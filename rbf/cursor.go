@@ -371,7 +371,8 @@ func (c *Cursor) putLeafCell(in leafCell) (err error) {
 
 	// Split into multiple pages if page size is exceeded.
 	groups := [][]leafCell{cells}
-	if leafCellsPageSize(cells) >= PageSize {
+	sz := leafCellsPageSize(cells)
+	if sz >= PageSize {
 		groups = splitLeafCells(cells)
 	}
 
@@ -674,6 +675,9 @@ func splitLeafCells(cells []leafCell) [][]leafCell {
 
 	var dataSize int
 	for _, cell := range cells {
+		if cell.Type == ContainerTypeBitmap {
+			panic("no! all ContainerTypeBitmap should be ContainerTypeBitmapPtr by now")
+		}
 		// Determine number of cells on current slice & cell size.
 		cellN := len(slices[len(slices)-1])
 		sz := align8(leafCellHeaderSize + len(cell.Data))
@@ -823,7 +827,7 @@ func (c *Cursor) Seek(key uint64) (exact bool, err error) {
 		switch typ := readFlags(buf); typ {
 		case PageTypeBranch:
 			n := readCellN(buf)
-			index, ok := search(n, func(i int) int {
+			index, xact := search(n, func(i int) int {
 				if v := readBranchCellKey(buf, i); key == v {
 					return 0
 				} else if key < v {
@@ -831,8 +835,8 @@ func (c *Cursor) Seek(key uint64) (exact bool, err error) {
 				}
 				return 1
 			})
-			//if not found (ok) the cell
-			if !ok && index > 0 {
+			//if not found (xact) the cell
+			if !xact && index > 0 {
 				index--
 			}
 			elem.index = index
@@ -848,7 +852,7 @@ func (c *Cursor) Seek(key uint64) (exact bool, err error) {
 
 		case PageTypeLeaf:
 			n := readCellN(buf)
-			index, ok := search(n, func(i int) int {
+			index, xact := search(n, func(i int) int {
 				if v := readLeafCellKey(buf, i); key == v {
 					return 0
 				} else if key < v {
@@ -858,7 +862,7 @@ func (c *Cursor) Seek(key uint64) (exact bool, err error) {
 			})
 			elem.index = index
 			c.leafPage = buf
-			return ok, nil
+			return xact, nil
 
 		default:
 			return false, fmt.Errorf("rbf.Cursor.Seek(): invalid page type: pgno=%d type=%d", elem.pgno, typ)
@@ -1132,6 +1136,7 @@ func ConvertToLeafArgs(key uint64, c *roaring.Container) (result leafCell) {
 			roaring.ConvertRunToBitmap(c)
 			result.Type = ContainerTypeBitmap
 			result.Data = fromArray64(roaring.AsBitmap(c))
+			return
 		}
 		result.N = len(r) //note RBF N is number of containers
 		result.Type = ContainerTypeRLE

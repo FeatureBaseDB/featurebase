@@ -23,6 +23,8 @@ import (
 
 // Ensure the file handle count is working
 func TestCountOpenFiles(t *testing.T) {
+	roaringOnlyTest(t)
+
 	// Windows is not supported yet
 	if runtime.GOOS == "windows" {
 		t.Skip("Skipping unsupported countOpenFiles test on Windows.")

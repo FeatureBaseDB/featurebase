@@ -24,6 +24,10 @@ import (
 	"github.com/pkg/errors"
 )
 
+// if enableRowCache, then we must not return mmap-ed memory
+// directly, but only a copy.
+const EnableRowCache = true
+
 //probably should just implement the container interface
 // but for now i'll do it
 func (c *Cursor) Rows() ([]uint64, error) {
@@ -53,7 +57,7 @@ func (c *Cursor) Rows() ([]uint64, error) {
 	return rows, err
 }
 func (tx *Tx) FieldViews() []string {
-	r, _ := tx.rootRecords()
+	r, _ := tx.RootRecords()
 	res := make([]string, len(r))
 	for i := range r {
 		res[i] = r[i].Name
@@ -140,16 +144,33 @@ func (c *Cursor) CurrentPageType() int {
 }
 
 func toContainer(l leafCell, tx *Tx) *roaring.Container {
+
+	orig := l.Data
+	var cpMaybe []byte
+	if EnableRowCache {
+		// make a copy, otherwise the rowCache will see corrupted data
+		// or mmapped data that may disappear.
+		cpMaybe = make([]byte, len(orig))
+		copy(cpMaybe, orig)
+	} else {
+		// not a copy
+		cpMaybe = orig
+	}
 	switch l.Type {
 	case ContainerTypeArray:
-		return roaring.NewContainerArray(toArray16(l.Data))
+		return roaring.NewContainerArray(toArray16(cpMaybe))
 	case ContainerTypeBitmapPtr:
-		_, bm, _ := tx.leafCellBitmap(toPgno(l.Data))
-		return roaring.NewContainerBitmap(l.N, bm)
+		_, bm, _ := tx.leafCellBitmap(toPgno(cpMaybe))
+		cloneMaybe := bm
+		if EnableRowCache {
+			cloneMaybe = make([]uint64, len(bm))
+			copy(cloneMaybe, bm)
+		}
+		return roaring.NewContainerBitmap(l.N, cloneMaybe)
 	case ContainerTypeBitmap:
-		return roaring.NewContainerBitmap(l.N, toArray64(l.Data))
+		return roaring.NewContainerBitmap(l.N, toArray64(cpMaybe))
 	case ContainerTypeRLE:
-		return roaring.NewContainerRun(toInterval16(l.Data))
+		return roaring.NewContainerRun(toInterval16(cpMaybe))
 	}
 	return nil
 }

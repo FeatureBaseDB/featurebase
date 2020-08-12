@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/pilosa/pilosa/v2/rbf"
+	"github.com/pilosa/pilosa/v2/txpath"
 )
 
 func TestTx_CommitRollback(t *testing.T) {
@@ -472,7 +473,8 @@ func TestTx_Dump(t *testing.T) {
 	defer tx.Rollback()
 
 	index, field, view, shard := "i", "f", "v", uint64(15)
-	nm := rbfName(field, view, shard)
+
+	nm := rbfName(index, field, view, shard)
 
 	if err := tx.CreateBitmap(nm); err != nil {
 		t.Fatal(err)
@@ -481,12 +483,12 @@ func TestTx_Dump(t *testing.T) {
 	}
 
 	// test that we don't crash, and get *something* back
-	s := tx.DumpString(index)
+	s := tx.DumpString()
 	if s == "" {
 		panic("should have had 3 containers!")
 	}
 }
 
-func rbfName(field, view string, shard uint64) string {
-	return fmt.Sprintf("%s\x00%s\x00%d", field, view, shard)
+func rbfName(index, field, view string, shard uint64) string {
+	return string(txpath.Prefix(index, field, view, shard))
 }

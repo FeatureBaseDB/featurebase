@@ -716,6 +716,7 @@ var fieldQueue = make(chan struct{}, 16)
 
 // openViews opens and initializes the views inside the field.
 func (f *Field) openViews() error {
+
 	file, err := os.Open(filepath.Join(f.path, "views"))
 	if os.IsNotExist(err) {
 		return nil
@@ -754,17 +755,19 @@ fileLoop:
 					return fmt.Errorf("opening view: view=%s, err=%s", view.name, err)
 				}
 
-				// Automatically upgrade BSI v1 fragments if they exist & reopen view.
-				if bsig := f.bsiGroup(f.name); bsig != nil {
-					if ok, err := upgradeViewBSIv2(view, bsig.BitDepth); err != nil {
-						return errors.Wrap(err, "upgrade view bsi v2")
-					} else if ok {
-						if err := view.close(); err != nil {
-							return errors.Wrap(err, "closing upgraded view")
-						}
-						view = f.newView(f.viewPath(name), name)
-						if err := view.open(); err != nil {
-							return fmt.Errorf("re-opening view: view=%s, err=%s", view.name, err)
+				if f.idx.Txf.TxType() == roaringFragmentFilesTxn {
+					// Automatically upgrade BSI v1 fragments if they exist & reopen view.
+					if bsig := f.bsiGroup(f.name); bsig != nil {
+						if ok, err := upgradeViewBSIv2(view, bsig.BitDepth); err != nil {
+							return errors.Wrap(err, "upgrade view bsi v2")
+						} else if ok {
+							if err := view.close(); err != nil {
+								return errors.Wrap(err, "closing upgraded view")
+							}
+							view = f.newView(f.viewPath(name), name)
+							if err := view.open(); err != nil {
+								return fmt.Errorf("re-opening view: view=%s, err=%s", view.name, err)
+							}
 						}
 					}
 				}

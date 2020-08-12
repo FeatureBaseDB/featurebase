@@ -28,8 +28,10 @@ import (
 	"net/http"
 	_ "net/http/pprof" // Imported for its side-effect of registering pprof endpoints with the server.
 	"net/url"
+	"os"
 	"reflect"
 	"runtime/debug"
+	"runtime/pprof"
 	"strconv"
 	"strings"
 	"sync"
@@ -44,6 +46,7 @@ import (
 	"github.com/pilosa/pilosa/v2/tracing"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/zeebo/blake3"
 )
 
 // Handler represents an HTTP handler.
@@ -385,6 +388,9 @@ func newRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/internal/nodes", handler.handleGetNodes).Methods("GET").Name("GetNodes")
 	router.HandleFunc("/internal/shards/max", handler.handleGetShardsMax).Methods("GET").Name("GetShardsMax") // TODO: deprecate, but it's being used by the client
 
+	router.HandleFunc("/internal/translate/index/{index}/{partition}", handler.handlePostTranslateIndexDB).Methods("POST").Name("PostTranslateIndexDB")
+	router.HandleFunc("/internal/translate/field/{index}/{field}", handler.handlePostTranslateFieldDB).Methods("POST").Name("PostTranslateFieldDB")
+
 	router.Use(handler.queryArgValidator)
 	router.Use(handler.addQueryContext)
 	router.Use(handler.extractTracing)
@@ -634,14 +640,55 @@ type getStatusResponse struct {
 	LocalID string         `json:"localID"`
 }
 
+func hash(s string) string {
+
+	hasher := blake3.New()
+	_, _ = hasher.Write([]byte(s))
+	var buf [16]byte
+	_, _ = hasher.Digest().Read(buf[0:])
+
+	return fmt.Sprintf("%x", buf)
+}
+
+var DoPerQueryProfiling = false
+
 // handlePostQuery handles /query requests.
 func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
-
 	// Read previouly parsed request from context
 	qreq := r.Context().Value(contextKeyQueryRequest)
 	qerr := r.Context().Value(contextKeyQueryError)
 	req, ok := qreq.(*pilosa.QueryRequest)
-	err, _ := qerr.(error)
+
+	if DoPerQueryProfiling {
+
+		txsrc := os.Getenv("PILOSA_TXSRC")
+		reqHash := hash(req.Query)
+
+		qlen := len(req.Query)
+		if qlen > 100 {
+			qlen = 100
+		}
+		name := "_query." + reqHash + "." + txsrc + "." + time.Now().Format("20060102150405") + "." + req.Query[:qlen]
+		f, err := os.Create(name)
+		if err != nil {
+			panic(err)
+		}
+		defer f.Close()
+
+		_ = pprof.StartCPUProfile(f)
+		defer pprof.StopCPUProfile()
+
+	} // end DoPerQueryProfiling
+	/*
+		er = trace.Start(f)
+		if er != nil {
+			panic(er)
+		}
+		defer trace.Stop()
+	*/
+
+	var err error
+	err, _ = qerr.(error)
 
 	if err != nil || !ok {
 		w.WriteHeader(http.StatusBadRequest)
@@ -2202,4 +2249,59 @@ func readBody(r *http.Request) ([]byte, error) {
 	}
 
 	return buf.Bytes(), nil
+}
+
+func (h *Handler) handlePostTranslateFieldDB(w http.ResponseWriter, r *http.Request) {
+	indexName, ok := mux.Vars(r)["index"]
+	if !ok {
+		http.Error(w, "index name is required", http.StatusBadRequest)
+		return
+	}
+
+	fieldName, ok := mux.Vars(r)["field"]
+	if !ok {
+		http.Error(w, "field name is required", http.StatusBadRequest)
+		return
+	}
+	bd, err := readBody(r)
+	if err != nil {
+		http.Error(w, "failed to read body", http.StatusBadRequest)
+		return
+	}
+	br := bytes.NewReader(bd)
+
+	err = h.api.TranslateFieldDB(r.Context(), indexName, fieldName, br)
+	resp := successResponse{h: h, Name: fieldName}
+	resp.check(err)
+	resp.write(w, err)
+}
+
+func (h *Handler) handlePostTranslateIndexDB(w http.ResponseWriter, r *http.Request) {
+	indexName, ok := mux.Vars(r)["index"]
+	if !ok {
+		http.Error(w, "index name is required", http.StatusBadRequest)
+		return
+	}
+
+	partitionArg, ok := mux.Vars(r)["partition"]
+	if !ok {
+		http.Error(w, "partition is required", http.StatusBadRequest)
+		return
+	}
+	partition, err := strconv.ParseUint(partitionArg, 10, 64)
+	if err != nil {
+		http.Error(w, "bad partition", http.StatusBadRequest)
+		return
+	}
+
+	bd, err := readBody(r)
+	if err != nil {
+		http.Error(w, "failed to read body", http.StatusBadRequest)
+		return
+	}
+	br := bytes.NewReader(bd)
+	err = h.api.TranslateIndexDB(r.Context(), indexName, int(partition), br)
+	resp := successResponse{h: h, Name: indexName}
+	resp.check(err)
+	resp.write(w, err)
 }

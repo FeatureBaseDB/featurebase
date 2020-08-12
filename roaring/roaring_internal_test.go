@@ -2962,7 +2962,7 @@ func TestContainerCombinations(t *testing.T) {
 
 	cts := setupContainerTests()
 
-	containerTypes := []byte{containerArray, containerBitmap, containerRun}
+	containerTypes := []byte{ContainerArray, ContainerBitmap, ContainerRun}
 
 	testOps := []testOp{
 		// intersect
@@ -4323,8 +4323,8 @@ func TestBitmapAny(t *testing.T) {
 }
 
 func TestDifferenceInPlace_N(t *testing.T) {
-	a := doContainer(containerRun, runFull())
-	b := doContainer(containerBitmap, bitmapFull())
+	a := doContainer(ContainerRun, runFull())
+	b := doContainer(ContainerBitmap, bitmapFull())
 	r := differenceInPlaceWrapper(a, b)
 	if r.N() != 0 {
 		t.Error("expected difference of containers to have n=0")
@@ -4352,8 +4352,8 @@ func BenchmarkUnionRunRunInPlace(bm *testing.B) {
 		for _, br := range runs {
 			bm.Run("RunToBitmapRun-"+ar.name+"_"+br.name, func(bm *testing.B) {
 				for i := 0; i < bm.N; i++ {
-					arun := doContainer(containerRun, ar.fn())
-					brun := doContainer(containerRun, br.fn())
+					arun := doContainer(ContainerRun, ar.fn())
+					brun := doContainer(ContainerRun, br.fn())
 
 					abmp := arun.runToBitmap()
 					unionBitmapRunInPlace(abmp, brun)
@@ -4362,8 +4362,8 @@ func BenchmarkUnionRunRunInPlace(bm *testing.B) {
 
 			bm.Run("RunRun-"+ar.name+"_"+br.name, func(bm *testing.B) {
 				for i := 0; i < bm.N; i++ {
-					arun := doContainer(containerRun, ar.fn())
-					brun := doContainer(containerRun, br.fn())
+					arun := doContainer(ContainerRun, ar.fn())
+					brun := doContainer(ContainerRun, br.fn())
 
 					unionRunRunInPlace(arun, brun)
 				}
@@ -4390,8 +4390,8 @@ func TestUnionRunRunInPlaceBitwiseCompare(t *testing.T) {
 	for _, a := range runs {
 		for _, b := range runs {
 			t.Run(a.name+"-"+b.name, func(t *testing.T) {
-				arun := doContainer(containerRun, a.run)
-				brun := doContainer(containerRun, b.run)
+				arun := doContainer(ContainerRun, a.run)
+				brun := doContainer(ContainerRun, b.run)
 
 				out1 := unionBitmapRunInPlace(arun.runToBitmap(), brun)
 				out2 := unionRunRunInPlace(arun, brun)

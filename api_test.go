@@ -134,8 +134,9 @@ func TestAPI_ImportColumnAttrs(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(res.ColumnAttrSets) != 100 {
-			t.Fatal("incorrect number of column attrs set")
+		m := len(res.ColumnAttrSets)
+		if m != 100 {
+			t.Fatalf("incorrect number of column attrs set; m = %v", m)
 		}
 
 		for _, v := range res.ColumnAttrSets {

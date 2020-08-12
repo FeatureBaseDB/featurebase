@@ -62,17 +62,17 @@ const (
 )
 
 const (
-	containerNil    byte = iota // no container
-	containerArray              // slice of bit position values
-	containerBitmap             // slice of 1024 uint64s
-	containerRun                // container of run-encoded bits
+	ContainerNil    byte = iota // no container
+	ContainerArray              // slice of bit position values
+	ContainerBitmap             // slice of 1024 uint64s
+	ContainerRun                // container of run-encoded bits
 )
 
 // map used for a more descriptive print
 var containerTypeNames = map[byte]string{
-	containerArray:  "array",
-	containerBitmap: "bitmap",
-	containerRun:    "run",
+	ContainerArray:  "array",
+	ContainerBitmap: "bitmap",
+	ContainerRun:    "run",
 }
 
 var fullContainer = NewContainerRun([]Interval16{{Start: 0, Last: MaxContainerVal}}).Freeze()
@@ -845,33 +845,33 @@ func (c *Container) intersectInPlace(other *Container) *Container {
 	}
 
 	switch c.typ() {
-	case containerArray:
+	case ContainerArray:
 		switch other.typ() {
-		case containerArray:
+		case ContainerArray:
 			return intersectArrayArrayInPlace(c, other)
-		case containerBitmap:
+		case ContainerBitmap:
 			return intersectArrayBitmapInPlace(c, other)
-		case containerRun:
+		case ContainerRun:
 			return intersectArrayRunInPlace(c, other)
 		}
 
-	case containerBitmap:
+	case ContainerBitmap:
 		switch other.typ() {
-		case containerArray:
+		case ContainerArray:
 			return intersectBitmapArrayInPlace(c, other)
-		case containerBitmap:
+		case ContainerBitmap:
 			return intersectBitmapBitmapInPlace(c, other)
-		case containerRun:
+		case ContainerRun:
 			return intersectBitmapRunInPlace(c, other)
 		}
 
-	case containerRun:
+	case ContainerRun:
 		switch other.typ() {
-		case containerArray:
+		case ContainerArray:
 			return intersectRunArrayInPlace(c, other)
-		case containerBitmap:
+		case ContainerBitmap:
 			return intersectRunBitmapInPlace(c, other)
-		case containerRun:
+		case ContainerRun:
 			return intersectRunRunInPlace(c, other)
 		}
 	}
@@ -881,17 +881,17 @@ func (c *Container) intersectInPlace(other *Container) *Container {
 
 func (c *Container) copyInPlace(other *Container) *Container {
 	switch other.typ() {
-	case containerArray:
-		c.setTyp(containerArray)
+	case ContainerArray:
+		c.setTyp(ContainerArray)
 		c.setArrayMaybeCopy(other.array(), true)
 
-	case containerBitmap:
-		c.setTyp(containerBitmap)
+	case ContainerBitmap:
+		c.setTyp(ContainerBitmap)
 		c.setBitmapCopy(other.bitmap())
 		c.setN(other.N())
 
-	case containerRun:
-		c.setTyp(containerRun)
+	case ContainerRun:
+		c.setTyp(ContainerRun)
 		c.setRunsMaybeCopy(other.runs(), true)
 		c.setN(other.N())
 
@@ -1026,7 +1026,7 @@ func intersectBitmapArrayInPlace(a, b *Container) *Container {
 		}
 	}
 	array = array[:n]
-	a.setTyp(containerArray)
+	a.setTyp(ContainerArray)
 	a.setArray(array)
 
 	return a
@@ -1154,7 +1154,7 @@ func intersectRunArrayInPlace(a, b *Container) *Container {
 	}
 
 	array = array[:n]
-	a.setTyp(containerArray)
+	a.setTyp(ContainerArray)
 	a.setArray(array)
 
 	return a
@@ -1407,7 +1407,7 @@ func (b *Bitmap) unionInPlace(others ...*Bitmap) {
 				// first other container, but for some cases, that will
 				// result in cloning a non-bitmap, then converting it
 				// to a bitmap, and this will be expensive...
-				if expectedN >= 512 && iContainer.typ() != containerBitmap {
+				if expectedN >= 512 && iContainer.typ() != ContainerBitmap {
 					// copying the non-bitmap, then converting it,
 					// is expensive.
 					statsHit("unionInPlace/newBitmap")
@@ -1428,12 +1428,12 @@ func (b *Bitmap) unionInPlace(others ...*Bitmap) {
 				// convert it preemptively, because union into a
 				// bitmap is nearly always faster.
 				itersToUnion = bitmapIters[i:]
-				if expectedN >= 512 && tContainer.typ() != containerBitmap {
+				if expectedN >= 512 && tContainer.typ() != ContainerBitmap {
 					statsHit("unionInPlace/convertToBitmap")
 					switch tContainer.typ() {
-					case containerArray:
+					case ContainerArray:
 						tContainer = tContainer.arrayToBitmap()
-					case containerRun:
+					case ContainerRun:
 						tContainer = tContainer.runToBitmap()
 					}
 				}
@@ -1967,7 +1967,7 @@ func (r *pilosaRoaringIterator) Next() (key uint64, cType byte, n int, length in
 
 	// a run container keeps its data after an initial 2 byte length header
 	var runCount uint16
-	if r.currentType == containerRun {
+	if r.currentType == ContainerRun {
 		runCount = binary.LittleEndian.Uint16(r.data[r.currentDataOffset : r.currentDataOffset+runCountHeaderSize])
 		r.currentDataOffset += 2
 	}
@@ -1979,13 +1979,13 @@ func (r *pilosaRoaringIterator) Next() (key uint64, cType byte, n int, length in
 	r.currentPointer = (*uint16)(unsafe.Pointer(&r.data[r.currentDataOffset]))
 	var size int
 	switch r.currentType {
-	case containerArray:
+	case ContainerArray:
 		r.currentLen = r.currentN
 		size = r.currentLen * 2
-	case containerBitmap:
+	case ContainerBitmap:
 		r.currentLen = 1024
 		size = 8192
-	case containerRun:
+	case ContainerRun:
 		r.currentLen = int(runCount)
 		size = r.currentLen * 4
 	}
@@ -2035,7 +2035,7 @@ func (r *officialRoaringIterator) Next() (key uint64, cType byte, n int, length 
 	}
 	// a run container keeps its data after an initial 2 byte length header
 	var runCount uint16
-	if r.currentType == containerRun {
+	if r.currentType == ContainerRun {
 		if int(r.currentDataOffset)+2 > len(r.data) {
 			r.Done(fmt.Errorf("insufficient data for offsets container %d/%d, expect run length at %d/%d bytes",
 				r.currentIdx, r.keys, r.currentDataOffset, len(r.data)))
@@ -2052,13 +2052,13 @@ func (r *officialRoaringIterator) Next() (key uint64, cType byte, n int, length 
 	r.currentPointer = (*uint16)(unsafe.Pointer(&r.data[r.currentDataOffset]))
 	var size int
 	switch r.currentType {
-	case containerArray:
+	case ContainerArray:
 		r.currentLen = r.currentN
 		size = r.currentLen * 2
-	case containerBitmap:
+	case ContainerBitmap:
 		r.currentLen = 1024
 		size = 8192
-	case containerRun:
+	case ContainerRun:
 		// official format stores runs as start/len, we want to convert, but since
 		// they might be mmapped, we can't write to that memory
 		newRuns := make([]Interval16, runCount)
@@ -2257,7 +2257,7 @@ func (b *Bitmap) ImportRoaringRawIterator(itr RoaringIterator, clear bool, log b
 				return newerC, true
 			}
 			newC = oldC.unionInPlace(&synthC)
-			if newC.typeID == containerBitmap {
+			if newC.typeID == ContainerBitmap {
 				newC.Repair()
 			}
 			if newC.N() != existN {
@@ -2461,12 +2461,12 @@ func BitmapsToRoaring(bitmaps []*Bitmap) []byte {
 			binary.LittleEndian.PutUint32(offset[0:4], uint32(dataOffset+int(offsetEnd)))
 			nextData := data[dataOffset:]
 			switch c.typeID { // TODO: make this work on big endian machines
-			case containerArray:
+			case ContainerArray:
 				dataOffset += 2 * copy((*[1 << 16]uint16)(unsafe.Pointer(&nextData[0]))[:], c.array())
-			case containerBitmap:
+			case ContainerBitmap:
 				copy((*[1024]uint64)(unsafe.Pointer(&nextData[0]))[:], c.bitmap())
 				dataOffset += 8192
-			case containerRun:
+			case ContainerRun:
 				binary.LittleEndian.PutUint16(nextData[0:2], uint16(c.len))
 				dataOffset += 2
 				dataOffset += 4 * copy((*[1 << 15]Interval16)(unsafe.Pointer(&nextData[2]))[:], c.runs())
@@ -2489,11 +2489,11 @@ func (b *Bitmap) roaringSize() (int64, int64) {
 		}
 		count++
 		switch c.typeID {
-		case containerArray:
+		case ContainerArray:
 			size += 2 * int64(c.N())
-		case containerBitmap:
+		case ContainerBitmap:
 			size += 8192
-		case containerRun:
+		case ContainerRun:
 			// 2 bytes for the count of runs, plus 4 bytes per run
 			size += 2 + (4 * int64(c.len))
 		}
@@ -3141,39 +3141,39 @@ func (c *Container) optimize() *Container {
 
 	var newType byte
 	if runs <= runMaxSize && runs <= c.N()/2 {
-		newType = containerRun
+		newType = ContainerRun
 	} else if c.N() < ArrayMaxSize {
-		newType = containerArray
+		newType = ContainerArray
 	} else {
-		newType = containerBitmap
+		newType = ContainerBitmap
 	}
 
 	// Then convert accordingly.
 	if c.isArray() {
-		if newType == containerBitmap {
+		if newType == ContainerBitmap {
 			statsHit("optimize/arrayToBitmap")
 			c = c.arrayToBitmap()
-		} else if newType == containerRun {
+		} else if newType == ContainerRun {
 			statsHit("optimize/arrayToRun")
 			c = c.arrayToRun(runs)
 		} else {
 			statsHit("optimize/arrayUnchanged")
 		}
 	} else if c.isBitmap() {
-		if newType == containerArray {
+		if newType == ContainerArray {
 			statsHit("optimize/bitmapToArray")
 			c = c.bitmapToArray()
-		} else if newType == containerRun {
+		} else if newType == ContainerRun {
 			statsHit("optimize/bitmapToRun")
 			c = c.bitmapToRun(runs)
 		} else {
 			statsHit("optimize/bitmapUnchanged")
 		}
 	} else if c.isRun() {
-		if newType == containerBitmap {
+		if newType == ContainerBitmap {
 			statsHit("optimize/runToBitmap")
 			c = c.runToBitmap()
-		} else if newType == containerArray {
+		} else if newType == ContainerArray {
 			statsHit("optimize/runToArray")
 			c = c.runToArray()
 		} else {
@@ -3202,36 +3202,36 @@ func (c *Container) unionInPlace(other *Container) *Container {
 		return fullContainer
 	}
 	switch c.typ() {
-	case containerBitmap:
+	case ContainerBitmap:
 		switch other.typ() {
-		case containerBitmap:
+		case ContainerBitmap:
 			return unionBitmapBitmapInPlace(c, other)
-		case containerArray:
+		case ContainerArray:
 			return unionBitmapArrayInPlace(c, other)
-		case containerRun:
+		case ContainerRun:
 			return unionBitmapRunInPlace(c, other)
 
 		}
-	case containerArray:
+	case ContainerArray:
 		switch other.typ() {
-		case containerBitmap:
+		case ContainerBitmap:
 			c = c.arrayToBitmap()
 			return unionBitmapBitmapInPlace(c, other)
-		case containerArray:
+		case ContainerArray:
 			return unionArrayArrayInPlace(c, other)
-		case containerRun:
+		case ContainerRun:
 			c = c.arrayToBitmap()
 			return unionBitmapRunInPlace(c, other)
 		}
-	case containerRun:
+	case ContainerRun:
 		switch other.typ() {
-		case containerBitmap:
+		case ContainerBitmap:
 			c = c.runToBitmap()
 			return unionBitmapBitmapInPlace(c, other)
-		case containerArray:
+		case ContainerArray:
 			c = c.runToBitmap()
 			return unionBitmapArrayInPlace(c, other)
-		case containerRun:
+		case ContainerRun:
 			return unionRunRunInPlace(c, other)
 		}
 	}
@@ -3412,7 +3412,7 @@ func (c *Container) bitmapToArray() *Container {
 		if c.frozen() {
 			return NewContainerArray(nil)
 		}
-		c.setTyp(containerArray)
+		c.setTyp(ContainerArray)
 		c.setArray(nil)
 		return c
 	}
@@ -3441,7 +3441,7 @@ func (c *Container) bitmapToArray() *Container {
 	if c.frozen() {
 		return NewContainerArray(array)
 	}
-	c.setTyp(containerArray)
+	c.setTyp(ContainerArray)
 	c.setMapped(false)
 	c.setArray(array)
 	return c
@@ -3462,7 +3462,7 @@ func (c *Container) arrayToBitmap() *Container {
 		if c.frozen() {
 			return NewContainerBitmap(0, nil)
 		}
-		c.setTyp(containerBitmap)
+		c.setTyp(ContainerBitmap)
 		c.setBitmap(make([]uint64, bitmapN))
 		return c
 	}
@@ -3474,7 +3474,7 @@ func (c *Container) arrayToBitmap() *Container {
 	if c.frozen() {
 		return NewContainerBitmapN(bitmap, c.N())
 	}
-	c.setTyp(containerBitmap)
+	c.setTyp(ContainerBitmap)
 	c.setMapped(false)
 	c.setBitmap(bitmap)
 	return c
@@ -3495,7 +3495,7 @@ func (c *Container) runToBitmap() *Container {
 		if c.frozen() {
 			return NewContainerBitmap(0, nil)
 		}
-		c.setTyp(containerBitmap)
+		c.setTyp(ContainerBitmap)
 		c.setBitmap(make([]uint64, bitmapN))
 		return c
 	}
@@ -3533,7 +3533,7 @@ func (c *Container) runToBitmap() *Container {
 	if c.frozen() {
 		return NewContainerBitmapN(bitmap, c.N())
 	}
-	c.setTyp(containerBitmap)
+	c.setTyp(ContainerBitmap)
 	c.setMapped(false)
 	c.setBitmap(bitmap)
 	return c
@@ -3554,7 +3554,7 @@ func (c *Container) bitmapToRun(numRuns int32) *Container {
 		if c.frozen() {
 			return NewContainerRun(nil)
 		}
-		c.setTyp(containerRun)
+		c.setTyp(ContainerRun)
 		c.setRuns(nil)
 		return c
 	}
@@ -3605,7 +3605,7 @@ func (c *Container) bitmapToRun(numRuns int32) *Container {
 	if c.frozen() {
 		return NewContainerRunN(runs, c.N())
 	}
-	c.setTyp(containerRun)
+	c.setTyp(ContainerRun)
 	c.setRuns(runs)
 	c.setMapped(false)
 	return c
@@ -3626,7 +3626,7 @@ func (c *Container) arrayToRun(numRuns int32) *Container {
 		if c.frozen() {
 			return NewContainerRun(nil)
 		}
-		c.setTyp(containerRun)
+		c.setTyp(ContainerRun)
 		c.setRuns(nil)
 		return c
 	}
@@ -3651,7 +3651,7 @@ func (c *Container) arrayToRun(numRuns int32) *Container {
 	if c.frozen() {
 		return NewContainerRunN(runs, c.N())
 	}
-	c.setTyp(containerRun)
+	c.setTyp(ContainerRun)
 	c.setMapped(false)
 	c.setRuns(runs)
 	return c
@@ -3672,7 +3672,7 @@ func (c *Container) runToArray() *Container {
 		if c.frozen() {
 			return NewContainerArray(nil)
 		}
-		c.setTyp(containerArray)
+		c.setTyp(ContainerArray)
 		c.setArray(nil)
 		return c
 	}
@@ -3695,7 +3695,7 @@ func (c *Container) runToArray() *Container {
 	if c.frozen() {
 		return NewContainerArray(array)
 	}
-	c.setTyp(containerArray)
+	c.setTyp(ContainerArray)
 	c.setMapped(false)
 	c.setArray(array)
 	return c
@@ -3708,15 +3708,15 @@ func (c *Container) Clone() (out *Container) {
 		return nil
 	}
 	switch c.typ() {
-	case containerArray:
+	case ContainerArray:
 		statsHit("Container/Clone/Array")
 		out = NewContainerArrayCopy(c.array())
-	case containerBitmap:
+	case ContainerBitmap:
 		statsHit("Container/Clone/Bitmap")
 		other := NewContainerBitmapN(nil, c.N())
 		copy(other.bitmap(), c.bitmap())
 		out = other
-	case containerRun:
+	case ContainerRun:
 		statsHit("Container/Clone/Run")
 		out = NewContainerRunCopy(c.runs())
 	default:
@@ -4717,15 +4717,15 @@ func (c *Container) BitwiseCompare(c2 *Container) error {
 		return nil
 	}
 	switch typePair(c.typ(), c2.typ()) {
-	case typePair(containerArray, containerArray):
+	case typePair(ContainerArray, ContainerArray):
 		return compareArrayArray(c.array(), c2.array())
-	case typePair(containerArray, containerBitmap):
+	case typePair(ContainerArray, ContainerBitmap):
 		return compareArrayBitmap(c.array(), c2.bitmap())
-	case typePair(containerBitmap, containerArray):
+	case typePair(ContainerBitmap, ContainerArray):
 		return compareArrayBitmap(c2.array(), c.bitmap())
-	case typePair(containerArray, containerRun):
+	case typePair(ContainerArray, ContainerRun):
 		return compareArrayRuns(c.array(), c2.runs())
-	case typePair(containerRun, containerArray):
+	case typePair(ContainerRun, ContainerArray):
 		return compareArrayRuns(c2.array(), c.runs())
 	default:
 		c3 := xor(c, c2)
@@ -5432,7 +5432,7 @@ func xorArrayBitmap(a, b *Container) *Container {
 
 	// It's possible that output was converted from bitmap to array in output.remove()
 	// so we only do this conversion if output is still a bitmap container.
-	if output.typ() == containerBitmap && output.count() < ArrayMaxSize {
+	if output.typ() == ContainerBitmap && output.count() < ArrayMaxSize {
 		output = output.bitmapToArray()
 	}
 
@@ -6239,9 +6239,9 @@ func readOfficialHeader(buf []byte) (size uint32, containerTyper func(index uint
 		return size, containerTyper, header, pos, haveRuns, err
 	}
 	cf := func(index uint, card int) (newType byte) {
-		newType = containerBitmap
+		newType = ContainerBitmap
 		if card < ArrayMaxSize {
-			newType = containerArray
+			newType = ContainerArray
 		}
 		return newType
 	}
@@ -6268,7 +6268,7 @@ func readOfficialHeader(buf []byte) (size uint32, containerTyper func(index uint
 		pos += isRunBitmapSize
 		containerTyper = func(index uint, card int) byte {
 			if isRunBitmap[index/8]&(1<<(index%8)) != 0 {
-				return containerRun
+				return ContainerRun
 			}
 			return cf(index, card)
 		}
@@ -6714,7 +6714,7 @@ func differenceRunBitmapInPlace(c, other *Container) {
 		for i, word := range other.bitmap() {
 			bitmap[i] = ^word
 		}
-		c.setTyp(containerBitmap)
+		c.setTyp(ContainerBitmap)
 		c.setMapped(false)
 		c.setBitmap(bitmap)
 		c.setN(c.count())

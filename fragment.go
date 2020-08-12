@@ -574,6 +574,7 @@ func (f *fragment) mustRow(tx Tx, rowID uint64) *Row {
 // unprotectedRow returns a row from the row cache if available or from storage
 // (updating the cache).
 func (f *fragment) unprotectedRow(tx Tx, rowID uint64) (*Row, error) {
+
 	useRowCache := tx.UseRowCache()
 	if useRowCache {
 		r, ok := f.rowCache.Fetch(rowID)

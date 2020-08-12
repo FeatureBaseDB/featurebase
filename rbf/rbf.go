@@ -351,7 +351,7 @@ func (c *leafCell) Values(tx *Tx) []uint16 {
 }
 
 // firstValue the first value from the container.
-func (c *leafCell) firstValue() uint16 {
+func (c *leafCell) firstValue(tx *Tx) uint16 {
 	switch c.Type {
 	case ContainerTypeArray:
 		a := toArray16(c.Data)
@@ -360,7 +360,9 @@ func (c *leafCell) firstValue() uint16 {
 		r := toInterval16(c.Data)
 		return r[0].Start
 	case ContainerTypeBitmapPtr:
-		for i, v := range toArray64(c.Data) {
+		_, slc, err := tx.leafCellBitmap(toPgno(c.Data))
+		panicOn(err)
+		for i, v := range slc {
 			for j := uint(0); j < 64; j++ {
 				if v&(1<<j) != 0 {
 					return (uint16(i) * 64) + uint16(j)
@@ -373,8 +375,20 @@ func (c *leafCell) firstValue() uint16 {
 	}
 }
 
+// helper for lastValue()
+func (c *leafCell) lastValueFromBitmap(a []uint64) uint16 {
+	for i := len(a) - 1; i >= 0; i-- {
+		for j := 63; j >= 0; j-- {
+			if a[i]&(1<<j) != 0 {
+				return (uint16(i) * 64) + uint16(j)
+			}
+		}
+	}
+	panic(fmt.Sprintf("rbf.leafCell.lastValueFromBitmap(): no values set in bitmap container: key=%d", c.Key))
+}
+
 // lastValue the last value from the container.
-func (c *leafCell) lastValue() uint16 {
+func (c *leafCell) lastValue(tx *Tx) uint16 {
 	switch c.Type {
 	case ContainerTypeArray:
 		a := toArray16(c.Data)
@@ -382,16 +396,15 @@ func (c *leafCell) lastValue() uint16 {
 	case ContainerTypeRLE:
 		r := toInterval16(c.Data)
 		return r[len(r)-1].Last
+
 	case ContainerTypeBitmap:
 		a := toArray64(c.Data)
-		for i := len(a) - 1; i >= 0; i-- {
-			for j := 63; j >= 0; j-- {
-				if a[i]&(1<<j) != 0 {
-					return (uint16(i) * 64) + uint16(j)
-				}
-			}
-		}
-		panic(fmt.Sprintf("rbf.leafCell.firstValue(): no values set in bitmap container: key=%d", c.Key))
+		return c.lastValueFromBitmap(a)
+
+	case ContainerTypeBitmapPtr:
+		_, a, err := tx.leafCellBitmap(toPgno(c.Data))
+		panicOn(err)
+		return c.lastValueFromBitmap(a)
 	default:
 		panic(fmt.Sprintf("invalid container type: %d", c.Type))
 	}
@@ -429,8 +442,6 @@ func readLeafCell(page []byte, i int) leafCell {
 	assert(i < readCellN(page), "cell index %d exceeds cell count %d", i, readCellN(page))
 	offset := readCellOffset(page, i)
 
-	// cd ..; PILOSA_TXSRC=rbf go test -v -run TestFragment_TopN_IDs  -tags=' shardwidth20'  "-gcflags=all=-d=checkptr=0"
-	// gives panic: runtime error: slice bounds out of range [16390:8192] here.
 	buf := page[offset:]
 
 	var cell leafCell
@@ -476,7 +487,7 @@ func writeLeafCell(page []byte, i, offset int, cell leafCell) {
 	*(*uint32)(unsafe.Pointer(&page[offset+8])) = uint32(cell.Type)
 	*(*uint16)(unsafe.Pointer(&page[offset+12])) = uint16(cell.N)
 	*(*uint16)(unsafe.Pointer(&page[offset+14])) = uint16(cell.BitN)
-	assert(offset+16+len(cell.Data) <= PageSize, "leaf cell write extends beyond page: offset %d + cell size %d > page size %d", offset, 16+len(cell.Data), PageSize)
+	assert(offset+16+len(cell.Data) <= PageSize, "leaf cell write extends beyond page: offset %d + len(cell.Data)(%v) + 16  == %v > page size %d", offset, len(cell.Data), offset+16+len(cell.Data), PageSize)
 	copy(page[offset+16:], cell.Data)
 }
 

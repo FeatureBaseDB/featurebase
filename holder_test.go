@@ -403,6 +403,7 @@ func TestHolder_HasData(t *testing.T) {
 
 // Ensure holder can delete an index and its underlying files.
 func TestHolder_DeleteIndex(t *testing.T) {
+
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 

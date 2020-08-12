@@ -21,6 +21,7 @@ import (
 
 	cryptorand "crypto/rand"
 	"github.com/zeebo/blake3"
+	"golang.org/x/mod/sumdb/dirhash"
 )
 
 // Blake3Hasher is a thread/goroutine safe way to
@@ -92,4 +93,11 @@ func cryptoRandInt64() int64 {
 	}
 	r := int64(binary.LittleEndian.Uint64(b))
 	return r
+}
+
+func HashOfDir(path string) string {
+	prefix := ""
+	h, err := dirhash.HashDir(path, prefix, dirhash.Hash1)
+	panicOn(err)
+	return h
 }

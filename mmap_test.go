@@ -86,7 +86,8 @@ func forceSnapshotsCheckMapping(t *testing.T) {
 // in newGeneration in generation.go. So this is probably useless but it's
 // a failure mode we've been bitten by once...
 func TestMmapBehavior(t *testing.T) {
-	skipForRBF(t)
+	// rbf and lmdb not happy with this test.
+	roaringOnlyTest(t)
 
 	var changed bool
 	var original uint64

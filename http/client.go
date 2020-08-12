@@ -1685,3 +1685,66 @@ func (c *InternalClient) RetrieveTranslatePartitionFromURI(ctx context.Context, 
 
 	return resp.Body, nil
 }
+func (c *InternalClient) ImportIndexKeys(ctx context.Context, uri *pilosa.URI, index string, partitionID int, remote bool, rddbdata io.Reader) error {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.ImportIndexKeys")
+	defer span.Finish()
+
+	if index == "" {
+		return pilosa.ErrIndexRequired
+	}
+
+	if uri == nil {
+		uri = c.defaultURI
+	}
+
+	vals := url.Values{}
+	vals.Set("remote", strconv.FormatBool(remote))
+	url := fmt.Sprintf("%s/internal/translate/index/%s/%d", uri, index, partitionID)
+
+	// Generate HTTP request.
+	httpReq, err := http.NewRequest("POST", url, rddbdata)
+	if err != nil {
+		return errors.Wrap(err, "creating request")
+	}
+	httpReq.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+
+	// Execute request against the host.
+	resp, err := c.executeRequest(httpReq.WithContext(ctx))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	return nil
+}
+
+func (c *InternalClient) ImportFieldKeys(ctx context.Context, uri *pilosa.URI, index, field string, remote bool, rddbdata io.Reader) error {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.ImportFieldKeys")
+	defer span.Finish()
+
+	if index == "" {
+		return pilosa.ErrIndexRequired
+	}
+
+	if uri == nil {
+		uri = c.defaultURI
+	}
+
+	vals := url.Values{}
+	vals.Set("remote", strconv.FormatBool(remote))
+	url := fmt.Sprintf("%s/internal/translate/field/%s/%s", uri, index, field)
+
+	// Generate HTTP request.
+	httpReq, err := http.NewRequest("POST", url, rddbdata)
+	if err != nil {
+		return errors.Wrap(err, "creating request")
+	}
+	httpReq.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+
+	// Execute request against the host.
+	resp, err := c.executeRequest(httpReq.WithContext(ctx))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	return nil
+}

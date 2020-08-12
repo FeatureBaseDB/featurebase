@@ -243,9 +243,11 @@ func (e *executor) Execute(ctx context.Context, index string, q *pql.Query, shar
 	// Must copy out of Tx data before Commiting, because it will become invalid afterwards.
 	respSafeNoTxData := e.safeCopy(resp)
 
-	// Commit transaction.
-	if err := tx.Commit(); err != nil {
-		return respSafeNoTxData, err
+	// Commit transaction if writing; else let the defer Rollback have it.
+	if needWriteTxn {
+		if err := tx.Commit(); err != nil {
+			return respSafeNoTxData, err
+		}
 	}
 	return respSafeNoTxData, nil
 }
@@ -503,7 +505,8 @@ func (e *executor) execute(ctx context.Context, tx Tx, index string, q *pql.Quer
 		// still need to handle them. Since everything else was
 		// already precomputed by handlePreCallChildren, though,
 		// we don't need this logic in executeCall.
-		if newIndex := call.CallIndex(); newIndex != "" && newIndex != index {
+		newIndex := call.CallIndex()
+		if newIndex != "" && newIndex != index {
 			v, err = e.executeCall(ctx, tx, newIndex, call, nil, opt)
 		} else {
 			v, err = e.executeCall(ctx, tx, index, call, shards, opt)
@@ -815,7 +818,7 @@ func (e *executor) executeCall(ctx context.Context, tx Tx, index string, c *pql.
 		return e.executeFieldValueCall(ctx, tx, index, c, shards, opt)
 	case "Precomputed":
 		return e.executePrecomputedCall(ctx, tx, index, c, shards, opt)
-	default:
+	default: // e.g. "Row", "Union", "Intersect" or anything that returns a bitmap.
 		statFn()
 		return e.executeBitmapCall(ctx, tx, index, c, shards, opt)
 	}
@@ -1374,6 +1377,7 @@ func (e *executor) executePrecomputedCall(ctx context.Context, tx Tx, index stri
 
 // executeBitmapCall executes a call that returns a bitmap.
 func (e *executor) executeBitmapCall(ctx context.Context, tx Tx, index string, c *pql.Call, shards []uint64, opt *execOptions) (*Row, error) {
+
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeBitmapCall")
 	span.LogKV("pqlCallName", c.Name)
 	defer span.Finish()

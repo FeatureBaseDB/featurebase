@@ -48,10 +48,6 @@ func (c *catcherTx) NewTxIterator(index, field, view string, shard uint64) *roar
 	return c.b.NewTxIterator(index, field, view, shard)
 }
 
-func (c *catcherTx) WholeDatabaseBlake3Hash(index, field, view string, shard uint64) (hash string, err error) {
-	return c.b.WholeDatabaseBlake3Hash(index, field, view, shard)
-}
-
 func (c *catcherTx) ImportRoaringBits(index, field, view string, shard uint64, rit roaring.RoaringIterator, clear bool, log bool, rowSize uint64, data []byte) (changed int, rowSet map[uint64]int, err error) {
 	defer func() {
 		if r := recover(); r != nil {

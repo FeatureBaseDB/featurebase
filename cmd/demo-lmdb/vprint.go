@@ -22,17 +22,17 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package rbf
+// +build !386
+
+package main
 
 import (
 	"fmt"
 	"io"
 	"os"
 	"path"
-	"path/filepath"
 	"runtime"
 	"runtime/debug"
-	"strings"
 	"sync"
 	"time"
 )
@@ -168,41 +168,12 @@ func Caller(upStack int) string {
 	return f.Function
 }
 
-var _ = stack // happy linter
-var _ = listFilesUnderDir
-
-// listFilesUnderDir returns the paths of files found under directory root.
-// If includeRoot is true, it returns the full path, otherwise paths are relative to root.
-// If requriedSuffix is supplied, the returned file paths will end in that,
-// and any other files found during the walk of the directory tree will be ignored.
-// If ignoreEmpty is true, files of size 0 will be excluded.
-func listFilesUnderDir(root string, includeRoot bool, requiredSuffix string, ignoreEmpty bool) (files []string, err error) {
-	if !DirExists(root) {
-		return nil, fmt.Errorf("listFilesUnderDir error: root directory '%v' not found", root)
-	}
-	n := len(root) + 1
-	if includeRoot {
-		n = 0
-	}
-	err = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
-		if len(path) < n {
-			// ignore
-		} else {
-			if info == nil {
-				panic(fmt.Sprintf("info was nil for path = '%v'", path))
-			}
-			if info.IsDir() {
-				// skip directories.
-			} else {
-				if ignoreEmpty && info.Size() == 0 {
-					return nil
-				}
-				if requiredSuffix == "" || strings.HasSuffix(path, requiredSuffix) {
-					files = append(files, path[n:])
-				}
-			}
-		}
-		return nil
-	})
-	return
-}
+// happy linter:
+var _ = DirExists
+var _ = FileExists
+var _ = Caller
+var _ = stack
+var _ = RFC3339MsecTz0
+var _ = RFC3339UsecTz0
+var _ = AlwaysPrintf
+var _ = FileSize

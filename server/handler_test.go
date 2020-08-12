@@ -179,6 +179,17 @@ func TestHandler_Endpoints(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer tx0.Rollback()
+	if f, err := i0.CreateFieldIfNotExists("f1", pilosa.OptFieldTypeDefault()); err != nil {
+		t.Fatal(err)
+	} else if _, err := f.SetBit(tx0, 0, 0, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := i0.CreateFieldIfNotExists("f0", pilosa.OptFieldTypeDefault()); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx0.Commit(); err != nil {
+		t.Fatal(err)
+	}
 
 	i1 := hldr.MustCreateIndexIfNotExists("i1", pilosa.IndexOptions{})
 	tx1, err := holder.BeginTx(true, i1.Index)
@@ -186,22 +197,9 @@ func TestHandler_Endpoints(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer tx1.Rollback()
-
-	if f, err := i0.CreateFieldIfNotExists("f1", pilosa.OptFieldTypeDefault()); err != nil {
-		t.Fatal(err)
-	} else if _, err := f.SetBit(tx0, 0, 0, nil); err != nil {
-		t.Fatal(err)
-	}
 	if f, err := i1.CreateFieldIfNotExists("f0", pilosa.OptFieldTypeDefault()); err != nil {
 		t.Fatal(err)
 	} else if _, err := f.SetBit(tx1, 0, 0, nil); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := i0.CreateFieldIfNotExists("f0", pilosa.OptFieldTypeDefault()); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := tx0.Commit(); err != nil {
 		t.Fatal(err)
 	}
 	if err := tx1.Commit(); err != nil {
@@ -673,11 +671,13 @@ func TestHandler_Endpoints(t *testing.T) {
 		if field == nil {
 			t.Fatalf("field not found: %s", fieldName)
 		}
-		if !reflect.DeepEqual(pql.NewDecimal(math.MinInt64, 0), field.Options.Min) {
-			t.Fatalf("field min %d != %d", int64(math.MinInt64), field.Options.Min)
-		}
-		if !reflect.DeepEqual(pql.NewDecimal(math.MaxInt64, 0), field.Options.Max) {
-			t.Fatalf("field max %d != %d", int64(math.MaxInt64), field.Options.Max)
+		if field != nil { // happy linter
+			if !reflect.DeepEqual(pql.NewDecimal(math.MinInt64, 0), field.Options.Min) {
+				t.Fatalf("field min %d != %d", int64(math.MinInt64), field.Options.Min)
+			}
+			if !reflect.DeepEqual(pql.NewDecimal(math.MaxInt64, 0), field.Options.Max) {
+				t.Fatalf("field max %d != %d", int64(math.MaxInt64), field.Options.Max)
+			}
 		}
 	})
 
@@ -702,11 +702,13 @@ func TestHandler_Endpoints(t *testing.T) {
 		if field == nil {
 			t.Fatalf("field not found: %s", fieldName)
 		}
-		if !reflect.DeepEqual(pql.NewDecimal(math.MinInt64, 0), field.Options.Min) {
-			t.Fatalf("field min %d != %d", int64(math.MinInt64), field.Options.Min)
-		}
-		if !reflect.DeepEqual(pql.NewDecimal(1, -1), field.Options.Max) {
-			t.Fatalf("field max %d != %d", 10, field.Options.Max)
+		if field != nil { // happy linter
+			if !reflect.DeepEqual(pql.NewDecimal(math.MinInt64, 0), field.Options.Min) {
+				t.Fatalf("field min %d != %d", int64(math.MinInt64), field.Options.Min)
+			}
+			if !reflect.DeepEqual(pql.NewDecimal(1, -1), field.Options.Max) {
+				t.Fatalf("field max %d != %d", 10, field.Options.Max)
+			}
 		}
 	})
 
@@ -731,11 +733,13 @@ func TestHandler_Endpoints(t *testing.T) {
 		if field == nil {
 			t.Fatalf("field not found: %s", fieldName)
 		}
-		if !reflect.DeepEqual(pql.NewDecimal(-1, -1), field.Options.Min) {
-			t.Fatalf("field min %d != %d", 10, field.Options.Min)
-		}
-		if !reflect.DeepEqual(pql.NewDecimal(math.MaxInt64, 0), field.Options.Max) {
-			t.Fatalf("field max %d != %d", int64(math.MaxInt64), field.Options.Max)
+		if field != nil { // happy linter
+			if !reflect.DeepEqual(pql.NewDecimal(-1, -1), field.Options.Min) {
+				t.Fatalf("field min %d != %d", 10, field.Options.Min)
+			}
+			if !reflect.DeepEqual(pql.NewDecimal(math.MaxInt64, 0), field.Options.Max) {
+				t.Fatalf("field max %d != %d", int64(math.MaxInt64), field.Options.Max)
+			}
 		}
 	})
 
@@ -770,11 +774,13 @@ func TestHandler_Endpoints(t *testing.T) {
 		if field == nil {
 			t.Fatalf("field not found: %s", fieldName)
 		}
-		if !reflect.DeepEqual(pql.NewDecimal(math.MinInt64, 0), field.Options.Min) {
-			t.Fatalf("field min %d != %d", int64(math.MinInt64), field.Options.Min)
-		}
-		if !reflect.DeepEqual(pql.NewDecimal(math.MaxInt64, 0), field.Options.Max) {
-			t.Fatalf("field max %d != %d", int64(math.MaxInt64), field.Options.Max)
+		if field != nil { // happy linter
+			if !reflect.DeepEqual(pql.NewDecimal(math.MinInt64, 0), field.Options.Min) {
+				t.Fatalf("field min %d != %d", int64(math.MinInt64), field.Options.Min)
+			}
+			if !reflect.DeepEqual(pql.NewDecimal(math.MaxInt64, 0), field.Options.Max) {
+				t.Fatalf("field max %d != %d", int64(math.MaxInt64), field.Options.Max)
+			}
 		}
 	})
 
@@ -800,11 +806,13 @@ func TestHandler_Endpoints(t *testing.T) {
 		if field == nil {
 			t.Fatalf("field not found: %s", fieldName)
 		}
-		if !reflect.DeepEqual(pql.NewDecimal(math.MinInt64, 1), field.Options.Min) {
-			t.Fatalf("field min %d != %d", pql.NewDecimal(math.MinInt64, 1), field.Options.Min)
-		}
-		if !reflect.DeepEqual(pql.NewDecimal(105, 1), field.Options.Max) {
-			t.Fatalf("field max %s != %d", pql.NewDecimal(105, 1), field.Options.Max)
+		if field != nil { // happy linter
+			if !reflect.DeepEqual(pql.NewDecimal(math.MinInt64, 1), field.Options.Min) {
+				t.Fatalf("field min %d != %d", pql.NewDecimal(math.MinInt64, 1), field.Options.Min)
+			}
+			if !reflect.DeepEqual(pql.NewDecimal(105, 1), field.Options.Max) {
+				t.Fatalf("field max %s != %d", pql.NewDecimal(105, 1), field.Options.Max)
+			}
 		}
 	})
 
@@ -1054,6 +1062,7 @@ func TestHandler_Endpoints(t *testing.T) {
 	})
 
 	t.Run("index handlers", func(t *testing.T) {
+
 		// create index
 		w := httptest.NewRecorder()
 		r := test.MustNewHTTPRequest("POST", "/index/idx1", strings.NewReader(""))
