@@ -99,13 +99,22 @@ func (h *GRPCHandler) GetVDSs(ctx context.Context, req *pb.GetVDSsRequest) (*pb.
 }
 
 // PostVDS creates a new VDS
-func (*GRPCHandler) PostVDS(ctx context.Context, req *pb.PostVDSRequest) (*pb.PostVDSResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method PostVDS not implemented")
+func (h *GRPCHandler) PostVDS(ctx context.Context, req *pb.PostVDSRequest) (*pb.PostVDSResponse, error) {
+	opts := pilosa.IndexOptions{Keys: req.Keys, TrackExistence: req.TrackExistence}
+	_, err := h.api.CreateIndex(ctx, req.Name, opts)
+	if err != nil {
+		return nil, err
+	}
+	return &pb.PostVDSResponse{}, nil
 }
 
 // DeleteVDS deletes a VDS
-func (*GRPCHandler) DeleteVDS(ctx context.Context, req *pb.DeleteVDSRequest) (*pb.DeleteVDSResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method DeleteVDS not implemented")
+func (h *GRPCHandler) DeleteVDS(ctx context.Context, req *pb.DeleteVDSRequest) (*pb.DeleteVDSResponse, error) {
+	err := h.api.DeleteIndex(ctx, req.Name)
+	if err != nil {
+		return nil, err
+	}
+	return &pb.DeleteVDSResponse{}, nil
 }
 
 // QuerySQL handles the SQL request and sends RowResponses to the stream.

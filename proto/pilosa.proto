@@ -22,6 +22,8 @@ message GetVDSResponse {
 
 message PostVDSRequest {
   string name = 1;
+  bool keys = 2;
+  bool trackExistence = 3;
 }
 
 message PostVDSResponse {
