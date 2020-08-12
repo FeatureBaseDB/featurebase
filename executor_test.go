@@ -61,6 +61,25 @@ func getTempDirString() (td *string) {
 	return td
 }
 
+func TestExecutor_Execute_ConstRow(t *testing.T) {
+	c := test.MustRunCluster(t, 2)
+	defer c.Close()
+
+	c.CreateField(t, "i", pilosa.IndexOptions{}, "h")
+	c.ImportBits(t, "i", "h", [][2]uint64{
+		{1, 2},
+		{3, 4},
+		{5, 6},
+	})
+
+	resp := c.Query(t, "i", `ConstRow(columns=[2,6])`)
+	expect := []uint64{2, 6}
+	got := resp.Results[0].(*pilosa.Row).Columns()
+	if !reflect.DeepEqual(expect, got) {
+		t.Errorf("expected %v but got %v", expect, got)
+	}
+}
+
 // Ensure a row query can be executed.
 func TestExecutor_Execute_Row(t *testing.T) {
 	t.Run("RowIDColumnID", func(t *testing.T) {
@@ -3631,10 +3650,96 @@ func TestExecutor_Execute_FieldValue(t *testing.T) {
 	}
 }
 
+// Ensure a Limit query can be executed.
+func TestExecutor_Execute_Limit(t *testing.T) {
+	c := test.MustRunCluster(t, 1)
+	defer c.Close()
+
+	c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "f")
+	c.ImportBits(t, "i", "f", [][2]uint64{
+		{1, 0},
+		{1, 1},
+		{1, ShardWidth + 1},
+	})
+	columns := []uint64{0, 1, ShardWidth + 1}
+
+	// Test with only a limit specified.
+	t.Run("Limit", func(t *testing.T) {
+		for limit := 0; limit < 5; limit++ {
+			expect := columns
+			if limit < len(expect) {
+				expect = expect[:limit]
+			}
+
+			resp := c.Query(t, "i", fmt.Sprintf("Limit(All(), limit=%d)", limit))
+			if len(resp.Results) != 1 {
+				t.Fatalf("limit=%d: expected 1 result but got %v", limit, resp.Results)
+			}
+			row, ok := resp.Results[0].(*pilosa.Row)
+			if !ok {
+				t.Fatalf("limit=%d: expected a row result but got %T", limit, resp.Results[0])
+			}
+			got := row.Columns()
+			if !reflect.DeepEqual(expect, got) {
+				t.Errorf("limit=%d: expected %v but got %v", limit, expect, got)
+			}
+		}
+	})
+
+	// Test with only an offset specified.
+	t.Run("Offset", func(t *testing.T) {
+		for offset := 0; offset < 5; offset++ {
+			expect := []uint64{}
+			if offset <= len(columns) {
+				expect = columns[offset:]
+			}
+
+			resp := c.Query(t, "i", fmt.Sprintf("Limit(All(), offset=%d)", offset))
+			if len(resp.Results) != 1 {
+				t.Fatalf("offset=%d: expected 1 result but got %v", offset, resp.Results)
+			}
+			row, ok := resp.Results[0].(*pilosa.Row)
+			if !ok {
+				t.Fatalf("offset=%d: expected a row result but got %T", offset, resp.Results[0])
+			}
+			got := row.Columns()
+			if !reflect.DeepEqual(expect, got) {
+				t.Errorf("offset=%d: expected %v but got %v", offset, expect, got)
+			}
+		}
+	})
+
+	// Test with a limit and offset specified.
+	t.Run("LimitOffset", func(t *testing.T) {
+		for limit := 0; limit < 5; limit++ {
+			for offset := 0; offset < 5; offset++ {
+				expect := []uint64{}
+				if offset <= len(columns) {
+					expect = columns[offset:]
+				}
+				if limit < len(expect) {
+					expect = expect[:limit]
+				}
+
+				resp := c.Query(t, "i", fmt.Sprintf("Limit(All(), limit=%d, offset=%d)", limit, offset))
+				if len(resp.Results) != 1 {
+					t.Fatalf("limit=%d,offset=%d: expected 1 result but got %v", limit, offset, resp.Results)
+				}
+				row, ok := resp.Results[0].(*pilosa.Row)
+				if !ok {
+					t.Fatalf("limit=%d,offset=%d: expected a row result but got %T", limit, offset, resp.Results[0])
+				}
+				got := row.Columns()
+				if !reflect.DeepEqual(expect, got) {
+					t.Errorf("limit=%d,offset=%d: expected %v but got %v", limit, offset, expect, got)
+				}
+			}
+		}
+	})
+}
+
 // Ensure an all query can be executed.
 func TestExecutor_Execute_All(t *testing.T) {
-	skipForRBF(t)
-
 	t.Run("ColumnID", func(t *testing.T) {
 		c := test.MustRunCluster(t, 1)
 		defer c.Close()
@@ -4235,6 +4340,291 @@ func benchmarkExistence(nn bool, b *testing.B) {
 func BenchmarkExecutor_Existence_True(b *testing.B)  { benchmarkExistence(true, b) }
 func BenchmarkExecutor_Existence_False(b *testing.B) { benchmarkExistence(false, b) }
 
+func TestExecutor_Execute_Extract(t *testing.T) {
+	c := test.MustRunCluster(t, 3)
+	defer c.Close()
+
+	c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "set")
+	c.ImportBits(t, "i", "set", [][2]uint64{
+		{0, 1},
+		{0, 2},
+		{3, 1},
+		{4, 1},
+		{4, 4 * ShardWidth},
+		{5, ShardWidth},
+	})
+	c.Query(t, "i", fmt.Sprintf("Clear(%d, set=5)", ShardWidth))
+
+	c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "keyset", pilosa.OptFieldKeys())
+	c.Query(t, "i", `
+		Set(0, keyset="h")
+		Set(1, keyset="xyzzy")
+		Set(0, keyset="plugh")
+	`)
+
+	c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "mutex", pilosa.OptFieldTypeMutex(pilosa.CacheTypeRanked, 5000))
+	c.ImportBits(t, "i", "mutex", [][2]uint64{
+		{0, 1},
+		{0, 2},
+		{4, 4 * ShardWidth},
+	})
+
+	c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "keymutex", pilosa.OptFieldKeys(), pilosa.OptFieldTypeMutex(pilosa.CacheTypeRanked, 5000))
+	c.Query(t, "i", `
+		Set(0, keymutex="h")
+		Set(1, keymutex="xyzzy")
+		Set(3, keymutex="plugh")
+	`)
+
+	c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "time", pilosa.OptFieldTypeTime("YMDH"))
+	c.Query(t, "i", `
+		Set(0, time=1, 2016-01-01T00:00)
+		Set(1, time=2, 2017-01-01T00:00)
+		Set(3, time=3, 2018-01-01T00:00)
+	`)
+
+	c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "keytime", pilosa.OptFieldKeys(), pilosa.OptFieldTypeTime("YMDH"))
+	c.Query(t, "i", `
+		Set(0, keytime="h", 2016-01-01T00:00)
+		Set(1, keytime="xyzzy", 2017-01-01T00:00)
+		Set(0, keytime="plugh", 2018-01-01T00:00)
+	`)
+
+	c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "bsint", pilosa.OptFieldTypeInt(-100, 100))
+	c.Query(t, "i", `
+		Set(0, bsint=1)
+		Set(1, bsint=-1)
+		Set(3, bsint=2)
+	`)
+
+	c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "bsidecimal", pilosa.OptFieldTypeDecimal(2))
+	c.Query(t, "i", `
+		Set(0, bsidecimal=0.01)
+		Set(1, bsidecimal=1.00)
+		Set(3, bsidecimal=-1.01)
+	`)
+
+	c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "bool", pilosa.OptFieldTypeBool())
+	c.Query(t, "i", `
+		Set(0, bool=true)
+		Set(1, bool=false)
+		Set(3, bool=true)
+	`)
+
+	resp := c.Query(t, "i", `Extract(All(), Rows(set), Rows(keyset), Rows(mutex), Rows(keymutex), Rows(time), Rows(keytime), Rows(bsint), Rows(bsidecimal), Rows(bool))`)
+	expect := []interface{}{
+		pilosa.ExtractedTable{
+			Fields: []pilosa.ExtractedTableField{
+				{
+					Name: "set",
+					Type: pilosa.FieldTypeSet,
+				},
+				{
+					Name: "keyset",
+					Type: pilosa.FieldTypeSet,
+				},
+				{
+					Name: "mutex",
+					Type: pilosa.FieldTypeMutex,
+				},
+				{
+					Name: "keymutex",
+					Type: pilosa.FieldTypeMutex,
+				},
+				{
+					Name: "time",
+					Type: pilosa.FieldTypeTime,
+				},
+				{
+					Name: "keytime",
+					Type: pilosa.FieldTypeTime,
+				},
+				{
+					Name: "bsint",
+					Type: pilosa.FieldTypeInt,
+				},
+				{
+					Name: "bsidecimal",
+					Type: pilosa.FieldTypeDecimal,
+				},
+				{
+					Name: "bool",
+					Type: pilosa.FieldTypeBool,
+				},
+			},
+			Columns: []pilosa.ExtractedTableColumn{
+				{
+					Column: pilosa.KeyOrID{ID: 0},
+					Rows: []interface{}{
+						[]uint64{},
+						[]string{
+							"h",
+							"plugh",
+						},
+						nil,
+						"h",
+						[]uint64{
+							1,
+						},
+						[]string{
+							"h",
+							"plugh",
+						},
+						int64(1),
+						pql.NewDecimal(1, 2),
+						true,
+					},
+				},
+				{
+					Column: pilosa.KeyOrID{ID: 1},
+					Rows: []interface{}{
+						[]uint64{
+							0,
+							3,
+							4,
+						},
+						[]string{
+							"xyzzy",
+						},
+						uint64(0),
+						"xyzzy",
+						[]uint64{
+							2,
+						},
+						[]string{
+							"xyzzy",
+						},
+						int64(-1),
+						pql.NewDecimal(100, 2),
+						false,
+					},
+				},
+				{
+					Column: pilosa.KeyOrID{ID: 2},
+					Rows: []interface{}{
+						[]uint64{
+							0,
+						},
+						[]string{},
+						uint64(0),
+						nil,
+						[]uint64{},
+						[]string{},
+						nil,
+						nil,
+						nil,
+					},
+				},
+				{
+					Column: pilosa.KeyOrID{ID: 3},
+					Rows: []interface{}{
+						[]uint64{},
+						[]string{},
+						nil,
+						"plugh",
+						[]uint64{
+							3,
+						},
+						[]string{},
+						int64(2),
+						pql.NewDecimal(-101, 2),
+						true,
+					},
+				},
+				{
+					Column: pilosa.KeyOrID{ID: ShardWidth},
+					Rows: []interface{}{
+						[]uint64{},
+						[]string{},
+						nil,
+						nil,
+						[]uint64{},
+						[]string{},
+						nil,
+						nil,
+						nil,
+					},
+				},
+				{
+					Column: pilosa.KeyOrID{ID: 4 * ShardWidth},
+					Rows: []interface{}{
+						[]uint64{
+							4,
+						},
+						[]string{},
+						uint64(4),
+						nil,
+						[]uint64{},
+						[]string{},
+						nil,
+						nil,
+						nil,
+					},
+				},
+			},
+		},
+	}
+
+	if !reflect.DeepEqual(expect, resp.Results) {
+		t.Errorf("expected %v but got %v", expect, resp.Results)
+	}
+}
+
+func TestExecutor_Execute_Extract_Keyed(t *testing.T) {
+	c := test.MustRunCluster(t, 3)
+	defer c.Close()
+
+	c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true, Keys: true}, "set")
+	c.Query(t, "i", `
+		Set("h", set=1)
+		Set("h", set=2)
+		Set("xyzzy", set=2)
+		Set("plugh", set=1)
+		Clear("plugh", set=1)
+	`)
+
+	resp := c.Query(t, "i", `Extract(All(), Rows(set))`)
+	expect := []interface{}{
+		pilosa.ExtractedTable{
+			Fields: []pilosa.ExtractedTableField{
+				{
+					Name: "set",
+					Type: "set",
+				},
+			},
+			Columns: []pilosa.ExtractedTableColumn{
+				{
+					Column: pilosa.KeyOrID{Keyed: true, Key: "plugh"},
+					Rows: []interface{}{
+						[]uint64{},
+					},
+				},
+				{
+					Column: pilosa.KeyOrID{Keyed: true, Key: "h"},
+					Rows: []interface{}{
+						[]uint64{
+							1,
+							2,
+						},
+					},
+				},
+				{
+					Column: pilosa.KeyOrID{Keyed: true, Key: "xyzzy"},
+					Rows: []interface{}{
+						[]uint64{
+							2,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	if !reflect.DeepEqual(expect, resp.Results) {
+		t.Errorf("expected %v but got %v", expect, resp.Results)
+	}
+}
+
 func TestExecutor_Execute_Rows(t *testing.T) {
 	c := test.MustRunCluster(t, 3)
 	defer c.Close()
@@ -4395,8 +4785,6 @@ func TestExecutor_Execute_Query_Error(t *testing.T) {
 }
 
 func TestExecutor_GroupByStrings(t *testing.T) {
-	skipForRBF(t)
-
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
 	c.CreateField(t, "istring", pilosa.IndexOptions{Keys: true}, "generals", pilosa.OptFieldKeys())
@@ -4853,8 +5241,6 @@ func sameStringSlice(x, y []string) bool {
 }
 
 func TestExecutor_Execute_GroupBy(t *testing.T) {
-	skipForRBF(t)
-
 	groupByTest := func(t *testing.T, clusterSize int) {
 		c := test.MustRunCluster(t, 1)
 		defer c.Close()

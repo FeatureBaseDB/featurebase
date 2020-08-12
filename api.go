@@ -1066,10 +1066,6 @@ func (api *API) Import(ctx context.Context, req *ImportRequest, opts ...ImportOp
 		return errors.Wrap(err, "getting index and field")
 	}
 
-	//  Obtain transaction.
-	tx := index.Txf.NewTx(Txo{Write: true, Index: index})
-	defer tx.Rollback()
-
 	if err := req.ValidateWithTimestamp(index.CreatedAt(), field.CreatedAt()); err != nil {
 		return errors.Wrap(err, "validating import value request")
 	}
@@ -1162,11 +1158,22 @@ func (api *API) Import(ctx context.Context, req *ImportRequest, opts ...ImportOp
 
 	// Import columnIDs into existence field.
 	if !options.Clear {
-		if err := importExistenceColumns(tx, index, req.ColumnIDs); err != nil {
-			api.server.logger.Printf("import existence error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
+		if err := func() error {
+			tx := index.Txf.NewTx(Txo{Write: true, Index: index})
+			defer tx.Rollback()
+
+			if err := importExistenceColumns(tx, index, req.ColumnIDs); err != nil {
+				api.server.logger.Printf("import existence error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
+				return err
+			}
+			return tx.Commit()
+		}(); err != nil {
 			return errors.Wrap(err, "importing existence columns")
 		}
 	}
+
+	tx := index.Txf.NewTx(Txo{Write: true, Index: index})
+	defer tx.Rollback()
 
 	// Import into fragment.
 	err = field.Import(tx, req.RowIDs, req.ColumnIDs, timestamps, opts...)
@@ -1197,10 +1204,6 @@ func (api *API) ImportValue(ctx context.Context, req *ImportValueRequest, opts .
 	if err := req.ValidateWithTimestamp(index.CreatedAt(), field.CreatedAt()); err != nil {
 		return errors.Wrap(err, "validating import value request")
 	}
-
-	// Obtain transaction.
-	tx := index.Txf.NewTx(Txo{Write: true, Index: index})
-	defer tx.Rollback()
 
 	// Set up import options.
 	options, err := setUpImportOptions(opts...)
@@ -1257,6 +1260,10 @@ func (api *API) ImportValue(ctx context.Context, req *ImportValueRequest, opts .
 
 	// if we're importing into a specific shard
 	if req.Shard != math.MaxUint64 {
+		// Obtain transaction.
+		tx := index.Txf.NewTx(Txo{Write: true, Index: index})
+		defer tx.Rollback()
+
 		// Check that column IDs match the stated shard.
 		if s1, s2 := req.ColumnIDs[0]/ShardWidth, req.ColumnIDs[len(req.ColumnIDs)-1]/ShardWidth; s1 != s2 && s2 != req.Shard {
 			return errors.Errorf("shard %d specified, but import spans shards %d to %d", req.Shard, s1, s2)

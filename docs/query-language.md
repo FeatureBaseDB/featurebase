@@ -429,9 +429,9 @@ Union([ROW_CALL ...])
 
 **Description:**
 
-Union performs a logical OR on the results of all `ROW_CALL` queries passed to it.
+Union performs a set union on the column indexes in the results of all `ROW_CALL` queries passed to it. In comparison to a relational query, this is similar to combining clauses in the "OR" sense.
 
-**Result Type:** object with attrs and bits
+**Result Type:** object with attrs and columns
 
 attrs will always be empty
 
@@ -457,7 +457,7 @@ Intersect(<ROW_CALL>, [ROW_CALL ...])
 
 **Description:**
 
-Intersect performs a logical AND on the results of all `ROW_CALL` queries passed to it.
+Intersect performs a set intersection on the column indexes in the results of all `ROW_CALL` queries passed to it. In comparison to a relational query, this is similar to combining clauses in the "AND" sense.
 
 **Result Type:** object with attrs and columns
 
@@ -570,6 +570,38 @@ Not(Row(stargazer=1))
 ```
 
 * columns are repositories that were not starred by user 1
+
+#### Limit
+
+**Spec:**
+
+```
+Limit(<ROW_CALL>, [limit=<UINT>], [offset=<UINT>])
+```
+
+**Description:**
+
+Limit executes a `ROW_CALL` and returns a subset of the results.
+If a limit of `n` is specified, then this query will return the first `n` results of the row call.
+If an offset of `m` is specified, then this query will skip the first `m` results of the row call.
+If both a limit and offset are specified, the offset is applied before the limit.
+This can be used to implement pagination.
+
+**Result Type:** object with attrs and columns
+
+attrs will always be empty
+
+**Examples:**
+
+Find the second column that has a bit set in the given row.
+```request
+Limit(Row(stargazer=1), limit=1, offset=1)
+```
+```response
+{"results":[{"attrs":{},"columns":[30]}]}
+```
+
+* columns are repositories that were starred by user 1
 
 #### Count
 **Spec:**
@@ -792,6 +824,33 @@ Options(Row(f1=10), shards=[0, 2])
 {"attrs":{},"columns":[100, 2097152]}
 ```
 
+#### Row Constant
+
+**Spec:**
+
+```
+ConstRow(columns=<[]COLUMN>)
+```
+
+**Description:**
+
+`ConstRow` provides a constant bitmap value that can be used in place of a `Row` call.
+The columns can be specified as integer IDs or strings.
+
+**Result Type:** row value columns.
+
+e.g. `{"attrs":{},"columns":[10, 20]}`
+
+**Examples:**
+
+Filter specified columns to only those with a bit set in row 1 of the field `stargazer` (repositories that are starred by user 1):
+```request
+Intersect(ConstRow(columns=[10, 20, 30]), Row(stargazer=1))
+```
+```response
+{"attrs":{},"columns":[10, 20]}
+```
+
 #### Rows
 
 **Spec:**
@@ -848,6 +907,41 @@ Rows(job, like="%t")
 ```
 ```response
 {"rows":null,"keys":["management","student"]}
+```
+
+#### Extract
+
+**Spec:**
+```
+Extract(<ROW_CALL>, [<ROWS_CALL>...])
+```
+
+**Description:**
+
+Extract intersects a set of columns with a set of rows in order to extract a subset of the index.
+The result is a table consisting of the matched columns and the rows which they intersect.
+This is similar to a select query in a SQL database.
+
+**Result Type:** Object with an array of the selected fields and an array of the selected columns.
+The column array contains objects containing a column identifier and an array of field values.
+Field values are typed as such:
+- Bool Field - boolean or null
+- Mutex Field (unkeyed) - 64-bit unsigned integer or null
+- Mutex Field (keyed) - string or null
+- Integer Field - 64-bit signed integer or null
+- Decimal Field - Pilosa decimal value or null
+- Set Field (unkeyed) - array of 64-bit unsigned integers
+- Set Field (keyed) - array of strings
+- Time Field - same as the equivalent Set
+
+**Examples:**
+
+List all stargazers who have starred repository 1, and the full set of repositories they have starred:
+```request
+Extract(Row(stargazer=1), Rows(stargazer))
+```
+```response
+{"fields":[{"name":"stargazer","type":"set"}],"columns":[{"column":3,"rows":[[1, 2, 3]]}]}
 ```
 
 #### Group By
@@ -949,7 +1043,7 @@ UnionRows([ROWSET_CALL ...])
 
 UnionRows performs a logical OR on the rows matched by the results of all `ROWSET_CALL` queries passed to it.
 
-**Result Type:** object with attrs and bits
+**Result Type:** object with attrs and columns
 
 attrs will always be empty
 

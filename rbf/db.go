@@ -187,6 +187,7 @@ func (db *DB) checkpoint() error {
 	// Loop over each transaction
 	walID++
 	pageMap := immutable.NewMap(&uint32Hasher{})
+	var maxCheckpointedWALID int64
 	for {
 		// Determine last page of transaction.
 		metaWALID, metaFlags, err := db.findNextWALMetaPage(walID)
@@ -240,20 +241,27 @@ func (db *DB) checkpoint() error {
 			if err := db.writePage(pgno, page); err != nil {
 				return err
 			}
+
+			// Track highest WALID that has been checkpointed back to disk.
+			if IsMetaPage(page) {
+				maxCheckpointedWALID = walID
+			}
 		}
 	}
 
 	// Remove WAL segments that have been checkpointed.
-	for len(db.segments) > 1 {
-		segment := db.segments[0]
-		if minActiveWALID != 0 && segment.MaxWALID() >= minActiveWALID {
-			break
-		}
+	if maxCheckpointedWALID != 0 {
+		for len(db.segments) > 1 {
+			segment := db.segments[0]
+			if segment.MaxWALID() >= maxCheckpointedWALID {
+				break
+			}
 
-		if err := segment.Close(); err != nil {
-			return err
+			if err := segment.Close(); err != nil {
+				return err
+			}
+			db.segments, db.segments[0] = db.segments[1:], nil
 		}
-		db.segments, db.segments[0] = db.segments[1:], nil
 	}
 
 	db.pageMap = pageMap
@@ -424,12 +432,12 @@ func (db *DB) addWALSegment() error {
 func (db *DB) Close() (err error) {
 	// TODO(bbj): Add wait group to hang until last Tx is complete.
 
-	db.mu.Lock()
-	defer db.mu.Unlock()
-
 	// Wait for writer lock.
 	db.rwmu.Lock()
 	defer db.rwmu.Unlock()
+
+	db.mu.Lock()
+	defer db.mu.Unlock()
 
 	db.opened = false
 
@@ -546,6 +554,11 @@ func (db *DB) initFreelistPage() error {
 func (db *DB) Begin(writable bool) (_ *Tx, err error) {
 	// TODO(BBJ): Acquire write lock if writable.
 
+	// Ensure only one writable transaction at a time.
+	if writable {
+		db.rwmu.Lock()
+	}
+
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
@@ -554,11 +567,6 @@ func (db *DB) Begin(writable bool) (_ *Tx, err error) {
 	}
 
 	tx := &Tx{db: db, pageMap: db.pageMap, writable: writable}
-
-	// Ensure only one writable transaction at a time.
-	if tx.writable {
-		db.rwmu.Lock()
-	}
 
 	// Copy meta page into transaction's buffer.
 	// This page is only written at the end of a dirty transaction.
@@ -590,8 +598,10 @@ func (db *DB) removeTx(tx *Tx) error {
 
 	// Write pages from WAL to DB.
 	// TODO(bbj): Move this to an async goroutine.
-	if err := db.checkpoint(); err != nil {
-		return err
+	if tx.writable {
+		if err := db.checkpoint(); err != nil {
+			return err
+		}
 	}
 
 	delete(tx.db.txs, tx)

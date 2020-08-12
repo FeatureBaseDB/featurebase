@@ -289,6 +289,10 @@ func (e *executor) safeCopy(resp QueryResponse) (out QueryResponse) {
 			out.Results = append(out.Results, x)
 		case []GroupCount:
 			out.Results = append(out.Results, x)
+		case ExtractedTable:
+			out.Results = append(out.Results, x)
+		case ExtractedIDMatrix:
+			out.Results = append(out.Results, x)
 		case RowIdentifiers:
 			// no bitmap material, so should be ok to skip Clone()
 			out.Results = append(out.Results, x)
@@ -519,7 +523,6 @@ func (e *executor) execute(ctx context.Context, tx Tx, index string, q *pql.Quer
 }
 
 // preprocessQuery expands any calls that need preprocessing.
-// So far, this only needs to process UnionRows.
 func (e *executor) preprocessQuery(ctx context.Context, tx Tx, index string, c *pql.Call, shards []uint64, opt *execOptions) (*pql.Call, error) {
 	switch c.Name {
 	case "UnionRows":
@@ -600,6 +603,88 @@ func (e *executor) preprocessQuery(ctx context.Context, tx Tx, index string, c *
 			Name:     "Union",
 			Children: rows,
 		}, nil
+
+	case "ConstRow":
+		// Fetch user-provided columns list.
+		cols, _ := c.Args["columns"].([]interface{})
+		var ids []uint64
+		var keys []string
+		for _, c := range cols {
+			switch c := c.(type) {
+			case uint64:
+				ids = append(ids, c)
+			case int64:
+				ids = append(ids, uint64(c))
+			case string:
+				keys = append(keys, c)
+			default:
+				return nil, errors.Errorf("invalid column identifier %v of type %T", c, c)
+			}
+		}
+
+		// Translate keys to IDs.
+		if len(keys) > 0 {
+			keyIDs, err := e.Cluster.translateIndexKeys(ctx, index, keys)
+			if err != nil {
+				return nil, errors.Wrap(err, "translating column IDs in ConstRow")
+			}
+			ids = append(ids, keyIDs...)
+		}
+
+		// Split IDs by shard.
+		shardSet := make(map[uint64][]uint64)
+		for _, id := range ids {
+			shardSet[id/ShardWidth] = append(shardSet[id/ShardWidth], id)
+		}
+
+		// Convert ID sets to per-shard Row objects.
+		precomputed := make(map[uint64]interface{})
+		for _, s := range shards {
+			precomputed[s] = NewRow(shardSet[s]...)
+		}
+
+		// Generate a precomputed call with the data.
+		return &pql.Call{
+			Name:        "Precomputed",
+			Precomputed: precomputed,
+		}, nil
+
+	case "All":
+		_, hasLimit, err := c.UintArg("limit")
+		if err != nil {
+			return nil, err
+		}
+		_, hasOffset, err := c.UintArg("offset")
+		if err != nil {
+			return nil, err
+		}
+		if !hasLimit && !hasOffset {
+			return c, nil
+		}
+
+		// Rewrite the All() w/ limit to Limit(All()).
+		c.Children = []*pql.Call{
+			{
+				Name: "All",
+			},
+		}
+		c.Name = "Limit"
+		fallthrough
+
+	case "Limit":
+		if len(c.Children) != 1 {
+			return nil, errors.Errorf("expected 1 child of limit call but got %d", len(c.Children))
+		}
+		res, err := e.preprocessQuery(ctx, tx, index, c.Children[0], shards, opt)
+		if err != nil {
+			return nil, err
+		}
+		c.Children[0] = res
+		err = e.executeLimitCall(ctx, tx, index, c, shards, opt)
+		if err != nil {
+			return nil, err
+		}
+		return c, nil
 
 	default:
 		// Recurse through child calls.
@@ -714,6 +799,9 @@ func (e *executor) executeCall(ctx context.Context, tx Tx, index string, c *pql.
 	case "Rows":
 		statFn()
 		return e.executeRows(ctx, tx, index, c, shards, opt)
+	case "Extract":
+		statFn()
+		return e.executeExtract(ctx, tx, index, c, shards, opt)
 	case "GroupBy":
 		statFn()
 		return e.executeGroupBy(ctx, tx, index, c, shards, opt)
@@ -725,9 +813,6 @@ func (e *executor) executeCall(ctx context.Context, tx Tx, index string, c *pql.
 	case "FieldValue":
 		statFn()
 		return e.executeFieldValueCall(ctx, tx, index, c, shards, opt)
-	case "All":
-		statFn()
-		return e.executeAllCall(ctx, tx, index, c, shards, opt)
 	case "Precomputed":
 		return e.executePrecomputedCall(ctx, tx, index, c, shards, opt)
 	default:
@@ -925,25 +1010,20 @@ func (e *executor) executeFieldValueCallShard(ctx context.Context, tx Tx, field 
 	return other, nil
 }
 
-// executeAllCall executes an All() call.
-func (e *executor) executeAllCall(ctx context.Context, tx Tx, index string, c *pql.Call, shards []uint64, opt *execOptions) (*Row, error) {
-	rslt := NewRow()
+// executeLimitCall executes a Limit() call, **rewriting it to a precomputed call**.
+func (e *executor) executeLimitCall(ctx context.Context, tx Tx, index string, c *pql.Call, shards []uint64, opt *execOptions) error {
+	bitmapCall := c.Children[0]
 
-	var limit uint64
-	var offset uint64
-
-	if lim, hasLimit, err := c.UintArg("limit"); err != nil {
-		return nil, errors.Wrap(err, "getting limit")
-	} else if hasLimit && lim > 0 {
-		limit = uint64(lim)
+	limit, hasLimit, err := c.UintArg("limit")
+	if err != nil {
+		return errors.Wrap(err, "getting limit")
 	}
-	if off, hasOffset, err := c.UintArg("offset"); err != nil {
-		return nil, errors.Wrap(err, "getting offset")
-	} else if hasOffset && off > 0 {
-		offset = uint64(off)
+	offset, _, err := c.UintArg("offset")
+	if err != nil {
+		return errors.Wrap(err, "getting offset")
 	}
 
-	if limit == 0 {
+	if !hasLimit {
 		limit = math.MaxUint64
 	}
 
@@ -954,11 +1034,33 @@ func (e *executor) executeAllCall(ctx context.Context, tx Tx, index string, c *p
 	// got tracks the number of records gotten to that point.
 	var got uint64
 
+	c.Precomputed = make(map[uint64]interface{})
+
 	for _, shard := range shards {
-		row, err := e.executeAllCallMapReduce(ctx, tx, index, c, shard, opt)
-		if err != nil {
-			return nil, errors.Wrap(err, "executing map reduce on shard")
+		// Execute calls in bulk on each remote node and merge.
+		mapFn := func(ctx context.Context, shard uint64) (interface{}, error) {
+			return e.executeBitmapCallShard(ctx, tx, index, bitmapCall, shard)
 		}
+
+		// Merge returned results at coordinating node.
+		reduceFn := func(ctx context.Context, prev, v interface{}) interface{} {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			other, _ := prev.(*Row)
+			if other == nil {
+				other = NewRow()
+			}
+			other.Merge(v.(*Row))
+			return other
+		}
+
+		result, err := e.mapReduce(ctx, index, []uint64{shard}, c, opt, mapFn, reduceFn)
+		if err != nil {
+			return errors.Wrap(err, "limit map reduce")
+		}
+
+		row, _ := result.(*Row)
 
 		segCnt := row.Count()
 
@@ -972,14 +1074,14 @@ func (e *executor) executeAllCall(ctx context.Context, tx Tx, index string, c *p
 		// (or it has exactly enough).
 		if segCnt-skip <= limit-got {
 			if skip == 0 {
-				rslt.Merge(row)
+				c.Precomputed[shard] = row
 			} else {
 				cols := row.Columns()
 				partialRow := NewRow()
 				for _, bit := range cols[skip:] {
 					partialRow.SetBit(bit)
 				}
-				rslt.Merge(partialRow)
+				c.Precomputed[shard] = partialRow
 			}
 			got += segCnt - skip
 			// In the case where this segment exactly fulfills the limit, break.
@@ -996,42 +1098,12 @@ func (e *executor) executeAllCall(ctx context.Context, tx Tx, index string, c *p
 		for _, bit := range cols[skip : skip+limit-got] {
 			partialRow.SetBit(bit)
 		}
-		rslt.Merge(partialRow)
+		c.Precomputed[shard] = partialRow
 		break
 	}
 
-	return rslt, nil
-}
-
-// executeAllCallMapReduce executes a single shard of the All() call
-// using the executor.mapReduce() method.
-func (e *executor) executeAllCallMapReduce(ctx context.Context, tx Tx, index string, c *pql.Call, shard uint64, opt *execOptions) (*Row, error) {
-	// Execute calls in bulk on each remote node and merge.
-	mapFn := func(ctx context.Context, shard uint64) (interface{}, error) {
-		return e.executeAllCallShard(ctx, tx, index, c, shard)
-	}
-
-	// Merge returned results at coordinating node.
-	reduceFn := func(ctx context.Context, prev, v interface{}) interface{} {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		other, _ := prev.(*Row)
-		if other == nil {
-			other = NewRow()
-		}
-		other.Merge(v.(*Row))
-		return other
-	}
-
-	result, err := e.mapReduce(ctx, index, []uint64{shard}, c, opt, mapFn, reduceFn)
-	if err != nil {
-		return nil, errors.Wrap(err, "map reduce")
-	}
-
-	row, _ := result.(*Row)
-
-	return row, nil
+	c.Name = "Precomputed"
+	return nil
 }
 
 // executeIncludesColumnCallShard
@@ -1407,7 +1479,7 @@ func (e *executor) executeBitmapCallShard(ctx context.Context, tx Tx, index stri
 		return e.executeNotShard(ctx, tx, index, c, shard)
 	case "Shift":
 		return e.executeShiftShard(ctx, tx, index, c, shard)
-	case "All": // Allow a shard computation to use All() (note, limit/offset not applied)
+	case "All": // Allow a shard computation to use All()
 		return e.executeAllCallShard(ctx, tx, index, c, shard)
 	case "Distinct":
 		return nil, errors.New("Distinct shouldn't be hit as a bitmap call")
@@ -2590,8 +2662,11 @@ func (e *executor) executeRowsShard(ctx context.Context, tx Tx, index string, fi
 	// in order to represent `Rows` for the field.
 	var views = []string{viewStandard}
 
-	// Handle `time` fields.
-	if f.Type() == FieldTypeTime {
+	// Handle `int` and `time` fields.
+	switch f.Type() {
+	case FieldTypeInt:
+		return nil, errors.New("int fields not supported by Rows() query")
+	case FieldTypeTime:
 		var err error
 
 		// Parse "from" time, if set.
@@ -2710,6 +2785,298 @@ func (e *executor) executeRowsShard(ctx context.Context, tx Tx, index string, fi
 	}
 
 	return rowIDs, nil
+}
+
+type ExtractedTableField struct {
+	Name string `json:"name"`
+	Type string `json:"type"`
+}
+
+type KeyOrID struct {
+	ID    uint64
+	Key   string
+	Keyed bool
+}
+
+func (kid KeyOrID) MarshalJSON() ([]byte, error) {
+	if kid.Keyed {
+		return json.Marshal(kid.Key)
+	}
+
+	return json.Marshal(kid.ID)
+}
+
+type ExtractedTableColumn struct {
+	Column KeyOrID       `json:"column"`
+	Rows   []interface{} `json:"rows"`
+}
+
+type ExtractedTable struct {
+	Fields  []ExtractedTableField  `json:"fields"`
+	Columns []ExtractedTableColumn `json:"columns"`
+}
+
+type ExtractedIDColumn struct {
+	ColumnID uint64
+	Rows     [][]uint64
+}
+
+type ExtractedIDMatrix struct {
+	Fields  []string
+	Columns []ExtractedIDColumn
+}
+
+func (e *ExtractedIDMatrix) Append(m ExtractedIDMatrix) {
+	e.Columns = append(e.Columns, m.Columns...)
+	if e.Fields == nil {
+		e.Fields = m.Fields
+	}
+}
+
+func (e *executor) executeExtract(ctx context.Context, tx Tx, index string, c *pql.Call, shards []uint64, opt *execOptions) (ExtractedIDMatrix, error) {
+	// Extract the column filter call.
+	if len(c.Children) < 1 {
+		return ExtractedIDMatrix{}, errors.New("missing column filter in Extract")
+	}
+	filter := c.Children[0]
+
+	// Extract fields from rows calls.
+	fields := make([]string, len(c.Children)-1)
+	for i, rows := range c.Children[1:] {
+		if rows.Name != "Rows" {
+			return ExtractedIDMatrix{}, errors.Errorf("child call of Extract is %q but expected Rows", rows.Name)
+		}
+		var fieldName string
+		var ok bool
+		for k, v := range rows.Args {
+			switch k {
+			case "field", "_field":
+				fieldName = v.(string)
+				ok = true
+			default:
+				return ExtractedIDMatrix{}, errors.Errorf("unsupported Rows argument for Extract: %q", k)
+			}
+		}
+		if !ok {
+			return ExtractedIDMatrix{}, errors.New("missing field specification in Rows")
+		}
+		fields[i] = fieldName
+	}
+
+	// Execute calls in bulk on each remote node and merge.
+	mapFn := func(ctx context.Context, shard uint64) (interface{}, error) {
+		return e.executeExtractShard(ctx, tx, index, fields, filter, shard)
+	}
+
+	// Merge returned results at coordinating node.
+	reduceFn := func(ctx context.Context, prev, v interface{}) interface{} {
+		other, _ := prev.(ExtractedIDMatrix)
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		other.Append(v.(ExtractedIDMatrix))
+		return other
+	}
+
+	// Get full result set.
+	other, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
+	if err != nil {
+		return ExtractedIDMatrix{}, err
+	}
+	results, _ := other.(ExtractedIDMatrix)
+	sort.Slice(results.Columns, func(i, j int) bool {
+		return results.Columns[i].ColumnID < results.Columns[j].ColumnID
+	})
+	return results, nil
+}
+
+func mergeBits(bits *Row, mask uint64, out map[uint64]uint64) {
+	for _, v := range bits.Columns() {
+		out[v] |= mask
+	}
+}
+
+var trueRowFakeID = []uint64{1}
+var falseRowFakeID = []uint64{0}
+
+func (e *executor) executeExtractShard(ctx context.Context, tx Tx, index string, fields []string, filter *pql.Call, shard uint64) (ExtractedIDMatrix, error) {
+	// Execute filter.
+	colsBitmap, err := e.executeBitmapCallShard(ctx, tx, index, filter, shard)
+	if err != nil {
+		return ExtractedIDMatrix{}, errors.Wrap(err, "failed to get extraction column filter")
+	}
+
+	// Fetch index.
+	idx := e.Holder.Index(index)
+	if idx == nil {
+		return ExtractedIDMatrix{}, ErrIndexNotFound
+	}
+
+	// Decompress columns bitmap.
+	cols := colsBitmap.Columns()
+
+	// Generate a matrix to stuff the results into.
+	m := make([]ExtractedIDColumn, len(cols))
+	{
+		rowsBuf := make([][]uint64, len(m)*len(fields))
+		for i, c := range cols {
+			m[i] = ExtractedIDColumn{
+				ColumnID: c,
+				Rows:     rowsBuf[i*len(fields) : (i+1)*len(fields) : (i+1)*len(fields)],
+			}
+		}
+	}
+	if len(m) == 0 {
+		return ExtractedIDMatrix{
+			Fields:  fields,
+			Columns: m,
+		}, nil
+	}
+	mLookup := make(map[uint64]int)
+	for i, j := range cols {
+		mLookup[j] = i
+	}
+
+	// Process fields.
+	for i, name := range fields {
+		// Look up the field.
+		field := idx.Field(name)
+		if field == nil {
+			return ExtractedIDMatrix{}, ErrFieldNotFound
+		}
+
+		switch field.Type() {
+		case FieldTypeSet, FieldTypeMutex, FieldTypeTime:
+			// Handle a set field by listing the rows and then intersecting them with the filter.
+
+			// Extract the standard view fragment.
+			fragment := e.Holder.fragment(index, name, viewStandard, shard)
+			if fragment == nil {
+				// There is nothing here.
+				continue
+			}
+
+			// List all rows in the standard view.
+			rows, err := fragment.rows(ctx, tx, 0)
+			if err != nil {
+				return ExtractedIDMatrix{}, errors.Wrap(err, "listing rows in set field")
+			}
+
+			// Loop over each row and scan the intersection with the filter.
+			for _, rowID := range rows {
+				// Load row from fragment.
+				row, err := fragment.row(tx, rowID)
+				if err != nil {
+					return ExtractedIDMatrix{}, errors.Wrap(err, "loading row from fragment")
+				}
+
+				// Apply column filter to row.
+				row = row.Intersect(colsBitmap)
+
+				// Rotate vector into the matrix.
+				for _, columnID := range row.Columns() {
+					fieldSlot := &m[mLookup[columnID]].Rows[i]
+					*fieldSlot = append(*fieldSlot, rowID)
+				}
+			}
+		case FieldTypeBool:
+			// Handle bool fields by scanning the true and false rows and assigning an integer.
+
+			// Extract the standard view fragment.
+			fragment := e.Holder.fragment(index, name, viewStandard, shard)
+			if fragment == nil {
+				// There is nothing here.
+				continue
+			}
+
+			// Fetch true and false rows.
+			trueRow, err := fragment.row(tx, trueRowID)
+			if err != nil {
+				return ExtractedIDMatrix{}, errors.Wrap(err, "loading true row from fragment")
+			}
+			falseRow, err := fragment.row(tx, falseRowID)
+			if err != nil {
+				return ExtractedIDMatrix{}, errors.Wrap(err, "loading true row from fragment")
+			}
+
+			// Fetch values by column.
+			for j := range m {
+				col := m[j].ColumnID
+				switch {
+				case trueRow.Includes(col):
+					m[j].Rows[i] = trueRowFakeID
+				case falseRow.Includes(col):
+					m[j].Rows[i] = falseRowFakeID
+				}
+			}
+
+		case FieldTypeInt, FieldTypeDecimal:
+			// Handle an int/decimal field by rotating a BSI matrix.
+
+			// Extract the BSI view fragment.
+			fragment := e.Holder.fragment(index, name, viewBSIGroupPrefix+name, shard)
+			if fragment == nil {
+				// There is nothing here.
+				continue
+			}
+
+			// Load the BSI group.
+			bsig := field.bsiGroup(name)
+			if bsig == nil {
+				return ExtractedIDMatrix{}, ErrBSIGroupNotFound
+			}
+
+			// Load the BSI exists bit.
+			exists, err := fragment.row(tx, bsiExistsBit)
+			if err != nil {
+				return ExtractedIDMatrix{}, errors.Wrap(err, "loading BSI exists bit from fragment")
+			}
+
+			// Filter BSI exists bit by selected columns.
+			exists = exists.Intersect(colsBitmap)
+			if !exists.Any() {
+				// No relevant BSI values are present in this fragment.
+				continue
+			}
+
+			// Populate a map with the BSI data.
+			data := make(map[uint64]uint64)
+			mergeBits(exists, 0, data)
+
+			// Copy in the sign bit.
+			sign, err := fragment.row(tx, bsiSignBit)
+			if err != nil {
+				return ExtractedIDMatrix{}, errors.Wrap(err, "loading BSI sign bit from fragment")
+			}
+			sign = sign.Intersect(exists)
+			mergeBits(sign, 1<<63, data)
+
+			// Copy in the significand.
+			for i := uint(0); i < bsig.BitDepth; i++ {
+				bits, err := fragment.row(tx, bsiOffsetBit+uint64(i))
+				if err != nil {
+					return ExtractedIDMatrix{}, errors.Wrap(err, "loading BSI significand bit from fragment")
+				}
+				bits = bits.Intersect(exists)
+				mergeBits(bits, 1<<i, data)
+			}
+
+			// Store the results back into the matrix.
+			for columnID, val := range data {
+				// Convert to two's complement.
+				val = uint64((2*(int64(val)>>63) + 1) * int64(val&^(1<<63)))
+
+				m[mLookup[columnID]].Rows[i] = []uint64{val}
+			}
+		}
+	}
+
+	// Emit the final matrix.
+	// Like RowIDs, this is an internal type and will need to be converted.
+	return ExtractedIDMatrix{
+		Fields:  fields,
+		Columns: m,
+	}, nil
 }
 
 func (e *executor) executeRowShard(ctx context.Context, tx Tx, index string, c *pql.Call, shard uint64) (*Row, error) {
@@ -4452,18 +4819,24 @@ func (e *executor) translateResults(ctx context.Context, index string, idx *Inde
 }
 
 func (e *executor) collectResultIDs(index string, idx *Index, call *pql.Call, result interface{}, idSet map[uint64]struct{}) error {
-	row, ok := result.(*Row)
-	if !ok {
-		return nil
-	} else if !idx.Keys() {
-		return nil
-	}
+	switch result := result.(type) {
+	case *Row:
+		if !idx.Keys() {
+			return nil
+		}
 
-	for _, segment := range row.Segments() {
-		for _, col := range segment.Columns() {
-			idSet[col] = struct{}{}
+		for _, segment := range result.Segments() {
+			for _, col := range segment.Columns() {
+				idSet[col] = struct{}{}
+			}
+		}
+
+	case ExtractedIDMatrix:
+		for _, col := range result.Columns {
+			idSet[col.ColumnID] = struct{}{}
 		}
 	}
+
 	return nil
 }
 
@@ -4630,6 +5003,151 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 		}
 
 		return other, nil
+
+	case ExtractedIDMatrix:
+		type fieldMapper = func([]uint64) (interface{}, error)
+
+		fields := make([]ExtractedTableField, len(result.Fields))
+		mappers := make([]fieldMapper, len(result.Fields))
+		for i, v := range result.Fields {
+			field := idx.Field(v)
+			if field == nil {
+				return nil, ErrFieldNotFound
+			}
+
+			typ := field.Type()
+
+			fields[i] = ExtractedTableField{
+				Name: v,
+				Type: typ,
+			}
+
+			var mapper fieldMapper
+			switch typ {
+			case FieldTypeBool:
+				mapper = func(ids []uint64) (interface{}, error) {
+					switch len(ids) {
+					case 0:
+						return nil, nil
+					case 1:
+						switch ids[0] {
+						case 0:
+							return false, nil
+						case 1:
+							return true, nil
+						default:
+							return nil, errors.Errorf("invalid ID for boolean %q: %d", field.Name(), ids[0])
+						}
+					default:
+						return nil, errors.Errorf("boolean %q has too many values: %v", field.Name(), ids)
+					}
+				}
+			case FieldTypeSet, FieldTypeTime:
+				if field.Keys() {
+					translator := field.TranslateStore()
+					mapper = func(ids []uint64) (interface{}, error) {
+						return translator.TranslateIDs(ids)
+					}
+				} else {
+					mapper = func(ids []uint64) (interface{}, error) {
+						if ids == nil {
+							ids = []uint64{}
+						}
+						return ids, nil
+					}
+				}
+			case FieldTypeMutex:
+				if field.Keys() {
+					translator := field.TranslateStore()
+					mapper = func(ids []uint64) (interface{}, error) {
+						switch len(ids) {
+						case 0:
+							return nil, nil
+						case 1:
+							return translator.TranslateID(ids[0])
+						default:
+							return nil, errors.Errorf("mutex %q has too many values: %v", field.Name(), ids)
+						}
+					}
+				} else {
+					mapper = func(ids []uint64) (interface{}, error) {
+						switch len(ids) {
+						case 0:
+							return nil, nil
+						case 1:
+							return ids[0], nil
+						default:
+							return nil, errors.Errorf("mutex %q has too many values: %v", field.Name(), ids)
+						}
+					}
+				}
+			case FieldTypeInt:
+				mapper = func(ids []uint64) (interface{}, error) {
+					switch len(ids) {
+					case 0:
+						return nil, nil
+					case 1:
+						return int64(ids[0]), nil
+					default:
+						return nil, errors.Errorf("BSI field %q has too many values: %v", field.Name(), ids)
+					}
+				}
+			case FieldTypeDecimal:
+				scale := field.Options().Scale
+				mapper = func(ids []uint64) (interface{}, error) {
+					switch len(ids) {
+					case 0:
+						return nil, nil
+					case 1:
+						return pql.NewDecimal(int64(ids[0]), scale), nil
+					default:
+						return nil, errors.Errorf("BSI field %q has too many values: %v", field.Name(), ids)
+					}
+				}
+			default:
+				return nil, errors.Errorf("field type %q not yet supported", typ)
+			}
+			mappers[i] = mapper
+		}
+
+		var translateCol func(uint64) (KeyOrID, error)
+		if idx.keys {
+			translateCol = func(id uint64) (KeyOrID, error) {
+				return KeyOrID{Keyed: true, Key: idSet[id]}, nil
+			}
+		} else {
+			translateCol = func(id uint64) (KeyOrID, error) {
+				return KeyOrID{ID: id}, nil
+			}
+		}
+
+		cols := make([]ExtractedTableColumn, len(result.Columns))
+		colData := make([]interface{}, len(cols)*len(result.Fields))
+		for i, col := range result.Columns {
+			data := colData[i*len(result.Fields) : (i+1)*len(result.Fields) : (i+1)*len(result.Fields)]
+			for j, rows := range col.Rows {
+				v, err := mappers[j](rows)
+				if err != nil {
+					return nil, errors.Wrap(err, "translating extracted table value")
+				}
+				data[j] = v
+			}
+
+			colTrans, err := translateCol(col.ColumnID)
+			if err != nil {
+				return nil, errors.Wrap(err, "translating column ID in extracted table")
+			}
+
+			cols[i] = ExtractedTableColumn{
+				Column: colTrans,
+				Rows:   data,
+			}
+		}
+
+		return ExtractedTable{
+			Fields:  fields,
+			Columns: cols,
+		}, nil
 	}
 
 	return result, nil
