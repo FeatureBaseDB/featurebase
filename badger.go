@@ -720,7 +720,8 @@ func (tx *BadgerTx) PutContainer(index, field, view string, shard uint64, ckey u
 		panic(fmt.Sprintf("unknown roaring.Container type: %v", ct))
 	}
 	tx.writeCount++
-	tx.writeByteCount += len(by)
+	sz := len(by) + len(bkey) + 2
+	tx.writeByteCount += sz
 
 	tx.mu.Lock()
 	defer tx.mu.Unlock()
@@ -728,16 +729,20 @@ func (tx *BadgerTx) PutContainer(index, field, view string, shard uint64, ckey u
 	// The integration tests do large bit level loads that exceed 10MB.
 	// So we autocommit and start a new Txn if we are about to
 	// write too much into one Txn.
+	//
 	// The badger defaults limits are currently:
 	// maxBatchCount:104857, maxBatchSize:10066329
-	// So we stop a little before to make sure we fit.
-	if tx.writeCount > 100000 || tx.writeByteCount > 10000000 {
+	//
+	// However, emprirically we still get ErrTnTooBig when
+	// tx.writeByteCount=5884222; or when tx.writeCount=16197.
+	// So duck under both those thresholds by some margin.
+	if tx.writeCount > 10000 || tx.writeByteCount > 4000000 {
 		// avoid ErrTxnTooBig by commiting before going over the limits,
 		// because then we get a error: "Transaction Conflict. Please retry."
 		panicOn(tx.tx.Commit())
 		tx.tx = tx.Db.db.NewTransaction(tx.write)
 		tx.writeCount = 1
-		tx.writeByteCount = len(by)
+		tx.writeByteCount = sz
 	}
 	entry := badger.NewEntry(bkey, by).WithMeta(ct)
 	err := tx.tx.SetEntry(entry)
@@ -748,7 +753,7 @@ func (tx *BadgerTx) PutContainer(index, field, view string, shard uint64, ckey u
 	// is best to commit the transaction and start a new transaction immediately."
 	//
 	if err == badger.ErrTxnTooBig {
-		panic(fmt.Sprintf("got error badger.ErrTxnTooBig, but we shoud never get this now; len(by) = %v; vs limit is 10MB. tx.writeCount=%v; tx.writeByteCount=%v;", len(by), tx.writeCount, tx.writeByteCount))
+		panic(fmt.Sprintf("got error badger.ErrTxnTooBig, but we shoud never get this now; len(by) = %v; len(bkey)=%v; vs limit is 10MB. tx.writeCount=%v; tx.writeByteCount=%v;", len(by), len(bkey), tx.writeCount, tx.writeByteCount))
 	}
 	return err
 }

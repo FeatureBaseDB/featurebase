@@ -1278,7 +1278,7 @@ func getTestBitmapAsRawRoaring(bitsToSet ...uint64) []byte {
 func TestBadger_AutoCommit(t *testing.T) {
 
 	// setup
-	dbwrap, clean := mustOpenEmptyBadgerWrapper("TestBadger_DeleteIndex")
+	dbwrap, clean := mustOpenEmptyBadgerWrapper("TestBadger_AutoCommit")
 	defer clean()
 	defer dbwrap.Close()
 

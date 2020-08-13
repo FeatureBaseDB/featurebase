@@ -250,6 +250,18 @@ func (f *TxFactory) DeleteIndex(name string) error {
 		return f.badgerDB.DeleteIndex(name)
 	case blueGreenRoaringBadger:
 		return f.badgerDB.DeleteIndex(name)
+	case blueGreenRBFBadger:
+		_ = f.rbfDB.DeleteIndex(name)
+		return f.badgerDB.DeleteIndex(name)
+	case blueGreenBadgerRBF:
+		_ = f.badgerDB.DeleteIndex(name)
+		return f.rbfDB.DeleteIndex(name)
+	case blueGreenRBFRoaring:
+		// roaring already done
+		return f.rbfDB.DeleteIndex(name)
+	case blueGreenRoaringRBF:
+		// roaring already done
+		return f.rbfDB.DeleteIndex(name)
 	}
 	panic(fmt.Sprintf("unknown f.typeOfTx type: '%v'", f.typeOfTx))
 }
@@ -260,8 +272,6 @@ func (f *TxFactory) DeleteFieldFromStore(index, field, fieldPath string) error {
 		return f.roaringDB.DeleteField(index, field, fieldPath)
 	case badgerTxn:
 		return f.badgerDB.DeleteField(index, field, fieldPath)
-	//case lmdbTxn:
-	//return f.lmDB.DeleteField(index, field, fieldPath)
 	case rbfTxn:
 		return f.rbfDB.DeleteField(index, field, fieldPath)
 	case blueGreenBadgerRoaring:
@@ -270,6 +280,20 @@ func (f *TxFactory) DeleteFieldFromStore(index, field, fieldPath string) error {
 	case blueGreenRoaringBadger:
 		_ = f.roaringDB.DeleteField(index, field, fieldPath)
 		return f.badgerDB.DeleteField(index, field, fieldPath)
+	case blueGreenRBFBadger:
+		_ = f.badgerDB.DeleteField(index, field, fieldPath)
+		return f.rbfDB.DeleteField(index, field, fieldPath)
+	case blueGreenBadgerRBF:
+		_ = f.rbfDB.DeleteField(index, field, fieldPath)
+		return f.badgerDB.DeleteField(index, field, fieldPath)
+	case blueGreenRBFRoaring:
+		_ = f.rbfDB.DeleteField(index, field, fieldPath)
+		return f.roaringDB.DeleteField(index, field, fieldPath)
+	case blueGreenRoaringRBF:
+		_ = f.roaringDB.DeleteField(index, field, fieldPath)
+		return f.rbfDB.DeleteField(index, field, fieldPath)
+		//case lmdbTxn:
+		//return f.lmDB.DeleteField(index, field, fieldPath)
 	}
 	panic(fmt.Sprintf("unknown f.typeOfTx type: '%v'", f.typeOfTx))
 }
@@ -282,14 +306,26 @@ func (f *TxFactory) DeleteFragmentFromStore(index, field, view string, shard uin
 		return f.badgerDB.DeleteFragment(index, field, view, shard, frag)
 	case rbfTxn:
 		return f.rbfDB.DeleteFragment(index, field, view, shard, frag)
-		//	case lmdbTxn:
-		//		return f.lmDB.DeleteFragment(index, field, view, shard, frag)
 	case blueGreenBadgerRoaring:
 		_ = f.badgerDB.DeleteFragment(index, field, view, shard, frag)
 		return f.roaringDB.DeleteFragment(index, field, view, shard, frag)
 	case blueGreenRoaringBadger:
 		_ = f.roaringDB.DeleteFragment(index, field, view, shard, frag)
 		return f.badgerDB.DeleteFragment(index, field, view, shard, frag)
+	case blueGreenRBFBadger:
+		_ = f.rbfDB.DeleteFragment(index, field, view, shard, frag)
+		return f.badgerDB.DeleteFragment(index, field, view, shard, frag)
+	case blueGreenBadgerRBF:
+		_ = f.badgerDB.DeleteFragment(index, field, view, shard, frag)
+		return f.rbfDB.DeleteFragment(index, field, view, shard, frag)
+	case blueGreenRBFRoaring:
+		_ = f.rbfDB.DeleteFragment(index, field, view, shard, frag)
+		return f.roaringDB.DeleteFragment(index, field, view, shard, frag)
+	case blueGreenRoaringRBF:
+		_ = f.roaringDB.DeleteFragment(index, field, view, shard, frag)
+		return f.rbfDB.DeleteFragment(index, field, view, shard, frag)
+		//	case lmdbTxn:
+		//		return f.lmDB.DeleteFragment(index, field, view, shard, frag)
 	}
 	panic(fmt.Sprintf("unknown f.typeOfTx type: '%v'", f.typeOfTx))
 

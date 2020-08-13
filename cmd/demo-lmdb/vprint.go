@@ -23,6 +23,7 @@
 // SOFTWARE.
 
 // +build !386
+// +build skip_building_lmdb_for_now
 
 package main
 
