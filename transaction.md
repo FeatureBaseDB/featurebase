@@ -28,7 +28,9 @@ presumably cluster-wide.
 
 The base transaction endpoints are `/transactions`, for listing or creating
 transactions, and `/transaction/[id]`, for listing, creating, finishing, or
-cancelling a transaction.
+cancelling a transaction. A GET to the `/transaction` endpoint (without an
+`[id]`) will return a list of all transactions ordered by their creation
+date: `createdAt`.
 
 A POST to `/transaction` attempts to create a transaction, assigning it an
 arbitrary ID that is not the ID of any existing transaction. A `GET` from
@@ -214,6 +216,7 @@ This will return a JSON "transaction response" object.
   "active":true,
   "exclusive":false,
   "timeout":"1m0s",
+  "createdAt":"2020-04-17T21:53:18.69359-05:00",
   "deadline":"2020-04-17T21:54:18.69359-05:00"
   },
 "error":"some message"
