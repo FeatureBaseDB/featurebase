@@ -1275,6 +1275,30 @@ func getTestBitmapAsRawRoaring(bitsToSet ...uint64) []byte {
 	return buf.Bytes()
 }
 
+func TestBadger_AutoCommit(t *testing.T) {
+
+	// setup
+	dbwrap, clean := mustOpenEmptyBadgerWrapper("TestBadger_DeleteIndex")
+	defer clean()
+	defer dbwrap.Close()
+
+	index, field, view, shard := "i", "f", "v", uint64(0)
+	tx := dbwrap.NewBadgerTx(writable, index, nil)
+
+	// if we go over 100K writes, we should autocommit
+	// rather than panic.
+	for v := 0; v < 133444; v++ {
+		changed, err := tx.Add(index, field, view, shard, doBatched, uint64(v))
+		if changed <= 0 {
+			panic("should have changed")
+		}
+		panicOn(err)
+	}
+
+	err := tx.Commit()
+	panicOn(err)
+}
+
 func TestBadger_DeleteIndex(t *testing.T) {
 
 	// setup
