@@ -29,6 +29,7 @@ import (
 	"github.com/pilosa/pilosa/v2/pql"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/stats"
+	"github.com/pilosa/pilosa/v2/testhook"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -158,6 +159,7 @@ func (v *view) open() error {
 		return err
 	}
 
+	_ = testhook.Opened(v.holder.Auditor, v, nil)
 	v.holder.Logger.Debugf("successfully opened index/field/view: %s/%s/%s", v.index, v.field, v.name)
 	return nil
 }
@@ -224,6 +226,9 @@ shardLoop:
 func (v *view) close() error {
 	v.mu.Lock()
 	defer v.mu.Unlock()
+	defer func() {
+		_ = testhook.Closed(v.holder.Auditor, v, nil)
+	}()
 
 	// Close all fragments.
 	eg, ctx := errgroup.WithContext(context.Background())
@@ -394,6 +399,7 @@ func (v *view) deleteFragment(shard uint64) error {
 	v.holder.Logger.Printf("delete fragment: (%s/%s/%s) %d", v.index, v.field, v.name, shard)
 
 	idx := f.holder.Index(v.index)
+	f.Close()
 	if err := idx.Txf.DeleteFragmentFromStore(f.index, f.field, f.view, f.shard, f); err != nil {
 		return errors.Wrap(err, "DeleteFragment")
 	}

@@ -104,6 +104,7 @@ func (g *memberSet) Open() (err error) {
 // Close attempts to gracefully leave the cluster, and finally calls shutdown
 // after (at most) a timeout period.
 func (g *memberSet) Close() error {
+	g.eventReceiver.Close()
 	leaveErr := g.memberlist.Leave(5 * time.Second)
 	shutdownErr := g.memberlist.Shutdown()
 	if leaveErr != nil || shutdownErr != nil {
@@ -366,8 +367,9 @@ func (g *memberSet) MergeRemoteState(buf []byte, join bool) {
 // Care must be taken that events are processed in a timely manner from
 // the channel, since this delegate will block until an event can be sent.
 type eventReceiver struct {
-	ch   chan memberlist.NodeEvent
-	papi *pilosa.API
+	ch     chan memberlist.NodeEvent
+	closed chan struct{}
+	papi   *pilosa.API
 
 	logger logger.Logger
 }
@@ -376,6 +378,7 @@ type eventReceiver struct {
 func newEventReceiver(logger logger.Logger, papi *pilosa.API) *eventReceiver {
 	ger := &eventReceiver{
 		ch:     make(chan memberlist.NodeEvent, 1),
+		closed: make(chan struct{}),
 		logger: logger,
 		papi:   papi,
 	}
@@ -389,7 +392,10 @@ func (g *eventReceiver) NotifyJoin(n *memberlist.Node) {
 	n2.Meta = make([]byte, len(n.Meta))
 	copy(n2.Meta, n.Meta)
 
-	g.ch <- memberlist.NodeEvent{Event: memberlist.NodeJoin, Node: &n2}
+	select {
+	case g.ch <- memberlist.NodeEvent{Event: memberlist.NodeJoin, Node: &n2}:
+	case <-g.closed:
+	}
 }
 
 func (g *eventReceiver) NotifyLeave(n *memberlist.Node) {
@@ -398,7 +404,10 @@ func (g *eventReceiver) NotifyLeave(n *memberlist.Node) {
 	n2.Meta = make([]byte, len(n.Meta))
 	copy(n2.Meta, n.Meta)
 
-	g.ch <- memberlist.NodeEvent{Event: memberlist.NodeLeave, Node: &n2}
+	select {
+	case g.ch <- memberlist.NodeEvent{Event: memberlist.NodeLeave, Node: &n2}:
+	case <-g.closed:
+	}
 }
 
 func (g *eventReceiver) NotifyUpdate(n *memberlist.Node) {
@@ -407,13 +416,25 @@ func (g *eventReceiver) NotifyUpdate(n *memberlist.Node) {
 	n2.Meta = make([]byte, len(n.Meta))
 	copy(n2.Meta, n.Meta)
 
-	g.ch <- memberlist.NodeEvent{Event: memberlist.NodeUpdate, Node: &n2}
+	select {
+	case g.ch <- memberlist.NodeEvent{Event: memberlist.NodeUpdate, Node: &n2}:
+	case <-g.closed:
+	}
+}
+
+func (g *eventReceiver) Close() {
+	close(g.closed)
 }
 
 func (g *eventReceiver) listen() {
 	var nodeEventType pilosa.NodeEventType
 	for {
-		e := <-g.ch
+		var e memberlist.NodeEvent
+		select {
+		case <-g.closed:
+			return
+		case e = <-g.ch:
+		}
 		switch e.Event {
 		case memberlist.NodeJoin:
 			nodeEventType = pilosa.NodeJoin

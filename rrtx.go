@@ -369,16 +369,12 @@ func (db *RoaringStore) DeleteField(index, field, fieldPath string) error {
 }
 
 // frag should be passed by any RoaringTx user, but for RBF/Badger it can be nil.
+// The fragment should be closed before this.
 func (db *RoaringStore) DeleteFragment(index, field, view string, shard uint64, frag interface{}) error {
 
 	fragment, ok := frag.(*fragment)
 	if !ok {
 		return fmt.Errorf("RoaringStore.DeleteFragment must get frag of type *fragment, but got '%T'", frag)
-	}
-
-	// Close data files before deletion.
-	if err := fragment.Close(); err != nil {
-		return errors.Wrap(err, "closing fragment")
 	}
 
 	// Delete fragment file.

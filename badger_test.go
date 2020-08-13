@@ -18,12 +18,8 @@
 // See https://github.com/dgraph-io/badger/issues/1384 for any progress.
 // What we see is that the value-log allocations immediately run out of
 // memory. So we turn off 386 with a build tag to keep the .circleci happy.
-//
-// gendebug_test will have a TestMain if build tag generationdebug is on,
-// so we avoid conflicting with that debug scenario.
 
 // +build !386
-// +build !generationdebug
 
 package pilosa
 
@@ -36,9 +32,15 @@ import (
 
 	"github.com/dgraph-io/badger/v2"
 	"github.com/pilosa/pilosa/v2/roaring"
+	"github.com/pilosa/pilosa/v2/testhook"
+	"github.com/pkg/errors"
 )
 
 var _ = &roaring.Bitmap{}
+
+func init() {
+	testhook.RegisterPostTestHook(reportTestBadgersNeedingClose)
+}
 
 // helpers, each runs their own new txn, and commits if a change/delete
 // was made. The txn is rolled back if it is just viewing the data.
@@ -1639,26 +1641,20 @@ func BenchmarkBadger_Write(b *testing.B) {
 	*/
 }
 
-func reportTestBadgersNeedingClose() {
+func reportTestBadgersNeedingClose() error {
 	globalBadgerReg.mu.Lock()
 	defer globalBadgerReg.mu.Unlock()
 	n := len(globalBadgerReg.mp)
-	if n > 0 {
-		AlwaysPrintf("*** these badgers are still open (n=%v):", n)
-		i := 0
-		for w := range globalBadgerReg.mp {
-			AlwaysPrintf("i=%v, w p=%p stack:\n%v\n\n", i, w, w.startStack)
-			i++
-		}
+	if n == 0 {
+		return nil
 	}
-}
-
-var _ = reportTestBadgersNeedingClose // happy linter
-
-func TestMain(m *testing.M) {
-	ret := m.Run()
-	//reportTestBadgersNeedingClose()
-	os.Exit(ret)
+	AlwaysPrintf("*** these badgers are still open (n=%v):", n)
+	i := 0
+	for w := range globalBadgerReg.mp {
+		AlwaysPrintf("i=%v, w p=%p stack:\n%v\n\n", i, w, w.startStack)
+		i++
+	}
+	return errors.New("unclosed badgers, contact Animal Control")
 }
 
 /*

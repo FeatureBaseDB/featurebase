@@ -49,6 +49,7 @@ import (
 	"github.com/pilosa/pilosa/v2/stats"
 	"github.com/pilosa/pilosa/v2/statsd"
 	"github.com/pilosa/pilosa/v2/syswrap"
+	"github.com/pilosa/pilosa/v2/testhook"
 	"github.com/pkg/errors"
 )
 
@@ -196,6 +197,7 @@ func (m *Command) Start() (err error) {
 		}
 	}
 
+	_ = testhook.Opened(pilosa.NewAuditor(), m, nil)
 	close(m.Started)
 	return nil
 }
@@ -537,6 +539,7 @@ func (m *Command) GossipTransport() *gossip.Transport {
 func (m *Command) Close() error {
 	defer close(m.done)
 	eg := errgroup.Group{}
+	m.grpcServer.Stop()
 	eg.Go(m.Handler.Close)
 	eg.Go(m.Server.Close)
 	eg.Go(m.API.Close)
@@ -552,6 +555,7 @@ func (m *Command) Close() error {
 	}
 
 	err := eg.Wait()
+	_ = testhook.Closed(pilosa.NewAuditor(), m, nil)
 	return errors.Wrap(err, "closing everything")
 }
 

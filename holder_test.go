@@ -33,7 +33,7 @@ import (
 
 func TestHolder_Open(t *testing.T) {
 	t.Run("ErrIndexName", func(t *testing.T) {
-		h := test.MustOpenHolder()
+		h := test.MustOpenHolder(t)
 
 		bufLogger := test.NewBufferLogger()
 		h.Holder.Logger = bufLogger
@@ -60,7 +60,7 @@ func TestHolder_Open(t *testing.T) {
 		if os.Geteuid() == 0 {
 			t.Skip("Skipping permissions test since user is root.")
 		}
-		h := test.MustOpenHolder()
+		h := test.MustOpenHolder(t)
 		defer h.Close()
 
 		if _, err := h.CreateIndex("test", pilosa.IndexOptions{}); err != nil {
@@ -79,7 +79,7 @@ func TestHolder_Open(t *testing.T) {
 		}
 	})
 	t.Run("ErrIndexAttrStoreCorrupt", func(t *testing.T) {
-		h := test.MustOpenHolder()
+		h := test.MustOpenHolder(t)
 		defer h.Close()
 
 		if _, err := h.CreateIndex("test", pilosa.IndexOptions{}); err != nil {
@@ -99,7 +99,7 @@ func TestHolder_Open(t *testing.T) {
 		if os.Geteuid() == 0 {
 			t.Skip("Skipping permissions test since user is root.")
 		}
-		h := test.MustOpenHolder()
+		h := test.MustOpenHolder(t)
 		defer h.Close()
 
 		if idx, err := h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
@@ -119,7 +119,7 @@ func TestHolder_Open(t *testing.T) {
 		}
 	})
 	t.Run("ErrFieldOptionsCorrupt", func(t *testing.T) {
-		h := test.MustOpenHolder()
+		h := test.MustOpenHolder(t)
 		defer h.Close()
 
 		var idx *pilosa.Index
@@ -142,7 +142,7 @@ func TestHolder_Open(t *testing.T) {
 		}
 	})
 	t.Run("ErrFieldAttrStoreCorrupt", func(t *testing.T) {
-		h := test.MustOpenHolder()
+		h := test.MustOpenHolder(t)
 		defer h.Close()
 
 		var idx *pilosa.Index
@@ -170,7 +170,7 @@ func TestHolder_Open(t *testing.T) {
 		if os.Geteuid() == 0 {
 			t.Skip("Skipping permissions test since user is root.")
 		}
-		h := test.MustOpenHolder()
+		h := test.MustOpenHolder(t)
 		defer h.Close()
 
 		var idx *pilosa.Index
@@ -205,7 +205,7 @@ func TestHolder_Open(t *testing.T) {
 	t.Run("ErrFragmentStorageCorrupt", func(t *testing.T) {
 		roaringOnlyTest(t)
 
-		h := test.MustOpenHolder()
+		h := test.MustOpenHolder(t)
 		defer h.Close()
 
 		var idx *pilosa.Index
@@ -239,7 +239,7 @@ func TestHolder_Open(t *testing.T) {
 	t.Run("ErrFragmentStorageRecoverable", func(t *testing.T) {
 		roaringOnlyTest(t)
 
-		h := test.MustOpenHolder()
+		h := test.MustOpenHolder(t)
 		defer h.Close()
 
 		idx, err := h.CreateIndex("foo", pilosa.IndexOptions{})
@@ -271,7 +271,7 @@ func TestHolder_Open(t *testing.T) {
 
 	t.Run("ForeignIndex", func(t *testing.T) {
 		t.Run("ErrForeignIndexNotFound", func(t *testing.T) {
-			h := test.MustOpenHolder()
+			h := test.MustOpenHolder(t)
 			defer h.Close()
 
 			if idx, err := h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
@@ -288,7 +288,7 @@ func TestHolder_Open(t *testing.T) {
 
 		// Foreign index zzz is opened after foo/bar.
 		t.Run("ForeignIndexNotOpenYet", func(t *testing.T) {
-			h := test.MustOpenHolder()
+			h := test.MustOpenHolder(t)
 			defer h.Close()
 
 			if _, err := h.CreateIndex("zzz", pilosa.IndexOptions{}); err != nil {
@@ -308,7 +308,7 @@ func TestHolder_Open(t *testing.T) {
 
 		// Foreign index aaa is opened before foo/bar.
 		t.Run("ForeignIndexIsOpen", func(t *testing.T) {
-			h := test.MustOpenHolder()
+			h := test.MustOpenHolder(t)
 			defer h.Close()
 
 			if _, err := h.CreateIndex("aaa", pilosa.IndexOptions{}); err != nil {
@@ -328,7 +328,7 @@ func TestHolder_Open(t *testing.T) {
 
 		// Try to re-create existing index
 		t.Run("CreateIndexIfNotExists", func(t *testing.T) {
-			h := test.MustOpenHolder()
+			h := test.MustOpenHolder(t)
 			defer h.Close()
 
 			idx1, err := h.CreateIndexIfNotExists("aaa", pilosa.IndexOptions{})
@@ -356,7 +356,7 @@ func TestHolder_Open(t *testing.T) {
 
 func TestHolder_HasData(t *testing.T) {
 	t.Run("IndexDirectory", func(t *testing.T) {
-		h := test.MustOpenHolder()
+		h := test.MustOpenHolder(t)
 		defer h.Close()
 
 		if ok, err := h.HasData(); ok || err != nil {
@@ -373,7 +373,7 @@ func TestHolder_HasData(t *testing.T) {
 	})
 
 	t.Run("Peek", func(t *testing.T) {
-		h := test.NewHolder()
+		h := test.NewHolder(t)
 
 		if ok, err := h.HasData(); ok || err != nil {
 			t.Fatal("expected HasData to return false, no err, but", ok, err)
@@ -390,7 +390,7 @@ func TestHolder_HasData(t *testing.T) {
 	})
 
 	t.Run("Peek at missing directory", func(t *testing.T) {
-		h := test.NewHolder()
+		h := test.NewHolder(t)
 
 		// Ensure that hasData is false when dir doesn't exist.
 		h.Path = "bad-path"
@@ -404,7 +404,7 @@ func TestHolder_HasData(t *testing.T) {
 // Ensure holder can delete an index and its underlying files.
 func TestHolder_DeleteIndex(t *testing.T) {
 
-	hldr := test.MustOpenHolder()
+	hldr := test.MustOpenHolder(t)
 	defer hldr.Close()
 
 	// Write bits to separate indexes.
@@ -432,43 +432,43 @@ func TestHolder_DeleteIndex(t *testing.T) {
 // Ensure holder can sync with a remote holder.
 func TestHolderSyncer_SyncHolder(t *testing.T) {
 	c := test.MustNewCluster(t, 2)
-	c[0].Config.Cluster.ReplicaN = 2
-	c[0].Config.AntiEntropy.Interval = 0
-	c[1].Config.Cluster.ReplicaN = 2
-	c[1].Config.AntiEntropy.Interval = 0
+	c.GetNode(0).Config.Cluster.ReplicaN = 2
+	c.GetNode(0).Config.AntiEntropy.Interval = 0
+	c.GetNode(1).Config.Cluster.ReplicaN = 2
+	c.GetNode(1).Config.AntiEntropy.Interval = 0
 	err := c.Start()
 	if err != nil {
 		t.Fatalf("starting cluster: %v", err)
 	}
 	defer c.Close()
 
-	_, err = c[0].API.CreateIndex(context.Background(), "i", pilosa.IndexOptions{})
+	_, err = c.GetNode(0).API.CreateIndex(context.Background(), "i", pilosa.IndexOptions{})
 	if err != nil {
 		t.Fatalf("creating index i: %v", err)
 	}
-	_, err = c[0].API.CreateIndex(context.Background(), "y", pilosa.IndexOptions{})
+	_, err = c.GetNode(0).API.CreateIndex(context.Background(), "y", pilosa.IndexOptions{})
 	if err != nil {
 		t.Fatalf("creating index y: %v", err)
 	}
-	_, err = c[0].API.CreateField(context.Background(), "i", "f", pilosa.OptFieldTypeSet(pilosa.DefaultCacheType, pilosa.DefaultCacheSize))
+	_, err = c.GetNode(0).API.CreateField(context.Background(), "i", "f", pilosa.OptFieldTypeSet(pilosa.DefaultCacheType, pilosa.DefaultCacheSize))
 	if err != nil {
 		t.Fatalf("creating field f: %v", err)
 	}
-	_, err = c[0].API.CreateField(context.Background(), "i", "f0", pilosa.OptFieldTypeSet(pilosa.DefaultCacheType, pilosa.DefaultCacheSize))
+	_, err = c.GetNode(0).API.CreateField(context.Background(), "i", "f0", pilosa.OptFieldTypeSet(pilosa.DefaultCacheType, pilosa.DefaultCacheSize))
 	if err != nil {
 		t.Fatalf("creating field f0: %v", err)
 	}
-	_, err = c[0].API.CreateField(context.Background(), "y", "z", pilosa.OptFieldTypeMutex(pilosa.DefaultCacheType, pilosa.DefaultCacheSize))
+	_, err = c.GetNode(0).API.CreateField(context.Background(), "y", "z", pilosa.OptFieldTypeMutex(pilosa.DefaultCacheType, pilosa.DefaultCacheSize))
 	if err != nil {
 		t.Fatalf("creating field z in y: %v", err)
 	}
-	_, err = c[0].API.CreateField(context.Background(), "y", "b", pilosa.OptFieldTypeBool())
+	_, err = c.GetNode(0).API.CreateField(context.Background(), "y", "b", pilosa.OptFieldTypeBool())
 	if err != nil {
 		t.Fatalf("creating field b in y: %v", err)
 	}
 
-	hldr0 := &test.Holder{Holder: c[0].Server.Holder()}
-	hldr1 := &test.Holder{Holder: c[1].Server.Holder()}
+	hldr0 := &test.Holder{Holder: c.GetNode(0).Server.Holder()}
+	hldr1 := &test.Holder{Holder: c.GetNode(1).Server.Holder()}
 
 	// Set data on the local holder.
 	hldr0.SetBit("i", "f", 0, 10)
@@ -495,11 +495,11 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 	hldr1.SetBit("y", "b", 0, (3*ShardWidth)+5) // false
 	hldr1.SetBit("y", "b", 1, (3*ShardWidth)+7) // true
 
-	err = c[0].Server.SyncData()
+	err = c.GetNode(0).Server.SyncData()
 	if err != nil {
 		t.Fatalf("syncing node 0: %v", err)
 	}
-	err = c[1].Server.SyncData()
+	err = c.GetNode(1).Server.SyncData()
 	if err != nil {
 		t.Fatalf("syncing node 1: %v", err)
 	}
@@ -543,30 +543,30 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 // the row boundaries of the block.
 func TestHolderSyncer_BlockIteratorLimits(t *testing.T) {
 	c := test.MustNewCluster(t, 3)
-	c[0].Config.Cluster.ReplicaN = 3
-	c[0].Config.AntiEntropy.Interval = 0
-	c[1].Config.Cluster.ReplicaN = 3
-	c[1].Config.AntiEntropy.Interval = 0
+	c.GetNode(0).Config.Cluster.ReplicaN = 3
+	c.GetNode(0).Config.AntiEntropy.Interval = 0
+	c.GetNode(1).Config.Cluster.ReplicaN = 3
+	c.GetNode(1).Config.AntiEntropy.Interval = 0
 	err := c.Start()
 	if err != nil {
 		t.Fatalf("starting cluster: %v", err)
 	}
 	defer c.Close()
 
-	_, err = c[0].API.CreateIndex(context.Background(), "i", pilosa.IndexOptions{})
+	_, err = c.GetNode(0).API.CreateIndex(context.Background(), "i", pilosa.IndexOptions{})
 	if err != nil {
 		t.Fatalf("creating index i: %v", err)
 	}
-	_, err = c[0].API.CreateField(context.Background(), "i", "f", pilosa.OptFieldTypeSet(pilosa.DefaultCacheType, pilosa.DefaultCacheSize))
+	_, err = c.GetNode(0).API.CreateField(context.Background(), "i", "f", pilosa.OptFieldTypeSet(pilosa.DefaultCacheType, pilosa.DefaultCacheSize))
 	if err != nil {
 		t.Fatalf("creating field f: %v", err)
 	}
 
 	blockEdge := uint64(pilosa.HashBlockSize)
 
-	hldr0 := &test.Holder{Holder: c[0].Server.Holder()}
-	hldr1 := &test.Holder{Holder: c[1].Server.Holder()}
-	hldr2 := &test.Holder{Holder: c[2].Server.Holder()}
+	hldr0 := &test.Holder{Holder: c.GetNode(0).Server.Holder()}
+	hldr1 := &test.Holder{Holder: c.GetNode(1).Server.Holder()}
+	hldr2 := &test.Holder{Holder: c.GetNode(2).Server.Holder()}
 
 	// Set data on the local holder.
 	hldr0.SetBit("i", "f", blockEdge-1, 10)
@@ -579,7 +579,7 @@ func TestHolderSyncer_BlockIteratorLimits(t *testing.T) {
 
 	// Leave the third replica empty to force a block merge.
 	//
-	err = c[0].Server.SyncData()
+	err = c.GetNode(0).Server.SyncData()
 	if err != nil {
 		t.Fatalf("syncing node 0: %v", err)
 	}
@@ -598,28 +598,28 @@ func TestHolderSyncer_BlockIteratorLimits(t *testing.T) {
 // Ensure holder correctly handles clears during block sync.
 func TestHolderSyncer_Clears(t *testing.T) {
 	c := test.MustNewCluster(t, 3)
-	c[0].Config.Cluster.ReplicaN = 3
-	c[0].Config.AntiEntropy.Interval = 0
-	c[1].Config.Cluster.ReplicaN = 3
-	c[1].Config.AntiEntropy.Interval = 0
+	c.GetNode(0).Config.Cluster.ReplicaN = 3
+	c.GetNode(0).Config.AntiEntropy.Interval = 0
+	c.GetNode(1).Config.Cluster.ReplicaN = 3
+	c.GetNode(1).Config.AntiEntropy.Interval = 0
 	err := c.Start()
 	if err != nil {
 		t.Fatalf("starting cluster: %v", err)
 	}
 	defer c.Close()
 
-	_, err = c[0].API.CreateIndex(context.Background(), "i", pilosa.IndexOptions{})
+	_, err = c.GetNode(0).API.CreateIndex(context.Background(), "i", pilosa.IndexOptions{})
 	if err != nil {
 		t.Fatalf("creating index i: %v", err)
 	}
-	_, err = c[0].API.CreateField(context.Background(), "i", "f", pilosa.OptFieldTypeSet(pilosa.DefaultCacheType, pilosa.DefaultCacheSize))
+	_, err = c.GetNode(0).API.CreateField(context.Background(), "i", "f", pilosa.OptFieldTypeSet(pilosa.DefaultCacheType, pilosa.DefaultCacheSize))
 	if err != nil {
 		t.Fatalf("creating field f: %v", err)
 	}
 
-	hldr0 := &test.Holder{Holder: c[0].Server.Holder()}
-	hldr1 := &test.Holder{Holder: c[1].Server.Holder()}
-	hldr2 := &test.Holder{Holder: c[2].Server.Holder()}
+	hldr0 := &test.Holder{Holder: c.GetNode(0).Server.Holder()}
+	hldr1 := &test.Holder{Holder: c.GetNode(1).Server.Holder()}
+	hldr2 := &test.Holder{Holder: c.GetNode(2).Server.Holder()}
 
 	// Set data on the local holder that should be cleared
 	// because it's the only instance of this value.
@@ -631,7 +631,7 @@ func TestHolderSyncer_Clears(t *testing.T) {
 	hldr1.SetBit("i", "f", 0, 20)
 	hldr2.SetBit("i", "f", 0, 20)
 
-	err = c[0].Server.SyncData()
+	err = c.GetNode(0).Server.SyncData()
 	if err != nil {
 		t.Fatalf("syncing node 0: %v", err)
 	}
@@ -647,10 +647,10 @@ func TestHolderSyncer_Clears(t *testing.T) {
 // Ensure holder can sync time quantum views with a remote holder.
 func TestHolderSyncer_TimeQuantum(t *testing.T) {
 	c := test.MustNewCluster(t, 2)
-	c[0].Config.Cluster.ReplicaN = 2
-	c[0].Config.AntiEntropy.Interval = 0
-	c[1].Config.Cluster.ReplicaN = 2
-	c[1].Config.AntiEntropy.Interval = 0
+	c.GetNode(0).Config.Cluster.ReplicaN = 2
+	c.GetNode(0).Config.AntiEntropy.Interval = 0
+	c.GetNode(1).Config.Cluster.ReplicaN = 2
+	c.GetNode(1).Config.AntiEntropy.Interval = 0
 	err := c.Start()
 	if err != nil {
 		t.Fatalf("starting cluster: %v", err)
@@ -659,17 +659,17 @@ func TestHolderSyncer_TimeQuantum(t *testing.T) {
 
 	quantum := "D"
 
-	_, err = c[0].API.CreateIndex(context.Background(), "i", pilosa.IndexOptions{})
+	_, err = c.GetNode(0).API.CreateIndex(context.Background(), "i", pilosa.IndexOptions{})
 	if err != nil {
 		t.Fatalf("creating index i: %v", err)
 	}
-	_, err = c[0].API.CreateField(context.Background(), "i", "f", pilosa.OptFieldTypeTime(pilosa.TimeQuantum(quantum)))
+	_, err = c.GetNode(0).API.CreateField(context.Background(), "i", "f", pilosa.OptFieldTypeTime(pilosa.TimeQuantum(quantum)))
 	if err != nil {
 		t.Fatalf("creating field f: %v", err)
 	}
 
-	hldr0 := &test.Holder{Holder: c[0].Server.Holder()}
-	hldr1 := &test.Holder{Holder: c[1].Server.Holder()}
+	hldr0 := &test.Holder{Holder: c.GetNode(0).Server.Holder()}
+	hldr1 := &test.Holder{Holder: c.GetNode(1).Server.Holder()}
 
 	// Set data on the local holder for node0.
 	t1 := time.Date(2018, 8, 1, 12, 30, 0, 0, time.UTC)
@@ -680,7 +680,7 @@ func TestHolderSyncer_TimeQuantum(t *testing.T) {
 	// Set data on node1.
 	hldr1.SetBitTime("i", "f", 0, 22, &t2)
 
-	err = c[0].Server.SyncData()
+	err = c.GetNode(0).Server.SyncData()
 	if err != nil {
 		t.Fatalf("syncing node 0: %v", err)
 	}
@@ -700,10 +700,10 @@ func TestHolderSyncer_TimeQuantum(t *testing.T) {
 func TestHolderSyncer_IntField(t *testing.T) {
 	t.Run("BasicSync", func(t *testing.T) {
 		c := test.MustNewCluster(t, 2)
-		c[0].Config.Cluster.ReplicaN = 2
-		c[0].Config.AntiEntropy.Interval = 0
-		c[1].Config.Cluster.ReplicaN = 2
-		c[1].Config.AntiEntropy.Interval = 0
+		c.GetNode(0).Config.Cluster.ReplicaN = 2
+		c.GetNode(0).Config.AntiEntropy.Interval = 0
+		c.GetNode(1).Config.Cluster.ReplicaN = 2
+		c.GetNode(1).Config.AntiEntropy.Interval = 0
 		err := c.Start()
 		if err != nil {
 			t.Fatalf("starting cluster: %v", err)
@@ -712,18 +712,18 @@ func TestHolderSyncer_IntField(t *testing.T) {
 
 		var idx0 *pilosa.Index
 		_ = idx0
-		idx0, err = c[0].API.CreateIndex(context.Background(), "i", pilosa.IndexOptions{})
+		idx0, err = c.GetNode(0).API.CreateIndex(context.Background(), "i", pilosa.IndexOptions{})
 		_ = idx0
 		if err != nil {
 			t.Fatalf("creating index i: %v", err)
 		}
-		_, err = c[0].API.CreateField(context.Background(), "i", "f", pilosa.OptFieldTypeInt(0, 100))
+		_, err = c.GetNode(0).API.CreateField(context.Background(), "i", "f", pilosa.OptFieldTypeInt(0, 100))
 		if err != nil {
 			t.Fatalf("creating field f: %v", err)
 		}
 
-		hldr0 := &test.Holder{Holder: c[0].Server.Holder()}
-		hldr1 := &test.Holder{Holder: c[1].Server.Holder()}
+		hldr0 := &test.Holder{Holder: c.GetNode(0).Server.Holder()}
+		hldr1 := &test.Holder{Holder: c.GetNode(1).Server.Holder()}
 
 		// Set data on the local holder for node0. columnID=1, value=1
 		hldr0.SetValue("i", "f", 1, 1)
@@ -734,7 +734,7 @@ func TestHolderSyncer_IntField(t *testing.T) {
 		idx1 := hldr1.SetValue("i", "f", 2, 2)
 		_ = idx1
 
-		err = c[0].Server.SyncData()
+		err = c.GetNode(0).Server.SyncData()
 		if err != nil {
 			t.Fatalf("syncing node 0: %v", err)
 		}
@@ -758,10 +758,10 @@ func TestHolderSyncer_IntField(t *testing.T) {
 
 	t.Run("MultiShard", func(t *testing.T) {
 		c := test.MustNewCluster(t, 2)
-		c[0].Config.Cluster.ReplicaN = 2
-		c[0].Config.AntiEntropy.Interval = 0
-		c[1].Config.Cluster.ReplicaN = 2
-		c[1].Config.AntiEntropy.Interval = 0
+		c.GetNode(0).Config.Cluster.ReplicaN = 2
+		c.GetNode(0).Config.AntiEntropy.Interval = 0
+		c.GetNode(1).Config.Cluster.ReplicaN = 2
+		c.GetNode(1).Config.AntiEntropy.Interval = 0
 		err := c.Start()
 		if err != nil {
 			t.Fatalf("starting cluster: %v", err)
@@ -770,18 +770,18 @@ func TestHolderSyncer_IntField(t *testing.T) {
 
 		var idx0 *pilosa.Index
 		_ = idx0
-		idx0, err = c[0].API.CreateIndex(context.Background(), "i", pilosa.IndexOptions{})
+		idx0, err = c.GetNode(0).API.CreateIndex(context.Background(), "i", pilosa.IndexOptions{})
 		_ = idx0
 		if err != nil {
 			t.Fatalf("creating index i: %v", err)
 		}
-		_, err = c[0].API.CreateField(context.Background(), "i", "f", pilosa.OptFieldTypeInt(math.MinInt64, math.MaxInt64))
+		_, err = c.GetNode(0).API.CreateField(context.Background(), "i", "f", pilosa.OptFieldTypeInt(math.MinInt64, math.MaxInt64))
 		if err != nil {
 			t.Fatalf("creating field f: %v", err)
 		}
 
-		hldr0 := &test.Holder{Holder: c[0].Server.Holder()}
-		hldr1 := &test.Holder{Holder: c[1].Server.Holder()}
+		hldr0 := &test.Holder{Holder: c.GetNode(0).Server.Holder()}
+		hldr1 := &test.Holder{Holder: c.GetNode(1).Server.Holder()}
 
 		// Set data on the local holder for node0.
 		hldr0.SetValue("i", "f", 1*pilosa.ShardWidth, 11)
@@ -799,11 +799,11 @@ func TestHolderSyncer_IntField(t *testing.T) {
 		// node0: [0,3,7]
 		// node1: [1,2,4]
 
-		err = c[0].Server.SyncData()
+		err = c.GetNode(0).Server.SyncData()
 		if err != nil {
 			t.Fatalf("syncing node 0: %v", err)
 		}
-		err = c[1].Server.SyncData()
+		err = c.GetNode(1).Server.SyncData()
 		if err != nil {
 			t.Fatalf("syncing node 1: %v", err)
 		}

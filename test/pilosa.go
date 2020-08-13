@@ -30,6 +30,7 @@ import (
 	"github.com/pilosa/pilosa/v2/encoding/proto"
 	"github.com/pilosa/pilosa/v2/http"
 	"github.com/pilosa/pilosa/v2/server"
+	"github.com/pilosa/pilosa/v2/testhook"
 )
 
 ////////////////////////////////////////////////////////////////////////////////////
@@ -48,8 +49,8 @@ func OptAllowedOrigins(origins []string) server.CommandOption {
 }
 
 // newCommand returns a new instance of Main with a temporary data directory and random port.
-func newCommand(opts ...server.CommandOption) *Command {
-	path, err := ioutil.TempDir("", "pilosa-")
+func newCommand(tb testing.TB, opts ...server.CommandOption) *Command {
+	path, err := testhook.TempDir(tb, "pilosa-command-")
 	if err != nil {
 		panic(err)
 	}
@@ -85,12 +86,12 @@ func newCommand(opts ...server.CommandOption) *Command {
 }
 
 // NewCommandNode returns a new instance of Command with clustering enabled.
-func NewCommandNode(isCoordinator bool, opts ...server.CommandOption) *Command {
+func NewCommandNode(tb testing.TB, isCoordinator bool, opts ...server.CommandOption) *Command {
 	// We want tests to default to using the in-memory translate store, so we
 	// prepend opts with that functional option. If a different translate store
 	// has been specified, it will override this one.
 	opts = prependTestServerOpts(opts)
-	m := newCommand(opts...)
+	m := newCommand(tb, opts...)
 	m.Config.Cluster.Disabled = false
 	m.Config.Cluster.Coordinator = isCoordinator
 	return m
@@ -99,7 +100,7 @@ func NewCommandNode(isCoordinator bool, opts ...server.CommandOption) *Command {
 // RunCommand returns a new, running Main. Panic on error.
 func RunCommand(t *testing.T) *Command {
 	t.Helper()
-	m := newCommand(server.OptCommandServerOptions(pilosa.OptServerOpenTranslateStore(pilosa.OpenInMemTranslateStore)))
+	m := newCommand(t, server.OptCommandServerOptions(pilosa.OptServerOpenTranslateStore(pilosa.OpenInMemTranslateStore)))
 	m.Config.Metric.Diagnostics = false // Disable diagnostics.
 	m.Config.Gossip.Port = "0"
 	if err := m.Start(); err != nil {
@@ -307,8 +308,15 @@ func Do(t *testing.T, method, urlStr string, body string) *httpResponse {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 
-	resp, err := gohttp.DefaultClient.Do(req)
+	// set a timeout instead of allowing gohttp.Defaultclient to
+	// potentially hang forever.
+	hc := &gohttp.Client{
+		Timeout: time.Second * 10,
+	}
+	resp, err := hc.Do(req)
+
 	if err != nil {
+		fmt.Printf(" hc.Do() err = '%v'\n", err)
 		t.Fatal(err)
 	}
 	defer resp.Body.Close()

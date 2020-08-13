@@ -15,11 +15,11 @@
 package test
 
 import (
-	"io/ioutil"
 	"os"
 	"testing"
 
 	"github.com/pilosa/pilosa/v2"
+	"github.com/pilosa/pilosa/v2/testhook"
 )
 
 // Field represents a test wrapper for pilosa.Field.
@@ -28,8 +28,8 @@ type Field struct {
 }
 
 // newField returns a new instance of Field d/0.
-func newField(opts pilosa.FieldOption) *Field {
-	path, err := ioutil.TempDir("", "pilosa-field-")
+func newField(tb testing.TB, opts pilosa.FieldOption) *Field {
+	path, err := testhook.TempDir(tb, "pilosa-field-")
 	if err != nil {
 		panic(err)
 	}
@@ -41,8 +41,8 @@ func newField(opts pilosa.FieldOption) *Field {
 }
 
 // mustOpenField returns a new, opened field at a temporary path. Panic on error.
-func mustOpenField(opts pilosa.FieldOption) *Field {
-	f := newField(opts)
+func mustOpenField(tb testing.TB, opts pilosa.FieldOption) *Field {
+	f := newField(tb, opts)
 	if err := f.Open(); err != nil {
 		panic(err)
 	}
@@ -76,7 +76,7 @@ func (f *Field) reopen() error {
 
 // Ensure field can set its cache
 func TestField_SetCacheSize(t *testing.T) {
-	f := mustOpenField(pilosa.OptFieldTypeDefault())
+	f := mustOpenField(t, pilosa.OptFieldTypeDefault())
 	defer f.close()
 	cacheSize := uint32(100)
 

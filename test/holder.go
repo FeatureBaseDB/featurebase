@@ -15,14 +15,14 @@
 package test
 
 import (
-	"io/ioutil"
 	"math"
-	"os"
+	"testing"
 	"time"
 
 	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/boltdb"
 	"github.com/pilosa/pilosa/v2/pql"
+	"github.com/pilosa/pilosa/v2/testhook"
 )
 
 var panicOn = pilosa.PanicOn
@@ -33,8 +33,8 @@ type Holder struct {
 }
 
 // NewHolder returns a new instance of Holder with a temporary path.
-func NewHolder() *Holder {
-	path, err := ioutil.TempDir("", "pilosa-")
+func NewHolder(tb testing.TB) *Holder {
+	path, err := testhook.TempDir(tb, "pilosa-holder-")
 	if err != nil {
 		panic(err)
 	}
@@ -47,17 +47,16 @@ func NewHolder() *Holder {
 }
 
 // MustOpenHolder creates and opens a holder at a temporary path. Panic on error.
-func MustOpenHolder() *Holder {
-	h := NewHolder()
+func MustOpenHolder(tb testing.TB) *Holder {
+	h := NewHolder(tb)
 	if err := h.Open(); err != nil {
 		panic(err)
 	}
 	return h
 }
 
-// Close closes the holder and removes all underlying data.
+// Close closes the holder. The data should be removed by the
 func (h *Holder) Close() error {
-	defer os.RemoveAll(h.Path)
 	return h.Holder.Close()
 }
 

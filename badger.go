@@ -32,6 +32,7 @@ import (
 	badger "github.com/dgraph-io/badger/v2"
 	badgeroptions "github.com/dgraph-io/badger/v2/options"
 	"github.com/pilosa/pilosa/v2/roaring"
+	"github.com/pilosa/pilosa/v2/testhook"
 	"github.com/pilosa/pilosa/v2/txkey"
 	"github.com/pkg/errors"
 )
@@ -329,6 +330,7 @@ func (r *badgerRegistrar) openBadgerDBWrapper(bpath string) (*BadgerDBWrapper, e
 		halt:   halt,
 		hasher: NewBlake3Hasher(),
 	}
+	_ = testhook.Opened(NewAuditor(), w, nil)
 	r.unprotectedRegister(w)
 
 	w.startStack = stack()
@@ -504,6 +506,7 @@ func (w *BadgerDBWrapper) Close() (err error) {
 		close(w.halt)
 		w.closed = true
 	}
+	_ = testhook.Closed(NewAuditor(), w, nil)
 	return w.db.Close()
 }
 

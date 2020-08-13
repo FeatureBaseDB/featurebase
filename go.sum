@@ -55,8 +55,8 @@ github.com/glycerine/goconvey v0.0.0-20190410193231-58a59202ab31 h1:gclg6gY70GLy
 github.com/glycerine/goconvey v0.0.0-20190410193231-58a59202ab31/go.mod h1:Ogl1Tioa0aV7gstGFO7KhffUsb9M4ydbEbbxpcEDc24=
 github.com/glycerine/idem v0.0.0-20190127113923-7a8083893311 h1:AAXH0ZvYIHHqU06ASy0H2tYAkAGrQlZvEy2QZrrtt4E=
 github.com/glycerine/idem v0.0.0-20190127113923-7a8083893311/go.mod h1:B72P/ZM99sNiCmaQJflpmMAF5LsDzStpLdWzn0+Vr2Y=
-github.com/glycerine/lmdb-go v1.9.26 h1:4aIiCQhg5fLChuZuATDHD4Lr6y9CdEHLtvROkzCZKIg=
-github.com/glycerine/lmdb-go v1.9.26/go.mod h1:DrPeeTGooMg6B7cjNSP14perptTJzzdBy5YoosthrRs=
+github.com/glycerine/lmdb-go v1.9.27 h1:k20zfiumwC/E1g/MYIzZ2GkhOH0hicDfEXa0KUjWLjY=
+github.com/glycerine/lmdb-go v1.9.27/go.mod h1:DrPeeTGooMg6B7cjNSP14perptTJzzdBy5YoosthrRs=
 github.com/go-kit/kit v0.8.0/go.mod h1:xBxKIO96dXMWWy0MnWVtmwkA9/13aqxPnvrjFYMA2as=
 github.com/go-logfmt/logfmt v0.3.0/go.mod h1:Qt1PoO58o5twSAckw1HlFXLmHsOX5/0LbT9GBnD5lWE=
 github.com/go-logfmt/logfmt v0.4.0/go.mod h1:3RMwSq7FuexP4Kalkev3ejPJsZTpXXBr9+V4qmtdjCk=

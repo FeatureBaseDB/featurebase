@@ -15,19 +15,23 @@
 package pilosa
 
 import (
-	"io/ioutil"
 	"testing"
+
+	"github.com/pilosa/pilosa/v2/testhook"
 )
 
 // mustOpenIndex returns a new, opened index at a temporary path. Panic on error.
-func mustOpenIndex(opt IndexOptions) *Index {
-	path, err := ioutil.TempDir(*TempDir, "pilosa-index-")
+func mustOpenIndex(tb testing.TB, opt IndexOptions) *Index {
+	path, err := testhook.TempDirInDir(tb, *TempDir, "pilosa-index-")
 	if err != nil {
 		panic(err)
 	}
 	h := NewHolder(1)
 	h.Path = path
 	index, err := h.CreateIndex("i", opt)
+	testhook.Cleanup(tb, func() {
+		h.Close()
+	})
 
 	if err != nil {
 		panic(err)
@@ -36,9 +40,6 @@ func mustOpenIndex(opt IndexOptions) *Index {
 	index.keys = opt.Keys
 	index.trackExistence = opt.TrackExistence
 
-	if err := index.Open(false); err != nil {
-		panic(err)
-	}
 	return index
 }
 
@@ -56,7 +57,7 @@ func (i *Index) reopen() error {
 // Ensure that deleting the existence field is handled properly.
 func TestIndex_Existence_Delete(t *testing.T) {
 	// Create Index (with existence tracking).
-	index := mustOpenIndex(IndexOptions{TrackExistence: true})
+	index := mustOpenIndex(t, IndexOptions{TrackExistence: true})
 	defer index.Close()
 
 	// Ensure existence field has been created.

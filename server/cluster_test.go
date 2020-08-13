@@ -35,7 +35,7 @@ import (
 // Ensure program can send/receive broadcast messages.
 func TestMain_SendReceiveMessage(t *testing.T) {
 	ms := test.MustRunCluster(t, 2)
-	m0, m1 := ms[0], ms[1]
+	m0, m1 := ms.GetNode(0), ms.GetNode(1)
 	defer ms.Close()
 
 	// Expected indexes and Fields
@@ -131,10 +131,10 @@ func TestClusterResize_EmptyNodes(t *testing.T) {
 	clus := test.MustRunCluster(t, 2)
 	defer clus.Close()
 
-	if clus[0].API.State() != pilosa.ClusterStateNormal {
-		t.Fatalf("unexpected node0 cluster state: %s", clus[0].API.State())
-	} else if clus[1].API.State() != pilosa.ClusterStateNormal {
-		t.Fatalf("unexpected node1 cluster state: %s", clus[1].API.State())
+	if clus.GetNode(0).API.State() != pilosa.ClusterStateNormal {
+		t.Fatalf("unexpected node0 cluster state: %s", clus.GetNode(0).API.State())
+	} else if clus.GetNode(1).API.State() != pilosa.ClusterStateNormal {
+		t.Fatalf("unexpected node1 cluster state: %s", clus.GetNode(1).API.State())
 	}
 }
 
@@ -144,15 +144,15 @@ func TestClusterResize_AddNode(t *testing.T) {
 		clus := test.MustRunCluster(t, 2)
 		defer clus.Close()
 
-		if !test.CheckClusterState(clus[0], pilosa.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node0 cluster state: %s", clus[0].API.State())
-		} else if !test.CheckClusterState(clus[1], pilosa.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node1 cluster state: %s", clus[1].API.State())
+		if !test.CheckClusterState(clus.GetNode(0), pilosa.ClusterStateNormal, 1000) {
+			t.Fatalf("unexpected node0 cluster state: %s", clus.GetNode(0).API.State())
+		} else if !test.CheckClusterState(clus.GetNode(1), pilosa.ClusterStateNormal, 1000) {
+			t.Fatalf("unexpected node1 cluster state: %s", clus.GetNode(1).API.State())
 		}
 	})
 	t.Run("WithIndex", func(t *testing.T) {
 		// Configure node0
-		m0 := test.MustRunCluster(t, 1)[0]
+		m0 := test.MustRunCluster(t, 1).GetNode(0)
 		defer m0.Close()
 
 		seed := m0.GossipAddress()
@@ -168,7 +168,7 @@ func TestClusterResize_AddNode(t *testing.T) {
 		}
 
 		// Configure node1
-		m1 := test.NewCommandNode(false)
+		m1 := test.NewCommandNode(t, false)
 		m1.Config.Gossip.Port = "0"
 		m1.Config.Gossip.Seeds = []string{seed}
 		err := m1.Start()
@@ -198,7 +198,7 @@ func TestClusterResize_AddNode(t *testing.T) {
 		skipTestUnderBlueGreenWithRoaring(t)
 
 		// Configure node0
-		m0 := test.MustRunCluster(t, 1)[0]
+		m0 := test.MustRunCluster(t, 1).GetNode(0)
 		defer m0.Close()
 
 		seed := m0.GossipAddress()
@@ -229,7 +229,7 @@ func TestClusterResize_AddNode(t *testing.T) {
 		m0.QueryExpect(t, "i", "", `Row(f=1)`, exp)
 
 		// Configure node1
-		m1 := test.NewCommandNode(false)
+		m1 := test.NewCommandNode(t, false)
 		m1.Config.Gossip.Port = "0"
 		m1.Config.Gossip.Seeds = []string{seed}
 		err := m1.Start()
@@ -250,7 +250,7 @@ func TestClusterResize_AddNode(t *testing.T) {
 	})
 	t.Run("OneShard", func(t *testing.T) {
 		// Configure node0
-		m0 := test.MustRunCluster(t, 1)[0]
+		m0 := test.MustRunCluster(t, 1).GetNode(0)
 		defer m0.Close()
 
 		seed := m0.GossipAddress()
@@ -278,7 +278,7 @@ func TestClusterResize_AddNode(t *testing.T) {
 		m0.QueryExpect(t, "i", "", `Row(f=1)`, exp)
 
 		// Configure node1
-		m1 := test.NewCommandNode(false)
+		m1 := test.NewCommandNode(t, false)
 		m1.Config.Gossip.Port = "0"
 		m1.Config.Gossip.Seeds = []string{seed}
 		err := m1.Start()
@@ -299,7 +299,7 @@ func TestClusterResize_AddNode(t *testing.T) {
 	})
 	t.Run("SkippedShard", func(t *testing.T) {
 		// Configure node0
-		m0 := test.MustRunCluster(t, 1)[0]
+		m0 := test.MustRunCluster(t, 1).GetNode(0)
 		defer m0.Close()
 
 		seed := m0.GossipAddress()
@@ -331,7 +331,7 @@ func TestClusterResize_AddNode(t *testing.T) {
 		m0.QueryExpect(t, "i", "", `Row(f=1)`, exp)
 
 		// Configure node1
-		m1 := test.NewCommandNode(false)
+		m1 := test.NewCommandNode(t, false)
 		m1.Config.Gossip.Port = "0"
 		m1.Config.Gossip.Seeds = []string{seed}
 		err := m1.Start()
@@ -356,7 +356,7 @@ func TestClusterResize_AddNode(t *testing.T) {
 func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 	t.Run("WithIndex", func(t *testing.T) {
 		// Configure node0
-		m0 := test.MustRunCluster(t, 1)[0]
+		m0 := test.MustRunCluster(t, 1).GetNode(0)
 		defer m0.Close()
 
 		seed := m0.GossipAddress()
@@ -378,7 +378,7 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 		}()
 
 		// Configure node1
-		m1 := test.NewCommandNode(false)
+		m1 := test.NewCommandNode(t, false)
 		m1.Config.Gossip.Port = "0"
 		m1.Config.Gossip.Seeds = []string{seed}
 		err := m1.Start()
@@ -399,7 +399,7 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 	})
 	t.Run("ContinuousShards", func(t *testing.T) {
 		// Configure node0
-		m0 := test.MustRunCluster(t, 1)[0]
+		m0 := test.MustRunCluster(t, 1).GetNode(0)
 		defer m0.Close()
 
 		seed := m0.GossipAddress()
@@ -431,7 +431,7 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 		m0.QueryExpect(t, "i", "", `Row(f=1)`, exp)
 
 		// Configure node1
-		m1 := test.NewCommandNode(false)
+		m1 := test.NewCommandNode(t, false)
 		m1.Config.Gossip.Port = "0"
 		m1.Config.Gossip.Seeds = []string{seed}
 		err := m1.Start()
@@ -457,7 +457,7 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 	})
 	t.Run("SkippedShard", func(t *testing.T) {
 		// Configure node0
-		m0 := test.MustRunCluster(t, 1)[0]
+		m0 := test.MustRunCluster(t, 1).GetNode(0)
 		defer m0.Close()
 
 		seed := m0.GossipAddress()
@@ -489,7 +489,7 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 		m0.QueryExpect(t, "i", "", `Row(f=1)`, exp)
 
 		// Configure node1
-		m1 := test.NewCommandNode(false)
+		m1 := test.NewCommandNode(t, false)
 		m1.Config.Gossip.Port = "0"
 		m1.Config.Gossip.Seeds = []string{seed}
 		errc := make(chan error, 1)
@@ -515,7 +515,7 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 	})
 	t.Run("WithIndexKeys", func(t *testing.T) {
 		// Configure node0
-		m0 := test.MustRunCluster(t, 1)[0]
+		m0 := test.MustRunCluster(t, 1).GetNode(0)
 		defer m0.Close()
 
 		seed := m0.GossipAddress()
@@ -545,7 +545,7 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 		m0.QueryExpect(t, "i", "", `Row(f=1)`, exp)
 
 		// Configure node1
-		m1 := test.NewCommandNode(false)
+		m1 := test.NewCommandNode(t, false)
 		m1.Config.Gossip.Port = "0"
 		m1.Config.Gossip.Seeds = []string{seed}
 		errc := make(chan error, 1)
@@ -573,7 +573,7 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 func TestCluster_GossipMembership(t *testing.T) {
 	t.Run("Node0Down", func(t *testing.T) {
 		// Configure node0
-		m0 := test.MustRunCluster(t, 1)[0]
+		m0 := test.MustRunCluster(t, 1).GetNode(0)
 		defer m0.Close()
 
 		seed := m0.GossipAddress()
@@ -581,7 +581,7 @@ func TestCluster_GossipMembership(t *testing.T) {
 		var eg errgroup.Group
 
 		// Configure node1
-		m1 := test.NewCommandNode(false)
+		m1 := test.NewCommandNode(t, false)
 		defer m1.Close()
 		eg.Go(func() error {
 			m1.Config.Gossip.Port = "0"
@@ -595,7 +595,7 @@ func TestCluster_GossipMembership(t *testing.T) {
 		})
 
 		// Configure node1
-		m2 := test.NewCommandNode(false)
+		m2 := test.NewCommandNode(t, false)
 		defer m2.Close()
 		eg.Go(func() error {
 			m2.Config.Gossip.Port = "0"
@@ -630,8 +630,8 @@ func TestCluster_GossipMembership(t *testing.T) {
 func TestClusterResize_RemoveNode(t *testing.T) {
 	cluster := test.MustRunCluster(t, 3)
 	defer cluster.Close()
-	m0 := cluster[0]
-	m1 := cluster[1]
+	m0 := cluster.GetNode(0)
+	m1 := cluster.GetNode(1)
 
 	mustNodeID := func(baseURL string) string {
 		body := test.Do(t, "GET", fmt.Sprintf("%s/status", baseURL), "").Body
@@ -730,7 +730,7 @@ func TestClusterMutualTLS(t *testing.T) {
 
 	cluster := test.MustRunCluster(t, 3, commandOpts...)
 	defer cluster.Close()
-	m0 := cluster[0]
+	m0 := cluster.GetNode(0)
 
 	client0 := m0.Client()
 	if err := client0.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {

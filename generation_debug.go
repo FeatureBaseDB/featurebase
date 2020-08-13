@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"math/rand"
 	"runtime"
+	"runtime/debug"
 	"sort"
 	"sync"
 	"time"
@@ -29,6 +30,7 @@ const generationDebug = true
 
 type lifespan struct {
 	from, to, finalized time.Time
+	stack               []byte
 }
 
 var knownGenerations map[string]lifespan
@@ -36,32 +38,49 @@ var knownGenerationLock sync.Mutex
 
 var timeZero time.Time
 
+var generationDebugVerbose bool
+
+// History reports the finalized/dead/created status of a span which we think
+// is in some way in error. It's shared between a couple of places.
+func (span *lifespan) History() string {
+	dead := "not dead"
+	finalized := "not finalized"
+	if span.finalized != timeZero {
+		finalized = fmt.Sprintf("finalized at %v", span.finalized)
+	}
+	if span.to != timeZero {
+		dead = fmt.Sprintf("dead at %v", span.to)
+	}
+	return fmt.Sprintf("%s, %s, created at %v at %s", dead, finalized, span.from, span.stack)
+}
+
+func (span *lifespan) reportHistory(reason string, id string) string {
+	return fmt.Sprintf("%s %s: %s", id, reason, span.History())
+}
+
 func registerGeneration(id string) string {
 	knownGenerationLock.Lock()
 	defer knownGenerationLock.Unlock()
 	if knownGenerations == nil {
 		knownGenerations = make(map[string]lifespan)
 	}
-	newSpan := lifespan{from: time.Now()}
+	newSpan := lifespan{from: time.Now(), stack: debug.Stack()}
 	origId := id
 
 	// if you have more than 65k of the same file open, maybe you have bigger
 	// problems than this.
 	for span, exists := knownGenerations[id]; exists; span, exists = knownGenerations[id] {
 		suffix := fmt.Sprintf("::%04x", rand.Int63n(65536))
-		if span.finalized != timeZero {
-			fmt.Printf("new generation %s: adding %s, previously existed, created %v, died %v, finalized %v\n",
-				id, suffix, span.from, span.to, span.finalized)
-		} else {
-			if span.to != timeZero {
-				fmt.Printf("new generation %s: adding %s, previously existed, created %v, died %v\n", id, suffix, span.from, span.to)
-			} else {
-				fmt.Printf("new generation %s: adding %s, already exists, created %v", id, suffix, span.from)
-			}
+		if generationDebugVerbose {
+			history := span.History()
+			fmt.Printf("new generation: adding suffix %s, previous %s\n",
+				suffix, history)
 		}
 		id = origId + suffix
 	}
-	fmt.Printf("new generation %s\n", id)
+	if generationDebugVerbose {
+		fmt.Printf("new generation %s\n", id)
+	}
 	knownGenerations[id] = newSpan
 	return id
 }
@@ -75,8 +94,7 @@ func endGeneration(id string) {
 		panic(oops)
 	}
 	if span.finalized != timeZero || span.to != timeZero {
-		oops := fmt.Sprintf("ending generation %s: already died at %v, finalized at %v", id, span.to, span.finalized)
-		panic(oops)
+		panic(span.reportHistory("ending generation", id))
 	}
 	span.to = time.Now()
 	knownGenerations[id] = span
@@ -108,39 +126,25 @@ func finalizeGeneration(id string) {
 		panic(oops)
 	}
 	if span.finalized != timeZero {
-		var oops string
-		if span.to != timeZero {
-			oops = fmt.Sprintf("finalizing generation %s: already finalized at %v, but not dead", id, span.finalized)
-		} else {
-			oops = fmt.Sprintf("finalizing generation %s: already finalized at %v, dead at %v", id, span.finalized, span.to)
-		}
-		panic(oops)
+		panic(span.reportHistory("finalizing", id))
 	}
 	span.finalized = time.Now()
 	knownGenerations[id] = span
 }
 
-func reportGenerations() []string {
+func reportGenerations() (stats string, surviving []string) {
 	runtime.GC()
 	knownGenerationLock.Lock()
 	defer knownGenerationLock.Unlock()
-	var surviving []string
 	times := make([]int64, 0, len(knownGenerations))
 	for id, span := range knownGenerations {
-		if span.to == timeZero {
-			if span.finalized == timeZero {
-				surviving = append(surviving, fmt.Sprintf("%s: %v, not ended or finalized", id, span.from))
-			} else {
-				surviving = append(surviving, fmt.Sprintf("%s: %v, finalized %v, not ended", id, span.from, span.finalized))
-			}
+		if span.to == timeZero || span.finalized == timeZero {
+			surviving = append(surviving, span.reportHistory("surviving", id))
 		} else {
-			if span.finalized == timeZero {
-				surviving = append(surviving, fmt.Sprintf("%s: %v to %v, not finalized", id, span.from, span.to))
-			} else {
-				times = append(times, int64(span.finalized.Sub(span.to)))
-			}
+			times = append(times, int64(span.finalized.Sub(span.to)))
 		}
 	}
+	stats = "no recorded finalized spans"
 	if len(times) > 0 {
 		sort.Slice(times, func(i, j int) bool { return times[i] < times[j] })
 		var total int64
@@ -153,8 +157,8 @@ func reportGenerations() []string {
 		p90 = times[(len(times)*9)/10]
 		p99 = times[(len(times)*99)/100]
 		worst = times[len(times)-1]
-		surviving = append(surviving, fmt.Sprintf("%d finalized spans. lag: mean %v, median %v, p90 %v, p99 %v, worst %v",
-			len(times), time.Duration(mean), time.Duration(median), time.Duration(p90), time.Duration(p99), time.Duration(worst)))
+		stats = fmt.Sprintf("%d finalized spans. lag: mean %v, median %v, p90 %v, p99 %v, worst %v",
+			len(times), time.Duration(mean), time.Duration(median), time.Duration(p90), time.Duration(p99), time.Duration(worst))
 	}
-	return surviving
+	return stats, surviving
 }

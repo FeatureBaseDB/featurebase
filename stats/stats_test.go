@@ -32,7 +32,7 @@ import (
 // TestMultiStatClient_Expvar run the multistat client with exp var
 // since the EXPVAR data is stored in a global we should run these in one test function
 func TestMultiStatClient_Expvar(t *testing.T) {
-	hldr := test.MustOpenHolder()
+	hldr := test.MustOpenHolder(t)
 	defer hldr.Close()
 
 	c := stats.NewExpvarStatsClient()
@@ -93,7 +93,7 @@ func TestMultiStatClient_Expvar(t *testing.T) {
 func TestStatsCount_TopN(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
-	hldr := test.Holder{Holder: c[0].Server.Holder()}
+	hldr := test.Holder{Holder: c.GetNode(0).Server.Holder()}
 
 	hldr.SetBit("d", "f", 0, 0)
 	hldr.SetBit("d", "f", 0, 1)
@@ -115,7 +115,7 @@ func TestStatsCount_TopN(t *testing.T) {
 			called = true
 		},
 	}
-	if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "d", Query: `TopN(field=f, n=2)`}); err != nil {
+	if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "d", Query: `TopN(field=f, n=2)`}); err != nil {
 		t.Fatal(err)
 	}
 	if !called {
@@ -126,7 +126,7 @@ func TestStatsCount_TopN(t *testing.T) {
 func TestStatsCount_Bitmap(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
-	hldr := test.Holder{Holder: c[0].Server.Holder()}
+	hldr := test.Holder{Holder: c.GetNode(0).Server.Holder()}
 
 	hldr.SetBit("d", "f", 0, 0)
 	hldr.SetBit("d", "f", 0, 1)
@@ -144,7 +144,7 @@ func TestStatsCount_Bitmap(t *testing.T) {
 			called = true
 		},
 	}
-	if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "d", Query: `Row(f=0)`}); err != nil {
+	if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "d", Query: `Row(f=0)`}); err != nil {
 		t.Fatal(err)
 	}
 	if !called {
@@ -155,7 +155,7 @@ func TestStatsCount_Bitmap(t *testing.T) {
 func TestStatsCount_SetRowAttrsBulk(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
-	hldr := test.Holder{Holder: c[0].Server.Holder()}
+	hldr := test.Holder{Holder: c.GetNode(0).Server.Holder()}
 
 	hldr.SetBit("d", "f", 10, 0)
 	hldr.SetBit("d", "f", 10, 1)
@@ -178,7 +178,7 @@ func TestStatsCount_SetRowAttrsBulk(t *testing.T) {
 			called = true
 		},
 	}
-	if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "d", Query: `SetRowAttrs(f, 10, foo="bar")`}); err != nil {
+	if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "d", Query: `SetRowAttrs(f, 10, foo="bar")`}); err != nil {
 		t.Fatal(err)
 	}
 	if !called {
@@ -189,7 +189,7 @@ func TestStatsCount_SetRowAttrsBulk(t *testing.T) {
 func TestStatsCount_SetColumnAttrs(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
-	hldr := test.Holder{Holder: c[0].Server.Holder()}
+	hldr := test.Holder{Holder: c.GetNode(0).Server.Holder()}
 
 	hldr.SetBit("d", "f", 10, 0)
 	hldr.SetBit("d", "f", 10, 1)
@@ -212,7 +212,7 @@ func TestStatsCount_SetColumnAttrs(t *testing.T) {
 			called = true
 		},
 	}
-	if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "d", Query: `SetColumnAttrs(10, foo="bar")`}); err != nil {
+	if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "d", Query: `SetColumnAttrs(10, foo="bar")`}); err != nil {
 		t.Fatal(err)
 	}
 	if !called {
@@ -223,7 +223,7 @@ func TestStatsCount_SetColumnAttrs(t *testing.T) {
 func TestStatsCount_APICalls(t *testing.T) {
 	cluster := test.MustRunCluster(t, 1)
 	defer cluster.Close()
-	cmd := cluster[0]
+	cmd := cluster.GetNode(0)
 	h := cmd.Handler.(*http.Handler).Handler
 	holder := cmd.Server.Holder()
 	hldr := test.Holder{Holder: holder}
