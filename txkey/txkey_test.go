@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package txpath
+package txkey
 
 import (
 	"bytes"
@@ -86,4 +86,23 @@ func Test_ShardFromKey(t *testing.T) {
 		ShardFromKey([]byte("idx:'i';fld:'f';vw:'standard';shd:'18446744073709551615';ckey@1844674407370955161"))
 	}()
 
+}
+
+func Test_PrefixFromKey(t *testing.T) {
+	k := []byte("idx:'i';fld:'f';vw:'standard';shd:'1';ckey@18446744073709551615")
+	x := []byte("idx:'i';fld:'f';vw:'standard';shd:'1';ckey@")
+	pre := PrefixFromKey(k)
+	if !bytes.Equal(pre, x) {
+		nx := len(x)
+		npre := len(pre)
+		if nx != npre {
+			panic(fmt.Sprintf("nx=%v, npre=%v; expected '%v', observed '%v'", nx, npre, string(x), string(pre)))
+		}
+		for i := 0; i < nx; i++ {
+			if x[i] != pre[i] {
+				panic(fmt.Sprintf("first diff at index %v, expected '%v', observed '%v'", i, string(x[:i]), string(pre[:i])))
+			}
+		}
+		panic(fmt.Sprintf("expected:\n%v\n, observed:\n%v\n", string(x), string(pre)))
+	}
 }

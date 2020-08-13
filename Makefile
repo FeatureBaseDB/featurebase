@@ -184,6 +184,12 @@ topt-lmdb:
 	@echo "   log.topt.lmdb green: \c"; cat log.topt.lmdb | grep PASS |wc -l
 	@echo "   log.topt.lmdb   red: \c"; cat log.topt.lmdb | grep '\-\-\- FAIL' |wc -l
 
+topt-lmdb-race:
+	mv log.topt.lmdb log.topt.lmdb.prev || true
+	PILOSA_TXSRC=lmdb go test -race -v -tags='$(BUILD_TAGS)' $(TESTFLAGS) $(NOCHECKPTR)  2>&1 | tee log.topt.lmdb-race
+	@echo "   log.topt.lmdb-race green: \c"; cat log.topt.lmdb-race | grep PASS |wc -l
+	@echo "   log.topt.lmdb-race   red: \c"; cat log.topt.lmdb-race | grep '\-\-\- FAIL' |wc -l
+
 topt-race:
 	mv log.topt.race log.topt.race.prev || true
 	go test -race -v -tags='$(BUILD_TAGS)' $(TESTFLAGS) $(NOCHECKPTR)  2>&1 | tee log.topt.race
@@ -195,40 +201,63 @@ topt-race:
 
 bg-rr: # shorthand for bluegreen test with A:badger; B:roaring
 	mv log.bg-rr log.bg-rr.prev || true
-	set -o pipefail; PILOSA_TXSRC=badger_roaring go test -v -tags='$(BUILD_TAGS)' $(TESTFLAGS) $(NOCHECKPTR)  2>&1 | tee log.bg-rr
+	PILOSA_TXSRC=badger_roaring go test -v -tags='$(BUILD_TAGS)' $(TESTFLAGS) $(NOCHECKPTR)  2>&1 | tee log.bg-rr
 	@echo "   log.bg-rr green: \c"; cat log.bg-rr | grep PASS |wc -l
 	@echo "   log.bg-rr   red: \c"; cat log.bg-rr | grep '\-\-\- FAIL' |wc -l
 
 rr-bg: # bluegreen with A:roaring; B:badger (B's values are returned).
 	mv log.bg.roar_bg log.bg.roar_bg.prev || true
-	set -o pipefail; PILOSA_TXSRC=roaring_badger go test -v -tags='$(BUILD_TAGS)' $(TESTFLAGS) $(NOCHECKPTR)  2>&1 | tee log.rr-bg
-	##PILOSA_TXSRC=roaring_badger go test -v -tags='$(BUILD_TAGS)' $(TESTFLAGS) $(NOCHECKPTR)  2>&1 | tee log.rr-bg
+	PILOSA_TXSRC=roaring_badger go test -v -tags='$(BUILD_TAGS)' $(TESTFLAGS) $(NOCHECKPTR)  2>&1 | tee log.rr-bg
 	@echo "   log.rr-bg green: \c"; cat log.rr-bg | grep PASS |wc -l
 	@echo "   log.rr-bg   red: \c"; cat log.rr-bg | grep '\-\-\- FAIL' |wc -l
 
 rbf-rr:
 	mv log.rbf-rr log.rbf-rr.prev || true
-	set -o pipefail; PILOSA_TXSRC=rbf_roaring go test -v -tags='$(BUILD_TAGS)' $(TESTFLAGS) $(NOCHECKPTR)  2>&1 | tee log.rbf-rr
+	PILOSA_TXSRC=rbf_roaring go test -v -tags='$(BUILD_TAGS)' $(TESTFLAGS) $(NOCHECKPTR)  2>&1 | tee log.rbf-rr
 	@echo "   log.rbf-rr green: \c"; cat log.rbf-rr | grep PASS |wc -l
 	@echo "   log.rbf-rr   red: \c"; cat log.rbf-rr | grep '\-\-\- FAIL' |wc -l
 
 rr-rbf:
 	mv log.rr-rbf log.rr-rbf.prev || true
-	set -o pipefail; PILOSA_TXSRC=roaring_rbf go test -v -tags='$(BUILD_TAGS)' $(TESTFLAGS) $(NOCHECKPTR)  2>&1 | tee log.rr-rbf
+	PILOSA_TXSRC=roaring_rbf go test -v -tags='$(BUILD_TAGS)' $(TESTFLAGS) $(NOCHECKPTR)  2>&1 | tee log.rr-rbf
 	@echo "   log.rr-rbf green: \c"; cat log.rr-rbf | grep PASS |wc -l
 	@echo "   log.rr-rbf   red: \c"; cat log.rr-rbf | grep '\-\-\- FAIL' |wc -l
 
 rbf-bg:
 	mv log.rbf-bg log.rbf-bg.prev || true
-	set -o pipefail; PILOSA_TXSRC=rbf_badger go test -v -tags='$(BUILD_TAGS)' $(TESTFLAGS) $(NOCHECKPTR)  2>&1 | tee log.rbf-bg
+	PILOSA_TXSRC=rbf_badger go test -v -tags='$(BUILD_TAGS)' $(TESTFLAGS) $(NOCHECKPTR)  2>&1 | tee log.rbf-bg
 	@echo "   log.rbf-bg green: \c"; cat log.rbf-bg | grep PASS |wc -l
 	@echo "   log.rbf-bg   red: \c"; cat log.rbf-bg | grep '\-\-\- FAIL' |wc -l
 
 bg-rbf:
 	mv log.bg-rbf log.bg-rbf.prev || true
-	set -o pipefail; PILOSA_TXSRC=badger_rbf go test -v -tags='$(BUILD_TAGS)' $(TESTFLAGS) $(NOCHECKPTR)  2>&1 | tee log.bg-rbf
+	PILOSA_TXSRC=badger_rbf go test -v -tags='$(BUILD_TAGS)' $(TESTFLAGS) $(NOCHECKPTR)  2>&1 | tee log.bg-rbf
 	@echo "   log.bg-rbf green: \c"; cat log.bg-rbf | grep PASS |wc -l
 	@echo "   log.bg-rbf   red: \c"; cat log.bg-rbf | grep '\-\-\- FAIL' |wc -l
+
+lm-rr:
+	mv log.lm-rr log.lm-rr.prev || true
+	PILOSA_TXSRC=lmdb_roaring go test -v -tags='$(BUILD_TAGS)' $(TESTFLAGS) $(NOCHECKPTR)  2>&1 | tee log.lm-rr
+	@echo "   log.lm-rr green: \c"; cat log.lm-rr | grep PASS |wc -l
+	@echo "   log.lm-rr   red: \c"; cat log.lm-rr | grep '\-\-\- FAIL' |wc -l
+
+rr-lm:
+	mv log.rr-lm log.rr-lm.prev || true
+	PILOSA_TXSRC=roaring_lmdb go test -v -tags='$(BUILD_TAGS)' $(TESTFLAGS) $(NOCHECKPTR)  2>&1 | tee log.rr-lm
+	@echo "   log.rr-lm green: \c"; cat log.rr-lm | grep PASS |wc -l
+	@echo "   log.rr-lm   red: \c"; cat log.rr-lm | grep '\-\-\- FAIL' |wc -l
+
+bg-lm:
+	mv log.topt.bg-lm log.topt.bg-lm.prev || true
+	PILOSA_TXSRC=badger_lmdb go test -v -tags='$(BUILD_TAGS)' $(TESTFLAGS) $(NOCHECKPTR)  2>&1 | tee log.topt.bg-lm
+	@echo "   log.topt.bg-lm green: \c"; cat log.topt.bg-lm | grep PASS |wc -l
+	@echo "   log.topt.bg-lm   red: \c"; cat log.topt.bg-lm | grep '\-\-\- FAIL' |wc -l
+
+lm-bg:
+	mv log.topt.lm-bg log.topt.lm-bg.prev || true
+	PILOSA_TXSRC=lmdb_badger go test -v -tags='$(BUILD_TAGS)' $(TESTFLAGS) $(NOCHECKPTR)  2>&1 | tee log.topt.lm-bg
+	@echo "   log.topt.lm-bg green: \c"; cat log.topt.lm-bg | grep PASS |wc -l
+	@echo "   log.topt.lm-bg   red: \c"; cat log.topt.lm-bg | grep '\-\-\- FAIL' |wc -l
 
 
 # Run golangci-lint

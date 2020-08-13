@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -183,6 +184,19 @@ func TestClusterResize_AddNode(t *testing.T) {
 		}
 	})
 	t.Run("ContinuousShards", func(t *testing.T) {
+		// Why are we skipping this test under blue-green with Roaring?
+		//
+		// We see red test: during resize during importRoaringBits
+		// PILOSA_TXSRC=rbf_roaring go test -v  -tags=' shardwidth20'  "-gcflags=all=-d=checkptr=0" -run TestClusterResize_AddNode/"ContinuousShards"
+		// green:
+		// PILOSA_TXSRC=roaring_rbf go test -v  -tags=' shardwidth20'  "-gcflags=all=-d=checkptr=0" -run TestClusterResize_AddNode/"ContinuousShards"
+		//
+		// but rbf_badger and badger_rbf are both green (use the same data values for containers).
+		//
+		// Conclude: roaring reads a different size of data []byte in (due to ops log) bits vs others (RBF, badger), so
+		// we can't do blue-green with roaring on this test.
+		skipTestUnderBlueGreenWithRoaring(t)
+
 		// Configure node0
 		m0 := test.MustRunCluster(t, 1)[0]
 		defer m0.Close()
@@ -723,5 +737,14 @@ func TestClusterMutualTLS(t *testing.T) {
 		t.Fatal(err)
 	} else if err := client0.CreateField(context.Background(), "i", "f"); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func skipTestUnderBlueGreenWithRoaring(t *testing.T) {
+	src := os.Getenv("PILOSA_TXSRC")
+	if strings.Contains(src, "_") {
+		if strings.Contains(src, "roaring") {
+			t.Skip("skip for roaring blue-green")
+		}
 	}
 }

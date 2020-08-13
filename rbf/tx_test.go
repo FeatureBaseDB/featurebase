@@ -21,7 +21,7 @@ import (
 	"time"
 
 	"github.com/pilosa/pilosa/v2/rbf"
-	"github.com/pilosa/pilosa/v2/txpath"
+	"github.com/pilosa/pilosa/v2/txkey"
 )
 
 func TestTx_CommitRollback(t *testing.T) {
@@ -490,5 +490,5 @@ func TestTx_Dump(t *testing.T) {
 }
 
 func rbfName(index, field, view string, shard uint64) string {
-	return string(txpath.Prefix(index, field, view, shard))
+	return string(txkey.Prefix(index, field, view, shard))
 }
