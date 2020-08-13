@@ -192,16 +192,16 @@ func (c *blueGreenTx) Rollback() {
 			panic(r)
 		}
 	}()
-	fmt.Printf("blueGreenTx.Rollback() about to call (%v) a.Rollback()\n", c.as)
+	//fmt.Printf("blueGreenTx.Rollback() about to call (%v) a.Rollback()\n", c.as)
 	c.a.Rollback()
-	fmt.Printf("blueGreenTx.Rollback() about to call (%v) b.Rollback()\n", c.bs)
+	//fmt.Printf("blueGreenTx.Rollback() about to call (%v) b.Rollback()\n", c.bs)
 	c.b.Rollback()
 }
 
 func (c *blueGreenTx) Commit() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	fmt.Printf("blueGreenTx.Commit() called.\n")
+	//fmt.Printf("blueGreenTx.Commit() called.\n")
 	if c.rollbackOrCommitDone {
 		return nil
 	}
@@ -766,7 +766,7 @@ type blueGreenChecker struct {
 // see would mark a thing as seen.
 func (b *blueGreenChecker) see(index, field, view string, shard uint64) {
 	// keep this next Printf. Useful to see the sequence of Tx operations.
-	fmt.Printf("blueGreenTx.%v on index='%v'\n", Caller(1), index)
+	//fmt.Printf("blueGreenTx.%v on index='%v'\n", Caller(1), index)
 
 	b.mu.Lock()
 	defer b.mu.Unlock()
