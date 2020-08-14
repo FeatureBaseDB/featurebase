@@ -29,6 +29,7 @@ type WALSegment struct {
 	path     string   // path to file
 	w        *os.File // write handle
 	data     []byte   // read-only mmap data
+	buf      []byte   // write buffer
 	pageN    int      // number of written pages
 }
 
@@ -121,6 +122,12 @@ func (s *WALSegment) Close() error {
 
 // CloseForWrite closes the write handle, if initialized.
 func (s *WALSegment) CloseForWrite() error {
+	// Ensure write buffer is flushed out.
+	if err := s.Sync(); err != nil {
+		return err
+	}
+
+	// Close underlying file writer.
 	if s.w != nil {
 		if err := s.w.Close(); err != nil {
 			return err
@@ -138,6 +145,15 @@ func (s *WALSegment) ReadWALPage(walID int64) ([]byte, error) {
 	}
 
 	offset := (walID - s.minWALID) * PageSize
+
+	// If offset is within write buffer, return from write buffer.
+	writeBufferOffset := int64((s.pageN * PageSize) - len(s.buf))
+	if offset >= writeBufferOffset {
+		buf := s.buf[offset-writeBufferOffset:]
+		return buf[:PageSize:PageSize], nil
+	}
+
+	// Otherwise return from on-disk mmap.
 	return s.data[offset : offset+PageSize], nil
 }
 
@@ -161,10 +177,8 @@ func (s *WALSegment) WriteWALPage(page []byte, isMeta bool) (walID int64, err er
 		// TODO: Write meta page checksum
 	}
 
-	// Write page at position & increment page count.
-	if _, err := s.w.WriteAt(page, int64(s.pageN*PageSize)); err != nil {
-		return 0, fmt.Errorf("wal segment write: %w", err)
-	}
+	// Append write to write buffer & increment page count.
+	s.buf = append(s.buf, page...)
 	s.pageN++
 
 	return walID, nil
@@ -175,6 +189,13 @@ func (s *WALSegment) Sync() error {
 	if s.w == nil {
 		return nil
 	}
+
+	// Flush buffer to disk.
+	if _, err := s.w.WriteAt(s.buf, int64((s.pageN*PageSize)-len(s.buf))); err != nil {
+		return fmt.Errorf("wal segment write: %w", err)
+	}
+	s.buf = nil
+
 	return s.w.Sync()
 }
 
