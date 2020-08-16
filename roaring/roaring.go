@@ -3287,7 +3287,6 @@ func (c *Container) arrayRemove(v uint16) (*Container, bool) {
 	}
 	// removing the last item? we can just return the empty container.
 	if c.N() == 1 {
-		c.n = 0
 		return nil, true
 	}
 	c = c.Thaw()
@@ -3304,7 +3303,6 @@ func (c *Container) bitmapRemove(v uint16) (*Container, bool) {
 	}
 	// removing the last item? we can just return the empty container.
 	if c.N() == 1 {
-		c.n = 0
 		return nil, true
 	}
 	c = c.Thaw()
@@ -3330,7 +3328,6 @@ func (c *Container) runRemove(v uint16) (*Container, bool) {
 	}
 	// removing the last item? we can just return the empty container.
 	if c.N() == 1 {
-		c.n = 0
 		return nil, true
 	}
 	c = c.Thaw()
