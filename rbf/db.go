@@ -129,14 +129,14 @@ func (db *DB) Open() (err error) {
 		return fmt.Errorf("create wal dir: %w", err)
 	}
 
+	db.opened = true
+
 	// Open write-ahead log & checkpoint to the end since no transactions are open.
 	if err := db.openWALSegments(); err != nil {
 		return fmt.Errorf("wal open: %w", err)
 	} else if err := db.checkpoint(); err != nil {
 		return fmt.Errorf("checkpoint: %w", err)
 	}
-
-	db.opened = true
 
 	return nil
 }
