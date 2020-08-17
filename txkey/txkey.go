@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package txpath consolidates in one place the use of keys to index into our
+// Package txkey consolidates in one place the use of keys to index into our
 // various storage/txn back-ends. Databases badgerDB and rbfDB both use it,
 // so that debug Dumps are comparable.
-package txpath
+package txkey
 
 import (
 	"bytes"
@@ -154,4 +154,13 @@ func IndexOnlyPrefix(indexName string) []byte {
 // same for deleting a whole field.
 func FieldPrefix(index, field string) []byte {
 	return []byte(fmt.Sprintf("idx:'%v';fld:'%v';", index, field))
+}
+
+func PrefixFromKey(bkey []byte) (prefix []byte) {
+	MustValidateKey(bkey)
+	beg := bytes.LastIndex(bkey, []byte("@"))
+	if beg == -1 {
+		panic(fmt.Sprintf("bad bkey='%v' did not have '@' extract prefix", string(bkey)))
+	}
+	return bkey[:beg+1]
 }

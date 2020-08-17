@@ -5179,7 +5179,7 @@ func TestImportClearRestart(t *testing.T) {
 				if err != nil {
 					t.Fatalf("initial small import: %v", err)
 				}
-				if idx.Txf.TxType() == roaringFragmentFilesTxn {
+				if idx.Txf.TxType() == RoaringTxn {
 					if expOpN <= maxOpN && f.opN != expOpN {
 						t.Errorf("unexpected opN - %d is not %d", f.opN, expOpN)
 					}
@@ -5199,7 +5199,7 @@ func TestImportClearRestart(t *testing.T) {
 					t.Fatalf("reopening fragment: %v", err)
 				}
 
-				if idx.Txf.TxType() == roaringFragmentFilesTxn {
+				if idx.Txf.TxType() == RoaringTxn {
 					if expOpN <= maxOpN && f.opN != expOpN {
 						t.Errorf("unexpected opN after close/open %d is not %d", f.opN, expOpN)
 					}
@@ -5237,7 +5237,7 @@ func TestImportClearRestart(t *testing.T) {
 					t.Fatalf("opening new fragment: %v", err)
 				}
 
-				if idx.Txf.TxType() == roaringFragmentFilesTxn {
+				if idx.Txf.TxType() == RoaringTxn {
 					if expOpN <= maxOpN && f2.opN != expOpN {
 						t.Errorf("unexpected opN after close/open %d is not %d", f2.opN, expOpN)
 					}
@@ -5323,15 +5323,18 @@ func check(t *testing.T, tx Tx, f *fragment, exp map[uint64]map[uint64]struct{})
 
 func TestImportValueConcurrent(t *testing.T) {
 	f, idx := mustOpenBSIFragment("i", "f", viewBSIGroupPrefix+"foo", 0)
-	switch idx.Txf.TxType() {
-	case blueGreenBadgerRoaring, blueGreenRoaringBadger:
-		t.Skip(fmt.Sprintf("skipping TestImportValueConcurrent under " +
-			"blueGreenTx because the lack of transactional consistency " +
-			"from Roaring-per-file will create false comparison " +
-			"failures."))
-	case lmdbTxn:
-		t.Skip(fmt.Sprintf("skipping TestImportValueConcurrent under " +
-			"lmdb since only a single writer is allowed at once."))
+	types := idx.Txf.TxTypes()
+	for _, ty := range types {
+		switch ty {
+		case roaringTxn:
+			t.Skip(fmt.Sprintf("skipping TestImportValueConcurrent under " +
+				"blueGreenTx because the lack of transactional consistency " +
+				"from Roaring-per-file will create false comparison " +
+				"failures."))
+		case lmdbTxn:
+			t.Skip(fmt.Sprintf("skipping TestImportValueConcurrent under " +
+				"lmdb since only a single writer is allowed at once."))
+		}
 	}
 
 	// Since eg.Go gets called multiple times below, each

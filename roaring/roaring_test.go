@@ -2158,3 +2158,105 @@ func BenchmarkIntersectInPlace(b *testing.B) {
 		bm.IntersectInPlace(data.a2, data.b, data.r1, data.r2)
 	}
 }
+
+func TestArrayAddRemoveAddRemove(t *testing.T) {
+
+	var ct *roaring.Container
+	for i := 0; i < 3; i++ {
+		switch i {
+		case 0:
+			ct = roaring.NewContainerArray(nil)
+		case 1:
+			ct = roaring.NewContainerBitmap(0, nil)
+		case 2:
+			ct = roaring.NewContainerRun(nil)
+		}
+		values := []uint16{1, 0, 13, 77, 1511}
+		var added, removed bool
+		for _, v := range values {
+			ct, added = ct.Add(v)
+			if !added {
+				t.Fatalf("expected added to be true for: %d", v)
+			}
+			if !ct.Contains(v) {
+				t.Fatalf("expected bitmap to contain: %d", v)
+			}
+			ct, removed = ct.Remove(v)
+			if !removed {
+				t.Fatalf("expected removed to be true for: %d", v)
+			}
+			if n := ct.N(); n != 0 {
+				t.Fatalf("expected bitmap count to be zero now, got n=%v", n)
+			}
+			if ct.Contains(v) {
+				t.Fatalf("expected bitmap to not contain: %d", v)
+			}
+		}
+	}
+}
+
+func TestBitmapAddRemoveAddRemove(t *testing.T) {
+	ct := roaring.NewContainerBitmap(0, nil)
+	putmeValues := []uint16{1, 0, 13, 77, 1511}
+
+	var added, removed bool
+	for _, v := range putmeValues {
+		ct, added = ct.Add(v)
+		if !added {
+			t.Fatalf("expected added to be true for: %d", v)
+		}
+		if !ct.Contains(v) {
+			t.Fatalf("expected bitmap to contain: %d", v)
+		}
+		ct, removed = ct.Remove(v)
+		if !removed {
+			t.Fatalf("expected removed to be true for: %d", v)
+		}
+		if ct.Contains(v) {
+			t.Fatalf("expected bitmap to not contain: %d", v)
+		}
+
+		if n := ct.N(); n != 0 {
+			t.Fatalf("expected bitmap count to be zero now, got n=%v", n)
+		}
+
+		if ct != nil {
+			b := roaring.AsBitmap(ct)
+			for i, e := range b {
+				if e != 0 {
+					t.Fatalf("expected ct AsBitmap() contents to be all zeros, uint64 i=%v as %v", i, e)
+				}
+			}
+		}
+	}
+}
+
+func TestRunAddRemoveAddRemove(t *testing.T) {
+
+	ct := roaring.NewContainerRun(nil)
+	putmeValues := []uint16{1, 0, 13, 77, 1511}
+
+	var added, removed bool
+	for _, v := range putmeValues {
+		ct, added = ct.Add(v)
+		if !added {
+			t.Fatalf("expected added to be true for: %d", v)
+		}
+		if !ct.Contains(v) {
+			t.Fatalf("expected bitmap to contain: %d", v)
+		}
+		ct, removed = ct.Remove(v)
+		if !removed {
+			t.Fatalf("expected removed to be true for: %d", v)
+		}
+		if n := len(roaring.AsRuns(ct)); n != 0 {
+			t.Fatalf("expected ct AsRuns() len to be zero now, got n=%v", n)
+		}
+		if n := ct.N(); n != 0 {
+			t.Fatalf("expected bitmap count to be zero now, got n=%v", n)
+		}
+		if ct.Contains(v) {
+			t.Fatalf("expected bitmap to not contain: %d", v)
+		}
+	}
+}

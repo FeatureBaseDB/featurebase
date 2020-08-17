@@ -14,3 +14,5 @@
 ./cmd/slurp/vprint.go
 ./cmd/demo-lmdb/vprint.go
 ./gid.go
+./cmd/lmdb-keydump/vprint.go
+./cmd/lmdb-keydump/keydump.go

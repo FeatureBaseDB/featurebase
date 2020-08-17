@@ -492,7 +492,7 @@ func (c *Container) setBitmap(bitmap []uint64) {
 // runs yields the data viewed as a slice of intervals.
 func (c *Container) runs() []Interval16 {
 	if c == nil {
-		panic("attempt to read nil container's runs")
+		return nil
 	}
 	if roaringParanoia {
 		if c.typeID != ContainerRun {

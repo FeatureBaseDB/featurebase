@@ -25,7 +25,7 @@ import (
 
 	"github.com/pilosa/pilosa/v2/rbf"
 	"github.com/pilosa/pilosa/v2/roaring"
-	"github.com/pilosa/pilosa/v2/txpath"
+	"github.com/pilosa/pilosa/v2/txkey"
 	"github.com/pkg/errors"
 )
 
@@ -248,7 +248,7 @@ func (tx *RBFTx) RoaringBitmapReader(index, field, view string, shard uint64, fr
 
 func (tx *RBFTx) SliceOfShards(index, field, view, optionalViewPath string) (sliceOfShards []uint64, err error) {
 
-	prefix := string(txpath.AllShardPrefix(index, field, view))
+	prefix := string(txkey.AllShardPrefix(index, field, view))
 
 	names, err := tx.tx.BitmapNames()
 	if err != nil {
@@ -260,7 +260,7 @@ func (tx *RBFTx) SliceOfShards(index, field, view, optionalViewPath string) (sli
 		if !strings.HasPrefix(name, prefix) {
 			continue
 		}
-		shard := txpath.ShardFromPrefix([]byte(name))
+		shard := txkey.ShardFromPrefix([]byte(name))
 		sliceOfShards = append(sliceOfShards, shard)
 	}
 	return sliceOfShards, nil
@@ -296,13 +296,13 @@ func (tx *RBFTx) UseRowCache() bool {
 // rbfName returns a NULL-separated key used for identifying bitmap maps in RBF.
 func rbfName(index, field, view string, shard uint64) string {
 	//return fmt.Sprintf("%s\x00%s\x00%s\x00%d", index, field, view, shard)
-	return string(txpath.Prefix(index, field, view, shard))
+	return string(txkey.Prefix(index, field, view, shard))
 }
 
 // rbfFieldPrefix returns a prefix for field keys in RBF.
 func rbfFieldPrefix(index, field string) string {
 	//return fmt.Sprintf("%s\x00%s\x00", index, field)
-	return string(txpath.FieldPrefix(index, field))
+	return string(txkey.FieldPrefix(index, field))
 }
 
 func (w *RbfDBWrapper) DeleteField(index, field, fieldPath string) error {
@@ -330,7 +330,7 @@ func (w *RbfDBWrapper) DeleteIndex(indexName string) error {
 	if strings.Contains(indexName, "'") {
 		return fmt.Errorf("error: bad indexName `%v` in RbfDBWrapper.DeleteIndex() call: indexName cannot contain apostrophes/single quotes.", indexName)
 	}
-	prefix := txpath.IndexOnlyPrefix(indexName)
+	prefix := txkey.IndexOnlyPrefix(indexName)
 
 	w.muDb.Lock()
 	defer w.muDb.Unlock()

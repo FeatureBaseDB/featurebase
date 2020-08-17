@@ -33,16 +33,6 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// debug: TODO(jea): remove this init() that does cpu profiling.
-func init() {
-	go func() {
-		// give time for env var TXSRC to be set.
-		//time.Sleep(5 * time.Second)
-		//CPUProfileForDur(time.Minute, "cpu.pprof")
-		//CPUProfileForDur(15*time.Second, "cpu.pprof")
-	}()
-}
-
 // Index represents a container for fields.
 type Index struct {
 	mu            sync.RWMutex
@@ -178,6 +168,8 @@ func (i *Index) TranslateStorePath(partitionID int) string {
 
 // TranslateStore returns the translation store for a given partition.
 func (i *Index) TranslateStore(partitionID int) TranslateStore {
+	i.mu.RLock() // avoid race with Index.Close() doing i.translateStores = make(map[int]TranslateStore)
+	defer i.mu.RUnlock()
 	return i.translateStores[partitionID]
 }
 
@@ -722,4 +714,40 @@ func (idx *Index) Dump(label string) {
 	defer tx.Rollback()
 	fmt.Printf("\n%v Index.Dump('%v') for index '%v':\n", fileline, label, idx.name)
 	tx.Dump()
+}
+
+func (idx *Index) SliceOfShards(field, view, viewPath string) (sliceOfShards []uint64, err error) {
+
+	// SliceOfShards is based on view.openFragments()
+	// If we go to a database per shard then index will need this, or
+	// something like it, to read database files/directories
+	// and figure out what all the shards are so that a view
+	// can open its fragments.
+
+	file, err := os.Open(filepath.Join(viewPath, "fragments"))
+	if os.IsNotExist(err) {
+		return
+	} else if err != nil {
+		return nil, errors.Wrap(err, "opening fragments directory")
+	}
+	defer file.Close()
+
+	fis, err := file.Readdir(0)
+	if err != nil {
+		return nil, errors.Wrap(err, "reading fragments directory")
+	}
+
+	for _, fi := range fis {
+		if fi.IsDir() {
+			continue
+		}
+		// Parse filename into integer.
+		shard, err := strconv.ParseUint(filepath.Base(fi.Name()), 10, 64)
+		if err != nil {
+			idx.holder.Logger.Debugf("WARNING: couldn't use non-integer file as shard in index/field/view %s/%s/%s: %s", idx.name, field, view, fi.Name())
+			continue
+		}
+		sliceOfShards = append(sliceOfShards, shard)
+	}
+	return
 }

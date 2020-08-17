@@ -22,6 +22,7 @@ import (
 	"io/ioutil"
 	"log"
 	"math"
+	"math/bits"
 	"os"
 	"path/filepath"
 	"sort"
@@ -755,7 +756,7 @@ fileLoop:
 					return fmt.Errorf("opening view: view=%s, err=%s", view.name, err)
 				}
 
-				if f.idx.Txf.TxType() == roaringFragmentFilesTxn {
+				if f.idx.Txf.TxType() == RoaringTxn {
 					// Automatically upgrade BSI v1 fragments if they exist & reopen view.
 					if bsig := f.bsiGroup(f.name); bsig != nil {
 						if ok, err := upgradeViewBSIv2(view, bsig.BitDepth); err != nil {
@@ -2151,17 +2152,9 @@ func isValidCacheType(v string) bool {
 	}
 }
 
-// TODO(jea): why isn't this bits.Len64(x) using import "math/bits"
-// That would be much (80x or more) faster and correct if the high bit is set.
-//
 // bitDepth returns the number of bits required to store a value.
 func bitDepth(v uint64) uint {
-	for i := uint(0); i < 63; i++ {
-		if v < (1 << i) {
-			return i
-		}
-	}
-	return 63
+	return uint(bits.Len64(v))
 }
 
 // bitDepthInt64 returns the required bit depth for abs(v).

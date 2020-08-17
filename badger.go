@@ -20,6 +20,7 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"math"
 	"os"
 	"runtime"
 	"sort"
@@ -31,7 +32,7 @@ import (
 	badger "github.com/dgraph-io/badger/v2"
 	badgeroptions "github.com/dgraph-io/badger/v2/options"
 	"github.com/pilosa/pilosa/v2/roaring"
-	"github.com/pilosa/pilosa/v2/txpath"
+	"github.com/pilosa/pilosa/v2/txkey"
 	"github.com/pkg/errors"
 )
 
@@ -345,7 +346,7 @@ func (w *BadgerDBWrapper) DeleteIndex(indexName string) error {
 	if strings.Contains(indexName, "'") {
 		return fmt.Errorf("error: bad indexName `%v` in BadgerDBWrapper.DeleteIndex() call: indexName cannot contain apostrophes/single quotes.", indexName)
 	}
-	prefix := txpath.IndexOnlyPrefix(indexName)
+	prefix := txkey.IndexOnlyPrefix(indexName)
 	return w.DeletePrefix(prefix)
 }
 
@@ -438,6 +439,8 @@ type BadgerDBWrapper struct {
 	startStack string
 
 	DeleteEmptyContainer bool
+
+	writeBatch *badger.WriteBatch
 }
 
 // unprotectedListOpenTxAsString is a debugging helper.
@@ -488,9 +491,7 @@ func (w *BadgerDBWrapper) NewBadgerTx(write bool, initialIndexName string, frag 
 		doAllocZero:          w.doAllocZero,
 		initialIndexName:     initialIndexName,
 		DeleteEmptyContainer: w.DeleteEmptyContainer,
-		//initloc:              "", // stack(),
 	}
-
 	return
 }
 
@@ -528,9 +529,6 @@ type BadgerTx struct {
 
 	frag    *fragment
 	opcount int
-
-	// keep linter happy, comment out until needed again for debugging.
-	//initloc string // stack trace of where we were initially created.
 
 	doAllocZero bool
 
@@ -644,6 +642,7 @@ func (tx *BadgerTx) Commit() error {
 	if tx.doAllocZero {
 		tx.overWriteOurAllocs()
 	}
+
 	return err
 }
 
@@ -677,7 +676,7 @@ func (tx *BadgerTx) Container(index, field, view string, shard uint64, ckey uint
 	// you must use copy() to copy it to another byte slice.
 	// BUT here we are already inside the Txn.
 
-	bkey := txpath.Key(index, field, view, shard, ckey)
+	bkey := txkey.Key(index, field, view, shard, ckey)
 	tx.mu.Lock()
 	var item *badger.Item
 	item, err = tx.tx.Get(bkey)
@@ -699,10 +698,41 @@ func (tx *BadgerTx) Container(index, field, view string, shard uint64, ckey uint
 	return
 }
 
+func (w *BadgerDBWrapper) NewWriteBatch() {
+	w.muDb.Lock()
+	defer w.muDb.Unlock()
+	if w.writeBatch != nil {
+		panic("must FlushWriteBatch() before calling NewWriteBatch()")
+	}
+	w.writeBatch = w.db.NewWriteBatch()
+}
+
+// Flush any remaining un-committed writes in progress.
+func (w *BadgerDBWrapper) FlushWriteBatch() (err error) {
+	w.muDb.Lock()
+	defer w.muDb.Unlock()
+	if w.writeBatch == nil {
+		panic("CommitWriteBatch error: no batch in progress")
+	}
+	err = w.writeBatch.Flush()
+	w.writeBatch = nil
+	return
+}
+
+// Cancel any remaining un-committed writes in progress.
+func (w *BadgerDBWrapper) CancelWriteBatch() {
+	w.muDb.Lock()
+	defer w.muDb.Unlock()
+	if w.writeBatch == nil {
+		panic("CancelWriteBatch error: no batch in progress")
+	}
+	w.writeBatch.Cancel()
+}
+
 // PutContainer stores rc under the specified fragment and container ckey.
 func (tx *BadgerTx) PutContainer(index, field, view string, shard uint64, ckey uint64, rc *roaring.Container) error {
 
-	bkey := txpath.Key(index, field, view, shard, ckey)
+	bkey := txkey.Key(index, field, view, shard, ckey)
 	var by []byte
 
 	ct := roaring.ContainerType(rc)
@@ -719,12 +749,23 @@ func (tx *BadgerTx) PutContainer(index, field, view string, shard uint64, ckey u
 	default:
 		panic(fmt.Sprintf("unknown roaring.Container type: %v", ct))
 	}
-	tx.writeCount++
-	sz := len(by) + len(bkey) + 2
-	tx.writeByteCount += sz
+
+	entry := badger.NewEntry(bkey, by).WithMeta(ct)
+
+	tx.Db.muDb.Lock()
+	if tx.Db.writeBatch != nil {
+		err := tx.Db.writeBatch.SetEntry(entry) // Will create txns as needed.
+		tx.Db.muDb.Unlock()
+		return err
+	}
+	tx.Db.muDb.Unlock()
 
 	tx.mu.Lock()
 	defer tx.mu.Unlock()
+
+	tx.writeCount++
+	sz := len(by) + len(bkey) + 2
+	tx.writeByteCount += sz
 
 	// The integration tests do large bit level loads that exceed 10MB.
 	// So we autocommit and start a new Txn if we are about to
@@ -736,15 +777,28 @@ func (tx *BadgerTx) PutContainer(index, field, view string, shard uint64, ckey u
 	// However, emprirically we still get ErrTnTooBig when
 	// tx.writeByteCount=5884222; or when tx.writeCount=16197.
 	// So duck under both those thresholds by some margin.
-	if tx.writeCount > 10000 || tx.writeByteCount > 4000000 {
+	if tx.writeCount > 100 || tx.writeByteCount > 2000000 {
 		// avoid ErrTxnTooBig by commiting before going over the limits,
 		// because then we get a error: "Transaction Conflict. Please retry."
-		panicOn(tx.tx.Commit())
+		err := tx.tx.Commit()
+		panicOn(err)
+		// badger docs:
+		// `ErrConflict is returned when a transaction conflicts with another transaction. This can
+		// happen if the read rows had been updated concurrently by another transaction.
+		// ErrConflict = errors.New("Transaction Conflict. Please retry")`
+		//if err == badger.ErrConflict {
+		// problem is, we don't have the previous entry handy now.
+		//}
+		//if err != nil {
+		// ignore for now to get timings.
+		//panic(fmt.Sprintf("commit failed on bkey '%v': err '%v'", string(bkey), err))
+		//}
 		tx.tx = tx.Db.db.NewTransaction(tx.write)
+		//vv("NewBadgerTx write txn (p=%p) on gid=%v. b/c over thresholds writeCount=%v; writeByteCount=%v", tx.tx, curGID(), tx.writeCount, tx.writeByteCount)
+
 		tx.writeCount = 1
 		tx.writeByteCount = sz
 	}
-	entry := badger.NewEntry(bkey, by).WithMeta(ct)
 	err := tx.tx.SetEntry(entry)
 
 	// ErrTxnTooBig is returned if too many writes are fit into a single transaction.
@@ -752,15 +806,30 @@ func (tx *BadgerTx) PutContainer(index, field, view string, shard uint64, ckey u
 	// writes/deletes in the transaction exceeds a certain limit. In that case, it
 	// is best to commit the transaction and start a new transaction immediately."
 	//
-	if err == badger.ErrTxnTooBig {
-		panic(fmt.Sprintf("got error badger.ErrTxnTooBig, but we shoud never get this now; len(by) = %v; len(bkey)=%v; vs limit is 10MB. tx.writeCount=%v; tx.writeByteCount=%v;", len(by), len(bkey), tx.writeCount, tx.writeByteCount))
-	}
+	/*
+		if err == badger.ErrTxnTooBig {
+
+				err = tx.tx.Commit()
+				if err != nil {
+					panic(fmt.Sprintf("commit after TooBig failed on bkey '%v': err '%v'", string(bkey), err))
+				}
+
+				tx.tx = tx.Db.db.NewTransaction(tx.write)
+				//vv("NewBadgerTx write txn (p=%p) on gid=%v. b/c TooBig writeCount=%v; writeByteCount=%v", tx.tx, curGID(), tx.writeCount, tx.writeByteCount)
+				tx.writeCount = 1
+				tx.writeByteCount = sz
+
+				err = tx.tx.SetEntry(entry)
+				panicOn(err)
+			//panic(fmt.Sprintf("got error badger.ErrTxnTooBig, but we shoud never get this now; len(by) = %v; len(bkey)=%v; vs limit is 10MB. tx.writeCount=%v; tx.writeByteCount=%v;", len(by), len(bkey), tx.writeCount, tx.writeByteCount))
+		}
+	*/
 	return err
 }
 
 // RemoveContainer deletes the container specified by the shard and container key ckey
 func (tx *BadgerTx) RemoveContainer(index, field, view string, shard uint64, ckey uint64) error {
-	bkey := txpath.Key(index, field, view, shard, ckey)
+	bkey := txkey.Key(index, field, view, shard, ckey)
 	tx.mu.Lock()
 	err := tx.tx.Delete(bkey)
 	tx.mu.Unlock()
@@ -769,80 +838,86 @@ func (tx *BadgerTx) RemoveContainer(index, field, view string, shard uint64, cke
 
 // Add sets all the a bits hot in the specified fragment.
 func (tx *BadgerTx) Add(index, field, view string, shard uint64, batched bool, a ...uint64) (changeCount int, err error) {
+	return tx.addOrRemove(index, field, view, shard, batched, false, a...)
+}
 
+// Remove clears all the specified a bits in the chosen fragment.
+func (tx *BadgerTx) Remove(index, field, view string, shard uint64, a ...uint64) (changeCount int, err error) {
+	const batched = false
+	const remove = true
+	return tx.addOrRemove(index, field, view, shard, batched, remove, a...)
+}
+
+func (tx *BadgerTx) addOrRemove(index, field, view string, shard uint64, batched, remove bool, a ...uint64) (changeCount int, err error) {
 	// pure hack to match RoaringTx
 	defer func() {
-		if !batched {
+		if !remove && !batched {
 			if changeCount > 0 {
 				changeCount = 1
 			}
 		}
 	}()
 
-	// TODO: optimization: group 'a' elements into their containers,
-	// and then do all the Adds on that
-	// container at once, so we don't retrieve a container per bit.
-	// (maybe, for example, using ImportRoaringBits with clear=false).
-
-	for _, v := range a {
-		hi, lo := highbits(v), lowbits(v)
-
-		var rct *roaring.Container
-		rct, err = tx.Container(index, field, view, shard, hi)
-		panicOn(err)
-		if err != nil {
-			return 0, err
-		}
-		chng := false
-		// TODO optimization: set all the bits in the current container at once. group by container first.
-		rc1, chng := rct.Add(lo)
-		panicOn(err)
-		if chng {
-			changeCount++
-		}
-		if err != nil {
-			return changeCount, err
-		}
-		err = tx.PutContainer(index, field, view, shard, hi, rc1)
-		panicOn(err)
+	if len(a) == 0 {
+		return 0, nil
 	}
-	return
-}
 
-// Remove clears all the specified a bits in the chosen fragment.
-func (tx *BadgerTx) Remove(index, field, view string, shard uint64, a ...uint64) (changeCount int, err error) {
+	// have to sort, b/c input is not always sorted.
+	sort.Slice(a, func(i, j int) bool { return a[i] < a[j] })
 
-	// TODO: optimization: group 'a' elements into their containers,
-	// and then do all the Removes on that
-	// container at once, so we don't retrieve a container per bit.
-	// (maybe, for example, using ImportRoaringBits with clear=true).
-	for _, v := range a {
-		hi, lo := highbits(v), lowbits(v)
+	var lastHi uint64 = math.MaxUint64 // highbits is always less than this starter.
+	var rc *roaring.Container
+	var hi uint64
+	var lo uint16
 
-		var rct *roaring.Container
-		rct, err = tx.Container(index, field, view, shard, hi)
-		panicOn(err)
-		if err != nil {
-			return 0, err
-		}
+	for i, v := range a {
+
+		hi, lo = highbits(v), lowbits(v)
+		if hi != lastHi {
+			// either first time through, or changed to a different container.
+			// do we need put the last updated container now?
+			if i > 0 {
+				// not first time through, write what we got.
+				if remove && (rc == nil || rc.N() == 0) {
+					err = tx.RemoveContainer(index, field, view, shard, lastHi)
+					panicOn(err)
+				} else {
+					err = tx.PutContainer(index, field, view, shard, lastHi, rc)
+					panicOn(err)
+				}
+			}
+			// get the next container
+			rc, err = tx.Container(index, field, view, shard, hi)
+			panicOn(err)
+		} // else same container, keep adding bits to rct.
 		chng := false
-		rc1, chng := rct.Remove(lo)
-		panicOn(err)
+		// rc can be nil before, and nil after, in both Remove/Add below.
+		// The roaring container add() and remove() methods handle this.
+		if remove {
+			rc, chng = rc.Remove(lo)
+		} else {
+			rc, chng = rc.Add(lo)
+		}
 		if chng {
 			changeCount++
 		}
-		if err != nil {
-			return changeCount, err
-		}
-		if rc1.N() == 0 {
+		lastHi = hi
+	}
+	// write the last updates.
+	if remove {
+		if rc == nil || rc.N() == 0 {
 			err = tx.RemoveContainer(index, field, view, shard, hi)
-			if err != nil {
-				return
-			}
+			panicOn(err)
 		} else {
-			err = tx.PutContainer(index, field, view, shard, hi, rc1)
+			err = tx.PutContainer(index, field, view, shard, hi, rc)
 			panicOn(err)
 		}
+	} else {
+		if rc == nil || rc.N() == 0 {
+			panic("there should be no way to have an empty bitmap AFTER an Add() operation")
+		}
+		err = tx.PutContainer(index, field, view, shard, hi, rc)
+		panicOn(err)
 	}
 	return
 }
@@ -852,7 +927,7 @@ func (tx *BadgerTx) Remove(index, field, view string, shard uint64, a ...uint64)
 func (tx *BadgerTx) Contains(index, field, view string, shard uint64, key uint64) (exists bool, err error) {
 
 	lo, hi := lowbits(key), highbits(key)
-	bkey := txpath.Key(index, field, view, shard, hi)
+	bkey := txkey.Key(index, field, view, shard, hi)
 	tx.mu.Lock()
 	item, err := tx.tx.Get(bkey)
 	tx.mu.Unlock()
@@ -873,7 +948,7 @@ func (tx *BadgerTx) Contains(index, field, view string, shard uint64, key uint64
 
 func (tx *BadgerTx) SliceOfShards(index, field, view, optionalViewPath string) (sliceOfShards []uint64, err error) {
 
-	prefix := txpath.AllShardPrefix(index, field, view)
+	prefix := txkey.AllShardPrefix(index, field, view)
 
 	bi := NewBadgerIterator(tx, prefix)
 	defer bi.Close()
@@ -886,7 +961,7 @@ func (tx *BadgerTx) SliceOfShards(index, field, view, optionalViewPath string) (
 	for bi.Next() {
 		item := bi.it.Item()
 		key := item.Key()
-		shard := txpath.ShardFromKey(key)
+		shard := txkey.ShardFromKey(key)
 		if firstDone {
 			if shard != lastShard {
 				sliceOfShards = append(sliceOfShards, shard)
@@ -912,10 +987,10 @@ func (tx *BadgerTx) SliceOfShards(index, field, view, optionalViewPath string) (
 func (tx *BadgerTx) ContainerIterator(index, field, view string, shard uint64, firstRoaringContainerKey uint64) (citer roaring.ContainerIterator, found bool, err error) {
 
 	// needle example: "idx:'i';fld:'f';vw:'v';shd:'00000000000000000000';key@00000000000000000000"
-	needle := txpath.Key(index, field, view, shard, firstRoaringContainerKey)
+	needle := txkey.Key(index, field, view, shard, firstRoaringContainerKey)
 
 	// prefix example: "idx:'i';fld:'f';vw:'v';shard:'00000000000000000000';key@"
-	prefix := txpath.Prefix(index, field, view, shard)
+	prefix := txkey.Prefix(index, field, view, shard)
 
 	bi := NewBadgerIterator(tx, prefix)
 	bi.Seek(needle)
@@ -948,7 +1023,7 @@ type BadgerIterator struct {
 }
 
 // NewBadgerIterator creates an iterator on tx that will
-// only return txpath.Keys that start with prefix.
+// only return txkey.Keys that start with prefix.
 func NewBadgerIterator(tx *BadgerTx, prefix []byte) (bi *BadgerIterator) {
 
 	opts := badger.DefaultIteratorOptions
@@ -1053,7 +1128,7 @@ func (bi *BadgerIterator) Value() (containerKey uint64, c *roaring.Container) {
 		panic("item was nil")
 	}
 	key := item.Key()
-	containerKey = txpath.KeyExtractContainerKey(key)
+	containerKey = txkey.KeyExtractContainerKey(key)
 
 	err := item.Value(func(v []byte) error {
 		c = bi.tx.toContainer(item.UserMeta(), v)
@@ -1159,8 +1234,8 @@ func (tx *BadgerTx) Count(index, field, view string, shard uint64) (uint64, erro
 // Returns zero if the bitmap is empty. Odd, but this is what roaring.Max does.
 func (tx *BadgerTx) Max(index, field, view string, shard uint64) (uint64, error) {
 
-	prefix := txpath.Prefix(index, field, view, shard)
-	seekto := txpath.Prefix(index, field, view, shard+1)
+	prefix := txkey.Prefix(index, field, view, shard)
+	seekto := txkey.Prefix(index, field, view, shard+1)
 
 	it := NewBadgerReverseIterator(tx, prefix, seekto) // this iterator is still open, when we commit/discard tx.
 	defer it.Close()
@@ -1319,15 +1394,15 @@ func (tx *BadgerTx) OffsetRange(index, field, view string, shard, offset, start,
 	off := highbits(offset)
 	hi0, hi1 := highbits(start), highbits(endx)
 
-	needle := txpath.Key(index, field, view, shard, hi0)
-	prefix := txpath.Prefix(index, field, view, shard)
+	needle := txkey.Key(index, field, view, shard, hi0)
+	prefix := txkey.Prefix(index, field, view, shard)
 
-	n2, pre2 := txpath.KeyAndPrefix(index, field, view, shard, hi0)
+	n2, pre2 := txkey.KeyAndPrefix(index, field, view, shard, hi0)
 	if string(n2) != string(needle) {
-		panic(fmt.Sprintf("problem! n2(%v) != needle(%v), txpath.KeyAndPrefix not consitent with txpath.Key()", string(n2), string(needle)))
+		panic(fmt.Sprintf("problem! n2(%v) != needle(%v), txkey.KeyAndPrefix not consitent with txkey.Key()", string(n2), string(needle)))
 	}
 	if string(pre2) != string(prefix) {
-		panic(fmt.Sprintf("problem! pre2(%v) != prefix(%v), txpath.KeyAndPrefix not consitent with txpath.Key()", string(pre2), string(prefix)))
+		panic(fmt.Sprintf("problem! pre2(%v) != prefix(%v), txkey.KeyAndPrefix not consitent with txkey.Key()", string(pre2), string(prefix)))
 	}
 
 	it := NewBadgerIterator(tx, prefix)
@@ -1336,7 +1411,7 @@ func (tx *BadgerTx) OffsetRange(index, field, view string, shard, offset, start,
 	for ; it.it.ValidForPrefix(prefix); it.Next() {
 		item := it.it.Item()
 		bkey := item.Key()
-		k := txpath.KeyExtractContainerKey(bkey)
+		k := txkey.KeyExtractContainerKey(bkey)
 
 		// >= hi1 is correct b/c endx cannot have any lowbits set.
 		if uint64(k) >= hi1 {
@@ -1606,7 +1681,7 @@ func (w *BadgerDBWrapper) StringifiedBadgerKeys(optionalUseThisTx Tx) (r string)
 }
 
 // countBitsSet returns the number of bits set (or "hot") in
-// the roaring container value found by the txpath.Key()
+// the roaring container value found by the txkey.Key()
 // formatted bkey.
 func (tx *BadgerTx) countBitsSet(bkey []byte) (n int) {
 
@@ -1652,7 +1727,7 @@ func stringifiedBadgerKeysTx(tx *BadgerTx) (r string) {
 		item := it.Item()
 		bkey := item.Key()
 		key := string(bkey)
-		ckey := txpath.KeyExtractContainerKey(bkey)
+		ckey := txkey.KeyExtractContainerKey(bkey)
 		hash := ""
 		srbm := ""
 		err := item.Value(func(val []byte) error {
@@ -1810,12 +1885,12 @@ func (w *BadgerDBWrapper) DeleteField(index, field, fieldPath string) error {
 	if err != nil {
 		return errors.Wrap(err, "removing directory")
 	}
-	prefix := txpath.FieldPrefix(index, field)
+	prefix := txkey.FieldPrefix(index, field)
 	return w.DeletePrefix(prefix)
 }
 
 func (w *BadgerDBWrapper) DeleteFragment(index, field, view string, shard uint64, frag interface{}) error {
-	prefix := txpath.Prefix(index, field, view, shard)
+	prefix := txkey.Prefix(index, field, view, shard)
 	return w.DeletePrefix(prefix)
 }
 

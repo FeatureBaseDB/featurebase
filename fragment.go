@@ -2306,6 +2306,12 @@ func (f *fragment) importPositions(tx Tx, set, clear []uint64, rowSet map[uint64
 				start := rowID * ShardWidth
 				end := (rowID + 1) * ShardWidth
 
+				// avoid a 2nd r/w iterator if possible,
+				// aiming to having fewer write/read Tx conflicts.
+				badgerTx, isBadger := tx.(*BadgerTx)
+				if isBadger {
+					badgerTx.frag = f
+				}
 				n, err := tx.CountRange(f.index, f.field, f.view, f.shard, start, end)
 				if err != nil {
 					return errors.Wrap(err, "CountRange")

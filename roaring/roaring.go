@@ -3301,6 +3301,7 @@ func (c *Container) bitmapRemove(v uint16) (*Container, bool) {
 	if !c.bitmapContains(v) {
 		return c, false
 	}
+
 	// removing the last item? we can just return the empty container.
 	if c.N() == 1 {
 		return nil, true
@@ -6853,22 +6854,21 @@ func AsRuns(c *Container) []Interval16 {
 	return c.runs()
 }
 
-func ConvertArrayToBitmap(c *Container) {
-	c.arrayToBitmap()
+func ConvertArrayToBitmap(c *Container) *Container {
+	return c.arrayToBitmap()
 }
-func ConvertRunToBitmap(c *Container) {
-	c.runToBitmap()
+func ConvertRunToBitmap(c *Container) *Container {
+	return c.runToBitmap()
 }
 
-func Optimize(c *Container) {
-	c.optimize()
+func Optimize(c *Container) *Container {
+	return c.optimize()
 }
 func Union(a, b *Container) (c *Container) {
 	c = union(a, b)
 	// c can be have arrays that are too big, and need
 	// to be optimized into raw bitmaps.
-	c.optimize()
-	return c
+	return c.optimize()
 }
 
 func Difference(a, b *Container) *Container {
