@@ -16,7 +16,7 @@ package rbf_test
 
 import (
 	"bytes"
-        "encoding/hex"
+	"encoding/hex"
 	"io/ioutil"
 	"math/rand"
 	"os"
@@ -25,7 +25,6 @@ import (
 
 	"github.com/pilosa/pilosa/v2/rbf"
 )
-
 
 func TestWALSegment_Open(t *testing.T) {
 	t.Run("OK", func(t *testing.T) {
@@ -106,6 +105,47 @@ func TestParseWALSegmentPath(t *testing.T) {
 			t.Fatalf("unexpected error: %#v", err)
 		}
 	})
+}
+
+func BenchmarkWALSegment_WriteWALPage(b *testing.B) {
+	b.Run("8KB", func(b *testing.B) { benchmarkWALSegment_WriteWALPage(b, 8*(1<<10)) })
+	b.Run("16KB", func(b *testing.B) { benchmarkWALSegment_WriteWALPage(b, 16*(1<<10)) })
+	b.Run("64KB", func(b *testing.B) { benchmarkWALSegment_WriteWALPage(b, 64*(1<<10)) })
+	b.Run("256KB", func(b *testing.B) { benchmarkWALSegment_WriteWALPage(b, 256*(1<<10)) })
+	b.Run("1MB", func(b *testing.B) { benchmarkWALSegment_WriteWALPage(b, (1 << 20)) })
+	b.Run("10MB", func(b *testing.B) { benchmarkWALSegment_WriteWALPage(b, 10*(1<<20)) })
+}
+
+func benchmarkWALSegment_WriteWALPage(b *testing.B, flushSize int) {
+	page := make([]byte, rbf.PageSize)
+
+	for i := 0; i < b.N; i++ {
+		func() {
+			s := MustOpenWALSegment(b, 0)
+			defer MustCloseWALSegment(b, s)
+
+			// Fill the segment but stop after each flush interval to flush the write buffer.
+			for j := 0; j < rbf.MaxWALSegmentFileSize; j += rbf.PageSize {
+				if _, err := s.WriteWALPage(page, false); err != nil {
+					b.Fatal(err)
+				}
+
+				// Flush write buffer.
+				if j != 0 && j%flushSize == 0 {
+					if err := s.Flush(); err != nil {
+						b.Fatal(err)
+					}
+				}
+			}
+
+			// Fsync to disk at the end.
+			if err := s.Sync(); err != nil {
+				b.Fatal(err)
+			}
+		}()
+	}
+
+	b.SetBytes(rbf.MaxWALSegmentFileSize)
 }
 
 // MustOpenWALSegment opens a WAL segment in a temporary path. Fails on error.

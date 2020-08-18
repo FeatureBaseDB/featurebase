@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"syscall"
 
 	"github.com/pilosa/pilosa/v2/syswrap"
@@ -25,12 +26,13 @@ import (
 
 // WALSegment represents a single file in the WAL.
 type WALSegment struct {
-	minWALID int64    // base WALID; calculated from path
-	path     string   // path to file
-	w        *os.File // write handle
-	data     []byte   // read-only mmap data
-	buf      []byte   // write buffer
-	pageN    int      // number of written pages
+	mu         sync.RWMutex
+	minWALID   int64    // base WALID; calculated from path
+	path       string   // path to file
+	w          *os.File // write handle
+	data       []byte   // read-only mmap data
+	writeCache []byte   // write buffer
+	pageN      int      // number of written pages
 }
 
 // NewWALSegment returns a new instance of WALSegment for a given path.
@@ -139,6 +141,9 @@ func (s *WALSegment) CloseForWrite() error {
 
 // ReadWALPage reads a single page at the given WAL ID.
 func (s *WALSegment) ReadWALPage(walID int64) ([]byte, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
 	// Ensure requested ID is contained in this file.
 	if walID < s.minWALID || walID > s.minWALID+int64(s.pageN) {
 		return nil, fmt.Errorf("wal segment page read out of range: id=%d base=%d pageN=%d", walID, s.minWALID, s.pageN)
@@ -147,9 +152,9 @@ func (s *WALSegment) ReadWALPage(walID int64) ([]byte, error) {
 	offset := (walID - s.minWALID) * PageSize
 
 	// If offset is within write buffer, return from write buffer.
-	writeBufferOffset := int64((s.pageN * PageSize) - len(s.buf))
+	writeBufferOffset := int64((s.pageN * PageSize) - len(s.writeCache))
 	if offset >= writeBufferOffset {
-		buf := s.buf[offset-writeBufferOffset:]
+		buf := s.writeCache[offset-writeBufferOffset:]
 		return buf[:PageSize:PageSize], nil
 	}
 
@@ -160,6 +165,9 @@ func (s *WALSegment) ReadWALPage(walID int64) ([]byte, error) {
 // WriteWALPage writes a single page to the WAL segment and returns its WAL identifier.
 func (s *WALSegment) WriteWALPage(page []byte, isMeta bool) (walID int64, err error) {
 	assert(len(page) == PageSize, "invalid page size: %d", len(page))
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	// Initialize write file handle if not yet initialized.
 	if s.w == nil {
@@ -178,24 +186,32 @@ func (s *WALSegment) WriteWALPage(page []byte, isMeta bool) (walID int64, err er
 	}
 
 	// Append write to write buffer & increment page count.
-	s.buf = append(s.buf, page...)
+	s.writeCache = append(s.writeCache, page...)
 	s.pageN++
 
 	return walID, nil
 }
 
-// Sync flushes all changes to disk.
+// Flush flushes the write buffer to the OS cache.
+func (s *WALSegment) Flush() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if _, err := s.w.WriteAt(s.writeCache, int64((s.pageN*PageSize)-len(s.writeCache))); err != nil {
+		return fmt.Errorf("wal segment write: %w", err)
+	}
+	s.writeCache = nil
+	return nil
+}
+
+// Sync flushes the write buffer and invokes a file sync to flush data to disk.
 func (s *WALSegment) Sync() error {
 	if s.w == nil {
 		return nil
 	}
-
-	// Flush buffer to disk.
-	if _, err := s.w.WriteAt(s.buf, int64((s.pageN*PageSize)-len(s.buf))); err != nil {
-		return fmt.Errorf("wal segment write: %w", err)
+	if err := s.Flush(); err != nil {
+		return err
 	}
-	s.buf = nil
-
 	return s.w.Sync()
 }
 
