@@ -603,6 +603,11 @@ func (h *Holder) processForeignIndexFields() error {
 
 // Close closes all open fragments.
 func (h *Holder) Close() error {
+
+	if globalUseStatTx {
+		fmt.Printf("%v\n", globalCallStats.report())
+	}
+
 	h.Stats.Close()
 
 	// Notify goroutines of closing and wait for completion.
@@ -1472,14 +1477,15 @@ func (s *holderSyncer) setTranslateReadOnlyFlags() {
 		// Obtain a read lock on index to prevent Index.Close() from
 		// destroying the Index.translateStores map before this is
 		// done using it.
-		index.mu.RLock()
+		//
+		// Update: there was another path down to Index.Close(), so
+		// we shrink to lock to be inside index.TranslateStore() now.
 		for partitionID := 0; partitionID < s.Cluster.partitionN; partitionID++ {
 			ownsPartition := s.Cluster.unprotectedOwnsPartition(s.Node.ID, partitionID)
 			if ts := index.TranslateStore(partitionID); ts != nil {
 				ts.SetReadOnly(!ownsPartition)
 			}
 		}
-		index.mu.RUnlock()
 
 		for _, field := range index.Fields() {
 			field.TranslateStore().SetReadOnly(!isCoordinator)

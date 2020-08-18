@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// +build skip_building_lmdb_for_now
+// +build amd64
 
 package pilosa
 
@@ -28,120 +28,12 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"time"
 
-	"github.com/glycerine/idem"
 	"github.com/glycerine/lmdb-go/lmdb"
 	"github.com/pilosa/pilosa/v2/roaring"
+	"github.com/pilosa/pilosa/v2/txkey"
 	"github.com/pkg/errors"
 )
-
-// lmdbWorker represents a goroutine that has been welded to a
-// C thread by runtime.LockOSThread(); so it can do work for lmdb.
-// We create a single worker to write and a number of workers to read.
-// Each LMDBWrapper maintains a worker pool for access to its database.
-type lmdbWorker struct {
-	write bool
-	env   *lmdb.Env
-	dbi   lmdb.DBI
-
-	// coordinate shutdown
-	halt *idem.Halter
-
-	// run these jobs
-	jobCh chan *lmdbJob
-}
-
-// lmdbJob communicates jobs to lmdbWorkers.
-type lmdbJob struct {
-	write bool
-	fn    func(job *lmdbJob)
-	err   error
-	done  chan struct{}
-}
-
-func newLMDBJob(write bool, f func(job *lmdbJob)) *lmdbJob {
-	return &lmdbJob{
-		write: write,
-		fn:    f,
-		done:  make(chan struct{}),
-	}
-}
-
-func (w *LMDBWrapper) newLMDBWorker(write bool, env *lmdb.Env, dbi lmdb.DBI) (wrk *lmdbWorker) {
-	w.newLMDBWorkerMu.Lock()
-	defer w.newLMDBWorkerMu.Unlock()
-	if write {
-		if w.lmdbWriterCount > 0 {
-			panic("can only have one writing lmdb worker")
-		}
-		w.lmdbWriterCount++
-	}
-
-	wrk = &lmdbWorker{
-		write: write,
-		env:   env,
-		dbi:   dbi,
-		halt:  idem.NewHalter(),
-		jobCh: make(chan *lmdbJob, 100),
-	}
-	return
-}
-
-// StartWriter makes it apparent in the stack trace
-// which goroutine is writing.
-func (w *lmdbWorker) StartWriter() {
-	if !w.write {
-		panic("worker is not marked as writer")
-	}
-	go func() {
-		runtime.LockOSThread()
-		defer runtime.UnlockOSThread()
-		defer w.halt.Done.Close()
-
-		//vv("lmdbWorker.Start(), on gid = '%v'", curGID())
-
-		for {
-			select {
-			case <-w.halt.ReqStop.Chan:
-				return
-			case job := <-w.jobCh:
-				job.fn(job)
-				close(job.done)
-			}
-		}
-	}()
-}
-
-// StartReader makes it apparent in the stack trace
-// which goroutine(s) are reading.
-func (w *lmdbWorker) StartReader() {
-	if w.write {
-		panic("worker is not marked as reader")
-	}
-	go func() {
-		runtime.LockOSThread()
-		defer runtime.UnlockOSThread()
-		defer w.halt.Done.Close()
-
-		//vv("lmdbWorker.Start(), on gid = '%v'", curGID())
-
-		for {
-			select {
-			case <-w.halt.ReqStop.Chan:
-				return
-			case job := <-w.jobCh:
-				job.fn(job)
-				close(job.done)
-			}
-		}
-	}()
-}
-
-func (w *lmdbWorker) Stop() {
-	w.halt.ReqStop.Close()
-	<-w.halt.Done.Chan
-}
 
 // lmdbRegistrar facilitates shutdown
 // of all the lmdb databases started under
@@ -199,17 +91,6 @@ func DumpAllLMDB() {
 	}
 }
 
-// newLMDBWrapper creates a new empty database, blowing away
-// any prior path + "-lmdb" directory.
-func (r *lmdbRegistrar) newLMDBWrapper(path string) (*LMDBWrapper, error) {
-	bpath := lmdbPath(path)
-	err := os.RemoveAll(bpath)
-	if err != nil {
-		return nil, err
-	}
-	return r.openLMDBWrapper(bpath)
-}
-
 // lmdbPath is a helper for determining the full directory
 // in which the lmdb database will be stored.
 func lmdbPath(path string) string {
@@ -240,29 +121,36 @@ func (r *lmdbRegistrar) openLMDBWrapper(path0 string) (*LMDBWrapper, error) {
 	// otherwise, make a new lmdb and store it in globalLMDBReg
 
 	runtime.LockOSThread()
-	//vv("NewEnv for lmdb, gid = '%v'", curGID())
 
-	env, err := lmdb.NewEnv()
+	const MaxReaders = 256 // default is 126
+	env, err := lmdb.NewEnvMaxReaders(MaxReaders)
 	panicOn(err)
 
 	err = env.SetMaxDBs(1)
 	panicOn(err)
-	err = env.SetMapSize(1 << 38) // 256 GB
+	err = env.SetMapSize(256 << 30) // 256GB
 	panicOn(err)
 
-	const MaxReaders = 254 // default is 126
-	err = env.SetMaxReaders(MaxReaders)
-	panicOn(err)
+	panicOn(os.MkdirAll(filepath.Dir(path), 0755))
 
-	panicOn(os.MkdirAll(path, 0755))
-
-	flags := uint(lmdb.NoReadahead) // | uint(lmdb.NoLock) <<< yikes no
+	flags := uint(lmdb.NoReadahead | lmdb.NoSubdir)
 
 	// unsafe, but get upper bound on performance. TODO: remove these.
 	//	WriteMap    = C.MDB_WRITEMAP   // Use a writable memory map.
 	//	NoMetaSync  = C.MDB_NOMETASYNC // Don't fsync metapage after commit.
 	//	NoSync      = C.MDB_NOSYNC     // Don't fsync after commit.
-	flags = flags | lmdb.WriteMap | lmdb.NoMetaSync | lmdb.NoSync
+	// flags = flags | lmdb.WriteMap | lmdb.NoMetaSync | lmdb.NoSync // about the same speed
+	// flags = flags | lmdb.NoMetaSync | lmdb.NoSync // slows things down
+	//flags = flags | lmdb.WriteMap // seems faster than without:
+	// kRemove  N=  710401   avg/op:      7.714µs   sd:      27.83µs  total: 5.480656859s
+	//    kAdd  N=  722835   avg/op:      9.096µs   sd:    105.787µs  total: 6.575497725s
+
+	flags = flags |
+		lmdb.WriteMap | // Use a writable memory map.
+		lmdb.NoMetaSync | // Don't fsync metapage after commit.
+		lmdb.NoSync | // Don't fsync after commit.
+		lmdb.MapAsync | // Flush asynchronously when using the WriteMap flag.
+		lmdb.NoMemInit // Disable LMDB memory initialization
 
 	err = env.Open(path, flags, 0644)
 	if err != nil {
@@ -291,99 +179,20 @@ func (r *lmdbRegistrar) openLMDBWrapper(path0 string) (*LMDBWrapper, error) {
 	})
 	panicOn(err)
 
-	//vv("made new dbi=%v on gid = '%v'", dbi, gid)
-
 	w = &LMDBWrapper{
-		name:   name,
-		env:    env,
-		reg:    r,
-		path:   path,
-		dbi:    dbi,
-		halt:   idem.NewHalter(),
-		jobQ:   make(chan *lmdbJob),
-		hasher: NewBlake3Hasher(),
+		name: name,
+		env:  env,
+		reg:  r,
+		path: path,
+		dbi:  dbi,
 	}
 	r.unprotectedRegister(w)
-
 	w.startStack = stack()
 
-	writer := w.newLMDBWorker(true, env, dbi)
-	writer.StartWriter()
-	w.writer = writer
-
-	reader := w.newLMDBWorker(false, env, dbi)
-	reader.StartReader()
-	w.readers = []*lmdbWorker{reader}
-
-	w.startFunnel()
 	return w, nil
 }
 
-func (w *LMDBWrapper) startFunnel() {
-	go func() {
-		defer w.halt.Done.Close()
-
-		// use rw to enforce the lmdb.NoLock semanitcs
-		// of all readers finished before writer allowed to start.
-		var rw sync.RWMutex
-		for {
-			select {
-			case <-w.halt.ReqStop.Chan:
-				return
-			case job := <-w.jobQ:
-				if job.write {
-					rw.Lock()
-					select {
-					case w.writer.jobCh <- job:
-					case <-w.halt.ReqStop.Chan:
-						rw.Unlock()
-						return
-					}
-					select {
-					case <-job.done:
-						rw.Unlock()
-					case <-w.halt.ReqStop.Chan:
-						rw.Unlock()
-						return
-					}
-				} else {
-					// TODO: keep a readyReader queue and send jobs to more than one ready readers.
-					// For now we just have one reader.
-					rw.RLock()
-					select {
-					case w.readers[0].jobCh <- job:
-					case <-w.halt.ReqStop.Chan:
-						rw.RUnlock()
-						return
-					}
-					select {
-					case <-job.done:
-						rw.RUnlock()
-					case <-w.halt.ReqStop.Chan:
-						rw.RUnlock()
-						return
-					}
-				}
-			}
-		}
-	}()
-}
-
 var ErrShutdown = fmt.Errorf("shutting down")
-
-func (w *LMDBWrapper) submit(job *lmdbJob) error {
-	select {
-	case <-w.halt.ReqStop.Chan:
-		return ErrShutdown
-	case w.jobQ <- job:
-		select {
-		case <-w.halt.ReqStop.Chan:
-			return ErrShutdown
-		case <-job.done:
-		}
-	}
-	return job.err
-}
 
 // DeleteIndex deletes all the containers associated with
 // the named index from the lmdb database.
@@ -395,7 +204,7 @@ func (w *LMDBWrapper) DeleteIndex(indexName string) error {
 	if strings.Contains(indexName, "'") {
 		return fmt.Errorf("error: bad indexName `%v` in LMDBWrapper.DeleteIndex() call: indexName cannot contain apostrophes/single quotes.", indexName)
 	}
-	prefix := badgerIndexOnlyPrefix(indexName)
+	prefix := txkey.IndexOnlyPrefix(indexName)
 	return w.DeletePrefix(prefix)
 }
 
@@ -406,12 +215,6 @@ var _ Tx = (*LMDBTx)(nil)
 // Execute lmdbJob's via LMDBWrapper.submit(); these must
 // be done by the lmdb goroutine worker pool.
 type LMDBWrapper struct {
-	halt *idem.Halter
-	jobQ chan *lmdbJob
-
-	newLMDBWorkerMu sync.Mutex
-	lmdbWriterCount int
-
 	env *lmdb.Env
 
 	muDb sync.Mutex
@@ -423,28 +226,8 @@ type LMDBWrapper struct {
 	// track our registrar for Close / goro leak reporting purposes.
 	reg *lmdbRegistrar
 
-	// openTx and openIt are LMDBWrapper scoped tables of all open
-	// transactions and iterators. These are primarily for debugging purposes.
-	// openTx and openIt should only be read/written after locking the muOpenTxIt mutex.
-
-	// the bool value is the writable attribute of the key *LMDBTx
-	openTx map[*LMDBTx]bool
-
-	// the bool value is whether the iterator is reversed
-	openIt map[*LMDBIterator]bool
-
-	// protect openTx and openIt
-	muOpenTxIt sync.Mutex
-
 	// make LMDBWrapper.Close() idempotent, avoiding panic on double Close()
 	closed bool
-
-	// GcEveryDur controls how often the background goroutine
-	// runs garbage collection on the on-disk values-log.
-	// It defaults to running a GC every 1 minute if left as 0.
-	GcEveryDur time.Duration
-
-	hasher *Blake3Hasher
 
 	// doAllocZero sets the corresponding flag on all new LMDBTx.
 	// When doAllocZero is true, we zero out any data from lmdb
@@ -461,36 +244,13 @@ type LMDBWrapper struct {
 
 	DeleteEmptyContainer bool
 
-	writer  *lmdbWorker
-	readers []*lmdbWorker
-
 	nextTxSn int64
 }
 
-// unprotectedListOpenTxAsString is a debugging helper.
-// It is not thread safe, but is only used for debugging. Called internally while
-// holding locks.
-func (w *LMDBWrapper) unprotectedListOpenTxAsString() (r string) {
-
-	r = "openTx list = ["
-	for txn, write := range w.openTx {
-		r += fmt.Sprintf("txn p=%p(write:%v), ", txn, write)
-	}
-	return r + "]"
-}
-
-var _ = (*LMDBWrapper)(nil).unprotectedListOpenTxAsString // linter happy
-
-// UnprotectedListOpenItAsString is exported because it is
-// used for debugging in some of the pilosa_test tests.
-// It is not thread safe, but only used for debugging. Called internally
-// while holding locks and externally while not.
-func (w *LMDBWrapper) UnprotectedListOpenItAsString() (r string) {
-	r = "openIt list = ["
-	for it, reverse := range w.openIt {
-		r += fmt.Sprintf("it p=%p(reverse:%v), ", it, reverse)
-	}
-	return r + "]"
+func (w *LMDBWrapper) IsClosed() bool {
+	w.muDb.Lock()
+	defer w.muDb.Unlock()
+	return w.closed
 }
 
 // NewLMDBTx produces LMDB based ACID transactions. If
@@ -505,8 +265,8 @@ func (w *LMDBWrapper) UnprotectedListOpenItAsString() (r string) {
 // but when set is highly useful for debugging. It has no impact
 // on transaction behavior.
 //
-func (w *LMDBWrapper) NewLMDBTx(write bool, initialIndexName string) (tx *LMDBTx) {
-	//w.muDb.Lock() // deadlocked here
+func (w *LMDBWrapper) NewLMDBTx(write bool, initialIndexName string, frag *fragment) (tx *LMDBTx) {
+	//w.muDb.Lock()
 	//defer w.muDb.Unlock()
 
 	rwflag := uint(0) // writable txn denotated by lack of the lmdb.Readonly flag.
@@ -514,11 +274,12 @@ func (w *LMDBWrapper) NewLMDBTx(write bool, initialIndexName string) (tx *LMDBTx
 		rwflag = lmdb.Readonly
 	}
 
+	runtime.LockOSThread()
+
 	sn := atomic.AddInt64(&w.nextTxSn, 1)
-	//vv("about to create txn sn=%v, write='%v'; on '%v'/%v, stack=\n'%v'", sn, write, initialIndexName, w.path, stack())
 	lmdbTxn, err := w.env.BeginTxn(nil, rwflag)
 	panicOn(err)
-	//vv("back from creating txn sn=%v, write='%v'; on '%v'/%v", sn, write, initialIndexName, w.path)
+	lmdbTxn.RawRead = true
 
 	tx = &LMDBTx{
 		sn:    sn,
@@ -526,6 +287,7 @@ func (w *LMDBWrapper) NewLMDBTx(write bool, initialIndexName string) (tx *LMDBTx
 		tx:    lmdbTxn,
 		dbi:   w.dbi,
 		Db:    w,
+		frag:  frag,
 		//initloc:              stack(),
 		doAllocZero:          w.doAllocZero,
 		initialIndexName:     initialIndexName,
@@ -540,14 +302,11 @@ func (w *LMDBWrapper) Close() (err error) {
 	defer w.muDb.Unlock()
 	if !w.closed {
 		w.reg.unregister(w)
-		w.halt.ReqStop.Close()
 		w.closed = true
-		w.writer.Stop()
-		for _, reader := range w.readers {
-			reader.Stop()
-		}
+		w.env.CloseDBI(w.dbi)
+		w.env.Close()
+		w.env = nil
 	}
-	w.env.CloseDBI(w.dbi)
 	return nil
 }
 
@@ -558,13 +317,6 @@ func (w *LMDBWrapper) Close() (err error) {
 type LMDBTx struct {
 
 	// mu serializes lmdb operations on this single txn instance.
-	//
-	// reference: https://godoc.org/github.com/dgraph-io/lmdb
-	// "Running [two separate -jea] transactions concurrently is OK. However, a
-	// transaction itself isn't thread safe, and should only
-	// be run serially. It doesn't matter if a transaction is
-	// created by one goroutine and passed down to other, as
-	// long as the Txn APIs are called serially."
 	mu sync.Mutex
 	sn int64 // serial number
 
@@ -572,19 +324,13 @@ type LMDBTx struct {
 	dbi   lmdb.DBI
 	Db    *LMDBWrapper
 	tx    *lmdb.Txn
+	frag  *fragment
 
 	opcount int
 
 	//initloc string // stack trace of where we were initially created.
 
 	doAllocZero bool
-
-	// for tracking txn boundary issues, track all the memory
-	// that we deploy for roaring containers, and zero it on
-	// transaction commit/rollback.
-	acMu          sync.Mutex // protect ourAllocs and ourContainers
-	ourAllocs     [][]byte
-	ourContainers []*roaring.Container
 
 	initialIndexName string
 
@@ -598,42 +344,7 @@ func (tx *LMDBTx) Type() string {
 }
 
 func (tx *LMDBTx) UseRowCache() bool {
-	return true
-}
-
-// overWriteOurAllocs provides detection of memory
-// access outside the transactional context, similar to the
-// old school electric fence techniques but without setting
-// memory mappings to read-only... instead we just zero
-// out the memory allocated to roaring containers by a
-// transaction after the commit or rollback. This,
-// hopefully, will cause some downstream confusion and
-// test failures, which we can use to locate who has been
-// holding on to memory they should have copied prior
-// to transaction commit.
-func (tx *LMDBTx) overWriteOurAllocs() {
-
-	tx.acMu.Lock()
-	defer tx.acMu.Unlock()
-	for _, s := range tx.ourAllocs {
-
-		// The Go compiler recognizes the following pattern and inserts
-		// an efficient memclr instruction.
-		// See https://github.com/golang/go/issues/5373
-		// and https://codereview.appspot.com/137880043
-		for i := range s {
-			s[i] = 0
-			// or
-			// Seebs suggested we might see even more crashes :)
-			// but since it will be slow (no memclr), we'll leave the default 0 for now.
-			//s[i] = -2
-		}
-	}
-	// keep this around if we need to activate out-of-mmap memory access again.
-	//for _, v := range tx.ourContainers {
-	//v.Invalid = true
-	//v.Tx = tx
-	//}
+	return false
 }
 
 // Pointer gives us a memory address for the underlying transaction for debugging.
@@ -645,25 +356,16 @@ func (tx *LMDBTx) Pointer() string {
 
 // Rollback rolls back the transaction.
 func (tx *LMDBTx) Rollback() {
-	tx.mu.Lock() // hung here? on defer on panic?
+	tx.mu.Lock()
 	defer tx.mu.Unlock()
 
 	//pp("LMDBTx.Rollback p=%p, its: '%v' initloc: '%v',\n rollbackloc:'%v'", tx, tx.Db.UnprotectedListOpenItAsString(), tx.initloc, stack())
 	tx.tx.Abort() // must hold tx.mu mutex lock
 
-	tx.Db.muOpenTxIt.Lock()
-	delete(tx.Db.openTx, tx)
-	tx.Db.muOpenTxIt.Unlock()
-
-	if tx.doAllocZero {
-		// and clear our allocs, to find code using them outside of a txn.
-		tx.overWriteOurAllocs()
-	}
 	if !tx.unlocked {
-		//runtime.UnlockOSThread()
+		runtime.UnlockOSThread()
 		tx.unlocked = true
 	}
-	//vv("done rolling back LMDBTx sn=%v", tx.sn)
 }
 
 // Commit commits the transaction to permanent storage.
@@ -673,23 +375,16 @@ func (tx *LMDBTx) Commit() error {
 	tx.mu.Lock()
 	defer tx.mu.Unlock()
 
-	tx.Db.muOpenTxIt.Lock()
-	delete(tx.Db.openTx, tx)
-	tx.Db.muOpenTxIt.Unlock()
-
 	//pp("LMDBTx.Commit (write:%v) p=%p, stackID=%x openit: '%v' initloc: '%v', commitloc:\n%v", tx.write, tx, stackID, tx.Db.UnprotectedListOpenItAsString(), tx.initloc, stack())
 
 	err := tx.tx.Commit() // must hold tx.mu mutex lock
 	panicOn(err)
 
-	if tx.doAllocZero {
-		tx.overWriteOurAllocs()
-	}
 	if !tx.unlocked {
-		//runtime.UnlockOSThread()
+		runtime.UnlockOSThread()
 		tx.unlocked = true
 	}
-	//vv("done committing LMDBTx sn=%v", tx.sn)
+	//pp("done committing LMDBTx sn=%v", tx.sn)
 	return err
 }
 
@@ -712,10 +407,8 @@ func (tx *LMDBTx) Container(index, field, view string, shard uint64, ckey uint64
 	// you must use copy() to copy it to another byte slice.
 	// BUT here we are already inside the Txn.
 
-	bkey := badgerKey(index, field, view, shard, ckey)
+	bkey := txkey.Key(index, field, view, shard, ckey)
 	tx.mu.Lock()
-	//var item *lmdb.Item
-	//item, err = tx.tx.Get(bkey)
 
 	v, err := tx.tx.Get(tx.dbi, bkey)
 	tx.mu.Unlock()
@@ -726,8 +419,7 @@ func (tx *LMDBTx) Container(index, field, view string, shard uint64, ckey uint64
 		return nil, nil
 	} else {
 		if err != nil {
-			vv("unexpected error on Container for bkey = '%v'; err='%v' ignoring for now TODO fix me", string(bkey), err)
-			//panicOn(err) // mdb_get: invalid argument
+			panicOn(err)
 			return nil, nil
 		}
 	}
@@ -741,19 +433,19 @@ func (tx *LMDBTx) Container(index, field, view string, shard uint64, ckey uint64
 // PutContainer stores rc under the specified fragment and container ckey.
 func (tx *LMDBTx) PutContainer(index, field, view string, shard uint64, ckey uint64, rc *roaring.Container) error {
 
-	bkey := badgerKey(index, field, view, shard, ckey)
+	bkey := txkey.Key(index, field, view, shard, ckey)
 	var by []byte
 
 	ct := roaring.ContainerType(rc)
 
 	switch ct {
-	case containerArray:
+	case roaring.ContainerArray:
 		by = fromArray16(roaring.AsArray(rc))
-	case containerBitmap:
+	case roaring.ContainerBitmap:
 		by = fromArray64(roaring.AsBitmap(rc))
-	case containerRun:
+	case roaring.ContainerRun:
 		by = fromInterval16(roaring.AsRuns(rc))
-	case containerNil:
+	case roaring.ContainerNil:
 		panic("wat? nil container is unexpected, no?!?")
 	default:
 		panic(fmt.Sprintf("unknown container type: %v", ct))
@@ -772,7 +464,7 @@ func (tx *LMDBTx) PutContainer(index, field, view string, shard uint64, ckey uin
 
 // RemoveContainer deletes the container specified by the shard and container key ckey
 func (tx *LMDBTx) RemoveContainer(index, field, view string, shard uint64, ckey uint64) error {
-	bkey := badgerKey(index, field, view, shard, ckey)
+	bkey := txkey.Key(index, field, view, shard, ckey)
 	tx.mu.Lock()
 	err := tx.tx.Del(tx.dbi, bkey, nil)
 	tx.mu.Unlock()
@@ -852,7 +544,6 @@ func (tx *LMDBTx) Remove(index, field, view string, shard uint64, a ...uint64) (
 		if rc1.N() == 0 {
 			err = tx.RemoveContainer(index, field, view, shard, hi)
 			if err != nil {
-				//vv("err = '%v'", err)
 				return
 			}
 		} else {
@@ -868,13 +559,12 @@ func (tx *LMDBTx) Remove(index, field, view string, shard uint64, a ...uint64) (
 func (tx *LMDBTx) Contains(index, field, view string, shard uint64, key uint64) (exists bool, err error) {
 
 	lo, hi := lowbits(key), highbits(key)
-	bkey := badgerKey(index, field, view, shard, hi)
+	bkey := txkey.Key(index, field, view, shard, hi)
 	tx.mu.Lock()
 	var v []byte
 	v, err = tx.tx.Get(tx.dbi, bkey)
 	tx.mu.Unlock()
 	if lmdb.IsNotFound(err) {
-		//vv("Contains did not find bkey '%v'", string(bkey))
 		return false, nil
 	}
 	if err != nil {
@@ -890,19 +580,15 @@ func (tx *LMDBTx) Contains(index, field, view string, shard uint64, key uint64) 
 
 func (tx *LMDBTx) SliceOfShards(index, field, view, optionalViewPath string) (sliceOfShards []uint64, err error) {
 
-	prefix := badgerAllShardPrefix(index, field, view)
+	prefix := txkey.AllShardPrefix(index, field, view)
 
 	bi := NewLMDBIterator(tx, prefix)
 	defer bi.Close()
-	//	bi.Seek(prefix)
-	//	if !bi.cur.Valid() {
-	//	return
-	//}
 
 	lastShard := uint64(0)
 	firstDone := false
 	for bi.Next() {
-		shard := shardFromBadgerKey(bi.lastKey)
+		shard := txkey.ShardFromKey(bi.lastKey)
 		if firstDone {
 			if shard != lastShard {
 				sliceOfShards = append(sliceOfShards, shard)
@@ -928,22 +614,16 @@ func (tx *LMDBTx) SliceOfShards(index, field, view, optionalViewPath string) (sl
 func (tx *LMDBTx) ContainerIterator(index, field, view string, shard uint64, firstRoaringContainerKey uint64) (citer roaring.ContainerIterator, found bool, err error) {
 
 	// needle example: "idx:'i';fld:'f';vw:'v';shd:'00000000000000000000';key@00000000000000000000"
-	needle := badgerKey(index, field, view, shard, firstRoaringContainerKey)
+	needle := txkey.Key(index, field, view, shard, firstRoaringContainerKey)
 
 	// prefix example: "idx:'i';fld:'f';vw:'v';shard:'00000000000000000000';key@"
-	prefix := badgerPrefix(index, field, view, shard)
+	prefix := txkey.Prefix(index, field, view, shard)
 
 	bi := NewLMDBIterator(tx, prefix)
 	ok := bi.Seek(needle)
 	if !ok {
-		////vv("ContainerIterator not ok on seek to needle '%v'; bi='%#v'", string(needle), bi)
 		return bi, false, nil
 	}
-	//vv("ContainerIterator IS ok on seek to needle '%v'", string(needle))
-
-	//	if !bi.ValidForPrefix(prefix) {
-	//	return bi, false, nil
-	//}
 
 	// have to compare b/c lmdb might give us valid iterator
 	// that is past our needle if needle isn't present.
@@ -988,8 +668,6 @@ func NewLMDBIterator(tx *LMDBTx, prefix []byte) (bi *LMDBIterator) {
 
 // Close tells the database and transaction that the user is done
 // with the iterator.
-// From the lmdb docs: It is important to call this when you're done with iteration.
-// else you will get an error on tx.Discard()/Commit().
 func (bi *LMDBIterator) Close() {
 	bi.cur.Close()
 }
@@ -1001,12 +679,17 @@ func (bi *LMDBIterator) Valid() bool {
 
 // Seek allows the iterator to start at needle instead of the global begining.
 func (bi *LMDBIterator) Seek(needle []byte) (ok bool) {
-	//vv("Seek needle '%v'", string(needle))
 
 	bi.seen++ // if ommited, red TestLMDB_ContainerIterator_empty_iteration_loop() in lmdb_test.go.
 
+	var k, v []byte
+	var err error
 	getflag := uint(lmdb.SetRange)
-	k, v, err := bi.cur.Get(needle, nil, getflag)
+	if len(needle) == 0 {
+		k, v, err = bi.cur.Get(oneByteSliceOfZero, nil, getflag)
+	} else {
+		k, v, err = bi.cur.Get(needle, nil, getflag)
+	}
 
 	if lmdb.IsNotFound(err) {
 		bi.lastKey = nil
@@ -1035,40 +718,6 @@ func (bi *LMDBIterator) Seek(needle []byte) (ok bool) {
 
 	bi.lastKey = k
 	bi.lastVal = v
-	if len(v) == 0 {
-		// actually under !tx.DeleteEmptyContainer, we can have empty containers.
-
-		//vv("Seek got len v == 0, k='%v', needle='%v'; here is Dump:", string(k), string(needle))
-		//bi.tx.Dump()
-		//vv("done with dump.")
-
-		// lmdb.go:1008 2020-08-09T16:39:21.228243-05:00 done with dump.
-		// panic: len v should not be zero here; for found needle='idx:'valck';fld:'f';vw:'bsig_f';shd:'00000000000000000041';ckey@00000000000000000016' / k='idx:'valck';fld:'f';vw:'bsig_f';shd:'00000000000000000041';ckey@00000000000000000032'
-		// we see in the Dump shard 41, ckey 32; but not shard 41 ckey 16
-
-		// repull with the key k we *did* get back
-		var k2, v2 []byte
-		k2, v2, err = bi.cur.Get(k, nil, getflag)
-		if err != nil {
-			panic(fmt.Sprintf("repull should not error, since we got key k='%v' already!", string(k)))
-		}
-		if string(k2) != string(k) {
-			panic(fmt.Sprintf("repull should gives same k2 back, since we got key k='%v' already! k2='%v'", string(k), string(k2)))
-		}
-		if len(v2) > 0 {
-			vv("good, v2 had data on repull.")
-			bi.lastVal = v2
-		} else {
-			//panic(fmt.Sprintf("len v should not be zero here; for found needle='%v' / k='%v'", string(needle), string(k)))
-
-			// just bail
-			bi.lastKey = nil
-			bi.lastVal = nil
-			bi.lastOK = false
-			bi.lastConsumed = false
-			return false
-		}
-	}
 	bi.lastOK = true
 	bi.lastConsumed = false
 
@@ -1089,14 +738,11 @@ func (bi *LMDBIterator) String() (r string) {
 	return fmt.Sprintf("LMDBIterator{prefix: '%v', seekto: '%v', seen:%v, lastKey:'%v', lastOK:%v, lastConsumed:%v}", string(bi.prefix), string(bi.seekto), bi.seen, string(bi.lastKey), bi.lastOK, bi.lastConsumed)
 }
 
+var oneByteSliceOfZero = []byte{0}
+
 // Next advances the iterator.
 func (bi *LMDBIterator) Next() (ok bool) {
-	//vv("top of LMDBIterator.Next(); bi = '%v'", bi)
-	//	defer func() {
-	//	vv("LMDBIterator.Next() returning ok='%v'; bi = '%v'", ok, bi)
-	//	}()
 	if bi.lastOK && !bi.lastConsumed {
-		//vv("have seek value that has not been consumed, consume it now.")
 		bi.seen++
 		bi.lastConsumed = true
 		if len(bi.lastVal) == 0 {
@@ -1118,9 +764,18 @@ func (bi *LMDBIterator) Next() (ok bool) {
 
 	bi.seen++
 skipEmpty:
-	k, v, err := bi.cur.Get(prefix, nil, getflag)
-	////vv("Next Get() returned err='%v', k='%v'; stack=\n%v\n", err, string(k), stack())
-	//vv("Next Get(getflag='%v' (reference lmdb.Next='%v' and lmdb.SetRange='%v'); prefix='%v') returned err='%v', k='%v'", getflag, uint(lmdb.Next), uint(lmdb.SetRange), string(prefix), err, string(k))
+	var k, v []byte
+	var err error
+	if getflag == lmdb.SetRange && len(prefix) == 0 {
+		// don't do nil as key on setrange, will panic
+		// b/c keys in LMDB must be at least one byte long.
+		// http://www.lmdb.tech/doc/group__mdb.html#structMDB__val
+		// "Key sizes must be between 1 and mdb_env_get_maxkeysize() inclusive."
+		// But if getflag == lmdb.Next, key can be nil.
+		k, v, err = bi.cur.Get(oneByteSliceOfZero, nil, getflag)
+	} else {
+		k, v, err = bi.cur.Get(prefix, nil, getflag)
+	}
 	if lmdb.IsNotFound(err) {
 		bi.lastKey = nil
 		bi.lastVal = nil
@@ -1143,11 +798,6 @@ skipEmpty:
 	if len(v) == 0 {
 		// actually under !tx.DeleteEmptyContainer, we can have empty containers!
 		goto skipEmpty
-
-		//vv("v should not have len 0, in Next. k='%v'; here is Dump:", string(k))
-		//bi.tx.Dump()
-		//vv("done with Dump")
-		//panic("v should not have len 0")
 	}
 	bi.lastOK = true
 	bi.lastConsumed = true
@@ -1160,7 +810,7 @@ func (bi *LMDBIterator) Value() (containerKey uint64, c *roaring.Container) {
 	if !bi.lastOK {
 		panic("bi.cur not valid")
 	}
-	containerKey = badgerKeyExtractContainerKey(bi.lastKey)
+	containerKey = txkey.KeyExtractContainerKey(bi.lastKey)
 
 	v := bi.lastVal
 	n := len(v)
@@ -1201,6 +851,7 @@ func (bf *lmdbFinder) Close() {
 // NewTxIterator returns a *roaring.Iterator that MUST have Close() called on it BEFORE
 // the transaction Commits or Rollsback.
 func (tx *LMDBTx) NewTxIterator(index, field, view string, shard uint64) *roaring.Iterator {
+
 	bf := &lmdbFinder{tx: tx, index: index, field: field, view: view, shard: shard, needClose: make([]Closer, 0)}
 	itr := roaring.NewIterator(bf)
 	return itr
@@ -1208,6 +859,7 @@ func (tx *LMDBTx) NewTxIterator(index, field, view string, shard uint64) *roarin
 
 // ForEach applies fn to each bitmap in the fragment.
 func (tx *LMDBTx) ForEach(index, field, view string, shard uint64, fn func(i uint64) error) error {
+
 	itr := tx.NewTxIterator(index, field, view, shard)
 	defer itr.Close()
 
@@ -1247,18 +899,14 @@ func (tx *LMDBTx) Count(index, field, view string, shard uint64) (uint64, error)
 	panicOn(err)
 	defer a.Close()
 	if !found {
-		//vv("not found")
 		return 0, nil
 	}
 	result := int32(0)
-	//vv("a = '%v'", a.(*LMDBIterator).String())
 	for a.Next() {
 		ckey, cont := a.Value()
-		//vv("on a.Next() loop... a.Value() got ckey '%v'", string(ckey))
 		_ = ckey
 		result += cont.N()
 	}
-	//vv("a.Next() returned false")
 	return uint64(result), nil
 }
 
@@ -1266,15 +914,19 @@ func (tx *LMDBTx) Count(index, field, view string, shard uint64) (uint64, error)
 // Returns zero if the bitmap is empty. Odd, but this is what roaring.Max does.
 func (tx *LMDBTx) Max(index, field, view string, shard uint64) (uint64, error) {
 
-	prefix := badgerPrefix(index, field, view, shard)
-	seekto := badgerPrefix(index, field, view, shard+1)
+	prefix := txkey.Prefix(index, field, view, shard)
+	seekto := txkey.Prefix(index, field, view, shard+1)
 
 	cur, err := tx.tx.OpenCursor(tx.dbi)
 	panicOn(err)
 	defer cur.Close()
 
-	k, v, err := cur.Get(seekto, nil, lmdb.SetRange)
-	_, _ = k, v
+	var k, v []byte
+	if len(seekto) == 0 {
+		_, _, err = cur.Get(oneByteSliceOfZero, nil, lmdb.SetRange)
+	} else {
+		_, _, err = cur.Get(seekto, nil, lmdb.SetRange)
+	}
 	if lmdb.IsNotFound(err) {
 		// we have nothing >= seekto, but we might have stuff before it, and we'll wrap backwards.
 		k, v, err = cur.Get(nil, nil, lmdb.Prev)
@@ -1299,7 +951,7 @@ func (tx *LMDBTx) Max(index, field, view string, shard uint64) (uint64, error) {
 		return 0, nil // nothing in [prefix, seekto).
 	}
 
-	hb := badgerKeyExtractContainerKey(k)
+	hb := txkey.KeyExtractContainerKey(k)
 	n := len(v)
 	if n == 0 {
 		return 0, nil
@@ -1437,24 +1089,23 @@ func (tx *LMDBTx) OffsetRange(index, field, view string, shard, offset, start, e
 	off := highbits(offset)
 	hi0, hi1 := highbits(start), highbits(endx)
 
-	needle := badgerKey(index, field, view, shard, hi0)
-	prefix := badgerPrefix(index, field, view, shard)
+	needle := txkey.Key(index, field, view, shard, hi0)
+	prefix := txkey.Prefix(index, field, view, shard)
 
-	n2, pre2 := badgerKeyAndPrefix(index, field, view, shard, hi0)
+	n2, pre2 := txkey.KeyAndPrefix(index, field, view, shard, hi0)
 	if string(n2) != string(needle) {
-		panic(fmt.Sprintf("problem! n2(%v) != needle(%v), badgerKeyAndPrefix not consitent with badgerKey()", string(n2), string(needle)))
+		panic(fmt.Sprintf("problem! n2(%v) != needle(%v), txkey.KeyAndPrefix not consitent with txkey.Key()", string(n2), string(needle)))
 	}
 	if string(pre2) != string(prefix) {
-		panic(fmt.Sprintf("problem! pre2(%v) != prefix(%v), badgerKeyAndPrefix not consitent with badgerKey()", string(pre2), string(prefix)))
+		panic(fmt.Sprintf("problem! pre2(%v) != prefix(%v), txkey.KeyAndPrefix not consitent with txkey.Key()", string(pre2), string(prefix)))
 	}
 
-	it := NewLMDBIterator(tx, prefix) // see OffsetRange() panic 'Only one iterator can be active at one time, for a RW txn
+	it := NewLMDBIterator(tx, prefix)
 	defer it.Close()
 	it.Seek(needle)
 	for ; it.ValidForPrefix(prefix); it.Next() {
-		//vv("through the look, it.lastKey '%v' must have been valid for prefix '%v'", string(it.lastKey), string(prefix))
 		bkey := it.lastKey
-		k := badgerKeyExtractContainerKey(bkey)
+		k := txkey.KeyExtractContainerKey(bkey)
 
 		// >= hi1 is correct b/c endx cannot have any lowbits set.
 		if uint64(k) >= hi1 {
@@ -1465,7 +1116,6 @@ func (tx *LMDBTx) OffsetRange(index, field, view string, shard, offset, start, e
 		v := it.lastVal
 		n := len(v)
 		if n == 0 {
-			//vv("why is it.lastVal == v == nil for it.lastKey '%v' must have been valid for prefix '%v'", string(it.lastKey), string(prefix))
 			continue
 		}
 		c := tx.toContainer(v[n-1], v[0:(n-1)])
@@ -1482,6 +1132,7 @@ func (tx *LMDBTx) IncrementOpN(index, field, view string, shard uint64, changedN
 // ImportRoaringBits handles deletes by setting clear=true.
 // rowSet[rowID] returns the number of bit changed on that rowID.
 func (tx *LMDBTx) ImportRoaringBits(index, field, view string, shard uint64, itr roaring.RoaringIterator, clear bool, log bool, rowSize uint64, data []byte) (changed int, rowSet map[uint64]int, err error) {
+
 	n := itr.Len()
 	if n == 0 {
 		return
@@ -1573,7 +1224,7 @@ func (tx *LMDBTx) ImportRoaringBits(index, field, view string, shard uint64, itr
 
 			newC := roaring.Union(oldC, synthC) // UnionInPlace was giving us crashes on overly large containers.
 
-			if roaring.ContainerType(newC) == containerBitmap {
+			if roaring.ContainerType(newC) == roaring.ContainerBitmap {
 				newC.Repair() // update the bit-count so .n is valid. b/c UnionInPlace doesn't update it.
 			}
 			if newC.N() != existN {
@@ -1600,7 +1251,8 @@ func (tx *LMDBTx) toContainer(typ byte, v []byte) (r *roaring.Container) {
 	}
 
 	var w []byte
-	if tx.doAllocZero {
+	useRowCache := tx.UseRowCache()
+	if tx.doAllocZero || useRowCache {
 		// Do electric fence-inspired bad-memory read detection.
 		//
 		// The v []byte lives in LMDBDB's memory-mapped vlog-file,
@@ -1620,36 +1272,19 @@ func (tx *LMDBTx) toContainer(typ byte, v []byte) (r *roaring.Container) {
 		//
 		w = make([]byte, len(v))
 		copy(w, v)
-
-		// register w so we can catch out-of-tx memory access
-		tx.acMu.Lock()
-		defer tx.acMu.Unlock()
-		tx.ourAllocs = append(tx.ourAllocs, w)
 	} else {
 		w = v
 	}
 
 	switch typ {
-	case containerArray:
+	case roaring.ContainerArray:
 		c := roaring.NewContainerArray(toArray16(w))
-		if tx.doAllocZero {
-			// tx.acMu was acquired above, and Unlock deferred.
-			tx.ourContainers = append(tx.ourContainers, c)
-		}
 		return c
-	case containerBitmap:
+	case roaring.ContainerBitmap:
 		c := roaring.NewContainerBitmap(-1, toArray64(w))
-		if tx.doAllocZero {
-			// tx.acMu was acquired above, and Unlock deferred.
-			tx.ourContainers = append(tx.ourContainers, c)
-		}
 		return c
-	case containerRun:
+	case roaring.ContainerRun:
 		c := roaring.NewContainerRun(toInterval16(w))
-		if tx.doAllocZero {
-			// tx.acMu was acquired above, and Unlock deferred.
-			tx.ourContainers = append(tx.ourContainers, c)
-		}
 		return c
 	default:
 		panic(fmt.Sprintf("unknown container: %v", typ))
@@ -1660,7 +1295,7 @@ func (tx *LMDBTx) toContainer(typ byte, v []byte) (r *roaring.Container) {
 // keys available in lmdb.
 func (w *LMDBWrapper) StringifiedLMDBKeys(optionalUseThisTx Tx) (r string) {
 	if optionalUseThisTx == nil {
-		tx := w.NewLMDBTx(!writable, "<StringifiedLMDBKeys>")
+		tx := w.NewLMDBTx(!writable, "<StringifiedLMDBKeys>", nil)
 		defer tx.Rollback()
 		r = stringifiedLMDBKeysTx(tx)
 		return
@@ -1675,14 +1310,13 @@ func (w *LMDBWrapper) StringifiedLMDBKeys(optionalUseThisTx Tx) (r string) {
 }
 
 // countBitsSet returns the number of bits set (or "hot") in
-// the roaring container value found by the badgerKey()
+// the roaring container value found by the txkey.Key()
 // formatted bkey.
 func (tx *LMDBTx) countBitsSet(bkey []byte) (n int) {
 
 	v, err := tx.tx.Get(tx.dbi, bkey)
 	if lmdb.IsNotFound(err) {
 		// some queries bkey may not be present! don't panic.
-		//panic(fmt.Sprintf("lmdb did not have value for bkey = '%v'", string(bkey)))
 		return 0
 	}
 	panicOn(err)
@@ -1696,6 +1330,7 @@ func (tx *LMDBTx) countBitsSet(bkey []byte) (n int) {
 }
 
 func (tx *LMDBTx) Dump() {
+
 	fmt.Printf("%v\n", stringifiedLMDBKeysTx(tx))
 }
 
@@ -1719,7 +1354,7 @@ func stringifiedLMDBKeysTx(tx *LMDBTx) (r string) {
 
 		bkey := it.lastKey
 		key := string(bkey)
-		ckey := badgerKeyExtractContainerKey(bkey)
+		ckey := txkey.KeyExtractContainerKey(bkey)
 		hash := ""
 		srbm := ""
 		v := it.lastVal
@@ -1744,28 +1379,39 @@ func stringifiedLMDBKeysTx(tx *LMDBTx) (r string) {
 	}
 	return "lmdb-" + r
 }
+func (w *LMDBWrapper) DeleteDBPath(path string) (err error) {
+	err = os.RemoveAll(path)
+	if err != nil {
+		return errors.Wrap(err, "DeleteDBPath")
+	}
+	lockfile := path + "-lock"
+	if FileExists(lockfile) {
+		err = os.RemoveAll(lockfile)
+	}
+	return
+}
 
 func (w *LMDBWrapper) DeleteField(index, field, fieldPath string) error {
 
 	// under blue-green roaring_lmdb, the directory will not be found, b/c roaring will have
 	// already done the os.RemoveAll().	BUT, RemoveAll returns nil error in this case. Docs:
 	// "If the path does not exist, RemoveAll returns nil (no error)"
-	err := os.RemoveAll(fieldPath)
+	err := w.DeleteDBPath(fieldPath)
 	if err != nil {
 		return errors.Wrap(err, "removing directory")
 	}
-	prefix := badgerFieldPrefix(index, field)
+	prefix := txkey.FieldPrefix(index, field)
 	return w.DeletePrefix(prefix)
 }
 
 func (w *LMDBWrapper) DeleteFragment(index, field, view string, shard uint64, frag interface{}) error {
-	prefix := badgerPrefix(index, field, view, shard)
+	prefix := txkey.Prefix(index, field, view, shard)
 	return w.DeletePrefix(prefix)
 }
 
 func (w *LMDBWrapper) DeletePrefix(prefix []byte) error {
 
-	tx := w.NewLMDBTx(writable, w.name)
+	tx := w.NewLMDBTx(writable, w.name, nil)
 
 	// NewLMDBTx will grab these, so don't lock until after it.
 	w.muDb.Lock()

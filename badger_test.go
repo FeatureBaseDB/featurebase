@@ -1299,6 +1299,38 @@ func TestBadger_AutoCommit(t *testing.T) {
 	panicOn(err)
 }
 
+func TestBadger_BigWritesAvoidTxnTooLargeWithAutoCommit(t *testing.T) {
+
+	// setup
+	dbwrap, clean := mustOpenEmptyBadgerWrapper("TestBadger_BigWritesAvoidTxnTooLargeWithAutoCommit")
+	defer clean()
+	defer dbwrap.Close()
+
+	index, field, view, shard := "i", "f", "v", uint64(0)
+	tx := dbwrap.NewBadgerTx(writable, index, nil)
+
+	containerKey := uint64(0)
+	// setup
+	bits := make([]uint64, 1024)
+	n := 0
+	for i := range bits {
+		bits[i] = ^uint64(0)
+		n += 64
+	}
+	rc := roaring.NewContainerBitmap(n, bits)
+
+	// if we go over 100K big writes, we should autocommit
+	// rather than panic.
+	for v := 0; v < 133444; v++ {
+		containerKey++
+		err := tx.PutContainer(index, field, view, shard, containerKey, rc)
+		panicOn(err)
+	}
+
+	err := tx.Commit()
+	panicOn(err)
+}
+
 func TestBadger_DeleteIndex(t *testing.T) {
 
 	// setup
@@ -1626,3 +1658,86 @@ func TestMain(m *testing.M) {
 	//reportTestBadgersNeedingClose()
 	os.Exit(ret)
 }
+
+/*
+func TestBadger_ConflictWriteWriteResolution(t *testing.T) {
+
+	// 1) when do we get write-write conflicts (probably different goroutines) but
+	// can we get them on different keys?
+
+	// 2) does having a lock registry that insures we are only ever writing
+	// different keys at once avoid write-write conflicts?
+
+	// 3) how should write-write conflicts be resolved?
+	//    presumably just retying the write?
+
+	// setup
+	dbwrap, clean := mustOpenEmptyBadgerWrapper("TestBadger_ConflictWriteWriteResolution")
+	defer clean()
+	defer dbwrap.Close()
+
+	concur := 10
+	//bkey := []byte("a")
+	//by := []byte("value-for-a")
+
+	// read-loop:
+	for i := 0; i < concur*2; i++ {
+		go func() {
+			tx := dbwrap.NewBadgerTx(!writable, "", nil)
+
+			for j := 0; true; j++ {
+
+				bkey := []byte(fmt.Sprintf("key-for-a j=%v", j))
+				//by := []byte(fmt.Sprintf("value-for-a j=%v", -1))
+
+				_, err := tx.tx.Get(bkey)
+				if err != badger.ErrKeyNotFound {
+					panicOn(err)
+				}
+
+				if j%10 == 0 {
+					vv("committing after 10, gid=%v", curGID())
+					tx.Rollback()
+					tx = dbwrap.NewBadgerTx(!writable, "", nil)
+				}
+
+			}
+		}()
+	}
+
+	// write-loop:
+	for i := 0; i < concur; i++ {
+		go func() {
+			tx := dbwrap.NewBadgerTx(writable, "", nil)
+
+			for j := 0; true; j++ {
+
+				bkey := []byte(fmt.Sprintf("key-for-a j=%v", j))
+				by := []byte(fmt.Sprintf("value-for-a j=%v", j))
+
+				entry := badger.NewEntry(bkey, by)
+				err := tx.tx.SetEntry(entry)
+				panicOn(err)
+
+				if j%5 == 0 {
+					panicOn(tx.tx.Delete(bkey))
+				}
+
+				_, err = tx.tx.Get(bkey)
+				if err != badger.ErrKeyNotFound {
+					panicOn(err)
+				}
+
+				if j%10 == 0 {
+					///vv("committing after 10, gid=%v", curGID())
+					err = tx.tx.Commit()
+					panicOn(err)
+					tx = dbwrap.NewBadgerTx(writable, "", nil)
+				}
+
+			}
+		}()
+	}
+	select {}
+}
+*/

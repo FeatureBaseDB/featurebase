@@ -189,6 +189,8 @@ func (btc *bTreeContainers) Repair() {
 // replace the given container.
 func (btc *bTreeContainers) Update(key uint64, fn func(*Container, bool) (*Container, bool)) {
 	btc.tree.Put(key, fn)
+	btc.lastKey = ^uint64(0)
+	btc.lastContainer = nil
 }
 
 // UpdateEvery calls fn (existing-container, existed), and expects

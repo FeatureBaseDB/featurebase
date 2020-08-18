@@ -12,18 +12,14 @@ require (
 	github.com/codahale/hdrhistogram v0.0.0-20161010025455-3a0bb77429bd // indirect
 	github.com/davecgh/go-spew v1.1.1
 	github.com/dgraph-io/badger/v2 v2.0.1-rc1.0.20200709123515-8e896a7af361
-	github.com/glycerine/goconvey v0.0.0-20190410193231-58a59202ab31 // indirect
-	github.com/glycerine/idem v0.0.0-20190127113923-7a8083893311
-	github.com/glycerine/lmdb-go v1.9.11
+	github.com/glycerine/lmdb-go v1.9.26
 	github.com/go-ole/go-ole v1.2.4 // indirect
 	github.com/gogo/protobuf v1.2.0
 	github.com/golang/protobuf v1.3.3
 	github.com/google/go-cmp v0.2.0
-	github.com/gopherjs/gopherjs v0.0.0-20200217142428-fce0ec30dd00 // indirect
 	github.com/gorilla/handlers v1.3.0
 	github.com/gorilla/mux v1.7.0
 	github.com/hashicorp/memberlist v0.1.3
-	github.com/jtolds/gls v4.20.0+incompatible // indirect
 	github.com/opentracing/opentracing-go v1.1.0
 	github.com/pelletier/go-toml v1.2.0
 	github.com/pkg/errors v0.8.1

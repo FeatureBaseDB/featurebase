@@ -51,7 +51,9 @@ type blueGreenTx struct {
 func newBlueGreenTx(a, b Tx, idx *Index) *blueGreenTx {
 	as := a.Type()
 	bs := b.Type()
-	return &blueGreenTx{a: a, b: b, idx: idx, as: as, bs: bs}
+	c := &blueGreenTx{a: a, b: b, idx: idx, as: as, bs: bs}
+	c.checker.c = c
+	return c
 }
 
 var _ = newBlueGreenTx // keep linter happy
@@ -140,13 +142,14 @@ func (c *blueGreenTx) compareTxState(index, field, view string, shard uint64) {
 		}
 		bKey, bValue := bIter.Value()
 		if bKey != aKey {
+			//vv("6960 really ought to be present index='%v',field='%v';view='%v';shard='%v'; isIn=%v", index, field, view, shard, c.isIn(index, field, view, shard, 456130566))
 			AlwaysPrintf("problem in caller %v", Caller(2))
 			c.Dump()
 			panic(fmt.Sprintf("compareTxState[%v]: A(%v) found key %v, B(%v) found %v, at %v", here, c.as, aKey, c.bs, bKey, stack()))
 		}
 		if err := aValue.BitwiseCompare(bValue); err != nil {
 			c.Dump()
-			vv("compareTxState[%v]: key %v differs: %v;  A=%v; B=%v; at stack=%v", here, aKey, err, c.as, c.bs, stack())
+			//vv("compareTxState[%v]: key %v differs: %v;  A=%v; B=%v; at stack=%v", here, aKey, err, c.as, c.bs, stack())
 			panic(fmt.Sprintf("compareTxState[%v]: key %v differs: %v;  A=%v; B=%v; at stack=%v", here, aKey, err, c.as, c.bs, stack()))
 		}
 	}
@@ -155,7 +158,7 @@ func (c *blueGreenTx) compareTxState(index, field, view string, shard uint64) {
 		AlwaysPrintf("bIter has more than it should. problem in caller %v", Caller(2))
 		c.Dump()
 		bKey, _ := bIter.Value()
-		vv("compareTxState[%v]: B(%v) found key %v, A(%v) didn't, at %v", here, c.bs, bKey, c.as, stack())
+		//vv("compareTxState[%v]: B(%v) found key %v, A(%v) didn't, at %v", here, c.bs, bKey, c.as, stack())
 		panic(fmt.Sprintf("compareTxState[%v]: B(%v) found key %v, A(%v) didn't, at %v", here, c.bs, bKey, c.as, stack()))
 	}
 }
@@ -192,19 +195,24 @@ func (c *blueGreenTx) Rollback() {
 			panic(r)
 		}
 	}()
-	//fmt.Printf("blueGreenTx.Rollback() about to call (%v) a.Rollback()\n", c.as)
+	//vv("blueGreenTx.Rollback() about to call (%v) a.Rollback()", c.as)
 	c.a.Rollback()
-	//fmt.Printf("blueGreenTx.Rollback() about to call (%v) b.Rollback()\n", c.bs)
+	//vv("blueGreenTx.Rollback() about to call (%v) b.Rollback()", c.bs)
 	c.b.Rollback()
+	//vv("blueGreenTx.Rollback() done. bgtx p=%p", c)
 }
 
 func (c *blueGreenTx) Commit() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	//fmt.Printf("blueGreenTx.Commit() called.\n")
+
+	// for rbf 6930 debug stuff:
+	//in := c.isIn("i", "x", "standard", 0, 456130566)
+	//fmt.Printf("blueGreenTx.Commit() called. bgtx p=%p; in rbf=%v\n", c, in[0])
 	if c.rollbackOrCommitDone {
 		return nil
 	}
+	//vv("blueGreenTx.Commit() called. bgtx p=%p", c)
 	c.rollbackOrCommitDone = true
 	c.checkDatabase()
 	defer func() {
@@ -217,6 +225,13 @@ func (c *blueGreenTx) Commit() error {
 	_ = errA
 	errB := c.b.Commit()
 
+	/*
+		tx2, err := c.idx.Txf.rbfDB.NewRBFTx(false, "", nil)
+		panicOn(err)
+		inRbf, err := tx2.Contains("i", "x", "standard", 0, 456130566)
+		panicOn(err)
+		fmt.Printf("AFTER commits happened, blueGreenTx.Commit() called. bgtx p=%p; in rbf=%v\n", c, inRbf)
+	*/
 	compareErrors(errA, errB)
 	return errB
 }
@@ -281,9 +296,9 @@ func (c *blueGreenTx) ImportRoaringBits(index, field, view string, shard uint64,
 	// these are the first port of call for debugging, so we leave them in.
 	// ================== begin save comments.
 	//c.checkDatabase()
-	//vv("got past database check at TOP of ImportRoaringBits")
+	////vv("got past database check at TOP of ImportRoaringBits")
 	//c.Dump()
-	//vv("done with top dump; clear=%v", clear)
+	////vv("done with top dump; clear=%v", clear)
 	// ==================   end save comments.
 	defer func() {
 		if r := recover(); r != nil {
@@ -344,9 +359,30 @@ func (c *blueGreenTx) UseRowCache() bool {
 	return false
 }
 
+var _ = (&blueGreenTx{}).isIn // happy linter
+
+func (c *blueGreenTx) isIn(index, field, view string, shard uint64, ckey uint64) (r []bool) {
+	r = make([]bool, 2)
+	inA, errA := c.a.Contains(index, field, view, shard, ckey)
+	panicOn(errA)
+	inB, errB := c.b.Contains(index, field, view, shard, ckey)
+	panicOn(errB)
+	r[0] = inA
+	r[1] = inB
+	return
+}
+
 func (c *blueGreenTx) Add(index, field, view string, shard uint64, batched bool, a ...uint64) (changeCount int, err error) {
 	c.checker.see(index, field, view, shard)
+	//vv("blueGreenTx) Add(index=%v, field=%v, view=%v, shard=%v", index, field, view, shard)
 	defer func() {
+		// rbf 6960 debug code:
+		/*
+			in := c.isIn("i", "x", "standard", 0, 456130566)
+			if in[0] || in[1] {
+				vv("first time 6960 present isIn=%v; bgtx p=%p stack=\n%v", in, c, stack())
+			}
+		*/
 		if r := recover(); r != nil {
 			AlwaysPrintf("see Add() panic '%v' for index='%v', field='%v', view='%v', shard='%v' at '%v'", r, index, field, view, shard, stack())
 			panic(r)
@@ -590,7 +626,6 @@ func (c *blueGreenTx) UnionInPlace(index, field, view string, shard uint64, othe
 
 func (c *blueGreenTx) CountRange(index, field, view string, shard uint64, start, end uint64) (n uint64, err error) {
 	c.checker.see(index, field, view, shard)
-	//vv("CountRange start=0x%x, endx=0x%x", start, end)
 	defer func() {
 		if r := recover(); r != nil {
 			c.Dump()
@@ -626,6 +661,10 @@ func (c *blueGreenTx) OffsetRange(index, field, view string, shard, offset, star
 		panicOn(err)
 	}
 	compareErrors(errA, errB)
+
+	//vv("end of blue-green OffsetRange, dump:")
+	//c.Dump()
+
 	return b, errB
 }
 
@@ -692,8 +731,9 @@ func (c *blueGreenTx) SliceOfShards(index, field, view, optionalViewPath string)
 		}
 		for _, kb := range slcB {
 			if !ma[kb] {
+				//vv("blueGreenTx SliceOfShards diference! B(%v) had shard %v, but A(%v) did not. cpa='%#v'; cpb='%#v'; in the SliceOfShards returned slice.", c.bs, kb, c.as, cpa, cpb)
 				c.Dump()
-				panic(fmt.Sprintf("blueGreenTx SliceOfShards diference! B(%v) had %v, but A(%v) did not. cpa='%#v'; cpb='%#v'; in the SliceOfShards returned slice.", c.bs, kb, c.as, cpa, cpb))
+				panic(fmt.Sprintf("blueGreenTx SliceOfShards diference! B(%v) had shard %v, but A(%v) did not. cpa='%#v'; cpb='%#v'; in the SliceOfShards returned slice.", c.bs, kb, c.as, cpa, cpb))
 			}
 			delete(ma, kb)
 		}
@@ -758,6 +798,8 @@ func (m *MultiReaderB) Close() error {
 type blueGreenChecker struct {
 	visited map[string]map[string]map[string]map[uint64]struct{}
 
+	c *blueGreenTx
+
 	// lock mu when using visited.
 	// otherwise concurrent map writes on TestAPI_Import/RowIDColumnKey
 	mu sync.Mutex
@@ -767,6 +809,9 @@ type blueGreenChecker struct {
 func (b *blueGreenChecker) see(index, field, view string, shard uint64) {
 	// keep this next Printf. Useful to see the sequence of Tx operations.
 	//fmt.Printf("blueGreenTx.%v on index='%v'\n", Caller(1), index)
+
+	// is ckey 6960 present in i/x/standard/0 ?
+	////vv("6960 present index='%v',field='%v';view='%v';shard='%v'; isIn=%v", index, field, view, shard, b.c.isIn(index, field, view, shard, 456130566))
 
 	b.mu.Lock()
 	defer b.mu.Unlock()
