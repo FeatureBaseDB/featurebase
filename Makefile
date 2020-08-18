@@ -76,7 +76,6 @@ endif
 release: check-clean
 	$(MAKE) release-build GOOS=darwin GOARCH=amd64
 	$(MAKE) release-build GOOS=linux GOARCH=amd64
-	$(MAKE) release-build GOOS=linux GOARCH=386
 
 
 # try (e.g.) internal/clustertests/docker-compose-replication2.yml
