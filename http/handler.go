@@ -47,6 +47,8 @@ import (
 	"github.com/pilosa/pilosa/v2/tracing"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	dto "github.com/prometheus/client_model/go"
+	"github.com/prometheus/prom2json"
 	"github.com/zeebo/blake3"
 )
 
@@ -343,6 +345,7 @@ func newRouter(handler *Handler) *mux.Router {
 	router.PathPrefix("/debug/pprof/").Handler(http.DefaultServeMux).Methods("GET")
 	router.Handle("/debug/vars", expvar.Handler()).Methods("GET")
 	router.Handle("/metrics", promhttp.Handler())
+	router.HandleFunc("/metrics.json", handler.handleGetMetricsJSON).Methods("GET").Name("GetMetricsJSON")
 	router.HandleFunc("/export", handler.handleGetExport).Methods("GET").Name("GetExport")
 	router.HandleFunc("/import-atomic-record", handler.handlePostImportAtomicRecord).Methods("POST").Name("PostImportAtomicRecord")
 	router.HandleFunc("/index", handler.handleGetIndexes).Methods("GET").Name("GetIndexes")
@@ -1540,6 +1543,35 @@ func validateProtobufHeader(r *http.Request) (error string, code int) {
 		return "Not acceptable", http.StatusNotAcceptable
 	}
 	return
+}
+
+// handleGetMetricsJSON handles /metrics.json requests, translating text metrics results to more consumable JSON.
+func (h *Handler) handleGetMetricsJSON(w http.ResponseWriter, r *http.Request) {
+	if !validHeaderAcceptJSON(r.Header) {
+		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+
+	metricsURI := h.api.Node().URI.String() + "/metrics"
+	fmt.Printf("retrieving metrics from %s\n", metricsURI)
+	mfChan := make(chan *dto.MetricFamily, 1024)
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	err := prom2json.FetchMetricFamilies(metricsURI, mfChan, transport)
+	if err != nil {
+		http.Error(w, "fetching metrics: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	metrics := []*prom2json.Family{}
+	for mf := range mfChan {
+		metrics = append(metrics, prom2json.NewFamily(mf))
+	}
+
+	err = json.NewEncoder(w).Encode(metrics)
+	if err != nil {
+		h.logger.Printf("json write error: %s", err)
+	}
 }
 
 // handleGetExport handles /export requests.
