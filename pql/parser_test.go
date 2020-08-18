@@ -194,6 +194,25 @@ func TestParser_Parse(t *testing.T) {
 		}
 	})
 
+	// Parse unicode keys
+	t.Run("UnicodeKey", func(t *testing.T) {
+		// s := `���t`
+		s := `Æ`
+		q, err := pql.ParseString(`Row(unicode="` + s + `")`)
+		if err != nil {
+			t.Fatal(err)
+		} else if !reflect.DeepEqual(q.Calls[0],
+			&pql.Call{
+				Name: "Row",
+				Args: map[string]interface{}{
+					"unicode": s,
+				},
+			},
+		) {
+			t.Fatalf("uexpected call: %#v", q.Calls[0])
+		}
+	})
+
 }
 
 func TestUnquote(t *testing.T) {
