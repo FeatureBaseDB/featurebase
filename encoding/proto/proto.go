@@ -304,6 +304,14 @@ func (s Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		}
 		decodeTransactionMessage(msg, mt)
 		return nil
+	case *pilosa.AtomicRecord:
+		msg := &internal.AtomicRecord{}
+		err := proto.Unmarshal(buf, msg)
+		if err != nil {
+			return errors.Wrap(err, "unmarshaling AtomicRecord")
+		}
+		s.decodeAtomicRecord(msg, mt)
+		return nil
 	default:
 		panic(fmt.Sprintf("unhandled pilosa.Message of type %T: %#v", mt, m))
 	}
@@ -375,6 +383,8 @@ func (s Serializer) encodeToProto(m pilosa.Message) proto.Message {
 		return s.encodeTranslateIDsResponse(mt)
 	case *pilosa.TransactionMessage:
 		return s.encodeTransactionMessage(mt)
+	case *pilosa.AtomicRecord:
+		return s.encodeAtomicRecord(mt)
 	}
 	return nil
 }
@@ -413,6 +423,7 @@ func (s Serializer) encodeImportRequest(m *pilosa.ImportRequest) *internal.Impor
 		RowKeys:        m.RowKeys,
 		ColumnKeys:     m.ColumnKeys,
 		Timestamps:     m.Timestamps,
+		Clear:          m.Clear,
 	}
 }
 
@@ -428,6 +439,7 @@ func (s Serializer) encodeImportValueRequest(m *pilosa.ImportValueRequest) *inte
 		Values:         m.Values,
 		FloatValues:    m.FloatValues,
 		StringValues:   m.StringValues,
+		Clear:          m.Clear,
 	}
 }
 
@@ -873,6 +885,20 @@ func (s Serializer) encodeTransactionMessage(msg *pilosa.TransactionMessage) *in
 	}
 }
 
+func (s Serializer) encodeAtomicRecord(msg *pilosa.AtomicRecord) *internal.AtomicRecord {
+	ar := &internal.AtomicRecord{
+		Index: msg.Index,
+		Shard: msg.Shard,
+	}
+	for _, ivr := range msg.Ivr {
+		ar.Ivr = append(ar.Ivr, s.encodeImportValueRequest(ivr))
+	}
+	for _, ir := range msg.Ir {
+		ar.Ir = append(ar.Ir, s.encodeImportRequest(ir))
+	}
+	return ar
+}
+
 func (s Serializer) encodeTransaction(trns *pilosa.Transaction) *internal.Transaction {
 	if trns == nil {
 		return nil
@@ -1179,6 +1205,7 @@ func (s Serializer) decodeImportRequest(pb *internal.ImportRequest, m *pilosa.Im
 	m.Timestamps = pb.Timestamps
 	m.IndexCreatedAt = pb.IndexCreatedAt
 	m.FieldCreatedAt = pb.FieldCreatedAt
+	m.Clear = pb.Clear
 }
 
 func (s Serializer) decodeImportValueRequest(pb *internal.ImportValueRequest, m *pilosa.ImportValueRequest) {
@@ -1192,6 +1219,7 @@ func (s Serializer) decodeImportValueRequest(pb *internal.ImportValueRequest, m 
 	m.StringValues = pb.StringValues
 	m.IndexCreatedAt = pb.IndexCreatedAt
 	m.FieldCreatedAt = pb.FieldCreatedAt
+	m.Clear = pb.Clear
 }
 
 func (s Serializer) decodeImportRoaringRequest(pb *internal.ImportRoaringRequest, m *pilosa.ImportRoaringRequest) {
@@ -1293,6 +1321,22 @@ func decodeTransactionMessage(pb *internal.TransactionMessage, m *pilosa.Transac
 		m.Transaction = &pilosa.Transaction{}
 	}
 	decodeTransaction(pb.Transaction, m.Transaction)
+}
+
+func (s Serializer) decodeAtomicRecord(pb *internal.AtomicRecord, m *pilosa.AtomicRecord) {
+	m.Index = pb.Index
+	m.Shard = pb.Shard
+	m.Ivr = make([]*pilosa.ImportValueRequest, len(pb.Ivr))
+	m.Ir = make([]*pilosa.ImportRequest, len(pb.Ir))
+
+	for i, ivr := range pb.Ivr {
+		m.Ivr[i] = &pilosa.ImportValueRequest{}
+		s.decodeImportValueRequest(ivr, m.Ivr[i])
+	}
+	for i, ir := range pb.Ir {
+		m.Ir[i] = &pilosa.ImportRequest{}
+		s.decodeImportRequest(ir, m.Ir[i])
+	}
 }
 
 func decodeTransaction(pb *internal.Transaction, trns *pilosa.Transaction) {

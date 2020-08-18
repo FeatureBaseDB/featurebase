@@ -5323,19 +5323,11 @@ func check(t *testing.T, tx Tx, f *fragment, exp map[uint64]map[uint64]struct{})
 
 func TestImportValueConcurrent(t *testing.T) {
 	f, idx := mustOpenBSIFragment("i", "f", viewBSIGroupPrefix+"foo", 0)
-	types := idx.Txf.TxTypes()
-	for _, ty := range types {
-		switch ty {
-		case roaringTxn:
-			t.Skip(fmt.Sprintf("skipping TestImportValueConcurrent under " +
-				"blueGreenTx because the lack of transactional consistency " +
-				"from Roaring-per-file will create false comparison " +
-				"failures."))
-		case lmdbTxn:
-			t.Skip(fmt.Sprintf("skipping TestImportValueConcurrent under " +
-				"lmdb since only a single writer is allowed at once."))
-		}
-	}
+
+	// produces false positives under blue_green because of races
+	// between commits, and is probematic under single writer
+	// backends like rbf and lmdb. Marking as roaring-only.
+	roaringOnlyTest(t)
 
 	// Since eg.Go gets called multiple times below, each
 	// time needs its own Tx. So close the default one and

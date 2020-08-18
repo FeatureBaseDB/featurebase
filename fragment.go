@@ -622,7 +622,7 @@ func (f *fragment) rowFromStorage(tx Tx, rowID uint64) (*Row, error) {
 // setBit sets a bit for a given column & row within the fragment.
 // This updates both the on-disk storage and the in-cache bitmap.
 func (f *fragment) setBit(tx Tx, rowID, columnID uint64) (changed bool, err error) {
-	f.mu.Lock()
+	f.mu.Lock() // controls access to the file.
 	defer f.mu.Unlock()
 	var wp *io.Writer
 	if f.storage != nil {
