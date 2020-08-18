@@ -198,11 +198,6 @@ workflows:
           requires:
             - setup
       - test:
-          name: test-386
-          goarch: "386"
-          requires:
-            - setup
-      - test:
           name: test-shardwidth-22
           shard_width: "22"
           requires:
