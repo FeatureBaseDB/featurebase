@@ -1553,22 +1553,25 @@ func (h *Handler) handleGetMetricsJSON(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 
-	metricsURI := h.api.Node().URI.String() + "/metrics"
-	fmt.Printf("retrieving metrics from %s\n", metricsURI)
-	mfChan := make(chan *dto.MetricFamily, 1024)
+	metrics := make(map[string][]*prom2json.Family)
+	mfChan := make(chan *dto.MetricFamily, 60)
 	transport := http.DefaultTransport.(*http.Transport).Clone()
-	err := prom2json.FetchMetricFamilies(metricsURI, mfChan, transport)
-	if err != nil {
-		http.Error(w, "fetching metrics: "+err.Error(), http.StatusInternalServerError)
-		return
+	for _, node := range h.api.Hosts(r.Context()) {
+		metricsURI := node.URI.String() + "/metrics"
+		err := prom2json.FetchMetricFamilies(metricsURI, mfChan, transport)
+		if err != nil {
+			http.Error(w, "fetching metrics: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		nodeMetrics := []*prom2json.Family{}
+		for mf := range mfChan {
+			nodeMetrics = append(nodeMetrics, prom2json.NewFamily(mf))
+		}
+		metrics[node.ID] = nodeMetrics
 	}
 
-	metrics := []*prom2json.Family{}
-	for mf := range mfChan {
-		metrics = append(metrics, prom2json.NewFamily(mf))
-	}
-
-	err = json.NewEncoder(w).Encode(metrics)
+	err := json.NewEncoder(w).Encode(metrics)
 	if err != nil {
 		h.logger.Printf("json write error: %s", err)
 	}
