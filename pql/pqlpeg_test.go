@@ -24,9 +24,7 @@ import (
 func TestPEG(t *testing.T) {
 	p := PQL{Buffer: `
 SetBit(Union(Zitmap(row==4), Intersect(Qitmap(blah>4), Ritmap(field="http://zoo9.com=\\'hello' and \"hello\"")), Hitmap(row=ag-bee)), a="4z", b=5) Count(Union(Witmap(row=5.73, frame=.10), Row(zztop><[2, 9]))) TopN(blah, fields=["hello", "goodbye", "zero"])`[1:]}
-	if err := p.Init(); err != nil {
-		t.Fatalf("initialization error: %v", err)
-	}
+	p.Init()
 	err := p.Parse()
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
@@ -34,9 +32,7 @@ SetBit(Union(Zitmap(row==4), Intersect(Qitmap(blah>4), Ritmap(field="http://zoo9
 	p.Execute()
 
 	p = PQL{Buffer: `SetRowAttrs(attr="http://zoo9.com=\\'hello' "and \"hello\"")`}
-	if err := p.Init(); err != nil {
-		t.Fatalf("initialization error: %v", err)
-	}
+	p.Init()
 	err = p.Parse()
 	if err == nil {
 		t.Fatalf("should have been an error because of the interior unescaped double quote")
@@ -380,6 +376,48 @@ func TestPQLDeepEquality(t *testing.T) {
 				},
 			}},
 		{
+			name: "SetWithUnicode",
+			call: `Set(0, unicode="Æ�漢д ☮♬ ♞🜻💣")`,
+			exp: &Call{
+				Name: "Set",
+				Args: map[string]interface{}{
+					"_col":    int64(0),
+					"unicode": `Æ�漢д ☮♬ ♞🜻💣`,
+				},
+			}},
+		{
+			name: "RowWithUnicode",
+			call: `Row(unicode="Æ�漢д ☮♬ ♞🜻💣")`,
+			exp: &Call{
+				Name: "Row",
+				Args: map[string]interface{}{
+					"unicode": `Æ�漢д ☮♬ ♞🜻💣`,
+				},
+			}},
+		{
+			name: "RowsWithUnicode",
+			call: `Rows(job, previous="💣")`,
+			exp: &Call{
+				Name: "Rows",
+				Args: map[string]interface{}{
+					"_field":   "job",
+					"previous": `💣`,
+				},
+			}},
+		{
+			name: "TopNWithUnicode",
+			call: `TopN(stargazer, Row(unicode="Æ�漢д ☮♬ ♞🜻💣"), a="∑")`,
+			exp: &Call{
+				Name: "TopN",
+				Args: map[string]interface{}{
+					"_field": "stargazer",
+					"a":      "∑",
+				},
+				Children: []*Call{
+					{Name: "Row", Args: map[string]interface{}{"unicode": "Æ�漢д ☮♬ ♞🜻💣"}},
+				},
+			}},
+		{
 			name: "SetRowAttrs",
 			call: "SetRowAttrs(myfield, 9, z=4)",
 			exp: &Call{
@@ -413,6 +451,17 @@ func TestPQLDeepEquality(t *testing.T) {
 				},
 			}},
 		{
+			name: "SetRowAttrsWithUnicodeValues",
+			call: `SetRowAttrs(myfield, "∫", z="∀", a="∑")`,
+			exp: &Call{
+				Name: "SetRowAttrs",
+				Args: map[string]interface{}{
+					"z":      "∀",
+					"a":      "∑",
+					"_field": "myfield",
+					"_row":   "∫",
+				},
+			}}, {
 			name: "SetColumnAttrs",
 			call: "SetColumnAttrs(9, z=4)",
 			exp: &Call{
