@@ -7,11 +7,13 @@ COPY . pilosa
 
 RUN cd pilosa && make install FLAGS="-a -mod=vendor ${BUILD_FLAGS}" ${MAKE_FLAGS}
 
-FROM alpine:3.9.4
+FROM ubuntu:20.10
 
 LABEL maintainer "dev@pilosa.com"
 
-RUN apk add --no-cache curl jq
+RUN apt-get update
+## debug image: RUN apt-get install -y curl htop vim golang tree jq netcat
+RUN apt-get install -y curl jq
 
 COPY --from=builder /go/bin/pilosa /pilosa
 
