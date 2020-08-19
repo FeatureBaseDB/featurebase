@@ -46,20 +46,37 @@ func NewWALSegment(path string) *WALSegment {
 func (s *WALSegment) Path() string { return s.path }
 
 // MinWALID returns the initial WAL ID of the segment. Only available after Open().
-func (s *WALSegment) MinWALID() int64 { return s.minWALID }
+func (s *WALSegment) MinWALID() int64 {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.minWALID
+}
 
 // MaxWALID returns the maximum WAL ID of the segment. Only available after Open().
 func (s *WALSegment) MaxWALID() int64 {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	return s.minWALID + int64(s.pageN) - 1
 }
 
 // PageN returns the number of pages in the segment.
-func (s *WALSegment) PageN() int { return s.pageN }
+func (s *WALSegment) PageN() int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.pageN
+}
 
 // Size returns the current size of the segment, in bytes.
-func (s *WALSegment) Size() int64 { return int64(s.pageN) * PageSize }
+func (s *WALSegment) Size() int64 {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return int64(s.pageN) * PageSize
+}
 
 func (s *WALSegment) Open() (err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	// Extract base WAL ID and validate path.
 	if s.minWALID, err = ParseWALSegmentPath(s.path); err != nil {
 		return err
@@ -110,7 +127,10 @@ func (s *WALSegment) Open() (err error) {
 
 // Close closes the write handle and the read-only mmap.
 func (s *WALSegment) Close() error {
-	if err := s.CloseForWrite(); err != nil {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if err := s.closeForWrite(); err != nil {
 		return err
 	}
 	if s.data != nil {
@@ -124,8 +144,14 @@ func (s *WALSegment) Close() error {
 
 // CloseForWrite closes the write handle, if initialized.
 func (s *WALSegment) CloseForWrite() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.closeForWrite()
+}
+
+func (s *WALSegment) closeForWrite() error {
 	// Ensure write buffer is flushed out.
-	if err := s.Sync(); err != nil {
+	if err := s.sync(); err != nil {
 		return err
 	}
 
@@ -196,7 +222,10 @@ func (s *WALSegment) WriteWALPage(page []byte, isMeta bool) (walID int64, err er
 func (s *WALSegment) Flush() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.flush()
+}
 
+func (s *WALSegment) flush() error {
 	if _, err := s.w.WriteAt(s.writeCache, int64((s.pageN*PageSize)-len(s.writeCache))); err != nil {
 		return fmt.Errorf("wal segment write: %w", err)
 	}
@@ -206,10 +235,16 @@ func (s *WALSegment) Flush() error {
 
 // Sync flushes the write buffer and invokes a file sync to flush data to disk.
 func (s *WALSegment) Sync() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.sync()
+}
+
+func (s *WALSegment) sync() error {
 	if s.w == nil {
 		return nil
 	}
-	if err := s.Flush(); err != nil {
+	if err := s.flush(); err != nil {
 		return err
 	}
 	return s.w.Sync()
