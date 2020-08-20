@@ -704,7 +704,6 @@ func (h *Handler) handleGetStatus(w http.ResponseWriter, r *http.Request) {
 		Nodes:       h.api.Hosts(r.Context()),
 		NodeStates:  h.api.HostStates(r.Context()),
 		LocalID:     h.api.Node().ID,
-		ClusterID:   h.api.ClusterID(),
 		ClusterName: h.api.ClusterName(),
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -765,7 +764,6 @@ type getStatusResponse struct {
 	Nodes       []*pilosa.Node    `json:"nodes"`
 	NodeStates  map[string]string `json:"nodeStates"`
 	LocalID     string            `json:"localID"`
-	ClusterID   string            `json:"clusterID"`
 	ClusterName string            `json:"clusterName"`
 }
 
