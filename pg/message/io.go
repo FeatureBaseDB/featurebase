@@ -82,7 +82,7 @@ func NewWireReader(r *bufio.Reader) *WireReader {
 	return &WireReader{r: r}
 }
 
-// ErrMessageTooBig is an error indicating that a message is to big to be sent or recieved.
+// ErrMessageTooBig is an error indicating that a message is too big to be sent or received.
 var ErrMessageTooBig = errors.New("message is too big")
 
 // WireWriter writes messages in Postgres wire protocol.
