@@ -113,6 +113,7 @@ var NopHandler Handler = nopHandler{}
 
 // ImportValueRequest describes the import request structure
 // for a value (BSI) import.
+// Note: no RowIDs here. have to convert BSI Values into RowIDs internally.
 type ImportValueRequest struct {
 	Index          string
 	IndexCreatedAt int64
@@ -121,11 +122,25 @@ type ImportValueRequest struct {
 	// if Shard is MaxUint64 (an impossible shard value), this
 	// indicates that the column IDs may come from multiple shards.
 	Shard        uint64
-	ColumnIDs    []uint64
+	ColumnIDs    []uint64 // e.g. weather stationID
 	ColumnKeys   []string
-	Values       []int64
+	Values       []int64 // e.g. temperature, humidity, barometric pressure
 	FloatValues  []float64
 	StringValues []string
+	Clear        bool // only works for ImportAtomicRecord() at the moment.
+}
+
+// AtomicRecord applies all its Ivr and Ivr atomically, in a Tx.
+// The top level Shard has to agree with Ivr[i].Shard and the Iv[i].Shard
+// for all i included (in Ivr and Ir). The same goes for the top level Index: all records
+// have to be writes to the same Index. These requirements are checked.
+//
+type AtomicRecord struct {
+	Index string
+	Shard uint64
+
+	Ivr []*ImportValueRequest // BSI values
+	Ir  []*ImportRequest      // other field types, e.g. single bit
 }
 
 func (ivr *ImportValueRequest) Len() int           { return len(ivr.ColumnIDs) }
@@ -176,7 +191,7 @@ func (ivr *ImportValueRequest) ValidateWithTimestamp(indexCreatedAt, fieldCreate
 }
 
 // ImportColumnAttrsRequest describes the import request structure
-// for a ColumnAttr import
+// for a ColumnAttr import.
 type ImportColumnAttrsRequest struct {
 	AttrKey        string
 	ColumnIDs      []uint64
@@ -187,7 +202,7 @@ type ImportColumnAttrsRequest struct {
 }
 
 // ImportRequest describes the import request structure
-// for an import.
+// for an import.  BSIs use the ImportValueRequest instead.
 type ImportRequest struct {
 	Index          string
 	IndexCreatedAt int64
@@ -199,6 +214,7 @@ type ImportRequest struct {
 	RowKeys        []string
 	ColumnKeys     []string
 	Timestamps     []int64
+	Clear          bool // only works for ImportAtomicRecord() at the moment.
 }
 
 // ValidateWithTimestamp ensures that the payload of the request is valid.

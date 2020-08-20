@@ -38,7 +38,7 @@ type Protocol uint32
 
 const (
 	// ProtocolPostgres30 is version 3.0 of the Postgres wire protocol.
-	ProtocolPostgres30 Protocol = (3 << 16) | 0
+	ProtocolPostgres30 Protocol = (3 << 16)
 
 	// ProtocolCancel is the protocol used for query cancellation.
 	ProtocolCancel Protocol = (1234 << 16) | 5678

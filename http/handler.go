@@ -204,6 +204,7 @@ func (h *Handler) populateValidators() {
 	h.validators["PostField"] = queryValidationSpecRequired()
 	h.validators["DeleteField"] = queryValidationSpecRequired()
 	h.validators["PostImport"] = queryValidationSpecRequired().Optional("clear", "ignoreKeyCheck")
+	h.validators["PostImportAtomicRecord"] = queryValidationSpecRequired().Optional("simPowerLossAfter")
 	h.validators["PostImportRoaring"] = queryValidationSpecRequired().Optional("remote", "clear")
 	h.validators["PostQuery"] = queryValidationSpecRequired().Optional("shards", "columnAttrs", "excludeRowAttrs", "excludeColumns", "profile")
 	h.validators["GetInfo"] = queryValidationSpecRequired()
@@ -343,6 +344,7 @@ func newRouter(handler *Handler) *mux.Router {
 	router.Handle("/debug/vars", expvar.Handler()).Methods("GET")
 	router.Handle("/metrics", promhttp.Handler())
 	router.HandleFunc("/export", handler.handleGetExport).Methods("GET").Name("GetExport")
+	router.HandleFunc("/import-atomic-record", handler.handlePostImportAtomicRecord).Methods("POST").Name("PostImportAtomicRecord")
 	router.HandleFunc("/index", handler.handleGetIndexes).Methods("GET").Name("GetIndexes")
 	router.HandleFunc("/index", handler.handlePostIndex).Methods("POST").Name("PostIndex")
 	router.HandleFunc("/index/", handler.handlePostIndex).Methods("POST").Name("PostIndex")
@@ -2018,6 +2020,61 @@ func GetHTTPClient(t *tls.Config) *http.Client {
 		transport.TLSClientConfig = t
 	}
 	return &http.Client{Transport: transport}
+}
+
+// handlePostImportAtomicRecord handles /import-atomic-record requests
+func (h *Handler) handlePostImportAtomicRecord(w http.ResponseWriter, r *http.Request) {
+
+	// Verify that request is only communicating over protobufs.
+	if error, code := validateProtobufHeader(r); error != "" {
+		http.Error(w, error, code)
+		return
+	}
+
+	// Read entire body.
+	body, err := readBody(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	// Unmarshal request based on field type.
+
+	q := r.URL.Query()
+	sLoss := q.Get("simPowerLossAfter")
+	loss := 0
+	if sLoss != "" {
+		l, err := strconv.ParseInt(sLoss, 10, 64)
+		loss = int(l)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		}
+	}
+	opt := func(o *pilosa.ImportOptions) error {
+		o.SimPowerLossAfter = loss
+		return nil
+	}
+
+	req := &pilosa.AtomicRecord{}
+	if err := proto.DefaultSerializer.Unmarshal(body, req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if err := h.api.ImportAtomicRecord(r.Context(), req, opt); err != nil {
+		switch errors.Cause(err) {
+		case pilosa.ErrClusterDoesNotOwnShard, pilosa.ErrPreconditionFailed:
+			http.Error(w, err.Error(), http.StatusPreconditionFailed)
+		default:
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		return
+	}
+
+	// Write response.
+	_, err = w.Write(importOk)
+	if err != nil {
+		h.logger.Printf("writing import response: %v", err)
+	}
 }
 
 // handlePostImport handles /import requests.

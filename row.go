@@ -474,7 +474,7 @@ func (r *Row) MarshalJSON() ([]byte, error) {
 func (r *Row) Columns() []uint64 {
 	a := make([]uint64, 0, r.Count())
 	for i := range r.segments {
-		a = append(a, r.segments[i].Columns()...) // Accessing Tx memory that is now invalid.
+		a = append(a, r.segments[i].Columns()...)
 	}
 	return a
 }
