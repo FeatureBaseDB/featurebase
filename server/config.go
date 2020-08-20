@@ -167,6 +167,25 @@ type Config struct {
 		MutexFraction int `toml:"mutex-fraction"`
 	} `toml:"profile"`
 
+	Postgres struct {
+		// Addr is the address to which to bind a postgres endpoint.
+		// If this is empty, no endpoint will be created.
+		Addr string `toml:"addr"`
+		// TLS configuration for postgres connections.
+		TLS TLSConfig `toml:"tls"`
+
+		StartupTimeout toml.Duration `toml:"startup-timeout"`
+		ReadTimeout    toml.Duration `toml:"read-timeout"`
+		WriteTimeout   toml.Duration `toml:"write-timout"`
+
+		MaxStartupSize uint32 `toml:"max-startup-size"`
+
+		// ConnectionLimit is the maximum number of postgres connections to allow simultaneously.
+		// Setting this to 0 disables the limit.
+		// This mostly exists because other DBs seem to have it.
+		ConnectionLimit uint16 `toml:"max-connections"`
+	} `toml:"postgres"`
+
 	// Txsrc determines which Tx implementation the holder/Index will use; one
 	// of the available transactional-storage engines. Choices are listed
 	// in the string constants below. Should be one of
@@ -234,6 +253,13 @@ func NewConfig() *Config {
 
 	c.Profile.BlockRate = 10000000 // 1 sample per 10 ms
 	c.Profile.MutexFraction = 100  // 1% sampling
+
+	// Postgres config (off by default).
+	c.Postgres.MaxStartupSize = 8 * 1024 * 1024
+	c.Postgres.StartupTimeout = toml.Duration(5 * time.Second)
+	c.Postgres.ReadTimeout = toml.Duration(10 * time.Second)
+	c.Postgres.WriteTimeout = toml.Duration(10 * time.Second)
+	// we don't really need a connection limit
 
 	return c
 }

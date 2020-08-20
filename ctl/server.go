@@ -88,4 +88,7 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 
 	// Transactional storage engine
 	flags.StringVarP(&srv.Config.Txsrc, "tx", "", "", "transaction/storage to use: one of roaring, rbf, badger, rbf_roaring, roaring_rbf, badger_roaring, roaring_badger, badger_rbf, or rbf_badger (default roaring)")
+
+	// Postgres endpoint
+	flags.StringVar(&srv.Config.Postgres.Addr, "postgres.addr", "", "address to which to bind a postgres endpoint")
 }
