@@ -18,7 +18,6 @@ import (
 	"bufio"
 	"encoding/binary"
 	"errors"
-	"fmt"
 	"io"
 )
 
@@ -122,27 +121,4 @@ var _ Writer = (*WireWriter)(nil)
 // NewWireWriter returns a message writer that writes in postgres wire protocol format.
 func NewWireWriter(w *bufio.Writer) *WireWriter {
 	return &WireWriter{w: w}
-}
-
-type DumpWriter struct {
-	Writer
-	Out io.Writer
-}
-
-func (w *DumpWriter) WriteMessage(msg Message) error {
-	fmt.Fprintf(w.Out, "write type %s: %x %q\n", string(msg.Type), msg.Data, string(msg.Data))
-	return w.Writer.WriteMessage(msg)
-}
-
-type DumpReader struct {
-	Reader
-	Out io.Writer
-}
-
-func (r *DumpReader) ReadMessage() (Message, error) {
-	msg, err := r.Reader.ReadMessage()
-	if err == nil {
-		fmt.Fprintf(r.Out, "read type %s: %x %q\n", string(msg.Type), msg.Data, string(msg.Data))
-	}
-	return msg, err
 }
