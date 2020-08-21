@@ -2820,6 +2820,119 @@ type ExtractedTable struct {
 	Columns []ExtractedTableColumn `json:"columns"`
 }
 
+// ToRows implements the ToRowser interface.
+func (t ExtractedTable) ToRows(callback func(*pb.RowResponse) error) error {
+	if len(t.Columns) == 0 {
+		return nil
+	}
+
+	headers := make([]*pb.ColumnInfo, len(t.Fields)+1)
+	colType := "uint64"
+	if t.Columns[0].Column.Keyed {
+		colType = "string"
+	}
+	headers[0] = &pb.ColumnInfo{
+		Name:     "_id",
+		Datatype: colType,
+	}
+	dataHeaders := headers[1:]
+	for i, f := range t.Fields {
+		dataHeaders[i] = &pb.ColumnInfo{
+			Name:     f.Name,
+			Datatype: f.Type,
+		}
+	}
+
+	for _, c := range t.Columns {
+		cols := make([]*pb.ColumnResponse, len(c.Rows)+1)
+		if c.Column.Keyed {
+			cols[0] = &pb.ColumnResponse{
+				ColumnVal: &pb.ColumnResponse_StringVal{
+					StringVal: c.Column.Key,
+				},
+			}
+		} else {
+			cols[0] = &pb.ColumnResponse{
+				ColumnVal: &pb.ColumnResponse_Uint64Val{
+					Uint64Val: c.Column.ID,
+				},
+			}
+		}
+		valCols := cols[1:]
+		for i, r := range c.Rows {
+			var col *pb.ColumnResponse
+			switch r := r.(type) {
+			case bool:
+				col = &pb.ColumnResponse{
+					ColumnVal: &pb.ColumnResponse_BoolVal{
+						BoolVal: r,
+					},
+				}
+			case int64:
+				col = &pb.ColumnResponse{
+					ColumnVal: &pb.ColumnResponse_Int64Val{
+						Int64Val: r,
+					},
+				}
+			case uint64:
+				col = &pb.ColumnResponse{
+					ColumnVal: &pb.ColumnResponse_Uint64Val{
+						Uint64Val: r,
+					},
+				}
+			case string:
+				col = &pb.ColumnResponse{
+					ColumnVal: &pb.ColumnResponse_StringVal{
+						StringVal: r,
+					},
+				}
+			case []uint64:
+				col = &pb.ColumnResponse{
+					ColumnVal: &pb.ColumnResponse_Uint64ArrayVal{
+						Uint64ArrayVal: &pb.Uint64Array{
+							Vals: r,
+						},
+					},
+				}
+			case []string:
+				col = &pb.ColumnResponse{
+					ColumnVal: &pb.ColumnResponse_StringArrayVal{
+						StringArrayVal: &pb.StringArray{
+							Vals: r,
+						},
+					},
+				}
+			case pql.Decimal:
+				col = &pb.ColumnResponse{
+					ColumnVal: &pb.ColumnResponse_DecimalVal{
+						DecimalVal: &pb.Decimal{
+							Value: r.Value,
+							Scale: r.Scale,
+						},
+					},
+				}
+			default:
+				return errors.Errorf("unsupported field value: %v (type: %T)", r, r)
+			}
+			valCols[i] = col
+		}
+		err := callback(&pb.RowResponse{
+			Headers: headers,
+			Columns: cols,
+		})
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// ToTable converts the table to protobuf format.
+func (t ExtractedTable) ToTable() (*pb.TableResponse, error) {
+	return pb.RowsToTable(t, len(t.Columns))
+}
+
 type ExtractedIDColumn struct {
 	ColumnID uint64
 	Rows     [][]uint64
@@ -5019,15 +5132,17 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 				return nil, ErrFieldNotFound
 			}
 
-			typ := field.Type()
-
+			datatype, err := field.Datatype()
+			if err != nil {
+				return nil, errors.Wrapf(err, "field %s", v)
+			}
 			fields[i] = ExtractedTableField{
 				Name: v,
-				Type: typ,
+				Type: datatype,
 			}
 
 			var mapper fieldMapper
-			switch typ {
+			switch typ := field.Type(); typ {
 			case FieldTypeBool:
 				mapper = func(ids []uint64) (interface{}, error) {
 					switch len(ids) {
