@@ -1114,7 +1114,28 @@ func (api *API) ImportAtomicRecord(ctx context.Context, req *AtomicRecord, opts 
 	return tx.Commit()
 }
 
+// This is a hide your face ugly hack, forced upon
+// us by the horrible invention of function based options
+// by the usually brilliant Rob Pike. - JEA
+func addClearToImportOptions(opts []ImportOption) []ImportOption {
+	var opt ImportOptions
+	for _, o := range opts {
+		// check for side-effect of setting io.Clear; that is
+		// how we know it is present.
+		_ = o(&opt)
+		if opt.Clear {
+			// we already have the clear flag set, so nothing more to do.
+			return opts
+		}
+	}
+	// no clear flag being set, add that option now.
+	return append(opts, OptImportOptionsClear(true))
+}
+
 func (api *API) Import(ctx context.Context, req *ImportRequest, opts ...ImportOption) error {
+	if req.Clear {
+		opts = addClearToImportOptions(opts)
+	}
 	return api.ImportWithTx(ctx, nil, req, opts...)
 }
 
@@ -1254,6 +1275,9 @@ func (api *API) ImportWithTx(ctx context.Context, tx Tx, req *ImportRequest, opt
 }
 
 func (api *API) ImportValue(ctx context.Context, req *ImportValueRequest, opts ...ImportOption) error {
+	if req.Clear {
+		opts = addClearToImportOptions(opts)
+	}
 	return api.ImportValueWithTx(ctx, nil, req, opts...)
 }
 
