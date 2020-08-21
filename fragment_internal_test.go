@@ -29,6 +29,7 @@ import (
 	"runtime"
 	"runtime/debug"
 	"sort"
+	"strings"
 	"testing"
 	"testing/quick"
 
@@ -190,6 +191,8 @@ func TestFragment_RowcacheMap(t *testing.T) {
 
 // Ensure a fragment can clear a row.
 func TestFragment_ClearRow(t *testing.T) {
+	notBlueGreenTest(t)
+
 	f, idx := mustOpenFragment("i", "f", viewStandard, 0, "")
 	_ = idx
 	defer f.Clean(t)
@@ -225,6 +228,7 @@ func TestFragment_ClearRow(t *testing.T) {
 
 // Ensure a fragment can set a row.
 func TestFragment_SetRow(t *testing.T) {
+	notBlueGreenTest(t)
 	f, idx := mustOpenFragment("i", "f", viewStandard, 7, "")
 	_ = idx
 	defer f.Clean(t)
@@ -5642,5 +5646,14 @@ func TestFragment_Bug_Q2DoubleDelete(t *testing.T) {
 	res = f.mustRow(tx, 1).Columns()
 	if len(res) != 0 {
 		t.Fatalf("expected nothing got %v", res)
+	}
+}
+
+func notBlueGreenTest(t *testing.T) {
+	src := os.Getenv("PILOSA_TXSRC")
+	if strings.Contains(src, "_") {
+		if strings.Contains(src, "roaring") {
+			t.Skip("skip under blue green with roaring")
+		}
 	}
 }

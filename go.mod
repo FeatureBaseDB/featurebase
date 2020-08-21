@@ -44,6 +44,7 @@ require (
 	google.golang.org/grpc v1.28.0
 	modernc.org/mathutil v1.0.0
 	modernc.org/strutil v1.0.0
+	vitess.io/vitess v3.0.0-rc.3.0.20190602171040-12bfde34629c+incompatible
 )
 
 go 1.13
