@@ -59,7 +59,10 @@ func queryBalances(m0api *pilosa.API, acctOwnerID uint64, fldAcct0, fldAcct1, in
 	return
 }
 func skipForRoaring(t *testing.T) {
-	if strings.Contains(os.Getenv("PILOSA_TXSRC"), "roaring") {
+	src := os.Getenv("PILOSA_TXSRC")
+	// once txfactory.go DefaultTxsrc != RoaringTxn, this
+	// will break, of course. Take out the src == "" below.
+	if src == "" || strings.Contains(src, "roaring") {
 		t.Skip("skip if roaring pseudo-txn involved -- won't show transactional rollback")
 	}
 }
