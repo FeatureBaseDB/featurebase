@@ -1275,6 +1275,7 @@ func getTestBitmapAsRawRoaring(bitsToSet ...uint64) []byte {
 	return buf.Bytes()
 }
 
+/*
 func TestBadger_AutoCommit(t *testing.T) {
 
 	// setup
@@ -1330,6 +1331,7 @@ func TestBadger_BigWritesAvoidTxnTooLargeWithAutoCommit(t *testing.T) {
 	err := tx.Commit()
 	panicOn(err)
 }
+*/
 
 func TestBadger_DeleteIndex(t *testing.T) {
 
@@ -1394,7 +1396,7 @@ func TestBadger_DeleteIndex(t *testing.T) {
 }
 
 func TestBadger_DeleteIndex_over100k(t *testing.T) {
-
+	t.Skip("test big and long running, skip")
 	// setup
 	dbwrap, clean := mustOpenEmptyBadgerWrapper("TestBadger_DeleteIndex_over100k")
 	defer clean()

@@ -102,11 +102,8 @@ func mustOpenEmptyLMDBWrapper(path string) (w *LMDBWrapper, cleaner func()) {
 	}
 
 	return w, func() {
-		w.Close() // stop any started background GC goroutine.
-		os.RemoveAll(fn)
-		if FileExists(fn + "-lock") {
-			os.RemoveAll(fn)
-		}
+		w.Close()
+		panicOn(w.DeleteDBPath(fn))
 	}
 }
 

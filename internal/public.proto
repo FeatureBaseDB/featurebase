@@ -175,6 +175,7 @@ message ImportRequest {
 	repeated int64 Timestamps = 6;
 	int64 IndexCreatedAt = 9;
 	int64 FieldCreatedAt = 10;
+	bool Clear = 11;	
 }
 
 message ImportValueRequest {
@@ -188,6 +189,14 @@ message ImportValueRequest {
 	repeated string StringValues = 9;
 	int64 IndexCreatedAt = 10;
 	int64 FieldCreatedAt = 11;
+	bool Clear = 12;
+}
+
+message AtomicRecord {
+	string Index = 1;
+	uint64 Shard = 2;
+	repeated ImportValueRequest Ivr = 3;
+	repeated ImportRequest Ir = 4;
 }
 
 message TranslateKeysRequest {
