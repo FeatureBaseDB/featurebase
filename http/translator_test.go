@@ -227,7 +227,7 @@ func BenchmarkReadEntryWithMutex(b *testing.B) {
 	for n := 0; n < b.N; n++ {
 		r, err := http.GetOpenTranslateReaderWithLockerFunc(nil, &sync.Mutex{})(ctx, url, offset)
 		if err != nil {
-			b.Fatalf("openining translate reader: %+v", err)
+			b.Fatalf("opening translate reader: %+v", err)
 		}
 		benchmarkReadEntry(b, r, key, nkeys)
 		r.Close()
