@@ -19,6 +19,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"strconv"
 	"strings"
@@ -50,7 +51,8 @@ func NewPostgresServer(api *pilosa.API, logger logger.Logger, tls *tls.Config) *
 		s: pg.Server{
 			QueryHandler: &queryDecodeHandler{
 				child: &pilosaQueryHandler{
-					api: api,
+					api:    api,
+					logger: logger,
 				},
 			},
 			TypeEngine:     pg.PrimitiveTypeEngine{},
@@ -125,7 +127,8 @@ func pgDecodePQL(str string) (q pg.Query, err error) {
 }
 
 type pilosaQueryHandler struct {
-	api *pilosa.API
+	api    *pilosa.API
+	logger logger.Logger
 }
 
 func pgWriteRow(w pg.QueryResultWriter, row *pilosa.Row) error {
@@ -342,6 +345,28 @@ func pgWriteRowser(w pg.QueryResultWriter, result pb.ToRowser) error {
 	})
 }
 
+type clientRowser struct {
+	pb.StreamClient
+}
+
+func (cr *clientRowser) ToRows(f func(*pb.RowResponse) error) error {
+	for {
+		resp, err := cr.StreamClient.Recv()
+		if err != nil {
+			if err == io.EOF {
+				return nil
+			}
+
+			return err
+		}
+
+		err = f(resp)
+		if err != nil {
+			return err
+		}
+	}
+}
+
 func pgWriteResult(w pg.QueryResultWriter, result interface{}) error {
 	switch result := result.(type) {
 	case *pilosa.Row:
@@ -354,6 +379,8 @@ func pgWriteResult(w pg.QueryResultWriter, result interface{}) error {
 		return pgWriteGroupCount(w, result)
 	case pb.ToRowser: // we should avoid protobuf where we can...
 		return pgWriteRowser(w, result)
+	case pb.StreamClient:
+		return pgWriteRowser(w, &clientRowser{result})
 	default:
 		return errors.Errorf("result type %T not yet supported", result)
 	}
@@ -373,6 +400,13 @@ func (pqh *pilosaQueryHandler) HandleQuery(ctx context.Context, w pg.QueryResult
 			return errors.Errorf("expected 1 query result but found %d", len(resp.Results))
 		}
 		return errors.Wrap(pgWriteResult(w, resp.Results[0]), "writing query result")
+
+	case pg.SimpleQuery:
+		resp, err := execSQL(ctx, pqh.api, pqh.logger, string(q))
+		if err != nil {
+			return errors.Wrap(err, "executing query")
+		}
+		return errors.Wrap(pgWriteResult(w, resp), "writing query result")
 
 	default:
 		return errors.Errorf("query type %T not yet supported (query: %s)", q, q)
