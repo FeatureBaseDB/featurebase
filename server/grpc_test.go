@@ -686,7 +686,6 @@ func TestQuerySQLUnary(t *testing.T) {
 			},
 			eq: equalUnordered,
 		},
-
 		{
 			// GroupBy(Rows(field='age'),limit=3)
 			sql: "select age, count(*) as cnt from grouper group by age order by cnt desc, age desc limit 3",
@@ -699,6 +698,35 @@ func TestQuerySQLUnary(t *testing.T) {
 					{[]columnResponse{int64(16), uint64(4)}},
 					{[]columnResponse{int64(27), uint64(3)}},
 					{[]columnResponse{int64(19), uint64(1)}},
+				},
+			},
+			eq: equal,
+		},
+		{
+			sql: "show tables",
+			exp: tableResponse{
+				headers: []columnInfo{
+					{"Table", "string"},
+				},
+				rows: []row{
+					{[]columnResponse{"grouper"}},
+					{[]columnResponse{"joiner"}},
+				},
+			},
+			eq: equal,
+		},
+		{
+			sql: "show fields from grouper",
+			exp: tableResponse{
+				headers: []columnInfo{
+					{"Field", "string"},
+					{"Type", "string"},
+				},
+				rows: []row{
+					{[]columnResponse{"age", "int64"}},
+					{[]columnResponse{"color", "[]string"}},
+					{[]columnResponse{"height", "int64"}},
+					{[]columnResponse{"score", "int64"}},
 				},
 			},
 			eq: equal,

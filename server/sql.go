@@ -41,6 +41,12 @@ func execSQL(ctx context.Context, api *pilosa.API, logger logger.Logger, querySt
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to start SQL query")
 		}
+	case sql.SQLTypeShow:
+		handler := sql.NewShowHandler(api)
+		results, err = handler.Handle(ctx, query)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to start SQL query")
+		}
 	default:
 		return nil, status.Errorf(codes.Unimplemented, "query type not supported")
 	}

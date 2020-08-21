@@ -42,7 +42,11 @@ func NewSelectHandler(api *pilosa.API) *SelectHandler {
 
 // Handle executes mapped SQL
 func (s *SelectHandler) Handle(ctx context.Context, mapped *MappedSQL) (pproto.StreamClient, error) {
-	mr, err := s.mapSelect(ctx, mapped.Statement.(*sqlparser.Select), mapped.Mask)
+	stmt, ok := mapped.Statement.(*sqlparser.Select)
+	if !ok {
+		return nil, fmt.Errorf("statement is not type select: %T", mapped.Statement)
+	}
+	mr, err := s.mapSelect(ctx, stmt, mapped.Mask)
 	if err != nil {
 		return nil, errors.Wrap(err, "mapping select")
 	}
@@ -70,12 +74,11 @@ func (s *SelectHandler) mapSelect(ctx context.Context, selectStmt *sqlparser.Sel
 	return mr, nil
 }
 
-func (s *SelectHandler) execMappingResult(ctx context.Context, mr *MappingResult) (stream pproto.StreamClient, err error) {
+func (s *SelectHandler) execMappingResult(ctx context.Context, mr *MappingResult) (pproto.StreamClient, error) {
 	if mr.Query == "" {
 		return nil, errors.New("no pql query created")
 	}
 
-	fmt.Println("PQL:", mr.Query)
 	resp, err := s.api.Query(ctx, &pilosa.QueryRequest{Index: mr.IndexName, Query: mr.Query})
 	if err != nil {
 		return nil, errors.Wrap(err, "doing pql query")
