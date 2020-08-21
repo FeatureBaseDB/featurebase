@@ -17,6 +17,7 @@ package http_test
 import (
 	"context"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -150,4 +151,85 @@ func TestTranslateStore_EntryReader(t *testing.T) {
 			}
 		})
 	*/
+}
+
+func benchmarkSetup(b *testing.B, ctx context.Context, key string, nkeys int) (string, pilosa.TranslateOffsetMap, func()) {
+	b.Helper()
+
+	cluster := test.MustRunCluster(b, 1)
+	primary := cluster[0]
+
+	idx := primary.MustCreateIndex(b, "i", pilosa.IndexOptions{})
+	fld := primary.MustCreateField(b, idx.Name(), "f", pilosa.OptFieldKeys())
+	offset := make(pilosa.TranslateOffsetMap)
+	offset.SetIndexPartitionOffset(idx.Name(), 0, 1)
+	offset.SetFieldOffset(idx.Name(), fld.Name(), 1)
+
+	// Set data on the primary node.
+	for k := 0; k < nkeys; k++ {
+		if _, err := primary.API.Query(ctx, &pilosa.QueryRequest{
+			Index: idx.Name(),
+			Query: fmt.Sprintf(`Set(%d, %s="%s%[1]d")`, k, fld.Name(), key),
+		}); err != nil {
+			b.Fatalf("quering api: %+v", err)
+		}
+	}
+
+	return primary.URL(), offset, func() {
+		b.Helper()
+
+		if err := primary.API.DeleteIndex(ctx, idx.Name()); err != nil {
+			panic(err)
+		}
+		if err := cluster.Close(); err != nil {
+			panic(err)
+		}
+	}
+}
+
+func benchmarkReadEntry(b *testing.B, r pilosa.TranslateEntryReader, key string, nkeys int) {
+	var entry pilosa.TranslateEntry
+	for k := 0; k < nkeys; k++ {
+		if err := r.ReadEntry(&entry); err != nil {
+			b.Fatalf("reading entry: %+v", err)
+		}
+		if entry.Key != fmt.Sprintf("%s%d", key, k) {
+			b.Fatalf("got: %s, expected: %s%d", entry.Key, key, k)
+		}
+	}
+}
+
+const (
+	key   = "foo"
+	nkeys = 1000
+)
+
+func BenchmarkReadEntryNoMutex(b *testing.B) {
+	ctx := context.Background()
+	url, offset, teardown := benchmarkSetup(b, ctx, key, nkeys)
+	defer teardown()
+
+	for n := 0; n < b.N; n++ {
+		r, err := http.GetOpenTranslateReaderFunc(nil)(ctx, url, offset)
+		if err != nil {
+			b.Fatalf("opening translate reader: %+v", err)
+		}
+		benchmarkReadEntry(b, r, key, nkeys)
+		r.Close()
+	}
+}
+
+func BenchmarkReadEntryWithMutex(b *testing.B) {
+	ctx := context.Background()
+	url, offset, teardown := benchmarkSetup(b, ctx, key, nkeys)
+	defer teardown()
+
+	for n := 0; n < b.N; n++ {
+		r, err := http.GetOpenTranslateReaderWithLockerFunc(nil, &sync.Mutex{})(ctx, url, offset)
+		if err != nil {
+			b.Fatalf("opening translate reader: %+v", err)
+		}
+		benchmarkReadEntry(b, r, key, nkeys)
+		r.Close()
+	}
 }
