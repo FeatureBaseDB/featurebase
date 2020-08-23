@@ -20,6 +20,7 @@ require (
 	github.com/gorilla/handlers v1.3.0
 	github.com/gorilla/mux v1.7.0
 	github.com/hashicorp/memberlist v0.1.3
+	github.com/lib/pq v1.8.0
 	github.com/opentracing/opentracing-go v1.1.0
 	github.com/pelletier/go-toml v1.2.0
 	github.com/pkg/errors v0.8.1
@@ -43,6 +44,7 @@ require (
 	google.golang.org/grpc v1.28.0
 	modernc.org/mathutil v1.0.0
 	modernc.org/strutil v1.0.0
+	vitess.io/vitess v3.0.0-rc.3.0.20190602171040-12bfde34629c+incompatible
 )
 
 go 1.13

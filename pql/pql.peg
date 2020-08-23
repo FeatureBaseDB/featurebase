@@ -14,8 +14,8 @@ Call <-  'Set' {p.startCall("Set")} open col comma dargs (comma timestamp)? clos
        / 'Store' {p.startCall("Store")} open Call comma darg close {p.endCall()}
        / 'TopN' {p.startCall("TopN")} open posfield (comma allargs)? close {p.endCall()}
        / 'Rows' {p.startCall("Rows")} open posfield (comma allargs)? close {p.endCall()}
-       / 'Range' {p.startCall("Range")} open field sp '=' sp fvalue comma 'from='? {p.addField("from")} timestampfmt {p.addVal(buffer[begin:end])} comma 'to='? sp {p.addField("to")} timestampfmt {p.addVal(buffer[begin:end])} close {p.endCall()}
-       / < IDENT > { p.startCall(buffer[begin:end] ) } open allargs comma? close { p.endCall() }
+       / 'Range' {p.startCall("Range")} open field sp '=' sp fvalue comma 'from='? {p.addField("from")} timestampfmt {p.addVal(text)} comma 'to='? sp {p.addField("to")} timestampfmt {p.addVal(text)} close {p.endCall()}
+       / < IDENT > { p.startCall(text ) } open allargs comma? close { p.endCall() }
 allargs <- Call (comma Call)* (comma dargs)? / dargs / sp
 fargs <- farg (comma fargs)? sp
 farg <- ( field sp '=' sp fvalue
@@ -37,9 +37,9 @@ COND <- ( '><' { p.addBTWN() }
         )
 
 conditional <- {p.startConditional()} condint condLT condfield condLT condint {p.endConditional()}
-condint <- < '-'? [0-9]* '.' [0-9]+ / '0' / '-'? [1-9] [0-9]* > sp {p.condAdd(buffer[begin:end])}
-condLT <- <('<=' / '<')> sp {p.condAdd(buffer[begin:end])}
-condfield <- <fieldExpr> sp {p.condAdd(buffer[begin:end])}
+condint <- < '-'? [0-9]* '.' [0-9]+ / '0' / '-'? [1-9] [0-9]* > sp {p.condAdd(text)}
+condLT <- <('<=' / '<')> sp {p.condAdd(text)}
+condfield <- <fieldExpr> sp {p.condAdd(text)}
 
 dvalue <- ( ditem
          / lbrack { p.startList() } dlist rbrack { p.endList() }
@@ -60,35 +60,35 @@ fitem <- ( itema
 itema <- ( 'null' &(comma / sp close) { p.addVal(nil) }
          / 'true' &(comma / sp close) { p.addVal(true) }
          / 'false' &(comma / sp close) { p.addVal(false) }
-         / timestampfmt { p.addVal(buffer[begin:end]) }
+         / timestampfmt { p.addVal(text) }
          )
-itemb <- ( < IDENT > { p.startCall(buffer[begin:end]) } open allargs comma? close { p.addVal(p.endCall()) }
-         / < ([[A-Z]] / [0-9] / '-' / '_' / ':')+ > { p.addVal(buffer[begin:end]) }
-         / < '"'  doublequotedstring '"' > { p.addVal(buffer[begin:end]) }
-         / < '\''  singlequotedstring  '\'' > { p.addVal(buffer[begin:end]) }
+itemb <- ( < IDENT > { p.startCall(text) } open allargs comma? close { p.addVal(p.endCall()) }
+         / < ([[A-Z]] / [0-9] / '-' / '_' / ':')+ > { p.addVal(text) }
+         / < '"'  doublequotedstring '"' > { p.addVal(text) }
+         / < '\''  singlequotedstring  '\'' > { p.addVal(text) }
          )
-float <- ( < '-'? [0-9]+ ('.'[0-9]*)? > { p.addNumVal(buffer[begin:end], true) }
-         / < '-'? '.'[0-9]+ > { p.addNumVal(buffer[begin:end], true) }
+float <- ( < '-'? [0-9]+ ('.'[0-9]*)? > { p.addNumVal(text, true) }
+         / < '-'? '.'[0-9]+ > { p.addNumVal(text, true) }
          )
-decimal <- ( < '-'? [0-9]+ ('.'[0-9]*)? > { p.addNumVal(buffer[begin:end], false) }
-           / < '-'? '.'[0-9]+ > { p.addNumVal(buffer[begin:end], false) }
+decimal <- ( < '-'? [0-9]+ ('.'[0-9]*)? > { p.addNumVal(text, false) }
+           / < '-'? '.'[0-9]+ > { p.addNumVal(text, false) }
            )
 
 doublequotedstring <- ( '\\"' / '\\\\' / '\\n' / '\\t' / [^"\\] )*
 singlequotedstring <- ( '\\\'' / '\\\\' / '\\n' / '\\t' /  [^'\\] )*
 
 fieldExpr <- ( [[A-Z]] / '_' ) ( [[A-Z]] / [0-9] / '_' / '-' )*
-field <- <fieldExpr / reserved> { p.addField(buffer[begin:end]) }
+field <- <fieldExpr / reserved> { p.addField(text) }
 reserved <- ('_row' / '_col' / '_start' / '_end' / '_timestamp' / '_field')
-posfield <- <fieldExpr> { p.addPosStr("_field", buffer[begin:end]) }
+posfield <- <fieldExpr> { p.addPosStr("_field", text) }
 uint <- [1-9] [0-9]* / '0'
-col <- ( <uint> {p.addPosNum("_col", buffer[begin:end])}
-        / < '\'' singlequotedstring '\'' > {p.addPosStr("_col", buffer[begin:end])}
-        / < '"' doublequotedstring '"' > {p.addPosStr("_col", buffer[begin:end])}
+col <- ( <uint> {p.addPosNum("_col", text)}
+        / < '\'' singlequotedstring '\'' > {p.addPosStr("_col", text)}
+        / < '"' doublequotedstring '"' > {p.addPosStr("_col", text)}
         )
-row <- ( <uint> {p.addPosNum("_row", buffer[begin:end])}
-        / < '\'' singlequotedstring '\'' > {p.addPosStr("_row", buffer[begin:end])}
-        / < '"' doublequotedstring '"' > {p.addPosStr("_row", buffer[begin:end])}
+row <- ( <uint> {p.addPosNum("_row", text)}
+        / < '\'' singlequotedstring '\'' > {p.addPosStr("_row", text)}
+        / < '"' doublequotedstring '"' > {p.addPosStr("_row", text)}
         )
 
 open <- '(' sp
@@ -102,4 +102,4 @@ IDENT <- [[A-Z]] ([[A-Z]] / [0-9])*
 
 timestampbasicfmt <- [0-9][0-9][0-9][0-9]'-'[01][0-9]'-'[0-3][0-9]'T'[0-9][0-9]':'[0-9][0-9]
 timestampfmt <- '"' <timestampbasicfmt> '"' / '\'' <timestampbasicfmt> '\'' / <timestampbasicfmt>
-timestamp <- <timestampfmt> {p.addPosStr("_timestamp", buffer[begin:end])}
+timestamp <- <timestampfmt> {p.addPosStr("_timestamp", text)}

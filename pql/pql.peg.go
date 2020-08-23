@@ -4,8 +4,7 @@ package pql
 
 import (
 	"fmt"
-	"io"
-	"os"
+	"math"
 	"sort"
 	"strconv"
 )
@@ -245,19 +244,19 @@ type node32 struct {
 	up, next *node32
 }
 
-func (node *node32) print(w io.Writer, pretty bool, buffer string) {
+func (node *node32) print(pretty bool, buffer string) {
 	var print func(node *node32, depth int)
 	print = func(node *node32, depth int) {
 		for node != nil {
 			for c := 0; c < depth; c++ {
-				fmt.Fprintf(w, " ")
+				fmt.Printf(" ")
 			}
 			rule := rul3s[node.pegRule]
 			quote := strconv.Quote(string(([]rune(buffer)[node.begin:node.end])))
 			if !pretty {
-				fmt.Fprintf(w, "%v %v\n", rule, quote)
+				fmt.Printf("%v %v\n", rule, quote)
 			} else {
-				fmt.Fprintf(w, "\x1B[34m%v\x1B[m %v\n", rule, quote)
+				fmt.Printf("\x1B[34m%v\x1B[m %v\n", rule, quote)
 			}
 			if node.up != nil {
 				print(node.up, depth+1)
@@ -268,12 +267,12 @@ func (node *node32) print(w io.Writer, pretty bool, buffer string) {
 	print(node, 0)
 }
 
-func (node *node32) Print(w io.Writer, buffer string) {
-	node.print(w, false, buffer)
+func (node *node32) Print(buffer string) {
+	node.print(false, buffer)
 }
 
-func (node *node32) PrettyPrint(w io.Writer, buffer string) {
-	node.print(w, true, buffer)
+func (node *node32) PrettyPrint(buffer string) {
+	node.print(true, buffer)
 }
 
 type tokens32 struct {
@@ -316,24 +315,24 @@ func (t *tokens32) AST() *node32 {
 }
 
 func (t *tokens32) PrintSyntaxTree(buffer string) {
-	t.AST().Print(os.Stdout, buffer)
-}
-
-func (t *tokens32) WriteSyntaxTree(w io.Writer, buffer string) {
-	t.AST().Print(w, buffer)
+	t.AST().Print(buffer)
 }
 
 func (t *tokens32) PrettyPrintSyntaxTree(buffer string) {
-	t.AST().PrettyPrint(os.Stdout, buffer)
+	t.AST().PrettyPrint(buffer)
 }
 
 func (t *tokens32) Add(rule pegRule, begin, end, index uint32) {
-	tree, i := t.tree, int(index)
-	if i >= len(tree) {
-		t.tree = append(tree, token32{pegRule: rule, begin: begin, end: end})
-		return
+	if tree := t.tree; int(index) >= len(tree) {
+		expanded := make([]token32, 2*len(tree))
+		copy(expanded, tree)
+		t.tree = expanded
 	}
-	tree[i] = token32{pegRule: rule, begin: begin, end: end}
+	t.tree[index] = token32{
+		pegRule: rule,
+		begin:   begin,
+		end:     end,
+	}
 }
 
 func (t *tokens32) Tokens() []token32 {
@@ -397,7 +396,7 @@ type parseError struct {
 }
 
 func (e *parseError) Error() string {
-	tokens, err := []token32{e.max}, "\n"
+	tokens, error := []token32{e.max}, "\n"
 	positions, p := make([]int, 2*len(tokens)), 0
 	for _, token := range tokens {
 		positions[p], p = int(token.begin), p+1
@@ -410,14 +409,14 @@ func (e *parseError) Error() string {
 	}
 	for _, token := range tokens {
 		begin, end := int(token.begin), int(token.end)
-		err += fmt.Sprintf(format,
+		error += fmt.Sprintf(format,
 			rul3s[token.pegRule],
 			translations[begin].line, translations[begin].symbol,
 			translations[end].line, translations[end].symbol,
 			strconv.Quote(string(e.p.buffer[begin:end])))
 	}
 
-	return err
+	return error
 }
 
 func (p *PQL) PrintSyntaxTree() {
@@ -426,10 +425,6 @@ func (p *PQL) PrintSyntaxTree() {
 	} else {
 		p.tokens32.PrintSyntaxTree(p.Buffer)
 	}
-}
-
-func (p *PQL) WriteSyntaxTree(w io.Writer) {
-	p.tokens32.WriteSyntaxTree(w, p.Buffer)
 }
 
 func (p *PQL) Execute() {
@@ -478,15 +473,15 @@ func (p *PQL) Execute() {
 		case ruleAction17:
 			p.addField("from")
 		case ruleAction18:
-			p.addVal(buffer[begin:end])
+			p.addVal(text)
 		case ruleAction19:
 			p.addField("to")
 		case ruleAction20:
-			p.addVal(buffer[begin:end])
+			p.addVal(text)
 		case ruleAction21:
 			p.endCall()
 		case ruleAction22:
-			p.startCall(buffer[begin:end])
+			p.startCall(text)
 		case ruleAction23:
 			p.endCall()
 		case ruleAction24:
@@ -508,11 +503,11 @@ func (p *PQL) Execute() {
 		case ruleAction32:
 			p.endConditional()
 		case ruleAction33:
-			p.condAdd(buffer[begin:end])
+			p.condAdd(text)
 		case ruleAction34:
-			p.condAdd(buffer[begin:end])
+			p.condAdd(text)
 		case ruleAction35:
-			p.condAdd(buffer[begin:end])
+			p.condAdd(text)
 		case ruleAction36:
 			p.startList()
 		case ruleAction37:
@@ -528,74 +523,55 @@ func (p *PQL) Execute() {
 		case ruleAction42:
 			p.addVal(false)
 		case ruleAction43:
-			p.addVal(buffer[begin:end])
+			p.addVal(text)
 		case ruleAction44:
-			p.startCall(buffer[begin:end])
+			p.startCall(text)
 		case ruleAction45:
 			p.addVal(p.endCall())
 		case ruleAction46:
-			p.addVal(buffer[begin:end])
+			p.addVal(text)
 		case ruleAction47:
-			p.addVal(buffer[begin:end])
+			p.addVal(text)
 		case ruleAction48:
-			p.addVal(buffer[begin:end])
+			p.addVal(text)
 		case ruleAction49:
-			p.addNumVal(buffer[begin:end], true)
+			p.addNumVal(text, true)
 		case ruleAction50:
-			p.addNumVal(buffer[begin:end], true)
+			p.addNumVal(text, true)
 		case ruleAction51:
-			p.addNumVal(buffer[begin:end], false)
+			p.addNumVal(text, false)
 		case ruleAction52:
-			p.addNumVal(buffer[begin:end], false)
+			p.addNumVal(text, false)
 		case ruleAction53:
-			p.addField(buffer[begin:end])
+			p.addField(text)
 		case ruleAction54:
-			p.addPosStr("_field", buffer[begin:end])
+			p.addPosStr("_field", text)
 		case ruleAction55:
-			p.addPosNum("_col", buffer[begin:end])
+			p.addPosNum("_col", text)
 		case ruleAction56:
-			p.addPosStr("_col", buffer[begin:end])
+			p.addPosStr("_col", text)
 		case ruleAction57:
-			p.addPosStr("_col", buffer[begin:end])
+			p.addPosStr("_col", text)
 		case ruleAction58:
-			p.addPosNum("_row", buffer[begin:end])
+			p.addPosNum("_row", text)
 		case ruleAction59:
-			p.addPosStr("_row", buffer[begin:end])
+			p.addPosStr("_row", text)
 		case ruleAction60:
-			p.addPosStr("_row", buffer[begin:end])
+			p.addPosStr("_row", text)
 		case ruleAction61:
-			p.addPosStr("_timestamp", buffer[begin:end])
+			p.addPosStr("_timestamp", text)
 
 		}
 	}
 	_, _, _, _, _ = buffer, _buffer, text, begin, end
 }
 
-func Pretty(pretty bool) func(*PQL) error {
-	return func(p *PQL) error {
-		p.Pretty = pretty
-		return nil
-	}
-}
-
-func Size(size int) func(*PQL) error {
-	return func(p *PQL) error {
-		p.tokens32 = tokens32{tree: make([]token32, 0, size)}
-		return nil
-	}
-}
-func (p *PQL) Init(options ...func(*PQL) error) error {
+func (p *PQL) Init() {
 	var (
 		max                  token32
 		position, tokenIndex uint32
 		buffer               []rune
 	)
-	for _, option := range options {
-		err := option(p)
-		if err != nil {
-			return err
-		}
-	}
 	p.reset = func() {
 		max = token32{}
 		position, tokenIndex = 0, 0
@@ -609,7 +585,7 @@ func (p *PQL) Init(options ...func(*PQL) error) error {
 	p.reset()
 
 	_rules := p.rules
-	tree := p.tokens32
+	tree := tokens32{tree: make([]token32, math.MaxInt16)}
 	p.parse = func(rule ...int) error {
 		r := 1
 		if len(rule) > 0 {
@@ -3578,16 +3554,16 @@ func (p *PQL) Init(options ...func(*PQL) error) error {
 		nil,
 		/* 59 Action17 <- <{p.addField("from")}> */
 		nil,
-		/* 60 Action18 <- <{p.addVal(buffer[begin:end])}> */
+		/* 60 Action18 <- <{p.addVal(text)}> */
 		nil,
 		/* 61 Action19 <- <{p.addField("to")}> */
 		nil,
-		/* 62 Action20 <- <{p.addVal(buffer[begin:end])}> */
+		/* 62 Action20 <- <{p.addVal(text)}> */
 		nil,
 		/* 63 Action21 <- <{p.endCall()}> */
 		nil,
 		nil,
-		/* 65 Action22 <- <{ p.startCall(buffer[begin:end] ) }> */
+		/* 65 Action22 <- <{ p.startCall(text ) }> */
 		nil,
 		/* 66 Action23 <- <{ p.endCall() }> */
 		nil,
@@ -3609,11 +3585,11 @@ func (p *PQL) Init(options ...func(*PQL) error) error {
 		nil,
 		/* 75 Action32 <- <{p.endConditional()}> */
 		nil,
-		/* 76 Action33 <- <{p.condAdd(buffer[begin:end])}> */
+		/* 76 Action33 <- <{p.condAdd(text)}> */
 		nil,
-		/* 77 Action34 <- <{p.condAdd(buffer[begin:end])}> */
+		/* 77 Action34 <- <{p.condAdd(text)}> */
 		nil,
-		/* 78 Action35 <- <{p.condAdd(buffer[begin:end])}> */
+		/* 78 Action35 <- <{p.condAdd(text)}> */
 		nil,
 		/* 79 Action36 <- <{ p.startList() }> */
 		nil,
@@ -3629,45 +3605,44 @@ func (p *PQL) Init(options ...func(*PQL) error) error {
 		nil,
 		/* 85 Action42 <- <{ p.addVal(false) }> */
 		nil,
-		/* 86 Action43 <- <{ p.addVal(buffer[begin:end]) }> */
+		/* 86 Action43 <- <{ p.addVal(text) }> */
 		nil,
-		/* 87 Action44 <- <{ p.startCall(buffer[begin:end]) }> */
+		/* 87 Action44 <- <{ p.startCall(text) }> */
 		nil,
 		/* 88 Action45 <- <{ p.addVal(p.endCall()) }> */
 		nil,
-		/* 89 Action46 <- <{ p.addVal(buffer[begin:end]) }> */
+		/* 89 Action46 <- <{ p.addVal(text) }> */
 		nil,
-		/* 90 Action47 <- <{ p.addVal(buffer[begin:end]) }> */
+		/* 90 Action47 <- <{ p.addVal(text) }> */
 		nil,
-		/* 91 Action48 <- <{ p.addVal(buffer[begin:end]) }> */
+		/* 91 Action48 <- <{ p.addVal(text) }> */
 		nil,
-		/* 92 Action49 <- <{ p.addNumVal(buffer[begin:end], true) }> */
+		/* 92 Action49 <- <{ p.addNumVal(text, true) }> */
 		nil,
-		/* 93 Action50 <- <{ p.addNumVal(buffer[begin:end], true) }> */
+		/* 93 Action50 <- <{ p.addNumVal(text, true) }> */
 		nil,
-		/* 94 Action51 <- <{ p.addNumVal(buffer[begin:end], false) }> */
+		/* 94 Action51 <- <{ p.addNumVal(text, false) }> */
 		nil,
-		/* 95 Action52 <- <{ p.addNumVal(buffer[begin:end], false) }> */
+		/* 95 Action52 <- <{ p.addNumVal(text, false) }> */
 		nil,
-		/* 96 Action53 <- <{ p.addField(buffer[begin:end]) }> */
+		/* 96 Action53 <- <{ p.addField(text) }> */
 		nil,
-		/* 97 Action54 <- <{ p.addPosStr("_field", buffer[begin:end]) }> */
+		/* 97 Action54 <- <{ p.addPosStr("_field", text) }> */
 		nil,
-		/* 98 Action55 <- <{p.addPosNum("_col", buffer[begin:end])}> */
+		/* 98 Action55 <- <{p.addPosNum("_col", text)}> */
 		nil,
-		/* 99 Action56 <- <{p.addPosStr("_col", buffer[begin:end])}> */
+		/* 99 Action56 <- <{p.addPosStr("_col", text)}> */
 		nil,
-		/* 100 Action57 <- <{p.addPosStr("_col", buffer[begin:end])}> */
+		/* 100 Action57 <- <{p.addPosStr("_col", text)}> */
 		nil,
-		/* 101 Action58 <- <{p.addPosNum("_row", buffer[begin:end])}> */
+		/* 101 Action58 <- <{p.addPosNum("_row", text)}> */
 		nil,
-		/* 102 Action59 <- <{p.addPosStr("_row", buffer[begin:end])}> */
+		/* 102 Action59 <- <{p.addPosStr("_row", text)}> */
 		nil,
-		/* 103 Action60 <- <{p.addPosStr("_row", buffer[begin:end])}> */
+		/* 103 Action60 <- <{p.addPosStr("_row", text)}> */
 		nil,
-		/* 104 Action61 <- <{p.addPosStr("_timestamp", buffer[begin:end])}> */
+		/* 104 Action61 <- <{p.addPosStr("_timestamp", text)}> */
 		nil,
 	}
 	p.rules = _rules
-	return nil
 }

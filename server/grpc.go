@@ -18,6 +18,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"io"
 	"net"
 	"strings"
 	"time"
@@ -117,9 +118,32 @@ func (h *GRPCHandler) DeleteVDS(ctx context.Context, req *pb.DeleteVDSRequest) (
 	return &pb.DeleteVDSResponse{}, nil
 }
 
+func (h *GRPCHandler) execSQL(ctx context.Context, queryStr string) (pb.StreamClient, error) {
+	return execSQL(ctx, h.api, h.logger, queryStr)
+}
+
 // QuerySQL handles the SQL request and sends RowResponses to the stream.
-func (*GRPCHandler) QuerySQL(req *pb.QuerySQLRequest, stream pb.Pilosa_QuerySQLServer) error {
-	return status.Errorf(codes.Unimplemented, "method QuerySQL not implemented")
+func (h *GRPCHandler) QuerySQL(req *pb.QuerySQLRequest, stream pb.Pilosa_QuerySQLServer) error {
+	results, err := h.execSQL(stream.Context(), req.Sql)
+	if err != nil {
+		return err
+	}
+
+	for {
+		row, err := results.Recv()
+		switch err {
+		case nil:
+		case io.EOF:
+			return nil
+		default:
+			return errors.Wrap(err, "failed to load next row")
+		}
+
+		err = stream.Send(row)
+		if err != nil {
+			return errors.Wrap(err, "failed to send row")
+		}
+	}
 }
 
 // QuerySQLUnary is a unary-response (non-streaming) version of QuerySQL, returning a TableResponse.
@@ -134,8 +158,12 @@ func (*GRPCHandler) QuerySQL(req *pb.QuerySQLRequest, stream pb.Pilosa_QuerySQLS
 // Futures, which are used by python-molecula to perform multiple queries
 // concurrently. There is additional discussion and historical context here:
 // https://github.com/molecula/pilosa/pull/644
-func (*GRPCHandler) QuerySQLUnary(ctx context.Context, req *pb.QuerySQLRequest) (*pb.TableResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method QuerySQLUnary not implemented")
+func (h *GRPCHandler) QuerySQLUnary(ctx context.Context, req *pb.QuerySQLRequest) (*pb.TableResponse, error) {
+	results, err := h.execSQL(ctx, req.Sql)
+	if err != nil {
+		return nil, err
+	}
+	return pb.ReadIntoTable(results)
 }
 
 // QueryPQL handles the PQL request and sends RowResponses to the stream.
@@ -298,36 +326,6 @@ func ToRowserWrapper(result interface{}) (pb.ToRowser, error) {
 	return toRowser, nil
 }
 
-// fieldDataType returns a useful data type (string,
-// uint64, bool, etc.) based on the Pilosa field type.
-func fieldDataType(f *pilosa.Field) string {
-	switch f.Type() {
-	case "set":
-		if f.Keys() {
-			return "[]string"
-		}
-		return "[]uint64"
-	case "mutex":
-		if f.Keys() {
-			return "string"
-		}
-		return "uint64"
-	case "int":
-		if f.Keys() {
-			return "string"
-		}
-		return "int64"
-	case "decimal":
-		return "decimal"
-	case "bool":
-		return "bool"
-	case "time":
-		return "int64" // TODO: this is a placeholder
-	default:
-		panic(fmt.Sprintf("unimplemented fieldDataType: %s", f.Type()))
-	}
-}
-
 // Inspect handles the inspect request and sends an InspectResponse to the stream.
 func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectServer) error {
 	const defaultLimit = 100000
@@ -422,7 +420,11 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 			{Name: "_id", Datatype: "uint64"},
 		}
 		for _, field := range fields {
-			ci = append(ci, &pb.ColumnInfo{Name: field.Name(), Datatype: fieldDataType(field)})
+			fdt, err := field.Datatype()
+			if err != nil {
+				return errors.Wrapf(err, "field %s", field.Name())
+			}
+			ci = append(ci, &pb.ColumnInfo{Name: field.Name(), Datatype: fdt})
 		}
 
 		// If Columns is empty, then get the _exists list (via All()),
@@ -666,7 +668,11 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 			{Name: "_id", Datatype: "string"},
 		}
 		for _, field := range fields {
-			ci = append(ci, &pb.ColumnInfo{Name: field.Name(), Datatype: fieldDataType(field)})
+			fdt, err := field.Datatype()
+			if err != nil {
+				return errors.Wrapf(err, "field %s", field.Name())
+			}
+			ci = append(ci, &pb.ColumnInfo{Name: field.Name(), Datatype: fdt})
 		}
 
 		// If Columns is empty, then get the _exists list (via All()),

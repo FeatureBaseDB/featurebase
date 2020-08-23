@@ -22,19 +22,26 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"sync"
 
 	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/logger"
 )
 
 func GetOpenTranslateReaderFunc(client *http.Client) pilosa.OpenTranslateReaderFunc {
+	return GetOpenTranslateReaderWithLockerFunc(client, nopLocker{})
+}
+
+func GetOpenTranslateReaderWithLockerFunc(client *http.Client, locker sync.Locker) pilosa.OpenTranslateReaderFunc {
 	return func(ctx context.Context, nodeURL string, offsets pilosa.TranslateOffsetMap) (pilosa.TranslateEntryReader, error) {
-		return openTranslateReader(ctx, nodeURL, offsets, client)
+		return openTranslateReader(ctx, nodeURL, offsets, client, locker)
 	}
 }
 
-func openTranslateReader(ctx context.Context, nodeURL string, offsets pilosa.TranslateOffsetMap, client *http.Client) (pilosa.TranslateEntryReader, error) {
+func openTranslateReader(ctx context.Context, nodeURL string, offsets pilosa.TranslateOffsetMap, client *http.Client, locker sync.Locker) (pilosa.TranslateEntryReader, error) {
 	r := NewTranslateEntryReader(ctx, client)
+	r.locker = locker
+
 	r.URL = nodeURL + "/internal/translate/data"
 	r.Offsets = offsets
 	if err := r.Open(); err != nil {
@@ -43,9 +50,16 @@ func openTranslateReader(ctx context.Context, nodeURL string, offsets pilosa.Tra
 	return r, nil
 }
 
+type nopLocker struct{}
+
+func (nopLocker) Lock()   {}
+func (nopLocker) Unlock() {}
+
 // TranslateEntryReader represents an implementation of pilosa.TranslateEntryReader.
 // It consolidates all index & field translate entries into a single reader.
 type TranslateEntryReader struct {
+	locker sync.Locker
+
 	ctx    context.Context
 	cancel func()
 
@@ -70,7 +84,7 @@ func NewTranslateEntryReader(ctx context.Context, client *http.Client) *Translat
 	if client == nil {
 		client = http.DefaultClient
 	}
-	r := &TranslateEntryReader{HTTPClient: client, Logger: logger.NopLogger}
+	r := &TranslateEntryReader{locker: nopLocker{}, HTTPClient: client, Logger: logger.NopLogger}
 	r.ctx, r.cancel = context.WithCancel(ctx)
 	return r
 }
@@ -116,7 +130,10 @@ func (r *TranslateEntryReader) Close() error {
 		r.cancel()
 	}
 	if r.body != nil {
-		return r.body.Close()
+		r.locker.Lock()
+		err := r.body.Close()
+		r.locker.Unlock()
+		return err
 	}
 	return nil
 }
@@ -124,5 +141,8 @@ func (r *TranslateEntryReader) Close() error {
 // ReadEntry reads the next entry from the stream into entry.
 // Returns io.EOF at the end of the stream.
 func (r *TranslateEntryReader) ReadEntry(entry *pilosa.TranslateEntry) error {
+	r.locker.Lock()
+	defer r.locker.Unlock()
+
 	return r.dec.Decode(&entry)
 }

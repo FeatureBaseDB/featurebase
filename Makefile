@@ -234,6 +234,18 @@ bg-rbf:
 	@echo "   log.bg-rbf green: \c"; cat log.bg-rbf | grep PASS |wc -l
 	@echo "   log.bg-rbf   red: \c"; cat log.bg-rbf | grep '\-\-\- FAIL' |wc -l
 
+rbf-lm:
+	mv log.rbf-lm log.rbf-lm.prev || true
+	PILOSA_TXSRC=rbf_badger go test -v -tags='$(BUILD_TAGS)' $(TESTFLAGS) $(NOCHECKPTR)  2>&1 | tee log.rbf-lm
+	@echo "   log.rbf-lm green: \c"; cat log.rbf-lm | grep PASS |wc -l
+	@echo "   log.rbf-lm   red: \c"; cat log.rbf-lm | grep '\-\-\- FAIL' |wc -l
+
+lm-rbf:
+	mv log.lm-rbf log.lm-rbf.prev || true
+	PILOSA_TXSRC=badger_rbf go test -v -tags='$(BUILD_TAGS)' $(TESTFLAGS) $(NOCHECKPTR)  2>&1 | tee log.lm-rbf
+	@echo "   log.lm-rbf green: \c"; cat log.lm-rbf | grep PASS |wc -l
+	@echo "   log.lm-rbf   red: \c"; cat log.lm-rbf | grep '\-\-\- FAIL' |wc -l
+
 lm-rr:
 	mv log.lm-rr log.lm-rr.prev || true
 	PILOSA_TXSRC=lmdb_roaring go test -v -tags='$(BUILD_TAGS)' $(TESTFLAGS) $(NOCHECKPTR)  2>&1 | tee log.lm-rr

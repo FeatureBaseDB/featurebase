@@ -61,9 +61,7 @@ func (p *parser) Parse() (*Query, error) {
 	p.PQL = PQL{
 		Buffer: string(buf),
 	}
-	if err := p.Init(); err != nil {
-		return nil, errors.Wrap(err, "initializing")
-	}
+	p.Init()
 	err = p.PQL.Parse()
 	if err != nil {
 		return nil, errors.Wrap(err, "parsing")

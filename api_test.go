@@ -474,3 +474,127 @@ type offsetModHasher struct{}
 func (*offsetModHasher) Hash(key uint64, n int) int {
 	return int(key+1) % n
 }
+
+func TestAPI_ClearFlagForImportAndImportValues(t *testing.T) {
+	c := test.MustRunCluster(t, 1,
+		[]server.CommandOption{
+			server.OptCommandServerOptions(
+				pilosa.OptServerNodeID("node0"),
+				pilosa.OptServerClusterHasher(&offsetModHasher{}),
+				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+			)},
+	)
+	defer c.Close()
+
+	// plan:
+	//  1. set a bit
+	//  2. clear with Import() using the ImportRequest.Clear flag
+	//  3. verifiy the clear is done.
+	//  repeat for ImportValueRequest and ImportValues()
+
+	m0 := c[0]
+	m0api := m0.API
+
+	ctx := context.Background()
+	index := "i"
+	fieldAcct0 := "acct0"
+
+	opts := pilosa.OptFieldTypeInt(-1000, 1000)
+
+	_, err := m0api.CreateIndex(ctx, index, pilosa.IndexOptions{})
+	if err != nil {
+		t.Fatalf("creating index: %v", err)
+	}
+	_, err = m0api.CreateField(ctx, index, fieldAcct0, opts)
+	if err != nil {
+		t.Fatalf("creating fieldAcct0: %v", err)
+	}
+
+	iraField := "ira" // set field.
+	iraRowID := uint64(3)
+	_, err = m0api.CreateField(ctx, index, iraField)
+	if err != nil {
+		t.Fatalf("creating fieldIRA: %v", err)
+	}
+
+	acctOwnerID := uint64(78) // ColumnID
+	shard := acctOwnerID / ShardWidth
+	acct0bal := int64(500)
+
+	ivr0 := &pilosa.ImportValueRequest{
+		Index:     index,
+		Field:     fieldAcct0,
+		Shard:     shard,
+		ColumnIDs: []uint64{acctOwnerID},
+		Values:    []int64{acct0bal},
+	}
+	ir0 := &pilosa.ImportRequest{
+		Index:     index,
+		Field:     iraField,
+		Shard:     shard,
+		ColumnIDs: []uint64{acctOwnerID},
+		RowIDs:    []uint64{iraRowID},
+	}
+
+	if err := m0api.Import(ctx, ir0); err != nil {
+		t.Fatal(err)
+	}
+	if err := m0api.ImportValue(ctx, ivr0); err != nil {
+		t.Fatal(err)
+	}
+
+	bitIsSet := func() bool {
+		query := fmt.Sprintf("Row(%v=%v)", iraField, iraRowID)
+		res, err := m0api.Query(context.Background(), &pilosa.QueryRequest{Index: index, Query: query})
+		panicOn(err)
+		cols := res.Results[0].(*pilosa.Row).Columns()
+		for i := range cols {
+			if cols[i] == acctOwnerID {
+				return true
+			}
+		}
+		return false
+	}
+
+	if !bitIsSet() {
+		panic("IRA bit should have been set")
+	}
+
+	queryAcct := func(m0api *pilosa.API, acctOwnerID uint64, fieldAcct0, index string) (acctBal int64) {
+		query := fmt.Sprintf("FieldValue(field=%v, column=%v)", fieldAcct0, acctOwnerID)
+		res, err := m0api.Query(context.Background(), &pilosa.QueryRequest{Index: index, Query: query})
+		panicOn(err)
+
+		if len(res.Results) == 0 {
+			return 0
+		}
+		valCount := res.Results[0].(pilosa.ValCount)
+		return valCount.Val
+	}
+
+	bal := queryAcct(m0api, acctOwnerID, fieldAcct0, index)
+
+	if bal != acct0bal {
+		panic(fmt.Sprintf("expected %v, observed %v starting acct0 balance", acct0bal, bal))
+	}
+
+	// clear the bit
+	ir0.Clear = true
+	if err := m0api.Import(ctx, ir0); err != nil {
+		t.Fatal(err)
+	}
+
+	if bitIsSet() {
+		panic("IRA bit should have been cleared")
+	}
+
+	// clear the BSI
+	ivr0.Clear = true
+	if err := m0api.ImportValue(ctx, ivr0); err != nil {
+		t.Fatal(err)
+	}
+	bal = queryAcct(m0api, acctOwnerID, fieldAcct0, index)
+	if bal != 0 {
+		panic(fmt.Sprintf("expected %v, observed %v starting acct0 balance", acct0bal, 0))
+	}
+}

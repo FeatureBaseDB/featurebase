@@ -149,9 +149,9 @@ func (r *lmdbRegistrar) openLMDBWrapper(path0 string) (*LMDBWrapper, error) {
 
 	flags = flags |
 		lmdb.WriteMap | // Use a writable memory map.
-		lmdb.NoMetaSync | // Don't fsync metapage after commit.
-		lmdb.NoSync | // Don't fsync after commit.
-		lmdb.MapAsync | // Flush asynchronously when using the WriteMap flag.
+		//lmdb.NoMetaSync | // Don't fsync metapage after commit.
+		//lmdb.NoSync | // Don't fsync after commit.
+		//lmdb.MapAsync | // Flush asynchronously when using the WriteMap flag.
 		lmdb.NoMemInit // Disable LMDB memory initialization
 
 	err = env.Open(path, flags, 0644)
@@ -346,7 +346,7 @@ func (tx *LMDBTx) Type() string {
 }
 
 func (tx *LMDBTx) UseRowCache() bool {
-	return false
+	return true
 }
 
 // Pointer gives us a memory address for the underlying transaction for debugging.

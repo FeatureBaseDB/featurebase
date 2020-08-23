@@ -1022,6 +1022,9 @@ type ImportOptions struct {
 	Clear          bool
 	IgnoreKeyCheck bool
 	Presorted      bool
+
+	// test Tx atomicity if > 0
+	SimPowerLossAfter int
 }
 
 // ImportOption is a functional option type for API.Import.
@@ -1052,8 +1055,92 @@ func OptImportOptionsPresorted(b bool) ImportOption {
 	}
 }
 
-// Import bulk imports data into a particular index,field,shard.
+var ErrAborted = fmt.Errorf("error: update was aborted")
+
+func (api *API) ImportAtomicRecord(ctx context.Context, req *AtomicRecord, opts ...ImportOption) error {
+	simPowerLoss := false
+	lossAfter := -1
+	var opt ImportOptions
+	for _, setter := range opts {
+		if setter != nil {
+			err := setter(&opt)
+			if err != nil {
+				return errors.Wrap(err, "ImportAtomicRecord ImportOptions")
+			}
+		}
+	}
+	if opt.SimPowerLossAfter > 0 {
+		simPowerLoss = true
+		lossAfter = opt.SimPowerLossAfter
+	}
+
+	idx, err := api.Index(ctx, req.Index)
+	if err != nil {
+		return errors.Wrap(err, "getting index")
+	}
+
+	// the whole point is to run this part of the import atomically.
+	// So make a Tx.
+	tx := idx.Txf.NewTx(Txo{Write: writable, Index: idx})
+	defer tx.Rollback()
+
+	tot := 0
+
+	// BSIs (Values)
+	for _, ivr := range req.Ivr {
+		tot++
+		if simPowerLoss && tot > lossAfter {
+			return ErrAborted
+		}
+		opts0 := append(opts, OptImportOptionsClear(ivr.Clear))
+		err := api.ImportValueWithTx(ctx, tx, ivr, opts0...)
+		if err != nil {
+			return errors.Wrap(err, "ImportAtomicRecord ImportValueWithTx")
+		}
+	}
+
+	// other bits, non-BSI
+	for _, ir := range req.Ir {
+		tot++
+		if simPowerLoss && tot > lossAfter {
+			return ErrAborted
+		}
+		opts0 := append(opts, OptImportOptionsClear(ir.Clear))
+		err := api.ImportWithTx(ctx, tx, ir, opts0...)
+		if err != nil {
+			return errors.Wrap(err, "ImportAtomicRecord ImportWithTx")
+		}
+	}
+	return tx.Commit()
+}
+
+// This is a hide your face ugly hack, forced upon
+// us by the horrible invention of function based options
+// by the usually brilliant Rob Pike. - JEA
+func addClearToImportOptions(opts []ImportOption) []ImportOption {
+	var opt ImportOptions
+	for _, o := range opts {
+		// check for side-effect of setting io.Clear; that is
+		// how we know it is present.
+		_ = o(&opt)
+		if opt.Clear {
+			// we already have the clear flag set, so nothing more to do.
+			return opts
+		}
+	}
+	// no clear flag being set, add that option now.
+	return append(opts, OptImportOptionsClear(true))
+}
+
 func (api *API) Import(ctx context.Context, req *ImportRequest, opts ...ImportOption) error {
+	if req.Clear {
+		opts = addClearToImportOptions(opts)
+	}
+	return api.ImportWithTx(ctx, nil, req, opts...)
+}
+
+// Import bulk imports data into a particular index,field,shard.
+func (api *API) ImportWithTx(ctx context.Context, tx Tx, req *ImportRequest, opts ...ImportOption) error {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.Import")
 	defer span.Finish()
 
@@ -1156,39 +1243,46 @@ func (api *API) Import(ctx context.Context, req *ImportRequest, opts ...ImportOp
 		timestamps[i] = &t
 	}
 
+	isLocalTx := false
+	if tx == nil {
+		isLocalTx = true
+		tx = index.Txf.NewTx(Txo{Write: true, Index: index})
+		defer tx.Rollback()
+	}
+
 	// Import columnIDs into existence field.
 	if !options.Clear {
-		if err := func() error {
-			tx := index.Txf.NewTx(Txo{Write: true, Index: index})
-			defer tx.Rollback()
-
-			if err := importExistenceColumns(tx, index, req.ColumnIDs); err != nil {
-				api.server.logger.Printf("import existence error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
-				return err
-			}
-			return tx.Commit()
-		}(); err != nil {
+		if err := importExistenceColumns(tx, index, req.ColumnIDs); err != nil {
+			api.server.logger.Printf("import existence error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
+			return err
+		}
+		if err != nil {
 			return errors.Wrap(err, "importing existence columns")
 		}
 	}
-
-	tx := index.Txf.NewTx(Txo{Write: true, Index: index})
-	defer tx.Rollback()
 
 	// Import into fragment.
 	err = field.Import(tx, req.RowIDs, req.ColumnIDs, timestamps, opts...)
 	if err != nil {
 		api.server.logger.Printf("import error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
-	} else {
-		err = tx.Commit()
+		return errors.Wrap(err, "importing")
 	}
 
-	return errors.Wrap(err, "importing")
+	if isLocalTx {
+		err = tx.Commit()
+	}
+	return errors.Wrap(err, "committing")
+}
 
+func (api *API) ImportValue(ctx context.Context, req *ImportValueRequest, opts ...ImportOption) error {
+	if req.Clear {
+		opts = addClearToImportOptions(opts)
+	}
+	return api.ImportValueWithTx(ctx, nil, req, opts...)
 }
 
 // ImportValue bulk imports values into a particular field.
-func (api *API) ImportValue(ctx context.Context, req *ImportValueRequest, opts ...ImportOption) error {
+func (api *API) ImportValueWithTx(ctx context.Context, tx Tx, req *ImportValueRequest, opts ...ImportOption) error {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.ImportValue")
 	defer span.Finish()
 
@@ -1198,7 +1292,7 @@ func (api *API) ImportValue(ctx context.Context, req *ImportValueRequest, opts .
 
 	index, field, err := api.indexField(req.Index, req.Field, req.Shard)
 	if err != nil {
-		return errors.Wrap(err, "getting index and field")
+		return errors.Wrap(err, fmt.Sprintf("getting index '%v' and field '%v'; shard=%v", req.Index, req.Field, req.Shard))
 	}
 
 	if err := req.ValidateWithTimestamp(index.CreatedAt(), field.CreatedAt()); err != nil {
@@ -1258,11 +1352,15 @@ func (api *API) ImportValue(ctx context.Context, req *ImportValueRequest, opts .
 		sort.Sort(req)
 	}
 
+	isLocalTx := false
 	// if we're importing into a specific shard
 	if req.Shard != math.MaxUint64 {
 		// Obtain transaction.
-		tx := index.Txf.NewTx(Txo{Write: true, Index: index})
-		defer tx.Rollback()
+		if tx == nil {
+			isLocalTx = true
+			tx = index.Txf.NewTx(Txo{Write: true, Index: index})
+			defer tx.Rollback()
+		}
 
 		// Check that column IDs match the stated shard.
 		if s1, s2 := req.ColumnIDs[0]/ShardWidth, req.ColumnIDs[len(req.ColumnIDs)-1]/ShardWidth; s1 != s2 && s2 != req.Shard {
@@ -1293,7 +1391,7 @@ func (api *API) ImportValue(ctx context.Context, req *ImportValueRequest, opts .
 				api.server.logger.Printf("import error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
 			}
 		}
-		if err == nil {
+		if err == nil && isLocalTx {
 			err = tx.Commit()
 		}
 		return errors.Wrap(err, "importing value")
