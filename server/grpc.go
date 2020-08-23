@@ -26,7 +26,6 @@ import (
 	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/logger"
 	pb "github.com/pilosa/pilosa/v2/proto"
-	"github.com/pilosa/pilosa/v2/sql"
 	"github.com/pilosa/pilosa/v2/stats"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
@@ -120,24 +119,7 @@ func (h *GRPCHandler) DeleteVDS(ctx context.Context, req *pb.DeleteVDSRequest) (
 }
 
 func (h *GRPCHandler) execSQL(ctx context.Context, queryStr string) (pb.StreamClient, error) {
-	mapper := sql.NewMapper()
-	mapper.Logger = h.logger
-	query, err := mapper.MapSQL(queryStr)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to map SQL")
-	}
-	var results pb.StreamClient
-	switch query.SQLType {
-	case sql.SQLTypeSelect:
-		handler := sql.NewSelectHandler(h.api)
-		results, err = handler.Handle(ctx, query)
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to start SQL query")
-		}
-	default:
-		return nil, status.Errorf(codes.Unimplemented, "query type not supported")
-	}
-	return results, nil
+	return execSQL(ctx, h.api, h.logger, queryStr)
 }
 
 // QuerySQL handles the SQL request and sends RowResponses to the stream.

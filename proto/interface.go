@@ -31,6 +31,15 @@ type StreamClient interface {
 	Recv() (*RowResponse, error)
 }
 
+// EmptyStream implements StreamClient interface.
+// It always returns empty RowResponse
+type EmptyStream struct{}
+
+// Recv returns io.EOF
+func (EmptyStream) Recv() (*RowResponse, error) {
+	return nil, io.EOF
+}
+
 // ReadIntoTable reads from a StreamClient and stores the result into a table response.
 func ReadIntoTable(cli StreamClient) (*TableResponse, error) {
 	var headers []*ColumnInfo

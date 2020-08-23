@@ -59,7 +59,7 @@ func TestStartupInvalidLength(t *testing.T) {
 	res := testing.Benchmark(func(b *testing.B) {
 		connect, shutdown, err := pgtest.ServeMem(&pg.Server{
 			MaxStartupSize: 1024,
-			Logger:         logger.NewLogfLogger(t),
+			Logger:         logger.NopLogger,
 		})
 		if err != nil {
 			t.Fatalf("starting in-memory postgres server: %v", err)

@@ -27,6 +27,7 @@ import (
 	"net/http/httptest"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -1300,7 +1301,7 @@ func TestCluster_TranslateStore(t *testing.T) {
 	cluster[0] = test.NewCommandNode(true,
 		server.OptCommandServerOptions(
 			pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
-			pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+			pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderWithLockerFunc(nil, &sync.Mutex{})),
 		),
 	)
 	cluster[0].Config.Gossip.Port = "0"
@@ -1329,7 +1330,7 @@ func TestClusterTranslator(t *testing.T) {
 	cluster[1] = test.NewCommandNode(false,
 		server.OptCommandServerOptions(
 			pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
-			pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+			pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderWithLockerFunc(nil, &sync.Mutex{})),
 		),
 	)
 	cluster[1].Config.Gossip.Port = "0"
