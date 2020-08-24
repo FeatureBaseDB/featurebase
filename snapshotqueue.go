@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/pilosa/pilosa/v2/logger"
+	"github.com/pilosa/pilosa/v2/testhook"
 	"github.com/pkg/errors"
 )
 
@@ -90,7 +91,7 @@ var defaultSnapshotQueue = &queuelessSnapshotQueue{}
 // w worker threads.
 func newSnapshotQueue(n int, w int, l logger.Logger) SnapshotQueue {
 	ctx, cancel := context.WithCancel(context.Background())
-	sq := prioritySnapshotQueue{
+	sq := &prioritySnapshotQueue{
 		normal:     make(chan snapshotRequest, n),
 		urgent:     make(chan snapshotRequest),
 		background: make(chan snapshotRequest),
@@ -102,8 +103,9 @@ func newSnapshotQueue(n int, w int, l logger.Logger) SnapshotQueue {
 	if sq.logger == nil {
 		sq.logger = logger.NewStandardLogger(os.Stderr)
 	}
+	_ = testhook.Opened(NewAuditor(), sq, nil)
 	sq.spawnWorkers(w)
-	return &sq
+	return sq
 }
 
 type snapshotRequest struct {
@@ -136,6 +138,7 @@ type prioritySnapshotQueue struct {
 		enqueued uint32
 		skipped  uint32
 	}
+	stopped bool
 }
 
 func (sq *prioritySnapshotQueue) spawnWorkers(w int) {
@@ -205,6 +208,10 @@ func (sq *prioritySnapshotQueue) process(req snapshotRequest) {
 func (sq *prioritySnapshotQueue) Stop() {
 	sq.mu.Lock()
 	defer sq.mu.Unlock()
+	if sq.stopped {
+		return
+	}
+	sq.stopped = true
 	sq.cancel()
 	// scanners need to be done before we close the other channels.
 	sq.scanWG.Wait()
@@ -214,6 +221,7 @@ func (sq *prioritySnapshotQueue) Stop() {
 	sq.urgent = nil
 	close(sq.background)
 	sq.background = nil
+	_ = testhook.Closed(NewAuditor(), sq, nil)
 	enqueued := atomic.LoadUint32(&sq.stats.enqueued)
 	skipped := atomic.LoadUint32(&sq.stats.skipped)
 	if skipped > 0 || enqueued > 1 {

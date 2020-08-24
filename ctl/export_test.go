@@ -46,7 +46,7 @@ func TestExportCommand_Validation(t *testing.T) {
 func TestExportCommand_Run(t *testing.T) {
 	cluster := test.MustRunCluster(t, 1)
 	defer cluster.Close()
-	cmd := cluster[0]
+	cmd := cluster.GetNode(0)
 
 	buf := bytes.Buffer{}
 	stdin, stdout, stderr := GetIO(buf)

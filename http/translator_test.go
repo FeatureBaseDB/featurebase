@@ -36,7 +36,7 @@ func TestTranslateStore_EntryReader(t *testing.T) {
 
 			cluster := test.MustRunCluster(t, 1)
 			defer cluster.Close()
-			primary := cluster[0]
+			primary := cluster.GetNode(0)
 
 			hldr := test.Holder{Holder: primary.Server.Holder()}
 			index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{Keys: true})
@@ -157,7 +157,7 @@ func benchmarkSetup(b *testing.B, ctx context.Context, key string, nkeys int) (s
 	b.Helper()
 
 	cluster := test.MustRunCluster(b, 1)
-	primary := cluster[0]
+	primary := cluster.GetNode(0)
 
 	idx := primary.MustCreateIndex(b, "i", pilosa.IndexOptions{})
 	fld := primary.MustCreateField(b, idx.Name(), "f", pilosa.OptFieldKeys())

@@ -21,6 +21,8 @@ import (
 	"testing"
 
 	"encoding/hex"
+
+	"github.com/pilosa/pilosa/v2/testhook"
 )
 
 func TestBlake3Hasher(t *testing.T) {
@@ -49,7 +51,7 @@ func TestCryptoRandInt64(t *testing.T) {
 }
 
 func TestHashOfDir(t *testing.T) {
-	dir, err := ioutil.TempDir(".", "TestHashOfDir-dir")
+	dir, err := testhook.TempDir(t, "TestHashOfDir-dir")
 	panicOn(err)
 	b := dir + sep + "A" + sep + "B"
 	c := dir + sep + "A" + sep + "C"
@@ -59,7 +61,6 @@ func TestHashOfDir(t *testing.T) {
 	panicOn(ioutil.WriteFile(b+sep+"b_content", bmessage, 0644))
 	cmessage := []byte("hello C\n")
 	panicOn(ioutil.WriteFile(c+sep+"c_content", cmessage, 0644))
-	defer os.RemoveAll(dir)
 	hsh := HashOfDir(dir)
 
 	c2message := []byte("hello C2\n")

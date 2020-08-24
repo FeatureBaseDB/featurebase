@@ -30,15 +30,15 @@ func TestNewCluster(t *testing.T) {
 	cluster := test.MustRunCluster(t, numNodes)
 	defer cluster.Close()
 
-	coordinator := getCoordinator(cluster[0])
+	coordinator := getCoordinator(cluster.Nodes[0])
 	for i := 1; i < numNodes; i++ {
-		if coordi := getCoordinator(cluster[i]); coordi != coordinator {
+		if coordi := getCoordinator(cluster.Nodes[i]); coordi != coordinator {
 			t.Fatalf("node %d does not have the same coordinator as node 0. '%v' and '%v' respectively", i, coordi, coordinator)
 		}
 	}
 	req, err := http.NewRequest(
 		"GET",
-		cluster[0].URL()+"/status",
+		cluster.Nodes[0].URL()+"/status",
 		strings.NewReader(""),
 	)
 	if err != nil {

@@ -59,8 +59,8 @@ func TestAPI_ImportColumnAttrs(t *testing.T) {
 	)
 	defer c.Close()
 
-	m0 := c[0]
-	m1 := c[1]
+	m0 := c.GetNode(0)
+	m1 := c.GetNode(1)
 	t.Run("ImportColumnAttrs", func(t *testing.T) {
 		ctx := context.Background()
 		indexName := "i"
@@ -184,8 +184,8 @@ func TestAPI_Import(t *testing.T) {
 	)
 	defer c.Close()
 
-	m0 := c[0]
-	m1 := c[1]
+	m0 := c.GetNode(0)
+	m1 := c.GetNode(1)
 
 	t.Run("RowIDColumnKey", func(t *testing.T) {
 		ctx := context.Background()
@@ -293,8 +293,8 @@ func TestAPI_ImportValue(t *testing.T) {
 	)
 	defer c.Close()
 
-	m0 := c[0]
-	m1 := c[1]
+	m0 := c.GetNode(0)
+	m1 := c.GetNode(1)
 
 	t.Run("ValColumnKey", func(t *testing.T) {
 		ctx := context.Background()
@@ -492,7 +492,7 @@ func TestAPI_ClearFlagForImportAndImportValues(t *testing.T) {
 	//  3. verifiy the clear is done.
 	//  repeat for ImportValueRequest and ImportValues()
 
-	m0 := c[0]
+	m0 := c.GetNode(0)
 	m0api := m0.API
 
 	ctx := context.Background()

@@ -15,10 +15,11 @@
 package pilosa
 
 import (
-	"io/ioutil"
 	"runtime"
 	"testing"
 	"time"
+
+	"github.com/pilosa/pilosa/v2/testhook"
 )
 
 // Ensure the file handle count is working
@@ -40,7 +41,7 @@ func TestCountOpenFiles(t *testing.T) {
 
 func TestMonitorAntiEntropyZero(t *testing.T) {
 
-	td, err := ioutil.TempDir(*TempDir, "")
+	td, err := testhook.TempDirInDir(t, *TempDir, "")
 	if err != nil {
 		t.Fatalf("getting temp dir: %v", err)
 	}
@@ -49,6 +50,7 @@ func TestMonitorAntiEntropyZero(t *testing.T) {
 	if err != nil {
 		t.Fatalf("making new server: %v", err)
 	}
+	defer s.Close()
 
 	ch := make(chan struct{})
 	go func() {

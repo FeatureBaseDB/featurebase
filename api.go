@@ -1114,9 +1114,6 @@ func (api *API) ImportAtomicRecord(ctx context.Context, req *AtomicRecord, opts 
 	return tx.Commit()
 }
 
-// This is a hide your face ugly hack, forced upon
-// us by the horrible invention of function based options
-// by the usually brilliant Rob Pike. - JEA
 func addClearToImportOptions(opts []ImportOption) []ImportOption {
 	var opt ImportOptions
 	for _, o := range opts {

@@ -31,11 +31,12 @@ type cv struct {
 
 func forceSnapshotsCheckMapping(t *testing.T) {
 	depth := uint(6)
-	f, idx := mustOpenBSIFragment("i", "f", viewStandard, 0)
+	f, idx, tx := mustOpenBSIFragment(t, "i", "f", viewStandard, 0)
+	tx.Rollback()
 	f.Logger = logger.NewLogfLogger(t)
 	defer f.Clean(t)
 
-	tx := idx.Txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f})
+	tx = idx.Txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f})
 	defer tx.Rollback()
 
 	for i := 0; i < f.MaxOpN; i++ {

@@ -130,14 +130,15 @@ func (r *lmdbRegistrar) openLMDBWrapper(path0 string) (*LMDBWrapper, error) {
 
 	err = env.SetMaxDBs(1)
 	panicOn(err)
-	err = env.SetMapSize(256 << 30) // 256GB
+	//err = env.SetMapSize(256 << 30) // 256GB
+	err = env.SetMapSize(16 << 30) // 16GB
 	panicOn(err)
 
 	panicOn(os.MkdirAll(filepath.Dir(path), 0755))
 
 	flags := uint(lmdb.NoReadahead | lmdb.NoSubdir)
 
-	// unsafe, but get upper bound on performance. TODO: remove these.
+	// unsafe, but get upper bound on performance.
 	//	WriteMap    = C.MDB_WRITEMAP   // Use a writable memory map.
 	//	NoMetaSync  = C.MDB_NOMETASYNC // Don't fsync metapage after commit.
 	//	NoSync      = C.MDB_NOSYNC     // Don't fsync after commit.
@@ -149,11 +150,18 @@ func (r *lmdbRegistrar) openLMDBWrapper(path0 string) (*LMDBWrapper, error) {
 
 	// ACI not ACID at the moment; no durability
 	flags = flags |
-		//lmdb.WriteMap | // Use a writable memory map.
+		lmdb.NoMemInit | // Disable LMDB memory initialization
+
+		// Note that lmdb.WriteMap requests a big, writable, memory map.
+		// On my darwin/OSX laptop with 16GB ram, for instance, we
+		// can have difficulty obtaining this, resulting in
+		//   panic: mdb_env_open: no space left on device
+		lmdb.WriteMap | // Use a writable memory map.
+
+		// default ACI (not Durable) transactions; 300% faster write speed results.
 		lmdb.NoMetaSync | // Don't fsync metapage after commit.
 		lmdb.NoSync | // Don't fsync after commit.
-		lmdb.MapAsync | // Flush asynchronously when using the WriteMap flag.
-		lmdb.NoMemInit // Disable LMDB memory initialization
+		lmdb.MapAsync // Flush asynchronously when using the WriteMap flag.
 
 	err = env.Open(path, flags, 0644)
 	if err != nil {

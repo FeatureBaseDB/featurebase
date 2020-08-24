@@ -29,6 +29,7 @@ import (
 	pb "github.com/pilosa/pilosa/v2/proto"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/shardwidth"
+	"github.com/pilosa/pilosa/v2/testhook"
 	"github.com/pilosa/pilosa/v2/tracing"
 	"github.com/pkg/errors"
 )
@@ -100,6 +101,7 @@ func newExecutor(opts ...executorOption) *executor {
 	// the few tests we've done at scale with concurrent query
 	// workloads. Possible that it could be smaller.
 	e.work = make(chan job, e.workerPoolSize)
+	_ = testhook.Opened(NewAuditor(), e, nil)
 	for i := 0; i < e.workerPoolSize; i++ {
 		e.workersWG.Add(1)
 		go func() {
@@ -114,6 +116,7 @@ func (e *executor) Close() error {
 	e.workMu.Lock()
 	defer e.workMu.Unlock()
 	e.shutdown = true
+	_ = testhook.Closed(NewAuditor(), e, nil)
 	close(e.work)
 	e.workersWG.Wait()
 	return nil
