@@ -6891,7 +6891,7 @@ func (c *Container) CountRange(start, end int32) (n int32) {
 	return c.countRange(start, end)
 }
 
-func (c *Container) UnionInPlace(other *Container) *Container {
+func (c *Container) UnionInPlace(other *Container) (r *Container) {
 	return c.unionInPlace(other)
 }
 
