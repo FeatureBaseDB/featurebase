@@ -140,6 +140,19 @@ func TestClusterResize_EmptyNodes(t *testing.T) {
 
 // Ensure that adding a node correctly resizes the cluster.
 func TestClusterResize_AddNode(t *testing.T) {
+	// Why are we skipping this test under blue-green with Roaring?
+	//
+	// We see red test: during resize during importRoaringBits
+	// PILOSA_TXSRC=rbf_roaring go test -v  -tags=' shardwidth20'  "-gcflags=all=-d=checkptr=0" -run TestClusterResize_AddNode/"ContinuousShards"
+	// green:
+	// PILOSA_TXSRC=roaring_rbf go test -v  -tags=' shardwidth20'  "-gcflags=all=-d=checkptr=0" -run TestClusterResize_AddNode/"ContinuousShards"
+	//
+	// but rbf_badger and badger_rbf are both green (use the same data values for containers).
+	//
+	// Conclude: roaring reads a different size of data []byte in (due to ops log) bits vs others (RBF, badger), so
+	// we can't do blue-green with roaring on this test.
+	skipTestUnderBlueGreenWithRoaring(t)
+
 	t.Run("NoData", func(t *testing.T) {
 		clus := test.MustRunCluster(t, 2)
 		defer clus.Close()
@@ -184,18 +197,6 @@ func TestClusterResize_AddNode(t *testing.T) {
 		}
 	})
 	t.Run("ContinuousShards", func(t *testing.T) {
-		// Why are we skipping this test under blue-green with Roaring?
-		//
-		// We see red test: during resize during importRoaringBits
-		// PILOSA_TXSRC=rbf_roaring go test -v  -tags=' shardwidth20'  "-gcflags=all=-d=checkptr=0" -run TestClusterResize_AddNode/"ContinuousShards"
-		// green:
-		// PILOSA_TXSRC=roaring_rbf go test -v  -tags=' shardwidth20'  "-gcflags=all=-d=checkptr=0" -run TestClusterResize_AddNode/"ContinuousShards"
-		//
-		// but rbf_badger and badger_rbf are both green (use the same data values for containers).
-		//
-		// Conclude: roaring reads a different size of data []byte in (due to ops log) bits vs others (RBF, badger), so
-		// we can't do blue-green with roaring on this test.
-		skipTestUnderBlueGreenWithRoaring(t)
 
 		// Configure node0
 		m0 := test.MustRunCluster(t, 1).GetNode(0)
@@ -298,6 +299,8 @@ func TestClusterResize_AddNode(t *testing.T) {
 		m1.QueryExpect(t, "i", "", `Row(f=1)`, exp)
 	})
 	t.Run("SkippedShard", func(t *testing.T) {
+		// same reason as the ContinuousShards test above.
+
 		// Configure node0
 		m0 := test.MustRunCluster(t, 1).GetNode(0)
 		defer m0.Close()
@@ -354,6 +357,8 @@ func TestClusterResize_AddNode(t *testing.T) {
 
 // Ensure that adding a node correctly resizes the cluster.
 func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
+	skipTestUnderBlueGreenWithRoaring(t)
+
 	t.Run("WithIndex", func(t *testing.T) {
 		// Configure node0
 		m0 := test.MustRunCluster(t, 1).GetNode(0)
@@ -456,6 +461,7 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 		m1.QueryExpect(t, "i", "", `Row(f=1)`, exp)
 	})
 	t.Run("SkippedShard", func(t *testing.T) {
+
 		// Configure node0
 		m0 := test.MustRunCluster(t, 1).GetNode(0)
 		defer m0.Close()
