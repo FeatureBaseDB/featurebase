@@ -21,6 +21,7 @@ import (
 	"io"
 	"net"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/pilosa/pilosa/v2"
@@ -909,6 +910,7 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 
 type grpcServer struct {
 	api        *pilosa.API
+	mu         sync.Mutex
 	grpcServer *grpc.Server
 	ln         net.Listener
 
@@ -956,17 +958,29 @@ func (s *grpcServer) Serve(tlsConfig *tls.Config) error {
 	}
 
 	// create grpc server
+	s.mu.Lock()
 	s.grpcServer = grpc.NewServer(opts...)
 	pb.RegisterPilosaServer(s.grpcServer, NewGRPCHandler(s.api).WithLogger(s.logger).WithStats(s.stats))
 
 	// register the server so its services are available to grpc_cli and others
 	reflection.Register(s.grpcServer)
+	s.mu.Unlock()
 
 	// and start...
 	if err := s.grpcServer.Serve(s.ln); err != nil {
 		return errors.Wrap(err, "starting grpc server")
 	}
 	return nil
+}
+
+// Stop stops the GRPC server. There's no error because the underlying GRPC
+// stuff doesn't report an error.
+func (s *grpcServer) Stop() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.grpcServer != nil {
+		s.grpcServer.Stop()
+	}
 }
 
 func NewGRPCServer(opts ...grpcServerOption) (*grpcServer, error) {

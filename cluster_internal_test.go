@@ -17,7 +17,6 @@ package pilosa
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
 	"math/rand"
 	"net"
 	"net/http"
@@ -35,6 +34,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/pilosa/pilosa/v2/logger"
 	"github.com/pilosa/pilosa/v2/roaring"
+	"github.com/pilosa/pilosa/v2/testhook"
 	"github.com/pkg/errors"
 )
 
@@ -91,14 +91,17 @@ func TestFragCombos(t *testing.T) {
 }
 
 // newIndexWithTempPath returns a new instance of Index.
-func newIndexWithTempPath(name string) *Index {
-	path, err := ioutil.TempDir(*TempDir, "pilosa-index-")
+func newIndexWithTempPath(tb testing.TB, name string) *Index {
+	path, err := testhook.TempDirInDir(tb, *TempDir, "pilosa-index-")
 	if err != nil {
 		panic(err)
 	}
 	h := NewHolder(DefaultPartitionN)
 	h.Path = path
 	index, err := h.CreateIndex(name, IndexOptions{})
+	testhook.Cleanup(tb, func() {
+		h.Close()
+	})
 	if err != nil {
 		panic(err)
 	}
@@ -158,7 +161,7 @@ func TestFragSources(t *testing.T) {
 	c5.addNodeBasicSorted(node2)
 	c5.addNodeBasicSorted(node3)
 
-	idx := newIndexWithTempPath("i")
+	idx := newIndexWithTempPath(t, "i")
 	defer idx.Close()
 
 	// Obtain transaction.
@@ -398,7 +401,7 @@ func TestHasher(t *testing.T) {
 
 // Ensure ContainsShards can find the actual shard list for node and index.
 func TestCluster_ContainsShards(t *testing.T) {
-	c := NewTestCluster(5)
+	c := NewTestCluster(t, 5)
 	c.ReplicaN = 3
 	shards := c.containsShards("test", roaring.NewBitmap(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10), c.nodes[2])
 
@@ -544,7 +547,7 @@ func TestCluster_Coordinator(t *testing.T) {
 }
 
 func TestCluster_Topology(t *testing.T) {
-	c1 := NewTestCluster(1) // automatically creates Node{ID: "node0"}
+	c1 := NewTestCluster(t, 1) // automatically creates Node{ID: "node0"}
 
 	uri0 := NewTestURIFromHostPort("host0", 0)
 	uri1 := NewTestURIFromHostPort("host1", 0)
@@ -592,7 +595,7 @@ func TestCluster_Topology(t *testing.T) {
 func TestCluster_ResizeStates(t *testing.T) {
 
 	t.Run("Single node, no data", func(t *testing.T) {
-		tc := NewClusterCluster(1)
+		tc := NewClusterCluster(t, 1)
 
 		// Open TestCluster.
 		if err := tc.Open(); err != nil {
@@ -622,7 +625,7 @@ func TestCluster_ResizeStates(t *testing.T) {
 	})
 
 	t.Run("Single node, in topology", func(t *testing.T) {
-		tc := NewClusterCluster(0)
+		tc := NewClusterCluster(t, 0)
 		if err := tc.addNode(); err != nil {
 			t.Fatalf("adding node: %v", err)
 		}
@@ -654,7 +657,7 @@ func TestCluster_ResizeStates(t *testing.T) {
 	})
 
 	t.Run("Single node, not in topology", func(t *testing.T) {
-		tc := NewClusterCluster(0)
+		tc := NewClusterCluster(t, 0)
 		if err := tc.addNode(); err != nil {
 			t.Fatalf("adding node: %v", err)
 		}
@@ -683,7 +686,7 @@ func TestCluster_ResizeStates(t *testing.T) {
 	})
 
 	t.Run("Multiple nodes, no data", func(t *testing.T) {
-		tc := NewClusterCluster(0)
+		tc := NewClusterCluster(t, 0)
 		if err := tc.addNode(); err != nil {
 			t.Fatalf("adding node: %v", err)
 		}
@@ -725,7 +728,7 @@ func TestCluster_ResizeStates(t *testing.T) {
 	})
 
 	t.Run("Multiple nodes, in/not in topology", func(t *testing.T) {
-		tc := NewClusterCluster(0)
+		tc := NewClusterCluster(t, 0)
 		if err := tc.addNode(); err != nil {
 			t.Fatalf("adding node: %v", err)
 		}
@@ -774,7 +777,7 @@ func TestCluster_ResizeStates(t *testing.T) {
 	})
 
 	t.Run("Multiple nodes, with data", func(t *testing.T) {
-		tc := NewClusterCluster(0)
+		tc := NewClusterCluster(t, 0)
 		if err := tc.addNode(); err != nil {
 			t.Fatalf("adding node: %v", err)
 		}
@@ -927,7 +930,7 @@ func TestAE(t *testing.T) {
 // Ensures that coordinator can be changed.
 func TestCluster_UpdateCoordinator(t *testing.T) {
 	t.Run("UpdateCoordinator", func(t *testing.T) {
-		c := NewTestCluster(2)
+		c := NewTestCluster(t, 2)
 
 		oldNode := c.nodes[0]
 		newNode := c.nodes[1]

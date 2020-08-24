@@ -16,7 +16,6 @@ package pilosa
 
 import (
 	"fmt"
-	"io/ioutil"
 	"math"
 	"os"
 	"path/filepath"
@@ -28,6 +27,7 @@ import (
 
 	"github.com/pilosa/pilosa/v2/pql"
 	"github.com/pilosa/pilosa/v2/roaring"
+	"github.com/pilosa/pilosa/v2/testhook"
 )
 
 // Ensure a bsiGroup can adjust to its baseValue.
@@ -197,11 +197,13 @@ func TestField_DeleteView(t *testing.T) {
 // TestField represents a test wrapper for Field.
 type TestField struct {
 	*Field
+	parent *Index
+	tb     testing.TB
 }
 
 // NewTestField returns a new instance of TestField d/0.
 func NewTestField(t *testing.T, opts FieldOption) *TestField {
-	path, err := ioutil.TempDir(*TempDir, "pilosa-field-")
+	path, err := testhook.TempDirInDir(t, *TempDir, "pilosa-field-")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -211,20 +213,20 @@ func NewTestField(t *testing.T, opts FieldOption) *TestField {
 	if err != nil {
 		panic(err)
 	}
-	field, err := NewField(h, path, "i", "f", opts)
+	field, err := idx.CreateField("f", opts)
 	if err != nil {
 		t.Fatal(err)
 	}
-	field.idx = idx
-	return &TestField{Field: field}
+	tf := &TestField{Field: field, parent: idx, tb: t}
+	testhook.Cleanup(t, func() {
+		h.Close()
+	})
+	return tf
 }
 
 // OpenField returns a new, opened field at a temporary path.
 func OpenField(t *testing.T, opts FieldOption) *TestField {
 	f := NewTestField(t, opts)
-	if err := f.Open(); err != nil {
-		t.Fatal(err)
-	}
 	return f
 }
 
@@ -239,27 +241,16 @@ func (f *TestField) Close() error {
 
 // Reopen closes the index and reopens it.
 func (f *TestField) Reopen() error {
-	var err error
-	if err := f.Field.Close(); err != nil {
+	name := f.Field.Name()
+	if err := f.parent.Close(); err != nil {
+		f.parent = nil
 		return err
 	}
-
-	path, index, name := f.Path(), f.Index(), f.Name()
-	h := NewHolder(DefaultPartitionN)
-	h.Path = path
-	idx, err := h.CreateIndex(index, IndexOptions{})
-	if err != nil {
+	if err := f.parent.Open(false); err != nil {
+		f.parent = nil
 		return err
 	}
-	f.Field, err = NewField(h, path, index, name, OptFieldTypeDefault())
-	if err != nil {
-		return err
-	}
-	f.Field.idx = idx
-
-	if err := f.Open(); err != nil {
-		return err
-	}
+	f.Field = f.parent.Field(name)
 	return nil
 }
 

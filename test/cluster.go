@@ -35,20 +35,34 @@ type ModHasher struct{}
 func (*ModHasher) Hash(key uint64, n int) int { return int(key) % n }
 
 // Cluster represents a Pilosa cluster (multiple Command instances)
-type Cluster []*Command
+type Cluster struct {
+	Nodes []*Command
+}
 
 // Query executes an API.Query through one of the cluster's node's API. It fails
 // the test if there is an error.
-func (c Cluster) Query(t testing.TB, index, query string) pilosa.QueryResponse {
+func (c *Cluster) Query(t testing.TB, index, query string) pilosa.QueryResponse {
 	t.Helper()
-	if len(c) == 0 {
+	if len(c.Nodes) == 0 {
 		t.Fatal("must have at least one node in cluster to query")
 	}
 
-	return c[0].QueryAPI(t, &pilosa.QueryRequest{Index: index, Query: query})
+	return c.Nodes[0].QueryAPI(t, &pilosa.QueryRequest{Index: index, Query: query})
 }
 
-func (c Cluster) ImportBits(t testing.TB, index, field string, rowcols [][2]uint64) {
+func (c *Cluster) GetNode(n int) *Command {
+	return c.Nodes[n]
+}
+
+func (c *Cluster) GetHolder(n int) *Holder {
+	return &Holder{Holder: c.Nodes[n].Server.Holder()}
+}
+
+func (c *Cluster) Len() int {
+	return len(c.Nodes)
+}
+
+func (c *Cluster) ImportBits(t testing.TB, index, field string, rowcols [][2]uint64) {
 	t.Helper()
 	byShard := make(map[uint64][][2]uint64)
 	for _, rowcol := range rowcols {
@@ -63,7 +77,7 @@ func (c Cluster) ImportBits(t testing.TB, index, field string, rowcols [][2]uint
 			rowIDs[i] = bit[0]
 			colIDs[i] = bit[1]
 		}
-		nodes, err := c[0].API.ShardNodes(context.Background(), index, shard)
+		nodes, err := c.Nodes[0].API.ShardNodes(context.Background(), index, shard)
 		if err != nil {
 			t.Fatalf("getting shard nodes: %v", err)
 		}
@@ -72,7 +86,7 @@ func (c Cluster) ImportBits(t testing.TB, index, field string, rowcols [][2]uint
 		// suggesting that elsewhere we would support importing to a
 		// single node, regardless of where the data ends up.
 		for _, node := range nodes {
-			for _, com := range c {
+			for _, com := range c.Nodes {
 				if com.API.Node().ID != node.ID {
 					continue
 				}
@@ -92,13 +106,13 @@ func (c Cluster) ImportBits(t testing.TB, index, field string, rowcols [][2]uint
 }
 
 // CreateField creates the index (if necessary) and field specified.
-func (c Cluster) CreateField(t testing.TB, index string, iopts pilosa.IndexOptions, field string, fopts ...pilosa.FieldOption) *pilosa.Field {
+func (c *Cluster) CreateField(t testing.TB, index string, iopts pilosa.IndexOptions, field string, fopts ...pilosa.FieldOption) *pilosa.Field {
 	t.Helper()
-	idx, err := c[0].API.CreateIndex(context.Background(), index, iopts)
+	idx, err := c.Nodes[0].API.CreateIndex(context.Background(), index, iopts)
 	if err != nil && !strings.Contains(err.Error(), "index already exists") {
 		t.Fatalf("creating index: %v", err)
 	} else if err != nil { // index exists
-		idx, err = c[0].API.Index(context.Background(), index)
+		idx, err = c.Nodes[0].API.Index(context.Background(), index)
 		if err != nil {
 			t.Fatalf("getting index: %v", err)
 		}
@@ -107,7 +121,7 @@ func (c Cluster) CreateField(t testing.TB, index string, iopts pilosa.IndexOptio
 		t.Logf("existing index options:\n%v\ndon't match given opts:\n%v\n in pilosa/test.Cluster.CreateField", idx.Options(), iopts)
 	}
 
-	f, err := c[0].API.CreateField(context.Background(), index, field, fopts...)
+	f, err := c.Nodes[0].API.CreateField(context.Background(), index, field, fopts...)
 	// we'll assume the field doesn't exist because checking if the options
 	// match seems painful.
 	if err != nil {
@@ -117,9 +131,9 @@ func (c Cluster) CreateField(t testing.TB, index string, iopts pilosa.IndexOptio
 }
 
 // Start runs a Cluster
-func (c Cluster) Start() error {
-	var gossipSeeds = make([]string, len(c))
-	for i, cc := range c {
+func (c *Cluster) Start() error {
+	var gossipSeeds = make([]string, len(c.Nodes))
+	for i, cc := range c.Nodes {
 		cc.Config.Gossip.Port = "0"
 		cc.Config.Gossip.Seeds = gossipSeeds[:i]
 		if err := cc.Start(); err != nil {
@@ -131,8 +145,8 @@ func (c Cluster) Start() error {
 }
 
 // Stop stops a Cluster
-func (c Cluster) Close() error {
-	for i, cc := range c {
+func (c *Cluster) Close() error {
+	for i, cc := range c.Nodes {
 		if err := cc.Close(); err != nil {
 			return errors.Wrapf(err, "stopping server %d", i)
 		}
@@ -140,19 +154,30 @@ func (c Cluster) Close() error {
 	return nil
 }
 
+func (c *Cluster) CloseAndRemove(n int) error {
+	if n < 0 || n >= len(c.Nodes) {
+		return fmt.Errorf("close/remove from cluster: index %d out of range (len %d)", n, len(c.Nodes))
+	}
+	err := c.Nodes[n].Close()
+	copy(c.Nodes[n:], c.Nodes[n+1:])
+	c.Nodes = c.Nodes[:len(c.Nodes)-1]
+	return err
+}
+
 // AwaitState waits for the cluster coordinator (assumed to be the first
 // node) to reach a specified state.
-func (c Cluster) AwaitCoordinatorState(expectedState string, timeout time.Duration) error {
-	if len(c) < 1 {
+func (c *Cluster) AwaitCoordinatorState(expectedState string, timeout time.Duration) error {
+	if len(c.Nodes) < 1 {
 		return errors.New("can't await coordinator state on an empty cluster")
 	}
-	return c[:1].AwaitState(expectedState, timeout)
+	onlyCoordinator := &Cluster{Nodes: c.Nodes[:1]}
+	return onlyCoordinator.AwaitState(expectedState, timeout)
 }
 
 // ExceptionalState returns an error if any node in the cluster is not
 // in the expected state.
-func (c Cluster) ExceptionalState(expectedState string) error {
-	for _, node := range c {
+func (c *Cluster) ExceptionalState(expectedState string) error {
+	for _, node := range c.Nodes {
 		state := node.API.State()
 		if state != expectedState {
 			return fmt.Errorf("node %q: state %s", node.ID(), state)
@@ -162,8 +187,8 @@ func (c Cluster) ExceptionalState(expectedState string) error {
 }
 
 // AwaitState waits for the whole cluster to reach a specified state.
-func (c Cluster) AwaitState(expectedState string, timeout time.Duration) (err error) {
-	if len(c) < 1 {
+func (c *Cluster) AwaitState(expectedState string, timeout time.Duration) (err error) {
+	if len(c.Nodes) < 1 {
 		return errors.New("can't await state of an empty cluster")
 	}
 	startTime := time.Now()
@@ -184,7 +209,7 @@ func (c Cluster) AwaitState(expectedState string, timeout time.Duration) (err er
 // slice of command options, those options are used with every node.
 // If it is empty, default options are used. Otherwise, it must contain size
 // slices of command options, which are used with corresponding nodes.
-func MustNewCluster(tb testing.TB, size int, opts ...[]server.CommandOption) Cluster {
+func MustNewCluster(tb testing.TB, size int, opts ...[]server.CommandOption) *Cluster {
 	tb.Helper()
 	c, err := newCluster(tb, size, opts...)
 	if err != nil {
@@ -206,7 +231,7 @@ func CheckClusterState(m *Command, state string, n int) bool {
 }
 
 // newCluster creates a new cluster
-func newCluster(tb testing.TB, size int, opts ...[]server.CommandOption) (Cluster, error) {
+func newCluster(tb testing.TB, size int, opts ...[]server.CommandOption) (*Cluster, error) {
 	if size == 0 {
 		return nil, errors.New("cluster must contain at least one node")
 	}
@@ -214,26 +239,26 @@ func newCluster(tb testing.TB, size int, opts ...[]server.CommandOption) (Cluste
 		return nil, errors.New("Slice of CommandOptions must be of length 0, 1, or equal to the number of cluster nodes")
 	}
 
-	cluster := make(Cluster, size)
+	cluster := &Cluster{Nodes: make([]*Command, size)}
 	name := tb.Name()
 	for i := 0; i < size; i++ {
 		var commandOpts []server.CommandOption
 		if len(opts) > 0 {
 			commandOpts = opts[i%len(opts)]
 		}
-		m := NewCommandNode(i == 0, commandOpts...)
+		m := NewCommandNode(tb, i == 0, commandOpts...)
 		err := ioutil.WriteFile(path.Join(m.Config.DataDir, ".id"), []byte(name+"_"+strconv.Itoa(i)), 0600)
 		if err != nil {
 			return nil, errors.Wrap(err, "writing node id")
 		}
-		cluster[i] = m
+		cluster.Nodes[i] = m
 	}
 
 	return cluster, nil
 }
 
 // runCluster creates and starts a new cluster
-func runCluster(tb testing.TB, size int, opts ...[]server.CommandOption) (Cluster, error) {
+func runCluster(tb testing.TB, size int, opts ...[]server.CommandOption) (*Cluster, error) {
 	cluster, err := newCluster(tb, size, opts...)
 	if err != nil {
 		return nil, errors.Wrap(err, "new cluster")
@@ -247,7 +272,7 @@ func runCluster(tb testing.TB, size int, opts ...[]server.CommandOption) (Cluste
 
 // MustRunCluster creates and starts a new cluster. The opts parameter
 // is slightly magical; see MustNewCluster.
-func MustRunCluster(tb testing.TB, size int, opts ...[]server.CommandOption) Cluster {
+func MustRunCluster(tb testing.TB, size int, opts ...[]server.CommandOption) *Cluster {
 	// We want tests to default to using the in-memory translate store, so we
 	// prepend opts with that functional option. If a different translate store
 	// has been specified, it will override this one.

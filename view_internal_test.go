@@ -15,16 +15,16 @@
 package pilosa
 
 import (
-	"io/ioutil"
 	"testing"
 	"time"
 
+	"github.com/pilosa/pilosa/v2/testhook"
 	"golang.org/x/sync/errgroup"
 )
 
 // mustOpenView returns a new instance of View with a temporary path.
-func mustOpenView(index, field, name string) *view {
-	path, err := ioutil.TempDir(*TempDir, "pilosa-view-")
+func mustOpenView(tb testing.TB, index, field, name string) *view {
+	path, err := testhook.TempDirInDir(tb, *TempDir, "pilosa-view-")
 	if err != nil {
 		panic(err)
 	}
@@ -38,7 +38,9 @@ func mustOpenView(index, field, name string) *view {
 	h.Path = path
 	// h needs an *Index so we can call h.Index() and get Index.Txf, in TestView_DeleteFragment
 	idx, err := h.createIndex(index, IndexOptions{})
-	_ = idx
+	testhook.Cleanup(tb, func() {
+		h.Close()
+	})
 	panicOn(err)
 
 	v := newView(h, path, index, field, name, fo)
@@ -54,7 +56,7 @@ func mustOpenView(index, field, name string) *view {
 
 // Ensure view can open and retrieve a fragment.
 func TestView_DeleteFragment(t *testing.T) {
-	v := mustOpenView("i", "f", "v")
+	v := mustOpenView(t, "i", "f", "v")
 	defer v.close()
 
 	shard := uint64(9)
@@ -89,7 +91,7 @@ func TestView_DeleteFragment(t *testing.T) {
 // if the broadcast operation takes a bit of time.
 func TestView_CreateFragmentRace(t *testing.T) {
 	var creates errgroup.Group
-	v := mustOpenView("i", "f", "v")
+	v := mustOpenView(t, "i", "f", "v")
 	defer v.close()
 
 	// Use a broadcaster which intentionally fails.

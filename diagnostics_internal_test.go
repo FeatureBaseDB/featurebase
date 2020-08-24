@@ -29,6 +29,7 @@ import (
 func TestDiagnosticsClient(t *testing.T) {
 	// Mock server.
 	server := httptest.NewServer(nil)
+	defer server.Close()
 
 	// Create a new client.
 	d := newDiagnosticsCollector(server.URL)
@@ -121,6 +122,7 @@ func TestDiagnosticsVersion_Check(t *testing.T) {
 			t.Fatalf("couldn't encode version response: %v", err)
 		}
 	}))
+	defer server.Close()
 
 	// Create a new client.
 	d := newDiagnosticsCollector("localhost:10101")
@@ -158,6 +160,7 @@ func compareJSON(a, b []byte) (bool, error) {
 func BenchmarkDiagnostics(b *testing.B) {
 	// Mock server.
 	server := httptest.NewServer(nil)
+	defer server.Close()
 
 	// Create a new client.
 	d := newDiagnosticsCollector(server.URL)

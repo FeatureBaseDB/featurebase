@@ -29,6 +29,7 @@ import (
 	"github.com/pilosa/pilosa/v2/internal"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/stats"
+	"github.com/pilosa/pilosa/v2/testhook"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -153,6 +154,9 @@ func (i *Index) CreatedAt() int64 {
 // Name returns name of the index.
 func (i *Index) Name() string { return i.name }
 
+// Holder yields this index's Holder.
+func (i *Index) Holder() *Holder { return i.holder }
+
 // QualifiedName returns the qualified name of the index.
 func (i *Index) QualifiedName() string { return i.qualifiedName }
 
@@ -253,6 +257,7 @@ func (i *Index) open(withTimestamp, haveHolderLock bool) (err error) {
 		return err
 	}
 
+	_ = testhook.Opened(i.holder.Auditor, i, nil)
 	return nil
 }
 
@@ -339,7 +344,16 @@ fileLoop:
 			})
 		}
 	}
-	return eg.Wait()
+	err = eg.Wait()
+	if err != nil {
+		// Close any fields which got opened, since the overall
+		// index won't be open.
+		for n, f := range i.fields {
+			f.Close()
+			delete(i.fields, n)
+		}
+	}
+	return err
 }
 
 // openExistenceField gets or creates the existence field and associates it to the index.
@@ -403,6 +417,9 @@ func (i *Index) saveMeta() error {
 func (i *Index) Close() error {
 	i.mu.Lock()
 	defer i.mu.Unlock()
+	defer func() {
+		_ = testhook.Closed(i.holder.Auditor, i, nil)
+	}()
 
 	err := i.Txf.CloseIndex(i)
 	if err != nil {

@@ -19,7 +19,9 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math"
 	"os"
+	"sort"
 	"strings"
 	"sync"
 
@@ -164,12 +166,90 @@ func (tx *RBFTx) RemoveContainer(index, field, view string, shard uint64, key ui
 	return tx.tx.RemoveContainer(rbfName(index, field, view, shard), key)
 }
 
+// Add sets all the a bits hot in the specified fragment.
 func (tx *RBFTx) Add(index, field, view string, shard uint64, batched bool, a ...uint64) (changeCount int, err error) {
-	return tx.tx.Add(rbfName(index, field, view, shard), a...)
+	return tx.addOrRemove(index, field, view, shard, batched, false, a...)
 }
 
+// Remove clears all the specified a bits in the chosen fragment.
 func (tx *RBFTx) Remove(index, field, view string, shard uint64, a ...uint64) (changeCount int, err error) {
-	return tx.tx.Remove(rbfName(index, field, view, shard), a...)
+	const batched = false
+	const remove = true
+	return tx.addOrRemove(index, field, view, shard, batched, remove, a...)
+}
+
+func (tx *RBFTx) addOrRemove(index, field, view string, shard uint64, batched, remove bool, a ...uint64) (changeCount int, err error) {
+	// pure hack to match RoaringTx
+	defer func() {
+		if !remove && !batched {
+			if changeCount > 0 {
+				changeCount = 1
+			}
+		}
+	}()
+
+	if len(a) == 0 {
+		return 0, nil
+	}
+
+	// have to sort, b/c input is not always sorted.
+	sort.Slice(a, func(i, j int) bool { return a[i] < a[j] })
+
+	var lastHi uint64 = math.MaxUint64 // highbits is always less than this starter.
+	var rc *roaring.Container
+	var hi uint64
+	var lo uint16
+
+	for i, v := range a {
+
+		hi, lo = highbits(v), lowbits(v)
+		if hi != lastHi {
+			// either first time through, or changed to a different container.
+			// do we need put the last updated container now?
+			if i > 0 {
+				// not first time through, write what we got.
+				if remove && (rc == nil || rc.N() == 0) {
+					err = tx.RemoveContainer(index, field, view, shard, lastHi)
+					panicOn(err)
+				} else {
+					err = tx.PutContainer(index, field, view, shard, lastHi, rc)
+					panicOn(err)
+				}
+			}
+			// get the next container
+			rc, err = tx.Container(index, field, view, shard, hi)
+			panicOn(err)
+		} // else same container, keep adding bits to rct.
+		chng := false
+		// rc can be nil before, and nil after, in both Remove/Add below.
+		// The roaring container add() and remove() methods handle this.
+		if remove {
+			rc, chng = rc.Remove(lo)
+		} else {
+			rc, chng = rc.Add(lo)
+		}
+		if chng {
+			changeCount++
+		}
+		lastHi = hi
+	}
+	// write the last updates.
+	if remove {
+		if rc == nil || rc.N() == 0 {
+			err = tx.RemoveContainer(index, field, view, shard, hi)
+			panicOn(err)
+		} else {
+			err = tx.PutContainer(index, field, view, shard, hi, rc)
+			panicOn(err)
+		}
+	} else {
+		if rc == nil || rc.N() == 0 {
+			panic("there should be no way to have an empty bitmap AFTER an Add() operation")
+		}
+		err = tx.PutContainer(index, field, view, shard, hi, rc)
+		panicOn(err)
+	}
+	return
 }
 
 func (tx *RBFTx) Contains(index, field, view string, shard uint64, v uint64) (exists bool, err error) {

@@ -16,9 +16,10 @@ package pilosa
 
 import (
 	"context"
-	"io/ioutil"
 	"os"
 	"testing"
+
+	"github.com/pilosa/pilosa/v2/testhook"
 )
 
 type testHolderOperator struct {
@@ -72,8 +73,8 @@ func (t *testHolderOperator) ProcessFragment(*fragment) error {
 	return nil
 }
 
-func makeHolder() (*Holder, string, error) {
-	path, err := ioutil.TempDir("", "pilosa-")
+func makeHolder(tb testing.TB) (*Holder, string, error) {
+	path, err := testhook.TempDir(tb, "pilosa-")
 	if err != nil {
 		return nil, "", err
 	}
@@ -109,7 +110,7 @@ func testSetBit(t *testing.T, h *Holder, index, field string, rowID, columnID ui
 }
 
 func TestHolderOperatorProcess(t *testing.T) {
-	h, path, err := makeHolder()
+	h, path, err := makeHolder(t)
 	if err != nil {
 		t.Fatalf("creating holder: %v", err)
 	}
@@ -139,7 +140,7 @@ func TestHolderOperatorProcess(t *testing.T) {
 }
 
 func TestHolderOperatorCancel(t *testing.T) {
-	h, path, err := makeHolder()
+	h, path, err := makeHolder(t)
 	if err != nil {
 		t.Fatalf("creating holder: %v", err)
 	}

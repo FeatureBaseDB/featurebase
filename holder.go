@@ -32,6 +32,7 @@ import (
 	"github.com/pilosa/pilosa/v2/logger"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/stats"
+	"github.com/pilosa/pilosa/v2/testhook"
 	"github.com/pilosa/pilosa/v2/tracing"
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
@@ -105,6 +106,8 @@ type Holder struct {
 	opening bool
 
 	Opts HolderOpts
+
+	Auditor testhook.Auditor
 }
 
 type HolderOpts struct {
@@ -165,7 +168,7 @@ func (lc *lockedChan) Recv() {
 
 // NewHolder returns a new instance of Holder.
 func NewHolder(partitionN int) *Holder {
-	return &Holder{
+	h := &Holder{
 		partitionN: partitionN,
 		indexes:    make(map[string]*Index),
 		closing:    make(chan struct{}),
@@ -188,7 +191,11 @@ func NewHolder(partitionN int) *Holder {
 		Logger: logger.NopLogger,
 
 		SnapshotQueue: defaultSnapshotQueue,
+
+		Auditor: NewAuditor(),
 	}
+	_ = testhook.Created(h.Auditor, h, nil)
+	return h
 }
 
 type HolderInfo struct {
@@ -535,6 +542,8 @@ func (h *Holder) Open() error {
 			err = index.Open(false)
 		}
 		if err != nil {
+			// FIXME: The holder shouldn't be responsible for closing these, probably.
+			_ = index.Txf.CloseDB()
 			if err == ErrName {
 				h.Logger.Printf("ERROR opening index: %s, err=%s", index.Name(), err)
 				continue
@@ -558,6 +567,8 @@ func (h *Holder) Open() error {
 	h.Stats.Open()
 
 	h.opened.Close()
+
+	_ = testhook.Opened(h.Auditor, h, nil)
 
 	return nil
 }
@@ -627,6 +638,12 @@ func (h *Holder) Close() error {
 	h.opened.mu.Lock()
 	h.opened.ch = make(chan struct{})
 	h.opened.mu.Unlock()
+	if h.SnapshotQueue != nil {
+		h.SnapshotQueue.Stop()
+		h.SnapshotQueue = nil
+	}
+
+	_ = testhook.Closed(h.Auditor, h, nil)
 
 	return nil
 }

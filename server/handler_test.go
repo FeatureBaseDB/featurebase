@@ -43,7 +43,7 @@ import (
 func TestHandler_PostSchemaCluster(t *testing.T) {
 	cluster := test.MustRunCluster(t, 3)
 	defer cluster.Close()
-	cmd := cluster[0]
+	cmd := cluster.GetNode(0)
 	h := cmd.Handler.(*http.Handler).Handler
 
 	t.Run("PostSchema", func(t *testing.T) {
@@ -56,8 +56,8 @@ func TestHandler_PostSchemaCluster(t *testing.T) {
 			}
 			t.Fatalf("unexpected code: %v, bod: %s", w.Code, bod)
 		}
-		for i := 0; i < len(cluster); i++ {
-			cmd = cluster[i]
+		for i := 0; i < cluster.Len(); i++ {
+			cmd = cluster.GetNode(i)
 			idx, err := cmd.API.Index(context.Background(), "blah")
 			if err != nil {
 				t.Fatalf("getting index: %v", err)
@@ -82,7 +82,7 @@ func TestHandler_PostSchemaCluster(t *testing.T) {
 func TestHandler_Endpoints(t *testing.T) {
 	cluster := test.MustRunCluster(t, 1)
 	defer cluster.Close()
-	cmd := cluster[0]
+	cmd := cluster.GetNode(0)
 	h := cmd.Handler.(*http.Handler).Handler
 	holder := cmd.Server.Holder()
 	hldr := test.Holder{Holder: holder}
@@ -1049,7 +1049,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		clus := test.MustRunCluster(t, 1, []server.CommandOption{test.OptAllowedOrigins([]string{"http://test/"})})
 		defer clus.Close()
 		w = httptest.NewRecorder()
-		h := clus[0].Handler.(*http.Handler).Handler
+		h := clus.GetNode(0).Handler.(*http.Handler).Handler
 		h.ServeHTTP(w, req)
 		result = w.Result()
 
@@ -1297,59 +1297,59 @@ func TestHandler_Endpoints(t *testing.T) {
 }
 
 func TestCluster_TranslateStore(t *testing.T) {
-	cluster := make(test.Cluster, 1)
-	cluster[0] = test.NewCommandNode(true,
+	cluster := test.MustNewCluster(t, 1)
+	cluster.Nodes[0] = test.NewCommandNode(t, true,
 		server.OptCommandServerOptions(
 			pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
 			pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderWithLockerFunc(nil, &sync.Mutex{})),
 		),
 	)
-	cluster[0].Config.Gossip.Port = "0"
-	err := cluster[0].Start()
+	cluster.GetNode(0).Config.Gossip.Port = "0"
+	err := cluster.GetNode(0).Start()
 	if err != nil {
 		t.Fatalf("starting cluster 0: %v", err)
 	}
-	defer cluster[0].Close()
+	defer cluster.GetNode(0).Close()
 
-	test.Do(t, "POST", cluster[0].URL()+"/index/i0", "{\"options\": {\"keys\": true}}")
+	test.Do(t, "POST", cluster.GetNode(0).URL()+"/index/i0", "{\"options\": {\"keys\": true}}")
 }
 
 func TestClusterTranslator(t *testing.T) {
-	cluster := make(test.Cluster, 2)
-	cluster[0] = test.NewCommandNode(true,
+	cluster := test.MustNewCluster(t, 2)
+	cluster.Nodes[0] = test.NewCommandNode(t, true,
 		server.OptCommandServerOptions(
 			pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
 		),
 	)
-	cluster[0].Config.Gossip.Port = "0"
-	err := cluster[0].Start()
+	cluster.GetNode(0).Config.Gossip.Port = "0"
+	err := cluster.GetNode(0).Start()
 	if err != nil {
 		t.Fatalf("starting cluster 0: %v", err)
 	}
-	defer cluster[0].Close()
-	cluster[1] = test.NewCommandNode(false,
+	defer cluster.GetNode(0).Close()
+	cluster.Nodes[1] = test.NewCommandNode(t, false,
 		server.OptCommandServerOptions(
 			pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
 			pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderWithLockerFunc(nil, &sync.Mutex{})),
 		),
 	)
-	cluster[1].Config.Gossip.Port = "0"
-	cluster[1].Config.Gossip.Seeds = []string{cluster[0].GossipAddress()}
-	err = cluster[1].Start()
+	cluster.GetNode(1).Config.Gossip.Port = "0"
+	cluster.GetNode(1).Config.Gossip.Seeds = []string{cluster.GetNode(0).GossipAddress()}
+	err = cluster.GetNode(1).Start()
 	if err != nil {
 		t.Fatalf("starting cluster 1: %v", err)
 	}
-	defer cluster[1].Close()
+	defer cluster.GetNode(1).Close()
 
-	test.Do(t, "POST", cluster[0].URL()+"/index/i0", "{\"options\": {\"keys\": true}}")
-	test.Do(t, "POST", cluster[0].URL()+"/index/i0/field/f0", "{\"options\": {\"keys\": true}}")
+	test.Do(t, "POST", cluster.GetNode(0).URL()+"/index/i0", "{\"options\": {\"keys\": true}}")
+	test.Do(t, "POST", cluster.GetNode(0).URL()+"/index/i0/field/f0", "{\"options\": {\"keys\": true}}")
 
-	test.Do(t, "POST", cluster[0].URL()+"/index/i0/query", "Set(\"foo\", f0=\"bar\")")
+	test.Do(t, "POST", cluster.GetNode(0).URL()+"/index/i0/query", "Set(\"foo\", f0=\"bar\")")
 
 	var result0, result1 string
 	if err := test.RetryUntil(2*time.Second, func() error {
-		result0 = test.Do(t, "POST", cluster[0].URL()+"/index/i0/query", "Row(f0=\"bar\")").Body
-		result1 = test.Do(t, "POST", cluster[1].URL()+"/index/i0/query", "Row(f0=\"bar\")").Body
+		result0 = test.Do(t, "POST", cluster.GetNode(0).URL()+"/index/i0/query", "Row(f0=\"bar\")").Body
+		result1 = test.Do(t, "POST", cluster.GetNode(1).URL()+"/index/i0/query", "Row(f0=\"bar\")").Body
 		if result0 != result1 {
 			return fmt.Errorf("`%s` != `%s`", result0, result1)
 		}

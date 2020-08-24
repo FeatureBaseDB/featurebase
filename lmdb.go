@@ -22,9 +22,11 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"math"
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -128,14 +130,15 @@ func (r *lmdbRegistrar) openLMDBWrapper(path0 string) (*LMDBWrapper, error) {
 
 	err = env.SetMaxDBs(1)
 	panicOn(err)
-	err = env.SetMapSize(256 << 30) // 256GB
+	//err = env.SetMapSize(256 << 30) // 256GB
+	err = env.SetMapSize(16 << 30) // 16GB
 	panicOn(err)
 
 	panicOn(os.MkdirAll(filepath.Dir(path), 0755))
 
 	flags := uint(lmdb.NoReadahead | lmdb.NoSubdir)
 
-	// unsafe, but get upper bound on performance. TODO: remove these.
+	// unsafe, but get upper bound on performance.
 	//	WriteMap    = C.MDB_WRITEMAP   // Use a writable memory map.
 	//	NoMetaSync  = C.MDB_NOMETASYNC // Don't fsync metapage after commit.
 	//	NoSync      = C.MDB_NOSYNC     // Don't fsync after commit.
@@ -145,12 +148,20 @@ func (r *lmdbRegistrar) openLMDBWrapper(path0 string) (*LMDBWrapper, error) {
 	// kRemove  N=  710401   avg/op:      7.714µs   sd:      27.83µs  total: 5.480656859s
 	//    kAdd  N=  722835   avg/op:      9.096µs   sd:    105.787µs  total: 6.575497725s
 
+	// ACI not ACID at the moment; no durability
 	flags = flags |
+		lmdb.NoMemInit | // Disable LMDB memory initialization
+
+		// Note that lmdb.WriteMap requests a big, writable, memory map.
+		// On my darwin/OSX laptop with 16GB ram, for instance, we
+		// can have difficulty obtaining this, resulting in
+		//   panic: mdb_env_open: no space left on device
 		lmdb.WriteMap | // Use a writable memory map.
-		//lmdb.NoMetaSync | // Don't fsync metapage after commit.
-		//lmdb.NoSync | // Don't fsync after commit.
-		//lmdb.MapAsync | // Flush asynchronously when using the WriteMap flag.
-		lmdb.NoMemInit // Disable LMDB memory initialization
+
+		// default ACI (not Durable) transactions; 300% faster write speed results.
+		lmdb.NoMetaSync | // Don't fsync metapage after commit.
+		lmdb.NoSync | // Don't fsync after commit.
+		lmdb.MapAsync // Flush asynchronously when using the WriteMap flag.
 
 	err = env.Open(path, flags, 0644)
 	if err != nil {
@@ -476,80 +487,86 @@ func (tx *LMDBTx) RemoveContainer(index, field, view string, shard uint64, ckey 
 
 // Add sets all the a bits hot in the specified fragment.
 func (tx *LMDBTx) Add(index, field, view string, shard uint64, batched bool, a ...uint64) (changeCount int, err error) {
+	return tx.addOrRemove(index, field, view, shard, batched, false, a...)
+}
 
+// Remove clears all the specified a bits in the chosen fragment.
+func (tx *LMDBTx) Remove(index, field, view string, shard uint64, a ...uint64) (changeCount int, err error) {
+	const batched = false
+	const remove = true
+	return tx.addOrRemove(index, field, view, shard, batched, remove, a...)
+}
+
+func (tx *LMDBTx) addOrRemove(index, field, view string, shard uint64, batched, remove bool, a ...uint64) (changeCount int, err error) {
 	// pure hack to match RoaringTx
 	defer func() {
-		if !batched {
+		if !remove && !batched {
 			if changeCount > 0 {
 				changeCount = 1
 			}
 		}
 	}()
 
-	// TODO: optimization: group 'a' elements into their containers,
-	// and then do all the Adds on that
-	// container at once, so we don't retrieve a container per bit.
-	// (maybe, for example, using ImportRoaringBits with clear=false).
-
-	for _, v := range a {
-		hi, lo := highbits(v), lowbits(v)
-
-		var rct *roaring.Container
-		rct, err = tx.Container(index, field, view, shard, hi)
-		panicOn(err)
-		if err != nil {
-			return 0, err
-		}
-		chng := false
-		// TODO optimization: set all the bits in the current container at once. group by container first.
-		rc1, chng := rct.Add(lo)
-		panicOn(err)
-		if chng {
-			changeCount++
-		}
-		if err != nil {
-			return changeCount, err
-		}
-		err = tx.PutContainer(index, field, view, shard, hi, rc1)
-		//panicOn(err)
+	if len(a) == 0 {
+		return 0, nil
 	}
-	return
-}
 
-// Remove clears all the specified a bits in the chosen fragment.
-func (tx *LMDBTx) Remove(index, field, view string, shard uint64, a ...uint64) (changeCount int, err error) {
+	// have to sort, b/c input is not always sorted.
+	sort.Slice(a, func(i, j int) bool { return a[i] < a[j] })
 
-	// TODO: optimization: group 'a' elements into their containers,
-	// and then do all the Removes on that
-	// container at once, so we don't retrieve a container per bit.
-	// (maybe, for example, using ImportRoaringBits with clear=true).
-	for _, v := range a {
-		hi, lo := highbits(v), lowbits(v)
+	var lastHi uint64 = math.MaxUint64 // highbits is always less than this starter.
+	var rc *roaring.Container
+	var hi uint64
+	var lo uint16
 
-		var rct *roaring.Container
-		rct, err = tx.Container(index, field, view, shard, hi)
-		panicOn(err)
-		if err != nil {
-			return 0, err
-		}
+	for i, v := range a {
+
+		hi, lo = highbits(v), lowbits(v)
+		if hi != lastHi {
+			// either first time through, or changed to a different container.
+			// do we need put the last updated container now?
+			if i > 0 {
+				// not first time through, write what we got.
+				if remove && (rc == nil || rc.N() == 0) {
+					err = tx.RemoveContainer(index, field, view, shard, lastHi)
+					panicOn(err)
+				} else {
+					err = tx.PutContainer(index, field, view, shard, lastHi, rc)
+					panicOn(err)
+				}
+			}
+			// get the next container
+			rc, err = tx.Container(index, field, view, shard, hi)
+			panicOn(err)
+		} // else same container, keep adding bits to rct.
 		chng := false
-		rc1, chng := rct.Remove(lo)
-		panicOn(err)
+		// rc can be nil before, and nil after, in both Remove/Add below.
+		// The roaring container add() and remove() methods handle this.
+		if remove {
+			rc, chng = rc.Remove(lo)
+		} else {
+			rc, chng = rc.Add(lo)
+		}
 		if chng {
 			changeCount++
 		}
-		if err != nil {
-			return changeCount, err
-		}
-		if rc1.N() == 0 {
+		lastHi = hi
+	}
+	// write the last updates.
+	if remove {
+		if rc == nil || rc.N() == 0 {
 			err = tx.RemoveContainer(index, field, view, shard, hi)
-			if err != nil {
-				return
-			}
+			panicOn(err)
 		} else {
-			err = tx.PutContainer(index, field, view, shard, hi, rc1)
+			err = tx.PutContainer(index, field, view, shard, hi, rc)
 			panicOn(err)
 		}
+	} else {
+		if rc == nil || rc.N() == 0 {
+			panic("there should be no way to have an empty bitmap AFTER an Add() operation")
+		}
+		err = tx.PutContainer(index, field, view, shard, hi, rc)
+		panicOn(err)
 	}
 	return
 }

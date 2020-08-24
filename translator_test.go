@@ -227,11 +227,12 @@ func TestTranslation_Reset(t *testing.T) {
 					pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
 				)},
 		)
+		defer c.Close()
 
-		node0 := c[0]
-		node1 := c[1]
-		node2 := c[2]
-		node3 := c[3]
+		node0 := c.GetNode(0)
+		node1 := c.GetNode(1)
+		node2 := c.GetNode(2)
+		node3 := c.GetNode(3)
 
 		ctx := context.Background()
 		idx := "i"
@@ -321,9 +322,10 @@ func TestTranslation_Replication(t *testing.T) {
 					pilosa.OptServerReplicaN(2),
 				)},
 		)
+		defer c.Close()
 
-		node0 := c[0]
-		node1 := c[1]
+		node0 := c.GetNode(0)
+		node1 := c.GetNode(1)
 
 		ctx := context.Background()
 		idx := "i"
@@ -362,7 +364,7 @@ func TestTranslation_Replication(t *testing.T) {
 		node0.QueryExpect(t, idx, "", `Row(f=1)`, exp)
 
 		// Kill one node.
-		if err := node1.Command.Close(); err != nil {
+		if err := c.CloseAndRemove(1); err != nil {
 			t.Fatal(err)
 		}
 
@@ -396,8 +398,8 @@ func TestTranslation_Coordinator(t *testing.T) {
 		)
 		defer c.Close()
 
-		node0 := c[0]
-		node1 := c[1]
+		node0 := c.GetNode(0)
+		node1 := c.GetNode(1)
 
 		ctx := context.Background()
 		idx := "i"

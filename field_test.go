@@ -15,7 +15,6 @@
 package pilosa_test
 
 import (
-	"io/ioutil"
 	"math"
 	"testing"
 
@@ -23,6 +22,7 @@ import (
 	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/test"
+	"github.com/pilosa/pilosa/v2/testhook"
 )
 
 var panicOn = pilosa.PanicOn
@@ -30,7 +30,7 @@ var panicOn = pilosa.PanicOn
 // Ensure a field can set & read a bsiGroup value.
 func TestField_SetValue(t *testing.T) {
 	t.Run("OK", func(t *testing.T) {
-		idx := test.MustOpenIndex()
+		idx := test.MustOpenIndex(t)
 		defer idx.Close()
 
 		f, err := idx.CreateField("f", pilosa.OptFieldTypeInt(math.MinInt64, math.MaxInt64))
@@ -67,7 +67,7 @@ func TestField_SetValue(t *testing.T) {
 	})
 
 	t.Run("Overwrite", func(t *testing.T) {
-		idx := test.MustOpenIndex()
+		idx := test.MustOpenIndex(t)
 		defer idx.Close()
 
 		f, err := idx.CreateField("f", pilosa.OptFieldTypeInt(math.MinInt64, math.MaxInt64))
@@ -103,7 +103,7 @@ func TestField_SetValue(t *testing.T) {
 	})
 
 	t.Run("ErrBSIGroupNotFound", func(t *testing.T) {
-		idx := test.MustOpenIndex()
+		idx := test.MustOpenIndex(t)
 		defer idx.Close()
 
 		f, err := idx.CreateField("f", pilosa.OptFieldTypeDefault())
@@ -121,7 +121,7 @@ func TestField_SetValue(t *testing.T) {
 	})
 
 	t.Run("ErrBSIGroupValueTooLow", func(t *testing.T) {
-		idx := test.MustOpenIndex()
+		idx := test.MustOpenIndex(t)
 		defer idx.Close()
 
 		f, err := idx.CreateField("f", pilosa.OptFieldTypeInt(20, 30))
@@ -139,7 +139,7 @@ func TestField_SetValue(t *testing.T) {
 	})
 
 	t.Run("ErrBSIGroupValueTooHigh", func(t *testing.T) {
-		idx := test.MustOpenIndex()
+		idx := test.MustOpenIndex(t)
 		defer idx.Close()
 
 		f, err := idx.CreateField("f", pilosa.OptFieldTypeInt(20, 30))
@@ -158,7 +158,7 @@ func TestField_SetValue(t *testing.T) {
 }
 
 func TestField_NameRestriction(t *testing.T) {
-	path, err := ioutil.TempDir("", "pilosa-field-")
+	path, err := testhook.TempDir(t, "pilosa-field-")
 	if err != nil {
 		panic(err)
 	}
@@ -190,7 +190,7 @@ func TestField_NameValidation(t *testing.T) {
 		"charact23112345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901",
 	}
 
-	path, err := ioutil.TempDir("", "pilosa-field-")
+	path, err := testhook.TempDir(t, "pilosa-field-")
 	if err != nil {
 		panic(err)
 	}
@@ -210,7 +210,7 @@ func TestField_NameValidation(t *testing.T) {
 
 // Ensure can update and delete available shards.
 func TestField_AvailableShards(t *testing.T) {
-	idx := test.MustOpenIndex()
+	idx := test.MustOpenIndex(t)
 	defer idx.Close()
 
 	f, err := idx.CreateField("f", pilosa.OptFieldTypeDefault())
@@ -253,7 +253,7 @@ func TestField_AvailableShards(t *testing.T) {
 
 func TestField_ClearValue(t *testing.T) {
 	t.Run("OK", func(t *testing.T) {
-		idx := test.MustOpenIndex()
+		idx := test.MustOpenIndex(t)
 		defer idx.Close()
 
 		f, err := idx.CreateField("f", pilosa.OptFieldTypeInt(math.MinInt64, math.MaxInt64))

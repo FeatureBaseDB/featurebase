@@ -19,15 +19,17 @@ import (
 	"io/ioutil"
 	"path/filepath"
 	"sync"
+	"testing"
 	"time"
 
 	"github.com/gogo/protobuf/proto"
+	"github.com/pilosa/pilosa/v2/testhook"
 	"github.com/pkg/errors"
 )
 
 // NewTestCluster returns a cluster with n nodes and uses a mod-based hasher.
-func NewTestCluster(n int) *cluster {
-	path, err := ioutil.TempDir("", "pilosa-cluster-")
+func NewTestCluster(tb testing.TB, n int) *cluster {
+	path, err := testhook.TempDir(tb, "pilosa-cluster-")
 	if err != nil {
 		panic(err)
 	}
@@ -88,6 +90,7 @@ type ClusterCluster struct {
 	mu         sync.RWMutex
 	resizing   bool
 	resizeDone chan struct{}
+	tb         testing.TB
 }
 
 type commonClusterSettings struct {
@@ -226,7 +229,7 @@ func (t *ClusterCluster) addCluster(i int, saveTopology bool) (*cluster, error) 
 	t.common.Nodes = append(t.common.Nodes, node)
 
 	// create node-specific temp directory
-	path, err := ioutil.TempDir(*TempDir, fmt.Sprintf("pilosa-cluster-node-%d-", i))
+	path, err := testhook.TempDirInDir(t.tb, *TempDir, fmt.Sprintf("pilosa-cluster-node-%d-", i))
 	if err != nil {
 		return nil, err
 	}
@@ -262,10 +265,11 @@ func (t *ClusterCluster) addCluster(i int, saveTopology bool) (*cluster, error) 
 }
 
 // NewClusterCluster returns a new instance of test.Cluster.
-func NewClusterCluster(n int) *ClusterCluster {
+func NewClusterCluster(tb testing.TB, n int) *ClusterCluster {
 
 	tc := &ClusterCluster{
 		common: &commonClusterSettings{},
+		tb:     tb,
 	}
 
 	// add clusters

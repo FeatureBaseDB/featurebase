@@ -355,7 +355,7 @@ func TestConcurrentFieldCreation(t *testing.T) {
 	cluster := test.MustRunCluster(t, 3)
 	defer cluster.Close()
 
-	api0 := cluster[0].API
+	api0 := cluster.GetNode(0).API
 	if _, err := api0.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil {
 		t.Fatalf("creating index: %v", err)
 	}
@@ -379,10 +379,10 @@ func TestTransactionsAPI(t *testing.T) {
 	cluster := test.MustRunCluster(t, 3)
 	defer cluster.Close()
 
-	api0 := cluster[0].API
-	api1 := cluster[1].API
+	api0 := cluster.GetNode(0).API
+	api1 := cluster.GetNode(1).API
 	ctx := context.Background()
-	//api2 := cluster[2].API
+	//api2 := cluster.GetNode(2).API
 
 	// can fetch empty transactions
 	if trnsMap, err := api0.Transactions(ctx); err != nil {
@@ -508,7 +508,7 @@ func TestMain_RecalculateHashes(t *testing.T) {
 	defer cluster.Close()
 
 	// Create the schema.
-	client0 := cluster[0].Client()
+	client0 := cluster.GetNode(0).Client()
 	if err := client0.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
 		t.Fatal("create index:", err)
 	}
@@ -523,12 +523,12 @@ func TestMain_RecalculateHashes(t *testing.T) {
 			data = append(data, fmt.Sprintf(`Set(%d, f=%d)`, columnID, rowID))
 		}
 	}
-	if _, err := cluster[0].Query(t, "i", "", strings.Join(data, "")); err != nil {
+	if _, err := cluster.GetNode(0).Query(t, "i", "", strings.Join(data, "")); err != nil {
 		t.Fatal("setting columns:", err)
 	}
 
 	// Calculate caches on the first node
-	err := cluster[0].RecalculateCaches(t)
+	err := cluster.GetNode(0).RecalculateCaches(t)
 	if err != nil {
 		t.Fatalf("recalculating caches: %v", err)
 	}
@@ -536,7 +536,7 @@ func TestMain_RecalculateHashes(t *testing.T) {
 	target := `{"results":[[{"id":7,"key":"","count":99},{"id":1,"key":"","count":99},{"id":9,"key":"","count":99},{"id":5,"key":"","count":99},{"id":4,"key":"","count":99},{"id":8,"key":"","count":99},{"id":2,"key":"","count":99},{"id":6,"key":"","count":99},{"id":3,"key":"","count":99}]]}`
 
 	// Run a TopN query on all nodes. The result should be the same as the target.
-	for _, m := range cluster {
+	for _, m := range cluster.Nodes {
 		res, err := m.Query(t, "i", "", `TopN(f)`)
 		if err != nil {
 			t.Fatal(err)
@@ -635,27 +635,27 @@ func TestClusteringNodesReplica1(t *testing.T) {
 		t.Fatalf("starting cluster: %v", err)
 	}
 
-	if err := cluster[2].Command.Close(); err != nil {
+	if err := cluster.GetNode(2).Command.Close(); err != nil {
 		t.Fatalf("closing third node: %v", err)
 	}
 
 	// confirm that cluster stops accepting queries after one node closes
-	if _, err := cluster[0].API.Query(context.Background(), &pilosa.QueryRequest{}); !strings.Contains(err.Error(), "not allowed in state STARTING") {
+	if _, err := cluster.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{}); !strings.Contains(err.Error(), "not allowed in state STARTING") {
 		t.Fatalf("got unexpected error querying an incomplete cluster: %v", err)
 	}
 
 	// Create new main with the same config.
-	config := cluster[2].Command.Config
+	config := cluster.GetNode(2).Command.Config
 	config.Translation.MapSize = 100000
 
 	// this isn't necessary, but makes the test run way faster
-	config.Gossip.Port = strconv.Itoa(int(cluster[2].Command.GossipTransport().URI.Port))
+	config.Gossip.Port = strconv.Itoa(int(cluster.GetNode(2).Command.GossipTransport().URI.Port))
 
-	cluster[2].Command = server.NewCommand(cluster[2].Stdin, cluster[2].Stdout, cluster[2].Stderr, server.OptCommandServerOptions(pilosa.OptServerOpenTranslateStore(pilosa.OpenInMemTranslateStore)))
-	cluster[2].Command.Config = config
+	cluster.GetNode(2).Command = server.NewCommand(cluster.GetNode(2).Stdin, cluster.GetNode(2).Stdout, cluster.GetNode(2).Stderr, server.OptCommandServerOptions(pilosa.OptServerOpenTranslateStore(pilosa.OpenInMemTranslateStore)))
+	cluster.GetNode(2).Command.Config = config
 
 	// Run new program.
-	if err := cluster[2].Start(); err != nil {
+	if err := cluster.GetNode(2).Start(); err != nil {
 		t.Fatalf("restarting node 2: %v", err)
 	}
 
@@ -667,7 +667,7 @@ func TestClusteringNodesReplica1(t *testing.T) {
 
 func TestClusteringNodesReplica2(t *testing.T) {
 	cluster := test.MustNewCluster(t, 3)
-	for _, c := range cluster {
+	for _, c := range cluster.Nodes {
 		c.Config.Cluster.ReplicaN = 2
 	}
 	err := cluster.Start()
@@ -681,7 +681,7 @@ func TestClusteringNodesReplica2(t *testing.T) {
 		t.Fatalf("starting cluster: %v", err)
 	}
 
-	if err := cluster[2].Command.Close(); err != nil {
+	if err := cluster.GetNode(2).Command.Close(); err != nil {
 		t.Fatalf("closing third node: %v", err)
 	}
 
@@ -691,12 +691,12 @@ func TestClusteringNodesReplica2(t *testing.T) {
 	}
 
 	// confirm that cluster keeps accepting queries if replication > 1
-	if _, err := cluster[0].API.CreateIndex(context.Background(), "anewindex", pilosa.IndexOptions{}); err != nil {
+	if _, err := cluster.GetNode(0).API.CreateIndex(context.Background(), "anewindex", pilosa.IndexOptions{}); err != nil {
 		t.Fatalf("got unexpected error creating index: %v", err)
 	}
 
 	// confirm that cluster stops accepting queries if 2 nodes fail and replication == 2
-	if err := cluster[1].Command.Close(); err != nil {
+	if err := cluster.GetNode(1).Command.Close(); err != nil {
 		t.Fatalf("closing 2nd node: %v", err)
 	}
 
@@ -705,23 +705,23 @@ func TestClusteringNodesReplica2(t *testing.T) {
 		t.Fatalf("after closing second server: %v", err)
 	}
 
-	if _, err := cluster[0].API.Query(context.Background(), &pilosa.QueryRequest{}); !strings.Contains(err.Error(), "not allowed in state STARTING") {
+	if _, err := cluster.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{}); !strings.Contains(err.Error(), "not allowed in state STARTING") {
 		t.Fatalf("got unexpected error querying an incomplete cluster: %v", err)
 	}
 
 	// Create new main with the same config.
-	config := cluster[2].Command.Config
+	config := cluster.GetNode(2).Command.Config
 	config.Translation.MapSize = 100000
-	// config.Bind = cluster[2].API.Node().URI.HostPort()
+	// config.Bind = cluster.GetNode(2).API.Node().URI.HostPort()
 
 	// this isn't necessary, but makes the test run way faster
-	config.Gossip.Port = strconv.Itoa(int(cluster[2].Command.GossipTransport().URI.Port))
+	config.Gossip.Port = strconv.Itoa(int(cluster.GetNode(2).Command.GossipTransport().URI.Port))
 
-	cluster[2].Command = server.NewCommand(cluster[2].Stdin, cluster[2].Stdout, cluster[2].Stderr, server.OptCommandServerOptions(pilosa.OptServerOpenTranslateStore(pilosa.OpenInMemTranslateStore)))
-	cluster[2].Command.Config = config
+	cluster.GetNode(2).Command = server.NewCommand(cluster.GetNode(2).Stdin, cluster.GetNode(2).Stdout, cluster.GetNode(2).Stderr, server.OptCommandServerOptions(pilosa.OptServerOpenTranslateStore(pilosa.OpenInMemTranslateStore)))
+	cluster.GetNode(2).Command.Config = config
 
 	// Run new program.
-	if err := cluster[2].Start(); err != nil {
+	if err := cluster.GetNode(2).Start(); err != nil {
 		t.Fatalf("restarting node 2: %v", err)
 	}
 
@@ -731,18 +731,18 @@ func TestClusteringNodesReplica2(t *testing.T) {
 	}
 
 	// Create new main with the same config.
-	config = cluster[1].Command.Config
-	// config.Bind = cluster[1].API.Node().URI.HostPort()
+	config = cluster.GetNode(1).Command.Config
+	// config.Bind = cluster.GetNode(1).API.Node().URI.HostPort()
 	config.Translation.MapSize = 100000
 
 	// this isn't necessary, but makes the test run way faster
-	config.Gossip.Port = strconv.Itoa(int(cluster[1].Command.GossipTransport().URI.Port))
+	config.Gossip.Port = strconv.Itoa(int(cluster.GetNode(1).Command.GossipTransport().URI.Port))
 
-	cluster[1].Command = server.NewCommand(cluster[1].Stdin, cluster[1].Stdout, cluster[1].Stderr, server.OptCommandServerOptions(pilosa.OptServerOpenTranslateStore(pilosa.OpenInMemTranslateStore)))
-	cluster[1].Command.Config = config
+	cluster.GetNode(1).Command = server.NewCommand(cluster.GetNode(1).Stdin, cluster.GetNode(1).Stdout, cluster.GetNode(1).Stderr, server.OptCommandServerOptions(pilosa.OptServerOpenTranslateStore(pilosa.OpenInMemTranslateStore)))
+	cluster.GetNode(1).Command.Config = config
 
 	// Run new program.
-	if err := cluster[1].Start(); err != nil {
+	if err := cluster.GetNode(1).Start(); err != nil {
 		t.Fatalf("restarting node 1: %v", err)
 	}
 
@@ -754,7 +754,7 @@ func TestClusteringNodesReplica2(t *testing.T) {
 
 func TestRemoveNodeAfterItDies(t *testing.T) {
 	cluster := test.MustNewCluster(t, 3)
-	for _, c := range cluster {
+	for _, c := range cluster.Nodes {
 		c.Config.Cluster.ReplicaN = 2
 	}
 	err := cluster.Start()
@@ -774,10 +774,9 @@ func TestRemoveNodeAfterItDies(t *testing.T) {
 		t.Fatalf("starting cluster: %v", err)
 	}
 
-	// prevent double-closing cluster[2] from the deferred Close above
-	disabled, cluster := cluster[2], cluster[:2]
-
-	if err := disabled.Command.Close(); err != nil {
+	// prevent double-closing cluster.GetNode(2) from the deferred Close above
+	disabled := cluster.GetNode(2)
+	if err := cluster.CloseAndRemove(2); err != nil {
 		t.Fatalf("closing third node: %v", err)
 	}
 
@@ -786,7 +785,7 @@ func TestRemoveNodeAfterItDies(t *testing.T) {
 		t.Fatalf("starting cluster: %v", err)
 	}
 
-	if _, err := cluster[0].API.RemoveNode(disabled.API.Node().ID); err != nil {
+	if _, err := cluster.GetNode(0).API.RemoveNode(disabled.API.Node().ID); err != nil {
 		t.Fatalf("removing failed node: %v", err)
 	}
 
@@ -795,7 +794,7 @@ func TestRemoveNodeAfterItDies(t *testing.T) {
 		t.Fatalf("removing disabled node: %v", err)
 	}
 
-	hosts := cluster[0].API.Hosts(context.Background())
+	hosts := cluster.GetNode(0).API.Hosts(context.Background())
 	if len(hosts) != 2 {
 		t.Fatalf("unexpected hosts: %v", hosts)
 	}
@@ -803,7 +802,7 @@ func TestRemoveNodeAfterItDies(t *testing.T) {
 
 func TestRemoveConcurrentIndexCreation(t *testing.T) {
 	cluster := test.MustNewCluster(t, 3)
-	for _, c := range cluster {
+	for _, c := range cluster.Nodes {
 		c.Config.Cluster.ReplicaN = 2
 	}
 	err := cluster.Start()
@@ -818,11 +817,11 @@ func TestRemoveConcurrentIndexCreation(t *testing.T) {
 
 	errc := make(chan error)
 	go func() {
-		_, err := cluster[0].API.CreateIndex(context.Background(), "blah", pilosa.IndexOptions{})
+		_, err := cluster.GetNode(0).API.CreateIndex(context.Background(), "blah", pilosa.IndexOptions{})
 		errc <- err
 	}()
 
-	if _, err := cluster[0].API.RemoveNode(cluster[2].API.Node().ID); err != nil {
+	if _, err := cluster.GetNode(0).API.RemoveNode(cluster.GetNode(2).API.Node().ID); err != nil {
 		t.Fatalf("removing node: %v", err)
 	}
 
@@ -831,7 +830,7 @@ func TestRemoveConcurrentIndexCreation(t *testing.T) {
 		t.Fatalf("starting cluster: %v", err)
 	}
 
-	hosts := cluster[0].API.Hosts(context.Background())
+	hosts := cluster.GetNode(0).API.Hosts(context.Background())
 	if len(hosts) != 2 {
 		t.Fatalf("unexpected hosts: %v", hosts)
 	}
@@ -948,9 +947,9 @@ func TestMain_ImportTimestampNoStandardView(t *testing.T) {
 func TestClusterQueriesAfterRestart(t *testing.T) {
 	cluster := test.MustRunCluster(t, 3)
 	defer cluster.Close()
-	cmd1 := cluster[1]
+	cmd1 := cluster.GetNode(1)
 
-	for _, com := range cluster {
+	for _, com := range cluster.Nodes {
 		nodes := com.API.Hosts(context.Background())
 		for _, n := range nodes {
 			if n.State != "READY" {
@@ -992,7 +991,7 @@ func TestClusterQueriesAfterRestart(t *testing.T) {
 	}
 
 	// confirm that cluster stops accepting queries after one node closes
-	if _, err := cluster[0].API.Query(context.Background(), &pilosa.QueryRequest{}); !strings.Contains(err.Error(), "not allowed in state STARTING") {
+	if _, err := cluster.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{}); !strings.Contains(err.Error(), "not allowed in state STARTING") {
 		t.Fatalf("got unexpected error querying an incomplete cluster: %v", err)
 	}
 
@@ -1034,9 +1033,9 @@ func TestClusterExhaustingConnections(t *testing.T) {
 	}
 	cluster := test.MustRunCluster(t, 5)
 	defer cluster.Close()
-	cmd1 := cluster[1]
+	cmd1 := cluster.GetNode(1)
 
-	for _, com := range cluster {
+	for _, com := range cluster.Nodes {
 		nodes := com.API.Hosts(context.Background())
 		for _, n := range nodes {
 			if n.State != "READY" {
@@ -1053,7 +1052,7 @@ func TestClusterExhaustingConnections(t *testing.T) {
 		i := i
 		eg.Go(func() error {
 			for j := i; j < 10000; j += 20 {
-				_, err := cluster[i%5].API.Query(context.Background(), &pilosa.QueryRequest{
+				_, err := cluster.GetNode(i%5).API.Query(context.Background(), &pilosa.QueryRequest{
 					Index: "testidx",
 					Query: fmt.Sprintf("Set(%d, testfield=0)", j*pilosa.ShardWidth),
 				})
@@ -1120,9 +1119,9 @@ func TestClusterExhaustingConnectionsImport(t *testing.T) {
 	}
 	cluster := test.MustRunCluster(t, 5)
 	defer cluster.Close()
-	cmd1 := cluster[1]
+	cmd1 := cluster.GetNode(1)
 
-	for _, com := range cluster {
+	for _, com := range cluster.Nodes {
 		nodes := com.API.Hosts(context.Background())
 		for _, n := range nodes {
 			if n.State != "READY" {
@@ -1151,7 +1150,7 @@ func TestClusterExhaustingConnectionsImport(t *testing.T) {
 				if (j-i)%1000 == 0 {
 					fmt.Printf("%d is %.2f%% done.\n", i, float64(j-i)*100/100000)
 				}
-				err := cluster[i%5].API.ImportRoaring(context.Background(), "testidx", "testfield", j, false, &pilosa.ImportRoaringRequest{
+				err := cluster.GetNode(int(i%5)).API.ImportRoaring(context.Background(), "testidx", "testfield", j, false, &pilosa.ImportRoaringRequest{
 					Views: map[string][]byte{
 						"": data,
 					},
@@ -1172,12 +1171,12 @@ func TestClusterExhaustingConnectionsImport(t *testing.T) {
 func TestClusterMinMaxSumDecimal(t *testing.T) {
 	cluster := test.MustRunCluster(t, 3)
 	defer cluster.Close()
-	cmd := cluster[0]
+	cmd := cluster.GetNode(0)
 
 	cmd.MustCreateIndex(t, "testdec", pilosa.IndexOptions{Keys: true, TrackExistence: true})
 	cmd.MustCreateField(t, "testdec", "adec", pilosa.OptFieldTypeDecimal(2))
 
-	test.Do(t, "POST", cluster[0].URL()+"/index/testdec/query", `
+	test.Do(t, "POST", cluster.GetNode(0).URL()+"/index/testdec/query", `
 Set("a", adec=42.2)
 Set("b", adec=11.12)
 Set("c", adec=13.41)
@@ -1188,21 +1187,21 @@ Set("g", adec=15.52)
 Set("h", adec=100.22)
 `)
 
-	result := test.Do(t, "POST", cluster[0].URL()+"/index/testdec/query", "Sum(field=adec)")
+	result := test.Do(t, "POST", cluster.GetNode(0).URL()+"/index/testdec/query", "Sum(field=adec)")
 	if !strings.Contains(result.Body, `"decimalValue":305.59`) {
 		t.Fatalf("expected decimal sum of 305.59, but got: '%s'", result.Body)
 	} else if !strings.Contains(result.Body, `"count":8`) {
 		t.Fatalf("expected count 8, but got: '%s'", result.Body)
 	}
 
-	result = test.Do(t, "POST", cluster[0].URL()+"/index/testdec/query", "Max(field=adec)")
+	result = test.Do(t, "POST", cluster.GetNode(0).URL()+"/index/testdec/query", "Max(field=adec)")
 	if !strings.Contains(result.Body, `"decimalValue":100.22`) {
 		t.Fatalf("expected decimal max of 100.22, but got: '%s'", result.Body)
 	} else if !strings.Contains(result.Body, `"count":1`) {
 		t.Fatalf("expected count 1, but got: '%s'", result.Body)
 	}
 
-	result = test.Do(t, "POST", cluster[0].URL()+"/index/testdec/query", "Min(field=adec)")
+	result = test.Do(t, "POST", cluster.GetNode(0).URL()+"/index/testdec/query", "Min(field=adec)")
 	if !strings.Contains(result.Body, `"decimalValue":11.12`) {
 		t.Fatalf("expected decimal min of 11.12, but got: '%s'", result.Body)
 	} else if !strings.Contains(result.Body, `"count":1`) {
