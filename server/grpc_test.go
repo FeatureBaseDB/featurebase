@@ -709,6 +709,7 @@ func TestQuerySQLUnary(t *testing.T) {
 					{"Table", "string"},
 				},
 				rows: []row{
+					{[]columnResponse{"delete_me"}},
 					{[]columnResponse{"grouper"}},
 					{[]columnResponse{"joiner"}},
 				},
@@ -727,6 +728,27 @@ func TestQuerySQLUnary(t *testing.T) {
 					{[]columnResponse{"color", "[]string"}},
 					{[]columnResponse{"height", "int64"}},
 					{[]columnResponse{"score", "int64"}},
+				},
+			},
+			eq: equal,
+		},
+		{
+			sql: "drop table delete_me",
+			exp: tableResponse{
+				headers: []columnInfo{},
+				rows:    []row{},
+			},
+			eq: equal,
+		},
+		{
+			sql: "show tables",
+			exp: tableResponse{
+				headers: []columnInfo{
+					{"Table", "string"},
+				},
+				rows: []row{
+					{[]columnResponse{"grouper"}},
+					{[]columnResponse{"joiner"}},
 				},
 			},
 			eq: equal,
@@ -880,6 +902,9 @@ func setUpTestQuerySQLUnary(ctx context.Context, t *testing.T) (gh *server.GRPCH
 			t.Fatal(err)
 		}
 	}
+
+	// delete_me
+	m.MustCreateIndex(t, "delete_me", pilosa.IndexOptions{TrackExistence: true})
 
 	return gh, func() {
 		if err := m.API.DeleteIndex(ctx, joiner.Name()); err != nil {
