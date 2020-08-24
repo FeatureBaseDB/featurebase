@@ -145,7 +145,11 @@ func extractSelectFields(index *pilosa.Index, stmt *sqlparser.Select) ([]Column,
 						column = NewIDIndexColumn(index, alias)
 					}
 				} else {
-					column = NewFieldColumn(index.Field(fieldName), alias)
+					field := index.Field(fieldName)
+					if field == nil {
+						return nil, features, errors.Wrapf(pilosa.ErrFieldNotFound, "field %s", fieldName)
+					}
+					column = NewFieldColumn(field, alias)
 				}
 			case *sqlparser.FuncExpr:
 				funcName := FuncName(strings.ToLower(colExpr.Name.String()))
@@ -160,6 +164,9 @@ func extractSelectFields(index *pilosa.Index, stmt *sqlparser.Select) ([]Column,
 					if colExpr, ok := expr.Expr.(*sqlparser.ColName); ok {
 						fieldName := colExpr.Name.String()
 						field = index.Field(fieldName)
+						if field == nil {
+							return nil, features, errors.Wrapf(pilosa.ErrFieldNotFound, "field %s", fieldName)
+						}
 					} else {
 						return nil, features, errors.New("table name is required")
 					}

@@ -25,7 +25,9 @@ import (
 	"github.com/pilosa/pilosa/v2/pql"
 	pb "github.com/pilosa/pilosa/v2/proto"
 	"github.com/pilosa/pilosa/v2/server"
+	"github.com/pilosa/pilosa/v2/sql"
 	"github.com/pilosa/pilosa/v2/test"
+	"github.com/pkg/errors"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -765,6 +767,50 @@ func TestQuerySQLUnary(t *testing.T) {
 				if err := test.eq(test.exp, tr); err != nil {
 					t.Fatalf("sql: %s, error: %+v", test.sql, err)
 				}
+			}
+		})
+	}
+}
+
+func TestQuerySQLUnaryWithError(t *testing.T) {
+
+	ctx := context.Background()
+	gh, tearDownFunc := setUpTestQuerySQLUnary(ctx, t)
+	defer tearDownFunc()
+
+	tests := []struct {
+		sql string
+		err error
+	}{
+		{
+
+			sql: "select * from index_not_found",
+			err: pilosa.ErrIndexNotFound,
+		},
+		{
+
+			sql: "select field_not_found from grouper",
+			err: pilosa.ErrFieldNotFound,
+		},
+		{
+
+			sql: "select * from grouper, index_not_found",
+			err: sql.ErrUnsupportedQuery,
+		},
+		{
+
+			sql: "select _id, age, field_not_found from grouper",
+			err: pilosa.ErrFieldNotFound,
+		},
+	}
+
+	for i, test := range tests {
+		t.Run("test-"+strconv.Itoa(i), func(t *testing.T) {
+			_, err := gh.QuerySQLUnary(ctx, &pb.QuerySQLRequest{Sql: test.sql})
+			if err == nil {
+				t.Fatalf("sql: %s, expected error: %v", test.sql, test.err)
+			} else if errors.Cause(err) != test.err {
+				t.Fatalf("sql: %s, expected error: %v, got: %v", test.sql, test.err, err)
 			}
 		})
 	}
