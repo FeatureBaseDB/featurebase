@@ -3851,11 +3851,13 @@ func (e *executor) executeClearRowShard(ctx context.Context, tx Tx, index string
 
 // executeSetRow executes a Store() call.
 func (e *executor) executeSetRow(ctx context.Context, tx Tx, indexName string, c *pql.Call, shards []uint64, opt *execOptions) (bool, error) {
-	// Ensure the field type supports Store().
+	// Parse arguments.
 	fieldName, err := c.FieldArg()
 	if err != nil {
 		return false, errors.New("field required for Store()")
 	}
+	argKey, argKeyed := c.Args[fieldName].(string)
+
 	field := e.Holder.Field(indexName, fieldName)
 	if field == nil {
 		// Find index.
@@ -3865,15 +3867,32 @@ func (e *executor) executeSetRow(ctx context.Context, tx Tx, indexName string, c
 		}
 
 		// Create field.
-		field, err = index.CreateField(fieldName, OptFieldTypeSet(CacheTypeNone, 0))
+		opts := []FieldOption{OptFieldTypeSet(CacheTypeNone, 0)}
+		if argKeyed {
+			opts = append(opts, OptFieldKeys())
+		}
+		field, err = index.CreateField(fieldName, opts...)
 		if err != nil {
 			// We wrap these because we want to indicate that it wasn't found,
 			// but also the problem we encountered trying to create it.
 			return false, newNotFoundError(errors.Wrap(err, "creating field"))
 		}
 	}
+	// Ensure the field type supports Store().
 	if field.Type() != FieldTypeSet {
 		return false, fmt.Errorf("can't Store() on a %s field", field.Type())
+	}
+
+	if argKeyed {
+		// Translate the argument key.
+		if !field.Keys() {
+			return false, errors.New("can't Store() a key into an unkeyed field")
+		}
+		id, err := field.TranslateStore().TranslateKey(argKey)
+		if err != nil {
+			return false, errors.Wrap(err, "translating a key for Store()")
+		}
+		c.Args[fieldName] = id
 	}
 
 	// Execute calls in bulk on each remote node and merge.
