@@ -147,11 +147,12 @@ func (r *lmdbRegistrar) openLMDBWrapper(path0 string) (*LMDBWrapper, error) {
 	// kRemove  N=  710401   avg/op:      7.714µs   sd:      27.83µs  total: 5.480656859s
 	//    kAdd  N=  722835   avg/op:      9.096µs   sd:    105.787µs  total: 6.575497725s
 
+	// ACI not ACID at the moment; no durability
 	flags = flags |
-		lmdb.WriteMap | // Use a writable memory map.
-		//lmdb.NoMetaSync | // Don't fsync metapage after commit.
-		//lmdb.NoSync | // Don't fsync after commit.
-		//lmdb.MapAsync | // Flush asynchronously when using the WriteMap flag.
+		//lmdb.WriteMap | // Use a writable memory map.
+		lmdb.NoMetaSync | // Don't fsync metapage after commit.
+		lmdb.NoSync | // Don't fsync after commit.
+		lmdb.MapAsync | // Flush asynchronously when using the WriteMap flag.
 		lmdb.NoMemInit // Disable LMDB memory initialization
 
 	err = env.Open(path, flags, 0644)

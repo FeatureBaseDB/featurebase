@@ -127,7 +127,7 @@ type ImportValueRequest struct {
 	Values       []int64 // e.g. temperature, humidity, barometric pressure
 	FloatValues  []float64
 	StringValues []string
-	Clear        bool // only works for ImportAtomicRecord() at the moment.
+	Clear        bool
 }
 
 // AtomicRecord applies all its Ivr and Ivr atomically, in a Tx.
@@ -214,7 +214,7 @@ type ImportRequest struct {
 	RowKeys        []string
 	ColumnKeys     []string
 	Timestamps     []int64
-	Clear          bool // only works for ImportAtomicRecord() at the moment.
+	Clear          bool
 }
 
 // ValidateWithTimestamp ensures that the payload of the request is valid.
