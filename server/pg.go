@@ -381,6 +381,51 @@ func pgWriteResult(w pg.QueryResultWriter, result interface{}) error {
 		return pgWriteRowser(w, result)
 	case pb.StreamClient:
 		return pgWriteRowser(w, &clientRowser{result})
+	case uint64:
+		err := w.WriteHeader(pg.ColumnInfo{
+			Name: "count",
+			Type: pg.TypeCharoid,
+		})
+		if err != nil {
+			return errors.Wrap(err, "writing headers")
+		}
+
+		err = w.WriteRowText(strconv.FormatUint(result, 10))
+		if err != nil {
+			return errors.Wrap(err, "writing count")
+		}
+
+		return nil
+	case int64:
+		err := w.WriteHeader(pg.ColumnInfo{
+			Name: "value",
+			Type: pg.TypeCharoid,
+		})
+		if err != nil {
+			return errors.Wrap(err, "writing headers")
+		}
+
+		err = w.WriteRowText(strconv.FormatInt(result, 10))
+		if err != nil {
+			return errors.Wrap(err, "writing count")
+		}
+
+		return nil
+	case bool:
+		err := w.WriteHeader(pg.ColumnInfo{
+			Name: "result",
+			Type: pg.TypeCharoid,
+		})
+		if err != nil {
+			return errors.Wrap(err, "writing headers")
+		}
+
+		err = w.WriteRowText(strconv.FormatBool(result))
+		if err != nil {
+			return errors.Wrap(err, "writing count")
+		}
+
+		return nil
 	default:
 		return errors.Errorf("result type %T not yet supported", result)
 	}
