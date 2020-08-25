@@ -4291,6 +4291,54 @@ func TestExecutor_Execute_SetRow(t *testing.T) {
 			t.Fatalf("unexpected columns: %+v", bits)
 		}
 	})
+	t.Run("Set_Keyed", func(t *testing.T) {
+		c := test.MustRunCluster(t, 1)
+		defer c.Close()
+		hldr := c.GetHolder(0)
+		index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{TrackExistence: true})
+		if _, err := index.CreateField("f", pilosa.OptFieldTypeDefault(), pilosa.OptFieldKeys()); err != nil {
+			t.Fatal(err)
+		}
+
+		// Set bits.
+		if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(1, f="a")`}); err != nil {
+			t.Fatal(err)
+		}
+
+		if res, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Row(f="a")`}); err != nil {
+			t.Fatal(err)
+		} else if bits := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(bits, []uint64{1}) {
+			t.Fatalf("unexpected columns: %+v", bits)
+		}
+
+		// Store row a into a different row.
+		if res, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Store(Row(f="a"), f="b")`}); err != nil {
+			t.Fatal(err)
+		} else if res := res.Results[0].(bool); !res {
+			t.Fatalf("unexpected set row result: %+v", res)
+		}
+
+		// Ensure the row was populated.
+		if res, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Row(f="b")`}); err != nil {
+			t.Fatal(err)
+		} else if bits := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(bits, []uint64{1}) {
+			t.Fatalf("unexpected columns: %+v", bits)
+		}
+
+		// Store row 10 into a table which doesn't exist.
+		if res, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Store(Row(f="a"), nonexistent="c")`}); err != nil {
+			t.Fatal(err)
+		} else if res := res.Results[0].(bool); !res {
+			t.Fatalf("unexpected set row result: %+v", res)
+		}
+
+		// Ensure the row was populated.
+		if res, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Row(nonexistent="c")`}); err != nil {
+			t.Fatal(err)
+		} else if bits := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(bits, []uint64{1}) {
+			t.Fatalf("unexpected columns: %+v", bits)
+		}
+	})
 }
 
 func benchmarkExistence(nn bool, b *testing.B) {
