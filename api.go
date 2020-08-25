@@ -1173,7 +1173,7 @@ func (api *API) ImportWithTx(ctx context.Context, tx Tx, req *ImportRequest, opt
 			if len(req.RowIDs) != 0 {
 				return errors.New("row ids cannot be used because field uses string keys")
 			}
-			if req.RowIDs, err = api.cluster.translateFieldKeys(ctx, field, req.RowKeys...); err != nil {
+			if req.RowIDs, err = api.cluster.translateFieldKeys(ctx, field, req.RowKeys, true); err != nil {
 				return errors.Wrapf(err, "translating field keys")
 			}
 		}
@@ -1184,7 +1184,7 @@ func (api *API) ImportWithTx(ctx context.Context, tx Tx, req *ImportRequest, opt
 			if len(req.ColumnIDs) != 0 {
 				return errors.New("column ids cannot be used because index uses string keys")
 			}
-			if req.ColumnIDs, err = api.cluster.translateIndexKeys(ctx, req.Index, req.ColumnKeys); err != nil {
+			if req.ColumnIDs, err = api.cluster.translateIndexKeys(ctx, req.Index, req.ColumnKeys, true); err != nil {
 				return errors.Wrap(err, "translating columns")
 			}
 		}
@@ -1319,7 +1319,7 @@ func (api *API) ImportValueWithTx(ctx context.Context, tx Tx, req *ImportValueRe
 			if len(req.ColumnIDs) != 0 {
 				return errors.New("column ids cannot be used because index uses string keys")
 			}
-			if req.ColumnIDs, err = api.cluster.translateIndexKeys(ctx, req.Index, req.ColumnKeys); err != nil {
+			if req.ColumnIDs, err = api.cluster.translateIndexKeys(ctx, req.Index, req.ColumnKeys, true); err != nil {
 				return errors.Wrap(err, "translating columns")
 			}
 			req.Shard = math.MaxUint64
@@ -1330,7 +1330,7 @@ func (api *API) ImportValueWithTx(ctx context.Context, tx Tx, req *ImportValueRe
 		if field.Keys() {
 			// Perform translation.
 			span.LogKV("rowKeys", true)
-			uints, err := api.cluster.translateIndexKeys(ctx, field.ForeignIndex(), req.StringValues)
+			uints, err := api.cluster.translateIndexKeys(ctx, field.ForeignIndex(), req.StringValues, true)
 			if err != nil {
 				return err
 			}
@@ -1707,8 +1707,8 @@ func (api *API) GetTranslateEntryReader(ctx context.Context, offsets TranslateOf
 	return NewMultiTranslateEntryReader(ctx, a), nil
 }
 
-func (api *API) TranslateIndexKey(ctx context.Context, indexName string, key string) (uint64, error) {
-	return api.cluster.translateIndexKey(ctx, indexName, key)
+func (api *API) TranslateIndexKey(ctx context.Context, indexName string, key string, writable bool) (uint64, error) {
+	return api.cluster.translateIndexKey(ctx, indexName, key, writable)
 }
 
 func (api *API) TranslateIndexIDs(ctx context.Context, indexName string, ids []uint64) ([]string, error) {
@@ -1716,7 +1716,7 @@ func (api *API) TranslateIndexIDs(ctx context.Context, indexName string, ids []u
 }
 
 // TranslateKeys handles a TranslateKeyRequest.
-func (api *API) TranslateKeys(ctx context.Context, r io.Reader) (_ []byte, err error) {
+func (api *API) TranslateKeys(ctx context.Context, r io.Reader, writable bool) (_ []byte, err error) {
 	var req TranslateKeysRequest
 	if buf, err := ioutil.ReadAll(r); err != nil {
 		return nil, NewBadRequestError(errors.Wrap(err, "read translate keys request error"))
@@ -1727,18 +1727,18 @@ func (api *API) TranslateKeys(ctx context.Context, r io.Reader) (_ []byte, err e
 	// Lookup store for either index or field and translate keys.
 	var ids []uint64
 	if req.Field == "" {
-		if ids, err = api.cluster.translateIndexKeys(ctx, req.Index, req.Keys); err != nil {
+		if ids, err = api.cluster.translateIndexKeys(ctx, req.Index, req.Keys, writable); err != nil {
 			return nil, err
 		}
 	} else {
 		if field := api.holder.Field(req.Index, req.Field); field == nil {
 			return nil, ErrFieldNotFound
 		} else if fi := field.ForeignIndex(); fi != "" {
-			ids, err = api.cluster.translateIndexKeys(ctx, fi, req.Keys)
+			ids, err = api.cluster.translateIndexKeys(ctx, fi, req.Keys, writable)
 			if err != nil {
 				return nil, err
 			}
-		} else if ids, err = api.cluster.translateFieldKeys(ctx, field, req.Keys...); err != nil {
+		} else if ids, err = api.cluster.translateFieldKeys(ctx, field, req.Keys, writable); err != nil {
 			return nil, errors.Wrapf(err, "translating field keys")
 		}
 	}

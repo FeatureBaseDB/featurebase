@@ -29,8 +29,8 @@ type TranslateStore struct {
 	PartitionIDFunc   func() int
 	ReadOnlyFunc      func() bool
 	SetReadOnlyFunc   func(v bool)
-	TranslateKeyFunc  func(key string) (uint64, error)
-	TranslateKeysFunc func(keys []string) ([]uint64, error)
+	TranslateKeyFunc  func(key string, writable bool) (uint64, error)
+	TranslateKeysFunc func(keys []string, writable bool) ([]uint64, error)
 	TranslateIDFunc   func(id uint64) (string, error)
 	TranslateIDsFunc  func(ids []uint64) ([]string, error)
 	ForceSetFunc      func(id uint64, key string) error
@@ -57,12 +57,12 @@ func (s *TranslateStore) SetReadOnly(v bool) {
 	s.SetReadOnlyFunc(v)
 }
 
-func (s *TranslateStore) TranslateKey(key string) (uint64, error) {
-	return s.TranslateKeyFunc(key)
+func (s *TranslateStore) TranslateKey(key string, writable bool) (uint64, error) {
+	return s.TranslateKeyFunc(key, writable)
 }
 
-func (s *TranslateStore) TranslateKeys(keys []string) ([]uint64, error) {
-	return s.TranslateKeysFunc(keys)
+func (s *TranslateStore) TranslateKeys(keys []string, writable bool) ([]uint64, error) {
+	return s.TranslateKeysFunc(keys, writable)
 }
 
 func (s *TranslateStore) TranslateID(id uint64) (string, error) {
