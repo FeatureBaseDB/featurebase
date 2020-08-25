@@ -86,10 +86,6 @@ func (tx *Tx) Commit() error {
 		tx.db.mu.Unlock()
 	}
 
-	if err := tx.db.checkpoint(); err != nil {
-		return err
-	}
-
 	// Disconnect transaction from DB.
 	return tx.db.removeTx(tx)
 }
