@@ -2260,3 +2260,51 @@ func TestRunAddRemoveAddRemove(t *testing.T) {
 		}
 	}
 }
+
+// confirm that two fairly full array containers, when
+// unioned in place, do not produce a new invalid array container that
+// has more array elements than can fit in a bitmap; such
+// was seen at one point by a Container.UnionInPlace operation.
+func TestContainer_UnionInPlace_TwoBigArrays(t *testing.T) {
+	var (
+		bm0 = roaring.NewBitmap()
+		bm1 = roaring.NewBitmap()
+	)
+	for i := uint64(0); i < 8192; i++ {
+		if i%3 == 0 {
+			if _, err := bm0.Add(i); err != nil {
+				t.Fatalf("adding bits: %v", err)
+			}
+		}
+	}
+	for i := uint64(0); i < 8192; i++ {
+		if i%3 == 1 {
+			if _, err := bm1.Add(i); err != nil {
+				t.Fatalf("adding bits: %v", err)
+			}
+		}
+	}
+	it, ok := bm0.Containers.Iterator(0)
+	if !ok || it == nil {
+		panic("empty iterator!")
+	}
+	if !it.Next() {
+		panic("no container???")
+	}
+	_, ct0 := it.Value()
+
+	it, ok = bm1.Containers.Iterator(0)
+	if !ok || it == nil {
+		panic("empty iterator!")
+	}
+	if !it.Next() {
+		panic("no container???")
+	}
+	_, ct1 := it.Value()
+
+	resCt := ct0.UnionInPlace(ct1)
+	typ := roaring.ContainerType(resCt)
+	if typ == roaring.ContainerArray {
+		panic("should be NOT be an array now")
+	}
+}
