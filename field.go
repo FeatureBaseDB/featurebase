@@ -35,6 +35,7 @@ import (
 	"github.com/pilosa/pilosa/v2/pql"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/stats"
+	"github.com/pilosa/pilosa/v2/testhook"
 	"github.com/pilosa/pilosa/v2/tracing"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
@@ -607,9 +608,11 @@ func (f *Field) Open() error {
 		return err
 	}
 
+	_ = testhook.Opened(f.holder.Auditor, f, nil)
 	f.holder.Logger.Debugf("successfully opened field index/field: %s/%s", f.index, f.name)
 	return nil
 }
+
 func blockingWriteAvailableShards(fieldPath string, availableShardBytes []byte) {
 	path := filepath.Join(fieldPath, ".available.shards")
 	// Create a temporary file to save to.
@@ -972,12 +975,14 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 func (f *Field) Close() error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	defer func() {
+		_ = testhook.Closed(f.holder.Auditor, f, nil)
+	}()
 	// Shutdown the available shards writer
 	if f.doneChan != nil {
-		f.doneChan <- struct{}{}
+		close(f.doneChan)
 		f.wg.Wait()
 		close(f.availableShardChan)
-		close(f.doneChan)
 		f.availableShardChan = nil
 		f.doneChan = nil
 	}

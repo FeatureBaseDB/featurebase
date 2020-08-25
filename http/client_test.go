@@ -49,7 +49,7 @@ func TestClient_MultiNode(t *testing.T) {
 	defer c.Close()
 
 	hldr := []test.Holder{}
-	for _, command := range c {
+	for _, command := range c.Nodes {
 		hldr = append(hldr, test.Holder{Holder: command.Server.Holder()})
 	}
 
@@ -72,7 +72,7 @@ func TestClient_MultiNode(t *testing.T) {
 			}
 		}
 		if !ownsNum {
-			t.Fatalf("Trying to use shard %d on host %s, but it doesn't own that shard. It owns %v", num, c[i].URL(), owns)
+			t.Fatalf("Trying to use shard %d on host %s, but it doesn't own that shard. It owns %v", num, c.GetNode(i).URL(), owns)
 		}
 	}
 
@@ -86,11 +86,11 @@ func TestClient_MultiNode(t *testing.T) {
 			maxShard = x
 		}
 	}
-	_, err := c[0].API.CreateIndex(context.Background(), "i", pilosa.IndexOptions{})
+	_, err := c.GetNode(0).API.CreateIndex(context.Background(), "i", pilosa.IndexOptions{})
 	if err != nil {
 		t.Fatalf("creating index: %v", err)
 	}
-	_, err = c[0].API.CreateField(context.Background(), "i", "f", pilosa.OptFieldTypeSet(pilosa.DefaultCacheType, 100))
+	_, err = c.GetNode(0).API.CreateField(context.Background(), "i", "f", pilosa.OptFieldTypeSet(pilosa.DefaultCacheType, 100))
 	if err != nil {
 		t.Fatalf("creating field: %v", err)
 	}
@@ -119,24 +119,24 @@ func TestClient_MultiNode(t *testing.T) {
 	// Rebuild the RankCache.
 	// We have to do this to avoid the 10-second cache invalidation delay
 	// built into cache.Invalidate()
-	err = c[0].RecalculateCaches(t)
+	err = c.GetNode(0).RecalculateCaches(t)
 	if err != nil {
 		t.Fatalf("recalculating cache: %v", err)
 	}
-	err = c[1].RecalculateCaches(t)
+	err = c.GetNode(1).RecalculateCaches(t)
 	if err != nil {
 		t.Fatalf("recalculating cache: %v", err)
 	}
-	err = c[2].RecalculateCaches(t)
+	err = c.GetNode(2).RecalculateCaches(t)
 	if err != nil {
 		t.Fatalf("recalculating cache: %v", err)
 	}
 
 	// Connect to each node to compare results.
 	client := make([]*Client, 3)
-	client[0] = MustNewClient(c[0].URL(), http.GetHTTPClient(nil))
-	client[1] = MustNewClient(c[1].URL(), http.GetHTTPClient(nil))
-	client[2] = MustNewClient(c[2].URL(), http.GetHTTPClient(nil))
+	client[0] = MustNewClient(c.GetNode(0).URL(), http.GetHTTPClient(nil))
+	client[1] = MustNewClient(c.GetNode(1).URL(), http.GetHTTPClient(nil))
+	client[2] = MustNewClient(c.GetNode(2).URL(), http.GetHTTPClient(nil))
 
 	topN := 4
 	queryRequest := &pilosa.QueryRequest{
@@ -188,7 +188,7 @@ func TestClient_MultiNode(t *testing.T) {
 func TestClient_Export(t *testing.T) {
 	cluster := test.MustRunCluster(t, 1)
 	defer cluster.Close()
-	cmd := cluster[0]
+	cmd := cluster.GetNode(0)
 
 	host := cmd.URL()
 
@@ -368,7 +368,7 @@ func TestClient_Export(t *testing.T) {
 func TestClient_Import(t *testing.T) {
 	cluster := test.MustRunCluster(t, 1)
 	defer cluster.Close()
-	cmd := cluster[0]
+	cmd := cluster.GetNode(0)
 	host := cmd.URL()
 	holder := cmd.Server.Holder()
 	hldr := test.Holder{Holder: holder}
@@ -415,7 +415,7 @@ func TestClient_Import(t *testing.T) {
 // Ensure client can bulk import column attrs.
 func TestClient_ImportColumnAttrs(t *testing.T) {
 	cluster := test.MustNewCluster(t, 2)
-	for _, c := range cluster {
+	for _, c := range cluster.Nodes {
 		c.Config.Cluster.ReplicaN = 2
 	}
 	err := cluster.Start()
@@ -425,31 +425,31 @@ func TestClient_ImportColumnAttrs(t *testing.T) {
 	defer cluster.Close()
 
 	ctx := context.Background()
-	_, err = cluster[0].API.CreateIndex(ctx, "i", pilosa.IndexOptions{})
+	_, err = cluster.GetNode(0).API.CreateIndex(ctx, "i", pilosa.IndexOptions{})
 	if err != nil {
 		t.Fatalf("creating index: %v", err)
 	}
-	_, err = cluster[0].API.CreateField(ctx, "i", "f", pilosa.OptFieldTypeSet(pilosa.CacheTypeRanked, 100))
+	_, err = cluster.GetNode(0).API.CreateField(ctx, "i", "f", pilosa.OptFieldTypeSet(pilosa.CacheTypeRanked, 100))
 	if err != nil {
 		t.Fatalf("creating field: %v", err)
 	}
-	_, err = cluster[0].API.Query(ctx, &pilosa.QueryRequest{Index: "i", Query: "Set(0, f=0) Set(1, f=0) Set(2, f=0) Set(3, f=0) Set(4, f=0)"})
+	_, err = cluster.GetNode(0).API.Query(ctx, &pilosa.QueryRequest{Index: "i", Query: "Set(0, f=0) Set(1, f=0) Set(2, f=0) Set(3, f=0) Set(4, f=0)"})
 	if err != nil {
 		t.Fatalf("querying: %v", err)
 	}
 
 	attrKey := "k"
 	// Send import request.
-	host := cluster[0].URL()
+	host := cluster.GetNode(0).URL()
 	c := MustNewClient(host, http.GetHTTPClient(nil))
 	colAttrsReq := makeImportColumnAttrsRequest("i", 0, attrKey)
-	if err := c.ImportColumnAttrs(ctx, &cluster[1].API.Node().URI, "i", colAttrsReq); err != nil {
+	if err := c.ImportColumnAttrs(ctx, &cluster.GetNode(1).API.Node().URI, "i", colAttrsReq); err != nil {
 		t.Fatal(err)
 	}
 
 	// Verify data.
 	pql := "Options(Row(f=0), columnAttrs=true)"
-	res, err := cluster[1].API.Query(ctx, &pilosa.QueryRequest{Index: "i", Query: pql})
+	res, err := cluster.GetNode(1).API.Query(ctx, &pilosa.QueryRequest{Index: "i", Query: pql})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -469,7 +469,7 @@ func TestClient_ImportColumnAttrs(t *testing.T) {
 // Ensure client can bulk import data.
 func TestClient_ImportRoaring(t *testing.T) {
 	cluster := test.MustNewCluster(t, 2)
-	for _, c := range cluster {
+	for _, c := range cluster.Nodes {
 		c.Config.Cluster.ReplicaN = 2
 	}
 	err := cluster.Start()
@@ -478,29 +478,29 @@ func TestClient_ImportRoaring(t *testing.T) {
 	}
 	defer cluster.Close()
 
-	_, err = cluster[0].API.CreateIndex(context.Background(), "i", pilosa.IndexOptions{})
+	_, err = cluster.GetNode(0).API.CreateIndex(context.Background(), "i", pilosa.IndexOptions{})
 	if err != nil {
 		t.Fatalf("creating index: %v", err)
 	}
-	_, err = cluster[0].API.CreateField(context.Background(), "i", "f", pilosa.OptFieldTypeSet(pilosa.CacheTypeRanked, 100))
+	_, err = cluster.GetNode(0).API.CreateField(context.Background(), "i", "f", pilosa.OptFieldTypeSet(pilosa.CacheTypeRanked, 100))
 	if err != nil {
 		t.Fatalf("creating field: %v", err)
 	}
-	_, err = cluster[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: "Set(0, f=1)"})
+	_, err = cluster.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: "Set(0, f=1)"})
 	if err != nil {
 		t.Fatalf("querying: %v", err)
 	}
 
 	// Send import request.
-	host := cluster[0].URL()
+	host := cluster.GetNode(0).URL()
 	c := MustNewClient(host, http.GetHTTPClient(nil))
 	// [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 65537]
 	roaringReq := makeImportRoaringRequest(false, "3B3001000100000900010000000100010009000100")
-	if err := c.ImportRoaring(context.Background(), &cluster[0].API.Node().URI, "i", "f", 0, false, roaringReq); err != nil {
+	if err := c.ImportRoaring(context.Background(), &cluster.GetNode(0).API.Node().URI, "i", "f", 0, false, roaringReq); err != nil {
 		t.Fatal(err)
 	}
 
-	hldr := test.Holder{Holder: cluster[0].Server.Holder()}
+	hldr := test.Holder{Holder: cluster.GetNode(0).Server.Holder()}
 	// Verify data on node 0.
 	if a := hldr.Row("i", "f", 0).Columns(); !reflect.DeepEqual(a, []uint64{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 65537}) {
 		t.Fatalf("unexpected columns: %+v", a)
@@ -509,7 +509,7 @@ func TestClient_ImportRoaring(t *testing.T) {
 		t.Fatalf("unexpected columns: %+v", a)
 	}
 
-	hldr2 := test.Holder{Holder: cluster[1].Server.Holder()}
+	hldr2 := test.Holder{Holder: cluster.GetNode(1).Server.Holder()}
 	// Verify data on node 1.
 	if a := hldr2.Row("i", "f", 0).Columns(); !reflect.DeepEqual(a, []uint64{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 65537}) {
 		t.Fatalf("unexpected columns: %+v", a)
@@ -521,7 +521,7 @@ func TestClient_ImportRoaring(t *testing.T) {
 	// Ensure that sending a roaring import with the clear flag works as expected.
 	// [65539, 65540]
 	roaringReq = makeImportRoaringRequest(true, "3A30000001000000010001001000000003000400")
-	if err := c.ImportRoaring(context.Background(), &cluster[0].API.Node().URI, "i", "f", 0, false, roaringReq); err != nil {
+	if err := c.ImportRoaring(context.Background(), &cluster.GetNode(0).API.Node().URI, "i", "f", 0, false, roaringReq); err != nil {
 		t.Fatal(err)
 	}
 
@@ -544,7 +544,7 @@ func TestClient_ImportRoaring(t *testing.T) {
 	// Ensure that sending a roaring import with the clear flag works as expected.
 	// [4, 6, 65537, 65539]
 	roaringReq = makeImportRoaringRequest(true, "3A300000020000000000010001000100180000001C0000000400060001000300")
-	if err := c.ImportRoaring(context.Background(), &cluster[0].API.Node().URI, "i", "f", 0, false, roaringReq); err != nil {
+	if err := c.ImportRoaring(context.Background(), &cluster.GetNode(0).API.Node().URI, "i", "f", 0, false, roaringReq); err != nil {
 		t.Fatal(err)
 	}
 
@@ -567,7 +567,7 @@ func TestClient_ImportRoaring(t *testing.T) {
 	// Ensure that sending a roaring import with the clear flag works as expected.
 	// [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 65537]
 	roaringReq = makeImportRoaringRequest(true, "3B3001000100000900010000000100010009000100")
-	if err := c.ImportRoaring(context.Background(), &cluster[0].API.Node().URI, "i", "f", 0, false, roaringReq); err != nil {
+	if err := c.ImportRoaring(context.Background(), &cluster.GetNode(0).API.Node().URI, "i", "f", 0, false, roaringReq); err != nil {
 		t.Fatal(err)
 	}
 
@@ -593,7 +593,7 @@ func TestClient_ImportKeys(t *testing.T) {
 	t.Run("SingleNode", func(t *testing.T) {
 		cluster := test.MustRunCluster(t, 1)
 		defer cluster.Close()
-		cmd := cluster[0]
+		cmd := cluster.GetNode(0)
 		host := cmd.URL()
 
 		cmd.MustCreateIndex(t, "keyed", pilosa.IndexOptions{Keys: true})
@@ -691,8 +691,8 @@ func TestClient_ImportKeys(t *testing.T) {
 	t.Run("MultiNode", func(t *testing.T) {
 		cluster := test.MustRunCluster(t, 2)
 		defer cluster.Close()
-		cmd0 := cluster[0]
-		cmd1 := cluster[1]
+		cmd0 := cluster.GetNode(0)
+		cmd1 := cluster.GetNode(1)
 		host0 := cmd0.URL()
 		host1 := cmd1.URL()
 
@@ -768,7 +768,7 @@ func TestClient_ImportKeys(t *testing.T) {
 	t.Run("IntegerFieldSingleNode", func(t *testing.T) {
 		cluster := test.MustRunCluster(t, 1)
 		defer cluster.Close()
-		cmd := cluster[0]
+		cmd := cluster.GetNode(0)
 		host := cmd.URL()
 		holder := cmd.Server.Holder()
 		hldr := test.Holder{Holder: holder}
@@ -840,7 +840,7 @@ func TestClient_ImportIDs(t *testing.T) {
 	t.Run("ImportRangeImport", func(t *testing.T) {
 		cluster := test.MustRunCluster(t, 1)
 		defer cluster.Close()
-		cmd := cluster[0]
+		cmd := cluster.GetNode(0)
 		host := cmd.URL()
 		holder := cmd.Server.Holder()
 		hldr := test.Holder{Holder: holder}
@@ -901,7 +901,7 @@ func TestClient_ImportIDs(t *testing.T) {
 func TestClient_ImportValue(t *testing.T) {
 	cluster := test.MustRunCluster(t, 1)
 	defer cluster.Close()
-	cmd := cluster[0]
+	cmd := cluster.GetNode(0)
 	host := cmd.URL()
 	holder := cmd.Server.Holder()
 	hldr := test.Holder{Holder: holder}
@@ -974,7 +974,7 @@ func TestClient_ImportValue(t *testing.T) {
 func TestClient_ImportExistence(t *testing.T) {
 	cluster := test.MustRunCluster(t, 1)
 	defer cluster.Close()
-	cmd := cluster[0]
+	cmd := cluster.GetNode(0)
 	host := cmd.URL()
 	holder := cmd.Server.Holder()
 	hldr := test.Holder{Holder: holder}
@@ -1053,7 +1053,7 @@ func TestClient_ImportExistence(t *testing.T) {
 func TestClient_FragmentBlocks(t *testing.T) {
 	cluster := test.MustRunCluster(t, 1)
 	defer cluster.Close()
-	cmd := cluster[0]
+	cmd := cluster.GetNode(0)
 
 	holder := cmd.Server.Holder()
 	hldr := test.Holder{Holder: holder}
@@ -1086,7 +1086,7 @@ func TestClient_FragmentBlocks(t *testing.T) {
 func TestClient_CreateDecimalField(t *testing.T) {
 	cluster := test.MustRunCluster(t, 1)
 	defer cluster.Close()
-	cmd := cluster[0]
+	cmd := cluster.GetNode(0)
 
 	c := MustNewClient(cmd.URL(), http.GetHTTPClient(nil))
 
@@ -1195,8 +1195,8 @@ func TestClientTransactions(t *testing.T) {
 	c := test.MustRunCluster(t, 3)
 	defer c.Close()
 
-	client0 := MustNewClient(c[0].URL(), http.GetHTTPClient(nil))
-	client1 := MustNewClient(c[1].URL(), http.GetHTTPClient(nil))
+	client0 := MustNewClient(c.GetNode(0).URL(), http.GetHTTPClient(nil))
+	client1 := MustNewClient(c.GetNode(1).URL(), http.GetHTTPClient(nil))
 
 	// can create, list, get, and finish a transaction
 	var expDeadline time.Time

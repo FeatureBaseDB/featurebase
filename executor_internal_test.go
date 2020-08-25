@@ -18,24 +18,25 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/pilosa/pilosa/v2/pql"
+	"github.com/pilosa/pilosa/v2/testhook"
 )
 
 func TestExecutor_TranslateGroupByCall(t *testing.T) {
 	holder := NewHolder(DefaultPartitionN)
+	defer holder.Close()
 
-	cluster := NewTestCluster(1)
+	cluster := NewTestCluster(t, 1)
 
 	e := &executor{
 		Holder:  holder,
 		Cluster: cluster,
 	}
-	e.Holder.Path, _ = ioutil.TempDir(*TempDir, "")
+	e.Holder.Path, _ = testhook.TempDirInDir(t, *TempDir, "pilosa-executor-")
 	err := e.Holder.Open()
 	if err != nil {
 		t.Fatalf("opening holder: %v", err)
@@ -139,9 +140,9 @@ func TestExecutor_TranslateRowsOnBool(t *testing.T) {
 
 	e := &executor{
 		Holder:  holder,
-		Cluster: NewTestCluster(1),
+		Cluster: NewTestCluster(t, 1),
 	}
-	e.Holder.Path, _ = ioutil.TempDir(*TempDir, "")
+	e.Holder.Path, _ = testhook.TempDirInDir(t, *TempDir, "pilosa-executor-")
 	if err := e.Holder.Open(); err != nil {
 		t.Fatalf("opening holder: %v", err)
 	}

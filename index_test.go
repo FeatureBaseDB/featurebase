@@ -15,13 +15,13 @@
 package pilosa_test
 
 import (
-	"io/ioutil"
 	"reflect"
 	"testing"
 
 	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/pql"
 	"github.com/pilosa/pilosa/v2/test"
+	"github.com/pilosa/pilosa/v2/testhook"
 	"github.com/pkg/errors"
 )
 
@@ -30,7 +30,7 @@ const ShardWidth = pilosa.ShardWidth
 
 // Ensure index can open and retrieve a field.
 func TestIndex_CreateFieldIfNotExists(t *testing.T) {
-	index := test.MustOpenIndex()
+	index := test.MustOpenIndex(t)
 	defer index.Close()
 
 	// Create field.
@@ -58,7 +58,7 @@ func TestIndex_CreateField(t *testing.T) {
 	// Ensure time quantum can be set appropriately on a new field.
 	t.Run("TimeQuantum", func(t *testing.T) {
 		t.Run("Explicit", func(t *testing.T) {
-			index := test.MustOpenIndex()
+			index := test.MustOpenIndex(t)
 			defer index.Close()
 
 			// Create field with explicit quantum.
@@ -74,7 +74,7 @@ func TestIndex_CreateField(t *testing.T) {
 	// Ensure time quantum can be set appropriately on a new field.
 	t.Run("TimeQuantumNoStandardView", func(t *testing.T) {
 		t.Run("Explicit", func(t *testing.T) {
-			index := test.MustOpenIndex()
+			index := test.MustOpenIndex(t)
 			defer index.Close()
 
 			// Create field with explicit quantum with no standard view
@@ -90,7 +90,7 @@ func TestIndex_CreateField(t *testing.T) {
 	// Ensure field can include range columns.
 	t.Run("BSIFields", func(t *testing.T) {
 		t.Run("OK", func(t *testing.T) {
-			index := test.MustOpenIndex()
+			index := test.MustOpenIndex(t)
 			defer index.Close()
 
 			// Create field with schema and verify it exists.
@@ -112,7 +112,7 @@ func TestIndex_CreateField(t *testing.T) {
 		// on field creation FieldOptions validation.
 		/*
 			t.Run("ErrRangeCacheAllowed", func(t *testing.T) {
-				index := test.MustOpenIndex()
+				index := test.MustOpenIndex(t)
 				defer index.Close()
 
 				if _, err := index.CreateField("f", pilosa.FieldOptions{
@@ -123,7 +123,7 @@ func TestIndex_CreateField(t *testing.T) {
 			})
 
 			t.Run("BSIFieldsWithCacheTypeNone", func(t *testing.T) {
-				index := test.MustOpenIndex()
+				index := test.MustOpenIndex(t)
 				defer index.Close()
 				if _, err := index.CreateField("f", pilosa.FieldOptions{
 					CacheType: pilosa.CacheTypeNone,
@@ -134,7 +134,7 @@ func TestIndex_CreateField(t *testing.T) {
 			})
 
 			t.Run("ErrFieldFieldsAllowed", func(t *testing.T) {
-				index := test.MustOpenIndex()
+				index := test.MustOpenIndex(t)
 				defer index.Close()
 
 				if _, err := index.CreateField("f", pilosa.FieldOptions{
@@ -147,7 +147,7 @@ func TestIndex_CreateField(t *testing.T) {
 			})
 
 			t.Run("ErrFieldNameRequired", func(t *testing.T) {
-				index := test.MustOpenIndex()
+				index := test.MustOpenIndex(t)
 				defer index.Close()
 
 				if _, err := index.CreateField("f", pilosa.FieldOptions{
@@ -160,7 +160,7 @@ func TestIndex_CreateField(t *testing.T) {
 			})
 
 			t.Run("ErrInvalidFieldType", func(t *testing.T) {
-				index := test.MustOpenIndex()
+				index := test.MustOpenIndex(t)
 				defer index.Close()
 
 				if _, err := index.CreateField("f", pilosa.FieldOptions{
@@ -173,7 +173,7 @@ func TestIndex_CreateField(t *testing.T) {
 			})
 
 			t.Run("ErrInvalidBSIGroupRange", func(t *testing.T) {
-				index := test.MustOpenIndex()
+				index := test.MustOpenIndex(t)
 				defer index.Close()
 
 				if _, err := index.CreateField("f", pilosa.FieldOptions{
@@ -190,7 +190,7 @@ func TestIndex_CreateField(t *testing.T) {
 	t.Run("WithKeys", func(t *testing.T) {
 		// Don't allow an int field to be created with keys=true
 		t.Run("IntField", func(t *testing.T) {
-			index := test.MustOpenIndex()
+			index := test.MustOpenIndex(t)
 			defer index.Close()
 
 			_, err := index.CreateField("f", pilosa.OptFieldTypeInt(-1, 1), pilosa.OptFieldKeys())
@@ -201,7 +201,7 @@ func TestIndex_CreateField(t *testing.T) {
 
 		// Don't allow a decimal field to be created with keys=true
 		t.Run("DecimalField", func(t *testing.T) {
-			index := test.MustOpenIndex()
+			index := test.MustOpenIndex(t)
 			defer index.Close()
 
 			_, err := index.CreateField("f", pilosa.OptFieldTypeDecimal(1, pql.Decimal{Value: -1}, pql.Decimal{Value: 1}), pilosa.OptFieldKeys())
@@ -214,7 +214,7 @@ func TestIndex_CreateField(t *testing.T) {
 
 // Ensure index can delete a field.
 func TestIndex_DeleteField(t *testing.T) {
-	index := test.MustOpenIndex()
+	index := test.MustOpenIndex(t)
 	defer index.Close()
 
 	// Create field.
@@ -238,7 +238,7 @@ func TestIndex_DeleteField(t *testing.T) {
 
 // Ensure index can validate its name.
 func TestIndex_InvalidName(t *testing.T) {
-	path, err := ioutil.TempDir("", "pilosa-index-")
+	path, err := testhook.TempDir(t, "pilosa-index-")
 	if err != nil {
 		panic(err)
 	}

@@ -58,6 +58,7 @@ func queryBalances(m0api *pilosa.API, acctOwnerID uint64, fldAcct0, fldAcct1, in
 	acct1bal = mustQueryAcct(m0api, acctOwnerID, fldAcct1, index)
 	return
 }
+
 func skipForRoaring(t *testing.T) {
 	src := os.Getenv("PILOSA_TXSRC")
 	// once txfactory.go DefaultTxsrc != RoaringTxn, this
@@ -67,7 +68,7 @@ func skipForRoaring(t *testing.T) {
 	}
 }
 
-func TestAPI_ImportAIR(t *testing.T) {
+func TestAPI_ImportAtomicRecord(t *testing.T) {
 	skipForRoaring(t)
 	c := test.MustRunCluster(t, 1,
 		[]server.CommandOption{
@@ -79,7 +80,7 @@ func TestAPI_ImportAIR(t *testing.T) {
 	)
 	defer c.Close()
 
-	m0 := c[0]
+	m0 := c.GetNode(0)
 	m0api := m0.API
 
 	ctx := context.Background()

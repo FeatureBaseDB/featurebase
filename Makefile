@@ -1,4 +1,4 @@
-.PHONY: build check-clean clean cover cover-viz default docker docker-build docker-test docker-tag-push generate generate-protoc generate-pql gometalinter install install-build-deps install-golangci-lint install-gometalinter install-protoc install-protoc-gen-gofast install-peg prerelease prerelease-upload release release-build test
+.PHONY: build check-clean clean cover cover-viz default docker docker-build docker-test docker-tag-push generate generate-protoc generate-pql gometalinter install install-build-deps install-golangci-lint install-gometalinter install-protoc install-protoc-gen-gofast install-peg prerelease prerelease-upload release release-build test testv testv-race testvsub testvsub-race
 
 CLONE_URL=github.com/pilosa/pilosa
 VERSION := $(shell git describe --tags 2> /dev/null || echo unknown)
@@ -42,6 +42,33 @@ test:
 # Run test suite with race flag
 test-race:
 	go test ./... -tags='$(BUILD_TAGS)' $(TESTFLAGS) -race $(NOCHECKPTR) -timeout 60m -v
+
+testv: topt testvsub
+
+testv-race: topt-race testvsub-race
+
+# testvsub: run go test -v in sub-directories in "local mode" with incremental output,
+#            avoiding go -test ./... "package list mode" which doesn't give output
+#            until the test run finishes. Package list mode makes it hard to
+#            find which test is hung/deadlocked.
+#
+testvsub:
+	set -e; for i in ctl http pg pql rbf roaring server sql txkey; do \
+           echo; echo "___ testing subpkg $$i"; \
+           cd $$i; pwd; \
+           go test -tags='$(BUILD_TAGS)' $(TESTFLAGS) $(NOCHECKPTR) -v || break; \
+           echo; echo "999 done testing subpkg $$i"; \
+           cd ..; \
+        done
+
+testvsub-race:
+	set -e; for i in ctl http pg pql rbf roaring server sql txkey; do \
+           echo; echo "___ testing subpkg $$i -race"; \
+           cd $$i; pwd; \
+           go test -tags='$(BUILD_TAGS)' $(TESTFLAGS) $(NOCHECKPTR) -v -race || break; \
+           echo; echo "999 done testing subpkg $$i -race"; \
+           cd ..; \
+        done
 
 bench:
 	go test ./... -bench=. -run=NoneZ -timeout=127m $(TESTFLAGS)

@@ -12,6 +12,7 @@
 ./vprint.go
 ./rbf/vprint.go
 ./cmd/slurp/vprint.go
+./cmd/badloader/vprint.go
 ./cmd/demo-lmdb/vprint.go
 ./gid.go
 ./cmd/lmdb-keydump/vprint.go

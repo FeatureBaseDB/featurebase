@@ -35,7 +35,7 @@ func TestStartupTimeout(t *testing.T) {
 
 	connect, shutdown, err := pgtest.ServeMem(&pg.Server{
 		StartupTimeout: time.Millisecond,
-		Logger:         logger.NewLogfLogger(t),
+		Logger:         logger.NopLogger,
 	})
 	if err != nil {
 		t.Fatalf("starting in-memory postgres server: %v", err)
@@ -103,7 +103,7 @@ func TestPQConnect(t *testing.T) {
 
 	server := &pg.Server{
 		StartupTimeout: time.Second,
-		Logger:         logger.NewLogfLogger(t),
+		Logger:         logger.NopLogger,
 	}
 	addr, shutdown, err := pgtest.ServeTCP(":0", server)
 	if err != nil {
@@ -134,7 +134,7 @@ func TestPQConnectSSL(t *testing.T) {
 
 	server := &pg.Server{
 		StartupTimeout: time.Second,
-		Logger:         logger.NewLogfLogger(t),
+		Logger:         logger.NopLogger,
 	}
 	addr, shutdown, err := pgtest.ServeTLS(":0", server)
 	if err != nil {
@@ -197,7 +197,7 @@ func TestPSQLQuery(t *testing.T) {
 		}),
 		TypeEngine:     pg.PrimitiveTypeEngine{},
 		StartupTimeout: time.Second,
-		Logger:         logger.NewLogfLogger(t),
+		Logger:         logger.NopLogger,
 	}
 	addr, shutdown, err := pgtest.ServeTCP(":0", server)
 	if err != nil {

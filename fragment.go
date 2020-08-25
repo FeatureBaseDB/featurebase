@@ -45,6 +45,7 @@ import (
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/shardwidth"
 	"github.com/pilosa/pilosa/v2/stats"
+	"github.com/pilosa/pilosa/v2/testhook"
 	"github.com/pilosa/pilosa/v2/tracing"
 	"github.com/pkg/errors"
 )
@@ -170,15 +171,6 @@ type fragment struct {
 	stats stats.StatsClient
 
 	bitmapInfo *roaring.BitmapInfo
-
-	// txTestingOnly: this looks gross.
-	// Nonetheless, it allowed us to
-	// integrate Tx into the
-	// fragment_internal_test.go suite
-	// and not break the world all at once.
-	//
-	// Only for testing, obviously.
-	txTestingOnly Tx
 }
 
 // newFragment returns a new instance of Fragment.
@@ -267,6 +259,7 @@ func (f *fragment) Open() error {
 	}
 	f.open = true
 
+	_ = testhook.Opened(f.holder.Auditor, f, nil)
 	f.holder.Logger.Debugf("successfully opened index/field/view/fragment: %s/%s/%s/%d", f.index, f.field, f.view, f.shard)
 	return nil
 }
@@ -513,6 +506,9 @@ func (f *fragment) openCache() error {
 func (f *fragment) Close() error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	defer func() {
+		_ = testhook.Closed(f.holder.Auditor, f, nil)
+	}()
 	for f.snapshotPending {
 		f.snapshotCond.Wait()
 	}

@@ -15,10 +15,10 @@
 package test
 
 import (
-	"io/ioutil"
-	"os"
+	"testing"
 
 	"github.com/pilosa/pilosa/v2"
+	"github.com/pilosa/pilosa/v2/testhook"
 )
 
 // Index represents a test wrapper for pilosa.Index.
@@ -27,12 +27,15 @@ type Index struct {
 }
 
 // newIndex returns a new instance of Index.
-func newIndex() *Index {
-	path, err := ioutil.TempDir("", "pilosa-index-")
+func newIndex(tb testing.TB) *Index {
+	path, err := testhook.TempDir(tb, "pilosa-index-")
 	if err != nil {
 		panic(err)
 	}
 	h := pilosa.NewHolder(pilosa.DefaultPartitionN)
+	testhook.Cleanup(tb, func() {
+		h.Close()
+	})
 	h.Path = path
 	index, err := h.CreateIndex("i", pilosa.IndexOptions{})
 	if err != nil {
@@ -42,17 +45,13 @@ func newIndex() *Index {
 }
 
 // MustOpenIndex returns a new, opened index at a temporary path. Panic on error.
-func MustOpenIndex() *Index {
-	index := newIndex()
-	if err := index.Open(false); err != nil {
-		panic(err)
-	}
+func MustOpenIndex(tb testing.TB) *Index {
+	index := newIndex(tb)
 	return index
 }
 
 // Close closes the index and removes the underlying data.
 func (i *Index) Close() error {
-	defer os.RemoveAll(i.Path())
 	return i.Index.Close()
 }
 
@@ -68,10 +67,6 @@ func (i *Index) Reopen() error {
 	h.Path = h.HolderPathFromIndexPath(path, name)
 	i.Index, err = h.CreateIndex(name, pilosa.IndexOptions{})
 	if err != nil {
-		return err
-	}
-
-	if err := i.Open(false); err != nil {
 		return err
 	}
 	return nil
