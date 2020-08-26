@@ -56,6 +56,8 @@ import (
 type Handler struct {
 	Handler http.Handler
 
+	FileSystem pilosa.FileSystem
+
 	logger logger.Logger
 
 	// Keeps the query argument validators for each handler
@@ -107,6 +109,13 @@ func OptHandlerAPI(api *pilosa.API) handlerOption {
 	}
 }
 
+func OptHandlerFileSystem(fs pilosa.FileSystem) handlerOption {
+	return func(h *Handler) error {
+		h.FileSystem = fs
+		return nil
+	}
+}
+
 func OptHandlerLogger(logger logger.Logger) handlerOption {
 	return func(h *Handler) error {
 		h.logger = logger
@@ -143,6 +152,7 @@ func NewHandler(opts ...handlerOption) (*Handler, error) {
 		}
 	})
 	handler := &Handler{
+		FileSystem:   pilosa.NopFileSystem,
 		logger:       logger.NopLogger,
 		closeTimeout: time.Second * 30,
 	}
@@ -338,7 +348,9 @@ func (h *Handler) collectStats(next http.Handler) http.Handler {
 // newRouter creates a new mux http router.
 func newRouter(handler *Handler) *mux.Router {
 	router := mux.NewRouter()
-	router.HandleFunc("/", handler.handleHome).Methods("GET").Name("Home")
+	router.HandleFunc("/", handler.handleLattice).Methods("GET")
+	router.HandleFunc("/{file}", handler.handleLattice).Methods("GET")
+	router.HandleFunc("/static/{file}", handler.handleLattice).Methods("GET")
 	router.HandleFunc("/cluster/resize/abort", handler.handlePostClusterResizeAbort).Methods("POST").Name("PostClusterResizeAbort")
 	router.HandleFunc("/cluster/resize/remove-node", handler.handlePostClusterResizeRemoveNode).Methods("POST").Name("PostClusterResizeRemoveNode")
 	router.HandleFunc("/cluster/resize/set-coordinator", handler.handlePostClusterResizeSetCoordinator).Methods("POST").Name("PostClusterResizeSetCoordinator")
@@ -422,6 +434,22 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.Handler.ServeHTTP(w, r)
 }
 
+func (h *Handler) handleLattice(w http.ResponseWriter, r *http.Request) {
+	// If user is using curl, don't chuck HTML at them
+	if strings.HasPrefix(r.UserAgent(), "curl") {
+		http.Error(w, "Welcome. Pilosa is running. Visit https://www.pilosa.com/docs/ for more information or try the Lattice UI by visiting this URL in your browser.", http.StatusNotFound)
+		return
+	}
+	filesystem, err := h.FileSystem.New()
+
+	if err != nil {
+		_ = h.writeQueryResponse(w, r, &pilosa.QueryResponse{Err: err})
+		h.logger.Printf("Lattice UI is not available. Please run `make generate-statik` before building Pilosa with `make install`.")
+		return
+	}
+	http.FileServer(filesystem).ServeHTTP(w, r)
+}
+
 // successResponse is a general success/error struct for http responses.
 type successResponse struct {
 	h         *Handler
@@ -488,10 +516,6 @@ func (r *successResponse) write(w http.ResponseWriter, err error) {
 	} else {
 		http.Error(w, string(msg), statusCode)
 	}
-}
-
-func (h *Handler) handleHome(w http.ResponseWriter, _ *http.Request) {
-	http.Error(w, "Welcome. Pilosa is running. Visit https://www.pilosa.com/docs/ for more information.", http.StatusNotFound)
 }
 
 // validHeaderAcceptJSON returns false if one or more Accept
