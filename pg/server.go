@@ -35,6 +35,10 @@ type Server struct {
 	// TLSConfig is the TLS configuration to use to serve postgres TLS connections.
 	TLSConfig *tls.Config
 
+	// RequireTLS rejects unencrypted postgres connections.
+	// This allows for mTLS to be used as auth.
+	RequireTLS bool
+
 	// StartupTimeout is the timeout to use for connection startup.
 	// If a connection fails to set up a protocol before this completes, it will be terminated.
 	StartupTimeout time.Duration

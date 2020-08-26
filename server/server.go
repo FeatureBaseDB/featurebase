@@ -191,6 +191,7 @@ func (m *Command) Start() (err error) {
 		m.pgserver.s.WriteTimeout = time.Duration(m.Config.Postgres.WriteTimeout)
 		m.pgserver.s.MaxStartupSize = m.Config.Postgres.MaxStartupSize
 		m.pgserver.s.ConnectionLimit = m.Config.Postgres.ConnectionLimit
+		m.pgserver.s.RequireTLS = m.Config.Postgres.RequireTLS
 		err := m.pgserver.Start(m.Config.Postgres.Addr)
 		if err != nil {
 			return errors.Wrap(err, "starting postgres")

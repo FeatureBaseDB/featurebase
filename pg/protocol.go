@@ -100,6 +100,8 @@ func (s *Server) handle(ctx context.Context, conn net.Conn) (err error) {
 		}
 	}
 
+	var hasTLS bool
+
 startup:
 	// Read startup packet.
 	var buf [4]byte
@@ -151,6 +153,7 @@ startup:
 					return errors.Wrap(err, "transferring startup deadline to TLS connection")
 				}
 			}
+			hasTLS = true
 			goto startup
 		}
 
@@ -161,6 +164,11 @@ startup:
 			return errors.Wrap(err, "sending SSL unsupported notification")
 		}
 		goto startup
+	}
+
+	if s.RequireTLS && !hasTLS {
+		// Reject the unsecured connection.
+		return errors.Errorf("client at %s attempted to initiate an unsecured postgres conenction", conn.RemoteAddr())
 	}
 
 	// Handle regular postgres.
