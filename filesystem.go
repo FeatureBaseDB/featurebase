@@ -11,27 +11,32 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
-//go:generate statik -src=../lattice/build -dest=../
-//
-// Package statik contains static assets for the Lattice UI. `go generate` or
-// `make generate-statik` will produce statik.go, which is ignored by git.
-package statik
+
+package pilosa
 
 import (
+	"fmt"
 	"net/http"
-
-	"github.com/pilosa/pilosa/v2"
-	"github.com/rakyll/statik/fs"
 )
 
 // Ensure nopFileSystem implements interface.
-var _ pilosa.FileSystem = &FileSystem{}
+var _ FileSystem = &nopFileSystem{}
 
-// FileSystem represents a static FileSystem.
-type FileSystem struct{}
+// FileSystem represents an interface for file system for serving the Lattice UI.
+type FileSystem interface {
+	New() (http.FileSystem, error)
+}
 
-// New is a statik implementation of FileSystem New method.
-func (s *FileSystem) New() (http.FileSystem, error) {
-	return fs.New()
+func init() {
+	NopFileSystem = &nopFileSystem{}
+}
+
+// NopFileSystem represents a FileSystem that returns an error if called.
+var NopFileSystem FileSystem
+
+type nopFileSystem struct{}
+
+// New is a no-op implementation of FileSystem New method.
+func (n *nopFileSystem) New() (http.FileSystem, error) {
+	return nil, fmt.Errorf("file system not implemented")
 }
