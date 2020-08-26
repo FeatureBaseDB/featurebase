@@ -22,6 +22,8 @@ const (
 	MetricDeleteAvailableShard            = "delete_available_shard_total"
 	MetricRecalculateCache                = "recalculate_cache_total"
 	MetricInvalidateCache                 = "invalidate_cache_total"
+	MetricInvalidateCacheSkipped          = "invalidate_cache_skipped_total"
+	MetricReadDirtyCache                  = "dirty_cache_total"
 	MetricRankCacheLength                 = "rank_cache_length"
 	MetricCacheThresholdReached           = "cache_threshold_reached_total"
 	MetricRow                             = "query_row_total"
