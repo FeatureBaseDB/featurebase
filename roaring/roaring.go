@@ -5388,33 +5388,48 @@ func xor(a, b *Container) *Container {
 
 func xorArrayArray(a, b *Container) *Container {
 	statsHit("xor/ArrayArray")
-	output := make([]uint16, 0)
 	aa, ab := a.array(), b.array()
-	na, nb := len(aa), len(ab)
-	for i, j := 0, 0; i < na || j < nb; {
-		if i < na && j >= nb {
-			output = append(output, aa[i])
-			i++
-			continue
-		} else if i >= na && j < nb {
-			output = append(output, ab[j])
-			j++
-			continue
-		}
+	output := make([]uint16, len(aa)+len(ab))
 
+	i, j, k := 0, 0, 0
+	for i < len(aa) && j < len(ab) {
 		va, vb := aa[i], ab[j]
-		if va < vb {
-			output = append(output, va)
-			i++
-		} else if va > vb {
-			output = append(output, vb)
-			j++
-		} else { //==
+		switch {
+		case va < vb:
+			// The a side is lower, so copy those first.
+			for i < len(aa) && aa[i] < vb {
+				output[k] = aa[i]
+				i++
+				k++
+			}
+
+		case va > vb:
+			// The b side is lower, so copy those first.
+			for j < len(ab) && ab[j] < va {
+				output[k] = ab[j]
+				j++
+				k++
+			}
+
+		default:
+			// Both are equal.
+			// Skip them.
 			i++
 			j++
 		}
 	}
-	return NewContainerArray(output)
+	switch {
+	case i < len(aa):
+		k += copy(output[k:], aa[i:])
+	case j < len(ab):
+		k += copy(output[k:], ab[j:])
+	}
+
+	if k == cap(output) {
+		return NewContainerArray(output)
+	}
+
+	return NewContainerArrayCopy(output[:k])
 }
 
 func xorArrayBitmap(a, b *Container) *Container {
