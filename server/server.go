@@ -176,7 +176,7 @@ func (m *Command) Start() (err error) {
 
 	// Initialize postgres.
 	m.pgserver = nil
-	if m.Config.Postgres.Addr != "" {
+	if m.Config.Postgres.Bind != "" {
 		var tlsConf *tls.Config
 		if m.Config.Postgres.TLS.CertificatePath != "" {
 			conf, err := GetTLSConfig(&m.Config.Postgres.TLS, m.logger.Logger())
@@ -191,7 +191,7 @@ func (m *Command) Start() (err error) {
 		m.pgserver.s.WriteTimeout = time.Duration(m.Config.Postgres.WriteTimeout)
 		m.pgserver.s.MaxStartupSize = m.Config.Postgres.MaxStartupSize
 		m.pgserver.s.ConnectionLimit = m.Config.Postgres.ConnectionLimit
-		err := m.pgserver.Start(m.Config.Postgres.Addr)
+		err := m.pgserver.Start(m.Config.Postgres.Bind)
 		if err != nil {
 			return errors.Wrap(err, "starting postgres")
 		}
