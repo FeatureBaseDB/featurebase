@@ -231,3 +231,68 @@ type RawRoaringData struct {
 func (rr *RawRoaringData) Iterator() (roaring.RoaringIterator, error) {
 	return roaring.NewRoaringIterator(rr.data)
 }
+
+// TxBitmap represents a bitmap that acts as a cache in front of a transaction.
+// Updates to the bitmap first pull in containers as needed and update them
+// in memory. The changes can be flushed in bulk using Flush().
+type TxBitmap struct {
+	b     *roaring.Bitmap
+	tx    Tx
+	index string
+	field string
+	view  string
+	shard uint64
+}
+
+func NewTxBitmap(tx Tx, index, field, view string, shard uint64) *TxBitmap {
+	return &TxBitmap{
+		b:     roaring.NewBitmap(),
+		tx:    tx,
+		index: index,
+		field: field,
+		view:  view,
+		shard: shard,
+	}
+}
+
+func (b *TxBitmap) Add(a ...uint64) (changed bool, err error) {
+	if err := b.ensureContainers(a...); err != nil {
+		return false, err
+	}
+	return b.b.Add(a...)
+}
+
+func (b *TxBitmap) Remove(a ...uint64) (changed bool, err error) {
+	if err := b.ensureContainers(a...); err != nil {
+		return false, err
+	}
+	return b.b.Remove(a...)
+}
+
+// ensureContainers pulls containers in from the transaction, if needed.
+func (b *TxBitmap) ensureContainers(a ...uint64) error {
+	for _, v := range a {
+		key := highbits(v)
+		if b.b.Containers.Get(key) != nil {
+			continue
+		}
+
+		c, err := b.tx.Container(b.index, b.field, b.view, b.shard, key)
+		if err != nil {
+			return err
+		}
+		b.b.Containers.Put(key, c)
+	}
+	return nil
+}
+
+// Flush writes all containers in the bitmap back to the transaction.
+func (b *TxBitmap) Flush() error {
+	for it, _ := b.b.Containers.Iterator(0); it.Next(); {
+		key, c := it.Value()
+		if err := b.tx.PutContainer(b.index, b.field, b.view, b.shard, key, c); err != nil {
+			return err
+		}
+	}
+	return nil
+}
