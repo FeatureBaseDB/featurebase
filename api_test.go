@@ -135,11 +135,11 @@ func TestAPI_Import(t *testing.T) {
 		index := "rkci"
 		field := "f"
 
-		_, err := m0.API.CreateIndex(ctx, index, pilosa.IndexOptions{Keys: false})
+		_, err := m1.API.CreateIndex(ctx, index, pilosa.IndexOptions{Keys: false})
 		if err != nil {
 			t.Fatalf("creating index: %v", err)
 		}
-		_, err = m0.API.CreateField(ctx, index, field, pilosa.OptFieldTypeSet(pilosa.DefaultCacheType, 100), pilosa.OptFieldKeys())
+		_, err = m1.API.CreateField(ctx, index, field, pilosa.OptFieldTypeSet(pilosa.DefaultCacheType, 100), pilosa.OptFieldKeys())
 		if err != nil {
 			t.Fatalf("creating field: %v", err)
 		}
