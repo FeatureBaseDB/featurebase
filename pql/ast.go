@@ -801,6 +801,19 @@ func (c *Call) TranslateInfo(columnLabel, rowLabel string) (colKey, rowKey, fiel
 	}
 }
 
+// Writable returns true if call is mutable (e.g. can write new translation keys)
+func (c *Call) Writable() bool {
+	switch c.Name {
+	case "Set", "SetRowAttrs", "SetColumnAttrs", "SetBit":
+		return true
+	case "Not":
+		// to support queries like Not(Row(f="garbage"))
+		return true
+	default:
+		return false
+	}
+}
+
 func (c *Call) ArgString(key string) string {
 	value, ok := c.Args[key]
 	if !ok {

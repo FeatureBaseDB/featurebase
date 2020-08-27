@@ -32,11 +32,20 @@ var (
 	// ErrTranslateStoreClosed is returned when reading from an TranslateEntryReader
 	// and the underlying store is closed.
 	ErrTranslateStoreClosed = errors.New("boltdb: translate store closing")
+
+	// ErrTranslateKeyNotFound is returned when translating key
+	// and the underlying store returns an empty set
+	ErrTranslateKeyNotFound = errors.New("boltdb: translating key returned empty set")
+
+	bucketKeys = []byte("keys")
+	bucketIDs  = []byte("ids")
 )
 
 const (
 	// snapshotExt is the file extension used for an in-process snapshot.
 	snapshotExt = ".snapshotting"
+
+	errFmtTranslateBucketNotFound = "boltdb: translate bucket '%s' not found"
 )
 
 // OpenTranslateStore opens and initializes a boltdb translation store.
@@ -102,9 +111,9 @@ func (s *TranslateStore) Open() (err error) {
 
 	// Initialize buckets.
 	if err := s.db.Update(func(tx *bolt.Tx) error {
-		if _, err := tx.CreateBucketIfNotExists([]byte("keys")); err != nil {
+		if _, err := tx.CreateBucketIfNotExists(bucketKeys); err != nil {
 			return err
-		} else if _, err := tx.CreateBucketIfNotExists([]byte("ids")); err != nil {
+		} else if _, err := tx.CreateBucketIfNotExists(bucketIDs); err != nil {
 			return err
 		}
 		return nil
@@ -162,64 +171,32 @@ func (s *TranslateStore) Size() int64 {
 
 // TranslateKey converts a string key to an integer ID.
 // If key does not have an associated id then one is created.
-func (s *TranslateStore) TranslateKey(key string) (id uint64, _ error) {
-	// Find id by key under read lock.
-	if err := s.db.View(func(tx *bolt.Tx) error {
-		id, _ = findIDByKey(tx.Bucket([]byte("keys")), key)
-		return nil
-	}); err != nil {
-		return 0, err
-	} else if id != 0 {
-		return id, nil
-	}
-
-	if s.ReadOnly() {
-		return 0, pilosa.ErrTranslateStoreReadOnly
-	}
-
-	// Find or create id under write lock.
-	var written bool
-	if err := s.db.Update(func(tx *bolt.Tx) (err error) {
-		bkt := tx.Bucket([]byte("keys"))
-
-		var boltKey []byte
-		if id, boltKey = findIDByKey(bkt, key); id != 0 {
-			return nil
-		}
-
-		id = pilosa.GenerateNextPartitionedID(s.index, maxID(tx), s.partitionID, s.partitionN)
-		if err := bkt.Put(boltKey, u64tob(id)); err != nil {
-			return err
-		} else if err := tx.Bucket([]byte("ids")).Put(u64tob(id), boltKey); err != nil {
-			return err
-		}
-		written = true
-		return nil
-	}); err != nil {
+func (s *TranslateStore) TranslateKey(key string, writable bool) (uint64, error) {
+	ids, err := s.translateKeys([]string{key}, writable)
+	if err != nil {
 		return 0, err
 	}
-
-	if written {
-		s.notifyWrite()
+	if len(ids) == 0 {
+		// this should not happen
+		return 0, ErrTranslateKeyNotFound
 	}
-
-	return id, nil
+	return ids[0], nil
 }
 
 // TranslateKeys converts a slice of string keys to a slice of integer IDs.
 // If a key does not have an associated id then one is created.
-func (s *TranslateStore) TranslateKeys(keys []string) (ids []uint64, _ error) {
-	if len(keys) == 0 {
-		return nil, nil
-	}
+func (s *TranslateStore) TranslateKeys(keys []string, writable bool) ([]uint64, error) {
+	return s.translateKeys(keys, writable)
+}
 
-	// Allocate slice for ID mapping.
-	ids = make([]uint64, len(keys))
-
-	// Find ids by key under read lock.
-	var found int
-	if err := s.db.View(func(tx *bolt.Tx) error {
-		bkt := tx.Bucket([]byte("keys"))
+func (s *TranslateStore) translateKeys(keys []string, writable bool) ([]uint64, error) {
+	found := 0
+	ids := make([]uint64, len(keys))
+	err := s.db.View(func(tx *bolt.Tx) error {
+		bkt := tx.Bucket(bucketKeys)
+		if bkt == nil {
+			return errors.Errorf(errFmtTranslateBucketNotFound, bucketKeys)
+		}
 		for i, key := range keys {
 			if id, _ := findIDByKey(bkt, key); id != 0 {
 				ids[i] = id
@@ -227,34 +204,36 @@ func (s *TranslateStore) TranslateKeys(keys []string) (ids []uint64, _ error) {
 			}
 		}
 		return nil
-	}); err != nil {
+
+	})
+	if err != nil {
 		return nil, err
-	} else if found == len(keys) {
+	}
+	if found == len(keys) {
 		return ids, nil
 	}
-
 	if s.ReadOnly() {
 		return ids, pilosa.ErrTranslateStoreReadOnly
 	}
-
+	if !writable {
+		return nil, pilosa.ErrTranslatingKeyNotFound
+	}
 	// Find or create ids under write lock if any keys were not found.
 	var written bool
 	if err := s.db.Update(func(tx *bolt.Tx) (err error) {
-		bkt := tx.Bucket([]byte("keys"))
+		bkt := tx.Bucket(bucketKeys)
 		for i, key := range keys {
 			if ids[i] != 0 {
 				continue
 			}
-
 			var boltKey []byte
 			if ids[i], boltKey = findIDByKey(bkt, key); ids[i] != 0 {
 				continue
 			}
-
 			ids[i] = pilosa.GenerateNextPartitionedID(s.index, maxID(tx), s.partitionID, s.partitionN)
 			if err := bkt.Put(boltKey, u64tob(ids[i])); err != nil {
 				return err
-			} else if err := tx.Bucket([]byte("ids")).Put(u64tob(ids[i]), boltKey); err != nil {
+			} else if err := tx.Bucket(bucketIDs).Put(u64tob(ids[i]), boltKey); err != nil {
 				return err
 			}
 			written = true
@@ -263,7 +242,6 @@ func (s *TranslateStore) TranslateKeys(keys []string) (ids []uint64, _ error) {
 	}); err != nil {
 		return nil, err
 	}
-
 	if written {
 		s.notifyWrite()
 	}
@@ -278,7 +256,7 @@ func (s *TranslateStore) TranslateID(id uint64) (string, error) {
 		return "", err
 	}
 	defer func() { _ = tx.Rollback() }()
-	return findKeyByID(tx.Bucket([]byte("ids")), id), nil
+	return findKeyByID(tx.Bucket(bucketIDs), id), nil
 }
 
 // TranslateIDs converts a list of integer IDs to a list of string keys.
@@ -295,7 +273,7 @@ func (s *TranslateStore) TranslateIDs(ids []uint64) ([]string, error) {
 
 	keys := make([]string, len(ids))
 	for i, id := range ids {
-		keys[i] = findKeyByID(tx.Bucket([]byte("ids")), id)
+		keys[i] = findKeyByID(tx.Bucket(bucketIDs), id)
 	}
 	return keys, nil
 }
@@ -303,9 +281,9 @@ func (s *TranslateStore) TranslateIDs(ids []uint64) ([]string, error) {
 // ForceSet writes the id/key pair to the store even if read only. Used by replication.
 func (s *TranslateStore) ForceSet(id uint64, key string) error {
 	if err := s.db.Update(func(tx *bolt.Tx) (err error) {
-		if err := tx.Bucket([]byte("keys")).Put([]byte(key), u64tob(id)); err != nil {
+		if err := tx.Bucket(bucketKeys).Put([]byte(key), u64tob(id)); err != nil {
 			return err
-		} else if err := tx.Bucket([]byte("ids")).Put(u64tob(id), []byte(key)); err != nil {
+		} else if err := tx.Bucket(bucketIDs).Put(u64tob(id), []byte(key)); err != nil {
 			return err
 		}
 		return nil
@@ -398,7 +376,7 @@ func (s *TranslateStore) ReadFrom(r io.Reader) (n int64, err error) {
 
 // MaxID returns the highest id in the store.
 func maxID(tx *bolt.Tx) uint64 {
-	if key, _ := tx.Bucket([]byte("ids")).Cursor().Last(); key != nil {
+	if key, _ := tx.Bucket(bucketIDs).Cursor().Last(); key != nil {
 		return btou64(key)
 	}
 	return 0
@@ -436,7 +414,7 @@ func (r *TranslateEntryReader) ReadEntry(entry *pilosa.TranslateEntry) error {
 		var found bool
 		if err := r.store.db.View(func(tx *bolt.Tx) error {
 			// Find ID/key lookup at offset or later.
-			cur := tx.Bucket([]byte("ids")).Cursor()
+			cur := tx.Bucket(bucketIDs).Cursor()
 			key, value := cur.Seek(u64tob(r.offset))
 			if key == nil {
 				return nil
