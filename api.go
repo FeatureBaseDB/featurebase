@@ -1077,7 +1077,7 @@ func (api *API) Import(ctx context.Context, req *ImportRequest, opts ...ImportOp
 			if len(req.RowIDs) != 0 {
 				return errors.New("row ids cannot be used because field uses string keys")
 			}
-			if req.RowIDs, err = api.cluster.translateFieldKeys(ctx, field, req.RowKeys...); err != nil {
+			if req.RowIDs, err = api.cluster.translateFieldKeys(ctx, field, req.RowKeys, true); err != nil {
 				return errors.Wrapf(err, "translating field keys")
 			}
 		}
@@ -1088,7 +1088,7 @@ func (api *API) Import(ctx context.Context, req *ImportRequest, opts ...ImportOp
 			if len(req.ColumnIDs) != 0 {
 				return errors.New("column ids cannot be used because index uses string keys")
 			}
-			if req.ColumnIDs, err = api.cluster.translateIndexKeys(ctx, req.Index, req.ColumnKeys); err != nil {
+			if req.ColumnIDs, err = api.cluster.translateIndexKeys(ctx, req.Index, req.ColumnKeys, true); err != nil {
 				return errors.Wrap(err, "translating columns")
 			}
 		}
@@ -1201,7 +1201,7 @@ func (api *API) ImportValue(ctx context.Context, req *ImportValueRequest, opts .
 			if len(req.ColumnIDs) != 0 {
 				return errors.New("column ids cannot be used because index uses string keys")
 			}
-			if req.ColumnIDs, err = api.cluster.translateIndexKeys(ctx, req.Index, req.ColumnKeys); err != nil {
+			if req.ColumnIDs, err = api.cluster.translateIndexKeys(ctx, req.Index, req.ColumnKeys, true); err != nil {
 				return errors.Wrap(err, "translating columns")
 			}
 			req.Shard = math.MaxUint64
@@ -1212,7 +1212,7 @@ func (api *API) ImportValue(ctx context.Context, req *ImportValueRequest, opts .
 		if field.Keys() {
 			// Perform translation.
 			span.LogKV("rowKeys", true)
-			uints, err := api.cluster.translateIndexKeys(ctx, field.ForeignIndex(), req.StringValues)
+			uints, err := api.cluster.translateIndexKeys(ctx, field.ForeignIndex(), req.StringValues, true)
 			if err != nil {
 				return err
 			}
@@ -1579,8 +1579,8 @@ func (api *API) GetTranslateEntryReader(ctx context.Context, offsets TranslateOf
 	return NewMultiTranslateEntryReader(ctx, a), nil
 }
 
-func (api *API) TranslateIndexKey(ctx context.Context, indexName string, key string) (uint64, error) {
-	return api.cluster.translateIndexKey(ctx, indexName, key)
+func (api *API) TranslateIndexKey(ctx context.Context, indexName string, key string, writable bool) (uint64, error) {
+	return api.cluster.translateIndexKey(ctx, indexName, key, writable)
 }
 
 func (api *API) TranslateIndexIDs(ctx context.Context, indexName string, ids []uint64) ([]string, error) {

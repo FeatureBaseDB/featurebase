@@ -32,11 +32,20 @@ var (
 	// ErrTranslateStoreClosed is returned when reading from an TranslateEntryReader
 	// and the underlying store is closed.
 	ErrTranslateStoreClosed = errors.New("boltdb: translate store closing")
+
+	// ErrTranslateKeyNotFound is returned when translating key
+	// and the underlying store returns an empty set
+	ErrTranslateKeyNotFound = errors.New("boltdb: translating key returned empty set")
+
+	bucketKeys = []byte("keys")
+	bucketIDs  = []byte("ids")
 )
 
 const (
 	// snapshotExt is the file extension used for an in-process snapshot.
 	snapshotExt = ".snapshotting"
+
+	errFmtTranslateBucketNotFound = "boltdb: translate bucket '%s' not found"
 )
 
 // OpenTranslateStore opens and initializes a boltdb translation store.
@@ -102,9 +111,9 @@ func (s *TranslateStore) Open() (err error) {
 
 	// Initialize buckets.
 	if err := s.db.Update(func(tx *bolt.Tx) error {
-		if _, err := tx.CreateBucketIfNotExists([]byte("keys")); err != nil {
+		if _, err := tx.CreateBucketIfNotExists(bucketKeys); err != nil {
 			return err
-		} else if _, err := tx.CreateBucketIfNotExists([]byte("ids")); err != nil {
+		} else if _, err := tx.CreateBucketIfNotExists(bucketIDs); err != nil {
 			return err
 		}
 		return nil
@@ -195,12 +204,11 @@ func (s *TranslateStore) TranslateKey(key string, writable bool) (uint64, error)
 	}); err != nil {
 		return 0, err
 	}
-
-	if written {
-		s.notifyWrite()
+	if len(ids) == 0 {
+		// this should not happen
+		return 0, ErrTranslateKeyNotFound
 	}
-
-	return id, nil
+	return ids[0], nil
 }
 
 // TranslateKeys converts a slice of string keys to a slice of integer IDs.
@@ -241,7 +249,9 @@ func (s *TranslateStore) translateKeys(keys []string, writable bool) ([]uint64, 
 		}
 		return nil, nil
 	}
-
+	if !writable {
+		return nil, pilosa.ErrTranslatingKeyNotFound
+	}
 	// Find or create ids under write lock if any keys were not found.
 	var written bool
 	if err := s.db.Update(func(tx *bolt.Tx) (err error) {
@@ -265,7 +275,6 @@ func (s *TranslateStore) translateKeys(keys []string, writable bool) ([]uint64, 
 	}); err != nil {
 		return nil, err
 	}
-
 	if written {
 		s.notifyWrite()
 	}
@@ -280,7 +289,7 @@ func (s *TranslateStore) TranslateID(id uint64) (string, error) {
 		return "", err
 	}
 	defer func() { _ = tx.Rollback() }()
-	return findKeyByID(tx.Bucket([]byte("ids")), id), nil
+	return findKeyByID(tx.Bucket(bucketIDs), id), nil
 }
 
 // TranslateIDs converts a list of integer IDs to a list of string keys.
@@ -297,7 +306,7 @@ func (s *TranslateStore) TranslateIDs(ids []uint64) ([]string, error) {
 
 	keys := make([]string, len(ids))
 	for i, id := range ids {
-		keys[i] = findKeyByID(tx.Bucket([]byte("ids")), id)
+		keys[i] = findKeyByID(tx.Bucket(bucketIDs), id)
 	}
 	return keys, nil
 }
@@ -305,9 +314,9 @@ func (s *TranslateStore) TranslateIDs(ids []uint64) ([]string, error) {
 // ForceSet writes the id/key pair to the store even if read only. Used by replication.
 func (s *TranslateStore) ForceSet(id uint64, key string) error {
 	if err := s.db.Update(func(tx *bolt.Tx) (err error) {
-		if err := tx.Bucket([]byte("keys")).Put([]byte(key), u64tob(id)); err != nil {
+		if err := tx.Bucket(bucketKeys).Put([]byte(key), u64tob(id)); err != nil {
 			return err
-		} else if err := tx.Bucket([]byte("ids")).Put(u64tob(id), []byte(key)); err != nil {
+		} else if err := tx.Bucket(bucketIDs).Put(u64tob(id), []byte(key)); err != nil {
 			return err
 		}
 		return nil
@@ -400,7 +409,7 @@ func (s *TranslateStore) ReadFrom(r io.Reader) (n int64, err error) {
 
 // MaxID returns the highest id in the store.
 func maxID(tx *bolt.Tx) uint64 {
-	if key, _ := tx.Bucket([]byte("ids")).Cursor().Last(); key != nil {
+	if key, _ := tx.Bucket(bucketIDs).Cursor().Last(); key != nil {
 		return btou64(key)
 	}
 	return 0
@@ -438,7 +447,7 @@ func (r *TranslateEntryReader) ReadEntry(entry *pilosa.TranslateEntry) error {
 		var found bool
 		if err := r.store.db.View(func(tx *bolt.Tx) error {
 			// Find ID/key lookup at offset or later.
-			cur := tx.Bucket([]byte("ids")).Cursor()
+			cur := tx.Bucket(bucketIDs).Cursor()
 			key, value := cur.Seek(u64tob(r.offset))
 			if key == nil {
 				return nil

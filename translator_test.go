@@ -36,21 +36,21 @@ func TestInMemTranslateStore_TranslateKey(t *testing.T) {
 	s := pilosa.NewInMemTranslateStore("IDX", "FLD", 0, pilosa.DefaultPartitionN)
 
 	// Ensure initial key translates to ID 1.
-	if id, err := s.TranslateKey("foo"); err != nil {
+	if id, err := s.TranslateKey("foo", true); err != nil {
 		t.Fatal(err)
 	} else if got, want := id, uint64(1); got != want {
 		t.Fatalf("TranslateKey()=%d, want %d", got, want)
 	}
 
 	// Ensure next key autoincrements.
-	if id, err := s.TranslateKey("bar"); err != nil {
+	if id, err := s.TranslateKey("bar", true); err != nil {
 		t.Fatal(err)
 	} else if got, want := id, uint64(2); got != want {
 		t.Fatalf("TranslateKey()=%d, want %d", got, want)
 	}
 
 	// Ensure retranslating existing key returns original ID.
-	if id, err := s.TranslateKey("foo"); err != nil {
+	if id, err := s.TranslateKey("foo", true); err != nil {
 		t.Fatal(err)
 	} else if got, want := id, uint64(1); got != want {
 		t.Fatalf("TranslateKey()=%d, want %d", got, want)
@@ -61,9 +61,9 @@ func TestInMemTranslateStore_TranslateID(t *testing.T) {
 	s := pilosa.NewInMemTranslateStore("IDX", "FLD", 0, pilosa.DefaultPartitionN)
 
 	// Setup initial keys.
-	if _, err := s.TranslateKey("foo"); err != nil {
+	if _, err := s.TranslateKey("foo", true); err != nil {
 		t.Fatal(err)
-	} else if _, err := s.TranslateKey("bar"); err != nil {
+	} else if _, err := s.TranslateKey("bar", true); err != nil {
 		t.Fatal(err)
 	}
 
@@ -289,7 +289,7 @@ func TestTranslation_Reset(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := node0.API.TranslateKeys(ctx, bytes.NewReader(reqBody)); err != nil {
+		if _, err := node0.API.TranslateKeys(ctx, bytes.NewReader(reqBody), true); err != nil {
 			t.Fatal(err)
 		}
 	})
@@ -558,7 +558,7 @@ func TestTranslation_Coordinator(t *testing.T) {
 		fld := "f"
 
 		// Create an index without keys.
-		if _, err := node0.API.CreateIndex(ctx, idx,
+		if _, err := node1.API.CreateIndex(ctx, idx,
 			pilosa.IndexOptions{
 				Keys: false,
 			}); err != nil {

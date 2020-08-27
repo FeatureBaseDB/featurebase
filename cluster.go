@@ -2325,8 +2325,8 @@ func (c *cluster) setStatic(hosts []string) error {
 }
 
 // translateFieldKey gets a single key from translateFieldKeys.
-func (c *cluster) translateFieldKey(ctx context.Context, field *Field, key string) (uint64, error) {
-	ids, err := c.translateFieldKeys(ctx, field, key)
+func (c *cluster) translateFieldKey(ctx context.Context, field *Field, key string, writable bool) (uint64, error) {
+	ids, err := c.translateFieldKeys(ctx, field, []string{key}, writable)
 	if err != nil {
 		return 0, err
 	} else if len(ids) == 0 {
@@ -2359,21 +2359,21 @@ func (c *cluster) translateFieldKeys(ctx context.Context, field *Field, keys []s
 	return ids, nil
 }
 
-func (c *cluster) translateIndexKey(ctx context.Context, indexName string, key string) (uint64, error) {
-	keyMap, err := c.translateIndexKeySet(ctx, indexName, map[string]struct{}{key: struct{}{}})
+func (c *cluster) translateIndexKey(ctx context.Context, indexName string, key string, writable bool) (uint64, error) {
+	keyMap, err := c.translateIndexKeySet(ctx, indexName, map[string]struct{}{key: struct{}{}}, writable)
 	if err != nil {
 		return 0, err
 	}
 	return keyMap[key], nil
 }
 
-func (c *cluster) translateIndexKeys(ctx context.Context, indexName string, keys []string) ([]uint64, error) {
+func (c *cluster) translateIndexKeys(ctx context.Context, indexName string, keys []string, writable bool) ([]uint64, error) {
 	keySet := make(map[string]struct{})
 	for _, key := range keys {
 		keySet[key] = struct{}{}
 	}
 
-	keyMap, err := c.translateIndexKeySet(ctx, indexName, keySet)
+	keyMap, err := c.translateIndexKeySet(ctx, indexName, keySet, writable)
 	if err != nil {
 		return nil, err
 	}
@@ -2394,7 +2394,7 @@ func (c *cluster) translateIndexKeys(ctx context.Context, indexName string, keys
 	return ids, nil
 }
 
-func (c *cluster) translateIndexKeySet(ctx context.Context, indexName string, keySet map[string]struct{}) (map[string]uint64, error) {
+func (c *cluster) translateIndexKeySet(ctx context.Context, indexName string, keySet map[string]struct{}, writable bool) (map[string]uint64, error) {
 	keyMap := make(map[string]uint64)
 
 	idx := c.holder.Index(indexName)

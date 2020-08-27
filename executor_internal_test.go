@@ -58,7 +58,9 @@ func TestExecutor_TranslateGroupByCall(t *testing.T) {
 		t.Fatalf("parsing query: %v", err)
 	}
 	c := query.Calls[0]
-	err = e.translateCall(context.Background(), "i", c, make(map[string]map[string]uint64))
+	// this is writable call just for testing purpose - to test previous argument
+	// generally GroupBy calls are not writable and keys should already exist
+	err = e.translateCall(context.Background(), "i", c, make(map[string]map[string]uint64), true)
 	if err != nil {
 		t.Fatalf("translating call: %v", err)
 	}
@@ -122,7 +124,7 @@ func TestExecutor_TranslateGroupByCall(t *testing.T) {
 				t.Fatalf("parsing query: %v", err)
 			}
 			c := query.Calls[0]
-			err = e.translateCall(context.Background(), "i", c, make(map[string]map[string]uint64))
+			err = e.translateCall(context.Background(), "i", c, make(map[string]map[string]uint64), false)
 			if err == nil {
 				t.Fatalf("expected error, but translated call is '%s", c)
 			}
@@ -181,7 +183,7 @@ func TestExecutor_TranslateRowsOnBool(t *testing.T) {
 			}
 
 			c := query.Calls[0]
-			err = e.translateCall(context.Background(), "i", c, make(map[string]map[string]uint64))
+			err = e.translateCall(context.Background(), "i", c, make(map[string]map[string]uint64), true)
 			if err != nil {
 				t.Fatalf("translating call: %v", err)
 			}

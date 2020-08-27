@@ -4746,7 +4746,18 @@ func TestExecutor_Execute_Rows_Keys(t *testing.T) {
 				if !reflect.DeepEqual(rows.Keys, test.exp) {
 					t.Fatalf("\ngot: %+v\nexp: %+v", rows.Keys, test.exp)
 				} else if rows.Rows != nil {
-					t.Fatalf("\ngot: %+v\nexp: nil", rows.Rows)
+					if test.exp == nil {
+						if res.Results != nil {
+							t.Fatalf("\ngot: %+v\nexp: nil, %[1]T, %#[1]v", res.Results)
+						}
+					} else {
+						rows := res.Results[0].(pilosa.RowIdentifiers)
+						if !reflect.DeepEqual(rows.Keys, test.exp) {
+							t.Fatalf("\ngot: %+v %[1]T\nexp: %+v  %[2]T", rows.Keys, test.exp)
+						} else if rows.Rows != nil {
+							t.Fatalf("\ngot: %+v %[1]T\nexp: nil", rows.Rows)
+						}
+					}
 				}
 			}
 		})

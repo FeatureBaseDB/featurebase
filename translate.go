@@ -37,6 +37,7 @@ var (
 	ErrReplicationNotSupported    = errors.New("replication not supported")
 	ErrTranslateStoreReadOnly     = errors.New("translate store could not find or create key, translate store read only")
 	ErrTranslateStoreNotFound     = errors.New("translate store not found")
+	ErrTranslatingKeyNotFound     = errors.New("translating key not found")
 	ErrCannotOpenV1TranslateFile  = errors.New("cannot open v1 translate .keys file")
 )
 
@@ -67,8 +68,8 @@ type TranslateStore interface {
 	//
 	// Translated id must be associated with a shard in the store's partition
 	// unless partition is set to -1.
-	TranslateKey(key string) (uint64, error)
-	TranslateKeys(key []string) ([]uint64, error)
+	TranslateKey(key string, writable bool) (uint64, error)
+	TranslateKeys(key []string, writable bool) ([]uint64, error)
 
 	// Converts an integer ID to its associated string key.
 	TranslateID(id uint64) (string, error)
@@ -311,39 +312,43 @@ func (s *InMemTranslateStore) SetReadOnly(v bool) {
 	s.readOnly = v
 }
 
-// TranslateKeys converts a string key to an integer ID.
+// TranslateKey converts a string key to an integer ID.
 // If key does not have an associated id then one is created.
-func (s *InMemTranslateStore) TranslateKey(key string) (uint64, error) {
+func (s *InMemTranslateStore) TranslateKey(key string, writable bool) (uint64, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.translateKey(key)
+	return s.translateKey(key, writable)
 }
 
 // TranslateKeys converts a string key to an integer ID.
 // If key does not have an associated id then one is created.
-func (s *InMemTranslateStore) TranslateKeys(keys []string) (_ []uint64, err error) {
+func (s *InMemTranslateStore) TranslateKeys(keys []string, writable bool) (_ []uint64, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	ids := make([]uint64, len(keys))
 	for i := range keys {
-		if ids[i], err = s.translateKey(keys[i]); err != nil {
+		if ids[i], err = s.translateKey(keys[i], writable); err != nil {
 			return ids, err
 		}
 	}
 	return ids, nil
 }
 
-func (s *InMemTranslateStore) translateKey(key string) (_ uint64, err error) {
-	// Return id if it has been added.
-	if id, ok := s.idsByKey[key]; ok {
+func (s *InMemTranslateStore) translateKey(key string, writable bool) (_ uint64, err error) {
+	id := s.idsByKey[key]
+	if id != 0 {
+		// Return id if it has been added.
 		return id, nil
-	} else if s.readOnly {
-		return 0, nil
+	}
+	if s.readOnly {
+		return 0, ErrTranslatingKeyNotFound
+	}
+	if !writable {
+		return 0, ErrTranslatingKeyNotFound
 	}
 
 	// Generate a new id and update db.
-	var id uint64
 	if s.field == "" {
 		id = GenerateNextPartitionedID(s.index, s.maxID, s.partitionID, s.partitionN)
 	} else {
