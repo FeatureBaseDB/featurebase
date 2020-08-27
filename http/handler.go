@@ -29,6 +29,7 @@ import (
 	_ "net/http/pprof" // Imported for its side-effect of registering pprof endpoints with the server.
 	"net/url"
 	"os"
+	"path/filepath"
 	"reflect"
 	"runtime/debug"
 	"runtime/pprof"
@@ -345,12 +346,43 @@ func (h *Handler) collectStats(next http.Handler) http.Handler {
 	})
 }
 
+// latticeHandler implements the http.Handler interface, so we can use it
+// to respond to HTTP requests. The path to the static directory and
+// path to the index file within that static directory are used to
+// serve the Lattice UI in the given static directory
+type latticeHandler struct {
+	staticPath string
+	indexPath  string
+}
+
+// ServeHTTP inspects the URL path to locate a file within the static dir
+// on latticeHandler. If a file is found, it will be served. If not, the
+// file located at the index path on the latticeHandler will be served. This
+// is suitable behavior for serving an SPA.
+func (h latticeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// get the absolute path to prevent directory traversal
+	path, err := filepath.Abs(r.URL.Path)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest) // TODO
+		return
+	}
+
+	path = filepath.Join(h.staticPath, path)
+	_, err = os.Stat(path) // TODO
+	if os.IsNotExist(err) {
+		http.ServeFile(w, r, filepath.Join(h.staticPath, h.indexPath))
+		return
+	} else if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	http.FileServer(http.Dir(h.staticPath)).ServeHTTP(w, r)
+}
+
 // newRouter creates a new mux http router.
 func newRouter(handler *Handler) *mux.Router {
 	router := mux.NewRouter()
-	router.HandleFunc("/", handler.handleLattice).Methods("GET")
-	router.HandleFunc("/{file}", handler.handleLattice).Methods("GET")
-	router.HandleFunc("/static/{file}", handler.handleLattice).Methods("GET")
 	router.HandleFunc("/cluster/resize/abort", handler.handlePostClusterResizeAbort).Methods("POST").Name("PostClusterResizeAbort")
 	router.HandleFunc("/cluster/resize/remove-node", handler.handlePostClusterResizeRemoveNode).Methods("POST").Name("PostClusterResizeRemoveNode")
 	router.HandleFunc("/cluster/resize/set-coordinator", handler.handlePostClusterResizeSetCoordinator).Methods("POST").Name("PostClusterResizeSetCoordinator")
@@ -411,6 +443,9 @@ func newRouter(handler *Handler) *mux.Router {
 
 	router.HandleFunc("/internal/translate/index/{index}/{partition}", handler.handlePostTranslateIndexDB).Methods("POST").Name("PostTranslateIndexDB")
 	router.HandleFunc("/internal/translate/field/{index}/{field}", handler.handlePostTranslateFieldDB).Methods("POST").Name("PostTranslateFieldDB")
+
+	lattice := latticeHandler{staticPath: "lattice/build", indexPath: "index.html"}
+	router.PathPrefix("/").Handler(lattice)
 
 	router.Use(handler.queryArgValidator)
 	router.Use(handler.addQueryContext)
