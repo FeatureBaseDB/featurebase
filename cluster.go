@@ -1356,7 +1356,7 @@ func (c *cluster) followResizeInstruction(instr *ResizeInstruction) error {
 				// Retrieve field.
 				f := c.holder.Field(src.Index, src.Field)
 				if f == nil {
-					return ErrFieldNotFound
+					return newNotFoundError(ErrFieldNotFound, src.Field)
 				}
 
 				// Create view.

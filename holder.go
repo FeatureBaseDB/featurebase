@@ -455,7 +455,7 @@ func (h *Holder) DeleteIndex(name string) error {
 	// Confirm index exists.
 	index := h.index(name)
 	if index == nil {
-		return newNotFoundError(ErrIndexNotFound)
+		return newNotFoundError(ErrIndexNotFound, name)
 	}
 
 	// Close index.
@@ -1042,7 +1042,7 @@ func (s *holderSyncer) syncField(index, name string) error {
 		// Retrieve attributes from differing blocks.
 		// Skip update and recomputation if no attributes have changed.
 		m, err := s.Cluster.InternalClient.RowAttrDiff(ctx, &node.URI, index, name, blks)
-		if err == ErrFieldNotFound {
+		if errors.Cause(err) == ErrFieldNotFound {
 			continue // field not created remotely yet, skip
 		} else if err != nil {
 			return errors.Wrap(err, "getting differing blocks")
@@ -1071,7 +1071,7 @@ func (s *holderSyncer) syncFragment(index, field, view string, shard uint64) err
 	// Retrieve local field.
 	f := s.Holder.Field(index, field)
 	if f == nil {
-		return ErrFieldNotFound
+		return newNotFoundError(ErrFieldNotFound, field)
 	}
 
 	// Ensure view exists locally.

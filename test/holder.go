@@ -21,6 +21,7 @@ import (
 
 	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/boltdb"
+	"github.com/pkg/errors"
 )
 
 // Holder is a test wrapper for pilosa.Holder.
@@ -96,7 +97,7 @@ func (h *Holder) Row(index, field string, rowID uint64) *pilosa.Row {
 func (h *Holder) ReadRow(index, field string, rowID uint64) *pilosa.Row {
 	f := h.Holder.Field(index, field)
 	if f == nil {
-		panic(pilosa.ErrFieldNotFound)
+		panic(errors.WithMessage(pilosa.ErrFieldNotFound, field))
 	}
 	row, err := f.Row(rowID)
 	if err != nil {
