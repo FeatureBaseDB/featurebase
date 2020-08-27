@@ -247,7 +247,7 @@ func extractWhere(index *pilosa.Index, expr sqlparser.Expr) (string, error) {
 
 		field := index.Field(parseCol.name)
 		if field == nil {
-			return "", pilosa.ErrFieldNotFound
+			return "", errors.Wrap(pilosa.ErrFieldNotFound, parseCol.name)
 		}
 
 		switch field.Type() {

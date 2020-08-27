@@ -1586,7 +1586,7 @@ func (c *cluster) followResizeInstruction(instr *ResizeInstruction) error {
 				// Retrieve field.
 				f := c.holder.Field(src.Index, src.Field)
 				if f == nil {
-					return ErrFieldNotFound
+					return newNotFoundError(ErrFieldNotFound, src.Field)
 				}
 
 				// Create view.
@@ -1638,7 +1638,7 @@ func (c *cluster) followResizeInstruction(instr *ResizeInstruction) error {
 
 				idx := c.holder.Index(src.Index)
 				if idx == nil {
-					return ErrIndexNotFound
+					return newNotFoundError(ErrIndexNotFound, src.Index)
 				}
 
 				// Retrieve partition from remote node.
@@ -2472,7 +2472,7 @@ func (c *cluster) translateIndexIDSet(ctx context.Context, indexName string, idS
 
 	index := c.holder.Index(indexName)
 	if index == nil {
-		return nil, ErrIndexNotFound
+		return nil, newNotFoundError(ErrIndexNotFound, indexName)
 	}
 
 	// Split ids by partition.

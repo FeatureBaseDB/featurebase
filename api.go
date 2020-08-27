@@ -217,7 +217,7 @@ func (api *API) Index(ctx context.Context, indexName string) (*Index, error) {
 
 	index := api.holder.Index(indexName)
 	if index == nil {
-		return nil, newNotFoundError(ErrIndexNotFound)
+		return nil, newNotFoundError(ErrIndexNotFound, indexName)
 	}
 	return index, nil
 }
@@ -273,7 +273,7 @@ func (api *API) CreateField(ctx context.Context, indexName string, fieldName str
 	// Find index.
 	index := api.holder.Index(indexName)
 	if index == nil {
-		return nil, newNotFoundError(ErrIndexNotFound)
+		return nil, newNotFoundError(ErrIndexNotFound, indexName)
 	}
 
 	// Create field.
@@ -312,7 +312,7 @@ func (api *API) Field(ctx context.Context, indexName, fieldName string) (*Field,
 
 	field := api.holder.Field(indexName, fieldName)
 	if field == nil {
-		return nil, newNotFoundError(ErrFieldNotFound)
+		return nil, newNotFoundError(ErrFieldNotFound, fieldName)
 	}
 	return field, nil
 }
@@ -432,7 +432,7 @@ func (api *API) ImportRoaring(ctx context.Context, indexName, fieldName string, 
 
 	index, field, err := api.indexField(indexName, fieldName, shard)
 	if index == nil || field == nil {
-		return newNotFoundError(ErrFieldNotFound)
+		return err
 	}
 
 	if err = req.ValidateWithTimestamp(index.CreatedAt(), field.CreatedAt()); err != nil {
@@ -501,7 +501,7 @@ func (api *API) DeleteField(ctx context.Context, indexName string, fieldName str
 	// Find index.
 	index := api.holder.Index(indexName)
 	if index == nil {
-		return newNotFoundError(ErrIndexNotFound)
+		return newNotFoundError(ErrIndexNotFound, indexName)
 	}
 
 	// Delete field from the index.
@@ -532,7 +532,7 @@ func (api *API) DeleteAvailableShard(_ context.Context, indexName, fieldName str
 	// Find field.
 	field := api.holder.Field(indexName, fieldName)
 	if field == nil {
-		return newNotFoundError(ErrFieldNotFound)
+		return newNotFoundError(ErrFieldNotFound, fieldName)
 	}
 
 	// Delete shard from the cache.
@@ -574,13 +574,13 @@ func (api *API) ExportCSV(ctx context.Context, indexName string, fieldName strin
 	// Find index.
 	index := api.holder.Index(indexName)
 	if index == nil {
-		return newNotFoundError(ErrIndexNotFound)
+		return newNotFoundError(ErrIndexNotFound, indexName)
 	}
 
 	// Find field from the index.
 	field := index.Field(fieldName)
 	if field == nil {
-		return newNotFoundError(ErrFieldNotFound)
+		return newNotFoundError(ErrFieldNotFound, fieldName)
 	}
 
 	// Find the fragment.
@@ -739,7 +739,7 @@ func (api *API) TranslateData(ctx context.Context, indexName string, partition i
 	// Retrieve index from holder.
 	idx := api.holder.Index(indexName)
 	if idx == nil {
-		return nil, ErrIndexNotFound
+		return nil, newNotFoundError(ErrIndexNotFound, indexName)
 	}
 
 	// Retrieve translatestore from holder.
@@ -890,7 +890,7 @@ func (api *API) Views(ctx context.Context, indexName string, fieldName string) (
 	// Retrieve views.
 	f := api.holder.Field(indexName, fieldName)
 	if f == nil {
-		return nil, ErrFieldNotFound
+		return nil, newNotFoundError(ErrFieldNotFound, fieldName)
 	}
 
 	// Fetch views.
@@ -910,7 +910,7 @@ func (api *API) DeleteView(ctx context.Context, indexName string, fieldName stri
 	// Retrieve field.
 	f := api.holder.Field(indexName, fieldName)
 	if f == nil {
-		return ErrFieldNotFound
+		return newNotFoundError(ErrFieldNotFound, fieldName)
 	}
 
 	// Delete the view.
@@ -947,7 +947,7 @@ func (api *API) IndexAttrDiff(ctx context.Context, indexName string, blocks []At
 	// Retrieve index from holder.
 	index := api.holder.Index(indexName)
 	if index == nil {
-		return nil, newNotFoundError(ErrIndexNotFound)
+		return nil, newNotFoundError(ErrIndexNotFound, indexName)
 	}
 
 	// Retrieve local blocks.
@@ -985,7 +985,7 @@ func (api *API) FieldAttrDiff(ctx context.Context, indexName string, fieldName s
 	// Retrieve index from holder.
 	f := api.holder.Field(indexName, fieldName)
 	if f == nil {
-		return nil, ErrFieldNotFound
+		return nil, newNotFoundError(ErrFieldNotFound, fieldName)
 	}
 
 	// Retrieve local blocks.
@@ -1535,14 +1535,14 @@ func (api *API) indexField(indexName string, fieldName string, shard uint64) (*I
 	index := api.holder.Index(indexName)
 	if index == nil {
 		api.server.logger.Printf("fragment error: index=%s, field=%s, shard=%d, err=%s", indexName, fieldName, shard, ErrIndexNotFound.Error())
-		return nil, nil, newNotFoundError(ErrIndexNotFound)
+		return nil, nil, newNotFoundError(ErrIndexNotFound, indexName)
 	}
 
 	// Retrieve field.
 	field := index.Field(fieldName)
 	if field == nil {
 		api.server.logger.Printf("field error: index=%s, field=%s, shard=%d, err=%s", indexName, fieldName, shard, ErrFieldNotFound.Error())
-		return nil, nil, ErrFieldNotFound
+		return nil, nil, newNotFoundError(ErrFieldNotFound, fieldName)
 	}
 	return index, field, nil
 }
@@ -1666,7 +1666,7 @@ func (api *API) GetTranslateEntryReader(ctx context.Context, offsets TranslateOf
 	for indexName, indexMap := range offsets {
 		index := api.holder.Index(indexName)
 		if index == nil {
-			return nil, ErrIndexNotFound
+			return nil, newNotFoundError(ErrIndexNotFound, indexName)
 		}
 
 		for partitionID, offset := range indexMap.Partitions {
@@ -1687,13 +1687,13 @@ func (api *API) GetTranslateEntryReader(ctx context.Context, offsets TranslateOf
 	for indexName, indexMap := range offsets {
 		index := api.holder.Index(indexName)
 		if index == nil {
-			return nil, ErrIndexNotFound
+			return nil, newNotFoundError(ErrIndexNotFound, indexName)
 		}
 
 		for fieldName, offset := range indexMap.Fields {
 			field := index.Field(fieldName)
 			if field == nil {
-				return nil, ErrFieldNotFound
+				return nil, newNotFoundError(ErrFieldNotFound, fieldName)
 			}
 
 			r, err := field.TranslateStore().EntryReader(ctx, uint64(offset))
@@ -1732,7 +1732,7 @@ func (api *API) TranslateKeys(ctx context.Context, r io.Reader, writable bool) (
 		}
 	} else {
 		if field := api.holder.Field(req.Index, req.Field); field == nil {
-			return nil, ErrFieldNotFound
+			return nil, newNotFoundError(ErrFieldNotFound, req.Field)
 		} else if fi := field.ForeignIndex(); fi != "" {
 			ids, err = api.cluster.translateIndexKeys(ctx, fi, req.Keys, writable)
 			if err != nil {
@@ -1768,7 +1768,7 @@ func (api *API) TranslateIDs(ctx context.Context, r io.Reader) (_ []byte, err er
 		}
 	} else {
 		if field := api.holder.Field(req.Index, req.Field); field == nil {
-			return nil, ErrFieldNotFound
+			return nil, newNotFoundError(ErrFieldNotFound, req.Field)
 		} else if fi := field.ForeignIndex(); fi != "" {
 			keys, err = api.cluster.translateIndexIDs(ctx, fi, req.IDs)
 			if err != nil {

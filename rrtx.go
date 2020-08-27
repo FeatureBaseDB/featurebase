@@ -310,11 +310,11 @@ func (tx *RoaringTx) getFragment(index, field, view string, shard uint64) (*frag
 			// only thing we can try is the cached index, and hope we aren't being asked for a foreign index.
 			f = tx.Index.Field(field)
 			if f == nil {
-				return nil, ErrFieldNotFound
+				return nil, newNotFoundError(ErrFieldNotFound, field)
 			}
 		} else {
 			if f = idx.Field(field); f == nil {
-				return nil, ErrFieldNotFound
+				return nil, newNotFoundError(ErrFieldNotFound, field)
 			}
 		}
 	}

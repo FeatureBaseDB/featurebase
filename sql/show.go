@@ -98,7 +98,7 @@ func (s *ShowHandler) execShowFields(ctx context.Context, showStmt *sqlparser.Sh
 		return nil, errors.Wrap(err, "getting schema")
 	}
 	if index == nil {
-		return nil, pilosa.ErrIndexNotFound
+		return nil, errors.WithMessage(pilosa.ErrIndexNotFound, indexName)
 	}
 	fields := index.Fields()
 	sz := len(fields)
