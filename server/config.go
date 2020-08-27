@@ -168,9 +168,9 @@ type Config struct {
 	} `toml:"profile"`
 
 	Postgres struct {
-		// Addr is the address to which to bind a postgres endpoint.
+		// Bind is the address to which to bind a postgres endpoint.
 		// If this is empty, no endpoint will be created.
-		Addr string `toml:"addr"`
+		Bind string `toml:"bind"`
 		// TLS configuration for postgres connections.
 		TLS TLSConfig `toml:"tls"`
 
