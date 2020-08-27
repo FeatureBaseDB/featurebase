@@ -92,7 +92,6 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 	// Postgres endpoint
 	flags.StringVar(&srv.Config.Postgres.Addr, "postgres.addr", srv.Config.Postgres.Addr, "address to which to bind a postgres endpoint (leave blank to disable)")
 	SetTLSConfig(flags, "postgres.", &srv.Config.Postgres.TLS.CertificatePath, &srv.Config.Postgres.TLS.CertificateKeyPath, &srv.Config.Postgres.TLS.CACertPath, &srv.Config.Postgres.TLS.SkipVerify, &srv.Config.Postgres.TLS.EnableClientVerification)
-	flags.BoolVar(&srv.Config.Postgres.RequireTLS, "postgres.tls.require", srv.Config.Postgres.RequireTLS, "Require TLS on all incoming postgres connections.")
 	flags.DurationVar((*time.Duration)(&srv.Config.Postgres.StartupTimeout), "postgres.startup-timeout", time.Duration(srv.Config.Postgres.StartupTimeout), "Timeout for postgres connection startup. (set 0 to disable)")
 	flags.DurationVar((*time.Duration)(&srv.Config.Postgres.ReadTimeout), "postgres.read-timeout", time.Duration(srv.Config.Postgres.ReadTimeout), "Timeout for reads on a postgres connection. (set 0 to disable; does not include connection idling)")
 	flags.DurationVar((*time.Duration)(&srv.Config.Postgres.WriteTimeout), "postgres.write-timeout", time.Duration(srv.Config.Postgres.WriteTimeout), "Timeout for writes on a postgres connection. (set 0 to disable)")

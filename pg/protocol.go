@@ -172,7 +172,7 @@ startup:
 		goto startup
 	}
 
-	if s.RequireTLS && !hasTLS {
+	if s.TLSConfig != nil && !hasTLS {
 		// Reject the unsecured connection.
 		return errors.Errorf("client at %s attempted to initiate an unsecured postgres conenction", conn.RemoteAddr())
 	}

@@ -174,8 +174,6 @@ type Config struct {
 		// TLS configuration for postgres connections.
 		TLS TLSConfig `toml:"tls"`
 
-		RequireTLS bool `toml:"require-tls"`
-
 		StartupTimeout toml.Duration `toml:"startup-timeout"`
 		ReadTimeout    toml.Duration `toml:"read-timeout"`
 		WriteTimeout   toml.Duration `toml:"write-timout"`
