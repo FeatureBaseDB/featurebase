@@ -406,6 +406,7 @@ func newRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/internal/index/{index}/field/{field}/remote-available-shards/{shardID}", handler.handleDeleteRemoteAvailableShard).Methods("DELETE")
 	router.HandleFunc("/internal/nodes", handler.handleGetNodes).Methods("GET").Name("GetNodes")
 	router.HandleFunc("/internal/shards/max", handler.handleGetShardsMax).Methods("GET").Name("GetShardsMax") // TODO: deprecate, but it's being used by the client
+
 	router.HandleFunc("/internal/translate/index/{index}/{partition}", handler.handlePostTranslateIndexDB).Methods("POST").Name("PostTranslateIndexDB")
 	router.HandleFunc("/internal/translate/field/{index}/{field}", handler.handlePostTranslateFieldDB).Methods("POST").Name("PostTranslateFieldDB")
 
@@ -454,7 +455,7 @@ type statikHandler struct {
 func NewStatikHandler(h *Handler) statikHandler {
 	fs, err := h.FileSystem.New()
 	if err == nil {
-		h.logger.Printf("enabled lattice UI at %s", h.api.Node().URI)
+		h.logger.Printf("enabled Lattice UI at %s", h.api.Node().URI)
 	}
 
 	return statikHandler{
@@ -483,15 +484,6 @@ func (s statikHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.FileServer(s.statikFS).ServeHTTP(w, r)
-	/*
-			filesystem, err := s.handler.FileSystem.New() // TODO
-			if err != nil {
-				s.handler.logger.Printf("Lattice UI is not available. Please run `make generate-statik` before building Pilosa with `make install`.")
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-		http.FileServer(filesystem).ServeHTTP(w, r)
-	*/
 }
 
 // successResponse is a general success/error struct for http responses.

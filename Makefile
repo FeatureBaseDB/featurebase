@@ -135,9 +135,11 @@ prerelease-upload:
 install:
 	go install -tags='$(BUILD_TAGS)' -ldflags $(LDFLAGS) $(FLAGS) ./cmd/pilosa
 
-build-lattice: require-yarn
+lattice:
 	git clone git@github.com:molecula/lattice.git
-	cd lattice && yarn install && yarn build
+
+build-lattice: lattice require-yarn
+	cd lattice && git pull && yarn install && yarn build
 
 # `go generate` protocol buffers
 generate-protoc: require-protoc require-protoc-gen-gofast
