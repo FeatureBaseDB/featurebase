@@ -119,13 +119,11 @@ func newConflictError(err error) ConflictError {
 
 // NotFoundError wraps an error value to signify that a resource was not found
 // such that in an HTTP scenario, http.StatusNotFound would be returned.
-type NotFoundError struct {
-	error
-}
+type NotFoundError error
 
 // newNotFoundError returns err wrapped in a NotFoundError.
-func newNotFoundError(err error) NotFoundError {
-	return NotFoundError{err}
+func newNotFoundError(err error, name string) NotFoundError {
+	return NotFoundError(errors.WithMessage(err, name))
 }
 
 type PreconditionFailedError struct {

@@ -142,7 +142,7 @@ func (e *executor) Execute(ctx context.Context, index string, q *pql.Query, shar
 
 	idx := e.Holder.Index(index)
 	if idx == nil {
-		return resp, ErrIndexNotFound
+		return resp, newNotFoundError(ErrIndexNotFound, index)
 	}
 
 	needWriteTxn := false
@@ -471,7 +471,7 @@ func (e *executor) execute(ctx context.Context, tx Tx, index string, q *pql.Quer
 		// Round up the number of shards.
 		idx := e.Holder.Index(index)
 		if idx == nil {
-			return nil, ErrIndexNotFound
+			return nil, newNotFoundError(ErrIndexNotFound, index)
 		}
 		shards = idx.AvailableShards().Slice()
 		if len(shards) == 0 {
@@ -745,7 +745,7 @@ func (e *executor) executeCall(ctx context.Context, tx Tx, index string, c *pql.
 		// Round up the number of shards.
 		idx := e.Holder.Index(index)
 		if idx == nil {
-			return nil, ErrIndexNotFound
+			return nil, newNotFoundError(ErrIndexNotFound, index)
 		}
 		shards = idx.AvailableShards().Slice()
 		if len(shards) == 0 {
@@ -942,13 +942,13 @@ func (e *executor) executeFieldValueCall(ctx context.Context, tx Tx, index strin
 	// Fetch index.
 	idx := e.Holder.Index(index)
 	if idx == nil {
-		return ValCount{}, ErrIndexNotFound
+		return ValCount{}, newNotFoundError(ErrIndexNotFound, index)
 	}
 
 	// Fetch field.
 	field := idx.Field(fieldName)
 	if field == nil {
-		return ValCount{}, ErrFieldNotFound
+		return ValCount{}, newNotFoundError(ErrFieldNotFound, fieldName)
 	}
 
 	var colID uint64
@@ -1169,7 +1169,7 @@ func (e *executor) executeSum(ctx context.Context, tx Tx, index string, c *pql.C
 	if !opt.Remote {
 		field := e.Holder.Field(index, fieldName)
 		if field == nil {
-			return ValCount{}, ErrFieldNotFound
+			return ValCount{}, newNotFoundError(ErrFieldNotFound, fieldName)
 		}
 		if field.Type() == FieldTypeDecimal {
 			other.DecimalVal = &pql.Decimal{
@@ -2114,7 +2114,7 @@ func (e *executor) executeGroupBy(ctx context.Context, tx Tx, index string, c *p
 
 	idx := e.Holder.Index(index)
 	if idx == nil {
-		return nil, ErrIndexNotFound
+		return nil, newNotFoundError(ErrIndexNotFound, index)
 	}
 
 	// perform necessary Rows queries (any that have limit or columns args) -
@@ -2147,7 +2147,7 @@ func (e *executor) executeGroupBy(ctx context.Context, tx Tx, index string, c *p
 		}
 		f := idx.Field(fieldName)
 		if f == nil {
-			return nil, ErrFieldNotFound
+			return nil, newNotFoundError(ErrFieldNotFound, fieldName)
 		}
 		switch f.Type() {
 		case FieldTypeInt:
@@ -2654,12 +2654,12 @@ func (e *executor) executeRowsShard(ctx context.Context, tx Tx, index string, fi
 	// Fetch index.
 	idx := e.Holder.Index(index)
 	if idx == nil {
-		return nil, ErrIndexNotFound
+		return nil, newNotFoundError(ErrIndexNotFound, index)
 	}
 	// Fetch field.
 	f := e.Holder.Field(index, fieldName)
 	if f == nil {
-		return nil, ErrFieldNotFound
+		return nil, newNotFoundError(ErrFieldNotFound, fieldName)
 	}
 
 	// rowIDs is the result set.
@@ -3029,7 +3029,7 @@ func (e *executor) executeExtractShard(ctx context.Context, tx Tx, index string,
 	// Fetch index.
 	idx := e.Holder.Index(index)
 	if idx == nil {
-		return ExtractedIDMatrix{}, ErrIndexNotFound
+		return ExtractedIDMatrix{}, newNotFoundError(ErrIndexNotFound, index)
 	}
 
 	// Decompress columns bitmap.
@@ -3062,7 +3062,7 @@ func (e *executor) executeExtractShard(ctx context.Context, tx Tx, index string,
 		// Look up the field.
 		field := idx.Field(name)
 		if field == nil {
-			return ExtractedIDMatrix{}, ErrFieldNotFound
+			return ExtractedIDMatrix{}, newNotFoundError(ErrFieldNotFound, name)
 		}
 
 		switch field.Type() {
@@ -3213,7 +3213,7 @@ func (e *executor) executeRowShard(ctx context.Context, tx Tx, index string, c *
 	// Fetch index.
 	idx := e.Holder.Index(index)
 	if idx == nil {
-		return nil, ErrIndexNotFound
+		return nil, newNotFoundError(ErrIndexNotFound, index)
 	}
 
 	// Fetch field name from argument.
@@ -3223,7 +3223,7 @@ func (e *executor) executeRowShard(ctx context.Context, tx Tx, index string, c *
 	}
 	f := idx.Field(fieldName)
 	if f == nil {
-		return nil, ErrFieldNotFound
+		return nil, newNotFoundError(ErrFieldNotFound, fieldName)
 	}
 
 	// Parse "from" time, if set.
@@ -3340,7 +3340,7 @@ func (e *executor) executeRowBSIGroupShard(ctx context.Context, tx Tx, index str
 
 	f := e.Holder.Field(index, fieldName)
 	if f == nil {
-		return nil, ErrFieldNotFound
+		return nil, newNotFoundError(ErrFieldNotFound, fieldName)
 	}
 
 	// EQ null           _exists - frag.NotNull()
@@ -3364,7 +3364,7 @@ func (e *executor) executeRowBSIGroupShard(ctx context.Context, tx Tx, index str
 		// Make sure the index supports existence tracking.
 		idx := e.Holder.Index(index)
 		if idx == nil {
-			return nil, ErrIndexNotFound
+			return nil, newNotFoundError(ErrIndexNotFound, index)
 		} else if idx.existenceField() == nil {
 			return nil, errors.Errorf("index does not support existence tracking: %s", index)
 		}
@@ -3574,7 +3574,7 @@ func (e *executor) executeNotShard(ctx context.Context, tx Tx, index string, c *
 	// Make sure the index supports existence tracking.
 	idx := e.Holder.Index(index)
 	if idx == nil {
-		return nil, ErrIndexNotFound
+		return nil, newNotFoundError(ErrIndexNotFound, index)
 	} else if idx.existenceField() == nil {
 		return nil, errors.Errorf("index does not support existence tracking: %s", index)
 	}
@@ -3609,7 +3609,7 @@ func (e *executor) executeAllCallShard(ctx context.Context, tx Tx, index string,
 	// Make sure the index supports existence tracking.
 	idx := e.Holder.Index(index)
 	if idx == nil {
-		return nil, ErrIndexNotFound
+		return nil, newNotFoundError(ErrIndexNotFound, index)
 	} else if idx.existenceField() == nil {
 		return nil, errors.Errorf("index does not support existence tracking: %s", index)
 	}
@@ -3704,11 +3704,11 @@ func (e *executor) executeClearBit(ctx context.Context, tx Tx, index string, c *
 	// Retrieve field.
 	idx := e.Holder.Index(index)
 	if idx == nil {
-		return false, ErrIndexNotFound
+		return false, newNotFoundError(ErrIndexNotFound, index)
 	}
 	f := idx.Field(fieldName)
 	if f == nil {
-		return false, ErrFieldNotFound
+		return false, newNotFoundError(ErrFieldNotFound, fieldName)
 	}
 
 	// Int field.
@@ -3771,7 +3771,7 @@ func (e *executor) executeClearRow(ctx context.Context, tx Tx, index string, c *
 	}
 	field := e.Holder.Field(index, fieldName)
 	if field == nil {
-		return false, ErrFieldNotFound
+		return false, newNotFoundError(ErrFieldNotFound, fieldName)
 	}
 
 	switch field.Type() {
@@ -3829,7 +3829,7 @@ func (e *executor) executeClearRowShard(ctx context.Context, tx Tx, index string
 
 	field := e.Holder.Field(index, fieldName)
 	if field == nil {
-		return false, ErrFieldNotFound
+		return false, newNotFoundError(ErrFieldNotFound, fieldName)
 	}
 
 	// Remove the row from all views.
@@ -3863,7 +3863,7 @@ func (e *executor) executeSetRow(ctx context.Context, tx Tx, indexName string, c
 		// Find index.
 		index := e.Holder.Index(indexName)
 		if index == nil {
-			return false, newNotFoundError(ErrIndexNotFound)
+			return false, newNotFoundError(ErrIndexNotFound, indexName)
 		}
 
 		// Create field.
@@ -3875,7 +3875,7 @@ func (e *executor) executeSetRow(ctx context.Context, tx Tx, indexName string, c
 		if err != nil {
 			// We wrap these because we want to indicate that it wasn't found,
 			// but also the problem we encountered trying to create it.
-			return false, newNotFoundError(errors.Wrap(err, "creating field"))
+			return false, newNotFoundError(errors.Wrap(err, "creating field"), fieldName)
 		}
 	}
 	// Ensure the field type supports Store().
@@ -3946,7 +3946,7 @@ func (e *executor) executeSetRowShard(ctx context.Context, tx Tx, index string, 
 
 	field := e.Holder.Field(index, fieldName)
 	if field == nil {
-		return false, ErrFieldNotFound
+		return false, newNotFoundError(ErrFieldNotFound, fieldName)
 	}
 
 	// Retrieve source row.
@@ -4006,11 +4006,11 @@ func (e *executor) executeSet(ctx context.Context, tx Tx, index string, c *pql.C
 	// Retrieve field.
 	idx := e.Holder.Index(index)
 	if idx == nil {
-		return false, ErrIndexNotFound
+		return false, newNotFoundError(ErrIndexNotFound, index)
 	}
 	f := idx.Field(fieldName)
 	if f == nil {
-		return false, ErrFieldNotFound
+		return false, newNotFoundError(ErrFieldNotFound, fieldName)
 	}
 
 	// Set column on existence field.
@@ -4185,7 +4185,7 @@ func (e *executor) executeSetRowAttrs(ctx context.Context, tx Tx, index string, 
 	// Retrieve field.
 	field := e.Holder.Field(index, fieldName)
 	if field == nil {
-		return ErrFieldNotFound
+		return newNotFoundError(ErrFieldNotFound, fieldName)
 	}
 
 	// Parse labels.
@@ -4253,7 +4253,7 @@ func (e *executor) executeBulkSetRowAttrs(ctx context.Context, tx Tx, index stri
 		// Retrieve field.
 		f := e.Holder.Field(index, field)
 		if f == nil {
-			return nil, ErrFieldNotFound
+			return nil, newNotFoundError(ErrFieldNotFound, field)
 		}
 
 		rowID, ok, err := c.UintArg("_" + rowLabel)
@@ -4291,7 +4291,7 @@ func (e *executor) executeBulkSetRowAttrs(ctx context.Context, tx Tx, index stri
 		// Retrieve field.
 		field := e.Holder.Field(index, name)
 		if field == nil {
-			return nil, ErrFieldNotFound
+			return nil, newNotFoundError(ErrFieldNotFound, name)
 		}
 
 		// Set attributes.
@@ -4339,7 +4339,7 @@ func (e *executor) executeSetColumnAttrs(ctx context.Context, tx Tx, index strin
 	// Retrieve index.
 	idx := e.Holder.Index(index)
 	if idx == nil {
-		return ErrIndexNotFound
+		return newNotFoundError(ErrIndexNotFound, index)
 	}
 
 	col, okCol, errCol := c.UintArg("_" + columnLabel)
@@ -4707,7 +4707,7 @@ func (e *executor) collectCallKeySets(ctx context.Context, indexName string, c *
 	if fieldName != "" {
 		idx, exists := e.Holder.indexes[indexName]
 		if !exists {
-			return errors.Wrapf(ErrIndexNotFound, "%s", indexName)
+			return newNotFoundError(ErrIndexNotFound, indexName)
 		}
 		if field := idx.Field(fieldName); field != nil && field.ForeignIndex() != "" {
 			foreignIndexName := field.ForeignIndex()
@@ -4755,7 +4755,7 @@ func (e *executor) translateCall(ctx context.Context, indexName string, c *pql.C
 	colKey, rowKey, fieldName := c.TranslateInfo(columnLabel, rowLabel)
 	idx, exists := e.Holder.indexes[indexName]
 	if !exists {
-		return errors.Wrapf(ErrIndexNotFound, "%s", indexName)
+		return newNotFoundError(ErrIndexNotFound, indexName)
 	}
 	if idx.Keys() {
 		if c.Args[colKey] != nil && !isString(c.Args[colKey]) {
@@ -5083,7 +5083,7 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 				// TODO: It may be useful to cache this field lookup.
 				field := idx.Field(g.Field)
 				if field == nil {
-					return nil, ErrFieldNotFound
+					return nil, newNotFoundError(ErrFieldNotFound, g.Field)
 				}
 				if field.Keys() {
 					var key string
@@ -5127,7 +5127,7 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 		}
 
 		if field := idx.Field(fieldName); field == nil {
-			return nil, ErrFieldNotFound
+			return nil, newNotFoundError(ErrFieldNotFound, fieldName)
 		} else if field.Keys() {
 			other.Keys = make([]string, len(result))
 			for i, id := range result {
@@ -5151,7 +5151,7 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 		for i, v := range result.Fields {
 			field := idx.Field(v)
 			if field == nil {
-				return nil, ErrFieldNotFound
+				return nil, newNotFoundError(ErrFieldNotFound, v)
 			}
 
 			datatype, err := field.Datatype()
@@ -5807,7 +5807,7 @@ func newGroupByIterator(executor *executor, tx Tx, rowIDs []RowIDs, children []*
 		}
 		field := holder.Field(index, fieldName)
 		if field == nil {
-			return nil, ErrFieldNotFound
+			return nil, newNotFoundError(ErrFieldNotFound, fieldName)
 		}
 		gbi.fields[i].Field = fieldName
 

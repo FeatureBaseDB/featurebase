@@ -280,7 +280,7 @@ func (mtx *MultiTx) tx(index string, shard uint64) (_ Tx, err error) {
 	idx := mtx.index
 	if mtx.holder != nil {
 		if idx = mtx.holder.Index(index); idx == nil {
-			return nil, ErrIndexNotFound
+			return nil, newNotFoundError(ErrIndexNotFound, index)
 		}
 	}
 
