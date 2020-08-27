@@ -73,9 +73,17 @@ func (p Protocol) String() string {
 
 // handle reads the startup packet and dispatches an appropriate protocol handler for the connection.
 func (s *Server) handle(ctx context.Context, conn net.Conn) (err error) {
+	var hasTLS bool
+
 	defer func() {
 		cerr := conn.Close()
 		if cerr != nil && err == nil {
+			if hasTLS {
+				if nerr, ok := cerr.(net.Error); ok && nerr.Timeout() {
+					// TLS does this sometimes.
+					return
+				}
+			}
 			err = errors.Wrap(cerr, "closing connection")
 		}
 	}()
@@ -99,8 +107,6 @@ func (s *Server) handle(ctx context.Context, conn net.Conn) (err error) {
 			return errors.Wrap(err, "setting deadline on protocol startup")
 		}
 	}
-
-	var hasTLS bool
 
 startup:
 	// Read startup packet.

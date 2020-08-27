@@ -181,7 +181,7 @@ func (m *Command) Start() (err error) {
 		if m.Config.Postgres.TLS.CertificatePath != "" {
 			conf, err := GetTLSConfig(&m.Config.Postgres.TLS, m.logger.Logger())
 			if err != nil {
-				return errors.Wrap(err, "settuing up postgres TLS")
+				return errors.Wrap(err, "setting up postgres TLS")
 			}
 			tlsConf = conf
 		}
