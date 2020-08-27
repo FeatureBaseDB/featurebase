@@ -29,7 +29,6 @@ import (
 	_ "net/http/pprof" // Imported for its side-effect of registering pprof endpoints with the server.
 	"net/url"
 	"os"
-	"path/filepath"
 	"reflect"
 	"runtime/debug"
 	"runtime/pprof"
@@ -157,8 +156,6 @@ func NewHandler(opts ...handlerOption) (*Handler, error) {
 		logger:       logger.NopLogger,
 		closeTimeout: time.Second * 30,
 	}
-	handler.Handler = newRouter(handler)
-	handler.populateValidators()
 
 	for _, opt := range opts {
 		err := opt(handler)
@@ -166,6 +163,10 @@ func NewHandler(opts ...handlerOption) (*Handler, error) {
 			return nil, errors.Wrap(err, "applying option")
 		}
 	}
+
+	// if OptHandlerFileSystem is used, it must be before newRouter is called
+	handler.Handler = newRouter(handler)
+	handler.populateValidators()
 
 	if handler.api == nil {
 		return nil, errors.New("must pass OptHandlerAPI")
@@ -203,7 +204,6 @@ func (h *Handler) Close() error {
 
 func (h *Handler) populateValidators() {
 	h.validators = map[string]*queryValidationSpec{}
-	h.validators["Home"] = queryValidationSpecRequired()
 	h.validators["PostClusterResizeAbort"] = queryValidationSpecRequired()
 	h.validators["PostClusterResizeRemoveNode"] = queryValidationSpecRequired()
 	h.validators["PostClusterResizeSetCoordinator"] = queryValidationSpecRequired()
@@ -346,40 +346,6 @@ func (h *Handler) collectStats(next http.Handler) http.Handler {
 	})
 }
 
-// latticeHandler implements the http.Handler interface, so we can use it
-// to respond to HTTP requests. The path to the static directory and
-// path to the index file within that static directory are used to
-// serve the Lattice UI in the given static directory
-type latticeHandler struct {
-	staticPath string
-	indexPath  string
-}
-
-// ServeHTTP inspects the URL path to locate a file within the static dir
-// on latticeHandler. If a file is found, it will be served. If not, the
-// file located at the index path on the latticeHandler will be served. This
-// is suitable behavior for serving an SPA.
-func (h latticeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// get the absolute path to prevent directory traversal
-	path, err := filepath.Abs(r.URL.Path)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest) // TODO
-		return
-	}
-
-	path = filepath.Join(h.staticPath, path)
-	_, err = os.Stat(path) // TODO
-	if os.IsNotExist(err) {
-		http.ServeFile(w, r, filepath.Join(h.staticPath, h.indexPath))
-		return
-	} else if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	http.FileServer(http.Dir(h.staticPath)).ServeHTTP(w, r)
-}
-
 // newRouter creates a new mux http router.
 func newRouter(handler *Handler) *mux.Router {
 	router := mux.NewRouter()
@@ -440,12 +406,19 @@ func newRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/internal/index/{index}/field/{field}/remote-available-shards/{shardID}", handler.handleDeleteRemoteAvailableShard).Methods("DELETE")
 	router.HandleFunc("/internal/nodes", handler.handleGetNodes).Methods("GET").Name("GetNodes")
 	router.HandleFunc("/internal/shards/max", handler.handleGetShardsMax).Methods("GET").Name("GetShardsMax") // TODO: deprecate, but it's being used by the client
-
 	router.HandleFunc("/internal/translate/index/{index}/{partition}", handler.handlePostTranslateIndexDB).Methods("POST").Name("PostTranslateIndexDB")
 	router.HandleFunc("/internal/translate/field/{index}/{field}", handler.handlePostTranslateFieldDB).Methods("POST").Name("PostTranslateFieldDB")
 
-	lattice := latticeHandler{staticPath: "lattice/build", indexPath: "index.html"}
-	router.PathPrefix("/").Handler(lattice)
+	// Endpoints to support lattice UI embedded via statik.
+	// The messiness here reflects the fact that assets live in a nontrivial
+	// directory structure that is controlled externally.
+	latticeHandler := NewStatikHandler(handler)
+	router.PathPrefix("/static").Handler(latticeHandler)
+	router.Path("/").Handler(latticeHandler)
+	router.Path("/vds").Handler(latticeHandler)
+	router.Path("/favicon.png").Handler(latticeHandler)
+	router.Path("/favicon.svg").Handler(latticeHandler)
+	router.Path("/manifest.json").Handler(latticeHandler)
 
 	router.Use(handler.queryArgValidator)
 	router.Use(handler.addQueryContext)
@@ -469,20 +442,56 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.Handler.ServeHTTP(w, r)
 }
 
-func (h *Handler) handleLattice(w http.ResponseWriter, r *http.Request) {
-	// If user is using curl, don't chuck HTML at them
+// statikHandler implements the http.Handler interface, and responds to
+// requests for static assets with the appropriate file contents embedded
+// in a statik filesystem.
+type statikHandler struct {
+	handler  *Handler
+	statikFS http.FileSystem
+}
+
+// NewStatikHandler returns a new instance of statikHandler
+func NewStatikHandler(h *Handler) statikHandler {
+	fs, err := h.FileSystem.New()
+	if err == nil {
+		h.logger.Printf("enabled lattice UI at %s", h.api.Node().URI)
+	}
+
+	return statikHandler{
+		handler:  h,
+		statikFS: fs,
+	}
+}
+
+func (s statikHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if strings.HasPrefix(r.UserAgent(), "curl") {
 		http.Error(w, "Welcome. Pilosa is running. Visit https://www.pilosa.com/docs/ for more information or try the Lattice UI by visiting this URL in your browser.", http.StatusNotFound)
 		return
 	}
-	filesystem, err := h.FileSystem.New()
 
-	if err != nil {
-		_ = h.writeQueryResponse(w, r, &pilosa.QueryResponse{Err: err})
-		h.logger.Printf("Lattice UI is not available. Please run `make generate-statik` before building Pilosa with `make install`.")
+	// /vds is a front-end route, not a backend route. Without this check, refreshing at /vds
+	// will request a nonexistent resource and return 404.
+	if r.URL.String() == "/vds" {
+		url, _ := url.Parse("/")
+		r.URL = url
+	}
+
+	if s.statikFS == nil {
+		msg := "Lattice UI is not available. Please run `make generate-statik` before building Pilosa with `make install`."
+		s.handler.logger.Printf(msg)
+		http.Error(w, msg, http.StatusInternalServerError)
 		return
 	}
-	http.FileServer(filesystem).ServeHTTP(w, r)
+	http.FileServer(s.statikFS).ServeHTTP(w, r)
+	/*
+			filesystem, err := s.handler.FileSystem.New() // TODO
+			if err != nil {
+				s.handler.logger.Printf("Lattice UI is not available. Please run `make generate-statik` before building Pilosa with `make install`.")
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+		http.FileServer(filesystem).ServeHTTP(w, r)
+	*/
 }
 
 // successResponse is a general success/error struct for http responses.
