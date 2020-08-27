@@ -1101,7 +1101,7 @@ func (c *InternalClient) RowAttrDiff(ctx context.Context, uri *pilosa.URI, index
 	resp, err := c.executeRequest(req.WithContext(ctx))
 	if err != nil {
 		if resp != nil && resp.StatusCode == http.StatusNotFound {
-			return nil, pilosa.ErrFieldNotFound
+			return nil, errors.Wrap(pilosa.ErrFieldNotFound, field)
 		}
 		return nil, err
 	}

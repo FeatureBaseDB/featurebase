@@ -23,6 +23,7 @@ import (
 	"github.com/pilosa/pilosa/v2/boltdb"
 	"github.com/pilosa/pilosa/v2/pql"
 	"github.com/pilosa/pilosa/v2/testhook"
+	"github.com/pkg/errors"
 )
 
 var panicOn = pilosa.PanicOn
@@ -104,11 +105,11 @@ func (h *Holder) Row(index, field string, rowID uint64) *pilosa.Row {
 func (h *Holder) ReadRow(index, field string, rowID uint64) *pilosa.Row {
 	idx := h.Holder.Index(index)
 	if idx == nil {
-		panic(pilosa.ErrIndexNotFound)
+		panic(errors.Wrap(pilosa.ErrIndexNotFound, index))
 	}
 	f := idx.Field(field)
 	if f == nil {
-		panic(pilosa.ErrFieldNotFound)
+		panic(errors.Wrap(pilosa.ErrFieldNotFound, field))
 	}
 	tx := idx.Txf.NewTx(pilosa.Txo{Write: false, Field: f})
 	defer tx.Rollback()
