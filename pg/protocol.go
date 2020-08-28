@@ -394,6 +394,14 @@ func (s *Server) handleStandard(ctx context.Context, proto Protocol, conn net.Co
 					return errors.Wrap(err, "failed to send query error to client")
 				}
 			} else {
+				if !qwriter.wroteHeaders {
+					// The handler did not write headers.
+					// Write back an empty set of headers.
+					err = qwriter.WriteHeader()
+					if err != nil {
+						return errors.Wrap(err, "sending empty column headers")
+					}
+				}
 				// The query completed normally.
 				// Notify the client of completion.
 				msg, err = encoder.CommandComplete(qwriter.tag)
