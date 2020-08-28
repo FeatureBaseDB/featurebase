@@ -282,20 +282,20 @@ func (v *ValCountFuncReducer) Reduce(c pproto.StreamClient, s pproto.StreamServe
 	if len(cols) == 0 {
 		return s.Send(pproto.ErrorCode(
 			errors.New("empty column set"),
-			codes.Unknown,
+			codes.NotFound,
 		))
 	}
 
 	if idxVal == -1 {
 		return s.Send(pproto.ErrorCode(
 			errors.New("result set has no column: value"),
-			codes.Unknown,
+			codes.NotFound,
 		))
 	}
 	if idxCnt == -1 {
 		return s.Send(pproto.ErrorCode(
 			errors.New("result set has no column: count"),
-			codes.Unknown,
+			codes.NotFound,
 		))
 	}
 
@@ -415,7 +415,7 @@ func (r *AssignHeadersReducer) Reduce(c pproto.StreamClient, s pproto.StreamServ
 			if len(placement) > len(rr.Columns) {
 				return s.Send(pproto.ErrorCode(
 					errors.New("mismatched header placement and column count"),
-					codes.Unknown,
+					codes.InvalidArgument,
 				))
 			}
 
