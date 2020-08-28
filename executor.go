@@ -5204,8 +5204,7 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 			for i, g := range gl.Group {
 				if ft, ok := fieldTranslations[g.Field]; ok {
 					g.RowKey = ft[g.RowID]
-				}
-				if ft, ok := foreignTranslations[g.Field]; ok && g.Value != nil {
+				} else if ft, ok := foreignTranslations[g.Field]; ok && g.Value != nil {
 					g.RowKey = ft[uint64(*g.Value)]
 					g.Value = nil
 				}
