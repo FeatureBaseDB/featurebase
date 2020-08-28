@@ -2,7 +2,7 @@
 
 CLONE_URL=github.com/pilosa/pilosa
 VERSION := $(shell git describe --tags 2> /dev/null || echo unknown)
-LATTICE_COMMIT := $(shell git -C lattice rev-parse --short HEAD || echo none)
+LATTICE_COMMIT := $(shell git -C lattice rev-parse --short HEAD 2>/dev/null)
 VARIANT = Molecula
 VERSION_ID = $(VERSION)-$(GOOS)-$(GOARCH)
 BRANCH := $(if $(TRAVIS_BRANCH),$(TRAVIS_BRANCH),$(if $(CIRCLE_BRANCH),$(CIRCLE_BRANCH),$(shell git rev-parse --abbrev-ref HEAD)))
