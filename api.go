@@ -1626,6 +1626,11 @@ func (api *API) Version() string {
 	return strings.TrimPrefix(Version, "v")
 }
 
+// Version returns the Lattice version.
+func (api *API) LatticeVersion() string {
+	return LatticeVersionInfo()
+}
+
 // Info returns information about this server instance.
 func (api *API) Info() serverInfo {
 	si := api.server.systemInfo

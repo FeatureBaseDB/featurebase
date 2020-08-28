@@ -455,7 +455,7 @@ type statikHandler struct {
 func NewStatikHandler(h *Handler) statikHandler {
 	fs, err := h.FileSystem.New()
 	if err == nil {
-		h.logger.Printf("enabled Lattice UI at %s", h.api.Node().URI)
+		h.logger.Printf("enabled Lattice UI (%s) at %s", h.api.LatticeVersion(), h.api.Node().URI)
 	}
 
 	return statikHandler{
