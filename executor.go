@@ -5016,6 +5016,38 @@ func (e *executor) collectResultIDs(index string, idx *Index, call *pql.Call, re
 	return nil
 }
 
+func (e *executor) translateFieldIDs(field *Field, ids map[uint64]struct{}) (map[uint64]string, error) {
+	idList := make([]uint64, len(ids))
+	{
+		i := 0
+		for id := range ids {
+			idList[i] = id
+			i++
+		}
+	}
+	keyList, err := field.TranslateStore().TranslateIDs(idList)
+	if err != nil {
+		return nil, err
+	}
+	mapped := make(map[uint64]string, len(idList))
+	for i, key := range keyList {
+		mapped[idList[i]] = key
+	}
+	return mapped, nil
+}
+
+// preTranslateMatrixSet translates the IDs of a set field in an extracted matrix.
+func (e *executor) preTranslateMatrixSet(mat ExtractedIDMatrix, fieldIdx uint, field *Field) (map[uint64]string, error) {
+	ids := make(map[uint64]struct{}, len(mat.Columns))
+	for _, col := range mat.Columns {
+		for _, v := range col.Rows[fieldIdx] {
+			ids[v] = struct{}{}
+		}
+	}
+
+	return e.translateFieldIDs(field, ids)
+}
+
 func (e *executor) translateResult(ctx context.Context, index string, idx *Index, call *pql.Call, result interface{}, idSet map[uint64]string) (interface{}, error) {
 	switch result := result.(type) {
 	case *Row:
@@ -5094,13 +5126,17 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 				return nil, fmt.Errorf("field %q not found", fieldName)
 			}
 			if field.Keys() {
+				ids := make([]uint64, len(result.Pairs))
+				for i := range result.Pairs {
+					ids[i] = result.Pairs[i].ID
+				}
+				keys, err := field.TranslateStore().TranslateIDs(ids)
+				if err != nil {
+					return nil, err
+				}
 				other := make([]Pair, len(result.Pairs))
 				for i := range result.Pairs {
-					key, err := field.TranslateStore().TranslateID(result.Pairs[i].ID)
-					if err != nil {
-						return nil, err
-					}
-					other[i] = Pair{Key: key, Count: result.Pairs[i].Count}
+					other[i] = Pair{Key: keys[i], Count: result.Pairs[i].Count}
 				}
 				return &PairsField{
 					Pairs: other,
@@ -5110,39 +5146,70 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 		}
 
 	case []GroupCount:
-		other := make([]GroupCount, 0)
+		fieldIDs := make(map[*Field]map[uint64]struct{})
+		foreignIDs := make(map[*Field]map[uint64]struct{})
 		for _, gl := range result {
-
-			group := make([]FieldRow, len(gl.Group))
-			for i, g := range gl.Group {
-				group[i] = g
-
-				// TODO: It may be useful to cache this field lookup.
+			for _, g := range gl.Group {
 				field := idx.Field(g.Field)
 				if field == nil {
 					return nil, newNotFoundError(ErrFieldNotFound, g.Field)
 				}
 				if field.Keys() {
-					var key string
-					var err error
-					if fi := field.ForeignIndex(); fi != "" && g.Value != nil {
-						val := uint64(*g.Value) // not worried about overflow here because it's a foreign key
-						keys, err := e.Cluster.translateIndexIDs(ctx, fi, []uint64{val})
-						if err != nil {
-							return nil, errors.Wrap(err, "translating foreign index in Group")
-						}
-						if len(keys) == 1 {
-							key = keys[0]
-							group[i].Value = nil // Remove value now that it has been translated.
-						}
-					} else {
-						key, err = field.TranslateStore().TranslateID(g.RowID)
-						if err != nil {
-							return nil, errors.Wrap(err, "translating row ID in Group")
+					if g.Value != nil {
+						if fi := field.ForeignIndex(); fi != "" {
+							m, ok := foreignIDs[field]
+							if !ok {
+								m = make(map[uint64]struct{}, len(result))
+								foreignIDs[field] = m
+							}
+
+							m[uint64(*g.Value)] = struct{}{}
+							continue
 						}
 					}
-					group[i].RowKey = key
+
+					m, ok := fieldIDs[field]
+					if !ok {
+						m = make(map[uint64]struct{}, len(result))
+						fieldIDs[field] = m
+					}
+
+					m[g.RowID] = struct{}{}
 				}
+			}
+		}
+
+		fieldTranslations := make(map[string]map[uint64]string)
+		for field, ids := range fieldIDs {
+			trans, err := e.translateFieldIDs(field, ids)
+			if err != nil {
+				return nil, errors.Wrapf(err, "translating IDs in field %q", field.Name())
+			}
+			fieldTranslations[field.Name()] = trans
+		}
+
+		foreignTranslations := make(map[string]map[uint64]string)
+		for field, ids := range foreignIDs {
+			trans, err := e.Cluster.translateIndexIDSet(ctx, field.ForeignIndex(), ids)
+			if err != nil {
+				return nil, errors.Wrapf(err, "translating foreign IDs from index %q", field.ForeignIndex())
+			}
+			foreignTranslations[field.Name()] = trans
+		}
+
+		other := make([]GroupCount, 0)
+		for _, gl := range result {
+
+			group := make([]FieldRow, len(gl.Group))
+			for i, g := range gl.Group {
+				if ft, ok := fieldTranslations[g.Field]; ok {
+					g.RowKey = ft[g.RowID]
+				} else if ft, ok := foreignTranslations[g.Field]; ok && g.Value != nil {
+					g.RowKey = ft[uint64(*g.Value)]
+					g.Value = nil
+				}
+
+				group[i] = g
 			}
 
 			other = append(other, GroupCount{
@@ -5166,14 +5233,11 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 		if field := idx.Field(fieldName); field == nil {
 			return nil, newNotFoundError(ErrFieldNotFound, fieldName)
 		} else if field.Keys() {
-			other.Keys = make([]string, len(result))
-			for i, id := range result {
-				key, err := field.TranslateStore().TranslateID(id)
-				if err != nil {
-					return nil, errors.Wrap(err, "translating row ID")
-				}
-				other.Keys[i] = key
+			keys, err := field.TranslateStore().TranslateIDs(result)
+			if err != nil {
+				return nil, errors.Wrap(err, "translating row IDs")
 			}
+			other.Keys = keys
 		} else {
 			other.Rows = result
 		}
@@ -5222,9 +5286,16 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 				}
 			case FieldTypeSet, FieldTypeTime:
 				if field.Keys() {
-					translator := field.TranslateStore()
+					translations, err := e.preTranslateMatrixSet(result, uint(i), field)
+					if err != nil {
+						return nil, errors.Wrapf(err, "translating IDs of field %q", v)
+					}
 					mapper = func(ids []uint64) (interface{}, error) {
-						return translator.TranslateIDs(ids)
+						keys := make([]string, len(ids))
+						for i, id := range ids {
+							keys[i] = translations[id]
+						}
+						return keys, nil
 					}
 				} else {
 					mapper = func(ids []uint64) (interface{}, error) {
@@ -5236,13 +5307,16 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 				}
 			case FieldTypeMutex:
 				if field.Keys() {
-					translator := field.TranslateStore()
+					translations, err := e.preTranslateMatrixSet(result, uint(i), field)
+					if err != nil {
+						return nil, errors.Wrapf(err, "translating IDs of field %q", v)
+					}
 					mapper = func(ids []uint64) (interface{}, error) {
 						switch len(ids) {
 						case 0:
 							return nil, nil
 						case 1:
-							return translator.TranslateID(ids[0])
+							return translations[ids[0]], nil
 						default:
 							return nil, errors.Errorf("mutex %q has too many values: %v", field.Name(), ids)
 						}
@@ -5260,14 +5334,50 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 					}
 				}
 			case FieldTypeInt:
-				mapper = func(ids []uint64) (interface{}, error) {
-					switch len(ids) {
-					case 0:
-						return nil, nil
-					case 1:
-						return int64(ids[0]), nil
-					default:
-						return nil, errors.Errorf("BSI field %q has too many values: %v", field.Name(), ids)
+				if fi := field.ForeignIndex(); fi != "" {
+					if field.Keys() {
+						ids := make(map[uint64]struct{}, len(result.Columns))
+						for _, col := range result.Columns {
+							for _, v := range col.Rows[i] {
+								ids[v] = struct{}{}
+							}
+						}
+						trans, err := e.Cluster.translateIndexIDSet(ctx, field.ForeignIndex(), ids)
+						if err != nil {
+							return nil, errors.Wrapf(err, "translating foreign IDs from index %q", field.ForeignIndex())
+						}
+						mapper = func(ids []uint64) (interface{}, error) {
+							switch len(ids) {
+							case 0:
+								return nil, nil
+							case 1:
+								return trans[ids[0]], nil
+							default:
+								return nil, errors.Errorf("BSI field %q has too many values: %v", field.Name(), ids)
+							}
+						}
+					} else {
+						mapper = func(ids []uint64) (interface{}, error) {
+							switch len(ids) {
+							case 0:
+								return nil, nil
+							case 1:
+								return ids[0], nil
+							default:
+								return nil, errors.Errorf("BSI field %q has too many values: %v", field.Name(), ids)
+							}
+						}
+					}
+				} else {
+					mapper = func(ids []uint64) (interface{}, error) {
+						switch len(ids) {
+						case 0:
+							return nil, nil
+						case 1:
+							return int64(ids[0]), nil
+						default:
+							return nil, errors.Errorf("BSI field %q has too many values: %v", field.Name(), ids)
+						}
 					}
 				}
 			case FieldTypeDecimal:
