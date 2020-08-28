@@ -89,6 +89,8 @@ func newRouter() *router {
 	selectRouter.addRoute("select fld1, count(fld1) from tbl where fld2=1 group by fld1", handlerSelectGroupBy{})
 
 	selectRouter.addRoute("select count(*) from tbl1 INNER JOIN tbl2 ON tbl1._id = tbl2.bsi", handlerSelectJoin{})
+	selectRouter.addRoute("select count(*) from tbl1 INNER JOIN tbl2 ON tbl1._id = tbl2.bsi where fld1=1", handlerSelectJoin{})
+	selectRouter.addRoute("select count(*) from tbl1 INNER JOIN tbl2 ON tbl1._id = tbl2.bsi where fld1=1 and fld2=2", handlerSelectJoin{})
 	selectRouter.addRoute("select _id from tbl1 INNER JOIN tbl2 ON tbl1._id = tbl2.bsi", handlerSelectJoin{})
 	selectRouter.addRoute("select _id from tbl1 INNER JOIN tbl2 ON tbl1._id = tbl2.bsi where fld1=1", handlerSelectJoin{})
 	selectRouter.addRoute("select _id from tbl1 INNER JOIN tbl2 ON tbl1._id = tbl2.bsi where fld1=1 and fld2=2", handlerSelectJoin{})
