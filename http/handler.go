@@ -70,6 +70,8 @@ type Handler struct {
 	closeTimeout time.Duration
 
 	server *http.Server
+
+	middleware []func(http.Handler) http.Handler
 }
 
 // externalPrefixFlag denotes endpoints that are intended to be exposed to clients.
@@ -94,10 +96,10 @@ type handlerOption func(s *Handler) error
 
 func OptHandlerAllowedOrigins(origins []string) handlerOption {
 	return func(h *Handler) error {
-		h.Handler = handlers.CORS(
+		h.middleware = append(h.middleware, handlers.CORS(
 			handlers.AllowedOrigins(origins),
 			handlers.AllowedHeaders([]string{"Content-Type"}),
-		)(h.Handler)
+		))
 		return nil
 	}
 }
@@ -347,7 +349,7 @@ func (h *Handler) collectStats(next http.Handler) http.Handler {
 }
 
 // newRouter creates a new mux http router.
-func newRouter(handler *Handler) *mux.Router {
+func newRouter(handler *Handler) http.Handler {
 	router := mux.NewRouter()
 	router.HandleFunc("/cluster/resize/abort", handler.handlePostClusterResizeAbort).Methods("POST").Name("PostClusterResizeAbort")
 	router.HandleFunc("/cluster/resize/remove-node", handler.handlePostClusterResizeRemoveNode).Methods("POST").Name("PostClusterResizeRemoveNode")
@@ -425,7 +427,18 @@ func newRouter(handler *Handler) *mux.Router {
 	router.Use(handler.addQueryContext)
 	router.Use(handler.extractTracing)
 	router.Use(handler.collectStats)
-	return router
+	var h http.Handler = router
+	for _, middleware := range handler.middleware {
+		// Ideally, we would use `router.Use` to inject middleware,
+		// instead of wrapping the handler. The reason we can't is
+		// because the router will only apply middleware to matched
+		// handlers. In this case, it won't match handlers with the
+		// OPTIONS method, needed by the CORS middleware. This issue
+		// is described in detail here:
+		// https://github.com/gorilla/handlers/issues/142
+		h = middleware(h)
+	}
+	return h
 }
 
 // ServeHTTP handles an HTTP request.
