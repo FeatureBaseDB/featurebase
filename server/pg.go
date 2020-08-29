@@ -16,6 +16,7 @@ package server
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
@@ -62,6 +63,9 @@ func NewPostgresServer(api *pilosa.API, logger logger.Logger, tls *tls.Config) *
 			MaxStartupSize: 8 * 1024 * 1024,
 			Logger:         logger,
 			TLSConfig:      tls,
+
+			// This is somewhat limited right now: it does not work with load balancers.
+			CancellationManager: pg.NewLocalCancellationManager(rand.Reader),
 		},
 	}
 }
