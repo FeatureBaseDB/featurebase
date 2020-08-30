@@ -56,7 +56,7 @@ import (
 type Handler struct {
 	Handler http.Handler
 
-	FileSystem pilosa.FileSystem
+	fileSystem pilosa.FileSystem
 
 	logger logger.Logger
 
@@ -113,7 +113,7 @@ func OptHandlerAPI(api *pilosa.API) handlerOption {
 
 func OptHandlerFileSystem(fs pilosa.FileSystem) handlerOption {
 	return func(h *Handler) error {
-		h.FileSystem = fs
+		h.fileSystem = fs
 		return nil
 	}
 }
@@ -154,7 +154,7 @@ func NewHandler(opts ...handlerOption) (*Handler, error) {
 		}
 	})
 	handler := &Handler{
-		FileSystem:   pilosa.NopFileSystem,
+		fileSystem:   pilosa.NopFileSystem,
 		logger:       logger.NopLogger,
 		closeTimeout: time.Second * 30,
 	}
@@ -466,7 +466,7 @@ type statikHandler struct {
 
 // NewStatikHandler returns a new instance of statikHandler
 func NewStatikHandler(h *Handler) statikHandler {
-	fs, err := h.FileSystem.New()
+	fs, err := h.fileSystem.New()
 	if err == nil {
 		h.logger.Printf("enabled Lattice UI (%s) at %s", h.api.LatticeVersion(), h.api.Node().URI)
 	}
