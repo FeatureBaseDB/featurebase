@@ -1,7 +1,8 @@
-.PHONY: build check-clean clean cover cover-viz default docker docker-build docker-test docker-tag-push generate generate-protoc generate-pql gometalinter install install-build-deps install-golangci-lint install-gometalinter install-protoc install-protoc-gen-gofast install-peg prerelease prerelease-upload release release-build test testv testv-race testvsub testvsub-race
+.PHONY: build check-clean clean build-lattice cover cover-viz default docker docker-build docker-test docker-tag-push generate generate-protoc generate-pql generate-statik gometalinter install install-build-deps install-golangci-lint install-gometalinter install-protoc install-protoc-gen-gofast install-peg install-statik prerelease prerelease-upload release release-build test testv testv-race testvsub testvsub-race
 
 CLONE_URL=github.com/pilosa/pilosa
 VERSION := $(shell git describe --tags 2> /dev/null || echo unknown)
+LATTICE_COMMIT := $(shell git -C lattice rev-parse --short HEAD 2>/dev/null)
 VARIANT = Molecula
 VERSION_ID = $(VERSION)-$(GOOS)-$(GOARCH)
 BRANCH := $(if $(TRAVIS_BRANCH),$(TRAVIS_BRANCH),$(if $(CIRCLE_BRANCH),$(CIRCLE_BRANCH),$(shell git rev-parse --abbrev-ref HEAD)))
@@ -9,7 +10,7 @@ BRANCH_ID := $(BRANCH)-$(GOOS)-$(GOARCH)
 BUILD_TIME := $(shell date -u +%FT%T%z)
 SHARD_WIDTH = 20
 COMMIT := $(shell git describe --exact-match >/dev/null 2>&1 || git rev-parse --short HEAD)
-LDFLAGS="-X github.com/pilosa/pilosa/v2.Version=$(VERSION) -X github.com/pilosa/pilosa/v2.BuildTime=$(BUILD_TIME) -X github.com/pilosa/pilosa/v2.Variant=$(VARIANT) -X github.com/pilosa/pilosa/v2.Commit=$(COMMIT)"
+LDFLAGS="-X github.com/pilosa/pilosa/v2.Version=$(VERSION) -X github.com/pilosa/pilosa/v2.BuildTime=$(BUILD_TIME) -X github.com/pilosa/pilosa/v2.Variant=$(VARIANT) -X github.com/pilosa/pilosa/v2.Commit=$(COMMIT) -X github.com/pilosa/pilosa/v2.LatticeCommit=$(LATTICE_COMMIT)"
 GO_VERSION=latest
 RELEASE ?= 0
 RELEASE_ENABLED = $(subst 0,,$(RELEASE))
@@ -135,9 +136,19 @@ prerelease-upload:
 install:
 	go install -tags='$(BUILD_TAGS)' -ldflags $(LDFLAGS) $(FLAGS) ./cmd/pilosa
 
+lattice:
+	git clone git@github.com:molecula/lattice.git
+
+build-lattice: lattice require-yarn
+	cd lattice && git pull && yarn install && yarn build
+
 # `go generate` protocol buffers
 generate-protoc: require-protoc require-protoc-gen-gofast
 	go generate github.com/pilosa/pilosa/v2/internal
+
+# `go generate` statik assets (lattice UI)
+generate-statik: build-lattice require-statik
+	go generate github.com/pilosa/pilosa/v2/statik
 
 # `go generate` stringers
 generate-stringer:
@@ -151,7 +162,7 @@ generate-proto-grpc: require-protoc require-protoc-gen-gofast
 	protoc -I proto proto/pilosa.proto --go_out=plugins=grpc:proto
 
 # `go generate` all needed packages
-generate: generate-protoc generate-stringer generate-pql
+generate: generate-protoc generate-statik generate-stringer generate-pql
 
 # Create Docker image from Dockerfile
 docker: vendor
@@ -347,7 +358,10 @@ require-%:
 		$(info Verified build dependency "$*" is installed.),\
 		$(error Build dependency "$*" not installed. To install, try `make install-$*`))
 
-install-build-deps: install-protoc-gen-gofast install-protoc install-stringer install-peg
+install-build-deps: install-protoc-gen-gofast install-protoc install-statik install-stringer install-peg
+
+install-statik:
+	go get -u github.com/rakyll/statik
 
 install-stringer:
 	GO111MODULE=off go get -u golang.org/x/tools/cmd/stringer

@@ -20,6 +20,7 @@ var Version string
 var Commit string
 var Variant string
 var BuildTime string
+var LatticeCommit string
 
 func VersionInfo() string {
 	var prefix string
@@ -49,4 +50,8 @@ func VersionInfo() string {
 	}
 
 	return prefix + "Pilosa" + suffix
+}
+
+func LatticeVersionInfo() string {
+	return "g" + LatticeCommit
 }
