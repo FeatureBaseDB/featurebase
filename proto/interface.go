@@ -40,36 +40,6 @@ func (EmptyStream) Recv() (*RowResponse, error) {
 	return nil, io.EOF
 }
 
-// ReadIntoTable reads from a StreamClient and stores the result into a table response.
-func ReadIntoTable(cli StreamClient) (*TableResponse, error) {
-	var headers []*ColumnInfo
-	rows := []*Row{}
-
-rx:
-	for {
-		row, err := cli.Recv()
-		switch err {
-		case nil:
-		case io.EOF:
-			break rx
-		default:
-			return nil, err
-		}
-
-		if headers == nil {
-			headers = row.Headers
-		}
-		rows = append(rows, &Row{
-			Columns: row.Columns,
-		})
-	}
-
-	return &TableResponse{
-		Headers: headers,
-		Rows:    rows,
-	}, nil
-}
-
 // StreamServer is an interface for a stream
 // which can accept a RowResponse to be later
 // returned by the stream via Recv().
@@ -93,24 +63,20 @@ type ToRowser interface {
 
 // RowsToTable is a helper function which takes a ToRowser,
 // along with the number of rows, and returns a TableResponse.
-// Obviously passing the number of rows seems unnecessary,
-// and we could remove that requirement, but for now we
-// do it to allow for pre-allocation of the rows slice.
+// The number of rows is treated as a hint.
 func RowsToTable(tr ToRowser, n int) (*TableResponse, error) {
 	var headers []*ColumnInfo
-	rows := make([]*Row, n)
+	rows := make([]*Row, 0, n)
 
 	// This callback gets called for every "row" in r.
 	// Each row populates its position in the pre-allocated
 	// `rows`. The headers get set based on those received
 	// in the first row.
-	var idx int
 	cb := func(rr *RowResponse) error {
-		if idx == 0 {
+		if len(rows) == 0 {
 			headers = rr.GetHeaders()
 		}
-		rows[idx] = &Row{Columns: rr.GetColumns()}
-		idx++
+		rows = append(rows, &Row{Columns: rr.GetColumns()})
 		return nil
 	}
 
@@ -122,60 +88,6 @@ func RowsToTable(tr ToRowser, n int) (*TableResponse, error) {
 		Headers: headers,
 		Rows:    rows,
 	}, nil
-}
-
-// RowBuffer acts as a Sender/Receiver of RowResponses.
-// Note that sending a nil value will cause the Recv
-// method to return an io.EOF error.
-type RowBuffer struct {
-	ch chan *RowResponse
-}
-
-// NewRowBuffer returns a new instance of RowBuffer.
-// sz is the size of the buffer.
-func NewRowBuffer(sz int) *RowBuffer {
-	var chSz int
-	if sz > 0 {
-		// Add one to allow for the EOF record.
-		chSz = sz + 1
-	}
-	return &RowBuffer{
-		ch: make(chan *RowResponse, chSz),
-	}
-}
-
-// Recv returns a RowResponse. When the buffer is empty,
-// calling Recv will return an io.EOF error.
-func (rb *RowBuffer) Recv() (*RowResponse, error) {
-	r := <-rb.ch
-
-	// If the StatusError contains a message then return
-	// with the approprate error.
-	se := r.GetStatusError()
-	code := codes.Code(se.GetCode())
-	msg := se.GetMessage()
-	if code != codes.OK {
-		return nil, status.Error(code, msg)
-	} else if msg == "EOF" {
-		return nil, io.EOF
-	} else if msg != "" {
-		return nil, errors.New(msg)
-	}
-
-	return r, nil
-}
-
-func (rb *RowBuffer) Send(rr *RowResponse) error {
-	rb.ch <- rr
-	return nil
-}
-
-// EOF acts as an io.EOF encoded into a RowResponse.
-var EOF *RowResponse = &RowResponse{
-	StatusError: &StatusError{
-		Code:    0,
-		Message: "EOF",
-	},
 }
 
 // Error is a helper function to create a RowResponse
@@ -397,4 +309,19 @@ func (r RowResponseSorter) Less(i, j int) bool {
 		}
 	}
 	return false
+}
+
+// ConstRowser implements ToRowser with a slice of row responses.
+type ConstRowser []RowResponse
+
+// ToRows calls a function with a pointer to each element of the slice.
+func (c ConstRowser) ToRows(fn func(*RowResponse) error) error {
+	for i := range c {
+		err := fn(&c[i])
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
