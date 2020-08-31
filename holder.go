@@ -756,6 +756,7 @@ func (h *Holder) limitedSchema() []*IndexInfo {
 			CreatedAt:  index.CreatedAt(),
 			Options:    index.Options(),
 			ShardWidth: ShardWidth,
+			Fields:     make([]*FieldInfo, 0, len(index.Fields())),
 		}
 		for _, field := range index.Fields() {
 			if strings.HasPrefix(field.name, "_") {

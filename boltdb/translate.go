@@ -271,9 +271,11 @@ func (s *TranslateStore) TranslateIDs(ids []uint64) ([]string, error) {
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	bucket := tx.Bucket(bucketIDs)
+
 	keys := make([]string, len(ids))
 	for i, id := range ids {
-		keys[i] = findKeyByID(tx.Bucket(bucketIDs), id)
+		keys[i] = findKeyByID(bucket, id)
 	}
 	return keys, nil
 }

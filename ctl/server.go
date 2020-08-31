@@ -36,10 +36,10 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 	flags.Uint64Var(&srv.Config.MaxFileCount, "max-file-count", srv.Config.MaxFileCount, "Soft limit on the maximum number of fragment files Pilosa keeps open simultaneously.")
 
 	// TLS
-	SetTLSConfig(flags, &srv.Config.TLS.CertificatePath, &srv.Config.TLS.CertificateKeyPath, &srv.Config.TLS.CACertPath, &srv.Config.TLS.SkipVerify, &srv.Config.TLS.EnableClientVerification)
+	SetTLSConfig(flags, "", &srv.Config.TLS.CertificatePath, &srv.Config.TLS.CertificateKeyPath, &srv.Config.TLS.CACertPath, &srv.Config.TLS.SkipVerify, &srv.Config.TLS.EnableClientVerification)
 
 	// Handler
-	flags.StringSliceVarP(&srv.Config.Handler.AllowedOrigins, "handler.allowed-origins", "", []string{}, "Comma separated list of allowed origin URIs (for CORS/WebUI).")
+	flags.StringSliceVarP(&srv.Config.Handler.AllowedOrigins, "handler.allowed-origins", "", []string{}, "Comma separated list of allowed origin URIs (for CORS/Lattice UI).")
 
 	// Cluster
 	flags.BoolVarP(&srv.Config.Cluster.Disabled, "cluster.disabled", "", srv.Config.Cluster.Disabled, "Disabled multi-node cluster communication (used for testing)")
@@ -90,5 +90,11 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 	flags.StringVarP(&srv.Config.Txsrc, "tx", "", "", "transaction/storage to use: one of roaring, rbf, badger, rbf_roaring, roaring_rbf, badger_roaring, roaring_badger, badger_rbf, or rbf_badger (default roaring)")
 
 	// Postgres endpoint
-	flags.StringVar(&srv.Config.Postgres.Addr, "postgres.addr", "", "address to which to bind a postgres endpoint")
+	flags.StringVar(&srv.Config.Postgres.Bind, "postgres.bind", srv.Config.Postgres.Bind, "Address to which to bind a postgres endpoint (leave blank to disable)")
+	SetTLSConfig(flags, "postgres.", &srv.Config.Postgres.TLS.CertificatePath, &srv.Config.Postgres.TLS.CertificateKeyPath, &srv.Config.Postgres.TLS.CACertPath, &srv.Config.Postgres.TLS.SkipVerify, &srv.Config.Postgres.TLS.EnableClientVerification)
+	flags.DurationVar((*time.Duration)(&srv.Config.Postgres.StartupTimeout), "postgres.startup-timeout", time.Duration(srv.Config.Postgres.StartupTimeout), "Timeout for postgres connection startup. (set 0 to disable)")
+	flags.DurationVar((*time.Duration)(&srv.Config.Postgres.ReadTimeout), "postgres.read-timeout", time.Duration(srv.Config.Postgres.ReadTimeout), "Timeout for reads on a postgres connection. (set 0 to disable; does not include connection idling)")
+	flags.DurationVar((*time.Duration)(&srv.Config.Postgres.WriteTimeout), "postgres.write-timeout", time.Duration(srv.Config.Postgres.WriteTimeout), "Timeout for writes on a postgres connection. (set 0 to disable)")
+	flags.Uint32Var(&srv.Config.Postgres.MaxStartupSize, "postgres.max-startup-size", srv.Config.Postgres.MaxStartupSize, "Maximum acceptable size of a postgres startup packet, in bytes. (set 0 to disable)")
+	flags.Uint16Var(&srv.Config.Postgres.ConnectionLimit, "postgres.connection-limit", srv.Config.Postgres.ConnectionLimit, "Maximum number of simultaneous postgres connections to allow. (set 0 to disable)")
 }

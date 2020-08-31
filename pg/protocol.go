@@ -73,9 +73,17 @@ func (p Protocol) String() string {
 
 // handle reads the startup packet and dispatches an appropriate protocol handler for the connection.
 func (s *Server) handle(ctx context.Context, conn net.Conn) (err error) {
+	var hasTLS bool
+
 	defer func() {
 		cerr := conn.Close()
 		if cerr != nil && err == nil {
+			if hasTLS {
+				if nerr, ok := cerr.(net.Error); ok && nerr.Timeout() {
+					// TLS does this sometimes.
+					return
+				}
+			}
 			err = errors.Wrap(cerr, "closing connection")
 		}
 	}()
@@ -151,6 +159,7 @@ startup:
 					return errors.Wrap(err, "transferring startup deadline to TLS connection")
 				}
 			}
+			hasTLS = true
 			goto startup
 		}
 
@@ -161,6 +170,11 @@ startup:
 			return errors.Wrap(err, "sending SSL unsupported notification")
 		}
 		goto startup
+	}
+
+	if s.TLSConfig != nil && !hasTLS {
+		// Reject the unsecured connection.
+		return errors.Errorf("client at %s attempted to initiate an unsecured postgres conenction", conn.RemoteAddr())
 	}
 
 	// Handle regular postgres.
@@ -380,6 +394,14 @@ func (s *Server) handleStandard(ctx context.Context, proto Protocol, conn net.Co
 					return errors.Wrap(err, "failed to send query error to client")
 				}
 			} else {
+				if !qwriter.wroteHeaders {
+					// The handler did not write headers.
+					// Write back an empty set of headers.
+					err = qwriter.WriteHeader()
+					if err != nil {
+						return errors.Wrap(err, "sending empty column headers")
+					}
+				}
 				// The query completed normally.
 				// Notify the client of completion.
 				msg, err = encoder.CommandComplete(qwriter.tag)

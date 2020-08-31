@@ -31,12 +31,12 @@ type CommandWithTLSSupport interface {
 }
 
 // SetTLSConfig creates common TLS flags
-func SetTLSConfig(flags *pflag.FlagSet, certificatePath *string, certificateKeyPath *string, caCertPath *string, skipVerify *bool, enableClientVerification *bool) {
-	flags.StringVarP(certificatePath, "tls.certificate", "", "", "TLS certificate path (usually has the .crt or .pem extension)")
-	flags.StringVarP(certificateKeyPath, "tls.key", "", "", "TLS certificate key path (usually has the .key extension)")
-	flags.StringVarP(caCertPath, "tls.ca-certificate", "", "", "TLS CA certificate path (usually has the .pem extension)")
-	flags.BoolVarP(skipVerify, "tls.skip-verify", "", false, "Skip TLS certificate server verification (not secure)")
-	flags.BoolVarP(enableClientVerification, "tls.enable-client-verification", "", false, "Enable TLS certificate client verification for incoming connections")
+func SetTLSConfig(flags *pflag.FlagSet, prefix string, certificatePath *string, certificateKeyPath *string, caCertPath *string, skipVerify *bool, enableClientVerification *bool) {
+	flags.StringVarP(certificatePath, prefix+"tls.certificate", "", "", "TLS certificate path (usually has the .crt or .pem extension)")
+	flags.StringVarP(certificateKeyPath, prefix+"tls.key", "", "", "TLS certificate key path (usually has the .key extension)")
+	flags.StringVarP(caCertPath, prefix+"tls.ca-certificate", "", "", "TLS CA certificate path (usually has the .pem extension)")
+	flags.BoolVarP(skipVerify, prefix+"tls.skip-verify", "", false, "Skip TLS certificate server verification (not secure)")
+	flags.BoolVarP(enableClientVerification, prefix+"tls.enable-client-verification", "", false, "Enable TLS certificate client verification for incoming connections")
 }
 
 // commandClient returns a pilosa.InternalHTTPClient for the command

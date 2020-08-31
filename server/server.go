@@ -46,6 +46,7 @@ import (
 	"github.com/pilosa/pilosa/v2/http"
 	"github.com/pilosa/pilosa/v2/logger"
 	"github.com/pilosa/pilosa/v2/prometheus"
+	"github.com/pilosa/pilosa/v2/statik"
 	"github.com/pilosa/pilosa/v2/stats"
 	"github.com/pilosa/pilosa/v2/statsd"
 	"github.com/pilosa/pilosa/v2/syswrap"
@@ -176,12 +177,12 @@ func (m *Command) Start() (err error) {
 
 	// Initialize postgres.
 	m.pgserver = nil
-	if m.Config.Postgres.Addr != "" {
+	if m.Config.Postgres.Bind != "" {
 		var tlsConf *tls.Config
 		if m.Config.Postgres.TLS.CertificatePath != "" {
 			conf, err := GetTLSConfig(&m.Config.Postgres.TLS, m.logger.Logger())
 			if err != nil {
-				return errors.Wrap(err, "settuing up postgres TLS")
+				return errors.Wrap(err, "setting up postgres TLS")
 			}
 			tlsConf = conf
 		}
@@ -191,7 +192,7 @@ func (m *Command) Start() (err error) {
 		m.pgserver.s.WriteTimeout = time.Duration(m.Config.Postgres.WriteTimeout)
 		m.pgserver.s.MaxStartupSize = m.Config.Postgres.MaxStartupSize
 		m.pgserver.s.ConnectionLimit = m.Config.Postgres.ConnectionLimit
-		err := m.pgserver.Start(m.Config.Postgres.Addr)
+		err := m.pgserver.Start(m.Config.Postgres.Bind)
 		if err != nil {
 			return errors.Wrap(err, "starting postgres")
 		}
@@ -427,6 +428,7 @@ func (m *Command) SetupServer() error {
 		http.OptHandlerAllowedOrigins(m.Config.Handler.AllowedOrigins),
 		http.OptHandlerAPI(m.API),
 		http.OptHandlerLogger(m.logger),
+		http.OptHandlerFileSystem(&statik.FileSystem{}),
 		http.OptHandlerListener(m.ln),
 		http.OptHandlerCloseTimeout(m.closeTimeout),
 	)

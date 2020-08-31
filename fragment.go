@@ -1058,7 +1058,7 @@ func (f *fragment) setValueBase(tx Tx, columnID uint64, bitDepth uint, value int
 }
 
 // importSetValue is a more efficient SetValue just for imports.
-func (f *fragment) importSetValue(tx Tx, columnID uint64, bitDepth uint, value int64, clear bool) (changed int, err error) { // nolint: unparam
+func (f *fragment) importSetValue(txb *TxBitmap, columnID uint64, bitDepth uint, value int64, clear bool) (changed int, err error) { // nolint: unparam
 	// Convert value to an unsigned representation.
 	uvalue := uint64(value)
 	if value < 0 {
@@ -1072,17 +1072,17 @@ func (f *fragment) importSetValue(tx Tx, columnID uint64, bitDepth uint, value i
 		}
 
 		if uvalue&(1<<i) != 0 {
-			c, err := tx.Add(f.index, f.field, f.view, f.shard, !doBatched, bit)
+			c, err := txb.Add(bit)
 			if err != nil {
 				return changed, errors.Wrap(err, "adding")
-			} else if c > 0 {
+			} else if c {
 				changed++
 			}
 		} else {
-			changeCount, err := tx.Remove(f.index, f.field, f.view, f.shard, bit)
+			c, err := txb.Remove(bit)
 			if err != nil {
 				return changed, errors.Wrap(err, "removing")
-			} else if changeCount > 0 {
+			} else if c {
 				changed++
 			}
 		}
@@ -1092,15 +1092,15 @@ func (f *fragment) importSetValue(tx Tx, columnID uint64, bitDepth uint, value i
 	if p, err := f.pos(uint64(bsiExistsBit), columnID); err != nil {
 		return changed, errors.Wrap(err, "getting not-null pos")
 	} else if clear {
-		if c, err := tx.Remove(f.index, f.field, f.view, f.shard, p); err != nil {
+		if c, err := txb.Remove(p); err != nil {
 			return changed, errors.Wrap(err, "removing not-null from storage")
-		} else if c > 0 {
+		} else if c {
 			changed++
 		}
 	} else {
-		if c, err := tx.Add(f.index, f.field, f.view, f.shard, !doBatched, p); err != nil {
+		if c, err := txb.Add(p); err != nil {
 			return changed, errors.Wrap(err, "adding not-null to storage")
-		} else if c > 0 {
+		} else if c {
 			changed++
 		}
 	}
@@ -1109,15 +1109,15 @@ func (f *fragment) importSetValue(tx Tx, columnID uint64, bitDepth uint, value i
 	if p, err := f.pos(uint64(bsiSignBit), columnID); err != nil {
 		return changed, errors.Wrap(err, "getting sign pos")
 	} else if value >= 0 || clear {
-		if c, err := tx.Remove(f.index, f.field, f.view, f.shard, p); err != nil {
+		if c, err := txb.Remove(p); err != nil {
 			return changed, errors.Wrap(err, "removing sign from storage")
-		} else if c > 0 {
+		} else if c {
 			changed++
 		}
 	} else {
-		if c, err := tx.Add(f.index, f.field, f.view, f.shard, !doBatched, p); err != nil {
+		if c, err := txb.Add(p); err != nil {
 			return changed, errors.Wrap(err, "adding sign to storage")
-		} else if c > 0 {
+		} else if c {
 			changed++
 		}
 	}
@@ -2460,17 +2460,20 @@ func (f *fragment) importValue(tx Tx, columnIDs []uint64, values []int64, bitDep
 	if f.storage != nil {
 		f.storage.OpWriter = nil
 	}
-	totalChanges := 0
+
+	var totalChanges int
 	if err := func() (err error) {
+		// Build changes into temporary bitmap.
+		txb := NewTxBitmap(tx, f.index, f.field, f.view, f.shard)
 		for i := range columnIDs {
 			columnID, value := columnIDs[i], values[i]
-			changed, err := f.importSetValue(tx, columnID, bitDepth, value, clear)
-			if err != nil {
+			if _, err := f.importSetValue(txb, columnID, bitDepth, value, clear); err != nil {
 				return errors.Wrapf(err, "importSetValue")
 			}
-			totalChanges += changed
 		}
-		return nil
+
+		// Flush changes in bulk back to the transaction.
+		return txb.Flush()
 	}(); err != nil {
 		_ = f.openStorage(true)
 		return err
