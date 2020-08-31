@@ -18,7 +18,6 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"io"
 	"net"
 	"strings"
 	"sync"
@@ -167,7 +166,7 @@ func (h *GRPCHandler) DeleteVDS(ctx context.Context, req *pb.DeleteVDSRequest) (
 	return &pb.DeleteVDSResponse{}, nil
 }
 
-func (h *GRPCHandler) execSQL(ctx context.Context, queryStr string) (pb.StreamClient, error) {
+func (h *GRPCHandler) execSQL(ctx context.Context, queryStr string) (pb.ToRowser, error) {
 	return execSQL(ctx, h.api, h.logger, queryStr)
 }
 
@@ -178,21 +177,12 @@ func (h *GRPCHandler) QuerySQL(req *pb.QuerySQLRequest, stream pb.Pilosa_QuerySQ
 		return err
 	}
 
-	for {
-		row, err := results.Recv()
-		switch err {
-		case nil:
-		case io.EOF:
-			return nil
-		default:
-			return errors.Wrap(err, "failed to load next row")
-		}
-
-		err = stream.Send(row)
-		if err != nil {
-			return errors.Wrap(err, "failed to send row")
-		}
+	err = results.ToRows(stream.Send)
+	if err != nil {
+		return errors.Wrap(err, "streaming result")
 	}
+
+	return nil
 }
 
 // QuerySQLUnary is a unary-response (non-streaming) version of QuerySQL, returning a TableResponse.
@@ -212,7 +202,10 @@ func (h *GRPCHandler) QuerySQLUnary(ctx context.Context, req *pb.QuerySQLRequest
 	if err != nil {
 		return nil, err
 	}
-	return pb.ReadIntoTable(results)
+	if results, ok := results.(pb.ToTabler); ok {
+		return results.ToTable()
+	}
+	return pb.RowsToTable(results, 0)
 }
 
 // QueryPQL handles the PQL request and sends RowResponses to the stream.

@@ -19,7 +19,6 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net"
 	"strconv"
 	"strings"
@@ -358,28 +357,6 @@ func pgWriteRowser(w pg.QueryResultWriter, result pb.ToRowser) error {
 	})
 }
 
-type clientRowser struct {
-	pb.StreamClient
-}
-
-func (cr *clientRowser) ToRows(f func(*pb.RowResponse) error) error {
-	for {
-		resp, err := cr.StreamClient.Recv()
-		if err != nil {
-			if err == io.EOF {
-				return nil
-			}
-
-			return err
-		}
-
-		err = f(resp)
-		if err != nil {
-			return err
-		}
-	}
-}
-
 func pgWriteResult(w pg.QueryResultWriter, result interface{}) error {
 	switch result := result.(type) {
 	case *pilosa.Row:
@@ -392,8 +369,6 @@ func pgWriteResult(w pg.QueryResultWriter, result interface{}) error {
 		return pgWriteGroupCount(w, result)
 	case pb.ToRowser: // we should avoid protobuf where we can...
 		return pgWriteRowser(w, result)
-	case pb.StreamClient:
-		return pgWriteRowser(w, &clientRowser{result})
 	case uint64:
 		err := w.WriteHeader(pg.ColumnInfo{
 			Name: "count",

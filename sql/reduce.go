@@ -15,110 +15,105 @@
 package sql
 
 import (
-	"io"
 	"sort"
 
+	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/pql"
 	pproto "github.com/pilosa/pilosa/v2/proto"
 	"github.com/pkg/errors"
-	"google.golang.org/grpc/codes"
 )
 
-// DataType contants describe the possible values
-// for the Datatype value in the RowResponse header.
-const (
-	DataTypeDecimal     = "decimal"
-	DataTypeFloat64     = "float64"
-	DataTypeInt64       = "int64"
-	DataTypeString      = "string"
-	DataTypeUint64Array = "[]uint64"
-)
-
-type Reducer interface {
-	Reduce(pproto.StreamClient, pproto.StreamServer) error
+type limitRowser struct {
+	rowser pproto.ToRowser
+	limit  uint
 }
 
-// LimitReducer limits the number of messages passed through.
-type LimitReducer struct {
-	limit  uint
+func (l *limitRowser) ToRows(fn func(*pproto.RowResponse) error) error {
+	limit := l.limit
+	return l.rowser.ToRows(func(row *pproto.RowResponse) error {
+		if limit == 0 {
+			return nil
+		}
+		limit--
+
+		return fn(row)
+	})
+}
+
+// LimitRows applies a limit to a ToRowser.
+func LimitRows(rowser pproto.ToRowser, limit uint) pproto.ToRowser {
+	switch rowser := rowser.(type) {
+	case pilosa.ExtractedTable:
+		if uint(len(rowser.Columns)) > limit {
+			rowser.Columns = rowser.Columns[:limit]
+		}
+		return rowser
+	default:
+		return &limitRowser{rowser, limit}
+	}
+}
+
+type offsetRowser struct {
+	rowser pproto.ToRowser
 	offset uint
 }
 
-// NewLimitReducer returns a new instance of LimitReducer.
-func NewLimitReducer(limit, offset uint) *LimitReducer {
-	return &LimitReducer{
-		limit:  limit,
-		offset: offset,
-	}
-}
-
-// Reduce applies the limit reducer to the client stream and sends the results
-// to the server stream.
-func (l *LimitReducer) Reduce(c pproto.StreamClient, s pproto.StreamServer) error {
-	offsetCountdown := l.offset
-
-	// in the case of an offset, since we'll be skipping the first record
-	// which contains the headers, we need to pull the headers, save them,
-	// and apply them to the first record that we actually send through.
+func (o *offsetRowser) ToRows(fn func(*pproto.RowResponse) error) error {
+	offset := o.offset
 	var headers []*pproto.ColumnInfo
+	return o.rowser.ToRows(func(row *pproto.RowResponse) error {
+		if headers == nil {
+			headers = row.Headers
+		}
+		if offset > 0 {
+			offset--
+			return nil
+		}
+		row.Headers = headers
 
-	for i := uint(0); i < l.limit+l.offset || l.limit == 0; i++ {
-		r, err := c.Recv()
-		if err == io.EOF {
-			break
-		} else if err != nil {
-			return s.Send(pproto.ErrorWrap(err, "receiving on client stream"))
-		}
-		if offsetCountdown > 0 {
-			if headers == nil {
-				headers = r.Headers
-			}
-			offsetCountdown--
-			continue
-		}
-		if headers != nil {
-			r.Headers = headers
-			headers = nil
-		}
-		if err := s.Send(r); err != nil {
-			return s.Send(pproto.ErrorWrap(err, "sending on server stream"))
-		}
-	}
-	return s.Send(pproto.EOF)
+		return fn(row)
+	})
 }
 
-// OrderByReducer orders the results based on the provide conditions.
-// It also takes limit and offset to reduce the amount of items
-// needing to be held in memory for sorting.
-type OrderByReducer struct {
+// OffsetRows applies an offset to a ToRowser.
+func OffsetRows(rowser pproto.ToRowser, offset uint) pproto.ToRowser {
+	if offset == 0 {
+		return rowser
+	}
+
+	switch rowser := rowser.(type) {
+	case pilosa.ExtractedTable:
+		if uint(len(rowser.Columns)) > offset {
+			rowser.Columns = rowser.Columns[:0]
+		} else {
+			rowser.Columns = rowser.Columns[offset:]
+		}
+		return rowser
+	default:
+		return &offsetRowser{rowser, offset}
+	}
+}
+
+type orderByRowser struct {
+	rowser       pproto.ToRowser
 	fields       []string
 	isDescending []bool // direction[asc: false, desc: true]
-	limit        uint
-	offset       uint
 }
 
-// NewOrderByReducer returns a new instance of OrderByReducer.
-func NewOrderByReducer(fields, dirs []string, limit, offset uint) *OrderByReducer {
-	descendings := make([]bool, len(fields))
-	for i := range dirs {
-		if dirs[i] == "desc" {
-			descendings[i] = true
-		}
-	}
-	return &OrderByReducer{
-		fields:       fields,
-		isDescending: descendings,
-		limit:        limit,
-		offset:       offset,
-	}
-}
-
-// Reduce applies the order by reducer to the client stream and sends the results
-// to the server stream.
-func (o *OrderByReducer) Reduce(c pproto.StreamClient, s pproto.StreamServer) error {
+func (o *orderByRowser) ToRows(fn func(*pproto.RowResponse) error) error {
 	// hold is a slice of row responses, to be sent to the output
 	// stream sorted by the sort conditions.
 	var hold []*pproto.RowResponse
+	err := o.rowser.ToRows(func(row *pproto.RowResponse) error {
+		hold = append(hold, row)
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	if len(hold) == 0 {
+		return nil
+	}
 
 	// sortColNames contains the names of the columns to
 	// sort on.
@@ -138,49 +133,16 @@ func (o *OrderByReducer) Reduce(c pproto.StreamClient, s pproto.StreamServer) er
 	// the first row) so they can be applied later
 	// to what will eventually be the first row after
 	// sorting has occurred.
-	var holdHeaders []*pproto.ColumnInfo
-
-	ii := 0
-	for {
-		rr, err := c.Recv()
-		if err != nil {
-			if err == io.EOF {
-				break
+	holdHeaders := hold[0].Headers
+	for i, hdr := range holdHeaders {
+		hdrName := hdr.GetName()
+		hdrType := hdr.GetDatatype()
+		for j := range sortColNames {
+			if sortColNames[j] == hdrName {
+				sortColIdxs[j] = i
+				sortColTypes[j] = hdrType
 			}
-			return s.Send(pproto.ErrorWrap(err, "receiving row response"))
 		}
-
-		// On the first row, get the sort column information
-		// from the headers. Also, stash the headers for
-		// later in the `holdHeaders` var.
-		if ii == 0 {
-			holdHeaders = rr.Headers
-			for i, rrHdr := range rr.Headers {
-				hdrName := rrHdr.GetName()
-				hdrType := rrHdr.GetDatatype()
-				for j := range sortColNames {
-					if sortColNames[j] == hdrName {
-						sortColIdxs[j] = i
-						sortColTypes[j] = hdrType
-					}
-				}
-			}
-			// Clear the headers in case this record is
-			// no longer first (we re-apply the headers
-			// to the first outgoing record later).
-			rr.Headers = nil
-		}
-
-		// Put each row in the hold.
-		hold = append(hold, rr)
-
-		ii++
-
-		// TODO: in the case where limit is provided and the number of possible
-		// rows is large, it might be more efficient to periodically sort/trim
-		// the hold so it doesn't become too large. For example, it could
-		// be constrained to size (limit + offset + buffer), where buffer is
-		// an amount that the hold can grow before being trimmed.
 	}
 
 	// Sort the hold.
@@ -191,61 +153,59 @@ func (o *OrderByReducer) Reduce(c pproto.StreamClient, s pproto.StreamServer) er
 		hold,
 	)
 	if err != nil {
-		return s.Send(pproto.ErrorWrap(err, "creating row response sorter"))
+		return errors.Wrap(err, "creating row response sorter")
 	}
 	sort.Sort(sorter)
-
-	var rowsToConsider uint = uint(len(hold))
-	var offsetCountdown uint
-	if o.limit > 0 {
-		offsetCountdown = o.offset
-		if o.limit+o.offset < rowsToConsider {
-			rowsToConsider = o.limit + o.offset
-		}
-	}
 
 	// Loop over hold and send each row response.
 	// Apply the header to the first row that is sent.
 	var headerApplied bool
-	for i := uint(0); i < rowsToConsider; i++ {
-		if offsetCountdown > 0 {
-			offsetCountdown--
-			continue
-		}
+	for i := range hold {
 		// Re-apply the headers to the first record.
 		if !headerApplied {
 			hold[i].Headers = holdHeaders
 			headerApplied = true
 		}
-		err := s.Send(hold[i])
+		err := fn(hold[i])
 		if err != nil {
-			return s.Send(pproto.ErrorWrap(err, "sending hold row"))
+			return errors.Wrap(err, "sending hold row")
 		}
 	}
-	return s.Send(pproto.EOF)
+
+	return nil
 }
 
-// ValCountFuncReducer converts a ValCount result to the proper
-// result for Func.
-type ValCountFuncReducer struct {
-	fn FuncName
-}
-
-// NewValCountFuncReducer returns a new instance of ValCountFuncReducer.
-func NewValCountFuncReducer(fn FuncName) *ValCountFuncReducer {
-	return &ValCountFuncReducer{
-		fn: fn,
+// OrderBy sorts a rowser.
+func OrderBy(rowser pproto.ToRowser, fields, dirs []string) pproto.ToRowser {
+	descendings := make([]bool, len(fields))
+	for i := range dirs {
+		if dirs[i] == "desc" {
+			descendings[i] = true
+		}
+	}
+	return &orderByRowser{
+		rowser:       rowser,
+		fields:       fields,
+		isDescending: descendings,
 	}
 }
 
-// Reduce modifies the stream according to the function.
-func (v *ValCountFuncReducer) Reduce(c pproto.StreamClient, s pproto.StreamServer) error {
-	r, err := c.Recv()
+type valCountRowser struct {
+	rowser pproto.ToRowser
+	fn     FuncName
+}
+
+func (v *valCountRowser) ToRows(fn func(row *pproto.RowResponse) error) error {
+	var r *pproto.RowResponse
+	err := v.rowser.ToRows(func(row *pproto.RowResponse) error {
+		if r != nil {
+			return errors.New("extra row in valcount")
+		}
+		r = row
+		return nil
+	})
 	if err != nil {
-		if err == io.EOF {
-			return s.Send(pproto.EOF)
-		}
-		return s.Send(pproto.Error(err))
+		return err
 	}
 
 	// Get the index of the column with header of "value".
@@ -268,7 +228,7 @@ func (v *ValCountFuncReducer) Reduce(c pproto.StreamClient, s pproto.StreamServe
 	returnDataType = sourceDataType
 	switch v.fn {
 	case FuncAvg:
-		returnDataType = DataTypeFloat64
+		returnDataType = "float64"
 	}
 
 	rr := pproto.RowResponse{
@@ -280,29 +240,20 @@ func (v *ValCountFuncReducer) Reduce(c pproto.StreamClient, s pproto.StreamServe
 
 	cols := r.GetColumns()
 	if len(cols) == 0 {
-		return s.Send(pproto.ErrorCode(
-			errors.New("empty column set"),
-			codes.NotFound,
-		))
+		return errors.New("empty column set")
 	}
 
 	if idxVal == -1 {
-		return s.Send(pproto.ErrorCode(
-			errors.New("result set has no column: value"),
-			codes.NotFound,
-		))
+		return errors.New("result set has no column: value")
 	}
 	if idxCnt == -1 {
-		return s.Send(pproto.ErrorCode(
-			errors.New("result set has no column: count"),
-			codes.NotFound,
-		))
+		return errors.New("result set has no column: count")
 	}
 
 	switch v.fn {
 	case FuncAvg:
 		var avg float64
-		if sourceDataType == DataTypeDecimal {
+		if sourceDataType == "decimal" {
 			val := cols[idxVal].GetDecimalVal()
 			dec := pql.NewDecimal(val.Value, val.Scale)
 			cnt := cols[idxCnt].GetInt64Val()
@@ -314,7 +265,7 @@ func (v *ValCountFuncReducer) Reduce(c pproto.StreamClient, s pproto.StreamServe
 		}
 		rr.Columns[0] = &pproto.ColumnResponse{ColumnVal: &pproto.ColumnResponse_Float64Val{Float64Val: avg}}
 	default:
-		if sourceDataType == DataTypeDecimal {
+		if sourceDataType == "decimal" {
 			val := cols[idxVal].GetDecimalVal()
 			rr.Columns[0] = &pproto.ColumnResponse{ColumnVal: &pproto.ColumnResponse_DecimalVal{DecimalVal: &pproto.Decimal{Value: val.Value, Scale: val.Scale}}}
 		} else {
@@ -323,127 +274,90 @@ func (v *ValCountFuncReducer) Reduce(c pproto.StreamClient, s pproto.StreamServe
 		}
 	}
 
-	if err := s.Send(&rr); err != nil {
-		return errors.Wrap(err, "sending row response")
-	}
-	return s.Send(pproto.EOF)
+	return fn(&rr)
 }
 
-// CountIDReducer returns a stream of _id's as a count.
-type CountIDReducer struct{}
+// ApplyValCountFunc converts a ValCount result to the proper
+// result for Func
+func ApplyValCountFunc(rowser pproto.ToRowser, fn FuncName) pproto.ToRowser {
+	return &valCountRowser{
+		rowser: rowser,
+		fn:     fn,
+	}
+}
 
-// Reduce counts the stream of IDs and returns a single record.
-func (r *CountIDReducer) Reduce(c pproto.StreamClient, s pproto.StreamServer) error {
-	var cnt uint64
+type countIDRowser struct {
+	rowser pproto.ToRowser
+}
 
-	for {
-		_, err := c.Recv()
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			return s.Send(pproto.ErrorWrap(err, "receiving on client stream"))
-		}
-		cnt++
+func (c *countIDRowser) ToRows(fn func(*pproto.RowResponse) error) error {
+	var count uint64
+	err := c.rowser.ToRows(func(row *pproto.RowResponse) error {
+		count++
+		return nil
+	})
+	if err != nil {
+		return err
 	}
 
-	rr := pproto.RowResponse{
+	return fn(&pproto.RowResponse{
 		Headers: []*pproto.ColumnInfo{
 			{Name: string(FuncCount), Datatype: "uint64"},
 		},
 		Columns: []*pproto.ColumnResponse{
-			&pproto.ColumnResponse{ColumnVal: &pproto.ColumnResponse_Uint64Val{Uint64Val: cnt}},
+			{
+				ColumnVal: &pproto.ColumnResponse_Uint64Val{Uint64Val: count},
+			},
 		},
-	}
-
-	if err := s.Send(&rr); err != nil {
-		return errors.Wrap(err, "sending row response")
-	}
-	return s.Send(pproto.EOF)
+	})
 }
 
-// AssignHeadersReducer overwrites the headers on the first record
-// according to field names and aliases from sql. It also reorders
-// the columns in the result stream to match the sql select clause.
-type AssignHeadersReducer struct {
-	cols []Column
+// CountRows counts the rows from the input rowser.
+func CountRows(rowser pproto.ToRowser) pproto.ToRowser {
+	return &countIDRowser{rowser}
 }
 
-// NewAssignHeadersReducer returns a new instance of AssignHeadersReducer.
-func NewAssignHeadersReducer(cols []Column) *AssignHeadersReducer {
-	return &AssignHeadersReducer{
-		cols: cols,
-	}
+type assignHeadersRowser struct {
+	rowser pproto.ToRowser
+	cols   []Column
 }
 
-// Reduce modifies the stream.
-func (r *AssignHeadersReducer) Reduce(c pproto.StreamClient, s pproto.StreamServer) error {
+func (a *assignHeadersRowser) ToRows(fn func(*pproto.RowResponse) error) error {
 	var placement []uint
-	var labels []string
 
-	var cnt int
-	for {
-		rr, err := c.Recv()
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			return s.Send(pproto.ErrorWrap(err, "receiving on client stream"))
-		}
-
-		// If the placement slice is [0-n] where n == len(Headers)
-		// then we don't need to alter rr on records after cnt == 0.
-		// If we don't apply aliases, we don't have to alter Headers
-		// either, but that may not be worth messing with.
-
-		if cnt == 0 {
-			placement, labels, err = headerAssignment(r.cols, rr.Headers)
+	return a.rowser.ToRows(func(row *pproto.RowResponse) error {
+		var out pproto.RowResponse
+		if placement == nil {
+			// Assign headers and generate placement.
+			var err error
+			var labels []string
+			placement, labels, err = headerAssignment(a.cols, row.Headers)
 			if err != nil {
-				return s.Send(pproto.ErrorWrap(err, "getting header assignment"))
+				return errors.Wrap(err, "getting header assignment")
 			}
-
-			// mod is the modified RowResponse object that gets populated
-			// according to placement and labels, then sent.
-			mod := &pproto.RowResponse{
-				Headers: make([]*pproto.ColumnInfo, len(placement)),
-				Columns: make([]*pproto.ColumnResponse, len(placement)),
+			headers := make([]*pproto.ColumnInfo, len(placement))
+			for i, v := range placement {
+				header := row.Headers[v]
+				header.Name = labels[i]
+				headers[i] = header
 			}
-
-			// For now, we assume that the column count in each RowResponse
-			// is consistent (i.e. we can validate one time, here, on the
-			// first row, and not every time, in the `else` statement below).
-			if len(placement) > len(rr.Columns) {
-				return s.Send(pproto.ErrorCode(
-					errors.New("mismatched header placement and column count"),
-					codes.InvalidArgument,
-				))
-			}
-
-			for i := 0; i < len(placement); i++ {
-				mod.Headers[i] = rr.Headers[placement[i]]
-				mod.Headers[i].Name = labels[i]
-				mod.Columns[i] = rr.Columns[placement[i]]
-			}
-			if err := s.Send(mod); err != nil {
-				return errors.Wrap(err, "sending mod")
-			}
-		} else {
-			// mod is the modified RowResponse object that gets populated
-			// according to placement and labels, then sent.
-			mod := &pproto.RowResponse{
-				Columns: make([]*pproto.ColumnResponse, len(placement)),
-			}
-			for i := 0; i < len(placement); i++ {
-				mod.Columns[i] = rr.Columns[placement[i]]
-			}
-			if err := s.Send(mod); err != nil {
-				return errors.Wrap(err, "sending mod")
-			}
+			out.Headers = headers
 		}
-		cnt++
-	}
 
-	return s.Send(pproto.EOF)
+		// Re-order the columns.
+		cols := make([]*pproto.ColumnResponse, len(placement))
+		for i, v := range placement {
+			cols[i] = row.Columns[v]
+		}
+		out.Columns = cols
+
+		return fn(&out)
+	})
+}
+
+// AssignHeaders assigns headers to a ToRowser.
+func AssignHeaders(rowser pproto.ToRowser, headers ...Column) pproto.ToRowser {
+	return &assignHeadersRowser{rowser, headers}
 }
 
 var (

@@ -37,7 +37,7 @@ func NewShowHandler(api *pilosa.API) *ShowHandler {
 }
 
 // Handle executes mapped SQL
-func (s *ShowHandler) Handle(ctx context.Context, mapped *MappedSQL) (pproto.StreamClient, error) {
+func (s *ShowHandler) Handle(ctx context.Context, mapped *MappedSQL) (pproto.ToRowser, error) {
 	stmt, ok := mapped.Statement.(*sqlparser.Show)
 	if !ok {
 		return nil, fmt.Errorf("statement is not type show: %T", mapped.Statement)
@@ -53,20 +53,12 @@ func (s *ShowHandler) Handle(ctx context.Context, mapped *MappedSQL) (pproto.Str
 	}
 }
 
-func (s *ShowHandler) execShowTables(ctx context.Context, showStmt *sqlparser.Show) (pproto.StreamClient, error) {
+func (s *ShowHandler) execShowTables(ctx context.Context, showStmt *sqlparser.Show) (pproto.ToRowser, error) {
 	indexInfo := s.api.Schema(ctx)
-	sz := len(indexInfo)
-	// If there aren't any indexes, don't bother creating
-	// a result row buffer.
-	if sz == 0 {
-		return pproto.EmptyStream{}, nil
-	}
 
-	// Create a buffer large enough to hold the entire result
-	// set. This way we don't have to use a goroutine.
-	result := pproto.NewRowBuffer(sz)
-	for _, ii := range indexInfo {
-		rr := &pproto.RowResponse{
+	result := make(pproto.ConstRowser, len(indexInfo))
+	for i, ii := range indexInfo {
+		result[i] = pproto.RowResponse{
 			Headers: []*pproto.ColumnInfo{
 				{Name: "Table", Datatype: "string"},
 			},
@@ -74,24 +66,13 @@ func (s *ShowHandler) execShowTables(ctx context.Context, showStmt *sqlparser.Sh
 				{ColumnVal: &pproto.ColumnResponse_StringVal{StringVal: ii.Name}},
 			},
 		}
-		if err := result.Send(rr); err != nil {
-			return nil, errors.Wrap(err, "sending row response")
-		}
-	}
-	if err := result.Send(pproto.EOF); err != nil {
-		return nil, errors.Wrap(err, "sending EOF")
 	}
 
-	// Apply Sort Reducer
-	out := pproto.NewRowBuffer(0)
-	red := NewOrderByReducer([]string{"Table"}, []string{"asc"}, 0, 0)
-	go red.Reduce(result, out) //nolint:errcheck
-
-	result = out
-	return result, nil
+	// Sort the result.
+	return OrderBy(result, []string{"Table"}, []string{"asc"}), nil
 }
 
-func (s *ShowHandler) execShowFields(ctx context.Context, showStmt *sqlparser.Show) (pproto.StreamClient, error) {
+func (s *ShowHandler) execShowFields(ctx context.Context, showStmt *sqlparser.Show) (pproto.ToRowser, error) {
 	indexName := showStmt.OnTable.ToViewName().Name.String()
 	index, err := s.api.Index(ctx, indexName)
 	if err != nil {
@@ -101,16 +82,8 @@ func (s *ShowHandler) execShowFields(ctx context.Context, showStmt *sqlparser.Sh
 		return nil, errors.WithMessage(pilosa.ErrIndexNotFound, indexName)
 	}
 	fields := index.Fields()
-	sz := len(fields)
-	// If there aren't any fields, don't bother creating
-	// a result row buffer.
-	if sz == 0 {
-		return pproto.EmptyStream{}, nil
-	}
 
-	// Create a buffer large enough to hold the entire result
-	// set. This way we don't have to use a goroutine.
-	result := pproto.NewRowBuffer(sz)
+	result := make(pproto.ConstRowser, 0, len(fields))
 	for _, f := range fields {
 		if f.Name() == "_exists" {
 			continue
@@ -120,7 +93,7 @@ func (s *ShowHandler) execShowFields(ctx context.Context, showStmt *sqlparser.Sh
 		if err != nil {
 			return nil, errors.Wrapf(err, "field %s", f.Name())
 		}
-		rr := &pproto.RowResponse{
+		result = append(result, pproto.RowResponse{
 			Headers: []*pproto.ColumnInfo{
 				{Name: "Field", Datatype: "string"},
 				{Name: "Type", Datatype: "string"},
@@ -129,20 +102,9 @@ func (s *ShowHandler) execShowFields(ctx context.Context, showStmt *sqlparser.Sh
 				{ColumnVal: &pproto.ColumnResponse_StringVal{StringVal: f.Name()}},
 				{ColumnVal: &pproto.ColumnResponse_StringVal{StringVal: dt}},
 			},
-		}
-		if err := result.Send(rr); err != nil {
-			return nil, errors.Wrap(err, "sending row response")
-		}
-	}
-	if err := result.Send(pproto.EOF); err != nil {
-		return nil, errors.Wrap(err, "sending EOF")
+		})
 	}
 
-	// Apply Sort Reducer
-	out := pproto.NewRowBuffer(0)
-	red := NewOrderByReducer([]string{"Field"}, []string{"asc"}, 0, 0)
-	go red.Reduce(result, out) //nolint:errcheck
-
-	result = out
-	return result, nil
+	// Sort the result.
+	return OrderBy(result, []string{"Field"}, []string{"asc"}), nil
 }

@@ -37,7 +37,7 @@ func NewDDLHandler(api *pilosa.API) *DDLHandler {
 }
 
 // Handle executes mapped SQL
-func (h *DDLHandler) Handle(ctx context.Context, mapped *MappedSQL) (pproto.StreamClient, error) {
+func (h *DDLHandler) Handle(ctx context.Context, mapped *MappedSQL) (pproto.ToRowser, error) {
 	stmt, ok := mapped.Statement.(*sqlparser.DDL)
 	if !ok {
 		return nil, fmt.Errorf("statement is not type DDL: %T", mapped.Statement)
@@ -52,7 +52,7 @@ func (h *DDLHandler) Handle(ctx context.Context, mapped *MappedSQL) (pproto.Stre
 	}
 }
 
-func (h *DDLHandler) execDropTable(ctx context.Context, stmt *sqlparser.DDL) (pproto.StreamClient, error) {
+func (h *DDLHandler) execDropTable(ctx context.Context, stmt *sqlparser.DDL) (pproto.ToRowser, error) {
 	if n := len(stmt.FromTables); n != 1 {
 		return nil, fmt.Errorf("statement can only contain a single drop table, but got: %d", n)
 	}
@@ -61,5 +61,5 @@ func (h *DDLHandler) execDropTable(ctx context.Context, stmt *sqlparser.DDL) (pp
 	if err := h.api.DeleteIndex(ctx, indexName); err != nil {
 		return nil, errors.Wrapf(err, "deleting index %s", indexName)
 	}
-	return pproto.EmptyStream{}, nil
+	return pproto.ConstRowser{}, nil
 }
