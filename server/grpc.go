@@ -153,7 +153,7 @@ func (h *GRPCHandler) PostVDS(ctx context.Context, req *pb.PostVDSRequest) (*pb.
 	opts := pilosa.IndexOptions{Keys: req.Keys, TrackExistence: req.TrackExistence}
 	_, err := h.api.CreateIndex(ctx, req.Name, opts)
 	if err != nil {
-		return nil, err
+		return nil, errToStatusError(err)
 	}
 	return &pb.PostVDSResponse{}, nil
 }
