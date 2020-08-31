@@ -162,7 +162,7 @@ func (h *GRPCHandler) PostVDS(ctx context.Context, req *pb.PostVDSRequest) (*pb.
 func (h *GRPCHandler) DeleteVDS(ctx context.Context, req *pb.DeleteVDSRequest) (*pb.DeleteVDSResponse, error) {
 	err := h.api.DeleteIndex(ctx, req.Name)
 	if err != nil {
-		return nil, err
+		return nil, errToStatusError(err)
 	}
 	return &pb.DeleteVDSResponse{}, nil
 }
