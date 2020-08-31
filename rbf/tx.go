@@ -604,7 +604,10 @@ func (tx *Tx) RoaringBitmap(name string) (*roaring.Bitmap, error) {
 func (tx *Tx) Container(name string, key uint64) (*roaring.Container, error) {
 	tx.mu.RLock()
 	defer tx.mu.RUnlock()
+	return tx.container(name, key)
+}
 
+func (tx *Tx) container(name string, key uint64) (*roaring.Container, error) {
 	if tx.db == nil {
 		return nil, ErrTxClosed
 	} else if name == "" {
@@ -626,9 +629,12 @@ func (tx *Tx) Container(name string, key uint64) (*roaring.Container, error) {
 func (tx *Tx) PutContainer(name string, key uint64, ct *roaring.Container) error {
 	tx.mu.Lock()
 	defer tx.mu.Unlock()
+	return tx.putContainer(name, key, ct)
+}
 
+func (tx *Tx) putContainer(name string, key uint64, ct *roaring.Container) error {
 	if tx.DeleteEmptyContainer && ct.N() == 0 {
-		return tx.RemoveContainer(name, key)
+		return tx.removeContainer(name, key)
 	}
 
 	cell := ConvertToLeafArgs(key, ct)
@@ -650,7 +656,10 @@ func (tx *Tx) PutContainer(name string, key uint64, ct *roaring.Container) error
 func (tx *Tx) RemoveContainer(name string, key uint64) error {
 	tx.mu.Lock()
 	defer tx.mu.Unlock()
+	return tx.removeContainer(name, key)
+}
 
+func (tx *Tx) removeContainer(name string, key uint64) error {
 	c, err := tx.cursor(name)
 	if err != nil {
 		return err
@@ -1414,6 +1423,9 @@ func (tx *Tx) ImportRoaringBits(name string, itr roaring.RoaringIterator, clear 
 		return
 	}
 
+	tx.mu.Lock()
+	defer tx.mu.Unlock()
+
 	if err = tx.createBitmapIfNotExists(name); err != nil {
 		return
 	}
@@ -1438,7 +1450,7 @@ func (tx *Tx) ImportRoaringBits(name string, itr roaring.RoaringIterator, clear 
 		}
 		// INVAR: nsynth > 0
 
-		oldC, err = tx.Container(name, itrKey)
+		oldC, err = tx.container(name, itrKey)
 		panicOn(err)
 		if err != nil {
 			return
@@ -1454,7 +1466,7 @@ func (tx *Tx) ImportRoaringBits(name string, itr roaring.RoaringIterator, clear 
 				changed += nsynth
 				rowSet[currRow] += nsynth
 
-				err = tx.PutContainer(name, itrKey, synthC)
+				err = tx.putContainer(name, itrKey, synthC)
 				if err != nil {
 					return
 				}
@@ -1476,7 +1488,7 @@ func (tx *Tx) ImportRoaringBits(name string, itr roaring.RoaringIterator, clear 
 				changes := int(existN - newC.N())
 				changed += changes
 				rowSet[currRow] -= changes
-				err = tx.PutContainer(name, itrKey, newC)
+				err = tx.putContainer(name, itrKey, newC)
 				if err != nil {
 					return
 				}
@@ -1494,7 +1506,7 @@ func (tx *Tx) ImportRoaringBits(name string, itr roaring.RoaringIterator, clear 
 				// can nsynth be zero? No, because of the continue/invariant above where nsynth > 0
 				changed += nsynth
 				rowSet[currRow] += nsynth
-				err = tx.PutContainer(name, itrKey, synthC)
+				err = tx.putContainer(name, itrKey, synthC)
 				if err != nil {
 					return
 				}
@@ -1511,7 +1523,7 @@ func (tx *Tx) ImportRoaringBits(name string, itr roaring.RoaringIterator, clear 
 				changed += changes
 				rowSet[currRow] += changes
 
-				err = tx.PutContainer(name, itrKey, newC)
+				err = tx.putContainer(name, itrKey, newC)
 				if err != nil {
 					panicOn(err)
 					return
