@@ -46,6 +46,7 @@ import (
 	"github.com/pilosa/pilosa/v2/http"
 	"github.com/pilosa/pilosa/v2/logger"
 	"github.com/pilosa/pilosa/v2/prometheus"
+	"github.com/pilosa/pilosa/v2/statik"
 	"github.com/pilosa/pilosa/v2/stats"
 	"github.com/pilosa/pilosa/v2/statsd"
 	"github.com/pilosa/pilosa/v2/syswrap"
@@ -427,6 +428,7 @@ func (m *Command) SetupServer() error {
 		http.OptHandlerAllowedOrigins(m.Config.Handler.AllowedOrigins),
 		http.OptHandlerAPI(m.API),
 		http.OptHandlerLogger(m.logger),
+		http.OptHandlerFileSystem(&statik.FileSystem{}),
 		http.OptHandlerListener(m.ln),
 		http.OptHandlerCloseTimeout(m.closeTimeout),
 	)

@@ -31,6 +31,8 @@ See our [Documentation](https://www.pilosa.com/docs/) for information about inst
 
 1.  [Install Pilosa](https://www.pilosa.com/docs/installation/).
 
+Optionally, to include Lattice, the in-browser UI, follow the "Build from source" instructions, and run `make generate-statik` before `make install`. When you run a local Pilosa server on the default host, for example, you can access Lattice at [localhost:10101](http://localhost:10101).
+
 2.  [Start Pilosa](https://www.pilosa.com/docs/getting-started/#starting-pilosa) with the default configuration:
 
     ```shell
