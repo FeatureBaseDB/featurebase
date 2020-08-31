@@ -127,6 +127,9 @@ func (s *SelectHandler) execMappingResult(ctx context.Context, mr *MappingResult
 				},
 			},
 		}
+	case nil:
+		result = pproto.ConstRowser{}
+
 	default:
 		return nil, fmt.Errorf("unsupported result type %T", res)
 	}

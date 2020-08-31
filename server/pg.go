@@ -414,6 +414,10 @@ func pgWriteResult(w pg.QueryResultWriter, result interface{}) error {
 		}
 
 		return nil
+
+	case nil:
+		return nil
+
 	default:
 		return errors.Errorf("result type %T not yet supported", result)
 	}
