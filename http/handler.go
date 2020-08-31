@@ -468,7 +468,7 @@ type statikHandler struct {
 func NewStatikHandler(h *Handler) statikHandler {
 	fs, err := h.fileSystem.New()
 	if err == nil {
-		h.logger.Printf("enabled Lattice UI (%s) at %s", h.api.LatticeVersion(), h.api.Node().URI)
+		h.logger.Printf("enabled Web UI (%s) at %s", h.api.LatticeVersion(), h.api.Node().URI)
 	}
 
 	return statikHandler{
@@ -478,8 +478,15 @@ func NewStatikHandler(h *Handler) statikHandler {
 }
 
 func (s statikHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if s.statikFS == nil {
+		msg := "Web UI is not available. Please run `make generate-statik` before building Pilosa with `make install`."
+		s.handler.logger.Printf(msg)
+		http.Error(w, msg, http.StatusInternalServerError)
+		return
+	}
+
 	if strings.HasPrefix(r.UserAgent(), "curl") {
-		http.Error(w, "Welcome. Pilosa is running. Visit https://www.pilosa.com/docs/ for more information or try the Lattice UI by visiting this URL in your browser.", http.StatusNotFound)
+		http.Error(w, "Welcome. Pilosa is running. Visit https://www.pilosa.com/docs/ for more information or try the Web UI by visiting this URL in your browser.", http.StatusNotFound)
 		return
 	}
 
@@ -490,12 +497,6 @@ func (s statikHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		r.URL = url
 	}
 
-	if s.statikFS == nil {
-		msg := "Lattice UI is not available. Please run `make generate-statik` before building Pilosa with `make install`."
-		s.handler.logger.Printf(msg)
-		http.Error(w, msg, http.StatusInternalServerError)
-		return
-	}
 	http.FileServer(s.statikFS).ServeHTTP(w, r)
 }
 
