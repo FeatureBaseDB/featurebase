@@ -478,15 +478,19 @@ func NewStatikHandler(h *Handler) statikHandler {
 }
 
 func (s statikHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if strings.HasPrefix(r.UserAgent(), "curl") {
+		msg := "Welcome. Pilosa v" + s.handler.api.Version() + " is running. Visit https://www.pilosa.com/docs/ for more information."
+		if s.statikFS != nil {
+			msg += " Try the Web UI by visiting this URL in your browser."
+		}
+		http.Error(w, msg, http.StatusNotFound)
+		return
+	}
+
 	if s.statikFS == nil {
 		msg := "Web UI is not available. Please run `make generate-statik` before building Pilosa with `make install`."
 		s.handler.logger.Printf(msg)
 		http.Error(w, msg, http.StatusInternalServerError)
-		return
-	}
-
-	if strings.HasPrefix(r.UserAgent(), "curl") {
-		http.Error(w, "Welcome. Pilosa is running. Visit https://www.pilosa.com/docs/ for more information or try the Web UI by visiting this URL in your browser.", http.StatusNotFound)
 		return
 	}
 
