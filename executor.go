@@ -90,7 +90,7 @@ func emptyResult(c *pql.Call) interface{} {
 		return false
 
 	case "Row":
-		return Row{Keys: []string{}}
+		return &Row{Keys: []string{}}
 
 	case "Rows":
 		return RowIdentifiers{Keys: []string{}}
