@@ -139,13 +139,7 @@ startup:
 	proto := Protocol(binary.BigEndian.Uint32(data))
 	data = data[4:]
 
-	// Handle special protocols.
-	switch proto {
-	case ProtocolCancel:
-		// TODO: send an actual postgres error message.
-		return errors.New("cancellation protocol not yet supported")
-
-	case ProtocolSSL:
+	if proto == ProtocolSSL {
 		if s.TLSConfig != nil {
 			// Upgrade the connection to TLS and renegotiate on the tunneled connection.
 			_, err = conn.Write([]byte{'S'})
@@ -177,8 +171,14 @@ startup:
 		return errors.Errorf("client at %s attempted to initiate an unsecured postgres conenction", conn.RemoteAddr())
 	}
 
-	// Handle regular postgres.
-	return s.handleStandard(ctx, proto, conn, data)
+	switch proto {
+	case ProtocolCancel:
+		// Handle cancellation.
+		return s.handleCancel(ctx, conn, data)
+	default:
+		// Handle regular postgres.
+		return s.handleStandard(ctx, proto, conn, data)
+	}
 }
 
 // parseParams parses a parameter list from a startup packet.
@@ -205,6 +205,33 @@ func parseParams(data []byte) (map[string]string, error) {
 
 		params[key] = val
 	}
+}
+
+// handleCancel handles cancel request connections.
+func (s *Server) handleCancel(ctx context.Context, conn net.Conn, data []byte) error {
+	if len(data) != 8 {
+		return errors.New("malformed cancellation packet")
+	}
+
+	if s.CancellationManager == nil {
+		return errors.New("cancellation is not configured")
+	}
+
+	pid := int32(binary.BigEndian.Uint32(data[:4]))
+	key := int32(binary.BigEndian.Uint32(data[4:]))
+
+	err := s.CancellationManager.Cancel(CancellationToken{PID: pid, Key: key})
+	switch err {
+	case nil:
+	case ErrCancelledMissingConnection:
+		// This is usually not a real error (race condition in the protocol).
+		// This can happen if a client cancels a request and shuts down.
+		s.Logger.Debugf("client at %v sent a mismatched cancellation token (is a load balancer misconfigured?)", conn.RemoteAddr())
+	default:
+		return err
+	}
+
+	return nil
 }
 
 // handleStandard handles a connection in the standard postgres wire protocol.
@@ -296,6 +323,25 @@ func (s *Server) handleStandard(ctx context.Context, proto Protocol, conn net.Co
 		return errors.Wrap(err, "sending authentication confirmation")
 	}
 
+	var cancelNotify <-chan struct{}
+	if s.CancellationManager != nil {
+		notify, cancel, token, err := s.CancellationManager.Token()
+		if err != nil {
+			return errors.Wrap(err, "setting up cancellation")
+		}
+		defer cancel()
+
+		msg, err := encoder.BackendKeyData(token.PID, token.Key)
+		if err != nil {
+			return errors.Wrap(err, "encoding cancellation key data")
+		}
+		err = w.WriteMessage(msg)
+		if err != nil {
+			return errors.Wrap(err, "sending cancellation key data")
+		}
+		cancelNotify = notify
+	}
+
 	var queryReady bool
 	for {
 		if !queryReady {
@@ -368,53 +414,11 @@ func (s *Server) handleStandard(ctx context.Context, proto Protocol, conn net.Co
 			// Parse the query message (a null-terminated string).
 			query := SimpleQuery(strings.TrimSuffix(string(msg.Data), "\x00"))
 
-			// Set up a result writer.
-			// SELECT is used as a default tag, which seems to be handled decently by clients.
-			// The encoder is intentionally not used because its buffer may be huge.
-			qwriter := &queryResultWriter{
-				w:   w,
-				te:  s.TypeEngine,
-				tag: "SELECT",
+			// Execute the query.
+			err := s.handleQuery(w, query, cancelNotify)
+			if err != nil {
+				return err
 			}
-
-			// Dispatch the query handler.
-			// TODO: cancellation (requires crazy internode logic and fake process IDs)
-			// This is not the connection context, since we want the request to finish safely before connection shutdown.
-			qerr := s.QueryHandler.HandleQuery(context.Background(), qwriter, query)
-			if qerr != nil {
-				// There was an error in processing the query.
-				// Send the error back to the client and keep going.
-				s.Logger.Debugf("failed to execute query %q: %v", query, qerr)
-				msg, err = encoder.GoError(qerr)
-				if err != nil {
-					return errors.Wrap(err, "failed to send query error to client")
-				}
-				err = w.WriteMessage(msg)
-				if err != nil {
-					return errors.Wrap(err, "failed to send query error to client")
-				}
-			} else {
-				if !qwriter.wroteHeaders {
-					// The handler did not write headers.
-					// Write back an empty set of headers.
-					err = qwriter.WriteHeader()
-					if err != nil {
-						return errors.Wrap(err, "sending empty column headers")
-					}
-				}
-				// The query completed normally.
-				// Notify the client of completion.
-				msg, err = encoder.CommandComplete(qwriter.tag)
-				if err != nil {
-					return errors.Wrap(err, "sending command completion notification")
-				}
-				err = w.WriteMessage(msg)
-				if err != nil {
-					return errors.Wrap(err, "sending command completion notification")
-				}
-			}
-
-			// The data will be flushed after we write back the "ready for query" state.
 
 		default:
 			// The message is not supported yet.
@@ -447,6 +451,90 @@ func (s *Server) handleStandard(ctx context.Context, proto Protocol, conn net.Co
 			}
 		}
 	}
+}
+
+// handleQuery processes a single query on a connection.
+func (s *Server) handleQuery(w message.Writer, query Query, cancelNotify <-chan struct{}) error {
+	// Configure cancellation.
+	// This is not the connection context, since we want the request to finish safely before connection shutdown.
+	ctx := context.Background()
+	if cancelNotify != nil {
+		defer func() {
+			// Flush any cancel notifications.
+			// This works on a best-effort basis.
+			// It is still entirely possible that the cancel notification may be delivered to the next request.
+			// Regardless of what we do, we either get false positives or false negatives.
+			// This code chooses false positives.
+			for len(cancelNotify) > 0 {
+				<-cancelNotify
+			}
+		}()
+
+		var wg sync.WaitGroup
+		defer wg.Add(1)
+
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithCancel(ctx)
+		defer cancel()
+
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			select {
+			case <-ctx.Done():
+			case <-cancelNotify:
+				cancel()
+			}
+		}()
+	}
+
+	// Set up a result writer.
+	// SELECT is used as a default tag, which seems to be handled decently by clients.
+	// The encoder is intentionally not re-used because its buffer may be huge.
+	qwriter := &queryResultWriter{
+		w:   w,
+		te:  s.TypeEngine,
+		tag: "SELECT",
+	}
+
+	// Dispatch the query handler.
+	qerr := s.QueryHandler.HandleQuery(ctx, qwriter, query)
+	if qerr != nil {
+		// There was an error in processing the query.
+		// Send the error back to the client and keep going.
+		s.Logger.Debugf("failed to execute query %q: %v", query, qerr)
+		msg, err := qwriter.enc.GoError(qerr)
+		if err != nil {
+			return errors.Wrap(err, "failed to send query error to client")
+		}
+		err = w.WriteMessage(msg)
+		if err != nil {
+			return errors.Wrap(err, "failed to send query error to client")
+		}
+	} else {
+		if !qwriter.wroteHeaders {
+			// The handler did not write headers.
+			// Write back an empty set of headers.
+			err := qwriter.WriteHeader()
+			if err != nil {
+				return errors.Wrap(err, "sending empty column headers")
+			}
+		}
+		// The query completed normally.
+		// Notify the client of completion.
+		msg, err := qwriter.enc.CommandComplete(qwriter.tag)
+		if err != nil {
+			return errors.Wrap(err, "sending command completion notification")
+		}
+		err = w.WriteMessage(msg)
+		if err != nil {
+			return errors.Wrap(err, "sending command completion notification")
+		}
+	}
+
+	// The data will be flushed after we write back the "ready for query" state.
+	return nil
 }
 
 func (s *Server) handleShutdown(conn net.Conn, w message.Writer, encoder *message.Encoder, notice ...message.NoticeField) error {

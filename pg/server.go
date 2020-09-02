@@ -55,6 +55,10 @@ type Server struct {
 
 	// Logger is the logger to use for error conditions and state changes.
 	Logger logger.Logger
+
+	// CancellationManager is the cancellation manager to use.
+	// If this is not set, no cancellations will be applied.
+	CancellationManager CancellationManager
 }
 
 // ServeConn serves a single connection.
