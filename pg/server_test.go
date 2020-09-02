@@ -15,12 +15,14 @@
 package pg_test
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"fmt"
 	"net"
 	"os/exec"
 	"strconv"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -233,12 +235,19 @@ func TestPSQLQuery(t *testing.T) {
 			}
 		}()
 
+		var mutex sync.Mutex
+		mutex.Lock()
+
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
 		server := &pg.Server{
 			QueryHandler: pgtest.HandlerFunc(func(qctx context.Context, w pg.QueryResultWriter, q pg.Query) error {
 				defer func() { qdone = true }()
+
+				mutex.Lock()
+				defer mutex.Unlock()
+
 				qerr = term()
 				if qerr != nil {
 					return qerr
@@ -266,9 +275,17 @@ func TestPSQLQuery(t *testing.T) {
 
 		cmd := exec.CommandContext(ctx, "psql", "-h", tcpAddr.IP.String(), "-p", strconv.Itoa(tcpAddr.Port), "-c", "test query")
 		term = func() error { return cmd.Process.Signal(syscall.SIGINT) }
-		data, err := cmd.CombinedOutput()
+		var buf bytes.Buffer
+		cmd.Stderr = &buf
+		cmd.Stdout = &buf
+		err = cmd.Start()
 		if err != nil {
-			t.Fatalf("psql failed: %v", string(data))
+			t.Fatalf("starting postgres client: %v", err)
+		}
+		mutex.Unlock()
+		err = cmd.Wait()
+		if err != nil {
+			t.Fatalf("psql failed (%v): %s", err, buf.String())
 		}
 	})
 }
