@@ -377,7 +377,6 @@ func (db *DB) WALPageN() int64 {
 
 // SyncWAL flushes the active segment to disk.
 func (db *DB) SyncWAL() error {
-
 	if s := db.ActiveWALSegment(); s != nil {
 		return s.Sync()
 	}
