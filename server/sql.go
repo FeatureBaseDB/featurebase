@@ -26,14 +26,14 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-func execSQL(ctx context.Context, api *pilosa.API, logger logger.Logger, queryStr string) (pb.StreamClient, error) {
+func execSQL(ctx context.Context, api *pilosa.API, logger logger.Logger, queryStr string) (pb.ToRowser, error) {
 	mapper := sql.NewMapper()
 	mapper.Logger = logger
 	query, err := mapper.MapSQL(queryStr)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to map SQL")
 	}
-	var results pb.StreamClient
+	var results pb.ToRowser
 	switch query.SQLType {
 	case sql.SQLTypeSelect:
 		handler := sql.NewSelectHandler(api)

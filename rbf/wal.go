@@ -154,6 +154,7 @@ func (s *WALSegment) closeForWrite() error {
 	if err := s.sync(); err != nil {
 		return err
 	}
+	s.writeCache = nil
 
 	// Close underlying file writer.
 	if s.w != nil {
@@ -190,7 +191,7 @@ func (s *WALSegment) ReadWALPage(walID int64) ([]byte, error) {
 
 // WriteWALPage writes a single page to the WAL segment and returns its WAL identifier.
 func (s *WALSegment) WriteWALPage(page []byte, isMeta bool) (walID int64, err error) {
-	assert(len(page) == PageSize, "invalid page size: %d", len(page))
+	assert(len(page) == PageSize) // invalid page size
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -212,6 +213,9 @@ func (s *WALSegment) WriteWALPage(page []byte, isMeta bool) (walID int64, err er
 	}
 
 	// Append write to write buffer & increment page count.
+	if s.writeCache == nil {
+		s.writeCache = make([]byte, 0, MaxWALSegmentFileSize+PageSize)
+	}
 	s.writeCache = append(s.writeCache, page...)
 	s.pageN++
 
@@ -229,7 +233,7 @@ func (s *WALSegment) flush() error {
 	if _, err := s.w.WriteAt(s.writeCache, int64((s.pageN*PageSize)-len(s.writeCache))); err != nil {
 		return fmt.Errorf("wal segment write: %w", err)
 	}
-	s.writeCache = nil
+	s.writeCache = s.writeCache[:0]
 	return nil
 }
 

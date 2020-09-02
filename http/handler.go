@@ -56,6 +56,8 @@ import (
 type Handler struct {
 	Handler http.Handler
 
+	fileSystem pilosa.FileSystem
+
 	logger logger.Logger
 
 	// Keeps the query argument validators for each handler
@@ -68,6 +70,8 @@ type Handler struct {
 	closeTimeout time.Duration
 
 	server *http.Server
+
+	middleware []func(http.Handler) http.Handler
 }
 
 // externalPrefixFlag denotes endpoints that are intended to be exposed to clients.
@@ -92,10 +96,10 @@ type handlerOption func(s *Handler) error
 
 func OptHandlerAllowedOrigins(origins []string) handlerOption {
 	return func(h *Handler) error {
-		h.Handler = handlers.CORS(
+		h.middleware = append(h.middleware, handlers.CORS(
 			handlers.AllowedOrigins(origins),
 			handlers.AllowedHeaders([]string{"Content-Type"}),
-		)(h.Handler)
+		))
 		return nil
 	}
 }
@@ -103,6 +107,13 @@ func OptHandlerAllowedOrigins(origins []string) handlerOption {
 func OptHandlerAPI(api *pilosa.API) handlerOption {
 	return func(h *Handler) error {
 		h.api = api
+		return nil
+	}
+}
+
+func OptHandlerFileSystem(fs pilosa.FileSystem) handlerOption {
+	return func(h *Handler) error {
+		h.fileSystem = fs
 		return nil
 	}
 }
@@ -143,11 +154,10 @@ func NewHandler(opts ...handlerOption) (*Handler, error) {
 		}
 	})
 	handler := &Handler{
+		fileSystem:   pilosa.NopFileSystem,
 		logger:       logger.NopLogger,
 		closeTimeout: time.Second * 30,
 	}
-	handler.Handler = newRouter(handler)
-	handler.populateValidators()
 
 	for _, opt := range opts {
 		err := opt(handler)
@@ -155,6 +165,10 @@ func NewHandler(opts ...handlerOption) (*Handler, error) {
 			return nil, errors.Wrap(err, "applying option")
 		}
 	}
+
+	// if OptHandlerFileSystem is used, it must be before newRouter is called
+	handler.Handler = newRouter(handler)
+	handler.populateValidators()
 
 	if handler.api == nil {
 		return nil, errors.New("must pass OptHandlerAPI")
@@ -192,7 +206,6 @@ func (h *Handler) Close() error {
 
 func (h *Handler) populateValidators() {
 	h.validators = map[string]*queryValidationSpec{}
-	h.validators["Home"] = queryValidationSpecRequired()
 	h.validators["PostClusterResizeAbort"] = queryValidationSpecRequired()
 	h.validators["PostClusterResizeRemoveNode"] = queryValidationSpecRequired()
 	h.validators["PostClusterResizeSetCoordinator"] = queryValidationSpecRequired()
@@ -336,9 +349,8 @@ func (h *Handler) collectStats(next http.Handler) http.Handler {
 }
 
 // newRouter creates a new mux http router.
-func newRouter(handler *Handler) *mux.Router {
+func newRouter(handler *Handler) http.Handler {
 	router := mux.NewRouter()
-	router.HandleFunc("/", handler.handleHome).Methods("GET").Name("Home")
 	router.HandleFunc("/cluster/resize/abort", handler.handlePostClusterResizeAbort).Methods("POST").Name("PostClusterResizeAbort")
 	router.HandleFunc("/cluster/resize/remove-node", handler.handlePostClusterResizeRemoveNode).Methods("POST").Name("PostClusterResizeRemoveNode")
 	router.HandleFunc("/cluster/resize/set-coordinator", handler.handlePostClusterResizeSetCoordinator).Methods("POST").Name("PostClusterResizeSetCoordinator")
@@ -400,11 +412,33 @@ func newRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/internal/translate/index/{index}/{partition}", handler.handlePostTranslateIndexDB).Methods("POST").Name("PostTranslateIndexDB")
 	router.HandleFunc("/internal/translate/field/{index}/{field}", handler.handlePostTranslateFieldDB).Methods("POST").Name("PostTranslateFieldDB")
 
+	// Endpoints to support lattice UI embedded via statik.
+	// The messiness here reflects the fact that assets live in a nontrivial
+	// directory structure that is controlled externally.
+	latticeHandler := NewStatikHandler(handler)
+	router.PathPrefix("/static").Handler(latticeHandler)
+	router.Path("/").Handler(latticeHandler)
+	router.Path("/vds").Handler(latticeHandler)
+	router.Path("/favicon.png").Handler(latticeHandler)
+	router.Path("/favicon.svg").Handler(latticeHandler)
+	router.Path("/manifest.json").Handler(latticeHandler)
+
 	router.Use(handler.queryArgValidator)
 	router.Use(handler.addQueryContext)
 	router.Use(handler.extractTracing)
 	router.Use(handler.collectStats)
-	return router
+	var h http.Handler = router
+	for _, middleware := range handler.middleware {
+		// Ideally, we would use `router.Use` to inject middleware,
+		// instead of wrapping the handler. The reason we can't is
+		// because the router will only apply middleware to matched
+		// handlers. In this case, it won't match handlers with the
+		// OPTIONS method, needed by the CORS middleware. This issue
+		// is described in detail here:
+		// https://github.com/gorilla/handlers/issues/142
+		h = middleware(h)
+	}
+	return h
 }
 
 // ServeHTTP handles an HTTP request.
@@ -420,6 +454,54 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	h.Handler.ServeHTTP(w, r)
+}
+
+// statikHandler implements the http.Handler interface, and responds to
+// requests for static assets with the appropriate file contents embedded
+// in a statik filesystem.
+type statikHandler struct {
+	handler  *Handler
+	statikFS http.FileSystem
+}
+
+// NewStatikHandler returns a new instance of statikHandler
+func NewStatikHandler(h *Handler) statikHandler {
+	fs, err := h.fileSystem.New()
+	if err == nil {
+		h.logger.Printf("enabled Web UI (%s) at %s", h.api.LatticeVersion(), h.api.Node().URI)
+	}
+
+	return statikHandler{
+		handler:  h,
+		statikFS: fs,
+	}
+}
+
+func (s statikHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if strings.HasPrefix(r.UserAgent(), "curl") {
+		msg := "Welcome. Pilosa v" + s.handler.api.Version() + " is running. Visit https://www.pilosa.com/docs/ for more information."
+		if s.statikFS != nil {
+			msg += " Try the Web UI by visiting this URL in your browser."
+		}
+		http.Error(w, msg, http.StatusNotFound)
+		return
+	}
+
+	if s.statikFS == nil {
+		msg := "Web UI is not available. Please run `make generate-statik` before building Pilosa with `make install`."
+		s.handler.logger.Printf(msg)
+		http.Error(w, msg, http.StatusInternalServerError)
+		return
+	}
+
+	// /vds is a front-end route, not a backend route. Without this check, refreshing at /vds
+	// will request a nonexistent resource and return 404.
+	if r.URL.String() == "/vds" {
+		url, _ := url.Parse("/")
+		r.URL = url
+	}
+
+	http.FileServer(s.statikFS).ServeHTTP(w, r)
 }
 
 // successResponse is a general success/error struct for http responses.
@@ -488,10 +570,6 @@ func (r *successResponse) write(w http.ResponseWriter, err error) {
 	} else {
 		http.Error(w, string(msg), statusCode)
 	}
-}
-
-func (h *Handler) handleHome(w http.ResponseWriter, _ *http.Request) {
-	http.Error(w, "Welcome. Pilosa is running. Visit https://www.pilosa.com/docs/ for more information.", http.StatusNotFound)
 }
 
 // validHeaderAcceptJSON returns false if one or more Accept

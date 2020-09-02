@@ -18,7 +18,6 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"io"
 	"net"
 	"strings"
 	"sync"
@@ -66,14 +65,62 @@ func errToStatusError(err error) error {
 
 	// Check error string.
 	switch errors.Cause(err) {
-	case pilosa.ErrIndexNotFound, pilosa.ErrFieldNotFound:
+	case pilosa.ErrIndexNotFound,
+		pilosa.ErrFieldNotFound,
+		pilosa.ErrForeignIndexNotFound,
+		pilosa.ErrBSIGroupNotFound:
 		return status.Error(codes.NotFound, err.Error())
+
+	case pilosa.ErrIndexExists,
+		pilosa.ErrFieldExists,
+		pilosa.ErrBSIGroupExists:
+		return status.Error(codes.AlreadyExists, err.Error())
+
+	case pilosa.ErrIndexRequired,
+		pilosa.ErrFieldRequired,
+		pilosa.ErrColumnRequired,
+		pilosa.ErrBSIGroupNameRequired,
+		pilosa.ErrName,
+		pilosa.ErrQueryRequired,
+		pilosa.ErrFieldsArgumentRequired,
+		pilosa.ErrIntFieldWithKeys,
+		pilosa.ErrDecimalFieldWithKeys:
+		return status.Error(codes.FailedPrecondition, err.Error())
+
+	case pilosa.ErrInvalidView,
+		pilosa.ErrInvalidBSIGroupType,
+		pilosa.ErrInvalidBSIGroupValueType,
+		pilosa.ErrInvalidCacheType:
+		return status.Error(codes.InvalidArgument, err.Error())
+
+	case pilosa.ErrDecimalOutOfRange,
+		pilosa.ErrBSIGroupValueTooLow,
+		pilosa.ErrBSIGroupValueTooHigh,
+		pilosa.ErrInvalidRangeOperation,
+		pilosa.ErrInvalidBetweenValue:
+		return status.Error(codes.OutOfRange, err.Error())
+
+	case pilosa.ErrQueryTimeout:
+		return status.Error(codes.DeadlineExceeded, err.Error())
+
+	case pilosa.ErrQueryCancelled:
+		return status.Error(codes.Canceled, err.Error())
+
+	case pilosa.ErrNotImplemented:
+		return status.Error(codes.Unimplemented, err.Error())
+
+	case pilosa.ErrAborted:
+		return status.Error(codes.Aborted, err.Error())
+
+	case pilosa.ErrClusterDoesNotOwnShard,
+		pilosa.ErrResizeNoReplicas,
+		pilosa.ErrResizeNotRunning,
+		pilosa.ErrNodeNotCoordinator,
+		pilosa.ErrTooManyWrites,
+		pilosa.ErrNodeIDNotExists:
+		return status.Error(codes.Internal, err.Error())
 	}
-	// Check error type.
-	switch errors.Cause(err).(type) {
-	case pilosa.NotFoundError:
-		return status.Error(codes.NotFound, err.Error())
-	}
+
 	return status.Error(codes.Unknown, err.Error())
 }
 
@@ -105,7 +152,7 @@ func (h *GRPCHandler) PostVDS(ctx context.Context, req *pb.PostVDSRequest) (*pb.
 	opts := pilosa.IndexOptions{Keys: req.Keys, TrackExistence: req.TrackExistence}
 	_, err := h.api.CreateIndex(ctx, req.Name, opts)
 	if err != nil {
-		return nil, err
+		return nil, errToStatusError(err)
 	}
 	return &pb.PostVDSResponse{}, nil
 }
@@ -114,12 +161,12 @@ func (h *GRPCHandler) PostVDS(ctx context.Context, req *pb.PostVDSRequest) (*pb.
 func (h *GRPCHandler) DeleteVDS(ctx context.Context, req *pb.DeleteVDSRequest) (*pb.DeleteVDSResponse, error) {
 	err := h.api.DeleteIndex(ctx, req.Name)
 	if err != nil {
-		return nil, err
+		return nil, errToStatusError(err)
 	}
 	return &pb.DeleteVDSResponse{}, nil
 }
 
-func (h *GRPCHandler) execSQL(ctx context.Context, queryStr string) (pb.StreamClient, error) {
+func (h *GRPCHandler) execSQL(ctx context.Context, queryStr string) (pb.ToRowser, error) {
 	return execSQL(ctx, h.api, h.logger, queryStr)
 }
 
@@ -130,21 +177,12 @@ func (h *GRPCHandler) QuerySQL(req *pb.QuerySQLRequest, stream pb.Pilosa_QuerySQ
 		return err
 	}
 
-	for {
-		row, err := results.Recv()
-		switch err {
-		case nil:
-		case io.EOF:
-			return nil
-		default:
-			return errors.Wrap(err, "failed to load next row")
-		}
-
-		err = stream.Send(row)
-		if err != nil {
-			return errors.Wrap(err, "failed to send row")
-		}
+	err = results.ToRows(stream.Send)
+	if err != nil {
+		return errors.Wrap(err, "streaming result")
 	}
+
+	return nil
 }
 
 // QuerySQLUnary is a unary-response (non-streaming) version of QuerySQL, returning a TableResponse.
@@ -164,7 +202,10 @@ func (h *GRPCHandler) QuerySQLUnary(ctx context.Context, req *pb.QuerySQLRequest
 	if err != nil {
 		return nil, err
 	}
-	return pb.ReadIntoTable(results)
+	if results, ok := results.(pb.ToTabler); ok {
+		return results.ToTable()
+	}
+	return pb.RowsToTable(results, 0)
 }
 
 // QueryPQL handles the PQL request and sends RowResponses to the stream.

@@ -16,6 +16,7 @@ package pgtest
 
 import (
 	"context"
+	"errors"
 
 	"github.com/pilosa/pilosa/v2/pg"
 )
@@ -29,3 +30,44 @@ func (h HandlerFunc) HandleQuery(ctx context.Context, w pg.QueryResultWriter, q 
 }
 
 var _ pg.QueryHandler = HandlerFunc(nil)
+
+// ResultSet is a QueryResultWriter that accumulates results in a slice.
+type ResultSet struct {
+	Columns   []pg.ColumnInfo
+	Data      [][]string
+	ResultTag string
+}
+
+// WriteHeader writes headers to the result set.
+func (rs *ResultSet) WriteHeader(cols ...pg.ColumnInfo) error {
+	if rs.Columns != nil {
+		return errors.New("double-write of headers")
+	}
+
+	colsCopy := make([]pg.ColumnInfo, len(cols))
+	copy(colsCopy, cols)
+	rs.Columns = colsCopy
+
+	return nil
+}
+
+// WriteRowText writes a row to the result set.
+func (rs *ResultSet) WriteRowText(vals ...string) error {
+	if rs.Columns == nil {
+		return errors.New("wrote a row without headers")
+	}
+
+	row := make([]string, len(vals))
+	copy(row, vals)
+
+	rs.Data = append(rs.Data, row)
+
+	return nil
+}
+
+// Tag applies a tag to the result set.
+func (rs *ResultSet) Tag(tag string) {
+	rs.ResultTag = tag
+}
+
+var _ pg.QueryResultWriter = (*ResultSet)(nil)
