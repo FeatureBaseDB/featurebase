@@ -207,8 +207,7 @@ func NewTestField(t *testing.T, opts FieldOption) *TestField {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := NewHolder(DefaultPartitionN)
-	h.Path = path
+	h := NewHolder(path, nil)
 	idx, err := h.CreateIndex("i", IndexOptions{})
 	if err != nil {
 		panic(err)
@@ -319,7 +318,7 @@ func TestField_RowTime(t *testing.T) {
 	defer f.Close()
 
 	// Obtain transaction.
-	tx := f.idx.Txf.NewTx(Txo{Write: writable, Index: f.idx, Field: f.Field})
+	tx := f.idx.Txf.NewTx(Txo{Write: writable, Index: f.idx, Field: f.Field, Shard: 0})
 	defer tx.Rollback()
 
 	if err := f.setTimeQuantum(TimeQuantum("YMDH")); err != nil {
@@ -335,7 +334,7 @@ func TestField_RowTime(t *testing.T) {
 	panicOn(tx.Commit())
 
 	// obtain 2nd transaction to read it back.
-	tx = f.idx.Txf.NewTx(Txo{Write: !writable, Index: f.idx, Field: f.Field})
+	tx = f.idx.Txf.NewTx(Txo{Write: !writable, Index: f.idx, Field: f.Field, Shard: 0})
 	defer tx.Rollback()
 
 	if r, err := f.RowTime(tx, 1, time.Date(2010, time.November, 5, 12, 0, 0, 0, time.UTC), "Y"); err != nil {
@@ -575,6 +574,9 @@ func TestBSIGroup_importValue(t *testing.T) {
 	f := OpenField(t, OptFieldTypeInt(-100, 200))
 	defer f.Close()
 
+	qcx := f.idx.Txf.NewQcx()
+	defer qcx.Abort()
+
 	options := &ImportOptions{}
 	for i, tt := range []struct {
 		columnIDs []uint64
@@ -601,31 +603,25 @@ func TestBSIGroup_importValue(t *testing.T) {
 			[]uint64{100},
 		},
 	} {
-		tx := f.idx.Txf.NewTx(Txo{Write: writable, Index: f.idx, Field: f.Field})
-		// can't do this, we are in a loop, not a function:
-		// defer tx.Rollback()
-
-		if err := f.importValue(tx, tt.columnIDs, tt.values, options); err != nil {
+		if err := f.importValue(qcx, tt.columnIDs, tt.values, options); err != nil {
 			t.Fatalf("test %d, importing values: %s", i, err.Error())
 		}
-
-		panicOn(tx.Commit())
-
-		tx = f.idx.Txf.NewTx(Txo{Write: !writable, Index: f.idx, Field: f.Field})
-		// no, same reason as above: defer tx.Rollback()
-
-		if row, err := f.Range(tx, f.name, pql.EQ, tt.checkVal); err != nil {
+		panicOn(qcx.Finish())
+		if row, err := f.Range(qcx, f.name, pql.EQ, tt.checkVal); err != nil {
 			t.Fatalf("test %d, getting range: %s", i, err.Error())
 		} else if !reflect.DeepEqual(row.Columns(), tt.expCols) {
 			t.Fatalf("test %d, expected columns: %v, but got: %v", i, tt.expCols, row.Columns())
 		}
-		tx.Rollback()
+		panicOn(qcx.Finish())
 	} // loop
 }
 
 func TestIntField_MinMaxForShard(t *testing.T) {
 	f := OpenField(t, OptFieldTypeInt(-100, 200))
 	defer f.Close()
+
+	qcx := f.idx.Txf.NewQcx()
+	defer qcx.Abort()
 
 	options := &ImportOptions{}
 	for i, test := range []struct {
@@ -677,18 +673,16 @@ func TestIntField_MinMaxForShard(t *testing.T) {
 		},
 	} {
 		t.Run(test.name+strconv.Itoa(i), func(t *testing.T) {
-			tx := f.idx.Txf.NewTx(Txo{Write: writable, Index: f.idx, Field: f.Field})
-			defer tx.Rollback()
-
-			if err := f.importValue(tx, test.columnIDs, test.values, options); err != nil {
+			if err := f.importValue(qcx, test.columnIDs, test.values, options); err != nil {
 				t.Fatalf("test %d, importing values: %s", i, err.Error())
 			}
+			panicOn(qcx.Finish())
 
-			panicOn(tx.Commit())
-			tx = f.idx.Txf.NewTx(Txo{Write: !writable, Index: f.idx, Field: f.Field})
-			defer tx.Rollback()
+			shard := uint64(0)
+			tx := f.idx.Txf.NewTx(Txo{Write: !writable, Index: f.idx, Field: f.Field, Shard: shard})
+			// Rollback below manually, because we are in a loop.
 
-			maxvc, err := f.MaxForShard(tx, 0, nil)
+			maxvc, err := f.MaxForShard(tx, shard, nil)
 			if err != nil {
 				t.Fatalf("getting max for shard: %v", err)
 			}
@@ -696,19 +690,21 @@ func TestIntField_MinMaxForShard(t *testing.T) {
 				t.Fatalf("max expected:\n%+v\ngot:\n%+v", test.expMax, maxvc)
 			}
 
-			minvc, err := f.MinForShard(tx, 0, nil)
+			minvc, err := f.MinForShard(tx, shard, nil)
 			if err != nil {
 				t.Fatalf("getting min for shard: %v", err)
 			}
 			if minvc != test.expMin {
 				t.Fatalf("min expected:\n%+v\ngot:\n%+v", test.expMin, minvc)
 			}
+			tx.Rollback()
 		})
 	}
 }
 
 // Ensure we get errors when they are expected.
 func TestDecimalField_MinMaxBoundaries(t *testing.T) {
+	th := newTestHolder(t)
 	for i, test := range []struct {
 		scale  int64
 		min    pql.Decimal
@@ -771,7 +767,7 @@ func TestDecimalField_MinMaxBoundaries(t *testing.T) {
 		},
 	} {
 		t.Run("minmax"+strconv.Itoa(i), func(t *testing.T) {
-			_, err := NewField(NewHolder(DefaultPartitionN), "no-path", "i", "f", OptFieldTypeDecimal(test.scale, test.min, test.max))
+			_, err := NewField(th, "no-path", "i", "f", OptFieldTypeDecimal(test.scale, test.min, test.max))
 			if err != nil && test.expErr {
 				if !strings.Contains(err.Error(), "is not supported") {
 					t.Fatal(err)
@@ -788,6 +784,9 @@ func TestDecimalField_MinMaxBoundaries(t *testing.T) {
 func TestDecimalField_MinMaxForShard(t *testing.T) {
 	f := OpenField(t, OptFieldTypeDecimal(3))
 	defer f.Close()
+
+	qcx := f.idx.Txf.NewQcx()
+	defer qcx.Abort()
 
 	options := &ImportOptions{}
 	for i, test := range []struct {
@@ -839,18 +838,15 @@ func TestDecimalField_MinMaxForShard(t *testing.T) {
 		},
 	} {
 		t.Run(test.name+strconv.Itoa(i), func(t *testing.T) {
-			tx := f.idx.Txf.NewTx(Txo{Write: writable, Index: f.idx, Field: f.Field})
-			defer tx.Rollback()
-
-			if err := f.importFloatValue(tx, test.columnIDs, test.values, options); err != nil {
+			if err := f.importFloatValue(qcx, test.columnIDs, test.values, options); err != nil {
 				t.Fatalf("test %d, importing values: %s", i, err.Error())
 			}
 
-			panicOn(tx.Commit())
-			tx = f.idx.Txf.NewTx(Txo{Write: !writable, Index: f.idx, Field: f.Field})
+			shard := uint64(0)
+			tx := f.idx.Txf.NewTx(Txo{Write: !writable, Index: f.idx, Field: f.Field, Shard: shard})
 			defer tx.Rollback()
 
-			maxvc, err := f.MaxForShard(tx, 0, nil)
+			maxvc, err := f.MaxForShard(tx, shard, nil)
 			if err != nil {
 				t.Fatalf("getting max for shard: %v", err)
 			}
@@ -858,7 +854,7 @@ func TestDecimalField_MinMaxForShard(t *testing.T) {
 				t.Fatalf("max expected:\n%+v\ngot:\n%+v", test.expMax, maxvc)
 			}
 
-			minvc, err := f.MinForShard(tx, 0, nil)
+			minvc, err := f.MinForShard(tx, shard, nil)
 			if err != nil {
 				t.Fatalf("getting min for shard: %v", err)
 			}
@@ -872,6 +868,9 @@ func TestDecimalField_MinMaxForShard(t *testing.T) {
 func TestBSIGroup_TxReopenDB(t *testing.T) {
 	f := OpenField(t, OptFieldTypeInt(-100, 200))
 	defer f.Close()
+
+	qcx := f.idx.Txf.NewQcx()
+	defer qcx.Abort()
 
 	options := &ImportOptions{}
 	for i, tt := range []struct {
@@ -899,25 +898,17 @@ func TestBSIGroup_TxReopenDB(t *testing.T) {
 			[]uint64{100},
 		},
 	} {
-		tx := f.idx.Txf.NewTx(Txo{Write: writable, Index: f.idx, Field: f.Field})
-		// can't do this, we are in a loop, not a function:
-		// defer tx.Rollback()
-
-		if err := f.importValue(tx, tt.columnIDs, tt.values, options); err != nil {
+		if err := f.importValue(qcx, tt.columnIDs, tt.values, options); err != nil {
 			t.Fatalf("test %d, importing values: %s", i, err.Error())
 		}
+		panicOn(qcx.Finish())
 
-		panicOn(tx.Commit())
-
-		tx = f.idx.Txf.NewTx(Txo{Write: !writable, Index: f.idx, Field: f.Field})
-		// no, same reason as above: defer tx.Rollback()
-
-		if row, err := f.Range(tx, f.name, pql.EQ, tt.checkVal); err != nil {
+		if row, err := f.Range(qcx, f.name, pql.EQ, tt.checkVal); err != nil {
 			t.Fatalf("test %d, getting range: %s", i, err.Error())
 		} else if !reflect.DeepEqual(row.Columns(), tt.expCols) {
 			t.Fatalf("test %d, expected columns: %v, but got: %v", i, tt.expCols, row.Columns())
 		}
-		tx.Rollback()
+		panicOn(qcx.Finish())
 	} // loop
 
 	// the test: can we re-open a BSI fragment under badger/rbf.

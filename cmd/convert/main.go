@@ -28,8 +28,7 @@ func main() {
 		log.Fatal("USAGE convert srcPath destPath")
 
 	}
-	holder := pilosa.NewHolder(256)
-	holder.Path = os.Args[1]
+	holder := pilosa.NewHolder(os.Args[1], nil)
 	err := holder.Open()
 
 	if err != nil {

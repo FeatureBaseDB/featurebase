@@ -16,6 +16,7 @@ package txkey
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"strconv"
 	"testing"
@@ -28,25 +29,27 @@ func Test_KeyPrefix(t *testing.T) {
 
 	index, field, view, shard := "i", "f", "v", uint64(0)
 
-	// needle examples with the container-key extremes:
-	// "index:'i';field:'f';view:'v';shard:'0';key@00000000000000000000" // smallest
-	// "index:'i';field:'f';view:'v';shard:'0';key@18446744073709551615" // largest
 	needle := Key(index, field, view, shard, 0)
 
-	// prefix example: "index:'i';field:'f';view:'v';shard:'0';key@"
+	// prefix example: i%f;v:12345678<
 	prefix := Prefix(index, field, view, shard)
+
+	//fmt.Printf("needle = '%v'\n", string(needle))
+	//fmt.Printf("prefix = '%v'\n", string(prefix))
 
 	if !bytes.HasPrefix(needle, prefix) {
 		panic(fmt.Sprintf("Prefix() output '%v'was not a prefix of Key() '%v'", string(needle), string(prefix)))
 	}
-	if len(prefix)+20 != len(needle) {
-		panic(fmt.Sprintf("Prefix() output '%v'was 20 characters shorter than Key() '%v'", string(needle), string(prefix)))
+	npre := len(prefix)
+	nneed := len(needle)
+	if npre+9 != nneed {
+		panic(fmt.Sprintf("Prefix() output len %v '%v' was not 9 characters shorter than Key() len %v '%v'", npre, string(prefix), nneed, string(needle)))
 	}
 
 	// validate assumption that KeyExtractContainerKey() makes about strconv.ParseUint() error reporting;
 	// for distinguishing prefixes from full keys. Even if the shard number is so large that the prefix
 	// starts with a legitimate decimal number.
-	shouldNotParse := "12345123451234';key@"
+	shouldNotParse := "12345123451234';key<"
 	containerKey, err := strconv.ParseUint(shouldNotParse, 10, 64)
 	if err == nil {
 		panic(fmt.Sprintf("strconv.ParseUint should have returned an error parsing this string '%v'; instead we got '%v'", shouldNotParse, containerKey))
@@ -65,13 +68,18 @@ func Test_KeyPrefix(t *testing.T) {
 }
 
 func Test_ShardFromKey(t *testing.T) {
-	if ShardFromKey([]byte("idx:'i';fld:'f';vw:'standard';shd:'1';ckey@18446744073709551615")) != 1 {
+	key := []byte("~i%f;v:12345678<12345678#")
+	binary.BigEndian.PutUint64(key[7:15], 1)
+
+	if ShardFromKey(key) != 1 {
 		panic("problem")
 	}
-	if ShardFromKey([]byte("idx:'i';fld:'f';vw:'standard';shd:'0';ckey@18446744073709551615")) != 0 {
+	binary.BigEndian.PutUint64(key[7:15], 0)
+	if ShardFromKey(key) != 0 {
 		panic("problem")
 	}
-	if ShardFromKey([]byte("idx:'i';fld:'f';vw:'standard';shd:'18446744073709551615';ckey@18446744073709551615")) != 18446744073709551615 {
+	binary.BigEndian.PutUint64(key[7:15], 18446744073709551615)
+	if ShardFromKey(key) != 18446744073709551615 {
 		panic("problem")
 	}
 
@@ -83,14 +91,14 @@ func Test_ShardFromKey(t *testing.T) {
 			}
 		}()
 		// called for the panic of a short ckey, only 19 bytes instead of 20
-		ShardFromKey([]byte("idx:'i';fld:'f';vw:'standard';shd:'18446744073709551615';ckey@1844674407370955161"))
+		ShardFromKey([]byte("~i%f;v:12345678<1234567#"))
 	}()
 
 }
 
 func Test_PrefixFromKey(t *testing.T) {
-	k := []byte("idx:'i';fld:'f';vw:'standard';shd:'1';ckey@18446744073709551615")
-	x := []byte("idx:'i';fld:'f';vw:'standard';shd:'1';ckey@")
+	k := []byte("~i%f;v:12345678<12345678#")
+	x := []byte("~i%f;v:12345678<")
 	pre := PrefixFromKey(k)
 	if !bytes.Equal(pre, x) {
 		nx := len(x)
@@ -104,5 +112,30 @@ func Test_PrefixFromKey(t *testing.T) {
 			}
 		}
 		panic(fmt.Sprintf("expected:\n%v\n, observed:\n%v\n", string(x), string(pre)))
+	}
+}
+
+func Test_Split(t *testing.T) {
+	bkey := []byte("~i%f;v:12345678<12345678#")
+	var xshard uint64 = 18446744073709551615
+	var xckey uint64 = 43
+	binary.BigEndian.PutUint64(bkey[7:15], xshard)
+	binary.BigEndian.PutUint64(bkey[16:24], xckey)
+
+	i, f, v, shard, ckey := Split(bkey)
+	if i != "i" {
+		panic("wrong index")
+	}
+	if f != "f" {
+		panic("wrong field")
+	}
+	if v != "v" {
+		panic("wrong view")
+	}
+	if shard != xshard {
+		panic("wrong shard")
+	}
+	if ckey != xckey {
+		panic("wrong ckey")
 	}
 }

@@ -57,7 +57,7 @@ testvsub:
 	set -e; for i in ctl http pg pql rbf roaring server sql txkey; do \
            echo; echo "___ testing subpkg $$i"; \
            cd $$i; pwd; \
-           go test -tags='$(BUILD_TAGS)' $(TESTFLAGS) $(NOCHECKPTR) -v || break; \
+           go test -tags='$(BUILD_TAGS)' $(TESTFLAGS) $(NOCHECKPTR) -v -timeout 60m || break; \
            echo; echo "999 done testing subpkg $$i"; \
            cd ..; \
         done
@@ -66,7 +66,7 @@ testvsub-race:
 	set -e; for i in ctl http pg pql rbf roaring server sql txkey; do \
            echo; echo "___ testing subpkg $$i -race"; \
            cd $$i; pwd; \
-           go test -tags='$(BUILD_TAGS)' $(TESTFLAGS) $(NOCHECKPTR) -v -race || break; \
+           go test -tags='$(BUILD_TAGS)' $(TESTFLAGS) $(NOCHECKPTR) -v -race -timeout 60m || break; \
            echo; echo "999 done testing subpkg $$i -race"; \
            cd ..; \
         done
@@ -184,6 +184,14 @@ docker-tag-push: vendor
 docker-build:
 	docker run --rm -v $(PWD):/go/src/$(CLONE_URL) -w /go/src/$(CLONE_URL) -e GOOS=$(GOOS) -e GOARCH=$(GOARCH) golang:$(GO_VERSION) go build -tags='$(BUILD_TAGS)' -ldflags $(LDFLAGS) $(FLAGS) $(CLONE_URL)/cmd/pilosa
 
+# Install diagnostic pilosa-keydump tool. Allows viewing the keys in a transaction-engine directory.
+pilosa-keydump:
+	go install -tags='$(BUILD_TAGS)' -ldflags $(LDFLAGS) $(FLAGS) ./cmd/pilosa-keydump
+
+# Install diagnostic pilosa-chk tool for string translations and fragment checksums.
+pilosa-chk:
+	go install -tags='$(BUILD_TAGS)' -ldflags $(LDFLAGS) $(FLAGS) ./cmd/pilosa-chk
+
 # Run Pilosa tests inside Docker container
 docker-test:
 	docker run --rm -v $(PWD):/go/src/$(CLONE_URL) -w /go/src/$(CLONE_URL) golang:$(GO_VERSION) go test -tags='$(BUILD_TAGS)' $(TESTFLAGS) ./...
@@ -216,7 +224,7 @@ topt-rbf:
 
 topt-rbf-race:
 	mv log.topt.rbf-race log.topt.rbf-race.prev || true
-	PILOSA_TXSRC=rbf go test -race -v -tags='$(BUILD_TAGS)' $(TESTFLAGS) $(NOCHECKPTR)  2>&1 | tee log.topt.rbf-race
+	PILOSA_TXSRC=rbf go test -race -v -tags='$(BUILD_TAGS)' $(TESTFLAGS) $(NOCHECKPTR) -timeout 120m  2>&1 | tee log.topt.rbf-race
 	@echo "   log.topt.rbf-race green: \c"; cat log.topt.rbf-race | grep PASS |wc -l
 	@echo "   log.topt.rbf-race   red: \c"; cat log.topt.rbf-race | grep '\-\-\- FAIL' |wc -l
 

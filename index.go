@@ -65,12 +65,11 @@ type Index struct {
 	// Per-partition translation stores
 	translateStores map[int]TranslateStore
 
-	translationSyncer translationSyncer
+	translationSyncer TranslationSyncer
 
 	// Instantiates new translation stores
 	OpenTranslateStore OpenTranslateStoreFunc
 
-	// txf chooses the transaction and storage strategy
 	Txf *TxFactory
 }
 
@@ -82,34 +81,9 @@ func NewIndex(holder *Holder, path, name string) (*Index, error) {
 	// the defaults, because we may be under a simple "go test" run where
 	// not all that command line machinery has been spun up.
 
-	// needed for the tests:
-	txsrc := os.Getenv("PILOSA_TXSRC")
-
-	// Warning: won't work for the tests to say:
-	// txsrc := holder.Opts.Txsrc // WILL BREAK TESTS
-
-	// For *most* of the tests and in a production pilosa server run, we expect that
-	// if holder.opts.Txsrc is set, it will be the exact same as PILOSA_TXSRC.
-	// Unfortunately there are some tests where that won't hold.
-	// So if the env var PILOSA_TXSRC *is* set, we always give it precedence.
-	// This lets `PILOSA_TXSRC=rbf go test -v -run "one_of_my_RBF_tests"` succeed.
-	if txsrc == "" {
-		// nothing in the env for PILOSA_TXSRC; therefore not running under a "make topt.rbf" for example.
-		if holder.Opts.Txsrc != "" {
-			txsrc = holder.Opts.Txsrc
-		} else {
-			txsrc = DefaultTxsrc
-		}
-	}
-
 	err := validateName(name)
 	if err != nil {
 		return nil, errors.Wrap(err, "validating name")
-	}
-
-	txf, err := NewTxFactory(txsrc, holder.Path, name)
-	if err != nil {
-		return nil, errors.Wrap(err, "creating newTxFactory")
 	}
 
 	idx := &Index{
@@ -131,9 +105,9 @@ func NewIndex(holder *Holder, path, name string) (*Index, error) {
 
 		OpenTranslateStore: OpenInMemTranslateStore,
 
-		Txf: txf,
+		// the Txf should be shared across all holder.
+		Txf: holder.txf,
 	}
-	idx.Txf.idx = idx
 	return idx, nil
 }
 
@@ -338,9 +312,9 @@ fileLoop:
 					return fmt.Errorf("open field: name=%s, err=%s", fld.Name(), err)
 				}
 				i.holder.Logger.Debugf("add field to index.fields: %s", fi.Name())
-				mu.Lock()
+				i.mu.Lock()
 				i.fields[fld.Name()] = fld
-				mu.Unlock()
+				i.mu.Unlock()
 				return nil
 			})
 		}
@@ -460,6 +434,7 @@ func (i *Index) AvailableShards() *roaring.Bitmap {
 
 	b := roaring.NewBitmap()
 	for _, f := range i.fields {
+		//b.Union(f.AvailableShards())
 		b.UnionInPlace(f.AvailableShards())
 	}
 
@@ -727,11 +702,9 @@ func FormatQualifiedIndexName(index string) string {
 // Dump prints to stdout the contents of the roaring Containers
 // stored in idx. Mostly for debugging.
 func (idx *Index) Dump(label string) {
-	fileline := FileLine(2)
-	tx := idx.Txf.NewTx(Txo{Write: !writable, Index: idx})
-	defer tx.Rollback()
-	fmt.Printf("\n%v Index.Dump('%v') for index '%v':\n", fileline, label, idx.name)
-	tx.Dump()
+	//fileline := FileLine(2)
+	fmt.Printf("\nDump: %v\n\n", label)
+	idx.Txf.dbPerShard.DumpAll()
 }
 
 func (idx *Index) SliceOfShards(field, view, viewPath string) (sliceOfShards []uint64, err error) {
@@ -818,7 +791,7 @@ func (i *Index) ComputeTranslatorSummary(verbose bool) (ats *AllTranslatorSummar
 		}
 		sum.Field = fld.name
 		sum.Index = i.Name()
-		sum.Checksum = blake3sum16([]byte(fmt.Sprintf("%v/%v/%v", sum.Checksum, fld.name, i.Name())))
+		sum.Checksum = Blake3sum16([]byte(fmt.Sprintf("%v/%v/%v", sum.Checksum, fld.name, i.Name())))
 
 		if verbose {
 			fmt.Printf("row blake3-%v keyN: %5v idN: %5v field: '%v'\n", sum.Checksum, sum.KeyCount, sum.IDCount, fld.name)
@@ -840,7 +813,7 @@ func (i *Index) ComputeTranslatorSummary(verbose bool) (ats *AllTranslatorSummar
 		sum.PartitionID = partitionID
 		sum.Index = i.Name()
 
-		sum.Checksum = blake3sum16([]byte(fmt.Sprintf("%v/%v/%v", sum.Checksum, partitionID, i.Name())))
+		sum.Checksum = Blake3sum16([]byte(fmt.Sprintf("%v/%v/%v", sum.Checksum, partitionID, i.Name())))
 		if verbose {
 			fmt.Printf("col blake3-%v keyN: %10v idN: %10v paritionID: %03v \n", sum.Checksum, sum.KeyCount, sum.IDCount, partitionID)
 		}

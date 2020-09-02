@@ -664,7 +664,7 @@ func TestExecutor_Execute_Set(t *testing.T) {
 			}
 		})
 
-		t.Run("ErrInvalidRowValueType", func(t *testing.T) { // // failing under badger_roaring
+		t.Run("ErrInvalidRowValueType", func(t *testing.T) {
 			idx := hldr.MustCreateIndexIfNotExists("inokey", pilosa.IndexOptions{})
 			if _, err := idx.CreateField("f", pilosa.OptFieldTypeDefault(), pilosa.OptFieldKeys()); err != nil {
 				t.Fatal(err)
@@ -934,10 +934,9 @@ func TestExecutor_Execute_SetValue(t *testing.T) {
 		}
 
 		// Obtain transaction.
-		tx, err := hldr.BeginTx(!writable, index.Index)
-		if err != nil {
-			t.Fatal(err)
-		}
+		idx := index.Index
+		shard := uint64(0)
+		tx := idx.Txf.NewTx(pilosa.Txo{Write: !writable, Index: idx, Shard: shard})
 		defer tx.Rollback()
 
 		f := hldr.Field("i", "f")
@@ -2488,7 +2487,6 @@ func TestExecutor_Execute_Row_BSIGroup(t *testing.T) {
 		if result, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Row(other != -20)`}); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual([]uint64{0}, result.Results[0].(*pilosa.Row).Columns()) {
-			//t.Fatalf("unexpected result: %s", spew.Sdump(result))
 			t.Fatalf("unexpected result: %#v", result.Results[0].(*pilosa.Row).Columns())
 		}
 	})
@@ -2769,7 +2767,6 @@ func TestExecutor_Execute_Range_BSIGroup_Deprecated(t *testing.T) {
 		if result, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Range(other != -20)`}); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual([]uint64{0}, result.Results[0].(*pilosa.Row).Columns()) {
-			//t.Fatalf("unexpected result: %s", spew.Sdump(result))
 			t.Fatalf("unexpected result: %v", result.Results[0].(*pilosa.Row).Columns())
 		}
 	})
@@ -3456,6 +3453,8 @@ func TestExecutor_Execute_Existence(t *testing.T) {
 			t.Fatal(err)
 		}
 
+		//index.Dump("after Set 3x")
+
 		if res, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Row(f=10)`}); err != nil {
 			t.Fatal(err)
 		} else if bits := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(bits, []uint64{3, ShardWidth + 1}) {
@@ -3472,6 +3471,11 @@ func TestExecutor_Execute_Existence(t *testing.T) {
 		if err := c.GetNode(0).Reopen(); err != nil {
 			t.Fatal(err)
 		}
+
+		hldr2 := c.GetHolder(0)
+		index2 := hldr2.Index("i")
+		_ = index2
+		//index2.Dump("after reopen")
 
 		if res, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Not(Row(f=10))`}); err != nil {
 			t.Fatal(err)
@@ -3777,8 +3781,18 @@ func TestExecutor_Execute_All(t *testing.T) {
 		req.RowIDs[bitCount-1] = 10
 		req.ColumnIDs[bitCount-1] = uint64((3 * ShardWidth) + 2)
 
-		if err := c.GetNode(0).API.Import(context.Background(), req); err != nil {
+		m0 := c.GetNode(0)
+
+		qcx := m0.API.Txf().NewQcx()
+		if err := m0.API.Import(context.Background(), qcx, req); err != nil {
 			t.Fatal(err)
+		}
+		panicOn(qcx.Finish())
+
+		i0, err := m0.API.Index(context.Background(), "i")
+		panicOn(err)
+		if i0 == nil {
+			panic("nil index i0?")
 		}
 
 		tests := []struct {
@@ -3802,7 +3816,7 @@ func TestExecutor_Execute_All(t *testing.T) {
 			{qry: fmt.Sprintf("All(limit=%d, offset=2)", bitCount-3), expCols: req.ColumnIDs[2 : bitCount-1], expCnt: uint64(bitCount - 3)},
 		}
 		for i, test := range tests {
-			if res, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: test.qry}); err != nil {
+			if res, err := m0.API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: test.qry}); err != nil {
 				t.Fatal(err)
 			} else if cnt := res.Results[0].(*pilosa.Row).Count(); cnt != test.expCnt {
 				t.Fatalf("test %d, unexpected count, got: %d, but expected: %d", i, cnt, test.expCnt)
@@ -3851,9 +3865,11 @@ func TestExecutor_Execute_All(t *testing.T) {
 			req.ColumnKeys[i] = fmt.Sprintf("c%d", i)
 		}
 
-		if err := c.GetNode(0).API.Import(context.Background(), req); err != nil {
+		qcx := c.GetNode(0).API.Txf().NewQcx()
+		if err := c.GetNode(0).API.Import(context.Background(), qcx, req); err != nil {
 			t.Fatal(err)
 		}
+		panicOn(qcx.Finish())
 
 		tests := []struct {
 			qry     string
@@ -4378,10 +4394,13 @@ func benchmarkExistence(nn bool, b *testing.B) {
 	}
 
 	b.ResetTimer()
+	nodeAPI := c.GetNode(0).API
 	for i := 0; i < b.N; i++ {
-		if err := c.GetNode(0).API.Import(context.Background(), req); err != nil {
+		qcx := nodeAPI.Txf().NewQcx()
+		if err := nodeAPI.Import(context.Background(), qcx, req); err != nil {
 			b.Fatal(err)
 		}
+		panicOn(qcx.Finish())
 	}
 }
 
@@ -4880,7 +4899,7 @@ func TestExecutor_GroupByStrings(t *testing.T) {
 	c.CreateField(t, "istring", pilosa.IndexOptions{Keys: true}, "vv", pilosa.OptFieldTypeInt(0, 1000))
 	c.CreateField(t, "istring", pilosa.IndexOptions{Keys: true}, "nv", pilosa.OptFieldTypeInt(-1000, 1000))
 
-	if err := c.GetNode(0).API.Import(context.Background(), &pilosa.ImportRequest{
+	if err := c.GetNode(0).API.Import(context.Background(), nil, &pilosa.ImportRequest{
 		Index:      "istring",
 		Field:      "generals",
 		Shard:      0,
@@ -4892,7 +4911,7 @@ func TestExecutor_GroupByStrings(t *testing.T) {
 
 	var v1, v2, v3, v4, v5, v6, v7, v8, v9, v10 int64 = 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
 	var nv1, nv2, nv3, nv4 int64 = -1, -2, -3, -4
-	if err := c.GetNode(0).API.ImportValue(context.Background(), &pilosa.ImportValueRequest{
+	if err := c.GetNode(0).API.ImportValue(context.Background(), nil, &pilosa.ImportValueRequest{
 		Index:      "istring",
 		Field:      "v",
 		Shard:      0,
@@ -4902,7 +4921,7 @@ func TestExecutor_GroupByStrings(t *testing.T) {
 		t.Fatalf("importing: %v", err)
 	}
 
-	if err := c.GetNode(0).API.ImportValue(context.Background(), &pilosa.ImportValueRequest{
+	if err := c.GetNode(0).API.ImportValue(context.Background(), nil, &pilosa.ImportValueRequest{
 		Index:      "istring",
 		Field:      "vv",
 		Shard:      0,
@@ -4912,7 +4931,7 @@ func TestExecutor_GroupByStrings(t *testing.T) {
 		t.Fatalf("importing: %v", err)
 	}
 
-	if err := c.GetNode(0).API.ImportValue(context.Background(), &pilosa.ImportValueRequest{
+	if err := c.GetNode(0).API.ImportValue(context.Background(), nil, &pilosa.ImportValueRequest{
 		Index:      "istring",
 		Field:      "nv",
 		Shard:      0,

@@ -291,8 +291,7 @@ func findPartitionPath(path string, partitionN int) (int, error) {
 }
 
 func (cmd *InspectCommand) InspectHolder(ctx context.Context, path string) error {
-	holder := pilosa.NewHolder(pilosa.DefaultPartitionN)
-	holder.Path = path
+	holder := pilosa.NewHolder(path, nil)
 	holder.Opts.Inspect = true
 	holder.Opts.ReadOnly = true
 	err := holder.Open()

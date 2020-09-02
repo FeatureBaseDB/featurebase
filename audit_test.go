@@ -89,19 +89,19 @@ func (*auditorFieldHooks) Live(o interface{}, entry *testhook.RegistryEntry) err
 }
 
 func (*auditorHolderHooks) WasDestroyed(o interface{}, kv testhook.KV, ent *testhook.RegistryEntry, err error) error {
-	path := o.(*pilosa.Holder).Path
+	path := o.(*pilosa.Holder).Path()
 	if path == "" {
 		fmt.Fprintf(os.Stderr, "OOPS: trying to destroy a holder with no path! created: %s\n",
 			ent.Stack)
 	} else {
-		os.RemoveAll(o.(*pilosa.Holder).Path)
+		os.RemoveAll(o.(*pilosa.Holder).Path())
 	}
 	return err
 }
 
 func (*auditorHolderHooks) Live(o interface{}, entry *testhook.RegistryEntry) error {
 	if entry != nil && entry.OpenCount != 0 {
-		return fmt.Errorf("holder %s still open", o.(*pilosa.Holder).Path)
+		return fmt.Errorf("holder %s still open", o.(*pilosa.Holder).Path())
 	}
 	return nil
 }

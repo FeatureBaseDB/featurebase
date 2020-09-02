@@ -36,28 +36,28 @@ import (
 	"fmt"
 	"os"
 	"runtime"
-	"sort"
 
 	"github.com/glycerine/lmdb-go/lmdb"
 	"github.com/pilosa/pilosa/v2"
+	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/txkey"
 )
 
-// keydump simply prints all the keys in the database path specified
+// pilosa-keydump is a diagnostic tool that simply prints all the
+// database keys in the database directory path specified
 // as the first argument on the command line.
-
 func main() {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 
 	if len(os.Args) < 2 {
-		fmt.Fprintf(os.Stderr, "must supply path to database as only arg\n")
+		fmt.Fprintf(os.Stderr, "must supply path to database directory as only arg\n")
 		os.Exit(1)
 	}
 
 	path := os.Args[1]
-	if !FileExists(path) {
-		fmt.Fprintf(os.Stderr, "path '%v' does not exist.\n", path)
+	if !DirExists(path) {
+		fmt.Fprintf(os.Stderr, "directory path '%v' does not exist.\n", path)
 		os.Exit(1)
 	}
 
@@ -72,7 +72,7 @@ func main() {
 	panicOn(err)
 
 	//var myflags uint = NoReadahead | NoSubdir
-	var myflags uint = lmdb.NoSubdir
+	var myflags uint = 0 //lmdb.NoSubdir
 	err = env.Open(path, myflags, 0664)
 	panicOn(err)
 
@@ -87,10 +87,9 @@ func main() {
 
 	dbnames := []string{}
 
-	shardSize := make(map[string]int)
-
 	var dbiRoot lmdb.DBI
 	var dbi lmdb.DBI
+	env.UseSphynxReader()
 	err = env.SphynxReader(func(txn *lmdb.Txn, readslot int) (err error) {
 		//txn.RawRead = true
 
@@ -157,14 +156,19 @@ database '%v':
 					}
 				}
 
-				vs := ""
-				if len(v) < 100 {
-					vs = fmt.Sprintf("%x", v) + " "
-				}
-				fmt.Printf("%04v %v len value; key: '%v' len %v -> %v\n", i, len(v), string(k), len(k), vs)
+				ckey := txkey.KeyExtractContainerKey(k)
 
-				pre := txkey.PrefixFromKey(k)
-				shardSize[string(pre)] += len(v)
+				n := len(v)
+
+				hash := pilosa.Blake3sum16(v[0:(n - 1)])
+				ct := pilosa.ToContainer(v[n-1], v[0:(n-1)])
+				cts := roaring.NewSliceContainers()
+				cts.Put(ckey, ct)
+				rbm := &roaring.Bitmap{Containers: cts}
+				srbm := pilosa.BitmapAsString(rbm)
+
+				fmt.Printf("%04v  %v -> %v (%v hot)\n", i, txkey.ToString(k), hash, ct.N())
+				fmt.Printf("          .......%v\n", srbm)
 			}
 			return
 		})
@@ -172,15 +176,4 @@ database '%v':
 	} // for dbnames
 
 	fmt.Printf("=================== done.\n")
-	var lines []*pilosa.LineSorter
-	for k, v := range shardSize {
-		lines = append(lines, &pilosa.LineSorter{Line: k, Tot: float64(v)})
-	}
-	sort.Sort(pilosa.SortByTot(lines))
-	fd, err := os.Create("shardsize")
-	panicOn(err)
-	defer fd.Close()
-	for _, ln := range lines {
-		fmt.Fprintf(fd, "%v %v\n", int(ln.Tot), ln.Line)
-	}
 }

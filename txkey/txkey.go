@@ -13,131 +13,151 @@
 // limitations under the License.
 
 // Package txkey consolidates in one place the use of keys to index into our
-// various storage/txn back-ends. Databases badgerDB and rbfDB both use it,
+// various storage/txn back-ends. Databases LMDB and rbfDB both use it,
 // so that debug Dumps are comparable.
 package txkey
 
 import (
-	"bytes"
+	"encoding/binary"
 	"fmt"
-	"strconv"
 )
 
 // Key produces the bytes that we use as a key to query the storage/tx engine.
-// The roaringContainerKey argument is a container key into a roaring Container.
-// Output examples:
+// The roaringContainerKey argument to Key() is a container key into a roaring Container.
+// The return value from Key() is constructed as follows:
 //
-// "idx:'i';fld:'f';vw:'standard';shd:'0';ckey@00000000000000000000" // smallest container-key
-// "idx:'i';fld:'f';vw:'standard';shd:'0';ckey@18446744073709551615" // largest  container-key (math.MaxUint64)
+//     ~index%field;view:shard<ckey#
+//
+// where shard and ckey are always exactly 8 bytes, uint64 big-endian encoded.
+//
+// Keys always start with either '~' or '>'. Keys always end with '#'.
+// Keys always contain exactly one each of '%', ';', ':' and '<', in that order.
+// The index is between the first byte and the '%'. It must be at least 1 byte long.
+// The field is between the '%' and the ';'. It must be at least 1 byte long.
+// The view is between the ';' and the ':'. It must be at least 1 byte long.
+// The shard is the 8 bytes between the ':' and the '<'.
+// The ckey is the 8 bytes between the '<' and the '#'.
+// The Prefix of a key ends at, and includes, the '<'. It is at least 16 bytes long.
+// The index, field, and view are not allowed to contain these reserved bytes:
+//  {'~', '>', ';', ':', '<', '#', '$', '%', '^', '(', ')', '*', '!'}
+//
+// The bytes {'+', '/', '-', '_', '.', and '=' can be used in index, field, and view; to enable
+// base-64 encoding.
+//
+// The shortest possible key is 25 bytes. It would be laid out like this:
+//           ~i%f;v:12345678<12345678#
+//           1234567890123456789012345
+//
+// keys starting with '~' are regular value keys.
+// keys starting with '>' are symlink keys.
 //
 // NB must be kept in sync with Prefix() and KeyExtractContainerKey().
 //
-func Key(index, field, view string, shard uint64, roaringContainerKey uint64) []byte {
-	// The %020d which adds zero padding up to 20 runes is required to
-	// allow the textual sort to accurately
-	// reflect a numeric sort order. This is because, as a string,
-	// math.MaxUint64 is 20 bytes long.
-	// Example of such a Key with a container-key that is math.MaxUint64:
-	// ...........................................12345678901234567890
-	// idx:'i';fld:'f';vw:'standard';shd:'1';ckey@18446744073709551615
+func Key(index, field, view string, shard uint64, roaringContainerKey uint64) (r []byte) {
 
 	prefix := Prefix(index, field, view, shard)
-	ckey := []byte(fmt.Sprintf("%020d", roaringContainerKey))
-	bkey := append(prefix, ckey...)
-	MustValidateKey(bkey)
-	return bkey
+
+	var ckey [9]byte
+	binary.BigEndian.PutUint64(ckey[:8], roaringContainerKey)
+	ckey[8] = byte('#')
+	return append(prefix, ckey[:]...)
 }
 
-var ckeyPartExpected = []byte(";ckey@")
-
-// MustValidatekey will panic on a bad Key with an informative message.
-func MustValidateKey(bkey []byte) {
-	n := len(bkey)
-	if n < 56 {
-		panic(fmt.Sprintf("bkey too short min size is 56 but we see %v in '%v'", n, string(bkey)))
-	}
-	beforeCkey := bkey[n-26 : n-20]
-	if !bytes.Equal(beforeCkey, ckeyPartExpected) {
-		panic(fmt.Sprintf(`bkey did not have expected ";ckey@" at 26 bytes from the end of the bkey '%v'; instead had '%v'`, string(bkey), string(beforeCkey)))
-	}
-}
-
+// ShardFromKey key example: index/field;view:shard<ckey
+//                  n-9    n-1
+// ... : 01234567 < 01234567   #
+//          shard       ckey
 func ShardFromKey(bkey []byte) (shard uint64) {
 	MustValidateKey(bkey)
-
 	n := len(bkey)
-	// idx:'i';fld:'f';vw:'standard';shd:'1';ckey@18446744073709551615 -> idx:'i';fld:'f';vw:'standard';shd:'1
-	by := bkey[:n-27]
-	beg := bytes.LastIndex(by, []byte("'"))
-	if beg == -1 {
-		panic(fmt.Sprintf("bad bkey='%v' did not have single quote to being shard decoding", string(bkey)))
-	}
-	parseMe := string(by[beg+1:])
-	shard, err := strconv.ParseUint(parseMe, 10, 64)
-	if err != nil {
-		panic(fmt.Sprintf("could not parse parseMe '%v' in strconv.ParseUint(), error: '%v'", parseMe, err))
-	}
-	return shard
+	// ckey is always exactly 8 bytes long
+	// shard is always exactly 8 bytes long
+	shard = binary.BigEndian.Uint64(bkey[(n - 18):(n - 10)])
+	return
 }
 
 func ShardFromPrefix(prefix []byte) (shard uint64) {
-
 	n := len(prefix)
-	// idx:'i';fld:'f';vw:'standard';shd:'1';ckey@ -> idx:'i';fld:'f';vw:'standard';shd:'1
-	by := prefix[:n-7]
-	beg := bytes.LastIndex(by, []byte("'"))
-	if beg == -1 {
-		panic(fmt.Sprintf("bad prefix='%v' did not have single quote to being shard decoding", string(prefix)))
-	}
-	parseMe := string(by[beg+1:])
-	shard, err := strconv.ParseUint(parseMe, 10, 64)
-	if err != nil {
-		panic(fmt.Sprintf("could not parse parseMe '%v' in strconv.ParseUint(), error: '%v'", parseMe, err))
-	}
-	return shard
+	shard = binary.BigEndian.Uint64(prefix[(n - 9):(n - 1)])
+	return
 }
 
 // KeyAndPrefix returns the equivalent of Key() and Prefix() calls.
 func KeyAndPrefix(index, field, view string, shard uint64, roaringContainerKey uint64) (key, prefix []byte) {
 	prefix = Prefix(index, field, view, shard)
-	ckey := []byte(fmt.Sprintf("%020d", roaringContainerKey))
-	bkey := append(prefix, ckey...)
-	MustValidateKey(bkey)
-	return bkey, prefix
+
+	var ckey [9]byte
+	binary.BigEndian.PutUint64(ckey[:8], roaringContainerKey)
+	ckey[8] = byte('#')
+	key = append(prefix, ckey[:]...)
+	return
 }
 
 var _ = KeyAndPrefix // keep linter happy
 
-// KeyExtractContainerKey extracts the containerKey from bkey.
-func KeyExtractContainerKey(bkey []byte) (containerKey uint64) {
-	MustValidateKey(bkey)
-	// The zero padding means that the container-key is always the last 20 bytes of the bkey.
-	//
-	// Be sure to catch the problematic case of a user passing in only a prefix. A prefix
-	// ends in 'key@' rather than a full key that has 'key@00000000000000000001' (for example)
-	// at the end. The ParseUint call below will fail in that case.
+func MustValidateKey(bkey []byte) {
 	n := len(bkey)
-	if n < 20 {
-		panic(fmt.Sprintf("KeyExtractContainerKey() error: bad bkey '%v', too short!", string(bkey)))
+	if n < 25 {
+		panic(fmt.Sprintf("bkey too short, must have at least 25 bytes: '%v'", string(bkey)))
 	}
-	last := bkey[n-20:] // Key() and Prefix() always return more than 20 rune []byte.
-	var err error
-	containerKey, err = strconv.ParseUint(string(last), 10, 64) // has to be the container key
-	if err != nil {
-		panic(fmt.Sprintf("KeyExtractContainerKey() error: bad bkey '%v', could not convert last 20 bytes ('%v') to a unit64: '%v'", string(bkey), string(last), err))
+	typ := bkey[0]
+	if typ != '~' && typ != '>' {
+		panic(fmt.Sprintf("bkey did not start with '~' for value nor '>' for symlink: '%v'", string(bkey)))
 	}
+	if bkey[n-10] != '<' {
+		panic(fmt.Sprintf("bkey did not have '<' at 9 bytes from the end: '%v'", string(bkey)))
+	}
+	if bkey[n-19] != ':' {
+		panic(fmt.Sprintf("bkey did not have '<' at 18 bytes from the end: '%v'", string(bkey)))
+	}
+	if bkey[n-1] != '#' {
+		panic(fmt.Sprintf("bkey did not end in '#': '%v'", string(bkey)))
+	}
+}
+
+// KeyExtractContainerKey extracts the containerKey from bkey.
+// key example: index/field;view:shard<ckey
+// shortest: =i%f;v:12345678<12345678#
+//           1234567890123456789012345
+//  numbering len(bkey) - i:
+//           5432109876543210987654321
+func KeyExtractContainerKey(bkey []byte) (containerKey uint64) {
+	n := len(bkey)
+	MustValidateKey(bkey)
+	containerKey = binary.BigEndian.Uint64(bkey[(n - 9):(n - 1)])
 	return
 }
 
-func AllShardPrefix(index, field, view string) []byte {
-	return []byte(fmt.Sprintf("idx:'%v';fld:'%v';vw:'%v';shd:", index, field, view))
+func AllShardPrefix(index, field, view string) (r []byte) {
+	r = make([]byte, 0, 64)
+	r = append(r, '~')
+	r = append(r, []byte(index)...)
+	r = append(r, '%')
+	r = append(r, []byte(field)...)
+	r = append(r, ';')
+	r = append(r, []byte(view)...)
+	r = append(r, ':')
+	return
 }
 
 // Prefix returns everything from Key up to and
-// including the '@' fune in a Key. The prefix excludes the roaring container key itself.
+// including the '<' byte in a Key. The prefix excludes the roaring container key itself.
 // NB must be kept in sync with Key() and KeyExtractContainerKey().
-func Prefix(index, field, view string, shard uint64) []byte {
-	return []byte(fmt.Sprintf("idx:'%v';fld:'%v';vw:'%v';shd:'%020v';ckey@", index, field, view, shard))
+func Prefix(index, field, view string, shard uint64) (r []byte) {
+	r = make([]byte, 0, 32)
+	r = append(r, '~')
+	r = append(r, []byte(index)...)
+	r = append(r, '%')
+	r = append(r, []byte(field)...)
+	r = append(r, ';')
+	r = append(r, []byte(view)...)
+	r = append(r, ':')
+
+	var sh [8]byte
+	binary.BigEndian.PutUint64(sh[:], shard)
+	r = append(r, sh[:]...)
+	r = append(r, '<')
+	return
 }
 
 // IndexOnlyPrefix returns a prefix suitable for DeleteIndex and a key-scan to
@@ -145,22 +165,79 @@ func Prefix(index, field, view string, shard uint64) []byte {
 //
 // The full name of the index must be provided, no partial index names will work.
 //
-// The provided key is terminated by `';` and so DeleteIndex("i") will not delete the index "i2".
+// The returned prefix is terminated by '%' and so DeleteIndex("i") will not delete the index "i2".
 //
-func IndexOnlyPrefix(indexName string) []byte {
-	return []byte(fmt.Sprintf("idx:'%v';", indexName))
+func IndexOnlyPrefix(indexName string) (r []byte) {
+	r = make([]byte, 0, 32)
+	r = append(r, '~')
+	r = append(r, []byte(indexName)...)
+	r = append(r, '%')
+	return
 }
 
 // same for deleting a whole field.
-func FieldPrefix(index, field string) []byte {
-	return []byte(fmt.Sprintf("idx:'%v';fld:'%v';", index, field))
+func FieldPrefix(index, field string) (r []byte) {
+	r = make([]byte, 0, 32)
+	r = append(r, '~')
+	r = append(r, []byte(index)...)
+	r = append(r, '%')
+	r = append(r, []byte(field)...)
+	r = append(r, ';')
+	return
 }
 
+// PrefixFromKey key example: index/field;view:shard<ckey
+//                  n-9    n-1
+// ... : 01234567 < 01234567  #
+//          shard       ckey
 func PrefixFromKey(bkey []byte) (prefix []byte) {
-	MustValidateKey(bkey)
-	beg := bytes.LastIndex(bkey, []byte("@"))
-	if beg == -1 {
-		panic(fmt.Sprintf("bad bkey='%v' did not have '@' extract prefix", string(bkey)))
+	n := len(bkey)
+	return bkey[:(n - 9)]
+}
+
+func ToString(bkey []byte) (r string) {
+	index, field, view, shard, ckey := Split(bkey)
+	return fmt.Sprintf("idx:'%v';fld:'%v';vw:'%v';shd:'%020v';ckey@%020d", index, field, view, shard, ckey)
+}
+
+func PrefixToString(pre []byte) (r string) {
+	index, field, view, shard := SplitPrefix(pre)
+	return fmt.Sprintf("idx:'%v';fld:'%v';vw:'%v';shd:'%020v';", index, field, view, shard)
+}
+
+func Split(bkey []byte) (index, field, view string, shard, ckey uint64) {
+	ckey = KeyExtractContainerKey(bkey)
+	n := len(bkey)
+	index, field, view, shard = SplitPrefix(bkey[:(n - 9)])
+	return
+}
+
+// full key: ~index%field;view:shard<ckey#
+// prefix  : ~index%field;view:shard<
+func SplitPrefix(pre []byte) (index, field, view string, shard uint64) {
+	n := len(pre)
+	shard = binary.BigEndian.Uint64(pre[(n - 9):(n - 1)])
+
+	// prefix: =index%field;view:shard<
+	goal := byte('%')
+	beg := 1
+	for i := 1; i < n; i++ {
+		c := pre[i]
+		switch goal {
+		case '%':
+			if c == goal {
+				index = string(pre[beg:i])
+				beg = i + 1
+				goal = byte(';')
+			}
+		case ';':
+			if c == goal {
+				field = string(pre[beg:i])
+				beg = i + 1
+				view = string(pre[beg:(n - 10)])
+				return
+			}
+		}
 	}
-	return bkey[:beg+1]
+	panic(fmt.Sprintf("malformed prefix '%v' / '%#v', could not Split", string(pre), pre))
 }

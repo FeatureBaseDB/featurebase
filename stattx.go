@@ -264,6 +264,14 @@ var _ = kReadonly
 
 var _ Tx = (*statTx)(nil)
 
+func (c *statTx) Group() *TxGroup {
+	return c.b.Group()
+}
+
+func (c *statTx) Options() Txo {
+	return c.b.Options()
+}
+
 //IncrementOpN
 func (c *statTx) IncrementOpN(index, field, view string, shard uint64, changedN int) {
 	me := kIncrementOpN
@@ -663,4 +671,9 @@ func (c *statTx) SliceOfShards(index, field, view, optionalViewPath string) (sli
 		}
 	}()
 	return c.b.SliceOfShards(index, field, view, optionalViewPath)
+}
+
+// Sn retreives the serial number of the Tx.
+func (c *statTx) Sn() int64 {
+	return c.b.Sn()
 }

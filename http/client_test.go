@@ -1391,3 +1391,16 @@ func makeImportColumnAttrsRequest(index string, shard int64, attrKey string) *pi
 		AttrVals:  attrVals,
 	}
 }
+
+// verify that serverInfo has TxSrc
+func TestClient_ServerInfoHasTxSrc(t *testing.T) {
+	//srcs := []string{"roaring", "rbf", "lmdb"}
+	cluster := test.MustRunCluster(t, 1)
+	defer cluster.Close()
+	cmd := cluster.GetNode(0)
+	si := cmd.API.Info()
+	if si.TxSrc == "" {
+		panic("should have gotten a TxSrc back")
+	}
+	pilosa.MustTxsrcToTxtype(si.TxSrc) // panics if invalid
+}

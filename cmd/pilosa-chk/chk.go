@@ -37,11 +37,13 @@ func main() {
 	var showOpsLog bool
 	var showBits bool
 	var showFrags bool
+	var dirChecksum bool
 	home := os.Getenv("HOME")
 	flag.StringVar(&dir, "dir", fmt.Sprintf("%v/.pilosa", home), "pilosa data dir to read")
 	flag.BoolVar(&showFrags, "v", false, "show the checksum hash for each fragment in each index. Warning: long output")
 	flag.BoolVar(&showOpsLog, "ops", false, "show the ops log for each fragment. Warning: very long output. Implies -v")
 	flag.BoolVar(&showBits, "bits", false, "show the hot bits for each fragment. Warning: very, very long output. Implies -v")
+	flag.BoolVar(&dirChecksum, "dirsum", false, "compute a directory hash")
 	flag.Parse()
 
 	if showBits {
@@ -51,10 +53,15 @@ func main() {
 		showFrags = true
 	}
 	fmt.Printf("opening dir '%v'... this may take a few seconds...\n", dir)
+
+	if dirChecksum {
+		fmt.Printf("path '%v' has dirhash %v\n", dir, pilosa.HashOfDir(dir))
+		return
+	}
+
 	fmt.Printf("    the blake-3 hash includes the value of each mapping and the field or partitionID.\n")
 
-	holder := pilosa.NewHolder(256)
-	holder.Path = dir
+	holder := pilosa.NewHolder(dir, nil)
 	holder.OpenTranslateStore = boltdb.OpenTranslateStore
 
 	err := holder.Open()
@@ -79,7 +86,7 @@ func main() {
 	final.Sort()
 
 	hasher := blake3.New()
-	fmt.Printf("\nsummary of %v:\n", dir)
+	fmt.Printf("\nsummary of col/row translations%v:\n", dir)
 	for _, sum := range final.Sums {
 		//fmt.Printf("index: %v  partitionID: %v blake3-%x keyCount: %v idCount: %v\n", sum.Index, sum.PartitionID, sum.Checksum, sum.KeyCount, sum.IDCount)
 		_, _ = hasher.Write([]byte(sum.Checksum))

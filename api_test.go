@@ -214,13 +214,16 @@ func TestAPI_Import(t *testing.T) {
 		// Generate some keyed records.
 		rowIDs := []uint64{}
 		timestamps := []int64{}
-		for i := 1; i <= 10; i++ {
+		N := 10
+		for i := 1; i <= N; i++ {
 			rowIDs = append(rowIDs, rowID)
 			timestamps = append(timestamps, timestamp)
 		}
 
 		// Keys are sharded so ordering is not guaranteed.
 		colKeys := []string{"col10", "col8", "col9", "col6", "col7", "col4", "col5", "col2", "col3", "col1"}
+
+		colKeys = colKeys[:N]
 
 		// Import data with keys to the coordinator (node0) and verify that it gets
 		// translated and forwarded to the owner of shard 0 (node1; because of offsetModHasher)
@@ -229,14 +232,18 @@ func TestAPI_Import(t *testing.T) {
 			IndexCreatedAt: index.CreatedAt(),
 			Field:          fieldName,
 			FieldCreatedAt: field.CreatedAt(),
-			Shard:          0,
+			Shard:          0, // import is all on shard 0, why are we making lots of other shards? b/c this is not a restriction.
 			RowIDs:         rowIDs,
 			ColumnKeys:     colKeys,
 			Timestamps:     timestamps,
 		}
-		if err := m0.API.Import(ctx, req); err != nil {
+
+		qcx := m0.API.Txf().NewQcx()
+
+		if err := m0.API.Import(ctx, qcx, req); err != nil {
 			t.Fatal(err)
 		}
+		panicOn(qcx.Finish())
 
 		pql := fmt.Sprintf("Row(%s=%d)", fieldName, rowID)
 
@@ -244,7 +251,7 @@ func TestAPI_Import(t *testing.T) {
 		if res, err := m0.API.Query(ctx, &pilosa.QueryRequest{Index: indexName, Query: pql}); err != nil {
 			t.Fatal(err)
 		} else if keys := res.Results[0].(*pilosa.Row).Keys; !reflect.DeepEqual(keys, colKeys) {
-			t.Fatalf("unexpected column keys: %#v", keys)
+			t.Fatalf("expected colKeys='%#v'; observed column keys: %#v", colKeys, keys)
 		}
 
 		// Query node1.
@@ -327,9 +334,12 @@ func TestAPI_ImportValue(t *testing.T) {
 			ColumnKeys: colKeys,
 			Values:     values,
 		}
-		if err := m0.API.ImportValue(ctx, req); err != nil {
+
+		qcx := m0.API.Txf().NewQcx()
+		if err := m0.API.ImportValue(ctx, qcx, req); err != nil {
 			t.Fatal(err)
 		}
+		panicOn(qcx.Finish())
 
 		pql := fmt.Sprintf("Row(%s>0)", field)
 
@@ -383,9 +393,12 @@ func TestAPI_ImportValue(t *testing.T) {
 			ColumnIDs:   colIDs,
 			FloatValues: values,
 		}
-		if err := m1.API.ImportValue(ctx, req); err != nil {
+
+		qcx := m1.API.Txf().NewQcx()
+		if err := m1.API.ImportValue(ctx, qcx, req); err != nil {
 			t.Fatal(err)
 		}
+		panicOn(qcx.Finish())
 
 		query := fmt.Sprintf("Row(%s>6)", field)
 
@@ -393,7 +406,7 @@ func TestAPI_ImportValue(t *testing.T) {
 		if res, err := m0.API.Query(ctx, &pilosa.QueryRequest{Index: index, Query: query}); err != nil {
 			t.Fatal(err)
 		} else if ids := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(ids, colIDs[6:]) {
-			t.Fatalf("unexpected column keys: %+v", ids)
+			t.Fatalf("unexpected column keys: observerd %+v;  expected '%+v'", ids, colIDs[6:])
 		}
 	})
 
@@ -453,9 +466,11 @@ func TestAPI_ImportValue(t *testing.T) {
 			ColumnIDs:    colIDs,
 			StringValues: values,
 		}
-		if err := m0.API.ImportValue(ctx, req); err != nil {
+		qcx := m0.API.Txf().NewQcx()
+		if err := m0.API.ImportValue(ctx, qcx, req); err != nil {
 			t.Fatal(err)
 		}
+		panicOn(qcx.Finish())
 
 		pql := fmt.Sprintf(`Row(%s=="strval-110")`, field)
 
@@ -463,7 +478,7 @@ func TestAPI_ImportValue(t *testing.T) {
 		if res, err := m0.API.Query(ctx, &pilosa.QueryRequest{Index: index, Query: pql}); err != nil {
 			t.Fatal(err)
 		} else if ids := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(ids, []uint64{1}) {
-			t.Fatalf("unexpected columns: %+v", ids)
+			t.Fatalf("unexpected columns: observerd %+v;  expected '%+v'", ids, []uint64{1})
 		}
 	})
 }
@@ -536,12 +551,14 @@ func TestAPI_ClearFlagForImportAndImportValues(t *testing.T) {
 		RowIDs:    []uint64{iraRowID},
 	}
 
-	if err := m0api.Import(ctx, ir0); err != nil {
+	qcx := m0api.Txf().NewQcx()
+	if err := m0api.Import(ctx, qcx, ir0); err != nil {
 		t.Fatal(err)
 	}
-	if err := m0api.ImportValue(ctx, ivr0); err != nil {
+	if err := m0api.ImportValue(ctx, qcx, ivr0); err != nil {
 		t.Fatal(err)
 	}
+	panicOn(qcx.Finish())
 
 	bitIsSet := func() bool {
 		query := fmt.Sprintf("Row(%v=%v)", iraField, iraRowID)
@@ -579,20 +596,25 @@ func TestAPI_ClearFlagForImportAndImportValues(t *testing.T) {
 	}
 
 	// clear the bit
+	qcx = m0api.Txf().NewQcx()
 	ir0.Clear = true
-	if err := m0api.Import(ctx, ir0); err != nil {
+	if err := m0api.Import(ctx, qcx, ir0); err != nil {
 		t.Fatal(err)
 	}
+	panicOn(qcx.Finish())
 
 	if bitIsSet() {
 		panic("IRA bit should have been cleared")
 	}
 
 	// clear the BSI
+	qcx = m0api.Txf().NewQcx()
 	ivr0.Clear = true
-	if err := m0api.ImportValue(ctx, ivr0); err != nil {
+	if err := m0api.ImportValue(ctx, qcx, ivr0); err != nil {
 		t.Fatal(err)
 	}
+	panicOn(qcx.Finish())
+
 	bal = queryAcct(m0api, acctOwnerID, fieldAcct0, index)
 	if bal != 0 {
 		panic(fmt.Sprintf("expected %v, observed %v starting acct0 balance", acct0bal, 0))

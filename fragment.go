@@ -250,7 +250,7 @@ func (f *fragment) Open() error {
 		f.checksums = make(map[int][]byte)
 
 		// Read last bit to determine max row.
-		tx := f.idx.Txf.NewTx(Txo{Write: false, Index: f.idx, Fragment: f})
+		tx := f.idx.Txf.NewTx(Txo{Write: false, Index: f.idx, Fragment: f, Shard: f.shard}) // first index 'i' shard 0
 		defer tx.Rollback()
 		return f.calculateMaxRowID(tx)
 	}(); err != nil {
@@ -485,7 +485,7 @@ func (f *fragment) openCache() error {
 		return nil
 	}
 
-	tx := f.idx.Txf.NewTx(Txo{Write: !writable, Index: f.idx, Fragment: f})
+	tx := f.idx.Txf.NewTx(Txo{Write: !writable, Index: f.idx, Fragment: f, Shard: f.shard})
 	defer tx.Rollback()
 
 	// Read in all rows by ID.
@@ -624,7 +624,7 @@ func (f *fragment) setBit(tx Tx, rowID, columnID uint64) (changed bool, err erro
 	if f.storage != nil {
 		wp = &f.storage.OpWriter
 	}
-	err = f.gen.Transaction(wp, func() error {
+	doSetFunc := func() error {
 		// handle mutux field type
 		if f.mutexVector != nil {
 			if err := f.handleMutex(tx, rowID, columnID); err != nil {
@@ -633,7 +633,13 @@ func (f *fragment) setBit(tx Tx, rowID, columnID uint64) (changed bool, err erro
 		}
 		changed, err = f.unprotectedSetBit(tx, rowID, columnID)
 		return err
-	})
+	}
+	// avoid crashing when f.gen is nil
+	if f.gen != nil {
+		err = f.gen.Transaction(wp, doSetFunc)
+	} else {
+		err = doSetFunc()
+	}
 	return changed, err
 }
 
@@ -992,9 +998,22 @@ func (f *fragment) positionsForValue(columnID uint64, bitDepth uint, value int64
 }
 
 // TODO get rid of this and use positionsForValue to generate a single write op, and set that with importPositions.
-func (f *fragment) setValueBase(tx Tx, columnID uint64, bitDepth uint, value int64, clear bool) (changed bool, err error) {
+func (f *fragment) setValueBase(txOrig Tx, columnID uint64, bitDepth uint, value int64, clear bool) (changed bool, err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+
+	tx := txOrig
+	if NilInside(tx) {
+		tx = f.idx.Txf.NewTx(Txo{Write: writable, Index: f.idx, Fragment: f, Shard: f.shard})
+		defer func() {
+			if err == nil {
+				panicOn(tx.Commit())
+			} else {
+				tx.Rollback()
+			}
+		}()
+	}
+
 	var wp *io.Writer
 	if f.storage != nil {
 		wp = &f.storage.OpWriter
@@ -1976,7 +1995,7 @@ func (f *fragment) Blocks() ([]FragmentBlock, error) {
 	if idx == nil {
 		panic(fmt.Sprintf("index was nil in fragment.Blocks(): f.index='%v'; f.holder.indexes='%#v'\n", f.index, f.holder.indexes))
 	}
-	tx := idx.Txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f})
+	tx := idx.Txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: f.shard})
 	defer tx.Rollback()
 	// no Commit below, b/c is read-only.
 
@@ -2061,7 +2080,7 @@ func (f *fragment) blockData(id int) (rowIDs, columnIDs []uint64, err error) {
 	defer f.mu.Unlock()
 
 	idx := f.holder.Index(f.index)
-	tx := idx.Txf.NewTx(Txo{Write: !writable, Index: idx})
+	tx := idx.Txf.NewTx(Txo{Write: !writable, Index: idx, Shard: f.shard})
 	defer tx.Rollback()
 	// readonly, so no Commit()
 
@@ -2268,7 +2287,7 @@ func (f *fragment) importPositions(tx Tx, set, clear []uint64, rowSet map[uint64
 	if f.storage != nil {
 		wp = &f.storage.OpWriter
 	}
-	err := f.gen.Transaction(wp, func() error { // segfault
+	doFunc := func() error {
 		if len(set) > 0 {
 			f.stats.Count(MetricImportingN, int64(len(set)), 1)
 
@@ -2302,12 +2321,6 @@ func (f *fragment) importPositions(tx Tx, set, clear []uint64, rowSet map[uint64
 				start := rowID * ShardWidth
 				end := (rowID + 1) * ShardWidth
 
-				// avoid a 2nd r/w iterator if possible,
-				// aiming to having fewer write/read Tx conflicts.
-				badgerTx, isBadger := tx.(*BadgerTx)
-				if isBadger {
-					badgerTx.frag = f
-				}
 				n, err := tx.CountRange(f.index, f.field, f.view, f.shard, start, end)
 				if err != nil {
 					return errors.Wrap(err, "CountRange")
@@ -2323,7 +2336,14 @@ func (f *fragment) importPositions(tx Tx, set, clear []uint64, rowSet map[uint64
 			f.cache.Recalculate()
 		}
 		return nil
-	})
+	}
+	var err error
+	if f.gen != nil {
+		err = f.gen.Transaction(wp, doFunc)
+	} else {
+		err = doFunc()
+	}
+
 	if err != nil {
 		// we got an error. it's possible that the error indicates that something went wrong.
 		mappedIn, mappedOut, unmappedIn, errs, e2 := f.storage.SanityCheckMapping(f.currdata.from, f.currdata.to)
@@ -2758,7 +2778,7 @@ func (f *fragment) WriteTo(w io.Writer) (n int64, err error) {
 // used in shipping the slices across the network for a resize.
 func (f *fragment) writeStorageToArchive(tw *tar.Writer) error {
 
-	tx := f.idx.Txf.NewTx(Txo{Write: !writable, Index: f.idx})
+	tx := f.idx.Txf.NewTx(Txo{Write: !writable, Index: f.idx, Shard: f.shard})
 	defer tx.Rollback()
 	file, sz, err := tx.RoaringBitmapReader(f.index, f.field, f.view, f.shard, f.path)
 	if err != nil {
@@ -2832,7 +2852,7 @@ func (f *fragment) ReadFrom(r io.Reader) (n int64, err error) {
 		switch hdr.Name {
 		case "data":
 			idx := f.holder.Index(f.index)
-			tx := idx.Txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f})
+			tx := idx.Txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f, Shard: f.shard})
 			defer tx.Rollback()
 			if err := f.fillFragmentFromArchive(tx, tr); err != nil {
 				return 0, errors.Wrap(err, "reading storage")
@@ -3612,7 +3632,7 @@ func (s *fragmentSyncer) syncBlock(id int) error {
 	}
 
 	idx := f.holder.Index(f.index)
-	tx := idx.Txf.NewTx(Txo{Write: writable, Index: idx})
+	tx := idx.Txf.NewTx(Txo{Write: writable, Index: idx, Shard: f.shard})
 	defer tx.Rollback()
 
 	// Merge blocks together.

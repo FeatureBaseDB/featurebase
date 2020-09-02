@@ -27,13 +27,14 @@ type Field struct {
 	*pilosa.Field
 }
 
-// newField returns a new instance of Field d/0.
+// newField returns a new instance of Field.
 func newField(tb testing.TB, opts pilosa.FieldOption) *Field {
 	path, err := testhook.TempDir(tb, "pilosa-field-")
 	if err != nil {
 		panic(err)
 	}
-	field, err := pilosa.NewField(pilosa.NewHolder(pilosa.DefaultPartitionN), path, "i", "f", opts)
+	// This path is probably wrong, but we don't care much because it's a scratch holder anyway.
+	field, err := pilosa.NewField(pilosa.NewHolder(path, nil), path, "i", "f", opts)
 	if err != nil {
 		panic(err)
 	}
@@ -57,21 +58,10 @@ func (f *Field) close() error { // nolint: unparam
 
 // reopen closes the index and reopens it.
 func (f *Field) reopen() error {
-	var err error
 	if err := f.Field.Close(); err != nil {
 		return err
 	}
-
-	path, index, name := f.Path(), f.Index(), f.Name()
-	f.Field, err = pilosa.NewField(pilosa.NewHolder(pilosa.DefaultPartitionN), path, index, name, pilosa.OptFieldTypeDefault())
-	if err != nil {
-		return err
-	}
-
-	if err := f.Open(); err != nil {
-		return err
-	}
-	return nil
+	return f.Field.Open()
 }
 
 // Ensure field can set its cache

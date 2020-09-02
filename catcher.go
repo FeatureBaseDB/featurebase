@@ -26,10 +26,10 @@ import (
 // of the executor_test swallows up
 // the location of a panic.
 type catcherTx struct {
-	b *BadgerTx
+	b Tx
 }
 
-func newCatcherTx(b *BadgerTx) *catcherTx {
+func newCatcherTx(b Tx) *catcherTx {
 	return &catcherTx{b: b}
 }
 
@@ -298,4 +298,17 @@ func (c *catcherTx) SliceOfShards(index, field, view, optionalViewPath string) (
 		}
 	}()
 	return c.b.SliceOfShards(index, field, view, optionalViewPath)
+}
+
+func (c *catcherTx) Group() *TxGroup {
+	return c.b.Group()
+}
+
+func (c *catcherTx) Options() Txo {
+	return c.b.Options()
+}
+
+// Sn retreives the serial number of the Tx.
+func (c *catcherTx) Sn() int64 {
+	return c.b.Sn()
 }

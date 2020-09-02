@@ -15,6 +15,7 @@
 package pilosa
 
 import (
+	"bytes"
 	"fmt"
 	"io/ioutil"
 	"path/filepath"
@@ -23,9 +24,39 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/proto"
+	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/testhook"
 	"github.com/pkg/errors"
 )
+
+// utilities used by tests
+
+// mustAddR is a helper for calling roaring.Container.Add() in tests to
+// keep the linter happy that we are checking the error.
+func mustAddR(changed bool, err error) {
+	panicOn(err)
+}
+
+// mustRemove is a helper for calling Tx.Remove() in tests to
+// keep the linter happy that we are checking the error.
+func mustRemove(changeCount int, err error) {
+	panicOn(err)
+}
+
+func getTestBitmapAsRawRoaring(bitsToSet ...uint64) []byte {
+	b := roaring.NewBitmap()
+	changed := b.DirectAddN(bitsToSet...)
+	n := len(bitsToSet)
+	if changed != n {
+		panic(fmt.Sprintf("changed=%v but bitsToSet len = %v", changed, n))
+	}
+	buf := bytes.NewBuffer(make([]byte, 0, 100000))
+	_, err := b.WriteTo(buf)
+	if err != nil {
+		panic(err)
+	}
+	return buf.Bytes()
+}
 
 // NewTestCluster returns a cluster with n nodes and uses a mod-based hasher.
 func NewTestCluster(tb testing.TB, n int) *cluster {
@@ -136,12 +167,11 @@ func (t *ClusterCluster) SetBit(index, field string, rowID, colID uint64, x *tim
 		}
 
 		if err := func() error {
-			tx, err := c.holder.BeginTx(writable, c.holder.indexes[f.index])
+			idx := c.holder.indexes[f.index]
+			shard := colID / ShardWidth
+			tx := idx.Txf.NewTx(Txo{Write: writable, Index: idx, Shard: shard})
 			if tx != nil {
 				defer tx.Rollback()
-			}
-			if err != nil {
-				return err
 			}
 
 			if _, err := f.SetBit(tx, rowID, colID, x); err != nil {
@@ -235,8 +265,7 @@ func (t *ClusterCluster) addCluster(i int, saveTopology bool) (*cluster, error) 
 	}
 
 	// holder
-	h := NewHolder(DefaultPartitionN)
-	h.Path = path
+	h := NewHolder(path, nil)
 
 	// cluster
 	c := newCluster()
@@ -459,11 +488,11 @@ func (t *ClusterCluster) FollowResizeInstruction(instr *ResizeInstruction) error
 			// there will be two -badgerdb directories/databases, we need to copy
 			// from src to dest the fragment. This simulates sending the fragment over the network.
 			srcIdx := srcCluster.holder.Index(src.Index)
-			srctx := srcIdx.Txf.NewTx(Txo{Write: !writable, Index: srcIdx, Fragment: srcFragment})
+			srctx := srcIdx.Txf.NewTx(Txo{Write: !writable, Index: srcIdx, Fragment: srcFragment, Shard: srcFragment.shard})
 
 			destIdx := destCluster.holder.Index(src.Index)
 
-			desttx := destIdx.Txf.NewTx(Txo{Write: writable, Index: destIdx, Fragment: destFragment})
+			desttx := destIdx.Txf.NewTx(Txo{Write: writable, Index: destIdx, Fragment: destFragment, Shard: destFragment.shard})
 
 			citer, _, err := srctx.ContainerIterator(src.Index, src.Field, src.View, src.Shard, 0)
 			panicOn(err)

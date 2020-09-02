@@ -70,6 +70,8 @@ type view struct {
 
 // newView returns a new instance of View.
 func newView(holder *Holder, path, index, field, name string, fieldOptions FieldOptions) *view {
+	panicOn(validateName(name))
+
 	return &view{
 		path:          path,
 		index:         index,
@@ -108,11 +110,13 @@ func newView(holder *Holder, path, index, field, name string, fieldOptions Field
 // return that bitmap, and set knownShardsCopied to 1, but we rarely modify
 // the list.
 func (v *view) addKnownShard(shard uint64) {
+	v.notifyIfNewShard(shard)
 	if atomic.LoadUint32(&v.knownShardsCopied) == 1 {
 		v.knownShards = v.knownShards.Clone()
 		atomic.StoreUint32(&v.knownShardsCopied, 0)
 	}
-	_, _ = v.knownShards.Add(shard)
+	_, err := v.knownShards.Add(shard)
+	panicOn(err)
 }
 
 // removeKnownShard removes a known shard from v. See the notes on addKnownShard.
@@ -168,14 +172,12 @@ var workQueue = make(chan struct{}, runtime.NumCPU()*2)
 
 // replaces v.openFragments() with Tx generic code.
 func (v *view) openFragmentsInTx() error {
-	tx := v.idx.Txf.NewTx(Txo{Write: false, Index: v.idx})
-	defer tx.Rollback()
 
-	shards, err := tx.SliceOfShards(v.index, v.field, v.name, v.path)
+	// we think this is correct for dbpershard, but might be slower. TODO
+	shards, err := DBPerShardGetShardsForIndex(v.idx, v.path)
 	if err != nil {
-		return errors.Wrap(err, "SliceOfShards")
+		return errors.Wrap(err, "DBPerShardGetShardsForIndex()")
 	}
-
 	eg, ctx := errgroup.WithContext(context.Background())
 	var mu sync.Mutex
 
@@ -213,7 +215,7 @@ shardLoop:
 				v.holder.Logger.Debugf("add index/field/view/fragment to view.fragments: %s/%s/%s/%d", v.index, v.field, v.name, shard)
 				mu.Lock()
 				v.fragments[frag.shard] = frag
-				v.addKnownShard(frag.shard)
+				v.addKnownShard(shard)
 				mu.Unlock()
 				return nil
 			})
@@ -315,6 +317,7 @@ func (v *view) recalculateCaches() {
 func (v *view) CreateFragmentIfNotExists(shard uint64) (*fragment, error) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
+
 	// Find fragment in cache first.
 	if frag := v.fragments[shard]; frag != nil {
 		return frag, nil
@@ -328,7 +331,6 @@ func (v *view) CreateFragmentIfNotExists(shard uint64) (*fragment, error) {
 	frag.RowAttrStore = v.rowAttrStore
 
 	v.fragments[shard] = frag
-	v.notifyIfNewShard(shard)
 	v.addKnownShard(shard)
 	return frag, nil
 }
@@ -410,9 +412,16 @@ func (v *view) deleteFragment(shard uint64) error {
 }
 
 // row returns a row for a shard of the view.
-func (v *view) row(tx Tx, rowID uint64) (*Row, error) {
+func (v *view) row(txOrig Tx, rowID uint64) (*Row, error) {
 	row := NewRow()
 	for _, frag := range v.allFragments() {
+
+		tx := txOrig
+		if NilInside(tx) {
+			tx = v.idx.Txf.NewTx(Txo{Write: !writable, Index: v.idx, Fragment: frag, Shard: frag.shard})
+			defer tx.Rollback()
+		}
+
 		fr, err := frag.row(tx, rowID)
 		if err != nil {
 			return nil, err
@@ -426,59 +435,121 @@ func (v *view) row(tx Tx, rowID uint64) (*Row, error) {
 }
 
 // setBit sets a bit within the view.
-func (v *view) setBit(tx Tx, rowID, columnID uint64) (changed bool, err error) {
+func (v *view) setBit(txOrig Tx, rowID, columnID uint64) (changed bool, err error) {
 	shard := columnID / ShardWidth
-	frag, err := v.CreateFragmentIfNotExists(shard)
+	var frag *fragment
+	frag, err = v.CreateFragmentIfNotExists(shard)
 	if err != nil {
 		return changed, err
+	}
+
+	tx := txOrig
+	if NilInside(tx) {
+		tx = v.idx.Txf.NewTx(Txo{Write: writable, Index: v.idx, Fragment: frag, Shard: shard})
+		defer func() {
+			if err == nil {
+				panicOn(tx.Commit())
+			} else {
+				tx.Rollback()
+			}
+		}()
 	}
 	return frag.setBit(tx, rowID, columnID)
 }
 
 // clearBit clears a bit within the view.
-func (v *view) clearBit(tx Tx, rowID, columnID uint64) (changed bool, err error) {
+func (v *view) clearBit(txOrig Tx, rowID, columnID uint64) (changed bool, err error) {
 	shard := columnID / ShardWidth
 	frag := v.Fragment(shard)
 	if frag == nil {
 		return false, nil
 	}
+
+	tx := txOrig
+	if NilInside(tx) {
+		tx = v.idx.Txf.NewTx(Txo{Write: writable, Index: v.idx, Fragment: frag, Shard: shard})
+		defer func() {
+			if err == nil {
+				panicOn(tx.Commit())
+			} else {
+				tx.Rollback()
+			}
+		}()
+	}
+
 	return frag.clearBit(tx, rowID, columnID)
 }
 
 // value uses a column of bits to read a multi-bit value.
-func (v *view) value(tx Tx, columnID uint64, bitDepth uint) (value int64, exists bool, err error) {
+func (v *view) value(txOrig Tx, columnID uint64, bitDepth uint) (value int64, exists bool, err error) {
 	shard := columnID / ShardWidth
 	frag, err := v.CreateFragmentIfNotExists(shard)
 	if err != nil {
 		return value, exists, err
 	}
+
+	tx := txOrig
+	if NilInside(tx) {
+		tx = frag.idx.Txf.NewTx(Txo{Write: !writable, Index: frag.idx, Fragment: frag, Shard: frag.shard})
+		defer tx.Rollback()
+	}
+
 	return frag.value(tx, columnID, bitDepth)
 }
 
 // setValue uses a column of bits to set a multi-bit value.
-func (v *view) setValue(tx Tx, columnID uint64, bitDepth uint, value int64) (changed bool, err error) {
+func (v *view) setValue(txOrig Tx, columnID uint64, bitDepth uint, value int64) (changed bool, err error) {
 	shard := columnID / ShardWidth
 	frag, err := v.CreateFragmentIfNotExists(shard)
 	if err != nil {
 		return changed, err
 	}
+
+	tx := txOrig
+	if NilInside(tx) {
+		tx = v.idx.Txf.NewTx(Txo{Write: writable, Index: v.idx, Fragment: frag, Shard: shard})
+		defer func() {
+			if err == nil {
+				panicOn(tx.Commit())
+			} else {
+				tx.Rollback()
+			}
+		}()
+	}
+
 	return frag.setValue(tx, columnID, bitDepth, value)
 }
 
 // clearValue removes a specific value assigned to columnID
-func (v *view) clearValue(tx Tx, columnID uint64, bitDepth uint, value int64) (changed bool, err error) {
+func (v *view) clearValue(txOrig Tx, columnID uint64, bitDepth uint, value int64) (changed bool, err error) {
 	shard := columnID / ShardWidth
 	frag := v.Fragment(shard)
 	if frag == nil {
 		return false, nil
 	}
+
+	tx := txOrig
+	if NilInside(tx) {
+		tx = v.idx.Txf.NewTx(Txo{Write: writable, Index: v.idx, Fragment: frag, Shard: shard})
+		defer func() {
+			if err == nil {
+				panicOn(tx.Commit())
+			} else {
+				tx.Rollback()
+			}
+		}()
+	}
 	return frag.clearValue(tx, columnID, bitDepth, value)
 }
 
 // rangeOp returns rows with a field value encoding matching the predicate.
-func (v *view) rangeOp(tx Tx, op pql.Token, bitDepth uint, predicate int64) (*Row, error) {
+func (v *view) rangeOp(qcx *Qcx, op pql.Token, bitDepth uint, predicate int64) (_ *Row, err0 error) {
 	r := NewRow()
 	for _, frag := range v.allFragments() {
+
+		tx, finisher := qcx.GetTx(Txo{Write: !writable, Index: v.idx, Shard: frag.shard})
+		defer finisher(&err0)
+
 		other, err := frag.rangeOp(tx, op, bitDepth, predicate)
 		if err != nil {
 			return nil, err

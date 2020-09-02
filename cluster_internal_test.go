@@ -96,8 +96,7 @@ func newIndexWithTempPath(tb testing.TB, name string) *Index {
 	if err != nil {
 		panic(err)
 	}
-	h := NewHolder(DefaultPartitionN)
-	h.Path = path
+	h := NewHolder(path, nil)
 	index, err := h.CreateIndex(name, IndexOptions{})
 	testhook.Cleanup(tb, func() {
 		h.Close()
@@ -164,30 +163,50 @@ func TestFragSources(t *testing.T) {
 	idx := newIndexWithTempPath(t, "i")
 	defer idx.Close()
 
-	// Obtain transaction.
-	tx := idx.Txf.NewTx(Txo{Write: writable, Index: idx})
-	defer tx.Rollback()
-
 	field, err := idx.CreateFieldIfNotExists("f", OptFieldTypeDefault())
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	// Obtain transaction.
+	var shard uint64
+	tx := idx.Txf.NewTx(Txo{Write: writable, Index: idx, Shard: shard})
+	defer tx.Rollback()
+
 	_, err = field.SetBit(tx, 1, 101, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = field.SetBit(tx, 1, ShardWidth+1, nil)
+	panicOn(tx.Commit())
+
+	shard = 1
+	tx = idx.Txf.NewTx(Txo{Write: writable, Index: idx, Shard: shard})
+	defer tx.Rollback()
+	_, err = field.SetBit(tx, 1, ShardWidth*shard+1, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = field.SetBit(tx, 1, ShardWidth*2+1, nil)
+	panicOn(tx.Commit())
+
+	shard = 2
+	tx = idx.Txf.NewTx(Txo{Write: writable, Index: idx, Shard: shard})
+	defer tx.Rollback()
+
+	_, err = field.SetBit(tx, 1, ShardWidth*shard+1, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = field.SetBit(tx, 1, ShardWidth*3+1, nil)
+	panicOn(tx.Commit())
+
+	shard = 3
+	tx = idx.Txf.NewTx(Txo{Write: writable, Index: idx, Shard: shard})
+	defer tx.Rollback()
+
+	_, err = field.SetBit(tx, 1, ShardWidth*shard+1, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
+	panicOn(tx.Commit())
 
 	tests := []struct {
 		from     *cluster

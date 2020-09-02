@@ -199,6 +199,10 @@ message AtomicRecord {
 	repeated ImportRequest Ir = 4;
 }
 
+message AtomicImportResponse {
+	string Error = 1;
+}
+
 message TranslateKeysRequest {
 	string Index = 1;
 	string Field = 2;

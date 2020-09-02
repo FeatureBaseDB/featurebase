@@ -108,11 +108,11 @@ func TestHolder_Open(t *testing.T) {
 			t.Fatal(err)
 		} else if err := h.Holder.Close(); err != nil {
 			t.Fatal(err)
-		} else if err := os.Chmod(filepath.Join(h.Path, "foo", "bar"), 0000); err != nil {
+		} else if err := os.Chmod(filepath.Join(h.Path(), "foo", "bar"), 0000); err != nil {
 			t.Fatal(err)
 		}
 		defer func() {
-			_ = os.Chmod(filepath.Join(h.Path, "foo", "bar"), 0755)
+			_ = os.Chmod(filepath.Join(h.Path(), "foo", "bar"), 0755)
 		}()
 		if err := h.Reopen(); err == nil || !strings.Contains(err.Error(), "permission denied") {
 			t.Fatalf("unexpected error: %s", err)
@@ -133,7 +133,7 @@ func TestHolder_Open(t *testing.T) {
 			t.Fatal(err)
 		} else if err := h.Holder.Close(); err != nil {
 			t.Fatal(err)
-		} else if err := os.Truncate(filepath.Join(h.Path, "foo", "bar", ".meta"), 2); err != nil {
+		} else if err := os.Truncate(filepath.Join(h.Path(), "foo", "bar", ".meta"), 2); err != nil {
 			t.Fatal(err)
 		}
 
@@ -155,7 +155,7 @@ func TestHolder_Open(t *testing.T) {
 			t.Fatal(err)
 		} else if err := h.Holder.Close(); err != nil {
 			t.Fatal(err)
-		} else if err := os.Truncate(filepath.Join(h.Path, "foo", "bar", ".data"), 2); err != nil {
+		} else if err := os.Truncate(filepath.Join(h.Path(), "foo", "bar", ".data"), 2); err != nil {
 			t.Fatal(err)
 		}
 
@@ -178,10 +178,9 @@ func TestHolder_Open(t *testing.T) {
 		if idx, err = h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
 			t.Fatal(err)
 		}
-		tx, err := h.BeginTx(writable, idx)
-		if err != nil {
-			t.Fatal(err)
-		}
+
+		var shard uint64
+		tx := idx.Txf.NewTx(pilosa.Txo{Write: writable, Index: idx, Shard: shard})
 		defer tx.Rollback()
 
 		if field, err := idx.CreateField("bar", pilosa.OptFieldTypeDefault()); err != nil {
@@ -192,11 +191,11 @@ func TestHolder_Open(t *testing.T) {
 			t.Fatal(err)
 		} else if err := h.Holder.Close(); err != nil {
 			t.Fatal(err)
-		} else if err := os.Chmod(filepath.Join(h.Path, "foo", "bar", "views", "standard", "fragments", "0"), 0000); err != nil {
+		} else if err := os.Chmod(filepath.Join(h.Path(), "foo", "bar", "views", "standard", "fragments", "0"), 0000); err != nil {
 			t.Fatal(err)
 		}
 		defer func() {
-			_ = os.Chmod(filepath.Join(h.Path, "foo", "bar", "views", "standard", "fragments", "0"), 0644)
+			_ = os.Chmod(filepath.Join(h.Path(), "foo", "bar", "views", "standard", "fragments", "0"), 0644)
 		}()
 		if err := h.Reopen(); err == nil || !strings.Contains(err.Error(), "permission denied") {
 			t.Fatalf("unexpected error: %s", err)
@@ -214,7 +213,8 @@ func TestHolder_Open(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		tx, err := h.BeginTx(writable, idx)
+		var shard uint64
+		tx := idx.Txf.NewTx(pilosa.Txo{Write: writable, Index: idx, Shard: shard})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -228,7 +228,7 @@ func TestHolder_Open(t *testing.T) {
 			t.Fatal(err)
 		} else if err := h.Holder.Close(); err != nil {
 			t.Fatal(err)
-		} else if err := os.Truncate(filepath.Join(h.Path, "foo", "bar", "views", "standard", "fragments", "0"), 2); err != nil {
+		} else if err := os.Truncate(filepath.Join(h.Path(), "foo", "bar", "views", "standard", "fragments", "0"), 2); err != nil {
 			t.Fatal(err)
 		}
 
@@ -246,10 +246,8 @@ func TestHolder_Open(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		tx, err := h.BeginTx(writable, idx)
-		if err != nil {
-			t.Fatal(err)
-		}
+		var shard uint64
+		tx := idx.Txf.NewTx(pilosa.Txo{Write: writable, Index: idx, Shard: shard})
 		defer tx.Rollback()
 
 		if field, err := idx.CreateField("bar", pilosa.OptFieldTypeDefault()); err != nil {
@@ -260,7 +258,7 @@ func TestHolder_Open(t *testing.T) {
 			t.Fatal(err)
 		} else if err := h.Holder.Close(); err != nil {
 			t.Fatal(err)
-		} else if err := os.Truncate(filepath.Join(h.Path, "foo", "bar", "views", "standard", "fragments", "0"), 20); err != nil {
+		} else if err := os.Truncate(filepath.Join(h.Path(), "foo", "bar", "views", "standard", "fragments", "0"), 20); err != nil {
 			t.Fatal(err)
 		}
 
@@ -390,10 +388,12 @@ func TestHolder_HasData(t *testing.T) {
 	})
 
 	t.Run("Peek at missing directory", func(t *testing.T) {
-		h := test.NewHolder(t)
-
 		// Ensure that hasData is false when dir doesn't exist.
-		h.Path = "bad-path"
+
+		// Note that we are intentionally not using test.NewHolder,
+		// because we want to create a Holder object with an invalid path,
+		// rather than creating a valid holder with a temporary path.
+		h := pilosa.NewHolder("bad-path", nil)
 
 		if ok, err := h.HasData(); ok || err != nil {
 			t.Fatal("expected HasData to return false, no err, but", ok, err)
@@ -748,7 +748,7 @@ func TestHolderSyncer_IntField(t *testing.T) {
 		for i, hldr := range []*test.Holder{hldr0, hldr1} {
 			if a, exists := hldr.Value("i", "f", 1); !exists || a != 1 {
 				// expects exists==true, a==1
-				t.Errorf("unexpected value(node%d/0): a:%d, exists: %v", i, a, exists) // failing TestHolderSyncer_IntField under Badger, unexpected value(node1/0): a:0, exists: true
+				t.Errorf("unexpected value(node%d/0): a:%d, exists: %v", i, a, exists)
 			}
 			if a, exists := hldr.Value("i", "f", 2); exists {
 				t.Errorf("unexpected value(node%d/1): a:%d, exists: %v", i, a, exists)

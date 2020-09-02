@@ -1,4 +1,4 @@
-// home: https://github.com/glyerine/vprint
+// home: https://github.com/glycerine/vprint
 // Copyright 2019 Jason E. Aten, Ph.D. All rights reserved.
 // License: MIT
 //

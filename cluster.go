@@ -236,7 +236,7 @@ type cluster struct { // nolint: maligned
 	abortAntiEntropyCh chan struct{}
 	muAntiEntropy      sync.Mutex
 
-	translationSyncer translationSyncer
+	translationSyncer TranslationSyncer
 
 	mu         sync.RWMutex
 	jobs       map[int64]*resizeJob

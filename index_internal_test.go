@@ -26,8 +26,7 @@ func mustOpenIndex(tb testing.TB, opt IndexOptions) *Index {
 	if err != nil {
 		panic(err)
 	}
-	h := NewHolder(1)
-	h.Path = path
+	h := NewHolder(path, nil)
 	index, err := h.CreateIndex("i", opt)
 	testhook.Cleanup(tb, func() {
 		h.Close()

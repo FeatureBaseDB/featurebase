@@ -15,11 +15,20 @@
 package pilosa_test
 
 import (
+	"fmt"
+	"net/http"
 	"testing"
 
+	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/testhook"
+	_ "net/http/pprof"
 )
 
 func TestMain(m *testing.M) {
+	port := pilosa.GetAvailPort()
+	fmt.Printf("pilosa/ TestMain: online stack-traces: curl http://localhost:%v/debug/pprof/goroutine?debug=2\n", port)
+	go func() {
+		_ = http.ListenAndServe(fmt.Sprintf("127.0.0.1:%v", port), nil)
+	}()
 	testhook.RunTestsWithHooks(m)
 }

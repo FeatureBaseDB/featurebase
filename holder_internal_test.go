@@ -78,8 +78,7 @@ func makeHolder(tb testing.TB) (*Holder, string, error) {
 	if err != nil {
 		return nil, "", err
 	}
-	h := NewHolder(DefaultPartitionN)
-	h.Path = path
+	h := NewHolder(path, nil)
 	return h, path, nil
 }
 
@@ -90,10 +89,8 @@ func testSetBit(t *testing.T, h *Holder, index, field string, rowID, columnID ui
 		t.Fatalf("creating index: %v", err)
 	}
 
-	tx, err := h.BeginTx(writable, idx)
-	if err != nil {
-		t.Fatal(err)
-	}
+	shard := columnID / ShardWidth
+	tx := idx.Txf.NewTx(Txo{Write: writable, Index: idx, Shard: shard})
 	defer tx.Rollback()
 
 	f, err := idx.CreateFieldIfNotExists(field, OptFieldTypeDefault())

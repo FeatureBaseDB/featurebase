@@ -28,6 +28,10 @@ import (
 // directly, but only a copy.
 const EnableRowCache = true
 
+// makes a copy, BUT doesn't do the zero out for now TODO(jea) zero out actually to detect
+// access past tx.
+var DoAllocZero bool
+
 //probably should just implement the container interface
 // but for now i'll do it
 func (c *Cursor) Rows() ([]uint64, error) {
@@ -147,7 +151,7 @@ func toContainer(l leafCell, tx *Tx) *roaring.Container {
 
 	orig := l.Data
 	var cpMaybe []byte
-	if EnableRowCache {
+	if EnableRowCache || DoAllocZero {
 		// make a copy, otherwise the rowCache will see corrupted data
 		// or mmapped data that may disappear.
 		cpMaybe = make([]byte, len(orig))
