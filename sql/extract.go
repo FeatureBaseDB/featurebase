@@ -1042,12 +1042,12 @@ func extractWheres(indexes []*pilosa.Index, tbls parseTables, expr sqlparser.Exp
 				return []*tableWhere{left[0], right[0]}, nil
 			}
 			return nil, errors.Errorf("no matching table on right: %s", left[0].table.name)
-		} else if len(left) == 1 && len(right) == 2 {
+		} else if len(left) == 2 && len(right) == 1 {
 			// if left(2) and right(1),
 			// then intersect the 1's and return final(2)
 			if right[0].table == left[0].table {
 				right[0].where = Intersect(right[0].where, left[0].where)
-				return []*tableWhere{left[0], right[1]}, nil
+				return []*tableWhere{left[1], right[0]}, nil
 			} else if right[0].table == left[1].table {
 				right[0].where = Intersect(right[0].where, left[1].where)
 				return []*tableWhere{left[0], right[0]}, nil
