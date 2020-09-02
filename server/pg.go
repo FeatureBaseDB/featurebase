@@ -19,7 +19,6 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net"
 	"strconv"
 	"strings"
@@ -28,6 +27,7 @@ import (
 	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/logger"
 	"github.com/pilosa/pilosa/v2/pg"
+	"github.com/pilosa/pilosa/v2/pql"
 	pb "github.com/pilosa/pilosa/v2/proto"
 
 	"github.com/pkg/errors"
@@ -49,12 +49,7 @@ func NewPostgresServer(api *pilosa.API, logger logger.Logger, tls *tls.Config) *
 		api:    api,
 		logger: logger,
 		s: pg.Server{
-			QueryHandler: &queryDecodeHandler{
-				child: &pilosaQueryHandler{
-					api:    api,
-					logger: logger,
-				},
-			},
+			QueryHandler:   NewPostgresHandler(api, logger),
 			TypeEngine:     pg.PrimitiveTypeEngine{},
 			StartupTimeout: 5 * time.Second,
 			ReadTimeout:    10 * time.Second,
@@ -62,6 +57,16 @@ func NewPostgresServer(api *pilosa.API, logger logger.Logger, tls *tls.Config) *
 			MaxStartupSize: 8 * 1024 * 1024,
 			Logger:         logger,
 			TLSConfig:      tls,
+		},
+	}
+}
+
+// NewPostgresHandler creates a postgres query handler wrapping the pilosa API.
+func NewPostgresHandler(api *pilosa.API, logger logger.Logger) pg.QueryHandler {
+	return &queryDecodeHandler{
+		child: &pilosaQueryHandler{
+			api:    api,
+			logger: logger,
 		},
 	}
 }
@@ -197,6 +202,8 @@ func pgFormatVal(val interface{}) string {
 		return strconv.FormatUint(val, 10)
 	case string:
 		return val
+	case pql.Decimal:
+		return val.String()
 	default:
 		data, _ := json.Marshal(val)
 		return string(data)
@@ -316,10 +323,15 @@ func pgWriteRowser(w pg.QueryResultWriter, result pb.ToRowser) error {
 		for i, col := range row.Columns {
 			var v string
 			switch col := col.ColumnVal.(type) {
+			case nil:
+				v = "null"
 			case *pb.ColumnResponse_BoolVal:
 				v = strconv.FormatBool(col.BoolVal)
 			case *pb.ColumnResponse_DecimalVal:
-				v = col.DecimalVal.String()
+				v = pql.Decimal{
+					Value: col.DecimalVal.Value,
+					Scale: col.DecimalVal.Scale,
+				}.String()
 			case *pb.ColumnResponse_Float64Val:
 				v = strconv.FormatFloat(col.Float64Val, 'g', -1, 64)
 			case *pb.ColumnResponse_Int64Val:
@@ -345,28 +357,6 @@ func pgWriteRowser(w pg.QueryResultWriter, result pb.ToRowser) error {
 	})
 }
 
-type clientRowser struct {
-	pb.StreamClient
-}
-
-func (cr *clientRowser) ToRows(f func(*pb.RowResponse) error) error {
-	for {
-		resp, err := cr.StreamClient.Recv()
-		if err != nil {
-			if err == io.EOF {
-				return nil
-			}
-
-			return err
-		}
-
-		err = f(resp)
-		if err != nil {
-			return err
-		}
-	}
-}
-
 func pgWriteResult(w pg.QueryResultWriter, result interface{}) error {
 	switch result := result.(type) {
 	case *pilosa.Row:
@@ -379,8 +369,55 @@ func pgWriteResult(w pg.QueryResultWriter, result interface{}) error {
 		return pgWriteGroupCount(w, result)
 	case pb.ToRowser: // we should avoid protobuf where we can...
 		return pgWriteRowser(w, result)
-	case pb.StreamClient:
-		return pgWriteRowser(w, &clientRowser{result})
+	case uint64:
+		err := w.WriteHeader(pg.ColumnInfo{
+			Name: "count",
+			Type: pg.TypeCharoid,
+		})
+		if err != nil {
+			return errors.Wrap(err, "writing headers")
+		}
+
+		err = w.WriteRowText(strconv.FormatUint(result, 10))
+		if err != nil {
+			return errors.Wrap(err, "writing count")
+		}
+
+		return nil
+	case int64:
+		err := w.WriteHeader(pg.ColumnInfo{
+			Name: "value",
+			Type: pg.TypeCharoid,
+		})
+		if err != nil {
+			return errors.Wrap(err, "writing headers")
+		}
+
+		err = w.WriteRowText(strconv.FormatInt(result, 10))
+		if err != nil {
+			return errors.Wrap(err, "writing count")
+		}
+
+		return nil
+	case bool:
+		err := w.WriteHeader(pg.ColumnInfo{
+			Name: "result",
+			Type: pg.TypeCharoid,
+		})
+		if err != nil {
+			return errors.Wrap(err, "writing headers")
+		}
+
+		err = w.WriteRowText(strconv.FormatBool(result))
+		if err != nil {
+			return errors.Wrap(err, "writing count")
+		}
+
+		return nil
+
+	case nil:
+		return nil
+
 	default:
 		return errors.Errorf("result type %T not yet supported", result)
 	}

@@ -41,7 +41,7 @@ func NewSelectHandler(api *pilosa.API) *SelectHandler {
 }
 
 // Handle executes mapped SQL
-func (s *SelectHandler) Handle(ctx context.Context, mapped *MappedSQL) (pproto.StreamClient, error) {
+func (s *SelectHandler) Handle(ctx context.Context, mapped *MappedSQL) (pproto.ToRowser, error) {
 	stmt, ok := mapped.Statement.(*sqlparser.Select)
 	if !ok {
 		return nil, fmt.Errorf("statement is not type select: %T", mapped.Statement)
@@ -74,7 +74,7 @@ func (s *SelectHandler) mapSelect(ctx context.Context, selectStmt *sqlparser.Sel
 	return mr, nil
 }
 
-func (s *SelectHandler) execMappingResult(ctx context.Context, mr *MappingResult) (pproto.StreamClient, error) {
+func (s *SelectHandler) execMappingResult(ctx context.Context, mr *MappingResult) (pproto.ToRowser, error) {
 	if mr.Query == "" {
 		return nil, errors.New("no pql query created")
 	}
@@ -85,29 +85,15 @@ func (s *SelectHandler) execMappingResult(ctx context.Context, mr *MappingResult
 	}
 	res := resp.Results[0]
 
-	// TODO: synchronize this properly somehow.
-	// It would probbably help to get rid of the streaming too.
-	respRows := pproto.NewRowBuffer(0)
+	var result pproto.ToRowser
 	switch res := res.(type) {
 	case pproto.ToRowser:
-		go func() {
-			if err := res.ToRows(respRows.Send); err != nil {
-				respRows.Send(pproto.Error(err)) //nolint:errcheck
-			} else {
-				_ = respRows.Send(pproto.EOF) //nolint:errcheck
-			}
-		}()
+		result = res
 	case []pilosa.GroupCount:
-		go func() {
-			if err := pilosa.GroupCounts(res).ToRows(respRows.Send); err != nil {
-				respRows.Send(pproto.Error(err)) //nolint:errcheck
-			} else {
-				respRows.Send(pproto.EOF) //nolint:errcheck
-			}
-		}()
+		result = pilosa.GroupCounts(res)
 	case uint64:
-		go func() {
-			respRows.Send(&pproto.RowResponse{ //nolint:errcheck
+		result = pproto.ConstRowser{
+			{
 				Headers: []*pproto.ColumnInfo{
 					{
 						Name:     "count",
@@ -121,12 +107,11 @@ func (s *SelectHandler) execMappingResult(ctx context.Context, mr *MappingResult
 						},
 					},
 				},
-			})
-			respRows.Send(pproto.EOF) //nolint:errcheck
-		}()
+			},
+		}
 	case bool:
-		go func() {
-			respRows.Send(&pproto.RowResponse{ //nolint:errcheck
+		result = pproto.ConstRowser{
+			{
 				Headers: []*pproto.ColumnInfo{
 					{
 						Name:     "result",
@@ -140,24 +125,18 @@ func (s *SelectHandler) execMappingResult(ctx context.Context, mr *MappingResult
 						},
 					},
 				},
-			})
-			respRows.Send(pproto.EOF) //nolint:errcheck
-		}()
+			},
+		}
+	case nil:
+		result = pproto.ConstRowser{}
+
 	default:
 		return nil, fmt.Errorf("unsupported result type %T", res)
 	}
 
-	// Apply Reducers
-	result := respRows
-	for _, red := range mr.Reducers {
-		out := pproto.NewRowBuffer(0)
-
-		// Run Reducers asyncronously.
-		// TODO: stop swallowing this error.
-		// TODO: does this need an EOF as input?
-		go red.Reduce(result, out) //nolint:errcheck
-
-		result = out
+	// Apply reducers.
+	for _, reducer := range mr.Reducers {
+		result = reducer(result)
 	}
 
 	return result, nil
@@ -172,10 +151,10 @@ type MappingResult struct {
 	Offset       uint64
 	Query        string
 	Header       []Column
-	Reducers     []Reducer
+	Reducers     []func(pproto.ToRowser) pproto.ToRowser
 }
 
-func (mr *MappingResult) addReducer(r Reducer) {
+func (mr *MappingResult) addReducer(r func(pproto.ToRowser) pproto.ToRowser) {
 	mr.Reducers = append(mr.Reducers, r)
 }
 
@@ -278,21 +257,24 @@ func (h handlerSelectFieldsFromTableWhere) Apply(stmt *sqlparser.Select, qm Quer
 		Header: selectFields,
 	}
 
-	// TODO: assign headers
-	mr.addReducer(NewAssignHeadersReducer(selectFields))
+	// assign headers
+	mr.addReducer(func(result pproto.ToRowser) pproto.ToRowser {
+		return AssignHeaders(result, selectFields...)
+	})
 
-	// TODO: If both order and limit/offset are required, then
-	// we can't supply limit/offset to the InspectRequest; we
-	// have to get all records, which we don't want to do on
-	// a large data set. We need to come up with a better
-	// way to handle that situation.
-	switch {
-	case qm.HasOrderBy():
-		mr.addReducer(NewOrderByReducer(orderByFlds, orderByDirs, limit, offset))
-	case limit != 0:
+	if qm.HasOrderBy() {
+		// Sort the results.
+		mr.addReducer(func(result pproto.ToRowser) pproto.ToRowser {
+			return OrderBy(result, orderByFlds, orderByDirs)
+		})
+
+		// Apply the limit and offset after sorting.
+		mr.addReducer(func(result pproto.ToRowser) pproto.ToRowser {
+			return LimitRows(OffsetRows(result, offset), limit)
+		})
+	} else {
+		// Apply the limit and offset inside the query.
 		whereQuery = Limit(whereQuery, limit, offset)
-	case offset != 0:
-		whereQuery = Offset(whereQuery, offset)
 	}
 
 	if len(fields) > 0 && fields[0] == "_id" {
@@ -359,12 +341,22 @@ func (h handlerSelectDistinctFromTable) Apply(stmt *sqlparser.Select, qm QueryMa
 		Query:     qo,
 	}
 
-	mr.addReducer(NewAssignHeadersReducer(selectFields))
+	// Assign headers to the result.
+	mr.addReducer(func(result pproto.ToRowser) pproto.ToRowser {
+		return AssignHeaders(result, selectFields...)
+	})
+
 	if qm.HasOrderBy() {
-		mr.addReducer(NewOrderByReducer(orderByFlds, orderByDirs, limit, offset))
-	} else {
-		mr.addReducer(NewLimitReducer(limit, offset))
+		// Sort the result.
+		mr.addReducer(func(result pproto.ToRowser) pproto.ToRowser {
+			return OrderBy(result, orderByFlds, orderByDirs)
+		})
 	}
+
+	// Apply a limit and offset to the result.
+	mr.addReducer(func(result pproto.ToRowser) pproto.ToRowser {
+		return LimitRows(OffsetRows(result, offset), limit)
+	})
 
 	return mr, nil
 }
@@ -374,7 +366,7 @@ type handlerSelectCountFromTableWhere struct{}
 
 func (h handlerSelectCountFromTableWhere) Apply(stmt *sqlparser.Select, qm QueryMask, indexFunc func(string) *pilosa.Index) (*MappingResult, error) {
 	var qo string
-	var reducers []Reducer
+	var reducers []func(pproto.ToRowser) pproto.ToRowser
 
 	indexName, err := extractIndexName(stmt)
 	if err != nil {
@@ -412,7 +404,9 @@ func (h handlerSelectCountFromTableWhere) Apply(stmt *sqlparser.Select, qm Query
 	} else {
 		// TODO: add the Distinct (for Int fields) here (like we do in handlerSelectDistinctFromTable)
 		qo = Rows(funcs[0].field.Name())
-		reducers = append(reducers, &CountIDReducer{})
+		reducers = append(reducers, func(result pproto.ToRowser) pproto.ToRowser {
+			return CountRows(result)
+		})
 	}
 	mr := &MappingResult{
 		IndexName: indexName,
@@ -421,9 +415,10 @@ func (h handlerSelectCountFromTableWhere) Apply(stmt *sqlparser.Select, qm Query
 		Reducers:  reducers,
 	}
 
-	mr.addReducer(NewAssignHeadersReducer(selectFields))
-	// NOTE: limit and order by don't make sense in this handler
-	// because it just returns a single row.
+	// Assign headers to the result.
+	mr.addReducer(func(result pproto.ToRowser) pproto.ToRowser {
+		return AssignHeaders(result, selectFields...)
+	})
 
 	return mr, nil
 }
@@ -493,13 +488,27 @@ func (h handlerSelectFuncFromTableWhere) Apply(stmt *sqlparser.Select, qm QueryM
 		Query:     qo,
 	}
 
-	mr.addReducer(NewValCountFuncReducer(funcs[0].funcName))
-	mr.addReducer(NewAssignHeadersReducer(selectFields))
+	// Apply the ValCount function.
+	mr.addReducer(func(result pproto.ToRowser) pproto.ToRowser {
+		return ApplyValCountFunc(result, funcs[0].funcName)
+	})
+
+	// Assign headers to the result.
+	mr.addReducer(func(result pproto.ToRowser) pproto.ToRowser {
+		return AssignHeaders(result, selectFields...)
+	})
+
 	if qm.HasOrderBy() {
-		mr.addReducer(NewOrderByReducer(orderByFlds, orderByDirs, limit, offset))
-	} else {
-		mr.addReducer(NewLimitReducer(limit, offset))
+		// Sort the result.
+		mr.addReducer(func(result pproto.ToRowser) pproto.ToRowser {
+			return OrderBy(result, orderByFlds, orderByDirs)
+		})
 	}
+
+	// Apply a limit and offset to the result.
+	mr.addReducer(func(result pproto.ToRowser) pproto.ToRowser {
+		return LimitRows(OffsetRows(result, offset), limit)
+	})
 
 	return mr, nil
 }
@@ -627,12 +636,22 @@ func (h handlerSelectGroupBy) Apply(stmt *sqlparser.Select, qm QueryMask, indexF
 		Query:     qo,
 	}
 
-	mr.addReducer(NewAssignHeadersReducer(selectFields))
+	// Assign headers to the result.
+	mr.addReducer(func(result pproto.ToRowser) pproto.ToRowser {
+		return AssignHeaders(result, selectFields...)
+	})
+
 	if qm.HasOrderBy() {
-		mr.addReducer(NewOrderByReducer(orderByFlds, orderByDirs, limit, offset))
-	} else {
-		mr.addReducer(NewLimitReducer(limit, offset))
+		// Sort the result.
+		mr.addReducer(func(result pproto.ToRowser) pproto.ToRowser {
+			return OrderBy(result, orderByFlds, orderByDirs)
+		})
 	}
+
+	// Apply a limit and offset to the result.
+	mr.addReducer(func(result pproto.ToRowser) pproto.ToRowser {
+		return LimitRows(OffsetRows(result, offset), limit)
+	})
 
 	return mr, nil
 }
@@ -689,12 +708,20 @@ func (f handlerSelectIDCountFromTable) Apply(stmt *sqlparser.Select, qm QueryMas
 		Query:     qo,
 	}
 
-	mr.addReducer(NewAssignHeadersReducer(selectFields))
-	mr.addReducer(NewLimitReducer(limit, offset))
+	// Assign headers to the result.
+	mr.addReducer(func(result pproto.ToRowser) pproto.ToRowser {
+		return AssignHeaders(result, selectFields...)
+	})
+
 	// TODO: order by is not implemented on this method because order desc
 	// is handled in pilosa TopN. In order to support asc here, we would
 	// have to return the entire TopN cache. Instead, we should consider
 	// supported something like this in Pilosa itself.
+
+	// Apply a limit and offset to the result.
+	mr.addReducer(func(result pproto.ToRowser) pproto.ToRowser {
+		return LimitRows(OffsetRows(result, offset), limit)
+	})
 
 	return mr, nil
 }
@@ -784,12 +811,22 @@ func (h handlerSelectJoin) Apply(stmt *sqlparser.Select, qm QueryMask, indexFunc
 		Query:     qo,
 	}
 
-	mr.addReducer(NewAssignHeadersReducer(selectFields))
+	// Assign headers to the result.
+	mr.addReducer(func(result pproto.ToRowser) pproto.ToRowser {
+		return AssignHeaders(result, selectFields...)
+	})
+
 	if qm.HasOrderBy() {
-		mr.addReducer(NewOrderByReducer(orderByFlds, orderByDirs, limit, offset))
-	} else {
-		mr.addReducer(NewLimitReducer(limit, offset))
+		// Sort the result.
+		mr.addReducer(func(result pproto.ToRowser) pproto.ToRowser {
+			return OrderBy(result, orderByFlds, orderByDirs)
+		})
 	}
+
+	// Apply a limit and offset to the result.
+	mr.addReducer(func(result pproto.ToRowser) pproto.ToRowser {
+		return LimitRows(OffsetRows(result, offset), limit)
+	})
 
 	return mr, nil
 }

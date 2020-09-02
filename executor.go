@@ -90,7 +90,7 @@ func emptyResult(c *pql.Call) interface{} {
 		return false
 
 	case "Row":
-		return Row{Keys: []string{}}
+		return &Row{Keys: []string{}}
 
 	case "Rows":
 		return RowIdentifiers{Keys: []string{}}
@@ -2899,6 +2899,8 @@ func (t ExtractedTable) ToRows(callback func(*pb.RowResponse) error) error {
 		for i, r := range c.Rows {
 			var col *pb.ColumnResponse
 			switch r := r.(type) {
+			case nil:
+				col = &pb.ColumnResponse{}
 			case bool:
 				col = &pb.ColumnResponse{
 					ColumnVal: &pb.ColumnResponse_BoolVal{

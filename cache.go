@@ -142,6 +142,7 @@ type rankCache struct {
 	entries      map[uint64]uint64
 	rankings     bitmapPairs // cached, ordered list
 	rankingsRead bool
+	dirty        bool
 
 	updateN    int
 	updateTime time.Time
@@ -173,6 +174,11 @@ func NewRankCache(maxEntries uint32) *rankCache {
 func (c *rankCache) Add(id uint64, n uint64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
+	// Flag the cache as dirty.
+	// This forces recalculation if top is called before the cache is recalculated.
+	c.dirty = true
+
 	// Ignore if the column count is below the threshold,
 	// unless the count is 0, which is effectively used
 	// to clear the cache value.
@@ -190,6 +196,11 @@ func (c *rankCache) Add(id uint64, n uint64) {
 func (c *rankCache) BulkAdd(id uint64, n uint64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
+	// Flag the cache as dirty.
+	// This forces recalculation if top is called before the cache is recalculated.
+	c.dirty = true
+
 	if n < c.thresholdValue {
 		delete(c.entries, id)
 		return
@@ -246,6 +257,11 @@ func (c *rankCache) invalidate() {
 	// Don't invalidate more than once every X seconds.
 	// TODO: consider making this configurable.
 	if time.Since(c.updateTime).Seconds() < 10 {
+		// Skipping recalculation means that the ranked cache's growth is unbounded.
+		// This is somewhat necessary for now since recalculation is not cheap.
+		// The cache will remain flagged as dirty and will be recalculated if Top is called.
+		// This may cause unexpected memory growth, so record it in metrics for debugging purposes.
+		c.stats.Count(MetricInvalidateCacheSkipped, 1, 1.0)
 		return
 	}
 	c.stats.Count(MetricInvalidateCache, 1, 1.0)
@@ -295,6 +311,9 @@ func (c *rankCache) recalculate() {
 			delete(c.entries, pair.ID)
 		}
 	}
+
+	// The cache is no longer dirty.
+	c.dirty = false
 }
 
 // SetStats defines the stats client used in the cache.
@@ -306,6 +325,12 @@ func (c *rankCache) SetStats(s stats.StatsClient) {
 func (c *rankCache) Top() []bitmapPair {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
+	if c.dirty {
+		// The cache is dirty, so we need to recalculate it to get a consistent view.
+		c.stats.Count(MetricReadDirtyCache, 1, 1.0)
+		c.recalculate()
+	}
 
 	c.rankingsRead = true
 	return c.rankings

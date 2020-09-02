@@ -101,10 +101,15 @@ ifndef SKIP_CHECK_CLEAN
 endif
 
 # Create release build tarballs for all supported platforms. Linux compilation happens under Docker.
-release: check-clean
+release: check-clean generate-statik
 	$(MAKE) release-build GOOS=darwin GOARCH=amd64
 	$(MAKE) release-build GOOS=linux GOARCH=amd64
 
+# Create release build tarballs for all supported platforms. Same as `release`, but without embedded Lattice UI.
+release-sans-ui: check-clean
+	rm -f statik/statik.go
+	$(MAKE) release-build GOOS=darwin GOARCH=amd64
+	$(MAKE) release-build GOOS=linux GOARCH=amd64
 
 # try (e.g.) internal/clustertests/docker-compose-replication2.yml
 DOCKER_COMPOSE=internal/clustertests/docker-compose.yml

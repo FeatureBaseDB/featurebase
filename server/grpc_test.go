@@ -755,6 +755,46 @@ func TestQuerySQLUnary(t *testing.T) {
 			},
 			eq: equal,
 		},
+		// The following cases test different paths within the `case *sqlparser.AndExpr`
+		// of extract.go by providing different WHERE conditions.
+		{
+			// len(left) == 2 && len(right) == 1
+			// right[0].table == left[0].table
+			sql: "select _id from grouper g INNER JOIN joiner j ON g._id = j.grouperid where g.color = 'red' and j.jointype = 2 and g.age = 16",
+			exp: tableResponse{
+				headers: []columnInfo{{"_id", "uint64"}},
+				rows: []row{
+					{[]columnResponse{uint64(8)}},
+					{[]columnResponse{uint64(9)}},
+				},
+			},
+			eq: equalUnordered,
+		},
+		{
+			// len(left) == 2 && len(right) == 1
+			// right[0].table == left[1].table {
+			sql: "select _id from grouper g INNER JOIN joiner j ON g._id = j.grouperid where j.jointype = 2 and g.color = 'red' and g.age = 16",
+			exp: tableResponse{
+				headers: []columnInfo{{"_id", "uint64"}},
+				rows: []row{
+					{[]columnResponse{uint64(8)}},
+					{[]columnResponse{uint64(9)}},
+				},
+			},
+			eq: equalUnordered,
+		},
+		{
+			// len(left) == 1 && len(right) == 1 && left[0].table != right[0].table
+			sql: "select _id from grouper g INNER JOIN joiner j ON g._id = j.grouperid where g.color = 'red' and g.age = 16 and j.jointype = 2",
+			exp: tableResponse{
+				headers: []columnInfo{{"_id", "uint64"}},
+				rows: []row{
+					{[]columnResponse{uint64(8)}},
+					{[]columnResponse{uint64(9)}},
+				},
+			},
+			eq: equalUnordered,
+		},
 	}
 
 	for i, test := range tests {
