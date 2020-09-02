@@ -205,6 +205,7 @@ func (sc *sliceContainers) Update(key uint64, fn func(*Container, bool) (*Contai
 			sc.insertAt(key, nc, i)
 		}
 	}
+	sc.invalidateCache()
 }
 
 // UpdateEvery calls fn (existing-container, existed), and expects
