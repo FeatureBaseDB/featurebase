@@ -595,12 +595,10 @@ func extractComparison(expr *sqlparser.ComparisonExpr) (col *parseColumn, op str
 	return
 }
 
-func extractLimitOffset(stmt *sqlparser.Select) (uint, uint, bool, bool, error) {
+func extractLimitOffset(stmt *sqlparser.Select) (limit uint, offset uint, hasLimit bool, hasOffset bool, err error) {
 	if stmt.Limit == nil {
 		return 0, 0, false, false, nil
 	}
-	var offset, limit uint
-	var hasOffset, hasLimit bool
 	if offsetExpr, ok := stmt.Limit.Offset.(*sqlparser.SQLVal); ok {
 		val, err := extractVal(offsetExpr)
 		if err != nil {
