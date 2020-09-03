@@ -39,7 +39,7 @@ func (tx *RoaringTx) Type() string {
 }
 
 func (tx *RoaringTx) Dump() {
-	fmt.Printf("%v\n", tx.Index.StringifiedRoaringKeys())
+	fmt.Printf("%v\n", tx.Index.StringifiedRoaringKeys(false, false))
 }
 
 func (tx *RoaringTx) UseRowCache() bool {
