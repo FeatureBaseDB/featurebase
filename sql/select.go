@@ -241,7 +241,7 @@ func (h handlerSelectFieldsFromTableWhere) Apply(stmt *sqlparser.Select, qm Quer
 		}
 	}
 
-	limit, offset, err := extractLimitOffset(stmt)
+	limit, offset, hasLimit, hasOffset, err := extractLimitOffset(stmt)
 	if err != nil {
 		return nil, errors.Wrap(err, "extracting limit")
 	}
@@ -253,8 +253,7 @@ func (h handlerSelectFieldsFromTableWhere) Apply(stmt *sqlparser.Select, qm Quer
 
 	mr := &MappingResult{
 		IndexName: indexName,
-		//FieldFilters: fields,
-		Header: selectFields,
+		Header:    selectFields,
 	}
 
 	// assign headers
@@ -269,12 +268,24 @@ func (h handlerSelectFieldsFromTableWhere) Apply(stmt *sqlparser.Select, qm Quer
 		})
 
 		// Apply the limit and offset after sorting.
-		mr.addReducer(func(result pproto.ToRowser) pproto.ToRowser {
-			return LimitRows(OffsetRows(result, offset), limit)
-		})
+		if hasOffset {
+			mr.addReducer(func(result pproto.ToRowser) pproto.ToRowser {
+				return OffsetRows(result, offset)
+			})
+		}
+		if hasLimit {
+			mr.addReducer(func(result pproto.ToRowser) pproto.ToRowser {
+				return LimitRows(result, limit)
+			})
+		}
 	} else {
 		// Apply the limit and offset inside the query.
-		whereQuery = Limit(whereQuery, limit, offset)
+		switch {
+		case hasLimit:
+			whereQuery = Limit(whereQuery, limit, offset)
+		case hasOffset:
+			whereQuery = Offset(whereQuery, offset)
+		}
 	}
 
 	if len(fields) > 0 && fields[0] == "_id" {
@@ -308,7 +319,7 @@ func (h handlerSelectDistinctFromTable) Apply(stmt *sqlparser.Select, qm QueryMa
 		return nil, errors.New("distinct requires a valid field column")
 	}
 
-	limit, offset, err := extractLimitOffset(stmt)
+	limit, offset, hasLimit, hasOffset, err := extractLimitOffset(stmt)
 	if err != nil {
 		return nil, errors.Wrap(err, "extracting limit")
 	}
@@ -353,10 +364,17 @@ func (h handlerSelectDistinctFromTable) Apply(stmt *sqlparser.Select, qm QueryMa
 		})
 	}
 
-	// Apply a limit and offset to the result.
-	mr.addReducer(func(result pproto.ToRowser) pproto.ToRowser {
-		return LimitRows(OffsetRows(result, offset), limit)
-	})
+	// Apply the limit and offset after sorting.
+	if hasOffset {
+		mr.addReducer(func(result pproto.ToRowser) pproto.ToRowser {
+			return OffsetRows(result, offset)
+		})
+	}
+	if hasLimit {
+		mr.addReducer(func(result pproto.ToRowser) pproto.ToRowser {
+			return LimitRows(result, limit)
+		})
+	}
 
 	return mr, nil
 }
@@ -461,7 +479,7 @@ func (h handlerSelectFuncFromTableWhere) Apply(stmt *sqlparser.Select, qm QueryM
 		}
 	}
 
-	limit, offset, err := extractLimitOffset(stmt)
+	limit, offset, hasLimit, hasOffset, err := extractLimitOffset(stmt)
 	if err != nil {
 		return nil, errors.Wrap(err, "extracting limit offset")
 	}
@@ -506,9 +524,16 @@ func (h handlerSelectFuncFromTableWhere) Apply(stmt *sqlparser.Select, qm QueryM
 	}
 
 	// Apply a limit and offset to the result.
-	mr.addReducer(func(result pproto.ToRowser) pproto.ToRowser {
-		return LimitRows(OffsetRows(result, offset), limit)
-	})
+	if hasOffset {
+		mr.addReducer(func(result pproto.ToRowser) pproto.ToRowser {
+			return OffsetRows(result, offset)
+		})
+	}
+	if hasLimit {
+		mr.addReducer(func(result pproto.ToRowser) pproto.ToRowser {
+			return LimitRows(result, limit)
+		})
+	}
 
 	return mr, nil
 }
@@ -599,7 +624,7 @@ func (h handlerSelectGroupBy) Apply(stmt *sqlparser.Select, qm QueryMask, indexF
 		}
 	}
 
-	limit, offset, err := extractLimitOffset(stmt)
+	limit, offset, hasLimit, hasOffset, err := extractLimitOffset(stmt)
 	if err != nil {
 		return nil, errors.Wrap(err, "extracting limit offset")
 	}
@@ -649,9 +674,16 @@ func (h handlerSelectGroupBy) Apply(stmt *sqlparser.Select, qm QueryMask, indexF
 	}
 
 	// Apply a limit and offset to the result.
-	mr.addReducer(func(result pproto.ToRowser) pproto.ToRowser {
-		return LimitRows(OffsetRows(result, offset), limit)
-	})
+	if hasOffset {
+		mr.addReducer(func(result pproto.ToRowser) pproto.ToRowser {
+			return OffsetRows(result, offset)
+		})
+	}
+	if hasLimit {
+		mr.addReducer(func(result pproto.ToRowser) pproto.ToRowser {
+			return LimitRows(result, limit)
+		})
+	}
 
 	return mr, nil
 }
@@ -684,7 +716,7 @@ func (f handlerSelectIDCountFromTable) Apply(stmt *sqlparser.Select, qm QueryMas
 		}
 	}
 
-	limit, offset, err := extractLimitOffset(stmt)
+	limit, offset, hasLimit, hasOffset, err := extractLimitOffset(stmt)
 	if err != nil {
 		return nil, errors.Wrap(err, "extracting limit offset")
 	}
@@ -719,9 +751,16 @@ func (f handlerSelectIDCountFromTable) Apply(stmt *sqlparser.Select, qm QueryMas
 	// supported something like this in Pilosa itself.
 
 	// Apply a limit and offset to the result.
-	mr.addReducer(func(result pproto.ToRowser) pproto.ToRowser {
-		return LimitRows(OffsetRows(result, offset), limit)
-	})
+	if hasOffset {
+		mr.addReducer(func(result pproto.ToRowser) pproto.ToRowser {
+			return OffsetRows(result, offset)
+		})
+	}
+	if hasLimit {
+		mr.addReducer(func(result pproto.ToRowser) pproto.ToRowser {
+			return LimitRows(result, limit)
+		})
+	}
 
 	return mr, nil
 }
@@ -800,7 +839,7 @@ func (h handlerSelectJoin) Apply(stmt *sqlparser.Select, qm QueryMask, indexFunc
 		qo = rowQry
 	}
 
-	limit, offset, err := extractLimitOffset(stmt)
+	limit, offset, hasLimit, hasOffset, err := extractLimitOffset(stmt)
 	if err != nil {
 		return nil, errors.Wrap(err, "extracting limit")
 	}
@@ -824,9 +863,16 @@ func (h handlerSelectJoin) Apply(stmt *sqlparser.Select, qm QueryMask, indexFunc
 	}
 
 	// Apply a limit and offset to the result.
-	mr.addReducer(func(result pproto.ToRowser) pproto.ToRowser {
-		return LimitRows(OffsetRows(result, offset), limit)
-	})
+	if hasOffset {
+		mr.addReducer(func(result pproto.ToRowser) pproto.ToRowser {
+			return OffsetRows(result, offset)
+		})
+	}
+	if hasLimit {
+		mr.addReducer(func(result pproto.ToRowser) pproto.ToRowser {
+			return LimitRows(result, limit)
+		})
+	}
 
 	return mr, nil
 }

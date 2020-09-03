@@ -595,34 +595,37 @@ func extractComparison(expr *sqlparser.ComparisonExpr) (col *parseColumn, op str
 	return
 }
 
-func extractLimitOffset(stmt *sqlparser.Select) (uint, uint, error) {
+func extractLimitOffset(stmt *sqlparser.Select) (uint, uint, bool, bool, error) {
 	if stmt.Limit == nil {
-		return 100, 0, nil
+		return 0, 0, false, false, nil
 	}
 	var offset, limit uint
+	var hasOffset, hasLimit bool
 	if offsetExpr, ok := stmt.Limit.Offset.(*sqlparser.SQLVal); ok {
 		val, err := extractVal(offsetExpr)
 		if err != nil {
-			return 0, 0, err
+			return 0, 0, false, false, err
 		}
 		if offsetVal, ok := val.(int); ok {
 			offset = uint(offsetVal)
 		} else {
-			return 0, 0, errors.New("offset must be an integer")
+			return 0, 0, false, false, errors.New("offset must be an integer")
 		}
+		hasOffset = true
 	}
 	if limitExpr, ok := stmt.Limit.Rowcount.(*sqlparser.SQLVal); ok {
 		val, err := extractVal(limitExpr)
 		if err != nil {
-			return 0, 0, err
+			return 0, 0, false, false, err
 		}
 		if limitVal, ok := val.(int); ok {
 			limit = uint(limitVal)
 		} else {
-			return 0, 0, errors.New("limit must be an integer")
+			return 0, 0, false, false, errors.New("limit must be an integer")
 		}
+		hasLimit = true
 	}
-	return limit, offset, nil
+	return limit, offset, hasLimit, hasOffset, nil
 }
 
 // extractOrderBy returns the order by fields and directions (asc/desc)
