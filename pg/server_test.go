@@ -15,11 +15,15 @@
 package pg_test
 
 import (
+	"bytes"
 	"context"
+	"crypto/rand"
 	"fmt"
 	"net"
 	"os/exec"
 	"strconv"
+	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -173,46 +177,115 @@ func TestPSQLQuery(t *testing.T) {
 		t.Fatalf("searching for psql: %v", err)
 	}
 
-	server := &pg.Server{
-		QueryHandler: pgtest.HandlerFunc(func(ctx context.Context, w pg.QueryResultWriter, q pg.Query) error {
-			err := w.WriteHeader(pg.ColumnInfo{
-				Name: "field",
-				Type: pg.TypeCharoid,
-			})
-			if err != nil {
-				return err
+	t.Run("Query", func(t *testing.T) {
+		server := &pg.Server{
+			QueryHandler: pgtest.HandlerFunc(func(ctx context.Context, w pg.QueryResultWriter, q pg.Query) error {
+				err := w.WriteHeader(pg.ColumnInfo{
+					Name: "field",
+					Type: pg.TypeCharoid,
+				})
+				if err != nil {
+					return err
+				}
+
+				err = w.WriteRowText("h")
+				if err != nil {
+					return err
+				}
+
+				err = w.WriteRowText("xyzzy")
+				if err != nil {
+					return err
+				}
+
+				return nil
+			}),
+			TypeEngine:     pg.PrimitiveTypeEngine{},
+			StartupTimeout: time.Second,
+			Logger:         logger.NopLogger,
+		}
+		addr, shutdown, err := pgtest.ServeTCP(":0", server)
+		if err != nil {
+			t.Fatalf("starting postgres server: %v", err)
+		}
+		defer shutdown.Finish(t, "postgres server")
+
+		tcpAddr := addr.(*net.TCPAddr)
+
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		cmd := exec.CommandContext(ctx, "psql", "-h", tcpAddr.IP.String(), "-p", strconv.Itoa(tcpAddr.Port), "-c", "test query")
+		data, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("psql failed: %v", string(data))
+		}
+	})
+
+	t.Run("Cancel", func(t *testing.T) {
+		var term func() error
+		var qerr error
+		var qdone bool
+		defer func() {
+			if qerr != nil {
+				t.Fatal(qerr)
 			}
-
-			err = w.WriteRowText("h")
-			if err != nil {
-				return err
+			if !qdone {
+				t.Fatal("query not done")
 			}
+		}()
 
-			err = w.WriteRowText("xyzzy")
-			if err != nil {
-				return err
-			}
+		var mutex sync.Mutex
+		mutex.Lock()
 
-			return nil
-		}),
-		TypeEngine:     pg.PrimitiveTypeEngine{},
-		StartupTimeout: time.Second,
-		Logger:         logger.NopLogger,
-	}
-	addr, shutdown, err := pgtest.ServeTCP(":0", server)
-	if err != nil {
-		t.Fatalf("starting postgres server: %v", err)
-	}
-	defer shutdown.Finish(t, "postgres server")
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
 
-	tcpAddr := addr.(*net.TCPAddr)
+		server := &pg.Server{
+			QueryHandler: pgtest.HandlerFunc(func(qctx context.Context, w pg.QueryResultWriter, q pg.Query) error {
+				defer func() { qdone = true }()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+				mutex.Lock()
+				defer mutex.Unlock()
 
-	cmd := exec.CommandContext(ctx, "psql", "-h", tcpAddr.IP.String(), "-p", strconv.Itoa(tcpAddr.Port), "-c", "test query")
-	data, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("psql failed: %v", string(data))
-	}
+				qerr = term()
+				if qerr != nil {
+					return qerr
+				}
+				select {
+				case <-qctx.Done():
+				case <-ctx.Done():
+					qerr = ctx.Err()
+					return qerr
+				}
+				return nil
+			}),
+			TypeEngine:          pg.PrimitiveTypeEngine{},
+			StartupTimeout:      time.Second,
+			Logger:              logger.NopLogger,
+			CancellationManager: pg.NewLocalCancellationManager(rand.Reader),
+		}
+		addr, shutdown, err := pgtest.ServeTCP(":0", server)
+		if err != nil {
+			t.Fatalf("starting postgres server: %v", err)
+		}
+		defer shutdown.Finish(t, "postgres server")
+
+		tcpAddr := addr.(*net.TCPAddr)
+
+		cmd := exec.CommandContext(ctx, "psql", "-h", tcpAddr.IP.String(), "-p", strconv.Itoa(tcpAddr.Port), "-c", "test query")
+		term = func() error { return cmd.Process.Signal(syscall.SIGINT) }
+		var buf bytes.Buffer
+		cmd.Stderr = &buf
+		cmd.Stdout = &buf
+		err = cmd.Start()
+		if err != nil {
+			t.Fatalf("starting postgres client: %v", err)
+		}
+		mutex.Unlock()
+		err = cmd.Wait()
+		if err != nil {
+			t.Fatalf("psql failed (%v): %s", err, buf.String())
+		}
+	})
 }

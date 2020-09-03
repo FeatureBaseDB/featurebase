@@ -49,6 +49,9 @@ const (
 
 	// TypeSimpleQuery is a simple query request.
 	TypeSimpleQuery Type = 'Q'
+
+	// TypeBackendKeyData contains a cancellation key for the client to use later.
+	TypeBackendKeyData Type = 'K'
 )
 
 // AuthenticationOK is a message indicating that authentication has completed.
@@ -339,6 +342,26 @@ func (e *Encoder) NegotiateProtocolVersion(maxMinor int32, unrecognizedOptions .
 
 	return Message{
 		Type: TypeNegotiateProtocolVersion,
+		Data: e.buf.Bytes(),
+	}, nil
+}
+
+// BackendKeyData encodes a Message with a cancellation key.
+func (e *Encoder) BackendKeyData(pid, key int32) (Message, error) {
+	e.buf.Reset()
+
+	err := e.i32(pid)
+	if err != nil {
+		return Message{}, err
+	}
+
+	err = e.i32(key)
+	if err != nil {
+		return Message{}, err
+	}
+
+	return Message{
+		Type: TypeBackendKeyData,
 		Data: e.buf.Bytes(),
 	}, nil
 }
