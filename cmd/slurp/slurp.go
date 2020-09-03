@@ -19,6 +19,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"flag"
 	"time"
 
 	//"fmt"
@@ -178,13 +179,20 @@ func UploadTar(srcFile string, client *http.InternalClient) error {
 }
 
 func main() {
+	var host string
+	var tarSrcPath string
+	flag.StringVar(&host, "host", "127.0.0.1:10101", "host to import into")
+	flag.StringVar(&tarSrcPath, "src", "q2.tar.gz", "data to import")
+	flag.Parse()
 
-	host := "127.0.0.1:10101"
+	uri, err := pilosa.NewURIFromAddress(host)
+	panicOn(err)
+	globURI = uri
+
 	h := &gohttp.Client{}
 	c, err := http.NewInternalClient(host, h)
 	panicOn(err)
 
-	tarSrcPath := os.Args[1] //"q2.tar.gz"
 	t0 := time.Now()
 	println("uploading", tarSrcPath)
 	panicOn(UploadTar(tarSrcPath, c))
@@ -192,12 +200,6 @@ func main() {
 }
 
 var globURI *pilosa.URI
-
-func init() {
-	var err error
-	globURI, err = pilosa.NewURIFromHostPort("127.0.0.1", 10101)
-	panicOn(err)
-}
 
 // get correct node to go to.
 func GetImportRoaringURI(index string, shard uint64) *pilosa.URI {
