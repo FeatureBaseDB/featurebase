@@ -32,6 +32,7 @@ import (
 	"sync/atomic"
 
 	"github.com/glycerine/lmdb-go/lmdb"
+	"github.com/pilosa/pilosa/v2/hash"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/txkey"
 	"github.com/pkg/errors"
@@ -1531,24 +1532,24 @@ func stringifiedLMDBKeysTx(tx *LMDBTx) (r string) {
 		bkey := it.lastKey
 		key := txkey.ToString(bkey)
 		ckey := txkey.KeyExtractContainerKey(bkey)
-		hash := ""
+		h := ""
 		srbm := ""
 		v := it.lastVal
 		n := len(v)
 		if n == 0 {
 			panic("should not have empty v here")
 		}
-		hash = Blake3sum16(v[0:(n - 1)])
+		h = hash.Blake3sum16(v[0:(n - 1)])
 		ct := tx.toContainer(v[n-1], v[0:(n-1)])
 		cts := roaring.NewSliceContainers()
 		cts.Put(ckey, ct)
 		rbm := &roaring.Bitmap{Containers: cts}
 		srbm = BitmapAsString(rbm)
 
-		r += fmt.Sprintf("%v -> %v (%v hot)\n", key, hash, tx.countBitsSet(bkey))
+		r += fmt.Sprintf("%v -> %v (%v hot)\n", key, h, tx.countBitsSet(bkey))
 		r += "          ......." + srbm + "\n"
 	}
-	r += "]\n   all-in-blake3:" + Blake3sum16([]byte(r))
+	r += "]\n   all-in-blake3:" + hash.Blake3sum16([]byte(r))
 
 	if !any {
 		return "<empty lmdb database>"

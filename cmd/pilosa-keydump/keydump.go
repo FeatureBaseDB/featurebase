@@ -39,6 +39,7 @@ import (
 
 	"github.com/glycerine/lmdb-go/lmdb"
 	"github.com/pilosa/pilosa/v2"
+	"github.com/pilosa/pilosa/v2/hash"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/txkey"
 )
@@ -160,7 +161,7 @@ database '%v':
 
 				n := len(v)
 
-				hash := pilosa.Blake3sum16(v[0:(n - 1)])
+				hash := hash.Blake3sum16(v[0:(n - 1)])
 				ct := pilosa.ToContainer(v[n-1], v[0:(n-1)])
 				cts := roaring.NewSliceContainers()
 				cts.Put(ckey, ct)

@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/proto"
+	"github.com/pilosa/pilosa/v2/hash"
 	"github.com/pilosa/pilosa/v2/internal"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/stats"
@@ -791,7 +792,7 @@ func (i *Index) ComputeTranslatorSummary(verbose bool) (ats *AllTranslatorSummar
 		}
 		sum.Field = fld.name
 		sum.Index = i.Name()
-		sum.Checksum = Blake3sum16([]byte(fmt.Sprintf("%v/%v/%v", sum.Checksum, fld.name, i.Name())))
+		sum.Checksum = hash.Blake3sum16([]byte(fmt.Sprintf("%v/%v/%v", sum.Checksum, fld.name, i.Name())))
 
 		if verbose {
 			fmt.Printf("row blake3-%v keyN: %5v idN: %5v field: '%v'\n", sum.Checksum, sum.KeyCount, sum.IDCount, fld.name)
@@ -813,7 +814,7 @@ func (i *Index) ComputeTranslatorSummary(verbose bool) (ats *AllTranslatorSummar
 		sum.PartitionID = partitionID
 		sum.Index = i.Name()
 
-		sum.Checksum = Blake3sum16([]byte(fmt.Sprintf("%v/%v/%v", sum.Checksum, partitionID, i.Name())))
+		sum.Checksum = hash.Blake3sum16([]byte(fmt.Sprintf("%v/%v/%v", sum.Checksum, partitionID, i.Name())))
 		if verbose {
 			fmt.Printf("col blake3-%v keyN: %10v idN: %10v paritionID: %03v \n", sum.Checksum, sum.KeyCount, sum.IDCount, partitionID)
 		}

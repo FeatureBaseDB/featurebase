@@ -12,15 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package pilosa
+package hash
 
 import (
+	"encoding/hex"
 	"fmt"
 	"io/ioutil"
 	"os"
+	"path"
 	"testing"
-
-	"encoding/hex"
 
 	"github.com/pilosa/pilosa/v2/testhook"
 )
@@ -44,7 +44,7 @@ func TestBlake3Hasher(t *testing.T) {
 }
 
 func TestCryptoRandInt64(t *testing.T) {
-	rnd := cryptoRandInt64()
+	rnd := CryptoRandInt64()
 	if rnd == 0 {
 		panic("cryptoRandInt64() gave 0, very high odds it has broken")
 	}
@@ -52,21 +52,39 @@ func TestCryptoRandInt64(t *testing.T) {
 
 func TestHashOfDir(t *testing.T) {
 	dir, err := testhook.TempDir(t, "TestHashOfDir-dir")
-	panicOn(err)
-	b := dir + sep + "A" + sep + "B"
-	c := dir + sep + "A" + sep + "C"
-	panicOn(os.MkdirAll(b, 0755))
-	panicOn(os.MkdirAll(c, 0755))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	b := path.Join(dir, "A", "B")
+	if err := os.MkdirAll(b, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	c := path.Join(dir, "A", "C")
+	if err := os.MkdirAll(c, 0755); err != nil {
+		t.Fatal(err)
+	}
+
 	bmessage := []byte("hello B\n")
-	panicOn(ioutil.WriteFile(b+sep+"b_content", bmessage, 0644))
+	if err := ioutil.WriteFile(path.Join(b, "b_content"), bmessage, 0644); err != nil {
+		t.Fatal(err)
+	}
+
 	cmessage := []byte("hello C\n")
-	panicOn(ioutil.WriteFile(c+sep+"c_content", cmessage, 0644))
+	if err := ioutil.WriteFile(path.Join(c, "c_content"), cmessage, 0644); err != nil {
+		t.Fatal(err)
+	}
+
 	hsh := HashOfDir(dir)
 
 	c2message := []byte("hello C2\n")
-	panicOn(ioutil.WriteFile(c+sep+"c_content", c2message, 0644))
+	if err := ioutil.WriteFile(path.Join(c, "c_content"), c2message, 0644); err != nil {
+		t.Fatal(err)
+	}
+
 	hsh2 := HashOfDir(dir)
 	if hsh2 == hsh {
-		panic("HashOfDir did not detect 1 byte change")
+		t.Fatal("HashOfDir did not detect 1 byte change")
 	}
 }
