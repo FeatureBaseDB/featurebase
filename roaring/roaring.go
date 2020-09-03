@@ -4617,8 +4617,8 @@ func compareArrayArray(a1, a2 []uint16) error {
 // an error describing any difference it finds. This is mostly intended
 // for use in tests that expect equality.
 func (c *Container) BitwiseCompare(c2 *Container) error {
-	if c.N() != c2.N() {
-		return errors.New("containers are different lengths")
+	if cn, c2n := c.N(), c2.N(); cn != c2n {
+		return errors.Errorf("containers are different lengths: %d, %d", cn, c2n)
 	}
 	if c.N() == 0 {
 		return nil
