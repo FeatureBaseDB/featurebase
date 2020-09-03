@@ -96,11 +96,16 @@ type TranslateStore interface {
 // TranslatorSummary is returned, for example from the boltdb string key translators,
 // by calling ComputeTranslatorSummary(). Non-boltdb mocks, etc no-op that method.
 type TranslatorSummary struct {
+	Index string
+
+	// ParitionID is filled for column keys
 	PartitionID int
-	Index       string
+
+	// Field is filled for row keys
+	Field string
 
 	// Checksum has a blake3 crypto hash of all the keys->ID and all the ID->key mappings
-	Checksum []byte
+	Checksum string
 
 	// KeyCount has the number of Key->ID mappings
 	KeyCount int

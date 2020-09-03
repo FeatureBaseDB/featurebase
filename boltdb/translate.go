@@ -518,6 +518,6 @@ func (s *TranslateStore) ComputeTranslatorSummary() (sum *pilosa.TranslatorSumma
 	}
 	var buf [16]byte
 	_, _ = hasher.Digest().Read(buf[0:])
-	sum.Checksum = buf[:]
+	sum.Checksum = string(buf[:])
 	return sum, nil
 }
