@@ -37,6 +37,10 @@ type TranslateStore struct {
 	EntryReaderFunc   func(ctx context.Context, offset uint64) (pilosa.TranslateEntryReader, error)
 }
 
+func (s *TranslateStore) ComputeTranslatorSummary() (sum *pilosa.TranslatorSummary, err error) {
+	return
+}
+
 func (s *TranslateStore) Close() error {
 	return s.CloseFunc()
 }

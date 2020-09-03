@@ -768,3 +768,57 @@ func (idx *Index) SliceOfShards(field, view, viewPath string) (sliceOfShards []u
 	}
 	return
 }
+
+type AllTranslatorSummary struct {
+	Sums []*TranslatorSummary
+}
+
+func NewAllTranslatorSummary() *AllTranslatorSummary {
+	return &AllTranslatorSummary{}
+}
+func (ats *AllTranslatorSummary) Merge(b *AllTranslatorSummary) {
+	ats.Sums = append(ats.Sums, b.Sums...)
+}
+
+func (ats *AllTranslatorSummary) Sort() {
+	// return sorted by index then PartitionID
+	sort.Slice(ats.Sums, func(i, j int) bool {
+		a := ats.Sums[i]
+		b := ats.Sums[j]
+		if a.Index < b.Index {
+			return true
+		}
+		if a.Index > b.Index {
+			return false
+		}
+		// INVAR: a.Index == b.Index
+		return a.PartitionID < b.PartitionID
+	})
+}
+
+// sums is only guaranteed to be sorted by (index, PartitionID) if err returns nil
+func (i *Index) ComputeTranslatorSummary(verbose bool) (ats *AllTranslatorSummary, err error) {
+	i.mu.RLock() // avoid race with Index.Close() doing i.translateStores = make(map[int]TranslateStore)
+	defer i.mu.RUnlock()
+
+	ats = &AllTranslatorSummary{}
+
+	for partitionID, store := range i.translateStores {
+		sum, err := store.ComputeTranslatorSummary()
+		if err != nil {
+			return ats, err
+		}
+		if sum == nil {
+			// probably one of the Noop stores
+			continue
+		}
+		sum.PartitionID = partitionID
+		sum.Index = i.Name()
+		if verbose {
+			fmt.Printf("index: %v paritionID: %03v blake3-%x keyN: %10v idN: %10v\n", i.name, partitionID, sum.Checksum, sum.KeyCount, sum.IDCount)
+		}
+		ats.Sums = append(ats.Sums, sum)
+	}
+
+	return
+}

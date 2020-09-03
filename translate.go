@@ -89,6 +89,24 @@ type TranslateStore interface {
 	// It should read from the reader and replace the data store with
 	// the read payload.
 	ReadFrom(io.Reader) (int64, error)
+
+	ComputeTranslatorSummary() (sum *TranslatorSummary, err error)
+}
+
+// TranslatorSummary is returned, for example from the boltdb string key translators,
+// by calling ComputeTranslatorSummary(). Non-boltdb mocks, etc no-op that method.
+type TranslatorSummary struct {
+	PartitionID int
+	Index       string
+
+	// Checksum has a blake3 crypto hash of all the keys->ID and all the ID->key mappings
+	Checksum []byte
+
+	// KeyCount has the number of Key->ID mappings
+	KeyCount int
+
+	// IDCount has the number of ID->Key mappings
+	IDCount int
 }
 
 // OpenTranslateStoreFunc represents a function for instantiating and opening a TranslateStore.
@@ -289,6 +307,9 @@ func OpenInMemTranslateStore(rawurl, index, field string, partitionID, partition
 	return NewInMemTranslateStore(index, field, partitionID, partitionN), nil
 }
 
+func (s *InMemTranslateStore) ComputeTranslatorSummary() (sum *TranslatorSummary, err error) {
+	panic("TODO")
+}
 func (s *InMemTranslateStore) Close() error {
 	return nil
 }

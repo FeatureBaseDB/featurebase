@@ -1870,6 +1870,7 @@ func (api *API) ActiveQueries(ctx context.Context) ([]ActiveQueryStatus, error) 
 }
 
 // TranslateIndexDB is an internal function to load the index keys database
+// rd is a boltdb file.
 func (api *API) TranslateIndexDB(ctx context.Context, indexName string, partitionID int, rd io.Reader) error {
 	idx := api.holder.Index(indexName)
 	store := idx.TranslateStore(partitionID)
