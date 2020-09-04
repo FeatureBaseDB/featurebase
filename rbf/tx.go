@@ -24,7 +24,10 @@ import (
 
 	"github.com/benbjohnson/immutable"
 	"github.com/pilosa/pilosa/v2/roaring"
+	"github.com/pilosa/pilosa/v2/txkey"
 )
+
+var _ = txkey.ToString
 
 // Tx represents a transaction.
 type Tx struct {
@@ -650,6 +653,16 @@ func (tx *Tx) putContainer(name string, key uint64, ct *roaring.Container) error
 		return err
 	}
 	return c.putLeafCell(cell)
+}
+
+func (tx *Tx) putContainerWithCursor(cur *Cursor, key uint64, ct *roaring.Container) error {
+	if tx.DeleteEmptyContainer && ct.N() == 0 {
+		if exact, err := cur.Seek(key); err != nil || !exact {
+			return err
+		}
+		return cur.deleteLeafCell(key)
+	}
+	return cur.putLeafCell(ConvertToLeafArgs(key, ct))
 }
 
 // RemoveContainer removes a container from the bitmap by key.
@@ -1403,7 +1416,8 @@ func stringOfCkeyCt(ckey uint64, ct *roaring.Container, rrName string) (s string
 	rbm := &roaring.Bitmap{Containers: cts}
 	srbm := bitmapAsString(rbm)
 
-	bkey := rrName + fmt.Sprintf("%020d", ckey)
+	pre := txkey.PrefixToString([]byte(rrName))
+	bkey := pre + fmt.Sprintf("ckey@%020d", ckey)
 
 	s = fmt.Sprintf("%v -> %v (%v hot)\n", bkey, hash, ct.N())
 	s += "          ......." + srbm + "\n"
@@ -1439,7 +1453,11 @@ func (tx *Tx) ImportRoaringBits(name string, itr roaring.RoaringIterator, clear 
 
 	var currRow uint64
 
-	var oldC *roaring.Container
+	cur, err := tx.cursor(name)
+	if err != nil {
+		return changed, rowSet, err
+	}
+
 	for itrKey, synthC := itr.NextContainer(); synthC != nil; itrKey, synthC = itr.NextContainer() {
 		if rowSize != 0 {
 			currRow = itrKey / rowSize
@@ -1450,10 +1468,12 @@ func (tx *Tx) ImportRoaringBits(name string, itr roaring.RoaringIterator, clear 
 		}
 		// INVAR: nsynth > 0
 
-		oldC, err = tx.container(name, itrKey)
-		panicOn(err)
-		if err != nil {
-			return
+		// Find existing container, if any.
+		var oldC *roaring.Container
+		if exact, err := cur.Seek(itrKey); err != nil {
+			return changed, rowSet, err
+		} else if exact {
+			oldC = toContainer(cur.cell(), tx)
 		}
 
 		if oldC == nil || oldC.N() == 0 {
@@ -1462,13 +1482,11 @@ func (tx *Tx) ImportRoaringBits(name string, itr roaring.RoaringIterator, clear 
 				// changed of 0 and empty rowSet is perfect, no need to change the defaults.
 				continue
 			} else {
-
 				changed += nsynth
 				rowSet[currRow] += nsynth
 
-				err = tx.putContainer(name, itrKey, synthC)
-				if err != nil {
-					return
+				if err := tx.putContainerWithCursor(cur, itrKey, synthC); err != nil {
+					return changed, rowSet, err
 				}
 				continue
 			}
@@ -1488,7 +1506,7 @@ func (tx *Tx) ImportRoaringBits(name string, itr roaring.RoaringIterator, clear 
 				changes := int(existN - newC.N())
 				changed += changes
 				rowSet[currRow] -= changes
-				err = tx.putContainer(name, itrKey, newC)
+				err = tx.putContainerWithCursor(cur, itrKey, newC)
 				if err != nil {
 					return
 				}
@@ -1506,7 +1524,7 @@ func (tx *Tx) ImportRoaringBits(name string, itr roaring.RoaringIterator, clear 
 				// can nsynth be zero? No, because of the continue/invariant above where nsynth > 0
 				changed += nsynth
 				rowSet[currRow] += nsynth
-				err = tx.putContainer(name, itrKey, synthC)
+				err = tx.putContainerWithCursor(cur, itrKey, synthC)
 				if err != nil {
 					return
 				}
@@ -1523,7 +1541,7 @@ func (tx *Tx) ImportRoaringBits(name string, itr roaring.RoaringIterator, clear 
 				changed += changes
 				rowSet[currRow] += changes
 
-				err = tx.putContainer(name, itrKey, newC)
+				err = tx.putContainerWithCursor(cur, itrKey, newC)
 				if err != nil {
 					panicOn(err)
 					return

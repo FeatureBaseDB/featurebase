@@ -175,7 +175,8 @@ func TestHandler_Endpoints(t *testing.T) {
 	})
 
 	i0 := hldr.MustCreateIndexIfNotExists("i0", pilosa.IndexOptions{})
-	tx0, err := holder.BeginTx(true, i0.Index)
+	const shard = 0
+	tx0, err := holder.BeginTx(true, i0.Index, shard)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -193,7 +194,7 @@ func TestHandler_Endpoints(t *testing.T) {
 	}
 
 	i1 := hldr.MustCreateIndexIfNotExists("i1", pilosa.IndexOptions{})
-	tx1, err := holder.BeginTx(true, i1.Index)
+	tx1, err := holder.BeginTx(true, i1.Index, shard)
 	if err != nil {
 		t.Fatal(err)
 	}

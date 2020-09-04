@@ -59,6 +59,10 @@ func newLMDBTestRegistrar() *lmdbRegistrar {
 	}
 }
 
+func (r *lmdbRegistrar) OpenDBWrapper(path0 string, doAllocZero bool) (DBWrapper, error) {
+	panic("lmdb only available on 64-bit arch")
+}
+
 // register each lmdb created under tests, so we
 // can clean them up. This is called by openLMDBWrapper() while
 // holding the r.mu.Lock, since it needs to atomically
@@ -154,10 +158,19 @@ func (tx *LMDBTx) UseRowCache() bool {
 	panic("lmdb only available on 64-bit arch")
 }
 
+func (tx *LMDBTx) Group() *TxGroup {
+	panic("lmdb only available on 64-bit arch")
+}
+
 // Pointer gives us a memory address for the underlying transaction for debugging.
 // It is public because we use it in roaring to report invalid container memory access
 // outside of a transaction.
 func (tx *LMDBTx) Pointer() string {
+	panic("lmdb only available on 64-bit arch")
+}
+
+// Sn retreives the serial number of the Tx.
+func (tx *LMDBTx) Sn() int64 {
 	panic("lmdb only available on 64-bit arch")
 }
 
@@ -419,5 +432,9 @@ func (tx *LMDBTx) RoaringBitmapReader(index, field, view string, shard uint64, f
 // UnionInPlace unions all the others Bitmaps into a new Bitmap, and then writes it to the
 // specified fragment.
 func (tx *LMDBTx) UnionInPlace(index, field, view string, shard uint64, others ...*roaring.Bitmap) error {
+	panic("lmdb only available on 64-bit arch")
+}
+
+func (tx *LMDBTx) Options() Txo {
 	panic("lmdb only available on 64-bit arch")
 }

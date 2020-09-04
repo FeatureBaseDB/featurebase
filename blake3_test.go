@@ -37,7 +37,7 @@ func TestBlake3Hasher(t *testing.T) {
 		panic(fmt.Sprintf("expected hash:'%v' but observed hash '%v'", expected, observed))
 	}
 
-	obs2 := blake3sum16(input)
+	obs2 := Blake3sum16(input)
 	if obs2 != expected {
 		panic(fmt.Sprintf("expected hash:'%v' but observed hash from blake2sum16: '%v'", expected, obs2))
 	}

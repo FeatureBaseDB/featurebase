@@ -74,7 +74,7 @@ type Tx interface {
 
 	// UseRowCache is used by fragment.go unprotectedRow() to determine
 	// dynamically at runtime if RoaringTx
-	// are in use, which for continuity want to continue to use the
+	// are in use, which for continuity wants to continue to use the
 	// rowCache, or if other storage engines (RBF, Badger) are in
 	// use, which will mean that the bitmap data stored by the
 	// rowCache can disappear as it is un-mmap-ed, causing crashes.
@@ -193,8 +193,29 @@ type Tx interface {
 	// one that needs optionalViewPath; any other Tx implementation can ignore that.
 	SliceOfShards(index, field, view, optionalViewPath string) (sliceOfShards []uint64, err error)
 
+	// Group returns nil or the TxGroup that this Tx is a part of.
+	Group() *TxGroup
+
 	// Dump is for debugging, what does this Tx see as its database?
 	Dump()
+
+	// Options returns the options used to create this Tx. This
+	// can be implementd by embedding Txo, and Txo provides the
+	// Options() method.
+	Options() Txo
+
+	// Sn retreives the serial number of the Tx.
+	Sn() int64
+}
+
+// Closer is used by Finders
+type Closer interface {
+	Close()
+}
+
+type Dumper interface {
+	// Dump is for debugging, what does this Tx see as its database?
+	AllDump()
 }
 
 // TxStore has operations that will create and commit multiple

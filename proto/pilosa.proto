@@ -1,6 +1,8 @@
 syntax = "proto3";
 package pilosa;
 
+import "public.proto";
+
 message VDS {
   string name = 1;
 }
@@ -124,4 +126,5 @@ service Pilosa {
   rpc QueryPQL(QueryPQLRequest) returns (stream RowResponse) {};
   rpc QueryPQLUnary(QueryPQLRequest) returns (TableResponse) {};
   rpc Inspect(InspectRequest) returns (stream RowResponse) {};
+  rpc ImportAtomicRecord(stream AtomicRecord) returns (AtomicImportResponse) {};
 }

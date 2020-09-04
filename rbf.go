@@ -24,6 +24,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/pilosa/pilosa/v2/rbf"
 	"github.com/pilosa/pilosa/v2/roaring"
@@ -38,10 +39,14 @@ type RbfDBWrapper struct {
 	reg  *rbfDBRegistrar
 	muDb sync.Mutex
 
+	openTx map[*RBFTx]bool
+
 	// make Close() idempotent, avoiding panic on double Close()
 	closed bool
 
 	//DeleteEmptyContainer bool // needed for roaring compat?
+
+	doAllocZero bool
 }
 
 // rbfDBRegistrar also allows opening the same path twice to
@@ -65,7 +70,7 @@ func newRbfDBRegistrar() *rbfDBRegistrar {
 }
 
 // register each rbf.DB created, so we dedup and can
-// can clean them up. This is called by openRbfDB() while
+// can clean them up. This is called by OpenDBWrapper() while
 // holding the r.mu.Lock, since it needs to atomically
 // check the registry and make a new instance only
 // if one does not exist for its path, and otherwise
@@ -92,15 +97,15 @@ func rbfPath(path string) string {
 	return path
 }
 
-// openRbfDB opens the database in the path directoy
+// OpenDBWrapper opens the database in the path directoy
 // without deleting any prior content. Any
 // database directory will have the "-rbfdb" suffix.
 //
-// openRbfDB will check the registry and make a new instance only
+// OpenDBWrapper will check the registry and make a new instance only
 // if one does not exist for its path. Otherwise it returns
 // the existing instance. This insures only one RbfDBWrapper
 // per bpath in this pilosa node.
-func (r *rbfDBRegistrar) openRbfDB(path0 string) (*RbfDBWrapper, error) {
+func (r *rbfDBRegistrar) OpenDBWrapper(path0 string, doAllocZero bool) (DBWrapper, error) {
 	path := rbfPath(path0)
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -112,12 +117,15 @@ func (r *rbfDBRegistrar) openRbfDB(path0 string) (*RbfDBWrapper, error) {
 	db := rbf.NewDB(path)
 
 	w = &RbfDBWrapper{
-		reg:  r,
-		Path: path,
-		db:   db,
+		reg:         r,
+		Path:        path,
+		db:          db,
+		doAllocZero: doAllocZero,
+		openTx:      make(map[*RBFTx]bool),
 	}
 
 	r.unprotectedRegister(w)
+	rbf.DoAllocZero = doAllocZero
 
 	err := db.Open()
 	if err != nil {
@@ -132,6 +140,9 @@ type RBFTx struct {
 	initialIndex string
 	frag         *fragment
 	tx           *rbf.Tx
+	o            Txo
+	sn           int64 // serial number
+	Db           *RbfDBWrapper
 }
 
 func (tx *RBFTx) DBPath() string {
@@ -143,10 +154,18 @@ func (tx *RBFTx) Type() string {
 }
 
 func (tx *RBFTx) Rollback() {
+	tx.Db.muDb.Lock()
+	delete(tx.Db.openTx, tx)
+	tx.Db.muDb.Unlock()
+
 	tx.tx.Rollback()
 }
 
 func (tx *RBFTx) Commit() error {
+	tx.Db.muDb.Lock()
+	delete(tx.Db.openTx, tx)
+	tx.Db.muDb.Unlock()
+
 	return tx.tx.Commit()
 }
 
@@ -365,6 +384,18 @@ func (tx *RBFTx) Readonly() bool {
 	return !tx.tx.Writable()
 }
 
+func (tx *RBFTx) Group() *TxGroup {
+	return tx.o.Group
+}
+
+func (tx *RBFTx) Options() Txo {
+	return tx.o
+}
+
+func (tx *RBFTx) Sn() int64 {
+	return tx.sn
+}
+
 func (tx *RBFTx) UseRowCache() bool {
 	// since RFB returns memory mapped data, we can't use
 	// the rowCache without first making a copy.
@@ -437,15 +468,32 @@ func (w *RbfDBWrapper) Close() error {
 	return w.db.Close()
 }
 
-func (w *RbfDBWrapper) NewRBFTx(write bool, initialIndex string, frag *fragment) (*RBFTx, error) {
+var globalNextTxSnRBFTx int64
+
+func (w *RbfDBWrapper) NewTx(write bool, initialIndex string, o Txo) (Tx, error) {
 	tx, err := w.db.Begin(write)
 	if err != nil {
 		return nil, err
 	}
-	return &RBFTx{tx: tx, initialIndex: initialIndex, frag: frag}, nil
+	sn := atomic.AddInt64(&globalNextTxSnRBFTx, 1)
+
+	rtx := &RBFTx{
+		tx:           tx,
+		initialIndex: initialIndex,
+		frag:         o.Fragment,
+		o:            o,
+		sn:           sn,
+		Db:           w,
+	}
+
+	w.muDb.Lock()
+	w.openTx[rtx] = true
+	w.muDb.Unlock()
+
+	return rtx, nil
 }
 
-func (w *RbfDBWrapper) DeleteFragment(index, field, view string, shard uint64, frag *fragment) error {
+func (w *RbfDBWrapper) DeleteFragment(index, field, view string, shard uint64, frag interface{}) error {
 	tx, err := w.db.Begin(true)
 	if err != nil {
 		return err
@@ -457,4 +505,21 @@ func (w *RbfDBWrapper) DeleteFragment(index, field, view string, shard uint64, f
 		return err
 	}
 	return tx.Commit()
+}
+
+func (w *RbfDBWrapper) DeleteDBPath(dbs *DBShard) error {
+	panic("TODO")
+}
+
+func (w *RbfDBWrapper) OpenListString() (r string) {
+	return "rbf OpenListString not implemented yet"
+}
+
+func (w *RbfDBWrapper) OpenSnList() (slc []int64) {
+	w.muDb.Lock()
+	for v := range w.openTx {
+		slc = append(slc, v.sn)
+	}
+	w.muDb.Unlock()
+	return
 }

@@ -163,9 +163,13 @@ func TestAPI_ImportAtomicRecord(t *testing.T) {
 
 	air := createAIRUpdate(expectedBalStartingAcct0, expectedBalStartingAcct1)
 
-	if err := m0api.ImportAtomicRecord(ctx, air); err != nil {
+	//vv("BEFORE the first ImportAtomicRecord!")
+
+	if err := m0api.ImportAtomicRecord(ctx, nil, air); err != nil {
 		t.Fatal(err)
 	}
+
+	//vv("AFTER the first ImportAtomicRecord!")
 
 	iraBit := queryIRABit(m0api, acctOwnerID, iraField, iraRowID, index)
 	if !iraBit {
@@ -193,10 +197,16 @@ func TestAPI_ImportAtomicRecord(t *testing.T) {
 
 	air = createAIRUpdate(expectedBalEndingAcct0, expectedBalEndingAcct1)
 
-	err = m0api.ImportAtomicRecord(ctx, air, opt)
+	qcx := m0api.Txf().NewQcx()
+	//vv("just before the SECOND ImportAtomicRecord, qcx is %p, should NOT BE NIL", qcx)
+	err = m0api.ImportAtomicRecord(ctx, qcx, air, opt)
+	//err = m0api.ImportAtomicRecord(ctx, nil, air, opt)
 	if err != pilosa.ErrAborted {
 		panic(fmt.Sprintf("expected ErrTxnAborted but got err='%#v'", err))
 	}
+	// sad path, cleanup
+	qcx.Abort()
+	qcx = nil
 
 	b0, b1 := queryBalances(m0api, acctOwnerID, fieldAcct0, fieldAcct1, index)
 	//vv("after power failure tx, balance: acct0=%v,  acct1=%v", b0, b1)
@@ -214,7 +224,7 @@ func TestAPI_ImportAtomicRecord(t *testing.T) {
 
 	// happy path with no power failure half-way through.
 
-	err = m0api.ImportAtomicRecord(ctx, air)
+	err = m0api.ImportAtomicRecord(ctx, nil, air)
 	panicOn(err)
 
 	eb0, eb1 := queryBalances(m0api, acctOwnerID, fieldAcct0, fieldAcct1, index)
@@ -231,7 +241,7 @@ func TestAPI_ImportAtomicRecord(t *testing.T) {
 	air.Ivr[1].Clear = true
 	air.Ir[0].Clear = true
 
-	err = m0api.ImportAtomicRecord(ctx, air)
+	err = m0api.ImportAtomicRecord(ctx, nil, air)
 	panicOn(err)
 
 	eb0, eb1 = queryBalances(m0api, acctOwnerID, fieldAcct0, fieldAcct1, index)

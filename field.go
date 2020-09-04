@@ -418,6 +418,7 @@ func (f *Field) AvailableShards() *roaring.Bitmap {
 
 	b := f.remoteAvailableShards.Clone()
 	for _, view := range f.viewMap {
+		//b.Union(view.availableShards())
 		b.UnionInPlace(view.availableShards())
 	}
 	return b
@@ -615,6 +616,7 @@ func (f *Field) Open() error {
 
 func blockingWriteAvailableShards(fieldPath string, availableShardBytes []byte) {
 	path := filepath.Join(fieldPath, ".available.shards")
+
 	// Create a temporary file to save to.
 	tempPath := path + tempExt
 	err := ioutil.WriteFile(tempPath, availableShardBytes, 0666)
@@ -627,7 +629,6 @@ func blockingWriteAvailableShards(fieldPath string, availableShardBytes []byte) 
 	if err := os.Rename(tempPath, path); err != nil {
 		log.Printf("rename snapshot: %s", err)
 	}
-
 }
 func nonBlockingWriteAvailableShards(fieldPath string, availableShardBytes []byte, done chan bool) {
 	if len(availableShardBytes) == 0 {
@@ -759,7 +760,7 @@ fileLoop:
 					return fmt.Errorf("opening view: view=%s, err=%s", view.name, err)
 				}
 
-				if f.idx.Txf.TxType() == RoaringTxn {
+				if f.holder.txf.TxType() == RoaringTxn {
 					// Automatically upgrade BSI v1 fragments if they exist & reopen view.
 					if bsig := f.bsiGroup(f.name); bsig != nil {
 						if ok, err := upgradeViewBSIv2(view, bsig.BitDepth); err != nil {
@@ -1111,6 +1112,7 @@ func (f *Field) RowTime(tx Tx, rowID uint64, time time.Time, quantum string) (*R
 	if view == nil {
 		return nil, errors.Errorf("view with quantum %v not found.", quantum)
 	}
+
 	return view.row(tx, rowID)
 }
 
@@ -1523,7 +1525,15 @@ func (f *Field) MaxForShard(tx Tx, shard uint64, filter *Row) (ValCount, error) 
 		return ValCount{}, nil
 	}
 
-	max, cnt, err := fragment.max(tx, filter, bsig.BitDepth)
+	var localTx Tx
+	if NilInside(tx) {
+		localTx = f.holder.txf.NewTx(Txo{Write: !writable, Index: f.idx, Fragment: fragment, Shard: fragment.shard})
+		defer localTx.Rollback()
+	} else {
+		localTx = tx
+	}
+
+	max, cnt, err := fragment.max(localTx, filter, bsig.BitDepth)
 	if err != nil {
 		return ValCount{}, errors.Wrap(err, "calling fragment.max")
 	}
@@ -1559,7 +1569,15 @@ func (f *Field) MinForShard(tx Tx, shard uint64, filter *Row) (ValCount, error) 
 		return ValCount{}, nil
 	}
 
-	min, cnt, err := fragment.min(tx, filter, bsig.BitDepth)
+	var localTx Tx
+	if NilInside(tx) {
+		localTx = f.idx.Txf.NewTx(Txo{Write: !writable, Index: f.idx, Fragment: fragment, Shard: fragment.shard})
+		defer localTx.Rollback()
+	} else {
+		localTx = tx
+	}
+
+	min, cnt, err := fragment.min(localTx, filter, bsig.BitDepth)
 	if err != nil {
 		return ValCount{}, errors.Wrap(err, "calling fragment.min")
 	}
@@ -1577,7 +1595,7 @@ func (f *Field) MinForShard(tx Tx, shard uint64, filter *Row) (ValCount, error) 
 }
 
 // Range performs a conditional operation on Field.
-func (f *Field) Range(tx Tx, name string, op pql.Token, predicate int64) (*Row, error) {
+func (f *Field) Range(qcx *Qcx, name string, op pql.Token, predicate int64) (*Row, error) {
 	// Retrieve and validate bsiGroup.
 	bsig := f.bsiGroup(name)
 	if bsig == nil {
@@ -1597,11 +1615,11 @@ func (f *Field) Range(tx Tx, name string, op pql.Token, predicate int64) (*Row, 
 		return NewRow(), nil
 	}
 
-	return view.rangeOp(tx, op, bsig.BitDepth, baseValue)
+	return view.rangeOp(qcx, op, bsig.BitDepth, baseValue)
 }
 
 // Import bulk imports data.
-func (f *Field) Import(tx Tx, rowIDs, columnIDs []uint64, timestamps []*time.Time, opts ...ImportOption) error {
+func (f *Field) Import(qcx *Qcx, rowIDs, columnIDs []uint64, timestamps []*time.Time, opts ...ImportOption) (err0 error) {
 
 	// Set up import options.
 	options := &ImportOptions{}
@@ -1673,15 +1691,19 @@ func (f *Field) Import(tx Tx, rowIDs, columnIDs []uint64, timestamps []*time.Tim
 			return errors.Wrap(err, "creating fragment")
 		}
 
-		if err := frag.bulkImport(tx, data.RowIDs, data.ColumnIDs, options); err != nil {
-			return err
-		}
-	}
+		tx, finisher := qcx.GetTx(Txo{Write: true, Index: frag.idx, Fragment: frag, Shard: frag.shard})
 
+		err1 := frag.bulkImport(tx, data.RowIDs, data.ColumnIDs, options)
+		if err1 != nil {
+			finisher(&err1)
+			return err1
+		}
+		finisher(nil)
+	}
 	return nil
 }
 
-func (f *Field) importFloatValue(tx Tx, columnIDs []uint64, values []float64, options *ImportOptions) error {
+func (f *Field) importFloatValue(qcx *Qcx, columnIDs []uint64, values []float64, options *ImportOptions) error {
 	// convert values to int64 values based on scale
 	ivalues := make([]int64, len(values))
 	bsig := f.bsiGroup(f.name)
@@ -1693,11 +1715,11 @@ func (f *Field) importFloatValue(tx Tx, columnIDs []uint64, values []float64, op
 		ivalues[i] = int64(fval * mult)
 	}
 	// then call importValue
-	return f.importValue(tx, columnIDs, ivalues, options)
+	return f.importValue(qcx, columnIDs, ivalues, options)
 }
 
 // importValue bulk imports range-encoded value data.
-func (f *Field) importValue(tx Tx, columnIDs []uint64, values []int64, options *ImportOptions) error {
+func (f *Field) importValue(qcx *Qcx, columnIDs []uint64, values []int64, options *ImportOptions) (err0 error) {
 	viewName := viewBSIGroupPrefix + f.name
 	// Get the bsiGroup so we know bitDepth.
 	bsig := f.bsiGroup(f.name)
@@ -1779,6 +1801,12 @@ func (f *Field) importValue(tx Tx, columnIDs []uint64, values []int64, options *
 		for i, value := range data.Values {
 			baseValues[i] = value - bsig.Base
 		}
+
+		// now we know which shard we discovered.
+		tx, finisher := qcx.GetTx(Txo{Write: writable, Index: f.idx, Shard: frag.shard})
+		// by deferring, even though we are in loop, we get en-mass commit at once if they all succeed,
+		// or en-mass rollback if any fail.
+		defer finisher(&err0)
 
 		if err := frag.importValue(tx, data.ColumnIDs, baseValues, requiredDepth, options.Clear); err != nil {
 			return err

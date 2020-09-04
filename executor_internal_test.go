@@ -27,7 +27,8 @@ import (
 )
 
 func TestExecutor_TranslateGroupByCall(t *testing.T) {
-	holder := NewHolder(DefaultPartitionN)
+	path, _ := testhook.TempDirInDir(t, *TempDir, "pilosa-executor-")
+	holder := NewHolder(path, nil)
 	defer holder.Close()
 
 	cluster := NewTestCluster(t, 1)
@@ -36,7 +37,6 @@ func TestExecutor_TranslateGroupByCall(t *testing.T) {
 		Holder:  holder,
 		Cluster: cluster,
 	}
-	e.Holder.Path, _ = testhook.TempDirInDir(t, *TempDir, "pilosa-executor-")
 	err := e.Holder.Open()
 	if err != nil {
 		t.Fatalf("opening holder: %v", err)
@@ -137,14 +137,14 @@ func TestExecutor_TranslateGroupByCall(t *testing.T) {
 }
 
 func TestExecutor_TranslateRowsOnBool(t *testing.T) {
-	holder := NewHolder(DefaultPartitionN)
+	path, _ := testhook.TempDirInDir(t, *TempDir, "pilosa-executor-")
+	holder := NewHolder(path, nil)
 	defer holder.Close()
 
 	e := &executor{
 		Holder:  holder,
 		Cluster: NewTestCluster(t, 1),
 	}
-	e.Holder.Path, _ = testhook.TempDirInDir(t, *TempDir, "pilosa-executor-")
 	if err := e.Holder.Open(); err != nil {
 		t.Fatalf("opening holder: %v", err)
 	}
@@ -154,10 +154,8 @@ func TestExecutor_TranslateRowsOnBool(t *testing.T) {
 		t.Fatalf("creating index: %v", err)
 	}
 
-	tx, err := holder.BeginTx(writable, idx)
-	if err != nil {
-		t.Fatal(err)
-	}
+	shard := uint64(0)
+	tx := idx.Txf.NewTx(Txo{Write: writable, Index: idx, Shard: shard})
 	defer tx.Rollback()
 
 	fb, errb := idx.CreateField("b", OptFieldTypeBool())

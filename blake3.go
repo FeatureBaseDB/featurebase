@@ -73,7 +73,7 @@ func (w *Blake3Hasher) CryptoHash(input []byte, buffer []byte) (outputCryptohash
 // blake3sum16 might be slower because we allocate a new hasher every time, but
 // it is more conenient for writing debug code. It returns
 // a 16 byte hash as a hexidecimal string.
-func blake3sum16(input []byte) string {
+func Blake3sum16(input []byte) string {
 	hasher := blake3.New()
 
 	_, _ = hasher.Write(input)

@@ -21,6 +21,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"sync/atomic"
 
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pkg/errors"
@@ -32,6 +33,8 @@ type RoaringTx struct {
 	Index    *Index
 	Field    *Field
 	fragment *fragment
+	o        Txo
+	sn       int64 // serial number
 }
 
 func (tx *RoaringTx) Type() string {
@@ -50,7 +53,8 @@ func (tx *RoaringTx) SliceOfShards(index, field, view, optionalViewPath string) 
 
 	// SliceOfShards is based on view.openFragments()
 
-	file, err := os.Open(filepath.Join(optionalViewPath, "fragments"))
+	path := filepath.Join(optionalViewPath, "fragments")
+	file, err := os.Open(path)
 	if os.IsNotExist(err) {
 		return
 	} else if err != nil {
@@ -70,7 +74,8 @@ func (tx *RoaringTx) SliceOfShards(index, field, view, optionalViewPath string) 
 		// Parse filename into integer.
 		shard, err := strconv.ParseUint(filepath.Base(fi.Name()), 10, 64)
 		if err != nil {
-			tx.Index.holder.Logger.Debugf("WARNING: couldn't use non-integer file as shard in index/field/view %s/%s/%s: %s", index, field, view, fi.Name())
+			//panic(fmt.Sprintf("WARNING: couldn't use non-integer file as shard in index/field/view %s/%s/%s: %s", index, field, view, fi.Name()))
+			//tx.Index.holder.Logger.Debugf("WARNING: couldn't use non-integer file as shard in index/field/view %s/%s/%s: %s", index, field, view, fi.Name())
 			continue
 		}
 		sliceOfShards = append(sliceOfShards, shard)
@@ -176,7 +181,6 @@ func (tx *RoaringTx) Add(index, field, view string, shard uint64, batched bool, 
 	// This creates a problem because RoaringTx needs the op-log
 	// to know when to flush the fragment to disk.
 	count, err := b.AddN(a...) // AddN does oplog batches. needed to keep op-log up to date.
-
 	return count, err
 }
 
@@ -186,7 +190,6 @@ func (tx *RoaringTx) Remove(index, field, view string, shard uint64, a ...uint64
 		return 0, err
 	}
 	changed, err := b.Remove(a...) // green TestFragment_Bug_Q2DoubleDelete
-	panicOn(err)
 	if changed {
 		return 1, err
 	} else {
@@ -211,6 +214,7 @@ func (tx *RoaringTx) ContainerIterator(index, field, view string, shard uint64, 
 	if err != nil {
 		return nil, false, err
 	}
+	//vv("b bitmap back from bitmap(index='%v', field='%v', view='%v', shard='%v')='%#v'", index, field, view, shard, b.Slice())
 	citer, found = b.Containers.Iterator(key)
 	return citer, found, nil
 }
@@ -292,9 +296,18 @@ func (tx *RoaringTx) getFragment(index, field, view string, shard uint64) (*frag
 			tx.fragment.field != field ||
 			tx.fragment.view != view ||
 			tx.fragment.shard != shard {
-			panic(fmt.Sprintf("different fragment cached vs requested. tx.fragment='%#v', index='%v', field='%v'; view='%v'; shard='%v'", tx.fragment, index, field, view, shard))
+
+			// still insist that index and shard match, since that is the current scope of all Tx.
+			if tx.fragment.index != index ||
+				tx.fragment.shard != shard {
+				panic(fmt.Sprintf("different fragment cached vs requested. index='%v', field='%v'; view='%v'; shard='%v'; tx.fragment='%#v'", index, field, view, shard, tx.fragment))
+			}
+			// cannot use this fragment.
+			tx.fragment = nil
+
+		} else {
+			return tx.fragment, nil
 		}
-		return tx.fragment, nil
 	}
 
 	// If a field is attached, start from there.
@@ -346,17 +359,45 @@ func (tx *RoaringTx) bitmap(index, field, view string, shard uint64) (*roaring.B
 	return frag.storage, nil
 }
 
+var globalRoaringReg = &RoaringStore{}
+
+func (r *RoaringStore) OpenDBWrapper(path string, doAllocZero bool) (DBWrapper, error) {
+	return r, nil
+}
+
+func (w *RoaringStore) DeleteDBPath(dbs *DBShard) error {
+	return os.RemoveAll(dbs.Path)
+}
+
+func (r *RoaringStore) Close() error {
+	return nil
+}
+
+func (w *RoaringStore) OpenListString() (r string) {
+	return "RoaringStore.OpenListString() not yet implemented"
+}
+
+func (w *RoaringStore) OpenSnList() (sns []int64) {
+	return nil
+}
+
 type RoaringStore struct{}
 
 func NewRoaringStore() *RoaringStore {
 	return &RoaringStore{}
 }
 
-func (db *RoaringStore) Close() error {
-	return nil
+var globalNextTxSnRoaring int64
+
+func (db *RoaringStore) NewTx(write bool, initialIndexName string, o Txo) (tx Tx, err error) {
+	sn := atomic.AddInt64(&globalNextTxSnRoaring, 1)
+	return &RoaringTx{write: o.Write, Field: o.Field, Index: o.Index, fragment: o.Fragment, o: o, sn: sn}, nil
 }
 
 func (db *RoaringStore) DeleteField(index, field, fieldPath string) error {
+
+	// match txn sn count vs lmdb/etc.
+	atomic.AddInt64(&globalNextTxSnRoaring, 1)
 
 	// under blue-green badger_roaring, the directory will not be found, b/c badger will have
 	// already done the os.RemoveAll().	BUT, RemoveAll returns nil error in this case. Docs:
@@ -371,6 +412,9 @@ func (db *RoaringStore) DeleteField(index, field, fieldPath string) error {
 // frag should be passed by any RoaringTx user, but for RBF/Badger it can be nil.
 // The fragment should be closed before this.
 func (db *RoaringStore) DeleteFragment(index, field, view string, shard uint64, frag interface{}) error {
+
+	// match txn sn count vs lmdb/etc.
+	atomic.AddInt64(&globalNextTxSnRoaring, 1)
 
 	fragment, ok := frag.(*fragment)
 	if !ok {
@@ -401,4 +445,17 @@ func (tx *RoaringTx) RoaringBitmapReader(index, field, view string, shard uint64
 	sz = fi.Size()
 	r = file
 	return
+}
+
+func (tx *RoaringTx) Group() *TxGroup {
+	return tx.o.Group
+}
+
+func (tx *RoaringTx) Options() Txo {
+	return tx.o
+}
+
+// Sn retreives the serial number of the Tx.
+func (tx *RoaringTx) Sn() int64 {
+	return tx.sn
 }

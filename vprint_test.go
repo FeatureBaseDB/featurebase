@@ -1,4 +1,4 @@
-// home: https://github.com/glyerine/vprint
+// home: https://github.com/glycerine/vprint
 // Copyright 2019 Jason E. Aten, Ph.D. All rights reserved.
 // License: MIT
 //
@@ -22,9 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-// +build amd64
-
-package main
+package pilosa_test
 
 import (
 	"fmt"
@@ -114,6 +112,14 @@ func stack() string {
 	return string(debug.Stack())
 }
 
+// happy linter
+var _ = stack
+var _ = FileExists
+var _ = FileSize
+var _ = AlwaysPrintf
+var _ = RFC3339MsecTz0
+var _ = Caller
+
 func FileExists(name string) bool {
 	fi, err := os.Stat(name)
 	if err != nil {
@@ -167,13 +173,3 @@ func Caller(upStack int) string {
 	}
 	return f.Function
 }
-
-// happy linter:
-var _ = DirExists
-var _ = FileExists
-var _ = Caller
-var _ = stack
-var _ = RFC3339MsecTz0
-var _ = RFC3339UsecTz0
-var _ = AlwaysPrintf
-var _ = FileSize

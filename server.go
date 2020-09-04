@@ -78,8 +78,10 @@ type Server struct { // nolint: maligned
 	isCoordinator       bool
 	syncer              holderSyncer
 
-	translationSyncer      translationSyncer
+	translationSyncer      TranslationSyncer
 	resetTranslationSyncCh chan struct{}
+	// HolderConfig stashes server options that are really Holder options.
+	holderConfig *HolderConfig
 
 	defaultClient InternalClient
 	dataDir       string
@@ -98,6 +100,7 @@ type ServerOption func(s *Server) error
 func OptServerLogger(l logger.Logger) ServerOption {
 	return func(s *Server) error {
 		s.logger = l
+		s.holderConfig.Logger = l
 		return nil
 	}
 }
@@ -125,7 +128,7 @@ func OptServerDataDir(dir string) ServerOption {
 // attribute store.
 func OptServerAttrStoreFunc(af func(string) AttrStore) ServerOption {
 	return func(s *Server) error {
-		s.holder.NewAttrStore = af
+		s.holderConfig.NewAttrStore = af
 		return nil
 	}
 }
@@ -213,7 +216,7 @@ func OptServerPrimaryTranslateStore(store TranslateStore) ServerOption {
 // used to specify the stats client.
 func OptServerStatsClient(sc stats.StatsClient) ServerOption {
 	return func(s *Server) error {
-		s.holder.Stats = sc
+		s.holderConfig.StatsClient = sc
 		return nil
 	}
 }
@@ -307,7 +310,7 @@ func OptServerClusterHasher(h Hasher) ServerOption {
 // used to specify the translation data store type.
 func OptServerOpenTranslateStore(fn OpenTranslateStoreFunc) ServerOption {
 	return func(s *Server) error {
-		s.holder.OpenTranslateStore = fn
+		s.holderConfig.OpenTranslateStore = fn
 		return nil
 	}
 }
@@ -316,7 +319,7 @@ func OptServerOpenTranslateStore(fn OpenTranslateStoreFunc) ServerOption {
 // used to specify the remote translation data reader.
 func OptServerOpenTranslateReader(fn OpenTranslateReaderFunc) ServerOption {
 	return func(s *Server) error {
-		s.holder.OpenTranslateReader = fn
+		s.holderConfig.OpenTranslateReader = fn
 		return nil
 	}
 }
@@ -327,7 +330,7 @@ func OptServerOpenTranslateReader(fn OpenTranslateReaderFunc) ServerOption {
 // being used for all Tx interface calls.
 func OptServerTxsrc(txsrc string) ServerOption {
 	return func(s *Server) error {
-		s.holder.Opts.Txsrc = txsrc
+		s.holderConfig.Txsrc = txsrc
 		return nil
 	}
 }
@@ -339,7 +342,6 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	s := &Server{
 		closing:       make(chan struct{}),
 		cluster:       cluster,
-		holder:        NewHolder(cluster.partitionN),
 		diagnostics:   newDiagnosticsCollector(defaultDiagnosticServer),
 		systemInfo:    newNopSystemInfo(),
 		defaultClient: nopInternalClient{},
@@ -360,10 +362,12 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	s.cluster.InternalClient = s.defaultClient
 
 	s.translationSyncer = newActiveTranslationSyncer(s.resetTranslationSyncCh)
-	s.holder.translationSyncer = s.translationSyncer
 	s.cluster.translationSyncer = s.translationSyncer
 
 	s.diagnostics.server = s
+	s.holderConfig = DefaultHolderConfig()
+	s.holderConfig.TranslationSyncer = s.translationSyncer
+	s.holderConfig.Logger = s.logger
 
 	for _, opt := range opts {
 		err := opt(s)
@@ -383,8 +387,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	s.holder.Path = path
-	s.holder.Logger = s.logger
+	s.holder = NewHolder(path, s.holderConfig)
 	s.holder.Stats.SetLogger(s.logger)
 
 	s.cluster.Path = path

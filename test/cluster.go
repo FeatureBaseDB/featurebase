@@ -90,7 +90,8 @@ func (c *Cluster) ImportBits(t testing.TB, index, field string, rowcols [][2]uin
 				if com.API.Node().ID != node.ID {
 					continue
 				}
-				err := com.API.Import(context.Background(), &pilosa.ImportRequest{
+
+				err := com.API.Import(context.Background(), nil, &pilosa.ImportRequest{
 					Index:     index,
 					Field:     field,
 					Shard:     shard,

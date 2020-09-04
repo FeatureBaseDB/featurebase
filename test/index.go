@@ -32,11 +32,10 @@ func newIndex(tb testing.TB) *Index {
 	if err != nil {
 		panic(err)
 	}
-	h := pilosa.NewHolder(pilosa.DefaultPartitionN)
+	h := pilosa.NewHolder(path, nil)
 	testhook.Cleanup(tb, func() {
 		h.Close()
 	})
-	h.Path = path
 	index, err := h.CreateIndex("i", pilosa.IndexOptions{})
 	if err != nil {
 		panic(err)
@@ -57,19 +56,10 @@ func (i *Index) Close() error {
 
 // Reopen closes the index and reopens it.
 func (i *Index) Reopen() error {
-	var err error
 	if err := i.Index.Close(); err != nil {
 		return err
 	}
-
-	path, name := i.Path(), i.Name()
-	h := pilosa.NewHolder(pilosa.DefaultPartitionN)
-	h.Path = h.HolderPathFromIndexPath(path, name)
-	i.Index, err = h.CreateIndex(name, pilosa.IndexOptions{})
-	if err != nil {
-		return err
-	}
-	return nil
+	return i.Index.Open(false)
 }
 
 // CreateField creates a field with the given options.

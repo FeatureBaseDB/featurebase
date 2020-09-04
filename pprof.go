@@ -15,11 +15,13 @@
 package pilosa
 
 import (
+	"fmt"
 	"os"
+	"runtime"
+	"runtime/pprof"
 	"time"
 
 	_ "net/http/pprof" // Imported for its side-effect of registering pprof endpoints with the server.
-	"runtime/pprof"
 )
 
 func CPUProfileForDur(dur time.Duration, outpath string) {
@@ -34,14 +36,40 @@ func CPUProfileForDur(dur time.Duration, outpath string) {
 	panicOn(err)
 
 	if dur == 0 {
-		dur = time.Hour
+		dur = time.Minute
 	}
-	vv("starting cpu profile for dur '%v', output to '%v'", dur, path)
+	AlwaysPrintf("starting cpu profile for dur '%v', output to '%v'", dur, path)
 	_ = pprof.StartCPUProfile(f)
 	go func() {
 		<-time.After(dur)
 		pprof.StopCPUProfile()
 		f.Close()
-		vv("stopping cpu profile after dur '%v', output: '%v'", dur, path)
+		AlwaysPrintf("stopping cpu profile after dur '%v', output: '%v'", dur, path)
+	}()
+}
+
+func MemProfileForDur(dur time.Duration, outpath string) {
+
+	// per-query pprof output:
+	txsrc := os.Getenv("PILOSA_TXSRC")
+	if txsrc == "" {
+		txsrc = "roaring"
+	}
+	path := outpath + "." + txsrc
+	f, err := os.Create(path)
+	panicOn(err)
+
+	if dur == 0 {
+		dur = time.Minute
+	}
+	AlwaysPrintf("will write memory profile after dur '%v', output to '%v'", dur, path)
+	go func() {
+		<-time.After(dur)
+		runtime.GC() // get up-to-date statistics
+		if err := pprof.WriteHeapProfile(f); err != nil {
+			panic(fmt.Sprintf("could not write memory profile: %v", err))
+		}
+		f.Close()
+		AlwaysPrintf("wrote memory profile after dur '%v', output: '%v'", dur, path)
 	}()
 }

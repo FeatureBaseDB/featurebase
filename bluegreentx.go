@@ -38,25 +38,90 @@ type blueGreenTx struct {
 	a Tx
 	b Tx // b's output is returned
 
+	o  Txo
 	as string
 	bs string
+
+	types []txtype
+
+	// roaring will not create as many Tx (they are
+	// psuedo Tx anyway), espcially when deleting
+	// files. Return the non-roaring Sn if
+	// possible, by referencing useSnA.
+	useSnA bool
 
 	idx *Index
 
 	checker              blueGreenChecker
 	mu                   sync.Mutex
 	rollbackOrCommitDone bool
+
+	txf *TxFactory
 }
 
-func newBlueGreenTx(a, b Tx, idx *Index) *blueGreenTx {
+// blueGreenRegistry is used to force checking of (read) transactions
+// before writes happen, if roaring is on one of the A/B branches.
+// Because roaring won't have an MVCC view of the world. Writes to
+// roaring will show up, while writes to the DB won't show up on
+// readTx that have already started.
+type blueGreenRegistry struct {
+	mu sync.Mutex
+	m  map[int64]*blueGreenTx
+}
+
+func newBlueGreenReg() *blueGreenRegistry {
+	return &blueGreenRegistry{
+		m: make(map[int64]*blueGreenTx),
+	}
+}
+
+// add remembers the tx so we can check it
+// should we see a write after creation
+// but before rollback/commit.
+func (b *blueGreenRegistry) add(c *blueGreenTx) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if c.useSnA {
+		b.m[c.a.Sn()] = c
+	} else {
+		b.m[c.b.Sn()] = c
+	}
+}
+
+func (b *blueGreenRegistry) finishedTx(tx *blueGreenTx) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	sn := tx.Sn()
+	delete(b.m, sn)
+	//vv("blueGreenRegistry deleted _sn_ %v", sn)
+}
+
+func (b *blueGreenRegistry) Close() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if len(b.m) > 0 {
+		panic(fmt.Sprintf("still have unchecked blueGreenTx: '%#v'", b.m))
+		//AlwaysPrintf("still have unchecked blueGreenTx: '%#v'", b.m)
+	}
+}
+
+func (txf *TxFactory) newBlueGreenTx(a, b Tx, idx *Index, o Txo) *blueGreenTx {
+	//func (reg *blueGreenRegistry) newBlueGreenTx(a, b Tx, idx *Index, o Txo, openTxSn []int64) *blueGreenTx {
 	as := a.Type()
 	bs := b.Type()
-	c := &blueGreenTx{a: a, b: b, idx: idx, as: as, bs: bs}
+	c := &blueGreenTx{a: a, b: b, idx: idx, as: as, bs: bs, txf: txf, types: txf.types}
+
+	if c.types[1] == roaringTxn {
+		c.useSnA = true
+	}
+
 	c.checker.c = c
+	c.o = o
+	if o.Write {
+		txf.blueGreenReg.add(c)
+	}
 	return c
 }
-
-var _ = newBlueGreenTx // keep linter happy
 
 var _ Tx = (*blueGreenTx)(nil)
 
@@ -74,6 +139,9 @@ func (c *blueGreenTx) Dump() {
 	c.a.Dump()
 	fmt.Printf("B(%v) Dump:\n", c.bs)
 	c.b.Dump()
+
+	fmt.Printf("dbPerShard.DumpAll(): idx=%p\n", c.idx)
+	c.idx.Txf.dbPerShard.DumpAll()
 }
 
 func (c *blueGreenTx) Readonly() bool {
@@ -105,6 +173,7 @@ func (c *blueGreenTx) IncrementOpN(index, field, view string, shard uint64, chan
 // compareTxState is called for the first Commit or Rollback a blueGreenTx sees.
 func (c *blueGreenTx) compareTxState(index, field, view string, shard uint64) {
 	here := fmt.Sprintf("%v/%v/%v/%v", index, field, view, shard)
+	//vv("compareTxState here = '%v', _sn_ %v gid=%v", here, c.Sn(), curGID())
 	aIter, aFound, aErr := c.a.ContainerIterator(index, field, view, shard, 0)
 	bIter, bFound, bErr := c.b.ContainerIterator(index, field, view, shard, 0)
 	if aErr == nil || aIter != nil {
@@ -137,12 +206,12 @@ func (c *blueGreenTx) compareTxState(index, field, view string, shard uint64) {
 		aKey, aValue := aIter.Value()
 
 		if !bIter.Next() {
+			AlwaysPrintf("compareTxState[%v]: A(%v) found key %v, B(%v) didn't, dump to follow, stack=\n %v\n\n and here is dump:", here, c.as, aKey, c.bs, stack())
 			c.Dump()
 			panic(fmt.Sprintf("compareTxState[%v]: A(%v) found key %v, B(%v) didn't, at %v", here, c.as, aKey, c.bs, stack()))
 		}
 		bKey, bValue := bIter.Value()
 		if bKey != aKey {
-			//vv("6960 really ought to be present index='%v',field='%v';view='%v';shard='%v'; isIn=%v", index, field, view, shard, c.isIn(index, field, view, shard, 456130566))
 			AlwaysPrintf("problem in caller %v", Caller(2))
 			c.Dump()
 			panic(fmt.Sprintf("compareTxState[%v]: A(%v) found key %v, B(%v) found %v, at %v", here, c.as, aKey, c.bs, bKey, stack()))
@@ -152,20 +221,43 @@ func (c *blueGreenTx) compareTxState(index, field, view string, shard uint64) {
 			//vv("compareTxState[%v]: key %v differs: %v;  A=%v; B=%v; at stack=%v", here, aKey, err, c.as, c.bs, stack())
 			panic(fmt.Sprintf("compareTxState[%v]: key %v differs: %v;  A=%v; B=%v; at stack=%v", here, aKey, err, c.as, c.bs, stack()))
 		}
+		//vv("successfully matched aKey(%v)='%v' and bKey(%v)='%v'", c.as, aKey, c.bs, bKey)
 	}
 	// end checking everything in A, but does B have more?
 	if bIter.Next() {
-		AlwaysPrintf("bIter has more than it should. problem in caller %v", Caller(2))
+		AlwaysPrintf("bIter has more than it should. problem in caller %v. _sn_ %v", Caller(2), c.Sn())
 		c.Dump()
 		bKey, _ := bIter.Value()
-		//vv("compareTxState[%v]: B(%v) found key %v, A(%v) didn't, at %v", here, c.bs, bKey, c.as, stack())
-		panic(fmt.Sprintf("compareTxState[%v]: B(%v) found key %v, A(%v) didn't, at %v", here, c.bs, bKey, c.as, stack()))
+		panic(fmt.Sprintf("compareTxState[%v]: B(%v) found key %v, A(%v) didn't, (a.sn=%v) (b.sn=%v) at %v", here, c.bs, bKey, c.as, c.a.Sn(), c.b.Sn(), stack()))
 	}
+	//vv("done without problem. compareTxState here = '%v', _sn_ %v gid=%v", here, c.Sn(), curGID())
 }
 
 func (c *blueGreenTx) checkDatabase() {
+	if !c.o.Write {
+		// We only need to check the we are A/B consistent after every write.
+		// Then reads can only see that consitent state, and don't need
+		// to be checked themselves. Sketch of proof by induction:
+		// Starting with zero data, if we have agreement in both A/B
+		// database state after each write, then
+		// because there is only ever a single
+		// writer (for LMDB/RBF), we should always have the same
+		// data state between A and B as long as every prior
+		// A/B check of the serialized writes suceeded.
+		//
+		// This avoids a key problem we discovered when A/B checking reads.
+		// The MVCC of the transactional engines means that reads that
+		// start before a write commit will look very different
+		// when comparing to roaring's non-transactional state.
+		return
+	}
+
 	c.checker.mu.Lock()
 	defer c.checker.mu.Unlock()
+	if c.checker.checkDone {
+		return // idemopotent. checkDatabase can be called twice. Only the first does the checks.
+	}
+	c.checker.checkDone = true
 
 	// seen() returns nil on 2nd or any further call,
 	// so only the first Commit() or Rollback() does this.
@@ -188,7 +280,9 @@ func (c *blueGreenTx) Rollback() {
 	}
 	c.rollbackOrCommitDone = true
 
-	c.checkDatabase()
+	if c.o.Write {
+		c.checkDatabase()
+	}
 	defer func() {
 		if r := recover(); r != nil {
 			AlwaysPrintf("see Rollback() panic '%v' at '%v'", r, stack())
@@ -200,21 +294,22 @@ func (c *blueGreenTx) Rollback() {
 	//vv("blueGreenTx.Rollback() about to call (%v) b.Rollback()", c.bs)
 	c.b.Rollback()
 	//vv("blueGreenTx.Rollback() done. bgtx p=%p", c)
+
+	c.txf.blueGreenReg.finishedTx(c)
 }
 
 func (c *blueGreenTx) Commit() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// for rbf 6930 debug stuff:
-	//in := c.isIn("i", "x", "standard", 0, 456130566)
-	//fmt.Printf("blueGreenTx.Commit() called. bgtx p=%p; in rbf=%v\n", c, in[0])
 	if c.rollbackOrCommitDone {
 		return nil
 	}
 	//vv("blueGreenTx.Commit() called. bgtx p=%p", c)
 	c.rollbackOrCommitDone = true
-	c.checkDatabase()
+	if c.o.Write {
+		c.checkDatabase()
+	}
 	defer func() {
 		if r := recover(); r != nil {
 			AlwaysPrintf("see Commit() panic '%v' at '%v'", r, stack())
@@ -225,14 +320,8 @@ func (c *blueGreenTx) Commit() error {
 	_ = errA
 	errB := c.b.Commit()
 
-	/*
-		tx2, err := c.idx.Txf.rbfDB.NewRBFTx(false, "", nil)
-		panicOn(err)
-		inRbf, err := tx2.Contains("i", "x", "standard", 0, 456130566)
-		panicOn(err)
-		fmt.Printf("AFTER commits happened, blueGreenTx.Commit() called. bgtx p=%p; in rbf=%v\n", c, inRbf)
-	*/
 	compareErrors(errA, errB)
+	c.txf.blueGreenReg.finishedTx(c)
 	return errB
 }
 
@@ -376,13 +465,6 @@ func (c *blueGreenTx) Add(index, field, view string, shard uint64, batched bool,
 	c.checker.see(index, field, view, shard)
 	//vv("blueGreenTx) Add(index=%v, field=%v, view=%v, shard=%v", index, field, view, shard)
 	defer func() {
-		// rbf 6960 debug code:
-		/*
-			in := c.isIn("i", "x", "standard", 0, 456130566)
-			if in[0] || in[1] {
-				vv("first time 6960 present isIn=%v; bgtx p=%p stack=\n%v", in, c, stack())
-			}
-		*/
 		if r := recover(); r != nil {
 			AlwaysPrintf("see Add() panic '%v' for index='%v', field='%v', view='%v', shard='%v' at '%v'", r, index, field, view, shard, stack())
 			panic(r)
@@ -662,9 +744,6 @@ func (c *blueGreenTx) OffsetRange(index, field, view string, shard, offset, star
 	}
 	compareErrors(errA, errB)
 
-	//vv("end of blue-green OffsetRange, dump:")
-	//c.Dump()
-
 	return b, errB
 }
 
@@ -701,6 +780,25 @@ func (c *blueGreenTx) RoaringBitmapReader(index, field, view string, shard uint6
 		rcA.Close()
 		return rcB, szB, errB
 	}
+}
+
+func (c *blueGreenTx) Group() *TxGroup {
+	return c.b.Group()
+}
+
+func (c *blueGreenTx) Options() Txo {
+	return c.b.Options()
+}
+
+// Sn retreives the serial number of the Tx.
+func (c *blueGreenTx) Sn() int64 {
+	asn := c.a.Sn()
+	bsn := c.b.Sn()
+
+	if c.useSnA {
+		return asn
+	}
+	return bsn
 }
 
 func (c *blueGreenTx) SliceOfShards(index, field, view, optionalViewPath string) (sliceOfShards []uint64, err error) {
@@ -803,15 +901,18 @@ type blueGreenChecker struct {
 	// lock mu when using visited.
 	// otherwise concurrent map writes on TestAPI_Import/RowIDColumnKey
 	mu sync.Mutex
+
+	checkDone bool
 }
 
 // see would mark a thing as seen.
 func (b *blueGreenChecker) see(index, field, view string, shard uint64) {
 	// keep this next Printf. Useful to see the sequence of Tx operations.
-	//fmt.Printf("blueGreenTx.%v on index='%v'\n", Caller(1), index)
+	//fmt.Printf("blueGreenTx.%v on index='%v' shard=%v\n", Caller(1), index, shard)
 
-	// is ckey 6960 present in i/x/standard/0 ?
-	////vv("6960 present index='%v',field='%v';view='%v';shard='%v'; isIn=%v", index, field, view, shard, b.c.isIn(index, field, view, shard, 456130566))
+	if !b.c.o.Write {
+		return
+	}
 
 	b.mu.Lock()
 	defer b.mu.Unlock()

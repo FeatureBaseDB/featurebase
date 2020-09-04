@@ -50,6 +50,12 @@ const (
 	existenceFieldName = "_exists"
 )
 
+func init() {
+	// For performance tuning, leave these readily available:
+	// CPUProfileForDur(time.Minute, "server.cpu.pprof")
+	// MemProfileForDur(2*time.Minute, "server.mem.pprof")
+}
+
 // Holder represents a container for indexes.
 type Holder struct {
 	mu sync.RWMutex
@@ -75,7 +81,7 @@ type Holder struct {
 	Stats stats.StatsClient
 
 	// Data directory path.
-	Path string
+	path string
 
 	// The interval at which the cached row ids are persisted to disk.
 	cacheFlushInterval time.Duration
@@ -93,7 +99,7 @@ type Holder struct {
 	// transactionManager
 	transactionManager *TransactionManager
 
-	translationSyncer translationSyncer
+	translationSyncer TranslationSyncer
 
 	// Queue of fields (having a foreign index) which have
 	// opened before their foreign index has opened.
@@ -108,8 +114,12 @@ type Holder struct {
 	Opts HolderOpts
 
 	Auditor testhook.Auditor
+
+	txf *TxFactory
 }
 
+// HolderOpts holds information about the holder which other things might want
+// to look up later while using the holder.
 type HolderOpts struct {
 	// ReadOnly indicates that this holder's contents should not produce
 	// disk writes under any circumstances. It must be set before Open
@@ -166,36 +176,87 @@ func (lc *lockedChan) Recv() {
 	lc.mu.RUnlock()
 }
 
-// NewHolder returns a new instance of Holder.
-func NewHolder(partitionN int) *Holder {
+// HolderConfig holds configuration details that need to be set up at
+// initial holder creation. NewHolder takes a *HolderConfig, which can be
+// nil. Use DefaultHolderConfig to get a default-valued HolderConfig you
+// can then alter.
+type HolderConfig struct {
+	PartitionN           int
+	OpenTranslateStore   OpenTranslateStoreFunc
+	OpenTranslateReader  OpenTranslateReaderFunc
+	OpenTransactionStore OpenTransactionStoreFunc
+	TranslationSyncer    TranslationSyncer
+	CacheFlushInterval   time.Duration
+	StatsClient          stats.StatsClient
+	NewAttrStore         func(string) AttrStore
+	Logger               logger.Logger
+	Txsrc                string
+}
+
+func DefaultHolderConfig() *HolderConfig {
+	return &HolderConfig{
+		PartitionN:           DefaultPartitionN,
+		OpenTranslateStore:   OpenInMemTranslateStore,
+		OpenTranslateReader:  nil,
+		OpenTransactionStore: OpenInMemTransactionStore,
+		TranslationSyncer:    NopTranslationSyncer,
+		CacheFlushInterval:   defaultCacheFlushInterval,
+		StatsClient:          stats.NopStatsClient,
+		NewAttrStore:         newNopAttrStore,
+		Logger:               logger.NopLogger,
+		Txsrc:                DefaultTxsrc,
+	}
+}
+
+// NewHolder returns a new instance of Holder for the given path.
+func NewHolder(path string, cfg *HolderConfig) *Holder {
+	if cfg == nil {
+		cfg = DefaultHolderConfig()
+		// still want the PILOSA_TXSRC to override, for tests use.
+		txsrc := os.Getenv("PILOSA_TXSRC")
+		if txsrc != "" {
+			_ = MustTxsrcToTxtype(txsrc)
+			// INVAR: have valid txsrc.
+			cfg.Txsrc = txsrc
+		}
+	}
+
 	h := &Holder{
-		partitionN: partitionN,
-		indexes:    make(map[string]*Index),
-		closing:    make(chan struct{}),
+		indexes: make(map[string]*Index),
+		closing: make(chan struct{}),
 
 		opened: lockedChan{ch: make(chan struct{})},
 
 		broadcaster: NopBroadcaster,
-		Stats:       stats.NopStatsClient,
 
-		NewAttrStore: newNopAttrStore,
-
-		cacheFlushInterval: defaultCacheFlushInterval,
-
-		OpenTranslateStore: OpenInMemTranslateStore,
-
-		OpenTransactionStore: OpenInMemTransactionStore,
-
-		translationSyncer: NopTranslationSyncer,
-
-		Logger: logger.NopLogger,
+		partitionN:           cfg.PartitionN,
+		Stats:                cfg.StatsClient,
+		NewAttrStore:         cfg.NewAttrStore,
+		cacheFlushInterval:   cfg.CacheFlushInterval,
+		OpenTranslateStore:   cfg.OpenTranslateStore,
+		OpenTranslateReader:  cfg.OpenTranslateReader,
+		OpenTransactionStore: cfg.OpenTransactionStore,
+		translationSyncer:    cfg.TranslationSyncer,
+		Logger:               cfg.Logger,
+		Opts:                 HolderOpts{Txsrc: cfg.Txsrc},
 
 		SnapshotQueue: defaultSnapshotQueue,
 
 		Auditor: NewAuditor(),
+
+		path: path,
 	}
+	txf, err := NewTxFactory(cfg.Txsrc, path, h)
+	panicOn(err)
+	h.txf = txf
+
 	_ = testhook.Created(h.Auditor, h, nil)
 	return h
+}
+
+// Path() returns the path directory the holder was created with.
+func (h *Holder) Path() string {
+	return h.path
 }
 
 type HolderInfo struct {
@@ -482,8 +543,8 @@ func (h *Holder) Open() error {
 
 	h.setFileLimit()
 
-	h.Logger.Printf("open holder path: %s", h.Path)
-	if err := os.MkdirAll(h.Path, 0777); err != nil {
+	h.Logger.Printf("open holder path: %s", h.path)
+	if err := os.MkdirAll(h.path, 0777); err != nil {
 		return errors.Wrap(err, "creating directory")
 	}
 
@@ -494,7 +555,7 @@ func (h *Holder) Open() error {
 		return ErrCannotOpenV1TranslateFile
 	}
 
-	tstore, err := h.OpenTransactionStore(h.Path)
+	tstore, err := h.OpenTransactionStore(h.path)
 	if err != nil {
 		return errors.Wrap(err, "opening transaction store")
 	}
@@ -502,7 +563,7 @@ func (h *Holder) Open() error {
 	h.transactionManager.Log = h.Logger
 
 	// Open path to read all index directories.
-	f, err := os.Open(h.Path)
+	f, err := os.Open(h.path)
 	if err != nil {
 		return errors.Wrap(err, "opening directory")
 	}
@@ -618,6 +679,7 @@ func (h *Holder) Close() error {
 	if globalUseStatTx {
 		fmt.Printf("%v\n", globalCallStats.report())
 	}
+	h.txf.blueGreenReg.Close()
 
 	h.Stats.Close()
 
@@ -648,11 +710,6 @@ func (h *Holder) Close() error {
 	return nil
 }
 
-// Begin starts a transaction on the holder.
-func (h *Holder) BeginTx(writable bool, index *Index) (Tx, error) {
-	return index.Txf.NewTx(Txo{Write: writable, Index: index}), nil
-}
-
 func (h *Holder) NeedsSnapshot() bool {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
@@ -674,13 +731,13 @@ func (h *Holder) HasData() (bool, error) {
 		return true, nil
 	}
 	// Open path to read all index directories.
-	if _, err := os.Stat(h.Path); os.IsNotExist(err) {
+	if _, err := os.Stat(h.path); os.IsNotExist(err) {
 		return false, nil
 	} else if err != nil {
 		return false, errors.Wrap(err, "statting data dir")
 	}
 
-	f, err := os.Open(h.Path)
+	f, err := os.Open(h.path)
 	if err != nil {
 		return false, errors.Wrap(err, "opening data dir")
 	}
@@ -702,7 +759,7 @@ func (h *Holder) HasData() (bool, error) {
 
 // hasV1TranslateKeysFile returns true if a v1 translation data file exists on disk.
 func (h *Holder) hasV1TranslateKeysFile() (bool, error) {
-	if _, err := os.Stat(filepath.Join(h.Path, ".keys")); os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(h.path, ".keys")); os.IsNotExist(err) {
 		return true, nil
 	} else if err != nil {
 		return false, err
@@ -842,7 +899,7 @@ func (h *Holder) applyCreatedAt(indexes []*IndexInfo) {
 
 // IndexPath returns the path where a given index is stored.
 func (h *Holder) IndexPath(name string) string {
-	return filepath.Join(h.Path, name)
+	return filepath.Join(h.path, name)
 }
 
 // HolderPathFromIndexPath is
@@ -1119,9 +1176,9 @@ func (h *Holder) setFileLimit() {
 }
 
 func (h *Holder) loadNodeID() (string, error) {
-	idPath := path.Join(h.Path, ".id")
+	idPath := path.Join(h.path, ".id")
 	h.Logger.Printf("load NodeID: %s", idPath)
-	if err := os.MkdirAll(h.Path, 0777); err != nil {
+	if err := os.MkdirAll(h.path, 0777); err != nil {
 		return "", errors.Wrap(err, "creating directory")
 	}
 
@@ -1148,7 +1205,7 @@ func (h *Holder) logStartup() error {
 	}
 	logLine := fmt.Sprintf("%s\t%s\n", time, Version)
 
-	f, err := os.OpenFile(h.Path+"/.startup.log", os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
+	f, err := os.OpenFile(h.path+"/.startup.log", os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
 	if err != nil {
 		return errors.Wrap(err, "opening startup log")
 	}
@@ -1425,12 +1482,12 @@ func (s *holderSyncer) resetTranslationSync() error {
 // a future iteration on this may be to make it more generic so
 // it can act as an internal message bus where one of the messages
 // being published is "translationSyncReset".
-type translationSyncer interface {
+type TranslationSyncer interface {
 	Reset() error
 }
 
 // NopTranslationSyncer represents a translationSyncer that doesn't do anything.
-var NopTranslationSyncer translationSyncer = &nopTranslationSyncer{}
+var NopTranslationSyncer TranslationSyncer = &nopTranslationSyncer{}
 
 type nopTranslationSyncer struct{}
 
@@ -1864,4 +1921,25 @@ func (h *Holder) addIndexFromField(idx *Index) {
 
 func (h *Holder) unprotectedAddIndexFromField(idx *Index) {
 	h.indexes[idx.Name()] = idx
+}
+
+func (h *Holder) DumpAllShards() {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	for index, idx := range h.indexes {
+		fmt.Printf("dump of index '%v'\n", index)
+		idx.Txf.dbPerShard.DumpAll()
+	}
+}
+
+func (h *Holder) Txf() *TxFactory {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.txf
+}
+
+// Begin starts a transaction on the holder. The index and shard
+// must be specified.
+func (h *Holder) BeginTx(writable bool, idx *Index, shard uint64) (Tx, error) {
+	return idx.Txf.NewTx(Txo{Write: writable, Index: idx, Shard: shard}), nil
 }

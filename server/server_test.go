@@ -22,6 +22,8 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math/rand"
+	nethttp "net/http"
+	"os"
 	"reflect"
 	"sort"
 	"strconv"
@@ -53,6 +55,7 @@ func TestMain_Set_Quick(t *testing.T) {
 	}
 
 	for i := 0; i < 100; i++ {
+		//for i := 0; i < 10; i++ {
 		t.Run(fmt.Sprint(i), func(t *testing.T) {
 			t.Parallel()
 
@@ -867,10 +870,13 @@ func TestMain_ImportTimestamp(t *testing.T) {
 	}
 
 	// Import data.
-	if err := m.API.Import(context.Background(), &data); err != nil {
+	qcx := m.API.Txf().NewQcx()
+	if err := m.API.Import(context.Background(), qcx, &data); err != nil { /// first write i/0 here. 2nd write here.
 		t.Fatal(err)
 	}
-
+	if err := qcx.Finish(); err != nil {
+		t.Fatal(err)
+	}
 	// Ensure the correct views were created.
 	dir := fmt.Sprintf("%s/%s/%s/views", m.Config.DataDir, indexName, fieldName)
 	files, err := ioutil.ReadDir(dir)
@@ -919,7 +925,11 @@ func TestMain_ImportTimestampNoStandardView(t *testing.T) {
 	}
 
 	// Import data.
-	if err := m.API.Import(context.Background(), &data); err != nil {
+	qcx := m.API.Txf().NewQcx()
+	if err := m.API.Import(context.Background(), qcx, &data); err != nil {
+		t.Fatal(err)
+	}
+	if err := qcx.Finish(); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1208,4 +1218,13 @@ Set("h", adec=100.22)
 		t.Fatalf("expected count 1, but got: '%s'", result.Body)
 	}
 
+}
+
+func TestMain(m *testing.M) {
+	port := pilosa.GetAvailPort()
+	fmt.Printf("server/ TestMain: online stack-traces: curl http://localhost:%v/debug/pprof/goroutine?debug=2\n", port)
+	go func() {
+		_ = nethttp.ListenAndServe(fmt.Sprintf("127.0.0.1:%v", port), nil)
+	}()
+	os.Exit(m.Run())
 }

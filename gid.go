@@ -49,6 +49,10 @@ var littleBuf = sync.Pool{
 var _ = curGID // happy linter
 
 func curGID() uint64 {
+	if true {
+		return 0 // avoid doing too much work during production profiling.
+	}
+
 	bp := littleBuf.Get().(*[]byte)
 	defer littleBuf.Put(bp)
 	b := *bp

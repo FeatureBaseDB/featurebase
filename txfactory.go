@@ -21,6 +21,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"text/tabwriter"
 
@@ -33,7 +34,6 @@ import (
 // public strings that pilosa/server/config.go can reference
 const (
 	RoaringTxn string = "roaring"
-	BadgerTxn  string = "badger"
 	LmdbTxn    string = "lmdb"
 	RBFTxn     string = "rbf"
 )
@@ -48,7 +48,7 @@ const DefaultTxsrc = RoaringTxn
 // which the transaction has committed or rolled back. Since
 // memory segments will be recycled by the underlying databases,
 // this can lead to corruption. When DetectMemAccessPastTx is true,
-// code in badger.go will copy the transactionally viewed memory before
+// code in lmdb.go will copy the transactionally viewed memory before
 // returning it for bitmap reading, and then zero it or overwrite it
 // with -2 when the Tx completes.
 //
@@ -58,24 +58,331 @@ const DetectMemAccessPastTx = false
 
 var sep = string(os.PathSeparator)
 
+// Qcx is a (Pilosa) Query Context.
+//
+// It flexibly expresses the desired grouping of Tx for mass
+// rollback at a query's end. It provides one-time commit for
+// an atomic import write Tx that involves multiple fragments.
+//
+// The most common use of Qcx is to call GetTx() to obtain a Tx locally,
+// once the index/shard pair is known:
+//
+//   someFunc(qcx Qcx, idx *Index, shard uint64) (err0 error) {
+//		tx, finisher := qcx.GetTx(Txo{Write: true, Index:idx, Shard:shard, ...})
+//		defer finisher(&err0)
+//      ...
+//   }
+//
+// Qcx reuses read-only Tx on the same index/shard pair. See
+// the Qcx.GetTx() for further discussion. The caveat is of
+// course that your "new" read Tx actually has an "old" view
+// of the database.
+//
+// At the moment, given that LMDB demands that
+// all write Tx are created and executed on the same C thread, most
+// writes to individual shards are commited eagerly and locally
+// when the `defer finisher(&err0)` is run.
+// This is done by returning a finisher that actually Commits,
+// thus freeing the one write slot for re-use. A single
+// writer is also required by RBF, so this design accomodates
+// both.
+//
+// In contrast, the default read Tx generated (or re-used) will
+// return a no-op finisher and the group of reads as a whole
+// will be rolled back (mmap memory released) en-mass when
+// Qcx.Abort() is called at the top-most level.
+//
+// Local use of a (Tx, finisher) pair obtained from Qcx.GetTx()
+// doesn't need to care about these details. Local use should
+// always invoke finisher(&err0) or finisher(nil) to complete
+// the Tx within the local function scope.
+//
+// In summary write Tx are typically "local"
+// and are never saved into the TxGroup. The parallelism
+// supplied by TxGroup typically applies only to read Tx.
+//
+// The one exception is this rule is for the one write Tx
+// used during the api.ImportAtomicRecord routine. There
+// we make a special write Tx and use it for all matching writes.
+// This is then committed at the final, top-level, Qcx.Finish() call.
+//
+// See also the Qcx.GetTx() example and the TxGroup description below.
+//
+type Qcx struct {
+	Grp *TxGroup
+	Txf *TxFactory
+
+	// if we go back to using Qcx values, this must become a pointer,
+	// or otherwise be dealt with because copies of Mutex are a no-no.
+	mu sync.Mutex
+
+	// RequiredForAtomicWriteTx is used by api.ImportAtomicRecord
+	// to ensure that all writes happen on this one Tx.
+	RequiredForAtomicWriteTx *Tx
+
+	// efficient access to the options for RequiredForAtomicWriteTx
+	RequiredTxo *Txo
+
+	isRoaring bool
+}
+
+// Finish commits/rollsback all stored Tx and resets the
+// Qcx for further operations, avoiding the need to call NewQxc() again.
+func (q *Qcx) Finish() (err error) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if q.RequiredForAtomicWriteTx != nil {
+		if q.RequiredTxo.Write {
+			err = (*q.RequiredForAtomicWriteTx).Commit() // panic here on 2nd. is this a double commit?
+		} else {
+			(*q.RequiredForAtomicWriteTx).Rollback()
+		}
+	}
+	err2 := q.Grp.FinishGroup()
+	q.reset()
+
+	if err != nil {
+		return err
+	}
+	return err2
+}
+
+// Abort rolls back all Tx generated and stored within the Qcx.
+// The Qcx is then reset and can be used again immediately.
+func (q *Qcx) Abort() {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if q.RequiredForAtomicWriteTx != nil {
+		(*q.RequiredForAtomicWriteTx).Rollback()
+	}
+	q.Grp.AbortGroup()
+
+	q.reset()
+}
+
+// reset forgets everything are starts fresh with an empty
+// group, ready for use again as if NewQcx() had been called.
+// q.mu must be held
+func (q *Qcx) reset() {
+	q.RequiredForAtomicWriteTx = nil
+	q.RequiredTxo = nil
+	q.Grp = q.Txf.NewTxGroup()
+}
+
+// NewQcxWithGroup allocates a freshly allocated and empty Grp.
+func (f *TxFactory) NewQcx() (qcx *Qcx) {
+	qcx = &Qcx{
+		Grp: f.NewTxGroup(),
+		Txf: f,
+	}
+	if f.typeOfTx == "roaring" {
+		qcx.isRoaring = true
+	}
+	return
+}
+
+var NoopFinisher = func(perr *error) {}
+
+// GetTx is used like this:
+//
+// someFunc(ctx context.Context, shard uint64) (_ interface{}, err0 error) {
+//
+//		tx, finisher := qcx.GetTx(Txo{Write: !writable, Index: idx, Shard: shard})
+//		defer finisher(&err0)
+//
+//		return e.executeIncludesColumnCallShard(ctx, tx, index, c, shard, col)
+//	}
+//
+// Note we are tracking the returned err value of someFunc(). An option instead is to say
+//
+//     defer finisher(nil)
+//
+// This means always Commit writes, ignoring if there were errors. This style
+// is expected to be rare compared to the typical
+//
+//     defer finisher(&err0)
+//
+// invocation, where err0 is your return from the enclosing function error.
+// If the Tx is local and not a part of a group, then the finisher
+// consults that error to decides whether to Commit() or Rollback().
+//
+// If instead the Tx becomes part of a group, then the local finisher() is
+// always a no-op, in deference to the Qcx.Finish()
+// or Qcx.Abort() calls.
+//
+// Take care the finisher(&err) is capturing the address of the
+// enclosing function's err and that it has not been shadowed
+// locally by another _, err := f() call. For this reason, it can
+// be clearer (and much safer) to rename the enclosing functions 'err' to 'err0',
+// to make it clear we are referring to the first and final error.
+//
+func (qcx *Qcx) GetTx(o Txo) (tx Tx, finisher func(perr *error)) {
+	qcx.mu.Lock()
+	defer qcx.mu.Unlock()
+
+	// roaring uses finer grain, a file per fragment rather than
+	// db per shard. So we can't re-use the readTx. Moreover,
+	// roaring Tx are No-ops anyway, so just give it a new Tx
+	// everytime.
+	if qcx.isRoaring {
+		return qcx.Txf.NewTx(o), NoopFinisher
+	}
+
+	// note: write Tx were re-using Tx across different goroutines,
+	// which lmdb will not be pleased with. For reads this
+	// should be okay, as the docs say
+	// "If you want to pass read-only transactions across threads,
+	//  you can use the MDB_NOTLS option on the environment."
+	//     -- http://www.lmdb.tech/doc/starting.html
+	// and we always use lmdb.NoTLS as the lmdb-go bindings ensure this.
+	//
+	// So we make ALL write transactions local, and never reuse them
+	// below.
+	//
+	// *However* there is one exception: when we have set RequiredForAtomicWriteTx
+	// for the importing of an AtomicRequest, then we must use that
+	// our single RequiredForAtomicWriteTx for all writes until it
+	// is cleared. This one is kept separately from the read TxGroup.
+	//
+	if o.Write && qcx.RequiredForAtomicWriteTx != nil {
+		// verify that shard and index match!
+		ro := qcx.RequiredTxo
+		if o.Shard != ro.Shard {
+			panic(fmt.Sprintf("shard mismatch: o.Shard = %v while qcx.RequiredTxo.Shard = %v", o.Shard, ro.Shard))
+		}
+		if o.Index == nil {
+			panic("o.Index annot be nil")
+		}
+		if ro.Index == nil {
+			panic("ro.Index annot be nil")
+		}
+		if o.Index.name != ro.Index.name {
+			panic(fmt.Sprintf("index mismatch: o.Index = %v while qcx.RequiredTxo.Index = %v", o.Index.name, ro.Index.name))
+		}
+		return *qcx.RequiredForAtomicWriteTx, NoopFinisher
+	}
+
+	if !o.Write && qcx.Grp != nil {
+		// read, with a group in place.
+		finisher = func(perr *error) {}
+
+		already := false
+		tx, already = qcx.Grp.AlreadyHaveTx(o)
+		if already {
+			return
+		}
+		o.Group = qcx.Grp
+		tx = qcx.Txf.NewTx(o)
+		qcx.Grp.AddTx(tx)
+		return
+	}
+
+	// non atomic writes or not grouped reads
+	tx = qcx.Txf.NewTx(o)
+	if o.Write {
+		finisherDone := false
+		finisher = func(perr *error) {
+			if finisherDone {
+				return
+			}
+			finisherDone = true // only Commit once.
+			// so defer finisher(nil) means always Commit writes, ignoring
+			// the enclosing functions return status.
+			if perr == nil || *perr == nil {
+				panicOn(tx.Commit())
+			} else {
+				tx.Rollback()
+			}
+		}
+	} else {
+		// read-only txn
+		finisher = func(perr *error) {
+			tx.Rollback()
+		}
+	}
+	return
+}
+
+// StartAtomicWriteTx allocates a Tx and stores it
+// in qcx.RequiredForAtomicWriteTx. All subsequent writes
+// to this shard/index will re-use it.
+func (qcx *Qcx) StartAtomicWriteTx(o Txo) {
+	if !o.Write {
+		panic("must have o.Write true")
+	}
+	qcx.mu.Lock()
+	defer qcx.mu.Unlock()
+
+	if qcx.RequiredForAtomicWriteTx == nil {
+		// new Tx needed
+		tx := qcx.Txf.NewTx(o)
+		qcx.RequiredForAtomicWriteTx = &tx
+		o := tx.Options()
+		qcx.RequiredTxo = &o
+		return
+	}
+
+	// re-using existing
+
+	// verify that shard and index match!
+	ro := qcx.RequiredTxo
+	if o.Shard != ro.Shard {
+		panic(fmt.Sprintf("shard mismatch: o.Shard = %v while qcx.RequiredTxo.Shard = %v", o.Shard, ro.Shard))
+	}
+	if o.Index == nil {
+		panic("o.Index annot be nil")
+	}
+	if ro.Index == nil {
+		panic("ro.Index annot be nil")
+	}
+	if o.Index.name != ro.Index.name {
+		panic(fmt.Sprintf("index mismatch: o.Index = %v while qcx.RequiredTxo.Index = %v", o.Index.name, ro.Index.name))
+	}
+}
+
+func (qcx *Qcx) SetRequiredForAtomicWriteTx(tx Tx) {
+	if tx == nil || NilInside(tx) {
+		panic("cannot set nil tx in SetRequiredForAtomicWriteTx")
+	}
+	qcx.mu.Lock()
+	qcx.RequiredForAtomicWriteTx = &tx
+	o := tx.Options()
+	qcx.RequiredTxo = &o
+	qcx.mu.Unlock()
+}
+
+func (qcx *Qcx) ClearRequiredForAtomicWriteTx() {
+	qcx.mu.Lock()
+	qcx.RequiredForAtomicWriteTx = nil
+	qcx.RequiredTxo = nil
+	qcx.mu.Unlock()
+}
+
+func (qcx *Qcx) ListOpenTx() string {
+	return qcx.Grp.String()
+}
+
 // TxFactory abstracts the creation of Tx interface-level
-// transactions so that RBF, or Badger, or Roaring-fragment-files, or several
+// transactions so that RBF, or LMDB, or Roaring-fragment-files, or several
 // of these at once in parallel, is used as the storage and transction layer.
 type TxFactory struct {
 	typeOfTx string
 
-	types []txtype // blue-green split individually here
+	mu sync.Mutex // group protection
 
-	badgerDB  *BadgerDBWrapper
-	lmDB      *LMDBWrapper
-	rbfDB     *RbfDBWrapper
-	roaringDB *RoaringStore
+	types []txtype // blue-green split individually here
 
 	dbsClosed bool // idemopotent CloseDB()
 
-	// could have more than one *Index, but for now keep it simple,
-	// and allow blueGreenTx to report badger contents via idx
-	idx *Index
+	dbPerShard *DBPerShard
+
+	holder *Holder
+
+	blueGreenReg *blueGreenRegistry
+}
+
+func (f *TxFactory) Types() []txtype {
+	return f.types
 }
 
 // integer types for fast switch{}
@@ -84,10 +391,21 @@ type txtype int
 const (
 	noneTxn    txtype = 0
 	roaringTxn txtype = 1 // these don't really have any transactions
-	badgerTxn  txtype = 2
-	rbfTxn     txtype = 3
-	lmdbTxn    txtype = 4
+	rbfTxn     txtype = 2
+	lmdbTxn    txtype = 3
 )
+
+func (ty txtype) FileSuffix() string {
+	switch ty {
+	case roaringTxn:
+		return ""
+	case rbfTxn:
+		return "-rbfdb"
+	case lmdbTxn:
+		return "-lmdb"
+	}
+	panic(fmt.Sprintf("unkown txtype %v", int(ty)))
+}
 
 func (txf *TxFactory) NeedsSnapshot() (b bool) {
 	for _, ty := range txf.types {
@@ -115,8 +433,6 @@ func MustTxsrcToTxtype(txsrc string) (types []txtype) {
 		switch s {
 		case RoaringTxn: // "roaring"
 			types = append(types, roaringTxn)
-		case BadgerTxn: // "badger"
-			types = append(types, badgerTxn)
 		case RBFTxn: // "rbf"
 			types = append(types, rbfTxn)
 		case LmdbTxn: // "lmdb"
@@ -137,53 +453,16 @@ func MustTxsrcToTxtype(txsrc string) (types []txtype) {
 // want to a fresh database, os.RemoveAll on dir/name ahead of time.
 // We always store files in a subdir of dir. If we are having one
 // database or many can depend on name.
-func NewTxFactory(txsrc string, dir, name string) (f *TxFactory, err error) {
-	//vv("NewTxFactory called for txsrc '%v'; dir='%v'; name='%v'", txsrc, dir, name)
-
+func NewTxFactory(txsrc string, holderDir string, holder *Holder) (f *TxFactory, err error) {
 	types := MustTxsrcToTxtype(txsrc)
 
 	f = &TxFactory{
-		types:     types,
-		typeOfTx:  txsrc,
-		roaringDB: NewRoaringStore(),
+		types:        types,
+		typeOfTx:     txsrc,
+		holder:       holder,
+		blueGreenReg: newBlueGreenReg(),
 	}
-
-	for _, ty := range f.types {
-		switch ty {
-		case roaringTxn:
-			// no-op. these are just files in a directory
-
-		case badgerTxn:
-			// one, big, bad-ass badger for all data: the honeyBadger.
-			//
-			// Note that having a single Tx backing store for all indexes
-			// enables cross-index Tx, which are important and are tested for.
-			path := dir + sep + "honeyBadger"
-
-			f.badgerDB, err = globalBadgerReg.openBadgerDBWrapper(path)
-			if err != nil {
-				return nil, errors.Wrap(err, fmt.Sprintf("cannot open badger db. path='%v'", path))
-			}
-
-			// electric-fence like finding of access to mmapped data beyond
-			// transaction end time.
-			f.badgerDB.doAllocZero = DetectMemAccessPastTx
-
-		case rbfTxn:
-			path := dir + sep + "all-in-one-rbfdb"
-			f.rbfDB, err = globalRbfDBReg.openRbfDB(path)
-			if err != nil {
-				return nil, errors.Wrap(err, fmt.Sprintf("cannot create new rbf db. path='%v'", path))
-			}
-		case lmdbTxn:
-			path := dir + sep + "all-in-one"
-			f.lmDB, err = globalLMDBReg.openLMDBWrapper(path)
-			if err != nil {
-				return nil, errors.Wrap(err, fmt.Sprintf("cannot create new lmdb db. path='%v'", path))
-			}
-		}
-	}
-
+	f.dbPerShard = f.NewDBPerShard(types, holderDir)
 	return f, err
 }
 
@@ -194,6 +473,15 @@ type Txo struct {
 	Index    *Index
 	Fragment *fragment
 	Shard    uint64
+
+	dbs *DBShard
+	per *DBPerShard
+
+	Group *TxGroup
+}
+
+func (o Txo) String() string {
+	return fmt.Sprintf("Txo{Write:%v, Index:%v Shard:%v Group:%p}", o.Write, o.Index.name, o.Shard, o.Group)
 }
 
 func (f *TxFactory) TxType() string {
@@ -205,60 +493,21 @@ func (f *TxFactory) TxTypes() []txtype {
 }
 
 func (f *TxFactory) DeleteIndex(name string) (err error) {
-	for _, ty := range f.types {
-		switch ty {
-		case roaringTxn:
-			// from holder.go:955, by default is already done there with os.RemoveAll()
-		case badgerTxn:
-			err = f.badgerDB.DeleteIndex(name)
-		case rbfTxn:
-			err = f.rbfDB.DeleteIndex(name)
-		case lmdbTxn:
-			err = f.lmDB.DeleteIndex(name)
-		default:
-			panic(fmt.Sprintf("unknown txtyp : '%v'", ty))
-		}
-	}
-	return
+	return f.dbPerShard.DeleteIndex(name)
 }
 
 func (f *TxFactory) DeleteFieldFromStore(index, field, fieldPath string) (err error) {
-	for _, ty := range f.types {
-		switch ty {
-		case roaringTxn:
-			err = f.roaringDB.DeleteField(index, field, fieldPath)
-		case badgerTxn:
-			err = f.badgerDB.DeleteField(index, field, fieldPath)
-		case rbfTxn:
-			err = f.rbfDB.DeleteField(index, field, fieldPath)
-		case lmdbTxn:
-			err = f.lmDB.DeleteField(index, field, fieldPath)
-		default:
-			panic(fmt.Sprintf("unknown f.typeOfTx type: '%v'", ty))
-		}
-	}
-	return
+	return f.dbPerShard.DeleteFieldFromStore(index, field, fieldPath)
 }
 
 func (f *TxFactory) DeleteFragmentFromStore(
 	index, field, view string, shard uint64, frag *fragment,
 ) (err error) {
+	return f.dbPerShard.DeleteFragment(index, field, view, shard, frag)
+}
 
-	for _, ty := range f.types {
-		switch ty {
-		case roaringTxn:
-			err = f.roaringDB.DeleteFragment(index, field, view, shard, frag)
-		case badgerTxn:
-			err = f.badgerDB.DeleteFragment(index, field, view, shard, frag)
-		case rbfTxn:
-			err = f.rbfDB.DeleteFragment(index, field, view, shard, frag)
-		case lmdbTxn:
-			err = f.lmDB.DeleteFragment(index, field, view, shard, frag)
-		default:
-			panic(fmt.Sprintf("unknown f.typeOfTx type: '%v'", ty))
-		}
-	}
-	return
+func (f *TxFactory) DumpAll() {
+	f.dbPerShard.DumpAll()
 }
 
 func (f *TxFactory) CloseIndex(idx *Index) error {
@@ -273,22 +522,7 @@ func (f *TxFactory) CloseDB() (err error) {
 		return nil
 	}
 	f.dbsClosed = true
-
-	for _, ty := range f.types {
-		switch ty {
-		case roaringTxn:
-			// no-op
-		case badgerTxn:
-			err = f.badgerDB.Close()
-		case rbfTxn:
-			err = f.rbfDB.Close()
-		case lmdbTxn:
-			err = f.lmDB.Close()
-		default:
-			panic(fmt.Sprintf("unknown txtype: '%v'", ty))
-		}
-	}
-	return
+	return f.dbPerShard.Close()
 }
 
 var globalUseStatTx = false
@@ -300,44 +534,179 @@ func init() {
 	}
 }
 
+// TxGroup holds a set of read and a set of write transactions
+// that will en-mass have Rollback() (for the read set) and
+// Commit() (for the write set) called on
+// them when TxGroup.Finish() is invoked.
+// Alternatively, TxGroup.Abort() will call Rollback()
+// on all Tx group memebers.
+type TxGroup struct {
+	mu       sync.Mutex
+	fac      *TxFactory
+	reads    []Tx
+	writes   []Tx
+	finished bool
+
+	all map[grpkey]Tx
+}
+
+type grpkey struct {
+	write bool
+	index string
+	shard uint64
+}
+
+func mustHaveIndexShard(o *Txo) {
+	if o.Index == nil || o.Index.name == "" {
+		panic("index must be set on Txo")
+	}
+}
+
+func (g *TxGroup) AlreadyHaveTx(o Txo) (tx Tx, already bool) {
+	mustHaveIndexShard(&o)
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	key := grpkey{write: o.Write, index: o.Index.name, shard: o.Shard}
+	tx, already = g.all[key]
+	return
+}
+
+func (g *TxGroup) String() (r string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if len(g.reads) == 0 && len(g.writes) == 0 {
+		return "<empty-TxGroup>"
+	}
+
+	i := 0
+	r += "\n"
+	for _, tx := range g.reads {
+		r += fmt.Sprintf("[%v]read: _sn_ %v %v, \n", i, tx.Sn(), tx.Options())
+		i++
+	}
+	for _, tx := range g.writes {
+		r += fmt.Sprintf("[%v]write: _sn_ %v %v, \n", i, tx.Sn(), tx.Options())
+		i++
+	}
+	return
+}
+
+// NewTxGroup
+func (f *TxFactory) NewTxGroup() (g *TxGroup) {
+	g = &TxGroup{
+		fac: f,
+		all: make(map[grpkey]Tx),
+	}
+	return
+}
+
+// AddTx adds tx to the group.
+func (g *TxGroup) AddTx(tx Tx) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.finished {
+		panic("in TxGroup.Finish(): TxGroup already finished")
+	}
+	if NilInside(tx) {
+		panic("Cannot add nil Tx to TxGroup")
+	}
+
+	if tx.Readonly() {
+		g.reads = append(g.reads, tx)
+	} else {
+		g.writes = append(g.writes, tx)
+	}
+	o := tx.Options()
+	mustHaveIndexShard(&o)
+
+	key := grpkey{write: o.Write, index: o.Index.name, shard: o.Shard}
+	prior, ok := g.all[key]
+	if ok {
+		panic(fmt.Sprintf("already have Tx in group for this, we should have re-used it! prior is '%v'; tx='%v'", prior, tx))
+	}
+	g.all[key] = tx
+}
+
+// Finish commits the write tx and calls Rollback() on
+// the read tx contained in the group. Either Abort() or Finish() must
+// be called on the TxGroup exactly once.
+func (g *TxGroup) FinishGroup() (err error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.finished {
+		panic("in TxGroup.Finish(): TxGroup already finished")
+	}
+	g.finished = true
+	for i, tx := range g.writes {
+		_ = i
+		err0 := tx.Commit()
+		if err0 != nil {
+			if err == nil {
+				err = err0 // keep the first error, but Commit them all.
+			}
+		}
+	}
+	for _, r := range g.reads {
+		r.Rollback()
+	}
+	return
+}
+
+// Abort calls Rollback() on all the group Tx, and marks
+// the group as finished. Either Abort() or Finish() must
+// be called on the TxGroup exactly once.
+func (g *TxGroup) AbortGroup() {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.finished {
+		// defer Abort() probably gets here often by default, just ignore.
+		return
+	}
+	g.finished = true
+
+	for _, r := range g.reads {
+		r.Rollback()
+	}
+	for _, tx := range g.writes {
+		tx.Rollback()
+	}
+}
+
 func (f *TxFactory) NewTx(o Txo) (txn Tx) {
+	f.mu.Lock() // deadlock here
+	defer f.mu.Unlock()
+
 	defer func() {
 		if globalUseStatTx {
 			txn = newStatTx(txn)
 		}
 	}()
+
 	indexName := ""
 	if o.Index != nil {
 		indexName = o.Index.name
 	}
-	var txns []Tx
 
-	for _, ty := range f.types {
-		switch ty {
-		case roaringTxn:
-			txns = append(txns, &RoaringTx{write: o.Write, Field: o.Field, Index: o.Index, fragment: o.Fragment})
-		case badgerTxn:
-			//tx := NewMultiTxWithIndex(o.Write, o.Index)
-			//txns = append(txns,  tx
-			btx := f.badgerDB.NewBadgerTx(o.Write, indexName, o.Fragment)
-			txns = append(txns, btx)
-		case rbfTxn:
-			//tx := NewMultiTxWithIndex(o.Write, o.Index)
-			tx, err := f.rbfDB.NewRBFTx(o.Write, indexName, o.Fragment)
-			if err != nil {
-				panic(errors.Wrap(err, "rbfDB.NewRBFTx transaction errored"))
-			}
-			txns = append(txns, tx)
-		case lmdbTxn:
-			txns = append(txns, f.lmDB.NewLMDBTx(o.Write, indexName, o.Fragment))
-		default:
-			panic(fmt.Sprintf("unknown txtyp: '%v'", ty))
+	if o.Fragment != nil {
+		if o.Fragment.index != indexName {
+			panic(fmt.Sprintf("inconsistent NewTx request: o.Fragment.index='%v' but indexName='%v'", o.Fragment.index, indexName))
+		}
+		if o.Fragment.shard != o.Shard {
+			panic(fmt.Sprintf("inconsistent NewTx request: o.Fragment.shard='%v' but o.Shard='%v'", o.Fragment.shard, o.Shard))
 		}
 	}
-	if len(txns) > 1 {
-		return newBlueGreenTx(txns[0], txns[1], f.idx)
+
+	// look up in the collection of open databases, and get our
+	// per-shard database. Opens a new one if needed.
+	dbs, err := f.dbPerShard.GetDBShard(indexName, o.Shard, o.Index)
+	panicOn(err)
+	o.dbs = dbs          // our specific database per shard.
+	o.per = f.dbPerShard // for top level debug Dumps
+	tx, err := dbs.NewTx(o.Write, indexName, o)
+	if err != nil {
+		panic(errors.Wrap(err, "rbfDB.NewRBFTx transaction errored"))
 	}
-	return txns[0]
+	return tx
 }
 
 func (ty txtype) String() string {
@@ -346,23 +715,12 @@ func (ty txtype) String() string {
 		return "noneTxn"
 	case roaringTxn:
 		return "roaringTxn"
-	case badgerTxn:
-		return "badgerTxn"
 	case rbfTxn:
 		return "rbfTxn"
 	case lmdbTxn:
 		return "lmdbTxn"
 	}
 	panic(fmt.Sprintf("unhandled ty '%v' in txtype.String()", int(ty)))
-}
-
-// StringifiedBadgerKeys displays the keys visible in BadgerDB for the idx *Index.
-// If optionalUseThisTx is nil, it will start a new read-only transaction to
-// do this query. Otherwise it will piggy back on the provided transaction.
-// Hence to view uncommited keys, you must provide in optionalUseThisTx the
-// Tx in which they have been added.
-func (idx *Index) StringifiedBadgerKeys(optionalUseThisTx Tx) string {
-	return idx.Txf.badgerDB.StringifiedBadgerKeys(optionalUseThisTx)
 }
 
 // fragmentSpecFromRoaringPath takes a path releative to the
@@ -425,7 +783,7 @@ func (idx *Index) StringifiedRoaringKeys(hashOnly, showOps bool) (r string) {
 		return "" // new convention that empty database => empty string returned.
 	}
 	// note that we can have a bitmap present, but it can be empty
-	r += "]\n   all-in-blake3:" + blake3sum16([]byte(r)) + "\n"
+	r += "]\n   all-in-blake3:" + Blake3sum16([]byte(r)) + "\n"
 
 	return "roaring-" + r
 }
@@ -503,17 +861,18 @@ func stringifiedRawRoaringFragment(path string, index, field, view string, shard
 	for citer.Next() {
 		ckey, ct := citer.Value()
 		by := containerToBytes(ct)
-		hash := blake3sum16(by)
+		hash := Blake3sum16(by)
 
 		cts := roaring.NewSliceContainers()
 		cts.Put(ckey, ct)
 		rbm := &roaring.Bitmap{Containers: cts}
+
 		var srbm string
 		if !hashOnly {
-			srbm = bitmapAsString(rbm)
+			srbm = BitmapAsString(rbm)
 		}
 
-		bkey := string(txkey.Key(index, field, view, shard, ckey))
+		bkey := txkey.ToString(txkey.Key(index, field, view, shard, ckey))
 
 		n := ct.N()
 		hotbits += int(n)

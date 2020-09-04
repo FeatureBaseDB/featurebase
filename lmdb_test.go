@@ -17,15 +17,12 @@
 package pilosa
 
 import (
-	"bytes"
 	"fmt"
 	"math"
 	"os"
-	"strconv"
 	"testing"
 
 	"github.com/pilosa/pilosa/v2/roaring"
-	"github.com/pilosa/pilosa/v2/txkey"
 )
 
 // helpers, each runs their own new txn, and commits if a change/delete
@@ -33,7 +30,7 @@ import (
 
 func LMDBMustHaveBitvalue(dbwrap *LMDBWrapper, index, field, view string, shard uint64, bitvalue uint64) {
 
-	tx := dbwrap.NewLMDBTx(!writable, index, nil)
+	tx, _ := dbwrap.NewTx(!writable, index, Txo{})
 	defer tx.Rollback()
 	exists, err := tx.Contains(index, field, view, shard, bitvalue)
 	panicOn(err)
@@ -46,7 +43,7 @@ func LMDBMustHaveBitvalue(dbwrap *LMDBWrapper, index, field, view string, shard 
 
 func LMDBMustNotHaveBitvalue(dbwrap *LMDBWrapper, index, field, view string, shard uint64, bitvalue uint64) {
 
-	tx := dbwrap.NewLMDBTx(!writable, index, nil)
+	tx, _ := dbwrap.NewTx(!writable, index, Txo{})
 	defer tx.Rollback()
 	exists, err := tx.Contains(index, field, view, shard, bitvalue)
 	panicOn(err)
@@ -57,7 +54,7 @@ func LMDBMustNotHaveBitvalue(dbwrap *LMDBWrapper, index, field, view string, sha
 }
 
 func LMDBMustSetBitvalue(dbwrap *LMDBWrapper, index, field, view string, shard uint64, putme uint64) {
-	tx := dbwrap.NewLMDBTx(writable, index, nil)
+	tx, _ := dbwrap.NewTx(writable, index, Txo{})
 
 	// add a bit
 	changed, err := tx.Add(index, field, view, shard, doBatched, putme)
@@ -75,14 +72,14 @@ func LMDBMustSetBitvalue(dbwrap *LMDBWrapper, index, field, view string, shard u
 }
 
 func LMDBMustDeleteBitvalueContainer(dbwrap *LMDBWrapper, index, field, view string, shard uint64, putme uint64) {
-	tx := dbwrap.NewLMDBTx(writable, index, nil)
+	tx, _ := dbwrap.NewTx(writable, index, Txo{})
 	hi := highbits(putme)
 	panicOn(tx.RemoveContainer(index, field, view, shard, hi))
 	panicOn(tx.Commit())
 }
 
 func LMDBMustDeleteBitvalue(dbwrap *LMDBWrapper, index, field, view string, shard uint64, putme uint64) {
-	tx := dbwrap.NewLMDBTx(writable, index, nil)
+	tx, _ := dbwrap.NewTx(writable, index, Txo{})
 	_, err := tx.Remove(index, field, view, shard, putme)
 	panicOn(err)
 	panicOn(tx.Commit())
@@ -92,18 +89,19 @@ func mustOpenEmptyLMDBWrapper(path string) (w *LMDBWrapper, cleaner func()) {
 	var err error
 	fn := lmdbPath(path)
 	panicOn(os.RemoveAll(fn))
-	w, err = globalLMDBReg.openLMDBWrapper(fn)
+	ww, err := globalLMDBReg.OpenDBWrapper(fn, DetectMemAccessPastTx)
 	panicOn(err)
+	w = ww.(*LMDBWrapper)
 
 	// verify it is empty
 	allkeys := w.StringifiedLMDBKeys(nil)
-	if allkeys != "" {
+	if allkeys != "<empty lmdb database>" {
 		panic(fmt.Sprintf("freshly created database was not empty! had keys:'%v'", allkeys))
 	}
 
 	return w, func() {
 		w.Close()
-		panicOn(w.DeleteDBPath(fn))
+		panicOn(w.DeleteDBPath(&DBShard{Path: fn}))
 	}
 }
 
@@ -120,7 +118,7 @@ func TestLMDB_DeleteFragment(t *testing.T) {
 	defer clean()
 	defer dbwrap.Close()
 	index, field, view, shard0 := "i", "f", "v", uint64(0)
-	tx := dbwrap.NewLMDBTx(writable, index, nil)
+	tx, _ := dbwrap.NewTx(writable, index, Txo{})
 
 	shard1 := uint64(1)
 
@@ -155,7 +153,7 @@ func TestLMDB_DeleteFragment(t *testing.T) {
 	err = dbwrap.DeleteFragment(index, field, view, victim, nil)
 	panicOn(err)
 
-	tx = dbwrap.NewLMDBTx(!writable, index, nil)
+	tx, _ = dbwrap.NewTx(!writable, index, Txo{})
 	defer tx.Rollback()
 
 	for _, s := range shards {
@@ -210,13 +208,12 @@ func TestLMDB_Max_on_many_containers(t *testing.T) {
 		}
 	}
 
-	tx := dbwrap.NewLMDBTx(!writable, index, nil)
+	tx, _ := dbwrap.NewTx(!writable, index, Txo{})
 	defer tx.Rollback()
 
 	for _, shard := range shards {
 		max, err := tx.Max(index, field, view, uint64(shard))
 		panicOn(err)
-		//vv("highbits of max = %v from shard = %v", max, shard)
 		if max != uint64(shard) {
 			panic(fmt.Sprintf("expected max (%v) to be == shard = %v", max, shard))
 		}
@@ -243,7 +240,7 @@ func TestLMDB_SetBitmap(t *testing.T) {
 	defer clean()
 	defer dbwrap.Close()
 	index, field, view, shard := "i", "f", "v", uint64(0)
-	tx := dbwrap.NewLMDBTx(writable, index, nil)
+	tx, _ := dbwrap.NewTx(writable, index, Txo{})
 	bitvalue := uint64(0)
 	changed, err := tx.Add(index, field, view, shard, doBatched, bitvalue)
 	if changed <= 0 {
@@ -264,7 +261,7 @@ func TestLMDB_SetBitmap(t *testing.T) {
 	// commited, so should be visible outside the txn
 	//
 
-	tx2 := dbwrap.NewLMDBTx(!writable, index, nil)
+	tx2, _ := dbwrap.NewTx(!writable, index, Txo{})
 	exists, err = tx2.Contains(index, field, view, shard, bitvalue)
 	panicOn(err)
 	if !exists {
@@ -284,7 +281,7 @@ func TestLMDB_OffsetRange(t *testing.T) {
 	defer clean()
 	defer dbwrap.Close()
 	index, field, view, shard := "i", "f", "v", uint64(0)
-	tx := dbwrap.NewLMDBTx(writable, index, nil)
+	tx, _ := dbwrap.NewTx(writable, index, Txo{})
 
 	bitvalue := uint64(1 << 20)
 	changed, err := tx.Add(index, field, view, shard, doBatched, bitvalue)
@@ -318,13 +315,13 @@ func TestLMDB_OffsetRange(t *testing.T) {
 	start := uint64(0 << 16)
 	endx := bitvalue + 1<<16
 
-	tx2 := dbwrap.NewLMDBTx(!writable, index, nil)
+	tx2, _ := dbwrap.NewTx(!writable, index, Txo{})
 	rbm2, err := tx2.OffsetRange(index, field, view, shard, offset, start, endx)
 	panicOn(err)
 	tx2.Rollback()
 
 	// should see our 1M value
-	s2 := bitmapAsString(rbm2)
+	s2 := BitmapAsString(rbm2)
 	expect2 := "c(1048576, 1048577)"
 	if s2 != expect2 {
 		panic(fmt.Sprintf("s2='%v', but expected '%v'", s2, expect2))
@@ -332,13 +329,13 @@ func TestLMDB_OffsetRange(t *testing.T) {
 
 	// now offset by 2M
 	offset = uint64(2 << 20)
-	tx3 := dbwrap.NewLMDBTx(!writable, index, nil)
+	tx3, _ := dbwrap.NewTx(!writable, index, Txo{})
 	rbm3, err := tx3.OffsetRange(index, field, view, shard, offset, start, endx)
 	panicOn(err)
 	tx3.Rollback()
 
 	//expect to see 3M == 3145728
-	s3 := bitmapAsString(rbm3)
+	s3 := BitmapAsString(rbm3)
 	expect3 := "c(3145728, 3145729)"
 
 	if s3 != expect3 {
@@ -360,7 +357,7 @@ func TestLMDB_Count_on_many_containers(t *testing.T) {
 		LMDBMustHaveBitvalue(dbwrap, index, field, view, shard, putme)
 	}
 
-	tx := dbwrap.NewLMDBTx(writable, index, nil)
+	tx, _ := dbwrap.NewTx(writable, index, Txo{})
 	defer tx.Rollback()
 
 	n, err := tx.Count(index, field, view, shard)
@@ -376,7 +373,7 @@ func TestLMDB_Count_dense_containers(t *testing.T) {
 	defer dbwrap.Close()
 	index, field, view, shard := "i", "f", "v", uint64(0)
 
-	tx := dbwrap.NewLMDBTx(writable, index, nil)
+	tx, _ := dbwrap.NewTx(writable, index, Txo{})
 
 	expected := 0
 	for i := uint64(0); i < (1<<16)+2; i += 2 {
@@ -402,7 +399,7 @@ func TestLMDB_ContainerIterator_on_empty(t *testing.T) {
 	defer clean()
 	defer dbwrap.Close()
 	index, field, view, shard := "i", "f", "v", uint64(0)
-	tx := dbwrap.NewLMDBTx(!writable, index, nil)
+	tx, _ := dbwrap.NewTx(!writable, index, Txo{})
 	defer tx.Rollback()
 	bitvalue := uint64(0)
 	citer, found, err := tx.ContainerIterator(index, field, view, shard, bitvalue)
@@ -420,7 +417,7 @@ func TestLMDB_ContainerIterator_on_one_bit(t *testing.T) {
 	defer clean()
 	defer dbwrap.Close()
 	index, field, view, shard := "i", "f", "v", uint64(0)
-	tx := dbwrap.NewLMDBTx(writable, index, nil)
+	tx, _ := dbwrap.NewTx(writable, index, Txo{})
 	defer tx.Rollback()
 
 	bitvalue := uint64(42)
@@ -472,55 +469,12 @@ func TestLMDB_ContainerIterator_on_one_bit(t *testing.T) {
 	}
 }
 
-func TestLMDB_badgerKey_badgerPrefix(t *testing.T) {
-
-	// badgerPrefix() must agree with badgerKey(), but not have the key at the end.
-	// This is important for iteration over containers.
-
-	index, field, view, shard := "i", "f", "v", uint64(0)
-
-	// needle examples with the container-key extremes:
-	// "index:'i';field:'f';view:'v';shard:'0';key@00000000000000000000" // smallest
-	// "index:'i';field:'f';view:'v';shard:'0';key@18446744073709551615" // largest
-	needle := txkey.Key(index, field, view, shard, 0)
-
-	// prefix example: "index:'i';field:'f';view:'v';shard:'0';key@"
-	prefix := txkey.Prefix(index, field, view, shard)
-
-	if !bytes.HasPrefix(needle, prefix) {
-		panic(fmt.Sprintf("txkey.Prefix() output '%v'was not a prefix of txkey.Key() '%v'", string(needle), string(prefix)))
-	}
-	if len(prefix)+20 != len(needle) {
-		panic(fmt.Sprintf("txkey.Prefix() output '%v'was 20 characters shorter than txkey.Key() '%v'", string(needle), string(prefix)))
-	}
-
-	// validate assumption that txkey.KeyExtractContainerKey() makes about strconv.ParseUint() error reporting;
-	// for distinguishing prefixes from full keys. Even if the shard number is so large that the prefix
-	// starts with a legitimate decimal number.
-	shouldNotParse := "12345123451234';key@"
-	containerKey, err := strconv.ParseUint(shouldNotParse, 10, 64)
-	if err == nil {
-		panic(fmt.Sprintf("strconv.ParseUint should have returned an error parsing this string '%v'; instead we got '%v'", shouldNotParse, containerKey))
-	}
-
-	// verify panic on submitting a prefix
-	func() {
-		defer func() {
-			r := recover()
-			if r == nil {
-				panic(fmt.Sprintf("should have seen panic on call to txkey.KeyExtractContainerKey(prefix='%v')", prefix))
-			}
-		}()
-		txkey.KeyExtractContainerKey(prefix) // should panic.
-	}()
-}
-
 func TestLMDB_ContainerIterator_on_one_bit_fail_to_find(t *testing.T) {
 	dbwrap, clean := mustOpenEmptyLMDBWrapper("TestLMDB_ContainerIterator_on_one_bit")
 	defer clean()
 	defer dbwrap.Close()
 	index, field, view, shard := "i", "f", "v", uint64(0)
-	tx := dbwrap.NewLMDBTx(writable, index, nil)
+	tx, _ := dbwrap.NewTx(writable, index, Txo{})
 	defer tx.Rollback()
 
 	putme := uint64(1<<16) + 3 // in the key:1 container
@@ -575,7 +529,7 @@ func TestLMDB_ContainerIterator_empty_iteration_loop(t *testing.T) {
 	defer clean()
 	defer dbwrap.Close()
 	index, field, view, shard := "i", "f", "v", uint64(0)
-	tx := dbwrap.NewLMDBTx(writable, index, nil)
+	tx, _ := dbwrap.NewTx(writable, index, Txo{})
 	defer tx.Rollback()
 
 	putme := uint64(1<<16) + 3  // in the key:1 container
@@ -625,7 +579,7 @@ func TestLMDB_ForEach_on_one_bit(t *testing.T) {
 	defer clean()
 	defer dbwrap.Close()
 	index, field, view, shard := "i", "f", "v", uint64(0)
-	tx := dbwrap.NewLMDBTx(writable, index, nil)
+	tx, _ := dbwrap.NewTx(writable, index, Txo{})
 	defer tx.Rollback()
 
 	bitvalue := uint64(42)
@@ -684,7 +638,7 @@ func TestLMDB_RemoveContainer_one_bit_test(t *testing.T) {
 		LMDBMustHaveBitvalue(dbwrap, index, field, view, shard, putme)
 
 		// delete, but rollback instead of commit
-		tx := dbwrap.NewLMDBTx(writable, index, nil)
+		tx, _ := dbwrap.NewTx(writable, index, Txo{})
 		hi := highbits(putme)
 		panicOn(tx.RemoveContainer(index, field, view, shard, hi))
 		tx.Rollback()
@@ -693,7 +647,7 @@ func TestLMDB_RemoveContainer_one_bit_test(t *testing.T) {
 		LMDBMustHaveBitvalue(dbwrap, index, field, view, shard, putme)
 
 		// c) within one Tx, after delete it should be gone as viewed within the txn.
-		tx = dbwrap.NewLMDBTx(writable, index, nil)
+		tx, _ = dbwrap.NewTx(writable, index, Txo{})
 		hi = highbits(putme)
 
 		exists, err := tx.Contains(index, field, view, shard, putme)
@@ -745,7 +699,7 @@ func TestLMDB_Remove_one_bit_test(t *testing.T) {
 		LMDBMustHaveBitvalue(dbwrap, index, field, view, shard, putme)
 
 		// delete, but rollback instead of commit
-		tx := dbwrap.NewLMDBTx(writable, index, nil)
+		tx, _ := dbwrap.NewTx(writable, index, Txo{})
 		hi, lo := highbits(putme), lowbits(putme)
 		_, _ = hi, lo
 		_, err := tx.Remove(index, field, view, shard, hi)
@@ -756,7 +710,7 @@ func TestLMDB_Remove_one_bit_test(t *testing.T) {
 		LMDBMustHaveBitvalue(dbwrap, index, field, view, shard, putme)
 
 		// c) within one Tx, after delete it should be gone as viewed within the txn.
-		tx = dbwrap.NewLMDBTx(writable, index, nil)
+		tx, _ = dbwrap.NewTx(writable, index, Txo{})
 
 		exists, err := tx.Contains(index, field, view, shard, putme)
 		panicOn(err)
@@ -788,7 +742,7 @@ func TestLMDB_Min_on_many_containers(t *testing.T) {
 	index, field, view, shard := "i", "f", "v", uint64(0)
 
 	// verify no containers flag works
-	tx := dbwrap.NewLMDBTx(!writable, index, nil)
+	tx, _ := dbwrap.NewTx(!writable, index, Txo{})
 	min, containersExist, err := tx.Min(index, field, view, shard)
 	_ = min
 	panicOn(err)
@@ -805,7 +759,7 @@ func TestLMDB_Min_on_many_containers(t *testing.T) {
 		LMDBMustHaveBitvalue(dbwrap, index, field, view, shard, putme)
 	}
 
-	tx = dbwrap.NewLMDBTx(!writable, index, nil)
+	tx, _ = dbwrap.NewTx(!writable, index, Txo{})
 	defer tx.Rollback()
 
 	min, containersExist, err = tx.Min(index, field, view, shard)
@@ -826,7 +780,7 @@ func TestLMDB_CountRange_on_many_containers(t *testing.T) {
 	index, field, view, shard := "i", "f", "v", uint64(0)
 
 	// verify no containers flag works
-	tx := dbwrap.NewLMDBTx(!writable, index, nil)
+	tx, _ := dbwrap.NewTx(!writable, index, Txo{})
 	n, err := tx.CountRange(index, field, view, shard, 0, math.MaxUint64)
 	panicOn(err)
 	if n != 0 {
@@ -842,7 +796,7 @@ func TestLMDB_CountRange_on_many_containers(t *testing.T) {
 		LMDBMustHaveBitvalue(dbwrap, index, field, view, shard, putme)
 	}
 
-	tx = dbwrap.NewLMDBTx(!writable, index, nil)
+	tx, _ = dbwrap.NewTx(!writable, index, Txo{})
 	defer tx.Rollback()
 
 	n, err = tx.CountRange(index, field, view, shard, 0, math.MaxUint64)
@@ -870,7 +824,7 @@ func TestLMDB_CountRange_middle_container(t *testing.T) {
 		LMDBMustHaveBitvalue(dbwrap, index, field, view, shard, putme)
 	}
 
-	tx := dbwrap.NewLMDBTx(!writable, index, nil)
+	tx, _ := dbwrap.NewTx(!writable, index, Txo{})
 	defer tx.Rollback()
 
 	// pick out just the middle container with the 1 bit set on it.
@@ -895,7 +849,7 @@ func TestLMDB_CountRange_many_middle_container(t *testing.T) {
 		LMDBMustHaveBitvalue(dbwrap, index, field, view, shard, putme)
 	}
 
-	tx := dbwrap.NewLMDBTx(!writable, index, nil)
+	tx, _ := dbwrap.NewTx(!writable, index, Txo{})
 	defer tx.Rollback()
 
 	// get them all
@@ -926,7 +880,7 @@ func TestLMDB_UnionInPlace(t *testing.T) {
 		LMDBMustHaveBitvalue(dbwrap, index, field, view, shard, putme)
 	}
 
-	tx2 := dbwrap.NewLMDBTx(!writable, index, nil)
+	tx2, _ := dbwrap.NewTx(!writable, index, Txo{})
 	n, err := tx2.Count(index, field, view, shard)
 	panicOn(err)
 	if n != 2 {
@@ -941,7 +895,7 @@ func TestLMDB_UnionInPlace(t *testing.T) {
 	}
 	mustAddR(others3.Add(4 << 16)) // outside the 2<<16 container
 
-	tx := dbwrap.NewLMDBTx(writable, index, nil)
+	tx, _ := dbwrap.NewTx(writable, index, Txo{})
 	defer tx.Rollback()
 	err = tx.UnionInPlace(index, field, view, shard, others, others2, others3)
 	panicOn(err)
@@ -966,7 +920,7 @@ func TestLMDB_RoaringBitmap(t *testing.T) {
 	putme := expected
 	LMDBMustSetBitvalue(dbwrap, index, field, view, shard, putme)
 
-	tx := dbwrap.NewLMDBTx(!writable, index, nil)
+	tx, _ := dbwrap.NewTx(!writable, index, Txo{})
 	defer tx.Rollback()
 
 	rbm, err := tx.RoaringBitmap(index, field, view, shard)
@@ -990,9 +944,9 @@ func TestLMDB_ImportRoaringBits(t *testing.T) {
 	defer clean()
 	defer dbwrap.Close()
 	index, field, view, shard := "i", "f", "v", uint64(0)
-	tx := dbwrap.NewLMDBTx(writable, index, nil)
+	tx, _ := dbwrap.NewTx(writable, index, Txo{})
 	defer tx.Rollback()
-	tx.DeleteEmptyContainer = true // traditional badger Tx behavior, but not Roaring.
+	tx.(*LMDBTx).DeleteEmptyContainer = true // traditional badger Tx behavior, but not Roaring.
 
 	//bitvalue := uint64(42)
 
@@ -1059,10 +1013,10 @@ func TestLMDB_ImportRoaringBits(t *testing.T) {
 	if n != 0 {
 		panic(fmt.Sprintf("n = %v not zero so the clearbits didn't happen!", n))
 	}
-	allkeys := stringifiedLMDBKeysTx(tx)
+	allkeys := stringifiedLMDBKeysTx(tx.(*LMDBTx))
 
 	// should have no keys
-	if allkeys != "" {
+	if allkeys != "<empty lmdb database>" {
 		panic("lmdb should have no keys now")
 	}
 }
@@ -1073,7 +1027,7 @@ func TestLMDB_ImportRoaringBits_set_nonoverlapping_bits(t *testing.T) {
 	defer clean()
 	defer dbwrap.Close()
 	index, field, view, shard := "i", "f", "v", uint64(0)
-	tx := dbwrap.NewLMDBTx(writable, index, nil)
+	tx, _ := dbwrap.NewTx(writable, index, Txo{})
 	defer tx.Rollback()
 
 	// get some roaring bits, get an itr RoaringIterator from them
@@ -1123,7 +1077,7 @@ func TestLMDB_ImportRoaringBits_clear_nonoverlapping_bits(t *testing.T) {
 	defer clean()
 	defer dbwrap.Close()
 	index, field, view, shard := "i", "f", "v", uint64(0)
-	tx := dbwrap.NewLMDBTx(writable, index, nil)
+	tx, _ := dbwrap.NewTx(writable, index, Txo{})
 	defer tx.Rollback()
 
 	// get some roaring bits, get an itr RoaringIterator from them
@@ -1182,7 +1136,7 @@ func TestLMDB_DeleteIndex(t *testing.T) {
 	defer clean()
 	defer dbwrap.Close()
 	index, field, view, shard := "i", "f", "v", uint64(0)
-	tx := dbwrap.NewLMDBTx(writable, index, nil)
+	tx, _ := dbwrap.NewTx(writable, index, Txo{})
 	bitvalue := uint64(777)
 	bits := []uint64{0, 3, 1 << 16, 1<<16 + 3, 8 << 16}
 	for _, v := range bits {
@@ -1219,7 +1173,7 @@ func TestLMDB_DeleteIndex(t *testing.T) {
 	err = dbwrap.DeleteIndex(index)
 	panicOn(err)
 
-	tx = dbwrap.NewLMDBTx(!writable, index2, nil)
+	tx, _ = dbwrap.NewTx(!writable, index2, Txo{})
 	defer tx.Rollback()
 	exists, err = tx.Contains(index2, field, view, shard, bitvalue)
 	panicOn(err)
@@ -1231,7 +1185,7 @@ func TestLMDB_DeleteIndex(t *testing.T) {
 		exists, err = tx.Contains(index, field, view, shard, v)
 		panicOn(err)
 		if exists {
-			allkeys := stringifiedLMDBKeysTx(tx)
+			allkeys := stringifiedLMDBKeysTx(tx.(*LMDBTx))
 			panic(fmt.Sprintf("after delete of index '%v', bit v=%v was not gone?!?; allkeys='%v'", index, v, allkeys))
 		}
 	}
@@ -1244,7 +1198,7 @@ func TestLMDB_DeleteIndex_over100k(t *testing.T) {
 	defer clean()
 	defer dbwrap.Close()
 	index, field, view, shard := "i", "f", "v", uint64(0)
-	tx := dbwrap.NewLMDBTx(writable, index, nil)
+	tx, _ := dbwrap.NewTx(writable, index, Txo{})
 	bitvalue := uint64(777)
 	limit := uint64(100002) // default batch size in DeleteIndex is 100k keys per delete transaction.
 	//limit := uint64(101)
@@ -1257,7 +1211,7 @@ func TestLMDB_DeleteIndex_over100k(t *testing.T) {
 		panicOn(err)
 		if v%100000 == 0 {
 			panicOn(tx.Commit())
-			tx = dbwrap.NewLMDBTx(writable, index, nil)
+			tx, _ = dbwrap.NewTx(writable, index, Txo{})
 		}
 	}
 
@@ -1274,7 +1228,7 @@ func TestLMDB_DeleteIndex_over100k(t *testing.T) {
 	err = dbwrap.DeleteIndex(index)
 	panicOn(err)
 
-	tx = dbwrap.NewLMDBTx(!writable, index2, nil)
+	tx, _ = dbwrap.NewTx(!writable, index2, Txo{})
 	defer tx.Rollback()
 	exists, err := tx.Contains(index2, field, view, shard, bitvalue)
 	panicOn(err)
@@ -1286,7 +1240,7 @@ func TestLMDB_DeleteIndex_over100k(t *testing.T) {
 		exists, err = tx.Contains(index, field, view, shard, v<<16)
 		panicOn(err)
 		if exists {
-			allkeys := stringifiedLMDBKeysTx(tx)
+			allkeys := stringifiedLMDBKeysTx(tx.(*LMDBTx))
 			panic(fmt.Sprintf("after delete of index '%v', bit v=%v was not gone?!?; allkeys='%v'", index, v, allkeys))
 		}
 	}
@@ -1303,7 +1257,7 @@ func TestLMDB_SliceOfShards(t *testing.T) {
 	for _, shard := range shards {
 		LMDBMustSetBitvalue(dbwrap, index, field, view, shard, putme)
 	}
-	tx := dbwrap.NewLMDBTx(!writable, index, nil)
+	tx, _ := dbwrap.NewTx(!writable, index, Txo{})
 	defer tx.Rollback()
 
 	slc, err := tx.SliceOfShards(index, field, view, "")

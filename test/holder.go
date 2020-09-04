@@ -40,8 +40,7 @@ func NewHolder(tb testing.TB) *Holder {
 		panic(err)
 	}
 
-	h := &Holder{Holder: pilosa.NewHolder(pilosa.DefaultPartitionN)}
-	h.Path = path
+	h := &Holder{Holder: pilosa.NewHolder(path, nil)}
 	h.Holder.NewAttrStore = boltdb.NewAttrStore
 
 	return h
@@ -64,11 +63,6 @@ func (h *Holder) Close() error {
 // Reopen instantiates and opens a new holder.
 // Note that the holder must be Closed first.
 func (h *Holder) Reopen() error {
-	path, logger := h.Path, h.Holder.Logger
-	h.Holder = pilosa.NewHolder(pilosa.DefaultPartitionN)
-	h.Holder.Path = path
-	h.Holder.Logger = logger
-	h.Holder.NewAttrStore = boltdb.NewAttrStore
 	return h.Holder.Open()
 }
 
@@ -88,8 +82,7 @@ func (h *Holder) Row(index, field string, rowID uint64) *pilosa.Row {
 	if err != nil {
 		panic(err)
 	}
-	tx := idx.Index.Txf.NewTx(pilosa.Txo{Write: false, Index: idx.Index})
-	defer tx.Rollback()
+	var tx pilosa.Tx
 
 	row, err := f.Row(tx, rowID)
 	if err != nil {
@@ -111,8 +104,7 @@ func (h *Holder) ReadRow(index, field string, rowID uint64) *pilosa.Row {
 	if f == nil {
 		panic(errors.Wrap(pilosa.ErrFieldNotFound, field))
 	}
-	tx := idx.Txf.NewTx(pilosa.Txo{Write: false, Field: f})
-	defer tx.Rollback()
+	var tx pilosa.Tx
 
 	row, err := f.Row(tx, rowID)
 	if err != nil {
@@ -139,8 +131,7 @@ func (h *Holder) RowTime(index, field string, rowID uint64, t time.Time, quantum
 	if err != nil {
 		panic(err)
 	}
-	tx := idx.Index.Txf.NewTx(pilosa.Txo{Write: false, Index: idx.Index})
-	defer tx.Rollback()
+	var tx pilosa.Tx
 
 	row, err := f.RowTime(tx, rowID, t, quantum)
 	if err != nil {
@@ -157,6 +148,9 @@ func (h *Holder) SetBit(index, field string, rowID, columnID uint64) {
 	h.SetBitTime(index, field, rowID, columnID, nil)
 }
 
+var vv = pilosa.VV
+var _ = vv // happy linter
+
 // SetBitTime sets a bit with timestamp on the given field.
 func (h *Holder) SetBitTime(index, field string, rowID, columnID uint64, t *time.Time) {
 	idx := h.MustCreateIndexIfNotExists(index, pilosa.IndexOptions{})
@@ -165,7 +159,8 @@ func (h *Holder) SetBitTime(index, field string, rowID, columnID uint64, t *time
 		panic(err)
 	}
 
-	tx := idx.Index.Txf.NewTx(pilosa.Txo{Write: true, Index: idx.Index})
+	shard := columnID / pilosa.ShardWidth
+	tx := idx.Index.Txf.NewTx(pilosa.Txo{Write: true, Index: idx.Index, Shard: shard})
 	defer tx.Rollback()
 
 	_, err = f.SetBit(tx, rowID, columnID, t)
@@ -182,7 +177,9 @@ func (h *Holder) ClearBit(index, field string, rowID, columnID uint64) {
 	if err != nil {
 		panic(err)
 	}
-	tx := idx.Index.Txf.NewTx(pilosa.Txo{Write: true, Index: idx.Index})
+
+	shard := columnID / pilosa.ShardWidth
+	tx := idx.Index.Txf.NewTx(pilosa.Txo{Write: true, Index: idx.Index, Shard: shard})
 	defer tx.Rollback()
 
 	_, err = f.ClearBit(tx, rowID, columnID)
@@ -207,7 +204,8 @@ func (h *Holder) SetValue(index, field string, columnID uint64, value int64) *In
 	if err != nil {
 		panic(err)
 	}
-	tx := idx.Index.Txf.NewTx(pilosa.Txo{Write: true, Index: idx.Index})
+	shard := columnID / pilosa.ShardWidth
+	tx := idx.Index.Txf.NewTx(pilosa.Txo{Write: true, Index: idx.Index, Shard: shard})
 	defer tx.Rollback()
 
 	_, err = f.SetValue(tx, columnID, value)
@@ -227,7 +225,8 @@ func (h *Holder) Value(index, field string, columnID uint64) (int64, bool) {
 	if err != nil {
 		panic(err)
 	}
-	tx := idx.Index.Txf.NewTx(pilosa.Txo{Write: false, Index: idx.Index})
+	shard := columnID / pilosa.ShardWidth
+	tx := idx.Index.Txf.NewTx(pilosa.Txo{Write: false, Index: idx.Index, Shard: shard})
 	defer tx.Rollback()
 
 	val, exists, err := f.Value(tx, columnID)
@@ -245,10 +244,11 @@ func (h *Holder) Range(index, field string, op pql.Token, predicate int64) *pilo
 	if err != nil {
 		panic(err)
 	}
-	tx := idx.Index.Txf.NewTx(pilosa.Txo{Write: false, Index: idx.Index})
-	defer tx.Rollback()
 
-	row, err := f.Range(tx, field, op, predicate)
+	qcx := h.Txf().NewQcx()
+	defer qcx.Abort()
+
+	row, err := f.Range(qcx, field, op, predicate)
 	if err != nil {
 		panic(err)
 	}

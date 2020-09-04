@@ -36,7 +36,7 @@ func forceSnapshotsCheckMapping(t *testing.T) {
 	f.Logger = logger.NewLogfLogger(t)
 	defer f.Clean(t)
 
-	tx = idx.Txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f})
+	tx = idx.Txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f, Shard: f.shard})
 	defer tx.Rollback()
 
 	for i := 0; i < f.MaxOpN; i++ {

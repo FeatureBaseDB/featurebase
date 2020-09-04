@@ -2173,7 +2173,14 @@ func (h *Handler) handlePostImportAtomicRecord(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	if err := h.api.ImportAtomicRecord(r.Context(), req, opt); err != nil {
+	qcx := h.api.Txf().NewQcx()
+	err = h.api.ImportAtomicRecord(r.Context(), qcx, req, opt)
+	if err == nil {
+		err = qcx.Finish()
+	} else {
+		qcx.Abort()
+	}
+	if err != nil {
 		switch errors.Cause(err) {
 		case pilosa.ErrClusterDoesNotOwnShard, pilosa.ErrPreconditionFailed:
 			http.Error(w, err.Error(), http.StatusPreconditionFailed)
@@ -2243,13 +2250,21 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if err := h.api.ImportValue(r.Context(), req, opts...); err != nil {
+		qcx := h.api.Txf().NewQcx()
+		defer qcx.Abort()
+
+		if err := h.api.ImportValue(r.Context(), qcx, req, opts...); err != nil {
 			switch errors.Cause(err) {
 			case pilosa.ErrClusterDoesNotOwnShard, pilosa.ErrPreconditionFailed:
 				http.Error(w, err.Error(), http.StatusPreconditionFailed)
 			default:
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 			}
+			return
+		}
+		err := qcx.Finish()
+		if err != nil {
+			http.Error(w, fmt.Sprintf("error in qcx.Finish(): '%v'", err.Error()), http.StatusInternalServerError)
 			return
 		}
 	} else {
@@ -2261,13 +2276,21 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if err := h.api.Import(r.Context(), req, opts...); err != nil {
+		qcx := h.api.Txf().NewQcx()
+		defer qcx.Abort()
+
+		if err := h.api.Import(r.Context(), qcx, req, opts...); err != nil {
 			switch errors.Cause(err) {
 			case pilosa.ErrClusterDoesNotOwnShard, pilosa.ErrPreconditionFailed:
 				http.Error(w, err.Error(), http.StatusPreconditionFailed)
 			default:
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 			}
+			return
+		}
+		err := qcx.Finish()
+		if err != nil {
+			http.Error(w, fmt.Sprintf("error in qcx.Finish() on set,time,mutex: '%v'", err.Error()), http.StatusInternalServerError)
 			return
 		}
 	}

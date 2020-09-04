@@ -377,8 +377,8 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 		return errToStatusError(err)
 	}
 
-	// Obtain transaction.
-	tx := pilosa.NewMultiTxWithIndex(true, index)
+	// It is okay to pass a nil Tx to field.StringValue(). It will lazily create it.
+	var tx pilosa.Tx
 
 	var fields []*pilosa.Field
 	for _, field := range index.Fields() {
