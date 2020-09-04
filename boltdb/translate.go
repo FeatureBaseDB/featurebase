@@ -26,6 +26,7 @@ import (
 	"github.com/boltdb/bolt"
 	"github.com/pilosa/pilosa/v2"
 	"github.com/pkg/errors"
+	"github.com/zeebo/blake3"
 )
 
 var (
@@ -479,4 +480,44 @@ func findKeyByID(bkt *bolt.Bucket, id uint64) string {
 		return ""
 	}
 	return string(boltKey)
+}
+
+func (s *TranslateStore) ComputeTranslatorSummary() (sum *pilosa.TranslatorSummary, err error) {
+	sum = &pilosa.TranslatorSummary{}
+	hasher := blake3.New()
+
+	err = s.db.View(func(tx *bolt.Tx) error {
+		bkt := tx.Bucket(bucketKeys)
+		if bkt == nil {
+			panic("bucketKeys not found")
+		}
+
+		cur := bkt.Cursor()
+		for k, v := cur.First(); k != nil; k, v = cur.Next() {
+			input := append(k, v...)
+			_, _ = hasher.Write(input)
+			sum.KeyCount++
+		}
+
+		bkt = tx.Bucket(bucketIDs)
+		if bkt == nil {
+			panic("bucketIDs not found")
+		}
+
+		cur = bkt.Cursor()
+		for k, v := cur.First(); k != nil; k, v = cur.Next() {
+			input := append(k, v...)
+			_, _ = hasher.Write(input)
+			sum.IDCount++
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	var buf [16]byte
+	_, _ = hasher.Digest().Read(buf[0:])
+	sum.Checksum = string(buf[:])
+	return sum, nil
 }

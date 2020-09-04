@@ -482,3 +482,54 @@ func MustCloseTranslateStore(s *boltdb.TranslateStore) {
 		panic(err)
 	}
 }
+
+func TestCryptoHashPerKey(t *testing.T) {
+	s := MustOpenNewTranslateStore()
+	defer MustCloseTranslateStore(s)
+
+	// hash one translation
+
+	expect := map[int]string{
+		1: string([]byte{0x76, 0x48, 0x8b, 0x70, 0xe8, 0x54, 0x35, 0xc6, 0x8e, 0xa6, 0x4, 0x6c, 0xfa, 0xd2, 0x1a, 0x12}),
+		2: string([]byte{0x81, 0x46, 0x84, 0x37, 0x26, 0x96, 0x41, 0xf3, 0x54, 0x4e, 0x98, 0xbc, 0x48, 0xab, 0x1b, 0xf0}),
+		3: string([]byte{0x7f, 0xe9, 0xf, 0x6d, 0x7b, 0x14, 0x1, 0x44, 0xb2, 0x4e, 0xd0, 0x86, 0x2f, 0x62, 0x8c, 0xa9}),
+	}
+	for n := 1; n < 4; n++ {
+		var batch0 []string
+		for i := 0; i < n; i++ {
+			batch0 = append(batch0, fmt.Sprintf("key%d", i))
+		}
+
+		// Populate the store with the keys in batch0.
+		batch0IDs, err := s.TranslateKeys(batch0, true)
+		_ = batch0IDs
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// done with setup
+
+		sum, err := s.ComputeTranslatorSummary()
+		if err != nil {
+			panic(err)
+		}
+		nkey := sum.KeyCount
+		nid := sum.IDCount
+		observedChecksum := sum.Checksum
+		if nkey != n {
+			panic("wrong key count")
+		}
+		if nkey != nid {
+			panic("key count should match id count")
+		}
+
+		// shardwidth 22 has different hashes, of course.
+		if pilosa.ShardWidth == 20 {
+			expectedChecksum := expect[n]
+			if observedChecksum != expectedChecksum {
+				panic(fmt.Sprintf("got wrong checksum obs '%#v' vs expected '%#v'", observedChecksum, expectedChecksum))
+			}
+		}
+	}
+
+}

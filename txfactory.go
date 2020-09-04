@@ -16,6 +16,7 @@ package pilosa
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -26,6 +27,7 @@ import (
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/txkey"
 	"github.com/pkg/errors"
+	"github.com/zeebo/blake3"
 )
 
 // public strings that pilosa/server/config.go can reference
@@ -394,7 +396,9 @@ func fragmentSpecFromRoaringPath(path string) (field, view string, shard uint64,
 	return
 }
 
-func (idx *Index) StringifiedRoaringKeys() (r string) {
+// hashOnly means only show the value hash, not the content bits.
+// showOps means display the ops log.
+func (idx *Index) StringifiedRoaringKeys(hashOnly, showOps bool) (r string) {
 	paths, err := listFilesUnderDir(idx.path, false, "", true)
 	panicOn(err)
 	index := idx.name
@@ -407,8 +411,8 @@ func (idx *Index) StringifiedRoaringKeys() (r string) {
 			continue // ignore .meta paths
 		}
 		abspath := idx.path + sep + relpath
-		const showOps = false
-		s, err := stringifiedRawRoaringFragment(abspath, index, field, view, shard, showOps)
+
+		s, _, err := stringifiedRawRoaringFragment(abspath, index, field, view, shard, showOps, hashOnly, os.Stdout)
 		panicOn(err)
 		//r += fmt.Sprintf("path:'%v' fragment contains:\n") + s
 		if s == "" {
@@ -426,7 +430,20 @@ func (idx *Index) StringifiedRoaringKeys() (r string) {
 	return "roaring-" + r
 }
 
-func stringifiedRawRoaringFragment(path string, index, field, view string, shard uint64, showOps bool) (r string, err error) {
+func RoaringFragmentChecksum(path string, index, field, view string, shard uint64) (r string, hotbits int) {
+	hasher := blake3.New()
+	showOps := false
+	hashOnly := true
+	_, hotbits, err := stringifiedRawRoaringFragment(path, index, field, view, shard, showOps, hashOnly, hasher)
+	panicOn(err)
+	fmt.Fprintf(hasher, "%v/%v/%v/%v", index, field, view, shard)
+	var buf [16]byte
+	_, _ = hasher.Digest().Read(buf[0:])
+	return fmt.Sprintf("%x", buf), hotbits
+
+}
+
+func stringifiedRawRoaringFragment(path string, index, field, view string, shard uint64, showOps, hashOnly bool, w io.Writer) (r string, hotbits int, err error) {
 
 	var info roaring.BitmapInfo
 	_ = info
@@ -473,10 +490,10 @@ func stringifiedRawRoaringFragment(path string, index, field, view string, shard
 			to:   info.To,
 		}
 		if info.ContainerCount > 0 {
-			printContainers(info, pC)
+			printContainers(w, info, pC)
 		}
 		if info.Ops > 0 {
-			printOps(info)
+			printOps(w, info)
 		}
 	}
 
@@ -491,13 +508,19 @@ func stringifiedRawRoaringFragment(path string, index, field, view string, shard
 		cts := roaring.NewSliceContainers()
 		cts.Put(ckey, ct)
 		rbm := &roaring.Bitmap{Containers: cts}
-		srbm := bitmapAsString(rbm)
-		panicOn(err)
+		var srbm string
+		if !hashOnly {
+			srbm = bitmapAsString(rbm)
+		}
 
 		bkey := string(txkey.Key(index, field, view, shard, ckey))
 
-		r += fmt.Sprintf("%v -> %v (%v hot)\n", bkey, hash, ct.N())
-		r += "          ......." + srbm + "\n"
+		n := ct.N()
+		hotbits += int(n)
+		r += fmt.Sprintf("%v -> %v (%v hot)\n", bkey, hash, n)
+		if !hashOnly {
+			r += "          ......." + srbm + "\n"
+		}
 	}
 
 	return
@@ -579,9 +602,9 @@ type pointerContext struct {
 	from, to uintptr
 }
 
-func printOps(info roaring.BitmapInfo) {
-	fmt.Fprintln(os.Stdout, "  Ops:")
-	tw := tabwriter.NewWriter(os.Stdout, 0, 8, 0, '\t', 0)
+func printOps(w io.Writer, info roaring.BitmapInfo) {
+	fmt.Fprintln(w, "  Ops:")
+	tw := tabwriter.NewWriter(w, 0, 8, 0, '\t', 0)
 	fmt.Fprintf(tw, "  \t%s\t%s\t%s\t\n", "TYPE", "OpN", "SIZE")
 	printed := 0
 	for _, op := range info.OpDetails {
@@ -606,9 +629,9 @@ func (p *pointerContext) pretty(c roaring.ContainerInfo) string {
 }
 
 // stolen from ctl/inspect.go
-func printContainers(info roaring.BitmapInfo, pC pointerContext) {
-	fmt.Fprintln(os.Stdout, "  Containers:")
-	tw := tabwriter.NewWriter(os.Stdout, 0, 8, 0, '\t', 0)
+func printContainers(w io.Writer, info roaring.BitmapInfo, pC pointerContext) {
+	fmt.Fprintln(w, "  Containers:")
+	tw := tabwriter.NewWriter(w, 0, 8, 0, '\t', 0)
 	fmt.Fprintf(tw, "  \t\tRoaring\t\t\t\tOps\t\t\t\tFlags\t\n")
 	fmt.Fprintf(tw, "\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t\n", "KEY", "TYPE", "N", "ALLOC", "OFFSET", "TYPE", "N", "ALLOC", "OFFSET", "FLAGS")
 	c1s := info.Containers

@@ -17,6 +17,7 @@ package pilosa
 import (
 	"context"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -767,4 +768,104 @@ func (idx *Index) SliceOfShards(field, view, viewPath string) (sliceOfShards []u
 		sliceOfShards = append(sliceOfShards, shard)
 	}
 	return
+}
+
+type AllTranslatorSummary struct {
+	Sums []*TranslatorSummary
+}
+
+func NewAllTranslatorSummary() *AllTranslatorSummary {
+	return &AllTranslatorSummary{}
+}
+func (ats *AllTranslatorSummary) Append(b *AllTranslatorSummary) {
+	ats.Sums = append(ats.Sums, b.Sums...)
+}
+
+func (ats *AllTranslatorSummary) Sort() {
+	// return sorted by index then PartitionID then Field
+	sort.Slice(ats.Sums, func(i, j int) bool {
+		a := ats.Sums[i]
+		b := ats.Sums[j]
+		if a.Index < b.Index {
+			return true
+		}
+		if a.Index > b.Index {
+			return false
+		}
+		// INVAR: a.Index == b.Index
+		if a.PartitionID < b.PartitionID {
+			return true
+		}
+		if a.PartitionID > b.PartitionID {
+			return false
+		}
+		return a.Field < b.Field
+	})
+}
+
+// sums is only guaranteed to be sorted by (index, PartitionID, field) iff err returns nil
+func (i *Index) ComputeTranslatorSummary(verbose bool) (ats *AllTranslatorSummary, err error) {
+	i.mu.RLock()
+	defer i.mu.RUnlock()
+
+	ats = &AllTranslatorSummary{}
+
+	fmt.Printf("\nindex: %v\n=================\n", i.name)
+	for _, fld := range i.fields {
+		sum, err := fld.translateStore.ComputeTranslatorSummary()
+		if err != nil {
+			return ats, err
+		}
+		sum.Field = fld.name
+		sum.Index = i.Name()
+		sum.Checksum = blake3sum16([]byte(fmt.Sprintf("%v/%v/%v", sum.Checksum, fld.name, i.Name())))
+
+		if verbose {
+			fmt.Printf("row blake3-%v keyN: %5v idN: %5v field: '%v'\n", sum.Checksum, sum.KeyCount, sum.IDCount, fld.name)
+		}
+		ats.Sums = append(ats.Sums, sum)
+	}
+
+	fmt.Printf("====================\n")
+
+	for partitionID, store := range i.translateStores {
+		sum, err := store.ComputeTranslatorSummary()
+		if err != nil {
+			return ats, err
+		}
+		if sum == nil {
+			// probably one of the Noop stores
+			continue
+		}
+		sum.PartitionID = partitionID
+		sum.Index = i.Name()
+
+		sum.Checksum = blake3sum16([]byte(fmt.Sprintf("%v/%v/%v", sum.Checksum, partitionID, i.Name())))
+		if verbose {
+			fmt.Printf("col blake3-%v keyN: %10v idN: %10v paritionID: %03v \n", sum.Checksum, sum.KeyCount, sum.IDCount, partitionID)
+		}
+		ats.Sums = append(ats.Sums, sum)
+	}
+	return
+}
+
+func (idx *Index) WriteFragmentChecksums(w io.Writer, showBits, showOps bool) {
+	paths, err := listFilesUnderDir(idx.path, false, "", true)
+	panicOn(err)
+	index := idx.name
+	n := 0
+	for _, relpath := range paths {
+		field, view, shard, err := fragmentSpecFromRoaringPath(relpath)
+		if err != nil {
+			continue // ignore .meta paths
+		}
+		abspath := idx.path + sep + relpath
+
+		checksum, hotbits := RoaringFragmentChecksum(abspath, index, field, view, shard)
+		fmt.Fprintf(w, "frg blake3-%v field: '%v' view: '%v' shard: %3v hotbits: %10v\n", checksum, field, view, shard, hotbits)
+		n++
+	}
+	if n == 0 {
+		fmt.Fprintf(w, "empty index '%v'", idx.path)
+	}
 }
