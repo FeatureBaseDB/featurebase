@@ -47,8 +47,9 @@ type DB struct {
 	txs         map[*Tx]struct{} // active transactions
 	opened      bool             // true if open
 
-	mu   sync.RWMutex // general mutex
-	rwmu sync.Mutex   // mutex for restricting single writer
+	mu     sync.RWMutex // general mutex
+	rwmu   sync.Mutex   // mutex for restricting single writer
+	exclmu sync.RWMutex // mutex for locking out everyone but a single writer
 
 	// Path represents the path to the database file.
 	Path string
@@ -134,7 +135,7 @@ func (db *DB) Open() (err error) {
 	// Open write-ahead log & checkpoint to the end since no transactions are open.
 	if err := db.openWALSegments(); err != nil {
 		return fmt.Errorf("wal open: %w", err)
-	} else if err := db.checkpoint(); err != nil {
+	} else if err := db.checkpoint(true); err != nil {
 		return fmt.Errorf("checkpoint: %w", err)
 	}
 
@@ -142,7 +143,6 @@ func (db *DB) Open() (err error) {
 }
 
 func (db *DB) openWALSegments() error {
-
 	fis, err := ioutil.ReadDir(db.WALPath())
 	if err != nil {
 		return fmt.Errorf("read dir: %w", err)
@@ -162,11 +162,11 @@ func (db *DB) openWALSegments() error {
 		db.segments = append(db.segments, segment)
 	}
 
-	// Truncate last WAL page if it is a bitmap header.
-	if segment := db.activeWALSegment(); segment != nil {
-		if err := segment.trimBitmapHeaderTrailer(); err != nil {
-			return err
-		}
+	// Truncate everything after the last successful meta page.
+	if walID, err := db.findLastWALMetaPage(); err != nil {
+		return err
+	} else if err := db.truncateWALAfter(walID); err != nil {
+		return err
 	}
 
 	return nil
@@ -175,8 +175,9 @@ func (db *DB) openWALSegments() error {
 // checkpoint copies pages from WAL segments into the main DB file. This can
 // only copy pages that aren't in use by an active transaction. The page map
 // is rebuilt as well for all WAL pages still in use.
-func (db *DB) checkpoint() error {
-
+//
+// If exclusive is true, all WAL writes are flushed to disk.
+func (db *DB) checkpoint(exclusive bool) error {
 	if !db.opened {
 		return nil
 	}
@@ -197,22 +198,16 @@ func (db *DB) checkpoint() error {
 	var maxCheckpointedWALID int64
 	for {
 		// Determine last page of transaction.
-		metaWALID, metaFlags, err := db.findNextWALMetaPage(walID)
+		metaWALID, err := db.findNextWALMetaPage(walID)
 		if err == io.EOF {
 			break
 		} else if err != nil {
 			return err
 		}
 
-		// If transaction was rolled back, skip it.
-		if metaFlags&MetaPageFlagCommit == 0 {
-			walID = metaWALID + 1
-			continue
-		}
-
 		// Loop over pages in the transaction.
 		for ; walID <= metaWALID; walID++ {
-			canCheckpoint := minActiveWALID == 0 || walID <= minActiveWALID
+			canCheckpoint := exclusive || minActiveWALID == 0 || walID <= minActiveWALID
 
 			page, err := db.readWALPage(walID)
 			if err != nil {
@@ -258,7 +253,7 @@ func (db *DB) checkpoint() error {
 
 	// Remove WAL segments that have been checkpointed.
 	if maxCheckpointedWALID != 0 {
-		for len(db.segments) > 1 {
+		for len(db.segments) > 0 {
 			segment := db.segments[0]
 			if segment.MaxWALID() >= maxCheckpointedWALID {
 				break
@@ -274,21 +269,52 @@ func (db *DB) checkpoint() error {
 		}
 	}
 
+	// Ensure all segments are flushed and there is no remapped pages.
+	if exclusive {
+		assert(len(db.segments) == 0)
+		assert(pageMap.Len() == 0)
+	}
+
 	db.pageMap = pageMap
 	return nil
 }
 
-func (db *DB) findNextWALMetaPage(walID int64) (metaWALID int64, metaFlags uint32, err error) {
+// truncateWALAfter removes all pages in the WAL after walID.
+func (db *DB) truncateWALAfter(walID int64) error {
+	for i := len(db.segments) - 1; i >= 0; i-- {
+		segment := db.segments[i]
+		if segment.MaxWALID() <= walID {
+			break
+		}
 
+		// Drop entire segment if all pages are after WAL ID.
+		if walID < segment.MinWALID() {
+			if err := segment.Close(); err != nil {
+				return err
+			} else if err := os.Remove(segment.Path()); err != nil {
+				return err
+			}
+			db.segments, db.segments[i] = db.segments[:len(db.segments)-1], nil
+			continue
+		}
+
+		// If we only remove some of the WAL pages then truncate and exit
+		// since segments before this will retain all their pages.
+		return segment.TruncateAfter(walID)
+	}
+	return nil
+}
+
+func (db *DB) findNextWALMetaPage(walID int64) (metaWALID int64, err error) {
 	maxWALID := db.maxWALID()
 
 	for ; walID <= maxWALID; walID++ {
-		// Read page data from WAL and return if it is a meta page (either commit or rollback)
+		// Read page data from WAL and return if it is a meta page.
 		page, err := db.readWALPage(walID)
 		if err != nil {
-			return walID, metaFlags, err
+			return walID, err
 		} else if IsMetaPage(page) {
-			return walID, readFlags(page), nil
+			return walID, nil
 		}
 
 		// Skip over next page if this is a bitmap header.
@@ -297,13 +323,30 @@ func (db *DB) findNextWALMetaPage(walID int64) (metaWALID int64, metaFlags uint3
 		}
 	}
 
-	return -1, 0, io.EOF
+	return -1, io.EOF
+}
+
+func (db *DB) findLastWALMetaPage() (walID int64, err error) {
+	if len(db.segments) == 0 {
+		return 0, nil
+	}
+
+	var maxWALID int64
+	for walID := db.segments[0].MinWALID(); walID <= maxWALID; walID++ {
+		if page, err := db.readWALPage(walID); err != nil {
+			return walID, err
+		} else if IsBitmapHeader(page) {
+			walID++ // skip next page for bitmap headers
+		} else if IsMetaPage(page) {
+			maxWALID = walID // save max meta WAL ID
+		}
+	}
+	return maxWALID, nil
 }
 
 // minActiveWALID returns the lowest WAL ID in use by any active transaction.
 // Returns 0 if no transactions are active.
 func (db *DB) minActiveWALID() int64 {
-
 	var walID int64
 	for tx := range db.txs {
 		if walID == 0 || walID > tx.walID {
@@ -315,14 +358,12 @@ func (db *DB) minActiveWALID() int64 {
 
 // ActiveWALSegment returns the most recent WAL segment.
 func (db *DB) ActiveWALSegment() *WALSegment {
-
 	db.mu.RLock()
 	defer db.mu.RUnlock()
 	return db.activeWALSegment()
 }
 
 func (db *DB) activeWALSegment() *WALSegment {
-
 	if len(db.segments) == 0 {
 		return nil
 	}
@@ -331,14 +372,12 @@ func (db *DB) activeWALSegment() *WALSegment {
 
 // MinWALID returns the lowest WAL ID available in the WAL.
 func (db *DB) MinWALID() int64 {
-
 	db.mu.RLock()
 	defer db.mu.RUnlock()
 	return db.minWALID()
 }
 
 func (db *DB) minWALID() int64 {
-
 	if len(db.segments) == 0 {
 		return 0
 	}
@@ -347,7 +386,6 @@ func (db *DB) minWALID() int64 {
 
 // MaxWALID returns the highest WAL ID available in the WAL.
 func (db *DB) MaxWALID() int64 {
-
 	db.mu.RLock()
 	defer db.mu.RUnlock()
 	return db.maxWALID()
@@ -364,7 +402,6 @@ func (db *DB) maxWALID() int64 {
 
 // WALPageN returns the number of pages across all segments.
 func (db *DB) WALPageN() int64 {
-
 	db.mu.RLock()
 	defer db.mu.RUnlock()
 
@@ -385,8 +422,6 @@ func (db *DB) SyncWAL() error {
 
 // readWALPage reads a single page at the given WAL ID.
 func (db *DB) readWALPage(walID int64) ([]byte, error) {
-	//
-
 	// TODO(BBJ): Binary search for segment.
 	for _, s := range db.segments {
 		if walID >= s.MinWALID() && walID <= s.MaxWALID() {
@@ -587,22 +622,71 @@ func (db *DB) initFreelistPage() error {
 
 // Begin starts a new transaction.
 func (db *DB) Begin(writable bool) (_ *Tx, err error) {
+	return db.begin(writable, false)
+}
 
-	// TODO(BBJ): Acquire write lock if writable.
+// BeginWithExclusiveLock starts a new transaction with an exclusive lock.
+//
+// This waits for all read transactions to finish and disallows any other
+// transactions on the database. All WAL writes are flushed to disk and page
+// writes during this transaction are written directly to the database file.
+//
+// Note that because page writes are direct, write failures can corrupt the
+// database. This should only be used during bulk loading of data.
+func (db *DB) BeginWithExclusiveLock() (_ *Tx, err error) {
+	return db.begin(true, true)
+}
+
+func (db *DB) begin(writable, exclusive bool) (_ *Tx, err error) {
+	if exclusive {
+		db.exclmu.Lock()
+	} else {
+		db.exclmu.RLock()
+	}
 
 	// Ensure only one writable transaction at a time.
 	if writable {
 		db.rwmu.Lock()
 	}
 
+	// This local function is called at exit points that occur before we can
+	// call Rollback() which would normally release these locks.
+	cleanup := func() {
+		if exclusive {
+			db.exclmu.Unlock()
+		} else {
+			db.exclmu.RUnlock()
+		}
+
+		if writable {
+			db.rwmu.Unlock()
+		}
+	}
+
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
 	if !db.opened {
+		cleanup()
 		return nil, ErrClosed
 	}
 
-	tx := &Tx{db: db, rootRecords: db.rootRecords, pageMap: db.pageMap, writable: writable}
+	// Flush all WAL writes to disk before an exclusive writer so that we can
+	// work directly with the on-disk database.
+	if exclusive {
+		if err := db.checkpoint(true); err != nil {
+			cleanup()
+			return nil, err
+		}
+	}
+
+	tx := &Tx{
+		db:          db,
+		rootRecords: db.rootRecords,
+		pageMap:     db.pageMap,
+		writable:    writable,
+		exclusive:   exclusive,
+	}
 
 	// Copy meta page into transaction's buffer.
 	// This page is only written at the end of a dirty transaction.
@@ -624,6 +708,12 @@ func (db *DB) Begin(writable bool) (_ *Tx, err error) {
 
 // removeTx removes an active transaction from the database.
 func (db *DB) removeTx(tx *Tx) error {
+	if tx.exclusive {
+		db.exclmu.Unlock()
+	} else {
+		db.exclmu.RUnlock()
+	}
+
 	// Release writer lock if tx is writable.
 	if tx.writable {
 		tx.db.rwmu.Unlock()
@@ -635,7 +725,7 @@ func (db *DB) removeTx(tx *Tx) error {
 	// Write pages from WAL to DB.
 	// TODO(bbj): Move this to an async goroutine.
 	if tx.writable {
-		if err := db.checkpoint(); err != nil {
+		if err := db.checkpoint(false); err != nil {
 			return err
 		}
 	}

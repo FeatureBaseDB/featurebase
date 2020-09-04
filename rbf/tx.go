@@ -38,6 +38,7 @@ type Tx struct {
 	rootRecords []*RootRecord  // read-only cache of root records
 	pageMap     *immutable.Map // mapping of database pages to WAL IDs
 	writable    bool           // if true, tx can write
+	exclusive   bool           // if true, tx writes directly to db file (no wal)
 	dirty       bool           // if true, changes have been made
 
 	// If Rollback() has already completed, don't do it again.
@@ -109,13 +110,9 @@ func (tx *Tx) Rollback() {
 
 	// TODO(bbj): Invalidate DB if rollback fails. Possibly attempt reopen?
 
-	// If any pages have been written, ensure we write a new meta page with
-	// the rollback flag to mark the end of the transaction. This allows us to
-	// discard pages in the transaction during playback of the WAL on open.
+	// Remove all WAL pages that have been written by this transaction.
 	if tx.dirty {
-		if err := tx.writeMetaPage(MetaPageFlagRollback); err != nil {
-			panic(err)
-		} else if err := tx.db.SyncWAL(); err != nil {
+		if err := tx.db.truncateWALAfter(tx.walID); err != nil {
 			panic(err)
 		}
 	}
@@ -924,15 +921,19 @@ func (tx *Tx) readPage(pgno uint32) ([]byte, error) {
 }
 
 func (tx *Tx) writePage(page []byte) error {
-	//	fmt.Println("writePage", readPageNo(page))
+	// Mark transaction as dirty so we write a meta page on commit/rollback.
+	tx.dirty = true
+
+	// If we are running in exclusive mode, directly write page to database.
+	if tx.exclusive {
+		return tx.db.writePage(readPageNo(page), page)
+	}
+
 	// Write page to WAL and obtain position in WAL.
 	walID, err := tx.db.writeWALPage(page, false)
 	if err != nil {
 		return err
 	}
-
-	// Mark transaction as dirty so we write a meta page on commit/rollback.
-	tx.dirty = true
 
 	// Update page map with WAL position.
 	tx.pageMap = tx.pageMap.Set(readPageNo(page), walID)
@@ -940,14 +941,19 @@ func (tx *Tx) writePage(page []byte) error {
 }
 
 func (tx *Tx) writeBitmapPage(pgno uint32, page []byte) error {
+	// Mark transaction as dirty so we write a meta page on commit/rollback.
+	tx.dirty = true
+
+	// If we are running in exclusive mode, directly write page to database.
+	if tx.exclusive {
+		return tx.db.writePage(pgno, page)
+	}
+
 	// Write bitmap to WAL and obtain WAL position of the actual page data (not the prefix page).
 	walID, err := tx.db.writeBitmapPage(pgno, page)
 	if err != nil {
 		return err
 	}
-
-	// Mark transaction as dirty so we write a meta page on commit/rollback.
-	tx.dirty = true
 
 	// Update page map with WAL position.
 	tx.pageMap = tx.pageMap.Set(pgno, walID)
@@ -957,6 +963,11 @@ func (tx *Tx) writeBitmapPage(pgno uint32, page []byte) error {
 func (tx *Tx) writeMetaPage(flag uint32) error {
 	// Set meta flags.
 	writeFlags(tx.meta[:], flag)
+
+	// If we are running in exclusive mode, directly write page to database.
+	if tx.exclusive {
+		return tx.db.writePage(0, tx.meta[:])
+	}
 
 	// Write page to WAL and obtain position in WAL.
 	walID, err := tx.db.writeWALPage(tx.meta[:], true)
