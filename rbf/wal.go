@@ -222,6 +222,34 @@ func (s *WALSegment) WriteWALPage(page []byte, isMeta bool) (walID int64, err er
 	return walID, nil
 }
 
+// TruncateAfter removes all pages after a given WAL ID.
+func (s *WALSegment) TruncateAfter(walID int64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Ensure this is a partial truncation. Full truncation of a segment
+	// should be performed by the DB since it needs to remove the segment.
+	assert(walID > s.minWALID)
+
+	// Update to new page size.
+	newPageN := int((walID - s.minWALID) + 1) // new page count of segment
+	truncPageN := newPageN - s.pageN          // number of pages removed
+	s.pageN = newPageN
+
+	// Check to see if we are only truncating from the write cache.
+	writeCachePageN := len(s.writeCache) / PageSize
+	if truncPageN <= int(writeCachePageN) {
+		s.writeCache = s.writeCache[:(writeCachePageN-truncPageN)*PageSize]
+		return nil
+	}
+
+	// Clear write cache.
+	s.writeCache = s.writeCache[:0]
+
+	// Remove on disk pages.
+	return os.Truncate(s.path, int64(s.pageN)*PageSize)
+}
+
 // Flush flushes the write buffer to the OS cache.
 func (s *WALSegment) Flush() error {
 	s.mu.Lock()
@@ -252,31 +280,6 @@ func (s *WALSegment) sync() error {
 		return err
 	}
 	return s.w.Sync()
-}
-
-// trimBitmapHeaderTrailer removes the last page if the last page is a bitmap header.
-// This should only be called on the last segment during recovery. A bitmap
-// header write is a 2-page write so a partial write would corrupt the WAL.
-func (s *WALSegment) trimBitmapHeaderTrailer() error {
-	// Skip if there are no pages in this segment.
-	if s.PageN() == 0 {
-		return nil
-	}
-
-	// Skip if this is not a bitmap header page.
-	if page, err := s.ReadWALPage(s.MaxWALID()); err != nil {
-		return err
-	} else if !IsBitmapHeader(page) {
-		return nil
-	}
-
-	// Truncate last page and reduce page count.
-	if err := os.Truncate(s.Path(), s.Size()-PageSize); err != nil {
-		return err
-	}
-	s.pageN--
-
-	return nil
 }
 
 // FormatWALSegmentPath returns a path for a WAL segment using a WAL ID.
