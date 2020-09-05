@@ -160,7 +160,7 @@ func (h *Holder) SetBitTime(index, field string, rowID, columnID uint64, t *time
 	}
 
 	shard := columnID / pilosa.ShardWidth
-	tx := idx.Index.Txf.NewTx(pilosa.Txo{Write: true, Index: idx.Index, Shard: shard})
+	tx := idx.Index.Txf().NewTx(pilosa.Txo{Write: true, Index: idx.Index, Shard: shard})
 	defer tx.Rollback()
 
 	_, err = f.SetBit(tx, rowID, columnID, t)
@@ -179,7 +179,7 @@ func (h *Holder) ClearBit(index, field string, rowID, columnID uint64) {
 	}
 
 	shard := columnID / pilosa.ShardWidth
-	tx := idx.Index.Txf.NewTx(pilosa.Txo{Write: true, Index: idx.Index, Shard: shard})
+	tx := idx.Index.Txf().NewTx(pilosa.Txo{Write: true, Index: idx.Index, Shard: shard})
 	defer tx.Rollback()
 
 	_, err = f.ClearBit(tx, rowID, columnID)
@@ -205,7 +205,7 @@ func (h *Holder) SetValue(index, field string, columnID uint64, value int64) *In
 		panic(err)
 	}
 	shard := columnID / pilosa.ShardWidth
-	tx := idx.Index.Txf.NewTx(pilosa.Txo{Write: true, Index: idx.Index, Shard: shard})
+	tx := idx.Index.Txf().NewTx(pilosa.Txo{Write: true, Index: idx.Index, Shard: shard})
 	defer tx.Rollback()
 
 	_, err = f.SetValue(tx, columnID, value)
@@ -226,7 +226,7 @@ func (h *Holder) Value(index, field string, columnID uint64) (int64, bool) {
 		panic(err)
 	}
 	shard := columnID / pilosa.ShardWidth
-	tx := idx.Index.Txf.NewTx(pilosa.Txo{Write: false, Index: idx.Index, Shard: shard})
+	tx := idx.Index.Txf().NewTx(pilosa.Txo{Write: false, Index: idx.Index, Shard: shard})
 	defer tx.Rollback()
 
 	val, exists, err := f.Value(tx, columnID)

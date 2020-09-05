@@ -412,11 +412,31 @@ func (f *Field) TranslateStore() TranslateStore {
 func (f *Field) RowAttrStore() AttrStore { return f.rowAttrStore }
 
 // AvailableShards returns a bitmap of shards that contain data.
-func (f *Field) AvailableShards() *roaring.Bitmap {
+func (f *Field) AvailableShards(localOnly bool) *roaring.Bitmap {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 
-	b := f.remoteAvailableShards.Clone()
+	var b *roaring.Bitmap
+	if localOnly {
+		b = roaring.NewBitmap()
+	} else {
+		b = f.remoteAvailableShards.Clone()
+	}
+	for _, view := range f.viewMap {
+		//b.Union(view.availableShards())
+		b.UnionInPlace(view.availableShards())
+	}
+	return b
+}
+
+// LocalAvailableShards returns a bitmap of shards that contain data, but
+// only from the local node. This prevents txfactory from making
+// db-per-shard for remote shards.
+func (f *Field) LocalAvailableShards() *roaring.Bitmap {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+
+	b := roaring.NewBitmap()
 	for _, view := range f.viewMap {
 		//b.Union(view.availableShards())
 		b.UnionInPlace(view.availableShards())
@@ -687,7 +707,7 @@ func (f *Field) applyTranslateStore() error {
 	// In the case where the field has a foreign index, set
 	// the usesKeys value accordingly.
 	if foreignIndexName := f.ForeignIndex(); foreignIndexName != "" {
-		if foreignIndex := f.holder.indexes[foreignIndexName]; foreignIndex != nil {
+		if foreignIndex := f.holder.Index(foreignIndexName); foreignIndex != nil {
 			f.usesKeys = foreignIndex.Keys()
 		}
 	}
@@ -1483,7 +1503,7 @@ func (f *Field) SetValue(tx Tx, columnID uint64, value int64) (changed bool, err
 	if view.idx == nil {
 		panic("view.idx should not be nil")
 	}
-	view.holder.addIndexFromField(view.idx)
+	view.holder.addIndex(view.idx)
 
 	return view.setValue(tx, columnID, bsig.BitDepth, baseValue)
 }
@@ -1571,7 +1591,7 @@ func (f *Field) MinForShard(tx Tx, shard uint64, filter *Row) (ValCount, error) 
 
 	var localTx Tx
 	if NilInside(tx) {
-		localTx = f.idx.Txf.NewTx(Txo{Write: !writable, Index: f.idx, Fragment: fragment, Shard: fragment.shard})
+		localTx = f.idx.holder.txf.NewTx(Txo{Write: !writable, Index: f.idx, Fragment: fragment, Shard: fragment.shard})
 		defer localTx.Rollback()
 	} else {
 		localTx = tx

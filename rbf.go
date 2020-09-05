@@ -34,7 +34,7 @@ import (
 
 // RbfDBWrapper wraps an *rbf.DB
 type RbfDBWrapper struct {
-	Path string
+	path string
 	db   *rbf.DB
 	reg  *rbfDBRegistrar
 	muDb sync.Mutex
@@ -49,6 +49,34 @@ type RbfDBWrapper struct {
 	doAllocZero bool
 }
 
+func (w *RbfDBWrapper) Path() string {
+	return w.path
+}
+
+func (w *RbfDBWrapper) SetHolder(h *Holder) {
+	// don't need it at the moment
+	//w.h = h
+}
+
+func (w *RbfDBWrapper) CleanupTx(tx Tx) {
+	r := tx.(*RBFTx)
+	r.mu.Lock()
+	if r.done {
+		r.mu.Unlock()
+		return
+	}
+	r.done = true
+	r.mu.Unlock()
+
+	// try not to old r.mu while locking w.muDb
+	w.muDb.Lock()
+
+	delete(w.openTx, r)
+	r.o.dbs.Cleanup(tx) // release the read/write lock.
+
+	w.muDb.Unlock()
+}
+
 // rbfDBRegistrar also allows opening the same path twice to
 // result in sharing the same open database handle, and
 // thus the same transactional guarantees.
@@ -58,6 +86,17 @@ type rbfDBRegistrar struct {
 	mp map[*RbfDBWrapper]bool
 
 	path2db map[string]*RbfDBWrapper
+}
+
+func (r *rbfDBRegistrar) Size() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	nmp := len(r.mp)
+	npa := len(r.path2db)
+	if nmp != npa {
+		panic(fmt.Sprintf("nmp=%v, vs npa=%v", nmp, npa))
+	}
+	return nmp
 }
 
 var globalRbfDBReg *rbfDBRegistrar = newRbfDBRegistrar()
@@ -77,29 +116,29 @@ func newRbfDBRegistrar() *rbfDBRegistrar {
 // return the existing instance.
 func (r *rbfDBRegistrar) unprotectedRegister(w *RbfDBWrapper) {
 	r.mp[w] = true
-	r.path2db[w.Path] = w
+	r.path2db[w.path] = w
 }
 
 // unregister removes w from r
 func (r *rbfDBRegistrar) unregister(w *RbfDBWrapper) {
 	r.mu.Lock()
 	delete(r.mp, w)
-	delete(r.path2db, w.Path)
+	delete(r.path2db, w.path)
 	r.mu.Unlock()
 }
 
 // rbfPath is a helper for determining the full directory
 // in which the RBF database will be stored.
 func rbfPath(path string) string {
-	if !strings.HasSuffix(path, "-rbfdb") {
-		return path + "-rbfdb"
+	if !strings.HasSuffix(path, "-rbfdb@") {
+		return path + "-rbfdb@"
 	}
 	return path
 }
 
 // OpenDBWrapper opens the database in the path directoy
 // without deleting any prior content. Any
-// database directory will have the "-rbfdb" suffix.
+// database directory will have the "-rbfdb@" suffix.
 //
 // OpenDBWrapper will check the registry and make a new instance only
 // if one does not exist for its path. Otherwise it returns
@@ -114,18 +153,21 @@ func (r *rbfDBRegistrar) OpenDBWrapper(path0 string, doAllocZero bool) (DBWrappe
 		// creates the effect of having only one DB open per pilosa node.
 		return w, nil
 	}
-	db := rbf.NewDB(path)
+	var db *rbf.DB
+	if doAllocZero {
+		db = rbf.NewDBWithAllocZero(path)
+	} else {
+		db = rbf.NewDB(path)
+	}
 
 	w = &RbfDBWrapper{
 		reg:         r,
-		Path:        path,
+		path:        path,
 		db:          db,
 		doAllocZero: doAllocZero,
 		openTx:      make(map[*RBFTx]bool),
 	}
-
 	r.unprotectedRegister(w)
-	rbf.DoAllocZero = doAllocZero
 
 	err := db.Open()
 	if err != nil {
@@ -143,6 +185,16 @@ type RBFTx struct {
 	o            Txo
 	sn           int64 // serial number
 	Db           *RbfDBWrapper
+
+	done bool
+	mu   sync.Mutex // protect done as it changes state
+}
+
+func (tx *RBFTx) IsDone() (done bool) {
+	tx.mu.Lock()
+	done = tx.done
+	tx.mu.Unlock()
+	return
 }
 
 func (tx *RBFTx) DBPath() string {
@@ -154,19 +206,18 @@ func (tx *RBFTx) Type() string {
 }
 
 func (tx *RBFTx) Rollback() {
-	tx.Db.muDb.Lock()
-	delete(tx.Db.openTx, tx)
-	tx.Db.muDb.Unlock()
-
 	tx.tx.Rollback()
+
+	// must happen after actual rollback
+	tx.Db.CleanupTx(tx)
 }
 
-func (tx *RBFTx) Commit() error {
-	tx.Db.muDb.Lock()
-	delete(tx.Db.openTx, tx)
-	tx.Db.muDb.Unlock()
+func (tx *RBFTx) Commit() (err error) {
+	err = tx.tx.Commit()
 
-	return tx.tx.Commit()
+	// must happen after actual commit
+	tx.Db.CleanupTx(tx)
+	return
 }
 
 func (tx *RBFTx) RoaringBitmap(index, field, view string, shard uint64) (*roaring.Bitmap, error) {
@@ -375,8 +426,8 @@ func (tx *RBFTx) Pointer() string {
 	return fmt.Sprintf("%p", tx)
 }
 
-func (tx *RBFTx) Dump() {
-	tx.tx.Dump()
+func (tx *RBFTx) Dump(short bool) {
+	tx.tx.Dump(short)
 }
 
 // Readonly is true if the transaction is not read-and-write, but only doing reads.
@@ -414,6 +465,12 @@ func rbfName(index, field, view string, shard uint64) string {
 func rbfFieldPrefix(index, field string) string {
 	//return fmt.Sprintf("%s\x00%s\x00", index, field)
 	return string(txkey.FieldPrefix(index, field))
+}
+
+func (w *RbfDBWrapper) HasData() (has bool, err error) {
+	w.muDb.Lock()
+	defer w.muDb.Unlock()
+	return w.db.HasData(false) // false => any prior attempt at write means we "have data"
 }
 
 func (w *RbfDBWrapper) DeleteField(index, field, fieldPath string) error {

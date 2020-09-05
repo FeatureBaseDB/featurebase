@@ -62,7 +62,7 @@ const (
 	resizeJobActionAdd    = "ADD"
 	resizeJobActionRemove = "REMOVE"
 
-	defaultConfirmDownRetries = 10
+	defaultConfirmDownRetries = 120
 	defaultConfirmDownSleep   = 1 * time.Second
 )
 
@@ -758,7 +758,7 @@ func (c *cluster) fragsByHost(idx *Index) fragsByHost {
 			fieldViews.addView(field.Name(), view.name)
 		}
 	}
-	return c.fragCombos(idx.Name(), idx.AvailableShards(), fieldViews)
+	return c.fragCombos(idx.Name(), idx.AvailableShards(includeRemote), fieldViews)
 }
 
 // fragCombos returns a map (by uri) of lists of fragments for a given index
@@ -2218,7 +2218,7 @@ func (c *cluster) nodeStatus() *NodeStatus {
 		is := &IndexStatus{Name: idx.Name, CreatedAt: idx.CreatedAt}
 		for _, f := range idx.Fields {
 			if field := c.holder.Field(idx.Name, f.Name); field != nil {
-				availableShards = field.AvailableShards()
+				availableShards = field.AvailableShards(includeRemote)
 			} else {
 				availableShards = roaring.NewBitmap()
 			}

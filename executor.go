@@ -506,7 +506,7 @@ func (e *executor) execute(ctx context.Context, qcx *Qcx, index string, q *pql.Q
 		if idx == nil {
 			return nil, newNotFoundError(ErrIndexNotFound, index)
 		}
-		shards = idx.AvailableShards().Slice()
+		shards = idx.AvailableShards(includeRemote).Slice()
 		if len(shards) == 0 {
 			shards = []uint64{0}
 		}
@@ -780,7 +780,7 @@ func (e *executor) executeCall(ctx context.Context, qcx *Qcx, index string, c *p
 		if idx == nil {
 			return nil, newNotFoundError(ErrIndexNotFound, index)
 		}
-		shards = idx.AvailableShards().Slice()
+		shards = idx.AvailableShards(includeRemote).Slice()
 		if len(shards) == 0 {
 			shards = []uint64{0}
 		}
@@ -4808,7 +4808,7 @@ func (e *executor) translateCalls(ctx context.Context, defaultIndexName string, 
 	// Perform a separate batch translation for each separate index used.
 	keyMaps := make(map[string]map[string]uint64)
 	for indexName, keySet := range keySets {
-		idx := e.Holder.indexes[indexName]
+		idx := e.Holder.Index(indexName)
 		if idx == nil {
 			return fmt.Errorf("cannot find index %q", indexName)
 		}
@@ -4851,8 +4851,8 @@ func (e *executor) collectCallKeySets(ctx context.Context, indexName string, c *
 
 	// Collect foreign index keys.
 	if fieldName != "" {
-		idx, exists := e.Holder.indexes[indexName]
-		if !exists {
+		idx := e.Holder.Index(indexName)
+		if idx == nil {
 			return newNotFoundError(ErrIndexNotFound, indexName)
 		}
 		if field := idx.Field(fieldName); field != nil && field.ForeignIndex() != "" {
@@ -4899,8 +4899,8 @@ func (e *executor) translateCall(ctx context.Context, indexName string, c *pql.C
 
 	// Translate column key.
 	colKey, rowKey, fieldName := c.TranslateInfo(columnLabel, rowLabel)
-	idx, exists := e.Holder.indexes[indexName]
-	if !exists {
+	idx := e.Holder.Index(indexName)
+	if idx == nil {
 		return newNotFoundError(ErrIndexNotFound, indexName)
 	}
 	if idx.Keys() {

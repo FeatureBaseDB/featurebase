@@ -16,12 +16,19 @@ package pilosa
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"io/ioutil"
+	"os"
+	"strings"
 	"testing"
 
 	cryrand "crypto/rand"
 )
+
+var _ = context.Background
+var _ = os.Open
+var _ = strings.Split
 
 func TestMultiReaderB(t *testing.T) {
 	// MultiReaderB should read identical chunks of bytes from both its "a" and "b"

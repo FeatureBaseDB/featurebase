@@ -59,7 +59,7 @@ func (i *Index) Reopen() error {
 	if err := i.Index.Close(); err != nil {
 		return err
 	}
-	return i.Index.Open(false)
+	return i.Index.Open()
 }
 
 // CreateField creates a field with the given options.

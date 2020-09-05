@@ -290,6 +290,9 @@ func (m *Command) SetupServer() error {
 	txty := pilosa.MustTxsrcToTxtype(m.Config.Txsrc) // will panic on unknown Txsrc.
 	os.Setenv("PILOSA_TXSRC", m.Config.Txsrc)
 	m.logger.Printf("using Txsrc '%v'/%v", m.Config.Txsrc, txty)
+	if len(txty) == 2 {
+		m.logger.Printf("blue='%v' / green='%v'", txty[0], txty[1])
+	}
 
 	// validateAddrs sets the appropriate values for Bind and Advertise
 	// based on the inputs. It is not responsible for applying defaults, although

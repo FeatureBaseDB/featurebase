@@ -173,8 +173,9 @@ type fragment struct {
 // newFragment returns a new instance of Fragment.
 func newFragment(holder *Holder, path, index, field, view string, shard uint64, flags byte) *fragment {
 	idx := holder.Index(index)
+
 	if idx == nil {
-		panic(fmt.Sprintf("holder=%#v but got nil idx back from holder!", holder))
+		panic(fmt.Sprintf("got nil idx back for '%v' from holder!", index))
 	}
 	f := &fragment{
 		path:  path,
@@ -478,7 +479,7 @@ func (f *fragment) openCache() error {
 		return nil
 	}
 
-	tx := f.idx.Txf.NewTx(Txo{Write: !writable, Index: f.idx, Fragment: f, Shard: f.shard})
+	tx := f.idx.holder.txf.NewTx(Txo{Write: !writable, Index: f.idx, Fragment: f, Shard: f.shard})
 	defer tx.Rollback()
 
 	// Read in all rows by ID.
@@ -996,7 +997,7 @@ func (f *fragment) setValueBase(txOrig Tx, columnID uint64, bitDepth uint, value
 
 	tx := txOrig
 	if NilInside(tx) {
-		tx = f.idx.Txf.NewTx(Txo{Write: writable, Index: f.idx, Fragment: f, Shard: f.shard})
+		tx = f.idx.holder.txf.NewTx(Txo{Write: writable, Index: f.idx, Fragment: f, Shard: f.shard})
 		defer func() {
 			if err == nil {
 				panicOn(tx.Commit())
@@ -1996,9 +1997,9 @@ func (f *fragment) Blocks() ([]FragmentBlock, error) {
 
 	idx := f.holder.Index(f.index)
 	if idx == nil {
-		panic(fmt.Sprintf("index was nil in fragment.Blocks(): f.index='%v'; f.holder.indexes='%#v'\n", f.index, f.holder.indexes))
+		panic(fmt.Sprintf("index was nil in fragment.Blocks(): f.index='%v'\n", f.index))
 	}
-	tx := idx.Txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: f.shard})
+	tx := idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: f.shard})
 	defer tx.Rollback()
 	// no Commit below, b/c is read-only.
 
@@ -2083,7 +2084,7 @@ func (f *fragment) blockData(id int) (rowIDs, columnIDs []uint64, err error) {
 	defer f.mu.Unlock()
 
 	idx := f.holder.Index(f.index)
-	tx := idx.Txf.NewTx(Txo{Write: !writable, Index: idx, Shard: f.shard})
+	tx := idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Shard: f.shard})
 	defer tx.Rollback()
 	// readonly, so no Commit()
 
@@ -2785,7 +2786,7 @@ func (f *fragment) WriteTo(w io.Writer) (n int64, err error) {
 // used in shipping the slices across the network for a resize.
 func (f *fragment) writeStorageToArchive(tw *tar.Writer) error {
 
-	tx := f.idx.Txf.NewTx(Txo{Write: !writable, Index: f.idx, Shard: f.shard})
+	tx := f.idx.holder.txf.NewTx(Txo{Write: !writable, Index: f.idx, Shard: f.shard})
 	defer tx.Rollback()
 	file, sz, err := tx.RoaringBitmapReader(f.index, f.field, f.view, f.shard, f.path)
 	if err != nil {
@@ -2859,7 +2860,7 @@ func (f *fragment) ReadFrom(r io.Reader) (n int64, err error) {
 		switch hdr.Name {
 		case "data":
 			idx := f.holder.Index(f.index)
-			tx := idx.Txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f, Shard: f.shard})
+			tx := idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f, Shard: f.shard})
 			defer tx.Rollback()
 			if err := f.fillFragmentFromArchive(tx, tr); err != nil {
 				return 0, errors.Wrap(err, "reading storage")
@@ -3639,7 +3640,7 @@ func (s *fragmentSyncer) syncBlock(id int) error {
 	}
 
 	idx := f.holder.Index(f.index)
-	tx := idx.Txf.NewTx(Txo{Write: writable, Index: idx, Shard: f.shard})
+	tx := idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Shard: f.shard})
 	defer tx.Rollback()
 
 	// Merge blocks together.

@@ -1334,10 +1334,10 @@ func (si *emptyContainerIterator) Value() (uint64, *roaring.Container) {
 	panic("emptyContainerIterator never has any Values")
 }
 
-func (tx *Tx) Dump() {
-	fmt.Println(tx.DumpString())
+func (tx *Tx) Dump(short bool) {
+	fmt.Println(tx.DumpString(short))
 }
-func (tx *Tx) DumpString() (r string) {
+func (tx *Tx) DumpString(short bool) (r string) {
 
 	r = "allkeys:[\n"
 
@@ -1365,7 +1365,7 @@ func (tx *Tx) DumpString() (r string) {
 			ckey := cell.Key
 			ct := toContainer(cell, tx)
 
-			s := stringOfCkeyCt(ckey, ct, rr.Name)
+			s := stringOfCkeyCt(ckey, ct, rr.Name, short)
 			r += s
 			n++
 		}
@@ -1419,7 +1419,7 @@ func bitmapAsString(rbm *roaring.Bitmap) (r string) {
 	return r + ")"
 }
 
-func stringOfCkeyCt(ckey uint64, ct *roaring.Container, rrName string) (s string) {
+func stringOfCkeyCt(ckey uint64, ct *roaring.Container, rrName string, short bool) (s string) {
 
 	by := containerToBytes(ct)
 	hash := hash.Blake3sum16(by)
@@ -1433,7 +1433,9 @@ func stringOfCkeyCt(ckey uint64, ct *roaring.Container, rrName string) (s string
 	bkey := pre + fmt.Sprintf("ckey@%020d", ckey)
 
 	s = fmt.Sprintf("%v -> %v (%v hot)\n", bkey, hash, ct.N())
-	s += "          ......." + srbm + "\n"
+	if !short {
+		s += "          ......." + srbm + "\n"
+	}
 	return
 }
 

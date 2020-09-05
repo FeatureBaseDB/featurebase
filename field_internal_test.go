@@ -208,6 +208,8 @@ func NewTestField(t *testing.T, opts FieldOption) *TestField {
 		t.Fatal(err)
 	}
 	h := NewHolder(path, nil)
+	panicOn(h.Open())
+
 	idx, err := h.CreateIndex("i", IndexOptions{})
 	if err != nil {
 		panic(err)
@@ -232,7 +234,7 @@ func OpenField(t *testing.T, opts FieldOption) *TestField {
 // Close closes the field and removes the underlying data.
 func (f *TestField) Close() error {
 	if f.idx != nil {
-		panicOn(f.idx.Txf.CloseIndex(f.idx))
+		panicOn(f.idx.holder.txf.CloseIndex(f.idx))
 	}
 	defer os.RemoveAll(f.Path())
 	return f.Field.Close()
@@ -245,7 +247,7 @@ func (f *TestField) Reopen() error {
 		f.parent = nil
 		return err
 	}
-	if err := f.parent.Open(false); err != nil {
+	if err := f.parent.Open(); err != nil {
 		f.parent = nil
 		return err
 	}
@@ -318,7 +320,7 @@ func TestField_RowTime(t *testing.T) {
 	defer f.Close()
 
 	// Obtain transaction.
-	tx := f.idx.Txf.NewTx(Txo{Write: writable, Index: f.idx, Field: f.Field, Shard: 0})
+	tx := f.idx.holder.txf.NewTx(Txo{Write: writable, Index: f.idx, Field: f.Field, Shard: 0})
 	defer tx.Rollback()
 
 	if err := f.setTimeQuantum(TimeQuantum("YMDH")); err != nil {
@@ -334,7 +336,7 @@ func TestField_RowTime(t *testing.T) {
 	panicOn(tx.Commit())
 
 	// obtain 2nd transaction to read it back.
-	tx = f.idx.Txf.NewTx(Txo{Write: !writable, Index: f.idx, Field: f.Field, Shard: 0})
+	tx = f.idx.holder.txf.NewTx(Txo{Write: !writable, Index: f.idx, Field: f.Field, Shard: 0})
 	defer tx.Rollback()
 
 	if r, err := f.RowTime(tx, 1, time.Date(2010, time.November, 5, 12, 0, 0, 0, time.UTC), "Y"); err != nil {
@@ -574,7 +576,7 @@ func TestBSIGroup_importValue(t *testing.T) {
 	f := OpenField(t, OptFieldTypeInt(-100, 200))
 	defer f.Close()
 
-	qcx := f.idx.Txf.NewQcx()
+	qcx := f.idx.holder.txf.NewQcx()
 	defer qcx.Abort()
 
 	options := &ImportOptions{}
@@ -620,7 +622,7 @@ func TestIntField_MinMaxForShard(t *testing.T) {
 	f := OpenField(t, OptFieldTypeInt(-100, 200))
 	defer f.Close()
 
-	qcx := f.idx.Txf.NewQcx()
+	qcx := f.idx.holder.txf.NewQcx()
 	defer qcx.Abort()
 
 	options := &ImportOptions{}
@@ -679,7 +681,7 @@ func TestIntField_MinMaxForShard(t *testing.T) {
 			panicOn(qcx.Finish())
 
 			shard := uint64(0)
-			tx := f.idx.Txf.NewTx(Txo{Write: !writable, Index: f.idx, Field: f.Field, Shard: shard})
+			tx := f.idx.holder.txf.NewTx(Txo{Write: !writable, Index: f.idx, Field: f.Field, Shard: shard})
 			// Rollback below manually, because we are in a loop.
 
 			maxvc, err := f.MaxForShard(tx, shard, nil)
@@ -705,6 +707,7 @@ func TestIntField_MinMaxForShard(t *testing.T) {
 // Ensure we get errors when they are expected.
 func TestDecimalField_MinMaxBoundaries(t *testing.T) {
 	th := newTestHolder(t)
+	defer th.Close()
 	for i, test := range []struct {
 		scale  int64
 		min    pql.Decimal
@@ -785,7 +788,7 @@ func TestDecimalField_MinMaxForShard(t *testing.T) {
 	f := OpenField(t, OptFieldTypeDecimal(3))
 	defer f.Close()
 
-	qcx := f.idx.Txf.NewQcx()
+	qcx := f.idx.holder.txf.NewQcx()
 	defer qcx.Abort()
 
 	options := &ImportOptions{}
@@ -843,7 +846,7 @@ func TestDecimalField_MinMaxForShard(t *testing.T) {
 			}
 
 			shard := uint64(0)
-			tx := f.idx.Txf.NewTx(Txo{Write: !writable, Index: f.idx, Field: f.Field, Shard: shard})
+			tx := f.idx.holder.txf.NewTx(Txo{Write: !writable, Index: f.idx, Field: f.Field, Shard: shard})
 			defer tx.Rollback()
 
 			maxvc, err := f.MaxForShard(tx, shard, nil)
@@ -869,7 +872,7 @@ func TestBSIGroup_TxReopenDB(t *testing.T) {
 	f := OpenField(t, OptFieldTypeInt(-100, 200))
 	defer f.Close()
 
-	qcx := f.idx.Txf.NewQcx()
+	qcx := f.idx.holder.txf.NewQcx()
 	defer qcx.Abort()
 
 	options := &ImportOptions{}

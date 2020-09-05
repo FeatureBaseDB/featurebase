@@ -26,10 +26,13 @@ import (
 
 // if enableRowCache, then we must not return mmap-ed memory
 // directly, but only a copy.
-const EnableRowCache = true
+const EnableRowCache = false
 
-// makes a copy, BUT doesn't do the zero out for now TODO(jea) zero out actually to detect
-// access past tx.
+// DoAllocZero means we copy mmap read data and
+// wipe it afterwards to catch retention of data
+// past Tx.Rollback which was a big problem.
+// This should be set by NewDBWithAllocZero and never changed
+// afterwards in order to avoid a data race.
 var DoAllocZero bool
 
 //probably should just implement the container interface

@@ -191,14 +191,14 @@ func FuzzRoaringOps(data []byte) int {
 	expected = make([]uint64, 0)
 	actual = make([]uint64, 0)
 	forEachInSlice(s1, func(v uint64) { expected = append(expected, v) })
-	bm1.ForEach(func(v uint64) { actual = append(actual, v) })
+	bm1.ForEach(func(v uint64) error { actual = append(actual, v); return nil })
 	if !reflect.DeepEqual(expected, actual) {
 		panic(fmt.Sprintf("for each:\n expected %v\n got %v", expected, actual))
 	}
 	expected = make([]uint64, 0)
 	actual = make([]uint64, 0)
 	forEachInSlice(s2, func(v uint64) { expected = append(expected, v) })
-	bm2.ForEach(func(v uint64) { actual = append(actual, v) })
+	bm2.ForEach(func(v uint64) error { actual = append(actual, v); return nil })
 	if !reflect.DeepEqual(expected, actual) {
 		panic(fmt.Sprintf("for each:\n expected %v\n got %v", expected, actual))
 	}
@@ -206,14 +206,14 @@ func FuzzRoaringOps(data []byte) int {
 	expected = make([]uint64, 0)
 	actual = make([]uint64, 0)
 	forEachInRangeSlice(s1, start, end, func(v uint64) { expected = append(expected, v) })
-	bm1.ForEachRange(start, end, func(v uint64) { actual = append(actual, v) })
+	bm1.ForEachRange(start, end, func(v uint64) error { actual = append(actual, v); return nil })
 	if !reflect.DeepEqual(expected, actual) {
 		panic(fmt.Sprintf("for each in range:\n expected %v\n got %v", expected, actual))
 	}
 	expected = make([]uint64, 0)
 	actual = make([]uint64, 0)
 	forEachInRangeSlice(s2, start, end, func(v uint64) { expected = append(expected, v) })
-	bm2.ForEachRange(start, end, func(v uint64) { actual = append(actual, v) })
+	bm2.ForEachRange(start, end, func(v uint64) error { actual = append(actual, v); return nil })
 	if !reflect.DeepEqual(expected, actual) {
 		panic(fmt.Sprintf("for each in range:\n expected %v\n got %v", expected, actual))
 	}
