@@ -6876,9 +6876,14 @@ func ConvertRunToBitmap(c *Container) *Container {
 	return c.runToBitmap()
 }
 
+// Optimize yields a container with the same bits as c, but
+// adjusted to the smallest-storage type by Roaring rules (thus,
+// runs where that's smaller, otherwise arrays for N < 4096 and
+// bitmaps for N >= 4096).
 func Optimize(c *Container) *Container {
 	return c.optimize()
 }
+
 func Union(a, b *Container) (c *Container) {
 	c = union(a, b)
 	// c can be have arrays that are too big, and need
@@ -6890,10 +6895,16 @@ func Difference(a, b *Container) *Container {
 	return difference(a, b)
 }
 
+// Add yields a container identical to c, but with the given bit set; added
+// is true if the bit wasn't previously set. It is unspecified whether
+// the original container is modified.
 func (c *Container) Add(v uint16) (newC *Container, added bool) {
 	return c.add(v)
 }
 
+// Add yields a container identical to c, but with the given bit cleared;
+// removed is true if the bit was previously set. It is unspecified whether
+// the original container is modified.
 func (c *Container) Remove(v uint16) (c2 *Container, removed bool) {
 	return c.remove(v)
 }
@@ -6906,6 +6917,10 @@ func (c *Container) CountRange(start, end int32) (n int32) {
 	return c.countRange(start, end)
 }
 
+// UnionInPlace yields a container containing all the bits set in either
+// c or other. It may, or may not, modify c. The resulting container's
+// count, as returned by c.N(), may be incorrect; see (*Container).Repair().
+// Do not freeze a container produced by this operation before repairing it.
 func (c *Container) UnionInPlace(other *Container) (r *Container) {
 	return c.unionInPlace(other)
 }

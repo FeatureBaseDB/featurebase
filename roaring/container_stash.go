@@ -34,6 +34,26 @@ const (
 // less than 4,096 values, an array is often used. Containers with long runs of
 // integers would use run length encoding, and more random data usually uses
 // bitmap encoding.
+//
+// The Container type has somewhat magical semantics. Containers can be marked
+// as "frozen" by the Freeze method, after which, nothing should ever modify
+// that specific container object again, no matter what. Because of this, but
+// also sometimes for Even More Esoteric Reasons, *no* container method should
+// ever be assumed to be genuinely modifying the container it was called on,
+// and *every* container method that might modify a container should return
+// the "modified" *Container, which *may point to a different object*. The
+// caller should always use this resulting container, and if you're storing
+// a *Container in a data structure, you need to update the data structure's
+// pointer too.
+//
+// A nil *Container is a valid empty container.
+//
+// In general, operations on containers which produce new containers *may*
+// yield new containers, and *may* yield their operands.
+//
+// The reason for all of this is to allow containers to have copy-on-write
+// semantics, which allow us to reduce memory usage dramatically, and GC
+// load even more dramatically.
 type Container struct {
 	pointer  *uint16                  // the data pointer
 	len, cap int32                    // length and cap
@@ -264,7 +284,9 @@ func (c *Container) setMapped(mapped bool) {
 // Freeze returns an unmodifiable container identical to c. This might
 // be c, now marked unmodifiable, or might be a new container. If c
 // is currently marked as "mapped", referring to a backing store that's
-// not a conventional Go pointer, the storage may be copied.
+// not a conventional Go pointer, the storage may (or may not) be copied.
+// Do not call Freeze on a temporarily-corrupt container, such as one
+// returned from UnionInPlace but on which you haven't since called Repair.
 func (c *Container) Freeze() *Container {
 	if c == nil {
 		return nil
