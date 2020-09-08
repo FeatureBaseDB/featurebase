@@ -188,6 +188,7 @@ func (db *DB) checkpoint(exclusive bool) error {
 		return err
 	}
 	walID := readMetaWALID(page)
+	maxCheckpointedWALID := walID
 
 	// Determine the high water mark for WAL pages that can be copied.
 	minActiveWALID := db.minActiveWALID()
@@ -195,7 +196,6 @@ func (db *DB) checkpoint(exclusive bool) error {
 	// Loop over each transaction
 	walID++
 	pageMap := immutable.NewMap(&uint32Hasher{})
-	var maxCheckpointedWALID int64
 	for {
 		// Determine last page of transaction.
 		metaWALID, err := db.findNextWALMetaPage(walID)
@@ -255,7 +255,7 @@ func (db *DB) checkpoint(exclusive bool) error {
 	if maxCheckpointedWALID != 0 {
 		for len(db.segments) > 0 {
 			segment := db.segments[0]
-			if segment.MaxWALID() >= maxCheckpointedWALID {
+			if segment.MaxWALID() > maxCheckpointedWALID {
 				break
 			}
 
@@ -331,17 +331,18 @@ func (db *DB) findLastWALMetaPage() (walID int64, err error) {
 		return 0, nil
 	}
 
-	var maxWALID int64
-	for walID := db.segments[0].MinWALID(); walID <= maxWALID; walID++ {
+	var maxMetaWALID int64
+	maxWALID := db.maxWALID()
+	for walID := db.minWALID(); walID <= maxWALID; walID++ {
 		if page, err := db.readWALPage(walID); err != nil {
 			return walID, err
 		} else if IsBitmapHeader(page) {
 			walID++ // skip next page for bitmap headers
 		} else if IsMetaPage(page) {
-			maxWALID = walID // save max meta WAL ID
+			maxMetaWALID = walID // save max meta WAL ID
 		}
 	}
-	return maxWALID, nil
+	return maxMetaWALID, nil
 }
 
 // minActiveWALID returns the lowest WAL ID in use by any active transaction.
@@ -459,7 +460,6 @@ func (db *DB) writeBitmapPage(pgno uint32, page []byte) (walID int64, err error)
 }
 
 func (db *DB) ensureWritableWALSegment() error {
-
 	if s := db.activeWALSegment(); s != nil && s.Size() < MaxWALSegmentFileSize {
 		return nil
 	}
@@ -469,13 +469,21 @@ func (db *DB) ensureWritableWALSegment() error {
 // addWALSegment appends a new, writable segment and closing an existing segments for write.
 func (db *DB) addWALSegment() error {
 
-	// Close previous last segment for writes.
-	base := int64(1)
+	// If we have a current active WAL segment then close it and start the
+	// next segment from the next WAL ID. If there is no existing WAL segments,
+	// read the last checkpointed WAL ID from the DB and start after that.
+	var base int64
 	if s := db.activeWALSegment(); s != nil {
 		base = s.MaxWALID() + 1
 		if err := s.CloseForWrite(); err != nil {
 			return err
 		}
+	} else {
+		page, err := db.readPage(db.pageMap, 0)
+		if err != nil {
+			return err
+		}
+		base = readMetaWALID(page) + 1
 	}
 
 	// Create new segment file.

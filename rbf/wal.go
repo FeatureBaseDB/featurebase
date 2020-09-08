@@ -233,7 +233,7 @@ func (s *WALSegment) TruncateAfter(walID int64) error {
 
 	// Update to new page size.
 	newPageN := int((walID - s.minWALID) + 1) // new page count of segment
-	truncPageN := newPageN - s.pageN          // number of pages removed
+	truncPageN := s.pageN - newPageN          // number of pages removed
 	s.pageN = newPageN
 
 	// Check to see if we are only truncating from the write cache.
