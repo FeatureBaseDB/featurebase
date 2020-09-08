@@ -50,6 +50,7 @@ type stateMachine struct {
 	state     string
 	client    *http.InternalClient
 	start     time.Time
+	direct    bool
 }
 
 func (r *stateMachine) NewHeader(h *tar.Header, tr *tar.Reader) error {
@@ -129,7 +130,8 @@ func (r *stateMachine) NewHeader(h *tar.Header, tr *tar.Reader) error {
 func (r *stateMachine) Upload() error {
 	if len(r.viewData) > 0 {
 		request := &pilosa.ImportRoaringRequest{
-			Views: r.viewData,
+			Views:  r.viewData,
+			Direct: r.direct,
 		}
 		uri := GetImportRoaringURI(r.lastIndex, r.lastShard)
 		err := r.client.ImportRoaring(context.Background(), uri, r.lastIndex, r.lastField, r.lastShard, false, request)
@@ -141,7 +143,7 @@ func (r *stateMachine) Upload() error {
 	return nil
 }
 
-func UploadTar(srcFile string, client *http.InternalClient) error {
+func UploadTar(srcFile string, direct bool, client *http.InternalClient) error {
 
 	f, err := os.Open(srcFile)
 	if err != nil {
@@ -161,6 +163,7 @@ func UploadTar(srcFile string, client *http.InternalClient) error {
 	runner := &stateMachine{
 		viewData: make(map[string][]byte),
 		start:    time.Now(),
+		direct:   direct,
 	}
 	runner.client = client
 	for {
@@ -180,8 +183,10 @@ func UploadTar(srcFile string, client *http.InternalClient) error {
 
 func main() {
 	var host string
+	var direct bool
 	var tarSrcPath string
 	flag.StringVar(&host, "host", "127.0.0.1:10101", "host to import into")
+	flag.BoolVar(&direct, "direct", false, "direct write to database (unsafe)")
 	flag.StringVar(&tarSrcPath, "src", "q2.tar.gz", "data to import")
 	flag.Parse()
 
@@ -195,7 +200,7 @@ func main() {
 
 	t0 := time.Now()
 	println("uploading", tarSrcPath)
-	panicOn(UploadTar(tarSrcPath, c))
+	panicOn(UploadTar(tarSrcPath, direct, c))
 	vv("total elapsed '%v'", time.Since(t0))
 }
 

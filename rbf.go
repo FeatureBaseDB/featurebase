@@ -470,8 +470,13 @@ func (w *RbfDBWrapper) Close() error {
 
 var globalNextTxSnRBFTx int64
 
-func (w *RbfDBWrapper) NewTx(write bool, initialIndex string, o Txo) (Tx, error) {
-	tx, err := w.db.Begin(write)
+func (w *RbfDBWrapper) NewTx(write bool, initialIndex string, o Txo) (_ Tx, err error) {
+	var tx *rbf.Tx
+	if write && o.Direct { // obtain exclusive lock if writing directly to db.
+		tx, err = w.db.BeginWithExclusiveLock()
+	} else {
+		tx, err = w.db.Begin(write)
+	}
 	if err != nil {
 		return nil, err
 	}

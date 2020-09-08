@@ -1870,9 +1870,6 @@ func (f *Field) importRoaringOverwrite(ctx context.Context, tx Tx, data []byte, 
 	switch f.Options().Type {
 	case FieldTypeInt, FieldTypeDecimal:
 		frag.mu.Lock()
-		if err := frag.calculateMaxRowID(tx); err != nil {
-			return err
-		}
 		maxRowID, _, err := frag.maxRow(tx, nil)
 		frag.mu.Unlock()
 		if err != nil {

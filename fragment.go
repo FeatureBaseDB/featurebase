@@ -143,9 +143,6 @@ type fragment struct {
 
 	CacheSize uint32
 
-	// Stats reporting.
-	maxRowID uint64
-
 	// Cache containing full rows (not just counts).
 	rowCache bitmapCache
 
@@ -248,11 +245,7 @@ func (f *fragment) Open() error {
 
 		// Clear checksums.
 		f.checksums = make(map[int][]byte)
-
-		// Read last bit to determine max row.
-		tx := f.idx.Txf.NewTx(Txo{Write: false, Index: f.idx, Fragment: f, Shard: f.shard}) // first index 'i' shard 0
-		defer tx.Rollback()
-		return f.calculateMaxRowID(tx)
+		return nil
 	}(); err != nil {
 		f.close()
 		return err
@@ -702,11 +695,6 @@ func (f *fragment) unprotectedSetBit(tx Tx, rowID, columnID uint64) (changed boo
 	f.rowCache.Add(rowID, nil)
 
 	f.stats.Count(MetricSetBit, 1, 1.0)
-
-	// Update row count if they have increased.
-	if rowID > f.maxRowID {
-		f.maxRowID = rowID
-	}
 
 	return changed, nil
 }
@@ -1310,8 +1298,15 @@ func (f *fragment) minRow(tx Tx, filter *Row) (uint64, uint64, error) {
 		if filter == nil {
 			return minRowID, 1, nil
 		}
+
+		// Read last bit to determine max row.
+		maxRowID, err := f.maxRowID(tx)
+		if err != nil {
+			return 0, 0, err
+		}
+
 		// iterate from min row ID and return the first that intersects with filter.
-		for i := minRowID; i <= f.maxRowID; i++ {
+		for i := minRowID; i <= maxRowID; i++ {
 			row, err := f.row(tx, i)
 			if err != nil {
 				return 0, 0, err
@@ -1336,12 +1331,17 @@ func (f *fragment) maxRow(tx Tx, filter *Row) (uint64, uint64, error) {
 		return 0, 0, err
 	}
 	if hasRowID {
+		maxRowID, err := f.maxRowID(tx)
+		if err != nil {
+			return 0, 0, err
+		}
+
 		if filter == nil {
-			return f.maxRowID, 1, nil
+			return maxRowID, 1, nil
 		}
 		// iterate back from max row ID and return the first that intersects with filter.
 		// TODO: implement reverse container iteration to improve performance here for sparse data. --Jaffee
-		for i := f.maxRowID; i >= minRowID; i-- {
+		for i := maxRowID; i >= minRowID; i-- {
 			row, err := f.row(tx, i)
 			if err != nil {
 				return 0, 0, err
@@ -1357,15 +1357,14 @@ func (f *fragment) maxRow(tx Tx, filter *Row) (uint64, uint64, error) {
 	return 0, 0, nil
 }
 
-// calculateMaxRowID determines the field's maxRowID value based
+// maxRowID determines the field's maxRowID value based
 // on the contents of its storage, and sets the struct argument.
-func (f *fragment) calculateMaxRowID(tx Tx) (err error) {
+func (f *fragment) maxRowID(tx Tx) (_ uint64, err error) {
 	max, err := tx.Max(f.index, f.field, f.view, f.shard)
 	if err != nil {
-		return err
+		return 0, err
 	}
-	f.maxRowID = max / ShardWidth
-	return nil
+	return max / ShardWidth, nil
 }
 
 // rangeOp returns bitmaps with a bsiGroup value encoding matching the predicate.
