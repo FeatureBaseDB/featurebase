@@ -1366,11 +1366,12 @@ func (b *Bitmap) unionInPlace(others ...*Bitmap) {
 			tContainer := target.Containers.Get(iKey)
 			// if the target's full, short-circuit out.
 			if tContainer != nil {
-				if tContainer.N() == MaxContainerVal+1 {
+				tN, ok := tContainer.SafeN()
+				if ok && tN == MaxContainerVal+1 {
 					bitmapIters.markItersWithKeyAsHandled(i, iKey)
 					continue
 				}
-				expectedN = int64(tContainer.N())
+				expectedN = int64(tN)
 			}
 			// Check i and later iters for any max-range containers, and
 			// find out how many there are.
@@ -1445,8 +1446,7 @@ func (b *Bitmap) unionInPlace(others ...*Bitmap) {
 				jKey, jContainer := iter.iter.Value()
 
 				if iKey == jKey {
-					tContainer = tContainer.Thaw()
-					tContainer.unionInPlace(jContainer)
+					tContainer = tContainer.unionInPlace(jContainer)
 					// "iter" is a local copy from the range
 					// loop, not the actual slice member.
 					itersToUnion[j].handled = true
@@ -3191,15 +3191,24 @@ func (c *Container) optimize() *Container {
 // it is possible that the returned container will not actually be the
 // original container; in-place is a suggestion.
 func (c *Container) unionInPlace(other *Container) *Container {
-	if c == nil {
-		return other.Freeze()
-	}
-	if other == nil {
-		return c
-	}
 	// short-circuit the trivial cases
-	if c.N() == MaxContainerVal+1 || other.N() == MaxContainerVal+1 {
-		return fullContainer
+	cN, cOk := c.SafeN()
+	if cOk {
+		if cN == MaxContainerVal+1 {
+			return fullContainer
+		}
+		if cN == 0 {
+			return other.Clone()
+		}
+	}
+	oN, oOk := other.SafeN()
+	if oOk {
+		if oN == MaxContainerVal+1 {
+			return fullContainer
+		}
+		if oN == 0 {
+			return c
+		}
 	}
 	switch c.typ() {
 	case ContainerBitmap:
@@ -3486,6 +3495,11 @@ func (c *Container) runToBitmap() *Container {
 			panic("nil container for runToBitmap")
 		}
 		return nil
+	}
+	if roaringParanoia {
+		if c.N() > 65536 {
+			panic(fmt.Sprintf("runToBitmap: container N %d", c.N()))
+		}
 	}
 
 	// return early if empty
@@ -3864,6 +3878,7 @@ func (c *Container) Repair() {
 	}
 	if c.isBitmap() {
 		c.bitmapRepair()
+		c.setDirty(false)
 	}
 }
 
@@ -4536,6 +4551,7 @@ func unionBitmapRun(a, b *Container) *Container {
 // a will need to be repaired after the fact.
 func unionBitmapRunInPlace(a, b *Container) *Container {
 	a = a.Thaw()
+	a.setDirty(true)
 	bitmap := a.bitmap()
 	statsHit("union/BitmapRun")
 	for _, run := range b.runs() {
@@ -4708,10 +4724,11 @@ func compareArrayArray(a1, a2 []uint16) error {
 // an error describing any difference it finds. This is mostly intended
 // for use in tests that expect equality.
 func (c *Container) BitwiseCompare(c2 *Container) error {
-	if c.N() != c2.N() {
-		return errors.New("containers are different lengths")
+	cn, c2n := c.N(), c2.N()
+	if cn != c2n {
+		return fmt.Errorf("containers are different lengths (%d vs %d)", cn, c2n)
 	}
-	if c.N() == 0 {
+	if cn == 0 {
 		return nil
 	}
 	switch typePair(c.typ(), c2.typ()) {
@@ -4728,7 +4745,7 @@ func (c *Container) BitwiseCompare(c2 *Container) error {
 	default:
 		c3 := xor(c, c2)
 		if c3.N() != 0 {
-			return fmt.Errorf("%d bits differenct between containers", c3.N())
+			return fmt.Errorf("%d bits different between containers", c3.N())
 		}
 	}
 	return nil
@@ -4753,6 +4770,7 @@ func unionArrayBitmap(a, b *Container) *Container {
 func unionBitmapArrayInPlace(a, b *Container) *Container {
 	a = a.Thaw()
 	bitmap := a.bitmap()
+	a.setDirty(true)
 	for _, v := range b.array() {
 		bitmap[v>>6] |= (uint64(1) << (v % 64))
 	}
@@ -4800,6 +4818,7 @@ func unionBitmapBitmapInPlace(a, b *Container) *Container {
 		ab[i+2] |= bb[i+2]
 		ab[i+3] |= bb[i+3]
 	}
+	a.setDirty(true)
 	return a
 }
 
