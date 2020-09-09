@@ -34,6 +34,26 @@ const (
 // less than 4,096 values, an array is often used. Containers with long runs of
 // integers would use run length encoding, and more random data usually uses
 // bitmap encoding.
+//
+// The Container type has somewhat magical semantics. Containers can be marked
+// as "frozen" by the Freeze method, after which, nothing should ever modify
+// that specific container object again, no matter what. Because of this, but
+// also sometimes for Even More Esoteric Reasons, *no* container method should
+// ever be assumed to be genuinely modifying the container it was called on,
+// and *every* container method that might modify a container should return
+// the "modified" *Container, which *may point to a different object*. The
+// caller should always use this resulting container, and if you're storing
+// a *Container in a data structure, you need to update the data structure's
+// pointer too.
+//
+// A nil *Container is a valid empty container.
+//
+// In general, operations on containers which produce new containers *may*
+// yield new containers, and *may* yield their operands.
+//
+// The reason for all of this is to allow containers to have copy-on-write
+// semantics, which allow us to reduce memory usage dramatically, and GC
+// load even more dramatically.
 type Container struct {
 	pointer  *uint16                  // the data pointer
 	len, cap int32                    // length and cap
@@ -54,16 +74,25 @@ var containerFlagStrings = [...]string{
 	"pristine/mapped",
 	"pristine/frozen",
 	"pristine/frozen/mapped",
+	"dirty",
+	"mapped/dirty",
+	"frozen/dirty",
+	"frozen/mapped/dirty",
+	"pristine/dirty",
+	"pristine/mapped/dirty",
+	"pristine/frozen/dirty",
+	"pristine/frozen/mapped/dirty",
 }
 
 func (f containerFlags) String() string {
-	return containerFlagStrings[f&7]
+	return containerFlagStrings[f&15]
 }
 
 const (
-	flagMapped = containerFlags(1 << iota)
-	flagFrozen
-	flagPristine
+	flagMapped   = containerFlags(1 << iota) // using memory-mapped or otherwise external storage
+	flagFrozen                               // not modifiable
+	flagPristine                             // flagPristine is used for mmapped containers referring to storage
+	flagDirty                                // flagDirty is used for containers which may have invalid N
 )
 
 func (c *Container) String() string {
@@ -212,10 +241,29 @@ func (c *Container) frozen() bool {
 	return (c.flags & flagFrozen) != 0
 }
 
+// SafeN returns N, true if it can, otherwise it returns 0, false. For
+// instance, a container subject to in-place operations can not know its
+// current N, and it's not meaningful or safe to query it until a repair,
+// so you can use this to get N "if it's available".
+func (c *Container) SafeN() (int32, bool) {
+	if c == nil {
+		return 0, true
+	}
+	if (c.flags & flagDirty) != 0 {
+		return 0, false
+	}
+	return c.n, true
+}
+
 // N returns the 1-count of the container.
 func (c *Container) N() int32 {
 	if c == nil {
 		return 0
+	}
+	if roaringParanoia {
+		if c.flags&flagDirty != 0 {
+			panic("trying to call N() on a dirty container")
+		}
 	}
 	return c.n
 }
@@ -261,13 +309,38 @@ func (c *Container) setMapped(mapped bool) {
 	}
 }
 
+// setDirty marks a container as "dirty" -- we don't trust container's n.
+// this should never happen except for bitmaps.
+func (c *Container) setDirty(dirty bool) {
+	if roaringParanoia {
+		if c == nil || c.frozen() {
+			panic("setDirty on nil or frozen container")
+		}
+	}
+	if dirty {
+		c.flags |= flagDirty
+	} else {
+		c.flags &^= flagDirty
+	}
+}
+
 // Freeze returns an unmodifiable container identical to c. This might
 // be c, now marked unmodifiable, or might be a new container. If c
 // is currently marked as "mapped", referring to a backing store that's
-// not a conventional Go pointer, the storage may be copied.
+// not a conventional Go pointer, the storage may (or may not) be copied.
+// Do not call Freeze on a temporarily-corrupt container, such as one
+// returned from UnionInPlace but on which you haven't since called Repair.
 func (c *Container) Freeze() *Container {
 	if c == nil {
 		return nil
+	}
+	if c.flags&flagDirty != 0 {
+		if roaringParanoia {
+			panic("freezing dirty container")
+		}
+		// c.Repair won't work if this is already frozen, but in
+		// theory that can't happen?
+		c.Repair()
 	}
 	// don't need to freeze
 	if c.flags&flagFrozen != 0 {

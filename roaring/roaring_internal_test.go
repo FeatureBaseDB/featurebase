@@ -4375,26 +4375,28 @@ func BenchmarkUnionRunRunInPlace(bm *testing.B) {
 func TestUnionRunRunInPlaceBitwiseCompare(t *testing.T) {
 	runs := []struct {
 		name string
-		run  []Interval16
+		fn   func() []Interval16
 	}{
-		{name: "FirstBitSet", run: runFirstBitSet()},
-		{name: "LastBitSet", run: runLastBitSet()},
-		{name: "FirstBitUnset", run: runFirstBitUnset()},
-		{name: "LastBitUnset", run: runLastBitUnset()},
-		{name: "InnerBitsSet", run: runInnerBitsSet()},
-		{name: "OuterBitsSet", run: runOuterBitsSet()},
-		{name: "OddBitsSet", run: runOddBitsSet()},
-		{name: "EvenBitsSet", run: runEvenBitsSet()},
+		{name: "FirstBitSet", fn: runFirstBitSet},
+		{name: "LastBitSet", fn: runLastBitSet},
+		{name: "FirstBitUnset", fn: runFirstBitUnset},
+		{name: "LastBitUnset", fn: runLastBitUnset},
+		{name: "InnerBitsSet", fn: runInnerBitsSet},
+		{name: "OuterBitsSet", fn: runOuterBitsSet},
+		{name: "OddBitsSet", fn: runOddBitsSet},
+		{name: "EvenBitsSet", fn: runEvenBitsSet},
 	}
 
 	for _, a := range runs {
 		for _, b := range runs {
 			t.Run(a.name+"-"+b.name, func(t *testing.T) {
-				arun := doContainer(ContainerRun, a.run)
-				brun := doContainer(ContainerRun, b.run)
+				arun := doContainer(ContainerRun, a.fn())
+				abm := doContainer(ContainerRun, a.fn()).runToBitmap()
+				brun := doContainer(ContainerRun, b.fn())
 
-				out1 := unionBitmapRunInPlace(arun.runToBitmap(), brun)
+				out1 := unionBitmapRunInPlace(abm, brun)
 				out2 := unionRunRunInPlace(arun, brun)
+				out1.Repair()
 
 				err := out1.BitwiseCompare(out2.runToBitmap())
 				if err != nil {
