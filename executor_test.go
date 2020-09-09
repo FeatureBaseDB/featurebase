@@ -6233,7 +6233,18 @@ func TestExecutor_Execute_CountDistinct(t *testing.T) {
 	}
 
 	// AntitodePoint == row 1 b/c keys field.
-	writeQuery := `Set(100, type=AntidotePoint)Set(100, equip_id=100)Set(100, site_id=100)Set(100, id=100)`
+	// Note: type=TwoPoints should match 100/101, and no row in type
+	// matches 102, but 102 is present in equip_id at all.
+	writeQuery := `
+		Set(100, type=AntidotePoint)
+		Set(100, type=TwoPoints)
+		Set(101, type=TwoPoints)
+		Set(100, equip_id=100)
+		Set(101, equip_id=101)
+		Set(102, equip_id=102)
+		Set(100, site_id=100)
+		Set(100, id=100)
+	`
 	for k, i := range schema.Indexes {
 		_ = k
 		if _, err := api.Query(context.TODO(), &pilosa.QueryRequest{Index: i.Name, Query: writeQuery}); err != nil {
@@ -6248,7 +6259,7 @@ func TestExecutor_Execute_CountDistinct(t *testing.T) {
 				Intersect(Row(type=AntidotePoint)),
 			index=equipment, field=equip_id),
 			Distinct(
-				Intersect(Row(type=AntidotePoint)),
+				Intersect(Row(type=TwoPoints)),
 			index=sites, field=equip_id)
 		), index=power_ts, field=site_id)`
 
@@ -6308,11 +6319,61 @@ func TestExecutor_Execute_CountDistinct(t *testing.T) {
 		if !ok {
 			t.Fatalf("invalid response type, expected: []pilosa.GroupCount, got: %T", resp.Results[0])
 		}
-		if len(gc) != 1 {
-			t.Fatalf("invalid group count length, expected: 1, got: %v", len(gc))
+		if len(gc) != 2 {
+			t.Fatalf("invalid group count length, expected: 2, got: %v", len(gc))
 		}
 		if gc[0].Count != 1 {
-			t.Fatalf("invalid group count count, expected: 1, got: %v", gc[0].Count)
+			t.Fatalf("invalid group-by count for %d, expected: 1, got: %v", gc[0].Group[0].RowID, gc[0].Count)
+		}
+		if gc[1].Count != 1 {
+			t.Fatalf("invalid group-by count for %d, expected: 1, got: %v", gc[1].Group[0].RowID, gc[1].Count)
+		}
+	})
+	t.Run("Store(Distinct)", func(t *testing.T) {
+		_, err = api.Query(context.TODO(), &pilosa.QueryRequest{
+			Index: "sites",
+			Query: `Store(Distinct(field=equip_id), type="a")`,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp, err := api.Query(context.TODO(), &pilosa.QueryRequest{
+			Index: "sites",
+			Query: `Row(type="a")`,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		res, ok := resp.Results[0].(*pilosa.Row)
+		if !ok {
+			t.Fatalf("invalid response type, expected: *pilosa.Row, got: %T", resp.Results[0])
+		}
+		cols := res.Columns()
+		if !eq(cols, []uint64{100, 101, 102}) {
+			t.Fatalf("expected [100, 101, 102], got %d", cols)
+		}
+
+		_, err = api.Query(context.TODO(), &pilosa.QueryRequest{
+			Index: "sites",
+			Query: `Store(Distinct(Row(type="TwoPoints"), field=equip_id), type="b")`,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp, err = api.Query(context.TODO(), &pilosa.QueryRequest{
+			Index: "sites",
+			Query: `Row(type="b")`,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		res, ok = resp.Results[0].(*pilosa.Row)
+		if !ok {
+			t.Fatalf("invalid response type, expected: *pilosa.Row, got: %T", resp.Results[0])
+		}
+		cols = res.Columns()
+		if !eq(cols, []uint64{100, 101}) {
+			t.Fatalf("expected [100, 101], got %d", cols)
 		}
 	})
 }
