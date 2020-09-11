@@ -201,6 +201,7 @@ workflows:
       - test:
           name: test-shardwidth-22
           shard_width: "22"
+          resource_class: large
           requires:
             - setup
       - cluster-tests:

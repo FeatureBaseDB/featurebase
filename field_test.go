@@ -205,6 +205,8 @@ func TestField_NameValidation(t *testing.T) {
 	}
 }
 
+const includeRemote = false // for calls to Index.AvailableShards(localOnly bool)
+
 // Ensure can update and delete available shards.
 func TestField_AvailableShards(t *testing.T) {
 	idx := test.MustOpenIndex(t)
@@ -223,7 +225,7 @@ func TestField_AvailableShards(t *testing.T) {
 		t.Fatal(err)
 	} else if _, err := f.SetBit(tx, 0, ShardWidth*2, nil); err != nil {
 		t.Fatal(err)
-	} else if diff := cmp.Diff(f.AvailableShards().Slice(), []uint64{0, 2}); diff != "" {
+	} else if diff := cmp.Diff(f.AvailableShards(includeRemote).Slice(), []uint64{0, 2}); diff != "" {
 		t.Fatal(diff)
 	}
 
@@ -231,7 +233,7 @@ func TestField_AvailableShards(t *testing.T) {
 	if err := f.AddRemoteAvailableShards(roaring.NewBitmap(1, 2, 4)); err != nil {
 		t.Fatalf("adding remote shards: %v", err)
 	}
-	if diff := cmp.Diff(f.AvailableShards().Slice(), []uint64{0, 1, 2, 4}); diff != "" {
+	if diff := cmp.Diff(f.AvailableShards(includeRemote).Slice(), []uint64{0, 1, 2, 4}); diff != "" {
 		t.Fatal(diff)
 	}
 
@@ -242,7 +244,7 @@ func TestField_AvailableShards(t *testing.T) {
 			t.Fatalf("removing shard %d: %v", i, err)
 		}
 	}
-	if diff := cmp.Diff(f.AvailableShards().Slice(), []uint64{0, 2}); diff != "" {
+	if diff := cmp.Diff(f.AvailableShards(includeRemote).Slice(), []uint64{0, 2}); diff != "" {
 		t.Fatal(diff)
 	}
 }

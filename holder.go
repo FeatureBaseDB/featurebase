@@ -60,11 +60,11 @@ func init() {
 type Holder struct {
 	mu sync.RWMutex
 
+	// our configuration
+	cfg *HolderConfig
+
 	// Partition count used by translation.
 	partitionN int
-
-	// Indexes by name.
-	indexes map[string]*Index
 
 	// opened channel is closed once Open() completes.
 	opened lockedChan
@@ -116,6 +116,32 @@ type Holder struct {
 	Auditor testhook.Auditor
 
 	txf *TxFactory
+
+	bkgr *holderBackgroundGoro
+
+	// indexesOwnedByBkgr is owned by h.bkgr. Do not touch.
+	// Only the owning holdbkg.go goroutine should query or
+	// modify the indexesOwnedByBkgr map. indexesOwnedByBkgr replaces
+	// the old indexes map which was the source of deadlock vs
+	// race issues with a dedicated goroutine
+	// associated with the Holder.
+	//
+	// Normally this map would live inside the holderBackgroundGoro
+	// struct, but tests expect the map to
+	// persist cross Holder ReOpens(), so it still lives here --
+	// since a ReOpen will kill and restart the goroutine and
+	// lose its state.
+	//
+	// Again, do not touch this directly. Use these methods instead:
+	//
+	//  h.Index()       // index name -> *Index
+	//  h.Indexes()     // copy of the full list of *Indexes
+	//  h.addIndex()    // add one *Index
+	//  h.deleteIndex() // delete one *Index
+	//
+	indexesOwnedByBkgr map[string]*Index
+
+	numCtBlueGreenVerified int64
 }
 
 // HolderOpts holds information about the holder which other things might want
@@ -209,6 +235,8 @@ func DefaultHolderConfig() *HolderConfig {
 }
 
 // NewHolder returns a new instance of Holder for the given path.
+// It starts the bkgr background goroutine that provides
+// exclusive access to the indexesOwnedByBkgr map.
 func NewHolder(path string, cfg *HolderConfig) *Holder {
 	if cfg == nil {
 		cfg = DefaultHolderConfig()
@@ -222,7 +250,7 @@ func NewHolder(path string, cfg *HolderConfig) *Holder {
 	}
 
 	h := &Holder{
-		indexes: make(map[string]*Index),
+		cfg:     cfg,
 		closing: make(chan struct{}),
 
 		opened: lockedChan{ch: make(chan struct{})},
@@ -245,7 +273,11 @@ func NewHolder(path string, cfg *HolderConfig) *Holder {
 		Auditor: NewAuditor(),
 
 		path: path,
+
+		indexesOwnedByBkgr: make(map[string]*Index),
 	}
+	h.bkgr = h.newHolderBackgroundGoro()
+
 	txf, err := NewTxFactory(cfg.Txsrc, path, h)
 	panicOn(err)
 	h.txf = txf
@@ -535,8 +567,23 @@ func (h *Holder) Inspect(ctx context.Context, req *InspectRequest) (*HolderInfo,
 
 // Open initializes the root data directory for the holder.
 func (h *Holder) Open() error {
+
 	h.opening = true
 	defer func() { h.opening = false }()
+
+	if h.bkgr == nil || h.bkgr.isClosed() {
+		h.bkgr = h.newHolderBackgroundGoro()
+	}
+
+	if h.txf == nil {
+		txf, err := NewTxFactory(h.cfg.Txsrc, h.path, h)
+		if err != nil {
+			return errors.Wrap(err, "Holder.Open NewTxFactory()")
+		}
+		h.txf = txf
+	}
+
+	h.txf.blueGreenOffIfRunningBlueGreen()
 
 	// Reset closing in case Holder is being reopened.
 	h.closing = make(chan struct{})
@@ -580,9 +627,7 @@ func (h *Holder) Open() error {
 			continue
 		}
 		// Skip embedded db files too.
-		if strings.HasSuffix(fi.Name(), "-badgerdb") ||
-			strings.HasSuffix(fi.Name(), "-lmdb") ||
-			strings.HasSuffix(fi.Name(), "-rbfdb") {
+		if h.txf.IsTxDatabasePath(fi.Name()) {
 			continue
 		}
 
@@ -598,22 +643,19 @@ func (h *Holder) Open() error {
 
 		if h.isCoordinator() {
 			index.createdAt = timestamp()
-			err = index.OpenWithTimestamp(false)
+			err = index.OpenWithTimestamp()
 		} else {
-			err = index.Open(false)
+			err = index.Open()
 		}
 		if err != nil {
-			// FIXME: The holder shouldn't be responsible for closing these, probably.
-			_ = index.Txf.CloseDB()
+			_ = h.txf.Close()
 			if err == ErrName {
 				h.Logger.Printf("ERROR opening index: %s, err=%s", index.Name(), err)
 				continue
 			}
 			return fmt.Errorf("open index: name=%s, err=%s", index.Name(), err)
 		}
-		h.mu.Lock()
-		h.indexes[index.Name()] = index
-		h.mu.Unlock()
+		h.addIndex(index)
 	}
 
 	// If any fields were opened before their foreign index
@@ -631,7 +673,14 @@ func (h *Holder) Open() error {
 
 	_ = testhook.Opened(h.Auditor, h, nil)
 
+	// under blue_green, we must sync blue from green before we turn on checking.
+	if err := h.txf.green2blue(h); err != nil {
+		return errors.Wrap(err, "Holder.Open h.txf.UpdateBlueFromGreen(h)")
+	}
+	h.txf.blueGreenOnIfRunningBlueGreen()
+
 	return nil
+
 }
 
 // Activate runs the background tasks relevant to keeping a holder in a stable
@@ -676,10 +725,14 @@ func (h *Holder) processForeignIndexFields() error {
 // Close closes all open fragments.
 func (h *Holder) Close() error {
 
+	defer h.stopBkgr()
+
 	if globalUseStatTx {
 		fmt.Printf("%v\n", globalCallStats.report())
 	}
-	h.txf.blueGreenReg.Close()
+	if h.txf.blueGreenReg != nil {
+		h.txf.blueGreenReg.Close()
+	}
 
 	h.Stats.Close()
 
@@ -687,16 +740,17 @@ func (h *Holder) Close() error {
 	close(h.closing)
 	h.wg.Wait()
 
-	for _, index := range h.indexes {
+	for _, index := range h.Indexes() {
 		if err := index.Close(); err != nil {
 			return errors.Wrap(err, "closing index")
 		}
-		if err := index.Txf.CloseDB(); err != nil {
-			return errors.Wrap(err, "index.Txf.CloseDB()")
-		}
+	}
+	if err := h.txf.Close(); err != nil {
+		return errors.Wrap(err, "holder.Txf.Close()")
 	}
 
 	// Reset opened in case Holder needs to be reopened.
+	h.txf = nil
 	h.opened.mu.Lock()
 	h.opened.ch = make(chan struct{})
 	h.opened.mu.Unlock()
@@ -713,7 +767,7 @@ func (h *Holder) Close() error {
 func (h *Holder) NeedsSnapshot() bool {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
-	for _, idx := range h.indexes {
+	for _, idx := range h.Indexes() {
 		if idx.NeedsSnapshot() {
 			return true
 		}
@@ -727,7 +781,7 @@ func (h *Holder) NeedsSnapshot() bool {
 func (h *Holder) HasData() (bool, error) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
-	if len(h.indexes) > 0 {
+	if len(h.Indexes()) > 0 {
 		return true, nil
 	}
 	// Open path to read all index directories.
@@ -771,7 +825,7 @@ func (h *Holder) hasV1TranslateKeysFile() (bool, error) {
 func (h *Holder) availableShardsByIndex() map[string]*roaring.Bitmap {
 	m := make(map[string]*roaring.Bitmap)
 	for _, index := range h.Indexes() {
-		m[index.Name()] = index.AvailableShards()
+		m[index.Name()] = index.AvailableShards(includeRemote)
 	}
 	return m
 }
@@ -914,27 +968,26 @@ func (h *Holder) HolderPathFromIndexPath(indexPath, indexName string) string {
 }
 
 // Index returns the index by name.
-func (h *Holder) Index(name string) *Index {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-	return h.index(name)
-}
-
-func (h *Holder) index(name string) *Index {
-	return h.indexes[name]
+func (h *Holder) Index(name string) (idx *Index) {
+	idx = h.bkgr.index(name)
+	return
 }
 
 // Indexes returns a list of all indexes in the holder.
 func (h *Holder) Indexes() []*Index {
-	h.mu.RLock()
-	a := make([]*Index, 0, len(h.indexes))
-	for _, index := range h.indexes {
-		a = append(a, index)
+	// utils_internal_test.go:345	func (t *ClusterCluster) Close() error
+	// wants to close an un-Open()-ed Holder.
+	// So I guess we won't panic here.
+	if h.bkgr == nil || h.bkgr.isClosed() {
+		return nil
 	}
-	h.mu.RUnlock()
+	req := newIndexReq("")
+	req.getAll = true
+	h.bkgr.getAllCh <- req
+	<-req.done
 
-	sort.Sort(indexSlice(a))
-	return a
+	sort.Sort(indexSlice(req.all))
+	return req.all
 }
 
 // CreateIndex creates an index.
@@ -944,7 +997,7 @@ func (h *Holder) CreateIndex(name string, opt IndexOptions) (*Index, error) {
 	defer h.mu.Unlock()
 
 	// Ensure index doesn't already exist.
-	if h.index(name) != nil {
+	if h.Index(name) != nil {
 		return nil, newConflictError(ErrIndexExists)
 	}
 	return h.createIndex(name, opt)
@@ -957,10 +1010,9 @@ func (h *Holder) CreateIndexIfNotExists(name string, opt IndexOptions) (*Index, 
 	defer h.mu.Unlock()
 
 	// Return index if it exists.
-	if index := h.index(name); index != nil {
+	if index := h.Index(name); index != nil {
 		return index, nil
 	}
-
 	return h.createIndex(name, opt)
 }
 
@@ -978,7 +1030,7 @@ func (h *Holder) createIndex(name string, opt IndexOptions) (*Index, error) {
 	index.keys = opt.Keys
 	index.trackExistence = opt.TrackExistence
 
-	if err = index.Open(true); err != nil {
+	if err = index.Open(); err != nil {
 		return nil, errors.Wrap(err, "opening")
 	}
 	if err = index.saveMeta(); err != nil {
@@ -986,7 +1038,7 @@ func (h *Holder) createIndex(name string, opt IndexOptions) (*Index, error) {
 	}
 
 	// Update options.
-	h.indexes[index.Name()] = index
+	h.addIndex(index)
 
 	// Since this is a new index, we need to kick off
 	// its translation sync.
@@ -1017,7 +1069,7 @@ func (h *Holder) DeleteIndex(name string) error {
 	defer h.mu.Unlock()
 
 	// Confirm index exists.
-	index := h.index(name)
+	index := h.Index(name)
 	if index == nil {
 		return newNotFoundError(ErrIndexNotFound, name)
 	}
@@ -1028,7 +1080,7 @@ func (h *Holder) DeleteIndex(name string) error {
 	}
 
 	// remove any backing store.
-	if err := index.Txf.DeleteIndex(name); err != nil {
+	if err := h.txf.DeleteIndex(name); err != nil {
 		return errors.Wrap(err, "index.Txf.DeleteIndex")
 	}
 
@@ -1038,12 +1090,16 @@ func (h *Holder) DeleteIndex(name string) error {
 	}
 
 	// Remove reference.
-	delete(h.indexes, name)
+	h.deleteIndex(name)
 
 	// I'm not sure if calling Reset() here is necessary
 	// since closing the index stops its translation
 	// sync processes.
 	return h.translationSyncer.Reset()
+}
+
+func (h *Holder) deleteIndex(index string) {
+	h.bkgr.delIdxCh <- index
 }
 
 // Field returns the field for an index and name.
@@ -1287,7 +1343,7 @@ func (s *holderSyncer) SyncHolder() error {
 					return nil
 				}
 
-				itr := s.Holder.Index(di.Name).AvailableShards().Iterator()
+				itr := s.Holder.Index(di.Name).AvailableShards(includeRemote).Iterator()
 				itr.Seek(0)
 				for shard, eof := itr.Next(); !eof; shard, eof = itr.Next() {
 					// Ignore shards that this host doesn't own.
@@ -1736,7 +1792,7 @@ func (c *holderCleaner) CleanHolder() error {
 		}
 
 		// Get the fragments that node is responsible for (based on hash(index, node)).
-		containedShards := c.Cluster.containsShards(index.Name(), index.AvailableShards(), c.Node)
+		containedShards := c.Cluster.containsShards(index.Name(), index.AvailableShards(includeRemote), c.Node)
 
 		// Get the fragments registered in memory.
 		for _, field := range index.Fields() {
@@ -1785,33 +1841,28 @@ func uint64InSlice(i uint64, s []uint64) bool {
 // Process loops through a holder based on the Check functions in op, calling
 // the Process functions in op when indicated.
 func (h *Holder) Process(ctx context.Context, op HolderOperator) (err error) {
-	var indexNames, fieldNames, viewNames []string
+	var fieldNames, viewNames []string
 	var fragNums []uint64
 
-	h.mu.Lock()
-	for indexName := range h.indexes {
-		indexNames = append(indexNames, indexName)
-	}
-	h.mu.Unlock()
-	for _, indexName := range indexNames {
+	indexes := h.Indexes()
+	for _, idx := range indexes {
 		if err = ctx.Err(); err != nil {
 			return err
 		}
+		if idx == nil {
+			continue
+		}
+		indexName := idx.name
 		process, recurse := op.CheckIndex(indexName)
 		if !process && !recurse {
 			continue
 		}
-		h.mu.Lock()
-		index := h.indexes[indexName]
-		h.mu.Unlock()
-		if index == nil {
-			continue
-		}
+
 		if err = ctx.Err(); err != nil {
 			return err
 		}
 		if process {
-			err = op.ProcessIndex(index)
+			err = op.ProcessIndex(idx)
 			if err != nil {
 				return err
 			}
@@ -1820,22 +1871,22 @@ func (h *Holder) Process(ctx context.Context, op HolderOperator) (err error) {
 			continue
 		}
 		fieldNames = fieldNames[:0]
-		index.mu.Lock()
-		for fieldName := range index.fields {
+		idx.mu.Lock()
+		for fieldName := range idx.fields {
 			fieldNames = append(fieldNames, fieldName)
 		}
-		index.mu.Unlock()
+		idx.mu.Unlock()
 		for _, fieldName := range fieldNames {
 			if err = ctx.Err(); err != nil {
 				return err
 			}
-			process, recurse := op.CheckField(indexName, fieldName)
+			process, recurse := op.CheckField(idx.name, fieldName)
 			if !process && !recurse {
 				continue
 			}
-			index.mu.Lock()
-			field := index.fields[fieldName]
-			index.mu.Unlock()
+			idx.mu.Lock()
+			field := idx.fields[fieldName]
+			idx.mu.Unlock()
 			if field == nil {
 				continue
 			}
@@ -1913,23 +1964,32 @@ func (h *Holder) Process(ctx context.Context, op HolderOperator) (err error) {
 
 // used by Index.openFields(), enabling Tx / Txf by telling
 // the holder about its own indexes.
-func (h *Holder) addIndexFromField(idx *Index) {
-	h.mu.Lock()
-	h.indexes[idx.Name()] = idx
-	h.mu.Unlock()
-}
-
-func (h *Holder) unprotectedAddIndexFromField(idx *Index) {
-	h.indexes[idx.Name()] = idx
+func (h *Holder) addIndex(idx *Index) {
+	if idx == nil {
+		panic("cannot pass nil to addIndex")
+	}
+	if h == nil {
+		panic("cannot call addIndex on nil Holder")
+	}
+	if h.bkgr == nil || h.bkgr.isClosed() {
+		// ugh. TestCluster_ResizeStates/Multiple_nodes,_with_data test
+		// from cluster_internal_test.go:799
+		// via utils_internal_test.go:450
+		// gets here, with the h.mu already held.
+		// so we cannot panic and complain or we mess up that test.
+		// But really, we should not be calling addIndex() on
+		// Holder that has not be Open()-ed.
+		h.mu.Lock()
+		h.bkgr = h.newHolderBackgroundGoro()
+		h.mu.Unlock()
+	}
+	h.bkgr.setIdxCh <- idx
 }
 
 func (h *Holder) DumpAllShards() {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
-	for index, idx := range h.indexes {
-		fmt.Printf("dump of index '%v'\n", index)
-		idx.Txf.dbPerShard.DumpAll()
-	}
+	h.txf.dbPerShard.DumpAll()
 }
 
 func (h *Holder) Txf() *TxFactory {
@@ -1941,5 +2001,38 @@ func (h *Holder) Txf() *TxFactory {
 // Begin starts a transaction on the holder. The index and shard
 // must be specified.
 func (h *Holder) BeginTx(writable bool, idx *Index, shard uint64) (Tx, error) {
-	return idx.Txf.NewTx(Txo{Write: writable, Index: idx, Shard: shard}), nil
+	return h.txf.NewTx(Txo{Write: writable, Index: idx, Shard: shard}), nil
+}
+
+func (h *Holder) NumContainersBlueGreenVerified() int {
+	return int(h.numCtBlueGreenVerified)
+}
+
+func (h *Holder) HasRoaringData() (has bool, err error) {
+
+	idxs := h.Indexes()
+	for _, idx := range idxs {
+		paths, err := listFilesUnderDir(idx.path, false, "", true)
+		if err != nil {
+			return false, errors.Wrap(err, "HasRoaringData listFilesUnderDir")
+		}
+		index := idx.name
+
+		for _, relpath := range paths {
+			field, view, shard, err := fragmentSpecFromRoaringPath(relpath)
+			if err != nil {
+				continue // ignore .meta paths
+			}
+			abspath := idx.path + sep + relpath
+
+			hasData, err := roaringFragmentHasData(abspath, index, field, view, shard)
+			if err != nil {
+				return false, errors.Wrap(err, "HasRoaringData roaringFragmentHasData")
+			}
+			if hasData {
+				return true, nil
+			}
+		}
+	}
+	return
 }

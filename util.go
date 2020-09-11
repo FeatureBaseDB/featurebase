@@ -20,8 +20,12 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net"
+	"os"
+	"path/filepath"
 	"reflect"
 	"sort"
+	"strings"
+	"syscall"
 	"unsafe"
 
 	"github.com/pilosa/pilosa/v2/roaring"
@@ -236,4 +240,120 @@ func fromInterval16(a []roaring.Interval16) []byte {
 		panic(fmt.Sprintf("cannot put more than 2048 roaring.Interval16 into a container: %v too big", len(a)))
 	}
 	return (*[8192]byte)(unsafe.Pointer(&a[0]))[: len(a)*4 : len(a)*4]
+}
+
+// DiskUse reports the total bytes uses by all files under root
+// that match requiredSuffix. requiredSuffix can be empty string.
+// Space used by directories is not counted.
+func DiskUse(root string, requiredSuffix string) (tot int, err error) {
+	if !DirExists(root) {
+		return -1, fmt.Errorf("listFilesUnderDir error: root directory '%v' not found", root)
+	}
+
+	err = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if info == nil {
+			panic(fmt.Sprintf("info was nil for path = '%v'", path))
+		}
+		if info.IsDir() {
+			// skip the size of directories themselves, only summing files.
+		} else {
+			sz := info.Size()
+			if requiredSuffix == "" || strings.HasSuffix(path, requiredSuffix) {
+				tot += int(sz)
+			}
+		}
+		return nil
+	})
+	return
+}
+
+// rootDir must exist. Return the size in bytes of the largest sub-directory
+// that has the required suffix. The largestSize is from DiskUse() called
+// on the sub-dir. DiskUse only counts file size, nothing for directory inodes.
+func SubdirLargestDirWithSuffix(rootDir, requiredDirSuffix string) (exists bool, largestSize int, err error) {
+	if !DirExists(rootDir) {
+		return false, -1, fmt.Errorf("SubdirExistsWithSuffix error: root directory '%v' not found", rootDir)
+	}
+
+	err = filepath.Walk(rootDir, func(path string, info os.FileInfo, err error) error {
+		if info == nil {
+			panic(fmt.Sprintf("info was nil for path = '%v'", path))
+		}
+
+		if info.IsDir() && strings.HasSuffix(path, requiredDirSuffix) {
+			exists = true
+			size, err := DiskUse(path, "")
+			if err != nil {
+				// disk error? report it
+				return err
+			}
+			if size > largestSize {
+				largestSize = size
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return exists, -1, err
+	}
+	return
+}
+
+// called by Holder.hasRoaringData()
+func roaringFragmentHasData(path string, index, field, view string, shard uint64) (hasData bool, err error) {
+
+	var info roaring.BitmapInfo
+	_ = info
+	var f *os.File
+	f, err = os.Open(path)
+	if err != nil {
+		return
+	}
+
+	var fi os.FileInfo
+	fi, err = f.Stat()
+	if err != nil {
+		return
+	}
+
+	// Memory map the file.
+	data, err := syscall.Mmap(int(f.Fd()), 0, int(fi.Size()), syscall.PROT_READ, syscall.MAP_SHARED)
+	if err != nil {
+		err = errors.Wrap(err, "mmapping")
+		return
+	}
+	defer func() {
+		err = syscall.Munmap(data)
+		if err != nil {
+			err = errors.Wrap(err, "roaringFragmentHasData: munmap failed")
+		}
+		err = f.Close()
+		if err != nil {
+			err = errors.Wrap(err, "roaringFragmentHasData f.Close() in defer")
+		}
+	}()
+
+	// Attach the mmap file to the bitmap.
+	var rbm *roaring.Bitmap
+	rbm, _, err = roaring.InspectBinary(data, true, &info)
+	if err != nil {
+		err = errors.Wrap(err, "inspecting")
+		return
+	}
+
+	if info.ContainerCount > 0 {
+		return true, nil
+	}
+	if info.Ops > 0 {
+		return true, nil
+	}
+
+	citer, found := rbm.Containers.Iterator(0)
+	_ = found
+
+	for citer.Next() {
+		return true, nil
+	}
+
+	return
 }

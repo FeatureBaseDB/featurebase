@@ -54,6 +54,10 @@ type API struct {
 	Serializer Serializer
 }
 
+func (api *API) Holder() *Holder {
+	return api.holder
+}
+
 // apiOption is a functional option type for pilosa.API
 type apiOption func(*API) error
 

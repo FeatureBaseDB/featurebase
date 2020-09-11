@@ -191,3 +191,83 @@ func TestDB_BeginWithExclusiveLock(t *testing.T) {
 		}
 	})
 }
+
+func TestDB_HasData(t *testing.T) {
+
+	db := MustOpenDB(t)
+	defer MustCloseDB(t, db)
+
+	// HasData should start out false.
+	const requireOneHotBit = true
+	hasAnything, err := db.HasData(!requireOneHotBit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hasAnything {
+		t.Fatalf("HasData reported existing data on an empty database")
+	}
+
+	hasAnything, err = db.HasData(requireOneHotBit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hasAnything {
+		t.Fatalf("HasData reported existing data on an empty database")
+	}
+
+	// check that HasData sees a committed record.
+
+	// Create bitmap with no hot bits.
+	if tx, err := db.Begin(true); err != nil {
+		t.Fatal(err)
+	} else if err := tx.CreateBitmap("x"); err != nil {
+		t.Fatal(err)
+	} else if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	// HasData(false) should now report seeing the 'x' record, even though
+	// the value is an empty bitmap, since !requireOneHotBit.
+	hasAnything, err = db.HasData(!requireOneHotBit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasAnything {
+		t.Fatalf("HasData(!requireOneHotBit) reported no data on a database that has 'x' written to it")
+	}
+
+	// HasData(requireOneHotBit) should report false, since we have no hot bits.
+	hasAnything, err = db.HasData(requireOneHotBit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hasAnything {
+		t.Fatalf("HasData(requireOneHotBit) reported data on a database that has 'x' -> empty bitmap")
+	}
+
+	// hot up a bit.
+	if tx, err := db.Begin(true); err != nil {
+		t.Fatal(err)
+	} else if _, err := tx.Add("x", rand.Uint64()); err != nil {
+		t.Fatal(err)
+	} else if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Now it shouldn't matter, we should get HasData true either way
+	// HasData(requireOneHotBit) should report false, since we have no hot bits.
+	hasAnything, err = db.HasData(requireOneHotBit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasAnything {
+		t.Fatalf("HasData should have seen the hot bit")
+	}
+	hasAnything, err = db.HasData(!requireOneHotBit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasAnything {
+		t.Fatalf("HasData should have seen the hot bit")
+	}
+}

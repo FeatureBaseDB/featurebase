@@ -330,7 +330,7 @@ func (g *memberSet) LocalState(join bool) []byte {
 		for _, f := range idx.Fields {
 			availableShards := roaring.NewBitmap()
 			if field, _ := g.papi.Field(context.Background(), idx.Name, f.Name); field != nil {
-				availableShards = field.AvailableShards()
+				availableShards = field.AvailableShards(false)
 			}
 
 			fs := &pilosa.FieldStatus{

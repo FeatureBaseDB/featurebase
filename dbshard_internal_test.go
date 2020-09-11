@@ -54,7 +54,7 @@ func TestShardPerDB_SetBit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tx = idx.Txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f, Shard: f.shard})
+	tx = idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f, Shard: f.shard})
 	defer tx.Rollback()
 
 	if n := f.mustRow(tx, 120).Count(); n != 2 {
@@ -72,12 +72,13 @@ func Test_DBPerShard_GetShardsForIndex(t *testing.T) {
 	orig := os.Getenv("PILOSA_TXSRC")
 	defer os.Setenv("PILOSA_TXSRC", orig) // must restore or will mess up other tests!
 
-	for _, src := range []string{"lmdb", "roaring", "rbf"} {
-		makeSampleRoaringDir(tmpdir, src)
+	for _, src := range []string{"lmdb", "roaring", "badger", "rbf"} {
+		makeSampleRoaringDir(tmpdir, src, 0)
 		os.Setenv("PILOSA_TXSRC", src)
 
 		// must make Holder AFTER setting src.
 		holder := NewHolder(tmpdir, nil)
+
 		idx, err := NewIndex(holder, tmpdir, "rick")
 		panicOn(err)
 		estd := "rick/_exists/views/standard"
@@ -100,6 +101,7 @@ func Test_DBPerShard_GetShardsForIndex(t *testing.T) {
 				}
 			}
 		}
+		holder.Close()
 	}
 }
 
@@ -135,36 +137,62 @@ rick/_exists/views/standard/fragments/219
 rick/_exists/views/standard/fragments/223
 `,
 	"lmdb": `
-rick/0219-lmdb/data.mdb
-rick/0219-lmdb/lock.mdb
-rick/0093-lmdb/data.mdb
-rick/0093-lmdb/lock.mdb
-rick/0223-lmdb/data.mdb
-rick/0223-lmdb/lock.mdb
-rick/0215-lmdb/data.mdb
-rick/0215-lmdb/lock.mdb
-rick/0217-lmdb/data.mdb
-rick/0217-lmdb/lock.mdb
-rick/0221-lmdb/data.mdb
-rick/0221-lmdb/lock.mdb
+rick/0219-lmdb@/data.mdb
+rick/0219-lmdb@/lock.mdb
+rick/0093-lmdb@/data.mdb
+rick/0093-lmdb@/lock.mdb
+rick/0223-lmdb@/data.mdb
+rick/0223-lmdb@/lock.mdb
+rick/0215-lmdb@/data.mdb
+rick/0215-lmdb@/lock.mdb
+rick/0217-lmdb@/data.mdb
+rick/0217-lmdb@/lock.mdb
+rick/0221-lmdb@/data.mdb
+rick/0221-lmdb@/lock.mdb
+`,
+	"badger": `
+rick/0219-badgerdb@/000000.vlog
+rick/0219-badgerdb@/KEYREGISTRY
+rick/0219-badgerdb@/MANIFEST
+rick/0219-badgerdb@/LOCK
+rick/0221-badgerdb@/000000.vlog
+rick/0221-badgerdb@/KEYREGISTRY
+rick/0221-badgerdb@/MANIFEST
+rick/0221-badgerdb@/LOCK
+rick/0223-badgerdb@/000000.vlog
+rick/0223-badgerdb@/KEYREGISTRY
+rick/0223-badgerdb@/MANIFEST
+rick/0223-badgerdb@/LOCK
+rick/0093-badgerdb@/000000.vlog
+rick/0093-badgerdb@/KEYREGISTRY
+rick/0093-badgerdb@/MANIFEST
+rick/0093-badgerdb@/LOCK
+rick/0217-badgerdb@/000000.vlog
+rick/0217-badgerdb@/KEYREGISTRY
+rick/0217-badgerdb@/MANIFEST
+rick/0217-badgerdb@/LOCK
+rick/0215-badgerdb@/000000.vlog
+rick/0215-badgerdb@/KEYREGISTRY
+rick/0215-badgerdb@/MANIFEST
+rick/0215-badgerdb@/LOCK
 `,
 	"rbf": `
-rick/0223-rbfdb/wal/0000000000000001.wal
-rick/0223-rbfdb/data
-rick/0093-rbfdb/wal/0000000000000001.wal
-rick/0093-rbfdb/data
-rick/0217-rbfdb/wal/0000000000000001.wal
-rick/0217-rbfdb/data
-rick/0215-rbfdb/wal/0000000000000001.wal
-rick/0215-rbfdb/data
-rick/0221-rbfdb/wal/0000000000000001.wal
-rick/0221-rbfdb/data
-rick/0219-rbfdb/wal/0000000000000001.wal
-rick/0219-rbfdb/data
+rick/0223-rbfdb@/wal/0000000000000001.wal
+rick/0223-rbfdb@/data
+rick/0093-rbfdb@/wal/0000000000000001.wal
+rick/0093-rbfdb@/data
+rick/0217-rbfdb@/wal/0000000000000001.wal
+rick/0217-rbfdb@/data
+rick/0215-rbfdb@/wal/0000000000000001.wal
+rick/0215-rbfdb@/data
+rick/0221-rbfdb@/wal/0000000000000001.wal
+rick/0221-rbfdb@/data
+rick/0219-rbfdb@/wal/0000000000000001.wal
+rick/0219-rbfdb@/data
 `,
 }
 
-func makeSampleRoaringDir(root, txsrc string) {
+func makeSampleRoaringDir(root, txsrc string, minBytes int) {
 	fns := strings.Split(sampleRoaringDirList[txsrc], "\n")
 	for _, fn := range fns {
 		if fn == "" {
@@ -174,6 +202,10 @@ func makeSampleRoaringDir(root, txsrc string) {
 		panicOn(os.MkdirAll(path, 0755))
 		fd, err := os.Create(root + sep + fn)
 		panicOn(err)
+		if minBytes > 0 {
+			_, err := fd.Write(make([]byte, minBytes))
+			panicOn(err)
+		}
 		fd.Close()
 	}
 }

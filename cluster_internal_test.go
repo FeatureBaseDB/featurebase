@@ -97,6 +97,7 @@ func newIndexWithTempPath(tb testing.TB, name string) *Index {
 		panic(err)
 	}
 	h := NewHolder(path, nil)
+	panicOn(h.Open())
 	index, err := h.CreateIndex(name, IndexOptions{})
 	testhook.Cleanup(tb, func() {
 		h.Close()
@@ -170,7 +171,7 @@ func TestFragSources(t *testing.T) {
 
 	// Obtain transaction.
 	var shard uint64
-	tx := idx.Txf.NewTx(Txo{Write: writable, Index: idx, Shard: shard})
+	tx := idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Shard: shard})
 	defer tx.Rollback()
 
 	_, err = field.SetBit(tx, 1, 101, nil)
@@ -180,7 +181,7 @@ func TestFragSources(t *testing.T) {
 	panicOn(tx.Commit())
 
 	shard = 1
-	tx = idx.Txf.NewTx(Txo{Write: writable, Index: idx, Shard: shard})
+	tx = idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Shard: shard})
 	defer tx.Rollback()
 	_, err = field.SetBit(tx, 1, ShardWidth*shard+1, nil)
 	if err != nil {
@@ -189,7 +190,7 @@ func TestFragSources(t *testing.T) {
 	panicOn(tx.Commit())
 
 	shard = 2
-	tx = idx.Txf.NewTx(Txo{Write: writable, Index: idx, Shard: shard})
+	tx = idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Shard: shard})
 	defer tx.Rollback()
 
 	_, err = field.SetBit(tx, 1, ShardWidth*shard+1, nil)
@@ -199,7 +200,7 @@ func TestFragSources(t *testing.T) {
 	panicOn(tx.Commit())
 
 	shard = 3
-	tx = idx.Txf.NewTx(Txo{Write: writable, Index: idx, Shard: shard})
+	tx = idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Shard: shard})
 	defer tx.Rollback()
 
 	_, err = field.SetBit(tx, 1, ShardWidth*shard+1, nil)

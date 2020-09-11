@@ -47,7 +47,7 @@ func (i *Index) reopen() error {
 	if err := i.Close(); err != nil {
 		return err
 	}
-	if err := i.Open(false); err != nil {
+	if err := i.Open(); err != nil {
 		return err
 	}
 	return nil

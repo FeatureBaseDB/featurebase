@@ -936,7 +936,7 @@ func TestExecutor_Execute_SetValue(t *testing.T) {
 		// Obtain transaction.
 		idx := index.Index
 		shard := uint64(0)
-		tx := idx.Txf.NewTx(pilosa.Txo{Write: !writable, Index: idx, Shard: shard})
+		tx := idx.Txf().NewTx(pilosa.Txo{Write: !writable, Index: idx, Shard: shard})
 		defer tx.Rollback()
 
 		f := hldr.Field("i", "f")

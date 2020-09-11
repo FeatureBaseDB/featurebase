@@ -483,7 +483,7 @@ func TestTx_Dump(t *testing.T) {
 	}
 
 	// test that we don't crash, and get *something* back
-	s := tx.DumpString()
+	s := tx.DumpString(true)
 	if s == "" {
 		panic("should have had 3 containers!")
 	}

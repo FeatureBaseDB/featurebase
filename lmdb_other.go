@@ -63,6 +63,10 @@ func (r *lmdbRegistrar) OpenDBWrapper(path0 string, doAllocZero bool) (DBWrapper
 	panic("lmdb only available on 64-bit arch")
 }
 
+func (r *lmdbRegistrar) Size() int {
+	panic("lmdb only available on 64-bit arch")
+}
+
 // register each lmdb created under tests, so we
 // can clean them up. This is called by openLMDBWrapper() while
 // holding the r.mu.Lock, since it needs to atomically
@@ -396,7 +400,11 @@ func (tx *LMDBTx) countBitsSet(bkey []byte) (n int) {
 	panic("lmdb only available on 64-bit arch")
 }
 
-func (tx *LMDBTx) Dump() {
+func (tx *LMDBTx) IsDone() (done bool) {
+	panic("lmdb only available on 64-bit arch")
+}
+
+func (tx *LMDBTx) Dump(short bool) {
 	panic("lmdb only available on 64-bit arch")
 }
 
