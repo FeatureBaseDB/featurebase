@@ -167,6 +167,7 @@ func (h *GRPCHandler) DeleteVDS(ctx context.Context, req *pb.DeleteVDSRequest) (
 }
 
 func (h *GRPCHandler) execSQL(ctx context.Context, queryStr string) (pb.ToRowser, error) {
+	h.stats.Count(pilosa.MetricSqlQueries, 1, 1)
 	return execSQL(ctx, h.api, h.logger, queryStr)
 }
 
@@ -243,6 +244,7 @@ func (h *GRPCHandler) QueryPQL(req *pb.QueryPQLRequest, stream pb.Pilosa_QueryPQ
 	durFormat := time.Since(t)
 	h.stats.Timing(pilosa.MetricGRPCStreamQueryDurationSeconds, durQuery, 0.1)
 	h.stats.Timing(pilosa.MetricGRPCStreamFormatDurationSeconds, durFormat, 0.1)
+	h.stats.Count(pilosa.MetricPqlQueries, 1, 1)
 
 	return errToStatusError(nil)
 }
@@ -284,6 +286,7 @@ func (h *GRPCHandler) QueryPQLUnary(ctx context.Context, req *pb.QueryPQLRequest
 
 	h.stats.Timing(pilosa.MetricGRPCUnaryQueryDurationSeconds, durQuery, 0.1)
 	h.stats.Timing(pilosa.MetricGRPCUnaryFormatDurationSeconds, durFormat, 0.1)
+	h.stats.Count(pilosa.MetricPqlQueries, 1, 1)
 
 	return table, errToStatusError(nil)
 }
