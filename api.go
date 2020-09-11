@@ -451,6 +451,7 @@ func (api *API) ImportRoaring(ctx context.Context, indexName, fieldName string, 
 	}
 
 	qcx := api.Txf().NewQcx()
+	qcx.Direct = req.Direct
 	defer qcx.Abort()
 
 	nodes := api.cluster.shardNodes(indexName, shard)
