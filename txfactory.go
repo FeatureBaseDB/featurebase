@@ -25,6 +25,7 @@ import (
 	"syscall"
 	"text/tabwriter"
 
+	"github.com/pilosa/pilosa/v2/hash"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/txkey"
 	"github.com/pkg/errors"
@@ -793,7 +794,7 @@ func (idx *Index) StringifiedRoaringKeys(hashOnly, showOps bool) (r string) {
 		return "" // new convention that empty database => empty string returned.
 	}
 	// note that we can have a bitmap present, but it can be empty
-	r += "]\n   all-in-blake3:" + Blake3sum16([]byte(r)) + "\n"
+	r += "]\n   all-in-blake3:" + hash.Blake3sum16([]byte(r)) + "\n"
 
 	return "roaring-" + r
 }
@@ -871,7 +872,7 @@ func stringifiedRawRoaringFragment(path string, index, field, view string, shard
 	for citer.Next() {
 		ckey, ct := citer.Value()
 		by := containerToBytes(ct)
-		hash := Blake3sum16(by)
+		hash := hash.Blake3sum16(by)
 
 		cts := roaring.NewSliceContainers()
 		cts.Put(ckey, ct)

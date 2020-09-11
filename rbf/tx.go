@@ -18,11 +18,13 @@ import (
 	"io"
 	"math"
 	"sort"
+
 	//"strconv"
 	"strings"
 	"sync"
 
 	"github.com/benbjohnson/immutable"
+	"github.com/pilosa/pilosa/v2/hash"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/txkey"
 )
@@ -1372,7 +1374,7 @@ func (tx *Tx) DumpString() (r string) {
 		return ""
 	}
 	// note that we can have a bitmap present, but it can be empty
-	r += "]\n   all-in-blake3:" + blake3sum16([]byte(r)) + "\n"
+	r += "]\n   all-in-blake3:" + hash.Blake3sum16([]byte(r)) + "\n"
 
 	return "rbf-" + r
 }
@@ -1420,7 +1422,7 @@ func bitmapAsString(rbm *roaring.Bitmap) (r string) {
 func stringOfCkeyCt(ckey uint64, ct *roaring.Container, rrName string) (s string) {
 
 	by := containerToBytes(ct)
-	hash := blake3sum16(by)
+	hash := hash.Blake3sum16(by)
 
 	cts := roaring.NewSliceContainers()
 	cts.Put(ckey, ct)
