@@ -21,6 +21,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -81,12 +82,19 @@ func (tx *RoaringTx) SliceOfShards(index, field, view, optionalViewPath string) 
 	}
 
 	for _, fi := range fis {
+		//vv("rrtx next fi = '%v'", fi.Name())
 		if fi.IsDir() {
 			continue
 		}
+		name := fi.Name()
+		if strings.HasSuffix(name, ".cache") {
+			continue
+		}
+
 		// Parse filename into integer.
-		shard, err := strconv.ParseUint(filepath.Base(fi.Name()), 10, 64)
+		shard, err := strconv.ParseUint(filepath.Base(name), 10, 64)
 		if err != nil {
+			//vv("WARNING: couldn't use non-integer file as shard in index/field/view %s/%s/%s: %s", index, field, view, fi.Name())
 			//panic(fmt.Sprintf("WARNING: couldn't use non-integer file as shard in index/field/view %s/%s/%s: %s", index, field, view, fi.Name()))
 			//tx.Index.holder.Logger.Debugf("WARNING: couldn't use non-integer file as shard in index/field/view %s/%s/%s: %s", index, field, view, fi.Name())
 			continue
@@ -552,10 +560,13 @@ func (w *RoaringWrapper) IsClosed() (closed bool) {
 }
 
 func (w *RoaringWrapper) DeleteDBPath(dbs *DBShard) (err error) {
-	return os.RemoveAll(dbs.Path)
+	//vv("RoaringWrapper.DeleteDBPath called on dbs = '%#v'", dbs)
+	path := dbs.pathForType(roaringTxn)
+	return os.RemoveAll(path)
 }
 
 func (w *RoaringWrapper) DeleteField(index, field, fieldPath string) error {
+	//vv("RoaringWrapper.DeleteField(index = '%v', field = '%v', fieldPath = '%v'", index, field, fieldPath)
 
 	// match txn sn count vs lmdb/etc.
 	atomic.AddInt64(&globalNextTxSnRoaring, 1)

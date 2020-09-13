@@ -350,7 +350,8 @@ func (r *badgerRegistrar) OpenDBWrapper(bpath string, doAllocZero bool) (DBWrapp
 }
 
 func (w *BadgerDBWrapper) DeleteDBPath(dbs *DBShard) error {
-	panic("TODO")
+	path := dbs.pathForType(badgerTxn)
+	return os.RemoveAll(path)
 }
 
 // DeleteIndex deletes all the containers associated with

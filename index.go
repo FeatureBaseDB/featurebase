@@ -261,6 +261,11 @@ fileLoop:
 			if !fi.IsDir() {
 				continue
 			}
+			// Skip embedded db files too.
+			if i.holder.txf.IsTxDatabasePath(fi.Name()) {
+				continue
+			}
+
 			indexQueue <- struct{}{}
 			eg.Go(func() error {
 				defer func() {
@@ -369,6 +374,7 @@ func (i *Index) saveMeta() error {
 
 // Close closes the index and its fields.
 func (i *Index) Close() error {
+
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	defer func() {

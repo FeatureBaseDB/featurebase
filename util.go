@@ -103,6 +103,7 @@ func mapDiff(mapA, mapB map[uint64]bool) (r []int) {
 			r = append(r, int(a))
 		}
 	}
+	sort.Ints(r)
 	return
 }
 

@@ -570,7 +570,8 @@ func (w *RbfDBWrapper) DeleteFragment(index, field, view string, shard uint64, f
 }
 
 func (w *RbfDBWrapper) DeleteDBPath(dbs *DBShard) error {
-	panic("TODO")
+	path := dbs.pathForType(rbfTxn)
+	return os.RemoveAll(path)
 }
 
 func (w *RbfDBWrapper) OpenListString() (r string) {
