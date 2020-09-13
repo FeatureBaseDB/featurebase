@@ -290,6 +290,10 @@ func (r *badgerRegistrar) OpenDBWrapper(bpath string, doAllocZero bool) (DBWrapp
 	// have the -badgerdb suffix.
 	bpath = badgerPath(bpath)
 
+	err := os.MkdirAll(bpath, 0755)
+	if err != nil {
+		return nil, err
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	w, ok := r.path2db[bpath]
@@ -1734,7 +1738,7 @@ func (tx *BadgerTx) countBitsSet(bkey []byte) (n int) {
 	return
 }
 
-func (tx *BadgerTx) Dump(short bool) {
+func (tx *BadgerTx) Dump(short bool, shard uint64) {
 	fmt.Printf("BadgerTx %p Dump: %v\n", tx, stringifiedBadgerKeysTx(tx, short))
 }
 

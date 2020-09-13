@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"math"
 	"reflect"
 	"sort"
 	"sync"
@@ -152,15 +153,15 @@ func (c *blueGreenTx) Type() string {
 
 var blueGreenTxDumpMut sync.Mutex
 
-func (c *blueGreenTx) Dump(short bool) {
+func (c *blueGreenTx) Dump(short bool, shard uint64) {
 
 	blueGreenTxDumpMut.Lock()
 	defer blueGreenTxDumpMut.Unlock()
 	fmt.Printf("%v blueGreenTx.Dump ============== \n", FileLine(2))
 	fmt.Printf("A(%v) Dump:\n", c.as)
-	c.a.Dump(short)
+	c.a.Dump(short, shard)
 	fmt.Printf("B(%v) Dump:\n", c.bs)
-	c.b.Dump(short)
+	c.b.Dump(short, shard)
 
 	if !short {
 		fmt.Printf("dbPerShard.DumpAll(): idx=%p\n", c.idx)
@@ -211,21 +212,21 @@ func (c *blueGreenTx) compareTxState(index, field, view string, shard uint64) {
 	}
 
 	if aFound != bFound {
-		c.Dump(c.short)
+		c.Dump(c.short, shard)
 		panic(fmt.Sprintf("compareTxState[%v]: A(%v) ContainerIterator had aFound=%v, but B(%v) had bFound=%v; at '%v'", here, c.as, aFound, c.bs, bFound, stack()))
 	}
 
 	if aErr != nil || bErr != nil {
 		if aErr != nil && bErr != nil {
-			c.Dump(c.short)
+			c.Dump(c.short, shard)
 			panic(fmt.Sprintf("compareTxState[%v]: A(%v) reported err '%v'; B(%v) reported err '%v' at %v", here, c.as, aErr, c.bs, bErr, stack()))
 		}
 		if aErr != nil {
-			c.Dump(c.short)
+			c.Dump(c.short, shard)
 			panic(fmt.Sprintf("compareTxState[%v]: A(%v) reported err %v at %v; but B(%v) did not", here, c.as, aErr, c.bs, stack()))
 		}
 		if bErr != nil {
-			c.Dump(c.short)
+			c.Dump(c.short, shard)
 			panic(fmt.Sprintf("compareTxState[%v]: B(%v) reported err %v at %v; but A(%v) did not", here, c.bs, bErr, c.as, stack()))
 		}
 	}
@@ -234,17 +235,17 @@ func (c *blueGreenTx) compareTxState(index, field, view string, shard uint64) {
 
 		if !bIter.Next() {
 			AlwaysPrintf("compareTxState[%v]: A(%v) found key %v, B(%v) didn't, dump to follow, stack=\n %v\n\n and here is dump:", here, c.as, aKey, c.bs, stack())
-			c.Dump(c.short)
+			c.Dump(c.short, shard)
 			panic(fmt.Sprintf("compareTxState[%v]: A(%v) found key %v, B(%v) didn't, at %v", here, c.as, aKey, c.bs, stack()))
 		}
 		bKey, bValue := bIter.Value()
 		if bKey != aKey {
 			AlwaysPrintf("problem in caller %v", Caller(2))
-			c.Dump(c.short)
+			c.Dump(c.short, shard)
 			panic(fmt.Sprintf("compareTxState[%v]: A(%v) found key %v, B(%v) found %v, at %v", here, c.as, aKey, c.bs, bKey, stack()))
 		}
 		if err := aValue.BitwiseCompare(bValue); err != nil {
-			c.Dump(c.short)
+			c.Dump(c.short, shard)
 			//vv("compareTxState[%v]: key %v differs: %v;  A=%v; B=%v; at stack=%v", here, aKey, err, c.as, c.bs, stack())
 			panic(fmt.Sprintf("compareTxState[%v]: key %v differs: %v;  A=%v; B=%v; at stack=%v", here, aKey, err, c.as, c.bs, stack()))
 		}
@@ -253,7 +254,7 @@ func (c *blueGreenTx) compareTxState(index, field, view string, shard uint64) {
 	// end checking everything in A, but does B have more?
 	if bIter.Next() {
 		AlwaysPrintf("bIter has more than it should. problem in caller %v. _sn_ %v", Caller(2), c.Sn())
-		c.Dump(c.short)
+		c.Dump(c.short, shard)
 		bKey, _ := bIter.Value()
 		panic(fmt.Sprintf("compareTxState[%v]: B(%v) found key %v, A(%v) didn't, (a.sn=%v) (b.sn=%v) at %v", here, c.bs, bKey, c.as, c.a.Sn(), c.b.Sn(), stack()))
 	}
@@ -430,7 +431,7 @@ func (c *blueGreenTx) ImportRoaringBits(index, field, view string, shard uint64,
 	// ================== begin save comments.
 	//c.checkDatabase()
 	////vv("got past database check at TOP of ImportRoaringBits")
-	//c.Dump(c.short)
+	//c.Dump(c.short, shard)
 	////vv("done with top dump; clear=%v", clear)
 	// ==================   end save comments.
 	defer func() {
@@ -789,7 +790,7 @@ func (c *blueGreenTx) CountRange(index, field, view string, shard uint64, start,
 	c.checker.see(index, field, view, shard)
 	defer func() {
 		if r := recover(); r != nil {
-			c.Dump(c.short)
+			c.Dump(c.short, shard)
 			AlwaysPrintf("see CountRange() panic '%v' at '%v'", r, stack())
 			panic(r)
 		}
@@ -822,7 +823,7 @@ func (c *blueGreenTx) OffsetRange(index, field, view string, shard, offset, star
 
 		err = roaringBitmapDiff(a, b)
 		if err != nil {
-			c.Dump(false)
+			c.Dump(false, shard)
 			panicOn(fmt.Errorf("on _sn_ %v OffsetRange(index='%v', field='%v', view='%v', shard='%v', offset: %v start: %v, end: %v) err: %v", c.Sn(), index, field, view, int(shard), offset, start, end, err))
 		}
 		compareErrors(errA, errB)
@@ -835,7 +836,7 @@ func (c *blueGreenTx) RoaringBitmapReader(index, field, view string, shard uint6
 	c.checker.see(index, field, view, shard)
 	defer func() {
 		if r := recover(); r != nil {
-			c.Dump(c.short)
+			c.Dump(c.short, shard)
 			AlwaysPrintf("see RoaringBitmapReader() panic '%v' at '%v'", r, stack())
 			panic(r)
 		}
@@ -895,7 +896,7 @@ func (c *blueGreenTx) SliceOfShards(index, field, view, optionalViewPath string)
 	//c.checker.see(index, field, view, shard) // don't have shard.
 	defer func() {
 		if r := recover(); r != nil {
-			c.Dump(c.short)
+			c.Dump(c.short, math.MaxUint64)
 			AlwaysPrintf("see SliceOfShards() panic '%v' at '%v'", r, stack())
 			panic(r)
 		}
@@ -921,7 +922,7 @@ func (c *blueGreenTx) SliceOfShards(index, field, view, optionalViewPath string)
 			for _, kb := range slcB {
 				if !ma[kb] {
 					//vv("blueGreenTx SliceOfShards diference! B(%v) had shard %v, but A(%v) did not. cpa='%#v'; cpb='%#v'; in the SliceOfShards returned slice.", c.bs, kb, c.as, cpa, cpb)
-					c.Dump(c.short)
+					c.Dump(c.short, math.MaxUint64)
 					panic(fmt.Sprintf("blueGreenTx SliceOfShards diference! B(%v) had shard %v, but A(%v) did not. cpa='%#v'; cpb='%#v'; in the SliceOfShards returned slice.", c.bs, kb, c.as, cpa, cpb))
 				}
 				delete(ma, kb)

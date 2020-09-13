@@ -112,7 +112,7 @@ func Test_TxFactory_Qcx_query_context(t *testing.T) {
 //       and b) we have an easy migration mechanism, to go from one storage format to another.
 //
 func Test_TxFactory_UpdateBlueFromGreen_OnStartup(t *testing.T) {
-	t.Skip("TODO(jea) bring this back in. broken by the local vs remote shard determination for a cluster")
+	//t.Skip("TODO(jea) bring this back in. broken by the local vs remote shard determination for a cluster")
 
 	orig := os.Getenv("PILOSA_TXSRC")
 	defer os.Setenv("PILOSA_TXSRC", orig) // must restore or will mess up other tests!
@@ -218,6 +218,8 @@ func Test_TxFactory_UpdateBlueFromGreen_OnStartup(t *testing.T) {
 			// open a holder with path again, now looking at both blue and green.
 			// The Holder.Open should do the migration from green, populating blue.
 			h4 := NewHolder(path, nil)
+
+			//vv("about to h4.Open we should populate blue from green")
 			panicOn(h4.Open())
 			defer h4.Close()
 
@@ -232,7 +234,7 @@ func Test_TxFactory_UpdateBlueFromGreen_OnStartup(t *testing.T) {
 // go to verify it but blue has more data than green.
 // That will also cause query divergence.
 func Test_TxFactory_verifyBlueEqualsGreen(t *testing.T) {
-	t.Skip("TODO(jea) bring this back in. broken by the local vs remote shard determination for a cluster")
+	//t.Skip("TODO(jea) bring this back in. broken by the local vs remote shard determination for a cluster")
 
 	orig := os.Getenv("PILOSA_TXSRC")
 	defer os.Setenv("PILOSA_TXSRC", orig) // must restore or will mess up other tests!

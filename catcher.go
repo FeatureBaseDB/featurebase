@@ -58,8 +58,8 @@ func (c *catcherTx) ImportRoaringBits(index, field, view string, shard uint64, r
 	return c.b.ImportRoaringBits(index, field, view, shard, rit, clear, log, rowSize, data)
 }
 
-func (c *catcherTx) Dump(short bool) {
-	c.b.Dump(short)
+func (c *catcherTx) Dump(short bool, shard uint64) {
+	c.b.Dump(short, shard)
 }
 
 func (c *catcherTx) Readonly() bool {

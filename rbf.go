@@ -426,8 +426,8 @@ func (tx *RBFTx) Pointer() string {
 	return fmt.Sprintf("%p", tx)
 }
 
-func (tx *RBFTx) Dump(short bool) {
-	tx.tx.Dump(short)
+func (tx *RBFTx) Dump(short bool, shard uint64) {
+	tx.tx.Dump(short, shard)
 }
 
 // Readonly is true if the transaction is not read-and-write, but only doing reads.

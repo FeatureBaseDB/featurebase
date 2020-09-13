@@ -173,7 +173,7 @@ var workQueue = make(chan struct{}, runtime.NumCPU()*2)
 // replaces v.openFragments() with Tx generic code.
 func (v *view) openFragmentsInTx() error {
 
-	shards, err := DBPerShardGetShardsForIndex(v.idx, v.path)
+	shards, err := v.holder.txf.GetShardsForIndex(v.idx, v.path)
 	if err != nil {
 		return errors.Wrap(err, "DBPerShardGetShardsForIndex()")
 	}

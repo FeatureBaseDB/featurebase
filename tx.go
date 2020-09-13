@@ -202,7 +202,7 @@ type Tx interface {
 	Group() *TxGroup
 
 	// Dump is for debugging, what does this Tx see as its database?
-	Dump(short bool)
+	Dump(short bool, shard uint64)
 
 	// Options returns the options used to create this Tx. This
 	// can be implementd by embedding Txo, and Txo provides the

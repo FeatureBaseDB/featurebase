@@ -404,7 +404,7 @@ func (tx *LMDBTx) IsDone() (done bool) {
 	panic("lmdb only available on 64-bit arch")
 }
 
-func (tx *LMDBTx) Dump(short bool) {
+func (tx *LMDBTx) Dump(short bool, shard uint64) {
 	panic("lmdb only available on 64-bit arch")
 }
 

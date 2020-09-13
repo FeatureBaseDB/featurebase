@@ -691,8 +691,8 @@ func FormatQualifiedIndexName(index string) string {
 // Dump prints to stdout the contents of the roaring Containers
 // stored in idx. Mostly for debugging.
 func (idx *Index) Dump(label string) {
-	//fileline := FileLine(2)
-	fmt.Printf("\nDump: %v\n\n", label)
+	fileline := FileLine(2)
+	fmt.Printf("\n%v Dump: %v\n\n", fileline, label)
 	idx.holder.txf.dbPerShard.DumpAll()
 }
 

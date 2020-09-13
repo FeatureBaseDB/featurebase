@@ -1575,7 +1575,7 @@ func (tx *LMDBTx) countBitsSet(bkey []byte) (n int) {
 	return
 }
 
-func (tx *LMDBTx) Dump(short bool) {
+func (tx *LMDBTx) Dump(short bool, shard uint64) {
 	fmt.Printf("%v\n", stringifiedLMDBKeysTx(tx, short))
 }
 
@@ -1650,11 +1650,11 @@ func (w *LMDBWrapper) DeleteField(index, field, fieldPath string) (err error) {
 	// under blue-green roaring_lmdb, the directory will not be found, b/c roaring will have
 	// already done the os.RemoveAll().	BUT, RemoveAll returns nil error in this case. Docs:
 	// "If the path does not exist, RemoveAll returns nil (no error)"
-	//w.DeleteDBPath(&DBShard{Path: fieldPath})
-	//if err != nil {
-	//return errors.Wrap(err, "removing directory")
-	//}
 
+	err = os.RemoveAll(fieldPath)
+	if err != nil {
+		return errors.Wrap(err, "removing directory")
+	}
 	prefix := txkey.FieldPrefix(index, field)
 	return w.DeletePrefix(prefix)
 }

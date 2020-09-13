@@ -28,8 +28,6 @@ import (
 	"github.com/pilosa/pilosa/v2/test"
 )
 
-var sep = string(os.PathSeparator)
-
 func skipForNonLMDB(t *testing.T) {
 	src := os.Getenv("PILOSA_TXSRC")
 	if src != "lmdb" {
@@ -62,13 +60,15 @@ func Test_DBPerShard_multiple_shards_used(t *testing.T) {
 	hldr.SetBit(index, "general", 11, ShardWidth+2)
 
 	types := pilosa.MustTxsrcToTxtype("lmdb")
-	tx_suffix := types[0].FileSuffix()
-	root := hldr.Path() + sep + index
-	shards := []string{"0000", "0001", "0002"}
+	idx := hldr.Index(index)
+	shardsU := []uint64{0, 1, 2}
 	pathShard := []string{}
+
 	// check that 3 different shard databases/files were made
 	for i := 0; i < 2; i++ {
-		path := root + sep + shards[i] + tx_suffix
+
+		path, err := hldr.Txf().GetDBShardPath(index, shardsU[i], idx, types[0], !writable)
+		panicOn(err)
 		pathShard = append(pathShard, path)
 
 		if !DirExists(pathShard[i]) {
