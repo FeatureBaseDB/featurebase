@@ -707,7 +707,7 @@ func TestIntField_MinMaxForShard(t *testing.T) {
 // Ensure we get errors when they are expected.
 func TestDecimalField_MinMaxBoundaries(t *testing.T) {
 	th := newTestHolder(t)
-	defer th.Close()
+
 	for i, test := range []struct {
 		scale  int64
 		min    pql.Decimal

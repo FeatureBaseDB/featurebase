@@ -101,7 +101,7 @@ func mustOpenEmptyLMDBWrapper(path string) (w *LMDBWrapper, cleaner func()) {
 
 	return w, func() {
 		w.Close()
-		panicOn(w.DeleteDBPath(&DBShard{Path: fn}))
+		panicOn(w.DeleteDBPath(&DBShard{HolderPath: fn}))
 	}
 }
 

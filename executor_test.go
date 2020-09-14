@@ -535,7 +535,10 @@ func TestExecutor_Execute_Count(t *testing.T) {
 }
 
 func roaringOnlyTest(t *testing.T) {
-	if os.Getenv("PILOSA_TXSRC") != "roaring" {
+	src := os.Getenv("PILOSA_TXSRC")
+	if src == pilosa.RoaringTxn || (pilosa.DefaultTxsrc == pilosa.RoaringTxn && src == "") {
+		// okay to run, we are under roaring only
+	} else {
 		t.Skip("skip for everything but roaring")
 	}
 }
