@@ -268,6 +268,19 @@ func TestFragment_SetRow(t *testing.T) {
 	} else if n := f.mustRow(tx, rowID).Count(); n != 3 {
 		t.Fatalf("unexpected count (reopen): %d", n)
 	}
+
+	// verify that setting something from a row which lacks a segment for
+	// this fragment's shard still clears this fragment correctly.
+	notOurs := NewRow(8*ShardWidth + 1024)
+	if changed, err := f.unprotectedSetRow(tx, notOurs, rowID); err != nil {
+		t.Fatal(err)
+	} else if !changed {
+		t.Fatalf("setRow didn't report a change")
+	}
+	if cols := f.mustRow(tx, rowID).Columns(); len(cols) != 0 {
+		t.Fatalf("expected setting a row with no entries to clear the cache")
+	}
+	panicOn(tx.Commit())
 }
 
 // Ensure a fragment can set & read a value.
@@ -2853,7 +2866,7 @@ func BenchmarkImportRoaring(b *testing.B) {
 						// care whether this succeeds,
 						// but if it's happening we want
 						// it to be done.
-						_ = defaultSnapshotQueue.Await(f)
+						_ = f.holder.SnapshotQueue.Await(f)
 						f.Clean(b)
 						b.Fatalf("import error: %v", err)
 					}
@@ -2897,7 +2910,7 @@ func BenchmarkImportRoaringConcurrent(b *testing.B) {
 								err := frags[j].importRoaringT(txs[j], data[j], false)
 								// error unimportant if it happened, but we want
 								// any snapshots to have finished.
-								_ = defaultSnapshotQueue.Await(frags[j])
+								_ = frags[j].holder.SnapshotQueue.Await(frags[j])
 								return err
 							})
 						}
@@ -2942,7 +2955,7 @@ func BenchmarkImportRoaringUpdateConcurrent(b *testing.B) {
 								if err != nil {
 									b.Fatalf("importing roaring: %v", err)
 								}
-								err = defaultSnapshotQueue.Immediate(frags[j])
+								err = frags[j].holder.SnapshotQueue.Immediate(frags[j])
 								if err != nil {
 									b.Fatalf("snapshot after import: %v", err)
 								}
@@ -2955,7 +2968,7 @@ func BenchmarkImportRoaringUpdateConcurrent(b *testing.B) {
 									defer txs[j].Rollback()
 
 									err := frags[j].importRoaringT(txs[j], updata, false)
-									err2 := defaultSnapshotQueue.Await(frags[j])
+									err2 := frags[j].holder.SnapshotQueue.Await(frags[j])
 									if err == nil {
 										err = err2
 									}
@@ -3029,7 +3042,7 @@ func BenchmarkImportRoaringUpdate(b *testing.B) {
 						if err != nil {
 							b.Errorf("import error: %v", err)
 						}
-						err = defaultSnapshotQueue.Immediate(f)
+						err = f.holder.SnapshotQueue.Immediate(f)
 						if err != nil {
 							b.Errorf("snapshot after import error: %v", err)
 						}
@@ -3039,7 +3052,7 @@ func BenchmarkImportRoaringUpdate(b *testing.B) {
 							f.Clean(b)
 							b.Errorf("import error: %v", err)
 						}
-						err = defaultSnapshotQueue.Await(f)
+						err = f.holder.SnapshotQueue.Await(f)
 						if err != nil {
 							b.Errorf("snapshot after import error: %v", err)
 						}
@@ -3402,7 +3415,7 @@ func (f *fragment) Clean(t testing.TB) {
 		// badger doesn't need snapshot, so this stuff is skipped.
 		// The snapshot queue stuff doesn't work under badger.
 		if f.idx.NeedsSnapshot() {
-			err := defaultSnapshotQueue.Await(f)
+			err := f.holder.SnapshotQueue.Await(f)
 			if err != nil {
 				t.Fatalf("snapshot failed before sanity check: %v", err)
 			}
@@ -4228,7 +4241,7 @@ func TestUnionInPlaceMapped(t *testing.T) {
 	// it's used only in computation of things that usually don't go to
 	// disk, which is why we handle this specially in testing and not
 	// generically.
-	err = defaultSnapshotQueue.Immediate(f)
+	err = f.holder.SnapshotQueue.Immediate(f)
 	if err != nil {
 		t.Fatalf("snapshot after union-in-place: %v", err)
 	}
