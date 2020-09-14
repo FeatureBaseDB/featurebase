@@ -72,6 +72,9 @@ testvsub-race:
            cd ..; \
         done
 
+tour:
+	./tournament.sh
+
 bench:
 	go test ./... -bench=. -run=NoneZ -timeout=127m $(TESTFLAGS)
 

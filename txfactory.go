@@ -827,6 +827,9 @@ func (idx *Index) StringifiedRoaringKeys(hashOnly, showOps bool, o Txo) (r strin
 		if err != nil {
 			continue // ignore .meta paths
 		}
+		if shard != o.Shard {
+			continue // only print the shard the Txo is on.
+		}
 		abspath := idx.path + sep + relpath
 
 		s, _, err := stringifiedRawRoaringFragment(abspath, index, field, view, shard, showOps, hashOnly, os.Stdout)
@@ -839,7 +842,7 @@ func (idx *Index) StringifiedRoaringKeys(hashOnly, showOps bool, o Txo) (r strin
 		n++
 	}
 	if n == 0 {
-		return "" // new convention that empty database => empty string returned.
+		return "<empty roaring data>"
 	}
 	// note that we can have a bitmap present, but it can be empty
 	r += "]\n   all-in-blake3:" + hash.Blake3sum16([]byte(r)) + "\n"
@@ -1197,14 +1200,19 @@ func (f *TxFactory) green2blue(holder *Holder) (err error) {
 
 	for _, idx := range idxs {
 
-		blueShards, err := TypedDBPerShardGetLocalShardsForIndex(blueDest, idx, "")
+		// scan directories
+		blueShards, err := f.dbPerShard.TypedDBPerShardGetShardsForIndex(blueDest, idx, "")
 		if err != nil {
 			return errors.Wrap(err, fmt.Sprintf("GetDBShard(index='%v') error fetching blueShards", idx.name))
 		}
-		greenShards, err := TypedDBPerShardGetLocalShardsForIndex(greenSrc, idx, "")
+		//vv("from blueDest='%v', blueShards = '%#v'", blueDest, blueShards)
+
+		// scan directories
+		greenShards, err := f.dbPerShard.TypedDBPerShardGetShardsForIndex(greenSrc, idx, "")
 		if err != nil {
 			return errors.Wrap(err, fmt.Sprintf("GetDBShard(index='%v') error fetching greenShards", idx.name))
 		}
+		//vv("from greenSrc='%v', greenShards = '%#v'", greenSrc, greenShards)
 
 		diff := f.shardSliceDiff(blueShards, greenShards)
 		if diff != "" {
@@ -1270,5 +1278,14 @@ func (f *TxFactory) shardSliceDiff(blueShards, greenShards []uint64) (diff strin
 		return ""
 	}
 	diff += fmt.Sprintf("shard diff: blueMinusGreen shards: '%#v'; greenMinusBlue shards: '%#v'", bmg, gmb)
+	return
+}
+
+func (f *TxFactory) GetDBShardPath(index string, shard uint64, idx *Index, ty txtype, write bool) (shardPath string, err error) {
+	dbs, err := f.dbPerShard.GetDBShard(index, shard, idx)
+	if err != nil {
+		return "", errors.Wrap(err, fmt.Sprintf("GetDBShardPath(index='%v', shard='%v', ty='%v')", index, shard, ty.String()))
+	}
+	shardPath = dbs.pathForType(ty)
 	return
 }

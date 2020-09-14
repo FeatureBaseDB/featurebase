@@ -1334,10 +1334,10 @@ func (si *emptyContainerIterator) Value() (uint64, *roaring.Container) {
 	panic("emptyContainerIterator never has any Values")
 }
 
-func (tx *Tx) Dump(short bool) {
-	fmt.Println(tx.DumpString(short))
+func (tx *Tx) Dump(short bool, shard uint64) {
+	fmt.Println(tx.DumpString(short, shard))
 }
-func (tx *Tx) DumpString(short bool) (r string) {
+func (tx *Tx) DumpString(short bool, shard uint64) (r string) {
 
 	r = "allkeys:[\n"
 

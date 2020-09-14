@@ -195,7 +195,7 @@ func (dbs *DBShard) DeleteDBPath() (err error) {
 type DBPerShard struct {
 	Mu sync.Mutex
 
-	Dir string // holder dir
+	HolderDir string
 
 	dbh *DBHolder
 
@@ -260,7 +260,7 @@ func (txf *TxFactory) NewDBPerShard(types []txtype, holderDir string) (d *DBPerS
 
 	d = &DBPerShard{
 		types:       types,
-		Dir:         holderDir,
+		HolderDir:   holderDir,
 		dbh:         NewDBHolder(),
 		Flatmap:     make(map[*DBShard]struct{}),
 		txf:         txf,
@@ -340,7 +340,7 @@ func (dbs *DBShard) DumpAll() {
 		panicOn(err)
 		defer tx.Rollback()
 		fmt.Printf("\n============= dumping dbs.W[%v] %v ========\n", i, ty)
-		tx.Dump(short)
+		tx.Dump(short, dbs.Shard)
 
 		switch ty {
 		case roaringTxn:
@@ -367,14 +367,29 @@ func (per *DBPerShard) DumpAll() {
 		}
 	}
 	if !found1 {
-		AlwaysPrintf("DBPerShard.DumpAll() sees no databases. dir='%v'", per.Dir)
+		AlwaysPrintf("DBPerShard.DumpAll() sees no databases. dir='%v'", per.HolderDir)
 	}
 }
 
+// if you know the shard, you can use this
+// pathForType and prefixForType must be kept in sync!
 func (dbs *DBShard) pathForType(ty txtype) string {
 	// top level paths will end in "@@"
-	return dbs.HolderPath + sep + dbs.Index + ".index.txstores@@@" + sep + "store" + ty.FileSuffix() + "@" + sep + fmt.Sprintf("shard.%04v", dbs.Shard)
+
+	// what here for roaring? well, roaringRegistrar.OpenDBWrapper()
+	// is a no-op anyhow. so doesn't need to be correct atm.
+
+	return dbs.HolderPath + sep + dbs.Index + ".index.txstores@@@" + sep + "store" + ty.FileSuffix() + "@" + sep + fmt.Sprintf("shard.%04v%v", dbs.Shard, ty.FileSuffix())
 }
+
+// if you don't know the shard, you have to use this.
+// prefixForType and pathForType must be kept in sync!
+func (per *DBPerShard) prefixForType(idx *Index, ty txtype) string {
+	// top level paths will end in "@@"
+	return per.HolderDir + sep + idx.name + ".index.txstores@@@" + sep + "store" + ty.FileSuffix() + "@" + sep
+}
+
+var ErrNoData = fmt.Errorf("no data")
 
 func (per *DBPerShard) GetDBShard(index string, shard uint64, idx *Index) (dbs *DBShard, err error) {
 
@@ -398,12 +413,11 @@ func (per *DBPerShard) GetDBShard(index string, shard uint64, idx *Index) (dbs *
 			ParentDBIndex: dbi,
 			Index:         index,
 			Shard:         shard,
-			HolderPath:    per.Dir,
-			//Path:          per.Path(index, shard),
-			idx:         idx,
-			per:         per,
-			useOpenList: per.useOpenList,
-			hasRoaring:  per.hasRoaring,
+			HolderPath:    per.HolderDir,
+			idx:           idx,
+			per:           per,
+			useOpenList:   per.useOpenList,
+			hasRoaring:    per.hasRoaring,
 		}
 		dbi.Shard[shard] = dbs
 	}
@@ -422,8 +436,8 @@ func (per *DBPerShard) GetDBShard(index string, shard uint64, idx *Index) (dbs *
 			default:
 				panic(fmt.Sprintf("unknown txtyp: '%v'", ty))
 			}
-
-			w, err := registry.OpenDBWrapper(dbs.pathForType(ty), DetectMemAccessPastTx)
+			path := dbs.pathForType(ty)
+			w, err := registry.OpenDBWrapper(path, DetectMemAccessPastTx)
 			panicOn(err)
 			h := idx.Holder()
 			w.SetHolder(h)
@@ -466,20 +480,48 @@ func (per *DBPerShard) Close() (err error) {
 	return
 }
 
-// DBPerShardGetShardsForIndex returns the indexes from the B (green) database if
-// blue-green comparison is in use, rather than from the A (blue) database.
-func DBPerShardGetShardsForIndex(idx *Index, roaringViewPath string) (sliceOfShards []uint64, err error) {
+// DBPerShardGetShardsForIndex returns the shards for idx.
+func (f *TxFactory) GetShardsForIndex(idx *Index, roaringViewPath string) (sliceOfShards []uint64, err error) {
 
-	// follow the blueGreen convention of returning the answer for 'B' or
-	// the last wrapper type.
-	types := idx.holder.txf.Types()
-	ty := types[len(types)-1]
-	return TypedDBPerShardGetLocalShardsForIndex(ty, idx, roaringViewPath)
+	var shards [][]uint64
+	for _, ty := range f.types {
+		var slc []uint64
+		slc, err = f.dbPerShard.TypedDBPerShardGetShardsForIndex(ty, idx, roaringViewPath)
+		if err != nil {
+			return
+		}
+		shards = append(shards, slc)
+	}
+	n := len(f.types)
+	if n != 1 && n != 2 {
+		panic(fmt.Sprintf("internal error. only green or blue/green supported. we see types len %v", n))
+	}
+	if !f.blueGreenOff && n == 2 {
+		// this is a blue green check which cannot live inside Tx because we don't know the shard yet.
+		// Therefore it has to be above Tx, since we are getting all the shards to choose from here.
+		//
+		// But, we still want to check for blue-green consistency. In fact, this was written
+		// in response to an issue with balancing/re-balancing shards being different
+		// over the cluster of nodes between blue and green.
+
+		b := sliceToMap(shards[0])
+		g := sliceToMap(shards[1])
+		blueMinusGreenDiff := mapDiff(b, g)
+		greenMinusBlueDiff := mapDiff(g, b)
+		if len(blueMinusGreenDiff) == 0 && len(greenMinusBlueDiff) == 0 {
+			// ok
+		} else {
+			vv("blue[%v] and green[%v] have different shards for index '%v': blueMinusGreenDiff: %v, greenMinusBlueDiff: %v;  blueShards='%v', greenShards='%v'; idx.path='%v'", f.types[0].String(), f.types[1].String(), idx.name, blueMinusGreenDiff, greenMinusBlueDiff, asInts(shards[0]), asInts(shards[1]), idx.path)
+			panic(fmt.Sprintf("blue[%v] and green[%v] have different shards for index '%v': blueMinusGreenDiff: %v, greenMinusBlueDiff: %v;  blueShards='%v', greenShards='%v'; idx.path='%v'", f.types[0].String(), f.types[1].String(), idx.name, blueMinusGreenDiff, greenMinusBlueDiff, asInts(shards[0]), asInts(shards[1]), idx.path))
+		}
+	}
+	// If we are populating blue from green, it does matter that we return green.
+	return shards[n-1], nil
 }
 
 // if roaringViewPath is "" then for ty == roaringTxn we go to disk to discover
 // all the view paths under idx for type ty.
-func TypedDBPerShardGetLocalShardsForIndex(ty txtype, idx *Index, roaringViewPath string) (sliceOfShards []uint64, err error) {
+func (per *DBPerShard) TypedDBPerShardGetShardsForIndex(ty txtype, idx *Index, roaringViewPath string) (sliceOfShards []uint64, err error) {
 
 	if ty == roaringTxn {
 		rx := &RoaringTx{
@@ -503,7 +545,8 @@ func TypedDBPerShardGetLocalShardsForIndex(ty txtype, idx *Index, roaringViewPat
 		return rx.SliceOfShards("", "", "", roaringViewPath)
 	}
 	requiredSuffix := ty.FileSuffix()
-	path := idx.Path()
+	//path := idx.Path()
+	path := per.prefixForType(idx, ty)
 
 	ignoreEmpty := false
 	includeRoot := true
@@ -517,8 +560,13 @@ func TypedDBPerShardGetLocalShardsForIndex(ty txtype, idx *Index, roaringViewPat
 			panic(fmt.Sprintf("should have 2 parts: nm='%v', base(nm)='%v'; requiredSuffix='%v'", nm, base, requiredSuffix))
 		}
 		prefix := splt[0]
+		const shardPrefix = "shard."
+		const lenOfShardPrefix = len(shardPrefix)
+		if !strings.HasPrefix(prefix, shardPrefix) {
+			continue
+		}
 		// Parse filename into integer.
-		shard, err := strconv.ParseUint(prefix, 10, 64)
+		shard, err := strconv.ParseUint(prefix[lenOfShardPrefix:], 10, 64)
 		if err != nil {
 			continue
 		}
@@ -528,8 +576,11 @@ func TypedDBPerShardGetLocalShardsForIndex(ty txtype, idx *Index, roaringViewPat
 }
 
 func listDirUnderDir(root string, includeRoot bool, requiredSuffix string, ignoreEmpty bool) (files []string, err error) {
+	//vv("listDirUnderDir(root ='%v', suffix='%v')", root, requiredSuffix)
 	if !dirExists(root) {
-		return nil, fmt.Errorf("listFilesUnderDir error: root directory '%v' not found", root)
+		//vv("warning: listFilesUnderDir error: root directory '%v' not found", root)
+		//return nil, fmt.Errorf("listFilesUnderDir error: root directory '%v' not found", root)
+		return
 	}
 	n := len(root) + 1
 	if includeRoot {

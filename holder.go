@@ -675,7 +675,7 @@ func (h *Holder) Open() error {
 
 	// under blue_green, we must sync blue from green before we turn on checking.
 	if err := h.txf.green2blue(h); err != nil {
-		return errors.Wrap(err, "Holder.Open h.txf.UpdateBlueFromGreen(h)")
+		return errors.Wrap(err, "Holder.Open h.txf.green2blue(h)")
 	}
 	h.txf.blueGreenOnIfRunningBlueGreen()
 

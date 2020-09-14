@@ -64,9 +64,9 @@ func TestShardPerDB_SetBit(t *testing.T) {
 	}
 }
 
-// test that we find all shards
-func Test_DBPerShard_GetShardsForIndex(t *testing.T) {
-	tmpdir, err := ioutil.TempDir("", "TestDBPerShardGetShardsForIndex")
+// test that we find all *local* shards
+func Test_DBPerShard_GetShardsForIndex_LocalOnly(t *testing.T) {
+	tmpdir, err := ioutil.TempDir("", "Test_DBPerShard_GetShardsForIndex_LocalOnly")
 	panicOn(err)
 
 	orig := os.Getenv("PILOSA_TXSRC")
@@ -84,7 +84,7 @@ func Test_DBPerShard_GetShardsForIndex(t *testing.T) {
 		estd := "rick/_exists/views/standard"
 		std := "rick/f/views/standard"
 
-		sos, err := DBPerShardGetShardsForIndex(idx, tmpdir+sep+std)
+		sos, err := holder.txf.GetShardsForIndex(idx, tmpdir+sep+std)
 		panicOn(err)
 		for _, shard := range []uint64{93, 223, 221, 215, 219, 217} {
 			if !inSlice(sos, shard) {
@@ -93,7 +93,7 @@ func Test_DBPerShard_GetShardsForIndex(t *testing.T) {
 		}
 		if src == "roaring" {
 			// check estd too
-			sos, err = DBPerShardGetShardsForIndex(idx, tmpdir+sep+estd)
+			sos, err = holder.txf.GetShardsForIndex(idx, tmpdir+sep+estd)
 			panicOn(err)
 			for _, shard := range []uint64{93, 223, 221, 215, 219, 217} {
 				if !inSlice(sos, shard) {
@@ -137,58 +137,58 @@ rick/_exists/views/standard/fragments/219
 rick/_exists/views/standard/fragments/223
 `,
 	"lmdb": `
-rick/0219-lmdb@/data.mdb
-rick/0219-lmdb@/lock.mdb
-rick/0093-lmdb@/data.mdb
-rick/0093-lmdb@/lock.mdb
-rick/0223-lmdb@/data.mdb
-rick/0223-lmdb@/lock.mdb
-rick/0215-lmdb@/data.mdb
-rick/0215-lmdb@/lock.mdb
-rick/0217-lmdb@/data.mdb
-rick/0217-lmdb@/lock.mdb
-rick/0221-lmdb@/data.mdb
-rick/0221-lmdb@/lock.mdb
+rick.index.txstores@@@/store-lmdb@@/shard.0219-lmdb@/data.mdb
+rick.index.txstores@@@/store-lmdb@@/shard.0219-lmdb@/lock.mdb
+rick.index.txstores@@@/store-lmdb@@/shard.0093-lmdb@/data.mdb
+rick.index.txstores@@@/store-lmdb@@/shard.0093-lmdb@/lock.mdb
+rick.index.txstores@@@/store-lmdb@@/shard.0223-lmdb@/data.mdb
+rick.index.txstores@@@/store-lmdb@@/shard.0223-lmdb@/lock.mdb
+rick.index.txstores@@@/store-lmdb@@/shard.0215-lmdb@/data.mdb
+rick.index.txstores@@@/store-lmdb@@/shard.0215-lmdb@/lock.mdb
+rick.index.txstores@@@/store-lmdb@@/shard.0217-lmdb@/data.mdb
+rick.index.txstores@@@/store-lmdb@@/shard.0217-lmdb@/lock.mdb
+rick.index.txstores@@@/store-lmdb@@/shard.0221-lmdb@/data.mdb
+rick.index.txstores@@@/store-lmdb@@/shard.0221-lmdb@/lock.mdb
 `,
 	"badger": `
-rick/0219-badgerdb@/000000.vlog
-rick/0219-badgerdb@/KEYREGISTRY
-rick/0219-badgerdb@/MANIFEST
-rick/0219-badgerdb@/LOCK
-rick/0221-badgerdb@/000000.vlog
-rick/0221-badgerdb@/KEYREGISTRY
-rick/0221-badgerdb@/MANIFEST
-rick/0221-badgerdb@/LOCK
-rick/0223-badgerdb@/000000.vlog
-rick/0223-badgerdb@/KEYREGISTRY
-rick/0223-badgerdb@/MANIFEST
-rick/0223-badgerdb@/LOCK
-rick/0093-badgerdb@/000000.vlog
-rick/0093-badgerdb@/KEYREGISTRY
-rick/0093-badgerdb@/MANIFEST
-rick/0093-badgerdb@/LOCK
-rick/0217-badgerdb@/000000.vlog
-rick/0217-badgerdb@/KEYREGISTRY
-rick/0217-badgerdb@/MANIFEST
-rick/0217-badgerdb@/LOCK
-rick/0215-badgerdb@/000000.vlog
-rick/0215-badgerdb@/KEYREGISTRY
-rick/0215-badgerdb@/MANIFEST
-rick/0215-badgerdb@/LOCK
+rick.index.txstores@@@/store-badgerdb@@/shard.0219-badgerdb@/000000.vlog
+rick.index.txstores@@@/store-badgerdb@@/shard.0219-badgerdb@/KEYREGISTRY
+rick.index.txstores@@@/store-badgerdb@@/shard.0219-badgerdb@/MANIFEST
+rick.index.txstores@@@/store-badgerdb@@/shard.0219-badgerdb@/LOCK
+rick.index.txstores@@@/store-badgerdb@@/shard.0221-badgerdb@/000000.vlog
+rick.index.txstores@@@/store-badgerdb@@/shard.0221-badgerdb@/KEYREGISTRY
+rick.index.txstores@@@/store-badgerdb@@/shard.0221-badgerdb@/MANIFEST
+rick.index.txstores@@@/store-badgerdb@@/shard.0221-badgerdb@/LOCK
+rick.index.txstores@@@/store-badgerdb@@/shard.0223-badgerdb@/000000.vlog
+rick.index.txstores@@@/store-badgerdb@@/shard.0223-badgerdb@/KEYREGISTRY
+rick.index.txstores@@@/store-badgerdb@@/shard.0223-badgerdb@/MANIFEST
+rick.index.txstores@@@/store-badgerdb@@/shard.0223-badgerdb@/LOCK
+rick.index.txstores@@@/store-badgerdb@@/shard.0093-badgerdb@/000000.vlog
+rick.index.txstores@@@/store-badgerdb@@/shard.0093-badgerdb@/KEYREGISTRY
+rick.index.txstores@@@/store-badgerdb@@/shard.0093-badgerdb@/MANIFEST
+rick.index.txstores@@@/store-badgerdb@@/shard.0093-badgerdb@/LOCK
+rick.index.txstores@@@/store-badgerdb@@/shard.0217-badgerdb@/000000.vlog
+rick.index.txstores@@@/store-badgerdb@@/shard.0217-badgerdb@/KEYREGISTRY
+rick.index.txstores@@@/store-badgerdb@@/shard.0217-badgerdb@/MANIFEST
+rick.index.txstores@@@/store-badgerdb@@/shard.0217-badgerdb@/LOCK
+rick.index.txstores@@@/store-badgerdb@@/shard.0215-badgerdb@/000000.vlog
+rick.index.txstores@@@/store-badgerdb@@/shard.0215-badgerdb@/KEYREGISTRY
+rick.index.txstores@@@/store-badgerdb@@/shard.0215-badgerdb@/MANIFEST
+rick.index.txstores@@@/store-badgerdb@@/shard.0215-badgerdb@/LOCK
 `,
 	"rbf": `
-rick/0223-rbfdb@/wal/0000000000000001.wal
-rick/0223-rbfdb@/data
-rick/0093-rbfdb@/wal/0000000000000001.wal
-rick/0093-rbfdb@/data
-rick/0217-rbfdb@/wal/0000000000000001.wal
-rick/0217-rbfdb@/data
-rick/0215-rbfdb@/wal/0000000000000001.wal
-rick/0215-rbfdb@/data
-rick/0221-rbfdb@/wal/0000000000000001.wal
-rick/0221-rbfdb@/data
-rick/0219-rbfdb@/wal/0000000000000001.wal
-rick/0219-rbfdb@/data
+rick.index.txstores@@@/store-rbfdb@@/shard.0223-rbfdb@/wal/0000000000000001.wal
+rick.index.txstores@@@/store-rbfdb@@/shard.0223-rbfdb@/data
+rick.index.txstores@@@/store-rbfdb@@/shard.0093-rbfdb@/wal/0000000000000001.wal
+rick.index.txstores@@@/store-rbfdb@@/shard.0093-rbfdb@/data
+rick.index.txstores@@@/store-rbfdb@@/shard.0217-rbfdb@/wal/0000000000000001.wal
+rick.index.txstores@@@/store-rbfdb@@/shard.0217-rbfdb@/data
+rick.index.txstores@@@/store-rbfdb@@/shard.0215-rbfdb@/wal/0000000000000001.wal
+rick.index.txstores@@@/store-rbfdb@@/shard.0215-rbfdb@/data
+rick.index.txstores@@@/store-rbfdb@@/shard.0221-rbfdb@/wal/0000000000000001.wal
+rick.index.txstores@@@/store-rbfdb@@/shard.0221-rbfdb@/data
+rick.index.txstores@@@/store-rbfdb@@/shard.0219-rbfdb@/wal/0000000000000001.wal
+rick.index.txstores@@@/store-rbfdb@@/shard.0219-rbfdb@/data
 `,
 }
 

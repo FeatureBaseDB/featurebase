@@ -55,8 +55,10 @@ func (tx *RoaringTx) Type() string {
 	return RoaringTxn
 }
 
-func (tx *RoaringTx) Dump(short bool) {
-	fmt.Printf("%v\n", tx.Index.StringifiedRoaringKeys(short, false, tx.o))
+func (tx *RoaringTx) Dump(short bool, shard uint64) {
+	o := tx.o
+	o.Shard = shard
+	fmt.Printf("%v\n", tx.Index.StringifiedRoaringKeys(short, false, o))
 }
 
 func (tx *RoaringTx) UseRowCache() bool {
@@ -188,6 +190,7 @@ func (tx *RoaringTx) RemoveContainer(index, field, view string, shard uint64, ke
 }
 
 func (tx *RoaringTx) Add(index, field, view string, shard uint64, batched bool, a ...uint64) (changeCount int, err error) {
+	//vv("RoaringTx.Add(index='%v', shard='%v') stack=\n%v", index, shard, stack())
 	b, err := tx.bitmap(index, field, view, shard)
 	if err != nil {
 		return 0, err

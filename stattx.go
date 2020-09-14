@@ -310,8 +310,8 @@ func (c *statTx) ImportRoaringBits(index, field, view string, shard uint64, rit 
 	return c.b.ImportRoaringBits(index, field, view, shard, rit, clear, log, rowSize, data)
 }
 
-func (c *statTx) Dump(short bool) {
-	c.b.Dump(short)
+func (c *statTx) Dump(short bool, shard uint64) {
+	c.b.Dump(short, shard)
 }
 
 func (c *statTx) Readonly() bool {

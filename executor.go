@@ -142,6 +142,7 @@ func (e *executor) Close() error {
 
 // Execute executes a PQL query.
 func (e *executor) Execute(ctx context.Context, index string, q *pql.Query, shards []uint64, opt *execOptions) (QueryResponse, error) {
+
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.Execute")
 	span.LogKV("pql", q.String())
 	defer span.Finish()
@@ -3834,15 +3835,15 @@ func (e *executor) executeClearBitField(ctx context.Context, qcx *Qcx, index str
 
 	shard := colID / ShardWidth
 
-	idx := e.Holder.Index(index)
-
-	tx, finisher := qcx.GetTx(Txo{Write: writable, Index: idx, Shard: shard})
-	defer finisher(&err)
-
 	ret := false
 	for _, node := range e.Cluster.shardNodes(index, shard) {
 		// Update locally if host matches.
 		if node.ID == e.Node.ID {
+
+			idx := e.Holder.Index(index)
+			tx, finisher := qcx.GetTx(Txo{Write: writable, Index: idx, Shard: shard})
+			defer finisher(&err)
+
 			val, err := f.ClearBit(tx, rowID, colID)
 			if err != nil {
 				return false, err
@@ -4109,7 +4110,7 @@ func (e *executor) executeSetRowShard(ctx context.Context, qcx *Qcx, index strin
 }
 
 // executeSet executes a Set() call.
-func (e *executor) executeSet(ctx context.Context, qcx *Qcx, index string, c *pql.Call, opt *execOptions) (_ bool, err error) {
+func (e *executor) executeSet(ctx context.Context, qcx *Qcx, index string, c *pql.Call, opt *execOptions) (_ bool, err0 error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeSet")
 	defer span.Finish()
 
@@ -4128,9 +4129,6 @@ func (e *executor) executeSet(ctx context.Context, qcx *Qcx, index string, c *pq
 
 	shard := colID / ShardWidth
 
-	tx, finisher := qcx.GetTx(Txo{Write: writable, Index: idx, Shard: shard})
-	defer finisher(&err)
-
 	// Read field name.
 	fieldName, err := c.FieldArg()
 	if err != nil {
@@ -4145,11 +4143,15 @@ func (e *executor) executeSet(ctx context.Context, qcx *Qcx, index string, c *pq
 
 	// Set column on existence field.
 	if ef := idx.existenceField(); ef != nil {
+		// we create tx here, rather than just above, to avoid creating an extra empty shard.
+		tx, finisher := qcx.GetTx(Txo{Write: writable, Index: idx, Shard: shard})
+		defer finisher(&err0)
+
 		if _, err := ef.SetBit(tx, 0, colID, nil); err != nil {
 			return false, errors.Wrap(err, "setting existence column")
 		}
+		finisher(nil) // commit to free of the write lock needed inside executeSetBitField
 	}
-	finisher(nil) // commit to free of the write lock needed inside executeSetBitField
 
 	switch f.Type() {
 	case FieldTypeInt, FieldTypeDecimal:
@@ -4206,13 +4208,14 @@ func (e *executor) executeSetBitField(ctx context.Context, qcx *Qcx, index strin
 	shard := colID / ShardWidth
 	ret := false
 
-	idx := e.Holder.Index(index)
-	tx, finisher := qcx.GetTx(Txo{Write: writable, Index: idx, Shard: shard})
-	defer finisher(&err0)
-
 	for _, node := range e.Cluster.shardNodes(index, shard) {
 		// Update locally if host matches.
 		if node.ID == e.Node.ID {
+
+			idx := e.Holder.Index(index)
+			tx, finisher := qcx.GetTx(Txo{Write: writable, Index: idx, Shard: shard})
+			defer finisher(&err0)
+
 			val, err := f.SetBit(tx, rowID, colID, timestamp)
 			if err != nil {
 				return false, err
@@ -4245,13 +4248,14 @@ func (e *executor) executeSetValueField(ctx context.Context, qcx *Qcx, index str
 	shard := colID / ShardWidth
 	ret := false
 
-	idx := e.Holder.Index(index)
-	tx, finisher := qcx.GetTx(Txo{Write: writable, Index: idx, Shard: shard})
-	defer finisher(&err)
-
 	for _, node := range e.Cluster.shardNodes(index, shard) {
 		// Update locally if host matches.
 		if node.ID == e.Node.ID {
+
+			idx := e.Holder.Index(index)
+			tx, finisher := qcx.GetTx(Txo{Write: writable, Index: idx, Shard: shard})
+			defer finisher(&err)
+
 			val, err := f.SetValue(tx, colID, value)
 			if err != nil {
 				return false, err
@@ -4284,13 +4288,14 @@ func (e *executor) executeClearValueField(ctx context.Context, qcx *Qcx, index s
 	shard := colID / ShardWidth
 	ret := false
 
-	idx := e.Holder.Index(index)
-	tx, finisher := qcx.GetTx(Txo{Write: writable, Index: idx, Shard: shard})
-	defer finisher(&err)
-
 	for _, node := range e.Cluster.shardNodes(index, shard) {
 		// Update locally if host matches.
 		if node.ID == e.Node.ID {
+
+			idx := e.Holder.Index(index)
+			tx, finisher := qcx.GetTx(Txo{Write: writable, Index: idx, Shard: shard})
+			defer finisher(&err)
+
 			val, err := f.ClearValue(tx, colID)
 			if err != nil {
 				return false, err
