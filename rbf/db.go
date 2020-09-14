@@ -800,6 +800,8 @@ func (db *DB) removeTx(tx *Tx) error {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
+	delete(tx.db.txs, tx)
+
 	// Write pages from WAL to DB.
 	// TODO(bbj): Move this to an async goroutine.
 	if tx.writable {
@@ -807,8 +809,6 @@ func (db *DB) removeTx(tx *Tx) error {
 			return err
 		}
 	}
-
-	delete(tx.db.txs, tx)
 
 	// Disassociate from db.
 	tx.db = nil

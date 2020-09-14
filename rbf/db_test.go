@@ -92,13 +92,24 @@ func TestDB_Recovery(t *testing.T) {
 		}
 
 		// Add one additional bit in a second transaction.
-		if tx, err := db.Begin(true); err != nil {
+		tx0, err := db.Begin(true)
+		if err != nil {
 			t.Fatal(err)
-		} else if _, err := tx.Add("x", uint64(len(a))); err != nil {
-			t.Fatal(err)
-		} else if err := tx.Commit(); err != nil {
+		} else if _, err := tx0.Add("x", uint64(len(a))); err != nil {
 			t.Fatal(err)
 		}
+
+		// Start a read-only transaction so the write tx does not checkpoint the WAL.
+		tx1, err := db.Begin(false)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Commit write transaction.
+		if err := tx0.Commit(); err != nil {
+			t.Fatal(err)
+		}
+		tx1.Rollback()
 
 		// Close database & truncate WAL to remove commit page & bitmap data page.
 		segment := db.ActiveWALSegment()
