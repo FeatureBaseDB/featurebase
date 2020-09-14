@@ -150,22 +150,25 @@ func (c *Cursor) CurrentPageType() int {
 	return cell.Type
 }
 
-func toContainer(l leafCell, tx *Tx) *roaring.Container {
+func toContainer(l leafCell, tx *Tx) (c *roaring.Container) {
 
 	orig := l.Data
 	var cpMaybe []byte
+	var mapped bool
 	if EnableRowCache || DoAllocZero {
 		// make a copy, otherwise the rowCache will see corrupted data
 		// or mmapped data that may disappear.
 		cpMaybe = make([]byte, len(orig))
 		copy(cpMaybe, orig)
+		mapped = false
 	} else {
 		// not a copy
 		cpMaybe = orig
+		mapped = true
 	}
 	switch l.Type {
 	case ContainerTypeArray:
-		return roaring.NewContainerArray(toArray16(cpMaybe))
+		c = roaring.NewContainerArray(toArray16(cpMaybe))
 	case ContainerTypeBitmapPtr:
 		_, bm, _ := tx.leafCellBitmap(toPgno(cpMaybe))
 		cloneMaybe := bm
@@ -173,13 +176,14 @@ func toContainer(l leafCell, tx *Tx) *roaring.Container {
 			cloneMaybe = make([]uint64, len(bm))
 			copy(cloneMaybe, bm)
 		}
-		return roaring.NewContainerBitmap(l.N, cloneMaybe)
+		c = roaring.NewContainerBitmap(l.N, cloneMaybe)
 	case ContainerTypeBitmap:
-		return roaring.NewContainerBitmap(l.N, toArray64(cpMaybe))
+		c = roaring.NewContainerBitmap(l.N, toArray64(cpMaybe))
 	case ContainerTypeRLE:
-		return roaring.NewContainerRun(toInterval16(cpMaybe))
+		c = roaring.NewContainerRun(toInterval16(cpMaybe))
 	}
-	return nil
+	c.SetMapped(mapped)
+	return c
 }
 
 type Nodetype int

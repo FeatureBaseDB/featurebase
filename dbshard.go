@@ -63,7 +63,8 @@ type DBRegistry interface {
 }
 
 type DBShard struct {
-	Path  string
+	HolderPath string
+
 	Index string
 	Shard uint64
 	Open  bool
@@ -118,8 +119,8 @@ func (dbs *DBShard) Close() (err error) {
 	return
 }
 
-func (dbs *DBShard) String() string {
-	return dbs.Path
+func (dbs *DBShard) HolderString() string {
+	return dbs.HolderPath
 }
 
 // Cleanup must be called at every commit/rollback of a Tx, in
@@ -234,7 +235,7 @@ func (per *DBPerShard) HasData(which int) (hasData bool, err error) {
 
 func (per *DBPerShard) ListOpenString() (r string) {
 	for v := range per.Flatmap {
-		r += v.Path + " -> " + v.W[per.useOpenList].OpenListString() + "\n"
+		r += v.HolderPath + " -> " + v.W[per.useOpenList].OpenListString() + "\n"
 	}
 	return
 }
@@ -282,9 +283,17 @@ func (per *DBPerShard) DeleteIndex(index string) (err error) {
 		return nil
 	}
 	for _, dbs := range dbi.Shard {
-		err := dbs.Close()
-		panicOn(err)
-		panicOn(os.RemoveAll(dbs.Path))
+		err = dbs.Close()
+		if err != nil {
+			return errors.Wrap(err, "DBPerShard.DeleteIndex dbs.Close()")
+		}
+		for _, ty := range per.types {
+			path := dbs.pathForType(ty)
+			err = os.RemoveAll(path)
+			if err != nil {
+				return errors.Wrap(err, fmt.Sprintf("DBPerShard.DeleteIndex os.RemoveAll('%v')", path))
+			}
+		}
 	}
 	return
 }
@@ -362,8 +371,9 @@ func (per *DBPerShard) DumpAll() {
 	}
 }
 
-func (per *DBPerShard) Path(index string, shard uint64) string {
-	return per.Dir + sep + index + sep + fmt.Sprintf("%04v", shard)
+func (dbs *DBShard) pathForType(ty txtype) string {
+	// top level paths will end in "@@"
+	return dbs.HolderPath + sep + dbs.Index + ".index.txstores@@@" + sep + "store" + ty.FileSuffix() + "@" + sep + fmt.Sprintf("shard.%04v", dbs.Shard)
 }
 
 func (per *DBPerShard) GetDBShard(index string, shard uint64, idx *Index) (dbs *DBShard, err error) {
@@ -388,11 +398,12 @@ func (per *DBPerShard) GetDBShard(index string, shard uint64, idx *Index) (dbs *
 			ParentDBIndex: dbi,
 			Index:         index,
 			Shard:         shard,
-			Path:          per.Path(index, shard),
-			idx:           idx,
-			per:           per,
-			useOpenList:   per.useOpenList,
-			hasRoaring:    per.hasRoaring,
+			HolderPath:    per.Dir,
+			//Path:          per.Path(index, shard),
+			idx:         idx,
+			per:         per,
+			useOpenList: per.useOpenList,
+			hasRoaring:  per.hasRoaring,
 		}
 		dbi.Shard[shard] = dbs
 	}
@@ -411,7 +422,8 @@ func (per *DBPerShard) GetDBShard(index string, shard uint64, idx *Index) (dbs *
 			default:
 				panic(fmt.Sprintf("unknown txtyp: '%v'", ty))
 			}
-			w, err := registry.OpenDBWrapper(dbs.Path, DetectMemAccessPastTx)
+
+			w, err := registry.OpenDBWrapper(dbs.pathForType(ty), DetectMemAccessPastTx)
 			panicOn(err)
 			h := idx.Holder()
 			w.SetHolder(h)
@@ -474,7 +486,8 @@ func TypedDBPerShardGetLocalShardsForIndex(ty txtype, idx *Index, roaringViewPat
 			Index: idx,
 		}
 		if roaringViewPath == "" {
-			for _, field := range idx.Fields() {
+			fields := idx.Fields()
+			for _, field := range fields {
 				for _, view := range field.views() {
 					sos, err := rx.SliceOfShards("", "", "", view.path)
 					if err != nil {

@@ -350,7 +350,8 @@ func (r *badgerRegistrar) OpenDBWrapper(bpath string, doAllocZero bool) (DBWrapp
 }
 
 func (w *BadgerDBWrapper) DeleteDBPath(dbs *DBShard) error {
-	panic("TODO")
+	path := dbs.pathForType(badgerTxn)
+	return os.RemoveAll(path)
 }
 
 // DeleteIndex deletes all the containers associated with
@@ -1627,7 +1628,7 @@ func (tx *BadgerTx) ImportRoaringBits(index, field, view string, shard uint64, i
 	return
 }
 
-func (tx *BadgerTx) toContainer(typ byte, v []byte) (r *roaring.Container) {
+func (tx *BadgerTx) toContainer(typ byte, v []byte) (c *roaring.Container) {
 
 	if len(v) == 0 {
 		return nil
@@ -1668,29 +1669,28 @@ func (tx *BadgerTx) toContainer(typ byte, v []byte) (r *roaring.Container) {
 
 	switch typ {
 	case roaring.ContainerArray:
-		c := roaring.NewContainerArray(toArray16(w))
+		c = roaring.NewContainerArray(toArray16(w))
 		if tx.doAllocZero {
 			// tx.acMu was acquired above, and Unlock deferred.
 			tx.ourContainers = append(tx.ourContainers, c)
 		}
-		return c
 	case roaring.ContainerBitmap:
-		c := roaring.NewContainerBitmap(-1, toArray64(w))
+		c = roaring.NewContainerBitmap(-1, toArray64(w))
 		if tx.doAllocZero {
 			// tx.acMu was acquired above, and Unlock deferred.
 			tx.ourContainers = append(tx.ourContainers, c)
 		}
-		return c
 	case roaring.ContainerRun:
-		c := roaring.NewContainerRun(toInterval16(w))
+		c = roaring.NewContainerRun(toInterval16(w))
 		if tx.doAllocZero {
 			// tx.acMu was acquired above, and Unlock deferred.
 			tx.ourContainers = append(tx.ourContainers, c)
 		}
-		return c
 	default:
 		panic(fmt.Sprintf("unknown container: %v", typ))
 	}
+	c.SetMapped(true)
+	return c
 }
 
 // StringifiedBadgerKeys returns a string with all the container

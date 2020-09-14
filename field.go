@@ -767,6 +767,11 @@ fileLoop:
 			if !fi.IsDir() {
 				continue
 			}
+			// Skip embedded db files too.
+			if f.holder.txf.IsTxDatabasePath(fi.Name()) {
+				continue
+			}
+
 			fieldQueue <- struct{}{}
 			eg.Go(func() error {
 				defer func() {

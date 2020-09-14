@@ -63,7 +63,7 @@ func skipForRoaring(t *testing.T) {
 	src := os.Getenv("PILOSA_TXSRC")
 	// once txfactory.go DefaultTxsrc != RoaringTxn, this
 	// will break, of course. Take out the src == "" below.
-	if src == "" || strings.Contains(src, "roaring") {
+	if (src == "" && pilosa.DefaultTxsrc == pilosa.RoaringTxn) || strings.Contains(src, "roaring") {
 		t.Skip("skip if roaring pseudo-txn involved -- won't show transactional rollback")
 	}
 }

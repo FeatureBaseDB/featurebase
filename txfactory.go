@@ -435,6 +435,10 @@ func (ty txtype) FileSuffix() string {
 }
 
 func (txf *TxFactory) IsTxDatabasePath(path string) bool {
+	if strings.HasSuffix(filepath.Base(path), ".txstores@@@") {
+		// top level dir
+		return true
+	}
 	for _, ty := range allTypesWithSuffixes {
 		if strings.HasSuffix(path, ty.FileSuffix()) {
 			return true

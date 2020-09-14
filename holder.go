@@ -725,12 +725,15 @@ func (h *Holder) processForeignIndexFields() error {
 // Close closes all open fragments.
 func (h *Holder) Close() error {
 
+	if h == nil {
+		return nil
+	}
 	defer h.stopBkgr()
 
 	if globalUseStatTx {
 		fmt.Printf("%v\n", globalCallStats.report())
 	}
-	if h.txf.blueGreenReg != nil {
+	if h.txf != nil && h.txf.blueGreenReg != nil {
 		h.txf.blueGreenReg.Close()
 	}
 
@@ -806,6 +809,11 @@ func (h *Holder) HasData() (bool, error) {
 		if !fi.IsDir() {
 			continue
 		}
+		// Skip embedded db files too.
+		if h.txf.IsTxDatabasePath(fi.Name()) {
+			continue
+		}
+
 		return true, nil
 	}
 	return false, nil

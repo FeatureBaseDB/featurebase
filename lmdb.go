@@ -1520,20 +1520,19 @@ func (tx *LMDBTx) toContainer(typ byte, v []byte) (r *roaring.Container) {
 	return ToContainer(typ, w)
 }
 
-func ToContainer(typ byte, w []byte) (r *roaring.Container) {
+func ToContainer(typ byte, w []byte) (c *roaring.Container) {
 	switch typ {
 	case roaring.ContainerArray:
-		c := roaring.NewContainerArray(toArray16(w))
-		return c
+		c = roaring.NewContainerArray(toArray16(w))
 	case roaring.ContainerBitmap:
-		c := roaring.NewContainerBitmap(-1, toArray64(w))
-		return c
+		c = roaring.NewContainerBitmap(-1, toArray64(w))
 	case roaring.ContainerRun:
-		c := roaring.NewContainerRun(toInterval16(w))
-		return c
+		c = roaring.NewContainerRun(toInterval16(w))
 	default:
 		panic(fmt.Sprintf("unknown container: %v", typ))
 	}
+	c.SetMapped(true)
+	return c
 }
 
 // StringifiedLMDBKeys returns a string with all the container
@@ -1629,11 +1628,13 @@ func stringifiedLMDBKeysTx(tx *LMDBTx, short bool) (r string) {
 }
 
 func (w *LMDBWrapper) DeleteDBPath(dbs *DBShard) (err error) {
-	path := dbs.Path
+	path := dbs.pathForType(lmdbTxn)
 	err = os.RemoveAll(path)
 	if err != nil {
 		return errors.Wrap(err, "DeleteDBPath")
 	}
+	// if we go back to flat instead of inside its own directory,
+	// there will be a second -lock file needing deletion too.
 	lockfile := path + "-lock"
 	if FileExists(lockfile) {
 		err = os.RemoveAll(lockfile)
@@ -1641,15 +1642,19 @@ func (w *LMDBWrapper) DeleteDBPath(dbs *DBShard) (err error) {
 	return
 }
 
-func (w *LMDBWrapper) DeleteField(index, field, fieldPath string) error {
+func (w *LMDBWrapper) DeleteField(index, field, fieldPath string) (err error) {
 
+	// TODO(jea) cleanup: I think this fieldPath delete just goes away now.
+	//  remove this commented stuff once we are sure.
+	//
 	// under blue-green roaring_lmdb, the directory will not be found, b/c roaring will have
 	// already done the os.RemoveAll().	BUT, RemoveAll returns nil error in this case. Docs:
 	// "If the path does not exist, RemoveAll returns nil (no error)"
-	err := w.DeleteDBPath(&DBShard{Path: fieldPath})
-	if err != nil {
-		return errors.Wrap(err, "removing directory")
-	}
+	//w.DeleteDBPath(&DBShard{Path: fieldPath})
+	//if err != nil {
+	//return errors.Wrap(err, "removing directory")
+	//}
+
 	prefix := txkey.FieldPrefix(index, field)
 	return w.DeletePrefix(prefix)
 }

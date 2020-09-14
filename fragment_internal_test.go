@@ -1696,13 +1696,19 @@ func TestFragment_RankCache_Persistence(t *testing.T) {
 }
 
 func roaringOnlyTest(t *testing.T) {
-	if os.Getenv("PILOSA_TXSRC") != "roaring" {
+	src := os.Getenv("PILOSA_TXSRC")
+	if src == RoaringTxn || (DefaultTxsrc == RoaringTxn && src == "") {
+		// okay to run, we are under roaring only
+	} else {
 		t.Skip("skip for everything but roaring")
 	}
 }
 
 func roaringOnlyBenchmark(b *testing.B) {
-	if os.Getenv("PILOSA_TXSRC") != "roaring" {
+	src := os.Getenv("PILOSA_TXSRC")
+	if src == RoaringTxn || (DefaultTxsrc == RoaringTxn && src == "") {
+		// okay to run, we are under roaring only
+	} else {
 		b.Skip("skip for everything but roaring")
 	}
 }
@@ -3161,6 +3167,7 @@ func BenchmarkImportIntoLargeFragment(b *testing.B) {
 		}
 		panicOn(tx.Commit())
 		f.Clean(b)
+		h.Close()
 	}
 }
 
@@ -3434,6 +3441,9 @@ func newTestHolder(tb testing.TB) *Holder {
 	path, _ := testhook.TempDirInDir(tb, *TempDir, "holder-dir")
 	h := NewHolder(path, nil)
 	panicOn(h.Open())
+	testhook.Cleanup(tb, func() {
+		h.Close()
+	})
 	//h.SnapshotQueue = newSnapshotQueue(1, 1, nil)
 	return h
 }
@@ -3461,9 +3471,6 @@ func mustOpenFragmentFlags(tb testing.TB, index, field, view string, shard uint6
 	}
 
 	th := newTestHolder(tb)
-	testhook.Cleanup(tb, func() {
-		th.Close()
-	})
 	idx := fragTestMustOpenIndex(index, th, IndexOptions{})
 	if th.NeedsSnapshot() {
 		th.SnapshotQueue = newSnapshotQueue(1, 1, nil)
@@ -4963,10 +4970,6 @@ func TestImportClearRestart(t *testing.T) {
 
 				// OVERWRITING the f.path with a new fragment
 				f2 := newFragment(h, f.path, "i", "f", viewStandard, 0, 0)
-
-				//				f2, idx2 := mustOpenFragment(t, "i", "f", viewStandard, 0, "")
-				//				_ = idx2
-
 				f2.MaxOpN = maxOpN
 				f2.CacheType = f.CacheType
 
@@ -4975,7 +4978,7 @@ func TestImportClearRestart(t *testing.T) {
 				tx2 := idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f2, Shard: f2.shard})
 				defer tx2.Rollback()
 
-				err = f.closeStorage()
+				err = f.Close()
 				if err != nil {
 					t.Fatalf("closing storage: %v", err)
 				}
@@ -5010,6 +5013,10 @@ func TestImportClearRestart(t *testing.T) {
 				panicOn(tx2.Commit())
 
 				h3 := NewHolder(filepath.Dir(f2.path), nil)
+				testhook.Cleanup(t, func() {
+					h3.Close()
+				})
+
 				idx3, err := h3.CreateIndex("i", IndexOptions{})
 				_ = idx3
 				panicOn(err)
@@ -5021,7 +5028,7 @@ func TestImportClearRestart(t *testing.T) {
 				tx3 := idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f3, Shard: f3.shard})
 				defer tx3.Rollback()
 
-				err = f2.closeStorage()
+				err = f2.Close()
 				if err != nil {
 					t.Fatalf("f2 closing storage: %v", err)
 				}

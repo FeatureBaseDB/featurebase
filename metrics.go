@@ -67,4 +67,6 @@ const (
 	MetricExclusiveTransactionActive      = "transaction_exclusive_active"
 	MetricExclusiveTransactionEnd         = "transaction_exclusive_end"
 	MetricExclusiveTransactionBlocked     = "transaction_exclusive_blocked"
+	MetricPqlQueries                      = "pql_queries_total"
+	MetricSqlQueries                      = "sql_queries_total"
 )

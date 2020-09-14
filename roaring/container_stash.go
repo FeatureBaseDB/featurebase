@@ -309,6 +309,13 @@ func (c *Container) setMapped(mapped bool) {
 	}
 }
 
+// SetMapped marks a container as "mapped"; do this if you're setting a
+// container's storage to something that it shouldn't write to, like mmapped
+// memory.
+func (c *Container) SetMapped(mapped bool) {
+	c.setMapped(mapped)
+}
+
 // setDirty marks a container as "dirty" -- we don't trust container's n.
 // this should never happen except for bitmaps.
 func (c *Container) setDirty(dirty bool) {
