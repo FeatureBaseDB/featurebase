@@ -3300,33 +3300,8 @@ func (c *Container) arrayRemove(v uint16) (*Container, bool) {
 	}
 	c = c.Thaw()
 	array = c.array()
-
-	const needCopyOnWriteDueToReadOnlyMmap = true
-
-	// TODO(jea) quick benchmarks don't show less performance if needCopyOnWriteDueToReadOnlyMmap
-	// is true, but we may need more rigorous measurement.
-	//
-	// Don't have a COW:
-	// all benchmarks in roaring/
-	// ok  	github.com/pilosa/pilosa/v2/roaring	217.138s
-	//
-	// ok, have a COW:
-	// all benchmarks in roaring/
-	// ok  	github.com/pilosa/pilosa/v2/roaring	214.295s
-
-	if needCopyOnWriteDueToReadOnlyMmap {
-		n := len(array)
-		array2 := make([]uint16, n-1)
-		copy(array2, array[:i])
-		copy(array2[i:], array[i+1:])
-		c.setArray(array2)
-	} else {
-		// seg fault here with read-only mmap; go 1.14.7 linux.
-		// example: cap =  7  i =  0  len = 7
-		// the append tries to write read-only memory?
-		array = append(array[:i], array[i+1:]...)
-		c.setArray(array)
-	}
+	array = append(array[:i], array[i+1:]...)
+	c.setArray(array)
 	return c, true
 }
 
