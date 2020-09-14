@@ -1632,10 +1632,10 @@ func (h *Handler) handleGetMetricsJSON(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	metrics := make(map[string][]*prom2json.Family)
-	mfChan := make(chan *dto.MetricFamily, 60)
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	for _, node := range h.api.Hosts(r.Context()) {
 		metricsURI := node.URI.String() + "/metrics"
+		mfChan := make(chan *dto.MetricFamily, 60)
 		err := prom2json.FetchMetricFamilies(metricsURI, mfChan, transport)
 		if err != nil {
 			http.Error(w, "fetching metrics: "+err.Error(), http.StatusInternalServerError)
