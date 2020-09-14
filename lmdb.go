@@ -1520,20 +1520,19 @@ func (tx *LMDBTx) toContainer(typ byte, v []byte) (r *roaring.Container) {
 	return ToContainer(typ, w)
 }
 
-func ToContainer(typ byte, w []byte) (r *roaring.Container) {
+func ToContainer(typ byte, w []byte) (c *roaring.Container) {
 	switch typ {
 	case roaring.ContainerArray:
-		c := roaring.NewContainerArray(toArray16(w))
-		return c
+		c = roaring.NewContainerArray(toArray16(w))
 	case roaring.ContainerBitmap:
-		c := roaring.NewContainerBitmap(-1, toArray64(w))
-		return c
+		c = roaring.NewContainerBitmap(-1, toArray64(w))
 	case roaring.ContainerRun:
-		c := roaring.NewContainerRun(toInterval16(w))
-		return c
+		c = roaring.NewContainerRun(toInterval16(w))
 	default:
 		panic(fmt.Sprintf("unknown container: %v", typ))
 	}
+	c.SetMapped(true)
+	return c
 }
 
 // StringifiedLMDBKeys returns a string with all the container
