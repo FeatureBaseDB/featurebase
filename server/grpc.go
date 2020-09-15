@@ -469,7 +469,7 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 			{Name: "_id", Datatype: "uint64"},
 		}
 		for _, field := range fields {
-			fdt, err := field.Datatype()
+			fdt := fieldDataType(field)
 			if err != nil {
 				return errors.Wrapf(err, "field %s", field.Name())
 			}
@@ -757,7 +757,7 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 			{Name: "_id", Datatype: "string"},
 		}
 		for _, field := range fields {
-			fdt, err := field.Datatype()
+			fdt := fieldDataType(field)
 			if err != nil {
 				return errors.Wrapf(err, "field %s", field.Name())
 			}
@@ -1034,6 +1034,39 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 
 	}
 	return nil
+}
+
+// fieldDataType returns a useful data type (string,
+// uint64, bool, etc.) based on the Pilosa field type.
+// DO NOT USE THIS IN FUTURE CODE.
+// This remains only for backwards-compatability within inspect.
+// It does not produce sane results in all scenarios.
+func fieldDataType(f *pilosa.Field) string {
+	switch f.Type() {
+	case "set":
+		if f.Keys() {
+			return "[]string"
+		}
+		return "[]uint64"
+	case "mutex":
+		if f.Keys() {
+			return "string"
+		}
+		return "uint64"
+	case "int":
+		if f.Keys() {
+			return "string"
+		}
+		return "int64"
+	case "decimal":
+		return "decimal"
+	case "bool":
+		return "bool"
+	case "time":
+		return "int64" // TODO: this is a placeholder
+	default:
+		panic(fmt.Sprintf("unimplemented fieldDataType: %s", f.Type()))
+	}
 }
 
 type grpcServer struct {
