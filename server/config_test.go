@@ -48,12 +48,7 @@ func TestDuration(t *testing.T) {
 		t.Fatalf("Unexpected marshalled value %v", v)
 	}
 
-	err := d.UnmarshalText([]byte("5"))
-	if err.Error() != "time: missing unit in duration 5" {
-		t.Fatalf("expected time: missing unit in duration: %s", err)
-	}
-
-	err = d.UnmarshalText([]byte("3m2s"))
+	err := d.UnmarshalText([]byte("3m2s"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

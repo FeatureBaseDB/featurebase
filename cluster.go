@@ -2346,7 +2346,7 @@ func (c *cluster) translateFieldKey(ctx context.Context, field *Field, key strin
 	if err != nil {
 		return 0, err
 	} else if len(ids) == 0 {
-		return 0, errors.New("translating key on coordinator returned empty set")
+		return 0, nil
 	}
 	return ids[0], nil
 }
@@ -2363,11 +2363,12 @@ func (c *cluster) translateFieldKeys(ctx context.Context, field *Field, keys []s
 	// to the coordinator.
 	if errors.Cause(err) == ErrTranslateStoreReadOnly {
 		coordinatorNode := c.coordinatorNode()
-		if ids, err := c.InternalClient.TranslateKeysNode(ctx, &coordinatorNode.URI, field.Index(), field.Name(), keys); err != nil {
-			return ids, errors.Wrap(err, "translating keys on coordinator")
-		} else {
+
+		ids, err := c.InternalClient.TranslateKeysNode(ctx, &coordinatorNode.URI, field.Index(), field.Name(), keys, writable)
+		if err == nil {
 			return ids, nil
 		}
+		return ids, errors.Wrap(err, "translating keys on coordinator")
 	}
 	return ids, err
 }
@@ -2428,7 +2429,7 @@ func (c *cluster) translateIndexKeySet(ctx context.Context, indexName string, ke
 				}
 			} else {
 				nodes := c.partitionNodes(partitionID)
-				if ids, err = c.InternalClient.TranslateKeysNode(ctx, &nodes[0].URI, indexName, "", keys); err != nil {
+				if ids, err = c.InternalClient.TranslateKeysNode(ctx, &nodes[0].URI, indexName, "", keys, writable); err != nil {
 					return err
 				}
 			}

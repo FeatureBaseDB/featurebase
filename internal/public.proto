@@ -175,7 +175,7 @@ message ImportRequest {
 	repeated int64 Timestamps = 6;
 	int64 IndexCreatedAt = 9;
 	int64 FieldCreatedAt = 10;
-	bool Clear = 11;	
+	bool Clear = 11;
 }
 
 message ImportValueRequest {
@@ -207,6 +207,7 @@ message TranslateKeysRequest {
 	string Index = 1;
 	string Field = 2;
 	repeated string Keys = 3;
+	bool NotWritable = 4;
 }
 
 message TranslateKeysResponse {
