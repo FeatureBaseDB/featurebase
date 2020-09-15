@@ -834,9 +834,10 @@ func (s Serializer) encodeRecalculateCaches(*pilosa.RecalculateCaches) *internal
 
 func (s Serializer) encodeTranslateKeysRequest(request *pilosa.TranslateKeysRequest) *internal.TranslateKeysRequest {
 	return &internal.TranslateKeysRequest{
-		Index: request.Index,
-		Field: request.Field,
-		Keys:  request.Keys,
+		Index:       request.Index,
+		Field:       request.Field,
+		Keys:        request.Keys,
+		NotWritable: request.NotWritable,
 	}
 }
 
@@ -1262,6 +1263,7 @@ func (s Serializer) decodeTranslateKeysRequest(pb *internal.TranslateKeysRequest
 	m.Index = pb.Index
 	m.Field = pb.Field
 	m.Keys = pb.Keys
+	m.NotWritable = pb.NotWritable
 }
 
 func (s Serializer) decodeTranslateKeysResponse(pb *internal.TranslateKeysResponse, m *pilosa.TranslateKeysResponse) {

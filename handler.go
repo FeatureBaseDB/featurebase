@@ -266,6 +266,9 @@ type TranslateKeysRequest struct {
 	Index string
 	Field string
 	Keys  []string
+
+	// it's a awkward name, just to keep backward compatibility with go-pilosa and idk.
+	NotWritable bool
 }
 
 // TranslateKeysResponse is the structured response of a key

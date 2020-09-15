@@ -289,11 +289,165 @@ func TestTranslation_Reset(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-
 		if _, err := node0.API.TranslateKeys(ctx, bytes.NewReader(reqBody)); err != nil {
 			t.Fatal(err)
 		}
 	})
+}
+
+func TestTranslation_KeyNotFound(t *testing.T) {
+	c := test.MustRunCluster(t, 4,
+		[]server.CommandOption{
+			server.OptCommandServerOptions(
+				pilosa.OptServerIsCoordinator(true),
+				pilosa.OptServerNodeID("node0"),
+				pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
+				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+			)},
+		[]server.CommandOption{
+			server.OptCommandServerOptions(
+				pilosa.OptServerIsCoordinator(false),
+				pilosa.OptServerNodeID("node1"),
+				pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
+				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+			)},
+		[]server.CommandOption{
+			server.OptCommandServerOptions(
+				pilosa.OptServerIsCoordinator(false),
+				pilosa.OptServerNodeID("node2"),
+				pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
+				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+			)},
+		[]server.CommandOption{
+			server.OptCommandServerOptions(
+				pilosa.OptServerIsCoordinator(false),
+				pilosa.OptServerNodeID("node3"),
+				pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
+				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+			)},
+	)
+	defer c.Close()
+
+	node0 := c.GetNode(0)
+	node1 := c.GetNode(1)
+	node2 := c.GetNode(2)
+	node3 := c.GetNode(3)
+
+	ctx := context.Background()
+	idx, fld := "i", "f"
+	// Create an index with keys.
+	if _, err := node0.API.CreateIndex(ctx, idx, pilosa.IndexOptions{Keys: true}); err != nil {
+		t.Fatal(err)
+	}
+	// Create an index with keys.
+	if _, err := node0.API.CreateField(ctx, idx, fld, pilosa.OptFieldKeys()); err != nil {
+		t.Fatal(err)
+	}
+
+	// write a new key and get id
+	req, err := node0.API.Serializer.Marshal(&pilosa.TranslateKeysRequest{
+		Index:       idx,
+		Field:       fld,
+		Keys:        []string{"k1"},
+		NotWritable: false,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if buf, err := node0.API.TranslateKeys(ctx, bytes.NewReader(req)); err != nil {
+		t.Fatal(err)
+	} else {
+		var resp pilosa.TranslateKeysResponse
+		if err = node0.API.Serializer.Unmarshal(buf, &resp); err != nil {
+			t.Fatal(err)
+		}
+		id0 := resp.IDs[0]
+
+		// read non-existing key
+		req, err = node3.API.Serializer.Marshal(&pilosa.TranslateKeysRequest{
+			Index:       idx,
+			Field:       fld,
+			Keys:        []string{"k2"},
+			NotWritable: true,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if buf, err = node3.API.TranslateKeys(ctx, bytes.NewReader(req)); err != nil {
+			t.Fatal(err)
+		}
+		if err = node3.API.Serializer.Unmarshal(buf, &resp); err != nil {
+			t.Fatal(err)
+		} else if resp.IDs != nil {
+			t.Fatalf("TranslateKeys(%+v): expected: nil, got: %d", req, resp)
+		}
+
+		req, err = node2.API.Serializer.Marshal(&pilosa.TranslateKeysRequest{
+			Index:       idx,
+			Keys:        []string{"k2"},
+			NotWritable: true,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if buf, err = node2.API.TranslateKeys(ctx, bytes.NewReader(req)); err != nil {
+			t.Fatal(err)
+		}
+		if err = node2.API.Serializer.Unmarshal(buf, &resp); err != nil {
+			t.Fatal(err)
+		} else if resp.IDs != nil {
+			t.Fatalf("TranslateKeys(%+v): expected: nil, got: %d", req, resp)
+		}
+
+		req, err = node1.API.Serializer.Marshal(&pilosa.TranslateKeysRequest{
+			Index:       idx,
+			Field:       fld,
+			Keys:        []string{"k2"},
+			NotWritable: false,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if buf, err = node0.API.TranslateKeys(ctx, bytes.NewReader(req)); err != nil {
+			t.Fatal(err)
+		}
+		if err = node0.API.Serializer.Unmarshal(buf, &resp); err != nil {
+			t.Fatal(err)
+		}
+		if resp.IDs[0] != id0+1 {
+			t.Fatalf("TranslateKeys(%+v): expected: %d, got: %d", req, id0+1, resp.IDs[0])
+		}
+	}
+}
+
+func TestInMemTranslateStore_ReadKey(t *testing.T) {
+	s := pilosa.NewInMemTranslateStore("IDX", "FLD", 0, pilosa.DefaultPartitionN)
+
+	id, err := s.TranslateKey("foo", false)
+	if err != pilosa.ErrTranslatingKeyNotFound {
+		t.Fatal(err)
+	}
+	if got, want := id, uint64(0); got != want {
+		t.Fatalf("TranslateKey()=%d, want %d", got, want)
+	}
+
+	// Ensure next key autoincrements.
+	if id, err = s.TranslateKey("foo", true); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := id, uint64(1); got != want {
+		t.Fatalf("TranslateKey()=%d, want %d", got, want)
+	}
+
+	id1, err := s.TranslateKey("foo", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := id1, id; got != want || id == 0 {
+		t.Fatalf("TranslateKey()=%d, want %d", got, want)
+	}
+
 }
 
 // Test index key translation replication under node failure.

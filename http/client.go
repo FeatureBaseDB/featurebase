@@ -1140,8 +1140,9 @@ func (c *InternalClient) SendMessage(ctx context.Context, uri *pilosa.URI, msg [
 	return errors.Wrap(err, "draining SendMessage response body")
 }
 
-// TranslateKeysNode sends a key translation request to a specific node.
-func (c *InternalClient) TranslateKeysNode(ctx context.Context, uri *pilosa.URI, index, field string, keys []string) ([]uint64, error) {
+// TranslateKeysNode function is mainly called to translate keys from coordinator node.
+// If coordinator node returns 404 error the function wraps it with pilosa.ErrTranslatingKeyNotFound.
+func (c *InternalClient) TranslateKeysNode(ctx context.Context, uri *pilosa.URI, index, field string, keys []string, writable bool) ([]uint64, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "TranslateKeysNode")
 	defer span.Finish()
 
@@ -1150,9 +1151,10 @@ func (c *InternalClient) TranslateKeysNode(ctx context.Context, uri *pilosa.URI,
 	}
 
 	buf, err := c.serializer.Marshal(&pilosa.TranslateKeysRequest{
-		Index: index,
-		Field: field,
-		Keys:  keys,
+		Index:       index,
+		Field:       field,
+		Keys:        keys,
+		NotWritable: !writable,
 	})
 	if err != nil {
 		return nil, errors.Wrap(err, "marshaling TranslateKeysRequest")
@@ -1174,6 +1176,9 @@ func (c *InternalClient) TranslateKeysNode(ctx context.Context, uri *pilosa.URI,
 	// Execute request against the host.
 	resp, err := c.executeRequest(req.WithContext(ctx))
 	if err != nil {
+		if resp != nil && resp.StatusCode == http.StatusNotFound {
+			return nil, errors.Wrap(pilosa.ErrTranslatingKeyNotFound, err.Error())
+		}
 		return nil, err
 	}
 	defer resp.Body.Close()

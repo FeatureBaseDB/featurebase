@@ -1588,9 +1588,11 @@ func (api *API) TranslateIndexIDs(ctx context.Context, indexName string, ids []u
 }
 
 // TranslateKeys handles a TranslateKeyRequest.
+// ErrTranslatingKeyNotFound error will be swallowed here, so the empty response will be returned.
 func (api *API) TranslateKeys(ctx context.Context, r io.Reader) (_ []byte, err error) {
 	var req TranslateKeysRequest
-	if buf, err := ioutil.ReadAll(r); err != nil {
+	buf, err := ioutil.ReadAll(r)
+	if err != nil {
 		return nil, NewBadRequestError(errors.Wrap(err, "read translate keys request error"))
 	} else if err := api.Serializer.Unmarshal(buf, &req); err != nil {
 		return nil, NewBadRequestError(errors.Wrap(err, "unmarshal translate keys request error"))
@@ -1599,25 +1601,25 @@ func (api *API) TranslateKeys(ctx context.Context, r io.Reader) (_ []byte, err e
 	// Lookup store for either index or field and translate keys.
 	var ids []uint64
 	if req.Field == "" {
-		if ids, err = api.cluster.translateIndexKeys(ctx, req.Index, req.Keys); err != nil {
-			return nil, err
-		}
+		ids, err = api.cluster.translateIndexKeys(ctx, req.Index, req.Keys, !req.NotWritable)
 	} else {
-		if field := api.holder.Field(req.Index, req.Field); field == nil {
-			return nil, ErrFieldNotFound
-		} else if fi := field.ForeignIndex(); fi != "" {
-			ids, err = api.cluster.translateIndexKeys(ctx, fi, req.Keys)
-			if err != nil {
-				return nil, err
-			}
-		} else if ids, err = api.cluster.translateFieldKeys(ctx, field, req.Keys...); err != nil {
-			return nil, errors.Wrapf(err, "translating field keys")
+		field := api.holder.Field(req.Index, req.Field)
+		if field == nil {
+			return nil, newNotFoundError(ErrFieldNotFound, req.Field)
 		}
+
+		if fi := field.ForeignIndex(); fi != "" {
+			ids, err = api.cluster.translateIndexKeys(ctx, fi, req.Keys, !req.NotWritable)
+		} else {
+			ids, err = api.cluster.translateFieldKeys(ctx, field, req.Keys, !req.NotWritable)
+		}
+	}
+	if err != nil && errors.Cause(err) != ErrTranslatingKeyNotFound {
+		return nil, errors.WithMessage(err, "translating keys")
 	}
 
 	// Encode response.
-	buf, err := api.Serializer.Marshal(&TranslateKeysResponse{IDs: ids})
-	if err != nil {
+	if buf, err = api.Serializer.Marshal(&TranslateKeysResponse{IDs: ids}); err != nil {
 		return nil, errors.Wrap(err, "translate keys response encoding error")
 	}
 	return buf, nil

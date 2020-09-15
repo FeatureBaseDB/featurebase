@@ -161,20 +161,17 @@ func (s *TranslateStore) Size() int64 {
 }
 
 // TranslateKey converts a string key to an integer ID.
-// If key does not have an associated id then one is created.
-func (s *TranslateStore) TranslateKey(key string) (id uint64, _ error) {
-	// Find id by key under read lock.
-	if err := s.db.View(func(tx *bolt.Tx) error {
-		id, _ = findIDByKey(tx.Bucket([]byte("keys")), key)
-		return nil
-	}); err != nil {
+// If key does not have an associated id then one is created, unless writable is false,
+// then the function will return the error pilosa.ErrTranslatingKeyNotFound.
+func (s *TranslateStore) TranslateKey(key string, writable bool) (uint64, error) {
+	ids, err := s.translateKeys([]string{key}, writable)
+	if err != nil {
 		return 0, err
 	} else if id != 0 {
 		return id, nil
 	}
-
-	if s.ReadOnly() {
-		return 0, pilosa.ErrTranslateStoreReadOnly
+	if len(ids) == 0 {
+		return 0, ErrTranslateKeyNotFound
 	}
 
 	// Find or create id under write lock.
@@ -207,11 +204,11 @@ func (s *TranslateStore) TranslateKey(key string) (id uint64, _ error) {
 }
 
 // TranslateKeys converts a slice of string keys to a slice of integer IDs.
-// If a key does not have an associated id then one is created.
-func (s *TranslateStore) TranslateKeys(keys []string) (ids []uint64, _ error) {
-	if len(keys) == 0 {
-		return nil, nil
-	}
+// If a key does not have an associated id then one is created, unless writable is false,
+// then the function will return the error pilosa.ErrTranslatingKeyNotFound.
+func (s *TranslateStore) TranslateKeys(keys []string, writable bool) ([]uint64, error) {
+	return s.translateKeys(keys, writable)
+}
 
 	// Allocate slice for ID mapping.
 	ids = make([]uint64, len(keys))
