@@ -5370,18 +5370,11 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 				return nil, newNotFoundError(ErrFieldNotFound, v)
 			}
 
-			datatype, err := field.Datatype()
-			if err != nil {
-				return nil, errors.Wrapf(err, "field %s", v)
-			}
-			fields[i] = ExtractedTableField{
-				Name: v,
-				Type: datatype,
-			}
-
 			var mapper fieldMapper
+			var datatype string
 			switch typ := field.Type(); typ {
 			case FieldTypeBool:
+				datatype = "bool"
 				mapper = func(ids []uint64) (_ interface{}, err error) {
 					switch len(ids) {
 					case 0:
@@ -5401,6 +5394,7 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 				}
 			case FieldTypeSet, FieldTypeTime:
 				if field.Keys() {
+					datatype = "[]string"
 					translations, err := e.preTranslateMatrixSet(result, uint(i), field)
 					if err != nil {
 						return nil, errors.Wrapf(err, "translating IDs of field %q", v)
@@ -5413,6 +5407,7 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 						return keys, nil
 					}
 				} else {
+					datatype = "[]uint64"
 					mapper = func(ids []uint64) (interface{}, error) {
 						if ids == nil {
 							ids = []uint64{}
@@ -5422,6 +5417,7 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 				}
 			case FieldTypeMutex:
 				if field.Keys() {
+					datatype = "string"
 					translations, err := e.preTranslateMatrixSet(result, uint(i), field)
 					if err != nil {
 						return nil, errors.Wrapf(err, "translating IDs of field %q", v)
@@ -5437,6 +5433,7 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 						}
 					}
 				} else {
+					datatype = "uint64"
 					mapper = func(ids []uint64) (_ interface{}, err error) {
 						switch len(ids) {
 						case 0:
@@ -5451,6 +5448,7 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 			case FieldTypeInt:
 				if fi := field.ForeignIndex(); fi != "" {
 					if field.Keys() {
+						datatype = "string"
 						ids := make(map[uint64]struct{}, len(result.Columns))
 						for _, col := range result.Columns {
 							for _, v := range col.Rows[i] {
@@ -5472,6 +5470,7 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 							}
 						}
 					} else {
+						datatype = "uint64"
 						mapper = func(ids []uint64) (interface{}, error) {
 							switch len(ids) {
 							case 0:
@@ -5484,6 +5483,7 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 						}
 					}
 				} else {
+					datatype = "int64"
 					mapper = func(ids []uint64) (interface{}, error) {
 						switch len(ids) {
 						case 0:
@@ -5496,6 +5496,7 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 					}
 				}
 			case FieldTypeDecimal:
+				datatype = "decimal"
 				scale := field.Options().Scale
 				mapper = func(ids []uint64) (_ interface{}, err error) {
 					switch len(ids) {
@@ -5511,6 +5512,10 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 				return nil, errors.Errorf("field type %q not yet supported", typ)
 			}
 			mappers[i] = mapper
+			fields[i] = ExtractedTableField{
+				Name: v,
+				Type: datatype,
+			}
 		}
 
 		var translateCol func(uint64) (KeyOrID, error)

@@ -1353,36 +1353,6 @@ func (f *Field) ClearBit(tx Tx, rowID, colID uint64) (changed bool, err error) {
 	return changed, nil
 }
 
-// Datatype returns a useful data type (string,
-// uint64, bool, etc.) based on the field type.
-func (f *Field) Datatype() (string, error) {
-	switch t := f.Type(); t {
-	case "set":
-		if f.Keys() {
-			return "[]string", nil
-		}
-		return "[]uint64", nil
-	case "mutex":
-		if f.Keys() {
-			return "string", nil
-		}
-		return "uint64", nil
-	case "int":
-		if f.Keys() {
-			return "string", nil
-		}
-		return "int64", nil
-	case "decimal":
-		return "decimal", nil
-	case "bool":
-		return "bool", nil
-	case "time":
-		return "int64", nil // TODO: this is a placeholder
-	default:
-		return "", fmt.Errorf("unimplemented field Datatype: %s", t)
-	}
-}
-
 func groupCompare(a, b string, offset int) (lt, eq bool) {
 	if len(a) > offset {
 		a = a[:offset]

@@ -89,10 +89,14 @@ func (s *ShowHandler) execShowFields(ctx context.Context, showStmt *sqlparser.Sh
 			continue
 		}
 
-		dt, err := f.Datatype()
-		if err != nil {
-			return nil, errors.Wrapf(err, "field %s", f.Name())
+		typeName := f.Type()
+		if f.Keys() {
+			typeName = "keyed-" + typeName
 		}
+		if f.ForeignIndex() != "" {
+			typeName = "foreign-" + typeName
+		}
+
 		result = append(result, pproto.RowResponse{
 			Headers: []*pproto.ColumnInfo{
 				{Name: "Field", Datatype: "string"},
@@ -100,7 +104,7 @@ func (s *ShowHandler) execShowFields(ctx context.Context, showStmt *sqlparser.Sh
 			},
 			Columns: []*pproto.ColumnResponse{
 				{ColumnVal: &pproto.ColumnResponse_StringVal{StringVal: f.Name()}},
-				{ColumnVal: &pproto.ColumnResponse_StringVal{StringVal: dt}},
+				{ColumnVal: &pproto.ColumnResponse_StringVal{StringVal: typeName}},
 			},
 		})
 	}
