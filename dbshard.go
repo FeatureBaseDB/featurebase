@@ -405,7 +405,11 @@ func (per *DBPerShard) GetDBShard(index string, shard uint64, idx *Index) (dbs *
 	}
 	dbs, ok = dbi.Shard[shard]
 	if dbs != nil && dbs.closed {
-		panic(fmt.Sprintf("cannot retain closed dbs across holder ReOpen dbs='%p'", dbs))
+		if len(per.types) == 1 && per.types[0] == roaringTxn {
+			// roaring txn are nil/fake anyway. Don't freak out.
+		} else {
+			panic(fmt.Sprintf("cannot retain closed dbs across holder ReOpen dbs='%p'", dbs))
+		}
 	}
 	if !ok {
 		dbs = &DBShard{
