@@ -4414,11 +4414,7 @@ func TestExecutor_Execute_Extract(t *testing.T) {
 	c := test.MustRunCluster(t, 3)
 	defer c.Close()
 
-	set := c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "set")
-	dtSet, err := set.Datatype()
-	if err != nil {
-		t.Fatal(err)
-	}
+	c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "set")
 	c.ImportBits(t, "i", "set", [][2]uint64{
 		{0, 1},
 		{0, 2},
@@ -4429,88 +4425,56 @@ func TestExecutor_Execute_Extract(t *testing.T) {
 	})
 	c.Query(t, "i", fmt.Sprintf("Clear(%d, set=5)", ShardWidth))
 
-	keyset := c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "keyset", pilosa.OptFieldKeys())
-	dtKeyset, err := keyset.Datatype()
-	if err != nil {
-		t.Fatal(err)
-	}
+	c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "keyset", pilosa.OptFieldKeys())
 	c.Query(t, "i", `
 		Set(0, keyset="h")
 		Set(1, keyset="xyzzy")
 		Set(0, keyset="plugh")
 	`)
 
-	mutex := c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "mutex", pilosa.OptFieldTypeMutex(pilosa.CacheTypeRanked, 5000))
-	dtMutex, err := mutex.Datatype()
-	if err != nil {
-		t.Fatal(err)
-	}
+	c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "mutex", pilosa.OptFieldTypeMutex(pilosa.CacheTypeRanked, 5000))
 	c.ImportBits(t, "i", "mutex", [][2]uint64{
 		{0, 1},
 		{0, 2},
 		{4, 4 * ShardWidth},
 	})
 
-	keymutex := c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "keymutex", pilosa.OptFieldKeys(), pilosa.OptFieldTypeMutex(pilosa.CacheTypeRanked, 5000))
-	dtKeyMutex, err := keymutex.Datatype()
-	if err != nil {
-		t.Fatal(err)
-	}
+	c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "keymutex", pilosa.OptFieldKeys(), pilosa.OptFieldTypeMutex(pilosa.CacheTypeRanked, 5000))
 	c.Query(t, "i", `
 		Set(0, keymutex="h")
 		Set(1, keymutex="xyzzy")
 		Set(3, keymutex="plugh")
 	`)
 
-	tm := c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "time", pilosa.OptFieldTypeTime("YMDH"))
-	dtTm, err := tm.Datatype()
-	if err != nil {
-		t.Fatal(err)
-	}
+	c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "time", pilosa.OptFieldTypeTime("YMDH"))
 	c.Query(t, "i", `
 		Set(0, time=1, 2016-01-01T00:00)
 		Set(1, time=2, 2017-01-01T00:00)
 		Set(3, time=3, 2018-01-01T00:00)
 	`)
 
-	keytm := c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "keytime", pilosa.OptFieldKeys(), pilosa.OptFieldTypeTime("YMDH"))
-	dtKeyTm, err := keytm.Datatype()
-	if err != nil {
-		t.Fatal(err)
-	}
+	c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "keytime", pilosa.OptFieldKeys(), pilosa.OptFieldTypeTime("YMDH"))
 	c.Query(t, "i", `
 		Set(0, keytime="h", 2016-01-01T00:00)
 		Set(1, keytime="xyzzy", 2017-01-01T00:00)
 		Set(0, keytime="plugh", 2018-01-01T00:00)
 	`)
 
-	bsiInt := c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "bsint", pilosa.OptFieldTypeInt(-100, 100))
-	dtBsiInt, err := bsiInt.Datatype()
-	if err != nil {
-		t.Fatal(err)
-	}
+	c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "bsint", pilosa.OptFieldTypeInt(-100, 100))
 	c.Query(t, "i", `
 		Set(0, bsint=1)
 		Set(1, bsint=-1)
 		Set(3, bsint=2)
 	`)
 
-	bsidecimal := c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "bsidecimal", pilosa.OptFieldTypeDecimal(2))
-	dtBsiDecimal, err := bsidecimal.Datatype()
-	if err != nil {
-		t.Fatal(err)
-	}
+	c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "bsidecimal", pilosa.OptFieldTypeDecimal(2))
 	c.Query(t, "i", `
 		Set(0, bsidecimal=0.01)
 		Set(1, bsidecimal=1.00)
 		Set(3, bsidecimal=-1.01)
 	`)
 
-	boolean := c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "bool", pilosa.OptFieldTypeBool())
-	dtBoolean, err := boolean.Datatype()
-	if err != nil {
-		t.Fatal(err)
-	}
+	c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "bool", pilosa.OptFieldTypeBool())
 	c.Query(t, "i", `
 		Set(0, bool=true)
 		Set(1, bool=false)
@@ -4523,39 +4487,39 @@ func TestExecutor_Execute_Extract(t *testing.T) {
 			Fields: []pilosa.ExtractedTableField{
 				{
 					Name: "set",
-					Type: dtSet,
+					Type: "[]uint64",
 				},
 				{
 					Name: "keyset",
-					Type: dtKeyset,
+					Type: "[]string",
 				},
 				{
 					Name: "mutex",
-					Type: dtMutex,
+					Type: "uint64",
 				},
 				{
 					Name: "keymutex",
-					Type: dtKeyMutex,
+					Type: "string",
 				},
 				{
 					Name: "time",
-					Type: dtTm,
+					Type: "[]uint64",
 				},
 				{
 					Name: "keytime",
-					Type: dtKeyTm,
+					Type: "[]string",
 				},
 				{
 					Name: "bsint",
-					Type: dtBsiInt,
+					Type: "int64",
 				},
 				{
 					Name: "bsidecimal",
-					Type: dtBsiDecimal,
+					Type: "decimal",
 				},
 				{
 					Name: "bool",
-					Type: dtBoolean,
+					Type: "bool",
 				},
 			},
 			Columns: []pilosa.ExtractedTableColumn{
@@ -4680,11 +4644,7 @@ func TestExecutor_Execute_Extract_Keyed(t *testing.T) {
 	c := test.MustRunCluster(t, 3)
 	defer c.Close()
 
-	set := c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true, Keys: true}, "set")
-	dtSet, err := set.Datatype()
-	if err != nil {
-		t.Fatal(err)
-	}
+	c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true, Keys: true}, "set")
 	c.Query(t, "i", `
 		Set("h", set=1)
 		Set("h", set=2)
@@ -4699,7 +4659,7 @@ func TestExecutor_Execute_Extract_Keyed(t *testing.T) {
 			Fields: []pilosa.ExtractedTableField{
 				{
 					Name: "set",
-					Type: dtSet,
+					Type: "[]uint64",
 				},
 			},
 			Columns: []pilosa.ExtractedTableColumn{
