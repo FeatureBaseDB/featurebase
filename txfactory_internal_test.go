@@ -112,12 +112,11 @@ func Test_TxFactory_Qcx_query_context(t *testing.T) {
 //       and b) we have an easy migration mechanism, to go from one storage format to another.
 //
 func Test_TxFactory_UpdateBlueFromGreen_OnStartup(t *testing.T) {
-	//t.Skip("TODO(jea) bring this back in. broken by the local vs remote shard determination for a cluster")
 
 	orig := os.Getenv("PILOSA_TXSRC")
 	defer os.Setenv("PILOSA_TXSRC", orig) // must restore or will mess up other tests!
 
-	checked := []string{"lmdb", "roaring", "badger", "rbf"}
+	checked := []string{"lmdb", "roaring", "rbf"}
 
 	for _, blue := range checked {
 		for _, green := range checked {
@@ -125,6 +124,7 @@ func Test_TxFactory_UpdateBlueFromGreen_OnStartup(t *testing.T) {
 				continue
 			}
 			blue_green := blue + "_" + green
+			//vv("setting blue_green to '%v'", blue_green)
 
 			// =============================
 			// Begin setup.
@@ -137,6 +137,7 @@ func Test_TxFactory_UpdateBlueFromGreen_OnStartup(t *testing.T) {
 				t.Fatalf("creating holder: %v", err)
 			}
 			defer os.RemoveAll(path)
+			//vv("path = %v", path)
 
 			// we will manually h.Close() below
 
@@ -169,17 +170,26 @@ func Test_TxFactory_UpdateBlueFromGreen_OnStartup(t *testing.T) {
 			testMustHaveBit(t, h, "i1", "f", 100, 200)
 			testMustHaveBit(t, h, "i1", "f", 100, 12345678)
 
+			//vv("about to reopen; blue_green = '%v' but PILOSA_TXSRC='%v'", blue_green, os.Getenv("PILOSA_TXSRC"))
+			//h.DumpAllShards()
+
+			//vv("after dump, about to close")
 			h.Close()
+
+			//vv("after close, about to re-open")
 
 			// can we re.Open the same holder h? hopefully without a problem.
 			panicOn(h.Open())
 
-			testMustHaveBit(t, h, "i0", "f", rowID, colID)
+			//vv("h.Open() re-open worked; blue_green = '%v'; dump; with PILOSA_TXSRC='%v'", blue_green, os.Getenv("PILOSA_TXSRC"))
+			//h.DumpAllShards()
+
+			testMustHaveBit(t, h, "i0", "f", rowID, colID) // panic here, colID 200 bit was cold.
 			testMustHaveBit(t, h, "i1", "f", 100, 200)
 			testMustHaveBit(t, h, "i1", "f", 100, 12345678)
 			h.Close()
 
-			// successful re-open and then Close again of h.
+			//vv("successful re-open and then Close again of h.")
 
 			// check that we can open a NewHolder on green, on same path, and still see our bits.
 			// Because the NewHolder is the code that creates and configures TxFactory as blue_green.
@@ -221,11 +231,14 @@ func Test_TxFactory_UpdateBlueFromGreen_OnStartup(t *testing.T) {
 
 			//vv("about to h4.Open we should populate blue from green")
 			panicOn(h4.Open())
-			defer h4.Close()
 
 			testMustHaveBit(t, h4, "i0", "f", rowID, colID)
 			testMustHaveBit(t, h4, "i1", "f", 100, 200)
 			testMustHaveBit(t, h4, "i1", "f", 100, 12345678)
+
+			//vv("successfully verified populatingBlueFromGreen with blue_green = '%v'", blue_green)
+			h4.Close()
+			os.RemoveAll(path)
 		}
 	}
 }
@@ -234,7 +247,6 @@ func Test_TxFactory_UpdateBlueFromGreen_OnStartup(t *testing.T) {
 // go to verify it but blue has more data than green.
 // That will also cause query divergence.
 func Test_TxFactory_verifyBlueEqualsGreen(t *testing.T) {
-	//t.Skip("TODO(jea) bring this back in. broken by the local vs remote shard determination for a cluster")
 
 	orig := os.Getenv("PILOSA_TXSRC")
 	defer os.Setenv("PILOSA_TXSRC", orig) // must restore or will mess up other tests!
@@ -260,6 +272,7 @@ func Test_TxFactory_verifyBlueEqualsGreen(t *testing.T) {
 			}
 			defer os.RemoveAll(path)
 
+			//vv("on green, which is '%v'", green)
 			// we will manually h.Close() below
 
 			// Write bits to separate indexes.
@@ -297,6 +310,8 @@ func Test_TxFactory_verifyBlueEqualsGreen(t *testing.T) {
 			// open a new holder on path, just looking at blue.
 			os.Setenv("PILOSA_TXSRC", blue)
 
+			//vv("on blue, which is '%v'", blue)
+
 			h3 := NewHolder(path, nil)
 			panicOn(h3.Open())
 
@@ -317,6 +332,8 @@ func Test_TxFactory_verifyBlueEqualsGreen(t *testing.T) {
 
 			os.Setenv("PILOSA_TXSRC", blue_green)
 
+			//vv("on blue_green, which is '%v'", blue_green)
+
 			// open a holder with path again, now looking at both blue and green.
 			// The Holder.Open should do the migration from green, populating blue.
 			h4 := NewHolder(path, nil)
@@ -330,9 +347,15 @@ func Test_TxFactory_verifyBlueEqualsGreen(t *testing.T) {
 			// now open just blue, and add a bit to a new index, i2.
 			os.Setenv("PILOSA_TXSRC", blue)
 
+			//vv("on blue, which is '%v'", blue)
+
 			h5 := NewHolder(path, nil)
 			panicOn(h5.Open())
 			testSetBit(t, h5, "i2", "f", 500, 777)
+
+			//vv("after adding a bit to blue, we have:")
+			//h5.DumpAllShards()
+
 			h5.Close()
 
 			// now open blue_green. should get a verification failure
@@ -345,6 +368,10 @@ func Test_TxFactory_verifyBlueEqualsGreen(t *testing.T) {
 			// The Holder.Open should verify blue against green and notice the extra bit.
 			h6 := NewHolder(path, nil)
 			err = h6.Open()
+
+			//vv("h6.Open() had err = '%v', PILOSA_TXSRC='%v'", err, os.Getenv("PILOSA_TXSRC"))
+			//h6.DumpAllShards()
+
 			if err == nil {
 				h6.Close()
 				t.Fatalf("should have had blue-green verification fail on Holder.Open")

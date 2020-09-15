@@ -117,31 +117,10 @@ type Holder struct {
 
 	txf *TxFactory
 
-	bkgr *holderBackgroundGoro
-
-	// indexesOwnedByBkgr is owned by h.bkgr. Do not touch.
-	// Only the owning holdbkg.go goroutine should query or
-	// modify the indexesOwnedByBkgr map. indexesOwnedByBkgr replaces
-	// the old indexes map which was the source of deadlock vs
-	// race issues with a dedicated goroutine
-	// associated with the Holder.
-	//
-	// Normally this map would live inside the holderBackgroundGoro
-	// struct, but tests expect the map to
-	// persist cross Holder ReOpens(), so it still lives here --
-	// since a ReOpen will kill and restart the goroutine and
-	// lose its state.
-	//
-	// Again, do not touch this directly. Use these methods instead:
-	//
-	//  h.Index()       // index name -> *Index
-	//  h.Indexes()     // copy of the full list of *Indexes
-	//  h.addIndex()    // add one *Index
-	//  h.deleteIndex() // delete one *Index
-	//
-	indexesOwnedByBkgr map[string]*Index
-
-	numCtBlueGreenVerified int64
+	// a separate lock out for indexes, to avoid the deadlock/race dilema
+	// on holding mu.
+	imu     sync.RWMutex
+	indexes map[string]*Index
 }
 
 // HolderOpts holds information about the holder which other things might want
@@ -235,8 +214,6 @@ func DefaultHolderConfig() *HolderConfig {
 }
 
 // NewHolder returns a new instance of Holder for the given path.
-// It starts the bkgr background goroutine that provides
-// exclusive access to the indexesOwnedByBkgr map.
 func NewHolder(path string, cfg *HolderConfig) *Holder {
 	if cfg == nil {
 		cfg = DefaultHolderConfig()
@@ -274,13 +251,13 @@ func NewHolder(path string, cfg *HolderConfig) *Holder {
 
 		path: path,
 
-		indexesOwnedByBkgr: make(map[string]*Index),
+		indexes: make(map[string]*Index),
 	}
-	h.bkgr = h.newHolderBackgroundGoro()
 
 	txf, err := NewTxFactory(cfg.Txsrc, path, h)
 	panicOn(err)
 	h.txf = txf
+	h.txf.blueGreenOffIfRunningBlueGreen()
 
 	_ = testhook.Created(h.Auditor, h, nil)
 	return h
@@ -571,10 +548,6 @@ func (h *Holder) Open() error {
 	h.opening = true
 	defer func() { h.opening = false }()
 
-	if h.bkgr == nil || h.bkgr.isClosed() {
-		h.bkgr = h.newHolderBackgroundGoro()
-	}
-
 	if h.txf == nil {
 		txf, err := NewTxFactory(h.cfg.Txsrc, h.path, h)
 		if err != nil {
@@ -673,6 +646,10 @@ func (h *Holder) Open() error {
 
 	_ = testhook.Opened(h.Auditor, h, nil)
 
+	if err := h.txf.Open(); err != nil {
+		return errors.Wrap(err, "Holder.Open h.txf.Open()")
+	}
+
 	// under blue_green, we must sync blue from green before we turn on checking.
 	if err := h.txf.green2blue(h); err != nil {
 		return errors.Wrap(err, "Holder.Open h.txf.green2blue(h)")
@@ -728,7 +705,6 @@ func (h *Holder) Close() error {
 	if h == nil {
 		return nil
 	}
-	defer h.stopBkgr()
 
 	if globalUseStatTx {
 		fmt.Printf("%v\n", globalCallStats.report())
@@ -977,25 +953,24 @@ func (h *Holder) HolderPathFromIndexPath(indexPath, indexName string) string {
 
 // Index returns the index by name.
 func (h *Holder) Index(name string) (idx *Index) {
-	idx = h.bkgr.index(name)
+	h.imu.RLock()
+	idx = h.indexes[name]
+	h.imu.RUnlock()
 	return
 }
 
 // Indexes returns a list of all indexes in the holder.
 func (h *Holder) Indexes() []*Index {
-	// utils_internal_test.go:345	func (t *ClusterCluster) Close() error
-	// wants to close an un-Open()-ed Holder.
-	// So I guess we won't panic here.
-	if h.bkgr == nil || h.bkgr.isClosed() {
-		return nil
+	h.imu.RLock()
+	// sizing and copying has to be done under the lock to avoid
+	// a logical race with a deletion/addition to indexes.
+	cp := make([]*Index, 0, len(h.indexes))
+	for _, idx := range h.indexes {
+		cp = append(cp, idx)
 	}
-	req := newIndexReq("")
-	req.getAll = true
-	h.bkgr.getAllCh <- req
-	<-req.done
-
-	sort.Sort(indexSlice(req.all))
-	return req.all
+	h.imu.RUnlock()
+	sort.Sort(indexSlice(cp))
+	return cp
 }
 
 // CreateIndex creates an index.
@@ -1107,7 +1082,9 @@ func (h *Holder) DeleteIndex(name string) error {
 }
 
 func (h *Holder) deleteIndex(index string) {
-	h.bkgr.delIdxCh <- index
+	h.imu.Lock()
+	delete(h.indexes, index)
+	h.imu.Unlock()
 }
 
 // Field returns the field for an index and name.
@@ -1973,25 +1950,9 @@ func (h *Holder) Process(ctx context.Context, op HolderOperator) (err error) {
 // used by Index.openFields(), enabling Tx / Txf by telling
 // the holder about its own indexes.
 func (h *Holder) addIndex(idx *Index) {
-	if idx == nil {
-		panic("cannot pass nil to addIndex")
-	}
-	if h == nil {
-		panic("cannot call addIndex on nil Holder")
-	}
-	if h.bkgr == nil || h.bkgr.isClosed() {
-		// ugh. TestCluster_ResizeStates/Multiple_nodes,_with_data test
-		// from cluster_internal_test.go:799
-		// via utils_internal_test.go:450
-		// gets here, with the h.mu already held.
-		// so we cannot panic and complain or we mess up that test.
-		// But really, we should not be calling addIndex() on
-		// Holder that has not be Open()-ed.
-		h.mu.Lock()
-		h.bkgr = h.newHolderBackgroundGoro()
-		h.mu.Unlock()
-	}
-	h.bkgr.setIdxCh <- idx
+	h.imu.Lock()
+	h.indexes[idx.name] = idx
+	h.imu.Unlock()
 }
 
 func (h *Holder) DumpAllShards() {
@@ -2010,10 +1971,6 @@ func (h *Holder) Txf() *TxFactory {
 // must be specified.
 func (h *Holder) BeginTx(writable bool, idx *Index, shard uint64) (Tx, error) {
 	return h.txf.NewTx(Txo{Write: writable, Index: idx, Shard: shard}), nil
-}
-
-func (h *Holder) NumContainersBlueGreenVerified() int {
-	return int(h.numCtBlueGreenVerified)
 }
 
 func (h *Holder) HasRoaringData() (has bool, err error) {
