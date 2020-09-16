@@ -441,7 +441,6 @@ func (db *DB) readWALPage(walID int64) ([]byte, error) {
 }
 
 func (db *DB) writeWALPage(page []byte, isMeta bool) (walID int64, err error) {
-
 	if err := db.ensureWritableWALSegment(); err != nil {
 		return 0, err
 	}
@@ -829,7 +828,6 @@ func (db *DB) Check() error {
 
 // writePage writes a page to the data file.
 func (db *DB) writePage(pgno uint32, page []byte) error {
-
 	_, err := db.file.WriteAt(page, int64(pgno)*PageSize)
 	return err
 }

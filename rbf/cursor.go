@@ -322,14 +322,25 @@ func toPgno(val []byte) uint32 {
 	return binary.LittleEndian.Uint32(val)
 }
 func (c *Cursor) putLeafCell(in leafCell) (err error) {
-	cells := readLeafCells(c.leafPage, c.leafCells[:])
+	// Copy target page if we are using direct writes because a split will
+	// cause the source data to be overwritten after the first page is written.
+	leafPage := c.leafPage
+	if c.tx.exclusive {
+		leafPage = make([]byte, PageSize)
+		copy(leafPage, c.leafPage)
+	}
+
+	cells := readLeafCells(leafPage, c.leafCells[:])
 	elem := &c.stack.elems[c.stack.index]
 	cell := in
 	if elem.index >= len(cells) || c.Key() != cell.Key {
 		//new cell
 		if in.Type == ContainerTypeBitmap {
 			//allocated bitmap()
-			bitmapPgno, _ := c.tx.allocate()
+			bitmapPgno, err := c.tx.allocate()
+			if err != nil {
+				return err
+			}
 			cell.Data = fromPgno(bitmapPgno)
 			cell.Type = ContainerTypeBitmapPtr
 		}
@@ -494,6 +505,15 @@ func (c *Cursor) putBranchCells(stackIndex int, newCells []branchCell) (err erro
 	if err != nil {
 		return err
 	}
+
+	// Copy target page if we are using direct writes because a split will
+	// cause the source data to be overwritten after the first page is written.
+	if c.tx.exclusive {
+		tmp := make([]byte, PageSize)
+		copy(tmp, page)
+		page = tmp
+	}
+
 	cells := readBranchCells(page)
 
 	// Update current cell & insert additional cells after it.
@@ -522,7 +542,7 @@ func (c *Cursor) putBranchCells(stackIndex int, newCells []branchCell) (err erro
 			parent.Pgno = origPgno
 		} else {
 			if parent.Pgno, err = c.tx.allocate(); err != nil {
-				return fmt.Errorf("cannot allocate leaf: %w", err)
+				return fmt.Errorf("cannot allocate branch: %w", err)
 			}
 		}
 		parents = append(parents, parent)
@@ -543,6 +563,8 @@ func (c *Cursor) putBranchCells(stackIndex int, newCells []branchCell) (err erro
 			return err
 		}
 	}
+
+	// TODO(BBJ): Check if key on page changes and update parent if so.
 
 	// TODO(BBJ): Update page in buffer & cursor stack.
 
