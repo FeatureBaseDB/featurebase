@@ -330,7 +330,7 @@ func TestTranslation_KeyNotFound(t *testing.T) {
 
 	node0 := c.GetNode(0)
 	node1 := c.GetNode(1)
-	node2 := c.GetNode(2)
+	// node2 := c.GetNode(2)
 	node3 := c.GetNode(3)
 
 	ctx := context.Background()
@@ -380,10 +380,10 @@ func TestTranslation_KeyNotFound(t *testing.T) {
 		if err = node3.API.Serializer.Unmarshal(buf, &resp); err != nil {
 			t.Fatal(err)
 		} else if resp.IDs != nil {
-			t.Fatalf("TranslateKeys(%+v): expected: nil, got: %d", req, resp)
+			t.Fatalf("TranslateKeys(%+v): expected: nil, got: %d", string(req), resp)
 		}
 
-		req, err = node2.API.Serializer.Marshal(&pilosa.TranslateKeysRequest{
+		req, err = node1.API.Serializer.Marshal(&pilosa.TranslateKeysRequest{
 			Index:       idx,
 			Keys:        []string{"k2"},
 			NotWritable: true,
@@ -391,10 +391,10 @@ func TestTranslation_KeyNotFound(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if buf, err = node2.API.TranslateKeys(ctx, bytes.NewReader(req)); err != nil {
+		if buf, err = node1.API.TranslateKeys(ctx, bytes.NewReader(req)); err != nil {
 			t.Fatal(err)
 		}
-		if err = node2.API.Serializer.Unmarshal(buf, &resp); err != nil {
+		if err = node1.API.Serializer.Unmarshal(buf, &resp); err != nil {
 			t.Fatal(err)
 		} else if resp.IDs != nil {
 			t.Fatalf("TranslateKeys(%+v): expected: nil, got: %d", req, resp)
