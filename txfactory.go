@@ -493,7 +493,7 @@ func MustTxsrcToTxtype(txsrc string) (types []txtype) {
 
 // NewTxFactory always opens an existing database. If you
 // want to a fresh database, os.RemoveAll on dir/name ahead of time.
-// We always store files in a subdir of dir. If we are having one
+// We always store files in a subdir of holderDir. If we are having one
 // database or many can depend on name.
 func NewTxFactory(txsrc string, holderDir string, holder *Holder) (f *TxFactory, err error) {
 	types := MustTxsrcToTxtype(txsrc)
@@ -506,9 +506,15 @@ func NewTxFactory(txsrc string, holderDir string, holder *Holder) (f *TxFactory,
 	if len(types) == 2 {
 		f.blueGreenReg = newBlueGreenReg(types)
 	}
-	f.dbPerShard = f.NewDBPerShard(types, holderDir)
+	f.dbPerShard = f.NewDBPerShard(types, holderDir, holder)
 
 	return f, err
+}
+
+// Open should be called only once the index metadata is loaded
+// from Holder.Open(), so we find all of our indexes.
+func (f *TxFactory) Open() error {
+	return f.dbPerShard.LoadExistingDBs()
 }
 
 // Txo holds the transaction options
@@ -1175,6 +1181,7 @@ func (f *TxFactory) blueHasData() (hasData bool, err error) {
 // Called by test Test_TxFactory_UpdateBlueFromGreen_OnStartup() in
 // txfactory_internal_test.go as well.
 //
+// This is a noop if we aren't running under a blue_green PILOSA_TXSRC.
 func (f *TxFactory) green2blue(holder *Holder) (err error) {
 
 	// Holder.Open will always call us, even without blue_green. Which is fine.
@@ -1201,32 +1208,32 @@ func (f *TxFactory) green2blue(holder *Holder) (err error) {
 	for _, idx := range idxs {
 
 		// scan directories
-		blueShards, err := f.dbPerShard.TypedDBPerShardGetShardsForIndex(blueDest, idx, "")
+		blueShards, err := f.dbPerShard.TypedDBPerShardGetShardsForIndex(blueDest, idx, "", false)
 		if err != nil {
 			return errors.Wrap(err, fmt.Sprintf("GetDBShard(index='%v') error fetching blueShards", idx.name))
 		}
-		//vv("from blueDest='%v', blueShards = '%#v'", blueDest, blueShards)
 
 		// scan directories
-		greenShards, err := f.dbPerShard.TypedDBPerShardGetShardsForIndex(greenSrc, idx, "")
+		greenShards, err := f.dbPerShard.TypedDBPerShardGetShardsForIndex(greenSrc, idx, "", true)
 		if err != nil {
 			return errors.Wrap(err, fmt.Sprintf("GetDBShard(index='%v') error fetching greenShards", idx.name))
 		}
-		//vv("from greenSrc='%v', greenShards = '%#v'", greenSrc, greenShards)
 
-		diff := f.shardSliceDiff(blueShards, greenShards)
-		if diff != "" {
-			return fmt.Errorf("blue[%v] and green[%v] have different shards for index '%v': %v", blueDest, greenSrc, idx.name, diff)
+		if verifyInsteadOfCopy {
+			diff := f.shardSliceDiff(blueShards, greenShards)
+			if diff != "" {
+				return fmt.Errorf("verifyInsteadOfCopy true, blue[%v]=%#v and green[%v]=%#v have different shards for index '%v': '%v'; stack=\n%v", blueDest, blueShards, greenSrc, greenShards, idx.name, diff, stack())
+			}
+
+			// can also check against meta data
+			shards := idx.AvailableShards(localOnly).Slice()
+			diff2 := f.shardSliceDiff(greenShards, shards)
+			if diff2 != "" {
+				return fmt.Errorf("green[%v] = '%#v' and meta data '%#v' have different shards for index '%v': %v", greenSrc, greenShards, shards, idx.name, diff2)
+			}
 		}
 
-		shards := idx.AvailableShards(localOnly).Slice()
-
-		diff2 := f.shardSliceDiff(blueShards, shards)
-		if diff2 != "" {
-			return fmt.Errorf("blue[%v] and meta data (from green[%v]?)have different shards for index '%v': %v", blueDest, greenSrc, idx.name, diff2)
-		}
-
-		for _, shard := range shards {
+		for _, shard := range greenShards {
 
 			dbs, err := f.dbPerShard.GetDBShard(idx.name, shard, idx)
 			if err != nil {
@@ -1235,7 +1242,7 @@ func (f *TxFactory) green2blue(holder *Holder) (err error) {
 
 			if verifyInsteadOfCopy {
 				// verify all containers
-				err = dbs.verifyBlueEqualsGreen(&holder.numCtBlueGreenVerified)
+				err = dbs.verifyBlueEqualsGreen()
 				if err != nil {
 					return errors.Wrap(err,
 						fmt.Sprintf("dbs.verifyBlueEqualsGreen(blue='%v', "+
