@@ -37,9 +37,10 @@ import (
 
 // GRPCHandler contains methods which handle the various gRPC requests.
 type GRPCHandler struct {
-	api    *pilosa.API
-	logger logger.Logger
-	stats  stats.StatsClient
+	api               *pilosa.API
+	logger            logger.Logger
+	stats             stats.StatsClient
+	inspectDeprecated sync.Once
 }
 
 func NewGRPCHandler(api *pilosa.API) *GRPCHandler {
@@ -374,6 +375,10 @@ func ToRowserWrapper(result interface{}) (pb.ToRowser, error) {
 // Inspect handles the inspect request and sends an InspectResponse to the stream.
 func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectServer) error {
 	const defaultLimit = 100000
+
+	h.inspectDeprecated.Do(func() {
+		h.logger.Printf("DEPRECATED: Inspect is deprecated, please use Extract() instead.")
+	})
 
 	index, err := h.api.Index(stream.Context(), req.Index)
 	if err != nil {
