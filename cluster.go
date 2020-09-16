@@ -2368,7 +2368,7 @@ func (c *cluster) translateFieldKeys(ctx context.Context, field *Field, keys []s
 		if err == nil {
 			return ids, nil
 		}
-		return ids, errors.Wrap(err, "translating keys on coordinator")
+		return ids, errors.Wrap(err, "translating field keys on coordinator")
 	}
 	return ids, err
 }
@@ -2392,9 +2392,11 @@ func (c *cluster) translateIndexKeys(ctx context.Context, indexName string, keys
 		return nil, err
 	}
 
-	ids := make([]uint64, len(keys))
-	for i := range keys {
-		ids[i] = keyMap[keys[i]]
+	ids := make([]uint64, 0, len(keys))
+	for _, k := range keys {
+		if id := keyMap[k]; id != 0 {
+			ids = append(ids, id)
+		}
 	}
 	return ids, nil
 }
@@ -2435,12 +2437,12 @@ func (c *cluster) translateIndexKeySet(ctx context.Context, indexName string, ke
 			}
 
 			mu.Lock()
-			defer mu.Unlock()
-			for i := range keys {
-				if id := ids[i]; id != 0 {
+			for i, id := range ids {
+				if id != 0 {
 					keyMap[keys[i]] = id
 				}
 			}
+			mu.Unlock()
 			return nil
 		})
 	}
