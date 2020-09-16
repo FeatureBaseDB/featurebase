@@ -22,7 +22,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 
 	"github.com/pkg/errors"
 )
@@ -192,6 +191,11 @@ func (dbs *DBShard) DeleteDBPath() (err error) {
 	return
 }
 
+type flatkey struct {
+	index string
+	shard uint64
+}
+
 type DBPerShard struct {
 	Mu sync.Mutex
 
@@ -201,12 +205,13 @@ type DBPerShard struct {
 
 	// just flat, not buried within the Node heirarchy.
 	// Easily see how many we have.
-	Flatmap map[*DBShard]struct{}
+	Flatmap map[flatkey]*DBShard
 
 	types      []txtype
 	hasRoaring bool
 
-	txf *TxFactory
+	txf    *TxFactory
+	holder *Holder
 
 	// which of our types is not-roaring, since
 	// roaring doesn't keep a list of open Tx sn.
@@ -215,13 +220,13 @@ type DBPerShard struct {
 }
 
 // HasData returns true if the database has at least one key.
-// For roaring it returns the number of fragments stored.
+// For roaring it returns true if we a fragment stored.
 // The `which` argument is the index into the per.W slice. 0 for blue, 1 for green.
 // If you pass 1, be sure you have a blue-green configuration.
 func (per *DBPerShard) HasData(which int) (hasData bool, err error) {
 	// has to aggregate across all available DBShard for each index and shard.
 
-	for v := range per.Flatmap {
+	for _, v := range per.Flatmap {
 		hasData, err = v.W[which].HasData()
 		if err != nil {
 			return
@@ -234,13 +239,32 @@ func (per *DBPerShard) HasData(which int) (hasData bool, err error) {
 }
 
 func (per *DBPerShard) ListOpenString() (r string) {
-	for v := range per.Flatmap {
+	for _, v := range per.Flatmap {
 		r += v.HolderPath + " -> " + v.W[per.useOpenList].OpenListString() + "\n"
 	}
 	return
 }
 
-func (txf *TxFactory) NewDBPerShard(types []txtype, holderDir string) (d *DBPerShard) {
+func (per *DBPerShard) LoadExistingDBs() (err error) {
+	idxs := per.holder.Indexes()
+
+	for _, idx := range idxs {
+
+		sos, err := per.txf.GetShardsForIndex(idx, "", true)
+		if err != nil {
+			return err
+		}
+		for _, shard := range sos {
+			_, err := per.GetDBShard(idx.name, shard, idx)
+			if err != nil {
+				return errors.Wrap(err, "DBPerShard.LoadExistingDBs GetDBShard()")
+			}
+		}
+	}
+	return
+}
+
+func (txf *TxFactory) NewDBPerShard(types []txtype, holderDir string, holder *Holder) (d *DBPerShard) {
 
 	useOpenList := 0
 	hasRoaring := false
@@ -261,8 +285,9 @@ func (txf *TxFactory) NewDBPerShard(types []txtype, holderDir string) (d *DBPerS
 	d = &DBPerShard{
 		types:       types,
 		HolderDir:   holderDir,
+		holder:      holder,
 		dbh:         NewDBHolder(),
-		Flatmap:     make(map[*DBShard]struct{}),
+		Flatmap:     make(map[flatkey]*DBShard),
 		txf:         txf,
 		useOpenList: useOpenList,
 		hasRoaring:  hasRoaring,
@@ -327,7 +352,9 @@ func (per *DBPerShard) DeleteFragment(index, field, view string, shard uint64, f
 
 	idx := per.txf.holder.Index(index)
 	dbs, err := per.GetDBShard(index, shard, idx)
-	panicOn(err)
+	if err != nil {
+		return err
+	}
 	return dbs.DeleteFragment(index, field, view, shard, frag)
 }
 
@@ -357,6 +384,7 @@ func (dbs *DBShard) DumpAll() {
 func (per *DBPerShard) DumpAll() {
 	per.Mu.Lock()
 	defer per.Mu.Unlock()
+
 	found1 := false
 	for _, dbi := range per.dbh.Index {
 		for _, dbs := range dbi.Shard {
@@ -447,7 +475,7 @@ func (per *DBPerShard) GetDBShard(index string, shard uint64, idx *Index) (dbs *
 			w.SetHolder(h)
 			dbs.Open = true
 			if w != nil && len(dbs.W) == 0 {
-				per.Flatmap[dbs] = struct{}{}
+				per.Flatmap[flatkey{index: index, shard: shard}] = dbs
 			}
 			dbs.W = append(dbs.W, w)
 		}
@@ -464,7 +492,7 @@ func (per *DBPerShard) Del(dbs *DBShard) (err error) {
 		return
 	}
 	panicOn(dbs.DeleteDBPath())
-	delete(per.Flatmap, dbs)
+	delete(per.Flatmap, flatkey{index: dbs.Index, shard: dbs.Shard})
 
 	// delete from the heirarchy
 	delete(dbs.ParentDBIndex.Shard, dbs.Shard)
@@ -485,12 +513,14 @@ func (per *DBPerShard) Close() (err error) {
 }
 
 // DBPerShardGetShardsForIndex returns the shards for idx.
-func (f *TxFactory) GetShardsForIndex(idx *Index, roaringViewPath string) (sliceOfShards []uint64, err error) {
+// If requireData, we open the database and see that it has a key, rather
+// than assume that the database file presence is enough.
+func (f *TxFactory) GetShardsForIndex(idx *Index, roaringViewPath string, requireData bool) (sliceOfShards []uint64, err error) {
 
 	var shards [][]uint64
 	for _, ty := range f.types {
 		var slc []uint64
-		slc, err = f.dbPerShard.TypedDBPerShardGetShardsForIndex(ty, idx, roaringViewPath)
+		slc, err = f.dbPerShard.TypedDBPerShardGetShardsForIndex(ty, idx, roaringViewPath, requireData)
 		if err != nil {
 			return
 		}
@@ -500,32 +530,20 @@ func (f *TxFactory) GetShardsForIndex(idx *Index, roaringViewPath string) (slice
 	if n != 1 && n != 2 {
 		panic(fmt.Sprintf("internal error. only green or blue/green supported. we see types len %v", n))
 	}
-	if !f.blueGreenOff && n == 2 {
-		// this is a blue green check which cannot live inside Tx because we don't know the shard yet.
-		// Therefore it has to be above Tx, since we are getting all the shards to choose from here.
-		//
-		// But, we still want to check for blue-green consistency. In fact, this was written
-		// in response to an issue with balancing/re-balancing shards being different
-		// over the cluster of nodes between blue and green.
 
-		b := sliceToMap(shards[0])
-		g := sliceToMap(shards[1])
-		blueMinusGreenDiff := mapDiff(b, g)
-		greenMinusBlueDiff := mapDiff(g, b)
-		if len(blueMinusGreenDiff) == 0 && len(greenMinusBlueDiff) == 0 {
-			// ok
-		} else {
-			vv("blue[%v] and green[%v] have different shards for index '%v': blueMinusGreenDiff: %v, greenMinusBlueDiff: %v;  blueShards='%v', greenShards='%v'; idx.path='%v'", f.types[0].String(), f.types[1].String(), idx.name, blueMinusGreenDiff, greenMinusBlueDiff, asInts(shards[0]), asInts(shards[1]), idx.path)
-			panic(fmt.Sprintf("blue[%v] and green[%v] have different shards for index '%v': blueMinusGreenDiff: %v, greenMinusBlueDiff: %v;  blueShards='%v', greenShards='%v'; idx.path='%v'", f.types[0].String(), f.types[1].String(), idx.name, blueMinusGreenDiff, greenMinusBlueDiff, asInts(shards[0]), asInts(shards[1]), idx.path))
-		}
-	}
+	// Note: we don't actually know when the blue call and when the green call comes
+	// through here. So if we are deleting a shard, we will see a difference earlier
+	// in one than the other. TestAPI_ClearFlagForImportAndImportValues for example.
+	// Hence we cannot do a blue-green check here for matching shards.
+
 	// If we are populating blue from green, it does matter that we return green.
 	return shards[n-1], nil
 }
 
 // if roaringViewPath is "" then for ty == roaringTxn we go to disk to discover
 // all the view paths under idx for type ty.
-func (per *DBPerShard) TypedDBPerShardGetShardsForIndex(ty txtype, idx *Index, roaringViewPath string) (sliceOfShards []uint64, err error) {
+// requireData means open the database file and verify that at least one key is set.
+func (per *DBPerShard) TypedDBPerShardGetShardsForIndex(ty txtype, idx *Index, roaringViewPath string, requireData bool) (sliceOfShards []uint64, err error) {
 
 	if ty == roaringTxn {
 		rx := &RoaringTx{
@@ -549,7 +567,6 @@ func (per *DBPerShard) TypedDBPerShardGetShardsForIndex(ty txtype, idx *Index, r
 		return rx.SliceOfShards("", "", "", roaringViewPath)
 	}
 	requiredSuffix := ty.FileSuffix()
-	//path := idx.Path()
 	path := per.prefixForType(idx, ty)
 
 	ignoreEmpty := false
@@ -558,7 +575,9 @@ func (per *DBPerShard) TypedDBPerShardGetShardsForIndex(ty txtype, idx *Index, r
 	panicOn(err)
 
 	for _, nm := range dbf {
+
 		base := filepath.Base(nm)
+
 		splt := strings.Split(base, requiredSuffix)
 		if len(splt) != 2 {
 			panic(fmt.Sprintf("should have 2 parts: nm='%v', base(nm)='%v'; requiredSuffix='%v'", nm, base, requiredSuffix))
@@ -569,21 +588,57 @@ func (per *DBPerShard) TypedDBPerShardGetShardsForIndex(ty txtype, idx *Index, r
 		if !strings.HasPrefix(prefix, shardPrefix) {
 			continue
 		}
+
 		// Parse filename into integer.
 		shard, err := strconv.ParseUint(prefix[lenOfShardPrefix:], 10, 64)
 		if err != nil {
+			panicOn(err)
 			continue
 		}
-		sliceOfShards = append(sliceOfShards, shard)
+
+		// exclude those without data?
+		hasData := false
+
+		if requireData {
+			hasData, err = per.TypedIndexShardHasData(ty, idx, shard)
+			if err != nil {
+				return nil, err
+			}
+			if hasData {
+				sliceOfShards = append(sliceOfShards, shard)
+			}
+		} else {
+			// file presence is enough
+			sliceOfShards = append(sliceOfShards, shard)
+		}
 	}
 	return
 }
 
+func (per *DBPerShard) TypedIndexShardHasData(ty txtype, idx *Index, shard uint64) (hasData bool, err error) {
+	whichty := 0
+	if len(per.types) == 2 {
+		if ty == per.types[1] {
+			whichty = 1
+		}
+	}
+	if ty != per.types[whichty] {
+		return
+	}
+
+	// make the dbs if it doesn't get exist
+	dbs, err := per.GetDBShard(idx.name, shard, idx)
+	if err != nil {
+		return false, errors.Wrap(err, fmt.Sprintf("DBPerShard.TypedIndexShardHasData() "+
+			"per.GetDBShard(index='%v', shard='%v', ty='%v')", idx.name, shard, ty.String()))
+	}
+
+	return dbs.W[whichty].HasData()
+}
+
 func listDirUnderDir(root string, includeRoot bool, requiredSuffix string, ignoreEmpty bool) (files []string, err error) {
-	//vv("listDirUnderDir(root ='%v', suffix='%v')", root, requiredSuffix)
+
 	if !dirExists(root) {
-		//vv("warning: listFilesUnderDir error: root directory '%v' not found", root)
-		//return nil, fmt.Errorf("listFilesUnderDir error: root directory '%v' not found", root)
 		return
 	}
 	n := len(root) + 1
@@ -649,9 +704,10 @@ func listDirUnderDir(root string, includeRoot bool, requiredSuffix string, ignor
 // populateBlueFromGreen().
 //
 func (dbs *DBShard) populateBlueFromGreen() (err error) {
+
 	n := len(dbs.W)
 	if n != 2 {
-		panic(fmt.Sprintf("copyGreenToBlue did not find 2 open DBs: have %v", n))
+		panic(fmt.Sprintf("populateBlueFromGreen did not find 2 open DBs: have %v", n))
 	}
 
 	dest := dbs.W[0] // blue
@@ -674,7 +730,12 @@ func (dbs *DBShard) populateBlueFromGreen() (err error) {
 			view := vw.name
 			citer, _, err := readtx.ContainerIterator(dbs.Index, field, view, dbs.Shard, 0)
 			if err != nil {
-				return errors.Wrap(err, "DBShard.copyGreenToBlue readtx.ContainerIterator")
+				// might be an empty fragment. If so, let's not freak out.
+				if strings.HasPrefix(err.Error(), "fragment not found") {
+					continue
+				} else {
+					return errors.Wrap(err, "DBShard.populateBlueFromGreen readtx.ContainerIterator")
+				}
 			}
 
 			for citer.Next() {
@@ -682,7 +743,7 @@ func (dbs *DBShard) populateBlueFromGreen() (err error) {
 				err := writetx.PutContainer(dbs.Index, field, view, dbs.Shard, ckey, rc)
 				if err != nil {
 					citer.Close()
-					return errors.Wrap(err, "DBShard.copyGreenToBlue writetx.PutContainer")
+					return errors.Wrap(err, "DBShard.populateBlueFromGreen writetx.PutContainer")
 				}
 			}
 			citer.Close()
@@ -696,7 +757,7 @@ func (dbs *DBShard) populateBlueFromGreen() (err error) {
 }
 
 // verifyBlueEqualsGreen checks that blue and green are identical.
-func (dbs *DBShard) verifyBlueEqualsGreen(numCtVerified *int64) (err error) {
+func (dbs *DBShard) verifyBlueEqualsGreen() (err error) {
 
 	n := len(dbs.W)
 	if n != 2 {
@@ -773,8 +834,6 @@ func (dbs *DBShard) verifyBlueEqualsGreen(numCtVerified *int64) (err error) {
 						"shard: '%v' ckey: '%v' nHotGreen= %v nHotBlue= %v ; BitwiseCompare response: '%v'",
 						dbs.Index, field, view, dbs.Shard, greenCkey, nGreen, nBlue, err))
 				}
-				atomic.AddInt64(numCtVerified, 1)
-
 			}
 			if bCiter.Next() {
 				blueCkey, _ := bCiter.Value()

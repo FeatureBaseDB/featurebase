@@ -152,6 +152,9 @@ func (c *Cursor) CurrentPageType() int {
 
 func toContainer(l leafCell, tx *Tx) (c *roaring.Container) {
 
+	if len(l.Data) == 0 {
+		return nil
+	}
 	orig := l.Data
 	var cpMaybe []byte
 	var mapped bool
