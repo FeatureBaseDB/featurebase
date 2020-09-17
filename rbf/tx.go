@@ -720,10 +720,12 @@ func (tx *Tx) checkPageAllocations() error {
 		if isInuse && isFree {
 			return fmt.Errorf("page in-use & free: pgno=%d", pgno)
 		} else if !isInuse && !isFree {
-			page, _ := tx.readPage(pgno)
+			page, err := tx.readPage(pgno)
+			if err != nil {
+				return err
+			}
 			flags := readFlags(page)
 			if flags == PageTypeBranch || flags == PageTypeLeaf {
-
 				return fmt.Errorf("page not in-use & not free: pgno=%d", pgno)
 			}
 			//assuming its a bitmap so its ok TODO ben?
