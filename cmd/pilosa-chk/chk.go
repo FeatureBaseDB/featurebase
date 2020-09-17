@@ -22,6 +22,7 @@ import (
 
 	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/boltdb"
+	"github.com/pilosa/pilosa/v2/hash"
 	"github.com/zeebo/blake3"
 )
 
@@ -55,7 +56,7 @@ func main() {
 	fmt.Printf("opening dir '%v'... this may take a few seconds...\n", dir)
 
 	if dirChecksum {
-		fmt.Printf("path '%v' has dirhash %v\n", dir, pilosa.HashOfDir(dir))
+		fmt.Printf("path '%v' has dirhash %v\n", dir, hash.HashOfDir(dir))
 		return
 	}
 

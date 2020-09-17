@@ -167,9 +167,9 @@ func (t *ClusterCluster) SetBit(index, field string, rowID, colID uint64, x *tim
 		}
 
 		if err := func() error {
-			idx := c.holder.indexes[f.index]
+			idx := c.holder.Index(f.index)
 			shard := colID / ShardWidth
-			tx := idx.Txf.NewTx(Txo{Write: writable, Index: idx, Shard: shard})
+			tx := idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Shard: shard})
 			if tx != nil {
 				defer tx.Rollback()
 			}
@@ -488,11 +488,11 @@ func (t *ClusterCluster) FollowResizeInstruction(instr *ResizeInstruction) error
 			// there will be two -badgerdb directories/databases, we need to copy
 			// from src to dest the fragment. This simulates sending the fragment over the network.
 			srcIdx := srcCluster.holder.Index(src.Index)
-			srctx := srcIdx.Txf.NewTx(Txo{Write: !writable, Index: srcIdx, Fragment: srcFragment, Shard: srcFragment.shard})
+			srctx := srcIdx.holder.txf.NewTx(Txo{Write: !writable, Index: srcIdx, Fragment: srcFragment, Shard: srcFragment.shard})
 
 			destIdx := destCluster.holder.Index(src.Index)
 
-			desttx := destIdx.Txf.NewTx(Txo{Write: writable, Index: destIdx, Fragment: destFragment, Shard: destFragment.shard})
+			desttx := destIdx.holder.txf.NewTx(Txo{Write: writable, Index: destIdx, Fragment: destFragment, Shard: destFragment.shard})
 
 			citer, _, err := srctx.ContainerIterator(src.Index, src.Field, src.View, src.Shard, 0)
 			panicOn(err)

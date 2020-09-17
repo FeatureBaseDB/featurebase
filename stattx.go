@@ -310,8 +310,8 @@ func (c *statTx) ImportRoaringBits(index, field, view string, shard uint64, rit 
 	return c.b.ImportRoaringBits(index, field, view, shard, rit, clear, log, rowSize, data)
 }
 
-func (c *statTx) Dump() {
-	c.b.Dump()
+func (c *statTx) Dump(short bool, shard uint64) {
+	c.b.Dump(short, shard)
 }
 
 func (c *statTx) Readonly() bool {
@@ -431,6 +431,10 @@ func (c *statTx) RemoveContainer(index, field, view string, shard uint64, key ui
 
 func (c *statTx) UseRowCache() bool {
 	return c.b.UseRowCache()
+}
+
+func (c *statTx) IsDone() (done bool) {
+	return c.b.IsDone()
 }
 
 func (c *statTx) Add(index, field, view string, shard uint64, batched bool, a ...uint64) (changeCount int, err error) {

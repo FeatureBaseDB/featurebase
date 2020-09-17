@@ -171,21 +171,22 @@ func (s *TranslateStore) Size() int64 {
 }
 
 // TranslateKey converts a string key to an integer ID.
-// If key does not have an associated id then one is created.
+// If key does not have an associated id then one is created, unless writable is false,
+// then the function will return the error pilosa.ErrTranslatingKeyNotFound.
 func (s *TranslateStore) TranslateKey(key string, writable bool) (uint64, error) {
 	ids, err := s.translateKeys([]string{key}, writable)
 	if err != nil {
 		return 0, err
 	}
 	if len(ids) == 0 {
-		// this should not happen
 		return 0, ErrTranslateKeyNotFound
 	}
 	return ids[0], nil
 }
 
 // TranslateKeys converts a slice of string keys to a slice of integer IDs.
-// If a key does not have an associated id then one is created.
+// If a key does not have an associated id then one is created, unless writable is false,
+// then the function will return the error pilosa.ErrTranslatingKeyNotFound.
 func (s *TranslateStore) TranslateKeys(keys []string, writable bool) ([]uint64, error) {
 	return s.translateKeys(keys, writable)
 }

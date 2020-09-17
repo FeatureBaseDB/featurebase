@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/proto"
+	"github.com/pilosa/pilosa/v2/hash"
 	"github.com/pilosa/pilosa/v2/internal"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/stats"
@@ -69,8 +70,6 @@ type Index struct {
 
 	// Instantiates new translation stores
 	OpenTranslateStore OpenTranslateStoreFunc
-
-	Txf *TxFactory
 }
 
 // NewIndex returns an existing (but possibly empty) instance of
@@ -104,19 +103,16 @@ func NewIndex(holder *Holder, path, name string) (*Index, error) {
 		translationSyncer: NopTranslationSyncer,
 
 		OpenTranslateStore: OpenInMemTranslateStore,
-
-		// the Txf should be shared across all holder.
-		Txf: holder.txf,
 	}
 	return idx, nil
 }
 
 func (i *Index) NewTx(txo Txo) Tx {
-	return i.Txf.NewTx(txo)
+	return i.holder.txf.NewTx(txo)
 }
 
 func (i *Index) NeedsSnapshot() bool {
-	return i.Txf.NeedsSnapshot()
+	return i.holder.txf.NeedsSnapshot()
 }
 
 // CreatedAt is an timestamp for a specific version of an index.
@@ -173,12 +169,14 @@ func (i *Index) options() IndexOptions {
 }
 
 // Open opens and initializes the index.
-func (i *Index) Open(haveHolderLock bool) error { return i.open(false, haveHolderLock) }
+func (i *Index) Open() error {
+	return i.open(false)
+}
 
 // OpenWithTimestamp opens and initializes the index and set a new CreatedAt timestamp for fields.
-func (i *Index) OpenWithTimestamp(haveHolderLock bool) error { return i.open(true, haveHolderLock) }
+func (i *Index) OpenWithTimestamp() error { return i.open(true) }
 
-func (i *Index) open(withTimestamp, haveHolderLock bool) (err error) {
+func (i *Index) open(withTimestamp bool) (err error) {
 	// Ensure the path exists.
 	i.holder.Logger.Debugf("ensure index path exists: %s", i.path)
 	if err := os.MkdirAll(i.path, 0777); err != nil {
@@ -192,7 +190,7 @@ func (i *Index) open(withTimestamp, haveHolderLock bool) (err error) {
 	}
 
 	i.holder.Logger.Debugf("open fields for index: %s", i.name)
-	if err := i.openFields(withTimestamp, haveHolderLock); err != nil {
+	if err := i.openFields(withTimestamp); err != nil {
 		return errors.Wrap(err, "opening fields")
 	}
 
@@ -239,7 +237,7 @@ func (i *Index) open(withTimestamp, haveHolderLock bool) (err error) {
 var indexQueue = make(chan struct{}, 8)
 
 // openFields opens and initializes the fields inside the index.
-func (i *Index) openFields(withTimestamp, haveHolderLock bool) error {
+func (i *Index) openFields(withTimestamp bool) error {
 	f, err := os.Open(i.path)
 	if err != nil {
 		return errors.Wrap(err, "opening directory")
@@ -263,6 +261,11 @@ fileLoop:
 			if !fi.IsDir() {
 				continue
 			}
+			// Skip embedded db files too.
+			if i.holder.txf.IsTxDatabasePath(fi.Name()) {
+				continue
+			}
+
 			indexQueue <- struct{}{}
 			eg.Go(func() error {
 				defer func() {
@@ -272,27 +275,8 @@ fileLoop:
 
 				mu.Lock()
 
-				// i.holder needs to know about its index i for the Txf to work.
-				//
-				// We face either a deadlock or a race here.
-				//
-				// We get a deadlock in TestIndex_CreateField/"BSIFields"/"OK"
-				// if we call addIndexFromField, because in that test
-				// we get here while already holding i.holder.mu.
-				//
-				// On the other had, we get races on other tests
-				// such as TestExecutor_Execute_Existence/Row
-				// if we call unprotectedAddIndexFromField which does
-				// not lock i.holder.mu.
-				//
-				// The resolution was to have the goroutines that are holding
-				// the lock already tell us. That is the haveHolderLock
-				// argument.
-				if haveHolderLock {
-					i.holder.unprotectedAddIndexFromField(i)
-				} else {
-					i.holder.addIndexFromField(i)
-				}
+				// goroutine safe
+				i.holder.addIndex(i)
 
 				fld, err := i.newField(i.fieldPath(filepath.Base(fi.Name())), filepath.Base(fi.Name()))
 				if withTimestamp {
@@ -390,13 +374,14 @@ func (i *Index) saveMeta() error {
 
 // Close closes the index and its fields.
 func (i *Index) Close() error {
+
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	defer func() {
 		_ = testhook.Closed(i.holder.Auditor, i, nil)
 	}()
 
-	err := i.Txf.CloseIndex(i)
+	err := i.holder.txf.CloseIndex(i)
 	if err != nil {
 		return errors.Wrap(err, "closing index")
 	}
@@ -423,8 +408,12 @@ func (i *Index) Close() error {
 	return nil
 }
 
+// make it clear what the Index.AvailableShards() calls are trying to obtain.
+const includeRemote = false
+const localOnly = true
+
 // AvailableShards returns a bitmap of all shards with data in the index.
-func (i *Index) AvailableShards() *roaring.Bitmap {
+func (i *Index) AvailableShards(localOnly bool) *roaring.Bitmap {
 	if i == nil {
 		return roaring.NewBitmap()
 	}
@@ -434,8 +423,8 @@ func (i *Index) AvailableShards() *roaring.Bitmap {
 
 	b := roaring.NewBitmap()
 	for _, f := range i.fields {
-		//b.Union(f.AvailableShards())
-		b.UnionInPlace(f.AvailableShards())
+		//b.Union(f.AvailableShards(localOnly))
+		b.UnionInPlace(f.AvailableShards(localOnly))
 	}
 
 	i.Stats.Gauge(MetricMaxShard, float64(b.Max()), 1.0)
@@ -444,7 +433,7 @@ func (i *Index) AvailableShards() *roaring.Bitmap {
 
 // Begin starts a transaction on a shard of the index.
 func (i *Index) BeginTx(writable bool, shard uint64) (Tx, error) {
-	return i.Txf.NewTx(Txo{Write: writable, Index: i, Shard: shard}), nil
+	return i.holder.txf.NewTx(Txo{Write: writable, Index: i, Shard: shard}), nil
 }
 
 // fieldPath returns the path to a field in the index.
@@ -620,7 +609,7 @@ func (i *Index) DeleteField(name string) error {
 		return errors.Wrap(err, "closing")
 	}
 
-	if err := i.Txf.DeleteFieldFromStore(i.name, name, i.fieldPath(name)); err != nil {
+	if err := i.holder.txf.DeleteFieldFromStore(i.name, name, i.fieldPath(name)); err != nil {
 		return errors.Wrap(err, "Txf.DeleteFieldFromStore")
 	}
 
@@ -702,9 +691,9 @@ func FormatQualifiedIndexName(index string) string {
 // Dump prints to stdout the contents of the roaring Containers
 // stored in idx. Mostly for debugging.
 func (idx *Index) Dump(label string) {
-	//fileline := FileLine(2)
-	fmt.Printf("\nDump: %v\n\n", label)
-	idx.Txf.dbPerShard.DumpAll()
+	fileline := FileLine(2)
+	fmt.Printf("\n%v Dump: %v\n\n", fileline, label)
+	idx.holder.txf.dbPerShard.DumpAll()
 }
 
 func (idx *Index) SliceOfShards(field, view, viewPath string) (sliceOfShards []uint64, err error) {
@@ -791,7 +780,7 @@ func (i *Index) ComputeTranslatorSummary(verbose bool) (ats *AllTranslatorSummar
 		}
 		sum.Field = fld.name
 		sum.Index = i.Name()
-		sum.Checksum = Blake3sum16([]byte(fmt.Sprintf("%v/%v/%v", sum.Checksum, fld.name, i.Name())))
+		sum.Checksum = hash.Blake3sum16([]byte(fmt.Sprintf("%v/%v/%v", sum.Checksum, fld.name, i.Name())))
 
 		if verbose {
 			fmt.Printf("row blake3-%v keyN: %5v idN: %5v field: '%v'\n", sum.Checksum, sum.KeyCount, sum.IDCount, fld.name)
@@ -813,7 +802,7 @@ func (i *Index) ComputeTranslatorSummary(verbose bool) (ats *AllTranslatorSummar
 		sum.PartitionID = partitionID
 		sum.Index = i.Name()
 
-		sum.Checksum = Blake3sum16([]byte(fmt.Sprintf("%v/%v/%v", sum.Checksum, partitionID, i.Name())))
+		sum.Checksum = hash.Blake3sum16([]byte(fmt.Sprintf("%v/%v/%v", sum.Checksum, partitionID, i.Name())))
 		if verbose {
 			fmt.Printf("col blake3-%v keyN: %10v idN: %10v paritionID: %03v \n", sum.Checksum, sum.KeyCount, sum.IDCount, partitionID)
 		}
@@ -841,4 +830,8 @@ func (idx *Index) WriteFragmentChecksums(w io.Writer, showBits, showOps bool) {
 	if n == 0 {
 		fmt.Fprintf(w, "empty index '%v'", idx.path)
 	}
+}
+
+func (idx *Index) Txf() *TxFactory {
+	return idx.holder.txf
 }

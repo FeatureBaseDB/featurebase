@@ -12,15 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package rbf
+package hash
 
 import (
+	cryptorand "crypto/rand"
 	"encoding/binary"
 	"fmt"
 	"sync"
 
-	cryptorand "crypto/rand"
 	"github.com/zeebo/blake3"
+	"golang.org/x/mod/sumdb/dirhash"
 )
 
 // Blake3Hasher is a thread/goroutine safe way to
@@ -69,10 +70,10 @@ func (w *Blake3Hasher) CryptoHash(input []byte, buffer []byte) (outputCryptohash
 	return buffer
 }
 
-// blake3sum16 might be slower because we allocate a new hasher every time, but
+// Blake3sum16 might be slower because we allocate a new hasher every time, but
 // it is more conenient for writing debug code. It returns
 // a 16 byte hash as a hexidecimal string.
-func blake3sum16(input []byte) string {
+func Blake3sum16(input []byte) string {
 	hasher := blake3.New()
 
 	_, _ = hasher.Write(input)
@@ -82,8 +83,8 @@ func blake3sum16(input []byte) string {
 	return fmt.Sprintf("%x", buf)
 }
 
-// cryptoRandInt64 uses crypto/rand to get an random int64
-func cryptoRandInt64() int64 {
+// CryptoRandInt64 uses crypto/rand to get an random int64
+func CryptoRandInt64() int64 {
 	c := 8
 	b := make([]byte, c)
 	_, err := cryptorand.Read(b)
@@ -94,4 +95,13 @@ func cryptoRandInt64() int64 {
 	return r
 }
 
-var _ = cryptoRandInt64 // happy linter
+// HashOfDir returns the hash of the local file system directory dir
+func HashOfDir(path string) string {
+	prefix := ""
+	h, err := dirhash.HashDir(path, prefix, dirhash.Hash1)
+	if err != nil {
+		panic(err)
+	}
+
+	return h
+}

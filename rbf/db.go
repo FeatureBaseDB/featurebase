@@ -58,6 +58,14 @@ type DB struct {
 	MaxSize int64
 }
 
+// NewDBWithAllocZero sets DoAllocZero true and
+// returns a new instance of DB. We set it here
+// to avoid a data race afterwards.
+func NewDBWithAllocZero(path string) *DB {
+	DoAllocZero = true
+	return NewDB(path)
+}
+
 // NewDB returns a new instance of DB.
 func NewDB(path string) *DB {
 	db := &DB{
@@ -433,7 +441,6 @@ func (db *DB) readWALPage(walID int64) ([]byte, error) {
 }
 
 func (db *DB) writeWALPage(page []byte, isMeta bool) (walID int64, err error) {
-
 	if err := db.ensureWritableWALSegment(); err != nil {
 		return 0, err
 	}
@@ -542,6 +549,68 @@ func (db *DB) closeWALSegments() (err error) {
 		}
 	}
 	return err
+}
+
+// HasData with requireOneHotBit=false returns
+// hasAnyRecords true if any record has been stored,
+// even if the value for that bitmap record turned out to have
+// no bits hot (be all zeroes).
+//
+// In this case, we are taking the attempted storage
+// of any named bitmap into the database as evidence
+// that the db is in use, and we return hasAnyRecords true.
+//
+// Conversely, if requireOneHotBit is true, then a
+// database consisting of only a named bitmap with
+// an all zeroes (no bits hot)
+// will return hasAnyRecords false. We must find at
+// least a single hot bit inside the db
+// in order to return hasAnyRecords true.
+//
+// HasData is used by backend migration and blue/green checks.
+//
+// If there is a disk error we return (false, error), so always
+// check the error before deciding if hasAnyRecords is valid.
+//
+// We will internally create and rollback a read-only
+// transaction to answer this query.
+func (db *DB) HasData(requireOneHotBit bool) (hasAnyRecords bool, err error) {
+
+	// Read a list of all bitmaps in Tx.
+	tx, err := db.Begin(false)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+
+	records, err := tx.RootRecords()
+	if err != nil {
+		return false, err
+	}
+	// Loop over each bitmap and attempt to move to the first cell.
+	// If we can move to a cell then we have at least one record.
+	for _, record := range records {
+		// Fetch cursor for bitmap.
+		cur, err := tx.Cursor(record.Name)
+		if err != nil {
+			return false, err
+		} else if cur == nil {
+			continue // no bitmap
+		}
+		if !requireOneHotBit {
+			return true, nil
+		}
+		// INVAR: requireOneHotBit true
+
+		// Check if we can move to the first cell.
+		if err := cur.First(); err == io.EOF {
+			continue // no data in bitmap
+		} else if err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+	return false, nil
 }
 
 // Size returns the size of the database & WAL, in bytes.
@@ -730,6 +799,8 @@ func (db *DB) removeTx(tx *Tx) error {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
+	delete(tx.db.txs, tx)
+
 	// Write pages from WAL to DB.
 	// TODO(bbj): Move this to an async goroutine.
 	if tx.writable {
@@ -737,8 +808,6 @@ func (db *DB) removeTx(tx *Tx) error {
 			return err
 		}
 	}
-
-	delete(tx.db.txs, tx)
 
 	// Disassociate from db.
 	tx.db = nil
@@ -759,7 +828,6 @@ func (db *DB) Check() error {
 
 // writePage writes a page to the data file.
 func (db *DB) writePage(pgno uint32, page []byte) error {
-
 	_, err := db.file.WriteAt(page, int64(pgno)*PageSize)
 	return err
 }

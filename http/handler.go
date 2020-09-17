@@ -1632,10 +1632,10 @@ func (h *Handler) handleGetMetricsJSON(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	metrics := make(map[string][]*prom2json.Family)
-	mfChan := make(chan *dto.MetricFamily, 60)
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	for _, node := range h.api.Hosts(r.Context()) {
 		metricsURI := node.URI.String() + "/metrics"
+		mfChan := make(chan *dto.MetricFamily, 60)
 		err := prom2json.FetchMetricFamilies(metricsURI, mfChan, transport)
 		if err != nil {
 			http.Error(w, "fetching metrics: "+err.Error(), http.StatusInternalServerError)
@@ -2432,17 +2432,22 @@ func (h *Handler) handlePostTranslateKeys(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	buf, err := h.api.TranslateKeys(r.Context(), r.Body, true)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("translate keys: %v", err), http.StatusInternalServerError)
-		return
-	}
+	buf, err := h.api.TranslateKeys(r.Context(), r.Body)
+	switch errors.Cause(err) {
+	case nil:
+		// Write response.
+		if _, err = w.Write(buf); err != nil {
+			h.logger.Printf("writing translate keys response: %v", err)
+		}
 
-	// Write response.
-	_, err = w.Write(buf)
-	if err != nil {
-		h.logger.Printf("writing translate keys response: %v", err)
-		return
+	case pilosa.ErrTranslatingKeyNotFound:
+		http.Error(w, fmt.Sprintf("translate keys: %v", err), http.StatusNotFound)
+
+	case pilosa.ErrTranslateStoreReadOnly:
+		http.Error(w, fmt.Sprintf("translate keys: %v", err), http.StatusPreconditionFailed)
+
+	default:
+		http.Error(w, fmt.Sprintf("translate keys: %v", err), http.StatusInternalServerError)
 	}
 }
 

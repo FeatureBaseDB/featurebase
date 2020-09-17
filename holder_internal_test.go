@@ -16,11 +16,14 @@ package pilosa
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"testing"
 
 	"github.com/pilosa/pilosa/v2/testhook"
 )
+
+var _ = fmt.Printf
 
 type testHolderOperator struct {
 	indexSeen, indexProcessed       int
@@ -79,7 +82,7 @@ func makeHolder(tb testing.TB) (*Holder, string, error) {
 		return nil, "", err
 	}
 	h := NewHolder(path, nil)
-	return h, path, nil
+	return h, path, h.Open()
 }
 
 func testSetBit(t *testing.T, h *Holder, index, field string, rowID, columnID uint64) {
@@ -89,21 +92,81 @@ func testSetBit(t *testing.T, h *Holder, index, field string, rowID, columnID ui
 		t.Fatalf("creating index: %v", err)
 	}
 
-	shard := columnID / ShardWidth
-	tx := idx.Txf.NewTx(Txo{Write: writable, Index: idx, Shard: shard})
-	defer tx.Rollback()
-
 	f, err := idx.CreateFieldIfNotExists(field, OptFieldTypeDefault())
 	if err != nil {
 		t.Fatalf("setting bit: %v", err)
 	}
-	_, err = f.SetBit(tx, rowID, columnID, nil)
+	_, err = f.SetBit(nil, rowID, columnID, nil)
 	if err != nil {
 		t.Fatalf("setting bit: %v", err)
 	}
-	if err := tx.Commit(); err != nil {
-		t.Fatal(err)
+}
+
+func testMustHaveBit(t *testing.T, h *Holder, index, field string, rowID, columnID uint64) {
+
+	//shard := columnID / ShardWidth
+
+	// hmm... if its a new holder, meta data isn't there, so ask for it.
+	idx, err := h.CreateIndexIfNotExists(index, IndexOptions{})
+	panicOn(err)
+
+	f := idx.Field(field)
+	if f == nil {
+		t.Fatalf("no such field '%v'", field)
 	}
+
+	row, err := f.Row(nil, rowID)
+	if err != nil {
+		t.Fatalf("error getting field.Row(rowID=%v): %v", rowID, err)
+	}
+
+	cols := row.Columns()
+	if len(cols) == 0 {
+		t.Fatalf("error getting field.Row().Columns(): empty columns, colID %v bit was not hot", columnID)
+	}
+
+	for _, c := range cols {
+		if c == columnID {
+			return // ok, found it.
+		}
+	}
+	t.Fatalf("error getting field.Row().Columns(): colID %v bit was not hot", columnID)
+}
+
+func testMustNotHaveBit(t *testing.T, h *Holder, index, field string, rowID, columnID uint64) {
+	if testHasBit(t, h, index, field, rowID, columnID) {
+		t.Fatalf("error, expected no bit but this bit was hot: index='%v', field='%v', rowID='%v', columnID='%v'", index, field, rowID, columnID)
+	}
+}
+
+func testHasBit(t *testing.T, h *Holder, index, field string, rowID, columnID uint64) bool {
+
+	idx := h.Index(index)
+	if idx == nil {
+		return false // not even an index by this name. Obviously no hot bits either.
+	}
+
+	f := idx.Field(field)
+	if f == nil {
+		return false
+	}
+
+	row, err := f.Row(nil, rowID)
+	if err != nil {
+		return false
+	}
+
+	cols := row.Columns()
+	if len(cols) == 0 {
+		return false
+	}
+
+	for _, c := range cols {
+		if c == columnID {
+			return true // ok, found it.
+		}
+	}
+	return false
 }
 
 func TestHolderOperatorProcess(t *testing.T) {

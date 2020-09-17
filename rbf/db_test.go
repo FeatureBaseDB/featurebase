@@ -92,13 +92,24 @@ func TestDB_Recovery(t *testing.T) {
 		}
 
 		// Add one additional bit in a second transaction.
-		if tx, err := db.Begin(true); err != nil {
+		tx0, err := db.Begin(true)
+		if err != nil {
 			t.Fatal(err)
-		} else if _, err := tx.Add("x", uint64(len(a))); err != nil {
-			t.Fatal(err)
-		} else if err := tx.Commit(); err != nil {
+		} else if _, err := tx0.Add("x", uint64(len(a))); err != nil {
 			t.Fatal(err)
 		}
+
+		// Start a read-only transaction so the write tx does not checkpoint the WAL.
+		tx1, err := db.Begin(false)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Commit write transaction.
+		if err := tx0.Commit(); err != nil {
+			t.Fatal(err)
+		}
+		tx1.Rollback()
 
 		// Close database & truncate WAL to remove commit page & bitmap data page.
 		segment := db.ActiveWALSegment()
@@ -190,4 +201,84 @@ func TestDB_BeginWithExclusiveLock(t *testing.T) {
 			t.Fatalf("WALSize()=%d, want %d", got, want)
 		}
 	})
+}
+
+func TestDB_HasData(t *testing.T) {
+
+	db := MustOpenDB(t)
+	defer MustCloseDB(t, db)
+
+	// HasData should start out false.
+	const requireOneHotBit = true
+	hasAnything, err := db.HasData(!requireOneHotBit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hasAnything {
+		t.Fatalf("HasData reported existing data on an empty database")
+	}
+
+	hasAnything, err = db.HasData(requireOneHotBit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hasAnything {
+		t.Fatalf("HasData reported existing data on an empty database")
+	}
+
+	// check that HasData sees a committed record.
+
+	// Create bitmap with no hot bits.
+	if tx, err := db.Begin(true); err != nil {
+		t.Fatal(err)
+	} else if err := tx.CreateBitmap("x"); err != nil {
+		t.Fatal(err)
+	} else if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	// HasData(false) should now report seeing the 'x' record, even though
+	// the value is an empty bitmap, since !requireOneHotBit.
+	hasAnything, err = db.HasData(!requireOneHotBit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasAnything {
+		t.Fatalf("HasData(!requireOneHotBit) reported no data on a database that has 'x' written to it")
+	}
+
+	// HasData(requireOneHotBit) should report false, since we have no hot bits.
+	hasAnything, err = db.HasData(requireOneHotBit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hasAnything {
+		t.Fatalf("HasData(requireOneHotBit) reported data on a database that has 'x' -> empty bitmap")
+	}
+
+	// hot up a bit.
+	if tx, err := db.Begin(true); err != nil {
+		t.Fatal(err)
+	} else if _, err := tx.Add("x", rand.Uint64()); err != nil {
+		t.Fatal(err)
+	} else if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Now it shouldn't matter, we should get HasData true either way
+	// HasData(requireOneHotBit) should report false, since we have no hot bits.
+	hasAnything, err = db.HasData(requireOneHotBit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasAnything {
+		t.Fatalf("HasData should have seen the hot bit")
+	}
+	hasAnything, err = db.HasData(!requireOneHotBit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasAnything {
+		t.Fatalf("HasData should have seen the hot bit")
+	}
 }

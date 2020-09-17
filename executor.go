@@ -142,6 +142,7 @@ func (e *executor) Close() error {
 
 // Execute executes a PQL query.
 func (e *executor) Execute(ctx context.Context, index string, q *pql.Query, shards []uint64, opt *execOptions) (QueryResponse, error) {
+
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.Execute")
 	span.LogKV("pql", q.String())
 	defer span.Finish()
@@ -506,7 +507,7 @@ func (e *executor) execute(ctx context.Context, qcx *Qcx, index string, q *pql.Q
 		if idx == nil {
 			return nil, newNotFoundError(ErrIndexNotFound, index)
 		}
-		shards = idx.AvailableShards().Slice()
+		shards = idx.AvailableShards(includeRemote).Slice()
 		if len(shards) == 0 {
 			shards = []uint64{0}
 		}
@@ -780,7 +781,7 @@ func (e *executor) executeCall(ctx context.Context, qcx *Qcx, index string, c *p
 		if idx == nil {
 			return nil, newNotFoundError(ErrIndexNotFound, index)
 		}
-		shards = idx.AvailableShards().Slice()
+		shards = idx.AvailableShards(includeRemote).Slice()
 		if len(shards) == 0 {
 			shards = []uint64{0}
 		}
@@ -3834,15 +3835,15 @@ func (e *executor) executeClearBitField(ctx context.Context, qcx *Qcx, index str
 
 	shard := colID / ShardWidth
 
-	idx := e.Holder.Index(index)
-
-	tx, finisher := qcx.GetTx(Txo{Write: writable, Index: idx, Shard: shard})
-	defer finisher(&err)
-
 	ret := false
 	for _, node := range e.Cluster.shardNodes(index, shard) {
 		// Update locally if host matches.
 		if node.ID == e.Node.ID {
+
+			idx := e.Holder.Index(index)
+			tx, finisher := qcx.GetTx(Txo{Write: writable, Index: idx, Shard: shard})
+			defer finisher(&err)
+
 			val, err := f.ClearBit(tx, rowID, colID)
 			if err != nil {
 				return false, err
@@ -4109,7 +4110,7 @@ func (e *executor) executeSetRowShard(ctx context.Context, qcx *Qcx, index strin
 }
 
 // executeSet executes a Set() call.
-func (e *executor) executeSet(ctx context.Context, qcx *Qcx, index string, c *pql.Call, opt *execOptions) (_ bool, err error) {
+func (e *executor) executeSet(ctx context.Context, qcx *Qcx, index string, c *pql.Call, opt *execOptions) (_ bool, err0 error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeSet")
 	defer span.Finish()
 
@@ -4128,9 +4129,6 @@ func (e *executor) executeSet(ctx context.Context, qcx *Qcx, index string, c *pq
 
 	shard := colID / ShardWidth
 
-	tx, finisher := qcx.GetTx(Txo{Write: writable, Index: idx, Shard: shard})
-	defer finisher(&err)
-
 	// Read field name.
 	fieldName, err := c.FieldArg()
 	if err != nil {
@@ -4145,11 +4143,15 @@ func (e *executor) executeSet(ctx context.Context, qcx *Qcx, index string, c *pq
 
 	// Set column on existence field.
 	if ef := idx.existenceField(); ef != nil {
+		// we create tx here, rather than just above, to avoid creating an extra empty shard.
+		tx, finisher := qcx.GetTx(Txo{Write: writable, Index: idx, Shard: shard})
+		defer finisher(&err0)
+
 		if _, err := ef.SetBit(tx, 0, colID, nil); err != nil {
 			return false, errors.Wrap(err, "setting existence column")
 		}
+		finisher(nil) // commit to free of the write lock needed inside executeSetBitField
 	}
-	finisher(nil) // commit to free of the write lock needed inside executeSetBitField
 
 	switch f.Type() {
 	case FieldTypeInt, FieldTypeDecimal:
@@ -4206,13 +4208,14 @@ func (e *executor) executeSetBitField(ctx context.Context, qcx *Qcx, index strin
 	shard := colID / ShardWidth
 	ret := false
 
-	idx := e.Holder.Index(index)
-	tx, finisher := qcx.GetTx(Txo{Write: writable, Index: idx, Shard: shard})
-	defer finisher(&err0)
-
 	for _, node := range e.Cluster.shardNodes(index, shard) {
 		// Update locally if host matches.
 		if node.ID == e.Node.ID {
+
+			idx := e.Holder.Index(index)
+			tx, finisher := qcx.GetTx(Txo{Write: writable, Index: idx, Shard: shard})
+			defer finisher(&err0)
+
 			val, err := f.SetBit(tx, rowID, colID, timestamp)
 			if err != nil {
 				return false, err
@@ -4245,13 +4248,14 @@ func (e *executor) executeSetValueField(ctx context.Context, qcx *Qcx, index str
 	shard := colID / ShardWidth
 	ret := false
 
-	idx := e.Holder.Index(index)
-	tx, finisher := qcx.GetTx(Txo{Write: writable, Index: idx, Shard: shard})
-	defer finisher(&err)
-
 	for _, node := range e.Cluster.shardNodes(index, shard) {
 		// Update locally if host matches.
 		if node.ID == e.Node.ID {
+
+			idx := e.Holder.Index(index)
+			tx, finisher := qcx.GetTx(Txo{Write: writable, Index: idx, Shard: shard})
+			defer finisher(&err)
+
 			val, err := f.SetValue(tx, colID, value)
 			if err != nil {
 				return false, err
@@ -4284,13 +4288,14 @@ func (e *executor) executeClearValueField(ctx context.Context, qcx *Qcx, index s
 	shard := colID / ShardWidth
 	ret := false
 
-	idx := e.Holder.Index(index)
-	tx, finisher := qcx.GetTx(Txo{Write: writable, Index: idx, Shard: shard})
-	defer finisher(&err)
-
 	for _, node := range e.Cluster.shardNodes(index, shard) {
 		// Update locally if host matches.
 		if node.ID == e.Node.ID {
+
+			idx := e.Holder.Index(index)
+			tx, finisher := qcx.GetTx(Txo{Write: writable, Index: idx, Shard: shard})
+			defer finisher(&err)
+
 			val, err := f.ClearValue(tx, colID)
 			if err != nil {
 				return false, err
@@ -4808,7 +4813,7 @@ func (e *executor) translateCalls(ctx context.Context, defaultIndexName string, 
 	// Perform a separate batch translation for each separate index used.
 	keyMaps := make(map[string]map[string]uint64)
 	for indexName, keySet := range keySets {
-		idx := e.Holder.indexes[indexName]
+		idx := e.Holder.Index(indexName)
 		if idx == nil {
 			return fmt.Errorf("cannot find index %q", indexName)
 		}
@@ -4851,8 +4856,8 @@ func (e *executor) collectCallKeySets(ctx context.Context, indexName string, c *
 
 	// Collect foreign index keys.
 	if fieldName != "" {
-		idx, exists := e.Holder.indexes[indexName]
-		if !exists {
+		idx := e.Holder.Index(indexName)
+		if idx == nil {
 			return newNotFoundError(ErrIndexNotFound, indexName)
 		}
 		if field := idx.Field(fieldName); field != nil && field.ForeignIndex() != "" {
@@ -4899,8 +4904,8 @@ func (e *executor) translateCall(ctx context.Context, indexName string, c *pql.C
 
 	// Translate column key.
 	colKey, rowKey, fieldName := c.TranslateInfo(columnLabel, rowLabel)
-	idx, exists := e.Holder.indexes[indexName]
-	if !exists {
+	idx := e.Holder.Index(indexName)
+	if idx == nil {
 		return newNotFoundError(ErrIndexNotFound, indexName)
 	}
 	if idx.Keys() {
@@ -5365,18 +5370,11 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 				return nil, newNotFoundError(ErrFieldNotFound, v)
 			}
 
-			datatype, err := field.Datatype()
-			if err != nil {
-				return nil, errors.Wrapf(err, "field %s", v)
-			}
-			fields[i] = ExtractedTableField{
-				Name: v,
-				Type: datatype,
-			}
-
 			var mapper fieldMapper
+			var datatype string
 			switch typ := field.Type(); typ {
 			case FieldTypeBool:
+				datatype = "bool"
 				mapper = func(ids []uint64) (_ interface{}, err error) {
 					switch len(ids) {
 					case 0:
@@ -5396,6 +5394,7 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 				}
 			case FieldTypeSet, FieldTypeTime:
 				if field.Keys() {
+					datatype = "[]string"
 					translations, err := e.preTranslateMatrixSet(result, uint(i), field)
 					if err != nil {
 						return nil, errors.Wrapf(err, "translating IDs of field %q", v)
@@ -5408,6 +5407,7 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 						return keys, nil
 					}
 				} else {
+					datatype = "[]uint64"
 					mapper = func(ids []uint64) (interface{}, error) {
 						if ids == nil {
 							ids = []uint64{}
@@ -5417,6 +5417,7 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 				}
 			case FieldTypeMutex:
 				if field.Keys() {
+					datatype = "string"
 					translations, err := e.preTranslateMatrixSet(result, uint(i), field)
 					if err != nil {
 						return nil, errors.Wrapf(err, "translating IDs of field %q", v)
@@ -5432,6 +5433,7 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 						}
 					}
 				} else {
+					datatype = "uint64"
 					mapper = func(ids []uint64) (_ interface{}, err error) {
 						switch len(ids) {
 						case 0:
@@ -5446,6 +5448,7 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 			case FieldTypeInt:
 				if fi := field.ForeignIndex(); fi != "" {
 					if field.Keys() {
+						datatype = "string"
 						ids := make(map[uint64]struct{}, len(result.Columns))
 						for _, col := range result.Columns {
 							for _, v := range col.Rows[i] {
@@ -5467,6 +5470,7 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 							}
 						}
 					} else {
+						datatype = "uint64"
 						mapper = func(ids []uint64) (interface{}, error) {
 							switch len(ids) {
 							case 0:
@@ -5479,6 +5483,7 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 						}
 					}
 				} else {
+					datatype = "int64"
 					mapper = func(ids []uint64) (interface{}, error) {
 						switch len(ids) {
 						case 0:
@@ -5491,6 +5496,7 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 					}
 				}
 			case FieldTypeDecimal:
+				datatype = "decimal"
 				scale := field.Options().Scale
 				mapper = func(ids []uint64) (_ interface{}, err error) {
 					switch len(ids) {
@@ -5506,6 +5512,10 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 				return nil, errors.Errorf("field type %q not yet supported", typ)
 			}
 			mappers[i] = mapper
+			fields[i] = ExtractedTableField{
+				Name: v,
+				Type: datatype,
+			}
 		}
 
 		var translateCol func(uint64) (KeyOrID, error)

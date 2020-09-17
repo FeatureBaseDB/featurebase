@@ -155,7 +155,7 @@ func TestExecutor_TranslateRowsOnBool(t *testing.T) {
 	}
 
 	shard := uint64(0)
-	tx := idx.Txf.NewTx(Txo{Write: writable, Index: idx, Shard: shard})
+	tx := idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Shard: shard})
 	defer tx.Rollback()
 
 	fb, errb := idx.CreateField("b", OptFieldTypeBool())

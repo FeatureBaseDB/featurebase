@@ -58,8 +58,8 @@ func (c *catcherTx) ImportRoaringBits(index, field, view string, shard uint64, r
 	return c.b.ImportRoaringBits(index, field, view, shard, rit, clear, log, rowSize, data)
 }
 
-func (c *catcherTx) Dump() {
-	c.b.Dump()
+func (c *catcherTx) Dump(short bool, shard uint64) {
+	c.b.Dump(short, shard)
 }
 
 func (c *catcherTx) Readonly() bool {
@@ -143,6 +143,10 @@ func (c *catcherTx) RemoveContainer(index, field, view string, shard uint64, key
 
 func (c *catcherTx) UseRowCache() bool {
 	return c.b.UseRowCache()
+}
+
+func (c *catcherTx) IsDone() bool {
+	return c.b.IsDone()
 }
 
 func (c *catcherTx) Add(index, field, view string, shard uint64, batched bool, a ...uint64) (changeCount int, err error) {

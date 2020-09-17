@@ -25,6 +25,7 @@ import (
 	"syscall"
 	"text/tabwriter"
 
+	"github.com/pilosa/pilosa/v2/hash"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/txkey"
 	"github.com/pkg/errors"
@@ -36,6 +37,7 @@ const (
 	RoaringTxn string = "roaring"
 	LmdbTxn    string = "lmdb"
 	RBFTxn     string = "rbf"
+	BadgerTxn  string = "badger"
 )
 
 // DefaultTxsrc is set here. pilosa/server/config.go references it
@@ -388,6 +390,10 @@ type TxFactory struct {
 	holder *Holder
 
 	blueGreenReg *blueGreenRegistry
+
+	// allow holder to activate blue-green checking only
+	// once we have synced both sides at start up time.
+	blueGreenOff bool
 }
 
 func (f *TxFactory) Types() []txtype {
@@ -402,18 +408,43 @@ const (
 	roaringTxn txtype = 1 // these don't really have any transactions
 	rbfTxn     txtype = 2
 	lmdbTxn    txtype = 3
+	badgerTxn  txtype = 4
 )
 
+// these need to be skipped by the holder.go field scanner that
+// calls IsTxDatabasePath
+var allTypesWithSuffixes = []txtype{rbfTxn, lmdbTxn, badgerTxn}
+
+// FileSuffix is used to determine backend directory names.
+// We append '@' to be sure we never collide with a field name
+// inside the index directory. In the future for different
+// versions of the same backend, there might be version
+// identifier tacked on too.
 func (ty txtype) FileSuffix() string {
 	switch ty {
 	case roaringTxn:
 		return ""
 	case rbfTxn:
-		return "-rbfdb"
+		return "-rbfdb@"
 	case lmdbTxn:
-		return "-lmdb"
+		return "-lmdb@"
+	case badgerTxn:
+		return "-badgerdb@"
 	}
 	panic(fmt.Sprintf("unkown txtype %v", int(ty)))
+}
+
+func (txf *TxFactory) IsTxDatabasePath(path string) bool {
+	if strings.HasSuffix(filepath.Base(path), ".txstores@@@") {
+		// top level dir
+		return true
+	}
+	for _, ty := range allTypesWithSuffixes {
+		if strings.HasSuffix(path, ty.FileSuffix()) {
+			return true
+		}
+	}
+	return false
 }
 
 func (txf *TxFactory) NeedsSnapshot() (b bool) {
@@ -446,6 +477,8 @@ func MustTxsrcToTxtype(txsrc string) (types []txtype) {
 			types = append(types, rbfTxn)
 		case LmdbTxn: // "lmdb"
 			types = append(types, lmdbTxn)
+		case BadgerTxn: // "badger"
+			types = append(types, badgerTxn)
 		default:
 			panic(fmt.Sprintf("unknown txsrc '%v'", s))
 		}
@@ -460,19 +493,28 @@ func MustTxsrcToTxtype(txsrc string) (types []txtype) {
 
 // NewTxFactory always opens an existing database. If you
 // want to a fresh database, os.RemoveAll on dir/name ahead of time.
-// We always store files in a subdir of dir. If we are having one
+// We always store files in a subdir of holderDir. If we are having one
 // database or many can depend on name.
 func NewTxFactory(txsrc string, holderDir string, holder *Holder) (f *TxFactory, err error) {
 	types := MustTxsrcToTxtype(txsrc)
 
 	f = &TxFactory{
-		types:        types,
-		typeOfTx:     txsrc,
-		holder:       holder,
-		blueGreenReg: newBlueGreenReg(),
+		types:    types,
+		typeOfTx: txsrc,
+		holder:   holder,
 	}
-	f.dbPerShard = f.NewDBPerShard(types, holderDir)
+	if len(types) == 2 {
+		f.blueGreenReg = newBlueGreenReg(types)
+	}
+	f.dbPerShard = f.NewDBPerShard(types, holderDir, holder)
+
 	return f, err
+}
+
+// Open should be called only once the index metadata is loaded
+// from Holder.Open(), so we find all of our indexes.
+func (f *TxFactory) Open() error {
+	return f.dbPerShard.LoadExistingDBs()
 }
 
 // Txo holds the transaction options
@@ -488,6 +530,8 @@ type Txo struct {
 	per *DBPerShard
 
 	Group *TxGroup
+
+	blueGreenOff bool
 }
 
 func (o Txo) String() string {
@@ -527,7 +571,7 @@ func (f *TxFactory) CloseIndex(idx *Index) error {
 	return nil
 }
 
-func (f *TxFactory) CloseDB() (err error) {
+func (f *TxFactory) Close() (err error) {
 	if f.dbsClosed {
 		return nil
 	}
@@ -683,7 +727,7 @@ func (g *TxGroup) AbortGroup() {
 }
 
 func (f *TxFactory) NewTx(o Txo) (txn Tx) {
-	f.mu.Lock() // deadlock here
+	f.mu.Lock()
 	defer f.mu.Unlock()
 
 	defer func() {
@@ -691,6 +735,8 @@ func (f *TxFactory) NewTx(o Txo) (txn Tx) {
 			txn = newStatTx(txn)
 		}
 	}()
+
+	o.blueGreenOff = f.blueGreenOff
 
 	indexName := ""
 	if o.Index != nil {
@@ -710,8 +756,15 @@ func (f *TxFactory) NewTx(o Txo) (txn Tx) {
 	// per-shard database. Opens a new one if needed.
 	dbs, err := f.dbPerShard.GetDBShard(indexName, o.Shard, o.Index)
 	panicOn(err)
+
+	if dbs.Shard != o.Shard {
+		panic(fmt.Sprintf("asked for o.Shard=%v but got dbs.Shard=%v", int(o.Shard), int(dbs.Shard)))
+	}
+	//vv("got dbs='%p' for o.Index='%v'; shard='%v'; dbs.types='%#v'; dbs.W='%#v'", dbs, o.Index.name, o.Shard, dbs.types, dbs.W)
+
 	o.dbs = dbs          // our specific database per shard.
 	o.per = f.dbPerShard // for top level debug Dumps
+
 	tx, err := dbs.NewTx(o.Write, indexName, o)
 	if err != nil {
 		panic(errors.Wrap(err, "rbfDB.NewRBFTx transaction errored"))
@@ -729,6 +782,8 @@ func (ty txtype) String() string {
 		return "rbfTxn"
 	case lmdbTxn:
 		return "lmdbTxn"
+	case badgerTxn:
+		return "badgerTxn"
 	}
 	panic(fmt.Sprintf("unhandled ty '%v' in txtype.String()", int(ty)))
 }
@@ -766,7 +821,7 @@ func fragmentSpecFromRoaringPath(path string) (field, view string, shard uint64,
 
 // hashOnly means only show the value hash, not the content bits.
 // showOps means display the ops log.
-func (idx *Index) StringifiedRoaringKeys(hashOnly, showOps bool) (r string) {
+func (idx *Index) StringifiedRoaringKeys(hashOnly, showOps bool, o Txo) (r string) {
 	paths, err := listFilesUnderDir(idx.path, false, "", true)
 	panicOn(err)
 	index := idx.name
@@ -778,22 +833,25 @@ func (idx *Index) StringifiedRoaringKeys(hashOnly, showOps bool) (r string) {
 		if err != nil {
 			continue // ignore .meta paths
 		}
+		if shard != o.Shard {
+			continue // only print the shard the Txo is on.
+		}
 		abspath := idx.path + sep + relpath
 
 		s, _, err := stringifiedRawRoaringFragment(abspath, index, field, view, shard, showOps, hashOnly, os.Stdout)
 		panicOn(err)
 		//r += fmt.Sprintf("path:'%v' fragment contains:\n") + s
-		if s == "" {
-			s = "<empty bitmap>"
-		}
+		//if s == "" {
+		//s = "<empty bitmap>"
+		//}
 		r += s
 		n++
 	}
 	if n == 0 {
-		return "" // new convention that empty database => empty string returned.
+		return "<empty roaring data>"
 	}
 	// note that we can have a bitmap present, but it can be empty
-	r += "]\n   all-in-blake3:" + Blake3sum16([]byte(r)) + "\n"
+	r += "]\n   all-in-blake3:" + hash.Blake3sum16([]byte(r)) + "\n"
 
 	return "roaring-" + r
 }
@@ -871,7 +929,7 @@ func stringifiedRawRoaringFragment(path string, index, field, view string, shard
 	for citer.Next() {
 		ckey, ct := citer.Value()
 		by := containerToBytes(ct)
-		hash := Blake3sum16(by)
+		hash := hash.Blake3sum16(by)
 
 		cts := roaring.NewSliceContainers()
 		cts.Put(ckey, ct)
@@ -1071,4 +1129,170 @@ func printContainers(w io.Writer, info roaring.BitmapInfo, pC pointerContext) {
 		printed++
 	}
 	tw.Flush()
+}
+
+var _ = anyGlobalDBWrappersStillOpen // happy linter
+
+func anyGlobalDBWrappersStillOpen() bool {
+	if globalRoaringReg.Size() != 0 {
+		return true
+	}
+	if globalRbfDBReg.Size() != 0 {
+		return true
+	}
+	if globalLMDBReg.Size() != 0 {
+		return true
+	}
+	if globalBadgerReg.Size() != 0 {
+		return true
+	}
+	return false
+}
+
+func (f *TxFactory) blueGreenOnIfRunningBlueGreen() {
+	if len(f.types) == 2 {
+		f.blueGreenOff = false
+	}
+}
+
+func (f *TxFactory) blueGreenOffIfRunningBlueGreen() {
+	if len(f.types) == 2 {
+		f.blueGreenOff = true
+	}
+}
+
+func (f *TxFactory) hasRoaring() bool {
+	return f.types[0] == roaringTxn || f.types[1] == roaringTxn
+}
+
+var _ = (&TxFactory{}).hasRoaring // happy linter
+
+func (f *TxFactory) blueHasData() (hasData bool, err error) {
+	if len(f.types) != 2 {
+		return false, nil
+	}
+	return f.dbPerShard.HasData(0)
+}
+
+// green2blue is called at the very end of Holder.Open(), so
+// we know that the holder is ready to go, knowing its holder.Indexes(), fields,
+// view, shards, and other metadata if any.
+//
+// Called by test Test_TxFactory_UpdateBlueFromGreen_OnStartup() in
+// txfactory_internal_test.go as well.
+//
+// This is a noop if we aren't running under a blue_green PILOSA_TXSRC.
+func (f *TxFactory) green2blue(holder *Holder) (err error) {
+
+	// Holder.Open will always call us, even without blue_green. Which is fine.
+	// We are just a no-op in that case.
+	if len(f.types) != 2 {
+		return nil
+	}
+
+	blueDest := f.types[0]
+	greenSrc := f.types[1]
+	idxs := holder.Indexes()
+
+	verifyInsteadOfCopy := false
+
+	hasData, err := f.blueHasData()
+	if err != nil {
+		return errors.Wrap(err, "TxFactory.green2blue DataSize(0)")
+	}
+
+	if hasData {
+		verifyInsteadOfCopy = true
+	}
+
+	for _, idx := range idxs {
+
+		// scan directories
+		blueShards, err := f.dbPerShard.TypedDBPerShardGetShardsForIndex(blueDest, idx, "", false)
+		if err != nil {
+			return errors.Wrap(err, fmt.Sprintf("GetDBShard(index='%v') error fetching blueShards", idx.name))
+		}
+
+		// scan directories
+		greenShards, err := f.dbPerShard.TypedDBPerShardGetShardsForIndex(greenSrc, idx, "", true)
+		if err != nil {
+			return errors.Wrap(err, fmt.Sprintf("GetDBShard(index='%v') error fetching greenShards", idx.name))
+		}
+
+		if verifyInsteadOfCopy {
+			diff := f.shardSliceDiff(blueShards, greenShards)
+			if diff != "" {
+				return fmt.Errorf("verifyInsteadOfCopy true, blue[%v]=%#v and green[%v]=%#v have different shards for index '%v': '%v'; stack=\n%v", blueDest, blueShards, greenSrc, greenShards, idx.name, diff, stack())
+			}
+
+			// can also check against meta data
+			shards := idx.AvailableShards(localOnly).Slice()
+			diff2 := f.shardSliceDiff(greenShards, shards)
+			if diff2 != "" {
+				return fmt.Errorf("green[%v] = '%#v' and meta data '%#v' have different shards for index '%v': %v", greenSrc, greenShards, shards, idx.name, diff2)
+			}
+		}
+
+		for _, shard := range greenShards {
+
+			dbs, err := f.dbPerShard.GetDBShard(idx.name, shard, idx)
+			if err != nil {
+				return errors.Wrap(err, fmt.Sprintf("GetDBShard(index='%v', shard='%v')", idx.name, int(shard)))
+			}
+
+			if verifyInsteadOfCopy {
+				// verify all containers
+				err = dbs.verifyBlueEqualsGreen()
+				if err != nil {
+					return errors.Wrap(err,
+						fmt.Sprintf("dbs.verifyBlueEqualsGreen(blue='%v', "+
+							"green='%v') for index='%v', shard='%v'",
+							blueDest, greenSrc, idx.name, int(shard)))
+				}
+			} else {
+				// the main copy work
+				err = dbs.populateBlueFromGreen()
+				if err != nil {
+					return errors.Wrap(err,
+						fmt.Sprintf("dbs.copyGreenToBlue(blue='%v', "+
+							"green='%v') for index='%v', shard='%v'",
+							blueDest, greenSrc, idx.name, int(shard)))
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func (f *TxFactory) shardSliceDiff(blueShards, greenShards []uint64) (diff string) {
+	nb := len(blueShards)
+	ng := len(greenShards)
+	if nb != ng {
+		diff = fmt.Sprintf("blueShard[%v] count = %v; greenShard[%v] count = %v; ", f.types[0], nb, f.types[1], ng)
+	}
+	b := make(map[uint64]bool)
+	g := make(map[uint64]bool)
+	for _, bs := range blueShards {
+		b[bs] = true
+	}
+	for _, gs := range greenShards {
+		g[gs] = true
+	}
+	bmg := mapDiff(b, g) // get blue - green
+	gmb := mapDiff(g, b) // get green - blue
+
+	if len(bmg) == 0 && len(gmb) == 0 {
+		return ""
+	}
+	diff += fmt.Sprintf("shard diff: blueMinusGreen shards: '%#v'; greenMinusBlue shards: '%#v'", bmg, gmb)
+	return
+}
+
+func (f *TxFactory) GetDBShardPath(index string, shard uint64, idx *Index, ty txtype, write bool) (shardPath string, err error) {
+	dbs, err := f.dbPerShard.GetDBShard(index, shard, idx)
+	if err != nil {
+		return "", errors.Wrap(err, fmt.Sprintf("GetDBShardPath(index='%v', shard='%v', ty='%v')", index, shard, ty.String()))
+	}
+	shardPath = dbs.pathForType(ty)
+	return
 }

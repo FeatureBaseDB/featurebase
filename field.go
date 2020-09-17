@@ -412,11 +412,31 @@ func (f *Field) TranslateStore() TranslateStore {
 func (f *Field) RowAttrStore() AttrStore { return f.rowAttrStore }
 
 // AvailableShards returns a bitmap of shards that contain data.
-func (f *Field) AvailableShards() *roaring.Bitmap {
+func (f *Field) AvailableShards(localOnly bool) *roaring.Bitmap {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 
-	b := f.remoteAvailableShards.Clone()
+	var b *roaring.Bitmap
+	if localOnly {
+		b = roaring.NewBitmap()
+	} else {
+		b = f.remoteAvailableShards.Clone()
+	}
+	for _, view := range f.viewMap {
+		//b.Union(view.availableShards())
+		b.UnionInPlace(view.availableShards())
+	}
+	return b
+}
+
+// LocalAvailableShards returns a bitmap of shards that contain data, but
+// only from the local node. This prevents txfactory from making
+// db-per-shard for remote shards.
+func (f *Field) LocalAvailableShards() *roaring.Bitmap {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+
+	b := roaring.NewBitmap()
 	for _, view := range f.viewMap {
 		//b.Union(view.availableShards())
 		b.UnionInPlace(view.availableShards())
@@ -687,7 +707,7 @@ func (f *Field) applyTranslateStore() error {
 	// In the case where the field has a foreign index, set
 	// the usesKeys value accordingly.
 	if foreignIndexName := f.ForeignIndex(); foreignIndexName != "" {
-		if foreignIndex := f.holder.indexes[foreignIndexName]; foreignIndex != nil {
+		if foreignIndex := f.holder.Index(foreignIndexName); foreignIndex != nil {
 			f.usesKeys = foreignIndex.Keys()
 		}
 	}
@@ -747,6 +767,11 @@ fileLoop:
 			if !fi.IsDir() {
 				continue
 			}
+			// Skip embedded db files too.
+			if f.holder.txf.IsTxDatabasePath(fi.Name()) {
+				continue
+			}
+
 			fieldQueue <- struct{}{}
 			eg.Go(func() error {
 				defer func() {
@@ -1328,36 +1353,6 @@ func (f *Field) ClearBit(tx Tx, rowID, colID uint64) (changed bool, err error) {
 	return changed, nil
 }
 
-// Datatype returns a useful data type (string,
-// uint64, bool, etc.) based on the field type.
-func (f *Field) Datatype() (string, error) {
-	switch t := f.Type(); t {
-	case "set":
-		if f.Keys() {
-			return "[]string", nil
-		}
-		return "[]uint64", nil
-	case "mutex":
-		if f.Keys() {
-			return "string", nil
-		}
-		return "uint64", nil
-	case "int":
-		if f.Keys() {
-			return "string", nil
-		}
-		return "int64", nil
-	case "decimal":
-		return "decimal", nil
-	case "bool":
-		return "bool", nil
-	case "time":
-		return "int64", nil // TODO: this is a placeholder
-	default:
-		return "", fmt.Errorf("unimplemented field Datatype: %s", t)
-	}
-}
-
 func groupCompare(a, b string, offset int) (lt, eq bool) {
 	if len(a) > offset {
 		a = a[:offset]
@@ -1483,7 +1478,7 @@ func (f *Field) SetValue(tx Tx, columnID uint64, value int64) (changed bool, err
 	if view.idx == nil {
 		panic("view.idx should not be nil")
 	}
-	view.holder.addIndexFromField(view.idx)
+	view.holder.addIndex(view.idx)
 
 	return view.setValue(tx, columnID, bsig.BitDepth, baseValue)
 }
@@ -1571,7 +1566,7 @@ func (f *Field) MinForShard(tx Tx, shard uint64, filter *Row) (ValCount, error) 
 
 	var localTx Tx
 	if NilInside(tx) {
-		localTx = f.idx.Txf.NewTx(Txo{Write: !writable, Index: f.idx, Fragment: fragment, Shard: fragment.shard})
+		localTx = f.idx.holder.txf.NewTx(Txo{Write: !writable, Index: f.idx, Fragment: fragment, Shard: fragment.shard})
 		defer localTx.Rollback()
 	} else {
 		localTx = tx

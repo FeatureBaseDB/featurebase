@@ -18,11 +18,13 @@ import (
 	"io"
 	"math"
 	"sort"
+
 	//"strconv"
 	"strings"
 	"sync"
 
 	"github.com/benbjohnson/immutable"
+	"github.com/pilosa/pilosa/v2/hash"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/txkey"
 )
@@ -716,10 +718,12 @@ func (tx *Tx) checkPageAllocations() error {
 		if isInuse && isFree {
 			return fmt.Errorf("page in-use & free: pgno=%d", pgno)
 		} else if !isInuse && !isFree {
-			page, _ := tx.readPage(pgno)
+			page, err := tx.readPage(pgno)
+			if err != nil {
+				return err
+			}
 			flags := readFlags(page)
 			if flags == PageTypeBranch || flags == PageTypeLeaf {
-
 				return fmt.Errorf("page not in-use & not free: pgno=%d", pgno)
 			}
 			//assuming its a bitmap so its ok TODO ben?
@@ -1325,10 +1329,10 @@ func (si *emptyContainerIterator) Value() (uint64, *roaring.Container) {
 	panic("emptyContainerIterator never has any Values")
 }
 
-func (tx *Tx) Dump() {
-	fmt.Println(tx.DumpString())
+func (tx *Tx) Dump(short bool, shard uint64) {
+	fmt.Println(tx.DumpString(short, shard))
 }
-func (tx *Tx) DumpString() (r string) {
+func (tx *Tx) DumpString(short bool, shard uint64) (r string) {
 
 	r = "allkeys:[\n"
 
@@ -1356,7 +1360,7 @@ func (tx *Tx) DumpString() (r string) {
 			ckey := cell.Key
 			ct := toContainer(cell, tx)
 
-			s := stringOfCkeyCt(ckey, ct, rr.Name)
+			s := stringOfCkeyCt(ckey, ct, rr.Name, short)
 			r += s
 			n++
 		}
@@ -1365,7 +1369,7 @@ func (tx *Tx) DumpString() (r string) {
 		return ""
 	}
 	// note that we can have a bitmap present, but it can be empty
-	r += "]\n   all-in-blake3:" + blake3sum16([]byte(r)) + "\n"
+	r += "]\n   all-in-blake3:" + hash.Blake3sum16([]byte(r)) + "\n"
 
 	return "rbf-" + r
 }
@@ -1410,10 +1414,10 @@ func bitmapAsString(rbm *roaring.Bitmap) (r string) {
 	return r + ")"
 }
 
-func stringOfCkeyCt(ckey uint64, ct *roaring.Container, rrName string) (s string) {
+func stringOfCkeyCt(ckey uint64, ct *roaring.Container, rrName string, short bool) (s string) {
 
 	by := containerToBytes(ct)
-	hash := blake3sum16(by)
+	hash := hash.Blake3sum16(by)
 
 	cts := roaring.NewSliceContainers()
 	cts.Put(ckey, ct)
@@ -1424,7 +1428,9 @@ func stringOfCkeyCt(ckey uint64, ct *roaring.Container, rrName string) (s string
 	bkey := pre + fmt.Sprintf("ckey@%020d", ckey)
 
 	s = fmt.Sprintf("%v -> %v (%v hot)\n", bkey, hash, ct.N())
-	s += "          ......." + srbm + "\n"
+	if !short {
+		s += "          ......." + srbm + "\n"
+	}
 	return
 }
 

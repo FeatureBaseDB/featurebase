@@ -37,9 +37,10 @@ import (
 
 // GRPCHandler contains methods which handle the various gRPC requests.
 type GRPCHandler struct {
-	api    *pilosa.API
-	logger logger.Logger
-	stats  stats.StatsClient
+	api               *pilosa.API
+	logger            logger.Logger
+	stats             stats.StatsClient
+	inspectDeprecated sync.Once
 }
 
 func NewGRPCHandler(api *pilosa.API) *GRPCHandler {
@@ -167,6 +168,7 @@ func (h *GRPCHandler) DeleteVDS(ctx context.Context, req *pb.DeleteVDSRequest) (
 }
 
 func (h *GRPCHandler) execSQL(ctx context.Context, queryStr string) (pb.ToRowser, error) {
+	h.stats.Count(pilosa.MetricSqlQueries, 1, 1)
 	return execSQL(ctx, h.api, h.logger, queryStr)
 }
 
@@ -243,6 +245,7 @@ func (h *GRPCHandler) QueryPQL(req *pb.QueryPQLRequest, stream pb.Pilosa_QueryPQ
 	durFormat := time.Since(t)
 	h.stats.Timing(pilosa.MetricGRPCStreamQueryDurationSeconds, durQuery, 0.1)
 	h.stats.Timing(pilosa.MetricGRPCStreamFormatDurationSeconds, durFormat, 0.1)
+	h.stats.Count(pilosa.MetricPqlQueries, 1, 1)
 
 	return errToStatusError(nil)
 }
@@ -284,6 +287,7 @@ func (h *GRPCHandler) QueryPQLUnary(ctx context.Context, req *pb.QueryPQLRequest
 
 	h.stats.Timing(pilosa.MetricGRPCUnaryQueryDurationSeconds, durQuery, 0.1)
 	h.stats.Timing(pilosa.MetricGRPCUnaryFormatDurationSeconds, durFormat, 0.1)
+	h.stats.Count(pilosa.MetricPqlQueries, 1, 1)
 
 	return table, errToStatusError(nil)
 }
@@ -371,6 +375,10 @@ func ToRowserWrapper(result interface{}) (pb.ToRowser, error) {
 // Inspect handles the inspect request and sends an InspectResponse to the stream.
 func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectServer) error {
 	const defaultLimit = 100000
+
+	h.inspectDeprecated.Do(func() {
+		h.logger.Printf("DEPRECATED: Inspect is deprecated, please use Extract() instead.")
+	})
 
 	index, err := h.api.Index(stream.Context(), req.Index)
 	if err != nil {
@@ -466,7 +474,7 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 			{Name: "_id", Datatype: "uint64"},
 		}
 		for _, field := range fields {
-			fdt, err := field.Datatype()
+			fdt := fieldDataType(field)
 			if err != nil {
 				return errors.Wrapf(err, "field %s", field.Name())
 			}
@@ -754,7 +762,7 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 			{Name: "_id", Datatype: "string"},
 		}
 		for _, field := range fields {
-			fdt, err := field.Datatype()
+			fdt := fieldDataType(field)
 			if err != nil {
 				return errors.Wrapf(err, "field %s", field.Name())
 			}
@@ -1031,6 +1039,39 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 
 	}
 	return nil
+}
+
+// fieldDataType returns a useful data type (string,
+// uint64, bool, etc.) based on the Pilosa field type.
+// DO NOT USE THIS IN FUTURE CODE.
+// This remains only for backwards-compatability within inspect.
+// It does not produce sane results in all scenarios.
+func fieldDataType(f *pilosa.Field) string {
+	switch f.Type() {
+	case "set":
+		if f.Keys() {
+			return "[]string"
+		}
+		return "[]uint64"
+	case "mutex":
+		if f.Keys() {
+			return "string"
+		}
+		return "uint64"
+	case "int":
+		if f.Keys() {
+			return "string"
+		}
+		return "int64"
+	case "decimal":
+		return "decimal"
+	case "bool":
+		return "bool"
+	case "time":
+		return "int64" // TODO: this is a placeholder
+	default:
+		panic(fmt.Sprintf("unimplemented fieldDataType: %s", f.Type()))
+	}
 }
 
 type grpcServer struct {

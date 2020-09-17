@@ -18,9 +18,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 	"reflect"
-	"strings"
 	"testing"
 
 	"github.com/pilosa/pilosa/v2"
@@ -30,8 +28,6 @@ import (
 	"github.com/pilosa/pilosa/v2/test"
 )
 
-var sep = string(os.PathSeparator)
-
 func skipForNonLMDB(t *testing.T) {
 	src := os.Getenv("PILOSA_TXSRC")
 	if src != "lmdb" {
@@ -39,7 +35,8 @@ func skipForNonLMDB(t *testing.T) {
 	}
 }
 
-var _ = skipForNonLMDB // happy linter
+var _ = skipForNonLMDB   // happy linter
+var _ = skipForNonBadger // happy linter
 
 func skipForNonBadger(t *testing.T) {
 	src := os.Getenv("PILOSA_TXSRC")
@@ -50,7 +47,7 @@ func skipForNonBadger(t *testing.T) {
 
 // Can't write it all to one shard like we do (did).
 func Test_DBPerShard_multiple_shards_used(t *testing.T) {
-	skipForNonBadger(t)
+	skipForNonLMDB(t)
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
 	hldr := c.GetHolder(0)
@@ -62,20 +59,22 @@ func Test_DBPerShard_multiple_shards_used(t *testing.T) {
 	hldr.SetBit(index, "general", 11, 2)
 	hldr.SetBit(index, "general", 11, ShardWidth+2)
 
-	//tx_suffix := "-lmdb"
-	tx_suffix := "-badgerdb"
-	root := hldr.Path() + sep + index
-	shards := []string{"0000", "0001", "0002"}
+	types := pilosa.MustTxsrcToTxtype("lmdb")
+	idx := hldr.Index(index)
+	shardsU := []uint64{0, 1, 2}
 	pathShard := []string{}
+
 	// check that 3 different shard databases/files were made
 	for i := 0; i < 2; i++ {
-		path := root + sep + shards[i] + tx_suffix
+
+		path, err := hldr.Txf().GetDBShardPath(index, shardsU[i], idx, types[0], !writable)
+		panicOn(err)
 		pathShard = append(pathShard, path)
 
 		if !DirExists(pathShard[i]) {
 			panic(fmt.Sprintf("no shard made for pathShard[%v]='%v'", i, pathShard[i]))
 		}
-		sz, err := DiskUse(pathShard[i], "")
+		sz, err := pilosa.DiskUse(pathShard[i], "")
 		panicOn(err)
 
 		if sz < 100 {
@@ -88,28 +87,6 @@ func Test_DBPerShard_multiple_shards_used(t *testing.T) {
 	} else if columns := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(columns, []uint64{0, 2, ShardWidth + 1, ShardWidth + 2}) {
 		t.Fatalf("unexpected columns: %+v", columns)
 	}
-}
-
-func DiskUse(root string, requiredSuffix string) (tot int, err error) {
-	if !DirExists(root) {
-		return -1, fmt.Errorf("listFilesUnderDir error: root directory '%v' not found", root)
-	}
-
-	err = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
-		if info == nil {
-			panic(fmt.Sprintf("info was nil for path = '%v'", path))
-		}
-		if info.IsDir() {
-			// skip directories.
-		} else {
-			sz := info.Size()
-			if requiredSuffix == "" || strings.HasSuffix(path, requiredSuffix) {
-				tot += int(sz)
-			}
-		}
-		return nil
-	})
-	return
 }
 
 func TestAPI_SimplerOneNode_ImportColumnKey(t *testing.T) {

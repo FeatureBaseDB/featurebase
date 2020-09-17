@@ -173,8 +173,7 @@ var workQueue = make(chan struct{}, runtime.NumCPU()*2)
 // replaces v.openFragments() with Tx generic code.
 func (v *view) openFragmentsInTx() error {
 
-	// we think this is correct for dbpershard, but might be slower. TODO
-	shards, err := DBPerShardGetShardsForIndex(v.idx, v.path)
+	shards, err := v.holder.txf.GetShardsForIndex(v.idx, v.path, false)
 	if err != nil {
 		return errors.Wrap(err, "DBPerShardGetShardsForIndex()")
 	}
@@ -368,15 +367,6 @@ func (v *view) notifyIfNewShard(shard uint64) {
 
 func (v *view) newFragment(path string, shard uint64) *fragment {
 
-	if v.holder != nil && v.idx != nil {
-		// A view must have its v.idx *Index registered with its holder.
-		// Otherwise TestField_AvailableShards crashes, as one example.
-		hIdx := v.holder.Index(v.idx.name)
-		if hIdx == nil && v.idx != nil {
-			v.holder.addIndexFromField(v.idx)
-		}
-	}
-
 	frag := newFragment(v.holder, path, v.index, v.field, v.name, shard, v.flags())
 	frag.CacheType = v.cacheType
 	frag.CacheSize = v.cacheSize
@@ -402,7 +392,7 @@ func (v *view) deleteFragment(shard uint64) error {
 
 	idx := f.holder.Index(v.index)
 	f.Close()
-	if err := idx.Txf.DeleteFragmentFromStore(f.index, f.field, f.view, f.shard, f); err != nil {
+	if err := idx.holder.txf.DeleteFragmentFromStore(f.index, f.field, f.view, f.shard, f); err != nil {
 		return errors.Wrap(err, "DeleteFragment")
 	}
 	delete(v.fragments, shard)
@@ -418,7 +408,7 @@ func (v *view) row(txOrig Tx, rowID uint64) (*Row, error) {
 
 		tx := txOrig
 		if NilInside(tx) {
-			tx = v.idx.Txf.NewTx(Txo{Write: !writable, Index: v.idx, Fragment: frag, Shard: frag.shard})
+			tx = v.idx.holder.txf.NewTx(Txo{Write: !writable, Index: v.idx, Fragment: frag, Shard: frag.shard})
 			defer tx.Rollback()
 		}
 
@@ -445,7 +435,7 @@ func (v *view) setBit(txOrig Tx, rowID, columnID uint64) (changed bool, err erro
 
 	tx := txOrig
 	if NilInside(tx) {
-		tx = v.idx.Txf.NewTx(Txo{Write: writable, Index: v.idx, Fragment: frag, Shard: shard})
+		tx = v.idx.holder.txf.NewTx(Txo{Write: writable, Index: v.idx, Fragment: frag, Shard: shard})
 		defer func() {
 			if err == nil {
 				panicOn(tx.Commit())
@@ -467,7 +457,7 @@ func (v *view) clearBit(txOrig Tx, rowID, columnID uint64) (changed bool, err er
 
 	tx := txOrig
 	if NilInside(tx) {
-		tx = v.idx.Txf.NewTx(Txo{Write: writable, Index: v.idx, Fragment: frag, Shard: shard})
+		tx = v.idx.holder.txf.NewTx(Txo{Write: writable, Index: v.idx, Fragment: frag, Shard: shard})
 		defer func() {
 			if err == nil {
 				panicOn(tx.Commit())
@@ -490,7 +480,7 @@ func (v *view) value(txOrig Tx, columnID uint64, bitDepth uint) (value int64, ex
 
 	tx := txOrig
 	if NilInside(tx) {
-		tx = frag.idx.Txf.NewTx(Txo{Write: !writable, Index: frag.idx, Fragment: frag, Shard: frag.shard})
+		tx = frag.idx.holder.txf.NewTx(Txo{Write: !writable, Index: frag.idx, Fragment: frag, Shard: frag.shard})
 		defer tx.Rollback()
 	}
 
@@ -507,7 +497,7 @@ func (v *view) setValue(txOrig Tx, columnID uint64, bitDepth uint, value int64) 
 
 	tx := txOrig
 	if NilInside(tx) {
-		tx = v.idx.Txf.NewTx(Txo{Write: writable, Index: v.idx, Fragment: frag, Shard: shard})
+		tx = v.idx.holder.txf.NewTx(Txo{Write: writable, Index: v.idx, Fragment: frag, Shard: shard})
 		defer func() {
 			if err == nil {
 				panicOn(tx.Commit())
@@ -530,7 +520,7 @@ func (v *view) clearValue(txOrig Tx, columnID uint64, bitDepth uint, value int64
 
 	tx := txOrig
 	if NilInside(tx) {
-		tx = v.idx.Txf.NewTx(Txo{Write: writable, Index: v.idx, Fragment: frag, Shard: shard})
+		tx = v.idx.holder.txf.NewTx(Txo{Write: writable, Index: v.idx, Fragment: frag, Shard: shard})
 		defer func() {
 			if err == nil {
 				panicOn(tx.Commit())

@@ -32,6 +32,7 @@ import (
 	"sync/atomic"
 
 	"github.com/glycerine/lmdb-go/lmdb"
+	"github.com/pilosa/pilosa/v2/hash"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/txkey"
 	"github.com/pkg/errors"
@@ -68,6 +69,17 @@ type lmdbRegistrar struct {
 	path2db map[string]*LMDBWrapper
 }
 
+func (r *lmdbRegistrar) Size() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	nmp := len(r.mp)
+	npa := len(r.path2db)
+	if nmp != npa {
+		panic(fmt.Sprintf("nmp=%v, vs npa=%v", nmp, npa))
+	}
+	return nmp
+}
+
 var globalLMDBReg *lmdbRegistrar = newLMDBTestRegistrar()
 
 var globalNextTxSnLMDB int64
@@ -100,18 +112,19 @@ func (r *lmdbRegistrar) unregister(w *LMDBWrapper) {
 }
 
 func DumpAllLMDB() {
+	short := true
 	globalLMDBReg.mu.Lock()
 	defer globalLMDBReg.mu.Unlock()
 	for w := range globalLMDBReg.mp {
-		AlwaysPrintf("this lmdb path='%v' has: \n%v\n", w.path, w.StringifiedLMDBKeys(nil))
+		AlwaysPrintf("this lmdb path='%v' has: \n%v\n", w.path, w.StringifiedLMDBKeys(nil, short))
 	}
 }
 
 // lmdbPath is a helper for determining the full directory
 // in which the lmdb database will be stored.
 func lmdbPath(path string) string {
-	if !strings.HasSuffix(path, "-lmdb") {
-		return path + "-lmdb"
+	if !strings.HasSuffix(path, "-lmdb@") {
+		return path + "-lmdb@"
 	}
 	return path
 }
@@ -153,6 +166,9 @@ func (r *lmdbRegistrar) OpenDBWrapper(path0 string, doAllocZero bool) (DBWrapper
 
 	//flags := uint(lmdb.NoReadahead | lmdb.NoSubdir)
 	//flags := uint(lmdb.NoSubdir) // no difference without the No.Readahead on ./query.
+	// NoReadahead should be better for random workloads or those bigger than memory,
+	// as it avoids loading extra pages which then evict pages you are using.
+	//flags := uint(lmdb.NoReadahead)
 	flags := uint(0)
 
 	// unsafe, but get upper bound on performance.
@@ -161,7 +177,15 @@ func (r *lmdbRegistrar) OpenDBWrapper(path0 string, doAllocZero bool) (DBWrapper
 	//	NoSync      = C.MDB_NOSYNC     // Don't fsync after commit.
 	// flags = flags | lmdb.WriteMap | lmdb.NoMetaSync | lmdb.NoSync // about the same speed
 	// flags = flags | lmdb.NoMetaSync | lmdb.NoSync // slows things down
-	//flags = flags | lmdb.WriteMap // seems faster than without:
+
+	// TODO(jea): we got an odd segfault in the roaring/ pkg when we went to read-only mmap
+	// with the row-cache off; probably means we were trying to write to mmap-ed
+	// memory. Investigate at some point. reference: 2a77b25d ja/write_map_prevents_segfault
+	//
+	// Update: added COW to roaring/roaring.go:3282  func (c *Container) arrayRemove(),
+	// seems to fix the issue.
+	//
+	//flags = flags | lmdb.WriteMap // seems faster than without: or maybe not. not sure.
 	// kRemove  N=  710401   avg/op:      7.714µs   sd:      27.83µs  total: 5.480656859s
 	//    kAdd  N=  722835   avg/op:      9.096µs   sd:    105.787µs  total: 6.575497725s
 
@@ -224,6 +248,38 @@ func (r *lmdbRegistrar) OpenDBWrapper(path0 string, doAllocZero bool) (DBWrapper
 	return w, nil
 }
 
+func (w *LMDBWrapper) Path() string {
+	return w.path
+}
+
+func (w *LMDBWrapper) HasData() (has bool, err error) {
+
+	tx, err := w.NewTx(!writable, "", Txo{})
+	if err != nil {
+		return false, errors.Wrap(err, "HasData NewTx")
+	}
+	defer tx.Rollback()
+
+	bi := NewLMDBIterator(tx.(*LMDBTx), nil)
+	defer bi.Close()
+
+	for bi.Next() {
+		return true, nil
+	}
+	return false, nil
+}
+
+func (w *LMDBWrapper) CleanupTx(tx Tx) {
+	// inlined into Rollback and Commit, so this is a no-op, just here to satisfy the interface.
+}
+
+func (tx *LMDBTx) IsDone() (done bool) {
+	tx.mu.Lock()
+	done = tx.unlocked
+	tx.mu.Unlock()
+	return
+}
+
 func (w *LMDBWrapper) OpenListString() (r string) {
 
 	list := w.listopen()
@@ -278,8 +334,6 @@ func (w *LMDBWrapper) DeleteIndex(indexName string) error {
 var _ Tx = (*LMDBTx)(nil)
 
 // LMDBWrapper provides the NewTx() method.
-// Execute lmdbJob's via LMDBWrapper.submit(); these must
-// be done by the lmdb goroutine worker pool.
 type LMDBWrapper struct {
 	env *lmdb.Env
 
@@ -309,6 +363,11 @@ type LMDBWrapper struct {
 	openTx map[*LMDBTx]bool
 }
 
+func (w *LMDBWrapper) SetHolder(h *Holder) {
+	// don't need it at the moment
+	//w.h = h
+}
+
 // NewTxWRITE lets us see in the callstack dumps where the WRITE tx are.
 // Can't have more than one active write per database, so the
 // 2nd one will block until the first finishes.
@@ -320,6 +379,9 @@ func (w *LMDBWrapper) NewTxWRITE() *lmdb.Txn {
 
 // NewTxREAD lets us see in the callstack dumps where the READ tx are.
 func (w *LMDBWrapper) NewTxREAD() *lmdb.Txn {
+	if w.env == nil {
+		panic("cannot call NewTxREAD() on closed LMDBWrapper() -- open a new Wrapper first")
+	}
 	lmdbTxn, err := w.env.BeginTxn(nil, lmdb.Readonly)
 	panicOn(err)
 	return lmdbTxn
@@ -341,7 +403,8 @@ func (w *LMDBWrapper) NewTx(write bool, initialIndexName string, o Txo) (tx Tx, 
 
 	sn := atomic.AddInt64(&globalNextTxSnLMDB, 1)
 
-	//vv("lmdb new tx _sn_ %v; stack \n%v", sn, stack())
+	//vv("lmdb new tx _sn_ %v; openTx='%v', stack \n%v", sn, w.OpenListString(), stack())
+	//vv("lmdb new (write=%v, shard=%v) tx _sn_ %v; openTx='%v'", write, o.Shard, sn, w.OpenListString())
 
 	runtime.LockOSThread()
 
@@ -472,7 +535,7 @@ func (tx *LMDBTx) Type() string {
 }
 
 func (tx *LMDBTx) UseRowCache() bool {
-	return true
+	return false
 }
 
 // Pointer gives us a memory address for the underlying transaction for debugging.
@@ -501,6 +564,7 @@ func (tx *LMDBTx) Rollback() {
 	if !tx.unlocked {
 		runtime.UnlockOSThread()
 		tx.unlocked = true
+		tx.o.dbs.Cleanup(tx)
 	}
 }
 
@@ -526,6 +590,7 @@ func (tx *LMDBTx) Commit() error {
 	if !tx.unlocked {
 		runtime.UnlockOSThread()
 		tx.unlocked = true
+		tx.o.dbs.Cleanup(tx)
 	}
 	return err
 }
@@ -1243,6 +1308,7 @@ func (tx *LMDBTx) CountRange(index, field, view string, shard uint64, start, end
 // fragment.rowFromStorage() in fragment.go. For example:
 //
 //    data, err := tx.OffsetRange(f.index, f.field, f.view, f.shard,
+//
 //                     f.shard*ShardWidth, rowID*ShardWidth, (rowID+1)*ShardWidth)
 //                     ^ offset            ^ start           ^ endx
 //
@@ -1251,6 +1317,10 @@ func (tx *LMDBTx) CountRange(index, field, view string, shard uint64, start, end
 // is done to conform to the roaring.OffsetRange() argument convention.
 //
 func (tx *LMDBTx) OffsetRange(index, field, view string, shard, offset, start, endx uint64) (other *roaring.Bitmap, err error) {
+	//vv("top of LMDBTx OffsetRange(index='%v', field='%v', view='%v', shard='%v', offset: %v start: %v, end: %v)", index, field, view, int(shard), int(offset), int(start), int(endx))
+	//defer func() {
+	//vv("returning from LMDBTx OffsetRange(index='%v', field='%v', view='%v', shard='%v', offset: %v start: %v, end: %v) other returning is: '%#v' stack=\n%v", index, field, view, int(shard), int(offset), int(start), int(endx), asInts(other.Slice()), stack())
+	//}()
 
 	// roaring does these three checks in its OffsetRange
 	if lowbits(offset) != 0 {
@@ -1450,29 +1520,28 @@ func (tx *LMDBTx) toContainer(typ byte, v []byte) (r *roaring.Container) {
 	return ToContainer(typ, w)
 }
 
-func ToContainer(typ byte, w []byte) (r *roaring.Container) {
+func ToContainer(typ byte, w []byte) (c *roaring.Container) {
 	switch typ {
 	case roaring.ContainerArray:
-		c := roaring.NewContainerArray(toArray16(w))
-		return c
+		c = roaring.NewContainerArray(toArray16(w))
 	case roaring.ContainerBitmap:
-		c := roaring.NewContainerBitmap(-1, toArray64(w))
-		return c
+		c = roaring.NewContainerBitmap(-1, toArray64(w))
 	case roaring.ContainerRun:
-		c := roaring.NewContainerRun(toInterval16(w))
-		return c
+		c = roaring.NewContainerRun(toInterval16(w))
 	default:
 		panic(fmt.Sprintf("unknown container: %v", typ))
 	}
+	c.SetMapped(true)
+	return c
 }
 
 // StringifiedLMDBKeys returns a string with all the container
 // keys available in lmdb.
-func (w *LMDBWrapper) StringifiedLMDBKeys(optionalUseThisTx Tx) (r string) {
+func (w *LMDBWrapper) StringifiedLMDBKeys(optionalUseThisTx Tx, short bool) (r string) {
 	if optionalUseThisTx == nil {
 		tx, _ := w.NewTx(!writable, "<StringifiedLMDBKeys>", Txo{})
 		defer tx.Rollback()
-		r = stringifiedLMDBKeysTx(tx.(*LMDBTx))
+		r = stringifiedLMDBKeysTx(tx.(*LMDBTx), short)
 		return
 	}
 
@@ -1480,7 +1549,7 @@ func (w *LMDBWrapper) StringifiedLMDBKeys(optionalUseThisTx Tx) (r string) {
 	if !ok {
 		return fmt.Sprintf("<not-a-LMDBTx-in-StringifiedLMDBKeys-was-%T>", optionalUseThisTx)
 	}
-	r = stringifiedLMDBKeysTx(btx)
+	r = stringifiedLMDBKeysTx(btx, short)
 	return
 }
 
@@ -1506,8 +1575,8 @@ func (tx *LMDBTx) countBitsSet(bkey []byte) (n int) {
 	return
 }
 
-func (tx *LMDBTx) Dump() {
-	fmt.Printf("%v\n", stringifiedLMDBKeysTx(tx))
+func (tx *LMDBTx) Dump(short bool, shard uint64) {
+	fmt.Printf("%v\n", stringifiedLMDBKeysTx(tx, short))
 }
 
 // stringifiedLMDBKeysTx reports all the lmdb keys and a
@@ -1519,7 +1588,7 @@ func (tx *LMDBTx) Dump() {
 // By convention, we must return the empty string if there
 // are no keys present. The tests use this to confirm
 // an empty database.
-func stringifiedLMDBKeysTx(tx *LMDBTx) (r string) {
+func stringifiedLMDBKeysTx(tx *LMDBTx, short bool) (r string) {
 
 	r = "allkeys:[\n"
 	it := NewLMDBIterator(tx, nil)
@@ -1531,24 +1600,26 @@ func stringifiedLMDBKeysTx(tx *LMDBTx) (r string) {
 		bkey := it.lastKey
 		key := txkey.ToString(bkey)
 		ckey := txkey.KeyExtractContainerKey(bkey)
-		hash := ""
+		h := ""
 		srbm := ""
 		v := it.lastVal
 		n := len(v)
 		if n == 0 {
 			panic("should not have empty v here")
 		}
-		hash = Blake3sum16(v[0:(n - 1)])
+		h = hash.Blake3sum16(v[0:(n - 1)])
 		ct := tx.toContainer(v[n-1], v[0:(n-1)])
 		cts := roaring.NewSliceContainers()
 		cts.Put(ckey, ct)
 		rbm := &roaring.Bitmap{Containers: cts}
 		srbm = BitmapAsString(rbm)
 
-		r += fmt.Sprintf("%v -> %v (%v hot)\n", key, hash, tx.countBitsSet(bkey))
-		r += "          ......." + srbm + "\n"
+		r += fmt.Sprintf("%v -> %v (%v hot)\n", key, h, tx.countBitsSet(bkey))
+		if !short {
+			r += "          ......." + srbm + "\n"
+		}
 	}
-	r += "]\n   all-in-blake3:" + Blake3sum16([]byte(r))
+	r += "]\n   all-in-blake3:" + hash.Blake3sum16([]byte(r))
 
 	if !any {
 		return "<empty lmdb database>"
@@ -1557,11 +1628,13 @@ func stringifiedLMDBKeysTx(tx *LMDBTx) (r string) {
 }
 
 func (w *LMDBWrapper) DeleteDBPath(dbs *DBShard) (err error) {
-	path := dbs.Path
+	path := dbs.pathForType(lmdbTxn)
 	err = os.RemoveAll(path)
 	if err != nil {
 		return errors.Wrap(err, "DeleteDBPath")
 	}
+	// if we go back to flat instead of inside its own directory,
+	// there will be a second -lock file needing deletion too.
 	lockfile := path + "-lock"
 	if FileExists(lockfile) {
 		err = os.RemoveAll(lockfile)
@@ -1569,12 +1642,16 @@ func (w *LMDBWrapper) DeleteDBPath(dbs *DBShard) (err error) {
 	return
 }
 
-func (w *LMDBWrapper) DeleteField(index, field, fieldPath string) error {
+func (w *LMDBWrapper) DeleteField(index, field, fieldPath string) (err error) {
 
+	// TODO(jea) cleanup: I think this fieldPath delete just goes away now.
+	//  remove this commented stuff once we are sure.
+	//
 	// under blue-green roaring_lmdb, the directory will not be found, b/c roaring will have
 	// already done the os.RemoveAll().	BUT, RemoveAll returns nil error in this case. Docs:
 	// "If the path does not exist, RemoveAll returns nil (no error)"
-	err := w.DeleteDBPath(&DBShard{Path: fieldPath})
+
+	err = os.RemoveAll(fieldPath)
 	if err != nil {
 		return errors.Wrap(err, "removing directory")
 	}

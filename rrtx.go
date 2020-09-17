@@ -21,6 +21,8 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
+	"sync"
 	"sync/atomic"
 
 	"github.com/pilosa/pilosa/v2/roaring"
@@ -35,18 +37,32 @@ type RoaringTx struct {
 	fragment *fragment
 	o        Txo
 	sn       int64 // serial number
+
+	done bool
+	mu   sync.Mutex // protect done as it changes state
+
+	w *RoaringWrapper
+}
+
+func (tx *RoaringTx) IsDone() (done bool) {
+	tx.mu.Lock()
+	done = tx.done
+	tx.mu.Unlock()
+	return
 }
 
 func (tx *RoaringTx) Type() string {
 	return RoaringTxn
 }
 
-func (tx *RoaringTx) Dump() {
-	fmt.Printf("%v\n", tx.Index.StringifiedRoaringKeys(false, false))
+func (tx *RoaringTx) Dump(short bool, shard uint64) {
+	o := tx.o
+	o.Shard = shard
+	fmt.Printf("%v\n", tx.Index.StringifiedRoaringKeys(short, false, o))
 }
 
 func (tx *RoaringTx) UseRowCache() bool {
-	return true
+	return false
 }
 
 func (tx *RoaringTx) SliceOfShards(index, field, view, optionalViewPath string) (sliceOfShards []uint64, err error) {
@@ -68,12 +84,19 @@ func (tx *RoaringTx) SliceOfShards(index, field, view, optionalViewPath string) 
 	}
 
 	for _, fi := range fis {
+		//vv("rrtx next fi = '%v'", fi.Name())
 		if fi.IsDir() {
 			continue
 		}
+		name := fi.Name()
+		if strings.HasSuffix(name, ".cache") {
+			continue
+		}
+
 		// Parse filename into integer.
-		shard, err := strconv.ParseUint(filepath.Base(fi.Name()), 10, 64)
+		shard, err := strconv.ParseUint(filepath.Base(name), 10, 64)
 		if err != nil {
+			//vv("WARNING: couldn't use non-integer file as shard in index/field/view %s/%s/%s: %s", index, field, view, fi.Name())
 			//panic(fmt.Sprintf("WARNING: couldn't use non-integer file as shard in index/field/view %s/%s/%s: %s", index, field, view, fi.Name()))
 			//tx.Index.holder.Logger.Debugf("WARNING: couldn't use non-integer file as shard in index/field/view %s/%s/%s: %s", index, field, view, fi.Name())
 			continue
@@ -125,11 +148,14 @@ func (tx *RoaringTx) IncrementOpN(index, field, view string, shard uint64, chang
 	frag.incrementOpN(changedN)
 }
 
-// Rollback is a no-op as Roaring does not support transactions.
-func (tx *RoaringTx) Rollback() {}
+// Rollback
+func (tx *RoaringTx) Rollback() {
+	tx.w.CleanupTx(tx)
+}
 
-// Commit is a no-op as Roaring does not support transactions.
+// Commit
 func (tx *RoaringTx) Commit() error {
+	tx.w.CleanupTx(tx)
 	return nil
 }
 
@@ -164,6 +190,7 @@ func (tx *RoaringTx) RemoveContainer(index, field, view string, shard uint64, ke
 }
 
 func (tx *RoaringTx) Add(index, field, view string, shard uint64, batched bool, a ...uint64) (changeCount int, err error) {
+	//vv("RoaringTx.Add(index='%v', shard='%v') stack=\n%v", index, shard, stack())
 	b, err := tx.bitmap(index, field, view, shard)
 	if err != nil {
 		return 0, err
@@ -359,80 +386,6 @@ func (tx *RoaringTx) bitmap(index, field, view string, shard uint64) (*roaring.B
 	return frag.storage, nil
 }
 
-var globalRoaringReg = &RoaringStore{}
-
-func (r *RoaringStore) OpenDBWrapper(path string, doAllocZero bool) (DBWrapper, error) {
-	return r, nil
-}
-
-func (w *RoaringStore) DeleteDBPath(dbs *DBShard) error {
-	return os.RemoveAll(dbs.Path)
-}
-
-func (r *RoaringStore) Close() error {
-	return nil
-}
-
-func (w *RoaringStore) OpenListString() (r string) {
-	return "RoaringStore.OpenListString() not yet implemented"
-}
-
-func (w *RoaringStore) OpenSnList() (sns []int64) {
-	return nil
-}
-
-type RoaringStore struct{}
-
-func NewRoaringStore() *RoaringStore {
-	return &RoaringStore{}
-}
-
-var globalNextTxSnRoaring int64
-
-func (db *RoaringStore) NewTx(write bool, initialIndexName string, o Txo) (tx Tx, err error) {
-	sn := atomic.AddInt64(&globalNextTxSnRoaring, 1)
-	return &RoaringTx{write: o.Write, Field: o.Field, Index: o.Index, fragment: o.Fragment, o: o, sn: sn}, nil
-}
-
-func (db *RoaringStore) DeleteField(index, field, fieldPath string) error {
-
-	// match txn sn count vs lmdb/etc.
-	atomic.AddInt64(&globalNextTxSnRoaring, 1)
-
-	// under blue-green badger_roaring, the directory will not be found, b/c badger will have
-	// already done the os.RemoveAll().	BUT, RemoveAll returns nil error in this case. Docs:
-	// "If the path does not exist, RemoveAll returns nil (no error)"
-	err := os.RemoveAll(fieldPath)
-	if err != nil {
-		return errors.Wrap(err, "removing directory")
-	}
-	return nil
-}
-
-// frag should be passed by any RoaringTx user, but for RBF/Badger it can be nil.
-// The fragment should be closed before this.
-func (db *RoaringStore) DeleteFragment(index, field, view string, shard uint64, frag interface{}) error {
-
-	// match txn sn count vs lmdb/etc.
-	atomic.AddInt64(&globalNextTxSnRoaring, 1)
-
-	fragment, ok := frag.(*fragment)
-	if !ok {
-		return fmt.Errorf("RoaringStore.DeleteFragment must get frag of type *fragment, but got '%T'", frag)
-	}
-
-	// Delete fragment file.
-	if err := os.Remove(fragment.path); err != nil {
-		return errors.Wrap(err, "deleting fragment file")
-	}
-
-	// Delete fragment cache file.
-	if err := os.Remove(fragment.cachePath()); err != nil {
-		return errors.Wrap(err, fmt.Sprintf("no cache file to delete for shard %d", fragment.shard))
-	}
-	return nil
-}
-
 func (tx *RoaringTx) RoaringBitmapReader(index, field, view string, shard uint64, fragmentPathForRoaring string) (r io.ReadCloser, sz int64, err error) {
 	file, err := os.Open(fragmentPathForRoaring) // open the fragment file
 	if err != nil {
@@ -458,4 +411,197 @@ func (tx *RoaringTx) Options() Txo {
 // Sn retreives the serial number of the Tx.
 func (tx *RoaringTx) Sn() int64 {
 	return tx.sn
+}
+
+//////// registrar and wrapper machinery
+
+// roaringRegistrar mirrors the machinery expected
+// for all backends for the roaring files approach.
+//
+type roaringRegistrar struct {
+	mu sync.Mutex
+	mp map[*RoaringWrapper]bool
+
+	path2db map[string]*RoaringWrapper
+}
+
+func (r *roaringRegistrar) Size() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	nmp := len(r.mp)
+	npa := len(r.path2db)
+	if nmp != npa {
+		panic(fmt.Sprintf("nmp=%v, vs npa=%v", nmp, npa))
+	}
+	return nmp
+}
+
+var globalRoaringReg *roaringRegistrar = newRoaringRegistrar()
+
+func newRoaringRegistrar() *roaringRegistrar {
+	return &roaringRegistrar{
+		mp:      make(map[*RoaringWrapper]bool),
+		path2db: make(map[string]*RoaringWrapper),
+	}
+}
+
+func (r *roaringRegistrar) unprotectedRegister(w *RoaringWrapper) {
+	r.mp[w] = true
+	r.path2db[w.path] = w
+}
+
+// unregister removes w from r
+func (r *roaringRegistrar) unregister(w *RoaringWrapper) {
+	r.mu.Lock()
+	delete(r.mp, w)
+	delete(r.path2db, w.path)
+	r.mu.Unlock()
+}
+
+// openRoaringDB will check the registry and make a new instance only
+// if one does not exist for its path0. Otherwise it returns
+// the existing instance.
+func (r *roaringRegistrar) OpenDBWrapper(path string, doAllocZero bool) (DBWrapper, error) {
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	w, ok := r.path2db[path]
+	if ok {
+		return w, nil
+	}
+	// otherwise, make a new roaring and store it in globalRoaringReg
+	w = &RoaringWrapper{
+		reg:  r,
+		path: path,
+	}
+	r.unprotectedRegister(w)
+
+	return w, nil
+}
+
+func (w *RoaringWrapper) SetHolder(h *Holder) {
+	w.h = h
+}
+
+func (w *RoaringWrapper) Path() string {
+	return w.path
+}
+
+func (w *RoaringWrapper) HasData() (has bool, err error) {
+	return w.h.HasRoaringData()
+}
+
+func (w *RoaringWrapper) CleanupTx(tx Tx) {
+	r := tx.(*RoaringTx)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.done {
+		return
+	}
+	r.done = true
+
+	r.o.dbs.Cleanup(tx) // release the read/write lock.
+}
+
+func (w *RoaringWrapper) OpenListString() (r string) {
+	return "RoaringWrapper.OpenListString() not yet implemented"
+}
+
+func (w *RoaringWrapper) OpenSnList() (slc []int64) {
+	return nil
+}
+
+// statically confirm that RoaringTx satisfies the Tx interface.
+var _ Tx = (*RoaringTx)(nil)
+
+// RoaringWrapper provides the NewTx() method.
+type RoaringWrapper struct {
+	muDb sync.Mutex
+
+	path string
+
+	h *Holder
+
+	reg *roaringRegistrar
+
+	// make RoaringWrapper.Close() idempotent, avoiding panic on double Close()
+	closed bool
+}
+
+var globalNextTxSnRoaring int64
+
+func (w *RoaringWrapper) NewTx(write bool, initialIndexName string, o Txo) (tx Tx, err error) {
+
+	sn := atomic.AddInt64(&globalNextTxSnRoaring, 1)
+	return &RoaringTx{
+		write:    o.Write,
+		Field:    o.Field,
+		Index:    o.Index,
+		fragment: o.Fragment,
+		o:        o,
+		sn:       sn,
+		w:        w,
+	}, nil
+}
+
+// Close shuts down the Roaring database.
+func (w *RoaringWrapper) Close() (err error) {
+	w.muDb.Lock()
+	defer w.muDb.Unlock()
+	if !w.closed {
+		w.reg.unregister(w)
+		w.closed = true
+	}
+	return nil
+}
+
+func (w *RoaringWrapper) IsClosed() (closed bool) {
+	w.muDb.Lock()
+	closed = w.closed
+	w.muDb.Unlock()
+	return
+}
+
+func (w *RoaringWrapper) DeleteDBPath(dbs *DBShard) (err error) {
+	//vv("RoaringWrapper.DeleteDBPath called on dbs = '%#v'", dbs)
+	path := dbs.pathForType(roaringTxn)
+	return os.RemoveAll(path)
+}
+
+func (w *RoaringWrapper) DeleteField(index, field, fieldPath string) error {
+	//vv("RoaringWrapper.DeleteField(index = '%v', field = '%v', fieldPath = '%v'", index, field, fieldPath)
+
+	// match txn sn count vs lmdb/etc.
+	atomic.AddInt64(&globalNextTxSnRoaring, 1)
+
+	// under blue-green badger_roaring, the directory will not be found, b/c badger will have
+	// already done the os.RemoveAll().	BUT, RemoveAll returns nil error in this case. Docs:
+	// "If the path does not exist, RemoveAll returns nil (no error)"
+	err := os.RemoveAll(fieldPath)
+	if err != nil {
+		return errors.Wrap(err, "removing directory")
+	}
+	return nil
+}
+
+func (w *RoaringWrapper) DeleteFragment(index, field, view string, shard uint64, frag interface{}) error {
+
+	// match txn sn count vs lmdb/etc.
+	atomic.AddInt64(&globalNextTxSnRoaring, 1)
+
+	fragment, ok := frag.(*fragment)
+	if !ok {
+		return fmt.Errorf("RoaringStore.DeleteFragment must get frag of type *fragment, but got '%T'", frag)
+	}
+
+	// Delete fragment file.
+	if err := os.Remove(fragment.path); err != nil {
+		return errors.Wrap(err, "deleting fragment file")
+	}
+
+	// Delete fragment cache file.
+	if err := os.Remove(fragment.cachePath()); err != nil {
+		return errors.Wrap(err, fmt.Sprintf("no cache file to delete for shard %d", fragment.shard))
+	}
+	return nil
 }

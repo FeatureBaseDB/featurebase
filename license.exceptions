@@ -18,3 +18,4 @@
 ./gid.go
 ./cmd/pilosa-keydump/vprint.go
 ./cmd/pilosa-keydump/keydump.go
+./synthload/vprint.go

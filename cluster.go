@@ -62,7 +62,7 @@ const (
 	resizeJobActionAdd    = "ADD"
 	resizeJobActionRemove = "REMOVE"
 
-	defaultConfirmDownRetries = 10
+	defaultConfirmDownRetries = 120
 	defaultConfirmDownSleep   = 1 * time.Second
 )
 
@@ -758,7 +758,7 @@ func (c *cluster) fragsByHost(idx *Index) fragsByHost {
 			fieldViews.addView(field.Name(), view.name)
 		}
 	}
-	return c.fragCombos(idx.Name(), idx.AvailableShards(), fieldViews)
+	return c.fragCombos(idx.Name(), idx.AvailableShards(includeRemote), fieldViews)
 }
 
 // fragCombos returns a map (by uri) of lists of fragments for a given index
@@ -2218,7 +2218,7 @@ func (c *cluster) nodeStatus() *NodeStatus {
 		is := &IndexStatus{Name: idx.Name, CreatedAt: idx.CreatedAt}
 		for _, f := range idx.Fields {
 			if field := c.holder.Field(idx.Name, f.Name); field != nil {
-				availableShards = field.AvailableShards()
+				availableShards = field.AvailableShards(includeRemote)
 			} else {
 				availableShards = roaring.NewBitmap()
 			}
@@ -2346,7 +2346,7 @@ func (c *cluster) translateFieldKey(ctx context.Context, field *Field, key strin
 	if err != nil {
 		return 0, err
 	} else if len(ids) == 0 {
-		return 0, errors.New("translating key on coordinator returned empty set")
+		return 0, nil
 	}
 	return ids[0], nil
 }
@@ -2363,11 +2363,12 @@ func (c *cluster) translateFieldKeys(ctx context.Context, field *Field, keys []s
 	// to the coordinator.
 	if errors.Cause(err) == ErrTranslateStoreReadOnly {
 		coordinatorNode := c.coordinatorNode()
-		if ids, err := c.InternalClient.TranslateKeysNode(ctx, &coordinatorNode.URI, field.Index(), field.Name(), keys); err != nil {
-			return ids, errors.Wrap(err, "translating keys on coordinator")
-		} else {
+
+		ids, err := c.InternalClient.TranslateKeysNode(ctx, &coordinatorNode.URI, field.Index(), field.Name(), keys, writable)
+		if err == nil {
 			return ids, nil
 		}
+		return ids, errors.Wrap(err, "translating field keys on coordinator")
 	}
 	return ids, err
 }
@@ -2391,9 +2392,11 @@ func (c *cluster) translateIndexKeys(ctx context.Context, indexName string, keys
 		return nil, err
 	}
 
-	ids := make([]uint64, len(keys))
-	for i := range keys {
-		ids[i] = keyMap[keys[i]]
+	ids := make([]uint64, 0, len(keys))
+	for _, k := range keys {
+		if id := keyMap[k]; id != 0 {
+			ids = append(ids, id)
+		}
 	}
 	return ids, nil
 }
@@ -2428,18 +2431,18 @@ func (c *cluster) translateIndexKeySet(ctx context.Context, indexName string, ke
 				}
 			} else {
 				nodes := c.partitionNodes(partitionID)
-				if ids, err = c.InternalClient.TranslateKeysNode(ctx, &nodes[0].URI, indexName, "", keys); err != nil {
+				if ids, err = c.InternalClient.TranslateKeysNode(ctx, &nodes[0].URI, indexName, "", keys, writable); err != nil {
 					return err
 				}
 			}
 
 			mu.Lock()
-			defer mu.Unlock()
-			for i := range keys {
-				if id := ids[i]; id != 0 {
+			for i, id := range ids {
+				if id != 0 {
 					keyMap[keys[i]] = id
 				}
 			}
+			mu.Unlock()
 			return nil
 		})
 	}

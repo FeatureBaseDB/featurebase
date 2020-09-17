@@ -12,7 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// +build amd64
+// explanation of build tags:
+//
+// badgerdb builds but won't run in 32-bit 386 world, as of 2020 July 20.
+// See https://github.com/dgraph-io/badger/issues/1384 for any progress.
+// What we see is that the value-log allocations immediately run out of
+// memory. So we turn off 386 with a build tag to keep the .circleci happy.
+
+// +build !386
 
 package pilosa
 
@@ -22,13 +29,22 @@ import (
 	"os"
 	"testing"
 
+	"github.com/dgraph-io/badger/v2"
 	"github.com/pilosa/pilosa/v2/roaring"
+	"github.com/pilosa/pilosa/v2/testhook"
+	"github.com/pkg/errors"
 )
+
+var _ = &roaring.Bitmap{}
+
+func init() {
+	testhook.RegisterPostTestHook(reportTestBadgersNeedingClose)
+}
 
 // helpers, each runs their own new txn, and commits if a change/delete
 // was made. The txn is rolled back if it is just viewing the data.
 
-func LMDBMustHaveBitvalue(dbwrap *LMDBWrapper, index, field, view string, shard uint64, bitvalue uint64) {
+func badgerDBMustHaveBitvalue(dbwrap *BadgerDBWrapper, index, field, view string, shard uint64, bitvalue uint64) {
 
 	tx, _ := dbwrap.NewTx(!writable, index, Txo{})
 	defer tx.Rollback()
@@ -41,7 +57,7 @@ func LMDBMustHaveBitvalue(dbwrap *LMDBWrapper, index, field, view string, shard 
 	tx.Rollback()
 }
 
-func LMDBMustNotHaveBitvalue(dbwrap *LMDBWrapper, index, field, view string, shard uint64, bitvalue uint64) {
+func badgerDBMustNotHaveBitvalue(dbwrap *BadgerDBWrapper, index, field, view string, shard uint64, bitvalue uint64) {
 
 	tx, _ := dbwrap.NewTx(!writable, index, Txo{})
 	defer tx.Rollback()
@@ -53,7 +69,7 @@ func LMDBMustNotHaveBitvalue(dbwrap *LMDBWrapper, index, field, view string, sha
 	tx.Rollback()
 }
 
-func LMDBMustSetBitvalue(dbwrap *LMDBWrapper, index, field, view string, shard uint64, putme uint64) {
+func badgerDBMustSetBitvalue(dbwrap *BadgerDBWrapper, index, field, view string, shard uint64, putme uint64) {
 	tx, _ := dbwrap.NewTx(writable, index, Txo{})
 
 	// add a bit
@@ -71,37 +87,37 @@ func LMDBMustSetBitvalue(dbwrap *LMDBWrapper, index, field, view string, shard u
 	panicOn(tx.Commit())
 }
 
-func LMDBMustDeleteBitvalueContainer(dbwrap *LMDBWrapper, index, field, view string, shard uint64, putme uint64) {
+func badgerDBMustDeleteBitvalueContainer(dbwrap *BadgerDBWrapper, index, field, view string, shard uint64, putme uint64) {
 	tx, _ := dbwrap.NewTx(writable, index, Txo{})
 	hi := highbits(putme)
 	panicOn(tx.RemoveContainer(index, field, view, shard, hi))
 	panicOn(tx.Commit())
 }
 
-func LMDBMustDeleteBitvalue(dbwrap *LMDBWrapper, index, field, view string, shard uint64, putme uint64) {
+func badgerDBMustDeleteBitvalue(dbwrap *BadgerDBWrapper, index, field, view string, shard uint64, putme uint64) {
 	tx, _ := dbwrap.NewTx(writable, index, Txo{})
 	_, err := tx.Remove(index, field, view, shard, putme)
 	panicOn(err)
 	panicOn(tx.Commit())
 }
 
-func mustOpenEmptyLMDBWrapper(path string) (w *LMDBWrapper, cleaner func()) {
+func mustOpenEmptyBadgerWrapper(path string) (w *BadgerDBWrapper, cleaner func()) {
 	var err error
-	fn := lmdbPath(path)
+	fn := badgerPath(path)
 	panicOn(os.RemoveAll(fn))
-	ww, err := globalLMDBReg.OpenDBWrapper(fn, DetectMemAccessPastTx)
+	ww, err := globalBadgerReg.OpenDBWrapper(path, DetectMemAccessPastTx)
 	panicOn(err)
-	w = ww.(*LMDBWrapper)
+	w = ww.(*BadgerDBWrapper)
 
 	// verify it is empty
-	allkeys := w.StringifiedLMDBKeys(nil, false)
-	if allkeys != "<empty lmdb database>" {
+	allkeys := w.StringifiedBadgerKeys(nil, true)
+	if allkeys != "" {
 		panic(fmt.Sprintf("freshly created database was not empty! had keys:'%v'", allkeys))
 	}
 
 	return w, func() {
-		w.Close()
-		panicOn(os.RemoveAll(fn))
+		w.Close() // stop any started background GC goroutine.
+		os.RemoveAll(fn)
 	}
 }
 
@@ -111,10 +127,10 @@ func mustOpenEmptyLMDBWrapper(path string) (w *LMDBWrapper, cleaner func()) {
 //////////////////////////
 // begin Tx method tests
 
-func TestLMDB_DeleteFragment(t *testing.T) {
+func TestBadger_DeleteFragment(t *testing.T) {
 
 	// setup
-	dbwrap, clean := mustOpenEmptyLMDBWrapper("TestLmdb_DeleteFragment")
+	dbwrap, clean := mustOpenEmptyBadgerWrapper("TestBadger_DeleteFragment")
 	defer clean()
 	defer dbwrap.Close()
 	index, field, view, shard0 := "i", "f", "v", uint64(0)
@@ -173,70 +189,35 @@ func TestLMDB_DeleteFragment(t *testing.T) {
 	}
 }
 
-func TestLMDB_Max_on_many_containers(t *testing.T) {
-	path := "TestLMDB_Max_on_many_containers"
-	dbwrap, clean := mustOpenEmptyLMDBWrapper(path)
-
+func TestBadger_Max_on_many_containers(t *testing.T) {
+	dbwrap, clean := mustOpenEmptyBadgerWrapper("TestBadger_Max_on_many_containers")
 	defer clean()
 	defer dbwrap.Close()
-	index, field, view := "i", "f", "v"
+	index, field, view, shard := "i", "f", "v", uint64(0)
 
-	// 099
-	// 101
-	// 199
-	// 300
-	// 399
-	//
-	// find max in [300,400) and get 399
-	// find max in [000,100) and get 099
-	// find max in [100,200) and get 199
-	// find max in [400,500) and get nothing back
-	// find max in [200,300) and get nothing back
+	putmeValues := []uint64{0, 2 << 16, 4 << 16}
 
-	shards := []int{99, 101, 199, 300, 399}
-
-	for _, sh := range shards {
-		shard := uint64(sh)
-		for _, pm := range shards {
-			putme := uint64(pm)
-			if putme > shard {
-				continue
-			}
-			LMDBMustNotHaveBitvalue(dbwrap, index, field, view, shard, putme)
-			LMDBMustSetBitvalue(dbwrap, index, field, view, shard, putme)
-			LMDBMustHaveBitvalue(dbwrap, index, field, view, shard, putme)
-		}
+	for _, putme := range putmeValues {
+		badgerDBMustNotHaveBitvalue(dbwrap, index, field, view, shard, putme)
+		badgerDBMustSetBitvalue(dbwrap, index, field, view, shard, putme)
+		badgerDBMustHaveBitvalue(dbwrap, index, field, view, shard, putme)
 	}
 
 	tx, _ := dbwrap.NewTx(!writable, index, Txo{})
 	defer tx.Rollback()
 
-	for _, shard := range shards {
-		max, err := tx.Max(index, field, view, uint64(shard))
-		panicOn(err)
-		if max != uint64(shard) {
-			panic(fmt.Sprintf("expected max (%v) to be == shard = %v", max, shard))
-		}
-	}
-
-	// check for not found
-	max, err := tx.Max(index, field, view, uint64(200))
+	max, err := tx.Max(index, field, view, shard)
 	panicOn(err)
-	if max != 0 {
-		panic("expected not found to give 0 max back with nil err")
+	expected := putmeValues[len(putmeValues)-1]
+	if max != expected {
+		panic(fmt.Sprintf("expected Max() of %v but got max=%v", expected, max))
 	}
-	max, err = tx.Max(index, field, view, uint64(400))
-	panicOn(err)
-	if max != 0 {
-		panic("expected not found to give 0 max back with nil err")
-	}
-
 }
 
 // and the rest
 
-func TestLMDB_SetBitmap(t *testing.T) {
-	dbwrap, clean := mustOpenEmptyLMDBWrapper("TestLMDB_SetBitmap")
+func TestBadger_SetBitmap(t *testing.T) {
+	dbwrap, clean := mustOpenEmptyBadgerWrapper("TestBadger_SetBitmap")
 	defer clean()
 	defer dbwrap.Close()
 	index, field, view, shard := "i", "f", "v", uint64(0)
@@ -276,8 +257,8 @@ func TestLMDB_SetBitmap(t *testing.T) {
 	tx2.Rollback()
 }
 
-func TestLMDB_OffsetRange(t *testing.T) {
-	dbwrap, clean := mustOpenEmptyLMDBWrapper("TestLMDB_OffsetRange")
+func TestBadger_OffsetRange(t *testing.T) {
+	dbwrap, clean := mustOpenEmptyBadgerWrapper("TestBadger_OffsetRange")
 	defer clean()
 	defer dbwrap.Close()
 	index, field, view, shard := "i", "f", "v", uint64(0)
@@ -343,8 +324,8 @@ func TestLMDB_OffsetRange(t *testing.T) {
 	}
 }
 
-func TestLMDB_Count_on_many_containers(t *testing.T) {
-	dbwrap, clean := mustOpenEmptyLMDBWrapper("TestLMDB_Count_on_many_containers")
+func TestBadger_Count_on_many_containers(t *testing.T) {
+	dbwrap, clean := mustOpenEmptyBadgerWrapper("TestBadger_Count_on_many_containers")
 	defer clean()
 	defer dbwrap.Close()
 	index, field, view, shard := "i", "f", "v", uint64(0)
@@ -352,9 +333,9 @@ func TestLMDB_Count_on_many_containers(t *testing.T) {
 	putmeValues := []uint64{0, 2 << 16, 4 << 16}
 
 	for _, putme := range putmeValues {
-		LMDBMustNotHaveBitvalue(dbwrap, index, field, view, shard, putme)
-		LMDBMustSetBitvalue(dbwrap, index, field, view, shard, putme)
-		LMDBMustHaveBitvalue(dbwrap, index, field, view, shard, putme)
+		badgerDBMustNotHaveBitvalue(dbwrap, index, field, view, shard, putme)
+		badgerDBMustSetBitvalue(dbwrap, index, field, view, shard, putme)
+		badgerDBMustHaveBitvalue(dbwrap, index, field, view, shard, putme)
 	}
 
 	tx, _ := dbwrap.NewTx(writable, index, Txo{})
@@ -367,8 +348,8 @@ func TestLMDB_Count_on_many_containers(t *testing.T) {
 	}
 }
 
-func TestLMDB_Count_dense_containers(t *testing.T) {
-	dbwrap, clean := mustOpenEmptyLMDBWrapper("TestLMDB_Count_dense_containers")
+func TestBadger_Count_dense_containers(t *testing.T) {
+	dbwrap, clean := mustOpenEmptyBadgerWrapper("TestBadger_Count_dense_containers")
 	defer clean()
 	defer dbwrap.Close()
 	index, field, view, shard := "i", "f", "v", uint64(0)
@@ -376,6 +357,9 @@ func TestLMDB_Count_dense_containers(t *testing.T) {
 	tx, _ := dbwrap.NewTx(writable, index, Txo{})
 
 	expected := 0
+	// can't do more than about 100k writes per badger txn by default, so
+	// have to keep this kind of small.
+	// (See maxBatchCount:104857, maxBatchSize:10066329).
 	for i := uint64(0); i < (1<<16)+2; i += 2 {
 		changed, err := tx.Add(index, field, view, shard, doBatched, i)
 		panicOn(err)
@@ -393,9 +377,9 @@ func TestLMDB_Count_dense_containers(t *testing.T) {
 	}
 }
 
-func TestLMDB_ContainerIterator_on_empty(t *testing.T) {
+func TestBadger_ContainerIterator_on_empty(t *testing.T) {
 	// iterate on empty container, should not find anything.
-	dbwrap, clean := mustOpenEmptyLMDBWrapper("TestLMDB_ContainerIterator")
+	dbwrap, clean := mustOpenEmptyBadgerWrapper("TestBadger_ContainerIterator")
 	defer clean()
 	defer dbwrap.Close()
 	index, field, view, shard := "i", "f", "v", uint64(0)
@@ -411,9 +395,9 @@ func TestLMDB_ContainerIterator_on_empty(t *testing.T) {
 	panicOn(err)
 }
 
-func TestLMDB_ContainerIterator_on_one_bit(t *testing.T) {
+func TestBadger_ContainerIterator_on_one_bit(t *testing.T) {
 	// set one bit, iterate.
-	dbwrap, clean := mustOpenEmptyLMDBWrapper("TestLMDB_ContainerIterator_on_one_bit")
+	dbwrap, clean := mustOpenEmptyBadgerWrapper("TestBadger_ContainerIterator_on_one_bit")
 	defer clean()
 	defer dbwrap.Close()
 	index, field, view, shard := "i", "f", "v", uint64(0)
@@ -469,8 +453,8 @@ func TestLMDB_ContainerIterator_on_one_bit(t *testing.T) {
 	}
 }
 
-func TestLMDB_ContainerIterator_on_one_bit_fail_to_find(t *testing.T) {
-	dbwrap, clean := mustOpenEmptyLMDBWrapper("TestLMDB_ContainerIterator_on_one_bit")
+func TestBadger_ContainerIterator_on_one_bit_fail_to_find(t *testing.T) {
+	dbwrap, clean := mustOpenEmptyBadgerWrapper("TestBadger_ContainerIterator_on_one_bit")
 	defer clean()
 	defer dbwrap.Close()
 	index, field, view, shard := "i", "f", "v", uint64(0)
@@ -524,8 +508,8 @@ func TestLMDB_ContainerIterator_on_one_bit_fail_to_find(t *testing.T) {
 	panicOn(err)
 }
 
-func TestLMDB_ContainerIterator_empty_iteration_loop(t *testing.T) {
-	dbwrap, clean := mustOpenEmptyLMDBWrapper("TestLMDB_ContainerIterator_empty_iteration_loop")
+func TestBadger_ContainerIterator_empty_iteration_loop(t *testing.T) {
+	dbwrap, clean := mustOpenEmptyBadgerWrapper("TestBadger_ContainerIterator_empty_iteration_loop")
 	defer clean()
 	defer dbwrap.Close()
 	index, field, view, shard := "i", "f", "v", uint64(0)
@@ -573,9 +557,9 @@ func TestLMDB_ContainerIterator_empty_iteration_loop(t *testing.T) {
 
 }
 
-func TestLMDB_ForEach_on_one_bit(t *testing.T) {
+func TestBadger_ForEach_on_one_bit(t *testing.T) {
 
-	dbwrap, clean := mustOpenEmptyLMDBWrapper("TestLMDB_ContainerIterator_on_one_bit")
+	dbwrap, clean := mustOpenEmptyBadgerWrapper("TestBadger_ContainerIterator_on_one_bit")
 	defer clean()
 	defer dbwrap.Close()
 	index, field, view, shard := "i", "f", "v", uint64(0)
@@ -612,9 +596,9 @@ func TestLMDB_ForEach_on_one_bit(t *testing.T) {
 	}
 }
 
-func TestLMDB_RemoveContainer_one_bit_test(t *testing.T) {
+func TestBadger_RemoveContainer_one_bit_test(t *testing.T) {
 
-	dbwrap, clean := mustOpenEmptyLMDBWrapper("TestLMDB_RemoveContainer_one_bit_test")
+	dbwrap, clean := mustOpenEmptyBadgerWrapper("TestBadger_RemoveContainer_one_bit_test")
 	defer clean()
 	defer dbwrap.Close()
 
@@ -626,16 +610,16 @@ func TestLMDB_RemoveContainer_one_bit_test(t *testing.T) {
 
 		// a) delete of whole container in a seperate txn. Commit should establish the deletion.
 
-		LMDBMustNotHaveBitvalue(dbwrap, index, field, view, shard, putme)
-		LMDBMustSetBitvalue(dbwrap, index, field, view, shard, putme)
-		LMDBMustHaveBitvalue(dbwrap, index, field, view, shard, putme)
-		LMDBMustDeleteBitvalueContainer(dbwrap, index, field, view, shard, putme)
-		LMDBMustNotHaveBitvalue(dbwrap, index, field, view, shard, putme)
+		badgerDBMustNotHaveBitvalue(dbwrap, index, field, view, shard, putme)
+		badgerDBMustSetBitvalue(dbwrap, index, field, view, shard, putme)
+		badgerDBMustHaveBitvalue(dbwrap, index, field, view, shard, putme)
+		badgerDBMustDeleteBitvalueContainer(dbwrap, index, field, view, shard, putme)
+		badgerDBMustNotHaveBitvalue(dbwrap, index, field, view, shard, putme)
 
 		// b) deletion + rollback on the txn should restore the deleted bit
 
-		LMDBMustSetBitvalue(dbwrap, index, field, view, shard, putme)
-		LMDBMustHaveBitvalue(dbwrap, index, field, view, shard, putme)
+		badgerDBMustSetBitvalue(dbwrap, index, field, view, shard, putme)
+		badgerDBMustHaveBitvalue(dbwrap, index, field, view, shard, putme)
 
 		// delete, but rollback instead of commit
 		tx, _ := dbwrap.NewTx(writable, index, Txo{})
@@ -644,7 +628,7 @@ func TestLMDB_RemoveContainer_one_bit_test(t *testing.T) {
 		tx.Rollback()
 
 		// verify that the rollback undid the deletion.
-		LMDBMustHaveBitvalue(dbwrap, index, field, view, shard, putme)
+		badgerDBMustHaveBitvalue(dbwrap, index, field, view, shard, putme)
 
 		// c) within one Tx, after delete it should be gone as viewed within the txn.
 		tx, _ = dbwrap.NewTx(writable, index, Txo{})
@@ -667,15 +651,15 @@ func TestLMDB_RemoveContainer_one_bit_test(t *testing.T) {
 		tx.Rollback()
 
 		// verify that the rollback undid the deletion.
-		LMDBMustHaveBitvalue(dbwrap, index, field, view, shard, putme)
+		badgerDBMustHaveBitvalue(dbwrap, index, field, view, shard, putme)
 		// leave with clean slate
-		LMDBMustDeleteBitvalueContainer(dbwrap, index, field, view, shard, putme)
+		badgerDBMustDeleteBitvalueContainer(dbwrap, index, field, view, shard, putme)
 	}
 }
 
-func TestLMDB_Remove_one_bit_test(t *testing.T) {
+func TestBadger_Remove_one_bit_test(t *testing.T) {
 
-	dbwrap, clean := mustOpenEmptyLMDBWrapper("TestLMDB_Remove_one_bit_test")
+	dbwrap, clean := mustOpenEmptyBadgerWrapper("TestBadger_Remove_one_bit_test")
 	defer clean()
 	defer dbwrap.Close()
 
@@ -687,16 +671,16 @@ func TestLMDB_Remove_one_bit_test(t *testing.T) {
 
 		// a) delete of whole container in a seperate txn. Commit should establish the deletion.
 
-		LMDBMustNotHaveBitvalue(dbwrap, index, field, view, shard, putme)
-		LMDBMustSetBitvalue(dbwrap, index, field, view, shard, putme)
-		LMDBMustHaveBitvalue(dbwrap, index, field, view, shard, putme)
-		LMDBMustDeleteBitvalue(dbwrap, index, field, view, shard, putme)
-		LMDBMustNotHaveBitvalue(dbwrap, index, field, view, shard, putme)
+		badgerDBMustNotHaveBitvalue(dbwrap, index, field, view, shard, putme)
+		badgerDBMustSetBitvalue(dbwrap, index, field, view, shard, putme)
+		badgerDBMustHaveBitvalue(dbwrap, index, field, view, shard, putme)
+		badgerDBMustDeleteBitvalue(dbwrap, index, field, view, shard, putme)
+		badgerDBMustNotHaveBitvalue(dbwrap, index, field, view, shard, putme)
 
 		// b) deletion + rollback on the txn should restore the deleted bit
 
-		LMDBMustSetBitvalue(dbwrap, index, field, view, shard, putme)
-		LMDBMustHaveBitvalue(dbwrap, index, field, view, shard, putme)
+		badgerDBMustSetBitvalue(dbwrap, index, field, view, shard, putme)
+		badgerDBMustHaveBitvalue(dbwrap, index, field, view, shard, putme)
 
 		// delete, but rollback instead of commit
 		tx, _ := dbwrap.NewTx(writable, index, Txo{})
@@ -707,7 +691,7 @@ func TestLMDB_Remove_one_bit_test(t *testing.T) {
 		tx.Rollback()
 
 		// verify that the rollback undid the deletion.
-		LMDBMustHaveBitvalue(dbwrap, index, field, view, shard, putme)
+		badgerDBMustHaveBitvalue(dbwrap, index, field, view, shard, putme)
 
 		// c) within one Tx, after delete it should be gone as viewed within the txn.
 		tx, _ = dbwrap.NewTx(writable, index, Txo{})
@@ -729,14 +713,64 @@ func TestLMDB_Remove_one_bit_test(t *testing.T) {
 		tx.Rollback()
 
 		// verify that the rollback undid the deletion.
-		LMDBMustHaveBitvalue(dbwrap, index, field, view, shard, putme)
+		badgerDBMustHaveBitvalue(dbwrap, index, field, view, shard, putme)
 		// leave with clean slate
-		LMDBMustDeleteBitvalueContainer(dbwrap, index, field, view, shard, putme)
+		badgerDBMustDeleteBitvalueContainer(dbwrap, index, field, view, shard, putme)
 	}
 }
 
-func TestLMDB_Min_on_many_containers(t *testing.T) {
-	dbwrap, clean := mustOpenEmptyLMDBWrapper("TestLMDB_Min_on_many_containers")
+func TestBadger_reverse_badger_iterator(t *testing.T) {
+
+	// sanity check our understanding of Seek()-ing on reverse iterators.
+	dbwrap, clean := mustOpenEmptyBadgerWrapper("TestBadger_reverse_badger_iterator")
+	defer clean()
+	defer dbwrap.Close()
+
+	// add 0, 1, 2 to badgerdb as keys (and same value).
+	err := dbwrap.Update(func(txn *badger.Txn) error {
+		for i := 0; i < 3; i++ {
+			kv := []byte(fmt.Sprintf("a:%v", i))
+			err := txn.Set(kv, kv)
+			panicOn(err)
+		}
+		return nil
+	})
+	panicOn(err)
+
+	tx := dbwrap.db.NewTransactionAt(1, !writable)
+
+	opts := badger.DefaultIteratorOptions
+	opts.PrefetchValues = false // else by default, pre-fetches the 1st 100 values, which would be slow.
+	opts.Reverse = true
+	it := tx.NewIterator(opts)
+	it.Rewind()
+	if !it.Valid() {
+		panic("invalid reversed iterator?")
+	}
+	a := []byte("a:3")
+	it.Seek(a)
+	if !it.Valid() {
+		panic("invalid reversed iterator after seek")
+	}
+
+	it.Next()
+	if !it.Valid() {
+		panic("invalid reversed iterator after seek and next")
+	}
+	item := it.Item()
+
+	err = item.Value(func(val []byte) error {
+		// This func with val would only be called if item.Value encounters no error.
+		if string(val) != "a:1" {
+			panic(fmt.Sprintf("we are in trouble, should have gotten 'a:1' but instead got '%v'", string(val)))
+		}
+		return nil
+	})
+	panicOn(err)
+}
+
+func TestBadger_Min_on_many_containers(t *testing.T) {
+	dbwrap, clean := mustOpenEmptyBadgerWrapper("TestBadger_Min_on_many_containers")
 	defer clean()
 	defer dbwrap.Close()
 	index, field, view, shard := "i", "f", "v", uint64(0)
@@ -754,9 +788,9 @@ func TestLMDB_Min_on_many_containers(t *testing.T) {
 	putmeValues := []uint64{3, 2 << 16, 4 << 16}
 
 	for _, putme := range putmeValues {
-		LMDBMustNotHaveBitvalue(dbwrap, index, field, view, shard, putme)
-		LMDBMustSetBitvalue(dbwrap, index, field, view, shard, putme)
-		LMDBMustHaveBitvalue(dbwrap, index, field, view, shard, putme)
+		badgerDBMustNotHaveBitvalue(dbwrap, index, field, view, shard, putme)
+		badgerDBMustSetBitvalue(dbwrap, index, field, view, shard, putme)
+		badgerDBMustHaveBitvalue(dbwrap, index, field, view, shard, putme)
 	}
 
 	tx, _ = dbwrap.NewTx(!writable, index, Txo{})
@@ -773,8 +807,8 @@ func TestLMDB_Min_on_many_containers(t *testing.T) {
 	}
 }
 
-func TestLMDB_CountRange_on_many_containers(t *testing.T) {
-	dbwrap, clean := mustOpenEmptyLMDBWrapper("TestLMDB_CountRange_on_many_containers")
+func TestBadger_CountRange_on_many_containers(t *testing.T) {
+	dbwrap, clean := mustOpenEmptyBadgerWrapper("TestBadger_CountRange_on_many_containers")
 	defer clean()
 	defer dbwrap.Close()
 	index, field, view, shard := "i", "f", "v", uint64(0)
@@ -791,9 +825,9 @@ func TestLMDB_CountRange_on_many_containers(t *testing.T) {
 	putmeValues := []uint64{3, 2 << 16, 4 << 16}
 
 	for _, putme := range putmeValues {
-		LMDBMustNotHaveBitvalue(dbwrap, index, field, view, shard, putme)
-		LMDBMustSetBitvalue(dbwrap, index, field, view, shard, putme)
-		LMDBMustHaveBitvalue(dbwrap, index, field, view, shard, putme)
+		badgerDBMustNotHaveBitvalue(dbwrap, index, field, view, shard, putme)
+		badgerDBMustSetBitvalue(dbwrap, index, field, view, shard, putme)
+		badgerDBMustHaveBitvalue(dbwrap, index, field, view, shard, putme)
 	}
 
 	tx, _ = dbwrap.NewTx(!writable, index, Txo{})
@@ -810,8 +844,8 @@ func TestLMDB_CountRange_on_many_containers(t *testing.T) {
 	}
 }
 
-func TestLMDB_CountRange_middle_container(t *testing.T) {
-	dbwrap, clean := mustOpenEmptyLMDBWrapper("TestLMDB_CountRange_middle_container")
+func TestBadger_CountRange_middle_container(t *testing.T) {
+	dbwrap, clean := mustOpenEmptyBadgerWrapper("TestBadger_CountRange_middle_container")
 	defer clean()
 	defer dbwrap.Close()
 	index, field, view, shard := "i", "f", "v", uint64(0)
@@ -819,9 +853,9 @@ func TestLMDB_CountRange_middle_container(t *testing.T) {
 	putmeValues := []uint64{3, 2 << 16, 4 << 16}
 
 	for _, putme := range putmeValues {
-		LMDBMustNotHaveBitvalue(dbwrap, index, field, view, shard, putme)
-		LMDBMustSetBitvalue(dbwrap, index, field, view, shard, putme)
-		LMDBMustHaveBitvalue(dbwrap, index, field, view, shard, putme)
+		badgerDBMustNotHaveBitvalue(dbwrap, index, field, view, shard, putme)
+		badgerDBMustSetBitvalue(dbwrap, index, field, view, shard, putme)
+		badgerDBMustHaveBitvalue(dbwrap, index, field, view, shard, putme)
 	}
 
 	tx, _ := dbwrap.NewTx(!writable, index, Txo{})
@@ -835,8 +869,8 @@ func TestLMDB_CountRange_middle_container(t *testing.T) {
 	}
 }
 
-func TestLMDB_CountRange_many_middle_container(t *testing.T) {
-	dbwrap, clean := mustOpenEmptyLMDBWrapper("TestLMDB_CountRange_many_middle_container")
+func TestBadger_CountRange_many_middle_container(t *testing.T) {
+	dbwrap, clean := mustOpenEmptyBadgerWrapper("TestBadger_CountRange_many_middle_container")
 	defer clean()
 	defer dbwrap.Close()
 	index, field, view, shard := "i", "f", "v", uint64(0)
@@ -844,9 +878,9 @@ func TestLMDB_CountRange_many_middle_container(t *testing.T) {
 	putmeValues := []uint64{3, 2 << 16, 4 << 16}
 
 	for _, putme := range putmeValues {
-		LMDBMustNotHaveBitvalue(dbwrap, index, field, view, shard, putme)
-		LMDBMustSetBitvalue(dbwrap, index, field, view, shard, putme)
-		LMDBMustHaveBitvalue(dbwrap, index, field, view, shard, putme)
+		badgerDBMustNotHaveBitvalue(dbwrap, index, field, view, shard, putme)
+		badgerDBMustSetBitvalue(dbwrap, index, field, view, shard, putme)
+		badgerDBMustHaveBitvalue(dbwrap, index, field, view, shard, putme)
 	}
 
 	tx, _ := dbwrap.NewTx(!writable, index, Txo{})
@@ -860,9 +894,9 @@ func TestLMDB_CountRange_many_middle_container(t *testing.T) {
 	}
 }
 
-func TestLMDB_UnionInPlace(t *testing.T) {
+func TestBadger_UnionInPlace(t *testing.T) {
 
-	dbwrap, clean := mustOpenEmptyLMDBWrapper("TestLMDB_UnionInPlace")
+	dbwrap, clean := mustOpenEmptyBadgerWrapper("TestBadger_UnionInPlace")
 	defer clean()
 	defer dbwrap.Close()
 	index, field, view, shard := "i", "f", "v", uint64(0)
@@ -875,9 +909,9 @@ func TestLMDB_UnionInPlace(t *testing.T) {
 	// populate others with putmeValues +1 into others
 
 	for _, putme := range putmeValues {
-		LMDBMustNotHaveBitvalue(dbwrap, index, field, view, shard, putme)
-		LMDBMustSetBitvalue(dbwrap, index, field, view, shard, putme)
-		LMDBMustHaveBitvalue(dbwrap, index, field, view, shard, putme)
+		badgerDBMustNotHaveBitvalue(dbwrap, index, field, view, shard, putme)
+		badgerDBMustSetBitvalue(dbwrap, index, field, view, shard, putme)
+		badgerDBMustHaveBitvalue(dbwrap, index, field, view, shard, putme)
 	}
 
 	tx2, _ := dbwrap.NewTx(!writable, index, Txo{})
@@ -909,16 +943,16 @@ func TestLMDB_UnionInPlace(t *testing.T) {
 	}
 }
 
-func TestLMDB_RoaringBitmap(t *testing.T) {
+func TestBadger_RoaringBitmap(t *testing.T) {
 
-	dbwrap, clean := mustOpenEmptyLMDBWrapper("TestLMDB_RoaringBitmap")
+	dbwrap, clean := mustOpenEmptyBadgerWrapper("TestBadger_RoaringBitmap")
 	defer clean()
 	defer dbwrap.Close()
 	index, field, view, shard := "i", "f", "v", uint64(0)
 
 	expected := uint64(3)
 	putme := expected
-	LMDBMustSetBitvalue(dbwrap, index, field, view, shard, putme)
+	badgerDBMustSetBitvalue(dbwrap, index, field, view, shard, putme)
 
 	tx, _ := dbwrap.NewTx(!writable, index, Txo{})
 	defer tx.Rollback()
@@ -932,21 +966,123 @@ func TestLMDB_RoaringBitmap(t *testing.T) {
 	}
 }
 
-// no reverse iterator on LMDB; we did a special case for Max
-// rather than a general purpose reverse iterator which we
-// aren't using for anything else.
-//func TestLMDB_reverse_badger_iterator_and_prefix_valid(t *testing.T)
-//func TestLMDB_just_reverse_badger_iterator_and_prefix_valid(t *testing.T)
+func TestBadger_reverse_badger_iterator_and_prefix_valid(t *testing.T) {
 
-func TestLMDB_ImportRoaringBits(t *testing.T) {
+	// does a reverse iterator and ValidForPrefix behave like we expect it too?
+	dbwrap, clean := mustOpenEmptyBadgerWrapper("TestBadger_reverse_badger_iterator_and_prefix_valid")
+	defer clean()
+	defer dbwrap.Close()
 
-	dbwrap, clean := mustOpenEmptyLMDBWrapper("TestLMDB_ImportRoaringBits")
+	// add 0, 1, 2 to badgerdb as keys (and same value).
+	err := dbwrap.Update(func(txn *badger.Txn) error {
+		for _, prefix := range []string{"a", "b", "c"} {
+			for i := 0; i < 3; i++ {
+				kv := []byte(fmt.Sprintf("%v:%v", prefix, i))
+				err := txn.Set(kv, kv)
+				panicOn(err)
+			}
+		}
+		return nil
+	})
+	panicOn(err)
+
+	tx0, _ := dbwrap.NewTx(!writable, "no-index-avail", Txo{})
+	tx := tx0.(*BadgerTx)
+
+	prefix := []byte("b:")
+	it := NewBadgerIterator(tx, prefix)
+
+	if !it.it.Valid() {
+		panic("why is underlying badger it not valid here?")
+	}
+	results := ""
+	for it.Next() {
+		item := it.it.Item()
+		sk := string(item.Key())
+		results += sk + ", "
+	}
+	expected := `b:0, b:1, b:2, `
+	if results != expected {
+		panic(fmt.Sprintf("observed: '%v' but expected: '%v'", results, expected))
+	}
+	it.Close()
+
+	// now reversed
+	seekto := []byte("c:")
+	rit := NewBadgerReverseIterator(tx, prefix, seekto) // Seeks("b:") goes to b:0
+	defer rit.Close()
+
+	if !rit.it.Valid() {
+		panic("why is underlying badger it not valid here?")
+	}
+	results = ""
+	for rit.Next() {
+		item := rit.it.Item()
+		sk := string(item.Key())
+		results += sk + ", "
+	}
+	expected = `b:2, b:1, b:0, `
+	if results != expected {
+		panic(fmt.Sprintf("observed: '%v' but expected: '%v'", results, expected))
+	}
+	rit.Close()
+}
+
+func TestBadger_just_reverse_badger_iterator_and_prefix_valid(t *testing.T) {
+
+	// does a reverse iterator and ValidForPrefix behave like we expect it too?
+	dbwrap, clean := mustOpenEmptyBadgerWrapper("TestBadger_reverse_badger_iterator_and_prefix_valid")
+	defer clean()
+	defer dbwrap.Close()
+
+	// add 0, 1, 2 to badgerdb as keys (and same value).
+	err := dbwrap.Update(func(txn *badger.Txn) error {
+		for _, prefix := range []string{"a", "b", "c"} {
+			for i := 0; i < 3; i++ {
+				kv := []byte(fmt.Sprintf("%v:%v", prefix, i))
+				err := txn.Set(kv, kv)
+				panicOn(err)
+			}
+		}
+		return nil
+	})
+	panicOn(err)
+
+	tx0, _ := dbwrap.NewTx(!writable, "no-index-avail", Txo{})
+	tx := tx0.(*BadgerTx)
+
+	seekto := []byte("c:")
+	prefix := []byte("b:")
+	// now reversed
+	rit := NewBadgerReverseIterator(tx, prefix, seekto) // Seeks("b:") goes to b:0
+	defer rit.Close()
+
+	if !rit.it.Valid() {
+		panic("why is underlying badger rit not valid here?")
+	}
+	results := ""
+	for rit.Next() {
+		item := rit.it.Item()
+		sk := string(item.Key())
+		results += sk + ", "
+	}
+	expected := `b:2, b:1, b:0, `
+	if results != expected {
+		panic(fmt.Sprintf("observed: '%v' but expected: '%v'", results, expected))
+	}
+	rit.Close()
+}
+
+func TestBadger_ImportRoaringBits(t *testing.T) {
+
+	dbwrap, clean := mustOpenEmptyBadgerWrapper("TestBadger_ImportRoaringBits")
 	defer clean()
 	defer dbwrap.Close()
 	index, field, view, shard := "i", "f", "v", uint64(0)
-	tx, _ := dbwrap.NewTx(writable, index, Txo{})
+	tx0, _ := dbwrap.NewTx(writable, index, Txo{})
+	tx := tx0.(*BadgerTx)
 	defer tx.Rollback()
-	tx.(*LMDBTx).DeleteEmptyContainer = true // traditional badger Tx behavior, but not Roaring.
+	tx.DeleteEmptyContainer = true // traditional badger Tx behavior, but not Roaring.
 
 	//bitvalue := uint64(42)
 
@@ -1013,17 +1149,17 @@ func TestLMDB_ImportRoaringBits(t *testing.T) {
 	if n != 0 {
 		panic(fmt.Sprintf("n = %v not zero so the clearbits didn't happen!", n))
 	}
-	allkeys := stringifiedLMDBKeysTx(tx.(*LMDBTx), false)
+	allkeys := stringifiedBadgerKeysTx(tx, false)
 
 	// should have no keys
-	if allkeys != "<empty lmdb database>" {
-		panic("lmdb should have no keys now")
+	if allkeys != "" {
+		panic("badger should have no keys now")
 	}
 }
 
-func TestLMDB_ImportRoaringBits_set_nonoverlapping_bits(t *testing.T) {
+func TestBadger_ImportRoaringBits_set_nonoverlapping_bits(t *testing.T) {
 
-	dbwrap, clean := mustOpenEmptyLMDBWrapper("TestLMDB_ImportRoaringBits_set_nonoverlapping_bits")
+	dbwrap, clean := mustOpenEmptyBadgerWrapper("TestBadger_ImportRoaringBits_set_nonoverlapping_bits")
 	defer clean()
 	defer dbwrap.Close()
 	index, field, view, shard := "i", "f", "v", uint64(0)
@@ -1071,9 +1207,9 @@ func TestLMDB_ImportRoaringBits_set_nonoverlapping_bits(t *testing.T) {
 	panicOn(err)
 }
 
-func TestLMDB_ImportRoaringBits_clear_nonoverlapping_bits(t *testing.T) {
+func TestBadger_ImportRoaringBits_clear_nonoverlapping_bits(t *testing.T) {
 
-	dbwrap, clean := mustOpenEmptyLMDBWrapper("TestLMDB_ImportRoaringBits_clear_nonoverlapping_bits")
+	dbwrap, clean := mustOpenEmptyBadgerWrapper("TestBadger_ImportRoaringBits_clear_nonoverlapping_bits")
 	defer clean()
 	defer dbwrap.Close()
 	index, field, view, shard := "i", "f", "v", uint64(0)
@@ -1129,14 +1265,74 @@ func TestLMDB_ImportRoaringBits_clear_nonoverlapping_bits(t *testing.T) {
 
 }
 
-func TestLMDB_DeleteIndex(t *testing.T) {
+/*
+func TestBadger_AutoCommit(t *testing.T) {
 
 	// setup
-	dbwrap, clean := mustOpenEmptyLMDBWrapper("TestLMDB_DeleteIndex")
+	dbwrap, clean := mustOpenEmptyBadgerWrapper("TestBadger_AutoCommit")
+	defer clean()
+	defer dbwrap.Close()
+
+	index, field, view, shard := "i", "f", "v", uint64(0)
+	tx, _ := dbwrap.NewTx(writable, index, Txo{})
+
+	// if we go over 100K writes, we should autocommit
+	// rather than panic.
+	for v := 0; v < 133444; v++ {
+		changed, err := tx.Add(index, field, view, shard, doBatched, uint64(v))
+		if changed <= 0 {
+			panic("should have changed")
+		}
+		panicOn(err)
+	}
+
+	err := tx.Commit()
+	panicOn(err)
+}
+
+func TestBadger_BigWritesAvoidTxnTooLargeWithAutoCommit(t *testing.T) {
+
+	// setup
+	dbwrap, clean := mustOpenEmptyBadgerWrapper("TestBadger_BigWritesAvoidTxnTooLargeWithAutoCommit")
+	defer clean()
+	defer dbwrap.Close()
+
+	index, field, view, shard := "i", "f", "v", uint64(0)
+	tx, _ := dbwrap.NewTx(writable, index, Txo{})
+
+	containerKey := uint64(0)
+	// setup
+	bits := make([]uint64, 1024)
+	n := 0
+	for i := range bits {
+		bits[i] = ^uint64(0)
+		n += 64
+	}
+	rc := roaring.NewContainerBitmap(n, bits)
+
+	// if we go over 100K big writes, we should autocommit
+	// rather than panic.
+	for v := 0; v < 133444; v++ {
+		containerKey++
+		err := tx.PutContainer(index, field, view, shard, containerKey, rc)
+		panicOn(err)
+	}
+
+	err := tx.Commit()
+	panicOn(err)
+}
+*/
+
+func TestBadger_DeleteIndex(t *testing.T) {
+
+	// setup
+	dbwrap, clean := mustOpenEmptyBadgerWrapper("TestBadger_DeleteIndex")
 	defer clean()
 	defer dbwrap.Close()
 	index, field, view, shard := "i", "f", "v", uint64(0)
-	tx, _ := dbwrap.NewTx(writable, index, Txo{})
+	tx0, _ := dbwrap.NewTx(writable, index, Txo{})
+	tx := tx0.(*BadgerTx)
+
 	bitvalue := uint64(777)
 	bits := []uint64{0, 3, 1 << 16, 1<<16 + 3, 8 << 16}
 	for _, v := range bits {
@@ -1173,7 +1369,9 @@ func TestLMDB_DeleteIndex(t *testing.T) {
 	err = dbwrap.DeleteIndex(index)
 	panicOn(err)
 
-	tx, _ = dbwrap.NewTx(!writable, index2, Txo{})
+	tx0, _ = dbwrap.NewTx(!writable, index2, Txo{})
+	tx = tx0.(*BadgerTx)
+
 	defer tx.Rollback()
 	exists, err = tx.Contains(index2, field, view, shard, bitvalue)
 	panicOn(err)
@@ -1185,20 +1383,22 @@ func TestLMDB_DeleteIndex(t *testing.T) {
 		exists, err = tx.Contains(index, field, view, shard, v)
 		panicOn(err)
 		if exists {
-			allkeys := stringifiedLMDBKeysTx(tx.(*LMDBTx), false)
+			allkeys := stringifiedBadgerKeysTx(tx, false)
 			panic(fmt.Sprintf("after delete of index '%v', bit v=%v was not gone?!?; allkeys='%v'", index, v, allkeys))
 		}
 	}
 }
 
-func TestLMDB_DeleteIndex_over100k(t *testing.T) {
-
+func TestBadger_DeleteIndex_over100k(t *testing.T) {
+	t.Skip("test big and long running, skip")
 	// setup
-	dbwrap, clean := mustOpenEmptyLMDBWrapper("TestLMDB_DeleteIndex_over100k")
+	dbwrap, clean := mustOpenEmptyBadgerWrapper("TestBadger_DeleteIndex_over100k")
 	defer clean()
 	defer dbwrap.Close()
 	index, field, view, shard := "i", "f", "v", uint64(0)
-	tx, _ := dbwrap.NewTx(writable, index, Txo{})
+	tx0, _ := dbwrap.NewTx(writable, index, Txo{})
+	tx := tx0.(*BadgerTx)
+
 	bitvalue := uint64(777)
 	limit := uint64(100002) // default batch size in DeleteIndex is 100k keys per delete transaction.
 	//limit := uint64(101)
@@ -1211,7 +1411,8 @@ func TestLMDB_DeleteIndex_over100k(t *testing.T) {
 		panicOn(err)
 		if v%100000 == 0 {
 			panicOn(tx.Commit())
-			tx, _ = dbwrap.NewTx(writable, index, Txo{})
+			tx0, _ := dbwrap.NewTx(writable, index, Txo{})
+			tx = tx0.(*BadgerTx)
 		}
 	}
 
@@ -1228,7 +1429,9 @@ func TestLMDB_DeleteIndex_over100k(t *testing.T) {
 	err = dbwrap.DeleteIndex(index)
 	panicOn(err)
 
-	tx, _ = dbwrap.NewTx(!writable, index2, Txo{})
+	tx0, _ = dbwrap.NewTx(!writable, index2, Txo{})
+	tx = tx0.(*BadgerTx)
+
 	defer tx.Rollback()
 	exists, err := tx.Contains(index2, field, view, shard, bitvalue)
 	panicOn(err)
@@ -1240,22 +1443,93 @@ func TestLMDB_DeleteIndex_over100k(t *testing.T) {
 		exists, err = tx.Contains(index, field, view, shard, v<<16)
 		panicOn(err)
 		if exists {
-			allkeys := stringifiedLMDBKeysTx(tx.(*LMDBTx), false)
+			allkeys := stringifiedBadgerKeysTx(tx, false)
 			panic(fmt.Sprintf("after delete of index '%v', bit v=%v was not gone?!?; allkeys='%v'", index, v, allkeys))
 		}
 	}
 }
 
-func TestLMDB_SliceOfShards(t *testing.T) {
+func TestBitmapDiff(t *testing.T) {
+	a := roaring.NewBitmap()
+	b := roaring.NewBitmap()
+	err := roaringBitmapDiff(a, b)
+	panicOn(err)
+	err = roaringBitmapDiff(b, a)
+	panicOn(err)
 
-	dbwrap, clean := mustOpenEmptyLMDBWrapper("TestLMDB_SliceOfShards")
+	a = roaring.NewBitmap(0)
+	err = roaringBitmapDiff(a, b)
+	if err == nil {
+		panic("diff should have been noticed")
+	}
+	err = roaringBitmapDiff(b, a)
+	if err == nil {
+		panic("diff should have been noticed")
+	}
+
+	b = roaring.NewBitmap(0)
+	err = roaringBitmapDiff(a, b)
+	panicOn(err)
+	err = roaringBitmapDiff(b, a)
+	panicOn(err)
+
+	a = roaring.NewBitmap()
+
+	err = roaringBitmapDiff(a, b)
+	if err == nil {
+		panic("diff should have been noticed")
+	}
+	err = roaringBitmapDiff(b, a)
+	if err == nil {
+		panic("diff should have been noticed")
+	}
+
+	a = roaring.NewBitmap(1)
+
+	err = roaringBitmapDiff(a, b)
+	if err == nil {
+		panic("diff should have been noticed")
+	}
+	err = roaringBitmapDiff(b, a)
+	if err == nil {
+		panic("diff should have been noticed")
+	}
+
+	b = roaring.NewBitmap(1, 2)
+	a = roaring.NewBitmap(0, 1)
+
+	err = roaringBitmapDiff(a, b)
+	if err == nil {
+		panic("diff should have been noticed")
+	}
+	err = roaringBitmapDiff(b, a)
+	if err == nil {
+		panic("diff should have been noticed")
+	}
+
+	b = roaring.NewBitmap(1, 2, 3)
+	a = roaring.NewBitmap(1, 2)
+
+	err = roaringBitmapDiff(a, b)
+	if err == nil {
+		panic("diff should have been noticed")
+	}
+	err = roaringBitmapDiff(b, a)
+	if err == nil {
+		panic("diff should have been noticed")
+	}
+}
+
+func TestBadger_SliceOfShards(t *testing.T) {
+
+	dbwrap, clean := mustOpenEmptyBadgerWrapper("TestBadger_SliceOfShards")
 	defer clean()
 	defer dbwrap.Close()
 	index, field, view := "i", "f", "v"
 	shards := []uint64{0, 1, 2, 3, 1000001, 2000001}
 	putme := uint64(179)
 	for _, shard := range shards {
-		LMDBMustSetBitvalue(dbwrap, index, field, view, shard, putme)
+		badgerDBMustSetBitvalue(dbwrap, index, field, view, shard, putme)
 	}
 	tx, _ := dbwrap.NewTx(!writable, index, Txo{})
 	defer tx.Rollback()
@@ -1269,9 +1543,9 @@ func TestLMDB_SliceOfShards(t *testing.T) {
 	}
 }
 
-func TestLMDB_HasData(t *testing.T) {
+func TestBadger_HasData(t *testing.T) {
 
-	db, clean := mustOpenEmptyLMDBWrapper("TestLMDB_SliceOfShards")
+	db, clean := mustOpenEmptyBadgerWrapper("TestBadger_HasData")
 	defer clean()
 	defer db.Close()
 
@@ -1287,7 +1561,7 @@ func TestLMDB_HasData(t *testing.T) {
 	// check that HasData sees a committed record.
 
 	index, field, view, shard, putme := "i", "f", "v", uint64(123), uint64(42)
-	LMDBMustSetBitvalue(db, index, field, view, shard, putme)
+	badgerDBMustSetBitvalue(db, index, field, view, shard, putme)
 
 	// HasData(false) should now report data
 	hasAnything, err = db.HasData()
@@ -1298,3 +1572,185 @@ func TestLMDB_HasData(t *testing.T) {
 		t.Fatalf("HasData() reported no data on a database that has bits written to it")
 	}
 }
+
+// Benchmark performance of setValue for BSI ranges.
+func BenchmarkBadger_Write(b *testing.B) {
+
+	dbwrap, clean := mustOpenEmptyBadgerWrapper("BenchmarkBadger_Write")
+	//defer clean()
+	_ = clean
+	defer dbwrap.Close()
+
+	putmeValues := []uint64{3, 2 << 16}
+	index, field, view, shard := "i", "f", "v", uint64(0)
+
+	for _, putme := range putmeValues {
+		badgerDBMustSetBitvalue(dbwrap, index, field, view, shard, putme)
+	}
+	/*
+
+		dbwrap, clean := mustOpenEmptyBadgerWrapper("BenchmarkBadger_Write")
+		defer clean()
+		defer dbwrap.Close()
+		index, field, view, shard := "i", "f", "v", uint64(0)
+		tx, _ := dbwrap.NewTx(writable, index, Txo{})
+
+		bitvalue := uint64(1 << 20)
+		changed, err := tx.Add(index, field, view, shard, doBatched, bitvalue)
+		if changed <= 0 {
+			panic("should have changed")
+		}
+		panicOn(err)
+
+		bitvalue2 := uint64(1<<20 + 1)
+		changed, err = tx.Add(index, field, view, shard, doBatched, bitvalue2)
+		if changed <= 0 {
+			panic("should have changed")
+		}
+		panicOn(err)
+
+		exists, err := tx.Contains(index, field, view, shard, bitvalue)
+		panicOn(err)
+		if !exists {
+			panic("ARG bitvalue was NOT SET!!!")
+		}
+		exists, err = tx.Contains(index, field, view, shard, bitvalue2)
+		panicOn(err)
+		if !exists {
+			panic("ARG bitvalue2 was NOT SET!!!")
+		}
+
+		err = tx.Commit()
+		panicOn(err)
+
+		offset := uint64(0 << 20)
+		start := uint64(0 << 16)
+		endx := bitvalue + 1<<16
+
+		tx2 := dbwrap.NewTx(!writable, index, Txo{})
+		rbm2, err := tx2.OffsetRange(index, field, view, shard, offset, start, endx)
+		panicOn(err)
+		tx2.Rollback()
+
+		// should see our 1M value
+		s2 := bitmapAsString(rbm2)
+		expect2 := "c(1048576, 1048577)"
+		if s2 != expect2 {
+			panic(fmt.Sprintf("s2='%v', but expected '%v'", s2, expect2))
+		}
+
+		// now offset by 2M
+		offset = uint64(2 << 20)
+		tx3 := dbwrap.NewTx(!writable, index, Txo{})
+		rbm3, err := tx3.OffsetRange(index, field, view, shard, offset, start, endx)
+		panicOn(err)
+		tx3.Rollback()
+
+		//expect to see 3M == 3145728
+		s3 := bitmapAsString(rbm3)
+		expect3 := "c(3145728, 3145729)"
+
+		if s3 != expect3 {
+			panic(fmt.Sprintf("s3='%v', but expected '%v'", s3, expect3))
+		}
+	*/
+}
+
+func reportTestBadgersNeedingClose() error {
+	globalBadgerReg.mu.Lock()
+	defer globalBadgerReg.mu.Unlock()
+	n := len(globalBadgerReg.mp)
+	if n == 0 {
+		return nil
+	}
+	AlwaysPrintf("*** these badgers are still open (n=%v):", n)
+	i := 0
+	for w := range globalBadgerReg.mp {
+		AlwaysPrintf("i=%v, w p=%p stack:\n%v\n\n", i, w, w.startStack)
+		i++
+	}
+	return errors.New("unclosed badgers, contact Animal Control")
+}
+
+/*
+func TestBadger_ConflictWriteWriteResolution(t *testing.T) {
+
+	// 1) when do we get write-write conflicts (probably different goroutines) but
+	// can we get them on different keys?
+
+	// 2) does having a lock registry that insures we are only ever writing
+	// different keys at once avoid write-write conflicts?
+
+	// 3) how should write-write conflicts be resolved?
+	//    presumably just retying the write?
+
+	// setup
+	dbwrap, clean := mustOpenEmptyBadgerWrapper("TestBadger_ConflictWriteWriteResolution")
+	defer clean()
+	defer dbwrap.Close()
+
+	concur := 10
+	//bkey := []byte("a")
+	//by := []byte("value-for-a")
+
+	// read-loop:
+	for i := 0; i < concur*2; i++ {
+		go func() {
+			tx, _ := dbwrap.NewTx(!writable, "", Txo{})
+
+			for j := 0; true; j++ {
+
+				bkey := []byte(fmt.Sprintf("key-for-a j=%v", j))
+				//by := []byte(fmt.Sprintf("value-for-a j=%v", -1))
+
+				_, err := tx.tx.Get(bkey)
+				if err != badger.ErrKeyNotFound {
+					panicOn(err)
+				}
+
+				if j%10 == 0 {
+					vv("committing after 10, gid=%v", curGID())
+					tx.Rollback()
+					tx, _ = dbwrap.NewTx(!writable, "", Txo{})
+				}
+
+			}
+		}()
+	}
+
+	// write-loop:
+	for i := 0; i < concur; i++ {
+		go func() {
+			tx, _ := dbwrap.NewTx(writable, "", Txo{})
+
+			for j := 0; true; j++ {
+
+				bkey := []byte(fmt.Sprintf("key-for-a j=%v", j))
+				by := []byte(fmt.Sprintf("value-for-a j=%v", j))
+
+				entry := badger.NewEntry(bkey, by)
+				err := tx.tx.SetEntry(entry)
+				panicOn(err)
+
+				if j%5 == 0 {
+					panicOn(tx.tx.Delete(bkey))
+				}
+
+				_, err = tx.tx.Get(bkey)
+				if err != badger.ErrKeyNotFound {
+					panicOn(err)
+				}
+
+				if j%10 == 0 {
+					///vv("committing after 10, gid=%v", curGID())
+					err = tx.tx.Commit()
+					panicOn(err)
+					tx, _ = dbwrap.NewTx(writable, "", Txo{})
+				}
+
+			}
+		}()
+	}
+	select {}
+}
+*/

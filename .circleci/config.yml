@@ -186,7 +186,7 @@ workflows:
           matrix:
             parameters:
               golang_version: ["1.14", "1.13"]
-          resource_class: large
+          resource_class: xlarge
           requires:
             - setup
           filters:
@@ -201,6 +201,7 @@ workflows:
       - test:
           name: test-shardwidth-22
           shard_width: "22"
+          resource_class: large
           requires:
             - setup
       - cluster-tests:

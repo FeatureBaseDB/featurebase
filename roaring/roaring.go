@@ -3300,7 +3300,6 @@ func (c *Container) arrayRemove(v uint16) (*Container, bool) {
 	}
 	c = c.Thaw()
 	array = c.array()
-
 	array = append(array[:i], array[i+1:]...)
 	c.setArray(array)
 	return c, true

@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"math"
 	"reflect"
 	"sort"
 	"sync"
@@ -32,7 +33,8 @@ import (
 // The checkDatabase() call will do reads of the fragments at Commit/Rollback,
 // while the snapshotqueue may be doing writes.
 //
-// Do not run with go test -race and expect it to be race free.
+// Do not run with go test -race and expect it to be race free with RoaringTx
+// on one arm.
 //
 type blueGreenTx struct {
 	a Tx
@@ -42,7 +44,8 @@ type blueGreenTx struct {
 	as string
 	bs string
 
-	types []txtype
+	types      []txtype
+	hasRoaring bool
 
 	// roaring will not create as many Tx (they are
 	// psuedo Tx anyway), espcially when deleting
@@ -57,6 +60,8 @@ type blueGreenTx struct {
 	rollbackOrCommitDone bool
 
 	txf *TxFactory
+
+	short bool // short Dump or long
 }
 
 // blueGreenRegistry is used to force checking of (read) transactions
@@ -65,19 +70,29 @@ type blueGreenTx struct {
 // roaring will show up, while writes to the DB won't show up on
 // readTx that have already started.
 type blueGreenRegistry struct {
-	mu sync.Mutex
-	m  map[int64]*blueGreenTx
+	mu         sync.Mutex
+	m          map[int64]*blueGreenTx
+	types      []txtype
+	hasRoaring bool
 }
 
-func newBlueGreenReg() *blueGreenRegistry {
+// if we have raoring in the mix we cannot expect reads
+// to match up, but otherwise do.
+func newBlueGreenReg(types []txtype) *blueGreenRegistry {
+
+	hasRoaring := false
+	if types[0] == roaringTxn || types[1] == roaringTxn {
+		hasRoaring = true
+	}
 	return &blueGreenRegistry{
-		m: make(map[int64]*blueGreenTx),
+		m:          make(map[int64]*blueGreenTx),
+		types:      types,
+		hasRoaring: hasRoaring,
 	}
 }
 
-// add remembers the tx so we can check it
-// should we see a write after creation
-// but before rollback/commit.
+// add remembers the tx so we can check that
+// all tx were finished before Close().
 func (b *blueGreenRegistry) add(c *blueGreenTx) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -100,26 +115,33 @@ func (b *blueGreenRegistry) Close() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if len(b.m) > 0 {
-		panic(fmt.Sprintf("still have unchecked blueGreenTx: '%#v'", b.m))
+		panic(fmt.Sprintf("still have open/unchecked blueGreenTx: '%#v'", b.m))
 		//AlwaysPrintf("still have unchecked blueGreenTx: '%#v'", b.m)
 	}
 }
 
 func (txf *TxFactory) newBlueGreenTx(a, b Tx, idx *Index, o Txo) *blueGreenTx {
-	//func (reg *blueGreenRegistry) newBlueGreenTx(a, b Tx, idx *Index, o Txo, openTxSn []int64) *blueGreenTx {
 	as := a.Type()
 	bs := b.Type()
-	c := &blueGreenTx{a: a, b: b, idx: idx, as: as, bs: bs, txf: txf, types: txf.types}
+	c := &blueGreenTx{a: a,
+		b:          b,
+		idx:        idx,
+		as:         as,
+		bs:         bs,
+		txf:        txf,
+		types:      txf.types,
+		hasRoaring: txf.blueGreenReg.hasRoaring,
+		short:      true,
+	}
 
 	if c.types[1] == roaringTxn {
 		c.useSnA = true
 	}
+	//vv("newBlueGreenTx with a.sn=%v with o.Shard=%v", c.Sn(), int(o.Shard))
 
 	c.checker.c = c
 	c.o = o
-	if o.Write {
-		txf.blueGreenReg.add(c)
-	}
+	txf.blueGreenReg.add(c)
 	return c
 }
 
@@ -131,24 +153,27 @@ func (c *blueGreenTx) Type() string {
 
 var blueGreenTxDumpMut sync.Mutex
 
-func (c *blueGreenTx) Dump() {
+func (c *blueGreenTx) Dump(short bool, shard uint64) {
+
 	blueGreenTxDumpMut.Lock()
 	defer blueGreenTxDumpMut.Unlock()
 	fmt.Printf("%v blueGreenTx.Dump ============== \n", FileLine(2))
 	fmt.Printf("A(%v) Dump:\n", c.as)
-	c.a.Dump()
+	c.a.Dump(short, shard)
 	fmt.Printf("B(%v) Dump:\n", c.bs)
-	c.b.Dump()
+	c.b.Dump(short, shard)
 
-	fmt.Printf("dbPerShard.DumpAll(): idx=%p\n", c.idx)
-	c.idx.Txf.dbPerShard.DumpAll()
+	if !short {
+		fmt.Printf("dbPerShard.DumpAll(): idx=%p\n", c.idx)
+		c.idx.holder.txf.dbPerShard.DumpAll()
+	}
 }
 
 func (c *blueGreenTx) Readonly() bool {
 	a := c.a.Readonly()
 	b := c.b.Readonly()
 	if a != b {
-		panic(fmt.Sprintf("a=%v, but b =%v", a, b))
+		panic(fmt.Sprintf("Readonly difference, a=%v, but b =%v", a, b))
 	}
 	return b
 }
@@ -172,6 +197,9 @@ func (c *blueGreenTx) IncrementOpN(index, field, view string, shard uint64, chan
 
 // compareTxState is called for the first Commit or Rollback a blueGreenTx sees.
 func (c *blueGreenTx) compareTxState(index, field, view string, shard uint64) {
+	if c.o.blueGreenOff {
+		return
+	}
 	here := fmt.Sprintf("%v/%v/%v/%v", index, field, view, shard)
 	//vv("compareTxState here = '%v', _sn_ %v gid=%v", here, c.Sn(), curGID())
 	aIter, aFound, aErr := c.a.ContainerIterator(index, field, view, shard, 0)
@@ -184,21 +212,21 @@ func (c *blueGreenTx) compareTxState(index, field, view string, shard uint64) {
 	}
 
 	if aFound != bFound {
-		c.Dump()
+		c.Dump(c.short, shard)
 		panic(fmt.Sprintf("compareTxState[%v]: A(%v) ContainerIterator had aFound=%v, but B(%v) had bFound=%v; at '%v'", here, c.as, aFound, c.bs, bFound, stack()))
 	}
 
 	if aErr != nil || bErr != nil {
 		if aErr != nil && bErr != nil {
-			c.Dump()
+			c.Dump(c.short, shard)
 			panic(fmt.Sprintf("compareTxState[%v]: A(%v) reported err '%v'; B(%v) reported err '%v' at %v", here, c.as, aErr, c.bs, bErr, stack()))
 		}
 		if aErr != nil {
-			c.Dump()
+			c.Dump(c.short, shard)
 			panic(fmt.Sprintf("compareTxState[%v]: A(%v) reported err %v at %v; but B(%v) did not", here, c.as, aErr, c.bs, stack()))
 		}
 		if bErr != nil {
-			c.Dump()
+			c.Dump(c.short, shard)
 			panic(fmt.Sprintf("compareTxState[%v]: B(%v) reported err %v at %v; but A(%v) did not", here, c.bs, bErr, c.as, stack()))
 		}
 	}
@@ -207,17 +235,17 @@ func (c *blueGreenTx) compareTxState(index, field, view string, shard uint64) {
 
 		if !bIter.Next() {
 			AlwaysPrintf("compareTxState[%v]: A(%v) found key %v, B(%v) didn't, dump to follow, stack=\n %v\n\n and here is dump:", here, c.as, aKey, c.bs, stack())
-			c.Dump()
+			c.Dump(c.short, shard)
 			panic(fmt.Sprintf("compareTxState[%v]: A(%v) found key %v, B(%v) didn't, at %v", here, c.as, aKey, c.bs, stack()))
 		}
 		bKey, bValue := bIter.Value()
 		if bKey != aKey {
 			AlwaysPrintf("problem in caller %v", Caller(2))
-			c.Dump()
+			c.Dump(c.short, shard)
 			panic(fmt.Sprintf("compareTxState[%v]: A(%v) found key %v, B(%v) found %v, at %v", here, c.as, aKey, c.bs, bKey, stack()))
 		}
 		if err := aValue.BitwiseCompare(bValue); err != nil {
-			c.Dump()
+			c.Dump(c.short, shard)
 			//vv("compareTxState[%v]: key %v differs: %v;  A=%v; B=%v; at stack=%v", here, aKey, err, c.as, c.bs, stack())
 			panic(fmt.Sprintf("compareTxState[%v]: key %v differs: %v;  A=%v; B=%v; at stack=%v", here, aKey, err, c.as, c.bs, stack()))
 		}
@@ -226,7 +254,7 @@ func (c *blueGreenTx) compareTxState(index, field, view string, shard uint64) {
 	// end checking everything in A, but does B have more?
 	if bIter.Next() {
 		AlwaysPrintf("bIter has more than it should. problem in caller %v. _sn_ %v", Caller(2), c.Sn())
-		c.Dump()
+		c.Dump(c.short, shard)
 		bKey, _ := bIter.Value()
 		panic(fmt.Sprintf("compareTxState[%v]: B(%v) found key %v, A(%v) didn't, (a.sn=%v) (b.sn=%v) at %v", here, c.bs, bKey, c.as, c.a.Sn(), c.b.Sn(), stack()))
 	}
@@ -234,10 +262,17 @@ func (c *blueGreenTx) compareTxState(index, field, view string, shard uint64) {
 }
 
 func (c *blueGreenTx) checkDatabase() {
-	if !c.o.Write {
-		// We only need to check the we are A/B consistent after every write.
-		// Then reads can only see that consitent state, and don't need
-		// to be checked themselves. Sketch of proof by induction:
+	if c.o.blueGreenOff {
+		return
+	}
+	if c.hasRoaring && !c.o.Write {
+		// With roaring on one arm, we only check the we are A/B
+		// consistent after every write.
+		//
+		// Ideally reads can only see that consitent state, and don't need
+		// to be checked themselves-- but we do try if both A and B
+		// are transactional. Sketch of proof by induction that
+		// write checking should, theoretically, suffice:
 		// Starting with zero data, if we have agreement in both A/B
 		// database state after each write, then
 		// because there is only ever a single
@@ -245,7 +280,8 @@ func (c *blueGreenTx) checkDatabase() {
 		// data state between A and B as long as every prior
 		// A/B check of the serialized writes suceeded.
 		//
-		// This avoids a key problem we discovered when A/B checking reads.
+		// This avoids a key problem we discovered when A/B checking reads
+		// with roaring on one arm.
 		// The MVCC of the transactional engines means that reads that
 		// start before a write commit will look very different
 		// when comparing to roaring's non-transactional state.
@@ -259,8 +295,6 @@ func (c *blueGreenTx) checkDatabase() {
 	}
 	c.checker.checkDone = true
 
-	// seen() returns nil on 2nd or any further call,
-	// so only the first Commit() or Rollback() does this.
 	for index, fields := range c.checker.seen() {
 		for field, views := range fields {
 			for view, shards := range views {
@@ -270,6 +304,10 @@ func (c *blueGreenTx) checkDatabase() {
 			}
 		}
 	}
+}
+
+func (c *blueGreenTx) IsDone() bool {
+	return c.b.IsDone()
 }
 
 func (c *blueGreenTx) Rollback() {
@@ -308,7 +346,9 @@ func (c *blueGreenTx) Commit() error {
 	//vv("blueGreenTx.Commit() called. bgtx p=%p", c)
 	c.rollbackOrCommitDone = true
 	if c.o.Write {
-		c.checkDatabase()
+		if !c.o.blueGreenOff {
+			c.checkDatabase()
+		}
 	}
 	defer func() {
 		if r := recover(); r != nil {
@@ -336,14 +376,15 @@ func (c *blueGreenTx) RoaringBitmap(index, field, view string, shard uint64) (*r
 	a, errA := c.a.RoaringBitmap(index, field, view, shard)
 	_, _ = a, errA
 	b, errB := c.b.RoaringBitmap(index, field, view, shard)
-	compareErrors(errA, errB)
+	if !c.o.blueGreenOff {
+		compareErrors(errA, errB)
 
-	slcA := a.Slice()
-	slcB := b.Slice()
-	if !reflect.DeepEqual(slcA, slcB) {
-		panic("blueGreenTx.RoaringBitmap() returning different roaring.Bitmaps!")
+		slcA := a.Slice()
+		slcB := b.Slice()
+		if !reflect.DeepEqual(slcA, slcB) {
+			panic("blueGreenTx.RoaringBitmap() returning different roaring.Bitmaps!")
+		}
 	}
-
 	return b, errB
 }
 
@@ -357,10 +398,12 @@ func (c *blueGreenTx) Container(index, field, view string, shard uint64, key uin
 	}()
 	a, errA := c.a.Container(index, field, view, shard, key)
 	b, errB := c.b.Container(index, field, view, shard, key)
-	compareErrors(errA, errB)
-	err = a.BitwiseCompare(b)
-	panicOn(err)
 
+	if !c.o.blueGreenOff {
+		compareErrors(errA, errB)
+		err = a.BitwiseCompare(b)
+		panicOn(err)
+	}
 	return b, errB
 }
 
@@ -374,8 +417,10 @@ func (c *blueGreenTx) PutContainer(index, field, view string, shard uint64, key 
 	}()
 	errA := c.a.PutContainer(index, field, view, shard, key, rc)
 	errB := c.b.PutContainer(index, field, view, shard, key, rc)
-	compareErrors(errA, errB)
 
+	if !c.o.blueGreenOff {
+		compareErrors(errA, errB)
+	}
 	return errB
 }
 
@@ -386,7 +431,7 @@ func (c *blueGreenTx) ImportRoaringBits(index, field, view string, shard uint64,
 	// ================== begin save comments.
 	//c.checkDatabase()
 	////vv("got past database check at TOP of ImportRoaringBits")
-	//c.Dump()
+	//c.Dump(c.short, shard)
 	////vv("done with top dump; clear=%v", clear)
 	// ==================   end save comments.
 	defer func() {
@@ -403,28 +448,31 @@ func (c *blueGreenTx) ImportRoaringBits(index, field, view string, shard uint64,
 	changedA, rowSetA, errA := c.a.ImportRoaringBits(index, field, view, shard, rit, clear, log, rowSize, data)
 	changedB, rowSetB, errB := c.b.ImportRoaringBits(index, field, view, shard, rit2, clear, log, rowSize, data)
 
-	if len(data) == 0 {
-		// okay to check! otherwise we are in the fragment.fillFragmentFromArchive
-		// case where we know that RoaringTx.ImportRoaringBits changed and rowSet will
-		// be inaccurate.
-		if changedA != changedB {
-			panic(fmt.Sprintf("changedA = %v, but changedB = %v", changedA, changedB))
-		}
-		if len(rowSetA) != len(rowSetB) {
-			panic(fmt.Sprintf("rowSetA = %#v, but rowSetB = %#v", rowSetA, rowSetB))
-		}
-		for k, va := range rowSetA {
-			vb, ok := rowSetB[k]
-			if !ok {
-				panic(fmt.Sprintf("diff on key '%v': present in rowSetA, but not in rowSet B. rowSetA = %#v, but rowSetB = %#v", k, rowSetA, rowSetB))
+	if !c.o.blueGreenOff {
+
+		if len(data) == 0 {
+			// okay to check! otherwise we are in the fragment.fillFragmentFromArchive
+			// case where we know that RoaringTx.ImportRoaringBits changed and rowSet will
+			// be inaccurate.
+			if changedA != changedB {
+				panic(fmt.Sprintf("changedA = %v, but changedB = %v", changedA, changedB))
 			}
-			if va != vb {
-				panic(fmt.Sprintf("diff on key '%v', rowSetA has value '%v', but rowSetB has value '%v'", k, va, vb))
+			if len(rowSetA) != len(rowSetB) {
+				panic(fmt.Sprintf("rowSetA = %#v, but rowSetB = %#v", rowSetA, rowSetB))
+			}
+			for k, va := range rowSetA {
+				vb, ok := rowSetB[k]
+				if !ok {
+					panic(fmt.Sprintf("diff on key '%v': present in rowSetA, but not in rowSet B. rowSetA = %#v, but rowSetB = %#v", k, rowSetA, rowSetB))
+				}
+				if va != vb {
+					panic(fmt.Sprintf("diff on key '%v', rowSetA has value '%v', but rowSetB has value '%v'", k, va, vb))
+				}
 			}
 		}
+		compareErrors(errA, errB)
+		c.checkDatabase()
 	}
-	compareErrors(errA, errB)
-	c.checkDatabase()
 	return changedB, rowSetB, errB
 }
 
@@ -438,7 +486,10 @@ func (c *blueGreenTx) RemoveContainer(index, field, view string, shard uint64, k
 	}()
 	errA := c.a.RemoveContainer(index, field, view, shard, key)
 	errB := c.b.RemoveContainer(index, field, view, shard, key)
-	compareErrors(errA, errB)
+
+	if !c.o.blueGreenOff {
+		compareErrors(errA, errB)
+	}
 	return errB
 }
 
@@ -481,10 +532,14 @@ func (c *blueGreenTx) Add(index, field, view string, shard uint64, batched bool,
 
 	bch, errB := c.b.Add(index, field, view, shard, batched, a2...)
 
-	if ach != bch {
-		panic(fmt.Sprintf("Add() difference, ach=%v, but bch=%v; errA='%v'; errB='%v'", ach, bch, errA, errB))
+	if !c.o.blueGreenOff {
+
+		if ach != bch {
+			panic(fmt.Sprintf("Add() difference, ach=%v, but bch=%v; errA='%v'; errB='%v'", ach, bch, errA, errB))
+		}
+		compareErrors(errA, errB)
 	}
-	compareErrors(errA, errB)
+
 	return bch, errB
 }
 
@@ -516,7 +571,10 @@ func (c *blueGreenTx) Remove(index, field, view string, shard uint64, a ...uint6
 	ach, errA := c.a.Remove(index, field, view, shard, a...)
 	_, _ = ach, errA
 	bch, errB := c.b.Remove(index, field, view, shard, a...)
-	compareErrors(errA, errB)
+
+	if !c.o.blueGreenOff {
+		compareErrors(errA, errB)
+	}
 	return bch, errB
 }
 
@@ -532,7 +590,9 @@ func (c *blueGreenTx) Contains(index, field, view string, shard uint64, key uint
 	_, _ = ax, errA
 	bx, errB := c.b.Contains(index, field, view, shard, key)
 
-	compareErrors(errA, errB)
+	if !c.o.blueGreenOff {
+		compareErrors(errA, errB)
+	}
 	return bx, errB
 }
 
@@ -550,8 +610,10 @@ func (c *blueGreenTx) ContainerIterator(index, field, view string, shard uint64,
 
 	bit, bfound, errB := c.b.ContainerIterator(index, field, view, shard, firstRoaringContainerKey)
 
-	compareErrors(errA, errB)
-	// INVAR: errA == errB, so only need to check one.
+	if !c.o.blueGreenOff {
+		compareErrors(errA, errB)
+	}
+
 	if errB != nil {
 		// RoaringTx can return an iterator and an error, so be sure Close it we have it.
 		if ait != nil {
@@ -562,6 +624,13 @@ func (c *blueGreenTx) ContainerIterator(index, field, view string, shard uint64,
 		}
 		return nil, bfound, errB
 	}
+	if errA != nil {
+		// RoaringTx can return an iterator and an error, so be sure Close it we have it.
+		if ait != nil {
+			ait.Close()
+		}
+	}
+
 	// INVAR: errA == errB == nil
 	bgi := NewBlueGreenIterator(c, ait, bit)
 	return bgi, bfound, errB
@@ -598,11 +667,14 @@ func (bgi *blueGreenIterator) Next() bool {
 func (bgi *blueGreenIterator) Value() (uint64, *roaring.Container) {
 	ka, ca := bgi.ait.Value()
 	kb, cb := bgi.bit.Value()
-	if ka != kb {
-		panic(fmt.Sprintf("ka=%v != kb=%v", ka, kb))
+
+	if !bgi.tx.o.blueGreenOff {
+		if ka != kb {
+			panic(fmt.Sprintf("ka=%v != kb=%v", ka, kb))
+		}
+		err := ca.BitwiseCompare(cb)
+		panicOn(err)
 	}
-	err := ca.BitwiseCompare(cb)
-	panicOn(err)
 	return kb, cb
 }
 func (bgi *blueGreenIterator) Close() {
@@ -611,7 +683,7 @@ func (bgi *blueGreenIterator) Close() {
 }
 
 // ForEach is read-only on the database, and so we only pass through to B.
-// Avoids the side-effects of calling fn too many times.
+// Avoids the side-effects of calling fn too many times, which can cause serious false alarms.
 func (c *blueGreenTx) ForEach(index, field, view string, shard uint64, fn func(i uint64) error) error {
 	defer func() {
 		if r := recover(); r != nil {
@@ -654,7 +726,9 @@ func (c *blueGreenTx) Count(index, field, view string, shard uint64) (uint64, er
 	b, errB := c.b.Count(index, field, view, shard)
 	_, _ = b, errB
 
-	compareErrors(errA, errB)
+	if !c.o.blueGreenOff {
+		compareErrors(errA, errB)
+	}
 	return b, errB
 }
 
@@ -671,7 +745,9 @@ func (c *blueGreenTx) Max(index, field, view string, shard uint64) (uint64, erro
 	b, errB := c.b.Max(index, field, view, shard)
 	_, _ = b, errB
 
-	compareErrors(errA, errB)
+	if !c.o.blueGreenOff {
+		compareErrors(errA, errB)
+	}
 	return b, errB
 }
 
@@ -688,7 +764,9 @@ func (c *blueGreenTx) Min(index, field, view string, shard uint64) (uint64, bool
 	bmin, bfound, errB := c.b.Min(index, field, view, shard)
 	_, _, _ = bmin, bfound, errB
 
-	compareErrors(errA, errB)
+	if !c.o.blueGreenOff {
+		compareErrors(errA, errB)
+	}
 	return bmin, bfound, errB
 }
 
@@ -702,7 +780,9 @@ func (c *blueGreenTx) UnionInPlace(index, field, view string, shard uint64, othe
 	}()
 	errA := c.a.UnionInPlace(index, field, view, shard, others...)
 	errB := c.b.UnionInPlace(index, field, view, shard, others...)
-	compareErrors(errA, errB)
+	if !c.o.blueGreenOff {
+		compareErrors(errA, errB)
+	}
 	return errB
 }
 
@@ -710,7 +790,7 @@ func (c *blueGreenTx) CountRange(index, field, view string, shard uint64, start,
 	c.checker.see(index, field, view, shard)
 	defer func() {
 		if r := recover(); r != nil {
-			c.Dump()
+			c.Dump(c.short, shard)
 			AlwaysPrintf("see CountRange() panic '%v' at '%v'", r, stack())
 			panic(r)
 		}
@@ -718,11 +798,13 @@ func (c *blueGreenTx) CountRange(index, field, view string, shard uint64, start,
 	a, errA := c.a.CountRange(index, field, view, shard, start, end)
 	b, errB := c.b.CountRange(index, field, view, shard, start, end)
 
-	if a != b {
-		panic(fmt.Sprintf("a(%v) = %v, but b(%v) = %v", c.as, a, c.bs, b))
-	}
+	if !c.o.blueGreenOff {
+		if a != b {
+			panic(fmt.Sprintf("a(%v) = %v, but b(%v) = %v", c.as, a, c.bs, b))
+		}
 
-	compareErrors(errA, errB)
+		compareErrors(errA, errB)
+	}
 	return b, errB
 }
 
@@ -730,19 +812,22 @@ func (c *blueGreenTx) OffsetRange(index, field, view string, shard, offset, star
 	c.checker.see(index, field, view, shard)
 	defer func() {
 		if r := recover(); r != nil {
-			AlwaysPrintf("see OffsetRange() panic '%v' at '%v'", r, stack())
+			AlwaysPrintf("see OffsetRange() on _sn_ %v, panic '%v' at '%v'", c.Sn(), r, stack())
 			panic(r)
 		}
 	}()
 	a, errA := c.a.OffsetRange(index, field, view, shard, offset, start, end)
 	b, errB := c.b.OffsetRange(index, field, view, shard, offset, start, end)
 
-	err = roaringBitmapDiff(a, b)
-	if err != nil {
-		c.Dump()
-		panicOn(err)
+	if !c.o.blueGreenOff {
+
+		err = roaringBitmapDiff(a, b)
+		if err != nil {
+			c.Dump(false, shard)
+			panicOn(fmt.Errorf("on _sn_ %v OffsetRange(index='%v', field='%v', view='%v', shard='%v', offset: %v start: %v, end: %v) err: %v", c.Sn(), index, field, view, int(shard), offset, start, end, err))
+		}
+		compareErrors(errA, errB)
 	}
-	compareErrors(errA, errB)
 
 	return b, errB
 }
@@ -751,7 +836,7 @@ func (c *blueGreenTx) RoaringBitmapReader(index, field, view string, shard uint6
 	c.checker.see(index, field, view, shard)
 	defer func() {
 		if r := recover(); r != nil {
-			c.Dump()
+			c.Dump(c.short, shard)
 			AlwaysPrintf("see RoaringBitmapReader() panic '%v' at '%v'", r, stack())
 			panic(r)
 		}
@@ -760,14 +845,19 @@ func (c *blueGreenTx) RoaringBitmapReader(index, field, view string, shard uint6
 	rcA, szA, errA := c.a.RoaringBitmapReader(index, field, view, shard, fragmentPathForRoaring)
 	rcB, szB, errB := c.b.RoaringBitmapReader(index, field, view, shard, fragmentPathForRoaring)
 
-	compareErrors(errA, errB)
+	if !c.o.blueGreenOff {
+		compareErrors(errA, errB)
+	}
 
 	// We are seeing Roaring vs Badger size differences on
 	// server/ test TestClusterResize_AddNode/ContinuousShards,
 	// so turn off the szA vs szB checks and MutliReaderB use. But keep them if we want to
 	// check RBF vs Badger for byte-for-byte compatiblity (we
 	// suspect the ops log or optimized bitmaps are accounting for the difference).
-	sizeMustMatch := false
+	sizeMustMatch := false // !c.hasRoaring
+	if c.o.blueGreenOff {
+		sizeMustMatch = false
+	}
 	if sizeMustMatch {
 		if szA != szB {
 			panic(fmt.Sprintf("szA(%v) = %v, but szB(%v) = %v;  fragmentPathForRoaring='%v'", c.as, szA, c.bs, szB, fragmentPathForRoaring))
@@ -806,41 +896,44 @@ func (c *blueGreenTx) SliceOfShards(index, field, view, optionalViewPath string)
 	//c.checker.see(index, field, view, shard) // don't have shard.
 	defer func() {
 		if r := recover(); r != nil {
-			c.Dump()
+			c.Dump(c.short, math.MaxUint64)
 			AlwaysPrintf("see SliceOfShards() panic '%v' at '%v'", r, stack())
 			panic(r)
 		}
 	}()
 	slcA, errA := c.a.SliceOfShards(index, field, view, optionalViewPath)
 	slcB, errB := c.b.SliceOfShards(index, field, view, optionalViewPath)
-	compareErrors(errA, errB)
 
-	// sort order may be different, and that's ok.
-	cpa := append([]uint64{}, slcA...)
-	cpb := append([]uint64{}, slcB...)
-	sort.Slice(cpa, func(i, j int) bool { return cpa[i] < cpa[j] })
-	sort.Slice(cpb, func(i, j int) bool { return cpb[i] < cpb[j] })
+	if !c.o.blueGreenOff {
+		compareErrors(errA, errB)
 
-	if !reflect.DeepEqual(cpa, cpb) {
-		// report the first difference
-		ma := make(map[uint64]bool)
-		for _, ka := range slcA {
-			ma[ka] = true
-		}
-		for _, kb := range slcB {
-			if !ma[kb] {
-				//vv("blueGreenTx SliceOfShards diference! B(%v) had shard %v, but A(%v) did not. cpa='%#v'; cpb='%#v'; in the SliceOfShards returned slice.", c.bs, kb, c.as, cpa, cpb)
-				c.Dump()
-				panic(fmt.Sprintf("blueGreenTx SliceOfShards diference! B(%v) had shard %v, but A(%v) did not. cpa='%#v'; cpb='%#v'; in the SliceOfShards returned slice.", c.bs, kb, c.as, cpa, cpb))
+		// sort order may be different, and that's ok.
+		cpa := append([]uint64{}, slcA...)
+		cpb := append([]uint64{}, slcB...)
+		sort.Slice(cpa, func(i, j int) bool { return cpa[i] < cpa[j] })
+		sort.Slice(cpb, func(i, j int) bool { return cpb[i] < cpb[j] })
+
+		if !reflect.DeepEqual(cpa, cpb) {
+			// report the first difference
+			ma := make(map[uint64]bool)
+			for _, ka := range slcA {
+				ma[ka] = true
 			}
-			delete(ma, kb)
-		}
-		if len(ma) != 0 {
-			for firstDifference := range ma {
-				panic(fmt.Sprintf("blueGreenTx SliceOfShards diference! A(%v) had %v, but B(%v) did not. cpa='%#v'; cpb='%#v'; in the SliceOfShards returned slice.", c.as, firstDifference, c.bs, cpa, cpb))
+			for _, kb := range slcB {
+				if !ma[kb] {
+					//vv("blueGreenTx SliceOfShards diference! B(%v) had shard %v, but A(%v) did not. cpa='%#v'; cpb='%#v'; in the SliceOfShards returned slice.", c.bs, kb, c.as, cpa, cpb)
+					c.Dump(c.short, math.MaxUint64)
+					panic(fmt.Sprintf("blueGreenTx SliceOfShards diference! B(%v) had shard %v, but A(%v) did not. cpa='%#v'; cpb='%#v'; in the SliceOfShards returned slice.", c.bs, kb, c.as, cpa, cpb))
+				}
+				delete(ma, kb)
 			}
+			if len(ma) != 0 {
+				for firstDifference := range ma {
+					panic(fmt.Sprintf("blueGreenTx SliceOfShards diference! A(%v) had %v, but B(%v) did not. cpa='%#v'; cpb='%#v'; in the SliceOfShards returned slice.", c.as, firstDifference, c.bs, cpa, cpb))
+				}
+			}
+			panic(fmt.Sprintf("blueGreenTx SliceOfShards diference \n slcA(%v)='%#v';\n slcB(%v)='%#v';\n", c.as, cpa, c.bs, cpb))
 		}
-		panic(fmt.Sprintf("blueGreenTx SliceOfShards diference \n slcA(%v)='%#v';\n slcB(%v)='%#v';\n", c.as, cpa, c.bs, cpb))
 	}
 	return slcB, errB
 }

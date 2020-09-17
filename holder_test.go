@@ -180,7 +180,7 @@ func TestHolder_Open(t *testing.T) {
 		}
 
 		var shard uint64
-		tx := idx.Txf.NewTx(pilosa.Txo{Write: writable, Index: idx, Shard: shard})
+		tx := idx.Txf().NewTx(pilosa.Txo{Write: writable, Index: idx, Shard: shard})
 		defer tx.Rollback()
 
 		if field, err := idx.CreateField("bar", pilosa.OptFieldTypeDefault()); err != nil {
@@ -214,7 +214,7 @@ func TestHolder_Open(t *testing.T) {
 		}
 
 		var shard uint64
-		tx := idx.Txf.NewTx(pilosa.Txo{Write: writable, Index: idx, Shard: shard})
+		tx := idx.Txf().NewTx(pilosa.Txo{Write: writable, Index: idx, Shard: shard})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -247,7 +247,7 @@ func TestHolder_Open(t *testing.T) {
 			t.Fatal(err)
 		}
 		var shard uint64
-		tx := idx.Txf.NewTx(pilosa.Txo{Write: writable, Index: idx, Shard: shard})
+		tx := idx.Txf().NewTx(pilosa.Txo{Write: writable, Index: idx, Shard: shard})
 		defer tx.Rollback()
 
 		if field, err := idx.CreateField("bar", pilosa.OptFieldTypeDefault()); err != nil {

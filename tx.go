@@ -68,6 +68,11 @@ type Tx interface {
 	// Commit makes the updates in the Tx visible to subsequent transactions.
 	Commit() error
 
+	// IsDone must return true if Rollback() or Commit() has already
+	// been called. Otherwise it must return false. This allows
+	// DBWrapper.CleanupTx(tx Tx) to be idempotent.
+	IsDone() bool
+
 	// Readonly returns the flag this transaction was created with
 	// during NewTx. If the transaction is writable, it will return false.
 	Readonly() bool
@@ -197,7 +202,7 @@ type Tx interface {
 	Group() *TxGroup
 
 	// Dump is for debugging, what does this Tx see as its database?
-	Dump()
+	Dump(short bool, shard uint64)
 
 	// Options returns the options used to create this Tx. This
 	// can be implementd by embedding Txo, and Txo provides the

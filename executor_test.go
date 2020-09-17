@@ -535,7 +535,10 @@ func TestExecutor_Execute_Count(t *testing.T) {
 }
 
 func roaringOnlyTest(t *testing.T) {
-	if os.Getenv("PILOSA_TXSRC") != "roaring" {
+	src := os.Getenv("PILOSA_TXSRC")
+	if src == pilosa.RoaringTxn || (pilosa.DefaultTxsrc == pilosa.RoaringTxn && src == "") {
+		// okay to run, we are under roaring only
+	} else {
 		t.Skip("skip for everything but roaring")
 	}
 }
@@ -936,7 +939,7 @@ func TestExecutor_Execute_SetValue(t *testing.T) {
 		// Obtain transaction.
 		idx := index.Index
 		shard := uint64(0)
-		tx := idx.Txf.NewTx(pilosa.Txo{Write: !writable, Index: idx, Shard: shard})
+		tx := idx.Txf().NewTx(pilosa.Txo{Write: !writable, Index: idx, Shard: shard})
 		defer tx.Rollback()
 
 		f := hldr.Field("i", "f")
@@ -4411,11 +4414,7 @@ func TestExecutor_Execute_Extract(t *testing.T) {
 	c := test.MustRunCluster(t, 3)
 	defer c.Close()
 
-	set := c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "set")
-	dtSet, err := set.Datatype()
-	if err != nil {
-		t.Fatal(err)
-	}
+	c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "set")
 	c.ImportBits(t, "i", "set", [][2]uint64{
 		{0, 1},
 		{0, 2},
@@ -4426,88 +4425,56 @@ func TestExecutor_Execute_Extract(t *testing.T) {
 	})
 	c.Query(t, "i", fmt.Sprintf("Clear(%d, set=5)", ShardWidth))
 
-	keyset := c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "keyset", pilosa.OptFieldKeys())
-	dtKeyset, err := keyset.Datatype()
-	if err != nil {
-		t.Fatal(err)
-	}
+	c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "keyset", pilosa.OptFieldKeys())
 	c.Query(t, "i", `
 		Set(0, keyset="h")
 		Set(1, keyset="xyzzy")
 		Set(0, keyset="plugh")
 	`)
 
-	mutex := c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "mutex", pilosa.OptFieldTypeMutex(pilosa.CacheTypeRanked, 5000))
-	dtMutex, err := mutex.Datatype()
-	if err != nil {
-		t.Fatal(err)
-	}
+	c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "mutex", pilosa.OptFieldTypeMutex(pilosa.CacheTypeRanked, 5000))
 	c.ImportBits(t, "i", "mutex", [][2]uint64{
 		{0, 1},
 		{0, 2},
 		{4, 4 * ShardWidth},
 	})
 
-	keymutex := c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "keymutex", pilosa.OptFieldKeys(), pilosa.OptFieldTypeMutex(pilosa.CacheTypeRanked, 5000))
-	dtKeyMutex, err := keymutex.Datatype()
-	if err != nil {
-		t.Fatal(err)
-	}
+	c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "keymutex", pilosa.OptFieldKeys(), pilosa.OptFieldTypeMutex(pilosa.CacheTypeRanked, 5000))
 	c.Query(t, "i", `
 		Set(0, keymutex="h")
 		Set(1, keymutex="xyzzy")
 		Set(3, keymutex="plugh")
 	`)
 
-	tm := c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "time", pilosa.OptFieldTypeTime("YMDH"))
-	dtTm, err := tm.Datatype()
-	if err != nil {
-		t.Fatal(err)
-	}
+	c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "time", pilosa.OptFieldTypeTime("YMDH"))
 	c.Query(t, "i", `
 		Set(0, time=1, 2016-01-01T00:00)
 		Set(1, time=2, 2017-01-01T00:00)
 		Set(3, time=3, 2018-01-01T00:00)
 	`)
 
-	keytm := c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "keytime", pilosa.OptFieldKeys(), pilosa.OptFieldTypeTime("YMDH"))
-	dtKeyTm, err := keytm.Datatype()
-	if err != nil {
-		t.Fatal(err)
-	}
+	c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "keytime", pilosa.OptFieldKeys(), pilosa.OptFieldTypeTime("YMDH"))
 	c.Query(t, "i", `
 		Set(0, keytime="h", 2016-01-01T00:00)
 		Set(1, keytime="xyzzy", 2017-01-01T00:00)
 		Set(0, keytime="plugh", 2018-01-01T00:00)
 	`)
 
-	bsiInt := c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "bsint", pilosa.OptFieldTypeInt(-100, 100))
-	dtBsiInt, err := bsiInt.Datatype()
-	if err != nil {
-		t.Fatal(err)
-	}
+	c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "bsint", pilosa.OptFieldTypeInt(-100, 100))
 	c.Query(t, "i", `
 		Set(0, bsint=1)
 		Set(1, bsint=-1)
 		Set(3, bsint=2)
 	`)
 
-	bsidecimal := c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "bsidecimal", pilosa.OptFieldTypeDecimal(2))
-	dtBsiDecimal, err := bsidecimal.Datatype()
-	if err != nil {
-		t.Fatal(err)
-	}
+	c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "bsidecimal", pilosa.OptFieldTypeDecimal(2))
 	c.Query(t, "i", `
 		Set(0, bsidecimal=0.01)
 		Set(1, bsidecimal=1.00)
 		Set(3, bsidecimal=-1.01)
 	`)
 
-	boolean := c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "bool", pilosa.OptFieldTypeBool())
-	dtBoolean, err := boolean.Datatype()
-	if err != nil {
-		t.Fatal(err)
-	}
+	c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "bool", pilosa.OptFieldTypeBool())
 	c.Query(t, "i", `
 		Set(0, bool=true)
 		Set(1, bool=false)
@@ -4520,39 +4487,39 @@ func TestExecutor_Execute_Extract(t *testing.T) {
 			Fields: []pilosa.ExtractedTableField{
 				{
 					Name: "set",
-					Type: dtSet,
+					Type: "[]uint64",
 				},
 				{
 					Name: "keyset",
-					Type: dtKeyset,
+					Type: "[]string",
 				},
 				{
 					Name: "mutex",
-					Type: dtMutex,
+					Type: "uint64",
 				},
 				{
 					Name: "keymutex",
-					Type: dtKeyMutex,
+					Type: "string",
 				},
 				{
 					Name: "time",
-					Type: dtTm,
+					Type: "[]uint64",
 				},
 				{
 					Name: "keytime",
-					Type: dtKeyTm,
+					Type: "[]string",
 				},
 				{
 					Name: "bsint",
-					Type: dtBsiInt,
+					Type: "int64",
 				},
 				{
 					Name: "bsidecimal",
-					Type: dtBsiDecimal,
+					Type: "decimal",
 				},
 				{
 					Name: "bool",
-					Type: dtBoolean,
+					Type: "bool",
 				},
 			},
 			Columns: []pilosa.ExtractedTableColumn{
@@ -4677,11 +4644,7 @@ func TestExecutor_Execute_Extract_Keyed(t *testing.T) {
 	c := test.MustRunCluster(t, 3)
 	defer c.Close()
 
-	set := c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true, Keys: true}, "set")
-	dtSet, err := set.Datatype()
-	if err != nil {
-		t.Fatal(err)
-	}
+	c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true, Keys: true}, "set")
 	c.Query(t, "i", `
 		Set("h", set=1)
 		Set("h", set=2)
@@ -4696,7 +4659,7 @@ func TestExecutor_Execute_Extract_Keyed(t *testing.T) {
 			Fields: []pilosa.ExtractedTableField{
 				{
 					Name: "set",
-					Type: dtSet,
+					Type: "[]uint64",
 				},
 			},
 			Columns: []pilosa.ExtractedTableColumn{
@@ -6230,7 +6193,18 @@ func TestExecutor_Execute_CountDistinct(t *testing.T) {
 	}
 
 	// AntitodePoint == row 1 b/c keys field.
-	writeQuery := `Set(100, type=AntidotePoint)Set(100, equip_id=100)Set(100, site_id=100)Set(100, id=100)`
+	// Note: type=TwoPoints should match 100/101, and no row in type
+	// matches 102, but 102 is present in equip_id at all.
+	writeQuery := `
+		Set(100, type=AntidotePoint)
+		Set(100, type=TwoPoints)
+		Set(101, type=TwoPoints)
+		Set(100, equip_id=100)
+		Set(101, equip_id=101)
+		Set(102, equip_id=102)
+		Set(100, site_id=100)
+		Set(100, id=100)
+	`
 	for k, i := range schema.Indexes {
 		_ = k
 		if _, err := api.Query(context.TODO(), &pilosa.QueryRequest{Index: i.Name, Query: writeQuery}); err != nil {
@@ -6245,7 +6219,7 @@ func TestExecutor_Execute_CountDistinct(t *testing.T) {
 				Intersect(Row(type=AntidotePoint)),
 			index=equipment, field=equip_id),
 			Distinct(
-				Intersect(Row(type=AntidotePoint)),
+				Intersect(Row(type=TwoPoints)),
 			index=sites, field=equip_id)
 		), index=power_ts, field=site_id)`
 
@@ -6305,11 +6279,61 @@ func TestExecutor_Execute_CountDistinct(t *testing.T) {
 		if !ok {
 			t.Fatalf("invalid response type, expected: []pilosa.GroupCount, got: %T", resp.Results[0])
 		}
-		if len(gc) != 1 {
-			t.Fatalf("invalid group count length, expected: 1, got: %v", len(gc))
+		if len(gc) != 2 {
+			t.Fatalf("invalid group count length, expected: 2, got: %v", len(gc))
 		}
 		if gc[0].Count != 1 {
-			t.Fatalf("invalid group count count, expected: 1, got: %v", gc[0].Count)
+			t.Fatalf("invalid group-by count for %d, expected: 1, got: %v", gc[0].Group[0].RowID, gc[0].Count)
+		}
+		if gc[1].Count != 1 {
+			t.Fatalf("invalid group-by count for %d, expected: 1, got: %v", gc[1].Group[0].RowID, gc[1].Count)
+		}
+	})
+	t.Run("Store(Distinct)", func(t *testing.T) {
+		_, err = api.Query(context.TODO(), &pilosa.QueryRequest{
+			Index: "sites",
+			Query: `Store(Distinct(field=equip_id), type="a")`,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp, err := api.Query(context.TODO(), &pilosa.QueryRequest{
+			Index: "sites",
+			Query: `Row(type="a")`,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		res, ok := resp.Results[0].(*pilosa.Row)
+		if !ok {
+			t.Fatalf("invalid response type, expected: *pilosa.Row, got: %T", resp.Results[0])
+		}
+		cols := res.Columns()
+		if !eq(cols, []uint64{100, 101, 102}) {
+			t.Fatalf("expected [100, 101, 102], got %d", cols)
+		}
+
+		_, err = api.Query(context.TODO(), &pilosa.QueryRequest{
+			Index: "sites",
+			Query: `Store(Distinct(Row(type="TwoPoints"), field=equip_id), type="b")`,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp, err = api.Query(context.TODO(), &pilosa.QueryRequest{
+			Index: "sites",
+			Query: `Row(type="b")`,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		res, ok = resp.Results[0].(*pilosa.Row)
+		if !ok {
+			t.Fatalf("invalid response type, expected: *pilosa.Row, got: %T", resp.Results[0])
+		}
+		cols = res.Columns()
+		if !eq(cols, []uint64{100, 101}) {
+			t.Fatalf("expected [100, 101], got %d", cols)
 		}
 	})
 }
