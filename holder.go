@@ -1597,9 +1597,11 @@ func (s *holderSyncer) setTranslateReadOnlyFlags() {
 		// Update: there was another path down to Index.Close(), so
 		// we shrink to lock to be inside index.TranslateStore() now.
 		for partitionID := 0; partitionID < s.Cluster.partitionN; partitionID++ {
-			ownsPartition := s.Cluster.unprotectedOwnsPartition(s.Node.ID, partitionID)
+			primary := s.Cluster.unprotectedPrimaryPartitionNode(partitionID)
+			isPrimary := primary != nil && s.Node.ID == primary.ID
+
 			if ts := index.TranslateStore(partitionID); ts != nil {
-				ts.SetReadOnly(!ownsPartition)
+				ts.SetReadOnly(!isPrimary)
 			}
 		}
 
