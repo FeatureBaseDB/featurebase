@@ -26,6 +26,7 @@ import (
 	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/logger"
 	pb "github.com/pilosa/pilosa/v2/proto"
+	vdsm_pb "github.com/pilosa/pilosa/v2/proto/vdsm"
 	"github.com/pilosa/pilosa/v2/stats"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
@@ -123,48 +124,6 @@ func errToStatusError(err error) error {
 	}
 
 	return status.Error(codes.Unknown, err.Error())
-}
-
-// GetVDSs returns a single VDS given a name
-func (h *GRPCHandler) GetVDS(ctx context.Context, req *pb.GetVDSRequest) (*pb.GetVDSResponse, error) {
-	// TODO: Return all schema information associated with the VDS.
-	// It's obviously not very useful to return the same data as given.
-	schema := h.api.Schema(ctx)
-	for _, index := range schema {
-		if req.Name == index.Name {
-			return &pb.GetVDSResponse{Vds: &pb.VDS{Name: index.Name}}, nil
-		}
-	}
-	return nil, status.Error(codes.NotFound, fmt.Sprintf("VDS with name %s not found", req.Name))
-}
-
-// GetVDSs returns a list of all VDSs
-func (h *GRPCHandler) GetVDSs(ctx context.Context, req *pb.GetVDSsRequest) (*pb.GetVDSsResponse, error) {
-	schema := h.api.Schema(ctx)
-	vdss := make([]*pb.VDS, len(schema))
-	for i, index := range schema {
-		vdss[i] = &pb.VDS{Name: index.Name}
-	}
-	return &pb.GetVDSsResponse{Vdss: vdss}, nil
-}
-
-// PostVDS creates a new VDS
-func (h *GRPCHandler) PostVDS(ctx context.Context, req *pb.PostVDSRequest) (*pb.PostVDSResponse, error) {
-	opts := pilosa.IndexOptions{Keys: req.Keys, TrackExistence: req.TrackExistence}
-	_, err := h.api.CreateIndex(ctx, req.Name, opts)
-	if err != nil {
-		return nil, errToStatusError(err)
-	}
-	return &pb.PostVDSResponse{}, nil
-}
-
-// DeleteVDS deletes a VDS
-func (h *GRPCHandler) DeleteVDS(ctx context.Context, req *pb.DeleteVDSRequest) (*pb.DeleteVDSResponse, error) {
-	err := h.api.DeleteIndex(ctx, req.Name)
-	if err != nil {
-		return nil, errToStatusError(err)
-	}
-	return &pb.DeleteVDSResponse{}, nil
 }
 
 func (h *GRPCHandler) execSQL(ctx context.Context, queryStr string) (pb.ToRowser, error) {
@@ -290,6 +249,94 @@ func (h *GRPCHandler) QueryPQLUnary(ctx context.Context, req *pb.QueryPQLRequest
 	h.stats.Count(pilosa.MetricPqlQueries, 1, 1)
 
 	return table, errToStatusError(nil)
+}
+
+// VDSMGRPCHandler contains methods which handle the various gRPC requests, ported from VDSM.
+type VDSMGRPCHandler struct {
+	api    *pilosa.API
+	logger logger.Logger
+	stats  stats.StatsClient
+}
+
+func NewVDSMGRPCHandler(api *pilosa.API) *VDSMGRPCHandler {
+	return &VDSMGRPCHandler{api: api, logger: logger.NopLogger, stats: stats.NopStatsClient}
+}
+
+func (h *VDSMGRPCHandler) WithLogger(logger logger.Logger) *VDSMGRPCHandler {
+	h.logger = logger
+	return h
+}
+
+func (h *VDSMGRPCHandler) WithStats(stats stats.StatsClient) *VDSMGRPCHandler {
+	h.stats = stats
+	return h
+}
+
+// GetVDSs returns a single VDS given a name
+func (h *VDSMGRPCHandler) GetVDS(ctx context.Context, req *vdsm_pb.GetVDSRequest) (*vdsm_pb.GetVDSResponse, error) {
+	typedIdOrName := req.GetIdOrName()
+	switch idOrName := typedIdOrName.(type) {
+	case *vdsm_pb.GetVDSRequest_Id:
+		return nil, status.Error(codes.InvalidArgument, "VDS IDs are no longer supported")
+	case *vdsm_pb.GetVDSRequest_Name:
+		schema := h.api.Schema(ctx)
+		for _, index := range schema {
+			if idOrName.Name == index.Name {
+				return &vdsm_pb.GetVDSResponse{Vds: &vdsm_pb.VDS{Name: index.Name}}, nil
+			}
+		}
+		return nil, status.Error(codes.NotFound, fmt.Sprintf("VDS with name %s not found", idOrName.Name))
+	default:
+		return nil, status.Error(codes.NotFound, "VDS not found")
+	}
+}
+
+// GetVDSs returns a list of all VDSs
+func (h *VDSMGRPCHandler) GetVDSs(ctx context.Context, req *vdsm_pb.GetVDSsRequest) (*vdsm_pb.GetVDSsResponse, error) {
+	schema := h.api.Schema(ctx)
+	vdss := make([]*vdsm_pb.VDS, len(schema))
+	for i, index := range schema {
+		vdss[i] = &vdsm_pb.VDS{Name: index.Name}
+	}
+	return &vdsm_pb.GetVDSsResponse{Vdss: vdss}, nil
+}
+
+// PostVDS creates a new VDS
+func (*VDSMGRPCHandler) PostVDS(ctx context.Context, req *vdsm_pb.PostVDSRequest) (*vdsm_pb.PostVDSResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PostVDS not implemented")
+}
+
+// DeleteVDS deletes a VDS
+func (h *VDSMGRPCHandler) DeleteVDS(ctx context.Context, req *vdsm_pb.DeleteVDSRequest) (*vdsm_pb.DeleteVDSResponse, error) {
+	typedIdOrName := req.GetIdOrName()
+	switch idOrName := typedIdOrName.(type) {
+	case *vdsm_pb.DeleteVDSRequest_Id:
+		return nil, status.Error(codes.InvalidArgument, "VDS IDs are no longer supported")
+	case *vdsm_pb.DeleteVDSRequest_Name:
+		err := h.api.DeleteIndex(ctx, idOrName.Name)
+		if err != nil {
+			return nil, errToStatusError(err)
+		}
+		return &vdsm_pb.DeleteVDSResponse{}, nil
+	default:
+		return nil, status.Error(codes.NotFound, "")
+	}
+}
+
+func (*VDSMGRPCHandler) QuerySQL(req *vdsm_pb.QuerySQLRequest, srv vdsm_pb.Molecula_QuerySQLServer) error {
+	return status.Errorf(codes.Unimplemented, "method QuerySQL not implemented")
+}
+func (*VDSMGRPCHandler) QuerySQLUnary(ctx context.Context, req *vdsm_pb.QuerySQLRequest) (*vdsm_pb.TableResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method QuerySQLUnary not implemented")
+}
+func (*VDSMGRPCHandler) QueryPQL(req *vdsm_pb.QueryPQLRequest, srv vdsm_pb.Molecula_QueryPQLServer) error {
+	return status.Errorf(codes.Unimplemented, "method QueryPQL not implemented")
+}
+func (*VDSMGRPCHandler) QueryPQLUnary(ctx context.Context, req *vdsm_pb.QueryPQLRequest) (*vdsm_pb.TableResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method QueryPQLUnary not implemented")
+}
+func (*VDSMGRPCHandler) Inspect(req *vdsm_pb.InspectRequest, srv vdsm_pb.Molecula_InspectServer) error {
+	return status.Errorf(codes.Unimplemented, "method Inspect not implemented")
 }
 
 // ResultUint64 is a wrapper around a uint64 result type
@@ -1145,6 +1192,7 @@ func (s *grpcServer) Serve(tlsConfig *tls.Config) error {
 	s.mu.Lock()
 	s.grpcServer = grpc.NewServer(opts...)
 	pb.RegisterPilosaServer(s.grpcServer, NewGRPCHandler(s.api).WithLogger(s.logger).WithStats(s.stats))
+	vdsm_pb.RegisterMoleculaServer(s.grpcServer, NewVDSMGRPCHandler(s.api).WithLogger(s.logger).WithStats(s.stats))
 
 	// register the server so its services are available to grpc_cli and others
 	reflection.Register(s.grpcServer)
