@@ -3,6 +3,8 @@ package pilosa;
 
 //import "public.proto";
 
+option go_package = "github.com/pilosa/pilosa/v2/proto";
+
 message QueryPQLRequest {
   string index = 1;
   string pql = 2;

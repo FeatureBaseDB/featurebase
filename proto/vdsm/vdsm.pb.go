@@ -7,6 +7,7 @@ import (
 	context "context"
 	fmt "fmt"
 	proto "github.com/golang/protobuf/proto"
+	proto1 "github.com/pilosa/pilosa/v2/proto"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
@@ -561,804 +562,6 @@ func (m *DeleteVDSResponse) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_DeleteVDSResponse proto.InternalMessageInfo
 
-type QueryPQLRequest struct {
-	Index                string   `protobuf:"bytes,1,opt,name=index,proto3" json:"index,omitempty"`
-	Pql                  string   `protobuf:"bytes,2,opt,name=pql,proto3" json:"pql,omitempty"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
-}
-
-func (m *QueryPQLRequest) Reset()         { *m = QueryPQLRequest{} }
-func (m *QueryPQLRequest) String() string { return proto.CompactTextString(m) }
-func (*QueryPQLRequest) ProtoMessage()    {}
-func (*QueryPQLRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_3849c3e549495f50, []int{10}
-}
-
-func (m *QueryPQLRequest) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_QueryPQLRequest.Unmarshal(m, b)
-}
-func (m *QueryPQLRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_QueryPQLRequest.Marshal(b, m, deterministic)
-}
-func (m *QueryPQLRequest) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_QueryPQLRequest.Merge(m, src)
-}
-func (m *QueryPQLRequest) XXX_Size() int {
-	return xxx_messageInfo_QueryPQLRequest.Size(m)
-}
-func (m *QueryPQLRequest) XXX_DiscardUnknown() {
-	xxx_messageInfo_QueryPQLRequest.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_QueryPQLRequest proto.InternalMessageInfo
-
-func (m *QueryPQLRequest) GetIndex() string {
-	if m != nil {
-		return m.Index
-	}
-	return ""
-}
-
-func (m *QueryPQLRequest) GetPql() string {
-	if m != nil {
-		return m.Pql
-	}
-	return ""
-}
-
-type QuerySQLRequest struct {
-	Sql                  string   `protobuf:"bytes,1,opt,name=sql,proto3" json:"sql,omitempty"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
-}
-
-func (m *QuerySQLRequest) Reset()         { *m = QuerySQLRequest{} }
-func (m *QuerySQLRequest) String() string { return proto.CompactTextString(m) }
-func (*QuerySQLRequest) ProtoMessage()    {}
-func (*QuerySQLRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_3849c3e549495f50, []int{11}
-}
-
-func (m *QuerySQLRequest) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_QuerySQLRequest.Unmarshal(m, b)
-}
-func (m *QuerySQLRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_QuerySQLRequest.Marshal(b, m, deterministic)
-}
-func (m *QuerySQLRequest) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_QuerySQLRequest.Merge(m, src)
-}
-func (m *QuerySQLRequest) XXX_Size() int {
-	return xxx_messageInfo_QuerySQLRequest.Size(m)
-}
-func (m *QuerySQLRequest) XXX_DiscardUnknown() {
-	xxx_messageInfo_QuerySQLRequest.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_QuerySQLRequest proto.InternalMessageInfo
-
-func (m *QuerySQLRequest) GetSql() string {
-	if m != nil {
-		return m.Sql
-	}
-	return ""
-}
-
-type StatusError struct {
-	Code                 uint32   `protobuf:"varint,1,opt,name=Code,proto3" json:"Code,omitempty"`
-	Message              string   `protobuf:"bytes,2,opt,name=Message,proto3" json:"Message,omitempty"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
-}
-
-func (m *StatusError) Reset()         { *m = StatusError{} }
-func (m *StatusError) String() string { return proto.CompactTextString(m) }
-func (*StatusError) ProtoMessage()    {}
-func (*StatusError) Descriptor() ([]byte, []int) {
-	return fileDescriptor_3849c3e549495f50, []int{12}
-}
-
-func (m *StatusError) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_StatusError.Unmarshal(m, b)
-}
-func (m *StatusError) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_StatusError.Marshal(b, m, deterministic)
-}
-func (m *StatusError) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_StatusError.Merge(m, src)
-}
-func (m *StatusError) XXX_Size() int {
-	return xxx_messageInfo_StatusError.Size(m)
-}
-func (m *StatusError) XXX_DiscardUnknown() {
-	xxx_messageInfo_StatusError.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_StatusError proto.InternalMessageInfo
-
-func (m *StatusError) GetCode() uint32 {
-	if m != nil {
-		return m.Code
-	}
-	return 0
-}
-
-func (m *StatusError) GetMessage() string {
-	if m != nil {
-		return m.Message
-	}
-	return ""
-}
-
-type RowResponse struct {
-	Headers              []*ColumnInfo     `protobuf:"bytes,1,rep,name=headers,proto3" json:"headers,omitempty"`
-	Columns              []*ColumnResponse `protobuf:"bytes,2,rep,name=columns,proto3" json:"columns,omitempty"`
-	StatusError          *StatusError      `protobuf:"bytes,3,opt,name=StatusError,proto3" json:"StatusError,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}          `json:"-"`
-	XXX_unrecognized     []byte            `json:"-"`
-	XXX_sizecache        int32             `json:"-"`
-}
-
-func (m *RowResponse) Reset()         { *m = RowResponse{} }
-func (m *RowResponse) String() string { return proto.CompactTextString(m) }
-func (*RowResponse) ProtoMessage()    {}
-func (*RowResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_3849c3e549495f50, []int{13}
-}
-
-func (m *RowResponse) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_RowResponse.Unmarshal(m, b)
-}
-func (m *RowResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_RowResponse.Marshal(b, m, deterministic)
-}
-func (m *RowResponse) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_RowResponse.Merge(m, src)
-}
-func (m *RowResponse) XXX_Size() int {
-	return xxx_messageInfo_RowResponse.Size(m)
-}
-func (m *RowResponse) XXX_DiscardUnknown() {
-	xxx_messageInfo_RowResponse.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_RowResponse proto.InternalMessageInfo
-
-func (m *RowResponse) GetHeaders() []*ColumnInfo {
-	if m != nil {
-		return m.Headers
-	}
-	return nil
-}
-
-func (m *RowResponse) GetColumns() []*ColumnResponse {
-	if m != nil {
-		return m.Columns
-	}
-	return nil
-}
-
-func (m *RowResponse) GetStatusError() *StatusError {
-	if m != nil {
-		return m.StatusError
-	}
-	return nil
-}
-
-type Row struct {
-	Columns              []*ColumnResponse `protobuf:"bytes,1,rep,name=columns,proto3" json:"columns,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}          `json:"-"`
-	XXX_unrecognized     []byte            `json:"-"`
-	XXX_sizecache        int32             `json:"-"`
-}
-
-func (m *Row) Reset()         { *m = Row{} }
-func (m *Row) String() string { return proto.CompactTextString(m) }
-func (*Row) ProtoMessage()    {}
-func (*Row) Descriptor() ([]byte, []int) {
-	return fileDescriptor_3849c3e549495f50, []int{14}
-}
-
-func (m *Row) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_Row.Unmarshal(m, b)
-}
-func (m *Row) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_Row.Marshal(b, m, deterministic)
-}
-func (m *Row) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_Row.Merge(m, src)
-}
-func (m *Row) XXX_Size() int {
-	return xxx_messageInfo_Row.Size(m)
-}
-func (m *Row) XXX_DiscardUnknown() {
-	xxx_messageInfo_Row.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_Row proto.InternalMessageInfo
-
-func (m *Row) GetColumns() []*ColumnResponse {
-	if m != nil {
-		return m.Columns
-	}
-	return nil
-}
-
-type TableResponse struct {
-	Headers              []*ColumnInfo `protobuf:"bytes,1,rep,name=headers,proto3" json:"headers,omitempty"`
-	Rows                 []*Row        `protobuf:"bytes,2,rep,name=rows,proto3" json:"rows,omitempty"`
-	StatusError          *StatusError  `protobuf:"bytes,3,opt,name=StatusError,proto3" json:"StatusError,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}      `json:"-"`
-	XXX_unrecognized     []byte        `json:"-"`
-	XXX_sizecache        int32         `json:"-"`
-}
-
-func (m *TableResponse) Reset()         { *m = TableResponse{} }
-func (m *TableResponse) String() string { return proto.CompactTextString(m) }
-func (*TableResponse) ProtoMessage()    {}
-func (*TableResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_3849c3e549495f50, []int{15}
-}
-
-func (m *TableResponse) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_TableResponse.Unmarshal(m, b)
-}
-func (m *TableResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_TableResponse.Marshal(b, m, deterministic)
-}
-func (m *TableResponse) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_TableResponse.Merge(m, src)
-}
-func (m *TableResponse) XXX_Size() int {
-	return xxx_messageInfo_TableResponse.Size(m)
-}
-func (m *TableResponse) XXX_DiscardUnknown() {
-	xxx_messageInfo_TableResponse.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_TableResponse proto.InternalMessageInfo
-
-func (m *TableResponse) GetHeaders() []*ColumnInfo {
-	if m != nil {
-		return m.Headers
-	}
-	return nil
-}
-
-func (m *TableResponse) GetRows() []*Row {
-	if m != nil {
-		return m.Rows
-	}
-	return nil
-}
-
-func (m *TableResponse) GetStatusError() *StatusError {
-	if m != nil {
-		return m.StatusError
-	}
-	return nil
-}
-
-type ColumnInfo struct {
-	Name                 string   `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Datatype             string   `protobuf:"bytes,2,opt,name=datatype,proto3" json:"datatype,omitempty"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
-}
-
-func (m *ColumnInfo) Reset()         { *m = ColumnInfo{} }
-func (m *ColumnInfo) String() string { return proto.CompactTextString(m) }
-func (*ColumnInfo) ProtoMessage()    {}
-func (*ColumnInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_3849c3e549495f50, []int{16}
-}
-
-func (m *ColumnInfo) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_ColumnInfo.Unmarshal(m, b)
-}
-func (m *ColumnInfo) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_ColumnInfo.Marshal(b, m, deterministic)
-}
-func (m *ColumnInfo) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_ColumnInfo.Merge(m, src)
-}
-func (m *ColumnInfo) XXX_Size() int {
-	return xxx_messageInfo_ColumnInfo.Size(m)
-}
-func (m *ColumnInfo) XXX_DiscardUnknown() {
-	xxx_messageInfo_ColumnInfo.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_ColumnInfo proto.InternalMessageInfo
-
-func (m *ColumnInfo) GetName() string {
-	if m != nil {
-		return m.Name
-	}
-	return ""
-}
-
-func (m *ColumnInfo) GetDatatype() string {
-	if m != nil {
-		return m.Datatype
-	}
-	return ""
-}
-
-type ColumnResponse struct {
-	// Types that are valid to be assigned to ColumnVal:
-	//	*ColumnResponse_StringVal
-	//	*ColumnResponse_Uint64Val
-	//	*ColumnResponse_Int64Val
-	//	*ColumnResponse_BoolVal
-	//	*ColumnResponse_BlobVal
-	//	*ColumnResponse_Uint64ArrayVal
-	//	*ColumnResponse_StringArrayVal
-	//	*ColumnResponse_Float64Val
-	//	*ColumnResponse_DecimalVal
-	ColumnVal            isColumnResponse_ColumnVal `protobuf_oneof:"columnVal"`
-	XXX_NoUnkeyedLiteral struct{}                   `json:"-"`
-	XXX_unrecognized     []byte                     `json:"-"`
-	XXX_sizecache        int32                      `json:"-"`
-}
-
-func (m *ColumnResponse) Reset()         { *m = ColumnResponse{} }
-func (m *ColumnResponse) String() string { return proto.CompactTextString(m) }
-func (*ColumnResponse) ProtoMessage()    {}
-func (*ColumnResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_3849c3e549495f50, []int{17}
-}
-
-func (m *ColumnResponse) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_ColumnResponse.Unmarshal(m, b)
-}
-func (m *ColumnResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_ColumnResponse.Marshal(b, m, deterministic)
-}
-func (m *ColumnResponse) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_ColumnResponse.Merge(m, src)
-}
-func (m *ColumnResponse) XXX_Size() int {
-	return xxx_messageInfo_ColumnResponse.Size(m)
-}
-func (m *ColumnResponse) XXX_DiscardUnknown() {
-	xxx_messageInfo_ColumnResponse.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_ColumnResponse proto.InternalMessageInfo
-
-type isColumnResponse_ColumnVal interface {
-	isColumnResponse_ColumnVal()
-}
-
-type ColumnResponse_StringVal struct {
-	StringVal string `protobuf:"bytes,1,opt,name=stringVal,proto3,oneof"`
-}
-
-type ColumnResponse_Uint64Val struct {
-	Uint64Val uint64 `protobuf:"varint,2,opt,name=uint64Val,proto3,oneof"`
-}
-
-type ColumnResponse_Int64Val struct {
-	Int64Val int64 `protobuf:"varint,3,opt,name=int64Val,proto3,oneof"`
-}
-
-type ColumnResponse_BoolVal struct {
-	BoolVal bool `protobuf:"varint,4,opt,name=boolVal,proto3,oneof"`
-}
-
-type ColumnResponse_BlobVal struct {
-	BlobVal []byte `protobuf:"bytes,5,opt,name=blobVal,proto3,oneof"`
-}
-
-type ColumnResponse_Uint64ArrayVal struct {
-	Uint64ArrayVal *Uint64Array `protobuf:"bytes,6,opt,name=uint64ArrayVal,proto3,oneof"`
-}
-
-type ColumnResponse_StringArrayVal struct {
-	StringArrayVal *StringArray `protobuf:"bytes,7,opt,name=stringArrayVal,proto3,oneof"`
-}
-
-type ColumnResponse_Float64Val struct {
-	Float64Val float64 `protobuf:"fixed64,8,opt,name=float64Val,proto3,oneof"`
-}
-
-type ColumnResponse_DecimalVal struct {
-	DecimalVal *Decimal `protobuf:"bytes,9,opt,name=decimalVal,proto3,oneof"`
-}
-
-func (*ColumnResponse_StringVal) isColumnResponse_ColumnVal() {}
-
-func (*ColumnResponse_Uint64Val) isColumnResponse_ColumnVal() {}
-
-func (*ColumnResponse_Int64Val) isColumnResponse_ColumnVal() {}
-
-func (*ColumnResponse_BoolVal) isColumnResponse_ColumnVal() {}
-
-func (*ColumnResponse_BlobVal) isColumnResponse_ColumnVal() {}
-
-func (*ColumnResponse_Uint64ArrayVal) isColumnResponse_ColumnVal() {}
-
-func (*ColumnResponse_StringArrayVal) isColumnResponse_ColumnVal() {}
-
-func (*ColumnResponse_Float64Val) isColumnResponse_ColumnVal() {}
-
-func (*ColumnResponse_DecimalVal) isColumnResponse_ColumnVal() {}
-
-func (m *ColumnResponse) GetColumnVal() isColumnResponse_ColumnVal {
-	if m != nil {
-		return m.ColumnVal
-	}
-	return nil
-}
-
-func (m *ColumnResponse) GetStringVal() string {
-	if x, ok := m.GetColumnVal().(*ColumnResponse_StringVal); ok {
-		return x.StringVal
-	}
-	return ""
-}
-
-func (m *ColumnResponse) GetUint64Val() uint64 {
-	if x, ok := m.GetColumnVal().(*ColumnResponse_Uint64Val); ok {
-		return x.Uint64Val
-	}
-	return 0
-}
-
-func (m *ColumnResponse) GetInt64Val() int64 {
-	if x, ok := m.GetColumnVal().(*ColumnResponse_Int64Val); ok {
-		return x.Int64Val
-	}
-	return 0
-}
-
-func (m *ColumnResponse) GetBoolVal() bool {
-	if x, ok := m.GetColumnVal().(*ColumnResponse_BoolVal); ok {
-		return x.BoolVal
-	}
-	return false
-}
-
-func (m *ColumnResponse) GetBlobVal() []byte {
-	if x, ok := m.GetColumnVal().(*ColumnResponse_BlobVal); ok {
-		return x.BlobVal
-	}
-	return nil
-}
-
-func (m *ColumnResponse) GetUint64ArrayVal() *Uint64Array {
-	if x, ok := m.GetColumnVal().(*ColumnResponse_Uint64ArrayVal); ok {
-		return x.Uint64ArrayVal
-	}
-	return nil
-}
-
-func (m *ColumnResponse) GetStringArrayVal() *StringArray {
-	if x, ok := m.GetColumnVal().(*ColumnResponse_StringArrayVal); ok {
-		return x.StringArrayVal
-	}
-	return nil
-}
-
-func (m *ColumnResponse) GetFloat64Val() float64 {
-	if x, ok := m.GetColumnVal().(*ColumnResponse_Float64Val); ok {
-		return x.Float64Val
-	}
-	return 0
-}
-
-func (m *ColumnResponse) GetDecimalVal() *Decimal {
-	if x, ok := m.GetColumnVal().(*ColumnResponse_DecimalVal); ok {
-		return x.DecimalVal
-	}
-	return nil
-}
-
-// XXX_OneofWrappers is for the internal use of the proto package.
-func (*ColumnResponse) XXX_OneofWrappers() []interface{} {
-	return []interface{}{
-		(*ColumnResponse_StringVal)(nil),
-		(*ColumnResponse_Uint64Val)(nil),
-		(*ColumnResponse_Int64Val)(nil),
-		(*ColumnResponse_BoolVal)(nil),
-		(*ColumnResponse_BlobVal)(nil),
-		(*ColumnResponse_Uint64ArrayVal)(nil),
-		(*ColumnResponse_StringArrayVal)(nil),
-		(*ColumnResponse_Float64Val)(nil),
-		(*ColumnResponse_DecimalVal)(nil),
-	}
-}
-
-type Decimal struct {
-	Value                int64    `protobuf:"varint,1,opt,name=value,proto3" json:"value,omitempty"`
-	Scale                int64    `protobuf:"varint,2,opt,name=scale,proto3" json:"scale,omitempty"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
-}
-
-func (m *Decimal) Reset()         { *m = Decimal{} }
-func (m *Decimal) String() string { return proto.CompactTextString(m) }
-func (*Decimal) ProtoMessage()    {}
-func (*Decimal) Descriptor() ([]byte, []int) {
-	return fileDescriptor_3849c3e549495f50, []int{18}
-}
-
-func (m *Decimal) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_Decimal.Unmarshal(m, b)
-}
-func (m *Decimal) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_Decimal.Marshal(b, m, deterministic)
-}
-func (m *Decimal) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_Decimal.Merge(m, src)
-}
-func (m *Decimal) XXX_Size() int {
-	return xxx_messageInfo_Decimal.Size(m)
-}
-func (m *Decimal) XXX_DiscardUnknown() {
-	xxx_messageInfo_Decimal.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_Decimal proto.InternalMessageInfo
-
-func (m *Decimal) GetValue() int64 {
-	if m != nil {
-		return m.Value
-	}
-	return 0
-}
-
-func (m *Decimal) GetScale() int64 {
-	if m != nil {
-		return m.Scale
-	}
-	return 0
-}
-
-type InspectRequest struct {
-	Vds                  string     `protobuf:"bytes,1,opt,name=vds,proto3" json:"vds,omitempty"`
-	Records              *IdsOrKeys `protobuf:"bytes,2,opt,name=records,proto3" json:"records,omitempty"`
-	FilterFields         []string   `protobuf:"bytes,3,rep,name=filterFields,proto3" json:"filterFields,omitempty"`
-	Limit                uint64     `protobuf:"varint,4,opt,name=limit,proto3" json:"limit,omitempty"`
-	Offset               uint64     `protobuf:"varint,5,opt,name=offset,proto3" json:"offset,omitempty"`
-	Query                string     `protobuf:"bytes,6,opt,name=query,proto3" json:"query,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}   `json:"-"`
-	XXX_unrecognized     []byte     `json:"-"`
-	XXX_sizecache        int32      `json:"-"`
-}
-
-func (m *InspectRequest) Reset()         { *m = InspectRequest{} }
-func (m *InspectRequest) String() string { return proto.CompactTextString(m) }
-func (*InspectRequest) ProtoMessage()    {}
-func (*InspectRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_3849c3e549495f50, []int{19}
-}
-
-func (m *InspectRequest) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_InspectRequest.Unmarshal(m, b)
-}
-func (m *InspectRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_InspectRequest.Marshal(b, m, deterministic)
-}
-func (m *InspectRequest) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_InspectRequest.Merge(m, src)
-}
-func (m *InspectRequest) XXX_Size() int {
-	return xxx_messageInfo_InspectRequest.Size(m)
-}
-func (m *InspectRequest) XXX_DiscardUnknown() {
-	xxx_messageInfo_InspectRequest.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_InspectRequest proto.InternalMessageInfo
-
-func (m *InspectRequest) GetVds() string {
-	if m != nil {
-		return m.Vds
-	}
-	return ""
-}
-
-func (m *InspectRequest) GetRecords() *IdsOrKeys {
-	if m != nil {
-		return m.Records
-	}
-	return nil
-}
-
-func (m *InspectRequest) GetFilterFields() []string {
-	if m != nil {
-		return m.FilterFields
-	}
-	return nil
-}
-
-func (m *InspectRequest) GetLimit() uint64 {
-	if m != nil {
-		return m.Limit
-	}
-	return 0
-}
-
-func (m *InspectRequest) GetOffset() uint64 {
-	if m != nil {
-		return m.Offset
-	}
-	return 0
-}
-
-func (m *InspectRequest) GetQuery() string {
-	if m != nil {
-		return m.Query
-	}
-	return ""
-}
-
-type Uint64Array struct {
-	Vals                 []uint64 `protobuf:"varint,1,rep,packed,name=vals,proto3" json:"vals,omitempty"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
-}
-
-func (m *Uint64Array) Reset()         { *m = Uint64Array{} }
-func (m *Uint64Array) String() string { return proto.CompactTextString(m) }
-func (*Uint64Array) ProtoMessage()    {}
-func (*Uint64Array) Descriptor() ([]byte, []int) {
-	return fileDescriptor_3849c3e549495f50, []int{20}
-}
-
-func (m *Uint64Array) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_Uint64Array.Unmarshal(m, b)
-}
-func (m *Uint64Array) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_Uint64Array.Marshal(b, m, deterministic)
-}
-func (m *Uint64Array) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_Uint64Array.Merge(m, src)
-}
-func (m *Uint64Array) XXX_Size() int {
-	return xxx_messageInfo_Uint64Array.Size(m)
-}
-func (m *Uint64Array) XXX_DiscardUnknown() {
-	xxx_messageInfo_Uint64Array.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_Uint64Array proto.InternalMessageInfo
-
-func (m *Uint64Array) GetVals() []uint64 {
-	if m != nil {
-		return m.Vals
-	}
-	return nil
-}
-
-type StringArray struct {
-	Vals                 []string `protobuf:"bytes,1,rep,name=vals,proto3" json:"vals,omitempty"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
-}
-
-func (m *StringArray) Reset()         { *m = StringArray{} }
-func (m *StringArray) String() string { return proto.CompactTextString(m) }
-func (*StringArray) ProtoMessage()    {}
-func (*StringArray) Descriptor() ([]byte, []int) {
-	return fileDescriptor_3849c3e549495f50, []int{21}
-}
-
-func (m *StringArray) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_StringArray.Unmarshal(m, b)
-}
-func (m *StringArray) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_StringArray.Marshal(b, m, deterministic)
-}
-func (m *StringArray) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_StringArray.Merge(m, src)
-}
-func (m *StringArray) XXX_Size() int {
-	return xxx_messageInfo_StringArray.Size(m)
-}
-func (m *StringArray) XXX_DiscardUnknown() {
-	xxx_messageInfo_StringArray.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_StringArray proto.InternalMessageInfo
-
-func (m *StringArray) GetVals() []string {
-	if m != nil {
-		return m.Vals
-	}
-	return nil
-}
-
-type IdsOrKeys struct {
-	// Types that are valid to be assigned to Type:
-	//	*IdsOrKeys_Ids
-	//	*IdsOrKeys_Keys
-	Type                 isIdsOrKeys_Type `protobuf_oneof:"type"`
-	XXX_NoUnkeyedLiteral struct{}         `json:"-"`
-	XXX_unrecognized     []byte           `json:"-"`
-	XXX_sizecache        int32            `json:"-"`
-}
-
-func (m *IdsOrKeys) Reset()         { *m = IdsOrKeys{} }
-func (m *IdsOrKeys) String() string { return proto.CompactTextString(m) }
-func (*IdsOrKeys) ProtoMessage()    {}
-func (*IdsOrKeys) Descriptor() ([]byte, []int) {
-	return fileDescriptor_3849c3e549495f50, []int{22}
-}
-
-func (m *IdsOrKeys) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_IdsOrKeys.Unmarshal(m, b)
-}
-func (m *IdsOrKeys) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_IdsOrKeys.Marshal(b, m, deterministic)
-}
-func (m *IdsOrKeys) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_IdsOrKeys.Merge(m, src)
-}
-func (m *IdsOrKeys) XXX_Size() int {
-	return xxx_messageInfo_IdsOrKeys.Size(m)
-}
-func (m *IdsOrKeys) XXX_DiscardUnknown() {
-	xxx_messageInfo_IdsOrKeys.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_IdsOrKeys proto.InternalMessageInfo
-
-type isIdsOrKeys_Type interface {
-	isIdsOrKeys_Type()
-}
-
-type IdsOrKeys_Ids struct {
-	Ids *Uint64Array `protobuf:"bytes,1,opt,name=ids,proto3,oneof"`
-}
-
-type IdsOrKeys_Keys struct {
-	Keys *StringArray `protobuf:"bytes,2,opt,name=keys,proto3,oneof"`
-}
-
-func (*IdsOrKeys_Ids) isIdsOrKeys_Type() {}
-
-func (*IdsOrKeys_Keys) isIdsOrKeys_Type() {}
-
-func (m *IdsOrKeys) GetType() isIdsOrKeys_Type {
-	if m != nil {
-		return m.Type
-	}
-	return nil
-}
-
-func (m *IdsOrKeys) GetIds() *Uint64Array {
-	if x, ok := m.GetType().(*IdsOrKeys_Ids); ok {
-		return x.Ids
-	}
-	return nil
-}
-
-func (m *IdsOrKeys) GetKeys() *StringArray {
-	if x, ok := m.GetType().(*IdsOrKeys_Keys); ok {
-		return x.Keys
-	}
-	return nil
-}
-
-// XXX_OneofWrappers is for the internal use of the proto package.
-func (*IdsOrKeys) XXX_OneofWrappers() []interface{} {
-	return []interface{}{
-		(*IdsOrKeys_Ids)(nil),
-		(*IdsOrKeys_Keys)(nil),
-	}
-}
-
 func init() {
 	proto.RegisterType((*DataSource)(nil), "vdsm.DataSource")
 	proto.RegisterMapType((map[string]string)(nil), "vdsm.DataSource.ConfigEntry")
@@ -1371,93 +574,50 @@ func init() {
 	proto.RegisterType((*PostVDSResponse)(nil), "vdsm.PostVDSResponse")
 	proto.RegisterType((*DeleteVDSRequest)(nil), "vdsm.DeleteVDSRequest")
 	proto.RegisterType((*DeleteVDSResponse)(nil), "vdsm.DeleteVDSResponse")
-	proto.RegisterType((*QueryPQLRequest)(nil), "vdsm.QueryPQLRequest")
-	proto.RegisterType((*QuerySQLRequest)(nil), "vdsm.QuerySQLRequest")
-	proto.RegisterType((*StatusError)(nil), "vdsm.StatusError")
-	proto.RegisterType((*RowResponse)(nil), "vdsm.RowResponse")
-	proto.RegisterType((*Row)(nil), "vdsm.Row")
-	proto.RegisterType((*TableResponse)(nil), "vdsm.TableResponse")
-	proto.RegisterType((*ColumnInfo)(nil), "vdsm.ColumnInfo")
-	proto.RegisterType((*ColumnResponse)(nil), "vdsm.ColumnResponse")
-	proto.RegisterType((*Decimal)(nil), "vdsm.Decimal")
-	proto.RegisterType((*InspectRequest)(nil), "vdsm.InspectRequest")
-	proto.RegisterType((*Uint64Array)(nil), "vdsm.Uint64Array")
-	proto.RegisterType((*StringArray)(nil), "vdsm.StringArray")
-	proto.RegisterType((*IdsOrKeys)(nil), "vdsm.IdsOrKeys")
 }
 
 func init() { proto.RegisterFile("vdsm/vdsm.proto", fileDescriptor_3849c3e549495f50) }
 
 var fileDescriptor_3849c3e549495f50 = []byte{
-	// 1081 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xa4, 0x56, 0xef, 0x6e, 0x1b, 0x45,
-	0x10, 0xf7, 0xe5, 0x1c, 0xdb, 0x37, 0x97, 0x38, 0xce, 0x36, 0x14, 0xcb, 0xb4, 0x95, 0x7b, 0x08,
-	0x61, 0x90, 0x48, 0xa3, 0xa4, 0xa9, 0x52, 0x0a, 0x48, 0x24, 0x69, 0x71, 0x04, 0xa5, 0xee, 0x9a,
-	0xe6, 0x2b, 0xda, 0xf8, 0xd6, 0xe1, 0xd4, 0xf5, 0xad, 0x7d, 0x7b, 0x4e, 0xf0, 0x37, 0xde, 0x80,
-	0x37, 0x00, 0x89, 0x77, 0xe0, 0xb9, 0x78, 0x05, 0xb4, 0xff, 0xce, 0x7b, 0x26, 0x15, 0x55, 0xfb,
-	0xc5, 0xda, 0xfd, 0xcd, 0x6f, 0xfe, 0xed, 0xcc, 0xcd, 0x18, 0xb6, 0xae, 0x62, 0x31, 0x79, 0x20,
-	0x7f, 0x76, 0xa7, 0x19, 0xcf, 0x39, 0xaa, 0xca, 0x73, 0xf4, 0x8f, 0x07, 0x70, 0x4a, 0x72, 0x32,
-	0xe4, 0xf3, 0x6c, 0x44, 0x51, 0x13, 0xd6, 0x92, 0xb8, 0xed, 0x75, 0xbd, 0x9e, 0x8f, 0xd7, 0x92,
-	0x18, 0x21, 0xa8, 0xa6, 0x64, 0x42, 0xdb, 0x6b, 0x5d, 0xaf, 0x17, 0x60, 0x75, 0x46, 0x5d, 0x08,
-	0x63, 0x2a, 0x46, 0x59, 0x32, 0xcd, 0x13, 0x9e, 0xb6, 0x7d, 0x25, 0x72, 0x21, 0xa9, 0x95, 0x2f,
-	0xa6, 0xb4, 0x5d, 0xd5, 0x5a, 0xf2, 0x8c, 0x1e, 0x42, 0x6d, 0xc4, 0xd3, 0x71, 0x72, 0xd9, 0x5e,
-	0xef, 0xfa, 0xbd, 0x70, 0xff, 0xce, 0xae, 0x8a, 0x65, 0xe9, 0x7b, 0xf7, 0x44, 0x89, 0x9f, 0xa6,
-	0x79, 0xb6, 0xc0, 0x86, 0x8b, 0x6e, 0x43, 0x4d, 0xe4, 0x24, 0x9f, 0x8b, 0x76, 0x4d, 0xd9, 0x32,
-	0xb7, 0xce, 0x63, 0x08, 0x1d, 0x3a, 0x6a, 0x81, 0xff, 0x9a, 0x2e, 0x54, 0xdc, 0x01, 0x96, 0x47,
-	0xb4, 0x03, 0xeb, 0x57, 0x84, 0xcd, 0x6d, 0xe4, 0xfa, 0xf2, 0xe5, 0xda, 0x91, 0x17, 0xfd, 0xe5,
-	0x81, 0x7f, 0x7e, 0x3a, 0x74, 0x52, 0x0d, 0xde, 0x23, 0xd5, 0xfb, 0xb0, 0x31, 0x4d, 0x18, 0x17,
-	0xe4, 0xe7, 0x24, 0x8d, 0xe9, 0xaf, 0x26, 0xe5, 0x50, 0x63, 0x67, 0x12, 0x42, 0xfb, 0x10, 0xc6,
-	0x24, 0x27, 0x42, 0x65, 0x29, 0x4c, 0xfa, 0xad, 0xd5, 0xf4, 0xb1, 0x4b, 0x8a, 0x5a, 0xd0, 0xfc,
-	0x8e, 0xe6, 0xe7, 0xa7, 0x43, 0x81, 0xe9, 0x6c, 0x4e, 0x45, 0x1e, 0xed, 0xc1, 0x56, 0x81, 0x88,
-	0x29, 0x4f, 0x05, 0x45, 0x77, 0x41, 0xd6, 0x50, 0xb4, 0x3d, 0x65, 0x31, 0xd0, 0x16, 0xcf, 0x4f,
-	0x87, 0x58, 0xc1, 0xd1, 0x09, 0x6c, 0x6a, 0x0d, 0x63, 0x02, 0xb5, 0x96, 0x19, 0xf7, 0x2b, 0x2a,
-	0xe7, 0x1d, 0x37, 0xe7, 0x7e, 0x45, 0x67, 0x7d, 0x0c, 0xd0, 0x48, 0xe2, 0x17, 0xd9, 0x8f, 0x64,
-	0x42, 0xa3, 0x2f, 0x6c, 0x20, 0x85, 0xd7, 0x8f, 0xc0, 0xbf, 0x8a, 0x85, 0x32, 0x53, 0x72, 0x2a,
-	0xd1, 0x68, 0x0f, 0x9a, 0x03, 0x2e, 0x5c, 0xa7, 0xf7, 0x00, 0x62, 0x3a, 0x4e, 0xd2, 0x44, 0xbd,
-	0xa0, 0x7e, 0x6e, 0x07, 0x89, 0x0e, 0x60, 0xab, 0xd0, 0x30, 0x1e, 0x56, 0x2b, 0xd3, 0x02, 0x7f,
-	0x9e, 0x25, 0xa6, 0x30, 0xf2, 0x18, 0x3d, 0x83, 0xd6, 0x29, 0x65, 0x34, 0xa7, 0xef, 0x99, 0xdd,
-	0x2d, 0xd8, 0x76, 0xec, 0x68, 0xf7, 0xd1, 0x63, 0xd8, 0x7a, 0x39, 0xa7, 0xd9, 0x62, 0xf0, 0xf2,
-	0x07, 0x6b, 0x7b, 0x07, 0xd6, 0x75, 0x79, 0x75, 0x50, 0xfa, 0x22, 0xe3, 0x9a, 0xce, 0x98, 0x8d,
-	0x6b, 0x3a, 0x63, 0xd1, 0xc7, 0x46, 0x75, 0xb8, 0x54, 0x6d, 0x81, 0x2f, 0x66, 0xcc, 0xb6, 0xa6,
-	0x98, 0xb1, 0xe8, 0x09, 0x84, 0x43, 0xd5, 0xc5, 0x4f, 0xb3, 0x8c, 0x67, 0xb2, 0xef, 0x4e, 0x78,
-	0x4c, 0x15, 0x63, 0x13, 0xab, 0x33, 0x6a, 0x43, 0xfd, 0x39, 0x15, 0x82, 0x5c, 0xda, 0x76, 0xb4,
-	0xd7, 0xe8, 0x0f, 0x0f, 0x42, 0xcc, 0xaf, 0x8b, 0xb7, 0xfa, 0x1c, 0xea, 0xbf, 0x50, 0x12, 0xd3,
-	0xcc, 0xb6, 0x81, 0x69, 0xac, 0x13, 0xce, 0xe6, 0x93, 0xf4, 0x2c, 0x1d, 0x73, 0x6c, 0x09, 0x68,
-	0x17, 0xea, 0x23, 0x05, 0x8b, 0xf6, 0x9a, 0xe2, 0xee, 0xb8, 0x5c, 0x6b, 0x12, 0x5b, 0x12, 0x3a,
-	0x28, 0x05, 0xaa, 0xba, 0x3f, 0xdc, 0xdf, 0xd6, 0x3a, 0x8e, 0x00, 0xbb, 0xac, 0xe8, 0x10, 0x7c,
-	0xcc, 0xaf, 0x5d, 0x5f, 0xde, 0x5b, 0xf8, 0x8a, 0x7e, 0xf7, 0x60, 0xf3, 0x27, 0x72, 0xc1, 0xe8,
-	0x3b, 0x65, 0x76, 0x17, 0xaa, 0x19, 0xbf, 0xb6, 0x69, 0x99, 0xa6, 0x94, 0xcf, 0xa4, 0xe0, 0x77,
-	0x4b, 0xe4, 0x2b, 0x80, 0xa5, 0xab, 0x62, 0x3a, 0x78, 0xce, 0x74, 0xe8, 0x40, 0x43, 0x7e, 0xb3,
-	0x6a, 0xd4, 0xe9, 0x32, 0x15, 0xf7, 0xe8, 0x37, 0x1f, 0x9a, 0xe5, 0x5c, 0xd1, 0x3d, 0x08, 0x44,
-	0x9e, 0x25, 0xe9, 0xe5, 0x39, 0x61, 0x45, 0x9f, 0x2e, 0x21, 0x29, 0x9f, 0x27, 0x69, 0xfe, 0xe8,
-	0xa1, 0x94, 0x4b, 0x7b, 0x55, 0x29, 0x2f, 0x20, 0x74, 0x07, 0x1a, 0x85, 0x58, 0xa6, 0xe0, 0xf7,
-	0x2b, 0xb8, 0x40, 0x50, 0x07, 0xea, 0x17, 0x9c, 0x33, 0x29, 0x94, 0x33, 0xa8, 0xd1, 0xaf, 0x60,
-	0x0b, 0x28, 0x19, 0xe3, 0x17, 0x52, 0xb6, 0xde, 0xf5, 0x7a, 0x1b, 0x4a, 0xa6, 0x01, 0xf4, 0x04,
-	0x9a, 0xda, 0xc5, 0xb7, 0x59, 0x46, 0x16, 0x92, 0x52, 0x73, 0x9f, 0xe7, 0xd5, 0x52, 0xd6, 0xaf,
-	0xe0, 0x15, 0xaa, 0x54, 0xd6, 0xf1, 0x17, 0xca, 0xf5, 0xf2, 0xdb, 0x16, 0x32, 0xa9, 0x5c, 0xa6,
-	0xa2, 0x2e, 0xc0, 0x98, 0x71, 0x62, 0x32, 0x6a, 0x74, 0xbd, 0x9e, 0xd7, 0xaf, 0x60, 0x07, 0x43,
-	0x0f, 0xe4, 0xec, 0x18, 0x25, 0x13, 0xa2, 0xd2, 0x0a, 0x94, 0xe9, 0x4d, 0x33, 0x38, 0x35, 0x2e,
-	0x15, 0x96, 0x94, 0xe3, 0x10, 0x02, 0xdd, 0x50, 0xe7, 0x84, 0x45, 0x87, 0x50, 0x37, 0xac, 0xe5,
-	0x36, 0xd0, 0x9b, 0x4d, 0x5f, 0x24, 0x2a, 0x46, 0x84, 0xe9, 0xe2, 0xf9, 0x58, 0x5f, 0xa2, 0xbf,
-	0x3d, 0x68, 0x9e, 0xa5, 0x62, 0x4a, 0x47, 0xb9, 0xf3, 0x0d, 0xdb, 0x91, 0x17, 0xa8, 0x39, 0x87,
-	0x3e, 0x83, 0x7a, 0x46, 0x47, 0x3c, 0x8b, 0x85, 0x52, 0x0e, 0xf7, 0xb7, 0x74, 0x58, 0x67, 0xb1,
-	0x78, 0x91, 0x7d, 0x4f, 0x17, 0x02, 0x5b, 0x39, 0x8a, 0x60, 0x63, 0x9c, 0xb0, 0x9c, 0x66, 0xcf,
-	0x12, 0xca, 0x62, 0xd1, 0xf6, 0xbb, 0x7e, 0x2f, 0xc0, 0x25, 0x4c, 0x46, 0xc2, 0x92, 0x49, 0x92,
-	0xab, 0xd2, 0x55, 0xb1, 0xbe, 0xc8, 0xe5, 0xc7, 0xc7, 0x63, 0x41, 0x73, 0x55, 0xb5, 0x2a, 0x36,
-	0x37, 0xc9, 0x9e, 0xc9, 0x29, 0x63, 0x76, 0xa2, 0xbe, 0x44, 0xf7, 0x21, 0x74, 0x8a, 0x25, 0x1b,
-	0xf6, 0x8a, 0x30, 0xfd, 0xed, 0x54, 0xb1, 0x3a, 0x4b, 0x8a, 0x53, 0x92, 0x12, 0x25, 0x30, 0x94,
-	0x11, 0x04, 0x45, 0x0e, 0xe8, 0x13, 0xf0, 0x93, 0x62, 0xd4, 0xdf, 0xd8, 0x10, 0x52, 0x8e, 0x3e,
-	0x85, 0xea, 0x6b, 0xba, 0xb0, 0x2f, 0x71, 0x63, 0xed, 0x15, 0xe1, 0xb8, 0xa6, 0xff, 0x17, 0xec,
-	0xff, 0x59, 0x85, 0xc6, 0x73, 0xce, 0xe8, 0x68, 0xce, 0x08, 0x3a, 0x82, 0xba, 0x59, 0x6c, 0xc8,
-	0xcc, 0x88, 0xf2, 0xe6, 0xeb, 0x7c, 0xb0, 0x82, 0x9a, 0x31, 0x5d, 0x41, 0x87, 0x50, 0xd3, 0x20,
-	0xba, 0xe5, 0x52, 0xac, 0xde, 0x4e, 0x19, 0x2c, 0xd4, 0x8e, 0xa0, 0x6e, 0x36, 0x8e, 0x75, 0x58,
-	0x5e, 0x59, 0xd6, 0xe1, 0xca, 0x5a, 0x8a, 0x2a, 0xe8, 0x1b, 0x08, 0x8a, 0x75, 0x81, 0x6e, 0xdb,
-	0x46, 0x2c, 0xef, 0xa1, 0xce, 0x87, 0xff, 0xc1, 0x1d, 0xcf, 0x0d, 0xbb, 0x1e, 0x90, 0x71, 0xb2,
-	0xb2, 0x2e, 0x3a, 0xdb, 0xcb, 0xd9, 0x55, 0xe8, 0xed, 0x79, 0xe8, 0x6b, 0xd8, 0xb4, 0xcc, 0x57,
-	0x29, 0xc9, 0x16, 0x6f, 0x52, 0x37, 0x0f, 0x51, 0x9a, 0xa4, 0x8e, 0xe3, 0xc1, 0x8a, 0xe3, 0xc1,
-	0x5b, 0x3b, 0x1e, 0xdc, 0xe4, 0x78, 0xf0, 0xbf, 0x8e, 0x1f, 0x41, 0xdd, 0x7c, 0x4b, 0xf6, 0xad,
-	0xcb, 0x9f, 0xd6, 0x1b, 0xdc, 0x5e, 0xd4, 0xd4, 0x7f, 0xd4, 0x83, 0x7f, 0x03, 0x00, 0x00, 0xff,
-	0xff, 0x5a, 0xe9, 0x98, 0xbf, 0xb6, 0x0a, 0x00, 0x00,
+	// 604 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xa4, 0x54, 0xcd, 0x6e, 0xd3, 0x4c,
+	0x14, 0x8d, 0xe3, 0x34, 0x6d, 0x6e, 0xbe, 0xb6, 0xfe, 0xa6, 0x69, 0x6b, 0x85, 0x1f, 0x05, 0x2f,
+	0x50, 0x36, 0xa4, 0x51, 0x0a, 0x52, 0xa8, 0x10, 0x12, 0x6d, 0x80, 0x56, 0xe2, 0x27, 0x75, 0x20,
+	0x0b, 0x36, 0x68, 0x62, 0x4f, 0xcb, 0x08, 0xc7, 0x36, 0x9e, 0x71, 0x20, 0xaf, 0xc3, 0x2b, 0xf0,
+	0x60, 0xbc, 0x02, 0xf2, 0xfc, 0x38, 0x4e, 0x5a, 0x04, 0xa8, 0x9b, 0xf6, 0xfa, 0xcc, 0x3d, 0xf7,
+	0x9c, 0x73, 0x27, 0x1a, 0xd8, 0x9e, 0xf9, 0x6c, 0x7a, 0x90, 0xfd, 0xe9, 0xc4, 0x49, 0xc4, 0x23,
+	0x54, 0xc9, 0xea, 0xe6, 0x7f, 0x31, 0x0d, 0x22, 0x86, 0x25, 0xe6, 0xfc, 0x34, 0x00, 0x06, 0x98,
+	0xe3, 0x51, 0x94, 0x26, 0x1e, 0x41, 0x5b, 0x50, 0xa6, 0xbe, 0x6d, 0xb4, 0x8c, 0xb6, 0xe9, 0x96,
+	0xa9, 0x8f, 0x10, 0x54, 0x42, 0x3c, 0x25, 0x76, 0xb9, 0x65, 0xb4, 0x6b, 0xae, 0xa8, 0x51, 0x0b,
+	0xea, 0x3e, 0x61, 0x5e, 0x42, 0x63, 0x4e, 0xa3, 0xd0, 0x36, 0xc5, 0x51, 0x11, 0xca, 0x58, 0x7c,
+	0x1e, 0x13, 0xbb, 0x22, 0x59, 0x59, 0x8d, 0x1e, 0x42, 0xd5, 0x8b, 0xc2, 0x0b, 0x7a, 0x69, 0xaf,
+	0xb5, 0xcc, 0x76, 0xbd, 0x77, 0xbb, 0x23, 0x9c, 0x2d, 0xb4, 0x3b, 0x27, 0xe2, 0xf8, 0x79, 0xc8,
+	0x93, 0xb9, 0xab, 0x7a, 0xd1, 0x1e, 0x54, 0x19, 0xc7, 0x3c, 0x65, 0x76, 0x55, 0xcc, 0x52, 0x5f,
+	0xcd, 0xc7, 0x50, 0x2f, 0xb4, 0x23, 0x0b, 0xcc, 0xcf, 0x64, 0x2e, 0x7c, 0xd7, 0xdc, 0xac, 0x44,
+	0x0d, 0x58, 0x9b, 0xe1, 0x20, 0xd5, 0xce, 0xe5, 0xc7, 0x51, 0xb9, 0x6f, 0x38, 0xdf, 0x0d, 0x30,
+	0xc7, 0x83, 0x51, 0x21, 0x6a, 0xed, 0x06, 0x51, 0xef, 0x81, 0xda, 0xe7, 0x47, 0x1a, 0xfa, 0xe4,
+	0x9b, 0x8a, 0x5c, 0x97, 0xd8, 0x59, 0x06, 0xa1, 0x1e, 0xd4, 0x7d, 0xcc, 0x31, 0x13, 0x29, 0x99,
+	0x8a, 0x6f, 0xad, 0xc6, 0x77, 0x8b, 0x4d, 0x8e, 0x05, 0x5b, 0x2f, 0x09, 0x1f, 0x0f, 0x46, 0xcc,
+	0x25, 0x5f, 0x52, 0xc2, 0xb8, 0xd3, 0x85, 0xed, 0x1c, 0x61, 0x71, 0x14, 0x32, 0x82, 0xee, 0x40,
+	0x76, 0xa3, 0xcc, 0x36, 0xc4, 0xc4, 0x9a, 0x9c, 0x38, 0x1e, 0x8c, 0x5c, 0x01, 0x3b, 0x27, 0xb0,
+	0x29, 0x19, 0x6a, 0x04, 0xb2, 0x16, 0x89, 0x4f, 0x4b, 0x22, 0x73, 0xa3, 0x98, 0xf9, 0xb4, 0x24,
+	0x53, 0x1f, 0x03, 0x6c, 0x50, 0xff, 0x6d, 0xf2, 0x06, 0x4f, 0x89, 0xf3, 0x40, 0x1b, 0xc9, 0x55,
+	0x6f, 0x81, 0x39, 0xf3, 0x99, 0x18, 0xb3, 0x24, 0x9a, 0xa1, 0x4e, 0x17, 0xb6, 0x86, 0x11, 0x2b,
+	0x8a, 0xde, 0x05, 0xf0, 0xc9, 0x05, 0x0d, 0xa9, 0xd8, 0xa0, 0x5c, 0x77, 0x01, 0x71, 0x0e, 0x61,
+	0x3b, 0x67, 0x28, 0x85, 0xd5, 0x9b, 0xb1, 0xc0, 0x4c, 0x13, 0xaa, 0x2e, 0x26, 0x2b, 0x9d, 0x17,
+	0x60, 0x0d, 0x48, 0x40, 0x38, 0xb9, 0x61, 0xba, 0x1d, 0xf8, 0xbf, 0x30, 0x47, 0xca, 0xf7, 0x7e,
+	0x54, 0x60, 0xe3, 0x75, 0x14, 0x10, 0x2f, 0x0d, 0x30, 0xea, 0xc3, 0xba, 0x5a, 0x3b, 0x6a, 0xc8,
+	0xac, 0xcb, 0xf7, 0xd2, 0xdc, 0x5d, 0x41, 0xe5, 0x10, 0xa7, 0x84, 0x1e, 0x41, 0x55, 0x82, 0x68,
+	0xa7, 0xd8, 0xa2, 0x79, 0x8d, 0x65, 0x30, 0xa7, 0xf5, 0x61, 0x5d, 0xed, 0x43, 0x0b, 0x2e, 0x2f,
+	0x54, 0x0b, 0xae, 0x2c, 0xcd, 0x29, 0xa1, 0xa7, 0x50, 0xcb, 0xc3, 0xa0, 0x3d, 0xf5, 0xfb, 0x5a,
+	0xd9, 0x52, 0x73, 0xff, 0x0a, 0x9e, 0xf3, 0x9f, 0xc0, 0xc6, 0x79, 0x4a, 0x92, 0xf9, 0xe8, 0xfc,
+	0x15, 0xda, 0xef, 0xa8, 0x57, 0x42, 0x23, 0x9a, 0xbf, 0xa3, 0x0f, 0xdc, 0xe8, 0xeb, 0x82, 0xdb,
+	0x35, 0xd0, 0x33, 0xd8, 0xd4, 0xbd, 0xef, 0x43, 0x9c, 0xcc, 0x7f, 0x3f, 0x62, 0x57, 0x1f, 0xbc,
+	0xc3, 0x93, 0x80, 0x5c, 0x63, 0x60, 0x78, 0xc5, 0xc0, 0xf0, 0x1f, 0x0c, 0x0c, 0xaf, 0x37, 0x30,
+	0xfc, 0x0b, 0x03, 0x47, 0xb0, 0x7e, 0x16, 0xb2, 0x98, 0x78, 0x1c, 0xed, 0xe9, 0x1e, 0x05, 0xfc,
+	0x49, 0xfe, 0xb8, 0xfd, 0xe1, 0xfe, 0x25, 0xe5, 0x9f, 0xd2, 0x49, 0xc7, 0x8b, 0xa6, 0x07, 0xb2,
+	0x49, 0xff, 0x9b, 0xf5, 0x0e, 0xc4, 0x6b, 0x2b, 0x1e, 0xe3, 0x49, 0x55, 0xd4, 0x87, 0xbf, 0x02,
+	0x00, 0x00, 0xff, 0xff, 0x39, 0x92, 0xf5, 0x8e, 0xa0, 0x05, 0x00, 0x00,
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -1476,11 +636,11 @@ type MoleculaClient interface {
 	GetVDS(ctx context.Context, in *GetVDSRequest, opts ...grpc.CallOption) (*GetVDSResponse, error)
 	PostVDS(ctx context.Context, in *PostVDSRequest, opts ...grpc.CallOption) (*PostVDSResponse, error)
 	DeleteVDS(ctx context.Context, in *DeleteVDSRequest, opts ...grpc.CallOption) (*DeleteVDSResponse, error)
-	QuerySQL(ctx context.Context, in *QuerySQLRequest, opts ...grpc.CallOption) (Molecula_QuerySQLClient, error)
-	QuerySQLUnary(ctx context.Context, in *QuerySQLRequest, opts ...grpc.CallOption) (*TableResponse, error)
-	QueryPQL(ctx context.Context, in *QueryPQLRequest, opts ...grpc.CallOption) (Molecula_QueryPQLClient, error)
-	QueryPQLUnary(ctx context.Context, in *QueryPQLRequest, opts ...grpc.CallOption) (*TableResponse, error)
-	Inspect(ctx context.Context, in *InspectRequest, opts ...grpc.CallOption) (Molecula_InspectClient, error)
+	QuerySQL(ctx context.Context, in *proto1.QuerySQLRequest, opts ...grpc.CallOption) (Molecula_QuerySQLClient, error)
+	QuerySQLUnary(ctx context.Context, in *proto1.QuerySQLRequest, opts ...grpc.CallOption) (*proto1.TableResponse, error)
+	QueryPQL(ctx context.Context, in *proto1.QueryPQLRequest, opts ...grpc.CallOption) (Molecula_QueryPQLClient, error)
+	QueryPQLUnary(ctx context.Context, in *proto1.QueryPQLRequest, opts ...grpc.CallOption) (*proto1.TableResponse, error)
+	Inspect(ctx context.Context, in *proto1.InspectRequest, opts ...grpc.CallOption) (Molecula_InspectClient, error)
 }
 
 type moleculaClient struct {
@@ -1527,7 +687,7 @@ func (c *moleculaClient) DeleteVDS(ctx context.Context, in *DeleteVDSRequest, op
 	return out, nil
 }
 
-func (c *moleculaClient) QuerySQL(ctx context.Context, in *QuerySQLRequest, opts ...grpc.CallOption) (Molecula_QuerySQLClient, error) {
+func (c *moleculaClient) QuerySQL(ctx context.Context, in *proto1.QuerySQLRequest, opts ...grpc.CallOption) (Molecula_QuerySQLClient, error) {
 	stream, err := c.cc.NewStream(ctx, &_Molecula_serviceDesc.Streams[0], "/vdsm.Molecula/QuerySQL", opts...)
 	if err != nil {
 		return nil, err
@@ -1543,7 +703,7 @@ func (c *moleculaClient) QuerySQL(ctx context.Context, in *QuerySQLRequest, opts
 }
 
 type Molecula_QuerySQLClient interface {
-	Recv() (*RowResponse, error)
+	Recv() (*proto1.RowResponse, error)
 	grpc.ClientStream
 }
 
@@ -1551,16 +711,16 @@ type moleculaQuerySQLClient struct {
 	grpc.ClientStream
 }
 
-func (x *moleculaQuerySQLClient) Recv() (*RowResponse, error) {
-	m := new(RowResponse)
+func (x *moleculaQuerySQLClient) Recv() (*proto1.RowResponse, error) {
+	m := new(proto1.RowResponse)
 	if err := x.ClientStream.RecvMsg(m); err != nil {
 		return nil, err
 	}
 	return m, nil
 }
 
-func (c *moleculaClient) QuerySQLUnary(ctx context.Context, in *QuerySQLRequest, opts ...grpc.CallOption) (*TableResponse, error) {
-	out := new(TableResponse)
+func (c *moleculaClient) QuerySQLUnary(ctx context.Context, in *proto1.QuerySQLRequest, opts ...grpc.CallOption) (*proto1.TableResponse, error) {
+	out := new(proto1.TableResponse)
 	err := c.cc.Invoke(ctx, "/vdsm.Molecula/QuerySQLUnary", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -1568,7 +728,7 @@ func (c *moleculaClient) QuerySQLUnary(ctx context.Context, in *QuerySQLRequest,
 	return out, nil
 }
 
-func (c *moleculaClient) QueryPQL(ctx context.Context, in *QueryPQLRequest, opts ...grpc.CallOption) (Molecula_QueryPQLClient, error) {
+func (c *moleculaClient) QueryPQL(ctx context.Context, in *proto1.QueryPQLRequest, opts ...grpc.CallOption) (Molecula_QueryPQLClient, error) {
 	stream, err := c.cc.NewStream(ctx, &_Molecula_serviceDesc.Streams[1], "/vdsm.Molecula/QueryPQL", opts...)
 	if err != nil {
 		return nil, err
@@ -1584,7 +744,7 @@ func (c *moleculaClient) QueryPQL(ctx context.Context, in *QueryPQLRequest, opts
 }
 
 type Molecula_QueryPQLClient interface {
-	Recv() (*RowResponse, error)
+	Recv() (*proto1.RowResponse, error)
 	grpc.ClientStream
 }
 
@@ -1592,16 +752,16 @@ type moleculaQueryPQLClient struct {
 	grpc.ClientStream
 }
 
-func (x *moleculaQueryPQLClient) Recv() (*RowResponse, error) {
-	m := new(RowResponse)
+func (x *moleculaQueryPQLClient) Recv() (*proto1.RowResponse, error) {
+	m := new(proto1.RowResponse)
 	if err := x.ClientStream.RecvMsg(m); err != nil {
 		return nil, err
 	}
 	return m, nil
 }
 
-func (c *moleculaClient) QueryPQLUnary(ctx context.Context, in *QueryPQLRequest, opts ...grpc.CallOption) (*TableResponse, error) {
-	out := new(TableResponse)
+func (c *moleculaClient) QueryPQLUnary(ctx context.Context, in *proto1.QueryPQLRequest, opts ...grpc.CallOption) (*proto1.TableResponse, error) {
+	out := new(proto1.TableResponse)
 	err := c.cc.Invoke(ctx, "/vdsm.Molecula/QueryPQLUnary", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -1609,7 +769,7 @@ func (c *moleculaClient) QueryPQLUnary(ctx context.Context, in *QueryPQLRequest,
 	return out, nil
 }
 
-func (c *moleculaClient) Inspect(ctx context.Context, in *InspectRequest, opts ...grpc.CallOption) (Molecula_InspectClient, error) {
+func (c *moleculaClient) Inspect(ctx context.Context, in *proto1.InspectRequest, opts ...grpc.CallOption) (Molecula_InspectClient, error) {
 	stream, err := c.cc.NewStream(ctx, &_Molecula_serviceDesc.Streams[2], "/vdsm.Molecula/Inspect", opts...)
 	if err != nil {
 		return nil, err
@@ -1625,7 +785,7 @@ func (c *moleculaClient) Inspect(ctx context.Context, in *InspectRequest, opts .
 }
 
 type Molecula_InspectClient interface {
-	Recv() (*RowResponse, error)
+	Recv() (*proto1.RowResponse, error)
 	grpc.ClientStream
 }
 
@@ -1633,8 +793,8 @@ type moleculaInspectClient struct {
 	grpc.ClientStream
 }
 
-func (x *moleculaInspectClient) Recv() (*RowResponse, error) {
-	m := new(RowResponse)
+func (x *moleculaInspectClient) Recv() (*proto1.RowResponse, error) {
+	m := new(proto1.RowResponse)
 	if err := x.ClientStream.RecvMsg(m); err != nil {
 		return nil, err
 	}
@@ -1647,11 +807,11 @@ type MoleculaServer interface {
 	GetVDS(context.Context, *GetVDSRequest) (*GetVDSResponse, error)
 	PostVDS(context.Context, *PostVDSRequest) (*PostVDSResponse, error)
 	DeleteVDS(context.Context, *DeleteVDSRequest) (*DeleteVDSResponse, error)
-	QuerySQL(*QuerySQLRequest, Molecula_QuerySQLServer) error
-	QuerySQLUnary(context.Context, *QuerySQLRequest) (*TableResponse, error)
-	QueryPQL(*QueryPQLRequest, Molecula_QueryPQLServer) error
-	QueryPQLUnary(context.Context, *QueryPQLRequest) (*TableResponse, error)
-	Inspect(*InspectRequest, Molecula_InspectServer) error
+	QuerySQL(*proto1.QuerySQLRequest, Molecula_QuerySQLServer) error
+	QuerySQLUnary(context.Context, *proto1.QuerySQLRequest) (*proto1.TableResponse, error)
+	QueryPQL(*proto1.QueryPQLRequest, Molecula_QueryPQLServer) error
+	QueryPQLUnary(context.Context, *proto1.QueryPQLRequest) (*proto1.TableResponse, error)
+	Inspect(*proto1.InspectRequest, Molecula_InspectServer) error
 }
 
 // UnimplementedMoleculaServer can be embedded to have forward compatible implementations.
@@ -1670,19 +830,19 @@ func (*UnimplementedMoleculaServer) PostVDS(ctx context.Context, req *PostVDSReq
 func (*UnimplementedMoleculaServer) DeleteVDS(ctx context.Context, req *DeleteVDSRequest) (*DeleteVDSResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeleteVDS not implemented")
 }
-func (*UnimplementedMoleculaServer) QuerySQL(req *QuerySQLRequest, srv Molecula_QuerySQLServer) error {
+func (*UnimplementedMoleculaServer) QuerySQL(req *proto1.QuerySQLRequest, srv Molecula_QuerySQLServer) error {
 	return status.Errorf(codes.Unimplemented, "method QuerySQL not implemented")
 }
-func (*UnimplementedMoleculaServer) QuerySQLUnary(ctx context.Context, req *QuerySQLRequest) (*TableResponse, error) {
+func (*UnimplementedMoleculaServer) QuerySQLUnary(ctx context.Context, req *proto1.QuerySQLRequest) (*proto1.TableResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method QuerySQLUnary not implemented")
 }
-func (*UnimplementedMoleculaServer) QueryPQL(req *QueryPQLRequest, srv Molecula_QueryPQLServer) error {
+func (*UnimplementedMoleculaServer) QueryPQL(req *proto1.QueryPQLRequest, srv Molecula_QueryPQLServer) error {
 	return status.Errorf(codes.Unimplemented, "method QueryPQL not implemented")
 }
-func (*UnimplementedMoleculaServer) QueryPQLUnary(ctx context.Context, req *QueryPQLRequest) (*TableResponse, error) {
+func (*UnimplementedMoleculaServer) QueryPQLUnary(ctx context.Context, req *proto1.QueryPQLRequest) (*proto1.TableResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method QueryPQLUnary not implemented")
 }
-func (*UnimplementedMoleculaServer) Inspect(req *InspectRequest, srv Molecula_InspectServer) error {
+func (*UnimplementedMoleculaServer) Inspect(req *proto1.InspectRequest, srv Molecula_InspectServer) error {
 	return status.Errorf(codes.Unimplemented, "method Inspect not implemented")
 }
 
@@ -1763,7 +923,7 @@ func _Molecula_DeleteVDS_Handler(srv interface{}, ctx context.Context, dec func(
 }
 
 func _Molecula_QuerySQL_Handler(srv interface{}, stream grpc.ServerStream) error {
-	m := new(QuerySQLRequest)
+	m := new(proto1.QuerySQLRequest)
 	if err := stream.RecvMsg(m); err != nil {
 		return err
 	}
@@ -1771,7 +931,7 @@ func _Molecula_QuerySQL_Handler(srv interface{}, stream grpc.ServerStream) error
 }
 
 type Molecula_QuerySQLServer interface {
-	Send(*RowResponse) error
+	Send(*proto1.RowResponse) error
 	grpc.ServerStream
 }
 
@@ -1779,12 +939,12 @@ type moleculaQuerySQLServer struct {
 	grpc.ServerStream
 }
 
-func (x *moleculaQuerySQLServer) Send(m *RowResponse) error {
+func (x *moleculaQuerySQLServer) Send(m *proto1.RowResponse) error {
 	return x.ServerStream.SendMsg(m)
 }
 
 func _Molecula_QuerySQLUnary_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(QuerySQLRequest)
+	in := new(proto1.QuerySQLRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -1796,13 +956,13 @@ func _Molecula_QuerySQLUnary_Handler(srv interface{}, ctx context.Context, dec f
 		FullMethod: "/vdsm.Molecula/QuerySQLUnary",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MoleculaServer).QuerySQLUnary(ctx, req.(*QuerySQLRequest))
+		return srv.(MoleculaServer).QuerySQLUnary(ctx, req.(*proto1.QuerySQLRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
 func _Molecula_QueryPQL_Handler(srv interface{}, stream grpc.ServerStream) error {
-	m := new(QueryPQLRequest)
+	m := new(proto1.QueryPQLRequest)
 	if err := stream.RecvMsg(m); err != nil {
 		return err
 	}
@@ -1810,7 +970,7 @@ func _Molecula_QueryPQL_Handler(srv interface{}, stream grpc.ServerStream) error
 }
 
 type Molecula_QueryPQLServer interface {
-	Send(*RowResponse) error
+	Send(*proto1.RowResponse) error
 	grpc.ServerStream
 }
 
@@ -1818,12 +978,12 @@ type moleculaQueryPQLServer struct {
 	grpc.ServerStream
 }
 
-func (x *moleculaQueryPQLServer) Send(m *RowResponse) error {
+func (x *moleculaQueryPQLServer) Send(m *proto1.RowResponse) error {
 	return x.ServerStream.SendMsg(m)
 }
 
 func _Molecula_QueryPQLUnary_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(QueryPQLRequest)
+	in := new(proto1.QueryPQLRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -1835,13 +995,13 @@ func _Molecula_QueryPQLUnary_Handler(srv interface{}, ctx context.Context, dec f
 		FullMethod: "/vdsm.Molecula/QueryPQLUnary",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MoleculaServer).QueryPQLUnary(ctx, req.(*QueryPQLRequest))
+		return srv.(MoleculaServer).QueryPQLUnary(ctx, req.(*proto1.QueryPQLRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
 func _Molecula_Inspect_Handler(srv interface{}, stream grpc.ServerStream) error {
-	m := new(InspectRequest)
+	m := new(proto1.InspectRequest)
 	if err := stream.RecvMsg(m); err != nil {
 		return err
 	}
@@ -1849,7 +1009,7 @@ func _Molecula_Inspect_Handler(srv interface{}, stream grpc.ServerStream) error 
 }
 
 type Molecula_InspectServer interface {
-	Send(*RowResponse) error
+	Send(*proto1.RowResponse) error
 	grpc.ServerStream
 }
 
@@ -1857,7 +1017,7 @@ type moleculaInspectServer struct {
 	grpc.ServerStream
 }
 
-func (x *moleculaInspectServer) Send(m *RowResponse) error {
+func (x *moleculaInspectServer) Send(m *proto1.RowResponse) error {
 	return x.ServerStream.SendMsg(m)
 }
 
