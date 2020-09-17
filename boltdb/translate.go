@@ -210,50 +210,55 @@ func (s *TranslateStore) TranslateKeys(keys []string, writable bool) ([]uint64, 
 	return s.translateKeys(keys, writable)
 }
 
-	// Allocate slice for ID mapping.
-	ids = make([]uint64, len(keys))
+func (s *TranslateStore) translateKeys(keys []string, writable bool) ([]uint64, error) {
+	ids := make([]uint64, 0, len(keys))
 
-	// Find ids by key under read lock.
-	var found int
-	if err := s.db.View(func(tx *bolt.Tx) error {
-		bkt := tx.Bucket([]byte("keys"))
-		for i, key := range keys {
-			if id, _ := findIDByKey(bkt, key); id != 0 {
-				ids[i] = id
-				found++
+	if s.ReadOnly() || !writable {
+		found := 0
+		if err := s.db.View(func(tx *bolt.Tx) error {
+			bkt := tx.Bucket(bucketKeys)
+			if bkt == nil {
+				return errors.Errorf(errFmtTranslateBucketNotFound, bucketKeys)
 			}
+			for _, key := range keys {
+				if id, _ := findIDByKey(bkt, key); id != 0 {
+					ids = append(ids, id)
+					found++
+				}
+			}
+			return nil
+		}); err != nil {
+			return nil, err
 		}
-		return nil
-	}); err != nil {
-		return nil, err
-	} else if found == len(keys) {
-		return ids, nil
-	}
-
-	if s.ReadOnly() {
-		return ids, pilosa.ErrTranslateStoreReadOnly
+		if found == len(keys) {
+			return ids, nil
+		}
+		if s.ReadOnly() {
+			return ids, pilosa.ErrTranslateStoreReadOnly
+		}
+		if !writable {
+			return nil, pilosa.ErrTranslatingKeyNotFound
+		}
+		return nil, nil
 	}
 
 	// Find or create ids under write lock if any keys were not found.
 	var written bool
 	if err := s.db.Update(func(tx *bolt.Tx) (err error) {
-		bkt := tx.Bucket([]byte("keys"))
-		for i, key := range keys {
-			if ids[i] != 0 {
+		bkt := tx.Bucket(bucketKeys)
+		for _, key := range keys {
+			id, boltKey := findIDByKey(bkt, key)
+			if id != 0 {
+				ids = append(ids, id)
 				continue
 			}
-
-			var boltKey []byte
-			if ids[i], boltKey = findIDByKey(bkt, key); ids[i] != 0 {
-				continue
-			}
-
-			ids[i] = pilosa.GenerateNextPartitionedID(s.index, maxID(tx), s.partitionID, s.partitionN)
-			if err := bkt.Put(boltKey, u64tob(ids[i])); err != nil {
+			id = pilosa.GenerateNextPartitionedID(s.index, maxID(tx), s.partitionID, s.partitionN)
+			if err := bkt.Put(boltKey, u64tob(id)); err != nil {
 				return err
-			} else if err := tx.Bucket([]byte("ids")).Put(u64tob(ids[i]), boltKey); err != nil {
+			} else if err := tx.Bucket(bucketIDs).Put(u64tob(id), boltKey); err != nil {
 				return err
 			}
+			ids = append(ids, id)
 			written = true
 		}
 		return nil
