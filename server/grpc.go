@@ -253,13 +253,14 @@ func (h *GRPCHandler) QueryPQLUnary(ctx context.Context, req *pb.QueryPQLRequest
 
 // VDSMGRPCHandler contains methods which handle the various gRPC requests, ported from VDSM.
 type VDSMGRPCHandler struct {
-	api    *pilosa.API
-	logger logger.Logger
-	stats  stats.StatsClient
+	grpcHandler *GRPCHandler
+	api         *pilosa.API
+	logger      logger.Logger
+	stats       stats.StatsClient
 }
 
-func NewVDSMGRPCHandler(api *pilosa.API) *VDSMGRPCHandler {
-	return &VDSMGRPCHandler{api: api, logger: logger.NopLogger, stats: stats.NopStatsClient}
+func NewVDSMGRPCHandler(grpcHandler *GRPCHandler, api *pilosa.API) *VDSMGRPCHandler {
+	return &VDSMGRPCHandler{grpcHandler: grpcHandler, api: api, logger: logger.NopLogger, stats: stats.NopStatsClient}
 }
 
 func (h *VDSMGRPCHandler) WithLogger(logger logger.Logger) *VDSMGRPCHandler {
@@ -303,6 +304,7 @@ func (h *VDSMGRPCHandler) GetVDSs(ctx context.Context, req *vdsm_pb.GetVDSsReque
 
 // PostVDS creates a new VDS
 func (*VDSMGRPCHandler) PostVDS(ctx context.Context, req *vdsm_pb.PostVDSRequest) (*vdsm_pb.PostVDSResponse, error) {
+	// Pilosa doesn't implement VDSD files, so this is unimplemented
 	return nil, status.Errorf(codes.Unimplemented, "method PostVDS not implemented")
 }
 
@@ -326,15 +328,31 @@ func (h *VDSMGRPCHandler) DeleteVDS(ctx context.Context, req *vdsm_pb.DeleteVDSR
 func (*VDSMGRPCHandler) QuerySQL(req *vdsm_pb.QuerySQLRequest, srv vdsm_pb.Molecula_QuerySQLServer) error {
 	return status.Errorf(codes.Unimplemented, "method QuerySQL not implemented")
 }
-func (*VDSMGRPCHandler) QuerySQLUnary(ctx context.Context, req *vdsm_pb.QuerySQLRequest) (*vdsm_pb.TableResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method QuerySQLUnary not implemented")
+
+func (h *VDSMGRPCHandler) QuerySQLUnary(ctx context.Context, req *vdsm_pb.QuerySQLRequest) (*vdsm_pb.TableResponse, error) {
+	pReq := pb.QuerySQLRequest(*req)
+	resp, err := h.grpcHandler.QuerySQLUnary(ctx, &pReq)
+	if err != nil {
+		return nil, err
+	}
+	pResp, err := tableToTable(resp)
+	return pResp, err
 }
+
 func (*VDSMGRPCHandler) QueryPQL(req *vdsm_pb.QueryPQLRequest, srv vdsm_pb.Molecula_QueryPQLServer) error {
 	return status.Errorf(codes.Unimplemented, "method QueryPQL not implemented")
 }
-func (*VDSMGRPCHandler) QueryPQLUnary(ctx context.Context, req *vdsm_pb.QueryPQLRequest) (*vdsm_pb.TableResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method QueryPQLUnary not implemented")
+
+func (h *VDSMGRPCHandler) QueryPQLUnary(ctx context.Context, req *vdsm_pb.QueryPQLRequest) (*vdsm_pb.TableResponse, error) {
+	pReq := pb.QueryPQLRequest(*req)
+	resp, err := h.grpcHandler.QueryPQLUnary(ctx, &pReq)
+	if err != nil {
+		return nil, err
+	}
+	pResp, err := tableToTable(resp)
+	return pResp, err
 }
+
 func (*VDSMGRPCHandler) Inspect(req *vdsm_pb.InspectRequest, srv vdsm_pb.Molecula_InspectServer) error {
 	return status.Errorf(codes.Unimplemented, "method Inspect not implemented")
 }
@@ -1191,8 +1209,9 @@ func (s *grpcServer) Serve(tlsConfig *tls.Config) error {
 	// create grpc server
 	s.mu.Lock()
 	s.grpcServer = grpc.NewServer(opts...)
-	pb.RegisterPilosaServer(s.grpcServer, NewGRPCHandler(s.api).WithLogger(s.logger).WithStats(s.stats))
-	vdsm_pb.RegisterMoleculaServer(s.grpcServer, NewVDSMGRPCHandler(s.api).WithLogger(s.logger).WithStats(s.stats))
+	grpcHandler := NewGRPCHandler(s.api).WithLogger(s.logger).WithStats(s.stats)
+	pb.RegisterPilosaServer(s.grpcServer, grpcHandler)
+	vdsm_pb.RegisterMoleculaServer(s.grpcServer, NewVDSMGRPCHandler(grpcHandler, s.api).WithLogger(s.logger).WithStats(s.stats))
 
 	// register the server so its services are available to grpc_cli and others
 	reflection.Register(s.grpcServer)
@@ -1226,4 +1245,52 @@ func NewGRPCServer(opts ...grpcServerOption) (*grpcServer, error) {
 		}
 	}
 	return server, nil
+}
+
+// tableToTable is a helper function used by QueryPQLUnary
+// to convert a pb.TableResponse into a vdsm_pb.TableResponse.
+func tableToTable(ptbl *pb.TableResponse) (*vdsm_pb.TableResponse, error) {
+	vtbl := &vdsm_pb.TableResponse{
+		Headers: make([]*vdsm_pb.ColumnInfo, len(ptbl.Headers)),
+		Rows:    make([]*vdsm_pb.Row, len(ptbl.Rows)),
+	}
+
+	// Headers
+	for i, info := range ptbl.Headers {
+		vtbl.Headers[i] = &vdsm_pb.ColumnInfo{Name: info.Name, Datatype: info.Datatype}
+	}
+
+	// Rows
+	for r := range ptbl.Rows {
+		columns := make([]*vdsm_pb.ColumnResponse, len(ptbl.Rows[r].Columns))
+		for i, col := range ptbl.Rows[r].Columns {
+			switch v := col.GetColumnVal().(type) {
+			case *pb.ColumnResponse_StringVal:
+				columns[i] = &vdsm_pb.ColumnResponse{ColumnVal: &vdsm_pb.ColumnResponse_StringVal{StringVal: v.StringVal}}
+			case *pb.ColumnResponse_Uint64Val:
+				columns[i] = &vdsm_pb.ColumnResponse{ColumnVal: &vdsm_pb.ColumnResponse_Uint64Val{Uint64Val: v.Uint64Val}}
+			case *pb.ColumnResponse_Int64Val:
+				columns[i] = &vdsm_pb.ColumnResponse{ColumnVal: &vdsm_pb.ColumnResponse_Int64Val{Int64Val: v.Int64Val}}
+			case *pb.ColumnResponse_BoolVal:
+				columns[i] = &vdsm_pb.ColumnResponse{ColumnVal: &vdsm_pb.ColumnResponse_BoolVal{BoolVal: v.BoolVal}}
+			case *pb.ColumnResponse_BlobVal:
+				columns[i] = &vdsm_pb.ColumnResponse{ColumnVal: &vdsm_pb.ColumnResponse_BlobVal{BlobVal: v.BlobVal}}
+			case *pb.ColumnResponse_Uint64ArrayVal:
+				columns[i] = &vdsm_pb.ColumnResponse{ColumnVal: &vdsm_pb.ColumnResponse_Uint64ArrayVal{Uint64ArrayVal: &vdsm_pb.Uint64Array{Vals: v.Uint64ArrayVal.Vals}}}
+			case *pb.ColumnResponse_StringArrayVal:
+				columns[i] = &vdsm_pb.ColumnResponse{ColumnVal: &vdsm_pb.ColumnResponse_StringArrayVal{StringArrayVal: &vdsm_pb.StringArray{Vals: v.StringArrayVal.Vals}}}
+			case *pb.ColumnResponse_Float64Val:
+				columns[i] = &vdsm_pb.ColumnResponse{ColumnVal: &vdsm_pb.ColumnResponse_Float64Val{Float64Val: v.Float64Val}}
+			case *pb.ColumnResponse_DecimalVal:
+				columns[i] = &vdsm_pb.ColumnResponse{ColumnVal: &vdsm_pb.ColumnResponse_DecimalVal{DecimalVal: &vdsm_pb.Decimal{Value: v.DecimalVal.Value, Scale: v.DecimalVal.Scale}}}
+			case nil:
+				columns[i] = &vdsm_pb.ColumnResponse{ColumnVal: nil}
+			default:
+				return nil, errors.Errorf("unhandled columnval type: %T", col.GetColumnVal())
+			}
+		}
+		vtbl.Rows[r] = &vdsm_pb.Row{Columns: columns}
+	}
+
+	return vtbl, nil
 }

@@ -57,7 +57,7 @@ message DeleteVDSResponse {
 }
 
 message QueryPQLRequest {
-  string vds = 1;
+  string index = 1;
   string pql = 2;
 }
 
@@ -83,6 +83,7 @@ message Row {
 message TableResponse{
   repeated ColumnInfo headers = 1;
   repeated Row rows = 2;
+  StatusError StatusError = 3;
 }
 
 message ColumnInfo {
