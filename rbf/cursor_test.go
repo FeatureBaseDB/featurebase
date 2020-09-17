@@ -1015,8 +1015,8 @@ func TestCursor_PlayContainer(t *testing.T) {
 	}
 	cur, _ := tx.Cursor("x")
 	offset := uint64(0)
-	many(cur, 0, rbf.ArrayMaxSize+offset)
-	many(cur, 65536, rbf.ArrayMaxSize+offset)
+	many(&cur, 0, rbf.ArrayMaxSize+offset)
+	many(&cur, 65536, rbf.ArrayMaxSize+offset)
 	/*
 	   many(cur, 2*65536, rbf.ArrayMaxSize+offset)
 	   many(cur, 3*65536, rbf.ArrayMaxSize)    //+offset)

@@ -594,8 +594,6 @@ func (db *DB) HasData(requireOneHotBit bool) (hasAnyRecords bool, err error) {
 		cur, err := tx.Cursor(record.Name)
 		if err != nil {
 			return false, err
-		} else if cur == nil {
-			continue // no bitmap
 		}
 		if !requireOneHotBit {
 			return true, nil

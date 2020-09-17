@@ -363,13 +363,13 @@ func TestTx_CursorCrashArray(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	//setArray(t, 0, 2379, c)
-	//setArray(t, 1, 2337, c)
-	setArray(t, 32, 1216, c)
-	setArray(t, 33, 1195, c)
-	setArray(t, 48, 1186, c)
-	setArray(t, 49, 1223, c)
-	setArray(t, 50, 1223, c)
+	//setArray(t, 0, 2379, &c)
+	//setArray(t, 1, 2337, &c)
+	setArray(t, 32, 1216, &c)
+	setArray(t, 33, 1195, &c)
+	setArray(t, 48, 1186, &c)
+	setArray(t, 49, 1223, &c)
+	setArray(t, 50, 1223, &c)
 
 }
 
@@ -389,8 +389,8 @@ func TestTx_CursorCrashBitmap(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	setArray(t, 0, 22510, c)
-	setArray(t, 1, 23584, c)
+	setArray(t, 0, 22510, &c)
+	setArray(t, 1, 23584, &c)
 }
 
 func setArray(tb testing.TB, key, num int, c *rbf.Cursor) {
