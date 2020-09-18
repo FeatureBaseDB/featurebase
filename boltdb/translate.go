@@ -180,33 +180,6 @@ func (s *TranslateStore) TranslateKey(key string, writable bool) (uint64, error)
 	if len(ids) == 0 {
 		return 0, ErrTranslateKeyNotFound
 	}
-
-	// Find or create id under write lock.
-	var written bool
-	if err := s.db.Update(func(tx *bolt.Tx) (err error) {
-		bkt := tx.Bucket([]byte("keys"))
-
-		var boltKey []byte
-		var id uint64
-		if id, boltKey = findIDByKey(bkt, key); id != 0 {
-			return nil
-		}
-
-		id = pilosa.GenerateNextPartitionedID(s.index, maxID(tx), s.partitionID, s.partitionN)
-		if err := bkt.Put(boltKey, u64tob(id)); err != nil {
-			return err
-		} else if err := tx.Bucket([]byte("ids")).Put(u64tob(id), boltKey); err != nil {
-			return err
-		}
-		written = true
-		return nil
-	}); err != nil {
-		return 0, err
-	}
-	if len(ids) == 0 {
-		// this should not happen
-		return 0, ErrTranslateKeyNotFound
-	}
 	return ids[0], nil
 }
 
@@ -248,9 +221,7 @@ func (s *TranslateStore) translateKeys(keys []string, writable bool) ([]uint64, 
 		}
 		return nil, nil
 	}
-	if !writable {
-		return nil, pilosa.ErrTranslatingKeyNotFound
-	}
+
 	// Find or create ids under write lock if any keys were not found.
 	var written bool
 	if err := s.db.Update(func(tx *bolt.Tx) (err error) {
@@ -303,9 +274,11 @@ func (s *TranslateStore) TranslateIDs(ids []uint64) ([]string, error) {
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	bucket := tx.Bucket(bucketIDs)
+
 	keys := make([]string, len(ids))
 	for i, id := range ids {
-		keys[i] = findKeyByID(tx.Bucket(bucketIDs), id)
+		keys[i] = findKeyByID(bucket, id)
 	}
 	return keys, nil
 }
