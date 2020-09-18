@@ -176,8 +176,6 @@ func (s *TranslateStore) TranslateKey(key string, writable bool) (uint64, error)
 	ids, err := s.translateKeys([]string{key}, writable)
 	if err != nil {
 		return 0, err
-	} else if id != 0 {
-		return id, nil
 	}
 	if len(ids) == 0 {
 		return 0, ErrTranslateKeyNotFound
@@ -189,6 +187,7 @@ func (s *TranslateStore) TranslateKey(key string, writable bool) (uint64, error)
 		bkt := tx.Bucket([]byte("keys"))
 
 		var boltKey []byte
+		var id uint64
 		if id, boltKey = findIDByKey(bkt, key); id != 0 {
 			return nil
 		}

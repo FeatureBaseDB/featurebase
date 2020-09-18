@@ -4201,7 +4201,7 @@ func (e *executor) translateCall(ctx context.Context, indexName string, c *pql.C
 					return errors.New("prev value must be a string when field 'keys' option enabled")
 				}
 				// TODO: does this need to take field.ForeignIndex() into consideration?
-				id, err := e.Cluster.translateFieldKey(ctx, field, prevStr)
+				id, err := e.Cluster.translateFieldKey(ctx, field, prevStr, writable)
 				if err != nil {
 					return errors.Wrapf(err, "translating field key: %s", prevStr)
 				}

@@ -1605,7 +1605,7 @@ func (api *API) TranslateKeys(ctx context.Context, r io.Reader) (_ []byte, err e
 	} else {
 		field := api.holder.Field(req.Index, req.Field)
 		if field == nil {
-			return nil, newNotFoundError(ErrFieldNotFound, req.Field)
+			return nil, newNotFoundError(ErrFieldNotFound)
 		}
 
 		if fi := field.ForeignIndex(); fi != "" {
