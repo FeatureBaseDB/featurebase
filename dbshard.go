@@ -731,7 +731,7 @@ func (dbs *DBShard) populateBlueFromGreen() (err error) {
 			citer, _, err := readtx.ContainerIterator(dbs.Index, field, view, dbs.Shard, 0)
 			if err != nil {
 				// might be an empty fragment. If so, let's not freak out.
-				if strings.HasPrefix(err.Error(), "fragment not found") {
+				if strings.Contains(err.Error(), "fragment not found") {
 					continue
 				} else {
 					return errors.Wrap(err, "DBShard.populateBlueFromGreen readtx.ContainerIterator")
@@ -782,7 +782,11 @@ func (dbs *DBShard) verifyBlueEqualsGreen() (err error) {
 			view := vw.name
 			gCiter, _, err := greentx.ContainerIterator(dbs.Index, field, view, dbs.Shard, 0)
 			if err != nil {
-				return errors.Wrap(err, "DBShard.verifyBlueEqualsGreen greentx.ContainerIterator")
+				if strings.Contains(err.Error(), "fragment not found") {
+					continue
+				} else {
+					return errors.Wrap(err, "DBShard.verifyBlueEqualsGreen greentx.ContainerIterator")
+				}
 			}
 
 			bCiter, _, err := bluetx.ContainerIterator(dbs.Index, field, view, dbs.Shard, 0)
