@@ -25,6 +25,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/pilosa/pilosa/v2/rbf"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pkg/errors"
 )
@@ -62,7 +63,7 @@ func (tx *RoaringTx) Dump(short bool, shard uint64) {
 }
 
 func (tx *RoaringTx) UseRowCache() bool {
-	return false
+	return rbf.EnableRowCache
 }
 
 func (tx *RoaringTx) SliceOfShards(index, field, view, optionalViewPath string) (sliceOfShards []uint64, err error) {

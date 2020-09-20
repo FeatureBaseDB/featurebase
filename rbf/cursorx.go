@@ -26,7 +26,7 @@ import (
 
 // if enableRowCache, then we must not return mmap-ed memory
 // directly, but only a copy.
-const EnableRowCache = false
+const EnableRowCache = true
 
 // DoAllocZero means we copy mmap read data and
 // wipe it afterwards to catch retention of data

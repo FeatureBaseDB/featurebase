@@ -31,6 +31,7 @@ import (
 	badger "github.com/dgraph-io/badger/v2"
 	badgeroptions "github.com/dgraph-io/badger/v2/options"
 	"github.com/pilosa/pilosa/v2/hash"
+	"github.com/pilosa/pilosa/v2/rbf"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/testhook"
 	"github.com/pilosa/pilosa/v2/txkey"
@@ -660,7 +661,7 @@ func (tx *BadgerTx) Type() string {
 
 func (tx *BadgerTx) UseRowCache() bool {
 	//the row cache speeds up queries.
-	return false
+	return rbf.EnableRowCache
 }
 
 // overWriteOurAllocs provides detection of memory

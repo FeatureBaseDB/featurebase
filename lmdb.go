@@ -33,6 +33,7 @@ import (
 
 	"github.com/glycerine/lmdb-go/lmdb"
 	"github.com/pilosa/pilosa/v2/hash"
+	"github.com/pilosa/pilosa/v2/rbf"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/txkey"
 	"github.com/pkg/errors"
@@ -274,10 +275,7 @@ func (w *LMDBWrapper) CleanupTx(tx Tx) {
 }
 
 func (tx *LMDBTx) IsDone() (done bool) {
-	tx.mu.Lock()
-	done = tx.unlocked
-	tx.mu.Unlock()
-	return
+	return atomic.LoadInt64(&tx.unlocked) == 1
 }
 
 func (w *LMDBWrapper) OpenListString() (r string) {
@@ -434,9 +432,11 @@ func (w *LMDBWrapper) NewTx(write bool, initialIndexName string, o Txo) (tx Tx, 
 	}
 	tx = ltx
 
-	w.muDb.Lock()
-	w.openTx[ltx] = true
-	w.muDb.Unlock()
+	if isDebugRun {
+		w.muDb.Lock()
+		w.openTx[ltx] = true
+		w.muDb.Unlock()
+	}
 	return
 }
 
@@ -445,13 +445,14 @@ func (w *LMDBWrapper) Close() (err error) {
 	w.muDb.Lock()
 	defer w.muDb.Unlock()
 	if !w.closed {
-		// complain if there are still Tx in flight, b/c otherwise we will see
-		// the somewhat mysterious 'panic: should not be in ReadSlot.free() with slot still owned by gid=107043; refCount=1'
-		if len(w.openTx) > 0 {
-			AlwaysPrintf("error: cannot close LMDBWrapper with Tx still in flight.")
-			return
+		if isDebugRun {
+			// complain if there are still Tx in flight, b/c otherwise we will see
+			// the somewhat mysterious 'panic: should not be in ReadSlot.free() with slot still owned by gid=107043; refCount=1'
+			if len(w.openTx) > 0 {
+				AlwaysPrintf("error: cannot close LMDBWrapper with Tx still in flight.")
+				return
+			}
 		}
-
 		w.reg.unregister(w)
 		w.closed = true
 		w.env.CloseDBI(w.dbi)
@@ -494,7 +495,7 @@ type LMDBTx struct {
 
 	DeleteEmptyContainer bool
 
-	unlocked bool // runtime.UnlockOSThread has been done.
+	unlocked int64 // runtime.UnlockOSThread has been done if > 0
 
 	o Txo
 
@@ -535,7 +536,7 @@ func (tx *LMDBTx) Type() string {
 }
 
 func (tx *LMDBTx) UseRowCache() bool {
-	return false
+	return rbf.EnableRowCache
 }
 
 // Pointer gives us a memory address for the underlying transaction for debugging.
@@ -545,15 +546,21 @@ func (tx *LMDBTx) Pointer() string {
 	return fmt.Sprintf("%p", tx)
 }
 
+const isDebugRun = false
+
 // Rollback rolls back the transaction.
 func (tx *LMDBTx) Rollback() {
-	tx.sanity()
-
+	alreadyDone := atomic.CompareAndSwapInt64(&tx.unlocked, 0, 1)
+	if !alreadyDone {
+		return
+	}
 	//vv("lmdb rollback tx _sn_ %v; stack \n%v", tx.sn) // , stack())
-
-	tx.Db.muDb.Lock()
-	delete(tx.Db.openTx, tx)
-	tx.Db.muDb.Unlock()
+	if isDebugRun {
+		tx.sanity()
+		tx.Db.muDb.Lock()
+		delete(tx.Db.openTx, tx)
+		tx.Db.muDb.Unlock()
+	}
 
 	tx.mu.Lock()
 	defer tx.mu.Unlock()
@@ -561,25 +568,26 @@ func (tx *LMDBTx) Rollback() {
 	//tx.debugOnlyGidcheck()
 	tx.tx.Abort() // must hold tx.mu mutex lock
 
-	if !tx.unlocked {
-		runtime.UnlockOSThread()
-		tx.unlocked = true
-		tx.o.dbs.Cleanup(tx)
-	}
+	// use CAS above instead of testing a bool unlocked.
+	runtime.UnlockOSThread()
+	tx.o.dbs.Cleanup(tx)
 }
 
 // Commit commits the transaction to permanent storage.
 // Commits can handle up to 100k updates to fragments
 // at once, but not more. This is a LMDBDB imposed limit.
 func (tx *LMDBTx) Commit() error {
-	tx.sanity()
-
+	alreadyDone := atomic.CompareAndSwapInt64(&tx.unlocked, 0, 1)
+	if !alreadyDone {
+		return nil
+	}
 	//vv("lmdb commit tx _sn_ %v; stack \n%v", tx.sn, stack())
-
-	tx.Db.muDb.Lock()
-	delete(tx.Db.openTx, tx)
-	tx.Db.muDb.Unlock()
-
+	if isDebugRun {
+		tx.sanity()
+		tx.Db.muDb.Lock()
+		delete(tx.Db.openTx, tx)
+		tx.Db.muDb.Unlock()
+	}
 	tx.mu.Lock()
 	defer tx.mu.Unlock()
 
@@ -587,11 +595,9 @@ func (tx *LMDBTx) Commit() error {
 	err := tx.tx.Commit() // must hold tx.mu mutex lock
 	panicOn(err)
 
-	if !tx.unlocked {
-		runtime.UnlockOSThread()
-		tx.unlocked = true
-		tx.o.dbs.Cleanup(tx)
-	}
+	// replace the if !tx.unlocked with the CAS on tx.unlocked above.
+	runtime.UnlockOSThread()
+	tx.o.dbs.Cleanup(tx)
 	return err
 }
 
