@@ -3526,6 +3526,9 @@ func (s *fragmentSyncer) syncFragment() error {
 		// to determine which bits to update, we consider the primary
 		// replica to be correct, and overwrite the non-primary replicas
 		// with the primary's data.
+
+		s.Fragment.holder.Logger.Debugf("sync block from primary: index='%v' field='%v' view='%v' shard='%v' id=%d", s.Fragment.index, s.Fragment.field, s.Fragment.view, s.Fragment.shard, blockID)
+
 		switch s.FieldType {
 		case FieldTypeInt, FieldTypeDecimal:
 			// Synchronize block from the primary replica.

@@ -857,12 +857,19 @@ func (idx *Index) StringifiedRoaringKeys(hashOnly, showOps bool, o Txo) (r strin
 }
 
 func RoaringFragmentChecksum(path string, index, field, view string, shard uint64) (r string, hotbits int) {
+	defer func() {
+		r := recover()
+		if r != nil {
+			panic(fmt.Sprintf("caught panic on path='%v', index='%v', field='%v', view='%v', shard='%v': %v",
+				path, index, field, view, shard, r))
+		}
+	}()
 	hasher := blake3.New()
 	showOps := false
 	hashOnly := true
-	_, hotbits, err := stringifiedRawRoaringFragment(path, index, field, view, shard, showOps, hashOnly, hasher)
+	hash, hotbits, err := stringifiedRawRoaringFragment(path, index, field, view, shard, showOps, hashOnly, hasher)
 	panicOn(err)
-	fmt.Fprintf(hasher, "%v/%v/%v/%v", index, field, view, shard)
+	fmt.Fprintf(hasher, "%v/%v/%v/%v/%v", index, field, view, shard, hash)
 	var buf [16]byte
 	_, _ = hasher.Digest().Read(buf[0:])
 	return fmt.Sprintf("%x", buf), hotbits
