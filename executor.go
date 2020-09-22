@@ -565,130 +565,6 @@ func (e *executor) execute(ctx context.Context, qcx *Qcx, index string, q *pql.Q
 // preprocessQuery expands any calls that need preprocessing.
 func (e *executor) preprocessQuery(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *execOptions) (*pql.Call, error) {
 	switch c.Name {
-	case "UnionRows":
-		// Turn UnionRows(Rows(...)) into Union(Row(...), ...).
-		var rows []*pql.Call
-		for _, child := range c.Children {
-			// Check that we can use the call.
-			switch child.Name {
-			case "Rows":
-			case "TopN":
-			default:
-				return nil, errors.Errorf("cannot use %v as a rows query", child)
-			}
-
-			// Execute the call.
-			rowsResult, err := e.executeCall(ctx, qcx, index, child, shards, opt)
-			if err != nil {
-				return nil, err
-			}
-
-			// Turn the results into rows calls.
-			var resultRows []*pql.Call
-			switch rowsResult := rowsResult.(type) {
-			case *PairsField:
-				// Translate pairs into rows calls.
-				for _, p := range rowsResult.Pairs {
-					var val interface{}
-					switch {
-					case p.Key != "":
-						val = p.Key
-					default:
-						val = p.ID
-					}
-					resultRows = append(resultRows, &pql.Call{
-						Name: "Row",
-						Args: map[string]interface{}{
-							rowsResult.Field: val,
-						},
-					})
-				}
-			case RowIDs:
-				// Translate Row IDs into Row calls.
-				for _, id := range rowsResult {
-					resultRows = append(resultRows, &pql.Call{
-						Name: "Row",
-						Args: map[string]interface{}{
-							child.Args["_field"].(string): id,
-						},
-					})
-				}
-			default:
-				return nil, errors.Errorf("unexpected Rows type %T", rowsResult)
-			}
-
-			// Propogate any special properties of the call.
-			switch child.Name {
-			case "Rows":
-				// Propogate "from" time, if set.
-				if v, ok := child.Args["from"]; ok {
-					for _, rowCall := range resultRows {
-						rowCall.Args["from"] = v
-					}
-				}
-
-				// Propogate "to" time, if set.
-				if v, ok := child.Args["to"]; ok {
-					for _, rowCall := range resultRows {
-						rowCall.Args["to"] = v
-					}
-				}
-			}
-
-			rows = append(rows, resultRows...)
-		}
-
-		// Generate a Union call over the rows.
-		return &pql.Call{
-			Name:     "Union",
-			Children: rows,
-		}, nil
-
-	case "ConstRow":
-		// Fetch user-provided columns list.
-		cols, _ := c.Args["columns"].([]interface{})
-		var ids []uint64
-		var keys []string
-		for _, c := range cols {
-			switch c := c.(type) {
-			case uint64:
-				ids = append(ids, c)
-			case int64:
-				ids = append(ids, uint64(c))
-			case string:
-				keys = append(keys, c)
-			default:
-				return nil, errors.Errorf("invalid column identifier %v of type %T", c, c)
-			}
-		}
-
-		// Translate keys to IDs.
-		if len(keys) > 0 {
-			keyIDs, err := e.Cluster.translateIndexKeys(ctx, index, keys, false)
-			if err != nil {
-				return nil, errors.Wrap(err, "translating column IDs in ConstRow")
-			}
-			ids = append(ids, keyIDs...)
-		}
-
-		// Split IDs by shard.
-		shardSet := make(map[uint64][]uint64)
-		for _, id := range ids {
-			shardSet[id/ShardWidth] = append(shardSet[id/ShardWidth], id)
-		}
-
-		// Convert ID sets to per-shard Row objects.
-		precomputed := make(map[uint64]interface{})
-		for _, s := range shards {
-			precomputed[s] = NewRow(shardSet[s]...)
-		}
-
-		// Generate a precomputed call with the data.
-		return &pql.Call{
-			Name:        "Precomputed",
-			Precomputed: precomputed,
-		}, nil
-
 	case "All":
 		_, hasLimit, err := c.UintArg("limit")
 		if err != nil {
@@ -709,21 +585,6 @@ func (e *executor) preprocessQuery(ctx context.Context, qcx *Qcx, index string, 
 			},
 		}
 		c.Name = "Limit"
-		fallthrough
-
-	case "Limit":
-		if len(c.Children) != 1 {
-			return nil, errors.Errorf("expected 1 child of limit call but got %d", len(c.Children))
-		}
-		res, err := e.preprocessQuery(ctx, qcx, index, c.Children[0], shards, opt)
-		if err != nil {
-			return nil, err
-		}
-		c.Children[0] = res
-		err = e.executeLimitCall(ctx, qcx, index, c, shards, opt)
-		if err != nil {
-			return nil, err
-		}
 		return c, nil
 
 	default:
@@ -855,6 +716,12 @@ func (e *executor) executeCall(ctx context.Context, qcx *Qcx, index string, c *p
 		return e.executeFieldValueCall(ctx, qcx, index, c, shards, opt)
 	case "Precomputed":
 		return e.executePrecomputedCall(ctx, qcx, index, c, shards, opt)
+	case "UnionRows":
+		return e.executeUnionRows(ctx, qcx, index, c, shards, opt)
+	case "ConstRow":
+		return e.executeConstRow(ctx, index, c)
+	case "Limit":
+		return e.executeLimitCall(ctx, qcx, index, c, shards, opt)
 	default: // e.g. "Row", "Union", "Intersect" or anything that returns a bitmap.
 		statFn()
 		return e.executeBitmapCall(ctx, qcx, index, c, shards, opt)
@@ -1055,100 +922,80 @@ func (e *executor) executeFieldValueCallShard(ctx context.Context, qcx *Qcx, fie
 	return other, nil
 }
 
-// executeLimitCall executes a Limit() call, **rewriting it to a precomputed call**.
-func (e *executor) executeLimitCall(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *execOptions) error {
+// executeLimitCall executes a Limit() call.
+func (e *executor) executeLimitCall(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *execOptions) (*Row, error) {
 	bitmapCall := c.Children[0]
 
 	limit, hasLimit, err := c.UintArg("limit")
 	if err != nil {
-		return errors.Wrap(err, "getting limit")
+		return nil, errors.Wrap(err, "getting limit")
 	}
 	offset, _, err := c.UintArg("offset")
 	if err != nil {
-		return errors.Wrap(err, "getting offset")
+		return nil, errors.Wrap(err, "getting offset")
 	}
 
 	if !hasLimit {
 		limit = math.MaxUint64
 	}
 
-	// skip tracks the number of records left to be skipped
-	// in support of getting to the offset.
-	var skip uint64 = offset
-
-	// got tracks the number of records gotten to that point.
-	var got uint64
-
-	c.Precomputed = make(map[uint64]interface{})
-
-	for _, shard := range shards {
-		// Execute calls in bulk on each remote node and merge.
-		mapFn := func(ctx context.Context, shard uint64) (_ interface{}, err error) {
-			return e.executeBitmapCallShard(ctx, qcx, index, bitmapCall, shard)
-		}
-
-		// Merge returned results at coordinating node.
-		reduceFn := func(ctx context.Context, prev, v interface{}) interface{} {
-			if err := ctx.Err(); err != nil {
-				return err
-			}
-			other, _ := prev.(*Row)
-			if other == nil {
-				other = NewRow()
-			}
-			other.Merge(v.(*Row))
-			return other
-		}
-
-		result, err := e.mapReduce(ctx, index, []uint64{shard}, c, opt, mapFn, reduceFn)
-		if err != nil {
-			return errors.Wrap(err, "limit map reduce")
-		}
-
-		row, _ := result.(*Row)
-
-		segCnt := row.Count()
-
-		// If this segment doesn't reach the offset, skip it.
-		if segCnt <= skip {
-			skip -= segCnt
-			continue
-		}
-
-		// This segment doesn't have enough to finish fulfilling the limit
-		// (or it has exactly enough).
-		if segCnt-skip <= limit-got {
-			if skip == 0 {
-				c.Precomputed[shard] = row
-			} else {
-				cols := row.Columns()
-				partialRow := NewRow()
-				for _, bit := range cols[skip:] {
-					partialRow.SetBit(bit)
-				}
-				c.Precomputed[shard] = partialRow
-			}
-			got += segCnt - skip
-			// In the case where this segment exactly fulfills the limit, break.
-			if got == limit {
-				break
-			}
-			skip = 0
-			continue
-		}
-
-		// This segment has more records than the remaining limit requires.
-		cols := row.Columns()
-		partialRow := NewRow()
-		for _, bit := range cols[skip : skip+limit-got] {
-			partialRow.SetBit(bit)
-		}
-		c.Precomputed[shard] = partialRow
-		break
+	// Execute bitmap call, storing the full result on this node.
+	res, err := e.executeCall(ctx, qcx, index, bitmapCall, shards, opt)
+	if err != nil {
+		return nil, errors.Wrap(err, "limit map reduce")
+	}
+	if res == nil {
+		res = NewRow()
 	}
 
-	c.Name = "Precomputed"
-	return nil
+	result, ok := res.(*Row)
+	if !ok {
+		return nil, errors.Errorf("expected Row but got %T", result)
+	}
+
+	if offset != 0 {
+		i := 0
+		var leadingBits []uint64
+		for i < len(result.segments) && offset > 0 {
+			seg := result.segments[i]
+			count := seg.Count()
+			if count > offset {
+				data := seg.Columns()
+				data = data[offset:]
+				leadingBits = data
+				i++
+				break
+			}
+
+			offset -= count
+			i++
+		}
+		row := NewRow(leadingBits...)
+		row.Merge(&Row{segments: result.segments[i:]})
+		result = row
+	}
+	if limit < result.Count() {
+		i := 0
+		var trailingBits []uint64
+		for i < len(result.segments) && limit > 0 {
+			seg := result.segments[i]
+			count := seg.Count()
+			if count > limit {
+				data := seg.Columns()
+				data = data[:limit]
+				trailingBits = data
+				break
+			}
+
+			limit -= count
+			i++
+		}
+		row := NewRow(trailingBits...)
+		row.Merge(&Row{segments: result.segments[:i]})
+		result = row
+	}
+
+	return result, nil
 }
 
 // executeIncludesColumnCallShard
@@ -3692,6 +3539,119 @@ func (e *executor) executeNotShard(ctx context.Context, qcx *Qcx, index string, 
 	}
 
 	return existenceRow.Difference(row), nil
+}
+
+func (e *executor) executeConstRow(ctx context.Context, index string, c *pql.Call) (res *Row, err error) {
+	// Fetch user-provided columns list.
+	cols, _ := c.Args["columns"].([]interface{})
+	var ids []uint64
+	var keys []string
+	for _, c := range cols {
+		switch c := c.(type) {
+		case uint64:
+			ids = append(ids, c)
+		case int64:
+			ids = append(ids, uint64(c))
+		case string:
+			keys = append(keys, c)
+		default:
+			return nil, errors.Errorf("invalid column identifier %v of type %T", c, c)
+		}
+	}
+
+	// Translate keys to IDs.
+	if len(keys) > 0 {
+		keyIDs, err := e.Cluster.translateIndexKeys(ctx, index, keys, false)
+		if err != nil {
+			return nil, errors.Wrap(err, "translating column IDs in ConstRow")
+		}
+		ids = append(ids, keyIDs...)
+	}
+
+	return NewRow(ids...), nil
+}
+
+func (e *executor) executeUnionRows(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *execOptions) (*Row, error) {
+	// Turn UnionRows(Rows(...)) into Union(Row(...), ...).
+	var rows []*pql.Call
+	for _, child := range c.Children {
+		// Check that we can use the call.
+		switch child.Name {
+		case "Rows":
+		case "TopN":
+		default:
+			return nil, errors.Errorf("cannot use %v as a rows query", child)
+		}
+
+		// Execute the call.
+		rowsResult, err := e.executeCall(ctx, qcx, index, child, shards, opt)
+		if err != nil {
+			return nil, err
+		}
+
+		// Turn the results into rows calls.
+		var resultRows []*pql.Call
+		switch rowsResult := rowsResult.(type) {
+		case *PairsField:
+			// Translate pairs into rows calls.
+			for _, p := range rowsResult.Pairs {
+				var val interface{}
+				switch {
+				case p.Key != "":
+					val = p.Key
+				default:
+					val = p.ID
+				}
+				resultRows = append(resultRows, &pql.Call{
+					Name: "Row",
+					Args: map[string]interface{}{
+						rowsResult.Field: val,
+					},
+				})
+			}
+		case RowIDs:
+			// Translate Row IDs into Row calls.
+			for _, id := range rowsResult {
+				resultRows = append(resultRows, &pql.Call{
+					Name: "Row",
+					Args: map[string]interface{}{
+						child.Args["_field"].(string): id,
+					},
+				})
+			}
+		default:
+			return nil, errors.Errorf("unexpected Rows type %T", rowsResult)
+		}
+
+		// Propogate any special properties of the call.
+		switch child.Name {
+		case "Rows":
+			// Propogate "from" time, if set.
+			if v, ok := child.Args["from"]; ok {
+				for _, rowCall := range resultRows {
+					rowCall.Args["from"] = v
+				}
+			}
+
+			// Propogate "to" time, if set.
+			if v, ok := child.Args["to"]; ok {
+				for _, rowCall := range resultRows {
+					rowCall.Args["to"] = v
+				}
+			}
+		}
+
+		rows = append(rows, resultRows...)
+	}
+
+	// Generate a Union call over the rows.
+	c = &pql.Call{
+		Name:     "Union",
+		Children: rows,
+	}
+
+	// Execute the generated Union() call.
+	return e.executeBitmapCall(ctx, qcx, index, c, shards, opt)
 }
 
 // executeAllCallShard executes an All() call for a local shard.
