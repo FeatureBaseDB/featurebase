@@ -29,7 +29,7 @@ func CPUProfileForDur(dur time.Duration, outpath string) {
 	// per-query pprof output:
 	txsrc := os.Getenv("PILOSA_TXSRC")
 	if txsrc == "" {
-		txsrc = "roaring"
+		txsrc = DefaultTxsrc
 	}
 	path := outpath + "." + txsrc
 	f, err := os.Create(path)
@@ -53,7 +53,7 @@ func MemProfileForDur(dur time.Duration, outpath string) {
 	// per-query pprof output:
 	txsrc := os.Getenv("PILOSA_TXSRC")
 	if txsrc == "" {
-		txsrc = "roaring"
+		txsrc = DefaultTxsrc
 	}
 	path := outpath + "." + txsrc
 	f, err := os.Create(path)
@@ -72,4 +72,37 @@ func MemProfileForDur(dur time.Duration, outpath string) {
 		f.Close()
 		AlwaysPrintf("wrote memory profile after dur '%v', output: '%v'", dur, path)
 	}()
+}
+
+type pprofProfile struct {
+	fdCpu *os.File
+}
+
+var _ = newPprof
+var _ = pprofProfile{}
+
+// for manually calling Close() to stop profiling.
+func newPprof() (pp *pprofProfile) {
+	pp = &pprofProfile{}
+	f, err := os.Create("cpu.manual.pprof")
+	panicOn(err)
+	pp.fdCpu = f
+
+	_ = pprof.StartCPUProfile(pp.fdCpu)
+	return
+}
+
+func (pp *pprofProfile) Close() {
+
+	pprof.StopCPUProfile()
+	pp.fdCpu.Close()
+
+	f, err := os.Create("mem.manual.pprof")
+	panicOn(err)
+
+	runtime.GC() // get up-to-date statistics
+	if err := pprof.WriteHeapProfile(f); err != nil {
+		panic(fmt.Sprintf("could not write memory profile: %v", err))
+	}
+	f.Close()
 }
