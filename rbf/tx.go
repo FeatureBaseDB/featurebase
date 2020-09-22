@@ -17,9 +17,9 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"os"
+	"path/filepath"
 	"sort"
-
-	//"strconv"
 	"strings"
 	"sync"
 
@@ -33,15 +33,19 @@ var _ = txkey.ToString
 
 // Tx represents a transaction.
 type Tx struct {
-	mu          sync.RWMutex
-	db          *DB            // parent db
-	meta        [PageSize]byte // copy of current meta page
-	walID       int64          // max WAL ID at start of tx
-	rootRecords []*RootRecord  // read-only cache of root records
-	pageMap     *immutable.Map // mapping of database pages to WAL IDs
-	writable    bool           // if true, tx can write
-	exclusive   bool           // if true, tx writes directly to db file (no wal)
-	dirty       bool           // if true, changes have been made
+	mu                  sync.RWMutex
+	db                  *DB            // parent db
+	segments            []WALSegment   // copy of WAL segments
+	updatedSegmentPaths []string       // updated or added segment paths
+	meta                [PageSize]byte // copy of current meta page
+	walID               int64          // max WAL ID at start of tx
+	rootRecords         []*RootRecord  // read-only cache of root records
+	pageMap             *immutable.Map // mapping of database pages to WAL IDs
+	writable            bool           // if true, tx can write
+	exclusive           bool           // if true, tx writes directly to db file (no wal)
+	dirty               bool           // if true, changes have been made
+
+	wcache []byte // write cache
 
 	// If Rollback() has already completed, don't do it again.
 	// Note db == nil means that commit has already been done.
@@ -76,7 +80,7 @@ func (tx *Tx) Commit() error {
 	if tx.dirty {
 		if err := tx.writeMetaPage(MetaPageFlagCommit); err != nil {
 			return err
-		} else if err := tx.db.SyncWAL(); err != nil {
+		} else if err := tx.flushWALWriter(); err != nil {
 			return err
 		}
 
@@ -89,6 +93,11 @@ func (tx *Tx) Commit() error {
 		tx.db.mu.Lock()
 		tx.db.rootRecords = tx.rootRecords
 		tx.db.pageMap = tx.pageMap
+		for _, path := range tx.updatedSegmentPaths {
+			segment := walSegmentByPath(tx.segments, path)
+			assert(segment != nil)
+			tx.db.updateWALSegment(*segment)
+		}
 		tx.db.mu.Unlock()
 	}
 
@@ -112,11 +121,12 @@ func (tx *Tx) Rollback() {
 
 	// TODO(bbj): Invalidate DB if rollback fails. Possibly attempt reopen?
 
-	// Remove all WAL pages that have been written by this transaction.
 	if tx.dirty {
-		if err := tx.db.truncateWALAfter(tx.walID); err != nil {
-			panic(err)
+		if _, err := truncateWALAfter(tx.segments, tx.walID); err != nil {
+			panicOn(err)
 		}
+		tx.segments = nil
+		tx.updatedSegmentPaths = nil
 	}
 
 	// Disconnect transaction from DB.
@@ -915,11 +925,28 @@ func (tx *Tx) readPage(pgno uint32) ([]byte, error) {
 		return tx.meta[:], nil
 	}
 
+	// Verify page number requested is within current size of database.
 	pageN := readMetaPageN(tx.meta[:])
 	if pgno > pageN {
 		return nil, fmt.Errorf("rbf: page read out of bounds: pgno=%d max=%d", pgno, pageN)
 	}
-	return tx.db.readPage(tx.pageMap, pgno)
+
+	// Check if page is remapped.
+	if walID, ok := tx.pageMap.Get(pgno); ok {
+		walID64 := walID.(int64)
+
+		// Read from write cache if not yet flushed to disk.
+		maxWALID := activeWALSegment(tx.segments).MaxWALID()
+		if walID64 > maxWALID {
+			offset := (walID64 - maxWALID - 1) * PageSize
+			return tx.wcache[offset : offset+PageSize], nil
+		}
+
+		// Otherwise return remapped page from WAL segment.
+		return readWALPage(tx.segments, walID64)
+	}
+
+	return tx.db.readDBPage(pgno)
 }
 
 func (tx *Tx) writePage(page []byte) error {
@@ -928,11 +955,11 @@ func (tx *Tx) writePage(page []byte) error {
 
 	// If we are running in exclusive mode, directly write page to database.
 	if tx.exclusive {
-		return tx.db.writePage(readPageNo(page), page)
+		return tx.db.writeDBPage(readPageNo(page), page)
 	}
 
 	// Write page to WAL and obtain position in WAL.
-	walID, err := tx.db.writeWALPage(page, false)
+	walID, err := tx.writeWALPage(page, false)
 	if err != nil {
 		return err
 	}
@@ -948,11 +975,11 @@ func (tx *Tx) writeBitmapPage(pgno uint32, page []byte) error {
 
 	// If we are running in exclusive mode, directly write page to database.
 	if tx.exclusive {
-		return tx.db.writePage(pgno, page)
+		return tx.db.writeDBPage(pgno, page)
 	}
 
 	// Write bitmap to WAL and obtain WAL position of the actual page data (not the prefix page).
-	walID, err := tx.db.writeBitmapPage(pgno, page)
+	walID, err := tx.writeBitmapWALPage(pgno, page)
 	if err != nil {
 		return err
 	}
@@ -968,11 +995,11 @@ func (tx *Tx) writeMetaPage(flag uint32) error {
 
 	// If we are running in exclusive mode, directly write page to database.
 	if tx.exclusive {
-		return tx.db.writePage(0, tx.meta[:])
+		return tx.db.writeDBPage(0, tx.meta[:])
 	}
 
 	// Write page to WAL and obtain position in WAL.
-	walID, err := tx.db.writeWALPage(tx.meta[:], true)
+	walID, err := tx.writeWALPage(tx.meta[:], true)
 	if err != nil {
 		return err
 	}
@@ -1561,4 +1588,115 @@ func (tx *Tx) ImportRoaringBits(name string, itr roaring.RoaringIterator, clear 
 		}
 	}
 	return
+}
+
+func (tx *Tx) flushWALWriter() error {
+	// Ignore if we have no data in the write cache.
+	if len(tx.wcache) == 0 {
+		return nil
+	}
+
+	// Determine active WAL segment.
+	assert(len(tx.segments) != 0)
+	segment := &tx.segments[len(tx.segments)-1]
+
+	// Open write handle to active segment.
+	w, err := os.OpenFile(segment.Path, os.O_WRONLY, 0666)
+	if err != nil {
+		return fmt.Errorf("open wal segment write handle: %w", err)
+	}
+	defer w.Close()
+
+	// Flush cache to writer.
+	if _, err := w.WriteAt(tx.wcache, int64(segment.PageN)*PageSize); err != nil {
+		return fmt.Errorf("write wal segment: %w", err)
+	} else if err := w.Sync(); err != nil {
+		return fmt.Errorf("sync wal segment: %w", err)
+	} else if err := w.Close(); err != nil {
+		return fmt.Errorf("close wal segment: %w", err)
+	}
+
+	// Increase the size of the last WAL segment & clear cache.
+	assert(len(tx.wcache)%PageSize == 0)
+	segment.PageN += len(tx.wcache) / PageSize
+	tx.wcache = tx.wcache[:0]
+
+	return nil
+}
+
+func (tx *Tx) writeWALPage(page []byte, isMeta bool) (walID int64, err error) {
+	if err := tx.ensureWritableWALSegment(); err != nil {
+		return 0, err
+	}
+
+	// Determine next WAL ID from cached meta page.
+	walID = readMetaWALID(tx.meta[:]) + 1
+
+	// Update WAL ID on cached meta page.
+	writeMetaWALID(tx.meta[:], walID)
+
+	// Append write to write buffer.
+	tx.wcache = append(tx.wcache, page...)
+
+	return walID, nil
+}
+
+func (tx *Tx) writeBitmapWALPage(pgno uint32, page []byte) (walID int64, err error) {
+	if err := tx.ensureWritableWALSegment(); err != nil {
+		return 0, err
+	}
+
+	// Write header page for next bitmap page.
+	buf := make([]byte, PageSize)
+	writePageNo(buf[:], pgno)
+	writeFlags(buf[:], PageTypeBitmapHeader)
+	// TODO(BBJ): Write checksum.
+	if _, err := tx.writeWALPage(buf, false); err != nil {
+		return 0, fmt.Errorf("write bitmap header: %w", err)
+	}
+
+	// Write the bitmap page and return its WALID.
+	return tx.writeWALPage(page, false)
+}
+
+func (tx *Tx) ensureWritableWALSegment() error {
+	writeCacheSize := int64(len(tx.wcache))
+	if len(tx.segments) != 0 && activeWALSegment(tx.segments).Size()+writeCacheSize < MaxWALSegmentFileSize {
+		return nil
+	}
+	return tx.addWALSegment()
+}
+
+// addWALSegment appends a new, writable segment and closing an existing segments for write.
+func (tx *Tx) addWALSegment() error {
+	if err := tx.flushWALWriter(); err != nil {
+		return err
+	}
+
+	// If we have a current active WAL segment then close it and start the
+	// next segment from the next WAL ID. If there is no existing WAL segments,
+	// read the last checkpointed WAL ID from the DB and start after that.
+	var base int64
+	if len(tx.segments) != 0 {
+		base = activeWALSegment(tx.segments).MaxWALID() + 1
+	} else {
+		page, err := tx.readPage(0)
+		if err != nil {
+			return err
+		}
+		base = readMetaWALID(page) + 1
+	}
+
+	// Create new segment file.
+	s := NewWALSegment(filepath.Join(tx.db.WALPath(), FormatWALSegmentPath(base)))
+	if err := s.Open(); err != nil {
+		return fmt.Errorf("add wal segment: %w", err)
+	}
+
+	// Track all segments that need to be added back to DB.
+	// The DB can remove segments in the background so we don't want to replace.
+	tx.segments = append(tx.segments, s)
+	tx.updatedSegmentPaths = append(tx.updatedSegmentPaths, s.Path)
+
+	return nil
 }
