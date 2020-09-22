@@ -19,3 +19,5 @@
 ./cmd/pilosa-keydump/vprint.go
 ./cmd/pilosa-keydump/keydump.go
 ./synthload/vprint.go
+./proto/vdsm/vdsm.proto
+./proto/vdsm/vdsm.pb.go
