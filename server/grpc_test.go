@@ -432,6 +432,32 @@ func TestQuerySQLUnary(t *testing.T) {
 			},
 			eq: equal,
 		},
+		{
+			// Extract(Limit(ConstRow(columns=[2]), limit=100, offset=0),Rows(age),Rows(color),Rows(height),Rows(score))
+			sql: "select * from grouper",
+			exp: tableResponse{
+				headers: []columnInfo{
+					{"_id", "uint64"},
+					{"age", "int64"},
+					{"color", "[]string"},
+					{"height", "int64"},
+					{"score", "int64"},
+				},
+				rows: []row{
+					{[]columnResponse{uint64(1), int64(27), []string{"blue"}, int64(20), int64(-10)}},
+					{[]columnResponse{uint64(2), int64(16), []string{"blue"}, int64(30), int64(-8)}},
+					{[]columnResponse{uint64(3), int64(19), []string{"red"}, int64(40), int64(6)}},
+					{[]columnResponse{uint64(4), int64(27), []string{"green"}, int64(50), int64(0)}},
+					{[]columnResponse{uint64(5), int64(16), []string{"blue"}, int64(60), int64(-2)}},
+					{[]columnResponse{uint64(6), int64(34), []string{"blue"}, int64(70), int64(100)}},
+					{[]columnResponse{uint64(7), int64(27), []string{"blue"}, int64(80), int64(0)}},
+					{[]columnResponse{uint64(8), int64(16), []string{}, int64(90), int64(-13)}},
+					{[]columnResponse{uint64(9), int64(16), []string{"red"}, int64(100), int64(80)}},
+					{[]columnResponse{uint64(10), int64(31), []string{"red"}, int64(110), int64(-2)}},
+				},
+			},
+			eq: equal,
+		},
 		// join
 		{
 			// Count(Intersect(All(),Distinct(Row(grouperid!=null),index='joiner',field='grouperid')))
@@ -471,7 +497,6 @@ func TestQuerySQLUnary(t *testing.T) {
 				headers: []columnInfo{{"_id", "uint64"}},
 				rows: []row{
 					{[]columnResponse{uint64(3)}},
-					{[]columnResponse{uint64(8)}},
 					{[]columnResponse{uint64(9)}},
 				},
 			},
@@ -484,7 +509,6 @@ func TestQuerySQLUnary(t *testing.T) {
 				headers: []columnInfo{{"_id", "uint64"}},
 				rows: []row{
 					{[]columnResponse{uint64(3)}},
-					{[]columnResponse{uint64(8)}},
 					{[]columnResponse{uint64(9)}},
 				},
 			},
@@ -630,7 +654,7 @@ func TestQuerySQLUnary(t *testing.T) {
 				},
 				rows: []row{
 					{[]columnResponse{int64(16), "blue", uint64(2)}},
-					{[]columnResponse{int64(16), "red", uint64(2)}},
+					{[]columnResponse{int64(16), "red", uint64(1)}},
 					{[]columnResponse{int64(19), "red", uint64(1)}},
 					{[]columnResponse{int64(27), "blue", uint64(2)}},
 					{[]columnResponse{int64(27), "green", uint64(1)}},
@@ -764,7 +788,6 @@ func TestQuerySQLUnary(t *testing.T) {
 			exp: tableResponse{
 				headers: []columnInfo{{"_id", "uint64"}},
 				rows: []row{
-					{[]columnResponse{uint64(8)}},
 					{[]columnResponse{uint64(9)}},
 				},
 			},
@@ -777,7 +800,6 @@ func TestQuerySQLUnary(t *testing.T) {
 			exp: tableResponse{
 				headers: []columnInfo{{"_id", "uint64"}},
 				rows: []row{
-					{[]columnResponse{uint64(8)}},
 					{[]columnResponse{uint64(9)}},
 				},
 			},
@@ -789,7 +811,6 @@ func TestQuerySQLUnary(t *testing.T) {
 			exp: tableResponse{
 				headers: []columnInfo{{"_id", "uint64"}},
 				rows: []row{
-					{[]columnResponse{uint64(8)}},
 					{[]columnResponse{uint64(9)}},
 				},
 			},
@@ -872,7 +893,6 @@ func setUpTestQuerySQLUnary(ctx context.Context, t *testing.T) (gh *server.GRPCH
 		6:  "blue",
 		7:  "blue",
 		3:  "red",
-		8:  "red",
 		9:  "red",
 		10: "red",
 		4:  "green",
