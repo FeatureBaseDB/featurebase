@@ -4398,7 +4398,8 @@ func TestUnionRunRunInPlaceBitwiseCompare(t *testing.T) {
 				out2 := unionRunRunInPlace(arun, brun)
 				out1.Repair()
 
-				err := out1.BitwiseCompare(out2.runToBitmap())
+				// out2 may no longer be a run container, so don't assume that.
+				err := out1.BitwiseCompare(out2)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -4441,5 +4442,94 @@ func TestCloneRoaringIterator(t *testing.T) {
 	}
 	if !reflect.DeepEqual(keys, keys2) {
 		t.Fatalf("keys != keys2. keys='%#v'; keys2='%#v'", keys, keys2)
+	}
+}
+
+// we were seeing unionInterval16InPlace() returning too
+// large an run container, which was causing problems when
+// we write to the transactional backends. Verify that
+// unionRunRunInPlace() converts to bitmap if its too large.
+//
+func TestContainer_unionRunRunInPlace_TwoBigRunArrays(t *testing.T) {
+
+	a := NewContainerRun(nil)
+	b := NewContainerRun(nil)
+
+	for i := uint16(0); i < 8192; i++ {
+		if i%3 == 0 {
+			a, _ = a.runAdd(i)
+		}
+	}
+	for i := uint16(0); i < 8192; i++ {
+		if i%3 == 1 {
+			b, _ = b.runAdd(i)
+		}
+	}
+
+	c := unionRunRunInPlace(a, b)
+
+	typ := ContainerType(c)
+	if typ == ContainerRun {
+		nr := len(c.runs())
+		if nr > runMaxSize {
+			panic(fmt.Sprintf("runs is over runMaxSize: %v", nr))
+		}
+	}
+}
+
+// we were seeing unionInterval16InPlace() returning too
+// large an array container, which was causing problems when
+// we write to the transactional backends. Verify that
+// unionArrayArrayInPlace() converts to bitmap if its too large.
+// Confirms that optimize() is done at the end of unionArrayArrayInPlace().
+func TestContainer_unionArrayArrayInPlace_TwoBigArrayArrays(t *testing.T) {
+
+	a := NewContainerArray(nil)
+	b := NewContainerArray(nil)
+
+	for i := uint16(0); i < 4096; i++ {
+		a, _ = a.arrayAdd(i)
+	}
+	for i := uint16(4096); i < 8192; i++ {
+		b, _ = b.arrayAdd(i)
+	}
+
+	c := unionArrayArrayInPlace(a, b)
+
+	typ := ContainerType(c)
+	if typ == ContainerArray {
+		nr := len(c.array())
+		if nr > ArrayMaxSize {
+			panic(fmt.Sprintf("arrays is over arrayMaxSize: %v", nr))
+		}
+	}
+}
+
+// the love child of the above two tests.
+func TestContainer_unionInPlace_ArrayUnionRun(t *testing.T) {
+
+	for k := 0; k < 2; k++ {
+		a := NewContainerArray(nil)
+		for i := uint16(0); i < 8192; i += 2 {
+			a, _ = a.arrayAdd(i)
+		}
+
+		b := NewContainerRun(nil)
+		for i := uint16(8192); i < 8192*2; i++ {
+			if i%3 == 1 {
+				b, _ = b.runAdd(i)
+			}
+		}
+
+		var c *Container
+		if k == 0 {
+			c = a.unionInPlace(b)
+		} else {
+			c = b.unionInPlace(a)
+		}
+		typ := ContainerType(c)
+		if typ == ContainerArray {
+			panic("should be impossible to have an array")
+		}
 	}
 }

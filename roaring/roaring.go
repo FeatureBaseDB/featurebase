@@ -362,6 +362,17 @@ func (b *Bitmap) DirectAdd(v uint64) bool {
 	cont := b.Containers.GetOrCreate(highbits(v))
 	newC, changed := cont.add(lowbits(v))
 	if newC != cont {
+		// avoid returning invalid container, and avoid a slow optimize call.
+		switch newC.typeID {
+		case ContainerArray:
+			if len(newC.array()) > ArrayMaxSize {
+				newC = newC.arrayToBitmap()
+			}
+		case ContainerRun:
+			if len(newC.runs()) > runMaxSize {
+				newC = newC.runToBitmap()
+			}
+		}
 		b.Containers.Put(highbits(v), newC)
 	}
 	return changed
@@ -4830,7 +4841,12 @@ func unionRunRunInPlace(a, b *Container) *Container {
 
 	a.setRuns(runs)
 	a.setN(n)
+
+	if len(runs) > runMaxSize {
+		a = a.runToBitmap()
+	}
 	return a
+
 }
 
 // unionInterval16InPlace merges two slice of intervals in place (in a).
