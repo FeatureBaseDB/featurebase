@@ -3659,7 +3659,7 @@ func TestExecutor_Execute_FieldValue(t *testing.T) {
 
 // Ensure a Limit query can be executed.
 func TestExecutor_Execute_Limit(t *testing.T) {
-	c := test.MustRunCluster(t, 1)
+	c := test.MustRunCluster(t, 2)
 	defer c.Close()
 
 	c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "f")
@@ -3741,6 +3741,58 @@ func TestExecutor_Execute_Limit(t *testing.T) {
 					t.Errorf("limit=%d,offset=%d: expected %v but got %v", limit, offset, expect, got)
 				}
 			}
+		}
+	})
+
+	t.Run("Nested", func(t *testing.T) {
+		for limit := 0; limit < 5; limit++ {
+			for offset := 0; offset < 5; offset++ {
+				expect := []uint64{}
+				if offset <= len(columns) {
+					expect = columns[offset:]
+				}
+				if limit < len(expect) {
+					expect = expect[:limit]
+				}
+
+				resp := c.Query(t, "i", fmt.Sprintf("Limit(Limit(All(), offset=%d), limit=%d)", offset, limit))
+				if len(resp.Results) != 1 {
+					t.Fatalf("limit=%d,offset=%d: expected 1 result but got %v", limit, offset, resp.Results)
+				}
+				row, ok := resp.Results[0].(*pilosa.Row)
+				if !ok {
+					t.Fatalf("limit=%d,offset=%d: expected a row result but got %T", limit, offset, resp.Results[0])
+				}
+				got := row.Columns()
+				if !reflect.DeepEqual(expect, got) {
+					t.Errorf("limit=%d,offset=%d: expected %v but got %v", limit, offset, expect, got)
+				}
+			}
+		}
+	})
+
+	t.Run("Extract", func(t *testing.T) {
+		resp := c.Query(t, "i", "Extract(Limit(All(), limit=1))")
+		if len(resp.Results) != 1 {
+			t.Fatalf("expected 1 result but got %d", len(resp.Results))
+		}
+		got, ok := resp.Results[0].(pilosa.ExtractedTable)
+		if !ok {
+			t.Fatalf("expected a table result but got %T", resp.Results[0])
+		}
+		expect := pilosa.ExtractedTable{
+			Fields: []pilosa.ExtractedTableField{},
+			Columns: []pilosa.ExtractedTableColumn{
+				{
+					Column: pilosa.KeyOrID{
+						ID: 0,
+					},
+					Rows: []interface{}{},
+				},
+			},
+		}
+		if !reflect.DeepEqual(expect, got) {
+			t.Errorf("expected %v but got %v", expect, got)
 		}
 	})
 }

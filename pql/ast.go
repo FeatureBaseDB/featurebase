@@ -392,7 +392,7 @@ var callInfoByFunc = map[string]callInfo{
 		},
 	},
 	"Union":     {allowUnknown: false},
-	"UnionRows": {allowUnknown: false},
+	"UnionRows": {allowUnknown: false, callType: PrecallGlobal},
 	"Extract":   {allowUnknown: false},
 	"Limit": {
 		allowUnknown: false,
@@ -400,6 +400,7 @@ var callInfoByFunc = map[string]callInfo{
 			"limit":  int64(0),
 			"offset": int64(0),
 		},
+		callType: PrecallGlobal,
 	},
 	"Xor": {allowUnknown: false},
 
@@ -408,6 +409,7 @@ var callInfoByFunc = map[string]callInfo{
 		prototypes: map[string]interface{}{
 			"columns": []interface{}{},
 		},
+		callType: PrecallGlobal,
 	},
 
 	// things that take _field
