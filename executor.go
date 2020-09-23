@@ -5130,26 +5130,6 @@ func (e *executor) collectResultIDs(index string, idx *Index, call *pql.Call, re
 	return nil
 }
 
-func (e *executor) translateFieldIDs(field *Field, ids map[uint64]struct{}) (map[uint64]string, error) {
-	idList := make([]uint64, len(ids))
-	{
-		i := 0
-		for id := range ids {
-			idList[i] = id
-			i++
-		}
-	}
-	keyList, err := field.TranslateStore().TranslateIDs(idList)
-	if err != nil {
-		return nil, err
-	}
-	mapped := make(map[uint64]string, len(idList))
-	for i, key := range keyList {
-		mapped[idList[i]] = key
-	}
-	return mapped, nil
-}
-
 // preTranslateMatrixSet translates the IDs of a set field in an extracted matrix.
 func (e *executor) preTranslateMatrixSet(mat ExtractedIDMatrix, fieldIdx uint, field *Field) (map[uint64]string, error) {
 	ids := make(map[uint64]struct{}, len(mat.Columns))
@@ -5159,7 +5139,7 @@ func (e *executor) preTranslateMatrixSet(mat ExtractedIDMatrix, fieldIdx uint, f
 		}
 	}
 
-	return e.translateFieldIDs(field, ids)
+	return e.Cluster.translateFieldIDs(field, ids)
 }
 
 func (e *executor) translateResult(ctx context.Context, index string, idx *Index, call *pql.Call, result interface{}, idSet map[uint64]string) (_ interface{}, err error) {
@@ -5245,7 +5225,7 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 				for i := range result.Pairs {
 					ids[i] = result.Pairs[i].ID
 				}
-				keys, err := field.TranslateStore().TranslateIDs(ids)
+				keys, err := e.Cluster.translateFieldListIDs(field, ids)
 				if err != nil {
 					return nil, err
 				}
@@ -5296,7 +5276,7 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 
 		fieldTranslations := make(map[string]map[uint64]string)
 		for field, ids := range fieldIDs {
-			trans, err := e.translateFieldIDs(field, ids)
+			trans, err := e.Cluster.translateFieldIDs(field, ids)
 			if err != nil {
 				return nil, errors.Wrapf(err, "translating IDs in field %q", field.Name())
 			}
@@ -5348,7 +5328,7 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 		if field := idx.Field(fieldName); field == nil {
 			return nil, newNotFoundError(ErrFieldNotFound, fieldName)
 		} else if field.Keys() {
-			keys, err := field.TranslateStore().TranslateIDs(result)
+			keys, err := e.Cluster.translateFieldListIDs(field, result)
 			if err != nil {
 				return nil, errors.Wrap(err, "translating row IDs")
 			}
