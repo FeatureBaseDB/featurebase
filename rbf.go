@@ -68,7 +68,7 @@ func (w *RbfDBWrapper) CleanupTx(tx Tx) {
 	r.done = true
 	r.mu.Unlock()
 
-	// try not to old r.mu while locking w.muDb
+	// try not to hold r.mu while locking w.muDb
 	w.muDb.Lock()
 
 	delete(w.openTx, r)
