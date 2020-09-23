@@ -2154,16 +2154,21 @@ func (h *Handler) handlePostTranslateKeys(w http.ResponseWriter, r *http.Request
 	}
 
 	buf, err := h.api.TranslateKeys(r.Context(), r.Body)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("translate keys: %v", err), http.StatusInternalServerError)
-		return
-	}
+	switch errors.Cause(err) {
+	case nil:
+		// Write response.
+		if _, err = w.Write(buf); err != nil {
+			h.logger.Printf("writing translate keys response: %v", err)
+		}
 
-	// Write response.
-	_, err = w.Write(buf)
-	if err != nil {
-		h.logger.Printf("writing translate keys response: %v", err)
-		return
+	case pilosa.ErrTranslatingKeyNotFound:
+		http.Error(w, fmt.Sprintf("translate keys: %v", err), http.StatusNotFound)
+
+	case pilosa.ErrTranslateStoreReadOnly:
+		http.Error(w, fmt.Sprintf("translate keys: %v", err), http.StatusPreconditionFailed)
+
+	default:
+		http.Error(w, fmt.Sprintf("translate keys: %v", err), http.StatusInternalServerError)
 	}
 }
 

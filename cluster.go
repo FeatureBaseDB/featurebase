@@ -1085,16 +1085,18 @@ func (c *cluster) partitionNodes(partitionID int) []*Node {
 	return nodes
 }
 
-// ownsPartition returns true if a host owns a partition.
-func (c *cluster) ownsPartition(nodeID string, partition int) bool {
+func (c *cluster) primaryPartitionNode(partition int) *Node {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	return c.unprotectedOwnsPartition(nodeID, partition)
+	return c.unprotectedPrimaryPartitionNode(partition)
 }
 
-// unprotectedOwnsPartition returns true if a host owns a partition.
-func (c *cluster) unprotectedOwnsPartition(nodeID string, partition int) bool {
-	return Nodes(c.partitionNodes(partition)).ContainsID(nodeID)
+// unprotectedPrimaryPartition returns tprimary node of partition.
+func (c *cluster) unprotectedPrimaryPartitionNode(partition int) *Node {
+	if nodes := c.partitionNodes(partition); len(nodes) > 0 {
+		return nodes[0]
+	}
+	return nil
 }
 
 // containsShards is like OwnsShards, but it includes replicas.
@@ -2323,64 +2325,76 @@ func (c *cluster) setStatic(hosts []string) error {
 }
 
 // translateFieldKey gets a single key from translateFieldKeys.
-func (c *cluster) translateFieldKey(ctx context.Context, field *Field, key string) (uint64, error) {
-	ids, err := c.translateFieldKeys(ctx, field, key)
+func (c *cluster) translateFieldKey(ctx context.Context, field *Field, key string, writable bool) (uint64, error) {
+	ids, err := c.translateFieldKeys(ctx, field, []string{key}, writable)
 	if err != nil {
 		return 0, err
 	} else if len(ids) == 0 {
-		return 0, errors.New("translating key on coordinator returned empty set")
+		return 0, nil
 	}
 	return ids[0], nil
 }
 
 // translateFieldKeys is basically a wrapper around
 // field.TranslateStore().TranslateKey(key), but in
-// the case where the local node's translate store
-// is read-only (i.e. it's not the primary translate
-// store), then this method will forward the translation
+// the case where the local node is not coordinator, then this method will forward the translation
 // request to the coordinator.
-func (c *cluster) translateFieldKeys(ctx context.Context, field *Field, keys ...string) ([]uint64, error) {
-	ids, err := field.TranslateStore().TranslateKeys(keys)
-	// If we get a "read only" error, then forward the request
-	// to the coordinator.
-	if errors.Cause(err) == ErrTranslateStoreReadOnly {
-		coordinatorNode := c.coordinatorNode()
-		if ids, err := c.InternalClient.TranslateKeysNode(ctx, &coordinatorNode.URI, field.Index(), field.Name(), keys); err != nil {
-			return ids, errors.Wrap(err, "translating keys on coordinator")
-		} else {
-			return ids, nil
-		}
+func (c *cluster) translateFieldKeys(ctx context.Context, field *Field, keys []string, writable bool) (ids []uint64, err error) {
+	coordinator := c.coordinatorNode()
+	if coordinator == nil {
+		return nil, errors.Errorf("translating field(%s/%s) keys(%v) - cannot find coordinator node", field.Index(), field.Name(), keys)
 	}
-	return ids, err
+
+	if c.Node.ID == coordinator.ID {
+		ids, err = field.TranslateStore().TranslateKeys(keys, writable)
+	} else {
+		// If it's writable, then forward the request to the coordinator.
+		ids, err = c.InternalClient.TranslateKeysNode(ctx, &coordinator.URI, field.Index(), field.Name(), keys, writable)
+	}
+
+	if err != nil {
+		return nil, errors.Wrapf(err, "translating field(%s/%s) keys(%v)", field.Index(), field.Name(), keys)
+	}
+
+	return ids, nil
 }
 
-func (c *cluster) translateIndexKey(ctx context.Context, indexName string, key string) (uint64, error) {
-	keyMap, err := c.translateIndexKeySet(ctx, indexName, map[string]struct{}{key: struct{}{}})
+func (c *cluster) translateIndexKey(ctx context.Context, indexName string, key string, writable bool) (uint64, error) {
+	keyMap, err := c.translateIndexKeySet(ctx, indexName, map[string]struct{}{key: struct{}{}}, writable)
 	if err != nil {
 		return 0, err
 	}
 	return keyMap[key], nil
 }
 
-func (c *cluster) translateIndexKeys(ctx context.Context, indexName string, keys []string) ([]uint64, error) {
+func (c *cluster) translateIndexKeys(ctx context.Context, indexName string, keys []string, writable bool) ([]uint64, error) {
 	keySet := make(map[string]struct{})
 	for _, key := range keys {
 		keySet[key] = struct{}{}
 	}
 
-	keyMap, err := c.translateIndexKeySet(ctx, indexName, keySet)
+	keyMap, err := c.translateIndexKeySet(ctx, indexName, keySet, writable)
 	if err != nil {
 		return nil, err
 	}
 
+	// make sure that ids line up with keys, but
+	// not appending, but assigning directly 1:1 into the slice.
 	ids := make([]uint64, len(keys))
-	for i := range keys {
-		ids[i] = keyMap[keys[i]]
+	for i, k := range keys {
+		id, ok := keyMap[k]
+		if !writable {
+			if !ok || id == 0 {
+				c.holder.Logger.Debugf("internal translateIndexKeys error: keyMap had no entry for k='%v', and was not writable", k)
+				return nil, ErrTranslatingKeyNotFound
+			}
+		}
+		ids[i] = id
 	}
 	return ids, nil
 }
 
-func (c *cluster) translateIndexKeySet(ctx context.Context, indexName string, keySet map[string]struct{}) (map[string]uint64, error) {
+func (c *cluster) translateIndexKeySet(ctx context.Context, indexName string, keySet map[string]struct{}, writable bool) (map[string]uint64, error) {
 	keyMap := make(map[string]uint64)
 
 	idx := c.holder.Index(indexName)
@@ -2404,22 +2418,29 @@ func (c *cluster) translateIndexKeySet(ctx context.Context, indexName string, ke
 
 		g.Go(func() (err error) {
 			var ids []uint64
-			if c.ownsPartition(c.Node.ID, partitionID) {
-				if ids, err = idx.TranslateStore(partitionID).TranslateKeys(keys); err != nil {
-					return err
-				}
+
+			primary := c.primaryPartitionNode(partitionID)
+			if primary == nil {
+				return errors.Errorf("translating index(%s) keys(%v) on partition(%d) - cannot find primary node", indexName, keys, partitionID)
+			}
+
+			if c.Node.ID == primary.ID {
+				ids, err = idx.TranslateStore(partitionID).TranslateKeys(keys, writable)
 			} else {
-				nodes := c.partitionNodes(partitionID)
-				if ids, err = c.InternalClient.TranslateKeysNode(ctx, &nodes[0].URI, indexName, "", keys); err != nil {
-					return err
-				}
+				ids, err = c.InternalClient.TranslateKeysNode(ctx, &primary.URI, indexName, "", keys, writable)
+			}
+
+			if err != nil {
+				return errors.Wrapf(err, "translating index(%s) keys(%v) on partition(%d)", indexName, keys, partitionID)
 			}
 
 			mu.Lock()
-			defer mu.Unlock()
-			for i := range keys {
-				keyMap[keys[i]] = ids[i]
+			for i, id := range ids {
+				if id != 0 {
+					keyMap[keys[i]] = id
+				}
 			}
+			mu.Unlock()
 			return nil
 		})
 	}
@@ -2471,22 +2492,28 @@ func (c *cluster) translateIndexIDSet(ctx context.Context, indexName string, idS
 
 		g.Go(func() (err error) {
 			var keys []string
-			if c.ownsPartition(c.Node.ID, partitionID) {
-				if keys, err = index.TranslateStore(partitionID).TranslateIDs(ids); err != nil {
-					return err
-				}
+
+			primary := c.primaryPartitionNode(partitionID)
+			if primary == nil {
+				return errors.Errorf("translating index(%s) ids(%v) on partition(%d) - cannot find primary node", indexName, ids, partitionID)
+			}
+
+			if c.Node.ID == primary.ID {
+				keys, err = index.TranslateStore(partitionID).TranslateIDs(ids)
 			} else {
-				nodes := c.partitionNodes(partitionID)
-				if keys, err = c.InternalClient.TranslateIDsNode(ctx, &nodes[0].URI, indexName, "", ids); err != nil {
-					return err
-				}
+				keys, err = c.InternalClient.TranslateIDsNode(ctx, &primary.URI, indexName, "", ids)
+			}
+
+			if err != nil {
+				return errors.Wrapf(err, "translating index(%s) ids(%v) on partition(%d)", indexName, ids, partitionID)
 			}
 
 			mu.Lock()
-			defer mu.Unlock()
-			for i := range ids {
-				idMap[ids[i]] = keys[i]
+			for i, id := range ids {
+				idMap[id] = keys[i]
 			}
+			mu.Unlock()
+
 			return nil
 		})
 	}

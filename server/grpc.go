@@ -357,6 +357,7 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 			}
 			ci = nil // only include headers with the first row
 
+			colAdded := 0
 			for _, field := range fields {
 				// TODO: handle `time` fields
 				switch field.Type() {
@@ -371,17 +372,27 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 						return errors.Wrapf(err, "querying rows for set: %s", pql)
 					}
 
-					ids, ok := resp.Results[0].(pilosa.RowIdentifiers)
-					if !ok {
-						return errors.Wrap(err, "getting row identifiers")
-					}
+					if len(resp.Results) > 0 {
+						ids, ok := resp.Results[0].(pilosa.RowIdentifiers)
+						if !ok {
+							return errors.Wrap(err, "getting row identifiers")
+						}
 
-					if len(ids.Keys) > 0 {
-						rowResp.Columns = append(rowResp.Columns,
-							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_StringArrayVal{StringArrayVal: &pb.StringArray{Vals: ids.Keys}}})
+						if len(ids.Keys) > 0 {
+							rowResp.Columns = append(rowResp.Columns,
+								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_StringArrayVal{StringArrayVal: &pb.StringArray{Vals: ids.Keys}}})
+							colAdded++
+						} else if len(ids.Rows) > 0 {
+							rowResp.Columns = append(rowResp.Columns,
+								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64ArrayVal{Uint64ArrayVal: &pb.Uint64Array{Vals: ids.Rows}}})
+							colAdded++
+						} else {
+							rowResp.Columns = append(rowResp.Columns,
+								&pb.ColumnResponse{ColumnVal: nil})
+						}
 					} else {
 						rowResp.Columns = append(rowResp.Columns,
-							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64ArrayVal{Uint64ArrayVal: &pb.Uint64Array{Vals: ids.Rows}}})
+							&pb.ColumnResponse{ColumnVal: nil})
 					}
 
 				case "mutex":
@@ -395,17 +406,24 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 						return errors.Wrap(err, "querying rows for mutex")
 					}
 
-					ids, ok := resp.Results[0].(pilosa.RowIdentifiers)
-					if !ok {
-						return errors.Wrap(err, "getting row identifiers")
-					}
+					if len(resp.Results) > 0 {
+						ids, ok := resp.Results[0].(pilosa.RowIdentifiers)
+						if !ok {
+							return errors.Wrap(err, "getting row identifiers")
+						}
 
-					if len(ids.Keys) == 1 {
-						rowResp.Columns = append(rowResp.Columns,
-							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_StringVal{StringVal: ids.Keys[0]}})
-					} else if len(ids.Rows) == 1 {
-						rowResp.Columns = append(rowResp.Columns,
-							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: ids.Rows[0]}})
+						if len(ids.Keys) == 1 {
+							rowResp.Columns = append(rowResp.Columns,
+								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_StringVal{StringVal: ids.Keys[0]}})
+							colAdded++
+						} else if len(ids.Rows) == 1 {
+							rowResp.Columns = append(rowResp.Columns,
+								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: ids.Rows[0]}})
+							colAdded++
+						} else {
+							rowResp.Columns = append(rowResp.Columns,
+								&pb.ColumnResponse{ColumnVal: nil})
+						}
 					} else {
 						rowResp.Columns = append(rowResp.Columns,
 							&pb.ColumnResponse{ColumnVal: nil})
@@ -428,15 +446,17 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 								return errors.Wrap(err, "getting int field value for column")
 							}
 
-							valCount, ok := resp.Results[0].(pilosa.ValCount)
-							if ok && valCount.Count == 1 {
-								vals, err := h.api.TranslateIndexIDs(stream.Context(), fi, []uint64{uint64(valCount.Val)})
-								if err != nil {
-									return errors.Wrap(err, "getting keys for ids")
-								}
-								if len(vals) > 0 && vals[0] != "" {
-									value = vals[0]
-									exists = true
+							if len(resp.Results) > 0 {
+								valCount, ok := resp.Results[0].(pilosa.ValCount)
+								if ok && valCount.Count == 1 {
+									vals, err := h.api.TranslateIndexIDs(stream.Context(), fi, []uint64{uint64(valCount.Val)})
+									if err != nil {
+										return errors.Wrap(err, "getting keys for ids")
+									}
+									if len(vals) > 0 && vals[0] != "" {
+										value = vals[0]
+										exists = true
+									}
 								}
 							}
 						} else {
@@ -448,6 +468,7 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 						if exists {
 							rowResp.Columns = append(rowResp.Columns,
 								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_StringVal{StringVal: value}})
+							colAdded++
 						} else {
 							rowResp.Columns = append(rowResp.Columns,
 								&pb.ColumnResponse{ColumnVal: nil})
@@ -463,10 +484,16 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 							return errors.Wrap(err, "getting int field value for column")
 						}
 
-						valCount, ok := resp.Results[0].(pilosa.ValCount)
-						if ok && valCount.Count == 1 {
-							rowResp.Columns = append(rowResp.Columns,
-								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: valCount.Val}})
+						if len(resp.Results) > 0 {
+							valCount, ok := resp.Results[0].(pilosa.ValCount)
+							if ok && valCount.Count == 1 {
+								rowResp.Columns = append(rowResp.Columns,
+									&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: valCount.Val}})
+								colAdded++
+							} else {
+								rowResp.Columns = append(rowResp.Columns,
+									&pb.ColumnResponse{ColumnVal: nil})
+							}
 						} else {
 							rowResp.Columns = append(rowResp.Columns,
 								&pb.ColumnResponse{ColumnVal: nil})
@@ -484,10 +511,16 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 						return errors.Wrap(err, "getting decimal field value for column")
 					}
 
-					valCount, ok := resp.Results[0].(pilosa.ValCount)
-					if ok && valCount.Count == 1 {
-						rowResp.Columns = append(rowResp.Columns,
-							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_DecimalVal{DecimalVal: &pb.Decimal{Value: valCount.DecimalVal.Value, Scale: valCount.DecimalVal.Scale}}})
+					if len(resp.Results) > 0 {
+						valCount, ok := resp.Results[0].(pilosa.ValCount)
+						if ok && valCount.Count == 1 {
+							rowResp.Columns = append(rowResp.Columns,
+								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_DecimalVal{DecimalVal: &pb.Decimal{Value: valCount.DecimalVal.Value, Scale: valCount.DecimalVal.Scale}}})
+							colAdded++
+						} else {
+							rowResp.Columns = append(rowResp.Columns,
+								&pb.ColumnResponse{ColumnVal: nil})
+						}
 					} else {
 						rowResp.Columns = append(rowResp.Columns,
 							&pb.ColumnResponse{ColumnVal: nil})
@@ -504,18 +537,24 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 						return errors.Wrap(err, "querying rows for bool")
 					}
 
-					ids, ok := resp.Results[0].(pilosa.RowIdentifiers)
-					if !ok {
-						return errors.Wrap(err, "getting row identifiers")
-					}
-
-					if len(ids.Rows) == 1 {
-						var bval bool
-						if ids.Rows[0] == 1 {
-							bval = true
+					if len(resp.Results) > 0 {
+						ids, ok := resp.Results[0].(pilosa.RowIdentifiers)
+						if !ok {
+							return errors.Wrap(err, "getting row identifiers")
 						}
-						rowResp.Columns = append(rowResp.Columns,
-							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_BoolVal{BoolVal: bval}})
+
+						if len(ids.Rows) == 1 {
+							var bval bool
+							if ids.Rows[0] == 1 {
+								bval = true
+							}
+							rowResp.Columns = append(rowResp.Columns,
+								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_BoolVal{BoolVal: bval}})
+							colAdded++
+						} else {
+							rowResp.Columns = append(rowResp.Columns,
+								&pb.ColumnResponse{ColumnVal: nil})
+						}
 					} else {
 						rowResp.Columns = append(rowResp.Columns,
 							&pb.ColumnResponse{ColumnVal: nil})
@@ -527,8 +566,25 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 				}
 			}
 
-			if err := stream.Send(rowResp); err != nil {
-				return errors.Wrap(err, "sending response to stream")
+			// For SQL queries like:
+			// SELECT * FROM t WHERE _id=garbageID;
+			// we don't want to return any rows.
+			// So, check here if we added any columns.
+			//
+			// Because we don't have keys to translate
+			// and _id is an artificial field that's why for query:
+			// SELECT _id FROM t WHERE _id=existing-id;
+			// we return an empty result.
+			//
+			// TODO(kuba--): We need to find a way to check here if
+			// existing-id is not a garbage.
+			//
+			// A query which will work here is 'SELECT *' or any query with more columns
+			// than just _id.
+			if colAdded > 0 {
+				if err := stream.Send(rowResp); err != nil {
+					return errors.Wrap(err, "sending response to stream")
+				}
 			}
 		}
 
@@ -546,6 +602,7 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 			return errToStatusError(errors.New("invalid key columns"))
 		}
 
+		forceSend := false
 		ci := []*pb.ColumnInfo{
 			{Name: "_id", Datatype: "string"},
 		}
@@ -565,6 +622,11 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 				end = uint64(len(cols))
 			}
 			cols = cols[offset:end]
+			if len(cols) == 1 {
+				if id, err := h.api.TranslateIndexKey(stream.Context(), index.Name(), cols[0], false); id != 0 && err == nil {
+					forceSend = true
+				}
+			}
 		} else {
 			// Prevent getting too many records by forcing a limit.
 			pql := fmt.Sprintf("All(limit=%d, offset=%d)", limit, offset)
@@ -577,18 +639,20 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 				return errors.Wrapf(err, "querying for all: %s", pql)
 			}
 
-			ids, ok := resp.Results[0].(*pilosa.Row)
-			if !ok {
-				return errors.Wrap(err, "getting results as a row")
-			}
+			if len(resp.Results) > 0 {
+				ids, ok := resp.Results[0].(*pilosa.Row)
+				if !ok {
+					return errors.Wrap(err, "getting results as a row")
+				}
 
-			limitedCols := ids.Keys
-			if len(limitedCols) == 0 {
-				// If cols is still empty after the limit/offset, then
-				// return with no results.
-				return nil
+				limitedCols := ids.Keys
+				if len(limitedCols) == 0 {
+					// If cols is still empty after the limit/offset, then
+					// return with no results.
+					return nil
+				}
+				cols = limitedCols
 			}
-			cols = limitedCols
 		}
 
 		for _, col := range cols {
@@ -600,6 +664,7 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 			}
 			ci = nil // only include headers with the first row
 
+			colAdded := 0
 			for _, field := range fields {
 				// TODO: handle `time` fields
 				switch field.Type() {
@@ -614,17 +679,21 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 						return errors.Wrap(err, "querying set rows(keys)")
 					}
 
-					ids, ok := resp.Results[0].(pilosa.RowIdentifiers)
-					if !ok {
-						return errors.Wrap(err, "getting row identifiers")
-					}
+					if len(resp.Results) > 0 {
+						ids, ok := resp.Results[0].(pilosa.RowIdentifiers)
+						if !ok {
+							return errors.Wrap(err, "getting row identifiers")
+						}
 
-					if len(ids.Keys) > 0 {
-						rowResp.Columns = append(rowResp.Columns,
-							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_StringArrayVal{StringArrayVal: &pb.StringArray{Vals: ids.Keys}}})
-					} else {
-						rowResp.Columns = append(rowResp.Columns,
-							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64ArrayVal{Uint64ArrayVal: &pb.Uint64Array{Vals: ids.Rows}}})
+						if len(ids.Keys) > 0 {
+							rowResp.Columns = append(rowResp.Columns,
+								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_StringArrayVal{StringArrayVal: &pb.StringArray{Vals: ids.Keys}}})
+							colAdded++
+						} else if len(ids.Rows) > 0 {
+							rowResp.Columns = append(rowResp.Columns,
+								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64ArrayVal{Uint64ArrayVal: &pb.Uint64Array{Vals: ids.Rows}}})
+							colAdded++
+						}
 					}
 
 				case "mutex":
@@ -638,25 +707,29 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 						return errors.Wrap(err, "querying mutex rows(keys)")
 					}
 
-					ids, ok := resp.Results[0].(pilosa.RowIdentifiers)
-					if !ok {
-						return errors.Wrap(err, "getting row identifiers")
-					}
+					if len(resp.Results) > 0 {
+						ids, ok := resp.Results[0].(pilosa.RowIdentifiers)
+						if !ok {
+							return errors.Wrap(err, "getting row identifiers")
+						}
 
-					if len(ids.Keys) == 1 {
-						rowResp.Columns = append(rowResp.Columns,
-							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_StringVal{StringVal: ids.Keys[0]}})
-					} else if len(ids.Rows) == 1 {
-						rowResp.Columns = append(rowResp.Columns,
-							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: ids.Rows[0]}})
-					} else {
-						rowResp.Columns = append(rowResp.Columns,
-							&pb.ColumnResponse{ColumnVal: nil})
+						if len(ids.Keys) == 1 {
+							rowResp.Columns = append(rowResp.Columns,
+								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_StringVal{StringVal: ids.Keys[0]}})
+							colAdded++
+						} else if len(ids.Rows) == 1 {
+							rowResp.Columns = append(rowResp.Columns,
+								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: ids.Rows[0]}})
+							colAdded++
+						} else {
+							rowResp.Columns = append(rowResp.Columns,
+								&pb.ColumnResponse{ColumnVal: nil})
+						}
 					}
 
 				case "int":
 					// Translate column key.
-					id, err := h.api.TranslateIndexKey(stream.Context(), index.Name(), col)
+					id, err := h.api.TranslateIndexKey(stream.Context(), index.Name(), col, false)
 					if err != nil {
 						return errors.Wrap(err, "translating column key")
 					}
@@ -677,15 +750,17 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 								return errors.Wrap(err, "getting int field value for column")
 							}
 
-							valCount, ok := resp.Results[0].(pilosa.ValCount)
-							if ok && valCount.Count == 1 {
-								vals, err := h.api.TranslateIndexIDs(stream.Context(), fi, []uint64{uint64(valCount.Val)})
-								if err != nil {
-									return errors.Wrap(err, "getting keys for ids")
-								}
-								if len(vals) > 0 && vals[0] != "" {
-									value = vals[0]
-									exists = true
+							if len(resp.Results) > 0 {
+								valCount, ok := resp.Results[0].(pilosa.ValCount)
+								if ok && valCount.Count == 1 {
+									vals, err := h.api.TranslateIndexIDs(stream.Context(), fi, []uint64{uint64(valCount.Val)})
+									if err != nil {
+										return errors.Wrap(err, "getting keys for ids")
+									}
+									if len(vals) > 0 && vals[0] != "" {
+										value = vals[0]
+										exists = true
+									}
 								}
 							}
 						} else {
@@ -697,6 +772,7 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 						if exists {
 							rowResp.Columns = append(rowResp.Columns,
 								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_StringVal{StringVal: value}})
+							colAdded++
 						} else {
 							rowResp.Columns = append(rowResp.Columns,
 								&pb.ColumnResponse{ColumnVal: nil})
@@ -712,13 +788,16 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 							return errors.Wrap(err, "getting int field value for column")
 						}
 
-						valCount, ok := resp.Results[0].(pilosa.ValCount)
-						if ok && valCount.Count == 1 {
-							rowResp.Columns = append(rowResp.Columns,
-								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: valCount.Val}})
-						} else {
-							rowResp.Columns = append(rowResp.Columns,
-								&pb.ColumnResponse{ColumnVal: nil})
+						if len(resp.Results) > 0 {
+							valCount, ok := resp.Results[0].(pilosa.ValCount)
+							if ok && valCount.Count == 1 {
+								rowResp.Columns = append(rowResp.Columns,
+									&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: valCount.Val}})
+								colAdded++
+							} else {
+								rowResp.Columns = append(rowResp.Columns,
+									&pb.ColumnResponse{ColumnVal: nil})
+							}
 						}
 					}
 
@@ -733,13 +812,16 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 						return errors.Wrap(err, "getting decimal field value for column")
 					}
 
-					valCount, ok := resp.Results[0].(pilosa.ValCount)
-					if ok && valCount.Count == 1 {
-						rowResp.Columns = append(rowResp.Columns,
-							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_DecimalVal{DecimalVal: &pb.Decimal{Value: valCount.DecimalVal.Value, Scale: valCount.DecimalVal.Scale}}})
-					} else {
-						rowResp.Columns = append(rowResp.Columns,
-							&pb.ColumnResponse{ColumnVal: nil})
+					if len(resp.Results) > 0 {
+						valCount, ok := resp.Results[0].(pilosa.ValCount)
+						if ok && valCount.Count == 1 {
+							rowResp.Columns = append(rowResp.Columns,
+								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_DecimalVal{DecimalVal: &pb.Decimal{Value: valCount.DecimalVal.Value, Scale: valCount.DecimalVal.Scale}}})
+							colAdded++
+						} else {
+							rowResp.Columns = append(rowResp.Columns,
+								&pb.ColumnResponse{ColumnVal: nil})
+						}
 					}
 
 				case "bool":
@@ -753,21 +835,24 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 						return errors.Wrap(err, "querying bool rows(keys)")
 					}
 
-					ids, ok := resp.Results[0].(pilosa.RowIdentifiers)
-					if !ok {
-						return errors.Wrap(err, "getting row identifiers")
-					}
-
-					if len(ids.Rows) == 1 {
-						var bval bool
-						if ids.Rows[0] == 1 {
-							bval = true
+					if len(resp.Results) > 0 {
+						ids, ok := resp.Results[0].(pilosa.RowIdentifiers)
+						if !ok {
+							return errors.Wrap(err, "getting row identifiers")
 						}
-						rowResp.Columns = append(rowResp.Columns,
-							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_BoolVal{BoolVal: bval}})
-					} else {
-						rowResp.Columns = append(rowResp.Columns,
-							&pb.ColumnResponse{ColumnVal: nil})
+
+						if len(ids.Rows) == 1 {
+							var bval bool
+							if ids.Rows[0] == 1 {
+								bval = true
+							}
+							rowResp.Columns = append(rowResp.Columns,
+								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_BoolVal{BoolVal: bval}})
+							colAdded++
+						} else {
+							rowResp.Columns = append(rowResp.Columns,
+								&pb.ColumnResponse{ColumnVal: nil})
+						}
 					}
 
 				case "time":
@@ -776,8 +861,20 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 				}
 			}
 
-			if err := stream.Send(rowResp); err != nil {
-				return errors.Wrap(err, "sending response to stream")
+			// For SQL queries like:
+			// SELECT _id FROM parent WHERE _id="garbage";
+			// we get here without any real columns and fields, and we did not
+			// translate any keys. That's why we don't want to send anything back
+			// and return fake response like:
+			//
+			// _id
+			// -------
+			// <nil>
+			// (1 row)
+			if colAdded > 0 || forceSend {
+				if err := stream.Send(rowResp); err != nil {
+					return errors.Wrap(err, "sending response to stream")
+				}
 			}
 		}
 
