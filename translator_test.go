@@ -605,3 +605,93 @@ func TestTranslation_Coordinator(t *testing.T) {
 		}
 	})
 }
+
+func TestTranslation_TranslateIDsOnCluster(t *testing.T) {
+	c := test.MustRunCluster(t, 4,
+		[]server.CommandOption{
+			server.OptCommandServerOptions(
+				pilosa.OptServerIsCoordinator(true),
+				pilosa.OptServerNodeID("node0"),
+				pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
+				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+			)},
+		[]server.CommandOption{
+			server.OptCommandServerOptions(
+				pilosa.OptServerIsCoordinator(false),
+				pilosa.OptServerNodeID("node1"),
+				pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
+				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+			)},
+		[]server.CommandOption{
+			server.OptCommandServerOptions(
+				pilosa.OptServerIsCoordinator(false),
+				pilosa.OptServerNodeID("node2"),
+				pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
+				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+			)},
+		[]server.CommandOption{
+			server.OptCommandServerOptions(
+				pilosa.OptServerIsCoordinator(false),
+				pilosa.OptServerNodeID("node3"),
+				pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
+				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+			)},
+	)
+	defer c.Close()
+
+	node0 := c.GetNode(0)
+	node3 := c.GetNode(3)
+
+	ctx := context.Background()
+	idx, fld := "i", "f"
+	// Create an index with keys.
+	if _, err := node0.API.CreateIndex(ctx, idx, pilosa.IndexOptions{Keys: true}); err != nil {
+		t.Fatal(err)
+	}
+	// Create an index with keys.
+	if _, err := node0.API.CreateField(ctx, idx, fld, pilosa.OptFieldKeys()); err != nil {
+		t.Fatal(err)
+	}
+
+	keys := []string{"k0", "k1", "k2", "k3", "k4", "k5", "k6", "k7", "k8", "k9"}
+	// write a new key and get id
+	req, err := node0.API.Serializer.Marshal(&pilosa.TranslateKeysRequest{
+		Index:       idx,
+		Field:       fld,
+		Keys:        keys,
+		NotWritable: false,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if buf, err := node0.API.TranslateKeys(ctx, bytes.NewReader(req)); err != nil {
+		t.Fatal(err)
+	} else {
+		var (
+			respKeys pilosa.TranslateKeysResponse
+			respIDs  pilosa.TranslateIDsResponse
+		)
+		if err = node0.API.Serializer.Unmarshal(buf, &respKeys); err != nil {
+			t.Fatal(err)
+		}
+		ids := respKeys.IDs
+
+		// translate ids
+		req, err = node3.API.Serializer.Marshal(&pilosa.TranslateIDsRequest{
+			Index: idx,
+			Field: fld,
+			IDs:   ids,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if buf, err = node3.API.TranslateIDs(ctx, bytes.NewReader(req)); err != nil {
+			t.Fatal(err)
+		}
+		if err = node3.API.Serializer.Unmarshal(buf, &respIDs); err != nil {
+			t.Fatal(err)
+		} else if !reflect.DeepEqual(respIDs.Keys, keys) {
+			t.Fatalf("TranslateIDs(%+v): expected: %+v, got: %+v", ids, keys, respIDs.Keys)
+		}
+	}
+}

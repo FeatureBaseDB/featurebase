@@ -1827,7 +1827,7 @@ func (api *API) TranslateIDs(ctx context.Context, r io.Reader) (_ []byte, err er
 			if err != nil {
 				return nil, err
 			}
-		} else if keys, err = field.TranslateStore().TranslateIDs(req.IDs); err != nil {
+		} else if keys, err = api.cluster.translateFieldListIDs(field, req.IDs); err != nil {
 			return nil, err
 		}
 	}
