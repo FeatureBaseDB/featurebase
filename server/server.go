@@ -37,6 +37,7 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
+	"github.com/pelletier/go-toml"
 	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/boltdb"
 	"github.com/pilosa/pilosa/v2/encoding/proto"
@@ -621,4 +622,11 @@ func (f *filteredWriter) Write(p []byte) (n int, err error) {
 		return f.logOutput.Write(p)
 	}
 	return len(p), nil
+}
+
+// ParseConfig parses s into a Config.
+func ParseConfig(s string) (Config, error) {
+	var c Config
+	err := toml.Unmarshal([]byte(s), &c)
+	return c, err
 }

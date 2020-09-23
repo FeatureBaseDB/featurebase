@@ -6,3 +6,4 @@ vendor
 build
 *~
 lattice
+release-pilosa-fsck.*.*.tar.gz

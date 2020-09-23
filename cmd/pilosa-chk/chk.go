@@ -76,8 +76,10 @@ func main() {
 
 	final := pilosa.NewAllTranslatorSummary()
 	const verbose = true
+	const checkKeys = false
+	const applyKeyRepairs = false
 	for _, idx := range holder.Indexes() {
-		asum, err := idx.ComputeTranslatorSummary(verbose)
+		asum, err := idx.ComputeTranslatorSummary(verbose, checkKeys, applyKeyRepairs, nil, "fake-nodeID")
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -103,7 +105,7 @@ func main() {
 			fmt.Printf("==============================\n")
 			fmt.Printf("index: %v\n", idx.Name())
 			fmt.Printf("==============================\n")
-			idx.WriteFragmentChecksums(os.Stdout, showBits, showOpsLog)
+			idx.WriteFragmentChecksums(os.Stdout, showBits, showOpsLog, nil, verbose)
 		}
 	}
 }

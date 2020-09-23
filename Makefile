@@ -55,7 +55,7 @@ testv-race: topt-race testvsub-race
 #            find which test is hung/deadlocked.
 #
 testvsub:
-	set -e; for i in ctl http pg pql rbf roaring server sql txkey; do \
+	set -e; for i in boltdb ctl http pg pql rbf roaring server sql txkey; do \
            echo; echo "___ testing subpkg $$i"; \
            cd $$i; pwd; \
            go test -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) $(NOCHECKPTR) -v -timeout 60m || break; \
@@ -64,7 +64,7 @@ testvsub:
         done
 
 testvsub-race:
-	set -e; for i in ctl http pg pql rbf roaring server sql txkey; do \
+	set -e; for i in boltdb ctl http pg pql rbf roaring server sql txkey; do \
            echo; echo "___ testing subpkg $$i -race"; \
            cd $$i; pwd; \
            go test -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) $(NOCHECKPTR) -v -race -timeout 60m || break; \
@@ -200,6 +200,9 @@ pilosa-keydump:
 # Install diagnostic pilosa-chk tool for string translations and fragment checksums.
 pilosa-chk:
 	go install -tags='$(BUILD_TAGS)' -ldflags $(LDFLAGS) $(FLAGS) ./cmd/pilosa-chk
+
+pilosa-fsck:
+	cd ./cmd/pilosa-fsck && make install && make release
 
 # Run Pilosa tests inside Docker container
 docker-test:
