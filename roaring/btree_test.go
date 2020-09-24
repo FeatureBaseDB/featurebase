@@ -440,7 +440,7 @@ func benchmarkGetSeq(b *testing.B, n int) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		for j := 0; j < n; j++ {
-			r.Get(uint64(j))
+			_, _ = r.Get(uint64(j))
 		}
 	}
 	b.StopTimer()
@@ -518,7 +518,7 @@ func benchmarkGetRnd(b *testing.B, n int) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		for _, v := range a {
-			r.Get(uint64(v))
+			_, _ = r.Get(uint64(v))
 		}
 	}
 	b.StopTimer()

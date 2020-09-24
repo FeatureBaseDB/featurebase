@@ -60,7 +60,7 @@ func (b *Bitmap) UnmarshalBinary(data []byte) (err error) {
 		}
 		newC.setMapped(true)
 		if !b.preferMapping {
-			newC.unmapOrClone()
+			newC = newC.unmapOrClone()
 		}
 		b.Containers.Put(itrKey, newC)
 		itrKey, itrCType, itrN, itrLen, itrPointer, itrErr = itr.Next()
@@ -152,7 +152,7 @@ func InspectBinary(data []byte, mapped bool, info *BitmapInfo) (b *Bitmap, mappe
 		}
 		newC.setMapped(true)
 		if !mapped {
-			newC.unmapOrClone()
+			newC = newC.unmapOrClone()
 		}
 		newC.flags |= flagPristine
 		if newC.flags&flagMapped != 0 {
