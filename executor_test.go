@@ -2943,10 +2943,6 @@ func TestExecutor_Execute_Remote_Row(t *testing.T) {
 	`}); err != nil {
 			t.Fatalf("querying remote: %v", err)
 		}
-		err := c.GetNode(0).API.RecalculateCaches(context.Background())
-		if err != nil {
-			t.Fatalf("recalculating caches: %v", err)
-		}
 
 		if res, err := c.GetNode(1).API.Query(context.Background(), &pilosa.QueryRequest{
 			Index: "i",

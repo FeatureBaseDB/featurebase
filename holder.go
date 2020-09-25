@@ -1154,6 +1154,8 @@ func (h *Holder) flushCaches() {
 // probably not practical to call in real-world workloads, but makes writing
 // integration tests much eaiser, since one doesn't have to wait 10 seconds
 // after setting bits to get expected response.
+// This is mostly unnecessary now, as caches will automatically recalculate on read.
+// However, a user may explicitly request calculation, in which case we should not defer it.
 func (h *Holder) recalculateCaches() {
 	for _, index := range h.Indexes() {
 		index.recalculateCaches()

@@ -780,7 +780,8 @@ func (api *API) Node() *Node {
 	return &node
 }
 
-// RecalculateCaches forces all TopN caches to be updated. Used mainly for integration tests.
+// RecalculateCaches forces all TopN caches to be updated.
+// This is done internally within a TopN query, but a user may want to do it ahead of time?
 func (api *API) RecalculateCaches(ctx context.Context) error {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.RecalculateCaches")
 	defer span.Finish()
