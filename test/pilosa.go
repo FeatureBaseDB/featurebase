@@ -184,15 +184,6 @@ func (m *Command) QueryAPI(tb testing.TB, req *pilosa.QueryRequest) pilosa.Query
 	return resp
 }
 
-// MustRecalculateCaches calls RecalculateCaches on the command's API, and fails
-// if there is an error.
-func (m *Command) MustRecalculateCaches(tb testing.TB) {
-	err := m.API.RecalculateCaches(context.Background())
-	if err != nil {
-		tb.Fatalf("recalcluating caches: %v", err)
-	}
-}
-
 // URL returns the base URL string for accessing the running program.
 func (m *Command) URL() string { return m.API.Node().URI.String() }
 

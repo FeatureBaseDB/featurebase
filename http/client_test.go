@@ -617,7 +617,6 @@ func TestClient_ImportKeys(t *testing.T) {
 			}); err != nil {
 				t.Fatal(err)
 			}
-			cmd.MustRecalculateCaches(t)
 			resp := cmd.QueryAPI(t, &pilosa.QueryRequest{
 				Index: "keyed",
 				Query: "TopN(keyedf)",
@@ -644,7 +643,6 @@ func TestClient_ImportKeys(t *testing.T) {
 			}); err != nil {
 				t.Fatal(err)
 			}
-			cmd.MustRecalculateCaches(t)
 			resp := cmd.QueryAPI(t, &pilosa.QueryRequest{
 				Index: "keyed",
 				Query: "TopN(unkeyedf)",
@@ -671,7 +669,6 @@ func TestClient_ImportKeys(t *testing.T) {
 			}); err != nil {
 				t.Fatal(err)
 			}
-			cmd.MustRecalculateCaches(t)
 			resp := cmd.QueryAPI(t, &pilosa.QueryRequest{
 				Index: "unkeyed",
 				Query: "TopN(keyedf)",
@@ -716,7 +713,6 @@ func TestClient_ImportKeys(t *testing.T) {
 			}); err != nil {
 				t.Fatal(err)
 			}
-			cmd0.MustRecalculateCaches(t)
 			resp := cmd0.QueryAPI(t, &pilosa.QueryRequest{
 				Index: "keyed",
 				Query: "TopN(keyedf0)",
@@ -748,7 +744,6 @@ func TestClient_ImportKeys(t *testing.T) {
 			// Wait for translation replication.
 			time.Sleep(500 * time.Millisecond)
 
-			cmd1.MustRecalculateCaches(t)
 			resp := cmd1.QueryAPI(t, &pilosa.QueryRequest{
 				Index: "keyed",
 				Query: "TopN(keyedf1)",
