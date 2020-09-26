@@ -369,20 +369,27 @@ func (w *LMDBWrapper) SetHolder(h *Holder) {
 // NewTxWRITE lets us see in the callstack dumps where the WRITE tx are.
 // Can't have more than one active write per database, so the
 // 2nd one will block until the first finishes.
-func (w *LMDBWrapper) NewTxWRITE() *lmdb.Txn {
+func (w *LMDBWrapper) NewTxWRITE() (*lmdb.Txn, error) {
 	lmdbTxn, err := w.env.BeginTxn(nil, 0)
-	panicOn(err)
-	return lmdbTxn
+	if err != nil {
+		if w.env == nil || w.IsClosed() {
+			return nil, fmt.Errorf("cannot call NewTxWRITE() on closed LMDB database: '%v'", err)
+		}
+		return nil, err
+	}
+	return lmdbTxn, nil
 }
 
 // NewTxREAD lets us see in the callstack dumps where the READ tx are.
-func (w *LMDBWrapper) NewTxREAD() *lmdb.Txn {
-	if w.env == nil {
-		panic("cannot call NewTxREAD() on closed LMDBWrapper() -- open a new Wrapper first")
-	}
+func (w *LMDBWrapper) NewTxREAD() (*lmdb.Txn, error) {
 	lmdbTxn, err := w.env.BeginTxn(nil, lmdb.Readonly)
-	panicOn(err)
-	return lmdbTxn
+	if err != nil {
+		if w.env == nil || w.IsClosed() {
+			return nil, fmt.Errorf("cannot call NewTxREAD() on closed LMDB database: '%v'", err)
+		}
+		return nil, err
+	}
+	return lmdbTxn, nil
 }
 
 // NewTx produces LMDB based ACID or ACI transactions. If
@@ -409,10 +416,16 @@ func (w *LMDBWrapper) NewTx(write bool, initialIndexName string, o Txo) (tx Tx, 
 	var lmdbTxn *lmdb.Txn
 	if write {
 		// see the WRITE tx on the callstack.
-		lmdbTxn = w.NewTxWRITE()
+		lmdbTxn, err = w.NewTxWRITE()
+		if err != nil {
+			return nil, err
+		}
 	} else {
 		// see the READ tx on the callstack.
-		lmdbTxn = w.NewTxREAD()
+		lmdbTxn, err = w.NewTxREAD()
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	lmdbTxn.RawRead = true
