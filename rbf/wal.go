@@ -122,9 +122,9 @@ func (s *WALSegment) ReadWALPage(walID int64) ([]byte, error) {
 }
 
 func walSegmentByPath(segments []WALSegment, path string) *WALSegment {
-	for _, segment := range segments {
-		if segment.Path == path {
-			return &segment
+	for i := range segments {
+		if segments[i].Path == path {
+			return &segments[i]
 		}
 	}
 	return nil
@@ -245,6 +245,13 @@ func truncateWALAfter(segments []WALSegment, walID int64) ([]WALSegment, error) 
 	}
 
 	return newSegments, nil
+}
+
+func DumpWALSegments(segments []WALSegment) {
+	fmt.Printf("WAL (%d segments)\n", len(segments))
+	for i, s := range segments {
+		fmt.Printf("[%d] WALIDs=(%d-%d) PageN=%d\n", i, s.MinWALID, s.MaxWALID(), s.PageN)
+	}
 }
 
 // FormatWALSegmentPath returns a path for a WAL segment using a WAL ID.

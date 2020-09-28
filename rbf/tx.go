@@ -1660,15 +1660,13 @@ func (tx *Tx) writeBitmapWALPage(pgno uint32, page []byte) (walID int64, err err
 }
 
 func (tx *Tx) ensureWritableWALSegment() error {
+	// Ignore if we still have space in the write cache.
 	writeCacheSize := int64(len(tx.wcache))
 	if len(tx.segments) != 0 && activeWALSegment(tx.segments).Size()+writeCacheSize < MaxWALSegmentFileSize {
 		return nil
 	}
-	return tx.addWALSegment()
-}
 
-// addWALSegment appends a new, writable segment and closing an existing segments for write.
-func (tx *Tx) addWALSegment() error {
+	// Flush write cache out to file before adding new segment.
 	if err := tx.flushWALWriter(); err != nil {
 		return err
 	}
