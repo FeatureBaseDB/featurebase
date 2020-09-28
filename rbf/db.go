@@ -250,7 +250,7 @@ func (db *DB) checkpoint(exclusive bool, mu sync.Locker) error {
 
 		// Loop over pages in the transaction.
 		for ; walID <= metaWALID; walID++ {
-			canCheckpoint := exclusive || minActiveWALID == 0 || walID <= minActiveWALID
+			canCheckpoint := exclusive || minActiveWALID == 0 || walID < minActiveWALID
 
 			page, err := readWALPage(segments, walID)
 			if err != nil {
