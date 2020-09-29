@@ -1,0 +1,73 @@
+syntax = "proto3";
+package vdsm;
+
+option go_package = "github.com/pilosa/pilosa/v2/proto/vdsm";
+
+import "pilosa.proto";
+
+// deprecated
+message DataSource {
+  int64 id = 1;
+  string name = 2;
+  string description = 3;
+  string type = 4;
+  map<string, string> config = 5;
+  string status = 6;
+}
+
+message VDS {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+  string pilosa_index = 4;
+  repeated DataSource datasources = 5;
+}
+
+message GetVDSsRequest {
+}
+
+message GetVDSsResponse {
+  repeated VDS vdss = 1;
+}
+
+message GetVDSRequest {
+  oneof idOrName {
+    string id = 1;
+    string name = 2;
+  }
+}
+
+message GetVDSResponse {
+  VDS vds = 1;
+}
+
+message PostVDSRequest {
+  string definition = 1;
+}
+
+message PostVDSResponse {
+  string id = 1;
+  string uri = 2;
+}
+
+message DeleteVDSRequest {
+  oneof idOrName {
+    string id = 1;
+    string name = 2;
+  }
+}
+
+message DeleteVDSResponse {
+}
+
+service Molecula {
+  rpc GetVDSs(GetVDSsRequest) returns (GetVDSsResponse) {};
+  rpc GetVDS(GetVDSRequest) returns (GetVDSResponse) {};
+  rpc PostVDS(PostVDSRequest) returns (PostVDSResponse) {};
+  rpc DeleteVDS(DeleteVDSRequest) returns (DeleteVDSResponse) {};
+  rpc QuerySQL(pilosa.QuerySQLRequest) returns (stream pilosa.RowResponse) {};
+  rpc QuerySQLUnary(pilosa.QuerySQLRequest) returns (pilosa.TableResponse) {};
+  rpc QueryPQL(pilosa.QueryPQLRequest) returns (stream pilosa.RowResponse) {};
+  rpc QueryPQLUnary(pilosa.QueryPQLRequest) returns (pilosa.TableResponse) {};
+  rpc Inspect(pilosa.InspectRequest) returns (stream pilosa.RowResponse) {};
+}

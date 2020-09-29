@@ -166,9 +166,14 @@ generate-stringer:
 generate-pql: require-peg
 	cd pql && peg -inline pql.peg && cd ..
 
-# dunno if protoc-gen-gofast is actually needed here
-generate-proto-grpc: require-protoc require-protoc-gen-gofast
+generate-proto-grpc: require-protoc require-protoc-gen-go
 	protoc -I proto proto/pilosa.proto --go_out=plugins=grpc:proto
+	protoc -I proto proto/vdsm/vdsm.proto --go_out=plugins=grpc:proto
+	# TODO: Modify above commands and remove the below mv if possible.
+	# See https://go-review.googlesource.com/c/protobuf/+/219298/ for info on --go-opt
+	# I couldn't get it to work during development - Cody
+	cp -r proto/github.com/pilosa/pilosa/v2/proto/ proto/
+	rm -rf proto/github.com
 
 # `go generate` all needed packages
 generate: generate-protoc generate-statik generate-stringer generate-pql
@@ -385,6 +390,9 @@ install-stringer:
 
 install-protoc-gen-gofast:
 	GO111MODULE=off go get -u github.com/gogo/protobuf/protoc-gen-gofast
+
+install-protoc-gen-go:
+	GO111MODULE=off go get -u github.com/golang/protobuf/protoc-gen-go
 
 install-protoc:
 	@echo This tool cannot automatically install protoc. Please download and install protoc from https://google.github.io/proto-lens/installing-protoc.html
