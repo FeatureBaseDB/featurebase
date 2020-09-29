@@ -62,7 +62,7 @@ const (
 	resizeJobActionAdd    = "ADD"
 	resizeJobActionRemove = "REMOVE"
 
-	defaultConfirmDownRetries = 120
+	defaultConfirmDownRetries = 10
 	defaultConfirmDownSleep   = 1 * time.Second
 )
 
