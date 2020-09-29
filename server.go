@@ -534,10 +534,12 @@ func (s *Server) Close() error {
 	s.wg.Wait()
 
 	var errh error
+	var errhs error
 	var errc error
 	if s.cluster != nil {
 		errc = s.cluster.close()
 	}
+	errhs = s.syncer.stopTranslationSync()
 	if s.holder != nil {
 		errh = s.holder.Close()
 	}
@@ -552,6 +554,9 @@ func (s *Server) Close() error {
 	// warrant the extra complexity.
 	if errh != nil {
 		return errors.Wrap(errh, "closing holder")
+	}
+	if errhs != nil {
+		return errors.Wrap(errhs, "terminating holder translation sync")
 	}
 	if errc != nil {
 		return errors.Wrap(errc, "closing cluster")
