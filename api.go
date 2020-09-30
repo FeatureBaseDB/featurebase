@@ -784,7 +784,7 @@ func (api *API) Node() *Node {
 
 // Usage gets the disk usage per index
 func (api *API) Usage() (map[string]int64, int64, error) {
-	indexSizes := make(map[string]int64, 0)
+	indexSizes := make(map[string]int64)
 	var totalSize int64
 
 	dirName, err := expandDirName(api.server.dataDir)
