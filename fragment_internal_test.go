@@ -33,13 +33,13 @@ import (
 	"testing"
 	"testing/quick"
 
-	"golang.org/x/sync/errgroup"
-
 	"github.com/davecgh/go-spew/spew"
 	"github.com/pilosa/pilosa/v2/pql"
+	"github.com/pilosa/pilosa/v2/race"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/testhook"
 	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
 )
 
 // Test flags
@@ -450,6 +450,10 @@ func TestFragment_SetValue(t *testing.T) {
 	})
 
 	t.Run("QuickCheck", func(t *testing.T) {
+		if os.Getenv("PILOSA_TXSRC") == "rbf" && race.Enabled {
+			t.Skip("race detection enabled, skipping for rbf")
+		}
+
 		if err := quick.Check(func(bitDepth uint, bitN uint64, values []uint64) bool {
 			// Limit bit depth & maximum values.
 			bitDepth = (bitDepth % 62) + 1

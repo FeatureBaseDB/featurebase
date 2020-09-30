@@ -25,9 +25,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pilosa/pilosa/v2/server"
-
 	"github.com/pilosa/pilosa/v2"
+	"github.com/pilosa/pilosa/v2/race"
+	"github.com/pilosa/pilosa/v2/server"
 	"github.com/pilosa/pilosa/v2/test"
 	"golang.org/x/sync/errgroup"
 )
@@ -634,6 +634,10 @@ func TestCluster_GossipMembership(t *testing.T) {
 }
 
 func TestClusterResize_RemoveNode(t *testing.T) {
+	if os.Getenv("PILOSA_TXSRC") == "rbf" && race.Enabled {
+		t.Skip("race detection enabled, skipping for rbf")
+	}
+
 	cluster := test.MustRunCluster(t, 3)
 	defer cluster.Close()
 	m0 := cluster.GetNode(0)

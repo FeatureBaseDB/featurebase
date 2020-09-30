@@ -14,7 +14,7 @@
 
 // +build race
 
-package rbf
+package race
 
-// RaceEnabled is true if the -race flag is enabled.
-const RaceEnabled = true
+// Enabled is true if the -race flag is enabled.
+const Enabled = true

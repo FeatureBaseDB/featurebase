@@ -34,6 +34,7 @@ import (
 	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/http"
 	"github.com/pilosa/pilosa/v2/pql"
+	"github.com/pilosa/pilosa/v2/race"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/server"
 	"github.com/pilosa/pilosa/v2/test"
@@ -51,6 +52,8 @@ func init() { // nolint: gochecknoinits
 func TestMain_Set_Quick(t *testing.T) {
 	if testing.Short() {
 		t.Skip("short")
+	} else if os.Getenv("PILOSA_TXSRC") == "rbf" && race.Enabled {
+		t.Skip("race detection enabled, skipping for rbf")
 	}
 
 	for i := 0; i < 100; i++ {
@@ -947,6 +950,10 @@ func TestMain_ImportTimestampNoStandardView(t *testing.T) {
 }
 
 func TestClusterQueriesAfterRestart(t *testing.T) {
+	if os.Getenv("PILOSA_TXSRC") == "rbf" && race.Enabled {
+		t.Skip("race detection enabled, skipping for rbf")
+	}
+
 	cluster := test.MustRunCluster(t, 3)
 	defer cluster.Close()
 	cmd1 := cluster.GetNode(1)
@@ -1171,6 +1178,10 @@ func TestClusterExhaustingConnectionsImport(t *testing.T) {
 }
 
 func TestClusterMinMaxSumDecimal(t *testing.T) {
+	if os.Getenv("PILOSA_TXSRC") == "rbf" && race.Enabled {
+		t.Skip("race detection enabled, skipping for rbf")
+	}
+
 	cluster := test.MustRunCluster(t, 3)
 	defer cluster.Close()
 	cmd := cluster.GetNode(0)
