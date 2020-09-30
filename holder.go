@@ -1275,6 +1275,8 @@ type holderSyncer struct {
 	// Translation sync handling.
 	readers []TranslateEntryReader
 
+	syncers errgroup.Group
+
 	// Stats
 	Stats stats.StatsClient
 
@@ -1569,6 +1571,7 @@ func (s *holderSyncer) stopTranslationSync() error {
 			return rd.Close()
 		})
 	}
+	g.Go(s.syncers.Wait)
 	return g.Wait()
 }
 
@@ -1658,7 +1661,11 @@ func (s *holderSyncer) initializeIndexTranslateReplication() error {
 		}
 		s.readers = append(s.readers, rd)
 
-		go func() { defer rd.Close(); s.readIndexTranslateReader(rd) }()
+		s.syncers.Go(func() error {
+			defer rd.Close()
+			s.readIndexTranslateReader(rd)
+			return nil
+		})
 	}
 
 	return nil
@@ -1697,8 +1704,11 @@ func (s *holderSyncer) initializeFieldTranslateReplication() error {
 	}
 	s.readers = append(s.readers, rd)
 
-	go func() { defer rd.Close(); s.readFieldTranslateReader(rd) }()
-
+	s.syncers.Go(func() error {
+		defer rd.Close()
+		s.readFieldTranslateReader(rd)
+		return nil
+	})
 	return nil
 }
 

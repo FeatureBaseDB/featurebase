@@ -20,6 +20,7 @@ import (
 	"io/ioutil"
 	"os"
 	"reflect"
+	"strconv"
 	"testing"
 	"time"
 
@@ -213,6 +214,30 @@ func TestTranslateStore_TranslateIDs(t *testing.T) {
 		t.Fatalf("TranslateIDs()[1]=%s, want %s", got, want)
 	} else if got, want := keys[2], ""; got != want {
 		t.Fatalf("TranslateIDs()[2]=%s, want %s", got, want)
+	}
+}
+
+func TestTranslateStore_MaxID(t *testing.T) {
+	s := MustOpenNewTranslateStore()
+	defer MustCloseTranslateStore(s)
+
+	// Generate a bunch of keys.
+	var lastk uint64
+	for i := 0; i < 1026; i++ {
+		k, err := s.TranslateKey(strconv.Itoa(i), true)
+		if err != nil {
+			t.Fatalf("translating %d: %v", i, err)
+		}
+		lastk = k
+	}
+
+	// Verify the max ID.
+	max, err := s.MaxID()
+	if err != nil {
+		t.Fatalf("checking max ID: %v", err)
+	}
+	if max != lastk {
+		t.Fatalf("last key is %d but max is %d", lastk, max)
 	}
 }
 
