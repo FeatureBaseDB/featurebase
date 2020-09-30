@@ -648,3 +648,19 @@ func RowValues(b []uint64) []uint64 {
 // 	_, file, line, _ := runtime.Caller(skip + 1)
 // 	return fmt.Sprintf("%s:%d", file, line)
 // }
+
+// truncate truncates the file at path to sz bytes. File must exist.
+func truncate(path string, sz int64) error {
+	f, err := os.OpenFile(path, os.O_WRONLY, 0666)
+	if err != nil {
+		return fmt.Errorf("open file: %w", err)
+	}
+	defer f.Close()
+
+	if err := f.Truncate(sz); err != nil {
+		return fmt.Errorf("truncate: %w", err)
+	} else if err := f.Sync(); err != nil {
+		return fmt.Errorf("sync: %w", err)
+	}
+	return f.Close()
+}

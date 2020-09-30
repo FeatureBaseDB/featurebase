@@ -74,8 +74,8 @@ func (s *WALSegment) Open() (err error) {
 	s.PageN = int(sz / PageSize)
 	if sz%PageSize != 0 {
 		sz = int64(s.PageN * PageSize)
-		if err := os.Truncate(s.Path, sz); err != nil {
-			return fmt.Errorf("truncate wal segment file: %w", err)
+		if err := truncate(s.Path, sz); err != nil {
+			return fmt.Errorf("truncate wal file: %w", err)
 		}
 	}
 
@@ -229,7 +229,7 @@ func truncateWALAfter(segments []WALSegment, walID int64) ([]WALSegment, error) 
 			newSegment := *segment
 			newSegment.PageN = int((walID - newSegment.MinWALID) + 1)
 
-			if err := os.Truncate(newSegment.Path, int64(newSegment.PageN)*PageSize); err != nil {
+			if err := truncate(newSegment.Path, int64(newSegment.PageN)*PageSize); err != nil {
 				return segments, err
 			}
 			newSegments = append(newSegments, newSegment)

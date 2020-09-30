@@ -294,6 +294,11 @@ func (db *DB) checkpoint(exclusive bool, mu sync.Locker) error {
 		}
 	}
 
+	// Ensure WAL pages are fully copied & synced to DB file.
+	if err := db.file.Sync(); err != nil {
+		return fmt.Errorf("db file sync: %w", err)
+	}
+
 	// Remove WAL segments that have been checkpointed.
 	if maxCheckpointedWALID != 0 {
 		for _, segment := range segments {
