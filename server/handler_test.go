@@ -379,6 +379,11 @@ func TestHandler_Endpoints(t *testing.T) {
 		if len(ret["nodes"].([]interface{})) != 1 {
 			t.Fatalf("wrong length nodes list: %#v", ret)
 		}
+		usage := ret["bytesOnDisk"].(map[string]interface{})
+		indexes := usage["indexes"].(map[string]interface{})
+		if len(indexes) != 2 {
+			t.Fatalf("wrong length index size list: %#v", indexes)
+		}
 	})
 
 	t.Run("Metrics", func(t *testing.T) {

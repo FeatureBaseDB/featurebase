@@ -663,10 +663,19 @@ func (h *Handler) handleGetStatus(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
 		return
 	}
+	usageIndexes, usageTotal, err := h.api.Usage()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+	usage := diskUsage{
+		Total:   usageTotal,
+		Indexes: usageIndexes,
+	}
 	status := getStatusResponse{
-		State:   h.api.State(),
-		Nodes:   h.api.Hosts(r.Context()),
-		LocalID: h.api.Node().ID,
+		State:       h.api.State(),
+		Nodes:       h.api.Hosts(r.Context()),
+		LocalID:     h.api.Node().ID,
+		BytesOnDisk: usage,
 	}
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(status); err != nil {
@@ -722,9 +731,15 @@ type getSchemaResponse struct {
 }
 
 type getStatusResponse struct {
-	State   string         `json:"state"`
-	Nodes   []*pilosa.Node `json:"nodes"`
-	LocalID string         `json:"localID"`
+	State       string         `json:"state"`
+	Nodes       []*pilosa.Node `json:"nodes"`
+	LocalID     string         `json:"localID"`
+	BytesOnDisk diskUsage      `json:"bytesOnDisk"`
+}
+
+type diskUsage struct {
+	Total   int64            `json:"total"`
+	Indexes map[string]int64 `json:"indexes"`
 }
 
 func hash(s string) string {
