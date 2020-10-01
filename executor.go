@@ -1074,14 +1074,16 @@ func (e *executor) executeDistinct(ctx context.Context, qcx *Qcx, index string, 
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeDistinct")
 	defer span.Finish()
 
-	field := c.Args["field"]
-	if field == "" {
-		return SignedRow{}, fmt.Errorf("plugin operation %s(): field required", c.Name)
+	field, hasField, err := c.StringArg("field")
+	if err != nil {
+		return SignedRow{}, errors.Wrap(err, "loading field option in Distinct query")
+	} else if !hasField {
+		return SignedRow{}, fmt.Errorf("missing field option in Distinct query")
 	}
 
 	// Execute calls in bulk on each remote node and merge.
 	mapFn := func(ctx context.Context, shard uint64) (_ interface{}, err error) {
-		return e.executeDistinctShard(ctx, qcx, index, c, shard)
+		return e.executeDistinctShard(ctx, qcx, index, field, c, shard)
 	}
 
 	// Merge returned results at coordinating node.
@@ -1098,7 +1100,7 @@ func (e *executor) executeDistinct(ctx context.Context, qcx *Qcx, index string, 
 		return SignedRow{}, err
 	}
 	other, _ := result.(SignedRow)
-	other.field = field.(string)
+	other.field = field
 
 	return other, nil
 }
@@ -1385,11 +1387,15 @@ func (e *executor) executeBitmapCallShard(ctx context.Context, qcx *Qcx, index s
 
 // executeDistinctShard executes a Distinct call on a single shard, yielding
 // a SignedRow of the values found.
-func (e *executor) executeDistinctShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64) (result SignedRow, err error) {
+func (e *executor) executeDistinctShard(ctx context.Context, qcx *Qcx, index string, fieldName string, c *pql.Call, shard uint64) (result SignedRow, err error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeDistinctShard")
 	defer span.Finish()
 
 	idx := e.Holder.Index(index)
+	field := e.Holder.Field(index, fieldName)
+	if field == nil {
+		return SignedRow{}, ErrFieldNotFound
+	}
 
 	var filter *Row
 	var filterBitmap *roaring.Bitmap
@@ -1404,13 +1410,6 @@ func (e *executor) executeDistinctShard(ctx context.Context, qcx *Qcx, index str
 		} else {
 			filterBitmap = roaring.NewFileBitmap()
 		}
-	}
-
-	fieldName, _ := c.Args["field"].(string)
-
-	field := e.Holder.Field(index, fieldName)
-	if field == nil {
-		return result, nil
 	}
 
 	bsig := field.bsiGroup(fieldName)
