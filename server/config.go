@@ -122,6 +122,7 @@ type Config struct {
 		Coordinator bool     `toml:"coordinator"`
 		ReplicaN    int      `toml:"replicas"`
 		Hosts       []string `toml:"hosts"`
+		Name        string   `toml:"name"`
 		// TODO(2.0) move this out of cluster. (why is it here??)
 		LongQueryTime toml.Duration `toml:"long-query-time"`
 	} `toml:"cluster"`

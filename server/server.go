@@ -406,6 +406,7 @@ func (m *Command) SetupServer() error {
 		pilosa.OptServerGRPCURI(advertiseGRPCURI),
 		pilosa.OptServerInternalClient(http.NewInternalClientFromURI(uri, c)),
 		pilosa.OptServerClusterDisabled(m.Config.Cluster.Disabled, m.Config.Cluster.Hosts),
+		pilosa.OptServerClusterName(m.Config.Cluster.Name),
 		pilosa.OptServerSerializer(proto.Serializer{}),
 		pilosa.OptServerTxsrc(m.Config.Txsrc),
 		coordinatorOpt,
