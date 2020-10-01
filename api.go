@@ -25,6 +25,8 @@ import (
 	"io/ioutil"
 	"math"
 	"net/url"
+	"os"
+	"path"
 	"sort"
 	"strconv"
 	"strings"
@@ -778,6 +780,70 @@ func (api *API) Hosts(ctx context.Context) []*Node {
 func (api *API) Node() *Node {
 	node := api.server.node()
 	return &node
+}
+
+// Usage gets the disk usage per index
+func (api *API) Usage() (map[string]int64, int64, error) {
+	indexSizes := make(map[string]int64)
+	var totalSize int64
+
+	dirName, err := expandDirName(api.server.dataDir)
+	if err != nil {
+		return indexSizes, totalSize, errors.Wrap(err, "expanding data directory")
+	}
+	dir, err := os.Open(dirName)
+	if err != nil {
+		return indexSizes, totalSize, errors.Wrap(err, "opening data directory")
+	}
+	defer dir.Close()
+
+	files, err := dir.Readdir(-1)
+	if err != nil {
+		return indexSizes, totalSize, errors.Wrap(err, "reading data directory")
+	}
+
+	for _, file := range files {
+		if !file.IsDir() {
+			continue
+		}
+		fullName := path.Join(dirName, file.Name())
+		indexSizes[file.Name()], err = diskUsage(fullName)
+		if err != nil {
+			break
+		}
+		totalSize += indexSizes[file.Name()]
+	}
+
+	return indexSizes, totalSize, nil
+}
+
+func diskUsage(fname string) (int64, error) {
+	var size int64
+
+	dir, err := os.Open(fname)
+	if err != nil {
+		return 0, errors.Wrap(err, "opening data subdirectory")
+	}
+	defer dir.Close()
+
+	files, err := dir.Readdir(-1)
+	if err != nil {
+		return 0, errors.Wrap(err, "reading data subdirectory")
+	}
+
+	for _, file := range files {
+		if file.IsDir() {
+			sz, err := diskUsage(path.Join(fname, file.Name()))
+			if err != nil {
+				return 0, err
+			}
+			size += sz
+		} else {
+			size += file.Size()
+		}
+	}
+
+	return size, nil
 }
 
 // RecalculateCaches forces all TopN caches to be updated.

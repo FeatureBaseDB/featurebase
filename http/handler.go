@@ -392,6 +392,8 @@ func newRouter(handler *Handler) http.Handler {
 	router.HandleFunc("/queries", handler.handleGetActiveQueries).Methods("GET").Name("GetActiveQueries")
 	router.HandleFunc("/version", handler.handleGetVersion).Methods("GET").Name("GetVersion")
 
+	router.HandleFunc("/ui/usage", handler.handleGetUsage).Methods("GET").Name("GetUsage")
+
 	// /internal endpoints are for internal use only; they may change at any time.
 	// DO NOT rely on these for external applications!
 	router.HandleFunc("/internal/cluster/message", handler.handlePostClusterMessage).Methods("POST").Name("PostClusterMessage")
@@ -655,6 +657,40 @@ func (h *Handler) handlePostSchema(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleGetUsage handles GET /ui/usage requests.
+func (h *Handler) handleGetUsage(w http.ResponseWriter, r *http.Request) {
+	if !validHeaderAcceptJSON(r.Header) {
+		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
+		return
+	}
+	usageIndexes, usageTotal, err := h.api.Usage()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+
+	disk := diskUsage{
+		Total:   usageTotal,
+		Indexes: usageIndexes,
+	}
+
+	usage := getUsageResponse{
+		Disk: disk,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(usage); err != nil {
+		h.logger.Printf("write status response error: %s", err)
+	}
+}
+
+type getUsageResponse struct {
+	Disk diskUsage `json:"bytesOnDisk"`
+}
+type diskUsage struct {
+	Total   int64            `json:"total"`
+	Indexes map[string]int64 `json:"indexes"`
 }
 
 // handleGetStatus handles GET /status requests.
