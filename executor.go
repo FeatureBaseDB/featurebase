@@ -1425,7 +1425,7 @@ func (e *executor) executeDistinctShard(ctx context.Context, qcx *Qcx, index str
 	tx, finisher := qcx.GetTx(Txo{Write: !writable, Index: idx, Shard: shard})
 	defer finisher(&err)
 
-	existsBitmap, err := tx.OffsetRange(index, fieldName, view, shard, 0, ShardWidth*0, ShardWidth*1)
+	existsBitmap, err := tx.OffsetRange(index, fieldName, view, shard, ShardWidth*shard, ShardWidth*0, ShardWidth*1)
 	if err != nil {
 		return result, err
 	}
@@ -1436,7 +1436,7 @@ func (e *executor) executeDistinctShard(ctx context.Context, qcx *Qcx, index str
 		return result, nil
 	}
 
-	signBitmap, err := tx.OffsetRange(index, fieldName, view, shard, 0, ShardWidth*1, ShardWidth*2)
+	signBitmap, err := tx.OffsetRange(index, fieldName, view, shard, ShardWidth*shard, ShardWidth*1, ShardWidth*2)
 	if err != nil {
 		return result, nil
 	}
@@ -1444,7 +1444,7 @@ func (e *executor) executeDistinctShard(ctx context.Context, qcx *Qcx, index str
 	dataBitmaps := make([]*roaring.Bitmap, depth)
 
 	for i := uint64(0); i < depth; i++ {
-		dataBitmaps[i], err = tx.OffsetRange(index, fieldName, view, shard, 0, ShardWidth*(i+2), ShardWidth*(i+3))
+		dataBitmaps[i], err = tx.OffsetRange(index, fieldName, view, shard, ShardWidth*shard, ShardWidth*(i+2), ShardWidth*(i+3))
 		if err != nil {
 			return result, err
 		}
