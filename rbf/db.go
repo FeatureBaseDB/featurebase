@@ -100,6 +100,13 @@ func CreateDirIfNotExist(path string) {
 	}
 }
 
+// TxN returns the number of active transactions.
+func (db *DB) TxN() int {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+	return len(db.txs)
+}
+
 // Open opens a database with the file specified in Path.
 // Creates a new file if one does not already exist.
 func (db *DB) Open() (err error) {
