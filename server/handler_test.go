@@ -379,6 +379,15 @@ func TestHandler_Endpoints(t *testing.T) {
 		if len(ret["nodes"].([]interface{})) != 1 {
 			t.Fatalf("wrong length nodes list: %#v", ret)
 		}
+	})
+
+	t.Run("UI/usage", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/ui/usage", nil))
+		if w.Code != gohttp.StatusOK {
+			t.Fatalf("unexpected status code: %d", w.Code)
+		}
+		ret := mustJSONDecode(t, w.Body)
 		usage := ret["bytesOnDisk"].(map[string]interface{})
 		indexes := usage["indexes"].(map[string]interface{})
 		if len(indexes) != 2 {
