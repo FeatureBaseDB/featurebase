@@ -381,8 +381,6 @@ func newRouter(handler *Handler) http.Handler {
 	router.HandleFunc("/schema", handler.handleGetSchema).Methods("GET").Name("GetSchema")
 	router.HandleFunc("/schema", handler.handlePostSchema).Methods("POST").Name("PostSchema")
 	router.HandleFunc("/status", handler.handleGetStatus).Methods("GET").Name("GetStatus")
-	router.HandleFunc("/transaction", handler.handleGetTransactionList).Methods("GET").Name("GetTransactionList")
-	router.HandleFunc("/transaction/", handler.handleGetTransactionList).Methods("GET").Name("GetTransactionList")
 	router.HandleFunc("/transaction", handler.handlePostTransaction).Methods("POST").Name("PostTransaction")
 	router.HandleFunc("/transaction/", handler.handlePostTransaction).Methods("POST").Name("PostTransaction")
 	router.HandleFunc("/transaction/{id}", handler.handleGetTransaction).Methods("GET").Name("GetTransaction")
@@ -393,6 +391,8 @@ func newRouter(handler *Handler) http.Handler {
 	router.HandleFunc("/version", handler.handleGetVersion).Methods("GET").Name("GetVersion")
 
 	router.HandleFunc("/ui/usage", handler.handleGetUsage).Methods("GET").Name("GetUsage")
+	router.HandleFunc("/ui/transaction", handler.handleGetTransactionList).Methods("GET").Name("GetTransactionList")
+	router.HandleFunc("/ui/transaction/", handler.handleGetTransactionList).Methods("GET").Name("GetTransactionList")
 
 	// /internal endpoints are for internal use only; they may change at any time.
 	// DO NOT rely on these for external applications!
@@ -700,9 +700,10 @@ func (h *Handler) handleGetStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	status := getStatusResponse{
-		State:   h.api.State(),
-		Nodes:   h.api.Hosts(r.Context()),
-		LocalID: h.api.Node().ID,
+		State:       h.api.State(),
+		Nodes:       h.api.Hosts(r.Context()),
+		LocalID:     h.api.Node().ID,
+		ClusterName: h.api.ClusterName(),
 	}
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(status); err != nil {
@@ -758,9 +759,10 @@ type getSchemaResponse struct {
 }
 
 type getStatusResponse struct {
-	State   string         `json:"state"`
-	Nodes   []*pilosa.Node `json:"nodes"`
-	LocalID string         `json:"localID"`
+	State       string         `json:"state"`
+	Nodes       []*pilosa.Node `json:"nodes"`
+	LocalID     string         `json:"localID"`
+	ClusterName string         `json:"clusterName"`
 }
 
 func hash(s string) string {

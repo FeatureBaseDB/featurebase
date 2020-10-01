@@ -208,6 +208,9 @@ type cluster struct { // nolint: maligned
 	// The number of replicas a partition has.
 	ReplicaN int
 
+	// Human-readable name of the cluster.
+	Name string
+
 	// Threshold for logging long-running queries
 	// TODO(2.0) move this out of cluster. (why is it here??)
 	longQueryTime time.Duration
@@ -698,6 +701,12 @@ func (c *cluster) Nodes() []*Node {
 	ret := make([]*Node, len(c.nodes))
 	copy(ret, c.nodes)
 	return ret
+}
+
+func (c *cluster) AllNodeStates() map[string]string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.Topology.nodeStates
 }
 
 // removeNodeBasicSorted removes a node from the cluster, maintaining the sort

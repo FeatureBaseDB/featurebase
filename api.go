@@ -776,6 +776,12 @@ func (api *API) Hosts(ctx context.Context) []*Node {
 	return api.cluster.Nodes()
 }
 
+func (api *API) HostStates(ctx context.Context) map[string]string {
+	span, _ := tracing.StartSpanFromContext(ctx, "API.HostStates")
+	defer span.Finish()
+	return api.cluster.AllNodeStates()
+}
+
 // Node gets the ID, URI and coordinator status for this particular node.
 func (api *API) Node() *Node {
 	node := api.server.node()
@@ -1733,6 +1739,14 @@ func (api *API) State() string {
 	return api.cluster.State()
 }
 
+// ClusterName returns the cluster name.
+func (api *API) ClusterName() string {
+	if api.cluster.Name == "" {
+		return api.cluster.id
+	}
+	return api.cluster.Name
+}
+
 // Version returns the Pilosa version.
 func (api *API) Version() string {
 	return strings.TrimPrefix(Version, "v")
@@ -1758,6 +1772,7 @@ func (api *API) Info() serverInfo {
 		CPUType:          si.CPUModel(),
 		Memory:           mem,
 		TxSrc:            api.holder.txf.TxType(),
+		ReplicaN:         api.cluster.ReplicaN,
 	}
 }
 
@@ -2004,6 +2019,7 @@ func (api *API) TranslateFieldDB(ctx context.Context, indexName, fieldName strin
 
 type serverInfo struct {
 	ShardWidth       uint64 `json:"shardWidth"`
+	ReplicaN         int    `json:"replicaN"`
 	Memory           uint64 `json:"memory"`
 	CPUType          string `json:"cpuType"`
 	CPUPhysicalCores int    `json:"cpuPhysicalCores"`

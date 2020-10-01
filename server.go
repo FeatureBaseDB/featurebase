@@ -269,6 +269,14 @@ func OptServerClusterDisabled(disabled bool, hosts []string) ServerOption {
 	}
 }
 
+// OptServerClusterName sets the human-readable cluster name.
+func OptServerClusterName(name string) ServerOption {
+	return func(s *Server) error {
+		s.cluster.Name = name
+		return nil
+	}
+}
+
 // OptServerSerializer is a functional option on Server
 // used to set the serializer.
 func OptServerSerializer(ser Serializer) ServerOption {
