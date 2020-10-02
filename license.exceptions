@@ -21,3 +21,5 @@
 ./synthload/vprint.go
 ./proto/vdsm/vdsm.proto
 ./proto/vdsm/vdsm.pb.go
+./cmd/pilosa-fsck/vprint.go
+

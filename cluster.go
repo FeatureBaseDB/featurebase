@@ -260,7 +260,7 @@ type cluster struct { // nolint: maligned
 // newCluster returns a new instance of Cluster with defaults.
 func newCluster() *cluster {
 	return &cluster{
-		Hasher:     &jmphasher{},
+		Hasher:     &Jmphasher{},
 		partitionN: DefaultPartitionN,
 		ReplicaN:   1,
 
@@ -978,12 +978,13 @@ func (c *cluster) translationNodes(to *cluster) (map[string][]*translationResize
 	return m, nil
 }
 
-// shardPartition returns the partition that a shard belongs to.
-func (c *cluster) shardPartition(index string, shard uint64) int {
-	return shardPartition(index, shard, c.partitionN)
+// shardPartition returns the shard-partition that a shard belongs to.
+// NOTE: this is DIFFERENT from the key-partition
+func (c *cluster) shardToShardPartition(index string, shard uint64) int {
+	return shardToShardPartition(index, shard, c.partitionN)
 }
 
-func shardPartition(index string, shard uint64, partitionN int) int {
+func shardToShardPartition(index string, shard uint64, partitionN int) int {
 	var buf [8]byte
 	binary.BigEndian.PutUint64(buf[:], shard)
 
@@ -994,12 +995,13 @@ func shardPartition(index string, shard uint64, partitionN int) int {
 	return int(h.Sum64() % uint64(partitionN))
 }
 
-// keyPartition returns the partition that a key belongs to.
-func (c *cluster) keyPartition(index, key string) int {
-	return keyPartition(index, key, c.partitionN)
+// keyPartition returns the key-partition that a key belongs to.
+// NOTE: the key-partition is DIFFERENT from the shard-partition.
+func (topo *Topology) KeyPartition(index, key string) int {
+	return keyToKeyPartition(index, key, topo.PartitionN)
 }
 
-func keyPartition(index, key string, partitionN int) int {
+func keyToKeyPartition(index, key string, partitionN int) int {
 	// Hash the bytes and mod by partition count.
 	h := fnv.New64a()
 	_, _ = h.Write([]byte(index))
@@ -1009,7 +1011,7 @@ func keyPartition(index, key string, partitionN int) int {
 
 // idPartition returns the partition that an id belongs to.
 func (c *cluster) idPartition(index string, id uint64) int {
-	return shardPartition(index, id/ShardWidth, c.partitionN)
+	return shardToShardPartition(index, id/ShardWidth, c.partitionN)
 }
 
 // ShardNodes returns a list of nodes that own a fragment. Safe for concurrent use.
@@ -1021,7 +1023,7 @@ func (c *cluster) ShardNodes(index string, shard uint64) []*Node {
 
 // shardNodes returns a list of nodes that own a fragment. unprotected
 func (c *cluster) shardNodes(index string, shard uint64) []*Node {
-	return c.partitionNodes(c.shardPartition(index, shard))
+	return c.partitionNodes(c.shardToShardPartition(index, shard))
 }
 
 // KeyNodes returns a list of nodes that own a fragment. Safe for concurrent use.
@@ -1033,7 +1035,7 @@ func (c *cluster) KeyNodes(index, key string) []*Node {
 
 // keyNodes returns a list of nodes that own a key. unprotected
 func (c *cluster) keyNodes(index, key string) []*Node {
-	return c.partitionNodes(c.keyPartition(index, key))
+	return c.partitionNodes(c.Topology.KeyPartition(index, key))
 }
 
 // ownsShard returns true if a host owns a fragment.
@@ -1077,8 +1079,14 @@ func (c *cluster) partitionNodes(partitionID int) []*Node {
 	}
 
 	// Determine primary owner node.
-	nodeIndex := c.Hasher.Hash(uint64(partitionID), nodeN)
-
+	if c.Topology == nil {
+		c.Topology = NewTopology(c.Hasher, c.partitionN, c.ReplicaN, c)
+	}
+	nodeIndex := c.Topology.PrimaryNodeIndex(partitionID)
+	if nodeIndex < 0 {
+		// no nodes anyway
+		return nil
+	}
 	// Collect nodes around the ring.
 	nodes := make([]*Node, 0, replicaN)
 	for i := 0; i < replicaN; i++ {
@@ -1109,11 +1117,66 @@ func (c *cluster) unprotectedPrimaryPartitionNode(partition int) *Node {
 	return nil
 }
 
+func (topo *Topology) IsPrimary(nodeID string, partitionID int) bool {
+	primary := topo.PrimaryNodeIndex(partitionID)
+	return nodeID == topo.nodeIDs[primary]
+}
+
+func (topo *Topology) PrimaryNodeIndex(partitionID int) (nodeIndex int) {
+	n := len(topo.nodeIDs)
+	if n == 0 {
+		if topo.cluster != nil {
+			n = len(topo.cluster.nodes)
+		}
+	}
+	nodeIndex = topo.Hasher.Hash(uint64(partitionID), n)
+	return
+}
+
+func (topo *Topology) GetNonPrimaryReplicas(partitionID int) (nonPrimaryReplicas []string) {
+
+	primary := topo.PrimaryNodeIndex(partitionID)
+	nodeN := len(topo.nodeIDs)
+
+	// Collect nodes around the ring.
+	for i := 1; i < nodeN; i++ {
+		nodeID := topo.nodeIDs[(primary+i)%nodeN]
+		if i < topo.ReplicaN {
+			nonPrimaryReplicas = append(nonPrimaryReplicas, nodeID)
+		}
+	}
+	return
+}
+
+// the map replicaNodeIDs[nodeID] will have a true value for the primary nodeID, and false for others.
+func (topo *Topology) GetReplicasForPrimary(primary int) (replicaNodeIDs, nonReplicas map[string]bool) {
+	if primary < 0 {
+		// no nodes anyway
+		return
+	}
+	replicaNodeIDs = make(map[string]bool)
+	nonReplicas = make(map[string]bool)
+
+	nodeN := len(topo.nodeIDs)
+
+	// Collect nodes around the ring.
+	for i := 0; i < nodeN; i++ {
+		nodeID := topo.nodeIDs[(primary+i)%nodeN]
+		if i < topo.ReplicaN {
+			// mark true if primary
+			replicaNodeIDs[nodeID] = (i == 0)
+		} else {
+			nonReplicas[nodeID] = false
+		}
+	}
+	return
+}
+
 // containsShards is like OwnsShards, but it includes replicas.
 func (c *cluster) containsShards(index string, availableShards *roaring.Bitmap, node *Node) []uint64 {
 	var shards []uint64
 	_ = availableShards.ForEach(func(i uint64) error {
-		p := c.shardPartition(index, i)
+		p := c.shardToShardPartition(index, i)
 		// Determine the nodes for partition.
 		nodes := c.partitionNodes(p)
 		for _, n := range nodes {
@@ -1133,10 +1196,10 @@ type Hasher interface {
 }
 
 // jmphasher represents an implementation of jmphash. Implements Hasher.
-type jmphasher struct{}
+type Jmphasher struct{}
 
 // Hash returns the integer hash for the given key.
-func (h *jmphasher) Hash(key uint64, n int) int {
+func (h *Jmphasher) Hash(key uint64, n int) int {
 	b, j := int64(-1), int64(0)
 	for j < int64(n) {
 		b = j
@@ -1202,7 +1265,7 @@ func (c *cluster) waitForStarted() error {
 
 		c.logger.Printf("%v wait for joining to complete", c.Node.ID)
 		<-c.joining
-		c.logger.Printf("joining has completed")
+		c.logger.Printf("joining has completed. I am NodeID '%v'", c.Node.ID)
 	}
 	return nil
 }
@@ -1853,6 +1916,8 @@ func (n nodeIDs) ContainsID(id string) bool {
 }
 
 // Topology represents the list of hosts in the cluster.
+// Topology now encapsulates all knowledge needed to
+// determine the primary node in the replication scheme.
 type Topology struct {
 	mu      sync.RWMutex
 	nodeIDs []string
@@ -1862,12 +1927,49 @@ type Topology struct {
 	// nodeStates holds the state of each node according to
 	// the coordinator. Used during startup and data load.
 	nodeStates map[string]string
+
+	// moved Hasher, PartitionN and ReplicaN
+	// from cluster for standalone use and comprehension:
+
+	// Hashing algorithm used to assign partitions to nodes.
+	Hasher Hasher
+	// The number of partitions in the cluster.
+	PartitionN int
+	// The number of replicas a partition has.
+	ReplicaN int
+
+	// can be nil
+	cluster *cluster
 }
 
-func newTopology() *Topology {
+// NewTopology creates a Topology.
+//
+// The arguments and members hasher, partitionN, and
+// replicaN were refactored out of struct cluster
+// to allow pilosa-fsck to load a Topology from
+// backup and then compute primaries standalone -- without starting a cluster.
+// As pilosa-fsck operates on all backups at once from
+// a single cpu, starting a full cluster isn't possible.
+//
+// The hasher is the Hashing algorithm used to assign partitions to nodes.
+// The cluster c should be provided if possible by pilosa code;
+// the pilosa-fsck utility won't be able to provide it.
+//
+// For the cluster size N, the topology gives preference to
+// len(t.nodeIDs) before falling back on len(c.nodes).
+//
+func NewTopology(hasher Hasher, partitionN int, replicaN int, c *cluster) *Topology {
 	return &Topology{
+		Hasher:     hasher,
+		PartitionN: partitionN,
+		ReplicaN:   replicaN,
 		nodeStates: make(map[string]string),
+		cluster:    c,
 	}
+}
+
+func (t *Topology) GetNodeIDs() []string {
+	return t.nodeIDs
 }
 
 // ContainsID returns true if id matches one of the topology's IDs.
@@ -1933,7 +2035,7 @@ func (t *Topology) encode() *internal.Topology {
 func (c *cluster) loadTopology() error {
 	buf, err := ioutil.ReadFile(filepath.Join(c.Path, ".topology"))
 	if os.IsNotExist(err) {
-		c.Topology = newTopology()
+		c.Topology = NewTopology(c.Hasher, c.partitionN, c.ReplicaN, c)
 		return nil
 	} else if err != nil {
 		return errors.Wrap(err, "reading file")
@@ -1943,7 +2045,7 @@ func (c *cluster) loadTopology() error {
 	if err := proto.Unmarshal(buf, &pb); err != nil {
 		return errors.Wrap(err, "unmarshalling")
 	}
-	top, err := decodeTopology(&pb)
+	top, err := DecodeTopology(&pb, c.Hasher, c.partitionN, c.ReplicaN, c)
 	if err != nil {
 		return errors.Wrap(err, "decoding")
 	}
@@ -1954,7 +2056,6 @@ func (c *cluster) loadTopology() error {
 
 // saveTopology writes the current topology to disk. unprotected.
 func (c *cluster) saveTopology() error {
-
 	if err := os.MkdirAll(c.Path, 0777); err != nil {
 		return errors.Wrap(err, "creating directory")
 	}
@@ -2461,6 +2562,27 @@ func (c *cluster) translateIndexKeys(ctx context.Context, indexName string, keys
 	return ids, nil
 }
 
+// The boltdb key translation stores are partitioned, designated by partitionIDs. These
+// are shared between replicas, and one node is the primary for
+// replication. So with 4 nodes and 3-way replication, each node has 3/4 of
+// the translation stores on it.
+func (topo *Topology) GetPrimaryForColKeyTranslation(index, key string) (primary int) {
+	partitionID := topo.KeyPartition(index, key)
+	return topo.PrimaryNodeIndex(partitionID)
+}
+
+// should match cluster.go:1033 cluster.ownsShard(nodeID, index, shard)
+// 	return Nodes(c.shardNodes(index, shard)).ContainsID(nodeID)
+func (t *Topology) GetPrimaryForShardReplication(index string, shard uint64) int {
+	n := len(t.nodeIDs)
+	if n == 0 {
+		return -1
+	}
+	partition := uint64(shardToShardPartition(index, shard, t.PartitionN))
+	nodeIndex := t.Hasher.Hash(partition, n)
+	return nodeIndex
+}
+
 func (c *cluster) translateIndexKeySet(ctx context.Context, indexName string, keySet map[string]struct{}, writable bool) (map[string]uint64, error) {
 	keyMap := make(map[string]uint64)
 
@@ -2472,7 +2594,7 @@ func (c *cluster) translateIndexKeySet(ctx context.Context, indexName string, ke
 	// Split keys by partition.
 	keysByPartition := make(map[int][]string, c.partitionN)
 	for key := range keySet {
-		partitionID := c.keyPartition(indexName, key)
+		partitionID := c.Topology.KeyPartition(indexName, key)
 		keysByPartition[partitionID] = append(keysByPartition[partitionID], key)
 	}
 
@@ -2651,12 +2773,13 @@ func encodeTopology(topology *Topology) *internal.Topology {
 	}
 }
 
-func decodeTopology(topology *internal.Topology) (*Topology, error) {
+// the cluster c is optional but give it if you have it.
+func DecodeTopology(topology *internal.Topology, hasher Hasher, partitionN, replicaN int, c *cluster) (*Topology, error) {
 	if topology == nil {
 		return nil, nil
 	}
 
-	t := newTopology()
+	t := NewTopology(hasher, partitionN, replicaN, c)
 	t.clusterID = topology.ClusterID
 	t.nodeIDs = topology.NodeIDs
 	sort.Slice(t.nodeIDs,

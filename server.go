@@ -579,7 +579,7 @@ func (s *Server) loadNodeID() string {
 	if s.nodeID != "" {
 		return s.nodeID
 	}
-	nodeID, err := s.holder.loadNodeID()
+	nodeID, err := s.holder.LoadNodeID()
 	if err != nil {
 		s.logger.Printf("loading NodeID: %v", err)
 		return s.nodeID

@@ -381,7 +381,7 @@ func TestCluster_Partition(t *testing.T) {
 		c := newCluster()
 		c.partitionN = partitionN
 
-		partitionID := c.shardPartition(index, shard)
+		partitionID := c.shardToShardPartition(index, shard)
 		if partitionID < 0 || partitionID >= partitionN {
 			t.Errorf("partition out of range: shard=%d, p=%d, n=%d", shard, partitionID, partitionN)
 		}
@@ -411,7 +411,7 @@ func TestHasher(t *testing.T) {
 		{0x0ddc0ffeebadf00d, []int{0, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 15, 15, 15, 15}},
 	} {
 		for i, v := range tt.bucket {
-			hasher := &jmphasher{}
+			hasher := &Jmphasher{}
 			if got := hasher.Hash(tt.key, i+1); got != v {
 				t.Errorf("hash(%v,%v)=%v, want %v", tt.key, i+1, got, v)
 			}
@@ -1051,5 +1051,29 @@ func TestCluster_confirmNodeDownDown(t *testing.T) {
 
 	if !c.confirmNodeDown(uri) {
 		t.Errorf("expected node to be down")
+	}
+}
+
+func TestCluster_GetNonPrimaryReplicas(t *testing.T) {
+
+	c := newCluster()
+	c.ReplicaN = 3
+	topo := NewTopology(c.Hasher, c.partitionN, c.ReplicaN, c)
+	c.Topology = topo
+	nNodes := 4
+	for i := 0; i < nNodes; i++ {
+		nodeID := fmt.Sprintf("node%d", i)
+		c.nodes = append(c.nodes, &Node{
+			ID:  nodeID,
+			URI: NewTestURI("http", fmt.Sprintf("host%d", i), uint16(0)),
+		})
+		c.Topology.addID(nodeID)
+	}
+
+	partitionID := 256
+	nonPrimes := topo.GetNonPrimaryReplicas(partitionID)
+	m := len(nonPrimes)
+	if m != c.ReplicaN-1 {
+		t.Fatalf("expected 2 non primes, got %v", m)
 	}
 }

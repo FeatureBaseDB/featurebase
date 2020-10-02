@@ -70,7 +70,7 @@ func NewTestCluster(tb testing.TB, n int) *cluster {
 	c.ReplicaN = 1
 	c.Hasher = NewTestModHasher()
 	c.Path = path
-	c.Topology = newTopology()
+	c.Topology = NewTopology(c.Hasher, c.partitionN, c.ReplicaN, c)
 
 	for i := 0; i < n; i++ {
 		c.nodes = append(c.nodes, &Node{
@@ -131,6 +131,15 @@ type commonClusterSettings struct {
 func (t *ClusterCluster) CreateIndex(name string) error {
 	for _, c := range t.Clusters {
 		if _, err := c.holder.CreateIndexIfNotExists(name, IndexOptions{}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (t *ClusterCluster) CreateIndexWithOpt(name string, opt IndexOptions) error {
+	for _, c := range t.Clusters {
+		if _, err := c.holder.CreateIndexIfNotExists(name, opt); err != nil {
 			return err
 		}
 	}
@@ -272,7 +281,8 @@ func (t *ClusterCluster) addCluster(i int, saveTopology bool) (*cluster, error) 
 	c.ReplicaN = 1
 	c.Hasher = NewTestModHasher()
 	c.Path = path
-	c.Topology = newTopology()
+	c.partitionN = DefaultPartitionN
+	c.Topology = NewTopology(c.Hasher, c.partitionN, c.ReplicaN, c)
 	c.holder = h
 	c.Node = node
 	c.Coordinator = t.common.Nodes[0].ID // the first node is the coordinator
@@ -514,4 +524,48 @@ func (t *ClusterCluster) FollowResizeInstruction(instr *ResizeInstruction) error
 
 	node := instr.Coordinator
 	return bcast{t: t}.SendTo(node, complete)
+}
+
+var _ = NewTestClusterWithReplication // happy linter
+
+func NewTestClusterWithReplication(tb testing.TB, nNodes, nReplicas, partitionN int) (c *cluster, cleaner func()) {
+	path, err := testhook.TempDir(tb, "pilosa-cluster-")
+	if err != nil {
+		panic(err)
+	}
+
+	// holder
+	h := NewHolder(path, nil)
+
+	// cluster
+	availableShardFileFlushDuration.Set(100 * time.Millisecond)
+	c = newCluster()
+	c.holder = h
+	c.ReplicaN = nReplicas
+	c.Hasher = &Jmphasher{}
+	c.Path = path
+	c.partitionN = partitionN
+	c.Topology = NewTopology(c.Hasher, c.partitionN, c.ReplicaN, c)
+
+	for i := 0; i < nNodes; i++ {
+		nodeID := fmt.Sprintf("node%d", i)
+		c.nodes = append(c.nodes, &Node{
+			ID:  nodeID,
+			URI: NewTestURI("http", fmt.Sprintf("host%d", i), uint16(0)),
+		})
+		c.Topology.addID(nodeID)
+	}
+
+	c.Node = c.nodes[0]
+	c.Coordinator = c.nodes[0].ID
+	c.SetState(ClusterStateNormal)
+
+	if err := c.holder.Open(); err != nil {
+		panic(err)
+	}
+
+	return c, func() {
+		c.holder.Close()
+		c.close()
+	}
 }

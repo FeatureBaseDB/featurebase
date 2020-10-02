@@ -17,6 +17,7 @@ package pilosa
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"sync"
@@ -90,7 +91,15 @@ type TranslateStore interface {
 	// the read payload.
 	ReadFrom(io.Reader) (int64, error)
 
-	ComputeTranslatorSummary() (sum *TranslatorSummary, err error)
+	ComputeTranslatorSummaryRows() (sum *TranslatorSummary, err error)
+	ComputeTranslatorSummaryCols(partitionID int, topo *Topology) (sum *TranslatorSummary, err error)
+
+	KeyWalker(walk func(key string, col uint64)) error
+	IDWalker(walk func(key string, col uint64)) error
+
+	RepairKeys(topo *Topology, verbose, applyKeyRepairs bool) (changed bool, err error)
+
+	GetStorePath() string
 }
 
 // TranslatorSummary is returned, for example from the boltdb string key translators,
@@ -100,6 +109,14 @@ type TranslatorSummary struct {
 
 	// ParitionID is filled for column keys
 	PartitionID int
+
+	NodeID    string
+	StorePath string
+	IsPrimary bool
+	IsReplica bool
+
+	// PrimaryNodeIndex indexes into the cluster []node array to find the primary
+	PrimaryNodeIndex int
 
 	// Field is filled for row keys
 	Field string
@@ -112,6 +129,41 @@ type TranslatorSummary struct {
 
 	// IDCount has the number of ID->Key mappings
 	IDCount int
+
+	// false for RowIDs, true for string-Key column IDs.
+	IsColKey bool
+}
+
+func (s *TranslatorSummary) String() string {
+	return fmt.Sprintf(`
+TranslatorSummary{
+	Index      : %v
+	PartitionID: %v
+	NodeID     : %v
+	StorePath  : %v
+	IsPrimary  : %v
+	IsReplica  : %v
+	PrimaryNodeIndex: %v
+	Field   : %v
+	Checksum: %v
+	KeyCount: %v
+	IDCount : %v
+	IsColKey: %v
+}
+`,
+		s.Index,
+		s.PartitionID,
+		s.NodeID,
+		s.StorePath,
+		s.IsPrimary,
+		s.IsReplica,
+		s.PrimaryNodeIndex,
+		s.Field,
+		s.Checksum,
+		s.KeyCount,
+		s.IDCount,
+		s.IsColKey,
+	)
 }
 
 // OpenTranslateStoreFunc represents a function for instantiating and opening a TranslateStore.
@@ -127,7 +179,7 @@ func GenerateNextPartitionedID(index string, prev uint64, partitionID, partition
 	// Try to use the next ID if it is in the same partition.
 	// Otherwise find ID in next shard that has a matching partition.
 	for id := prev + 1; ; id += ShardWidth {
-		if shardPartition(index, id/ShardWidth, partitionN) == partitionID {
+		if shardToShardPartition(index, id/ShardWidth, partitionN) == partitionID {
 			return id
 		}
 	}
@@ -304,6 +356,30 @@ func NewInMemTranslateStore(index, field string, partitionID, partitionN int) *I
 	}
 }
 
+func (s *InMemTranslateStore) GetStorePath() string {
+	return ""
+}
+
+// KeyWalker executes walk for every pair in the database
+func (s *InMemTranslateStore) KeyWalker(walk func(key string, col uint64)) error {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for id, key := range s.keysByID {
+		walk(key, id)
+	}
+	return nil
+}
+
+// IDWalker executes walk for every pair in the database
+func (s *InMemTranslateStore) IDWalker(walk func(key string, col uint64)) error {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for key, id := range s.idsByKey {
+		walk(key, id)
+	}
+	return nil
+}
+
 var _ OpenTranslateStoreFunc = OpenInMemTranslateStore
 
 // OpenInMemTranslateStore returns a new instance of InMemTranslateStore.
@@ -312,9 +388,18 @@ func OpenInMemTranslateStore(rawurl, index, field string, partitionID, partition
 	return NewInMemTranslateStore(index, field, partitionID, partitionN), nil
 }
 
-func (s *InMemTranslateStore) ComputeTranslatorSummary() (sum *TranslatorSummary, err error) {
+func (s *InMemTranslateStore) ComputeTranslatorSummaryRows() (sum *TranslatorSummary, err error) {
 	panic("TODO")
 }
+
+func (s *InMemTranslateStore) ComputeTranslatorSummaryCols(partitionID int, topo *Topology) (sum *TranslatorSummary, err error) {
+	panic("TODO")
+}
+
+func (s *InMemTranslateStore) RepairKeys(topo *Topology, verbose, applyKeyRepairs bool) (changed bool, err error) {
+	panic("TODO")
+}
+
 func (s *InMemTranslateStore) Close() error {
 	return nil
 }
