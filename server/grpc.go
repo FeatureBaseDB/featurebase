@@ -882,6 +882,8 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 					return nil
 				}
 				cols = limitedCols
+			} else {
+				return errors.Errorf("expected 1 result for inspect query; got %d from %q", len(resp.Results), req.Query)
 			}
 		}
 
@@ -924,6 +926,9 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64ArrayVal{Uint64ArrayVal: &pb.Uint64Array{Vals: ids.Rows}}})
 							colAdded++
 						}
+					} else {
+						rowResp.Columns = append(rowResp.Columns,
+							&pb.ColumnResponse{ColumnVal: nil})
 					}
 
 				case "mutex":
@@ -955,6 +960,10 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 							rowResp.Columns = append(rowResp.Columns,
 								&pb.ColumnResponse{ColumnVal: nil})
 						}
+
+					} else {
+						rowResp.Columns = append(rowResp.Columns,
+							&pb.ColumnResponse{ColumnVal: nil})
 					}
 
 				case "int":
@@ -1028,6 +1037,9 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 								rowResp.Columns = append(rowResp.Columns,
 									&pb.ColumnResponse{ColumnVal: nil})
 							}
+						} else {
+							rowResp.Columns = append(rowResp.Columns,
+								&pb.ColumnResponse{ColumnVal: nil})
 						}
 					}
 
@@ -1052,6 +1064,9 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 							rowResp.Columns = append(rowResp.Columns,
 								&pb.ColumnResponse{ColumnVal: nil})
 						}
+					} else {
+						rowResp.Columns = append(rowResp.Columns,
+							&pb.ColumnResponse{ColumnVal: nil})
 					}
 
 				case "bool":
@@ -1083,6 +1098,9 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 							rowResp.Columns = append(rowResp.Columns,
 								&pb.ColumnResponse{ColumnVal: nil})
 						}
+					} else {
+						rowResp.Columns = append(rowResp.Columns,
+							&pb.ColumnResponse{ColumnVal: nil})
 					}
 
 				case "time":
