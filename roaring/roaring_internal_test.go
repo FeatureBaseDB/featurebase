@@ -4391,11 +4391,17 @@ func TestUnionRunRunInPlaceBitwiseCompare(t *testing.T) {
 	for _, a := range runs {
 		for _, b := range runs {
 			t.Run(a.name+"-"+b.name, func(t *testing.T) {
-				arun := doContainer(containerRun, a.run).Thaw()
-				brun := doContainer(containerRun, b.run).Thaw()
+				arun := doContainer(containerRun, a.run)
+				brun := doContainer(containerRun, b.run)
 
 				out1 := unionBitmapRunInPlace(arun.runToBitmap(), brun)
 				out2 := unionRunRunInPlace(arun, brun)
+
+				// Because these containers have been modified using in-place
+				// methods, we need to repair them before comparison to ensure
+				// that their `n` value is updated.
+				out1.Repair()
+				out2.Repair()
 
 				err := out1.BitwiseCompare(out2.runToBitmap())
 				if err != nil {
