@@ -4851,6 +4851,8 @@ func TestExecutor_Execute_Query_Error(t *testing.T) {
 	defer c.Close()
 	c.CreateField(t, "i", pilosa.IndexOptions{}, "general")
 	c.CreateField(t, "i", pilosa.IndexOptions{}, "integer", pilosa.OptFieldTypeInt(-1000, 1000))
+	c.CreateField(t, "i", pilosa.IndexOptions{}, "decimal", pilosa.OptFieldTypeDecimal(2))
+	c.CreateField(t, "i", pilosa.IndexOptions{}, "bool", pilosa.OptFieldTypeBool())
 
 	tests := []struct {
 		query string
@@ -4883,6 +4885,18 @@ func TestExecutor_Execute_Query_Error(t *testing.T) {
 		{
 			query: "GroupBy(Rows(integer), prev=-1)",
 			error: "unknown arg 'prev'",
+		},
+		{
+			query: "Rows(integer)",
+			error: "int fields not supported by Rows() query",
+		},
+		{
+			query: "Rows(decimal)",
+			error: "decimal fields not supported by Rows() query",
+		},
+		{
+			query: "Rows(bool)",
+			error: "bool fields not supported by Rows() query",
 		},
 	}
 
