@@ -7,16 +7,16 @@ Problem Background
 Molecula Pilosa provides replication for fault-tolerance within a Pilosa cluster.
 
 Three kinds of data are replicated: Roaring bitmap data, Column-Key translation data,
-and Row-Key translations are replicated. Only the first two, Roaring data and Column-Key
-translation are relevant here. Broadly, the Roaring bitmap data
+and Row-Key data are replicated. Only the first two, Roaring data and Column-Key
+data are relevant here. Broadly, the Roaring bitmap data
 forms the central features -- the bits -- of a large, sparse bitmap matrix.
 The Column-Keys are the labels for the columns at the top margin of this matrix.
 
 For speed, the Roaring bitmap data is stored separately from the
-Key-translation data. The Roaring data is stored in sharded files
+Key data. The Roaring data is stored in sharded files
 within a directory heirarchy under PILOSA-DATA-DIR/index_name/field_name/...
-The Key translation data is stored in sharded BoltDB databases with
-in the PILOSA-DATA-DIR/index_name/_key directory.
+The Key translation data is stored in sharded BoltDB databases within
+the PILOSA-DATA-DIR/index_name/_key directory.
 
 The current approach to Roaring file replication involves an
 eventually consistent mechanism that uses an Anti-Entropy agent to
@@ -26,13 +26,15 @@ replica shards.
 Unfortunately, the Anti-Entropy agent approach has proved inadequate on two
 fronts. First, it does not provide for immediately consistent reads in the
 event that the primary is lost. Second, the Anti-Entropy agent itself experienced
-out-of-memory issues that have not yet been resolved.
+out-of-memory issues that have yet to be resolved.
 
 Therefore, work is now underway to replace this replication
 approach with a more consistent design. 
 
 However, in the meantime, for our customers in production with Molecula
 Pilosa, we wish to provide a means to re-establish correct replication.
+Thus even in the event of a node failure followed by a read from a replica, the
+returned read will be correct.
 
 The pilosa-fsck tool can therefore been seen as a temporary, stop-gap
 measure to address immediate issues while the cluster replication
@@ -40,7 +42,7 @@ mechanism is replaced.
 
 The second factor motivating the creation of pilosa-fsck was the discovery
 of a bug in the Key-translation process. Unfortunately this was a hard
-to reproduce bug, since it happened only on the customer's premises.
+to reproduce bug. It happened only on the customer's premises.
 It happened only after running the system for a long time, with a
 large amount of data, and with various eccentric node failures
 and recoveries.
@@ -48,7 +50,7 @@ and recoveries.
 However, we were able to reproduce a plausible explanation.
 Non-primary replicas were creating keys when they should have been
 forwarding the request to the primary. Correcting this bug is impetus
-for the release of the v2.1.4 version of Molecula Pilosa.
+for the v2.1.4 release of Molecula Pilosa.
 
 A fine point here: since we were not able to precisely reproduce the customer's
 issue in the development environment, we cannot guarantee with 100%
@@ -57,13 +59,14 @@ was seeing.
 
 Therefore we also desired an additional insurance
 policy. We wished to be able to empower customers to pro-actively discover any
-future Key-translation issues that happen in their on-premise system.
+future Key-translation issues that happen in their on-premise systems.
 
 To do this, we proposed providing select customers with the pilosa-fsck
 tool which can analyze their offline backups for issues.
 
 Optionally, these issues can also be repaired in-place in the
 offline backup on which pilosa-fsck is run.
+
 The -fix flag repairs both kinds of replication issues.
 
 Solution Approach: mechanism of action
@@ -80,7 +83,7 @@ The computer running pilosa-fsck must have the same or more
 memory as the Pilosa nodes in the cluster, as it will
 "pretend" to be each Pilosa node in turn. However, as each
 node's backup is closed before the next node's backup is
-read, we do not require substantially more memory than a single
+opened, we do not require substantially more memory than a single
 production node. Short Blake3 cryptographic checksums are
 computed for each Roaring fragment and each Key translation
 database. These are held in memory (and printed to the log)
@@ -98,7 +101,7 @@ N may be 4, the R may be only 3. In this example, within
 each replicated shard, one node will be the primary for
 that shard, two nodes will be "regular" non-primary replicas, and one
 node will be a non-replica. Note that the designation
-of primary changes for different Roaring shard within an index,
+of primary changes for different Roaring shards within an index,
 even on a single node.
 
 The essence of the the -fix repair operation that pilosa-fsck
@@ -116,34 +119,26 @@ the Roaring file data.
 Only with -fix will the repair actions actually happen
 during the pilosa-fsck run.
 
-The Key translation repairs must be made to the BoltDB
-databases directly, and so cannot be represented by
-simple cp/rm commands. Therefore if any key-translation
-repairs are indicated, and if the user wishes to
-make those repairs to the backups, then the -fix
-flag must be used.
-
-If only the Roaring files needs repair, then it suffices
-to chmod +x and run the output log, which is in the
-form of a bash shell script with comments.
 
 Details: running pilosa-fsck
 ----------------------------
 
 Errors in invocation are reported on stderr and the program will exit with a non-zero
 error code if invocation errors are present. A non-zero error code
-is returned if a repair is needed.
+is returned if a repair is needed and -fix was not given.
+
+A -fix run will return a zero error code to the shell, if the fix was
+successfully made; or if no fix was required.
 
 The log of the run is printed to stdout.
 
 The -h flag to pilosa-fsck prints a summary of its operation
-and a guide to laying out the backup directories in preparation.
+and a guide to laying out the backup directories.
 
 The help is reproduced below.
 
 ~~~
-jaten@twg-pilosa0 ~/pilosa/cmd/pilosa-fsck (fsck-design) $ pilosa-fsck -h
-pilosa-fsck version: Molecula Pilosa v2.2.1-43-g61047fde (Oct  5 2020 11:51AM, 61047fde)
+$ pilosa-fsck version: Molecula Pilosa v2.2.1-43-g9dacbccf (Oct  5 2020 1:28PM, 9dacbccf)
 
 Use: pilosa-fsck -replicas R {-fix} {-q} /backup/1/.pilosa /backup/2/.pilosa ... /backup/N/.pilosa
 
@@ -172,7 +167,7 @@ Just as fsck must be run on an unmounted disk,
 pilosa-fsck must be run on a backup. It must 
 not be run on the directories where a live Pilosa system
 is serving queries. Instead, take a backup first.
-A backup is a set of N cluster-node directories that have been
+A backup is a set of N Pilosa data directories that have been
 copied from your live system. They must all 
 be visible and mounted on one filesystem together.
 
@@ -183,8 +178,8 @@ and showing what data changes would have been made.
 
 REQUIRED COMMAND LINE ARGUMENTS
 
-The paths to all the top-level pilosa 
-directories in a cluster must be given on the command
+The paths to all the top-level Pilosa 
+data directories in a cluster must be given on the command
 line. The -replicas R flag is also always required. It
 must be correct for your cluser. Here R is the same as
 the [cluster] stanza "replicas = R" line from your
@@ -227,16 +222,17 @@ subdirectories node1/ node2/ node3/ node4/ under this:
 
 NOTE: your .pilosa directories need not be named .pilosa. They can
 be something else, such as when the -d flag to pilosa server was used.
-The .id and .topology and index directories must be found directly underneath.
+The .id file, the .topology file, and the index directories must be 
+found directly underneath.
 
 Then a typical invocation to scan a cluster backup for issues:
 
 $ cd /backup/molecula/
-$ pilosa-fsck -replicas 3 node1/.pilosa node2/.pilosa node3/.pilosa node4/.pilosa
+$ pilosa-fsck -replicas 3  node1/.pilosa  node2/.pilosa  node3/.pilosa  node4/.pilosa &> log
 
 A typical invocation to repair the replication in the same backup:
 
-$ pilosa-fsck -replicas 3 -fix node1/.pilosa node2/.pilosa node3/.pilosa node4/.pilosa
+$ pilosa-fsck -replicas 3 -fix  node1/.pilosa  node2/.pilosa  node3/.pilosa  node4/.pilosa &> log
 
 In both cases, the .id and .topology files must 
 be present in the backups.

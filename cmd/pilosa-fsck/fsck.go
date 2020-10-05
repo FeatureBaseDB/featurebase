@@ -116,7 +116,7 @@ Just as fsck must be run on an unmounted disk,
 pilosa-fsck must be run on a backup. It must 
 not be run on the directories where a live Pilosa system
 is serving queries. Instead, take a backup first.
-A backup is a set of N cluster-node directories that have been
+A backup is a set of N Pilosa data directories that have been
 copied from your live system. They must all 
 be visible and mounted on one filesystem together.
 
@@ -127,8 +127,8 @@ and showing what data changes would have been made.
 
 REQUIRED COMMAND LINE ARGUMENTS
 
-The paths to all the top-level pilosa 
-directories in a cluster must be given on the command
+The paths to all the top-level Pilosa 
+data directories in a cluster must be given on the command
 line. The -replicas R flag is also always required. It
 must be correct for your cluser. Here R is the same as
 the [cluster] stanza "replicas = R" line from your
@@ -171,16 +171,17 @@ subdirectories node1/ node2/ node3/ node4/ under this:
 
 NOTE: your .pilosa directories need not be named .pilosa. They can
 be something else, such as when the -d flag to pilosa server was used.
-The .id and .topology and index directories must be found directly underneath.
+The .id file, the .topology file, and the index directories must be 
+found directly underneath.
 
 Then a typical invocation to scan a cluster backup for issues:
 
 $ cd /backup/molecula/
-$ pilosa-fsck -replicas 3 node1/.pilosa node2/.pilosa node3/.pilosa node4/.pilosa
+$ pilosa-fsck -replicas 3  node1/.pilosa  node2/.pilosa  node3/.pilosa  node4/.pilosa &> log
 
 A typical invocation to repair the replication in the same backup:
 
-$ pilosa-fsck -replicas 3 -fix node1/.pilosa node2/.pilosa node3/.pilosa node4/.pilosa
+$ pilosa-fsck -replicas 3 -fix  node1/.pilosa  node2/.pilosa  node3/.pilosa  node4/.pilosa &> log
 
 In both cases, the .id and .topology files must 
 be present in the backups.
