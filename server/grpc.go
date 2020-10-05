@@ -925,6 +925,9 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 							rowResp.Columns = append(rowResp.Columns,
 								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64ArrayVal{Uint64ArrayVal: &pb.Uint64Array{Vals: ids.Rows}}})
 							colAdded++
+						} else {
+							rowResp.Columns = append(rowResp.Columns,
+								&pb.ColumnResponse{ColumnVal: nil})
 						}
 					} else {
 						rowResp.Columns = append(rowResp.Columns,
@@ -960,7 +963,6 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 							rowResp.Columns = append(rowResp.Columns,
 								&pb.ColumnResponse{ColumnVal: nil})
 						}
-
 					} else {
 						rowResp.Columns = append(rowResp.Columns,
 							&pb.ColumnResponse{ColumnVal: nil})
@@ -1000,7 +1002,13 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 										value = vals[0]
 										exists = true
 									}
+								} else {
+									rowResp.Columns = append(rowResp.Columns,
+										&pb.ColumnResponse{ColumnVal: nil})
 								}
+							} else {
+								rowResp.Columns = append(rowResp.Columns,
+									&pb.ColumnResponse{ColumnVal: nil})
 							}
 						} else {
 							value, exists, err = field.StringValue(tx, id)
@@ -1103,7 +1111,7 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 							&pb.ColumnResponse{ColumnVal: nil})
 					}
 
-				case "time":
+				default:
 					rowResp.Columns = append(rowResp.Columns,
 						&pb.ColumnResponse{ColumnVal: nil})
 				}
