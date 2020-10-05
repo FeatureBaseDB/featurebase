@@ -91,6 +91,11 @@ var (
 // Debug is just a temporary flag used for debugging.
 var Debug bool
 
+// Testing constants.
+const (
+	SyncEnabled = true
+)
+
 // Magic32 returns the magic bytes as a big endian encoded uint32.
 func Magic32() uint32 {
 	return binary.BigEndian.Uint32([]byte(Magic))
@@ -659,8 +664,15 @@ func truncate(path string, sz int64) error {
 
 	if err := f.Truncate(sz); err != nil {
 		return fmt.Errorf("truncate: %w", err)
-	} else if err := f.Sync(); err != nil {
+	} else if err := fsync(f); err != nil {
 		return fmt.Errorf("sync: %w", err)
 	}
 	return f.Close()
+}
+
+func fsync(f *os.File) error {
+	if !SyncEnabled {
+		return nil
+	}
+	return f.Sync()
 }

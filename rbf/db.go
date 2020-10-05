@@ -302,7 +302,7 @@ func (db *DB) checkpoint(exclusive bool, mu sync.Locker) error {
 	}
 
 	// Ensure WAL pages are fully copied & synced to DB file.
-	if err := db.file.Sync(); err != nil {
+	if err := fsync(db.file); err != nil {
 		return fmt.Errorf("db file sync: %w", err)
 	}
 

@@ -1610,7 +1610,7 @@ func (tx *Tx) flushWALWriter() error {
 	// Flush cache to writer.
 	if _, err := w.WriteAt(tx.wcache, int64(segment.PageN)*PageSize); err != nil {
 		return fmt.Errorf("write wal segment: %w", err)
-	} else if err := w.Sync(); err != nil {
+	} else if err := fsync(w); err != nil {
 		return fmt.Errorf("sync wal segment: %w", err)
 	} else if err := w.Close(); err != nil {
 		return fmt.Errorf("close wal segment: %w", err)
