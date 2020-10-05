@@ -79,7 +79,7 @@ type FsckConfig struct {
 func (cfg *FsckConfig) DefineFlags(fs *flag.FlagSet) {
 	fs.BoolVar(&cfg.Fix, "fix", false, "(warning: alters the backed-up node images on disk) copy primary data to replicas to create a consistent cluster. Implies -fixcol")
 	fs.BoolVar(&cfg.FixCol, "fixcol", false, "(warning: alters the backed-up node images on disk) repair string key translation tables. Skip repair of index data.")
-	fs.BoolVar(&cfg.Verbose, "v", false, "be very verbose during analysis")
+	//fs.BoolVar(&cfg.Verbose, "v", false, "be very verbose during analysis")
 	fs.BoolVar(&cfg.Quiet, "q", false, "be very quiet")
 
 	fs.IntVar(&cfg.ReplicaN, "replicas", 0, "(required) manually entered replicaN; the number of replicas maintained in the cluster. Must be the same as the [cluster] 'replicas = R' entry in the pilosa.conf file for the cluster.")
@@ -88,44 +88,20 @@ func (cfg *FsckConfig) DefineFlags(fs *flag.FlagSet) {
 
 	fs.Usage = func() {
 		fmt.Fprintf(os.Stderr, "pilosa-fsck version: %v\n\n", pilosa.VersionInfo())
-		fmt.Fprintf(os.Stderr, `Use: pilosa-fsck -replicas R {-fix} {-fixcol} {-q} {-v} /backup/1/.pilosa /backup/2/.pilosa ... /backup/N/.pilosa
+		fmt.Fprintf(os.Stderr, `Use: pilosa-fsck -replicas R {-fix} {-q} /backup/1/.pilosa /backup/2/.pilosa ... /backup/N/.pilosa
 
   -fix
-    	(warning: alters the backed-up node images on disk) copy primary data to replicas to create a consistent cluster.  Implies -fixcol
-
-  -fixcol
-        (warning: alters the backed-up node images on disk) repair string key translation tables. Skip repair of index data.
+    	(warning: alters the backed-up node images on disk) copy primary data to replicas to create a consistent cluster.
 
   -replicas R 
         (required) R is a positive integer, giving the replicaN or replicator factor for the cluster. This is
         the number of replicas maintained in the cluster. Must be the same as the 
         [cluster] 'replicas = R' entry shared across all the pilosa.conf files on each node.
 
-  -v
-        be very verbose during analysis
   -q
         be very quiet during analysis and repair
 
 `)
-		/*
-			key translation dump options, usually only used by developers debugging key translation:
-
-			  -col
-			    	(optional) display column keys (very long output)
-			  -dir string
-			    	(optional; requires -col), one pilosa data dir to read (default "/home/ubuntu/.pilosa")
-			  -header
-			    	(optional; requires -col), display header
-			  -id
-			    	(optional; requires -col), dump reverse mapping id->key
-			  -index string
-			    	(optional; requires -col), index name (default "i")
-			  -key
-			    	(optional; requires -col), dump forward mapping key->id
-			  -partition int
-			    	(optional; requires -col), partition id to dump
-
-		*/
 		fmt.Fprintf(os.Stderr, `
 Welcome to pilosa-fsck. This is a scan and repair 
 tool that is modeled after the classic unix file 
@@ -144,19 +120,10 @@ A backup is a set of N cluster-node directories that have been
 copied from your live system. They must all 
 be visible and mounted on one filesystem together.
 
-pilosa-fsck can be run in scan-mode (without -fix or -fixcol),
-or in repair-mode with -fix (or -fixcol). The console output
-supplies a shell script documenting the analysis 
-and showing what data changes would be made. If a
-fix has been requested, those fixes will have
-been applied during the run. The output then serves
-as documentation of what has been updated. If
-a fix has not been requested (in other words, neither
--fix nor -fixcol was given) then no changes will
-have been made to the backups. The fragment level
-sync can be completed next by running the script
-if you wish. The -fixcol fixes can only be
-applied by doing a -fixcol run of pilosa-fsck.
+pilosa-fsck can be run in scan-mode (without -fix),
+or in repair-mode with -fix. The console output
+supplies a log documenting the analysis 
+and showing what data changes would have been made.
 
 REQUIRED COMMAND LINE ARGUMENTS
 
@@ -218,20 +185,17 @@ $ pilosa-fsck -replicas 3 -fix node1/.pilosa node2/.pilosa node3/.pilosa node4/.
 In both cases, the .id and .topology files must 
 be present in the backups.
 
-KEY REPAIR NOTE
+Without -fix, no modifications will be made to the backups. Only
+by running with -fix will repairs be made. The user can safely
+always run with -fix to repair only if needed.
 
-While the output of pilosa-fsck wihtout -fix or -fixcol 
-gives a script showing the index fragment repair operations 
-that can be applied by (cp/rm) shell commands subsequently, 
-this script alone is an incomplete repair. It does not
-address string key tranlsation repairs. For a complete repair, 
-a run of pilosa-fsck with the -fixcol or -fix flags 
-will be required.
+A zero error code will be returned to the shell if no repairs were needed.
 
-A note about the -fixcol key translation repairs: these are fine
-grained operations on the internal databases that do not have
-corresponding (cp/rm) shell commands. Therefore a run of pilosa-fsck
-with the -fix or -fixcol flag is required to repair these.
+A zero error code will be also be returned to the shell if 
+repairs were needed and they were accomplished under -fix.
+
+A non-zero error code indicates that repairs were needed but
+were not made.
 `)
 	}
 }
@@ -295,6 +259,7 @@ func main() {
 	myflags := flag.NewFlagSet(ProgramName, flag.ContinueOnError)
 	cfg := &FsckConfig{}
 	cfg.DefineFlags(myflags)
+	cfg.Verbose = true
 
 	err := myflags.Parse(os.Args[1:])
 	if err != nil {
@@ -341,9 +306,13 @@ func main() {
 	}()
 	cfg.Dirs = dirs
 
-	_, err = cfg.Run()
+	fixNeeded, err := cfg.Run()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+	if fixNeeded && !cfg.Fix {
+		fmt.Fprintf(os.Stderr, "# pilosa-fsck exiting with non-zero error code because a repair is needed, but -fix was not given.\n")
 		os.Exit(1)
 	}
 }
