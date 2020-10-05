@@ -2592,10 +2592,8 @@ func (e *executor) executeRowsShard(ctx context.Context, qcx *Qcx, index string,
 	// in order to represent `Rows` for the field.
 	var views = []string{viewStandard}
 
-	// Handle `int` and `time` fields.
 	switch f.Type() {
-	case FieldTypeInt:
-		return nil, errors.New("int fields not supported by Rows() query")
+	case FieldTypeSet, FieldTypeMutex:
 	case FieldTypeTime:
 		var err error
 
@@ -2657,6 +2655,8 @@ func (e *executor) executeRowsShard(ctx context.Context, qcx *Qcx, index string,
 			// Determine the views based on the specified time range.
 			views = viewsByTimeRange(viewStandard, fromTime, toTime, q)
 		}
+	default:
+		return nil, errors.Errorf("%s fields not supported by Rows() query", f.Type())
 	}
 
 	start := uint64(0)
