@@ -812,6 +812,9 @@ func (api *API) Usage() (map[string]int64, int64, error) {
 		if !file.IsDir() {
 			continue
 		}
+		if api.holder.Txf().IsTxDatabasePath(file.Name()) {
+			continue
+		}
 		fullName := path.Join(dirName, file.Name())
 		indexSizes[file.Name()], err = diskUsage(fullName)
 		if err != nil {
