@@ -309,10 +309,12 @@ func main() {
 
 	fixNeeded, err := cfg.Run()
 	if err != nil {
+		fmt.Fprintf(os.Stdout, "# finished at %v (elapsed %v)\n\n", time.Now().Format(RFC3339MsecTz0), time.Since(t0))
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
 	if fixNeeded && !cfg.Fix {
+		fmt.Fprintf(os.Stdout, "# finished at %v (elapsed %v)\n\n", time.Now().Format(RFC3339MsecTz0), time.Since(t0))
 		fmt.Fprintf(os.Stderr, "# pilosa-fsck exiting with non-zero error code because a repair is needed, but -fix was not given.\n")
 		os.Exit(1)
 	}
