@@ -824,7 +824,7 @@ func (i *Index) ComputeTranslatorSummary(verbose, checkKeys, applyKeyRepairs boo
 
 			if verbose {
 				// This is pilosa-fsck output, not regular log.
-				fmt.Printf("# doing repair of keys on nodeID '%v', and primID '%v'\n", nodeID, primID)
+				fmt.Printf("# doing analysis of keys on nodeID '%v', and primID '%v'\n", nodeID, primID)
 			}
 			changed, err := store.RepairKeys(topo, verbose, applyKeyRepairs)
 			if err != nil {
