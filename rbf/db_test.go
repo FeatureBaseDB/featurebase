@@ -112,10 +112,11 @@ func TestDB_Recovery(t *testing.T) {
 		tx1.Rollback()
 
 		// Close database & truncate WAL to remove commit page & bitmap data page.
-		segment := db.ActiveWALSegment()
+		segments := db.WALSegments()
+		segment := segments[len(segments)-1]
 		if err := db.Close(); err != nil {
 			t.Fatal(err)
-		} else if err := os.Truncate(segment.Path(), segment.Size()-(2*rbf.PageSize)); err != nil {
+		} else if err := os.Truncate(segment.Path, segment.Size()-(2*rbf.PageSize)); err != nil {
 			t.Fatal(err)
 		}
 
