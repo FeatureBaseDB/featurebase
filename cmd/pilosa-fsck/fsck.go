@@ -22,6 +22,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -376,77 +377,96 @@ func (g *group) String() (s string) {
 	return
 }
 
+func indexesFromAts(ats *pilosa.AllTranslatorSummary) (indexes []string) {
+	indexMap := make(map[string]bool)
+	for _, sum := range ats.Sums {
+		if !indexMap[sum.Index] {
+			indexMap[sum.Index] = true
+			indexes = append(indexes, sum.Index)
+		}
+	}
+	sort.Strings(indexes)
+	return
+}
+
 func (cfg *FsckConfig) RepairTranslationStores(ats *pilosa.AllTranslatorSummary) (err error) {
 
 	verbose := cfg.Verbose
 
-	m := make(map[int]*group)
-	for _, sum := range ats.Sums {
-		if !sum.IsColKey {
-			continue
-		}
-		grp := m[sum.PartitionID]
-		if grp == nil {
-			grp = &group{
-				partitionID: sum.PartitionID,
-			}
-			m[sum.PartitionID] = grp
-		}
-		grp.elem = append(grp.elem, sum)
-	}
+	// group by index first. then repair.
+	indexes := indexesFromAts(ats)
 
-	for partitionID, group := range m {
-		_ = partitionID
-		prim := -1
-		keyCount := 0
-		for k, e := range group.elem {
-			if e.IsPrimary {
-				prim = k
-			}
-			keyCount += e.KeyCount
-		}
-		if prim == -1 {
-			panic(fmt.Sprintf("no primary found for group '%v'", group.String()))
-		}
+	for _, index := range indexes {
 
-		primary := group.elem[prim]
-		primaryChecksum := primary.Checksum
-		for _, e := range group.elem {
-			if e.IsPrimary {
+		m := make(map[int]*group)
+		for _, sum := range ats.Sums {
+
+			if !sum.IsColKey || sum.Index != index {
 				continue
 			}
-			// is e a replica? not necessarily! have to check.
-			if !e.IsReplica {
-				//if verbose {
-				// since this will happen even on a fix point, where it is already empty,
-				// we don't report it again.
-				//fmt.Printf("# non-replica should have no data: creating an empty translation store here at '%v'\n", e.StorePath)
-				//}
-				err := os.RemoveAll(e.StorePath)
-				if err != nil {
-					return errors.Wrap(err, fmt.Sprintf("RepairTranslationStores() os.RemoveAll(e.StorePath='%v')", e.StorePath))
+			grp := m[sum.PartitionID]
+			if grp == nil {
+				grp = &group{
+					partitionID: sum.PartitionID,
 				}
-				store, err := boltdb.OpenTranslateStore(e.StorePath, e.Index, e.Field, e.PartitionID, pilosa.DefaultPartitionN)
-				if err != nil {
-					return errors.Wrap(err, fmt.Sprintf("RepairTranslationStores() create empty boldtdb: boltdb.OpenTranslateStore e.StorePath='%v'", e.StorePath))
-				}
-				err = store.Close()
-				if err != nil {
-					return errors.Wrap(err, fmt.Sprintf("RepairTranslationStores() closing empty boltdb at path '%v'", e.StorePath))
-				}
-				continue
+				m[sum.PartitionID] = grp
 			}
-			// INVAR: e is a replica for this paritionID.
-			// Copy from primary if checksums are different.
-			if e.Checksum != primaryChecksum {
-				from := group.elem[prim].StorePath
-				dest := e.StorePath
-				if verbose {
-					fmt.Printf("# e.Checksum '%v' != primaryChecksum '%v': copying from primary translation store '%v' -> '%v'\n", e.Checksum, primaryChecksum, from, dest)
+			grp.elem = append(grp.elem, sum)
+		}
+
+		for partitionID, group := range m {
+			_ = partitionID
+			prim := -1
+			keyCount := 0
+			for k, e := range group.elem {
+				if e.IsPrimary {
+					prim = k
 				}
-				err := cp(from, dest)
-				if err != nil {
-					return fmt.Errorf("error: could not copy from primary '%v' to replica translation store '%v': '%v' ... try to keep going...\n", from, dest, err)
+				keyCount += e.KeyCount
+			}
+			if prim == -1 {
+				panic(fmt.Sprintf("no primary found for group '%v'", group.String()))
+			}
+
+			primary := group.elem[prim]
+			primaryChecksum := primary.Checksum
+			for _, e := range group.elem {
+				if e.IsPrimary {
+					continue
+				}
+				// is e a replica? not necessarily! have to check.
+				if !e.IsReplica {
+					//if verbose {
+					// since this will happen even on a fix point, where it is already empty,
+					// we don't report it again.
+					//fmt.Printf("# non-replica should have no data: creating an empty translation store here at '%v'\n", e.StorePath)
+					//}
+					err := os.RemoveAll(e.StorePath)
+					if err != nil {
+						return errors.Wrap(err, fmt.Sprintf("RepairTranslationStores() os.RemoveAll(e.StorePath='%v')", e.StorePath))
+					}
+					store, err := boltdb.OpenTranslateStore(e.StorePath, e.Index, e.Field, e.PartitionID, pilosa.DefaultPartitionN)
+					if err != nil {
+						return errors.Wrap(err, fmt.Sprintf("RepairTranslationStores() create empty boldtdb: boltdb.OpenTranslateStore e.StorePath='%v'", e.StorePath))
+					}
+					err = store.Close()
+					if err != nil {
+						return errors.Wrap(err, fmt.Sprintf("RepairTranslationStores() closing empty boltdb at path '%v'", e.StorePath))
+					}
+					continue
+				}
+				// INVAR: e is a replica for this paritionID.
+				// Copy from primary if checksums are different.
+				if e.Checksum != primaryChecksum {
+					from := group.elem[prim].StorePath
+					dest := e.StorePath
+					if verbose {
+						fmt.Printf("# e.Checksum '%v' != primaryChecksum '%v': copying from primary translation store '%v' -> '%v'\n", e.Checksum, primaryChecksum, from, dest)
+					}
+					err := cp(from, dest)
+					if err != nil {
+						return fmt.Errorf("error: could not copy from primary '%v' to replica translation store '%v': '%v' ... try to keep going...\n", from, dest, err)
+					}
 				}
 			}
 		}
@@ -555,7 +575,7 @@ func (cfg *FsckConfig) readOneDir(dir string) (idx2frag map[string]*pilosa.Index
 	quiet := cfg.Quiet
 
 	if !quiet {
-		fmt.Printf("# opening dir '%v'... this may take a few minutes... fixcol=%v\n\n", dir, cfg.FixCol)
+		fmt.Printf("# opening dir '%v'... this may take a few minutes...\n\n", dir)
 	}
 
 	jmphasher := &pilosa.Jmphasher{}
@@ -819,7 +839,7 @@ func (cfg *FsckConfig) analyzeThisIndex(
 	}
 	nDir := len(nodes2fragsum)
 
-	keyCount, idCount := cfg.getKeyIDCounts(ats)
+	keyCount, idCount := cfg.getKeyIDCounts(index, ats)
 
 	fixNeeded = changedFiles > 0 || ats.RepairNeeded
 	var actionTaken string
@@ -835,7 +855,7 @@ func (cfg *FsckConfig) analyzeThisIndex(
 	} else {
 		if fixNeeded {
 			wouldBe = "sync actions that would be taken under -fix:"
-			actionTaken = "*REPAIRS NEEDED BUT WERE NOT APPLIED* ; pilosa-fsck -fix and -fixcol were omitted."
+			actionTaken = "*REPAIRS NEEDED BUT WERE NOT APPLIED* ; pilosa-fsck -fix was omitted."
 		} else {
 			wouldBe = ""
 			actionTaken = "NO REPAIR NEEDED."
@@ -860,7 +880,6 @@ func (cfg *FsckConfig) analyzeThisIndex(
 #   pilosa-fsck final report 
 #
 #     run with    -fix: %v 
-#              -fixcol: %v
 #
 # index examined: '%v'
 #
@@ -878,7 +897,7 @@ func (cfg *FsckConfig) analyzeThisIndex(
 # %v
 # ========================================================
 `,
-		cfg.Fix, cfg.FixCol, index, nDir, cfg.ReplicaN, humanize.Comma(totalBytes), humanize.Comma(totalFiles), humanize.Comma(int64(nDir*pilosa.DefaultPartitionN)), humanize.Comma(int64(keyCount)), humanize.Comma(int64(idCount)), actionTaken, fragUpdate)
+		cfg.Fix, index, nDir, cfg.ReplicaN, humanize.Comma(totalBytes), humanize.Comma(totalFiles), humanize.Comma(int64(nDir*pilosa.DefaultPartitionN)), humanize.Comma(int64(keyCount)), humanize.Comma(int64(idCount)), actionTaken, fragUpdate)
 	return
 }
 
@@ -915,10 +934,12 @@ func cp(fromPath, toPath string) (err error) {
 	return os.Rename(tmpTo, toPath)
 }
 
-func (cfg *FsckConfig) getKeyIDCounts(ats *pilosa.AllTranslatorSummary) (keyCount, idCount int) {
+func (cfg *FsckConfig) getKeyIDCounts(index string, ats *pilosa.AllTranslatorSummary) (keyCount, idCount int) {
 	for _, sum := range ats.Sums {
-		keyCount += sum.KeyCount
-		idCount += sum.IDCount
+		if sum.Index == index {
+			keyCount += sum.KeyCount
+			idCount += sum.IDCount
+		}
 	}
 	return
 }

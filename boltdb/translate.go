@@ -579,7 +579,7 @@ func (s *TranslateStore) ComputeTranslatorSummaryCols(partitionID int, topo *pil
 				firstPrimary = primary
 			} else {
 				if primary != firstPrimary {
-					panic(fmt.Sprintf("primary (%v) != firstPrimary (%v); key='%v', id=%v, shard=%v; partitionID=%v", primary, firstPrimary, ks, id, shard, partitionID))
+					panic(fmt.Sprintf("s.index='%v' primary (%v) != firstPrimary (%v); key='%v', id=%v, shard=%v; partitionID=%v; topo='%v'", s.index, primary, firstPrimary, ks, id, shard, partitionID, topo.String()))
 				}
 			}
 

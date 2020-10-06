@@ -88,91 +88,109 @@ func Test_Repair(t *testing.T) {
 
 	ctx := context.Background()
 
-	index := "rick"
-	fieldName := "f"
+	index := []string{"rick", "morty"}
+	fieldName := []string{"f", "flying_car"}
+	idx := make([]*pilosa.Index, len(index))
+	field := make([]*pilosa.Field, len(index))
+	var err error
 
-	idx, err := nodes[0].API.CreateIndex(ctx, index, pilosa.IndexOptions{Keys: true, TrackExistence: true})
-	if err != nil {
-		t.Fatalf("creating index: %v", err)
-	}
-	if idx.CreatedAt() == 0 {
-		t.Fatal("index createdAt is empty")
-	}
+	for i := range index {
 
-	field, err := nodes[0].API.CreateField(ctx, index, fieldName, pilosa.OptFieldTypeSet(pilosa.DefaultCacheType, 100))
-	if err != nil {
-		t.Fatalf("creating field: %v", err)
-	}
-	if field.CreatedAt() == 0 {
-		t.Fatal("field createdAt is empty")
+		idx[i], err = nodes[0].API.CreateIndex(ctx, index[i], pilosa.IndexOptions{Keys: true, TrackExistence: true})
+		if err != nil {
+			t.Fatalf("creating index: %v", err)
+		}
+		if idx[i].CreatedAt() == 0 {
+			t.Fatal("index createdAt is empty")
+		}
+
+		field[i], err = nodes[0].API.CreateField(ctx, index[i], fieldName[i], pilosa.OptFieldTypeSet(pilosa.DefaultCacheType, 100))
+		if err != nil {
+			t.Fatalf("creating field: %v", err)
+		}
+		if field[i].CreatedAt() == 0 {
+			t.Fatal("field createdAt is empty")
+		}
 	}
 
 	rowID := uint64(1)
 	timestamp := int64(0)
 
-	// Generate some keyed records.
-	rowIDs := []uint64{}
-	timestamps := []int64{}
-	N := 10
-	for i := 1; i <= N; i++ {
-		rowIDs = append(rowIDs, rowID)
-		timestamps = append(timestamps, timestamp)
-	}
+	for i := range index {
 
-	// Keys are sharded so ordering is not guaranteed.
-	colKeys := []string{"col10", "col8", "col9", "col6", "col7", "col4", "col5", "col2", "col3", "col1"}
-
-	colKeys = colKeys[:N]
-
-	// Import data with keys to the coordinator (node0) and verify that it gets
-	// translated and forwarded to the owner of shard 0 (node1; because of offsetModHasher)
-	req := &pilosa.ImportRequest{
-		Index:          index,
-		IndexCreatedAt: idx.CreatedAt(),
-		Field:          fieldName,
-		FieldCreatedAt: field.CreatedAt(),
-
-		// even though this says Shard: 0, that won't matter. The column keys
-		// get hashed and that decides the actual shard.
-		Shard:      0,
-		RowIDs:     rowIDs,
-		ColumnKeys: colKeys,
-		Timestamps: timestamps,
-	}
-
-	qcx := nodes[0].API.Txf().NewQcx()
-
-	if err := nodes[0].API.Import(ctx, qcx, req); err != nil {
-		t.Fatal(err)
-	}
-	panicOn(qcx.Finish())
-
-	pql := fmt.Sprintf("Row(%s=%d)", fieldName, rowID)
-
-	// Query node0.
-	if res, err := nodes[0].API.Query(ctx, &pilosa.QueryRequest{Index: index, Query: pql}); err != nil {
-		t.Fatal(err)
-	} else if keys := res.Results[0].(*pilosa.Row).Keys; !reflect.DeepEqual(keys, colKeys) {
-		t.Fatalf("expected colKeys='%#v'; observed column keys: %#v", colKeys, keys)
-	}
-
-	// Query node1.
-	if err := test.RetryUntil(5*time.Second, func() error {
-		if res, err := nodes[1].API.Query(ctx, &pilosa.QueryRequest{Index: index, Query: pql}); err != nil {
-			return err
-		} else if keys := res.Results[0].(*pilosa.Row).Keys; !reflect.DeepEqual(keys, colKeys) {
-			return fmt.Errorf("unexpected column keys: %#v", keys)
+		// Generate some keyed records.
+		rowIDs := []uint64{}
+		timestamps := []int64{}
+		N := 10
+		for j := 1; j <= N; j++ {
+			rowIDs = append(rowIDs, rowID)
+			timestamps = append(timestamps, timestamp)
 		}
-		return nil
-	}); err != nil {
-		t.Fatal(err)
-	}
 
+		var colKeys []string
+		switch i {
+		case 0:
+			// Keys are sharded so ordering is not guaranteed.
+			colKeys = []string{"col10", "col8", "col9", "col6", "col7", "col4", "col5", "col2", "col3", "col1"}
+			colKeys = colKeys[:N]
+		case 1:
+			colKeys = []string{"col11", "col12"}
+			N = len(colKeys)
+			rowIDs = rowIDs[:N]
+			timestamps = timestamps[:N]
+		}
+
+		// Import data with keys to the coordinator (node0) and verify that it gets
+		// translated and forwarded to the owner of shard 0 (node1; because of offsetModHasher)
+		req := &pilosa.ImportRequest{
+			Index:          index[i],
+			IndexCreatedAt: idx[i].CreatedAt(),
+			Field:          fieldName[i],
+			FieldCreatedAt: field[i].CreatedAt(),
+
+			// even though this says Shard: 0, that won't matter. The column keys
+			// get hashed and that decides the actual shard.
+			Shard:      0,
+			RowIDs:     rowIDs,
+			ColumnKeys: colKeys,
+			Timestamps: timestamps,
+		}
+
+		qcx := nodes[0].API.Txf().NewQcx()
+
+		if err := nodes[0].API.Import(ctx, qcx, req); err != nil {
+			t.Fatal(err)
+		}
+		panicOn(qcx.Finish())
+		//qcx.Reset()
+
+		pql := fmt.Sprintf("Row(%s=%d)", fieldName[i], rowID)
+
+		// Query node0.
+		if res, err := nodes[0].API.Query(ctx, &pilosa.QueryRequest{Index: index[i], Query: pql}); err != nil {
+			t.Fatal(err)
+		} else if keys := res.Results[0].(*pilosa.Row).Keys; !reflect.DeepEqual(keys, colKeys) {
+			t.Fatalf("expected colKeys='%#v'; observed column keys: %#v", colKeys, keys)
+		}
+
+		// Query node1.
+		if err := test.RetryUntil(5*time.Second, func() error {
+			if res, err := nodes[1].API.Query(ctx, &pilosa.QueryRequest{Index: index[i], Query: pql}); err != nil {
+				return err
+			} else if keys := res.Results[0].(*pilosa.Row).Keys; !reflect.DeepEqual(keys, colKeys) {
+				return fmt.Errorf("unexpected column keys: %#v", keys)
+			}
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
 	// end of setup.
 
 	// partitionID in use: 6, 31, 57, 133, 185, 235
 	targetPartition := 31  // which partitionID we mess with.
 	targetNode := nodes[0] // this is the first replica.
+	targetIndex := index[0]
 	// 0 first replica
 	// 1 second replica
 	// 2  -- not a replica
@@ -191,8 +209,8 @@ func Test_Repair(t *testing.T) {
 	// for this test, mess up a replica that is not the primary.
 
 	h := targetNode.API.Holder()
-	idx = h.Index(index)
-	store := idx.TranslateStore(targetPartition)
+	idx[0] = h.Index(index[0])
+	store := idx[0].TranslateStore(targetPartition)
 	fwd, rev := getFwdRev(store, targetPartition)
 	//vv("targetPartition=%v, store.PartitionID=%v, before corruption, fwd='%#v', rev='%#v'", targetPartition, store.PartitionID, fwd, rev)
 
@@ -218,6 +236,28 @@ func Test_Repair(t *testing.T) {
 	//fwd3, rev3 := getFwdRev(store, targetPartition)
 	//vv("after corruption, fwd='%#v', rev='%#v'", fwd3, rev3)
 
+	targetIndex1 := "morty"
+	targetPartition1 := 226 // for "col11"
+	// # fsck_test.go:248 2020-10-06T20:24:33.755576-05:00 on k=47, idx[1]: targetPartition=47, store.PartitionID=0x4abe160, before corruption, fwd1='map[string]uint64{"col12":0xcf00001}', rev1='map[uint64]string{0xcf00001:"col12"}'
+	//# fsck_test.go:248 2020-10-06T20:24:35.608568-05:00 on k=226, idx[1]: targetPartition=226, store.PartitionID=0x4abe160, before corruption, fwd1='map[string]uint64{"col11":0xcc00001}', rev1='map[uint64]string{0xcc00001:"col11"}'
+	idx[1] = h.Index(index[1])
+	store1 := idx[1].TranslateStore(targetPartition1)
+	fwd1, rev1 := getFwdRev(store1, targetPartition1)
+	//vv("on k=%v, idx[1]: targetPartition=%v, store.PartitionID=%v, before corruption, fwd1='%#v', rev1='%#v'", k, targetPartition1, store.PartitionID, fwd1, rev1)
+
+	presz1 := len(rev1)
+	delete(rev1, fwd1["col11"])
+	postsz1 := len(rev1)
+
+	if postsz1 == presz1 {
+		panic("did not delete any key!")
+	}
+	bolt1 := store1.(*boltdb.TranslateStore)
+	if err := bolt1.SetFwdRevMaps(nil, fwd1, rev1); err != nil {
+		t.Fatal(err)
+	}
+
+	// done corrupting.
 	for _, nd := range nodes {
 		nd.Command.Close()
 	}
@@ -231,9 +271,17 @@ func Test_Repair(t *testing.T) {
 	// first we check that the corruption can be detected
 	// by our test with the checksums.
 
-	chk, err := check(dirs, cfg, targetPartition)
+	chk, err := check(dirs, cfg, targetIndex, targetPartition)
 	_ = chk
 	//vv("pre-fix, chk='%v'; err='%v'", chk, err)
+
+	if err == nil {
+		panic("expected to see checksums not match! but no corruption detected.")
+	}
+
+	chk1, err := check(dirs, cfg, targetIndex1, targetPartition1)
+	_ = chk1
+	//vv("pre-fix, chk1='%v'; err='%v'", chk1, err)
 
 	if err == nil {
 		panic("expected to see checksums not match! but no corruption detected.")
@@ -249,6 +297,7 @@ func Test_Repair(t *testing.T) {
 	// c) run the fix.
 	cfg.Fix = true
 	cfg.FixCol = true
+
 	fixNeeded, err = cfg.Run()
 	panicOn(err)
 	if !fixNeeded {
@@ -260,8 +309,13 @@ func Test_Repair(t *testing.T) {
 	//chksums = getChecksums(dirs, cfg, targetPartition)
 	//vv("after repair chksums = '%#v'", chksums)
 
-	chk, err = check(dirs, cfg, targetPartition)
+	chk, err = check(dirs, cfg, targetIndex, targetPartition)
 	_ = chk
+	//vv("chk = '%v' after repair; err='%v'", chk, err)
+	panicOn(err)
+
+	chk1, err = check(dirs, cfg, targetIndex1, targetPartition1)
+	_ = chk1
 	//vv("chk = '%v' after repair; err='%v'", chk, err)
 	panicOn(err)
 
@@ -271,7 +325,6 @@ func Test_Repair(t *testing.T) {
 	if fixNeeded {
 		panic("should see no fix needed after the prior repair")
 	}
-
 }
 
 func getFwdRev(store pilosa.TranslateStore, partitionID int) (fwd map[string]uint64, rev map[uint64]string) {
@@ -288,10 +341,13 @@ func getFwdRev(store pilosa.TranslateStore, partitionID int) (fwd map[string]uin
 	return
 }
 
-func check(dirs []string, cfg *FsckConfig, targetPartition int) (chksum string, err error) {
+func check(dirs []string, cfg *FsckConfig, targetIndex string, targetPartition int) (chksum string, err error) {
+	//vv("top of check, dirs = '%#v', targetIndex='%v', targetPartition='%v'", dirs, targetIndex, targetPartition)
+	//defer vv("returning from check()")
 
 	firstChecksum := ""
 	firstDir := ""
+	firstStorePath := ""
 	quiet := cfg.Quiet
 	defer func() {
 		cfg.Quiet = quiet
@@ -301,19 +357,42 @@ func check(dirs []string, cfg *FsckConfig, targetPartition int) (chksum string, 
 		dir := dirs[i]
 		_, _, ats, err := cfg.readOneDir(dir)
 		panicOn(err)
+		indexes := indexesFromAts(ats)
+		//vv("indexes = '%#v'", indexes)
 
-		for _, s := range ats.Sums {
-			if s.PartitionID != targetPartition {
+		for _, index := range indexes {
+
+			if index != targetIndex {
 				continue
 			}
-			if s.IsPrimary || s.IsReplica {
-				chksum := s.Checksum
-				if firstChecksum == "" {
-					firstChecksum = chksum
-					firstDir = dir
-				} else {
-					if chksum != firstChecksum {
-						return chksum, fmt.Errorf("bolt chksum on node %v '%v' disagrees with '%v' on '%v'", dir, chksum, firstChecksum, firstDir)
+			for _, s := range ats.Sums {
+				//vv(" s= '%#v'", s)
+				if s.Index != index {
+					//vv("skipping s.Index '%v' != index '%v'", s.Index, index)
+					continue
+				}
+				if s.PartitionID != targetPartition {
+					continue
+				}
+				//vv("accepting s.PartitionID(%v) == targetPartition(%v); s.Index '%v'; "+
+				//"index '%v';  s.IsPrimary=%v, s.IsReplica=%v, s='%#v'; s.Checksum='%v', firstChecksum='%v'",
+				//s.PartitionID, targetPartition, s.Index, index,
+				//s.IsPrimary, s.IsReplica, s, s.Checksum, firstChecksum)
+
+				if s.IsPrimary || s.IsReplica {
+					chksum := s.Checksum
+					if firstChecksum == "" {
+
+						firstChecksum = chksum
+						firstDir = dir
+						firstStorePath = s.StorePath
+
+					} else {
+						//vv("targetIndex = '%v'; firstChecksum='%v', chksum='%v'", targetIndex, firstChecksum, chksum)
+
+						if chksum != firstChecksum {
+							return chksum, fmt.Errorf("bolt chksum on node %v '%v' disagrees with '%v' on '%v'; index='%v'; s.StorePath = '%v'; firstStorePath='%v'", dir, chksum, firstChecksum, firstDir, index, s.StorePath, firstStorePath)
+						}
 					}
 				}
 			}

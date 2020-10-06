@@ -1968,6 +1968,23 @@ func NewTopology(hasher Hasher, partitionN int, replicaN int, c *cluster) *Topol
 	}
 }
 
+func (t *Topology) String() string {
+	return fmt.Sprintf(`
+&pilosa.Topology{
+		nodeIDs:    %v,
+		clusterID:  %v,
+		nodeStates: %v,
+		PartitionN: %v,
+		ReplicaN:   %v,
+}
+`,
+		t.nodeIDs,
+		t.clusterID,
+		t.nodeStates,
+		t.PartitionN,
+		t.ReplicaN,
+	)
+}
 func (t *Topology) GetNodeIDs() []string {
 	return t.nodeIDs
 }
