@@ -663,6 +663,13 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 		}
 
 		for _, col := range cols {
+			// Everything relies on the creation of index keys here.
+			// This is a bug which has become expected behavior.
+			_, err := h.api.TranslateIndexKey(stream.Context(), req.Index, col, true)
+			if err != nil {
+				return errors.Wrapf(err, "get or create index key %q", col)
+			}
+
 			rowResp := &pb.RowResponse{
 				Headers: ci,
 				Columns: []*pb.ColumnResponse{
