@@ -609,12 +609,14 @@ func TestBSIGroup_importValue(t *testing.T) {
 			t.Fatalf("test %d, importing values: %s", i, err.Error())
 		}
 		panicOn(qcx.Finish())
+		qcx.Reset()
 		if row, err := f.Range(qcx, f.name, pql.EQ, tt.checkVal); err != nil {
 			t.Fatalf("test %d, getting range: %s", i, err.Error())
 		} else if !reflect.DeepEqual(row.Columns(), tt.expCols) {
 			t.Fatalf("test %d, expected columns: %v, but got: %v", i, tt.expCols, row.Columns())
 		}
 		panicOn(qcx.Finish())
+		qcx.Reset()
 	} // loop
 }
 
@@ -679,6 +681,7 @@ func TestIntField_MinMaxForShard(t *testing.T) {
 				t.Fatalf("test %d, importing values: %s", i, err.Error())
 			}
 			panicOn(qcx.Finish())
+			qcx.Reset()
 
 			shard := uint64(0)
 			tx := f.idx.holder.txf.NewTx(Txo{Write: !writable, Index: f.idx, Field: f.Field, Shard: shard})
@@ -905,6 +908,7 @@ func TestBSIGroup_TxReopenDB(t *testing.T) {
 			t.Fatalf("test %d, importing values: %s", i, err.Error())
 		}
 		panicOn(qcx.Finish())
+		qcx.Reset()
 
 		if row, err := f.Range(qcx, f.name, pql.EQ, tt.checkVal); err != nil {
 			t.Fatalf("test %d, getting range: %s", i, err.Error())
@@ -912,6 +916,7 @@ func TestBSIGroup_TxReopenDB(t *testing.T) {
 			t.Fatalf("test %d, expected columns: %v, but got: %v", i, tt.expCols, row.Columns())
 		}
 		panicOn(qcx.Finish())
+		qcx.Reset()
 	} // loop
 
 	// the test: can we re-open a BSI fragment under Tx store

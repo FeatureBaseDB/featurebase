@@ -138,6 +138,9 @@ type Qcx struct {
 	// writable tx for all reads and writes on each given
 	// shard
 	write bool
+
+	// don't allow automatic reuse now. Must manually call Reset, or NewQcx().
+	done bool
 }
 
 // Finish commits/rollsback all stored Tx and resets the
@@ -153,7 +156,7 @@ func (q *Qcx) Finish() (err error) {
 		}
 	}
 	err2 := q.Grp.FinishGroup()
-	q.reset()
+	q.done = true
 
 	if err != nil {
 		return err
@@ -171,16 +174,25 @@ func (q *Qcx) Abort() {
 	}
 	q.Grp.AbortGroup()
 
-	q.reset()
+	q.done = true
 }
 
-// reset forgets everything are starts fresh with an empty
+// Reset forgets everything are starts fresh with an empty
 // group, ready for use again as if NewQcx() had been called.
-// q.mu must be held
-func (q *Qcx) reset() {
+func (q *Qcx) Reset() {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if !q.done {
+		panic("must call Qcx.Abort() or Qcx.Finish() before calling Reset().")
+	}
+	q.unprotected_reset()
+}
+
+func (q *Qcx) unprotected_reset() {
 	q.RequiredForAtomicWriteTx = nil
 	q.RequiredTxo = nil
 	q.Grp = q.Txf.NewTxGroup()
+	q.done = false
 }
 
 // NewQcxWithGroup allocates a freshly allocated and empty Grp.
@@ -235,6 +247,11 @@ var NoopFinisher = func(perr *error) {}
 func (qcx *Qcx) GetTx(o Txo) (tx Tx, finisher func(perr *error)) {
 	qcx.mu.Lock()
 	defer qcx.mu.Unlock()
+
+	if qcx.done {
+		panic(fmt.Sprintf("cannot call GetTx on a Qcx that is already done. "+
+			"Must call Reset() or txf.NewQcx(); stack='%v'", stack()))
+	}
 
 	// Use direct option if set on QCX.
 	if qcx.Direct {
@@ -861,7 +878,7 @@ func (f *TxFactory) NewTx(o Txo) (txn Tx) {
 
 	tx, err := dbs.NewTx(o.Write, indexName, o)
 	if err != nil {
-		panic(errors.Wrap(err, "rbfDB.NewRBFTx transaction errored"))
+		panic(errors.Wrap(err, "dbs.NewTx transaction errored"))
 	}
 	return tx
 }
