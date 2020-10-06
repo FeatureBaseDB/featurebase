@@ -793,26 +793,43 @@ func (api *API) Node() *Node {
 	return &node
 }
 
-// Usage gets the disk usage per index
-func (api *API) Usage() (map[string]int64, int64, error) {
-	indexSizes := make(map[string]int64)
+// NodeUsage represents all usage measurements for one node.
+type NodeUsage struct {
+	Disk DiskUsage `json:"bytesOnDisk"`
+}
+
+// DiskUsage represents the storage space used on disk by one node.
+type DiskUsage struct {
+	Total   int64            `json:"total"`
+	Indexes map[string]int64 `json:"indexes"`
+}
+
+// Usage gets the disk usage per index, in a map[nodeID]NodeUsage
+func (api *API) Usage(ctx context.Context, remote bool) (map[string]NodeUsage, error) {
+	span, _ := tracing.StartSpanFromContext(ctx, "API.Usage")
+	defer span.Finish()
+
+	nodeUsages := make(map[string]NodeUsage)
 	var totalSize int64
 
+	// Open storage directory.
 	dirName, err := expandDirName(api.server.dataDir)
 	if err != nil {
-		return indexSizes, totalSize, errors.Wrap(err, "expanding data directory")
+		return nodeUsages, errors.Wrap(err, "expanding data directory")
 	}
 	dir, err := os.Open(dirName)
 	if err != nil {
-		return indexSizes, totalSize, errors.Wrap(err, "opening data directory")
+		return nodeUsages, errors.Wrap(err, "opening data directory")
 	}
 	defer dir.Close()
 
 	files, err := dir.Readdir(-1)
 	if err != nil {
-		return indexSizes, totalSize, errors.Wrap(err, "reading data directory")
+		return nodeUsages, errors.Wrap(err, "reading data directory")
 	}
 
+	// Read size on disk for each index directory.
+	indexSizes := make(map[string]int64)
 	for _, file := range files {
 		if !file.IsDir() {
 			continue
@@ -821,17 +838,40 @@ func (api *API) Usage() (map[string]int64, int64, error) {
 			continue
 		}
 		fullName := path.Join(dirName, file.Name())
-		indexSizes[file.Name()], err = diskUsage(fullName)
+		indexSizes[file.Name()], err = directoryUsage(fullName)
 		if err != nil {
-			break
+			return nodeUsages, errors.Wrap(err, "getting disk usage")
 		}
 		totalSize += indexSizes[file.Name()]
 	}
 
-	return indexSizes, totalSize, nil
+	// Insert into result.
+	nodeUsage := NodeUsage{
+		Disk: DiskUsage{
+			Total:   totalSize,
+			Indexes: indexSizes,
+		},
+	}
+	nodeUsages[api.server.nodeID] = nodeUsage
+
+	// Collect size on disk from remote nodes
+	if !remote {
+		nodes := api.cluster.Nodes()
+		for _, node := range nodes {
+			if node.ID == api.server.nodeID {
+				continue
+			}
+			nodeUsage, err := api.server.defaultClient.GetNodeUsage(ctx, &node.URI)
+			if err != nil {
+				return nil, errors.Wrapf(err, "collecting disk usage from %s", node.URI)
+			}
+			nodeUsages[node.ID] = nodeUsage[node.ID]
+		}
+	}
+	return nodeUsages, nil
 }
 
-func diskUsage(fname string) (int64, error) {
+func directoryUsage(fname string) (int64, error) {
 	var size int64
 
 	dir, err := os.Open(fname)
@@ -847,7 +887,7 @@ func diskUsage(fname string) (int64, error) {
 
 	for _, file := range files {
 		if file.IsDir() {
-			sz, err := diskUsage(path.Join(fname, file.Name()))
+			sz, err := directoryUsage(path.Join(fname, file.Name()))
 			if err != nil {
 				return 0, err
 			}
