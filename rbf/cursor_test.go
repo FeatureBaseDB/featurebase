@@ -23,7 +23,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pilosa/pilosa/v2/race"
 	"github.com/pilosa/pilosa/v2/rbf"
 	"github.com/pilosa/pilosa/v2/roaring"
 )
@@ -77,8 +76,6 @@ func TestCursor_FirstNext_Quick(t *testing.T) {
 		t.Skip("-short enabled, skipping")
 	} else if is32Bit() {
 		t.Skip("32-bit build, skipping quick check tests")
-	} else if race.Enabled {
-		t.Skip("race detection enabled, skipping")
 	}
 
 	const n = 10000
@@ -199,8 +196,6 @@ func TestCursor_LastPrev_Quick(t *testing.T) {
 		t.Skip("-short enabled, skipping")
 	} else if is32Bit() {
 		t.Skip("32-bit build, skipping quick check tests")
-	} else if race.Enabled {
-		t.Skip("race detection enabled, skipping")
 	}
 
 	const n = 10000
@@ -313,8 +308,6 @@ func TestCursor_Union(t *testing.T) {
 			t.Skip("-short enabled, skipping")
 		} else if is32Bit() {
 			t.Skip("32-bit build, skipping quick check tests")
-		} else if race.Enabled {
-			t.Skip("race detection enabled, skipping")
 		}
 
 		QuickCheck(t, func(t *testing.T, rand *rand.Rand) {
@@ -394,8 +387,6 @@ func TestCursor_Intersect(t *testing.T) {
 			t.Skip("-short enabled, skipping")
 		} else if is32Bit() {
 			t.Skip("32-bit build, skipping quick check tests")
-		} else if race.Enabled {
-			t.Skip("race detection enabled, skipping")
 		}
 
 		QuickCheck(t, func(t *testing.T, rand *rand.Rand) {
