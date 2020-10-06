@@ -19,4 +19,4 @@ package rbf
 // DefaultMaxSize is the default mmap size and therefore the maximum allowed
 // size of the database. The size can be increased by updating the DB.MaxSize
 // and reopening the database. This setting mainly affects virtual space usage.
-const DefaultMaxSize = 100 * (1 << 30) // 100GB
+const DefaultMaxSize = 4 * (1 << 30)

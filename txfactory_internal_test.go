@@ -95,9 +95,9 @@ func Test_TxFactory_Qcx_query_context(t *testing.T) {
 	// allow all goro to finish before Closing the lmdb.env, otherwise
 	// we will crash as the goroutines making Tx will try to use the env
 	// after it is closed. It can take quite a while.
-	// one writer might be blocking the other... so ask for only N-1 at first.
-	barrier.BlockUntil(N - 1)
-	//barrier.BlockUntil(N)
+	// one writer might be blocking the other... so ask for only N-2 at first
+	// to avoid deadlock.
+	barrier.BlockUntil(N - 2)
 	barrier.UnblockReaders()
 	time.Sleep(1 * time.Second)
 }

@@ -16,9 +16,9 @@ package rbf
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
-	"sync"
 	"syscall"
 
 	"github.com/pilosa/pilosa/v2/syswrap"
@@ -26,66 +26,40 @@ import (
 
 // WALSegment represents a single file in the WAL.
 type WALSegment struct {
-	mu         sync.RWMutex
-	minWALID   int64    // base WALID; calculated from path
-	path       string   // path to file
-	w          *os.File // write handle
-	data       []byte   // read-only mmap data
-	writeCache []byte   // write buffer
-	pageN      int      // number of written pages
+	Path     string // path to file
+	MinWALID int64  // base WALID; calculated from path
+	PageN    int    // number of written pages
+
+	data []byte // read-only mmap data
 }
 
 // NewWALSegment returns a new instance of WALSegment for a given path.
-func NewWALSegment(path string) *WALSegment {
-	return &WALSegment{
-		path: path,
+func NewWALSegment(path string) WALSegment {
+	return WALSegment{
+		Path: path,
 	}
 }
 
-// Path returns the path the segment was initialized with.
-func (s *WALSegment) Path() string { return s.path }
-
-// MinWALID returns the initial WAL ID of the segment. Only available after Open().
-func (s *WALSegment) MinWALID() int64 {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.minWALID
-}
-
 // MaxWALID returns the maximum WAL ID of the segment. Only available after Open().
-func (s *WALSegment) MaxWALID() int64 {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.minWALID + int64(s.pageN) - 1
-}
-
-// PageN returns the number of pages in the segment.
-func (s *WALSegment) PageN() int {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.pageN
+func (s WALSegment) MaxWALID() int64 {
+	return s.MinWALID + int64(s.PageN) - 1
 }
 
 // Size returns the current size of the segment, in bytes.
-func (s *WALSegment) Size() int64 {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return int64(s.pageN) * PageSize
+func (s WALSegment) Size() int64 {
+	return int64(s.PageN) * PageSize
 }
 
 func (s *WALSegment) Open() (err error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	// Extract base WAL ID and validate path.
-	if s.minWALID, err = ParseWALSegmentPath(s.path); err != nil {
+	if s.MinWALID, err = ParseWALSegmentPath(s.Path); err != nil {
 		return err
 	}
 
 	// Determine file size & create if necessary.
 	var sz int64
-	if fi, err := os.Stat(s.path); os.IsNotExist(err) {
-		if f, err := os.OpenFile(s.path, os.O_RDWR|os.O_CREATE, 0666); err != nil {
+	if fi, err := os.Stat(s.Path); os.IsNotExist(err) {
+		if f, err := os.OpenFile(s.Path, os.O_RDWR|os.O_CREATE, 0666); err != nil {
 			return fmt.Errorf("touch wal segment file: %w", err)
 		} else if err := f.Close(); err != nil {
 			return fmt.Errorf("close touched wal segment file: %w", err)
@@ -97,11 +71,11 @@ func (s *WALSegment) Open() (err error) {
 	}
 
 	// Determine page count & truncate if a partial page is written.
-	s.pageN = int(sz / PageSize)
+	s.PageN = int(sz / PageSize)
 	if sz%PageSize != 0 {
-		sz = int64(s.pageN * PageSize)
-		if err := os.Truncate(s.path, sz); err != nil {
-			return fmt.Errorf("truncate wal segment file: %w", err)
+		sz = int64(s.PageN * PageSize)
+		if err := truncate(s.Path, sz); err != nil {
+			return fmt.Errorf("truncate wal file: %w", err)
 		}
 	}
 
@@ -113,7 +87,7 @@ func (s *WALSegment) Open() (err error) {
 	}
 
 	// Open file as a read-only memory map.
-	if f, err := os.OpenFile(s.path, os.O_RDONLY, 0666); err != nil {
+	if f, err := os.OpenFile(s.Path, os.O_RDONLY, 0666); err != nil {
 		return fmt.Errorf("open wal segment file: %w", err)
 	} else if s.data, err = syswrap.Mmap(int(f.Fd()), 0, int(mmapSize), syscall.PROT_READ, syscall.MAP_SHARED); err != nil {
 		f.Close()
@@ -127,12 +101,6 @@ func (s *WALSegment) Open() (err error) {
 
 // Close closes the write handle and the read-only mmap.
 func (s *WALSegment) Close() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if err := s.closeForWrite(); err != nil {
-		return err
-	}
 	if s.data != nil {
 		if err := syswrap.Munmap(s.data); err != nil {
 			return err
@@ -142,144 +110,148 @@ func (s *WALSegment) Close() error {
 	return nil
 }
 
-// CloseForWrite closes the write handle, if initialized.
-func (s *WALSegment) CloseForWrite() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.closeForWrite()
-}
-
-func (s *WALSegment) closeForWrite() error {
-	// Ensure write buffer is flushed out.
-	if err := s.sync(); err != nil {
-		return err
-	}
-	s.writeCache = nil
-
-	// Close underlying file writer.
-	if s.w != nil {
-		if err := s.w.Close(); err != nil {
-			return err
-		}
-		s.w = nil
-	}
-	return nil
-}
-
 // ReadWALPage reads a single page at the given WAL ID.
 func (s *WALSegment) ReadWALPage(walID int64) ([]byte, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
 	// Ensure requested ID is contained in this file.
-	if walID < s.minWALID || walID > s.minWALID+int64(s.pageN) {
-		return nil, fmt.Errorf("wal segment page read out of range: id=%d base=%d pageN=%d", walID, s.minWALID, s.pageN)
+	if walID < s.MinWALID || walID > s.MinWALID+int64(s.PageN) {
+		return nil, fmt.Errorf("wal segment page read out of range: id=%d base=%d pageN=%d", walID, s.MinWALID, s.PageN)
 	}
 
-	offset := (walID - s.minWALID) * PageSize
-
-	// If offset is within write buffer, return from write buffer.
-	writeBufferOffset := int64((s.pageN * PageSize) - len(s.writeCache))
-	if offset >= writeBufferOffset {
-		buf := s.writeCache[offset-writeBufferOffset:]
-		return buf[:PageSize:PageSize], nil
-	}
-
-	// Otherwise return from on-disk mmap.
+	offset := (walID - s.MinWALID) * PageSize
 	return s.data[offset : offset+PageSize], nil
 }
 
-// WriteWALPage writes a single page to the WAL segment and returns its WAL identifier.
-func (s *WALSegment) WriteWALPage(page []byte, isMeta bool) (walID int64, err error) {
-	assert(len(page) == PageSize) // invalid page size
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	// Initialize write file handle if not yet initialized.
-	if s.w == nil {
-		if s.w, err = os.OpenFile(s.path, os.O_WRONLY, 0666); err != nil {
-			return 0, fmt.Errorf("open wal segment write handle: %w", err)
+func walSegmentByPath(segments []WALSegment, path string) *WALSegment {
+	for i := range segments {
+		if segments[i].Path == path {
+			return &segments[i]
 		}
 	}
-
-	// Determine current WAL position.
-	walID = s.minWALID + int64(s.pageN)
-
-	// Write WAL ID if this is a meta page.
-	if isMeta {
-		writeMetaWALID(page, walID)
-		// TODO: Write meta page checksum
-	}
-
-	// Append write to write buffer & increment page count.
-	if s.writeCache == nil {
-		s.writeCache = make([]byte, 0, MaxWALSegmentFileSize+PageSize)
-	}
-	s.writeCache = append(s.writeCache, page...)
-	s.pageN++
-
-	return walID, nil
-}
-
-// TruncateAfter removes all pages after a given WAL ID.
-func (s *WALSegment) TruncateAfter(walID int64) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	// Ensure this is a partial truncation. Full truncation of a segment
-	// should be performed by the DB since it needs to remove the segment.
-	assert(walID > s.minWALID)
-
-	// Update to new page size.
-	newPageN := int((walID - s.minWALID) + 1) // new page count of segment
-	truncPageN := s.pageN - newPageN          // number of pages removed
-	s.pageN = newPageN
-
-	// Check to see if we are only truncating from the write cache.
-	writeCachePageN := len(s.writeCache) / PageSize
-	if truncPageN <= int(writeCachePageN) {
-		s.writeCache = s.writeCache[:(writeCachePageN-truncPageN)*PageSize]
-		return nil
-	}
-
-	// Clear write cache.
-	s.writeCache = s.writeCache[:0]
-
-	// Remove on disk pages.
-	return os.Truncate(s.path, int64(s.pageN)*PageSize)
-}
-
-// Flush flushes the write buffer to the OS cache.
-func (s *WALSegment) Flush() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.flush()
-}
-
-func (s *WALSegment) flush() error {
-	if _, err := s.w.WriteAt(s.writeCache, int64((s.pageN*PageSize)-len(s.writeCache))); err != nil {
-		return fmt.Errorf("wal segment write: %w", err)
-	}
-	s.writeCache = s.writeCache[:0]
 	return nil
 }
 
-// Sync flushes the write buffer and invokes a file sync to flush data to disk.
-func (s *WALSegment) Sync() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.sync()
+func activeWALSegment(segments []WALSegment) WALSegment {
+	if len(segments) == 0 {
+		return WALSegment{}
+	}
+	return segments[len(segments)-1]
 }
 
-func (s *WALSegment) sync() error {
-	if s.w == nil {
-		return nil
+func minWALID(segments []WALSegment) int64 {
+	if len(segments) == 0 {
+		return 0
 	}
-	if err := s.flush(); err != nil {
-		return err
+	return segments[0].MinWALID
+}
+
+func maxWALID(segments []WALSegment) int64 {
+	if len(segments) == 0 {
+		return 0
 	}
-	return s.w.Sync()
+	s := segments[len(segments)-1]
+	return s.MaxWALID()
+}
+
+func walSize(segments []WALSegment) int64 {
+	var sz int64
+	for _, s := range segments {
+		sz += s.Size()
+	}
+	return sz
+}
+
+// readWALPage reads a single page at the given WAL ID.
+func readWALPage(segments []WALSegment, walID int64) ([]byte, error) {
+	// TODO(BBJ): Binary search for segment.
+	for _, s := range segments {
+		if walID >= s.MinWALID && walID <= s.MaxWALID() {
+			return s.ReadWALPage(walID)
+		}
+	}
+	return nil, fmt.Errorf("cannot find segment containing WAL page: %d", walID)
+}
+
+func findNextWALMetaPage(segments []WALSegment, walID int64) (metaWALID int64, err error) {
+	maxWALID := maxWALID(segments)
+
+	for ; walID <= maxWALID; walID++ {
+		// Read page data from WAL and return if it is a meta page.
+		page, err := readWALPage(segments, walID)
+		if err != nil {
+			return walID, err
+		} else if IsMetaPage(page) {
+			return walID, nil
+		}
+
+		// Skip over next page if this is a bitmap header.
+		if IsBitmapHeader(page) {
+			walID++
+		}
+	}
+
+	return -1, io.EOF
+}
+
+func findLastWALMetaPage(segments []WALSegment) (walID int64, err error) {
+	if len(segments) == 0 {
+		return 0, nil
+	}
+
+	var maxMetaWALID int64
+	maxWALID := maxWALID(segments)
+	for walID := minWALID(segments); walID <= maxWALID; walID++ {
+		if page, err := readWALPage(segments, walID); err != nil {
+			return walID, err
+		} else if IsBitmapHeader(page) {
+			walID++ // skip next page for bitmap headers
+		} else if IsMetaPage(page) {
+			maxMetaWALID = walID // save max meta WAL ID
+		}
+	}
+	return maxMetaWALID, nil
+}
+
+// truncateWALAfter removes all pages in the WAL after walID.
+func truncateWALAfter(segments []WALSegment, walID int64) ([]WALSegment, error) {
+	var newSegments []WALSegment
+
+	for i := range segments {
+		segment := &segments[i]
+
+		// Append entire segment if WAL range entirely before target WAL ID.
+		if walID > segment.MaxWALID() {
+			newSegments = append(newSegments, *segment)
+			continue
+		}
+
+		// If we only remove some of the WAL pages then truncate and append.
+		if segment.MinWALID < walID {
+			newSegment := *segment
+			newSegment.PageN = int((walID - newSegment.MinWALID) + 1)
+
+			if err := truncate(newSegment.Path, int64(newSegment.PageN)*PageSize); err != nil {
+				return segments, err
+			}
+			newSegments = append(newSegments, newSegment)
+			continue
+		}
+
+		// Drop entire segment if all pages are after WAL ID.
+		if err := segment.Close(); err != nil {
+			return segments, err
+		} else if err := os.Remove(segment.Path); err != nil {
+			return segments, err
+		}
+	}
+
+	return newSegments, nil
+}
+
+func DumpWALSegments(segments []WALSegment) {
+	fmt.Printf("WAL (%d segments)\n", len(segments))
+	for i, s := range segments {
+		fmt.Printf("[%d] WALIDs=(%d-%d) PageN=%d\n", i, s.MinWALID, s.MaxWALID(), s.PageN)
+	}
 }
 
 // FormatWALSegmentPath returns a path for a WAL segment using a WAL ID.

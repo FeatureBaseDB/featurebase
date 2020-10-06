@@ -86,6 +86,8 @@ func MustCloseDB(tb testing.TB, db *rbf.DB) {
 	tb.Helper()
 	if err := db.Check(); err != nil && err != rbf.ErrClosed {
 		tb.Fatal(err)
+	} else if n := db.TxN(); n != 0 {
+		tb.Fatalf("db still has %d active transactions; must closed before closing db", n)
 	} else if err := db.Close(); err != nil && err != rbf.ErrClosed {
 		tb.Fatal(err)
 	} else if err := os.RemoveAll(db.Path); err != nil {
