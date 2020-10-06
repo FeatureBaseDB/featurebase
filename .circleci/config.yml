@@ -199,11 +199,23 @@ workflows:
           requires:
             - setup
       - test:
+          name: test-txstore-rbf
+          test_make_target: test-txstore-rbf
+          resource_class: xlarge
+          requires:
+            - setup
+      - test:
+          name: test-txstore-rbf_lmdb
+          test_make_target: test-txstore-rbf_lmdb
+          resource_class: xlarge
+          requires:
+            - setup            
+      - test:
           name: test-shardwidth-22
           shard_width: "22"
           resource_class: large
           requires:
-            - setup
+            - setup            
       - cluster-tests:
           requires:
             - setup

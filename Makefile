@@ -1,4 +1,4 @@
-.PHONY: build check-clean clean build-lattice cover cover-viz default docker docker-build docker-test docker-tag-push generate generate-protoc generate-pql generate-statik gometalinter install install-build-deps install-golangci-lint install-gometalinter install-protoc install-protoc-gen-gofast install-peg install-statik prerelease prerelease-upload release release-build test testv testv-race testvsub testvsub-race
+.PHONY: build check-clean clean build-lattice cover cover-viz default docker docker-build docker-test docker-tag-push generate generate-protoc generate-pql generate-statik gometalinter install install-build-deps install-golangci-lint install-gometalinter install-protoc install-protoc-gen-gofast install-peg install-statik prerelease prerelease-upload release release-build test testv testv-race testvsub testvsub-race test-txstore-rbf_lmdb test-txstore-rbf
 
 CLONE_URL=github.com/pilosa/pilosa
 VERSION := $(shell git describe --tags 2> /dev/null || echo unknown)
@@ -410,3 +410,10 @@ install-gometalinter:
 	GO111MODULE=off go get -u github.com/alecthomas/gometalinter
 	GO111MODULE=off gometalinter --install
 	GO111MODULE=off go get github.com/remyoudompheng/go-misc/deadcode
+
+test-txstore-rbf:
+	PILOSA_TXSRC=rbf $(MAKE) testv-race
+
+test-txstore-rbf_lmdb:
+	PILOSA_TXSRC=rbf_lmdb $(MAKE) testv-race
+
