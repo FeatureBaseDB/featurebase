@@ -219,8 +219,12 @@ func (db *DB) Checkpoint() error {
 
 // checkpoint moves WAL segments to the main DB file.
 //
-// Note that mu should db.mu when called through the external API but it
-// can be &nopLocker if called under lock.
+// Note that mu should db.mu when called through DB.Checkpoint() but it
+// can be &nopLocker if called under lock. The external API will be used
+// to periodically checkpoint outside of a transaction and the locking
+// must be used only in the beginning (to obtain the segment list) and at
+// the end (when removing old segments from the list). If the entire function
+// were to obtain a lock then it would block all new read & write transactions.
 func (db *DB) checkpoint(exclusive bool, mu sync.Locker) error {
 	// Obtain a snapshot of WAL segments at the start.
 	mu.Lock()
