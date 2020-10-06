@@ -36,14 +36,14 @@ Pilosa, we wish to provide a means to re-establish correct replication.
 Thus even in the event of a node failure followed by a read from a replica, the
 returned read will be correct.
 
-The pilosa-fsck tool can therefore been seen as a temporary, stop-gap
+The pilosa-fsck tool can therefore be seen as a temporary, stop-gap
 measure to address immediate issues while the cluster replication
 mechanism is replaced.
 
 The second factor motivating the creation of pilosa-fsck was the discovery
 of a bug in the Key-translation process. Unfortunately this was a hard
-to reproduce bug. It happened only on the customer's premises.
-It happened only after running the system for a long time, with a
+to reproduce bug. It happened only on the customer's premises,
+and only after running the system for a long time, with a
 large amount of data, and with various eccentric node failures
 and recoveries.
 
@@ -58,7 +58,7 @@ certainty that we have actually addressed the bug that the customer
 was seeing.
 
 Therefore we also desired an additional insurance
-policy. We wished to be able to empower customers to pro-actively discover any
+policy. We wished to be able to empower customers to proactively discover any
 future Key-translation issues that happen in their on-premise systems.
 
 To do this, we proposed providing select customers with the pilosa-fsck
@@ -96,10 +96,10 @@ Use `&> log` or  `2>&1 > log` at the end of the
 pilosa-fsck invocation to save a log of the run to disk.
 
 In a typical cluster, the Replication factor R may be less
-than the number nodes N in the cluster. For example, while
+than the number of nodes N in the cluster. For example, while
 N may be 4, the R may be only 3. In this example, within
 each replicated shard, one node will be the primary for
-that shard, two nodes will be "regular" non-primary replicas, and one
+that shard, two nodes will be non-primary replicas, and one
 node will be a non-replica. Note that the designation
 of primary changes for different Roaring shards within an index,
 even on a single node.
@@ -127,7 +127,7 @@ Errors in invocation are reported on stderr and the program will exit with a non
 error code if invocation errors are present. A non-zero error code
 is returned if a repair is needed and -fix was not given.
 
-A -fix run will return a zero error code to the shell, if the fix was
+A -fix run will return a zero error code to the shell if the fix was
 successfully made; or if no fix was required.
 
 The log of the run is printed to stdout.
