@@ -33,6 +33,10 @@ type Query struct {
 }
 
 func (q *Query) startCall(name string) {
+	// Coerce every name into a canonical form if we know of one.
+	if canon, ok := canonicalCaps[strings.ToLower(name)]; ok {
+		name = canon
+	}
 	newCall := &Call{Name: name}
 	q.callStack = append(q.callStack, &callStackElem{call: newCall})
 
@@ -476,6 +480,21 @@ var callInfoByFunc = map[string]callInfo{
 			"column": stringOrInt64,
 		},
 	},
+}
+
+// We want to allow case-insensitive names, but we want to continue using
+// friendly easy-to-read names like "SetRowAttrs", not "setrowattrs". So,
+// we make a map; put in a ToLower() string, get back the canonical
+// capitalization. This might not have seemed like the best strategy if we
+// didn't already have so much code relying on the exact strings.
+var canonicalCaps = makeCanonicalMap(callInfoByFunc)
+
+func makeCanonicalMap(from map[string]callInfo) map[string]string {
+	m := make(map[string]string, len(from))
+	for k := range from {
+		m[strings.ToLower(k)] = k
+	}
+	return m
 }
 
 // CheckCallInfo tries to validate that arguments are correct and valid for the
