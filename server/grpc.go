@@ -584,11 +584,13 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 			//
 			// A query which will work here is 'SELECT *' or any query with more columns
 			// than just _id.
-			if colAdded > 0 {
-				if err := stream.Send(rowResp); err != nil {
-					return errors.Wrap(err, "sending response to stream")
-				}
+			//if colAdded > 0 {
+			// This has been reverted, as it violates the expectations of users of inspect.
+			// It is expected that inspect will return garbage.
+			if err := stream.Send(rowResp); err != nil {
+				return errors.Wrap(err, "sending response to stream")
 			}
+			//}
 		}
 
 	} else {
@@ -607,7 +609,7 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 			}
 		}
 
-		forceSend := false
+		//forceSend := false
 		ci := []*pb.ColumnInfo{
 			{Name: "_id", Datatype: "string"},
 		}
@@ -627,11 +629,11 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 				end = uint64(len(cols))
 			}
 			cols = cols[offset:end]
-			if len(cols) == 1 {
+			/*if len(cols) == 1 {
 				if id, err := h.api.TranslateIndexKey(stream.Context(), index.Name(), cols[0], false); id != 0 && err == nil {
 					forceSend = true
 				}
-			}
+			}*/
 		} else {
 			// Prevent getting too many records by forcing a limit.
 			pql := fmt.Sprintf("All(limit=%d, offset=%d)", limit, offset)
@@ -909,11 +911,13 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 			// -------
 			// <nil>
 			// (1 row)
-			if colAdded > 0 || forceSend {
-				if err := stream.Send(rowResp); err != nil {
-					return errors.Wrap(err, "sending response to stream")
-				}
+			//if colAdded > 0 || forceSend {
+			// This has been reverted, as it violates the expectations of users of inspect.
+			// It is expected that inspect will return garbage.
+			if err := stream.Send(rowResp); err != nil {
+				return errors.Wrap(err, "sending response to stream")
 			}
+			//}
 		}
 
 	}
