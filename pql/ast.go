@@ -60,7 +60,7 @@ func (q *Query) lastCallStackElem() *callStackElem {
 
 func (q *Query) addPosNum(key, value string) {
 	q.addField(key)
-	q.addNumVal(value, false)
+	q.addNumVal(value)
 }
 
 func (q *Query) addPosStr(key, value string) {
@@ -85,9 +85,9 @@ func (q *Query) endConditional() {
 	if len(q.conditional) != 5 {
 		panic(fmt.Sprintf("conditional of wrong length: %#v", q.conditional))
 	}
-	low := parseNum(q.conditional[0], false)
+	low := parseNum(q.conditional[0])
 	field := q.conditional[2]
-	high := parseNum(q.conditional[4], false)
+	high := parseNum(q.conditional[4])
 
 	var op Token
 	switch q.conditional[1] + q.conditional[3] {
@@ -162,12 +162,12 @@ func (q *Query) addVal(val interface{}) {
 	elem.lastCond = ILLEGAL
 }
 
-func (q *Query) addNumVal(val string, asFloat bool) {
+func (q *Query) addNumVal(val string) {
 	elem := q.lastCallStackElem()
 	if elem == nil || elem.lastField == "" {
 		panic(fmt.Sprintf("addIntVal called with '%s' when lastField is empty", val))
 	}
-	ival := parseNum(val, asFloat)
+	ival := parseNum(val)
 	if elem.inList {
 		if elem.lastCond != ILLEGAL {
 			list := elem.call.Args[elem.lastField].(*Condition).Value.([]interface{})
@@ -991,6 +991,20 @@ func CopyArgs(m map[string]interface{}) map[string]interface{} {
 	return other
 }
 
+// CopyArgsDecimalToFloat makes a copy of m, but in the process,
+// replaces any Decimal values with Float64 values.
+func CopyArgsDecimalToFloat(m map[string]interface{}) map[string]interface{} {
+	other := make(map[string]interface{}, len(m))
+	for k, v := range m {
+		if dec, ok := v.(Decimal); ok {
+			other[k] = dec.Float64()
+		} else {
+			other[k] = v
+		}
+	}
+	return other
+}
+
 func joinInterfaceSlice(a []interface{}) string {
 	other := make([]string, len(a))
 	for i := range a {
@@ -1012,15 +1026,11 @@ func joinUint64Slice(a []uint64) string {
 	return "[" + strings.Join(other, ",") + "]"
 }
 
-func parseNum(val string, asFloat bool) interface{} {
+func parseNum(val string) interface{} {
 	var ival interface{}
 	var err error
 	if strings.Contains(val, ".") {
-		if asFloat {
-			ival, err = strconv.ParseFloat(val, 64)
-		} else {
-			ival, err = ParseDecimal(val)
-		}
+		ival, err = ParseDecimal(val)
 	} else {
 		ival, err = strconv.ParseInt(val, 10, 64)
 	}
