@@ -429,6 +429,16 @@ func (m *Command) SetupServer() error {
 		return errors.Wrap(err, "new api")
 	}
 
+	m.grpcServer, err = NewGRPCServer(
+		OptGRPCServerAPI(m.API),
+		OptGRPCServerListener(m.grpcLn),
+		OptGRPCServerLogger(m.logger),
+		OptGRPCServerStats(statsClient),
+	)
+	if err != nil {
+		return errors.Wrap(err, "new grpc server")
+	}
+
 	m.Handler, err = http.NewHandler(
 		http.OptHandlerAllowedOrigins(m.Config.Handler.AllowedOrigins),
 		http.OptHandlerAPI(m.API),
@@ -436,18 +446,9 @@ func (m *Command) SetupServer() error {
 		http.OptHandlerFileSystem(&statik.FileSystem{}),
 		http.OptHandlerListener(m.ln),
 		http.OptHandlerCloseTimeout(m.closeTimeout),
+		http.OptHandlerMiddleware(m.grpcServer.Middleware(m.Config.Handler.AllowedOrigins)),
 	)
-	if err != nil {
-		return errors.Wrap(err, "new handler")
-	}
-
-	m.grpcServer, err = NewGRPCServer(
-		OptGRPCServerAPI(m.API),
-		OptGRPCServerListener(m.grpcLn),
-		OptGRPCServerLogger(m.logger),
-		OptGRPCServerStats(statsClient),
-	)
-	return errors.Wrap(err, "new grpc server")
+	return errors.Wrap(err, "new handler")
 }
 
 // setupNetworking sets up internode communication based on the configuration.

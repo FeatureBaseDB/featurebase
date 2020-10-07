@@ -10,6 +10,7 @@ require (
 	github.com/cespare/xxhash v1.1.0
 	github.com/codahale/hdrhistogram v0.0.0-20161010025455-3a0bb77429bd // indirect
 	github.com/davecgh/go-spew v1.1.1
+	github.com/desertbit/timer v0.0.0-20180107155436-c41aec40b27f // indirect
 	github.com/dgraph-io/badger/v2 v2.0.1-rc1.0.20200709123515-8e896a7af361
 	github.com/dustin/go-humanize v1.0.0
 	github.com/glycerine/idem v0.0.0-20190127113923-7a8083893311
@@ -21,6 +22,7 @@ require (
 	github.com/gorilla/handlers v1.3.0
 	github.com/gorilla/mux v1.7.0
 	github.com/hashicorp/memberlist v0.1.3
+	github.com/improbable-eng/grpc-web v0.13.0
 	github.com/lib/pq v1.8.0
 	github.com/opentracing/opentracing-go v1.1.0
 	github.com/pelletier/go-toml v1.2.0
@@ -30,6 +32,7 @@ require (
 	github.com/prometheus/prom2json v1.3.0
 	github.com/rakyll/statik v0.1.7
 	github.com/remyoudompheng/bigfft v0.0.0-20190728182440-6a916e37a237 // indirect
+	github.com/rs/cors v1.7.0 // indirect
 	github.com/satori/go.uuid v1.2.0
 	github.com/shirou/gopsutil v2.18.12+incompatible
 	github.com/shirou/w32 v0.0.0-20160930032740-bb4de0191aa4 // indirect

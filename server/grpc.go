@@ -19,10 +19,12 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net"
+	"net/http"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/improbable-eng/grpc-web/go/grpcweb"
 	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/logger"
 	pb "github.com/pilosa/pilosa/v2/proto"
@@ -1239,6 +1241,29 @@ func (s *grpcServer) Serve(tlsConfig *tls.Config) error {
 		return errors.Wrap(err, "starting grpc server")
 	}
 	return nil
+}
+
+func (s *grpcServer) Middleware(origins []string) func(http.Handler) http.Handler {
+	httpOriginFunc := grpcweb.WithOriginFunc(func(origin string) bool {
+		for _, x := range origins {
+			if origin == x {
+				return true
+			}
+		}
+		return false
+	})
+
+	wrappedGrpc := grpcweb.WrapServer(s.grpcServer, httpOriginFunc)
+
+	return func(h http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if wrappedGrpc.IsGrpcWebRequest(r) || wrappedGrpc.IsAcceptableGrpcCorsRequest(r) {
+				wrappedGrpc.ServeHTTP(w, r)
+			} else {
+				h.ServeHTTP(w, r)
+			}
+		})
+	}
 }
 
 // Stop stops the GRPC server. There's no error because the underlying GRPC

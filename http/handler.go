@@ -94,6 +94,13 @@ type errorResponse struct {
 // handlerOption is a functional option type for pilosa.Handler
 type handlerOption func(s *Handler) error
 
+func OptHandlerMiddleware(middleware func(http.Handler) http.Handler) handlerOption {
+	return func(h *Handler) error {
+		h.middleware = append(h.middleware, middleware)
+		return nil
+	}
+}
+
 func OptHandlerAllowedOrigins(origins []string) handlerOption {
 	return func(h *Handler) error {
 		h.middleware = append(h.middleware, handlers.CORS(
