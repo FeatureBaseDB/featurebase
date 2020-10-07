@@ -393,6 +393,7 @@ func newRouter(handler *Handler) http.Handler {
 	router.HandleFunc("/ui/usage", handler.handleGetUsage).Methods("GET").Name("GetUsage")
 	router.HandleFunc("/ui/transaction", handler.handleGetTransactionList).Methods("GET").Name("GetTransactionList")
 	router.HandleFunc("/ui/transaction/", handler.handleGetTransactionList).Methods("GET").Name("GetTransactionList")
+	router.HandleFunc("/ui/shard-distribution", handler.handleGetShardDistribution).Methods("GET").Name("GetShardDistribution")
 
 	// /internal endpoints are for internal use only; they may change at any time.
 	// DO NOT rely on these for external applications!
@@ -680,6 +681,15 @@ func (h *Handler) handleGetUsage(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(nodeUsages); err != nil {
+		h.logger.Printf("write status response error: %s", err)
+	}
+}
+
+// handleGetUsage handles GET /ui/shard-distribution requests.
+func (h *Handler) handleGetShardDistribution(w http.ResponseWriter, r *http.Request) {
+	dist := h.api.ShardDistribution(r.Context())
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(dist); err != nil {
 		h.logger.Printf("write status response error: %s", err)
 	}
 }

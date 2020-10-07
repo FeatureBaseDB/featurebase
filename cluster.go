@@ -978,12 +978,74 @@ func (c *cluster) translationNodes(to *cluster) (map[string][]*translationResize
 	return m, nil
 }
 
-// shardPartition returns the shard-partition that a shard belongs to.
-// NOTE: this is DIFFERENT from the key-partition
-func (c *cluster) shardToShardPartition(index string, shard uint64) int {
-	return shardToShardPartition(index, shard, c.partitionN)
+// shardDistributionByIndex returns a slice of shards per node for an index, up to maxShard.
+func (c *cluster) shardDistributionByIndex(index string, maxShard uint64) ([]Node, [][]uint64) {
+	m := make(map[Node][]uint64)
+
+	for i := range c.nodes {
+		m[*c.nodes[i]] = []uint64{}
+	}
+
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	for shard := uint64(0); shard <= maxShard; shard++ {
+		for _, node := range c.shardNodes(index, shard) {
+			m[*node] = append(m[*node], shard)
+		}
+	}
+
+	n := make([]Node, len(c.nodes))
+	s := make([][]uint64, len(c.nodes))
+
+	for i := range c.nodes {
+		n[i] = *c.nodes[i]
+		s[i] = m[*c.nodes[i]]
+	}
+
+	return n, s
 }
 
+// For specified index, return an object like
+/*
+{
+	"7aa98e81-0b53-43e4-9f98-c77d7fc2371a": {
+    	"primary-shards": [],
+		"replica-shards": []
+	},
+	"d4a7b7ff-529f-4d28-8d95-48d307751775": {
+    	"primary-shards": [],
+		"replica-shards": []
+	}
+	...
+}
+*/
+func (c *cluster) shardDistributionByIndex2(index string, maxShard uint64) map[string]interface{} {
+	dist := make(map[string]interface{})
+
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	for i := range c.nodes {
+		nodeDist := make(map[string][]uint64)
+		primaries := make([]uint64)
+		replicas := make([]uint64)
+		for shard := uint64(0); shard <= maxShard; shard++ {
+
+		}
+		dist[node.ID]["primary-shards"] = primaries
+		dist[node.ID]["replica-shards"] = replicas
+	}
+	return dist
+}
+
+// shardPartition returns the partition that a shard belongs to.
+func (c *cluster) shardPartition(index string, shard uint64) int {
+	return shardPartition(index, shard, c.partitionN)
+}
+
+// shardPartition returns the shard-partition that a shard belongs to.
+// NOTE: this is DIFFERENT from the key-partition
 func shardToShardPartition(index string, shard uint64, partitionN int) int {
 	var buf [8]byte
 	binary.BigEndian.PutUint64(buf[:], shard)
