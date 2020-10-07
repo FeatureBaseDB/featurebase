@@ -4,9 +4,11 @@ package pql
 
 import (
 	"fmt"
-	"math"
+	"io"
+	"os"
 	"sort"
 	"strconv"
+	"strings"
 )
 
 const endSymbol rune = 1114112
@@ -244,19 +246,19 @@ type node32 struct {
 	up, next *node32
 }
 
-func (node *node32) print(pretty bool, buffer string) {
+func (node *node32) print(w io.Writer, pretty bool, buffer string) {
 	var print func(node *node32, depth int)
 	print = func(node *node32, depth int) {
 		for node != nil {
 			for c := 0; c < depth; c++ {
-				fmt.Printf(" ")
+				fmt.Fprintf(w, " ")
 			}
 			rule := rul3s[node.pegRule]
 			quote := strconv.Quote(string(([]rune(buffer)[node.begin:node.end])))
 			if !pretty {
-				fmt.Printf("%v %v\n", rule, quote)
+				fmt.Fprintf(w, "%v %v\n", rule, quote)
 			} else {
-				fmt.Printf("\x1B[34m%v\x1B[m %v\n", rule, quote)
+				fmt.Fprintf(w, "\x1B[34m%v\x1B[m %v\n", rule, quote)
 			}
 			if node.up != nil {
 				print(node.up, depth+1)
@@ -267,12 +269,12 @@ func (node *node32) print(pretty bool, buffer string) {
 	print(node, 0)
 }
 
-func (node *node32) Print(buffer string) {
-	node.print(false, buffer)
+func (node *node32) Print(w io.Writer, buffer string) {
+	node.print(w, false, buffer)
 }
 
-func (node *node32) PrettyPrint(buffer string) {
-	node.print(true, buffer)
+func (node *node32) PrettyPrint(w io.Writer, buffer string) {
+	node.print(w, true, buffer)
 }
 
 type tokens32 struct {
@@ -315,24 +317,24 @@ func (t *tokens32) AST() *node32 {
 }
 
 func (t *tokens32) PrintSyntaxTree(buffer string) {
-	t.AST().Print(buffer)
+	t.AST().Print(os.Stdout, buffer)
+}
+
+func (t *tokens32) WriteSyntaxTree(w io.Writer, buffer string) {
+	t.AST().Print(w, buffer)
 }
 
 func (t *tokens32) PrettyPrintSyntaxTree(buffer string) {
-	t.AST().PrettyPrint(buffer)
+	t.AST().PrettyPrint(os.Stdout, buffer)
 }
 
 func (t *tokens32) Add(rule pegRule, begin, end, index uint32) {
-	if tree := t.tree; int(index) >= len(tree) {
-		expanded := make([]token32, 2*len(tree))
-		copy(expanded, tree)
-		t.tree = expanded
+	tree, i := t.tree, int(index)
+	if i >= len(tree) {
+		t.tree = append(tree, token32{pegRule: rule, begin: begin, end: end})
+		return
 	}
-	t.tree[index] = token32{
-		pegRule: rule,
-		begin:   begin,
-		end:     end,
-	}
+	tree[i] = token32{pegRule: rule, begin: begin, end: end}
 }
 
 func (t *tokens32) Tokens() []token32 {
@@ -396,7 +398,7 @@ type parseError struct {
 }
 
 func (e *parseError) Error() string {
-	tokens, error := []token32{e.max}, "\n"
+	tokens, err := []token32{e.max}, "\n"
 	positions, p := make([]int, 2*len(tokens)), 0
 	for _, token := range tokens {
 		positions[p], p = int(token.begin), p+1
@@ -409,14 +411,14 @@ func (e *parseError) Error() string {
 	}
 	for _, token := range tokens {
 		begin, end := int(token.begin), int(token.end)
-		error += fmt.Sprintf(format,
+		err += fmt.Sprintf(format,
 			rul3s[token.pegRule],
 			translations[begin].line, translations[begin].symbol,
 			translations[end].line, translations[end].symbol,
 			strconv.Quote(string(e.p.buffer[begin:end])))
 	}
 
-	return error
+	return err
 }
 
 func (p *PQL) PrintSyntaxTree() {
@@ -425,6 +427,16 @@ func (p *PQL) PrintSyntaxTree() {
 	} else {
 		p.tokens32.PrintSyntaxTree(p.Buffer)
 	}
+}
+
+func (p *PQL) WriteSyntaxTree(w io.Writer) {
+	p.tokens32.WriteSyntaxTree(w, p.Buffer)
+}
+
+func (p *PQL) SprintSyntaxTree() string {
+	var bldr strings.Builder
+	p.WriteSyntaxTree(&bldr)
+	return bldr.String()
 }
 
 func (p *PQL) Execute() {
@@ -566,12 +578,31 @@ func (p *PQL) Execute() {
 	_, _, _, _, _ = buffer, _buffer, text, begin, end
 }
 
-func (p *PQL) Init() {
+func Pretty(pretty bool) func(*PQL) error {
+	return func(p *PQL) error {
+		p.Pretty = pretty
+		return nil
+	}
+}
+
+func Size(size int) func(*PQL) error {
+	return func(p *PQL) error {
+		p.tokens32 = tokens32{tree: make([]token32, 0, size)}
+		return nil
+	}
+}
+func (p *PQL) Init(options ...func(*PQL) error) error {
 	var (
 		max                  token32
 		position, tokenIndex uint32
 		buffer               []rune
 	)
+	for _, option := range options {
+		err := option(p)
+		if err != nil {
+			return err
+		}
+	}
 	p.reset = func() {
 		max = token32{}
 		position, tokenIndex = 0, 0
@@ -585,7 +616,7 @@ func (p *PQL) Init() {
 	p.reset()
 
 	_rules := p.rules
-	tree := tokens32{tree: make([]token32, math.MaxInt16)}
+	tree := p.tokens32
 	p.parse = func(rule ...int) error {
 		r := 1
 		if len(rule) > 0 {
@@ -3645,4 +3676,5 @@ func (p *PQL) Init() {
 		nil,
 	}
 	p.rules = _rules
+	return nil
 }
