@@ -4,7 +4,6 @@ type PQL Peg {
      Query
 }
 
-
 Calls <- sp (Call sp)* !.
 Call <-  "Set" {p.startCall("Set")} open col comma args (comma timestamp)? close {p.endCall()}
        / "SetRowAttrs" {p.startCall("SetRowAttrs")} open posfield comma row comma args close {p.endCall()}
@@ -14,11 +13,11 @@ Call <-  "Set" {p.startCall("Set")} open col comma args (comma timestamp)? close
        / "Store" {p.startCall("Store")} open Call comma arg close {p.endCall()}
        / "TopN" {p.startCall("TopN")} open posfield (comma allargs)? close {p.endCall()}
        / "Rows" {p.startCall("Rows")} open posfield (comma allargs)? close {p.endCall()}
-       / "Range" {p.startCall("Range")} open field sp '=' sp value comma 'from='? {p.addField("from")} timestampfmt {p.addVal(text)} comma 'to='? sp {p.addField("to")} timestampfmt {p.addVal(text)} close {p.endCall()}
+       / "Range" {p.startCall("Range")} open field eq value comma 'from='? {p.addField("from")} timestampfmt {p.addVal(text)} comma 'to='? sp {p.addField("to")} timestampfmt {p.addVal(text)} close {p.endCall()}
        / < IDENT > { p.startCall(text) } open allargs comma? close { p.endCall() }
 allargs <- Call (comma Call)* (comma args)? / args / sp
 args <- arg (comma args)? sp
-arg <-   field sp '=' sp value
+arg <-    field eq value
         / field sp COND sp value
         / conditional
 COND <-   '><' { p.addBTWN() }
@@ -34,12 +33,12 @@ condint <- < '-'? [0-9]* '.' [0-9]+ / '0' / '-'? [1-9] [0-9]* > sp {p.condAdd(te
 condLT <- <('<=' / '<')> sp {p.condAdd(text)}
 condfield <- <fieldExpr> sp {p.condAdd(text)}
 
-value <-   item
+value <-    item
           / lbrack { p.startList() } list rbrack { p.endList() }
 list <- item (comma list)?
-item <-   'null' &(comma / sp close) { p.addVal(nil) }
-         / 'true' &(comma / sp close) { p.addVal(true) }
-         / 'false' &(comma / sp close) { p.addVal(false) }
+item <-   'null' &(comma / close) { p.addVal(nil) }
+         / 'true' &(comma / close) { p.addVal(true) }
+         / 'false' &(comma / close) { p.addVal(false) }
          / timestampfmt { p.addVal(text) }
          / < '-'? [0-9]+ ('.'[0-9]*)? > { p.addNumVal(text) }
          / < '-'? '.'[0-9]+ > { p.addNumVal(text) }
@@ -64,8 +63,9 @@ row <-   <uint> {p.addPosNum("_row", text)}
         / < '"' doublequotedstring '"' > {p.addPosStr("_row", text)}
 
 open <- '(' sp
-close <- ')' sp
+close <- sp ')' sp
 sp <- [ \t\n]*
+eq <- sp '=' sp
 comma <- sp ',' sp
 lbrack <- '[' sp
 rbrack <- sp ']' sp
