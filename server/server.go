@@ -171,7 +171,7 @@ func (m *Command) Start() (err error) {
 
 	m.logger.Printf("listening as %s\n", m.listenURI)
 	go func() {
-		if err := m.grpcServer.Serve(m.tlsConfig); err != nil {
+		if err := m.grpcServer.Serve(); err != nil {
 			m.logger.Printf("grpc server error: %v", err)
 		}
 	}()
@@ -432,6 +432,7 @@ func (m *Command) SetupServer() error {
 	m.grpcServer, err = NewGRPCServer(
 		OptGRPCServerAPI(m.API),
 		OptGRPCServerListener(m.grpcLn),
+		OptGRPCServerTLSConfig(m.tlsConfig),
 		OptGRPCServerLogger(m.logger),
 		OptGRPCServerStats(statsClient),
 	)
@@ -446,7 +447,7 @@ func (m *Command) SetupServer() error {
 		http.OptHandlerFileSystem(&statik.FileSystem{}),
 		http.OptHandlerListener(m.ln),
 		http.OptHandlerCloseTimeout(m.closeTimeout),
-		http.OptHandlerMiddleware(m.grpcServer.Middleware(m.Config.Handler.AllowedOrigins)),
+		http.OptHandlerMiddleware(m.grpcServer.middleware(m.Config.Handler.AllowedOrigins)),
 	)
 	return errors.Wrap(err, "new handler")
 }
