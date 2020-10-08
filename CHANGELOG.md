@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [1.4.1] - 2020-10-08
+
+This version contains 1 contribution from 1 contributor. There are 4 files changed; 170 insertions; and 30 deletions.
+
+### Fixed
+- Add logic that clears fragment.rowCache after importValue ([#2084](https://github.com/pilosa/pilosa/pull/2084))
+
 ## [1.4.0] - 2019-09-17
 
 This version contains 99 contributions from 11 contributors. There are 94 files changed; 9,453 insertions; and 6,121 deletions.
