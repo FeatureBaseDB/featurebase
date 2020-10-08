@@ -4,6 +4,7 @@ type PQL Peg {
      Query
 }
 
+# All input queries consist of a sequence of calls, at the top level.
 Calls <- sp (Call sp)* !.
 Call <-  "Set" {p.startCall("Set")} open col comma args (comma timestamp)? close {p.endCall()}
        / "SetRowAttrs" {p.startCall("SetRowAttrs")} open posfield comma row comma args close {p.endCall()}
@@ -29,19 +30,18 @@ COND <-   '><' { p.addBTWN() }
         / '>' { p.addGT() }
 
 conditional <- {p.startConditional()} condint condLT condfield condLT condint {p.endConditional()}
-condint <- < '-'? [0-9]* '.' [0-9]+ / '0' / '-'? [1-9] [0-9]* > sp {p.condAdd(text)}
+condint <- < decimal > sp {p.condAdd(text)}
 condLT <- <('<=' / '<')> sp {p.condAdd(text)}
 condfield <- <fieldExpr> sp {p.condAdd(text)}
 
 value <-    item
-          / lbrack { p.startList() } list rbrack { p.endList() }
-list <- item (comma list)?
+          / lbrack { p.startList() } items rbrack { p.endList() }
+items <- item (comma items)?
 item <-   'null' &(comma / close) { p.addVal(nil) }
          / 'true' &(comma / close) { p.addVal(true) }
          / 'false' &(comma / close) { p.addVal(false) }
          / timestampfmt { p.addVal(text) }
-         / < '-'? [0-9]+ ('.'[0-9]*)? > { p.addNumVal(text) }
-         / < '-'? '.'[0-9]+ > { p.addNumVal(text) }
+         / < decimal > { p.addNumVal(text) }
          / < IDENT > { p.startCall(text) } open allargs comma? close { p.addVal(p.endCall()) }
          / < ([[A-Z]] / [0-9] / '-' / '_' / ':')+ > { p.addVal(text) }
          / < '"'  doublequotedstring '"' > { p.addVal(text) }
@@ -54,11 +54,10 @@ fieldExpr <- ( [[A-Z]] / '_' ) ( [[A-Z]] / [0-9] / '_' / '-' )*
 field <- <fieldExpr / reserved> { p.addField(text) }
 reserved <- '_row' / '_col' / '_start' / '_end' / '_timestamp' / '_field'
 posfield <- <fieldExpr> { p.addPosStr("_field", text) }
-uint <- [1-9] [0-9]* / '0'
-col <-   <uint> {p.addPosNum("_col", text)}
+col <-   < digits > {p.addPosNum("_col", text)}
         / < '\'' singlequotedstring '\'' > {p.addPosStr("_col", text)}
         / < '"' doublequotedstring '"' > {p.addPosStr("_col", text)}
-row <-   <uint> {p.addPosNum("_row", text)}
+row <-   < digits > {p.addPosNum("_row", text)}
         / < '\'' singlequotedstring '\'' > {p.addPosStr("_row", text)}
         / < '"' doublequotedstring '"' > {p.addPosStr("_row", text)}
 
@@ -70,7 +69,10 @@ comma <- sp ',' sp
 lbrack <- '[' sp
 rbrack <- sp ']' sp
 IDENT <- [[A-Z]] ([[A-Z]] / [0-9])*
-
+digits <- [0-9]+
+signedDigits <- '-'? digits
+decimal <- signedDigits ('.' digits?)?
+         / '-'? '.' digits
 
 timestampbasicfmt <- [0-9][0-9][0-9][0-9]'-'[01][0-9]'-'[0-3][0-9]'T'[0-9][0-9]':'[0-9][0-9]
 timestampfmt <- '"' <timestampbasicfmt> '"' / '\'' <timestampbasicfmt> '\'' / <timestampbasicfmt>

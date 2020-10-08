@@ -34,10 +34,9 @@ func TestDecimal(t *testing.T) {
 			{"0", pql.Decimal{0, 0}, ""},
 			{"-0", pql.Decimal{0, 0}, ""},
 			{"0.0", pql.Decimal{0, 0}, ""},
+			{"0.", pql.Decimal{0, 0}, ""},
 			{"-0.00", pql.Decimal{0, 0}, ""},
 			{"123.4567", pql.Decimal{1234567, 4}, ""},
-			{"  123.4567", pql.Decimal{1234567, 4}, ""},
-			{"  123.4567  ", pql.Decimal{1234567, 4}, ""},
 			{"123.456700", pql.Decimal{1234567, 4}, ""},
 			{"00123.4567", pql.Decimal{1234567, 4}, ""},
 			{"+123.4567", pql.Decimal{1234567, 4}, ""},
@@ -56,8 +55,7 @@ func TestDecimal(t *testing.T) {
 			{".123", pql.Decimal{123, 3}, ""},
 			{"0.123", pql.Decimal{123, 3}, ""},
 			{"0.001230", pql.Decimal{123, 5}, ""},
-			{" 0.001230 ", pql.Decimal{123, 5}, ""},
-			{"-0.001230 ", pql.Decimal{-123, 5}, ""},
+			{"-0.001230", pql.Decimal{-123, 5}, ""},
 
 			// int64 edges.
 			{".000009223372036854775807", pql.Decimal{9223372036854775807, 24}, ""},
@@ -83,6 +81,10 @@ func TestDecimal(t *testing.T) {
 			{"abc", pql.Decimal{}, "invalid syntax"},
 			{"0.12.3", pql.Decimal{}, "invalid decimal string"},
 			{"--12300", pql.Decimal{}, "invalid syntax"},
+			{"  123.4567  ", pql.Decimal{}, "invalid syntax"},
+			{"  123.4567", pql.Decimal{}, "invalid syntax"},
+			{"123.4567 ", pql.Decimal{}, "invalid syntax"},
+			{"0.a", pql.Decimal{}, "invalid syntax"},
 
 			// These are no longer error cases since we introduced precision adjustment.
 			//{"922337203685477580.9", pql.Decimal{}, "value out of range"},
@@ -94,12 +96,12 @@ func TestDecimal(t *testing.T) {
 			dec, err := pql.ParseDecimal(test.s)
 			if test.expErr != "" {
 				if err == nil || !strings.Contains(err.Error(), test.expErr) {
-					t.Fatalf("test %d expected error to contain: %s, but got: %v", i, test.expErr, err)
+					t.Fatalf("test %d parsing string `%s`: expected error to contain: %s, but got: %v", i, test.s, test.expErr, err)
 				}
 			} else if err != nil {
 				t.Fatalf("test %d parsing string `%s`: %s", i, test.s, err)
 			} else if dec != test.exp {
-				t.Fatalf("test %d expected: %v, but got: %v", i, test.exp, dec)
+				t.Fatalf("test %d parsing string `%s`: expected: %v, but got: %v", i, test.s, test.exp, dec)
 			}
 		}
 	})
@@ -141,8 +143,6 @@ func TestDecimal(t *testing.T) {
 			exp string
 		}{
 			{"123.4567", "123.4567"},
-			{"  123.4567", "123.4567"},
-			{"  123.4567  ", "123.4567"},
 			{"123.456700", "123.4567"},
 			{"00123.4567", "123.4567"},
 			{"+123.4567", "123.4567"},
@@ -161,8 +161,8 @@ func TestDecimal(t *testing.T) {
 
 			{"0.123", "0.123"},
 			{"0.001230", "0.00123"},
-			{" 0.001230 ", "0.00123"},
-			{"-0.001230 ", "-0.00123"},
+			{"+0.001230", "0.00123"},
+			{"-0.001230", "-0.00123"},
 		}
 		for i, test := range tests {
 			dec, err := pql.ParseDecimal(test.s)
