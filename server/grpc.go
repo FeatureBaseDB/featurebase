@@ -569,28 +569,12 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 				}
 			}
 
-			// For SQL queries like:
-			// SELECT * FROM t WHERE _id=garbageID;
-			// we don't want to return any rows.
-			// So, check here if we added any columns.
-			//
-			// Because we don't have keys to translate
-			// and _id is an artificial field that's why for query:
-			// SELECT _id FROM t WHERE _id=existing-id;
-			// we return an empty result.
-			//
-			// TODO(kuba--): We need to find a way to check here if
-			// existing-id is not a garbage.
-			//
-			// A query which will work here is 'SELECT *' or any query with more columns
-			// than just _id.
-			//if colAdded > 0 {
+			// Previously, we discarded rows that did not exist.
 			// This has been reverted, as it violates the expectations of users of inspect.
 			// It is expected that inspect will return garbage.
 			if err := stream.Send(rowResp); err != nil {
 				return errors.Wrap(err, "sending response to stream")
 			}
-			//}
 		}
 
 	} else {
@@ -609,7 +593,6 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 			}
 		}
 
-		//forceSend := false
 		ci := []*pb.ColumnInfo{
 			{Name: "_id", Datatype: "string"},
 		}
@@ -629,11 +612,6 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 				end = uint64(len(cols))
 			}
 			cols = cols[offset:end]
-			/*if len(cols) == 1 {
-				if id, err := h.api.TranslateIndexKey(stream.Context(), index.Name(), cols[0], false); id != 0 && err == nil {
-					forceSend = true
-				}
-			}*/
 		} else {
 			// Prevent getting too many records by forcing a limit.
 			pql := fmt.Sprintf("All(limit=%d, offset=%d)", limit, offset)
@@ -901,23 +879,12 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 				}
 			}
 
-			// For SQL queries like:
-			// SELECT _id FROM parent WHERE _id="garbage";
-			// we get here without any real columns and fields, and we did not
-			// translate any keys. That's why we don't want to send anything back
-			// and return fake response like:
-			//
-			// _id
-			// -------
-			// <nil>
-			// (1 row)
-			//if colAdded > 0 || forceSend {
+			// Previously, we discarded rows that did not exist.
 			// This has been reverted, as it violates the expectations of users of inspect.
 			// It is expected that inspect will return garbage.
 			if err := stream.Send(rowResp); err != nil {
 				return errors.Wrap(err, "sending response to stream")
 			}
-			//}
 		}
 
 	}
