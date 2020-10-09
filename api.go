@@ -378,37 +378,42 @@ func importWorker(importWork chan importJob) {
 					}
 				}
 
-				tx, finisher := j.qcx.GetTx(Txo{Write: writable, Index: j.field.idx, Shard: j.shard})
-				defer finisher(&err0)
+				if err := func() error {
+					tx, finisher := j.qcx.GetTx(Txo{Write: writable, Index: j.field.idx, Shard: j.shard})
+					defer finisher(&err0)
 
-				var doClear bool
-				switch doAction {
-				case RequestActionOverwrite:
-					err := j.field.importRoaringOverwrite(j.ctx, tx, viewData, j.shard, viewName, j.req.Block)
-					if err != nil {
-						return errors.Wrap(err, "importing roaring as overwrite")
-					}
-				case RequestActionClear:
-					doClear = true
-					fallthrough
-				case RequestActionSet:
-					fileMagic := uint32(binary.LittleEndian.Uint16(viewData[0:2]))
-					if fileMagic == roaring.MagicNumber { // if pilosa roaring format
-						err := j.field.importRoaring(j.ctx, tx, viewData, j.shard, viewName, doClear)
+					var doClear bool
+					switch doAction {
+					case RequestActionOverwrite:
+						err := j.field.importRoaringOverwrite(j.ctx, tx, viewData, j.shard, viewName, j.req.Block)
 						if err != nil {
-							return errors.Wrap(err, "importing pilosa roaring")
+							return errors.Wrap(err, "importing roaring as overwrite")
 						}
-					} else {
-						// must make a copy of data to operate on locally on standard roaring format.
-						// field.importRoaring changes the standard roaring run format to pilosa roaring
-						data := make([]byte, len(viewData))
-						copy(data, viewData)
-						err := j.field.importRoaring(j.ctx, tx, data, j.shard, viewName, doClear)
+					case RequestActionClear:
+						doClear = true
+						fallthrough
+					case RequestActionSet:
+						fileMagic := uint32(binary.LittleEndian.Uint16(viewData[0:2]))
+						if fileMagic == roaring.MagicNumber { // if pilosa roaring format
+							err := j.field.importRoaring(j.ctx, tx, viewData, j.shard, viewName, doClear)
+							if err != nil {
+								return errors.Wrap(err, "importing pilosa roaring")
+							}
+						} else {
+							// must make a copy of data to operate on locally on standard roaring format.
+							// field.importRoaring changes the standard roaring run format to pilosa roaring
+							data := make([]byte, len(viewData))
+							copy(data, viewData)
+							err := j.field.importRoaring(j.ctx, tx, data, j.shard, viewName, doClear)
 
-						if err != nil {
-							return errors.Wrap(err, "importing standard roaring")
+							if err != nil {
+								return errors.Wrap(err, "importing standard roaring")
+							}
 						}
 					}
+					return nil
+				}(); err != nil {
+					return err
 				}
 			}
 			return nil
