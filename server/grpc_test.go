@@ -272,6 +272,12 @@ func TestGRPC(t *testing.T) {
 					{int64(12)},
 				},
 			},
+			// nil
+			{
+				nil,
+				nil,
+				nil,
+			},
 		}
 
 		for ti, test := range tests {

@@ -191,6 +191,19 @@ func (r ResultBool) ToRows(callback func(*pb.RowResponse) error) error {
 		}})
 }
 
+// EmptyResult produces an empty result.
+type EmptyResult struct{}
+
+// ToRows implements the ToRowser interface.
+func (r EmptyResult) ToRows(callback func(*pb.RowResponse) error) error {
+	return nil
+}
+
+// ToTable implements the ToTabler interface.
+func (r EmptyResult) ToTable() (*pb.TableResponse, error) {
+	return &pb.TableResponse{}, nil
+}
+
 // Normally we wouldn't need this wrapper, but since pilosa returns
 // some concrete types for which we can't implement the ToTabler
 // interface, we have to check for those here and then wrap them
@@ -199,6 +212,8 @@ func ToTablerWrapper(result interface{}) (pb.ToTabler, error) {
 	toTabler, ok := result.(pb.ToTabler)
 	if !ok {
 		switch v := result.(type) {
+		case nil:
+			toTabler = EmptyResult{}
 		case []pilosa.GroupCount:
 			toTabler = pilosa.GroupCounts(v)
 		case uint64:
@@ -220,6 +235,8 @@ func ToRowserWrapper(result interface{}) (pb.ToRowser, error) {
 	toRowser, ok := result.(pb.ToRowser)
 	if !ok {
 		switch v := result.(type) {
+		case nil:
+			toRowser = EmptyResult{}
 		case []pilosa.GroupCount:
 			toRowser = pilosa.GroupCounts(v)
 		case uint64:
