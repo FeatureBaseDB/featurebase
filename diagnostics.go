@@ -275,6 +275,7 @@ type SystemInfo interface {
 	CPUCores() (physical int, logical int, err error)
 	CPUMHz() (int, error)
 	CPUArch() string
+	DiskCapacity(string) (uint64, error)
 }
 
 // newNopSystemInfo creates a no-op implementation of SystemInfo.
@@ -344,4 +345,9 @@ func (n *nopSystemInfo) CPUMHz() (int, error) {
 // CPUCores returns the number of CPU cores (physical or logical)
 func (n *nopSystemInfo) CPUCores() (physical, logical int, err error) {
 	return 0, 0, nil
+}
+
+// DiskCapacity returns the disk capacity
+func (n *nopSystemInfo) DiskCapacity(path string) (uint64, error) {
+	return 0, nil
 }

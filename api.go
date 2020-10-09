@@ -38,7 +38,6 @@ import (
 	"github.com/pilosa/pilosa/v2/stats"
 	"github.com/pilosa/pilosa/v2/tracing"
 	"github.com/pkg/errors"
-	"github.com/shirou/gopsutil/disk"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -847,11 +846,9 @@ func (api *API) Usage(ctx context.Context, remote bool) (map[string]NodeUsage, e
 		totalSize += indexSizes[file.Name()]
 	}
 
-	usageStats, err := disk.Usage("/")
-	capacity := usageStats.Total
+	capacity, err := api.server.systemInfo.DiskCapacity(api.server.dataDir)
 
 	if err != nil {
-		capacity = uint64(0)
 		api.server.logger.Printf("failed to get disk capacity: %s", err)
 	}
 
