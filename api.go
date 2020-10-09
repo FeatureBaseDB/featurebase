@@ -38,6 +38,7 @@ import (
 	"github.com/pilosa/pilosa/v2/stats"
 	"github.com/pilosa/pilosa/v2/tracing"
 	"github.com/pkg/errors"
+	"github.com/shirou/gopsutil/disk"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -800,8 +801,9 @@ type NodeUsage struct {
 
 // DiskUsage represents the storage space used on disk by one node.
 type DiskUsage struct {
-	Total   int64            `json:"total"`
-	Indexes map[string]int64 `json:"indexes"`
+	Capacity uint64           `json:"capacity"`
+	TotalUse int64            `json:"totalInUse"`
+	Indexes  map[string]int64 `json:"indexes"`
 }
 
 // Usage gets the disk usage per index, in a map[nodeID]NodeUsage
@@ -845,11 +847,20 @@ func (api *API) Usage(ctx context.Context, remote bool) (map[string]NodeUsage, e
 		totalSize += indexSizes[file.Name()]
 	}
 
+	usageStats, err := disk.Usage("/")
+	capacity := usageStats.Total
+
+	if err != nil {
+		capacity = uint64(0)
+		api.server.logger.Printf("failed to get disk capacity: %s", err)
+	}
+
 	// Insert into result.
 	nodeUsage := NodeUsage{
 		Disk: DiskUsage{
-			Total:   totalSize,
-			Indexes: indexSizes,
+			Capacity: capacity,
+			TotalUse: totalSize,
+			Indexes:  indexSizes,
 		},
 	}
 	nodeUsages[api.server.nodeID] = nodeUsage
