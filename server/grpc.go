@@ -333,8 +333,9 @@ func (h *VDSMGRPCHandler) QuerySQLUnary(ctx context.Context, req *pb.QuerySQLReq
 	return h.grpcHandler.QuerySQLUnary(ctx, req)
 }
 
-func (h *VDSMGRPCHandler) QueryPQL(req *pb.QueryPQLRequest, srv vdsm_pb.Molecula_QueryPQLServer) error {
-	return h.grpcHandler.QueryPQL(req, srv)
+func (h *VDSMGRPCHandler) QueryPQL(req *vdsm_pb.QueryPQLRequest, srv vdsm_pb.Molecula_QueryPQLServer) error {
+	preq := &pb.QueryPQLRequest{Index: req.Vds, Pql: req.Pql}
+	return h.grpcHandler.QueryPQL(preq, srv)
 }
 
 func (h *VDSMGRPCHandler) QueryPQLUnary(ctx context.Context, req *pb.QueryPQLRequest) (*pb.TableResponse, error) {

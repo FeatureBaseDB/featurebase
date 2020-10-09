@@ -60,6 +60,12 @@ message DeleteVDSRequest {
 message DeleteVDSResponse {
 }
 
+// copied from pilosa.proto to use "vds" instead of "index"
+message QueryPQLRequest {
+  string vds = 1;
+  string pql = 2;
+}
+
 service Molecula {
   rpc GetVDSs(GetVDSsRequest) returns (GetVDSsResponse) {};
   rpc GetVDS(GetVDSRequest) returns (GetVDSResponse) {};
@@ -67,7 +73,7 @@ service Molecula {
   rpc DeleteVDS(DeleteVDSRequest) returns (DeleteVDSResponse) {};
   rpc QuerySQL(pilosa.QuerySQLRequest) returns (stream pilosa.RowResponse) {};
   rpc QuerySQLUnary(pilosa.QuerySQLRequest) returns (pilosa.TableResponse) {};
-  rpc QueryPQL(pilosa.QueryPQLRequest) returns (stream pilosa.RowResponse) {};
+  rpc QueryPQL(QueryPQLRequest) returns (stream pilosa.RowResponse) {};
   rpc QueryPQLUnary(pilosa.QueryPQLRequest) returns (pilosa.TableResponse) {};
   rpc Inspect(pilosa.InspectRequest) returns (stream pilosa.RowResponse) {};
 }
