@@ -400,6 +400,32 @@ func TestHandler_Endpoints(t *testing.T) {
 		}
 	})
 
+	t.Run("UI/shard-distribution", func(t *testing.T) {
+		// This tests the response structure, not the shard distribution.
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/ui/shard-distribution", nil))
+		if w.Code != gohttp.StatusOK {
+			t.Fatalf("unexpected status code: %d", w.Code)
+		}
+
+		ret := mustJSONDecode(t, w.Body)
+
+		for indexName := range ret {
+			indexData := ret[indexName].(map[string]interface{})
+			for nodeName := range indexData {
+				nodeData := indexData[nodeName].(map[string]interface{})
+				_, hasPrimary := nodeData["primary-shards"]
+				_, hasReplica := nodeData["replica-shards"]
+
+				responseOK := hasPrimary && hasReplica
+				if !responseOK {
+					t.Fatalf("unexpected response structure")
+				}
+			}
+
+		}
+	})
+
 	t.Run("Metrics", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/metrics", nil))

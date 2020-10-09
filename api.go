@@ -1600,7 +1600,7 @@ func importExistenceColumns(qcx *Qcx, index *Index, columnIDs []uint64) error {
 // ShardDistribution returns an object representing the distribution of shards
 // across nodes for each index, distinguishing between primary and replica.
 // The structure of this information is [indexName][nodeID][primaryOrReplica]uint64.
-// This function supports a view in the UI, and
+// This function supports a view in the UI.
 func (api *API) ShardDistribution(ctx context.Context) map[string]interface{} {
 	distByIndex := make(map[string]interface{})
 	maxShards := api.MaxShards(ctx)
