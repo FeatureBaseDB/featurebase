@@ -1597,6 +1597,10 @@ func importExistenceColumns(qcx *Qcx, index *Index, columnIDs []uint64) error {
 	return ef.Import(qcx, existenceRowIDs, columnIDs, nil)
 }
 
+// ShardDistribution returns an object representing the distribution of shards
+// across nodes for each index, distinguishing between primary and replica.
+// The structure of this information is [indexName][nodeID][primaryOrReplica]uint64.
+// This function supports a view in the UI, and
 func (api *API) ShardDistribution(ctx context.Context) map[string]interface{} {
 	distByIndex := make(map[string]interface{})
 	maxShards := api.MaxShards(ctx)
@@ -1606,30 +1610,11 @@ func (api *API) ShardDistribution(ctx context.Context) map[string]interface{} {
 		if mx, ok := maxShards[idx]; ok {
 			calculatedMaxShard = mx
 		}
-		_, shards := api.cluster.shardDistributionByIndex(idx, calculatedMaxShard)
-		distByIndex[idx] = shards
+		dist := api.cluster.shardDistributionByIndex(idx, calculatedMaxShard)
+		distByIndex[idx] = dist
 	}
 
 	return distByIndex
-}
-
-// ShardDistributionByIndex returns a slice of shards per node.
-func (api *API) ShardDistributionByIndex(ctx context.Context, index string, provideMaxShard bool, maxShard uint64) ([]Node, [][]uint64) {
-	span, _ := tracing.StartSpanFromContext(ctx, "API.ShardDistributionByIndex")
-	defer span.Finish()
-
-	calculatedMaxShard := uint64(0)
-	if provideMaxShard {
-		calculatedMaxShard = maxShard
-	} else {
-		// Get max shard from cluster.
-		maxShards := api.MaxShards(ctx)
-		if mx, ok := maxShards[index]; ok {
-			calculatedMaxShard = mx
-		}
-	}
-
-	return api.cluster.shardDistributionByIndex(index, calculatedMaxShard)
 }
 
 // MaxShards returns the maximum shard number for each index in a map.
@@ -1807,6 +1792,8 @@ func (api *API) Info() serverInfo {
 		Memory:           mem,
 		TxSrc:            api.holder.txf.TxType(),
 		ReplicaN:         api.cluster.ReplicaN,
+		ShardHash:        api.cluster.Hasher.Name(),
+		KeyHash:          api.cluster.Topology.Hasher.Name(),
 	}
 }
 
@@ -2054,6 +2041,8 @@ func (api *API) TranslateFieldDB(ctx context.Context, indexName, fieldName strin
 type serverInfo struct {
 	ShardWidth       uint64 `json:"shardWidth"`
 	ReplicaN         int    `json:"replicaN"`
+	ShardHash        string `json:"shardHash"`
+	KeyHash          string `json:"keyHash"`
 	Memory           uint64 `json:"memory"`
 	CPUType          string `json:"cpuType"`
 	CPUPhysicalCores int    `json:"cpuPhysicalCores"`

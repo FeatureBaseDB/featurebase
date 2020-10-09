@@ -978,74 +978,39 @@ func (c *cluster) translationNodes(to *cluster) (map[string][]*translationResize
 	return m, nil
 }
 
-// shardDistributionByIndex returns a slice of shards per node for an index, up to maxShard.
-func (c *cluster) shardDistributionByIndex(index string, maxShard uint64) ([]Node, [][]uint64) {
-	m := make(map[Node][]uint64)
+// shardDistributionByIndex returns a map of [nodeID][primaryOrReplica][]uint64,
+// where the int slices are lists of shards.
+func (c *cluster) shardDistributionByIndex(index string, maxShard uint64) map[string]map[string][]uint64 {
+	dist := make(map[string]map[string][]uint64)
 
-	for i := range c.nodes {
-		m[*c.nodes[i]] = []uint64{}
+	for _, node := range c.nodes {
+		nodeDist := make(map[string][]uint64)
+		nodeDist["primary-shards"] = make([]uint64, 0)
+		nodeDist["replica-shards"] = make([]uint64, 0)
+		dist[node.ID] = nodeDist
 	}
 
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
 	for shard := uint64(0); shard <= maxShard; shard++ {
-		for _, node := range c.shardNodes(index, shard) {
-			m[*node] = append(m[*node], shard)
+		p := c.shardToShardPartition(index, shard)
+		nodes := c.partitionNodes(p)
+		dist[nodes[0].ID]["primary-shards"] = append(dist[nodes[0].ID]["primary-shards"], shard)
+		for k := 1; k < len(nodes); k++ {
+			dist[nodes[k].ID]["replica-shards"] = append(dist[nodes[k].ID]["replica-shards"], shard)
 		}
 	}
 
-	n := make([]Node, len(c.nodes))
-	s := make([][]uint64, len(c.nodes))
-
-	for i := range c.nodes {
-		n[i] = *c.nodes[i]
-		s[i] = m[*c.nodes[i]]
-	}
-
-	return n, s
-}
-
-// For specified index, return an object like
-/*
-{
-	"7aa98e81-0b53-43e4-9f98-c77d7fc2371a": {
-    	"primary-shards": [],
-		"replica-shards": []
-	},
-	"d4a7b7ff-529f-4d28-8d95-48d307751775": {
-    	"primary-shards": [],
-		"replica-shards": []
-	}
-	...
-}
-*/
-func (c *cluster) shardDistributionByIndex2(index string, maxShard uint64) map[string]interface{} {
-	dist := make(map[string]interface{})
-
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	for i := range c.nodes {
-		nodeDist := make(map[string][]uint64)
-		primaries := make([]uint64)
-		replicas := make([]uint64)
-		for shard := uint64(0); shard <= maxShard; shard++ {
-
-		}
-		dist[node.ID]["primary-shards"] = primaries
-		dist[node.ID]["replica-shards"] = replicas
-	}
 	return dist
-}
-
-// shardPartition returns the partition that a shard belongs to.
-func (c *cluster) shardPartition(index string, shard uint64) int {
-	return shardPartition(index, shard, c.partitionN)
 }
 
 // shardPartition returns the shard-partition that a shard belongs to.
 // NOTE: this is DIFFERENT from the key-partition
+func (c *cluster) shardToShardPartition(index string, shard uint64) int {
+	return shardToShardPartition(index, shard, c.partitionN)
+}
+
 func shardToShardPartition(index string, shard uint64, partitionN int) int {
 	var buf [8]byte
 	binary.BigEndian.PutUint64(buf[:], shard)
@@ -1255,9 +1220,10 @@ func (c *cluster) containsShards(index string, availableShards *roaring.Bitmap, 
 type Hasher interface {
 	// Hashes the key into a number between [0,N).
 	Hash(key uint64, n int) int
+	Name() string
 }
 
-// jmphasher represents an implementation of jmphash. Implements Hasher.
+// Jmphasher represents an implementation of jmphash. Implements Hasher.
 type Jmphasher struct{}
 
 // Hash returns the integer hash for the given key.
@@ -1269,6 +1235,11 @@ func (h *Jmphasher) Hash(key uint64, n int) int {
 		j = int64(float64(b+1) * (float64(int64(1)<<31) / float64((key>>33)+1)))
 	}
 	return int(b)
+}
+
+// Name returns the name of this hash.
+func (h *Jmphasher) Name() string {
+	return "jump-hash"
 }
 
 func (c *cluster) setup() error {
@@ -1967,7 +1938,7 @@ func (n nodeIDs) Len() int           { return len(n) }
 func (n nodeIDs) Swap(i, j int)      { n[i], n[j] = n[j], n[i] }
 func (n nodeIDs) Less(i, j int) bool { return n[i] < n[j] }
 
-// ContainsID returns true if idi matches one of the nodesets's IDs.
+// ContainsID returns true if id matches one of the nodesets's IDs.
 func (n nodeIDs) ContainsID(id string) bool {
 	for _, nid := range n {
 		if nid == id {
