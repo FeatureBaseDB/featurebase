@@ -66,6 +66,16 @@ message QueryPQLRequest {
   string pql = 2;
 }
 
+// copied from pilosa.proto to use "vds" instead of "index" and "records" instead of "columns"
+message InspectRequest {
+  string vds = 1;
+  pilosa.IdsOrKeys records = 2;
+  repeated string filterFields = 3;
+  uint64 limit = 4;
+  uint64 offset = 5;
+  string query = 6;
+}
+
 service Molecula {
   rpc GetVDSs(GetVDSsRequest) returns (GetVDSsResponse) {};
   rpc GetVDS(GetVDSRequest) returns (GetVDSResponse) {};
@@ -75,5 +85,5 @@ service Molecula {
   rpc QuerySQLUnary(pilosa.QuerySQLRequest) returns (pilosa.TableResponse) {};
   rpc QueryPQL(QueryPQLRequest) returns (stream pilosa.RowResponse) {};
   rpc QueryPQLUnary(pilosa.QueryPQLRequest) returns (pilosa.TableResponse) {};
-  rpc Inspect(pilosa.InspectRequest) returns (stream pilosa.RowResponse) {};
+  rpc Inspect(InspectRequest) returns (stream pilosa.RowResponse) {};
 }

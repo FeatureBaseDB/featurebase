@@ -342,8 +342,9 @@ func (h *VDSMGRPCHandler) QueryPQLUnary(ctx context.Context, req *pb.QueryPQLReq
 	return h.grpcHandler.QueryPQLUnary(ctx, req)
 }
 
-func (h *VDSMGRPCHandler) Inspect(req *pb.InspectRequest, srv vdsm_pb.Molecula_InspectServer) error {
-	return h.grpcHandler.Inspect(req, srv)
+func (h *VDSMGRPCHandler) Inspect(req *vdsm_pb.InspectRequest, srv vdsm_pb.Molecula_InspectServer) error {
+	preq := &pb.InspectRequest{Index: req.Vds, Columns: req.Records, FilterFields: req.FilterFields, Limit: req.Limit, Offset: req.Offset, Query: req.Query}
+	return h.grpcHandler.Inspect(preq, srv)
 }
 
 // ResultUint64 is a wrapper around a uint64 result type
