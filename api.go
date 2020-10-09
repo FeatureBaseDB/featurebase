@@ -801,7 +801,7 @@ type NodeUsage struct {
 
 // DiskUsage represents the storage space used on disk by one node.
 type DiskUsage struct {
-	Capacity uint64           `json:"capacity"`
+	Capacity uint64           `json:"capacity,omitempty"`
 	TotalUse int64            `json:"totalInUse"`
 	Indexes  map[string]int64 `json:"indexes"`
 }
