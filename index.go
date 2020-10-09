@@ -792,84 +792,106 @@ func (i *Index) ComputeTranslatorSummary(verbose, checkKeys, applyKeyRepairs boo
 	defer i.mu.RUnlock()
 
 	ats = &AllTranslatorSummary{}
+	var atsMu sync.Mutex
 
 	if verbose {
 		fmt.Printf("\n# index: %v\n# =================\n", i.name)
 	}
+
+	var g errgroup.Group
+
 	for _, fld := range i.fields {
-		sum, err := fld.translateStore.ComputeTranslatorSummaryRows()
-		if err != nil {
-			return ats, err
-		}
-		sum.Field = fld.name
-		sum.Index = i.Name()
-		sum.Checksum = hash.Blake3sum16([]byte(fmt.Sprintf("%v/%v/%v", sum.Checksum, fld.name, i.Name())))
-		sum.IsColKey = false
-		if verbose {
-			fmt.Printf("# row blake3-%v keyN: %5v idN: %5v field: '%v'\n", sum.Checksum, sum.KeyCount, sum.IDCount, fld.name)
-		}
-		ats.Sums = append(ats.Sums, sum)
+		fld := fld
+		g.Go(func() error {
+			//vv("g.Go() on fld '%v'", fld.name)
+			sum, err := fld.translateStore.ComputeTranslatorSummaryRows()
+			if err != nil {
+				return err
+			}
+			sum.Field = fld.name
+			sum.Index = i.Name()
+			sum.Checksum = hash.Blake3sum16([]byte(fmt.Sprintf("%v/%v/%v", sum.Checksum, fld.name, i.Name())))
+			sum.IsColKey = false
+			if verbose {
+				fmt.Printf("# row blake3-%v keyN: %5v idN: %5v field: '%v'\n", sum.Checksum, sum.KeyCount, sum.IDCount, fld.name)
+			}
+			atsMu.Lock()
+			ats.Sums = append(ats.Sums, sum)
+			atsMu.Unlock()
+			return nil
+		})
 	}
 	if verbose {
 		fmt.Printf("# ====================\n")
 	}
 
 	for partitionID, store := range i.translateStores {
-		if checkKeys {
-			prim := topo.PrimaryNodeIndex(partitionID)
-			primID := topo.nodeIDs[prim]
+		partitionID := partitionID
+		store := store
+		g.Go(func() error {
+			//vv("g.Go() running on store.Path = '%v'", store.GetStorePath())
+			if checkKeys {
+				prim := topo.PrimaryNodeIndex(partitionID)
+				primID := topo.nodeIDs[prim]
 
-			// note: we fix irrespective of nodeID == primID now, so that we
-			// get a fine grain report of what maps were off.
+				// note: we fix irrespective of nodeID == primID now, so that we
+				// get a fine grain report of what maps were off.
 
-			if verbose {
-				// This is pilosa-fsck output, not regular log.
-				fmt.Printf("# doing analysis of keys on nodeID '%v', and primID '%v'\n", nodeID, primID)
+				if verbose {
+					// This is pilosa-fsck output, not regular log.
+					fmt.Printf("# doing analysis of keys on nodeID '%v', and primID '%v'\n", nodeID, primID)
+				}
+				changed, err := store.RepairKeys(topo, verbose, applyKeyRepairs)
+				if err != nil {
+					return errors.Wrap(err, "ComputeTranslatorSummary() call to store.Repair()")
+				}
+				if changed {
+					atsMu.Lock()
+					ats.RepairNeeded = true
+					atsMu.Unlock()
+				}
 			}
-			changed, err := store.RepairKeys(topo, verbose, applyKeyRepairs)
+
+			// key repair has to be above, because we compute the checksum below.
+
+			sum, err := store.ComputeTranslatorSummaryCols(partitionID, topo)
 			if err != nil {
-				return nil, errors.Wrap(err, "ComputeTranslatorSummary() call to store.Repair()")
+				return err
 			}
-			if changed {
-				ats.RepairNeeded = true
+			if sum == nil {
+				// probably one of the Noop stores from the tests.
+				return nil
 			}
-		}
+			sum.IsColKey = true
+			sum.PartitionID = partitionID
+			sum.Index = i.Name()
+			sum.StorePath = store.GetStorePath()
+			sum.NodeID = nodeID
+			sum.IsPrimary = topo.IsPrimary(nodeID, partitionID)
 
-		// key repair has to be above, because we compute the checksum below.
-
-		sum, err := store.ComputeTranslatorSummaryCols(partitionID, topo)
-		if err != nil {
-			return ats, err
-		}
-		if sum == nil {
-			// probably one of the Noop stores from the tests.
-			continue
-		}
-		sum.IsColKey = true
-		sum.PartitionID = partitionID
-		sum.Index = i.Name()
-		sum.StorePath = store.GetStorePath()
-		sum.NodeID = nodeID
-		sum.IsPrimary = topo.IsPrimary(nodeID, partitionID)
-
-		replicas := topo.GetNonPrimaryReplicas(partitionID)
-		for _, replica := range replicas {
-			if nodeID == replica {
-				sum.IsReplica = true
-				break
+			replicas := topo.GetNonPrimaryReplicas(partitionID)
+			for _, replica := range replicas {
+				if nodeID == replica {
+					sum.IsReplica = true
+					break
+				}
 			}
-		}
 
-		sum.Checksum = hash.Blake3sum16([]byte(fmt.Sprintf("%v/%v/%v", sum.Checksum, partitionID, i.Name())))
-		if verbose {
-			// This is not regular index logging. This is output of the pilosa-fsck tool.
-			// So it must be printing straight to stdout.
-			fmt.Printf("# col blake3-%v keyN: %10v idN: %10v paritionID: %03v primary: %03v\n", sum.Checksum, sum.KeyCount, sum.IDCount, partitionID, sum.PrimaryNodeIndex)
-		}
+			sum.Checksum = hash.Blake3sum16([]byte(fmt.Sprintf("%v/%v/%v", sum.Checksum, partitionID, i.Name())))
+			if verbose {
+				// This is not regular index logging. This is output of the pilosa-fsck tool.
+				// So it must be printing straight to stdout.
+				fmt.Printf("# col blake3-%v keyN: %10v idN: %10v paritionID: %03v primary: %03v\n", sum.Checksum, sum.KeyCount, sum.IDCount, partitionID, sum.PrimaryNodeIndex)
+			}
+			atsMu.Lock()
+			ats.Sums = append(ats.Sums, sum)
+			atsMu.Unlock()
 
-		ats.Sums = append(ats.Sums, sum)
+			return nil
+		})
 	}
-	return
+	err = g.Wait()
+	return ats, err
 }
 
 // returned by WriteFragmentChecksums
