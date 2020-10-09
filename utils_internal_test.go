@@ -110,6 +110,8 @@ func NewTestModHasher() *TestModHasher { return &TestModHasher{} }
 
 func (*TestModHasher) Hash(key uint64, n int) int { return int(key) % n }
 
+func (*TestModHasher) Name() string { return "mod" }
+
 // ClusterCluster represents a cluster of test nodes, each of which
 // has a Cluster.
 // ClusterCluster implements Broadcaster interface.
