@@ -338,8 +338,9 @@ func (h *VDSMGRPCHandler) QueryPQL(req *vdsm_pb.QueryPQLRequest, srv vdsm_pb.Mol
 	return h.grpcHandler.QueryPQL(preq, srv)
 }
 
-func (h *VDSMGRPCHandler) QueryPQLUnary(ctx context.Context, req *pb.QueryPQLRequest) (*pb.TableResponse, error) {
-	return h.grpcHandler.QueryPQLUnary(ctx, req)
+func (h *VDSMGRPCHandler) QueryPQLUnary(ctx context.Context, req *vdsm_pb.QueryPQLRequest) (*pb.TableResponse, error) {
+	preq := &pb.QueryPQLRequest{Index: req.Vds, Pql: req.Pql}
+	return h.grpcHandler.QueryPQLUnary(ctx, preq)
 }
 
 func (h *VDSMGRPCHandler) Inspect(req *vdsm_pb.InspectRequest, srv vdsm_pb.Molecula_InspectServer) error {
