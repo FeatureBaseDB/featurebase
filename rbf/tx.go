@@ -122,7 +122,7 @@ func (tx *Tx) Rollback() {
 	// TODO(bbj): Invalidate DB if rollback fails. Possibly attempt reopen?
 
 	if tx.dirty {
-		if _, err := truncateWALAfter(tx.segments, tx.walID); err != nil {
+		if _, err := tx.db.truncateWALAfter(tx.segments, tx.walID); err != nil {
 			panicOn(err)
 		}
 		tx.segments = nil
@@ -1610,7 +1610,7 @@ func (tx *Tx) flushWALWriter() error {
 	// Flush cache to writer.
 	if _, err := w.WriteAt(tx.wcache, int64(segment.PageN)*PageSize); err != nil {
 		return fmt.Errorf("write wal segment: %w", err)
-	} else if err := fsync(w); err != nil {
+	} else if err := tx.db.fsync(w); err != nil {
 		return fmt.Errorf("sync wal segment: %w", err)
 	} else if err := w.Close(); err != nil {
 		return fmt.Errorf("close wal segment: %w", err)
@@ -1686,7 +1686,7 @@ func (tx *Tx) ensureWritableWALSegment() error {
 	}
 
 	// Create new segment file.
-	s := NewWALSegment(filepath.Join(tx.db.WALPath(), FormatWALSegmentPath(base)))
+	s := tx.db.NewWALSegment(filepath.Join(tx.db.WALPath(), FormatWALSegmentPath(base)))
 	if err := s.Open(); err != nil {
 		return fmt.Errorf("add wal segment: %w", err)
 	}

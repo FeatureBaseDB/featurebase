@@ -28,13 +28,6 @@ import (
 // directly, but only a copy.
 const EnableRowCache = true
 
-// DoAllocZero means we copy mmap read data and
-// wipe it afterwards to catch retention of data
-// past Tx.Rollback which was a big problem.
-// This should be set by NewDBWithAllocZero and never changed
-// afterwards in order to avoid a data race.
-var DoAllocZero bool
-
 //probably should just implement the container interface
 // but for now i'll do it
 func (c *Cursor) Rows() ([]uint64, error) {
@@ -158,7 +151,7 @@ func toContainer(l leafCell, tx *Tx) (c *roaring.Container) {
 	orig := l.Data
 	var cpMaybe []byte
 	var mapped bool
-	if EnableRowCache || DoAllocZero {
+	if EnableRowCache || tx.db.DoAllocZero {
 		// make a copy, otherwise the rowCache will see corrupted data
 		// or mmapped data that may disappear.
 		cpMaybe = make([]byte, len(orig))

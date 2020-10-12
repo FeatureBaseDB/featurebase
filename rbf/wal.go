@@ -26,6 +26,7 @@ import (
 
 // WALSegment represents a single file in the WAL.
 type WALSegment struct {
+	db       *DB
 	Path     string // path to file
 	MinWALID int64  // base WALID; calculated from path
 	PageN    int    // number of written pages
@@ -34,8 +35,9 @@ type WALSegment struct {
 }
 
 // NewWALSegment returns a new instance of WALSegment for a given path.
-func NewWALSegment(path string) WALSegment {
+func (db *DB) NewWALSegment(path string) WALSegment {
 	return WALSegment{
+		db:   db,
 		Path: path,
 	}
 }
@@ -74,7 +76,7 @@ func (s *WALSegment) Open() (err error) {
 	s.PageN = int(sz / PageSize)
 	if sz%PageSize != 0 {
 		sz = int64(s.PageN * PageSize)
-		if err := truncate(s.Path, sz); err != nil {
+		if err := s.db.truncate(s.Path, sz); err != nil {
 			return fmt.Errorf("truncate wal file: %w", err)
 		}
 	}
@@ -212,7 +214,7 @@ func findLastWALMetaPage(segments []WALSegment) (walID int64, err error) {
 }
 
 // truncateWALAfter removes all pages in the WAL after walID.
-func truncateWALAfter(segments []WALSegment, walID int64) ([]WALSegment, error) {
+func (db *DB) truncateWALAfter(segments []WALSegment, walID int64) ([]WALSegment, error) {
 	var newSegments []WALSegment
 
 	for i := range segments {
@@ -229,7 +231,7 @@ func truncateWALAfter(segments []WALSegment, walID int64) ([]WALSegment, error) 
 			newSegment := *segment
 			newSegment.PageN = int((walID - newSegment.MinWALID) + 1)
 
-			if err := truncate(newSegment.Path, int64(newSegment.PageN)*PageSize); err != nil {
+			if err := db.truncate(newSegment.Path, int64(newSegment.PageN)*PageSize); err != nil {
 				return segments, err
 			}
 			newSegments = append(newSegments, newSegment)

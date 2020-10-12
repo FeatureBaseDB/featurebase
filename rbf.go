@@ -153,12 +153,8 @@ func (r *rbfDBRegistrar) OpenDBWrapper(path0 string, doAllocZero bool) (DBWrappe
 		// creates the effect of having only one DB open per pilosa node.
 		return w, nil
 	}
-	var db *rbf.DB
-	if doAllocZero {
-		db = rbf.NewDBWithAllocZero(path)
-	} else {
-		db = rbf.NewDB(path)
-	}
+	db := rbf.NewDB(path)
+	db.DoAllocZero = doAllocZero
 
 	w = &RbfDBWrapper{
 		reg:         r,
