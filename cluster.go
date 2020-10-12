@@ -2540,6 +2540,109 @@ func (c *cluster) translateFieldKeys(ctx context.Context, field *Field, keys []s
 	return ids, nil
 }
 
+func (c *cluster) findFieldKeys(ctx context.Context, field *Field, keys ...string) (map[string]uint64, error) {
+	// Attempt to find the keys locally.
+	localTranslations, err := field.TranslateStore().FindKeys(keys...)
+	if err != nil {
+		return nil, errors.Wrapf(err, "translating field(%s/%s) keys(%v) locally", field.Index(), field.Name(), keys)
+	}
+
+	// Check for missing keys.
+	var missing []string
+	if len(keys) > len(localTranslations) {
+		// There are either duplicate keys or missing keys.
+		// This should work either way.
+		missing = make([]string, 0, len(keys)-len(localTranslations))
+		for _, k := range keys {
+			_, found := localTranslations[k]
+			if !found {
+				missing = append(missing, k)
+			}
+		}
+	}
+	if len(missing) == 0 {
+		// All keys were available locally.
+		return localTranslations, nil
+	}
+
+	// It is possible that the missing keys exist, but have not been synced to the local replica.
+	coordinator := c.coordinatorNode()
+	if coordinator == nil {
+		return nil, errors.Errorf("translating field(%s/%s) keys(%v) - cannot find coordinator node", field.Index(), field.Name(), keys)
+	}
+	if c.Node.ID == coordinator.ID {
+		// The local copy is the authoritative copy.
+		return localTranslations, nil
+	}
+
+	// Forward the missing keys to the coordinator.
+	// The coordinator has the authoritative copy.
+	remoteTranslations, err := c.InternalClient.FindFieldKeysNode(ctx, &coordinator.URI, field.Index(), field.Name(), keys...)
+	if err != nil {
+		return nil, errors.Wrapf(err, "translating field(%s/%s) keys(%v) remotely", field.Index(), field.Name(), keys)
+	}
+
+	// Merge the remote translations into the local translations.
+	translations := localTranslations
+	for key, id := range remoteTranslations {
+		translations[key] = id
+	}
+
+	return translations, nil
+}
+
+func (c *cluster) createFieldKeys(ctx context.Context, field *Field, keys ...string) (map[string]uint64, error) {
+	// The coordinator is the only node that can create field keys, since it owns the authoritative copy.
+	coordinator := c.coordinatorNode()
+	if coordinator == nil {
+		return nil, errors.Errorf("translating field(%s/%s) keys(%v) - cannot find coordinator node", field.Index(), field.Name(), keys)
+	}
+	if c.Node.ID == coordinator.ID {
+		// The local copy is the authoritative copy.
+		return field.TranslateStore().CreateKeys(keys...)
+	}
+
+	// Attempt to find the keys locally.
+	// They cannot be created locally, but skipping keys that exist can reduce network usage.
+	localTranslations, err := field.TranslateStore().FindKeys(keys...)
+	if err != nil {
+		return nil, errors.Wrapf(err, "translating field(%s/%s) keys(%v) locally", field.Index(), field.Name(), keys)
+	}
+
+	// Check for missing keys.
+	var missing []string
+	if len(keys) > len(localTranslations) {
+		// There are either duplicate keys or missing keys.
+		// This should work either way.
+		missing = make([]string, 0, len(keys)-len(localTranslations))
+		for _, k := range keys {
+			_, found := localTranslations[k]
+			if !found {
+				missing = append(missing, k)
+			}
+		}
+	}
+	if len(missing) == 0 {
+		// All keys exist locally.
+		// There is no need to create anything.
+		return localTranslations, nil
+	}
+
+	// Forward the missing keys to the coordinator to be created.
+	remoteTranslations, err := c.InternalClient.CreateFieldKeysNode(ctx, &coordinator.URI, field.Index(), field.Name(), keys...)
+	if err != nil {
+		return nil, errors.Wrapf(err, "translating field(%s/%s) keys(%v) remotely", field.Index(), field.Name(), keys)
+	}
+
+	// Merge the remote translations into the local translations.
+	translations := localTranslations
+	for key, id := range remoteTranslations {
+		translations[key] = id
+	}
+
+	return translations, nil
+}
+
 func (c *cluster) translateFieldIDs(field *Field, ids map[uint64]struct{}) (map[uint64]string, error) {
 	idList := make([]uint64, len(ids))
 	{
@@ -2690,6 +2793,179 @@ func (c *cluster) translateIndexKeySet(ctx context.Context, indexName string, ke
 		return nil, err
 	}
 	return keyMap, nil
+}
+
+func (c *cluster) findIndexKeys(ctx context.Context, indexName string, keys ...string) (map[string]uint64, error) {
+	idx := c.holder.Index(indexName)
+	if idx == nil {
+		return nil, ErrIndexNotFound
+	}
+
+	// Split keys by partition.
+	keysByPartition := make(map[int][]string, c.partitionN)
+	for _, key := range keys {
+		partitionID := c.Topology.KeyPartition(indexName, key)
+		keysByPartition[partitionID] = append(keysByPartition[partitionID], key)
+	}
+
+	// TODO: use local replicas to short-circuit network traffic
+
+	// Group keys by node.
+	// Delete remote keys from the by-partition map so that it can be used for local translation.
+	keysByNode := make(map[*Node][]string)
+	for partitionID, keys := range keysByPartition {
+		// Find the primary node for this partition.
+		primary := c.primaryPartitionNode(partitionID)
+		if primary == nil {
+			return nil, errors.Errorf("translating index(%s) keys(%v) on partition(%d) - cannot find primary node", indexName, keys, partitionID)
+		}
+
+		if c.Node.ID == primary.ID {
+			// The partition is local.
+			continue
+		}
+
+		// Group the partition to be processed remotely.
+		keysByNode[primary] = append(keysByNode[primary], keys...)
+		delete(keysByPartition, partitionID)
+	}
+
+	// Start translating keys remotely.
+	// On child calls, there are no remote results.
+	remoteResults := make(chan map[string]uint64, len(keysByNode))
+	var g errgroup.Group
+	defer g.Wait()
+	for node, keys := range keysByNode {
+		node, keys := node, keys
+
+		g.Go(func() error {
+			translations, err := c.InternalClient.FindIndexKeysNode(ctx, &node.URI, indexName, keys...)
+			if err != nil {
+				return errors.Wrapf(err, "translating index(%s) keys(%v) on node %s", indexName, keys, node.ID)
+			}
+
+			remoteResults <- translations
+			return nil
+		})
+	}
+
+	// Translate local keys.
+	translations := make(map[string]uint64)
+	for partitionID, keys := range keysByPartition {
+		// Find the keys within the partition.
+		t, err := idx.TranslateStore(partitionID).FindKeys(keys...)
+		if err != nil {
+			return nil, errors.Wrapf(err, "translating index(%s) keys(%v) on partition(%d)", idx.Name(), keys, partitionID)
+		}
+
+		// Merge the translations from this partition.
+		for key, id := range t {
+			translations[key] = id
+		}
+	}
+
+	// Wait for remote key sets.
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+
+	// Merge the translations.
+	close(remoteResults)
+	for t := range remoteResults {
+		for key, id := range t {
+			translations[key] = id
+		}
+	}
+	return translations, nil
+}
+
+func (c *cluster) createIndexKeys(ctx context.Context, indexName string, keys ...string) (map[string]uint64, error) {
+	idx := c.holder.Index(indexName)
+	if idx == nil {
+		return nil, ErrIndexNotFound
+	}
+
+	// Split keys by partition.
+	keysByPartition := make(map[int][]string, c.partitionN)
+	for _, key := range keys {
+		partitionID := c.Topology.KeyPartition(indexName, key)
+		keysByPartition[partitionID] = append(keysByPartition[partitionID], key)
+	}
+
+	// TODO: use local replicas to short-circuit network traffic
+
+	// Group keys by node.
+	// Delete remote keys from the by-partition map so that it can be used for local translation.
+	keysByNode := make(map[*Node][]string)
+	for partitionID, keys := range keysByPartition {
+		// Find the primary node for this partition.
+		primary := c.primaryPartitionNode(partitionID)
+		if primary == nil {
+			return nil, errors.Errorf("translating index(%s) keys(%v) on partition(%d) - cannot find primary node", indexName, keys, partitionID)
+		}
+
+		if c.Node.ID == primary.ID {
+			// The partition is local.
+			continue
+		}
+
+		// Group the partition to be processed remotely.
+		keysByNode[primary] = append(keysByNode[primary], keys...)
+		delete(keysByPartition, partitionID)
+	}
+
+	translateResults := make(chan map[string]uint64, len(keysByNode)+len(keysByPartition))
+	var g errgroup.Group
+	defer g.Wait()
+
+	// Start translating keys remotely.
+	// On child calls, there are no remote results.
+	for node, keys := range keysByNode {
+		node, keys := node, keys
+
+		g.Go(func() error {
+			translations, err := c.InternalClient.CreateIndexKeysNode(ctx, &node.URI, indexName, keys...)
+			if err != nil {
+				return errors.Wrapf(err, "translating index(%s) keys(%v) on node %s", indexName, keys, node.ID)
+			}
+
+			translateResults <- translations
+			return nil
+		})
+	}
+
+	// Translate local keys.
+	// TODO: make this less horrible (why fsync why?????)
+	// 		This is kinda terrible because each goroutine does an fsync, thus locking up an entire OS thread.
+	// 		AHHHHHHHHHHHHHHHHHH
+	for partitionID, keys := range keysByPartition {
+		partitionID, keys := partitionID, keys
+
+		g.Go(func() error {
+			translations, err := idx.TranslateStore(partitionID).CreateKeys(keys...)
+			if err != nil {
+				return errors.Wrapf(err, "translating index(%s) keys(%v) on partition(%d)", idx.Name(), keys, partitionID)
+			}
+
+			translateResults <- translations
+			return nil
+		})
+	}
+
+	// Wait for remote key sets.
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+
+	// Merge the translations.
+	translations := make(map[string]uint64, len(keys))
+	close(translateResults)
+	for t := range translateResults {
+		for key, id := range t {
+			translations[key] = id
+		}
+	}
+	return translations, nil
 }
 
 func (c *cluster) translateIndexIDs(ctx context.Context, indexName string, ids []uint64) ([]string, error) {

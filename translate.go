@@ -51,7 +51,7 @@ var (
 // 	0xc2, 0xa0, // NO-BREAK SPACE
 // 	0x00,
 // }
-type TranslateStore interface {
+type TranslateStore interface { // TODO: refactor this interface; readonly should be part of the type and replication should be an impl detail
 	io.Closer
 
 	// Returns the maximum ID set on the store.
@@ -71,6 +71,15 @@ type TranslateStore interface {
 	// unless partition is set to -1.
 	TranslateKey(key string, writable bool) (uint64, error)
 	TranslateKeys(key []string, writable bool) ([]uint64, error)
+
+	// FindKeys looks up the ID for each key.
+	// Keys are not created if they do not exist.
+	// Missing keys are not considered errors, so the length of the result may be less than that of the input.
+	FindKeys(keys ...string) (map[string]uint64, error)
+
+	// CreateKeys maps all keys to IDs, creating the IDs if they do not exist.
+	// If the translator is read-only, this will return an error.
+	CreateKeys(keys ...string) (map[string]uint64, error)
 
 	// Converts an integer ID to its associated string key.
 	TranslateID(id uint64) (string, error)
@@ -444,6 +453,57 @@ func (s *InMemTranslateStore) TranslateKeys(keys []string, writable bool) (_ []u
 		}
 	}
 	return ids, nil
+}
+
+// FindKeys looks up the ID for each key.
+// Keys are not created if they do not exist.
+// Missing keys are not considered errors, so the length of the result may be less than that of the input.
+func (s *InMemTranslateStore) FindKeys(keys ...string) (map[string]uint64, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	result := make(map[string]uint64, len(keys))
+	for _, key := range keys {
+		id, ok := s.idsByKey[key]
+		if !ok {
+			// The key does not exist.
+			continue
+		}
+
+		result[key] = id
+	}
+
+	return result, nil
+}
+
+// CreateKeys maps all keys to IDs, creating the IDs if they do not exist.
+// If the translator is read-only, this will return an error.
+func (s *InMemTranslateStore) CreateKeys(keys ...string) (map[string]uint64, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.readOnly {
+		return nil, ErrTranslateStoreReadOnly
+	}
+
+	result := make(map[string]uint64, len(keys))
+	for _, key := range keys {
+		id, ok := s.idsByKey[key]
+		if !ok {
+			// The key does not exist.
+			// Generate a new id and update db.
+			if s.field == "" {
+				id = GenerateNextPartitionedID(s.index, s.maxID, s.partitionID, s.partitionN)
+			} else {
+				id = s.maxID + 1
+			}
+			s.set(id, key)
+		}
+
+		result[key] = id
+	}
+
+	return result, nil
 }
 
 func (s *InMemTranslateStore) translateKey(key string, writable bool) (_ uint64, err error) {
