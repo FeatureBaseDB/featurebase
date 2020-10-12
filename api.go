@@ -1661,6 +1661,38 @@ func (api *API) TranslateIDs(ctx context.Context, r io.Reader) (_ []byte, err er
 	return buf, nil
 }
 
+// FindIndexKeys looks up column keys in the index, mapping them to IDs.
+// If a key does not exist, it will be absent from the resulting map.
+func (api *API) FindIndexKeys(ctx context.Context, index string, keys ...string) (map[string]uint64, error) {
+	return api.cluster.findIndexKeys(ctx, index, keys...)
+}
+
+// FindFieldKeys looks up keys in a field, mapping them to IDs.
+// If a key does not exist, it will be absent from the resulting map.
+func (api *API) FindFieldKeys(ctx context.Context, index, field string, keys ...string) (map[string]uint64, error) {
+	f := api.holder.Field(index, field)
+	if f == nil {
+		return nil, newNotFoundError(ErrFieldNotFound, field)
+	}
+	return api.cluster.findFieldKeys(ctx, f, keys...)
+}
+
+// CreateIndexKeys looks up column keys in the index, mapping them to IDs.
+// If a key does not exist, it will be created.
+func (api *API) CreateIndexKeys(ctx context.Context, index string, keys ...string) (map[string]uint64, error) {
+	return api.cluster.createIndexKeys(ctx, index, keys...)
+}
+
+// CreateFieldKeys looks up keys in a field, mapping them to IDs.
+// If a key does not exist, it will be created.
+func (api *API) CreateFieldKeys(ctx context.Context, index, field string, keys ...string) (map[string]uint64, error) {
+	f := api.holder.Field(index, field)
+	if f == nil {
+		return nil, newNotFoundError(ErrFieldNotFound, field)
+	}
+	return api.cluster.createFieldKeys(ctx, f, keys...)
+}
+
 // PrimaryReplicaNodeURL returns the URL of the cluster's primary replica.
 func (api *API) PrimaryReplicaNodeURL() url.URL {
 	node := api.cluster.PrimaryReplicaNode()

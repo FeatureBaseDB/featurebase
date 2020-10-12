@@ -1247,6 +1247,208 @@ func (c *InternalClient) TranslateIDsNode(ctx context.Context, uri *pilosa.URI, 
 	return tkresp.Keys, nil
 }
 
+func (c *InternalClient) FindIndexKeysNode(ctx context.Context, uri *pilosa.URI, index string, keys ...string) (transMap map[string]uint64, err error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.FindKeysNodePartition")
+	defer span.Finish()
+
+	// Create HTTP request.
+	u := uriPathToURL(uri, fmt.Sprintf("/internal/translate/index/%s/keys", index))
+	reqData, err := json.Marshal(keys)
+	if err != nil {
+		return nil, errors.Wrap(err, "marshalling request")
+	}
+	req, err := http.NewRequest("POST", u.String(), bytes.NewReader(reqData))
+	if err != nil {
+		return nil, errors.Wrap(err, "creating request")
+	}
+
+	// Apply headers.
+	req.Header.Set("Content-Length", strconv.Itoa(len(reqData)))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+
+	// Send the request.
+	resp, err := c.executeRequest(req.WithContext(ctx))
+	if err != nil {
+		return nil, errors.Wrap(err, "executing request")
+	}
+	defer func() {
+		cerr := resp.Body.Close()
+		if cerr != nil && err == nil {
+			err = errors.Wrap(cerr, "closing response body")
+		}
+	}()
+
+	// Read the response body.
+	result, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, errors.Wrap(err, "reading response")
+	}
+
+	// Decode the translations.
+	transMap = make(map[string]uint64, len(keys))
+	err = json.Unmarshal(result, &transMap)
+	if err != nil {
+		return nil, errors.Wrap(err, "json decoding")
+	}
+
+	return transMap, nil
+}
+
+func (c *InternalClient) FindFieldKeysNode(ctx context.Context, uri *pilosa.URI, index string, field string, keys ...string) (transMap map[string]uint64, err error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.FindKeysFieldNode")
+	defer span.Finish()
+
+	// Create HTTP request.
+	u := uriPathToURL(uri, fmt.Sprintf("/internal/translate/index/%s/field/%s", index, field))
+	q := u.Query()
+	q.Add("remote", "true")
+	u.RawQuery = q.Encode()
+	reqData, err := json.Marshal(keys)
+	if err != nil {
+		return nil, errors.Wrap(err, "marshalling request")
+	}
+	req, err := http.NewRequest("POST", u.String(), bytes.NewReader(reqData))
+	if err != nil {
+		return nil, errors.Wrap(err, "creating request")
+	}
+
+	// Apply headers.
+	req.Header.Set("Content-Length", strconv.Itoa(len(reqData)))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+
+	// Send the request.
+	resp, err := c.executeRequest(req.WithContext(ctx))
+	if err != nil {
+		return nil, errors.Wrap(err, "executing request")
+	}
+	defer func() {
+		cerr := resp.Body.Close()
+		if cerr != nil && err == nil {
+			err = errors.Wrap(cerr, "closing response body")
+		}
+	}()
+
+	// Read the response body.
+	result, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, errors.Wrap(err, "reading response")
+	}
+
+	// Decode the translations.
+	transMap = make(map[string]uint64, len(keys))
+	err = json.Unmarshal(result, &transMap)
+	if err != nil {
+		return nil, errors.Wrap(err, "json decoding")
+	}
+
+	return transMap, nil
+}
+
+func (c *InternalClient) CreateIndexKeysNode(ctx context.Context, uri *pilosa.URI, index string, keys ...string) (transMap map[string]uint64, err error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.FindKeysNodePartition")
+	defer span.Finish()
+
+	// Create HTTP request.
+	u := uriPathToURL(uri, fmt.Sprintf("/internal/translate/index/%s/keys", index))
+	reqData, err := json.Marshal(keys)
+	if err != nil {
+		return nil, errors.Wrap(err, "marshalling request")
+	}
+	req, err := http.NewRequest("PUT", u.String(), bytes.NewReader(reqData))
+	if err != nil {
+		return nil, errors.Wrap(err, "creating request")
+	}
+
+	// Apply headers.
+	req.Header.Set("Content-Length", strconv.Itoa(len(reqData)))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+
+	// Send the request.
+	resp, err := c.executeRequest(req.WithContext(ctx))
+	if err != nil {
+		return nil, errors.Wrap(err, "executing request")
+	}
+	defer func() {
+		cerr := resp.Body.Close()
+		if cerr != nil && err == nil {
+			err = errors.Wrap(cerr, "closing response body")
+		}
+	}()
+
+	// Read the response body.
+	result, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, errors.Wrap(err, "reading response")
+	}
+
+	// Decode the translations.
+	transMap = make(map[string]uint64, len(keys))
+	err = json.Unmarshal(result, &transMap)
+	if err != nil {
+		return nil, errors.Wrap(err, "json decoding")
+	}
+
+	return transMap, nil
+}
+
+func (c *InternalClient) CreateFieldKeysNode(ctx context.Context, uri *pilosa.URI, index string, field string, keys ...string) (transMap map[string]uint64, err error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.FindKeysFieldNode")
+	defer span.Finish()
+
+	// Create HTTP request.
+	u := uriPathToURL(uri, fmt.Sprintf("/internal/translate/index/%s/field/%s", index, field))
+	q := u.Query()
+	q.Add("remote", "true")
+	u.RawQuery = q.Encode()
+	reqData, err := json.Marshal(keys)
+	if err != nil {
+		return nil, errors.Wrap(err, "marshalling request")
+	}
+	req, err := http.NewRequest("PUT", u.String(), bytes.NewReader(reqData))
+	if err != nil {
+		return nil, errors.Wrap(err, "creating request")
+	}
+
+	// Apply headers.
+	req.Header.Set("Content-Length", strconv.Itoa(len(reqData)))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+
+	// Send the request.
+	resp, err := c.executeRequest(req.WithContext(ctx))
+	if err != nil {
+		return nil, errors.Wrap(err, "executing request")
+	}
+	defer func() {
+		cerr := resp.Body.Close()
+		if cerr != nil && err == nil {
+			err = errors.Wrap(cerr, "closing response body")
+		}
+	}()
+
+	// Read the response body.
+	result, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, errors.Wrap(err, "reading response")
+	}
+
+	// Decode the translations.
+	transMap = make(map[string]uint64, len(keys))
+	err = json.Unmarshal(result, &transMap)
+	if err != nil {
+		return nil, errors.Wrap(err, "json decoding")
+	}
+
+	return transMap, nil
+}
+
 func (c *InternalClient) Transactions(ctx context.Context) (map[string]*pilosa.Transaction, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.Transactions")
 	defer span.Finish()

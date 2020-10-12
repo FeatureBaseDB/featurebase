@@ -92,11 +92,17 @@ type InternalQueryClient interface {
 	// Trasnlate keys on the particular node. The parameter writable informs TranslateStore if we can generate a new ID if any of keys does not exist.
 	TranslateKeysNode(ctx context.Context, uri *URI, index, field string, keys []string, writable bool) ([]uint64, error)
 	TranslateIDsNode(ctx context.Context, uri *URI, index, field string, id []uint64) ([]string, error)
+
+	FindIndexKeysNode(ctx context.Context, uri *URI, index string, keys ...string) (map[string]uint64, error)
+	FindFieldKeysNode(ctx context.Context, uri *URI, index string, field string, keys ...string) (map[string]uint64, error)
+
+	CreateIndexKeysNode(ctx context.Context, uri *URI, index string, keys ...string) (map[string]uint64, error)
+	CreateFieldKeysNode(ctx context.Context, uri *URI, index string, field string, keys ...string) (map[string]uint64, error)
 }
 
 type nopInternalQueryClient struct{}
 
-func (n *nopInternalQueryClient) QueryNode(ctx context.Context, uri *URI, index string, queryRequest *QueryRequest) (*QueryResponse, error) {
+func (n nopInternalQueryClient) QueryNode(ctx context.Context, uri *URI, index string, queryRequest *QueryRequest) (*QueryResponse, error) {
 	return nil, nil
 }
 
@@ -108,15 +114,31 @@ func (n nopInternalQueryClient) TranslateIDsNode(ctx context.Context, uri *URI, 
 	return nil, nil
 }
 
-func newNopInternalQueryClient() *nopInternalQueryClient {
-	return &nopInternalQueryClient{}
+func (n nopInternalQueryClient) FindIndexKeysNode(ctx context.Context, uri *URI, index string, keys ...string) (map[string]uint64, error) {
+	return nil, nil
+}
+
+func (n nopInternalQueryClient) FindFieldKeysNode(ctx context.Context, uri *URI, index string, field string, keys ...string) (map[string]uint64, error) {
+	return nil, nil
+}
+
+func (n nopInternalQueryClient) CreateIndexKeysNode(ctx context.Context, uri *URI, index string, keys ...string) (map[string]uint64, error) {
+	return nil, nil
+}
+
+func (n nopInternalQueryClient) CreateFieldKeysNode(ctx context.Context, uri *URI, index string, field string, keys ...string) (map[string]uint64, error) {
+	return nil, nil
+}
+
+func newNopInternalQueryClient() nopInternalQueryClient {
+	return nopInternalQueryClient{}
 }
 
 var _ InternalQueryClient = newNopInternalQueryClient()
 
 //===============
 
-type nopInternalClient struct{}
+type nopInternalClient struct{ nopInternalQueryClient }
 
 func newNopInternalClient() nopInternalClient {
 	return nopInternalClient{}
@@ -142,15 +164,6 @@ func (n nopInternalClient) Nodes(ctx context.Context) ([]*Node, error) {
 	return nil, nil
 }
 func (n nopInternalClient) Query(ctx context.Context, index string, queryRequest *QueryRequest) (*QueryResponse, error) {
-	return nil, nil
-}
-func (n nopInternalClient) QueryNode(ctx context.Context, uri *URI, index string, queryRequest *QueryRequest) (*QueryResponse, error) {
-	return nil, nil
-}
-func (n nopInternalClient) TranslateKeysNode(ctx context.Context, uri *URI, index, field string, keys []string, writable bool) ([]uint64, error) {
-	return nil, nil
-}
-func (n nopInternalClient) TranslateIDsNode(ctx context.Context, uri *URI, index, field string, ids []uint64) ([]string, error) {
 	return nil, nil
 }
 func (n nopInternalClient) Import(ctx context.Context, index, field string, shard uint64, bits []Bit, opts ...ImportOption) error {
