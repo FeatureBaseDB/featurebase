@@ -52,15 +52,15 @@ type FsckConfig struct {
 	Fix    bool // -fix
 	FixCol bool // -fixcol
 
-	Colkeydump bool // -col
+	Colkeydump    bool   // -col
+	JustThisIndex string // -index
 
 	// -col column key dump only options:
-	Dir         string
-	Index       string
-	PartitionID int
-	ShowHeader  bool
-	ShowKey     bool
-	ShowID      bool
+	// Dir         string
+	// PartitionID int
+	// ShowHeader  bool
+	// ShowKey     bool
+	// ShowID      bool
 
 	// not flags, just the Args() left after all other flags. Should be the list
 	// of pilosa (holder) directories for the cluster.
@@ -87,6 +87,8 @@ func (cfg *FsckConfig) DefineFlags(fs *flag.FlagSet) {
 
 	fs.StringVar(&cfg.PilosaConfigPath, "config", "", "(required: -replicas or -config, with -config preferred) path to the pilosa.conf for the cluster (e.g. /etc/pilosa.conf)")
 
+	fs.StringVar(&cfg.JustThisIndex, "index", "", "(optional) restrict to just this index. Otherwise we default to all indexes.")
+
 	fs.Usage = func() {
 		fmt.Fprintf(os.Stderr, "pilosa-fsck version: %v\n\n", pilosa.VersionInfo())
 		fmt.Fprintf(os.Stderr, `Use: pilosa-fsck -replicas R {-fix} {-q} /backup/1/.pilosa /backup/2/.pilosa ... /backup/N/.pilosa
@@ -98,6 +100,9 @@ func (cfg *FsckConfig) DefineFlags(fs *flag.FlagSet) {
         (required) R is a positive integer, giving the replicaN or replicator factor for the cluster. This is
         the number of replicas maintained in the cluster. Must be the same as the 
         [cluster] 'replicas = R' entry shared across all the pilosa.conf files on each node.
+
+  -index index_name
+        (optional) restrict to just this index. Otherwise we default to all indexes.
 
   -q
         be very quiet during analysis and repair
@@ -323,9 +328,9 @@ func main() {
 
 func (cfg *FsckConfig) Run() (fixNeeded bool, err error) {
 
-	if cfg.Colkeydump {
-		cfg.dumpcols()
-	}
+	//	if cfg.Colkeydump {
+	//	cfg.dumpcols()
+	//}
 
 	perNodeIndexMaps, clusterNodes, ats, err := cfg.read()
 	if err != nil {
@@ -397,6 +402,10 @@ func (cfg *FsckConfig) RepairTranslationStores(ats *pilosa.AllTranslatorSummary)
 	indexes := indexesFromAts(ats)
 
 	for _, index := range indexes {
+
+		if !cfg.DoingIndex(index) {
+			continue
+		}
 
 		m := make(map[int]*group)
 		for _, sum := range ats.Sums {
@@ -474,6 +483,7 @@ func (cfg *FsckConfig) RepairTranslationStores(ats *pilosa.AllTranslatorSummary)
 	return nil
 }
 
+/*
 func (cfg *FsckConfig) dumpcols() {
 
 	verbose := cfg.Verbose
@@ -551,6 +561,7 @@ func (cfg *FsckConfig) dumpcols() {
 		}
 	}
 }
+*/
 
 func (cfg *FsckConfig) read() (perNodeIndexMaps []map[string]*pilosa.IndexFragmentSummary, clusterNodes []string, final *pilosa.AllTranslatorSummary, err error) {
 
@@ -615,6 +626,13 @@ func (cfg *FsckConfig) readOneDir(dir string) (idx2frag map[string]*pilosa.Index
 	const checkKeys = true
 	atsNode = pilosa.NewAllTranslatorSummary()
 	for _, idx := range holder.Indexes() {
+
+		if !cfg.DoingIndex(idx.Name()) {
+			continue
+		}
+
+		//vv("calling idx.ComputeTranslatorSummary(verbose, checkKeys=%v, cfg.FixCol='%v')", checkKeys, cfg.FixCol)
+
 		asum, err := idx.ComputeTranslatorSummary(verbose, checkKeys, cfg.FixCol, topo, nodeID)
 		if err != nil {
 			log.Fatal(err)
@@ -664,6 +682,18 @@ func (cfg *FsckConfig) readOneDir(dir string) (idx2frag map[string]*pilosa.Index
 	//vv("idx2frag = '%v'", idx2frag) // tons of output. see 1234.out.full for examaple.
 
 	return
+}
+
+func (cfg *FsckConfig) DoingIndex(index string) bool {
+	if cfg.JustThisIndex == "" {
+		// scan all indexes
+		return true
+	}
+	if index == cfg.JustThisIndex {
+		// scan just this one
+		return true
+	}
+	return false
 }
 
 // from cluster.go:1924
