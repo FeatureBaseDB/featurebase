@@ -25,8 +25,6 @@ import (
 	"io/ioutil"
 	"math"
 	"net/url"
-	"os"
-	"path"
 	"sort"
 	"strconv"
 	"strings"
@@ -811,45 +809,19 @@ func (api *API) Usage(ctx context.Context, remote bool) (map[string]NodeUsage, e
 	defer span.Finish()
 
 	nodeUsages := make(map[string]NodeUsage)
+
+	indexSizes, err := api.holder.Txf().IndexSizes()
+	if err != nil {
+		return nil, errors.Wrap(err, "getting index usage")
+	}
 	var totalSize int64
-
-	// Open storage directory.
-	dirName, err := expandDirName(api.server.dataDir)
-	if err != nil {
-		return nodeUsages, errors.Wrap(err, "expanding data directory")
-	}
-	dir, err := os.Open(dirName)
-	if err != nil {
-		return nodeUsages, errors.Wrap(err, "opening data directory")
-	}
-	defer dir.Close()
-
-	files, err := dir.Readdir(-1)
-	if err != nil {
-		return nodeUsages, errors.Wrap(err, "reading data directory")
+	for _, s := range indexSizes {
+		totalSize += s
 	}
 
-	// Read size on disk for each index directory.
-	indexSizes := make(map[string]int64)
-	for _, file := range files {
-		if !file.IsDir() {
-			continue
-		}
-		if api.holder.Txf().IsTxDatabasePath(file.Name()) {
-			continue
-		}
-		fullName := path.Join(dirName, file.Name())
-		indexSizes[file.Name()], err = directoryUsage(fullName)
-		if err != nil {
-			return nodeUsages, errors.Wrap(err, "getting disk usage")
-		}
-		totalSize += indexSizes[file.Name()]
-	}
-
-	capacity, err := api.server.systemInfo.DiskCapacity(api.server.dataDir)
-
+	capacity, err := api.server.systemInfo.DiskCapacity(api.holder.path)
 	if err != nil {
-		api.server.logger.Printf("failed to get disk capacity: %s", err)
+		api.server.logger.Printf("couldn't read disk capacity: %s", err)
 	}
 
 	// Insert into result.
@@ -877,35 +849,6 @@ func (api *API) Usage(ctx context.Context, remote bool) (map[string]NodeUsage, e
 		}
 	}
 	return nodeUsages, nil
-}
-
-func directoryUsage(fname string) (int64, error) {
-	var size int64
-
-	dir, err := os.Open(fname)
-	if err != nil {
-		return 0, errors.Wrap(err, "opening data subdirectory")
-	}
-	defer dir.Close()
-
-	files, err := dir.Readdir(-1)
-	if err != nil {
-		return 0, errors.Wrap(err, "reading data subdirectory")
-	}
-
-	for _, file := range files {
-		if file.IsDir() {
-			sz, err := directoryUsage(path.Join(fname, file.Name()))
-			if err != nil {
-				return 0, err
-			}
-			size += sz
-		} else {
-			size += file.Size()
-		}
-	}
-
-	return size, nil
 }
 
 // RecalculateCaches forces all TopN caches to be updated.

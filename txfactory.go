@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -562,6 +563,81 @@ func (f *TxFactory) DeleteFragmentFromStore(
 
 func (f *TxFactory) DumpAll() {
 	f.dbPerShard.DumpAll()
+}
+
+func (f *TxFactory) IndexSizes() (map[string]int64, error) {
+	switch f.types[0] {
+	case roaringTxn:
+		return f.diskUsageFromFilesystem()
+	default:
+		return nil, errors.New("Not implemented")
+	}
+
+}
+
+func (f *TxFactory) diskUsageFromFilesystem() (map[string]int64, error) {
+	// Open storage directory.
+	indexSizes := make(map[string]int64)
+	dirName, err := expandDirName(f.holder.path)
+	if err != nil {
+		return indexSizes, errors.Wrap(err, "expanding data directory")
+	}
+	dir, err := os.Open(dirName)
+	if err != nil {
+		return indexSizes, errors.Wrap(err, "opening data directory")
+	}
+	defer dir.Close()
+
+	files, err := dir.Readdir(-1)
+	if err != nil {
+		return indexSizes, errors.Wrap(err, "reading data directory")
+	}
+
+	// Read size on disk for each index directory.
+	for _, file := range files {
+		if !file.IsDir() {
+			continue
+		}
+		if f.IsTxDatabasePath(file.Name()) {
+			continue
+		}
+		fullName := path.Join(dirName, file.Name())
+		indexSizes[file.Name()], err = directoryUsage(fullName)
+		if err != nil {
+			return indexSizes, errors.Wrap(err, "getting disk usage")
+		}
+	}
+
+	return indexSizes, nil
+}
+
+func directoryUsage(fname string) (int64, error) {
+	var size int64
+
+	dir, err := os.Open(fname)
+	if err != nil {
+		return 0, errors.Wrap(err, "opening data subdirectory")
+	}
+	defer dir.Close()
+
+	files, err := dir.Readdir(-1)
+	if err != nil {
+		return 0, errors.Wrap(err, "reading data subdirectory")
+	}
+
+	for _, file := range files {
+		if file.IsDir() {
+			sz, err := directoryUsage(path.Join(fname, file.Name()))
+			if err != nil {
+				return 0, err
+			}
+			size += sz
+		} else {
+			size += file.Size()
+		}
+	}
+
+	return size, nil
 }
 
 func (f *TxFactory) CloseIndex(idx *Index) error {
