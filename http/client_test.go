@@ -588,6 +588,42 @@ func TestClient_ImportRoaring(t *testing.T) {
 	}
 }
 
+// Ensure client can bulk import data with multiple views and not deadlock.
+func TestClient_ImportRoaring_MultiView(t *testing.T) {
+	cluster := test.MustNewCluster(t, 2)
+	for _, c := range cluster.Nodes {
+		c.Config.Cluster.ReplicaN = 2
+	}
+	err := cluster.Start()
+	if err != nil {
+		t.Fatalf("starting cluster: %v", err)
+	}
+	defer cluster.Close()
+
+	_, err = cluster.GetNode(0).API.CreateIndex(context.Background(), "i", pilosa.IndexOptions{})
+	if err != nil {
+		t.Fatalf("creating index: %v", err)
+	}
+	_, err = cluster.GetNode(0).API.CreateField(context.Background(), "i", "f", pilosa.OptFieldTypeSet(pilosa.CacheTypeRanked, 100))
+	if err != nil {
+		t.Fatalf("creating field: %v", err)
+	}
+	_, err = cluster.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: "Set(0, f=1)"})
+	if err != nil {
+		t.Fatalf("querying: %v", err)
+	}
+
+	// Send import request.
+	host := cluster.GetNode(0).URL()
+	c := MustNewClient(host, http.GetHTTPClient(nil))
+	req := &pilosa.ImportRoaringRequest{Views: map[string][]byte{}}
+	req.Views["a"], _ = hex.DecodeString("3B3001000100000900010000000100010009000100")
+	req.Views["b"], _ = hex.DecodeString("3B3001000100000900010000000100010009000100")
+	if err := c.ImportRoaring(context.Background(), &cluster.GetNode(0).API.Node().URI, "i", "f", 0, false, req); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // Ensure client can bulk import data.
 func TestClient_ImportKeys(t *testing.T) {
 	t.Run("SingleNode", func(t *testing.T) {
