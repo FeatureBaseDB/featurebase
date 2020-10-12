@@ -5667,6 +5667,21 @@ func TestExecutor_Execute_NoIndex(t *testing.T) {
 	}
 }
 
+func TestExecutor_Translate_NoKeys(t *testing.T) {
+	c := test.MustRunCluster(t, 1)
+	defer c.Close()
+
+	c.CreateField(t, "i", pilosa.IndexOptions{}, "k", pilosa.OptFieldKeys())
+	c.Query(t, "i", `Set(1, k="a")`)
+	c.Query(t, "i", `Set(2, k="b")`)
+	resp := c.Query(t, "i", `Count(Union(Row(k="a"), Row(k="b"), Row(k="c")))`)
+	if len(resp.Results) != 1 {
+		t.Errorf("expected one result but got %v", resp.Results)
+	} else if resp.Results[0] != uint64(2) {
+		t.Errorf("expected 2 but got %v", resp.Results[0])
+	}
+}
+
 func TestExecutor_Execute_CountDistinct(t *testing.T) {
 	data, err := ioutil.ReadFile("testdata/schema.json")
 	if err != nil {
