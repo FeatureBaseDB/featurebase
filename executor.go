@@ -3954,11 +3954,7 @@ func (e *executor) translateCalls(ctx context.Context, defaultIndexName string, 
 
 	// Generate a list of all used
 	keySets := make(map[string]map[string]struct{})
-	writable := false
 	for _, c := range calls {
-		if c.Writable() {
-			writable = true
-		}
 		if err := e.collectCallKeySets(ctx, defaultIndexName, c, keySets); err != nil {
 			return err
 		}
@@ -3975,14 +3971,14 @@ func (e *executor) translateCalls(ctx context.Context, defaultIndexName string, 
 		if !idx.Keys() || len(keySets) == 0 {
 			continue
 		}
-		if keyMaps[indexName], err = e.Cluster.translateIndexKeySet(ctx, indexName, keySet, writable); err != nil {
+		if keyMaps[indexName], err = e.Cluster.translateIndexKeySet(ctx, indexName, keySet, true); err != nil {
 			return err
 		}
 	}
 
 	// Translate calls.
 	for _, c := range calls {
-		if err := e.translateCall(ctx, defaultIndexName, c, keyMaps, c.Writable()); err != nil {
+		if err := e.translateCall(ctx, defaultIndexName, c, keyMaps, true); err != nil {
 			return err
 		}
 	}
