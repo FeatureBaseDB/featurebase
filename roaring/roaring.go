@@ -3465,8 +3465,11 @@ func (c *Container) bitmapToArray() *Container {
 }
 
 // arrayToBitmap converts from array format to bitmap format.
-func (c *Container) arrayToBitmap() *Container {
+func (c *Container) arrayToBitmap() (out *Container) {
 	statsHit("arrayToBitmap")
+	if roaringParanoia {
+		defer func() { out.CheckN() }()
+	}
 	if c == nil {
 		if roaringParanoia {
 			panic("nil container for arrayToBitmap")
@@ -3498,8 +3501,11 @@ func (c *Container) arrayToBitmap() *Container {
 }
 
 // runToBitmap converts from RLE format to bitmap format.
-func (c *Container) runToBitmap() *Container {
+func (c *Container) runToBitmap() (out *Container) {
 	statsHit("runToBitmap")
+	if roaringParanoia {
+		defer func() { c.CheckN() }()
+	}
 	if c == nil {
 		if roaringParanoia {
 			panic("nil container for runToBitmap")
@@ -3725,6 +3731,9 @@ func (c *Container) runToArray() *Container {
 
 // Clone returns a copy of c.
 func (c *Container) Clone() (out *Container) {
+	if roaringParanoia {
+		defer func() { out.CheckN() }()
+	}
 	statsHit("Container/Clone")
 	if c == nil {
 		return nil
@@ -3735,8 +3744,9 @@ func (c *Container) Clone() (out *Container) {
 		out = NewContainerArrayCopy(c.array())
 	case ContainerBitmap:
 		statsHit("Container/Clone/Bitmap")
-		other := NewContainerBitmapN(nil, c.N())
+		other := NewContainerBitmapN(nil, 0)
 		copy(other.bitmap(), c.bitmap())
+		other.n = c.n
 		out = other
 	case ContainerRun:
 		statsHit("Container/Clone/Run")
@@ -4098,7 +4108,10 @@ func intersectionCountBitmapBitmap(a, b *Container) (n int32) {
 	return int32(popcountAndSlice(a.bitmap(), b.bitmap()))
 }
 
-func intersect(a, b *Container) *Container {
+func intersect(a, b *Container) (c *Container) {
+	if roaringParanoia {
+		defer func() { c.CheckN() }()
+	}
 	if a.N() == MaxContainerVal+1 {
 		return b.Freeze()
 	}
@@ -4320,7 +4333,10 @@ func intersectBitmapBitmap(a, b *Container) *Container {
 	return output
 }
 
-func union(a, b *Container) *Container {
+func union(a, b *Container) (c *Container) {
+	if roaringParanoia {
+		defer func() { c.CheckN() }()
+	}
 	if a.N() == MaxContainerVal+1 || b.N() == MaxContainerVal+1 {
 		return fullContainer
 	}
@@ -5029,7 +5045,10 @@ func appendInterval16At(a []Interval16, val Interval16, off int) ([]Interval16, 
 	return a, off
 }
 
-func difference(a, b *Container) *Container {
+func difference(a, b *Container) (c *Container) {
+	if roaringParanoia {
+		defer func() { c.CheckN() }()
+	}
 	if a.N() == 0 || b.N() == MaxContainerVal+1 {
 		return nil
 	}
@@ -5386,7 +5405,10 @@ func differenceBitmapBitmap(a, b *Container) *Container {
 	return output
 }
 
-func xor(a, b *Container) *Container {
+func xor(a, b *Container) (c *Container) {
+	if roaringParanoia {
+		defer func() { c.CheckN() }()
+	}
 	if a.N() == 0 {
 		return b.Freeze()
 	}

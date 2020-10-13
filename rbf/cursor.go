@@ -1180,7 +1180,7 @@ func (c *Cursor) merge(key uint64, data *roaring.Container) (bool, error) {
 		if err != nil {
 			return false, errors.Wrap(err, "cursor.merge")
 		}
-		container = roaring.NewContainerBitmap(cell.BitN, d)
+		container = roaring.NewContainerBitmap(-1, d)
 	case ContainerTypeRLE:
 		d := toInterval16(cell.Data)
 		container = roaring.NewContainerRun(d)
@@ -1267,7 +1267,7 @@ func (c *Cursor) difference(key uint64, data *roaring.Container) (bool, error) {
 		if err != nil {
 			return false, errors.Wrap(err, "cursor.difference")
 		}
-		container = roaring.NewContainerBitmap(cell.N, d)
+		container = roaring.NewContainerBitmap(-1, d)
 	case ContainerTypeRLE:
 		d := toInterval16(cell.Data)
 		container = roaring.NewContainerRun(d)

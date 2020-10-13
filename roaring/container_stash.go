@@ -146,6 +146,9 @@ func NewContainerBitmap(n int, bitmap []uint64) *Container {
 		c.bitmapRepair()
 	} else {
 		c.setN(int32(n))
+		if roaringParanoia {
+			c.CheckN()
+		}
 	}
 	return c
 }
@@ -163,6 +166,9 @@ func NewContainerBitmapN(bitmap []uint64, n int32) *Container {
 		c.setBitmapCopy(bitmap)
 	} else {
 		c.setBitmap(bitmap)
+	}
+	if roaringParanoia {
+		c.CheckN()
 	}
 	return c
 }
@@ -219,6 +225,9 @@ func NewContainerRunCopy(set []Interval16) *Container {
 func NewContainerRunN(set []Interval16, n int32) *Container {
 	c := &Container{typeID: ContainerRun, n: n}
 	c.setRuns(set)
+	if roaringParanoia {
+		c.CheckN()
+	}
 	return c
 }
 
@@ -622,61 +631,6 @@ func (c *Container) setRunsMaybeCopy(runs []Interval16, doCopy bool) {
 		runs = runs[: len(runs) : 1<<15]
 	}
 	c.pointer, c.len, c.cap = &runs[0].Start, int32(len(runs)), int32(cap(runs))
-}
-
-// UpdateOrMake updates the container, yielding a new container if necessary.
-func (c *Container) UpdateOrMake(typ byte, n int32, mapped bool) *Container {
-	if c == nil {
-		switch typ {
-		case ContainerRun:
-			c = NewContainerRunN(nil, n)
-		case ContainerBitmap:
-			c = NewContainerBitmapN(nil, n)
-		default:
-			c = NewContainerArrayN(nil, n)
-		}
-		c.flags |= flagMapped
-		return c
-	}
-	// ensure that we are allowed to modify this container
-	c = c.Thaw()
-	c.typeID = typ
-	c.n = n
-	// note: this probably shouldn't be happening, the decision should be getting
-	// made when we specify the storage.
-	c.setMapped(mapped)
-	// we don't know that any existing slice is usable, so let's ditch it
-	switch c.typeID {
-	case ContainerArray:
-		c.pointer, c.len, c.cap = &c.data[0], 0, stashedArraySize
-	case ContainerRun:
-		c.pointer, c.len, c.cap = &c.data[0], 0, stashedRunSize
-	default:
-		c.pointer, c.len, c.cap = nil, 0, 0
-	}
-	return c
-}
-
-// Update updates the container if possible. It is an error to
-// call Update on a frozen container.
-func (c *Container) Update(typ byte, n int32, mapped bool) {
-	if c == nil || c.frozen() {
-		panic("cannot Update a nil or frozen container")
-	}
-	c.typeID = typ
-	c.n = n
-	// note: this probably shouldn't be happening, the decision should be getting
-	// made when we specify the storage.
-	c.setMapped(mapped)
-	// we don't know that any existing slice is usable, so let's ditch it
-	switch c.typeID {
-	case ContainerArray:
-		c.pointer, c.len, c.cap = nil, 0, 0
-	case ContainerRun:
-		c.pointer, c.len, c.cap = nil, 0, 0
-	default:
-		c.pointer, c.len, c.cap = nil, 0, 0
-	}
 }
 
 // isArray returns true if the container is an array container.
