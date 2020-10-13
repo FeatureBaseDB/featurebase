@@ -186,6 +186,10 @@ workflows:
       - check-changelog-label:
           requires:
             - setup
+          # the following should make this only run on pull requests
+          filters:
+            branches:
+              ignore: /.*/
       - test-build-arm:
           requires:
             - setup
