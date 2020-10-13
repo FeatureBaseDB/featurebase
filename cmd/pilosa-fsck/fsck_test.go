@@ -201,8 +201,9 @@ func Test_Repair(t *testing.T) {
 		FixCol: false,
 		Quiet:  true,
 		//Verbose:  true,
-		ReplicaN: nReplicas,
-		Dirs:     dirs,
+		ReplicaN:        nReplicas,
+		Dirs:            dirs,
+		ParallelReaders: 5,
 	}
 	panicOn(cfg.ValidateConfig())
 
