@@ -2503,24 +2503,6 @@ func (e *executor) executeRowShard(ctx context.Context, index string, c *pql.Cal
 		}
 	}
 
-	timeNotSet := fromTime.IsZero() && toTime.IsZero()
-
-	// This is workaround to support pql.ASSIGN ('=') as condition ('==') for int and decimal fields
-	if c.Name == "Row" && timeNotSet &&
-		(f.Type() == FieldTypeInt || f.Type() == FieldTypeDecimal) {
-		// re-write args as conditions for fieldName
-		for k, v := range c.Args {
-			if _, ok := v.(*pql.Condition); k == fieldName && !ok {
-				c.Args[k] = &pql.Condition{
-					Op:    pql.EQ,
-					Value: v,
-				}
-
-				return e.executeRowBSIGroupShard(ctx, index, c, shard)
-			}
-		}
-	}
-
 	rowID, rowOK, rowErr := c.UintArg(fieldName)
 	if rowErr != nil {
 		return nil, fmt.Errorf("Row() error with arg for row: %v", rowErr)
@@ -2529,6 +2511,7 @@ func (e *executor) executeRowShard(ctx context.Context, index string, c *pql.Cal
 	}
 
 	// Simply return row if times are not set.
+	timeNotSet := fromTime.IsZero() && toTime.IsZero()
 	if c.Name == "Row" && timeNotSet {
 		frag := e.Holder.fragment(index, fieldName, viewStandard, shard)
 		if frag == nil {
@@ -4073,8 +4056,9 @@ func (e *executor) translateCall(ctx context.Context, indexName string, c *pql.C
 	}
 
 	// Translate row key, if field is specified & key exists.
+	var field *Field
 	if fieldName != "" {
-		field := idx.Field(fieldName)
+		field = idx.Field(fieldName)
 		if field == nil {
 			// Instead of returning ErrFieldNotFound here,
 			// we just return, and don't attempt the translation.
@@ -4208,6 +4192,21 @@ func (e *executor) translateCall(ctx context.Context, indexName string, c *pql.C
 				if prevStr, ok := prev.(string); ok {
 					return errors.Errorf("got string row val '%s' in 'previous' for field %s which doesn't use string keys", prevStr, field.Name())
 				}
+			}
+		}
+	}
+
+	// This is workaround to support pql.ASSIGN ('=') as condition ('==') for int and decimal fields
+	if c.Name == "Row" && field != nil &&
+		(field.Type() == FieldTypeInt || field.Type() == FieldTypeDecimal) {
+		// re-write args as conditions for fieldName
+		for k, v := range c.Args {
+			if _, ok := v.(*pql.Condition); k == fieldName && !ok {
+				c.Args[k] = &pql.Condition{
+					Op:    pql.EQ,
+					Value: v,
+				}
+				break
 			}
 		}
 	}
