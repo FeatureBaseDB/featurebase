@@ -1895,9 +1895,10 @@ func TestWriteReadArray(t *testing.T) {
 
 func TestWriteReadBitmap(t *testing.T) {
 	// create bitmap containing > 4096 bits
-	cb := NewContainerBitmapN(nil, 129*32)
+	cb := NewContainerBitmapN(nil, 0)
 	for i := 0; i < 129; i++ {
 		cb.bitmap()[i] = 0x5555555555555555
+		cb.n += 32
 	}
 	bb := NewFileBitmap()
 	bb.Containers.Put(0, cb)
@@ -1918,9 +1919,10 @@ func TestWriteReadBitmap(t *testing.T) {
 
 func TestWriteReadFullBitmap(t *testing.T) {
 	// create bitmap containing > 4096 bits
-	cb := NewContainerBitmapN(nil, 65536)
+	cb := NewContainerBitmapN(nil, 0)
 	for i := 0; i < bitmapN; i++ {
 		cb.bitmap()[i] = 0xffffffffffffffff
+		cb.n += 64
 	}
 	bb := NewFileBitmap()
 	bb.Containers.Put(0, cb)

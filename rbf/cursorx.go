@@ -179,12 +179,16 @@ func toContainer(l leafCell, tx *Tx) (c *roaring.Container) {
 			cloneMaybe = make([]uint64, len(bm))
 			copy(cloneMaybe, bm)
 		}
-		c = roaring.NewContainerBitmap(l.N, cloneMaybe)
+		c = roaring.NewContainerBitmap(-1, cloneMaybe)
 	case ContainerTypeBitmap:
-		c = roaring.NewContainerBitmap(l.N, toArray64(cpMaybe))
+		c = roaring.NewContainerBitmap(-1, toArray64(cpMaybe))
 	case ContainerTypeRLE:
 		c = roaring.NewContainerRun(toInterval16(cpMaybe))
 	}
+	// Note: If the "roaringparanoia" build tag isn't set, this
+	// should be optimized away entirely. Otherwise it's moderately
+	// expensive.
+	c.CheckN()
 	c.SetMapped(mapped)
 	return c
 }
