@@ -73,6 +73,8 @@ type FsckConfig struct {
 	ReplicaN         int    // -replicas
 	PilosaConfigPath string // -config
 
+	ParallelReaders int //  -readers
+
 	topo *pilosa.Topology
 }
 
@@ -84,6 +86,8 @@ func (cfg *FsckConfig) DefineFlags(fs *flag.FlagSet) {
 	fs.BoolVar(&cfg.Quiet, "q", false, "be very quiet")
 
 	fs.IntVar(&cfg.ReplicaN, "replicas", 0, "(required) manually entered replicaN; the number of replicas maintained in the cluster. Must be the same as the [cluster] 'replicas = R' entry in the pilosa.conf file for the cluster.")
+
+	fs.IntVar(&cfg.ParallelReaders, "readers", 10, "how many parallel readers to use to scan at once. 0 means do everything possible in parallel. 1 means serialize everything through a single reader. Can be adjusted to control memory consumption.")
 
 	fs.StringVar(&cfg.PilosaConfigPath, "config", "", "(required: -replicas or -config, with -config preferred) path to the pilosa.conf for the cluster (e.g. /etc/pilosa.conf)")
 
@@ -103,6 +107,12 @@ func (cfg *FsckConfig) DefineFlags(fs *flag.FlagSet) {
 
   -index index_name
         (optional) restrict to just this index. Otherwise we default to all indexes.
+
+  -readers PR
+        how many parallel readers to use to scan at once. PR==0 means do everything 
+        possible in parallel. PR==1 means serialize everything through a single reader. 
+        Adjust PR to control memory consumption if needed. As a practical limit, setting 
+        PR > 10000 will have no effect. (default is 10).
 
   -q
         be very quiet during analysis and repair
@@ -633,7 +643,7 @@ func (cfg *FsckConfig) readOneDir(dir string) (idx2frag map[string]*pilosa.Index
 
 		//vv("calling idx.ComputeTranslatorSummary(verbose, checkKeys=%v, cfg.FixCol='%v')", checkKeys, cfg.FixCol)
 
-		asum, err := idx.ComputeTranslatorSummary(verbose, checkKeys, cfg.FixCol, topo, nodeID)
+		asum, err := idx.ComputeTranslatorSummary(verbose, checkKeys, cfg.FixCol, topo, nodeID, cfg.ParallelReaders)
 		if err != nil {
 			log.Fatal(err)
 		}
