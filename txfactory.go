@@ -582,30 +582,22 @@ func (f *TxFactory) diskUsageFromFilesystem() (map[string]int64, error) {
 	if err != nil {
 		return indexSizes, errors.Wrap(err, "expanding data directory")
 	}
-	dir, err := os.Open(dirName)
-	if err != nil {
-		return indexSizes, errors.Wrap(err, "opening data directory")
-	}
-	defer dir.Close()
 
-	files, err := dir.Readdir(-1)
-	if err != nil {
-		return indexSizes, errors.Wrap(err, "reading data directory")
-	}
+	idxs := f.holder.Indexes()
 
-	// Read size on disk for each index directory.
-	for _, file := range files {
-		if !file.IsDir() {
-			continue
-		}
-		if f.IsTxDatabasePath(file.Name()) {
-			continue
-		}
-		fullName := path.Join(dirName, file.Name())
-		indexSizes[file.Name()], err = directoryUsage(fullName)
+	for _, idx := range idxs {
+		index := idx.name
+		fullName := path.Join(dirName, index)
+		roaringAndMeta, err := directoryUsage(fullName)
 		if err != nil {
-			return indexSizes, errors.Wrap(err, "getting disk usage")
+			return indexSizes, errors.Wrap(err, "getting disk usage for roaring and meta")
 		}
+		fullName = index + ".index.txstores@@@"
+		rbfOrLmdb, err := directoryUsage(fullName)
+		if err != nil {
+			return indexSizes, errors.Wrap(err, "getting disk usage for backend")
+		}
+		indexSizes[index] = roaringAndMeta + rbfOrLmdb
 	}
 
 	return indexSizes, nil
