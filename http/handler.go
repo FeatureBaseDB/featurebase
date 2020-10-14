@@ -665,32 +665,23 @@ func (h *Handler) handleGetUsage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
 		return
 	}
-	usageIndexes, usageTotal, err := h.api.Usage()
+
+	q := r.URL.Query()
+	remoteStr := q.Get("remote")
+	var remote bool
+	if remoteStr == "true" {
+		remote = true
+	}
+
+	nodeUsages, err := h.api.Usage(r.Context(), remote)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 
-	disk := diskUsage{
-		Total:   usageTotal,
-		Indexes: usageIndexes,
-	}
-
-	usage := getUsageResponse{
-		Disk: disk,
-	}
-
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(usage); err != nil {
+	if err := json.NewEncoder(w).Encode(nodeUsages); err != nil {
 		h.logger.Printf("write status response error: %s", err)
 	}
-}
-
-type getUsageResponse struct {
-	Disk diskUsage `json:"bytesOnDisk"`
-}
-type diskUsage struct {
-	Total   int64            `json:"total"`
-	Indexes map[string]int64 `json:"indexes"`
 }
 
 // handleGetStatus handles GET /status requests.

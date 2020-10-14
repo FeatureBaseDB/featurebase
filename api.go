@@ -25,8 +25,6 @@ import (
 	"io/ioutil"
 	"math"
 	"net/url"
-	"os"
-	"path"
 	"sort"
 	"strconv"
 	"strings"
@@ -793,71 +791,64 @@ func (api *API) Node() *Node {
 	return &node
 }
 
-// Usage gets the disk usage per index
-func (api *API) Usage() (map[string]int64, int64, error) {
-	indexSizes := make(map[string]int64)
-	var totalSize int64
-
-	dirName, err := expandDirName(api.server.dataDir)
-	if err != nil {
-		return indexSizes, totalSize, errors.Wrap(err, "expanding data directory")
-	}
-	dir, err := os.Open(dirName)
-	if err != nil {
-		return indexSizes, totalSize, errors.Wrap(err, "opening data directory")
-	}
-	defer dir.Close()
-
-	files, err := dir.Readdir(-1)
-	if err != nil {
-		return indexSizes, totalSize, errors.Wrap(err, "reading data directory")
-	}
-
-	for _, file := range files {
-		if !file.IsDir() {
-			continue
-		}
-		if api.holder.Txf().IsTxDatabasePath(file.Name()) {
-			continue
-		}
-		fullName := path.Join(dirName, file.Name())
-		indexSizes[file.Name()], err = diskUsage(fullName)
-		if err != nil {
-			break
-		}
-		totalSize += indexSizes[file.Name()]
-	}
-
-	return indexSizes, totalSize, nil
+// NodeUsage represents all usage measurements for one node.
+type NodeUsage struct {
+	Disk DiskUsage `json:"bytesOnDisk"`
 }
 
-func diskUsage(fname string) (int64, error) {
-	var size int64
+// DiskUsage represents the storage space used on disk by one node.
+type DiskUsage struct {
+	Capacity uint64           `json:"capacity,omitempty"`
+	TotalUse int64            `json:"totalInUse"`
+	Indexes  map[string]int64 `json:"indexes"`
+}
 
-	dir, err := os.Open(fname)
+// Usage gets the disk usage per index, in a map[nodeID]NodeUsage
+func (api *API) Usage(ctx context.Context, remote bool) (map[string]NodeUsage, error) {
+	span, _ := tracing.StartSpanFromContext(ctx, "API.Usage")
+	defer span.Finish()
+
+	nodeUsages := make(map[string]NodeUsage)
+
+	indexSizes, err := api.holder.Txf().IndexSizes()
 	if err != nil {
-		return 0, errors.Wrap(err, "opening data subdirectory")
+		return nil, errors.Wrap(err, "getting index usage")
 	}
-	defer dir.Close()
+	var totalSize int64
+	for _, s := range indexSizes {
+		totalSize += s
+	}
 
-	files, err := dir.Readdir(-1)
+	capacity, err := api.server.systemInfo.DiskCapacity(api.holder.path)
 	if err != nil {
-		return 0, errors.Wrap(err, "reading data subdirectory")
+		api.server.logger.Printf("couldn't read disk capacity: %s", err)
 	}
 
-	for _, file := range files {
-		if file.IsDir() {
-			sz, err := diskUsage(path.Join(fname, file.Name()))
-			if err != nil {
-				return 0, err
+	// Insert into result.
+	nodeUsage := NodeUsage{
+		Disk: DiskUsage{
+			Capacity: capacity,
+			TotalUse: totalSize,
+			Indexes:  indexSizes,
+		},
+	}
+	nodeUsages[api.server.nodeID] = nodeUsage
+
+	// Collect size on disk from remote nodes
+	if !remote {
+		nodes := api.cluster.Nodes()
+		for _, node := range nodes {
+			if node.ID == api.server.nodeID {
+				continue
 			}
-			size += sz
-		} else {
-			size += file.Size()
+			nodeUsage, err := api.server.defaultClient.GetNodeUsage(ctx, &node.URI)
+			if err != nil {
+				return nil, errors.Wrapf(err, "collecting disk usage from %s", node.URI)
+			}
+			nodeUsages[node.ID] = nodeUsage[node.ID]
 		}
 	}
-
-	return size, nil
+	return nodeUsages, nil
 }
 
 // RecalculateCaches forces all TopN caches to be updated.
