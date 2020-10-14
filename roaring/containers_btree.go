@@ -188,7 +188,7 @@ func (btc *bTreeContainers) Repair() {
 // (new-container, write). If write is true, the container is used to
 // replace the given container.
 func (btc *bTreeContainers) Update(key uint64, fn func(*Container, bool) (*Container, bool)) {
-	btc.tree.Put(key, fn)
+	_, _ = btc.tree.Put(key, fn)
 	btc.lastKey = ^uint64(0)
 	btc.lastContainer = nil
 }
