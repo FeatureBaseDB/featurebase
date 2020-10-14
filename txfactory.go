@@ -565,18 +565,7 @@ func (f *TxFactory) DumpAll() {
 	f.dbPerShard.DumpAll()
 }
 
-func (f *TxFactory) IndexSizes() (map[string]int64, error) {
-	switch f.types[0] {
-	case roaringTxn:
-		return f.diskUsageFromFilesystem()
-	default:
-		return nil, errors.New("Not implemented")
-	}
-
-}
-
-//
-func (f *TxFactory) diskUsageFromFilesystem() (index2bytes map[string]int64, err error) {
+func (f *TxFactory) IndexSizes() (index2bytes map[string]int64, err error) {
 	// Open storage directory.
 	index2bytes = make(map[string]int64)
 	dirName, err := expandDirName(f.holder.path)
@@ -605,6 +594,10 @@ func (f *TxFactory) diskUsageFromFilesystem() (index2bytes map[string]int64, err
 }
 
 func directoryUsage(fname string) (int64, error) {
+	if !DirExists(fname) {
+		return 0, nil
+	}
+
 	var size int64
 
 	dir, err := os.Open(fname)
