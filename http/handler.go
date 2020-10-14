@@ -685,14 +685,6 @@ func (h *Handler) handleGetUsage(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-type getUsageResponse struct {
-	Disk diskUsage `json:"bytesOnDisk"`
-}
-type diskUsage struct {
-	Total   int64            `json:"total"`
-	Indexes map[string]int64 `json:"indexes"`
-}
-
 // handleGetUsage handles GET /ui/shard-distribution requests.
 func (h *Handler) handleGetShardDistribution(w http.ResponseWriter, r *http.Request) {
 	dist := h.api.ShardDistribution(r.Context())

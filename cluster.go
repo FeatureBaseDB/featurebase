@@ -980,7 +980,7 @@ func (c *cluster) translationNodes(to *cluster) (map[string][]*translationResize
 
 // shardDistributionByIndex returns a map of [nodeID][primaryOrReplica][]uint64,
 // where the int slices are lists of shards.
-func (c *cluster) shardDistributionByIndex(index string, maxShard uint64) map[string]map[string][]uint64 {
+func (c *cluster) shardDistributionByIndex(indexName string) map[string]map[string][]uint64 {
 	dist := make(map[string]map[string][]uint64)
 
 	for _, node := range c.nodes {
@@ -990,11 +990,14 @@ func (c *cluster) shardDistributionByIndex(index string, maxShard uint64) map[st
 		dist[node.ID] = nodeDist
 	}
 
+	index := c.holder.Index(indexName)
+	available := index.AvailableShards(includeRemote).Slice()
+
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	for shard := uint64(0); shard <= maxShard; shard++ {
-		p := c.shardToShardPartition(index, shard)
+	for _, shard := range available {
+		p := c.shardToShardPartition(indexName, shard)
 		nodes := c.partitionNodes(p)
 		dist[nodes[0].ID]["primary-shards"] = append(dist[nodes[0].ID]["primary-shards"], shard)
 		for k := 1; k < len(nodes); k++ {
