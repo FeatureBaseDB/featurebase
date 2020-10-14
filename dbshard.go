@@ -320,6 +320,9 @@ func (per *DBPerShard) DeleteIndex(index string) (err error) {
 			}
 		}
 	}
+	// allow the index to be created again anew.
+	delete(per.dbh.Index, index)
+
 	return
 }
 
@@ -436,7 +439,7 @@ func (per *DBPerShard) GetDBShard(index string, shard uint64, idx *Index) (dbs *
 		if len(per.types) == 1 && per.types[0] == roaringTxn {
 			// roaring txn are nil/fake anyway. Don't freak out.
 		} else {
-			panic(fmt.Sprintf("cannot retain closed dbs across holder ReOpen dbs='%p'", dbs))
+			panic(fmt.Sprintf("cannot retain closed dbs across holder ReOpen dbs='%p'; per.types[0]='%v'; len(per.types)=%v", dbs, per.types[0], len(per.types)))
 		}
 	}
 	if !ok {

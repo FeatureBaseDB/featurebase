@@ -26,6 +26,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/glycerine/idem"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/v2/hash"
 	"github.com/pilosa/pilosa/v2/internal"
@@ -33,6 +34,7 @@ import (
 	"github.com/pilosa/pilosa/v2/stats"
 	"github.com/pilosa/pilosa/v2/testhook"
 	"github.com/pkg/errors"
+	"github.com/zeebo/blake3"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -734,6 +736,19 @@ func (idx *Index) SliceOfShards(field, view, viewPath string) (sliceOfShards []u
 
 type AllTranslatorSummary struct {
 	Sums []*TranslatorSummary
+
+	RepairNeeded bool
+}
+
+func (ats *AllTranslatorSummary) Checksum() string {
+	ats.Sort()
+	hasher := blake3.New()
+	for _, sum := range ats.Sums {
+		_, _ = hasher.Write([]byte(sum.Checksum))
+	}
+	var buf [16]byte
+	_, _ = hasher.Digest().Read(buf[0:])
+	return fmt.Sprintf("blake3-%x", buf)
 }
 
 func NewAllTranslatorSummary() *AllTranslatorSummary {
@@ -741,6 +756,7 @@ func NewAllTranslatorSummary() *AllTranslatorSummary {
 }
 func (ats *AllTranslatorSummary) Append(b *AllTranslatorSummary) {
 	ats.Sums = append(ats.Sums, b.Sums...)
+	ats.RepairNeeded = ats.RepairNeeded || b.RepairNeeded
 }
 
 func (ats *AllTranslatorSummary) Sort() {
@@ -761,57 +777,244 @@ func (ats *AllTranslatorSummary) Sort() {
 		if a.PartitionID > b.PartitionID {
 			return false
 		}
-		return a.Field < b.Field
+		if a.Field < b.Field {
+			return true
+		}
+		if a.Field > b.Field {
+			return false
+		}
+		return a.NodeID < b.NodeID
 	})
 }
 
 // sums is only guaranteed to be sorted by (index, PartitionID, field) iff err returns nil
-func (i *Index) ComputeTranslatorSummary(verbose bool) (ats *AllTranslatorSummary, err error) {
-	i.mu.RLock()
-	defer i.mu.RUnlock()
+func (idx *Index) ComputeTranslatorSummary(verbose, checkKeys, applyKeyRepairs bool, topo *Topology, nodeID string, parallelReaders int) (ats *AllTranslatorSummary, err error) {
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
 
 	ats = &AllTranslatorSummary{}
+	var atsMu sync.Mutex
 
-	fmt.Printf("\nindex: %v\n=================\n", i.name)
-	for _, fld := range i.fields {
-		sum, err := fld.translateStore.ComputeTranslatorSummary()
-		if err != nil {
-			return ats, err
-		}
-		sum.Field = fld.name
-		sum.Index = i.Name()
-		sum.Checksum = hash.Blake3sum16([]byte(fmt.Sprintf("%v/%v/%v", sum.Checksum, fld.name, i.Name())))
-
-		if verbose {
-			fmt.Printf("row blake3-%v keyN: %5v idN: %5v field: '%v'\n", sum.Checksum, sum.KeyCount, sum.IDCount, fld.name)
-		}
-		ats.Sums = append(ats.Sums, sum)
+	if verbose {
+		fmt.Printf("\n# index: %v\n# =================\n", idx.name)
 	}
 
-	fmt.Printf("====================\n")
+	jobQ := make(chan func() error, 10000)
+	var errmu sync.Mutex
 
-	for partitionID, store := range i.translateStores {
-		sum, err := store.ComputeTranslatorSummary()
-		if err != nil {
-			return ats, err
-		}
-		if sum == nil {
-			// probably one of the Noop stores
-			continue
-		}
-		sum.PartitionID = partitionID
-		sum.Index = i.Name()
-
-		sum.Checksum = hash.Blake3sum16([]byte(fmt.Sprintf("%v/%v/%v", sum.Checksum, partitionID, i.Name())))
-		if verbose {
-			fmt.Printf("col blake3-%v keyN: %10v idN: %10v paritionID: %03v \n", sum.Checksum, sum.KeyCount, sum.IDCount, partitionID)
-		}
-		ats.Sums = append(ats.Sums, sum)
+	if parallelReaders < 1 {
+		// turn it up to 11
+		parallelReaders = 10000
 	}
+
+	halters := make([]*idem.Halter, parallelReaders)
+	for j := 0; j < parallelReaders; j++ {
+		h := idem.NewHalter()
+		halters[j] = h
+	}
+	for _, h := range halters {
+		go func(h *idem.Halter) {
+			defer h.MarkDone()
+			for {
+				select {
+				case <-h.ReqStop.Chan:
+					return
+				case f, ok := <-jobQ:
+					if !ok || f == nil {
+						// channel closed, finish up
+						return
+					}
+
+					err1 := f()
+					if err1 != nil {
+						errmu.Lock()
+						if err == nil {
+							err = err1
+						}
+						errmu.Unlock()
+						// an error occurred, tell everyone to stop
+						for _, h2 := range halters {
+							h2.RequestStop()
+						}
+						return
+					}
+				}
+			}
+		}(h)
+	}
+
+floop:
+	for _, fld := range idx.fields {
+		fld := fld
+
+		fun := func() error {
+			//vv("ComputeTranslatorSummary() on fld '%v'", fld.name)
+			sum, err := fld.translateStore.ComputeTranslatorSummaryRows()
+			if err != nil {
+				return err
+			}
+			sum.Field = fld.name
+			sum.Index = idx.Name()
+			sum.Checksum = hash.Blake3sum16([]byte(fmt.Sprintf("%v/%v/%v", sum.Checksum, fld.name, idx.Name())))
+			sum.IsColKey = false
+			if verbose {
+				fmt.Printf("# row blake3-%v keyN: %5v idN: %5v field: '%v'\n", sum.Checksum, sum.KeyCount, sum.IDCount, fld.name)
+			}
+			atsMu.Lock()
+			ats.Sums = append(ats.Sums, sum)
+			atsMu.Unlock()
+			return nil
+		}
+
+		select {
+		case <-halters[0].ReqStop.Chan:
+			break floop
+		case jobQ <- fun:
+		}
+	} // end floop
+
+	if verbose {
+		fmt.Printf("# ====================\n")
+	}
+
+tloop:
+	for partitionID, store := range idx.translateStores {
+		partitionID := partitionID
+		store := store
+
+		fun2 := func() error {
+			//vv("ComputeTranslatorSummary() running on store.Path = '%v'", store.GetStorePath())
+			if checkKeys {
+				prim := topo.PrimaryNodeIndex(partitionID)
+				primID := topo.nodeIDs[prim]
+
+				// note: we fix irrespective of nodeID == primID now, so that we
+				// get a fine grain report of what maps were off.
+
+				if verbose {
+					// This is pilosa-fsck output, not regular log.
+					fmt.Printf("# doing analysis of keys on nodeID '%v', and primID '%v'\n", nodeID, primID)
+				}
+				changed, err := store.RepairKeys(topo, verbose, applyKeyRepairs)
+				if err != nil {
+					return errors.Wrap(err, "ComputeTranslatorSummary() call to store.Repair()")
+				}
+				if changed {
+					atsMu.Lock()
+					ats.RepairNeeded = true
+					atsMu.Unlock()
+				}
+			}
+
+			// key repair has to be above, because we compute the checksum below.
+
+			sum, err := store.ComputeTranslatorSummaryCols(partitionID, topo)
+			if err != nil {
+				return err
+			}
+			if sum == nil {
+				// probably one of the Noop stores from the tests.
+				return nil
+			}
+			sum.IsColKey = true
+			sum.PartitionID = partitionID
+			sum.Index = idx.Name()
+			sum.StorePath = store.GetStorePath()
+			sum.NodeID = nodeID
+			sum.IsPrimary = topo.IsPrimary(nodeID, partitionID)
+
+			replicas := topo.GetNonPrimaryReplicas(partitionID)
+			for _, replica := range replicas {
+				if nodeID == replica {
+					sum.IsReplica = true
+					break
+				}
+			}
+
+			sum.Checksum = hash.Blake3sum16([]byte(fmt.Sprintf("%v/%v/%v", sum.Checksum, partitionID, idx.Name())))
+			if verbose {
+				// This is not regular index logging. This is output of the pilosa-fsck tool.
+				// So it must be printing straight to stdout.
+				fmt.Printf("# col blake3-%v keyN: %10v idN: %10v paritionID: %03v primary: %03v\n", sum.Checksum, sum.KeyCount, sum.IDCount, partitionID, sum.PrimaryNodeIndex)
+			}
+			atsMu.Lock()
+			ats.Sums = append(ats.Sums, sum)
+			atsMu.Unlock()
+
+			return nil
+		}
+		select {
+		case <-halters[0].ReqStop.Chan:
+			break tloop
+		case jobQ <- fun2:
+		}
+	} // end tloop
+
+	close(jobQ) // tell the workers no more jobs.
+
+	// wait for everyone to finish
+	for _, h := range halters {
+		<-h.Done.Chan
+	}
+	return ats, err
+}
+
+// returned by WriteFragmentChecksums
+type IndexFragmentSummary struct {
+	Dir       string
+	NodeID    string
+	Index     string
+	IndexPath string
+	Frg       []*FragSum
+
+	RelPath2fsum map[string]*FragSum
+}
+
+func (ifs *IndexFragmentSummary) String() (s string) {
+	s = fmt.Sprintf(`&pilosa.IndexFragmentSummary{
+  Dir:    '%v'
+  NodeID: '%v'
+  Index:     '%v'
+  IndexPath: '%v'
+`, ifs.Dir, ifs.NodeID, ifs.Index, ifs.IndexPath)
+	for _, frg := range ifs.Frg {
+		s += frg.String() + "\n"
+	}
+	s += "}\n"
 	return
 }
 
-func (idx *Index) WriteFragmentChecksums(w io.Writer, showBits, showOps bool) {
+// used in IndexFragmentSummary
+type FragSum struct {
+	AbsPath string
+	RelPath string
+
+	// critically, NodeID is how pilosa-fsck figures out if this
+	// fragment should be deleted if it is on a node it should not be.
+	NodeID string
+
+	Index    string
+	Field    string
+	View     string
+	Shard    uint64
+	Hotbits  int
+	Checksum string
+	Primary  int
+
+	ScanDone bool // pilosa-fsck will set this once done to avoid repairing multiple times.
+}
+
+func (fsum *FragSum) String() (s string) {
+	return fmt.Sprintf("%#v", fsum)
+}
+
+// if verbose, then print to w.
+func (idx *Index) WriteFragmentChecksums(w io.Writer, showBits, showOps bool, topo *Topology, verbose bool) (sum *IndexFragmentSummary) {
+	sum = &IndexFragmentSummary{
+		Index:        idx.name,
+		IndexPath:    idx.path,
+		RelPath2fsum: make(map[string]*FragSum),
+	}
 	paths, err := listFilesUnderDir(idx.path, false, "", true)
 	panicOn(err)
 	index := idx.name
@@ -822,14 +1025,37 @@ func (idx *Index) WriteFragmentChecksums(w io.Writer, showBits, showOps bool) {
 			continue // ignore .meta paths
 		}
 		abspath := idx.path + sep + relpath
+		primary := topo.GetPrimaryForShardReplication(index, shard)
 
 		checksum, hotbits := RoaringFragmentChecksum(abspath, index, field, view, shard)
-		fmt.Fprintf(w, "frg blake3-%v field: '%v' view: '%v' shard: %3v hotbits: %10v\n", checksum, field, view, shard, hotbits)
+		if verbose {
+			fmt.Fprintf(w, "# frg blake3-%v field: '%v' view: '%v' shard: %3v hotbits: %10v primary:%03v\n", checksum, field, view, shard, hotbits, primary)
+		}
+		fsum := &FragSum{
+			AbsPath:  abspath,
+			RelPath:  relpath,
+			Index:    index,
+			Field:    field,
+			View:     view,
+			Shard:    shard,
+			Hotbits:  hotbits,
+			Checksum: checksum,
+			Primary:  primary,
+		}
+		sum.Frg = append(sum.Frg, fsum)
+		_, already := sum.RelPath2fsum[relpath]
+		if already {
+			panic(fmt.Sprintf("relpath '%v' was already present!?!", relpath))
+		}
+		sum.RelPath2fsum[relpath] = fsum
 		n++
 	}
 	if n == 0 {
-		fmt.Fprintf(w, "empty index '%v'", idx.path)
+		if verbose {
+			fmt.Fprintf(w, "empty index '%v'", idx.path)
+		}
 	}
+	return
 }
 
 func (idx *Index) Txf() *TxFactory {

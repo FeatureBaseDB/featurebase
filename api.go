@@ -25,6 +25,8 @@ import (
 	"io/ioutil"
 	"math"
 	"net/url"
+	"os"
+	"path"
 	"sort"
 	"strconv"
 	"strings"
@@ -376,37 +378,42 @@ func importWorker(importWork chan importJob) {
 					}
 				}
 
-				tx, finisher := j.qcx.GetTx(Txo{Write: writable, Index: j.field.idx, Shard: j.shard})
-				defer finisher(&err0)
+				if err := func() (err1 error) {
+					tx, finisher := j.qcx.GetTx(Txo{Write: writable, Index: j.field.idx, Shard: j.shard})
+					defer finisher(&err1)
 
-				var doClear bool
-				switch doAction {
-				case RequestActionOverwrite:
-					err := j.field.importRoaringOverwrite(j.ctx, tx, viewData, j.shard, viewName, j.req.Block)
-					if err != nil {
-						return errors.Wrap(err, "importing roaring as overwrite")
-					}
-				case RequestActionClear:
-					doClear = true
-					fallthrough
-				case RequestActionSet:
-					fileMagic := uint32(binary.LittleEndian.Uint16(viewData[0:2]))
-					if fileMagic == roaring.MagicNumber { // if pilosa roaring format
-						err := j.field.importRoaring(j.ctx, tx, viewData, j.shard, viewName, doClear)
+					var doClear bool
+					switch doAction {
+					case RequestActionOverwrite:
+						err := j.field.importRoaringOverwrite(j.ctx, tx, viewData, j.shard, viewName, j.req.Block)
 						if err != nil {
-							return errors.Wrap(err, "importing pilosa roaring")
+							return errors.Wrap(err, "importing roaring as overwrite")
 						}
-					} else {
-						// must make a copy of data to operate on locally on standard roaring format.
-						// field.importRoaring changes the standard roaring run format to pilosa roaring
-						data := make([]byte, len(viewData))
-						copy(data, viewData)
-						err := j.field.importRoaring(j.ctx, tx, data, j.shard, viewName, doClear)
+					case RequestActionClear:
+						doClear = true
+						fallthrough
+					case RequestActionSet:
+						fileMagic := uint32(binary.LittleEndian.Uint16(viewData[0:2]))
+						if fileMagic == roaring.MagicNumber { // if pilosa roaring format
+							err := j.field.importRoaring(j.ctx, tx, viewData, j.shard, viewName, doClear)
+							if err != nil {
+								return errors.Wrap(err, "importing pilosa roaring")
+							}
+						} else {
+							// must make a copy of data to operate on locally on standard roaring format.
+							// field.importRoaring changes the standard roaring run format to pilosa roaring
+							data := make([]byte, len(viewData))
+							copy(data, viewData)
+							err := j.field.importRoaring(j.ctx, tx, data, j.shard, viewName, doClear)
 
-						if err != nil {
-							return errors.Wrap(err, "importing standard roaring")
+							if err != nil {
+								return errors.Wrap(err, "importing standard roaring")
+							}
 						}
 					}
+					return nil
+				}(); err != nil {
+					return err
 				}
 			}
 			return nil
@@ -774,10 +781,83 @@ func (api *API) Hosts(ctx context.Context) []*Node {
 	return api.cluster.Nodes()
 }
 
+func (api *API) HostStates(ctx context.Context) map[string]string {
+	span, _ := tracing.StartSpanFromContext(ctx, "API.HostStates")
+	defer span.Finish()
+	return api.cluster.AllNodeStates()
+}
+
 // Node gets the ID, URI and coordinator status for this particular node.
 func (api *API) Node() *Node {
 	node := api.server.node()
 	return &node
+}
+
+// Usage gets the disk usage per index
+func (api *API) Usage() (map[string]int64, int64, error) {
+	indexSizes := make(map[string]int64)
+	var totalSize int64
+
+	dirName, err := expandDirName(api.server.dataDir)
+	if err != nil {
+		return indexSizes, totalSize, errors.Wrap(err, "expanding data directory")
+	}
+	dir, err := os.Open(dirName)
+	if err != nil {
+		return indexSizes, totalSize, errors.Wrap(err, "opening data directory")
+	}
+	defer dir.Close()
+
+	files, err := dir.Readdir(-1)
+	if err != nil {
+		return indexSizes, totalSize, errors.Wrap(err, "reading data directory")
+	}
+
+	for _, file := range files {
+		if !file.IsDir() {
+			continue
+		}
+		if api.holder.Txf().IsTxDatabasePath(file.Name()) {
+			continue
+		}
+		fullName := path.Join(dirName, file.Name())
+		indexSizes[file.Name()], err = diskUsage(fullName)
+		if err != nil {
+			break
+		}
+		totalSize += indexSizes[file.Name()]
+	}
+
+	return indexSizes, totalSize, nil
+}
+
+func diskUsage(fname string) (int64, error) {
+	var size int64
+
+	dir, err := os.Open(fname)
+	if err != nil {
+		return 0, errors.Wrap(err, "opening data subdirectory")
+	}
+	defer dir.Close()
+
+	files, err := dir.Readdir(-1)
+	if err != nil {
+		return 0, errors.Wrap(err, "reading data subdirectory")
+	}
+
+	for _, file := range files {
+		if file.IsDir() {
+			sz, err := diskUsage(path.Join(fname, file.Name()))
+			if err != nil {
+				return 0, err
+			}
+			size += sz
+		} else {
+			size += file.Size()
+		}
+	}
+
+	return size, nil
 }
 
 // RecalculateCaches forces all TopN caches to be updated.
@@ -1667,6 +1747,14 @@ func (api *API) State() string {
 	return api.cluster.State()
 }
 
+// ClusterName returns the cluster name.
+func (api *API) ClusterName() string {
+	if api.cluster.Name == "" {
+		return api.cluster.id
+	}
+	return api.cluster.Name
+}
+
 // Version returns the Pilosa version.
 func (api *API) Version() string {
 	return strings.TrimPrefix(Version, "v")
@@ -1692,6 +1780,7 @@ func (api *API) Info() serverInfo {
 		CPUType:          si.CPUModel(),
 		Memory:           mem,
 		TxSrc:            api.holder.txf.TxType(),
+		ReplicaN:         api.cluster.ReplicaN,
 	}
 }
 
@@ -1938,6 +2027,7 @@ func (api *API) TranslateFieldDB(ctx context.Context, indexName, fieldName strin
 
 type serverInfo struct {
 	ShardWidth       uint64 `json:"shardWidth"`
+	ReplicaN         int    `json:"replicaN"`
 	Memory           uint64 `json:"memory"`
 	CPUType          string `json:"cpuType"`
 	CPUPhysicalCores int    `json:"cpuPhysicalCores"`

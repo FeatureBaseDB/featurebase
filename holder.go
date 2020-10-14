@@ -1218,7 +1218,7 @@ func (h *Holder) setFileLimit() {
 	}
 }
 
-func (h *Holder) loadNodeID() (string, error) {
+func (h *Holder) LoadNodeID() (string, error) {
 	idPath := path.Join(h.path, ".id")
 	h.Logger.Printf("load NodeID: %s", idPath)
 	if err := os.MkdirAll(h.path, 0777); err != nil {
@@ -1227,7 +1227,9 @@ func (h *Holder) loadNodeID() (string, error) {
 
 	nodeIDBytes, err := ioutil.ReadFile(idPath)
 	if err == nil {
-		return strings.TrimSpace(string(nodeIDBytes)), nil
+		nodeid := strings.TrimSpace(string(nodeIDBytes))
+		h.Logger.Printf("I am NodeID: %s", nodeid)
+		return nodeid, nil
 	}
 	if !os.IsNotExist(err) {
 		return "", errors.Wrap(err, "reading file")
@@ -1237,6 +1239,7 @@ func (h *Holder) loadNodeID() (string, error) {
 	if err != nil {
 		return "", errors.Wrap(err, "writing file")
 	}
+	h.Logger.Printf("I am NodeID: %s", nodeID)
 	return nodeID, nil
 }
 
@@ -1274,6 +1277,8 @@ type holderSyncer struct {
 
 	// Translation sync handling.
 	readers []TranslateEntryReader
+
+	syncers errgroup.Group
 
 	// Stats
 	Stats stats.StatsClient
@@ -1569,6 +1574,7 @@ func (s *holderSyncer) stopTranslationSync() error {
 			return rd.Close()
 		})
 	}
+	g.Go(s.syncers.Wait)
 	return g.Wait()
 }
 
@@ -1658,7 +1664,11 @@ func (s *holderSyncer) initializeIndexTranslateReplication() error {
 		}
 		s.readers = append(s.readers, rd)
 
-		go func() { defer rd.Close(); s.readIndexTranslateReader(rd) }()
+		s.syncers.Go(func() error {
+			defer rd.Close()
+			s.readIndexTranslateReader(rd)
+			return nil
+		})
 	}
 
 	return nil
@@ -1697,8 +1707,11 @@ func (s *holderSyncer) initializeFieldTranslateReplication() error {
 	}
 	s.readers = append(s.readers, rd)
 
-	go func() { defer rd.Close(); s.readFieldTranslateReader(rd) }()
-
+	s.syncers.Go(func() error {
+		defer rd.Close()
+		s.readFieldTranslateReader(rd)
+		return nil
+	})
 	return nil
 }
 
@@ -1718,7 +1731,7 @@ func (s *holderSyncer) readIndexTranslateReader(rd TranslateEntryReader) {
 		}
 
 		// Apply replication to store.
-		store := idx.TranslateStore(s.Cluster.keyPartition(entry.Index, entry.Key))
+		store := idx.TranslateStore(s.Cluster.Topology.KeyPartition(entry.Index, entry.Key))
 		if err := store.ForceSet(entry.ID, entry.Key); err != nil {
 			s.Holder.Logger.Printf("cannot force set index translation data: %d=%q", entry.ID, entry.Key)
 			return

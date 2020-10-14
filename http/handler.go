@@ -381,8 +381,6 @@ func newRouter(handler *Handler) http.Handler {
 	router.HandleFunc("/schema", handler.handleGetSchema).Methods("GET").Name("GetSchema")
 	router.HandleFunc("/schema", handler.handlePostSchema).Methods("POST").Name("PostSchema")
 	router.HandleFunc("/status", handler.handleGetStatus).Methods("GET").Name("GetStatus")
-	router.HandleFunc("/transaction", handler.handleGetTransactionList).Methods("GET").Name("GetTransactionList")
-	router.HandleFunc("/transaction/", handler.handleGetTransactionList).Methods("GET").Name("GetTransactionList")
 	router.HandleFunc("/transaction", handler.handlePostTransaction).Methods("POST").Name("PostTransaction")
 	router.HandleFunc("/transaction/", handler.handlePostTransaction).Methods("POST").Name("PostTransaction")
 	router.HandleFunc("/transaction/{id}", handler.handleGetTransaction).Methods("GET").Name("GetTransaction")
@@ -391,6 +389,10 @@ func newRouter(handler *Handler) http.Handler {
 	router.HandleFunc("/transactions", handler.handleGetTransactions).Methods("GET").Name("GetTransactions")
 	router.HandleFunc("/queries", handler.handleGetActiveQueries).Methods("GET").Name("GetActiveQueries")
 	router.HandleFunc("/version", handler.handleGetVersion).Methods("GET").Name("GetVersion")
+
+	router.HandleFunc("/ui/usage", handler.handleGetUsage).Methods("GET").Name("GetUsage")
+	router.HandleFunc("/ui/transaction", handler.handleGetTransactionList).Methods("GET").Name("GetTransactionList")
+	router.HandleFunc("/ui/transaction/", handler.handleGetTransactionList).Methods("GET").Name("GetTransactionList")
 
 	// /internal endpoints are for internal use only; they may change at any time.
 	// DO NOT rely on these for external applications!
@@ -657,6 +659,40 @@ func (h *Handler) handlePostSchema(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// handleGetUsage handles GET /ui/usage requests.
+func (h *Handler) handleGetUsage(w http.ResponseWriter, r *http.Request) {
+	if !validHeaderAcceptJSON(r.Header) {
+		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
+		return
+	}
+	usageIndexes, usageTotal, err := h.api.Usage()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+
+	disk := diskUsage{
+		Total:   usageTotal,
+		Indexes: usageIndexes,
+	}
+
+	usage := getUsageResponse{
+		Disk: disk,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(usage); err != nil {
+		h.logger.Printf("write status response error: %s", err)
+	}
+}
+
+type getUsageResponse struct {
+	Disk diskUsage `json:"bytesOnDisk"`
+}
+type diskUsage struct {
+	Total   int64            `json:"total"`
+	Indexes map[string]int64 `json:"indexes"`
+}
+
 // handleGetStatus handles GET /status requests.
 func (h *Handler) handleGetStatus(w http.ResponseWriter, r *http.Request) {
 	if !validHeaderAcceptJSON(r.Header) {
@@ -664,9 +700,10 @@ func (h *Handler) handleGetStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	status := getStatusResponse{
-		State:   h.api.State(),
-		Nodes:   h.api.Hosts(r.Context()),
-		LocalID: h.api.Node().ID,
+		State:       h.api.State(),
+		Nodes:       h.api.Hosts(r.Context()),
+		LocalID:     h.api.Node().ID,
+		ClusterName: h.api.ClusterName(),
 	}
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(status); err != nil {
@@ -722,9 +759,10 @@ type getSchemaResponse struct {
 }
 
 type getStatusResponse struct {
-	State   string         `json:"state"`
-	Nodes   []*pilosa.Node `json:"nodes"`
-	LocalID string         `json:"localID"`
+	State       string         `json:"state"`
+	Nodes       []*pilosa.Node `json:"nodes"`
+	LocalID     string         `json:"localID"`
+	ClusterName string         `json:"clusterName"`
 }
 
 func hash(s string) string {

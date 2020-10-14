@@ -218,8 +218,6 @@ func TestTx_Add_Quick(t *testing.T) {
 		t.Skip("-short enabled, skipping")
 	} else if is32Bit() {
 		t.Skip("32-bit build, skipping quick check tests")
-	} else if rbf.RaceEnabled {
-		t.Skip("race detection enabled, skipping")
 	}
 
 	QuickCheck(t, func(t *testing.T, rand *rand.Rand) {
@@ -257,8 +255,6 @@ func TestTx_AddRemove_Quick(t *testing.T) {
 		t.Skip("-short enabled, skipping")
 	} else if is32Bit() {
 		t.Skip("32-bit build, skipping quick check tests")
-	} else if rbf.RaceEnabled {
-		t.Skip("race detection enabled, skipping")
 	}
 
 	QuickCheck(t, func(t *testing.T, rand *rand.Rand) {

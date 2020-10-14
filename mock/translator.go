@@ -37,7 +37,10 @@ type TranslateStore struct {
 	EntryReaderFunc   func(ctx context.Context, offset uint64) (pilosa.TranslateEntryReader, error)
 }
 
-func (s *TranslateStore) ComputeTranslatorSummary() (sum *pilosa.TranslatorSummary, err error) {
+func (s *TranslateStore) ComputeTranslatorSummaryRows() (sum *pilosa.TranslatorSummary, err error) {
+	return
+}
+func (s *TranslateStore) ComputeTranslatorSummaryCols(partitionID int, topo *pilosa.Topology) (sum *pilosa.TranslatorSummary, err error) {
 	return
 }
 
@@ -93,6 +96,14 @@ func (s *TranslateStore) ReadFrom(r io.Reader) (int64, error) {
 	return 0, nil
 }
 
+func (s *TranslateStore) RepairKeys(topo *pilosa.Topology, verbose, applyKeyRepairs bool) (changed bool, err error) {
+	return
+}
+
+func (s *TranslateStore) GetStorePath() string {
+	return ""
+}
+
 var _ pilosa.TranslateEntryReader = (*TranslateEntryReader)(nil)
 
 type TranslateEntryReader struct {
@@ -106,4 +117,11 @@ func (r *TranslateEntryReader) Close() error {
 
 func (r *TranslateEntryReader) ReadEntry(entry *pilosa.TranslateEntry) error {
 	return r.ReadEntryFunc(entry)
+}
+
+func (s *TranslateStore) KeyWalker(walk func(key string, col uint64)) error {
+	panic("TODO")
+}
+func (s *TranslateStore) IDWalker(walk func(key string, col uint64)) error {
+	panic("TODO")
 }

@@ -248,7 +248,7 @@ func newCluster(tb testing.TB, size int, opts ...[]server.CommandOption) (*Clust
 			commandOpts = opts[i%len(opts)]
 		}
 		m := NewCommandNode(tb, i == 0, commandOpts...)
-		err := ioutil.WriteFile(path.Join(m.Config.DataDir, ".id"), []byte(name+"_"+strconv.Itoa(i)), 0600)
+		err := ioutil.WriteFile(path.Join(m.Config.DataDir, ".id"), []byte(name+"__"+strconv.Itoa(i)), 0600)
 		if err != nil {
 			return nil, errors.Wrap(err, "writing node id")
 		}

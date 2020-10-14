@@ -41,11 +41,13 @@ const (
 type DB struct {
 	data        []byte           // mmap data
 	file        *os.File         // file descriptor
-	segments    []*WALSegment    // write-ahead log
 	rootRecords []*RootRecord    // cached root records
 	pageMap     *immutable.Map   // pgno-to-WALID mapping
 	txs         map[*Tx]struct{} // active transactions
 	opened      bool             // true if open
+
+	wcache   []byte       // wal write cache
+	segments []WALSegment // write-ahead log
 
 	mu     sync.RWMutex // general mutex
 	rwmu   sync.Mutex   // mutex for restricting single writer
@@ -71,6 +73,7 @@ func NewDB(path string) *DB {
 	db := &DB{
 		txs:     make(map[*Tx]struct{}),
 		pageMap: immutable.NewMap(&uint32Hasher{}),
+		wcache:  make([]byte, MaxWALSegmentFileSize+PageSize),
 		Path:    path,
 		MaxSize: DefaultMaxSize,
 	}
@@ -84,12 +87,10 @@ func (db *DB) DataPath() string {
 
 // WALPath returns the path to the WAL directory.
 func (db *DB) WALPath() string {
-
 	return filepath.Join(db.Path, "wal")
 }
 
 func CreateDirIfNotExist(path string) {
-
 	dir := filepath.Dir(path)
 	if _, err := os.Stat(dir); os.IsNotExist(err) {
 		err = os.MkdirAll(dir, 0755)
@@ -99,10 +100,16 @@ func CreateDirIfNotExist(path string) {
 	}
 }
 
+// TxN returns the number of active transactions.
+func (db *DB) TxN() int {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+	return len(db.txs)
+}
+
 // Open opens a database with the file specified in Path.
 // Creates a new file if one does not already exist.
 func (db *DB) Open() (err error) {
-
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
@@ -143,7 +150,7 @@ func (db *DB) Open() (err error) {
 	// Open write-ahead log & checkpoint to the end since no transactions are open.
 	if err := db.openWALSegments(); err != nil {
 		return fmt.Errorf("wal open: %w", err)
-	} else if err := db.checkpoint(true); err != nil {
+	} else if err := db.checkpoint(true, &nopLocker{}); err != nil {
 		return fmt.Errorf("checkpoint: %w", err)
 	}
 
@@ -171,27 +178,66 @@ func (db *DB) openWALSegments() error {
 	}
 
 	// Truncate everything after the last successful meta page.
-	if walID, err := db.findLastWALMetaPage(); err != nil {
+	if walID, err := findLastWALMetaPage(db.segments); err != nil {
 		return err
-	} else if err := db.truncateWALAfter(walID); err != nil {
+	} else if db.segments, err = truncateWALAfter(db.segments, walID); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-// checkpoint copies pages from WAL segments into the main DB file. This can
+// updateWALSegment updates or adds a segment.
+func (db *DB) updateWALSegment(s WALSegment) {
+	segments := make([]WALSegment, len(db.segments), len(db.segments)+1)
+	copy(segments, db.segments)
+
+	// Find the matching segment using the path.
+	segment := walSegmentByPath(segments, s.Path)
+
+	// Update existing segment if it already exists.
+	// Otherwise append segment to the end.
+	if segment != nil {
+		*segment = s
+	} else {
+		assert(len(segments) == 0 || segments[len(segments)-1].MinWALID < s.MinWALID)
+		segments = append(segments, s)
+	}
+
+	// Replace DB segment list.
+	db.segments = segments
+}
+
+// Checkpoint copies pages from WAL segments into the main DB file. This can
 // only copy pages that aren't in use by an active transaction. The page map
 // is rebuilt as well for all WAL pages still in use.
 //
 // If exclusive is true, all WAL writes are flushed to disk.
-func (db *DB) checkpoint(exclusive bool) error {
-	if !db.opened {
+func (db *DB) Checkpoint() error {
+	return db.checkpoint(false, &db.mu)
+}
+
+// checkpoint moves WAL segments to the main DB file.
+//
+// Note that mu should db.mu when called through DB.Checkpoint() but it
+// can be &nopLocker if called under lock. The external API will be used
+// to periodically checkpoint outside of a transaction and the locking
+// must be used only in the beginning (to obtain the segment list) and at
+// the end (when removing old segments from the list). If the entire function
+// were to obtain a lock then it would block all new read & write transactions.
+func (db *DB) checkpoint(exclusive bool, mu sync.Locker) error {
+	// Obtain a snapshot of WAL segments at the start.
+	mu.Lock()
+	opened := db.opened
+	segments := db.segments
+	mu.Unlock()
+
+	if !opened {
 		return nil
 	}
 
 	// Determine last checkpointed WAL ID.
-	page, err := db.readPage(nil, 0)
+	page, err := db.readDBPage(0)
 	if err != nil {
 		return err
 	}
@@ -206,7 +252,7 @@ func (db *DB) checkpoint(exclusive bool) error {
 	pageMap := immutable.NewMap(&uint32Hasher{})
 	for {
 		// Determine last page of transaction.
-		metaWALID, err := db.findNextWALMetaPage(walID)
+		metaWALID, err := findNextWALMetaPage(segments, walID)
 		if err == io.EOF {
 			break
 		} else if err != nil {
@@ -215,9 +261,9 @@ func (db *DB) checkpoint(exclusive bool) error {
 
 		// Loop over pages in the transaction.
 		for ; walID <= metaWALID; walID++ {
-			canCheckpoint := exclusive || minActiveWALID == 0 || walID <= minActiveWALID
+			canCheckpoint := exclusive || minActiveWALID == 0 || walID < minActiveWALID
 
-			page, err := db.readWALPage(walID)
+			page, err := readWALPage(segments, walID)
 			if err != nil {
 				return err
 			}
@@ -242,13 +288,13 @@ func (db *DB) checkpoint(exclusive bool) error {
 			// Ensure we actually read the bitmap data in when we checkpoint.
 			// NOTE: The walID variable is incremented above in the pgno check.
 			if isBitmapHeader {
-				if page, err = db.readWALPage(walID); err != nil {
+				if page, err = readWALPage(segments, walID); err != nil {
 					return err
 				}
 			}
 
 			// Write page data into main db file.
-			if err := db.writePage(pgno, page); err != nil {
+			if err := db.writeDBPage(pgno, page); err != nil {
 				return err
 			}
 
@@ -259,98 +305,64 @@ func (db *DB) checkpoint(exclusive bool) error {
 		}
 	}
 
+	// Ensure WAL pages are fully copied & synced to DB file.
+	if err := fsync(db.file); err != nil {
+		return fmt.Errorf("db file sync: %w", err)
+	}
+
 	// Remove WAL segments that have been checkpointed.
 	if maxCheckpointedWALID != 0 {
-		for len(db.segments) > 0 {
-			segment := db.segments[0]
+		for _, segment := range segments {
 			if segment.MaxWALID() > maxCheckpointedWALID {
 				break
 			}
 
-			segpath := segment.Path()
-			if err := segment.Close(); err != nil {
-				return err
-			} else if err := os.Remove(segpath); err != nil {
+			if err := func() error {
+				mu.Lock()
+				defer mu.Unlock()
+				return db.removeWALSegment(segment.Path)
+			}(); err != nil {
 				return err
 			}
-			db.segments, db.segments[0] = db.segments[1:], nil
 		}
 	}
 
 	// Ensure all segments are flushed and there is no remapped pages.
 	if exclusive {
+		mu.Lock()
 		assert(len(db.segments) == 0)
 		assert(pageMap.Len() == 0)
+		mu.Unlock()
 	}
 
 	db.pageMap = pageMap
 	return nil
 }
 
-// truncateWALAfter removes all pages in the WAL after walID.
-func (db *DB) truncateWALAfter(walID int64) error {
-	for i := len(db.segments) - 1; i >= 0; i-- {
-		segment := db.segments[i]
-		if segment.MaxWALID() <= walID {
-			break
-		}
-
-		// Drop entire segment if all pages are after WAL ID.
-		if walID < segment.MinWALID() {
+// removeWALSegment closes and deletes the segment with the given path.
+//
+// The DB's segment list is entirely replaced so that transactions with
+// a reference to the old list can continue to use it without a lock.
+func (db *DB) removeWALSegment(path string) error {
+	newSegments := make([]WALSegment, 0, len(db.segments))
+	for _, segment := range db.segments {
+		// Close and remove if path matches.
+		if segment.Path == path {
 			if err := segment.Close(); err != nil {
 				return err
-			} else if err := os.Remove(segment.Path()); err != nil {
+			} else if err := os.Remove(segment.Path); err != nil {
 				return err
 			}
-			db.segments, db.segments[i] = db.segments[:len(db.segments)-1], nil
 			continue
 		}
 
-		// If we only remove some of the WAL pages then truncate and exit
-		// since segments before this will retain all their pages.
-		return segment.TruncateAfter(walID)
+		// Otherwise append to new slice of segments.
+		newSegments = append(newSegments, segment)
 	}
+
+	// Replace entire slice of segments.
+	db.segments = newSegments
 	return nil
-}
-
-func (db *DB) findNextWALMetaPage(walID int64) (metaWALID int64, err error) {
-	maxWALID := db.maxWALID()
-
-	for ; walID <= maxWALID; walID++ {
-		// Read page data from WAL and return if it is a meta page.
-		page, err := db.readWALPage(walID)
-		if err != nil {
-			return walID, err
-		} else if IsMetaPage(page) {
-			return walID, nil
-		}
-
-		// Skip over next page if this is a bitmap header.
-		if IsBitmapHeader(page) {
-			walID++
-		}
-	}
-
-	return -1, io.EOF
-}
-
-func (db *DB) findLastWALMetaPage() (walID int64, err error) {
-	if len(db.segments) == 0 {
-		return 0, nil
-	}
-
-	var maxMetaWALID int64
-	maxWALID := db.maxWALID()
-	for walID := db.minWALID(); walID <= maxWALID; walID++ {
-		if page, err := db.readWALPage(walID); err != nil {
-			return walID, err
-		} else if IsBitmapHeader(page) {
-			walID++ // skip next page for bitmap headers
-		} else if IsMetaPage(page) {
-			maxMetaWALID = walID // save max meta WAL ID
-		}
-	}
-	return maxMetaWALID, nil
 }
 
 // minActiveWALID returns the lowest WAL ID in use by any active transaction.
@@ -365,147 +377,8 @@ func (db *DB) minActiveWALID() int64 {
 	return walID
 }
 
-// ActiveWALSegment returns the most recent WAL segment.
-func (db *DB) ActiveWALSegment() *WALSegment {
-	db.mu.RLock()
-	defer db.mu.RUnlock()
-	return db.activeWALSegment()
-}
-
-func (db *DB) activeWALSegment() *WALSegment {
-	if len(db.segments) == 0 {
-		return nil
-	}
-	return db.segments[len(db.segments)-1]
-}
-
-// MinWALID returns the lowest WAL ID available in the WAL.
-func (db *DB) MinWALID() int64 {
-	db.mu.RLock()
-	defer db.mu.RUnlock()
-	return db.minWALID()
-}
-
-func (db *DB) minWALID() int64 {
-	if len(db.segments) == 0 {
-		return 0
-	}
-	return db.segments[0].MinWALID()
-}
-
-// MaxWALID returns the highest WAL ID available in the WAL.
-func (db *DB) MaxWALID() int64 {
-	db.mu.RLock()
-	defer db.mu.RUnlock()
-	return db.maxWALID()
-}
-
-func (db *DB) maxWALID() int64 {
-
-	if len(db.segments) == 0 {
-		return 0
-	}
-	s := db.segments[len(db.segments)-1]
-	return s.MaxWALID()
-}
-
-// WALPageN returns the number of pages across all segments.
-func (db *DB) WALPageN() int64 {
-	db.mu.RLock()
-	defer db.mu.RUnlock()
-
-	var n int64
-	for _, s := range db.segments {
-		n += int64(s.PageN())
-	}
-	return n
-}
-
-// SyncWAL flushes the active segment to disk.
-func (db *DB) SyncWAL() error {
-	if s := db.ActiveWALSegment(); s != nil {
-		return s.Sync()
-	}
-	return nil
-}
-
-// readWALPage reads a single page at the given WAL ID.
-func (db *DB) readWALPage(walID int64) ([]byte, error) {
-	// TODO(BBJ): Binary search for segment.
-	for _, s := range db.segments {
-		if walID >= s.MinWALID() && walID <= s.MaxWALID() {
-			return s.ReadWALPage(walID)
-		}
-	}
-	return nil, fmt.Errorf("cannot find segment containing WAL page: %d", walID)
-}
-
-func (db *DB) writeWALPage(page []byte, isMeta bool) (walID int64, err error) {
-	if err := db.ensureWritableWALSegment(); err != nil {
-		return 0, err
-	}
-	return db.activeWALSegment().WriteWALPage(page, isMeta)
-}
-
-func (db *DB) writeBitmapPage(pgno uint32, page []byte) (walID int64, err error) {
-
-	if err := db.ensureWritableWALSegment(); err != nil {
-		return 0, err
-	}
-
-	// Write header page for next bitmap page.
-	buf := make([]byte, PageSize)
-	writePageNo(buf[:], pgno)
-	writeFlags(buf[:], PageTypeBitmapHeader)
-	// TODO(BBJ): Write checksum.
-	if _, err := db.activeWALSegment().WriteWALPage(buf, false); err != nil {
-		return 0, fmt.Errorf("write bitmap header: %w", err)
-	}
-
-	// Write the bitmap page and return its WALID.
-	return db.activeWALSegment().WriteWALPage(page, false)
-}
-
-func (db *DB) ensureWritableWALSegment() error {
-	if s := db.activeWALSegment(); s != nil && s.Size() < MaxWALSegmentFileSize {
-		return nil
-	}
-	return db.addWALSegment()
-}
-
-// addWALSegment appends a new, writable segment and closing an existing segments for write.
-func (db *DB) addWALSegment() error {
-
-	// If we have a current active WAL segment then close it and start the
-	// next segment from the next WAL ID. If there is no existing WAL segments,
-	// read the last checkpointed WAL ID from the DB and start after that.
-	var base int64
-	if s := db.activeWALSegment(); s != nil {
-		base = s.MaxWALID() + 1
-		if err := s.CloseForWrite(); err != nil {
-			return err
-		}
-	} else {
-		page, err := db.readPage(db.pageMap, 0)
-		if err != nil {
-			return err
-		}
-		base = readMetaWALID(page) + 1
-	}
-
-	// Create new segment file.
-	s := NewWALSegment(filepath.Join(db.WALPath(), FormatWALSegmentPath(base)))
-	if err := s.Open(); err != nil {
-		return fmt.Errorf("add wal segment: %w", err)
-	}
-	db.segments = append(db.segments, s)
-
-	return nil
-}
-
 // Close closes the database.
 func (db *DB) Close() (err error) {
-
 	// TODO(bbj): Add wait group to hang until last Tx is complete.
 
 	// Wait for writer lock.
@@ -542,12 +415,12 @@ func (db *DB) Close() (err error) {
 
 // closeWALSegments closes the WAL and all its segments.
 func (db *DB) closeWALSegments() (err error) {
-
 	for _, s := range db.segments {
 		if e := s.Close(); e != nil && err == nil {
 			err = e
 		}
 	}
+	db.segments = nil
 	return err
 }
 
@@ -613,7 +486,6 @@ func (db *DB) HasData(requireOneHotBit bool) (hasAnyRecords bool, err error) {
 
 // Size returns the size of the database & WAL, in bytes.
 func (db *DB) Size() (int64, error) {
-
 	db.mu.RLock()
 	defer db.mu.RUnlock()
 
@@ -621,38 +493,27 @@ func (db *DB) Size() (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	return db.walSize() + fi.Size(), nil
+	return walSize(db.segments) + fi.Size(), nil
 }
 
 // WALSize returns the size of all WAL segments, in bytes.
 func (db *DB) WALSize() int64 {
-
 	db.mu.RLock()
 	defer db.mu.RUnlock()
-	return db.walSize()
-}
-
-func (db *DB) walSize() int64 {
-
-	var sz int64
-	for _, s := range db.segments {
-		sz += s.Size()
-	}
-	return sz
+	return walSize(db.segments)
 }
 
 // WALSegments returns the WAL segments currently on the DB.
-// This should only be used for debugging & testing purposes.
-func (db *DB) WALSegments() []*WALSegment {
-
+func (db *DB) WALSegments() []WALSegment {
 	db.mu.RLock()
 	defer db.mu.RUnlock()
-	return db.segments
+	other := make([]WALSegment, len(db.segments))
+	copy(other, db.segments)
+	return other
 }
 
 // init initializes a new database file.
 func (db *DB) init() error {
-
 	if err := db.initMetaPage(); err != nil {
 		return fmt.Errorf("meta: %w", err)
 	} else if err := db.initRootRecordPage(); err != nil {
@@ -714,6 +575,10 @@ func (db *DB) BeginWithExclusiveLock() (_ *Tx, err error) {
 
 func (db *DB) begin(writable, exclusive bool) (_ *Tx, err error) {
 	if exclusive {
+		assert(writable) // exclusive transactions must be writable
+	}
+
+	if exclusive {
 		db.exclmu.Lock()
 	} else {
 		db.exclmu.RLock()
@@ -749,7 +614,7 @@ func (db *DB) begin(writable, exclusive bool) (_ *Tx, err error) {
 	// Flush all WAL writes to disk before an exclusive writer so that we can
 	// work directly with the on-disk database.
 	if exclusive {
-		if err := db.checkpoint(true); err != nil {
+		if err := db.checkpoint(true, &nopLocker{}); err != nil {
 			cleanup()
 			return nil, err
 		}
@@ -762,10 +627,21 @@ func (db *DB) begin(writable, exclusive bool) (_ *Tx, err error) {
 		writable:    writable,
 		exclusive:   exclusive,
 	}
+	if writable {
+		tx.wcache = db.wcache[:0]
+	}
+
+	// Copy list of WAL segments so they can be altered by the tx.
+	// Add last segment to the list of segments that will be updated/added.
+	if len(db.segments) != 0 {
+		tx.segments = make([]WALSegment, len(db.segments))
+		copy(tx.segments, db.segments)
+		tx.updatedSegmentPaths = []string{tx.segments[len(tx.segments)-1].Path}
+	}
 
 	// Copy meta page into transaction's buffer.
 	// This page is only written at the end of a dirty transaction.
-	page, err := db.readPage(db.pageMap, 0)
+	page, err := db.readMetaPage()
 	if err != nil {
 		tx.Rollback()
 		return nil, err
@@ -802,8 +678,8 @@ func (db *DB) removeTx(tx *Tx) error {
 	// Write pages from WAL to DB.
 	// TODO(bbj): Move this to an async goroutine.
 	if tx.writable {
-		if err := db.checkpoint(false); err != nil {
-			return err
+		if err := db.checkpoint(false, &nopLocker{}); err != nil {
+			return fmt.Errorf("checkpoint: %w", err)
 		}
 	}
 
@@ -824,21 +700,25 @@ func (db *DB) Check() error {
 	return tx.Check()
 }
 
-// writePage writes a page to the data file.
-func (db *DB) writePage(pgno uint32, page []byte) error {
+// writeDBPage writes a page to the data file.
+func (db *DB) writeDBPage(pgno uint32, page []byte) error {
 	_, err := db.file.WriteAt(page, int64(pgno)*PageSize)
 	return err
 }
 
-func (db *DB) readPage(pageMap *immutable.Map, pgno uint32) ([]byte, error) {
-	// Check if page is currently in WAL.
-	if pageMap != nil {
-		if walID, ok := pageMap.Get(pgno); ok {
-			return db.readWALPage(walID.(int64))
-		}
-	}
-
-	// Otherwise read from the data file.
+func (db *DB) readDBPage(pgno uint32) ([]byte, error) {
 	offset := int64(pgno) * PageSize
 	return db.data[offset : offset+PageSize], nil
 }
+
+func (db *DB) readMetaPage() ([]byte, error) {
+	if walID, ok := db.pageMap.Get(uint32(0)); ok {
+		return readWALPage(db.segments, walID.(int64))
+	}
+	return db.readDBPage(0)
+}
+
+type nopLocker struct{}
+
+func (*nopLocker) Lock()   {}
+func (*nopLocker) Unlock() {}

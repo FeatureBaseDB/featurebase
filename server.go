@@ -269,6 +269,14 @@ func OptServerClusterDisabled(disabled bool, hosts []string) ServerOption {
 	}
 }
 
+// OptServerClusterName sets the human-readable cluster name.
+func OptServerClusterName(name string) ServerOption {
+	return func(s *Server) error {
+		s.cluster.Name = name
+		return nil
+	}
+}
+
 // OptServerSerializer is a functional option on Server
 // used to set the serializer.
 func OptServerSerializer(ser Serializer) ServerOption {
@@ -534,10 +542,12 @@ func (s *Server) Close() error {
 	s.wg.Wait()
 
 	var errh error
+	var errhs error
 	var errc error
 	if s.cluster != nil {
 		errc = s.cluster.close()
 	}
+	errhs = s.syncer.stopTranslationSync()
 	if s.holder != nil {
 		errh = s.holder.Close()
 	}
@@ -553,6 +563,9 @@ func (s *Server) Close() error {
 	if errh != nil {
 		return errors.Wrap(errh, "closing holder")
 	}
+	if errhs != nil {
+		return errors.Wrap(errhs, "terminating holder translation sync")
+	}
 	if errc != nil {
 		return errors.Wrap(errc, "closing cluster")
 	}
@@ -566,7 +579,7 @@ func (s *Server) loadNodeID() string {
 	if s.nodeID != "" {
 		return s.nodeID
 	}
-	nodeID, err := s.holder.loadNodeID()
+	nodeID, err := s.holder.LoadNodeID()
 	if err != nil {
 		s.logger.Printf("loading NodeID: %v", err)
 		return s.nodeID

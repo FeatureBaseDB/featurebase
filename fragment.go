@@ -798,26 +798,28 @@ func (f *fragment) unprotectedSetRow(tx Tx, row *Row, rowID uint64) (changed boo
 
 	// From the given row, get the rowSegment for this shard.
 	seg := row.segment(f.shard)
-	if seg == nil {
-		return changed, nil
-	}
-
-	// Put each container from rowSegment to fragment storage.
-	citer, _ := seg.data.Containers.Iterator(f.shard << shardVsContainerExponent)
-	for citer.Next() {
-		k, c := citer.Value()
-		if err := tx.PutContainer(f.index, f.field, f.view, f.shard, headContainerKey+(k%(1<<shardVsContainerExponent)), c); err != nil {
-			return changed, err
+	if seg != nil {
+		// Put each container from rowSegment to fragment storage.
+		citer, _ := seg.data.Containers.Iterator(f.shard << shardVsContainerExponent)
+		for citer.Next() {
+			k, c := citer.Value()
+			if err := tx.PutContainer(f.index, f.field, f.view, f.shard, headContainerKey+(k%(1<<shardVsContainerExponent)), c); err != nil {
+				return changed, err
+			}
 		}
-	}
 
-	// Update the row in cache.
-	if f.CacheType != CacheTypeNone {
-		n, err := tx.CountRange(f.index, f.field, f.view, f.shard, rowID*ShardWidth, (rowID+1)*ShardWidth)
-		if err != nil {
-			return changed, err
+		// Update the row in cache.
+		if f.CacheType != CacheTypeNone {
+			n, err := tx.CountRange(f.index, f.field, f.view, f.shard, rowID*ShardWidth, (rowID+1)*ShardWidth)
+			if err != nil {
+				return changed, err
+			}
+			f.cache.BulkAdd(rowID, n)
 		}
-		f.cache.BulkAdd(rowID, n)
+	} else {
+		if f.CacheType != CacheTypeNone {
+			f.cache.BulkAdd(rowID, 0)
+		}
 	}
 
 	// invalidate rowCache for this row.

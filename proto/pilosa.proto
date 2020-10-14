@@ -1,42 +1,9 @@
 syntax = "proto3";
 package pilosa;
 
-import "public.proto";
+//import "public.proto";
 
-message VDS {
-  string name = 1;
-}
-
-message GetVDSsRequest {
-}
-
-message GetVDSsResponse {
-  repeated VDS vdss = 1;
-}
-
-message GetVDSRequest {
-  string name = 1;
-}
-
-message GetVDSResponse {
-  VDS vds = 1;
-}
-
-message PostVDSRequest {
-  string name = 1;
-  bool keys = 2;
-  bool trackExistence = 3;
-}
-
-message PostVDSResponse {
-}
-
-message DeleteVDSRequest {
-  string name = 1;
-}
-
-message DeleteVDSResponse {
-}
+option go_package = "github.com/pilosa/pilosa/v2/proto";
 
 message QueryPQLRequest {
   string index = 1;
@@ -117,14 +84,10 @@ message IdsOrKeys {
 }
 
 service Pilosa {
-  rpc GetVDSs(GetVDSsRequest) returns (GetVDSsResponse) {};
-  rpc GetVDS(GetVDSRequest) returns (GetVDSResponse) {};
-  rpc PostVDS(PostVDSRequest) returns (PostVDSResponse) {};
-  rpc DeleteVDS(DeleteVDSRequest) returns (DeleteVDSResponse) {};
   rpc QuerySQL(QuerySQLRequest) returns (stream RowResponse) {};
   rpc QuerySQLUnary(QuerySQLRequest) returns (TableResponse) {};
   rpc QueryPQL(QueryPQLRequest) returns (stream RowResponse) {};
   rpc QueryPQLUnary(QueryPQLRequest) returns (TableResponse) {};
   rpc Inspect(InspectRequest) returns (stream RowResponse) {};
-  rpc ImportAtomicRecord(stream AtomicRecord) returns (AtomicImportResponse) {};
+  //rpc ImportAtomicRecord(stream AtomicRecord) returns (AtomicImportResponse) {};
 }

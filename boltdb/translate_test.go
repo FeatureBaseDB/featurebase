@@ -20,12 +20,15 @@ import (
 	"io/ioutil"
 	"os"
 	"reflect"
+	"strconv"
 	"testing"
 	"time"
 
 	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/boltdb"
 )
+
+//var vv = pilosa.VV
 
 func TestTranslateStore_TranslateKey(t *testing.T) {
 	s := MustOpenNewTranslateStore()
@@ -213,6 +216,30 @@ func TestTranslateStore_TranslateIDs(t *testing.T) {
 		t.Fatalf("TranslateIDs()[1]=%s, want %s", got, want)
 	} else if got, want := keys[2], ""; got != want {
 		t.Fatalf("TranslateIDs()[2]=%s, want %s", got, want)
+	}
+}
+
+func TestTranslateStore_MaxID(t *testing.T) {
+	s := MustOpenNewTranslateStore()
+	defer MustCloseTranslateStore(s)
+
+	// Generate a bunch of keys.
+	var lastk uint64
+	for i := 0; i < 1026; i++ {
+		k, err := s.TranslateKey(strconv.Itoa(i), true)
+		if err != nil {
+			t.Fatalf("translating %d: %v", i, err)
+		}
+		lastk = k
+	}
+
+	// Verify the max ID.
+	max, err := s.MaxID()
+	if err != nil {
+		t.Fatalf("checking max ID: %v", err)
+	}
+	if max != lastk {
+		t.Fatalf("last key is %d but max is %d", lastk, max)
 	}
 }
 
@@ -508,8 +535,7 @@ func TestCryptoHashPerKey(t *testing.T) {
 		}
 
 		// done with setup
-
-		sum, err := s.ComputeTranslatorSummary()
+		sum, err := s.ComputeTranslatorSummaryCols(0, pilosa.NewTopology(&pilosa.Jmphasher{}, pilosa.DefaultPartitionN, 1, nil))
 		if err != nil {
 			panic(err)
 		}
@@ -532,4 +558,124 @@ func TestCryptoHashPerKey(t *testing.T) {
 		}
 	}
 
+}
+
+func TestTranslateStore_RepairNonInvertibleStringKeyTranslation(t *testing.T) {
+
+	const N = 6
+	// before repair
+	var fwd [N]map[string]uint64
+	var rev [N]map[uint64]string
+
+	// after repair
+	var fwd2 [N]map[string]uint64
+	var rev2 [N]map[uint64]string
+
+	// case 0: forward is messed up (unlikely but check for it anyway, be sure we can repair)
+	// "key0" -> id 0  // correct.
+	// "key1" -> id 0  // wrong. after Repair, should see key1 -> 1 (0xec0002)
+	//
+	// id 0 -> "key0" // correct
+	// id 1 -> "key1" // correct
+	//
+	fwd[0] = map[string]uint64{"key0": 0xec00001, "key1": 0xec00001}
+	rev[0] = map[uint64]string{0xec00001: "key0", 0xec00002: "key1"}
+	fwd2[0] = map[string]uint64{"key0": 0xec00001, "key1": 0xec00002}
+	rev2[0] = map[uint64]string{0xec00001: "key0", 0xec00002: "key1"}
+
+	// case 1: reverse is messed up (we have seen this in the past)
+	// "key0" -> id 0  // correct
+	// "key1" -> id 1  // correct
+	//
+	// id 0 -> "key0" // correct.
+	// id 1 -> "key0" // wrong. after Repair, should see id 1 -> "key1"
+	//
+	fwd[1] = map[string]uint64{"key0": 0xec00001, "key1": 0xec00002}
+	rev[1] = map[uint64]string{0xec00001: "key0", 0xec00002: "key0"}
+	fwd2[1] = map[string]uint64{"key0": 0xec00001, "key1": 0xec00002}
+	rev2[1] = map[uint64]string{0xec00001: "key0", 0xec00002: "key1"}
+
+	// case 2: only present in reverse.
+	fwd[2] = map[string]uint64{}
+	rev[2] = map[uint64]string{0xec00001: "key0"}
+	fwd2[2] = map[string]uint64{"key0": 0xec00001}
+	rev2[2] = map[uint64]string{0xec00001: "key0"}
+
+	// case 3: same thing. with camoflage.
+	fwd[3] = map[string]uint64{"key1": 0xec00002}
+	rev[3] = map[uint64]string{0xec00001: "key0", 0xec00002: "key1"}
+	fwd2[3] = map[string]uint64{"key0": 0xec00001, "key1": 0xec00002}
+	rev2[3] = map[uint64]string{0xec00001: "key0", 0xec00002: "key1"}
+
+	// case 4: only present in forward.
+
+	fwd[4] = map[string]uint64{"key0": 0xec00001}
+	rev[4] = map[uint64]string{}
+	fwd2[4] = map[string]uint64{"key0": 0xec00001}
+	rev2[4] = map[uint64]string{0xec00001: "key0"}
+
+	// case 5: same thing. with camoflage.
+	fwd[5] = map[string]uint64{"key0": 0xec00001}
+	rev[5] = map[uint64]string{0xec00002: "key1"}
+	fwd2[5] = map[string]uint64{"key0": 0xec00001, "key1": 0xec00002}
+	rev2[5] = map[uint64]string{0xec00001: "key0", 0xec00002: "key1"}
+
+	// case 6: we had an id, but b/c of the fix, that id is no longer used.
+	//         now that id might still be used in the fragment for a column,
+	//         and so we will need to remove that id/column from the fragment.
+	// encapsulated: "did it affect the state of the fields?"
+
+	for i := 0; i < 5; i++ {
+		//println("i = ", i)
+		s := MustOpenNewTranslateStore()
+		defer MustCloseTranslateStore(s)
+
+		if err := s.SetFwdRevMaps(nil, fwd[i], rev[i]); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := verifyState("setup", i, s, fwd[i], rev[i]); err != nil {
+			t.Fatal(err)
+		}
+
+		var topo *pilosa.Topology
+		verbose := false
+		applyKeyRepairs := true
+		changed, err := s.RepairKeys(topo, verbose, applyKeyRepairs)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !changed {
+			t.Fatalf("expected changes!")
+		}
+
+		if err := verifyState("afterRepair", i, s, fwd2[i], rev2[i]); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func verifyState(label string, i int, s *boltdb.TranslateStore, fwd map[string]uint64, rev map[uint64]string) error {
+
+	// verify the setup
+	const writable = true
+	for key, expectID := range fwd {
+		id, err := s.TranslateKey(key, !writable)
+		if err != nil {
+			return err
+		}
+		if id != expectID {
+			return fmt.Errorf("fwd %v problem. i=%v, for key '%v', expected %x, observed %x", label, i, key, expectID, id)
+		}
+	}
+	for id, expectKey := range rev {
+		key, err := s.TranslateID(id)
+		if err != nil {
+			return err
+		}
+		if key != expectKey {
+			return fmt.Errorf("rev %v problem. i=%v, for id '%x', expected %v, observed %v", label, i, id, expectKey, key)
+		}
+	}
+	return nil
 }

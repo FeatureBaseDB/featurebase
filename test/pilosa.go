@@ -302,7 +302,7 @@ func Do(t *testing.T, method, urlStr string, body string) *httpResponse {
 	// set a timeout instead of allowing gohttp.Defaultclient to
 	// potentially hang forever.
 	hc := &gohttp.Client{
-		Timeout: time.Second * 10,
+		Timeout: time.Second * 30,
 	}
 	resp, err := hc.Do(req)
 

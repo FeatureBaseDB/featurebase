@@ -1,4 +1,4 @@
-.PHONY: build check-clean clean build-lattice cover cover-viz default docker docker-build docker-test docker-tag-push generate generate-protoc generate-pql generate-statik gometalinter install install-build-deps install-golangci-lint install-gometalinter install-protoc install-protoc-gen-gofast install-peg install-statik prerelease prerelease-upload release release-build test testv testv-race testvsub testvsub-race
+.PHONY: build check-clean clean build-lattice cover cover-viz default docker docker-build docker-test docker-tag-push generate generate-protoc generate-pql generate-statik gometalinter install install-build-deps install-golangci-lint install-gometalinter install-protoc install-protoc-gen-gofast install-peg install-statik prerelease prerelease-upload release release-build test testv testv-race testvsub testvsub-race test-txstore-rbf_lmdb test-txstore-rbf
 
 CLONE_URL=github.com/pilosa/pilosa
 VERSION := $(shell git describe --tags 2> /dev/null || echo unknown)
@@ -55,7 +55,7 @@ testv-race: topt-race testvsub-race
 #            find which test is hung/deadlocked.
 #
 testvsub:
-	set -e; for i in ctl http pg pql rbf roaring server sql txkey; do \
+	set -e; for i in boltdb ctl http pg pql rbf roaring server sql txkey; do \
            echo; echo "___ testing subpkg $$i"; \
            cd $$i; pwd; \
            go test -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) $(NOCHECKPTR) -v -timeout 60m || break; \
@@ -64,7 +64,7 @@ testvsub:
         done
 
 testvsub-race:
-	set -e; for i in ctl http pg pql rbf roaring server sql txkey; do \
+	set -e; for i in boltdb ctl http pg pql rbf roaring server sql txkey; do \
            echo; echo "___ testing subpkg $$i -race"; \
            cd $$i; pwd; \
            go test -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) $(NOCHECKPTR) -v -race -timeout 60m || break; \
@@ -166,9 +166,14 @@ generate-stringer:
 generate-pql: require-peg
 	cd pql && peg -inline pql.peg && cd ..
 
-# dunno if protoc-gen-gofast is actually needed here
-generate-proto-grpc: require-protoc require-protoc-gen-gofast
+generate-proto-grpc: require-protoc require-protoc-gen-go
 	protoc -I proto proto/pilosa.proto --go_out=plugins=grpc:proto
+	protoc -I proto proto/vdsm/vdsm.proto --go_out=plugins=grpc:proto
+	# TODO: Modify above commands and remove the below mv if possible.
+	# See https://go-review.googlesource.com/c/protobuf/+/219298/ for info on --go-opt
+	# I couldn't get it to work during development - Cody
+	cp -r proto/github.com/pilosa/pilosa/v2/proto/ proto/
+	rm -rf proto/github.com
 
 # `go generate` all needed packages
 generate: generate-protoc generate-statik generate-stringer generate-pql
@@ -195,6 +200,9 @@ pilosa-keydump:
 # Install diagnostic pilosa-chk tool for string translations and fragment checksums.
 pilosa-chk:
 	go install -tags='$(BUILD_TAGS)' -ldflags $(LDFLAGS) $(FLAGS) ./cmd/pilosa-chk
+
+pilosa-fsck:
+	cd ./cmd/pilosa-fsck && make install && make release
 
 # Run Pilosa tests inside Docker container
 docker-test:
@@ -386,6 +394,9 @@ install-stringer:
 install-protoc-gen-gofast:
 	GO111MODULE=off go get -u github.com/gogo/protobuf/protoc-gen-gofast
 
+install-protoc-gen-go:
+	GO111MODULE=off go get -u github.com/golang/protobuf/protoc-gen-go
+
 install-protoc:
 	@echo This tool cannot automatically install protoc. Please download and install protoc from https://google.github.io/proto-lens/installing-protoc.html
 
@@ -399,3 +410,10 @@ install-gometalinter:
 	GO111MODULE=off go get -u github.com/alecthomas/gometalinter
 	GO111MODULE=off gometalinter --install
 	GO111MODULE=off go get github.com/remyoudompheng/go-misc/deadcode
+
+test-txstore-rbf:
+	PILOSA_TXSRC=rbf $(MAKE) testv-race
+
+test-txstore-rbf_lmdb:
+	PILOSA_TXSRC=rbf_lmdb $(MAKE) testv-race
+

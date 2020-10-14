@@ -26,6 +26,7 @@ import (
 	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/logger"
 	pb "github.com/pilosa/pilosa/v2/proto"
+	vdsm_pb "github.com/pilosa/pilosa/v2/proto/vdsm"
 	"github.com/pilosa/pilosa/v2/stats"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
@@ -123,48 +124,6 @@ func errToStatusError(err error) error {
 	}
 
 	return status.Error(codes.Unknown, err.Error())
-}
-
-// GetVDSs returns a single VDS given a name
-func (h *GRPCHandler) GetVDS(ctx context.Context, req *pb.GetVDSRequest) (*pb.GetVDSResponse, error) {
-	// TODO: Return all schema information associated with the VDS.
-	// It's obviously not very useful to return the same data as given.
-	schema := h.api.Schema(ctx)
-	for _, index := range schema {
-		if req.Name == index.Name {
-			return &pb.GetVDSResponse{Vds: &pb.VDS{Name: index.Name}}, nil
-		}
-	}
-	return nil, status.Error(codes.NotFound, fmt.Sprintf("VDS with name %s not found", req.Name))
-}
-
-// GetVDSs returns a list of all VDSs
-func (h *GRPCHandler) GetVDSs(ctx context.Context, req *pb.GetVDSsRequest) (*pb.GetVDSsResponse, error) {
-	schema := h.api.Schema(ctx)
-	vdss := make([]*pb.VDS, len(schema))
-	for i, index := range schema {
-		vdss[i] = &pb.VDS{Name: index.Name}
-	}
-	return &pb.GetVDSsResponse{Vdss: vdss}, nil
-}
-
-// PostVDS creates a new VDS
-func (h *GRPCHandler) PostVDS(ctx context.Context, req *pb.PostVDSRequest) (*pb.PostVDSResponse, error) {
-	opts := pilosa.IndexOptions{Keys: req.Keys, TrackExistence: req.TrackExistence}
-	_, err := h.api.CreateIndex(ctx, req.Name, opts)
-	if err != nil {
-		return nil, errToStatusError(err)
-	}
-	return &pb.PostVDSResponse{}, nil
-}
-
-// DeleteVDS deletes a VDS
-func (h *GRPCHandler) DeleteVDS(ctx context.Context, req *pb.DeleteVDSRequest) (*pb.DeleteVDSResponse, error) {
-	err := h.api.DeleteIndex(ctx, req.Name)
-	if err != nil {
-		return nil, errToStatusError(err)
-	}
-	return &pb.DeleteVDSResponse{}, nil
 }
 
 func (h *GRPCHandler) execSQL(ctx context.Context, queryStr string) (pb.ToRowser, error) {
@@ -290,6 +249,103 @@ func (h *GRPCHandler) QueryPQLUnary(ctx context.Context, req *pb.QueryPQLRequest
 	h.stats.Count(pilosa.MetricPqlQueries, 1, 1)
 
 	return table, errToStatusError(nil)
+}
+
+// VDSMGRPCHandler contains methods which handle the various gRPC requests, ported from VDSM.
+type VDSMGRPCHandler struct {
+	grpcHandler *GRPCHandler
+	api         *pilosa.API
+	logger      logger.Logger
+	stats       stats.StatsClient
+}
+
+func NewVDSMGRPCHandler(grpcHandler *GRPCHandler, api *pilosa.API) *VDSMGRPCHandler {
+	return &VDSMGRPCHandler{grpcHandler: grpcHandler, api: api, logger: logger.NopLogger, stats: stats.NopStatsClient}
+}
+
+func (h *VDSMGRPCHandler) WithLogger(logger logger.Logger) *VDSMGRPCHandler {
+	h.logger = logger
+	return h
+}
+
+func (h *VDSMGRPCHandler) WithStats(stats stats.StatsClient) *VDSMGRPCHandler {
+	h.stats = stats
+	return h
+}
+
+// GetVDSs returns a single VDS given a name
+func (h *VDSMGRPCHandler) GetVDS(ctx context.Context, req *vdsm_pb.GetVDSRequest) (*vdsm_pb.GetVDSResponse, error) {
+	typedIdOrName := req.GetIdOrName()
+	switch idOrName := typedIdOrName.(type) {
+	case *vdsm_pb.GetVDSRequest_Id:
+		return nil, status.Error(codes.InvalidArgument, "VDS IDs are no longer supported")
+	case *vdsm_pb.GetVDSRequest_Name:
+		schema := h.api.Schema(ctx)
+		for _, index := range schema {
+			if idOrName.Name == index.Name {
+				return &vdsm_pb.GetVDSResponse{Vds: &vdsm_pb.VDS{Name: index.Name}}, nil
+			}
+		}
+		return nil, status.Error(codes.NotFound, fmt.Sprintf("VDS with name %s not found", idOrName.Name))
+	default:
+		return nil, status.Error(codes.NotFound, "VDS not found")
+	}
+}
+
+// GetVDSs returns a list of all VDSs
+func (h *VDSMGRPCHandler) GetVDSs(ctx context.Context, req *vdsm_pb.GetVDSsRequest) (*vdsm_pb.GetVDSsResponse, error) {
+	schema := h.api.Schema(ctx)
+	vdss := make([]*vdsm_pb.VDS, len(schema))
+	for i, index := range schema {
+		vdss[i] = &vdsm_pb.VDS{Name: index.Name}
+	}
+	return &vdsm_pb.GetVDSsResponse{Vdss: vdss}, nil
+}
+
+// PostVDS creates a new VDS
+func (*VDSMGRPCHandler) PostVDS(ctx context.Context, req *vdsm_pb.PostVDSRequest) (*vdsm_pb.PostVDSResponse, error) {
+	// Pilosa doesn't implement VDSD files, so this is unimplemented
+	return nil, status.Errorf(codes.Unimplemented, "method PostVDS not implemented")
+}
+
+// DeleteVDS deletes a VDS
+func (h *VDSMGRPCHandler) DeleteVDS(ctx context.Context, req *vdsm_pb.DeleteVDSRequest) (*vdsm_pb.DeleteVDSResponse, error) {
+	typedIdOrName := req.GetIdOrName()
+	switch idOrName := typedIdOrName.(type) {
+	case *vdsm_pb.DeleteVDSRequest_Id:
+		return nil, status.Error(codes.InvalidArgument, "VDS IDs are no longer supported")
+	case *vdsm_pb.DeleteVDSRequest_Name:
+		err := h.api.DeleteIndex(ctx, idOrName.Name)
+		if err != nil {
+			return nil, errToStatusError(err)
+		}
+		return &vdsm_pb.DeleteVDSResponse{}, nil
+	default:
+		return nil, status.Error(codes.NotFound, "")
+	}
+}
+
+func (h *VDSMGRPCHandler) QuerySQL(req *pb.QuerySQLRequest, srv vdsm_pb.Molecula_QuerySQLServer) error {
+	return h.grpcHandler.QuerySQL(req, srv)
+}
+
+func (h *VDSMGRPCHandler) QuerySQLUnary(ctx context.Context, req *pb.QuerySQLRequest) (*pb.TableResponse, error) {
+	return h.grpcHandler.QuerySQLUnary(ctx, req)
+}
+
+func (h *VDSMGRPCHandler) QueryPQL(req *vdsm_pb.QueryPQLRequest, srv vdsm_pb.Molecula_QueryPQLServer) error {
+	preq := &pb.QueryPQLRequest{Index: req.Vds, Pql: req.Pql}
+	return h.grpcHandler.QueryPQL(preq, srv)
+}
+
+func (h *VDSMGRPCHandler) QueryPQLUnary(ctx context.Context, req *vdsm_pb.QueryPQLRequest) (*pb.TableResponse, error) {
+	preq := &pb.QueryPQLRequest{Index: req.Vds, Pql: req.Pql}
+	return h.grpcHandler.QueryPQLUnary(ctx, preq)
+}
+
+func (h *VDSMGRPCHandler) Inspect(req *vdsm_pb.InspectRequest, srv vdsm_pb.Molecula_InspectServer) error {
+	preq := &pb.InspectRequest{Index: req.Vds, Columns: req.Records, FilterFields: req.FilterFields, Limit: req.Limit, Offset: req.Offset, Query: req.Query}
+	return h.grpcHandler.Inspect(preq, srv)
 }
 
 // ResultUint64 is a wrapper around a uint64 result type
@@ -829,6 +885,8 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 					return nil
 				}
 				cols = limitedCols
+			} else {
+				return errors.Errorf("expected 1 result for inspect query; got %d from %q", len(resp.Results), req.Query)
 			}
 		}
 
@@ -870,7 +928,13 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 							rowResp.Columns = append(rowResp.Columns,
 								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64ArrayVal{Uint64ArrayVal: &pb.Uint64Array{Vals: ids.Rows}}})
 							colAdded++
+						} else {
+							rowResp.Columns = append(rowResp.Columns,
+								&pb.ColumnResponse{ColumnVal: nil})
 						}
+					} else {
+						rowResp.Columns = append(rowResp.Columns,
+							&pb.ColumnResponse{ColumnVal: nil})
 					}
 
 				case "mutex":
@@ -902,6 +966,9 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 							rowResp.Columns = append(rowResp.Columns,
 								&pb.ColumnResponse{ColumnVal: nil})
 						}
+					} else {
+						rowResp.Columns = append(rowResp.Columns,
+							&pb.ColumnResponse{ColumnVal: nil})
 					}
 
 				case "int":
@@ -938,7 +1005,13 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 										value = vals[0]
 										exists = true
 									}
+								} else {
+									rowResp.Columns = append(rowResp.Columns,
+										&pb.ColumnResponse{ColumnVal: nil})
 								}
+							} else {
+								rowResp.Columns = append(rowResp.Columns,
+									&pb.ColumnResponse{ColumnVal: nil})
 							}
 						} else {
 							value, exists, err = field.StringValue(tx, id)
@@ -975,6 +1048,9 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 								rowResp.Columns = append(rowResp.Columns,
 									&pb.ColumnResponse{ColumnVal: nil})
 							}
+						} else {
+							rowResp.Columns = append(rowResp.Columns,
+								&pb.ColumnResponse{ColumnVal: nil})
 						}
 					}
 
@@ -999,6 +1075,9 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 							rowResp.Columns = append(rowResp.Columns,
 								&pb.ColumnResponse{ColumnVal: nil})
 						}
+					} else {
+						rowResp.Columns = append(rowResp.Columns,
+							&pb.ColumnResponse{ColumnVal: nil})
 					}
 
 				case "bool":
@@ -1030,9 +1109,12 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 							rowResp.Columns = append(rowResp.Columns,
 								&pb.ColumnResponse{ColumnVal: nil})
 						}
+					} else {
+						rowResp.Columns = append(rowResp.Columns,
+							&pb.ColumnResponse{ColumnVal: nil})
 					}
 
-				case "time":
+				default:
 					rowResp.Columns = append(rowResp.Columns,
 						&pb.ColumnResponse{ColumnVal: nil})
 				}
@@ -1144,7 +1226,9 @@ func (s *grpcServer) Serve(tlsConfig *tls.Config) error {
 	// create grpc server
 	s.mu.Lock()
 	s.grpcServer = grpc.NewServer(opts...)
-	pb.RegisterPilosaServer(s.grpcServer, NewGRPCHandler(s.api).WithLogger(s.logger).WithStats(s.stats))
+	grpcHandler := NewGRPCHandler(s.api).WithLogger(s.logger).WithStats(s.stats)
+	pb.RegisterPilosaServer(s.grpcServer, grpcHandler)
+	vdsm_pb.RegisterMoleculaServer(s.grpcServer, NewVDSMGRPCHandler(grpcHandler, s.api).WithLogger(s.logger).WithStats(s.stats))
 
 	// register the server so its services are available to grpc_cli and others
 	reflection.Register(s.grpcServer)

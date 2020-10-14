@@ -31,7 +31,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pelletier/go-toml"
 	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/http"
 	"github.com/pilosa/pilosa/v2/pql"
@@ -338,7 +337,7 @@ func TestMain_MinMaxFloat(t *testing.T) {
 
 // Ensure the host can be parsed.
 func TestConfig_Parse_Host(t *testing.T) {
-	if c, err := ParseConfig(`bind = "local"`); err != nil {
+	if c, err := server.ParseConfig(`bind = "local"`); err != nil {
 		t.Fatal(err)
 	} else if c.Bind != "local" {
 		t.Fatalf("unexpected host: %s", c.Bind)
@@ -347,7 +346,7 @@ func TestConfig_Parse_Host(t *testing.T) {
 
 // Ensure the data directory can be parsed.
 func TestConfig_Parse_DataDir(t *testing.T) {
-	if c, err := ParseConfig(`data-dir = "/tmp/foo"`); err != nil {
+	if c, err := server.ParseConfig(`data-dir = "/tmp/foo"`); err != nil {
 		t.Fatal(err)
 	} else if c.DataDir != "/tmp/foo" {
 		t.Fatalf("unexpected data dir: %s", c.DataDir)
@@ -598,13 +597,6 @@ func GenerateSetCommands(n int, rand *rand.Rand) []SetCommand {
 		}
 	}
 	return cmds
-}
-
-// ParseConfig parses s into a Config.
-func ParseConfig(s string) (server.Config, error) {
-	var c server.Config
-	err := toml.Unmarshal([]byte(s), &c)
-	return c, err
 }
 
 // MustMarshalJSON marshals v into a string. Panic on error.

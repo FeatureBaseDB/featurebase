@@ -37,6 +37,7 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
+	"github.com/pelletier/go-toml"
 	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/boltdb"
 	"github.com/pilosa/pilosa/v2/encoding/proto"
@@ -406,6 +407,7 @@ func (m *Command) SetupServer() error {
 		pilosa.OptServerGRPCURI(advertiseGRPCURI),
 		pilosa.OptServerInternalClient(http.NewInternalClientFromURI(uri, c)),
 		pilosa.OptServerClusterDisabled(m.Config.Cluster.Disabled, m.Config.Cluster.Hosts),
+		pilosa.OptServerClusterName(m.Config.Cluster.Name),
 		pilosa.OptServerSerializer(proto.Serializer{}),
 		pilosa.OptServerTxsrc(m.Config.Txsrc),
 		coordinatorOpt,
@@ -620,4 +622,11 @@ func (f *filteredWriter) Write(p []byte) (n int, err error) {
 		return f.logOutput.Write(p)
 	}
 	return len(p), nil
+}
+
+// ParseConfig parses s into a Config.
+func ParseConfig(s string) (Config, error) {
+	var c Config
+	err := toml.Unmarshal([]byte(s), &c)
+	return c, err
 }
