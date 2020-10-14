@@ -189,7 +189,7 @@ workflows:
           # the following should make this only run on pull requests
           filters:
             branches:
-              ignore: /.*/
+              only: /^pull\/.*$/
       - test-build-arm:
           requires:
             - setup
