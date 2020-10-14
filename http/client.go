@@ -1247,6 +1247,37 @@ func (c *InternalClient) TranslateIDsNode(ctx context.Context, uri *pilosa.URI, 
 	return tkresp.Keys, nil
 }
 
+// GetNodeUsage retrieves the size-on-disk information for the specified node.
+func (c *InternalClient) GetNodeUsage(ctx context.Context, uri *pilosa.URI) (map[string]pilosa.NodeUsage, error) {
+	u := uri.Path("/ui/usage?remote=true")
+	req, err := http.NewRequest("GET", u, nil)
+	if err != nil {
+		return nil, errors.Wrap(err, "creating request")
+	}
+
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+
+	// Execute request against the host.
+	resp, err := c.executeRequest(req.WithContext(ctx))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	// Read body and unmarshal response.
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, errors.Wrap(err, "reading")
+	}
+
+	nodeUsages := make(map[string]pilosa.NodeUsage) // map of size 1
+	if err := json.Unmarshal(body, &nodeUsages); err != nil {
+		return nil, fmt.Errorf("unmarshal response: %s", err)
+	}
+	return nodeUsages, nil
+}
+
 func (c *InternalClient) Transactions(ctx context.Context) (map[string]*pilosa.Transaction, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.Transactions")
 	defer span.Finish()

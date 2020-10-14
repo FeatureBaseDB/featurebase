@@ -26,6 +26,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/glycerine/idem"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/v2/hash"
 	"github.com/pilosa/pilosa/v2/internal"
@@ -787,30 +788,74 @@ func (ats *AllTranslatorSummary) Sort() {
 }
 
 // sums is only guaranteed to be sorted by (index, PartitionID, field) iff err returns nil
-func (i *Index) ComputeTranslatorSummary(verbose, checkKeys, applyKeyRepairs bool, topo *Topology, nodeID string) (ats *AllTranslatorSummary, err error) {
-	i.mu.RLock()
-	defer i.mu.RUnlock()
+func (idx *Index) ComputeTranslatorSummary(verbose, checkKeys, applyKeyRepairs bool, topo *Topology, nodeID string, parallelReaders int) (ats *AllTranslatorSummary, err error) {
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
 
 	ats = &AllTranslatorSummary{}
 	var atsMu sync.Mutex
 
 	if verbose {
-		fmt.Printf("\n# index: %v\n# =================\n", i.name)
+		fmt.Printf("\n# index: %v\n# =================\n", idx.name)
 	}
 
-	var g errgroup.Group
+	jobQ := make(chan func() error, 10000)
+	var errmu sync.Mutex
 
-	for _, fld := range i.fields {
+	if parallelReaders < 1 {
+		// turn it up to 11
+		parallelReaders = 10000
+	}
+
+	halters := make([]*idem.Halter, parallelReaders)
+	for j := 0; j < parallelReaders; j++ {
+		h := idem.NewHalter()
+		halters[j] = h
+	}
+	for _, h := range halters {
+		go func(h *idem.Halter) {
+			defer h.MarkDone()
+			for {
+				select {
+				case <-h.ReqStop.Chan:
+					return
+				case f, ok := <-jobQ:
+					if !ok || f == nil {
+						// channel closed, finish up
+						return
+					}
+
+					err1 := f()
+					if err1 != nil {
+						errmu.Lock()
+						if err == nil {
+							err = err1
+						}
+						errmu.Unlock()
+						// an error occurred, tell everyone to stop
+						for _, h2 := range halters {
+							h2.RequestStop()
+						}
+						return
+					}
+				}
+			}
+		}(h)
+	}
+
+floop:
+	for _, fld := range idx.fields {
 		fld := fld
-		g.Go(func() error {
-			//vv("g.Go() on fld '%v'", fld.name)
+
+		fun := func() error {
+			//vv("ComputeTranslatorSummary() on fld '%v'", fld.name)
 			sum, err := fld.translateStore.ComputeTranslatorSummaryRows()
 			if err != nil {
 				return err
 			}
 			sum.Field = fld.name
-			sum.Index = i.Name()
-			sum.Checksum = hash.Blake3sum16([]byte(fmt.Sprintf("%v/%v/%v", sum.Checksum, fld.name, i.Name())))
+			sum.Index = idx.Name()
+			sum.Checksum = hash.Blake3sum16([]byte(fmt.Sprintf("%v/%v/%v", sum.Checksum, fld.name, idx.Name())))
 			sum.IsColKey = false
 			if verbose {
 				fmt.Printf("# row blake3-%v keyN: %5v idN: %5v field: '%v'\n", sum.Checksum, sum.KeyCount, sum.IDCount, fld.name)
@@ -819,17 +864,26 @@ func (i *Index) ComputeTranslatorSummary(verbose, checkKeys, applyKeyRepairs boo
 			ats.Sums = append(ats.Sums, sum)
 			atsMu.Unlock()
 			return nil
-		})
-	}
+		}
+
+		select {
+		case <-halters[0].ReqStop.Chan:
+			break floop
+		case jobQ <- fun:
+		}
+	} // end floop
+
 	if verbose {
 		fmt.Printf("# ====================\n")
 	}
 
-	for partitionID, store := range i.translateStores {
+tloop:
+	for partitionID, store := range idx.translateStores {
 		partitionID := partitionID
 		store := store
-		g.Go(func() error {
-			//vv("g.Go() running on store.Path = '%v'", store.GetStorePath())
+
+		fun2 := func() error {
+			//vv("ComputeTranslatorSummary() running on store.Path = '%v'", store.GetStorePath())
 			if checkKeys {
 				prim := topo.PrimaryNodeIndex(partitionID)
 				primID := topo.nodeIDs[prim]
@@ -864,7 +918,7 @@ func (i *Index) ComputeTranslatorSummary(verbose, checkKeys, applyKeyRepairs boo
 			}
 			sum.IsColKey = true
 			sum.PartitionID = partitionID
-			sum.Index = i.Name()
+			sum.Index = idx.Name()
 			sum.StorePath = store.GetStorePath()
 			sum.NodeID = nodeID
 			sum.IsPrimary = topo.IsPrimary(nodeID, partitionID)
@@ -877,7 +931,7 @@ func (i *Index) ComputeTranslatorSummary(verbose, checkKeys, applyKeyRepairs boo
 				}
 			}
 
-			sum.Checksum = hash.Blake3sum16([]byte(fmt.Sprintf("%v/%v/%v", sum.Checksum, partitionID, i.Name())))
+			sum.Checksum = hash.Blake3sum16([]byte(fmt.Sprintf("%v/%v/%v", sum.Checksum, partitionID, idx.Name())))
 			if verbose {
 				// This is not regular index logging. This is output of the pilosa-fsck tool.
 				// So it must be printing straight to stdout.
@@ -888,9 +942,20 @@ func (i *Index) ComputeTranslatorSummary(verbose, checkKeys, applyKeyRepairs boo
 			atsMu.Unlock()
 
 			return nil
-		})
+		}
+		select {
+		case <-halters[0].ReqStop.Chan:
+			break tloop
+		case jobQ <- fun2:
+		}
+	} // end tloop
+
+	close(jobQ) // tell the workers no more jobs.
+
+	// wait for everyone to finish
+	for _, h := range halters {
+		<-h.Done.Chan
 	}
-	err = g.Wait()
 	return ats, err
 }
 

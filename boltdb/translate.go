@@ -116,6 +116,15 @@ func NewTranslateStore(index, field string, partitionID, partitionN int) *Transl
 
 // Open opens the translate file.
 func (s *TranslateStore) Open() (err error) {
+
+	// add the path to the problem database if we panic handling it.
+	defer func() {
+		r := recover()
+		if r != nil {
+			panic(fmt.Sprintf("pilosa/boltdb/TranslateStore.Open(s.Path='%v') panic with '%v'", s.Path, r))
+		}
+	}()
+
 	if err := os.MkdirAll(filepath.Dir(s.Path), 0777); err != nil {
 		return errors.Wrapf(err, "mkdir %s", filepath.Dir(s.Path))
 	} else if s.db, err = bolt.Open(s.Path, 0666, &bolt.Options{Timeout: 1 * time.Second}); err != nil {

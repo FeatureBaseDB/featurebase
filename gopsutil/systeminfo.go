@@ -21,6 +21,7 @@ import (
 
 	"github.com/pilosa/pilosa/v2"
 	"github.com/shirou/gopsutil/cpu"
+	"github.com/shirou/gopsutil/disk"
 	"github.com/shirou/gopsutil/host"
 	"github.com/shirou/gopsutil/mem"
 )
@@ -241,6 +242,16 @@ func (s *systemInfo) CPUCores() (physical, logical int, err error) {
 		return 0, 0, err
 	}
 	return s.cpuPhysicalCores, s.cpuLogicalCores, nil
+}
+
+// DiskCapacity returns the disk capacity.
+func (s *systemInfo) DiskCapacity(path string) (uint64, error) {
+	diskInfo, err := disk.Usage(path)
+
+	if err != nil {
+		return 0, err
+	}
+	return diskInfo.Total, nil
 }
 
 // NewSystemInfo is a constructor for the gopsutil implementation of SystemInfo.

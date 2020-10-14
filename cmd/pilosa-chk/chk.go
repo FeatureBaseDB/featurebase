@@ -79,7 +79,7 @@ func main() {
 	const checkKeys = false
 	const applyKeyRepairs = false
 	for _, idx := range holder.Indexes() {
-		asum, err := idx.ComputeTranslatorSummary(verbose, checkKeys, applyKeyRepairs, nil, "fake-nodeID")
+		asum, err := idx.ComputeTranslatorSummary(verbose, checkKeys, applyKeyRepairs, nil, "fake-nodeID", 10)
 		if err != nil {
 			log.Fatal(err)
 		}

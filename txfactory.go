@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -562,6 +563,67 @@ func (f *TxFactory) DeleteFragmentFromStore(
 
 func (f *TxFactory) DumpAll() {
 	f.dbPerShard.DumpAll()
+}
+
+func (f *TxFactory) IndexSizes() (index2bytes map[string]int64, err error) {
+	// Open storage directory.
+	index2bytes = make(map[string]int64)
+	dirName, err := expandDirName(f.holder.path)
+	if err != nil {
+		return index2bytes, errors.Wrap(err, "expanding data directory")
+	}
+
+	idxs := f.holder.Indexes()
+
+	for _, idx := range idxs {
+		index := idx.name
+		fullName := path.Join(dirName, index)
+		roaringAndMeta, err := directoryUsage(fullName)
+		if err != nil {
+			return index2bytes, errors.Wrap(err, "getting disk usage for roaring and meta")
+		}
+		fullName = index + ".index.txstores@@@"
+		rbfOrLmdb, err := directoryUsage(fullName)
+		if err != nil {
+			return index2bytes, errors.Wrap(err, "getting disk usage for backend")
+		}
+		index2bytes[index] = roaringAndMeta + rbfOrLmdb
+	}
+
+	return index2bytes, nil
+}
+
+func directoryUsage(fname string) (int64, error) {
+	if !DirExists(fname) {
+		return 0, nil
+	}
+
+	var size int64
+
+	dir, err := os.Open(fname)
+	if err != nil {
+		return 0, errors.Wrap(err, "opening data subdirectory")
+	}
+	defer dir.Close()
+
+	files, err := dir.Readdir(-1)
+	if err != nil {
+		return 0, errors.Wrap(err, "reading data subdirectory")
+	}
+
+	for _, file := range files {
+		if file.IsDir() {
+			sz, err := directoryUsage(path.Join(fname, file.Name()))
+			if err != nil {
+				return 0, err
+			}
+			size += sz
+		} else {
+			size += file.Size()
+		}
+	}
+
+	return size, nil
 }
 
 func (f *TxFactory) CloseIndex(idx *Index) error {
