@@ -2473,14 +2473,14 @@ func BitmapsToRoaring(bitmaps []*Bitmap) []byte {
 			nextData := data[dataOffset:]
 			switch c.typeID { // TODO: make this work on big endian machines
 			case ContainerArray:
-				dataOffset += 2 * copy((*[1 << 16]uint16)(unsafe.Pointer(&nextData[0]))[:], c.array())
+				dataOffset += 2 * copy((*[1 << 16]uint16)(unsafe.Pointer(&nextData[0]))[:c.n:c.n], c.array())
 			case ContainerBitmap:
 				copy((*[1024]uint64)(unsafe.Pointer(&nextData[0]))[:], c.bitmap())
 				dataOffset += 8192
 			case ContainerRun:
 				binary.LittleEndian.PutUint16(nextData[0:2], uint16(c.len))
 				dataOffset += 2
-				dataOffset += 4 * copy((*[1 << 15]Interval16)(unsafe.Pointer(&nextData[2]))[:], c.runs())
+				dataOffset += 4 * copy((*[1 << 15]Interval16)(unsafe.Pointer(&nextData[2]))[:c.len:c.len], c.runs())
 			}
 		}
 	}

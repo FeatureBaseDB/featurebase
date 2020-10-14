@@ -26,10 +26,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/boltdb/bolt"
 	"github.com/pilosa/pilosa/v2"
 	"github.com/pkg/errors"
 	"github.com/zeebo/blake3"
+	bolt "go.etcd.io/bbolt"
 
 	"runtime/pprof"
 )
