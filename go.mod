@@ -13,6 +13,7 @@ require (
 	github.com/davecgh/go-spew v1.1.1
 	github.com/dgraph-io/badger/v2 v2.0.1-rc1.0.20200709123515-8e896a7af361
 	github.com/dustin/go-humanize v1.0.0
+	github.com/glycerine/idem v0.0.0-20190127113923-7a8083893311
 	github.com/glycerine/lmdb-go v1.9.32
 	github.com/go-ole/go-ole v1.2.4 // indirect
 	github.com/gogo/protobuf v1.2.1
