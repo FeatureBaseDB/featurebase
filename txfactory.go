@@ -575,12 +575,13 @@ func (f *TxFactory) IndexSizes() (map[string]int64, error) {
 
 }
 
-func (f *TxFactory) diskUsageFromFilesystem() (map[string]int64, error) {
+//
+func (f *TxFactory) diskUsageFromFilesystem() (index2bytes map[string]int64, err error) {
 	// Open storage directory.
-	indexSizes := make(map[string]int64)
+	index2bytes = make(map[string]int64)
 	dirName, err := expandDirName(f.holder.path)
 	if err != nil {
-		return indexSizes, errors.Wrap(err, "expanding data directory")
+		return index2bytes, errors.Wrap(err, "expanding data directory")
 	}
 
 	idxs := f.holder.Indexes()
@@ -590,17 +591,17 @@ func (f *TxFactory) diskUsageFromFilesystem() (map[string]int64, error) {
 		fullName := path.Join(dirName, index)
 		roaringAndMeta, err := directoryUsage(fullName)
 		if err != nil {
-			return indexSizes, errors.Wrap(err, "getting disk usage for roaring and meta")
+			return index2bytes, errors.Wrap(err, "getting disk usage for roaring and meta")
 		}
 		fullName = index + ".index.txstores@@@"
 		rbfOrLmdb, err := directoryUsage(fullName)
 		if err != nil {
-			return indexSizes, errors.Wrap(err, "getting disk usage for backend")
+			return index2bytes, errors.Wrap(err, "getting disk usage for backend")
 		}
-		indexSizes[index] = roaringAndMeta + rbfOrLmdb
+		index2bytes[index] = roaringAndMeta + rbfOrLmdb
 	}
 
-	return indexSizes, nil
+	return index2bytes, nil
 }
 
 func directoryUsage(fname string) (int64, error) {
