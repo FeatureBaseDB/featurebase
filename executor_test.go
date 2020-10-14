@@ -2471,6 +2471,13 @@ func TestExecutor_Execute_Row_BSIGroup(t *testing.T) {
 		} else if got, exp := result.Results[0].(*pilosa.Row).Columns(), []uint64{50, (5 * ShardWidth) + 100}; !reflect.DeepEqual(exp, got) {
 			t.Fatalf("Query().Row.Columns=%#v, expected %#v", got, exp)
 		}
+
+		// EQ (single = form) <int>
+		if result, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Row(foo = 20)`}); err != nil {
+			t.Fatal(err)
+		} else if got, exp := result.Results[0].(*pilosa.Row).Columns(), []uint64{50, (5 * ShardWidth) + 100}; !reflect.DeepEqual(exp, got) {
+			t.Fatalf("Query().Row.Columns=%#v, expected %#v", got, exp)
+		}
 	})
 
 	t.Run("NEQ", func(t *testing.T) {
