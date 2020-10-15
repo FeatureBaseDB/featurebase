@@ -62,6 +62,8 @@ type blueGreenTx struct {
 	txf *TxFactory
 
 	short bool // short Dump or long
+
+	FullDump bool // else quieter, don't attemp Dump() if false.
 }
 
 // blueGreenRegistry is used to force checking of (read) transactions
@@ -154,6 +156,10 @@ func (c *blueGreenTx) Type() string {
 var blueGreenTxDumpMut sync.Mutex
 
 func (c *blueGreenTx) Dump(short bool, shard uint64) {
+
+	if !c.FullDump {
+		return
+	}
 
 	blueGreenTxDumpMut.Lock()
 	defer blueGreenTxDumpMut.Unlock()
