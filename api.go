@@ -1597,6 +1597,21 @@ func importExistenceColumns(qcx *Qcx, index *Index, columnIDs []uint64) error {
 	return ef.Import(qcx, existenceRowIDs, columnIDs, nil)
 }
 
+// ShardDistribution returns an object representing the distribution of shards
+// across nodes for each index, distinguishing between primary and replica.
+// The structure of this information is [indexName][nodeID][primaryOrReplica][]uint64.
+// This function supports a view in the UI.
+func (api *API) ShardDistribution(ctx context.Context) map[string]interface{} {
+	distByIndex := make(map[string]interface{})
+
+	for idx := range api.holder.indexes {
+		dist := api.cluster.shardDistributionByIndex(idx)
+		distByIndex[idx] = dist
+	}
+
+	return distByIndex
+}
+
 // MaxShards returns the maximum shard number for each index in a map.
 // TODO (2.0): This method has been deprecated. Instead, use
 // AvailableShardsByIndex.
@@ -1772,6 +1787,8 @@ func (api *API) Info() serverInfo {
 		Memory:           mem,
 		TxSrc:            api.holder.txf.TxType(),
 		ReplicaN:         api.cluster.ReplicaN,
+		ShardHash:        api.cluster.Hasher.Name(),
+		KeyHash:          api.cluster.Topology.Hasher.Name(),
 	}
 }
 
@@ -2019,6 +2036,8 @@ func (api *API) TranslateFieldDB(ctx context.Context, indexName, fieldName strin
 type serverInfo struct {
 	ShardWidth       uint64 `json:"shardWidth"`
 	ReplicaN         int    `json:"replicaN"`
+	ShardHash        string `json:"shardHash"`
+	KeyHash          string `json:"keyHash"`
 	Memory           uint64 `json:"memory"`
 	CPUType          string `json:"cpuType"`
 	CPUPhysicalCores int    `json:"cpuPhysicalCores"`

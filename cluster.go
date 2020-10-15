@@ -978,6 +978,36 @@ func (c *cluster) translationNodes(to *cluster) (map[string][]*translationResize
 	return m, nil
 }
 
+// shardDistributionByIndex returns a map of [nodeID][primaryOrReplica][]uint64,
+// where the int slices are lists of shards.
+func (c *cluster) shardDistributionByIndex(indexName string) map[string]map[string][]uint64 {
+	dist := make(map[string]map[string][]uint64)
+
+	for _, node := range c.nodes {
+		nodeDist := make(map[string][]uint64)
+		nodeDist["primary-shards"] = make([]uint64, 0)
+		nodeDist["replica-shards"] = make([]uint64, 0)
+		dist[node.ID] = nodeDist
+	}
+
+	index := c.holder.Index(indexName)
+	available := index.AvailableShards(includeRemote).Slice()
+
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	for _, shard := range available {
+		p := c.shardToShardPartition(indexName, shard)
+		nodes := c.partitionNodes(p)
+		dist[nodes[0].ID]["primary-shards"] = append(dist[nodes[0].ID]["primary-shards"], shard)
+		for k := 1; k < len(nodes); k++ {
+			dist[nodes[k].ID]["replica-shards"] = append(dist[nodes[k].ID]["replica-shards"], shard)
+		}
+	}
+
+	return dist
+}
+
 // shardPartition returns the shard-partition that a shard belongs to.
 // NOTE: this is DIFFERENT from the key-partition
 func (c *cluster) shardToShardPartition(index string, shard uint64) int {
@@ -1193,9 +1223,10 @@ func (c *cluster) containsShards(index string, availableShards *roaring.Bitmap, 
 type Hasher interface {
 	// Hashes the key into a number between [0,N).
 	Hash(key uint64, n int) int
+	Name() string
 }
 
-// jmphasher represents an implementation of jmphash. Implements Hasher.
+// Jmphasher represents an implementation of jmphash. Implements Hasher.
 type Jmphasher struct{}
 
 // Hash returns the integer hash for the given key.
@@ -1207,6 +1238,11 @@ func (h *Jmphasher) Hash(key uint64, n int) int {
 		j = int64(float64(b+1) * (float64(int64(1)<<31) / float64((key>>33)+1)))
 	}
 	return int(b)
+}
+
+// Name returns the name of this hash.
+func (h *Jmphasher) Name() string {
+	return "jump-hash"
 }
 
 func (c *cluster) setup() error {
@@ -1905,7 +1941,7 @@ func (n nodeIDs) Len() int           { return len(n) }
 func (n nodeIDs) Swap(i, j int)      { n[i], n[j] = n[j], n[i] }
 func (n nodeIDs) Less(i, j int) bool { return n[i] < n[j] }
 
-// ContainsID returns true if idi matches one of the nodesets's IDs.
+// ContainsID returns true if id matches one of the nodesets's IDs.
 func (n nodeIDs) ContainsID(id string) bool {
 	for _, nid := range n {
 		if nid == id {

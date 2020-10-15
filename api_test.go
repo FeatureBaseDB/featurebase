@@ -490,6 +490,8 @@ func (*offsetModHasher) Hash(key uint64, n int) int {
 	return int(key+1) % n
 }
 
+func (*offsetModHasher) Name() string { return "mod" }
+
 func TestAPI_ClearFlagForImportAndImportValues(t *testing.T) {
 	c := test.MustRunCluster(t, 1,
 		[]server.CommandOption{

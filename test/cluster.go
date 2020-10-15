@@ -34,6 +34,8 @@ type ModHasher struct{}
 
 func (*ModHasher) Hash(key uint64, n int) int { return int(key) % n }
 
+func (*ModHasher) Name() string { return "mod" }
+
 // Cluster represents a Pilosa cluster (multiple Command instances)
 type Cluster struct {
 	Nodes []*Command
