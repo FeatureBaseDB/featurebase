@@ -135,19 +135,19 @@ func TestRunCountRange(t *testing.T) {
 	if cnt != 0 {
 		t.Fatalf("should get 0 from empty container, but got: %v", cnt)
 	}
-	c.add(5)
-	c.add(6)
-	c.add(7)
+	c, _ = c.add(5)
+	c, _ = c.add(6)
+	c, _ = c.add(7)
 
 	cnt = RunCountRange(c.runs(), 2, 9)
 	if cnt != 3 {
 		t.Fatalf("should get 3 from interval within range, but got: %v", cnt)
 	}
 
-	c.add(8)
-	c.add(9)
-	c.add(10)
-	c.add(11)
+	c, _ = c.add(8)
+	c, _ = c.add(9)
+	c, _ = c.add(10)
+	c, _ = c.add(11)
 
 	cnt = RunCountRange(c.runs(), 4, 8)
 	if cnt != 3 {
@@ -199,17 +199,17 @@ func TestRunCountRange(t *testing.T) {
 		t.Fatalf("should get 6 from interval equal to range, but got: %v", cnt)
 	}
 
-	c.add(17)
-	c.add(19)
-	c.add(18)
+	c, _ = c.add(17)
+	c, _ = c.add(19)
+	c, _ = c.add(18)
 
 	cnt = RunCountRange(c.runs(), 1, 22)
 	if cnt != 10 {
 		t.Fatalf("should get 10 from multiple ranges in interval, but got: %v", cnt)
 	}
 
-	c.add(13)
-	c.add(14)
+	c, _ = c.add(13)
+	c, _ = c.add(14)
 
 	cnt = RunCountRange(c.runs(), 6, 18)
 	if cnt != 9 {
@@ -227,17 +227,17 @@ func TestRunContains(t *testing.T) {
 	if c.runContains(5) {
 		t.Fatalf("empty run container should not contain 5")
 	}
-	c.add(5)
+	c, _ = c.add(5)
 	if !c.runContains(5) {
 		t.Fatalf("run container with 5 should contain 5")
 	}
 
-	c.add(6)
-	c.add(7)
+	c, _ = c.add(6)
+	c, _ = c.add(7)
 
-	c.add(9)
-	c.add(10)
-	c.add(11)
+	c, _ = c.add(9)
+	c, _ = c.add(10)
+	c, _ = c.add(11)
 
 	if !c.runContains(10) {
 		t.Fatalf("run container with 10 in second run should contain 10")
@@ -282,7 +282,7 @@ func TestIntersectionCountArrayBitmap3(t *testing.T) {
 	if res.N() != res.count() || res.N() != MaxContainerVal+1 {
 		t.Fatalf("test #2 intersectCountBitmapRun fail orig: %v new: %v exp: %v", res.N(), res.count(), MaxContainerVal+1)
 	}
-	b.bitmapToRun(0)
+	b = b.bitmapToRun(0)
 	res = intersectRunRun(a, b)
 	n := intersectionCountRunRun(a, b)
 	if res.N() != res.count() || res.N() != MaxContainerVal+1 || res.N() != int32(n) {
@@ -613,7 +613,7 @@ func TestIntersectBitmapRunBitmap(t *testing.T) {
 		b.setN(4097)
 		ret := intersectBitmapRun(a, b)
 		if ret.isArray() {
-			ret.arrayToBitmap()
+			ret = ret.arrayToBitmap()
 		}
 		if !reflect.DeepEqual(ret.bitmap(), exp) {
 			t.Fatalf("test #%v expected %v, but got %v", i, exp, ret.bitmap())
@@ -710,9 +710,9 @@ func TestUnionMixed(t *testing.T) {
 			res := union(tt.c1, tt.c2)
 			// convert to array for comparison
 			if res.isBitmap() {
-				res.bitmapToArray()
+				res = res.bitmapToArray()
 			} else if res.isRun() {
-				res.runToArray()
+				res = res.runToArray()
 			}
 			if !reflect.DeepEqual(res.array(), tt.exp) {
 				t.Fatalf("test %s expected %v, but got %v", tt.name, tt.exp, res.array())
@@ -1304,11 +1304,11 @@ func TestBitmapToRun(t *testing.T) {
 	for i, test := range tests {
 		a := NewContainerBitmap(-1, test.bitmap)
 		x := a.bitmap()
-		a.bitmapToRun(0)
+		a = a.bitmapToRun(0)
 		if !reflect.DeepEqual(a.runs(), test.exp) {
 			t.Fatalf("test #%v expected %v, but got %v", i, test.exp, a.runs())
 		}
-		a.runToBitmap()
+		a = a.runToBitmap()
 		if !reflect.DeepEqual(a.bitmap(), x) {
 			t.Fatalf("test #%v expected %v, but got %v", i, a.bitmap(), x)
 		}
@@ -1633,7 +1633,7 @@ func MakeBitmap(start []uint64) []uint64 {
 func MakeLastBitSet() []uint64 {
 	obj := NewFileBitmap(65535)
 	c := obj.container(0)
-	c.arrayToBitmap()
+	c = c.arrayToBitmap()
 	return c.bitmap()
 }
 
@@ -1895,9 +1895,10 @@ func TestWriteReadArray(t *testing.T) {
 
 func TestWriteReadBitmap(t *testing.T) {
 	// create bitmap containing > 4096 bits
-	cb := NewContainerBitmapN(nil, 129*32)
+	cb := NewContainerBitmapN(nil, 0)
 	for i := 0; i < 129; i++ {
 		cb.bitmap()[i] = 0x5555555555555555
+		cb.n += 32
 	}
 	bb := NewFileBitmap()
 	bb.Containers.Put(0, cb)
@@ -1918,9 +1919,10 @@ func TestWriteReadBitmap(t *testing.T) {
 
 func TestWriteReadFullBitmap(t *testing.T) {
 	// create bitmap containing > 4096 bits
-	cb := NewContainerBitmapN(nil, 65536)
+	cb := NewContainerBitmapN(nil, 0)
 	for i := 0; i < bitmapN; i++ {
 		cb.bitmap()[i] = 0xffffffffffffffff
+		cb.n += 64
 	}
 	bb := NewFileBitmap()
 	bb.Containers.Put(0, cb)
@@ -2924,8 +2926,7 @@ func unionInPlaceWrapper(a, b *Container) *Container {
 
 func differenceInPlaceWrapper(a, b *Container) *Container {
 	a = a.Clone()
-	// this should probably return its new value, but currently does not
-	a.differenceInPlace(b)
+	a = a.differenceInPlace(b)
 	return a
 }
 
@@ -3859,7 +3860,7 @@ func BenchmarkUnionBitmapBitmapInPlace(b *testing.B) {
 	b1 := newTestBitmapContainer()
 	b2 := newTestBitmapContainer()
 	for n := 0; n < b.N; n++ {
-		unionBitmapBitmapInPlace(b1, b2)
+		b1 = unionBitmapBitmapInPlace(b1, b2)
 	}
 }
 
@@ -4356,7 +4357,7 @@ func BenchmarkUnionRunRunInPlace(bm *testing.B) {
 					brun := doContainer(ContainerRun, br.fn())
 
 					abmp := arun.runToBitmap()
-					unionBitmapRunInPlace(abmp, brun)
+					_ = unionBitmapRunInPlace(abmp, brun)
 				}
 			})
 
@@ -4365,7 +4366,7 @@ func BenchmarkUnionRunRunInPlace(bm *testing.B) {
 					arun := doContainer(ContainerRun, ar.fn())
 					brun := doContainer(ContainerRun, br.fn())
 
-					unionRunRunInPlace(arun, brun)
+					_ = unionRunRunInPlace(arun, brun)
 				}
 			})
 		}

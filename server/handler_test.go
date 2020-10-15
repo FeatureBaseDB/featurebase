@@ -385,13 +385,18 @@ func TestHandler_Endpoints(t *testing.T) {
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/ui/usage", nil))
 		if w.Code != gohttp.StatusOK {
+			fmt.Printf("%+v\n", w.Body)
 			t.Fatalf("unexpected status code: %d", w.Code)
 		}
-		ret := mustJSONDecode(t, w.Body)
-		usage := ret["bytesOnDisk"].(map[string]interface{})
-		indexes := usage["indexes"].(map[string]interface{})
-		if len(indexes) != 2 {
-			t.Fatalf("wrong length index size list: %#v", indexes)
+		nodeUsages := make(map[string]pilosa.NodeUsage)
+		if err := json.Unmarshal(w.Body.Bytes(), &nodeUsages); err != nil {
+			t.Fatalf("unmarshal")
+		}
+
+		for _, nodeUsage := range nodeUsages {
+			if len(nodeUsage.Disk.Indexes) != 2 {
+				t.Fatalf("wrong length index size list: %#v", nodeUsage.Disk.Indexes)
+			}
 		}
 	})
 
