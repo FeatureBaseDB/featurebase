@@ -228,18 +228,22 @@ func (s *TranslateStore) CreateKeys(keys ...string) (map[string]uint64, error) {
 	written := false
 	result := make(map[string]uint64, len(keys))
 	err := s.db.Update(func(tx *bolt.Tx) error {
-		bkt := tx.Bucket(bucketKeys)
-		if bkt == nil {
+		keyBucket := tx.Bucket(bucketKeys)
+		if keyBucket == nil {
 			return errors.Errorf(errFmtTranslateBucketNotFound, bucketKeys)
 		}
+		idBucket := tx.Bucket(bucketIDs)
+		if keyBucket == nil {
+			return errors.Errorf(errFmtTranslateBucketNotFound, bucketIDs)
+		}
 		for _, key := range keys {
-			id, boltKey := findIDByKey(bkt, key)
+			id, boltKey := findIDByKey(keyBucket, key)
 			if id == 0 {
 				// The key does not exist.
 				id = pilosa.GenerateNextPartitionedID(s.index, maxID(tx), s.partitionID, s.partitionN)
-				if err := bkt.Put(boltKey, u64tob(id)); err != nil {
+				if err := keyBucket.Put(boltKey, u64tob(id)); err != nil {
 					return err
-				} else if err := tx.Bucket(bucketIDs).Put(u64tob(id), boltKey); err != nil {
+				} else if err := idBucket.Put(u64tob(id), boltKey); err != nil {
 					return err
 				}
 				written = true

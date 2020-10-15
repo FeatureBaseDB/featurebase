@@ -2378,6 +2378,8 @@ func (c *cluster) findFieldKeys(ctx context.Context, field *Field, keys ...strin
 				missing = append(missing, k)
 			}
 		}
+	} else if len(localTranslations) > len(keys) {
+		panic(fmt.Sprintf("more translations than keys! translation count=%v, key count=%v", len(localTranslations), len(keys)))
 	}
 	if len(missing) == 0 {
 		// All keys were available locally.
@@ -2396,7 +2398,7 @@ func (c *cluster) findFieldKeys(ctx context.Context, field *Field, keys ...strin
 
 	// Forward the missing keys to the coordinator.
 	// The coordinator has the authoritative copy.
-	remoteTranslations, err := c.InternalClient.FindFieldKeysNode(ctx, &coordinator.URI, field.Index(), field.Name(), keys...)
+	remoteTranslations, err := c.InternalClient.FindFieldKeysNode(ctx, &coordinator.URI, field.Index(), field.Name(), missing...)
 	if err != nil {
 		return nil, errors.Wrapf(err, "translating field(%s/%s) keys(%v) remotely", field.Index(), field.Name(), keys)
 	}
@@ -2440,6 +2442,8 @@ func (c *cluster) createFieldKeys(ctx context.Context, field *Field, keys ...str
 				missing = append(missing, k)
 			}
 		}
+	} else if len(localTranslations) > len(keys) {
+		panic(fmt.Sprintf("more translations than keys! translation count=%v, key count=%v", len(localTranslations), len(keys)))
 	}
 	if len(missing) == 0 {
 		// All keys exist locally.
@@ -2448,7 +2452,7 @@ func (c *cluster) createFieldKeys(ctx context.Context, field *Field, keys ...str
 	}
 
 	// Forward the missing keys to the coordinator to be created.
-	remoteTranslations, err := c.InternalClient.CreateFieldKeysNode(ctx, &coordinator.URI, field.Index(), field.Name(), keys...)
+	remoteTranslations, err := c.InternalClient.CreateFieldKeysNode(ctx, &coordinator.URI, field.Index(), field.Name(), missing...)
 	if err != nil {
 		return nil, errors.Wrapf(err, "translating field(%s/%s) keys(%v) remotely", field.Index(), field.Name(), keys)
 	}
@@ -2594,6 +2598,8 @@ func (c *cluster) translateIndexKeySet(ctx context.Context, indexName string, ke
 }
 
 func (c *cluster) findIndexKeys(ctx context.Context, indexName string, keys ...string) (map[string]uint64, error) {
+	done := ctx.Done()
+
 	idx := c.holder.Index(indexName)
 	if idx == nil {
 		return nil, ErrIndexNotFound
@@ -2609,7 +2615,6 @@ func (c *cluster) findIndexKeys(ctx context.Context, indexName string, keys ...s
 	// TODO: use local replicas to short-circuit network traffic
 
 	// Group keys by node.
-	// Delete remote keys from the by-partition map so that it can be used for local translation.
 	keysByNode := make(map[*Node][]string)
 	for partitionID, keys := range keysByPartition {
 		// Find the primary node for this partition.
@@ -2625,11 +2630,13 @@ func (c *cluster) findIndexKeys(ctx context.Context, indexName string, keys ...s
 
 		// Group the partition to be processed remotely.
 		keysByNode[primary] = append(keysByNode[primary], keys...)
+
+		// Delete remote keys from the by-partition map so that it can be used for local translation.
 		delete(keysByPartition, partitionID)
 	}
 
 	// Start translating keys remotely.
-	// On child calls, there are no remote results.
+	// On child calls, there are no remote results since we were only sent the keys that we own.
 	remoteResults := make(chan map[string]uint64, len(keysByNode))
 	var g errgroup.Group
 	defer g.Wait()
@@ -2650,6 +2657,13 @@ func (c *cluster) findIndexKeys(ctx context.Context, indexName string, keys ...s
 	// Translate local keys.
 	translations := make(map[string]uint64)
 	for partitionID, keys := range keysByPartition {
+		// Handle cancellation.
+		select {
+		case <-done:
+			return nil, ctx.Err()
+		default:
+		}
+
 		// Find the keys within the partition.
 		t, err := idx.TranslateStore(partitionID).FindKeys(keys...)
 		if err != nil {
@@ -2678,6 +2692,14 @@ func (c *cluster) findIndexKeys(ctx context.Context, indexName string, keys ...s
 }
 
 func (c *cluster) createIndexKeys(ctx context.Context, indexName string, keys ...string) (map[string]uint64, error) {
+	// Check for early cancellation.
+	done := ctx.Done()
+	select {
+	case <-done:
+		return nil, ctx.Err()
+	default:
+	}
+
 	idx := c.holder.Index(indexName)
 	if idx == nil {
 		return nil, ErrIndexNotFound
@@ -2717,7 +2739,7 @@ func (c *cluster) createIndexKeys(ctx context.Context, indexName string, keys ..
 	defer g.Wait()
 
 	// Start translating keys remotely.
-	// On child calls, there are no remote results.
+	// On child calls, there are no remote results since we were only sent the keys that we own.
 	for node, keys := range keysByNode {
 		node, keys := node, keys
 
@@ -2740,6 +2762,13 @@ func (c *cluster) createIndexKeys(ctx context.Context, indexName string, keys ..
 		partitionID, keys := partitionID, keys
 
 		g.Go(func() error {
+			// Handle cancellation.
+			select {
+			case <-done:
+				return ctx.Err()
+			default:
+			}
+
 			translations, err := idx.TranslateStore(partitionID).CreateKeys(keys...)
 			if err != nil {
 				return errors.Wrapf(err, "translating index(%s) keys(%v) on partition(%d)", idx.Name(), keys, partitionID)

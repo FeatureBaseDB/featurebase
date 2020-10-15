@@ -292,7 +292,7 @@ func TestTranslateStore_FindKeys(t *testing.T) {
 			s := MustOpenNewTranslateStore()
 			defer MustCloseTranslateStore(s)
 
-			var naieveMap map[string]uint64
+			var naiveMap map[string]uint64
 			if c.data != nil {
 				// Load in key data.
 				keys := c.data
@@ -305,16 +305,16 @@ func TestTranslateStore_FindKeys(t *testing.T) {
 					t.Errorf("mapped %d keys to %d ids", len(keys), len(ids))
 					return
 				}
-				naieveMap = make(map[string]uint64, len(keys))
+				naiveMap = make(map[string]uint64, len(keys))
 				for i, key := range keys {
-					naieveMap[key] = ids[i]
+					naiveMap[key] = ids[i]
 				}
 			}
 
 			// Compute expected lookup result.
 			result := map[string]uint64{}
 			for _, key := range c.lookup {
-				id, ok := naieveMap[key]
+				id, ok := naiveMap[key]
 				if !ok {
 					// The key is expected to be missing.
 					continue
