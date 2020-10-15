@@ -28,7 +28,10 @@ import (
 
 func TestWALSegment_Open(t *testing.T) {
 	t.Run("OK", func(t *testing.T) {
-		s := MustOpenWALSegment(t, 10)
+		db := MustOpenDB(t)
+		defer MustCloseDB(t, db)
+
+		s := MustOpenWALSegment(t, db, 10)
 		defer MustCloseWALSegment(t, s)
 		if got, want := s.MinWALID, int64(10); got != want {
 			t.Fatalf("Base()=%d, want %d", got, want)
@@ -153,7 +156,7 @@ func benchmarkWALSegment_WriteWALPage(b *testing.B, flushSize int) {
 */
 
 // MustOpenWALSegment opens a WAL segment in a temporary path. Fails on error.
-func MustOpenWALSegment(tb testing.TB, walID int64) rbf.WALSegment {
+func MustOpenWALSegment(tb testing.TB, db *rbf.DB, walID int64) rbf.WALSegment {
 	tb.Helper()
 
 	dir, err := ioutil.TempDir("", "")
@@ -165,7 +168,7 @@ func MustOpenWALSegment(tb testing.TB, walID int64) rbf.WALSegment {
 		tb.Fatal(err)
 	}
 
-	s := rbf.NewWALSegment(path)
+	s := db.NewWALSegment(path)
 	if err := s.Open(); err != nil {
 		tb.Fatal(err)
 	}

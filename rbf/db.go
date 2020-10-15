@@ -38,6 +38,8 @@ const (
 	MaxWALSegmentFileSize = 10 * (1 << 20)
 )
 
+// DB options like 	MaxSize, FsyncEnabled, DoAllocZero
+// can be set before calling DB.Open().
 type DB struct {
 	data        []byte           // mmap data
 	file        *os.File         // file descriptor
@@ -58,24 +60,23 @@ type DB struct {
 
 	// The maximum allowed database size. Required by mmap.
 	MaxSize int64
-}
 
-// NewDBWithAllocZero sets DoAllocZero true and
-// returns a new instance of DB. We set it here
-// to avoid a data race afterwards.
-func NewDBWithAllocZero(path string) *DB {
-	DoAllocZero = true
-	return NewDB(path)
+	// Set before calling db.Open()
+	FsyncEnabled bool
+
+	// for mmap correctness testing.
+	DoAllocZero bool
 }
 
 // NewDB returns a new instance of DB.
 func NewDB(path string) *DB {
 	db := &DB{
-		txs:     make(map[*Tx]struct{}),
-		pageMap: immutable.NewMap(&uint32Hasher{}),
-		wcache:  make([]byte, MaxWALSegmentFileSize+PageSize),
-		Path:    path,
-		MaxSize: DefaultMaxSize,
+		txs:          make(map[*Tx]struct{}),
+		pageMap:      immutable.NewMap(&uint32Hasher{}),
+		wcache:       make([]byte, MaxWALSegmentFileSize+PageSize),
+		Path:         path,
+		MaxSize:      DefaultMaxSize,
+		FsyncEnabled: true,
 	}
 	return db
 }
@@ -169,7 +170,7 @@ func (db *DB) openWALSegments() error {
 			continue
 		}
 
-		segment := NewWALSegment(filepath.Join(db.WALPath(), fi.Name()))
+		segment := db.NewWALSegment(filepath.Join(db.WALPath(), fi.Name()))
 		if err := segment.Open(); err != nil {
 			_ = db.closeWALSegments()
 			return err
@@ -180,7 +181,7 @@ func (db *DB) openWALSegments() error {
 	// Truncate everything after the last successful meta page.
 	if walID, err := findLastWALMetaPage(db.segments); err != nil {
 		return err
-	} else if db.segments, err = truncateWALAfter(db.segments, walID); err != nil {
+	} else if db.segments, err = db.truncateWALAfter(db.segments, walID); err != nil {
 		return err
 	}
 
@@ -306,7 +307,7 @@ func (db *DB) checkpoint(exclusive bool, mu sync.Locker) error {
 	}
 
 	// Ensure WAL pages are fully copied & synced to DB file.
-	if err := fsync(db.file); err != nil {
+	if err := db.fsync(db.file); err != nil {
 		return fmt.Errorf("db file sync: %w", err)
 	}
 
