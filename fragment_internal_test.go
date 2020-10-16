@@ -560,7 +560,7 @@ func TestFragment_Sum(t *testing.T) {
 		}
 	})
 
-	panicOn(tx.Commit())
+	tx.Rollback()
 	tx = idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f, Shard: f.shard})
 	defer tx.Rollback()
 
@@ -2178,7 +2178,7 @@ func TestFragment_ImportSet_WithTxCommit(t *testing.T) {
 				}
 			}
 
-			panicOn(tx.Commit())
+			tx.Rollback()
 			tx = idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f, Shard: f.shard})
 			defer tx.Rollback()
 
@@ -2457,7 +2457,7 @@ func TestFragment_ImportMutex_WithTxCommit(t *testing.T) {
 				}
 			}
 
-			panicOn(tx.Commit())
+			tx.Rollback()
 			tx = idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f, Shard: f.shard})
 			defer tx.Rollback()
 
@@ -2707,7 +2707,7 @@ func TestFragment_ImportBool_WithTxCommit(t *testing.T) {
 				}
 			}
 
-			panicOn(tx.Commit())
+			tx.Rollback()
 			tx = idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f, Shard: f.shard})
 			defer tx.Rollback()
 
@@ -2787,7 +2787,7 @@ func BenchmarkFragment_FullSnapshot(b *testing.B) {
 		if err := f.bulkImport(tx, rows, cols, options); err != nil {
 			b.Fatalf("Error Building Sample: %s", err)
 		}
-		panicOn(tx.Commit())
+		tx.Rollback()
 		if row > max {
 			max = row
 		}
@@ -2949,7 +2949,7 @@ func BenchmarkImportRoaringUpdateConcurrent(b *testing.B) {
 								// the cost of actually doing the op log for the large initial data set
 								// is excessive. force storage into snapshotted state, then use import
 								// to generate an op log and/or snapshot.
-								// note: skipped for badger, above.
+								// note: skipped for rbf, bolt, lmdb, above.
 								_, _, err := frags[j].storage.ImportRoaringBits(data, false, false, 0)
 								if err != nil {
 									b.Fatalf("importing roaring: %v", err)
@@ -3376,7 +3376,7 @@ func BenchmarkFileWrite(b *testing.B) {
 
 /////////////////////////////////////////////////////////////////////
 
-// not called under badger b/c f.idx.NeedsSnapshot() in Clean() avoids it.
+// not called under Tx stores b/c f.idx.NeedsSnapshot() in Clean() avoids it.
 func (f *fragment) sanityCheck(t testing.TB) {
 	newBM := roaring.NewFileBitmap()
 	file, err := os.Open(f.path)
@@ -3393,7 +3393,7 @@ func (f *fragment) sanityCheck(t testing.TB) {
 		t.Fatalf("sanityCheck couldn't unmarshal fragment %s: %v", f.path, err)
 	}
 	// Refactor fragment.storage
-	// note: not called for badger, see above.
+	// note: not called for rbf, see above.
 	if equal, reason := newBM.BitwiseEqual(f.storage); !equal {
 		t.Fatalf("fragment %s: unmarshalled bitmap different: %v", f.path, reason)
 	}
@@ -3408,11 +3408,11 @@ func (f *fragment) Clean(t testing.TB) {
 	// check or else, in some cases, the background snapshot queue
 	// can decide to pick it up.
 	func() {
-		// should we skip snapshot queue stuff under badger/rbf?
+		// should we skip snapshot queue stuff under bolt/rbf?
 		defer f.mu.Unlock()
 
-		// badger doesn't need snapshot, so this stuff is skipped.
-		// The snapshot queue stuff doesn't work under badger.
+		// rbf doesn't need snapshot, so this stuff is skipped.
+		// The snapshot queue stuff doesn't work under rbf.
 		if f.idx.NeedsSnapshot() {
 			err := f.holder.SnapshotQueue.Await(f)
 			if err != nil {

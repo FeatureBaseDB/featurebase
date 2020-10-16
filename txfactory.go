@@ -38,7 +38,7 @@ const (
 	RoaringTxn string = "roaring"
 	LmdbTxn    string = "lmdb"
 	RBFTxn     string = "rbf"
-	BadgerTxn  string = "badger"
+	BoltTxn    string = "bolt"
 )
 
 // DefaultTxsrc is set here. pilosa/server/config.go references it
@@ -409,12 +409,12 @@ const (
 	roaringTxn txtype = 1 // these don't really have any transactions
 	rbfTxn     txtype = 2
 	lmdbTxn    txtype = 3
-	badgerTxn  txtype = 4
+	boltTxn    txtype = 4
 )
 
 // these need to be skipped by the holder.go field scanner that
 // calls IsTxDatabasePath
-var allTypesWithSuffixes = []txtype{rbfTxn, lmdbTxn, badgerTxn}
+var allTypesWithSuffixes = []txtype{rbfTxn, lmdbTxn, boltTxn}
 
 // FileSuffix is used to determine backend directory names.
 // We append '@' to be sure we never collide with a field name
@@ -429,8 +429,8 @@ func (ty txtype) FileSuffix() string {
 		return "-rbfdb@"
 	case lmdbTxn:
 		return "-lmdb@"
-	case badgerTxn:
-		return "-badgerdb@"
+	case boltTxn:
+		return "-boltdb@"
 	}
 	panic(fmt.Sprintf("unkown txtype %v", int(ty)))
 }
@@ -478,8 +478,8 @@ func MustTxsrcToTxtype(txsrc string) (types []txtype) {
 			types = append(types, rbfTxn)
 		case LmdbTxn: // "lmdb"
 			types = append(types, lmdbTxn)
-		case BadgerTxn: // "badger"
-			types = append(types, badgerTxn)
+		case BoltTxn: // "bolt"
+			types = append(types, boltTxn)
 		default:
 			panic(fmt.Sprintf("unknown txsrc '%v'", s))
 		}
@@ -844,8 +844,8 @@ func (ty txtype) String() string {
 		return "rbfTxn"
 	case lmdbTxn:
 		return "lmdbTxn"
-	case badgerTxn:
-		return "badgerTxn"
+	case boltTxn:
+		return "boltTxn"
 	}
 	panic(fmt.Sprintf("unhandled ty '%v' in txtype.String()", int(ty)))
 }
@@ -1212,7 +1212,7 @@ func anyGlobalDBWrappersStillOpen() bool {
 	if globalLMDBReg.Size() != 0 {
 		return true
 	}
-	if globalBadgerReg.Size() != 0 {
+	if globalBoltReg.Size() != 0 {
 		return true
 	}
 	return false

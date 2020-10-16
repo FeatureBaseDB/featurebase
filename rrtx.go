@@ -575,7 +575,7 @@ func (w *RoaringWrapper) DeleteField(index, field, fieldPath string) error {
 	// match txn sn count vs lmdb/etc.
 	atomic.AddInt64(&globalNextTxSnRoaring, 1)
 
-	// under blue-green badger_roaring, the directory will not be found, b/c badger will have
+	// under blue-green bolt_roaring, the directory will not be found, b/c bolt will have
 	// already done the os.RemoveAll().	BUT, RemoveAll returns nil error in this case. Docs:
 	// "If the path does not exist, RemoveAll returns nil (no error)"
 	err := os.RemoveAll(fieldPath)

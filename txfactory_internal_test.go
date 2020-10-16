@@ -26,10 +26,10 @@ import (
 
 func Test_TxFactory_Qcx_query_context(t *testing.T) {
 	src := os.Getenv("PILOSA_TXSRC")
-	if src == "rbf" || src == "lmdb" || src == "badger" {
+	if src == "rbf" || src == "lmdb" || src == "bolt" {
 		// ok
 	} else {
-		t.Skip("this test only for lmdb and rbf and badger")
+		t.Skip("this test only for lmdb and rbf and bolt")
 	}
 
 	shard := uint64(0)
@@ -251,7 +251,7 @@ func Test_TxFactory_verifyBlueEqualsGreen(t *testing.T) {
 	orig := os.Getenv("PILOSA_TXSRC")
 	defer os.Setenv("PILOSA_TXSRC", orig) // must restore or will mess up other tests!
 
-	checked := []string{"lmdb", "roaring", "badger", "rbf"}
+	checked := []string{"lmdb", "roaring", "bolt", "rbf"}
 
 	for _, blue := range checked {
 		for _, green := range checked {

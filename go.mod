@@ -11,7 +11,6 @@ require (
 	github.com/codahale/hdrhistogram v0.0.0-20161010025455-3a0bb77429bd // indirect
 	github.com/davecgh/go-spew v1.1.1
 	github.com/desertbit/timer v0.0.0-20180107155436-c41aec40b27f // indirect
-	github.com/dgraph-io/badger/v2 v2.0.1-rc1.0.20200709123515-8e896a7af361
 	github.com/dustin/go-humanize v1.0.0
 	github.com/glycerine/idem v0.0.0-20190127113923-7a8083893311
 	github.com/glycerine/lmdb-go v1.9.34
@@ -36,6 +35,7 @@ require (
 	github.com/satori/go.uuid v1.2.0
 	github.com/shirou/gopsutil v2.18.12+incompatible
 	github.com/shirou/w32 v0.0.0-20160930032740-bb4de0191aa4 // indirect
+	github.com/spaolacci/murmur3 v1.1.0 // indirect
 	github.com/spf13/cobra v1.0.0
 	github.com/spf13/pflag v1.0.5
 	github.com/spf13/viper v1.4.0
@@ -50,6 +50,7 @@ require (
 	golang.org/x/text v0.3.3 // indirect
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 	google.golang.org/grpc v1.28.0
+	gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15 // indirect
 	modernc.org/mathutil v1.0.0
 	modernc.org/strutil v1.0.0
 	vitess.io/vitess v3.0.0-rc.3.0.20190602171040-12bfde34629c+incompatible

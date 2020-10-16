@@ -932,12 +932,6 @@ func TestLMDB_RoaringBitmap(t *testing.T) {
 	}
 }
 
-// no reverse iterator on LMDB; we did a special case for Max
-// rather than a general purpose reverse iterator which we
-// aren't using for anything else.
-//func TestLMDB_reverse_badger_iterator_and_prefix_valid(t *testing.T)
-//func TestLMDB_just_reverse_badger_iterator_and_prefix_valid(t *testing.T)
-
 func TestLMDB_ImportRoaringBits(t *testing.T) {
 
 	dbwrap, clean := mustOpenEmptyLMDBWrapper("TestLMDB_ImportRoaringBits")
@@ -946,7 +940,7 @@ func TestLMDB_ImportRoaringBits(t *testing.T) {
 	index, field, view, shard := "i", "f", "v", uint64(0)
 	tx, _ := dbwrap.NewTx(writable, index, Txo{})
 	defer tx.Rollback()
-	tx.(*LMDBTx).DeleteEmptyContainer = true // traditional badger Tx behavior, but not Roaring.
+	tx.(*LMDBTx).DeleteEmptyContainer = true // match Roaring
 
 	//bitvalue := uint64(42)
 

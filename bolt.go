@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// +build amd64
-
 package pilosa
 
 import (
@@ -21,58 +19,42 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"math"
 	"os"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
-	"github.com/glycerine/lmdb-go/lmdb"
 	"github.com/pilosa/pilosa/v2/hash"
 	"github.com/pilosa/pilosa/v2/rbf"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/txkey"
 	"github.com/pkg/errors"
+	bolt "go.etcd.io/bbolt"
 )
 
-const TxInitialMmapSize = 4 << 30 // 4GB
-
-// Linux builds note:
-//
-// This setting of -DMDB_USE_SYSV_SEM=1 is required in the cgo build
-// under Linux to avoid a random deadlock occurance deep inside
-// the LMDB C code.
-//
-// Futher documentation here: https://github.com/bmatsuo/lmdb-go/issues/94
-//
-// The effect of the -D define above is to that the LMDB C code then
-// uses SysV semaphores and avoids POSIX thread-local semaphores. SysV semaphores
-// are stored system-wide. POSIX semaphores are kept on thread-local storage,
-// which is apparently problematic.
-
-// lmdbRegistrar facilitates shutdown
-// of all the lmdb databases started under
+// boltRegistrar facilitates shutdown
+// of all the bolt databases started under
 // tests. Its needed because most tests don't cleanup
 // the *Index(es) they create. But we still
-// want to shutdown lmdbDB goroutines
+// want to shutdown boltDB goroutines
 // after tests run.
 //
 // It also allows opening the same path twice to
 // result in sharing the same open database handle, and
 // thus the same transactional guarantees.
 //
-type lmdbRegistrar struct {
+type boltRegistrar struct {
 	mu sync.Mutex
-	mp map[*LMDBWrapper]bool
+	mp map[*BoltWrapper]bool
 
-	path2db map[string]*LMDBWrapper
+	path2db map[string]*BoltWrapper
 }
 
-func (r *lmdbRegistrar) Size() int {
+func (r *boltRegistrar) Size() int {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	nmp := len(r.mp)
@@ -83,179 +65,112 @@ func (r *lmdbRegistrar) Size() int {
 	return nmp
 }
 
-var globalLMDBReg *lmdbRegistrar = newLMDBTestRegistrar()
+var globalBoltReg *boltRegistrar = newBoltTestRegistrar()
 
-var globalNextTxSnLMDB int64
+var globalNextTxSnBolt int64
 
-func newLMDBTestRegistrar() *lmdbRegistrar {
+func newBoltTestRegistrar() *boltRegistrar {
 
-	return &lmdbRegistrar{
-		mp:      make(map[*LMDBWrapper]bool),
-		path2db: make(map[string]*LMDBWrapper),
+	return &boltRegistrar{
+		mp:      make(map[*BoltWrapper]bool),
+		path2db: make(map[string]*BoltWrapper),
 	}
 }
 
-// register each lmdb created under tests, so we
-// can clean them up. This is called by openLMDBWrapper() while
+// register each bolt created under tests, so we
+// can clean them up. This is called by openBoltWrapper() while
 // holding the r.mu.Lock, since it needs to atomically
 // check the registry and make a new instance only
 // if one does not exist for its path, and otherwise
 // return the existing instance.
-func (r *lmdbRegistrar) unprotectedRegister(w *LMDBWrapper) {
+func (r *boltRegistrar) unprotectedRegister(w *BoltWrapper) {
 	r.mp[w] = true
 	r.path2db[w.path] = w
 }
 
 // unregister removes w from r
-func (r *lmdbRegistrar) unregister(w *LMDBWrapper) {
+func (r *boltRegistrar) unregister(w *BoltWrapper) {
 	r.mu.Lock()
 	delete(r.mp, w)
 	delete(r.path2db, w.path)
 	r.mu.Unlock()
 }
 
-func DumpAllLMDB() {
+func DumpAllBolt() {
 	short := true
-	globalLMDBReg.mu.Lock()
-	defer globalLMDBReg.mu.Unlock()
-	for w := range globalLMDBReg.mp {
-		AlwaysPrintf("this lmdb path='%v' has: \n%v\n", w.path, w.StringifiedLMDBKeys(nil, short))
+	globalBoltReg.mu.Lock()
+	defer globalBoltReg.mu.Unlock()
+	for w := range globalBoltReg.mp {
+		AlwaysPrintf("this bolt path='%v' has: \n%v\n", w.path, w.StringifiedBoltKeys(nil, short))
 	}
 }
 
-// lmdbPath is a helper for determining the full directory
-// in which the lmdb database will be stored.
-func lmdbPath(path string) string {
-	if !strings.HasSuffix(path, "-lmdb@") {
-		return path + "-lmdb@"
+// boltPath is a helper for determining the full directory
+// in which the bolt database will be stored.
+func boltPath(path string) string {
+	if !strings.HasSuffix(path, "-boltdb@") {
+		return path + "-boltdb@"
 	}
 	return path
 }
 
-// openLMDBDB opens the database in the bpath directoy
-// without deleting any prior content. Any LMDBDB
-// database directory will have the "-lmdb" suffix.
+// openBoltDB opens the database in the bpath directoy
+// without deleting any prior content. Any BoltDB
+// database directory will have the "-bolt" suffix.
 //
-// openLMDBDB will check the registry and make a new instance only
+// openBoltDB will check the registry and make a new instance only
 // if one does not exist for its bpath. Otherwise it returns
-// the existing instance. This insures only one lmdbDB
+// the existing instance. This insures only one boltDB
 // per bpath in this pilosa node.
-func (r *lmdbRegistrar) OpenDBWrapper(path0 string, doAllocZero bool) (DBWrapper, error) {
-	path := lmdbPath(path0)
+func (r *boltRegistrar) OpenDBWrapper(path0 string, doAllocZero bool) (DBWrapper, error) {
+	path := boltPath(path0)
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	w, ok := r.path2db[path]
 	if ok {
-		// creates the effect of having only one lmdb open per pilosa node.
+		// creates the effect of having only one bolt open per pilosa node.
 		return w, nil
 	}
-	// otherwise, make a new lmdb and store it in globalLMDBReg
+	// otherwise, make a new bolt and store it in globalBoltReg
 
-	runtime.LockOSThread()
-	defer runtime.UnlockOSThread()
-
-	const MaxReaders = 126 // default is 126
-	env, err := lmdb.NewEnvMaxReaders(MaxReaders)
-	panicOn(err)
-
-	err = env.SetMaxDBs(1)
-	panicOn(err)
-	//err = env.SetMapSize(256 << 30) // 256GB
-	err = env.SetMapSize(TxInitialMmapSize)
-	panicOn(err)
-
-	panicOn(os.MkdirAll(filepath.Dir(path), 0755))
-
-	//flags := uint(lmdb.NoReadahead | lmdb.NoSubdir)
-	//flags := uint(lmdb.NoSubdir) // no difference without the No.Readahead on ./query.
-	// NoReadahead should be better for random workloads or those bigger than memory,
-	// as it avoids loading extra pages which then evict pages you are using.
-	//flags := uint(lmdb.NoReadahead)
-	flags := uint(0)
-
-	// unsafe, but get upper bound on performance.
-	//	WriteMap    = C.MDB_WRITEMAP   // Use a writable memory map.
-	//	NoMetaSync  = C.MDB_NOMETASYNC // Don't fsync metapage after commit.
-	//	NoSync      = C.MDB_NOSYNC     // Don't fsync after commit.
-	// flags = flags | lmdb.WriteMap | lmdb.NoMetaSync | lmdb.NoSync // about the same speed
-	// flags = flags | lmdb.NoMetaSync | lmdb.NoSync // slows things down
-
-	// TODO(jea): we got an odd segfault in the roaring/ pkg when we went to read-only mmap
-	// with the row-cache off; probably means we were trying to write to mmap-ed
-	// memory. Investigate at some point. reference: 2a77b25d ja/write_map_prevents_segfault
-	//
-	// Update: added COW to roaring/roaring.go:3282  func (c *Container) arrayRemove(),
-	// seems to fix the issue.
-	//
-	//flags = flags | lmdb.WriteMap // seems faster than without: or maybe not. not sure.
-	// kRemove  N=  710401   avg/op:      7.714µs   sd:      27.83µs  total: 5.480656859s
-	//    kAdd  N=  722835   avg/op:      9.096µs   sd:    105.787µs  total: 6.575497725s
-
-	// ACI not ACID at the moment; no durability
-	flags = flags |
-		lmdb.NoMemInit | // Disable LMDB memory initialization
-
-		// Note that lmdb.WriteMap requests a big, writable, memory map.
-		// On my darwin/OSX laptop with 16GB ram, for instance, we
-		// can have difficulty obtaining this, resulting in
-		//   panic: mdb_env_open: no space left on device
-		lmdb.WriteMap | // Use a writable memory map.
-
-		// default ACI (not Durable) transactions; 300% faster write speed results.
-		lmdb.NoMetaSync | // Don't fsync metapage after commit.
-		lmdb.NoSync | // Don't fsync after commit.
-		lmdb.MapAsync // Flush asynchronously when using the WriteMap flag.
-
+	dir := filepath.Dir(path)
 	if !DirExists(path) {
-		panicOn(os.MkdirAll(path, 0755))
+		panicOn(os.MkdirAll(dir, 0755))
 	}
-	err = env.Open(path, flags, 0644)
+
+	db, err := bolt.Open(path, 0666, &bolt.Options{Timeout: 5 * time.Second, InitialMmapSize: TxInitialMmapSize})
 	if err != nil {
-		AlwaysPrintf("error env.Open(path='%v'): '%v'; on gid = '%v'", path, err, curGID())
-	}
-	panicOn(err)
-
-	// In any real application it is important to check for readers that were
-	// never closed by their owning process, and for which the owning process
-	// has exited.  See the documentation on transactions for more information.
-	staleReaders, err := env.ReaderCheck()
-	panicOn(err)
-	if staleReaders > 0 {
-		log.Printf("cleared %d reader slots from dead processes", staleReaders)
+		return nil, errors.Wrapf(err, fmt.Sprintf("open bolt path '%v'", path))
 	}
 
-	// Open a database handle that will be used for the entire lifetime of this
-	// application.  Because the database may not have existed before, and the
-	// database may need to be created, we need to get the database handle in
-	// an update transacation.
-	var dbi lmdb.DBI
-	name := filepath.Base(path)
-	err = env.Update(func(txn *lmdb.Txn) (err error) {
-		dbi, err = txn.CreateDBI(name)
-		return err
+	err = db.Update(func(tx *bolt.Tx) (err error) {
+		_, err = tx.CreateBucketIfNotExists(bucketCT)
+		return
 	})
-	panicOn(err)
+	if err != nil {
+		return nil, errors.Wrapf(err, fmt.Sprintf("create bolt bucket '%v' in path '%v'", string(bucketCT), path))
+	}
 
-	w = &LMDBWrapper{
+	name := filepath.Base(path)
+	w = &BoltWrapper{
 		name:        name,
-		env:         env,
+		db:          db,
 		reg:         r,
 		path:        path,
-		dbi:         dbi,
 		doAllocZero: doAllocZero,
-		openTx:      make(map[*LMDBTx]bool),
+		openTx:      make(map[*BoltTx]bool),
 	}
 	r.unprotectedRegister(w)
 
 	return w, nil
 }
 
-func (w *LMDBWrapper) Path() string {
+func (w *BoltWrapper) Path() string {
 	return w.path
 }
 
-func (w *LMDBWrapper) HasData() (has bool, err error) {
+func (w *BoltWrapper) HasData() (has bool, err error) {
 
 	tx, err := w.NewTx(!writable, "", Txo{})
 	if err != nil {
@@ -263,7 +178,7 @@ func (w *LMDBWrapper) HasData() (has bool, err error) {
 	}
 	defer tx.Rollback()
 
-	bi := NewLMDBIterator(tx.(*LMDBTx), nil)
+	bi := NewBoltIterator(tx.(*BoltTx), nil)
 	defer bi.Close()
 
 	for bi.Next() {
@@ -272,19 +187,19 @@ func (w *LMDBWrapper) HasData() (has bool, err error) {
 	return false, nil
 }
 
-func (w *LMDBWrapper) CleanupTx(tx Tx) {
+func (w *BoltWrapper) CleanupTx(tx Tx) {
 	// inlined into Rollback and Commit, so this is a no-op, just here to satisfy the interface.
 }
 
-func (tx *LMDBTx) IsDone() (done bool) {
+func (tx *BoltTx) IsDone() (done bool) {
 	return atomic.LoadInt64(&tx.unlocked) == 1
 }
 
-func (w *LMDBWrapper) OpenListString() (r string) {
+func (w *BoltWrapper) OpenListString() (r string) {
 
 	list := w.listopen()
 	if len(list) == 0 {
-		return "<no open LMDBTx>"
+		return "<no open BoltTx>"
 	}
 	for i, ltx := range list {
 		if ltx.o.Write {
@@ -296,7 +211,7 @@ func (w *LMDBWrapper) OpenListString() (r string) {
 	return
 }
 
-func (w *LMDBWrapper) listopen() (slc []*LMDBTx) {
+func (w *BoltWrapper) listopen() (slc []*BoltTx) {
 	w.muDb.Lock()
 	for v := range w.openTx {
 		slc = append(slc, v)
@@ -305,7 +220,7 @@ func (w *LMDBWrapper) listopen() (slc []*LMDBTx) {
 	return
 }
 
-func (w *LMDBWrapper) OpenSnList() (slc []int64) {
+func (w *BoltWrapper) OpenSnList() (slc []int64) {
 	w.muDb.Lock()
 	for v := range w.openTx {
 		slc = append(slc, v.sn)
@@ -314,56 +229,53 @@ func (w *LMDBWrapper) OpenSnList() (slc []int64) {
 	return
 }
 
-var ErrShutdown = fmt.Errorf("shutting down")
-
 // DeleteIndex deletes all the containers associated with
-// the named index from the lmdb database.
-func (w *LMDBWrapper) DeleteIndex(indexName string) error {
+// the named index from the bolt database.
+func (w *BoltWrapper) DeleteIndex(indexName string) error {
 
 	// We use the apostrophie rune `'` to locate the end of the
 	// index name in the key prefix, so we cannot allow indexNames
 	// themselves to contain apostrophies.
 	if strings.Contains(indexName, "/") {
-		return fmt.Errorf("error: bad indexName `%v` in LMDBWrapper.DeleteIndex() call: indexName cannot contain '/'.", indexName)
+		return fmt.Errorf("error: bad indexName `%v` in BoltWrapper.DeleteIndex() call: indexName cannot contain '/'.", indexName)
 	}
 	prefix := txkey.IndexOnlyPrefix(indexName)
 	return w.DeletePrefix(prefix)
 }
 
-// statically confirm that LMDBTx satisfies the Tx interface.
-var _ Tx = (*LMDBTx)(nil)
+// statically confirm that BoltTx satisfies the Tx interface.
+var _ Tx = (*BoltTx)(nil)
 
-// LMDBWrapper provides the NewTx() method.
-type LMDBWrapper struct {
-	env *lmdb.Env
+// BoltWrapper provides the NewTx() method.
+type BoltWrapper struct {
+	db *bolt.DB
 
 	muDb sync.Mutex
 
 	path string
 	name string
-	dbi  lmdb.DBI
 
 	// track our registrar for Close / goro leak reporting purposes.
-	reg *lmdbRegistrar
+	reg *boltRegistrar
 
-	// make LMDBWrapper.Close() idempotent, avoiding panic on double Close()
+	// make BoltWrapper.Close() idempotent, avoiding panic on double Close()
 	closed bool
 
-	// doAllocZero sets the corresponding flag on all new LMDBTx.
-	// When doAllocZero is true, we zero out any data from lmdb
+	// doAllocZero sets the corresponding flag on all new BoltTx.
+	// When doAllocZero is true, we zero out any data from bolt
 	// after transcation commit and rollback. This simulates
 	// what would happen if we were to use the mmap-ed data
-	// from lmdb directly. Currently we copy by default for
+	// from bolt directly. Currently we copy by default for
 	// safety because otherwise TestAPI_ImportColumnAttrs sees
 	// corrupted data.
 	doAllocZero bool
 
 	DeleteEmptyContainer bool
 
-	openTx map[*LMDBTx]bool
+	openTx map[*BoltTx]bool
 }
 
-func (w *LMDBWrapper) SetHolder(h *Holder) {
+func (w *BoltWrapper) SetHolder(h *Holder) {
 	// don't need it at the moment
 	//w.h = h
 }
@@ -371,33 +283,33 @@ func (w *LMDBWrapper) SetHolder(h *Holder) {
 // NewTxWRITE lets us see in the callstack dumps where the WRITE tx are.
 // Can't have more than one active write per database, so the
 // 2nd one will block until the first finishes.
-func (w *LMDBWrapper) NewTxWRITE() (*lmdb.Txn, error) {
-	lmdbTxn, err := w.env.BeginTxn(nil, 0)
+func (w *BoltWrapper) NewTxWRITE() (*bolt.Tx, error) {
+	boltTxn, err := w.db.Begin(true)
 	if err != nil {
-		if w.env == nil || w.IsClosed() {
-			return nil, fmt.Errorf("cannot call NewTxWRITE() on closed LMDB database: '%v'", err)
+		if w.db == nil || w.IsClosed() {
+			return nil, fmt.Errorf("cannot call NewTxWRITE() on closed Bolt database: '%v'", err)
 		}
 		return nil, err
 	}
-	return lmdbTxn, nil
+	return boltTxn, nil
 }
 
 // NewTxREAD lets us see in the callstack dumps where the READ tx are.
-func (w *LMDBWrapper) NewTxREAD() (*lmdb.Txn, error) {
-	lmdbTxn, err := w.env.BeginTxn(nil, lmdb.Readonly)
+func (w *BoltWrapper) NewTxREAD() (*bolt.Tx, error) {
+	boltTxn, err := w.db.Begin(false)
 	if err != nil {
-		if w.env == nil || w.IsClosed() {
-			return nil, fmt.Errorf("cannot call NewTxREAD() on closed LMDB database: '%v'", err)
+		if w.db == nil || w.IsClosed() {
+			return nil, fmt.Errorf("cannot call NewTxREAD() on closed Bolt database: '%v'", err)
 		}
 		return nil, err
 	}
-	return lmdbTxn, nil
+	return boltTxn, nil
 }
 
-// NewTx produces LMDB based ACID or ACI transactions. If
+// NewTx produces Bolt based transactions. If
 // the transaction will modify data, then the write flag must be true.
 // Read-only queries should set write to false, to allow more concurrency.
-// Methods on a LMDBTx are thread-safe, and can be called from
+// Methods on a BoltTx are thread-safe, and can be called from
 // different goroutines.
 //
 // initialIndexName is optional. It is set by the TxFactory from the Txo
@@ -406,37 +318,32 @@ func (w *LMDBWrapper) NewTxREAD() (*lmdb.Txn, error) {
 // but when set is highly useful for debugging. It has no impact
 // on transaction behavior.
 //
-func (w *LMDBWrapper) NewTx(write bool, initialIndexName string, o Txo) (tx Tx, err error) {
+func (w *BoltWrapper) NewTx(write bool, initialIndexName string, o Txo) (tx Tx, err error) {
 
-	sn := atomic.AddInt64(&globalNextTxSnLMDB, 1)
+	sn := atomic.AddInt64(&globalNextTxSnBolt, 1)
 
-	//vv("lmdb new tx _sn_ %v; openTx='%v', stack \n%v", sn, w.OpenListString(), stack())
-	//vv("lmdb new (write=%v, shard=%v) tx _sn_ %v; openTx='%v'", write, o.Shard, sn, w.OpenListString())
+	////vv("bolt new tx _sn_ %v; openTx='%v', stack \n%v", sn, w.OpenListString(), stack())
+	////vv("bolt new (write=%v, shard=%v) tx _sn_ %v; openTx='%v'", write, o.Shard, sn, w.OpenListString())
 
-	runtime.LockOSThread()
-
-	var lmdbTxn *lmdb.Txn
+	var boltTxn *bolt.Tx
 	if write {
 		// see the WRITE tx on the callstack.
-		lmdbTxn, err = w.NewTxWRITE()
+		boltTxn, err = w.NewTxWRITE()
 		if err != nil {
 			return nil, err
 		}
 	} else {
 		// see the READ tx on the callstack.
-		lmdbTxn, err = w.NewTxREAD()
+		boltTxn, err = w.NewTxREAD()
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	lmdbTxn.RawRead = true
-
-	ltx := &LMDBTx{
+	ltx := &BoltTx{
 		sn:                   sn,
 		write:                write,
-		tx:                   lmdbTxn,
-		dbi:                  w.dbi,
+		tx:                   boltTxn,
 		Db:                   w,
 		frag:                 o.Fragment,
 		doAllocZero:          w.doAllocZero,
@@ -455,8 +362,8 @@ func (w *LMDBWrapper) NewTx(write bool, initialIndexName string, o Txo) (tx Tx, 
 	return
 }
 
-// Close shuts down the LMDB database.
-func (w *LMDBWrapper) Close() (err error) {
+// Close shuts down the Bolt database.
+func (w *BoltWrapper) Close() (err error) {
 	w.muDb.Lock()
 	defer w.muDb.Unlock()
 	if !w.closed {
@@ -464,40 +371,37 @@ func (w *LMDBWrapper) Close() (err error) {
 			// complain if there are still Tx in flight, b/c otherwise we will see
 			// the somewhat mysterious 'panic: should not be in ReadSlot.free() with slot still owned by gid=107043; refCount=1'
 			if len(w.openTx) > 0 {
-				AlwaysPrintf("error: cannot close LMDBWrapper with Tx still in flight.")
+				AlwaysPrintf("error: cannot close BoltWrapper with Tx still in flight.")
 				return
 			}
 		}
 		w.reg.unregister(w)
 		w.closed = true
-		w.env.CloseDBI(w.dbi)
-		w.env.Close()
-		w.env = nil
+		return w.db.Close()
 	}
 	return nil
 }
 
-func (w *LMDBWrapper) IsClosed() (closed bool) {
+func (w *BoltWrapper) IsClosed() (closed bool) {
 	w.muDb.Lock()
 	closed = w.closed
 	w.muDb.Unlock()
 	return
 }
 
-// LMDBTx wraps a lmdb.Txn and provides the Tx interface
+// BoltTx wraps a bolt.Tx and provides the Tx interface
 // method implementations.
-// The methods on LMDBTx are thread-safe, and can be called
+// The methods on BoltTx are thread-safe, and can be called
 // from different goroutines.
-type LMDBTx struct {
+type BoltTx struct {
 
-	// mu serializes lmdb operations on this single txn instance.
+	// mu serializes bolt operations on this single txn instance.
 	mu sync.Mutex
 	sn int64 // serial number
 
 	write bool
-	dbi   lmdb.DBI
-	Db    *LMDBWrapper
-	tx    *lmdb.Txn
+	Db    *BoltWrapper
+	tx    *bolt.Tx
 	frag  *fragment
 
 	opcount int
@@ -510,7 +414,7 @@ type LMDBTx struct {
 
 	DeleteEmptyContainer bool
 
-	unlocked int64 // runtime.UnlockOSThread has been done if > 0
+	unlocked int64
 
 	o Txo
 
@@ -522,54 +426,38 @@ type LMDBTx struct {
 }
 
 // sanity check that database is open.
-func (tx *LMDBTx) sanity() {
+func (tx *BoltTx) sanity() {
 	if tx.Db.IsClosed() {
-		panic("cannot operate on closed LMDB")
+		panic("cannot operate on closed Bolt")
 	}
 }
 
-// debugOnlyGidcheck is expected to be sort of slow. So once we are sure
-// of correctness, turn it off.
-// func (tx *LMDBTx) debugOnlyGidcheck() {
-//
-// 	// only applies to write txn. Reads should be able to share the txn.
-// 	if tx.o.Write {
-// 		cur := curGID()
-// 		if cur != tx.gid {
-// 			panic(fmt.Sprintf("must use write LMDBTx from same gid that created it! creator gid=%v, but user gid now =%v", tx.gid, cur))
-// 		}
-// 	}
-//
-// }
-
-func (tx *LMDBTx) Group() *TxGroup {
+func (tx *BoltTx) Group() *TxGroup {
 	return tx.o.Group
 }
 
-func (tx *LMDBTx) Type() string {
-	return LmdbTxn
+func (tx *BoltTx) Type() string {
+	return BoltTxn
 }
 
-func (tx *LMDBTx) UseRowCache() bool {
+func (tx *BoltTx) UseRowCache() bool {
 	return rbf.EnableRowCache
 }
 
 // Pointer gives us a memory address for the underlying transaction for debugging.
 // It is public because we use it in roaring to report invalid container memory access
 // outside of a transaction.
-func (tx *LMDBTx) Pointer() string {
+func (tx *BoltTx) Pointer() string {
 	return fmt.Sprintf("%p", tx)
 }
 
-const isDebugRun = false
-
 // Rollback rolls back the transaction.
-func (tx *LMDBTx) Rollback() {
+func (tx *BoltTx) Rollback() {
 	notDone := atomic.CompareAndSwapInt64(&tx.unlocked, 0, 1)
 	if !notDone {
 		return
 	}
-	//vv("lmdb rollback tx _sn_ %v; stack \n%v", tx.sn) // , stack())
+	////vv("bolt rollback tx _sn_ %v; stack \n%v", tx.sn) // , stack())
 	if isDebugRun {
 		tx.sanity()
 		tx.Db.muDb.Lock()
@@ -581,22 +469,23 @@ func (tx *LMDBTx) Rollback() {
 	defer tx.mu.Unlock()
 
 	//tx.debugOnlyGidcheck()
-	tx.tx.Abort() // must hold tx.mu mutex lock
+	_ = tx.tx.Rollback() // must hold tx.mu mutex lock
 
-	// use CAS above instead of testing a bool unlocked.
-	runtime.UnlockOSThread()
 	tx.o.dbs.Cleanup(tx)
 }
 
 // Commit commits the transaction to permanent storage.
 // Commits can handle up to 100k updates to fragments
-// at once, but not more. This is a LMDBDB imposed limit.
-func (tx *LMDBTx) Commit() error {
+// at once, but not more. This is a BoltDB imposed limit.
+func (tx *BoltTx) Commit() error {
 	notDone := atomic.CompareAndSwapInt64(&tx.unlocked, 0, 1)
 	if !notDone {
+		////vv("Commit already done")
 		return nil
 	}
-	//vv("lmdb commit tx _sn_ %v; stack \n%v", tx.sn, stack())
+	////vv("bolt commit tx _sn_ %v; path = '%v'; stack \n%v", tx.sn, tx.Db.path, stack())
+	//DumpAllBolt()
+
 	if isDebugRun {
 		tx.sanity()
 		tx.Db.muDb.Lock()
@@ -606,29 +495,26 @@ func (tx *LMDBTx) Commit() error {
 	tx.mu.Lock()
 	defer tx.mu.Unlock()
 
-	//tx.debugOnlyGidcheck()
-	err := tx.tx.Commit() // must hold tx.mu mutex lock
+	err := tx.tx.Commit()
 	panicOn(err)
 
-	// replace the if !tx.unlocked with the CAS on tx.unlocked above.
-	runtime.UnlockOSThread()
 	tx.o.dbs.Cleanup(tx)
 	return err
 }
 
-// Readonly returns true iff the LMDBTx is read-only.
-func (tx *LMDBTx) Readonly() bool {
+// Readonly returns true iff the BoltTx is read-only.
+func (tx *BoltTx) Readonly() bool {
 	return !tx.write
 }
 
 // RoaringBitmap returns the roaring.Bitmap for all bits in the fragment.
-func (tx *LMDBTx) RoaringBitmap(index, field, view string, shard uint64) (*roaring.Bitmap, error) {
+func (tx *BoltTx) RoaringBitmap(index, field, view string, shard uint64) (*roaring.Bitmap, error) {
 
 	return tx.OffsetRange(index, field, view, shard, 0, 0, LeftShifted16MaxContainerKey)
 }
 
 // Container returns the requested roaring.Container, selected by fragment and ckey
-func (tx *LMDBTx) Container(index, field, view string, shard uint64, ckey uint64) (c *roaring.Container, err error) {
+func (tx *BoltTx) Container(index, field, view string, shard uint64, ckey uint64) (c *roaring.Container, err error) {
 
 	// values returned from Get() are only valid while the transaction
 	// is open. If you need to use a value outside of the transaction then
@@ -640,18 +526,13 @@ func (tx *LMDBTx) Container(index, field, view string, shard uint64, ckey uint64
 
 	//tx.debugOnlyGidcheck()
 
-	v, err := tx.tx.Get(tx.dbi, bkey)
+	bkt := tx.tx.Bucket(bucketCT)
+	v := bkt.Get(bkey)
 	tx.mu.Unlock()
 
-	if lmdb.IsNotFound(err) {
-		// Seems crazy, but we, for now at least,
-		// match what RoaringTx does by returning nil, nil.
+	if v == nil {
+		// not found
 		return nil, nil
-	} else {
-		if err != nil {
-			panicOn(err)
-			return nil, nil
-		}
 	}
 	n := len(v)
 	if n > 0 {
@@ -660,8 +541,10 @@ func (tx *LMDBTx) Container(index, field, view string, shard uint64, ckey uint64
 	return
 }
 
+var bucketCT = []byte("ct")
+
 // PutContainer stores rc under the specified fragment and container ckey.
-func (tx *LMDBTx) PutContainer(index, field, view string, shard uint64, ckey uint64, rc *roaring.Container) error {
+func (tx *BoltTx) PutContainer(index, field, view string, shard uint64, ckey uint64, rc *roaring.Container) error {
 
 	bkey := txkey.Key(index, field, view, shard, ckey)
 	var by []byte
@@ -681,45 +564,41 @@ func (tx *LMDBTx) PutContainer(index, field, view string, shard uint64, ckey uin
 		panic(fmt.Sprintf("unknown container type: %v", ct))
 	}
 	tx.mu.Lock()
-	//tx.debugOnlyGidcheck()
 
-	err := tx.tx.Put(tx.dbi, bkey, append(by, ct), 0) // TODO: this might make a copy; can meta byte be stored elsewhere?
+	bkt := tx.tx.Bucket(bucketCT)
+	err := bkt.Put(bkey, append(by, ct))
+	////vv("err on put bkey = '%v' was %v", string(bkey), err)
 	tx.mu.Unlock()
 
-	// TODO(jea): need to handle?
-	//	lmdb.TxnFull
-	//	lmdb.CursorFull
-	//	lmdb.PageFull
 	return err
 }
 
 // RemoveContainer deletes the container specified by the shard and container key ckey
-func (tx *LMDBTx) RemoveContainer(index, field, view string, shard uint64, ckey uint64) error {
+func (tx *BoltTx) RemoveContainer(index, field, view string, shard uint64, ckey uint64) error {
 	bkey := txkey.Key(index, field, view, shard, ckey)
 	tx.mu.Lock()
 	//tx.debugOnlyGidcheck()
 
-	err := tx.tx.Del(tx.dbi, bkey, nil)
+	bkt := tx.tx.Bucket(bucketCT)
+	err := bkt.Delete(bkey)
+
 	tx.mu.Unlock()
-	if lmdb.IsNotFound(err) {
-		return nil
-	}
 	return err
 }
 
 // Add sets all the a bits hot in the specified fragment.
-func (tx *LMDBTx) Add(index, field, view string, shard uint64, batched bool, a ...uint64) (changeCount int, err error) {
+func (tx *BoltTx) Add(index, field, view string, shard uint64, batched bool, a ...uint64) (changeCount int, err error) {
 	return tx.addOrRemove(index, field, view, shard, batched, false, a...)
 }
 
 // Remove clears all the specified a bits in the chosen fragment.
-func (tx *LMDBTx) Remove(index, field, view string, shard uint64, a ...uint64) (changeCount int, err error) {
+func (tx *BoltTx) Remove(index, field, view string, shard uint64, a ...uint64) (changeCount int, err error) {
 	const batched = false
 	const remove = true
 	return tx.addOrRemove(index, field, view, shard, batched, remove, a...)
 }
 
-func (tx *LMDBTx) addOrRemove(index, field, view string, shard uint64, batched, remove bool, a ...uint64) (changeCount int, err error) {
+func (tx *BoltTx) addOrRemove(index, field, view string, shard uint64, batched, remove bool, a ...uint64) (changeCount int, err error) {
 	// pure hack to match RoaringTx
 	defer func() {
 		if !remove && !batched {
@@ -795,22 +674,18 @@ func (tx *LMDBTx) addOrRemove(index, field, view string, shard uint64, batched, 
 
 // Contains returns exists true iff the bit chosen by key is
 // hot (set to 1) in specified fragment.
-func (tx *LMDBTx) Contains(index, field, view string, shard uint64, key uint64) (exists bool, err error) {
+func (tx *BoltTx) Contains(index, field, view string, shard uint64, key uint64) (exists bool, err error) {
 
 	lo, hi := lowbits(key), highbits(key)
 	bkey := txkey.Key(index, field, view, shard, hi)
 	tx.mu.Lock()
-	var v []byte
 
-	//tx.debugOnlyGidcheck()
+	bkt := tx.tx.Bucket(bucketCT)
+	v := bkt.Get(bkey)
 
-	v, err = tx.tx.Get(tx.dbi, bkey)
 	tx.mu.Unlock()
-	if lmdb.IsNotFound(err) {
+	if v == nil {
 		return false, nil
-	}
-	if err != nil {
-		return false, err
 	}
 	n := len(v)
 	if n > 0 {
@@ -820,11 +695,11 @@ func (tx *LMDBTx) Contains(index, field, view string, shard uint64, key uint64) 
 	return exists, err
 }
 
-func (tx *LMDBTx) SliceOfShards(index, field, view, optionalViewPath string) (sliceOfShards []uint64, err error) {
+func (tx *BoltTx) SliceOfShards(index, field, view, optionalViewPath string) (sliceOfShards []uint64, err error) {
 
 	prefix := txkey.AllShardPrefix(index, field, view)
 
-	bi := NewLMDBIterator(tx, prefix)
+	bi := NewBoltIterator(tx, prefix)
 	defer bi.Close()
 
 	lastShard := uint64(0)
@@ -852,8 +727,8 @@ func (tx *LMDBTx) SliceOfShards(index, field, view, optionalViewPath string) (sl
 // return the first container at or after key. found will be true if a
 // container is found at key.
 //
-// LMDBTx notes: We auto-stop at the end of this shard, not going beyond.
-func (tx *LMDBTx) ContainerIterator(index, field, view string, shard uint64, firstRoaringContainerKey uint64) (citer roaring.ContainerIterator, found bool, err error) {
+// BoltTx notes: We auto-stop at the end of this shard, not going beyond.
+func (tx *BoltTx) ContainerIterator(index, field, view string, shard uint64, firstRoaringContainerKey uint64) (citer roaring.ContainerIterator, found bool, err error) {
 
 	// needle example: "idx:'i';fld:'f';vw:'v';shd:'00000000000000000000';key@00000000000000000000"
 	needle := txkey.Key(index, field, view, shard, firstRoaringContainerKey)
@@ -861,23 +736,22 @@ func (tx *LMDBTx) ContainerIterator(index, field, view string, shard uint64, fir
 	// prefix example: "idx:'i';fld:'f';vw:'v';shard:'00000000000000000000';key@"
 	prefix := txkey.Prefix(index, field, view, shard)
 
-	bi := NewLMDBIterator(tx, prefix)
+	bi := NewBoltIterator(tx, prefix)
 	ok := bi.Seek(needle)
 	if !ok {
 		return bi, false, nil
 	}
 
-	// have to compare b/c lmdb might give us valid iterator
+	// have to compare b/c bolt might give us valid iterator
 	// that is past our needle if needle isn't present.
 	return bi, bytes.Equal(bi.lastKey, needle), nil
 }
 
-// LMDBIterator is the iterator returned from a LMDBTx.ContainerIterator() call.
+// BoltIterator is the iterator returned from a BoltTx.ContainerIterator() call.
 // It implements the roaring.ContainerIterator interface.
-type LMDBIterator struct {
-	tx  *LMDBTx
-	cur *lmdb.Cursor
-	dbi lmdb.DBI
+type BoltIterator struct {
+	tx  *BoltTx
+	cur *bolt.Cursor
 
 	prefix []byte
 	seekto []byte
@@ -893,61 +767,48 @@ type LMDBIterator struct {
 	lastConsumed bool
 }
 
-// NewLMDBIterator creates an iterator on tx that will
-// only return rbf that start with prefix.
-func NewLMDBIterator(tx *LMDBTx, prefix []byte) (bi *LMDBIterator) {
+// NewBoltIterator creates an iterator on tx that will
+// only return boltKeys that start with prefix.
+func NewBoltIterator(tx *BoltTx, prefix []byte) (bi *BoltIterator) {
 
 	tx.mu.Lock()
-	//tx.debugOnlyGidcheck()
 
-	cur, err := tx.tx.OpenCursor(tx.dbi)
+	bkt := tx.tx.Bucket(bucketCT)
+	cur := bkt.Cursor()
 	tx.mu.Unlock()
 
-	panicOn(err)
-
-	bi = &LMDBIterator{
-		dbi:    tx.dbi,
+	bi = &BoltIterator{
 		tx:     tx,
 		cur:    cur,
 		prefix: prefix,
 	}
+
 	return
 }
 
 // Close tells the database and transaction that the user is done
 // with the iterator.
-func (bi *LMDBIterator) Close() {
-	bi.tx.mu.Lock()
-	//bi.tx.debugOnlyGidcheck()
-
-	bi.cur.Close()
-	bi.tx.mu.Unlock()
+func (bi *BoltIterator) Close() {
+	// no-op
 }
 
 // Valid returns false if there are no more values in the iterator's range.
-func (bi *LMDBIterator) Valid() bool {
+func (bi *BoltIterator) Valid() bool {
 	return bi.lastOK
 }
 
 // Seek allows the iterator to start at needle instead of the global begining.
-func (bi *LMDBIterator) Seek(needle []byte) (ok bool) {
+func (bi *BoltIterator) Seek(needle []byte) (ok bool) {
 	bi.tx.mu.Lock()
 	defer bi.tx.mu.Unlock()
 
-	bi.seen++ // if ommited, red TestLMDB_ContainerIterator_empty_iteration_loop() in lmdb_test.go.
+	bi.seen++ // if ommited, red TestBolt_ContainerIterator_empty_iteration_loop()
 
-	//bi.tx.debugOnlyGidcheck()
+	k, v := bi.cur.Seek(needle)
+	////vv("seek to needle '%v' gives key '%v'", string(needle), txkey.ToString(k))
 
-	var k, v []byte
-	var err error
-	getflag := uint(lmdb.SetRange)
-	if len(needle) == 0 {
-		k, v, err = bi.cur.Get(oneByteSliceOfZero, nil, getflag)
-	} else {
-		k, v, err = bi.cur.Get(needle, nil, getflag)
-	}
-
-	if lmdb.IsNotFound(err) {
+	if len(k) == 0 {
+		// not found, no keys after needle.
 		bi.lastKey = nil
 		bi.lastVal = nil
 		bi.lastOK = false
@@ -964,13 +825,6 @@ func (bi *LMDBIterator) Seek(needle []byte) (ok bool) {
 			return false
 		}
 	}
-	if len(k) == 0 {
-		bi.lastKey = nil
-		bi.lastVal = nil
-		bi.lastOK = false
-		bi.lastConsumed = false
-		return false
-	}
 
 	bi.lastKey = k
 	bi.lastVal = v
@@ -980,7 +834,7 @@ func (bi *LMDBIterator) Seek(needle []byte) (ok bool) {
 	return true
 }
 
-func (bi *LMDBIterator) ValidForPrefix(prefix []byte) bool {
+func (bi *BoltIterator) ValidForPrefix(prefix []byte) bool {
 	if !bi.lastOK {
 		return false
 	}
@@ -990,15 +844,15 @@ func (bi *LMDBIterator) ValidForPrefix(prefix []byte) bool {
 	return bytes.HasPrefix(bi.lastKey, bi.prefix)
 }
 
-func (bi *LMDBIterator) String() (r string) {
-	return fmt.Sprintf("LMDBIterator{prefix: '%v', seekto: '%v', seen:%v, lastKey:'%v', lastOK:%v, lastConsumed:%v}", string(bi.prefix), string(bi.seekto), bi.seen, string(bi.lastKey), bi.lastOK, bi.lastConsumed)
+func (bi *BoltIterator) String() (r string) {
+	return fmt.Sprintf("BoltIterator{prefix: '%v', seekto: '%v', seen:%v, lastKey:'%v', lastOK:%v, lastConsumed:%v}", string(bi.prefix), string(bi.seekto), bi.seen, string(bi.lastKey), bi.lastOK, bi.lastConsumed)
 }
 
-var oneByteSliceOfZero = []byte{0}
-
 // Next advances the iterator.
-func (bi *LMDBIterator) Next() (ok bool) {
+func (bi *BoltIterator) Next() (ok bool) {
+	//vv("Next; bi.prefix='%v'", string(bi.prefix))
 	if bi.lastOK && !bi.lastConsumed {
+		//vv("lastOk and not consumed, returning wo doing anything")
 		bi.seen++
 		bi.lastConsumed = true
 		if len(bi.lastVal) == 0 {
@@ -1007,38 +861,37 @@ func (bi *LMDBIterator) Next() (ok bool) {
 		return true
 	}
 
-	getflag := uint(lmdb.Next)
-	prefix := bi.prefix
-
+	var k, v []byte
 	if bi.seen == 0 {
-		if len(bi.prefix) > 0 {
-			getflag = lmdb.SetRange
+		if len(bi.prefix) == 0 {
+			bi.tx.mu.Lock()
+			k, v = bi.cur.First()
+			bi.tx.mu.Unlock()
+		} else {
+			found := bi.Seek(bi.prefix)
+			// increments bi.seen for us.
+			if !found {
+				bi.lastKey = nil
+				bi.lastVal = nil
+				bi.lastOK = false
+				bi.lastConsumed = false
+				return false
+			}
+			// ready to go
+			return true
 		}
-	} else {
-		prefix = nil
 	}
 
 	bi.seen++
 skipEmpty:
-	var k, v []byte
-	var err error
-
-	bi.tx.mu.Lock()
-	if getflag == lmdb.SetRange && len(prefix) == 0 {
-		// don't do nil as key on setrange, will panic
-		// b/c keys in LMDB must be at least one byte long.
-		// http://www.lmdb.tech/doc/group__mdb.html#structMDB__val
-		// "Key sizes must be between 1 and mdb_env_get_maxkeysize() inclusive."
-		// But if getflag == lmdb.Next, key can be nil.
-		k, v, err = bi.cur.Get(oneByteSliceOfZero, nil, getflag)
-	} else {
-		k, v, err = bi.cur.Get(prefix, nil, getflag)
+	if bi.seen > 1 {
+		bi.tx.mu.Lock()
+		k, v = bi.cur.Next()
+		bi.tx.mu.Unlock()
 	}
-	bi.tx.mu.Unlock()
 
-	//bi.tx.debugOnlyGidcheck()
-
-	if lmdb.IsNotFound(err) {
+	if len(k) == 0 {
+		// no more
 		bi.lastKey = nil
 		bi.lastVal = nil
 		bi.lastOK = false
@@ -1068,7 +921,7 @@ skipEmpty:
 }
 
 // Value retrieves what is pointed at currently by the iterator.
-func (bi *LMDBIterator) Value() (containerKey uint64, c *roaring.Container) {
+func (bi *BoltIterator) Value() (containerKey uint64, c *roaring.Container) {
 	if !bi.lastOK {
 		panic("bi.cur not valid")
 	}
@@ -1084,10 +937,10 @@ func (bi *LMDBIterator) Value() (containerKey uint64, c *roaring.Container) {
 	return
 }
 
-// lmdbFinder implements roaring.IteratorFinder.
-// It is used by LMDBTx.ForEach()
-type lmdbFinder struct {
-	tx        *LMDBTx
+// boltFinder implements roaring.IteratorFinder.
+// It is used by BoltTx.ForEach()
+type boltFinder struct {
+	tx        *BoltTx
 	index     string
 	field     string
 	view      string
@@ -1095,8 +948,8 @@ type lmdbFinder struct {
 	needClose []Closer
 }
 
-// FindIterator lets lmdbFinder implement the roaring.FindIterator interface.
-func (bf *lmdbFinder) FindIterator(seek uint64) (roaring.ContainerIterator, bool) {
+// FindIterator lets boltFinder implement the roaring.FindIterator interface.
+func (bf *boltFinder) FindIterator(seek uint64) (roaring.ContainerIterator, bool) {
 	a, found, err := bf.tx.ContainerIterator(bf.index, bf.field, bf.view, bf.shard, seek)
 	panicOn(err)
 	bf.needClose = append(bf.needClose, a)
@@ -1104,7 +957,7 @@ func (bf *lmdbFinder) FindIterator(seek uint64) (roaring.ContainerIterator, bool
 }
 
 // Close closes all bf.needClose listed Closers.
-func (bf *lmdbFinder) Close() {
+func (bf *boltFinder) Close() {
 	for _, i := range bf.needClose {
 		i.Close()
 	}
@@ -1112,15 +965,15 @@ func (bf *lmdbFinder) Close() {
 
 // NewTxIterator returns a *roaring.Iterator that MUST have Close() called on it BEFORE
 // the transaction Commits or Rollsback.
-func (tx *LMDBTx) NewTxIterator(index, field, view string, shard uint64) *roaring.Iterator {
+func (tx *BoltTx) NewTxIterator(index, field, view string, shard uint64) *roaring.Iterator {
 
-	bf := &lmdbFinder{tx: tx, index: index, field: field, view: view, shard: shard, needClose: make([]Closer, 0)}
+	bf := &boltFinder{tx: tx, index: index, field: field, view: view, shard: shard, needClose: make([]Closer, 0)}
 	itr := roaring.NewIterator(bf)
 	return itr
 }
 
 // ForEach applies fn to each bitmap in the fragment.
-func (tx *LMDBTx) ForEach(index, field, view string, shard uint64, fn func(i uint64) error) error {
+func (tx *BoltTx) ForEach(index, field, view string, shard uint64, fn func(i uint64) error) error {
 
 	itr := tx.NewTxIterator(index, field, view, shard)
 	defer itr.Close()
@@ -1137,7 +990,7 @@ func (tx *LMDBTx) ForEach(index, field, view string, shard uint64, fn func(i uin
 }
 
 // ForEachRange applies fn on the selected range of bits on the chosen fragment.
-func (tx *LMDBTx) ForEachRange(index, field, view string, shard uint64, start, end uint64, fn func(uint64) error) error {
+func (tx *BoltTx) ForEachRange(index, field, view string, shard uint64, start, end uint64, fn func(uint64) error) error {
 
 	itr := tx.NewTxIterator(index, field, view, shard)
 	defer itr.Close()
@@ -1155,7 +1008,7 @@ func (tx *LMDBTx) ForEachRange(index, field, view string, shard uint64, start, e
 
 // Count operates on the full bitmap level, so it sums over all the containers
 // in the bitmap.
-func (tx *LMDBTx) Count(index, field, view string, shard uint64) (uint64, error) {
+func (tx *BoltTx) Count(index, field, view string, shard uint64) (uint64, error) {
 
 	a, found, err := tx.ContainerIterator(index, field, view, shard, 0)
 	panicOn(err)
@@ -1174,34 +1027,27 @@ func (tx *LMDBTx) Count(index, field, view string, shard uint64) (uint64, error)
 
 // Max is the maximum bit-value in your bitmap.
 // Returns zero if the bitmap is empty. Odd, but this is what roaring.Max does.
-func (tx *LMDBTx) Max(index, field, view string, shard uint64) (uint64, error) {
+func (tx *BoltTx) Max(index, field, view string, shard uint64) (uint64, error) {
 
 	prefix := txkey.Prefix(index, field, view, shard)
 	seekto := txkey.Prefix(index, field, view, shard+1)
 
-	//tx.debugOnlyGidcheck()
-
-	cur, err := tx.tx.OpenCursor(tx.dbi)
-	panicOn(err)
-	defer cur.Close()
+	bkt := tx.tx.Bucket(bucketCT)
+	cur := bkt.Cursor()
 
 	var k, v []byte
-	if len(seekto) == 0 {
-		_, _, err = cur.Get(oneByteSliceOfZero, nil, lmdb.SetRange)
-	} else {
-		_, _, err = cur.Get(seekto, nil, lmdb.SetRange)
-	}
-	if lmdb.IsNotFound(err) {
+	k, _ = cur.Seek(seekto)
+	if k == nil {
 		// we have nothing >= seekto, but we might have stuff before it, and we'll wrap backwards.
-		k, v, err = cur.Get(nil, nil, lmdb.Prev)
-		if lmdb.IsNotFound(err) {
+		k, v = cur.Prev()
+		if k == nil {
 			// empty database
 			return 0, nil
 		}
 	} else {
 		// we found something >= seekto, so backup by 1.
-		k, v, err = cur.Get(nil, nil, lmdb.Prev)
-		if lmdb.IsNotFound(err) {
+		k, v = cur.Prev()
+		if k == nil {
 			// nothing before seekto
 			return 0, nil
 		}
@@ -1215,11 +1061,12 @@ func (tx *LMDBTx) Max(index, field, view string, shard uint64) (uint64, error) {
 		return 0, nil // nothing in [prefix, seekto).
 	}
 
-	hb := txkey.KeyExtractContainerKey(k)
 	n := len(v)
 	if n == 0 {
 		return 0, nil
 	}
+
+	hb := txkey.KeyExtractContainerKey(k)
 	rc := tx.toContainer(v[n-1], v[0:(n-1)])
 
 	lb := rc.Max()
@@ -1228,10 +1075,10 @@ func (tx *LMDBTx) Max(index, field, view string, shard uint64) (uint64, error) {
 
 // Min returns the smallest bit set in the fragment. If no bit is hot,
 // the second return argument is false.
-func (tx *LMDBTx) Min(index, field, view string, shard uint64) (uint64, bool, error) {
+func (tx *BoltTx) Min(index, field, view string, shard uint64) (uint64, bool, error) {
 
 	// Seek can create many container iterators, thus the bf.Close() needClose list.
-	bf := &lmdbFinder{tx: tx, index: index, field: field, view: view, shard: shard, needClose: make([]Closer, 0)}
+	bf := &boltFinder{tx: tx, index: index, field: field, view: view, shard: shard, needClose: make([]Closer, 0)}
 	defer bf.Close()
 	itr := roaring.NewIterator(bf)
 
@@ -1247,7 +1094,7 @@ func (tx *LMDBTx) Min(index, field, view string, shard uint64) (uint64, bool, er
 
 // UnionInPlace unions all the others Bitmaps into a new Bitmap, and then writes it to the
 // specified fragment.
-func (tx *LMDBTx) UnionInPlace(index, field, view string, shard uint64, others ...*roaring.Bitmap) error {
+func (tx *BoltTx) UnionInPlace(index, field, view string, shard uint64, others ...*roaring.Bitmap) error {
 
 	rbm, err := tx.RoaringBitmap(index, field, view, shard)
 	panicOn(err)
@@ -1271,7 +1118,7 @@ func (tx *LMDBTx) UnionInPlace(index, field, view string, shard uint64, others .
 
 // CountRange returns the count of hot bits in the start, end range on the fragment.
 // roaring.countRange counts the number of bits set between [start, end).
-func (tx *LMDBTx) CountRange(index, field, view string, shard uint64, start, end uint64) (n uint64, err error) {
+func (tx *BoltTx) CountRange(index, field, view string, shard uint64, start, end uint64) (n uint64, err error) {
 
 	if start >= end {
 		return 0, nil
@@ -1337,10 +1184,10 @@ func (tx *LMDBTx) CountRange(index, field, view string, shard uint64, start, end
 // their highbits() will be taken to determine the actual container keys. This
 // is done to conform to the roaring.OffsetRange() argument convention.
 //
-func (tx *LMDBTx) OffsetRange(index, field, view string, shard, offset, start, endx uint64) (other *roaring.Bitmap, err error) {
-	//vv("top of LMDBTx OffsetRange(index='%v', field='%v', view='%v', shard='%v', offset: %v start: %v, end: %v)", index, field, view, int(shard), int(offset), int(start), int(endx))
+func (tx *BoltTx) OffsetRange(index, field, view string, shard, offset, start, endx uint64) (other *roaring.Bitmap, err error) {
+	////vv("top of BoltTx OffsetRange(index='%v', field='%v', view='%v', shard='%v', offset: %v start: %v, end: %v)", index, field, view, int(shard), int(offset), int(start), int(endx))
 	//defer func() {
-	//vv("returning from LMDBTx OffsetRange(index='%v', field='%v', view='%v', shard='%v', offset: %v start: %v, end: %v) other returning is: '%#v' stack=\n%v", index, field, view, int(shard), int(offset), int(start), int(endx), asInts(other.Slice()), stack())
+	////vv("returning from BoltTx OffsetRange(index='%v', field='%v', view='%v', shard='%v', offset: %v start: %v, end: %v) other returning is: '%#v' stack=\n%v", index, field, view, int(shard), int(offset), int(start), int(endx), asInts(other.Slice()), stack())
 	//}()
 
 	// roaring does these three checks in its OffsetRange
@@ -1361,7 +1208,7 @@ func (tx *LMDBTx) OffsetRange(index, field, view string, shard, offset, start, e
 	needle := txkey.Key(index, field, view, shard, hi0)
 	prefix := txkey.Prefix(index, field, view, shard)
 
-	it := NewLMDBIterator(tx, prefix)
+	it := NewBoltIterator(tx, prefix)
 	defer it.Close()
 	it.Seek(needle)
 	for ; it.ValidForPrefix(prefix); it.Next() {
@@ -1386,13 +1233,13 @@ func (tx *LMDBTx) OffsetRange(index, field, view string, shard, offset, start, e
 }
 
 // IncrementOpN increments the tx opcount by changedN
-func (tx *LMDBTx) IncrementOpN(index, field, view string, shard uint64, changedN int) {
+func (tx *BoltTx) IncrementOpN(index, field, view string, shard uint64, changedN int) {
 	tx.opcount += changedN
 }
 
 // ImportRoaringBits handles deletes by setting clear=true.
 // rowSet[rowID] returns the number of bit changed on that rowID.
-func (tx *LMDBTx) ImportRoaringBits(index, field, view string, shard uint64, itr roaring.RoaringIterator, clear bool, log bool, rowSize uint64, data []byte) (changed int, rowSet map[uint64]int, err error) {
+func (tx *BoltTx) ImportRoaringBits(index, field, view string, shard uint64, itr roaring.RoaringIterator, clear bool, log bool, rowSize uint64, data []byte) (changed int, rowSet map[uint64]int, err error) {
 
 	n := itr.Len()
 	if n == 0 {
@@ -1420,7 +1267,7 @@ func (tx *LMDBTx) ImportRoaringBits(index, field, view string, shard uint64, itr
 		}
 
 		if oldC == nil || oldC.N() == 0 {
-			// no container at the itrKey in lmdb (or all zero container).
+			// no container at the itrKey in bolt (or all zero container).
 			if clear {
 				// changed of 0 and empty rowSet is perfect, no need to change the defaults.
 				continue
@@ -1505,7 +1352,7 @@ func (tx *LMDBTx) ImportRoaringBits(index, field, view string, shard uint64, itr
 	return
 }
 
-func (tx *LMDBTx) toContainer(typ byte, v []byte) (r *roaring.Container) {
+func (tx *BoltTx) toContainer(typ byte, v []byte) (r *roaring.Container) {
 
 	//tx.debugOnlyGidcheck()
 
@@ -1518,8 +1365,8 @@ func (tx *LMDBTx) toContainer(typ byte, v []byte) (r *roaring.Container) {
 	if tx.doAllocZero || useRowCache {
 		// Do electric fence-inspired bad-memory read detection.
 		//
-		// The v []byte lives in LMDBDB's memory-mapped vlog-file,
-		// and LMDB will recycle it after tx ends with rollback or commit.
+		// The v []byte lives in BoltDB's memory-mapped vlog-file,
+		// and Bolt will recycle it after tx ends with rollback or commit.
 		//
 		// Problem is, at least some operations were not respecting transaction boundaries.
 		// This technique helped us find them. The rowCache was an example.
@@ -1541,52 +1388,38 @@ func (tx *LMDBTx) toContainer(typ byte, v []byte) (r *roaring.Container) {
 	return ToContainer(typ, w)
 }
 
-func ToContainer(typ byte, w []byte) (c *roaring.Container) {
-	switch typ {
-	case roaring.ContainerArray:
-		c = roaring.NewContainerArray(toArray16(w))
-	case roaring.ContainerBitmap:
-		c = roaring.NewContainerBitmap(-1, toArray64(w))
-	case roaring.ContainerRun:
-		c = roaring.NewContainerRun(toInterval16(w))
-	default:
-		panic(fmt.Sprintf("unknown container: %v", typ))
-	}
-	c.SetMapped(true)
-	return c
-}
-
-// StringifiedLMDBKeys returns a string with all the container
-// keys available in lmdb.
-func (w *LMDBWrapper) StringifiedLMDBKeys(optionalUseThisTx Tx, short bool) (r string) {
+// StringifiedBoltKeys returns a string with all the container
+// keys available in bolt.
+func (w *BoltWrapper) StringifiedBoltKeys(optionalUseThisTx Tx, short bool) (r string) {
 	if optionalUseThisTx == nil {
-		tx, _ := w.NewTx(!writable, "<StringifiedLMDBKeys>", Txo{})
+		tx, _ := w.NewTx(!writable, "<StringifiedBoltKeys>", Txo{})
 		defer tx.Rollback()
-		r = stringifiedLMDBKeysTx(tx.(*LMDBTx), short)
+		r = stringifiedBoltKeysTx(tx.(*BoltTx), short)
 		return
 	}
 
-	btx, ok := optionalUseThisTx.(*LMDBTx)
+	btx, ok := optionalUseThisTx.(*BoltTx)
 	if !ok {
-		return fmt.Sprintf("<not-a-LMDBTx-in-StringifiedLMDBKeys-was-%T>", optionalUseThisTx)
+		return fmt.Sprintf("<not-a-BoltTx-in-StringifiedBoltKeys-was-%T>", optionalUseThisTx)
 	}
-	r = stringifiedLMDBKeysTx(btx, short)
+	r = stringifiedBoltKeysTx(btx, short)
 	return
 }
 
 // countBitsSet returns the number of bits set (or "hot") in
 // the roaring container value found by the txkey.Key()
 // formatted bkey.
-func (tx *LMDBTx) countBitsSet(bkey []byte) (n int) {
+func (tx *BoltTx) countBitsSet(bkey []byte) (n int) {
 
 	//tx.debugOnlyGidcheck()
 
-	v, err := tx.tx.Get(tx.dbi, bkey)
-	if lmdb.IsNotFound(err) {
+	bkt := tx.tx.Bucket(bucketCT)
+	v := bkt.Get(bkey)
+
+	if v == nil {
 		// some queries bkey may not be present! don't panic.
 		return 0
 	}
-	panicOn(err)
 
 	n = len(v)
 	if n > 0 {
@@ -1596,23 +1429,23 @@ func (tx *LMDBTx) countBitsSet(bkey []byte) (n int) {
 	return
 }
 
-func (tx *LMDBTx) Dump(short bool, shard uint64) {
-	fmt.Printf("%v\n", stringifiedLMDBKeysTx(tx, short))
+func (tx *BoltTx) Dump(short bool, shard uint64) {
+	fmt.Printf("%v\n", stringifiedBoltKeysTx(tx, short))
 }
 
-// stringifiedLMDBKeysTx reports all the lmdb keys and a
+// stringifiedBoltKeysTx reports all the bolt keys and a
 // corresponding blake3 hash viewable by txn within the entire
-// lmdb database.
+// bolt database.
 // It also reports how many bits are hot in the roaring container
 // (how many bits are set, or 1 rather than 0).
 //
 // By convention, we must return the empty string if there
 // are no keys present. The tests use this to confirm
 // an empty database.
-func stringifiedLMDBKeysTx(tx *LMDBTx, short bool) (r string) {
+func stringifiedBoltKeysTx(tx *BoltTx, short bool) (r string) {
 
 	r = "allkeys:[\n"
-	it := NewLMDBIterator(tx, nil)
+	it := NewBoltIterator(tx, nil)
 	defer it.Close()
 	any := false
 	for it.Next() {
@@ -1643,32 +1476,26 @@ func stringifiedLMDBKeysTx(tx *LMDBTx, short bool) (r string) {
 	r += "]\n   all-in-blake3:" + hash.Blake3sum16([]byte(r))
 
 	if !any {
-		return "<empty lmdb database>"
+		return "<empty bolt database>"
 	}
-	return "lmdb-" + r
+	return "bolt-" + r
 }
 
-func (w *LMDBWrapper) DeleteDBPath(dbs *DBShard) (err error) {
-	path := dbs.pathForType(lmdbTxn)
+func (w *BoltWrapper) DeleteDBPath(dbs *DBShard) (err error) {
+	path := dbs.pathForType(boltTxn)
 	err = os.RemoveAll(path)
 	if err != nil {
 		return errors.Wrap(err, "DeleteDBPath")
 	}
-	// if we go back to flat instead of inside its own directory,
-	// there will be a second -lock file needing deletion too.
-	lockfile := path + "-lock"
-	if FileExists(lockfile) {
-		err = os.RemoveAll(lockfile)
-	}
 	return
 }
 
-func (w *LMDBWrapper) DeleteField(index, field, fieldPath string) (err error) {
+func (w *BoltWrapper) DeleteField(index, field, fieldPath string) (err error) {
 
 	// TODO(jea) cleanup: I think this fieldPath delete just goes away now.
 	//  remove this commented stuff once we are sure.
 	//
-	// under blue-green roaring_lmdb, the directory will not be found, b/c roaring will have
+	// under blue-green roaring_bolt, the directory will not be found, b/c roaring will have
 	// already done the os.RemoveAll().	BUT, RemoveAll returns nil error in this case. Docs:
 	// "If the path does not exist, RemoveAll returns nil (no error)"
 
@@ -1680,22 +1507,23 @@ func (w *LMDBWrapper) DeleteField(index, field, fieldPath string) (err error) {
 	return w.DeletePrefix(prefix)
 }
 
-func (w *LMDBWrapper) DeleteFragment(index, field, view string, shard uint64, frag interface{}) error {
+func (w *BoltWrapper) DeleteFragment(index, field, view string, shard uint64, frag interface{}) error {
 	prefix := txkey.Prefix(index, field, view, shard)
 	return w.DeletePrefix(prefix)
 }
 
-func (w *LMDBWrapper) DeletePrefix(prefix []byte) error {
+func (w *BoltWrapper) DeletePrefix(prefix []byte) error {
 
 	tx, _ := w.NewTx(writable, w.name, Txo{})
 
 	// NewTx will grab these, so don't lock until after it.
 	w.muDb.Lock()
 
-	bi := NewLMDBIterator(tx.(*LMDBTx), prefix)
+	bi := NewBoltIterator(tx.(*BoltTx), prefix)
 
 	for bi.Next() {
-		err := bi.cur.Del(0)
+		//vv("deleting next in cur")
+		err := bi.cur.Delete()
 		if err != nil {
 			w.muDb.Unlock()
 			panic(err)
@@ -1712,7 +1540,7 @@ func (w *LMDBWrapper) DeletePrefix(prefix []byte) error {
 	return nil
 }
 
-func (tx *LMDBTx) RoaringBitmapReader(index, field, view string, shard uint64, fragmentPathForRoaring string) (r io.ReadCloser, sz int64, err error) {
+func (tx *BoltTx) RoaringBitmapReader(index, field, view string, shard uint64, fragmentPathForRoaring string) (r io.ReadCloser, sz int64, err error) {
 
 	rbm, err := tx.RoaringBitmap(index, field, view, shard)
 	if err != nil {
@@ -1726,11 +1554,11 @@ func (tx *LMDBTx) RoaringBitmapReader(index, field, view string, shard uint64, f
 	return ioutil.NopCloser(&buf), sz, err
 }
 
-func (tx *LMDBTx) Options() Txo {
+func (tx *BoltTx) Options() Txo {
 	return tx.o
 }
 
 // Sn retreives the serial number of the Tx.
-func (tx *LMDBTx) Sn() int64 {
+func (tx *BoltTx) Sn() int64 {
 	return tx.sn
 }

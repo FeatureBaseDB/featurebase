@@ -3138,7 +3138,6 @@ func (e *executor) executeRowShard(ctx context.Context, qcx *Qcx, index string, 
 
 	// Handle bsiGroup ranges differently.
 	if c.HasConditionArg() {
-		// looks the same on badger/roaring. we think.
 		return e.executeRowBSIGroupShard(ctx, qcx, index, c, shard)
 	}
 

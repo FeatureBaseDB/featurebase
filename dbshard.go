@@ -376,7 +376,7 @@ func (dbs *DBShard) DumpAll() {
 		case roaringTxn:
 		case rbfTxn:
 		case lmdbTxn:
-		case badgerTxn:
+		case boltTxn:
 		default:
 			panic(fmt.Sprintf("unknown txtyp: '%v'", ty))
 		}
@@ -410,7 +410,13 @@ func (dbs *DBShard) pathForType(ty txtype) string {
 	// what here for roaring? well, roaringRegistrar.OpenDBWrapper()
 	// is a no-op anyhow. so doesn't need to be correct atm.
 
-	return dbs.HolderPath + sep + dbs.Index + ".index.txstores@@@" + sep + "store" + ty.FileSuffix() + "@" + sep + fmt.Sprintf("shard.%04v%v", dbs.Shard, ty.FileSuffix())
+	path := dbs.HolderPath + sep + dbs.Index + ".index.txstores@@@" + sep + "store" + ty.FileSuffix() + "@" + sep + fmt.Sprintf("shard.%04v%v", dbs.Shard, ty.FileSuffix())
+	if ty == boltTxn {
+		// special case:
+		// bolt doesn't use a directory like the others, just a direct path.
+		path += sep + "bolt.db"
+	}
+	return path
 }
 
 // if you don't know the shard, you have to use this.
@@ -466,8 +472,8 @@ func (per *DBPerShard) GetDBShard(index string, shard uint64, idx *Index) (dbs *
 				registry = globalRbfDBReg
 			case lmdbTxn:
 				registry = globalLMDBReg
-			case badgerTxn:
-				registry = globalBadgerReg
+			case boltTxn:
+				registry = globalBoltReg
 			default:
 				panic(fmt.Sprintf("unknown txtyp: '%v'", ty))
 			}
