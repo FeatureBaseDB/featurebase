@@ -7,7 +7,6 @@ require (
 	github.com/DataDog/datadog-go v0.0.0-20180822151419-281ae9f2d895
 	github.com/StackExchange/wmi v0.0.0-20190523213315-cbe66965904d // indirect
 	github.com/benbjohnson/immutable v0.2.0
-	github.com/boltdb/bolt v1.3.1
 	github.com/cespare/xxhash v1.1.0
 	github.com/codahale/hdrhistogram v0.0.0-20161010025455-3a0bb77429bd // indirect
 	github.com/davecgh/go-spew v1.1.1
@@ -41,6 +40,7 @@ require (
 	github.com/uber/jaeger-client-go v2.16.0+incompatible
 	github.com/uber/jaeger-lib v2.2.0+incompatible // indirect
 	github.com/zeebo/blake3 v0.0.4
+	go.etcd.io/bbolt v1.3.5
 	golang.org/x/mod v0.3.0
 	golang.org/x/net v0.0.0-20200822124328-c89045814202 // indirect
 	golang.org/x/sync v0.0.0-20200625203802-6e8e738ad208

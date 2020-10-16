@@ -5,7 +5,7 @@ executors:
     parameters:
       version:
         type: string
-        default: "1.14"
+        default: "1.14.9"
       resource_class:
         type: string
         default: medium
@@ -84,7 +84,7 @@ jobs:
         default: medium
       golang_version:
         type: string
-        default: "1.14"
+        default: "1.14.9"
       shard_width:
         type: string
         default: "20"
@@ -192,16 +192,31 @@ workflows:
           requires:
             - setup
       - test:
-          name: test-golang-<< matrix.golang_version >>
-          matrix:
-            parameters:
-              golang_version: ["1.14", "1.13"]
+          name: test-golang-1.13
           resource_class: xlarge
+          golang_version: 1.13.15
           requires:
             - setup
           filters:
             tags:
               only: /^v.*/
+      - test:
+          name: test-golang-1.14
+          resource_class: xlarge
+          golang_version: 1.14.9
+          requires:
+            - setup
+          filters:
+            tags:
+              only: /^v.*/
+      # Ideally we would do something like the following instead of the above,
+      # but we don't like having point releases in the CI run name. Maybe in
+      # the future we can go back to this:
+      #- test:
+      #  name: test-golang-<< matrix.golang_version >>
+      #  matrix:
+      #    parameters:
+      #      golang_version: ["1.14.9", "1.13.15"]
       - test:
           name: test-race
           test_make_target: test-race
