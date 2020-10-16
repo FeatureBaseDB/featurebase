@@ -1276,7 +1276,7 @@ func (c *InternalClient) GetNodeUsage(ctx context.Context, uri *pilosa.URI) (map
 }
 
 func (c *InternalClient) FindIndexKeysNode(ctx context.Context, uri *pilosa.URI, index string, keys ...string) (transMap map[string]uint64, err error) {
-	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.FindKeysNodePartition")
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.FindIndexKeysNode")
 	defer span.Finish()
 
 	// Create HTTP request.
@@ -1325,11 +1325,11 @@ func (c *InternalClient) FindIndexKeysNode(ctx context.Context, uri *pilosa.URI,
 }
 
 func (c *InternalClient) FindFieldKeysNode(ctx context.Context, uri *pilosa.URI, index string, field string, keys ...string) (transMap map[string]uint64, err error) {
-	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.FindKeysFieldNode")
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.FindFieldKeysNode")
 	defer span.Finish()
 
 	// Create HTTP request.
-	u := uriPathToURL(uri, fmt.Sprintf("/internal/translate/index/%s/field/%s", index, field))
+	u := uriPathToURL(uri, fmt.Sprintf("/internal/translate/field/%s/%s/keys", index, field))
 	q := u.Query()
 	q.Add("remote", "true")
 	u.RawQuery = q.Encode()
@@ -1377,7 +1377,7 @@ func (c *InternalClient) FindFieldKeysNode(ctx context.Context, uri *pilosa.URI,
 }
 
 func (c *InternalClient) CreateIndexKeysNode(ctx context.Context, uri *pilosa.URI, index string, keys ...string) (transMap map[string]uint64, err error) {
-	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.FindKeysNodePartition")
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.CreateIndexKeysNode")
 	defer span.Finish()
 
 	// Create HTTP request.
@@ -1426,11 +1426,11 @@ func (c *InternalClient) CreateIndexKeysNode(ctx context.Context, uri *pilosa.UR
 }
 
 func (c *InternalClient) CreateFieldKeysNode(ctx context.Context, uri *pilosa.URI, index string, field string, keys ...string) (transMap map[string]uint64, err error) {
-	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.FindKeysFieldNode")
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.CreateFieldKeysNode")
 	defer span.Finish()
 
 	// Create HTTP request.
-	u := uriPathToURL(uri, fmt.Sprintf("/internal/translate/index/%s/field/%s", index, field))
+	u := uriPathToURL(uri, fmt.Sprintf("/internal/translate/field/%s/%s/keys", index, field))
 	q := u.Query()
 	q.Add("remote", "true")
 	u.RawQuery = q.Encode()

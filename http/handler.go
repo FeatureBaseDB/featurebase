@@ -2598,7 +2598,7 @@ func (h *Handler) handleFindIndexKeys(w http.ResponseWriter, r *http.Request) {
 	if r.Header.Get("Content-Type") != "application/json" {
 		http.Error(w, "Unsupported media type", http.StatusUnsupportedMediaType)
 		return
-	} else if validHeaderAcceptJSON(r.Header) {
+	} else if !validHeaderAcceptJSON(r.Header) {
 		http.Error(w, "Not acceptable", http.StatusNotAcceptable)
 		return
 	}
@@ -2640,7 +2640,7 @@ func (h *Handler) handleFindFieldKeys(w http.ResponseWriter, r *http.Request) {
 	if r.Header.Get("Content-Type") != "application/json" {
 		http.Error(w, "Unsupported media type", http.StatusUnsupportedMediaType)
 		return
-	} else if validHeaderAcceptJSON(r.Header) {
+	} else if !validHeaderAcceptJSON(r.Header) {
 		http.Error(w, "Not acceptable", http.StatusNotAcceptable)
 		return
 	}
@@ -2688,7 +2688,7 @@ func (h *Handler) handleCreateIndexKeys(w http.ResponseWriter, r *http.Request) 
 	if r.Header.Get("Content-Type") != "application/json" {
 		http.Error(w, "Unsupported media type", http.StatusUnsupportedMediaType)
 		return
-	} else if validHeaderAcceptJSON(r.Header) {
+	} else if !validHeaderAcceptJSON(r.Header) {
 		http.Error(w, "Not acceptable", http.StatusNotAcceptable)
 		return
 	}
@@ -2730,7 +2730,7 @@ func (h *Handler) handleCreateFieldKeys(w http.ResponseWriter, r *http.Request) 
 	if r.Header.Get("Content-Type") != "application/json" {
 		http.Error(w, "Unsupported media type", http.StatusUnsupportedMediaType)
 		return
-	} else if validHeaderAcceptJSON(r.Header) {
+	} else if !validHeaderAcceptJSON(r.Header) {
 		http.Error(w, "Not acceptable", http.StatusNotAcceptable)
 		return
 	}

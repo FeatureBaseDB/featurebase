@@ -17,11 +17,11 @@ package pilosa_test
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/pilosa/pilosa/v2"
@@ -30,6 +30,8 @@ import (
 	"github.com/pilosa/pilosa/v2/mock"
 	"github.com/pilosa/pilosa/v2/server"
 	"github.com/pilosa/pilosa/v2/test"
+	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
 )
 
 func TestInMemTranslateStore_TranslateKey(t *testing.T) {
@@ -694,4 +696,253 @@ func TestTranslation_TranslateIDsOnCluster(t *testing.T) {
 			t.Fatalf("TranslateIDs(%+v): expected: %+v, got: %+v", ids, keys, respIDs.Keys)
 		}
 	}
+}
+
+func TestTranslation_Cluster_CreateFind(t *testing.T) {
+	c := test.MustRunCluster(t, 3)
+	defer c.Close()
+
+	c.CreateField(t, "i", pilosa.IndexOptions{Keys: true}, "f", pilosa.OptFieldKeys())
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Use the alphabet to test keys.
+	testKeys := make(map[string]struct{})
+	for i := 'a'; i <= 'z'; i++ {
+		testKeys[string(i)] = struct{}{}
+	}
+
+	t.Run("Index", func(t *testing.T) {
+		// Create all index keys, split across nodes.
+		{
+			parts := make([][]string, len(c.Nodes))
+			{
+				// Randomly partition the keys.
+				i := 0
+				for k := range testKeys {
+					parts[i%len(c.Nodes)] = append(parts[i%len(c.Nodes)], k)
+					i++
+				}
+			}
+
+			// Create some keys on each node.
+			var g errgroup.Group
+			defer g.Wait()
+			for i, keys := range parts {
+				i, keys := i, keys
+				g.Go(func() error {
+					_, err := c.Nodes[i].API.CreateIndexKeys(ctx, "i", keys...)
+					return err
+				})
+			}
+			if err := g.Wait(); err != nil {
+				t.Errorf("creating keys: %v", err)
+				return
+			}
+		}
+
+		// Check that all index keys exist, and consistently map to the same IDs.
+		{
+			// Convert the keys to a list.
+			keyList := make([]string, 0, len(testKeys))
+			for k := range testKeys {
+				keyList = append(keyList, k)
+			}
+
+			// Obtain authoritative translations for the keys.
+			translations, err := c.Nodes[0].API.FindIndexKeys(ctx, "i", keyList...)
+			if err != nil {
+				t.Errorf("obtaining authoritative translations: %v", err)
+				return
+			}
+			for _, k := range keyList {
+				if _, ok := translations[k]; !ok {
+					t.Errorf("key %q is missing", k)
+				}
+			}
+
+			// Check that all nodes agree on these translations.
+			var g errgroup.Group
+			defer g.Wait()
+			for i, n := range c.Nodes {
+				i, api := i, n.API
+				g.Go(func() (err error) {
+					defer func() { err = errors.Wrapf(err, "translating on node %d", i) }()
+					localTranslations, err := api.FindIndexKeys(ctx, "i", keyList...)
+					if err != nil {
+						return errors.Wrap(err, "finding translations")
+					}
+					for key, id := range localTranslations {
+						if realID, ok := translations[key]; !ok {
+							return errors.Errorf("unexpected key %q mapped to ID %d", key, id)
+						} else if id != realID {
+							return errors.Errorf("mismatched translation: expected %q:%d but got %q:%d", key, realID, key, id)
+						}
+					}
+					for key, realID := range translations {
+						if id, ok := localTranslations[key]; !ok {
+							return errors.Errorf("missing translation of key %q", key)
+						} else if id != realID {
+							// This should not be necessary, but do it just to be safe.
+							return errors.Errorf("mismatched translation: expected %q:%d but got %q:%d", key, realID, key, id)
+						}
+					}
+					return nil
+				})
+			}
+			if err := g.Wait(); err != nil {
+				t.Errorf("finding keys: %v", err)
+				return
+			}
+
+			// Check that re-invoking create returns the original translations.
+			for i, n := range c.Nodes {
+				i, api := i, n.API
+				g.Go(func() (err error) {
+					defer func() { err = errors.Wrapf(err, "translating on node %d", i) }()
+					localTranslations, err := api.CreateIndexKeys(ctx, "i", keyList...)
+					if err != nil {
+						return errors.Wrap(err, "finding translations")
+					}
+					for key, id := range localTranslations {
+						if realID, ok := translations[key]; !ok {
+							return errors.Errorf("unexpected key %q mapped to ID %d", key, id)
+						} else if id != realID {
+							return errors.Errorf("mismatched translation: expected %q:%d but got %q:%d", key, realID, key, id)
+						}
+					}
+					for key, realID := range translations {
+						if id, ok := localTranslations[key]; !ok {
+							return errors.Errorf("missing translation of key %q", key)
+						} else if id != realID {
+							// This should not be necessary, but do it just to be safe.
+							return errors.Errorf("mismatched translation: expected %q:%d but got %q:%d", key, realID, key, id)
+						}
+					}
+					return nil
+				})
+			}
+			if err := g.Wait(); err != nil {
+				t.Errorf("checking re-create of keys: %v", err)
+				return
+			}
+		}
+	})
+	t.Run("Field", func(t *testing.T) {
+		// Create all field keys, split across nodes.
+		{
+			parts := make([][]string, len(c.Nodes))
+			{
+				// Randomly partition the keys.
+				i := 0
+				for k := range testKeys {
+					parts[i%len(c.Nodes)] = append(parts[i%len(c.Nodes)], k)
+					i++
+				}
+			}
+
+			// Create some keys on each node.
+			var g errgroup.Group
+			defer g.Wait()
+			for i, keys := range parts {
+				i, keys := i, keys
+				g.Go(func() error {
+					_, err := c.Nodes[i].API.CreateFieldKeys(ctx, "i", "f", keys...)
+					return err
+				})
+			}
+			if err := g.Wait(); err != nil {
+				t.Errorf("creating keys: %v", err)
+				return
+			}
+		}
+
+		// Check that all field keys exist, and consistently map to the same IDs.
+		{
+			// Convert the keys to a list.
+			keyList := make([]string, 0, len(testKeys))
+			for k := range testKeys {
+				keyList = append(keyList, k)
+			}
+
+			// Obtain authoritative translations for the keys.
+			translations, err := c.Nodes[0].API.FindFieldKeys(ctx, "i", "f", keyList...)
+			if err != nil {
+				t.Errorf("obtaining authoritative translations: %v", err)
+				return
+			}
+			for _, k := range keyList {
+				if _, ok := translations[k]; !ok {
+					t.Errorf("key %q is missing", k)
+				}
+			}
+
+			// Check that all nodes agree on these translations.
+			var g errgroup.Group
+			defer g.Wait()
+			for i, n := range c.Nodes {
+				i, api := i, n.API
+				g.Go(func() (err error) {
+					defer func() { err = errors.Wrapf(err, "translating on node %d", i) }()
+					localTranslations, err := api.FindFieldKeys(ctx, "i", "f", keyList...)
+					if err != nil {
+						return errors.Wrap(err, "finding translations")
+					}
+					for key, id := range localTranslations {
+						if realID, ok := translations[key]; !ok {
+							return errors.Errorf("unexpected key %q mapped to ID %d", key, id)
+						} else if id != realID {
+							return errors.Errorf("mismatched translation: expected %q:%d but got %q:%d", key, realID, key, id)
+						}
+					}
+					for key, realID := range translations {
+						if id, ok := localTranslations[key]; !ok {
+							return errors.Errorf("missing translation of key %q", key)
+						} else if id != realID {
+							// This should not be necessary, but do it just to be safe.
+							return errors.Errorf("mismatched translation: expected %q:%d but got %q:%d", key, realID, key, id)
+						}
+					}
+					return nil
+				})
+			}
+			if err := g.Wait(); err != nil {
+				t.Errorf("finding keys: %v", err)
+				return
+			}
+
+			// Check that re-invoking create returns the original translations.
+			for i, n := range c.Nodes {
+				i, api := i, n.API
+				g.Go(func() (err error) {
+					defer func() { err = errors.Wrapf(err, "translating on node %d", i) }()
+					localTranslations, err := api.CreateFieldKeys(ctx, "i", "f", keyList...)
+					if err != nil {
+						return errors.Wrap(err, "finding translations")
+					}
+					for key, id := range localTranslations {
+						if realID, ok := translations[key]; !ok {
+							return errors.Errorf("unexpected key %q mapped to ID %d", key, id)
+						} else if id != realID {
+							return errors.Errorf("mismatched translation: expected %q:%d but got %q:%d", key, realID, key, id)
+						}
+					}
+					for key, realID := range translations {
+						if id, ok := localTranslations[key]; !ok {
+							return errors.Errorf("missing translation of key %q", key)
+						} else if id != realID {
+							// This should not be necessary, but do it just to be safe.
+							return errors.Errorf("mismatched translation: expected %q:%d but got %q:%d", key, realID, key, id)
+						}
+					}
+					return nil
+				})
+			}
+			if err := g.Wait(); err != nil {
+				t.Errorf("checking re-create of keys: %v", err)
+				return
+			}
+		}
+	})
 }
