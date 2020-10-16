@@ -1357,6 +1357,36 @@ func TestHandler_Endpoints(t *testing.T) {
 			t.Fatalf("%v != %v", target, resp.IDs)
 		}
 	})
+
+	t.Run("grpc-web-cors", func(t *testing.T) {
+		req := test.MustNewHTTPRequest("OPTIONS", "/pilosa.Pilosa/QueryPQL", nil)
+		req.Header.Add("Origin", "http://test/")
+		req.Header.Add("Access-Control-Request-Method", "POST")
+
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, req)
+		result := w.Result()
+
+		// Fail CORS preflight
+		if result.Header["Access-Control-Allow-Origin"] != nil {
+			t.Fatalf("CORS preflight includes Access-Control-Allow-Origin but should not.")
+		}
+
+		clus := test.MustRunCluster(t, 1, []server.CommandOption{test.OptAllowedOrigins([]string{"http://test/"})})
+		defer clus.Close()
+		w = httptest.NewRecorder()
+		h := clus.GetNode(0).Handler.(*http.Handler).Handler
+		h.ServeHTTP(w, req)
+		result = w.Result()
+
+		if result.Header["Access-Control-Allow-Origin"] == nil {
+			t.Fatalf("CORS preflight does not include Access-Control-Allow-Origin.")
+		}
+
+		if result.Header["Access-Control-Allow-Origin"][0] != "http://test/" {
+			t.Fatal("CORS header not present")
+		}
+	})
 }
 
 func TestCluster_TranslateStore(t *testing.T) {

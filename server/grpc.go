@@ -19,10 +19,12 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net"
+	"net/http"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/improbable-eng/grpc-web/go/grpcweb"
 	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/logger"
 	pb "github.com/pilosa/pilosa/v2/proto"
@@ -1176,9 +1178,9 @@ func fieldDataType(f *pilosa.Field) string {
 
 type grpcServer struct {
 	api        *pilosa.API
-	mu         sync.Mutex
 	grpcServer *grpc.Server
 	ln         net.Listener
+	tlsConfig  *tls.Config
 
 	logger logger.Logger
 	stats  stats.StatsClient
@@ -1200,6 +1202,13 @@ func OptGRPCServerListener(ln net.Listener) grpcServerOption {
 	}
 }
 
+func OptGRPCServerTLSConfig(tlsConfig *tls.Config) grpcServerOption {
+	return func(s *grpcServer) error {
+		s.tlsConfig = tlsConfig
+		return nil
+	}
+}
+
 func OptGRPCServerLogger(logger logger.Logger) grpcServerOption {
 	return func(s *grpcServer) error {
 		s.logger = logger
@@ -1214,25 +1223,8 @@ func OptGRPCServerStats(stats stats.StatsClient) grpcServerOption {
 	}
 }
 
-func (s *grpcServer) Serve(tlsConfig *tls.Config) error {
+func (s *grpcServer) Serve() error {
 	s.logger.Printf("enabled grpc listening on %s", s.ln.Addr())
-
-	opts := make([]grpc.ServerOption, 0)
-	if tlsConfig != nil {
-		creds := credentials.NewTLS(tlsConfig)
-		opts = append(opts, grpc.Creds(creds))
-	}
-
-	// create grpc server
-	s.mu.Lock()
-	s.grpcServer = grpc.NewServer(opts...)
-	grpcHandler := NewGRPCHandler(s.api).WithLogger(s.logger).WithStats(s.stats)
-	pb.RegisterPilosaServer(s.grpcServer, grpcHandler)
-	vdsm_pb.RegisterMoleculaServer(s.grpcServer, NewVDSMGRPCHandler(grpcHandler, s.api).WithLogger(s.logger).WithStats(s.stats))
-
-	// register the server so its services are available to grpc_cli and others
-	reflection.Register(s.grpcServer)
-	s.mu.Unlock()
 
 	// and start...
 	if err := s.grpcServer.Serve(s.ln); err != nil {
@@ -1241,14 +1233,33 @@ func (s *grpcServer) Serve(tlsConfig *tls.Config) error {
 	return nil
 }
 
+func (s *grpcServer) middleware(origins []string) func(http.Handler) http.Handler {
+	httpOriginFunc := grpcweb.WithOriginFunc(func(origin string) bool {
+		for _, x := range origins {
+			if origin == x {
+				return true
+			}
+		}
+		return false
+	})
+
+	wrappedGrpc := grpcweb.WrapServer(s.grpcServer, httpOriginFunc)
+
+	return func(h http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if wrappedGrpc.IsGrpcWebRequest(r) || wrappedGrpc.IsAcceptableGrpcCorsRequest(r) {
+				wrappedGrpc.ServeHTTP(w, r)
+			} else {
+				h.ServeHTTP(w, r)
+			}
+		})
+	}
+}
+
 // Stop stops the GRPC server. There's no error because the underlying GRPC
 // stuff doesn't report an error.
 func (s *grpcServer) Stop() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.grpcServer != nil {
-		s.grpcServer.Stop()
-	}
+	s.grpcServer.Stop()
 }
 
 func NewGRPCServer(opts ...grpcServerOption) (*grpcServer, error) {
@@ -1261,5 +1272,21 @@ func NewGRPCServer(opts ...grpcServerOption) (*grpcServer, error) {
 			return nil, errors.Wrap(err, "applying option")
 		}
 	}
+
+	gopts := make([]grpc.ServerOption, 0)
+	if server.tlsConfig != nil {
+		creds := credentials.NewTLS(server.tlsConfig)
+		gopts = append(gopts, grpc.Creds(creds))
+	}
+
+	// create grpc server
+	server.grpcServer = grpc.NewServer(gopts...)
+	grpcHandler := NewGRPCHandler(server.api).WithLogger(server.logger).WithStats(server.stats)
+	pb.RegisterPilosaServer(server.grpcServer, grpcHandler)
+	vdsm_pb.RegisterMoleculaServer(server.grpcServer, NewVDSMGRPCHandler(grpcHandler, server.api).WithLogger(server.logger).WithStats(server.stats))
+
+	// register the server so its services are available to grpc_cli and others
+	reflection.Register(server.grpcServer)
+
 	return server, nil
 }
