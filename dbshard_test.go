@@ -35,15 +35,7 @@ func skipForNonLMDB(t *testing.T) {
 	}
 }
 
-var _ = skipForNonLMDB   // happy linter
-var _ = skipForNonBadger // happy linter
-
-func skipForNonBadger(t *testing.T) {
-	src := os.Getenv("PILOSA_TXSRC")
-	if src != "badger" {
-		t.Skip("skip if not badger")
-	}
-}
+var _ = skipForNonLMDB // happy linter
 
 // Can't write it all to one shard like we do (did).
 func Test_DBPerShard_multiple_shards_used(t *testing.T) {

@@ -31,6 +31,13 @@ import (
 
 var _ = time.Now
 
+const isDebugRun = false
+const TxInitialMmapSize = 1 << 30 // 1GB
+
+func ToContainer(typ byte, w []byte) (c *roaring.Container) {
+	panic("ToContainer not implemented yet on non-amd64")
+}
+
 // lmdbRegistrar facilitates shutdown
 // of all the lmdb databases started under
 // tests. Its needed because most tests don't cleanup
@@ -252,7 +259,7 @@ func (tx *LMDBTx) ContainerIterator(index, field, view string, shard uint64, fir
 type LMDBIterator struct{}
 
 // NewLMDBIterator creates an iterator on tx that will
-// only return badgerKeys that start with prefix.
+// only return lmdbKeys that start with prefix.
 func NewLMDBIterator(tx *LMDBTx, prefix []byte) (bi *LMDBIterator) {
 	panic("lmdb only available on 64-bit arch")
 }

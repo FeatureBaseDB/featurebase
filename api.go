@@ -655,7 +655,8 @@ func (api *API) ExportCSV(ctx context.Context, indexName string, fieldName strin
 	// Ensure data is flushed.
 	cw.Flush()
 	span.LogKV("n", n)
-	return tx.Commit()
+	tx.Rollback()
+	return nil
 }
 
 // ShardNodes returns the node and all replicas which should contain a shard's data.

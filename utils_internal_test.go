@@ -497,7 +497,7 @@ func (t *ClusterCluster) FollowResizeInstruction(instr *ResizeInstruction) error
 			// this is the *test* version of a network call, transferring fragments between
 			// nodes in a cluster. So it is allowed to be kind of a hack.
 
-			// there will be two -badgerdb directories/databases, we need to copy
+			// there will be two -rbfdb directories/databases, we need to copy
 			// from src to dest the fragment. This simulates sending the fragment over the network.
 			srcIdx := srcCluster.holder.Index(src.Index)
 			srctx := srcIdx.holder.txf.NewTx(Txo{Write: !writable, Index: srcIdx, Fragment: srcFragment, Shard: srcFragment.shard})

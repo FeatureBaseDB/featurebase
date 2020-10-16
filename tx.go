@@ -48,7 +48,7 @@ const writable = true
 // that have not been committed.
 type Tx interface {
 
-	// Type returns "roaring", "rbf", "badger", "badger_roaring", or one of the other
+	// Type returns "roaring", "rbf", "bolt", "badger_roaring", or one of the other
 	// blue-green Tx types at the top of txfactory.go
 	Type() string
 

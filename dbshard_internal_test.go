@@ -74,7 +74,7 @@ func Test_DBPerShard_GetShardsForIndex_LocalOnly(t *testing.T) {
 	orig := os.Getenv("PILOSA_TXSRC")
 	defer os.Setenv("PILOSA_TXSRC", orig) // must restore or will mess up other tests!
 
-	for _, src := range []string{"lmdb", "roaring", "badger", "rbf"} {
+	for _, src := range []string{"lmdb", "roaring", "bolt", "rbf"} {
 
 		os.Setenv("PILOSA_TXSRC", src)
 
@@ -149,13 +149,13 @@ rick.index.txstores@@@/store-lmdb@@/shard.0219-lmdb@
 rick.index.txstores@@@/store-lmdb@@/shard.0221-lmdb@
 rick.index.txstores@@@/store-lmdb@@/shard.0223-lmdb@
 `,
-	"badger": `
-rick.index.txstores@@@/store-badgerdb@@/shard.0093-badgerdb@
-rick.index.txstores@@@/store-badgerdb@@/shard.0215-badgerdb@
-rick.index.txstores@@@/store-badgerdb@@/shard.0217-badgerdb@
-rick.index.txstores@@@/store-badgerdb@@/shard.0219-badgerdb@
-rick.index.txstores@@@/store-badgerdb@@/shard.0221-badgerdb@
-rick.index.txstores@@@/store-badgerdb@@/shard.0223-badgerdb@
+	"bolt": `
+rick.index.txstores@@@/store-boltdb@@/shard.0093-boltdb@/bolt.db
+rick.index.txstores@@@/store-boltdb@@/shard.0215-boltdb@/bolt.db
+rick.index.txstores@@@/store-boltdb@@/shard.0217-boltdb@/bolt.db
+rick.index.txstores@@@/store-boltdb@@/shard.0219-boltdb@/bolt.db
+rick.index.txstores@@@/store-boltdb@@/shard.0221-boltdb@/bolt.db
+rick.index.txstores@@@/store-boltdb@@/shard.0223-boltdb@/bolt.db
 `,
 	"rbf": `
 rick.index.txstores@@@/store-rbfdb@@/shard.0093-rbfdb@
@@ -189,8 +189,8 @@ func makeSampleRoaringDir(root, txsrc string, minBytes int, h *Holder) {
 			// DBPerShard won't know anything about it.
 			helperCreateDBShard(h, index, shard)
 			continue
-		case "badger":
-			makeBadgertestDB(root+sep+fn, h, shard)
+		case "bolt":
+			makeBolttestDB(root+sep+fn, h, shard)
 			helperCreateDBShard(h, index, shard)
 			continue
 		case "rbf":
@@ -227,10 +227,10 @@ func makeLMDBtestDB(path string, h *Holder, shard uint64) {
 
 }
 
-func makeBadgertestDB(path string, h *Holder, shard uint64) {
+func makeBolttestDB(path string, h *Holder, shard uint64) {
 	i := uint64(1)
-	w, _ := mustOpenEmptyBadgerWrapper(path)
-	badgerDBMustSetBitvalue(w, "index", "field", "view", shard, i)
+	w, _ := mustOpenEmptyBoltWrapper(path)
+	BoltMustSetBitvalue(w, "index", "field", "view", shard, i)
 	w.Close()
 }
 

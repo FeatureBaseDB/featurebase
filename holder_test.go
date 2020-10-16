@@ -808,7 +808,7 @@ func TestHolderSyncer_IntField(t *testing.T) {
 			t.Fatalf("syncing node 1: %v", err)
 		}
 
-		// dump the badger keys for both c0 and c1
+		// dump the rbf keys for both c0 and c1
 
 		// Verify data is the same on both nodes.
 		for i, hldr := range []*test.Holder{hldr0, hldr1} {

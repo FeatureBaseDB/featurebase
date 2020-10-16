@@ -914,6 +914,6 @@ func TestBSIGroup_TxReopenDB(t *testing.T) {
 		panicOn(qcx.Finish())
 	} // loop
 
-	// the test: can we re-open a BSI fragment under badger/rbf.
+	// the test: can we re-open a BSI fragment under Tx store
 	_ = f.Reopen()
 }
