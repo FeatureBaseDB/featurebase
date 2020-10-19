@@ -96,7 +96,8 @@ func (tx *Tx) Commit() error {
 		for _, path := range tx.updatedSegmentPaths {
 			segment := walSegmentByPath(tx.segments, path)
 			assert(segment != nil)
-			tx.db.updateWALSegment(*segment)
+			//lint:ignore SA5011 the assert above prevents this from being nil
+			tx.db.updateWALSegment(*segment) //nolint:staticcheck
 		}
 		tx.db.mu.Unlock()
 	}
