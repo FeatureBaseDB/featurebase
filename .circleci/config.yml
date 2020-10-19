@@ -53,7 +53,7 @@ jobs:
       name: golang
     steps:
       - checkout-plus
-      - run: curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sudo sh -s -- -b /usr/local/bin v1.23.8
+      - run: curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sudo sh -s -- -b /usr/local/bin v1.31.0
       - run: make golangci-lint
   go-mod-tidy:
     executor:
