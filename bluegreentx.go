@@ -36,6 +36,15 @@ import (
 // Do not run with go test -race and expect it to be race free with RoaringTx
 // on one arm.
 //
+// Note: using the dbshard.go DBShard.mut RWMutex to begin and end
+// both the A and B transactions atomically, we support a single importer and
+// lots of readers running under blue-green transactions. Two writers a.k.a. two
+// github ingests at once will deadlock eventually, but I think that may be asking
+// for more than we want to test under blue-green, as it would require a bunch of
+// test-only internal executor logic that could mess with the production path.
+// So, for now, a limitation on blue green tests is that they be single
+// writer/single importer going at once.
+//
 type blueGreenTx struct {
 	a Tx
 	b Tx // b's output is returned
@@ -111,6 +120,9 @@ func (b *blueGreenRegistry) finishedTx(tx *blueGreenTx) {
 	sn := tx.Sn()
 	delete(b.m, sn)
 	//vv("blueGreenRegistry deleted _sn_ %v", sn)
+
+	// Note that a tx.o.dbs.Cleanup(tx) call should not be needed,
+	// because the individual tx will call cleanup themselves.
 }
 
 func (b *blueGreenRegistry) Close() {
