@@ -276,7 +276,7 @@ func (qcx *Qcx) GetTx(o Txo) (tx Tx, finisher func(perr *error)) {
 
 	if !o.Write && qcx.Grp != nil {
 		// read, with a group in place.
-		finisher = func(perr *error) {}
+		finisher = func(perr *error) {} // finisher is a returned value
 
 		already := false
 		tx, already = qcx.Grp.AlreadyHaveTx(o)
@@ -380,7 +380,7 @@ func (qcx *Qcx) ListOpenTx() string {
 type TxFactory struct {
 	typeOfTx string
 
-	mu sync.Mutex // group protection
+	mu sync.Mutex
 
 	types []txtype // blue-green split individually here
 
@@ -395,6 +395,8 @@ type TxFactory struct {
 	// allow holder to activate blue-green checking only
 	// once we have synced both sides at start up time.
 	blueGreenOff bool
+
+	isBlueGreen bool
 }
 
 func (f *TxFactory) Types() []txtype {
@@ -506,6 +508,7 @@ func NewTxFactory(txsrc string, holderDir string, holder *Holder) (f *TxFactory,
 	}
 	if len(types) == 2 {
 		f.blueGreenReg = newBlueGreenReg(types)
+		f.isBlueGreen = true
 	}
 	f.dbPerShard = f.NewDBPerShard(types, holderDir, holder)
 
@@ -789,16 +792,15 @@ func (g *TxGroup) AbortGroup() {
 }
 
 func (f *TxFactory) NewTx(o Txo) (txn Tx) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
 	defer func() {
 		if globalUseStatTx {
 			txn = newStatTx(txn)
 		}
 	}()
 
+	f.mu.Lock()
 	o.blueGreenOff = f.blueGreenOff
+	f.mu.Unlock()
 
 	indexName := ""
 	if o.Index != nil {
@@ -834,14 +836,15 @@ func (f *TxFactory) NewTx(o Txo) (txn Tx) {
 	return tx
 }
 
+// has to match the const strings at the top of the file.
 func (ty txtype) String() string {
 	switch ty {
 	case noneTxn:
 		return "noneTxn"
 	case roaringTxn:
-		return "roaringTxn"
+		return "roaring"
 	case rbfTxn:
-		return "rbfTxn"
+		return "rbf"
 	case lmdbTxn:
 		return "lmdbTxn"
 	case boltTxn:

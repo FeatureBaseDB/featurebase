@@ -113,7 +113,7 @@ func TestFragment_ClearBit(t *testing.T) {
 	// In that spirit, we will check that the Tx Commit is visible afterwards.
 	panicOn(tx.Commit())
 
-	tx = idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f, Shard: f.shard})
+	tx = idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: f.shard})
 	defer tx.Rollback()
 
 	// Close and reopen the fragment & verify the data.
@@ -198,7 +198,7 @@ func TestFragment_ClearRow(t *testing.T) {
 		t.Fatalf("unexpected count: %d", n)
 	}
 	panicOn(tx.Commit())
-	tx = idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f, Shard: f.shard})
+	tx = idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: f.shard})
 	defer tx.Rollback()
 
 	// Close and reopen the fragment & verify the data.
@@ -258,8 +258,7 @@ func TestFragment_SetRow(t *testing.T) {
 	}
 
 	panicOn(tx.Commit())
-	tx = idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f, Shard: f.shard})
-	defer tx.Rollback()
+	tx = idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: f.shard})
 
 	// Close and reopen the fragment & verify the data.
 	if err := f.Reopen(); err != nil {
@@ -267,6 +266,10 @@ func TestFragment_SetRow(t *testing.T) {
 	} else if n := f.mustRow(tx, rowID).Count(); n != 3 {
 		t.Fatalf("unexpected count (reopen): %d", n)
 	}
+
+	tx.Rollback()
+	tx = idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f, Shard: f.shard})
+	defer tx.Rollback()
 
 	// verify that setting something from a row which lacks a segment for
 	// this fragment's shard still clears this fragment correctly.
@@ -1515,12 +1518,17 @@ func TestFragment_Checksum(t *testing.T) {
 	f, idx, tx := mustOpenFragment(t, "i", "f", viewStandard, 0, "")
 	_ = idx
 	defer f.Clean(t)
+	tx.Rollback() // allow f.Checksum to make its read tx.
 
 	// Retrieve checksum and set bits.
 	orig, err := f.Checksum()
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	tx = idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f, Shard: f.shard})
+	defer tx.Rollback()
+
 	if _, err := f.setBit(tx, 1, 200); err != nil {
 		t.Fatal(err)
 	} else if _, err := f.setBit(tx, HashBlockSize*2, 200); err != nil {
@@ -5412,8 +5420,6 @@ func TestFragment_Bug_Q2DoubleDelete(t *testing.T) {
 func notBlueGreenTest(t *testing.T) {
 	src := os.Getenv("PILOSA_TXSRC")
 	if strings.Contains(src, "_") {
-		if strings.Contains(src, "roaring") {
-			t.Skip("skip under blue green with roaring")
-		}
+		t.Skip("skip under blue green")
 	}
 }

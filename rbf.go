@@ -72,6 +72,7 @@ func (w *RbfDBWrapper) CleanupTx(tx Tx) {
 	w.muDb.Lock()
 
 	delete(w.openTx, r)
+	//vv("rbf CleanupTx gid %v about to call r.o.dbs.Cleanup(tx.Sn=%v)", curGID(), tx.Sn())
 	r.o.dbs.Cleanup(tx) // release the read/write lock.
 
 	w.muDb.Unlock()
