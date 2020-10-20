@@ -131,6 +131,11 @@ type Qcx struct {
 	Direct bool
 
 	isRoaring bool
+
+	// top-level context is for a write, so re-use a
+	// writable tx for all reads and writes on each given
+	// shard
+	write bool
 }
 
 // Finish commits/rollsback all stored Tx and resets the
@@ -177,6 +182,8 @@ func (q *Qcx) reset() {
 }
 
 // NewQcxWithGroup allocates a freshly allocated and empty Grp.
+// The top-level executor will set qcx.write = true manually
+// if the overall query is a write.
 func (f *TxFactory) NewQcx() (qcx *Qcx) {
 	qcx = &Qcx{
 		Grp: f.NewTxGroup(),
@@ -239,6 +246,12 @@ func (qcx *Qcx) GetTx(o Txo) (tx Tx, finisher func(perr *error)) {
 	if qcx.isRoaring {
 		return qcx.Txf.NewTx(o), NoopFinisher
 	}
+
+	// qcx.write reflects the top executor determination
+	// if a write will be done at the end, so we upgrade
+	// the "local" read Tx to be writes, so that they
+	// don't deadlock against themselves under blue-green.
+	o.Write = o.Write || qcx.write
 
 	// note: write Tx were re-using Tx across different goroutines,
 	// which lmdb will not be pleased with. For reads this
