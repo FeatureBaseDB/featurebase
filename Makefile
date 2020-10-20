@@ -38,11 +38,11 @@ vendor: go.mod
 
 # Run test suite
 test:
-	GODEBUG=x509ignoreCN=0 go test ./... -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) -v
+	go test ./... -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) -v
 
 # Run test suite with race flag
 test-race:
-	GODEBUG=x509ignoreCN=0 go test ./... -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) -race -timeout 60m -v
+	go test ./... -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) -race -timeout 60m -v
 
 testv: topt testvsub
 
@@ -57,7 +57,7 @@ testvsub:
 	set -e; for i in boltdb ctl http pg pql rbf roaring server sql txkey; do \
            echo; echo "___ testing subpkg $$i"; \
            cd $$i; pwd; \
-           GODEBUG=x509ignoreCN=0 go test -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) -v -timeout 60m || break; \
+           go test -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) -v -timeout 60m || break; \
            echo; echo "999 done testing subpkg $$i"; \
            cd ..; \
         done
@@ -66,7 +66,7 @@ testvsub-race:
 	set -e; for i in boltdb ctl http pg pql rbf roaring server sql txkey; do \
            echo; echo "___ testing subpkg $$i -race"; \
            cd $$i; pwd; \
-           GODEBUG=x509ignoreCN=0 go test -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) -v -race -timeout 60m || break; \
+           go test -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) -v -race -timeout 60m || break; \
            echo; echo "999 done testing subpkg $$i -race"; \
            cd ..; \
         done
@@ -75,7 +75,7 @@ tour:
 	./tournament.sh
 
 bench:
-	GODEBUG=x509ignoreCN=0 go test ./... -bench=. -run=NoneZ -timeout=127m $(TESTFLAGS)
+	go test ./... -bench=. -run=NoneZ -timeout=127m $(TESTFLAGS)
 
 # Run test suite with coverage enabled
 cover:
@@ -205,20 +205,20 @@ pilosa-fsck:
 
 # Run Pilosa tests inside Docker container
 docker-test:
-	docker run --rm -v $(PWD):/go/src/$(CLONE_URL) -w /go/src/$(CLONE_URL) golang:$(GO_VERSION) GODEBUG=x509ignoreCN=0 go test -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) ./...
+	docker run --rm -v $(PWD):/go/src/$(CLONE_URL) -w /go/src/$(CLONE_URL) golang:$(GO_VERSION) go test -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) ./...
 
 # Must use bash in order to -o pipefail; otherwise the tee will hide red tests.
 # run top tests, not subdirs. print summary red/green after.
 # The \-\-\- FAIL avoids counting the extra two FAIL strings at then bottom of log.topt.
 topt:
 	mv log.topt.roar log.topt.roar.prev || true
-	$(eval SHELL:=/bin/bash) set -o pipefail; GODEBUG=x509ignoreCN=0 go test -v -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) 2>&1 | tee log.topt.roar
+	$(eval SHELL:=/bin/bash) set -o pipefail; go test -v -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) 2>&1 | tee log.topt.roar
 	@echo "   log.topt.roar green: \c"; cat log.topt.roar | grep PASS |wc -l
 	@echo "   log.topt.roar   red: \c"; cat log.topt.roar | grep '\-\-\- FAIL' | wc -l
 
 topt-race:
 	mv log.topt.race log.topt.race.prev || true
-	$(eval SHELL:=/bin/bash) set -o pipefail; GODEBUG=x509ignoreCN=0 go test -race -v -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) 2>&1 | tee log.topt.race
+	$(eval SHELL:=/bin/bash) set -o pipefail; go test -race -v -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) 2>&1 | tee log.topt.race
 	@echo "   log.topt.race green: \c"; cat log.topt.race | grep PASS |wc -l
 	@echo "   log.topt.race   red: \c"; cat log.topt.race | grep '\-\-\- FAIL' | wc -l
 
