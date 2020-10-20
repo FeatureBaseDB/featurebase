@@ -10,3 +10,5 @@ certstrap --depot-path certs sign "localhost" --CA pilosa-ca --expires "100 year
 dev-25ea708a
 
 (built with go 1.13)
+
+`GODEBUG=x509ignoreCN=0` is needed to run server tests since go 1.15 to avoid certificate errors.
