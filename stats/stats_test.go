@@ -197,7 +197,7 @@ func TestStatsCount_SetColumnAttrs(t *testing.T) {
 	called := false
 	idx := hldr.Holder.Index("d")
 	if idx == nil {
-		t.Fatal("idex not found")
+		t.Fatal("index not found")
 	}
 
 	hldr.Holder.Stats = &MockStats{

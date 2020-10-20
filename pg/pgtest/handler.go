@@ -17,6 +17,8 @@ package pgtest
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 
 	"github.com/pilosa/pilosa/v2/pg"
 )
@@ -36,6 +38,52 @@ type ResultSet struct {
 	Columns   []pg.ColumnInfo
 	Data      [][]string
 	ResultTag string
+}
+
+func (s ResultSet) String() string {
+	if len(s.Columns) == 0 || len(s.Data) == 0 {
+		return "EMPTY"
+	}
+	colHdr := make([]string, len(s.Columns))
+	for i, c := range s.Columns {
+		colHdr[i] = fmt.Sprintf("%s:%v", c.Name, c.Type)
+	}
+	dataBody := make([][]string, len(s.Data))
+	for i, v := range s.Data {
+		dataBody[i] = append([]string(nil), v...)
+	}
+	colWidth := make([]int, len(s.Columns))
+	for i, c := range colHdr {
+		if len(c) > colWidth[i] {
+			colWidth[i] = len(c)
+		}
+	}
+	for _, row := range dataBody {
+		for i, c := range row {
+			if len(c) > colWidth[i] {
+				colWidth[i] = len(c)
+			}
+		}
+	}
+	for i, c := range colHdr {
+		c += strings.Repeat(" ", colWidth[i]-len(c))
+		colHdr[i] = c
+	}
+	for _, row := range dataBody {
+		for i, c := range row {
+			c += strings.Repeat(" ", colWidth[i]-len(c))
+			row[i] = c
+		}
+	}
+	var totalWidth int
+	for _, width := range colWidth {
+		totalWidth += width
+	}
+	data := make([]string, len(dataBody))
+	for i, row := range dataBody {
+		data[i] = strings.Join(row, "|")
+	}
+	return strings.Join(colHdr, "|") + "\n" + strings.Repeat("-", totalWidth+(2*len(colHdr)-1)) + "\n" + strings.Join(data, "\n")
 }
 
 // WriteHeader writes headers to the result set.

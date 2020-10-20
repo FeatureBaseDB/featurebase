@@ -2541,6 +2541,16 @@ func (c *cluster) translateFieldKeys(ctx context.Context, field *Field, keys []s
 }
 
 func (c *cluster) findFieldKeys(ctx context.Context, field *Field, keys ...string) (map[string]uint64, error) {
+	if idx := field.ForeignIndex(); idx != "" {
+		// The field uses foreign index keys.
+		// Therefore, the field keys are actually column keys on a different index.
+		return c.findIndexKeys(ctx, idx, keys...)
+	}
+
+	if !field.Keys() {
+		return nil, errors.Wrap(ErrTranslatingKeyNotFound, "field is not keyed")
+	}
+
 	// Attempt to find the keys locally.
 	localTranslations, err := field.TranslateStore().FindKeys(keys...)
 	if err != nil {
@@ -2594,6 +2604,16 @@ func (c *cluster) findFieldKeys(ctx context.Context, field *Field, keys ...strin
 }
 
 func (c *cluster) createFieldKeys(ctx context.Context, field *Field, keys ...string) (map[string]uint64, error) {
+	if idx := field.ForeignIndex(); idx != "" {
+		// The field uses foreign index keys.
+		// Therefore, the field keys are actually column keys on a different index.
+		return c.createIndexKeys(ctx, idx, keys...)
+	}
+
+	if !field.Keys() {
+		return nil, errors.Wrap(ErrTranslatingKeyNotFound, "field is not keyed")
+	}
+
 	// The coordinator is the only node that can create field keys, since it owns the authoritative copy.
 	coordinator := c.coordinatorNode()
 	if coordinator == nil {
