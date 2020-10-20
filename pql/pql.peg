@@ -4,101 +4,75 @@ type PQL Peg {
      Query
 }
 
-
+# All input queries consist of a sequence of calls, at the top level.
 Calls <- sp (Call sp)* !.
-Call <-  'Set' {p.startCall("Set")} open col comma dargs (comma timestamp)? close {p.endCall()}
-       / 'SetRowAttrs' {p.startCall("SetRowAttrs")} open posfield comma row comma fargs close {p.endCall()}
-       / 'SetColumnAttrs' {p.startCall("SetColumnAttrs")} open col comma fargs close {p.endCall()}
-       / 'Clear' {p.startCall("Clear")} open col comma dargs close {p.endCall()}
-       / 'ClearRow' {p.startCall("ClearRow")} open darg close {p.endCall()}
-       / 'Store' {p.startCall("Store")} open Call comma darg close {p.endCall()}
-       / 'TopN' {p.startCall("TopN")} open posfield (comma allargs)? close {p.endCall()}
-       / 'Rows' {p.startCall("Rows")} open posfield (comma allargs)? close {p.endCall()}
-       / 'Range' {p.startCall("Range")} open field sp '=' sp fvalue comma 'from='? {p.addField("from")} timestampfmt {p.addVal(text)} comma 'to='? sp {p.addField("to")} timestampfmt {p.addVal(text)} close {p.endCall()}
-       / < IDENT > { p.startCall(text ) } open allargs comma? close { p.endCall() }
-allargs <- Call (comma Call)* (comma dargs)? / dargs / sp
-fargs <- farg (comma fargs)? sp
-farg <- ( field sp '=' sp fvalue
-        / field sp COND sp fvalue
+Call <-  "Set" {p.startCall("Set")} open col comma args (comma timestamp)? close {p.endCall()}
+       / "SetRowAttrs" {p.startCall("SetRowAttrs")} open posfield comma row comma args close {p.endCall()}
+       / "SetColumnAttrs" {p.startCall("SetColumnAttrs")} open col comma args close {p.endCall()}
+       / "Clear" {p.startCall("Clear")} open col comma args close {p.endCall()}
+       / "ClearRow" {p.startCall("ClearRow")} open arg close {p.endCall()}
+       / "Store" {p.startCall("Store")} open Call comma arg close {p.endCall()}
+       / "TopN" {p.startCall("TopN")} open posfield (comma allargs)? close {p.endCall()}
+       / "Rows" {p.startCall("Rows")} open posfield (comma allargs)? close {p.endCall()}
+       / "Range" {p.startCall("Range")} open field eq value comma 'from='? {p.addField("from")} timestampfmt {p.addVal(text)} comma 'to='? sp {p.addField("to")} timestampfmt {p.addVal(text)} close {p.endCall()}
+       / < IDENT > { p.startCall(text) } open allargs comma? close { p.endCall() }
+allargs <- Call (comma Call)* (comma args)? / args / sp
+args <- arg (comma args)? sp
+arg <-    field eq value
+        / field sp COND sp value
         / conditional
-        )
-dargs <- darg (comma dargs)? sp
-darg <- ( field sp '=' sp dvalue
-        / field sp COND sp dvalue
-        / conditional
-        )
-COND <- ( '><' { p.addBTWN() }
+COND <-   '><' { p.addBTWN() }
         / '<=' { p.addLTE() }
         / '>=' { p.addGTE() }
         / '==' { p.addEQ() }
         / '!=' { p.addNEQ() }
         / '<' { p.addLT() }
         / '>' { p.addGT() }
-        )
 
 conditional <- {p.startConditional()} condint condLT condfield condLT condint {p.endConditional()}
-condint <- < '-'? [0-9]* '.' [0-9]+ / '0' / '-'? [1-9] [0-9]* > sp {p.condAdd(text)}
+condint <- < decimal > sp {p.condAdd(text)}
 condLT <- <('<=' / '<')> sp {p.condAdd(text)}
 condfield <- <fieldExpr> sp {p.condAdd(text)}
 
-dvalue <- ( ditem
-         / lbrack { p.startList() } dlist rbrack { p.endList() }
-         )
-fvalue <- ( fitem
-          / lbrack { p.startList() } flist rbrack { p.endList() }
-          )
-dlist <- ditem (comma dlist)?
-flist <- fitem (comma flist)?
-ditem <- ( itema
-         / decimal
-         / itemb
-         )
-fitem <- ( itema
-         / float
-         / itemb
-         )
-itema <- ( 'null' &(comma / sp close) { p.addVal(nil) }
-         / 'true' &(comma / sp close) { p.addVal(true) }
-         / 'false' &(comma / sp close) { p.addVal(false) }
+value <-    item
+          / lbrack { p.startList() } items rbrack { p.endList() }
+items <- item (comma items)?
+item <-   'null' &(comma / close) { p.addVal(nil) }
+         / 'true' &(comma / close) { p.addVal(true) }
+         / 'false' &(comma / close) { p.addVal(false) }
          / timestampfmt { p.addVal(text) }
-         )
-itemb <- ( < IDENT > { p.startCall(text) } open allargs comma? close { p.addVal(p.endCall()) }
+         / < decimal > { p.addNumVal(text) }
+         / < IDENT > { p.startCall(text) } open allargs comma? close { p.addVal(p.endCall()) }
          / < ([[A-Z]] / [0-9] / '-' / '_' / ':')+ > { p.addVal(text) }
          / < '"'  doublequotedstring '"' > { p.addVal(text) }
          / < '\''  singlequotedstring  '\'' > { p.addVal(text) }
-         )
-float <- ( < '-'? [0-9]+ ('.'[0-9]*)? > { p.addNumVal(text, true) }
-         / < '-'? '.'[0-9]+ > { p.addNumVal(text, true) }
-         )
-decimal <- ( < '-'? [0-9]+ ('.'[0-9]*)? > { p.addNumVal(text, false) }
-           / < '-'? '.'[0-9]+ > { p.addNumVal(text, false) }
-           )
 
 doublequotedstring <- ( '\\"' / '\\\\' / '\\n' / '\\t' / [^"\\] )*
 singlequotedstring <- ( '\\\'' / '\\\\' / '\\n' / '\\t' /  [^'\\] )*
 
 fieldExpr <- ( [[A-Z]] / '_' ) ( [[A-Z]] / [0-9] / '_' / '-' )*
 field <- <fieldExpr / reserved> { p.addField(text) }
-reserved <- ('_row' / '_col' / '_start' / '_end' / '_timestamp' / '_field')
+reserved <- '_row' / '_col' / '_start' / '_end' / '_timestamp' / '_field'
 posfield <- <fieldExpr> { p.addPosStr("_field", text) }
-uint <- [1-9] [0-9]* / '0'
-col <- ( <uint> {p.addPosNum("_col", text)}
+col <-   < digits > {p.addPosNum("_col", text)}
         / < '\'' singlequotedstring '\'' > {p.addPosStr("_col", text)}
         / < '"' doublequotedstring '"' > {p.addPosStr("_col", text)}
-        )
-row <- ( <uint> {p.addPosNum("_row", text)}
+row <-   < digits > {p.addPosNum("_row", text)}
         / < '\'' singlequotedstring '\'' > {p.addPosStr("_row", text)}
         / < '"' doublequotedstring '"' > {p.addPosStr("_row", text)}
-        )
 
 open <- '(' sp
-close <- ')' sp
-sp <- ( ' ' / '\t' / '\n' )*
+close <- sp ')' sp
+sp <- [ \t\n]*
+eq <- sp '=' sp
 comma <- sp ',' sp
 lbrack <- '[' sp
 rbrack <- sp ']' sp
 IDENT <- [[A-Z]] ([[A-Z]] / [0-9])*
-
+digits <- [0-9]+
+signedDigits <- '-'? digits
+decimal <- signedDigits ('.' digits?)?
+         / '-'? '.' digits
 
 timestampbasicfmt <- [0-9][0-9][0-9][0-9]'-'[01][0-9]'-'[0-3][0-9]'T'[0-9][0-9]':'[0-9][0-9]
 timestampfmt <- '"' <timestampbasicfmt> '"' / '\'' <timestampbasicfmt> '\'' / <timestampbasicfmt>

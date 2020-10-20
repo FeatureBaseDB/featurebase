@@ -4287,7 +4287,7 @@ func (e *executor) executeSetRowAttrs(ctx context.Context, qcx *Qcx, index strin
 	}
 
 	// Copy args and remove reserved fields.
-	attrs := pql.CopyArgs(c.Args)
+	attrs := pql.CopyArgsDecimalToFloat(c.Args)
 	delete(attrs, "_field")
 	delete(attrs, "_"+rowLabel)
 
@@ -4354,7 +4354,7 @@ func (e *executor) executeBulkSetRowAttrs(ctx context.Context, qcx *Qcx, index s
 		}
 
 		// Copy args and remove reserved fields.
-		attrs := pql.CopyArgs(c.Args)
+		attrs := pql.CopyArgsDecimalToFloat(c.Args)
 		delete(attrs, "_field")
 		delete(attrs, "_"+rowLabel)
 
@@ -4438,7 +4438,7 @@ func (e *executor) executeSetColumnAttrs(ctx context.Context, qcx *Qcx, index st
 	}
 
 	// Copy args and remove reserved fields.
-	attrs := pql.CopyArgs(c.Args)
+	attrs := pql.CopyArgsDecimalToFloat(c.Args)
 	delete(attrs, "_"+columnLabel)
 	delete(attrs, "field")
 

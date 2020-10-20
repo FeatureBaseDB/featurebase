@@ -309,7 +309,6 @@ func ParseDecimal(s string) (Decimal, error) {
 	var err error
 
 	// General steps:
-	// - Trim leading whitespace/zeros
 	// - Get the sign value
 	// - Trim leading zeros
 	// - Push characters into a buffer
@@ -328,26 +327,23 @@ func ParseDecimal(s string) (Decimal, error) {
 		switch state {
 		case stateSign:
 			switch s[i] {
-			case ' ':
-				continue
 			case '-':
 				sign = true
 				fallthrough
 			case '+':
 				state = stateLeadingZeros
-			default:
-				state = stateLeadingZeros
-				i--
+				// Resume loop and look at next character
+				continue
 			}
+			state = stateLeadingZeros
+			fallthrough
 		case stateLeadingZeros:
-			switch s[i] {
-			case '0':
+			if s[i] == '0' {
 				foundLeadingZero = true
 				continue
-			default:
-				state = stateMantissa
-				i--
 			}
+			state = stateMantissa
+			fallthrough
 		case stateMantissa:
 			switch s[i] {
 			case '.':
@@ -371,23 +367,14 @@ func ParseDecimal(s string) (Decimal, error) {
 		return Decimal{}, errors.New("decimal string is empty")
 	}
 
-	// Trim trailing zeros/spaces of mantissa
-	// for any portion that would have been to the
-	// right of the decimal.
+	// Trim trailing zeros from mantissa. If we ended up with no
+	// characters at all in string, thus, pos == 0, the loop doesn't
+	// happen and we pick [:0], which is correct, probably.
 	trimZeroCnt := 0
-	trimSpaceCnt := 0
-	for i := len(mantissa) - 1; i >= 0; i-- {
-		switch mantissa[i] {
-		case uint8(0), uint8(32): // nil/space
-			trimSpaceCnt++
-			continue
-		case uint8(48): // zero
-			trimZeroCnt++
-			continue
-		}
-		break
+	for i := pos - 1; i >= 0 && mantissa[i] == '0'; i-- {
+		trimZeroCnt++
 	}
-	mantissa = mantissa[:len(mantissa)-trimSpaceCnt-trimZeroCnt]
+	mantissa = mantissa[:pos-trimZeroCnt]
 
 	// Based on where (or if) the decimal was found,
 	// calculate scale.

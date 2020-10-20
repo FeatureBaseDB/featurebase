@@ -193,6 +193,37 @@ func TestParser_Parse(t *testing.T) {
 			t.Fatalf("unexpected call: %#v", q.Calls[0])
 		}
 	})
+
+	t.Run("MixedCase", func(t *testing.T) {
+		q, err := pql.ParseString(`roW(x=3)`)
+		if err != nil {
+			t.Fatal(err)
+		} else if !reflect.DeepEqual(q.Calls[0],
+			&pql.Call{
+				Name: "Row",
+				Args: map[string]interface{}{
+					"x": int64(3),
+				},
+			},
+		) {
+			t.Fatalf("unexpected call: %#v", q.Calls[0])
+		}
+	})
+
+	t.Run("VariousSpaces", func(t *testing.T) {
+		q, err := pql.ParseString(`TopN( x )`)
+		if err != nil {
+			t.Fatal(err)
+		} else if !reflect.DeepEqual(q.Calls[0],
+			&pql.Call{
+				Name: "TopN",
+				Args: map[string]interface{}{"_field": "x"},
+			},
+		) {
+			t.Fatalf("unexpected call: %#v", q.Calls[0])
+		}
+	})
+
 }
 
 func TestUnquote(t *testing.T) {
