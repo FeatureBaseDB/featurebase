@@ -846,9 +846,9 @@ func (ty txtype) String() string {
 	case rbfTxn:
 		return "rbf"
 	case lmdbTxn:
-		return "lmdbTxn"
+		return "lmdb"
 	case boltTxn:
-		return "boltTxn"
+		return "bolt"
 	}
 	panic(fmt.Sprintf("unhandled ty '%v' in txtype.String()", int(ty)))
 }

@@ -380,3 +380,18 @@ func Test_TxFactory_verifyBlueEqualsGreen(t *testing.T) {
 		}
 	}
 }
+
+func Test_TxFactory_verifyStringConstantsMatch(t *testing.T) {
+	// txtype.String() method MUST return strings that match
+	// our const definitions at the top of txfactory.go, or
+	// else blue-green transactions cannot determine when
+	// the second transaction is being released in dbshard.go.
+	check := []txtype{roaringTxn, rbfTxn, lmdbTxn, boltTxn}
+	expect := []string{RoaringTxn, RBFTxn, LmdbTxn, BoltTxn}
+	for i, chk := range check {
+		obs := chk.String()
+		if obs != expect[i] {
+			t.Fatalf("expected '%v' but got '%v'", expect[i], obs)
+		}
+	}
+}
