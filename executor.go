@@ -211,6 +211,7 @@ func (e *executor) Execute(ctx context.Context, index string, q *pql.Query, shar
 	// Can't do NewTx() this high up, because we need a specific shard.
 	// So start a ccx with a TxGroup and pass it down.
 	qcx := idx.holder.txf.NewQcx()
+	qcx.write = needWriteTxn
 	defer qcx.Abort()
 
 	results, err := e.execute(ctx, qcx, index, q, shards, opt)

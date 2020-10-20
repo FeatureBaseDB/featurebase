@@ -134,7 +134,7 @@ func (dbs *DBShard) Cleanup(tx Tx) {
 	if dbs == nil {
 		return // some tests are using Tx only, no dbs available.
 	}
-	//vv("top of DBShard %v Cleanup for tx.Sn = %v; dbs=%p; is 2nd: %v; type='%v'; dbs.stypes='%#v'", dbs.Shard, tx.Sn(), dbs, tx.Type() == dbs.stypes[1], tx.Type(), dbs.stypes)
+	//vv("gid %v top of DBShard %v Cleanup for tx.Sn = %v; dbs=%p; is 2nd: %v; type='%v'; dbs.stypes='%#v'", curGID(), dbs.Shard, tx.Sn(), dbs, tx.Type() == dbs.stypes[1], tx.Type(), dbs.stypes)
 	if !dbs.hasRoaring {
 		if dbs.isBlueGreen {
 			// only release on the 2nd Tx's cleanup
@@ -158,11 +158,13 @@ func (dbs *DBShard) NewTx(write bool, initialIndexName string, o Txo) (tx Tx, er
 		// the Tx finishes. This makes the two Tx in the blue-green Tx atomic.
 		if !dbs.hasRoaring {
 			if write {
+				//vv("shard %v about to write lock by gid %v; stack =\n%v", dbs.Shard, curGID(), stack())
 				dbs.mut.Lock()
 				//vv("shard %v was write locked by gid %v; stack =\n%v", dbs.Shard, curGID(), stack())
 			} else {
 				//vv("shard %v about to be read locked by gid %v; stack=\n%v", dbs.Shard, curGID(), stack())
 				dbs.mut.RLock()
+				//vv("shard %v was read locked by gid %v; stack=\n%v", dbs.Shard, curGID(), stack())
 			}
 		}
 	}
