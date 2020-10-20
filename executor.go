@@ -455,6 +455,17 @@ func (e *executor) execute(ctx context.Context, index string, q *pql.Query, shar
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.execute")
 	defer span.Finish()
 
+	// Apply translations if necessary.
+	var colTranslations map[string]map[string]uint64
+	var rowTranslations map[string]map[string]map[string]uint64
+	if !opt.Remote {
+		cols, rows, err := e.preTranslate(ctx, index, q.Calls...)
+		if err != nil {
+			return nil, err
+		}
+		colTranslations, rowTranslations = cols, rows
+	}
+
 	// Don't bother calculating shards for query types that don't require it.
 	needsShards := needsShards(q.Calls)
 
@@ -482,6 +493,20 @@ func (e *executor) execute(ctx context.Context, index string, q *pql.Query, shar
 	for i, call := range q.Calls {
 		if err := validateQueryContext(ctx); err != nil {
 			return nil, err
+		}
+
+		// Apply call translation.
+		if !opt.Remote {
+			translated, err := e.translateCallNew(call, index, colTranslations, rowTranslations)
+			if err != nil {
+				return nil, errors.Wrap(err, "translating call")
+			}
+			if translated == nil {
+				results = append(results, emptyResult(call))
+				continue
+			}
+
+			call = translated
 		}
 
 		// If you actually make a top-level Distinct call, you
@@ -4026,6 +4051,470 @@ func (e *executor) collectCallKeySets(ctx context.Context, indexName string, c *
 		}
 	}
 	return nil
+}
+
+func (e *executor) preTranslate(ctx context.Context, index string, calls ...*pql.Call) (cols map[string]map[string]uint64, rows map[string]map[string]map[string]uint64, err error) {
+	// Collect all of the required keys.
+	collector := keyCollector{
+		createCols: make(map[string][]string),
+		findCols:   make(map[string][]string),
+		createRows: make(map[string]map[string][]string),
+		findRows:   make(map[string]map[string][]string),
+	}
+	for _, call := range calls {
+		err := e.collectCallKeysNew(&collector, call, index)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+
+	// Translate columns.
+	cols = make(map[string]map[string]uint64)
+	for idx, keys := range collector.createCols {
+		translations, err := e.Cluster.createIndexKeys(ctx, index, keys...)
+		if err != nil {
+			return nil, nil, errors.Wrap(err, "creating query column keys")
+		}
+		cols[idx] = translations
+	}
+	for idx, keys := range collector.findCols {
+		translations, err := e.Cluster.findIndexKeys(ctx, index, keys...)
+		if err != nil {
+			return nil, nil, errors.Wrap(err, "finding query column keys")
+		}
+		if prev := cols[idx]; prev != nil {
+			for key, id := range translations {
+				prev[key] = id
+			}
+		} else {
+			cols[idx] = translations
+		}
+	}
+
+	// Translate rows.
+	rows = make(map[string]map[string]map[string]uint64)
+	for idx, fields := range collector.createRows {
+		idxRows := make(map[string]map[string]uint64)
+		index := e.Holder.Index(idx)
+		if index == nil {
+			return nil, nil, errors.Wrapf(ErrIndexNotFound, "creating rows on index %q", idx)
+		}
+		for f, keys := range fields {
+			field := index.Field(f)
+			if field == nil {
+				return nil, nil, errors.Wrapf(ErrFieldNotFound, "creating rows on field %q in index %q", f, idx)
+			}
+			translations, err := e.Cluster.createFieldKeys(ctx, field, keys...)
+			if err != nil {
+				return nil, nil, errors.Wrap(err, "creating query row keys")
+			}
+			idxRows[f] = translations
+		}
+		rows[idx] = idxRows
+	}
+	for idx, fields := range collector.findRows {
+		idxRows := rows[idx]
+		if idxRows == nil {
+			idxRows = make(map[string]map[string]uint64)
+			rows[idx] = idxRows
+		}
+		index := e.Holder.Index(idx)
+		if index == nil {
+			return nil, nil, errors.Wrapf(ErrIndexNotFound, "finding rows on index %q", idx)
+		}
+		for f, keys := range fields {
+			field := index.Field(f)
+			if field == nil {
+				return nil, nil, errors.Wrapf(ErrFieldNotFound, "finding rows on field %q in index %q", f, idx)
+			}
+			translations, err := e.Cluster.findFieldKeys(ctx, field, keys...)
+			if err != nil {
+				return nil, nil, errors.Wrap(err, "finding query row keys")
+			}
+			if prev := idxRows[f]; prev != nil {
+				for key, id := range translations {
+					prev[key] = id
+				}
+			} else {
+				idxRows[f] = translations
+			}
+		}
+	}
+
+	return cols, rows, nil
+}
+
+func (e *executor) collectCallKeysNew(dst *keyCollector, c *pql.Call, index string) error {
+	// Check for an overriding 'index' argument.
+	// This also applies to all child calls.
+	if callIndex := c.CallIndex(); callIndex != "" {
+		index = callIndex
+	}
+
+	// Handle the field arg.
+	switch c.Name {
+	case "Set", "Store":
+		if field, err := c.FieldArg(); err == nil {
+			if arg, ok := c.Args[field].(string); ok {
+				dst.CreateRows(index, field, arg)
+			}
+		}
+
+	case "Clear", "Row", "Range", "ClearRow":
+		if field, err := c.FieldArg(); err == nil {
+			switch arg := c.Args[field].(type) {
+			case string:
+				dst.FindRows(index, field, arg)
+			case *pql.Condition:
+				switch arg.Op {
+				case pql.EQ, pql.NEQ:
+					if key, ok := arg.Value.(string); ok {
+						dst.FindRows(index, field, key)
+					}
+				}
+			}
+		}
+	}
+
+	// Handle _col.
+	if col, ok := c.Args["_col"].(string); ok {
+		switch c.Name {
+		case "Set":
+			dst.CreateColumns(index, col)
+		default:
+			dst.FindColumns(index, col)
+		}
+	}
+
+	// Handle queries that need a "column" argument.
+	switch c.Name {
+	case "Rows", "GroupBy", "FieldValue", "IncludesColumn":
+		if col, ok := c.Args["column"].(string); ok {
+			dst.FindColumns(index, col)
+		}
+	}
+
+	// Handle special per-query arguments.
+	switch c.Name {
+	case "ConstRow":
+		// Translate the columns list.
+		if cols, ok := c.Args["columns"].([]interface{}); ok {
+			keys := make([]string, 0, len(cols))
+			for _, v := range cols {
+				switch v := v.(type) {
+				case string:
+					keys = append(keys, v)
+				case uint64:
+				case int64:
+				default:
+					return errors.Errorf("invalid column identifier %v of type %T", c, c)
+				}
+			}
+			dst.FindColumns(index, keys...)
+		}
+
+	case "GroupBy":
+		// the old code translated "previous" for "GroupBy", but we dont actually. . . use it?
+		// TODO: can we just leave this out?
+
+	case "Rows":
+		if prev, ok := c.Args["previous"].(string); ok {
+			// Find the field.
+			var field string
+			if f, ok, err := c.StringArg("_field"); err != nil {
+				return errors.Wrap(err, "finding field for Rows previous translation")
+			} else if ok {
+				field = f
+			} else if f, ok, err := c.StringArg("field"); err != nil {
+				return errors.Wrap(err, "finding field for Rows previous translation")
+			} else if ok {
+				field = f
+			} else {
+				return errors.New("missing field in Rows call")
+			}
+
+			dst.FindRows(index, field, prev)
+		}
+	}
+
+	// Collect keys from child calls.
+	for _, child := range c.Children {
+		err := e.collectCallKeysNew(dst, child, index)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Collect keys from argument calls.
+	for _, arg := range c.Args {
+		argCall, ok := arg.(*pql.Call)
+		if !ok {
+			continue
+		}
+
+		err := e.collectCallKeysNew(dst, argCall, index)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+type keyCollector struct {
+	createCols, findCols map[string][]string
+	createRows, findRows map[string]map[string][]string
+}
+
+func (c *keyCollector) CreateColumns(index string, columns ...string) {
+	if len(columns) == 0 {
+		return
+	}
+	c.createCols[index] = append(c.createCols[index], columns...)
+}
+
+func (c *keyCollector) FindColumns(index string, columns ...string) {
+	if len(columns) == 0 {
+		return
+	}
+	c.findCols[index] = append(c.findCols[index], columns...)
+}
+
+func (c *keyCollector) CreateRows(index string, field string, columns ...string) {
+	if len(columns) == 0 {
+		return
+	}
+	idx := c.createRows[index]
+	if idx == nil {
+		idx = make(map[string][]string)
+		c.createRows[index] = idx
+	}
+	idx[field] = append(idx[field], columns...)
+}
+
+func (c *keyCollector) FindRows(index string, field string, columns ...string) {
+	if len(columns) == 0 {
+		return
+	}
+	idx := c.findRows[index]
+	if idx == nil {
+		idx = make(map[string][]string)
+		c.findRows[index] = idx
+	}
+	idx[field] = append(idx[field], columns...)
+}
+
+func (e *executor) translateCallNew(c *pql.Call, index string, columnKeys map[string]map[string]uint64, rowKeys map[string]map[string]map[string]uint64) (*pql.Call, error) {
+	// Check for an overriding 'index' argument.
+	// This also applies to all child calls.
+	if callIndex := c.CallIndex(); callIndex != "" {
+		index = callIndex
+	}
+
+	// Fetch the column keys list for this index.
+	indexCols, indexRows := columnKeys[index], rowKeys[index]
+
+	// Handle the field arg.
+	switch c.Name {
+	case "Set", "Store":
+		if field, err := c.FieldArg(); err == nil {
+			switch arg := c.Args[field].(type) {
+			case string:
+				if translation, ok := indexRows[field][arg]; ok {
+					c.Args[field] = translation
+				} else {
+					return nil, errors.Wrapf(ErrTranslatingKeyNotFound, "destination key not found %q in %q in index %q", arg, field, index)
+				}
+			case bool:
+				// TODO: this should really be somewhere else
+				idx := e.Holder.Index(index)
+				if idx == nil {
+					return nil, errors.Wrapf(ErrIndexNotFound, "translating boolean argument in query %q", c.String())
+				}
+				f := idx.Field(field)
+				if f == nil {
+					return nil, errors.Wrapf(ErrFieldNotFound, "translating boolean argument in query %q", c.String())
+				}
+				if f.Type() != FieldTypeBool {
+					return nil, errors.Errorf("bool value on field of type %s in query %q", f.Type(), c.String())
+				}
+				if arg {
+					c.Args[field] = trueRowID
+				} else {
+					c.Args[field] = falseRowID
+				}
+			}
+		}
+
+	case "Clear", "Row", "Range", "ClearRow":
+		if field, err := c.FieldArg(); err == nil {
+			switch arg := c.Args[field].(type) {
+			case string:
+				if translation, ok := indexRows[field][arg]; ok {
+					c.Args[field] = translation
+				} else {
+					// Rewrite the call into a zero value call.
+					return e.callZero(c), nil
+				}
+			case bool:
+				// TODO: this should really be somewhere else
+				idx := e.Holder.Index(index)
+				if idx == nil {
+					return nil, errors.Wrapf(ErrIndexNotFound, "translating boolean argument in query %q", c.String())
+				}
+				f := idx.Field(field)
+				if f == nil {
+					return nil, errors.Wrapf(ErrFieldNotFound, "translating boolean argument in query %q", c.String())
+				}
+				if f.Type() != FieldTypeBool {
+					return nil, errors.Errorf("bool value on field of type %s in query %q", f.Type(), c.String())
+				}
+				if arg {
+					c.Args[field] = trueRowID
+				} else {
+					c.Args[field] = falseRowID
+				}
+			case *pql.Condition:
+				switch arg.Op {
+				case pql.EQ, pql.NEQ:
+					if key, ok := arg.Value.(string); ok {
+						if translation, ok := indexRows[field][key]; ok {
+							arg.Value = translation
+						} else {
+							// Rewrite the call into a zero value call.
+							return e.callZero(c), nil
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// Handle _col.
+	if col, ok := c.Args["_col"].(string); ok {
+		if id, ok := indexCols[col]; ok {
+			c.Args["_col"] = id
+		} else {
+			switch c.Name {
+			case "Set":
+				return nil, errors.Wrapf(ErrTranslatingKeyNotFound, "destination key not found %q in index %q", col, index)
+			default:
+				return e.callZero(c), nil
+			}
+		}
+	}
+
+	// Handle queries that need a "column" argument.
+	switch c.Name {
+	case "Rows", "GroupBy", "FieldValue", "IncludesColumn":
+		if col, ok := c.Args["column"].(string); ok {
+			if translation, ok := indexCols[col]; ok {
+				c.Args["column"] = translation
+			} else {
+				// Rewrite the call into a zero value call.
+				return e.callZero(c), nil
+			}
+		}
+	}
+
+	// Handle special per-query arguments.
+	switch c.Name {
+	case "ConstRow":
+		// Translate the columns list.
+		if cols, ok := c.Args["columns"].([]interface{}); ok {
+			out := make([]uint64, 0, len(cols))
+			for _, v := range cols {
+				switch v := v.(type) {
+				case string:
+					if id, ok := indexCols[v]; ok {
+						out = append(out, id)
+					}
+				case uint64:
+					out = append(out, v)
+				case int64:
+					out = append(out, uint64(v))
+				default:
+					return nil, errors.Errorf("invalid column identifier %v of type %T", c, c)
+				}
+			}
+			c.Args["columns"] = out
+		}
+
+	case "GroupBy":
+		// the old code translated "previous" for "GroupBy", but we dont actually. . . use it?
+		// TODO: can we just leave this out?
+
+	case "Rows":
+		// Translate the previous row key.
+		if prev, ok := c.Args["previous"].(string); ok {
+			// Find the field.
+			var field string
+			if f, ok, err := c.StringArg("_field"); err != nil {
+				return nil, errors.Wrap(err, "finding field for Rows previous translation")
+			} else if ok {
+				field = f
+			} else if f, ok, err := c.StringArg("field"); err != nil {
+				return nil, errors.Wrap(err, "finding field for Rows previous translation")
+			} else if ok {
+				field = f
+			} else {
+				return nil, errors.New("missing field in Rows call")
+			}
+
+			// Look up a translation for the previous row key.
+			if translation, ok := indexRows[field][prev]; ok {
+				c.Args["previous"] = translation
+			} else {
+				return nil, errors.Wrapf(ErrTranslatingKeyNotFound, "translating previous key %q from field %q in index %q in Rows call", prev, field, index)
+			}
+		}
+	}
+
+	// Translate child calls.
+	for i, child := range c.Children {
+		translated, err := e.translateCallNew(child, index, columnKeys, rowKeys)
+		if err != nil {
+			return nil, err
+		}
+		c.Children[i] = translated
+	}
+
+	// Translate argument calls.
+	for k, arg := range c.Args {
+		argCall, ok := arg.(*pql.Call)
+		if !ok {
+			continue
+		}
+
+		translated, err := e.translateCallNew(argCall, index, columnKeys, rowKeys)
+		if err != nil {
+			return nil, err
+		}
+
+		c.Args[k] = translated
+	}
+
+	return c, nil
+}
+
+func (e *executor) callZero(c *pql.Call) *pql.Call {
+	switch c.Name {
+	case "Row", "Range":
+		if field, err := c.FieldArg(); err == nil {
+			if cond, ok := c.Args[field].(*pql.Condition); ok {
+				if cond.Op == pql.NEQ {
+					// Turn not nothing into everything.
+					return &pql.Call{Name: "All"}
+				}
+			}
+		}
+
+		// Use an empty union as a placeholder.
+		return &pql.Call{Name: "Union"}
+
+	default:
+		return nil
+	}
 }
 
 func (e *executor) translateCall(ctx context.Context, indexName string, c *pql.Call, keyMaps map[string]map[string]uint64, writable bool) (err error) {
