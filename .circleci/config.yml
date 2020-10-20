@@ -192,16 +192,16 @@ workflows:
           requires:
             - setup
       - test:
-          name: test-golang-1.13
+          name: test-golang-1.15
           resource_class: xlarge
-          golang_version: 1.13.15
+          golang_version: 1.15.3
           requires:
             - setup
           filters:
             tags:
               only: /^v.*/
       - test:
-          name: test-golang-1.14
+          name: test-golang-1.14.9
           resource_class: xlarge
           golang_version: 1.14.9
           requires:
@@ -216,7 +216,7 @@ workflows:
       #  name: test-golang-<< matrix.golang_version >>
       #  matrix:
       #    parameters:
-      #      golang_version: ["1.14.9", "1.13.15"]
+      #      golang_version: ["1.14.9", "1.15.3"]
       - test:
           name: test-race
           test_make_target: test-race
@@ -248,7 +248,7 @@ workflows:
           requires:
             - linter
             - check-license-headers
-            - test-golang-1.14
+            - test-golang-1.14.9
       - dockerhub-upload-unstable:
           context: molecula
           requires:
