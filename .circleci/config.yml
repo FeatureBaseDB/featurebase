@@ -201,7 +201,7 @@ workflows:
             tags:
               only: /^v.*/
       - test:
-          name: test-golang-1.14
+          name: test-golang-1.14.9
           resource_class: xlarge
           golang_version: 1.14.9
           requires:
@@ -248,7 +248,7 @@ workflows:
           requires:
             - linter
             - check-license-headers
-            - test-golang-1.14
+            - test-golang-1.14.9
       - dockerhub-upload-unstable:
           context: molecula
           requires:
