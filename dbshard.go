@@ -68,13 +68,12 @@ type DBShard struct {
 	Shard uint64
 	Open  bool
 
-	// With RWMutex, the
-	// writer who calls Lock() automatically gets priority over
-	// any reader who arrives later, even if the lock is held
-	// by a reader to start with.
+	// With RWMutex, the blue-green Tx can start and commit
+	// atomically.
 	mut sync.RWMutex
 
 	types      []txtype
+	stypes     []string
 	hasRoaring bool // if either of the types is roaringTxn
 
 	W             []DBWrapper
@@ -85,6 +84,8 @@ type DBShard struct {
 
 	useOpenList int
 	closed      bool
+
+	isBlueGreen bool
 }
 
 func (dbs *DBShard) DeleteFragment(index, field, view string, shard uint64, frag interface{}) (err error) {
@@ -133,28 +134,34 @@ func (dbs *DBShard) Cleanup(tx Tx) {
 	if dbs == nil {
 		return // some tests are using Tx only, no dbs available.
 	}
-	if useRWLock {
-		if !dbs.hasRoaring {
-			if tx.Readonly() {
-				dbs.mut.RUnlock()
-			} else {
-				dbs.mut.Unlock()
+	//vv("top of DBShard %v Cleanup for tx.Sn = %v; dbs=%p; is 2nd: %v; type='%v'; dbs.stypes='%#v'", dbs.Shard, tx.Sn(), dbs, tx.Type() == dbs.stypes[1], tx.Type(), dbs.stypes)
+	if !dbs.hasRoaring {
+		if dbs.isBlueGreen {
+			// only release on the 2nd Tx's cleanup
+			if tx.Type() == dbs.stypes[1] {
+				if tx.Readonly() {
+					dbs.mut.RUnlock()
+					//vv("gid %v released read-lock on shard %v", curGID(), dbs.Shard)
+				} else {
+					dbs.mut.Unlock()
+					//vv("gid %v released write-lock on shard %v", curGID(), dbs.Shard)
+				}
 			}
 		}
 	}
 }
 
-// experimental feature, off for now.
-const useRWLock = false
-
 func (dbs *DBShard) NewTx(write bool, initialIndexName string, o Txo) (tx Tx, err error) {
-	if useRWLock {
+
+	if dbs.isBlueGreen {
 		// enforce only one writer at a time. The dbs.mut is held until
-		// the Tx finishes.
+		// the Tx finishes. This makes the two Tx in the blue-green Tx atomic.
 		if !dbs.hasRoaring {
 			if write {
 				dbs.mut.Lock()
+				//vv("shard %v was write locked by gid %v; stack =\n%v", dbs.Shard, curGID(), stack())
 			} else {
+				//vv("shard %v about to be read locked by gid %v; stack=\n%v", dbs.Shard, curGID(), stack())
 				dbs.mut.RLock()
 			}
 		}
@@ -178,7 +185,9 @@ func (dbs *DBShard) NewTx(write bool, initialIndexName string, o Txo) (tx Tx, er
 		return
 	}
 	// blue green
-	return dbs.per.txf.newBlueGreenTx(txns[0], txns[1], o.Index, o), nil
+	tx, err = dbs.per.txf.newBlueGreenTx(txns[0], txns[1], o.Index, o), nil
+	//vv("dbshard returning blue-green tx sn %v", tx.Sn())
+	return
 }
 
 func (dbs *DBShard) DeleteDBPath() (err error) {
@@ -459,7 +468,13 @@ func (per *DBPerShard) GetDBShard(index string, shard uint64, idx *Index) (dbs *
 			per:           per,
 			useOpenList:   per.useOpenList,
 			hasRoaring:    per.hasRoaring,
+			isBlueGreen:   len(per.types) > 1,
 		}
+		dbs.stypes = make([]string, len(per.types))
+		for i, ty := range per.types {
+			dbs.stypes[i] = ty.String()
+		}
+
 		dbi.Shard[shard] = dbs
 	}
 	if !dbs.Open {
