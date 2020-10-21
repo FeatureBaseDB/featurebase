@@ -143,7 +143,7 @@ func (t *queryTracker) ActiveQueries() []ActiveQueryStatus {
 
 func (t *queryTracker) PastQueries() []PastQueryStatus {
 	queries := make([]pastQuery, 0, len(t.history))
-	for pq, _ := range t.history {
+	for pq := range t.history {
 		queries = append(queries, pq)
 	}
 	// TODO use sort.Sort

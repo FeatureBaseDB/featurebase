@@ -14,7 +14,10 @@
 
 package pilosa
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestQueryTracker(t *testing.T) {
 	tracker := newQueryTracker()
@@ -24,7 +27,7 @@ func TestQueryTracker(t *testing.T) {
 		t.Fatalf("expected no active queries; found %v", queries)
 	}
 
-	qs := tracker.Start("test query")
+	qs := tracker.Start("test query", "node0")
 
 	var queries []ActiveQueryStatus
 	for len(queries) < 1 {
@@ -34,7 +37,7 @@ func TestQueryTracker(t *testing.T) {
 		t.Fatalf("unexpected queries: %v", queries)
 	}
 
-	tracker.Finish(qs)
+	tracker.Finish(qs, time.Now())
 
 	for len(queries) > 0 {
 		queries = tracker.ActiveQueries()
