@@ -2628,7 +2628,7 @@ func (c *cluster) findIndexKeys(ctx context.Context, indexName string, keys ...s
 	// Split keys by partition.
 	keysByPartition := make(map[int][]string, c.partitionN)
 	for _, key := range keys {
-		partitionID := c.Topology.KeyPartition(indexName, key)
+		partitionID := c.keyPartition(indexName, key)
 		keysByPartition[partitionID] = append(keysByPartition[partitionID], key)
 	}
 
@@ -2728,7 +2728,7 @@ func (c *cluster) createIndexKeys(ctx context.Context, indexName string, keys ..
 	// Split keys by partition.
 	keysByPartition := make(map[int][]string, c.partitionN)
 	for _, key := range keys {
-		partitionID := c.Topology.KeyPartition(indexName, key)
+		partitionID := c.keyPartition(indexName, key)
 		keysByPartition[partitionID] = append(keysByPartition[partitionID], key)
 	}
 

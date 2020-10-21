@@ -662,6 +662,19 @@ func (c *Call) UintSliceArg(key string) ([]uint64, bool, error) {
 	}
 }
 
+func (c *Call) StringArg(key string) (string, bool, error) {
+	val, ok := c.Args[key]
+	if !ok {
+		return "", false, nil
+	}
+	switch tval := val.(type) {
+	case string:
+		return tval, true, nil
+	default:
+		return "", true, fmt.Errorf("unexpected type %T in StringArg, val %v", tval, tval)
+	}
+}
+
 // CallArg is for reading the value at key from call.Args as a Call. If the
 // key is not in Call.Args, the value of the returned value will be nil, and
 // the error will be nil. An error is returned if the value is not a Call.

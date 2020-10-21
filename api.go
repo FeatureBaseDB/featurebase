@@ -1672,7 +1672,7 @@ func (api *API) FindIndexKeys(ctx context.Context, index string, keys ...string)
 func (api *API) FindFieldKeys(ctx context.Context, index, field string, keys ...string) (map[string]uint64, error) {
 	f := api.holder.Field(index, field)
 	if f == nil {
-		return nil, newNotFoundError(ErrFieldNotFound, field)
+		return nil, errors.Wrapf(ErrFieldNotFound, "finding keys for field %q", field)
 	}
 	return api.cluster.findFieldKeys(ctx, f, keys...)
 }
@@ -1688,7 +1688,7 @@ func (api *API) CreateIndexKeys(ctx context.Context, index string, keys ...strin
 func (api *API) CreateFieldKeys(ctx context.Context, index, field string, keys ...string) (map[string]uint64, error) {
 	f := api.holder.Field(index, field)
 	if f == nil {
-		return nil, newNotFoundError(ErrFieldNotFound, field)
+		return nil, errors.Wrapf(ErrFieldNotFound, "finding keys for field %q", field)
 	}
 	return api.cluster.createFieldKeys(ctx, f, keys...)
 }

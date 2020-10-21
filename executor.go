@@ -485,7 +485,7 @@ func (e *executor) execute(ctx context.Context, index string, q *pql.Query, shar
 
 	// Optimize handling for bulk attribute insertion.
 	if hasOnlySetRowAttrs(q.Calls) {
-		return e.executeBulkSetRowAttrs(ctx, index, q.Calls, opt)
+		return e.executeBulkSetRowAttrs(ctx, index, q.Calls, opt, colTranslations, rowTranslations)
 	}
 
 	// Execute each call serially.
@@ -780,19 +780,9 @@ func (e *executor) executeFieldValueCall(ctx context.Context, index string, c *p
 		return ValCount{}, ErrFieldNotFound
 	}
 
-	var colID uint64
-	if key, ok := colKey.(string); ok && idx.Keys() {
-		id, err := e.Cluster.translateIndexKey(ctx, index, key, false)
-		if err != nil {
-			return ValCount{}, errors.Wrap(err, "getting column id")
-		}
-		colID = id
-	} else {
-		id, ok, err := c.UintArg("column")
-		if !ok || err != nil {
-			return ValCount{}, errors.Wrap(err, "getting column argument")
-		}
-		colID = id
+	colID, ok, err := c.UintArg("column")
+	if !ok || err != nil {
+		return ValCount{}, errors.Wrap(err, "getting column argument")
 	}
 
 	shard := colID / ShardWidth
@@ -3188,19 +3178,7 @@ func (e *executor) executeSetRow(ctx context.Context, indexName string, c *pql.C
 	}
 	field := e.Holder.Field(indexName, fieldName)
 	if field == nil {
-		// Find index.
-		index := e.Holder.Index(indexName)
-		if index == nil {
-			return false, newNotFoundError(ErrIndexNotFound)
-		}
-
-		// Create field.
-		field, err = index.CreateField(fieldName, OptFieldTypeSet(CacheTypeNone, 0))
-		if err != nil {
-			// We wrap these because we want to indicate that it wasn't found,
-			// but also the problem we encountered trying to create it.
-			return false, newNotFoundError(errors.Wrap(err, "creating field"))
-		}
+		return false, errors.Wrapf(ErrFieldNotFound, "field %q", field)
 	}
 	if field.Type() != FieldTypeSet {
 		return false, fmt.Errorf("can't Store() on a %s field", field.Type())
@@ -3543,7 +3521,8 @@ func (e *executor) executeSetRowAttrs(ctx context.Context, index string, c *pql.
 }
 
 // executeBulkSetRowAttrs executes a set of SetRowAttrs() calls.
-func (e *executor) executeBulkSetRowAttrs(ctx context.Context, index string, calls []*pql.Call, opt *execOptions) ([]interface{}, error) {
+
+func (e *executor) executeBulkSetRowAttrs(ctx context.Context, index string, calls []*pql.Call, opt *execOptions, colTranslations map[string]map[string]uint64, rowTranslations map[string]map[string]map[string]uint64) ([]interface{}, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeBulkSetRowAttrs")
 	defer span.Finish()
 
@@ -3554,6 +3533,19 @@ func (e *executor) executeBulkSetRowAttrs(ctx context.Context, index string, cal
 			if err := validateQueryContext(ctx); err != nil {
 				return nil, err
 			}
+		}
+
+		// Apply call translation.
+		if !opt.Remote {
+			translated, err := e.translateCallNew(c, index, colTranslations, rowTranslations)
+			if err != nil {
+				return nil, errors.Wrap(err, "translating call")
+			}
+			if translated == nil {
+				continue
+			}
+
+			c = translated
 		}
 
 		field, ok := c.Args["_field"].(string)
@@ -4153,8 +4145,46 @@ func (e *executor) collectCallKeysNew(dst *keyCollector, c *pql.Call, index stri
 
 	// Handle the field arg.
 	switch c.Name {
-	case "Set", "Store":
+	case "Set":
 		if field, err := c.FieldArg(); err == nil {
+			if arg, ok := c.Args[field].(string); ok {
+				dst.CreateRows(index, field, arg)
+			}
+		}
+
+	case "Store":
+		if field, err := c.FieldArg(); err == nil {
+			idx := e.Holder.Index(index)
+			if idx == nil {
+				return errors.Wrapf(ErrIndexNotFound, "translating store field argument")
+			}
+			f := idx.Field(field)
+			if f == nil {
+				// Create the field.
+				// This is messy, because if a query leading up to the store fails, we will have created the field without executing the store.
+				var keyed bool
+				switch v := c.Args[field].(type) {
+				case string:
+					keyed = true
+				case uint64:
+				case int64:
+					if v < 0 {
+						return errors.Errorf("negative store row ID %d", v)
+					}
+				default:
+					return errors.Errorf("invalid store row identifier: %v of %T", v, v)
+				}
+				opts := []FieldOption{OptFieldTypeSet(CacheTypeNone, 0)}
+				if keyed {
+					opts = append(opts, OptFieldKeys())
+				}
+				f, err = idx.CreateField(field, opts...)
+				if err != nil {
+					// We wrap these because we want to indicate that it wasn't found,
+					// but also the problem we encountered trying to create it.
+					return newNotFoundError(errors.Wrapf(err, "creating field %q", field))
+				}
+			}
 			if arg, ok := c.Args[field].(string); ok {
 				dst.CreateRows(index, field, arg)
 			}
@@ -4183,6 +4213,25 @@ func (e *executor) collectCallKeysNew(dst *keyCollector, c *pql.Call, index stri
 			dst.CreateColumns(index, col)
 		default:
 			dst.FindColumns(index, col)
+		}
+	}
+
+	// Handle _row.
+	if row, ok := c.Args["_row"].(string); ok {
+		// Find the field.
+		field, ok, err := c.StringArg("_field")
+		if err != nil {
+			return errors.Wrap(err, "finding field")
+		}
+		if !ok {
+			return errors.Wrap(ErrFieldNotFound, "finding field for _row argument")
+		}
+
+		switch c.Name {
+		case "SetRowAttrs":
+			dst.CreateRows(index, field, row)
+		default:
+			dst.FindRows(index, field, row)
 		}
 	}
 
@@ -4398,6 +4447,34 @@ func (e *executor) translateCallNew(c *pql.Call, index string, columnKeys map[st
 			switch c.Name {
 			case "Set":
 				return nil, errors.Wrapf(ErrTranslatingKeyNotFound, "destination key not found %q in index %q", col, index)
+			default:
+				return e.callZero(c), nil
+			}
+		}
+	}
+
+	// Handle _row.
+	if row, ok := c.Args["_row"].(string); ok {
+		// Find the field.
+		var field string
+		if f, ok, err := c.StringArg("_field"); err != nil {
+			return nil, errors.Wrap(err, "finding field")
+		} else if ok {
+			field = f
+		} else if f, ok, err := c.StringArg("field"); err != nil {
+			return nil, errors.Wrap(err, "finding field")
+		} else if ok {
+			field = f
+		} else {
+			return nil, errors.New("missing field")
+		}
+
+		if translation, ok := indexRows[field][row]; ok {
+			c.Args["_row"] = translation
+		} else {
+			switch c.Name {
+			case "SetRowAttrs":
+				return nil, errors.Errorf("row key missing in %q", c.String())
 			default:
 				return e.callZero(c), nil
 			}
