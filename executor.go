@@ -4827,8 +4827,10 @@ func (e *executor) preTranslate(ctx context.Context, index string, calls ...*pql
 		}
 	}
 
-	// Translate columns.
+	// Create keys.
+	// Both rows and columns need to be created first because of foreign index keys.
 	cols = make(map[string]map[string]uint64)
+	rows = make(map[string]map[string]map[string]uint64)
 	for idx, keys := range collector.createCols {
 		translations, err := e.Cluster.createIndexKeys(ctx, index, keys...)
 		if err != nil {
@@ -4836,22 +4838,6 @@ func (e *executor) preTranslate(ctx context.Context, index string, calls ...*pql
 		}
 		cols[idx] = translations
 	}
-	for idx, keys := range collector.findCols {
-		translations, err := e.Cluster.findIndexKeys(ctx, index, keys...)
-		if err != nil {
-			return nil, nil, errors.Wrap(err, "finding query column keys")
-		}
-		if prev := cols[idx]; prev != nil {
-			for key, id := range translations {
-				prev[key] = id
-			}
-		} else {
-			cols[idx] = translations
-		}
-	}
-
-	// Translate rows.
-	rows = make(map[string]map[string]map[string]uint64)
 	for idx, fields := range collector.createRows {
 		idxRows := make(map[string]map[string]uint64)
 		index := e.Holder.Index(idx)
@@ -4870,6 +4856,21 @@ func (e *executor) preTranslate(ctx context.Context, index string, calls ...*pql
 			idxRows[f] = translations
 		}
 		rows[idx] = idxRows
+	}
+
+	// Find other keys.
+	for idx, keys := range collector.findCols {
+		translations, err := e.Cluster.findIndexKeys(ctx, index, keys...)
+		if err != nil {
+			return nil, nil, errors.Wrap(err, "finding query column keys")
+		}
+		if prev := cols[idx]; prev != nil {
+			for key, id := range translations {
+				prev[key] = id
+			}
+		} else {
+			cols[idx] = translations
+		}
 	}
 	for idx, fields := range collector.findRows {
 		idxRows := rows[idx]
