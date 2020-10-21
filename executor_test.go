@@ -575,13 +575,13 @@ func TestExecutor_Execute_Set(t *testing.T) {
 		})
 
 		t.Run("ErrInvalidColValueType", func(t *testing.T) {
-			if _, err := cmd.API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set("foo", f=1)`}); err == nil || errors.Cause(err).Error() != `string 'col' value not allowed unless index 'keys' option enabled` {
+			if _, err := cmd.API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set("foo", f=1)`}); err == nil || !hasCause(err, pilosa.ErrTranslatingKeyNotFound) || !strings.Contains(err.Error(), "unkeyed index") {
 				t.Fatalf("The error is: '%v'", err)
 			}
 		})
 
 		t.Run("ErrInvalidRowValueType", func(t *testing.T) {
-			if _, err := cmd.API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(2, f="bar")`}); err == nil || errors.Cause(err).Error() != `string 'row' value not allowed unless field 'keys' option enabled` {
+			if _, err := cmd.API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(2, f="bar")`}); err == nil || !hasCause(err, pilosa.ErrTranslatingKeyNotFound) || !strings.Contains(err.Error(), "field is not keyed") {
 				t.Fatal(err)
 			}
 		})
@@ -672,7 +672,7 @@ func TestExecutor_Execute_Set(t *testing.T) {
 			if _, err := idx.CreateField("f", pilosa.OptFieldTypeDefault(), pilosa.OptFieldKeys()); err != nil {
 				t.Fatal(err)
 			}
-			if _, err := cmd.API.Query(context.Background(), &pilosa.QueryRequest{Index: "inokey", Query: `Set(2, f=1.2)`}); err == nil || !strings.Contains(err.Error(), "row value must be a string or non-negative integer") {
+			if _, err := cmd.API.Query(context.Background(), &pilosa.QueryRequest{Index: "inokey", Query: `Set(2, f=1.2)`}); err == nil || !strings.Contains(err.Error(), "invalid value") {
 				t.Fatal(err)
 			}
 
@@ -960,7 +960,7 @@ func TestExecutor_Execute_SetValue(t *testing.T) {
 		}
 	})
 
-	t.Run("", func(t *testing.T) {
+	t.Run("Err", func(t *testing.T) {
 		c := test.MustRunCluster(t, 1)
 		defer c.Close()
 		hldr := c.GetHolder(0)
@@ -970,24 +970,36 @@ func TestExecutor_Execute_SetValue(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		t.Run("ErrColumnBSIGroupRequired", func(t *testing.T) {
-			if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(invalid_column_name=10, f=100)`}); err == nil || errors.Cause(err).Error() != `Set() column argument 'col' required` {
+		t.Run("ColumnBSIGroupRequired", func(t *testing.T) {
+			if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(invalid_column_name=10, f=100)`}); err == nil || !hasCause(err, pilosa.ErrFieldNotFound) {
 				t.Fatalf("unexpected error: %s", err)
 			}
 		})
 
-		t.Run("ErrColumnBSIGroupValue", func(t *testing.T) {
-			if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set("bad_column", f=100)`}); err == nil || errors.Cause(err).Error() != `string 'col' value not allowed unless index 'keys' option enabled` {
+		t.Run("ColumnBSIGroupValue", func(t *testing.T) {
+			if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set("bad_column", f=100)`}); err == nil || !hasCause(err, pilosa.ErrTranslatingKeyNotFound) || !strings.Contains(err.Error(), "unkeyed index") {
 				t.Fatalf("unexpected error: %s", err)
 			}
 		})
 
-		t.Run("ErrInvalidBSIGroupValueType", func(t *testing.T) {
-			if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(10, f="hello")`}); err == nil || errors.Cause(err).Error() != `string 'row' value not allowed unless field 'keys' option enabled` {
+		t.Run("InvalidBSIGroupValueType", func(t *testing.T) {
+			if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(10, f="hello")`}); err == nil || !hasCause(err, pilosa.ErrTranslatingKeyNotFound) || !strings.Contains(err.Error(), "field is not keyed") {
 				t.Fatalf("unexpected error: %s", err)
 			}
 		})
 	})
+}
+
+func hasCause(err, cause error) bool {
+	for err != cause {
+		eCause := errors.Cause(err)
+		if eCause == err {
+			return false
+		}
+		err = eCause
+	}
+
+	return true
 }
 
 // Ensure a SetRowAttrs() query can be executed.
