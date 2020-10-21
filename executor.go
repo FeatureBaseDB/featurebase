@@ -4354,11 +4354,91 @@ func (c *keyCollector) FindRows(index string, field string, columns ...string) {
 	idx[field] = append(idx[field], columns...)
 }
 
+func fieldValidateValue(f *Field, val interface{}) error {
+	if val == nil {
+		return nil
+	}
+
+	// Validate special types.
+	switch val := val.(type) {
+	case string:
+		if !f.Keys() {
+			return errors.Errorf("string value on an unkeyed field %q", f.Name())
+		}
+		return nil
+	case *pql.Condition:
+		switch v := val.Value.(type) {
+		case nil:
+		case string:
+		case uint64:
+		case int64:
+		case float64:
+		case pql.Decimal:
+		case []interface{}:
+			for _, v := range v {
+				if err := fieldValidateValue(f, v); err != nil {
+					return err
+				}
+			}
+			return nil
+		default:
+			return errors.Errorf("invalid value %v in condition %q", v, val.String())
+		}
+		return fieldValidateValue(f, val.Value)
+	}
+
+	switch f.Type() {
+	case FieldTypeSet, FieldTypeMutex, FieldTypeTime:
+		switch v := val.(type) {
+		case uint64:
+		case int64:
+			if v < 0 {
+				return errors.Errorf("negative ID %d for set field %q", v, f.Name())
+			}
+		default:
+			return errors.Errorf("invalid value %v for field %q of type %s", v, f.Name(), f.Type())
+		}
+	case FieldTypeBool:
+		switch v := val.(type) {
+		case bool:
+		default:
+			return errors.Errorf("invalid value %v for bool field %q", v, f.Name())
+		}
+	case FieldTypeInt:
+		switch v := val.(type) {
+		case uint64:
+			if v > 1<<63 {
+				return errors.Errorf("oversized integer %d for int field %q (range: -2^63 to 2^63-1)", v, f.Name())
+			}
+		case int64:
+		default:
+			return errors.Errorf("invalid value %v for int field %q", v, f.Name())
+		}
+	case FieldTypeDecimal:
+		switch v := val.(type) {
+		case uint64:
+		case int64:
+		case float64:
+		case pql.Decimal:
+		default:
+			return errors.Errorf("invalid value %v for decimal field %q", v, f.Name())
+		}
+	default:
+		return errors.Errorf("unsupported type %s of field %q", f.Type(), f.Name())
+	}
+
+	return nil
+}
+
 func (e *executor) translateCallNew(c *pql.Call, index string, columnKeys map[string]map[string]uint64, rowKeys map[string]map[string]map[string]uint64) (*pql.Call, error) {
 	// Check for an overriding 'index' argument.
 	// This also applies to all child calls.
 	if callIndex := c.CallIndex(); callIndex != "" {
 		index = callIndex
+	}
+	idx := e.Holder.Index(index)
+	if idx == nil {
+		return nil, errors.Wrapf(ErrIndexNotFound, "translating query on index %q", index)
 	}
 
 	// Fetch the column keys list for this index.
@@ -4368,7 +4448,15 @@ func (e *executor) translateCallNew(c *pql.Call, index string, columnKeys map[st
 	switch c.Name {
 	case "Set", "Store":
 		if field, err := c.FieldArg(); err == nil {
-			switch arg := c.Args[field].(type) {
+			f := e.Holder.Field(index, field)
+			if f == nil {
+				return nil, errors.Wrapf(ErrFieldNotFound, "validating value for field %q", field)
+			}
+			arg := c.Args[field]
+			if err := fieldValidateValue(f, arg); err != nil {
+				return nil, errors.Wrap(err, "validating store value")
+			}
+			switch arg := arg.(type) {
 			case string:
 				if translation, ok := indexRows[field][arg]; ok {
 					c.Args[field] = translation
@@ -4376,18 +4464,6 @@ func (e *executor) translateCallNew(c *pql.Call, index string, columnKeys map[st
 					return nil, errors.Wrapf(ErrTranslatingKeyNotFound, "destination key not found %q in %q in index %q", arg, field, index)
 				}
 			case bool:
-				// TODO: this should really be somewhere else
-				idx := e.Holder.Index(index)
-				if idx == nil {
-					return nil, errors.Wrapf(ErrIndexNotFound, "translating boolean argument in query %q", c.String())
-				}
-				f := idx.Field(field)
-				if f == nil {
-					return nil, errors.Wrapf(ErrFieldNotFound, "translating boolean argument in query %q", c.String())
-				}
-				if f.Type() != FieldTypeBool {
-					return nil, errors.Errorf("bool value on field of type %s in query %q", f.Type(), c.String())
-				}
 				if arg {
 					c.Args[field] = trueRowID
 				} else {
@@ -4398,7 +4474,15 @@ func (e *executor) translateCallNew(c *pql.Call, index string, columnKeys map[st
 
 	case "Clear", "Row", "Range", "ClearRow":
 		if field, err := c.FieldArg(); err == nil {
-			switch arg := c.Args[field].(type) {
+			f := e.Holder.Field(index, field)
+			if f == nil {
+				return nil, errors.Wrapf(ErrFieldNotFound, "validating value for field %q", field)
+			}
+			arg := c.Args[field]
+			if err := fieldValidateValue(f, arg); err != nil {
+				return nil, errors.Wrap(err, "validating field parameter value")
+			}
+			switch arg := arg.(type) {
 			case string:
 				if translation, ok := indexRows[field][arg]; ok {
 					c.Args[field] = translation
@@ -4407,18 +4491,6 @@ func (e *executor) translateCallNew(c *pql.Call, index string, columnKeys map[st
 					return e.callZero(c), nil
 				}
 			case bool:
-				// TODO: this should really be somewhere else
-				idx := e.Holder.Index(index)
-				if idx == nil {
-					return nil, errors.Wrapf(ErrIndexNotFound, "translating boolean argument in query %q", c.String())
-				}
-				f := idx.Field(field)
-				if f == nil {
-					return nil, errors.Wrapf(ErrFieldNotFound, "translating boolean argument in query %q", c.String())
-				}
-				if f.Type() != FieldTypeBool {
-					return nil, errors.Errorf("bool value on field of type %s in query %q", f.Type(), c.String())
-				}
 				if arg {
 					c.Args[field] = trueRowID
 				} else {
@@ -4442,6 +4514,9 @@ func (e *executor) translateCallNew(c *pql.Call, index string, columnKeys map[st
 
 	// Handle _col.
 	if col, ok := c.Args["_col"].(string); ok {
+		if !idx.Keys() {
+			return nil, errors.Wrapf(ErrTranslatingKeyNotFound, "translating column on unkeyed index %q", index)
+		}
 		if id, ok := indexCols[col]; ok {
 			c.Args["_col"] = id
 		} else {
@@ -4455,7 +4530,7 @@ func (e *executor) translateCallNew(c *pql.Call, index string, columnKeys map[st
 	}
 
 	// Handle _row.
-	if row, ok := c.Args["_row"].(string); ok {
+	if row, ok := c.Args["_row"]; ok {
 		// Find the field.
 		var field string
 		if f, ok, err := c.StringArg("_field"); err != nil {
@@ -4470,14 +4545,24 @@ func (e *executor) translateCallNew(c *pql.Call, index string, columnKeys map[st
 			return nil, errors.New("missing field")
 		}
 
-		if translation, ok := indexRows[field][row]; ok {
-			c.Args["_row"] = translation
-		} else {
-			switch c.Name {
-			case "SetRowAttrs":
-				return nil, errors.Errorf("row key missing in %q", c.String())
-			default:
-				return e.callZero(c), nil
+		f := e.Holder.Field(index, field)
+		if f == nil {
+			return nil, errors.Wrapf(ErrFieldNotFound, "validating value for field %q", field)
+		}
+		if err := fieldValidateValue(f, row); err != nil {
+			return nil, errors.Wrap(err, "validating row value")
+		}
+		switch row := row.(type) {
+		case string:
+			if translation, ok := indexRows[field][row]; ok {
+				c.Args["_row"] = translation
+			} else {
+				switch c.Name {
+				case "SetRowAttrs":
+					return nil, errors.Errorf("row key missing in %q", c.String())
+				default:
+					return e.callZero(c), nil
+				}
 			}
 		}
 	}
@@ -4524,7 +4609,7 @@ func (e *executor) translateCallNew(c *pql.Call, index string, columnKeys map[st
 
 	case "Rows":
 		// Translate the previous row key.
-		if prev, ok := c.Args["previous"].(string); ok {
+		if prev, ok := c.Args["previous"]; ok {
 			// Find the field.
 			var field string
 			if f, ok, err := c.StringArg("_field"); err != nil {
@@ -4539,11 +4624,29 @@ func (e *executor) translateCallNew(c *pql.Call, index string, columnKeys map[st
 				return nil, errors.New("missing field in Rows call")
 			}
 
-			// Look up a translation for the previous row key.
-			if translation, ok := indexRows[field][prev]; ok {
-				c.Args["previous"] = translation
-			} else {
-				return nil, errors.Wrapf(ErrTranslatingKeyNotFound, "translating previous key %q from field %q in index %q in Rows call", prev, field, index)
+			// Validate the type.
+			f := e.Holder.Field(index, field)
+			if f == nil {
+				return nil, errors.Wrapf(ErrFieldNotFound, "validating value for field %q", field)
+			}
+			if err := fieldValidateValue(f, prev); err != nil {
+				return nil, errors.Wrap(err, "validating prev value")
+			}
+
+			switch prev := prev.(type) {
+			case string:
+				// Look up a translation for the previous row key.
+				if translation, ok := indexRows[field][prev]; ok {
+					c.Args["previous"] = translation
+				} else {
+					return nil, errors.Wrapf(ErrTranslatingKeyNotFound, "translating previous key %q from field %q in index %q in Rows call", prev, field, index)
+				}
+			case bool:
+				if prev {
+					c.Args["previous"] = trueRowID
+				} else {
+					c.Args["previous"] = falseRowID
+				}
 			}
 		}
 	}
