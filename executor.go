@@ -4179,8 +4179,7 @@ func (e *executor) collectCallKeysNew(dst *keyCollector, c *pql.Call, index stri
 				if keyed {
 					opts = append(opts, OptFieldKeys())
 				}
-				f, err = idx.CreateField(field, opts...)
-				if err != nil {
+				if _, err := idx.CreateField(field, opts...); err != nil {
 					// We wrap these because we want to indicate that it wasn't found,
 					// but also the problem we encountered trying to create it.
 					return newNotFoundError(errors.Wrapf(err, "creating field %q", field))
