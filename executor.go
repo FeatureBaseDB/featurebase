@@ -3893,7 +3893,6 @@ func (e *executor) executeSetRow(ctx context.Context, qcx *Qcx, indexName string
 	if err != nil {
 		return false, errors.New("field required for Store()")
 	}
-	argKey, argKeyed := c.Args[fieldName].(string)
 
 	field := e.Holder.Field(indexName, fieldName)
 	if field == nil {
@@ -3902,18 +3901,6 @@ func (e *executor) executeSetRow(ctx context.Context, qcx *Qcx, indexName string
 	// Ensure the field type supports Store().
 	if field.Type() != FieldTypeSet {
 		return false, fmt.Errorf("can't Store() on a %s field", field.Type())
-	}
-
-	if argKeyed {
-		// Translate the argument key.
-		if !field.Keys() {
-			return false, errors.New("can't Store() a key into an unkeyed field")
-		}
-		id, err := field.TranslateStore().TranslateKey(argKey, true)
-		if err != nil {
-			return false, errors.Wrap(err, "translating a key for Store()")
-		}
-		c.Args[fieldName] = id
 	}
 
 	// Execute calls in bulk on each remote node and merge.
@@ -4946,8 +4933,7 @@ func (e *executor) collectCallKeysNew(dst *keyCollector, c *pql.Call, index stri
 				if keyed {
 					opts = append(opts, OptFieldKeys())
 				}
-				f, err = idx.CreateField(field, opts...)
-				if err != nil {
+				if _, err := idx.CreateField(field, opts...); err != nil {
 					// We wrap these because we want to indicate that it wasn't found,
 					// but also the problem we encountered trying to create it.
 					return newNotFoundError(errors.Wrap(err, "creating field"), field)
