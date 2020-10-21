@@ -18,7 +18,10 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"time"
 )
+
+const RFC3339UsecTz0 = "2006-01-02T15:04:05.000000Z07:00"
 
 // Ensure nopLogger implements interface.
 var _ Logger = &nopLogger{}
@@ -45,11 +48,20 @@ type standardLogger struct {
 	logger *log.Logger
 }
 
-const logFlags = log.Ldate | log.Ltime | log.Lmicroseconds
+// write in UTC with constant width and microsecond resolution.
+type formatLog struct {
+	w io.Writer
+}
+
+func (fl formatLog) Write(bytes []byte) (int, error) {
+	return fmt.Fprintf(fl.w, "%v %v", time.Now().UTC().Format(RFC3339UsecTz0), string(bytes))
+}
 
 func NewStandardLogger(w io.Writer) *standardLogger {
+	logger := log.New(w, "", 0)
+	logger.SetOutput(formatLog{w: w})
 	return &standardLogger{
-		logger: log.New(w, "", logFlags),
+		logger: logger,
 	}
 }
 
@@ -69,8 +81,10 @@ type verboseLogger struct {
 }
 
 func NewVerboseLogger(w io.Writer) *verboseLogger {
+	logger := log.New(w, "", 0)
+	logger.SetOutput(formatLog{w: w})
 	return &verboseLogger{
-		logger: log.New(w, "", logFlags),
+		logger: logger,
 	}
 }
 
