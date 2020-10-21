@@ -22,22 +22,40 @@ import (
 
 type ActiveQueryStatus struct {
 	Query string        `json:"query"`
+	Node  string        `json:"node"`
 	Age   time.Duration `json:"age"`
+}
+
+type PastQueryStatus struct {
+	Query   string        `json:"query"`
+	Node    string        `json:"node"`
+	Age     time.Duration `json:"age"`
+	Runtime time.Duration `json:"runtime"`
 }
 
 type activeQuery struct {
 	query   string
+	node    string
 	started time.Time
 }
 
+type pastQuery struct {
+	query   string
+	node    string
+	started time.Time
+	runtime time.Duration
+}
+
 type queryStatusUpdate struct {
-	q   *activeQuery
-	end bool
+	q       *activeQuery
+	end     bool
+	endTime time.Time
 }
 
 type queryTracker struct {
 	updates chan<- queryStatusUpdate
 	checks  chan<- chan<- []*activeQuery
+	history map[pastQuery]struct{} // TODO not in memory
 	wg      sync.WaitGroup
 	stop    chan struct{}
 }
@@ -46,9 +64,11 @@ func newQueryTracker() *queryTracker {
 	done := make(chan struct{})
 	updates := make(chan queryStatusUpdate, 128)
 	checks := make(chan chan<- []*activeQuery)
+	history := make(map[pastQuery]struct{})
 	tracker := &queryTracker{
 		updates: updates,
 		checks:  checks,
+		history: history,
 		stop:    done,
 	}
 	tracker.wg.Add(1)
@@ -64,6 +84,8 @@ func newQueryTracker() *queryTracker {
 					delete(activeQueries, update.q)
 				} else {
 					activeQueries[update.q] = struct{}{}
+					pq := pastQuery{update.q.query, update.q.node, update.q.started, update.endTime.Sub(update.q.started)} // TODO move end time to api.go
+					tracker.history[pq] = struct{}{}
 				}
 			case check := <-checks:
 				out := make([]*activeQuery, len(activeQueries))
@@ -82,15 +104,15 @@ func newQueryTracker() *queryTracker {
 	return tracker
 }
 
-func (t *queryTracker) Start(query string) *activeQuery {
+func (t *queryTracker) Start(query, nodeID string) *activeQuery {
 	now := time.Now()
-	q := &activeQuery{query, now}
-	t.updates <- queryStatusUpdate{q, false}
+	q := &activeQuery{query, nodeID, now}
+	t.updates <- queryStatusUpdate{q, false, time.Time{}}
 	return q
 }
 
-func (t *queryTracker) Finish(q *activeQuery) {
-	t.updates <- queryStatusUpdate{q, true}
+func (t *queryTracker) Finish(q *activeQuery, endTime time.Time) {
+	t.updates <- queryStatusUpdate{q, true, endTime}
 }
 
 func (t *queryTracker) ActiveQueries() []ActiveQueryStatus {
@@ -114,9 +136,39 @@ func (t *queryTracker) ActiveQueries() []ActiveQueryStatus {
 	now := time.Now()
 	out := make([]ActiveQueryStatus, len(queries))
 	for i, v := range queries {
-		out[i] = ActiveQueryStatus{v.query, now.Sub(v.started)}
+		out[i] = ActiveQueryStatus{v.query, v.node, now.Sub(v.started)}
 	}
 	return out
+}
+
+func (t *queryTracker) PastQueries() []PastQueryStatus {
+	queries := make([]pastQuery, 0, len(t.history))
+	for pq, _ := range t.history {
+		queries = append(queries, pq)
+	}
+	// TODO use sort.Sort
+	sort.Slice(queries, func(i, j int) bool {
+		switch {
+		case queries[i].started.Before(queries[j].started):
+			return true
+		case queries[i].started.After(queries[j].started):
+			return false
+		case queries[i].query < queries[j].query:
+			return true
+		case queries[i].query > queries[j].query:
+			return false
+		default:
+			return false
+		}
+	})
+
+	now := time.Now()
+	out := make([]PastQueryStatus, len(queries))
+	for i, v := range queries {
+		out[i] = PastQueryStatus{v.query, v.node, now.Sub(v.started), v.runtime}
+	}
+	return out
+
 }
 
 func (t *queryTracker) Stop() {

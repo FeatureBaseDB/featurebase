@@ -158,7 +158,7 @@ func (api *API) Query(ctx context.Context, req *QueryRequest) (QueryResponse, er
 	if err != nil {
 		return QueryResponse{}, errors.Wrap(err, "parsing")
 	}
-	defer api.tracker.Finish(api.tracker.Start(req.Query))
+	defer api.tracker.Finish(api.tracker.Start(req.Query, api.server.nodeID), time.Now())
 	execOpts := &execOptions{
 		Remote:          req.Remote,
 		Profile:         req.Profile,
@@ -2050,6 +2050,14 @@ func (api *API) ActiveQueries(ctx context.Context) ([]ActiveQueryStatus, error) 
 	return api.tracker.ActiveQueries(), nil
 }
 
+func (api *API) PastQueries(ctx context.Context) ([]PastQueryStatus, error) {
+	if err := api.validate(apiPastQueries); err != nil {
+		return nil, errors.Wrap(err, "validating api method")
+	}
+	x := api.tracker.PastQueries()
+	return x, nil
+}
+
 // TranslateIndexDB is an internal function to load the index keys database
 // rd is a boltdb file.
 func (api *API) TranslateIndexDB(ctx context.Context, indexName string, partitionID int, rd io.Reader) error {
@@ -2124,6 +2132,7 @@ const (
 	apiTransactions
 	apiGetTransaction
 	apiActiveQueries
+	apiPastQueries
 )
 
 var methodsCommon = map[apiMethod]struct{}{
@@ -2164,4 +2173,5 @@ var methodsNormal = map[apiMethod]struct{}{
 	apiTransactions:         {},
 	apiGetTransaction:       {},
 	apiActiveQueries:        {},
+	apiPastQueries:          {},
 }
