@@ -971,7 +971,7 @@ func TestExecutor_Execute_SetValue(t *testing.T) {
 		}
 
 		t.Run("ColumnBSIGroupRequired", func(t *testing.T) {
-			if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(invalid_column_name=10, f=100)`}); err == nil || !hasCause(err, pilosa.ErrFieldNotFound) {
+			if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(f=100)`}); err == nil || errors.Cause(err).Error() != `Set() column argument 'col' required` {
 				t.Fatalf("unexpected error: %s", err)
 			}
 		})
@@ -992,11 +992,12 @@ func TestExecutor_Execute_SetValue(t *testing.T) {
 
 func hasCause(err, cause error) bool {
 	for err != cause {
-		eCause := errors.Cause(err)
-		if eCause == err {
+		innerErr := errors.Cause(err)
+		if innerErr == err {
+			// This is the innermost accessible error, and it does not have that cause.
 			return false
 		}
-		err = eCause
+		err = innerErr
 	}
 
 	return true

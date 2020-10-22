@@ -54,9 +54,7 @@ func (s ResultSet) String() string {
 	}
 	colWidth := make([]int, len(s.Columns))
 	for i, c := range colHdr {
-		if len(c) > colWidth[i] {
-			colWidth[i] = len(c)
-		}
+		colWidth[i] = len(c)
 	}
 	for _, row := range dataBody {
 		for i, c := range row {

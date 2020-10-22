@@ -2861,7 +2861,7 @@ func (c *cluster) findIndexKeys(ctx context.Context, indexName string, keys ...s
 	// On child calls, there are no remote results since we were only sent the keys that we own.
 	remoteResults := make(chan map[string]uint64, len(keysByNode))
 	var g errgroup.Group
-	defer g.Wait()
+	defer g.Wait() //nolint:errcheck
 	for node, keys := range keysByNode {
 		node, keys := node, keys
 
@@ -2904,6 +2904,8 @@ func (c *cluster) findIndexKeys(ctx context.Context, indexName string, keys ...s
 	}
 
 	// Merge the translations.
+	// All data should have been written to here while we waited.
+	// Closing the channel prevents the range from blocking.
 	close(remoteResults)
 	for t := range remoteResults {
 		for key, id := range t {
@@ -2958,7 +2960,7 @@ func (c *cluster) createIndexKeys(ctx context.Context, indexName string, keys ..
 
 	translateResults := make(chan map[string]uint64, len(keysByNode)+len(keysByPartition))
 	var g errgroup.Group
-	defer g.Wait()
+	defer g.Wait() //nolint:errcheck
 
 	// Start translating keys remotely.
 	// On child calls, there are no remote results since we were only sent the keys that we own.
@@ -3007,6 +3009,8 @@ func (c *cluster) createIndexKeys(ctx context.Context, indexName string, keys ..
 	}
 
 	// Merge the translations.
+	// All data should have been written to here while we waited.
+	// Closing the channel prevents the range from blocking.
 	translations := make(map[string]uint64, len(keys))
 	close(translateResults)
 	for t := range translateResults {

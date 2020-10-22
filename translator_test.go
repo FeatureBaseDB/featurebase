@@ -728,7 +728,7 @@ func TestTranslation_Cluster_CreateFind(t *testing.T) {
 
 			// Create some keys on each node.
 			var g errgroup.Group
-			defer g.Wait()
+			defer g.Wait() //nolint:errcheck
 			for i, keys := range parts {
 				i, keys := i, keys
 				g.Go(func() error {
@@ -764,7 +764,7 @@ func TestTranslation_Cluster_CreateFind(t *testing.T) {
 
 			// Check that all nodes agree on these translations.
 			var g errgroup.Group
-			defer g.Wait()
+			defer g.Wait() //nolint:errcheck
 			for i, n := range c.Nodes {
 				i, api := i, n.API
 				g.Go(func() (err error) {
@@ -773,22 +773,7 @@ func TestTranslation_Cluster_CreateFind(t *testing.T) {
 					if err != nil {
 						return errors.Wrap(err, "finding translations")
 					}
-					for key, id := range localTranslations {
-						if realID, ok := translations[key]; !ok {
-							return errors.Errorf("unexpected key %q mapped to ID %d", key, id)
-						} else if id != realID {
-							return errors.Errorf("mismatched translation: expected %q:%d but got %q:%d", key, realID, key, id)
-						}
-					}
-					for key, realID := range translations {
-						if id, ok := localTranslations[key]; !ok {
-							return errors.Errorf("missing translation of key %q", key)
-						} else if id != realID {
-							// This should not be necessary, but do it just to be safe.
-							return errors.Errorf("mismatched translation: expected %q:%d but got %q:%d", key, realID, key, id)
-						}
-					}
-					return nil
+					return compareTranslations(translations, localTranslations)
 				})
 			}
 			if err := g.Wait(); err != nil {
@@ -805,22 +790,7 @@ func TestTranslation_Cluster_CreateFind(t *testing.T) {
 					if err != nil {
 						return errors.Wrap(err, "finding translations")
 					}
-					for key, id := range localTranslations {
-						if realID, ok := translations[key]; !ok {
-							return errors.Errorf("unexpected key %q mapped to ID %d", key, id)
-						} else if id != realID {
-							return errors.Errorf("mismatched translation: expected %q:%d but got %q:%d", key, realID, key, id)
-						}
-					}
-					for key, realID := range translations {
-						if id, ok := localTranslations[key]; !ok {
-							return errors.Errorf("missing translation of key %q", key)
-						} else if id != realID {
-							// This should not be necessary, but do it just to be safe.
-							return errors.Errorf("mismatched translation: expected %q:%d but got %q:%d", key, realID, key, id)
-						}
-					}
-					return nil
+					return compareTranslations(translations, localTranslations)
 				})
 			}
 			if err := g.Wait(); err != nil {
@@ -844,7 +814,7 @@ func TestTranslation_Cluster_CreateFind(t *testing.T) {
 
 			// Create some keys on each node.
 			var g errgroup.Group
-			defer g.Wait()
+			defer g.Wait() //nolint:errcheck
 			for i, keys := range parts {
 				i, keys := i, keys
 				g.Go(func() error {
@@ -880,7 +850,7 @@ func TestTranslation_Cluster_CreateFind(t *testing.T) {
 
 			// Check that all nodes agree on these translations.
 			var g errgroup.Group
-			defer g.Wait()
+			defer g.Wait() //nolint:errcheck
 			for i, n := range c.Nodes {
 				i, api := i, n.API
 				g.Go(func() (err error) {
@@ -889,22 +859,7 @@ func TestTranslation_Cluster_CreateFind(t *testing.T) {
 					if err != nil {
 						return errors.Wrap(err, "finding translations")
 					}
-					for key, id := range localTranslations {
-						if realID, ok := translations[key]; !ok {
-							return errors.Errorf("unexpected key %q mapped to ID %d", key, id)
-						} else if id != realID {
-							return errors.Errorf("mismatched translation: expected %q:%d but got %q:%d", key, realID, key, id)
-						}
-					}
-					for key, realID := range translations {
-						if id, ok := localTranslations[key]; !ok {
-							return errors.Errorf("missing translation of key %q", key)
-						} else if id != realID {
-							// This should not be necessary, but do it just to be safe.
-							return errors.Errorf("mismatched translation: expected %q:%d but got %q:%d", key, realID, key, id)
-						}
-					}
-					return nil
+					return compareTranslations(translations, localTranslations)
 				})
 			}
 			if err := g.Wait(); err != nil {
@@ -921,22 +876,7 @@ func TestTranslation_Cluster_CreateFind(t *testing.T) {
 					if err != nil {
 						return errors.Wrap(err, "finding translations")
 					}
-					for key, id := range localTranslations {
-						if realID, ok := translations[key]; !ok {
-							return errors.Errorf("unexpected key %q mapped to ID %d", key, id)
-						} else if id != realID {
-							return errors.Errorf("mismatched translation: expected %q:%d but got %q:%d", key, realID, key, id)
-						}
-					}
-					for key, realID := range translations {
-						if id, ok := localTranslations[key]; !ok {
-							return errors.Errorf("missing translation of key %q", key)
-						} else if id != realID {
-							// This should not be necessary, but do it just to be safe.
-							return errors.Errorf("mismatched translation: expected %q:%d but got %q:%d", key, realID, key, id)
-						}
-					}
-					return nil
+					return compareTranslations(translations, localTranslations)
 				})
 			}
 			if err := g.Wait(); err != nil {
@@ -945,4 +885,22 @@ func TestTranslation_Cluster_CreateFind(t *testing.T) {
 			}
 		}
 	})
+}
+
+func compareTranslations(expected, got map[string]uint64) error {
+	for key, id := range got {
+		if realID, ok := expected[key]; !ok {
+			return errors.Errorf("unexpected key %q mapped to ID %d", key, id)
+		} else if id != realID {
+			return errors.Errorf("mismatched translation: expected %q:%d but got %q:%d", key, realID, key, id)
+		}
+	}
+	for key, realID := range expected {
+		if id, ok := got[key]; !ok {
+			return errors.Errorf("missing translation of key %q", key)
+		} else if id != realID {
+			return errors.Errorf("mismatched translation: expected %q:%d but got %q:%d", key, realID, key, id)
+		}
+	}
+	return nil
 }

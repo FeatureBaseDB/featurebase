@@ -1280,7 +1280,7 @@ func (c *InternalClient) FindIndexKeysNode(ctx context.Context, uri *pilosa.URI,
 	defer span.Finish()
 
 	// Create HTTP request.
-	u := uriPathToURL(uri, fmt.Sprintf("/internal/translate/index/%s/keys", index))
+	u := uriPathToURL(uri, fmt.Sprintf("/internal/translate/index/%s/keys/find", index))
 	reqData, err := json.Marshal(keys)
 	if err != nil {
 		return nil, errors.Wrap(err, "marshalling request")
@@ -1329,7 +1329,7 @@ func (c *InternalClient) FindFieldKeysNode(ctx context.Context, uri *pilosa.URI,
 	defer span.Finish()
 
 	// Create HTTP request.
-	u := uriPathToURL(uri, fmt.Sprintf("/internal/translate/field/%s/%s/keys", index, field))
+	u := uriPathToURL(uri, fmt.Sprintf("/internal/translate/field/%s/%s/keys/find", index, field))
 	q := u.Query()
 	q.Add("remote", "true")
 	u.RawQuery = q.Encode()
@@ -1381,7 +1381,7 @@ func (c *InternalClient) CreateIndexKeysNode(ctx context.Context, uri *pilosa.UR
 	defer span.Finish()
 
 	// Create HTTP request.
-	u := uriPathToURL(uri, fmt.Sprintf("/internal/translate/index/%s/keys", index))
+	u := uriPathToURL(uri, fmt.Sprintf("/internal/translate/index/%s/keys/create", index))
 	reqData, err := json.Marshal(keys)
 	if err != nil {
 		return nil, errors.Wrap(err, "marshalling request")
@@ -1430,7 +1430,7 @@ func (c *InternalClient) CreateFieldKeysNode(ctx context.Context, uri *pilosa.UR
 	defer span.Finish()
 
 	// Create HTTP request.
-	u := uriPathToURL(uri, fmt.Sprintf("/internal/translate/field/%s/%s/keys", index, field))
+	u := uriPathToURL(uri, fmt.Sprintf("/internal/translate/field/%s/%s/keys/create", index, field))
 	q := u.Query()
 	q.Add("remote", "true")
 	u.RawQuery = q.Encode()
