@@ -6562,3 +6562,91 @@ func TestTimelessClearRegression(t *testing.T) {
 		t.Fatal("clear supposedly failed")
 	}
 }
+
+func TestMissingKeyRegression(t *testing.T) {
+	c := test.MustRunCluster(t, 1, []server.CommandOption{server.OptCommandServerOptions(pilosa.OptServerTxsrc("roaring"))})
+	defer c.Close()
+
+	c.CreateField(t, "i", pilosa.IndexOptions{Keys: true, TrackExistence: true}, "f", pilosa.OptFieldKeys())
+
+	tests := []struct {
+		name     string
+		query    string
+		expected []interface{}
+	}{
+		{
+			name:     "RowGarbage",
+			query:    `Row(f="garbage")`,
+			expected: []interface{}{[]string(nil)},
+		},
+		{
+			name:     "Set",
+			query:    `Set("a", f="example")`,
+			expected: []interface{}{true},
+		},
+		{
+			name:     "Count",
+			query:    `Count(Row(f="example"))`,
+			expected: []interface{}{uint64(1)},
+		},
+		{
+			name:     "NotGarbage",
+			query:    `Not(Row(f="garbage"))`,
+			expected: []interface{}{[]string{"a"}},
+		},
+		{
+			name:     "DifferenceGarbage",
+			query:    `Difference(All(), Row(f="garbage"))`,
+			expected: []interface{}{[]string{"a"}},
+		},
+		/*{
+			// Key translation works here, but it seems the actual count query is processing stale data.
+			// Uncomment it when the bug has been fixed.
+			name: "SetAndCount",
+			query: `Set("a", f="example")` + "\n" +
+				`Count(Row(f="example"))`,
+			expected: []interface{}{true, uint64(1)},
+		},*/
+		{
+			name:     "CountNothing",
+			query:    `Count(Row(f="garbage"))`,
+			expected: []interface{}{uint64(0)},
+		},
+		{
+			name:     "StoreInvertSelf",
+			query:    `Store(Not(Row(f="xyzzy")), f="xyzzy")`,
+			expected: []interface{}{true},
+		},
+		{
+			name: "SetClear",
+			query: `Set("b", f="plugh")` + "\n" +
+				`Clear("b", f="plugh")`,
+			expected: []interface{}{true, true},
+		},
+		{
+			name: "ClearMix",
+			query: `Clear("a", f="garbage")` + "\n" +
+				`Clear("a", f="example")`,
+			expected: []interface{}{false, true},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			resp := c.Query(t, "i", tc.query)
+			if len(resp.Results) != len(tc.expected) {
+				t.Errorf("expected %d results but got %d", len(resp.Results), len(tc.expected))
+				return
+			}
+			for i, r := range resp.Results {
+				if row, ok := r.(*pilosa.Row); ok {
+					r = row.Keys
+				}
+				expect := tc.expected[i]
+				if !reflect.DeepEqual(r, expect) {
+					t.Errorf("result %d differs: expected %v but got %v", i, expect, r)
+				}
+			}
+		})
+	}
+}
