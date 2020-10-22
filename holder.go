@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/pilosa/pilosa/v2/logger"
+	"github.com/pilosa/pilosa/v2/rbf"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/stats"
 	"github.com/pilosa/pilosa/v2/testhook"
@@ -137,6 +138,9 @@ type HolderOpts struct {
 	// Txsrc controls the tx/storage engine we instatiate. Set by
 	// server.go OptServerTxsrc
 	Txsrc string
+
+	// RowcacheOff, if true, turns off the row cache for all storage backends.
+	RowcacheOff bool
 }
 
 func (h *Holder) StartTransaction(ctx context.Context, id string, timeout time.Duration, exclusive bool) (*Transaction, error) {
@@ -196,6 +200,7 @@ type HolderConfig struct {
 	NewAttrStore         func(string) AttrStore
 	Logger               logger.Logger
 	Txsrc                string
+	RowcacheOff          bool
 }
 
 func DefaultHolderConfig() *HolderConfig {
@@ -243,7 +248,7 @@ func NewHolder(path string, cfg *HolderConfig) *Holder {
 		OpenTransactionStore: cfg.OpenTransactionStore,
 		translationSyncer:    cfg.TranslationSyncer,
 		Logger:               cfg.Logger,
-		Opts:                 HolderOpts{Txsrc: cfg.Txsrc},
+		Opts:                 HolderOpts{Txsrc: cfg.Txsrc, RowcacheOff: cfg.RowcacheOff},
 
 		SnapshotQueue: defaultSnapshotQueue,
 
@@ -253,6 +258,8 @@ func NewHolder(path string, cfg *HolderConfig) *Holder {
 
 		indexes: make(map[string]*Index),
 	}
+
+	rbf.SetRowcacheOn(!cfg.RowcacheOff)
 
 	txf, err := NewTxFactory(cfg.Txsrc, path, h)
 	panicOn(err)

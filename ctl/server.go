@@ -17,6 +17,7 @@ package ctl
 import (
 	"time"
 
+	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/server"
 	"github.com/spf13/cobra"
 )
@@ -88,7 +89,10 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 	flags.IntVar(&srv.Config.Profile.MutexFraction, "profile.mutex-fraction", srv.Config.Profile.MutexFraction, "Sampling fraction for mutex contention profiling. Sample 1/<rate> of events.")
 
 	// Transactional storage engine
-	flags.StringVarP(&srv.Config.Txsrc, "tx", "", "", "transaction/storage to use: one of roaring, rbf, badger, rbf_roaring, roaring_rbf, badger_roaring, roaring_badger, badger_rbf, or rbf_badger (default roaring)")
+	flags.StringVarP(&srv.Config.Txsrc, "tx", "", pilosa.DefaultTxsrc, "transaction/storage to use: one of roaring, rbf, bolt, lmdb, or a blue-green setup: rbf_roaring, roaring_rbf, bolt_roaring, roaring_bolt, bolt_rbf, etc.")
+
+	// RowcacheOff
+	flags.BoolVarP((&srv.Config.RowcacheOff), "rowcache-off", "", srv.Config.RowcacheOff, "turn off the rowcache for all backends (reduces memory use)")
 
 	// Postgres endpoint
 	flags.StringVar(&srv.Config.Postgres.Bind, "postgres.bind", srv.Config.Postgres.Bind, "Address to which to bind a postgres endpoint (leave blank to disable)")
