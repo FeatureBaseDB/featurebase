@@ -1400,6 +1400,10 @@ func (e *executor) executeDistinctShard(ctx context.Context, qcx *Qcx, index str
 
 	var filter *Row
 	var filterBitmap *roaring.Bitmap
+	// If a filter *is* specified, an empty filter means nothing, and any
+	// filter at all means there's filtering to do. If a filter is *not*
+	// specified, then we don't need to do any filtering. So a nil
+	// filterBitmap (which we get if there's no children) means no filter.
 	if len(c.Children) == 1 {
 		row, err := e.executeBitmapCallShard(ctx, qcx, index, c.Children[0], shard)
 		if err != nil {
@@ -1408,17 +1412,81 @@ func (e *executor) executeDistinctShard(ctx context.Context, qcx *Qcx, index str
 		filter = row
 		if filter != nil && len(filter.segments) > 0 {
 			filterBitmap = filter.segments[0].data
-		} else {
-			filterBitmap = roaring.NewFileBitmap()
+		}
+		// if we had a filter to consider, but it came back empty, we
+		// can go ahead and save time by returning the empty results,
+		// because the filter excluded everything.
+		if filterBitmap == nil || !filterBitmap.Any() {
+			return SignedRow{}, nil
 		}
 	}
 
 	bsig := field.bsiGroup(fieldName)
 	if bsig == nil {
-		return result, nil
+		return executeDistinctShardSet(ctx, qcx, idx, fieldName, shard, filterBitmap)
 	}
-	view := viewBSIGroupPrefix + fieldName
+	return executeDistinctShardBSI(ctx, qcx, idx, fieldName, shard, bsig, filterBitmap)
+}
 
+func executeDistinctShardSet(ctx context.Context, qcx *Qcx, idx *Index, fieldName string, shard uint64, filterBitmap *roaring.Bitmap) (result SignedRow, err error) {
+	index := idx.Name()
+	tx, finisher := qcx.GetTx(Txo{Write: !writable, Index: idx, Shard: shard})
+	defer finisher(&err)
+
+	fragData, _, err := tx.ContainerIterator(index, fieldName, "standard", shard, 0)
+	if err != nil {
+		return SignedRow{}, errors.Wrap(err, "getting fragment data")
+	}
+	// We can't grab the containers "for each row" from the set-type field,
+	// because we don't know how many rows there are, and some of them
+	// might be empty, so really, we're going to iterate through the
+	// containers, and then intersect them with the filter if present.
+	var filter []*roaring.Container
+	if filterBitmap != nil {
+		filter = make([]*roaring.Container, 1<<shardVsContainerExponent)
+		filterIterator, _ := filterBitmap.Containers.Iterator(0)
+		// So let's get these all with a nice convenient 0 offset...
+		for filterIterator.Next() {
+			k, c := filterIterator.Value()
+			if c.N() == 0 {
+				continue
+			}
+			filter[k%(1<<shardVsContainerExponent)] = c
+		}
+	}
+	rows := roaring.NewSliceBitmap()
+	prevRow := ^uint64(0)
+	seenThisRow := false
+	for fragData.Next() {
+		k, c := fragData.Value()
+		row := k >> shardVsContainerExponent
+		if row == prevRow && seenThisRow {
+			continue
+		}
+		prevRow = row
+		if filterBitmap != nil {
+			if roaring.IntersectionAny(c, filter[k%(1<<shardVsContainerExponent)]) {
+				_, err = rows.Add(row)
+				if err != nil {
+					return SignedRow{}, errors.Wrap(err, "collecting results")
+				}
+				seenThisRow = true
+			}
+		} else if c.N() != 0 {
+			_, err = rows.Add(row)
+			if err != nil {
+				return SignedRow{}, errors.Wrap(err, "recording results")
+			}
+			seenThisRow = true
+		}
+	}
+
+	return SignedRow{Pos: NewRowFromBitmap(rows)}, nil
+}
+
+func executeDistinctShardBSI(ctx context.Context, qcx *Qcx, idx *Index, fieldName string, shard uint64, bsig *bsiGroup, filterBitmap *roaring.Bitmap) (result SignedRow, err error) {
+	view := viewBSIGroupPrefix + fieldName
+	index := idx.Name()
 	depth := uint64(bsig.BitDepth)
 	offset := bsig.Base
 
@@ -1429,7 +1497,7 @@ func (e *executor) executeDistinctShard(ctx context.Context, qcx *Qcx, index str
 	if err != nil {
 		return result, err
 	}
-	if filter != nil {
+	if filterBitmap != nil {
 		existsBitmap = existsBitmap.Intersect(filterBitmap)
 	}
 	if !existsBitmap.Any() {

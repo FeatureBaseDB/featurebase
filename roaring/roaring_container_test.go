@@ -87,6 +87,11 @@ func TestIntersectVariants(t *testing.T) {
 						t.Errorf("intersecting %s[%d] and %s[%d]: container has N %d, count was %d",
 							n1, i1, n2, i2, full.N(), count)
 					}
+					any := intersectionAny(c1, c2)
+					if any != (count != 0) {
+						t.Errorf("intersecting %s[%d] and %s[%d]: any %t, count was %d",
+							n1, i1, n2, i2, any, count)
+					}
 				}
 			}
 		}
