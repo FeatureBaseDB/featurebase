@@ -4238,21 +4238,22 @@ func intersectBitmapRun(a, b *Container) *Container {
 	statsHit("intersect/BitmapRun")
 	var output *Container
 	runs := b.runs()
-	if b.N() <= ArrayMaxSize || a.N() <= ArrayMaxSize {
-		// output is array container
-		array := make([]uint16, 0, b.N())
+	// Intersection will be array-sized for sure if either of the inputs
+	// is array-sized.
+	if b.N() <= ArrayMaxSize {
+		var scratch [ArrayMaxSize]uint16
+		n := 0
 		for _, iv := range runs {
-			for i := iv.Start; i <= iv.Last; i++ {
-				if a.bitmapContains(i) {
-					array = append(array, i)
-				}
-				// If the run ends the container, break to avoid an infinite loop.
-				if i == 65535 {
-					break
+			for i := int(iv.Start); i <= int(iv.Last); i++ {
+				if a.bitmapContains(uint16(i)) {
+					scratch[n] = uint16(i)
+					n++
 				}
 			}
 		}
-
+		// output is array container
+		array := make([]uint16, n)
+		copy(array, scratch[:])
 		output = NewContainerArray(array)
 	} else {
 		// right now this iterates through the runs and sets integers in the
