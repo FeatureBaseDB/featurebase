@@ -5134,6 +5134,19 @@ func (e *executor) translateCall(c *pql.Call, index string, columnKeys map[strin
 			if err := fieldValidateValue(f, arg); err != nil {
 				return nil, errors.Wrap(err, "validating field parameter value")
 			}
+			if c.Name == "Row" {
+				switch f.Type() {
+				case FieldTypeInt, FieldTypeDecimal:
+					if _, ok := arg.(*pql.Condition); !ok {
+						// This is workaround to support pql.ASSIGN ('=') as condition ('==') for int and decimal fields.
+						arg = &pql.Condition{
+							Op:    pql.EQ,
+							Value: arg,
+						}
+						c.Args[field] = arg
+					}
+				}
+			}
 			switch arg := arg.(type) {
 			case string:
 				if translation, ok := indexRows[field][arg]; ok {
