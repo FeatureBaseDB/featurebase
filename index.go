@@ -205,30 +205,32 @@ func (i *Index) open(withTimestamp bool) (err error) {
 		return errors.Wrap(err, "opening attrstore")
 	}
 
-	i.holder.Logger.Debugf("open translate store for index: %s", i.name)
+	if i.keys {
+		i.holder.Logger.Debugf("open translate store for index: %s", i.name)
 
-	var g errgroup.Group
-	var mu sync.Mutex
-	for partitionID := 0; partitionID < i.holder.partitionN; partitionID++ {
-		partitionID := partitionID
+		var g errgroup.Group
+		var mu sync.Mutex
+		for partitionID := 0; partitionID < i.holder.partitionN; partitionID++ {
+			partitionID := partitionID
 
-		g.Go(func() error {
-			store, err := i.OpenTranslateStore(i.TranslateStorePath(partitionID), i.name, "", partitionID, i.holder.partitionN)
-			if err != nil {
-				return errors.Wrapf(err, "opening index translate store: partition=%d", partitionID)
-			}
+			g.Go(func() error {
+				store, err := i.OpenTranslateStore(i.TranslateStorePath(partitionID), i.name, "", partitionID, i.holder.partitionN)
+				if err != nil {
+					return errors.Wrapf(err, "opening index translate store: partition=%d", partitionID)
+				}
 
-			mu.Lock()
-			defer mu.Unlock()
+				mu.Lock()
+				defer mu.Unlock()
 
-			i.mu.Lock()
-			defer i.mu.Unlock()
-			i.translateStores[partitionID] = store
-			return nil
-		})
-	}
-	if err := g.Wait(); err != nil {
-		return err
+				i.mu.Lock()
+				defer i.mu.Unlock()
+				i.translateStores[partitionID] = store
+				return nil
+			})
+		}
+		if err := g.Wait(); err != nil {
+			return err
+		}
 	}
 
 	_ = testhook.Opened(i.holder.Auditor, i, nil)
