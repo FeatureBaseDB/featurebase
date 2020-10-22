@@ -84,20 +84,11 @@ func TestExecutor_TranslateRowsOnBool(t *testing.T) {
 			if err != nil {
 				t.Fatalf("pre-translating call: %v", err)
 			}
-			_, err = e.translateCallNew(c, "i", colTranslations, rowTranslations)
+			_, err = e.translateCall(c, "i", colTranslations, rowTranslations)
 			if err != nil {
 				t.Fatalf("translating call: %v", err)
 			}
 		})
-	}
-}
-
-func isInt(a interface{}) bool {
-	switch a.(type) {
-	case int, int64, uint, uint64:
-		return true
-	default:
-		return false
 	}
 }
 
