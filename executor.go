@@ -497,7 +497,7 @@ func (e *executor) execute(ctx context.Context, index string, q *pql.Query, shar
 
 		// Apply call translation.
 		if !opt.Remote {
-			translated, err := e.translateCallNew(call, index, colTranslations, rowTranslations)
+			translated, err := e.translateCall(call, index, colTranslations, rowTranslations)
 			if err != nil {
 				return nil, errors.Wrap(err, "translating call")
 			}
@@ -3537,7 +3537,7 @@ func (e *executor) executeBulkSetRowAttrs(ctx context.Context, index string, cal
 
 		// Apply call translation.
 		if !opt.Remote {
-			translated, err := e.translateCallNew(c, index, colTranslations, rowTranslations)
+			translated, err := e.translateCall(c, index, colTranslations, rowTranslations)
 			if err != nil {
 				return nil, errors.Wrap(err, "translating call")
 			}
@@ -3957,7 +3957,7 @@ func (e *executor) preTranslate(ctx context.Context, index string, calls ...*pql
 		findRows:   make(map[string]map[string][]string),
 	}
 	for _, call := range calls {
-		err := e.collectCallKeysNew(&collector, call, index)
+		err := e.collectCallKeys(&collector, call, index)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -4040,7 +4040,7 @@ func (e *executor) preTranslate(ctx context.Context, index string, calls ...*pql
 	return cols, rows, nil
 }
 
-func (e *executor) collectCallKeysNew(dst *keyCollector, c *pql.Call, index string) error {
+func (e *executor) collectCallKeys(dst *keyCollector, c *pql.Call, index string) error {
 	// Check for an overriding 'index' argument.
 	// This also applies to all child calls.
 	if callIndex := c.CallIndex(); callIndex != "" {
@@ -4191,7 +4191,7 @@ func (e *executor) collectCallKeysNew(dst *keyCollector, c *pql.Call, index stri
 
 	// Collect keys from child calls.
 	for _, child := range c.Children {
-		err := e.collectCallKeysNew(dst, child, index)
+		err := e.collectCallKeys(dst, child, index)
 		if err != nil {
 			return err
 		}
@@ -4204,7 +4204,7 @@ func (e *executor) collectCallKeysNew(dst *keyCollector, c *pql.Call, index stri
 			continue
 		}
 
-		err := e.collectCallKeysNew(dst, argCall, index)
+		err := e.collectCallKeys(dst, argCall, index)
 		if err != nil {
 			return err
 		}
@@ -4332,7 +4332,7 @@ func fieldValidateValue(f *Field, val interface{}) error {
 	return nil
 }
 
-func (e *executor) translateCallNew(c *pql.Call, index string, columnKeys map[string]map[string]uint64, rowKeys map[string]map[string]map[string]uint64) (*pql.Call, error) {
+func (e *executor) translateCall(c *pql.Call, index string, columnKeys map[string]map[string]uint64, rowKeys map[string]map[string]map[string]uint64) (*pql.Call, error) {
 	// Check for an overriding 'index' argument.
 	// This also applies to all child calls.
 	if callIndex := c.CallIndex(); callIndex != "" {
@@ -4555,7 +4555,7 @@ func (e *executor) translateCallNew(c *pql.Call, index string, columnKeys map[st
 
 	// Translate child calls.
 	for i, child := range c.Children {
-		translated, err := e.translateCallNew(child, index, columnKeys, rowKeys)
+		translated, err := e.translateCall(child, index, columnKeys, rowKeys)
 		if err != nil {
 			return nil, err
 		}
@@ -4569,7 +4569,7 @@ func (e *executor) translateCallNew(c *pql.Call, index string, columnKeys map[st
 			continue
 		}
 
-		translated, err := e.translateCallNew(argCall, index, columnKeys, rowKeys)
+		translated, err := e.translateCall(argCall, index, columnKeys, rowKeys)
 		if err != nil {
 			return nil, err
 		}
@@ -5170,18 +5170,6 @@ func (vc *ValCount) floatLarger(other ValCount) ValCount {
 	}
 }
 
-func callArgBool(call *pql.Call, key string) (bool, error) {
-	value, ok := call.Args[key]
-	if !ok {
-		return false, errors.New("missing bool argument")
-	}
-	b, ok := value.(bool)
-	if !ok {
-		return false, fmt.Errorf("invalid bool argument type: %T", value)
-	}
-	return b, nil
-}
-
 func callArgString(call *pql.Call, key string) string {
 	value, ok := call.Args[key]
 	if !ok {
@@ -5189,39 +5177,6 @@ func callArgString(call *pql.Call, key string) string {
 	}
 	s, _ := value.(string)
 	return s
-}
-
-func isString(v interface{}) bool {
-	_, ok := v.(string)
-	return ok
-}
-
-func isCondition(v interface{}) bool {
-	_, ok := v.(*pql.Condition)
-	return ok
-}
-
-// isValidID returns whether v can be interpreted as a valid row or
-// column ID. In short, is v a non-negative integer? I think the int64
-// and default cases are the only ones actually used since the PQL
-// parser doesn't return any other integer types.
-func isValidID(v interface{}) bool {
-	switch vt := v.(type) {
-	case uint, uint64, uint32, uint16, uint8:
-		return true
-	case int64:
-		return vt >= 0
-	case int:
-		return vt >= 0
-	case int32:
-		return vt >= 0
-	case int16:
-		return vt >= 0
-	case int8:
-		return vt >= 0
-	default:
-		return false
-	}
 }
 
 // groupByIterator contains several slices. Each slice contains a number of

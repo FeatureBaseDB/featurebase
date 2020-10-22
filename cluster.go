@@ -2324,17 +2324,6 @@ func (c *cluster) setStatic(hosts []string) error {
 	return nil
 }
 
-// translateFieldKey gets a single key from translateFieldKeys.
-func (c *cluster) translateFieldKey(ctx context.Context, field *Field, key string, writable bool) (uint64, error) {
-	ids, err := c.translateFieldKeys(ctx, field, []string{key}, writable)
-	if err != nil {
-		return 0, err
-	} else if len(ids) == 0 {
-		return 0, nil
-	}
-	return ids[0], nil
-}
-
 // translateFieldKeys is basically a wrapper around
 // field.TranslateStore().TranslateKey(key), but in
 // the case where the local node is not coordinator, then this method will forward the translation
