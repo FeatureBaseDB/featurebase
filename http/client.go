@@ -1251,6 +1251,9 @@ func (c *InternalClient) TranslateIDsNode(ctx context.Context, uri *pilosa.URI, 
 func (c *InternalClient) GetNodeUsage(ctx context.Context, uri *pilosa.URI) (map[string]pilosa.NodeUsage, error) {
 	u := uri.Path("/ui/usage?remote=true")
 	req, err := http.NewRequest("GET", u, nil)
+	if err != nil {
+		return nil, errors.Wrap(err, "creating request")
+	}
 
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
