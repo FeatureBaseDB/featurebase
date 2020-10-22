@@ -385,10 +385,10 @@ func newRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/internal/nodes", handler.handleGetNodes).Methods("GET").Name("GetNodes")
 	router.HandleFunc("/internal/shards/max", handler.handleGetShardsMax).Methods("GET").Name("GetShardsMax") // TODO: deprecate, but it's being used by the client
 
-	router.HandleFunc("/internal/translate/index/{index}/keys", handler.handleFindIndexKeys).Methods("POST").Name("FindIndexKeys")
-	router.HandleFunc("/internal/translate/index/{index}/keys", handler.handleCreateIndexKeys).Methods("PUT").Name("CreateIndexKeys")
-	router.HandleFunc("/internal/translate/field/{index}/{field}/keys", handler.handleFindFieldKeys).Methods("POST").Name("FindFieldKeys")
-	router.HandleFunc("/internal/translate/field/{index}/{field}/keys", handler.handleCreateFieldKeys).Methods("PUT").Name("CreateFieldKeys")
+	router.HandleFunc("/internal/translate/index/{index}/keys/find", handler.handleFindIndexKeys).Methods("POST").Name("FindIndexKeys")
+	router.HandleFunc("/internal/translate/index/{index}/keys/create", handler.handleCreateIndexKeys).Methods("PUT").Name("CreateIndexKeys")
+	router.HandleFunc("/internal/translate/field/{index}/{field}/keys/find", handler.handleFindFieldKeys).Methods("POST").Name("FindFieldKeys")
+	router.HandleFunc("/internal/translate/field/{index}/{field}/keys/create", handler.handleCreateFieldKeys).Methods("PUT").Name("CreateFieldKeys")
 
 	router.Use(handler.queryArgValidator)
 	router.Use(handler.addQueryContext)
