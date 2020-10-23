@@ -3967,72 +3967,72 @@ func (e *executor) preTranslate(ctx context.Context, index string, calls ...*pql
 	// Both rows and columns need to be created first because of foreign index keys.
 	cols = make(map[string]map[string]uint64)
 	rows = make(map[string]map[string]map[string]uint64)
-	for idx, keys := range collector.createCols {
+	for index, keys := range collector.createCols {
 		translations, err := e.Cluster.createIndexKeys(ctx, index, keys...)
 		if err != nil {
 			return nil, nil, errors.Wrap(err, "creating query column keys")
 		}
-		cols[idx] = translations
+		cols[index] = translations
 	}
-	for idx, fields := range collector.createRows {
+	for index, fields := range collector.createRows {
 		idxRows := make(map[string]map[string]uint64)
-		index := e.Holder.Index(idx)
-		if index == nil {
-			return nil, nil, errors.Wrapf(ErrIndexNotFound, "creating rows on index %q", idx)
+		idx := e.Holder.Index(index)
+		if idx == nil {
+			return nil, nil, errors.Wrapf(ErrIndexNotFound, "creating rows on index %q", index)
 		}
-		for f, keys := range fields {
-			field := index.Field(f)
-			if field == nil {
-				return nil, nil, errors.Wrapf(ErrFieldNotFound, "creating rows on field %q in index %q", f, idx)
+		for field, keys := range fields {
+			f := idx.Field(field)
+			if f == nil {
+				return nil, nil, errors.Wrapf(ErrFieldNotFound, "creating rows on field %q in index %q", field, index)
 			}
-			translations, err := e.Cluster.createFieldKeys(ctx, field, keys...)
+			translations, err := e.Cluster.createFieldKeys(ctx, f, keys...)
 			if err != nil {
 				return nil, nil, errors.Wrap(err, "creating query row keys")
 			}
-			idxRows[f] = translations
+			idxRows[field] = translations
 		}
-		rows[idx] = idxRows
+		rows[index] = idxRows
 	}
 
 	// Find other keys.
-	for idx, keys := range collector.findCols {
+	for index, keys := range collector.findCols {
 		translations, err := e.Cluster.findIndexKeys(ctx, index, keys...)
 		if err != nil {
 			return nil, nil, errors.Wrap(err, "finding query column keys")
 		}
-		if prev := cols[idx]; prev != nil {
+		if prev := cols[index]; prev != nil {
 			for key, id := range translations {
 				prev[key] = id
 			}
 		} else {
-			cols[idx] = translations
+			cols[index] = translations
 		}
 	}
-	for idx, fields := range collector.findRows {
-		idxRows := rows[idx]
+	for index, fields := range collector.findRows {
+		idxRows := rows[index]
 		if idxRows == nil {
 			idxRows = make(map[string]map[string]uint64)
-			rows[idx] = idxRows
+			rows[index] = idxRows
 		}
-		index := e.Holder.Index(idx)
-		if index == nil {
-			return nil, nil, errors.Wrapf(ErrIndexNotFound, "finding rows on index %q", idx)
+		idx := e.Holder.Index(index)
+		if idx == nil {
+			return nil, nil, errors.Wrapf(ErrIndexNotFound, "finding rows on index %q", index)
 		}
-		for f, keys := range fields {
-			field := index.Field(f)
-			if field == nil {
-				return nil, nil, errors.Wrapf(ErrFieldNotFound, "finding rows on field %q in index %q", f, idx)
+		for field, keys := range fields {
+			f := idx.Field(field)
+			if f == nil {
+				return nil, nil, errors.Wrapf(ErrFieldNotFound, "finding rows on field %q in index %q", field, index)
 			}
-			translations, err := e.Cluster.findFieldKeys(ctx, field, keys...)
+			translations, err := e.Cluster.findFieldKeys(ctx, f, keys...)
 			if err != nil {
 				return nil, nil, errors.Wrap(err, "finding query row keys")
 			}
-			if prev := idxRows[f]; prev != nil {
+			if prev := idxRows[field]; prev != nil {
 				for key, id := range translations {
 					prev[key] = id
 				}
 			} else {
-				idxRows[f] = translations
+				idxRows[field] = translations
 			}
 		}
 	}
@@ -4099,10 +4099,13 @@ func (e *executor) collectCallKeys(dst *keyCollector, c *pql.Call, index string)
 			case string:
 				dst.FindRows(index, field, arg)
 			case *pql.Condition:
-				switch arg.Op {
-				case pql.EQ, pql.NEQ:
-					if key, ok := arg.Value.(string); ok {
+				// This is a workaround to allow `==` and `!=` to work on foreign index fields.
+				if key, ok := arg.Value.(string); ok {
+					switch arg.Op {
+					case pql.EQ, pql.NEQ:
 						dst.FindRows(index, field, key)
+					default:
+						return errors.Errorf("operator %v not defined on strings", arg.Op)
 					}
 				}
 			}
@@ -4112,7 +4115,7 @@ func (e *executor) collectCallKeys(dst *keyCollector, c *pql.Call, index string)
 	// Handle _col.
 	if col, ok := c.Args["_col"].(string); ok {
 		switch c.Name {
-		case "Set":
+		case "Set", "SetColumnAttrs":
 			dst.CreateColumns(index, col)
 		default:
 			dst.FindColumns(index, col)
@@ -4165,10 +4168,6 @@ func (e *executor) collectCallKeys(dst *keyCollector, c *pql.Call, index string)
 			dst.FindColumns(index, keys...)
 		}
 
-	case "GroupBy":
-		// the old code translated "previous" for "GroupBy", but we dont actually. . . use it?
-		// TODO: can we just leave this out?
-
 	case "Rows":
 		if prev, ok := c.Args["previous"].(string); ok {
 			// Find the field.
@@ -4214,8 +4213,8 @@ func (e *executor) collectCallKeys(dst *keyCollector, c *pql.Call, index string)
 }
 
 type keyCollector struct {
-	createCols, findCols map[string][]string
-	createRows, findRows map[string]map[string][]string
+	createCols, findCols map[string][]string            // map[index] -> column keys
+	createRows, findRows map[string]map[string][]string // map[index]map[field] -> row keys
 }
 
 func (c *keyCollector) CreateColumns(index string, columns ...string) {
@@ -4412,15 +4411,18 @@ func (e *executor) translateCall(c *pql.Call, index string, columnKeys map[strin
 					c.Args[field] = falseRowID
 				}
 			case *pql.Condition:
-				switch arg.Op {
-				case pql.EQ, pql.NEQ:
-					if key, ok := arg.Value.(string); ok {
+				// This is a workaround to allow `==` and `!=` to work on foreign index fields.
+				if key, ok := arg.Value.(string); ok {
+					switch arg.Op {
+					case pql.EQ, pql.NEQ:
 						if translation, ok := indexRows[field][key]; ok {
 							arg.Value = translation
 						} else {
 							// Rewrite the call into a zero value call.
 							return e.callZero(c), nil
 						}
+					default:
+						return nil, errors.Errorf("operator %v not defined on strings", arg.Op)
 					}
 				}
 			}
@@ -4436,7 +4438,7 @@ func (e *executor) translateCall(c *pql.Call, index string, columnKeys map[strin
 			c.Args["_col"] = id
 		} else {
 			switch c.Name {
-			case "Set":
+			case "Set", "SetColumnAttrs":
 				return nil, errors.Wrapf(ErrTranslatingKeyNotFound, "destination key not found %q in index %q", col, index)
 			default:
 				return e.callZero(c), nil
@@ -4517,10 +4519,6 @@ func (e *executor) translateCall(c *pql.Call, index string, columnKeys map[strin
 			}
 			c.Args["columns"] = out
 		}
-
-	case "GroupBy":
-		// the old code translated "previous" for "GroupBy", but we dont actually. . . use it?
-		// TODO: can we just leave this out?
 
 	case "Rows":
 		// Translate the previous row key.
