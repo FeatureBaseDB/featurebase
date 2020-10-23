@@ -27,11 +27,11 @@ Some of our tutorials work better as standalone repos, since you can <code>git c
 
 Pilosa supports encrypting all communication with nodes in a cluster using TLS, including [Mutual TLS Authentication](https://en.wikipedia.org/wiki/Mutual_authentication). In this tutorial, we will be setting up a three node Pilosa cluster running on the same computer. The same steps can be used for a multi-computer cluster but that requires setting up firewalls and other platform-specific configuration which is beyond the scope of this tutorial.
 
-This tutorial assumes that you are using a UNIX-like system, such as Linux or MacOS. [Windows Subsystem for Linux (WSL)](https://msdn.microsoft.com/en-us/commandline/wsl/about) works equally well on Windows 10 systems.
+This tutorial assumes that you are using a UNIX-like system, such as Linux or MacOS. Operating systems that do not support the POSIX-compliant mmap system call, such as Windows, are not supported.
 
 #### Installing Pilosa and Creating the Directory Structure
 
-If you haven't already done so, install Pilosa server on your computer. For Linux and WSL (Windows Subsystem for Linux) use the [Installing on Linux](../installation/#installing-on-linux) instructions. For MacOS use the [Installing on MacOS](../installation/#installing-on-macos). We do not support precompiled releases for other platforms, but you can always compile it yourself from source. See [Build from Source](../installation/#build-from-source).
+If you haven't already done so, install Pilosa server on your computer. For Linux use the [Installing on Linux](../installation/#installing-on-linux) instructions. For MacOS use the [Installing on MacOS](../installation/#installing-on-macos). We do not support precompiled releases for other platforms, but you can always compile it yourself from source. See [Build from Source](../installation/#build-from-source).
 
 After installing Pilosa, you may have to add it to your `$PATH`. Check that you can run Pilosa from the command line:
 ``` request
@@ -254,7 +254,7 @@ curl --cacert out/ca.crt --cert out/curl.crt --key out/curl.key \
 {"state":"NORMAL","nodes":[{"id":"98ebd177-c082-4c54-8d48-7e7c75857b52","uri":{"scheme":"https","host":"02.pilosa.local","port":10502},"isCoordinator":false},{"id":"a33dc0d6-c35f-4559-984a-e582bf032a21","uri":{"scheme":"https","host":"03.pilosa.local","port":10503},"isCoordinator":false},{"id":"e24ac014-ee2f-4cb0-b565-74df6c551f0a","uri":{"scheme":"https","host":"01.pilosa.local","port":10501},"isCoordinator":true}]}
 ```
 
-The `-k` flag is used to tell curl that it shouldn't bother checking the certificate the server provides, and the `--ipv4` flag avoids an issue on MacOS where the curl request takes a long time if the address resolves to `127.0.0.1`. You can leave it out on Linux and WSL.
+The `-k` flag is used to tell curl that it shouldn't bother checking the certificate the server provides, and the `--ipv4` flag avoids an issue on MacOS where the curl request takes a long time if the address resolves to `127.0.0.1`. You can leave it out on Linux.
 
 If everything is set up correctly, the cluster state should be `NORMAL`.
 
