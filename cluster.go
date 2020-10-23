@@ -2475,46 +2475,6 @@ func (c *cluster) createFieldKeys(ctx context.Context, field *Field, keys ...str
 	return translations, nil
 }
 
-func (c *cluster) translateFieldIDs(field *Field, ids map[uint64]struct{}) (map[uint64]string, error) {
-	idList := make([]uint64, len(ids))
-	{
-		i := 0
-		for id := range ids {
-			idList[i] = id
-			i++
-		}
-	}
-
-	keyList, err := c.translateFieldListIDs(field, idList)
-	if err != nil {
-		return nil, err
-	}
-
-	mapped := make(map[uint64]string, len(idList))
-	for i, key := range keyList {
-		mapped[idList[i]] = key
-	}
-	return mapped, nil
-}
-
-func (c *cluster) translateFieldListIDs(field *Field, ids []uint64) (keys []string, err error) {
-	coordinator := c.coordinatorNode()
-	if coordinator == nil {
-		return nil, errors.Errorf("translating field(%s/%s) ids(%v) - cannot find coordinator node", field.Index(), field.Name(), ids)
-	}
-
-	if c.Node.ID == coordinator.ID {
-		keys, err = field.TranslateStore().TranslateIDs(ids)
-	} else {
-		keys, err = c.InternalClient.TranslateIDsNode(context.Background(), &coordinator.URI, field.Index(), field.Name(), ids)
-	}
-	if err != nil {
-		return nil, errors.Wrapf(err, "translating field(%s/%s) ids(%v)", field.Index(), field.Name(), ids)
-	}
-
-	return keys, err
-}
-
 func (c *cluster) translateIndexKey(ctx context.Context, indexName string, key string, writable bool) (uint64, error) {
 	keyMap, err := c.translateIndexKeySet(ctx, indexName, map[string]struct{}{key: struct{}{}}, writable)
 	if err != nil {
