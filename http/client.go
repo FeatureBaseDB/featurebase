@@ -1389,7 +1389,7 @@ func (c *InternalClient) CreateIndexKeysNode(ctx context.Context, uri *pilosa.UR
 	if err != nil {
 		return nil, errors.Wrap(err, "marshalling request")
 	}
-	req, err := http.NewRequest("PUT", u.String(), bytes.NewReader(reqData))
+	req, err := http.NewRequest("POST", u.String(), bytes.NewReader(reqData))
 	if err != nil {
 		return nil, errors.Wrap(err, "creating request")
 	}
@@ -1441,7 +1441,7 @@ func (c *InternalClient) CreateFieldKeysNode(ctx context.Context, uri *pilosa.UR
 	if err != nil {
 		return nil, errors.Wrap(err, "marshalling request")
 	}
-	req, err := http.NewRequest("PUT", u.String(), bytes.NewReader(reqData))
+	req, err := http.NewRequest("POST", u.String(), bytes.NewReader(reqData))
 	if err != nil {
 		return nil, errors.Wrap(err, "creating request")
 	}
