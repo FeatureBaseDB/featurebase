@@ -92,6 +92,46 @@ func TestTranslateStore_TranslateKeys(t *testing.T) {
 	}
 }
 
+func TestTranslateStore_CreateKeys(t *testing.T) {
+	s := MustOpenNewTranslateStore()
+	defer MustCloseTranslateStore(s)
+
+	ids, err := s.CreateKeys("abc", "abc")
+	if err != nil {
+		t.Fatal(err)
+	} else if _, ok := ids["abc"]; !ok {
+		t.Fatalf(`missing "abc"; got %v`, ids)
+	} else if len(ids) > 1 {
+		t.Fatalf("expected one key, got %d in %v", len(ids), ids)
+	}
+
+	// Ensure different keys translate to different IDs.
+	ids1, err := s.CreateKeys("foo", "bar")
+	if err != nil {
+		t.Fatal(err)
+	} else if foo, bar := ids1["foo"], ids1["bar"]; foo == bar {
+		t.Fatalf(`"foo" and "bar" map back to the same ID %d`, foo)
+	}
+
+	// Ensure retranslation returns original IDs.
+	if ids, err := s.CreateKeys("bar", "foo"); err != nil {
+		t.Fatal(err)
+	} else if !reflect.DeepEqual(ids, ids1) {
+		t.Fatalf("retranslation produced result %v which is different from original translation %v", ids, ids1)
+	}
+
+	// Ensure retranslating with existing and non-existing keys returns correctly.
+	if ids, err := s.CreateKeys("foo", "baz", "bar"); err != nil {
+		t.Fatal(err)
+	} else if got, want := ids["foo"], ids1["foo"]; got != want {
+		t.Fatalf(`mismatched ID %d for "foo" (previously %d)`, got, want)
+	} else if _, ok := ids["baz"]; !ok {
+		t.Fatalf(`missing translation for "baz"; got %v`, ids)
+	} else if got, want := ids["bar"], ids1["bar"]; got != want {
+		t.Fatalf(`mismatched ID %d for "bar" (previously %d)`, got, want)
+	}
+}
+
 func TestTranslateStore_ReadKey(t *testing.T) {
 	s := MustOpenNewTranslateStore()
 	defer MustCloseTranslateStore(s)
@@ -213,6 +253,84 @@ func TestTranslateStore_TranslateIDs(t *testing.T) {
 		t.Fatalf("TranslateIDs()[1]=%s, want %s", got, want)
 	} else if got, want := keys[2], ""; got != want {
 		t.Fatalf("TranslateIDs()[2]=%s, want %s", got, want)
+	}
+}
+
+func TestTranslateStore_FindKeys(t *testing.T) {
+	cases := []struct {
+		name   string
+		data   []string
+		lookup []string
+	}{
+		{
+			name:   "All",
+			data:   []string{"plugh", "xyzzy", "h"},
+			lookup: []string{"plugh", "xyzzy", "h"},
+		},
+		{
+			name:   "Extra",
+			data:   []string{"plugh", "xyzzy", "h"},
+			lookup: []string{"plugh", "xyzzy", "h", "65"},
+		},
+		{
+			name:   "None",
+			data:   []string{"a", "b", "c"},
+			lookup: []string{"d", "e"},
+		},
+		{
+			name:   "Empty",
+			lookup: []string{"h"},
+		},
+		{
+			name: "LookupNothing",
+		},
+	}
+
+	for _, c := range cases {
+		c := c
+		t.Run(c.name, func(t *testing.T) {
+			s := MustOpenNewTranslateStore()
+			defer MustCloseTranslateStore(s)
+
+			var naiveMap map[string]uint64
+			if c.data != nil {
+				// Load in key data.
+				keys := c.data
+				ids, err := s.TranslateKeys(keys, true)
+				if err != nil {
+					t.Errorf("failed to import keys: %v", err)
+					return
+				}
+				if len(ids) != len(keys) {
+					t.Errorf("mapped %d keys to %d ids", len(keys), len(ids))
+					return
+				}
+				naiveMap = make(map[string]uint64, len(keys))
+				for i, key := range keys {
+					naiveMap[key] = ids[i]
+				}
+			}
+
+			// Compute expected lookup result.
+			result := map[string]uint64{}
+			for _, key := range c.lookup {
+				id, ok := naiveMap[key]
+				if !ok {
+					// The key is expected to be missing.
+					continue
+				}
+
+				result[key] = id
+			}
+
+			// Find the keys.
+			found, err := s.FindKeys(c.lookup...)
+			if err != nil {
+				t.Errorf("failed to find keys: %v", err)
+			} else if !reflect.DeepEqual(result, found) {
+				t.Errorf("expected %v but found %v", result, found)
+			}
+		})
 	}
 }
 
