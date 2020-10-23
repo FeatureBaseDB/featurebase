@@ -190,8 +190,8 @@ type Config struct {
 	// Txsrc determines which Tx implementation the holder/Index will use; one
 	// of the available transactional-storage engines. Choices are listed
 	// in the string constants below. Should be one of
-	// "roaring","badger", "rbf", "badger_roaring", "roaring_badger", "rbf_roaring",
-	// "roaring_rbf", "badger_rbf", "rbf_badger", or any later addition. The
+	// "roaring","bolt", "rbf", "bolt_roaring", "roaring_bolt", "rbf_roaring",
+	// "roaring_rbf", "bolt_rbf", "rbf_bolt", or any later addition. The
 	// engines with _ underscore indicate use of a blueGreenTx with a comparison
 	// of values back from each Tx method, and a panic if they differ. This
 	// is an effective test for consistency. If "rbf_roaring" is specified, then
@@ -199,6 +199,9 @@ type Config struct {
 	// If "roaring_rbf" is chosen, then the RBF values are the ones actually
 	// returned from the blueGreenTx.
 	Txsrc string `toml:"txsrc"`
+
+	// RowcacheOff, if true, turns off the row cache for all storage backends.
+	RowcacheOff bool `toml:"rowcache-off"`
 }
 
 // NewConfig returns an instance of Config with default options.

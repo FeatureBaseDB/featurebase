@@ -63,7 +63,7 @@ func (tx *RoaringTx) Dump(short bool, shard uint64) {
 }
 
 func (tx *RoaringTx) UseRowCache() bool {
-	return rbf.EnableRowCache
+	return rbf.EnableRowCache()
 }
 
 func (tx *RoaringTx) SliceOfShards(index, field, view, optionalViewPath string) (sliceOfShards []uint64, err error) {

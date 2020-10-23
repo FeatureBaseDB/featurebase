@@ -551,7 +551,7 @@ func (tx *LMDBTx) Type() string {
 }
 
 func (tx *LMDBTx) UseRowCache() bool {
-	return rbf.EnableRowCache
+	return rbf.EnableRowCache()
 }
 
 // Pointer gives us a memory address for the underlying transaction for debugging.

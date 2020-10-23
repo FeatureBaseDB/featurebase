@@ -343,6 +343,15 @@ func OptServerTxsrc(txsrc string) ServerOption {
 	}
 }
 
+// OptServerRowcacheOff is a functional option on Server
+// used to turn off the row cache.
+func OptServerRowcacheOff(rowcacheOff bool) ServerOption {
+	return func(s *Server) error {
+		s.holderConfig.RowcacheOff = rowcacheOff
+		return nil
+	}
+}
+
 // NewServer returns a new instance of Server.
 func NewServer(opts ...ServerOption) (*Server, error) {
 	cluster := newCluster()
@@ -397,6 +406,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	}
 	s.holder = NewHolder(path, s.holderConfig)
 	s.holder.Stats.SetLogger(s.logger)
+	s.holder.Logger.Printf("RowCacheOff: %v", s.holderConfig.RowcacheOff)
 
 	s.cluster.Path = path
 	s.cluster.logger = s.logger
