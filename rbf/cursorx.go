@@ -19,6 +19,7 @@ import (
 	"io"
 	"math"
 	"os"
+	"sync/atomic"
 
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pkg/errors"
@@ -26,7 +27,21 @@ import (
 
 // if enableRowCache, then we must not return mmap-ed memory
 // directly, but only a copy.
-const EnableRowCache = true
+var enableRowcache int64 = 1
+
+// SetEnableRowCache should only be called in NewHolder before
+// all other reads.
+func SetRowcacheOn(on bool) {
+	if on {
+		atomic.StoreInt64(&enableRowcache, 1)
+	} else {
+		atomic.StoreInt64(&enableRowcache, 0)
+	}
+}
+
+func EnableRowCache() bool {
+	return atomic.LoadInt64(&enableRowcache) == 1
+}
 
 //probably should just implement the container interface
 // but for now i'll do it
@@ -151,7 +166,7 @@ func toContainer(l leafCell, tx *Tx) (c *roaring.Container) {
 	orig := l.Data
 	var cpMaybe []byte
 	var mapped bool
-	if EnableRowCache || tx.db.DoAllocZero {
+	if EnableRowCache() || tx.db.DoAllocZero {
 		// make a copy, otherwise the rowCache will see corrupted data
 		// or mmapped data that may disappear.
 		cpMaybe = make([]byte, len(orig))
@@ -168,7 +183,7 @@ func toContainer(l leafCell, tx *Tx) (c *roaring.Container) {
 	case ContainerTypeBitmapPtr:
 		_, bm, _ := tx.leafCellBitmap(toPgno(cpMaybe))
 		cloneMaybe := bm
-		if EnableRowCache {
+		if EnableRowCache() {
 			cloneMaybe = make([]uint64, len(bm))
 			copy(cloneMaybe, bm)
 		}
