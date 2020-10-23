@@ -462,7 +462,7 @@ func (s *Server) InternalClient() InternalClient {
 // UpAndDown brings the server up minimally and shuts it down
 // again; basically, it exists for testing holder open and close.
 func (s *Server) UpAndDown() error {
-	s.logger.Printf("open server")
+	s.logger.Printf("open server. PID %v", os.Getpid())
 
 	// Log startup
 	err := s.holder.logStartup()
@@ -485,7 +485,7 @@ func (s *Server) UpAndDown() error {
 
 // Open opens and initializes the server.
 func (s *Server) Open() error {
-	s.logger.Printf("open server")
+	s.logger.Printf("open server. PID %v", os.Getpid())
 
 	if s.holder.NeedsSnapshot() {
 		// Start background monitoring.

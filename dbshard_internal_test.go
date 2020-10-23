@@ -88,35 +88,26 @@ func Test_DBPerShard_GetShardsForIndex_LocalOnly(t *testing.T) {
 		estd := "rick/_exists/views/standard"
 		std := "rick/f/views/standard"
 
-		sos, err := holder.txf.GetShardsForIndex(idx, tmpdir+sep+std, false)
+		shardset, err := holder.txf.GetShardsForIndex(idx, tmpdir+sep+std, false)
 		panicOn(err)
 
 		for _, shard := range []uint64{93, 223, 221, 215, 219, 217} {
-			if !inSlice(sos, shard) {
-				panic(fmt.Sprintf("missing shard=%v from sos='%#v'", shard, sos))
+			if !shardset.shards[shard] {
+				panic(fmt.Sprintf("missing shard=%v from shardset='%#v'", shard, shardset.shards))
 			}
 		}
 		if src == "roaring" {
 			// check estd too
-			sos, err = holder.txf.GetShardsForIndex(idx, tmpdir+sep+estd, false)
+			shardset, err = holder.txf.GetShardsForIndex(idx, tmpdir+sep+estd, false)
 			panicOn(err)
 			for _, shard := range []uint64{93, 223, 221, 215, 219, 217} {
-				if !inSlice(sos, shard) {
-					panic(fmt.Sprintf("missing shard=%v from sos='%#v'", shard, sos))
+				if !shardset.shards[shard] {
+					panic(fmt.Sprintf("missing shard=%v from shardset='%#v'", shard, shardset.shards))
 				}
 			}
 		}
 		holder.Close()
 	}
-}
-
-func inSlice(sos []uint64, shard uint64) bool {
-	for i := range sos {
-		if shard == sos[i] {
-			return true
-		}
-	}
-	return false
 }
 
 // data for Test_DBPerShard_GetShardsForIndex

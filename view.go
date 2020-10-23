@@ -173,20 +173,22 @@ var workQueue = make(chan struct{}, runtime.NumCPU()*2)
 // replaces v.openFragments() with Tx generic code.
 func (v *view) openFragmentsInTx() error {
 
-	shards, err := v.holder.txf.GetShardsForIndex(v.idx, v.path, false)
+	shardSet, err := v.holder.txf.GetShardsForIndex(v.idx, v.path, false)
 	if err != nil {
 		return errors.Wrap(err, "DBPerShardGetShardsForIndex()")
 	}
+	shards := shardSet.shards
 	eg, ctx := errgroup.WithContext(context.Background())
 	var mu sync.Mutex
 
-	shardCh := make(chan uint64, len(shards))
-	for i := range shards {
-		shardCh <- shards[i]
+	n := len(shards)
+	shardCh := make(chan uint64, n)
+	for shard := range shards {
+		shardCh <- shard
 	}
 
 shardLoop:
-	for range shards {
+	for j := 0; j < n; j++ {
 		select {
 		case <-ctx.Done():
 			break shardLoop

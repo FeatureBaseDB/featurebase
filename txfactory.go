@@ -1305,20 +1305,24 @@ func (f *TxFactory) green2blue(holder *Holder) (err error) {
 		}
 
 		if verifyInsteadOfCopy {
-			diff := f.shardSliceDiff(blueShards, greenShards)
+			diff := f.shardSetDiff(blueShards, greenShards)
 			if diff != "" {
 				return fmt.Errorf("verifyInsteadOfCopy true, blue[%v]=%#v and green[%v]=%#v have different shards for index '%v': '%v'; stack=\n%v", blueDest, blueShards, greenSrc, greenShards, idx.name, diff, stack())
 			}
 
 			// can also check against meta data
 			shards := idx.AvailableShards(localOnly).Slice()
-			diff2 := f.shardSliceDiff(greenShards, shards)
+			meta := newShardSet()
+			for _, shard := range shards {
+				meta.shards[shard] = true
+			}
+			diff2 := f.shardSetDiff(greenShards, meta)
 			if diff2 != "" {
 				return fmt.Errorf("green[%v] = '%#v' and meta data '%#v' have different shards for index '%v': %v", greenSrc, greenShards, shards, idx.name, diff2)
 			}
 		}
 
-		for _, shard := range greenShards {
+		for shard := range greenShards.shards {
 
 			dbs, err := f.dbPerShard.GetDBShard(idx.name, shard, idx)
 			if err != nil {
@@ -1349,22 +1353,14 @@ func (f *TxFactory) green2blue(holder *Holder) (err error) {
 	return nil
 }
 
-func (f *TxFactory) shardSliceDiff(blueShards, greenShards []uint64) (diff string) {
-	nb := len(blueShards)
-	ng := len(greenShards)
+func (f *TxFactory) shardSetDiff(blueShards, greenShards *shardSet) (diff string) {
+	nb := len(blueShards.shards)
+	ng := len(greenShards.shards)
 	if nb != ng {
 		diff = fmt.Sprintf("blueShard[%v] count = %v; greenShard[%v] count = %v; ", f.types[0], nb, f.types[1], ng)
 	}
-	b := make(map[uint64]bool)
-	g := make(map[uint64]bool)
-	for _, bs := range blueShards {
-		b[bs] = true
-	}
-	for _, gs := range greenShards {
-		g[gs] = true
-	}
-	bmg := mapDiff(b, g) // get blue - green
-	gmb := mapDiff(g, b) // get green - blue
+	bmg := mapDiff(blueShards.shards, greenShards.shards) // get blue - green
+	gmb := mapDiff(greenShards.shards, blueShards.shards) // get green - blue
 
 	if len(bmg) == 0 && len(gmb) == 0 {
 		return ""

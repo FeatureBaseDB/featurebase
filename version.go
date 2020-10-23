@@ -14,13 +14,17 @@
 
 package pilosa
 
-import "time"
+import (
+	"runtime"
+	"time"
+)
 
 var Version string
 var Commit string
 var Variant string
 var BuildTime string
 var LatticeCommit string
+var GoVersion string = runtime.Version()
 
 func VersionInfo() string {
 	var prefix string
@@ -48,6 +52,7 @@ func VersionInfo() string {
 	case buildTime != "":
 		suffix += " (" + buildTime + ")"
 	}
+	suffix += " " + GoVersion
 
 	return prefix + "Pilosa" + suffix
 }
