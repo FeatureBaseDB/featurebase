@@ -19,122 +19,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
-	"strings"
 	"testing"
 
 	"github.com/pilosa/pilosa/v2/pql"
 	"github.com/pilosa/pilosa/v2/testhook"
 )
-
-func TestExecutor_TranslateGroupByCall(t *testing.T) {
-	path, _ := testhook.TempDirInDir(t, *TempDir, "pilosa-executor-")
-	holder := NewHolder(path, nil)
-	defer holder.Close()
-
-	cluster := NewTestCluster(t, 1)
-
-	e := &executor{
-		Holder:  holder,
-		Cluster: cluster,
-	}
-	err := e.Holder.Open()
-	if err != nil {
-		t.Fatalf("opening holder: %v", err)
-	}
-
-	idx, err := e.Holder.CreateIndex("i", IndexOptions{})
-	if err != nil {
-		t.Fatalf("creating index: %v", err)
-	}
-
-	_, erra := idx.CreateField("ak", OptFieldKeys())
-	_, errb := idx.CreateField("b")
-	_, errc := idx.CreateField("ck", OptFieldKeys())
-	if erra != nil || errb != nil || errc != nil {
-		t.Fatalf("creating fields %v, %v, %v", erra, errb, errc)
-	}
-
-	query, err := pql.ParseString(`GroupBy(Rows(ak), Rows(b), Rows(ck), previous=["la", 0, "ha"], having=Condition(count > 10))`)
-	if err != nil {
-		t.Fatalf("parsing query: %v", err)
-	}
-	c := query.Calls[0]
-	// this is writable call just for testing purpose - to test previous argument
-	// generally GroupBy calls are not writable and keys should already exist
-	err = e.translateCall(context.Background(), "i", c, make(map[string]map[string]uint64), true)
-	if err != nil {
-		t.Fatalf("translating call: %v", err)
-	}
-	if len(c.Args["previous"].([]interface{})) != 3 {
-		t.Fatalf("unexpected length for 'previous' arg %v", c.Args["previous"])
-	}
-	for i, v := range c.Args["previous"].([]interface{}) {
-		if !isInt(v) {
-			t.Fatalf("expected all items in previous to be ints, but '%v' at index %d is %[1]T", v, i)
-		}
-	}
-
-	if having, hok := c.Args["having"].(*pql.Call); !hok {
-		t.Fatal("expected having to be a call")
-	} else if cond, cok := having.Args["count"].(*pql.Condition); !cok {
-		t.Fatal("expected condition to be a count")
-	} else if cond.Op != pql.GT {
-		t.Fatal("expected condition op to be >")
-	} else {
-		val, ok := cond.Uint64Value()
-		if !ok || val != uint64(10) {
-			t.Fatal("expected condition val to be uint64(10)")
-		}
-	}
-
-	errTests := []struct {
-		pql string
-		err string
-	}{
-		{
-			pql: `GroupBy(Rows(notfound), previous=1)`,
-			err: "'previous' argument must be list",
-		},
-		{
-			pql: `GroupBy(Rows(ak), previous=["la", 0])`,
-			err: "mismatched lengths",
-		},
-		{
-			pql: `GroupBy(Rows(ak), previous=[1])`,
-			err: "prev value must be a string",
-		},
-		{
-			pql: `GroupBy(Rows(notfound), previous=[1])`,
-			err: ErrFieldNotFound.Error(),
-		},
-		// TODO: an unknown key will actually allocate an id. this is probably bad.
-		// {
-		// 	pql: `GroupBy(Rows(ak), previous=["zoop"])`,
-		// 	err: "translating row key '",
-		// },
-		{
-			pql: `GroupBy(Rows(b), previous=["la"])`,
-			err: "which doesn't use string keys",
-		},
-	}
-
-	for i, test := range errTests {
-		t.Run(fmt.Sprintf("#%d_%s", i, test.err), func(t *testing.T) {
-			query, err := pql.ParseString(test.pql)
-			if err != nil {
-				t.Fatalf("parsing query: %v", err)
-			}
-			c := query.Calls[0]
-			err = e.translateCall(context.Background(), "i", c, make(map[string]map[string]uint64), false)
-			if err == nil {
-				t.Fatalf("expected error, but translated call is '%s", c)
-			}
-			if !strings.Contains(err.Error(), test.err) {
-				t.Fatalf("expected '%s', got '%v'", test.err, err)
-			}
-		})
-	}
-}
 
 func TestExecutor_TranslateRowsOnBool(t *testing.T) {
 	path, _ := testhook.TempDirInDir(t, *TempDir, "pilosa-executor-")
@@ -191,20 +80,15 @@ func TestExecutor_TranslateRowsOnBool(t *testing.T) {
 			}
 
 			c := query.Calls[0]
-			err = e.translateCall(context.Background(), "i", c, make(map[string]map[string]uint64), true)
+			colTranslations, rowTranslations, err := e.preTranslate(context.Background(), "i", c)
+			if err != nil {
+				t.Fatalf("pre-translating call: %v", err)
+			}
+			_, err = e.translateCall(c, "i", colTranslations, rowTranslations)
 			if err != nil {
 				t.Fatalf("translating call: %v", err)
 			}
 		})
-	}
-}
-
-func isInt(a interface{}) bool {
-	switch a.(type) {
-	case int, int64, uint, uint64:
-		return true
-	default:
-		return false
 	}
 }
 

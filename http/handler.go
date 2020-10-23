@@ -419,8 +419,12 @@ func newRouter(handler *Handler) http.Handler {
 	router.HandleFunc("/internal/nodes", handler.handleGetNodes).Methods("GET").Name("GetNodes")
 	router.HandleFunc("/internal/shards/max", handler.handleGetShardsMax).Methods("GET").Name("GetShardsMax") // TODO: deprecate, but it's being used by the client
 
+	router.HandleFunc("/internal/translate/index/{index}/keys/find", handler.handleFindIndexKeys).Methods("POST").Name("FindIndexKeys")
+	router.HandleFunc("/internal/translate/index/{index}/keys/create", handler.handleCreateIndexKeys).Methods("POST").Name("CreateIndexKeys")
 	router.HandleFunc("/internal/translate/index/{index}/{partition}", handler.handlePostTranslateIndexDB).Methods("POST").Name("PostTranslateIndexDB")
 	router.HandleFunc("/internal/translate/field/{index}/{field}", handler.handlePostTranslateFieldDB).Methods("POST").Name("PostTranslateFieldDB")
+	router.HandleFunc("/internal/translate/field/{index}/{field}/keys/find", handler.handleFindFieldKeys).Methods("POST").Name("FindFieldKeys")
+	router.HandleFunc("/internal/translate/field/{index}/{field}/keys/create", handler.handleCreateFieldKeys).Methods("POST").Name("CreateFieldKeys")
 
 	// Endpoints to support lattice UI embedded via statik.
 	// The messiness here reflects the fact that assets live in a nontrivial
@@ -2587,4 +2591,184 @@ func (h *Handler) handlePostTranslateIndexDB(w http.ResponseWriter, r *http.Requ
 	resp := successResponse{h: h, Name: indexName}
 	resp.check(err)
 	resp.write(w, err)
+}
+
+func (h *Handler) handleFindIndexKeys(w http.ResponseWriter, r *http.Request) {
+	// Verify input and output types
+	if r.Header.Get("Content-Type") != "application/json" {
+		http.Error(w, "Unsupported media type", http.StatusUnsupportedMediaType)
+		return
+	} else if !validHeaderAcceptJSON(r.Header) {
+		http.Error(w, "Not acceptable", http.StatusNotAcceptable)
+		return
+	}
+
+	indexName, ok := mux.Vars(r)["index"]
+	if !ok {
+		http.Error(w, "index name is required", http.StatusBadRequest)
+		return
+	}
+
+	bd, err := readBody(r)
+	if err != nil {
+		http.Error(w, "failed to read body", http.StatusBadRequest)
+		return
+	}
+
+	var keys []string
+	err = json.Unmarshal(bd, &keys)
+	if err != nil {
+		http.Error(w, "failed to decode request", http.StatusBadRequest)
+		return
+	}
+
+	translations, err := h.api.FindIndexKeys(r.Context(), indexName, keys...)
+	if err != nil {
+		http.Error(w, "translating keys", http.StatusBadRequest)
+		return
+	}
+
+	err = json.NewEncoder(w).Encode(translations)
+	if err != nil {
+		http.Error(w, "encoding result", http.StatusBadRequest)
+		return
+	}
+}
+
+func (h *Handler) handleFindFieldKeys(w http.ResponseWriter, r *http.Request) {
+	// Verify input and output types
+	if r.Header.Get("Content-Type") != "application/json" {
+		http.Error(w, "Unsupported media type", http.StatusUnsupportedMediaType)
+		return
+	} else if !validHeaderAcceptJSON(r.Header) {
+		http.Error(w, "Not acceptable", http.StatusNotAcceptable)
+		return
+	}
+
+	indexName, ok := mux.Vars(r)["index"]
+	if !ok {
+		http.Error(w, "index name is required", http.StatusBadRequest)
+		return
+	}
+
+	fieldName, ok := mux.Vars(r)["field"]
+	if !ok {
+		http.Error(w, "field name is required", http.StatusBadRequest)
+		return
+	}
+
+	bd, err := readBody(r)
+	if err != nil {
+		http.Error(w, "failed to read body", http.StatusBadRequest)
+		return
+	}
+
+	var keys []string
+	err = json.Unmarshal(bd, &keys)
+	if err != nil {
+		http.Error(w, "failed to decode request", http.StatusBadRequest)
+		return
+	}
+
+	translations, err := h.api.FindFieldKeys(r.Context(), indexName, fieldName, keys...)
+	if err != nil {
+		http.Error(w, "translating keys", http.StatusBadRequest)
+		return
+	}
+
+	err = json.NewEncoder(w).Encode(translations)
+	if err != nil {
+		http.Error(w, "encoding result", http.StatusBadRequest)
+		return
+	}
+}
+
+func (h *Handler) handleCreateIndexKeys(w http.ResponseWriter, r *http.Request) {
+	// Verify input and output types
+	if r.Header.Get("Content-Type") != "application/json" {
+		http.Error(w, "Unsupported media type", http.StatusUnsupportedMediaType)
+		return
+	} else if !validHeaderAcceptJSON(r.Header) {
+		http.Error(w, "Not acceptable", http.StatusNotAcceptable)
+		return
+	}
+
+	indexName, ok := mux.Vars(r)["index"]
+	if !ok {
+		http.Error(w, "index name is required", http.StatusBadRequest)
+		return
+	}
+
+	bd, err := readBody(r)
+	if err != nil {
+		http.Error(w, "failed to read body", http.StatusBadRequest)
+		return
+	}
+
+	var keys []string
+	err = json.Unmarshal(bd, &keys)
+	if err != nil {
+		http.Error(w, "failed to decode request", http.StatusBadRequest)
+		return
+	}
+
+	translations, err := h.api.CreateIndexKeys(r.Context(), indexName, keys...)
+	if err != nil {
+		http.Error(w, "translating keys", http.StatusBadRequest)
+		return
+	}
+
+	err = json.NewEncoder(w).Encode(translations)
+	if err != nil {
+		http.Error(w, "encoding result", http.StatusBadRequest)
+		return
+	}
+}
+
+func (h *Handler) handleCreateFieldKeys(w http.ResponseWriter, r *http.Request) {
+	// Verify input and output types
+	if r.Header.Get("Content-Type") != "application/json" {
+		http.Error(w, "Unsupported media type", http.StatusUnsupportedMediaType)
+		return
+	} else if !validHeaderAcceptJSON(r.Header) {
+		http.Error(w, "Not acceptable", http.StatusNotAcceptable)
+		return
+	}
+
+	indexName, ok := mux.Vars(r)["index"]
+	if !ok {
+		http.Error(w, "index name is required", http.StatusBadRequest)
+		return
+	}
+
+	fieldName, ok := mux.Vars(r)["field"]
+	if !ok {
+		http.Error(w, "field name is required", http.StatusBadRequest)
+		return
+	}
+
+	bd, err := readBody(r)
+	if err != nil {
+		http.Error(w, "failed to read body", http.StatusBadRequest)
+		return
+	}
+
+	var keys []string
+	err = json.Unmarshal(bd, &keys)
+	if err != nil {
+		http.Error(w, "failed to decode request", http.StatusBadRequest)
+		return
+	}
+
+	translations, err := h.api.CreateFieldKeys(r.Context(), indexName, fieldName, keys...)
+	if err != nil {
+		http.Error(w, "translating keys", http.StatusBadRequest)
+		return
+	}
+
+	err = json.NewEncoder(w).Encode(translations)
+	if err != nil {
+		http.Error(w, "encoding result", http.StatusBadRequest)
+		return
+	}
 }
