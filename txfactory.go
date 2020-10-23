@@ -1312,9 +1312,9 @@ func (f *TxFactory) green2blue(holder *Holder) (err error) {
 
 			// can also check against meta data
 			shards := idx.AvailableShards(localOnly).Slice()
-			meta := newShardSet()
+			meta := make(map[uint64]bool)
 			for _, shard := range shards {
-				meta.shards[shard] = true
+				meta[shard] = true
 			}
 			diff2 := f.shardSetDiff(greenShards, meta)
 			if diff2 != "" {
@@ -1322,7 +1322,7 @@ func (f *TxFactory) green2blue(holder *Holder) (err error) {
 			}
 		}
 
-		for shard := range greenShards.shards {
+		for shard := range greenShards {
 
 			dbs, err := f.dbPerShard.GetDBShard(idx.name, shard, idx)
 			if err != nil {
@@ -1353,14 +1353,14 @@ func (f *TxFactory) green2blue(holder *Holder) (err error) {
 	return nil
 }
 
-func (f *TxFactory) shardSetDiff(blueShards, greenShards *shardSet) (diff string) {
-	nb := len(blueShards.shards)
-	ng := len(greenShards.shards)
+func (f *TxFactory) shardSetDiff(blueShards, greenShards map[uint64]bool) (diff string) {
+	nb := len(blueShards)
+	ng := len(greenShards)
 	if nb != ng {
 		diff = fmt.Sprintf("blueShard[%v] count = %v; greenShard[%v] count = %v; ", f.types[0], nb, f.types[1], ng)
 	}
-	bmg := mapDiff(blueShards.shards, greenShards.shards) // get blue - green
-	gmb := mapDiff(greenShards.shards, blueShards.shards) // get green - blue
+	bmg := mapDiff(blueShards, greenShards) // get blue - green
+	gmb := mapDiff(greenShards, blueShards) // get green - blue
 
 	if len(bmg) == 0 && len(gmb) == 0 {
 		return ""

@@ -88,21 +88,21 @@ func Test_DBPerShard_GetShardsForIndex_LocalOnly(t *testing.T) {
 		estd := "rick/_exists/views/standard"
 		std := "rick/f/views/standard"
 
-		shardset, err := holder.txf.GetShardsForIndex(idx, tmpdir+sep+std, false)
+		shards, err := holder.txf.GetShardsForIndex(idx, tmpdir+sep+std, false)
 		panicOn(err)
 
 		for _, shard := range []uint64{93, 223, 221, 215, 219, 217} {
-			if !shardset.shards[shard] {
-				panic(fmt.Sprintf("missing shard=%v from shardset='%#v'", shard, shardset.shards))
+			if !shards[shard] {
+				panic(fmt.Sprintf("missing shard=%v from shards='%#v'", shard, shards))
 			}
 		}
 		if src == "roaring" {
 			// check estd too
-			shardset, err = holder.txf.GetShardsForIndex(idx, tmpdir+sep+estd, false)
+			shards, err = holder.txf.GetShardsForIndex(idx, tmpdir+sep+estd, false)
 			panicOn(err)
 			for _, shard := range []uint64{93, 223, 221, 215, 219, 217} {
-				if !shardset.shards[shard] {
-					panic(fmt.Sprintf("missing shard=%v from shardset='%#v'", shard, shardset.shards))
+				if !shards[shard] {
+					panic(fmt.Sprintf("missing shard=%v from shards='%#v'", shard, shards))
 				}
 			}
 		}
