@@ -1,6 +1,7 @@
 .PHONY: build check-clean clean build-lattice cover cover-viz default docker docker-build docker-test docker-tag-push generate generate-protoc generate-pql generate-statik gometalinter install install-build-deps install-golangci-lint install-gometalinter install-protoc install-protoc-gen-gofast install-peg install-statik prerelease prerelease-upload release release-build test testv testv-race testvsub testvsub-race test-txstore-rbf_lmdb test-txstore-rbf
 
 CLONE_URL=github.com/pilosa/pilosa
+MOD_VERSION=v2
 VERSION := $(shell git describe --tags 2> /dev/null || echo unknown)
 LATTICE_COMMIT := $(shell git -C lattice rev-parse --short HEAD 2>/dev/null)
 VARIANT = Molecula
@@ -11,7 +12,7 @@ BUILD_TIME := $(shell date -u +%FT%T%z)
 SHARD_WIDTH = 20
 COMMIT := $(shell git describe --exact-match >/dev/null 2>&1 || git rev-parse --short HEAD)
 LDFLAGS="-X github.com/pilosa/pilosa/v2.Version=$(VERSION) -X github.com/pilosa/pilosa/v2.BuildTime=$(BUILD_TIME) -X github.com/pilosa/pilosa/v2.Variant=$(VARIANT) -X github.com/pilosa/pilosa/v2.Commit=$(COMMIT) -X github.com/pilosa/pilosa/v2.LatticeCommit=$(LATTICE_COMMIT)"
-GO_VERSION=latest
+GO_VERSION=1.14.9
 RELEASE ?= 0
 RELEASE_ENABLED = $(subst 0,,$(RELEASE))
 BUILD_TAGS += $(if $(RELEASE_ENABLED),release)
@@ -21,6 +22,12 @@ define LICENSE_HASH_CODE
     head -13 $1 | sed -e 's/Copyright 20[0-9][0-9]/Copyright 20XX/g' | shasum | cut -f 1 -d " "
 endef
 LICENSE_HASH=$(shell $(call LICENSE_HASH_CODE, pilosa.go))
+UNAME := $(shell uname -s)
+ifeq ($(UNAME), Darwin)
+    IS_MACOS:=1
+else
+    IS_MACOS:=0
+endif
 
 export GO111MODULE=on
 export GOPRIVATE=github.com/molecula
@@ -106,13 +113,13 @@ endif
 # Create release build tarballs for all supported platforms. Linux compilation happens under Docker.
 release: check-clean generate-statik
 	$(MAKE) release-build GOOS=darwin GOARCH=amd64
-	$(MAKE) release-build GOOS=linux GOARCH=amd64
+	$(MAKE) release-build GOOS=linux GOARCH=amd64 $(if $(IS_MACOS),DOCKER_BUILD=1)
 
 # Create release build tarballs for all supported platforms. Same as `release`, but without embedded Lattice UI.
 release-sans-ui: check-clean
 	rm -f statik/statik.go
 	$(MAKE) release-build GOOS=darwin GOARCH=amd64
-	$(MAKE) release-build GOOS=linux GOARCH=amd64
+	$(MAKE) release-build GOOS=linux GOARCH=amd64 $(if $(IS_MACOS),DOCKER_BUILD=1)
 
 # try (e.g.) internal/clustertests/docker-compose-replication2.yml
 DOCKER_COMPOSE=internal/clustertests/docker-compose.yml
@@ -189,8 +196,8 @@ docker-tag-push: vendor
 	@echo Pushed docker image: $(DOCKER_TARGET)
 
 # Compile Pilosa inside Docker container
-docker-build:
-	docker run --rm -v $(PWD):/go/src/$(CLONE_URL) -w /go/src/$(CLONE_URL) -e GOOS=$(GOOS) -e GOARCH=$(GOARCH) golang:$(GO_VERSION) go build -tags='$(BUILD_TAGS)' -ldflags $(LDFLAGS) $(FLAGS) $(CLONE_URL)/cmd/pilosa
+docker-build: vendor
+	docker run --rm -v $(PWD):/go/src/$(CLONE_URL) -w /go/src/$(CLONE_URL) -e GOOS=$(GOOS) -e GOARCH=$(GOARCH) golang:$(GO_VERSION) go build -mod=vendor -tags='$(BUILD_TAGS)' -ldflags $(LDFLAGS) $(FLAGS) $(CLONE_URL)/$(MOD_VERSION)/cmd/pilosa
 
 # Install diagnostic pilosa-keydump tool. Allows viewing the keys in a transaction-engine directory.
 pilosa-keydump:
