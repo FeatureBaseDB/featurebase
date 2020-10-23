@@ -1460,10 +1460,14 @@ func executeDistinctShardSet(ctx context.Context, qcx *Qcx, idx *Index, fieldNam
 	for fragData.Next() {
 		k, c := fragData.Value()
 		row := k >> shardVsContainerExponent
-		if row == prevRow && seenThisRow {
-			continue
+		if row == prevRow {
+			if seenThisRow {
+				continue
+			}
+		} else {
+			seenThisRow = false
+			prevRow = row
 		}
-		prevRow = row
 		if filterBitmap != nil {
 			if roaring.IntersectionAny(c, filter[k%(1<<shardVsContainerExponent)]) {
 				_, err = rows.Add(row)

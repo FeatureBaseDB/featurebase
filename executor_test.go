@@ -6435,19 +6435,25 @@ func TestExecutor_BareDistinct(t *testing.T) {
 		pilosa.OptFieldTypeInt(0, math.MaxInt64),
 	)
 	c.CreateField(t, "i", pilosa.IndexOptions{}, "set")
+	c.CreateField(t, "i", pilosa.IndexOptions{}, "filter")
 
 	// Populate integer data.
 	c.Query(t, "i", fmt.Sprintf(`
 			Set(0, ints=1)
 			Set(%d, ints=2)
 		`, ShardWidth))
-	c.Query(t, "i", `Set(0, set=1)
-			 Set(1, set=2)`)
+	c.Query(t, "i", fmt.Sprintf(`
+		         Set(0, set=1)
+			 Set(1, set=2)
+			 Set(%d, set=2)
+			 Set(0, filter=1)
+			 Set(%d, filter=1)
+	        `, 65537, 65537))
 
 	for _, pql := range []string{
 		`Distinct(field="ints")`,
 		`Distinct(index="i", field="ints")`,
-		`Distinct(field="set")`,
+		`Distinct(Row(filter=1), field="set")`,
 	} {
 		exp := []uint64{1, 2}
 		res := c.Query(t, "i", pql).Results[0].(pilosa.SignedRow)
