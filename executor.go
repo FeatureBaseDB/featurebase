@@ -218,64 +218,33 @@ func (e *executor) Execute(ctx context.Context, index string, q *pql.Query, shar
 			return resp, fmt.Errorf("profiling execution failed: %T is not tracing.Profile", prof)
 		}
 	}
-	resp.Results = make([]interface{}, len(q.Calls))
-	for i, c := range q.Calls {
-		resp.Results[i] = emptyResult(c)
+	results, err := e.execute(ctx, index, q, shards, opt)
+	if err != nil {
+		return resp, err
 	}
-	var columnAttrsRows []*Row
-	for i, c := range q.Calls {
-		// Translate query keys to ids, if necessary.
-		// No need to translate a remote call.
-		if !opt.Remote {
-			if err := e.translateCalls(ctx, index, []*pql.Call{c}); err != nil {
-				if errors.Cause(err) == ErrTranslatingKeyNotFound {
-					// No error - return empty result
-					continue
-				}
-				return resp, err
-			} else if err := validateQueryContext(ctx); err != nil {
-				return resp, err
+	var columnIDs []uint64
+	if opt.ColumnAttrs {
+		// Consolidate all column ids across all calls.
+		for _, r := range results {
+			if bm, ok := r.(*Row); ok {
+				columnIDs = uint64Slice(columnIDs).merge(bm.Columns())
 			}
 		}
+	}
 
-		results, err := e.execute(ctx, index, &pql.Query{Calls: []*pql.Call{c}}, shards, opt)
+	// Translate response objects from ids to keys, if necessary.
+	// No need to translate a remote call.
+	if !opt.Remote {
+		err = e.translateResults(ctx, index, idx, q.Calls, results)
 		if err != nil {
 			return resp, err
-		} else if err := validateQueryContext(ctx); err != nil {
-			return resp, err
 		}
-
-		if opt.ColumnAttrs {
-			if resultRow, ok := results[0].(*Row); ok {
-				columnAttrsRows = append(columnAttrsRows, resultRow)
-			}
-		}
-
-		// Translate response objects from ids to keys, if necessary.
-		// No need to translate a remote call.
-		if !opt.Remote {
-			if err := e.translateResults(ctx, index, idx, []*pql.Call{c}, results); err != nil {
-				if errors.Cause(err) == ErrTranslatingKeyNotFound {
-					// No error - return empty result
-					continue
-				}
-				return resp, err
-			} else if err := validateQueryContext(ctx); err != nil {
-				return resp, err
-			}
-		}
-
-		resp.Results[i] = results[0]
 	}
+
+	resp.Results = results
 
 	// Fill column attributes if requested.
 	if opt.ColumnAttrs {
-		// Consolidate all column ids across all calls.
-		var columnIDs []uint64
-		for _, bm := range columnAttrsRows {
-			columnIDs = uint64Slice(columnIDs).merge(bm.Columns())
-		}
-
 		// Retrieve column attributes across all calls.
 		columnAttrSets, err := e.readColumnAttrSets(e.Holder.Index(index), columnIDs)
 		if err != nil {
@@ -3178,7 +3147,7 @@ func (e *executor) executeSetRow(ctx context.Context, indexName string, c *pql.C
 	}
 	field := e.Holder.Field(indexName, fieldName)
 	if field == nil {
-		return false, errors.Wrapf(ErrFieldNotFound, "field %q", field)
+		return false, errors.Wrapf(ErrFieldNotFound, "field %q", fieldName)
 	}
 	if field.Type() != FieldTypeSet {
 		return false, fmt.Errorf("can't Store() on a %s field", field.Type())
