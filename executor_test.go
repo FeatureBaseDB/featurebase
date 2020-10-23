@@ -5322,6 +5322,9 @@ func TestExecutor_ForeignIndex(t *testing.T) {
 		pilosa.OptFieldTypeInt(0, math.MaxInt64),
 		pilosa.OptFieldForeignIndex("parent"),
 	)
+	c.CreateField(t, "child", pilosa.IndexOptions{}, "parent_set_id",
+		pilosa.OptFieldForeignIndex("parent"),
+	)
 	c.CreateField(t, "child", pilosa.IndexOptions{}, "color",
 		pilosa.OptFieldKeys(),
 	)
@@ -5347,6 +5350,12 @@ func TestExecutor_ForeignIndex(t *testing.T) {
 			Set(%d, parent_id="one")
 			Set(4, parent_id="twenty-one")
 		`, ShardWidth))
+	c.Query(t, "child", fmt.Sprintf(`
+			Set(1, parent_set_id="one")
+			Set(2, parent_set_id="two")
+			Set(%d, parent_set_id="one")
+			Set(4, parent_set_id="twenty-one")
+		`, ShardWidth))
 
 	// Populate color data.
 	c.Query(t, "child", fmt.Sprintf(`
@@ -5357,6 +5366,10 @@ func TestExecutor_ForeignIndex(t *testing.T) {
 		`, ShardWidth))
 
 	distinct := c.Query(t, "child", `Distinct(index="child", field="parent_id")`).Results[0].(pilosa.SignedRow)
+	if !sameStringSlice(distinct.Pos.Keys, []string{"one", "two", "twenty-one"}) {
+		t.Fatalf("unexpected keys: %v", distinct.Pos.Keys)
+	}
+	distinct = c.Query(t, "child", `Distinct(index="child", field="parent_set_id")`).Results[0].(pilosa.SignedRow)
 	if !sameStringSlice(distinct.Pos.Keys, []string{"one", "two", "twenty-one"}) {
 		t.Fatalf("unexpected keys: %v", distinct.Pos.Keys)
 	}
@@ -5372,6 +5385,10 @@ func TestExecutor_ForeignIndex(t *testing.T) {
 	}
 
 	join := c.Query(t, "parent", fmt.Sprintf(`Intersect(Row(general=%d), Distinct(Row(color="blue"), index="child", field="parent_id"))`, ShardWidth)).Results[0].(*pilosa.Row)
+	if !reflect.DeepEqual(join.Keys, []string{"one"}) {
+		t.Fatalf("unexpected keys: %v", join.Keys)
+	}
+	join = c.Query(t, "parent", fmt.Sprintf(`Intersect(Row(general=%d), Distinct(Row(color="blue"), index="child", field="parent_set_id"))`, ShardWidth)).Results[0].(*pilosa.Row)
 	if !reflect.DeepEqual(join.Keys, []string{"one"}) {
 		t.Fatalf("unexpected keys: %v", join.Keys)
 	}
@@ -6430,16 +6447,26 @@ func TestExecutor_BareDistinct(t *testing.T) {
 	c.CreateField(t, "i", pilosa.IndexOptions{}, "ints",
 		pilosa.OptFieldTypeInt(0, math.MaxInt64),
 	)
+	c.CreateField(t, "i", pilosa.IndexOptions{}, "set")
+	c.CreateField(t, "i", pilosa.IndexOptions{}, "filter")
 
 	// Populate integer data.
 	c.Query(t, "i", fmt.Sprintf(`
 			Set(0, ints=1)
 			Set(%d, ints=2)
 		`, ShardWidth))
+	c.Query(t, "i", fmt.Sprintf(`
+		         Set(0, set=1)
+			 Set(1, set=2)
+			 Set(%d, set=2)
+			 Set(0, filter=1)
+			 Set(%d, filter=1)
+	        `, 65537, 65537))
 
 	for _, pql := range []string{
 		`Distinct(field="ints")`,
 		`Distinct(index="i", field="ints")`,
+		`Distinct(Row(filter=1), field="set")`,
 	} {
 		exp := []uint64{1, 2}
 		res := c.Query(t, "i", pql).Results[0].(pilosa.SignedRow)

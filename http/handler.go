@@ -1286,8 +1286,6 @@ func (o *fieldOptions) validate() error {
 			return pilosa.NewBadRequestError(errors.New("max does not apply to field type set"))
 		} else if o.TimeQuantum != nil {
 			return pilosa.NewBadRequestError(errors.New("timeQuantum does not apply to field type set"))
-		} else if o.ForeignIndex != nil {
-			return pilosa.NewBadRequestError(errors.New("set field cannot be a foreign key"))
 		}
 	case pilosa.FieldTypeInt:
 		if o.CacheType != nil {
@@ -1322,8 +1320,6 @@ func (o *fieldOptions) validate() error {
 			return pilosa.NewBadRequestError(errors.New("max does not apply to field type time"))
 		} else if o.TimeQuantum == nil {
 			return pilosa.NewBadRequestError(errors.New("timeQuantum is required for field type time"))
-		} else if o.ForeignIndex != nil {
-			return pilosa.NewBadRequestError(errors.New("time field cannot be a foreign key"))
 		}
 	case pilosa.FieldTypeMutex:
 		if o.CacheType == nil {
@@ -1338,8 +1334,6 @@ func (o *fieldOptions) validate() error {
 			return pilosa.NewBadRequestError(errors.New("max does not apply to field type mutex"))
 		} else if o.TimeQuantum != nil {
 			return pilosa.NewBadRequestError(errors.New("timeQuantum does not apply to field type mutex"))
-		} else if o.ForeignIndex != nil {
-			return pilosa.NewBadRequestError(errors.New("mutex field cannot be a foreign key"))
 		}
 	case pilosa.FieldTypeBool:
 		if o.CacheType != nil {

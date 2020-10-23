@@ -932,7 +932,7 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 		f.options.BitDepth = 0
 		f.options.TimeQuantum = ""
 		f.options.Keys = opt.Keys
-		f.options.ForeignIndex = ""
+		f.options.ForeignIndex = opt.ForeignIndex
 	case FieldTypeInt, FieldTypeDecimal:
 		f.options.Type = opt.Type
 		f.options.CacheType = CacheTypeNone
@@ -978,7 +978,7 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 			f.Close()
 			return errors.Wrap(err, "setting time quantum")
 		}
-		f.options.ForeignIndex = ""
+		f.options.ForeignIndex = opt.ForeignIndex
 	case FieldTypeBool:
 		f.options.Type = FieldTypeBool
 		f.options.CacheType = CacheTypeNone

@@ -3969,6 +3969,156 @@ func flipRun(b *Container) *Container {
 	return flipBitmap(x)
 }
 
+// IntersectionAny checks whether two containers have any overlap without
+// counting past the first bit found.
+func IntersectionAny(a, b *Container) bool {
+	return intersectionAny(a, b)
+}
+
+func intersectionAny(a, b *Container) bool {
+	an := a.N()
+	if an == 0 {
+		return false
+	}
+	bn := b.N()
+	if bn == 0 {
+		return false
+	}
+	if an+bn > MaxContainerVal+1 {
+		return true
+	}
+	if a.isArray() {
+		if b.isArray() {
+			return intersectionAnyArrayArray(a, b)
+		} else if b.isRun() {
+			return intersectionAnyArrayRun(a, b)
+		} else {
+			return intersectionAnyArrayBitmap(a, b)
+		}
+	} else if a.isRun() {
+		if b.isArray() {
+			return intersectionAnyArrayRun(b, a)
+		} else if b.isRun() {
+			return intersectionAnyRunRun(a, b)
+		} else {
+			return intersectionAnyRunBitmap(a, b)
+		}
+	} else {
+		if b.isArray() {
+			return intersectionAnyArrayBitmap(b, a)
+		} else if b.isRun() {
+			return intersectionAnyRunBitmap(b, a)
+		} else {
+			return intersectionAnyBitmapBitmap(a, b)
+		}
+	}
+}
+
+func intersectionAnyArrayArray(a, b *Container) bool {
+	ca, cb := a.array(), b.array()
+	nb := len(cb)
+	j := 0
+	for _, va := range ca {
+		for cb[j] < va {
+			j++
+			if j >= nb {
+				return false
+			}
+		}
+		if cb[j] == va {
+			return true
+		}
+	}
+	return false
+}
+
+func intersectionAnyArrayRun(a, b *Container) bool {
+	array, runs := a.array(), b.runs()
+	na, nb := len(array), len(runs)
+	for i, j := 0, 0; i < na && j < nb; {
+		va, vb := array[i], runs[j]
+		if va < vb.Start {
+			i++
+		} else if va >= vb.Start && va <= vb.Last {
+			return true
+		} else if va > vb.Last {
+			j++
+		}
+	}
+	return false
+}
+
+func intersectionAnyArrayBitmap(a, b *Container) bool {
+	bitmap := b.bitmap()[:1024]
+	for _, val := range a.array() {
+		i := int(val >> 6)
+		off := val % 64
+		if (bitmap[i]>>off)&1 != 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func intersectionAnyRunRun(a, b *Container) bool {
+	ra, rb := a.runs(), b.runs()
+	na, nb := len(ra), len(rb)
+	for i, j := 0, 0; i < na && j < nb; {
+		va, vb := ra[i], rb[j]
+		if va.Last < vb.Start {
+			// |--va--| |--vb--|
+			i++
+		} else if va.Start > vb.Last {
+			// |--vb--| |--va--|
+			j++
+		} else {
+			// va.Last >= vb.Start, and va.Start <= vb.Last,
+			// means there must be overlap
+			return true
+		}
+	}
+	return false
+}
+
+func intersectionAnyRunBitmap(a, b *Container) bool {
+	bb := b.bitmap()[:1024]
+	runs := a.runs()
+	for _, r := range runs {
+		loWord, loBit := r.Start/64, r.Start%64
+		hiWord, hiBit := r.Last/64, r.Last%64
+		if loBit != 0 {
+			w := bb[loWord]
+			mask := (uint64(1) << loBit) - 1
+			if w&^mask != 0 {
+				return true
+			}
+		}
+		for i := loWord; i < hiWord; i++ {
+			if bb[i] != 0 {
+				return true
+			}
+		}
+		if hiBit != 0 {
+			w := bb[hiWord]
+			mask := (uint64(1) << hiBit) - 1
+			if w&mask != 0 {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func intersectionAnyBitmapBitmap(a, b *Container) bool {
+	ba, bb := a.bitmap()[:1024], b.bitmap()[:1024]
+	for i, v := range ba {
+		if bb[i]&v != 0 {
+			return true
+		}
+	}
+	return false
+}
+
 func intersectionCount(a, b *Container) int32 {
 	if a.N() == MaxContainerVal+1 {
 		return b.N()
