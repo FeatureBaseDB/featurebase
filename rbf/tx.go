@@ -66,6 +66,11 @@ func (tx *Tx) Writable() bool {
 	return tx.writable
 }
 
+// PageN returns the number of pages in the database as seen by this transaction.
+func (tx *Tx) PageN() int {
+	return int(readMetaPageN(tx.meta[:]))
+}
+
 // Commit completes the transaction and persists data changes.
 func (tx *Tx) Commit() error {
 	tx.mu.Lock()
@@ -788,7 +793,7 @@ func (tx *Tx) inusePageSet() (map[uint32]struct{}, error) {
 	}
 
 	// Traverse freelist and mark pages as in-use.
-	if err := tx.walkTree(readMetaFreelistPageNo(tx.meta[:]), func(pgno uint32) error {
+	if err := tx.walkTree(readMetaFreelistPageNo(tx.meta[:]), 0, func(pgno, parent, typ uint32) error {
 		m[pgno] = struct{}{}
 		return nil
 	}); err != nil {
@@ -801,7 +806,7 @@ func (tx *Tx) inusePageSet() (map[uint32]struct{}, error) {
 		return m, err
 	}
 	for _, record := range records {
-		if err := tx.walkTree(record.Pgno, func(pgno uint32) error {
+		if err := tx.walkTree(record.Pgno, 0, func(pgno, parent, typ uint32) error {
 			m[pgno] = struct{}{}
 			return nil
 		}); err != nil {
@@ -813,28 +818,37 @@ func (tx *Tx) inusePageSet() (map[uint32]struct{}, error) {
 }
 
 // walkTree recursively iterates over a page and all its children.
-func (tx *Tx) walkTree(pgno uint32, fn func(uint32) error) error {
-	// Execute callback.
-	if err := fn(pgno); err != nil {
-		return err
-	}
-
+func (tx *Tx) walkTree(pgno, parent uint32, fn func(pgno, parent, typ uint32) error) error {
 	// Read page and iterate over children.
 	page, err := tx.readPage(pgno)
 	if err != nil {
 		return err
 	}
 
-	switch typ := readFlags(page); typ {
+	// Execute callback.
+	typ := readFlags(page)
+	if err := fn(pgno, parent, typ); err != nil {
+		return err
+	}
+
+	switch typ {
 	case PageTypeBranch:
 		for i, n := 0, readCellN(page); i < n; i++ {
 			cell := readBranchCell(page, i)
-			if err := tx.walkTree(cell.Pgno, fn); err != nil {
+			if err := tx.walkTree(cell.Pgno, pgno, fn); err != nil {
 				return err
 			}
 		}
 		return nil
 	case PageTypeLeaf:
+		// Execute callback only for bitmap pages pointed to by this leaf.
+		for i, n := 0, readCellN(page); i < n; i++ {
+			if cell := readLeafCell(page, i); cell.Type == ContainerTypeBitmapPtr {
+				if err := fn(toPgno(cell.Data), pgno, PageTypeBitmap); err != nil {
+					return err
+				}
+			}
+		}
 		return nil
 	default:
 		return fmt.Errorf("rbf.Tx.forEachTreePage(): invalid page type: pgno=%d type=%d", pgno, typ)
@@ -1698,4 +1712,306 @@ func (tx *Tx) ensureWritableWALSegment() error {
 	tx.updatedSegmentPaths = append(tx.updatedSegmentPaths, s.Path)
 
 	return nil
+}
+
+// Pages returns meta & record data for a list of pages.
+func (tx *Tx) Pages(pgnos []uint32) ([]Page, error) {
+	// Read page info for all pages in the database.
+	infos, err := tx.PageInfos()
+	if err != nil {
+		return nil, err
+	}
+
+	// Loop over each requested page number and extract additional data.
+	var pages []Page
+	for _, pgno := range pgnos {
+		buf, err := tx.readPage(pgno)
+		if err != nil {
+			return nil, err
+		}
+
+		switch info := infos[pgno].(type) {
+		case *MetaPageInfo:
+			pages = append(pages, &MetaPage{MetaPageInfo: info})
+
+		case *RootRecordPageInfo:
+			records, err := readRootRecords(buf)
+			if err != nil {
+				return nil, err
+			}
+			pages = append(pages, &RootRecordPage{RootRecordPageInfo: info, Records: records})
+
+		case *LeafPageInfo:
+			page := &LeafPage{LeafPageInfo: info}
+			cells := make([]leafCell, page.CellN)
+			for _, cell := range readLeafCells(buf, cells) {
+				other := &LeafCell{
+					Key:  cell.Key,
+					Type: ContainerTypeString(cell.Type),
+				}
+
+				switch cell.Type {
+				case ContainerTypeArray, ContainerTypeRLE:
+					other.Values = cell.Values(tx)
+				case ContainerTypeBitmapPtr:
+					other.Pgno = toPgno(cell.Data)
+				}
+
+				page.Cells = append(page.Cells, other)
+			}
+			pages = append(pages, page)
+
+		case *BranchPageInfo:
+			page := &BranchPage{BranchPageInfo: info}
+			for _, cell := range readBranchCells(buf) {
+				page.Cells = append(page.Cells, &BranchCell{
+					Key:   cell.Key,
+					Flags: cell.Flags,
+					Pgno:  cell.Pgno,
+				})
+			}
+			pages = append(pages, page)
+
+		case *BitmapPageInfo:
+			pages = append(pages, &BitmapPage{
+				BitmapPageInfo: info,
+				Values:         bitmapValues(toArray64(buf)),
+			})
+
+		case *FreePageInfo:
+			pages = append(pages, &FreePage{FreePageInfo: info})
+
+		default:
+			panic(fmt.Sprintf("invalid page info type %T", info))
+		}
+	}
+
+	return pages, nil
+}
+
+// PageInfos returns meta data about all pages in the database.
+func (tx *Tx) PageInfos() ([]PageInfo, error) {
+	infos := make([]PageInfo, tx.PageN())
+
+	// Read meta page info.
+	metaInfo, err := tx.metaPageInfo()
+	if err != nil {
+		return nil, err
+	}
+	infos[0] = metaInfo
+
+	// Traverse root record linked list.
+	for pgno := metaInfo.RootRecordPageNo; pgno != 0; {
+		info, err := tx.rootRecordPageInfo(pgno)
+		if err != nil {
+			return nil, err
+		}
+		infos[pgno] = info
+		pgno = info.Next
+	}
+
+	// Traverse freelist and mark pages as in-use.
+	if err := tx.walkPageInfo(infos, metaInfo.FreelistPageNo, "freelist"); err != nil {
+		return nil, err
+	}
+
+	// Traverse every b-tree and mark pages as in-use.
+	records, err := tx.RootRecords()
+	if err != nil {
+		return nil, err
+	}
+	for _, record := range records {
+		if err := tx.walkPageInfo(infos, record.Pgno, record.Name); err != nil {
+			return nil, err
+		}
+	}
+
+	// Build page info objects for each free page.
+	freePageSet, err := tx.freePageSet()
+	if err != nil {
+		return nil, err
+	}
+	for pgno := range freePageSet {
+		infos[pgno] = &FreePageInfo{Pgno: pgno}
+	}
+
+	return infos, nil
+}
+
+// metaPageInfo returns page metadata for the meta page.
+func (tx *Tx) metaPageInfo() (*MetaPageInfo, error) {
+	buf, err := tx.readPage(0)
+	if err != nil {
+		return nil, err
+	}
+
+	return &MetaPageInfo{
+		Pgno:             0,
+		Magic:            readMetaMagic(buf),
+		PageN:            readMetaPageN(buf),
+		WALID:            readMetaWALID(buf),
+		RootRecordPageNo: readMetaRootRecordPageNo(buf),
+		FreelistPageNo:   readMetaFreelistPageNo(buf),
+	}, nil
+}
+
+// rootRecordPageInfo returns page metadata for a root record page.
+func (tx *Tx) rootRecordPageInfo(pgno uint32) (*RootRecordPageInfo, error) {
+	buf, err := tx.readPage(pgno)
+	if err != nil {
+		return nil, err
+	}
+
+	return &RootRecordPageInfo{
+		Pgno: pgno,
+		Next: WalkRootRecordPages(buf),
+	}, nil
+}
+
+func (tx *Tx) walkPageInfo(infos []PageInfo, root uint32, name string) error {
+	return tx.walkTree(root, 0, func(pgno, parent, typ uint32) error {
+		buf, err := tx.readPage(pgno)
+		if err != nil {
+			return err
+		}
+
+		switch typ {
+		case PageTypeLeaf:
+			infos[pgno] = &LeafPageInfo{
+				Pgno:   pgno,
+				Parent: parent,
+				Tree:   name,
+				Flags:  readFlags(buf),
+				CellN:  readCellN(buf),
+			}
+		case PageTypeBranch:
+			infos[pgno] = &BranchPageInfo{
+				Pgno:   pgno,
+				Parent: parent,
+				Tree:   name,
+				Flags:  readFlags(buf),
+				CellN:  readCellN(buf),
+			}
+		case PageTypeBitmap:
+			infos[pgno] = &BitmapPageInfo{
+				Pgno:   pgno,
+				Parent: parent,
+				Tree:   name,
+			}
+		default:
+			panic(fmt.Sprintf("unexpected page type %d for page %d", typ, pgno))
+		}
+
+		return nil
+	})
+}
+
+// PageData returns the raw page data for a single page.
+func (tx *Tx) PageData(pgno uint32) ([]byte, error) {
+	return tx.readPage(pgno)
+}
+
+type PageInfo interface {
+	pageInfo()
+}
+
+func (*MetaPageInfo) pageInfo()       {}
+func (*RootRecordPageInfo) pageInfo() {}
+func (*LeafPageInfo) pageInfo()       {}
+func (*BranchPageInfo) pageInfo()     {}
+func (*BitmapPageInfo) pageInfo()     {}
+func (*FreePageInfo) pageInfo()       {}
+
+type MetaPageInfo struct {
+	Pgno             uint32
+	Magic            []byte
+	PageN            uint32
+	WALID            int64
+	RootRecordPageNo uint32
+	FreelistPageNo   uint32
+}
+
+type RootRecordPageInfo struct {
+	Pgno uint32
+	Next uint32
+}
+
+type LeafPageInfo struct {
+	Pgno   uint32
+	Parent uint32
+	Tree   string
+	Flags  uint32
+	CellN  int
+}
+
+type BranchPageInfo struct {
+	Pgno   uint32
+	Parent uint32
+	Tree   string
+	Flags  uint32
+	CellN  int
+}
+
+type BitmapPageInfo struct {
+	Pgno   uint32
+	Parent uint32
+	Tree   string
+}
+
+type FreePageInfo struct {
+	Pgno uint32
+}
+
+type Page interface {
+	page()
+}
+
+func (*MetaPage) page()       {}
+func (*RootRecordPage) page() {}
+func (*LeafPage) page()       {}
+func (*BranchPage) page()     {}
+func (*BitmapPage) page()     {}
+func (*FreePage) page()       {}
+
+type MetaPage struct {
+	*MetaPageInfo
+}
+
+type RootRecordPage struct {
+	*RootRecordPageInfo
+	Records []*RootRecord
+}
+
+type LeafPage struct {
+	*LeafPageInfo
+	Cells []*LeafCell
+}
+
+// LeafCell represents a leaf cell in the public API.
+type LeafCell struct {
+	Key    uint64
+	Type   string   // container type
+	Pgno   uint32   // bitmap pointer only
+	Values []uint16 // array & rle containers only
+}
+
+type BranchPage struct {
+	*BranchPageInfo
+	Cells []*BranchCell
+}
+
+// BranchCell represents a branch cell in the public API.
+type BranchCell struct {
+	Key   uint64
+	Flags uint32
+	Pgno  uint32
+}
+
+type BitmapPage struct {
+	*BitmapPageInfo
+	Values []uint16
+}
+
+type FreePage struct {
+	*FreePageInfo
 }

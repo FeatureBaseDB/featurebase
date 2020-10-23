@@ -215,7 +215,7 @@ type Walker interface {
 	Visit(pgno uint32, n Nodetype)
 }
 
-func Page(tx *Tx, pgno uint32, walker Walker) {
+func WalkPage(tx *Tx, pgno uint32, walker Walker) {
 	page, err := tx.readPage(pgno)
 	if err != nil {
 		panic(err)
@@ -232,7 +232,7 @@ func Page(tx *Tx, pgno uint32, walker Walker) {
 		walker.Visit(pgno, Branch)
 		for i, n := 0, readCellN(page); i < n; i++ {
 			cell := readBranchCell(page, i)
-			Page(tx, cell.Pgno, walker)
+			WalkPage(tx, cell.Pgno, walker)
 		}
 	case PageTypeLeaf:
 		walker.Visit(pgno, Leaf)

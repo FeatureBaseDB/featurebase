@@ -807,7 +807,7 @@ type EasyWalker struct {
 func (e *EasyWalker) Visitor(pgno uint32, records []*rbf.RootRecord) {
 	for _, record := range records {
 		e.VisitRoot(record.Pgno, record.Name)
-		rbf.Page(e.tx, record.Pgno, e)
+		rbf.WalkPage(e.tx, record.Pgno, e)
 	}
 }
 func (e *EasyWalker) VisitRoot(pgno uint32, name string) {
@@ -927,7 +927,7 @@ func TestCursor_SplitBranchCells(t *testing.T) {
 		}
 	}
 	before := &EasyWalker{tx: tx}
-	rbf.Page(tx, 0, before)
+	rbf.WalkPage(tx, 0, before)
 	if before.String() != "RL" {
 
 		t.Fatalf("Expecting RL (one branch) got %v", before.String())
@@ -939,7 +939,7 @@ func TestCursor_SplitBranchCells(t *testing.T) {
 	}
 
 	after := &EasyWalker{tx: tx}
-	rbf.Page(tx, 0, after)
+	rbf.WalkPage(tx, 0, after)
 	if after.String() != "RBLL" {
 
 		t.Fatalf("Expecting RBLL (a branch split) got %v", after.String())
