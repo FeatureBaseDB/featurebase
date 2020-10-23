@@ -21,6 +21,7 @@ import (
 	"io"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/pilosa/pilosa/v2"
@@ -30,6 +31,7 @@ import (
 	"github.com/pilosa/pilosa/v2/server"
 	"github.com/pilosa/pilosa/v2/test"
 	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
 )
 
 func TestInMemTranslateStore_TranslateKey(t *testing.T) {
@@ -472,8 +474,6 @@ func TestTranslation_Coordinator(t *testing.T) {
 	})
 }
 
-/*
-// Unfortunately. . . this test depends on tons of changes within the test package.
 func TestTranslation_Cluster_CreateFind(t *testing.T) {
 	c := test.MustRunCluster(t, 3)
 	defer c.Close()
@@ -492,12 +492,12 @@ func TestTranslation_Cluster_CreateFind(t *testing.T) {
 	t.Run("Index", func(t *testing.T) {
 		// Create all index keys, split across nodes.
 		{
-			parts := make([][]string, len(c.Nodes))
+			parts := make([][]string, len(c))
 			{
 				// Randomly partition the keys.
 				i := 0
 				for k := range testKeys {
-					parts[i%len(c.Nodes)] = append(parts[i%len(c.Nodes)], k)
+					parts[i%len(c)] = append(parts[i%len(c)], k)
 					i++
 				}
 			}
@@ -508,7 +508,7 @@ func TestTranslation_Cluster_CreateFind(t *testing.T) {
 			for i, keys := range parts {
 				i, keys := i, keys
 				g.Go(func() error {
-					_, err := c.Nodes[i].API.CreateIndexKeys(ctx, "i", keys...)
+					_, err := c[i].API.CreateIndexKeys(ctx, "i", keys...)
 					return err
 				})
 			}
@@ -527,7 +527,7 @@ func TestTranslation_Cluster_CreateFind(t *testing.T) {
 			}
 
 			// Obtain authoritative translations for the keys.
-			translations, err := c.Nodes[0].API.FindIndexKeys(ctx, "i", keyList...)
+			translations, err := c[0].API.FindIndexKeys(ctx, "i", keyList...)
 			if err != nil {
 				t.Errorf("obtaining authoritative translations: %v", err)
 				return
@@ -541,7 +541,7 @@ func TestTranslation_Cluster_CreateFind(t *testing.T) {
 			// Check that all nodes agree on these translations.
 			var g errgroup.Group
 			defer g.Wait() //nolint:errcheck
-			for i, n := range c.Nodes {
+			for i, n := range c {
 				i, api := i, n.API
 				g.Go(func() (err error) {
 					defer func() { err = errors.Wrapf(err, "translating on node %d", i) }()
@@ -558,7 +558,7 @@ func TestTranslation_Cluster_CreateFind(t *testing.T) {
 			}
 
 			// Check that re-invoking create returns the original translations.
-			for i, n := range c.Nodes {
+			for i, n := range c {
 				i, api := i, n.API
 				g.Go(func() (err error) {
 					defer func() { err = errors.Wrapf(err, "translating on node %d", i) }()
@@ -578,12 +578,12 @@ func TestTranslation_Cluster_CreateFind(t *testing.T) {
 	t.Run("Field", func(t *testing.T) {
 		// Create all field keys, split across nodes.
 		{
-			parts := make([][]string, len(c.Nodes))
+			parts := make([][]string, len(c))
 			{
 				// Randomly partition the keys.
 				i := 0
 				for k := range testKeys {
-					parts[i%len(c.Nodes)] = append(parts[i%len(c.Nodes)], k)
+					parts[i%len(c)] = append(parts[i%len(c)], k)
 					i++
 				}
 			}
@@ -594,7 +594,7 @@ func TestTranslation_Cluster_CreateFind(t *testing.T) {
 			for i, keys := range parts {
 				i, keys := i, keys
 				g.Go(func() error {
-					_, err := c.Nodes[i].API.CreateFieldKeys(ctx, "i", "f", keys...)
+					_, err := c[i].API.CreateFieldKeys(ctx, "i", "f", keys...)
 					return err
 				})
 			}
@@ -613,7 +613,7 @@ func TestTranslation_Cluster_CreateFind(t *testing.T) {
 			}
 
 			// Obtain authoritative translations for the keys.
-			translations, err := c.Nodes[0].API.FindFieldKeys(ctx, "i", "f", keyList...)
+			translations, err := c[0].API.FindFieldKeys(ctx, "i", "f", keyList...)
 			if err != nil {
 				t.Errorf("obtaining authoritative translations: %v", err)
 				return
@@ -627,7 +627,7 @@ func TestTranslation_Cluster_CreateFind(t *testing.T) {
 			// Check that all nodes agree on these translations.
 			var g errgroup.Group
 			defer g.Wait() //nolint:errcheck
-			for i, n := range c.Nodes {
+			for i, n := range c {
 				i, api := i, n.API
 				g.Go(func() (err error) {
 					defer func() { err = errors.Wrapf(err, "translating on node %d", i) }()
@@ -644,7 +644,7 @@ func TestTranslation_Cluster_CreateFind(t *testing.T) {
 			}
 
 			// Check that re-invoking create returns the original translations.
-			for i, n := range c.Nodes {
+			for i, n := range c {
 				i, api := i, n.API
 				g.Go(func() (err error) {
 					defer func() { err = errors.Wrapf(err, "translating on node %d", i) }()
@@ -680,4 +680,3 @@ func compareTranslations(expected, got map[string]uint64) error {
 	}
 	return nil
 }
-*/
