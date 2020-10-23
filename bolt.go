@@ -441,7 +441,7 @@ func (tx *BoltTx) Type() string {
 }
 
 func (tx *BoltTx) UseRowCache() bool {
-	return rbf.EnableRowCache
+	return rbf.EnableRowCache()
 }
 
 // Pointer gives us a memory address for the underlying transaction for debugging.

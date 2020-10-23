@@ -212,6 +212,79 @@ func (s *TranslateStore) TranslateKeys(keys []string, writable bool) ([]uint64, 
 	return s.translateKeys(keys, writable)
 }
 
+// FindKeys looks up the ID for each key.
+// Keys are not created if they do not exist.
+// Missing keys are not considered errors, so the length of the result may be less than that of the input.
+func (s *TranslateStore) FindKeys(keys ...string) (map[string]uint64, error) {
+	result := make(map[string]uint64, len(keys))
+	err := s.db.View(func(tx *bolt.Tx) error {
+		bkt := tx.Bucket(bucketKeys)
+		if bkt == nil {
+			return errors.Errorf(errFmtTranslateBucketNotFound, bucketKeys)
+		}
+		for _, key := range keys {
+			id, _ := findIDByKey(bkt, key)
+			if id == 0 {
+				// The key does not exist.
+				continue
+			}
+
+			result[key] = id
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+// CreateKeys maps all keys to IDs, creating the IDs if they do not exist.
+// If the translator is read-only, this will return an error.
+func (s *TranslateStore) CreateKeys(keys ...string) (map[string]uint64, error) {
+	if s.ReadOnly() {
+		return nil, pilosa.ErrTranslateStoreReadOnly
+	}
+
+	written := false
+	result := make(map[string]uint64, len(keys))
+	err := s.db.Update(func(tx *bolt.Tx) error {
+		keyBucket := tx.Bucket(bucketKeys)
+		if keyBucket == nil {
+			return errors.Errorf(errFmtTranslateBucketNotFound, bucketKeys)
+		}
+		idBucket := tx.Bucket(bucketIDs)
+		if keyBucket == nil {
+			return errors.Errorf(errFmtTranslateBucketNotFound, bucketIDs)
+		}
+		for _, key := range keys {
+			id, boltKey := findIDByKey(keyBucket, key)
+			if id == 0 {
+				// The key does not exist.
+				id = pilosa.GenerateNextPartitionedID(s.index, maxID(tx), s.partitionID, s.partitionN)
+				if err := keyBucket.Put(boltKey, u64tob(id)); err != nil {
+					return err
+				} else if err := idBucket.Put(u64tob(id), boltKey); err != nil {
+					return err
+				}
+				written = true
+			}
+
+			result[key] = id
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	if written {
+		s.notifyWrite()
+	}
+
+	return result, nil
+}
+
 func (s *TranslateStore) translateKeys(keys []string, writable bool) ([]uint64, error) {
 	ids := make([]uint64, 0, len(keys))
 

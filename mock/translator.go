@@ -21,8 +21,6 @@ import (
 	"github.com/pilosa/pilosa/v2"
 )
 
-var _ pilosa.TranslateStore = (*TranslateStore)(nil)
-
 type TranslateStore struct {
 	CloseFunc         func() error
 	MaxIDFunc         func() (uint64, error)
@@ -33,6 +31,8 @@ type TranslateStore struct {
 	TranslateKeysFunc func(keys []string, writable bool) ([]uint64, error)
 	TranslateIDFunc   func(id uint64) (string, error)
 	TranslateIDsFunc  func(ids []uint64) ([]string, error)
+	FindKeysFunc      func(keys ...string) (map[string]uint64, error)
+	CreateKeysFunc    func(keys ...string) (map[string]uint64, error)
 	ForceSetFunc      func(id uint64, key string) error
 	EntryReaderFunc   func(ctx context.Context, offset uint64) (pilosa.TranslateEntryReader, error)
 }
@@ -78,6 +78,14 @@ func (s *TranslateStore) TranslateID(id uint64) (string, error) {
 
 func (s *TranslateStore) TranslateIDs(ids []uint64) ([]string, error) {
 	return s.TranslateIDsFunc(ids)
+}
+
+func (s *TranslateStore) FindKeys(keys ...string) (map[string]uint64, error) {
+	return s.FindKeysFunc(keys...)
+}
+
+func (s *TranslateStore) CreateKeys(keys ...string) (map[string]uint64, error) {
+	return s.CreateKeysFunc(keys...)
 }
 
 func (s *TranslateStore) ForceSet(id uint64, key string) error {

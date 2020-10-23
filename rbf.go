@@ -449,7 +449,7 @@ func (tx *RBFTx) UseRowCache() bool {
 	// the rowCache without first making a copy.
 	// So we only use the rowCache if the copy is
 	// enabled.
-	return rbf.EnableRowCache
+	return rbf.EnableRowCache()
 }
 
 // rbfName returns a NULL-separated key used for identifying bitmap maps in RBF.

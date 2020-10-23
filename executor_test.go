@@ -575,13 +575,13 @@ func TestExecutor_Execute_Set(t *testing.T) {
 		})
 
 		t.Run("ErrInvalidColValueType", func(t *testing.T) {
-			if _, err := cmd.API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set("foo", f=1)`}); err == nil || errors.Cause(err).Error() != `string 'col' value not allowed unless index 'keys' option enabled` {
+			if _, err := cmd.API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set("foo", f=1)`}); err == nil || !hasCause(err, pilosa.ErrTranslatingKeyNotFound) || !strings.Contains(err.Error(), "unkeyed index") {
 				t.Fatalf("The error is: '%v'", err)
 			}
 		})
 
 		t.Run("ErrInvalidRowValueType", func(t *testing.T) {
-			if _, err := cmd.API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(2, f="bar")`}); err == nil || errors.Cause(err).Error() != `string 'row' value not allowed unless field 'keys' option enabled` {
+			if _, err := cmd.API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(2, f="bar")`}); err == nil || !hasCause(err, pilosa.ErrTranslatingKeyNotFound) || !strings.Contains(err.Error(), "field is not keyed") {
 				t.Fatal(err)
 			}
 		})
@@ -672,7 +672,7 @@ func TestExecutor_Execute_Set(t *testing.T) {
 			if _, err := idx.CreateField("f", pilosa.OptFieldTypeDefault(), pilosa.OptFieldKeys()); err != nil {
 				t.Fatal(err)
 			}
-			if _, err := cmd.API.Query(context.Background(), &pilosa.QueryRequest{Index: "inokey", Query: `Set(2, f=1.2)`}); err == nil || !strings.Contains(err.Error(), "row value must be a string or non-negative integer") {
+			if _, err := cmd.API.Query(context.Background(), &pilosa.QueryRequest{Index: "inokey", Query: `Set(2, f=1.2)`}); err == nil || !strings.Contains(err.Error(), "invalid value") {
 				t.Fatal(err)
 			}
 
@@ -960,7 +960,7 @@ func TestExecutor_Execute_SetValue(t *testing.T) {
 		}
 	})
 
-	t.Run("", func(t *testing.T) {
+	t.Run("Err", func(t *testing.T) {
 		c := test.MustRunCluster(t, 1)
 		defer c.Close()
 		hldr := c.GetHolder(0)
@@ -970,24 +970,37 @@ func TestExecutor_Execute_SetValue(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		t.Run("ErrColumnBSIGroupRequired", func(t *testing.T) {
-			if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(invalid_column_name=10, f=100)`}); err == nil || errors.Cause(err).Error() != `Set() column argument 'col' required` {
+		t.Run("ColumnBSIGroupRequired", func(t *testing.T) {
+			if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(f=100)`}); err == nil || errors.Cause(err).Error() != `Set() column argument 'col' required` {
 				t.Fatalf("unexpected error: %s", err)
 			}
 		})
 
-		t.Run("ErrColumnBSIGroupValue", func(t *testing.T) {
-			if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set("bad_column", f=100)`}); err == nil || errors.Cause(err).Error() != `string 'col' value not allowed unless index 'keys' option enabled` {
+		t.Run("ColumnBSIGroupValue", func(t *testing.T) {
+			if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set("bad_column", f=100)`}); err == nil || !hasCause(err, pilosa.ErrTranslatingKeyNotFound) || !strings.Contains(err.Error(), "unkeyed index") {
 				t.Fatalf("unexpected error: %s", err)
 			}
 		})
 
-		t.Run("ErrInvalidBSIGroupValueType", func(t *testing.T) {
-			if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(10, f="hello")`}); err == nil || errors.Cause(err).Error() != `string 'row' value not allowed unless field 'keys' option enabled` {
+		t.Run("InvalidBSIGroupValueType", func(t *testing.T) {
+			if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(10, f="hello")`}); err == nil || !hasCause(err, pilosa.ErrTranslatingKeyNotFound) || !strings.Contains(err.Error(), "field is not keyed") {
 				t.Fatalf("unexpected error: %s", err)
 			}
 		})
 	})
+}
+
+func hasCause(err, cause error) bool {
+	for err != cause {
+		innerErr := errors.Cause(err)
+		if innerErr == err {
+			// This is the innermost accessible error, and it does not have that cause.
+			return false
+		}
+		err = innerErr
+	}
+
+	return true
 }
 
 // Ensure a SetRowAttrs() query can be executed.
@@ -6574,5 +6587,93 @@ func TestTimelessClearRegression(t *testing.T) {
 		t.Fatal(err)
 	} else if res.Results[0] != true {
 		t.Fatal("clear supposedly failed")
+	}
+}
+
+func TestMissingKeyRegression(t *testing.T) {
+	c := test.MustRunCluster(t, 1, []server.CommandOption{server.OptCommandServerOptions(pilosa.OptServerTxsrc("roaring"))})
+	defer c.Close()
+
+	c.CreateField(t, "i", pilosa.IndexOptions{Keys: true, TrackExistence: true}, "f", pilosa.OptFieldKeys())
+
+	tests := []struct {
+		name     string
+		query    string
+		expected []interface{}
+	}{
+		{
+			name:     "RowGarbage",
+			query:    `Row(f="garbage")`,
+			expected: []interface{}{[]string(nil)},
+		},
+		{
+			name:     "Set",
+			query:    `Set("a", f="example")`,
+			expected: []interface{}{true},
+		},
+		{
+			name:     "Count",
+			query:    `Count(Row(f="example"))`,
+			expected: []interface{}{uint64(1)},
+		},
+		{
+			name:     "NotGarbage",
+			query:    `Not(Row(f="garbage"))`,
+			expected: []interface{}{[]string{"a"}},
+		},
+		{
+			name:     "DifferenceGarbage",
+			query:    `Difference(All(), Row(f="garbage"))`,
+			expected: []interface{}{[]string{"a"}},
+		},
+		/*{
+			// Key translation works here, but it seems the actual count query is processing stale data.
+			// Uncomment it when the bug has been fixed.
+			name: "SetAndCount",
+			query: `Set("a", f="example")` + "\n" +
+				`Count(Row(f="example"))`,
+			expected: []interface{}{true, uint64(1)},
+		},*/
+		{
+			name:     "CountNothing",
+			query:    `Count(Row(f="garbage"))`,
+			expected: []interface{}{uint64(0)},
+		},
+		{
+			name:     "StoreInvertSelf",
+			query:    `Store(Not(Row(f="xyzzy")), f="xyzzy")`,
+			expected: []interface{}{true},
+		},
+		{
+			name: "SetClear",
+			query: `Set("b", f="plugh")` + "\n" +
+				`Clear("b", f="plugh")`,
+			expected: []interface{}{true, true},
+		},
+		{
+			name: "ClearMix",
+			query: `Clear("a", f="garbage")` + "\n" +
+				`Clear("a", f="example")`,
+			expected: []interface{}{false, true},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			resp := c.Query(t, "i", tc.query)
+			if len(resp.Results) != len(tc.expected) {
+				t.Errorf("expected %d results but got %d", len(resp.Results), len(tc.expected))
+				return
+			}
+			for i, r := range resp.Results {
+				if row, ok := r.(*pilosa.Row); ok {
+					r = row.Keys
+				}
+				expect := tc.expected[i]
+				if !reflect.DeepEqual(r, expect) {
+					t.Errorf("result %d differs: expected %v but got %v", i, expect, r)
+				}
+			}
+		})
 	}
 }
