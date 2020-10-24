@@ -181,8 +181,8 @@ func (v *view) openFragmentsInTx() error {
 	var mu sync.Mutex
 
 	shardCh := make(chan uint64, len(shards))
-	for i := range shards {
-		shardCh <- shards[i]
+	for shard := range shards {
+		shardCh <- shard
 	}
 
 shardLoop:
