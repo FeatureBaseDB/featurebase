@@ -256,6 +256,14 @@ type shardSet struct {
 	readonlyVer int64
 }
 
+func (ss *shardSet) add(shard uint64) {
+	_, already := ss.shards[shard]
+	if !already {
+		ss.shards[shard] = true
+		ss.shardsVer++
+	}
+}
+
 // CloneMaybe maintains a re-usable readonly version
 // ss.shards that can be returned to multiple goroutine
 // reads as it will never change. A copy is only made
@@ -265,8 +273,6 @@ func (ss *shardSet) CloneMaybe() map[uint64]bool {
 	if ss.readonlyVer == ss.shardsVer {
 		return ss.readonly
 	}
-
-	//vv("888888 CloneMaybe updating to version %v  with %v shards", ss.shardsVer, len(ss.shards))
 
 	// readonlyVer is out of date.
 	// readonly needs update. We cannot
@@ -517,15 +523,9 @@ func (per *DBPerShard) updateIndex2ShardCacheWithNewShard(dbs *DBShard) {
 		if !ok {
 			shardset = newShardSet()
 			mapIndex2shardSet[dbs.Index] = shardset
-			//vv("888888 made new shardset for shard dbs.Shard=%v", dbs.Shard)
 		}
 		// INVAR: shardset is present, not nil; a map that can be added to.
-		_, already := shardset.shards[dbs.Shard]
-		if !already {
-			shardset.shards[dbs.Shard] = true
-			shardset.shardsVer++ // invalid the readonly copy, force cloning it anew.
-			//vv("888888 updated to shardset version %v  with %v shards", shardset.shardsVer, len(shardset.shards))
-		}
+		shardset.add(dbs.Shard)
 	}
 }
 
@@ -688,7 +688,6 @@ func (per *DBPerShard) TypedDBPerShardGetShardsForIndex(ty txtype, idx *Index, r
 	// gotta read shards from disk directory layout.
 	setOfShards := newShardSet()
 	per.index2shards[ty][idx.name] = setOfShards
-	setOfShards.shardsVer++ // invalidate readonlyVer
 
 	// Upon return, cache the setOfShards value and reuse it next time
 
@@ -707,7 +706,7 @@ func (per *DBPerShard) TypedDBPerShardGetShardsForIndex(ty txtype, idx *Index, r
 								"TypedDBPerShardGetLocalShardsForIndex roaringTxn view.path='%v'", view.path))
 					}
 					for _, shard := range sos {
-						setOfShards.shards[shard] = true
+						setOfShards.add(shard)
 					}
 				}
 			}
@@ -718,7 +717,7 @@ func (per *DBPerShard) TypedDBPerShardGetShardsForIndex(ty txtype, idx *Index, r
 			return nil, err
 		}
 		for _, shard := range sos {
-			setOfShards.shards[shard] = true
+			setOfShards.add(shard)
 		}
 		return setOfShards.CloneMaybe(), nil
 	}
@@ -763,11 +762,11 @@ func (per *DBPerShard) TypedDBPerShardGetShardsForIndex(ty txtype, idx *Index, r
 				return nil, err
 			}
 			if hasData {
-				setOfShards.shards[shard] = true
+				setOfShards.add(shard)
 			}
 		} else {
 			// file presence is enough
-			setOfShards.shards[shard] = true
+			setOfShards.add(shard)
 		}
 	}
 	return setOfShards.CloneMaybe(), nil
