@@ -266,6 +266,8 @@ func (ss *shardSet) CloneMaybe() map[uint64]bool {
 		return ss.readonly
 	}
 
+	//vv("888888 CloneMaybe updating to version %v  with %v shards", ss.shardsVer, len(ss.shards))
+
 	// readonlyVer is out of date.
 	// readonly needs update. We cannot
 	// modify the readonly map in place;
@@ -515,10 +517,15 @@ func (per *DBPerShard) updateIndex2ShardCacheWithNewShard(dbs *DBShard) {
 		if !ok {
 			shardset = newShardSet()
 			mapIndex2shardSet[dbs.Index] = shardset
+			//vv("888888 made new shardset for shard dbs.Shard=%v", dbs.Shard)
 		}
 		// INVAR: shardset is present, not nil; a map that can be added to.
-		shardset.shards[dbs.Shard] = true
-		shardset.shardsVer++ // invalid the readonly copy, force cloning it anew.
+		_, already := shardset.shards[dbs.Shard]
+		if !already {
+			shardset.shards[dbs.Shard] = true
+			shardset.shardsVer++ // invalid the readonly copy, force cloning it anew.
+			//vv("888888 updated to shardset version %v  with %v shards", shardset.shardsVer, len(shardset.shards))
+		}
 	}
 }
 
