@@ -23,12 +23,14 @@ import (
 type ActiveQueryStatus struct {
 	Query string        `json:"query"`
 	Node  string        `json:"node"`
+	Index string        `json:index`
 	Age   time.Duration `json:"age"`
 }
 
 type PastQueryStatus struct {
 	Query   string        `json:"query"`
-	Node    string        `json:"node"`
+	Node    string        `json:"nodeID"`
+	Index   string        `json:index`
 	Age     time.Duration `json:"age"`
 	Runtime time.Duration `json:"runtime"`
 }
@@ -36,12 +38,14 @@ type PastQueryStatus struct {
 type activeQuery struct {
 	query   string
 	node    string
+	index   string
 	started time.Time
 }
 
 type pastQuery struct {
 	query   string
 	node    string
+	index   string
 	started time.Time
 	runtime time.Duration
 }
@@ -118,11 +122,11 @@ func newQueryTracker() *queryTracker {
 			select {
 			case update := <-updates:
 				if update.end {
+					pq := pastQuery{update.q.query, update.q.node, update.q.index, update.q.started, update.endTime.Sub(update.q.started)}
+					tracker.history.add(pq)
 					delete(activeQueries, update.q)
 				} else {
 					activeQueries[update.q] = struct{}{}
-					pq := pastQuery{update.q.query, update.q.node, update.q.started, update.endTime.Sub(update.q.started)} // TODO move end time to api.go
-					tracker.history.add(pq)
 				}
 			case check := <-checks:
 				out := make([]*activeQuery, len(activeQueries))
@@ -141,9 +145,9 @@ func newQueryTracker() *queryTracker {
 	return tracker
 }
 
-func (t *queryTracker) Start(query, nodeID string) *activeQuery {
+func (t *queryTracker) Start(query, nodeID, index string) *activeQuery {
 	now := time.Now()
-	q := &activeQuery{query, nodeID, now}
+	q := &activeQuery{query, nodeID, index, now}
 	t.updates <- queryStatusUpdate{q, false, time.Time{}}
 	return q
 }
@@ -173,7 +177,7 @@ func (t *queryTracker) ActiveQueries() []ActiveQueryStatus {
 	now := time.Now()
 	out := make([]ActiveQueryStatus, len(queries))
 	for i, v := range queries {
-		out[i] = ActiveQueryStatus{v.query, v.node, now.Sub(v.started)}
+		out[i] = ActiveQueryStatus{v.query, v.node, v.index, now.Sub(v.started)}
 	}
 	return out
 }
@@ -183,7 +187,7 @@ func (t *queryTracker) PastQueries() []PastQueryStatus {
 	now := time.Now()
 	out := make([]PastQueryStatus, len(queries))
 	for i, v := range queries {
-		out[i] = PastQueryStatus{v.query, v.node, now.Sub(v.started), v.runtime}
+		out[i] = PastQueryStatus{v.query, v.node, v.index, now.Sub(v.started), v.runtime}
 	}
 	return out
 

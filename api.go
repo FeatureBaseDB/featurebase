@@ -158,7 +158,7 @@ func (api *API) Query(ctx context.Context, req *QueryRequest) (QueryResponse, er
 	if err != nil {
 		return QueryResponse{}, errors.Wrap(err, "parsing")
 	}
-	defer api.tracker.Finish(api.tracker.Start(req.Query, api.server.nodeID), time.Now())
+	defer api.tracker.Finish(api.tracker.Start(req.Query, api.server.nodeID, req.Index), time.Now())
 	execOpts := &execOptions{
 		Remote:          req.Remote,
 		Profile:         req.Profile,
