@@ -55,16 +55,53 @@ type queryStatusUpdate struct {
 type queryTracker struct {
 	updates chan<- queryStatusUpdate
 	checks  chan<- chan<- []*activeQuery
-	history map[pastQuery]struct{} // TODO not in memory
-	wg      sync.WaitGroup
-	stop    chan struct{}
+	history *ringBuffer
+
+	wg   sync.WaitGroup
+	stop chan struct{}
+}
+
+type ringBuffer struct {
+	queries []pastQuery
+	start   int
+	count   int
+	mu      sync.Mutex
+}
+
+// newRingBuffer initializes an empty RingBuffer of specified capacity.
+func newRingBuffer(n int) *ringBuffer {
+	return &ringBuffer{
+		queries: make([]pastQuery, n),
+		start:   0,
+		count:   0,
+	}
+}
+
+// add adds a new element to the queue, overwriting the oldest if it is already full.
+func (b *ringBuffer) add(q pastQuery) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	b.queries[(b.start+b.count)%cap(b.queries)] = q
+	if b.count == cap(b.queries) {
+		b.start = (b.start + 1) % cap(b.queries)
+	} else {
+		b.count++
+	}
+}
+
+// slice returns the contents of the RingBuffer, in insertion order.
+func (b *ringBuffer) slice() []pastQuery {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return append(b.queries[b.start:b.count], b.queries[0:b.start]...)
 }
 
 func newQueryTracker() *queryTracker {
 	done := make(chan struct{})
 	updates := make(chan queryStatusUpdate, 128)
 	checks := make(chan chan<- []*activeQuery)
-	history := make(map[pastQuery]struct{})
+	history := newRingBuffer(128)
 	tracker := &queryTracker{
 		updates: updates,
 		checks:  checks,
@@ -85,7 +122,7 @@ func newQueryTracker() *queryTracker {
 				} else {
 					activeQueries[update.q] = struct{}{}
 					pq := pastQuery{update.q.query, update.q.node, update.q.started, update.endTime.Sub(update.q.started)} // TODO move end time to api.go
-					tracker.history[pq] = struct{}{}
+					tracker.history.add(pq)
 				}
 			case check := <-checks:
 				out := make([]*activeQuery, len(activeQueries))
@@ -142,26 +179,7 @@ func (t *queryTracker) ActiveQueries() []ActiveQueryStatus {
 }
 
 func (t *queryTracker) PastQueries() []PastQueryStatus {
-	queries := make([]pastQuery, 0, len(t.history))
-	for pq := range t.history {
-		queries = append(queries, pq)
-	}
-	// TODO use sort.Sort
-	sort.Slice(queries, func(i, j int) bool {
-		switch {
-		case queries[i].started.Before(queries[j].started):
-			return true
-		case queries[i].started.After(queries[j].started):
-			return false
-		case queries[i].query < queries[j].query:
-			return true
-		case queries[i].query > queries[j].query:
-			return false
-		default:
-			return false
-		}
-	})
-
+	queries := t.history.slice()
 	now := time.Now()
 	out := make([]PastQueryStatus, len(queries))
 	for i, v := range queries {
