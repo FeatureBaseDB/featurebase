@@ -100,7 +100,7 @@ func NewAPI(opts ...apiOption) (*API, error) {
 		}()
 	}
 
-	api.tracker = newQueryTracker()
+	api.tracker = newQueryTracker(api.server.queryHistoryLength)
 
 	return api, nil
 }

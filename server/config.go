@@ -206,6 +206,11 @@ type Config struct {
 
 	// RBFConfig defines all externally configurable RBF flags.
 	RBFConfig *rbfcfg.Config
+
+	// QueryHistoryLength sets the maximum number of queries that are maintained
+	// for the /query-history endpoint. This parameter is per-node, and the
+	// result combines the history from all nodes.
+	QueryHistoryLength int
 }
 
 // NewConfig returns an instance of Config with default options.
@@ -230,6 +235,8 @@ func NewConfig() *Config {
 		ImportWorkerPoolSize: runtime.NumCPU(),
 
 		RBFConfig: rbfcfg.NewDefaultConfig(),
+
+		QueryHistoryLength: 100,
 	}
 
 	// Cluster config.

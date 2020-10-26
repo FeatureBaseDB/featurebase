@@ -1302,7 +1302,7 @@ func (c *InternalClient) GetPastQueries(ctx context.Context, uri *pilosa.URI) ([
 		return nil, errors.Wrap(err, "reading")
 	}
 
-	queries := make([]pilosa.PastQueryStatus, 128)
+	queries := make([]pilosa.PastQueryStatus, 100)
 	if err := json.Unmarshal(body, &queries); err != nil {
 		return nil, fmt.Errorf("unmarshal response: %s", err)
 	}

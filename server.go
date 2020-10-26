@@ -86,6 +86,8 @@ type Server struct { // nolint: maligned
 
 	defaultClient InternalClient
 	dataDir       string
+
+	queryHistoryLength int
 }
 
 // Holder returns the holder for server.
@@ -357,6 +359,16 @@ func OptServerRowcacheOff(rowcacheOff bool) ServerOption {
 func OptServerRBFConfig(cfg *rbfcfg.Config) ServerOption {
 	return func(s *Server) error {
 		s.holderConfig.RBFConfig = cfg
+		return nil
+	}
+}
+
+// OptServerQueryHistoryLength is a functional option on Server
+// used to specify the length of the query history buffer that maintains
+// the information returned at /query-history.
+func OptServerQueryHistoryLength(length int) ServerOption {
+	return func(s *Server) error {
+		s.queryHistoryLength = length
 		return nil
 	}
 }

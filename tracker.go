@@ -101,11 +101,11 @@ func (b *ringBuffer) slice() []pastQuery {
 	return append(b.queries[b.start:b.count], b.queries[0:b.start]...)
 }
 
-func newQueryTracker() *queryTracker {
+func newQueryTracker(historyLength int) *queryTracker {
 	done := make(chan struct{})
 	updates := make(chan queryStatusUpdate, 128)
 	checks := make(chan chan<- []*activeQuery)
-	history := newRingBuffer(128)
+	history := newRingBuffer(historyLength)
 	tracker := &queryTracker{
 		updates: updates,
 		checks:  checks,
