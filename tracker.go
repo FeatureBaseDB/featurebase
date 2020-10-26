@@ -23,14 +23,14 @@ import (
 type ActiveQueryStatus struct {
 	Query string        `json:"query"`
 	Node  string        `json:"node"`
-	Index string        `json:index`
+	Index string        `json:"index"`
 	Age   time.Duration `json:"age"`
 }
 
 type PastQueryStatus struct {
 	Query   string        `json:"query"`
 	Node    string        `json:"nodeID"`
-	Index   string        `json:index`
+	Index   string        `json:"index"`
 	Age     time.Duration `json:"age"`
 	Runtime time.Duration `json:"runtime"`
 }
@@ -86,9 +86,10 @@ func (b *ringBuffer) add(q pastQuery) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	b.queries[(b.start+b.count)%cap(b.queries)] = q
-	if b.count == cap(b.queries) {
-		b.start = (b.start + 1) % cap(b.queries)
+	// len(b.queries) is used here as the *capacity* of the ringBuffer
+	b.queries[(b.start+b.count)%len(b.queries)] = q
+	if b.count == len(b.queries) {
+		b.start = (b.start + 1) % len(b.queries)
 	} else {
 		b.count++
 	}

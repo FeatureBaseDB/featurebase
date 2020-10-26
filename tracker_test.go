@@ -56,14 +56,14 @@ func TestRingBuffer(t *testing.T) {
 }
 
 func TestQueryTracker(t *testing.T) {
-	tracker := newQueryTracker()
+	tracker := newQueryTracker(5)
 	defer tracker.Stop()
 
 	if queries := tracker.ActiveQueries(); len(queries) > 0 {
 		t.Fatalf("expected no active queries; found %v", queries)
 	}
 
-	qs := tracker.Start("test query", "node0")
+	qs := tracker.Start("test query", "node0", "i")
 
 	var queries []ActiveQueryStatus
 	for len(queries) < 1 {
