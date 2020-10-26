@@ -26,6 +26,7 @@ import (
 	gohttp "net/http"
 	"net/http/httptest"
 	"reflect"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -401,7 +402,7 @@ func TestHandler_Endpoints(t *testing.T) {
 	})
 
 	t.Run("UI/shard-distribution", func(t *testing.T) {
-		// This tests the response structure, not the shard distribution.
+		// This tests the response structure, not the cluster behavior.
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/ui/shard-distribution", nil))
 		if w.Code != gohttp.StatusOK {
@@ -1400,7 +1401,7 @@ func TestCluster_TranslateStore(t *testing.T) {
 	cluster.GetNode(0).Config.Gossip.Port = "0"
 	err := cluster.GetNode(0).Start()
 	if err != nil {
-		t.Fatalf("starting cluster 0: %v", err)
+		t.Fatalf("starting node 0: %v", err)
 	}
 	defer cluster.GetNode(0).Close()
 
@@ -1417,7 +1418,7 @@ func TestClusterTranslator(t *testing.T) {
 	cluster.GetNode(0).Config.Gossip.Port = "0"
 	err := cluster.GetNode(0).Start()
 	if err != nil {
-		t.Fatalf("starting cluster 0: %v", err)
+		t.Fatalf("starting node 0: %v", err)
 	}
 	defer cluster.GetNode(0).Close()
 	cluster.Nodes[1] = test.NewCommandNode(t, false,
@@ -1430,7 +1431,7 @@ func TestClusterTranslator(t *testing.T) {
 	cluster.GetNode(1).Config.Gossip.Seeds = []string{cluster.GetNode(0).GossipAddress()}
 	err = cluster.GetNode(1).Start()
 	if err != nil {
-		t.Fatalf("starting cluster 1: %v", err)
+		t.Fatalf("starting node 1: %v", err)
 	}
 	defer cluster.GetNode(1).Close()
 
@@ -1469,6 +1470,126 @@ func TestClusterTranslator(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestQueryHistory(t *testing.T) {
+	cluster := test.MustNewCluster(t, 2)
+	cluster.Nodes[0] = test.NewCommandNode(t, true)
+	cluster.GetNode(0).Config.Gossip.Port = "0"
+	err := cluster.GetNode(0).Start()
+	if err != nil {
+		t.Fatalf("starting node 0: %v", err)
+	}
+	defer cluster.GetNode(0).Close()
+
+	cluster.Nodes[1] = test.NewCommandNode(t, false)
+	cluster.GetNode(1).Config.Gossip.Port = "0"
+	cluster.GetNode(1).Config.Gossip.Seeds = []string{cluster.GetNode(0).GossipAddress()}
+	err = cluster.GetNode(1).Start()
+	if err != nil {
+		t.Fatalf("starting node 1: %v", err)
+	}
+	defer cluster.GetNode(1).Close()
+
+	cmd := cluster.GetNode(0)
+	h := cmd.Handler.(*http.Handler).Handler
+
+	w := httptest.NewRecorder()
+
+	test.Do(t, "POST", cmd.URL()+"/index/i0", "")
+	test.Do(t, "POST", cmd.URL()+"/index/i0/field/f0", "")
+	test.Do(t, "POST", cmd.URL()+"/index/i0/query", "Set(0, f0=0)")
+	test.Do(t, "POST", cmd.URL()+"/index/i0/query", "Set(3000000, f0=0)")
+	test.Do(t, "POST", cmd.URL()+"/index/i0/query", "TopN(f0)")
+
+	h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/query-history", nil))
+	if w.Code != gohttp.StatusOK {
+		t.Fatalf("unexpected status code: %d", w.Code)
+	}
+	ret := mustJSONDecodeSlice(t, w.Body)
+
+	for n, r := range ret {
+		fmt.Printf("%d %+v\n", n, r)
+	}
+
+	// verify result length
+	if len(ret) != 7 {
+		// each set query executes on both nodes once
+		// topn query gets added to history on node0 once, node1 twice
+		t.Fatalf("expected list of length 7, got %d", len(ret))
+	}
+
+	// verify sort order
+	if !sort.SliceIsSorted(ret, func(i, j int) bool {
+		// must match the sort in api.PastQueries
+		return ret[i].(map[string]interface{})["age"].(float64) > ret[j].(map[string]interface{})["age"].(float64)
+	}) {
+		t.Fatalf("response list not sorted correctly")
+	}
+
+	// verify response structure
+	queryStatus := ret[4].(map[string]interface{})
+	expectedStrings := map[string]string{
+		"index":  "i0",
+		"nodeID": cluster.GetNode(0).Server.NodeID(),
+		"query":  "TopN(f0)",
+	}
+	for k, exp := range expectedStrings {
+		got, ok := queryStatus[k]
+		if !ok {
+			t.Fatalf("response key '%s' not present", k)
+		}
+		if exp != got {
+			t.Fatalf("response value for key '%s' was '%s', expected '%s'", k, got, exp)
+		}
+	}
+	expectedNumKeys := []string{"age", "runtime"}
+	for _, k := range expectedNumKeys {
+		got, ok := queryStatus[k]
+		if !ok {
+			t.Fatalf("response key '%s' not present", k)
+		}
+		gotint, ok := got.(float64) // ugh
+		if !ok {
+			t.Fatalf("response value for key '%s' %T instead of float64", k, got)
+		}
+		if gotint <= 0 {
+			t.Fatalf("negative value for key '%s'", k)
+		}
+	}
+
+	// verify additional history entries for the TopN call
+	queryStatus = ret[5].(map[string]interface{})
+	expectedStrings = map[string]string{
+		"index":  "i0",
+		"nodeID": cluster.GetNode(1).Server.NodeID(),
+		"query":  "TopN(_field=\"f0\")",
+	}
+	for k, exp := range expectedStrings {
+		got, ok := queryStatus[k]
+		if !ok {
+			t.Fatalf("response key '%s' not present", k)
+		}
+		if exp != got {
+			t.Fatalf("response value for key '%s' was '%s', expected '%s'", k, got, exp)
+		}
+	}
+	queryStatus = ret[6].(map[string]interface{})
+	expectedStrings = map[string]string{
+		"index":  "i0",
+		"nodeID": cluster.GetNode(1).Server.NodeID(),
+		"query":  "TopN(_field=\"f0\", ids=[0])",
+	}
+	for k, exp := range expectedStrings {
+		got, ok := queryStatus[k]
+		if !ok {
+			t.Fatalf("response key '%s' not present", k)
+		}
+		if exp != got {
+			t.Fatalf("response value for key '%s' was '%s', expected '%s'", k, got, exp)
+		}
+	}
+
 }
 
 func mustJSONDecode(t *testing.T, r io.Reader) (ret map[string]interface{}) {
