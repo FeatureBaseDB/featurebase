@@ -666,7 +666,7 @@ func (db *DB) truncate(path string, sz int64) error {
 }
 
 func (db *DB) fsync(f *os.File) error {
-	if !db.FsyncEnabled {
+	if !db.cfg.FsyncEnabled {
 		return nil
 	}
 	return f.Sync()

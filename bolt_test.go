@@ -87,7 +87,7 @@ func mustOpenEmptyBoltWrapper(path string) (w *BoltWrapper, cleaner func()) {
 	var err error
 	fn := boltPath(path)
 	panicOn(os.RemoveAll(fn))
-	ww, err := globalBoltReg.OpenDBWrapper(fn, DetectMemAccessPastTx)
+	ww, err := globalBoltReg.OpenDBWrapper(fn, DetectMemAccessPastTx, nil)
 	panicOn(err)
 	w = ww.(*BoltWrapper)
 

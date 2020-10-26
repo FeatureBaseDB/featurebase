@@ -30,6 +30,7 @@ import (
 
 	"github.com/pilosa/pilosa/v2/hash"
 	"github.com/pilosa/pilosa/v2/rbf"
+	rbfcfg "github.com/pilosa/pilosa/v2/rbf/cfg"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/txkey"
 	"github.com/pkg/errors"
@@ -122,7 +123,7 @@ func boltPath(path string) string {
 // if one does not exist for its bpath. Otherwise it returns
 // the existing instance. This insures only one boltDB
 // per bpath in this pilosa node.
-func (r *boltRegistrar) OpenDBWrapper(path0 string, doAllocZero bool) (DBWrapper, error) {
+func (r *boltRegistrar) OpenDBWrapper(path0 string, doAllocZero bool, rbfcfg *rbfcfg.Config) (DBWrapper, error) {
 	path := boltPath(path0)
 
 	r.mu.Lock()

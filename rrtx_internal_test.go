@@ -28,7 +28,7 @@ func TestRoaring_HasData(t *testing.T) {
 	idx := newIndexWithTempPath(t, "i")
 	defer idx.Close()
 
-	db, err := globalRoaringReg.OpenDBWrapper(idx.path, false)
+	db, err := globalRoaringReg.OpenDBWrapper(idx.path, false, nil)
 	panicOn(err)
 	db.SetHolder(idx.holder)
 

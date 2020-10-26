@@ -26,6 +26,7 @@ import (
 	"sync/atomic"
 
 	"github.com/pilosa/pilosa/v2/rbf"
+	rbfcfg "github.com/pilosa/pilosa/v2/rbf/cfg"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pkg/errors"
 )
@@ -462,7 +463,7 @@ func (r *roaringRegistrar) unregister(w *RoaringWrapper) {
 // openRoaringDB will check the registry and make a new instance only
 // if one does not exist for its path0. Otherwise it returns
 // the existing instance.
-func (r *roaringRegistrar) OpenDBWrapper(path string, doAllocZero bool) (DBWrapper, error) {
+func (r *roaringRegistrar) OpenDBWrapper(path string, doAllocZero bool, cfg *rbfcfg.Config) (DBWrapper, error) {
 
 	r.mu.Lock()
 	defer r.mu.Unlock()

@@ -23,24 +23,23 @@ import (
 	"path/filepath"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/benbjohnson/immutable"
 	"github.com/pilosa/pilosa/v2/syswrap"
+
+	rbfcfg "github.com/pilosa/pilosa/v2/rbf/cfg"
 )
 
 var (
 	ErrClosed = errors.New("rbf: database closed")
 )
 
-const (
-	// Maximum size of a single WAL segment.
-	// May exceed by one page if last page is a bitmap header + bitmap.
-	MaxWALSegmentFileSize = 10 * (1 << 20)
-)
-
 // DB options like 	MaxSize, FsyncEnabled, DoAllocZero
 // can be set before calling DB.Open().
 type DB struct {
+	cfg rbfcfg.Config
+
 	data        []byte           // mmap data
 	file        *os.File         // file descriptor
 	rootRecords []*RootRecord    // cached root records
@@ -58,25 +57,21 @@ type DB struct {
 	// Path represents the path to the database file.
 	Path string
 
-	// The maximum allowed database size. Required by mmap.
-	MaxSize int64
-
-	// Set before calling db.Open()
-	FsyncEnabled bool
-
-	// for mmap correctness testing.
-	DoAllocZero bool
+	lastCheckpoint time.Time
 }
 
 // NewDB returns a new instance of DB.
-func NewDB(path string) *DB {
+// If cfg is nil we will use the rbfcfg.DefaultConfig().
+func NewDB(path string, cfg *rbfcfg.Config) *DB {
+	if cfg == nil {
+		cfg = rbfcfg.NewDefaultConfig()
+	}
 	db := &DB{
-		txs:          make(map[*Tx]struct{}),
-		pageMap:      immutable.NewMap(&uint32Hasher{}),
-		wcache:       make([]byte, MaxWALSegmentFileSize+PageSize),
-		Path:         path,
-		MaxSize:      DefaultMaxSize,
-		FsyncEnabled: true,
+		cfg:     *cfg,
+		txs:     make(map[*Tx]struct{}),
+		pageMap: immutable.NewMap(&uint32Hasher{}),
+		wcache:  make([]byte, cfg.MaxWALSegmentFileSize+PageSize),
+		Path:    path,
 	}
 	return db
 }
@@ -123,7 +118,7 @@ func (db *DB) Open() (err error) {
 	// Open read-only mmap.
 	if f, err := os.OpenFile(db.DataPath(), os.O_RDONLY, 0666); err != nil {
 		return fmt.Errorf("open mmap file: %w", err)
-	} else if db.data, err = syswrap.Mmap(int(f.Fd()), 0, int(db.MaxSize), syscall.PROT_READ, syscall.MAP_SHARED); err != nil {
+	} else if db.data, err = syswrap.Mmap(int(f.Fd()), 0, int(db.cfg.MaxSize), syscall.PROT_READ, syscall.MAP_SHARED); err != nil {
 		f.Close()
 		return fmt.Errorf("open mmap file: %w", err)
 	} else if err := f.Close(); err != nil {
@@ -605,10 +600,15 @@ func (db *DB) begin(writable, exclusive bool) (_ *Tx, err error) {
 	}
 
 	db.mu.Lock()
-	defer db.mu.Unlock()
+	// note: We cannot defer db.mu.Unlock() here because
+	// we call tx.Rollback() before if db.readMetaPage
+	// returns an error, and thus we will deadlock against
+	// ourselves when the Rollback tries to acquire the db.mu.
+	// This is why db.mu.Unlock() is done manually below.
 
 	if !db.opened {
 		cleanup()
+		db.mu.Unlock()
 		return nil, ErrClosed
 	}
 
@@ -617,6 +617,7 @@ func (db *DB) begin(writable, exclusive bool) (_ *Tx, err error) {
 	if exclusive {
 		if err := db.checkpoint(true, &nopLocker{}); err != nil {
 			cleanup()
+			db.mu.Unlock()
 			return nil, err
 		}
 	}
@@ -644,6 +645,9 @@ func (db *DB) begin(writable, exclusive bool) (_ *Tx, err error) {
 	// This page is only written at the end of a dirty transaction.
 	page, err := db.readMetaPage()
 	if err != nil {
+		// we will deadlock in tx.Rollback()
+		// on db.mu.Lock unless we manually db.mu.Unlock first.
+		db.mu.Unlock()
 		tx.Rollback()
 		return nil, err
 	}
@@ -655,6 +659,7 @@ func (db *DB) begin(writable, exclusive bool) (_ *Tx, err error) {
 	// Track transaction with the DB.
 	db.txs[tx] = struct{}{}
 
+	db.mu.Unlock()
 	return tx, nil
 }
 
@@ -679,8 +684,11 @@ func (db *DB) removeTx(tx *Tx) error {
 	// Write pages from WAL to DB.
 	// TODO(bbj): Move this to an async goroutine.
 	if tx.writable {
-		if err := db.checkpoint(false, &nopLocker{}); err != nil {
-			return fmt.Errorf("checkpoint: %w", err)
+		if db.cfg.CheckpointEveryDur == 0 || time.Since(db.lastCheckpoint) > db.cfg.CheckpointEveryDur {
+			if err := db.checkpoint(false, &nopLocker{}); err != nil {
+				return fmt.Errorf("checkpoint: %w", err)
+			}
+			db.lastCheckpoint = time.Now()
 		}
 	}
 

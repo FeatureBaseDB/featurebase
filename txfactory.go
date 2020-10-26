@@ -525,6 +525,10 @@ func NewTxFactory(txsrc string, holderDir string, holder *Holder) (f *TxFactory,
 	}
 	f.dbPerShard = f.NewDBPerShard(types, holderDir, holder)
 
+	if f.hasRBF() {
+		holder.Logger.Printf("rbf config = %#v", holder.cfg.RBFConfig)
+	}
+
 	return f, err
 }
 
@@ -1247,7 +1251,11 @@ func (f *TxFactory) blueGreenOffIfRunningBlueGreen() {
 }
 
 func (f *TxFactory) hasRoaring() bool {
-	return f.types[0] == roaringTxn || f.types[1] == roaringTxn
+	return f.types[0] == roaringTxn || (len(f.types) > 1 && f.types[1] == roaringTxn)
+}
+
+func (f *TxFactory) hasRBF() bool {
+	return f.types[0] == rbfTxn || (len(f.types) > 1 && f.types[1] == rbfTxn)
 }
 
 var _ = (&TxFactory{}).hasRoaring // happy linter
