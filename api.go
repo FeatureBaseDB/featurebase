@@ -2050,12 +2050,32 @@ func (api *API) ActiveQueries(ctx context.Context) ([]ActiveQueryStatus, error) 
 	return api.tracker.ActiveQueries(), nil
 }
 
-func (api *API) PastQueries(ctx context.Context) ([]PastQueryStatus, error) {
+func (api *API) PastQueries(ctx context.Context, remote bool) ([]PastQueryStatus, error) {
 	if err := api.validate(apiPastQueries); err != nil {
 		return nil, errors.Wrap(err, "validating api method")
 	}
-	x := api.tracker.PastQueries()
-	return x, nil
+
+	clusterQueries := api.tracker.PastQueries()
+
+	if !remote {
+		nodes := api.cluster.Nodes()
+		for _, node := range nodes {
+			if node.ID == api.server.nodeID {
+				continue
+			}
+			nodeQueries, err := api.server.defaultClient.GetPastQueries(ctx, &node.URI)
+			if err != nil {
+				return nil, errors.Wrapf(err, "collecting query history from %s", node.URI)
+			}
+			clusterQueries = append(clusterQueries, nodeQueries...)
+		}
+	}
+
+	sort.Slice(clusterQueries, func(i, j int) bool {
+		return clusterQueries[i].Age.Seconds() > clusterQueries[j].Age.Seconds()
+	})
+
+	return clusterQueries, nil
 }
 
 // TranslateIndexDB is an internal function to load the index keys database
