@@ -26,6 +26,7 @@ import (
 	"sync"
 	"time"
 
+	rbfcfg "github.com/pilosa/pilosa/v2/rbf/cfg"
 	"github.com/pilosa/pilosa/v2/roaring"
 )
 
@@ -66,7 +67,7 @@ func newLMDBTestRegistrar() *lmdbRegistrar {
 	}
 }
 
-func (r *lmdbRegistrar) OpenDBWrapper(path0 string, doAllocZero bool) (DBWrapper, error) {
+func (r *lmdbRegistrar) OpenDBWrapper(path string, doAllocZero bool, rbfcfg *rbfcfg.Config) (DBWrapper, error) {
 	panic("lmdb only available on 64-bit arch")
 }
 

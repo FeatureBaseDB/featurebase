@@ -94,6 +94,9 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 	// RowcacheOff
 	flags.BoolVarP((&srv.Config.RowcacheOff), "rowcache-off", "", srv.Config.RowcacheOff, "turn off the rowcache for all backends (reduces memory use)")
 
+	// RBF specific flags. See pilosa/rbf/cfg/cfg.go for definitions.
+	srv.Config.RBFConfig.DefineFlags(flags)
+
 	// Postgres endpoint
 	flags.StringVar(&srv.Config.Postgres.Bind, "postgres.bind", srv.Config.Postgres.Bind, "Address to which to bind a postgres endpoint (leave blank to disable)")
 	SetTLSConfig(flags, "postgres.", &srv.Config.Postgres.TLS.CertificatePath, &srv.Config.Postgres.TLS.CertificateKeyPath, &srv.Config.Postgres.TLS.CACertPath, &srv.Config.Postgres.TLS.SkipVerify, &srv.Config.Postgres.TLS.EnableClientVerification)
@@ -102,4 +105,5 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 	flags.DurationVar((*time.Duration)(&srv.Config.Postgres.WriteTimeout), "postgres.write-timeout", time.Duration(srv.Config.Postgres.WriteTimeout), "Timeout for writes on a postgres connection. (set 0 to disable)")
 	flags.Uint32Var(&srv.Config.Postgres.MaxStartupSize, "postgres.max-startup-size", srv.Config.Postgres.MaxStartupSize, "Maximum acceptable size of a postgres startup packet, in bytes. (set 0 to disable)")
 	flags.Uint16Var(&srv.Config.Postgres.ConnectionLimit, "postgres.connection-limit", srv.Config.Postgres.ConnectionLimit, "Maximum number of simultaneous postgres connections to allow. (set 0 to disable)")
+
 }

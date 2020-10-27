@@ -30,6 +30,7 @@ import (
 	uuid "github.com/satori/go.uuid"
 
 	"github.com/pilosa/pilosa/v2/logger"
+	rbfcfg "github.com/pilosa/pilosa/v2/rbf/cfg"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/stats"
 	"github.com/pkg/errors"
@@ -352,6 +353,14 @@ func OptServerRowcacheOff(rowcacheOff bool) ServerOption {
 	}
 }
 
+// OptServerRBFConfig conveys the RBF flags to the Holder.
+func OptServerRBFConfig(cfg *rbfcfg.Config) ServerOption {
+	return func(s *Server) error {
+		s.holderConfig.RBFConfig = cfg
+		return nil
+	}
+}
+
 // NewServer returns a new instance of Server.
 func NewServer(opts ...ServerOption) (*Server, error) {
 	cluster := newCluster()
@@ -407,6 +416,12 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	s.holder = NewHolder(path, s.holderConfig)
 	s.holder.Stats.SetLogger(s.logger)
 	s.holder.Logger.Printf("RowCacheOff: %v", s.holderConfig.RowcacheOff)
+	cwd, err := os.Getwd()
+	if err != nil {
+		return nil, err
+	}
+	s.holder.Logger.Printf("cwd: %v", cwd)
+	s.holder.Logger.Printf("cmd line: %v", strings.Join(os.Args, " "))
 
 	s.cluster.Path = path
 	s.cluster.logger = s.logger

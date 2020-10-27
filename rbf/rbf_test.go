@@ -66,7 +66,7 @@ func NewDB() *rbf.DB {
 		panic(err)
 	}
 
-	db := rbf.NewDB(path)
+	db := rbf.NewDB(path, nil)
 	return db
 }
 
@@ -104,7 +104,7 @@ func MustReopenDB(tb testing.TB, db *rbf.DB) *rbf.DB {
 		tb.Fatal(err)
 	}
 
-	other := rbf.NewDB(db.Path)
+	other := rbf.NewDB(db.Path, nil)
 	if err := other.Open(); err != nil {
 		tb.Fatal(err)
 	}

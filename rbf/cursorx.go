@@ -166,7 +166,7 @@ func toContainer(l leafCell, tx *Tx) (c *roaring.Container) {
 	orig := l.Data
 	var cpMaybe []byte
 	var mapped bool
-	if EnableRowCache() || tx.db.DoAllocZero {
+	if EnableRowCache() || tx.db.cfg.DoAllocZero {
 		// make a copy, otherwise the rowCache will see corrupted data
 		// or mmapped data that may disappear.
 		cpMaybe = make([]byte, len(orig))

@@ -89,7 +89,7 @@ func mustOpenEmptyLMDBWrapper(path string) (w *LMDBWrapper, cleaner func()) {
 	var err error
 	fn := lmdbPath(path)
 	panicOn(os.RemoveAll(fn))
-	ww, err := globalLMDBReg.OpenDBWrapper(fn, DetectMemAccessPastTx)
+	ww, err := globalLMDBReg.OpenDBWrapper(fn, DetectMemAccessPastTx, nil)
 	panicOn(err)
 	w = ww.(*LMDBWrapper)
 
