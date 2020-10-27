@@ -19,10 +19,13 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"syscall"
 
 	"github.com/pilosa/pilosa/v2/syswrap"
 )
+
+var _ = sort.Search
 
 // WALSegment represents a single file in the WAL.
 type WALSegment struct {
@@ -83,7 +86,7 @@ func (s *WALSegment) Open() (err error) {
 
 	// Default the mmap size to the max size plus a page of padding for bitmap pages.
 	// If the actual size is larger, then increase to that size.
-	mmapSize := int64(MaxWALSegmentFileSize + PageSize)
+	mmapSize := int64(s.db.cfg.MaxWALSegmentFileSize + PageSize)
 	if sz > mmapSize {
 		mmapSize = sz
 	}
@@ -164,8 +167,12 @@ func walSize(segments []WALSegment) int64 {
 
 // readWALPage reads a single page at the given WAL ID.
 func readWALPage(segments []WALSegment, walID int64) ([]byte, error) {
-	// TODO(BBJ): Binary search for segment.
-	for _, s := range segments {
+	n := len(segments)
+	i := sort.Search(n, func(i int) bool {
+		return walID < segments[i].MinWALID
+	})
+	if i > 0 {
+		s := segments[i-1]
 		if walID >= s.MinWALID && walID <= s.MaxWALID() {
 			return s.ReadWALPage(walID)
 		}

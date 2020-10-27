@@ -23,6 +23,7 @@ import (
 	"strings"
 	"sync"
 
+	rbfcfg "github.com/pilosa/pilosa/v2/rbf/cfg"
 	"github.com/pkg/errors"
 )
 
@@ -58,7 +59,7 @@ type DBWrapper interface {
 }
 
 type DBRegistry interface {
-	OpenDBWrapper(path string, doAllocZero bool) (DBWrapper, error)
+	OpenDBWrapper(path string, doAllocZero bool, rbfcfg *rbfcfg.Config) (DBWrapper, error)
 }
 
 type DBShard struct {
@@ -239,6 +240,8 @@ type DBPerShard struct {
 	index2shards map[txtype]map[string]*shardSet
 
 	isBlueGreen bool
+
+	RBFConfig *rbfcfg.Config
 }
 
 func newIndex2Shards() (r map[txtype]map[string]*shardSet) {
@@ -340,6 +343,10 @@ func (per *DBPerShard) LoadExistingDBs() (err error) {
 
 func (txf *TxFactory) NewDBPerShard(types []txtype, holderDir string, holder *Holder) (d *DBPerShard) {
 
+	if holder.cfg == nil || holder.cfg.RBFConfig == nil {
+		panic("must have holder.cfg.RBFConfig set here")
+	}
+
 	useOpenList := 0
 	hasRoaring := false
 	if types[0] == roaringTxn {
@@ -367,6 +374,7 @@ func (txf *TxFactory) NewDBPerShard(types []txtype, holderDir string, holder *Ho
 		hasRoaring:   hasRoaring,
 		isBlueGreen:  len(types) > 1,
 		index2shards: newIndex2Shards(),
+		RBFConfig:    holder.cfg.RBFConfig,
 	}
 	return
 }
@@ -586,7 +594,7 @@ func (per *DBPerShard) GetDBShard(index string, shard uint64, idx *Index) (dbs *
 				panic(fmt.Sprintf("unknown txtyp: '%v'", ty))
 			}
 			path := dbs.pathForType(ty)
-			w, err := registry.OpenDBWrapper(path, DetectMemAccessPastTx)
+			w, err := registry.OpenDBWrapper(path, DetectMemAccessPastTx, per.RBFConfig)
 			panicOn(err)
 			h := idx.Holder()
 			w.SetHolder(h)

@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/pilosa/pilosa/v2/gossip"
+	rbfcfg "github.com/pilosa/pilosa/v2/rbf/cfg"
 	"github.com/pilosa/pilosa/v2/toml"
 	"github.com/pkg/errors"
 )
@@ -202,6 +203,9 @@ type Config struct {
 
 	// RowcacheOff, if true, turns off the row cache for all storage backends.
 	RowcacheOff bool `toml:"rowcache-off"`
+
+	// RBFConfig defines all externally configurable RBF flags.
+	RBFConfig *rbfcfg.Config
 }
 
 // NewConfig returns an instance of Config with default options.
@@ -224,6 +228,8 @@ func NewConfig() *Config {
 
 		WorkerPoolSize:       runtime.NumCPU(),
 		ImportWorkerPoolSize: runtime.NumCPU(),
+
+		RBFConfig: rbfcfg.NewDefaultConfig(),
 	}
 
 	// Cluster config.

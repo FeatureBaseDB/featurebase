@@ -1677,7 +1677,7 @@ func (tx *Tx) writeBitmapWALPage(pgno uint32, page []byte) (walID int64, err err
 func (tx *Tx) ensureWritableWALSegment() error {
 	// Ignore if we still have space in the write cache.
 	writeCacheSize := int64(len(tx.wcache))
-	if len(tx.segments) != 0 && activeWALSegment(tx.segments).Size()+writeCacheSize < MaxWALSegmentFileSize {
+	if len(tx.segments) != 0 && activeWALSegment(tx.segments).Size()+writeCacheSize < int64(tx.db.cfg.MaxWALSegmentFileSize) {
 		return nil
 	}
 

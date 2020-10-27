@@ -31,6 +31,7 @@ import (
 
 	"github.com/pilosa/pilosa/v2/logger"
 	"github.com/pilosa/pilosa/v2/rbf"
+	rbfcfg "github.com/pilosa/pilosa/v2/rbf/cfg"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/stats"
 	"github.com/pilosa/pilosa/v2/testhook"
@@ -201,6 +202,8 @@ type HolderConfig struct {
 	Logger               logger.Logger
 	Txsrc                string
 	RowcacheOff          bool
+
+	RBFConfig *rbfcfg.Config
 }
 
 func DefaultHolderConfig() *HolderConfig {
@@ -215,6 +218,7 @@ func DefaultHolderConfig() *HolderConfig {
 		NewAttrStore:         newNopAttrStore,
 		Logger:               logger.NopLogger,
 		Txsrc:                DefaultTxsrc,
+		RBFConfig:            rbfcfg.NewDefaultConfig(),
 	}
 }
 
@@ -229,6 +233,8 @@ func NewHolder(path string, cfg *HolderConfig) *Holder {
 			// INVAR: have valid txsrc.
 			cfg.Txsrc = txsrc
 		}
+	} else if cfg.RBFConfig == nil {
+		cfg.RBFConfig = rbfcfg.NewDefaultConfig()
 	}
 
 	h := &Holder{

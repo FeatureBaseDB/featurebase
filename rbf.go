@@ -27,6 +27,7 @@ import (
 	"sync/atomic"
 
 	"github.com/pilosa/pilosa/v2/rbf"
+	rbfcfg "github.com/pilosa/pilosa/v2/rbf/cfg"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/txkey"
 	"github.com/pkg/errors"
@@ -36,6 +37,7 @@ import (
 type RbfDBWrapper struct {
 	path string
 	db   *rbf.DB
+	cfg  *rbfcfg.Config
 	reg  *rbfDBRegistrar
 	muDb sync.Mutex
 
@@ -145,7 +147,7 @@ func rbfPath(path string) string {
 // if one does not exist for its path. Otherwise it returns
 // the existing instance. This insures only one RbfDBWrapper
 // per bpath in this pilosa node.
-func (r *rbfDBRegistrar) OpenDBWrapper(path0 string, doAllocZero bool) (DBWrapper, error) {
+func (r *rbfDBRegistrar) OpenDBWrapper(path0 string, doAllocZero bool, cfg *rbfcfg.Config) (DBWrapper, error) {
 	path := rbfPath(path0)
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -154,8 +156,11 @@ func (r *rbfDBRegistrar) OpenDBWrapper(path0 string, doAllocZero bool) (DBWrappe
 		// creates the effect of having only one DB open per pilosa node.
 		return w, nil
 	}
-	db := rbf.NewDB(path)
-	db.DoAllocZero = doAllocZero
+	if cfg == nil {
+		cfg = rbfcfg.NewDefaultConfig()
+		cfg.DoAllocZero = doAllocZero
+	}
+	db := rbf.NewDB(path, cfg)
 
 	w = &RbfDBWrapper{
 		reg:         r,
@@ -163,6 +168,7 @@ func (r *rbfDBRegistrar) OpenDBWrapper(path0 string, doAllocZero bool) (DBWrappe
 		db:          db,
 		doAllocZero: doAllocZero,
 		openTx:      make(map[*RBFTx]bool),
+		cfg:         cfg,
 	}
 	r.unprotectedRegister(w)
 

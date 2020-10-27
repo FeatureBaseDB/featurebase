@@ -228,7 +228,7 @@ func makeBolttestDB(path string, h *Holder, shard uint64) {
 func makeRBFtestDB(path string, h *Holder, shard uint64) {
 	i := uint64(1)
 
-	db := rbf.NewDB(path)
+	db := rbf.NewDB(path, nil)
 	err := db.Open()
 	panicOn(err)
 	defer db.Close()

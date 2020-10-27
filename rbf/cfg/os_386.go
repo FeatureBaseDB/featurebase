@@ -12,11 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// +build !386
-
-package rbf
+package cfg
 
 // DefaultMaxSize is the default mmap size and therefore the maximum allowed
 // size of the database. The size can be increased by updating the DB.MaxSize
 // and reopening the database. This setting mainly affects virtual space usage.
-const DefaultMaxSize = 4 * (1 << 30)
+const DefaultMaxSize = 256 * (1 << 20) // 256MB
