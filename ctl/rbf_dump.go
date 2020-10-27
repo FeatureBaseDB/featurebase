@@ -47,7 +47,7 @@ func NewRBFDumpCommand(stdin io.Reader, stdout, stderr io.Writer) *RBFDumpComman
 // Run executes the export.
 func (cmd *RBFDumpCommand) Run(ctx context.Context) error {
 	// Open database.
-	db := rbf.NewDB(cmd.Path)
+	db := rbf.NewDB(cmd.Path, nil)
 	if err := db.Open(); err != nil {
 		return err
 	}

@@ -42,7 +42,7 @@ func NewRBFCheckCommand(stdin io.Reader, stdout, stderr io.Writer) *RBFCheckComm
 // Run executes the export.
 func (cmd *RBFCheckCommand) Run(ctx context.Context) error {
 	// Open database.
-	db := rbf.NewDB(cmd.Path)
+	db := rbf.NewDB(cmd.Path, nil)
 	if err := db.Open(); err != nil {
 		return err
 	}

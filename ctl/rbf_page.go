@@ -45,7 +45,7 @@ func NewRBFPageCommand(stdin io.Reader, stdout, stderr io.Writer) *RBFPageComman
 // Run executes the export.
 func (cmd *RBFPageCommand) Run(ctx context.Context) error {
 	// Open database.
-	db := rbf.NewDB(cmd.Path)
+	db := rbf.NewDB(cmd.Path, nil)
 	if err := db.Open(); err != nil {
 		return err
 	}
