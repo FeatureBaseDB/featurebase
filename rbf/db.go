@@ -683,6 +683,11 @@ func (db *DB) removeTx(tx *Tx) error {
 
 	// Write pages from WAL to DB.
 	// TODO(bbj): Move this to an async goroutine.
+	// TODO(jea): Make the time-based checkpointing work at all, and update the
+	// comment in cfg/cfg.go for CheckpointEveryDur. Seems that
+	// wal.go readWALPage() can receive a request for a walID that
+	// comes before the segments it is passed if we do not
+	// checkpoint eagerly.
 	if tx.writable {
 		if db.cfg.CheckpointEveryDur == 0 || time.Since(db.lastCheckpoint) > db.cfg.CheckpointEveryDur {
 			if err := db.checkpoint(false, &nopLocker{}); err != nil {
