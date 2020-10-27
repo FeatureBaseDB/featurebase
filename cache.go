@@ -607,13 +607,7 @@ func (p uint64Slice) merge(other []uint64) []uint64 {
 	return ret
 }
 
-// bitmapCache provides an interface for caching full bitmaps.
-type bitmapCache interface {
-	Fetch(id uint64) (*Row, bool)
-	Add(id uint64, b *Row)
-}
-
-// simpleCache implements BitmapCache
+// simpleCache implements a bitmap Rowcache.
 // it is meant to be a short-lived cache for cases where writes are continuing to access
 // the same row within a short time frame (i.e. good for write-heavy loads)
 // A read-heavy use case would cause the cache to get bigger, potentially causing the
@@ -626,6 +620,12 @@ type simpleCache struct {
 func (s *simpleCache) Fetch(id uint64) (*Row, bool) {
 	m, ok := s.cache[id]
 	return m, ok
+}
+
+func newSimpleCache() *simpleCache {
+	return &simpleCache{
+		cache: make(map[uint64]*Row),
+	}
 }
 
 // Add adds the bitmap to the cache, keyed on the id. A nil row means
