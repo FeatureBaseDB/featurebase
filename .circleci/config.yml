@@ -5,7 +5,7 @@ executors:
     parameters:
       version:
         type: string
-        default: "1.14.9"
+        default: "1.14.10"
       resource_class:
         type: string
         default: medium
@@ -84,7 +84,7 @@ jobs:
         default: medium
       golang_version:
         type: string
-        default: "1.14.9"
+        default: "1.14.10"
       shard_width:
         type: string
         default: "20"
@@ -201,9 +201,9 @@ workflows:
             tags:
               only: /^v.*/
       - test:
-          name: test-golang-1.14.9
+          name: test-golang-1.14.10
           resource_class: xlarge
-          golang_version: 1.14.9
+          golang_version: 1.14.10
           requires:
             - setup
           filters:
@@ -216,7 +216,7 @@ workflows:
       #  name: test-golang-<< matrix.golang_version >>
       #  matrix:
       #    parameters:
-      #      golang_version: ["1.14.9", "1.15.3"]
+      #      golang_version: ["1.14.10", "1.15.3"]
       - test:
           name: test-race
           test_make_target: test-race
@@ -248,7 +248,7 @@ workflows:
           requires:
             - linter
             - check-license-headers
-            - test-golang-1.14.9
+            - test-golang-1.14.10
       - dockerhub-upload-unstable:
           context: molecula
           requires:
