@@ -1474,7 +1474,9 @@ func TestClusterTranslator(t *testing.T) {
 
 func TestQueryHistory(t *testing.T) {
 	cluster := test.MustNewCluster(t, 2)
-	cluster.Nodes[0] = test.NewCommandNode(t, true)
+	cluster.Nodes[0] = test.NewCommandNode(t, true, server.OptCommandServerOptions(
+		pilosa.OptServerNodeID("1"),
+	))
 	cluster.GetNode(0).Config.Gossip.Port = "0"
 	err := cluster.GetNode(0).Start()
 	if err != nil {
@@ -1482,7 +1484,9 @@ func TestQueryHistory(t *testing.T) {
 	}
 	defer cluster.GetNode(0).Close()
 
-	cluster.Nodes[1] = test.NewCommandNode(t, false)
+	cluster.Nodes[1] = test.NewCommandNode(t, false, server.OptCommandServerOptions(
+		pilosa.OptServerNodeID("0"),
+	))
 	cluster.GetNode(1).Config.Gossip.Port = "0"
 	cluster.GetNode(1).Config.Gossip.Seeds = []string{cluster.GetNode(0).GossipAddress()}
 	err = cluster.GetNode(1).Start()
