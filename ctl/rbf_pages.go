@@ -29,6 +29,9 @@ type RBFPagesCommand struct {
 	// Filepath to the RBF database.
 	Path string
 
+	// Print the b-tree key with each row.
+	WithTree bool
+
 	// Standard input/output
 	*pilosa.CmdIO
 }
@@ -63,24 +66,71 @@ func (cmd *RBFPagesCommand) Run(ctx context.Context) error {
 	}
 
 	// Write header.
-	fmt.Fprintln(cmd.Stdout, "ID       TYPE       TREE                           EXTRA")
-	fmt.Fprintln(cmd.Stdout, "======== ========== ============================== ====================")
+	fmt.Fprint(cmd.Stdout, "ID       ")
+	fmt.Fprint(cmd.Stdout, "TYPE       ")
+	if cmd.WithTree {
+		fmt.Fprint(cmd.Stdout, "TREE                           ")
+	}
+	fmt.Fprintln(cmd.Stdout, "EXTRA")
+
+	fmt.Fprint(cmd.Stdout, "======== ")
+	fmt.Fprint(cmd.Stdout, "========== ")
+	if cmd.WithTree {
+		fmt.Fprint(cmd.Stdout, "============================== ")
+	}
+	fmt.Fprintln(cmd.Stdout, "====================")
 
 	// Print one line for each page.
 	for pgno, info := range infos {
 		switch info := info.(type) {
 		case *rbf.MetaPageInfo:
-			fmt.Fprintf(cmd.Stdout, "%-8d %-10s %-30q pageN=%d,walid=%d,rootrec=%d,freelist=%d\n", pgno, "meta", "", info.PageN, info.WALID, info.RootRecordPageNo, info.FreelistPageNo)
+			fmt.Fprintf(cmd.Stdout, "%-8d ", pgno)
+			fmt.Fprintf(cmd.Stdout, "%-10s ", "meta")
+			if cmd.WithTree {
+				fmt.Fprintf(cmd.Stdout, "%-30q ", "")
+			}
+			fmt.Fprintf(cmd.Stdout, "pageN=%d,walid=%d,rootrec=%d,freelist=%d\n", info.PageN, info.WALID, info.RootRecordPageNo, info.FreelistPageNo)
+
 		case *rbf.RootRecordPageInfo:
-			fmt.Fprintf(cmd.Stdout, "%-8d %-10s %-30q next=%d\n", pgno, "rootrec", "", info.Next)
+			fmt.Fprintf(cmd.Stdout, "%-8d ", pgno)
+			fmt.Fprintf(cmd.Stdout, "%-10s ", "rootrec")
+			if cmd.WithTree {
+				fmt.Fprintf(cmd.Stdout, "%-30q ", "")
+			}
+			fmt.Fprintf(cmd.Stdout, "next=%d\n", info.Next)
+
 		case *rbf.LeafPageInfo:
-			fmt.Fprintf(cmd.Stdout, "%-8d %-10s %-30q flags=x%x,celln=%d\n", pgno, "leaf", txkeyString(info.Tree), info.Flags, info.CellN)
+			fmt.Fprintf(cmd.Stdout, "%-8d ", pgno)
+			fmt.Fprintf(cmd.Stdout, "%-10s ", "leaf")
+			if cmd.WithTree {
+				fmt.Fprintf(cmd.Stdout, "%-30q ", prefixToString(info.Tree))
+			}
+			fmt.Fprintf(cmd.Stdout, "flags=x%x,celln=%d\n", info.Flags, info.CellN)
+
 		case *rbf.BranchPageInfo:
-			fmt.Fprintf(cmd.Stdout, "%-8d %-10s %-30q flags=x%x,celln=%d\n", pgno, "branch", txkeyString(info.Tree), info.Flags, info.CellN)
+			fmt.Fprintf(cmd.Stdout, "%-8d ", pgno)
+			fmt.Fprintf(cmd.Stdout, "%-10s ", "branch")
+			if cmd.WithTree {
+				fmt.Fprintf(cmd.Stdout, "%-30q ", prefixToString(info.Tree))
+			}
+			fmt.Fprintf(cmd.Stdout, "flags=x%x,celln=%d\n", info.Flags, info.CellN)
+
 		case *rbf.BitmapPageInfo:
-			fmt.Fprintf(cmd.Stdout, "%-8d %-10s %-30q -\n", pgno, "bitmap", info.Tree)
+			fmt.Fprintf(cmd.Stdout, "%-8d ", pgno)
+			fmt.Fprintf(cmd.Stdout, "%-10s ", "bitmap")
+			if cmd.WithTree {
+				fmt.Fprintf(cmd.Stdout, "%-30q ", prefixToString(info.Tree))
+			}
+			fmt.Fprintf(cmd.Stdout, "-\n")
+
 		case *rbf.FreePageInfo:
-			fmt.Fprintf(cmd.Stdout, "%-8d %-10s %-30q -\n", pgno, "free", "")
+			fmt.Fprintf(cmd.Stdout, "%-8d ", pgno)
+			fmt.Fprintf(cmd.Stdout, "%-10s ", "free")
+			if cmd.WithTree {
+				fmt.Fprintf(cmd.Stdout, "%-30q ", "")
+			}
+			fmt.Fprintf(cmd.Stdout, "-\n")
+
 		default:
 			panic(fmt.Sprintf("unexpected page info type %T", info))
 		}
@@ -89,11 +139,11 @@ func (cmd *RBFPagesCommand) Run(ctx context.Context) error {
 	return nil
 }
 
-func txkeyString(s string) (ret string) {
+func prefixToString(s string) (ret string) {
 	defer func() {
 		if err := recover(); err != nil {
 			ret = s
 		}
 	}()
-	return txkey.ToString([]byte(s))
+	return txkey.PrefixToString([]byte(s))
 }

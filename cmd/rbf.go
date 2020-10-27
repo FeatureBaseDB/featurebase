@@ -96,6 +96,9 @@ Prints a line for every page in the database with its type/status.
 			return c.Run(context.Background())
 		},
 	}
+
+	flags := cmd.Flags()
+	flags.BoolVar(&c.WithTree, "with-tree", false, "Display b-tree name for each row")
 	return cmd
 }
 
