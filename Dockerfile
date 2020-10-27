@@ -1,4 +1,4 @@
-FROM golang:1.15.3 as builder
+FROM golang:1.14.10 as builder
 
 ARG BUILD_FLAGS
 ARG MAKE_FLAGS
