@@ -27,6 +27,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/pilosa/pilosa/v2/hash"
+	"github.com/pilosa/pilosa/v2/rbf"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/txkey"
 	"github.com/pkg/errors"
@@ -522,6 +523,8 @@ func NewTxFactory(txsrc string, holderDir string, holder *Holder) (f *TxFactory,
 	if len(types) == 2 {
 		f.blueGreenReg = newBlueGreenReg(types)
 		f.isBlueGreen = true
+		// blue-green can never use the rowCache.
+		rbf.SetRowcacheOn(false)
 	}
 	f.dbPerShard = f.NewDBPerShard(types, holderDir, holder)
 
@@ -536,6 +539,15 @@ func NewTxFactory(txsrc string, holderDir string, holder *Holder) (f *TxFactory,
 // from Holder.Open(), so we find all of our indexes.
 func (f *TxFactory) Open() error {
 	return f.dbPerShard.LoadExistingDBs()
+}
+
+// UseRowCache can be more "global" than Tx at the moment, because
+// we are sharing the same bool flag in rbf at the moment. If
+// this changes then fragment.openStorage() will need a new way
+// to determine if it should use the rowCache. Currently it
+// doesn't have a tx Tx parameter, so we use the Txf instead.
+func (f *TxFactory) UseRowCache() bool {
+	return rbf.EnableRowCache()
 }
 
 // Txo holds the transaction options

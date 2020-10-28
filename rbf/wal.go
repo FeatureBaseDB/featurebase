@@ -171,13 +171,32 @@ func readWALPage(segments []WALSegment, walID int64) ([]byte, error) {
 	i := sort.Search(n, func(i int) bool {
 		return walID < segments[i].MinWALID
 	})
+	minWALID, maxWALID := int64(-1), int64(-1)
 	if i > 0 {
 		s := segments[i-1]
-		if walID >= s.MinWALID && walID <= s.MaxWALID() {
+		minWALID = s.MinWALID
+		maxWALID = s.MaxWALID()
+		if walID >= minWALID && walID <= maxWALID {
 			return s.ReadWALPage(walID)
 		}
 	}
-	return nil, fmt.Errorf("cannot find segment containing WAL page: %d", walID)
+	// ok, we're about to error, which should never happen.
+	// So we can afford to provide detailed diagnostics.
+
+	// Report min and max WALID over all supplied segments.
+	for _, s := range segments {
+		if minWALID < 0 || s.MinWALID < minWALID {
+			minWALID = s.MinWALID
+		}
+		max := s.MaxWALID()
+		if maxWALID < 0 || max > maxWALID {
+			maxWALID = max
+		}
+	}
+	// show all the current segments too.
+	detail := WALSegmentsAsString(segments)
+
+	return nil, fmt.Errorf("cannot find segment containing WAL page: %d; over all supplied segments, minWALID=%v, maxWALID=%v; detail='%v'", walID, minWALID, maxWALID, detail)
 }
 
 func findNextWALMetaPage(segments []WALSegment, walID int64) (metaWALID int64, err error) {
@@ -261,6 +280,14 @@ func DumpWALSegments(segments []WALSegment) {
 	for i, s := range segments {
 		fmt.Printf("[%d] WALIDs=(%d-%d) PageN=%d\n", i, s.MinWALID, s.MaxWALID(), s.PageN)
 	}
+}
+
+func WALSegmentsAsString(segments []WALSegment) (r string) {
+	r = fmt.Sprintf("WAL (%d segments)\n", len(segments))
+	for i, s := range segments {
+		r += fmt.Sprintf("[%d] WALIDs=(%d-%d) PageN=%d\n", i, s.MinWALID, s.MaxWALID(), s.PageN)
+	}
+	return
 }
 
 // FormatWALSegmentPath returns a path for a WAL segment using a WAL ID.
