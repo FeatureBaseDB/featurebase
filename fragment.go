@@ -144,7 +144,7 @@ type fragment struct {
 	CacheSize uint32
 
 	// Cache containing full rows (not just counts).
-	rowCache bitmapCache
+	rowCache *simpleCache
 
 	// Cached checksums for each block.
 	checksums map[int][]byte
@@ -396,9 +396,12 @@ func (f *fragment) inspectStorage(data []byte, file *os.File, newGen generation,
 // (remapping an existing bitmap to match a new backing store).
 func (f *fragment) openStorage(unmarshalData bool) error {
 
+	useRowCache := f.idx.Txf().UseRowCache()
 	if !f.idx.NeedsSnapshot() {
 		f.gen = &NopGeneration{}
-		f.rowCache = &simpleCache{make(map[uint64]*Row)}
+		if useRowCache {
+			f.rowCache = newSimpleCache()
+		}
 		f.currdata = struct{ from, to uintptr }{}
 		f.prevdata = f.currdata
 		return nil // openStorage becomes a noop under RBF, Badger, etc.
@@ -412,7 +415,9 @@ func (f *fragment) openStorage(unmarshalData bool) error {
 		// unmarshal this data in order to have any.
 		unmarshalData = true
 	}
-	f.rowCache = &simpleCache{make(map[uint64]*Row)}
+	if useRowCache {
+		f.rowCache = newSimpleCache()
+	}
 	var storageOp func([]byte, *os.File, generation, bool) (bool, error)
 	if f.holder.Opts.Inspect {
 		// note that this will unmarshal even if we already have
@@ -567,6 +572,9 @@ func (f *fragment) unprotectedRow(tx Tx, rowID uint64) (*Row, error) {
 
 	useRowCache := tx.UseRowCache()
 	if useRowCache {
+		if f.rowCache == nil {
+			f.rowCache = newSimpleCache()
+		}
 		r, ok := f.rowCache.Fetch(rowID)
 		if ok && r != nil {
 			return r, nil
@@ -693,7 +701,9 @@ func (f *fragment) unprotectedSetBit(tx Tx, rowID, columnID uint64) (changed boo
 	}
 	// Drop the rowCache entry; it's wrong, and we don't want to force
 	// a new copy if no one's reading it.
-	f.rowCache.Add(rowID, nil)
+	if tx.UseRowCache() && f.rowCache != nil {
+		f.rowCache.Add(rowID, nil)
+	}
 
 	f.stats.Count(MetricSetBit, 1, 1.0)
 
@@ -756,7 +766,9 @@ func (f *fragment) unprotectedClearBit(tx Tx, rowID, columnID uint64) (changed b
 	}
 	// Drop the rowCache entry; it's wrong, and we don't want to force
 	// a new copy if no one's reading it.
-	f.rowCache.Add(rowID, nil)
+	if tx.UseRowCache() && f.rowCache != nil {
+		f.rowCache.Add(rowID, nil)
+	}
 
 	f.stats.Count(MetricClearBit, 1, 1.0)
 
@@ -823,7 +835,9 @@ func (f *fragment) unprotectedSetRow(tx Tx, row *Row, rowID uint64) (changed boo
 	}
 
 	// invalidate rowCache for this row.
-	f.rowCache.Add(rowID, nil)
+	if tx.UseRowCache() && f.rowCache != nil {
+		f.rowCache.Add(rowID, nil)
+	}
 
 	// Snapshot storage.
 	f.holder.SnapshotQueue.Enqueue(f)
@@ -872,7 +886,9 @@ func (f *fragment) unprotectedClearRow(tx Tx, rowID uint64) (changed bool, err e
 
 	// Clear the row in cache.
 	f.cache.Add(rowID, 0)
-	f.rowCache.Add(rowID, nil)
+	if tx.UseRowCache() && f.rowCache != nil {
+		f.rowCache.Add(rowID, nil)
+	}
 
 	// Snapshot storage.
 	f.holder.SnapshotQueue.Enqueue(f)
@@ -2293,6 +2309,8 @@ func (f *fragment) importPositions(tx Tx, set, clear []uint64, rowSet map[uint64
 	if f.storage != nil {
 		wp = &f.storage.OpWriter
 	}
+	useRowCache := tx.UseRowCache()
+
 	doFunc := func() error {
 		if len(set) > 0 {
 			f.stats.Count(MetricImportingN, int64(len(set)), 1)
@@ -2334,8 +2352,9 @@ func (f *fragment) importPositions(tx Tx, set, clear []uint64, rowSet map[uint64
 
 				f.cache.BulkAdd(rowID, n)
 			}
-
-			f.rowCache.Add(rowID, nil)
+			if useRowCache && f.rowCache != nil {
+				f.rowCache.Add(rowID, nil)
+			}
 		}
 
 		if f.CacheType != CacheTypeNone {
@@ -2465,8 +2484,10 @@ func (f *fragment) importValueSmallWrite(tx Tx, columnIDs []uint64, values []int
 		return errors.Wrap(err, "importing positions")
 	}
 
-	// Reset the rowCache.
-	f.rowCache = &simpleCache{make(map[uint64]*Row)}
+	if tx.UseRowCache() {
+		// Reset the rowCache.
+		f.rowCache = newSimpleCache()
+	}
 
 	return nil
 }
@@ -2515,8 +2536,10 @@ func (f *fragment) importValue(tx Tx, columnIDs []uint64, values []int64, bitDep
 	f.opN += totalChanges
 	f.ops++
 
-	// Reset the rowCache.
-	f.rowCache = &simpleCache{make(map[uint64]*Row)}
+	if tx.UseRowCache() {
+		// Reset the rowCache.
+		f.rowCache = newSimpleCache()
+	}
 
 	// in theory, this should probably have been queued anyway, but if enough
 	// of the bits matched existing bits, we'll be under our opN estimate, and
@@ -2541,6 +2564,8 @@ func (f *fragment) importRoaring(ctx context.Context, tx Tx, data []byte, clear 
 func (f *fragment) unprotectedImportRoaring(ctx context.Context, tx Tx, data []byte, clear bool) error {
 	rowSize := uint64(1 << shardVsContainerExponent)
 	span, ctx := tracing.StartSpanFromContext(ctx, "importRoaring.ImportRoaringBits")
+
+	useRowCache := tx.UseRowCache()
 	var changed int
 	var rowSet map[uint64]int
 	var wp *io.Writer
@@ -2570,7 +2595,9 @@ func (f *fragment) unprotectedImportRoaring(ctx context.Context, tx Tx, data []b
 		if changes == 0 {
 			continue
 		}
-		f.rowCache.Add(rowID, nil)
+		if useRowCache && f.rowCache != nil {
+			f.rowCache.Add(rowID, nil)
+		}
 		if updateCache {
 			anyChanged = true
 			if changes < 0 {
@@ -3208,8 +3235,14 @@ func (f *fragment) intRowIterator(tx Tx, wrap bool, filters ...rowFilter) (rowIt
 	// accumulator [column ID] -> [int value]
 	acc := make(map[uint64]int64)
 
-	f.mu.RLock()
-	defer f.mu.RUnlock()
+	if tx.UseRowCache() {
+		// needs a write lock since it will update the f.rowCache
+		f.mu.Lock()
+		defer f.mu.Unlock()
+	} else {
+		f.mu.RLock()
+		defer f.mu.RUnlock()
+	}
 	if err := f.foreachRow(tx, filters, func(rid uint64) error {
 		// skip exist(0) and sign(1) rows
 		if rid == bsiExistsBit || rid == bsiSignBit {

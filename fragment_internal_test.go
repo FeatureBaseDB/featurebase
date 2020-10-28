@@ -432,6 +432,7 @@ func TestFragment_SetValue(t *testing.T) {
 		f, idx, tx := mustOpenFragment(t, "i", "f", viewStandard, 0, "")
 		_ = idx
 		defer f.Clean(t)
+		defer tx.Rollback()
 
 		// Set value.
 		if changed, err := f.setValue(tx, 100, 10, 20); err != nil {
