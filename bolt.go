@@ -145,6 +145,28 @@ func (r *boltRegistrar) OpenDBWrapper(path0 string, doAllocZero bool, rbfcfg *rb
 		return nil, errors.Wrapf(err, fmt.Sprintf("open bolt path '%v'", path))
 	}
 
+	// docs on fsync from https://godoc.org/github.com/etcd-io/bbolt
+	//
+	// Setting the NoSync flag will cause the database to skip fsync()
+	// calls after each commit. This can be useful when bulk loading data
+	// into a database and you can restart the bulk load in the event of
+	// a system failure or database corruption. Do not set this flag for
+	// normal use.
+	//
+	// If the package global IgnoreNoSync constant is true, this value is
+	// ignored.  See the comment on that constant for more details.
+	//
+	// THIS IS UNSAFE. PLEASE USE WITH CAUTION.
+	//	NoSync bool
+
+	// When true, skips syncing freelist to disk. This improves the database
+	// write performance under normal operation, but requires a full database
+	// re-sync during recovery.
+	// NoFreelistSync bool
+
+	//db.NoSync = true
+	//db.NoFreelistSync = true
+
 	err = db.Update(func(tx *bolt.Tx) (err error) {
 		_, err = tx.CreateBucketIfNotExists(bucketCT)
 		return

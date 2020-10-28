@@ -1308,9 +1308,12 @@ func (f *TxFactory) green2blue(holder *Holder) (err error) {
 
 	if hasData {
 		verifyInsteadOfCopy = true
+	} else {
+		holder.Logger.Printf("bitmap-backend migration starting: populating %v from %v", blueDest, greenSrc)
+		defer holder.Logger.Printf("bitmap-backend migration done    : populated  %v from %v", blueDest, greenSrc)
 	}
 
-	for _, idx := range idxs {
+	for k, idx := range idxs {
 
 		// scan directories
 		blueShards, err := f.dbPerShard.TypedDBPerShardGetShardsForIndex(blueDest, idx, "", false)
@@ -1342,6 +1345,7 @@ func (f *TxFactory) green2blue(holder *Holder) (err error) {
 			}
 		}
 
+		progressCount := 0
 		for shard := range greenShards {
 
 			dbs, err := f.dbPerShard.GetDBShard(idx.name, shard, idx)
@@ -1360,6 +1364,10 @@ func (f *TxFactory) green2blue(holder *Holder) (err error) {
 				}
 			} else {
 				// the main copy work
+				progressCount++
+				holder.Logger.Printf("migration progress on index '%v' (%v of %v): on shard %v of %v",
+					k+1, len(idxs), idx.name, progressCount, len(greenShards))
+
 				err = dbs.populateBlueFromGreen()
 				if err != nil {
 					return errors.Wrap(err,

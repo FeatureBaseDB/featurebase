@@ -2064,7 +2064,7 @@ func (f *fragment) Blocks() ([]FragmentBlock, error) {
 
 		// Cache checksum.
 		chksum := h.Sum()
-		f.checksums[h.blockID] = chksum
+		f.checksums[h.blockID] = chksum // the only place checksums is added to.
 
 		// Append block.
 		a = append(a, FragmentBlock{

@@ -203,7 +203,8 @@ type HolderConfig struct {
 	Txsrc                string
 	RowcacheOff          bool
 
-	RBFConfig *rbfcfg.Config
+	RBFConfig           *rbfcfg.Config
+	AntiEntropyInterval time.Duration
 }
 
 func DefaultHolderConfig() *HolderConfig {
@@ -651,8 +652,6 @@ func (h *Holder) Open() error {
 		return errors.Wrap(err, "processing foreign index fields")
 	}
 
-	h.Logger.Printf("open holder: complete")
-
 	h.Stats.Open()
 
 	h.opened.Close()
@@ -668,6 +667,8 @@ func (h *Holder) Open() error {
 		return errors.Wrap(err, "Holder.Open h.txf.green2blue(h)")
 	}
 	h.txf.blueGreenOnIfRunningBlueGreen()
+
+	h.Logger.Printf("open holder: complete")
 
 	return nil
 
