@@ -55,7 +55,8 @@ const (
 	PageTypeRootRecord   = 1
 	PageTypeLeaf         = 2
 	PageTypeBranch       = 4
-	PageTypeBitmapHeader = 8 // Only used by the WAL for marking next page
+	PageTypeBitmapHeader = 8  // Only used by the WAL for marking next page
+	PageTypeBitmap       = 16 // Only used internally when walking the b-tree
 )
 
 // Meta commit/rollback flags.
@@ -72,6 +73,24 @@ const (
 	ContainerTypeBitmap
 	ContainerTypeBitmapPtr
 )
+
+// ContainerTypeString returns a string representation of the container type.
+func ContainerTypeString(typ int) string {
+	switch typ {
+	case ContainerTypeNone:
+		return "none"
+	case ContainerTypeArray:
+		return "array"
+	case ContainerTypeRLE:
+		return "rle"
+	case ContainerTypeBitmap:
+		return "bitmap"
+	case ContainerTypeBitmapPtr:
+		return "bitmap-ptr"
+	default:
+		return fmt.Sprintf("unknown<%d>", typ)
+	}
+}
 
 const (
 	rootRecordPageHeaderSize = 12
@@ -333,21 +352,25 @@ func (c *leafCell) Values(tx *Tx) []uint16 {
 		a = a[:n]
 		return a
 	case ContainerTypeBitmapPtr:
-		a := make([]uint16, 0, BitmapN*64)
 		_, bm, _ := tx.leafCellBitmap(toPgno(c.Data))
-		for i, v := range bm {
-			for j := uint(0); j < 64; j++ {
-				if v&(1<<j) != 0 {
-					a = append(a, (uint16(i)*64)+uint16(j))
-				}
-			}
-		}
-		return a
+		return bitmapValues(bm)
 	case ContainerTypeNone:
 		return []uint16{}
 	default:
 		panic(fmt.Sprintf("invalid container type: %d", c.Type))
 	}
+}
+
+func bitmapValues(bm []uint64) []uint16 {
+	a := make([]uint16, 0, BitmapN*64)
+	for i, v := range bm {
+		for j := uint(0); j < 64; j++ {
+			if v&(1<<j) != 0 {
+				a = append(a, (uint16(i)*64)+uint16(j))
+			}
+		}
+	}
+	return a
 }
 
 // firstValue the first value from the container.
