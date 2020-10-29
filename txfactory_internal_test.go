@@ -272,6 +272,10 @@ func Test_TxFactory_verifyBlueEqualsGreen(t *testing.T) {
 			if blue == green {
 				continue
 			}
+			if blue == "roaring" {
+				// not supported
+				continue
+			}
 			blue_green := blue + "_" + green
 
 			// =============================
