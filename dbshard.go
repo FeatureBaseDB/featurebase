@@ -698,6 +698,21 @@ func (per *DBPerShard) TypedDBPerShardGetShardsForIndex(ty txtype, idx *Index, r
 	per.Mu.Lock()
 	defer per.Mu.Unlock()
 
+	if ty == roaringTxn && roaringViewPath != "" {
+		rx := &RoaringTx{
+			Index: idx,
+		}
+		sos, err := rx.SliceOfShards("", "", "", roaringViewPath)
+		if err != nil {
+			return nil, err
+		}
+		shardMap = make(map[uint64]bool)
+		for _, shard := range sos {
+			shardMap[shard] = true
+		}
+		return shardMap, nil
+	}
+
 	i2ss, ok := per.index2shards[ty]
 	if !ok {
 		// index -> shardSet
