@@ -118,10 +118,17 @@ func Test_TxFactory_UpdateBlueFromGreen_OnStartup(t *testing.T) {
 
 	checked := []string{"lmdb", "roaring", "rbf"}
 
+	expectError := false
 	for _, blue := range checked {
 		for _, green := range checked {
 			if blue == green {
 				continue
+			}
+			if blue == "roaring" {
+				// not supported
+				expectError = true
+			} else {
+				expectError = false
 			}
 			blue_green := blue + "_" + green
 			//vv("setting blue_green to '%v'", blue_green)
@@ -230,7 +237,14 @@ func Test_TxFactory_UpdateBlueFromGreen_OnStartup(t *testing.T) {
 			h4 := NewHolder(path, nil)
 
 			//vv("about to h4.Open we should populate blue from green")
-			panicOn(h4.Open())
+			err = h4.Open()
+			if expectError {
+				if err == nil {
+					panic("expected error since migration to roaring not supported")
+				}
+			} else {
+				panicOn(err)
+			}
 
 			testMustHaveBit(t, h4, "i0", "f", rowID, colID)
 			testMustHaveBit(t, h4, "i1", "f", 100, 200)
