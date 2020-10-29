@@ -25,6 +25,7 @@ import (
 	"sync"
 	"syscall"
 	"text/tabwriter"
+	"time"
 
 	"github.com/pilosa/pilosa/v2/hash"
 	"github.com/pilosa/pilosa/v2/rbf"
@@ -1279,6 +1280,17 @@ func (f *TxFactory) blueHasData() (hasData bool, err error) {
 	return f.dbPerShard.HasData(0)
 }
 
+func (f *TxFactory) greenHasData() (hasData bool, err error) {
+	n := len(f.types)
+	switch n {
+	case 1:
+		return f.dbPerShard.HasData(0)
+	case 2:
+		return f.dbPerShard.HasData(1)
+	}
+	panic(fmt.Sprintf("unsupported len(f.types): %v. Must be 1 or 2.", n))
+}
+
 // green2blue is called at the very end of Holder.Open(), so
 // we know that the holder is ready to go, knowing its holder.Indexes(), fields,
 // view, shards, and other metadata if any.
@@ -1297,20 +1309,42 @@ func (f *TxFactory) green2blue(holder *Holder) (err error) {
 
 	blueDest := f.types[0]
 	greenSrc := f.types[1]
+
+	if blueDest == roaringTxn {
+		return fmt.Errorf("error: cannot migrate to 'roaring': not implemented.")
+	}
+
 	idxs := holder.Indexes()
 
 	verifyInsteadOfCopy := false
 
-	hasData, err := f.blueHasData()
+	blueHasData, err := f.blueHasData()
 	if err != nil {
-		return errors.Wrap(err, "TxFactory.green2blue DataSize(0)")
+		return errors.Wrap(err, "TxFactory.green2blue f.blueHasData()")
 	}
 
-	if hasData {
+	greenHasData, err := f.greenHasData()
+	if err != nil {
+		return errors.Wrap(err, "TxFactory.green2blue f.greenHasData()")
+	}
+	if !blueHasData && !greenHasData {
+		holder.Logger.Printf("no data in blue or green. No migration or verification to do.")
+		return nil
+	}
+	// INVAR: blue has data.
+	if !greenHasData {
+		holder.Logger.Printf("error: cannot migrate from green '%v' because it has no data in it.", greenSrc)
+		return fmt.Errorf("error: cannot migrate from green '%v' because it has no data in it.", greenSrc)
+	}
+
+	if blueHasData {
 		verifyInsteadOfCopy = true
+	} else {
+		holder.Logger.Printf("bitmap-backend migration starting: populating %v from %v", blueDest, greenSrc)
+		defer holder.Logger.Printf("bitmap-backend migration done    : populated  %v from %v", blueDest, greenSrc)
 	}
 
-	for _, idx := range idxs {
+	for k, idx := range idxs {
 
 		// scan directories
 		blueShards, err := f.dbPerShard.TypedDBPerShardGetShardsForIndex(blueDest, idx, "", false)
@@ -1342,6 +1376,8 @@ func (f *TxFactory) green2blue(holder *Holder) (err error) {
 			}
 		}
 
+		lastProgress := time.Now()
+		progressCount := 0
 		for shard := range greenShards {
 
 			dbs, err := f.dbPerShard.GetDBShard(idx.name, shard, idx)
@@ -1360,6 +1396,12 @@ func (f *TxFactory) green2blue(holder *Holder) (err error) {
 				}
 			} else {
 				// the main copy work
+				progressCount++
+				if progressCount == 1 || time.Since(lastProgress) > time.Second {
+					holder.Logger.Printf("migration progress on index '%v' (%v of %v): on shard %v of %v",
+						idx.name, k+1, len(idxs), progressCount, len(greenShards))
+					lastProgress = time.Now()
+				}
 				err = dbs.populateBlueFromGreen()
 				if err != nil {
 					return errors.Wrap(err,

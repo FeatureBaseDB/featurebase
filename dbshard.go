@@ -303,6 +303,10 @@ func newShardSet() *shardSet {
 func (per *DBPerShard) HasData(which int) (hasData bool, err error) {
 	// has to aggregate across all available DBShard for each index and shard.
 
+	if per.types[which] == roaringTxn {
+		return per.RoaringHasData()
+	}
+
 	for _, v := range per.Flatmap {
 		hasData, err = v.W[which].HasData()
 		if err != nil {
@@ -313,6 +317,21 @@ func (per *DBPerShard) HasData(which int) (hasData bool, err error) {
 		}
 	}
 	return
+}
+
+func (per *DBPerShard) RoaringHasData() (bool, error) {
+	idxs := per.holder.Indexes()
+	const requireData = true
+	for _, idx := range idxs {
+		shards, err := per.TypedDBPerShardGetShardsForIndex(roaringTxn, idx, "", requireData)
+		if err != nil {
+			return false, err
+		}
+		if len(shards) > 0 {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (per *DBPerShard) ListOpenString() (r string) {

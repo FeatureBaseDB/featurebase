@@ -401,6 +401,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 			return nil, errors.Wrap(err, "applying option")
 		}
 	}
+	s.holderConfig.AntiEntropyInterval = s.antiEntropyInterval
 
 	// set up executor after server opts have been processed
 	executorOpts := []executorOption{optExecutorInternalQueryClient(s.defaultClient)}
