@@ -1280,6 +1280,17 @@ func (f *TxFactory) blueHasData() (hasData bool, err error) {
 	return f.dbPerShard.HasData(0)
 }
 
+func (f *TxFactory) greenHasData() (hasData bool, err error) {
+	n := len(f.types)
+	switch n {
+	case 1:
+		return f.dbPerShard.HasData(0)
+	case 2:
+		return f.dbPerShard.HasData(1)
+	}
+	panic(fmt.Sprintf("unsupported len(f.types): %v. Must be 1 or 2.", n))
+}
+
 // green2blue is called at the very end of Holder.Open(), so
 // we know that the holder is ready to go, knowing its holder.Indexes(), fields,
 // view, shards, and other metadata if any.
@@ -1302,12 +1313,20 @@ func (f *TxFactory) green2blue(holder *Holder) (err error) {
 
 	verifyInsteadOfCopy := false
 
-	hasData, err := f.blueHasData()
+	blueHasData, err := f.blueHasData()
 	if err != nil {
-		return errors.Wrap(err, "TxFactory.green2blue DataSize(0)")
+		return errors.Wrap(err, "TxFactory.green2blue f.blueHasData()")
 	}
 
-	if hasData {
+	greenHasData, err := f.greenHasData()
+	if err != nil {
+		return errors.Wrap(err, "TxFactory.green2blue f.greenHasData()")
+	}
+	if !greenHasData {
+		return fmt.Errorf("error: cannot migrate from green '%v' because it has no data in it.", greenSrc)
+	}
+
+	if blueHasData {
 		verifyInsteadOfCopy = true
 	} else {
 		holder.Logger.Printf("bitmap-backend migration starting: populating %v from %v", blueDest, greenSrc)
