@@ -1309,6 +1309,11 @@ func (f *TxFactory) green2blue(holder *Holder) (err error) {
 
 	blueDest := f.types[0]
 	greenSrc := f.types[1]
+
+	if blueDest == roaringTxn {
+		return fmt.Errorf("error: cannot migration to 'roaring': not implemented.")
+	}
+
 	idxs := holder.Indexes()
 
 	verifyInsteadOfCopy := false
