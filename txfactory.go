@@ -1307,6 +1307,8 @@ func (f *TxFactory) green2blue(holder *Holder) (err error) {
 		return nil
 	}
 
+	holder.Logger.Printf("green2blue analysis begins.")
+
 	blueDest := f.types[0]
 	greenSrc := f.types[1]
 

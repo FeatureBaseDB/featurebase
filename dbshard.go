@@ -698,6 +698,21 @@ func (per *DBPerShard) TypedDBPerShardGetShardsForIndex(ty txtype, idx *Index, r
 	per.Mu.Lock()
 	defer per.Mu.Unlock()
 
+	if ty == roaringTxn && roaringViewPath != "" {
+		rx := &RoaringTx{
+			Index: idx,
+		}
+		sos, err := rx.SliceOfShards("", "", "", roaringViewPath)
+		if err != nil {
+			return nil, err
+		}
+		shardMap = make(map[uint64]bool)
+		for _, shard := range sos {
+			shardMap[shard] = true
+		}
+		return shardMap, nil
+	}
+
 	i2ss, ok := per.index2shards[ty]
 	if !ok {
 		// index -> shardSet
@@ -719,32 +734,24 @@ func (per *DBPerShard) TypedDBPerShardGetShardsForIndex(ty txtype, idx *Index, r
 	// Upon return, cache the setOfShards value and reuse it next time
 
 	if ty == roaringTxn {
+		// INVAR: roaringViewPath == "", because the other case is
+		// handled above.
 		rx := &RoaringTx{
 			Index: idx,
 		}
-		if roaringViewPath == "" {
-			fields := idx.Fields()
-			for _, field := range fields {
-				for _, view := range field.views() {
-					sos, err := rx.SliceOfShards("", "", "", view.path)
-					if err != nil {
-						return nil,
-							errors.Wrap(err, fmt.Sprintf(
-								"TypedDBPerShardGetLocalShardsForIndex roaringTxn view.path='%v'", view.path))
-					}
-					for _, shard := range sos {
-						setOfShards.add(shard)
-					}
+		fields := idx.Fields()
+		for _, field := range fields {
+			for _, view := range field.views() {
+				sos, err := rx.SliceOfShards("", "", "", view.path)
+				if err != nil {
+					return nil,
+						errors.Wrap(err, fmt.Sprintf(
+							"TypedDBPerShardGetLocalShardsForIndex roaringTxn view.path='%v'", view.path))
+				}
+				for _, shard := range sos {
+					setOfShards.add(shard)
 				}
 			}
-			return setOfShards.CloneMaybe(), nil
-		}
-		sos, err := rx.SliceOfShards("", "", "", roaringViewPath)
-		if err != nil {
-			return nil, err
-		}
-		for _, shard := range sos {
-			setOfShards.add(shard)
 		}
 		return setOfShards.CloneMaybe(), nil
 	}
