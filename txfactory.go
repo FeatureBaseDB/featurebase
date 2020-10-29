@@ -25,6 +25,7 @@ import (
 	"sync"
 	"syscall"
 	"text/tabwriter"
+	"time"
 
 	"github.com/pilosa/pilosa/v2/hash"
 	"github.com/pilosa/pilosa/v2/rbf"
@@ -1345,6 +1346,7 @@ func (f *TxFactory) green2blue(holder *Holder) (err error) {
 			}
 		}
 
+		lastProgress := time.Now()
 		progressCount := 0
 		for shard := range greenShards {
 
@@ -1365,9 +1367,11 @@ func (f *TxFactory) green2blue(holder *Holder) (err error) {
 			} else {
 				// the main copy work
 				progressCount++
-				holder.Logger.Printf("migration progress on index '%v' (%v of %v): on shard %v of %v",
-					k+1, len(idxs), idx.name, progressCount, len(greenShards))
-
+				if progressCount == 1 || time.Since(lastProgress) > time.Second {
+					holder.Logger.Printf("migration progress on index '%v' (%v of %v): on shard %v of %v",
+						idx.name, k+1, len(idxs), progressCount, len(greenShards))
+					lastProgress = time.Now()
+				}
 				err = dbs.populateBlueFromGreen()
 				if err != nil {
 					return errors.Wrap(err,
