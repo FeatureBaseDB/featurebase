@@ -1327,7 +1327,7 @@ func (f *TxFactory) green2blue(holder *Holder) (err error) {
 	if err != nil {
 		return errors.Wrap(err, "TxFactory.green2blue f.greenHasData()")
 	}
-	if !greenHasData {
+	if blueHasData && !greenHasData {
 		holder.Logger.Printf("error: cannot migrate from green '%v' because it has no data in it.", greenSrc)
 		return fmt.Errorf("error: cannot migrate from green '%v' because it has no data in it.", greenSrc)
 	}
