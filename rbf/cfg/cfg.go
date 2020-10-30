@@ -48,7 +48,7 @@ func NewDefaultConfig() *Config {
 		MaxSize:               DefaultMaxSize,
 		FsyncEnabled:          true,
 		CheckpointEveryDur:    10 * time.Second,
-		MaxWALSegmentFileSize: 1 << 16,
+		MaxWALSegmentFileSize: 1 << 20,
 	}
 }
 
