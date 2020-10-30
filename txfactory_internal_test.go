@@ -74,6 +74,7 @@ func Test_TxFactory_Qcx_query_context(t *testing.T) {
 			finisher(nil) // hit the write tx.Commit path
 			// commit the change, and verify it is still there
 			panicOn(qcx.Finish())
+			qcx.Reset()
 
 			tx, finread := qcx.GetTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: f.shard})
 			if n := f.mustRow(tx, 120).Count(); n != 2 {
@@ -83,6 +84,7 @@ func Test_TxFactory_Qcx_query_context(t *testing.T) {
 			}
 			finread(nil) // no-op on reads that are in a group, so must qcx.Abort() to stop them.
 			qcx.Abort()
+			qcx.Reset()
 		}
 	}
 	N := 1000
