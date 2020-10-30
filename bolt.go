@@ -183,6 +183,8 @@ func (r *boltRegistrar) OpenDBWrapper(path0 string, doAllocZero bool, rbfcfg *rb
 		path:        path,
 		doAllocZero: doAllocZero,
 		openTx:      make(map[*BoltTx]bool),
+
+		DeleteEmptyContainer: true,
 	}
 	r.unprotectedRegister(w)
 

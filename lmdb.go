@@ -247,6 +247,8 @@ func (r *lmdbRegistrar) OpenDBWrapper(path0 string, doAllocZero bool, rbfcfg *rb
 		dbi:         dbi,
 		doAllocZero: doAllocZero,
 		openTx:      make(map[*LMDBTx]bool),
+
+		DeleteEmptyContainer: true,
 	}
 	r.unprotectedRegister(w)
 
