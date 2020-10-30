@@ -46,7 +46,7 @@ const (
 // DefaultTxsrc is set here. pilosa/server/config.go references it
 // to set the default for pilosa server exeutable.
 // Can be overridden with env variable PILOSA_TXSRC for testing.
-const DefaultTxsrc = RBFTxn
+const DefaultTxsrc = BoltTxn
 
 // DetectMemAccessPastTx true helps us catch places in api and executor
 // where mmapped memory is being accessed after the point in time
