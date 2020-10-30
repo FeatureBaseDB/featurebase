@@ -666,6 +666,7 @@ func (h *Holder) Open() error {
 	if err := h.txf.green2blue(h); err != nil {
 		return errors.Wrap(err, "Holder.Open h.txf.green2blue(h)")
 	}
+
 	h.txf.blueGreenOnIfRunningBlueGreen()
 
 	h.Logger.Printf("open holder: complete")
