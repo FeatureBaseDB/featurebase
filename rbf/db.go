@@ -628,6 +628,8 @@ func (db *DB) begin(writable, exclusive bool) (_ *Tx, err error) {
 		pageMap:     db.pageMap,
 		writable:    writable,
 		exclusive:   exclusive,
+
+		DeleteEmptyContainer: true,
 	}
 	if writable {
 		tx.wcache = db.wcache[:0]
