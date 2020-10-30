@@ -26,6 +26,7 @@ import (
 	"testing"
 
 	"github.com/pilosa/pilosa/v2/rbf"
+	rbfcfg "github.com/pilosa/pilosa/v2/rbf/cfg"
 )
 
 var quickCheckN *int = flag.Int("quickchecks", 10, "The number of iterations for each quickcheck")
@@ -60,20 +61,24 @@ func TestReadWriteRootRecord(t *testing.T) {
 }
 
 // NewDB returns a new instance of DB with a temporary path.
-func NewDB() *rbf.DB {
+func NewDB(cfg ...*rbfcfg.Config) *rbf.DB {
 	path, err := ioutil.TempDir("", "")
 	if err != nil {
 		panic(err)
 	}
 
-	db := rbf.NewDB(path, nil)
+	var cfg0 *rbfcfg.Config
+	if len(cfg) > 0 {
+		cfg0 = cfg[0]
+	}
+	db := rbf.NewDB(path, cfg0)
 	return db
 }
 
 // MustOpenDB returns a db opened on a temporary file. On error, fail test.
-func MustOpenDB(tb testing.TB) *rbf.DB {
+func MustOpenDB(tb testing.TB, cfg ...*rbfcfg.Config) *rbf.DB {
 	tb.Helper()
-	db := NewDB()
+	db := NewDB(cfg...)
 	if err := db.Open(); err != nil {
 		tb.Fatal(err)
 	}

@@ -238,10 +238,9 @@ func (db *DB) checkpoint(exclusive bool, mu sync.Locker) error {
 		return err
 	}
 	walID := readMetaWALID(page)
-	maxCheckpointedWALID := walID
 
 	// Determine the high water mark for WAL pages that can be copied.
-	minActiveWALID := db.minActiveWALID()
+	writerWALID := db.writerWALID()
 
 	// Loop over each transaction
 	walID++
@@ -257,7 +256,7 @@ func (db *DB) checkpoint(exclusive bool, mu sync.Locker) error {
 
 		// Loop over pages in the transaction.
 		for ; walID <= metaWALID; walID++ {
-			canCheckpoint := exclusive || minActiveWALID == 0 || walID < minActiveWALID
+			canCheckpoint := exclusive || writerWALID == 0 || walID < writerWALID
 
 			page, err := readWALPage(segments, walID)
 			if err != nil {
@@ -293,11 +292,6 @@ func (db *DB) checkpoint(exclusive bool, mu sync.Locker) error {
 			if err := db.writeDBPage(pgno, page); err != nil {
 				return err
 			}
-
-			// Track highest WALID that has been checkpointed back to disk.
-			if IsMetaPage(page) {
-				maxCheckpointedWALID = walID
-			}
 		}
 	}
 
@@ -305,21 +299,23 @@ func (db *DB) checkpoint(exclusive bool, mu sync.Locker) error {
 	if err := db.fsync(db.file); err != nil {
 		return fmt.Errorf("db file sync: %w", err)
 	}
+	mu.Lock()
+	db.pageMap = pageMap
+	mu.Unlock()
 
 	// Remove WAL segments that have been checkpointed.
-	if maxCheckpointedWALID != 0 {
-		for _, segment := range segments {
-			if segment.MaxWALID() > maxCheckpointedWALID {
-				break
-			}
+	minPageMapWALID := db.minPageMapWALID()
+	for _, segment := range segments {
+		if minPageMapWALID != 0 && segment.MaxWALID() > minPageMapWALID {
+			break
+		}
 
-			if err := func() error {
-				mu.Lock()
-				defer mu.Unlock()
-				return db.removeWALSegment(segment.Path)
-			}(); err != nil {
-				return err
-			}
+		if err := func() error {
+			mu.Lock()
+			defer mu.Unlock()
+			return db.removeWALSegment(segment.Path)
+		}(); err != nil {
+			return err
 		}
 	}
 
@@ -331,7 +327,6 @@ func (db *DB) checkpoint(exclusive bool, mu sync.Locker) error {
 		mu.Unlock()
 	}
 
-	db.pageMap = pageMap
 	return nil
 }
 
@@ -361,16 +356,38 @@ func (db *DB) removeWALSegment(path string) error {
 	return nil
 }
 
-// minActiveWALID returns the lowest WAL ID in use by any active transaction.
-// Returns 0 if no transactions are active.
-func (db *DB) minActiveWALID() int64 {
-	var walID int64
+// minPageMapWALID returns the lowest WAL ID referenced by an active page map.
+func (db *DB) minPageMapWALID() int64 {
+	// Use the db's page map because that is the state of the map when the
+	// writer transaction started. We can't use the writer transaction's map
+	// because it can change.
+	min := pageMapMinWALID(db.pageMap)
+
 	for tx := range db.txs {
-		if walID == 0 || walID > tx.walID {
-			walID = tx.walID
+		// If a write transaction is active, ensure the min is at least the starting WAL.
+		if tx.writable {
+			if min == 0 || tx.walID < min {
+				min = tx.walID
+			}
+			continue
+		}
+
+		// Record the min WAL ID referenced by the reader's page map.
+		if walID := pageMapMinWALID(tx.pageMap); min == 0 || walID < min {
+			min = walID
 		}
 	}
-	return walID
+	return min
+}
+
+// writerWALID returns the starting WAL ID of the active writer tx.
+func (db *DB) writerWALID() int64 {
+	for tx := range db.txs {
+		if tx.writable {
+			return tx.walID
+		}
+	}
+	return 0
 }
 
 // Close closes the database.
@@ -738,3 +755,15 @@ type nopLocker struct{}
 
 func (*nopLocker) Lock()   {}
 func (*nopLocker) Unlock() {}
+
+// pageMapMinWALID returns the lowest WAL ID
+func pageMapMinWALID(m *immutable.Map) int64 {
+	var min int64
+	for itr := m.Iterator(); !itr.Done(); {
+		_, v := itr.Next()
+		if walID := v.(int64); min == 0 || walID < min {
+			min = walID
+		}
+	}
+	return min
+}
