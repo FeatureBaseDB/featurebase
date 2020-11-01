@@ -307,14 +307,32 @@ func TestDB_MultiTx(t *testing.T) {
 	// Run multiple readers in separate goroutines.
 	ctx, cancel := context.WithCancel(context.Background())
 	g, ctx := errgroup.WithContext(ctx)
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 4; i++ {
 		g.Go(func() error {
 			for {
 				if ctx.Err() != nil {
 					return nil // cancelled, return no error
-				} else if err := testDB_MultiTx_reader(db); err != nil {
+				} else if err := func() error {
+					tx, err := db.Begin(false)
+					if err != nil {
+						return err
+					}
+					defer tx.Rollback()
+
+					time.Sleep(time.Duration(rand.Intn(100)) * time.Millisecond)
+
+					for i := 0; i < rand.Intn(1000); i++ {
+						v := rand.Intn(1 << 20)
+						if _, err := tx.Contains("x", uint64(v)); err != nil {
+							return err
+						}
+					}
+					return nil
+				}(); err != nil {
 					return err
 				}
+
+				time.Sleep(time.Duration(rand.Intn(int(100 * time.Millisecond))))
 			}
 		})
 	}
@@ -328,11 +346,12 @@ func TestDB_MultiTx(t *testing.T) {
 			}
 			defer tx.Rollback()
 
-			for j := 0; j < rand.Intn(10); j++ {
+			for j := 0; j < rand.Intn(100); j++ {
 				v := rand.Intn(1 << 20)
 				if _, err := tx.Add("x", uint64(v)); err != nil {
 					t.Fatal(err)
 				}
+
 			}
 
 			if err := tx.Commit(); err != nil {
@@ -346,26 +365,6 @@ func TestDB_MultiTx(t *testing.T) {
 	if err := g.Wait(); err != nil {
 		t.Fatal(err)
 	}
-}
-
-// testDB_MultiTx_reader checks if a bitmap contains a random set of bits.
-func testDB_MultiTx_reader(db *rbf.DB) error {
-	tx, err := db.Begin(false)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
-	time.Sleep(time.Duration(rand.Intn(1000)) * time.Millisecond)
-
-	for i := 0; i < rand.Intn(1000); i++ {
-		v := rand.Intn(1 << 20)
-		if _, err := tx.Contains("x", uint64(v)); err != nil {
-			return err
-		}
-	}
-
-	return nil
 }
 
 // better diagnosis of deadlocks/hung situations versus just really slow "Quick" tests.

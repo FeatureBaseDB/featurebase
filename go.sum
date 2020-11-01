@@ -161,7 +161,6 @@ github.com/pelletier/go-toml v1.2.0 h1:T5zMGML61Wp+FlcbWjRDT7yAxhJNAiPPLOFECq181
 github.com/pelletier/go-toml v1.2.0/go.mod h1:5z9KED0ma1S8pY6P1sdut58dfprrGBbd/94hg7ilaic=
 github.com/pilosa/memberlist v0.1.4-0.20190415211605-f6512523c021 h1:ERLyN4p3KS5Fk2ADsDENm2cq0+Lx6sF1sG8uwRlySpU=
 github.com/pilosa/memberlist v0.1.4-0.20190415211605-f6512523c021/go.mod h1:ajVTdAv/9Im8oMAAj5G31PhhMCZJV2pPBoIllUwCN7I=
-github.com/pilosa/pilosa v1.4.1 h1:zSNyS/MqXTfRDNRBBNCApsOu2oUnTEj2uymCaqYSNx8=
 github.com/pkg/errors v0.8.0/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
 github.com/pkg/errors v0.8.1 h1:iURUrRGxPUNPdy5/HRSm+Yj6okJ6UtLINN0Q9M4+h3I=
 github.com/pkg/errors v0.8.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
