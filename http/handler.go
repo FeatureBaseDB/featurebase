@@ -72,6 +72,8 @@ type Handler struct {
 	server *http.Server
 
 	middleware []func(http.Handler) http.Handler
+
+	pprofCPUProfileBuffer *bytes.Buffer
 }
 
 // externalPrefixFlag denotes endpoints that are intended to be exposed to clients.
@@ -425,6 +427,12 @@ func newRouter(handler *Handler) http.Handler {
 	router.HandleFunc("/internal/translate/field/{index}/{field}", handler.handlePostTranslateFieldDB).Methods("POST").Name("PostTranslateFieldDB")
 	router.HandleFunc("/internal/translate/field/{index}/{field}/keys/find", handler.handleFindFieldKeys).Methods("POST").Name("FindFieldKeys")
 	router.HandleFunc("/internal/translate/field/{index}/{field}/keys/create", handler.handleCreateFieldKeys).Methods("POST").Name("CreateFieldKeys")
+
+	// endpoints for collecting cpu profiles from a chosen begin point to
+	// when the client wants to stop. Used for profiling imports that
+	// could be long or short.
+	router.HandleFunc("/cpu-profile/start", handler.handleCPUProfileStart).Methods("GET").Name("CPUProfileStart")
+	router.HandleFunc("/cpu-profile/stop", handler.handleCPUProfileStop).Methods("GET").Name("CPUProfileStop")
 
 	// Endpoints to support lattice UI embedded via statik.
 	// The messiness here reflects the fact that assets live in a nontrivial
@@ -873,6 +881,54 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 	// Write response back to client.
 	if err := h.writeQueryResponse(w, r, &resp); err != nil {
 		h.logger.Printf("write query response error: %s", err)
+	}
+}
+
+func (h *Handler) handleCPUProfileStart(w http.ResponseWriter, r *http.Request) {
+
+	if h.pprofCPUProfileBuffer == nil {
+		h.pprofCPUProfileBuffer = bytes.NewBuffer(nil)
+	} else {
+		http.Error(w, "cpu profile already in progress", http.StatusBadRequest)
+		return
+	}
+	err := pprof.StartCPUProfile(h.pprofCPUProfileBuffer)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("%v", err), http.StatusBadRequest)
+		h.pprofCPUProfileBuffer = nil
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
+func (h *Handler) handleCPUProfileStop(w http.ResponseWriter, r *http.Request) {
+
+	if h.pprofCPUProfileBuffer == nil {
+		http.Error(w, "no cpu profile in progress", http.StatusBadRequest)
+		return
+	}
+	pprof.StopCPUProfile()
+
+	// match what pprof usually returns:
+	// HTTP/1.1 200 OK
+	// Content-Disposition: attachment; filename="profile"
+	// Content-Type: application/octet-stream
+	// X-Content-Type-Options: nosniff
+	// Date: Tue, 03 Nov 2020 18:31:36 GMT
+	// Content-Length: 939
+
+	//Send the headers
+	by := h.pprofCPUProfileBuffer.Bytes()
+	w.Header().Set("Content-Disposition", "attachment; filename=\"profile\"")
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Length", fmt.Sprintf("%v", len(by)))
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+
+	_, err := io.Copy(w, h.pprofCPUProfileBuffer)
+	h.pprofCPUProfileBuffer = nil
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 }
 

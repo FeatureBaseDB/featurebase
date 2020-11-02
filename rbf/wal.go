@@ -16,7 +16,6 @@ package rbf
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -199,6 +198,8 @@ func readWALPage(segments []WALSegment, walID int64) ([]byte, error) {
 	return nil, fmt.Errorf("cannot find segment containing WAL page: %d; over all supplied segments, minWALID=%v, maxWALID=%v; detail='%v'", walID, minWALID, maxWALID, detail)
 }
 
+var ErrNoMetaFound = fmt.Errorf("no meta page found")
+
 func findNextWALMetaPage(segments []WALSegment, walID int64) (metaWALID int64, err error) {
 	maxWALID := maxWALID(segments)
 
@@ -217,7 +218,7 @@ func findNextWALMetaPage(segments []WALSegment, walID int64) (metaWALID int64, e
 		}
 	}
 
-	return -1, io.EOF
+	return -1, ErrNoMetaFound
 }
 
 func findLastWALMetaPage(segments []WALSegment) (walID int64, err error) {

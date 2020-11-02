@@ -47,7 +47,7 @@ func NewDefaultConfig() *Config {
 	return &Config{
 		MaxSize:               DefaultMaxSize,
 		FsyncEnabled:          true,
-		CheckpointEveryDur:    10 * time.Second,
+		CheckpointEveryDur:    time.Millisecond,
 		MaxWALSegmentFileSize: 1 << 20,
 	}
 }
@@ -55,16 +55,8 @@ func NewDefaultConfig() *Config {
 func (cfg *Config) DefineFlags(flags *pflag.FlagSet) {
 	default0 := NewDefaultConfig()
 	flags.IntVar(&cfg.MaxWALSegmentFileSize, "rbf-max-wal", default0.MaxWALSegmentFileSize, "RBF write-Ahead-Log file size in bytes")
-
-	// TODO: make delayed checkpointing work. Currently
-	// wal.go readWALPage() can fail to locate some pages
-	// when checkpointing does not happen after every Commit.
-	// Once that is done we can return to trying to checkpoint
-	// after some duration.
-	//flags.DurationVar(&cfg.CheckpointEveryDur, "rbf-checkpoint-dur", default0.CheckpointEveryDur, "RBF checkpoint on the next write that occurs this long or more after the previous write. 0 means checkpoint after every write.")
-
-	flags.DurationVar(&cfg.CheckpointEveryDur, "rbf-checkpoint-dur", 0, "RBF checkpoint on the next write that occurs this long or more after the previous write. 0 means checkpoint after every write.")
-
+	flags.DurationVar(&cfg.CheckpointEveryDur, "rbf-checkpoint-dur", default0.CheckpointEveryDur,
+		"RBF checkpoint on the next write that occurs this long or more after the previous write. 0 means checkpoint after every write.")
 	flags.Int64Var(&cfg.MaxSize, "rbf-max-db-size", default0.MaxSize, "RBF maximum size in bytes of a database file (distinct from a WAL file)")
 	flags.BoolVar(&cfg.FsyncEnabled, "rbf-fsync", default0.FsyncEnabled, "RBF: enable fsync fully safe flush-to-disk at each checkpoint")
 }
