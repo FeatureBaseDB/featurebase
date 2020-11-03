@@ -891,11 +891,14 @@ func (e *executor) executeFieldValueCall(ctx context.Context, qcx *Qcx, index st
 	return other, nil
 }
 
-func (e *executor) executeFieldValueCallShard(ctx context.Context, qcx *Qcx, field *Field, col uint64, shard uint64) (_ ValCount, err error) {
+func (e *executor) executeFieldValueCallShard(ctx context.Context, qcx *Qcx, field *Field, col uint64, shard uint64) (_ ValCount, err0 error) {
 
 	idx := e.Holder.Index(field.index)
-	tx, finisher := qcx.GetTx(Txo{Write: !writable, Index: idx, Shard: shard})
-	defer finisher(&err)
+	tx, finisher, err := qcx.GetTx(Txo{Write: !writable, Index: idx, Shard: shard})
+	if err != nil {
+		return ValCount{}, err
+	}
+	defer finisher(&err0)
 
 	value, exists, err := field.Value(tx, col)
 	if err != nil {
@@ -1426,10 +1429,13 @@ func (e *executor) executeDistinctShard(ctx context.Context, qcx *Qcx, index str
 	return executeDistinctShardBSI(ctx, qcx, idx, fieldName, shard, bsig, filterBitmap)
 }
 
-func executeDistinctShardSet(ctx context.Context, qcx *Qcx, idx *Index, fieldName string, shard uint64, filterBitmap *roaring.Bitmap) (result SignedRow, err error) {
+func executeDistinctShardSet(ctx context.Context, qcx *Qcx, idx *Index, fieldName string, shard uint64, filterBitmap *roaring.Bitmap) (result SignedRow, err0 error) {
 	index := idx.Name()
-	tx, finisher := qcx.GetTx(Txo{Write: !writable, Index: idx, Shard: shard})
-	defer finisher(&err)
+	tx, finisher, err := qcx.GetTx(Txo{Write: !writable, Index: idx, Shard: shard})
+	if err != nil {
+		return SignedRow{}, err
+	}
+	defer finisher(&err0)
 
 	fragData, _, err := tx.ContainerIterator(index, fieldName, "standard", shard, 0)
 	if err != nil {
@@ -1486,14 +1492,17 @@ func executeDistinctShardSet(ctx context.Context, qcx *Qcx, idx *Index, fieldNam
 	return SignedRow{Pos: NewRowFromBitmap(rows)}, nil
 }
 
-func executeDistinctShardBSI(ctx context.Context, qcx *Qcx, idx *Index, fieldName string, shard uint64, bsig *bsiGroup, filterBitmap *roaring.Bitmap) (result SignedRow, err error) {
+func executeDistinctShardBSI(ctx context.Context, qcx *Qcx, idx *Index, fieldName string, shard uint64, bsig *bsiGroup, filterBitmap *roaring.Bitmap) (result SignedRow, err0 error) {
 	view := viewBSIGroupPrefix + fieldName
 	index := idx.Name()
 	depth := uint64(bsig.BitDepth)
 	offset := bsig.Base
 
-	tx, finisher := qcx.GetTx(Txo{Write: !writable, Index: idx, Shard: shard})
-	defer finisher(&err)
+	tx, finisher, err := qcx.GetTx(Txo{Write: !writable, Index: idx, Shard: shard})
+	if err != nil {
+		return SignedRow{}, err
+	}
+	defer finisher(&err0)
 
 	existsBitmap, err := tx.OffsetRange(index, fieldName, view, shard, ShardWidth*shard, ShardWidth*0, ShardWidth*1)
 	if err != nil {
@@ -1596,7 +1605,7 @@ func executeDistinctShardBSI(ctx context.Context, qcx *Qcx, idx *Index, fieldNam
 }
 
 // executeSumCountShard calculates the sum and count for bsiGroups on a shard.
-func (e *executor) executeSumCountShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, filter *Row, shard uint64) (_ ValCount, err error) {
+func (e *executor) executeSumCountShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, filter *Row, shard uint64) (_ ValCount, err0 error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeSumCountShard")
 	defer span.Finish()
 
@@ -1631,8 +1640,11 @@ func (e *executor) executeSumCountShard(ctx context.Context, qcx *Qcx, index str
 		return ValCount{}, nil
 	}
 
-	tx, finisher := qcx.GetTx(Txo{Write: !writable, Index: idx, Fragment: fragment, Shard: shard})
-	defer finisher(&err)
+	tx, finisher, err := qcx.GetTx(Txo{Write: !writable, Index: idx, Fragment: fragment, Shard: shard})
+	if err != nil {
+		return ValCount{}, err
+	}
+	defer finisher(&err0)
 
 	sumspan, _ := tracing.StartSpanFromContext(ctx, "Executor.executeSumCountShard_fragment.sum")
 	defer sumspan.Finish()
@@ -1647,7 +1659,7 @@ func (e *executor) executeSumCountShard(ctx context.Context, qcx *Qcx, index str
 }
 
 // executeMinShard calculates the min for bsiGroups on a shard.
-func (e *executor) executeMinShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64) (_ ValCount, err error) {
+func (e *executor) executeMinShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64) (_ ValCount, err0 error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeMinShard")
 	defer span.Finish()
 
@@ -1669,13 +1681,16 @@ func (e *executor) executeMinShard(ctx context.Context, qcx *Qcx, index string, 
 		return ValCount{}, nil
 	}
 
-	tx, finisher := qcx.GetTx(Txo{Write: !writable, Index: idx, Shard: shard})
-	defer finisher(&err)
+	tx, finisher, err := qcx.GetTx(Txo{Write: !writable, Index: idx, Shard: shard})
+	if err != nil {
+		return ValCount{}, err
+	}
+	defer finisher(&err0)
 	return field.MinForShard(tx, shard, filter)
 }
 
 // executeMaxShard calculates the max for bsiGroups on a shard.
-func (e *executor) executeMaxShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64) (_ ValCount, err error) {
+func (e *executor) executeMaxShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64) (_ ValCount, err0 error) {
 
 	idx := e.Holder.Index(index)
 
@@ -1695,13 +1710,17 @@ func (e *executor) executeMaxShard(ctx context.Context, qcx *Qcx, index string, 
 		return ValCount{}, nil
 	}
 
-	tx, finisher := qcx.GetTx(Txo{Write: !writable, Index: idx, Shard: shard})
-	defer finisher(&err)
+	tx, finisher, err := qcx.GetTx(Txo{Write: !writable, Index: idx, Shard: shard})
+	if err != nil {
+		return ValCount{}, err
+	}
+
+	defer finisher(&err0)
 	return field.MaxForShard(tx, shard, filter)
 }
 
 // executeMinRowShard returns the minimum row ID for a shard.
-func (e *executor) executeMinRowShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64) (_ PairField, err error) {
+func (e *executor) executeMinRowShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64) (_ PairField, err0 error) {
 	var filter *Row
 
 	if len(c.Children) == 1 {
@@ -1724,8 +1743,12 @@ func (e *executor) executeMinRowShard(ctx context.Context, qcx *Qcx, index strin
 	}
 
 	idx := e.Holder.Index(index)
-	tx, finisher := qcx.GetTx(Txo{Write: !writable, Index: idx, Fragment: fragment, Shard: fragment.shard})
-	defer finisher(&err)
+	tx, finisher, err := qcx.GetTx(Txo{Write: !writable, Index: idx, Fragment: fragment, Shard: fragment.shard})
+	if err != nil {
+		return PairField{}, err
+	}
+
+	defer finisher(&err0)
 
 	minRowID, count, err := fragment.minRow(tx, filter)
 	if err != nil {
@@ -1742,7 +1765,7 @@ func (e *executor) executeMinRowShard(ctx context.Context, qcx *Qcx, index strin
 }
 
 // executeMaxRowShard returns the maximum row ID for a shard.
-func (e *executor) executeMaxRowShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64) (_ PairField, err error) {
+func (e *executor) executeMaxRowShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64) (_ PairField, err0 error) {
 
 	var filter *Row
 	if len(c.Children) == 1 {
@@ -1765,8 +1788,11 @@ func (e *executor) executeMaxRowShard(ctx context.Context, qcx *Qcx, index strin
 	}
 
 	idx := e.Holder.Index(index)
-	tx, finisher := qcx.GetTx(Txo{Write: !writable, Index: idx, Shard: shard})
-	defer finisher(&err)
+	tx, finisher, err := qcx.GetTx(Txo{Write: !writable, Index: idx, Shard: shard})
+	if err != nil {
+		return PairField{}, ErrQcxDone
+	}
+	defer finisher(&err0)
 
 	maxRowID, count, err := fragment.maxRow(tx, filter)
 	if err != nil {
@@ -1935,7 +1961,10 @@ func (e *executor) executeTopNShard(ctx context.Context, qcx *Qcx, index string,
 	}
 
 	idx := e.Holder.Index(index)
-	tx, finisher := qcx.GetTx(Txo{Write: !writable, Fragment: f, Index: idx, Shard: shard})
+	tx, finisher, err := qcx.GetTx(Txo{Write: !writable, Fragment: f, Index: idx, Shard: shard})
+	if err != nil {
+		return nil, err
+	}
 	defer finisher(&err0)
 
 	pairs, err := f.top(tx, topOptions{
@@ -2764,7 +2793,10 @@ func (e *executor) executeRowsShard(ctx context.Context, qcx *Qcx, index string,
 		filters = append(filters, filterLike(like, f.TranslateStore(), likeErr))
 	}
 
-	tx, finisher := qcx.GetTx(Txo{Write: !writable, Index: idx, Shard: shard})
+	tx, finisher, err := qcx.GetTx(Txo{Write: !writable, Index: idx, Shard: shard})
+	if err != nil {
+		return nil, err
+	}
 	defer finisher(&err0)
 
 	for _, view := range views {
@@ -3032,7 +3064,10 @@ func (e *executor) executeExtractShard(ctx context.Context, qcx *Qcx, index stri
 		return ExtractedIDMatrix{}, newNotFoundError(ErrIndexNotFound, index)
 	}
 
-	tx, finisher := qcx.GetTx(Txo{Write: !writable, Index: idx, Shard: shard})
+	tx, finisher, err := qcx.GetTx(Txo{Write: !writable, Index: idx, Shard: shard})
+	if err != nil {
+		return ExtractedIDMatrix{}, err
+	}
 	defer finisher(&err0)
 
 	// Decompress columns bitmap.
@@ -3260,7 +3295,10 @@ func (e *executor) executeRowShard(ctx context.Context, qcx *Qcx, index string, 
 			return NewRow(), nil
 		}
 
-		tx, finisher := qcx.GetTx(Txo{Write: !writable, Fragment: frag, Index: idx, Shard: shard})
+		tx, finisher, err := qcx.GetTx(Txo{Write: !writable, Fragment: frag, Index: idx, Shard: shard})
+		if err != nil {
+			return nil, err
+		}
 		defer finisher(&err0)
 		return frag.row(tx, rowID)
 	}
@@ -3286,7 +3324,10 @@ func (e *executor) executeRowShard(ctx context.Context, qcx *Qcx, index string, 
 		if f == nil {
 			continue
 		}
-		tx, finisher := qcx.GetTx(Txo{Write: !writable, Fragment: f, Index: idx, Shard: shard})
+		tx, finisher, err := qcx.GetTx(Txo{Write: !writable, Fragment: f, Index: idx, Shard: shard})
+		if err != nil {
+			return nil, err
+		}
 		defer finisher(&err0)
 
 		row, err := f.row(tx, rowID)
@@ -3334,7 +3375,10 @@ func (e *executor) executeRowBSIGroupShard(ctx context.Context, qcx *Qcx, index 
 		return nil, newNotFoundError(ErrFieldNotFound, fieldName)
 	}
 
-	tx, finisher := qcx.GetTx(Txo{Write: !writable, Index: f.idx, Shard: shard})
+	tx, finisher, err := qcx.GetTx(Txo{Write: !writable, Index: f.idx, Shard: shard})
+	if err != nil {
+		return nil, err
+	}
 	defer finisher(&err0)
 
 	// EQ null           _exists - frag.NotNull()
@@ -3554,7 +3598,7 @@ func (e *executor) executePrecomputedCallShard(ctx context.Context, qcx *Qcx, in
 }
 
 // executeNotShard executes a Not() call for a local shard.
-func (e *executor) executeNotShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64) (_ *Row, err error) {
+func (e *executor) executeNotShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64) (_ *Row, err0 error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeNotShard")
 	defer span.Finish()
 
@@ -3572,8 +3616,12 @@ func (e *executor) executeNotShard(ctx context.Context, qcx *Qcx, index string, 
 		return nil, errors.Errorf("index does not support existence tracking: %s", index)
 	}
 
-	tx, finisher := qcx.GetTx(Txo{Write: !writable, Index: idx, Shard: shard})
-	defer finisher(&err)
+	tx, finisher, err := qcx.GetTx(Txo{Write: !writable, Index: idx, Shard: shard})
+	if err != nil {
+		return nil, err
+	}
+
+	defer finisher(&err0)
 
 	var existenceRow *Row
 	existenceFrag := e.Holder.fragment(index, existenceFieldName, viewStandard, shard)
@@ -3687,7 +3735,7 @@ func (e *executor) executeUnionRows(ctx context.Context, qcx *Qcx, index string,
 }
 
 // executeAllCallShard executes an All() call for a local shard.
-func (e *executor) executeAllCallShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64) (res *Row, err error) {
+func (e *executor) executeAllCallShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64) (res *Row, err0 error) {
 
 	span, _ := tracing.StartSpanFromContext(ctx, "Executor.executeAllCallShard")
 	defer span.Finish()
@@ -3709,8 +3757,12 @@ func (e *executor) executeAllCallShard(ctx context.Context, qcx *Qcx, index stri
 	if existenceFrag == nil {
 		existenceRow = NewRow()
 	} else {
-		tx, finisher := qcx.GetTx(Txo{Write: !writable, Index: idx, Fragment: existenceFrag, Shard: shard})
-		defer finisher(&err)
+		tx, finisher, err := qcx.GetTx(Txo{Write: !writable, Index: idx, Fragment: existenceFrag, Shard: shard})
+		if err != nil {
+			return nil, err
+		}
+
+		defer finisher(&err0)
 
 		if existenceRow, err = existenceFrag.row(tx, 0); err != nil {
 			return nil, err
@@ -3821,7 +3873,7 @@ func (e *executor) executeClearBit(ctx context.Context, qcx *Qcx, index string, 
 }
 
 // executeClearBitField executes a Clear() call for a field.
-func (e *executor) executeClearBitField(ctx context.Context, qcx *Qcx, index string, c *pql.Call, f *Field, colID, rowID uint64, opt *execOptions) (_ bool, err error) {
+func (e *executor) executeClearBitField(ctx context.Context, qcx *Qcx, index string, c *pql.Call, f *Field, colID, rowID uint64, opt *execOptions) (_ bool, err0 error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeClearBitField")
 	defer span.Finish()
 
@@ -3833,8 +3885,12 @@ func (e *executor) executeClearBitField(ctx context.Context, qcx *Qcx, index str
 		if node.ID == e.Node.ID {
 
 			idx := e.Holder.Index(index)
-			tx, finisher := qcx.GetTx(Txo{Write: writable, Index: idx, Shard: shard})
-			defer finisher(&err)
+			tx, finisher, err := qcx.GetTx(Txo{Write: writable, Index: idx, Shard: shard})
+			if err != nil {
+				return false, err
+			}
+
+			defer finisher(&err0)
 
 			val, err := f.ClearBit(tx, rowID, colID)
 			if err != nil {
@@ -3911,12 +3967,11 @@ func (e *executor) executeClearRow(ctx context.Context, qcx *Qcx, index string, 
 }
 
 // executeClearRowShard executes a ClearRow() call for a single shard.
-func (e *executor) executeClearRowShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64) (_ bool, err error) {
+func (e *executor) executeClearRowShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64) (_ bool, err0 error) {
 	span, _ := tracing.StartSpanFromContext(ctx, "Executor.executeClearRowShard")
 	defer span.Finish()
 
-	var fieldName string
-	fieldName, err = c.FieldArg()
+	fieldName, err := c.FieldArg()
 	if err != nil {
 		return false, errors.New("ClearRow() argument required: field")
 	}
@@ -3937,8 +3992,11 @@ func (e *executor) executeClearRowShard(ctx context.Context, qcx *Qcx, index str
 	}
 
 	idx := e.Holder.Index(index)
-	tx, finisher := qcx.GetTx(Txo{Write: writable, Index: idx, Shard: shard})
-	defer finisher(&err)
+	tx, finisher, err := qcx.GetTx(Txo{Write: writable, Index: idx, Shard: shard})
+	if err != nil {
+		return false, err
+	}
+	defer finisher(&err0)
 
 	// Remove the row from all views.
 	changed := false
@@ -4010,9 +4068,9 @@ func (e *executor) executeSetRow(ctx context.Context, qcx *Qcx, indexName string
 }
 
 // executeSetRowShard executes a SetRow() call for a single shard.
-func (e *executor) executeSetRowShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64) (_ bool, err error) {
-	var fieldName string
-	fieldName, err = c.FieldArg()
+func (e *executor) executeSetRowShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64) (_ bool, err0 error) {
+
+	fieldName, err := c.FieldArg()
 	if err != nil {
 		return false, errors.New("Store() argument required: field")
 	}
@@ -4060,8 +4118,12 @@ func (e *executor) executeSetRowShard(ctx context.Context, qcx *Qcx, index strin
 	}
 
 	idx := e.Holder.Index(index)
-	tx, finisher := qcx.GetTx(Txo{Write: writable, Index: idx, Shard: shard})
-	defer finisher(&err)
+	tx, finisher, err := qcx.GetTx(Txo{Write: writable, Index: idx, Shard: shard})
+	if err != nil {
+		return false, err
+	}
+
+	defer finisher(&err0)
 
 	set, err := fragment.setRow(tx, src, rowID)
 	if err != nil {
@@ -4107,7 +4169,11 @@ func (e *executor) executeSet(ctx context.Context, qcx *Qcx, index string, c *pq
 	// Set column on existence field.
 	if ef := idx.existenceField(); ef != nil {
 		// we create tx here, rather than just above, to avoid creating an extra empty shard.
-		tx, finisher := qcx.GetTx(Txo{Write: writable, Index: idx, Shard: shard})
+		tx, finisher, err := qcx.GetTx(Txo{Write: writable, Index: idx, Shard: shard})
+		if err != nil {
+			return false, err
+		}
+
 		defer finisher(&err0)
 
 		if _, err := ef.SetBit(tx, 0, colID, nil); err != nil {
@@ -4176,7 +4242,10 @@ func (e *executor) executeSetBitField(ctx context.Context, qcx *Qcx, index strin
 		if node.ID == e.Node.ID {
 
 			idx := e.Holder.Index(index)
-			tx, finisher := qcx.GetTx(Txo{Write: writable, Index: idx, Shard: shard})
+			tx, finisher, err := qcx.GetTx(Txo{Write: writable, Index: idx, Shard: shard})
+			if err != nil {
+				return false, err
+			}
 			defer finisher(&err0)
 
 			val, err := f.SetBit(tx, rowID, colID, timestamp)
@@ -4204,7 +4273,7 @@ func (e *executor) executeSetBitField(ctx context.Context, qcx *Qcx, index strin
 }
 
 // executeSetValueField executes a Set() call for a specific int field.
-func (e *executor) executeSetValueField(ctx context.Context, qcx *Qcx, index string, c *pql.Call, f *Field, colID uint64, value int64, opt *execOptions) (_ bool, err error) {
+func (e *executor) executeSetValueField(ctx context.Context, qcx *Qcx, index string, c *pql.Call, f *Field, colID uint64, value int64, opt *execOptions) (_ bool, err0 error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeSetValueField")
 	defer span.Finish()
 
@@ -4216,8 +4285,12 @@ func (e *executor) executeSetValueField(ctx context.Context, qcx *Qcx, index str
 		if node.ID == e.Node.ID {
 
 			idx := e.Holder.Index(index)
-			tx, finisher := qcx.GetTx(Txo{Write: writable, Index: idx, Shard: shard})
-			defer finisher(&err)
+			tx, finisher, err := qcx.GetTx(Txo{Write: writable, Index: idx, Shard: shard})
+			if err != nil {
+				return false, err
+			}
+
+			defer finisher(&err0)
 
 			val, err := f.SetValue(tx, colID, value)
 			if err != nil {
@@ -4244,7 +4317,7 @@ func (e *executor) executeSetValueField(ctx context.Context, qcx *Qcx, index str
 }
 
 // executeClearValueField removes value for colID if present
-func (e *executor) executeClearValueField(ctx context.Context, qcx *Qcx, index string, c *pql.Call, f *Field, colID uint64, opt *execOptions) (_ bool, err error) {
+func (e *executor) executeClearValueField(ctx context.Context, qcx *Qcx, index string, c *pql.Call, f *Field, colID uint64, opt *execOptions) (_ bool, err0 error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeClearValueField")
 	defer span.Finish()
 
@@ -4256,8 +4329,11 @@ func (e *executor) executeClearValueField(ctx context.Context, qcx *Qcx, index s
 		if node.ID == e.Node.ID {
 
 			idx := e.Holder.Index(index)
-			tx, finisher := qcx.GetTx(Txo{Write: writable, Index: idx, Shard: shard})
-			defer finisher(&err)
+			tx, finisher, err := qcx.GetTx(Txo{Write: writable, Index: idx, Shard: shard})
+			if err != nil {
+				return false, err
+			}
+			defer finisher(&err0)
 
 			val, err := f.ClearValue(tx, colID)
 			if err != nil {
@@ -6332,7 +6408,7 @@ type groupByIterator struct {
 }
 
 // newGroupByIterator initializes a new groupByIterator.
-func newGroupByIterator(executor *executor, qcx *Qcx, rowIDs []RowIDs, children []*pql.Call, aggregate *pql.Call, filter *Row, index string, shard uint64, holder *Holder) (_ *groupByIterator, err error) {
+func newGroupByIterator(executor *executor, qcx *Qcx, rowIDs []RowIDs, children []*pql.Call, aggregate *pql.Call, filter *Row, index string, shard uint64, holder *Holder) (_ *groupByIterator, err0 error) {
 
 	gbi := &groupByIterator{
 		executor: executor,
@@ -6389,8 +6465,11 @@ func newGroupByIterator(executor *executor, qcx *Qcx, rowIDs []RowIDs, children 
 			filters = append(filters, filterWithRows(rowIDs[i]))
 		}
 
-		tx, finisher := qcx.GetTx(Txo{Write: !writable, Index: idx, Shard: shard})
-		defer finisher(&err)
+		tx, finisher, err := qcx.GetTx(Txo{Write: !writable, Index: idx, Shard: shard})
+		if err != nil {
+			return nil, err
+		}
+		defer finisher(&err0)
 
 		gbi.rowIters[i], err = frag.rowIterator(tx, i != 0, filters...)
 		if err != nil {

@@ -537,7 +537,10 @@ func (v *view) rangeOp(qcx *Qcx, op pql.Token, bitDepth uint, predicate int64) (
 	r := NewRow()
 	for _, frag := range v.allFragments() {
 
-		tx, finisher := qcx.GetTx(Txo{Write: !writable, Index: v.idx, Shard: frag.shard})
+		tx, finisher, err := qcx.GetTx(Txo{Write: !writable, Index: v.idx, Shard: frag.shard})
+		if err != nil {
+			return nil, err
+		}
 		defer finisher(&err0)
 
 		other, err := frag.rangeOp(tx, op, bitDepth, predicate)

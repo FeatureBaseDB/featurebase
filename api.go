@@ -377,7 +377,10 @@ func importWorker(importWork chan importJob) {
 				}
 
 				if err := func() (err1 error) {
-					tx, finisher := j.qcx.GetTx(Txo{Write: writable, Index: j.field.idx, Shard: j.shard})
+					tx, finisher, err := j.qcx.GetTx(Txo{Write: writable, Index: j.field.idx, Shard: j.shard})
+					if err != nil {
+						return err
+					}
 					defer finisher(&err1)
 
 					var doClear bool
