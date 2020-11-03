@@ -15,6 +15,7 @@
 package rbf_test
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"net"
@@ -24,6 +25,8 @@ import (
 	"time"
 
 	"github.com/pilosa/pilosa/v2/rbf"
+	rbfcfg "github.com/pilosa/pilosa/v2/rbf/cfg"
+	"golang.org/x/sync/errgroup"
 	_ "net/http/pprof"
 )
 
@@ -287,6 +290,80 @@ func TestDB_HasData(t *testing.T) {
 	}
 	if !hasAnything {
 		t.Fatalf("HasData should have seen the hot bit")
+	}
+}
+
+// Ensures the DB can continuously write while readers are executing.
+func TestDB_MultiTx(t *testing.T) {
+	if testing.Short() {
+		t.Skip("-short enabled, skipping")
+	}
+
+	cfg := rbfcfg.NewDefaultConfig()
+	cfg.CheckpointEveryDur = 1 * time.Millisecond
+	db := MustOpenDB(t, cfg)
+	defer MustCloseDB(t, db)
+
+	// Run multiple readers in separate goroutines.
+	ctx, cancel := context.WithCancel(context.Background())
+	g, ctx := errgroup.WithContext(ctx)
+	for i := 0; i < 4; i++ {
+		g.Go(func() error {
+			for {
+				if ctx.Err() != nil {
+					return nil // cancelled, return no error
+				} else if err := func() error {
+					tx, err := db.Begin(false)
+					if err != nil {
+						return err
+					}
+					defer tx.Rollback()
+
+					time.Sleep(time.Duration(rand.Intn(100)) * time.Millisecond)
+
+					for i := 0; i < rand.Intn(1000); i++ {
+						v := rand.Intn(1 << 20)
+						if _, err := tx.Contains("x", uint64(v)); err != nil {
+							return err
+						}
+					}
+					return nil
+				}(); err != nil {
+					return err
+				}
+
+				time.Sleep(time.Duration(rand.Intn(int(100 * time.Millisecond))))
+			}
+		})
+	}
+
+	// Continuously set/clear bits while readers are executing.
+	for i := 0; i < 1000; i++ {
+		func() {
+			tx, err := db.Begin(true)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer tx.Rollback()
+
+			for j := 0; j < rand.Intn(100); j++ {
+				v := rand.Intn(1 << 20)
+				if _, err := tx.Add("x", uint64(v)); err != nil {
+					t.Fatal(err)
+				}
+
+			}
+
+			if err := tx.Commit(); err != nil {
+				t.Fatal(err)
+			}
+		}()
+	}
+
+	// Stop readers & wait.
+	cancel()
+	if err := g.Wait(); err != nil {
+		t.Fatal(err)
 	}
 }
 

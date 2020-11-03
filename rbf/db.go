@@ -146,7 +146,7 @@ func (db *DB) Open() (err error) {
 	// Open write-ahead log & checkpoint to the end since no transactions are open.
 	if err := db.openWALSegments(); err != nil {
 		return fmt.Errorf("wal open: %w", err)
-	} else if err := db.checkpoint(true, &nopLocker{}); err != nil {
+	} else if err := db.checkpoint(true); err != nil {
 		return fmt.Errorf("checkpoint: %w", err)
 	}
 
@@ -204,32 +204,13 @@ func (db *DB) updateWALSegment(s WALSegment) {
 	db.segments = segments
 }
 
-// Checkpoint copies pages from WAL segments into the main DB file. This can
-// only copy pages that aren't in use by an active transaction. The page map
-// is rebuilt as well for all WAL pages still in use.
-//
-// If exclusive is true, all WAL writes are flushed to disk.
-func (db *DB) Checkpoint() error {
-	return db.checkpoint(false, &db.mu)
-}
-
 // checkpoint moves WAL segments to the main DB file.
-//
-// Note that mu should db.mu when called through DB.Checkpoint() but it
-// can be &nopLocker if called under lock. The external API will be used
-// to periodically checkpoint outside of a transaction and the locking
-// must be used only in the beginning (to obtain the segment list) and at
-// the end (when removing old segments from the list). If the entire function
-// were to obtain a lock then it would block all new read & write transactions.
-func (db *DB) checkpoint(exclusive bool, mu sync.Locker) error {
-	// Obtain a snapshot of WAL segments at the start.
-	mu.Lock()
-	opened := db.opened
-	segments := db.segments
-	mu.Unlock()
-
-	if !opened {
+// Must be called by a write transaction while under db.mu lock.
+func (db *DB) checkpoint(exclusive bool) error {
+	if !db.opened {
 		return nil
+	} else if len(db.txs) > 0 {
+		return nil // skip if transactions open
 	}
 
 	// Determine last checkpointed WAL ID.
@@ -238,17 +219,12 @@ func (db *DB) checkpoint(exclusive bool, mu sync.Locker) error {
 		return err
 	}
 	walID := readMetaWALID(page)
-	maxCheckpointedWALID := walID
-
-	// Determine the high water mark for WAL pages that can be copied.
-	minActiveWALID := db.minActiveWALID()
 
 	// Loop over each transaction
 	walID++
-	pageMap := immutable.NewMap(&uint32Hasher{})
 	for {
 		// Determine last page of transaction.
-		metaWALID, err := findNextWALMetaPage(segments, walID)
+		metaWALID, err := findNextWALMetaPage(db.segments, walID)
 		if err == io.EOF {
 			break
 		} else if err != nil {
@@ -257,9 +233,7 @@ func (db *DB) checkpoint(exclusive bool, mu sync.Locker) error {
 
 		// Loop over pages in the transaction.
 		for ; walID <= metaWALID; walID++ {
-			canCheckpoint := exclusive || minActiveWALID == 0 || walID < minActiveWALID
-
-			page, err := readWALPage(segments, walID)
+			page, err := readWALPage(db.segments, walID)
 			if err != nil {
 				return err
 			}
@@ -275,16 +249,10 @@ func (db *DB) checkpoint(exclusive bool, mu sync.Locker) error {
 				pgno = readPageNo(page)
 			}
 
-			// If we can no longer checkpoint, map the page number to the WAL page.
-			if !canCheckpoint {
-				pageMap = pageMap.Set(pgno, walID)
-				continue
-			}
-
 			// Ensure we actually read the bitmap data in when we checkpoint.
 			// NOTE: The walID variable is incremented above in the pgno check.
 			if isBitmapHeader {
-				if page, err = readWALPage(segments, walID); err != nil {
+				if page, err = readWALPage(db.segments, walID); err != nil {
 					return err
 				}
 			}
@@ -293,11 +261,6 @@ func (db *DB) checkpoint(exclusive bool, mu sync.Locker) error {
 			if err := db.writeDBPage(pgno, page); err != nil {
 				return err
 			}
-
-			// Track highest WALID that has been checkpointed back to disk.
-			if IsMetaPage(page) {
-				maxCheckpointedWALID = walID
-			}
 		}
 	}
 
@@ -305,72 +268,19 @@ func (db *DB) checkpoint(exclusive bool, mu sync.Locker) error {
 	if err := db.fsync(db.file); err != nil {
 		return fmt.Errorf("db file sync: %w", err)
 	}
+	db.pageMap = immutable.NewMap(&uint32Hasher{})
 
 	// Remove WAL segments that have been checkpointed.
-	if maxCheckpointedWALID != 0 {
-		for _, segment := range segments {
-			if segment.MaxWALID() > maxCheckpointedWALID {
-				break
-			}
-
-			if err := func() error {
-				mu.Lock()
-				defer mu.Unlock()
-				return db.removeWALSegment(segment.Path)
-			}(); err != nil {
-				return err
-			}
-		}
-	}
-
-	// Ensure all segments are flushed and there is no remapped pages.
-	if exclusive {
-		mu.Lock()
-		assert(len(db.segments) == 0)
-		assert(pageMap.Len() == 0)
-		mu.Unlock()
-	}
-
-	db.pageMap = pageMap
-	return nil
-}
-
-// removeWALSegment closes and deletes the segment with the given path.
-//
-// The DB's segment list is entirely replaced so that transactions with
-// a reference to the old list can continue to use it without a lock.
-func (db *DB) removeWALSegment(path string) error {
-	newSegments := make([]WALSegment, 0, len(db.segments))
 	for _, segment := range db.segments {
-		// Close and remove if path matches.
-		if segment.Path == path {
-			if err := segment.Close(); err != nil {
-				return err
-			} else if err := os.Remove(segment.Path); err != nil {
-				return err
-			}
-			continue
+		if err := segment.Close(); err != nil {
+			return err
+		} else if err := os.Remove(segment.Path); err != nil {
+			return err
 		}
-
-		// Otherwise append to new slice of segments.
-		newSegments = append(newSegments, segment)
 	}
+	db.segments = nil
 
-	// Replace entire slice of segments.
-	db.segments = newSegments
 	return nil
-}
-
-// minActiveWALID returns the lowest WAL ID in use by any active transaction.
-// Returns 0 if no transactions are active.
-func (db *DB) minActiveWALID() int64 {
-	var walID int64
-	for tx := range db.txs {
-		if walID == 0 || walID > tx.walID {
-			walID = tx.walID
-		}
-	}
-	return walID
 }
 
 // Close closes the database.
@@ -615,7 +525,7 @@ func (db *DB) begin(writable, exclusive bool) (_ *Tx, err error) {
 	// Flush all WAL writes to disk before an exclusive writer so that we can
 	// work directly with the on-disk database.
 	if exclusive {
-		if err := db.checkpoint(true, &nopLocker{}); err != nil {
+		if err := db.checkpoint(true); err != nil {
 			cleanup()
 			db.mu.Unlock()
 			return nil, err
@@ -692,7 +602,7 @@ func (db *DB) removeTx(tx *Tx) error {
 	// checkpoint eagerly.
 	if tx.writable {
 		if db.cfg.CheckpointEveryDur == 0 || time.Since(db.lastCheckpoint) > db.cfg.CheckpointEveryDur {
-			if err := db.checkpoint(false, &nopLocker{}); err != nil {
+			if err := db.checkpoint(false); err != nil {
 				return fmt.Errorf("checkpoint: %w", err)
 			}
 			db.lastCheckpoint = time.Now()
@@ -733,8 +643,3 @@ func (db *DB) readMetaPage() ([]byte, error) {
 	}
 	return db.readDBPage(0)
 }
-
-type nopLocker struct{}
-
-func (*nopLocker) Lock()   {}
-func (*nopLocker) Unlock() {}
