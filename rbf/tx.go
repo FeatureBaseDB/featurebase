@@ -40,10 +40,14 @@ type Tx struct {
 	meta                [PageSize]byte // copy of current meta page
 	walID               int64          // max WAL ID at start of tx
 	rootRecords         []*RootRecord  // read-only cache of root records
-	pageMap             *immutable.Map // mapping of database pages to WAL IDs
-	writable            bool           // if true, tx can write
-	exclusive           bool           // if true, tx writes directly to db file (no wal)
-	dirty               bool           // if true, changes have been made
+
+	// pageMap holds WAL pages that have not yet been transferred
+	// into the database pages. So it can be empty, if the whole previous
+	// WAL has been checkpointed back into the database.
+	pageMap   *immutable.Map // mapping of database pages to WAL IDs
+	writable  bool           // if true, tx can write
+	exclusive bool           // if true, tx writes directly to db file (no wal)
+	dirty     bool           // if true, changes have been made
 
 	wcache []byte // write cache
 

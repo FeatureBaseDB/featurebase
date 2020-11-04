@@ -219,13 +219,26 @@ func (db *DB) checkpoint(exclusive bool) error {
 		return err
 	}
 	walID := readMetaWALID(page)
+	// INVAR: walID represents everything already in the DB, and
+	// any wal page k > walID is in the WAL not the DB.
 
 	// Loop over each transaction
+
+	// We could be looking at a recovery. When there is no new
+	// meta page further down in the WAL, then there was power
+	// failure or the process was killed. So we have to search
+	// and find the next meta page, if present.
+	//
+	// Read ahead to the next meta page, if present, in the WAL. If we
+	// we find it, then we must ensure the pages between
+	// [walID, next_meta_page.walID] are committed.
+	// If there is NOT another meta page after, then those writes get
+	// rolled back.
 	walID++
 	for {
 		// Determine last page of transaction.
 		metaWALID, err := findNextWALMetaPage(db.segments, walID)
-		if err == io.EOF {
+		if err == ErrNoMetaFound {
 			break
 		} else if err != nil {
 			return err
@@ -256,6 +269,25 @@ func (db *DB) checkpoint(exclusive bool) error {
 					return err
 				}
 			}
+
+			// TODO: address this problem: if we write a WAL meta page to database page 0 before fsyncing
+			// the transactions updates from the WAL into the DB, then (upon
+			// power failure in the middle of a fsync), the meta page might
+			// get updated before all of the databases pages that included the changes
+			// that the meta page represents. The only way to have a strict
+			// ordering that the meta page is updated only after the other
+			// pages is to fsync it in a 2nd fsync that follows the
+			// the first. SSDs and HDs both exhibit these "unsynchronized writes".
+			// reference https://www.usenix.org/system/files/conference/fast13/fast13-final80.pdf
+			//
+			// needed pattern:
+			// 1) write  tx-content pages;
+			// 2) fsync the tx-content pages;
+			// 3) write meta page;
+			// 4) fsync the meta page.
+
+			// The OS can also be inserting fsyncs at any point (e.g. due to memory pressure)
+			// and so we have to be certain that the meta page is written after a separate fsync.
 
 			// Write page data into main db file.
 			if err := db.writeDBPage(pgno, page); err != nil {

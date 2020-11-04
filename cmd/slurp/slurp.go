@@ -20,23 +20,18 @@ import (
 	"compress/gzip"
 	"context"
 	"flag"
-	"time"
-
-	//"fmt"
 	"fmt"
 	"io"
 	"io/ioutil"
 	gohttp "net/http"
+	"net/url"
+	"os"
+	"strconv"
+	"strings"
+	"time"
 
 	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/http"
-
-	//"log"
-	"os"
-	//"path/filepath"
-	//"sort"
-	"strconv"
-	"strings"
 )
 
 // slurp: slurp is a load-tester for importing bulk data.
@@ -51,6 +46,9 @@ type stateMachine struct {
 	client    *http.InternalClient
 	start     time.Time
 	direct    bool
+
+	profile string
+	host    string
 }
 
 func (r *stateMachine) NewHeader(h *tar.Header, tr *tar.Reader) error {
@@ -86,6 +84,10 @@ func (r *stateMachine) NewHeader(h *tar.Header, tr *tar.Reader) error {
 				return err
 			}
 			vv("Finished import %v", time.Since(r.start))
+
+			if r.profile != "" {
+				stopProfile(r.host, r.profile)
+			}
 		}
 		//
 		uri := GetImportRoaringURI(r.lastIndex, r.lastShard)
@@ -143,7 +145,7 @@ func (r *stateMachine) Upload() error {
 	return nil
 }
 
-func UploadTar(srcFile string, direct bool, client *http.InternalClient) error {
+func UploadTar(srcFile string, direct bool, client *http.InternalClient, profile, host string) error {
 
 	f, err := os.Open(srcFile)
 	if err != nil {
@@ -164,6 +166,8 @@ func UploadTar(srcFile string, direct bool, client *http.InternalClient) error {
 		viewData: make(map[string][]byte),
 		start:    time.Now(),
 		direct:   direct,
+		profile:  profile,
+		host:     host,
 	}
 	runner.client = client
 	for {
@@ -184,9 +188,11 @@ func UploadTar(srcFile string, direct bool, client *http.InternalClient) error {
 func main() {
 	var host string
 	var direct bool
+	var profile string
 	var tarSrcPath string
 	flag.StringVar(&host, "host", "127.0.0.1:10101", "host to import into")
 	flag.BoolVar(&direct, "direct", false, "direct write to database (unsafe)")
+	flag.StringVar(&profile, "profile", "", "profile and save a cpu profile of the import to this file")
 	flag.StringVar(&tarSrcPath, "src", "q2.tar.gz", "data to import")
 	flag.Parse()
 
@@ -195,13 +201,61 @@ func main() {
 	globURI = uri
 
 	h := &gohttp.Client{}
+	if profile != "" {
+		startProfile(host)
+	}
 	c, err := http.NewInternalClient(host, h)
 	panicOn(err)
 
 	t0 := time.Now()
 	println("uploading", tarSrcPath)
-	panicOn(UploadTar(tarSrcPath, direct, c))
+	panicOn(UploadTar(tarSrcPath, direct, c, profile, host))
 	vv("total elapsed '%v'", time.Since(t0))
+}
+
+func startProfile(host string) {
+	cli := &gohttp.Client{}
+	req := &gohttp.Request{
+		Method: "GET",
+		URL: &url.URL{
+			Scheme: "http",
+			Host:   host,
+			Path:   "/cpu-profile/start",
+		},
+	}
+	resp, err := cli.Do(req)
+	if err != nil {
+		if resp != nil {
+			resp.Body.Close()
+		}
+		panic(err)
+	}
+}
+
+func stopProfile(host, outfile string) {
+	cli := &gohttp.Client{}
+	req := &gohttp.Request{
+		Method: "GET",
+		URL: &url.URL{
+			Scheme: "http",
+			Host:   host,
+			Path:   "/cpu-profile/stop",
+		},
+	}
+	resp, err := cli.Do(req)
+	if err != nil {
+		if resp != nil {
+			resp.Body.Close()
+		}
+		panic(err)
+	}
+
+	fd, err := os.Create(outfile)
+	panicOn(err)
+	defer fd.Close()
+	_, err = io.Copy(fd, resp.Body)
+	panicOn(err)
+
 }
 
 var globURI *pilosa.URI
