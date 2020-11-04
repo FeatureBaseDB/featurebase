@@ -143,8 +143,9 @@ type Qcx struct {
 	done bool
 }
 
-// Finish commits/rollsback all stored Tx and resets the
-// Qcx for further operations, avoiding the need to call NewQxc() again.
+// Finish commits/rollsback all stored Tx. It no longer resets the
+// Qcx for further operations automatically. User must call Reset()
+// or NewQxc() again.
 func (q *Qcx) Finish() (err error) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
@@ -223,7 +224,7 @@ var ErrQcxDone = fmt.Errorf("Qcx already Aborted or Finished, so must call reset
 //		return e.executeIncludesColumnCallShard(ctx, tx, index, c, shard, col)
 //	}
 //
-// Note we are tracking the returned err value of someFunc(). An option instead is to say
+// Note we are tracking the returned err0 error value of someFunc(). An option instead is to say
 //
 //     defer finisher(nil)
 //
@@ -408,7 +409,7 @@ func (qcx *Qcx) ListOpenTx() string {
 }
 
 // TxFactory abstracts the creation of Tx interface-level
-// transactions so that RBF, or LMDB, or Roaring-fragment-files, or several
+// transactions so that RBF, BoltDB, LMDB, or Roaring-fragment-files, or several
 // of these at once in parallel, is used as the storage and transction layer.
 type TxFactory struct {
 	typeOfTx string
@@ -488,6 +489,7 @@ func (txf *TxFactory) NeedsSnapshot() (b bool) {
 		switch ty {
 		case roaringTxn:
 			b = true
+			return
 		}
 	}
 	return
@@ -529,8 +531,7 @@ func MustTxsrcToTxtype(txsrc string) (types []txtype) {
 
 // NewTxFactory always opens an existing database. If you
 // want to a fresh database, os.RemoveAll on dir/name ahead of time.
-// We always store files in a subdir of holderDir. If we are having one
-// database or many can depend on name.
+// We always store files in a subdir of holderDir.
 func NewTxFactory(txsrc string, holderDir string, holder *Holder) (f *TxFactory, err error) {
 	types := MustTxsrcToTxtype(txsrc)
 
@@ -821,7 +822,7 @@ func (g *TxGroup) FinishGroup() (err error) {
 
 // Abort calls Rollback() on all the group Tx, and marks
 // the group as finished. Either Abort() or Finish() must
-// be called on the TxGroup exactly once.
+// be called on the TxGroup.
 func (g *TxGroup) AbortGroup() {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -846,9 +847,11 @@ func (f *TxFactory) NewTx(o Txo) (txn Tx) {
 		}
 	}()
 
-	f.mu.Lock()
-	o.blueGreenOff = f.blueGreenOff
-	f.mu.Unlock()
+	if f.isBlueGreen {
+		f.mu.Lock()
+		o.blueGreenOff = f.blueGreenOff
+		f.mu.Unlock()
+	}
 
 	indexName := ""
 	if o.Index != nil {
