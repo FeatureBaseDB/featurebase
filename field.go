@@ -1686,7 +1686,10 @@ func (f *Field) Import(qcx *Qcx, rowIDs, columnIDs []uint64, timestamps []*time.
 			return errors.Wrap(err, "creating fragment")
 		}
 
-		tx, finisher := qcx.GetTx(Txo{Write: true, Index: frag.idx, Fragment: frag, Shard: frag.shard})
+		tx, finisher, err := qcx.GetTx(Txo{Write: true, Index: frag.idx, Fragment: frag, Shard: frag.shard})
+		if err != nil {
+			return errors.Wrap(err, "qcx.GetTx")
+		}
 
 		err1 := frag.bulkImport(tx, data.RowIDs, data.ColumnIDs, options)
 		if err1 != nil {
@@ -1798,12 +1801,15 @@ func (f *Field) importValue(qcx *Qcx, columnIDs []uint64, values []int64, option
 		}
 
 		// now we know which shard we discovered.
-		tx, finisher := qcx.GetTx(Txo{Write: writable, Index: f.idx, Shard: frag.shard})
+		tx, finisher, err := qcx.GetTx(Txo{Write: writable, Index: f.idx, Shard: frag.shard})
+		if err != nil {
+			return err
+		}
 		// by deferring, even though we are in loop, we get en-mass commit at once if they all succeed,
 		// or en-mass rollback if any fail.
 		defer finisher(&err0)
 
-		if err := frag.importValue(tx, data.ColumnIDs, baseValues, requiredDepth, options.Clear); err != nil {
+		if err = frag.importValue(tx, data.ColumnIDs, baseValues, requiredDepth, options.Clear); err != nil {
 			return err
 		}
 	}

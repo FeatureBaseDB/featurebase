@@ -211,6 +211,8 @@ func (f *TxFactory) NewQcx() (qcx *Qcx) {
 
 var NoopFinisher = func(perr *error) {}
 
+var ErrQcxDone = fmt.Errorf("Qcx already Aborted or Finished, so must call reset before re-use")
+
 // GetTx is used like this:
 //
 // someFunc(ctx context.Context, shard uint64) (_ interface{}, err0 error) {
@@ -244,13 +246,12 @@ var NoopFinisher = func(perr *error) {}
 // be clearer (and much safer) to rename the enclosing functions 'err' to 'err0',
 // to make it clear we are referring to the first and final error.
 //
-func (qcx *Qcx) GetTx(o Txo) (tx Tx, finisher func(perr *error)) {
+func (qcx *Qcx) GetTx(o Txo) (tx Tx, finisher func(perr *error), err error) {
 	qcx.mu.Lock()
 	defer qcx.mu.Unlock()
 
 	if qcx.done {
-		panic(fmt.Sprintf("cannot call GetTx on a Qcx that is already done. "+
-			"Must call Reset() or txf.NewQcx(); stack='%v'", stack()))
+		return nil, nil, ErrQcxDone
 	}
 
 	// Use direct option if set on QCX.
@@ -263,7 +264,7 @@ func (qcx *Qcx) GetTx(o Txo) (tx Tx, finisher func(perr *error)) {
 	// roaring Tx are No-ops anyway, so just give it a new Tx
 	// everytime.
 	if qcx.isRoaring {
-		return qcx.Txf.NewTx(o), NoopFinisher
+		return qcx.Txf.NewTx(o), NoopFinisher, nil
 	}
 
 	// qcx.write reflects the top executor determination
@@ -303,7 +304,7 @@ func (qcx *Qcx) GetTx(o Txo) (tx Tx, finisher func(perr *error)) {
 		if o.Index.name != ro.Index.name {
 			panic(fmt.Sprintf("index mismatch: o.Index = %v while qcx.RequiredTxo.Index = %v", o.Index.name, ro.Index.name))
 		}
-		return *qcx.RequiredForAtomicWriteTx, NoopFinisher
+		return *qcx.RequiredForAtomicWriteTx, NoopFinisher, nil
 	}
 
 	if !o.Write && qcx.Grp != nil {

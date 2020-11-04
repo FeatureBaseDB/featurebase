@@ -53,7 +53,8 @@ func Test_TxFactory_Qcx_query_context(t *testing.T) {
 			// add to the group txn on the txf.
 			qcx := idx.holder.txf.NewQcx()
 
-			tx, finisher := qcx.GetTx(Txo{Write: true, Index: idx, Shard: f.shard})
+			tx, finisher, err := qcx.GetTx(Txo{Write: true, Index: idx, Shard: f.shard})
+			panicOn(err)
 
 			// Set bits on the fragment.
 			if _, err := f.setBit(tx, 120, 1); err != nil {
@@ -76,7 +77,8 @@ func Test_TxFactory_Qcx_query_context(t *testing.T) {
 			panicOn(qcx.Finish())
 			qcx.Reset()
 
-			tx, finread := qcx.GetTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: f.shard})
+			tx, finread, err := qcx.GetTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: f.shard})
+			panicOn(err)
 			if n := f.mustRow(tx, 120).Count(); n != 2 {
 				panic(fmt.Sprintf("unexpected count (reopen): %d", n))
 			} else if n := f.mustRow(tx, 121).Count(); n != 1 {
