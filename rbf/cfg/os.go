@@ -20,3 +20,8 @@ package cfg
 // size of the database. The size can be increased by updating the DB.MaxSize
 // and reopening the database. This setting mainly affects virtual space usage.
 const DefaultMaxSize = 4 * (1 << 30)
+
+// DefaultMaxWALSize is the default mmap size and therefore the maximum allowed
+// size of the WAL. The size can be increased by updating the DB.MaxWALSize
+// and reopening the database. This setting mainly affects virtual space usage.
+const DefaultMaxWALSize = 2 * (1 << 30)

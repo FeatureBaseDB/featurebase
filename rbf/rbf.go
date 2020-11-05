@@ -694,3 +694,27 @@ func (db *DB) fsync(f *os.File) error {
 	}
 	return f.Sync()
 }
+
+// uint32Hasher implements Hasher for uint32 keys.
+type uint32Hasher struct{}
+
+// Hash returns a hash for key.
+func (h *uint32Hasher) Hash(key interface{}) uint32 {
+	return hashUint64(uint64(key.(uint32)))
+}
+
+// Equal returns true if a is equal to b. Otherwise returns false.
+// Panics if a and b are not ints.
+func (h *uint32Hasher) Equal(a, b interface{}) bool {
+	return a.(uint32) == b.(uint32)
+}
+
+// hashUint64 returns a 32-bit hash for a 64-bit value.
+func hashUint64(value uint64) uint32 {
+	hash := value
+	for value > 0xffffffff {
+		value /= 0xffffffff
+		hash ^= value
+	}
+	return uint32(hash)
+}

@@ -39,45 +39,6 @@ func TestDB_Open(t *testing.T) {
 	}
 }
 
-/* optimization of wal size means there may certainly be more than 2 WAL segments.
-func TestDB_Checkpoint(t *testing.T) {
-	if testing.Short() {
-		t.Skip("-short enabled, skipping")
-	}
-
-	db := MustOpenDB(t)
-	defer MustCloseDB(t, db)
-
-	// Create bitmap.
-	if tx, err := db.Begin(true); err != nil {
-		t.Fatal(err)
-	} else if err := tx.CreateBitmap("x"); err != nil {
-		t.Fatal(err)
-	} else if err := tx.Commit(); err != nil {
-		t.Fatal(err)
-	}
-
-	// Create a bunch of transactions to generate WAL segments.
-	rand := rand.New(rand.NewSource(0))
-	for i := 0; i < 1000; i++ {
-		if tx, err := db.Begin(true); err != nil {
-			t.Fatal(err)
-		} else if _, err := tx.Add("x", rand.Uint64()); err != nil {
-			t.Fatal(err)
-		} else if _, err := tx.Add("x", rand.Uint64()); err != nil {
-			t.Fatal(err)
-		} else if err := tx.Commit(); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	// Ensure there is no more than two WAL segments.
-	if n := len(db.WALSegments()); n > 2 {
-		t.Fatalf("expected two or fewer WAL segments, got %d", n)
-	}
-}
-*/
-
 func TestDB_Recovery(t *testing.T) {
 	// Ensure a bitmap header written without a bitmap is truncated.
 	t.Run("TruncPartialWALBitmap", func(t *testing.T) {
@@ -121,11 +82,10 @@ func TestDB_Recovery(t *testing.T) {
 		tx1.Rollback()
 
 		// Close database & truncate WAL to remove commit page & bitmap data page.
-		segments := db.WALSegments()
-		segment := segments[len(segments)-1]
+		walPath, walSize := db.WALPath(), db.WALSize()
 		if err := db.Close(); err != nil {
 			t.Fatal(err)
-		} else if err := os.Truncate(segment.Path, segment.Size()-(2*rbf.PageSize)); err != nil {
+		} else if err := os.Truncate(walPath, walSize-(2*rbf.PageSize)); err != nil {
 			t.Fatal(err)
 		}
 
