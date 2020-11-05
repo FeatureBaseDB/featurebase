@@ -20,12 +20,12 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
 	"syscall"
 	"text/tabwriter"
-	"time"
 
 	"github.com/pilosa/pilosa/v2/hash"
 	"github.com/pilosa/pilosa/v2/rbf"
@@ -1320,7 +1320,7 @@ func (f *TxFactory) greenHasData() (hasData bool, err error) {
 // txfactory_internal_test.go as well.
 //
 // This is a noop if we aren't running under a blue_green PILOSA_TXSRC.
-func (f *TxFactory) green2blue(holder *Holder) (err error) {
+func (f *TxFactory) green2blue(holder *Holder) (err0 error) {
 
 	// Holder.Open will always call us, even without blue_green. Which is fine.
 	// We are just a no-op in that case.
@@ -1360,13 +1360,25 @@ func (f *TxFactory) green2blue(holder *Holder) (err error) {
 		return fmt.Errorf("error: cannot migrate from green '%v' because it has no data in it.", greenSrc)
 	}
 
+	nGoro := runtime.NumCPU()
+	if nGoro < 5 {
+		// try to get some overlapped IO
+		nGoro = 5
+	}
+	pj := newParallelJobs(nGoro)
+
+	action := "verify"
 	if blueHasData {
 		verifyInsteadOfCopy = true
+		defer holder.Logger.Printf("bitmap-backend verification done    : %v compared to %v", blueDest, greenSrc)
 	} else {
-		holder.Logger.Printf("bitmap-backend migration starting: populating %v from %v", blueDest, greenSrc)
+		action = "migrate"
+		holder.Logger.Printf("bitmap-backend migration starting: populating %v from %v with %v threads", blueDest, greenSrc, nGoro)
 		defer holder.Logger.Printf("bitmap-backend migration done    : populated  %v from %v", blueDest, greenSrc)
 	}
+	firstPjobStarted := false
 
+indexloop:
 	for k, idx := range idxs {
 
 		// scan directories
@@ -1399,39 +1411,56 @@ func (f *TxFactory) green2blue(holder *Holder) (err error) {
 			}
 		}
 
-		lastProgress := time.Now()
-		progressCount := 0
+		shardNum := 0
 		for shard := range greenShards {
+			shardNum++
+			shnum := shardNum
+			idx := idx
+			shard := shard
+			k := k
+			fun := func(worker int) error {
 
-			dbs, err := f.dbPerShard.GetDBShard(idx.name, shard, idx)
-			if err != nil {
-				return errors.Wrap(err, fmt.Sprintf("GetDBShard(index='%v', shard='%v')", idx.name, int(shard)))
+				dbs, err := f.dbPerShard.GetDBShard(idx.name, shard, idx)
+				if err != nil {
+					return errors.Wrap(err, fmt.Sprintf("GetDBShard(index='%v', shard='%v')", idx.name, int(shard)))
+				}
+
+				holder.Logger.Printf("%v progress on index '%v' (%v of %v): on shard '%v' (%v of %v) [worker %v]",
+					action, idx.name, k+1, len(idxs), shard, shnum, len(greenShards), worker)
+
+				if verifyInsteadOfCopy {
+					// verify all containers
+					err = dbs.verifyBlueEqualsGreen()
+					if err != nil {
+						return errors.Wrap(err,
+							fmt.Sprintf("dbs.verifyBlueEqualsGreen(blue='%v', "+
+								"green='%v') for index='%v', shard='%v'",
+								blueDest, greenSrc, idx.name, int(shard)))
+					}
+				} else {
+					// the main copy work
+					err = dbs.populateBlueFromGreen()
+					if err != nil {
+						return errors.Wrap(err,
+							fmt.Sprintf("dbs.copyGreenToBlue(blue='%v', "+
+								"green='%v') for index='%v', shard='%v'",
+								blueDest, greenSrc, idx.name, int(shard)))
+					}
+				}
+				return nil
+			} // end of fun definition
+
+			if !pj.run(fun) {
+				break indexloop
 			}
-
-			if verifyInsteadOfCopy {
-				// verify all containers
-				err = dbs.verifyBlueEqualsGreen()
-				if err != nil {
-					return errors.Wrap(err,
-						fmt.Sprintf("dbs.verifyBlueEqualsGreen(blue='%v', "+
-							"green='%v') for index='%v', shard='%v'",
-							blueDest, greenSrc, idx.name, int(shard)))
-				}
-			} else {
-				// the main copy work
-				progressCount++
-				if progressCount == 1 || time.Since(lastProgress) > time.Second {
-					holder.Logger.Printf("migration progress on index '%v' (%v of %v): on shard %v of %v",
-						idx.name, k+1, len(idxs), progressCount, len(greenShards))
-					lastProgress = time.Now()
-				}
-				err = dbs.populateBlueFromGreen()
-				if err != nil {
-					return errors.Wrap(err,
-						fmt.Sprintf("dbs.copyGreenToBlue(blue='%v', "+
-							"green='%v') for index='%v', shard='%v'",
-							blueDest, greenSrc, idx.name, int(shard)))
-				}
+			if !firstPjobStarted {
+				firstPjobStarted = true
+				defer func() {
+					err1 := pj.waitForFinish()
+					if err0 == nil {
+						err0 = err1
+					}
+				}()
 			}
 		}
 	}

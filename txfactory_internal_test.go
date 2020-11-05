@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/glycerine/lmdb-go/lmdb"
+	//"github.com/pilosa/pilosa/v2/logger"
 )
 
 func Test_TxFactory_Qcx_query_context(t *testing.T) {
@@ -390,14 +391,13 @@ func Test_TxFactory_verifyBlueEqualsGreen(t *testing.T) {
 			// The Holder.Open should verify blue against green and notice the extra bit.
 			h6 := NewHolder(path, nil)
 			err = h6.Open()
-
-			//vv("h6.Open() had err = '%v', PILOSA_TXSRC='%v'", err, os.Getenv("PILOSA_TXSRC"))
 			//h6.DumpAllShards()
 
 			if err == nil {
 				h6.Close()
 				t.Fatalf("should have had blue-green verification fail on Holder.Open")
 			}
+
 			h6.Close()
 		}
 	}

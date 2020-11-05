@@ -26,7 +26,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/glycerine/idem"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/v2/hash"
 	"github.com/pilosa/pilosa/v2/internal"
@@ -799,55 +798,13 @@ func (idx *Index) ComputeTranslatorSummary(verbose, checkKeys, applyKeyRepairs b
 		fmt.Printf("\n# index: %v\n# =================\n", idx.name)
 	}
 
-	jobQ := make(chan func() error, 10000)
-	var errmu sync.Mutex
-
-	if parallelReaders < 1 {
-		// turn it up to 11
-		parallelReaders = 10000
-	}
-
-	halters := make([]*idem.Halter, parallelReaders)
-	for j := 0; j < parallelReaders; j++ {
-		h := idem.NewHalter()
-		halters[j] = h
-	}
-	for _, h := range halters {
-		go func(h *idem.Halter) {
-			defer h.MarkDone()
-			for {
-				select {
-				case <-h.ReqStop.Chan:
-					return
-				case f, ok := <-jobQ:
-					if !ok || f == nil {
-						// channel closed, finish up
-						return
-					}
-
-					err1 := f()
-					if err1 != nil {
-						errmu.Lock()
-						if err == nil {
-							err = err1
-						}
-						errmu.Unlock()
-						// an error occurred, tell everyone to stop
-						for _, h2 := range halters {
-							h2.RequestStop()
-						}
-						return
-					}
-				}
-			}
-		}(h)
-	}
+	pjob := newParallelJobs(parallelReaders)
 
 floop:
 	for _, fld := range idx.fields {
 		fld := fld
 
-		fun := func() error {
+		fun := func(worker int) error {
 			//vv("ComputeTranslatorSummary() on fld '%v'", fld.name)
 			sum, err := fld.translateStore.ComputeTranslatorSummaryRows()
 			if err != nil {
@@ -866,10 +823,8 @@ floop:
 			return nil
 		}
 
-		select {
-		case <-halters[0].ReqStop.Chan:
+		if !pjob.run(fun) {
 			break floop
-		case jobQ <- fun:
 		}
 	} // end floop
 
@@ -882,7 +837,7 @@ tloop:
 		partitionID := partitionID
 		store := store
 
-		fun2 := func() error {
+		fun2 := func(worker int) error {
 			//vv("ComputeTranslatorSummary() running on store.Path = '%v'", store.GetStorePath())
 			if checkKeys {
 				prim := topo.PrimaryNodeIndex(partitionID)
@@ -943,19 +898,14 @@ tloop:
 
 			return nil
 		}
-		select {
-		case <-halters[0].ReqStop.Chan:
+		if !pjob.run(fun2) {
 			break tloop
-		case jobQ <- fun2:
 		}
+
 	} // end tloop
 
-	close(jobQ) // tell the workers no more jobs.
+	err = pjob.waitForFinish()
 
-	// wait for everyone to finish
-	for _, h := range halters {
-		<-h.Done.Chan
-	}
 	return ats, err
 }
 
