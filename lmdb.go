@@ -183,13 +183,6 @@ func (r *lmdbRegistrar) OpenDBWrapper(path0 string, doAllocZero bool, rbfcfg *rb
 	// flags = flags | lmdb.WriteMap | lmdb.NoMetaSync | lmdb.NoSync // about the same speed
 	// flags = flags | lmdb.NoMetaSync | lmdb.NoSync // slows things down
 
-	// TODO(jea): we got an odd segfault in the roaring/ pkg when we went to read-only mmap
-	// with the row-cache off; probably means we were trying to write to mmap-ed
-	// memory. Investigate at some point. reference: 2a77b25d ja/write_map_prevents_segfault
-	//
-	// Update: added COW to roaring/roaring.go:3282  func (c *Container) arrayRemove(),
-	// seems to fix the issue.
-	//
 	//flags = flags | lmdb.WriteMap // seems faster than without: or maybe not. not sure.
 	// kRemove  N=  710401   avg/op:      7.714µs   sd:      27.83µs  total: 5.480656859s
 	//    kAdd  N=  722835   avg/op:      9.096µs   sd:    105.787µs  total: 6.575497725s
@@ -202,12 +195,17 @@ func (r *lmdbRegistrar) OpenDBWrapper(path0 string, doAllocZero bool, rbfcfg *rb
 		// On my darwin/OSX laptop with 16GB ram, for instance, we
 		// can have difficulty obtaining this, resulting in
 		//   panic: mdb_env_open: no space left on device
-		lmdb.WriteMap | // Use a writable memory map.
+		lmdb.WriteMap // Use a writable memory map.
 
-		// default ACI (not Durable) transactions; 300% faster write speed results.
-		lmdb.NoMetaSync | // Don't fsync metapage after commit.
-		lmdb.NoSync | // Don't fsync after commit.
-		lmdb.MapAsync // Flush asynchronously when using the WriteMap flag.
+	if rbfcfg == nil || !rbfcfg.FsyncEnabled {
+		// default for lmdb: fsync off.
+		// unsafe, but get upper bound on performance.
+		flags = flags |
+			// default ACI (not Durable) transactions; 300% faster write speed results.
+			lmdb.NoMetaSync | // Don't fsync metapage after commit.
+			lmdb.NoSync | // Don't fsync after commit.
+			lmdb.MapAsync // Flush asynchronously when using the WriteMap flag.
+	}
 
 	if !DirExists(path) {
 		panicOn(os.MkdirAll(path, 0755))

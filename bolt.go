@@ -164,8 +164,14 @@ func (r *boltRegistrar) OpenDBWrapper(path0 string, doAllocZero bool, rbfcfg *rb
 	// re-sync during recovery.
 	// NoFreelistSync bool
 
-	//db.NoSync = true
-	//db.NoFreelistSync = true
+	if rbfcfg != nil && !rbfcfg.FsyncEnabled {
+		db.NoSync = true
+		db.NoFreelistSync = true
+	} else {
+		// default to using fsync on bolt.
+		db.NoSync = false
+		db.NoFreelistSync = false
+	}
 
 	err = db.Update(func(tx *bolt.Tx) (err error) {
 		_, err = tx.CreateBucketIfNotExists(bucketCT)
