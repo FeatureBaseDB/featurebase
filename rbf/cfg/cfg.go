@@ -58,5 +58,7 @@ func (cfg *Config) DefineFlags(flags *pflag.FlagSet) {
 	flags.DurationVar(&cfg.CheckpointEveryDur, "rbf-checkpoint-dur", default0.CheckpointEveryDur,
 		"RBF checkpoint on the next write that occurs this long or more after the previous write. 0 means checkpoint after every write.")
 	flags.Int64Var(&cfg.MaxSize, "rbf-max-db-size", default0.MaxSize, "RBF maximum size in bytes of a database file (distinct from a WAL file)")
-	flags.BoolVar(&cfg.FsyncEnabled, "rbf-fsync", default0.FsyncEnabled, "RBF: enable fsync fully safe flush-to-disk at each checkpoint")
+
+	// renamed from --rbf-fsync to just --fsync because now it applies to all Tx backends.
+	flags.BoolVar(&cfg.FsyncEnabled, "fsync", default0.FsyncEnabled, "enable fsync fully safe flush-to-disk")
 }
