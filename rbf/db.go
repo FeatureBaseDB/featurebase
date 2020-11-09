@@ -51,9 +51,8 @@ type DB struct {
 	walPageN int      // wal page count
 	wcache   []byte   // wal write cache
 
-	mu     sync.RWMutex // general mutex
-	rwmu   sync.Mutex   // mutex for restricting single writer
-	exclmu sync.RWMutex // mutex for locking out everyone but a single writer
+	mu   sync.RWMutex // general mutex
+	rwmu sync.Mutex   // mutex for restricting single writer
 
 	// Path represents the path to the database file.
 	Path string
@@ -142,7 +141,7 @@ func (db *DB) Open() (err error) {
 	// Open write-ahead log & checkpoint to the end since no transactions are open.
 	if err := db.openWAL(); err != nil {
 		return fmt.Errorf("wal open: %w", err)
-	} else if err := db.checkpoint(true); err != nil {
+	} else if err := db.checkpoint(); err != nil {
 		return fmt.Errorf("checkpoint: %w", err)
 	}
 
@@ -193,7 +192,7 @@ func (db *DB) openWAL() (err error) {
 
 // checkpoint moves all WAL pages to the main DB file.
 // Must be called by a write transaction while under db.mu lock.
-func (db *DB) checkpoint(exclusive bool) error {
+func (db *DB) checkpoint() error {
 	if !db.opened {
 		return nil
 	} else if len(db.txs) > 0 {
@@ -417,32 +416,6 @@ func (db *DB) initFreelistPage() error {
 
 // Begin starts a new transaction.
 func (db *DB) Begin(writable bool) (_ *Tx, err error) {
-	return db.begin(writable, false)
-}
-
-// BeginWithExclusiveLock starts a new transaction with an exclusive lock.
-//
-// This waits for all read transactions to finish and disallows any other
-// transactions on the database. All WAL writes are flushed to disk and page
-// writes during this transaction are written directly to the database file.
-//
-// Note that because page writes are direct, write failures can corrupt the
-// database. This should only be used during bulk loading of data.
-func (db *DB) BeginWithExclusiveLock() (_ *Tx, err error) {
-	return db.begin(true, true)
-}
-
-func (db *DB) begin(writable, exclusive bool) (_ *Tx, err error) {
-	if exclusive {
-		assert(writable) // exclusive transactions must be writable
-	}
-
-	if exclusive {
-		db.exclmu.Lock()
-	} else {
-		db.exclmu.RLock()
-	}
-
 	// Ensure only one writable transaction at a time.
 	if writable {
 		db.rwmu.Lock()
@@ -451,12 +424,6 @@ func (db *DB) begin(writable, exclusive bool) (_ *Tx, err error) {
 	// This local function is called at exit points that occur before we can
 	// call Rollback() which would normally release these locks.
 	cleanup := func() {
-		if exclusive {
-			db.exclmu.Unlock()
-		} else {
-			db.exclmu.RUnlock()
-		}
-
 		if writable {
 			db.rwmu.Unlock()
 		}
@@ -475,23 +442,12 @@ func (db *DB) begin(writable, exclusive bool) (_ *Tx, err error) {
 		return nil, ErrClosed
 	}
 
-	// Flush all WAL writes to disk before an exclusive writer so that we can
-	// work directly with the on-disk database.
-	if exclusive {
-		if err := db.checkpoint(true); err != nil {
-			cleanup()
-			db.mu.Unlock()
-			return nil, err
-		}
-	}
-
 	tx := &Tx{
 		db:          db,
 		rootRecords: db.rootRecords,
 		pageMap:     db.pageMap,
 		walPageN:    db.walPageN,
 		writable:    writable,
-		exclusive:   exclusive,
 
 		DeleteEmptyContainer: true,
 	}
@@ -524,12 +480,6 @@ func (db *DB) begin(writable, exclusive bool) (_ *Tx, err error) {
 
 // removeTx removes an active transaction from the database.
 func (db *DB) removeTx(tx *Tx) error {
-	if tx.exclusive {
-		db.exclmu.Unlock()
-	} else {
-		db.exclmu.RUnlock()
-	}
-
 	// Release writer lock if tx is writable.
 	if tx.writable {
 		tx.db.rwmu.Unlock()
@@ -546,7 +496,7 @@ func (db *DB) removeTx(tx *Tx) error {
 	// comment in cfg/cfg.go for CheckpointEveryDur.
 	if tx.writable {
 		if db.cfg.CheckpointEveryDur == 0 || time.Since(db.lastCheckpoint) > db.cfg.CheckpointEveryDur {
-			if err := db.checkpoint(false); err != nil {
+			if err := db.checkpoint(); err != nil {
 				return fmt.Errorf("checkpoint: %w", err)
 			}
 			db.lastCheckpoint = time.Now()

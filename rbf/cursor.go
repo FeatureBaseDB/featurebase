@@ -322,13 +322,7 @@ func toPgno(val []byte) uint32 {
 	return binary.LittleEndian.Uint32(val)
 }
 func (c *Cursor) putLeafCell(in leafCell) (err error) {
-	// Copy target page if we are using direct writes because a split will
-	// cause the source data to be overwritten after the first page is written.
 	leafPage := c.leafPage
-	if c.tx.exclusive {
-		leafPage = make([]byte, PageSize)
-		copy(leafPage, c.leafPage)
-	}
 
 	cells := readLeafCells(leafPage, c.leafCells[:])
 	elem := &c.stack.elems[c.stack.index]
@@ -504,14 +498,6 @@ func (c *Cursor) putBranchCells(stackIndex int, newCells []branchCell) (err erro
 	page, err := c.tx.readPage(elem.pgno)
 	if err != nil {
 		return err
-	}
-
-	// Copy target page if we are using direct writes because a split will
-	// cause the source data to be overwritten after the first page is written.
-	if c.tx.exclusive {
-		tmp := make([]byte, PageSize)
-		copy(tmp, page)
-		page = tmp
 	}
 
 	cells := readBranchCells(page)

@@ -128,10 +128,6 @@ type Qcx struct {
 	// efficient access to the options for RequiredForAtomicWriteTx
 	RequiredTxo *Txo
 
-	// Option for direct writes to the database. RBF only.
-	// This option is unsafe and should only be used for imports.
-	Direct bool
-
 	isRoaring bool
 
 	// top-level context is for a write, so re-use a
@@ -253,11 +249,6 @@ func (qcx *Qcx) GetTx(o Txo) (tx Tx, finisher func(perr *error), err error) {
 
 	if qcx.done {
 		return nil, nil, ErrQcxDone
-	}
-
-	// Use direct option if set on QCX.
-	if qcx.Direct {
-		o.Direct = true
 	}
 
 	// roaring uses finer grain, a file per fragment rather than
@@ -573,7 +564,6 @@ func (f *TxFactory) UseRowCache() bool {
 // Txo holds the transaction options
 type Txo struct {
 	Write    bool
-	Direct   bool // directly write to the database. rbf only. (unsafe)
 	Field    *Field
 	Index    *Index
 	Fragment *fragment

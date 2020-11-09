@@ -42,10 +42,9 @@ type Tx struct {
 	// pageMap holds WAL pages that have not yet been transferred
 	// into the database pages. So it can be empty, if the whole previous
 	// WAL has been checkpointed back into the database.
-	pageMap   *immutable.Map // mapping of database pages to WAL IDs
-	writable  bool           // if true, tx can write
-	exclusive bool           // if true, tx writes directly to db file (no wal)
-	dirty     bool           // if true, changes have been made
+	pageMap  *immutable.Map // mapping of database pages to WAL IDs
+	writable bool           // if true, tx can write
+	dirty    bool           // if true, changes have been made
 
 	// If Rollback() has already completed, don't do it again.
 	// Note db == nil means that commit has already been done.
@@ -967,11 +966,6 @@ func (tx *Tx) writePage(page []byte) error {
 	// Mark transaction as dirty so we write a meta page on commit/rollback.
 	tx.dirty = true
 
-	// If we are running in exclusive mode, directly write page to database.
-	if tx.exclusive {
-		return tx.db.writeDBPage(readPageNo(page), page)
-	}
-
 	// Write page to WAL and obtain position in WAL.
 	walID, err := tx.writeWALPage(page, false)
 	if err != nil {
@@ -987,11 +981,6 @@ func (tx *Tx) writeBitmapPage(pgno uint32, page []byte) error {
 	// Mark transaction as dirty so we write a meta page on commit/rollback.
 	tx.dirty = true
 
-	// If we are running in exclusive mode, directly write page to database.
-	if tx.exclusive {
-		return tx.db.writeDBPage(pgno, page)
-	}
-
 	// Write bitmap to WAL and obtain WAL position of the actual page data (not the prefix page).
 	walID, err := tx.writeBitmapWALPage(pgno, page)
 	if err != nil {
@@ -1006,11 +995,6 @@ func (tx *Tx) writeBitmapPage(pgno uint32, page []byte) error {
 func (tx *Tx) writeMetaPage(flag uint32) error {
 	// Set meta flags.
 	writeFlags(tx.meta[:], flag)
-
-	// If we are running in exclusive mode, directly write page to database.
-	if tx.exclusive {
-		return tx.db.writeDBPage(0, tx.meta[:])
-	}
 
 	// Write page to WAL and obtain position in WAL.
 	walID, err := tx.writeWALPage(tx.meta[:], true)

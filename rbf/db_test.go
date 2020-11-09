@@ -112,67 +112,6 @@ func TestDB_Recovery(t *testing.T) {
 	})
 }
 
-func TestDB_BeginWithExclusiveLock(t *testing.T) {
-	t.Run("EnsureBlock", func(t *testing.T) {
-		db := MustOpenDB(t)
-		defer MustCloseDB(t, db)
-
-		tx, err := db.BeginWithExclusiveLock()
-		if err != nil {
-			t.Fatal(err)
-		} else if err := tx.CreateBitmap("x"); err != nil {
-			t.Fatal(err)
-		}
-
-		// Attempt to start another transaction in a second goroutine.
-		ch := make(chan struct{})
-		go func() {
-			tx1, err := db.Begin(false)
-			if err != nil {
-				panic(err)
-			}
-			defer tx1.Rollback()
-			close(ch) // signal
-		}()
-
-		// Ensure other transctions are blocked during an exclusive lock.
-		select {
-		case <-ch:
-			t.Fatal("secondary transaction too soon")
-		case <-time.After(100 * time.Millisecond):
-		}
-
-		// Release exclusive lock.
-		if err := tx.Commit(); err != nil {
-			t.Fatal(err)
-		}
-
-		// Ensure other transaction to begin after exclusive lock released.
-		select {
-		case <-time.After(1 * time.Second):
-			t.Fatal("expected secondary transaction")
-		case <-ch:
-		}
-	})
-
-	t.Run("EnsureNoWAL", func(t *testing.T) {
-		db := MustOpenDB(t)
-		defer MustCloseDB(t, db)
-
-		tx, err := db.BeginWithExclusiveLock()
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer tx.Rollback()
-
-		if err := tx.CreateBitmap("x"); err != nil {
-			t.Fatal(err)
-		} else if got, want := db.WALSize(), int64(0); got != want {
-			t.Fatalf("WALSize()=%d, want %d", got, want)
-		}
-	})
-}
-
 func TestDB_HasData(t *testing.T) {
 
 	db := MustOpenDB(t)
