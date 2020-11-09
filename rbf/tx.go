@@ -14,6 +14,7 @@
 package rbf
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"math"
@@ -36,7 +37,6 @@ type Tx struct {
 	meta        [PageSize]byte // copy of current meta page
 	walID       int64          // max WAL ID at start of tx
 	walPageN    int            // wal page count
-	wcache      []byte         // write cache
 	rootRecords []*RootRecord  // read-only cache of root records
 
 	// pageMap holds WAL pages that have not yet been transferred
@@ -44,7 +44,9 @@ type Tx struct {
 	// WAL has been checkpointed back into the database.
 	pageMap  *immutable.Map // mapping of database pages to WAL IDs
 	writable bool           // if true, tx can write
-	dirty    bool           // if true, changes have been made
+
+	dirtyPages       map[uint32][]byte // updated pages in this tx
+	dirtyBitmapPages map[uint32][]byte // updated bitmap pages in this tx
 
 	// If Rollback() has already completed, don't do it again.
 	// Note db == nil means that commit has already been done.
@@ -65,6 +67,11 @@ func (tx *Tx) Writable() bool {
 	return tx.writable
 }
 
+// dirty returns true if any pages have been updated in this tx.
+func (tx *Tx) dirty() bool {
+	return len(tx.dirtyPages) != 0 || len(tx.dirtyBitmapPages) != 0
+}
+
 // PageN returns the number of pages in the database as seen by this transaction.
 func (tx *Tx) PageN() int {
 	return int(readMetaPageN(tx.meta[:]))
@@ -81,13 +88,9 @@ func (tx *Tx) Commit() error {
 
 	// If any pages have been written, ensure we write a new meta page with
 	// the commit flag to mark the end of the transaction.
-	if tx.dirty {
-		if err := tx.writeMetaPage(MetaPageFlagCommit); err != nil {
+	if tx.dirty() {
+		if err := tx.flush(); err != nil {
 			return err
-		} else if err := tx.flushWALWriter(); err != nil {
-			return err
-		} else if err := tx.db.fsync(tx.db.walFile); err != nil {
-			return fmt.Errorf("sync wal: %w", err)
 		}
 		// future plan: after checkpoint is moved to background
 		// or not every removeTx, then we can move the
@@ -118,19 +121,6 @@ func (tx *Tx) Rollback() {
 	if tx.db == nil {
 		// Commit already done.
 		return
-	}
-
-	// TODO(bbj): Invalidate DB if rollback fails. Possibly attempt reopen?
-
-	// Remove any writes to the WAL from this transaction.
-	if tx.dirty {
-		func() {
-			tx.db.mu.Lock()
-			defer tx.db.mu.Unlock()
-			if err := tx.db.walFile.Truncate(int64(tx.db.walPageN * PageSize)); err != nil {
-				panicOn(fmt.Errorf("rollback truncate: %w", err))
-			}
-		}()
 	}
 
 	// Disconnect transaction from DB.
@@ -944,65 +934,36 @@ func (tx *Tx) readPage(pgno uint32) ([]byte, error) {
 		return nil, fmt.Errorf("rbf: page read out of bounds: pgno=%d max=%d", pgno, pageN)
 	}
 
-	// Check if page is remapped.
-	if walID, ok := tx.pageMap.Get(pgno); ok {
-		walID64 := walID.(int64)
-
-		// Read from write cache if not yet flushed to disk.
-		maxWALID := tx.db.baseWALID() + int64(tx.walPageN)
-		if walID64 > maxWALID {
-			offset := (walID64 - maxWALID - 1) * PageSize
-			return tx.wcache[offset : offset+PageSize], nil
+	// Check if page has been updated in this tx.
+	if tx.writable {
+		if page := tx.dirtyPages[pgno]; page != nil {
+			return page, nil
+		} else if page := tx.dirtyBitmapPages[pgno]; page != nil {
+			return page, nil
 		}
-
-		// Otherwise return remapped page from WAL.
-		return tx.db.readWALPageByID(walID64)
 	}
 
+	// Check if page is remapped in WAL.
+	if walID, ok := tx.pageMap.Get(pgno); ok {
+		return tx.db.readWALPageByID(walID.(int64))
+	}
+
+	// Otherwise read directly from DB.
 	return tx.db.readDBPage(pgno)
 }
 
 func (tx *Tx) writePage(page []byte) error {
-	// Mark transaction as dirty so we write a meta page on commit/rollback.
-	tx.dirty = true
-
-	// Write page to WAL and obtain position in WAL.
-	walID, err := tx.writeWALPage(page, false)
-	if err != nil {
-		return err
-	}
-
-	// Update page map with WAL position.
-	tx.pageMap = tx.pageMap.Set(readPageNo(page), walID)
+	tx.dirtyPages[readPageNo(page)] = page
 	return nil
 }
 
 func (tx *Tx) writeBitmapPage(pgno uint32, page []byte) error {
-	// Mark transaction as dirty so we write a meta page on commit/rollback.
-	tx.dirty = true
-
-	// Write bitmap to WAL and obtain WAL position of the actual page data (not the prefix page).
-	walID, err := tx.writeBitmapWALPage(pgno, page)
-	if err != nil {
-		return err
-	}
-
-	// Update page map with WAL position.
-	tx.pageMap = tx.pageMap.Set(pgno, walID)
+	tx.dirtyBitmapPages[pgno] = page
 	return nil
 }
 
-func (tx *Tx) writeMetaPage(flag uint32) error {
-	// Set meta flags.
-	writeFlags(tx.meta[:], flag)
-
-	// Write page to WAL and obtain position in WAL.
-	walID, err := tx.writeWALPage(tx.meta[:], true)
-	if err != nil {
-		return err
-	}
-	tx.pageMap = tx.pageMap.Set(uint32(0), walID)
-
+func (tx *Tx) writeMetaPage() error {
+	tx.dirtyPages[0] = tx.meta[:]
 	return nil
 }
 
@@ -1588,64 +1549,72 @@ func (tx *Tx) ImportRoaringBits(name string, itr roaring.RoaringIterator, clear 
 	return
 }
 
-func (tx *Tx) flushWALWriter() error {
-	// Ignore if we have no data in the write cache.
-	if len(tx.wcache) == 0 {
-		return nil
+// flush writes the dirty pages & meta page to the WAL.
+func (tx *Tx) flush() error {
+	w := bufio.NewWriterSize(tx.db.walFile, 65536)
+	builder := immutable.NewMapBuilder(tx.pageMap)
+
+	// Write non-bitmap pages to WAL.
+	for _, pgno := range dirtyPageMapKeys(tx.dirtyPages) {
+		walID, err := tx.writeToWAL(w, tx.dirtyPages[pgno])
+		if err != nil {
+			return fmt.Errorf("write page to wal: %w", err)
+		}
+		builder.Set(pgno, walID)
 	}
 
-	// Flush cache to writer.
-	if _, err := tx.db.walFile.WriteAt(tx.wcache, int64(tx.walPageN)*PageSize); err != nil {
-		return fmt.Errorf("write wal: %w", err)
+	// Write bitmap headers & pages to WAL.
+	for _, pgno := range dirtyPageMapKeys(tx.dirtyBitmapPages) {
+		// Write header page.
+		hdr := make([]byte, PageSize)
+		writePageNo(hdr[:], pgno)
+		writeFlags(hdr[:], PageTypeBitmapHeader)
+		if _, err := tx.writeToWAL(w, hdr); err != nil {
+			return fmt.Errorf("write bitmap header page to wal: %w", err)
+		}
+
+		// Write bitmap page.
+		walID, err := tx.writeToWAL(w, tx.dirtyBitmapPages[pgno])
+		if err != nil {
+			return fmt.Errorf("write bitmap page to wal: %w", err)
+		}
+		builder.Set(pgno, walID)
 	}
 
-	// Increase the size of the WAL & clear cache.
-	assert(len(tx.wcache)%PageSize == 0)
-	tx.walPageN += len(tx.wcache) / PageSize
-	tx.wcache = tx.wcache[:0]
+	// Write meta page to WAL.
+	walID, err := tx.writeToWAL(w, tx.meta[:])
+	if err != nil {
+		return fmt.Errorf("write meta page to wal: %w", err)
+	}
+	builder.Set(uint32(0), walID)
+
+	// Flush & sync WAL.
+	if err := w.Flush(); err != nil {
+		return fmt.Errorf("flush wal: %w", err)
+	} else if err := tx.db.fsync(tx.db.walFile); err != nil {
+		return fmt.Errorf("sync wal: %w", err)
+	}
+
+	// Save page map for new WAL pages.
+	tx.pageMap = builder.Map()
 
 	return nil
 }
 
-func (tx *Tx) writeWALPage(page []byte, isMeta bool) (walID int64, err error) {
-	// Flush WAL cache if there is not enough space to write the page.
-	if len(tx.wcache) == cap(tx.wcache) {
-		if err := tx.flushWALWriter(); err != nil {
-			return 0, err
-		}
-	}
-
+func (tx *Tx) writeToWAL(w io.Writer, page []byte) (walID int64, err error) {
 	// Determine next WAL ID from cached meta page.
 	walID = readMetaWALID(tx.meta[:]) + 1
 
 	// Update WAL ID on cached meta page.
 	writeMetaWALID(tx.meta[:], walID)
 
-	// Append write to write buffer.
-	tx.wcache = append(tx.wcache, page...)
+	// Append to WAL and increment WAL size.
+	if _, err := w.Write(page); err != nil {
+		return 0, err
+	}
+	tx.walPageN++
 
 	return walID, nil
-}
-
-func (tx *Tx) writeBitmapWALPage(pgno uint32, page []byte) (walID int64, err error) {
-	// Flush WAL cache if there is not enough space to write the header & page.
-	if len(tx.wcache)+PageSize >= cap(tx.wcache) {
-		if err := tx.flushWALWriter(); err != nil {
-			return 0, err
-		}
-	}
-
-	// Write header page for next bitmap page.
-	buf := make([]byte, PageSize)
-	writePageNo(buf[:], pgno)
-	writeFlags(buf[:], PageTypeBitmapHeader)
-	// TODO(BBJ): Write checksum.
-	if _, err := tx.writeWALPage(buf, false); err != nil {
-		return 0, fmt.Errorf("write bitmap header: %w", err)
-	}
-
-	// Write the bitmap page and return its WALID.
-	return tx.writeWALPage(page, false)
 }
 
 // Pages returns meta & record data for a list of pages.
@@ -1949,3 +1918,19 @@ type BitmapPage struct {
 type FreePage struct {
 	*FreePageInfo
 }
+
+// dirtyPageMapKeys returns a sorted slice slice of keys for a dirty page map.
+func dirtyPageMapKeys(m map[uint32][]byte) []uint32 {
+	a := make([]uint32, 0, len(m))
+	for k := range m {
+		a = append(a, k)
+	}
+	sort.Sort(uint32Slice(a))
+	return a
+}
+
+type uint32Slice []uint32
+
+func (p uint32Slice) Len() int           { return len(p) }
+func (p uint32Slice) Less(i, j int) bool { return p[i] < p[j] }
+func (p uint32Slice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }

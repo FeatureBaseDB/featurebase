@@ -184,6 +184,8 @@ func (db *DB) openWAL() (err error) {
 	// Truncate WAL to the last valid meta page.
 	if err := db.walFile.Truncate(int64(pageN * PageSize)); err != nil {
 		return fmt.Errorf("wal truncate: %w", err)
+	} else if _, err := db.walFile.Seek(int64(pageN*PageSize), io.SeekStart); err != nil {
+		return fmt.Errorf("wal seek: %w", err)
 	}
 	db.walPageN = pageN
 
@@ -232,6 +234,8 @@ func (db *DB) checkpoint() error {
 		return fmt.Errorf("truncate wal file: %w", err)
 	} else if err := db.fsync(db.walFile); err != nil {
 		return fmt.Errorf("wal file sync: %w", err)
+	} else if _, err := db.walFile.Seek(0, io.SeekStart); err != nil {
+		return fmt.Errorf("seek wal file: %w", err)
 	}
 	db.walPageN = 0
 	db.pageMap = immutable.NewMap(&uint32Hasher{})
@@ -453,7 +457,8 @@ func (db *DB) Begin(writable bool) (_ *Tx, err error) {
 	}
 
 	if writable {
-		tx.wcache = db.wcache[:0]
+		tx.dirtyPages = make(map[uint32][]byte)
+		tx.dirtyBitmapPages = make(map[uint32][]byte)
 	}
 
 	// Copy meta page into transaction's buffer.
