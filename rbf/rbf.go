@@ -672,22 +672,6 @@ func RowValues(b []uint64) []uint64 {
 // 	return fmt.Sprintf("%s:%d", file, line)
 // }
 
-// truncate truncates the file at path to sz bytes. File must exist.
-func (db *DB) truncate(path string, sz int64) error {
-	f, err := os.OpenFile(path, os.O_WRONLY, 0666)
-	if err != nil {
-		return fmt.Errorf("open file: %w", err)
-	}
-	defer f.Close()
-
-	if err := f.Truncate(sz); err != nil {
-		return fmt.Errorf("truncate: %w", err)
-	} else if err := db.fsync(f); err != nil {
-		return fmt.Errorf("sync: %w", err)
-	}
-	return f.Close()
-}
-
 func (db *DB) fsync(f *os.File) error {
 	if !db.cfg.FsyncEnabled {
 		return nil

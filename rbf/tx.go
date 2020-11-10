@@ -962,11 +962,6 @@ func (tx *Tx) writeBitmapPage(pgno uint32, page []byte) error {
 	return nil
 }
 
-func (tx *Tx) writeMetaPage() error {
-	tx.dirtyPages[0] = tx.meta[:]
-	return nil
-}
-
 func (tx *Tx) AddRoaring(name string, bm *roaring.Bitmap) (changed bool, err error) {
 	tx.mu.RLock()
 	defer tx.mu.RUnlock()
