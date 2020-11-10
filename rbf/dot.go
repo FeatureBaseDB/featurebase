@@ -38,15 +38,15 @@ func dotCell(b []byte, parent string, writer io.Writer) {
 			switch cell.Type {
 			case ContainerTypeArray:
 				//fmt.Fprintf(os.Stderr, "[%d]: key=%d type=array n=%d elems=%v\n", i, cell.Key, cell.N, toArray16(cell.Data))
-				fmt.Fprintf(writer, "<tr><td border=\"1\" bgcolor=\"green\"><font color=\"white\">[%d]: key=%d type=array n=%d</font></td></tr>\n", i, cell.Key, cell.N)
+				fmt.Fprintf(writer, "<tr><td border=\"1\" bgcolor=\"green\"><font color=\"white\">[%d]: key=%d type=array n=%d</font></td></tr>\n", i, cell.Key, cell.BitN)
 			case ContainerTypeRLE:
-				fmt.Fprintf(writer, "<tr><td border=\"1\" bgcolor=\"blue\"><font color=\"white\">[%d]: key=%d type=rle n=%d</font></td></tr>\n", i, cell.Key, cell.N)
+				fmt.Fprintf(writer, "<tr><td border=\"1\" bgcolor=\"blue\"><font color=\"white\">[%d]: key=%d type=rle n=%d</font></td></tr>\n", i, cell.Key, cell.BitN)
 			case ContainerTypeBitmapPtr:
 				bpn := toPgno(cell.Data)
-				fmt.Fprintf(writer, "<tr><td border=\"1\" bgcolor=\"red\" port=\"%d\"><font color=\"white\">[%d]: key=%d type=bitmap n=%d </font></td></tr>\n", bpn, i, cell.Key, cell.N)
+				fmt.Fprintf(writer, "<tr><td border=\"1\" bgcolor=\"red\" port=\"%d\"><font color=\"white\">[%d]: key=%d type=bitmap n=%d </font></td></tr>\n", bpn, i, cell.Key, cell.BitN)
 				links = append(links, fmt.Sprintf("bitmap%d[label=\"bitmap (%d)\"]\n cell%d:%d -> bitmap%d\n", bpn, bpn, pgno, i, bpn))
 			default:
-				fmt.Fprintf(writer, "<tr><td border=\"1\" bgcolor=\"yellow\">[%d]: key=%d type=unknown<%d> n=%d</td></tr>\n", i, cell.Key, cell.Type, cell.N)
+				fmt.Fprintf(writer, "<tr><td border=\"1\" bgcolor=\"yellow\">[%d]: key=%d type=unknown<%d> n=%d</td></tr>\n", i, cell.Key, cell.Type, cell.BitN)
 			}
 		}
 		fmt.Fprintf(writer, "</table>>]\n")

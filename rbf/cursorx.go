@@ -72,13 +72,10 @@ func (c *Cursor) Rows() ([]uint64, error) {
 	return rows, err
 }
 func (tx *Tx) FieldViews() []string {
-	r, _ := tx.RootRecords()
-	res := make([]string, len(r))
-	for i := range r {
-		res[i] = r[i].Name
-	}
-	return res
+	rr, _ := tx.RootRecords()
+	return rr.sliceOfNames()
 }
+
 func (c *Cursor) DumpKeys() {
 	if err := c.First(); err != nil {
 		//ignoring errors for this debug function
