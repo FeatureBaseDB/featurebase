@@ -69,7 +69,12 @@ func (tx *Tx) Writable() bool {
 
 // dirty returns true if any pages have been updated in this tx.
 func (tx *Tx) dirty() bool {
-	return len(tx.dirtyPages) != 0 || len(tx.dirtyBitmapPages) != 0
+	return tx.dirtyN() != 0
+}
+
+// dirtyN returns the number of dirty pages.
+func (tx *Tx) dirtyN() int {
+	return len(tx.dirtyPages) + len(tx.dirtyBitmapPages)
 }
 
 // PageN returns the number of pages in the database as seen by this transaction.
@@ -954,11 +959,18 @@ func (tx *Tx) readPage(pgno uint32) ([]byte, error) {
 
 func (tx *Tx) writePage(page []byte) error {
 	tx.dirtyPages[readPageNo(page)] = page
-	return nil
+	return tx.checkTxSize()
 }
 
 func (tx *Tx) writeBitmapPage(pgno uint32, page []byte) error {
 	tx.dirtyBitmapPages[pgno] = page
+	return tx.checkTxSize()
+}
+
+func (tx *Tx) checkTxSize() error {
+	if (tx.walPageN+tx.dirtyN())*PageSize >= len(tx.db.wal) {
+		return ErrTxTooLarge
+	}
 	return nil
 }
 

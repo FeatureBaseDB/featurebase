@@ -105,6 +105,7 @@ var (
 	ErrBitmapNameRequired = errors.New("bitmap name required")
 	ErrBitmapNotFound     = errors.New("bitmap not found")
 	ErrBitmapExists       = errors.New("bitmap already exists")
+	ErrTxTooLarge         = errors.New("rbf tx too large")
 )
 
 // Debug is just a temporary flag used for debugging.

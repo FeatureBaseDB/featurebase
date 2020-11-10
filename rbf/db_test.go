@@ -39,6 +39,25 @@ func TestDB_Open(t *testing.T) {
 	}
 }
 
+func TestDB_WAL(t *testing.T) {
+	t.Run("ErrTxTooLarge", func(t *testing.T) {
+		config := rbfcfg.NewDefaultConfig()
+		config.MaxWALSize = 4 * rbf.PageSize
+
+		db := MustOpenDB(t, config)
+		defer MustCloseDB(t, db)
+
+		tx := MustBegin(t, db, true)
+		defer tx.Rollback()
+
+		if err := tx.CreateBitmap("x"); err != nil {
+			t.Fatal(err)
+		} else if err := tx.CreateBitmap("y"); err != rbf.ErrTxTooLarge {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+}
+
 func TestDB_Recovery(t *testing.T) {
 	// Ensure a bitmap header written without a bitmap is truncated.
 	t.Run("TruncPartialWALBitmap", func(t *testing.T) {
