@@ -242,7 +242,6 @@ type ImportRoaringRequest struct {
 	Action         string // [set, clear, overwrite]
 	Block          int
 	Views          map[string][]byte
-	Direct         bool
 }
 
 // ValidateWithTimestamp ensures that the payload of the request is valid.

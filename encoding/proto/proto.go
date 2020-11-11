@@ -460,7 +460,6 @@ func (s Serializer) encodeImportRoaringRequest(m *pilosa.ImportRoaringRequest) *
 		Action:         m.Action,
 		Block:          uint64(m.Block),
 		Views:          views,
-		Direct:         m.Direct,
 	}
 }
 
@@ -1235,7 +1234,6 @@ func (s Serializer) decodeImportRoaringRequest(pb *internal.ImportRoaringRequest
 	m.Views = views
 	m.IndexCreatedAt = pb.IndexCreatedAt
 	m.FieldCreatedAt = pb.FieldCreatedAt
-	m.Direct = pb.Direct
 }
 
 func (s Serializer) decodeImportColumnAttrsRequest(pb *internal.ImportColumnAttrsRequest, m *pilosa.ImportColumnAttrsRequest) {

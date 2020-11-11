@@ -39,44 +39,88 @@ func TestDB_Open(t *testing.T) {
 	}
 }
 
-/* optimization of wal size means there may certainly be more than 2 WAL segments.
-func TestDB_Checkpoint(t *testing.T) {
-	if testing.Short() {
-		t.Skip("-short enabled, skipping")
-	}
+func TestDB_WAL(t *testing.T) {
+	t.Run("ErrTxTooLarge", func(t *testing.T) {
+		config := rbfcfg.NewDefaultConfig()
+		config.MaxWALSize = 4 * rbf.PageSize
 
-	db := MustOpenDB(t)
-	defer MustCloseDB(t, db)
+		db := MustOpenDB(t, config)
+		defer MustCloseDB(t, db)
 
-	// Create bitmap.
-	if tx, err := db.Begin(true); err != nil {
-		t.Fatal(err)
-	} else if err := tx.CreateBitmap("x"); err != nil {
-		t.Fatal(err)
-	} else if err := tx.Commit(); err != nil {
-		t.Fatal(err)
-	}
+		tx := MustBegin(t, db, true)
+		defer tx.Rollback()
 
-	// Create a bunch of transactions to generate WAL segments.
-	rand := rand.New(rand.NewSource(0))
-	for i := 0; i < 1000; i++ {
-		if tx, err := db.Begin(true); err != nil {
+		if err := tx.CreateBitmap("x"); err != nil {
 			t.Fatal(err)
-		} else if _, err := tx.Add("x", rand.Uint64()); err != nil {
-			t.Fatal(err)
-		} else if _, err := tx.Add("x", rand.Uint64()); err != nil {
-			t.Fatal(err)
-		} else if err := tx.Commit(); err != nil {
+		} else if err := tx.CreateBitmap("y"); err != rbf.ErrTxTooLarge {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("Halt", func(t *testing.T) {
+		if testing.Short() {
+			t.Skip("-short enabled, skipping")
+		}
+
+		config := rbfcfg.NewDefaultConfig()
+		config.MaxWALSize = 16 * rbf.PageSize
+		config.MaxWALCheckpointSize = 8 * rbf.PageSize
+		config.MinWALCheckpointSize = 4 * rbf.PageSize
+
+		db := MustOpenDB(t, config)
+		defer MustCloseDB(t, db)
+
+		// Continuously run read overlapping transactions.
+		ctx, cancel := context.WithCancel(context.Background())
+		g, ctx := errgroup.WithContext(ctx)
+		for i := 0; i < 10; i++ {
+			i := i
+			g.Go(func() error {
+				time.Sleep(time.Duration(i) * 10 * time.Millisecond) // stagger
+
+				for {
+					if err := ctx.Err(); err != nil {
+						return nil
+					}
+
+					if err := func() error {
+						tx, err := db.Begin(false)
+						if err != nil {
+							return err
+						}
+						defer tx.Rollback()
+						time.Sleep(20 * time.Millisecond)
+						return nil
+					}(); err != nil {
+						return err
+					}
+				}
+			})
+		}
+
+		// Generate updates to the DB/WAL.
+		for i := 0; i < 100; i++ {
+			func() {
+				tx := MustBegin(t, db, true)
+				defer tx.Rollback()
+
+				if err := tx.CreateBitmapIfNotExists("x"); err != nil {
+					t.Fatal(err)
+				} else if _, err := tx.Add("x", uint64(i)); err != nil {
+					t.Fatal(err)
+				} else if err := tx.Commit(); err != nil {
+					t.Fatal(err)
+				}
+			}()
+		}
+
+		// Stop read transactions & wait.
+		cancel()
+		if err := g.Wait(); err != nil {
 			t.Fatal(err)
 		}
-	}
-
-	// Ensure there is no more than two WAL segments.
-	if n := len(db.WALSegments()); n > 2 {
-		t.Fatalf("expected two or fewer WAL segments, got %d", n)
-	}
+	})
 }
-*/
 
 func TestDB_Recovery(t *testing.T) {
 	// Ensure a bitmap header written without a bitmap is truncated.
@@ -121,11 +165,10 @@ func TestDB_Recovery(t *testing.T) {
 		tx1.Rollback()
 
 		// Close database & truncate WAL to remove commit page & bitmap data page.
-		segments := db.WALSegments()
-		segment := segments[len(segments)-1]
+		walPath, walSize := db.WALPath(), db.WALSize()
 		if err := db.Close(); err != nil {
 			t.Fatal(err)
-		} else if err := os.Truncate(segment.Path, segment.Size()-(2*rbf.PageSize)); err != nil {
+		} else if err := os.Truncate(walPath, walSize-(2*rbf.PageSize)); err != nil {
 			t.Fatal(err)
 		}
 
@@ -149,67 +192,6 @@ func TestDB_Recovery(t *testing.T) {
 			t.Fatalf("Contains()=<%v,%#v>", exists, err)
 		}
 		tx.Rollback()
-	})
-}
-
-func TestDB_BeginWithExclusiveLock(t *testing.T) {
-	t.Run("EnsureBlock", func(t *testing.T) {
-		db := MustOpenDB(t)
-		defer MustCloseDB(t, db)
-
-		tx, err := db.BeginWithExclusiveLock()
-		if err != nil {
-			t.Fatal(err)
-		} else if err := tx.CreateBitmap("x"); err != nil {
-			t.Fatal(err)
-		}
-
-		// Attempt to start another transaction in a second goroutine.
-		ch := make(chan struct{})
-		go func() {
-			tx1, err := db.Begin(false)
-			if err != nil {
-				panic(err)
-			}
-			defer tx1.Rollback()
-			close(ch) // signal
-		}()
-
-		// Ensure other transctions are blocked during an exclusive lock.
-		select {
-		case <-ch:
-			t.Fatal("secondary transaction too soon")
-		case <-time.After(100 * time.Millisecond):
-		}
-
-		// Release exclusive lock.
-		if err := tx.Commit(); err != nil {
-			t.Fatal(err)
-		}
-
-		// Ensure other transaction to begin after exclusive lock released.
-		select {
-		case <-time.After(1 * time.Second):
-			t.Fatal("expected secondary transaction")
-		case <-ch:
-		}
-	})
-
-	t.Run("EnsureNoWAL", func(t *testing.T) {
-		db := MustOpenDB(t)
-		defer MustCloseDB(t, db)
-
-		tx, err := db.BeginWithExclusiveLock()
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer tx.Rollback()
-
-		if err := tx.CreateBitmap("x"); err != nil {
-			t.Fatal(err)
-		} else if got, want := db.WALSize(), int64(0); got != want {
-			t.Fatalf("WALSize()=%d, want %d", got, want)
-		}
 	})
 }
 
@@ -300,7 +282,6 @@ func TestDB_MultiTx(t *testing.T) {
 	}
 
 	cfg := rbfcfg.NewDefaultConfig()
-	cfg.CheckpointEveryDur = 1 * time.Millisecond
 	db := MustOpenDB(t, cfg)
 	defer MustCloseDB(t, db)
 

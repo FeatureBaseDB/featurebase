@@ -787,7 +787,6 @@ func TestCursor_RLEConversion(t *testing.T) {
 		}()...)
 	if err != nil {
 		t.Fatalf("ERR adding bits: %v\n", err)
-
 	}
 
 	if err := c.First(); err != nil {

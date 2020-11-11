@@ -105,6 +105,7 @@ var (
 	ErrBitmapNameRequired = errors.New("bitmap name required")
 	ErrBitmapNotFound     = errors.New("bitmap not found")
 	ErrBitmapExists       = errors.New("bitmap already exists")
+	ErrTxTooLarge         = errors.New("rbf tx too large")
 )
 
 // Debug is just a temporary flag used for debugging.
@@ -672,25 +673,33 @@ func RowValues(b []uint64) []uint64 {
 // 	return fmt.Sprintf("%s:%d", file, line)
 // }
 
-// truncate truncates the file at path to sz bytes. File must exist.
-func (db *DB) truncate(path string, sz int64) error {
-	f, err := os.OpenFile(path, os.O_WRONLY, 0666)
-	if err != nil {
-		return fmt.Errorf("open file: %w", err)
-	}
-	defer f.Close()
-
-	if err := f.Truncate(sz); err != nil {
-		return fmt.Errorf("truncate: %w", err)
-	} else if err := db.fsync(f); err != nil {
-		return fmt.Errorf("sync: %w", err)
-	}
-	return f.Close()
-}
-
 func (db *DB) fsync(f *os.File) error {
 	if !db.cfg.FsyncEnabled {
 		return nil
 	}
 	return f.Sync()
+}
+
+// uint32Hasher implements Hasher for uint32 keys.
+type uint32Hasher struct{}
+
+// Hash returns a hash for key.
+func (h *uint32Hasher) Hash(key interface{}) uint32 {
+	return hashUint64(uint64(key.(uint32)))
+}
+
+// Equal returns true if a is equal to b. Otherwise returns false.
+// Panics if a and b are not ints.
+func (h *uint32Hasher) Equal(a, b interface{}) bool {
+	return a.(uint32) == b.(uint32)
+}
+
+// hashUint64 returns a 32-bit hash for a 64-bit value.
+func hashUint64(value uint64) uint32 {
+	hash := value
+	for value > 0xffffffff {
+		value /= 0xffffffff
+		hash ^= value
+	}
+	return uint32(hash)
 }
