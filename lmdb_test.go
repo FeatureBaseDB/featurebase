@@ -470,7 +470,7 @@ func TestLMDB_ContainerIterator_on_one_bit(t *testing.T) {
 }
 
 func TestLMDB_ContainerIterator_on_one_bit_fail_to_find(t *testing.T) {
-	dbwrap, clean := mustOpenEmptyLMDBWrapper("TestLMDB_ContainerIterator_on_one_bit")
+	dbwrap, clean := mustOpenEmptyLMDBWrapper("TestLMDB_ContainerIterator_on_one_bit_fail_to_find")
 	defer clean()
 	defer dbwrap.Close()
 	index, field, view, shard := "i", "f", "v", uint64(0)
@@ -575,7 +575,7 @@ func TestLMDB_ContainerIterator_empty_iteration_loop(t *testing.T) {
 
 func TestLMDB_ForEach_on_one_bit(t *testing.T) {
 
-	dbwrap, clean := mustOpenEmptyLMDBWrapper("TestLMDB_ContainerIterator_on_one_bit")
+	dbwrap, clean := mustOpenEmptyLMDBWrapper("TestLMDB_ForEach_on_one_bit")
 	defer clean()
 	defer dbwrap.Close()
 	index, field, view, shard := "i", "f", "v", uint64(0)
