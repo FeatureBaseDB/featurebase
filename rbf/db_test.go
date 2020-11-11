@@ -56,6 +56,70 @@ func TestDB_WAL(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
+
+	t.Run("Halt", func(t *testing.T) {
+		if testing.Short() {
+			t.Skip("-short enabled, skipping")
+		}
+
+		config := rbfcfg.NewDefaultConfig()
+		config.MaxWALSize = 16 * rbf.PageSize
+		config.MaxWALCheckpointSize = 8 * rbf.PageSize
+		config.MinWALCheckpointSize = 4 * rbf.PageSize
+
+		db := MustOpenDB(t, config)
+		defer MustCloseDB(t, db)
+
+		// Continuously run read overlapping transactions.
+		ctx, cancel := context.WithCancel(context.Background())
+		g, ctx := errgroup.WithContext(ctx)
+		for i := 0; i < 10; i++ {
+			i := i
+			g.Go(func() error {
+				time.Sleep(time.Duration(i) * 10 * time.Millisecond) // stagger
+
+				for {
+					if err := ctx.Err(); err != nil {
+						return nil
+					}
+
+					if err := func() error {
+						tx, err := db.Begin(false)
+						if err != nil {
+							return err
+						}
+						defer tx.Rollback()
+						time.Sleep(20 * time.Millisecond)
+						return nil
+					}(); err != nil {
+						return err
+					}
+				}
+			})
+		}
+
+		// Generate updates to the DB/WAL.
+		for i := 0; i < 100; i++ {
+			func() {
+				tx := MustBegin(t, db, true)
+				defer tx.Rollback()
+
+				if err := tx.CreateBitmapIfNotExists("x"); err != nil {
+					t.Fatal(err)
+				} else if _, err := tx.Add("x", uint64(i)); err != nil {
+					t.Fatal(err)
+				} else if err := tx.Commit(); err != nil {
+					t.Fatal(err)
+				}
+			}()
+		}
+
+		// Stop read transactions & wait.
+		cancel()
+		if err := g.Wait(); err != nil {
+			t.Fatal(err)
+		}
+	})
 }
 
 func TestDB_Recovery(t *testing.T) {
@@ -218,7 +282,6 @@ func TestDB_MultiTx(t *testing.T) {
 	}
 
 	cfg := rbfcfg.NewDefaultConfig()
-	cfg.CheckpointEveryDur = 1 * time.Millisecond
 	db := MustOpenDB(t, cfg)
 	defer MustCloseDB(t, db)
 

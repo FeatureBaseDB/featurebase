@@ -15,9 +15,12 @@
 package cfg
 
 import (
-	"time"
-
 	"github.com/spf13/pflag"
+)
+
+const (
+	DefaultMinWALCheckpointSize = 1 * (1 << 20) // 1MB
+	DefaultMaxWALCheckpointSize = DefaultMaxWALSize / 2
 )
 
 // Config defines externally configurable rbf options.
@@ -30,38 +33,35 @@ type Config struct {
 	// The maximum allowed WAL size. Required by mmap.
 	MaxWALSize int64
 
+	// The minimum WAL size before the WAL is copied to the DB.
+	MinWALCheckpointSize int64
+
+	// The maximum WAL size before transactions are halted to allow a checkpoint.
+	MaxWALCheckpointSize int64
+
 	// Set before calling db.Open()
 	FsyncEnabled bool
 
 	// for mmap correctness testing.
 	DoAllocZero bool
-
-	// CheckpointEveryDur if zero means checkpoint after every write.
-	// Otherwise, wait and checkpoint at the next write that happens
-	// after CheckpointEveryDur since the previous.
-	CheckpointEveryDur time.Duration
-
-	// Maximum size of a WAL write cache.
-	MaxWALWriteCacheSize int
 }
 
 func NewDefaultConfig() *Config {
 	return &Config{
 		MaxSize:              DefaultMaxSize,
 		MaxWALSize:           DefaultMaxWALSize,
+		MinWALCheckpointSize: DefaultMinWALCheckpointSize,
+		MaxWALCheckpointSize: DefaultMaxWALCheckpointSize,
 		FsyncEnabled:         true,
-		CheckpointEveryDur:   time.Millisecond,
-		MaxWALWriteCacheSize: 1 << 20,
 	}
 }
 
 func (cfg *Config) DefineFlags(flags *pflag.FlagSet) {
 	default0 := NewDefaultConfig()
-	flags.IntVar(&cfg.MaxWALWriteCacheSize, "rbf-max-write-cache-size", default0.MaxWALWriteCacheSize, "RBF write cache size, in bytes")
-	flags.DurationVar(&cfg.CheckpointEveryDur, "rbf-checkpoint-dur", default0.CheckpointEveryDur,
-		"RBF checkpoint on the next write that occurs this long or more after the previous write. 0 means checkpoint after every write.")
 	flags.Int64Var(&cfg.MaxSize, "rbf-max-db-size", default0.MaxSize, "RBF maximum size in bytes of a database file (distinct from a WAL file)")
 	flags.Int64Var(&cfg.MaxWALSize, "rbf-max-wal-size", default0.MaxWALSize, "RBF maximum size in bytes of a WAL file (distinct from a DB file)")
+	flags.Int64Var(&cfg.MinWALCheckpointSize, "rbf-min-wal-checkpoint-size", default0.MinWALCheckpointSize, "RBF minimum size in bytes of a WAL file before attempting checkpoint")
+	flags.Int64Var(&cfg.MaxWALCheckpointSize, "rbf-max-wal-checkpoint-size", default0.MaxWALCheckpointSize, "RBF maximum size in bytes of a WAL file before forcing checkpoint")
 
 	// renamed from --rbf-fsync to just --fsync because now it applies to all Tx backends.
 	flags.BoolVar(&cfg.FsyncEnabled, "fsync", default0.FsyncEnabled, "enable fsync fully safe flush-to-disk")

@@ -22,7 +22,6 @@ import (
 	"path/filepath"
 	"sync"
 	"syscall"
-	"time"
 
 	"github.com/benbjohnson/immutable"
 	"github.com/pilosa/pilosa/v2/syswrap"
@@ -49,15 +48,13 @@ type DB struct {
 	wal      []byte   // wal mmap
 	walFile  *os.File // wal file descriptor
 	walPageN int      // wal page count
-	wcache   []byte   // wal write cache
 
-	mu   sync.RWMutex // general mutex
-	rwmu sync.Mutex   // mutex for restricting single writer
+	mu       sync.RWMutex // general mutex
+	rwmu     sync.Mutex   // mutex for restricting single writer
+	haltCond *sync.Cond   // condition for resuming txs after checkpoint
 
 	// Path represents the path to the database file.
 	Path string
-
-	lastCheckpoint time.Time
 }
 
 // NewDB returns a new instance of DB.
@@ -70,9 +67,9 @@ func NewDB(path string, cfg *rbfcfg.Config) *DB {
 		cfg:     *cfg,
 		txs:     make(map[*Tx]struct{}),
 		pageMap: immutable.NewMap(&uint32Hasher{}),
-		wcache:  make([]byte, 0, cfg.MaxWALWriteCacheSize),
 		Path:    path,
 	}
+	db.haltCond = sync.NewCond(&db.mu)
 	return db
 }
 
@@ -239,6 +236,9 @@ func (db *DB) checkpoint() error {
 	}
 	db.walPageN = 0
 	db.pageMap = immutable.NewMap(&uint32Hasher{})
+
+	// Notify halted tranactions that the WAL has been checkpointed.
+	db.haltCond.Broadcast()
 
 	return nil
 }
@@ -446,6 +446,11 @@ func (db *DB) Begin(writable bool) (_ *Tx, err error) {
 		return nil, ErrClosed
 	}
 
+	// Wait for WAL size to be below threshold.
+	for int64(db.walPageN*PageSize) > db.cfg.MaxWALCheckpointSize {
+		db.haltCond.Wait()
+	}
+
 	tx := &Tx{
 		db:          db,
 		rootRecords: db.rootRecords,
@@ -495,21 +500,16 @@ func (db *DB) removeTx(tx *Tx) error {
 
 	delete(tx.db.txs, tx)
 
-	// Write pages from WAL to DB.
-	// TODO(bbj): Move this to an async goroutine.
-	// TODO(jea): Make the time-based checkpointing work at all, and update the
-	// comment in cfg/cfg.go for CheckpointEveryDur.
-	if tx.writable {
-		if db.cfg.CheckpointEveryDur == 0 || time.Since(db.lastCheckpoint) > db.cfg.CheckpointEveryDur {
-			if err := db.checkpoint(); err != nil {
-				return fmt.Errorf("checkpoint: %w", err)
-			}
-			db.lastCheckpoint = time.Now()
-		}
-	}
-
 	// Disassociate from db.
 	tx.db = nil
+
+	// Write pages from WAL to DB.
+	// TODO(bbj): Move this to an async goroutine.
+	if len(db.txs) == 0 && db.walSize() > db.cfg.MinWALCheckpointSize {
+		if err := db.checkpoint(); err != nil {
+			return fmt.Errorf("checkpoint: %w", err)
+		}
+	}
 
 	return nil
 }
