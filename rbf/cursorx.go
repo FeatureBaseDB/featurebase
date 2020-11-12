@@ -150,7 +150,7 @@ func (c *Cursor) Row(shard, rowID uint64) (*roaring.Bitmap, error) {
 
 // CurrentPageType returns the type of the container currently pointed to by cursor used in testing
 // sometimes the cursor needs to be positions prior to this call with First/Last etc.
-func (c *Cursor) CurrentPageType() int {
+func (c *Cursor) CurrentPageType() ContainerType {
 	cell := c.cell()
 	return cell.Type
 }

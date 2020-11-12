@@ -17,7 +17,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-	"math/bits"
 	"sort"
 	"unsafe"
 
@@ -39,6 +38,7 @@ type Cursor struct {
 	rle       [RLEMaxSize + 1]roaring.Interval16
 	leafCells [PageSize / 8]leafCell
 
+	// stack holds branches
 	stack struct {
 		index int
 		elems [32]stackElem
@@ -85,8 +85,9 @@ func runAdd(runs []roaring.Interval16, v uint16) ([]roaring.Interval16, bool) {
 	return runs, true
 }
 
-// checkRun is only called by Cursor.Add()
-func checkRun(runs []roaring.Interval16, bitN int, key uint64) leafCell {
+// maybeConvertOversizedRunToBitmap is only called by Cursor.Add().
+// bitN must be the correct new bit count.
+func maybeConvertOversizedRunToBitmap(runs []roaring.Interval16, bitN int, key uint64) leafCell {
 	if len(runs) >= RLEMaxSize {
 		//convertToBitmap
 		bitmap := make([]uint64, BitmapN)
@@ -120,12 +121,8 @@ func checkRun(runs []roaring.Interval16, bitN int, key uint64) leafCell {
 				words[i] = ^uint64(0)
 			}
 		}
-		// TODO: take this out once we know bitN matches
-		n := uint64(0)
-		for _, v := range bitmap {
-			n += popcount(v)
-		}
 
+		// note that ElemN should be left 0 for ContainerTypeBitmap.
 		return leafCell{Key: key, BitN: int(bitN), Type: ContainerTypeBitmap, Data: fromArray64(bitmap)}
 	}
 	return leafCell{Key: key, ElemN: len(runs), BitN: int(bitN), Type: ContainerTypeRLE, Data: fromInterval16(runs)}
@@ -162,11 +159,10 @@ func (c *Cursor) Add(v uint64) (changed bool, err error) {
 
 	case ContainerTypeRLE:
 		runs := toInterval16(cell.Data)
-		//TODO Look at this again with fresh eyes
 		copy(c.rle[:], runs)
 		run, added := runAdd(c.rle[:len(runs)], lo)
 		if added {
-			leaf := checkRun(run, cell.BitN+1, cell.Key)
+			leaf := maybeConvertOversizedRunToBitmap(run, cell.BitN+1, cell.Key)
 			return true, c.putLeafCell(leaf)
 		}
 		return false, nil
@@ -188,9 +184,9 @@ func (c *Cursor) Add(v uint64) (changed bool, err error) {
 		if err := c.tx.writeBitmapPage(pgno, fromArray64(a)); err != nil {
 			return false, err
 		}
-		// TODO(bbj): Update parent cell with new BitN.
-
-		return true, nil
+		// Update with new BitN.
+		cell.BitN++
+		return true, c.putLeafCell(cell)
 	default:
 		return false, fmt.Errorf("rbf.Cursor.Add(): invalid container type: %d", cell.Type)
 	}
@@ -267,19 +263,41 @@ func (c *Cursor) Remove(v uint64) (changed bool, err error) {
 		}
 		a := cloneArray64(bm)
 		if a[lo/64]&(1<<uint64(lo%64)) == 0 {
+			// not present.
 			return false, nil
 		}
 
-		// TODO(3736): Handle shrinking bitmap container to an array container.
-
-		// Clear bit and rewrite page.
+		// clear the bit
 		a[lo/64] &^= 1 << uint64(lo%64)
+		cell.BitN--
+
+		if cell.BitN == 0 {
+			if err := c.tx.freePgno(pgno); err != nil {
+				return false, err
+			}
+			return true, c.deleteLeafCell(cell.Key)
+		}
+
+		// shrink if we've gotten small.
+		if cell.BitN <= ArrayMaxSize {
+			cbm := roaring.NewContainerBitmap(cell.BitN, a)
+			// convert to array
+			cbm = roaring.Optimize(cbm)
+
+			leafCell1 := ConvertToLeafArgs(cell.Key, cbm)
+			// ConvertToLeafArgs returns leafCell1 with BitN and ElemN updated.
+			if err := c.tx.freePgno(pgno); err != nil {
+				return false, err
+			}
+			return true, c.putLeafCell(leafCell1)
+		}
+
+		// rewrite page, still as a bitmap.
 		if err := c.tx.writeBitmapPage(pgno, fromArray64(a)); err != nil {
 			return false, err
 		}
+		return true, c.putLeafCell(cell)
 
-		// TODO(bbj): Update parent cell to decrement BitN.
-		return true, nil
 	default:
 		return false, fmt.Errorf("rbf.Cursor.Add(): invalid container type: %d", cell.Type)
 	}
@@ -346,6 +364,8 @@ func (c *Cursor) putLeafCell(in leafCell) (err error) {
 			}
 			cell.Data = fromPgno(bitmapPgno)
 			cell.Type = ContainerTypeBitmapPtr
+			cell.BitN = in.BitN
+			cell.ElemN = in.ElemN
 		}
 		// Shift cells over if this is an insertion.
 		cells = append(cells, leafCell{})
@@ -361,6 +381,9 @@ func (c *Cursor) putLeafCell(in leafCell) (err error) {
 				}
 				cell.Type = ContainerTypeBitmapPtr
 				cell.Data = fromPgno(bitmapPgno)
+				// update the BitN too
+				cell.BitN = in.BitN
+				cell.ElemN = in.ElemN
 			}
 		}
 	}
@@ -963,107 +986,6 @@ func (c *Cursor) Prev() error {
 	}
 }
 
-// Union performs a bitwise OR operation on row and a given row id in the bitmap.
-func (c *Cursor) Union(rowID uint64, row []uint64) error {
-	base := rowID * ShardWidth
-
-	if _, err := c.Seek(base >> 16); err != nil {
-		return err
-	}
-	for {
-		err := c.Next()
-		if err == io.EOF {
-			return nil
-		} else if err != nil {
-			return err
-		}
-
-		cell := c.cell()
-		key := cell.Key << 16
-		if key >= base+ShardWidth {
-			return nil
-		}
-		offset := key - base
-		switch cell.Type {
-		case ContainerTypeArray:
-			for _, v := range toArray16(cell.Data) {
-				row[(offset+uint64(v))/64] |= 1 << uint64(v%64)
-			}
-		case ContainerTypeRLE:
-			panic("TODO(BBJ): rbf.Bitmap.Union() RLE support")
-		case ContainerTypeBitmapPtr:
-			_, bm, err := c.tx.leafCellBitmap(toPgno(cell.Data))
-			if err != nil {
-				return errors.Wrap(err, "union")
-			}
-			for i, v := range bm {
-				row[(offset/64)+uint64(i)] |= v
-			}
-		default:
-			return fmt.Errorf("rbf.Bitmap.Union(): invalid container type: %d", cell.Type)
-		}
-	}
-}
-
-// Intersect performs a bitwise AND operation on row and a given row id in the bitmap.
-func (c *Cursor) Intersect(rowID uint64, row []uint64) error {
-	base := rowID * ShardWidth
-	c.stack.index = 0
-
-	keyExists := make([]bool, ShardWidth/(1<<16))
-
-	if _, err := c.Seek(base >> 16); err != nil {
-		return err
-	}
-	for {
-		err := c.Next()
-		if err == io.EOF {
-			break
-		} else if err != nil {
-			return err
-		}
-
-		cell := c.cell()
-		key := cell.Key << 16
-		if key >= base+ShardWidth {
-			return nil
-		}
-		offset := key - base
-
-		keyExists[offset/(1<<16)] = true
-
-		switch cell.Type {
-		case ContainerTypeArray:
-			for i, v := range cell.Bitmap(c.tx) {
-				row[(offset/64)+uint64(i)] &= v
-			}
-		case ContainerTypeRLE:
-			panic("TODO(BBJ): rbf.Bitmap.Intersect() RLE support")
-		case ContainerTypeBitmapPtr:
-			_, bm, err := c.tx.leafCellBitmap(toPgno(cell.Data))
-			if err != nil {
-				return errors.Wrap(err, "cursor.Intersect")
-			}
-			for i, v := range bm {
-				row[(offset/64)+uint64(i)] &= v
-			}
-		default:
-			return fmt.Errorf("rbf.Bitmap.Intersect(): invalid container type: %d", cell.Type)
-		}
-	}
-
-	// Clear any missing keys.
-	for i, ok := range keyExists {
-		if ok {
-			continue
-		}
-		for j := 0; j < (1 << 16); j += 64 {
-			row[((i*(1<<16))+j)/64] = 0
-		}
-	}
-	return nil
-}
-
 // Values returns the values for the container the cursor is currently pointing to.
 func (c *Cursor) Values() []uint16 {
 	elem := &c.stack.elems[c.stack.index]
@@ -1224,10 +1146,6 @@ func (c *Cursor) AddRoaring(bm *roaring.Bitmap) (changed bool, err error) {
 		}
 	}
 	return changed, nil
-}
-
-func popcount(x uint64) uint64 {
-	return uint64(bits.OnesCount64(x))
 }
 
 func (c *Cursor) RemoveRoaring(bm *roaring.Bitmap) (changed bool, err error) {

@@ -66,9 +66,11 @@ const (
 	MetaPageFlagRollback = 2
 )
 
+type ContainerType int
+
 // Container types.
 const (
-	ContainerTypeNone = iota
+	ContainerTypeNone ContainerType = iota
 	ContainerTypeArray
 	ContainerTypeRLE
 	ContainerTypeBitmap
@@ -76,7 +78,7 @@ const (
 )
 
 // ContainerTypeString returns a string representation of the container type.
-func ContainerTypeString(typ int) string {
+func (typ ContainerType) String() string {
 	switch typ {
 	case ContainerTypeNone:
 		return "none"
@@ -289,7 +291,7 @@ func align8(offset int) int {
 // leafCell represents a leaf cell.
 type leafCell struct {
 	Key  uint64
-	Type int // container type
+	Type ContainerType
 
 	// ElemN is the number of "things" in Data:
 	//  for an array container the number of integers in the array.
@@ -477,7 +479,7 @@ func readLeafCell(page []byte, i int) leafCell {
 
 	var cell leafCell
 	cell.Key = *(*uint64)(unsafe.Pointer(&buf[0]))
-	cell.Type = int(*(*uint32)(unsafe.Pointer(&buf[8])))
+	cell.Type = ContainerType(*(*uint32)(unsafe.Pointer(&buf[8])))
 	cell.ElemN = int(*(*uint16)(unsafe.Pointer(&buf[12])))
 	cell.BitN = int(*(*uint16)(unsafe.Pointer(&buf[14])))
 

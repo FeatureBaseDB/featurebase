@@ -95,7 +95,7 @@ func dumpdot(tx *Tx, pgno uint32, parent string, writer io.Writer) {
 		fmt.Fprintf(writer, "%s[label=\"BRANCH(%d)| n=%d\"]\n %s->%s\n", p, pgno, readCellN(page), parent, p)
 		for i, n := 0, readCellN(page); i < n; i++ {
 			cell := readBranchCell(page, i)
-			if cell.Flags&ContainerTypeBitmap == 0 { // leaf/branch child page
+			if cell.Flags&uint32(ContainerTypeBitmap) == 0 { // leaf/branch child page
 				dumpdot(tx, cell.Pgno, p, writer)
 			} else {
 				b := fmt.Sprintf("bm%d", cell.Pgno)
