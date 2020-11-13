@@ -141,7 +141,7 @@ func TestCursor_FirstNext_Quick(t *testing.T) {
 			} else if got, want := c.Key(), item.key; got != want {
 				t.Fatalf("Key()=%d, want %d", got, want)
 			} else if got, want := c.Values(), item.values; !reflect.DeepEqual(got, want) {
-				t.Fatalf("len(Values())=%v, want %v", len(got), len(want))
+				t.Fatalf("len(Values())=%v/%#v, want %v/%#v", len(got), got, len(want), want)
 			}
 		}
 	})
@@ -707,7 +707,7 @@ func TestCursor_BitmapToArrayConversion(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// start with n = 4084 bits, where ArrayMaxSize =
+	// start with n = 4084 bits, over ArrayMaxSize
 	rb := roaring.NewBitmap()
 	bits := make([]uint64, rbf.BitmapN)
 	n := 0
@@ -718,7 +718,6 @@ func TestCursor_BitmapToArrayConversion(t *testing.T) {
 			break
 		}
 	}
-	//vv("ArrayMaxSize=%v;  n = %v", rbf.ArrayMaxSize, n)
 	rb.Put(0, roaring.NewContainerBitmap(n, bits))
 
 	// setup to delete random bits down
@@ -1114,5 +1113,84 @@ func TestCursor_GenerateAll(t *testing.T) {
 	}
 	if _, err := tx.AddRoaring("field/view/", bb); err != nil {
 		panic(err)
+	}
+}
+
+// test ForEachRange handles Bitmaps, because BitmapPtr
+// case was missing
+func TestForEachRange(t *testing.T) {
+	db := MustOpenDB(t)
+	defer MustCloseDB(t, db)
+	tx := MustBegin(t, db, true)
+	defer tx.Rollback()
+
+	if err := tx.CreateBitmap("x"); err != nil {
+		t.Fatal(err)
+	}
+
+	rb := roaring.NewBitmap()
+	bits := make([]uint64, rbf.BitmapN)
+	n := 0
+	for i := range bits {
+		bits[i] = 15 // ^uint64(0)
+		n += 4
+		if n > rbf.ArrayMaxSize {
+			break
+		}
+	}
+
+	rb.Put(0, roaring.NewContainerBitmap(n, bits))
+	crun := roaring.NewContainerRun([]roaring.Interval16{roaring.Interval16{Start: 0, Last: 1<<16 - 1}})
+	rb.Put(1, crun)
+	rb.Put(2, roaring.NewContainerArray([]uint16{1, 1024, 1<<16 - 1}))
+
+	// setup to delete random bits down
+	values := rb.Slice()
+	valmap := make(map[uint64]bool)
+	for _, v := range values {
+		valmap[v] = true
+	}
+
+	_, err := tx.AddRoaring("x", rb)
+	if err != nil {
+		t.Errorf("Add Roaring Failed %v", err)
+	}
+
+	c, err := tx.Cursor("x")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.DebugSlowCheckAllPages()
+
+	if err := c.First(); err != nil {
+		t.Fatal(err)
+	}
+
+	exists, err := c.Contains(0x3)
+	if err != nil {
+		t.Fatalf("ERR:%v", err)
+	}
+	if !exists {
+		t.Fatalf("Should Contain %v", 0x3)
+	}
+
+	exists, err = c.Contains(0x4)
+	if err != nil {
+		t.Fatalf("ERR:%v", err)
+	}
+	if exists {
+		t.Fatalf("Should Not Contain %v", 0x4)
+	}
+
+	c.DebugSlowCheckAllPages()
+
+	_ = tx.ForEach("x", func(i uint64) error {
+		delete(valmap, i)
+		return nil
+	})
+
+	// check it is empty
+	if len(valmap) != 0 {
+		t.Fatalf("expected empty container, but see %v values left: '%#v'", len(valmap), valmap)
 	}
 }

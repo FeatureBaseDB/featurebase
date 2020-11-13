@@ -1140,7 +1140,28 @@ func (tx *Tx) ForEachRange(name string, start, end uint64, fn func(uint64) error
 		case ContainerTypeBitmap:
 			for i, bits := range toArray64(cell.Data) {
 				for j := uint(0); j < 64; j++ {
-					if bits&(1<<j) != 0 {
+					if bits&(1<<j) == 0 {
+						continue
+					}
+
+					v := cell.Key<<16 | (uint64(i) * 64) | uint64(j)
+					if v < start {
+						continue
+					} else if v > end {
+						return nil
+					} else if err := fn(v); err != nil {
+						return err
+					}
+				}
+			}
+		case ContainerTypeBitmapPtr:
+			_, bm, err := c.tx.leafCellBitmap(toPgno(cell.Data))
+			if err != nil {
+				return err
+			}
+			for i, bits := range bm {
+				for j := uint(0); j < 64; j++ {
+					if bits&(1<<j) == 0 {
 						continue
 					}
 
