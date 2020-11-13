@@ -324,6 +324,12 @@ func (e *executor) safeCopy(resp QueryResponse) (out QueryResponse) {
 			// so does not contain bitmap material, and
 			// should not need to be cloned.
 			out.Results = append(out.Results, x)
+		case []*Row:
+			safe := make([]*Row, len(x))
+			for i, v := range x {
+				safe[i] = v.Clone()
+			}
+			out.Results = append(out.Results, safe)
 		default:
 			panic(fmt.Sprintf("handle %T here", v))
 		}
@@ -703,6 +709,9 @@ func (e *executor) executeCall(ctx context.Context, qcx *Qcx, index string, c *p
 	case "SetColumnAttrs":
 		statFn()
 		return nil, e.executeSetColumnAttrs(ctx, qcx, index, c, opt)
+	case "TopK":
+		statFn()
+		return e.executeTopK(ctx, qcx, index, c, shards, opt)
 	case "TopN":
 		statFn()
 		return e.executeTopN(ctx, qcx, index, c, shards, opt)
@@ -1806,6 +1815,126 @@ func (e *executor) executeMaxRowShard(ctx context.Context, qcx *Qcx, index strin
 		},
 		Field: fieldName,
 	}, nil
+}
+
+func (e *executor) executeTopK(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *execOptions) (interface{}, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeTopK")
+	defer span.Finish()
+
+	mapFn := func(ctx context.Context, shard uint64) (_ interface{}, err error) {
+		return e.executeTopKShard(ctx, qcx, index, c, shard)
+	}
+
+	reduceFn := func(ctx context.Context, prev, v interface{}) interface{} {
+		x, _ := prev.([]*Row)
+		y, _ := v.([]*Row)
+		return ([]*Row)(addBSI(x, y))
+	}
+
+	other, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
+	if err != nil {
+		return nil, err
+	}
+	results, _ := other.([]*Row)
+
+	if opt.Remote {
+		return results, nil
+	}
+
+	k, hasK, err := c.UintArg("k")
+	if err != nil {
+		return nil, errors.Wrap(err, "fetching k")
+	}
+
+	var limit *uint64
+	if hasK {
+		limit = &k
+	}
+
+	var dst []Pair
+	bsiData(results).pivotDescending(NewRow().Union(results...), 0, limit, nil, func(count uint64, ids ...uint64) {
+		for _, id := range ids {
+			dst = append(dst, Pair{
+				ID:    id,
+				Count: count,
+			})
+		}
+	})
+
+	fieldName, hasFieldName, err := c.StringArg("_field")
+	if err != nil {
+		return nil, errors.Wrap(err, "fetching TopK field")
+	} else if !hasFieldName {
+		return nil, errors.New("missing field in TopK")
+	}
+
+	return &PairsField{
+		Pairs: dst,
+		Field: fieldName,
+	}, nil
+}
+
+func (e *executor) executeTopKShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64) (_ []*Row, err0 error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeTopKShard")
+	defer span.Finish()
+
+	// Look up the index.
+	idx := e.Holder.Index(index)
+	if idx == nil {
+		return nil, ErrIndexNotFound
+	}
+
+	// Look up the field.
+	fieldName, hasFieldName, err := c.StringArg("_field")
+	if err != nil {
+		return nil, errors.Wrap(err, "fetching TopK field")
+	} else if !hasFieldName {
+		return nil, errors.New("missing field in TopK")
+	}
+	f := idx.Field(fieldName)
+	if f == nil {
+		return nil, ErrFieldNotFound
+	}
+
+	// Fetch the filter.
+	var filterBitmap *Row
+	if filter, hasFilter, err := c.CallArg("filter"); err != nil {
+		return nil, err
+	} else if hasFilter {
+		filterBitmap, err = e.executeBitmapCallShard(ctx, qcx, index, filter, shard)
+		if err != nil {
+			return nil, err
+		}
+		if !filterBitmap.Any() {
+			return []*Row(nil), nil
+		}
+	}
+
+	tx, finisher, err := qcx.GetTx(Txo{Write: !writable, Index: idx, Shard: shard})
+	if err != nil {
+		return nil, err
+	}
+	defer finisher(&err0)
+
+	ftype := f.Type()
+	switch ftype {
+	case FieldTypeSet, FieldTypeTime:
+		return e.executeTopKShardSet(ctx, tx, filterBitmap, index, fieldName, shard)
+	default:
+		return nil, errors.Errorf("field type %q is not yet supported by TopK", ftype)
+	}
+}
+
+func (e *executor) executeTopKShardSet(ctx context.Context, tx Tx, filter *Row, index, field string, shard uint64) ([]*Row, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeTopKShardSet")
+	defer span.Finish()
+
+	f := e.Holder.fragment(index, field, viewStandard, shard)
+	if f == nil {
+		return nil, nil
+	}
+
+	return f.cardinalityBSISet(ctx, tx, filter)
 }
 
 // executeTopN executes a TopN() call.

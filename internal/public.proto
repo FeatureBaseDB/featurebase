@@ -9,6 +9,10 @@ message Row {
 	bytes Roaring = 4;
 }
 
+message RowMatrix {
+	repeated Row Rows = 1;
+}
+
 message SignedRow {
 	Row Pos = 1;
 	Row Neg = 2;
@@ -161,6 +165,7 @@ message QueryResult {
 	PairField PairField = 12;
 	ExtractedIDMatrix ExtractedIDMatrix = 13;
 	ExtractedTable ExtractedTable = 14;
+	RowMatrix RowMatrix = 15;
 }
 
 message ImportRequest {

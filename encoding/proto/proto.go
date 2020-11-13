@@ -312,6 +312,14 @@ func (s Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		}
 		s.decodeAtomicRecord(msg, mt)
 		return nil
+	case *[]*pilosa.Row:
+		msg := &internal.RowMatrix{}
+		err := proto.Unmarshal(buf, msg)
+		if err != nil {
+			return errors.Wrap(err, "unmarshaling RowMatrix")
+		}
+		*mt = s.decodeRowMatrix(msg)
+		return nil
 	default:
 		panic(fmt.Sprintf("unhandled pilosa.Message of type %T: %#v", mt, m))
 	}
@@ -542,6 +550,9 @@ func (s Serializer) encodeQueryResponse(m *pilosa.QueryResponse) *internal.Query
 		case pilosa.PairField:
 			pb.Results[i].Type = queryResultTypePairField
 			pb.Results[i].PairField = s.encodePairField(result)
+		case []*pilosa.Row:
+			pb.Results[i].Type = queryResultTypeRowMatrix
+			pb.Results[i].RowMatrix = s.encodeRowMatrix(result)
 		case nil:
 			pb.Results[i].Type = queryResultTypeNil
 		default:
@@ -898,6 +909,15 @@ func (s Serializer) encodeAtomicRecord(msg *pilosa.AtomicRecord) *internal.Atomi
 		ar.Ir = append(ar.Ir, s.encodeImportRequest(ir))
 	}
 	return ar
+}
+
+func (s Serializer) encodeRowMatrix(msg []*pilosa.Row) *internal.RowMatrix {
+	rows := make([]*internal.Row, len(msg))
+	for i, r := range msg {
+		rows[i] = s.encodeRow(r)
+	}
+
+	return &internal.RowMatrix{Rows: rows}
 }
 
 func (s Serializer) encodeTransaction(trns *pilosa.Transaction) *internal.Transaction {
@@ -1341,6 +1361,14 @@ func (s Serializer) decodeAtomicRecord(pb *internal.AtomicRecord, m *pilosa.Atom
 	}
 }
 
+func (s Serializer) decodeRowMatrix(pb *internal.RowMatrix) []*pilosa.Row {
+	rows := make([]*pilosa.Row, len(pb.Rows))
+	for i, r := range pb.Rows {
+		rows[i] = s.decodeRow(r)
+	}
+	return rows
+}
+
 func decodeTransaction(pb *internal.Transaction, trns *pilosa.Transaction) {
 	trns.ID = pb.ID
 	trns.Active = pb.Active
@@ -1364,6 +1392,7 @@ const (
 	queryResultTypeRowIdentifiers
 	queryResultTypePair
 	queryResultTypePairField
+	queryResultTypeRowMatrix
 	queryResultTypeSignedRow
 	queryResultTypeExtractedIDMatrix
 	queryResultTypeExtractedTable
@@ -1401,6 +1430,8 @@ func (s Serializer) decodeQueryResult(pb *internal.QueryResult) interface{} {
 		return s.decodeExtractedIDMatrix(pb.ExtractedIDMatrix)
 	case queryResultTypeExtractedTable:
 		return s.decodeExtractedTable(pb.ExtractedTable)
+	case queryResultTypeRowMatrix:
+		return s.decodeRowMatrix(pb.RowMatrix)
 	}
 	panic(fmt.Sprintf("unknown type: %d", pb.Type))
 }
