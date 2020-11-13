@@ -192,23 +192,29 @@ workflows:
           requires:
             - setup
       - test:
-        name: test-golang-<< matrix.golang_version >>
-        resource_class: large
-        matrix:
-          parameters:
-            golang_version: ["1.14.12", "1.15.5"]
+          name: test-golang-<< matrix.golang_version >>
+          resource_class: large
+          context: molecula
+          requires:
+            - setup
+          matrix:
+            parameters:
+              golang_version: ["1.14.12", "1.15.5"]
       - test:
-        name: << matrix.test_make_target >>
-        resource_class: xlarge
-        matrix:
-          parameters:
-            test_make_target: ["test-race", "test-txstore-rbf", "test-txstore-rbf_lmdb"]
+          name: << matrix.test_make_target >>
+          resource_class: xlarge
+          context: molecula
+          requires:
+            - setup
+          matrix:
+            parameters:
+              test_make_target: ["test-race", "test-txstore-rbf", "test-txstore-rbf_lmdb"]
       - test:
           name: test-shardwidth-22
           shard_width: "22"
           resource_class: large
           requires:
-            - setup            
+            - setup
       - cluster-tests:
           requires:
             - setup
