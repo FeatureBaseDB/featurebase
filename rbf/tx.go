@@ -1733,7 +1733,7 @@ func (tx *Tx) Pages(pgnos []uint32) ([]Page, error) {
 			for _, cell := range readLeafCells(buf, cells) {
 				other := &LeafCell{
 					Key:  cell.Key,
-					Type: ContainerTypeString(cell.Type),
+					Type: cell.Type,
 				}
 
 				switch cell.Type {
@@ -1979,7 +1979,7 @@ type LeafPage struct {
 // LeafCell represents a leaf cell in the public API.
 type LeafCell struct {
 	Key    uint64
-	Type   string   // container type
+	Type   ContainerType
 	Pgno   uint32   // bitmap pointer only
 	Values []uint16 // array & rle containers only
 }

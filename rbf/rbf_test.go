@@ -126,6 +126,8 @@ func MustBegin(tb testing.TB, db *rbf.DB, writable bool) *rbf.Tx {
 	return tx
 }
 
+var _ = MustAddRandom
+
 // MustAddRandom adds values to a bitmap in a random order.
 func MustAddRandom(tb testing.TB, rand *rand.Rand, tx *rbf.Tx, name string, values ...uint64) {
 	tb.Helper()
@@ -147,6 +149,8 @@ func GenerateValues(rand *rand.Rand, n int) []uint64 {
 	return a
 }
 
+var _ = ToRows
+
 // ToRows returns a sorted list of rows from a set of values.
 func ToRows(values []uint64) []*Row {
 	m := make(map[uint64][]uint64)
@@ -162,6 +166,8 @@ func ToRows(values []uint64) []*Row {
 	sort.Slice(a, func(i, j int) bool { return a[i].ID < a[j].ID })
 	return a
 }
+
+var _ = Row{}
 
 type Row struct {
 	ID     uint64

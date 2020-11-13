@@ -267,162 +267,6 @@ func TestCursor_LastPrev_Quick(t *testing.T) {
 	})
 }
 
-func TestCursor_Union(t *testing.T) {
-	t.Run("OK", func(t *testing.T) {
-		db := MustOpenDB(t)
-		defer MustCloseDB(t, db)
-		tx := MustBegin(t, db, true)
-		defer tx.Rollback()
-
-		if err := tx.CreateBitmap("x"); err != nil {
-			t.Fatal(err)
-		}
-
-		row := make([]uint64, rbf.ShardWidth/64)
-
-		if _, err := tx.Add("x", 1, 3); err != nil {
-			t.Fatal(err)
-		} else if _, err := tx.Add("x", rbf.ShardWidth+1, rbf.ShardWidth+2, rbf.ShardWidth+7); err != nil {
-			t.Fatal(err)
-		}
-
-		c, err := tx.Cursor("x")
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err := c.Union(0, row); err != nil {
-			t.Fatal(err)
-		} else if row[0] != 0b00001010 {
-			t.Fatalf("unexpected row[0]: 0b%b", row[0])
-		}
-
-		if err := c.Union(1, row); err != nil {
-			t.Fatal(err)
-		} else if row[0] != 0b10001110 {
-			t.Fatalf("unexpected row[0]: 0b%b", row[0])
-		}
-	})
-
-	t.Run("Quick", func(t *testing.T) {
-		if testing.Short() {
-			t.Skip("-short enabled, skipping")
-		} else if is32Bit() {
-			t.Skip("32-bit build, skipping quick check tests")
-		}
-
-		QuickCheck(t, func(t *testing.T, rand *rand.Rand) {
-			t.Parallel()
-
-			db := MustOpenDB(t)
-			defer MustCloseDB(t, db)
-			tx := MustBegin(t, db, true)
-			defer tx.Rollback()
-			values := GenerateValues(rand, 10000)
-			rows := ToRows(values)
-
-			if err := tx.CreateBitmap("x"); err != nil {
-				t.Fatal(err)
-			}
-			MustAddRandom(t, rand, tx, "x", values...)
-
-			// Iterate over rows and randomly choose another row to union.
-			for i, row0 := range rows {
-				row1 := rows[rand.Intn(len(rows))]
-
-				bitmap := row0.Bitmap()
-				c, err := tx.Cursor("x")
-				if err != nil {
-					t.Fatal(err)
-				} else if err := c.Union(row1.ID, bitmap); err != nil {
-					return
-				}
-
-				if got, want := len(rbf.RowValues(bitmap)), len(row0.Union(row1)); got != want {
-					t.Fatalf("%d. len()=%d, want %d", i, got, want)
-				}
-			}
-		})
-	})
-}
-
-func TestCursor_Intersect(t *testing.T) {
-	t.Run("OK", func(t *testing.T) {
-		db := MustOpenDB(t)
-		defer MustCloseDB(t, db)
-		tx := MustBegin(t, db, true)
-		defer tx.Rollback()
-
-		row := make([]uint64, rbf.ShardWidth/64)
-
-		if err := tx.CreateBitmap("x"); err != nil {
-			t.Fatal(err)
-		}
-
-		if _, err := tx.Add("x", 1, 3); err != nil {
-			t.Fatal(err)
-		} else if _, err := tx.Add("x", rbf.ShardWidth+1, rbf.ShardWidth+2, rbf.ShardWidth+7); err != nil {
-			t.Fatal(err)
-		}
-
-		c, err := tx.Cursor("x")
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if err := c.Union(0, row); err != nil {
-			t.Fatal(err)
-		} else if row[0] != 0b00001010 {
-			t.Fatalf("unexpected row[0]: %#v", row[0])
-		}
-
-		if err := c.Intersect(1, row); err != nil {
-			t.Fatal(err)
-		} else if row[0] != 0b00000010 {
-			t.Fatalf("unexpected row[0]: %#v", row[0])
-		}
-	})
-
-	t.Run("Quick", func(t *testing.T) {
-		if testing.Short() {
-			t.Skip("-short enabled, skipping")
-		} else if is32Bit() {
-			t.Skip("32-bit build, skipping quick check tests")
-		}
-
-		QuickCheck(t, func(t *testing.T, rand *rand.Rand) {
-			t.Parallel()
-
-			db := MustOpenDB(t)
-			defer MustCloseDB(t, db)
-			tx := MustBegin(t, db, true)
-			defer tx.Rollback()
-			values := GenerateValues(rand, rand.Intn(10000))
-			rows := ToRows(values)
-
-			if err := tx.CreateBitmap("x"); err != nil {
-				t.Fatal(err)
-			}
-			MustAddRandom(t, rand, tx, "x", values...)
-
-			// Iterate over rows and randomly choose another row to union.
-			for i, row0 := range rows {
-				row1 := rows[rand.Intn(len(rows))]
-
-				bitmap := row0.Bitmap()
-				if c, err := tx.Cursor("x"); err != nil {
-					t.Fatal(err)
-				} else if err := c.Intersect(row1.ID, bitmap); err != nil {
-					t.Fatal(err)
-				}
-
-				if got, want := len(rbf.RowValues(bitmap)), len(row0.Intersect(row1)); got != want {
-					t.Fatalf("%d. len()=%d, want %d", i, got, want)
-				}
-			}
-		})
-	})
-}
-
 func makeBitmap(bit []uint16) (n int, ret []uint64) {
 	ret = make([]uint64, 1024)
 	for _, v := range bit {
@@ -731,6 +575,7 @@ func TestCursor_RLEConversion(t *testing.T) {
 	if err := tx.CreateBitmap("x"); err != nil {
 		t.Fatal(err)
 	}
+	exp := 0 // expected count of BitN
 	want := make([]uint16, 0, rbf.ArrayMaxSize)
 	rb := func() *roaring.Bitmap {
 		bm := roaring.NewBitmap()
@@ -741,6 +586,7 @@ func TestCursor_RLEConversion(t *testing.T) {
 			want = append(want, x)
 			want = append(want, x+1)
 			x += 3
+			exp += 2
 		}
 		bm.Put(0, roaring.NewContainerRun(runs))
 		return bm
@@ -775,6 +621,18 @@ func TestCursor_RLEConversion(t *testing.T) {
 		t.Fatalf("Should Not Contain %v", 0x6)
 	}
 
+	c.DebugSlowCheckAllPages()
+
+	//i := 0
+	for x := uint64(65408); x < 65536; x++ {
+		_, err = tx.Add("x", x)
+		if err != nil {
+			panic(err)
+		}
+		//vv("on i=%v, x = %v", i, x)
+		c.DebugSlowCheckAllPages()
+	}
+
 	//add a few bits to create another run
 	_, err = tx.Add("x",
 		func() []uint64 {
@@ -792,8 +650,169 @@ func TestCursor_RLEConversion(t *testing.T) {
 	if err := c.First(); err != nil {
 		t.Fatal(err)
 	}
-	if got, want := c.Values(), want; !reflect.DeepEqual(got, want) {
+
+	c.DebugSlowCheckAllPages()
+	//vv("past 2nd check")
+
+	got, want := c.Values(), want
+	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("Values()=%#v, want %#v", got, want)
+	}
+
+	// Split a run.
+	// There's a run at the end from 0xff80 - 0xffff (65408 - 65535).
+	// Split it in half.
+	removeMe := uint64(65471)
+	_, err = c.Remove(removeMe)
+	if err != nil {
+		t.Fatalf("remove failed")
+	}
+
+	got2 := c.Values()
+	target := uint16(removeMe)
+	for _, v := range got2 {
+		if v == target {
+			t.Fatalf("removal of %v from rle did not succeed", removeMe)
+		}
+	}
+
+	c.DebugSlowCheckAllPages()
+
+	// add it back
+	_, err = c.Add(removeMe)
+	if err != nil {
+		t.Fatalf("add failed")
+	}
+
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("Values()=%#v, want %#v", got, want)
+	}
+
+	c.DebugSlowCheckAllPages()
+}
+
+// test shrinking from bitmap down to array when a bit is removed
+func TestCursor_BitmapToArrayConversion(t *testing.T) {
+	db := MustOpenDB(t)
+	defer MustCloseDB(t, db)
+	tx := MustBegin(t, db, true)
+	defer tx.Rollback()
+
+	// Setup a Bitmap with more than ArrayMaxSize, then
+	// delete bits to down to below ArrayMaxSize, and
+	// verify the container type got converted to an array
+	// and that the BitN and ElemN are always correct.
+	//
+	if err := tx.CreateBitmap("x"); err != nil {
+		t.Fatal(err)
+	}
+
+	// start with n = 4084 bits, where ArrayMaxSize =
+	rb := roaring.NewBitmap()
+	bits := make([]uint64, rbf.BitmapN)
+	n := 0
+	for i := range bits {
+		bits[i] = 15 // ^uint64(0)
+		n += 4
+		if n > rbf.ArrayMaxSize {
+			break
+		}
+	}
+	//vv("ArrayMaxSize=%v;  n = %v", rbf.ArrayMaxSize, n)
+	rb.Put(0, roaring.NewContainerBitmap(n, bits))
+
+	// setup to delete random bits down
+	values := rb.Slice()
+	valmap := make(map[uint64]bool)
+	for _, v := range values {
+		valmap[v] = true
+	}
+
+	_, err := tx.AddRoaring("x", rb)
+	if err != nil {
+		t.Errorf("Add Roaring Failed %v", err)
+	}
+	c, err := tx.Cursor("x")
+	if err != nil {
+		t.Fatal(err)
+	} else if err := c.First(); err != nil {
+		t.Fatal(err)
+	}
+
+	if c.CurrentPageType() != rbf.ContainerTypeBitmapPtr {
+		t.Fatalf("Should Be BitmapPtr but is: %v\n", c.CurrentPageType())
+	}
+
+	exists, err := c.Contains(0x3)
+	if err != nil {
+		t.Fatalf("ERR:%v", err)
+	}
+	if !exists {
+		t.Fatalf("Should Contain %v", 0x3)
+	}
+
+	exists, err = c.Contains(0x4)
+	if err != nil {
+		t.Fatalf("ERR:%v", err)
+	}
+	if exists {
+		t.Fatalf("Should Not Contain %v", 0x4)
+	}
+
+	c.DebugSlowCheckAllPages()
+
+	for len(valmap) > 0 {
+
+		// pick a bit to evict
+		var removeMe uint64
+		for removeMe = range valmap {
+			break
+		}
+
+		c.DebugSlowCheckAllPages()
+
+		exists, err := c.Contains(removeMe)
+		if err != nil {
+			t.Fatalf("ERR:%v", err)
+		}
+		if !exists {
+			t.Fatalf("Should Contain %v", removeMe)
+		}
+
+		_, err = c.Remove(removeMe)
+		if err != nil {
+			t.Fatalf("remove failed")
+		}
+		//vv("removed %v, have %v left", removeMe, len(valmap))
+		c.DebugSlowCheckAllPages()
+
+		exists, err = c.Contains(removeMe)
+		if err != nil {
+			t.Fatalf("ERR:%v", err)
+		}
+		if exists {
+			t.Fatalf("Should NOT Contain %v", removeMe)
+		}
+
+		delete(valmap, removeMe)
+		n := len(valmap)
+
+		if n > rbf.ArrayMaxSize {
+			if c.CurrentPageType() != rbf.ContainerTypeBitmapPtr {
+				t.Fatalf("Should Be BitmapPtr but is: %v\n", c.CurrentPageType())
+			}
+		} else {
+			if n > 0 { // no pages if n == 0, so cannot get a CurrentPageType()
+				if c.CurrentPageType() == rbf.ContainerTypeBitmapPtr {
+					t.Fatalf("Should NOT Be BitmapPtr but is indeed: %v\n", c.CurrentPageType())
+				}
+			}
+		}
+	}
+	// check it is empty
+	va := c.Values()
+	if len(va) != 0 {
+		t.Fatalf("expected empty container, but see %v values left: '%#v'", len(va), va)
 	}
 
 }

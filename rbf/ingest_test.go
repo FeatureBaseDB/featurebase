@@ -34,35 +34,41 @@ func rbfName(index, field, view string, shard uint64) string {
 	return string(txkey.Prefix(index, field, view, shard))
 }
 
+var _ = rbfName // keep linter happy
+
+/*
+// rbtree uses 15% memory and needs half the ingest time
+// for our 10K view ingest.
+//
+// previous master with slice copying instead of rbtree:
+
+=== RUN   TestIngest_lots_of_views
+ingest_test.go:141 2020-11-13T03:14:09.778839Z m0.TotalAlloc = 728408
+ingest_test.go:144 2020-11-13T03:14:37.492104Z m1.TotalAlloc = 41,816,617,216
+--- PASS: TestIngest_lots_of_views (27.71s)
+
+// lots_views with rbtree
+
+=== RUN   TestIngest_lots_of_views
+ingest_test.go:141 2020-11-13T03:11:01.540076Z m0.TotalAlloc = 726072
+ingest_test.go:144 2020-11-13T03:11:15.003591Z m1.TotalAlloc = 35,510,273,184
+--- PASS: TestIngest_lots_of_views (13.46s)
+*/
 func TestIngest_lots_of_views(t *testing.T) {
 
-	// skip unless studying perf because is long (15-30 seconds)
-	//return
+	// realistic
+	//nCt := 10000
+
+	// fast CI
+	nCt := 10
 
 	var m0, m1 runtime.MemStats
 	runtime.ReadMemStats(&m0)
-	vv("m0.TotalAlloc = %v", m0.TotalAlloc)
+	//vv("m0.TotalAlloc = %v", m0.TotalAlloc)
 	defer func() {
 		runtime.ReadMemStats(&m1)
-		vv("m1.TotalAlloc = %v", m1.TotalAlloc)
+		//vv("m1.TotalAlloc = %v", m1.TotalAlloc)
 	}()
-	// rbtree uses 15% memory and needs half the ingest time
-	// for our 10K view ingest.
-	//
-	// previous master with slice copying instead of rbtree:
-	/*
-		=== RUN   TestIngest_lots_of_views
-		ingest_test.go:141 2020-11-13T03:14:09.778839Z m0.TotalAlloc = 728408
-		ingest_test.go:144 2020-11-13T03:14:37.492104Z m1.TotalAlloc = 41,816,617,216
-		--- PASS: TestIngest_lots_of_views (27.71s)
-	*/
-	// lots_views with rbtree
-	/*
-		=== RUN   TestIngest_lots_of_views
-		ingest_test.go:141 2020-11-13T03:11:01.540076Z m0.TotalAlloc = 726072
-		ingest_test.go:144 2020-11-13T03:11:15.003591Z m1.TotalAlloc = 35,510,273,184
-		--- PASS: TestIngest_lots_of_views (13.46s)
-	*/
 
 	path, err := ioutil.TempDir("", "rbf_ingest_lots_of_views")
 	panicOn(err)
@@ -93,15 +99,14 @@ func TestIngest_lots_of_views(t *testing.T) {
 
 	// put a raw-bitmap container to many views.
 	bits := []uint16{}
-	for i := 0; i < 1<<16; i++ {
-		//for i := 0; i < 100; i++ {
+	//for i := 0; i < 1<<16; i++ {
+	for i := 0; i < 100; i++ {
 		if i%2 == 0 {
 			bits = append(bits, uint16(i))
 		}
 	}
 	ct := roaring.NewContainerArray(bits)
 
-	nCt := 10000
 	ckey := uint64(0)
 	shard := ckey / ShardWidth
 
@@ -133,22 +138,9 @@ func TestIngest_lots_of_views(t *testing.T) {
 	sz, err := DiskUse(path, "")
 	panicOn(err)
 	_ = sz
-	vv("sz in bytes= %v", sz)
-
+	//vv("sz in bytes= %v", sz)
 	db.Close()
 }
-
-// func (s *rr) last() (r *RootRecord) {
-// 	it := s.tree.Max()
-// 	if it == s.tree.NegativeLimit() {
-// 		return nil
-// 	}
-// 	rec := it.Item().(RootRecord)
-// 	r = &rec
-// 	return
-// }
-
-// var _ = (&rr{}).last // happy linter
 
 func DiskUse(root string, requiredSuffix string) (tot int, err error) {
 	if !DirExists(root) {

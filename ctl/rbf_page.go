@@ -111,7 +111,7 @@ func (cmd *RBFPageCommand) printLeafPage(page *rbf.LeafPage) {
 	fmt.Fprintf(cmd.Stdout, "Type: leaf\n")
 	fmt.Fprintf(cmd.Stdout, "Cells: n=%d\n", len(page.Cells))
 	for i, cell := range page.Cells {
-		if cell.Type == "bitmap-ptr" {
+		if cell.Type == rbf.ContainerTypeBitmapPtr {
 			fmt.Fprintf(cmd.Stdout, "[%d]: key=%d type=%s pgno=%d\n", i, cell.Key, cell.Type, cell.Pgno)
 		} else {
 			fmt.Fprintf(cmd.Stdout, "[%d]: key=%d type=%s values=%v\n", i, cell.Key, cell.Type, cell.Values)
