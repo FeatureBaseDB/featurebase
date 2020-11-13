@@ -5,7 +5,7 @@ executors:
     parameters:
       version:
         type: string
-        default: "1.14.10"
+        default: "1.15.5"
       resource_class:
         type: string
         default: medium
@@ -84,7 +84,7 @@ jobs:
         default: medium
       golang_version:
         type: string
-        default: "1.14.10"
+        default: "1.15.5"
       shard_width:
         type: string
         default: "20"
@@ -192,55 +192,29 @@ workflows:
           requires:
             - setup
       - test:
-          name: test-golang-1.15
-          resource_class: xlarge
-          golang_version: 1.15.3
+          name: test-golang-<< matrix.golang_version >>
+          resource_class: large
+          context: molecula
           requires:
             - setup
-          filters:
-            tags:
-              only: /^v.*/
+          matrix:
+            parameters:
+              golang_version: ["1.14.12", "1.15.5"]
       - test:
-          name: test-golang-1.14.10
+          name: << matrix.test_make_target >>
           resource_class: xlarge
-          golang_version: 1.14.10
+          context: molecula
           requires:
             - setup
-          filters:
-            tags:
-              only: /^v.*/
-      # Ideally we would do something like the following instead of the above,
-      # but we don't like having point releases in the CI run name. Maybe in
-      # the future we can go back to this:
-      #- test:
-      #  name: test-golang-<< matrix.golang_version >>
-      #  matrix:
-      #    parameters:
-      #      golang_version: ["1.14.10", "1.15.3"]
-      - test:
-          name: test-race
-          test_make_target: test-race
-          resource_class: xlarge
-          requires:
-            - setup
-      - test:
-          name: test-txstore-rbf
-          test_make_target: test-txstore-rbf
-          resource_class: xlarge
-          requires:
-            - setup
-      - test:
-          name: test-txstore-rbf_lmdb
-          test_make_target: test-txstore-rbf_lmdb
-          resource_class: xlarge
-          requires:
-            - setup            
+          matrix:
+            parameters:
+              test_make_target: ["test-race", "test-txstore-rbf", "test-txstore-rbf_lmdb"]
       - test:
           name: test-shardwidth-22
           shard_width: "22"
           resource_class: large
           requires:
-            - setup            
+            - setup
       - cluster-tests:
           requires:
             - setup
@@ -248,7 +222,7 @@ workflows:
           requires:
             - linter
             - check-license-headers
-            - test-golang-1.14.10
+            - test-golang-1.15.5
       - dockerhub-upload-unstable:
           context: molecula
           requires:
