@@ -45,10 +45,10 @@ const (
 
 	// ArrayMaxSize represents the maximum size of array containers.
 	// This is sligtly less than roaring to accommodate the page header.
-	ArrayMaxSize = 4080
+	ArrayMaxSize = 4079
 
 	// RLEMaxSize represents the maximum size of run length encoded containers.
-	RLEMaxSize = 2040
+	RLEMaxSize = 2039
 )
 
 // Page types.
@@ -98,7 +98,7 @@ func (typ ContainerType) String() string {
 const (
 	rootRecordPageHeaderSize = 12
 	rootRecordHeaderSize     = 4 + 2     // pgno, len(name)
-	leafCellHeaderSize       = 8 + 4 + 4 // key, type, count
+	leafCellHeaderSize       = 8 + 4 + 6 // key, type, count
 	branchCellSize           = 8 + 4 + 4 // key, flags, pgno
 )
 
@@ -481,15 +481,15 @@ func readLeafCell(page []byte, i int) leafCell {
 	cell.Key = *(*uint64)(unsafe.Pointer(&buf[0]))
 	cell.Type = ContainerType(*(*uint32)(unsafe.Pointer(&buf[8])))
 	cell.ElemN = int(*(*uint16)(unsafe.Pointer(&buf[12])))
-	cell.BitN = int(*(*uint16)(unsafe.Pointer(&buf[14])))
+	cell.BitN = int(*(*uint32)(unsafe.Pointer(&buf[14])))
 
 	switch cell.Type {
 	case ContainerTypeArray:
-		cell.Data = buf[16 : 16+(cell.ElemN*2)]
+		cell.Data = buf[18 : 18+(cell.ElemN*2)]
 	case ContainerTypeRLE:
-		cell.Data = buf[16 : 16+(cell.ElemN*4)]
+		cell.Data = buf[18 : 18+(cell.ElemN*4)]
 	case ContainerTypeBitmapPtr:
-		cell.Data = buf[16 : 16+4]
+		cell.Data = buf[18 : 18+4]
 	default:
 	}
 
@@ -519,9 +519,9 @@ func writeLeafCell(page []byte, i, offset int, cell leafCell) {
 	*(*uint64)(unsafe.Pointer(&page[offset])) = cell.Key
 	*(*uint32)(unsafe.Pointer(&page[offset+8])) = uint32(cell.Type)
 	*(*uint16)(unsafe.Pointer(&page[offset+12])) = uint16(cell.ElemN)
-	*(*uint16)(unsafe.Pointer(&page[offset+14])) = uint16(cell.BitN)
-	assert(offset+16+len(cell.Data) <= PageSize) // leaf cell write extends beyond page
-	copy(page[offset+16:], cell.Data)
+	*(*uint32)(unsafe.Pointer(&page[offset+14])) = uint32(cell.BitN)
+	assert(offset+18+len(cell.Data) <= PageSize) // leaf cell write extends beyond page
+	copy(page[offset+18:], cell.Data)
 }
 
 // branchCell represents a branch cell.

@@ -350,11 +350,13 @@ func toPgno(val []byte) uint32 {
 	return binary.LittleEndian.Uint32(val)
 }
 func (c *Cursor) putLeafCell(in leafCell) (err error) {
+
 	leafPage := c.leafPage // the last read leaf page
 	cells := readLeafCells(leafPage, c.leafCells[:])
 	elem := &c.stack.elems[c.stack.index]
 	cell := in
 	if elem.index >= len(cells) || c.Key() != cell.Key {
+
 		//new cell
 		if in.Type == ContainerTypeBitmap {
 			//allocated bitmap()
@@ -403,7 +405,6 @@ func (c *Cursor) putLeafCell(in leafCell) (err error) {
 		}
 		cell.Data = fromPgno(bitmapPgno)
 	}
-
 	cells[elem.index] = cell
 
 	// Split into multiple pages if page size is exceeded.
