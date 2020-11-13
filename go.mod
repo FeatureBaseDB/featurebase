@@ -14,6 +14,7 @@ require (
 	github.com/dustin/go-humanize v1.0.0
 	github.com/glycerine/idem v0.0.0-20190127113923-7a8083893311
 	github.com/glycerine/lmdb-go v1.9.34
+	github.com/glycerine/rbtree v0.0.0-20190406191118-ceb71889d809
 	github.com/go-ole/go-ole v1.2.4 // indirect
 	github.com/gogo/protobuf v1.2.1
 	github.com/golang/protobuf v1.3.3

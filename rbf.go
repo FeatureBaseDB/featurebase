@@ -460,7 +460,6 @@ func (tx *RBFTx) UseRowCache() bool {
 
 // rbfName returns a NULL-separated key used for identifying bitmap maps in RBF.
 func rbfName(index, field, view string, shard uint64) string {
-	//return fmt.Sprintf("%s\x00%s\x00%s\x00%d", index, field, view, shard)
 	return string(txkey.Prefix(index, field, view, shard))
 }
 

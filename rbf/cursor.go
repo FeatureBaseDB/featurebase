@@ -69,7 +69,7 @@ func runAdd(runs []roaring.Interval16, v uint16) ([]roaring.Interval16, bool) {
 		if i > 0 && runs[i-1].Last == v-1 {
 			runs[i-1].Last = iv.Last
 			runs = append(runs[:i], runs[i+1:]...)
-			//TODO check if to big
+			//TODO check if too big
 			return runs, true
 		}
 		// just before an interval
@@ -84,6 +84,8 @@ func runAdd(runs []roaring.Interval16, v uint16) ([]roaring.Interval16, bool) {
 	}
 	return runs, true
 }
+
+// checkRun is only called by Cursor.Add()
 func checkRun(runs []roaring.Interval16, bitN int, key uint64) leafCell {
 	if len(runs) >= RLEMaxSize {
 		//convertToBitmap
@@ -118,14 +120,15 @@ func checkRun(runs []roaring.Interval16, bitN int, key uint64) leafCell {
 				words[i] = ^uint64(0)
 			}
 		}
+		// TODO: take this out once we know bitN matches
 		n := uint64(0)
 		for _, v := range bitmap {
 			n += popcount(v)
 		}
 
-		return leafCell{Key: key, N: int(n), BitN: int(n), Type: ContainerTypeBitmap, Data: fromArray64(bitmap)}
+		return leafCell{Key: key, BitN: int(bitN), Type: ContainerTypeBitmap, Data: fromArray64(bitmap)}
 	}
-	return leafCell{Key: key, N: len(runs), BitN: int(bitN + 1), Type: ContainerTypeRLE, Data: fromInterval16(runs)}
+	return leafCell{Key: key, ElemN: len(runs), BitN: int(bitN), Type: ContainerTypeRLE, Data: fromInterval16(runs)}
 }
 
 // Add sets a bit on the underlying bitmap.
@@ -136,7 +139,7 @@ func (c *Cursor) Add(v uint64) (changed bool, err error) {
 	if exact, err := c.Seek(hi); err != nil {
 		return false, err
 	} else if !exact {
-		return true, c.putLeafCell(leafCell{Key: hi, Type: ContainerTypeArray, N: 1, BitN: 1, Data: fromArray16([]uint16{lo})})
+		return true, c.putLeafCell(leafCell{Key: hi, Type: ContainerTypeArray, ElemN: 1, BitN: 1, Data: fromArray16([]uint16{lo})})
 	}
 
 	// If the container exists and bit is not set then update the page.
@@ -155,7 +158,7 @@ func (c *Cursor) Add(v uint64) (changed bool, err error) {
 		copy(other, a[:i])
 		other[i] = lo
 		copy(other[i+1:], a[i:])
-		return true, c.putLeafCell(leafCell{Key: cell.Key, Type: ContainerTypeArray, N: len(other), BitN: cell.BitN + 1, Data: fromArray16(other)})
+		return true, c.putLeafCell(leafCell{Key: cell.Key, Type: ContainerTypeArray, ElemN: len(other), BitN: cell.BitN + 1, Data: fromArray16(other)})
 
 	case ContainerTypeRLE:
 		runs := toInterval16(cell.Data)
@@ -163,7 +166,7 @@ func (c *Cursor) Add(v uint64) (changed bool, err error) {
 		copy(c.rle[:], runs)
 		run, added := runAdd(c.rle[:len(runs)], lo)
 		if added {
-			leaf := checkRun(run, cell.BitN, cell.Key)
+			leaf := checkRun(run, cell.BitN+1, cell.Key)
 			return true, c.putLeafCell(leaf)
 		}
 		return false, nil
@@ -219,10 +222,10 @@ func (c *Cursor) Remove(v uint64) (changed bool, err error) {
 		}
 
 		// Copy container data and remove new value.
-		other := make([]uint16, len(a)-1)
+		other := c.array[:len(a)-1]
 		copy(other[:i], a[:i])
 		copy(other[i:], a[i+1:])
-		return true, c.putLeafCell(leafCell{Key: cell.Key, Type: ContainerTypeArray, N: len(other), BitN: cell.BitN - 1, Data: fromArray16(other)})
+		return true, c.putLeafCell(leafCell{Key: cell.Key, Type: ContainerTypeArray, ElemN: len(other), BitN: cell.BitN - 1, Data: fromArray16(other)})
 
 	case ContainerTypeRLE:
 		r := toInterval16(cell.Data)
@@ -230,6 +233,7 @@ func (c *Cursor) Remove(v uint64) (changed bool, err error) {
 		if !contains {
 			return false, nil
 		}
+		// INVAR: lo is in run[i]
 		copy(c.rle[:], r)
 		runs := c.rle[:len(r)]
 
@@ -240,16 +244,22 @@ func (c *Cursor) Remove(v uint64) (changed bool, err error) {
 		} else if lo == c.rle[i].Start {
 			runs[i].Start++
 		} else if lo > runs[i].Start {
+			// INVAR: Start < lo < Last.
+			// We remove lo, so split into two runs:
 			last := runs[i].Last
 			runs[i].Last = lo - 1
+			// INVAR: runs[:i] is correct, but still need to insert the new interval at i+1.
 			runs = append(runs, roaring.Interval16{})
+			// copy the tail first
 			copy(runs[i+2:], runs[i+1:])
+			// overwrite with the new interval.
 			runs[i+1] = roaring.Interval16{Start: lo + 1, Last: last}
 		}
 		if len(runs) == 0 {
 			return true, c.deleteLeafCell(cell.Key)
 		}
-		return true, c.putLeafCell(leafCell{Key: cell.Key, Type: ContainerTypeRLE, N: len(runs), Data: fromInterval16(runs)})
+		return true, c.putLeafCell(leafCell{Key: cell.Key, Type: ContainerTypeRLE, ElemN: len(runs), BitN: cell.BitN - 1, Data: fromInterval16(runs)})
+
 	case ContainerTypeBitmapPtr:
 		pgno, bm, err := c.tx.leafCellBitmap(toPgno(cell.Data))
 		if err != nil {
@@ -322,8 +332,7 @@ func toPgno(val []byte) uint32 {
 	return binary.LittleEndian.Uint32(val)
 }
 func (c *Cursor) putLeafCell(in leafCell) (err error) {
-	leafPage := c.leafPage
-
+	leafPage := c.leafPage // the last read leaf page
 	cells := readLeafCells(leafPage, c.leafCells[:])
 	elem := &c.stack.elems[c.stack.index]
 	cell := in
@@ -331,7 +340,7 @@ func (c *Cursor) putLeafCell(in leafCell) (err error) {
 		//new cell
 		if in.Type == ContainerTypeBitmap {
 			//allocated bitmap()
-			bitmapPgno, err := c.tx.allocate()
+			bitmapPgno, err := c.tx.allocatePgno()
 			if err != nil {
 				return err
 			}
@@ -346,7 +355,7 @@ func (c *Cursor) putLeafCell(in leafCell) (err error) {
 		if in.Type == ContainerTypeBitmap {
 			cell = cells[elem.index]
 			if cell.Type != ContainerTypeBitmapPtr {
-				bitmapPgno, err := c.tx.allocate()
+				bitmapPgno, err := c.tx.allocatePgno()
 				if err != nil {
 					return errors.Wrap(err, "cursor.putLeafCell")
 				}
@@ -356,7 +365,7 @@ func (c *Cursor) putLeafCell(in leafCell) (err error) {
 		}
 	}
 
-	if in.Type == ContainerTypeArray && in.N > ArrayMaxSize {
+	if in.Type == ContainerTypeArray && in.ElemN > ArrayMaxSize {
 		//convert to bitmap
 		in.Type = ContainerTypeBitmap
 		a := make([]uint64, PageSize/8)
@@ -365,7 +374,7 @@ func (c *Cursor) putLeafCell(in leafCell) (err error) {
 		}
 		in.Data = fromArray64(a)
 		cell.Type = ContainerTypeBitmapPtr
-		bitmapPgno, err := c.tx.allocate()
+		bitmapPgno, err := c.tx.allocatePgno()
 		if err != nil {
 			return err
 		}
@@ -393,7 +402,7 @@ func (c *Cursor) putLeafCell(in leafCell) (err error) {
 		if i == 0 && !newRoot {
 			parent.Pgno = origPgno
 		} else {
-			if parent.Pgno, err = c.tx.allocate(); err != nil {
+			if parent.Pgno, err = c.tx.allocatePgno(); err != nil {
 				return fmt.Errorf("cannot allocate leaf: %w", err)
 			}
 		}
@@ -450,14 +459,14 @@ func (c *Cursor) deleteLeafCell(key uint64) (err error) {
 	oldPageKey := cells[0].Key
 	cell := c.cell()
 	if cell.Type == ContainerTypeBitmapPtr {
-		if err := c.tx.deallocate(toPgno(cell.Data)); err != nil {
+		if err := c.tx.freePgno(toPgno(cell.Data)); err != nil {
 			return err
 		}
 	}
 
 	// If no more cells exist and we have a parent, remove from parent.
 	if c.stack.index > 0 && len(cells) == 1 {
-		if err := c.tx.deallocate(elem.pgno); err != nil {
+		if err := c.tx.freePgno(elem.pgno); err != nil {
 			return err
 		}
 		return c.deleteBranchCell(c.stack.index-1, cells[0].Key)
@@ -527,7 +536,7 @@ func (c *Cursor) putBranchCells(stackIndex int, newCells []branchCell) (err erro
 		if i == 0 && !newRoot {
 			parent.Pgno = origPgno
 		} else {
-			if parent.Pgno, err = c.tx.allocate(); err != nil {
+			if parent.Pgno, err = c.tx.allocatePgno(); err != nil {
 				return fmt.Errorf("cannot allocate branch: %w", err)
 			}
 		}
@@ -634,7 +643,7 @@ func (c *Cursor) deleteBranchCell(stackIndex int, key uint64) (err error) {
 		copy(buf, target)
 		writePageNo(buf[:], elem.pgno)
 
-		if err := c.tx.deallocate(cells[0].Pgno); err != nil {
+		if err := c.tx.freePgno(cells[0].Pgno); err != nil {
 			return err
 		}
 		return c.tx.writePage(buf[:])
@@ -694,7 +703,7 @@ func splitLeafCells(cells []leafCell) [][]leafCell {
 		// half a page then create a new group of cells.
 		if cellN != 0 && (dataOffset(cellN+1)+dataSize+sz) > (PageSize*60)/100 {
 			slices, dataSize = append(slices, nil), 0
-		} else if cellN != 0 && cell.Type == ContainerTypeArray && cell.N > ArrayMaxSize {
+		} else if cellN != 0 && cell.Type == ContainerTypeArray && cell.ElemN > ArrayMaxSize {
 			slices, dataSize = append(slices, nil), 0
 			sz = PageSize
 		}
@@ -1116,7 +1125,6 @@ func (c *Cursor) goNextPage() error {
 
 func ConvertToLeafArgs(key uint64, c *roaring.Container) (result leafCell) {
 	result.Key = key
-	result.N = int(c.N())
 	result.BitN = int(c.N())
 	result.Type = ContainerTypeNone
 	if c.N() == 0 {
@@ -1129,14 +1137,17 @@ func ConvertToLeafArgs(key uint64, c *roaring.Container) (result leafCell) {
 			roaring.ConvertArrayToBitmap(c)
 			result.Type = ContainerTypeBitmap
 			result.Data = fromArray64(roaring.AsBitmap(c))
+			// result.ElemN is 0 or undefined for bitmap
 			return
 		}
 		result.Type = ContainerTypeArray
 		result.Data = fromArray16(a)
+		result.ElemN = int(c.N())
 		return
 	case 2: //bitmap
 		result.Type = ContainerTypeBitmap
 		result.Data = fromArray64(roaring.AsBitmap(c))
+		// result.ElemN is 0 or undefined for bitmap
 		return
 	case 3: //run
 		r := roaring.AsRuns(c)
@@ -1144,9 +1155,11 @@ func ConvertToLeafArgs(key uint64, c *roaring.Container) (result leafCell) {
 			roaring.ConvertRunToBitmap(c)
 			result.Type = ContainerTypeBitmap
 			result.Data = fromArray64(roaring.AsBitmap(c))
+			// result.ElemN is 0 or undefined for bitmap
+
 			return
 		}
-		result.N = len(r) //note RBF N is number of containers
+		result.ElemN = len(r) // ElemN is the number of runs
 		result.Type = ContainerTypeRLE
 		result.Data = fromInterval16(r)
 		return
@@ -1186,7 +1199,7 @@ func (c *Cursor) AddRoaring(bm *roaring.Bitmap) (changed bool, err error) {
 	for itr.Next() {
 		hi, cont := itr.Value()
 		leaf := ConvertToLeafArgs(hi, cont)
-		if leaf.N == 0 {
+		if leaf.BitN == 0 {
 			continue
 		}
 		// Move cursor to the key of the container.

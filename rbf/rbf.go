@@ -25,6 +25,7 @@ import (
 	"os"
 	"unsafe"
 
+	"github.com/glycerine/rbtree"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/shardwidth"
 )
@@ -166,16 +167,22 @@ func readRootRecords(page []byte) (records []*RootRecord, err error) {
 	}
 }
 
-func writeRootRecords(page []byte, records []*RootRecord) (remaining []*RootRecord, err error) {
+// writeRootRecords is only called by tx.go Tx.writeRootRecordPages().
+// We can return io.ErrShortBuffer in err. If we still have records
+// to write that don't fit on page, remain will point to the next
+// record that hasn't yet been written.
+func writeRootRecords(page []byte, recit, limit rbtree.Iterator) (remain rbtree.Iterator, err error) {
 	data := page[rootRecordPageHeaderSize:]
-	for i, rec := range records {
-		if data, err = WriteRootRecord(data, rec); err == io.ErrShortBuffer {
-			return records[i:], nil
-		} else if err != nil {
-			return records[i:], err
+
+	for recit != limit {
+		rec := recit.Item().(RootRecord)
+		data, err = WriteRootRecord(data, &rec)
+		if err != nil {
+			return recit, err
 		}
+		recit = recit.Next()
 	}
-	return nil, nil
+	return recit, nil
 }
 
 // Branch & leaf page helpers
@@ -284,11 +291,11 @@ type leafCell struct {
 	Key  uint64
 	Type int // container type
 
-	// N is the number of "things" in Data:
+	// ElemN is the number of "things" in Data:
 	//  for an array container the number of integers in the array.
 	//  for an RLE, number of intervals.
-	// etc.
-	N int
+	// ElemN is undefined or 0 for ContainerTypeBitmap
+	ElemN int
 
 	BitN int
 	Data []byte
@@ -471,14 +478,14 @@ func readLeafCell(page []byte, i int) leafCell {
 	var cell leafCell
 	cell.Key = *(*uint64)(unsafe.Pointer(&buf[0]))
 	cell.Type = int(*(*uint32)(unsafe.Pointer(&buf[8])))
-	cell.N = int(*(*uint16)(unsafe.Pointer(&buf[12])))
+	cell.ElemN = int(*(*uint16)(unsafe.Pointer(&buf[12])))
 	cell.BitN = int(*(*uint16)(unsafe.Pointer(&buf[14])))
 
 	switch cell.Type {
 	case ContainerTypeArray:
-		cell.Data = buf[16 : 16+(cell.N*2)]
+		cell.Data = buf[16 : 16+(cell.ElemN*2)]
 	case ContainerTypeRLE:
-		cell.Data = buf[16 : 16+(cell.N*4)]
+		cell.Data = buf[16 : 16+(cell.ElemN*4)]
 	case ContainerTypeBitmapPtr:
 		cell.Data = buf[16 : 16+4]
 	default:
@@ -509,7 +516,7 @@ func writeLeafCell(page []byte, i, offset int, cell leafCell) {
 	writeCellOffset(page, i, offset)
 	*(*uint64)(unsafe.Pointer(&page[offset])) = cell.Key
 	*(*uint32)(unsafe.Pointer(&page[offset+8])) = uint32(cell.Type)
-	*(*uint16)(unsafe.Pointer(&page[offset+12])) = uint16(cell.N)
+	*(*uint16)(unsafe.Pointer(&page[offset+12])) = uint16(cell.ElemN)
 	*(*uint16)(unsafe.Pointer(&page[offset+14])) = uint16(cell.BitN)
 	assert(offset+16+len(cell.Data) <= PageSize) // leaf cell write extends beyond page
 	copy(page[offset+16:], cell.Data)
@@ -611,13 +618,13 @@ func Pagedump(b []byte, indent string, writer io.Writer) {
 			switch cell.Type {
 			case ContainerTypeArray:
 				//fmt.Fprintf(os.Stderr, "[%d]: key=%d type=array n=%d elems=%v\n", i, cell.Key, cell.N, toArray16(cell.Data))
-				fmt.Fprintf(writer, "%s[%d]: key=%d type=array n=%d \n", indent, i, cell.Key, cell.N)
+				fmt.Fprintf(writer, "%s[%d]: key=%d type=array BitN=%d \n", indent, i, cell.Key, cell.BitN)
 			case ContainerTypeRLE:
-				fmt.Fprintf(writer, "%s[%d]: key=%d type=rle n=%d\n", indent, i, cell.Key, cell.N)
+				fmt.Fprintf(writer, "%s[%d]: key=%d type=rle BitN=%d\n", indent, i, cell.Key, cell.BitN)
 			case ContainerTypeBitmapPtr:
-				fmt.Fprintf(writer, "%s[%d]: key=%d type=bitmap n=%d\n", indent, i, cell.Key, cell.N)
+				fmt.Fprintf(writer, "%s[%d]: key=%d type=bitmap BitN=%d\n", indent, i, cell.Key, cell.BitN)
 			default:
-				fmt.Fprintf(writer, "%s[%d]: key=%d type=unknown<%d> n=%d\n", indent, i, cell.Key, cell.Type, cell.N)
+				fmt.Fprintf(writer, "%s[%d]: key=%d type=unknown<%d> BitN=%d\n", indent, i, cell.Key, cell.Type, cell.BitN)
 			}
 		}
 	case flags&PageTypeBranch != 0:

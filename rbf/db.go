@@ -40,7 +40,7 @@ type DB struct {
 
 	data        []byte           // database mmap
 	file        *os.File         // database file descriptor
-	rootRecords []*RootRecord    // cached root records
+	rootRecords *rr              // cached root records
 	pageMap     *immutable.Map   // pgno-to-WALID mapping
 	txs         map[*Tx]struct{} // active transactions
 	opened      bool             // true if open
@@ -329,7 +329,9 @@ func (db *DB) HasData(requireOneHotBit bool) (hasAnyRecords bool, err error) {
 	}
 	// Loop over each bitmap and attempt to move to the first cell.
 	// If we can move to a cell then we have at least one record.
-	for _, record := range records {
+
+	for it := records.tree.Min(); it != records.tree.Limit(); it = it.Next() {
+		record := it.Item().(RootRecord)
 		// Fetch cursor for bitmap.
 		cur, err := tx.Cursor(record.Name)
 		if err != nil {

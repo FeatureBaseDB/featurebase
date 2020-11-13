@@ -3270,7 +3270,10 @@ func (c *Container) bitmapContains(v uint16) bool {
 // or the index of the next run starting after v, and false, when v is not contained.
 func BinSearchRuns(v uint16, a []Interval16) (int32, bool) {
 	i := int32(sort.Search(len(a),
-		func(i int) bool { return a[i].Last >= v }))
+		func(i int) bool {
+			return a[i].Last >= v
+		}))
+
 	if i < int32(len(a)) {
 		return i, (v >= a[i].Start) && (v <= a[i].Last)
 	}
