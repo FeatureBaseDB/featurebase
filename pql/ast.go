@@ -416,6 +416,15 @@ var callInfoByFunc = map[string]callInfo{
 		callType: PrecallGlobal,
 	},
 
+	"TopK": {
+		allowUnknown: false,
+		prototypes: map[string]interface{}{
+			"_field": "",
+			"k":      int64(0),
+			"filter": nil,
+		},
+	},
+
 	// things that take _field
 	"TopN": allowUnderField,
 	// special cases:

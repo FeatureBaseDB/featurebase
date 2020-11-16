@@ -1063,6 +1063,37 @@ func TestExecutor_Execute_SetRowAttrs(t *testing.T) {
 	})
 }
 
+func TestExecutor_Execute_TopK(t *testing.T) {
+	c := test.MustRunCluster(t, 2)
+	defer c.Close()
+
+	// Load some test data into a set field.
+	c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "f")
+	c.ImportBits(t, "i", "f", [][2]uint64{
+		{0, 0},
+		{0, 1},
+		{0, ShardWidth + 2},
+		{10, 2},
+		{10, ShardWidth},
+		{10, 2 * ShardWidth},
+		{10, ShardWidth + 1},
+		{20, ShardWidth},
+	})
+
+	// Execute query.
+	if result, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `TopK(f, k=2)`}); err != nil {
+		t.Fatal(err)
+	} else if !reflect.DeepEqual(result.Results, []interface{}{&pilosa.PairsField{
+		Pairs: []pilosa.Pair{
+			{ID: 10, Count: 4},
+			{ID: 0, Count: 3},
+		},
+		Field: "f",
+	}}) {
+		t.Fatalf("unexpected result: %s", spew.Sdump(result))
+	}
+}
+
 // Ensure a TopN() query can be executed.
 func TestExecutor_Execute_TopN(t *testing.T) {
 	t.Run("RowIDColumnID", func(t *testing.T) {
