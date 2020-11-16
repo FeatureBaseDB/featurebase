@@ -15,6 +15,7 @@
 package ctl
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/pilosa/pilosa/v2"
@@ -89,7 +90,9 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 	flags.IntVar(&srv.Config.Profile.MutexFraction, "profile.mutex-fraction", srv.Config.Profile.MutexFraction, "Sampling fraction for mutex contention profiling. Sample 1/<rate> of events.")
 
 	// Transactional storage engine
-	flags.StringVarP(&srv.Config.Txsrc, "tx", "", pilosa.DefaultTxsrc, "transaction/storage to use: one of roaring, rbf, bolt, lmdb, or a blue-green setup: rbf_roaring, roaring_rbf, bolt_roaring, roaring_bolt, bolt_rbf, etc.")
+	// Note: the default for --tx must be kept "" empty string. Otherwise we
+	// cannot detect and honor the PILOSA_TXSRC env var over-ride.
+	flags.StringVarP(&srv.Config.Txsrc, "tx", "", "", fmt.Sprintf("transaction/storage to use: one of roaring, rbf, bolt, lmdb, or a blue-green setup: rbf_roaring, roaring_rbf, bolt_roaring, roaring_bolt, bolt_rbf, etc. The default is: %v. The env var PILOSA_TXSRC is over-ridden by --tx option on the command line.", pilosa.DefaultTxsrc))
 
 	// RowcacheOff
 	flags.BoolVarP((&srv.Config.RowcacheOff), "rowcache-off", "", srv.Config.RowcacheOff, "turn off the rowcache for all backends (reduces memory use)")
