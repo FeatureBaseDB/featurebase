@@ -1063,7 +1063,7 @@ func TestExecutor_Execute_SetRowAttrs(t *testing.T) {
 	})
 }
 
-func TestExecutor_Execute_TopK(t *testing.T) {
+func TestExecutor_Execute_TopK_Set(t *testing.T) {
 	c := test.MustRunCluster(t, 2)
 	defer c.Close()
 
@@ -1087,6 +1087,35 @@ func TestExecutor_Execute_TopK(t *testing.T) {
 		Pairs: []pilosa.Pair{
 			{ID: 10, Count: 4},
 			{ID: 0, Count: 3},
+		},
+		Field: "f",
+	}}) {
+		t.Fatalf("unexpected result: %s", spew.Sdump(result))
+	}
+}
+
+func TestExecutor_Execute_TopK_Time(t *testing.T) {
+	c := test.MustRunCluster(t, 2)
+	defer c.Close()
+
+	// Load some test data into a time field.
+	c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "f", pilosa.OptFieldTypeTime("YMD", true))
+	c.Query(t, "i", `
+		Set(0, f=0, 2016-01-02T00:00)
+		Set(0, f=1, 2016-01-02T00:00)
+		Set(0, f=0, 2016-01-03T00:00)
+		Set(1, f=0, 2016-01-10T00:00)
+		Set(100000000, f=2, 2016-02-02T00:00)
+		Set(200000000, f=3, 2015-01-02T00:00)
+	`)
+
+	// Execute query.
+	if result, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `TopK(f, k=3, from=2016-01-01T00:00, to=2016-01-11T00:00)`}); err != nil {
+		t.Fatal(err)
+	} else if !reflect.DeepEqual(result.Results, []interface{}{&pilosa.PairsField{
+		Pairs: []pilosa.Pair{
+			{ID: 0, Count: 2},
+			{ID: 1, Count: 1},
 		},
 		Field: "f",
 	}}) {

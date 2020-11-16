@@ -422,6 +422,8 @@ var callInfoByFunc = map[string]callInfo{
 			"_field": "",
 			"k":      int64(0),
 			"filter": nil,
+			"from":   nil,
+			"to":     nil,
 		},
 	},
 

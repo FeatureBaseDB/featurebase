@@ -1775,36 +1775,6 @@ func (f *fragment) forEachBit(tx Tx, fn func(rowID, columnID uint64) error) erro
 	})
 }
 
-// cardinalityBSISet constructs a perpendicular BSI bitmap containing the cardinality of each specified row in a set field.
-func (f *fragment) cardinalityBSISet(ctx context.Context, tx Tx, filter *Row) ([]*Row, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	// Fetch row IDs.
-	rowIDs, err := f.unprotectedRows(ctx, tx, 0)
-	if err != nil {
-		return nil, err
-	}
-
-	// Count the bits in each row.
-	var out bsiData
-	for _, id := range rowIDs {
-		row, err := f.unprotectedRow(tx, id)
-		if err != nil {
-			return nil, err
-		}
-		var count uint64
-		if filter != nil {
-			count = row.intersectionCount(filter)
-		} else {
-			count = row.Count()
-		}
-		out.insert(id, count)
-	}
-
-	return out, nil
-}
-
 // top returns the top rows from the fragment.
 // If opt.Src is specified then only rows which intersect src are returned.
 // If opt.FilterValues exist then the row attribute specified by field is matched.

@@ -45,7 +45,8 @@ require (
 	github.com/uber/jaeger-lib v2.2.0+incompatible // indirect
 	github.com/zeebo/blake3 v0.0.4
 	go.etcd.io/bbolt v1.3.5
-	golang.org/x/mod v0.3.0
+	golang.org/x/exp v0.0.0-20201008143054-e3b2a7f2fdc7
+	golang.org/x/mod v0.3.1-0.20200828183125-ce943fd02449
 	golang.org/x/net v0.0.0-20200822124328-c89045814202 // indirect
 	golang.org/x/sync v0.0.0-20200625203802-6e8e738ad208
 	golang.org/x/text v0.3.3 // indirect

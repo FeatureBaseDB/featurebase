@@ -14,26 +14,14 @@
 
 package pilosa
 
-import "math/bits"
+import (
+	"math/bits"
+
+	"github.com/pilosa/pilosa/v2/roaring"
+)
 
 // bsiData contains BSI-structured data.
 type bsiData []*Row
-
-// insert a value for a column in the BSI data.
-func (bsi *bsiData) insert(column uint64, value uint64) {
-	data := *bsi
-	for value != 0 {
-		bit := bits.TrailingZeros64(value)
-		value &^= 1 << bit
-
-		for len(data) <= bit {
-			data = append(data, NewRow())
-		}
-
-		data[bit].SetBit(column)
-	}
-	*bsi = data
-}
 
 // pivotDescending loops over nonzero BSI values in descending order.
 // For each value, the provided function is called with the value and a slice of the associated columns.
@@ -98,23 +86,208 @@ func (bsi bsiData) distribution(filter *Row) bsiData {
 }
 */
 
-// addBSI adds BSI values together.
+var placeholderBitmap = roaring.NewBitmap()
+
+// addBSI adds two BSI bitmaps together.
+// It does not handle sign and has no concept of overflow.
 func addBSI(x, y bsiData) bsiData {
-	if len(x) > len(y) {
-		x, y = y, x
+	// Accumulate row segments.
+	segments := make([][]rowSegment, len(x)+len(y))
+	xsegs, ysegs := segments[:len(x)], segments[len(x):]
+	for i, r := range x {
+		xsegs[i] = r.segments
 	}
-	carry := NewRow()
-	out := make(bsiData, 0, len(y))
-	for i, v := range x {
-		out = append(out, v.Xor(y[i]).Xor(carry))
-		carry = v.Intersect(y[i]).Union(v.Intersect(carry), y[i].Intersect(carry))
+	for i, r := range y {
+		ysegs[i] = r.segments
 	}
-	for _, v := range y[len(x):] {
-		out = append(out, v.Xor(carry))
-		carry = v.Intersect(carry)
+
+	var dst bsiData
+	var xbitmaps, ybitmaps []*roaring.Bitmap
+	for {
+		// Find the next shard.
+		next := ^uint64(0)
+		for _, s := range segments {
+			if len(s) == 0 {
+				continue
+			}
+			shard := s[0].shard
+			if shard < next {
+				next = shard
+			}
+		}
+		if next == ^uint64(0) {
+			// There are no remaining shards.
+			break
+		}
+
+		// Accumulate bitmaps for this shard.
+		xbitmaps, ybitmaps = xbitmaps[:0], ybitmaps[:0]
+		for i, segs := range xsegs {
+			if len(segs) == 0 || segs[0].shard != next {
+				continue
+			}
+			xsegs[i] = segs[1:]
+			bm := segs[0].data
+			if !bm.Any() {
+				continue
+			}
+			for len(xbitmaps) < i {
+				xbitmaps = append(xbitmaps, placeholderBitmap)
+			}
+			xbitmaps = append(xbitmaps, bm)
+		}
+		for i, segs := range ysegs {
+			if len(segs) == 0 || segs[0].shard != next {
+				continue
+			}
+			ysegs[i] = segs[1:]
+			bm := segs[0].data
+			if !bm.Any() {
+				continue
+			}
+			for len(ybitmaps) < i {
+				ybitmaps = append(ybitmaps, placeholderBitmap)
+			}
+			ybitmaps = append(ybitmaps, bm)
+		}
+
+		// Add the shard values together.
+		var out []*roaring.Bitmap
+		switch {
+		case len(xbitmaps) == 0:
+			// There are no values in x.
+			out = ybitmaps
+		case len(ybitmaps) == 0:
+			// There are no values in y.
+			out = xbitmaps
+		default:
+			out = roaring.Add(xbitmaps, ybitmaps)
+		}
+
+		// Convert the bitmaps to output segments.
+		for i, b := range out {
+			if !b.Any() {
+				continue
+			}
+			for len(dst) <= i {
+				dst = append(dst, NewRow())
+			}
+			dst[i].segments = append(dst[i].segments, rowSegment{
+				shard:    next,
+				writable: true,
+				data:     b,
+				n:        b.Count(),
+			})
+		}
 	}
-	if carry.Any() {
-		out = append(out, carry)
+
+	return dst
+}
+
+// rowBuilder builds a row quickly from individual values.
+// It is optimized for the case in which values are generated sequentially.
+type rowBuilder struct {
+	bm    *roaring.Bitmap
+	mask  *[1024]uint64
+	array []uint16
+	key   uint64
+	n     int32
+}
+
+// flushKey flushes the data at the current key to the bitmap.
+func (b *rowBuilder) flushKey() {
+	var c *roaring.Container
+	switch {
+	case b.mask != nil:
+		c = roaring.NewContainerBitmapN(b.mask[:], b.n)
+		b.mask = nil
+	case len(b.array) > 0:
+		c = roaring.NewContainerArrayCopy(b.array)
+		b.array = b.array[:0]
+	default:
+		return
 	}
-	return out
+
+	if b.bm == nil {
+		b.bm = roaring.NewBitmap()
+	}
+	if old := b.bm.Containers.Get(b.key); old != nil {
+		c = roaring.Union(c, old)
+	}
+	b.bm.Containers.Put(b.key, c)
+}
+
+// Add a value to the bitmap.
+func (b *rowBuilder) Add(v uint64) {
+	vkey := v / (1 << 16)
+	if b.key != vkey {
+		// This is a new key, so flush the old one.
+		b.flushKey()
+		b.key = vkey
+	}
+
+	if b.mask != nil {
+		// Add to the mask.
+		b.n += int32(1 &^ (b.mask[uint16(v)/64] >> (v % 64)))
+		b.mask[uint16(v)/64] |= 1 << (v % 64)
+		return
+	}
+
+	// Add to an array.
+	b.array = append(b.array, uint16(v))
+	if len(b.array) >= roaring.ArrayMaxSize {
+		// The array is too big.
+		// Convert it to a bitmask.
+		m := [1024]uint64{}
+		for _, v := range b.array {
+			m[v/64] |= 1 << (v % 64)
+		}
+		b.n = int32(len(b.array))
+		b.array = b.array[:0]
+		b.mask = &m
+	}
+}
+
+// Build a Row from stored data.
+// This resets the builder.
+func (b *rowBuilder) Build() *Row {
+	// Flush the active key to the bitmap.
+	b.flushKey()
+
+	// Remove the bitmap and convert it to a Row.
+	bm := b.bm
+	b.bm = nil
+	if bm == nil {
+		return NewRow()
+	}
+	return NewRowFromBitmap(bm)
+}
+
+// bsiBuilder assembles BSI data.
+// It is optimized for the case in which values are generated sequentially.
+type bsiBuilder []rowBuilder
+
+// Insert a value into the BSI data.
+// It is assumed that it did not previously exist.
+func (b *bsiBuilder) Insert(col, val uint64) {
+	for val != 0 {
+		i := bits.TrailingZeros64(val)
+		val &^= 1 << i
+		for len(*b) <= i {
+			*b = append(*b, rowBuilder{})
+		}
+		(*b)[i].Add(col)
+	}
+}
+
+// Build BSI data.
+// This resets the builder.
+func (b *bsiBuilder) Build() bsiData {
+	builders := *b
+	*b = builders[:0]
+	rows := make(bsiData, len(builders))
+	for i := range builders {
+		rows[i] = builders[i].Build()
+	}
+	return rows
 }
