@@ -109,6 +109,7 @@ type Tx interface {
 	// ContainerIterator must not have side-effects. blueGreenTx will
 	// call it at the very beginning of commit to verify db contents.
 	//
+	// citer.Close() must be called when the client is done using it.
 	ContainerIterator(index, field, view string, shard uint64, ckey uint64) (citer roaring.ContainerIterator, found bool, err error)
 
 	// RoaringBitmap retreives the roaring.Bitmap for the entire shard.

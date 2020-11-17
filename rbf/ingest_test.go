@@ -129,6 +129,7 @@ func TestIngest_lots_of_views(t *testing.T) {
 			} else if err != nil {
 				panic(err)
 			}
+			defer c.Close()
 			c.Dump("one.bitmap.dot.dump")
 		}
 	}
