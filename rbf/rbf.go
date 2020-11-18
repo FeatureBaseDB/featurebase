@@ -25,7 +25,7 @@ import (
 	"os"
 	"unsafe"
 
-	"github.com/glycerine/rbtree"
+	"github.com/benbjohnson/immutable"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/shardwidth"
 )
@@ -173,18 +173,19 @@ func readRootRecords(page []byte) (records []*RootRecord, err error) {
 // We can return io.ErrShortBuffer in err. If we still have records
 // to write that don't fit on page, remain will point to the next
 // record that hasn't yet been written.
-func writeRootRecords(page []byte, recit, limit rbtree.Iterator) (remain rbtree.Iterator, err error) {
+func writeRootRecords(page []byte, itr *immutable.SortedMapIterator) (err error) {
 	data := page[rootRecordPageHeaderSize:]
 
-	for recit != limit {
-		rec := recit.Item().(RootRecord)
-		data, err = WriteRootRecord(data, &rec)
+	for !itr.Done() {
+		name, pgno := itr.Next()
+
+		data, err = WriteRootRecord(data, &RootRecord{Name: name.(string), Pgno: pgno.(uint32)})
 		if err != nil {
-			return recit, err
+			itr.Prev()
+			return err
 		}
-		recit = recit.Next()
 	}
-	return recit, nil
+	return nil
 }
 
 // Branch & leaf page helpers

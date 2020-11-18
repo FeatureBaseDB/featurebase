@@ -24,9 +24,8 @@ import (
 	"syscall"
 
 	"github.com/benbjohnson/immutable"
-	"github.com/pilosa/pilosa/v2/syswrap"
-
 	rbfcfg "github.com/pilosa/pilosa/v2/rbf/cfg"
+	"github.com/pilosa/pilosa/v2/syswrap"
 )
 
 var (
@@ -38,12 +37,12 @@ var (
 type DB struct {
 	cfg rbfcfg.Config
 
-	data        []byte           // database mmap
-	file        *os.File         // database file descriptor
-	rootRecords *rr              // cached root records
-	pageMap     *immutable.Map   // pgno-to-WALID mapping
-	txs         map[*Tx]struct{} // active transactions
-	opened      bool             // true if open
+	data        []byte               // database mmap
+	file        *os.File             // database file descriptor
+	rootRecords *immutable.SortedMap // cached root records
+	pageMap     *immutable.Map       // pgno-to-WALID mapping
+	txs         map[*Tx]struct{}     // active transactions
+	opened      bool                 // true if open
 
 	wal      []byte   // wal mmap
 	walFile  *os.File // wal file descriptor
@@ -330,10 +329,10 @@ func (db *DB) HasData(requireOneHotBit bool) (hasAnyRecords bool, err error) {
 	// Loop over each bitmap and attempt to move to the first cell.
 	// If we can move to a cell then we have at least one record.
 
-	for it := records.tree.Min(); it != records.tree.Limit(); it = it.Next() {
-		record := it.Item().(RootRecord)
+	for itr := records.Iterator(); !itr.Done(); {
+		name, _ := itr.Next()
 		// Fetch cursor for bitmap.
-		cur, err := tx.Cursor(record.Name)
+		cur, err := tx.Cursor(name.(string))
 		if err != nil {
 			return false, err
 		}
@@ -496,9 +495,6 @@ func (db *DB) removeTx(tx *Tx) error {
 	if tx.writable {
 		tx.db.rwmu.Unlock()
 	}
-
-	db.mu.Lock()
-	defer db.mu.Unlock()
 
 	delete(tx.db.txs, tx)
 
