@@ -42,7 +42,7 @@ func TestServerDefaultTxsrcFlags(t *testing.T) {
 	stdin, stdout, stderr := GetIO(buf)
 	Server := server.NewCommand(stdin, stdout, stderr)
 	BuildServerFlags(cm, Server)
-	if cm.Flags().Lookup("tx").DefValue != "" {
-		t.Fatal("cannot set the tx default in ctl/server.go, otherwise we won't know to let the environment override the lack of --tx on the command line. We want explicit command line --tx to override the env value.")
+	if cm.Flags().Lookup("txsrc").DefValue != "" {
+		t.Fatal("cannot set the txsrc default in ctl/server.go, otherwise we won't know to let the environment override the lack of --txsrc on the command line. We want explicit command line --txsrc to override the env value.")
 	}
 }
