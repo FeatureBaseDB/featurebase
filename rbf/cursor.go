@@ -349,14 +349,33 @@ func fromPgno(val uint32) []byte {
 func toPgno(val []byte) uint32 {
 	return binary.LittleEndian.Uint32(val)
 }
+
 func (c *Cursor) putLeafCell(in leafCell) (err error) {
 
 	leafPage := c.leafPage // the last read leaf page
-	cells := readLeafCells(leafPage, c.leafCells[:])
 	elem := &c.stack.elems[c.stack.index]
-	cell := in
-	if elem.index >= len(cells) || c.Key() != cell.Key {
+	cellN := readCellN(leafPage)
 
+	// Determine if the insert/update will overflow the page.
+	// If it doesn't then we can do an optimized write where we don't deserialize.
+	isInsert := elem.index >= cellN || c.Key() != in.Key
+	newEstPageSize := leafPageSize(leafPage)
+	if isInsert {
+		newEstPageSize += in.Size() + leafCellIndexElemSize
+	} else {
+		newEstPageSize += in.Size() - len(readLeafCellBytesAtOffset(leafPage, readCellOffset(leafPage, elem.index)))
+	}
+
+	// Use an optimized routine to insert the leaf cell if we won't overflow.
+	// We pad the estimate with 16 bytes because we do 8-byte alignment of
+	// both the cell and the index.
+	if newEstPageSize+16 <= PageSize {
+		return c.putLeafCellFast(in, isInsert)
+	}
+
+	cells := readLeafCells(leafPage, c.leafCells[:])
+	cell := in
+	if isInsert {
 		//new cell
 		if in.Type == ContainerTypeBitmap {
 			//allocated bitmap()
@@ -474,6 +493,59 @@ func (c *Cursor) putLeafCell(in leafCell) (err error) {
 
 	// Otherwise update existing parent.
 	return c.putBranchCells(c.stack.index-1, parents)
+}
+
+// putLeafCellFast quickly insert or updates a cell on a leaf page.
+// It works by shifting bytes around instead of deserializing. This must not overflow.
+func (c *Cursor) putLeafCellFast(in leafCell, isInsert bool) (err error) {
+	src := c.leafPage
+	elem := &c.stack.elems[c.stack.index]
+	srcCellN := readCellN(src)
+
+	// Determine the cell count of the new page.
+	dstCellN := srcCellN
+	if isInsert {
+		dstCellN++
+	}
+
+	// Write page header.
+	dst := make([]byte, PageSize)
+	writePageNo(dst, readPageNo(src))
+	writeFlags(dst, PageTypeLeaf)
+	writeCellN(dst, dstCellN)
+
+	// Loop over source page elements and copy them to the new page.
+	offset := dataOffset(dstCellN)
+	for i, j := 0, 0; j < dstCellN; i, j = i+1, j+1 {
+		// If positioned at the insert/update index, write the new cell.
+		if i == elem.index {
+			writeLeafCell(dst[:], j, offset, in)
+			offset += align8(in.Size())
+
+			// If this is an update, skip to the next element.
+			if !isInsert {
+				continue
+			}
+
+			// If this is an insert, move the dst position forward.
+			j++
+		}
+
+		// Copy the raw bytes from the src page to the dst page.
+		if i < srcCellN {
+			srcCellBuf := readLeafCellBytesAtOffset(src, readCellOffset(src, i))
+			writeCellOffset(dst, j, offset)
+			copy(dst[offset:], srcCellBuf)
+			offset += align8(len(srcCellBuf))
+		}
+	}
+
+	// Write new page to dirty page cache.
+	if err := c.tx.writePage(dst); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // deleteLeafCell removes a cell from the currently positioned page & index.

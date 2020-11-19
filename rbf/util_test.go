@@ -41,8 +41,6 @@ func (c_orig *Cursor) DebugSlowCheckAllPages() {
 		}
 	}
 
-	c2.Dump("debug.dot")
-
 	checkElemNBitN(c2.tx, 0)
 }
 

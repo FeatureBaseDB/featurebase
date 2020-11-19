@@ -23,6 +23,8 @@ import (
 	"io"
 	"math"
 	"os"
+	"sync"
+	"time"
 	"unsafe"
 
 	"github.com/benbjohnson/immutable"
@@ -99,6 +101,8 @@ const (
 	rootRecordPageHeaderSize = 12
 	rootRecordHeaderSize     = 4 + 2     // pgno, len(name)
 	leafCellHeaderSize       = 8 + 4 + 6 // key, type, count
+	leafPageHeaderSize       = 4 + 4 + 2 // pgno, flags, cell n
+	leafCellIndexElemSize    = 2
 	branchCellSize           = 8 + 4 + 4 // key, flags, pgno
 )
 
@@ -486,11 +490,11 @@ func readLeafCell(page []byte, i int) leafCell {
 
 	switch cell.Type {
 	case ContainerTypeArray:
-		cell.Data = buf[18 : 18+(cell.ElemN*2)]
+		cell.Data = buf[leafCellHeaderSize : leafCellHeaderSize+(cell.ElemN*2)]
 	case ContainerTypeRLE:
-		cell.Data = buf[18 : 18+(cell.ElemN*4)]
+		cell.Data = buf[leafCellHeaderSize : leafCellHeaderSize+(cell.ElemN*4)]
 	case ContainerTypeBitmapPtr:
-		cell.Data = buf[18 : 18+4]
+		cell.Data = buf[leafCellHeaderSize : leafCellHeaderSize+4]
 	default:
 	}
 
@@ -504,6 +508,35 @@ func readLeafCells(page []byte, buf []leafCell) []leafCell {
 		cells[i] = readLeafCell(page, i)
 	}
 	return cells
+}
+
+func readLeafCellBytesAtOffset(page []byte, offset int) []byte {
+	buf := page[offset:]
+	typ := ContainerType(*(*uint32)(unsafe.Pointer(&buf[8])))
+	n := int(*(*uint16)(unsafe.Pointer(&buf[12])))
+
+	switch typ {
+	case ContainerTypeArray:
+		return buf[:leafCellHeaderSize+(n*2)]
+	case ContainerTypeRLE:
+		return buf[:leafCellHeaderSize+(n*4)]
+	case ContainerTypeBitmapPtr:
+		return buf[:leafCellHeaderSize+4]
+	default:
+		panic(fmt.Sprintf("invalid cell type: %d", typ))
+	}
+}
+
+// leafPageSize returns the number of bytes used on a leaf page.
+func leafPageSize(page []byte) int {
+	cellN := readCellN(page)
+	if cellN == 0 {
+		return leafPageHeaderSize
+	}
+
+	// Determine the offset & size of the last element.
+	offset := readCellOffset(page, cellN-1)
+	return offset + len(readLeafCellBytesAtOffset(page, offset))
 }
 
 // leafCellsPageSize returns the total page size required to hold cells.
@@ -521,8 +554,8 @@ func writeLeafCell(page []byte, i, offset int, cell leafCell) {
 	*(*uint32)(unsafe.Pointer(&page[offset+8])) = uint32(cell.Type)
 	*(*uint16)(unsafe.Pointer(&page[offset+12])) = uint16(cell.ElemN)
 	*(*uint32)(unsafe.Pointer(&page[offset+14])) = uint32(cell.BitN)
-	assert(offset+18+len(cell.Data) <= PageSize) // leaf cell write extends beyond page
-	copy(page[offset+18:], cell.Data)
+	assert(offset+leafCellHeaderSize+len(cell.Data) <= PageSize) // leaf cell write extends beyond page
+	copy(page[offset+leafCellHeaderSize:], cell.Data)
 }
 
 // branchCell represents a branch cell.
@@ -712,4 +745,31 @@ func hashUint64(value uint64) uint32 {
 		hash ^= value
 	}
 	return uint32(hash)
+}
+
+// Metric is a simple, internal metric for check duration of operations.
+type Metric struct {
+	name     string
+	interval int // reporting interval
+
+	mu sync.Mutex
+	d  time.Duration // total duration
+	n  int           // total count
+}
+
+func NewMetric(name string, interval int) Metric {
+	assert(interval > 0)
+	return Metric{name: name, interval: interval}
+}
+
+func (m *Metric) Inc(d time.Duration) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.d += d
+	m.n++
+
+	if m.n != 0 && m.n%m.interval == 0 {
+		fmt.Printf("metric:%10s avg=%dns\n", m.name, int(m.d)/m.n)
+	}
 }

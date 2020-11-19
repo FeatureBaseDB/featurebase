@@ -399,7 +399,7 @@ func setArray(tb testing.TB, key, num int, c *rbf.Cursor) {
 }
 
 func BenchmarkTx_Add(b *testing.B) {
-	for _, n := range []int{10000, 100000, 1000000} {
+	for _, n := range []int{1, 10, 1000} {
 		b.Run(fmt.Sprint(n), func(b *testing.B) {
 			rand := rand.New(rand.NewSource(0))
 
@@ -408,25 +408,27 @@ func BenchmarkTx_Add(b *testing.B) {
 				values[i] = uint64(rand.Intn(rbf.ShardWidth))
 			}
 			b.ResetTimer()
-			t := time.Now()
+
 			b.ReportAllocs()
 
 			for i := 0; i < b.N; i++ {
 				func() {
 					db := MustOpenDB(b)
 					defer MustCloseDB(b, db)
-					tx := MustBegin(b, db, true)
-					defer tx.Rollback()
 
 					for _, v := range values {
-						if _, err := tx.Add("x", v); err != nil {
-							b.Fatalf("Add(%d) i=%d err=%q", v, i, err)
-						}
+						func() {
+							tx := MustBegin(b, db, true)
+							defer tx.Rollback()
+							if _, err := tx.Add("x", v); err != nil {
+								b.Fatal(err)
+							} else if err := tx.Commit(); err != nil {
+								b.Fatal(err)
+							}
+						}()
 					}
 				}()
 			}
-
-			b.ReportMetric(float64(time.Since(t).Nanoseconds())/float64(n*b.N), "ns/op")
 		})
 	}
 }
