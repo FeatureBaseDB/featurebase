@@ -367,8 +367,9 @@ func (c *Cursor) putLeafCell(in leafCell) (err error) {
 	}
 
 	// Use an optimized routine to insert the leaf cell if we won't overflow.
-	// We pad the estimate with 8 bytes because we do 8-byte alignment of cells.
-	if newEstPageSize+8 <= PageSize {
+	// We pad the estimate with 16 bytes because we do 8-byte alignment of
+	// both the cell and the index.
+	if newEstPageSize+16 <= PageSize {
 		return c.putLeafCellFast(in, isInsert)
 	}
 
