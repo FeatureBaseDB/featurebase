@@ -10,3 +10,4 @@ release-pilosa-fsck.*.*.tar.gz
 /log.*
 /tourna.log.*
 pilosa
+*.dot

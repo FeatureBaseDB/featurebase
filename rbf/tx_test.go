@@ -486,6 +486,30 @@ func TestTx_Dump(t *testing.T) {
 	}
 }
 
+func TestTx_CreateBitmap(t *testing.T) {
+	t.Run("Bulk", func(t *testing.T) {
+		db := MustOpenDB(t)
+		defer MustCloseDB(t, db)
+
+		tx, err := db.Begin(true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer tx.Rollback()
+
+		if err := tx.CreateBitmap(fmt.Sprintf("%4000x", 0)); err != nil {
+			t.Fatal(err)
+		} else if err := tx.CreateBitmap(fmt.Sprintf("%4000x", 1)); err != nil {
+			t.Fatal(err)
+		} else if err := tx.CreateBitmap(fmt.Sprintf("%4000x", 2)); err != nil {
+			t.Fatal(err)
+		}
+		if err := tx.Commit(); err != nil {
+			t.Fatal(err)
+		}
+	})
+}
+
 func rbfName(index, field, view string, shard uint64) string {
 	return string(txkey.Prefix(index, field, view, shard))
 }
