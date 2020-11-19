@@ -36,6 +36,11 @@ type RandomQueryConfig struct {
 	TreeDepth  int    // -d
 	QueryCount int    // -n
 	Verbose    bool   // -v
+	TimeFromArg   string // --time.from
+	TimeToArg     string // --time.to
+	TimeFrom   time.Time // parsed time
+	TimeTo     time.Time // parsed time
+	TimeRange      int64 // hours between parsed times
 
 	IndexMap map[string]*Features
 
@@ -76,12 +81,18 @@ func wrapApiToInternalClient(api *pilosa.API) *wrapper {
 	return &wrapper{api: api}
 }
 
+// These times are copied from the "kitchen sink" data generator to serve as defaults.
+var defaultEndTime = time.Date(2020, time.May, 4, 12, 2, 28, 0, time.UTC)
+var defaultStartTime = defaultEndTime.Add(-5 * 365 * 24 * time.Hour)
+
 // call DefineFlags before myflags.Parse()
 func (cfg *RandomQueryConfig) DefineFlags(fs *flag.FlagSet) {
 	fs.StringVar(&cfg.HostPort, "hostport", "localhost:10101", "host:port of pilosa to run random queries on.")
 	fs.IntVar(&cfg.TreeDepth, "d", 4, "depth of random queries to generate.")
 	fs.IntVar(&cfg.QueryCount, "n", 100, "number of random queries to generate. Set to 0 for inifinite queries.")
 	fs.BoolVar(&cfg.Verbose, "v", false, "show queries as they are generated")
+	fs.StringVar(&cfg.TimeFromArg, "time.from", defaultStartTime.Format(time.RFC3339), "starting time for time fields (format: 2006-01-02T15:04:05Z07:00)")
+	fs.StringVar(&cfg.TimeToArg, "time.to", defaultEndTime.Format(time.RFC3339), "starting time for time fields (format: 2006-01-02T15:04:05Z07:00)")
 }
 
 // call c.ValidateConfig() after myflags.Parse()
@@ -91,6 +102,20 @@ func (c *RandomQueryConfig) ValidateConfig() error {
 	}
 	if c.QueryCount < 0 {
 		return fmt.Errorf("-n count must be 0 or greater; saw %v", c.QueryCount)
+	}
+	var err error
+	c.TimeFrom, err = time.Parse(time.RFC3339, c.TimeFromArg)
+	if err != nil {
+		return fmt.Errorf("-time.from value couldn't be parsed: %w", err)
+	}
+	c.TimeTo, err = time.Parse(time.RFC3339, c.TimeToArg)
+	if err != nil {
+		return fmt.Errorf("-time.to value couldn't be parsed: %w", err)
+	}
+	c.TimeRange = int64(c.TimeTo.Sub(c.TimeFrom).Hours())
+	if c.TimeRange < 1 {
+		return fmt.Errorf("time.to (%s) should be at least one hour after time.from (%s)",
+			c.TimeToArg, c.TimeFromArg)
 	}
 	return nil
 }
@@ -219,6 +244,7 @@ type IndexFieldRow struct {
 	RowID    uint64
 	RowKey   string
 	IsRowKey bool
+	HasTime  bool
 }
 
 // Run a RandomQuery takes a list of RowIDFeatures and ColumnKeyObjects
@@ -235,7 +261,8 @@ func (cfg *RandomQueryConfig) Setup(api API) (err error) {
 		_ = i
 		for k, fld := range ii.Fields {
 			_ = k
-			if fld.Options.Type == "set" {
+			switch fld.Options.Type {
+			case "set", "mutex", "time":
 				pql := fmt.Sprintf("Rows(%v)", fld.Name)
 
 				res, err := api.Query(ctx, ii.Name, &pilosa.QueryRequest{Index: ii.Name, Query: pql})
@@ -251,11 +278,17 @@ func (cfg *RandomQueryConfig) Setup(api API) (err error) {
 				switch x := res.Results[0].(type) {
 				case *pilosa.RowIdentifiers:
 					// internalClient gets this
-					cfg.AddResponse(ii.Name, fld.Name, x)
+					cfg.AddResponse(ii.Name, fld.Name, x, fld.Options.Type == "time")
 				case pilosa.RowIdentifiers:
 					// test gets this
-					cfg.AddResponse(ii.Name, fld.Name, &x)
+					cfg.AddResponse(ii.Name, fld.Name, &x, fld.Options.Type == "time")
 				}
+			case "int":
+				fmt.Printf("int field: details %#v\n", fld)
+			case "decimal":
+				fmt.Printf("decimal field: details %#v\n", fld)
+			default:
+				AlwaysPrintf("ignoring field %q: unhandled type %q\n", fld.Name, fld.Options.Type)
 			}
 		}
 	}
@@ -267,12 +300,12 @@ func (cfg *RandomQueryConfig) Setup(api API) (err error) {
 	return nil
 }
 
-func (cfg *RandomQueryConfig) AddResponse(index, field string, x *pilosa.RowIdentifiers) {
+func (cfg *RandomQueryConfig) AddResponse(index, field string, x *pilosa.RowIdentifiers, hasTime bool) {
 	for _, rowID := range x.Rows {
-		cfg.AddFeature(index, field, rowID, "", false)
+		cfg.AddFeature(index, field, rowID, "", false, hasTime)
 	}
 	for _, rowKey := range x.Keys {
-		cfg.AddFeature(index, field, 0, rowKey, true)
+		cfg.AddFeature(index, field, 0, rowKey, true, hasTime)
 	}
 }
 
@@ -323,16 +356,29 @@ func (tr *Tree) StringIndent(ind int) (s string) {
 	return
 }
 
+const pilosaTimeFmt = "2006-01-02T15:04"
 func (cfg *RandomQueryConfig) GenTree(index string, depth int) (tr *Tree) {
 	if depth == 0 {
 		slc := cfg.IndexMap[index].Slc
 		//vv("depth is 0, slc = '%#v'", slc)
 		r := cfg.Rnd.Intn(len(slc))
 		fea := slc[r]
-		if fea.IsRowKey {
-			return &Tree{S: fmt.Sprintf("Row(%v='%v')", fea.Field, fea.RowKey)}
+		fromTo := ""
+		// 5% of queries on a time field will use the standard view
+		// anyway.
+		if slc[r].HasTime && rand.Int63n(20) != 0 {
+			startHours := (rand.Int63n(cfg.TimeRange - 1))
+			endHours := rand.Int63n(cfg.TimeRange - startHours) + 1 + startHours
+			startTime := cfg.TimeFrom.Add(time.Duration(startHours) * time.Hour)
+			endTime := cfg.TimeFrom.Add(time.Duration(endHours) * time.Hour)
+			fromTo = fmt.Sprintf(", from=%s, to=%s",
+				startTime.Format(pilosaTimeFmt),
+				endTime.Format(pilosaTimeFmt))
 		}
-		return &Tree{S: fmt.Sprintf("Row(%v=%v)", fea.Field, fea.RowID)}
+		if fea.IsRowKey {
+			return &Tree{S: fmt.Sprintf("Row(%v='%v'%s)", fea.Field, fea.RowKey, fromTo)}
+		}
+		return &Tree{S: fmt.Sprintf("Row(%v=%v%s)", fea.Field, fea.RowID, fromTo)}
 	}
 
 	r := cfg.Rnd.Intn(len(cfg.BitmapFunc))
@@ -368,7 +414,7 @@ func (tr *Tree) ToPQL() (s string) {
 	return fmt.Sprintf("%v(%v)", tr.S, all)
 }
 
-func (cfg *RandomQueryConfig) AddFeature(index, field string, rowID uint64, rowKey string, isRowKey bool) {
+func (cfg *RandomQueryConfig) AddFeature(index, field string, rowID uint64, rowKey string, isRowKey bool, hasTime bool) {
 
 	f, ok := cfg.IndexMap[index]
 	if !ok {
@@ -381,5 +427,6 @@ func (cfg *RandomQueryConfig) AddFeature(index, field string, rowID uint64, rowK
 		RowID:    rowID,
 		RowKey:   rowKey,
 		IsRowKey: isRowKey,
+		HasTime:  hasTime,
 	})
 }
