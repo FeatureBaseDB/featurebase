@@ -181,7 +181,7 @@ func writeRootRecords(page []byte, itr *immutable.SortedMapIterator) (err error)
 
 		data, err = WriteRootRecord(data, &RootRecord{Name: name.(string), Pgno: pgno.(uint32)})
 		if err != nil {
-			itr.Prev()
+			itr.Seek(name)
 			return err
 		}
 	}
