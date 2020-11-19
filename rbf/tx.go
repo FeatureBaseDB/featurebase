@@ -476,6 +476,8 @@ func (tx *Tx) Add(name string, a ...uint64) (changeCount int, err error) {
 	if err != nil {
 		return 0, err
 	}
+	defer c.Close()
+
 	for _, v := range a {
 		if vchanged, err := c.Add(v); err != nil {
 			return changeCount, err
@@ -505,6 +507,8 @@ func (tx *Tx) Remove(name string, a ...uint64) (changeCount int, err error) {
 	} else if err != nil {
 		return 0, err
 	}
+	defer c.Close()
+
 	for _, v := range a {
 		if vchanged, err := c.Remove(v); err != nil {
 			return changeCount, err
@@ -532,29 +536,31 @@ func (tx *Tx) Contains(name string, v uint64) (bool, error) {
 	} else if err != nil {
 		return false, err
 	}
+	defer c.Close()
+
 	return c.Contains(v)
 }
 
 // Cursor returns an instance of a cursor this bitmap.
-func (tx *Tx) Cursor(name string) (Cursor, error) {
+func (tx *Tx) Cursor(name string) (*Cursor, error) {
 	tx.mu.RLock()
 	defer tx.mu.RUnlock()
 	return tx.cursor(name)
 }
 
-func (tx *Tx) cursor(name string) (Cursor, error) {
+func (tx *Tx) cursor(name string) (*Cursor, error) {
 	if tx.db == nil {
-		return Cursor{}, ErrTxClosed
+		return nil, ErrTxClosed
 	} else if name == "" {
-		return Cursor{}, ErrBitmapNameRequired
+		return nil, ErrBitmapNameRequired
 	}
 
 	root, err := tx.root(name)
 	if err != nil {
-		return Cursor{}, err
+		return nil, err
 	}
 
-	c := Cursor{tx: tx}
+	c := tx.db.getCursor(tx)
 	c.stack.elems[0] = stackElem{pgno: root}
 	return c, nil
 }
@@ -576,6 +582,7 @@ func (tx *Tx) RoaringBitmap(name string) (*roaring.Bitmap, error) {
 	} else if err != nil {
 		return nil, err
 	}
+	defer c.Close()
 
 	other := roaring.NewSliceBitmap()
 	if err := c.First(); err == io.EOF {
@@ -615,9 +622,13 @@ func (tx *Tx) container(name string, key uint64) (*roaring.Container, error) {
 		return nil, nil
 	} else if err != nil {
 		return nil, err
-	} else if exact, err := c.Seek(key); err != nil || !exact {
+	}
+	defer c.Close()
+
+	if exact, err := c.Seek(key); err != nil || !exact {
 		return nil, err
 	}
+
 	return toContainer(c.cell(), tx), nil
 }
 
@@ -642,9 +653,13 @@ func (tx *Tx) putContainer(name string, key uint64, ct *roaring.Container) error
 	c, err := tx.cursor(name)
 	if err != nil {
 		return err
-	} else if _, err := c.Seek(cell.Key); err != nil {
+	}
+	defer c.Close()
+
+	if _, err := c.Seek(cell.Key); err != nil {
 		return err
 	}
+
 	return c.putLeafCell(cell)
 }
 
@@ -671,9 +686,13 @@ func (tx *Tx) removeContainer(name string, key uint64) error {
 		return nil
 	} else if err != nil {
 		return err
-	} else if exact, err := c.Seek(key); err != nil || !exact {
+	}
+	defer c.Close()
+
+	if exact, err := c.Seek(key); err != nil || !exact {
 		return err
 	}
+
 	return c.deleteLeafCell(key)
 }
 
@@ -976,6 +995,8 @@ func (tx *Tx) AddRoaring(name string, bm *roaring.Bitmap) (changed bool, err err
 	if err != nil {
 		return false, err
 	}
+	defer c.Close()
+
 	return c.AddRoaring(bm)
 }
 
@@ -1018,7 +1039,10 @@ func (tx *Tx) ForEachRange(name string, start, end uint64, fn func(uint64) error
 		return nil
 	} else if err != nil {
 		return err
-	} else if _, err := c.Seek(highbits(start)); err != nil {
+	}
+	defer c.Close()
+
+	if _, err := c.Seek(highbits(start)); err != nil {
 		return err
 	}
 
@@ -1107,7 +1131,10 @@ func (tx *Tx) Count(name string) (uint64, error) {
 		return 0, nil
 	} else if err != nil {
 		return 0, err
-	} else if err := c.First(); err != nil {
+	}
+	defer c.Close()
+
+	if err := c.First(); err != nil {
 		return 0, err
 	}
 
@@ -1133,7 +1160,10 @@ func (tx *Tx) Max(name string) (uint64, error) {
 		return 0, nil
 	} else if err != nil {
 		return 0, err
-	} else if err := c.Last(); err == io.EOF {
+	}
+	defer c.Close()
+
+	if err := c.Last(); err == io.EOF {
 		return 0, nil
 	} else if err != nil {
 		return 0, err
@@ -1152,7 +1182,10 @@ func (tx *Tx) Min(name string) (uint64, bool, error) {
 		return 0, false, nil
 	} else if err != nil {
 		return 0, false, err
-	} else if err := c.First(); err == io.EOF {
+	}
+	defer c.Close()
+
+	if err := c.First(); err == io.EOF {
 		return 0, false, nil
 	} else if err != nil {
 		return 0, false, err
@@ -1201,6 +1234,7 @@ func (tx *Tx) CountRange(name string, start, end uint64) (uint64, error) {
 	} else if err != nil {
 		return 0, err
 	}
+	defer csr.Close()
 
 	exact, err := csr.Seek(skey)
 	_ = exact
@@ -1271,6 +1305,7 @@ func (tx *Tx) OffsetRange(name string, offset, start, endx uint64) (*roaring.Bit
 	} else if err != nil {
 		return nil, err
 	}
+	defer c.Close()
 
 	other := roaring.NewSliceBitmap()
 	off := highbits(offset)
@@ -1303,11 +1338,15 @@ func (tx *Tx) OffsetRange(name string, offset, start, endx uint64) (*roaring.Bit
 
 // containerIterator wraps Cursor to implement roaring.ContainerIterator.
 type containerIterator struct {
-	cursor Cursor
+	cursor *Cursor
 }
 
-// Close is a no-op. It exists to implement the roaring.ContainerIterator interface.
-func (itr *containerIterator) Close() {}
+// Close must be called when the client is done
+// with the containerIterator so that the internal
+// Cursor can be recycled.
+func (itr *containerIterator) Close() {
+	itr.cursor.Close()
+}
 
 // Next moves the iterator to the next container.
 func (itr *containerIterator) Next() bool {
@@ -1350,6 +1389,8 @@ func (tx *Tx) DumpString(short bool, shard uint64) (r string) {
 
 		c, err := tx.cursor(name.(string))
 		panicOn(err)
+		defer c.Close()
+
 		err = c.First() // First will rewind to beginning.
 		if err == io.EOF {
 			r += "<empty bitmap>"
@@ -1474,6 +1515,7 @@ func (tx *Tx) ImportRoaringBits(name string, itr roaring.RoaringIterator, clear 
 	if err != nil {
 		return changed, rowSet, err
 	}
+	defer cur.Close()
 
 	for itrKey, synthC := itr.NextContainer(); synthC != nil; itrKey, synthC = itr.NextContainer() {
 		if rowSize != 0 {
@@ -1502,7 +1544,7 @@ func (tx *Tx) ImportRoaringBits(name string, itr roaring.RoaringIterator, clear 
 				changed += nsynth
 				rowSet[currRow] += nsynth
 
-				if err := tx.putContainerWithCursor(&cur, itrKey, synthC); err != nil {
+				if err := tx.putContainerWithCursor(cur, itrKey, synthC); err != nil {
 					return changed, rowSet, err
 				}
 				continue
@@ -1523,7 +1565,7 @@ func (tx *Tx) ImportRoaringBits(name string, itr roaring.RoaringIterator, clear 
 				changes := int(existN - newC.N())
 				changed += changes
 				rowSet[currRow] -= changes
-				err = tx.putContainerWithCursor(&cur, itrKey, newC)
+				err = tx.putContainerWithCursor(cur, itrKey, newC)
 				if err != nil {
 					return
 				}
@@ -1541,7 +1583,7 @@ func (tx *Tx) ImportRoaringBits(name string, itr roaring.RoaringIterator, clear 
 				// can nsynth be zero? No, because of the continue/invariant above where nsynth > 0
 				changed += nsynth
 				rowSet[currRow] += nsynth
-				err = tx.putContainerWithCursor(&cur, itrKey, synthC)
+				err = tx.putContainerWithCursor(cur, itrKey, synthC)
 				if err != nil {
 					return
 				}
@@ -1558,7 +1600,7 @@ func (tx *Tx) ImportRoaringBits(name string, itr roaring.RoaringIterator, clear 
 				changed += changes
 				rowSet[currRow] += changes
 
-				err = tx.putContainerWithCursor(&cur, itrKey, newC)
+				err = tx.putContainerWithCursor(cur, itrKey, newC)
 				if err != nil {
 					panicOn(err)
 					return

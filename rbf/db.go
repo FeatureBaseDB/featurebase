@@ -24,6 +24,7 @@ import (
 	"syscall"
 
 	"github.com/benbjohnson/immutable"
+	"github.com/glycerine/idem"
 	rbfcfg "github.com/pilosa/pilosa/v2/rbf/cfg"
 	"github.com/pilosa/pilosa/v2/syswrap"
 )
@@ -31,6 +32,14 @@ import (
 var (
 	ErrClosed = errors.New("rbf: database closed")
 )
+
+// global in the sense that it is shared among all instances
+// of rbf.DBs in this process. This is deliberate.
+var globalCursorSyncPool = &sync.Pool{
+	New: func() interface{} {
+		return &Cursor{}
+	},
+}
 
 // DB options like 	MaxSize, FsyncEnabled, DoAllocZero
 // can be set before calling DB.Open().
@@ -54,6 +63,9 @@ type DB struct {
 
 	// Path represents the path to the database file.
 	Path string
+
+	cursorArenaCh chan *Cursor
+	cursorCleaner *idem.Halter
 }
 
 // NewDB returns a new instance of DB.
@@ -67,8 +79,15 @@ func NewDB(path string, cfg *rbfcfg.Config) *DB {
 		txs:     make(map[*Tx]struct{}),
 		pageMap: immutable.NewMap(&uint32Hasher{}),
 		Path:    path,
+
+		cursorArenaCh: make(chan *Cursor, cfg.CursorCacheSize),
+		cursorCleaner: idem.NewHalter(),
+	}
+	for i := int64(0); i < cfg.CursorCacheSize; i++ {
+		db.cursorArenaCh <- &Cursor{}
 	}
 	db.haltCond = sync.NewCond(&db.mu)
+
 	return db
 }
 
@@ -253,6 +272,8 @@ func (db *DB) Close() (err error) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
+	defer db.cursorCleaner.RequestStop()
+
 	db.opened = false
 
 	// Close mmap handle.
@@ -336,6 +357,8 @@ func (db *DB) HasData(requireOneHotBit bool) (hasAnyRecords bool, err error) {
 		if err != nil {
 			return false, err
 		}
+		defer cur.Close()
+
 		if !requireOneHotBit {
 			return true, nil
 		}
@@ -555,4 +578,24 @@ func (db *DB) readMetaPage() ([]byte, error) {
 		return db.readWALPageByID(walID.(int64))
 	}
 	return db.readDBPage(0)
+}
+
+func (db *DB) getCursor(tx *Tx) (c *Cursor) {
+	if db.cfg.CursorCacheSize == 0 {
+		c = globalCursorSyncPool.Get().(*Cursor)
+		c.tx = tx
+		return
+	}
+
+	n := len(db.cursorArenaCh)
+	if n < 10 {
+		vv("warning, db.cursorArenaCh is low! %v left", n)
+	}
+	select {
+	case c = <-db.cursorArenaCh:
+		c.tx = tx
+		return
+	case <-db.cursorCleaner.ReqStop.Chan:
+		return nil
+	}
 }

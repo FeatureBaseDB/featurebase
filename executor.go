@@ -1450,6 +1450,7 @@ func executeDistinctShardSet(ctx context.Context, qcx *Qcx, idx *Index, fieldNam
 	if err != nil {
 		return SignedRow{}, errors.Wrap(err, "getting fragment data")
 	}
+	defer fragData.Close()
 	// We can't grab the containers "for each row" from the set-type field,
 	// because we don't know how many rows there are, and some of them
 	// might be empty, so really, we're going to iterate through the
