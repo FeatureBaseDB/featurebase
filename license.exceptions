@@ -13,6 +13,7 @@
 ./vprint.go
 ./vprint_test.go
 ./rbf/vprint.go
+./rbf/page_map.go
 ./cmd/slurp/vprint.go
 ./cmd/badloader/vprint.go
 ./cmd/demo-lmdb/vprint.go
