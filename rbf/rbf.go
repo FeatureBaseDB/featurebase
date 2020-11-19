@@ -490,11 +490,11 @@ func readLeafCell(page []byte, i int) leafCell {
 
 	switch cell.Type {
 	case ContainerTypeArray:
-		cell.Data = buf[18 : 18+(cell.ElemN*2)]
+		cell.Data = buf[leafCellHeaderSize : leafCellHeaderSize+(cell.ElemN*2)]
 	case ContainerTypeRLE:
-		cell.Data = buf[18 : 18+(cell.ElemN*4)]
+		cell.Data = buf[leafCellHeaderSize : leafCellHeaderSize+(cell.ElemN*4)]
 	case ContainerTypeBitmapPtr:
-		cell.Data = buf[18 : 18+4]
+		cell.Data = buf[leafCellHeaderSize : leafCellHeaderSize+4]
 	default:
 	}
 
@@ -517,11 +517,11 @@ func readLeafCellBytesAtOffset(page []byte, offset int) []byte {
 
 	switch typ {
 	case ContainerTypeArray:
-		return buf[:18+(n*2)]
+		return buf[:leafCellHeaderSize+(n*2)]
 	case ContainerTypeRLE:
-		return buf[:18+(n*4)]
+		return buf[:leafCellHeaderSize+(n*4)]
 	case ContainerTypeBitmapPtr:
-		return buf[:18+4]
+		return buf[:leafCellHeaderSize+4]
 	default:
 		panic(fmt.Sprintf("invalid cell type: %d", typ))
 	}
@@ -554,8 +554,8 @@ func writeLeafCell(page []byte, i, offset int, cell leafCell) {
 	*(*uint32)(unsafe.Pointer(&page[offset+8])) = uint32(cell.Type)
 	*(*uint16)(unsafe.Pointer(&page[offset+12])) = uint16(cell.ElemN)
 	*(*uint32)(unsafe.Pointer(&page[offset+14])) = uint32(cell.BitN)
-	assert(offset+18+len(cell.Data) <= PageSize) // leaf cell write extends beyond page
-	copy(page[offset+18:], cell.Data)
+	assert(offset+leafCellHeaderSize+len(cell.Data) <= PageSize) // leaf cell write extends beyond page
+	copy(page[offset+leafCellHeaderSize:], cell.Data)
 }
 
 // branchCell represents a branch cell.
