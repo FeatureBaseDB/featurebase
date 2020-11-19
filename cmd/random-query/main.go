@@ -18,13 +18,16 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"math"
 	"math/rand"
 	nethttp "net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/pilosa/pilosa/v2"
+	"github.com/pilosa/pilosa/v2/pql"
 	"github.com/pilosa/pilosa/v2/http"
 )
 
@@ -36,6 +39,7 @@ type RandomQueryConfig struct {
 	TreeDepth  int    // -d
 	QueryCount int    // -n
 	Verbose    bool   // -v
+	VeryVerbose bool  // -V
 	TimeFromArg   string // --time.from
 	TimeToArg     string // --time.to
 	TimeFrom   time.Time // parsed time
@@ -91,6 +95,7 @@ func (cfg *RandomQueryConfig) DefineFlags(fs *flag.FlagSet) {
 	fs.IntVar(&cfg.TreeDepth, "d", 4, "depth of random queries to generate.")
 	fs.IntVar(&cfg.QueryCount, "n", 100, "number of random queries to generate. Set to 0 for inifinite queries.")
 	fs.BoolVar(&cfg.Verbose, "v", false, "show queries as they are generated")
+	fs.BoolVar(&cfg.VeryVerbose, "V", false, "show query results")
 	fs.StringVar(&cfg.TimeFromArg, "time.from", defaultStartTime.Format(time.RFC3339), "starting time for time fields (format: 2006-01-02T15:04:05Z07:00)")
 	fs.StringVar(&cfg.TimeToArg, "time.to", defaultEndTime.Format(time.RFC3339), "starting time for time fields (format: 2006-01-02T15:04:05Z07:00)")
 }
@@ -217,7 +222,7 @@ NewSetup:
 			AlwaysPrintf("QUERY FAILED! queries before this=%v; err = '%v', pql='%v'", loops, err, pql)
 			return err
 		}
-		if cfg.Verbose {
+		if cfg.VeryVerbose {
 			fmt.Printf("success on pql = '%v'; res='%v'\n", pql, res.Results[0])
 		}
 		totalQ++
@@ -230,6 +235,20 @@ NewSetup:
 
 type Features struct {
 	Slc []IndexFieldRow
+	Ranges []IndexFieldRange
+	SlcWeight int
+	RangeWeight int
+}
+
+// Pick either a feature entry or a random query on a range, weighted
+// by number of features and approximate weight of ranges
+func (f *Features) RandomQuery(cfg *RandomQueryConfig) *Tree {
+	r := rand.Intn(f.SlcWeight + f.RangeWeight)
+	if r < f.SlcWeight {
+		return f.Slc[r].Query(cfg)
+	}
+	r = rand.Intn(len(f.Ranges))
+	return f.Ranges[r].Query()
 }
 
 func NewRandomQueryConfig() *RandomQueryConfig {
@@ -245,13 +264,81 @@ type IndexFieldRow struct {
 	RowKey   string
 	IsRowKey bool
 	HasTime  bool
+	IsInt    bool
+}
+
+func (fea *IndexFieldRow) Query(cfg *RandomQueryConfig) *Tree {
+	fromTo := ""
+	// 5% of queries on a time field will use the standard view
+	// anyway.
+	if fea.HasTime && rand.Int63n(20) != 0 {
+		startHours := (rand.Int63n(cfg.TimeRange - 1))
+		endHours := rand.Int63n(cfg.TimeRange - startHours) + 1 + startHours
+		startTime := cfg.TimeFrom.Add(time.Duration(startHours) * time.Hour)
+		endTime := cfg.TimeFrom.Add(time.Duration(endHours) * time.Hour)
+		fromTo = fmt.Sprintf(", from=%s, to=%s",
+			startTime.Format(pilosaTimeFmt),
+			endTime.Format(pilosaTimeFmt))
+	}
+	if fea.IsRowKey {
+		return &Tree{S: fmt.Sprintf("Row(%v='%v'%s)", fea.Field, fea.RowKey, fromTo)}
+	}
+	return &Tree{S: fmt.Sprintf("Row(%v=%v%s)", fea.Field, fea.RowID, fromTo)}
+}
+
+type IndexFieldRange struct {
+	Index string
+	Field string
+	Min, Max, Scale int64
+	ScaleDiv float64
+	Range uint64
+}
+
+// We want to pick one of (1) a single-operation filter, (2) a
+// between-filter of some kind.
+// So, that's one of <=, >=, ==, !=, >, <, or
+// one of [<, <], [<, <=], [<=, <=], [<=, <].
+var binaryOps = []string{
+	"<=", ">=", "==", "!=", "<", ">",
+}
+
+func (i *IndexFieldRange) Query() *Tree {
+	r := rand.Int63n(10)
+	// this is unevenly weighted, but there's no Uint64N, and
+	// Int63n can't represent the whole range.
+	v1 := rand.Uint64() % i.Range
+	v2 := rand.Uint64() % i.Range
+	if v1 > v2 {
+		v1, v2 = v2, v1
+	}
+	v1 = v1 + uint64(i.Min)
+	v2 = v2 + uint64(i.Min)
+	var v1s, v2s string
+	if i.Scale != 0 {
+		v1s = fmt.Sprintf("%.*f", i.Scale, float64(int64(v1)) / i.ScaleDiv)
+		v2s = fmt.Sprintf("%.*f", i.Scale, float64(int64(v2)) / i.ScaleDiv)
+	} else {
+		v1s = strconv.FormatInt(int64(v1), 10)
+		v2s = strconv.FormatInt(int64(v2), 10)
+	}
+	if r < 4 {
+		lte := "<="
+		op1 := lte[:1+(r&1)]
+		op2 := lte[:1+((r>>1)&1)]
+		return &Tree{S: fmt.Sprintf("Row(%s %s %s %s %s)",
+			v1s, op1, i.Field, op2, v2s)}
+	} else {
+		if rand.Int63n(2) == 1 {
+			v1s = v2s
+		}
+		return &Tree{S: fmt.Sprintf("Row(%s %s %s)", i.Field, binaryOps[r - 4], v1s)}
+	}
 }
 
 // Run a RandomQuery takes a list of RowIDFeatures and ColumnKeyObjects
 // and spits back a PQL query
 //
 func (cfg *RandomQueryConfig) Setup(api API) (err error) {
-
 	ctx := context.Background()
 	cfg.Info, err = api.Schema(ctx)
 	if err != nil {
@@ -267,7 +354,7 @@ func (cfg *RandomQueryConfig) Setup(api API) (err error) {
 
 				res, err := api.Query(ctx, ii.Name, &pilosa.QueryRequest{Index: ii.Name, Query: pql})
 				panicOn(err)
-				if cfg.Verbose {
+				if cfg.VeryVerbose {
 					fmt.Printf("success on pql = '%v'; res='%v'\n", pql, res.Results[0])
 				}
 				// if the option is set to use RowKeys, then must get the Keys instead of the Rows from the RowIdentifiers.
@@ -283,10 +370,9 @@ func (cfg *RandomQueryConfig) Setup(api API) (err error) {
 					// test gets this
 					cfg.AddResponse(ii.Name, fld.Name, &x, fld.Options.Type == "time")
 				}
-			case "int":
-				fmt.Printf("int field: details %#v\n", fld)
-			case "decimal":
-				fmt.Printf("decimal field: details %#v\n", fld)
+			case "int", "decimal":
+				// we'll ignore row keys and just use value ranges
+				cfg.AddIntField(ii.Name, fld.Name, fld.Options.Min, fld.Options.Max, fld.Options.Scale)
 			default:
 				AlwaysPrintf("ignoring field %q: unhandled type %q\n", fld.Name, fld.Options.Type)
 			}
@@ -307,6 +393,47 @@ func (cfg *RandomQueryConfig) AddResponse(index, field string, x *pilosa.RowIden
 	for _, rowKey := range x.Keys {
 		cfg.AddFeature(index, field, 0, rowKey, true, hasTime)
 	}
+}
+
+const maxEffectiveRange = 1000000
+
+func (cfg *RandomQueryConfig) AddIntField(index, field string, min, max pql.Decimal, scale int64) {
+	f, ok := cfg.IndexMap[index]
+	if !ok {
+		f = &Features{}
+		cfg.IndexMap[index] = f
+	}
+	if min.Scale != scale || max.Scale != scale {
+		panic(fmt.Sprintf("scale error; min scale %d, max scale %d, field scale %d, assumed they'd be equal",
+			min.Scale, max.Scale, scale))
+	}
+
+	effectiveRange := uint64(max.Value) - uint64(min.Value) + 1
+	// if you have INT64_MAX and INT64_MIN, effectiveRange is 1<<64, which
+	// wraps to 0. Anything closer together will be fine. We accept the loss
+	// of accuracy in the range from not representing quite the full value
+	// in that edge case.
+	if effectiveRange == 0 {
+		effectiveRange--
+	}
+
+	// we assume that the Value of the field is already scaled, I guess?
+	f.Ranges = append(f.Ranges, IndexFieldRange{
+		Index:    index,
+		Field:    field,
+		Min:      min.Value,
+		Max:      max.Value,
+		Scale:    scale,
+		ScaleDiv: math.Pow(10, float64(scale)),
+		Range:    effectiveRange,
+	})
+	// We want to add more values for larger int fields, but the
+	// default KitchenSink field has a range of 1<<64 which would make
+	// it completely dominate weights, so...
+	if effectiveRange > maxEffectiveRange {
+		effectiveRange = maxEffectiveRange
+	}
+	f.RangeWeight += int(effectiveRange)
 }
 
 func (cfg *RandomQueryConfig) GenQuery(index string) (pql string, err error) {
@@ -359,26 +486,7 @@ func (tr *Tree) StringIndent(ind int) (s string) {
 const pilosaTimeFmt = "2006-01-02T15:04"
 func (cfg *RandomQueryConfig) GenTree(index string, depth int) (tr *Tree) {
 	if depth == 0 {
-		slc := cfg.IndexMap[index].Slc
-		//vv("depth is 0, slc = '%#v'", slc)
-		r := cfg.Rnd.Intn(len(slc))
-		fea := slc[r]
-		fromTo := ""
-		// 5% of queries on a time field will use the standard view
-		// anyway.
-		if slc[r].HasTime && rand.Int63n(20) != 0 {
-			startHours := (rand.Int63n(cfg.TimeRange - 1))
-			endHours := rand.Int63n(cfg.TimeRange - startHours) + 1 + startHours
-			startTime := cfg.TimeFrom.Add(time.Duration(startHours) * time.Hour)
-			endTime := cfg.TimeFrom.Add(time.Duration(endHours) * time.Hour)
-			fromTo = fmt.Sprintf(", from=%s, to=%s",
-				startTime.Format(pilosaTimeFmt),
-				endTime.Format(pilosaTimeFmt))
-		}
-		if fea.IsRowKey {
-			return &Tree{S: fmt.Sprintf("Row(%v='%v'%s)", fea.Field, fea.RowKey, fromTo)}
-		}
-		return &Tree{S: fmt.Sprintf("Row(%v=%v%s)", fea.Field, fea.RowID, fromTo)}
+		return cfg.IndexMap[index].RandomQuery(cfg)
 	}
 
 	r := cfg.Rnd.Intn(len(cfg.BitmapFunc))
@@ -429,4 +537,5 @@ func (cfg *RandomQueryConfig) AddFeature(index, field string, rowID uint64, rowK
 		IsRowKey: isRowKey,
 		HasTime:  hasTime,
 	})
+	f.SlcWeight++
 }
