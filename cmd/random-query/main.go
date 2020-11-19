@@ -133,6 +133,17 @@ func (cfg *RandomQueryConfig) Run() (err error) {
 	loops := 0
 	t0 := time.Now()
 
+	report := func() {
+		dur := time.Since(t0)
+		if dur > 0 {
+			qps := 1e9 * float64(totalQ) / float64(dur)
+			AlwaysPrintf("totalQueries run: %v   elapsed: %v   qps: %0.02f", totalQ, dur, qps)
+		} else {
+			AlwaysPrintf("totalQueries run: %v   elapsed: %v   qps: N/A", totalQ, dur)
+		}
+	}
+	defer report()
+
 NewSetup:
 	err = cfg.Setup(cli)
 	if err != nil {
@@ -162,12 +173,8 @@ NewSetup:
 				goto NewSetup
 			}
 		}
-		if totalQ%100 == 0 {
-			dur := time.Since(t0)
-			if dur > 0 {
-				qps := 1e9 * float64(totalQ) / float64(dur)
-				AlwaysPrintf("totalQueries run: %v   elapsed: %v   qps: %0.02f", totalQ, dur, qps)
-			}
+		if totalQ > 0 && totalQ%100 == 0 {
+			report()
 		}
 
 		index := indexes[rand.Intn(len(indexes))]
@@ -190,6 +197,7 @@ NewSetup:
 		}
 		totalQ++
 		loops++
+
 	}
 
 	return nil
