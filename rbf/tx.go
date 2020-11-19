@@ -23,7 +23,6 @@ import (
 	"sync"
 
 	"github.com/benbjohnson/immutable"
-	"github.com/glycerine/rbtree"
 	"github.com/pilosa/pilosa/v2/hash"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/txkey"
@@ -34,11 +33,11 @@ var _ = txkey.ToString
 // Tx represents a transaction.
 type Tx struct {
 	mu          sync.RWMutex
-	db          *DB            // parent db
-	meta        [PageSize]byte // copy of current meta page
-	walID       int64          // max WAL ID at start of tx
-	walPageN    int            // wal page count
-	rootRecords *rr            // read-only cache of root records
+	db          *DB                  // parent db
+	meta        [PageSize]byte       // copy of current meta page
+	walID       int64                // max WAL ID at start of tx
+	walPageN    int                  // wal page count
+	rootRecords *immutable.SortedMap // read-only cache of root records
 
 	// pageMap holds WAL pages that have not yet been transferred
 	// into the database pages. So it can be empty, if the whole previous
@@ -57,70 +56,6 @@ type Tx struct {
 	// behavior where an existing container has all its bits cleared
 	// but still sticks around in the database.
 	DeleteEmptyContainer bool
-}
-
-type rr struct {
-	tree rbtree.Tree
-}
-
-func newRR() *rr {
-	return &rr{
-		tree: *rbtree.NewTree(
-			func(a, b rbtree.Item) int {
-				an := a.(RootRecord).Name
-				bn := b.(RootRecord).Name
-				if an == bn {
-					return 0
-				}
-				if an < bn {
-					return -1
-				}
-				return 1
-			}),
-	}
-}
-
-func (s *rr) size() int {
-	return s.tree.Len()
-}
-
-func (s *rr) add(r RootRecord) {
-	s.tree.Insert(r)
-}
-
-func (s *rr) addAll(recs []*RootRecord) {
-	for _, r := range recs {
-		s.add(*r)
-	}
-}
-
-func (s *rr) remove(it rbtree.Iterator) {
-	s.tree.DeleteWithIterator(it)
-}
-
-func iterToRootRecord(it rbtree.Iterator) RootRecord {
-	return it.Item().(RootRecord)
-}
-
-func (s *rr) sliceOfNames() (res []string) {
-	res = make([]string, s.size())
-
-	i := 0
-	for it := s.tree.Min(); it != s.tree.Limit(); it = it.Next() {
-		res[i] = it.Item().(RootRecord).Name
-		i++
-	}
-	return
-}
-
-func (s *rr) find(name string) (r RootRecord, iter rbtree.Iterator, exact bool) {
-	iter = s.tree.FindGE(RootRecord{Name: name})
-	if iter.Limit() {
-		return
-	}
-	r = iter.Item().(RootRecord)
-	exact = (r.Name == name)
-	return
 }
 
 func (tx *Tx) DBPath() string {
@@ -169,13 +104,16 @@ func (tx *Tx) Commit() error {
 		// avoid race detector firing on a write race here
 		// vs the read of rootRecords at db.Begin()
 		tx.db.mu.Lock()
+		defer tx.db.mu.Unlock()
 		tx.db.rootRecords = tx.rootRecords
 		tx.db.pageMap = tx.pageMap
 		tx.db.walPageN = tx.walPageN
-		tx.db.mu.Unlock()
+		return tx.db.removeTx(tx)
 	}
 
 	// Disconnect transaction from DB.
+	tx.db.mu.Lock()
+	defer tx.db.mu.Unlock()
 	return tx.db.removeTx(tx)
 }
 
@@ -194,6 +132,8 @@ func (tx *Tx) Rollback() {
 	}
 
 	// Disconnect transaction from DB.
+	tx.db.mu.Lock()
+	defer tx.db.mu.Unlock()
 	panicOn(tx.db.removeTx(tx))
 }
 
@@ -210,11 +150,11 @@ func (tx *Tx) root(name string) (uint32, error) {
 		return 0, err
 	}
 
-	_, it, exactHit := records.find(name)
-	if !exactHit {
+	pgno, ok := records.Get(name)
+	if !ok {
 		return 0, ErrBitmapNotFound
 	}
-	return iterToRootRecord(it).Pgno, nil
+	return pgno.(uint32), nil
 }
 
 // BitmapNames returns a list of all bitmap names.
@@ -231,7 +171,13 @@ func (tx *Tx) BitmapNames() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	return records.sliceOfNames(), nil
+
+	a := make([]string, 0, records.Len())
+	for itr := records.Iterator(); !itr.Done(); {
+		k, _ := itr.Next()
+		a = append(a, k.(string))
+	}
+	return a, nil
 }
 
 // CreateBitmap creates a new empty bitmap with the given name.
@@ -258,15 +204,12 @@ func (tx *Tx) createBitmap(name string) error {
 	}
 
 	// Find btree by name. Exit if already exists.
-	_, _, exact := records.find(name)
-	if exact {
+	if _, ok := records.Get(name); ok {
 		return ErrBitmapExists
 	}
-	//fmt.Println("CREATE BITMAP", name, index)
 
 	// Allocate new root page.
 	pgno, err := tx.allocatePgno()
-	//fmt.Println("CREATE BITMAP @ PGNO", pgno)
 	if err != nil {
 		return err
 	}
@@ -281,7 +224,7 @@ func (tx *Tx) createBitmap(name string) error {
 	}
 
 	// Insert into correct index.
-	records.add(RootRecord{Name: name, Pgno: pgno})
+	records = records.Set(name, pgno)
 	if err := tx.writeRootRecordPages(records); err != nil {
 		return fmt.Errorf("write bitmaps: %w", err)
 	}
@@ -305,15 +248,6 @@ func (tx *Tx) createBitmapIfNotExists(name string) error {
 	return nil
 }
 
-/*
-func dump(r []*RootRecord) {
-	for _, i := range r {
-		fmt.Println("RECORD", i.Name, i.Pgno)
-	}
-
-}
-*/
-
 // DeleteBitmap removes a bitmap with the given name.
 // Returns an error if the bitmap does not exist.
 func (tx *Tx) DeleteBitmap(name string) error {
@@ -335,21 +269,18 @@ func (tx *Tx) DeleteBitmap(name string) error {
 	}
 
 	// Find btree by name. Exit if it doesn't exist.
-	record, it, ok := records.find(name)
-
+	pgno, ok := records.Get(name)
 	if !ok {
 		return fmt.Errorf("bitmap does not exist: %q", name)
 	}
-	pgno := record.Pgno
 
 	// Deallocate all pages in the tree.
-	if err := tx.deallocateTree(pgno); err != nil {
+	if err := tx.deallocateTree(pgno.(uint32)); err != nil {
 		return err
 	}
 
-	records.remove(it)
-
 	// Delete from record list & rewrite record pages.
+	records = records.Delete(name)
 	if err := tx.writeRootRecordPages(records); err != nil {
 		return fmt.Errorf("write bitmaps: %w", err)
 	}
@@ -373,24 +304,21 @@ func (tx *Tx) DeleteBitmapsWithPrefix(prefix string) error {
 	if err != nil {
 		return err
 	}
-	for it := records.tree.Min(); it != records.tree.Limit(); {
-		record := it.Item().(RootRecord)
+
+	for itr := records.Iterator(); !itr.Done(); {
+		name, pgno := itr.Next()
 
 		// Skip bitmaps without matching prefix.
-		if !strings.HasPrefix(record.Name, prefix) {
+		if !strings.HasPrefix(name.(string), prefix) {
 			continue
 		}
 
 		// Deallocate all pages in the tree.
-		if err := tx.deallocateTree(record.Pgno); err != nil {
+		if err := tx.deallocateTree(pgno.(uint32)); err != nil {
 			return err
 		}
 
-		// as long we've advanced it past delme, we can
-		// delete delme without affecting it.
-		delme := it
-		it = it.Next()
-		records.remove(delme)
+		records = records.Delete(name.(string))
 	}
 
 	// Rewrite record pages.
@@ -422,16 +350,14 @@ func (tx *Tx) RenameBitmap(oldname, newname string) error {
 	}
 
 	// Find btree by name. Exit if it doesn't exist.
-	rec, it, exactHit := records.find(oldname)
-	if !exactHit {
+	pgno, ok := records.Get(oldname)
+	if !ok {
 		return fmt.Errorf("bitmap does not exist: %q", oldname)
 	}
 
 	// Update record name & rewrite record pages.
-	rec2 := rec
-	rec2.Name = newname
-	records.remove(it)
-	records.add(rec2)
+	records = records.Delete(oldname)
+	records = records.Set(newname, pgno)
 	if err := tx.writeRootRecordPages(records); err != nil {
 		return fmt.Errorf("write bitmaps: %w", err)
 	}
@@ -440,12 +366,12 @@ func (tx *Tx) RenameBitmap(oldname, newname string) error {
 }
 
 // RootRecords returns a list of root records.
-func (tx *Tx) RootRecords() (records *rr, err error) {
+func (tx *Tx) RootRecords() (records *immutable.SortedMap, err error) {
 	if tx.rootRecords != nil {
 		return tx.rootRecords, nil
 	}
 
-	records = newRR()
+	records = immutable.NewSortedMap(nil)
 	for pgno := readMetaRootRecordPageNo(tx.meta[:]); pgno != 0; {
 		page, err := tx.readPage(pgno)
 		if err != nil {
@@ -457,7 +383,9 @@ func (tx *Tx) RootRecords() (records *rr, err error) {
 		if err != nil {
 			return nil, err
 		}
-		records.addAll(a)
+		for _, rec := range a {
+			records = records.Set(rec.Name, rec.Pgno)
+		}
 
 		// Read next overflow page number.
 		pgno = WalkRootRecordPages(page)
@@ -469,7 +397,7 @@ func (tx *Tx) RootRecords() (records *rr, err error) {
 }
 
 // writeRootRecordPages writes a list of root record pages.
-func (tx *Tx) writeRootRecordPages(records *rr) (err error) {
+func (tx *Tx) writeRootRecordPages(records *immutable.SortedMap) (err error) {
 
 	// Release all existing root record pages.
 	for pgno := readMetaRootRecordPageNo(tx.meta[:]); pgno != 0; {
@@ -486,7 +414,7 @@ func (tx *Tx) writeRootRecordPages(records *rr) (err error) {
 	}
 
 	// Exit early if no records exist.
-	if records.size() == 0 {
+	if records.Len() == 0 {
 		writeMetaRootRecordPageNo(tx.meta[:], 0)
 		return nil
 	}
@@ -499,30 +427,19 @@ func (tx *Tx) writeRootRecordPages(records *rr) (err error) {
 	writeMetaRootRecordPageNo(tx.meta[:], pgno)
 
 	// Write new root record pages.
-	limit := records.tree.Limit()
-	it := records.tree.Min()
-	for it != limit {
-
+	for itr := records.Iterator(); !itr.Done(); {
 		// Initialize page & write as many records as will fit.
 		page := make([]byte, PageSize)
 		writePageNo(page, pgno)
 		writeFlags(page, PageTypeRootRecord)
 
-		// writeRootRecords does it = it.Next() for us after
-		// each successful write to the page.
-		it, err = writeRootRecords(page, it, limit)
-
-		switch err {
-		case nil:
-			// nothing to do, all the rest of the records fit on the page.
-
-		case io.ErrShortBuffer:
+		if err := writeRootRecords(page, itr); err == io.ErrShortBuffer {
 			// Allocate next pgno and write overflow if we have remaining records.
 			if pgno, err = tx.allocatePgno(); err != nil {
 				return err
 			}
 			writeRootRecordOverflowPgno(page, pgno)
-		default:
+		} else if err != nil {
 			return err
 		}
 
@@ -869,10 +786,10 @@ func (tx *Tx) inusePageSet() (map[uint32]struct{}, error) {
 		return m, err
 	}
 
-	for it := records.tree.Min(); it != records.tree.Limit(); it = it.Next() {
-		record := it.Item().(RootRecord)
+	for itr := records.Iterator(); !itr.Done(); {
+		_, pgno := itr.Next()
 
-		if err := tx.walkTree(record.Pgno, 0, func(pgno, parent, typ uint32) error {
+		if err := tx.walkTree(pgno.(uint32), 0, func(pgno, parent, typ uint32) error {
 			m[pgno] = struct{}{}
 			return nil
 		}); err != nil {
@@ -1428,10 +1345,10 @@ func (tx *Tx) DumpString(short bool, shard uint64) (r string) {
 	panicOn(err)
 	n := 0
 
-	for it := records.tree.Min(); it != records.tree.Limit(); it = it.Next() {
-		rr := it.Item().(RootRecord)
+	for itr := records.Iterator(); !itr.Done(); {
+		name, _ := itr.Next()
 
-		c, err := tx.cursor(rr.Name)
+		c, err := tx.cursor(name.(string))
 		panicOn(err)
 		err = c.First() // First will rewind to beginning.
 		if err == io.EOF {
@@ -1450,7 +1367,7 @@ func (tx *Tx) DumpString(short bool, shard uint64) (r string) {
 			ckey := cell.Key
 			ct := toContainer(cell, tx)
 
-			s := stringOfCkeyCt(ckey, ct, rr.Name, short)
+			s := stringOfCkeyCt(ckey, ct, name.(string), short)
 			r += s
 			n++
 		}
@@ -1656,7 +1573,6 @@ func (tx *Tx) ImportRoaringBits(name string, itr roaring.RoaringIterator, clear 
 // flush writes the dirty pages & meta page to the WAL.
 func (tx *Tx) flush() error {
 	w := bufio.NewWriterSize(tx.db.walFile, 65536)
-	builder := immutable.NewMapBuilder(tx.pageMap)
 
 	// Write non-bitmap pages to WAL.
 	for _, pgno := range dirtyPageMapKeys(tx.dirtyPages) {
@@ -1664,7 +1580,7 @@ func (tx *Tx) flush() error {
 		if err != nil {
 			return fmt.Errorf("write page to wal: %w", err)
 		}
-		builder.Set(pgno, walID)
+		tx.pageMap = tx.pageMap.Set(pgno, walID)
 	}
 
 	// Write bitmap headers & pages to WAL.
@@ -1682,7 +1598,7 @@ func (tx *Tx) flush() error {
 		if err != nil {
 			return fmt.Errorf("write bitmap page to wal: %w", err)
 		}
-		builder.Set(pgno, walID)
+		tx.pageMap = tx.pageMap.Set(pgno, walID)
 	}
 
 	// Write meta page to WAL.
@@ -1690,7 +1606,7 @@ func (tx *Tx) flush() error {
 	if err != nil {
 		return fmt.Errorf("write meta page to wal: %w", err)
 	}
-	builder.Set(uint32(0), walID)
+	tx.pageMap = tx.pageMap.Set(uint32(0), walID)
 
 	// Flush & sync WAL.
 	if err := w.Flush(); err != nil {
@@ -1698,9 +1614,6 @@ func (tx *Tx) flush() error {
 	} else if err := tx.db.fsync(tx.db.walFile); err != nil {
 		return fmt.Errorf("sync wal: %w", err)
 	}
-
-	// Save page map for new WAL pages.
-	tx.pageMap = builder.Map()
 
 	return nil
 }
@@ -1828,10 +1741,10 @@ func (tx *Tx) PageInfos() ([]PageInfo, error) {
 		return nil, err
 	}
 
-	for it := records.tree.Min(); it != records.tree.Limit(); it = it.Next() {
-		record := it.Item().(RootRecord)
+	for itr := records.Iterator(); !itr.Done(); {
+		name, pgno := itr.Next()
 
-		if err := tx.walkPageInfo(infos, record.Pgno, record.Name); err != nil {
+		if err := tx.walkPageInfo(infos, pgno.(uint32), name.(string)); err != nil {
 			return nil, err
 		}
 	}
