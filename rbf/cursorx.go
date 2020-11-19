@@ -71,9 +71,15 @@ func (c *Cursor) Rows() ([]uint64, error) {
 	}
 	return rows, err
 }
+
 func (tx *Tx) FieldViews() []string {
-	rr, _ := tx.RootRecords()
-	return rr.sliceOfNames()
+	records, _ := tx.RootRecords()
+	a := make([]string, 0, records.Len())
+	for itr := records.Iterator(); !itr.Done(); {
+		name, _ := itr.Next()
+		a = append(a, name.(string))
+	}
+	return a
 }
 
 func (c *Cursor) DumpKeys() {

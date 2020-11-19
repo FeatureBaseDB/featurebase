@@ -35,3 +35,14 @@ func TestBuildServerFlags(t *testing.T) {
 		t.Fatal("log-path flag is required")
 	}
 }
+
+func TestServerDefaultTxsrcFlags(t *testing.T) {
+	cm := &cobra.Command{}
+	buf := bytes.Buffer{}
+	stdin, stdout, stderr := GetIO(buf)
+	Server := server.NewCommand(stdin, stdout, stderr)
+	BuildServerFlags(cm, Server)
+	if cm.Flags().Lookup("txsrc").DefValue != "" {
+		t.Fatal("cannot set the txsrc default in ctl/server.go, otherwise we won't know to let the environment override the lack of --txsrc on the command line. We want explicit command line --txsrc to override the env value.")
+	}
+}

@@ -44,6 +44,10 @@ type Config struct {
 
 	// for mmap correctness testing.
 	DoAllocZero bool
+
+	// CursorCacheSize is the number of copies of Cursor{} to keep in our
+	// readyCursorCh arena to avoid GC pressure.
+	CursorCacheSize int64
 }
 
 func NewDefaultConfig() *Config {
@@ -53,6 +57,10 @@ func NewDefaultConfig() *Config {
 		MinWALCheckpointSize: DefaultMinWALCheckpointSize,
 		MaxWALCheckpointSize: DefaultMaxWALCheckpointSize,
 		FsyncEnabled:         true,
+
+		// CI passed with 20. 50 was too big for CI, even on X-large instances.
+		// For now we default to 0, which means use sync.Pool.
+		CursorCacheSize: 0,
 	}
 }
 
@@ -65,4 +73,6 @@ func (cfg *Config) DefineFlags(flags *pflag.FlagSet) {
 
 	// renamed from --rbf-fsync to just --fsync because now it applies to all Tx backends.
 	flags.BoolVar(&cfg.FsyncEnabled, "fsync", default0.FsyncEnabled, "enable fsync fully safe flush-to-disk")
+	flags.Int64Var(&cfg.CursorCacheSize, "rbf-cursor-cache", default0.CursorCacheSize, "how big a Cursor arena to maintain. 0 means use sync.Pool with dynamic sizing. Note that <= 20 is needed to pass CI. Controls the memory footprint of rbf.")
+
 }

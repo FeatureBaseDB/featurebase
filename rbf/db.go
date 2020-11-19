@@ -24,26 +24,34 @@ import (
 	"syscall"
 
 	"github.com/benbjohnson/immutable"
-	"github.com/pilosa/pilosa/v2/syswrap"
-
+	"github.com/glycerine/idem"
 	rbfcfg "github.com/pilosa/pilosa/v2/rbf/cfg"
+	"github.com/pilosa/pilosa/v2/syswrap"
 )
 
 var (
 	ErrClosed = errors.New("rbf: database closed")
 )
 
+// global in the sense that it is shared among all instances
+// of rbf.DBs in this process. This is deliberate.
+var globalCursorSyncPool = &sync.Pool{
+	New: func() interface{} {
+		return &Cursor{}
+	},
+}
+
 // DB options like 	MaxSize, FsyncEnabled, DoAllocZero
 // can be set before calling DB.Open().
 type DB struct {
 	cfg rbfcfg.Config
 
-	data        []byte           // database mmap
-	file        *os.File         // database file descriptor
-	rootRecords *rr              // cached root records
-	pageMap     *immutable.Map   // pgno-to-WALID mapping
-	txs         map[*Tx]struct{} // active transactions
-	opened      bool             // true if open
+	data        []byte               // database mmap
+	file        *os.File             // database file descriptor
+	rootRecords *immutable.SortedMap // cached root records
+	pageMap     *immutable.Map       // pgno-to-WALID mapping
+	txs         map[*Tx]struct{}     // active transactions
+	opened      bool                 // true if open
 
 	wal      []byte   // wal mmap
 	walFile  *os.File // wal file descriptor
@@ -55,6 +63,9 @@ type DB struct {
 
 	// Path represents the path to the database file.
 	Path string
+
+	cursorArenaCh chan *Cursor
+	cursorCleaner *idem.Halter
 }
 
 // NewDB returns a new instance of DB.
@@ -68,8 +79,15 @@ func NewDB(path string, cfg *rbfcfg.Config) *DB {
 		txs:     make(map[*Tx]struct{}),
 		pageMap: immutable.NewMap(&uint32Hasher{}),
 		Path:    path,
+
+		cursorArenaCh: make(chan *Cursor, cfg.CursorCacheSize),
+		cursorCleaner: idem.NewHalter(),
+	}
+	for i := int64(0); i < cfg.CursorCacheSize; i++ {
+		db.cursorArenaCh <- &Cursor{}
 	}
 	db.haltCond = sync.NewCond(&db.mu)
+
 	return db
 }
 
@@ -254,6 +272,8 @@ func (db *DB) Close() (err error) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
+	defer db.cursorCleaner.RequestStop()
+
 	db.opened = false
 
 	// Close mmap handle.
@@ -330,13 +350,15 @@ func (db *DB) HasData(requireOneHotBit bool) (hasAnyRecords bool, err error) {
 	// Loop over each bitmap and attempt to move to the first cell.
 	// If we can move to a cell then we have at least one record.
 
-	for it := records.tree.Min(); it != records.tree.Limit(); it = it.Next() {
-		record := it.Item().(RootRecord)
+	for itr := records.Iterator(); !itr.Done(); {
+		name, _ := itr.Next()
 		// Fetch cursor for bitmap.
-		cur, err := tx.Cursor(record.Name)
+		cur, err := tx.Cursor(name.(string))
 		if err != nil {
 			return false, err
 		}
+		defer cur.Close()
+
 		if !requireOneHotBit {
 			return true, nil
 		}
@@ -497,9 +519,6 @@ func (db *DB) removeTx(tx *Tx) error {
 		tx.db.rwmu.Unlock()
 	}
 
-	db.mu.Lock()
-	defer db.mu.Unlock()
-
 	delete(tx.db.txs, tx)
 
 	// Disassociate from db.
@@ -559,4 +578,24 @@ func (db *DB) readMetaPage() ([]byte, error) {
 		return db.readWALPageByID(walID.(int64))
 	}
 	return db.readDBPage(0)
+}
+
+func (db *DB) getCursor(tx *Tx) (c *Cursor) {
+	if db.cfg.CursorCacheSize == 0 {
+		c = globalCursorSyncPool.Get().(*Cursor)
+		c.tx = tx
+		return
+	}
+
+	n := len(db.cursorArenaCh)
+	if n < 10 {
+		vv("warning, db.cursorArenaCh is low! %v left", n)
+	}
+	select {
+	case c = <-db.cursorArenaCh:
+		c.tx = tx
+		return
+	case <-db.cursorCleaner.ReqStop.Chan:
+		return nil
+	}
 }

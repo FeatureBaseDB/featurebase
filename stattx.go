@@ -19,6 +19,7 @@ import (
 	"io"
 	"math"
 	"os"
+	"runtime"
 	"sort"
 	"sync"
 	"time"
@@ -108,6 +109,11 @@ func (c *callStats) report() (r string) {
 	for i := range lines {
 		r += lines[i].Line
 	}
+
+	var m1 runtime.MemStats
+	runtime.ReadMemStats(&m1)
+	r += fmt.Sprintf("\n m1.TotalAlloc = %v\n", m1.TotalAlloc)
+
 	return
 }
 

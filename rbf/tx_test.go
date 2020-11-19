@@ -361,11 +361,11 @@ func TestTx_CursorCrashArray(t *testing.T) {
 	}
 	//setArray(t, 0, 2379, &c)
 	//setArray(t, 1, 2337, &c)
-	setArray(t, 32, 1216, &c)
-	setArray(t, 33, 1195, &c)
-	setArray(t, 48, 1186, &c)
-	setArray(t, 49, 1223, &c)
-	setArray(t, 50, 1223, &c)
+	setArray(t, 32, 1216, c)
+	setArray(t, 33, 1195, c)
+	setArray(t, 48, 1186, c)
+	setArray(t, 49, 1223, c)
+	setArray(t, 50, 1223, c)
 
 }
 
@@ -385,8 +385,8 @@ func TestTx_CursorCrashBitmap(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	setArray(t, 0, 22510, &c)
-	setArray(t, 1, 23584, &c)
+	setArray(t, 0, 22510, c)
+	setArray(t, 1, 23584, c)
 }
 
 func setArray(tb testing.TB, key, num int, c *rbf.Cursor) {
@@ -486,6 +486,30 @@ func TestTx_Dump(t *testing.T) {
 	if s == "" {
 		panic("should have had 3 containers!")
 	}
+}
+
+func TestTx_CreateBitmap(t *testing.T) {
+	t.Run("Bulk", func(t *testing.T) {
+		db := MustOpenDB(t)
+		defer MustCloseDB(t, db)
+
+		tx, err := db.Begin(true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer tx.Rollback()
+
+		if err := tx.CreateBitmap(fmt.Sprintf("%4000x", 0)); err != nil {
+			t.Fatal(err)
+		} else if err := tx.CreateBitmap(fmt.Sprintf("%4000x", 1)); err != nil {
+			t.Fatal(err)
+		} else if err := tx.CreateBitmap(fmt.Sprintf("%4000x", 2)); err != nil {
+			t.Fatal(err)
+		}
+		if err := tx.Commit(); err != nil {
+			t.Fatal(err)
+		}
+	})
 }
 
 func rbfName(index, field, view string, shard uint64) string {
