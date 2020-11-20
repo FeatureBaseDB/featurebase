@@ -220,6 +220,7 @@ func (b *rowBuilder) flushKey() {
 }
 
 // Add a value to the bitmap.
+// Values must be added sequentially.
 func (b *rowBuilder) Add(v uint64) {
 	vkey := v / (1 << 16)
 	if b.key != vkey {
@@ -270,7 +271,7 @@ func (b *rowBuilder) Build() *Row {
 type bsiBuilder []rowBuilder
 
 // Insert a value into the BSI data.
-// It is assumed that it did not previously exist.
+// Columns must be inserted sequentially, and duplicates are not allowed.
 func (b *bsiBuilder) Insert(col, val uint64) {
 	for val != 0 {
 		i := bits.TrailingZeros64(val)
