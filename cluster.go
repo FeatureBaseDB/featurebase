@@ -2918,6 +2918,10 @@ func (c *cluster) createIndexKeys(ctx context.Context, indexName string, keys ..
 		return nil, ErrIndexNotFound
 	}
 
+	if !idx.keys {
+		return nil, errors.Errorf("can't create index keys on unkeyed index %s", indexName)
+	}
+
 	// Split keys by partition.
 	keysByPartition := make(map[int][]string, c.partitionN)
 	for _, key := range keys {

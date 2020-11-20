@@ -575,7 +575,7 @@ func TestExecutor_Execute_Set(t *testing.T) {
 		})
 
 		t.Run("ErrInvalidColValueType", func(t *testing.T) {
-			if _, err := cmd.API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set("foo", f=1)`}); err == nil || !hasCause(err, pilosa.ErrTranslatingKeyNotFound) || !strings.Contains(err.Error(), "unkeyed index") {
+			if _, err := cmd.API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set("foo", f=1)`}); err == nil || !strings.Contains(err.Error(), "unkeyed index") {
 				t.Fatalf("The error is: '%v'", err)
 			}
 		})
@@ -977,7 +977,7 @@ func TestExecutor_Execute_SetValue(t *testing.T) {
 		})
 
 		t.Run("ColumnBSIGroupValue", func(t *testing.T) {
-			if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set("bad_column", f=100)`}); err == nil || !hasCause(err, pilosa.ErrTranslatingKeyNotFound) || !strings.Contains(err.Error(), "unkeyed index") {
+			if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set("bad_column", f=100)`}); err == nil || !strings.Contains(err.Error(), "unkeyed index") {
 				t.Fatalf("unexpected error: %s", err)
 			}
 		})
