@@ -49,7 +49,7 @@ type DB struct {
 	data        []byte               // database mmap
 	file        *os.File             // database file descriptor
 	rootRecords *immutable.SortedMap // cached root records
-	pageMap     *immutable.Map       // pgno-to-WALID mapping
+	pageMap     *PageMap             // pgno-to-WALID mapping
 	txs         map[*Tx]struct{}     // active transactions
 	opened      bool                 // true if open
 
@@ -77,7 +77,7 @@ func NewDB(path string, cfg *rbfcfg.Config) *DB {
 	db := &DB{
 		cfg:     *cfg,
 		txs:     make(map[*Tx]struct{}),
-		pageMap: immutable.NewMap(&uint32Hasher{}),
+		pageMap: NewPageMap(),
 		Path:    path,
 
 		cursorArenaCh: make(chan *Cursor, cfg.CursorCacheSize),
@@ -253,7 +253,7 @@ func (db *DB) checkpoint() error {
 		return fmt.Errorf("seek wal file: %w", err)
 	}
 	db.walPageN = 0
-	db.pageMap = immutable.NewMap(&uint32Hasher{})
+	db.pageMap = NewPageMap()
 
 	// Notify halted tranactions that the WAL has been checkpointed.
 	db.haltCond.Broadcast()
@@ -575,7 +575,7 @@ func (db *DB) readWALPageAt(i int) ([]byte, error) {
 
 func (db *DB) readMetaPage() ([]byte, error) {
 	if walID, ok := db.pageMap.Get(uint32(0)); ok {
-		return db.readWALPageByID(walID.(int64))
+		return db.readWALPageByID(walID)
 	}
 	return db.readDBPage(0)
 }
