@@ -207,7 +207,7 @@ NewSetup:
 			report()
 		}
 
-		index := indexes[rand.Intn(len(indexes))]
+		index := indexes[cfg.Rnd.Intn(len(indexes))]
 
 		pql, err := cfg.GenQuery(index)
 		panicOn(err)
@@ -236,6 +236,7 @@ NewSetup:
 type Features struct {
 	Slc []IndexFieldRow
 	Ranges []IndexFieldRange
+	Distinctables []IndexFieldRange
 	SlcWeight int
 	RangeWeight int
 }
@@ -243,12 +244,12 @@ type Features struct {
 // Pick either a feature entry or a random query on a range, weighted
 // by number of features and approximate weight of ranges
 func (f *Features) RandomQuery(cfg *RandomQueryConfig) *Tree {
-	r := rand.Intn(f.SlcWeight + f.RangeWeight)
+	r := cfg.Rnd.Intn(f.SlcWeight + f.RangeWeight)
 	if r < f.SlcWeight {
 		return f.Slc[r].Query(cfg)
 	}
-	r = rand.Intn(len(f.Ranges))
-	return f.Ranges[r].Query()
+	r = cfg.Rnd.Intn(len(f.Ranges))
+	return f.Ranges[r].Query(cfg)
 }
 
 func NewRandomQueryConfig() *RandomQueryConfig {
@@ -271,9 +272,9 @@ func (fea *IndexFieldRow) Query(cfg *RandomQueryConfig) *Tree {
 	fromTo := ""
 	// 5% of queries on a time field will use the standard view
 	// anyway.
-	if fea.HasTime && rand.Int63n(20) != 0 {
-		startHours := (rand.Int63n(cfg.TimeRange - 1))
-		endHours := rand.Int63n(cfg.TimeRange - startHours) + 1 + startHours
+	if fea.HasTime && cfg.Rnd.Int63n(20) != 0 {
+		startHours := (cfg.Rnd.Int63n(cfg.TimeRange - 1))
+		endHours := cfg.Rnd.Int63n(cfg.TimeRange - startHours) + 1 + startHours
 		startTime := cfg.TimeFrom.Add(time.Duration(startHours) * time.Hour)
 		endTime := cfg.TimeFrom.Add(time.Duration(endHours) * time.Hour)
 		fromTo = fmt.Sprintf(", from=%s, to=%s",
@@ -302,12 +303,12 @@ var binaryOps = []string{
 	"<=", ">=", "==", "!=", "<", ">",
 }
 
-func (i *IndexFieldRange) Query() *Tree {
-	r := rand.Int63n(10)
+func (i *IndexFieldRange) Query(cfg *RandomQueryConfig) *Tree {
+	r := cfg.Rnd.Int63n(10)
 	// this is unevenly weighted, but there's no Uint64N, and
 	// Int63n can't represent the whole range.
-	v1 := rand.Uint64() % i.Range
-	v2 := rand.Uint64() % i.Range
+	v1 := cfg.Rnd.Uint64() % i.Range
+	v2 := cfg.Rnd.Uint64() % i.Range
 	if v1 > v2 {
 		v1, v2 = v2, v1
 	}
@@ -328,7 +329,7 @@ func (i *IndexFieldRange) Query() *Tree {
 		return &Tree{S: fmt.Sprintf("Row(%s %s %s %s %s)",
 			v1s, op1, i.Field, op2, v2s)}
 	} else {
-		if rand.Int63n(2) == 1 {
+		if cfg.Rnd.Int63n(2) == 1 {
 			v1s = v2s
 		}
 		return &Tree{S: fmt.Sprintf("Row(%s %s %s)", i.Field, binaryOps[r - 4], v1s)}
@@ -344,6 +345,7 @@ func (cfg *RandomQueryConfig) Setup(api API) (err error) {
 	if err != nil {
 		return err
 	}
+	foundIntField := false
 	for i, ii := range cfg.Info {
 		_ = i
 		for k, fld := range ii.Fields {
@@ -370,9 +372,12 @@ func (cfg *RandomQueryConfig) Setup(api API) (err error) {
 					// test gets this
 					cfg.AddResponse(ii.Name, fld.Name, &x, fld.Options.Type == "time")
 				}
-			case "int", "decimal":
+			case "int":
+				foundIntField = true
+				fallthrough // I bet you thought you'd never see this used
+			case "decimal":
 				// we'll ignore row keys and just use value ranges
-				cfg.AddIntField(ii.Name, fld.Name, fld.Options.Min, fld.Options.Max, fld.Options.Scale)
+				cfg.AddIntField(ii.Name, fld.Name, fld.Options.Min, fld.Options.Max, fld.Options.Scale, fld.Options.Type == "decimal")
 			default:
 				AlwaysPrintf("ignoring field %q: unhandled type %q\n", fld.Name, fld.Options.Type)
 			}
@@ -380,6 +385,9 @@ func (cfg *RandomQueryConfig) Setup(api API) (err error) {
 	}
 
 	cfg.BitmapFunc = []string{"Union", "Intersect", "Xor", "Not", "Difference"}
+	if foundIntField {
+		cfg.BitmapFunc = append(cfg.BitmapFunc, "Distinct")
+	}
 	seed := int64(42)
 	cfg.Rnd = rand.New(rand.NewSource(seed))
 
@@ -397,7 +405,7 @@ func (cfg *RandomQueryConfig) AddResponse(index, field string, x *pilosa.RowIden
 
 const maxEffectiveRange = 1000000
 
-func (cfg *RandomQueryConfig) AddIntField(index, field string, min, max pql.Decimal, scale int64) {
+func (cfg *RandomQueryConfig) AddIntField(index, field string, min, max pql.Decimal, scale int64, decimal bool) {
 	f, ok := cfg.IndexMap[index]
 	if !ok {
 		f = &Features{}
@@ -418,7 +426,7 @@ func (cfg *RandomQueryConfig) AddIntField(index, field string, min, max pql.Deci
 	}
 
 	// we assume that the Value of the field is already scaled, I guess?
-	f.Ranges = append(f.Ranges, IndexFieldRange{
+	newRange := IndexFieldRange{
 		Index:    index,
 		Field:    field,
 		Min:      min.Value,
@@ -426,7 +434,11 @@ func (cfg *RandomQueryConfig) AddIntField(index, field string, min, max pql.Deci
 		Scale:    scale,
 		ScaleDiv: math.Pow(10, float64(scale)),
 		Range:    effectiveRange,
-	})
+	}
+	f.Ranges = append(f.Ranges, newRange)
+	if !decimal {
+		f.Distinctables = append(f.Distinctables, newRange)
+	}
 	// We want to add more values for larger int fields, but the
 	// default KitchenSink field has a range of 1<<64 which would make
 	// it completely dominate weights, so...
@@ -452,8 +464,8 @@ func (cfg *RandomQueryConfig) GenQuery(index string) (pql string, err error) {
 
 type Tree struct {
 	Chd []*Tree
-
 	S string
+	Args []string // Extra args to pass after children, such as a field for Distinct.
 }
 
 func (tr *Tree) StringIndent(ind int) (s string) {
@@ -485,8 +497,9 @@ func (tr *Tree) StringIndent(ind int) (s string) {
 
 const pilosaTimeFmt = "2006-01-02T15:04"
 func (cfg *RandomQueryConfig) GenTree(index string, depth int) (tr *Tree) {
+	features := cfg.IndexMap[index]
 	if depth == 0 {
-		return cfg.IndexMap[index].RandomQuery(cfg)
+		return features.RandomQuery(cfg)
 	}
 
 	r := cfg.Rnd.Intn(len(cfg.BitmapFunc))
@@ -500,6 +513,14 @@ func (cfg *RandomQueryConfig) GenTree(index string, depth int) (tr *Tree) {
 		numChild = 1
 	case "Difference":
 		numChild = 2
+	case "Distinct":
+		numChild = 1
+		// sometimes do a bare distinct without a filter
+		if cfg.Rnd.Intn(10) == 0 {
+			numChild = 0
+		}
+		r = cfg.Rnd.Intn(len(features.Distinctables))
+		tr.Args = append(tr.Args, fmt.Sprintf("field=%s", features.Distinctables[r].Field))
 	}
 	for i := 0; i < numChild; i++ {
 		tr.Chd = append(tr.Chd, cfg.GenTree(index, depth-1))
@@ -518,6 +539,8 @@ func (tr *Tree) ToPQL() (s string) {
 	for _, c := range tr.Chd {
 		chds = append(chds, c.ToPQL())
 	}
+	// If we had no extra args, this does nothing.
+	chds = append(chds, tr.Args...)
 	all := strings.Join(chds, ", ")
 	return fmt.Sprintf("%v(%v)", tr.S, all)
 }
