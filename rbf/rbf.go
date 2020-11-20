@@ -727,14 +727,8 @@ func (db *DB) fsync(f *os.File) error {
 type uint32Hasher struct{}
 
 // Hash returns a hash for key.
-func (h *uint32Hasher) Hash(key interface{}) uint32 {
-	return hashUint64(uint64(key.(uint32)))
-}
-
-// Equal returns true if a is equal to b. Otherwise returns false.
-// Panics if a and b are not ints.
-func (h *uint32Hasher) Equal(a, b interface{}) bool {
-	return a.(uint32) == b.(uint32)
+func (h *uint32Hasher) Hash(key uint32) uint32 {
+	return hashUint64(uint64(key))
 }
 
 // hashUint64 returns a 32-bit hash for a 64-bit value.

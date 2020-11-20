@@ -42,8 +42,8 @@ type Tx struct {
 	// pageMap holds WAL pages that have not yet been transferred
 	// into the database pages. So it can be empty, if the whole previous
 	// WAL has been checkpointed back into the database.
-	pageMap  *immutable.Map // mapping of database pages to WAL IDs
-	writable bool           // if true, tx can write
+	pageMap  *PageMap // mapping of database pages to WAL IDs
+	writable bool     // if true, tx can write
 
 	dirtyPages       map[uint32][]byte // updated pages in this tx
 	dirtyBitmapPages map[uint32][]byte // updated bitmap pages in this tx
@@ -959,7 +959,7 @@ func (tx *Tx) readPage(pgno uint32) ([]byte, error) {
 
 	// Check if page is remapped in WAL.
 	if walID, ok := tx.pageMap.Get(pgno); ok {
-		return tx.db.readWALPageByID(walID.(int64))
+		return tx.db.readWALPageByID(walID)
 	}
 
 	// Otherwise read directly from DB.
