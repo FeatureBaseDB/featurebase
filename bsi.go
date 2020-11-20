@@ -24,7 +24,9 @@ import (
 type bsiData []*Row
 
 // pivotDescending loops over nonzero BSI values in descending order.
-// For each value, the provided function is called with the value and a slice of the associated columns.
+// For each value, the provided function is called with the value and
+// a slice of the associated columns. TODO, document branch and
+// limit/offset behavior (particularly when nil).
 func (bsi bsiData) pivotDescending(filter *Row, branch uint64, limit, offset *uint64, fn func(uint64, ...uint64)) {
 	// This "pivot" algorithm works by treating the BSI data as a tree.
 	// Each branch of this tree corresponds to a power-of-2-sized range of BSI values.
