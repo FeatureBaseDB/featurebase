@@ -4473,17 +4473,18 @@ func intersectBitmapBitmap(a, b *Container) *Container {
 	// local variables added to prevent BCE checks in loop
 	// see https://go101.org/article/bounds-check-elimination.html
 	var (
-		ab = a.bitmap()[:bitmapN]
-		bb = b.bitmap()[:bitmapN]
-		ob = make([]uint64, bitmapN)
+		ab = a.bitmask()
+		bb = b.bitmask()
+		ob = [1024]uint64{}
 		n  int32
 	)
-	for i := 0; i < bitmapN; i++ {
+	_, _ = &ab[0], &bb[0]
+	for i := range ob {
 		ob[i] = ab[i] & bb[i]
 		n += int32(popcount(ob[i]))
 	}
 
-	output := NewContainerBitmapN(ob, n)
+	output := NewContainerBitmapN(ob[:], n)
 	return output
 }
 
@@ -5668,19 +5669,20 @@ func xorBitmapBitmap(a, b *Container) *Container {
 	// see https://go101.org/article/bounds-check-elimination.html
 
 	var (
-		ab = a.bitmap()[:bitmapN]
-		bb = b.bitmap()[:bitmapN]
-		ob = make([]uint64, bitmapN)[:bitmapN]
+		ab = a.bitmask()
+		bb = b.bitmask()
+		ob = [1024]uint64{}
 
 		n int32
 	)
 
-	for i := 0; i < bitmapN; i++ {
+	_, _ = &ab[0], &bb[0]
+	for i := range ob {
 		ob[i] = ab[i] ^ bb[i]
 		n += int32(popcount(ob[i]))
 	}
 
-	output := NewContainerBitmapN(ob, n)
+	output := NewContainerBitmapN(ob[:], n)
 	if n < ArrayMaxSize {
 		output = output.bitmapToArray()
 	}
@@ -7113,6 +7115,10 @@ func Union(a, b *Container) (c *Container) {
 
 func Difference(a, b *Container) *Container {
 	return difference(a, b)
+}
+
+func IntersectionCount(x, y *Container) int32 {
+	return intersectionCount(x, y)
 }
 
 // Add yields a container identical to c, but with the given bit set; added

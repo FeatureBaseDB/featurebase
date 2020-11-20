@@ -472,6 +472,18 @@ func (c *Container) bitmap() []uint64 {
 	return (*[1024]uint64)(unsafe.Pointer(c.pointer))[:]
 }
 
+func (c *Container) bitmask() *[1024]uint64 {
+	if c == nil {
+		panic("attempt to read nil container's bitmap")
+	}
+	if roaringParanoia {
+		if c.typeID != ContainerBitmap {
+			panic("attempt to read non-bitmap's bitmap")
+		}
+	}
+	return (*[1024]uint64)(unsafe.Pointer(c.pointer))
+}
+
 // AsBitmap yields a 65k-bit bitmap, storing it in the target if a target
 // is provided. The target should be zeroed, or this becomes an implicit
 // union.

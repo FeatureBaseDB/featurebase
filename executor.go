@@ -1875,6 +1875,7 @@ func (e *executor) executeTopK(ctx context.Context, qcx *Qcx, index string, c *p
 	}, nil
 }
 
+// executeTopKShard builds a perpendicular BSI bitmap of a shard for TopK.
 func (e *executor) executeTopKShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64) (_ []*Row, err0 error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeTopKShard")
 	defer span.Finish()
@@ -1895,6 +1896,22 @@ func (e *executor) executeTopKShard(ctx context.Context, qcx *Qcx, index string,
 	f := idx.Field(fieldName)
 	if f == nil {
 		return nil, ErrFieldNotFound
+	}
+
+	// Parse "from" time, if set.
+	var fromTime time.Time
+	if v, ok := c.Args["from"]; ok {
+		if fromTime, err = parseTime(v); err != nil {
+			return nil, errors.Wrap(err, "parsing from time")
+		}
+	}
+
+	// Parse "to" time, if set.
+	var toTime time.Time
+	if v, ok := c.Args["to"]; ok {
+		if toTime, err = parseTime(v); err != nil {
+			return nil, errors.Wrap(err, "parsing to time")
+		}
 	}
 
 	// Fetch the filter.
@@ -1919,13 +1936,19 @@ func (e *executor) executeTopKShard(ctx context.Context, qcx *Qcx, index string,
 
 	ftype := f.Type()
 	switch ftype {
-	case FieldTypeSet, FieldTypeTime:
+	case FieldTypeTime:
+		if !(fromTime.IsZero() && toTime.IsZero()) {
+			return e.executeTopKShardTime(ctx, tx, filterBitmap, index, fieldName, shard, fromTime, toTime)
+		}
+		fallthrough
+	case FieldTypeSet:
 		return e.executeTopKShardSet(ctx, tx, filterBitmap, index, fieldName, shard)
 	default:
 		return nil, errors.Errorf("field type %q is not yet supported by TopK", ftype)
 	}
 }
 
+// executeTopKShardSet builds a perpendicular BSI bitmap of a set field within a shard.
 func (e *executor) executeTopKShardSet(ctx context.Context, tx Tx, filter *Row, index, field string, shard uint64) ([]*Row, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeTopKShardSet")
 	defer span.Finish()
@@ -1935,7 +1958,285 @@ func (e *executor) executeTopKShardSet(ctx context.Context, tx Tx, filter *Row, 
 		return nil, nil
 	}
 
-	return f.cardinalityBSISet(ctx, tx, filter)
+	return topKFragments(ctx, tx, filter, f)
+}
+
+// executeTopKShardTime builds a perpendicular BSI bitmap of a time field within a shard.
+func (e *executor) executeTopKShardTime(ctx context.Context, tx Tx, filter *Row, index, field string, shard uint64, from, to time.Time) ([]*Row, error) {
+	// Fetch index.
+	idx := e.Holder.Index(index)
+	if idx == nil {
+		return nil, newNotFoundError(ErrIndexNotFound, index)
+	}
+
+	// Fetch field.
+	f := idx.Field(field)
+	if f == nil {
+		return nil, newNotFoundError(ErrFieldNotFound, field)
+	}
+
+	// Check the time quantum.
+	quantum := f.TimeQuantum()
+	if quantum == "" {
+		// ????????
+		return nil, nil
+	}
+
+	// Fetch fragments.
+	var fragments []*fragment
+	for _, view := range viewsByTimeRange(viewStandard, from, to, quantum) {
+		f := e.Holder.fragment(index, field, view, shard)
+		if f == nil {
+			continue
+		}
+
+		fragments = append(fragments, f)
+	}
+
+	return topKFragments(ctx, tx, filter, fragments...)
+}
+
+// topKFragments builds a perpendicular BSI bitmap from fragments.
+// The fragments are expected to be from set fields.
+func topKFragments(ctx context.Context, tx Tx, filter *Row, fragments ...*fragment) (bsiData, error) {
+	// Acquire fragment container iterators.
+	iters := make([]roaring.ContainerIterator, len(fragments))
+	for i, f := range fragments {
+		f.mu.RLock()
+		defer f.mu.RUnlock()
+
+		iter, _, err := tx.ContainerIterator(f.index, f.field, f.view, f.shard, 0)
+		if err != nil {
+			return nil, err
+		}
+
+		iters[i] = iter
+	}
+
+	// Merge to a single container iterator.
+	var it roaring.ContainerIterator
+	if len(iters) == 1 {
+		it = iters[0]
+	} else {
+		it = mergerate(iters...)
+	}
+
+	// Extract filter data if a filter was provided.
+	var filterData *topKFilter
+	if filter != nil {
+		var f topKFilter
+		f.fill(filter)
+		filterData = &f
+	}
+
+	return doTopK(ctx, it, filterData)
+}
+
+// mergerate returns a container iterator that unions many container iterators.
+func mergerate(iters ...roaring.ContainerIterator) *mergerator {
+	iterStates := make([]mergeState, len(iters))
+	for i, s := range iters {
+		iterStates[i].iter = s
+	}
+	m := mergerator{
+		iters: iterStates,
+		heap:  make(mergeratorHeap, 0, len(iters)),
+	}
+	for i := range iterStates {
+		m.pusherate(uint64(i))
+	}
+	return &m
+}
+
+// mergerator is a container iterator that merges container iterators (via unioning).
+type mergerator struct {
+	iters     []mergeState
+	heap      mergeratorHeap
+	container *roaring.Container
+	key       uint64
+}
+
+// pusherate pushes the iterator at the given index back onto the heap.
+func (m *mergerator) pusherate(idx uint64) {
+	state := &m.iters[idx]
+	it := state.iter
+	if !it.Next() {
+		it.Close()
+		return
+	}
+	key, c := it.Value()
+	state.c = c
+	m.heap.push(mergeNode{
+		key: key,
+		idx: idx,
+	})
+}
+
+func (m *mergerator) Next() bool {
+	nodes := m.heap.pop()
+	if len(nodes) == 0 {
+		return false
+	}
+	key := nodes[0].key
+	var container *roaring.Container
+	for _, n := range nodes {
+		c := m.iters[n.idx].c
+		if container != nil {
+			container = roaring.Union(container, c)
+		} else {
+			container = c
+		}
+		m.pusherate(n.idx)
+	}
+	m.key, m.container = key, container
+	return true
+}
+
+func (m *mergerator) Value() (uint64, *roaring.Container) {
+	return m.key, m.container
+}
+
+func (m *mergerator) Close() {
+	for _, n := range m.heap {
+		m.iters[n.idx].iter.Close()
+	}
+	m.heap = nil
+}
+
+type mergeState struct {
+	c    *roaring.Container
+	iter roaring.ContainerIterator
+}
+
+// mergeratorHeap is a binary min-heap over keys.
+// This is used to find the next iterator to hit.
+type mergeratorHeap []mergeNode
+
+type mergeNode struct {
+	key, idx uint64
+}
+
+// push a node onto the heap.
+func (h *mergeratorHeap) push(node mergeNode) {
+	s := *h
+	i := len(s)
+	s = append(s, node)
+	for i != 0 && s[(i-1)/2].key > s[i].key {
+		s[(i-1)/2], s[i] = s[i], s[(i-1)/2]
+		i = (i - 1) / 2
+	}
+	*h = s
+}
+
+// pop the minimum key off of the heap.
+// If there are multiple iterators with this keys, this returns all of them.
+func (h *mergeratorHeap) pop() []mergeNode {
+	s := *h
+	if len(s) == 0 {
+		return nil
+	}
+
+	n := 0
+	for key := s[0].key; len(s) > n && s[0].key == key; n++ {
+		s[0], s[len(s)-n-1] = s[len(s)-n-1], s[0]
+		s[:len(s)-n-1].minHeapify()
+	}
+
+	*h = s[:len(s)-n]
+	return s[len(s)-n:]
+}
+
+// minHeapify fixes the heap invariant after updating the heap's root.
+func (h mergeratorHeap) minHeapify() {
+	i := 0
+	for {
+		l, r := 2*i+1, 2*i+2
+		min := i
+		if l < len(h) && h[l].key < h[min].key {
+			min = l
+		}
+		if r < len(h) && h[r].key < h[min].key {
+			min = r
+		}
+		if min == i {
+			return
+		}
+		h[min], h[i] = h[i], h[min]
+		i = min
+	}
+}
+
+// doTopK uses a raw Pilosa matrix to produce a perpendicular BSI bitmap.
+// It will apply a row filter if one is provided.
+func doTopK(ctx context.Context, it roaring.ContainerIterator, filter *topKFilter) (bsiData, error) {
+	row := ^uint64(0)
+	var count uint64
+
+	var builder bsiBuilder
+	var i uint16
+	for it.Next() {
+		if i == 0 {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+		}
+		i++
+
+		// Fetch the next container.
+		key, container := it.Value()
+		keyrow, subkey := key/(ShardWidth>>16), key%(ShardWidth>>16)
+		if keyrow != row {
+			// The previous row has ended.
+			// Flush the count to the BSI data.
+			builder.Insert(row, count)
+			row, count = keyrow, 0
+		}
+
+		// Add the selected bits to the count.
+		if filter != nil {
+			fc := filter[subkey]
+			if fc == nil {
+				continue
+			}
+			count += uint64(roaring.IntersectionCount(container, fc))
+		} else {
+			count += uint64(container.N())
+		}
+	}
+
+	// Add the final count to the BSI data.
+	builder.Insert(row, count)
+
+	// Construct the result.
+	return builder.Build(), nil
+}
+
+// topKFilter is a row filter for a TopK query.
+// It is represented as a contiguous array of containers.
+type topKFilter [ShardWidth >> 16]*roaring.Container
+
+// fill the filter with the contents of a Row.
+func (f *topKFilter) fill(row *Row) {
+	for _, s := range row.segments {
+		it, _ := s.data.Containers.Iterator(0)
+		f.fillIt(it)
+	}
+	// I don't think multiple segments make sense here?
+}
+
+func (f *topKFilter) fillIt(it roaring.ContainerIterator) {
+	defer it.Close()
+
+	for it.Next() {
+		key, c := it.Value()
+
+		key %= uint64(len(f))
+
+		if f[key] != nil {
+			panic("duplicate container in topk filter")
+		}
+		f[key] = c
+	}
 }
 
 // executeTopN executes a TopN() call.
