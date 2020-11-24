@@ -1278,6 +1278,37 @@ func (c *InternalClient) GetNodeUsage(ctx context.Context, uri *pilosa.URI) (map
 	return nodeUsages, nil
 }
 
+// GetPastQueries retrieves the query history log for the specified node.
+func (c *InternalClient) GetPastQueries(ctx context.Context, uri *pilosa.URI) ([]pilosa.PastQueryStatus, error) {
+	u := uri.Path("/query-history?remote=true")
+	req, err := http.NewRequest("GET", u, nil)
+	if err != nil {
+		return nil, errors.Wrap(err, "creating request")
+	}
+
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+
+	// Execute request against the host.
+	resp, err := c.executeRequest(req.WithContext(ctx))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	// Read body and unmarshal response.
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, errors.Wrap(err, "reading")
+	}
+
+	queries := make([]pilosa.PastQueryStatus, 100)
+	if err := json.Unmarshal(body, &queries); err != nil {
+		return nil, fmt.Errorf("unmarshal response: %s", err)
+	}
+	return queries, nil
+}
+
 func (c *InternalClient) FindIndexKeysNode(ctx context.Context, uri *pilosa.URI, index string, keys ...string) (transMap map[string]uint64, err error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.FindIndexKeysNode")
 	defer span.Finish()
@@ -1341,10 +1372,6 @@ func (c *InternalClient) FindFieldKeysNode(ctx context.Context, uri *pilosa.URI,
 		return nil, errors.Wrap(err, "marshalling request")
 	}
 	req, err := http.NewRequest("POST", u.String(), bytes.NewReader(reqData))
-	if err != nil {
-		return nil, errors.Wrap(err, "creating request")
-	}
-
 	// Apply headers.
 	req.Header.Set("Content-Length", strconv.Itoa(len(reqData)))
 	req.Header.Set("Content-Type", "application/json")

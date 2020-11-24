@@ -412,6 +412,7 @@ func (m *Command) SetupServer() error {
 		pilosa.OptServerTxsrc(m.Config.Txsrc),
 		pilosa.OptServerRowcacheOff(m.Config.RowcacheOff),
 		pilosa.OptServerRBFConfig(m.Config.RBFConfig),
+		pilosa.OptServerQueryHistoryLength(m.Config.QueryHistoryLength),
 		coordinatorOpt,
 	}
 

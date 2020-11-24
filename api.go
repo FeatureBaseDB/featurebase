@@ -100,7 +100,7 @@ func NewAPI(opts ...apiOption) (*API, error) {
 		}()
 	}
 
-	api.tracker = newQueryTracker()
+	api.tracker = newQueryTracker(api.server.queryHistoryLength)
 
 	return api, nil
 }
@@ -147,6 +147,7 @@ func (api *API) Txf() *TxFactory {
 
 // Query parses a PQL query out of the request and executes it.
 func (api *API) Query(ctx context.Context, req *QueryRequest) (QueryResponse, error) {
+	start := time.Now()
 	span, ctx := tracing.StartSpanFromContext(ctx, "API.Query")
 	defer span.Finish()
 
@@ -158,7 +159,10 @@ func (api *API) Query(ctx context.Context, req *QueryRequest) (QueryResponse, er
 	if err != nil {
 		return QueryResponse{}, errors.Wrap(err, "parsing")
 	}
-	defer api.tracker.Finish(api.tracker.Start(req.Query))
+
+	if !req.Remote {
+		defer api.tracker.Finish(api.tracker.Start(req.Query, api.server.nodeID, req.Index, start))
+	}
 	execOpts := &execOptions{
 		Remote:          req.Remote,
 		Profile:         req.Profile,
@@ -2050,6 +2054,34 @@ func (api *API) ActiveQueries(ctx context.Context) ([]ActiveQueryStatus, error) 
 	return api.tracker.ActiveQueries(), nil
 }
 
+func (api *API) PastQueries(ctx context.Context, remote bool) ([]PastQueryStatus, error) {
+	if err := api.validate(apiPastQueries); err != nil {
+		return nil, errors.Wrap(err, "validating api method")
+	}
+
+	clusterQueries := api.tracker.PastQueries()
+
+	if !remote {
+		nodes := api.cluster.Nodes()
+		for _, node := range nodes {
+			if node.ID == api.server.nodeID {
+				continue
+			}
+			nodeQueries, err := api.server.defaultClient.GetPastQueries(ctx, &node.URI)
+			if err != nil {
+				return nil, errors.Wrapf(err, "collecting query history from %s", node.URI)
+			}
+			clusterQueries = append(clusterQueries, nodeQueries...)
+		}
+	}
+
+	sort.Slice(clusterQueries, func(i, j int) bool {
+		return clusterQueries[i].Start.After(clusterQueries[j].Start)
+	})
+
+	return clusterQueries, nil
+}
+
 // TranslateIndexDB is an internal function to load the index keys database
 // rd is a boltdb file.
 func (api *API) TranslateIndexDB(ctx context.Context, indexName string, partitionID int, rd io.Reader) error {
@@ -2124,6 +2156,7 @@ const (
 	apiTransactions
 	apiGetTransaction
 	apiActiveQueries
+	apiPastQueries
 )
 
 var methodsCommon = map[apiMethod]struct{}{
@@ -2164,4 +2197,5 @@ var methodsNormal = map[apiMethod]struct{}{
 	apiTransactions:         {},
 	apiGetTransaction:       {},
 	apiActiveQueries:        {},
+	apiPastQueries:          {},
 }

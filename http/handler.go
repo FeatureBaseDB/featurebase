@@ -397,8 +397,10 @@ func newRouter(handler *Handler) http.Handler {
 	router.HandleFunc("/transaction/{id}/finish", handler.handlePostFinishTransaction).Methods("POST").Name("PostFinishTransaction")
 	router.HandleFunc("/transactions", handler.handleGetTransactions).Methods("GET").Name("GetTransactions")
 	router.HandleFunc("/queries", handler.handleGetActiveQueries).Methods("GET").Name("GetActiveQueries")
+	router.HandleFunc("/query-history", handler.handleGetPastQueries).Methods("GET").Name("GetPastQueries")
 	router.HandleFunc("/version", handler.handleGetVersion).Methods("GET").Name("GetVersion")
 
+	// /ui endpoints are for UI use; they may change at any time.
 	router.HandleFunc("/ui/usage", handler.handleGetUsage).Methods("GET").Name("GetUsage")
 	router.HandleFunc("/ui/transaction", handler.handleGetTransactionList).Methods("GET").Name("GetTransactionList")
 	router.HandleFunc("/ui/transaction/", handler.handleGetTransactionList).Methods("GET").Name("GetTransactionList")
@@ -704,7 +706,7 @@ func (h *Handler) handleGetUsage(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleGetUsage handles GET /ui/shard-distribution requests.
+// handleGetShardDistribution handles GET /ui/shard-distribution requests.
 func (h *Handler) handleGetShardDistribution(w http.ResponseWriter, r *http.Request) {
 	dist := h.api.ShardDistribution(r.Context())
 	w.Header().Set("Content-Type", "application/json")
@@ -1182,6 +1184,27 @@ func (h *Handler) handleGetActiveQueries(w http.ResponseWriter, r *http.Request)
 			h.logger.Printf("encoding GetActiveQueries response: %s", err)
 		}
 	}
+}
+
+func (h *Handler) handleGetPastQueries(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	remoteStr := q.Get("remote")
+	var remote bool
+	if remoteStr == "true" {
+		remote = true
+	}
+
+	queries, err := h.api.PastQueries(r.Context(), remote)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(queries); err != nil {
+		h.logger.Printf("encoding GetActiveQueries response: %s", err)
+	}
+
 }
 
 type postIndexAttrDiffRequest struct {

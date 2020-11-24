@@ -83,6 +83,7 @@ type InternalClient interface {
 	GetTransaction(ctx context.Context, id string) (*Transaction, error)
 
 	GetNodeUsage(ctx context.Context, uri *URI) (map[string]NodeUsage, error)
+	GetPastQueries(ctx context.Context, uri *URI) ([]PastQueryStatus, error)
 }
 
 //===============
@@ -244,5 +245,9 @@ func (n nopInternalClient) GetTransaction(ctx context.Context, id string) (*Tran
 }
 
 func (n nopInternalClient) GetNodeUsage(ctx context.Context, uri *URI) (map[string]NodeUsage, error) {
+	return nil, nil
+}
+
+func (n nopInternalClient) GetPastQueries(ctx context.Context, uri *URI) ([]PastQueryStatus, error) {
 	return nil, nil
 }
