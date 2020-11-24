@@ -1510,90 +1510,42 @@ func TestQueryHistory(t *testing.T) {
 	if w.Code != gohttp.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	}
-	ret := mustJSONDecodeSlice(t, w.Body)
 
-	for n, r := range ret {
-		fmt.Printf("%d %+v\n", n, r)
+	ret := make([]pilosa.PastQueryStatus, 3)
+	b, err := ioutil.ReadAll(w.Body)
+	if err != nil {
+		t.Fatalf("reading: %v", err)
+	}
+	err = json.Unmarshal(b, &ret)
+	if err != nil {
+		t.Fatalf("unmarshalling: %v", err)
 	}
 
 	// verify result length
-	if len(ret) != 7 {
+	if len(ret) != 3 {
 		// each set query executes on both nodes once
 		// topn query gets added to history on node0 once, node1 twice
-		t.Fatalf("expected list of length 7, got %d", len(ret))
+		t.Fatalf("expected list of length 3, got %d", len(ret))
 	}
 
 	// verify sort order
 	if !sort.SliceIsSorted(ret, func(i, j int) bool {
 		// must match the sort in api.PastQueries
-		return ret[i].(map[string]interface{})["age"].(float64) > ret[j].(map[string]interface{})["age"].(float64)
+		return ret[i].Start.After(ret[j].Start)
 	}) {
 		t.Fatalf("response list not sorted correctly")
 	}
 
-	// verify response structure
-	queryStatus := ret[4].(map[string]interface{})
-	expectedStrings := map[string]string{
-		"index":  "i0",
-		"nodeID": cluster.GetNode(0).Server.NodeID(),
-		"query":  "TopN(f0)",
+	// verify some response values
+	if ret[0].Index != "i0" {
+		t.Fatalf("response value for 'Index' was '%s', expected 'i0'", ret[0].Index)
 	}
-	for k, exp := range expectedStrings {
-		got, ok := queryStatus[k]
-		if !ok {
-			t.Fatalf("response key '%s' not present", k)
-		}
-		if exp != got {
-			t.Fatalf("response value for key '%s' was '%s', expected '%s'", k, got, exp)
-		}
+	if ret[0].Node != cluster.GetNode(0).Server.NodeID() {
+		t.Fatalf("response value for 'Node' was '%s', expected '%s'", ret[0].Node, cluster.GetNode(0).Server.NodeID())
 	}
-	expectedNumKeys := []string{"age", "runtime"}
-	for _, k := range expectedNumKeys {
-		got, ok := queryStatus[k]
-		if !ok {
-			t.Fatalf("response key '%s' not present", k)
-		}
-		gotint, ok := got.(float64) // ugh
-		if !ok {
-			t.Fatalf("response value for key '%s' %T instead of float64", k, got)
-		}
-		if gotint <= 0 {
-			t.Fatalf("negative value for key '%s'", k)
-		}
+	if ret[0].Query != "TopN(f0)" {
+		t.Fatalf("response value for 'Query' was '%s', expected 'TopN(f0)'", ret[0].Query)
 	}
-
-	// verify additional history entries for the TopN call
-	queryStatus = ret[5].(map[string]interface{})
-	expectedStrings = map[string]string{
-		"index":  "i0",
-		"nodeID": cluster.GetNode(1).Server.NodeID(),
-		"query":  "TopN(_field=\"f0\")",
-	}
-	for k, exp := range expectedStrings {
-		got, ok := queryStatus[k]
-		if !ok {
-			t.Fatalf("response key '%s' not present", k)
-		}
-		if exp != got {
-			t.Fatalf("response value for key '%s' was '%s', expected '%s'", k, got, exp)
-		}
-	}
-	queryStatus = ret[6].(map[string]interface{})
-	expectedStrings = map[string]string{
-		"index":  "i0",
-		"nodeID": cluster.GetNode(1).Server.NodeID(),
-		"query":  "TopN(_field=\"f0\", ids=[0])",
-	}
-	for k, exp := range expectedStrings {
-		got, ok := queryStatus[k]
-		if !ok {
-			t.Fatalf("response key '%s' not present", k)
-		}
-		if exp != got {
-			t.Fatalf("response value for key '%s' was '%s', expected '%s'", k, got, exp)
-		}
-	}
-
 }
 
 func mustJSONDecode(t *testing.T, r io.Reader) (ret map[string]interface{}) {

@@ -147,6 +147,7 @@ func (api *API) Txf() *TxFactory {
 
 // Query parses a PQL query out of the request and executes it.
 func (api *API) Query(ctx context.Context, req *QueryRequest) (QueryResponse, error) {
+	start := time.Now()
 	span, ctx := tracing.StartSpanFromContext(ctx, "API.Query")
 	defer span.Finish()
 
@@ -158,7 +159,10 @@ func (api *API) Query(ctx context.Context, req *QueryRequest) (QueryResponse, er
 	if err != nil {
 		return QueryResponse{}, errors.Wrap(err, "parsing")
 	}
-	defer api.tracker.Finish(api.tracker.Start(req.Query, api.server.nodeID, req.Index), time.Now())
+
+	if !req.Remote {
+		defer api.tracker.Finish(api.tracker.Start(req.Query, api.server.nodeID, req.Index, start))
+	}
 	execOpts := &execOptions{
 		Remote:          req.Remote,
 		Profile:         req.Profile,
@@ -2072,7 +2076,7 @@ func (api *API) PastQueries(ctx context.Context, remote bool) ([]PastQueryStatus
 	}
 
 	sort.Slice(clusterQueries, func(i, j int) bool {
-		return clusterQueries[i].Age.Seconds() > clusterQueries[j].Age.Seconds()
+		return clusterQueries[i].Start.After(clusterQueries[j].Start)
 	})
 
 	return clusterQueries, nil

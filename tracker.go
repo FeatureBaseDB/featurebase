@@ -31,7 +31,7 @@ type PastQueryStatus struct {
 	Query   string        `json:"query"`
 	Node    string        `json:"nodeID"`
 	Index   string        `json:"index"`
-	Age     time.Duration `json:"age"`
+	Start   time.Time     `json:"start"`
 	Runtime time.Duration `json:"runtime"`
 }
 
@@ -146,15 +146,14 @@ func newQueryTracker(historyLength int) *queryTracker {
 	return tracker
 }
 
-func (t *queryTracker) Start(query, nodeID, index string) *activeQuery {
-	now := time.Now()
-	q := &activeQuery{query, nodeID, index, now}
+func (t *queryTracker) Start(query, nodeID, index string, start time.Time) *activeQuery {
+	q := &activeQuery{query, nodeID, index, start}
 	t.updates <- queryStatusUpdate{q, false, time.Time{}}
 	return q
 }
 
-func (t *queryTracker) Finish(q *activeQuery, endTime time.Time) {
-	t.updates <- queryStatusUpdate{q, true, endTime}
+func (t *queryTracker) Finish(q *activeQuery) {
+	t.updates <- queryStatusUpdate{q, true, time.Now()}
 }
 
 func (t *queryTracker) ActiveQueries() []ActiveQueryStatus {
@@ -185,10 +184,9 @@ func (t *queryTracker) ActiveQueries() []ActiveQueryStatus {
 
 func (t *queryTracker) PastQueries() []PastQueryStatus {
 	queries := t.history.slice()
-	now := time.Now()
 	out := make([]PastQueryStatus, len(queries))
 	for i, v := range queries {
-		out[i] = PastQueryStatus{v.query, v.node, v.index, now.Sub(v.started), v.runtime}
+		out[i] = PastQueryStatus{v.query, v.node, v.index, v.started, v.runtime}
 	}
 	return out
 

@@ -63,7 +63,7 @@ func TestQueryTracker(t *testing.T) {
 		t.Fatalf("expected no active queries; found %v", queries)
 	}
 
-	qs := tracker.Start("test query", "node0", "i")
+	qs := tracker.Start("test query", "node0", "i", time.Now())
 
 	var queries []ActiveQueryStatus
 	for len(queries) < 1 {
@@ -73,7 +73,7 @@ func TestQueryTracker(t *testing.T) {
 		t.Fatalf("unexpected queries: %v", queries)
 	}
 
-	tracker.Finish(qs, time.Now())
+	tracker.Finish(qs)
 
 	for len(queries) > 0 {
 		queries = tracker.ActiveQueries()
