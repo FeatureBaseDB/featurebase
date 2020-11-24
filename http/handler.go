@@ -357,6 +357,10 @@ func (h *Handler) collectStats(next http.Handler) http.Handler {
 	})
 }
 
+// latticeRoutes lists the frontend routes that do not directly correspond to
+// backend routes, and require special handling.
+var latticeRoutes = []string{"/tables", "/query"}
+
 // newRouter creates a new mux http router.
 func newRouter(handler *Handler) http.Handler {
 	router := mux.NewRouter()
@@ -442,10 +446,12 @@ func newRouter(handler *Handler) http.Handler {
 	latticeHandler := NewStatikHandler(handler)
 	router.PathPrefix("/static").Handler(latticeHandler)
 	router.Path("/").Handler(latticeHandler)
-	router.Path("/vds").Handler(latticeHandler)
 	router.Path("/favicon.png").Handler(latticeHandler)
 	router.Path("/favicon.svg").Handler(latticeHandler)
 	router.Path("/manifest.json").Handler(latticeHandler)
+	for _, route := range latticeRoutes {
+		router.Path(route).Handler(latticeHandler)
+	}
 
 	router.Use(handler.queryArgValidator)
 	router.Use(handler.addQueryContext)
@@ -518,11 +524,13 @@ func (s statikHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// /vds is a front-end route, not a backend route. Without this check, refreshing at /vds
+	// Without this check, refreshing the UI at e.g. /query
 	// will request a nonexistent resource and return 404.
-	if r.URL.String() == "/vds" {
-		url, _ := url.Parse("/")
-		r.URL = url
+	for _, route := range latticeRoutes {
+		if r.URL.String() == route {
+			url, _ := url.Parse("/")
+			r.URL = url
+		}
 	}
 
 	http.FileServer(s.statikFS).ServeHTTP(w, r)
