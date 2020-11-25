@@ -5593,7 +5593,7 @@ func fieldValidateValue(f *Field, val interface{}) error {
 	switch val := val.(type) {
 	case string:
 		if !f.Keys() {
-			return errors.Errorf("string value on an unkeyed field %q", f.Name())
+			return errors.Errorf("string value on unkeyed field %q", f.Name())
 		}
 		return nil
 	case *pql.Condition:
@@ -5627,6 +5627,9 @@ func fieldValidateValue(f *Field, val interface{}) error {
 			}
 		default:
 			return errors.Errorf("invalid value %v for field %q of type %s", v, f.Name(), f.Type())
+		}
+		if f.Keys() {
+			return errors.Errorf("found integer ID %d on keyed field %q", val, f.Name())
 		}
 	case FieldTypeBool:
 		switch v := val.(type) {

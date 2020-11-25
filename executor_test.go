@@ -4933,6 +4933,7 @@ func TestExecutor_Execute_Query_Error(t *testing.T) {
 	c.CreateField(t, "i", pilosa.IndexOptions{}, "integer", pilosa.OptFieldTypeInt(-1000, 1000))
 	c.CreateField(t, "i", pilosa.IndexOptions{}, "decimal", pilosa.OptFieldTypeDecimal(2))
 	c.CreateField(t, "i", pilosa.IndexOptions{}, "bool", pilosa.OptFieldTypeBool())
+	c.CreateField(t, "i", pilosa.IndexOptions{}, "keys", pilosa.OptFieldKeys())
 
 	tests := []struct {
 		query string
@@ -4977,6 +4978,10 @@ func TestExecutor_Execute_Query_Error(t *testing.T) {
 		{
 			query: "Rows(bool)",
 			error: "bool fields not supported by Rows() query",
+		},
+		{
+			query: `Row(keys=1)`,
+			error: `found integer ID 1 on keyed field "keys"`,
 		},
 	}
 
