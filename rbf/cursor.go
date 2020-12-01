@@ -514,38 +514,50 @@ func (c *Cursor) putLeafCellFast(in leafCell, isInsert bool) (err error) {
 	writeFlags(dst, PageTypeLeaf)
 	writeCellN(dst, dstCellN)
 
-	// Loop over source page elements and copy them to the new page.
+	// Copy data before index.
 	offset := dataOffset(dstCellN)
-	for i, j := 0, 0; j < dstCellN; i, j = i+1, j+1 {
-		// If positioned at the insert/update index, write the new cell.
-		if i == elem.index {
-			writeLeafCell(dst[:], j, offset, in)
-			offset += align8(in.Size())
 
-			// If this is an update, skip to the next element.
-			if !isInsert {
-				continue
-			}
+	if elem.index > 0 {
+		srcStart := dataOffset(srcCellN)
+		srcEnd := readCellEndingOffset(src, elem.index-1)
+		shiftN := offset - srcStart
+		copy(dst[offset:], src[srcStart:srcEnd])
+		offset += align8(srcEnd - srcStart)
 
-			// If this is an insert, move the dst position forward.
-			j++
+		// Rewrite initial index slots by position moved.
+		for i := 0; i < elem.index; i++ {
+			writeCellOffset(dst, i, readCellOffset(src, i)+shiftN)
 		}
+	}
 
-		// Copy the raw bytes from the src page to the dst page.
-		if i < srcCellN {
-			srcCellBuf := readLeafCellBytesAtOffset(src, readCellOffset(src, i))
-			writeCellOffset(dst, j, offset)
-			copy(dst[offset:], srcCellBuf)
-			offset += align8(len(srcCellBuf))
+	// Insert new row.
+	writeLeafCell(dst[:], elem.index, offset, in)
+	offset += align8(in.Size())
+
+	// Copy data after inserted element.
+	if (isInsert && elem.index < srcCellN) || (!isInsert && elem.index < srcCellN-1) {
+		var srcStart int
+		if isInsert {
+			srcStart = readCellOffset(src, elem.index)
+		} else {
+			srcStart = readCellOffset(src, elem.index+1)
+		}
+		srcEnd := readCellEndingOffset(src, srcCellN-1)
+		copy(dst[offset:], src[srcStart:srcEnd])
+
+		// Rewrite ending index slots by position moved.
+		shiftN := offset - srcStart
+		for i := elem.index + 1; i < dstCellN; i++ {
+			srci := i
+			if isInsert {
+				srci--
+			}
+			writeCellOffset(dst, i, readCellOffset(src, srci)+shiftN)
 		}
 	}
 
 	// Write new page to dirty page cache.
-	if err := c.tx.writePage(dst); err != nil {
-		return err
-	}
-
-	return nil
+	return c.tx.writePage(dst)
 }
 
 // deleteLeafCell removes a cell from the currently positioned page & index.

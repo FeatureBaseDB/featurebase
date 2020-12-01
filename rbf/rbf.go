@@ -211,6 +211,12 @@ func writeCellOffset(page []byte, i int, v int) {
 	binary.BigEndian.PutUint16(page[10+(i*2):], uint16(v))
 }
 
+// readCellEndingOffset returns the last byte position of the i-th cell.
+func readCellEndingOffset(page []byte, i int) int {
+	offset := readCellOffset(page, i)
+	return offset + len(readLeafCellBytesAtOffset(page, offset))
+}
+
 func dataOffset(n int) int {
 	return align8(10 + (n * 2))
 }
