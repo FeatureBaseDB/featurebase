@@ -1756,6 +1756,14 @@ type RoaringIterator interface {
 	// Clone copies the iterator, preserving it at this point in the iteration.
 	// It may well share much underlying data.
 	Clone() RoaringIterator
+
+	// ContainerKeySpan provides the smallest and largest
+	// container keys that the iterator will return.
+	// The current implementation requires that the underlying header
+	// lists the keys in ascending order.
+	// Iff there no keys, then empty will be returned true.
+	// If there is only a single key, then ckeyLast will equal ckeyFirst.
+	ContainerKeySpan() (ckeyFirst, ckeyLast uint64, empty bool)
 }
 
 // baseRoaringIterator holds values used by both Pilosa and official Roaring
@@ -1922,6 +1930,22 @@ func (r *baseRoaringIterator) Done(err error) {
 	r.currentPointer = nil
 	r.lastDataOffset = int64(r.currentDataOffset)
 	r.currentDataOffset = 0
+}
+
+func (r *baseRoaringIterator) ContainerKeySpan() (ckeyFirst, ckeyLast uint64, empty bool) {
+	n := r.keys
+	if n == 0 {
+		empty = true
+		return
+	}
+	ckeyFirst = binary.LittleEndian.Uint64(r.headers[0:8])
+	if n == 1 {
+		ckeyLast = ckeyFirst
+		return
+	}
+	beg := (n - 1) * 12
+	ckeyLast = binary.LittleEndian.Uint64(r.headers[beg : beg+8])
+	return
 }
 
 // Len() indicates the total number of containers the iterator expects to have.
