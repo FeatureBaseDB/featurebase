@@ -4430,6 +4430,17 @@ func TestCloneRoaringIterator(t *testing.T) {
 
 	itr2 := itr.Clone()
 
+	firstCkey, lastCkey, empty := itr2.ContainerKeySpan()
+	if empty {
+		t.Fatalf("should not be empty")
+	}
+	if firstCkey != 0 {
+		t.Fatalf("firstCkey should be 0")
+	}
+	if lastCkey != 10001 {
+		t.Fatalf("lastCkey should be 10001")
+	}
+
 	var keys []uint64
 	for itrKey, synthC := itr.NextContainer(); synthC != nil; itrKey, synthC = itr.NextContainer() {
 		keys = append(keys, itrKey)
@@ -4443,6 +4454,54 @@ func TestCloneRoaringIterator(t *testing.T) {
 	}
 	if !reflect.DeepEqual(keys, keys2) {
 		t.Fatalf("keys != keys2. keys='%#v'; keys2='%#v'", keys, keys2)
+	}
+}
+
+func TestRoaringIteratorContainerKeySpan(t *testing.T) {
+
+	ca := NewContainerArray([]uint16{1, 10, 100, 1000})
+	ba := NewFileBitmap()
+	ba.Containers.Put(101, ca)
+	ba.Containers.Put(10, ca)
+	ba.Containers.Put(10001, ca)
+	var buf bytes.Buffer
+	_, err := ba.WriteTo(&buf)
+	if err != nil {
+		t.Fatalf("error writing: %v", err)
+	}
+
+	itr, err := NewRoaringIterator(buf.Bytes())
+	if err != nil {
+		t.Fatalf("error NewRoaringIterator(buf.Bytes()): %v", err)
+	}
+
+	firstCkey, lastCkey, empty := itr.ContainerKeySpan()
+	if empty {
+		t.Fatalf("should not be empty")
+	}
+	if firstCkey != 10 {
+		t.Fatalf("firstCkey should be 10")
+	}
+	if lastCkey != 10001 {
+		t.Fatalf("lastCkey should be 10001")
+	}
+
+	// make and check empty bitmap
+
+	baEmpty := NewFileBitmap()
+	var bufEmpty bytes.Buffer
+	_, err = baEmpty.WriteTo(&bufEmpty)
+	if err != nil {
+		t.Fatalf("error writing: %v", err)
+	}
+
+	itrEmpty, err := NewRoaringIterator(bufEmpty.Bytes())
+	if err != nil {
+		t.Fatalf("error NewRoaringIterator(bufEmpty.Bytes()): %v", err)
+	}
+	_, _, empty = itrEmpty.ContainerKeySpan()
+	if !empty {
+		t.Fatalf("should be empty")
 	}
 }
 
