@@ -599,3 +599,21 @@ func (db *DB) getCursor(tx *Tx) (c *Cursor) {
 		return nil
 	}
 }
+
+// Shared pool for in-memory database pages.
+// These are used before being flushed to disk.
+var pagePool = &sync.Pool{
+	New: func() interface{} {
+		page := make([]byte, PageSize)
+		return &page
+	},
+}
+
+func allocPage() []byte {
+	page := pagePool.Get().(*[]byte)
+	return *page
+}
+
+func freePage(page []byte) {
+	pagePool.Put(&page)
+}
