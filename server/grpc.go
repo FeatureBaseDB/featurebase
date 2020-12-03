@@ -135,12 +135,14 @@ func (h *GRPCHandler) execSQL(ctx context.Context, queryStr string) (pb.ToRowser
 
 // QuerySQL handles the SQL request and sends RowResponses to the stream.
 func (h *GRPCHandler) QuerySQL(req *pb.QuerySQLRequest, stream pb.Pilosa_QuerySQLServer) error {
+	start := time.Now()
 	results, err := h.execSQL(stream.Context(), req.Sql)
+	duration := time.Since(start)
 	if err != nil {
 		return err
 	}
 
-	err = results.ToRows(stream.Send)
+	err = newDurationRowser(results, duration).ToRows(stream.Send)
 	if err != nil {
 		return errors.Wrap(err, "streaming result")
 	}
@@ -161,14 +163,22 @@ func (h *GRPCHandler) QuerySQL(req *pb.QuerySQLRequest, stream pb.Pilosa_QuerySQ
 // concurrently. There is additional discussion and historical context here:
 // https://github.com/molecula/pilosa/pull/644
 func (h *GRPCHandler) QuerySQLUnary(ctx context.Context, req *pb.QuerySQLRequest) (*pb.TableResponse, error) {
+	start := time.Now()
 	results, err := h.execSQL(ctx, req.Sql)
+	duration := int64(time.Since(start))
 	if err != nil {
 		return nil, err
 	}
+
+	var table *pb.TableResponse
 	if results, ok := results.(pb.ToTabler); ok {
-		return results.ToTable()
+		table, err = results.ToTable()
+		table.Duration = duration
+		return table, err
 	}
-	return pb.RowsToTable(results, 0)
+	table, err = pb.RowsToTable(results, 0)
+	table.Duration = duration
+	return table, err
 }
 
 // QueryPQL handles the PQL request and sends RowResponses to the stream.
@@ -200,7 +210,7 @@ func (h *GRPCHandler) QueryPQL(req *pb.QueryPQLRequest, stream pb.Pilosa_QueryPQ
 	}
 
 	t = time.Now()
-	if err := toRowser.ToRows(stream.Send); err != nil {
+	if err := newDurationRowser(toRowser, durQuery).ToRows(stream.Send); err != nil {
 		return errToStatusError(err)
 	}
 	durFormat := time.Since(t)
@@ -245,6 +255,8 @@ func (h *GRPCHandler) QueryPQLUnary(ctx context.Context, req *pb.QueryPQLRequest
 		return nil, errToStatusError(err)
 	}
 	durFormat := time.Since(t)
+
+	table.Duration = int64(durQuery + durFormat)
 
 	h.stats.Timing(pilosa.MetricGRPCUnaryQueryDurationSeconds, durQuery, 0.1)
 	h.stats.Timing(pilosa.MetricGRPCUnaryFormatDurationSeconds, durFormat, 0.1)
@@ -428,6 +440,31 @@ func ToRowserWrapper(result interface{}) (pb.ToRowser, error) {
 		}
 	}
 	return toRowser, nil
+}
+
+// durationRowser is a wrapper for pb.ToRowser that can be used to inject a
+// duration value into the first record in a stream
+type durationRowser struct {
+	pb.ToRowser
+	duration time.Duration
+	once     sync.Once
+}
+
+func (r *durationRowser) ToRows(callback func(*pb.RowResponse) error) error {
+	cb := func(rr *pb.RowResponse) error {
+		r.once.Do(func() {
+			rr.Duration = int64(r.duration)
+		})
+		return callback(rr)
+	}
+	return r.ToRowser.ToRows(cb)
+}
+
+func newDurationRowser(orig pb.ToRowser, duration time.Duration) pb.ToRowser {
+	return &durationRowser{
+		ToRowser: orig,
+		duration: duration,
+	}
 }
 
 // Inspect handles the inspect request and sends an InspectResponse to the stream.

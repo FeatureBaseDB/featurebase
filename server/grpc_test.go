@@ -347,13 +347,17 @@ func TestQueryPQLUnary(t *testing.T) {
 	ctx := context.Background()
 	gh := server.NewGRPCHandler(m.API)
 
-	_, err := gh.QueryPQLUnary(ctx, &pb.QueryPQLRequest{
+	resp, err := gh.QueryPQLUnary(ctx, &pb.QueryPQLRequest{
 		Index: i.Name(),
 		Pql:   `Set(0, f="zero")`,
 	})
 	if err != nil {
 		// Unary query should work
 		t.Fatal(err)
+	}
+
+	if resp.Duration == 0 {
+		t.Fatal("duration not recorded")
 	}
 
 	_, err = gh.QueryPQLUnary(ctx, &pb.QueryPQLRequest{
@@ -824,6 +828,9 @@ func TestQuerySQLUnary(t *testing.T) {
 			if err != nil {
 				t.Fatalf("sql: %s, error: %v", test.sql, err)
 			} else {
+				if resp.Duration == 0 {
+					t.Fatal("duration not recorded")
+				}
 				tr := toTableResponse(resp)
 				if err := test.eq(test.exp, tr); err != nil {
 					t.Fatalf("sql: %s, error: %+v", test.sql, err)
