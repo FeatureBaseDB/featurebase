@@ -3276,6 +3276,60 @@ func TestGetZipfRowsSliceRoaring(t *testing.T) {
 	f.Clean(t)
 }
 
+func prepareSampleRowData(b *testing.B, bits int, rows uint64, width uint64) (*fragment, Tx) {
+	f, _, tx := mustOpenFragment(b, "i", "f", viewStandard, 0, "none")
+	for i := 0; i < bits; i++ {
+		data := getUniformRowsSliceRoaring(rows, int64(rows)+int64(i), 0, width)
+		err := f.importRoaringT(tx, data, false)
+		if err != nil {
+			b.Fatalf("creating sample data: %v", err)
+		}
+	}
+	return f, tx
+}
+
+type txFrag struct {
+	rows, width uint64
+	tx          Tx
+	frag        *fragment
+}
+
+func benchmarkRowsOnTestcase(b *testing.B, ctx context.Context, txf txFrag) {
+	col := uint64(0)
+	for i := 0; i < b.N; i++ {
+		_, err := txf.frag.rows(ctx, txf.tx, 0, roaring.NewBitmapColumnFilter(col))
+		if err != nil {
+			b.Fatalf("retrieving rows for col %d: %v", col, err)
+		}
+		col = (col + 1) % txf.width
+	}
+}
+
+func BenchmarkRows(b *testing.B) {
+	var depths = []uint64{384, 2048}
+	testCases := make([]txFrag, 0, len(depths))
+	defer func() {
+		for _, testCase := range testCases {
+			testCase.frag.Clean(b)
+		}
+	}()
+	bg := context.Background()
+	for _, rows := range depths {
+		frag, tx := prepareSampleRowData(b, 3, rows, ShardWidth)
+		testCases = append(testCases, txFrag{
+			rows:  rows,
+			width: ShardWidth,
+			frag:  frag,
+			tx:    tx,
+		})
+	}
+	for _, testCase := range testCases {
+		b.Run(fmt.Sprintf("%d", testCase.rows), func(b *testing.B) {
+			benchmarkRowsOnTestcase(b, bg, testCase)
+		})
+	}
+}
+
 // getZipfRowsSliceRoaring generates a random fragment with the given number of
 // rows, and 1 bit set in each column. The row each bit is set in is chosen via
 // the Zipf generator, and so will be skewed toward lower row numbers. If this
@@ -3290,6 +3344,32 @@ func getZipfRowsSliceRoaring(numRows uint64, seed int64, startCol, endCol uint64
 	posBuf := make([]uint64, 0, bufSize)
 	for i := uint64(startCol); i < endCol; i++ {
 		row := z.Uint64()
+		posBuf = append(posBuf, row*ShardWidth+i)
+		if len(posBuf) == bufSize {
+			sort.Slice(posBuf, func(i int, j int) bool { return posBuf[i] < posBuf[j] })
+			b.DirectAddN(posBuf...)
+		}
+	}
+	b.DirectAddN(posBuf...)
+	buf := bytes.NewBuffer(make([]byte, 0, 100000))
+	_, err := b.WriteTo(buf)
+	if err != nil {
+		panic(err)
+	}
+	return buf.Bytes()
+}
+
+// getUniformRowsSliceRoaring produces evenly-distributed values as a roaring
+// bitmap slice. This is useful if you want to avoid the higher rows being
+// sparse; see also getZipfRowsSliceRoaring.
+func getUniformRowsSliceRoaring(numRows uint64, seed int64, startCol, endCol uint64) []byte {
+	b := roaring.NewBTreeBitmap()
+	s := rand.NewSource(seed)
+	r := rand.New(s)
+	bufSize := 1 << 14
+	posBuf := make([]uint64, 0, bufSize)
+	for i := uint64(startCol); i < endCol; i++ {
+		row := uint64(r.Int63n(int64(numRows)))
 		posBuf = append(posBuf, row*ShardWidth+i)
 		if len(posBuf) == bufSize {
 			sort.Slice(posBuf, func(i int, j int) bool { return posBuf[i] < posBuf[j] })
