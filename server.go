@@ -326,6 +326,16 @@ func OptServerOpenTranslateStore(fn OpenTranslateStoreFunc) ServerOption {
 	}
 }
 
+// OptServerOpenIDAllocator is a functional option on Server
+// used to specify the ID allocator data store type.
+// Except not really.
+func OptServerOpenIDAllocator(fn OpenIDAllocatorFunc) ServerOption {
+	return func(s *Server) error {
+		s.holderConfig.OpenIDAllocator = fn
+		return nil
+	}
+}
+
 // OptServerOpenTranslateReader is a functional option on Server
 // used to specify the remote translation data reader.
 func OptServerOpenTranslateReader(fn OpenTranslateReaderFunc) ServerOption {

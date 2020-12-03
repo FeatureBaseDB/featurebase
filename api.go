@@ -2082,6 +2082,42 @@ func (api *API) PastQueries(ctx context.Context, remote bool) ([]PastQueryStatus
 	return clusterQueries, nil
 }
 
+func (api *API) ReserveIDs(key IDAllocKey, session [32]byte, offset uint64, count uint64) ([]IDRange, error) {
+	if err := api.validate(apiIDReserve); err != nil {
+		return nil, errors.Wrap(err, "validating api method")
+	}
+
+	if api.holder.isCoordinator() {
+		return api.holder.ida.reserve(key, session, offset, count)
+	}
+
+	return nil, errors.New("cannot reserve IDs on a non-coordinator node")
+}
+
+func (api *API) CommitIDs(key IDAllocKey, session [32]byte, count uint64) error {
+	if err := api.validate(apiIDCommit); err != nil {
+		return errors.Wrap(err, "validating api method")
+	}
+
+	if api.holder.isCoordinator() {
+		return api.holder.ida.commit(key, session, count)
+	}
+
+	return errors.New("cannot commit IDs on a non-coordinator node")
+}
+
+func (api *API) ResetIDAlloc(index string) error {
+	if err := api.validate(apiIDReset); err != nil {
+		return errors.Wrap(err, "validating api method")
+	}
+
+	if api.holder.isCoordinator() {
+		return api.holder.ida.reset(index)
+	}
+
+	return errors.New("cannot reset IDs on a non-coordinator node")
+}
+
 // TranslateIndexDB is an internal function to load the index keys database
 // rd is a boltdb file.
 func (api *API) TranslateIndexDB(ctx context.Context, indexName string, partitionID int, rd io.Reader) error {
@@ -2157,6 +2193,9 @@ const (
 	apiGetTransaction
 	apiActiveQueries
 	apiPastQueries
+	apiIDReserve
+	apiIDCommit
+	apiIDReset
 )
 
 var methodsCommon = map[apiMethod]struct{}{
@@ -2198,4 +2237,7 @@ var methodsNormal = map[apiMethod]struct{}{
 	apiGetTransaction:       {},
 	apiActiveQueries:        {},
 	apiPastQueries:          {},
+	apiIDReserve:            {},
+	apiIDCommit:             {},
+	apiIDReset:              {},
 }

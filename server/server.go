@@ -398,6 +398,7 @@ func (m *Command) SetupServer() error {
 		pilosa.OptServerExecutorPoolSize(m.Config.WorkerPoolSize),
 		pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
 		pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderWithLockerFunc(c, &sync.Mutex{})),
+		pilosa.OptServerOpenIDAllocator(pilosa.OpenIDAllocator),
 		pilosa.OptServerLogger(m.logger),
 		pilosa.OptServerAttrStoreFunc(boltdb.NewAttrStore),
 		pilosa.OptServerSystemInfo(gopsutil.NewSystemInfo()),
