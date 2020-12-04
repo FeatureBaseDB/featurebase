@@ -23,6 +23,7 @@ message RowResponse{
   repeated ColumnInfo headers = 1;
   repeated ColumnResponse columns = 2;
   StatusError StatusError = 3;
+  int64 duration = 4;
 }
 
 message Row {
@@ -33,6 +34,7 @@ message TableResponse{
   repeated ColumnInfo headers = 1;
   repeated Row rows = 2;
   StatusError StatusError = 3;
+  int64 duration = 4;
 }
 
 message ColumnInfo {
