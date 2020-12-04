@@ -5110,9 +5110,6 @@ func TestImportValueConcurrent(t *testing.T) {
 				"blueGreenTx because the lack of transactional consistency " +
 				"from Roaring-per-file will create false comparison " +
 				"failures."))
-		case lmdbTxn:
-			t.Skip(fmt.Sprintf("skipping TestImportValueConcurrent under " +
-				"lmdb since only a single writer is allowed at once."))
 		}
 	}
 

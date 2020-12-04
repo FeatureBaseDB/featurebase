@@ -17,7 +17,6 @@ package pilosa_test
 import (
 	"context"
 	"fmt"
-	"os"
 	"reflect"
 	"testing"
 
@@ -27,59 +26,6 @@ import (
 	"github.com/pilosa/pilosa/v2/server"
 	"github.com/pilosa/pilosa/v2/test"
 )
-
-func skipForNonLMDB(t *testing.T) {
-	src := os.Getenv("PILOSA_TXSRC")
-	if src != "lmdb" {
-		t.Skip("skip if not lmdb")
-	}
-}
-
-var _ = skipForNonLMDB // happy linter
-
-// Can't write it all to one shard like we do (did).
-func Test_DBPerShard_multiple_shards_used(t *testing.T) {
-	skipForNonLMDB(t)
-	c := test.MustRunCluster(t, 1)
-	defer c.Close()
-	hldr := c.GetHolder(0)
-	index := "i"
-	hldr.SetBit(index, "general", 10, 0)
-	hldr.SetBit(index, "general", 10, ShardWidth+1)
-	hldr.SetBit(index, "general", 10, ShardWidth+2)
-
-	hldr.SetBit(index, "general", 11, 2)
-	hldr.SetBit(index, "general", 11, ShardWidth+2)
-
-	types := pilosa.MustTxsrcToTxtype("lmdb")
-	idx := hldr.Index(index)
-	shardsU := []uint64{0, 1, 2}
-	pathShard := []string{}
-
-	// check that 3 different shard databases/files were made
-	for i := 0; i < 2; i++ {
-
-		path, err := hldr.Txf().GetDBShardPath(index, shardsU[i], idx, types[0], !writable)
-		panicOn(err)
-		pathShard = append(pathShard, path)
-
-		if !DirExists(pathShard[i]) {
-			panic(fmt.Sprintf("no shard made for pathShard[%v]='%v'", i, pathShard[i]))
-		}
-		sz, err := pilosa.DiskUse(pathShard[i], "")
-		panicOn(err)
-
-		if sz < 100 {
-			panic(fmt.Sprintf("shard %v was too small", i))
-		}
-	}
-
-	if res, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: index, Query: `Union(Row(general=10), Row(general=11))`}); err != nil {
-		t.Fatal(err)
-	} else if columns := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(columns, []uint64{0, 2, ShardWidth + 1, ShardWidth + 2}) {
-		t.Fatalf("unexpected columns: %+v", columns)
-	}
-}
 
 func TestAPI_SimplerOneNode_ImportColumnKey(t *testing.T) {
 

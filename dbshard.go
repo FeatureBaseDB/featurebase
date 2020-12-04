@@ -478,7 +478,6 @@ func (dbs *DBShard) DumpAll() {
 		switch ty {
 		case roaringTxn:
 		case rbfTxn:
-		case lmdbTxn:
 		case boltTxn:
 		default:
 			panic(fmt.Sprintf("unknown txtyp: '%v'", ty))
@@ -605,8 +604,6 @@ func (per *DBPerShard) GetDBShard(index string, shard uint64, idx *Index) (dbs *
 				registry = globalRoaringReg
 			case rbfTxn:
 				registry = globalRbfDBReg
-			case lmdbTxn:
-				registry = globalLMDBReg
 			case boltTxn:
 				registry = globalBoltReg
 			default:
@@ -888,9 +885,9 @@ func listDirUnderDir(root string, includeRoot bool, requiredSuffix string, ignor
 // The blue is the destination -- this is always types[0].
 // The green source is always types[1]. The mnemonic is blue_geen.
 // The blue is first, so it is in types[0]. The green
-// is second, in types[1]. For example, with PILOSA_TXSRC=lmdb_roaring
-// we have lmdb as blue, and roaring as green. The contents of
-// lmdb must be empty or exactly match roaring. If lmdb
+// is second, in types[1]. For example, with PILOSA_TXSRC=bolt_roaring
+// we have bolt as blue, and roaring as green. The contents of
+// bolt must be empty or exactly match roaring. If bolt
 // starts empty, it will be populated from roaring by
 // populateBlueFromGreen().
 //

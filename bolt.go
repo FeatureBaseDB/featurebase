@@ -37,6 +37,8 @@ import (
 	bolt "go.etcd.io/bbolt"
 )
 
+const isDebugRun = false
+
 // boltRegistrar facilitates shutdown
 // of all the bolt databases started under
 // tests. Its needed because most tests don't cleanup
@@ -1417,6 +1419,21 @@ func (tx *BoltTx) toContainer(typ byte, v []byte) (r *roaring.Container) {
 		w = v
 	}
 	return ToContainer(typ, w)
+}
+
+func ToContainer(typ byte, w []byte) (c *roaring.Container) {
+	switch typ {
+	case roaring.ContainerArray:
+		c = roaring.NewContainerArray(toArray16(w))
+	case roaring.ContainerBitmap:
+		c = roaring.NewContainerBitmap(-1, toArray64(w))
+	case roaring.ContainerRun:
+		c = roaring.NewContainerRun(toInterval16(w))
+	default:
+		panic(fmt.Sprintf("unknown container: %v", typ))
+	}
+	c.SetMapped(true)
+	return c
 }
 
 // StringifiedBoltKeys returns a string with all the container
