@@ -74,7 +74,7 @@ func Test_DBPerShard_GetShardsForIndex_LocalOnly(t *testing.T) {
 	orig := os.Getenv("PILOSA_TXSRC")
 	defer os.Setenv("PILOSA_TXSRC", orig) // must restore or will mess up other tests!
 
-	for _, src := range []string{"lmdb", "roaring", "bolt", "rbf"} {
+	for _, src := range []string{"roaring", "bolt", "rbf"} {
 
 		os.Setenv("PILOSA_TXSRC", src)
 
@@ -132,14 +132,6 @@ rick/_exists/views/standard/fragments/93
 rick/_exists/views/standard/fragments/219
 rick/_exists/views/standard/fragments/223
 `,
-	"lmdb": `
-rick.index.txstores@@@/store-lmdb@@/shard.0093-lmdb@
-rick.index.txstores@@@/store-lmdb@@/shard.0215-lmdb@
-rick.index.txstores@@@/store-lmdb@@/shard.0217-lmdb@
-rick.index.txstores@@@/store-lmdb@@/shard.0219-lmdb@
-rick.index.txstores@@@/store-lmdb@@/shard.0221-lmdb@
-rick.index.txstores@@@/store-lmdb@@/shard.0223-lmdb@
-`,
 	"bolt": `
 rick.index.txstores@@@/store-boltdb@@/shard.0093-boltdb@/bolt.db
 rick.index.txstores@@@/store-boltdb@@/shard.0215-boltdb@/bolt.db
@@ -173,13 +165,6 @@ func makeSampleRoaringDir(root, txsrc string, minBytes int, h *Holder) {
 			shard = shards[i]
 		}
 		switch txsrc {
-		case "lmdb":
-			makeLMDBtestDB(root+sep+fn, h, shard)
-			// also have to make the DBShard in our in-memory tree,
-			// or else the search won't find it because
-			// DBPerShard won't know anything about it.
-			helperCreateDBShard(h, index, shard)
-			continue
 		case "bolt":
 			makeBolttestDB(root+sep+fn, h, shard)
 			helperCreateDBShard(h, index, shard)
@@ -208,14 +193,6 @@ func helperCreateDBShard(h *Holder, index string, shard uint64) {
 	dbs, err := h.txf.dbPerShard.GetDBShard(index, shard, idx)
 	panicOn(err)
 	_ = dbs
-}
-
-func makeLMDBtestDB(path string, h *Holder, shard uint64) {
-	i := uint64(1)
-	w, _ := mustOpenEmptyLMDBWrapper(path)
-	LMDBMustSetBitvalue(w, "index", "field", "view", shard, i)
-	w.Close()
-
 }
 
 func makeBolttestDB(path string, h *Holder, shard uint64) {

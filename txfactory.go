@@ -38,7 +38,6 @@ import (
 // public strings that pilosa/server/config.go can reference
 const (
 	RoaringTxn string = "roaring"
-	LmdbTxn    string = "lmdb"
 	RBFTxn     string = "rbf"
 	BoltTxn    string = "bolt"
 )
@@ -53,7 +52,7 @@ const DefaultTxsrc = RBFTxn
 // which the transaction has committed or rolled back. Since
 // memory segments will be recycled by the underlying databases,
 // this can lead to corruption. When DetectMemAccessPastTx is true,
-// code in lmdb.go will copy the transactionally viewed memory before
+// code in bolt.go will copy the transactionally viewed memory before
 // returning it for bitmap reading, and then zero it or overwrite it
 // with -2 when the Tx completes.
 //
@@ -83,8 +82,7 @@ var sep = string(os.PathSeparator)
 // course that your "new" read Tx actually has an "old" view
 // of the database.
 //
-// At the moment, given that LMDB demands that
-// all write Tx are created and executed on the same C thread, most
+// At the moment, most
 // writes to individual shards are commited eagerly and locally
 // when the `defer finisher(&err0)` is run.
 // This is done by returning a finisher that actually Commits,
@@ -265,16 +263,8 @@ func (qcx *Qcx) GetTx(o Txo) (tx Tx, finisher func(perr *error), err error) {
 	// don't deadlock against themselves under blue-green.
 	o.Write = o.Write || qcx.write
 
-	// note: write Tx were re-using Tx across different goroutines,
-	// which lmdb will not be pleased with. For reads this
-	// should be okay, as the docs say
-	// "If you want to pass read-only transactions across threads,
-	//  you can use the MDB_NOTLS option on the environment."
-	//     -- http://www.lmdb.tech/doc/starting.html
-	// and we always use lmdb.NoTLS as the lmdb-go bindings ensure this.
-	//
-	// So we make ALL write transactions local, and never reuse them
-	// below.
+	// In general, we make ALL write transactions local, and never reuse them
+	// below. Previously this was to help lmdb.
 	//
 	// *However* there is one exception: when we have set RequiredForAtomicWriteTx
 	// for the importing of an AtomicRequest, then we must use that
@@ -400,7 +390,7 @@ func (qcx *Qcx) ListOpenTx() string {
 }
 
 // TxFactory abstracts the creation of Tx interface-level
-// transactions so that RBF, BoltDB, LMDB, or Roaring-fragment-files, or several
+// transactions so that RBF, BoltDB, or Roaring-fragment-files, or several
 // of these at once in parallel, is used as the storage and transction layer.
 type TxFactory struct {
 	typeOfTx string
@@ -435,13 +425,12 @@ const (
 	noneTxn    txtype = 0
 	roaringTxn txtype = 1 // these don't really have any transactions
 	rbfTxn     txtype = 2
-	lmdbTxn    txtype = 3
 	boltTxn    txtype = 4
 )
 
 // these need to be skipped by the holder.go field scanner that
 // calls IsTxDatabasePath
-var allTypesWithSuffixes = []txtype{rbfTxn, lmdbTxn, boltTxn}
+var allTypesWithSuffixes = []txtype{rbfTxn, boltTxn}
 
 // FileSuffix is used to determine backend directory names.
 // We append '@' to be sure we never collide with a field name
@@ -454,8 +443,6 @@ func (ty txtype) FileSuffix() string {
 		return ""
 	case rbfTxn:
 		return "-rbfdb@"
-	case lmdbTxn:
-		return "-lmdb@"
 	case boltTxn:
 		return "-boltdb@"
 	}
@@ -504,8 +491,6 @@ func MustTxsrcToTxtype(txsrc string) (types []txtype) {
 			types = append(types, roaringTxn)
 		case RBFTxn: // "rbf"
 			types = append(types, rbfTxn)
-		case LmdbTxn: // "lmdb"
-			types = append(types, lmdbTxn)
 		case BoltTxn: // "bolt"
 			types = append(types, boltTxn)
 		default:
@@ -886,8 +871,6 @@ func (ty txtype) String() string {
 		return "roaring"
 	case rbfTxn:
 		return "rbf"
-	case lmdbTxn:
-		return "lmdb"
 	case boltTxn:
 		return "bolt"
 	}
@@ -1251,9 +1234,6 @@ func anyGlobalDBWrappersStillOpen() bool {
 		return true
 	}
 	if globalRbfDBReg.Size() != 0 {
-		return true
-	}
-	if globalLMDBReg.Size() != 0 {
 		return true
 	}
 	if globalBoltReg.Size() != 0 {
