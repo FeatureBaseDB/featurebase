@@ -61,7 +61,14 @@ func (c *Cursor) Rows() ([]uint64, error) {
 		if err != nil {
 			break
 		}
-		cell := c.cell()
+
+		elem := &c.stack.elems[c.stack.index]
+		leafPage, _, err := c.tx.readPage(elem.pgno)
+		if err != nil {
+			return nil, err
+		}
+		cell := readLeafCell(leafPage, elem.index)
+
 		vRow := cell.Key >> shardVsContainerExponent
 		if vRow == lastRow {
 			continue
@@ -92,7 +99,12 @@ func (c *Cursor) DumpKeys() {
 		if err == io.EOF {
 			break
 		}
-		cell := c.cell()
+		elem := &c.stack.elems[c.stack.index]
+		leafPage, _, err := c.tx.readPage(elem.pgno)
+		if err != nil {
+			return
+		}
+		cell := readLeafCell(leafPage, elem.index)
 		fmt.Println("key", cell.Key)
 	}
 }
@@ -129,7 +141,11 @@ func (c *Cursor) Row(shard, rowID uint64) (*roaring.Bitmap, error) {
 	}
 	if !ok {
 		elem := &c.stack.elems[c.stack.index]
-		n := readCellN(c.leafPage)
+		leafPage, _, err := c.tx.readPage(elem.pgno)
+		if err != nil {
+			return nil, err
+		}
+		n := readCellN(leafPage)
 		if elem.index >= n {
 			if err := c.goNextPage(); err != nil {
 				return nil, errors.Wrap(err, "row")
@@ -145,7 +161,12 @@ func (c *Cursor) Row(shard, rowID uint64) (*roaring.Bitmap, error) {
 			return nil, err
 		}
 
-		cell := c.cell()
+		elem := &c.stack.elems[c.stack.index]
+		leafPage, _, err := c.tx.readPage(elem.pgno)
+		if err != nil {
+			return nil, err
+		}
+		cell := readLeafCell(leafPage, elem.index)
 		if cell.Key >= hi1 {
 			break
 		}
@@ -157,7 +178,9 @@ func (c *Cursor) Row(shard, rowID uint64) (*roaring.Bitmap, error) {
 // CurrentPageType returns the type of the container currently pointed to by cursor used in testing
 // sometimes the cursor needs to be positions prior to this call with First/Last etc.
 func (c *Cursor) CurrentPageType() ContainerType {
-	cell := c.cell()
+	elem := &c.stack.elems[c.stack.index]
+	leafPage, _, _ := c.tx.readPage(elem.pgno)
+	cell := readLeafCell(leafPage, elem.index)
 	return cell.Type
 }
 
@@ -219,7 +242,7 @@ type Walker interface {
 }
 
 func WalkPage(tx *Tx, pgno uint32, walker Walker) {
-	page, err := tx.readPage(pgno)
+	page, _, err := tx.readPage(pgno)
 	if err != nil {
 		panic(err)
 	}

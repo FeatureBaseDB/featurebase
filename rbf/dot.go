@@ -62,7 +62,7 @@ func dotCell(b []byte, parent string, writer io.Writer) {
 
 // dumpdot recursively writes the tree representation starting from a given page to STDERR.
 func dumpdot(tx *Tx, pgno uint32, parent string, writer io.Writer) {
-	page, err := tx.readPage(pgno)
+	page, _, err := tx.readPage(pgno)
 	if err != nil {
 		panic(err)
 	}

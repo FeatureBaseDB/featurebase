@@ -373,7 +373,7 @@ func (tx *Tx) RootRecords() (records *immutable.SortedMap, err error) {
 
 	records = immutable.NewSortedMap(nil)
 	for pgno := readMetaRootRecordPageNo(tx.meta[:]); pgno != 0; {
-		page, err := tx.readPage(pgno)
+		page, _, err := tx.readPage(pgno)
 		if err != nil {
 			return nil, err
 		}
@@ -401,7 +401,7 @@ func (tx *Tx) writeRootRecordPages(records *immutable.SortedMap) (err error) {
 
 	// Release all existing root record pages.
 	for pgno := readMetaRootRecordPageNo(tx.meta[:]); pgno != 0; {
-		page, err := tx.readPage(pgno)
+		page, _, err := tx.readPage(pgno)
 		if err != nil {
 			return err
 		}
@@ -598,7 +598,12 @@ func (tx *Tx) RoaringBitmap(name string) (*roaring.Bitmap, error) {
 			return nil, err
 		}
 
-		cell := c.cell()
+		elem := &c.stack.elems[c.stack.index]
+		leafPage, _, err := c.tx.readPage(elem.pgno)
+		if err != nil {
+			return nil, err
+		}
+		cell := readLeafCell(leafPage, elem.index)
 		other.Containers.Put(cell.Key, toContainer(cell, tx))
 	}
 }
@@ -629,7 +634,14 @@ func (tx *Tx) container(name string, key uint64) (*roaring.Container, error) {
 		return nil, err
 	}
 
-	return toContainer(c.cell(), tx), nil
+	elem := &c.stack.elems[c.stack.index]
+	leafPage, _, err := c.tx.readPage(elem.pgno)
+	if err != nil {
+		return nil, err
+	}
+	cell := readLeafCell(leafPage, elem.index)
+
+	return toContainer(cell, tx), nil
 }
 
 // PutContainer inserts a container into a bitmap. Overwrites if key already exists.
@@ -733,7 +745,7 @@ func (tx *Tx) checkPageAllocations() error {
 		if isInuse && isFree {
 			return fmt.Errorf("page in-use & free: pgno=%d", pgno)
 		} else if !isInuse && !isFree {
-			page, err := tx.readPage(pgno)
+			page, _, err := tx.readPage(pgno)
 			if err != nil {
 				return err
 			}
@@ -767,7 +779,13 @@ func (tx *Tx) freePageSet() (map[uint32]struct{}, error) {
 			return m, err
 		}
 
-		cell := c.cell()
+		elem := &c.stack.elems[c.stack.index]
+		leafPage, _, err := c.tx.readPage(elem.pgno)
+		if err != nil {
+			return nil, err
+		}
+		cell := readLeafCell(leafPage, elem.index)
+
 		for _, v := range cell.Values(tx) {
 			pgno := uint32((cell.Key << 16) & uint64(v))
 			m[pgno] = struct{}{}
@@ -784,7 +802,7 @@ func (tx *Tx) inusePageSet() (map[uint32]struct{}, error) {
 	for pgno := readMetaRootRecordPageNo(tx.meta[:]); pgno != 0; {
 		m[pgno] = struct{}{}
 
-		page, err := tx.readPage(pgno)
+		page, _, err := tx.readPage(pgno)
 		if err != nil {
 			return nil, err
 		}
@@ -822,7 +840,7 @@ func (tx *Tx) inusePageSet() (map[uint32]struct{}, error) {
 // walkTree recursively iterates over a page and all its children.
 func (tx *Tx) walkTree(pgno, parent uint32, fn func(pgno, parent, typ uint32) error) error {
 	// Read page and iterate over children.
-	page, err := tx.readPage(pgno)
+	page, _, err := tx.readPage(pgno)
 	if err != nil {
 		return err
 	}
@@ -892,7 +910,13 @@ func (tx *Tx) nextFreelistPageNo() (uint32, error) {
 		return 0, err
 	}
 
-	cell := c.cell()
+	elem := &c.stack.elems[c.stack.index]
+	leafPage, _, err := c.tx.readPage(elem.pgno)
+	if err != nil {
+		return 0, err
+	}
+	cell := readLeafCell(leafPage, elem.index)
+
 	v := cell.firstValue(tx)
 
 	pgno := uint32((cell.Key << 16) | uint64(v))
@@ -914,7 +938,7 @@ func (tx *Tx) freePgno(pgno uint32) error {
 
 // deallocateTree recursively all pages in a btree.
 func (tx *Tx) deallocateTree(pgno uint32) error {
-	page, err := tx.readPage(pgno)
+	page, _, err := tx.readPage(pgno)
 	if err != nil {
 		return err
 	}
@@ -936,34 +960,36 @@ func (tx *Tx) deallocateTree(pgno uint32) error {
 	}
 }
 
-func (tx *Tx) readPage(pgno uint32) ([]byte, error) {
+func (tx *Tx) readPage(pgno uint32) (_ []byte, isHeap bool, err error) {
 	// Meta page is always cached on the transaction.
 	if pgno == 0 {
-		return tx.meta[:], nil
+		return tx.meta[:], false, nil
 	}
 
 	// Verify page number requested is within current size of database.
 	pageN := readMetaPageN(tx.meta[:])
 	if pgno > pageN {
-		return nil, fmt.Errorf("rbf: page read out of bounds: pgno=%d max=%d", pgno, pageN)
+		return nil, false, fmt.Errorf("rbf: page read out of bounds: pgno=%d max=%d", pgno, pageN)
 	}
 
 	// Check if page has been updated in this tx.
 	if tx.writable {
 		if page := tx.dirtyPages[pgno]; page != nil {
-			return page, nil
+			return page, true, nil
 		} else if page := tx.dirtyBitmapPages[pgno]; page != nil {
-			return page, nil
+			return page, true, nil
 		}
 	}
 
 	// Check if page is remapped in WAL.
 	if walID, ok := tx.pageMap.Get(pgno); ok {
-		return tx.db.readWALPageByID(walID)
+		buf, err := tx.db.readWALPageByID(walID)
+		return buf, false, err
 	}
 
 	// Otherwise read directly from DB.
-	return tx.db.readDBPage(pgno)
+	buf, err := tx.db.readDBPage(pgno)
+	return buf, false, err
 }
 
 func (tx *Tx) writePage(page []byte) error {
@@ -1001,7 +1027,7 @@ func (tx *Tx) AddRoaring(name string, bm *roaring.Bitmap) (changed bool, err err
 }
 
 func (tx *Tx) leafCellBitmap(pgno uint32) (uint32, []uint64, error) {
-	page, err := tx.readPage(pgno)
+	page, _, err := tx.readPage(pgno)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -1053,7 +1079,14 @@ func (tx *Tx) ForEachRange(name string, start, end uint64, fn func(uint64) error
 			return err
 		}
 
-		switch cell := c.cell(); cell.Type {
+		elem := &c.stack.elems[c.stack.index]
+		leafPage, _, err := c.tx.readPage(elem.pgno)
+		if err != nil {
+			return err
+		}
+		cell := readLeafCell(leafPage, elem.index)
+
+		switch cell.Type {
 		case ContainerTypeArray:
 			for _, lo := range toArray16(cell.Data) {
 				v := cell.Key<<16 | uint64(lo)
@@ -1146,7 +1179,14 @@ func (tx *Tx) Count(name string) (uint64, error) {
 			return 0, err
 		}
 
-		n += uint64(c.cell().BitN)
+		elem := &c.stack.elems[c.stack.index]
+		leafPage, _, err := c.tx.readPage(elem.pgno)
+		if err != nil {
+			return 0, err
+		}
+		cell := readLeafCell(leafPage, elem.index)
+
+		n += uint64(cell.BitN)
 	}
 	return n, nil
 }
@@ -1169,7 +1209,13 @@ func (tx *Tx) Max(name string) (uint64, error) {
 		return 0, err
 	}
 
-	cell := c.cell()
+	elem := &c.stack.elems[c.stack.index]
+	leafPage, _, err := c.tx.readPage(elem.pgno)
+	if err != nil {
+		return 0, err
+	}
+	cell := readLeafCell(leafPage, elem.index)
+
 	return uint64((cell.Key << 16) | uint64(cell.lastValue(tx))), nil
 }
 
@@ -1191,7 +1237,13 @@ func (tx *Tx) Min(name string) (uint64, bool, error) {
 		return 0, false, err
 	}
 
-	cell := c.cell()
+	elem := &c.stack.elems[c.stack.index]
+	leafPage, _, err := c.tx.readPage(elem.pgno)
+	if err != nil {
+		return 0, false, err
+	}
+	cell := readLeafCell(leafPage, elem.index)
+
 	return uint64((cell.Key << 16) | uint64(cell.firstValue(tx))), true, nil
 }
 
@@ -1252,7 +1304,13 @@ func (tx *Tx) CountRange(name string, start, end uint64) (uint64, error) {
 			return 0, err
 		}
 
-		c := csr.cell()
+		elem := &csr.stack.elems[csr.stack.index]
+		leafPage, _, err := csr.tx.readPage(elem.pgno)
+		if err != nil {
+			return 0, err
+		}
+		c := readLeafCell(leafPage, elem.index)
+
 		k := c.Key
 		if k > ekey {
 			break
@@ -1324,7 +1382,12 @@ func (tx *Tx) OffsetRange(name string, offset, start, endx uint64) (*roaring.Bit
 			return nil, err
 		}
 
-		cell := c.cell()
+		elem := &c.stack.elems[c.stack.index]
+		leafPage, _, err := c.tx.readPage(elem.pgno)
+		if err != nil {
+			return nil, err
+		}
+		cell := readLeafCell(leafPage, elem.index)
 		ckey := cell.Key
 
 		// >= hi1 is correct b/c endx cannot have any lowbits set.
@@ -1356,7 +1419,9 @@ func (itr *containerIterator) Next() bool {
 
 // Value returns the current key & container.
 func (itr *containerIterator) Value() (uint64, *roaring.Container) {
-	cell := itr.cursor.cell()
+	elem := &itr.cursor.stack.elems[itr.cursor.stack.index]
+	leafPage, _, _ := itr.cursor.tx.readPage(elem.pgno)
+	cell := readLeafCell(leafPage, elem.index)
 	return cell.Key, toContainer(cell, itr.cursor.tx)
 }
 
@@ -1404,7 +1469,12 @@ func (tx *Tx) DumpString(short bool, shard uint64) (r string) {
 				break
 			}
 			panicOn(err)
-			cell := c.cell()
+
+			elem := &c.stack.elems[c.stack.index]
+			leafPage, _, err := c.tx.readPage(elem.pgno)
+			panicOn(err)
+			cell := readLeafCell(leafPage, elem.index)
+
 			ckey := cell.Key
 			ct := toContainer(cell, tx)
 
@@ -1532,7 +1602,13 @@ func (tx *Tx) ImportRoaringBits(name string, itr roaring.RoaringIterator, clear 
 		if exact, err := cur.Seek(itrKey); err != nil {
 			return changed, rowSet, err
 		} else if exact {
-			oldC = toContainer(cur.cell(), tx)
+			elem := &cur.stack.elems[cur.stack.index]
+			leafPage, _, err := cur.tx.readPage(elem.pgno)
+			if err != nil {
+				return changed, rowSet, err
+			}
+			cell := readLeafCell(leafPage, elem.index)
+			oldC = toContainer(cell, tx)
 		}
 
 		if oldC == nil || oldC.N() == 0 {
@@ -1687,7 +1763,7 @@ func (tx *Tx) Pages(pgnos []uint32) ([]Page, error) {
 	// Loop over each requested page number and extract additional data.
 	var pages []Page
 	for _, pgno := range pgnos {
-		buf, err := tx.readPage(pgno)
+		buf, _, err := tx.readPage(pgno)
 		if err != nil {
 			return nil, err
 		}
@@ -1805,7 +1881,7 @@ func (tx *Tx) PageInfos() ([]PageInfo, error) {
 
 // metaPageInfo returns page metadata for the meta page.
 func (tx *Tx) metaPageInfo() (*MetaPageInfo, error) {
-	buf, err := tx.readPage(0)
+	buf, _, err := tx.readPage(0)
 	if err != nil {
 		return nil, err
 	}
@@ -1822,7 +1898,7 @@ func (tx *Tx) metaPageInfo() (*MetaPageInfo, error) {
 
 // rootRecordPageInfo returns page metadata for a root record page.
 func (tx *Tx) rootRecordPageInfo(pgno uint32) (*RootRecordPageInfo, error) {
-	buf, err := tx.readPage(pgno)
+	buf, _, err := tx.readPage(pgno)
 	if err != nil {
 		return nil, err
 	}
@@ -1835,7 +1911,7 @@ func (tx *Tx) rootRecordPageInfo(pgno uint32) (*RootRecordPageInfo, error) {
 
 func (tx *Tx) walkPageInfo(infos []PageInfo, root uint32, name string) error {
 	return tx.walkTree(root, 0, func(pgno, parent, typ uint32) error {
-		buf, err := tx.readPage(pgno)
+		buf, _, err := tx.readPage(pgno)
 		if err != nil {
 			return err
 		}
@@ -1873,7 +1949,8 @@ func (tx *Tx) walkPageInfo(infos []PageInfo, root uint32, name string) error {
 
 // PageData returns the raw page data for a single page.
 func (tx *Tx) PageData(pgno uint32) ([]byte, error) {
-	return tx.readPage(pgno)
+	buf, _, err := tx.readPage(pgno)
+	return buf, err
 }
 
 type PageInfo interface {

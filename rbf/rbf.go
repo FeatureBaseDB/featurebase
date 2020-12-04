@@ -682,7 +682,7 @@ func Pagedump(b []byte, indent string, writer io.Writer) {
 
 func Walk(tx *Tx, pgno uint32, v func(uint32, []*RootRecord)) {
 	for pgno := readMetaRootRecordPageNo(tx.meta[:]); pgno != 0; {
-		page, err := tx.readPage(pgno)
+		page, _, err := tx.readPage(pgno)
 		if err != nil {
 			panic(err)
 		}
