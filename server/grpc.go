@@ -165,20 +165,22 @@ func (h *GRPCHandler) QuerySQL(req *pb.QuerySQLRequest, stream pb.Pilosa_QuerySQ
 func (h *GRPCHandler) QuerySQLUnary(ctx context.Context, req *pb.QuerySQLRequest) (*pb.TableResponse, error) {
 	start := time.Now()
 	results, err := h.execSQL(ctx, req.Sql)
-	duration := int64(time.Since(start))
 	if err != nil {
 		return nil, err
 	}
 
 	var table *pb.TableResponse
-	if results, ok := results.(pb.ToTabler); ok {
+	switch results := results.(type) {
+	case pb.ToTabler:
 		table, err = results.ToTable()
-		table.Duration = duration
-		return table, err
+	default:
+		table, err = pb.RowsToTable(results, 0)
 	}
-	table, err = pb.RowsToTable(results, 0)
-	table.Duration = duration
-	return table, err
+	if err != nil {
+		return nil, err
+	}
+	table.Duration = int64(time.Since(start))
+	return table, nil
 }
 
 // QueryPQL handles the PQL request and sends RowResponses to the stream.
