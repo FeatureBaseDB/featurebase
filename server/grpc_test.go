@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/pilosa/pilosa/v2"
@@ -371,6 +372,89 @@ func TestQueryPQLUnary(t *testing.T) {
 	}
 }
 
+func TestQueryPQL(t *testing.T) {
+	// TODO: Replace TestQueryPQL and TestQueryPQLUnary with table-driven test, like TestQuerySQL
+	m := test.RunCommand(t)
+	defer m.Close()
+
+	i := m.MustCreateIndex(t, "i", pilosa.IndexOptions{Keys: false, TrackExistence: true})
+	m.MustCreateField(t, i.Name(), "f", pilosa.OptFieldKeys())
+	gh := server.NewGRPCHandler(m.API)
+
+	mock := &mockPilosa_QuerySQLServer{}
+
+	err := gh.QueryPQL(&pb.QueryPQLRequest{
+		Index: i.Name(),
+		Pql:   `Set(0, f="zero")`,
+	}, mock)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(mock.Results) != 1 {
+		t.Fatal("expecting one result")
+	}
+
+	if len(mock.Results[0].Headers) != 1 {
+		t.Fatal("expecting one header")
+	}
+
+	if len(mock.Results[0].Columns) != 1 {
+		t.Fatal("expecting one column")
+	}
+
+	if mock.Results[0].Duration == 0 {
+		t.Fatal("expecting non-zero duration")
+	}
+
+	// Set second value so that All() returns more than one result
+	err = gh.QueryPQL(&pb.QueryPQLRequest{
+		Index: i.Name(),
+		Pql:   `Set(1, f="zero")`,
+	}, mock)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mock.clearResults()
+
+	err = gh.QueryPQL(&pb.QueryPQLRequest{
+		Index: i.Name(),
+		Pql:   `All()`,
+	}, mock)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(mock.Results) != 2 {
+		t.Fatal("expecting two results")
+	}
+
+	if len(mock.Results[0].Headers) != 1 {
+		t.Fatal("expecting one header")
+	}
+
+	if len(mock.Results[0].Columns) != 1 {
+		t.Fatal("expecting one column")
+	}
+
+	if len(mock.Results[1].Headers) != 0 {
+		t.Fatal("expecting no headers on second result")
+	}
+
+	if len(mock.Results[1].Columns) != 1 {
+		t.Fatal("expecting one column on second result")
+	}
+
+	if mock.Results[0].Duration == 0 {
+		t.Fatal("expecting non-zero duration")
+	}
+
+	if mock.Results[1].Duration != 0 {
+		t.Fatal("expecting zero duration on second result")
+	}
+}
+
 type (
 	tableResponse struct {
 		headers []columnInfo
@@ -386,7 +470,7 @@ type (
 	columnResponse interface{}
 )
 
-func TestQuerySQLUnary(t *testing.T) {
+func TestQuerySQL(t *testing.T) {
 
 	ctx := context.Background()
 	gh, tearDownFunc := setUpTestQuerySQLUnary(ctx, t)
@@ -837,6 +921,24 @@ func TestQuerySQLUnary(t *testing.T) {
 				}
 			}
 		})
+		t.Run("test-"+strconv.Itoa(i)+"-streaming", func(t *testing.T) {
+			if strings.HasPrefix(test.sql, "drop table") {
+				t.Skip("drop statements can only run once")
+			}
+			mock := &mockPilosa_QuerySQLServer{}
+			err := gh.QuerySQL(&pb.QuerySQLRequest{Sql: test.sql}, mock)
+			if err != nil {
+				t.Fatalf("sql: %s, error: %v", test.sql, err)
+			} else {
+				if mock.Results[0].Duration == 0 {
+					t.Fatal("duration not recorded")
+				}
+				if len(mock.Results) > 1 && mock.Results[1].Duration != 0 {
+					t.Fatal("duration on second result expected to be zero")
+				}
+				// TODO: test result values
+			}
+		})
 	}
 }
 
@@ -1105,4 +1207,22 @@ func equalUnordered(exp tableResponse, got tableResponse) error {
 		return fmt.Errorf("got incorrect rows: %+v", got.rows)
 	}
 	return nil
+}
+
+type mockPilosa_QuerySQLServer struct {
+	pb.Pilosa_QuerySQLServer
+	Results []*pb.RowResponse
+}
+
+func (m *mockPilosa_QuerySQLServer) Send(result *pb.RowResponse) error {
+	m.Results = append(m.Results, result)
+	return nil
+}
+
+func (m *mockPilosa_QuerySQLServer) Context() context.Context {
+	return context.Background()
+}
+
+func (m *mockPilosa_QuerySQLServer) clearResults() {
+	m.Results = m.Results[:0]
 }
