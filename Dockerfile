@@ -5,9 +5,9 @@ ARG MAKE_FLAGS
 
 COPY . pilosa
 
-RUN cd pilosa && make install FLAGS="-a -mod=vendor ${BUILD_FLAGS}" ${MAKE_FLAGS}
+RUN cd pilosa && CGO_ENABLED=0 make install FLAGS="-a -mod=vendor ${BUILD_FLAGS}" ${MAKE_FLAGS}
 
-FROM alpine:3.9.4
+FROM alpine:3.12.1
 
 LABEL maintainer "dev@pilosa.com"
 
