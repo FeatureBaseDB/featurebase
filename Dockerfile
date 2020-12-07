@@ -5,15 +5,13 @@ ARG MAKE_FLAGS
 
 COPY . pilosa
 
-RUN cd pilosa && make install FLAGS="-a -mod=vendor ${BUILD_FLAGS}" ${MAKE_FLAGS}
+RUN cd pilosa && CGO_ENABLED=0 make install FLAGS="-a -mod=vendor ${BUILD_FLAGS}" ${MAKE_FLAGS}
 
-FROM ubuntu:20.10
+FROM alpine:3.12.1
 
 LABEL maintainer "dev@pilosa.com"
 
-RUN apt-get update
-## debug image: RUN apt-get install -y curl htop vim golang tree jq netcat
-RUN apt-get install -y curl jq
+RUN apk add --no-cache curl jq
 
 COPY --from=builder /go/bin/pilosa /pilosa
 
