@@ -51,6 +51,7 @@ func init() {
 	// keeper linter happy
 	_ = pp
 	_ = vv
+	_ = DirExists
 }
 
 func PanicOn(err error) {

@@ -33,7 +33,6 @@ type Cursor struct {
 	buffered bool
 
 	// buffers
-	leafPage  []byte
 	array     [ArrayMaxSize + 1]uint16
 	rle       [RLEMaxSize + 1]roaring.Interval16
 	leafCells [PageSize / 8]leafCell
@@ -140,7 +139,13 @@ func (c *Cursor) Add(v uint64) (changed bool, err error) {
 	}
 
 	// If the container exists and bit is not set then update the page.
-	cell := c.cell()
+	elem := &c.stack.elems[c.stack.index]
+	leafPage, _, err := c.tx.readPage(elem.pgno)
+	if err != nil {
+		return false, err
+	}
+	cell := readLeafCell(leafPage, elem.index)
+
 	switch cell.Type {
 	case ContainerTypeArray:
 		// Exit if value exists in array container.
@@ -205,7 +210,13 @@ func (c *Cursor) Remove(v uint64) (changed bool, err error) {
 	}
 
 	// If the container exists and bit is not set then update the page.
-	cell := c.cell()
+	elem := &c.stack.elems[c.stack.index]
+	leafPage, _, err := c.tx.readPage(elem.pgno)
+	if err != nil {
+		return false, err
+	}
+	cell := readLeafCell(leafPage, elem.index)
+
 	switch cell.Type {
 	case ContainerTypeArray:
 		// Exit if value does not exists in array container.
@@ -315,7 +326,13 @@ func (c *Cursor) Contains(v uint64) (exists bool, err error) {
 	}
 
 	// If the container exists then check for low bits existence.
-	cell := c.cell()
+	elem := &c.stack.elems[c.stack.index]
+	leafPage, _, err := c.tx.readPage(elem.pgno)
+	if err != nil {
+		return false, err
+	}
+	cell := readLeafCell(leafPage, elem.index)
+
 	switch cell.Type {
 	case ContainerTypeArray:
 		a := toArray16(cell.Data)
@@ -351,14 +368,16 @@ func toPgno(val []byte) uint32 {
 }
 
 func (c *Cursor) putLeafCell(in leafCell) (err error) {
-
-	leafPage := c.leafPage // the last read leaf page
 	elem := &c.stack.elems[c.stack.index]
+	leafPage, isHeap, err := c.tx.readPage(elem.pgno) // the last read leaf page
+	if err != nil {
+		return err
+	}
 	cellN := readCellN(leafPage)
 
 	// Determine if the insert/update will overflow the page.
 	// If it doesn't then we can do an optimized write where we don't deserialize.
-	isInsert := elem.index >= cellN || c.Key() != in.Key
+	isInsert := elem.index >= cellN || pageKeyAt(leafPage, elem.index) != in.Key
 	newEstPageSize := leafPageSize(leafPage)
 	if isInsert {
 		newEstPageSize += in.Size() + leafCellIndexElemSize
@@ -477,6 +496,11 @@ func (c *Cursor) putLeafCell(in leafCell) (err error) {
 		parents = append(parents, parent)
 	}
 
+	// Free the source page once we've finished with it if it is on heap.
+	if isHeap {
+		freePage(leafPage)
+	}
+
 	// TODO(BBJ): Update page in buffer & cursor stack.
 
 	// If this is not a split then exit now.
@@ -498,8 +522,11 @@ func (c *Cursor) putLeafCell(in leafCell) (err error) {
 // putLeafCellFast quickly insert or updates a cell on a leaf page.
 // It works by shifting bytes around instead of deserializing. This must not overflow.
 func (c *Cursor) putLeafCellFast(in leafCell, isInsert bool) (err error) {
-	src := c.leafPage
 	elem := &c.stack.elems[c.stack.index]
+	src, isHeap, err := c.tx.readPage(elem.pgno)
+	if err != nil {
+		return err
+	}
 	srcCellN := readCellN(src)
 
 	// Determine the cell count of the new page.
@@ -509,34 +536,50 @@ func (c *Cursor) putLeafCellFast(in leafCell, isInsert bool) (err error) {
 	}
 
 	// Write page header.
-	dst := make([]byte, PageSize)
+	dst := allocPage() // make([]byte, PageSize)
 	writePageNo(dst, readPageNo(src))
 	writeFlags(dst, PageTypeLeaf)
 	writeCellN(dst, dstCellN)
 
-	// Loop over source page elements and copy them to the new page.
+	// Copy data before index.
 	offset := dataOffset(dstCellN)
-	for i, j := 0, 0; j < dstCellN; i, j = i+1, j+1 {
-		// If positioned at the insert/update index, write the new cell.
-		if i == elem.index {
-			writeLeafCell(dst[:], j, offset, in)
-			offset += align8(in.Size())
 
-			// If this is an update, skip to the next element.
-			if !isInsert {
-				continue
-			}
+	if elem.index > 0 {
+		srcStart := dataOffset(srcCellN)
+		srcEnd := readCellEndingOffset(src, elem.index-1)
+		shiftN := offset - srcStart
+		copy(dst[offset:], src[srcStart:srcEnd])
+		offset += align8(srcEnd - srcStart)
 
-			// If this is an insert, move the dst position forward.
-			j++
+		// Rewrite initial index slots by position moved.
+		for i := 0; i < elem.index; i++ {
+			writeCellOffset(dst, i, readCellOffset(src, i)+shiftN)
 		}
+	}
 
-		// Copy the raw bytes from the src page to the dst page.
-		if i < srcCellN {
-			srcCellBuf := readLeafCellBytesAtOffset(src, readCellOffset(src, i))
-			writeCellOffset(dst, j, offset)
-			copy(dst[offset:], srcCellBuf)
-			offset += align8(len(srcCellBuf))
+	// Insert new row.
+	writeLeafCell(dst[:], elem.index, offset, in)
+	offset += align8(in.Size())
+
+	// Copy data after inserted element.
+	if (isInsert && elem.index < srcCellN) || (!isInsert && elem.index < srcCellN-1) {
+		var srcStart int
+		if isInsert {
+			srcStart = readCellOffset(src, elem.index)
+		} else {
+			srcStart = readCellOffset(src, elem.index+1)
+		}
+		srcEnd := readCellEndingOffset(src, srcCellN-1)
+		copy(dst[offset:], src[srcStart:srcEnd])
+
+		// Rewrite ending index slots by position moved.
+		shiftN := offset - srcStart
+		for i := elem.index + 1; i < dstCellN; i++ {
+			srci := i
+			if isInsert {
+				srci--
+			}
+			writeCellOffset(dst, i, readCellOffset(src, srci)+shiftN)
 		}
 	}
 
@@ -545,15 +588,24 @@ func (c *Cursor) putLeafCellFast(in leafCell, isInsert bool) (err error) {
 		return err
 	}
 
+	// Free page if on heap.
+	if isHeap {
+		freePage(src)
+	}
 	return nil
 }
 
 // deleteLeafCell removes a cell from the currently positioned page & index.
 func (c *Cursor) deleteLeafCell(key uint64) (err error) {
-	cells := readLeafCells(c.leafPage, c.leafCells[:])
 	elem := &c.stack.elems[c.stack.index]
+	leafPage, _, err := c.tx.readPage(elem.pgno)
+	if err != nil {
+		return err
+	}
+	cells := readLeafCells(leafPage, c.leafCells[:])
 	oldPageKey := cells[0].Key
-	cell := c.cell()
+	cell := readLeafCell(leafPage, elem.index)
+
 	if cell.Type == ContainerTypeBitmapPtr {
 		if err := c.tx.freePgno(toPgno(cell.Data)); err != nil {
 			return err
@@ -600,7 +652,7 @@ func (c *Cursor) putBranchCells(stackIndex int, newCells []branchCell) (err erro
 	elem := &c.stack.elems[stackIndex]
 
 	// Read branch page from disk. The current buffer is the leaf page.
-	page, err := c.tx.readPage(elem.pgno)
+	page, _, err := c.tx.readPage(elem.pgno)
 	if err != nil {
 		return err
 	}
@@ -680,7 +732,7 @@ func (c *Cursor) updateBranchCell(stackIndex int, newKey uint64) (err error) {
 	elem := &c.stack.elems[stackIndex]
 
 	// Read branch page from disk. The current buffer is the leaf page.
-	page, err := c.tx.readPage(elem.pgno)
+	page, _, err := c.tx.readPage(elem.pgno)
 	if err != nil {
 		return err
 	}
@@ -716,7 +768,7 @@ func (c *Cursor) deleteBranchCell(stackIndex int, key uint64) (err error) {
 	elem := &c.stack.elems[stackIndex]
 
 	// Read branch page from disk. The current buffer is the leaf page.
-	page, err := c.tx.readPage(elem.pgno)
+	page, _, err := c.tx.readPage(elem.pgno)
 	if err != nil {
 		return err
 	}
@@ -730,7 +782,7 @@ func (c *Cursor) deleteBranchCell(stackIndex int, key uint64) (err error) {
 
 	// If the root only has one node, replace it with its child.
 	if stackIndex == 0 && len(cells) == 1 {
-		target, err := c.tx.readPage(cells[0].Pgno)
+		target, _, err := c.tx.readPage(cells[0].Pgno)
 		if err != nil {
 			return err
 		}
@@ -837,16 +889,10 @@ func splitBranchCells(cells []branchCell) [][]branchCell {
 	return slices
 }
 
-// Key returns the key that the cursor is currently positioned over.
-func (c *Cursor) Key() uint64 {
-	elem := &c.stack.elems[c.stack.index]
-	offset := readCellOffset(c.leafPage, elem.index)
-	return *(*uint64)(unsafe.Pointer(&c.leafPage[offset]))
-}
-
-func (c *Cursor) cell() leafCell {
-	elem := &c.stack.elems[c.stack.index]
-	return readLeafCell(c.leafPage[:], elem.index)
+// pageKeyAt returns the key at the given index of the page.
+func pageKeyAt(page []byte, index int) uint64 {
+	offset := readCellOffset(page, index)
+	return *(*uint64)(unsafe.Pointer(&page[offset]))
 }
 
 // First moves to the first element of the btree.
@@ -856,7 +902,7 @@ func (c *Cursor) First() error {
 	for c.stack.index = 0; ; c.stack.index++ {
 		elem := &c.stack.elems[c.stack.index]
 
-		buf, err := c.tx.readPage(elem.pgno)
+		buf, _, err := c.tx.readPage(elem.pgno)
 		if err != nil {
 			return err
 		}
@@ -874,7 +920,6 @@ func (c *Cursor) First() error {
 			}
 
 		case PageTypeLeaf:
-			c.leafPage = buf
 			elem.index = 0
 			if readCellN(buf) == 0 {
 				return io.EOF // root leaf with no elements
@@ -894,7 +939,7 @@ func (c *Cursor) Last() error {
 	for c.stack.index = 0; ; c.stack.index++ {
 		elem := &c.stack.elems[c.stack.index]
 
-		buf, err := c.tx.readPage(elem.pgno)
+		buf, _, err := c.tx.readPage(elem.pgno)
 		if err != nil {
 			return err
 		}
@@ -912,7 +957,6 @@ func (c *Cursor) Last() error {
 
 		case PageTypeLeaf:
 			elem.index = readCellN(buf) - 1
-			c.leafPage = buf
 			if readCellN(buf) == 0 {
 				return io.EOF // root leaf with no elements
 			}
@@ -932,7 +976,7 @@ func (c *Cursor) Seek(key uint64) (exact bool, err error) {
 		elem := &c.stack.elems[c.stack.index]
 		assert(elem.pgno != 0) // cursor should never point to page zero (meta)
 
-		buf, err := c.tx.readPage(elem.pgno)
+		buf, _, err := c.tx.readPage(elem.pgno)
 		if err != nil {
 			return false, err
 		}
@@ -974,7 +1018,6 @@ func (c *Cursor) Seek(key uint64) (exact bool, err error) {
 				return 1
 			})
 			elem.index = index
-			c.leafPage = buf
 			return xact, nil
 
 		default:
@@ -985,18 +1028,24 @@ func (c *Cursor) Seek(key uint64) (exact bool, err error) {
 
 // Next moves to the next element of the btree. Returns EOF if no more elements exist.
 func (c *Cursor) Next() error {
+	elem := &c.stack.elems[c.stack.index]
+	leafPage, _, err := c.tx.readPage(elem.pgno)
+	if err != nil {
+		return err
+	}
+
 	if c.buffered {
 		c.buffered = false
 
 		// Move to next available element if we are past the last cell in the page.
-		if elem := &c.stack.elems[c.stack.index]; elem.index >= readCellN(c.leafPage) {
+		if elem.index >= readCellN(leafPage) {
 			return c.goNextPage()
 		}
 		return nil
 	}
 
 	// Move forward to the next leaf element if available.
-	if elem := &c.stack.elems[c.stack.index]; elem.index < readCellN(c.leafPage)-1 {
+	if elem.index < readCellN(leafPage)-1 {
 		elem.index++
 		return nil
 	}
@@ -1035,7 +1084,7 @@ func (c *Cursor) Prev() error {
 	for ; ; c.stack.index++ {
 		elem := &c.stack.elems[c.stack.index]
 
-		buf, err := c.tx.readPage(elem.pgno)
+		buf, _, err := c.tx.readPage(elem.pgno)
 		if err != nil {
 			return err
 		}
@@ -1051,7 +1100,6 @@ func (c *Cursor) Prev() error {
 
 		case PageTypeLeaf:
 			elem.index = readCellN(buf) - 1
-			c.leafPage = buf
 			return nil
 		default:
 			return fmt.Errorf("rbf.Cursor.Prev(): invalid page type: pgno=%d type=%d", elem.pgno, typ)
@@ -1059,13 +1107,25 @@ func (c *Cursor) Prev() error {
 	}
 }
 
+// Key returns the key for the container the cursor is currently pointing to.
+func (c *Cursor) Key() uint64 {
+	elem := &c.stack.elems[c.stack.index]
+	leafPage, _, _ := c.tx.readPage(elem.pgno)
+	if readCellN(leafPage[:]) == 0 {
+		return 0
+	}
+	cell := readLeafCell(leafPage, elem.index)
+	return cell.Key
+}
+
 // Values returns the values for the container the cursor is currently pointing to.
 func (c *Cursor) Values() []uint16 {
 	elem := &c.stack.elems[c.stack.index]
-	if readCellN(c.leafPage[:]) == 0 {
+	leafPage, _, _ := c.tx.readPage(elem.pgno)
+	if readCellN(leafPage[:]) == 0 {
 		return nil
 	}
-	cell := readLeafCell(c.leafPage[:], elem.index)
+	cell := readLeafCell(leafPage, elem.index)
 	return cell.Values(c.tx)
 }
 
@@ -1079,7 +1139,7 @@ type stackElem struct {
 func (c *Cursor) goNextPage() error {
 	for c.stack.index--; c.stack.index >= 0; c.stack.index-- {
 		elem := &c.stack.elems[c.stack.index]
-		if buf, err := c.tx.readPage(elem.pgno); err != nil {
+		if buf, _, err := c.tx.readPage(elem.pgno); err != nil {
 			return err
 		} else if n := readCellN(buf); elem.index+1 < n {
 			elem.index++
@@ -1096,7 +1156,7 @@ func (c *Cursor) goNextPage() error {
 	// Traverse back down the stack to find the first element in each page.
 	for ; ; c.stack.index++ {
 		elem := &c.stack.elems[c.stack.index]
-		buf, err := c.tx.readPage(elem.pgno)
+		buf, _, err := c.tx.readPage(elem.pgno)
 		if err != nil {
 			return err
 		}
@@ -1110,7 +1170,6 @@ func (c *Cursor) goNextPage() error {
 			}
 		case PageTypeLeaf:
 			elem.index = 0
-			c.leafPage = buf
 			return nil
 		default:
 			return fmt.Errorf("rbf.Cursor.Next(): invalid page type: pgno=%d type=%d", elem.pgno, typ)
@@ -1163,7 +1222,13 @@ func ConvertToLeafArgs(key uint64, c *roaring.Container) (result leafCell) {
 }
 
 func (c *Cursor) merge(key uint64, data *roaring.Container) (bool, error) {
-	cell := c.cell()
+	elem := &c.stack.elems[c.stack.index]
+	leafPage, _, err := c.tx.readPage(elem.pgno)
+	if err != nil {
+		return false, err
+	}
+	cell := readLeafCell(leafPage, elem.index)
+
 	var container *roaring.Container
 	switch cell.Type {
 	case ContainerTypeArray:
@@ -1246,7 +1311,13 @@ func (c *Cursor) RemoveRoaring(bm *roaring.Bitmap) (changed bool, err error) {
 }
 
 func (c *Cursor) difference(key uint64, data *roaring.Container) (bool, error) {
-	cell := c.cell()
+	elem := &c.stack.elems[c.stack.index]
+	leafPage, _, err := c.tx.readPage(elem.pgno)
+	if err != nil {
+		return false, err
+	}
+	cell := readLeafCell(leafPage, elem.index)
+
 	var container *roaring.Container
 	switch cell.Type {
 	case ContainerTypeArray:

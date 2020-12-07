@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"github.com/glycerine/lmdb-go/lmdb"
-	//"github.com/pilosa/pilosa/v2/logger"
 )
 
 func Test_TxFactory_Qcx_query_context(t *testing.T) {
@@ -121,7 +120,7 @@ func Test_TxFactory_UpdateBlueFromGreen_OnStartup(t *testing.T) {
 	orig := os.Getenv("PILOSA_TXSRC")
 	defer os.Setenv("PILOSA_TXSRC", orig) // must restore or will mess up other tests!
 
-	checked := []string{"lmdb", "roaring", "rbf"}
+	checked := []string{"roaring", "rbf"}
 
 	expectError := false
 	for _, blue := range checked {
@@ -270,7 +269,7 @@ func Test_TxFactory_verifyBlueEqualsGreen(t *testing.T) {
 	orig := os.Getenv("PILOSA_TXSRC")
 	defer os.Setenv("PILOSA_TXSRC", orig) // must restore or will mess up other tests!
 
-	checked := []string{"lmdb", "roaring", "bolt", "rbf"}
+	checked := []string{"roaring", "bolt", "rbf"}
 
 	for _, blue := range checked {
 		for _, green := range checked {
@@ -408,8 +407,8 @@ func Test_TxFactory_verifyStringConstantsMatch(t *testing.T) {
 	// our const definitions at the top of txfactory.go, or
 	// else blue-green transactions cannot determine when
 	// the second transaction is being released in dbshard.go.
-	check := []txtype{roaringTxn, rbfTxn, lmdbTxn, boltTxn}
-	expect := []string{RoaringTxn, RBFTxn, LmdbTxn, BoltTxn}
+	check := []txtype{roaringTxn, rbfTxn, boltTxn}
+	expect := []string{RoaringTxn, RBFTxn, BoltTxn}
 	for i, chk := range check {
 		obs := chk.String()
 		if obs != expect[i] {
