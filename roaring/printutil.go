@@ -21,13 +21,6 @@ import (
 	"github.com/pilosa/pilosa/v2/shardwidth"
 )
 
-// TODO: once fastRows2 merges, take out these redundant const definitions
-const (
-	rowExponent = (shardwidth.Exponent - 16) // e.g. 20 - 16 == 4
-	rowWidth    = 1 << rowExponent           // containers per row // e.g. 1 << 4 == 16
-	keyMask     = (rowWidth - 1)             // a mask for offset within the row                             // e.g. 0x0000000f or 15
-)
-
 func (b *Bitmap) String() (r string) {
 	r = "c("
 	slc := b.Slice()

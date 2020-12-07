@@ -29,7 +29,9 @@ import (
 	"runtime"
 	"runtime/debug"
 	"sort"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"testing/quick"
 
@@ -3599,7 +3601,7 @@ func TestFragment_RowsIteration(t *testing.T) {
 			t.Fatalf("Do not match %v %v", expectedAll, ids)
 		}
 
-		ids, err = f.rows(context.Background(), tx, 0, filterColumn(1))
+		ids, err = f.rows(context.Background(), tx, 0, roaring.NewBitmapColumnFilter(1))
 		if err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(expectedOdd, ids) {
@@ -3633,7 +3635,7 @@ func TestFragment_RowsIteration(t *testing.T) {
 			t.Fatalf("Do not match %v %v", expected, ids)
 		}
 
-		ids, err = f.rows(context.Background(), tx, 0, filterColumn(66000))
+		ids, err = f.rows(context.Background(), tx, 0, roaring.NewBitmapColumnFilter(66000))
 		if err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(expected, ids) {
@@ -3661,7 +3663,7 @@ func TestFragment_RowsIteration(t *testing.T) {
 				} else if !reflect.DeepEqual(expectedRows, ids) {
 					t.Fatalf("Do not match %v %v", expectedRows, ids)
 				}
-				ids, err = f.rows(context.Background(), tx, 0, filterColumn(c))
+				ids, err = f.rows(context.Background(), tx, 0, roaring.NewBitmapColumnFilter(c))
 				if err != nil {
 					t.Fatal(err)
 				} else if !reflect.DeepEqual(expectedRows, ids) {
@@ -5431,4 +5433,290 @@ func notBlueGreenTest(t *testing.T) {
 	if strings.Contains(src, "_") {
 		t.Skip("skip under blue green")
 	}
+}
+
+var mutexSamplesPrepared sync.Once
+
+func requireMutexSampleData() {
+	mutexSamplesPrepared.Do(prepareMutexSampleData)
+}
+
+// a few mutex tests want common largeish pools of mutex data
+type mutexSampleData struct {
+	name           string
+	colIDs, rowIDs []uint64
+}
+
+func (m *mutexSampleData) scratchSpace(cols, rows []uint64) ([]uint64, []uint64) {
+	if cap(cols) < len(m.colIDs) {
+		cols = make([]uint64, len(m.colIDs))
+	} else {
+		cols = cols[:len(m.colIDs)]
+	}
+	copy(cols, m.colIDs)
+	if cap(rows) < len(m.rowIDs) {
+		rows = make([]uint64, len(m.rowIDs))
+	} else {
+		rows = rows[:len(m.rowIDs)]
+	}
+	copy(rows, m.rowIDs)
+	return cols, rows
+}
+
+// mutex data wants to exist for differing numbers of rows, and different
+// densities, and reasonably-large N. But we don't want a huge pool of nested
+// maps, so...
+type mutexSampleRange int16
+
+// density should be able to range from every bit filled to almost no
+// bits filled. So, how many bits per container? How about pow(2, N), where N
+// can be negative. 16 is the highest possible value, and -16 is the lowest,
+// and 0 means about one bit per container on average.
+func (m mutexSampleRange) density() int8 {
+	return int8(m >> 8)
+}
+
+// bottom 8 bits are log2 of number of rows.
+func (m mutexSampleRange) rows() uint32 {
+	return uint32(1) << (m & 0x1F)
+}
+
+// just a convenience thing to hide the implementation
+func newMutexSampleRange(density int8, rows uint8) mutexSampleRange {
+	if density > 16 {
+		density = 16
+	}
+	if density < -16 {
+		density = -16
+	}
+	return mutexSampleRange((int16(density) << 8) | int16(rows))
+}
+
+var sampleMutexData = map[mutexSampleRange]*mutexSampleData{}
+
+type mutexDensity struct {
+	name    string
+	density int8
+}
+
+type mutexSize struct {
+	name string
+	rows uint8
+}
+
+var mutexDensities = []mutexDensity{
+	{"64K", 16},
+	// {"32K", 15}, // 50-50
+	// {"16K", 14}, // 1/4
+	// {"4K", 12},  // a fair number of things
+	// {"1", 0},   // about one per container
+	// {"empty", -14}, // almost none
+}
+
+var mutexSizes = []mutexSize{
+	{"4r", 2},
+	{"16r", 4},
+	{"256r", 8},
+	// {"65Kr", 16},
+}
+
+var mutexCaches = []string{
+	// "ranked",
+	"none",
+}
+
+const mutexSampleDataSize = ShardWidth
+
+func prepareMutexSampleData() {
+	for _, d := range mutexDensities {
+		for _, s := range mutexSizes {
+			rng := newMutexSampleRange(d.density, s.rows)
+			col := uint64(0)
+			// at density 16, we want everything to be adjacent.
+			// at density 0, we want about 65k between items.
+			// The average spacing we want is 1<<(16 - density),
+			// so random numbers between 0 and twice that would
+			// be close, but we never want 0, so, subtract 1 from
+			// "twice that", then add 1 to the result.
+			//
+			// So for density 16, we compute spacing of 1, then
+			// draw random numbers in [0,1), and add 1 to them.
+			spacing := ((int64(1) << (16 - d.density)) * 2) - 1
+			rows := (int64(1) << s.rows)
+			expected := int64(mutexSampleDataSize)
+			if (ShardWidth / spacing) < mutexSampleDataSize {
+				expected = (ShardWidth / spacing) * 2
+				if expected < 2 {
+					expected = 2
+				}
+			}
+			data := &mutexSampleData{
+				name:   d.name + "/" + s.name,
+				colIDs: make([]uint64, mutexSampleDataSize),
+				rowIDs: make([]uint64, mutexSampleDataSize),
+			}
+			for i := int64(0); i < expected; i++ {
+				col += uint64(rand.Int63n(spacing)) + 1
+				// can only import one fragment at a time,
+				// though!
+				if col >= ShardWidth {
+					expected = i
+					break
+				}
+				row := uint64(rand.Int63n(rows))
+				data.colIDs[i] = col
+				data.rowIDs[i] = row
+			}
+			// if we came up short, because we overran the shard
+			// size, we reduced expected above.
+			data.colIDs = data.colIDs[:expected]
+			data.rowIDs = data.rowIDs[:expected]
+			sampleMutexData[rng] = data
+		}
+	}
+}
+
+var importBatchSizes = []int{65536}
+
+func TestImportMutexSampleData(t *testing.T) {
+	requireMutexSampleData()
+	var scratchCols []uint64
+	var scratchRows []uint64
+	for rng, data := range sampleMutexData {
+		// skip the larger ones, they'll be slow
+		if rng.rows() > 256 {
+			continue
+		}
+		scratchCols, scratchRows = data.scratchSpace(scratchCols, scratchRows)
+		t.Run(data.name, func(t *testing.T) {
+			for _, batchSize := range importBatchSizes {
+				t.Run(fmt.Sprintf("%d", batchSize), func(t *testing.T) {
+					f, _, tx := mustOpenMutexFragment(t, "i", "f", viewStandard, 0, "")
+					defer f.Clean(t)
+					// Set import.
+					var err error
+					for i := 0; i < len(scratchCols); i += batchSize {
+						max := i + batchSize
+						if len(scratchCols) < max {
+							max = len(scratchCols)
+						}
+						err = f.bulkImport(tx, scratchRows[i:max], scratchCols[i:max], &ImportOptions{})
+						if err != nil {
+							t.Fatalf("bulk importing ids [%d:%d]: %v", i, max, err)
+						}
+					}
+					count := uint64(0)
+					for k := uint32(0); k < rng.rows(); k++ {
+						count += f.mustRow(tx, uint64(k)).Count()
+					}
+					if int(count) != len(data.colIDs) {
+						t.Fatalf("for %d rows, %d density: expected %d results, got %d",
+							rng.rows(), rng.density(), len(data.colIDs), count)
+					}
+				})
+			}
+		})
+	}
+}
+
+func BenchmarkImportMutexSampleData(b *testing.B) {
+	requireMutexSampleData()
+	var scratchCols []uint64
+	var scratchRows []uint64
+	var data *mutexSampleData
+	var cache string
+	var batchSize int
+	// this exists just to manage indentation below
+	benchmarkFragmentImports := func(b *testing.B) {
+		f, _, tx := mustOpenMutexFragment(b, "i", "f", viewStandard, 0, cache)
+		defer f.Clean(b)
+		scratchCols, scratchRows = data.scratchSpace(scratchCols, scratchRows)
+		var err error
+		for i := 0; i < len(scratchCols) && i < (batchSize*b.N); i += batchSize {
+			max := i + batchSize
+			if len(scratchCols) < max {
+				max = len(scratchCols)
+			}
+			err = f.bulkImport(tx, scratchRows[i:max], scratchCols[i:max], &ImportOptions{})
+			if err != nil {
+				b.Fatalf("bulk importing ids [%d:%d]: %v", i, max, err)
+			}
+		}
+	}
+	for _, data = range sampleMutexData {
+		b.Run(data.name, func(b *testing.B) {
+			for _, batchSize = range importBatchSizes {
+				b.Run(strconv.Itoa(batchSize), func(b *testing.B) {
+					for _, cache = range mutexCaches {
+						b.Run(cache, benchmarkFragmentImports)
+					}
+				})
+			}
+		})
+	}
+}
+
+func testOneParallelSlice(t *testing.T, p *parallelSlices) {
+	// the easy answer
+	seen := make(map[uint64]uint64, len(p.cols))
+	t.Logf("cols %d, rows %d", p.cols, p.rows)
+	for i, c := range p.cols {
+		seen[c] = p.rows[i]
+	}
+	unsorted := p.Prune()
+	t.Logf("unsorted %t, cols %d, rows %d", unsorted, p.cols, p.rows)
+	if unsorted {
+		sort.Stable(p)
+	}
+	unsorted = p.Prune()
+	if unsorted {
+		t.Fatalf("slice still unsorted after sort")
+	}
+	t.Logf("pruned/sorted cols %d, rows %d", p.cols, p.rows)
+	if len(p.cols) != len(seen) {
+		t.Fatalf("expected %d entries, found %d", len(seen), len(p.cols))
+	}
+	for i, c := range p.cols {
+		if seen[c] != p.rows[i] {
+			t.Fatalf("expected %d:%d, found :%d", c, seen[c], p.rows[i])
+		}
+	}
+}
+
+func TestParallelSlices(t *testing.T) {
+	cols := make([]uint64, 256)
+	rows := make([]uint64, 256)
+	// ensure at least some overlap by coercing columns into a range
+	// smaller than number of entries
+	for i := range cols {
+		cols[i] = rand.Uint64() & ((uint64(len(cols)) / 2) - 1)
+		rows[i] = rand.Uint64() & 0xff
+	}
+	t.Run("random", func(t *testing.T) {
+		testOneParallelSlice(t, &parallelSlices{cols: cols, rows: rows})
+	})
+	cols = cols[:cap(cols)]
+	rows = rows[:cap(rows)]
+	// in-order but no overlap
+	col := uint64(0)
+	for i := range cols {
+		cols[i] = col
+		col = col + (rand.Uint64() & 3) + 1
+		rows[i] = rand.Uint64() & 0xff
+	}
+	t.Run("ordered", func(t *testing.T) {
+		testOneParallelSlice(t, &parallelSlices{cols: cols, rows: rows})
+	})
+	cols = cols[:cap(cols)]
+	rows = rows[:cap(rows)]
+	// in-order with
+	col = uint64(0)
+	for i := range cols {
+		cols[i] = col
+		col = col + (rand.Uint64() & 3)
+		rows[i] = rand.Uint64() & 0xff
+	}
+	t.Run("orderlapping", func(t *testing.T) {
+		testOneParallelSlice(t, &parallelSlices{cols: cols, rows: rows})
+	})
 }

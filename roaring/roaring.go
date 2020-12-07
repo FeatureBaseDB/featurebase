@@ -7164,6 +7164,10 @@ func Difference(a, b *Container) *Container {
 	return difference(a, b)
 }
 
+func Intersect(x, y *Container) *Container {
+	return intersect(x, y)
+}
+
 func IntersectionCount(x, y *Container) int32 {
 	return intersectionCount(x, y)
 }
@@ -7204,4 +7208,42 @@ func (c *Container) Difference(other *Container) *Container {
 
 func NewSliceContainers() *sliceContainers {
 	return newSliceContainers()
+}
+
+// Slice returns an array of the values in the container as uint16.
+// Do NOT modify the result; it could be the container's actual storage.
+func (c *Container) Slice() (r []uint16) {
+	if c == nil {
+		return r
+	}
+	switch c.typ() {
+	case ContainerArray:
+		r = c.array()
+	case ContainerBitmap:
+		r = make([]uint16, c.N())
+		n := int32(0)
+		for i, word := range c.bitmap() {
+			for word != 0 {
+				t := word & -word
+				if roaringParanoia {
+					if n >= c.N() {
+						panic("bitmap has more bits set than container.n")
+					}
+				}
+				r[n] = uint16((i*64 + int(popcount(t-1))))
+				n++
+				word ^= t
+			}
+		}
+	case ContainerRun:
+		r = make([]uint16, c.N())
+		n := 0
+		for _, run := range c.runs() {
+			for v := int(run.Start); v <= int(run.Last); v++ {
+				r[n] = uint16(v)
+				n++
+			}
+		}
+	}
+	return r
 }

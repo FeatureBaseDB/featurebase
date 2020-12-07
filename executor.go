@@ -3197,7 +3197,7 @@ func (e *executor) executeRowsShard(ctx context.Context, qcx *Qcx, index string,
 		start = previous + 1
 	}
 
-	filters := []rowFilter{}
+	filters := []roaring.BitmapFilter{}
 	if columnID, ok, err := c.UintArg("column"); err != nil {
 		return nil, err
 	} else if ok {
@@ -3205,14 +3205,14 @@ func (e *executor) executeRowsShard(ctx context.Context, qcx *Qcx, index string,
 		if colShard != shard {
 			return rowIDs, nil
 		}
-		filters = append(filters, filterColumn(columnID))
+		filters = append(filters, roaring.NewBitmapColumnFilter(columnID))
 	}
 
 	limit := int(^uint(0) >> 1)
 	if lim, hasLimit, err := c.UintArg("limit"); err != nil {
 		return nil, errors.Wrap(err, "getting limit")
 	} else if hasLimit {
-		filters = append(filters, filterWithLimit(lim))
+		filters = append(filters, roaring.NewBitmapRowLimitFilter(lim))
 		limit = int(lim)
 	}
 
@@ -3221,7 +3221,7 @@ func (e *executor) executeRowsShard(ctx context.Context, qcx *Qcx, index string,
 		return nil, errors.Wrap(err, "getting like pattern")
 	} else if hasLike {
 		likeErr = make(chan error, 1)
-		filters = append(filters, filterLike(like, f.TranslateStore(), likeErr))
+		filters = append(filters, NewBitmapLikeFilter(like, f.TranslateStore()))
 	}
 
 	tx, finisher, err := qcx.GetTx(Txo{Write: !writable, Index: idx, Shard: shard})
@@ -6894,9 +6894,9 @@ func newGroupByIterator(executor *executor, qcx *Qcx, rowIDs []RowIDs, children 
 		if frag == nil { // this means this whole shard doesn't have all it needs to continue
 			return nil, nil
 		}
-		filters := []rowFilter{}
+		filters := []roaring.BitmapFilter{}
 		if len(rowIDs[i]) > 0 {
-			filters = append(filters, filterWithRows(rowIDs[i]))
+			filters = append(filters, roaring.NewBitmapRowsFilter(rowIDs[i]))
 		}
 
 		tx, finisher, err := qcx.GetTx(Txo{Write: !writable, Index: idx, Shard: shard})
