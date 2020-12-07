@@ -98,10 +98,15 @@ type Holder struct {
 	// Func to open whatever implementation of transaction store we're using.
 	OpenTransactionStore OpenTransactionStoreFunc
 
+	// Func to open the ID allocator.
+	OpenIDAllocator func(string) (*idAllocator, error)
+
 	// transactionManager
 	transactionManager *TransactionManager
 
 	translationSyncer TranslationSyncer
+
+	ida *idAllocator
 
 	// Queue of fields (having a foreign index) which have
 	// opened before their foreign index has opened.
@@ -195,6 +200,7 @@ type HolderConfig struct {
 	OpenTranslateStore   OpenTranslateStoreFunc
 	OpenTranslateReader  OpenTranslateReaderFunc
 	OpenTransactionStore OpenTransactionStoreFunc
+	OpenIDAllocator      OpenIDAllocatorFunc
 	TranslationSyncer    TranslationSyncer
 	CacheFlushInterval   time.Duration
 	StatsClient          stats.StatsClient
@@ -213,6 +219,7 @@ func DefaultHolderConfig() *HolderConfig {
 		OpenTranslateStore:   OpenInMemTranslateStore,
 		OpenTranslateReader:  nil,
 		OpenTransactionStore: OpenInMemTransactionStore,
+		OpenIDAllocator:      func(string) (*idAllocator, error) { return &idAllocator{}, nil },
 		TranslationSyncer:    NopTranslationSyncer,
 		CacheFlushInterval:   defaultCacheFlushInterval,
 		StatsClient:          stats.NopStatsClient,
@@ -253,6 +260,7 @@ func NewHolder(path string, cfg *HolderConfig) *Holder {
 		OpenTranslateStore:   cfg.OpenTranslateStore,
 		OpenTranslateReader:  cfg.OpenTranslateReader,
 		OpenTransactionStore: cfg.OpenTransactionStore,
+		OpenIDAllocator:      cfg.OpenIDAllocator,
 		translationSyncer:    cfg.TranslationSyncer,
 		Logger:               cfg.Logger,
 		Opts:                 HolderOpts{Txsrc: cfg.Txsrc, RowcacheOff: cfg.RowcacheOff},
@@ -596,6 +604,12 @@ func (h *Holder) Open() error {
 	h.transactionManager = NewTransactionManager(tstore)
 	h.transactionManager.Log = h.Logger
 
+	// Open ID allocator.
+	h.ida, err = h.OpenIDAllocator(filepath.Join(h.path, "idalloc.db"))
+	if err != nil {
+		return errors.Wrap(err, "opening ID allocator")
+	}
+
 	// Open path to read all index directories.
 	f, err := os.Open(h.path)
 	if err != nil {
@@ -741,6 +755,9 @@ func (h *Holder) Close() error {
 	}
 	if err := h.txf.Close(); err != nil {
 		return errors.Wrap(err, "holder.Txf.Close()")
+	}
+	if err := h.ida.Close(); err != nil {
+		return errors.Wrap(err, "closing ID allocator")
 	}
 
 	// Reset opened in case Holder needs to be reopened.

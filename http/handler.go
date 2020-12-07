@@ -434,6 +434,10 @@ func newRouter(handler *Handler) http.Handler {
 	router.HandleFunc("/internal/translate/field/{index}/{field}/keys/find", handler.handleFindFieldKeys).Methods("POST").Name("FindFieldKeys")
 	router.HandleFunc("/internal/translate/field/{index}/{field}/keys/create", handler.handleCreateFieldKeys).Methods("POST").Name("CreateFieldKeys")
 
+	router.HandleFunc("/internal/idalloc/reserve", handler.handleReserveIDs).Methods("POST").Name("ReserveIDs")
+	router.HandleFunc("/internal/idalloc/commit", handler.handleCommitIDs).Methods("POST").Name("CommitIDs")
+	router.HandleFunc("/internal/idalloc/reset/{index}", handler.handleResetIDAlloc).Methods("POST").Name("ResetIDAlloc")
+
 	// endpoints for collecting cpu profiles from a chosen begin point to
 	// when the client wants to stop. Used for profiling imports that
 	// could be long or short.
@@ -2852,4 +2856,92 @@ func (h *Handler) handleCreateFieldKeys(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "encoding result", http.StatusBadRequest)
 		return
 	}
+}
+
+func (h *Handler) handleReserveIDs(w http.ResponseWriter, r *http.Request) {
+	// Verify input and output types
+	if r.Header.Get("Content-Type") != "application/json" {
+		http.Error(w, "Unsupported media type", http.StatusUnsupportedMediaType)
+		return
+	} else if !validHeaderAcceptJSON(r.Header) {
+		http.Error(w, "Not acceptable", http.StatusNotAcceptable)
+		return
+	}
+
+	bd, err := readBody(r)
+	if err != nil {
+		http.Error(w, "failed to read body", http.StatusBadRequest)
+		return
+	}
+
+	var req pilosa.IDAllocReserveRequest
+	req.Offset = ^uint64(0)
+	err = json.Unmarshal(bd, &req)
+	if err != nil {
+		http.Error(w, "failed to decode request", http.StatusBadRequest)
+		return
+	}
+
+	ids, err := h.api.ReserveIDs(req.Key, req.Session, req.Offset, req.Count)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("reserving IDs: %v", err.Error()), http.StatusBadRequest)
+		return
+	}
+
+	err = json.NewEncoder(w).Encode(ids)
+	if err != nil {
+		http.Error(w, "encoding result", http.StatusBadRequest)
+		return
+	}
+}
+
+func (h *Handler) handleCommitIDs(w http.ResponseWriter, r *http.Request) {
+	// Verify input and output types
+	if r.Header.Get("Content-Type") != "application/json" {
+		http.Error(w, "Unsupported media type", http.StatusUnsupportedMediaType)
+		return
+	} else if !validHeaderAcceptJSON(r.Header) {
+		http.Error(w, "Not acceptable", http.StatusNotAcceptable)
+		return
+	}
+
+	bd, err := readBody(r)
+	if err != nil {
+		http.Error(w, "failed to read body", http.StatusBadRequest)
+		return
+	}
+
+	var req pilosa.IDAllocCommitRequest
+	err = json.Unmarshal(bd, &req)
+	if err != nil {
+		http.Error(w, "failed to decode request", http.StatusBadRequest)
+		return
+	}
+
+	err = h.api.CommitIDs(req.Key, req.Session, req.Count)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("committing IDs: %v", err.Error()), http.StatusBadRequest)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) handleResetIDAlloc(w http.ResponseWriter, r *http.Request) {
+	if !validHeaderAcceptType(r.Header, "text", "plain") {
+		http.Error(w, "text/plain is not an acceptable response type", http.StatusNotAcceptable)
+	}
+	indexName, ok := mux.Vars(r)["index"]
+	if !ok {
+		http.Error(w, "index name is required", http.StatusBadRequest)
+		return
+	}
+	err := h.api.ResetIDAlloc(indexName)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("resetting ID allocation: %v", err.Error()), http.StatusBadRequest)
+		return
+	}
+	w.Header().Add("Content-Type", "text/plain")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("OK")) //nolint:errcheck
 }
