@@ -108,3 +108,97 @@ change as development progresses:
 - WAL support is deferred
 
 
+## Pattern of branch splits when adding data in ascending sorted order.
+
+In this example, fan-out is restricted to 2 to make the
+drawings easy and the splits obvious. The data leaves are only allowed one
+roaring.Container key (ckey) in this example.
+
+Each frame adds the next datum: A,B,C,D,E,... in order.
+
+The letter represent data leaves, while
+numbers represent branch pages. The one exception is the
+first frame where the root is a leaf with data.
+Every frame after has normal branch at the root.
+
+NB: there are only three places pages get written on addition:
+a) writeRoot
+b) putLeafCell
+c) putBranchCells
+
+---------------------------------------------
+add A:
+        root
+         3
+         A
+---------------------------------------------
+add B:
+      root
+       3
+     4   5
+     A   B
+---------------------------------------------
+add C: this sequence of updates occurs
+
+1) putLeafCell writes leaf B to page 5
+2) putLeafCell writes leaf C to page 6
+3) putBranchCells writes branch page 7 with children 4,5
+4) putBranchCells writes branch page 8 with child 6
+5) writeRoot writes branch cells to pgno 3, children: 7,8
+
+      root
+       3
+    7     8
+  4  5    6
+  A  B    C
+---------------------------------------------
+add D:
+      root                 
+       3
+    7      8
+  4  5   6   9
+  A  B   C   D
+             
+---------------------------------------------
+add E:
+             root
+              3
+     12              13
+  7      8           11
+4  5    6 9          10
+A  B    C D           E
+---------------------------------------------
+add F:
+             root
+              3
+     12              13
+  7      8           11
+4  5    6 9        10  14
+A  B    C D         E   F
+---------------------------------------------
+add G:
+             root
+              3
+     12                13
+  7      8           11    16
+4  5    6 9        10  14  15
+A  B    C D         E   F   G
+---------------------------------------------
+add H:
+             root
+              3
+     12                13
+  7      8           11    16
+4  5    6 9        10  14  15 17
+A  B    C D         E   F   G  H
+---------------------------------------------
+add I:
+                                 root
+                                  3
+              21                         22
+     12                 13               20
+  7      8           11    16            19
+4  5    6 9        10  14  15 17         18
+A  B    C D         E   F   G  H          I
+---------------------------------------------
+
