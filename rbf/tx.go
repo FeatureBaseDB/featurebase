@@ -787,7 +787,7 @@ func (tx *Tx) freePageSet() (map[uint32]struct{}, error) {
 		cell := readLeafCell(leafPage, elem.index)
 
 		for _, v := range cell.Values(tx) {
-			pgno := uint32((cell.Key << 16) & uint64(v))
+			pgno := uint32((cell.Key << 16) | uint64(v))
 			m[pgno] = struct{}{}
 		}
 	}
