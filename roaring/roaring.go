@@ -1757,13 +1757,16 @@ type RoaringIterator interface {
 	// It may well share much underlying data.
 	Clone() RoaringIterator
 
-	// ContainerKeySpan provides the smallest and largest
+	// ContainerKeys provides all the
 	// container keys that the iterator will return.
 	// The current implementation requires that the underlying header
 	// lists the keys in ascending order.
-	// Iff there no keys, then empty will be returned true.
-	// If there is only a single key, then ckeyLast will equal ckeyFirst.
-	ContainerKeySpan() (ckeyFirst, ckeyLast uint64, empty bool)
+	// If there are no keys, then an empty slice will be returned.
+	ContainerKeys() (slc []uint64)
+
+	// Skip will move the iterator forward by 1 without
+	// materializing the container.
+	Skip()
 }
 
 // baseRoaringIterator holds values used by both Pilosa and official Roaring
@@ -1932,20 +1935,40 @@ func (r *baseRoaringIterator) Done(err error) {
 	r.currentDataOffset = 0
 }
 
-func (r *baseRoaringIterator) ContainerKeySpan() (ckeyFirst, ckeyLast uint64, empty bool) {
+func (r *pilosaRoaringIterator) ContainerKeys() (slc []uint64) {
 	n := r.keys
 	if n == 0 {
-		empty = true
 		return
 	}
-	ckeyFirst = binary.LittleEndian.Uint64(r.headers[0:8])
-	if n == 1 {
-		ckeyLast = ckeyFirst
-		return
+	for i := int64(0); i < n; i++ {
+		beg := i * 12
+		slc = append(slc, binary.LittleEndian.Uint64(r.headers[beg:beg+8]))
 	}
-	beg := (n - 1) * 12
-	ckeyLast = binary.LittleEndian.Uint64(r.headers[beg : beg+8])
 	return
+}
+
+func (r *officialRoaringIterator) ContainerKeys() (slc []uint64) {
+	n := r.keys
+	if n == 0 {
+		return
+	}
+	for i := int64(0); i < n; i++ {
+		beg := i * 4
+		slc = append(slc, uint64(binary.LittleEndian.Uint16(r.headers[beg:beg+2])))
+	}
+	return
+}
+
+func (r *baseRoaringIterator) Skip() {
+	if r.currentIdx >= r.keys {
+		// we're already done
+		return
+	}
+	r.currentIdx++
+	if r.currentIdx == r.keys {
+		// this is the last key. transition state to the finalized state
+		r.Done(io.EOF)
+	}
 }
 
 // Len() indicates the total number of containers the iterator expects to have.

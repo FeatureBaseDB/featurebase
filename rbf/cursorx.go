@@ -62,7 +62,7 @@ func (c *Cursor) Rows() ([]uint64, error) {
 			break
 		}
 
-		elem := &c.stack.elems[c.stack.index]
+		elem := &c.stack.elems[c.stack.top]
 		leafPage, _, err := c.tx.readPage(elem.pgno)
 		if err != nil {
 			return nil, err
@@ -99,7 +99,7 @@ func (c *Cursor) DumpKeys() {
 		if err == io.EOF {
 			break
 		}
-		elem := &c.stack.elems[c.stack.index]
+		elem := &c.stack.elems[c.stack.top]
 		leafPage, _, err := c.tx.readPage(elem.pgno)
 		if err != nil {
 			return
@@ -110,7 +110,7 @@ func (c *Cursor) DumpKeys() {
 }
 func (c *Cursor) DumpStack() {
 	fmt.Println("STACK")
-	for i := c.stack.index; i >= 0; i-- {
+	for i := c.stack.top; i >= 0; i-- {
 		fmt.Printf("%+v\n", c.stack.elems[i])
 	}
 	fmt.Println()
@@ -134,13 +134,13 @@ func (c *Cursor) Row(shard, rowID uint64) (*roaring.Bitmap, error) {
 	offset := uint64(shard * ShardWidth)
 	off := highbits(offset)
 	hi0, hi1 := highbits(base), highbits((rowID+1)*ShardWidth)
-	c.stack.index = 0
+	c.stack.top = 0
 	ok, err := c.Seek(hi0)
 	if err != nil {
 		return nil, err
 	}
 	if !ok {
-		elem := &c.stack.elems[c.stack.index]
+		elem := &c.stack.elems[c.stack.top]
 		leafPage, _, err := c.tx.readPage(elem.pgno)
 		if err != nil {
 			return nil, err
@@ -161,7 +161,7 @@ func (c *Cursor) Row(shard, rowID uint64) (*roaring.Bitmap, error) {
 			return nil, err
 		}
 
-		elem := &c.stack.elems[c.stack.index]
+		elem := &c.stack.elems[c.stack.top]
 		leafPage, _, err := c.tx.readPage(elem.pgno)
 		if err != nil {
 			return nil, err
@@ -178,7 +178,7 @@ func (c *Cursor) Row(shard, rowID uint64) (*roaring.Bitmap, error) {
 // CurrentPageType returns the type of the container currently pointed to by cursor used in testing
 // sometimes the cursor needs to be positions prior to this call with First/Last etc.
 func (c *Cursor) CurrentPageType() ContainerType {
-	elem := &c.stack.elems[c.stack.index]
+	elem := &c.stack.elems[c.stack.top]
 	leafPage, _, _ := c.tx.readPage(elem.pgno)
 	cell := readLeafCell(leafPage, elem.index)
 	return cell.Type
@@ -258,7 +258,7 @@ func WalkPage(tx *Tx, pgno uint32, walker Walker) {
 		walker.Visit(pgno, Branch)
 		for i, n := 0, readCellN(page); i < n; i++ {
 			cell := readBranchCell(page, i)
-			WalkPage(tx, cell.Pgno, walker)
+			WalkPage(tx, cell.ChildPgno, walker)
 		}
 	case PageTypeLeaf:
 		walker.Visit(pgno, Leaf)

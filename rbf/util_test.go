@@ -15,14 +15,21 @@ package rbf
 
 import (
 	"fmt"
-	"github.com/pilosa/pilosa/v2/roaring"
 	"io"
+	"io/ioutil"
+	"os"
+	"testing"
+
+	rbfcfg "github.com/pilosa/pilosa/v2/rbf/cfg"
+	"github.com/pilosa/pilosa/v2/roaring"
 )
 
 // util_test adds reusable utilities for testing.
 // Here we catch BitN and ElemN mis-settings by
 // scanning all data under an rbf-root (logically equivalent
 // to a single roaring.Bitmap with multiple rows).
+
+var _ = keysFromParents // linter happy
 
 // verify that BitN and ElemN are correct.
 func (c_orig *Cursor) DebugSlowCheckAllPages() {
@@ -67,7 +74,7 @@ func checkElemNBitN(tx *Tx, pgno uint32) {
 		for i, n := 0, readCellN(page); i < n; i++ {
 			cell := readBranchCell(page, i)
 			if cell.Flags&uint32(ContainerTypeBitmap) == 0 { // leaf/branch child page
-				checkElemNBitN(tx, cell.Pgno)
+				checkElemNBitN(tx, cell.ChildPgno)
 			}
 			// else is a bitmap
 		}
@@ -132,4 +139,49 @@ func verifyElemNBitN(tx *Tx, lc leafCell) {
 	if lc.ElemN != int(obsElemN) {
 		panic(fmt.Sprintf("lc.ElemN(%v) != obsElemN(%v); typ='%v'", lc.ElemN, obsElemN, typ))
 	}
+}
+
+func testHelperMustOpenNewDB(tb testing.TB, cfg ...*rbfcfg.Config) *DB {
+	tb.Helper()
+
+	path, err := ioutil.TempDir("", "")
+	if err != nil {
+		panic(err)
+	}
+
+	var cfg0 *rbfcfg.Config
+	if len(cfg) > 0 {
+		cfg0 = cfg[0]
+	}
+	db := NewDB(path, cfg0)
+
+	if err := db.Open(); err != nil {
+		tb.Fatal(err)
+	}
+	return db
+}
+
+// MustCloseDB closes db. On error, fail test.
+// This function also also performs an integrity check on the DB.
+func MustCloseDB(tb testing.TB, db *DB) {
+	tb.Helper()
+	if err := db.Check(); err != nil && err != ErrClosed {
+		tb.Fatal(err)
+	} else if n := db.TxN(); n != 0 {
+		tb.Fatalf("db still has %d active transactions; must closed before closing db", n)
+	} else if err := db.Close(); err != nil && err != ErrClosed {
+		tb.Fatal(err)
+	} else if err := os.RemoveAll(db.Path); err != nil {
+		tb.Fatal(err)
+	}
+}
+
+// MustBegin returns a new transaction or fails.
+func MustBegin(tb testing.TB, db *DB, writable bool) *Tx {
+	tb.Helper()
+	tx, err := db.Begin(writable)
+	if err != nil {
+		tb.Fatal(err)
+	}
+	return tx
 }

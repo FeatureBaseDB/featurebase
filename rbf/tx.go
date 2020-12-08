@@ -598,7 +598,7 @@ func (tx *Tx) RoaringBitmap(name string) (*roaring.Bitmap, error) {
 			return nil, err
 		}
 
-		elem := &c.stack.elems[c.stack.index]
+		elem := &c.stack.elems[c.stack.top]
 		leafPage, _, err := c.tx.readPage(elem.pgno)
 		if err != nil {
 			return nil, err
@@ -634,7 +634,7 @@ func (tx *Tx) container(name string, key uint64) (*roaring.Container, error) {
 		return nil, err
 	}
 
-	elem := &c.stack.elems[c.stack.index]
+	elem := &c.stack.elems[c.stack.top]
 	leafPage, _, err := c.tx.readPage(elem.pgno)
 	if err != nil {
 		return nil, err
@@ -779,7 +779,7 @@ func (tx *Tx) freePageSet() (map[uint32]struct{}, error) {
 			return m, err
 		}
 
-		elem := &c.stack.elems[c.stack.index]
+		elem := &c.stack.elems[c.stack.top]
 		leafPage, _, err := c.tx.readPage(elem.pgno)
 		if err != nil {
 			return nil, err
@@ -855,7 +855,7 @@ func (tx *Tx) walkTree(pgno, parent uint32, fn func(pgno, parent, typ uint32) er
 	case PageTypeBranch:
 		for i, n := 0, readCellN(page); i < n; i++ {
 			cell := readBranchCell(page, i)
-			if err := tx.walkTree(cell.Pgno, pgno, fn); err != nil {
+			if err := tx.walkTree(cell.ChildPgno, pgno, fn); err != nil {
 				return err
 			}
 		}
@@ -910,7 +910,7 @@ func (tx *Tx) nextFreelistPageNo() (uint32, error) {
 		return 0, err
 	}
 
-	elem := &c.stack.elems[c.stack.index]
+	elem := &c.stack.elems[c.stack.top]
 	leafPage, _, err := c.tx.readPage(elem.pgno)
 	if err != nil {
 		return 0, err
@@ -947,7 +947,7 @@ func (tx *Tx) deallocateTree(pgno uint32) error {
 	case PageTypeBranch:
 		for i, n := 0, readCellN(page); i < n; i++ {
 			cell := readBranchCell(page, i)
-			if err := tx.deallocateTree(cell.Pgno); err != nil {
+			if err := tx.deallocateTree(cell.ChildPgno); err != nil {
 				return err
 			}
 		}
@@ -1079,7 +1079,7 @@ func (tx *Tx) ForEachRange(name string, start, end uint64, fn func(uint64) error
 			return err
 		}
 
-		elem := &c.stack.elems[c.stack.index]
+		elem := &c.stack.elems[c.stack.top]
 		leafPage, _, err := c.tx.readPage(elem.pgno)
 		if err != nil {
 			return err
@@ -1179,7 +1179,7 @@ func (tx *Tx) Count(name string) (uint64, error) {
 			return 0, err
 		}
 
-		elem := &c.stack.elems[c.stack.index]
+		elem := &c.stack.elems[c.stack.top]
 		leafPage, _, err := c.tx.readPage(elem.pgno)
 		if err != nil {
 			return 0, err
@@ -1209,7 +1209,7 @@ func (tx *Tx) Max(name string) (uint64, error) {
 		return 0, err
 	}
 
-	elem := &c.stack.elems[c.stack.index]
+	elem := &c.stack.elems[c.stack.top]
 	leafPage, _, err := c.tx.readPage(elem.pgno)
 	if err != nil {
 		return 0, err
@@ -1237,7 +1237,7 @@ func (tx *Tx) Min(name string) (uint64, bool, error) {
 		return 0, false, err
 	}
 
-	elem := &c.stack.elems[c.stack.index]
+	elem := &c.stack.elems[c.stack.top]
 	leafPage, _, err := c.tx.readPage(elem.pgno)
 	if err != nil {
 		return 0, false, err
@@ -1304,7 +1304,7 @@ func (tx *Tx) CountRange(name string, start, end uint64) (uint64, error) {
 			return 0, err
 		}
 
-		elem := &csr.stack.elems[csr.stack.index]
+		elem := &csr.stack.elems[csr.stack.top]
 		leafPage, _, err := csr.tx.readPage(elem.pgno)
 		if err != nil {
 			return 0, err
@@ -1382,7 +1382,7 @@ func (tx *Tx) OffsetRange(name string, offset, start, endx uint64) (*roaring.Bit
 			return nil, err
 		}
 
-		elem := &c.stack.elems[c.stack.index]
+		elem := &c.stack.elems[c.stack.top]
 		leafPage, _, err := c.tx.readPage(elem.pgno)
 		if err != nil {
 			return nil, err
@@ -1419,7 +1419,7 @@ func (itr *containerIterator) Next() bool {
 
 // Value returns the current key & container.
 func (itr *containerIterator) Value() (uint64, *roaring.Container) {
-	elem := &itr.cursor.stack.elems[itr.cursor.stack.index]
+	elem := &itr.cursor.stack.elems[itr.cursor.stack.top]
 	leafPage, _, _ := itr.cursor.tx.readPage(elem.pgno)
 	cell := readLeafCell(leafPage, elem.index)
 	return cell.Key, toContainer(cell, itr.cursor.tx)
@@ -1470,7 +1470,7 @@ func (tx *Tx) DumpString(short bool, shard uint64) (r string) {
 			}
 			panicOn(err)
 
-			elem := &c.stack.elems[c.stack.index]
+			elem := &c.stack.elems[c.stack.top]
 			leafPage, _, err := c.tx.readPage(elem.pgno)
 			panicOn(err)
 			cell := readLeafCell(leafPage, elem.index)
@@ -1478,7 +1478,7 @@ func (tx *Tx) DumpString(short bool, shard uint64) (r string) {
 			ckey := cell.Key
 			ct := toContainer(cell, tx)
 
-			s := stringOfCkeyCt(ckey, ct, name.(string), short)
+			s := stringOfCkeyCt(ckey, ct, name.(string), short, true)
 			r += s
 			n++
 		}
@@ -1532,20 +1532,27 @@ func bitmapAsString(rbm *roaring.Bitmap) (r string) {
 	return r + ")"
 }
 
-func stringOfCkeyCt(ckey uint64, ct *roaring.Container, rrName string, short bool) (s string) {
+func stringOfCkeyCt(ckey uint64, ct *roaring.Container, rrName string, short, showHash bool) (s string) {
 
-	by := containerToBytes(ct)
-	hash := hash.Blake3sum16(by)
+	hsh := ""
+	if showHash {
+		by := containerToBytes(ct)
+		hsh = hash.Blake3sum16(by)
+	}
 
 	cts := roaring.NewSliceContainers()
 	cts.Put(ckey, ct)
 	rbm := &roaring.Bitmap{Containers: cts}
 	srbm := bitmapAsString(rbm)
 
-	pre := txkey.PrefixToString([]byte(rrName))
+	var pre string
+	if len(rrName) > 0 {
+		pre = txkey.PrefixToString([]byte(rrName))
+	}
 	bkey := pre + fmt.Sprintf("ckey@%020d", ckey)
 
-	s = fmt.Sprintf("%v -> %v (%v hot)\n", bkey, hash, ct.N())
+	s = fmt.Sprintf("%v -> %v (%v hot)\n", bkey, hsh, ct.N())
+
 	if !short {
 		s += "          ......." + srbm + "\n"
 	}
@@ -1553,6 +1560,7 @@ func stringOfCkeyCt(ckey uint64, ct *roaring.Container, rrName string, short boo
 }
 
 func (tx *Tx) ImportRoaringBits(name string, itr roaring.RoaringIterator, clear bool, log bool, rowSize uint64, data []byte) (changed int, rowSet map[uint64]int, err error) {
+
 	// begin write boilerplate
 	if tx.db == nil {
 		err = ErrTxClosed
@@ -1588,6 +1596,7 @@ func (tx *Tx) ImportRoaringBits(name string, itr roaring.RoaringIterator, clear 
 	defer cur.Close()
 
 	for itrKey, synthC := itr.NextContainer(); synthC != nil; itrKey, synthC = itr.NextContainer() {
+
 		if rowSize != 0 {
 			currRow = itrKey / rowSize
 		}
@@ -1602,7 +1611,7 @@ func (tx *Tx) ImportRoaringBits(name string, itr roaring.RoaringIterator, clear 
 		if exact, err := cur.Seek(itrKey); err != nil {
 			return changed, rowSet, err
 		} else if exact {
-			elem := &cur.stack.elems[cur.stack.index]
+			elem := &cur.stack.elems[cur.stack.top]
 			leafPage, _, err := cur.tx.readPage(elem.pgno)
 			if err != nil {
 				return changed, rowSet, err
@@ -1803,9 +1812,9 @@ func (tx *Tx) Pages(pgnos []uint32) ([]Page, error) {
 			page := &BranchPage{BranchPageInfo: info}
 			for _, cell := range readBranchCells(buf) {
 				page.Cells = append(page.Cells, &BranchCell{
-					Key:   cell.Key,
+					Key:   cell.LeftKey,
 					Flags: cell.Flags,
-					Pgno:  cell.Pgno,
+					Pgno:  cell.ChildPgno,
 				})
 			}
 			pages = append(pages, page)
