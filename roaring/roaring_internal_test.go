@@ -4430,15 +4430,15 @@ func TestCloneRoaringIterator(t *testing.T) {
 
 	itr2 := itr.Clone()
 
-	firstCkey, lastCkey, empty := itr2.ContainerKeySpan()
-	if empty {
+	ikeys := itr2.ContainerKeys()
+	if len(ikeys) == 0 {
 		t.Fatalf("should not be empty")
 	}
-	if firstCkey != 0 {
-		t.Fatalf("firstCkey should be 0")
+	if ikeys[0] != 0 {
+		t.Fatalf("first ikeys should be 0")
 	}
-	if lastCkey != 10001 {
-		t.Fatalf("lastCkey should be 10001")
+	if ikeys[len(ikeys)-1] != 10001 {
+		t.Fatalf("last ikeys should be 10001")
 	}
 
 	var keys []uint64
@@ -4457,7 +4457,7 @@ func TestCloneRoaringIterator(t *testing.T) {
 	}
 }
 
-func TestRoaringIteratorContainerKeySpan(t *testing.T) {
+func TestRoaringIteratorContainerKeys(t *testing.T) {
 
 	ca := NewContainerArray([]uint16{1, 10, 100, 1000})
 	ba := NewFileBitmap()
@@ -4475,15 +4475,15 @@ func TestRoaringIteratorContainerKeySpan(t *testing.T) {
 		t.Fatalf("error NewRoaringIterator(buf.Bytes()): %v", err)
 	}
 
-	firstCkey, lastCkey, empty := itr.ContainerKeySpan()
-	if empty {
+	ikeys := itr.ContainerKeys()
+	if len(ikeys) == 0 {
 		t.Fatalf("should not be empty")
 	}
-	if firstCkey != 10 {
-		t.Fatalf("firstCkey should be 10")
+	if ikeys[0] != 10 {
+		t.Fatalf("first ikeys should be 10")
 	}
-	if lastCkey != 10001 {
-		t.Fatalf("lastCkey should be 10001")
+	if ikeys[len(ikeys)-1] != 10001 {
+		t.Fatalf("last ikeys should be 10001")
 	}
 
 	// make and check empty bitmap
@@ -4499,10 +4499,53 @@ func TestRoaringIteratorContainerKeySpan(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error NewRoaringIterator(bufEmpty.Bytes()): %v", err)
 	}
-	_, _, empty = itrEmpty.ContainerKeySpan()
-	if !empty {
+	ikeys = itrEmpty.ContainerKeys()
+
+	if len(ikeys) != 0 {
 		t.Fatalf("should be empty")
 	}
+}
+
+func TestRoaringIteratorSkip(t *testing.T) {
+
+	ca := NewContainerArray([]uint16{1, 10, 100, 1000})
+	ba := NewFileBitmap()
+	ba.Containers.Put(101, ca)
+	ba.Containers.Put(10, ca)
+	ba.Containers.Put(10001, ca)
+	var buf bytes.Buffer
+	_, err := ba.WriteTo(&buf)
+	if err != nil {
+		t.Fatalf("error writing: %v", err)
+	}
+
+	itr, err := NewRoaringIterator(buf.Bytes())
+	if err != nil {
+		t.Fatalf("error NewRoaringIterator(buf.Bytes()): %v", err)
+	}
+
+	itr.Skip()
+	ckey1, ct := itr.NextContainer()
+	_ = ct
+	if ckey1 != 101 {
+		t.Fatalf("expected to skip 10 and get 101 but got: %v", ckey1)
+	}
+
+	// make and check empty bitmap
+
+	baEmpty := NewFileBitmap()
+	var bufEmpty bytes.Buffer
+	_, err = baEmpty.WriteTo(&bufEmpty)
+	if err != nil {
+		t.Fatalf("error writing: %v", err)
+	}
+
+	itrEmpty, err := NewRoaringIterator(bufEmpty.Bytes())
+	if err != nil {
+		t.Fatalf("error NewRoaringIterator(bufEmpty.Bytes()): %v", err)
+	}
+	itrEmpty.Skip()
+	// should not have panic-ed.
 }
 
 // we were seeing unionInterval16InPlace() returning too

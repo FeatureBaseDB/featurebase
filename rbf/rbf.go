@@ -53,6 +53,8 @@ const (
 	RLEMaxSize = 2039
 )
 
+const maxBranchCellsPerPage = int((PageSize - branchPageHeaderSize) / (branchCellIndexElemSize + unsafe.Sizeof(branchCell{})))
+
 // Page types.
 const (
 	PageTypeRootRecord   = 1
@@ -103,7 +105,9 @@ const (
 	leafCellHeaderSize       = 8 + 4 + 6 // key, type, count
 	leafPageHeaderSize       = 4 + 4 + 2 // pgno, flags, cell n
 	leafCellIndexElemSize    = 2
+	branchPageHeaderSize     = 4 + 4 + 2 // pgno, flags, cell n
 	branchCellSize           = 8 + 4 + 4 // key, flags, pgno
+	branchCellIndexElemSize  = 2
 )
 
 var (
@@ -566,9 +570,9 @@ func writeLeafCell(page []byte, i, offset int, cell leafCell) {
 
 // branchCell represents a branch cell.
 type branchCell struct {
-	Key   uint64
-	Flags uint32
-	Pgno  uint32
+	LeftKey   uint64 // smallest key on ChildPgno
+	Flags     uint32
+	ChildPgno uint32
 }
 
 // branchCellsPageSize returns the total page size required to hold cells.
@@ -591,9 +595,9 @@ func readBranchCell(page []byte, i int) branchCell {
 
 	offset := readCellOffset(page, i)
 	var cell branchCell
-	cell.Key = *(*uint64)(unsafe.Pointer(&page[offset]))
+	cell.LeftKey = *(*uint64)(unsafe.Pointer(&page[offset]))
 	cell.Flags = *(*uint32)(unsafe.Pointer(&page[offset+8]))
-	cell.Pgno = *(*uint32)(unsafe.Pointer(&page[offset+12]))
+	cell.ChildPgno = *(*uint32)(unsafe.Pointer(&page[offset+12]))
 	return cell
 }
 
@@ -608,9 +612,9 @@ func readBranchCells(page []byte) []branchCell {
 
 func writeBranchCell(page []byte, i, offset int, cell branchCell) {
 	writeCellOffset(page, i, offset)
-	*(*uint64)(unsafe.Pointer(&page[offset+0])) = cell.Key
+	*(*uint64)(unsafe.Pointer(&page[offset+0])) = cell.LeftKey
 	*(*uint32)(unsafe.Pointer(&page[offset+8])) = uint32(cell.Flags)
-	*(*uint32)(unsafe.Pointer(&page[offset+12])) = uint32(cell.Pgno)
+	*(*uint32)(unsafe.Pointer(&page[offset+12])) = uint32(cell.ChildPgno)
 }
 
 func highbits(v uint64) uint64 { return v >> 16 }
@@ -673,7 +677,7 @@ func Pagedump(b []byte, indent string, writer io.Writer) {
 		fmt.Fprintf(writer, "==BRANCH pgno=%d flags=%d n=%d\n", pgno, flags, cellN)
 		for i := 0; i < cellN; i++ {
 			cell := readBranchCell(b, i)
-			fmt.Fprintf(writer, "[%d]: key=%d flags=%d pgno=%d\n", i, cell.Key, cell.Flags, cell.Pgno)
+			fmt.Fprintf(writer, "[%d]: key=%d flags=%d pgno=%d\n", i, cell.LeftKey, cell.Flags, cell.ChildPgno)
 		}
 	default:
 		fmt.Fprintf(writer, "==!PAGE %d flags=%d\n", pgno, flags)

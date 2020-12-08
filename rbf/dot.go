@@ -96,10 +96,10 @@ func dumpdot(tx *Tx, pgno uint32, parent string, writer io.Writer) {
 		for i, n := 0, readCellN(page); i < n; i++ {
 			cell := readBranchCell(page, i)
 			if cell.Flags&uint32(ContainerTypeBitmap) == 0 { // leaf/branch child page
-				dumpdot(tx, cell.Pgno, p, writer)
+				dumpdot(tx, cell.ChildPgno, p, writer)
 			} else {
-				b := fmt.Sprintf("bm%d", cell.Pgno)
-				fmt.Fprintf(writer, "%s[label=\"BITMAP(%d) key=%d \"]\n %s -> %s\n", b, cell.Pgno, cell.Key, p, b)
+				b := fmt.Sprintf("bm%d", cell.ChildPgno)
+				fmt.Fprintf(writer, "%s[label=\"BITMAP(%d) key=%d \"]\n %s -> %s\n", b, cell.ChildPgno, cell.LeftKey, p, b)
 			}
 		}
 	case PageTypeLeaf:

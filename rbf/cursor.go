@@ -38,10 +38,12 @@ type Cursor struct {
 	leafCells [PageSize / 8]leafCell
 
 	// stack holds branches
-	stack struct {
-		index int
-		elems [32]stackElem
-	}
+	stack searchStack
+}
+
+type searchStack struct {
+	top   int
+	elems [32]stackElem
 }
 
 func runAdd(runs []roaring.Interval16, v uint16) ([]roaring.Interval16, bool) {
@@ -139,7 +141,7 @@ func (c *Cursor) Add(v uint64) (changed bool, err error) {
 	}
 
 	// If the container exists and bit is not set then update the page.
-	elem := &c.stack.elems[c.stack.index]
+	elem := &c.stack.elems[c.stack.top]
 	leafPage, _, err := c.tx.readPage(elem.pgno)
 	if err != nil {
 		return false, err
@@ -210,7 +212,7 @@ func (c *Cursor) Remove(v uint64) (changed bool, err error) {
 	}
 
 	// If the container exists and bit is not set then update the page.
-	elem := &c.stack.elems[c.stack.index]
+	elem := &c.stack.elems[c.stack.top]
 	leafPage, _, err := c.tx.readPage(elem.pgno)
 	if err != nil {
 		return false, err
@@ -326,7 +328,7 @@ func (c *Cursor) Contains(v uint64) (exists bool, err error) {
 	}
 
 	// If the container exists then check for low bits existence.
-	elem := &c.stack.elems[c.stack.index]
+	elem := &c.stack.elems[c.stack.top]
 	leafPage, _, err := c.tx.readPage(elem.pgno)
 	if err != nil {
 		return false, err
@@ -368,7 +370,7 @@ func toPgno(val []byte) uint32 {
 }
 
 func (c *Cursor) putLeafCell(in leafCell) (err error) {
-	elem := &c.stack.elems[c.stack.index]
+	elem := &c.stack.elems[c.stack.top]
 	leafPage, isHeap, err := c.tx.readPage(elem.pgno) // the last read leaf page
 	if err != nil {
 		return err
@@ -453,18 +455,18 @@ func (c *Cursor) putLeafCell(in leafCell) (err error) {
 	}
 
 	// Write each group to a separate page.
-	newRoot := (len(groups) > 1) && (c.stack.index == 0)
+	newRoot := (len(groups) > 1) && (c.stack.top == 0)
 	var parents []branchCell
 	origPgno := elem.pgno
 	// newRoot if split occured and bottom of the stack
 	for i, group := range groups {
 		// First page should overwrite the original.
 		// Subsequent pages should allocate new pages.
-		parent := branchCell{Key: group[0].Key} //<<< this is the key spot for making sure that key is correct
+		parent := branchCell{LeftKey: group[0].Key} //<<< this is the key spot for making sure that key is correct
 		if i == 0 && !newRoot {
-			parent.Pgno = origPgno
+			parent.ChildPgno = origPgno
 		} else {
-			if parent.Pgno, err = c.tx.allocatePgno(); err != nil {
+			if parent.ChildPgno, err = c.tx.allocatePgno(); err != nil {
 				return fmt.Errorf("cannot allocate leaf: %w", err)
 			}
 		}
@@ -479,7 +481,7 @@ func (c *Cursor) putLeafCell(in leafCell) (err error) {
 		}
 		var buf [PageSize]byte
 		// Write cells to page.
-		writePageNo(buf[:], parent.Pgno)
+		writePageNo(buf[:], parent.ChildPgno)
 		writeFlags(buf[:], PageTypeLeaf)
 		writeCellN(buf[:], len(group))
 
@@ -509,20 +511,20 @@ func (c *Cursor) putLeafCell(in leafCell) (err error) {
 	}
 
 	// Initialize a new root if we are currently the root page.
-	if c.stack.index == 0 {
+	if c.stack.top == 0 {
 		assert(newRoot) // leaf write must be root when stack at root
 		return c.writeRoot(origPgno, parents)
 	}
 	assert(!newRoot) // leaf write must NOT be root when stack not at root
 
 	// Otherwise update existing parent.
-	return c.putBranchCells(c.stack.index-1, parents)
+	return c.putBranchCells(c.stack.top-1, parents)
 }
 
 // putLeafCellFast quickly insert or updates a cell on a leaf page.
 // It works by shifting bytes around instead of deserializing. This must not overflow.
 func (c *Cursor) putLeafCellFast(in leafCell, isInsert bool) (err error) {
-	elem := &c.stack.elems[c.stack.index]
+	elem := &c.stack.elems[c.stack.top]
 	src, isHeap, err := c.tx.readPage(elem.pgno)
 	if err != nil {
 		return err
@@ -597,7 +599,7 @@ func (c *Cursor) putLeafCellFast(in leafCell, isInsert bool) (err error) {
 
 // deleteLeafCell removes a cell from the currently positioned page & index.
 func (c *Cursor) deleteLeafCell(key uint64) (err error) {
-	elem := &c.stack.elems[c.stack.index]
+	elem := &c.stack.elems[c.stack.top]
 	leafPage, _, err := c.tx.readPage(elem.pgno)
 	if err != nil {
 		return err
@@ -613,11 +615,11 @@ func (c *Cursor) deleteLeafCell(key uint64) (err error) {
 	}
 
 	// If no more cells exist and we have a parent, remove from parent.
-	if c.stack.index > 0 && len(cells) == 1 {
+	if c.stack.top > 0 && len(cells) == 1 {
 		if err := c.tx.freePgno(elem.pgno); err != nil {
 			return err
 		}
-		return c.deleteBranchCell(c.stack.index-1, cells[0].Key)
+		return c.deleteBranchCell(c.stack.top-1, cells[0].Key)
 	}
 
 	// Remove matching cell from list.
@@ -641,8 +643,8 @@ func (c *Cursor) deleteLeafCell(key uint64) (err error) {
 	}
 
 	// Update the parent's reference key if it's changed.
-	if c.stack.index > 0 && oldPageKey != cells[0].Key {
-		return c.updateBranchCell(c.stack.index-1, cells[0].Key)
+	if c.stack.top > 0 && oldPageKey != cells[0].Key {
+		return c.updateBranchCell(c.stack.top-1, cells[0].Key)
 	}
 	return nil
 }
@@ -658,6 +660,10 @@ func (c *Cursor) putBranchCells(stackIndex int, newCells []branchCell) (err erro
 	}
 
 	cells := readBranchCells(page)
+
+	if len(cells) == 0 {
+		cells = make([]branchCell, 1)
+	}
 
 	// Update current cell & insert additional cells after it.
 	cells[elem.index] = newCells[0]
@@ -680,11 +686,11 @@ func (c *Cursor) putBranchCells(stackIndex int, newCells []branchCell) (err erro
 	for i, group := range groups {
 		// First page should overwrite the original.
 		// Subsequent pages should allocate new pages.
-		parent := branchCell{Key: group[0].Key}
+		parent := branchCell{LeftKey: group[0].LeftKey}
 		if i == 0 && !newRoot {
-			parent.Pgno = origPgno
+			parent.ChildPgno = origPgno
 		} else {
-			if parent.Pgno, err = c.tx.allocatePgno(); err != nil {
+			if parent.ChildPgno, err = c.tx.allocatePgno(); err != nil {
 				return fmt.Errorf("cannot allocate branch: %w", err)
 			}
 		}
@@ -692,7 +698,7 @@ func (c *Cursor) putBranchCells(stackIndex int, newCells []branchCell) (err erro
 
 		// Write cells to page.
 		var buf [PageSize]byte
-		writePageNo(buf[:], parents[i].Pgno)
+		writePageNo(buf[:], parents[i].ChildPgno)
 		writeFlags(buf[:], PageTypeBranch)
 		writeCellN(buf[:], len(group))
 
@@ -737,10 +743,10 @@ func (c *Cursor) updateBranchCell(stackIndex int, newKey uint64) (err error) {
 		return err
 	}
 	cells := readBranchCells(page)
-	oldPageKey := cells[0].Key
+	oldPageKey := cells[0].LeftKey
 
 	// Update key in branch cell.
-	cells[elem.index].Key = newKey
+	cells[elem.index].LeftKey = newKey
 
 	// Write cells to page.
 	var buf [PageSize]byte
@@ -757,8 +763,8 @@ func (c *Cursor) updateBranchCell(stackIndex int, newKey uint64) (err error) {
 		return err
 	}
 
-	if stackIndex > 0 && oldPageKey != cells[0].Key {
-		return c.updateBranchCell(stackIndex-1, cells[0].Key)
+	if stackIndex > 0 && oldPageKey != cells[0].LeftKey {
+		return c.updateBranchCell(stackIndex-1, cells[0].LeftKey)
 	}
 	return nil
 }
@@ -773,7 +779,7 @@ func (c *Cursor) deleteBranchCell(stackIndex int, key uint64) (err error) {
 		return err
 	}
 	cells := readBranchCells(page)
-	oldPageKey := cells[0].Key
+	oldPageKey := cells[0].LeftKey
 
 	// Remove cell from branch.
 	copy(cells[elem.index:], cells[elem.index+1:])
@@ -782,7 +788,7 @@ func (c *Cursor) deleteBranchCell(stackIndex int, key uint64) (err error) {
 
 	// If the root only has one node, replace it with its child.
 	if stackIndex == 0 && len(cells) == 1 {
-		target, _, err := c.tx.readPage(cells[0].Pgno)
+		target, _, err := c.tx.readPage(cells[0].ChildPgno)
 		if err != nil {
 			return err
 		}
@@ -791,7 +797,7 @@ func (c *Cursor) deleteBranchCell(stackIndex int, key uint64) (err error) {
 		copy(buf, target)
 		writePageNo(buf[:], elem.pgno)
 
-		if err := c.tx.freePgno(cells[0].Pgno); err != nil {
+		if err := c.tx.freePgno(cells[0].ChildPgno); err != nil {
 			return err
 		}
 		return c.tx.writePage(buf[:])
@@ -812,8 +818,8 @@ func (c *Cursor) deleteBranchCell(stackIndex int, key uint64) (err error) {
 		return err
 	}
 
-	if stackIndex > 0 && len(cells) > 0 && oldPageKey != cells[0].Key {
-		return c.updateBranchCell(stackIndex-1, cells[0].Key)
+	if stackIndex > 0 && len(cells) > 0 && oldPageKey != cells[0].LeftKey {
+		return c.updateBranchCell(stackIndex-1, cells[0].LeftKey)
 	}
 	return nil
 }
@@ -849,7 +855,8 @@ func splitLeafCells(cells []leafCell) [][]leafCell {
 
 		// If there is at least one cell on the slice & we've exceeded
 		// half a page then create a new group of cells.
-		if cellN != 0 && (dataOffset(cellN+1)+dataSize+sz) > (PageSize*60)/100 {
+		thresh := int(float64(PageSize) * globalBranchFillPct)
+		if cellN != 0 && (dataOffset(cellN+1)+dataSize+sz) > thresh {
 			slices, dataSize = append(slices, nil), 0
 		} else if cellN != 0 && cell.Type == ContainerTypeArray && cell.ElemN > ArrayMaxSize {
 			slices, dataSize = append(slices, nil), 0
@@ -864,6 +871,8 @@ func splitLeafCells(cells []leafCell) [][]leafCell {
 	return slices
 }
 
+var globalBranchFillPct = 0.60
+
 // splitBranchCells splits cells into roughly equal parts. It's a naive
 // implementation that splits cells whenever a page is 60% full.
 func splitBranchCells(cells []branchCell) [][]branchCell {
@@ -877,7 +886,9 @@ func splitBranchCells(cells []branchCell) [][]branchCell {
 
 		// If there is at least one cell on the slice & we've exceeded
 		// half a page then create a new group of cells.
-		if cellN != 0 && (dataOffset(cellN+1)+dataSize+sz) > (PageSize*60)/100 {
+
+		thresh := int(float64(PageSize) * globalBranchFillPct)
+		if cellN != 0 && (dataOffset(cellN+1)+dataSize+sz) > thresh {
 			slices, dataSize = append(slices, nil), 0
 		}
 
@@ -899,8 +910,8 @@ func pageKeyAt(page []byte, index int) uint64 {
 func (c *Cursor) First() error {
 	c.buffered = true
 
-	for c.stack.index = 0; ; c.stack.index++ {
-		elem := &c.stack.elems[c.stack.index]
+	for c.stack.top = 0; ; c.stack.top++ {
+		elem := &c.stack.elems[c.stack.top]
 
 		buf, _, err := c.tx.readPage(elem.pgno)
 		if err != nil {
@@ -914,9 +925,9 @@ func (c *Cursor) First() error {
 			// Read cell pgno into the next stack level.
 			cell := readBranchCell(buf, elem.index)
 
-			c.stack.elems[c.stack.index+1] = stackElem{
-				pgno: cell.Pgno,
-				key:  cell.Key,
+			c.stack.elems[c.stack.top+1] = stackElem{
+				pgno: cell.ChildPgno,
+				key:  cell.LeftKey,
 			}
 
 		case PageTypeLeaf:
@@ -936,8 +947,8 @@ func (c *Cursor) Last() error {
 	// c.stack.elems[0].pgno = c.root
 	c.buffered = true
 
-	for c.stack.index = 0; ; c.stack.index++ {
-		elem := &c.stack.elems[c.stack.index]
+	for c.stack.top = 0; ; c.stack.top++ {
+		elem := &c.stack.elems[c.stack.top]
 
 		buf, _, err := c.tx.readPage(elem.pgno)
 		if err != nil {
@@ -950,9 +961,9 @@ func (c *Cursor) Last() error {
 
 			// Read cell pgno into the next stack level.
 			cell := readBranchCell(buf, elem.index)
-			c.stack.elems[c.stack.index+1] = stackElem{
-				pgno: cell.Pgno,
-				key:  cell.Key,
+			c.stack.elems[c.stack.top+1] = stackElem{
+				pgno: cell.ChildPgno,
+				key:  cell.LeftKey,
 			}
 
 		case PageTypeLeaf:
@@ -972,8 +983,8 @@ func (c *Cursor) Last() error {
 func (c *Cursor) Seek(key uint64) (exact bool, err error) {
 	// c.stack.elems[0].pgno = c.bitmap.root
 	c.buffered = true
-	for c.stack.index = 0; ; c.stack.index++ {
-		elem := &c.stack.elems[c.stack.index]
+	for c.stack.top = 0; ; c.stack.top++ {
+		elem := &c.stack.elems[c.stack.top]
 		assert(elem.pgno != 0) // cursor should never point to page zero (meta)
 
 		buf, _, err := c.tx.readPage(elem.pgno)
@@ -1002,9 +1013,9 @@ func (c *Cursor) Seek(key uint64) (exact bool, err error) {
 
 			cell := readBranchCell(buf, elem.index)
 
-			c.stack.elems[c.stack.index+1] = stackElem{
-				pgno: cell.Pgno,
-				key:  cell.Key,
+			c.stack.elems[c.stack.top+1] = stackElem{
+				pgno: cell.ChildPgno,
+				key:  cell.LeftKey,
 			}
 
 		case PageTypeLeaf:
@@ -1028,7 +1039,7 @@ func (c *Cursor) Seek(key uint64) (exact bool, err error) {
 
 // Next moves to the next element of the btree. Returns EOF if no more elements exist.
 func (c *Cursor) Next() error {
-	elem := &c.stack.elems[c.stack.index]
+	elem := &c.stack.elems[c.stack.top]
 	leafPage, _, err := c.tx.readPage(elem.pgno)
 	if err != nil {
 		return err
@@ -1060,14 +1071,14 @@ func (c *Cursor) Prev() error {
 	}
 
 	// Move forward to the next leaf element if available.
-	if elem := &c.stack.elems[c.stack.index]; elem.index > 0 {
+	if elem := &c.stack.elems[c.stack.top]; elem.index > 0 {
 		elem.index--
 		return nil
 	}
 
 	// Move up the stack until we can move forward one element.
-	for c.stack.index--; c.stack.index >= 0; c.stack.index-- {
-		elem := &c.stack.elems[c.stack.index]
+	for c.stack.top--; c.stack.top >= 0; c.stack.top-- {
+		elem := &c.stack.elems[c.stack.top]
 		if elem.index > 0 {
 			elem.index--
 			break
@@ -1075,14 +1086,14 @@ func (c *Cursor) Prev() error {
 	}
 
 	// No more elements, return EOF.
-	if c.stack.index == -1 {
-		c.stack.index = 0
+	if c.stack.top == -1 {
+		c.stack.top = 0
 		return io.EOF
 	}
 
 	// Traverse back down the stack to find the first element in each page.
-	for ; ; c.stack.index++ {
-		elem := &c.stack.elems[c.stack.index]
+	for ; ; c.stack.top++ {
+		elem := &c.stack.elems[c.stack.top]
 
 		buf, _, err := c.tx.readPage(elem.pgno)
 		if err != nil {
@@ -1093,9 +1104,9 @@ func (c *Cursor) Prev() error {
 		case PageTypeBranch:
 			cell := readBranchCell(buf, elem.index)
 
-			c.stack.elems[c.stack.index+1] = stackElem{
-				pgno: cell.Pgno,
-				key:  cell.Key,
+			c.stack.elems[c.stack.top+1] = stackElem{
+				pgno: cell.ChildPgno,
+				key:  cell.LeftKey,
 			}
 
 		case PageTypeLeaf:
@@ -1109,7 +1120,7 @@ func (c *Cursor) Prev() error {
 
 // Key returns the key for the container the cursor is currently pointing to.
 func (c *Cursor) Key() uint64 {
-	elem := &c.stack.elems[c.stack.index]
+	elem := &c.stack.elems[c.stack.top]
 	leafPage, _, _ := c.tx.readPage(elem.pgno)
 	if readCellN(leafPage[:]) == 0 {
 		return 0
@@ -1120,7 +1131,7 @@ func (c *Cursor) Key() uint64 {
 
 // Values returns the values for the container the cursor is currently pointing to.
 func (c *Cursor) Values() []uint16 {
-	elem := &c.stack.elems[c.stack.index]
+	elem := &c.stack.elems[c.stack.top]
 	leafPage, _, _ := c.tx.readPage(elem.pgno)
 	if readCellN(leafPage[:]) == 0 {
 		return nil
@@ -1136,9 +1147,36 @@ type stackElem struct {
 	key   uint64 // element key
 }
 
+func (se *stackElem) equal(se2 *stackElem) bool {
+	if se.pgno != se2.pgno {
+		return false
+	}
+	if se.index != se2.index {
+		return false
+	}
+	if se.key != se2.key {
+		return false
+	}
+	return true
+}
+
+func (se *stackElem) String() string {
+	return fmt.Sprintf("stackElem{pgno:%v  index:%v  key:%v}", int(se.pgno) /*,tx.pageTypeDesc(se.pgno)*/, se.index, int(se.key))
+}
+
+func (se *stackElem) clear() {
+	se.pgno = 0
+	se.index = 0
+	se.key = 0
+}
+
+var _ = (&stackElem{}).clear
+var _ = (&stackElem{}).String
+var _ = (&stackElem{}).equal
+
 func (c *Cursor) goNextPage() error {
-	for c.stack.index--; c.stack.index >= 0; c.stack.index-- {
-		elem := &c.stack.elems[c.stack.index]
+	for c.stack.top--; c.stack.top >= 0; c.stack.top-- {
+		elem := &c.stack.elems[c.stack.top]
 		if buf, _, err := c.tx.readPage(elem.pgno); err != nil {
 			return err
 		} else if n := readCellN(buf); elem.index+1 < n {
@@ -1148,14 +1186,14 @@ func (c *Cursor) goNextPage() error {
 	}
 
 	// No more elements, return EOF.
-	if c.stack.index == -1 {
-		c.stack.index = 0
+	if c.stack.top == -1 {
+		c.stack.top = 0
 		return io.EOF
 	}
 
 	// Traverse back down the stack to find the first element in each page.
-	for ; ; c.stack.index++ {
-		elem := &c.stack.elems[c.stack.index]
+	for ; ; c.stack.top++ {
+		elem := &c.stack.elems[c.stack.top]
 		buf, _, err := c.tx.readPage(elem.pgno)
 		if err != nil {
 			return err
@@ -1164,9 +1202,9 @@ func (c *Cursor) goNextPage() error {
 		switch typ := readFlags(buf); typ {
 		case PageTypeBranch:
 			cell := readBranchCell(buf, elem.index)
-			c.stack.elems[c.stack.index+1] = stackElem{
-				pgno: cell.Pgno,
-				key:  cell.Key,
+			c.stack.elems[c.stack.top+1] = stackElem{
+				pgno: cell.ChildPgno,
+				key:  cell.LeftKey,
 			}
 		case PageTypeLeaf:
 			elem.index = 0
@@ -1222,7 +1260,7 @@ func ConvertToLeafArgs(key uint64, c *roaring.Container) (result leafCell) {
 }
 
 func (c *Cursor) merge(key uint64, data *roaring.Container) (bool, error) {
-	elem := &c.stack.elems[c.stack.index]
+	elem := &c.stack.elems[c.stack.top]
 	leafPage, _, err := c.tx.readPage(elem.pgno)
 	if err != nil {
 		return false, err
@@ -1311,7 +1349,7 @@ func (c *Cursor) RemoveRoaring(bm *roaring.Bitmap) (changed bool, err error) {
 }
 
 func (c *Cursor) difference(key uint64, data *roaring.Container) (bool, error) {
-	elem := &c.stack.elems[c.stack.index]
+	elem := &c.stack.elems[c.stack.top]
 	leafPage, _, err := c.tx.readPage(elem.pgno)
 	if err != nil {
 		return false, err
@@ -1364,4 +1402,21 @@ func (c *Cursor) Close() {
 	case tx.db.cursorArenaCh <- c:
 	case <-tx.db.cursorCleaner.ReqStop.Chan:
 	}
+}
+
+func keysFromParents(parents []branchCell) (ckeys []int) {
+	for _, par := range parents {
+		ckeys = append(ckeys, int(par.LeftKey))
+	}
+	return
+}
+
+var _ = (&Cursor{}).showCursorStack
+
+func (c *Cursor) showCursorStack() (r string) {
+	r = fmt.Sprintf("top = %v\n", c.stack.top)
+	for i := 0; i <= c.stack.top; i++ {
+		r += fmt.Sprintf("  [%02v] %v\n", i, c.stack.elems[i].String())
+	}
+	return
 }
