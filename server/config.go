@@ -201,8 +201,10 @@ type Config struct {
 	// returned from the blueGreenTx.
 	Txsrc string `toml:"txsrc"`
 
-	// RowcacheOff, if true, turns off the row cache for all storage backends.
-	RowcacheOff bool `toml:"rowcache-off"`
+	// RowcacheOn, if true, turns on the row cache for all storage backends.
+	// The default is now off because it makes rbf queries faster and uses
+	// much less memory.
+	RowcacheOn bool `toml:"rowcache-on"`
 
 	// RBFConfig defines all externally configurable RBF flags.
 	RBFConfig *rbfcfg.Config

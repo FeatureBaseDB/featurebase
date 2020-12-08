@@ -95,8 +95,8 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 	// cannot detect and honor the PILOSA_TXSRC env var over-ride.
 	flags.StringVarP(&srv.Config.Txsrc, "txsrc", "", "", fmt.Sprintf("transaction/storage to use: one of roaring, rbf, bolt, lmdb, or a blue-green setup: rbf_roaring, roaring_rbf, bolt_roaring, roaring_bolt, bolt_rbf, etc. The default is: %v. The env var PILOSA_TXSRC is over-ridden by --tx option on the command line.", pilosa.DefaultTxsrc))
 
-	// RowcacheOff
-	flags.BoolVarP((&srv.Config.RowcacheOff), "rowcache-off", "", srv.Config.RowcacheOff, "turn off the rowcache for all backends (reduces memory use)")
+	// RowcacheOn
+	flags.BoolVarP((&srv.Config.RowcacheOn), "rowcache-on", "", srv.Config.RowcacheOn, "turn on the rowcache for all backends (may speed some queries)")
 
 	// RBF specific flags. See pilosa/rbf/cfg/cfg.go for definitions.
 	srv.Config.RBFConfig.DefineFlags(flags)

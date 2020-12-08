@@ -145,8 +145,8 @@ type HolderOpts struct {
 	// server.go OptServerTxsrc
 	Txsrc string
 
-	// RowcacheOff, if true, turns off the row cache for all storage backends.
-	RowcacheOff bool
+	// RowcacheOn, if true, turns on the row cache for all storage backends.
+	RowcacheOn bool
 }
 
 func (h *Holder) StartTransaction(ctx context.Context, id string, timeout time.Duration, exclusive bool) (*Transaction, error) {
@@ -207,7 +207,7 @@ type HolderConfig struct {
 	NewAttrStore         func(string) AttrStore
 	Logger               logger.Logger
 	Txsrc                string
-	RowcacheOff          bool
+	RowcacheOn           bool
 
 	RBFConfig           *rbfcfg.Config
 	AntiEntropyInterval time.Duration
@@ -263,7 +263,7 @@ func NewHolder(path string, cfg *HolderConfig) *Holder {
 		OpenIDAllocator:      cfg.OpenIDAllocator,
 		translationSyncer:    cfg.TranslationSyncer,
 		Logger:               cfg.Logger,
-		Opts:                 HolderOpts{Txsrc: cfg.Txsrc, RowcacheOff: cfg.RowcacheOff},
+		Opts:                 HolderOpts{Txsrc: cfg.Txsrc, RowcacheOn: cfg.RowcacheOn},
 
 		SnapshotQueue: defaultSnapshotQueue,
 
@@ -274,7 +274,7 @@ func NewHolder(path string, cfg *HolderConfig) *Holder {
 		indexes: make(map[string]*Index),
 	}
 
-	rbf.SetRowcacheOn(!cfg.RowcacheOff)
+	rbf.SetRowcacheOn(cfg.RowcacheOn)
 
 	txf, err := NewTxFactory(cfg.Txsrc, path, h)
 	panicOn(err)
