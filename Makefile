@@ -198,7 +198,7 @@ docker-tag-push: vendor
 
 # Compile Pilosa inside Docker container
 docker-build: vendor
-	docker run --rm -v $(PWD):/go/src/$(CLONE_URL) -w /go/src/$(CLONE_URL) -e GOOS=$(GOOS) -e GOARCH=$(GOARCH) golang:$(GO_VERSION) go build -mod=vendor -tags='$(BUILD_TAGS)' -ldflags $(LDFLAGS) $(FLAGS) $(CLONE_URL)/$(MOD_VERSION)/cmd/pilosa
+	docker run --rm -v $(PWD):/go/src/$(CLONE_URL) -w /go/src/$(CLONE_URL) -e GOOS=$(GOOS) -e GOARCH=$(GOARCH) golang:$(GO_VERSION) make build FLAGS="$(FLAGS) -mod=vendor" RELEASE=$(RELEASE)
 
 # Install diagnostic pilosa-keydump tool. Allows viewing the keys in a transaction-engine directory.
 pilosa-keydump:
