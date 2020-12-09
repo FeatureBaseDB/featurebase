@@ -1433,10 +1433,11 @@ func (s *containerFilter) Close() {
 
 func (s *containerFilter) Apply() (err error) {
 	var minKey roaring.FilterKey
+	var cell leafCell
 	for err := s.cursor.Next(); err == nil; err = s.cursor.Next() {
 		elem := &s.cursor.stack.elems[s.cursor.stack.top]
 		leafPage, _, _ := s.cursor.tx.readPage(elem.pgno)
-		cell := readLeafCell(leafPage, elem.index)
+		readLeafCellInto(&cell, leafPage, elem.index)
 		key := roaring.FilterKey(cell.Key)
 		if key < minKey {
 			continue
