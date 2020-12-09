@@ -356,11 +356,11 @@ func OptServerTxsrc(txsrc string) ServerOption {
 	}
 }
 
-// OptServerRowcacheOff is a functional option on Server
-// used to turn off the row cache.
-func OptServerRowcacheOff(rowcacheOff bool) ServerOption {
+// OptServerRowcacheOn is a functional option on Server
+// used to turn on the row cache.
+func OptServerRowcacheOn(rowcacheOn bool) ServerOption {
 	return func(s *Server) error {
-		s.holderConfig.RowcacheOff = rowcacheOff
+		s.holderConfig.RowcacheOn = rowcacheOn
 		return nil
 	}
 }
@@ -438,7 +438,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	}
 	s.holder = NewHolder(path, s.holderConfig)
 	s.holder.Stats.SetLogger(s.logger)
-	s.holder.Logger.Printf("RowCacheOff: %v", s.holderConfig.RowcacheOff)
+	s.holder.Logger.Printf("RowCacheOn: %v", s.holderConfig.RowcacheOn)
 	cwd, err := os.Getwd()
 	if err != nil {
 		return nil, err
