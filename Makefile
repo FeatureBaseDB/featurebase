@@ -31,6 +31,7 @@ endif
 
 export GO111MODULE=on
 export GOPRIVATE=github.com/molecula
+export CGO_ENABLED=0
 
 # Run tests and compile Pilosa
 default: test build
