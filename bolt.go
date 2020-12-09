@@ -1583,3 +1583,7 @@ func (tx *BoltTx) Options() Txo {
 func (tx *BoltTx) Sn() int64 {
 	return tx.sn
 }
+
+func (c *BoltTx) ApplyFilter(index, field, view string, shard uint64, ckey uint64, filter roaring.BitmapFilter) (err error) {
+	return GenericApplyFilter(c, index, field, view, shard, ckey, filter)
+}

@@ -112,6 +112,14 @@ type Tx interface {
 	// citer.Close() must be called when the client is done using it.
 	ContainerIterator(index, field, view string, shard uint64, ckey uint64) (citer roaring.ContainerIterator, found bool, err error)
 
+	// ApplyFilter applies a roaring.BitmapFilter to a specified shard,
+	// starting at the given container key. The filter's ConsiderData
+	// method may be called with transient Container objects which *must
+	// not* be retained or referenced after that function exits. Similarly,
+	// their data must not be retained. If you need the data later, you
+	// must copy it into some other memory.
+	ApplyFilter(index, field, view string, shard uint64, ckey uint64, filter roaring.BitmapFilter) (err error)
+
 	// RoaringBitmap retreives the roaring.Bitmap for the entire shard.
 	RoaringBitmap(index, field, view string, shard uint64) (*roaring.Bitmap, error)
 
@@ -316,4 +324,15 @@ func (b *TxBitmap) Flush() error {
 		}
 	}
 	return nil
+}
+
+// GenericApplyFilter implements ApplyFilter in terms of tx.ContainerIterator,
+// as a convenience if a Tx backend hasn't implemented this new function yet.
+func GenericApplyFilter(tx Tx, index, field, view string, shard uint64, ckey uint64, filter roaring.BitmapFilter) (err error) {
+	iter, _, err := tx.ContainerIterator(index, field, view, shard, ckey)
+	if err != nil {
+		return err
+	}
+	// ApplyFilterToIterator closes the iterator for us.
+	return roaring.ApplyFilterToIterator(filter, iter)
 }

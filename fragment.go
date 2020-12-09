@@ -3179,20 +3179,18 @@ func (f *fragment) rows(ctx context.Context, tx Tx, start uint64, filters ...roa
 // unprotectedRows calls rows without grabbing the mutex.
 func (f *fragment) unprotectedRows(ctx context.Context, tx Tx, start uint64, filters ...roaring.BitmapFilter) ([]uint64, error) {
 	var rows []uint64
-	startKey := rowToKey(start)
-	i, _, err := tx.ContainerIterator(f.index(), f.field(), f.view(), f.shard, startKey)
-	if err != nil {
-		return nil, err
-	} else if i == nil {
-		return rows, nil
-	}
-	callback := func(row uint64) error {
+	cb := func(row uint64) error {
 		rows = append(rows, row)
 		return nil
 	}
-	filter := roaring.NewBitmapRowFilter(callback, filters...)
-	err = roaring.ApplyFilterToIterator(filter, i)
-	return rows, err
+	startKey := rowToKey(start)
+	filter := roaring.NewBitmapRowFilter(cb, filters...)
+	err := tx.ApplyFilter(f.index(), f.field(), f.view(), f.shard, startKey, filter)
+	if err != nil {
+		return nil, err
+	} else {
+		return rows, nil
+	}
 }
 
 // blockToRoaringData converts a fragment block into a roaring.Bitmap
@@ -3361,14 +3359,8 @@ func (f *fragment) intRowIterator(tx Tx, wrap bool, filters ...roaring.BitmapFil
 	return &it, nil
 }
 
-<<<<<<< HEAD
-func (f *fragment) foreachRow(tx Tx, filters []rowFilter, fn func(rid uint64) error) error {
-	var lastRow uint64 = math.MaxUint64
-	i, _, err := tx.ContainerIterator(f.index(), f.field(), f.view(), f.shard, rowToKey(0))
-=======
 func (f *fragment) foreachRow(tx Tx, filters []roaring.BitmapFilter, fn func(rid uint64) error) error {
-	i, _, err := tx.ContainerIterator(f.index, f.field, f.view, f.shard, rowToKey(0))
->>>>>>> Allow arbitrary and potentially more efficient filtering of bitmaps
+	i, _, err := tx.ContainerIterator(f.index, f.field(), f.view(), f.shard, rowToKey(0))
 	if err != nil {
 		return err
 	}

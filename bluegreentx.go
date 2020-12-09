@@ -907,6 +907,10 @@ func (c *blueGreenTx) Sn() int64 {
 	return bsn
 }
 
+func (c *blueGreenTx) ApplyFilter(index, field, view string, shard uint64, ckey uint64, filter roaring.BitmapFilter) (err error) {
+	return GenericApplyFilter(c, index, field, view, shard, ckey, filter)
+}
+
 // MultiReaderB is returned by RoaringBitmapReader. It verifies
 // that identical byte streams are read from its two members.
 type MultiReaderB struct {

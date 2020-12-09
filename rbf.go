@@ -438,6 +438,10 @@ func (tx *RBFTx) UseRowCache() bool {
 	return rbf.EnableRowCache()
 }
 
+func (c *RBFTx) ApplyFilter(index, field, view string, shard uint64, ckey uint64, filter roaring.BitmapFilter) (err error) {
+	return GenericApplyFilter(c, index, field, view, shard, ckey, filter)
+}
+
 // rbfName returns a NULL-separated key used for identifying bitmap maps in RBF.
 func rbfName(index, field, view string, shard uint64) string {
 	return string(txkey.Prefix(index, field, view, shard))
