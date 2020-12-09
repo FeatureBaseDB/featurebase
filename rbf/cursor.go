@@ -1125,8 +1125,7 @@ func (c *Cursor) Key() uint64 {
 	if readCellN(leafPage[:]) == 0 {
 		return 0
 	}
-	cell := readLeafCell(leafPage, elem.index)
-	return cell.Key
+	return readLeafCellKey(leafPage, elem.index)
 }
 
 // Values returns the values for the container the cursor is currently pointing to.
