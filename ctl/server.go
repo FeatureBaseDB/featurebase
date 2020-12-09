@@ -93,7 +93,7 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 	// Transactional storage engine
 	// Note: the default for --tx must be kept "" empty string. Otherwise we
 	// cannot detect and honor the PILOSA_TXSRC env var over-ride.
-	flags.StringVarP(&srv.Config.Txsrc, "txsrc", "", "", fmt.Sprintf("transaction/storage to use: one of roaring, rbf, bolt, lmdb, or a blue-green setup: rbf_roaring, roaring_rbf, bolt_roaring, roaring_bolt, bolt_rbf, etc. The default is: %v. The env var PILOSA_TXSRC is over-ridden by --tx option on the command line.", pilosa.DefaultTxsrc))
+	flags.StringVarP(&srv.Config.Txsrc, "txsrc", "", "", fmt.Sprintf("transaction/storage to use: one of roaring, rbf, bolt, or a blue-green setup: rbf_roaring, roaring_rbf, bolt_roaring, roaring_bolt, bolt_rbf, etc. The default is: %v. The env var PILOSA_TXSRC is over-ridden by --txsrc option on the command line.", pilosa.DefaultTxsrc))
 
 	// RowcacheOn
 	flags.BoolVarP((&srv.Config.RowcacheOn), "rowcache-on", "", srv.Config.RowcacheOn, "turn on the rowcache for all backends (may speed some queries)")

@@ -12,16 +12,18 @@ require (
 	github.com/davecgh/go-spew v1.1.1
 	github.com/desertbit/timer v0.0.0-20180107155436-c41aec40b27f // indirect
 	github.com/dustin/go-humanize v1.0.0
+	github.com/glycerine/goconvey v0.0.0-20190410193231-58a59202ab31 // indirect
 	github.com/glycerine/idem v0.0.0-20190127113923-7a8083893311
-	github.com/glycerine/lmdb-go v1.9.34
 	github.com/go-ole/go-ole v1.2.4 // indirect
 	github.com/gogo/protobuf v1.2.1
 	github.com/golang/protobuf v1.3.3
 	github.com/google/go-cmp v0.4.0
+	github.com/gopherjs/gopherjs v0.0.0-20200217142428-fce0ec30dd00 // indirect
 	github.com/gorilla/handlers v1.3.0
 	github.com/gorilla/mux v1.7.0
 	github.com/hashicorp/memberlist v0.1.3
 	github.com/improbable-eng/grpc-web v0.13.0
+	github.com/jtolds/gls v4.20.0+incompatible // indirect
 	github.com/lib/pq v1.8.0
 	github.com/molecula/apophenia v0.0.0-20190827192002-68b7a14a478b
 	github.com/opentracing/opentracing-go v1.1.0

@@ -16,12 +16,11 @@
 ./rbf/page_map.go
 ./cmd/slurp/vprint.go
 ./cmd/badloader/vprint.go
-./cmd/demo-lmdb/vprint.go
 ./gid.go
-./cmd/pilosa-keydump/vprint.go
-./cmd/pilosa-keydump/keydump.go
 ./synthload/vprint.go
 ./proto/vdsm/vdsm.proto
 ./proto/vdsm/vdsm.pb.go
 ./cmd/pilosa-fsck/vprint.go
 ./cmd/random-query/vprint.go
+./barrier.go
+./barrier_test.go
