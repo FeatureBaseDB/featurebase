@@ -20,16 +20,14 @@ import (
 	"os"
 	"testing"
 	"time"
-
-	"github.com/glycerine/lmdb-go/lmdb"
 )
 
 func Test_TxFactory_Qcx_query_context(t *testing.T) {
 	src := os.Getenv("PILOSA_TXSRC")
-	if src == "rbf" || src == "lmdb" || src == "bolt" {
+	if src == "rbf" || src == "bolt" {
 		// ok
 	} else {
-		t.Skip("this test only for lmdb and rbf and bolt")
+		t.Skip("this test only for rbf and bolt")
 	}
 
 	shard := uint64(0)
@@ -37,7 +35,7 @@ func Test_TxFactory_Qcx_query_context(t *testing.T) {
 	defer f.Clean(t)
 	tx.Rollback()
 
-	barrier := lmdb.NewBarrier()
+	barrier := NewBarrier()
 	defer barrier.Close()
 
 	done := make(chan bool)

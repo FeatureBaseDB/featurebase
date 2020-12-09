@@ -31,6 +31,7 @@ endif
 
 export GO111MODULE=on
 export GOPRIVATE=github.com/molecula
+export CGO_ENABLED=0
 
 # Run tests and compile Pilosa
 default: test build
@@ -49,7 +50,7 @@ test:
 
 # Run test suite with race flag
 test-race:
-	go test ./... -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) -race -timeout 60m -v
+	CGO_ENABLED=1 go test ./... -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) -race -timeout 60m -v
 
 testv: topt testvsub
 
@@ -73,7 +74,7 @@ testvsub-race:
 	set -e; for i in boltdb ctl http pg pql rbf roaring server sql txkey; do \
            echo; echo "___ testing subpkg $$i -race"; \
            cd $$i; pwd; \
-           go test -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) -v -race -timeout 60m || break; \
+           CGO_ENABLED=1 go test -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) -v -race -timeout 60m || break; \
            echo; echo "999 done testing subpkg $$i -race"; \
            cd ..; \
         done
@@ -225,7 +226,7 @@ topt:
 
 topt-race:
 	mv log.topt.race log.topt.race.prev || true
-	$(eval SHELL:=/bin/bash) set -o pipefail; go test -race -v -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) 2>&1 | tee log.topt.race
+	$(eval SHELL:=/bin/bash) set -o pipefail; CGO_ENABLED=1 go test -race -v -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) 2>&1 | tee log.topt.race
 	@echo "   log.topt.race green: \c"; cat log.topt.race | grep PASS |wc -l
 	@echo "   log.topt.race   red: \c"; cat log.topt.race | grep '\-\-\- FAIL' | wc -l
 

@@ -147,6 +147,14 @@ jobs:
           at: .
       - run: sudo pip install awscli
       - run: make prerelease-upload
+  docker-build:
+    executor:
+      name: golang
+    steps:
+      - checkout-plus
+      - setup_remote_docker
+      - run: make docker
+      - run: docker run pilosa:$(git describe --tags) help
   dockerhub-upload-unstable:
     executor:
       name: golang
@@ -154,6 +162,7 @@ jobs:
       - checkout-plus
       - setup_remote_docker
       - run: make docker
+      - run: docker run pilosa:$(git describe --tags) help
       - run: docker login -u $DOCKER_USER -p $DOCKER_PASS
       - run: make docker-tag-push DOCKER_TARGET=moleculacorp/pilosa:<< pipeline.git.branch >>
   dockerhub-upload-stable:
@@ -163,6 +172,7 @@ jobs:
       - checkout-plus
       - setup_remote_docker
       - run: make docker
+      - run: docker run pilosa:$(git describe --tags) help
       - run: docker login -u $DOCKER_USER -p $DOCKER_PASS
       - run: make docker-tag-push DOCKER_TARGET=moleculacorp/pilosa:<< pipeline.git.tag >>
       - run: make docker-tag-push DOCKER_TARGET=moleculacorp/pilosa:latest
@@ -216,6 +226,10 @@ workflows:
           requires:
             - setup
       - cluster-tests:
+          requires:
+            - setup
+      - docker-build:
+          context: molecula
           requires:
             - setup
       - prerelease:
