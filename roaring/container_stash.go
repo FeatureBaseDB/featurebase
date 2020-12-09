@@ -125,6 +125,25 @@ func NewContainer() *Container {
 	return NewContainerArray(nil)
 }
 
+func RemakeContainerBitmap(c *Container, bitmap []uint64) *Container {
+	*c = Container{typeID: ContainerBitmap}
+	c.setBitmap(bitmap)
+	c.bitmapRepair()
+	return c
+}
+
+func RemakeContainerArray(c *Container, array []uint16) *Container {
+	*c = Container{typeID: ContainerArray}
+	c.setArray(array)
+	return c
+}
+
+func RemakeContainerRun(c *Container, intervals []Interval16) *Container {
+	*c = Container{typeID: ContainerRun}
+	c.setRuns(intervals)
+	return c
+}
+
 // NewContainerBitmap makes a bitmap container using the provided bitmap, or
 // an empty one if provided bitmap is nil. If the provided bitmap is too short,
 // it will be padded. This function's API is wrong; it should have been

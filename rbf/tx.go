@@ -1053,6 +1053,26 @@ func (tx *Tx) ContainerIterator(name string, key uint64) (citer roaring.Containe
 	return &containerIterator{cursor: c}, exact, nil
 }
 
+func (tx *Tx) ApplyFilter(name string, key uint64, filter roaring.BitmapFilter) (err error) {
+	tx.mu.RLock()
+	defer tx.mu.RUnlock()
+
+	c, err := tx.cursor(name)
+	if err == ErrBitmapNotFound {
+		return nil // nothing available.
+	} else if err != nil {
+		return err
+	}
+
+	_, err = c.Seek(key)
+	if err != nil {
+		return err
+	}
+	f := containerFilter{cursor: c, filter: filter, tx: tx}
+	defer f.Close()
+	return f.Apply()
+}
+
 func (tx *Tx) ForEach(name string, fn func(i uint64) error) error {
 	return tx.ForEachRange(name, 0, math.MaxUint64, fn)
 }
@@ -1396,6 +1416,55 @@ func (tx *Tx) OffsetRange(name string, offset, start, endx uint64) (*roaring.Bit
 		other.Containers.Put(off+(ckey-hi0), toContainer(cell, tx))
 	}
 	return other, nil
+}
+
+// containerFilter is like ContainerIterator, but implements ApplyFilter
+type containerFilter struct {
+	cursor *Cursor
+	filter roaring.BitmapFilter
+	tx     *Tx
+	header roaring.Container
+	body   [8192]byte
+}
+
+func (s *containerFilter) Close() {
+	s.cursor.Close()
+}
+
+func (s *containerFilter) Apply() (err error) {
+	var minKey roaring.FilterKey
+	for err := s.cursor.Next(); err == nil; err = s.cursor.Next() {
+		elem := &s.cursor.stack.elems[s.cursor.stack.top]
+		leafPage, _, _ := s.cursor.tx.readPage(elem.pgno)
+		cell := readLeafCell(leafPage, elem.index)
+		key := roaring.FilterKey(cell.Key)
+		if key < minKey {
+			continue
+		}
+		s.tx.mu.RUnlock()
+		res := s.filter.ConsiderKey(key)
+		s.tx.mu.RLock()
+		if res.Err != nil {
+			return res.Err
+		}
+		if res.YesKey <= key && res.NoKey <= key {
+			data := intoContainer(cell, s.cursor.tx, &s.header, s.body[:])
+			s.tx.mu.RUnlock()
+			res = s.filter.ConsiderData(key, data)
+			s.tx.mu.RLock()
+			if res.Err != nil {
+				return res.Err
+			}
+		}
+		minKey = res.NoKey
+		if minKey > key+1 {
+			_, err := s.cursor.Seek(uint64(minKey))
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // containerIterator wraps Cursor to implement roaring.ContainerIterator.
