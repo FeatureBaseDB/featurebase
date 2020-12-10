@@ -45,6 +45,7 @@ func TestServerConfig(t *testing.T) {
 			args: []string{"server", "--data-dir", actualDataDir, "--cluster.hosts", "localhost:42454,localhost:10110", "--bind", "localhost:42454", "--bind-grpc", "localhost:30112", "--translation.map-size", "100000"},
 			env: map[string]string{
 				"PILOSA_DATA_DIR":                "/tmp/myEnvDatadir",
+				"PILOSA_LONG_QUERY_TIME":         "1m30s",
 				"PILOSA_CLUSTER_LONG_QUERY_TIME": "1m30s",
 				"PILOSA_MAX_WRITES_PER_REQUEST":  "2000",
 				"PILOSA_PROFILE_BLOCK_RATE":      "9123",
@@ -55,7 +56,8 @@ func TestServerConfig(t *testing.T) {
 	bind = "localhost:0"
 	bind-grpc = "localhost:0"
 	max-writes-per-request = 3000
-
+	long-query-time = "1m10s"
+	
 	[cluster]
 		disabled = true
 		replicas = 2
@@ -73,6 +75,7 @@ func TestServerConfig(t *testing.T) {
 				v.Check(cmd.Server.Config.Bind, "localhost:42454")
 				v.Check(cmd.Server.Config.Cluster.ReplicaN, 2)
 				v.Check(cmd.Server.Config.Cluster.Hosts, []string{"localhost:42454", "localhost:10110"})
+				v.Check(cmd.Server.Config.LongQueryTime, toml.Duration(time.Second*90))
 				v.Check(cmd.Server.Config.Cluster.LongQueryTime, toml.Duration(time.Second*90))
 				v.Check(cmd.Server.Config.MaxWritesPerRequest, 2000)
 				v.Check(cmd.Server.Config.Translation.MapSize, 100000)
@@ -160,6 +163,74 @@ func TestServerConfig(t *testing.T) {
 					return errors.New("Log file was not written!")
 				}
 				return nil
+			},
+		},
+	}
+
+	// run server tests
+	for i, test := range tests {
+		com := test.setupCommand(t)
+		executed := make(chan struct{})
+		var execErr error
+		go func() {
+			execErr = com.Execute()
+			close(executed)
+		}()
+		select {
+		case <-cmd.Server.Started:
+		case <-executed:
+		}
+		if execErr != nil {
+			t.Fatalf("executing server command: %v", execErr)
+		}
+		err := cmd.Server.Close()
+		failErr(t, err, "closing pilosa server command")
+		<-executed
+		failErr(t, execErr, "executing command")
+
+		if err := test.validation(); err != nil {
+			t.Fatalf("Failed test %d due to: %v", i, err)
+		}
+		test.reset()
+	}
+}
+func TestServerConfig_DeprecateLongQueryTime(t *testing.T) {
+	tests := []commandTest{
+		// TEST 0
+		{
+			args:           []string{"server", "--long-query-time", "1m10s"},
+			env:            map[string]string{},
+			cfgFileContent: "",
+			validation: func() error {
+				v := validator{}
+				v.Check(cmd.Server.Config.LongQueryTime, toml.Duration(time.Second*70))
+				v.Check(toml.Duration(cmd.Server.API.LongQueryTime()), toml.Duration(time.Second*70))
+				return v.Error()
+			},
+		},
+		// TEST 1
+		{
+			args:           []string{"server", "--cluster.long-query-time", "1m20s"},
+			env:            map[string]string{},
+			cfgFileContent: "",
+			validation: func() error {
+				v := validator{}
+				v.Check(cmd.Server.Config.Cluster.LongQueryTime, toml.Duration(time.Second*80))
+				v.Check(toml.Duration(cmd.Server.API.LongQueryTime()), toml.Duration(time.Second*80))
+				return v.Error()
+			},
+		},
+		// TEST 2: Use old value if both are provided because it is the simplest implementation
+		{
+			args:           []string{"server", "--long-query-time", "50s", "--cluster.long-query-time", "1m30s"},
+			env:            map[string]string{},
+			cfgFileContent: "",
+			validation: func() error {
+				v := validator{}
+				v.Check(cmd.Server.Config.LongQueryTime, toml.Duration(time.Second*50))
+				v.Check(toml.Duration(cmd.Server.Config.Cluster.LongQueryTime), toml.Duration(time.Second*90))
+				v.Check(toml.Duration(cmd.Server.API.LongQueryTime()), toml.Duration(time.Second*90))
+				return v.Error()
 			},
 		},
 	}

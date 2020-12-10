@@ -380,6 +380,12 @@ func (m *Command) SetupServer() error {
 	if m.Config.Translation.PrimaryURL != "" {
 		m.logger.Printf("DEPRECATED: The primary-url configuration option is no longer used.")
 	}
+	// Handle renamed and deprecated config parameter
+	longQueryTime := m.Config.LongQueryTime
+	if m.Config.Cluster.LongQueryTime >= 0 {
+		longQueryTime = m.Config.Cluster.LongQueryTime
+		m.logger.Printf("DEPRECATED: Configuration parameter cluster.long-query-time has been renamed to long-query-time")
+	}
 
 	// Set Coordinator.
 	coordinatorOpt := pilosa.OptServerIsCoordinator(false)
@@ -389,7 +395,7 @@ func (m *Command) SetupServer() error {
 
 	serverOptions := []pilosa.ServerOption{
 		pilosa.OptServerAntiEntropyInterval(time.Duration(m.Config.AntiEntropy.Interval)),
-		pilosa.OptServerLongQueryTime(time.Duration(m.Config.Cluster.LongQueryTime)),
+		pilosa.OptServerLongQueryTime(time.Duration(longQueryTime)),
 		pilosa.OptServerDataDir(m.Config.DataDir),
 		pilosa.OptServerReplicaN(m.Config.Cluster.ReplicaN),
 		pilosa.OptServerMaxWritesPerRequest(m.Config.MaxWritesPerRequest),

@@ -114,6 +114,16 @@ The config file is in the [toml format](https://github.com/toml-lang/toml) and h
     ```toml
     verbose = true
     ```
+#### Long Query Time
+
+* Description: Duration that will trigger log and stat messages for slow queries.
+* Flag: `long-query-time="1m0s"`
+* Env: `PILOSA_CLUSTER_LONG_QUERY_TIME="1m0s"`
+* Config:
+
+    ```toml
+    long-query-time = "1m0s"
+    ```
 
 #### Max Map Count
 
@@ -220,6 +230,18 @@ The config file is in the [toml format](https://github.com/toml-lang/toml) and h
       key = "/var/secret/gossip.key32"
     ```
 
+#### Cluster Long Query Time
+
+* Description (DEPRICATED, see Long Query Time): Duration that will trigger log and stat messages for slow queries.
+* Flag: `cluster.long-query-time="1m0s"`
+* Env: `PILOSA_CLUSTER_LONG_QUERY_TIME="1m0s"`
+* Config:
+
+    ```toml
+    [cluster]
+    long-query-time = "1m0s"
+    ```
+
 #### Cluster Coordinator
 
 * Description: Indicates whether the node should act as the coordinator for the cluster. Only one node per cluster should be the coordinator.
@@ -230,18 +252,6 @@ The config file is in the [toml format](https://github.com/toml-lang/toml) and h
     ```toml
     [cluster]
     coordinator = true
-    ```
-
-#### Cluster Long Query Time
-
-* Description: Duration that will trigger log and stat messages for slow queries.
-* Flag: `cluster.long-query-time="1m0s"`
-* Env: `PILOSA_CLUSTER_LONG_QUERY_TIME="1m0s"`
-* Config:
-
-    ```toml
-    [cluster]
-    long-query-time = "1m0s"
     ```
 
 #### Cluster Replicas
