@@ -3276,8 +3276,8 @@ func TestGetZipfRowsSliceRoaring(t *testing.T) {
 	f.Clean(t)
 }
 
-func prepareSampleRowData(b *testing.B, bits int, rows uint64, width uint64) (*fragment, Tx) {
-	f, _, tx := mustOpenFragment(b, "i", "f", viewStandard, 0, "none")
+func prepareSampleRowData(b *testing.B, bits int, rows uint64, width uint64) (*fragment, *Index, Tx) {
+	f, idx, tx := mustOpenFragment(b, "i", "f", viewStandard, 0, "none")
 	for i := 0; i < bits; i++ {
 		data := getUniformRowsSliceRoaring(rows, int64(rows)+int64(i), 0, width)
 		err := f.importRoaringT(tx, data, false)
@@ -3285,12 +3285,13 @@ func prepareSampleRowData(b *testing.B, bits int, rows uint64, width uint64) (*f
 			b.Fatalf("creating sample data: %v", err)
 		}
 	}
-	return f, tx
+	return f, idx, tx
 }
 
 type txFrag struct {
 	rows, width uint64
 	tx          Tx
+	idx         *Index
 	frag        *fragment
 }
 
@@ -3305,7 +3306,9 @@ func benchmarkRowsOnTestcase(b *testing.B, ctx context.Context, txf txFrag) {
 	}
 }
 
-func BenchmarkRows(b *testing.B) {
+// benchmarkRowsMaybeWritable uses a local flag which shadows the package-scope
+// const writable. Neat, huh.
+func benchmarkRowsMaybeWritable(b *testing.B, writable bool) {
 	var depths = []uint64{384, 2048}
 	testCases := make([]txFrag, 0, len(depths))
 	defer func() {
@@ -3315,11 +3318,19 @@ func BenchmarkRows(b *testing.B) {
 	}()
 	bg := context.Background()
 	for _, rows := range depths {
-		frag, tx := prepareSampleRowData(b, 3, rows, ShardWidth)
+		frag, idx, tx := prepareSampleRowData(b, 3, rows, ShardWidth)
+		if !writable {
+			err := tx.Commit()
+			if err != nil {
+				b.Fatalf("error committing sample data: %v", err)
+			}
+			tx = idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Fragment: frag, Shard: 0})
+		}
 		testCases = append(testCases, txFrag{
 			rows:  rows,
 			width: ShardWidth,
 			frag:  frag,
+			idx:   idx,
 			tx:    tx,
 		})
 	}
@@ -3328,6 +3339,14 @@ func BenchmarkRows(b *testing.B) {
 			benchmarkRowsOnTestcase(b, bg, testCase)
 		})
 	}
+}
+func BenchmarkRows(b *testing.B) {
+	b.Run("writable", func(b *testing.B) {
+		benchmarkRowsMaybeWritable(b, true)
+	})
+	b.Run("readonly", func(b *testing.B) {
+		benchmarkRowsMaybeWritable(b, false)
+	})
 }
 
 // getZipfRowsSliceRoaring generates a random fragment with the given number of
