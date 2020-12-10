@@ -2333,12 +2333,16 @@ func (f *fragment) bulkImportStandard(tx Tx, rowIDs, columnIDs []uint64, options
 // parallelSlices provides a sort.Interface for corresponding slices of
 // column and row values, and also allows pruning of duplicate values,
 // meaning values for the same column, as you might want for a mutex.
+//
+// The slices should be parallel and of the same length.
 type parallelSlices struct {
 	cols, rows []uint64
 }
 
-// Prune eliminates duplicate adjacent values, and returns a boolean
-// indicating whether any values were lower than previous values.
+// Prune eliminates values which have the same column key and are
+// adjacent in the slice. It doesn't handle non-adjacent keys, but
+// does report whether it saw any. See FullPrune for what you probably
+// want to be using.
 func (p *parallelSlices) Prune() (unsorted bool) {
 	l := len(p.cols)
 	if l == 0 {
@@ -2346,10 +2350,11 @@ func (p *parallelSlices) Prune() (unsorted bool) {
 	}
 	n := 0
 	prev := p.cols[0]
-	// at any point, n is the index of the last value we wrote
-	// (we pretend we copied 0 to 0 before starting). if the next
-	// value would have the same column ID, we want to overwrite it.
-	// otherwise, we'll bump n. if there's no duplicates, n is
+	// At any point, n is the index of the last value we wrote
+	// (we pretend we copied 0 to 0 before starting). If the next
+	// value would have the same column ID, it should replace
+	// the one we just wrote, otherwise we move n to point to a
+	// new slot before writing. If there are no duplicates, n is
 	// always equal to i. we don't check for this because skipping
 	// those writes would require an extra branch...
 	for i := 1; i < l; i++ {
@@ -2369,6 +2374,11 @@ func (p *parallelSlices) Prune() (unsorted bool) {
 	return unsorted
 }
 
+// FullPrune trims any adjacent values with identical column keys (and
+// the corresponding row values), and if it notices that anything was unsorted,
+// does a stable sort by column key and tries that again, ensuring that
+// there's no items with the same column key. The last entry with a given
+// column key wins.
 func (p *parallelSlices) FullPrune() {
 	if len(p.cols) == 0 {
 		return
@@ -2376,12 +2386,12 @@ func (p *parallelSlices) FullPrune() {
 	unsorted := p.Prune()
 	if unsorted {
 		sort.Stable(p)
+		_ = p.Prune()
 	}
-	_ = p.Prune()
 }
 
 func (p *parallelSlices) Len() int {
-	return len(p.rows)
+	return len(p.cols)
 }
 
 func (p *parallelSlices) Less(i, j int) bool {
@@ -2515,13 +2525,6 @@ func (f *fragment) bulkImportMutex(tx Tx, rowIDs, columnIDs []uint64) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	// We don't use this right away, but if this fails nothing else is
-	// useful...
-	iter, _, err := tx.ContainerIterator(f.index, f.field, f.view, f.shard, 0)
-	if err != nil {
-		return errors.Wrap(err, "searching storage")
-	}
-
 	p := parallelSlices{cols: columnIDs, rows: rowIDs}
 	p.FullPrune()
 	columnIDs = p.cols
@@ -2529,7 +2532,7 @@ func (f *fragment) bulkImportMutex(tx Tx, rowIDs, columnIDs []uint64) error {
 
 	// create a mask of rows we care about
 	columns := roaring.NewSliceBitmap()
-	_, err = columns.AddN(columnIDs...)
+	_, err := columns.AddN(columnIDs...)
 	if err != nil {
 		return errors.Wrap(err, "creating bitmap of affected columns")
 	}
@@ -2565,7 +2568,7 @@ func (f *fragment) bulkImportMutex(tx Tx, rowIDs, columnIDs []uint64) error {
 		return nil
 	}
 	existing := roaring.NewBitmapBitmapFilter(columns, callback)
-	err = roaring.ApplyFilterToIterator(existing, iter)
+	err = tx.ApplyFilter(f.index(), f.field(), f.view(), f.shard, 0, existing)
 	if err != nil {
 		return errors.Wrap(err, "finding existing positions")
 	}
@@ -3362,13 +3365,8 @@ func (f *fragment) intRowIterator(tx Tx, wrap bool, filters ...roaring.BitmapFil
 }
 
 func (f *fragment) foreachRow(tx Tx, filters []roaring.BitmapFilter, fn func(rid uint64) error) error {
-	i, _, err := tx.ContainerIterator(f.index, f.field(), f.view(), f.shard, rowToKey(0))
-	if err != nil {
-		return err
-	}
 	filter := roaring.NewBitmapRowFilter(fn, filters...)
-	err = roaring.ApplyFilterToIterator(filter, i)
-	return err
+	return tx.ApplyFilter(f.index(), f.field(), f.view(), f.shard, 0, filter)
 }
 
 func (it *intRowIterator) Seek(rowID uint64) {
