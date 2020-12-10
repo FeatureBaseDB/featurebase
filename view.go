@@ -336,6 +336,13 @@ func (v *view) CreateFragmentIfNotExists(shard uint64) (*fragment, error) {
 
 func (v *view) notifyIfNewShard(shard uint64) {
 
+	// if single node, don't bother serializing only to drop it b/c
+	// we won't send to ourselves.
+	srv, ok := v.broadcaster.(*Server)
+	if ok && len(srv.cluster.Nodes()) == 1 {
+		return
+	}
+
 	if v.knownShards.Contains(shard) { //checks the fields remoteShards bitmap to see if broadcast needed
 		return
 	}
