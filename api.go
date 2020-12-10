@@ -1652,10 +1652,7 @@ func (api *API) StatsWithTags(tags []string) stats.StatsClient {
 // LongQueryTime returns the configured threshold for logging/statting
 // long running queries.
 func (api *API) LongQueryTime() time.Duration {
-	if api.cluster == nil {
-		return 0
-	}
-	return api.cluster.longQueryTime
+	return api.server.longQueryTime
 }
 
 func (api *API) validateShardOwnership(indexName string, shard uint64) error {

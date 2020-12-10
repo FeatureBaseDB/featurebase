@@ -87,6 +87,8 @@ type Server struct { // nolint: maligned
 	defaultClient InternalClient
 	dataDir       string
 
+	// Threshold for logging long-running queries
+	longQueryTime time.Duration
 	queryHistoryLength int
 }
 
@@ -149,7 +151,7 @@ func OptServerAntiEntropyInterval(interval time.Duration) ServerOption {
 // used to set long query duration.
 func OptServerLongQueryTime(dur time.Duration) ServerOption {
 	return func(s *Server) error {
-		s.cluster.longQueryTime = dur
+		s.longQueryTime = dur
 		return nil
 	}
 }

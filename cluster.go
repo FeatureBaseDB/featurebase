@@ -211,10 +211,6 @@ type cluster struct { // nolint: maligned
 	// Human-readable name of the cluster.
 	Name string
 
-	// Threshold for logging long-running queries
-	// TODO(2.0) move this out of cluster. (why is it here??)
-	longQueryTime time.Duration
-
 	// Maximum number of Set() or Clear() commands per request.
 	maxWritesPerRequest int
 

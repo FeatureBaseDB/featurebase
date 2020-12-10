@@ -124,10 +124,11 @@ type Config struct {
 		ReplicaN    int      `toml:"replicas"`
 		Hosts       []string `toml:"hosts"`
 		Name        string   `toml:"name"`
-		// TODO(2.0) move this out of cluster. (why is it here??)
+		// This LongQueryTime is deprecated but still exists for backward compatibility
 		LongQueryTime toml.Duration `toml:"long-query-time"`
 	} `toml:"cluster"`
 
+	LongQueryTime toml.Duration `toml:"long-query-time"`
 	// Gossip config is based around memberlist.Config.
 	Gossip gossip.Config `toml:"gossip"`
 
@@ -239,13 +240,15 @@ func NewConfig() *Config {
 		RBFConfig: rbfcfg.NewDefaultConfig(),
 
 		QueryHistoryLength: 100,
+
+		LongQueryTime: toml.Duration(-time.Minute),
 	}
 
 	// Cluster config.
 	c.Cluster.Disabled = false
 	c.Cluster.ReplicaN = 1
 	c.Cluster.Hosts = []string{}
-	c.Cluster.LongQueryTime = toml.Duration(time.Minute)
+	c.Cluster.LongQueryTime = toml.Duration(-time.Minute) //TODO remove this once cluster.longQueryTime is fully deprecated
 
 	// Gossip config.
 	c.Gossip.Port = "14000"
