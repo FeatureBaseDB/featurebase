@@ -561,6 +561,7 @@ func (tx *Tx) cursor(name string) (*Cursor, error) {
 	}
 
 	c := tx.db.getCursor(tx)
+	c.stack.top = 0
 	c.stack.elems[0] = stackElem{pgno: root}
 	return c, nil
 }
