@@ -3325,6 +3325,7 @@ func benchmarkRowsMaybeWritable(b *testing.B, writable bool) {
 				b.Fatalf("error committing sample data: %v", err)
 			}
 			tx = idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Fragment: frag, Shard: 0})
+			defer tx.Rollback()
 		}
 		testCases = append(testCases, txFrag{
 			rows:  rows,
@@ -5536,29 +5537,35 @@ func notBlueGreenTest(t *testing.T) {
 
 var mutexSamplesPrepared sync.Once
 
-func requireMutexSampleData() {
-	mutexSamplesPrepared.Do(prepareMutexSampleData)
+func requireMutexSampleData(tb testing.TB) {
+	mutexSamplesPrepared.Do(func() { prepareMutexSampleData(tb) })
 }
 
 // a few mutex tests want common largeish pools of mutex data
 type mutexSampleData struct {
 	name           string
-	colIDs, rowIDs []uint64
+	colIDs, rowIDs [2][]uint64
 }
 
-func (m *mutexSampleData) scratchSpace(cols, rows []uint64) ([]uint64, []uint64) {
-	if cap(cols) < len(m.colIDs) {
-		cols = make([]uint64, len(m.colIDs))
+// scratchSpace copies the values over corresponding entries in slices,
+// reusing existing storage when possible.
+func (m *mutexSampleData) scratchSpace(idx int, cols, rows []uint64) ([]uint64, []uint64) {
+	colIDs := m.colIDs[idx]
+	rowIDs := m.rowIDs[idx]
+
+	if cap(cols) < len(colIDs) {
+		cols = make([]uint64, len(colIDs))
 	} else {
-		cols = cols[:len(m.colIDs)]
+		cols = cols[:len(colIDs)]
 	}
-	copy(cols, m.colIDs)
-	if cap(rows) < len(m.rowIDs) {
-		rows = make([]uint64, len(m.rowIDs))
+	copy(cols, colIDs)
+
+	if cap(rows) < len(rowIDs) {
+		rows = make([]uint64, len(rowIDs))
 	} else {
-		rows = rows[:len(m.rowIDs)]
+		rows = rows[:len(rowIDs)]
 	}
-	copy(rows, m.rowIDs)
+	copy(rows, rowIDs)
 	return cols, rows
 }
 
@@ -5624,9 +5631,12 @@ var mutexCaches = []string{
 	"none",
 }
 
-const mutexSampleDataSize = ShardWidth
+const mutexSampleDataSize = ShardWidth << 1
 
-func prepareMutexSampleData() {
+// prepareMutexSampleData creates two sets of data for each density and
+// number of rows, so that we can test performance when overwriting also.
+func prepareMutexSampleData(tb testing.TB) {
+	myrand := rand.New(rand.NewSource(9))
 	for _, d := range mutexDensities {
 		for _, s := range mutexSizes {
 			rng := newMutexSampleRange(d.density, s.rows)
@@ -5640,36 +5650,41 @@ func prepareMutexSampleData() {
 			//
 			// So for density 16, we compute spacing of 1, then
 			// draw random numbers in [0,1), and add 1 to them.
-			spacing := ((int64(1) << (16 - d.density)) * 2) - 1
+			spacing := ((1 << (16 - d.density)) * 2) - 1
 			rows := (int64(1) << s.rows)
-			expected := int64(mutexSampleDataSize)
+			expected := mutexSampleDataSize
 			if (ShardWidth / spacing) < mutexSampleDataSize {
 				expected = (ShardWidth / spacing) * 2
 				if expected < 2 {
 					expected = 2
 				}
 			}
-			data := &mutexSampleData{
-				name:   d.name + "/" + s.name,
-				colIDs: make([]uint64, mutexSampleDataSize),
-				rowIDs: make([]uint64, mutexSampleDataSize),
-			}
-			for i := int64(0); i < expected; i++ {
-				col += uint64(rand.Int63n(spacing)) + 1
+			colIDs := make([]uint64, mutexSampleDataSize)
+			rowIDs := make([]uint64, mutexSampleDataSize)
+			data := &mutexSampleData{name: d.name + "/" + s.name}
+			prev := uint64(0)
+			generated := 0
+			for i := 0; i < expected; i++ {
+				col += uint64(myrand.Int63n(int64(spacing))) + 1
 				// can only import one fragment at a time,
 				// though!
-				if col >= ShardWidth {
-					expected = i
-					break
+				if col/ShardWidth > prev {
+					data.colIDs[prev] = colIDs[generated:i:i]
+					data.rowIDs[prev] = rowIDs[generated:i:i]
+					generated = i
+					prev = col / ShardWidth
+					if int(prev) >= len(data.colIDs) {
+						break
+					}
 				}
-				row := uint64(rand.Int63n(rows))
-				data.colIDs[i] = col
-				data.rowIDs[i] = row
+				row := uint64(myrand.Int63n(rows))
+				colIDs[i] = col % ShardWidth
+				rowIDs[i] = row
 			}
-			// if we came up short, because we overran the shard
-			// size, we reduced expected above.
-			data.colIDs = data.colIDs[:expected]
-			data.rowIDs = data.rowIDs[:expected]
+			if int(prev) < len(data.colIDs) {
+				data.colIDs[prev] = colIDs[generated:expected:expected]
+				data.rowIDs[prev] = rowIDs[generated:expected:expected]
+			}
 			sampleMutexData[rng] = data
 		}
 	}
@@ -5678,7 +5693,7 @@ func prepareMutexSampleData() {
 var importBatchSizes = []int{65536}
 
 func TestImportMutexSampleData(t *testing.T) {
-	requireMutexSampleData()
+	requireMutexSampleData(t)
 	var scratchCols []uint64
 	var scratchRows []uint64
 	for rng, data := range sampleMutexData {
@@ -5686,7 +5701,7 @@ func TestImportMutexSampleData(t *testing.T) {
 		if rng.rows() > 256 {
 			continue
 		}
-		scratchCols, scratchRows = data.scratchSpace(scratchCols, scratchRows)
+		scratchCols, scratchRows = data.scratchSpace(0, scratchCols, scratchRows)
 		t.Run(data.name, func(t *testing.T) {
 			for _, batchSize := range importBatchSizes {
 				t.Run(fmt.Sprintf("%d", batchSize), func(t *testing.T) {
@@ -5699,7 +5714,7 @@ func TestImportMutexSampleData(t *testing.T) {
 						if len(scratchCols) < max {
 							max = len(scratchCols)
 						}
-						err = f.bulkImport(tx, scratchRows[i:max], scratchCols[i:max], &ImportOptions{})
+						err = f.bulkImport(tx, scratchRows[i:max:max], scratchCols[i:max:max], &ImportOptions{})
 						if err != nil {
 							t.Fatalf("bulk importing ids [%d:%d]: %v", i, max, err)
 						}
@@ -5708,9 +5723,9 @@ func TestImportMutexSampleData(t *testing.T) {
 					for k := uint32(0); k < rng.rows(); k++ {
 						count += f.mustRow(tx, uint64(k)).Count()
 					}
-					if int(count) != len(data.colIDs) {
+					if int(count) != len(data.colIDs[0]) {
 						t.Fatalf("for %d rows, %d density: expected %d results, got %d",
-							rng.rows(), rng.density(), len(data.colIDs), count)
+							rng.rows(), rng.density(), len(data.colIDs[0]), count)
 					}
 				})
 			}
@@ -5719,27 +5734,42 @@ func TestImportMutexSampleData(t *testing.T) {
 }
 
 func BenchmarkImportMutexSampleData(b *testing.B) {
-	requireMutexSampleData()
-	var scratchCols []uint64
-	var scratchRows []uint64
+	requireMutexSampleData(b)
+	var cols []uint64
+	var rows []uint64
 	var data *mutexSampleData
 	var cache string
 	var batchSize int
-	// this exists just to manage indentation below
-	benchmarkFragmentImports := func(b *testing.B) {
-		f, _, tx := mustOpenMutexFragment(b, "i", "f", viewStandard, 0, cache)
-		defer f.Clean(b)
-		scratchCols, scratchRows = data.scratchSpace(scratchCols, scratchRows)
-		var err error
-		for i := 0; i < len(scratchCols) && i < (batchSize*b.N); i += batchSize {
+	var frag *fragment
+	var tx Tx
+	var idx *Index
+	benchmarkOneFragmentImports := func(b *testing.B, i int) {
+		cols, rows = data.scratchSpace(i, cols, rows)
+		for i := 0; i < len(cols) && i < (batchSize*b.N); i += batchSize {
 			max := i + batchSize
-			if len(scratchCols) < max {
-				max = len(scratchCols)
+			if len(cols) < max {
+				max = len(cols)
 			}
-			err = f.bulkImport(tx, scratchRows[i:max], scratchCols[i:max], &ImportOptions{})
+			err := frag.bulkImport(tx, rows[i:max:max], cols[i:max:max], &ImportOptions{})
 			if err != nil {
 				b.Fatalf("bulk importing ids [%d:%d]: %v", i, max, err)
 			}
+		}
+	}
+	benchmarkFragmentImports := func(b *testing.B) {
+		frag, idx, tx = mustOpenMutexFragment(b, "i", "f", viewStandard, 0, cache)
+		defer frag.Clean(b)
+		for i := range data.colIDs {
+			b.Run(fmt.Sprintf("write-%d", i), func(b *testing.B) {
+				benchmarkOneFragmentImports(b, i)
+			})
+			// Then commit that write and do another one as a new Tx.
+			err := tx.Commit()
+			if err != nil {
+				b.Fatalf("error commiting write: %v", err)
+			}
+			tx = idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Fragment: frag, Shard: 0})
+			defer tx.Rollback()
 		}
 	}
 	for _, data = range sampleMutexData {

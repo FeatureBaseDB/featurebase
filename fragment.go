@@ -2416,7 +2416,6 @@ func (f *fragment) importPositions(tx Tx, set, clear []uint64, rowSet map[uint64
 			// TODO benchmark Add/RemoveN behavior with sorted/unsorted positions
 			// Note: AddN() avoids writing to the op-log. While Add() does.
 			changedN, err := tx.Add(f.index(), f.field(), f.view(), f.shard, !doBatched, set...)
-
 			if err != nil {
 				return errors.Wrap(err, "adding positions")
 			}
@@ -2503,6 +2502,8 @@ func unclearSets(toSet, toClear []uint64) []uint64 {
 			cv = toClear[cn]
 		}
 	}
+	copy(toClear[n:], toClear[cn:])
+	n += len(toClear[cn:])
 	return toClear[:n]
 }
 
@@ -2541,13 +2542,14 @@ func (f *fragment) bulkImportMutex(tx Tx, rowIDs, columnIDs []uint64) error {
 		rowSet[rowID] = struct{}{}
 		pos, err := f.pos(rowID, columnID)
 		if err != nil {
-			return err
+			return errors.Wrap(err, fmt.Sprintf("finding pos for row %d, col %d", rowID, columnID))
 		}
 		// positions are sorted by columns, but not by absolute
 		// position. we might want them sorted, though.
 		if pos < prev {
 			unsorted = true
 		}
+		prev = pos
 		rowIDs[i] = pos
 	}
 	toSet := rowIDs
