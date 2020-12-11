@@ -1300,6 +1300,7 @@ func (tx *Tx) CountRange(name string, start, end uint64) (uint64, error) {
 
 	skey := highbits(start)
 	ekey := highbits(end)
+	ebits := int32(lowbits(end))
 
 	csr, err := tx.cursor(name)
 	if err == ErrBitmapNotFound {
@@ -1339,7 +1340,7 @@ func (tx *Tx) CountRange(name string, start, end uint64) (uint64, error) {
 
 		// If range is entirely in one container then just count that range.
 		if skey == ekey {
-			return uint64(c.countRange(int32(lowbits(start)), int32(lowbits(end)))), nil
+			return uint64(c.countRange(int32(lowbits(start)), ebits)), nil
 		}
 		// INVAR: skey < ekey
 
@@ -1356,8 +1357,8 @@ func (tx *Tx) CountRange(name string, start, end uint64) (uint64, error) {
 			n += uint64(c.BitN)
 			continue
 		}
-		if k == ekey {
-			n += uint64(c.countRange(0, int32(lowbits(end))))
+		if k == ekey && ebits > 0 {
+			n += uint64(c.countRange(0, ebits))
 			break
 		}
 	}

@@ -2642,12 +2642,12 @@ func TestBitmap_RemoveEmptyContainers(t *testing.T) {
 	bm1 := NewFileBitmap(1<<16, 2<<16, 3<<16)
 	bm2 := NewFileBitmap(1<<16, 2<<16+1, 3<<16)
 	bm3 := bm1.Intersect(bm2)
-	if bm3.countEmptyContainers() != 1 {
+	if bm3.countNonEmptyContainers() != 2 {
 		t.Fatalf("Should be 1 empty container ")
 	}
 	bm3.removeEmptyContainers()
 
-	if bm3.countEmptyContainers() != 0 {
+	if bm3.countNonEmptyContainers() != bm3.Containers.Size() {
 		t.Fatalf("Should be no empty containers ")
 	}
 }
@@ -2665,7 +2665,7 @@ func TestBitmap_BitmapWriteToWithEmpty(t *testing.T) {
 	if err := bm0.UnmarshalBinary(buf.Bytes()); err != nil {
 		t.Fatalf("unmarshalling: %v", err)
 	}
-	if bm0.countEmptyContainers() != 0 {
+	if bm0.countNonEmptyContainers() != bm0.Containers.Size() {
 		t.Fatalf("Should be no empty containers ")
 	}
 	if bm0.Count() != bm1.Count() {
