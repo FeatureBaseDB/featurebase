@@ -511,7 +511,7 @@ func (t *ClusterCluster) FollowResizeInstruction(instr *ResizeInstruction) error
 			d := destFragment
 			for citer.Next() {
 				ckey, c := citer.Value()
-				err := desttx.PutContainer(d.index, d.field, d.view, d.shard, ckey, c)
+				err := desttx.PutContainer(d.index(), d.field(), d.view(), d.shard, ckey, c)
 				panicOn(err)
 			}
 			citer.Close()

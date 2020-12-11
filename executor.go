@@ -2005,7 +2005,7 @@ func topKFragments(ctx context.Context, tx Tx, filter *Row, fragments ...*fragme
 		f.mu.RLock()
 		defer f.mu.RUnlock()
 
-		iter, _, err := tx.ContainerIterator(f.index, f.field, f.view, f.shard, 0)
+		iter, _, err := tx.ContainerIterator(f.index(), f.field(), f.view(), f.shard, 0)
 		if err != nil {
 			return nil, err
 		}

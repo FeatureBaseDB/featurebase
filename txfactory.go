@@ -834,8 +834,8 @@ func (f *TxFactory) NewTx(o Txo) (txn Tx) {
 	}
 
 	if o.Fragment != nil {
-		if o.Fragment.index != indexName {
-			panic(fmt.Sprintf("inconsistent NewTx request: o.Fragment.index='%v' but indexName='%v'", o.Fragment.index, indexName))
+		if o.Fragment.index() != indexName {
+			panic(fmt.Sprintf("inconsistent NewTx request: o.Fragment.index='%v' but indexName='%v'", o.Fragment.index(), indexName))
 		}
 		if o.Fragment.shard != o.Shard {
 			panic(fmt.Sprintf("inconsistent NewTx request: o.Fragment.shard='%v' but o.Shard='%v'", o.Fragment.shard, o.Shard))

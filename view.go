@@ -20,7 +20,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -204,14 +203,18 @@ shardLoop:
 				default:
 					return nil // no more work
 				}
-				v.holder.Logger.Debugf("open index/field/view/fragment: %s/%s/%s/%d", v.index, v.field, v.name, shard)
+				// these are frequent and so can expensive. Comment in only if you are actually debugging stuff.
+				//v.holder.Logger.Debugf("open index/field/view/fragment: %s/%s/%s/%d", v.index, v.field, v.name, shard)
 
-				frag := v.newFragment(v.fragmentPath(shard), shard)
+				frag := v.newFragment(shard)
 				if err := frag.Open(); err != nil {
 					return fmt.Errorf("open fragment: shard=%d, err=%s", frag.shard, err)
 				}
 				frag.RowAttrStore = v.rowAttrStore
-				v.holder.Logger.Debugf("add index/field/view/fragment to view.fragments: %s/%s/%s/%d", v.index, v.field, v.name, shard)
+
+				// as above, this can be expensive, use sparely.
+				//v.holder.Logger.Debugf("add index/field/view/fragment to view.fragments: %s/%s/%s/%d", v.index, v.field, v.name, shard)
+
 				mu.Lock()
 				v.fragments[frag.shard] = frag
 				v.addKnownShard(shard)
@@ -281,11 +284,6 @@ func (v *view) availableShards() *roaring.Bitmap {
 	return v.knownShards
 }
 
-// fragmentPath returns the path to a fragment in the view.
-func (v *view) fragmentPath(shard uint64) string {
-	return filepath.Join(v.path, "fragments", strconv.FormatUint(shard, 10))
-}
-
 // Fragment returns a fragment in the view by shard.
 func (v *view) Fragment(shard uint64) *fragment {
 	v.mu.RLock()
@@ -323,7 +321,7 @@ func (v *view) CreateFragmentIfNotExists(shard uint64) (*fragment, error) {
 	}
 
 	// Initialize and open fragment.
-	frag := v.newFragment(v.fragmentPath(shard), shard)
+	frag := v.newFragment(shard)
 	if err := frag.Open(); err != nil {
 		return nil, errors.Wrap(err, "opening fragment")
 	}
@@ -372,9 +370,16 @@ func (v *view) notifyIfNewShard(shard uint64) {
 	}
 }
 
-func (v *view) newFragment(path string, shard uint64) *fragment {
-
-	frag := newFragment(v.holder, path, v.index, v.field, v.name, shard, v.flags())
+func (v *view) newFragment(shard uint64) *fragment {
+	fld := v.idx.Field(v.field)
+	nb := &fragProxy{
+		_shard:    shard,
+		_index:    v.idx,
+		_field:    fld,
+		_fieldstr: v.field,
+		_view:     v,
+	}
+	frag := newFragment(v.holder, nb, shard, v.flags())
 	frag.CacheType = v.cacheType
 	frag.CacheSize = v.cacheSize
 	frag.stats = v.stats
@@ -399,7 +404,7 @@ func (v *view) deleteFragment(shard uint64) error {
 
 	idx := f.holder.Index(v.index)
 	f.Close()
-	if err := idx.holder.txf.DeleteFragmentFromStore(f.index, f.field, f.view, f.shard, f); err != nil {
+	if err := idx.holder.txf.DeleteFragmentFromStore(f.index(), f.field(), f.view(), f.shard, f); err != nil {
 		return errors.Wrap(err, "DeleteFragment")
 	}
 	delete(v.fragments, shard)
@@ -572,7 +577,7 @@ func upgradeViewBSIv2(v *view, bitDepth uint) (ok bool, _ error) {
 			return ok, errors.Wrap(err, "upgrading bsi v2")
 		} else if err := frag.closeStorage(); err != nil {
 			return ok, errors.Wrap(err, "closing after bsi v2 upgrade")
-		} else if err := os.Rename(tmpPath, frag.path); err != nil {
+		} else if err := os.Rename(tmpPath, frag.path()); err != nil {
 			return ok, errors.Wrap(err, "renaming after bsi v2 upgrade")
 		} else if err := frag.openStorage(true); err != nil {
 			return ok, errors.Wrap(err, "re-opening after bsi v2 upgrade")
