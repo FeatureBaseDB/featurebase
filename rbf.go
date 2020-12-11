@@ -360,19 +360,7 @@ func (tx *RBFTx) UnionInPlace(index, field, view string, shard uint64, others ..
 // CountRange returns the count of hot bits in the start, end range on the fragment.
 // roaring.countRange counts the number of bits set between [start, end).
 func (tx *RBFTx) CountRange(index, field, view string, shard uint64, start, end uint64) (n uint64, err error) {
-
-	if tx.frag == nil {
-		return tx.tx.CountRange(rbfName(index, field, view, shard), start, end)
-	}
-
-	// For speed, exploit the fact that on startup the rowCache will
-	// have already loaded fragments.
-	rowID := start / ShardWidth
-	row, err := tx.frag.unprotectedRow(tx, rowID)
-	if err != nil {
-		return 0, err
-	}
-	return row.Count(), nil
+	return tx.tx.CountRange(rbfName(index, field, view, shard), start, end)
 }
 
 func (tx *RBFTx) OffsetRange(index, field, view string, shard uint64, offset, start, end uint64) (*roaring.Bitmap, error) {
