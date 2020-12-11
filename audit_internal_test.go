@@ -39,7 +39,7 @@ func (*auditorViewHooks) Live(o interface{}, entry *testhook.RegistryEntry) erro
 
 func (*auditorFragmentHooks) Live(o interface{}, entry *testhook.RegistryEntry) error {
 	if entry != nil && entry.OpenCount != 0 {
-		return fmt.Errorf("fragment %s still open", o.(*fragment).path)
+		return fmt.Errorf("fragment %s still open", o.(*fragment).path())
 	}
 	return nil
 }

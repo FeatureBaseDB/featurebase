@@ -1800,7 +1800,7 @@ func BenchmarkFragment_Blocks(b *testing.B) {
 
 	// Open the fragment specified by the path. Note that newFragment
 	// is overriding the usual holder-to-fragment path logic...
-	f := newFragment(th, *FragmentPath, "i", "f", viewStandard, 0, 0)
+	f := newFragment(th, makeTestFragProxy(*FragmentPath, "i", "f", viewStandard), 0, 0)
 	if err := f.Open(); err != nil {
 		b.Fatal(err)
 	}
@@ -2741,6 +2741,38 @@ func TestFragment_ImportBool_WithTxCommit(t *testing.T) {
 	}
 }
 
+// testFragProxy implements FragProxy because fragProxy
+// requires *view and *Field but not all tests have those.
+type testFragProxy struct {
+	_path  string
+	_index string
+	_field string
+	_view  string
+}
+
+func (fb *testFragProxy) index() string {
+	return fb._index
+
+}
+func (fb *testFragProxy) field() string {
+	return fb._field
+}
+func (fb *testFragProxy) view() string {
+	return fb._view
+}
+func (fb *testFragProxy) path() string {
+	return fb._path
+}
+
+func makeTestFragProxy(path, index, field, view string) *testFragProxy {
+	return &testFragProxy{
+		_path:  path,
+		_index: index,
+		_field: field,
+		_view:  view,
+	}
+}
+
 func BenchmarkFragment_Snapshot(b *testing.B) {
 	if *FragmentPath == "" {
 		b.Skip("no fragment specified")
@@ -2748,7 +2780,7 @@ func BenchmarkFragment_Snapshot(b *testing.B) {
 
 	b.ReportAllocs()
 	// Open the fragment specified by the path.
-	f := newFragment(newTestHolder(b), *FragmentPath, "i", "f", viewStandard, 0, 0)
+	f := newFragment(newTestHolder(b), makeTestFragProxy(*FragmentPath, "i", "f", viewStandard), 0, 0)
 	if err := f.Open(); err != nil {
 		b.Fatal(err)
 	}
@@ -3046,7 +3078,7 @@ func BenchmarkImportRoaringUpdate(b *testing.B) {
 						// to generate an op log and/or snapshot.
 						itr, err := roaring.NewRoaringIterator(data)
 						panicOn(err)
-						_, _, err = tx.ImportRoaringBits(f.index, f.field, f.view, f.shard, itr, false, false, 0, nil)
+						_, _, err = tx.ImportRoaringBits(f.index(), f.field(), f.view(), f.shard, itr, false, false, 0, nil)
 						if err != nil {
 							b.Errorf("import error: %v", err)
 						}
@@ -3136,7 +3168,7 @@ func initBigFrag(tb testing.TB) {
 		if err != nil {
 			panic(fmt.Sprintf("closing fragment: %v", err))
 		}
-		bigFrag = f.path
+		bigFrag = f.path()
 		panicOn(tx.Commit())
 	}
 }
@@ -3168,7 +3200,7 @@ func BenchmarkImportIntoLargeFragment(b *testing.B) {
 		idx, err := h.CreateIndex("i", IndexOptions{})
 		panicOn(err)
 
-		f := newFragment(h, fi.Name(), "i", "f", viewStandard, 0, 0)
+		f := newFragment(h, makeTestFragProxy(fi.Name(), "i", "f", viewStandard), 0, 0)
 		err = f.Open()
 		if err != nil {
 			b.Fatalf("opening fragment: %v", err)
@@ -3221,7 +3253,7 @@ func BenchmarkImportRoaringIntoLargeFragment(b *testing.B) {
 			th.SnapshotQueue = newSnapshotQueue(1, 1, nil)
 		}
 		// XXX TODO: newFragment is using the wrong path here, we should fix that someday.
-		f := newFragment(th, fi.Name(), "i", "f", viewStandard, 0, 0)
+		f := newFragment(th, makeTestFragProxy(fi.Name(), "i", "f", viewStandard), 0, 0)
 		defer f.Clean(b)
 
 		tx := idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f, Shard: f.shard})
@@ -3388,23 +3420,23 @@ func BenchmarkFileWrite(b *testing.B) {
 // not called under Tx stores b/c f.idx.NeedsSnapshot() in Clean() avoids it.
 func (f *fragment) sanityCheck(t testing.TB) {
 	newBM := roaring.NewFileBitmap()
-	file, err := os.Open(f.path)
+	file, err := os.Open(f.path())
 	if err != nil {
-		t.Fatalf("sanityCheck couldn't open file %s: %v", f.path, err)
+		t.Fatalf("sanityCheck couldn't open file %s: %v", f.path(), err)
 	}
 	defer file.Close()
 	data, err := ioutil.ReadAll(file)
 	if err != nil {
-		t.Fatalf("sanityCheck couldn't read fragment %s: %v", f.path, err)
+		t.Fatalf("sanityCheck couldn't read fragment %s: %v", f.path(), err)
 	}
 	err = newBM.UnmarshalBinary(data)
 	if err != nil {
-		t.Fatalf("sanityCheck couldn't unmarshal fragment %s: %v", f.path, err)
+		t.Fatalf("sanityCheck couldn't unmarshal fragment %s: %v", f.path(), err)
 	}
 	// Refactor fragment.storage
 	// note: not called for rbf, see above.
 	if equal, reason := newBM.BitwiseEqual(f.storage); !equal {
-		t.Fatalf("fragment %s: unmarshalled bitmap different: %v", f.path, reason)
+		t.Fatalf("fragment %s: unmarshalled bitmap different: %v", f.path(), reason)
 	}
 }
 
@@ -3430,7 +3462,7 @@ func (f *fragment) Clean(t testing.TB) {
 			f.sanityCheck(t)
 			if f.storage != nil && f.storage.Source != nil {
 				if f.storage.Source.Dead() {
-					t.Fatalf("cleaning up fragment %s, source %s, source already dead", f.path, f.storage.Source.ID())
+					t.Fatalf("cleaning up fragment %s, source %s, source already dead", f.path(), f.storage.Source.ID())
 				}
 			}
 		}
@@ -3500,7 +3532,7 @@ func mustOpenFragmentFlags(tb testing.TB, index, field, view string, shard uint6
 	fragDir := fmt.Sprintf("%v/%v/views/%v/fragments/", idx.path, field, view)
 	panicOn(os.MkdirAll(fragDir, 0777))
 	fragPath := fragDir + fmt.Sprintf("%v", shard)
-	f := newFragment(th, fragPath, index, field, view, shard, flags)
+	f := newFragment(th, makeTestFragProxy(fragPath, index, field, view), shard, flags)
 
 	tx := idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f, Shard: shard})
 	testhook.Cleanup(tb, func() {
@@ -4990,7 +5022,7 @@ func TestImportClearRestart(t *testing.T) {
 				panicOn(err)
 
 				// OVERWRITING the f.path with a new fragment
-				f2 := newFragment(h, f.path, "i", "f", viewStandard, 0, 0)
+				f2 := newFragment(h, makeTestFragProxy(f.path(), "i", "f", viewStandard), 0, 0)
 				f2.MaxOpN = maxOpN
 				f2.CacheType = f.CacheType
 
@@ -5033,7 +5065,7 @@ func TestImportClearRestart(t *testing.T) {
 
 				panicOn(tx2.Commit())
 
-				h3 := NewHolder(filepath.Dir(f2.path), nil)
+				h3 := NewHolder(filepath.Dir(f2.path()), nil)
 				testhook.Cleanup(t, func() {
 					h3.Close()
 				})
@@ -5042,7 +5074,7 @@ func TestImportClearRestart(t *testing.T) {
 				_ = idx3
 				panicOn(err)
 
-				f3 := newFragment(h3, f2.path, "i", "f", viewStandard, 0, 0)
+				f3 := newFragment(h3, makeTestFragProxy(f2.path(), "i", "f", viewStandard), 0, 0)
 				f3.MaxOpN = maxOpN
 				f3.CacheType = f.CacheType
 
@@ -5294,7 +5326,7 @@ func TestFragmentConcurrentReadWrite(t *testing.T) {
 func TestRemapCache(t *testing.T) {
 	f, _, tx := mustOpenFragment(t, "i", "f", viewStandard, 0, "")
 	defer f.Close()
-	index, field, view, shard := f.index, f.field, f.view, f.shard
+	index, field, view, shard := f.index(), f.field(), f.view(), f.shard
 
 	// request a panic that doesn't kill the program on fault
 	wouldFault := debug.SetPanicOnFault(true)

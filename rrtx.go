@@ -321,13 +321,13 @@ func (tx *RoaringTx) getFragment(index, field, view string, shard uint64) (*frag
 	// it is highly likely to be correct.
 	if tx.fragment != nil {
 		// but still a basic sanity check.
-		if tx.fragment.index != index ||
-			tx.fragment.field != field ||
-			tx.fragment.view != view ||
+		if tx.fragment.index() != index ||
+			tx.fragment.field() != field ||
+			tx.fragment.view() != view ||
 			tx.fragment.shard != shard {
 
 			// still insist that index and shard match, since that is the current scope of all Tx.
-			if tx.fragment.index != index ||
+			if tx.fragment.index() != index ||
 				tx.fragment.shard != shard {
 				panic(fmt.Sprintf("different fragment cached vs requested. index='%v', field='%v'; view='%v'; shard='%v'; tx.fragment='%#v'", index, field, view, shard, tx.fragment))
 			}
@@ -597,7 +597,7 @@ func (w *RoaringWrapper) DeleteFragment(index, field, view string, shard uint64,
 	}
 
 	// Delete fragment file.
-	if err := os.Remove(fragment.path); err != nil {
+	if err := os.Remove(fragment.path()); err != nil {
 		return errors.Wrap(err, "deleting fragment file")
 	}
 
