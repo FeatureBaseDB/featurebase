@@ -193,12 +193,6 @@ type Tx interface {
 
 	RoaringBitmapReader(index, field, view string, shard uint64, fragmentPathForRoaring string) (r io.ReadCloser, sz int64, err error)
 
-	// SliceOfShards returns all of the shards for the specified index, field, view triple.
-	// Use within pilosa supposes a new read-only transaction was created just
-	// for the SliceOfShards() call. The legacy RoaringTx version is the only
-	// one that needs optionalViewPath; any other Tx implementation can ignore that.
-	SliceOfShards(index, field, view, optionalViewPath string) (sliceOfShards []uint64, err error)
-
 	// Group returns nil or the TxGroup that this Tx is a part of.
 	Group() *TxGroup
 

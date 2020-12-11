@@ -294,15 +294,6 @@ func (c *catcherTx) RoaringBitmapReader(index, field, view string, shard uint64,
 func (c *catcherTx) Type() string {
 	return c.b.Type()
 }
-func (c *catcherTx) SliceOfShards(index, field, view, optionalViewPath string) (sliceOfShards []uint64, err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			AlwaysPrintf("see SliceOfShards() panic '%v' at '%v'", r, stack())
-			panic(r)
-		}
-	}()
-	return c.b.SliceOfShards(index, field, view, optionalViewPath)
-}
 
 func (c *catcherTx) Group() *TxGroup {
 	return c.b.Group()

@@ -29,7 +29,7 @@ import (
 	"github.com/pilosa/pilosa/v2/rbf"
 	rbfcfg "github.com/pilosa/pilosa/v2/rbf/cfg"
 	"github.com/pilosa/pilosa/v2/roaring"
-	"github.com/pilosa/pilosa/v2/txkey"
+	txkey "github.com/pilosa/pilosa/v2/short_txkey"
 	"github.com/pkg/errors"
 )
 
@@ -397,26 +397,6 @@ func (tx *RBFTx) RoaringBitmapReader(index, field, view string, shard uint64, fr
 		return nil, -1, errors.Wrap(err, "RoaringBitmapReader rbm.WriteTo(buf)")
 	}
 	return ioutil.NopCloser(&buf), sz, err
-}
-
-func (tx *RBFTx) SliceOfShards(index, field, view, optionalViewPath string) (sliceOfShards []uint64, err error) {
-
-	prefix := string(txkey.AllShardPrefix(index, field, view))
-
-	names, err := tx.tx.BitmapNames()
-	if err != nil {
-		return nil, err
-	}
-
-	// Iterate over shard names and collect shards from matching field/view prefix.
-	for _, name := range names {
-		if !strings.HasPrefix(name, prefix) {
-			continue
-		}
-		shard := txkey.ShardFromPrefix([]byte(name))
-		sliceOfShards = append(sliceOfShards, shard)
-	}
-	return sliceOfShards, nil
 }
 
 func (tx *RBFTx) NewTxIterator(index, field, view string, shard uint64) *roaring.Iterator {

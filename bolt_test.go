@@ -1239,29 +1239,6 @@ func TestBolt_DeleteIndex_over100k(t *testing.T) {
 	}
 }
 
-func TestBolt_SliceOfShards(t *testing.T) {
-
-	dbwrap, clean := mustOpenEmptyBoltWrapper("TestBolt_SliceOfShards")
-	defer clean()
-	defer dbwrap.Close()
-	index, field, view := "i", "f", "v"
-	shards := []uint64{0, 1, 2, 3, 1000001, 2000001}
-	putme := uint64(179)
-	for _, shard := range shards {
-		BoltMustSetBitvalue(dbwrap, index, field, view, shard, putme)
-	}
-	tx, _ := dbwrap.NewTx(!writable, index, Txo{})
-	defer tx.Rollback()
-
-	slc, err := tx.SliceOfShards(index, field, view, "")
-	panicOn(err)
-	for i := range shards {
-		if shards[i] != slc[i] {
-			panic(fmt.Sprintf("expected at i=%v that slc[i]=%v = shards[i]=%v", i, slc[i], shards[i]))
-		}
-	}
-}
-
 func TestBolt_HasData(t *testing.T) {
 
 	db, clean := mustOpenEmptyBoltWrapper("TestBolt_SliceOfShards")

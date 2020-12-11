@@ -18,9 +18,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"math"
 	"reflect"
-	"sort"
 	"sync"
 
 	"github.com/pilosa/pilosa/v2/roaring"
@@ -907,53 +905,6 @@ func (c *blueGreenTx) Sn() int64 {
 		return asn
 	}
 	return bsn
-}
-
-func (c *blueGreenTx) SliceOfShards(index, field, view, optionalViewPath string) (sliceOfShards []uint64, err error) {
-	// doesn't change state, so we don't really need see() call here. And we don't have a single shard for it.
-	//c.checker.see(index, field, view, shard) // don't have shard.
-	defer func() {
-		if r := recover(); r != nil {
-			c.Dump(c.short, math.MaxUint64)
-			AlwaysPrintf("see SliceOfShards() panic '%v' at '%v'", r, stack())
-			panic(r)
-		}
-	}()
-	slcA, errA := c.a.SliceOfShards(index, field, view, optionalViewPath)
-	slcB, errB := c.b.SliceOfShards(index, field, view, optionalViewPath)
-
-	if !c.o.blueGreenOff {
-		compareErrors(errA, errB)
-
-		// sort order may be different, and that's ok.
-		cpa := append([]uint64{}, slcA...)
-		cpb := append([]uint64{}, slcB...)
-		sort.Slice(cpa, func(i, j int) bool { return cpa[i] < cpa[j] })
-		sort.Slice(cpb, func(i, j int) bool { return cpb[i] < cpb[j] })
-
-		if !reflect.DeepEqual(cpa, cpb) {
-			// report the first difference
-			ma := make(map[uint64]bool)
-			for _, ka := range slcA {
-				ma[ka] = true
-			}
-			for _, kb := range slcB {
-				if !ma[kb] {
-					//vv("blueGreenTx SliceOfShards diference! B(%v) had shard %v, but A(%v) did not. cpa='%#v'; cpb='%#v'; in the SliceOfShards returned slice.", c.bs, kb, c.as, cpa, cpb)
-					c.Dump(c.short, math.MaxUint64)
-					panic(fmt.Sprintf("blueGreenTx SliceOfShards diference! B(%v) had shard %v, but A(%v) did not. cpa='%#v'; cpb='%#v'; in the SliceOfShards returned slice.", c.bs, kb, c.as, cpa, cpb))
-				}
-				delete(ma, kb)
-			}
-			if len(ma) != 0 {
-				for firstDifference := range ma {
-					panic(fmt.Sprintf("blueGreenTx SliceOfShards diference! A(%v) had %v, but B(%v) did not. cpa='%#v'; cpb='%#v'; in the SliceOfShards returned slice.", c.as, firstDifference, c.bs, cpa, cpb))
-				}
-			}
-			panic(fmt.Sprintf("blueGreenTx SliceOfShards diference \n slcA(%v)='%#v';\n slcB(%v)='%#v';\n", c.as, cpa, c.bs, cpb))
-		}
-	}
-	return slcB, errB
 }
 
 // MultiReaderB is returned by RoaringBitmapReader. It verifies

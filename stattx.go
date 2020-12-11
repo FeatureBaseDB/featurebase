@@ -667,22 +667,6 @@ func (c *statTx) Type() string {
 	return c.b.Type()
 }
 
-func (c *statTx) SliceOfShards(index, field, view, optionalViewPath string) (sliceOfShards []uint64, err error) {
-	me := kSliceOfShards
-
-	t0 := time.Now()
-	defer func() {
-		c.stats.add(me, time.Since(t0))
-	}()
-	defer func() {
-		if r := recover(); r != nil {
-			AlwaysPrintf("see SliceOfShards() panic '%v' at '%v'", r, stack())
-			panic(r)
-		}
-	}()
-	return c.b.SliceOfShards(index, field, view, optionalViewPath)
-}
-
 // Sn retreives the serial number of the Tx.
 func (c *statTx) Sn() int64 {
 	return c.b.Sn()
