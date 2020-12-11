@@ -1443,7 +1443,7 @@ func (s *containerFilter) Apply() (err error) {
 			continue
 		}
 		s.tx.mu.RUnlock()
-		res := s.filter.ConsiderKey(key)
+		res := s.filter.ConsiderKey(key, int32(cell.BitN))
 		s.tx.mu.RLock()
 		if res.Err != nil {
 			return res.Err

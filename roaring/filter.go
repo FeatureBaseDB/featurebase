@@ -181,8 +181,8 @@ func (f FilterKey) MatchOneUntilSameOffset() FilterResult {
 }
 
 // A BitmapFilter, given a series of key/data pairs, is considered to "match"
-// some of those containers. Matching may be dependent on key values alone,
-// or on the contents of the container.
+// some of those containers. Matching may be dependent on key values and
+// cardinalities alone, or on the contents of the container.
 //
 // The ConsiderData function must not retain the container, or the data
 // from the container; if it needs access to that information later, it needs
@@ -199,7 +199,7 @@ func (f FilterKey) MatchOneUntilSameOffset() FilterResult {
 // If multiple filters are combined, they are only called if their input is
 // needed to determine a value.
 type BitmapFilter interface {
-	ConsiderKey(key FilterKey) FilterResult
+	ConsiderKey(key FilterKey, n int32) FilterResult
 	ConsiderData(key FilterKey, data *Container) FilterResult
 }
 
@@ -213,7 +213,7 @@ type BitmapColumnFilter struct {
 
 var _ BitmapFilter = &BitmapColumnFilter{}
 
-func (f *BitmapColumnFilter) ConsiderKey(key FilterKey) FilterResult {
+func (f *BitmapColumnFilter) ConsiderKey(key FilterKey, n int32) FilterResult {
 	if uint16(key&keyMask) != f.key {
 		return key.RejectUntilOffset(uint64(f.key))
 	}
@@ -234,9 +234,12 @@ type BitmapRowsFilter struct {
 	i    int
 }
 
-func (f *BitmapRowsFilter) ConsiderKey(key FilterKey) FilterResult {
+func (f *BitmapRowsFilter) ConsiderKey(key FilterKey, n int32) FilterResult {
 	if f.i == -1 {
 		return key.Done()
+	}
+	if n == 0 {
+		return key.RejectOne()
 	}
 	row := uint64(key) >> rowExponent
 	for f.rows[f.i] < row {
@@ -343,11 +346,14 @@ func (b *BitmapRowFilterBase) SetResult(key FilterKey, result FilterResult) Filt
 // already answered by our YesKey/NoKey/lastRow, we will match this key,
 // reject the rest of the row, and update our keys accordingly. We'll
 // also hit the callback, and return an error from it if appropriate.
-func (b *BitmapRowFilterBase) ConsiderKey(key FilterKey) FilterResult {
+func (b *BitmapRowFilterBase) ConsiderKey(key FilterKey, n int32) FilterResult {
 	var done bool
 	b.FilterResult, done = b.DetermineByKey(key)
 	if done {
 		return b.FilterResult
+	}
+	if n == 0 {
+		return key.RejectOne()
 	}
 	b.FilterResult = key.MatchOneRejectRow()
 	row := key.Row()
@@ -378,11 +384,14 @@ var _ BitmapFilter = &BitmapRowLimitFilter{}
 // Without a sub-filter, we always-succeed; if we get a key that isn't
 // already answered by our YesKey/NoKey/lastRow, we will match the whole
 // row.
-func (b *BitmapRowLimitFilter) ConsiderKey(key FilterKey) FilterResult {
+func (b *BitmapRowLimitFilter) ConsiderKey(key FilterKey, n int32) FilterResult {
 	var done bool
 	b.FilterResult, done = b.DetermineByKey(key)
 	if done {
 		return b.FilterResult
+	}
+	if n == 0 {
+		return key.RejectOne()
 	}
 	if b.limit > 0 {
 		b.FilterResult = key.MatchRow()
@@ -411,12 +420,12 @@ type BitmapRowFilterSingleFilter struct {
 	filter BitmapFilter
 }
 
-func (b *BitmapRowFilterSingleFilter) ConsiderKey(key FilterKey) FilterResult {
+func (b *BitmapRowFilterSingleFilter) ConsiderKey(key FilterKey, n int32) FilterResult {
 	res, done := b.DetermineByKey(key)
 	if done {
 		return res
 	}
-	return b.SetResult(key, b.filter.ConsiderKey(key))
+	return b.SetResult(key, b.filter.ConsiderKey(key, n))
 }
 
 func (b *BitmapRowFilterSingleFilter) ConsiderData(key FilterKey, data *Container) FilterResult {
@@ -452,7 +461,7 @@ type BitmapRowFilterMultiFilter struct {
 	toDo            []int
 }
 
-func (b *BitmapRowFilterMultiFilter) ConsiderKey(key FilterKey) FilterResult {
+func (b *BitmapRowFilterMultiFilter) ConsiderKey(key FilterKey, n int32) FilterResult {
 	res, done := b.DetermineByKey(key)
 	if done {
 		return res
@@ -497,7 +506,7 @@ func (b *BitmapRowFilterMultiFilter) ConsiderKey(key FilterKey) FilterResult {
 	// values still don't know, using the same backing store.
 	newToDo := b.toDo[:0]
 	for _, filter := range b.toDo {
-		result := b.filters[filter].ConsiderKey(key)
+		result := b.filters[filter].ConsiderKey(key, n)
 		if result.Err != nil {
 			return key.Fail(result.Err)
 		}
@@ -589,9 +598,9 @@ type BitmapBitmapFilter struct {
 	callback    func(uint64) error
 }
 
-func (b *BitmapBitmapFilter) ConsiderKey(key FilterKey) FilterResult {
+func (b *BitmapBitmapFilter) ConsiderKey(key FilterKey, n int32) FilterResult {
 	pos := key & keyMask
-	if b.containers[pos] == nil {
+	if b.containers[pos] == nil || n == 0 {
 		return key.RejectUntilOffset(b.nextOffsets[pos])
 	}
 	return key.NeedData()
@@ -696,7 +705,7 @@ func ApplyFilterToIterator(filter BitmapFilter, iter ContainerIterator) error {
 		if key < until {
 			continue
 		}
-		result := filter.ConsiderKey(FilterKey(key))
+		result := filter.ConsiderKey(FilterKey(key), data.N())
 		if result.Err != nil {
 			return result.Err
 		}

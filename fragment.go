@@ -3137,10 +3137,15 @@ type BitmapLikeFilter struct {
 	translator TranslateStore
 }
 
-func (b *BitmapLikeFilter) ConsiderKey(key roaring.FilterKey) roaring.FilterResult {
+var _ roaring.BitmapFilter = &BitmapLikeFilter{}
+
+func (b *BitmapLikeFilter) ConsiderKey(key roaring.FilterKey, n int32) roaring.FilterResult {
 	res, done := b.DetermineByKey(key)
 	if done {
 		return res
+	}
+	if n == 0 {
+		return key.RejectOne()
 	}
 	row := key.Row()
 	keyStr, err := b.translator.TranslateID(row)

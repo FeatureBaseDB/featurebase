@@ -152,7 +152,7 @@ func TestLimitFilter(t *testing.T) {
 
 	for i := FilterKey(0); i < 5; i++ {
 		key := i << rowExponent
-		res := f.ConsiderKey(key)
+		res := f.ConsiderKey(key, 1)
 		if res.NoKey == ^FilterKey(0) {
 			t.Fatalf("limit filter ended early on iteration %d", i)
 		}
@@ -160,7 +160,7 @@ func TestLimitFilter(t *testing.T) {
 			t.Fatalf("limit filter should always include until done")
 		}
 	}
-	res := f.ConsiderKey(FilterKey(5) << rowExponent)
+	res := f.ConsiderKey(FilterKey(5)<<rowExponent, 1)
 	if res.NoKey != ^FilterKey(0) {
 		t.Fatalf("limit filter should have thought it was done, reported last key %d", res.NoKey)
 	}
@@ -212,7 +212,7 @@ func TestFilterWithRows(t *testing.T) {
 			f := NewBitmapRowsFilter(test.rows)
 			for i, id := range test.callWith {
 				key := FilterKey(id) << rowExponent
-				res := f.ConsiderKey(key)
+				res := f.ConsiderKey(key, 1)
 				inc := res.YesKey > key
 				done := res.NoKey == ^FilterKey(0)
 				if inc != test.expect[i][0] || done != test.expect[i][1] {
