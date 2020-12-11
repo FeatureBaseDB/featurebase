@@ -18,7 +18,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/pilosa/pilosa/v2/txkey"
+	txkey "github.com/pilosa/pilosa/v2/short_txkey"
 )
 
 func (tx *Tx) dumpAllPages(showLeaves bool) error {

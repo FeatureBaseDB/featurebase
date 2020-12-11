@@ -25,7 +25,7 @@ import (
 	"github.com/benbjohnson/immutable"
 	"github.com/pilosa/pilosa/v2/hash"
 	"github.com/pilosa/pilosa/v2/roaring"
-	"github.com/pilosa/pilosa/v2/txkey"
+	txkey "github.com/pilosa/pilosa/v2/short_txkey"
 )
 
 var _ = txkey.ToString

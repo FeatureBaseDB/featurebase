@@ -728,33 +728,6 @@ func (tx *BoltTx) Contains(index, field, view string, shard uint64, key uint64) 
 	return exists, err
 }
 
-func (tx *BoltTx) SliceOfShards(index, field, view, optionalViewPath string) (sliceOfShards []uint64, err error) {
-
-	prefix := txkey.AllShardPrefix(index, field, view)
-
-	bi := NewBoltIterator(tx, prefix)
-	defer bi.Close()
-
-	lastShard := uint64(0)
-	firstDone := false
-	for bi.Next() {
-		shard := txkey.ShardFromKey(bi.lastKey)
-		if firstDone {
-			if shard != lastShard {
-				sliceOfShards = append(sliceOfShards, shard)
-			}
-			lastShard = shard
-		} else {
-			// first time
-			lastShard = shard
-			firstDone = true
-			sliceOfShards = append(sliceOfShards, shard)
-		}
-
-	}
-	return
-}
-
 // key is the container key for the first roaring Container
 // roaring docs: Iterator returns a ContainterIterator which *after* a call to Next(), a call to Value() will
 // return the first container at or after key. found will be true if a

@@ -22,7 +22,7 @@ import (
 	"time"
 
 	"github.com/pilosa/pilosa/v2/rbf"
-	"github.com/pilosa/pilosa/v2/txkey"
+	txkey "github.com/pilosa/pilosa/v2/short_txkey"
 )
 
 func TestTx_CommitRollback(t *testing.T) {
