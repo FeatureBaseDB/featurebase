@@ -1011,8 +1011,8 @@ func (tx *Tx) checkTxSize() error {
 }
 
 func (tx *Tx) AddRoaring(name string, bm *roaring.Bitmap) (changed bool, err error) {
-	tx.mu.RLock()
-	defer tx.mu.RUnlock()
+	tx.mu.Lock()
+	defer tx.mu.Unlock()
 
 	if err := tx.createBitmapIfNotExists(name); err != nil {
 		return false, err
@@ -1353,10 +1353,8 @@ func (tx *Tx) OffsetRange(name string, offset, start, endx uint64) (*roaring.Bit
 		panic("range endx must not contain low bits")
 	}
 
-	// need write lock here (not just read lock) b/c caching the tx.rootRecords = records
-	// is a write the race detector fires on.
-	tx.mu.Lock()
-	defer tx.mu.Unlock()
+	tx.mu.RLock()
+	defer tx.mu.RUnlock()
 
 	c, err := tx.cursor(name)
 	if err == ErrBitmapNotFound {
