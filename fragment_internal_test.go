@@ -1800,7 +1800,7 @@ func BenchmarkFragment_Blocks(b *testing.B) {
 
 	// Open the fragment specified by the path. Note that newFragment
 	// is overriding the usual holder-to-fragment path logic...
-	f := newFragment(th, makeTestFragProxy(*FragmentPath, "i", "f", viewStandard), 0, 0)
+	f := newFragment(th, makeTestFragSpec(*FragmentPath, "i", "f", viewStandard), 0, 0)
 	if err := f.Open(); err != nil {
 		b.Fatal(err)
 	}
@@ -2741,35 +2741,14 @@ func TestFragment_ImportBool_WithTxCommit(t *testing.T) {
 	}
 }
 
-// testFragProxy implements FragProxy because fragProxy
-// requires *view and *Field but not all tests have those.
-type testFragProxy struct {
-	_path  string
-	_index string
-	_field string
-	_view  string
-}
+func makeTestFragSpec(path, index, field, view0 string) fragSpec {
 
-func (fb *testFragProxy) index() string {
-	return fb._index
-
-}
-func (fb *testFragProxy) field() string {
-	return fb._field
-}
-func (fb *testFragProxy) view() string {
-	return fb._view
-}
-func (fb *testFragProxy) path() string {
-	return fb._path
-}
-
-func makeTestFragProxy(path, index, field, view string) *testFragProxy {
-	return &testFragProxy{
-		_path:  path,
-		_index: index,
-		_field: field,
-		_view:  view,
+	// /tmp/holder-dir199550572/i/f/views/standard/fragments/0 -> /tmp/holder-dir199550572/i/f/views/standard
+	splt := strings.Split(path, sep+"fragments"+sep)
+	return fragSpec{
+		index: &Index{path: splt[0], name: index},
+		field: &Field{name: field},
+		view:  &view{path: splt[0], name: view0},
 	}
 }
 
@@ -2780,7 +2759,7 @@ func BenchmarkFragment_Snapshot(b *testing.B) {
 
 	b.ReportAllocs()
 	// Open the fragment specified by the path.
-	f := newFragment(newTestHolder(b), makeTestFragProxy(*FragmentPath, "i", "f", viewStandard), 0, 0)
+	f := newFragment(newTestHolder(b), makeTestFragSpec(*FragmentPath, "i", "f", viewStandard), 0, 0)
 	if err := f.Open(); err != nil {
 		b.Fatal(err)
 	}
@@ -3200,7 +3179,7 @@ func BenchmarkImportIntoLargeFragment(b *testing.B) {
 		idx, err := h.CreateIndex("i", IndexOptions{})
 		panicOn(err)
 
-		f := newFragment(h, makeTestFragProxy(fi.Name(), "i", "f", viewStandard), 0, 0)
+		f := newFragment(h, makeTestFragSpec(fi.Name(), "i", "f", viewStandard), 0, 0)
 		err = f.Open()
 		if err != nil {
 			b.Fatalf("opening fragment: %v", err)
@@ -3253,7 +3232,7 @@ func BenchmarkImportRoaringIntoLargeFragment(b *testing.B) {
 			th.SnapshotQueue = newSnapshotQueue(1, 1, nil)
 		}
 		// XXX TODO: newFragment is using the wrong path here, we should fix that someday.
-		f := newFragment(th, makeTestFragProxy(fi.Name(), "i", "f", viewStandard), 0, 0)
+		f := newFragment(th, makeTestFragSpec(fi.Name(), "i", "f", viewStandard), 0, 0)
 		defer f.Clean(b)
 
 		tx := idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f, Shard: f.shard})
@@ -3532,7 +3511,7 @@ func mustOpenFragmentFlags(tb testing.TB, index, field, view string, shard uint6
 	fragDir := fmt.Sprintf("%v/%v/views/%v/fragments/", idx.path, field, view)
 	panicOn(os.MkdirAll(fragDir, 0777))
 	fragPath := fragDir + fmt.Sprintf("%v", shard)
-	f := newFragment(th, makeTestFragProxy(fragPath, index, field, view), shard, flags)
+	f := newFragment(th, makeTestFragSpec(fragPath, index, field, view), shard, flags)
 
 	tx := idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f, Shard: shard})
 	testhook.Cleanup(tb, func() {
@@ -5022,7 +5001,7 @@ func TestImportClearRestart(t *testing.T) {
 				panicOn(err)
 
 				// OVERWRITING the f.path with a new fragment
-				f2 := newFragment(h, makeTestFragProxy(f.path(), "i", "f", viewStandard), 0, 0)
+				f2 := newFragment(h, makeTestFragSpec(f.path(), "i", "f", viewStandard), 0, 0)
 				f2.MaxOpN = maxOpN
 				f2.CacheType = f.CacheType
 
@@ -5074,7 +5053,7 @@ func TestImportClearRestart(t *testing.T) {
 				_ = idx3
 				panicOn(err)
 
-				f3 := newFragment(h3, makeTestFragProxy(f2.path(), "i", "f", viewStandard), 0, 0)
+				f3 := newFragment(h3, makeTestFragSpec(f2.path(), "i", "f", viewStandard), 0, 0)
 				f3.MaxOpN = maxOpN
 				f3.CacheType = f.CacheType
 

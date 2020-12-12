@@ -100,61 +100,49 @@ const (
 	roaringFlagBSIv2 = 0x01 // indicates version using low bit for existence
 )
 
-// FragProxy lets us use either fragProxy or testFragProxy.
-type FragProxy interface {
-	index() string
-	field() string
-	view() string
-	path() string
-}
-
-// fragProxy saves a ton of duplicated strings for
+// fragSpec saves a ton of duplicated strings for
 // path, and index, field, view name strings.
-// We already have the non _ versions as methods on FragProxy.
-// Thus the _shard, _index, _field, _view as names.
-type fragProxy struct {
-	_shard    uint64
-	_index    *Index
-	_field    *Field
-	_fieldstr string
-	_view     *view
+type fragSpec struct {
+	index    *Index
+	field    *Field
+	fieldstr string
+	view     *view
 }
 
-func (fb *fragProxy) index() string {
-	return fb._index.Name()
-
+func (f *fragment) index() string {
+	return f.idx.name
 }
-func (fb *fragProxy) field() string {
+
+func (f *fragment) field() string {
 	// initialization of _field *Field can
-	// be late, so we might not have it
-	// during the startup dance. Hence
-	// we keep _fieldstr as a backup
-	// until we've safely go _field filled.
-	if fb._field == nil {
-		return fb._fieldstr
+	// go missing during tests that do incomplete setup.
+	// Hence we must keep fieldstr as a backup.
+	if f.fld == nil {
+		return f.fieldstr
 	} else {
-		fb._fieldstr = ""
+		f.fieldstr = ""
 	}
-	return fb._field.Name()
+	return f.fld.name
 }
 
-func (fb *fragProxy) view() string {
-	return fb._view.name
+func (f *fragment) view() string {
+	return f._view.name
 }
-func (fb *fragProxy) path() string {
-	return filepath.Join(fb._view.path, "fragments", strconv.FormatUint(fb._shard, 10))
+func (f *fragment) path() string {
+	return filepath.Join(f._view.path, "fragments", strconv.FormatUint(f.shard, 10))
 }
 
 // fragment represents the intersection of a field and shard in an index.
 type fragment struct {
 	mu sync.RWMutex
 
-	// Composite identifiers
-
 	// We save 20GB worth strings on some data sets by not duplicating
 	// the path, index, field, view strings on every fragment.
-	// FragProxy assembles these on demand.
-	FragProxy
+	// Instead assemble strings on demand in field(), view(), path(), index().
+	fld      *Field
+	fieldstr string
+	_view    *view
+
 	shard uint64
 
 	// idx cached to avoid repeatedly looking it up everywhere.
@@ -217,19 +205,21 @@ type fragment struct {
 	bitmapInfo *roaring.BitmapInfo
 }
 
-// newFragment returns a new instance of Fragment.
-func newFragment(holder *Holder, fp FragProxy, shard uint64, flags byte) *fragment {
-	idx := holder.Index(fp.index())
+// newFragment returns a new instance of fragment.
+func newFragment(holder *Holder, spec fragSpec, shard uint64, flags byte) *fragment {
+	idx := holder.Index(spec.index.name)
 
 	if idx == nil {
-		panic(fmt.Sprintf("got nil idx back for '%v' from holder!", fp.index()))
+		panic(fmt.Sprintf("got nil idx back for '%v' from holder!", spec.index))
 	}
 
 	f := &fragment{
-		FragProxy: fp,
-		shard:     shard,
-		flags:     flags,
-		idx:       idx,
+		_view:    spec.view,
+		fieldstr: spec.fieldstr,
+		fld:      spec.field,
+		shard:    shard,
+		flags:    flags,
+		idx:      idx,
 
 		CacheType: DefaultCacheType,
 		CacheSize: DefaultCacheSize,

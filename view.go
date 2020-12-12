@@ -372,14 +372,18 @@ func (v *view) notifyIfNewShard(shard uint64) {
 
 func (v *view) newFragment(shard uint64) *fragment {
 	fld := v.idx.Field(v.field)
-	nb := &fragProxy{
-		_shard:    shard,
-		_index:    v.idx,
-		_field:    fld,
-		_fieldstr: v.field,
-		_view:     v,
+	spec := fragSpec{
+		index: v.idx,
+		field: fld,
+		view:  v,
 	}
-	frag := newFragment(v.holder, nb, shard, v.flags())
+	if fld == nil {
+		// The backup plan.
+		// For tests that do incomplete setup, like making
+		// a view without a field.
+		spec.fieldstr = v.field
+	}
+	frag := newFragment(v.holder, spec, shard, v.flags())
 	frag.CacheType = v.cacheType
 	frag.CacheSize = v.cacheSize
 	frag.stats = v.stats
