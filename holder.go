@@ -22,6 +22,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -53,6 +54,9 @@ const (
 )
 
 func init() {
+	// needed to get the most I/O throughtpu.
+	runtime.GOMAXPROCS(128)
+
 	// For performance tuning, leave these readily available:
 	// CPUProfileForDur(time.Minute, "server.cpu.pprof")
 	// MemProfileForDur(2*time.Minute, "server.mem.pprof")
