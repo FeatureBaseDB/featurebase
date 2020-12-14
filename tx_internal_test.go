@@ -81,6 +81,11 @@ func TestTx_CountRange(t *testing.T) {
 	f, tx := requireCountRangeSampleData(t)
 	defer f.Clean(t)
 	defer tx.Rollback()
+	// CountRange accesses the fragment without locking. Normally we only
+	// call it from inside a fragment routine with locking. Otherwise, you
+	// can have a race condition with snapshots, for instance.
+	f.mu.Lock()
+	defer f.mu.Unlock()
 
 	expected := uint64(0)
 	j := uint64(0)
