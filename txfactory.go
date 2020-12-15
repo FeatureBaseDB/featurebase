@@ -609,7 +609,7 @@ func (f *TxFactory) IndexSizes() (index2bytes map[string]int64, err error) {
 		if err != nil {
 			return index2bytes, errors.Wrap(err, "getting disk usage for roaring and meta")
 		}
-		fullName = index + ".index.txstores@@@"
+		fullName += ".index.txstores@@@"
 		rbfOrLmdb, err := directoryUsage(fullName)
 		if err != nil {
 			return index2bytes, errors.Wrap(err, "getting disk usage for backend")
