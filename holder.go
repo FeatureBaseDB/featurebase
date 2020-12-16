@@ -783,7 +783,7 @@ func (h *Holder) NeedsSnapshot() bool {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
-	return h.cfg.Txsrc == "roaring"
+	return h.txf.NeedsSnapshot()
 }
 
 // HasData returns true if Holder contains at least one index.
