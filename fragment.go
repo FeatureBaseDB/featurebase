@@ -2525,7 +2525,7 @@ func sliceDifference(original, remove []uint64) []uint64 {
 			n++
 		}
 	}
-	return append(original[:n], original[on+1:]...)
+	return original[:n]
 }
 
 // bulkImportMutex performs a bulk import on a fragment while ensuring
@@ -2541,12 +2541,9 @@ func (f *fragment) bulkImportMutex(tx Tx, rowIDs, columnIDs []uint64) error {
 	columnIDs = p.cols
 	rowIDs = p.rows
 
-	// create a mask of rows we care about
-	columns := roaring.NewSliceBitmap()
-	_, err := columns.AddN(columnIDs...)
-	if err != nil {
-		return errors.Wrap(err, "creating bitmap of affected columns")
-	}
+	// create a mask of columns we care about
+	columns := roaring.NewSliceBitmap(columnIDs...)
+
 	// we now need to find existing rows for these bits.
 	rowSet := make(map[uint64]struct{}, len(rowIDs))
 	unsorted := false
@@ -2579,7 +2576,7 @@ func (f *fragment) bulkImportMutex(tx Tx, rowIDs, columnIDs []uint64) error {
 		return nil
 	}
 	findExisting := roaring.NewBitmapBitmapFilter(columns, callback)
-	err = tx.ApplyFilter(f.index(), f.field(), f.view(), f.shard, 0, findExisting)
+	err := tx.ApplyFilter(f.index(), f.field(), f.view(), f.shard, 0, findExisting)
 	if err != nil {
 		return errors.Wrap(err, "finding existing positions")
 	}
