@@ -782,12 +782,8 @@ func (h *Holder) Close() error {
 func (h *Holder) NeedsSnapshot() bool {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
-	for _, idx := range h.Indexes() {
-		if idx.NeedsSnapshot() {
-			return true
-		}
-	}
-	return false
+
+	return h.txf.NeedsSnapshot()
 }
 
 // HasData returns true if Holder contains at least one index.
