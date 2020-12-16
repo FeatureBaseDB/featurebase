@@ -88,7 +88,7 @@ type Server struct { // nolint: maligned
 	dataDir       string
 
 	// Threshold for logging long-running queries
-	longQueryTime time.Duration
+	longQueryTime      time.Duration
 	queryHistoryLength int
 }
 
