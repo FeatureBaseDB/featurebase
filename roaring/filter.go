@@ -31,10 +31,10 @@ import (
 // means it needs access to the shard width stuff, which roaring otherwise
 // studiously avoids knowing about.
 const (
-	rowExponent = (shardwidth.Exponent - 16)
-	rowWidth    = 1 << rowExponent    // containers per row
-	keyMask     = (rowWidth - 1)      // a mask for offset within the row
-	rowMask     = ^FilterKey(keyMask) // a mask for the row bits, without converting them to a row ID
+	rowExponent = (shardwidth.Exponent - 16) // for instance, 20-16 = 4
+	rowWidth    = 1 << rowExponent           // containers per row, for instance 1<<4 = 16
+	keyMask     = (rowWidth - 1)             // a mask for offset within the row
+	rowMask     = ^FilterKey(keyMask)        // a mask for the row bits, without converting them to a row ID
 )
 
 type FilterKey uint64
@@ -47,8 +47,8 @@ type FilterKey uint64
 // easier to write. It can also report an error, which indicates that the
 // entire operation should be stopped with that error.
 type FilterResult struct {
-	YesKey FilterKey // The lowest container key this container is known NOT to match.
-	NoKey  FilterKey // The highest container key after that that this filter is known to not match.
+	YesKey FilterKey // The lowest container key this filter is known NOT to match.
+	NoKey  FilterKey // The highest container key after YesKey that this filter is known to not match.
 	Err    error     // An error which should terminate processing.
 }
 
@@ -73,7 +73,7 @@ func (f FilterKey) MatchReject(y, n FilterKey) FilterResult {
 }
 
 func (f FilterKey) MatchOne() FilterResult {
-	return FilterResult{YesKey: f + 1}
+	return FilterResult{YesKey: f + 1, NoKey: f + 1}
 }
 
 // NeedData() is only really meaningful for ConsiderKey, and indicates
@@ -225,6 +225,10 @@ func (f *BitmapColumnFilter) ConsiderData(key FilterKey, data *Container) Filter
 		return key.MatchOneUntilSameOffset()
 	}
 	return key.RejectUntilOffset(uint64(f.key))
+}
+
+func NewBitmapColumnFilter(col uint64) BitmapFilter {
+	return &BitmapColumnFilter{key: uint16((col >> 16) & keyMask), offset: uint16(col & 0xFFFF)}
 }
 
 // BitmapRowsFilter is a BitmapFilter which checks for containers that are
@@ -583,16 +587,12 @@ func (b *BitmapRowFilterMultiFilter) ConsiderData(key FilterKey, data *Container
 	return b.SetResult(key, key.MatchReject(lowestYes, lowestYesNo))
 }
 
-func NewBitmapColumnFilter(col uint64) BitmapFilter {
-	return &BitmapColumnFilter{key: uint16((col >> 16) & keyMask), offset: uint16(col & 0xFFFF)}
-}
-
 // BitmapBitmap filter builds a list of positions in the bitmap which
 // match those in a provided bitmap. It is shard-agnostic; no matter what
 // offsets the input bitmap's containers have, it matches them against
 // corresponding keys.
 type BitmapBitmapFilter struct {
-	filter      *Bitmap // We don't use this, but in ludicrous edge cases it might be holding a generation we need.
+	filter      *Bitmap // We don't use this while iterating, but in ludicrous edge cases it might be holding a generation we need.
 	containers  []*Container
 	nextOffsets []uint64
 	callback    func(uint64) error
@@ -628,6 +628,11 @@ func (b *BitmapBitmapFilter) ConsiderData(key FilterKey, data *Container) Filter
 // within a bitmap which are set, and which have positions corresponding to
 // the specified columns. It calls the provided callback function on
 // each value it finds, terminating early if that returns an error.
+//
+// The input filter is assumed to represent one "row" of a shard's data,
+// which is to say, a range of up to rowWidth consecutive containers starting
+// at some multiple of rowWidth. We coerce that to the 0..rowWidth range
+// because offset-within-row is what we care about.
 func NewBitmapBitmapFilter(filter *Bitmap, callback func(uint64) error) *BitmapBitmapFilter {
 	b := &BitmapBitmapFilter{
 		filter:      filter,
@@ -640,6 +645,8 @@ func NewBitmapBitmapFilter(filter *Bitmap, callback func(uint64) error) *BitmapB
 	count := 0
 	for iter.Next() {
 		k, v := iter.Value()
+		// Coerce container key into the 0-rowWidth range we'll be
+		// using to compare against containers within each row.
 		k = k & keyMask
 		b.containers[k] = v
 		last = k
@@ -689,6 +696,56 @@ func NewBitmapRowFilter(callback func(uint64) error, filters ...BitmapFilter) Bi
 		return NewBitmapRowFilterSingleFilter(callback, filters[0])
 	}
 	return NewBitmapRowFilterMultiFilter(callback, filters...)
+}
+
+// BitmapRangeFilter limits filter operations to a specified range, and
+// performs key or data callbacks.
+//
+// On seeing a key in its range:
+// If the key callback is present, and returns true, match the key.
+// Otherwise, if a data callback is present, request the data, and in the
+// data handler, call the data callback, then match the single key.
+// If neither is present, match the entire range at once.
+type BitmapRangeFilter struct {
+	min, max FilterKey
+	kcb      func(FilterKey, int32) (bool, error)
+	dcb      func(FilterKey, *Container) error
+}
+
+var _ BitmapFilter = &BitmapRangeFilter{}
+
+func (b *BitmapRangeFilter) ConsiderKey(key FilterKey, n int32) FilterResult {
+	if key >= b.max {
+		return key.Done()
+	}
+	if key >= b.min {
+		if b.kcb != nil {
+			match, err := b.kcb(key, n)
+			if err != nil {
+				return key.Fail(err)
+			}
+			if match {
+				return key.MatchOne()
+			}
+		}
+		if b.dcb != nil {
+			return key.NeedData()
+		}
+		return key.MatchReject(b.max, ^FilterKey(0))
+	}
+	return key.RejectUntil(b.min)
+}
+
+func (b *BitmapRangeFilter) ConsiderData(key FilterKey, data *Container) FilterResult {
+	err := b.dcb(key, data)
+	if err != nil {
+		return key.Fail(err)
+	}
+	return key.MatchOne()
+}
+
+func NewBitmapRangeFilter(min, max FilterKey, keyCallback func(FilterKey, int32) (bool, error), dataCallback func(FilterKey, *Container) error) *BitmapRangeFilter {
+	return &BitmapRangeFilter{min: min, max: max, kcb: keyCallback, dcb: dataCallback}
 }
 
 // ApplyFilterToIterator is a simplistic implementation that applies a bitmap

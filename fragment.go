@@ -2339,11 +2339,11 @@ type parallelSlices struct {
 	cols, rows []uint64
 }
 
-// Prune eliminates values which have the same column key and are
+// prune eliminates values which have the same column key and are
 // adjacent in the slice. It doesn't handle non-adjacent keys, but
-// does report whether it saw any. See FullPrune for what you probably
+// does report whether it saw any. See fullPrune for what you probably
 // want to be using.
-func (p *parallelSlices) Prune() (unsorted bool) {
+func (p *parallelSlices) prune() (unsorted bool) {
 	l := len(p.cols)
 	if l == 0 {
 		return
@@ -2374,19 +2374,22 @@ func (p *parallelSlices) Prune() (unsorted bool) {
 	return unsorted
 }
 
-// FullPrune trims any adjacent values with identical column keys (and
+// fullPrune trims any adjacent values with identical column keys (and
 // the corresponding row values), and if it notices that anything was unsorted,
 // does a stable sort by column key and tries that again, ensuring that
 // there's no items with the same column key. The last entry with a given
 // column key wins.
-func (p *parallelSlices) FullPrune() {
+func (p *parallelSlices) fullPrune() {
 	if len(p.cols) == 0 {
 		return
 	}
-	unsorted := p.Prune()
+	if len(p.rows) != len(p.cols) {
+		panic("parallelSlices must have same length for rows and columns")
+	}
+	unsorted := p.prune()
 	if unsorted {
 		sort.Stable(p)
-		_ = p.Prune()
+		_ = p.prune()
 	}
 }
 
@@ -2496,25 +2499,33 @@ func (f *fragment) importPositions(tx Tx, set, clear []uint64, rowSet map[uint64
 	return err
 }
 
-// unclearSets removes anything in toClear that was found in toSet
-func unclearSets(toSet, toClear []uint64) []uint64 {
-	cn := 0
-	cv := toClear[cn]
+// sliceDifference removes everything from original that's found in remove,
+// updating the slice in place, and returns the compacted slice. The input
+// sets should be sorted.
+func sliceDifference(original, remove []uint64) []uint64 {
+	if len(remove) == 0 {
+		return original
+	}
+	rn := 0
+	rv := remove[rn]
+	on := 0
+	ov := uint64(0)
 	n := 0
-	for _, sv := range toSet {
-		for cv < sv {
-			toClear[n] = cv
-			n++
-			cn++
-			if cn >= len(toClear) {
-				return toClear[:n]
+
+	for on, ov = range original {
+		for rv < ov {
+			rn++
+			if rn >= len(remove) {
+				return append(original[:n], original[on:]...)
 			}
-			cv = toClear[cn]
+			rv = remove[rn]
+		}
+		if rv != ov {
+			original[n] = ov
+			n++
 		}
 	}
-	copy(toClear[n:], toClear[cn:])
-	n += len(toClear[cn:])
-	return toClear[:n]
+	return append(original[:n], original[on+1:]...)
 }
 
 // bulkImportMutex performs a bulk import on a fragment while ensuring
@@ -2526,7 +2537,7 @@ func (f *fragment) bulkImportMutex(tx Tx, rowIDs, columnIDs []uint64) error {
 	defer f.mu.Unlock()
 
 	p := parallelSlices{cols: columnIDs, rows: rowIDs}
-	p.FullPrune()
+	p.fullPrune()
 	columnIDs = p.cols
 	rowIDs = p.rows
 
@@ -2567,15 +2578,15 @@ func (f *fragment) bulkImportMutex(tx Tx, rowIDs, columnIDs []uint64) error {
 		rowSet[rowID] = struct{}{}
 		return nil
 	}
-	existing := roaring.NewBitmapBitmapFilter(columns, callback)
-	err = tx.ApplyFilter(f.index(), f.field(), f.view(), f.shard, 0, existing)
+	findExisting := roaring.NewBitmapBitmapFilter(columns, callback)
+	err = tx.ApplyFilter(f.index(), f.field(), f.view(), f.shard, 0, findExisting)
 	if err != nil {
 		return errors.Wrap(err, "finding existing positions")
 	}
 	// if we're clearing things, anything being set that is being cleared
 	// should not be cleared
 	if len(toClear) > 0 {
-		toClear = unclearSets(toSet, toClear)
+		toClear = sliceDifference(toClear, toSet)
 	}
 	return errors.Wrap(f.importPositions(tx, toSet, toClear, rowSet), "importing positions")
 }

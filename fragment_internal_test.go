@@ -5792,12 +5792,12 @@ func testOneParallelSlice(t *testing.T, p *parallelSlices) {
 	for i, c := range p.cols {
 		seen[c] = p.rows[i]
 	}
-	unsorted := p.Prune()
+	unsorted := p.prune()
 	t.Logf("unsorted %t, cols %d, rows %d", unsorted, p.cols, p.rows)
 	if unsorted {
 		sort.Stable(p)
 	}
-	unsorted = p.Prune()
+	unsorted = p.prune()
 	if unsorted {
 		t.Fatalf("slice still unsorted after sort")
 	}
@@ -5848,4 +5848,198 @@ func TestParallelSlices(t *testing.T) {
 	t.Run("orderlapping", func(t *testing.T) {
 		testOneParallelSlice(t, &parallelSlices{cols: cols, rows: rows})
 	})
+}
+
+func testOneParallelSliceFullPrune(t *testing.T, p *parallelSlices) {
+	// the easy answer
+	seen := make(map[uint64]uint64, len(p.cols))
+	//t.Logf("cols %d, rows %d", p.cols, p.rows)
+	for i, c := range p.cols {
+		seen[c] = p.cols[i]
+	}
+	//t.Logf("before fullPrune: cols %d, rows %d", p.cols, p.rows)
+	p.fullPrune()
+
+	//t.Logf("after fullPrune, pruned/sorted cols %d, rows %d", p.cols, p.rows)
+	if len(p.cols) != len(seen) {
+		t.Fatalf("expected %d entries, found %d", len(seen), len(p.cols))
+	}
+	for i := range p.cols {
+		if i == 0 {
+			continue
+		}
+		if p.cols[i] <= p.cols[i-1] {
+			t.Fatalf("expected p.cols[i=%v]=%v <= p.cols[i-1=%v]=%v", i, p.cols[i], i-1, p.cols[i-1])
+		}
+	}
+}
+
+func TestParallelSlicesFullPrune(t *testing.T) {
+	cols := make([]uint64, 0)
+	rows := make([]uint64, 0)
+
+	t.Run("no_loss", func(t *testing.T) {
+		testOneParallelSliceFullPrune(t, &parallelSlices{cols: cols, rows: rows})
+	})
+
+	cols = make([]uint64, 1)
+	rows = make([]uint64, 1)
+	cols[0] = 3
+
+	t.Run("no_loss", func(t *testing.T) {
+		testOneParallelSliceFullPrune(t, &parallelSlices{cols: cols, rows: rows})
+	})
+
+	cols = make([]uint64, 2)
+	rows = make([]uint64, 2)
+	cols[1] = 1 // sorted
+
+	t.Run("no_loss", func(t *testing.T) {
+		testOneParallelSliceFullPrune(t, &parallelSlices{cols: cols, rows: rows})
+	})
+
+	cols = make([]uint64, 2)
+	rows = make([]uint64, 2)
+	// one duplicate 0
+
+	t.Run("no_loss", func(t *testing.T) {
+		testOneParallelSliceFullPrune(t, &parallelSlices{cols: cols, rows: rows})
+	})
+
+	cols = make([]uint64, 2)
+	rows = make([]uint64, 2)
+	cols[0] = 1 // unsorted
+
+	t.Run("no_loss", func(t *testing.T) {
+		testOneParallelSliceFullPrune(t, &parallelSlices{cols: cols, rows: rows})
+	})
+
+	cols = make([]uint64, 3)
+	rows = make([]uint64, 3)
+	cols[0] = 2 // unsorted
+	cols[1] = 1 // unsorted
+
+	t.Run("no_loss", func(t *testing.T) {
+		testOneParallelSliceFullPrune(t, &parallelSlices{cols: cols, rows: rows})
+	})
+
+	cols = make([]uint64, 3)
+	rows = make([]uint64, 3)
+	// three duplicate 0s
+
+	t.Run("no_loss", func(t *testing.T) {
+		testOneParallelSliceFullPrune(t, &parallelSlices{cols: cols, rows: rows})
+	})
+
+	cols = make([]uint64, 3)
+	rows = make([]uint64, 3)
+	// three duplicate 1s
+	cols[0] = 1
+	cols[1] = 1
+	cols[2] = 1
+
+	t.Run("no_loss", func(t *testing.T) {
+		testOneParallelSliceFullPrune(t, &parallelSlices{cols: cols, rows: rows})
+	})
+
+	cols = make([]uint64, 256)
+	rows = make([]uint64, 256)
+
+	// ensure at least some overlap by coercing columns into a range
+	// smaller than number of entries
+	for i := range cols {
+		cols[i] = rand.Uint64() & ((uint64(len(cols)) / 2) - 1)
+		rows[i] = rand.Uint64() & 0xff
+	}
+	t.Run("random", func(t *testing.T) {
+		testOneParallelSliceFullPrune(t, &parallelSlices{cols: cols, rows: rows})
+	})
+
+	cols = cols[:cap(cols)]
+	rows = rows[:cap(rows)]
+	// in-order but no overlap
+	col := uint64(0)
+	for i := range cols {
+		cols[i] = col
+		col = col + (rand.Uint64() & 3) + 1
+		rows[i] = rand.Uint64() & 0xff
+	}
+	t.Run("ordered", func(t *testing.T) {
+		testOneParallelSliceFullPrune(t, &parallelSlices{cols: cols, rows: rows})
+	})
+	cols = cols[:cap(cols)]
+	rows = rows[:cap(rows)]
+	// in-order with
+	col = uint64(0)
+	for i := range cols {
+		cols[i] = col
+		col = col + (rand.Uint64() & 3)
+		rows[i] = rand.Uint64() & 0xff
+	}
+	t.Run("orderlapping", func(t *testing.T) {
+		testOneParallelSliceFullPrune(t, &parallelSlices{cols: cols, rows: rows})
+	})
+}
+
+func compareSlices(tb testing.TB, name string, s1, s2 []uint64) {
+	if len(s1) != len(s2) {
+		tb.Fatalf("slice length mismatch %q: expected %d items %d, got %d items %d",
+			name, len(s1), s1, len(s2), s2)
+	}
+	for i, v := range s1 {
+		if s2[i] != v {
+			tb.Fatalf("row mismatch %q: expected item %d to be %d, got %d",
+				name, i, s1[i], s2[i])
+		}
+	}
+}
+
+type sliceDifferenceTestCase struct {
+	original, remove, expected []uint64
+}
+
+func TestSliceDifference(t *testing.T) {
+	testCases := map[string]sliceDifferenceTestCase{
+		"noOverlap": {
+			original: []uint64{1, 2, 3},
+			remove:   []uint64{0, 5},
+			expected: []uint64{1, 2, 3},
+		},
+		"before": {
+			original: []uint64{3, 5, 7},
+			remove:   []uint64{0, 6},
+			expected: []uint64{3, 5, 7},
+		},
+		"after": {
+			original: []uint64{3, 5, 7},
+			remove:   []uint64{8, 10},
+			expected: []uint64{3, 5, 7},
+		},
+		"all": {
+			original: []uint64{3, 5, 7},
+			remove:   []uint64{3, 5, 7},
+			expected: []uint64{},
+		},
+		"first": {
+			original: []uint64{3, 5, 7},
+			remove:   []uint64{3},
+			expected: []uint64{5, 7},
+		},
+		"last": {
+			original: []uint64{3, 5, 7},
+			remove:   []uint64{7},
+			expected: []uint64{3, 5},
+		},
+		"middle": {
+			original: []uint64{3, 5, 7},
+			remove:   []uint64{5},
+			expected: []uint64{3, 7},
+		},
+	}
+	var scratch []uint64
+	for name, tc := range testCases {
+		scratch = append(scratch[:0], tc.original...)
+		result := sliceDifference(scratch, tc.remove)
+		compareSlices(t, name, tc.expected, result)
+	}
 }
