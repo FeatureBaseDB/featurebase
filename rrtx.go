@@ -150,6 +150,10 @@ func (tx *RoaringTx) IncrementOpN(index, field, view string, shard uint64, chang
 	frag.incrementOpN(changedN)
 }
 
+func (c *RoaringTx) ApplyFilter(index, field, view string, shard uint64, ckey uint64, filter roaring.BitmapFilter) (err error) {
+	return GenericApplyFilter(c, index, field, view, shard, ckey, filter)
+}
+
 // Rollback
 func (tx *RoaringTx) Rollback() {
 	tx.w.CleanupTx(tx)

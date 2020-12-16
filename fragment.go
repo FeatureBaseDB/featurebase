@@ -2330,6 +2330,82 @@ func (f *fragment) bulkImportStandard(tx Tx, rowIDs, columnIDs []uint64, options
 	return errors.Wrap(err, "bulkImportStandard")
 }
 
+// parallelSlices provides a sort.Interface for corresponding slices of
+// column and row values, and also allows pruning of duplicate values,
+// meaning values for the same column, as you might want for a mutex.
+//
+// The slices should be parallel and of the same length.
+type parallelSlices struct {
+	cols, rows []uint64
+}
+
+// prune eliminates values which have the same column key and are
+// adjacent in the slice. It doesn't handle non-adjacent keys, but
+// does report whether it saw any. See fullPrune for what you probably
+// want to be using.
+func (p *parallelSlices) prune() (unsorted bool) {
+	l := len(p.cols)
+	if l == 0 {
+		return
+	}
+	n := 0
+	prev := p.cols[0]
+	// At any point, n is the index of the last value we wrote
+	// (we pretend we copied 0 to 0 before starting). If the next
+	// value would have the same column ID, it should replace
+	// the one we just wrote, otherwise we move n to point to a
+	// new slot before writing. If there are no duplicates, n is
+	// always equal to i. we don't check for this because skipping
+	// those writes would require an extra branch...
+	for i := 1; i < l; i++ {
+		next := p.cols[i]
+		if next < prev {
+			unsorted = true
+		}
+		if next != prev {
+			n++
+		}
+		prev = next
+		p.cols[n] = p.cols[i]
+		p.rows[n] = p.rows[i]
+	}
+	p.rows = p.rows[:n+1]
+	p.cols = p.cols[:n+1]
+	return unsorted
+}
+
+// fullPrune trims any adjacent values with identical column keys (and
+// the corresponding row values), and if it notices that anything was unsorted,
+// does a stable sort by column key and tries that again, ensuring that
+// there's no items with the same column key. The last entry with a given
+// column key wins.
+func (p *parallelSlices) fullPrune() {
+	if len(p.cols) == 0 {
+		return
+	}
+	if len(p.rows) != len(p.cols) {
+		panic("parallelSlices must have same length for rows and columns")
+	}
+	unsorted := p.prune()
+	if unsorted {
+		sort.Stable(p)
+		_ = p.prune()
+	}
+}
+
+func (p *parallelSlices) Len() int {
+	return len(p.cols)
+}
+
+func (p *parallelSlices) Less(i, j int) bool {
+	return p.cols[i] < p.cols[j]
+}
+
+func (p parallelSlices) Swap(i, j int) {
+	p.cols[i], p.cols[j] = p.cols[j], p.cols[i]
+	p.rows[i], p.rows[j] = p.rows[j], p.rows[i]
+}
+
 // importPositions takes slices of positions within the fragment to set and
 // clear in storage. One must also pass in the set of unique rows which are
 // affected by the set and clear operations. It is unprotected (f.mu must be
@@ -2353,7 +2429,6 @@ func (f *fragment) importPositions(tx Tx, set, clear []uint64, rowSet map[uint64
 			// TODO benchmark Add/RemoveN behavior with sorted/unsorted positions
 			// Note: AddN() avoids writing to the op-log. While Add() does.
 			changedN, err := tx.Add(f.index(), f.field(), f.view(), f.shard, !doBatched, set...)
-
 			if err != nil {
 				return errors.Wrap(err, "adding positions")
 			}
@@ -2424,6 +2499,35 @@ func (f *fragment) importPositions(tx Tx, set, clear []uint64, rowSet map[uint64
 	return err
 }
 
+// sliceDifference removes everything from original that's found in remove,
+// updating the slice in place, and returns the compacted slice. The input
+// sets should be sorted.
+func sliceDifference(original, remove []uint64) []uint64 {
+	if len(remove) == 0 {
+		return original
+	}
+	rn := 0
+	rv := remove[rn]
+	on := 0
+	ov := uint64(0)
+	n := 0
+
+	for on, ov = range original {
+		for rv < ov {
+			rn++
+			if rn >= len(remove) {
+				return append(original[:n], original[on:]...)
+			}
+			rv = remove[rn]
+		}
+		if rv != ov {
+			original[n] = ov
+			n++
+		}
+	}
+	return original[:n]
+}
+
 // bulkImportMutex performs a bulk import on a fragment while ensuring
 // mutex restrictions. Because the mutex requirements must be checked
 // against storage, this method must acquire a write lock on the fragment
@@ -2432,53 +2536,55 @@ func (f *fragment) bulkImportMutex(tx Tx, rowIDs, columnIDs []uint64) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	rowSet := make(map[uint64]struct{})
-	// we have to maintain which columns are getting bits set as a map so that
-	// we don't end up setting multiple bits in the same column if a column is
-	// repeated within the import.
-	colSet := make(map[uint64]uint64)
+	p := parallelSlices{cols: columnIDs, rows: rowIDs}
+	p.fullPrune()
+	columnIDs = p.cols
+	rowIDs = p.rows
 
-	// Since each imported bit will at most set one bit and clear one bit, we
-	// can reuse the rowIDs and columnIDs slices as the set and clear slice
-	// arguments to importPositions. The set positions we'll get from the
-	// colSet, but we maintain clearIdx as we loop through row and col ids so
-	// that we know how many bits we need to clear and how far through columnIDs
-	// we are.
-	clearIdx := 0
+	// create a mask of columns we care about
+	columns := roaring.NewSliceBitmap(columnIDs...)
+
+	// we now need to find existing rows for these bits.
+	rowSet := make(map[uint64]struct{}, len(rowIDs))
+	unsorted := false
+	prev := uint64(0)
 	for i := range rowIDs {
 		rowID, columnID := rowIDs[i], columnIDs[i]
-		if existingRowID, found, err := f.mutexVector.Get(tx, columnID); err != nil {
-			return errors.Wrap(err, "getting mutex vector data")
-		} else if found && existingRowID != rowID {
-			// Determine the position of the bit in the storage.
-			clearPos, err := f.pos(existingRowID, columnID)
-			if err != nil {
-				return err
-			}
-			columnIDs[clearIdx] = clearPos
-			clearIdx++
-
-			rowSet[existingRowID] = struct{}{}
-		} else if found && existingRowID == rowID {
-			continue
-		}
+		rowSet[rowID] = struct{}{}
 		pos, err := f.pos(rowID, columnID)
 		if err != nil {
-			return err
+			return errors.Wrap(err, fmt.Sprintf("finding pos for row %d, col %d", rowID, columnID))
 		}
-		colSet[columnID] = pos
-		rowSet[rowID] = struct{}{}
-	}
-
-	// re-use rowIDs by populating positions to set from colSet.
-	i := 0
-	for _, pos := range colSet {
+		// positions are sorted by columns, but not by absolute
+		// position. we might want them sorted, though.
+		if pos < prev {
+			unsorted = true
+		}
+		prev = pos
 		rowIDs[i] = pos
-		i++
 	}
-	toSet := rowIDs[:i]
-	toClear := columnIDs[:clearIdx]
-
+	toSet := rowIDs
+	if unsorted {
+		sort.Slice(toSet, func(i, j int) bool { return toSet[i] < toSet[j] })
+	}
+	// we'll reuse the row IDs as the values to clear, if any.
+	toClear := columnIDs[:0]
+	callback := func(pos uint64) error {
+		toClear = append(toClear, pos)
+		rowID := pos / ShardWidth
+		rowSet[rowID] = struct{}{}
+		return nil
+	}
+	findExisting := roaring.NewBitmapBitmapFilter(columns, callback)
+	err := tx.ApplyFilter(f.index(), f.field(), f.view(), f.shard, 0, findExisting)
+	if err != nil {
+		return errors.Wrap(err, "finding existing positions")
+	}
+	// if we're clearing things, anything being set that is being cleared
+	// should not be cleared
+	if len(toClear) > 0 {
+		toClear = sliceDifference(toClear, toSet)
+	}
 	return errors.Wrap(f.importPositions(tx, toSet, toClear, rowSet), "importing positions")
 }
 
@@ -3032,77 +3138,44 @@ func (f *fragment) minRowID(tx Tx) (uint64, bool, error) {
 	return min / ShardWidth, ok, err
 }
 
-// rowFilter is a function signature for controlling iteration over containers
-// in a fragment. It will be invoked on each container found and returns two
-// booleans. The first is whether the row this container is in should be
-// included or skipped, and the second is whether to stop processing or
-// continue.
-type rowFilter func(rowID, key uint64, c *roaring.Container) (include, done bool)
-
-// filterWithLimit returns a filter which will only allow a limited number of
-// rows to be returned. It should be applied last so that it is only called (and
-// therefore only updates its internal state) if the row is being included by
-// every other filter.
-func filterWithLimit(limit uint64) rowFilter {
-	return func(rowID, key uint64, c *roaring.Container) (include, done bool) {
-		if limit > 0 {
-			limit--
-			return true, false
-		}
-		return false, true
-	}
+// BitmapLikeFilter is a roaring.BitmapFilter which handles Like expressions.
+type BitmapLikeFilter struct {
+	roaring.BitmapRowFilterBase
+	plan       []filterStep
+	translator TranslateStore
 }
 
-func filterColumn(col uint64) rowFilter {
-	return func(rowID, key uint64, c *roaring.Container) (include, done bool) {
-		colID := col % ShardWidth
-		colKey := ((rowID * ShardWidth) + colID) >> 16
-		colVal := uint16(colID & 0xFFFF) // columnID within the container
-		return colKey == key && c.Contains(colVal), false
+var _ roaring.BitmapFilter = &BitmapLikeFilter{}
+
+func (b *BitmapLikeFilter) ConsiderKey(key roaring.FilterKey, n int32) roaring.FilterResult {
+	res, done := b.DetermineByKey(key)
+	if done {
+		return res
 	}
+	if n == 0 {
+		return key.RejectOne()
+	}
+	row := key.Row()
+	keyStr, err := b.translator.TranslateID(row)
+	if err != nil {
+		return b.SetResult(key, key.Fail(errors.Wrap(err, "translating key for row")))
+	}
+	if matchLike(keyStr, b.plan...) {
+		return b.SetResult(key, key.MatchRow())
+	}
+	return b.SetResult(key, key.RejectRow())
 }
 
-func filterLike(like string, t TranslateStore, e chan error) rowFilter {
-	plan := planLike(like)
-
-	return func(rowID, key uint64, c *roaring.Container) (include, done bool) {
-		keyStr, err := t.TranslateID(rowID)
-		if err != nil {
-			select {
-			case e <- err:
-			default:
-			}
-			return false, true
-		}
-		return matchLike(keyStr, plan...), false
-	}
+func (b *BitmapLikeFilter) ConsiderData(key roaring.FilterKey, data *roaring.Container) roaring.FilterResult {
+	b.FilterResult.Err = errors.New("like filter should not need to look at data")
+	return b.FilterResult
 }
 
-// TODO: this works, but it would be more performant if the fragment could seek
-// to the next row in the rows list rather than asking the filter for each
-// container serially. The container iterator would need to expose a seek
-// method, and the rowFilter would need some way of communicating to
-// fragment.rows what the next rowID to seek to is.
-func filterWithRows(rows []uint64) rowFilter {
-	loc := 0
-	return func(rowID, key uint64, c *roaring.Container) (include, done bool) {
-		if loc >= len(rows) {
-			return false, true
-		}
-		i := sort.Search(len(rows[loc:]), func(i int) bool {
-			return rows[loc+i] >= rowID
-		})
-		loc += i
-		if loc >= len(rows) {
-			return false, true
-		}
-		if rows[loc] == rowID {
-			if loc == len(rows)-1 {
-				done = true
-			}
-			return true, done
-		}
-		return false, false
+func NewBitmapLikeFilter(like string, translator TranslateStore) *BitmapLikeFilter {
+	return &BitmapLikeFilter{
+		BitmapRowFilterBase: *roaring.NewBitmapRowFilterBase(nil),
+		plan:                planLike(like),
+		translator:          translator,
 	}
 }
 
@@ -3115,65 +3188,27 @@ func filterWithRows(rows []uint64) rowFilter {
 // returning done == true will cause processing to stop after all filters for
 // this container have been processed. The rows accumulated up to this point
 // (including this row if all filters passed) will be returned.
-func (f *fragment) rows(ctx context.Context, tx Tx, start uint64, filters ...rowFilter) ([]uint64, error) {
+func (f *fragment) rows(ctx context.Context, tx Tx, start uint64, filters ...roaring.BitmapFilter) ([]uint64, error) {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 	return f.unprotectedRows(ctx, tx, start, filters...)
 }
 
 // unprotectedRows calls rows without grabbing the mutex.
-func (f *fragment) unprotectedRows(ctx context.Context, tx Tx, start uint64, filters ...rowFilter) ([]uint64, error) {
-	rows := make([]uint64, 0)
+func (f *fragment) unprotectedRows(ctx context.Context, tx Tx, start uint64, filters ...roaring.BitmapFilter) ([]uint64, error) {
+	var rows []uint64
+	cb := func(row uint64) error {
+		rows = append(rows, row)
+		return nil
+	}
 	startKey := rowToKey(start)
-	i, _, err := tx.ContainerIterator(f.index(), f.field(), f.view(), f.shard, startKey)
+	filter := roaring.NewBitmapRowFilter(cb, filters...)
+	err := tx.ApplyFilter(f.index(), f.field(), f.view(), f.shard, startKey, filter)
 	if err != nil {
 		return nil, err
-	} else if i == nil {
+	} else {
 		return rows, nil
 	}
-	defer i.Close() // must close iterators allocated on a Tx
-	var lastRow uint64 = math.MaxUint64
-
-	// Loop over the existing containers.
-	var k uint16
-	for i.Next() {
-		if k == 0 {
-			if err := ctx.Err(); err != nil {
-				// caller doesn't need a result anymore.
-				return nil, err
-			}
-		}
-		k++
-
-		key, c := i.Value()
-
-		// virtual row for the current container
-		vRow := key >> shardVsContainerExponent
-
-		// skip dups
-		if vRow == lastRow {
-			continue
-		}
-
-		// apply filters
-		addRow, done := true, false
-		for _, filter := range filters {
-			var d bool
-			addRow, d = filter(vRow, key, c)
-			done = done || d
-			if !addRow {
-				break
-			}
-		}
-		if addRow {
-			lastRow = vRow
-			rows = append(rows, vRow)
-		}
-		if done {
-			return rows, nil
-		}
-	}
-	return rows, nil
 }
 
 // blockToRoaringData converts a fragment block into a roaring.Bitmap
@@ -3246,7 +3281,7 @@ type rowIterator interface {
 	Next() (*Row, uint64, *int64, bool, error)
 }
 
-func (f *fragment) rowIterator(tx Tx, wrap bool, filters ...rowFilter) (rowIterator, error) {
+func (f *fragment) rowIterator(tx Tx, wrap bool, filters ...roaring.BitmapFilter) (rowIterator, error) {
 	if strings.HasPrefix(f.view(), viewBSIGroupPrefix) {
 		return f.intRowIterator(tx, wrap, filters...)
 	}
@@ -3264,7 +3299,7 @@ type intRowIterator struct {
 	wrap   bool
 }
 
-func (f *fragment) intRowIterator(tx Tx, wrap bool, filters ...rowFilter) (rowIterator, error) {
+func (f *fragment) intRowIterator(tx Tx, wrap bool, filters ...roaring.BitmapFilter) (rowIterator, error) {
 	it := intRowIterator{
 		f:      f,
 		colIDs: make(map[int64][]uint64),
@@ -3283,7 +3318,7 @@ func (f *fragment) intRowIterator(tx Tx, wrap bool, filters ...rowFilter) (rowIt
 		f.mu.RLock()
 		defer f.mu.RUnlock()
 	}
-	if err := f.foreachRow(tx, filters, func(rid uint64) error {
+	callback := func(rid uint64) error {
 		// skip exist(0) and sign(1) rows
 		if rid == bsiExistsBit || rid == bsiSignBit {
 			return nil
@@ -3298,7 +3333,8 @@ func (f *fragment) intRowIterator(tx Tx, wrap bool, filters ...rowFilter) (rowIt
 			acc[cid] |= val
 		}
 		return nil
-	}); err != nil {
+	}
+	if err := f.foreachRow(tx, filters, callback); err != nil {
 		return nil, err
 	}
 
@@ -3341,47 +3377,9 @@ func (f *fragment) intRowIterator(tx Tx, wrap bool, filters ...rowFilter) (rowIt
 	return &it, nil
 }
 
-func (f *fragment) foreachRow(tx Tx, filters []rowFilter, fn func(rid uint64) error) error {
-	var lastRow uint64 = math.MaxUint64
-	i, _, err := tx.ContainerIterator(f.index(), f.field(), f.view(), f.shard, rowToKey(0))
-	if err != nil {
-		return err
-	}
-	defer i.Close() // must close tx allocated iterators when done.
-
-	// Loop over the existing containers.
-	for i.Next() {
-		key, c := i.Value()
-		// virtual row for the current container
-		vRow := key >> shardVsContainerExponent
-		// skip dups
-		if vRow == lastRow {
-			continue
-		}
-
-		// apply filters
-		addRow, done := true, false
-		for _, filter := range filters {
-			var d bool
-			addRow, d = filter(vRow, key, c)
-			done = done || d
-			if !addRow {
-				break
-			}
-		}
-		if addRow {
-			lastRow = vRow
-			if fn != nil {
-				if err := fn(vRow); err != nil {
-					return err
-				}
-			}
-		}
-		if done {
-			break
-		}
-	}
-	return nil
+func (f *fragment) foreachRow(tx Tx, filters []roaring.BitmapFilter, fn func(rid uint64) error) error {
+	filter := roaring.NewBitmapRowFilter(fn, filters...)
+	return tx.ApplyFilter(f.index(), f.field(), f.view(), f.shard, 0, filter)
 }
 
 func (it *intRowIterator) Seek(rowID uint64) {
@@ -3416,7 +3414,7 @@ type setRowIterator struct {
 	wrap   bool
 }
 
-func (f *fragment) setRowIterator(tx Tx, wrap bool, filters ...rowFilter) (rowIterator, error) {
+func (f *fragment) setRowIterator(tx Tx, wrap bool, filters ...roaring.BitmapFilter) (rowIterator, error) {
 	rows, err := f.rows(context.Background(), tx, 0, filters...)
 	if err != nil {
 		return nil, err
@@ -3867,7 +3865,7 @@ func newRowsVector(f *fragment) *rowsVector {
 // otherwise it returns false. Ensure that you already
 // have the mutex before calling this.
 func (v *rowsVector) Get(tx Tx, colID uint64) (uint64, bool, error) {
-	rows, err := v.f.unprotectedRows(context.Background(), tx, 0, filterColumn(colID))
+	rows, err := v.f.unprotectedRows(context.Background(), tx, 0, roaring.NewBitmapColumnFilter(colID))
 	if err != nil {
 		return 0, false, err
 	} else if len(rows) > 1 {
@@ -3903,7 +3901,7 @@ func newBoolVector(f *fragment) *boolVector {
 // otherwise it returns false. Ensure that you already
 // have the fragment mutex before calling this.
 func (v *boolVector) Get(tx Tx, colID uint64) (uint64, bool, error) {
-	rows, err := v.f.unprotectedRows(context.Background(), tx, 0, filterColumn(colID))
+	rows, err := v.f.unprotectedRows(context.Background(), tx, 0, roaring.NewBitmapColumnFilter(colID))
 	if err != nil {
 		return 0, false, err
 	} else if len(rows) > 1 {

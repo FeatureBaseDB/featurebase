@@ -29,7 +29,9 @@ import (
 	"runtime"
 	"runtime/debug"
 	"sort"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"testing/quick"
 
@@ -3274,6 +3276,80 @@ func TestGetZipfRowsSliceRoaring(t *testing.T) {
 	f.Clean(t)
 }
 
+func prepareSampleRowData(b *testing.B, bits int, rows uint64, width uint64) (*fragment, *Index, Tx) {
+	f, idx, tx := mustOpenFragment(b, "i", "f", viewStandard, 0, "none")
+	for i := 0; i < bits; i++ {
+		data := getUniformRowsSliceRoaring(rows, int64(rows)+int64(i), 0, width)
+		err := f.importRoaringT(tx, data, false)
+		if err != nil {
+			b.Fatalf("creating sample data: %v", err)
+		}
+	}
+	return f, idx, tx
+}
+
+type txFrag struct {
+	rows, width uint64
+	tx          Tx
+	idx         *Index
+	frag        *fragment
+}
+
+func benchmarkRowsOnTestcase(b *testing.B, ctx context.Context, txf txFrag) {
+	col := uint64(0)
+	for i := 0; i < b.N; i++ {
+		_, err := txf.frag.rows(ctx, txf.tx, 0, roaring.NewBitmapColumnFilter(col))
+		if err != nil {
+			b.Fatalf("retrieving rows for col %d: %v", col, err)
+		}
+		col = (col + 1) % txf.width
+	}
+}
+
+// benchmarkRowsMaybeWritable uses a local flag which shadows the package-scope
+// const writable. Neat, huh.
+func benchmarkRowsMaybeWritable(b *testing.B, writable bool) {
+	var depths = []uint64{384, 2048}
+	testCases := make([]txFrag, 0, len(depths))
+	defer func() {
+		for _, testCase := range testCases {
+			testCase.frag.Clean(b)
+		}
+	}()
+	bg := context.Background()
+	for _, rows := range depths {
+		frag, idx, tx := prepareSampleRowData(b, 3, rows, ShardWidth)
+		if !writable {
+			err := tx.Commit()
+			if err != nil {
+				b.Fatalf("error committing sample data: %v", err)
+			}
+			tx = idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Fragment: frag, Shard: 0})
+			defer tx.Rollback()
+		}
+		testCases = append(testCases, txFrag{
+			rows:  rows,
+			width: ShardWidth,
+			frag:  frag,
+			idx:   idx,
+			tx:    tx,
+		})
+	}
+	for _, testCase := range testCases {
+		b.Run(fmt.Sprintf("%d", testCase.rows), func(b *testing.B) {
+			benchmarkRowsOnTestcase(b, bg, testCase)
+		})
+	}
+}
+func BenchmarkRows(b *testing.B) {
+	b.Run("writable", func(b *testing.B) {
+		benchmarkRowsMaybeWritable(b, true)
+	})
+	b.Run("readonly", func(b *testing.B) {
+		benchmarkRowsMaybeWritable(b, false)
+	})
+}
+
 // getZipfRowsSliceRoaring generates a random fragment with the given number of
 // rows, and 1 bit set in each column. The row each bit is set in is chosen via
 // the Zipf generator, and so will be skewed toward lower row numbers. If this
@@ -3288,6 +3364,32 @@ func getZipfRowsSliceRoaring(numRows uint64, seed int64, startCol, endCol uint64
 	posBuf := make([]uint64, 0, bufSize)
 	for i := uint64(startCol); i < endCol; i++ {
 		row := z.Uint64()
+		posBuf = append(posBuf, row*ShardWidth+i)
+		if len(posBuf) == bufSize {
+			sort.Slice(posBuf, func(i int, j int) bool { return posBuf[i] < posBuf[j] })
+			b.DirectAddN(posBuf...)
+		}
+	}
+	b.DirectAddN(posBuf...)
+	buf := bytes.NewBuffer(make([]byte, 0, 100000))
+	_, err := b.WriteTo(buf)
+	if err != nil {
+		panic(err)
+	}
+	return buf.Bytes()
+}
+
+// getUniformRowsSliceRoaring produces evenly-distributed values as a roaring
+// bitmap slice. This is useful if you want to avoid the higher rows being
+// sparse; see also getZipfRowsSliceRoaring.
+func getUniformRowsSliceRoaring(numRows uint64, seed int64, startCol, endCol uint64) []byte {
+	b := roaring.NewBTreeBitmap()
+	s := rand.NewSource(seed)
+	r := rand.New(s)
+	bufSize := 1 << 14
+	posBuf := make([]uint64, 0, bufSize)
+	for i := uint64(startCol); i < endCol; i++ {
+		row := uint64(r.Int63n(int64(numRows)))
 		posBuf = append(posBuf, row*ShardWidth+i)
 		if len(posBuf) == bufSize {
 			sort.Slice(posBuf, func(i int, j int) bool { return posBuf[i] < posBuf[j] })
@@ -3599,7 +3701,7 @@ func TestFragment_RowsIteration(t *testing.T) {
 			t.Fatalf("Do not match %v %v", expectedAll, ids)
 		}
 
-		ids, err = f.rows(context.Background(), tx, 0, filterColumn(1))
+		ids, err = f.rows(context.Background(), tx, 0, roaring.NewBitmapColumnFilter(1))
 		if err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(expectedOdd, ids) {
@@ -3633,7 +3735,7 @@ func TestFragment_RowsIteration(t *testing.T) {
 			t.Fatalf("Do not match %v %v", expected, ids)
 		}
 
-		ids, err = f.rows(context.Background(), tx, 0, filterColumn(66000))
+		ids, err = f.rows(context.Background(), tx, 0, roaring.NewBitmapColumnFilter(66000))
 		if err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(expected, ids) {
@@ -3661,7 +3763,7 @@ func TestFragment_RowsIteration(t *testing.T) {
 				} else if !reflect.DeepEqual(expectedRows, ids) {
 					t.Fatalf("Do not match %v %v", expectedRows, ids)
 				}
-				ids, err = f.rows(context.Background(), tx, 0, filterColumn(c))
+				ids, err = f.rows(context.Background(), tx, 0, roaring.NewBitmapColumnFilter(c))
 				if err != nil {
 					t.Fatal(err)
 				} else if !reflect.DeepEqual(expectedRows, ids) {
@@ -5430,5 +5532,514 @@ func notBlueGreenTest(t *testing.T) {
 	src := os.Getenv("PILOSA_TXSRC")
 	if strings.Contains(src, "_") {
 		t.Skip("skip under blue green")
+	}
+}
+
+var mutexSamplesPrepared sync.Once
+
+func requireMutexSampleData(tb testing.TB) {
+	mutexSamplesPrepared.Do(func() { prepareMutexSampleData(tb) })
+}
+
+// a few mutex tests want common largeish pools of mutex data
+type mutexSampleData struct {
+	name           string
+	colIDs, rowIDs [2][]uint64
+}
+
+// scratchSpace copies the values over corresponding entries in slices,
+// reusing existing storage when possible.
+func (m *mutexSampleData) scratchSpace(idx int, cols, rows []uint64) ([]uint64, []uint64) {
+	colIDs := m.colIDs[idx]
+	rowIDs := m.rowIDs[idx]
+
+	if cap(cols) < len(colIDs) {
+		cols = make([]uint64, len(colIDs))
+	} else {
+		cols = cols[:len(colIDs)]
+	}
+	copy(cols, colIDs)
+
+	if cap(rows) < len(rowIDs) {
+		rows = make([]uint64, len(rowIDs))
+	} else {
+		rows = rows[:len(rowIDs)]
+	}
+	copy(rows, rowIDs)
+	return cols, rows
+}
+
+// mutex data wants to exist for differing numbers of rows, and different
+// densities, and reasonably-large N. But we don't want a huge pool of nested
+// maps, so...
+type mutexSampleRange int16
+
+// density should be able to range from every bit filled to almost no
+// bits filled. So, how many bits per container? How about pow(2, N), where N
+// can be negative. 16 is the highest possible value, and -16 is the lowest,
+// and 0 means about one bit per container on average.
+func (m mutexSampleRange) density() int8 {
+	return int8(m >> 8)
+}
+
+// bottom 8 bits are log2 of number of rows.
+func (m mutexSampleRange) rows() uint32 {
+	return uint32(1) << (m & 0x1F)
+}
+
+// just a convenience thing to hide the implementation
+func newMutexSampleRange(density int8, rows uint8) mutexSampleRange {
+	if density > 16 {
+		density = 16
+	}
+	if density < -16 {
+		density = -16
+	}
+	return mutexSampleRange((int16(density) << 8) | int16(rows))
+}
+
+var sampleMutexData = map[mutexSampleRange]*mutexSampleData{}
+
+type mutexDensity struct {
+	name    string
+	density int8
+}
+
+type mutexSize struct {
+	name string
+	rows uint8
+}
+
+var mutexDensities = []mutexDensity{
+	{"64K", 16},
+	// {"32K", 15}, // 50-50
+	// {"16K", 14}, // 1/4
+	// {"4K", 12},  // a fair number of things
+	// {"1", 0},   // about one per container
+	// {"empty", -14}, // almost none
+}
+
+var mutexSizes = []mutexSize{
+	{"4r", 2},
+	{"16r", 4},
+	{"256r", 8},
+	// {"65Kr", 16},
+}
+
+var mutexCaches = []string{
+	// "ranked",
+	"none",
+}
+
+const mutexSampleDataSize = ShardWidth << 1
+
+// prepareMutexSampleData creates two sets of data for each density and
+// number of rows, so that we can test performance when overwriting also.
+func prepareMutexSampleData(tb testing.TB) {
+	myrand := rand.New(rand.NewSource(9))
+	for _, d := range mutexDensities {
+		for _, s := range mutexSizes {
+			rng := newMutexSampleRange(d.density, s.rows)
+			col := uint64(0)
+			// at density 16, we want everything to be adjacent.
+			// at density 0, we want about 65k between items.
+			// The average spacing we want is 1<<(16 - density),
+			// so random numbers between 0 and twice that would
+			// be close, but we never want 0, so, subtract 1 from
+			// "twice that", then add 1 to the result.
+			//
+			// So for density 16, we compute spacing of 1, then
+			// draw random numbers in [0,1), and add 1 to them.
+			spacing := ((1 << (16 - d.density)) * 2) - 1
+			rows := (int64(1) << s.rows)
+			expected := mutexSampleDataSize
+			if (ShardWidth / spacing) < mutexSampleDataSize {
+				expected = (ShardWidth / spacing) * 2
+				if expected < 2 {
+					expected = 2
+				}
+			}
+			colIDs := make([]uint64, mutexSampleDataSize)
+			rowIDs := make([]uint64, mutexSampleDataSize)
+			data := &mutexSampleData{name: d.name + "/" + s.name}
+			prev := uint64(0)
+			generated := 0
+			for i := 0; i < expected; i++ {
+				col += uint64(myrand.Int63n(int64(spacing))) + 1
+				// can only import one fragment at a time,
+				// though!
+				if col/ShardWidth > prev {
+					data.colIDs[prev] = colIDs[generated:i:i]
+					data.rowIDs[prev] = rowIDs[generated:i:i]
+					generated = i
+					prev = col / ShardWidth
+					if int(prev) >= len(data.colIDs) {
+						break
+					}
+				}
+				row := uint64(myrand.Int63n(rows))
+				colIDs[i] = col % ShardWidth
+				rowIDs[i] = row
+			}
+			if int(prev) < len(data.colIDs) {
+				data.colIDs[prev] = colIDs[generated:expected:expected]
+				data.rowIDs[prev] = rowIDs[generated:expected:expected]
+			}
+			sampleMutexData[rng] = data
+		}
+	}
+}
+
+var importBatchSizes = []int{65536}
+
+func TestImportMutexSampleData(t *testing.T) {
+	requireMutexSampleData(t)
+	var scratchCols []uint64
+	var scratchRows []uint64
+	for rng, data := range sampleMutexData {
+		// skip the larger ones, they'll be slow
+		if rng.rows() > 256 {
+			continue
+		}
+		scratchCols, scratchRows = data.scratchSpace(0, scratchCols, scratchRows)
+		t.Run(data.name, func(t *testing.T) {
+			for _, batchSize := range importBatchSizes {
+				t.Run(fmt.Sprintf("%d", batchSize), func(t *testing.T) {
+					f, _, tx := mustOpenMutexFragment(t, "i", "f", viewStandard, 0, "")
+					defer f.Clean(t)
+					// Set import.
+					var err error
+					for i := 0; i < len(scratchCols); i += batchSize {
+						max := i + batchSize
+						if len(scratchCols) < max {
+							max = len(scratchCols)
+						}
+						err = f.bulkImport(tx, scratchRows[i:max:max], scratchCols[i:max:max], &ImportOptions{})
+						if err != nil {
+							t.Fatalf("bulk importing ids [%d:%d]: %v", i, max, err)
+						}
+					}
+					count := uint64(0)
+					for k := uint32(0); k < rng.rows(); k++ {
+						count += f.mustRow(tx, uint64(k)).Count()
+					}
+					if int(count) != len(data.colIDs[0]) {
+						t.Fatalf("for %d rows, %d density: expected %d results, got %d",
+							rng.rows(), rng.density(), len(data.colIDs[0]), count)
+					}
+				})
+			}
+		})
+	}
+}
+
+func BenchmarkImportMutexSampleData(b *testing.B) {
+	requireMutexSampleData(b)
+	var cols []uint64
+	var rows []uint64
+	var data *mutexSampleData
+	var cache string
+	var batchSize int
+	var frag *fragment
+	var tx Tx
+	var idx *Index
+	benchmarkOneFragmentImports := func(b *testing.B, i int) {
+		cols, rows = data.scratchSpace(i, cols, rows)
+		for i := 0; i < len(cols) && i < (batchSize*b.N); i += batchSize {
+			max := i + batchSize
+			if len(cols) < max {
+				max = len(cols)
+			}
+			err := frag.bulkImport(tx, rows[i:max:max], cols[i:max:max], &ImportOptions{})
+			if err != nil {
+				b.Fatalf("bulk importing ids [%d:%d]: %v", i, max, err)
+			}
+		}
+	}
+	benchmarkFragmentImports := func(b *testing.B) {
+		frag, idx, tx = mustOpenMutexFragment(b, "i", "f", viewStandard, 0, cache)
+		defer frag.Clean(b)
+		for i := range data.colIDs {
+			b.Run(fmt.Sprintf("write-%d", i), func(b *testing.B) {
+				benchmarkOneFragmentImports(b, i)
+			})
+			// Then commit that write and do another one as a new Tx.
+			err := tx.Commit()
+			if err != nil {
+				b.Fatalf("error commiting write: %v", err)
+			}
+			tx = idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Fragment: frag, Shard: 0})
+			defer tx.Rollback()
+		}
+	}
+	for _, data = range sampleMutexData {
+		b.Run(data.name, func(b *testing.B) {
+			for _, batchSize = range importBatchSizes {
+				b.Run(strconv.Itoa(batchSize), func(b *testing.B) {
+					for _, cache = range mutexCaches {
+						b.Run(cache, benchmarkFragmentImports)
+					}
+				})
+			}
+		})
+	}
+}
+
+func testOneParallelSlice(t *testing.T, p *parallelSlices) {
+	// the easy answer
+	seen := make(map[uint64]uint64, len(p.cols))
+	t.Logf("cols %d, rows %d", p.cols, p.rows)
+	for i, c := range p.cols {
+		seen[c] = p.rows[i]
+	}
+	unsorted := p.prune()
+	t.Logf("unsorted %t, cols %d, rows %d", unsorted, p.cols, p.rows)
+	if unsorted {
+		sort.Stable(p)
+	}
+	unsorted = p.prune()
+	if unsorted {
+		t.Fatalf("slice still unsorted after sort")
+	}
+	t.Logf("pruned/sorted cols %d, rows %d", p.cols, p.rows)
+	if len(p.cols) != len(seen) {
+		t.Fatalf("expected %d entries, found %d", len(seen), len(p.cols))
+	}
+	for i, c := range p.cols {
+		if seen[c] != p.rows[i] {
+			t.Fatalf("expected %d:%d, found :%d", c, seen[c], p.rows[i])
+		}
+	}
+}
+
+func TestParallelSlices(t *testing.T) {
+	cols := make([]uint64, 256)
+	rows := make([]uint64, 256)
+	// ensure at least some overlap by coercing columns into a range
+	// smaller than number of entries
+	for i := range cols {
+		cols[i] = rand.Uint64() & ((uint64(len(cols)) / 2) - 1)
+		rows[i] = rand.Uint64() & 0xff
+	}
+	t.Run("random", func(t *testing.T) {
+		testOneParallelSlice(t, &parallelSlices{cols: cols, rows: rows})
+	})
+	cols = cols[:cap(cols)]
+	rows = rows[:cap(rows)]
+	// in-order but no overlap
+	col := uint64(0)
+	for i := range cols {
+		cols[i] = col
+		col = col + (rand.Uint64() & 3) + 1
+		rows[i] = rand.Uint64() & 0xff
+	}
+	t.Run("ordered", func(t *testing.T) {
+		testOneParallelSlice(t, &parallelSlices{cols: cols, rows: rows})
+	})
+	cols = cols[:cap(cols)]
+	rows = rows[:cap(rows)]
+	// in-order with
+	col = uint64(0)
+	for i := range cols {
+		cols[i] = col
+		col = col + (rand.Uint64() & 3)
+		rows[i] = rand.Uint64() & 0xff
+	}
+	t.Run("orderlapping", func(t *testing.T) {
+		testOneParallelSlice(t, &parallelSlices{cols: cols, rows: rows})
+	})
+}
+
+func testOneParallelSliceFullPrune(t *testing.T, p *parallelSlices) {
+	// the easy answer
+	seen := make(map[uint64]uint64, len(p.cols))
+	//t.Logf("cols %d, rows %d", p.cols, p.rows)
+	for i, c := range p.cols {
+		seen[c] = p.cols[i]
+	}
+	//t.Logf("before fullPrune: cols %d, rows %d", p.cols, p.rows)
+	p.fullPrune()
+
+	//t.Logf("after fullPrune, pruned/sorted cols %d, rows %d", p.cols, p.rows)
+	if len(p.cols) != len(seen) {
+		t.Fatalf("expected %d entries, found %d", len(seen), len(p.cols))
+	}
+	for i := range p.cols {
+		if i == 0 {
+			continue
+		}
+		if p.cols[i] <= p.cols[i-1] {
+			t.Fatalf("expected p.cols[i=%v]=%v <= p.cols[i-1=%v]=%v", i, p.cols[i], i-1, p.cols[i-1])
+		}
+	}
+}
+
+func TestParallelSlicesFullPrune(t *testing.T) {
+	cols := make([]uint64, 0)
+	rows := make([]uint64, 0)
+
+	t.Run("no_loss", func(t *testing.T) {
+		testOneParallelSliceFullPrune(t, &parallelSlices{cols: cols, rows: rows})
+	})
+
+	cols = make([]uint64, 1)
+	rows = make([]uint64, 1)
+	cols[0] = 3
+
+	t.Run("no_loss", func(t *testing.T) {
+		testOneParallelSliceFullPrune(t, &parallelSlices{cols: cols, rows: rows})
+	})
+
+	cols = make([]uint64, 2)
+	rows = make([]uint64, 2)
+	cols[1] = 1 // sorted
+
+	t.Run("no_loss", func(t *testing.T) {
+		testOneParallelSliceFullPrune(t, &parallelSlices{cols: cols, rows: rows})
+	})
+
+	cols = make([]uint64, 2)
+	rows = make([]uint64, 2)
+	// one duplicate 0
+
+	t.Run("no_loss", func(t *testing.T) {
+		testOneParallelSliceFullPrune(t, &parallelSlices{cols: cols, rows: rows})
+	})
+
+	cols = make([]uint64, 2)
+	rows = make([]uint64, 2)
+	cols[0] = 1 // unsorted
+
+	t.Run("no_loss", func(t *testing.T) {
+		testOneParallelSliceFullPrune(t, &parallelSlices{cols: cols, rows: rows})
+	})
+
+	cols = make([]uint64, 3)
+	rows = make([]uint64, 3)
+	cols[0] = 2 // unsorted
+	cols[1] = 1 // unsorted
+
+	t.Run("no_loss", func(t *testing.T) {
+		testOneParallelSliceFullPrune(t, &parallelSlices{cols: cols, rows: rows})
+	})
+
+	cols = make([]uint64, 3)
+	rows = make([]uint64, 3)
+	// three duplicate 0s
+
+	t.Run("no_loss", func(t *testing.T) {
+		testOneParallelSliceFullPrune(t, &parallelSlices{cols: cols, rows: rows})
+	})
+
+	cols = make([]uint64, 3)
+	rows = make([]uint64, 3)
+	// three duplicate 1s
+	cols[0] = 1
+	cols[1] = 1
+	cols[2] = 1
+
+	t.Run("no_loss", func(t *testing.T) {
+		testOneParallelSliceFullPrune(t, &parallelSlices{cols: cols, rows: rows})
+	})
+
+	cols = make([]uint64, 256)
+	rows = make([]uint64, 256)
+
+	// ensure at least some overlap by coercing columns into a range
+	// smaller than number of entries
+	for i := range cols {
+		cols[i] = rand.Uint64() & ((uint64(len(cols)) / 2) - 1)
+		rows[i] = rand.Uint64() & 0xff
+	}
+	t.Run("random", func(t *testing.T) {
+		testOneParallelSliceFullPrune(t, &parallelSlices{cols: cols, rows: rows})
+	})
+
+	cols = cols[:cap(cols)]
+	rows = rows[:cap(rows)]
+	// in-order but no overlap
+	col := uint64(0)
+	for i := range cols {
+		cols[i] = col
+		col = col + (rand.Uint64() & 3) + 1
+		rows[i] = rand.Uint64() & 0xff
+	}
+	t.Run("ordered", func(t *testing.T) {
+		testOneParallelSliceFullPrune(t, &parallelSlices{cols: cols, rows: rows})
+	})
+	cols = cols[:cap(cols)]
+	rows = rows[:cap(rows)]
+	// in-order with
+	col = uint64(0)
+	for i := range cols {
+		cols[i] = col
+		col = col + (rand.Uint64() & 3)
+		rows[i] = rand.Uint64() & 0xff
+	}
+	t.Run("orderlapping", func(t *testing.T) {
+		testOneParallelSliceFullPrune(t, &parallelSlices{cols: cols, rows: rows})
+	})
+}
+
+func compareSlices(tb testing.TB, name string, s1, s2 []uint64) {
+	if len(s1) != len(s2) {
+		tb.Fatalf("slice length mismatch %q: expected %d items %d, got %d items %d",
+			name, len(s1), s1, len(s2), s2)
+	}
+	for i, v := range s1 {
+		if s2[i] != v {
+			tb.Fatalf("row mismatch %q: expected item %d to be %d, got %d",
+				name, i, s1[i], s2[i])
+		}
+	}
+}
+
+type sliceDifferenceTestCase struct {
+	original, remove, expected []uint64
+}
+
+func TestSliceDifference(t *testing.T) {
+	testCases := map[string]sliceDifferenceTestCase{
+		"noOverlap": {
+			original: []uint64{1, 2, 3},
+			remove:   []uint64{0, 5},
+			expected: []uint64{1, 2, 3},
+		},
+		"before": {
+			original: []uint64{3, 5, 7},
+			remove:   []uint64{0, 6},
+			expected: []uint64{3, 5, 7},
+		},
+		"after": {
+			original: []uint64{3, 5, 7},
+			remove:   []uint64{8, 10},
+			expected: []uint64{3, 5, 7},
+		},
+		"all": {
+			original: []uint64{3, 5, 7},
+			remove:   []uint64{3, 5, 7},
+			expected: []uint64{},
+		},
+		"first": {
+			original: []uint64{3, 5, 7},
+			remove:   []uint64{3},
+			expected: []uint64{5, 7},
+		},
+		"last": {
+			original: []uint64{3, 5, 7},
+			remove:   []uint64{7},
+			expected: []uint64{3, 5},
+		},
+		"middle": {
+			original: []uint64{3, 5, 7},
+			remove:   []uint64{5},
+			expected: []uint64{3, 7},
+		},
+	}
+	var scratch []uint64
+	for name, tc := range testCases {
+		scratch = append(scratch[:0], tc.original...)
+		result := sliceDifference(scratch, tc.remove)
+		compareSlices(t, name, tc.expected, result)
 	}
 }

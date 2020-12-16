@@ -307,3 +307,7 @@ func (c *catcherTx) Options() Txo {
 func (c *catcherTx) Sn() int64 {
 	return c.b.Sn()
 }
+
+func (c *catcherTx) ApplyFilter(index, field, view string, shard uint64, ckey uint64, filter roaring.BitmapFilter) (err error) {
+	return GenericApplyFilter(c, index, field, view, shard, ckey, filter)
+}

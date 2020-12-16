@@ -1596,12 +1596,13 @@ func (b *Bitmap) removeEmptyContainers() {
 		}
 	}
 }
-func (b *Bitmap) countEmptyContainers() int {
+
+func (b *Bitmap) countNonEmptyContainers() int {
 	result := 0
 	citer, _ := b.Containers.Iterator(0)
 	for citer.Next() {
 		_, c := citer.Value()
-		if c.N() == 0 {
+		if c.N() > 0 {
 			result++
 		}
 	}
@@ -1663,8 +1664,7 @@ func (b *Bitmap) writeToUnoptimized(w io.Writer) (n int64, err error) {
 	// Remove empty containers before persisting.
 	//b.removeEmptyContainers()
 
-	containerCount := b.Containers.Size() - b.countEmptyContainers()
-	headerSize := headerBaseSize
+	containerCount := b.countNonEmptyContainers()
 	byte2 := make([]byte, 2)
 	byte4 := make([]byte, 4)
 	byte8 := make([]byte, 8)
@@ -1695,12 +1695,17 @@ func (b *Bitmap) writeToUnoptimized(w io.Writer) (n int64, err error) {
 			ew.WriteUint16(byte2, uint16(c.typ()))
 			ew.WriteUint16(byte2, uint16(c.N()-1))
 		}
-
+	}
+	if ew.n != headerBaseSize+(containerCount*12) {
+		return int64(ew.n), fmt.Errorf("after writing %d headers, wrote %d bytes, expected %d",
+			containerCount, ew.n, headerBaseSize+(containerCount*12))
 	}
 
 	// Offset header section: write the offset for each container block.
-	// 4 bytes per container.
-	offset := uint32(headerSize + (containerCount * (8 + 2 + 2 + 4)))
+	// 4 bytes per container. The actual data offsets will then be 4 bytes
+	// further in per non-empty container, and now that we've scanned the
+	// containers, we know how many we really have.
+	offset := uint32(ew.n + (containerCount * 4))
 	citer, _ = b.Containers.Iterator(0)
 	for citer.Next() {
 		_, c := citer.Value()
@@ -1708,13 +1713,18 @@ func (b *Bitmap) writeToUnoptimized(w io.Writer) (n int64, err error) {
 			ew.WriteUint32(byte4, offset)
 			offset += uint32(c.size())
 		}
-
 	}
 	if ew.err != nil {
 		return int64(ew.n), ew.err
 	}
+	if ew.n != headerBaseSize+(containerCount*16) {
+		return int64(ew.n), fmt.Errorf("after writing %d headers+offsets, wrote %d bytes, expected %d",
+			containerCount, ew.n, headerBaseSize+(containerCount*16))
+	}
 
-	n = int64(headerSize + (containerCount * (8 + 2 + 2 + 4)))
+	// We could compute the expected value, but a SliceContainers can contain
+	// a nil *Container, reported by Size() but not returned by the iterator.
+	n = int64(ew.n)
 
 	// Container storage section: write each container block.
 	citer, _ = b.Containers.Iterator(0)
@@ -7164,6 +7174,10 @@ func Difference(a, b *Container) *Container {
 	return difference(a, b)
 }
 
+func Intersect(x, y *Container) *Container {
+	return intersect(x, y)
+}
+
 func IntersectionCount(x, y *Container) int32 {
 	return intersectionCount(x, y)
 }
@@ -7204,4 +7218,42 @@ func (c *Container) Difference(other *Container) *Container {
 
 func NewSliceContainers() *sliceContainers {
 	return newSliceContainers()
+}
+
+// Slice returns an array of the values in the container as uint16.
+// Do NOT modify the result; it could be the container's actual storage.
+func (c *Container) Slice() (r []uint16) {
+	if c == nil {
+		return r
+	}
+	switch c.typ() {
+	case ContainerArray:
+		r = c.array()
+	case ContainerBitmap:
+		r = make([]uint16, c.N())
+		n := int32(0)
+		for i, word := range c.bitmap() {
+			for word != 0 {
+				t := word & -word
+				if roaringParanoia {
+					if n >= c.N() {
+						panic("bitmap has more bits set than container.n")
+					}
+				}
+				r[n] = uint16((i*64 + int(popcount(t-1))))
+				n++
+				word ^= t
+			}
+		}
+	case ContainerRun:
+		r = make([]uint16, c.N())
+		n := 0
+		for _, run := range c.runs() {
+			for v := int(run.Start); v <= int(run.Last); v++ {
+				r[n] = uint16(v)
+				n++
+			}
+		}
+	}
+	return r
 }

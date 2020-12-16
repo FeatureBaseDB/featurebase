@@ -511,6 +511,29 @@ func readLeafCell(page []byte, i int) leafCell {
 	return cell
 }
 
+func readLeafCellInto(cell *leafCell, page []byte, i int) {
+	assert(i < readCellN(page)) // cell index exceeds cell count
+	offset := readCellOffset(page, i)
+
+	buf := page[offset:]
+
+	cell.Key = *(*uint64)(unsafe.Pointer(&buf[0]))
+	cell.Type = ContainerType(*(*uint32)(unsafe.Pointer(&buf[8])))
+	cell.ElemN = int(*(*uint16)(unsafe.Pointer(&buf[12])))
+	cell.BitN = int(*(*uint32)(unsafe.Pointer(&buf[14])))
+
+	switch cell.Type {
+	case ContainerTypeArray:
+		cell.Data = buf[leafCellHeaderSize : leafCellHeaderSize+(cell.ElemN*2)]
+	case ContainerTypeRLE:
+		cell.Data = buf[leafCellHeaderSize : leafCellHeaderSize+(cell.ElemN*4)]
+	case ContainerTypeBitmapPtr:
+		cell.Data = buf[leafCellHeaderSize : leafCellHeaderSize+4]
+	default:
+		cell.Data = nil
+	}
+}
+
 func readLeafCells(page []byte, buf []leafCell) []leafCell {
 	n := readCellN(page)
 	cells := buf[:n]

@@ -20,6 +20,7 @@ import (
 	"math"
 	"os"
 	"sync/atomic"
+	"unsafe"
 
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pkg/errors"
@@ -182,6 +183,48 @@ func (c *Cursor) CurrentPageType() ContainerType {
 	leafPage, _, _ := c.tx.readPage(elem.pgno)
 	cell := readLeafCell(leafPage, elem.index)
 	return cell.Type
+}
+
+func intoContainer(l leafCell, tx *Tx, replacing *roaring.Container, target []byte) (c *roaring.Container) {
+	if len(l.Data) == 0 {
+		return nil
+	}
+	orig := l.Data
+	var cpMaybe []byte
+	var mapped bool
+	if EnableRowCache() || tx.db.cfg.DoAllocZero {
+		// make a copy, otherwise the rowCache will see corrupted data
+		// or mmapped data that may disappear.
+		cpMaybe = target[:len(orig)]
+		copy(cpMaybe, orig)
+		mapped = false
+	} else {
+		// not a copy
+		cpMaybe = orig
+		mapped = true
+	}
+	switch l.Type {
+	case ContainerTypeArray:
+		c = roaring.RemakeContainerArray(replacing, toArray16(cpMaybe))
+	case ContainerTypeBitmapPtr:
+		_, bm, _ := tx.leafCellBitmap(toPgno(cpMaybe))
+		cloneMaybe := bm
+		if EnableRowCache() {
+			cloneMaybe = (*[1024]uint64)(unsafe.Pointer(&target[0]))[:1024]
+			copy(cloneMaybe, bm)
+		}
+		c = roaring.RemakeContainerBitmap(replacing, cloneMaybe)
+	case ContainerTypeBitmap:
+		c = roaring.RemakeContainerBitmap(replacing, toArray64(cpMaybe))
+	case ContainerTypeRLE:
+		c = roaring.RemakeContainerRun(replacing, toInterval16(cpMaybe))
+	}
+	// Note: If the "roaringparanoia" build tag isn't set, this
+	// should be optimized away entirely. Otherwise it's moderately
+	// expensive.
+	c.CheckN()
+	c.SetMapped(mapped)
+	return c
 }
 
 func toContainer(l leafCell, tx *Tx) (c *roaring.Container) {

@@ -511,6 +511,10 @@ func (c *statTx) ContainerIterator(index, field, view string, shard uint64, firs
 	return c.b.ContainerIterator(index, field, view, shard, firstRoaringContainerKey)
 }
 
+func (c *statTx) ApplyFilter(index, field, view string, shard uint64, ckey uint64, filter roaring.BitmapFilter) (err error) {
+	return GenericApplyFilter(c, index, field, view, shard, ckey, filter)
+}
+
 func (c *statTx) ForEach(index, field, view string, shard uint64, fn func(i uint64) error) error {
 	me := kForEach
 
