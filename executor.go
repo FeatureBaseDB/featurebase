@@ -468,7 +468,11 @@ func (e *executor) handlePreCallChildren(ctx context.Context, qcx *Qcx, index st
 			return err
 		}
 	}
-	for _, val := range c.Args {
+	for key, val := range c.Args {
+		// Do not precompute GroupBy aggregates
+		if key == "aggregate" {
+			continue
+		}
 		// Handle Call() operations which exist inside named arguments, too.
 		if call, ok := val.(*pql.Call); ok {
 			if err := ctx.Err(); err != nil {
@@ -2701,6 +2705,43 @@ func (e *executor) executeGroupBy(ctx context.Context, qcx *Qcx, index string, c
 	} else if hasLimit {
 		if int(limit) < len(results) {
 			results = results[:limit]
+		}
+	}
+	aggregate, _, err := c.CallArg("aggregate")
+	if err == nil && aggregate != nil && aggregate.Name == "Count" && len(aggregate.Children) > 0 && aggregate.Children[0].Name == "Distinct" {
+		for n, gc := range results {
+			intersectRows := make([]*pql.Call, 0, len(gc.Group))
+			for _, fr := range gc.Group {
+				intersectRows = append(intersectRows, &pql.Call{Name: "Row", Args: map[string]interface{}{fr.Field: fr.RowID}})
+			}
+
+			countDistinctIntersect := &pql.Call{
+				Name: "Count",
+				Children: []*pql.Call{
+					&pql.Call{
+						Name: "Distinct",
+						Children: []*pql.Call{
+							&pql.Call{
+								Name:     "Intersect",
+								Children: intersectRows,
+							},
+						},
+						Args: aggregate.Children[0].Args,
+						Type: pql.PrecallGlobal,
+					},
+				},
+			}
+
+			err = e.handlePreCallChildren(ctx, qcx, index, countDistinctIntersect, shards, opt)
+			if err != nil {
+				return nil, err
+			}
+
+			aggregateCount, err := e.executeCount(ctx, qcx, index, countDistinctIntersect, shards, opt)
+			if err != nil {
+				return nil, err
+			}
+			results[n].Sum = int64(aggregateCount)
 		}
 	}
 	return results, nil
@@ -7193,7 +7234,7 @@ func (gbi *groupByIterator) Next(ctx context.Context) (ret GroupCount, done bool
 		if gbi.done {
 			return ret, true, nil
 		}
-		if gbi.aggregate == nil {
+		if gbi.aggregate == nil || gbi.aggregate.Name == "Count" {
 			if len(gbi.rows) == 1 {
 				ret.Count = gbi.rows[len(gbi.rows)-1].row.Count()
 			} else {
