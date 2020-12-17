@@ -2388,7 +2388,45 @@ func (p *parallelSlices) fullPrune() {
 	}
 	unsorted := p.prune()
 	if unsorted {
+
+		// Q: why sort.Stable instead of sort.Sort?
+		//
+		// A: Because we need to ensure that the last entry
+		// is the one that wins. The last entry is the most recent update, and
+		// so the mutex field should reflect that one and not earlier
+		// updates. Mutex fields are special in that only 1 bit can
+		// be hot (set to 1), so the last update overrides all the others. We
+		// exploit this to eliminate irrelevant earlier writes.
+		//
+		// So if the input columns were {1, 2, 1},
+		// and input rows were          {3, 4, 5},
+		// we need to be sure that we end up with cols:{1, 2}
+		//                                        rows:{5, 4} // right, last update won.
+		//                                and not rows:{3, 4} // wrong, first update won.
+		//
+		// illustrated: (dk = don't know state)
+		//
+		// the new, raw data before later updates "win":
+		//
+		//         col0  col1  col2
+		// row3    dk    1     dk
+		// row4    dk    dk    1
+		// row5    dk    1     dk
+		//
+		// after last one wins, to be written to the backend:
+		//
+		//         col0  col1  col2
+		// row3    dk    0     0
+		// row4    dk    0     1
+		// row5    dk    1     0
+		//               ^
+		//                \-- on col1. The last one won, b/c its a mutex all other rows go to 0 for that column.
+		//
+		// Which means we need a stable sort, ensuring that if two things
+		// have the same column key, they stay in the same relative order,
+		// and then the prune algorithm always keeps the last.
 		sort.Stable(p)
+
 		_ = p.prune()
 	}
 }
