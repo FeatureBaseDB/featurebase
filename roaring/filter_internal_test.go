@@ -16,6 +16,8 @@ package roaring
 
 import (
 	"fmt"
+	"math/rand"
+	"reflect"
 	"sort"
 	"sync"
 	"testing"
@@ -144,6 +146,129 @@ func TestBitmapFilter(t *testing.T) {
 			t.Fatalf("unexpected error applying filter: %v", err)
 		}
 		compareSlices(t, fmt.Sprintf("stride-%d", i), expected, positions)
+	}
+}
+
+func TestNewBitmapBitmapFilter_static(t *testing.T) {
+
+	bm := NewBitmap(1<<16, 2<<16, 5<<16)
+
+	positions := make([]uint64, 0, 80)
+	callback := func(pos uint64) error {
+		positions = append(positions, pos)
+		return nil
+	}
+	bbfilt := NewBitmapBitmapFilter(bm, callback)
+
+	// now verify nextOffsets with a slightly different algorithm
+
+	containers := make([]*Container, rowWidth)
+	algoExpectedNextOffsets := make([]uint64, rowWidth)
+
+	iter, _ := bm.Containers.Iterator(0)
+	last := uint64(0)
+	first := uint64(0)
+	count := 0
+	for iter.Next() {
+		k, v := iter.Value()
+		// Coerce container key into the 0-rowWidth range we'll be
+		// using to compare against containers within each row.
+		k = k & keyMask
+
+		// we only have one row in filterColumns, so we won't be overwriting anything.
+		containers[k] = v
+
+		last = k
+		if count == 0 {
+			first = k
+		}
+		count++
+	}
+
+	//                           last = 5; first = 1
+	// bbfilt.containers: [ - 1 2 - - 5 - -... (all - to end) ]
+	// nextOffsets:       [ 1 2 5 5 5 1 1 1...(all 1s to end) ] desired
+	curLast := last
+	for i := rowWidth - 1; i >= 0; i-- {
+		if uint64(i) >= last {
+			algoExpectedNextOffsets[i] = first
+		} else {
+			algoExpectedNextOffsets[i] = curLast
+			if containers[i] != nil {
+				curLast = uint64(i)
+			}
+		}
+	}
+
+	// compare observed and algoExpectedNextOffsets:
+	if !reflect.DeepEqual(bbfilt.nextOffsets, algoExpectedNextOffsets) {
+		t.Errorf("observed bbfilt.nextOffsets: %v, expected %v", bbfilt.nextOffsets, algoExpectedNextOffsets)
+	}
+}
+
+func TestNewBitmapBitmapFilter_random(t *testing.T) {
+
+	rand.Seed(1)
+	for N := 0; N < 100; N++ {
+		bm := NewBitmap()
+		shardWidth := uint64(rowWidth << 16)
+		_ = shardWidth
+		for i := 0; i < N; i++ {
+			_, _ = bm.AddN(rand.Uint64() % shardWidth)
+		}
+
+		positions := make([]uint64, 0, 80)
+		callback := func(pos uint64) error {
+			positions = append(positions, pos)
+			return nil
+		}
+		bbfilt := NewBitmapBitmapFilter(bm, callback)
+
+		// now verify nextOffsets with a slightly different algorithm
+
+		containers := make([]*Container, rowWidth)
+		algoExpectedNextOffsets := make([]uint64, rowWidth)
+
+		iter, _ := bm.Containers.Iterator(0)
+		last := uint64(0)
+		first := uint64(0)
+		count := 0
+		for iter.Next() {
+			k, v := iter.Value()
+			// Coerce container key into the 0-rowWidth range we'll be
+			// using to compare against containers within each row.
+			k = k & keyMask
+
+			// we only have one row in filterColumns, so we won't be overwriting anything.
+			containers[k] = v
+
+			last = k
+			if count == 0 {
+				first = k
+			}
+			count++
+		}
+
+		// small example
+		//                           last = 5; first = 1
+		// bbfilt.containers: [ - 1 2 - - 5 - -... (all - to end) ]
+		// nextOffsets:       [ 1 2 5 5 5 1 1 1...(all 1s to end) ] desired
+		curLast := last
+		for i := rowWidth - 1; i >= 0; i-- {
+			if uint64(i) >= last {
+				algoExpectedNextOffsets[i] = first
+			} else {
+				algoExpectedNextOffsets[i] = curLast
+				if containers[i] != nil {
+					curLast = uint64(i)
+				}
+			}
+		}
+
+		// compare observed and algoExpectedNextOffsets:
+		if !reflect.DeepEqual(bbfilt.nextOffsets, algoExpectedNextOffsets) {
+			t.Errorf("observed bbfilt.nextOffsets: %v, expected %v", bbfilt.nextOffsets, algoExpectedNextOffsets)
+		}
 	}
 }
 
