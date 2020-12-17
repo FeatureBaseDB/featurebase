@@ -18,6 +18,8 @@ import (
 	"io"
 
 	"github.com/pilosa/pilosa/v2/roaring"
+	txkey "github.com/pilosa/pilosa/v2/short_txkey"
+	//txkey "github.com/pilosa/pilosa/v2/txkey"
 )
 
 // batch operations want Tx.Add(batched=doBatch), while bit-at-a-time want Tx.Add(batched=!doBatched)
@@ -142,9 +144,9 @@ type Tx interface {
 	// If the batched flag is true, then the roaring.Bitmap.AddN() is used, which does oplog batches.
 	// If the batched flag is false, then the roaring.Bitmap.Add() is used, which does simple opTypeAdd single adds.
 	//
-	// Beware: if batched is true, then changeCount will only ever be 0 or 1,
+	// Beware: if batched is false, then changeCount will only ever be 0 or 1,
 	// because it calls roaring.Add().
-	// If batched is false, we call roaring.DirectAddN() and then changeCount
+	// If batched is true, we call roaring.DirectAddN() and then changeCount
 	// will be accurate if the changeCount is greater than 0.
 	//
 	// Hence: only ever call Add(batched=false) if changeCount is expected to be 0 or 1.
@@ -214,6 +216,9 @@ type Tx interface {
 
 	// Sn retreives the serial number of the Tx.
 	Sn() int64
+
+	// GetSortedFieldViewList gets the set of FieldView(s)
+	GetSortedFieldViewList(idx *Index, shard uint64) (fvs []txkey.FieldView, err error)
 }
 
 // Closer is used by Finders

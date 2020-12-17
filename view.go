@@ -127,8 +127,76 @@ func (v *view) removeKnownShard(shard uint64) {
 	_, _ = v.knownShards.Remove(shard)
 }
 
-// open opens and initializes the view.
-func (v *view) open() error {
+// openWithShardSet opens the view. Importantly, it
+// only opens the fragments that have data. This saves
+// a ton of time. If you have no data and want a new
+// view, call view.openEmpty().
+func (v *view) openWithShardSet(ss *shardSet) error {
+	if v.knownShards == nil {
+		v.knownShards = roaring.NewSliceBitmap()
+	}
+
+	// Never keep a cache for field views.
+	if strings.HasPrefix(v.name, viewBSIGroupPrefix) {
+		v.cacheType = CacheTypeNone
+	}
+
+	shards := ss.CloneMaybe()
+
+	var frags []*fragment
+	for shard := range shards {
+		frag := v.newFragment(shard)
+		frags = append(frags, frag)
+		frag.RowAttrStore = v.rowAttrStore
+		v.fragments[frag.shard] = frag
+	}
+
+	nGoro := runtime.NumCPU()
+	if v.idx.holder.txf.TxType() != "roaring" {
+		nGoro = nGoro / 4
+	}
+	if nGoro < 4 {
+		nGoro = 4
+	}
+	pj := newParallelJobs(nGoro)
+	for i := range frags {
+		// create a new variable frag on each time through
+		// the loop (instead of i, frag := range frags)
+		// so that the closure run on the
+		// goroutine has its own variable.
+		frag := frags[i]
+		accepted := pj.run(func(worker int) error {
+			if err := frag.Open(); err != nil {
+				return fmt.Errorf("open fragment: shard=%d, err=%s", frag.shard, err)
+			}
+			return nil
+		})
+		if !accepted {
+			// have error/shutting down the pj, so stop
+			break
+		}
+	}
+
+	err := pj.waitForFinish()
+	if err != nil {
+		return err
+	}
+
+	// serial, not parallel, because no locking inside addKnownShard at the moment.
+	// TODO(jea): is this slow on a cluster? can we optimize it
+	// by running it on a goroutine in the background?
+	for shard := range shards {
+		v.addKnownShard(shard)
+	}
+
+	_ = testhook.Opened(v.holder.Auditor, v, nil)
+	v.holder.Logger.Debugf("successfully opened index/field/view: %s/%s/%s", v.index, v.field, v.name)
+	return nil
+}
+
+// openEmpty opens and initializes a new view that has no
+// data. If you have data already, then use view.openWithShardSet()
+func (v *view) openEmpty() error {
 	if v.knownShards == nil {
 		v.knownShards = roaring.NewSliceBitmap()
 	}
@@ -152,10 +220,6 @@ func (v *view) open() error {
 
 		v.holder.Logger.Debugf("open fragments for index/field/view: %s/%s/%s", v.index, v.field, v.name)
 
-		if err := v.openFragmentsInTx(); err != nil {
-			return errors.Wrap(err, "opening fragments")
-		}
-
 		return nil
 	}(); err != nil {
 		v.close()
@@ -168,63 +232,6 @@ func (v *view) open() error {
 }
 
 var workQueue = make(chan struct{}, runtime.NumCPU()*2)
-
-// replaces v.openFragments() with Tx generic code.
-func (v *view) openFragmentsInTx() error {
-
-	shards, err := v.holder.txf.GetShardsForIndex(v.idx, v.path, false)
-	if err != nil {
-		return errors.Wrap(err, "DBPerShardGetShardsForIndex()")
-	}
-	eg, ctx := errgroup.WithContext(context.Background())
-	var mu sync.Mutex
-
-	shardCh := make(chan uint64, len(shards))
-	for shard := range shards {
-		shardCh <- shard
-	}
-
-shardLoop:
-	for range shards {
-		select {
-		case <-ctx.Done():
-			break shardLoop
-		default:
-
-			workQueue <- struct{}{}
-			eg.Go(func() error {
-				defer func() {
-					<-workQueue
-				}()
-
-				var shard uint64
-				select {
-				case shard = <-shardCh:
-				default:
-					return nil // no more work
-				}
-				// these are frequent and so can expensive. Comment in only if you are actually debugging stuff.
-				//v.holder.Logger.Debugf("open index/field/view/fragment: %s/%s/%s/%d", v.index, v.field, v.name, shard)
-
-				frag := v.newFragment(shard)
-				if err := frag.Open(); err != nil {
-					return fmt.Errorf("open fragment: shard=%d, err=%s", frag.shard, err)
-				}
-				frag.RowAttrStore = v.rowAttrStore
-
-				// as above, this can be expensive, use sparely.
-				//v.holder.Logger.Debugf("add index/field/view/fragment to view.fragments: %s/%s/%s/%d", v.index, v.field, v.name, shard)
-
-				mu.Lock()
-				v.fragments[frag.shard] = frag
-				v.addKnownShard(shard)
-				mu.Unlock()
-				return nil
-			})
-		}
-	}
-	return eg.Wait()
-}
 
 // close closes the view and its fragments.
 func (v *view) close() error {

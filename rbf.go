@@ -30,6 +30,7 @@ import (
 	rbfcfg "github.com/pilosa/pilosa/v2/rbf/cfg"
 	"github.com/pilosa/pilosa/v2/roaring"
 	txkey "github.com/pilosa/pilosa/v2/short_txkey"
+	//txkey "github.com/pilosa/pilosa/v2/txkey"
 	"github.com/pkg/errors"
 )
 
@@ -428,6 +429,10 @@ func (tx *RBFTx) UseRowCache() bool {
 
 func (tx *RBFTx) ApplyFilter(index, field, view string, shard uint64, ckey uint64, filter roaring.BitmapFilter) (err error) {
 	return tx.tx.ApplyFilter(rbfName(index, field, view, shard), ckey, filter)
+}
+
+func (tx *RBFTx) GetSortedFieldViewList(idx *Index, shard uint64) (fvs []txkey.FieldView, err error) {
+	return tx.tx.GetSortedFieldViewList()
 }
 
 // rbfName returns a NULL-separated key used for identifying bitmap maps in RBF.

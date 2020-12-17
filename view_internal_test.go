@@ -45,7 +45,7 @@ func mustOpenView(tb testing.TB, index, field, name string) *view {
 
 	v := newView(h, path, index, field, name, fo)
 	v.idx = idx
-	if err := v.open(); err != nil {
+	if err := v.openEmpty(); err != nil {
 		panic(err)
 	}
 	v.rowAttrStore = &memAttrStore{

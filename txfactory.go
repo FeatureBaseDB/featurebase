@@ -30,7 +30,8 @@ import (
 	"github.com/pilosa/pilosa/v2/hash"
 	"github.com/pilosa/pilosa/v2/rbf"
 	"github.com/pilosa/pilosa/v2/roaring"
-	"github.com/pilosa/pilosa/v2/txkey"
+	txkey "github.com/pilosa/pilosa/v2/short_txkey"
+	//txkey "github.com/pilosa/pilosa/v2/txkey"
 	"github.com/pkg/errors"
 	"github.com/zeebo/blake3"
 )
@@ -1460,4 +1461,8 @@ func (f *TxFactory) GetDBShardPath(index string, shard uint64, idx *Index, ty tx
 	}
 	shardPath = dbs.pathForType(ty)
 	return
+}
+
+func (txf *TxFactory) GetFieldView2ShardsMapForIndex(idx *Index) (vs *FieldView2Shards, err error) {
+	return txf.dbPerShard.GetFieldView2ShardsMapForIndex(idx)
 }

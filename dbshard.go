@@ -24,6 +24,8 @@ import (
 	"sync"
 
 	rbfcfg "github.com/pilosa/pilosa/v2/rbf/cfg"
+	txkey "github.com/pilosa/pilosa/v2/short_txkey"
+	//txkey "github.com/pilosa/pilosa/v2/txkey"
 	"github.com/pkg/errors"
 )
 
@@ -259,6 +261,36 @@ type shardSet struct {
 	readonlyVer int64
 }
 
+func (a *shardSet) unionInPlace(b *shardSet) {
+	shards := b.CloneMaybe()
+	for shard := range shards {
+		a.add(shard)
+	}
+}
+
+func (a *shardSet) equals(b *shardSet) bool {
+	if len(a.shards) != len(b.shards) {
+		return false
+	}
+	for shardInA := range a.shards {
+		_, ok := b.shards[shardInA]
+		if !ok {
+			return false
+		}
+	}
+	return true
+
+}
+
+func (ss *shardSet) String() (r string) {
+	r = "["
+	for k := range ss.shards {
+		r += fmt.Sprintf("%v, ", k)
+	}
+	r += "]"
+	return
+}
+
 func (ss *shardSet) add(shard uint64) {
 	_, already := ss.shards[shard]
 	if !already {
@@ -293,6 +325,12 @@ func (ss *shardSet) CloneMaybe() map[uint64]bool {
 func newShardSet() *shardSet {
 	return &shardSet{
 		shards: make(map[uint64]bool),
+	}
+}
+func newShardSetFromMap(m map[uint64]bool) *shardSet {
+	return &shardSet{
+		shards:    m,
+		shardsVer: 1,
 	}
 }
 
@@ -556,9 +594,12 @@ func (per *DBPerShard) updateIndex2ShardCacheWithNewShard(dbs *DBShard) {
 }
 
 func (per *DBPerShard) GetDBShard(index string, shard uint64, idx *Index) (dbs *DBShard, err error) {
-
 	per.Mu.Lock()
 	defer per.Mu.Unlock()
+	return per.unprotectedGetDBShard(index, shard, idx)
+}
+
+func (per *DBPerShard) unprotectedGetDBShard(index string, shard uint64, idx *Index) (dbs *DBShard, err error) {
 
 	dbi, ok := per.dbh.Index[index]
 	if !ok {
@@ -689,6 +730,11 @@ func (f *TxFactory) GetShardsForIndex(idx *Index, roaringViewPath string, requir
 //
 // when a new DBShard is made, we will update the list of shards then. Thus
 // the per.index2shard should always be up to date AFTER the first call here.
+//
+// Note: we cannot here call GetView2ShardsMapForIndex() because that only ever
+// returns the green data and we are used during migration for both blue
+// and green.
+//
 func (per *DBPerShard) TypedDBPerShardGetShardsForIndex(ty txtype, idx *Index, roaringViewPath string, requireData bool) (shardMap map[uint64]bool, err error) {
 
 	// use the cache, always
@@ -696,16 +742,9 @@ func (per *DBPerShard) TypedDBPerShardGetShardsForIndex(ty txtype, idx *Index, r
 	defer per.Mu.Unlock()
 
 	if ty == roaringTxn && roaringViewPath != "" {
-		rx := &RoaringTx{
-			Index: idx,
-		}
-		sos, err := rx.SliceOfShards("", "", "", roaringViewPath)
+		shardMap, err := roaringMapOfShards(roaringViewPath)
 		if err != nil {
 			return nil, err
-		}
-		shardMap = make(map[uint64]bool)
-		for _, shard := range sos {
-			shardMap[shard] = true
 		}
 		return shardMap, nil
 	}
@@ -733,19 +772,16 @@ func (per *DBPerShard) TypedDBPerShardGetShardsForIndex(ty txtype, idx *Index, r
 	if ty == roaringTxn {
 		// INVAR: roaringViewPath == "", because the other case is
 		// handled above.
-		rx := &RoaringTx{
-			Index: idx,
-		}
 		fields := idx.Fields()
 		for _, field := range fields {
 			for _, view := range field.views() {
-				sos, err := rx.SliceOfShards("", "", "", view.path)
+				shardMap, err := roaringMapOfShards(view.path)
 				if err != nil {
 					return nil,
 						errors.Wrap(err, fmt.Sprintf(
 							"TypedDBPerShardGetLocalShardsForIndex roaringTxn view.path='%v'", view.path))
 				}
-				for _, shard := range sos {
+				for shard := range shardMap {
 					setOfShards.add(shard)
 				}
 			}
@@ -788,7 +824,7 @@ func (per *DBPerShard) TypedDBPerShardGetShardsForIndex(ty txtype, idx *Index, r
 		hasData := false
 
 		if requireData {
-			hasData, err = per.TypedIndexShardHasData(ty, idx, shard)
+			hasData, err = per.unprotectedTypedIndexShardHasData(ty, idx, shard)
 			if err != nil {
 				return nil, err
 			}
@@ -803,7 +839,7 @@ func (per *DBPerShard) TypedDBPerShardGetShardsForIndex(ty txtype, idx *Index, r
 	return setOfShards.CloneMaybe(), nil
 }
 
-func (per *DBPerShard) TypedIndexShardHasData(ty txtype, idx *Index, shard uint64) (hasData bool, err error) {
+func (per *DBPerShard) unprotectedTypedIndexShardHasData(ty txtype, idx *Index, shard uint64) (hasData bool, err error) {
 	whichty := 0
 	if len(per.types) == 2 {
 		if ty == per.types[1] {
@@ -815,7 +851,7 @@ func (per *DBPerShard) TypedIndexShardHasData(ty txtype, idx *Index, shard uint6
 	}
 
 	// make the dbs if it doesn't get exist
-	dbs, err := per.GetDBShard(idx.name, shard, idx)
+	dbs, err := per.unprotectedGetDBShard(idx.name, shard, idx)
 	if err != nil {
 		return false, errors.Wrap(err, fmt.Sprintf("DBPerShard.TypedIndexShardHasData() "+
 			"per.GetDBShard(index='%v', shard='%v', ty='%v')", idx.name, shard, ty.String()))
@@ -1042,4 +1078,157 @@ func (dbs *DBShard) verifyBlueEqualsGreen() (err error) {
 	}
 
 	return nil
+}
+
+type FieldView2Shards struct {
+	// field -> view -> *shardSet
+	m map[string]map[string]*shardSet
+}
+
+func (vs *FieldView2Shards) getViewsForField(field string) map[string]*shardSet {
+	return vs.m[field]
+}
+
+func (vs *FieldView2Shards) has(field, view string, shard uint64) bool {
+	vw, ok := vs.m[field]
+	if !ok {
+		return false
+	}
+	ss, ok := vw[view]
+	if !ok {
+		return false
+	}
+	shardMap := ss.CloneMaybe()
+	return shardMap[shard]
+}
+
+func (vs *FieldView2Shards) addViewShardSet(fv txkey.FieldView, ss *shardSet) {
+
+	f, ok := vs.m[fv.Field]
+	if !ok {
+		f = make(map[string]*shardSet)
+		vs.m[fv.Field] = f
+	}
+	// INVAR: f is ready to take ss.
+
+	// existing stuff to merge with?
+	prior, ok := f[fv.View]
+	if !ok {
+		f[fv.View] = ss
+		return
+	}
+	// merge ss and prior. No need to put the union back into f[fv.View]
+	// because prior is a pointer.
+	prior.unionInPlace(ss)
+}
+
+func (a *FieldView2Shards) equals(b *FieldView2Shards) bool {
+	if a == nil && b == nil {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	if len(a.m) != len(b.m) {
+		return false
+	}
+	for field, viewmapA := range a.m {
+		viewmapB, ok := b.m[field]
+		if !ok {
+			return false
+		}
+		if len(viewmapB) != len(viewmapA) {
+			return false
+		}
+		for k, va := range viewmapA {
+			vb, ok := viewmapB[k]
+			if !ok {
+				return false
+			}
+			if !va.equals(vb) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func NewFieldView2Shards() *FieldView2Shards {
+	return &FieldView2Shards{
+		m: make(map[string]map[string]*shardSet), // expected response from GetView2ShardMapForIndex
+	}
+}
+
+func (vs *FieldView2Shards) addShard(fv txkey.FieldView, shard uint64) {
+	viewmap, ok := vs.m[fv.Field]
+	if !ok {
+		viewmap = make(map[string]*shardSet)
+		vs.m[fv.Field] = viewmap
+	}
+	ss, ok := viewmap[fv.View]
+	if !ok {
+		ss = newShardSet()
+		viewmap[fv.View] = ss
+	}
+	ss.add(shard)
+}
+
+func (vs *FieldView2Shards) String() (r string) {
+	r = "\n"
+	for field, viewmap := range vs.m {
+		for view, shards := range viewmap {
+			r += fmt.Sprintf("field '%v' view:'%v' shards:%v\n", field, view, shards)
+		}
+	}
+	r += "\n"
+	return
+}
+
+// Note: cannot call this during migration, because
+// it only ever returns the green shards if we are in blue-green.
+func (per *DBPerShard) GetFieldView2ShardsMapForIndex(idx *Index) (vs *FieldView2Shards, err error) {
+
+	// for blue-green, it does matter that we return green, so we can migrate from it.
+	ty := per.types[0]
+	if per.isBlueGreen {
+		ty = per.types[1]
+	}
+
+	switch ty {
+	case roaringTxn:
+		return roaringGetFieldView2Shards(idx)
+	default:
+		vs = NewFieldView2Shards()
+
+		shardMap, err := per.TypedDBPerShardGetShardsForIndex(ty, idx, "", true)
+		if err != nil {
+			return nil, err
+		}
+
+		for shard := range shardMap {
+			dbs, err := per.GetDBShard(idx.name, shard, idx)
+			if err != nil {
+				return nil, errors.Wrap(err, "DBPerShard.GetFieldView2ShardsMapForIndex GetDBShard()")
+			}
+			fieldviews, err := dbs.AllFieldViews()
+			if err != nil {
+				return nil, errors.Wrap(err, "DBPerShard.GetFieldView2ShardsMapForIndex dbs.AllFieldViews()")
+			}
+			for _, fv := range fieldviews {
+				vs.addShard(fv, shard)
+			}
+		}
+	}
+
+	return
+}
+
+func (dbs *DBShard) AllFieldViews() (fvs []txkey.FieldView, err error) {
+
+	tx, err := dbs.NewTx(!writable, dbs.idx.name, Txo{Write: !writable, Shard: dbs.Shard, Index: dbs.idx, dbs: dbs})
+	if err != nil {
+		return nil, errors.Wrap(err, fmt.Sprintf("dbshard.NewTx for index '%v', shard %v", dbs.idx.name, dbs.Shard))
+	}
+	defer tx.Rollback()
+	return tx.GetSortedFieldViewList(dbs.idx, dbs.Shard)
 }

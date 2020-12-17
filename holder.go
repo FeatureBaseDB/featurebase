@@ -55,7 +55,7 @@ const (
 
 func init() {
 	// needed to get the most I/O throughtpu.
-	runtime.GOMAXPROCS(128)
+	runtime.GOMAXPROCS(runtime.NumCPU())
 
 	// For performance tuning, leave these readily available:
 	// CPUProfileForDur(time.Minute, "server.cpu.pprof")

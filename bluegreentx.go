@@ -22,6 +22,8 @@ import (
 	"sync"
 
 	"github.com/pilosa/pilosa/v2/roaring"
+	txkey "github.com/pilosa/pilosa/v2/short_txkey"
+	//txkey "github.com/pilosa/pilosa/v2/txkey"
 )
 
 // blueGreenTx runs two Tx together and notices differences in their output.
@@ -192,6 +194,15 @@ func (c *blueGreenTx) Readonly() bool {
 		panic(fmt.Sprintf("Readonly difference, a=%v, but b =%v", a, b))
 	}
 	return b
+}
+
+// for now we just return B's list, since this is involved in
+// holder Open which can happen before any blue-green is done;
+// in fact this is instrumental in setting up the sync from
+// green to blue.
+func (c *blueGreenTx) GetSortedFieldViewList(idx *Index, shard uint64) (fvB []txkey.FieldView, errB error) {
+	fvB, errB = c.b.GetSortedFieldViewList(idx, shard)
+	return
 }
 
 func (c *blueGreenTx) NewTxIterator(index, field, view string, shard uint64) *roaring.Iterator {

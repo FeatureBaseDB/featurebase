@@ -38,7 +38,6 @@ import (
 	"github.com/pilosa/pilosa/v2/testhook"
 	"github.com/pilosa/pilosa/v2/tracing"
 	"github.com/pkg/errors"
-	"golang.org/x/sync/errgroup"
 )
 
 // Default field settings.
@@ -581,6 +580,7 @@ func (f *Field) Open() error {
 		}
 
 		f.holder.Logger.Debugf("load available shards for index/field: %s/%s", f.index, f.name)
+
 		if err := f.loadAvailableShards(); err != nil {
 			return errors.Wrap(err, "loading available shards")
 		}
@@ -737,82 +737,44 @@ func (f *Field) ForeignIndex() string {
 	return f.options.ForeignIndex
 }
 
-var fieldQueue = make(chan struct{}, 16)
-
 // openViews opens and initializes the views inside the field.
 func (f *Field) openViews() error {
 
-	file, err := os.Open(filepath.Join(f.path, "views"))
-	if os.IsNotExist(err) {
+	view2shards := f.idx.fieldView2shard.getViewsForField(f.name)
+	if view2shards == nil {
+		// no data
 		return nil
-	} else if err != nil {
-		return errors.Wrap(err, "opening view directory")
 	}
-	defer file.Close()
 
-	fis, err := file.Readdir(0)
-	if err != nil {
-		return errors.Wrap(err, "reading directory")
-	}
-	eg, ctx := errgroup.WithContext(context.Background())
-	var mu sync.Mutex
+	for name, shardset := range view2shards {
 
-fileLoop:
-	for _, loopFi := range fis {
-		select {
-		case <-ctx.Done():
-			break fileLoop
-		default:
-			fi := loopFi
-			if !fi.IsDir() {
-				continue
-			}
-			// Skip embedded db files too.
-			if f.holder.txf.IsTxDatabasePath(fi.Name()) {
-				continue
-			}
+		view := f.newView(f.viewPath(name), name)
+		if err := view.openWithShardSet(shardset); err != nil {
+			return fmt.Errorf("opening view: view=%s, err=%s", view.name, err)
+		}
 
-			fieldQueue <- struct{}{}
-			eg.Go(func() error {
-				defer func() {
-					<-fieldQueue
-				}()
-				name := filepath.Base(fi.Name())
-				f.holder.Logger.Debugf("open index/field/view: %s/%s/%s", f.index, f.name, fi.Name())
-
-				view := f.newView(f.viewPath(name), name)
-				if err := view.open(); err != nil {
-					return fmt.Errorf("opening view: view=%s, err=%s", view.name, err)
-				}
-
-				if f.holder.txf.TxType() == RoaringTxn {
-					// Automatically upgrade BSI v1 fragments if they exist & reopen view.
-					if bsig := f.bsiGroup(f.name); bsig != nil {
-						if ok, err := upgradeViewBSIv2(view, bsig.BitDepth); err != nil {
-							return errors.Wrap(err, "upgrade view bsi v2")
-						} else if ok {
-							if err := view.close(); err != nil {
-								return errors.Wrap(err, "closing upgraded view")
-							}
-							view = f.newView(f.viewPath(name), name)
-							if err := view.open(); err != nil {
-								return fmt.Errorf("re-opening view: view=%s, err=%s", view.name, err)
-							}
-						}
+		if f.holder.txf.TxType() == RoaringTxn {
+			// Automatically upgrade BSI v1 fragments if they exist & reopen view.
+			if bsig := f.bsiGroup(f.name); bsig != nil {
+				if ok, err := upgradeViewBSIv2(view, bsig.BitDepth); err != nil {
+					return errors.Wrap(err, "upgrade view bsi v2")
+				} else if ok {
+					if err := view.close(); err != nil {
+						return errors.Wrap(err, "closing upgraded view")
+					}
+					view = f.newView(f.viewPath(name), name)
+					if err := view.openWithShardSet(shardset); err != nil {
+						return fmt.Errorf("re-opening view: view=%s, err=%s", view.name, err)
 					}
 				}
-
-				view.rowAttrStore = f.rowAttrStore
-				f.holder.Logger.Debugf("add index/field/view to field.viewMap: %s/%s/%s", f.index, f.name, view.name)
-				mu.Lock()
-				f.viewMap[view.name] = view
-				mu.Unlock()
-				return nil
-			})
+			}
 		}
-	}
 
-	return eg.Wait()
+		view.rowAttrStore = f.rowAttrStore
+		f.holder.Logger.Debugf("add index/field/view to field.viewMap: %s/%s/%s", f.index, f.name, view.name)
+		f.viewMap[view.name] = view
+	}
+	return nil
 }
 
 // loadMeta reads meta data for the field, if any.
@@ -1209,7 +1171,7 @@ func (f *Field) createViewIfNotExistsBase(name string) (*view, bool, error) {
 	}
 	view := f.newView(f.viewPath(name), name)
 
-	if err := view.open(); err != nil {
+	if err := view.openEmpty(); err != nil {
 		return nil, false, errors.Wrap(err, "opening view")
 	}
 	view.rowAttrStore = f.rowAttrStore

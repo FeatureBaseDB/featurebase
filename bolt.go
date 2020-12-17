@@ -32,7 +32,12 @@ import (
 	"github.com/pilosa/pilosa/v2/rbf"
 	rbfcfg "github.com/pilosa/pilosa/v2/rbf/cfg"
 	"github.com/pilosa/pilosa/v2/roaring"
-	"github.com/pilosa/pilosa/v2/txkey"
+
+	// On Bolt only, we still use the long txkey, because
+	// this allows Max() to work readily.
+	//
+	"github.com/pilosa/pilosa/v2/short_txkey"
+	txkey "github.com/pilosa/pilosa/v2/txkey"
 	"github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"
 )
@@ -632,6 +637,7 @@ func (tx *BoltTx) Remove(index, field, view string, shard uint64, a ...uint64) (
 }
 
 func (tx *BoltTx) addOrRemove(index, field, view string, shard uint64, batched, remove bool, a ...uint64) (changeCount int, err error) {
+
 	// pure hack to match RoaringTx
 	defer func() {
 		if !remove && !batched {
@@ -1452,6 +1458,19 @@ func (tx *BoltTx) countBitsSet(bkey []byte) (n int) {
 
 func (tx *BoltTx) Dump(short bool, shard uint64) {
 	fmt.Printf("%v\n", stringifiedBoltKeysTx(tx, short))
+}
+
+func (tx *BoltTx) GetSortedFieldViewList(idx *Index, shard uint64) (fvs []short_txkey.FieldView, err error) {
+	bkt := tx.tx.Bucket(bucketCT)
+	err = bkt.ForEach(func(bkey, v []byte) error {
+		fv := txkey.FieldViewFromFullKey(bkey)
+		var shortFV short_txkey.FieldView
+		shortFV.Field = fv.Field
+		shortFV.View = fv.View
+		fvs = append(fvs, shortFV)
+		return nil
+	})
+	return
 }
 
 // stringifiedBoltKeysTx reports all the bolt keys and a
