@@ -181,6 +181,13 @@ func (api *API) CreateIndex(ctx context.Context, indexName string, options Index
 		return nil, errors.Wrap(err, "validating api method")
 	}
 
+	if !api.holder.isCoordinator() {
+		if err := api.server.defaultClient.CreateIndex(ctx, indexName, options); err != nil {
+			return nil, errors.Wrap(err, "forwarding CreateIndex to coordinator")
+		}
+		return api.holder.Index(indexName), nil
+	}
+
 	// Create index.
 	index, err := api.holder.CreateIndex(indexName, options)
 	if err != nil {
@@ -268,6 +275,13 @@ func (api *API) CreateField(ctx context.Context, indexName string, fieldName str
 		if err != nil {
 			return nil, NewBadRequestError(errors.Wrap(err, "applying option"))
 		}
+	}
+
+	if !api.holder.isCoordinator() {
+		if err := api.server.defaultClient.CreateFieldWithOptions(ctx, indexName, fieldName, fo); err != nil {
+			return nil, errors.Wrap(err, "forwarding CreateField to coordinator")
+		}
+		return api.holder.Field(indexName, fieldName), nil
 	}
 
 	// Find index.
