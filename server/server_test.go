@@ -1220,3 +1220,65 @@ func TestMain(m *testing.M) {
 	}()
 	os.Exit(m.Run())
 }
+
+// TestClusterCreatedAtRace is a regression test for an issue where
+// creating the same field concurrently across the cluster could cause
+// the createdAt value to be disagreed upon by various nodes in the
+// cluster (which would cause ingest to fail).
+func TestClusterCreatedAtRace(t *testing.T) {
+	iterations := 1
+	if runStress {
+		iterations = 10
+	}
+	for k := 0; k < iterations; k++ {
+		t.Run(fmt.Sprintf("run-%d", k), func(t *testing.T) {
+			cluster := test.MustRunCluster(t, 4)
+			defer cluster.Close()
+
+			for _, com := range cluster.Nodes {
+				nodes := com.API.Hosts(context.Background())
+				for _, n := range nodes {
+					if n.State != "READY" {
+						t.Fatalf("unexpected node state after upping cluster: %v", nodes)
+					}
+				}
+			}
+			_, err := cluster.Nodes[0].API.CreateIndex(context.Background(), "anindex", pilosa.IndexOptions{})
+			if err != nil && errors.Cause(err).Error() != pilosa.ErrIndexExists.Error() {
+				t.Fatal(err)
+			}
+
+			eg := errgroup.Group{}
+			for i := 0; i < 4; i++ {
+				for _, cmd := range cluster.Nodes {
+					cmd := cmd
+					eg.Go(func() error {
+						_, err := cmd.API.CreateField(context.Background(), "anindex", "afield")
+						if err != nil && errors.Cause(err).Error() != pilosa.ErrFieldExists.Error() {
+							return errors.Wrap(err, "creating field")
+						}
+						return nil
+					})
+				}
+			}
+
+			err = eg.Wait()
+			if err != nil {
+				t.Fatalf("creating indices and fields concurrently: %v", err)
+			}
+
+			schemas := make([]*pilosa.IndexInfo, len(cluster.Nodes))
+			for i, cmd := range cluster.Nodes {
+				schemas[i] = cmd.API.Schema(context.Background())[0]
+			}
+
+			createdAtField := schemas[0].Fields[0].CreatedAt
+			for i, schema := range schemas[1:] {
+				if schema.Fields[0].CreatedAt != createdAtField {
+					t.Fatalf("node %d doesn't match node 0 for field. 0: %d, %d: %d", i, createdAtField, i, schema.Fields[0].CreatedAt)
+				}
+			}
+
+		})
+	}
+}
