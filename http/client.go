@@ -165,6 +165,17 @@ func (c *InternalClient) CreateIndex(ctx context.Context, index string, opt pilo
 	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.CreateIndex")
 	defer span.Finish()
 
+	// Get the coordinator node. Schema changes must go through
+	// coordinator to avoid weird race conditions.
+	nodes, err := c.Nodes(ctx)
+	if err != nil {
+		return fmt.Errorf("getting nodes: %s", err)
+	}
+	coord := getCoordinatorNode(nodes)
+	if coord == nil {
+		return fmt.Errorf("could not find the coordinator node")
+	}
+
 	// Encode query request.
 	buf, err := json.Marshal(&postIndexRequest{
 		Options: opt,
@@ -174,7 +185,7 @@ func (c *InternalClient) CreateIndex(ctx context.Context, index string, opt pilo
 	}
 
 	// Create URL & HTTP request.
-	u := uriPathToURL(c.defaultURI, fmt.Sprintf("/index/%s", index))
+	u := uriPathToURL(&coord.URI, fmt.Sprintf("/index/%s", index))
 	req, err := http.NewRequest("POST", u.String(), bytes.NewReader(buf))
 	if err != nil {
 		return errors.Wrap(err, "creating request")
@@ -915,8 +926,19 @@ func (c *InternalClient) CreateFieldWithOptions(ctx context.Context, index, fiel
 		return errors.Wrap(err, "marshaling")
 	}
 
+	// Get the coordinator node. Schema changes must go through
+	// coordinator to avoid weird race conditions.
+	nodes, err := c.Nodes(ctx)
+	if err != nil {
+		return fmt.Errorf("getting nodes: %s", err)
+	}
+	coord := getCoordinatorNode(nodes)
+	if coord == nil {
+		return fmt.Errorf("could not find the coordinator node")
+	}
+
 	// Create URL & HTTP request.
-	u := uriPathToURL(c.defaultURI, fmt.Sprintf("/index/%s/field/%s", index, field))
+	u := uriPathToURL(&coord.URI, fmt.Sprintf("/index/%s/field/%s", index, field))
 	req, err := http.NewRequest("POST", u.String(), bytes.NewReader(buf))
 	if err != nil {
 		return errors.Wrap(err, "creating request")
