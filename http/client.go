@@ -165,8 +165,8 @@ func (c *InternalClient) CreateIndex(ctx context.Context, index string, opt pilo
 	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.CreateIndex")
 	defer span.Finish()
 
-	// Get the coordinator node; all bits are sent to the
-	// primary translate store (i.e. coordinator).
+	// Get the coordinator node. Schema changes must go through
+	// coordinator to avoid weird race conditions.
 	nodes, err := c.Nodes(ctx)
 	if err != nil {
 		return fmt.Errorf("getting nodes: %s", err)
@@ -926,8 +926,8 @@ func (c *InternalClient) CreateFieldWithOptions(ctx context.Context, index, fiel
 		return errors.Wrap(err, "marshaling")
 	}
 
-	// Get the coordinator node; all bits are sent to the
-	// primary translate store (i.e. coordinator).
+	// Get the coordinator node. Schema changes must go through
+	// coordinator to avoid weird race conditions.
 	nodes, err := c.Nodes(ctx)
 	if err != nil {
 		return fmt.Errorf("getting nodes: %s", err)
