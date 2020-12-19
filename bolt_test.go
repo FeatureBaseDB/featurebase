@@ -115,16 +115,14 @@ func TestBolt_DeleteFragment(t *testing.T) {
 	dbwrap, clean := mustOpenEmptyBoltWrapper("TestBolt_DeleteFragment")
 	defer clean()
 	defer dbwrap.Close()
-	index, field, view, shard0 := "i", "f", "v", uint64(0)
+	index, field, shard := "i", "f", uint64(0)
 	tx, _ := dbwrap.NewTx(writable, index, Txo{})
 
-	shard1 := uint64(1)
-
 	bits := []uint64{0, 3, 1 << 16, 1<<16 + 3, 8 << 16}
-	shards := []uint64{shard0, shard1}
-	for _, s := range shards {
+	views := []string{"v1", "v2"}
+	for _, view := range views {
 		for _, v := range bits {
-			changed, err := tx.Add(index, field, view, s, doBatched, v)
+			changed, err := tx.Add(index, field, view, shard, doBatched, v)
 			if changed <= 0 {
 				panic("should have changed")
 			}
@@ -132,9 +130,9 @@ func TestBolt_DeleteFragment(t *testing.T) {
 		}
 	}
 
-	for _, s := range shards {
+	for _, view := range views {
 		for _, v := range bits {
-			exists, err := tx.Contains(index, field, view, s, v)
+			exists, err := tx.Contains(index, field, view, shard, v)
 			panicOn(err)
 			if !exists {
 				panic("ARG bitvalue was NOT SET!!!")
@@ -146,23 +144,23 @@ func TestBolt_DeleteFragment(t *testing.T) {
 
 	// end of setup
 
-	survivor := shard0
-	victim := shard1
-	err = dbwrap.DeleteFragment(index, field, view, victim, nil)
+	victim := "v1"
+	survivor := "v2"
+	err = dbwrap.DeleteFragment(index, field, victim, shard, nil)
 	panicOn(err)
 
 	tx, _ = dbwrap.NewTx(!writable, index, Txo{})
 	defer tx.Rollback()
 
-	for _, s := range shards {
+	for _, view := range views {
 		for _, v := range bits {
-			exists, err := tx.Contains(index, field, view, s, v)
+			exists, err := tx.Contains(index, field, view, shard, v)
 			panicOn(err)
-			if s == survivor {
+			if view == survivor {
 				if !exists {
 					panic(fmt.Sprintf("ARG survivor died : bit %v", v))
 				}
-			} else if s == victim { // victim, should have been deleted
+			} else if view == victim { // victim, should have been deleted
 				if exists {
 					panic(fmt.Sprintf("ARG victim lived : bit %v", v))
 				}

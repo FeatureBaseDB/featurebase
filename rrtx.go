@@ -20,6 +20,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -28,6 +29,8 @@ import (
 	"github.com/pilosa/pilosa/v2/rbf"
 	rbfcfg "github.com/pilosa/pilosa/v2/rbf/cfg"
 	"github.com/pilosa/pilosa/v2/roaring"
+	txkey "github.com/pilosa/pilosa/v2/short_txkey"
+	//txkey "github.com/pilosa/pilosa/v2/txkey"
 	"github.com/pkg/errors"
 )
 
@@ -67,9 +70,10 @@ func (tx *RoaringTx) UseRowCache() bool {
 	return rbf.EnableRowCache()
 }
 
-func (tx *RoaringTx) SliceOfShards(index, field, view, optionalViewPath string) (sliceOfShards []uint64, err error) {
+// based on view.openFragments()
+func roaringMapOfShards(optionalViewPath string) (shardMap map[uint64]bool, err error) {
 
-	// SliceOfShards is based on view.openFragments()
+	shardMap = make(map[uint64]bool)
 
 	path := filepath.Join(optionalViewPath, "fragments")
 	file, err := os.Open(path)
@@ -103,7 +107,7 @@ func (tx *RoaringTx) SliceOfShards(index, field, view, optionalViewPath string) 
 			//tx.Index.holder.Logger.Debugf("WARNING: couldn't use non-integer file as shard in index/field/view %s/%s/%s: %s", index, field, view, fi.Name())
 			continue
 		}
-		sliceOfShards = append(sliceOfShards, shard)
+		shardMap[shard] = true
 	}
 	return
 }
@@ -417,6 +421,168 @@ func (tx *RoaringTx) Options() Txo {
 // Sn retreives the serial number of the Tx.
 func (tx *RoaringTx) Sn() int64 {
 	return tx.sn
+}
+
+func roaringGetFieldView2Shards(idx *Index) (vs *FieldView2Shards, err error) {
+	vs = NewFieldView2Shards()
+
+	// A) open the index directory
+	f, err := os.Open(idx.path)
+	if err != nil {
+		return nil, errors.Wrap(err, "opening directory")
+	}
+	defer f.Close()
+
+	fieldFIs, err := f.Readdir(0)
+	if err != nil {
+		return nil, errors.Wrap(err, "reading directory")
+	}
+
+	//vv("roaringGetFieldView2Shards A) opened index path '%v'", idx.path)
+
+	// B) read the name of each field under the index
+	for _, loopFieldFi := range fieldFIs {
+		fieldFI := loopFieldFi
+		if !fieldFI.IsDir() {
+			continue
+		}
+		field := fieldFI.Name()
+
+		//vv("roaringGetFieldView2Shards B) on field '%v'", field)
+
+		fieldPath := filepath.Join(idx.path, field)
+
+		// Skip embedded db files too.
+		if idx.holder.txf.IsTxDatabasePath(field) {
+			continue
+		}
+		viewsDir := filepath.Join(fieldPath, "views")
+		file, err := os.Open(viewsDir)
+		if os.IsNotExist(err) {
+			//return nil
+			continue
+		} else if err != nil {
+			return nil, errors.Wrapf(err, "opening view directory '%v'", viewsDir)
+		}
+		defer file.Close()
+
+		// C) read the name of each view under the field
+
+		viewFIs, err := file.Readdir(0)
+		if err != nil {
+			return nil, errors.Wrapf(err, "reading views directory '%v'", viewsDir)
+		}
+		for _, viewFI := range viewFIs {
+
+			if !viewFI.IsDir() {
+				continue
+			}
+			view := viewFI.Name()
+			roaringViewPath := filepath.Join(viewsDir, view)
+
+			shardMap, err := roaringMapOfShards(roaringViewPath)
+			if err != nil {
+				return nil, errors.Wrapf(err, "reading view path directory '%v'", roaringViewPath)
+			}
+			if len(shardMap) == 0 {
+				//vv("roaringGetFieldView2Shards C) SAVED SPACE! field '%v' view '%v' had no shards", field, view)
+				continue
+			}
+
+			ss := newShardSetFromMap(shardMap)
+			fv := txkey.FieldView{Field: field, View: view}
+			vs.addViewShardSet(fv, ss)
+
+			//vv("roaringGetFieldView2Shards C) added field '%v' view '%v' with shards '%#v'", field, view, ss.shards)
+		}
+	}
+	return
+}
+
+// inefficient for roaring. Instead use the roaringGetFieldView2Shards() above.
+func (tx *RoaringTx) GetSortedFieldViewList(idx *Index, shard uint64) (fvs []txkey.FieldView, err error) {
+
+	// A) open the index directory
+	f, err := os.Open(idx.path)
+	if err != nil {
+		return nil, errors.Wrap(err, "opening directory")
+	}
+	defer f.Close()
+
+	fieldFIs, err := f.Readdir(0)
+	if err != nil {
+		return nil, errors.Wrap(err, "reading directory")
+	}
+
+	//vv("A) shard %v, opened index path '%v'", shard, idx.path)
+
+	// B) read the name of each field under the index
+	for _, loopFieldFi := range fieldFIs {
+		fieldFI := loopFieldFi
+		if !fieldFI.IsDir() {
+			continue
+		}
+		field := fieldFI.Name()
+
+		//vv("B) on field '%v'", field)
+
+		fieldPath := filepath.Join(idx.path, field)
+
+		// Skip embedded db files too.
+		if idx.holder.txf.IsTxDatabasePath(field) {
+			continue
+		}
+		viewsDir := filepath.Join(fieldPath, "views")
+		file, err := os.Open(viewsDir)
+		if os.IsNotExist(err) {
+			//return nil
+			continue
+		} else if err != nil {
+			return nil, errors.Wrapf(err, "opening view directory '%v'", viewsDir)
+		}
+		defer file.Close()
+
+		// C) read the name of each view under the field
+
+		viewFIs, err := file.Readdir(0)
+		if err != nil {
+			return nil, errors.Wrapf(err, "reading views directory '%v'", viewsDir)
+		}
+		for _, viewFI := range viewFIs {
+
+			if !viewFI.IsDir() {
+				continue
+			}
+			view := viewFI.Name()
+			roaringViewPath := filepath.Join(viewsDir, view)
+
+			shardMap, err := roaringMapOfShards(roaringViewPath)
+			if err != nil {
+				return nil, errors.Wrapf(err, "reading view path directory '%v'", roaringViewPath)
+			}
+			if len(shardMap) == 0 {
+				continue
+			}
+
+			// once we know we have data for this shard!
+			if shardMap[shard] {
+				fv := txkey.FieldView{Field: field, View: view}
+				//vv("C) adding fv '%#v'", fv)
+				fvs = append(fvs, fv)
+			}
+		}
+	}
+	// directory stuff isn't returned in sorted order, we must sort.
+	sort.Slice(fvs, func(i, j int) bool {
+		if fvs[i].Field < fvs[j].Field {
+			return true
+		}
+		if fvs[i].Field > fvs[j].Field {
+			return false
+		}
+		return fvs[i].View < fvs[j].View
+	})
+	return
 }
 
 //////// registrar and wrapper machinery

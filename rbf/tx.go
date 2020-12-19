@@ -26,6 +26,7 @@ import (
 	"github.com/pilosa/pilosa/v2/hash"
 	"github.com/pilosa/pilosa/v2/roaring"
 	txkey "github.com/pilosa/pilosa/v2/short_txkey"
+	//txkey "github.com/pilosa/pilosa/v2/txkey"
 )
 
 var _ = txkey.ToString
@@ -2030,6 +2031,21 @@ func (tx *Tx) walkPageInfo(infos []PageInfo, root uint32, name string) error {
 func (tx *Tx) PageData(pgno uint32) ([]byte, error) {
 	buf, _, err := tx.readPage(pgno)
 	return buf, err
+}
+
+func (tx *Tx) GetSortedFieldViewList() (fvs []txkey.FieldView, _ error) {
+	records, err := tx.RootRecords()
+	if err != nil {
+		return nil, err
+	}
+	it := records.Iterator()
+	for !it.Done() {
+		k, _ := it.Next()
+		root := k.(string)
+		fv := txkey.FieldViewFromPrefix([]byte(root))
+		fvs = append(fvs, fv)
+	}
+	return
 }
 
 type PageInfo interface {

@@ -5788,7 +5788,7 @@ func BenchmarkImportMutexSampleData(b *testing.B) {
 func testOneParallelSlice(t *testing.T, p *parallelSlices) {
 	// the easy answer
 	seen := make(map[uint64]uint64, len(p.cols))
-	t.Logf("cols %d, rows %d", p.cols, p.rows)
+	//t.Logf("cols %d, rows %d", p.cols, p.rows)
 	for i, c := range p.cols {
 		seen[c] = p.rows[i]
 	}

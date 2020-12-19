@@ -19,6 +19,8 @@ import (
 	"io"
 
 	"github.com/pilosa/pilosa/v2/roaring"
+	txkey "github.com/pilosa/pilosa/v2/short_txkey"
+	//txkey "github.com/pilosa/pilosa/v2/txkey"
 )
 
 // catcher is useful to report error locations with a
@@ -310,4 +312,8 @@ func (c *catcherTx) Sn() int64 {
 
 func (c *catcherTx) ApplyFilter(index, field, view string, shard uint64, ckey uint64, filter roaring.BitmapFilter) (err error) {
 	return GenericApplyFilter(c, index, field, view, shard, ckey, filter)
+}
+
+func (c *catcherTx) GetSortedFieldViewList(idx *Index, shard uint64) (fvs []txkey.FieldView, err error) {
+	return c.b.GetSortedFieldViewList(idx, shard)
 }

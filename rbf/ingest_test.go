@@ -27,6 +27,7 @@ import (
 
 	"github.com/pilosa/pilosa/v2/rbf/cfg"
 	"github.com/pilosa/pilosa/v2/roaring"
+	// "github.com/pilosa/pilosa/v2/txkey"
 	txkey "github.com/pilosa/pilosa/v2/short_txkey"
 )
 

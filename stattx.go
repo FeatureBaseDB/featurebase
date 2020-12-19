@@ -25,6 +25,8 @@ import (
 	"time"
 
 	"github.com/pilosa/pilosa/v2/roaring"
+	txkey "github.com/pilosa/pilosa/v2/short_txkey"
+	//txkey "github.com/pilosa/pilosa/v2/txkey"
 )
 
 // statTx is useful to profile on a
@@ -674,4 +676,8 @@ func (c *statTx) Type() string {
 // Sn retreives the serial number of the Tx.
 func (c *statTx) Sn() int64 {
 	return c.b.Sn()
+}
+
+func (c *statTx) GetSortedFieldViewList(idx *Index, shard uint64) (fvs []txkey.FieldView, err error) {
+	return c.b.GetSortedFieldViewList(idx, shard)
 }

@@ -22,6 +22,22 @@ import (
 	"fmt"
 )
 
+// FieldView is here to avoid circular import.
+type FieldView struct {
+	Field string
+	View  string
+}
+
+func FieldViewFromPrefix(prefix []byte) FieldView {
+	_, field, view, _ := SplitPrefix(prefix)
+	return FieldView{Field: field, View: view}
+}
+
+func FieldViewFromFullKey(fullKey []byte) FieldView {
+	_, field, view, _, _ := Split(fullKey)
+	return FieldView{Field: field, View: view}
+}
+
 // Key produces the bytes that we use as a key to query the storage/tx engine.
 // The roaringContainerKey argument to Key() is a container key into a roaring Container.
 // The return value from Key() is constructed as follows:

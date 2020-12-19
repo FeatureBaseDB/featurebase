@@ -71,6 +71,9 @@ type Index struct {
 
 	// Instantiates new translation stores
 	OpenTranslateStore OpenTranslateStoreFunc
+
+	// track the subset of shards available to our views
+	fieldView2shard *FieldView2Shards
 }
 
 // NewIndex returns an existing (but possibly empty) instance of
@@ -190,6 +193,16 @@ func (i *Index) open(withTimestamp bool) (err error) {
 		return errors.Wrap(err, "loading meta file")
 	}
 
+	// we don't want to open *all* the views for each shard, since
+	// most are empty when we are doing time quantums. It slows
+	// down startup dramatically. So we ask for the meta data
+	// of what fields/views/shards are present with data up front.
+	fieldView2shard, err := i.holder.txf.GetFieldView2ShardsMapForIndex(i)
+	if err != nil {
+		return errors.Wrap(err, fmt.Sprintf("i.holder.txf.GetFieldView2ShardsMapForIndex('%v')", i.name))
+	}
+	i.fieldView2shard = fieldView2shard
+
 	i.holder.Logger.Debugf("open fields for index: %s", i.name)
 	if err := i.openFields(withTimestamp); err != nil {
 		return errors.Wrap(err, "opening fields")
@@ -294,7 +307,7 @@ fileLoop:
 				// up a foreign index.
 				fld.holder = i.holder
 
-				// open all the views
+				// open the views we have data for.
 				if err := fld.Open(); err != nil {
 					return fmt.Errorf("open field: name=%s, err=%s", fld.Name(), err)
 				}
