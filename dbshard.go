@@ -342,7 +342,7 @@ func (per *DBPerShard) HasData(which int) (hasData bool, err error) {
 	// has to aggregate across all available DBShard for each index and shard.
 
 	if per.types[which] == roaringTxn {
-		return per.RoaringHasData()
+		return per.RoaringHasData() // this needs to be made accurate
 	}
 
 	for _, v := range per.Flatmap {
@@ -948,6 +948,8 @@ func (dbs *DBShard) populateBlueFromGreen() (err error) {
 	panicOn(err)
 	defer writetx.Rollback()
 
+	ctWriteCount := 0
+
 	for _, fld := range dbs.idx.Fields() {
 		field := fld.Name()
 		for _, vw := range fld.views() {
@@ -958,6 +960,7 @@ func (dbs *DBShard) populateBlueFromGreen() (err error) {
 				if strings.Contains(err.Error(), "fragment not found") {
 					continue
 				} else {
+					writetx.Rollback()
 					return errors.Wrap(err, "DBShard.populateBlueFromGreen readtx.ContainerIterator")
 				}
 			}
@@ -967,8 +970,37 @@ func (dbs *DBShard) populateBlueFromGreen() (err error) {
 				err := writetx.PutContainer(dbs.Index, field, view, dbs.Shard, ckey, rc)
 				if err != nil {
 					citer.Close()
+					writetx.Rollback()
 					return errors.Wrap(err, "DBShard.populateBlueFromGreen writetx.PutContainer")
 				}
+
+				ctWriteCount++
+				if ctWriteCount%1000 == 1 {
+
+					// regularly commiting smaller batches and the first batch as soon as
+					// possible massively speeds up writing to bolt.
+					//
+					// reference: https://github.com/boltdb/bolt/issues/94
+					//
+					//  benbjohnson commented on Mar 25, 2014
+					//  "Bulk loading more than 1000 items at a time is very slow. This is because nodes
+					//   are not splitting before commit which causes large memmove() operations during insertion."
+					// runtime.memmove is taking all of the time in our pprof profile, when copying rbf to bolt, so we suspect it is this.
+					//
+					err = writetx.Commit()
+					if err != nil {
+						citer.Close()
+						writetx.Rollback()
+						return errors.Wrap(err, "DBShard.populateBlueFromGreen writetx.Commit")
+					}
+					writetx, err = dest.NewTx(writable, dbs.Index, Txo{Write: writable, Index: dbs.idx, Shard: dbs.Shard})
+					if err != nil {
+						citer.Close()
+						writetx.Rollback()
+						return errors.Wrap(err, "DBShard.populateBlueFromGreen writetx.NewTx inside citer.Next() loop")
+					}
+				}
+
 			}
 			citer.Close()
 		}
