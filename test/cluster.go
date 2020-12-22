@@ -108,6 +108,53 @@ func (c *Cluster) ImportBits(t testing.TB, index, field string, rowcols [][2]uin
 	}
 }
 
+// ImportKeyKey imports data into an index where both the index and
+// the field are using string keys.
+func (c *Cluster) ImportKeyKey(t testing.TB, index, field string, valAndRecKeys [][2]string) {
+	t.Helper()
+	importRequest := &pilosa.ImportRequest{
+		Index:      index,
+		Field:      field,
+		RowKeys:    make([]string, len(valAndRecKeys)),
+		ColumnKeys: make([]string, len(valAndRecKeys)),
+	}
+	for i, vk := range valAndRecKeys {
+		importRequest.RowKeys[i] = vk[0]
+		importRequest.ColumnKeys[i] = vk[1]
+	}
+	err := c.Nodes[0].API.Import(context.Background(), nil, importRequest)
+	if err != nil {
+		t.Fatalf("importing keykey data: %v", err)
+	}
+}
+
+// KeyID represents a key and an ID for importing data into an index
+// and field where one uses string keys and the other does not.
+type KeyID struct {
+	Key string
+	ID  uint64
+}
+
+// ImportIDKey imports data into an index where the index is using
+// keys, but the field is not.
+func (c *Cluster) ImportIDKey(t testing.TB, index, field string, pairs []KeyID) {
+	t.Helper()
+	importRequest := &pilosa.ImportRequest{
+		Index:      index,
+		Field:      field,
+		RowIDs:     make([]uint64, len(pairs)),
+		ColumnKeys: make([]string, len(pairs)),
+	}
+	for i, pair := range pairs {
+		importRequest.RowIDs[i] = pair.ID
+		importRequest.ColumnKeys[i] = pair.Key
+	}
+	err := c.Nodes[0].API.Import(context.Background(), nil, importRequest)
+	if err != nil {
+		t.Fatalf("importing IDKey data: %v", err)
+	}
+}
+
 // CreateField creates the index (if necessary) and field specified.
 func (c *Cluster) CreateField(t testing.TB, index string, iopts pilosa.IndexOptions, field string, fopts ...pilosa.FieldOption) *pilosa.Field {
 	t.Helper()

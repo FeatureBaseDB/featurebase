@@ -361,7 +361,7 @@ func (e *executor) readColumnAttrSets(index *Index, ids []uint64) ([]*ColumnAttr
 }
 
 // handlePreCalls traverses the call tree looking for calls that need
-// precomputed values. Right now, that's just Distinct.
+// precomputed values (e.g. Distinct, UnionRows, ConstRow...)
 func (e *executor) handlePreCalls(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *execOptions) error {
 	if c.Name == "Precomputed" {
 		idx := c.Args["valueidx"].(int64)
@@ -4235,9 +4235,27 @@ func (e *executor) executeCount(ctx context.Context, qcx *Qcx, index string, c *
 		return 0, errors.New("Count() only accepts a single bitmap input")
 	}
 
+	child := c.Children[0]
+
+	// if the child is precomputed, we'll bypass mapreduce, ignore
+	// shards, and just count the number of bits
+	if child.Name == "Precomputed" {
+		count := uint64(0)
+		for _, irow := range child.Precomputed {
+			if row, ok := irow.(*Row); !ok {
+				return 0, errors.Errorf("unexpected precomputed value type inside count: %+v", irow)
+			} else {
+				for _, seg := range row.segments {
+					count += seg.n
+				}
+			}
+		}
+		return count, nil
+	}
+
 	// Execute calls in bulk on each remote node and merge.
 	mapFn := func(ctx context.Context, shard uint64) (_ interface{}, err error) {
-		row, err := e.executeBitmapCallShard(ctx, qcx, index, c.Children[0], shard)
+		row, err := e.executeBitmapCallShard(ctx, qcx, index, child, shard)
 		if err != nil {
 			return 0, err
 		}

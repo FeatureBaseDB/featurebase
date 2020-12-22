@@ -6742,3 +6742,96 @@ func TestMissingKeyRegression(t *testing.T) {
 		})
 	}
 }
+
+func TestDistinctOnSetsKeyedIndex(t *testing.T) {
+	c := test.MustRunCluster(t, 3)
+	defer c.Close()
+
+	// create and populate "likenums" similar to "likes", but no keys on the field
+	c.CreateField(t, "users", pilosa.IndexOptions{Keys: true, TrackExistence: true}, "likenums")
+	c.ImportIDKey(t, "users", "likenums", []test.KeyID{
+		{ID: 1, Key: "userA"},
+		{ID: 2, Key: "userB"},
+		{ID: 3, Key: "userC"},
+		{ID: 4, Key: "userD"},
+		{ID: 5, Key: "userE"},
+		{ID: 6, Key: "userF"},
+		{ID: 7, Key: "userA"},
+		{ID: 7, Key: "userB"},
+		{ID: 7, Key: "userC"},
+		{ID: 7, Key: "userD"},
+		{ID: 7, Key: "userE"},
+		{ID: 7, Key: "userF"},
+	})
+
+	// create and populate "likes" field
+	c.CreateField(t, "users", pilosa.IndexOptions{Keys: true, TrackExistence: true}, "likes", pilosa.OptFieldKeys())
+	c.ImportKeyKey(t, "users", "likes", [][2]string{
+		{"molecula", "userA"},
+		{"pilosa", "userB"},
+		{"pangolin", "userC"},
+		{"zebra", "userD"},
+		{"toucan", "userE"},
+		{"dog", "userF"},
+		{"icecream", "userA"},
+		{"icecream", "userB"},
+		{"icecream", "userC"},
+		{"icecream", "userD"},
+		{"icecream", "userE"},
+		{"icecream", "userF"},
+	})
+
+	tests := []struct {
+		query    string
+		verifier func(t *testing.T, resp pilosa.QueryResponse)
+	}{
+		{
+			query: "Count(All())",
+			verifier: func(t *testing.T, resp pilosa.QueryResponse) {
+				if resp.Results[0].(uint64) != 6 {
+					t.Errorf("expected 6, got %+v", resp.Results[0])
+				}
+			},
+		},
+		{
+			query: "Count(Distinct(field=likenums))",
+			verifier: func(t *testing.T, resp pilosa.QueryResponse) {
+				if resp.Results[0].(uint64) != 7 {
+					t.Errorf("wrong count: %+v", resp.Results[0])
+				}
+			},
+		},
+		{
+			query: "Distinct(field=likenums)",
+			verifier: func(t *testing.T, resp pilosa.QueryResponse) {
+				if !reflect.DeepEqual(resp.Results[0].(pilosa.SignedRow).Pos.Columns(), []uint64{1, 2, 3, 4, 5, 6, 7}) {
+					t.Errorf("wrong values: %+v", resp.Results[0].(pilosa.SignedRow).Pos.Columns())
+				}
+			},
+		},
+		{
+			query: "Count(Distinct(field=likes))",
+			verifier: func(t *testing.T, resp pilosa.QueryResponse) {
+				if resp.Results[0].(uint64) != 7 {
+					t.Errorf("wrong count: %+v", resp.Results[0])
+				}
+			},
+		},
+		// {
+		// 	query: "Distinct(field=likes)",
+		// 	verifier: func(t *testing.T, resp pilosa.QueryResponse) {
+		// 		if !reflect.DeepEqual(resp.Results[0].(*pilosa.Row).Keys, []string{"molecula", "pilosa", "pangolin", "zebra", "toucan", "dog", "icecream"}) {
+		// 			t.Errorf("wrong values: %+v", resp.Results[0])
+		// 		}
+		// 	},
+		// },
+	}
+
+	for i, tst := range tests {
+		t.Run(fmt.Sprintf("%d-%s", i, tst.query), func(t *testing.T) {
+			resp := c.Query(t, "users", tst.query)
+			fmt.Println(resp.Results[0])
+			tst.verifier(t, resp)
+		})
+	}
+}
