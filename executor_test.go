@@ -6747,7 +6747,7 @@ func TestDistinctOnSetsKeyedIndex(t *testing.T) {
 	c := test.MustRunCluster(t, 3)
 	defer c.Close()
 
-	// create and populate "likenums" similar to "likes", but no keys on the field
+	// Create and populate "likenums" similar to "likes", but without keys on the field.
 	c.CreateField(t, "users", pilosa.IndexOptions{Keys: true, TrackExistence: true}, "likenums")
 	c.ImportIDKey(t, "users", "likenums", []test.KeyID{
 		{ID: 1, Key: "userA"},
@@ -6764,7 +6764,7 @@ func TestDistinctOnSetsKeyedIndex(t *testing.T) {
 		{ID: 7, Key: "userF"},
 	})
 
-	// create and populate "likes" field
+	// Create and populate "likes" field.
 	c.CreateField(t, "users", pilosa.IndexOptions{Keys: true, TrackExistence: true}, "likes", pilosa.OptFieldKeys())
 	c.ImportKeyKey(t, "users", "likes", [][2]string{
 		{"molecula", "userA"},
@@ -6779,6 +6779,16 @@ func TestDistinctOnSetsKeyedIndex(t *testing.T) {
 		{"icecream", "userD"},
 		{"icecream", "userE"},
 		{"icecream", "userF"},
+	})
+
+	// Create and populate "affinity" int field with negative, positive, zero and null values.
+	c.CreateField(t, "users", pilosa.IndexOptions{Keys: true, TrackExistence: true}, "affinity", pilosa.OptFieldTypeInt(-1000, 1000))
+	c.ImportIntKey(t, "users", "affinity", []test.IntKey{
+		{Val: 10, Key: "userA"},
+		{Val: -10, Key: "userB"},
+		{Val: 5, Key: "userC"},
+		{Val: -5, Key: "userD"},
+		{Val: 0, Key: "userE"},
 	})
 
 	tests := []struct {
@@ -6817,6 +6827,32 @@ func TestDistinctOnSetsKeyedIndex(t *testing.T) {
 				}
 			},
 		},
+		{
+			query: "Distinct(field=affinity)",
+			verifier: func(t *testing.T, resp pilosa.QueryResponse) {
+				if !reflect.DeepEqual(resp.Results[0].(pilosa.SignedRow).Pos.Columns(), []uint64{0, 5, 10}) {
+					t.Errorf("wrong positive records: %+v", resp.Results[0].(pilosa.SignedRow).Pos.Columns())
+				}
+				if !reflect.DeepEqual(resp.Results[0].(pilosa.SignedRow).Neg.Columns(), []uint64{5, 10}) {
+					t.Errorf("wrong negative records: %+v", resp.Results[0].(pilosa.SignedRow).Neg.Columns())
+				}
+			},
+		},
+		// handling this case properly will require changing the way
+		// that precomputed data is stored on Call objects. Currently
+		// if a Distinct is at all nested (e.g. within a Count) it
+		// gets handled by executor.handlePreCalls which assumes that
+		// only the positive values are worthwhile.
+		// {
+		// 	query: "Count(Distinct(field=affinity))",
+		// 	verifier: func(t *testing.T, resp pilosa.QueryResponse) {
+		// 		if resp.Results[0].(uint64) != 5 {
+		// 			t.Errorf("wrong number of values: %+v", resp.Results[0])
+		// 		}
+		// 	},
+		// },
+
+		// this case doesn't work due to the missing index issue
 		// {
 		// 	query: "Distinct(field=likes)",
 		// 	verifier: func(t *testing.T, resp pilosa.QueryResponse) {

@@ -1516,7 +1516,10 @@ func executeDistinctShardBSI(ctx context.Context, qcx *Qcx, idx *Index, fieldNam
 
 	existsBitmap, err := tx.OffsetRange(index, fieldName, view, shard, ShardWidth*shard, ShardWidth*0, ShardWidth*1)
 	if err != nil {
-		return result, err
+		if _, ok := errors.Cause(err).(ViewOrFragmentNotFound); ok {
+			return result, nil
+		}
+		return result, errors.Wrap(err, "getting exists bitmap")
 	}
 	if filterBitmap != nil {
 		existsBitmap = existsBitmap.Intersect(filterBitmap)
@@ -1527,6 +1530,7 @@ func executeDistinctShardBSI(ctx context.Context, qcx *Qcx, idx *Index, fieldNam
 
 	signBitmap, err := tx.OffsetRange(index, fieldName, view, shard, ShardWidth*shard, ShardWidth*1, ShardWidth*2)
 	if err != nil {
+		// TODO wtf... if there's any error getting the sign bitmap we just return an empty result and move on?
 		return result, nil
 	}
 
@@ -4242,12 +4246,20 @@ func (e *executor) executeCount(ctx context.Context, qcx *Qcx, index string, c *
 	if child.Name == "Precomputed" {
 		count := uint64(0)
 		for _, irow := range child.Precomputed {
-			if row, ok := irow.(*Row); !ok {
-				return 0, errors.Errorf("unexpected precomputed value type inside count: %+v", irow)
-			} else {
+			switch row := irow.(type) {
+			case *Row:
 				for _, seg := range row.segments {
 					count += seg.n
 				}
+			case SignedRow:
+				for _, seg := range row.Pos.segments {
+					count += seg.n
+				}
+				for _, seg := range row.Neg.segments {
+					count += seg.n
+				}
+			default:
+				return 0, errors.Errorf("unexpected precomputed value type inside count: %+v", row)
 			}
 		}
 		return count, nil

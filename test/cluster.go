@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"math"
 	"path"
 	"strconv"
 	"strings"
@@ -125,6 +126,31 @@ func (c *Cluster) ImportKeyKey(t testing.TB, index, field string, valAndRecKeys 
 	err := c.Nodes[0].API.Import(context.Background(), nil, importRequest)
 	if err != nil {
 		t.Fatalf("importing keykey data: %v", err)
+	}
+}
+
+// IntKey is a string key and a signed integer value.
+type IntKey struct {
+	Val int64
+	Key string
+}
+
+// ImportIntKey imports int data into an index which uses string keys.
+func (c *Cluster) ImportIntKey(t testing.TB, index, field string, pairs []IntKey) {
+	t.Helper()
+	importRequest := &pilosa.ImportValueRequest{
+		Index:      index,
+		Field:      field,
+		Shard:      math.MaxUint64,
+		ColumnKeys: make([]string, len(pairs)),
+		Values:     make([]int64, len(pairs)),
+	}
+	for i, pair := range pairs {
+		importRequest.Values[i] = pair.Val
+		importRequest.ColumnKeys[i] = pair.Key
+	}
+	if err := c.Nodes[0].API.ImportValue(context.Background(), nil, importRequest); err != nil {
+		t.Fatalf("importing IntKey data: %v", err)
 	}
 }
 
