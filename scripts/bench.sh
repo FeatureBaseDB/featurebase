@@ -20,15 +20,15 @@ SHA=$(git -C $PILOSA_SRC rev-parse HEAD)
 # Format current date.
 DATE=$(date '+%Y%m%d')
 
-WORKFLOW_PATH="${BASH_SOURCE%/*}/etc/gloat/gh.1d.yml"
+WORKFLOW_PATH="${BASH_SOURCE%/*}/etc/gloat/gh.1m.yml"
 WORKFLOW_NAME="$(gloat workflow name $WORKFLOW_PATH)"
 TITLE="RBF vs Roaring, $WORKFLOW_NAME, $DATE ($SHA)"
 
 # Execute RBF/Roaring benchmark.
-RBF_PATH=gloat/data/1d/rbf/${DATE}.tar.gz
+RBF_PATH=gloat/data/1m/rbf/${DATE}.tar.gz
 TXSRC=rbf gloat run -v -o $RBF_PATH $WORKFLOW_PATH
 
-ROARING_PATH=gloat/data/1d/roaring/${DATE}.tar.gz
+ROARING_PATH=gloat/data/1m/roaring/${DATE}.tar.gz
 TXSRC=roaring gloat run -v -o $ROARING_PATH $WORKFLOW_PATH
 
 # Generate graph from results.
