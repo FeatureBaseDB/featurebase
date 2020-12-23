@@ -5517,7 +5517,7 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 			t.Fatal(err)
 		} else if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(1, v=100)`}); err != nil {
 			t.Fatal(err)
-		} else if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(1500000, v=100)`}); err != nil {
+		} else if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: fmt.Sprintf(`Set(%d, v=100)`, ShardWidth+10)}); err != nil { // Workaround distinct bug where v must be set in every shard
 			t.Fatal(err)
 		}
 
