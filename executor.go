@@ -563,6 +563,7 @@ func (e *executor) execute(ctx context.Context, qcx *Qcx, index string, q *pql.Q
 		} else {
 			v, err = e.executeCall(ctx, qcx, index, call, shards, opt)
 		}
+
 		if err != nil {
 			return nil, err
 		}
@@ -1080,8 +1081,9 @@ func (e *executor) executeSum(ctx context.Context, qcx *Qcx, index string, c *pq
 	return other, nil
 }
 
-// executeDistinct executes a Distinct call on a field.
-func (e *executor) executeDistinct(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *execOptions) (SignedRow, error) {
+// executeDistinct executes a Distinct call on a field. It returns a
+// SignedRow for int fields and a *Row for set/mutex/time fields.
+func (e *executor) executeDistinct(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *execOptions) (interface{}, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeDistinct")
 	defer span.Finish()
 
@@ -1099,21 +1101,31 @@ func (e *executor) executeDistinct(ctx context.Context, qcx *Qcx, index string, 
 
 	// Merge returned results at coordinating node.
 	reduceFn := func(ctx context.Context, prev, v interface{}) interface{} {
-		other, _ := prev.(SignedRow)
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		return other.union(v.(SignedRow))
+		switch other := prev.(type) {
+		case SignedRow:
+			return other.union(v.(SignedRow))
+		case *Row:
+			return other.Union(v.(*Row))
+		case nil:
+			return v
+		default:
+			return errors.Errorf("unexpected return type from executeDistinctShard: %+v %T", other, other)
+		}
 	}
 
 	result, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
 	if err != nil {
-		return SignedRow{}, err
+		return nil, err
 	}
-	other, _ := result.(SignedRow)
-	other.field = field
 
-	return other, nil
+	if other, ok := result.(SignedRow); ok {
+		other.field = field
+	}
+
+	return result, nil
 }
 
 // executeMin executes a Min() call.
@@ -1302,7 +1314,7 @@ func (e *executor) executeBitmapCall(ctx context.Context, qcx *Qcx, index string
 	reduceFn := func(ctx context.Context, prev, v interface{}) interface{} {
 		other, _ := prev.(*Row)
 		if other == nil {
-
+			// TODO... what's going on on the following line
 			other = NewRow() // bug! this row ends up containing Badger Txn data that should be accessed outside the Txn.
 		}
 		if err := ctx.Err(); err != nil {
@@ -1398,14 +1410,20 @@ func (e *executor) executeBitmapCallShard(ctx context.Context, qcx *Qcx, index s
 
 // executeDistinctShard executes a Distinct call on a single shard, yielding
 // a SignedRow of the values found.
-func (e *executor) executeDistinctShard(ctx context.Context, qcx *Qcx, index string, fieldName string, c *pql.Call, shard uint64) (result SignedRow, err error) {
+func (e *executor) executeDistinctShard(ctx context.Context, qcx *Qcx, index string, fieldName string, c *pql.Call, shard uint64) (result interface{}, err error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeDistinctShard")
 	defer span.Finish()
 
 	idx := e.Holder.Index(index)
 	field := e.Holder.Field(index, fieldName)
 	if field == nil {
-		return SignedRow{}, ErrFieldNotFound
+		return nil, ErrFieldNotFound
+	}
+	bsig := field.bsiGroup(fieldName)
+	if bsig == nil {
+		result = new(Row)
+	} else {
+		result = SignedRow{}
 	}
 
 	var filter *Row
@@ -1427,28 +1445,27 @@ func (e *executor) executeDistinctShard(ctx context.Context, qcx *Qcx, index str
 		// can go ahead and save time by returning the empty results,
 		// because the filter excluded everything.
 		if filterBitmap == nil || !filterBitmap.Any() {
-			return SignedRow{}, nil
+			return result, nil
 		}
 	}
 
-	bsig := field.bsiGroup(fieldName)
 	if bsig == nil {
 		return executeDistinctShardSet(ctx, qcx, idx, fieldName, shard, filterBitmap)
 	}
 	return executeDistinctShardBSI(ctx, qcx, idx, fieldName, shard, bsig, filterBitmap)
 }
 
-func executeDistinctShardSet(ctx context.Context, qcx *Qcx, idx *Index, fieldName string, shard uint64, filterBitmap *roaring.Bitmap) (result SignedRow, err0 error) {
+func executeDistinctShardSet(ctx context.Context, qcx *Qcx, idx *Index, fieldName string, shard uint64, filterBitmap *roaring.Bitmap) (result *Row, err0 error) {
 	index := idx.Name()
 	tx, finisher, err := qcx.GetTx(Txo{Write: !writable, Index: idx, Shard: shard})
 	if err != nil {
-		return SignedRow{}, err
+		return nil, err
 	}
 	defer finisher(&err0)
 
 	fragData, _, err := tx.ContainerIterator(index, fieldName, "standard", shard, 0)
 	if err != nil {
-		return SignedRow{}, errors.Wrap(err, "getting fragment data")
+		return nil, errors.Wrap(err, "getting fragment data")
 	}
 	defer fragData.Close()
 	// We can't grab the containers "for each row" from the set-type field,
@@ -1486,20 +1503,22 @@ func executeDistinctShardSet(ctx context.Context, qcx *Qcx, idx *Index, fieldNam
 			if roaring.IntersectionAny(c, filter[k%(1<<shardVsContainerExponent)]) {
 				_, err = rows.Add(row)
 				if err != nil {
-					return SignedRow{}, errors.Wrap(err, "collecting results")
+					return nil, errors.Wrap(err, "collecting results")
 				}
 				seenThisRow = true
 			}
 		} else if c.N() != 0 {
 			_, err = rows.Add(row)
 			if err != nil {
-				return SignedRow{}, errors.Wrap(err, "recording results")
+				return nil, errors.Wrap(err, "recording results")
 			}
 			seenThisRow = true
 		}
 	}
-
-	return SignedRow{Pos: NewRowFromBitmap(rows)}, nil
+	result = NewRowFromBitmap(rows)
+	result.Index = idx.Name()
+	result.Field = fieldName
+	return result, nil
 }
 
 func executeDistinctShardBSI(ctx context.Context, qcx *Qcx, idx *Index, fieldName string, shard uint64, bsig *bsiGroup, filterBitmap *roaring.Bitmap) (result SignedRow, err0 error) {
@@ -1612,10 +1631,14 @@ func executeDistinctShardBSI(ctx context.Context, qcx *Qcx, idx *Index, fieldNam
 			}
 		}
 	}
-	return SignedRow{
+
+	result = SignedRow{
 		Neg: NewRowFromBitmap(negBitmap),
 		Pos: NewRowFromBitmap(posBitmap),
-	}, nil
+	}
+	result.Neg.Index, result.Pos.Index = idx.Name(), idx.Name()
+	result.Neg.Field, result.Pos.Field = fieldName, fieldName
+	return result, nil
 }
 
 // executeSumCountShard calculates the sum and count for bsiGroups on a shard.
@@ -6000,13 +6023,81 @@ func (e *executor) translateResults(ctx context.Context, index string, idx *Inde
 	return nil
 }
 
+type translationStrategy int
+
+const (
+	byCurrentIndex translationStrategy = iota + 1
+	byRowField
+	byRowFieldForeignIndex
+	byRowIndex
+	noTranslation
+)
+
+// howToTranslate determines how a *Row object's bits should be
+// translated to keys (if at all). There are several different options
+// detailed by the various const values of translationStrategy. In
+// order to do this it has to figure out the row's index and field
+// which it also returns as the caller may need them to actually
+// execute the translation or do whatever else it's doing with the
+// translationStrategy information.
+func (e *executor) howToTranslate(idx *Index, row *Row) (rowIdx *Index, rowField *Field, strat translationStrategy, err error) {
+	// First get the index and field the row specifies (if any).
+	rowIdx = idx
+	if row.Index != "" && row.Index != idx.Name() {
+		rowIdx = e.Holder.Index(row.Index)
+		if rowIdx == nil {
+			return nil, nil, 0, errors.Errorf("got a row with unknown index: %s", row.Index)
+		}
+	}
+	if row.Field != "" {
+		rowField = rowIdx.Field(row.Field)
+		if rowField == nil {
+			return nil, nil, 0, errors.Errorf("got a row with unknown index/field %s/%s", idx.Name(), row.Field)
+		}
+	}
+
+	// Handle the case where the Row has specified a field
+	if rowField != nil {
+		// Handle case where field has a foreign index.
+		if rowField.ForeignIndex() != "" {
+			fidx := e.Holder.Index(rowField.ForeignIndex())
+			if fidx == nil {
+				return nil, nil, 0, errors.Errorf("foreign index %s not found for field %s in index %s", rowField.ForeignIndex(), rowField.Name(), rowField.Index())
+			}
+			if fidx.Keys() {
+				return rowIdx, rowField, byRowFieldForeignIndex, nil
+			}
+		} else if rowField.Keys() {
+			return rowIdx, rowField, byRowField, nil
+		}
+		return rowIdx, rowField, noTranslation, nil
+	}
+
+	// In this case, the row has specified an index, but not a field, so we translate according to that index.
+	if rowIdx != idx && rowIdx.Keys() {
+		return rowIdx, rowField, byRowIndex, nil
+	}
+
+	// Handle normal case (row represents a set of records in
+	// the top level index, Row has not specifed a different index
+	// or field).
+	if rowIdx == idx && idx.Keys() && rowField == nil {
+		return rowIdx, rowField, byCurrentIndex, nil
+	}
+	return rowIdx, rowField, noTranslation, nil
+}
+
 func (e *executor) collectResultIDs(index string, idx *Index, call *pql.Call, result interface{}, idSet map[uint64]struct{}) error {
 	switch result := result.(type) {
 	case *Row:
-		if !idx.Keys() {
+		_, _, strategy, err := e.howToTranslate(idx, result)
+		if err != nil {
+			return errors.Wrap(err, "determining how to translate")
+		}
+		// Only collect result IDs if they are in the current index.
+		if strategy != byCurrentIndex {
 			return nil
 		}
-
 		for _, segment := range result.Segments() {
 			for _, col := range segment.Columns() {
 				idSet[col] = struct{}{}
@@ -6035,10 +6126,14 @@ func (e *executor) preTranslateMatrixSet(mat ExtractedIDMatrix, fieldIdx uint, f
 }
 
 func (e *executor) translateResult(ctx context.Context, index string, idx *Index, call *pql.Call, result interface{}, idSet map[uint64]string) (_ interface{}, err error) {
-
 	switch result := result.(type) {
 	case *Row:
-		if idx.Keys() {
+		rowIdx, rowField, strategy, err := e.howToTranslate(idx, result)
+		if err != nil {
+			return nil, errors.Wrap(err, "determining translation strategy")
+		}
+		switch strategy {
+		case byCurrentIndex:
 			other := &Row{Attrs: result.Attrs}
 			for _, segment := range result.Segments() {
 				for _, col := range segment.Columns() {
@@ -6046,11 +6141,40 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 				}
 			}
 			return other, nil
-		}
+		case byRowField:
+			keys, err := e.Cluster.translateFieldListIDs(rowField, result.Columns())
+			if err != nil {
+				return nil, errors.Wrap(err, "translating Row to field keys")
+			}
+			result.Keys = keys
+		case byRowFieldForeignIndex:
+			idx = e.Holder.Index(rowField.ForeignIndex())
+			if idx == nil {
+				return nil, errors.Errorf("foreign index %s not found for field %s in index %s", rowField.ForeignIndex(), rowField.Name(), rowField.Index())
+			}
+			for _, segment := range result.Segments() {
+				keys, err := e.Cluster.translateIndexIDs(context.Background(), rowField.ForeignIndex(), segment.Columns())
+				if err != nil {
+					return nil, errors.Wrap(err, "translating index ids")
+				}
+				result.Keys = append(result.Keys, keys...)
+			}
 
-	// TODO: instead of supporting SignedRow here, we may be able to
-	// make the return type for an int field with a ForeignIndex be
-	// a *Row instead (because it should always be positive).
+		case byRowIndex:
+			for _, segment := range result.Segments() {
+				keys, err := e.Cluster.translateIndexIDs(context.Background(), rowIdx.Name(), segment.Columns())
+				if err != nil {
+					return nil, errors.Wrap(err, "translating index ids")
+				}
+				result.Keys = append(result.Keys, keys...)
+			}
+			return result, nil
+
+		case noTranslation:
+			return result, nil
+		default:
+			return nil, errors.Errorf("unknown translation strategy %d", strategy)
+		}
 	case SignedRow:
 		sr, err := func() (*SignedRow, error) {
 			fieldName := callArgString(call, "field")

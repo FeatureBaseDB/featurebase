@@ -7,6 +7,8 @@ message Row {
 	repeated string Keys = 3;
 	repeated Attr Attrs = 2;
 	bytes Roaring = 4;
+	string Index = 5;
+	string Field = 6;
 }
 
 message RowMatrix {

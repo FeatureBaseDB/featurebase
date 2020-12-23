@@ -6814,8 +6814,8 @@ func TestDistinctOnSetsKeyedIndex(t *testing.T) {
 		{
 			query: "Distinct(field=likenums)",
 			verifier: func(t *testing.T, resp pilosa.QueryResponse) {
-				if !reflect.DeepEqual(resp.Results[0].(pilosa.SignedRow).Pos.Columns(), []uint64{1, 2, 3, 4, 5, 6, 7}) {
-					t.Errorf("wrong values: %+v", resp.Results[0].(pilosa.SignedRow).Pos.Columns())
+				if !reflect.DeepEqual(resp.Results[0].(*pilosa.Row).Columns(), []uint64{1, 2, 3, 4, 5, 6, 7}) {
+					t.Errorf("wrong values: %+v %+v", resp.Results[0].(*pilosa.Row).Columns(), resp.Results[0].(*pilosa.Row))
 				}
 			},
 		},
@@ -6838,6 +6838,26 @@ func TestDistinctOnSetsKeyedIndex(t *testing.T) {
 				}
 			},
 		},
+		{
+			query: "Distinct(Row(affinity>=0), field=affinity)",
+			verifier: func(t *testing.T, resp pilosa.QueryResponse) {
+				if !reflect.DeepEqual(resp.Results[0].(pilosa.SignedRow).Pos.Columns(), []uint64{0, 5, 10}) {
+					t.Errorf("wrong positive records: %+v", resp.Results[0].(pilosa.SignedRow).Pos.Columns())
+				}
+				if !reflect.DeepEqual(resp.Results[0].(pilosa.SignedRow).Neg.Columns(), []uint64{}) {
+					t.Errorf("wrong negative records: %+v", resp.Results[0].(pilosa.SignedRow).Neg.Columns())
+				}
+			},
+		},
+		{
+			query: "Count(Distinct(Row(affinity>=0), field=affinity))",
+			verifier: func(t *testing.T, resp pilosa.QueryResponse) {
+				if resp.Results[0].(uint64) != 3 {
+					t.Errorf("wrong number of values: %+v", resp.Results[0])
+				}
+			},
+		},
+
 		// handling this case properly will require changing the way
 		// that precomputed data is stored on Call objects. Currently
 		// if a Distinct is at all nested (e.g. within a Count) it
@@ -6851,22 +6871,19 @@ func TestDistinctOnSetsKeyedIndex(t *testing.T) {
 		// 		}
 		// 	},
 		// },
-
-		// this case doesn't work due to the missing index issue
-		// {
-		// 	query: "Distinct(field=likes)",
-		// 	verifier: func(t *testing.T, resp pilosa.QueryResponse) {
-		// 		if !reflect.DeepEqual(resp.Results[0].(*pilosa.Row).Keys, []string{"molecula", "pilosa", "pangolin", "zebra", "toucan", "dog", "icecream"}) {
-		// 			t.Errorf("wrong values: %+v", resp.Results[0])
-		// 		}
-		// 	},
-		// },
+		{
+			query: "Distinct(field=likes)",
+			verifier: func(t *testing.T, resp pilosa.QueryResponse) {
+				if !reflect.DeepEqual(resp.Results[0].(*pilosa.Row).Keys, []string{"molecula", "pilosa", "pangolin", "zebra", "toucan", "dog", "icecream"}) {
+					t.Errorf("wrong values: %+v", resp.Results[0])
+				}
+			},
+		},
 	}
 
 	for i, tst := range tests {
 		t.Run(fmt.Sprintf("%d-%s", i, tst.query), func(t *testing.T) {
 			resp := c.Query(t, "users", tst.query)
-			fmt.Println(resp.Results[0])
 			tst.verifier(t, resp)
 		})
 	}
