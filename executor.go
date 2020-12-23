@@ -361,7 +361,7 @@ func (e *executor) readColumnAttrSets(index *Index, ids []uint64) ([]*ColumnAttr
 }
 
 // handlePreCalls traverses the call tree looking for calls that need
-// precomputed values (e.g. Distinct, UnionRows, ConstRow...)
+// precomputed values (e.g. Distinct, UnionRows, ConstRow...).
 func (e *executor) handlePreCalls(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *execOptions) error {
 	if c.Name == "Precomputed" {
 		idx := c.Args["valueidx"].(int64)
@@ -4264,8 +4264,8 @@ func (e *executor) executeCount(ctx context.Context, qcx *Qcx, index string, c *
 
 	child := c.Children[0]
 
-	// if the child is precomputed, we'll bypass mapreduce, ignore
-	// shards, and just count the number of bits
+	// If the child is precomputed, we'll bypass mapreduce, ignore
+	// shards, and just count the number of bits.
 	if child.Name == "Precomputed" {
 		count := uint64(0)
 		for _, irow := range child.Precomputed {
@@ -6056,7 +6056,7 @@ func (e *executor) howToTranslate(idx *Index, row *Row) (rowIdx *Index, rowField
 		}
 	}
 
-	// Handle the case where the Row has specified a field
+	// Handle the case where the Row has specified a field.
 	if rowField != nil {
 		// Handle case where field has a foreign index.
 		if rowField.ForeignIndex() != "" {
@@ -6073,7 +6073,8 @@ func (e *executor) howToTranslate(idx *Index, row *Row) (rowIdx *Index, rowField
 		return rowIdx, rowField, noTranslation, nil
 	}
 
-	// In this case, the row has specified an index, but not a field, so we translate according to that index.
+	// In this case, the row has specified an index, but not a field,
+	// so we translate according to that index.
 	if rowIdx != idx && rowIdx.Keys() {
 		return rowIdx, rowField, byRowIndex, nil
 	}

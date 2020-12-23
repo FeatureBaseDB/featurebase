@@ -6743,7 +6743,17 @@ func TestMissingKeyRegression(t *testing.T) {
 	}
 }
 
-func TestDistinctOnSetsKeyedIndex(t *testing.T) {
+// TestVariousQueries has originally been written to test out a
+// variety of scenarios with Distinct, but it's structure is more
+// general purpose. My vision is to eventually have any test which
+// needs to test a single query be in here, and have a robust enough
+// test data set loaded at the start which covers what we want to
+// test.
+//
+// I'd also like to have it automatically run a matrix of scenarios
+// (single and multi-node clusters, different endpoints for the
+// queries (HTTP, GRPC, Postgres), etc.).
+func TestVariousQueries(t *testing.T) {
 	c := test.MustRunCluster(t, 3)
 	defer c.Close()
 
@@ -6858,11 +6868,12 @@ func TestDistinctOnSetsKeyedIndex(t *testing.T) {
 			},
 		},
 
-		// handling this case properly will require changing the way
+		// Handling this case properly will require changing the way
 		// that precomputed data is stored on Call objects. Currently
 		// if a Distinct is at all nested (e.g. within a Count) it
 		// gets handled by executor.handlePreCalls which assumes that
 		// only the positive values are worthwhile.
+		//
 		// {
 		// 	query: "Count(Distinct(field=affinity))",
 		// 	verifier: func(t *testing.T, resp pilosa.QueryResponse) {
