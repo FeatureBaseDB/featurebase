@@ -5434,9 +5434,9 @@ func TestExecutor_ForeignIndex(t *testing.T) {
 	if !sameStringSlice(distinct.Pos.Keys, []string{"one", "two", "twenty-one"}) {
 		t.Fatalf("unexpected keys: %v", distinct.Pos.Keys)
 	}
-	distinct = c.Query(t, "child", `Distinct(index="child", field="parent_set_id")`).Results[0].(pilosa.SignedRow)
-	if !sameStringSlice(distinct.Pos.Keys, []string{"one", "two", "twenty-one"}) {
-		t.Fatalf("unexpected keys: %v", distinct.Pos.Keys)
+	row := c.Query(t, "child", `Distinct(index="child", field="parent_set_id")`).Results[0].(*pilosa.Row)
+	if !sameStringSlice(row.Keys, []string{"one", "two", "twenty-one"}) {
+		t.Fatalf("unexpected keys: %v", row.Keys)
 	}
 
 	eq := c.Query(t, "child", `Row(parent_id=="one")`).Results[0].(*pilosa.Row)
@@ -6512,7 +6512,6 @@ func TestExecutor_BareDistinct(t *testing.T) {
 	c.CreateField(t, "i", pilosa.IndexOptions{}, "ints",
 		pilosa.OptFieldTypeInt(0, math.MaxInt64),
 	)
-	c.CreateField(t, "i", pilosa.IndexOptions{}, "set")
 	c.CreateField(t, "i", pilosa.IndexOptions{}, "filter")
 
 	// Populate integer data.
@@ -6521,17 +6520,13 @@ func TestExecutor_BareDistinct(t *testing.T) {
 			Set(%d, ints=2)
 		`, ShardWidth))
 	c.Query(t, "i", fmt.Sprintf(`
-		         Set(0, set=1)
-			 Set(1, set=2)
-			 Set(%d, set=2)
 			 Set(0, filter=1)
 			 Set(%d, filter=1)
-	        `, 65537, 65537))
+	        `, 65537))
 
 	for _, pql := range []string{
 		`Distinct(field="ints")`,
 		`Distinct(index="i", field="ints")`,
-		`Distinct(Row(filter=1), field="set")`,
 	} {
 		exp := []uint64{1, 2}
 		res := c.Query(t, "i", pql).Results[0].(pilosa.SignedRow)
@@ -6886,6 +6881,14 @@ func TestVariousQueries(t *testing.T) {
 			query: "Distinct(field=likes)",
 			verifier: func(t *testing.T, resp pilosa.QueryResponse) {
 				if !reflect.DeepEqual(resp.Results[0].(*pilosa.Row).Keys, []string{"molecula", "pilosa", "pangolin", "zebra", "toucan", "dog", "icecream"}) {
+					t.Errorf("wrong values: %+v", resp.Results[0])
+				}
+			},
+		},
+		{
+			query: "Distinct(Row(affinity<0), field=likes)",
+			verifier: func(t *testing.T, resp pilosa.QueryResponse) {
+				if !reflect.DeepEqual(resp.Results[0].(*pilosa.Row).Keys, []string{"pilosa", "zebra", "icecream"}) {
 					t.Errorf("wrong values: %+v", resp.Results[0])
 				}
 			},
