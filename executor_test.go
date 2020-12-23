@@ -5517,6 +5517,8 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 			t.Fatal(err)
 		} else if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(1, v=100)`}); err != nil {
 			t.Fatal(err)
+		} else if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(1500000, v=100)`}); err != nil {
+			t.Fatal(err)
 		}
 
 		t.Run("No Field List Arguments", func(t *testing.T) {
@@ -5578,6 +5580,39 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 			}
 
 			results := c.Query(t, "i", `GroupBy(Rows(general), Rows(sub), aggregate=Sum(field=v))`).Results[0].([]pilosa.GroupCount)
+			test.CheckGroupBy(t, expected, results)
+		})
+
+		t.Run("AggregateCountDistinct", func(t *testing.T) {
+			expected := []pilosa.GroupCount{
+				{Group: []pilosa.FieldRow{{Field: "general", RowID: 10}, {Field: "sub", RowID: 100}}, Count: 3, Sum: 2},
+				{Group: []pilosa.FieldRow{{Field: "general", RowID: 10}, {Field: "sub", RowID: 110}}, Count: 1, Sum: 1},
+				{Group: []pilosa.FieldRow{{Field: "general", RowID: 11}, {Field: "sub", RowID: 110}}, Count: 1, Sum: 0},
+				{Group: []pilosa.FieldRow{{Field: "general", RowID: 12}, {Field: "sub", RowID: 110}}, Count: 1, Sum: 0},
+			}
+
+			results := c.Query(t, "i", `GroupBy(Rows(general), Rows(sub), aggregate=Count(Distinct(field=v)))`).Results[0].([]pilosa.GroupCount)
+			test.CheckGroupBy(t, expected, results)
+		})
+
+		t.Run("AggregateCountDistinctFilter", func(t *testing.T) {
+			expected := []pilosa.GroupCount{
+				{Group: []pilosa.FieldRow{{Field: "general", RowID: 10}, {Field: "sub", RowID: 100}}, Count: 1, Sum: 1},
+			}
+
+			results := c.Query(t, "i", `GroupBy(Rows(general), Rows(sub), filter=Row(v > 10), aggregate=Count(Distinct(field=v)))`).Results[0].([]pilosa.GroupCount)
+			test.CheckGroupBy(t, expected, results)
+		})
+
+		t.Run("AggregateCountDistinctFilterDistinct", func(t *testing.T) {
+			expected := []pilosa.GroupCount{
+				{Group: []pilosa.FieldRow{{Field: "general", RowID: 10}, {Field: "sub", RowID: 100}}, Count: 3, Sum: 1},
+				{Group: []pilosa.FieldRow{{Field: "general", RowID: 10}, {Field: "sub", RowID: 110}}, Count: 1, Sum: 0},
+				{Group: []pilosa.FieldRow{{Field: "general", RowID: 11}, {Field: "sub", RowID: 110}}, Count: 1, Sum: 0},
+				{Group: []pilosa.FieldRow{{Field: "general", RowID: 12}, {Field: "sub", RowID: 110}}, Count: 1, Sum: 0},
+			}
+
+			results := c.Query(t, "i", `GroupBy(Rows(general), Rows(sub), aggregate=Count(Distinct(Row(v > 10), field=v)))`).Results[0].([]pilosa.GroupCount)
 			test.CheckGroupBy(t, expected, results)
 		})
 

@@ -2714,6 +2714,14 @@ func (e *executor) executeGroupBy(ctx context.Context, qcx *Qcx, index string, c
 			for _, fr := range gc.Group {
 				intersectRows = append(intersectRows, &pql.Call{Name: "Row", Args: map[string]interface{}{fr.Field: fr.RowID}})
 			}
+			// apply any filter, if present
+			if filter != nil {
+				intersectRows = append(intersectRows, filter)
+			}
+			// also intersect with any children of Distinct
+			if len(aggregate.Children[0].Children) > 0 {
+				intersectRows = append(intersectRows, aggregate.Children[0].Children[0])
+			}
 
 			countDistinctIntersect := &pql.Call{
 				Name: "Count",
@@ -2732,16 +2740,11 @@ func (e *executor) executeGroupBy(ctx context.Context, qcx *Qcx, index string, c
 				},
 			}
 
-			err = e.handlePreCallChildren(ctx, qcx, index, countDistinctIntersect, shards, opt)
+			aggregateCount, err := e.execute(ctx, qcx, index, &pql.Query{Calls: []*pql.Call{countDistinctIntersect}}, []uint64{}, opt)
 			if err != nil {
 				return nil, err
 			}
-
-			aggregateCount, err := e.executeCount(ctx, qcx, index, countDistinctIntersect, shards, opt)
-			if err != nil {
-				return nil, err
-			}
-			results[n].Sum = int64(aggregateCount)
+			results[n].Sum = int64(aggregateCount[0].(uint64))
 		}
 	}
 	return results, nil
