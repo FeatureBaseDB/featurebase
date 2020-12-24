@@ -70,6 +70,8 @@ func (r *Row) Clone() (clone *Row) {
 	clone = &Row{
 		Keys:  keyClone,
 		Attrs: attrClone,
+		Index: r.Index,
+		Field: r.Field,
 	}
 
 	for _, seg := range r.segments {
@@ -299,6 +301,11 @@ func (r *Row) Union(others ...*Row) *Row {
 	toProcess := make([]*rowSegment, 0, len(others)+1)
 	var output []rowSegment
 	for _, other := range others {
+		if paranoia { // nolint:staticcheck
+			// TODO I think there is a good check we can do here, but
+			// it's nontrivial to check whether two rows are
+			// compatible because of foreign indexes and such.
+		}
 		if len(other.segments) > 0 {
 			segments = append(segments, other.segments)
 		}

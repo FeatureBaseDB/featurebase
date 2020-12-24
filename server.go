@@ -657,7 +657,6 @@ func (s *Server) monitorResetTranslationSync() {
 		case <-s.closing:
 			return
 		case <-s.resetTranslationSyncCh:
-			s.logger.Printf("holder translation sync beginning")
 			s.wg.Add(1)
 			go func() {
 				// Obtaining this lock ensures that there is only

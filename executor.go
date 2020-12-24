@@ -1421,7 +1421,10 @@ func (e *executor) executeDistinctShard(ctx context.Context, qcx *Qcx, index str
 	}
 	bsig := field.bsiGroup(fieldName)
 	if bsig == nil {
-		result = new(Row)
+		result = &Row{
+			Index: index,
+			Field: fieldName,
+		}
 	} else {
 		result = SignedRow{}
 	}
@@ -5188,7 +5191,10 @@ func makeEmbeddedDataForShards(allRows []*Row, shards []uint64) []*Row {
 		}
 		segments := row.segments
 		segmentIndex := 0
-		newRows[i] = &Row{}
+		newRows[i] = &Row{
+			Index: row.Index,
+			Field: row.Field,
+		}
 		for _, shard := range shards {
 			for segmentIndex < len(segments) && segments[segmentIndex].shard < shard {
 				segmentIndex++

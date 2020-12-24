@@ -6844,7 +6844,7 @@ func TestVariousQueries(t *testing.T) {
 			},
 		},
 		{
-			query: "Distinct(Row(affinity>=0), field=affinity)",
+			query: "Distinct(Row(affinity>=0),field=affinity)",
 			verifier: func(t *testing.T, resp pilosa.QueryResponse) {
 				if !reflect.DeepEqual(resp.Results[0].(pilosa.SignedRow).Pos.Columns(), []uint64{0, 5, 10}) {
 					t.Errorf("wrong positive records: %+v", resp.Results[0].(pilosa.SignedRow).Pos.Columns())
@@ -6855,7 +6855,7 @@ func TestVariousQueries(t *testing.T) {
 			},
 		},
 		{
-			query: "Count(Distinct(Row(affinity>=0), field=affinity))",
+			query: "Count(Distinct(Row(affinity>=0),field=affinity))",
 			verifier: func(t *testing.T, resp pilosa.QueryResponse) {
 				if resp.Results[0].(uint64) != 3 {
 					t.Errorf("wrong number of values: %+v", resp.Results[0])
@@ -6878,6 +6878,30 @@ func TestVariousQueries(t *testing.T) {
 		// 	},
 		// },
 		{
+			query: "Distinct(Row(affinity<0),field=likes)",
+			verifier: func(t *testing.T, resp pilosa.QueryResponse) {
+				if !reflect.DeepEqual(resp.Results[0].(*pilosa.Row).Keys, []string{"pilosa", "zebra", "icecream"}) {
+					t.Errorf("wrong values: %+v", resp.Results[0])
+				}
+			},
+		},
+		{
+			query: "Distinct(Row(affinity>0),field=likes)",
+			verifier: func(t *testing.T, resp pilosa.QueryResponse) {
+				if !reflect.DeepEqual(resp.Results[0].(*pilosa.Row).Keys, []string{"molecula", "pangolin", "icecream"}) {
+					t.Errorf("wrong values: %+v", resp.Results[0])
+				}
+			},
+		},
+		{
+			query: "Distinct(Row(likenums=1),field=likes)",
+			verifier: func(t *testing.T, resp pilosa.QueryResponse) {
+				if !reflect.DeepEqual(resp.Results[0].(*pilosa.Row).Keys, []string{"molecula", "icecream"}) {
+					t.Errorf("wrong values: %+v", resp.Results[0])
+				}
+			},
+		},
+		{
 			query: "Distinct(field=likes)",
 			verifier: func(t *testing.T, resp pilosa.QueryResponse) {
 				if !reflect.DeepEqual(resp.Results[0].(*pilosa.Row).Keys, []string{"molecula", "pilosa", "pangolin", "zebra", "toucan", "dog", "icecream"}) {
@@ -6886,9 +6910,17 @@ func TestVariousQueries(t *testing.T) {
 			},
 		},
 		{
-			query: "Distinct(Row(affinity<0), field=likes)",
+			query: "Distinct(All(),field=likes)",
 			verifier: func(t *testing.T, resp pilosa.QueryResponse) {
-				if !reflect.DeepEqual(resp.Results[0].(*pilosa.Row).Keys, []string{"pilosa", "zebra", "icecream"}) {
+				if !reflect.DeepEqual(resp.Results[0].(*pilosa.Row).Keys, []string{"molecula", "pilosa", "pangolin", "zebra", "toucan", "dog", "icecream"}) {
+					t.Errorf("wrong values: %+v", resp.Results[0])
+				}
+			},
+		},
+		{
+			query: "Distinct(field=likes )",
+			verifier: func(t *testing.T, resp pilosa.QueryResponse) {
+				if !reflect.DeepEqual(resp.Results[0].(*pilosa.Row).Keys, []string{"molecula", "pilosa", "pangolin", "zebra", "toucan", "dog", "icecream"}) {
 					t.Errorf("wrong values: %+v", resp.Results[0])
 				}
 			},
