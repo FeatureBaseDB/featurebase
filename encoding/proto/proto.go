@@ -1453,6 +1453,8 @@ func (s Serializer) decodeRow(pr *internal.Row) *pilosa.Row {
 	}
 	r.Attrs = s.decodeAttrs(pr.Attrs)
 	r.Keys = pr.Keys
+	r.Index = pr.Index
+	r.Field = pr.Field
 
 	return r
 }
@@ -1700,6 +1702,8 @@ func (s Serializer) encodeRow(r *pilosa.Row) *internal.Row {
 	ir := &internal.Row{
 		Keys:  r.Keys,
 		Attrs: s.encodeAttrs(r.Attrs),
+		Index: r.Index,
+		Field: r.Field,
 	}
 	if s.RoaringRows {
 		ir.Roaring = r.Roaring()

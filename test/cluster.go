@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"math"
 	"path"
 	"strconv"
 	"strings"
@@ -25,6 +26,8 @@ import (
 	"time"
 
 	"github.com/pilosa/pilosa/v2"
+	"github.com/pilosa/pilosa/v2/api/client"
+	"github.com/pilosa/pilosa/v2/proto"
 	"github.com/pilosa/pilosa/v2/server"
 	"github.com/pkg/errors"
 )
@@ -50,6 +53,39 @@ func (c *Cluster) Query(t testing.TB, index, query string) pilosa.QueryResponse 
 	}
 
 	return c.Nodes[0].QueryAPI(t, &pilosa.QueryRequest{Index: index, Query: query})
+}
+
+// QueryHTTP executes a PQL query through the HTTP endpoint. It fails
+// the test for explicit errors, but returns an error which has the
+// response body if the HTTP call returns a non-OK status.
+func (c *Cluster) QueryHTTP(t testing.TB, index, query string) (string, error) {
+	t.Helper()
+	if len(c.Nodes) == 0 {
+		t.Fatal("must have at least one node in cluster to query")
+	}
+	
+	return c.Nodes[0].Query(t, index, "", query)
+}
+
+// QueryGRPC executes a PQL query through the GRPC endpoint. It fails the
+// test if there is an error.
+func (c *Cluster) QueryGRPC(t testing.TB, index, query string) *proto.TableResponse {
+	t.Helper()
+	if len(c.Nodes) == 0 {
+		t.Fatal("must have at least one node in cluster to query")
+	}
+
+	grpcClient, err := client.NewGRPCClient([]string{fmt.Sprintf("%s:%d", c.Nodes[0].Server.GRPCURI().Host, c.Nodes[0].Server.GRPCURI().Port)}, nil)
+	if err != nil {
+		t.Fatalf("getting GRPC client: %v", err)
+	}
+
+	tableResp, err := grpcClient.QueryUnary(context.Background(), index, query)
+	if err != nil {
+		t.Fatalf("querying unary: %v", err)
+	}
+
+	return tableResp
 }
 
 func (c *Cluster) GetNode(n int) *Command {
@@ -105,6 +141,77 @@ func (c *Cluster) ImportBits(t testing.TB, index, field string, rowcols [][2]uin
 				}
 			}
 		}
+	}
+}
+
+// ImportKeyKey imports data into an index where both the index and
+// the field are using string keys.
+func (c *Cluster) ImportKeyKey(t testing.TB, index, field string, valAndRecKeys [][2]string) {
+	t.Helper()
+	importRequest := &pilosa.ImportRequest{
+		Index:      index,
+		Field:      field,
+		RowKeys:    make([]string, len(valAndRecKeys)),
+		ColumnKeys: make([]string, len(valAndRecKeys)),
+	}
+	for i, vk := range valAndRecKeys {
+		importRequest.RowKeys[i] = vk[0]
+		importRequest.ColumnKeys[i] = vk[1]
+	}
+	err := c.Nodes[0].API.Import(context.Background(), nil, importRequest)
+	if err != nil {
+		t.Fatalf("importing keykey data: %v", err)
+	}
+}
+
+// IntKey is a string key and a signed integer value.
+type IntKey struct {
+	Val int64
+	Key string
+}
+
+// ImportIntKey imports int data into an index which uses string keys.
+func (c *Cluster) ImportIntKey(t testing.TB, index, field string, pairs []IntKey) {
+	t.Helper()
+	importRequest := &pilosa.ImportValueRequest{
+		Index:      index,
+		Field:      field,
+		Shard:      math.MaxUint64,
+		ColumnKeys: make([]string, len(pairs)),
+		Values:     make([]int64, len(pairs)),
+	}
+	for i, pair := range pairs {
+		importRequest.Values[i] = pair.Val
+		importRequest.ColumnKeys[i] = pair.Key
+	}
+	if err := c.Nodes[0].API.ImportValue(context.Background(), nil, importRequest); err != nil {
+		t.Fatalf("importing IntKey data: %v", err)
+	}
+}
+
+// KeyID represents a key and an ID for importing data into an index
+// and field where one uses string keys and the other does not.
+type KeyID struct {
+	Key string
+	ID  uint64
+}
+
+//ImportIDKey imports data into an unkeyed set field in a keyed index.
+func (c *Cluster) ImportIDKey(t testing.TB, index, field string, pairs []KeyID) {
+	t.Helper()
+	importRequest := &pilosa.ImportRequest{
+		Index:      index,
+		Field:      field,
+		RowIDs:     make([]uint64, len(pairs)),
+		ColumnKeys: make([]string, len(pairs)),
+	}
+	for i, pair := range pairs {
+		importRequest.RowIDs[i] = pair.ID
+		importRequest.ColumnKeys[i] = pair.Key
+	}
+	err := c.Nodes[0].API.Import(context.Background(), nil, importRequest)
+	if err != nil {
+		t.Fatalf("importing IDKey data: %v", err)
 	}
 }
 

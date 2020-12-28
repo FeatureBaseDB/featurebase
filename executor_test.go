@@ -17,9 +17,11 @@ package pilosa_test
 import (
 	"bytes"
 	"context"
+	"encoding/csv"
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"math"
 	"math/rand"
@@ -37,6 +39,7 @@ import (
 	"github.com/pilosa/pilosa/v2/boltdb"
 	"github.com/pilosa/pilosa/v2/http"
 	"github.com/pilosa/pilosa/v2/pql"
+	"github.com/pilosa/pilosa/v2/proto"
 	"github.com/pilosa/pilosa/v2/server"
 	"github.com/pilosa/pilosa/v2/test"
 	"github.com/pilosa/pilosa/v2/testhook"
@@ -5434,9 +5437,9 @@ func TestExecutor_ForeignIndex(t *testing.T) {
 	if !sameStringSlice(distinct.Pos.Keys, []string{"one", "two", "twenty-one"}) {
 		t.Fatalf("unexpected keys: %v", distinct.Pos.Keys)
 	}
-	distinct = c.Query(t, "child", `Distinct(index="child", field="parent_set_id")`).Results[0].(pilosa.SignedRow)
-	if !sameStringSlice(distinct.Pos.Keys, []string{"one", "two", "twenty-one"}) {
-		t.Fatalf("unexpected keys: %v", distinct.Pos.Keys)
+	row := c.Query(t, "child", `Distinct(index="child", field="parent_set_id")`).Results[0].(*pilosa.Row)
+	if !sameStringSlice(row.Keys, []string{"one", "two", "twenty-one"}) {
+		t.Fatalf("unexpected keys: %v", row.Keys)
 	}
 
 	eq := c.Query(t, "child", `Row(parent_id=="one")`).Results[0].(*pilosa.Row)
@@ -6512,7 +6515,6 @@ func TestExecutor_BareDistinct(t *testing.T) {
 	c.CreateField(t, "i", pilosa.IndexOptions{}, "ints",
 		pilosa.OptFieldTypeInt(0, math.MaxInt64),
 	)
-	c.CreateField(t, "i", pilosa.IndexOptions{}, "set")
 	c.CreateField(t, "i", pilosa.IndexOptions{}, "filter")
 
 	// Populate integer data.
@@ -6521,17 +6523,13 @@ func TestExecutor_BareDistinct(t *testing.T) {
 			Set(%d, ints=2)
 		`, ShardWidth))
 	c.Query(t, "i", fmt.Sprintf(`
-		         Set(0, set=1)
-			 Set(1, set=2)
-			 Set(%d, set=2)
 			 Set(0, filter=1)
 			 Set(%d, filter=1)
-	        `, 65537, 65537))
+	        `, 65537))
 
 	for _, pql := range []string{
 		`Distinct(field="ints")`,
 		`Distinct(index="i", field="ints")`,
-		`Distinct(Row(filter=1), field="set")`,
 	} {
 		exp := []uint64{1, 2}
 		res := c.Query(t, "i", pql).Results[0].(pilosa.SignedRow)
@@ -6741,4 +6739,282 @@ func TestMissingKeyRegression(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestVariousQueries has originally been written to test out a
+// variety of scenarios with Distinct, but it's structure is more
+// general purpose. My vision is to eventually have any test which
+// needs to test a single query be in here, and have a robust enough
+// test data set loaded at the start which covers what we want to
+// test.
+//
+// I'd also like to have it automatically run a matrix of scenarios
+// (single and multi-node clusters, different endpoints for the
+// queries (HTTP, GRPC, Postgres), etc.).
+func TestVariousQueries(t *testing.T) {
+	c := test.MustRunCluster(t, 3)
+	defer c.Close()
+
+	// Create and populate "likenums" similar to "likes", but without keys on the field.
+	c.CreateField(t, "users", pilosa.IndexOptions{Keys: true, TrackExistence: true}, "likenums")
+	c.ImportIDKey(t, "users", "likenums", []test.KeyID{
+		{ID: 1, Key: "userA"},
+		{ID: 2, Key: "userB"},
+		{ID: 3, Key: "userC"},
+		{ID: 4, Key: "userD"},
+		{ID: 5, Key: "userE"},
+		{ID: 6, Key: "userF"},
+		{ID: 7, Key: "userA"},
+		{ID: 7, Key: "userB"},
+		{ID: 7, Key: "userC"},
+		{ID: 7, Key: "userD"},
+		{ID: 7, Key: "userE"},
+		{ID: 7, Key: "userF"},
+	})
+
+	// Create and populate "likes" field.
+	c.CreateField(t, "users", pilosa.IndexOptions{Keys: true, TrackExistence: true}, "likes", pilosa.OptFieldKeys())
+	c.ImportKeyKey(t, "users", "likes", [][2]string{
+		{"molecula", "userA"},
+		{"pilosa", "userB"},
+		{"pangolin", "userC"},
+		{"zebra", "userD"},
+		{"toucan", "userE"},
+		{"dog", "userF"},
+		{"icecream", "userA"},
+		{"icecream", "userB"},
+		{"icecream", "userC"},
+		{"icecream", "userD"},
+		{"icecream", "userE"},
+		{"icecream", "userF"},
+	})
+
+	// Create and populate "affinity" int field with negative, positive, zero and null values.
+	c.CreateField(t, "users", pilosa.IndexOptions{Keys: true, TrackExistence: true}, "affinity", pilosa.OptFieldTypeInt(-1000, 1000))
+	c.ImportIntKey(t, "users", "affinity", []test.IntKey{
+		{Val: 10, Key: "userA"},
+		{Val: -10, Key: "userB"},
+		{Val: 5, Key: "userC"},
+		{Val: -5, Key: "userD"},
+		{Val: 0, Key: "userE"},
+	})
+
+	tests := []struct {
+		query       string
+		qrVerifier  func(t *testing.T, resp pilosa.QueryResponse)
+		csvVerifier string
+	}{
+		{
+			query: "Count(All())",
+			qrVerifier: func(t *testing.T, resp pilosa.QueryResponse) {
+				if resp.Results[0].(uint64) != 6 {
+					t.Errorf("expected 6, got %+v", resp.Results[0])
+				}
+			},
+			csvVerifier: "6\n",
+		},
+		{
+			query: "Count(Distinct(field=likenums))",
+			qrVerifier: func(t *testing.T, resp pilosa.QueryResponse) {
+				if resp.Results[0].(uint64) != 7 {
+					t.Errorf("wrong count: %+v", resp.Results[0])
+				}
+			},
+			csvVerifier: "7\n",
+		},
+		{
+			query: "Distinct(field=likenums)",
+			qrVerifier: func(t *testing.T, resp pilosa.QueryResponse) {
+				if !reflect.DeepEqual(resp.Results[0].(*pilosa.Row).Columns(), []uint64{1, 2, 3, 4, 5, 6, 7}) {
+					t.Errorf("wrong values: %+v %+v", resp.Results[0].(*pilosa.Row).Columns(), resp.Results[0].(*pilosa.Row))
+				}
+			},
+			csvVerifier: "1\n2\n3\n4\n5\n6\n7\n",
+		},
+		{
+			query: "Count(Distinct(field=likes))",
+			qrVerifier: func(t *testing.T, resp pilosa.QueryResponse) {
+				if resp.Results[0].(uint64) != 7 {
+					t.Errorf("wrong count: %+v", resp.Results[0])
+				}
+			},
+			csvVerifier: "7\n",
+		},
+		{
+			query: "Distinct(field=affinity)",
+			qrVerifier: func(t *testing.T, resp pilosa.QueryResponse) {
+				if !reflect.DeepEqual(resp.Results[0].(pilosa.SignedRow).Pos.Columns(), []uint64{0, 5, 10}) {
+					t.Errorf("wrong positive records: %+v", resp.Results[0].(pilosa.SignedRow).Pos.Columns())
+				}
+				if !reflect.DeepEqual(resp.Results[0].(pilosa.SignedRow).Neg.Columns(), []uint64{5, 10}) {
+					t.Errorf("wrong negative records: %+v", resp.Results[0].(pilosa.SignedRow).Neg.Columns())
+				}
+			},
+			csvVerifier: "-10\n-5\n0\n5\n10\n",
+		},
+		{
+			query: "Distinct(Row(affinity>=0),field=affinity)",
+			qrVerifier: func(t *testing.T, resp pilosa.QueryResponse) {
+				if !reflect.DeepEqual(resp.Results[0].(pilosa.SignedRow).Pos.Columns(), []uint64{0, 5, 10}) {
+					t.Errorf("wrong positive records: %+v", resp.Results[0].(pilosa.SignedRow).Pos.Columns())
+				}
+				if !reflect.DeepEqual(resp.Results[0].(pilosa.SignedRow).Neg.Columns(), []uint64{}) {
+					t.Errorf("wrong negative records: %+v", resp.Results[0].(pilosa.SignedRow).Neg.Columns())
+				}
+			},
+			csvVerifier: "0\n5\n10\n",
+		},
+		{
+			query: "Count(Distinct(Row(affinity>=0),field=affinity))",
+			qrVerifier: func(t *testing.T, resp pilosa.QueryResponse) {
+				if resp.Results[0].(uint64) != 3 {
+					t.Errorf("wrong number of values: %+v", resp.Results[0])
+				}
+			},
+			csvVerifier: "3\n",
+		},
+
+		// Handling this case properly will require changing the way
+		// that precomputed data is stored on Call objects. Currently
+		// if a Distinct is at all nested (e.g. within a Count) it
+		// gets handled by executor.handlePreCalls which assumes that
+		// only the positive values are worthwhile.
+		//
+		// {
+		// 	query: "Count(Distinct(field=affinity))",
+		// 	verifier: func(t *testing.T, resp pilosa.QueryResponse) {
+		// 		if resp.Results[0].(uint64) != 5 {
+		// 			t.Errorf("wrong number of values: %+v", resp.Results[0])
+		// 		}
+		// 	},
+		// },
+		{
+			query: "Distinct(Row(affinity<0),field=likes)",
+			qrVerifier: func(t *testing.T, resp pilosa.QueryResponse) {
+				if !reflect.DeepEqual(resp.Results[0].(*pilosa.Row).Keys, []string{"pilosa", "zebra", "icecream"}) {
+					t.Errorf("wrong values: %+v", resp.Results[0])
+				}
+			},
+			csvVerifier: "pilosa\nzebra\nicecream\n",
+		},
+		{
+			query: "Distinct(Row(affinity>0),field=likes)",
+			qrVerifier: func(t *testing.T, resp pilosa.QueryResponse) {
+				if !reflect.DeepEqual(resp.Results[0].(*pilosa.Row).Keys, []string{"molecula", "pangolin", "icecream"}) {
+					t.Errorf("wrong values: %+v", resp.Results[0])
+				}
+			},
+			csvVerifier: "molecula\npangolin\nicecream\n",
+		},
+		{
+			query: "Distinct(Row(likenums=1),field=likes)",
+			qrVerifier: func(t *testing.T, resp pilosa.QueryResponse) {
+				if !reflect.DeepEqual(resp.Results[0].(*pilosa.Row).Keys, []string{"molecula", "icecream"}) {
+					t.Errorf("wrong values: %+v", resp.Results[0])
+				}
+			},
+			csvVerifier: "molecula\nicecream\n",
+		},
+		{
+			query: "Distinct(field=likes)",
+			qrVerifier: func(t *testing.T, resp pilosa.QueryResponse) {
+				if !reflect.DeepEqual(resp.Results[0].(*pilosa.Row).Keys, []string{"molecula", "pilosa", "pangolin", "zebra", "toucan", "dog", "icecream"}) {
+					t.Errorf("wrong values: %+v", resp.Results[0])
+				}
+			},
+			csvVerifier: "molecula\npilosa\npangolin\nzebra\ntoucan\ndog\nicecream\n",
+		},
+		{
+			query: "Distinct(All(),field=likes)",
+			qrVerifier: func(t *testing.T, resp pilosa.QueryResponse) {
+				if !reflect.DeepEqual(resp.Results[0].(*pilosa.Row).Keys, []string{"molecula", "pilosa", "pangolin", "zebra", "toucan", "dog", "icecream"}) {
+					t.Errorf("wrong values: %+v", resp.Results[0])
+				}
+			},
+			csvVerifier: "molecula\npilosa\npangolin\nzebra\ntoucan\ndog\nicecream\n",
+		},
+		{
+			query: "Distinct(field=likes )",
+			qrVerifier: func(t *testing.T, resp pilosa.QueryResponse) {
+				if !reflect.DeepEqual(resp.Results[0].(*pilosa.Row).Keys, []string{"molecula", "pilosa", "pangolin", "zebra", "toucan", "dog", "icecream"}) {
+					t.Errorf("wrong values: %+v", resp.Results[0])
+				}
+			},
+			csvVerifier: "molecula\npilosa\npangolin\nzebra\ntoucan\ndog\nicecream\n",
+		},
+	}
+
+	for i, tst := range tests {
+		t.Run(fmt.Sprintf("%d-%s", i, tst.query), func(t *testing.T) {
+			resp := c.Query(t, "users", tst.query)
+			tr := c.QueryGRPC(t, "users", tst.query)
+			if tst.qrVerifier != nil {
+				tst.qrVerifier(t, resp)
+			}
+			csvString, err := tableResponseToCSVString(tr)
+			if err != nil {
+				t.Fatal(err)
+			}
+			// verify everything after header
+			got := csvString[strings.Index(csvString, "\n")+1:]
+			if got != tst.csvVerifier {
+				t.Errorf("expected '%s', got '%s'", tst.csvVerifier, got)
+			}
+
+			// TODO: add HTTP and Postgres and ability to convert
+			// those results to CSV to run through CSV verifier
+		})
+	}
+}
+
+// tableResponseToCSV converts a generic TableResponse to a CSV format
+// and writes it to the writer.
+func tableResponseToCSV(m *proto.TableResponse, w io.Writer) error {
+	writer := csv.NewWriter(w)
+	record := make([]string, len(m.Headers))
+	for i, h := range m.Headers {
+		record[i] = h.Name
+	}
+	err := writer.Write(record)
+	if err != nil {
+		return errors.Wrap(err, "writing header")
+	}
+	for i, row := range m.Rows {
+		record = record[:0]
+		for colIndex, col := range row.Columns {
+			switch m.Headers[colIndex].Datatype {
+			case "[]string":
+				record = append(record, fmt.Sprintf("%v", col.GetStringArrayVal()))
+			case "[]uint64":
+				record = append(record, fmt.Sprintf("%v", col.GetUint64ArrayVal()))
+			case "string":
+				record = append(record, fmt.Sprintf("%v", col.GetStringVal()))
+			case "uint64":
+				record = append(record, fmt.Sprintf("%v", col.GetUint64Val()))
+			case "decimal":
+				record = append(record, fmt.Sprintf("%v", col.GetDecimalVal().String()))
+			case "bool":
+				record = append(record, fmt.Sprintf("%v", col.GetBoolVal()))
+			case "int64":
+				record = append(record, fmt.Sprintf("%v", col.GetInt64Val()))
+			}
+		}
+		err := writer.Write(record)
+		if err != nil {
+			return errors.Wrapf(err, "writing row %d", i)
+		}
+	}
+	writer.Flush()
+	return errors.Wrap(writer.Error(), "writing or flushing CSV")
+}
+
+// tableResponseToCSVString converts a generic TableResponse to a CSV format
+// and returns it as a string.
+func tableResponseToCSVString(m *proto.TableResponse) (string, error) {
+	buf := &bytes.Buffer{}
+	err := tableResponseToCSV(m, buf)
+	if err != nil {
+		return "", errors.Wrap(err, "writing tableResponse CSV to bytes.Buffer")
+	}
+	return buf.String(), nil
 }

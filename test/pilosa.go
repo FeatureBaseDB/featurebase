@@ -196,7 +196,7 @@ func (m *Command) Client() *http.InternalClient {
 }
 
 // Query executes a query against the program through the HTTP API.
-func (m *Command) Query(t *testing.T, index, rawQuery, query string) (string, error) {
+func (m *Command) Query(t testing.TB, index, rawQuery, query string) (string, error) {
 	resp := Do(t, "POST", fmt.Sprintf("%s/index/%s/query?%s", m.URL(), index, rawQuery), query)
 	if resp.StatusCode != gohttp.StatusOK {
 		return "", fmt.Errorf("invalid status: %d, body=%s", resp.StatusCode, resp.Body)
@@ -285,7 +285,7 @@ func (m *Command) RecalculateCaches(t *testing.T) error {
 }
 
 // Do executes http.Do() with an http.NewRequest().
-func Do(t *testing.T, method, urlStr string, body string) *httpResponse {
+func Do(t testing.TB, method, urlStr string, body string) *httpResponse {
 	t.Helper()
 	req, err := gohttp.NewRequest(
 		method,

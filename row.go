@@ -33,6 +33,15 @@ type Row struct {
 
 	// Attributes associated with the row.
 	Attrs map[string]interface{}
+
+	// Index tells what index this row is from - needed for key translation.
+	Index string
+
+	// Field tells what field this row is from if it's a "vertical"
+	// row. It may be the result of a Distinct query or Rows
+	// query. Knowing the index and field, we can figure out how to
+	// interpret the row data.
+	Field string
 }
 
 // NewRow returns a new instance of Row.
@@ -61,6 +70,8 @@ func (r *Row) Clone() (clone *Row) {
 	clone = &Row{
 		Keys:  keyClone,
 		Attrs: attrClone,
+		Index: r.Index,
+		Field: r.Field,
 	}
 
 	for _, seg := range r.segments {
@@ -322,7 +333,7 @@ func (r *Row) Union(others ...*Row) *Row {
 			output = append(output, *toProcess[0].Union(toProcess[1:]...))
 		}
 	}
-	return &Row{segments: output}
+	return &Row{Index: r.Index, Field: r.Field, segments: output}
 }
 
 // Difference returns the diff of r and other.
