@@ -17,7 +17,7 @@ RELEASE ?= 0
 RELEASE_ENABLED = $(subst 0,,$(RELEASE))
 BUILD_TAGS += $(if $(RELEASE_ENABLED),release)
 BUILD_TAGS += shardwidth$(SHARD_WIDTH)
-TEST_TAGS = roaringparanoia paranoia
+TEST_TAGS = roaringparanoia
 define LICENSE_HASH_CODE
     head -13 $1 | sed -e 's/Copyright 20[0-9][0-9]/Copyright 20XX/g' | shasum | cut -f 1 -d " "
 endef
