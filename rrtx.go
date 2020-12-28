@@ -373,13 +373,13 @@ func (tx *RoaringTx) getFragment(index, field, view string, shard uint64) (*frag
 
 	v := f.view(view)
 	if v == nil {
-		return nil, ViewOrFragmentNotFound(errors.Errorf("view not found: %q", view))
+		return nil, errors.Wrapf(ViewNotFound, "getting %s", view)
 	}
 
 	frag := v.Fragment(shard)
 
 	if frag == nil {
-		return nil, ViewOrFragmentNotFound(errors.Errorf("fragment not found: %q / %q / %d", field, view, shard))
+		return nil, errors.Wrapf(FragmentNotFound, "field:%q, view:%q, shard:%d", field, view, shard)
 	}
 
 	// Note: we cannot cache frag into tx.fragment.
@@ -389,7 +389,8 @@ func (tx *RoaringTx) getFragment(index, field, view string, shard uint64) (*frag
 	return frag, nil
 }
 
-type ViewOrFragmentNotFound error
+const ViewNotFound = Error("view not found")
+const FragmentNotFound = Error("fragment not found")
 
 func (tx *RoaringTx) bitmap(index, field, view string, shard uint64) (*roaring.Bitmap, error) {
 	frag, err := tx.getFragment(index, field, view, shard)

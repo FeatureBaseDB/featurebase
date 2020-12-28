@@ -1537,7 +1537,8 @@ func executeDistinctShardBSI(ctx context.Context, qcx *Qcx, idx *Index, fieldNam
 
 	existsBitmap, err := tx.OffsetRange(index, fieldName, view, shard, ShardWidth*shard, ShardWidth*0, ShardWidth*1)
 	if err != nil {
-		if _, ok := errors.Cause(err).(ViewOrFragmentNotFound); ok {
+		switch errors.Cause(err) {
+		case ViewNotFound, FragmentNotFound:
 			return result, nil
 		}
 		return result, errors.Wrap(err, "getting exists bitmap")
