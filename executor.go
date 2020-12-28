@@ -1552,8 +1552,7 @@ func executeDistinctShardBSI(ctx context.Context, qcx *Qcx, idx *Index, fieldNam
 
 	signBitmap, err := tx.OffsetRange(index, fieldName, view, shard, ShardWidth*shard, ShardWidth*1, ShardWidth*2)
 	if err != nil {
-		// TODO wtf... if there's any error getting the sign bitmap we just return an empty result and move on?
-		return result, nil
+		return result, errors.Wrap(err, "getting sign bitmap")
 	}
 
 	dataBitmaps := make([]*roaring.Bitmap, depth)
