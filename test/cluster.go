@@ -55,6 +55,9 @@ func (c *Cluster) Query(t testing.TB, index, query string) pilosa.QueryResponse 
 	return c.Nodes[0].QueryAPI(t, &pilosa.QueryRequest{Index: index, Query: query})
 }
 
+// QueryHTTP executes a PQL query through the HTTP endpoint. It fails
+// the test for explicit errors, but returns an error which has the
+// response body if the HTTP call returns a non-OK status.
 func (c *Cluster) QueryHTTP(t testing.TB, index, query string) (string, error) {
 	t.Helper()
 	if len(c.Nodes) == 0 {
@@ -63,6 +66,8 @@ func (c *Cluster) QueryHTTP(t testing.TB, index, query string) (string, error) {
 	return c.Nodes[0].Query(t, index, "", query)
 }
 
+// QueryGRPC executes a PQL query through the GRPC endpoint. It fails the
+// test if there is an error.
 func (c *Cluster) QueryGRPC(t testing.TB, index, query string) *proto.TableResponse {
 	t.Helper()
 	if len(c.Nodes) == 0 {
@@ -190,8 +195,7 @@ type KeyID struct {
 	ID  uint64
 }
 
-// ImportIDKey imports data into an index where the index is using
-// keys, but the field is not.
+//ImportIDKey imports data into an unkeyed set field in a keyed index.
 func (c *Cluster) ImportIDKey(t testing.TB, index, field string, pairs []KeyID) {
 	t.Helper()
 	importRequest := &pilosa.ImportRequest{

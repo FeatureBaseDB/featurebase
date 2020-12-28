@@ -17,9 +17,11 @@ package pilosa_test
 import (
 	"bytes"
 	"context"
+	"encoding/csv"
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"math"
 	"math/rand"
@@ -37,6 +39,7 @@ import (
 	"github.com/pilosa/pilosa/v2/boltdb"
 	"github.com/pilosa/pilosa/v2/http"
 	"github.com/pilosa/pilosa/v2/pql"
+	"github.com/pilosa/pilosa/v2/proto"
 	"github.com/pilosa/pilosa/v2/server"
 	"github.com/pilosa/pilosa/v2/test"
 	"github.com/pilosa/pilosa/v2/testhook"
@@ -6799,7 +6802,7 @@ func TestVariousQueries(t *testing.T) {
 	tests := []struct {
 		query       string
 		qrVerifier  func(t *testing.T, resp pilosa.QueryResponse)
-		csvVerifier func(t *testing.T, resp string)
+		csvVerifier string
 	}{
 		{
 			query: "Count(All())",
@@ -6808,12 +6811,7 @@ func TestVariousQueries(t *testing.T) {
 					t.Errorf("expected 6, got %+v", resp.Results[0])
 				}
 			},
-			csvVerifier: func(t *testing.T, resp string) {
-				exp := "6\n"
-				if resp != exp {
-					t.Errorf("expected '%s', got '%s'", exp, resp)
-				}
-			},
+			csvVerifier: "6\n",
 		},
 		{
 			query: "Count(Distinct(field=likenums))",
@@ -6822,12 +6820,7 @@ func TestVariousQueries(t *testing.T) {
 					t.Errorf("wrong count: %+v", resp.Results[0])
 				}
 			},
-			csvVerifier: func(t *testing.T, resp string) {
-				exp := "7\n"
-				if resp != exp {
-					t.Errorf("expected '%s', got '%s'", exp, resp)
-				}
-			},
+			csvVerifier: "7\n",
 		},
 		{
 			query: "Distinct(field=likenums)",
@@ -6836,12 +6829,7 @@ func TestVariousQueries(t *testing.T) {
 					t.Errorf("wrong values: %+v %+v", resp.Results[0].(*pilosa.Row).Columns(), resp.Results[0].(*pilosa.Row))
 				}
 			},
-			csvVerifier: func(t *testing.T, resp string) {
-				exp := "1\n2\n3\n4\n5\n6\n7\n"
-				if resp != exp {
-					t.Errorf("expected '%s', got '%s'", exp, resp)
-				}
-			},
+			csvVerifier: "1\n2\n3\n4\n5\n6\n7\n",
 		},
 		{
 			query: "Count(Distinct(field=likes))",
@@ -6850,12 +6838,7 @@ func TestVariousQueries(t *testing.T) {
 					t.Errorf("wrong count: %+v", resp.Results[0])
 				}
 			},
-			csvVerifier: func(t *testing.T, resp string) {
-				exp := "7\n"
-				if resp != exp {
-					t.Errorf("expected '%s', got '%s'", exp, resp)
-				}
-			},
+			csvVerifier: "7\n",
 		},
 		{
 			query: "Distinct(field=affinity)",
@@ -6867,12 +6850,7 @@ func TestVariousQueries(t *testing.T) {
 					t.Errorf("wrong negative records: %+v", resp.Results[0].(pilosa.SignedRow).Neg.Columns())
 				}
 			},
-			csvVerifier: func(t *testing.T, resp string) {
-				exp := "-10\n-5\n0\n5\n10\n"
-				if resp != exp {
-					t.Errorf("expected '%s', got '%s'", exp, resp)
-				}
-			},
+			csvVerifier: "-10\n-5\n0\n5\n10\n",
 		},
 		{
 			query: "Distinct(Row(affinity>=0),field=affinity)",
@@ -6884,12 +6862,7 @@ func TestVariousQueries(t *testing.T) {
 					t.Errorf("wrong negative records: %+v", resp.Results[0].(pilosa.SignedRow).Neg.Columns())
 				}
 			},
-			csvVerifier: func(t *testing.T, resp string) {
-				exp := "0\n5\n10\n"
-				if resp != exp {
-					t.Errorf("expected '%s', got '%s'", exp, resp)
-				}
-			},
+			csvVerifier: "0\n5\n10\n",
 		},
 		{
 			query: "Count(Distinct(Row(affinity>=0),field=affinity))",
@@ -6898,12 +6871,7 @@ func TestVariousQueries(t *testing.T) {
 					t.Errorf("wrong number of values: %+v", resp.Results[0])
 				}
 			},
-			csvVerifier: func(t *testing.T, resp string) {
-				exp := "3\n"
-				if resp != exp {
-					t.Errorf("expected '%s', got '%s'", exp, resp)
-				}
-			},
+			csvVerifier: "3\n",
 		},
 
 		// Handling this case properly will require changing the way
@@ -6927,12 +6895,7 @@ func TestVariousQueries(t *testing.T) {
 					t.Errorf("wrong values: %+v", resp.Results[0])
 				}
 			},
-			csvVerifier: func(t *testing.T, resp string) {
-				exp := "pilosa\nzebra\nicecream\n"
-				if resp != exp {
-					t.Errorf("expected '%s', got '%s'", exp, resp)
-				}
-			},
+			csvVerifier: "pilosa\nzebra\nicecream\n",
 		},
 		{
 			query: "Distinct(Row(affinity>0),field=likes)",
@@ -6941,12 +6904,7 @@ func TestVariousQueries(t *testing.T) {
 					t.Errorf("wrong values: %+v", resp.Results[0])
 				}
 			},
-			csvVerifier: func(t *testing.T, resp string) {
-				exp := "molecula\npangolin\nicecream\n"
-				if resp != exp {
-					t.Errorf("expected '%s', got '%s'", exp, resp)
-				}
-			},
+			csvVerifier: "molecula\npangolin\nicecream\n",
 		},
 		{
 			query: "Distinct(Row(likenums=1),field=likes)",
@@ -6955,12 +6913,7 @@ func TestVariousQueries(t *testing.T) {
 					t.Errorf("wrong values: %+v", resp.Results[0])
 				}
 			},
-			csvVerifier: func(t *testing.T, resp string) {
-				exp := "molecula\nicecream\n"
-				if resp != exp {
-					t.Errorf("expected '%s', got '%s'", exp, resp)
-				}
-			},
+			csvVerifier: "molecula\nicecream\n",
 		},
 		{
 			query: "Distinct(field=likes)",
@@ -6969,12 +6922,7 @@ func TestVariousQueries(t *testing.T) {
 					t.Errorf("wrong values: %+v", resp.Results[0])
 				}
 			},
-			csvVerifier: func(t *testing.T, resp string) {
-				exp := "molecula\npilosa\npangolin\nzebra\ntoucan\ndog\nicecream\n"
-				if resp != exp {
-					t.Errorf("expected '%s', got '%s'", exp, resp)
-				}
-			},
+			csvVerifier: "molecula\npilosa\npangolin\nzebra\ntoucan\ndog\nicecream\n",
 		},
 		{
 			query: "Distinct(All(),field=likes)",
@@ -6983,12 +6931,7 @@ func TestVariousQueries(t *testing.T) {
 					t.Errorf("wrong values: %+v", resp.Results[0])
 				}
 			},
-			csvVerifier: func(t *testing.T, resp string) {
-				exp := "molecula\npilosa\npangolin\nzebra\ntoucan\ndog\nicecream\n"
-				if resp != exp {
-					t.Errorf("expected '%s', got '%s'", exp, resp)
-				}
-			},
+			csvVerifier: "molecula\npilosa\npangolin\nzebra\ntoucan\ndog\nicecream\n",
 		},
 		{
 			query: "Distinct(field=likes )",
@@ -6997,12 +6940,7 @@ func TestVariousQueries(t *testing.T) {
 					t.Errorf("wrong values: %+v", resp.Results[0])
 				}
 			},
-			csvVerifier: func(t *testing.T, resp string) {
-				exp := "molecula\npilosa\npangolin\nzebra\ntoucan\ndog\nicecream\n"
-				if resp != exp {
-					t.Errorf("expected '%s', got '%s'", exp, resp)
-				}
-			},
+			csvVerifier: "molecula\npilosa\npangolin\nzebra\ntoucan\ndog\nicecream\n",
 		},
 	}
 
@@ -7013,12 +6951,104 @@ func TestVariousQueries(t *testing.T) {
 			if tst.qrVerifier != nil {
 				tst.qrVerifier(t, resp)
 			}
-			csvString := tr.ToCSVString()
+			csvString, err := tableResponseToCSVString(tr)
+			if err != nil {
+				t.Fatal(err)
+			}
 			// verify everything after header
-			tst.csvVerifier(t, csvString[strings.Index(csvString, "\n")+1:])
+			got := csvString[strings.Index(csvString, "\n")+1:]
+			if got != tst.csvVerifier {
+				t.Errorf("expected '%s', got '%s'", tst.csvVerifier, got)
+			}
 
 			// TODO: add HTTP and Postgres and ability to convert
 			// those results to CSV to run through CSV verifier
 		})
 	}
+}
+
+func TestReproDistinctWFilterIssue(t *testing.T) {
+
+	c := test.MustRunCluster(t, 3)
+	defer c.Close()
+	r := rand.New(rand.NewSource(127))
+
+	for i := 0; i < 77; i++ {
+		index := fmt.Sprintf("users%d", i)
+		c.CreateField(t, index, pilosa.IndexOptions{Keys: true, TrackExistence: true}, "likes", pilosa.OptFieldKeys())
+		c.CreateField(t, index, pilosa.IndexOptions{Keys: true, TrackExistence: true}, "filterfield", pilosa.OptFieldKeys())
+		likes := make([][2]string, 0)
+		filter := make([][2]string, 0)
+		for userNum := 0; userNum < 100; userNum++ {
+			likes = append(likes, [2]string{fmt.Sprintf("like%d", r.Intn(95)), "user" + strconv.Itoa(userNum)})
+			if r.Intn(10) < 8 {
+				filter = append(filter, [2]string{"yes", "user" + strconv.Itoa(userNum)})
+			}
+		}
+		c.ImportKeyKey(t, index, "likes", likes)
+		c.ImportKeyKey(t, index, "filterfield", filter)
+
+		distinctRes := c.Query(t, index, "Count(Distinct(Row(filterfield=yes), field=likes))")
+		distinctCount := distinctRes.Results[0].(uint64)
+		groupbyRes := c.Query(t, index, "GroupBy(Rows(field=likes), filter=Row(filterfield=yes))")
+		groupbyCount := uint64(len(groupbyRes.Results[0].([]pilosa.GroupCount)))
+
+		t.Logf("D:%v", distinctRes.Results[0])
+		t.Logf("G:%v", groupbyRes.Results[0])
+		if distinctCount != groupbyCount {
+			t.Errorf("distinct: %d, groupby: %d", distinctCount, groupbyCount)
+		}
+	}
+}
+
+// tableResponseToCSV converts a generic TableResponse to a CSV format
+// and writes it to the writer.
+func tableResponseToCSV(m *proto.TableResponse, w io.Writer) error {
+	writer := csv.NewWriter(w)
+	record := make([]string, len(m.Headers))
+	for i, h := range m.Headers {
+		record[i] = h.Name
+	}
+	err := writer.Write(record)
+	if err != nil {
+		return errors.Wrap(err, "writing header")
+	}
+	for i, row := range m.Rows {
+		record = record[:0]
+		for colIndex, col := range row.Columns {
+			switch m.Headers[colIndex].Datatype {
+			case "[]string":
+				record = append(record, fmt.Sprintf("%v", col.GetStringArrayVal()))
+			case "[]uint64":
+				record = append(record, fmt.Sprintf("%v", col.GetUint64ArrayVal()))
+			case "string":
+				record = append(record, fmt.Sprintf("%v", col.GetStringVal()))
+			case "uint64":
+				record = append(record, fmt.Sprintf("%v", col.GetUint64Val()))
+			case "decimal":
+				record = append(record, fmt.Sprintf("%v", col.GetDecimalVal().String()))
+			case "bool":
+				record = append(record, fmt.Sprintf("%v", col.GetBoolVal()))
+			case "int64":
+				record = append(record, fmt.Sprintf("%v", col.GetInt64Val()))
+			}
+		}
+		err := writer.Write(record)
+		if err != nil {
+			return errors.Wrapf(err, "writing row %d", i)
+		}
+	}
+	writer.Flush()
+	return errors.Wrap(writer.Error(), "writing or flushing CSV")
+}
+
+// tableResponseToCSVString converts a generic TableResponse to a CSV format
+// and returns it as a string.
+func tableResponseToCSVString(m *proto.TableResponse) (string, error) {
+	buf := &bytes.Buffer{}
+	err := tableResponseToCSV(m, buf)
+	if err != nil {
+		return "", errors.Wrap(err, "writing tableResponse CSV to bytes.Buffer")
+	}
+	return buf.String(), nil
 }

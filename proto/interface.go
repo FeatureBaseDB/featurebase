@@ -15,8 +15,6 @@
 package proto
 
 import (
-	"bytes"
-	"encoding/csv"
 	"fmt"
 	"io"
 	"strings"
@@ -326,52 +324,4 @@ func (c ConstRowser) ToRows(fn func(*RowResponse) error) error {
 	}
 
 	return nil
-}
-
-func (m *TableResponse) ToCSV(w io.Writer) error {
-	writer := csv.NewWriter(w)
-	record := make([]string, len(m.Headers))
-	for i, h := range m.Headers {
-		record[i] = h.Name
-	}
-	err := writer.Write(record)
-	if err != nil {
-		return errors.Wrap(err, "writing header")
-	}
-	for i, row := range m.Rows {
-		record = record[:0]
-		for colIndex, col := range row.Columns {
-			switch m.Headers[colIndex].Datatype {
-			case "[]string":
-				record = append(record, fmt.Sprintf("%v", col.GetStringArrayVal()))
-			case "[]uint64":
-				record = append(record, fmt.Sprintf("%v", col.GetUint64ArrayVal()))
-			case "string":
-				record = append(record, fmt.Sprintf("%v", col.GetStringVal()))
-			case "uint64":
-				record = append(record, fmt.Sprintf("%v", col.GetUint64Val()))
-			case "decimal":
-				record = append(record, fmt.Sprintf("%v", col.GetDecimalVal().String()))
-			case "bool":
-				record = append(record, fmt.Sprintf("%v", col.GetBoolVal()))
-			case "int64":
-				record = append(record, fmt.Sprintf("%v", col.GetInt64Val()))
-			}
-		}
-		err := writer.Write(record)
-		if err != nil {
-			return errors.Wrapf(err, "writing row %d", i)
-		}
-	}
-	writer.Flush()
-	return nil
-}
-
-func (m *TableResponse) ToCSVString() string {
-	buf := &bytes.Buffer{}
-	err := m.ToCSV(buf)
-	if err != nil {
-		panic(fmt.Sprintf("shouldn't get an error writing to bytes.Buffer, got: %v", err))
-	}
-	return buf.String()
 }

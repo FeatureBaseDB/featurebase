@@ -563,7 +563,6 @@ func (e *executor) execute(ctx context.Context, qcx *Qcx, index string, q *pql.Q
 		} else {
 			v, err = e.executeCall(ctx, qcx, index, call, shards, opt)
 		}
-
 		if err != nil {
 			return nil, err
 		}
@@ -6028,13 +6027,26 @@ func (e *executor) translateResults(ctx context.Context, index string, idx *Inde
 	return nil
 }
 
+// translationStrategy denotes the several different ways the bits in
+// a *Row could be translated to string keys.
 type translationStrategy int
 
 const (
+	// byCurrentIndex means to interpret the bits as IDs in "top
+	// level" index for this query (e.g. the index specified in the
+	// path of the HTTP request).
 	byCurrentIndex translationStrategy = iota + 1
+	// byRowField means that the bits in this *Row are row IDs which
+	// should be translated using the field's (*Row.Field) translation store.
 	byRowField
+	// byRowFieldForeignIndex means that the bits in this *Row should
+	// be interpreted as IDs in the foreign index of the *Row.Field.
 	byRowFieldForeignIndex
+	// byRowIndex means the bits in this *Row should be translated
+	// according to the index named by *Row.Index
 	byRowIndex
+	// noTranslation means the bits should not be translated to string
+	// keys.
 	noTranslation
 )
 
@@ -6063,7 +6075,7 @@ func (e *executor) howToTranslate(idx *Index, row *Row) (rowIdx *Index, rowField
 
 	// Handle the case where the Row has specified a field.
 	if rowField != nil {
-		// Handle case where field has a foreign index.
+		// Handle the case where field has a foreign index.
 		if rowField.ForeignIndex() != "" {
 			fidx := e.Holder.Index(rowField.ForeignIndex())
 			if fidx == nil {
@@ -6084,7 +6096,7 @@ func (e *executor) howToTranslate(idx *Index, row *Row) (rowIdx *Index, rowField
 		return rowIdx, rowField, byRowIndex, nil
 	}
 
-	// Handle normal case (row represents a set of records in
+	// Handle the normal case (row represents a set of records in
 	// the top level index, Row has not specifed a different index
 	// or field).
 	if rowIdx == idx && idx.Keys() && rowField == nil {
@@ -6096,20 +6108,18 @@ func (e *executor) howToTranslate(idx *Index, row *Row) (rowIdx *Index, rowField
 func (e *executor) collectResultIDs(index string, idx *Index, call *pql.Call, result interface{}, idSet map[uint64]struct{}) error {
 	switch result := result.(type) {
 	case *Row:
+		// Only collect result IDs if they are in the current index.
 		_, _, strategy, err := e.howToTranslate(idx, result)
 		if err != nil {
 			return errors.Wrap(err, "determining how to translate")
 		}
-		// Only collect result IDs if they are in the current index.
-		if strategy != byCurrentIndex {
-			return nil
-		}
-		for _, segment := range result.Segments() {
-			for _, col := range segment.Columns() {
-				idSet[col] = struct{}{}
+		if strategy == byCurrentIndex {
+			for _, segment := range result.Segments() {
+				for _, col := range segment.Columns() {
+					idSet[col] = struct{}{}
+				}
 			}
 		}
-
 	case ExtractedIDMatrix:
 		for _, col := range result.Columns {
 			idSet[col.ColumnID] = struct{}{}
