@@ -61,8 +61,9 @@ func (c *Cluster) Query(t testing.TB, index, query string) pilosa.QueryResponse 
 func (c *Cluster) QueryHTTP(t testing.TB, index, query string) (string, error) {
 	t.Helper()
 	if len(c.Nodes) == 0 {
-		t.Fatal("must have at least one node in cluster to QueryHTTP")
+		t.Fatal("must have at least one node in cluster to query")
 	}
+	
 	return c.Nodes[0].Query(t, index, "", query)
 }
 
@@ -71,7 +72,7 @@ func (c *Cluster) QueryHTTP(t testing.TB, index, query string) (string, error) {
 func (c *Cluster) QueryGRPC(t testing.TB, index, query string) *proto.TableResponse {
 	t.Helper()
 	if len(c.Nodes) == 0 {
-		t.Fatal("must have at least one node in cluster to QueryGRPC")
+		t.Fatal("must have at least one node in cluster to query")
 	}
 
 	grpcClient, err := client.NewGRPCClient([]string{fmt.Sprintf("%s:%d", c.Nodes[0].Server.GRPCURI().Host, c.Nodes[0].Server.GRPCURI().Port)}, nil)

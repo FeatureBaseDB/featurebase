@@ -6967,40 +6967,6 @@ func TestVariousQueries(t *testing.T) {
 	}
 }
 
-func TestReproDistinctWFilterIssue(t *testing.T) {
-
-	c := test.MustRunCluster(t, 3)
-	defer c.Close()
-	r := rand.New(rand.NewSource(127))
-
-	for i := 0; i < 77; i++ {
-		index := fmt.Sprintf("users%d", i)
-		c.CreateField(t, index, pilosa.IndexOptions{Keys: true, TrackExistence: true}, "likes", pilosa.OptFieldKeys())
-		c.CreateField(t, index, pilosa.IndexOptions{Keys: true, TrackExistence: true}, "filterfield", pilosa.OptFieldKeys())
-		likes := make([][2]string, 0)
-		filter := make([][2]string, 0)
-		for userNum := 0; userNum < 100; userNum++ {
-			likes = append(likes, [2]string{fmt.Sprintf("like%d", r.Intn(95)), "user" + strconv.Itoa(userNum)})
-			if r.Intn(10) < 8 {
-				filter = append(filter, [2]string{"yes", "user" + strconv.Itoa(userNum)})
-			}
-		}
-		c.ImportKeyKey(t, index, "likes", likes)
-		c.ImportKeyKey(t, index, "filterfield", filter)
-
-		distinctRes := c.Query(t, index, "Count(Distinct(Row(filterfield=yes), field=likes))")
-		distinctCount := distinctRes.Results[0].(uint64)
-		groupbyRes := c.Query(t, index, "GroupBy(Rows(field=likes), filter=Row(filterfield=yes))")
-		groupbyCount := uint64(len(groupbyRes.Results[0].([]pilosa.GroupCount)))
-
-		t.Logf("D:%v", distinctRes.Results[0])
-		t.Logf("G:%v", groupbyRes.Results[0])
-		if distinctCount != groupbyCount {
-			t.Errorf("distinct: %d, groupby: %d", distinctCount, groupbyCount)
-		}
-	}
-}
-
 // tableResponseToCSV converts a generic TableResponse to a CSV format
 // and writes it to the writer.
 func tableResponseToCSV(m *proto.TableResponse, w io.Writer) error {
