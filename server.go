@@ -499,6 +499,10 @@ func (s *Server) InternalClient() InternalClient {
 	return s.defaultClient
 }
 
+func (s *Server) GRPCURI() URI {
+	return s.grpcURI
+}
+
 // UpAndDown brings the server up minimally and shuts it down
 // again; basically, it exists for testing holder open and close.
 func (s *Server) UpAndDown() error {

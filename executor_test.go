@@ -6797,44 +6797,69 @@ func TestVariousQueries(t *testing.T) {
 	})
 
 	tests := []struct {
-		query    string
-		verifier func(t *testing.T, resp pilosa.QueryResponse)
+		query       string
+		qrVerifier  func(t *testing.T, resp pilosa.QueryResponse)
+		csvVerifier func(t *testing.T, resp string)
 	}{
 		{
 			query: "Count(All())",
-			verifier: func(t *testing.T, resp pilosa.QueryResponse) {
+			qrVerifier: func(t *testing.T, resp pilosa.QueryResponse) {
 				if resp.Results[0].(uint64) != 6 {
 					t.Errorf("expected 6, got %+v", resp.Results[0])
+				}
+			},
+			csvVerifier: func(t *testing.T, resp string) {
+				exp := "6\n"
+				if resp != exp {
+					t.Errorf("expected '%s', got '%s'", exp, resp)
 				}
 			},
 		},
 		{
 			query: "Count(Distinct(field=likenums))",
-			verifier: func(t *testing.T, resp pilosa.QueryResponse) {
+			qrVerifier: func(t *testing.T, resp pilosa.QueryResponse) {
 				if resp.Results[0].(uint64) != 7 {
 					t.Errorf("wrong count: %+v", resp.Results[0])
+				}
+			},
+			csvVerifier: func(t *testing.T, resp string) {
+				exp := "7\n"
+				if resp != exp {
+					t.Errorf("expected '%s', got '%s'", exp, resp)
 				}
 			},
 		},
 		{
 			query: "Distinct(field=likenums)",
-			verifier: func(t *testing.T, resp pilosa.QueryResponse) {
+			qrVerifier: func(t *testing.T, resp pilosa.QueryResponse) {
 				if !reflect.DeepEqual(resp.Results[0].(*pilosa.Row).Columns(), []uint64{1, 2, 3, 4, 5, 6, 7}) {
 					t.Errorf("wrong values: %+v %+v", resp.Results[0].(*pilosa.Row).Columns(), resp.Results[0].(*pilosa.Row))
+				}
+			},
+			csvVerifier: func(t *testing.T, resp string) {
+				exp := "1\n2\n3\n4\n5\n6\n7\n"
+				if resp != exp {
+					t.Errorf("expected '%s', got '%s'", exp, resp)
 				}
 			},
 		},
 		{
 			query: "Count(Distinct(field=likes))",
-			verifier: func(t *testing.T, resp pilosa.QueryResponse) {
+			qrVerifier: func(t *testing.T, resp pilosa.QueryResponse) {
 				if resp.Results[0].(uint64) != 7 {
 					t.Errorf("wrong count: %+v", resp.Results[0])
+				}
+			},
+			csvVerifier: func(t *testing.T, resp string) {
+				exp := "7\n"
+				if resp != exp {
+					t.Errorf("expected '%s', got '%s'", exp, resp)
 				}
 			},
 		},
 		{
 			query: "Distinct(field=affinity)",
-			verifier: func(t *testing.T, resp pilosa.QueryResponse) {
+			qrVerifier: func(t *testing.T, resp pilosa.QueryResponse) {
 				if !reflect.DeepEqual(resp.Results[0].(pilosa.SignedRow).Pos.Columns(), []uint64{0, 5, 10}) {
 					t.Errorf("wrong positive records: %+v", resp.Results[0].(pilosa.SignedRow).Pos.Columns())
 				}
@@ -6842,10 +6867,16 @@ func TestVariousQueries(t *testing.T) {
 					t.Errorf("wrong negative records: %+v", resp.Results[0].(pilosa.SignedRow).Neg.Columns())
 				}
 			},
+			csvVerifier: func(t *testing.T, resp string) {
+				exp := "-10\n-5\n0\n5\n10\n"
+				if resp != exp {
+					t.Errorf("expected '%s', got '%s'", exp, resp)
+				}
+			},
 		},
 		{
 			query: "Distinct(Row(affinity>=0),field=affinity)",
-			verifier: func(t *testing.T, resp pilosa.QueryResponse) {
+			qrVerifier: func(t *testing.T, resp pilosa.QueryResponse) {
 				if !reflect.DeepEqual(resp.Results[0].(pilosa.SignedRow).Pos.Columns(), []uint64{0, 5, 10}) {
 					t.Errorf("wrong positive records: %+v", resp.Results[0].(pilosa.SignedRow).Pos.Columns())
 				}
@@ -6853,12 +6884,24 @@ func TestVariousQueries(t *testing.T) {
 					t.Errorf("wrong negative records: %+v", resp.Results[0].(pilosa.SignedRow).Neg.Columns())
 				}
 			},
+			csvVerifier: func(t *testing.T, resp string) {
+				exp := "0\n5\n10\n"
+				if resp != exp {
+					t.Errorf("expected '%s', got '%s'", exp, resp)
+				}
+			},
 		},
 		{
 			query: "Count(Distinct(Row(affinity>=0),field=affinity))",
-			verifier: func(t *testing.T, resp pilosa.QueryResponse) {
+			qrVerifier: func(t *testing.T, resp pilosa.QueryResponse) {
 				if resp.Results[0].(uint64) != 3 {
 					t.Errorf("wrong number of values: %+v", resp.Results[0])
+				}
+			},
+			csvVerifier: func(t *testing.T, resp string) {
+				exp := "3\n"
+				if resp != exp {
+					t.Errorf("expected '%s', got '%s'", exp, resp)
 				}
 			},
 		},
@@ -6879,49 +6922,85 @@ func TestVariousQueries(t *testing.T) {
 		// },
 		{
 			query: "Distinct(Row(affinity<0),field=likes)",
-			verifier: func(t *testing.T, resp pilosa.QueryResponse) {
+			qrVerifier: func(t *testing.T, resp pilosa.QueryResponse) {
 				if !reflect.DeepEqual(resp.Results[0].(*pilosa.Row).Keys, []string{"pilosa", "zebra", "icecream"}) {
 					t.Errorf("wrong values: %+v", resp.Results[0])
+				}
+			},
+			csvVerifier: func(t *testing.T, resp string) {
+				exp := "pilosa\nzebra\nicecream\n"
+				if resp != exp {
+					t.Errorf("expected '%s', got '%s'", exp, resp)
 				}
 			},
 		},
 		{
 			query: "Distinct(Row(affinity>0),field=likes)",
-			verifier: func(t *testing.T, resp pilosa.QueryResponse) {
+			qrVerifier: func(t *testing.T, resp pilosa.QueryResponse) {
 				if !reflect.DeepEqual(resp.Results[0].(*pilosa.Row).Keys, []string{"molecula", "pangolin", "icecream"}) {
 					t.Errorf("wrong values: %+v", resp.Results[0])
+				}
+			},
+			csvVerifier: func(t *testing.T, resp string) {
+				exp := "molecula\npangolin\nicecream\n"
+				if resp != exp {
+					t.Errorf("expected '%s', got '%s'", exp, resp)
 				}
 			},
 		},
 		{
 			query: "Distinct(Row(likenums=1),field=likes)",
-			verifier: func(t *testing.T, resp pilosa.QueryResponse) {
+			qrVerifier: func(t *testing.T, resp pilosa.QueryResponse) {
 				if !reflect.DeepEqual(resp.Results[0].(*pilosa.Row).Keys, []string{"molecula", "icecream"}) {
 					t.Errorf("wrong values: %+v", resp.Results[0])
+				}
+			},
+			csvVerifier: func(t *testing.T, resp string) {
+				exp := "molecula\nicecream\n"
+				if resp != exp {
+					t.Errorf("expected '%s', got '%s'", exp, resp)
 				}
 			},
 		},
 		{
 			query: "Distinct(field=likes)",
-			verifier: func(t *testing.T, resp pilosa.QueryResponse) {
+			qrVerifier: func(t *testing.T, resp pilosa.QueryResponse) {
 				if !reflect.DeepEqual(resp.Results[0].(*pilosa.Row).Keys, []string{"molecula", "pilosa", "pangolin", "zebra", "toucan", "dog", "icecream"}) {
 					t.Errorf("wrong values: %+v", resp.Results[0])
+				}
+			},
+			csvVerifier: func(t *testing.T, resp string) {
+				exp := "molecula\npilosa\npangolin\nzebra\ntoucan\ndog\nicecream\n"
+				if resp != exp {
+					t.Errorf("expected '%s', got '%s'", exp, resp)
 				}
 			},
 		},
 		{
 			query: "Distinct(All(),field=likes)",
-			verifier: func(t *testing.T, resp pilosa.QueryResponse) {
+			qrVerifier: func(t *testing.T, resp pilosa.QueryResponse) {
 				if !reflect.DeepEqual(resp.Results[0].(*pilosa.Row).Keys, []string{"molecula", "pilosa", "pangolin", "zebra", "toucan", "dog", "icecream"}) {
 					t.Errorf("wrong values: %+v", resp.Results[0])
+				}
+			},
+			csvVerifier: func(t *testing.T, resp string) {
+				exp := "molecula\npilosa\npangolin\nzebra\ntoucan\ndog\nicecream\n"
+				if resp != exp {
+					t.Errorf("expected '%s', got '%s'", exp, resp)
 				}
 			},
 		},
 		{
 			query: "Distinct(field=likes )",
-			verifier: func(t *testing.T, resp pilosa.QueryResponse) {
+			qrVerifier: func(t *testing.T, resp pilosa.QueryResponse) {
 				if !reflect.DeepEqual(resp.Results[0].(*pilosa.Row).Keys, []string{"molecula", "pilosa", "pangolin", "zebra", "toucan", "dog", "icecream"}) {
 					t.Errorf("wrong values: %+v", resp.Results[0])
+				}
+			},
+			csvVerifier: func(t *testing.T, resp string) {
+				exp := "molecula\npilosa\npangolin\nzebra\ntoucan\ndog\nicecream\n"
+				if resp != exp {
+					t.Errorf("expected '%s', got '%s'", exp, resp)
 				}
 			},
 		},
@@ -6930,7 +7009,16 @@ func TestVariousQueries(t *testing.T) {
 	for i, tst := range tests {
 		t.Run(fmt.Sprintf("%d-%s", i, tst.query), func(t *testing.T) {
 			resp := c.Query(t, "users", tst.query)
-			tst.verifier(t, resp)
+			tr := c.QueryGRPC(t, "users", tst.query)
+			if tst.qrVerifier != nil {
+				tst.qrVerifier(t, resp)
+			}
+			csvString := tr.ToCSVString()
+			// verify everything after header
+			tst.csvVerifier(t, csvString[strings.Index(csvString, "\n")+1:])
+
+			// TODO: add HTTP and Postgres and ability to convert
+			// those results to CSV to run through CSV verifier
 		})
 	}
 }

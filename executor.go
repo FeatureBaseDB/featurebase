@@ -6690,38 +6690,42 @@ func (s SignedRow) ToTable() (*pb.TableResponse, error) {
 func (s SignedRow) ToRows(callback func(*pb.RowResponse) error) error {
 
 	ci := []*pb.ColumnInfo{{Name: s.Field(), Datatype: "int64"}}
-	negs := s.Neg.Columns()
-	for i := len(negs) - 1; i >= 0; i-- {
-		val, err := toNegInt64(negs[i])
-		if err != nil {
-			return errors.Wrap(err, "converting uint64 to int64 (negative)")
-		}
+	if s.Neg != nil {
+		negs := s.Neg.Columns()
+		for i := len(negs) - 1; i >= 0; i-- {
+			val, err := toNegInt64(negs[i])
+			if err != nil {
+				return errors.Wrap(err, "converting uint64 to int64 (negative)")
+			}
 
-		if err := callback(&pb.RowResponse{
-			Headers: ci,
-			Columns: []*pb.ColumnResponse{
-				&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: val}},
-			},
-		}); err != nil {
-			return errors.Wrap(err, "calling callback")
+			if err := callback(&pb.RowResponse{
+				Headers: ci,
+				Columns: []*pb.ColumnResponse{
+					&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: val}},
+				},
+			}); err != nil {
+				return errors.Wrap(err, "calling callback")
+			}
+			ci = nil
 		}
-		ci = nil
 	}
-	for _, id := range s.Pos.Columns() {
-		val, err := toInt64(id)
-		if err != nil {
-			return errors.Wrap(err, "converting uint64 to int64 (positive)")
-		}
+	if s.Pos != nil {
+		for _, id := range s.Pos.Columns() {
+			val, err := toInt64(id)
+			if err != nil {
+				return errors.Wrap(err, "converting uint64 to int64 (positive)")
+			}
 
-		if err := callback(&pb.RowResponse{
-			Headers: ci,
-			Columns: []*pb.ColumnResponse{
-				&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: val}},
-			},
-		}); err != nil {
-			return errors.Wrap(err, "calling callback")
+			if err := callback(&pb.RowResponse{
+				Headers: ci,
+				Columns: []*pb.ColumnResponse{
+					&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: val}},
+				},
+			}); err != nil {
+				return errors.Wrap(err, "calling callback")
+			}
+			ci = nil
 		}
-		ci = nil
 	}
 	return nil
 }

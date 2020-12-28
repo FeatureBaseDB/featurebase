@@ -26,6 +26,8 @@ import (
 	"time"
 
 	"github.com/pilosa/pilosa/v2"
+	"github.com/pilosa/pilosa/v2/api/client"
+	"github.com/pilosa/pilosa/v2/proto"
 	"github.com/pilosa/pilosa/v2/server"
 	"github.com/pkg/errors"
 )
@@ -51,6 +53,33 @@ func (c *Cluster) Query(t testing.TB, index, query string) pilosa.QueryResponse 
 	}
 
 	return c.Nodes[0].QueryAPI(t, &pilosa.QueryRequest{Index: index, Query: query})
+}
+
+func (c *Cluster) QueryHTTP(t testing.TB, index, query string) (string, error) {
+	t.Helper()
+	if len(c.Nodes) == 0 {
+		t.Fatal("must have at least one node in cluster to QueryHTTP")
+	}
+	return c.Nodes[0].Query(t, index, "", query)
+}
+
+func (c *Cluster) QueryGRPC(t testing.TB, index, query string) *proto.TableResponse {
+	t.Helper()
+	if len(c.Nodes) == 0 {
+		t.Fatal("must have at least one node in cluster to QueryGRPC")
+	}
+
+	grpcClient, err := client.NewGRPCClient([]string{fmt.Sprintf("%s:%d", c.Nodes[0].Server.GRPCURI().Host, c.Nodes[0].Server.GRPCURI().Port)}, nil)
+	if err != nil {
+		t.Fatalf("getting GRPC client: %v", err)
+	}
+
+	tableResp, err := grpcClient.QueryUnary(context.Background(), index, query)
+	if err != nil {
+		t.Fatalf("querying unary: %v", err)
+	}
+
+	return tableResp
 }
 
 func (c *Cluster) GetNode(n int) *Command {
