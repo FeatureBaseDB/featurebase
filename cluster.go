@@ -1047,7 +1047,7 @@ func (c *cluster) ShardNodes(index string, shard uint64) []*Node {
 	return c.shardNodes(index, shard)
 }
 
-// shardNodes returns a list of nodes that own a fragment. unprotected
+// shardNodes returns a list of nodes that own a shard. unprotected
 func (c *cluster) shardNodes(index string, shard uint64) []*Node {
 	return c.partitionNodes(c.shardToShardPartition(index, shard))
 }

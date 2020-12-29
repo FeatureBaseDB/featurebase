@@ -46,6 +46,10 @@ type QueryRequest struct {
 	// If false, this request is on the originating node.
 	Remote bool
 
+	// Query has already been translated. This is only used if Remote
+	// is false, Remote=true implies this.
+	PreTranslated bool
+
 	// Should we profile this query?
 	Profile bool
 

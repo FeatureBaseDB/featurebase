@@ -532,7 +532,7 @@ func (e *executor) execute(ctx context.Context, qcx *Qcx, index string, q *pql.Q
 		}
 
 		// Apply call translation.
-		if !opt.Remote {
+		if !opt.Remote && !opt.PreTranslated {
 			translated, err := e.translateCall(call, index, colTranslations, rowTranslations)
 			if err != nil {
 				return nil, errors.Wrap(err, "translating call")
@@ -676,77 +676,101 @@ func (e *executor) executeCall(ctx context.Context, qcx *Qcx, index string, c *p
 	switch c.Name {
 	case "Sum":
 		statFn()
-		return e.executeSum(ctx, qcx, index, c, shards, opt)
+		res, err := e.executeSum(ctx, qcx, index, c, shards, opt)
+		return res, errors.Wrapf(err, "executeSum %v", shards)
 	case "Min":
 		statFn()
-		return e.executeMin(ctx, qcx, index, c, shards, opt)
+		res, err := e.executeMin(ctx, qcx, index, c, shards, opt)
+		return res, errors.Wrapf(err, "executeMin %v", shards)
 	case "Max":
 		statFn()
-		return e.executeMax(ctx, qcx, index, c, shards, opt)
+		res, err := e.executeMax(ctx, qcx, index, c, shards, opt)
+		return res, errors.Wrapf(err, "executeMax %v", shards)
 	case "MinRow":
 		statFn()
-		return e.executeMinRow(ctx, qcx, index, c, shards, opt)
+		res, err := e.executeMinRow(ctx, qcx, index, c, shards, opt)
+		return res, errors.Wrapf(err, "executeMinRow %v", shards)
 	case "MaxRow":
 		statFn()
-		return e.executeMaxRow(ctx, qcx, index, c, shards, opt)
+		res, err := e.executeMaxRow(ctx, qcx, index, c, shards, opt)
+		return res, errors.Wrapf(err, "executeMaxRow %v", shards)
 	case "Clear":
 		statFn()
-		return e.executeClearBit(ctx, qcx, index, c, opt)
+		res, err := e.executeClearBit(ctx, qcx, index, c, opt)
+		return res, errors.Wrapf(err, "executeClearBit %v", shards)
 	case "ClearRow":
 		statFn()
-		return e.executeClearRow(ctx, qcx, index, c, shards, opt)
+		res, err := e.executeClearRow(ctx, qcx, index, c, shards, opt)
+		return res, errors.Wrapf(err, "executeClearRow %v", shards)
 	case "Distinct":
 		statFn()
-		return e.executeDistinct(ctx, qcx, index, c, shards, opt)
+		res, err := e.executeDistinct(ctx, qcx, index, c, shards, opt)
+		return res, errors.Wrapf(err, "executeDistinct %v", shards)
 	case "Store":
 		statFn()
-		return e.executeSetRow(ctx, qcx, index, c, shards, opt)
+		res, err := e.executeSetRow(ctx, qcx, index, c, shards, opt)
+		return res, errors.Wrapf(err, "executeSetRow %v", shards)
 	case "Count":
 		statFn()
-		return e.executeCount(ctx, qcx, index, c, shards, opt)
+		res, err := e.executeCount(ctx, qcx, index, c, shards, opt)
+		return res, errors.Wrapf(err, "executeCount %v", shards)
 	case "Set":
 		statFn()
-		return e.executeSet(ctx, qcx, index, c, opt)
+		res, err := e.executeSet(ctx, qcx, index, c, opt)
+		return res, errors.Wrapf(err, "executeSet %v", shards)
 	case "SetRowAttrs":
 		statFn()
-		return nil, e.executeSetRowAttrs(ctx, qcx, index, c, opt)
+		return nil, errors.Wrap(e.executeSetRowAttrs(ctx, qcx, index, c, opt), "executeSetRowAttrs")
 	case "SetColumnAttrs":
 		statFn()
-		return nil, e.executeSetColumnAttrs(ctx, qcx, index, c, opt)
+		return nil, errors.Wrap(e.executeSetColumnAttrs(ctx, qcx, index, c, opt), "executeSetColumnAttrs")
 	case "TopK":
 		statFn()
-		return e.executeTopK(ctx, qcx, index, c, shards, opt)
+		res, err := e.executeTopK(ctx, qcx, index, c, shards, opt)
+		return res, errors.Wrapf(err, "executeTopK %v", shards)
 	case "TopN":
 		statFn()
-		return e.executeTopN(ctx, qcx, index, c, shards, opt)
+		res, err := e.executeTopN(ctx, qcx, index, c, shards, opt)
+		return res, errors.Wrapf(err, "executeTopN %v", shards)
 	case "Rows":
 		statFn()
-		return e.executeRows(ctx, qcx, index, c, shards, opt)
+		res, err := e.executeRows(ctx, qcx, index, c, shards, opt)
+		return res, errors.Wrapf(err, "executeRows %v", shards)
 	case "Extract":
 		statFn()
-		return e.executeExtract(ctx, qcx, index, c, shards, opt)
+		res, err := e.executeExtract(ctx, qcx, index, c, shards, opt)
+		return res, errors.Wrapf(err, "executeExtract %v", shards)
 	case "GroupBy":
 		statFn()
-		return e.executeGroupBy(ctx, qcx, index, c, shards, opt)
+		res, err := e.executeGroupBy(ctx, qcx, index, c, shards, opt)
+		return res, errors.Wrapf(err, "executeGroupBy %v", shards)
 	case "Options":
 		statFn()
-		return e.executeOptionsCall(ctx, qcx, index, c, shards, opt)
+		res, err := e.executeOptionsCall(ctx, qcx, index, c, shards, opt)
+		return res, errors.Wrapf(err, "executeOptionsCall %v", shards)
 	case "IncludesColumn":
-		return e.executeIncludesColumnCall(ctx, qcx, index, c, shards, opt)
+		res, err := e.executeIncludesColumnCall(ctx, qcx, index, c, shards, opt)
+		return res, errors.Wrapf(err, "executeIncludesColumnCall %v", shards)
 	case "FieldValue":
 		statFn()
-		return e.executeFieldValueCall(ctx, qcx, index, c, shards, opt)
+		res, err := e.executeFieldValueCall(ctx, qcx, index, c, shards, opt)
+		return res, errors.Wrapf(err, "executeFieldValueCall %v", shards)
 	case "Precomputed":
-		return e.executePrecomputedCall(ctx, qcx, index, c, shards, opt)
+		res, err := e.executePrecomputedCall(ctx, qcx, index, c, shards, opt)
+		return res, errors.Wrapf(err, "executePrecomputedCall %v", shards)
 	case "UnionRows":
-		return e.executeUnionRows(ctx, qcx, index, c, shards, opt)
+		res, err := e.executeUnionRows(ctx, qcx, index, c, shards, opt)
+		return res, errors.Wrapf(err, "executeUnionRows %v", shards)
 	case "ConstRow":
-		return e.executeConstRow(ctx, index, c)
+		res, err := e.executeConstRow(ctx, index, c)
+		return res, errors.Wrapf(err, "executeConstRow %v", shards)
 	case "Limit":
-		return e.executeLimitCall(ctx, qcx, index, c, shards, opt)
+		res, err := e.executeLimitCall(ctx, qcx, index, c, shards, opt)
+		return res, errors.Wrapf(err, "executeLimitCall %v", shards)
 	default: // e.g. "Row", "Union", "Intersect" or anything that returns a bitmap.
 		statFn()
-		return e.executeBitmapCall(ctx, qcx, index, c, shards, opt)
+		res, err := e.executeBitmapCall(ctx, qcx, index, c, shards, opt)
+		return res, errors.Wrapf(err, "executeBitmapCall %v", shards)
 	}
 }
 
@@ -1111,6 +1135,11 @@ func (e *executor) executeDistinct(ctx context.Context, qcx *Qcx, index string, 
 		case SignedRow:
 			return other.union(v.(SignedRow))
 		case *Row:
+			if other == nil {
+				return v
+			} else if v.(*Row) == nil {
+				return other
+			}
 			return other.Union(v.(*Row))
 		case nil:
 			return v
@@ -1121,13 +1150,12 @@ func (e *executor) executeDistinct(ctx context.Context, qcx *Qcx, index string, 
 
 	result, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "mapReduce")
 	}
 
 	if other, ok := result.(SignedRow); ok {
 		other.field = field
 	}
-
 	return result, nil
 }
 
@@ -1470,10 +1498,15 @@ func executeDistinctShardSet(ctx context.Context, qcx *Qcx, idx *Index, fieldNam
 	defer finisher(&err0)
 
 	fragData, _, err := tx.ContainerIterator(index, fieldName, "standard", shard, 0)
-	if err != nil {
+	switch errors.Cause(err) {
+	case ViewNotFound, FragmentNotFound:
+		return nil, nil
+	case nil:
+	default:
 		return nil, errors.Wrap(err, "getting fragment data")
 	}
 	defer fragData.Close()
+
 	// We can't grab the containers "for each row" from the set-type field,
 	// because we don't know how many rows there are, and some of them
 	// might be empty, so really, we're going to iterate through the
@@ -2666,7 +2699,7 @@ func (e *executor) executeGroupBy(ctx context.Context, qcx *Qcx, index string, c
 	// Get full result set.
 	other, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "mapReduce shards: %v", shards)
 	}
 	results, _ := other.([]GroupCount)
 
@@ -2708,7 +2741,7 @@ func (e *executor) executeGroupBy(ctx context.Context, qcx *Qcx, index string, c
 		}
 	}
 	aggregate, _, err := c.CallArg("aggregate")
-	if err == nil && aggregate != nil && aggregate.Name == "Count" && len(aggregate.Children) > 0 && aggregate.Children[0].Name == "Distinct" {
+	if err == nil && aggregate != nil && aggregate.Name == "Count" && len(aggregate.Children) > 0 && aggregate.Children[0].Name == "Distinct" && !opt.Remote {
 		for n, gc := range results {
 			intersectRows := make([]*pql.Call, 0, len(gc.Group))
 			for _, fr := range gc.Group {
@@ -2740,6 +2773,7 @@ func (e *executor) executeGroupBy(ctx context.Context, qcx *Qcx, index string, c
 				},
 			}
 
+			opt.PreTranslated = true
 			aggregateCount, err := e.execute(ctx, qcx, index, &pql.Query{Calls: []*pql.Call{countDistinctIntersect}}, []uint64{}, opt)
 			if err != nil {
 				return nil, err
@@ -5146,7 +5180,7 @@ loop:
 				continue loop
 			}
 		}
-		return nil, errShardUnavailable
+		return nil, errors.Wrapf(errShardUnavailable, "%s:%d:%v:%v", index, shard, shards, nodes)
 	}
 	return m, nil
 }
@@ -5269,7 +5303,7 @@ func (e *executor) mapper(ctx context.Context, cancel context.CancelFunc, ch cha
 	// Group shards together by nodes.
 	m, err := e.shardsByNode(nodes, index, shards)
 	if err != nil {
-		return errors.Wrap(err, "shards by node")
+		return errors.Wrapf(err, "shards by node %v", shards)
 	}
 
 	// Execute each node in a separate goroutine.
@@ -6672,6 +6706,7 @@ type execOptions struct {
 	ExcludeRowAttrs bool
 	ExcludeColumns  bool
 	ColumnAttrs     bool
+	PreTranslated   bool
 	EmbeddedData    []*Row
 }
 

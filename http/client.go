@@ -286,7 +286,6 @@ func (c *InternalClient) QueryNode(ctx context.Context, uri *pilosa.URI, index s
 	} else if queryRequest.Query == "" {
 		return nil, pilosa.ErrQueryRequired
 	}
-
 	buf, err := c.serializer.Marshal(queryRequest)
 	if err != nil {
 		return nil, errors.Wrap(err, "marshaling queryRequest")
@@ -308,7 +307,7 @@ func (c *InternalClient) QueryNode(ctx context.Context, uri *pilosa.URI, index s
 	// Execute request against the host.
 	resp, err := c.executeRequest(req.WithContext(ctx))
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "'%s', shards %v", queryRequest.Query, queryRequest.Shards)
 	}
 	defer resp.Body.Close()
 
@@ -1714,12 +1713,15 @@ func (c *InternalClient) executeRequest(req *http.Request, opts ...executeReques
 		var msg string
 		// try to decode a JSON response
 		var sr successResponse
+		qr := &pilosa.QueryResponse{}
 		if err = json.Unmarshal(buf, &sr); err == nil {
 			msg = sr.Error.Error()
+		} else if err := c.serializer.Unmarshal(buf, qr); err == nil {
+			msg = qr.Err.Error()
 		} else {
 			msg = string(buf)
 		}
-		return resp, errors.Errorf("server error %s: '%s'", resp.Status, msg)
+		return resp, errors.Errorf("against %s %s: '%s'", req.URL.String(), resp.Status, msg)
 	}
 	return resp, nil
 }
