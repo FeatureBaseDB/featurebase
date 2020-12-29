@@ -15,6 +15,7 @@
 package cmd_test
 
 import (
+	"fmt"
 	"io/ioutil"
 	"strings"
 	"testing"
@@ -169,38 +170,49 @@ func TestServerConfig(t *testing.T) {
 
 	// run server tests
 	for i, test := range tests {
-		com := test.setupCommand(t)
-		executed := make(chan struct{})
-		var execErr error
-		go func() {
-			execErr = com.Execute()
-			close(executed)
-		}()
-		select {
-		case <-cmd.Server.Started:
-		case <-executed:
-		}
-		if execErr != nil {
-			t.Fatalf("executing server command: %v", execErr)
-		}
-		err := cmd.Server.Close()
-		failErr(t, err, "closing pilosa server command")
-		<-executed
-		failErr(t, execErr, "executing command")
+		t.Run(fmt.Sprintf("test-%d", i), func(t *testing.T) {
+			com := test.setupCommand(t)
+			executed := make(chan struct{})
+			var execErr error
+			go func() {
+				execErr = com.Execute()
+				close(executed)
+			}()
+			select {
+			case <-cmd.Server.Started:
+			case <-executed:
+			}
+			if execErr != nil {
+				t.Fatalf("executing server command: %v", execErr)
+			}
+			err := cmd.Server.Close()
+			failErr(t, err, "closing pilosa server command")
+			<-executed
+			failErr(t, execErr, "executing command")
 
-		if err := test.validation(); err != nil {
-			t.Fatalf("Failed test %d due to: %v", i, err)
-		}
-		test.reset()
+			if err := test.validation(); err != nil {
+				t.Fatalf("Failed test %d due to: %v", i, err)
+			}
+			test.reset()
+		})
 	}
 }
 func TestServerConfig_DeprecateLongQueryTime(t *testing.T) {
+	actualDataDir, err := ioutil.TempDir("", "")
+	failErr(t, err, "making data dir")
+
 	tests := []commandTest{
 		// TEST 0
 		{
-			args:           []string{"server", "--long-query-time", "1m10s"},
-			env:            map[string]string{},
-			cfgFileContent: "",
+			args: []string{"server", "--long-query-time", "1m10s"},
+			env:  map[string]string{},
+			cfgFileContent: `
+            	bind = "localhost:0"
+            	bind-grpc = "localhost:0"
+             	data-dir = "` + actualDataDir + `"
+                [gossip]
+                  port = "14321"
+`,
 			validation: func() error {
 				v := validator{}
 				v.Check(cmd.Server.Config.LongQueryTime, toml.Duration(time.Second*70))
@@ -210,9 +222,14 @@ func TestServerConfig_DeprecateLongQueryTime(t *testing.T) {
 		},
 		// TEST 1
 		{
-			args:           []string{"server", "--cluster.long-query-time", "1m20s"},
-			env:            map[string]string{},
-			cfgFileContent: "",
+			args: []string{"server", "--cluster.long-query-time", "1m20s"},
+			env:  map[string]string{},
+			cfgFileContent: `
+            	bind = "localhost:0"
+            	bind-grpc = "localhost:0"
+                [gossip]
+                  port = "14321"
+`,
 			validation: func() error {
 				v := validator{}
 				v.Check(cmd.Server.Config.Cluster.LongQueryTime, toml.Duration(time.Second*80))
@@ -222,9 +239,14 @@ func TestServerConfig_DeprecateLongQueryTime(t *testing.T) {
 		},
 		// TEST 2: Use old value if both are provided because it is the simplest implementation
 		{
-			args:           []string{"server", "--long-query-time", "50s", "--cluster.long-query-time", "1m30s"},
-			env:            map[string]string{},
-			cfgFileContent: "",
+			args: []string{"server", "--long-query-time", "50s", "--cluster.long-query-time", "1m30s"},
+			env:  map[string]string{},
+			cfgFileContent: `
+            	bind = "localhost:0"
+            	bind-grpc = "localhost:0"
+                [gossip]
+                  port = "14321"
+`,
 			validation: func() error {
 				v := validator{}
 				v.Check(cmd.Server.Config.LongQueryTime, toml.Duration(time.Second*50))
@@ -237,28 +259,30 @@ func TestServerConfig_DeprecateLongQueryTime(t *testing.T) {
 
 	// run server tests
 	for i, test := range tests {
-		com := test.setupCommand(t)
-		executed := make(chan struct{})
-		var execErr error
-		go func() {
-			execErr = com.Execute()
-			close(executed)
-		}()
-		select {
-		case <-cmd.Server.Started:
-		case <-executed:
-		}
-		if execErr != nil {
-			t.Fatalf("executing server command: %v", execErr)
-		}
-		err := cmd.Server.Close()
-		failErr(t, err, "closing pilosa server command")
-		<-executed
-		failErr(t, execErr, "executing command")
+		t.Run(fmt.Sprintf("test-%d", i), func(t *testing.T) {
+			com := test.setupCommand(t)
+			executed := make(chan struct{})
+			var execErr error
+			go func() {
+				execErr = com.Execute()
+				close(executed)
+			}()
+			select {
+			case <-cmd.Server.Started:
+			case <-executed:
+			}
+			if execErr != nil {
+				t.Fatalf("executing server command: %v", execErr)
+			}
+			err := cmd.Server.Close()
+			failErr(t, err, "closing pilosa server command")
+			<-executed
+			failErr(t, execErr, "executing command")
 
-		if err := test.validation(); err != nil {
-			t.Fatalf("Failed test %d due to: %v", i, err)
-		}
-		test.reset()
+			if err := test.validation(); err != nil {
+				t.Fatalf("Failed test %d due to: %v", i, err)
+			}
+			test.reset()
+		})
 	}
 }
