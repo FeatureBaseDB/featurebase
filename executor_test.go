@@ -6789,12 +6789,12 @@ func TestMissingKeyRegression(t *testing.T) {
 func TestVariousQueries(t *testing.T) {
 	for _, clusterSize := range []int{1, 3, 4, 7} {
 		t.Run(fmt.Sprintf("%d-node", clusterSize), func(t *testing.T) {
-			testVariousQueries(t, clusterSize)
+			variousQueries(t, clusterSize)
 		})
 	}
 }
 
-func testVariousQueries(t *testing.T, clusterSize int) {
+func variousQueries(t *testing.T, clusterSize int) {
 	c := test.MustRunCluster(t, clusterSize)
 	defer c.Close()
 
@@ -7046,6 +7046,30 @@ pangolin,1,1
 zebra,1,1
 toucan,1,1
 icecream,5,3
+`,
+		},
+		{
+			query: "GroupBy(Rows(field=likes), sort=\"count desc, likes asc\")",
+			// note, sort is in order of rowID rather than rowKey
+			csvVerifier: `icecream,6,0
+molecula,1,0
+pilosa,1,0
+pangolin,1,0
+zebra,1,0
+toucan,1,0
+dog,1,0
+`,
+		},
+		{
+			query: "GroupBy(Rows(field=likes), sort=\"count desc, likes desc\")",
+			// note, sort is in order of rowID rather than rowKey
+			csvVerifier: `icecream,6,0
+dog,1,0
+toucan,1,0
+zebra,1,0
+pangolin,1,0
+pilosa,1,0
+molecula,1,0
 `,
 		},
 	}

@@ -2613,6 +2613,135 @@ func (r RowIDs) merge(other RowIDs, limit int) RowIDs {
 	return result
 }
 
+type order bool
+
+const (
+	asc  order = true
+	desc order = false
+)
+
+type groupCountSorter struct {
+	fields []int
+	order  []order
+	data   []GroupCount
+}
+
+func (g *groupCountSorter) Len() int      { return len(g.data) }
+func (g *groupCountSorter) Swap(i, j int) { g.data[i], g.data[j] = g.data[j], g.data[i] }
+func (g *groupCountSorter) Less(i, j int) bool {
+	gci, gcj := g.data[i], g.data[j]
+	for idx, fieldIndex := range g.fields {
+		fieldOrder := g.order[idx]
+		switch fieldIndex {
+		case -1: // Count
+			if gci.Count == gcj.Count {
+				continue
+			}
+			if fieldOrder == asc {
+				return gci.Count < gcj.Count
+			}
+			return gcj.Count < gci.Count
+		case -2: // aggregate/Sum
+			if gci.Sum == gcj.Sum {
+				continue
+			}
+			if fieldOrder == asc {
+				return gci.Sum < gcj.Sum
+			}
+			return gcj.Sum < gci.Sum
+		default:
+			switch compareFieldRows(gci.Group[fieldIndex], gcj.Group[fieldIndex]) {
+			case 0:
+				continue
+			case -1:
+				return fieldOrder == asc
+			case 1:
+				return fieldOrder == desc
+			}
+
+		}
+	}
+	return true
+}
+
+// compareFieldRows returns -1 if a < b, +1 if a > b, and 0 if they
+// are equal. It checks Value, RowKey and RowID, but assumes that
+// Field is equal.
+func compareFieldRows(a, b FieldRow) int {
+	if a.Value != nil {
+		if a.Value == b.Value {
+			return 0
+		}
+		if *a.Value < *b.Value {
+			return -1
+		}
+		return +1
+	}
+	if a.RowKey != "" {
+		if a.RowKey == b.RowKey {
+			return 0
+		}
+		if a.RowKey < b.RowKey {
+			return -1
+		}
+		return +1
+	}
+	if a.RowID != 0 {
+		if a.RowID == b.RowID {
+			return 0
+		}
+		if a.RowID < b.RowID {
+			return -1
+		}
+		return +1
+	}
+	// OK, everything in a is zero... so b must be greater unless it's
+	// also zero (because if a.Value is nil, b.Value must also be
+	// nil... or something fishy is happening)
+	if b.RowKey == "" && b.RowID == 0 {
+		return 0
+	}
+	return -1
+}
+
+// getSorter hackily parses the sortSpec and figures out how to sort
+// the GroupBy results. TODO Probably has about a billion edge case
+// bugs. Also needs to take in the Call so it can figure out if fields
+// are valid and what order they're in.
+func getSorter(sortSpec string) (*groupCountSorter, error) {
+	gcs := &groupCountSorter{
+		fields: []int{},
+		order:  []order{},
+	}
+	sortOn := strings.Split(sortSpec, ",")
+	for _, sortField := range sortOn {
+		sortField = strings.TrimSpace(sortField)
+		fieldDir := strings.Split(sortField, " ")
+		defaultOrder := asc
+		if fieldDir[0] == "count" {
+			gcs.fields = append(gcs.fields, -1)
+			defaultOrder = desc
+		} else if fieldDir[0] == "aggregate" {
+			gcs.fields = append(gcs.fields, -2)
+			defaultOrder = desc
+		} else {
+			gcs.fields = append(gcs.fields, 0) // TODO actually figure out which field. probably need the call
+		}
+
+		if len(fieldDir) == 0 {
+			gcs.order = append(gcs.order, defaultOrder)
+		}
+		if fieldDir[1] == "asc" {
+			gcs.order = append(gcs.order, asc)
+		} else if fieldDir[1] == "desc" {
+			gcs.order = append(gcs.order, desc)
+		} else {
+			return nil, errors.Errorf("unknown sort direction '%s'", fieldDir[1])
+		}
+	}
+	return gcs, nil
+}
+
 func (e *executor) executeGroupBy(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *execOptions) ([]GroupCount, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeGroupBy")
 	defer span.Finish()
@@ -2629,6 +2758,16 @@ func (e *executor) executeGroupBy(ctx context.Context, qcx *Qcx, index string, c
 	filter, _, err := c.CallArg("filter")
 	if err != nil {
 		return nil, err
+	}
+
+	var sorter *groupCountSorter
+	if sortSpec, found, err := c.StringArg("sort"); err != nil {
+		return nil, errors.Wrap(err, "getting sort arg")
+	} else if found {
+		sorter, err = getSorter(sortSpec)
+		if err != nil {
+			return nil, errors.Wrap(err, "parsing sort spec")
+		}
 	}
 
 	idx := e.Holder.Index(index)
@@ -2781,6 +2920,12 @@ func (e *executor) executeGroupBy(ctx context.Context, qcx *Qcx, index string, c
 			results[n].Sum = int64(aggregateCount[0].(uint64))
 		}
 	}
+
+	if sorter != nil {
+		sorter.data = results
+		sort.Sort(sorter)
+	}
+
 	return results, nil
 }
 

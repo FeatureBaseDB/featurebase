@@ -444,6 +444,7 @@ var callInfoByFunc = map[string]callInfo{
 			"previous":  nil,
 			"aggregate": nil,
 			"having":    nil,
+			"sort":      "",
 		},
 	},
 	"Options": {
