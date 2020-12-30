@@ -250,7 +250,7 @@ func (tx *RoaringTx) Contains(index, field, view string, shard uint64, v uint64)
 func (tx *RoaringTx) ContainerIterator(index, field, view string, shard uint64, key uint64) (citer roaring.ContainerIterator, found bool, err error) {
 	b, err := tx.bitmap(index, field, view, shard)
 	if err != nil {
-		return nil, false, err
+		return nil, false, errors.Wrap(err, "getting bitmap")
 	}
 	//vv("b bitmap back from bitmap(index='%v', field='%v', view='%v', shard='%v')='%#v'", index, field, view, shard, b.Slice())
 	citer, found = b.Containers.Iterator(key)
@@ -395,7 +395,7 @@ const FragmentNotFound = Error("fragment not found")
 func (tx *RoaringTx) bitmap(index, field, view string, shard uint64) (*roaring.Bitmap, error) {
 	frag, err := tx.getFragment(index, field, view, shard)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "getFragment")
 	}
 	return frag.storage, nil
 }

@@ -144,6 +144,7 @@ message QueryRequest {
 	bool ExcludeRowAttrs = 6;
 	bool ExcludeColumns = 7;
 	repeated Row EmbeddedData = 8;
+	bool PreTranslated = 9;
 }
 
 message QueryResponse {

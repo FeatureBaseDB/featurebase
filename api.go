@@ -163,13 +163,15 @@ func (api *API) Query(ctx context.Context, req *QueryRequest) (QueryResponse, er
 	if !req.Remote {
 		defer api.tracker.Finish(api.tracker.Start(req.Query, api.server.nodeID, req.Index, start))
 	}
+	// TODO can we get rid of exec options and pass the QueryRequest directly to executor?
 	execOpts := &execOptions{
 		Remote:          req.Remote,
 		Profile:         req.Profile,
 		ExcludeRowAttrs: req.ExcludeRowAttrs, // NOTE: Kept for Pilosa 1.x compat.
 		ExcludeColumns:  req.ExcludeColumns,  // NOTE: Kept for Pilosa 1.x compat.
 		ColumnAttrs:     req.ColumnAttrs,     // NOTE: Kept for Pilosa 1.x compat.
-		EmbeddedData:    req.EmbeddedData,    // precomputed values that needed to be passed with the request
+		PreTranslated:   req.PreTranslated,
+		EmbeddedData:    req.EmbeddedData, // precomputed values that needed to be passed with the request
 	}
 	resp, err := api.server.executor.Execute(ctx, req.Index, q, req.Shards, execOpts)
 	if err != nil {

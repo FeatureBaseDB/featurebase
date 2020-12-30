@@ -490,6 +490,7 @@ func (s Serializer) encodeQueryRequest(m *pilosa.QueryRequest) *internal.QueryRe
 		Remote:          m.Remote,
 		ExcludeRowAttrs: m.ExcludeRowAttrs,
 		ExcludeColumns:  m.ExcludeColumns,
+		PreTranslated:   m.PreTranslated,
 		EmbeddedData:    make([]*internal.Row, len(m.EmbeddedData)),
 	}
 	for i := range m.EmbeddedData {
@@ -1210,6 +1211,7 @@ func (s Serializer) decodeQueryRequest(pb *internal.QueryRequest, m *pilosa.Quer
 	m.ExcludeRowAttrs = pb.ExcludeRowAttrs
 	m.ExcludeColumns = pb.ExcludeColumns
 	m.EmbeddedData = make([]*pilosa.Row, len(pb.EmbeddedData))
+	m.PreTranslated = pb.PreTranslated
 	for i := range pb.EmbeddedData {
 		m.EmbeddedData[i] = s.decodeRow(pb.EmbeddedData[i])
 	}
@@ -1696,7 +1698,7 @@ func (s Serializer) encodeSignedRow(r pilosa.SignedRow) *internal.SignedRow {
 
 func (s Serializer) encodeRow(r *pilosa.Row) *internal.Row {
 	if r == nil {
-		return nil
+		return &internal.Row{} // Generated proto code doesn't like a nil Row.
 	}
 
 	ir := &internal.Row{
