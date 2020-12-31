@@ -6844,6 +6844,18 @@ func variousQueries(t *testing.T, clusterSize int) {
 		{Val: 0, Key: "userE"},
 	})
 
+	// Create and populate "affinity" int field with negative, positive, zero and null values.
+
+	c.CreateField(t, "users", pilosa.IndexOptions{Keys: true, TrackExistence: true}, "net_worth", pilosa.OptFieldTypeInt(-100000000, 100000000))
+	c.ImportIntKey(t, "users", "net_worth", []test.IntKey{
+		{Val: 1, Key: "userA"},
+		{Val: 10, Key: "userB"},
+		{Val: 100, Key: "userC"},
+		{Val: 1000, Key: "userD"},
+		{Val: 10000, Key: "userE"},
+		{Val: 100000, Key: "userF"},
+	})
+
 	c.CreateField(t, "users", pilosa.IndexOptions{Keys: true, TrackExistence: true}, "zip_code", pilosa.OptFieldTypeInt(0, 100000))
 	c.ImportIntKey(t, "users", "zip_code", []test.IntKey{
 		{Val: 78739, Key: "userA"},
@@ -7009,6 +7021,10 @@ icecream,6,0
 `,
 		},
 		{
+			query:       "GroupBy(Rows(field=likes), having=Condition(count>5))",
+			csvVerifier: "icecream,6,0\n",
+		},
+		{
 			query: "GroupBy(Rows(field=likes), filter=Row(affinity>-7))",
 			csvVerifier: `molecula,1,0
 pangolin,1,0
@@ -7027,6 +7043,10 @@ toucan,1,1
 dog,1,0
 icecream,6,3
 `,
+		},
+		{
+			query:       "GroupBy(Rows(field=likes), aggregate=Count(Distinct(field=zip_code)), having=Condition(sum>2))",
+			csvVerifier: "icecream,6,3\n",
 		},
 		{
 			query: "GroupBy(Rows(field=likes), filter=Row(affinity>-11), aggregate=Count(Distinct(field=zip_code)))",
@@ -7049,8 +7069,7 @@ icecream,5,3
 `,
 		},
 		{
-			query: "GroupBy(Rows(field=likes), sort=\"count desc, likes asc\")",
-			// note, sort is in order of rowID rather than rowKey
+			query: "GroupBy(Rows(field=likes), sort=\"count desc\")",
 			csvVerifier: `icecream,6,0
 molecula,1,0
 pilosa,1,0
@@ -7061,15 +7080,28 @@ dog,1,0
 `,
 		},
 		{
-			query: "GroupBy(Rows(field=likes), sort=\"count desc, likes desc\")",
-			// note, sort is in order of rowID rather than rowKey
-			csvVerifier: `icecream,6,0
-dog,1,0
-toucan,1,0
-zebra,1,0
-pangolin,1,0
-pilosa,1,0
-molecula,1,0
+			query: "GroupBy(Rows(field=likes), aggregate=Sum(field=net_worth), sort=\"aggregate desc, count asc\")",
+			csvVerifier: `icecream,6,111111
+dog,1,100000
+toucan,1,10000
+zebra,1,1000
+pangolin,1,100
+pilosa,1,10
+molecula,1,1
+`,
+		},
+		{
+			query: "GroupBy(Rows(field=likes), aggregate=Sum(field=net_worth), sort=\"aggregate desc, count asc\", limit=3)",
+			csvVerifier: `icecream,6,111111
+dog,1,100000
+toucan,1,10000
+`,
+		},
+		{
+			query: "GroupBy(Rows(field=likes), aggregate=Sum(field=net_worth),sort=\"aggregate desc, count asc\",limit=3,offset=2)",
+			csvVerifier: `toucan,1,10000
+zebra,1,1000
+pangolin,1,100
 `,
 		},
 	}
@@ -7088,7 +7120,7 @@ molecula,1,0
 			// verify everything after header
 			got := csvString[strings.Index(csvString, "\n")+1:]
 			if got != tst.csvVerifier {
-				t.Errorf("expected '%s', got '%s'", tst.csvVerifier, got)
+				t.Errorf("expected:\n%s\ngot:\n%s", tst.csvVerifier, got)
 			}
 
 			// TODO: add HTTP and Postgres and ability to convert

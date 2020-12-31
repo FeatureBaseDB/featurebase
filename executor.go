@@ -2661,7 +2661,7 @@ func (g *groupCountSorter) Less(i, j int) bool {
 
 		}
 	}
-	return true
+	return false
 }
 
 // compareFieldRows returns -1 if a < b, +1 if a > b, and 0 if they
@@ -2706,8 +2706,7 @@ func compareFieldRows(a, b FieldRow) int {
 
 // getSorter hackily parses the sortSpec and figures out how to sort
 // the GroupBy results. TODO Probably has about a billion edge case
-// bugs. Also needs to take in the Call so it can figure out if fields
-// are valid and what order they're in.
+// bugs.
 func getSorter(sortSpec string) (*groupCountSorter, error) {
 	gcs := &groupCountSorter{
 		fields: []int{},
@@ -2717,19 +2716,16 @@ func getSorter(sortSpec string) (*groupCountSorter, error) {
 	for _, sortField := range sortOn {
 		sortField = strings.TrimSpace(sortField)
 		fieldDir := strings.Split(sortField, " ")
-		defaultOrder := asc
 		if fieldDir[0] == "count" {
 			gcs.fields = append(gcs.fields, -1)
-			defaultOrder = desc
-		} else if fieldDir[0] == "aggregate" {
+		} else if fieldDir[0] == "aggregate" || fieldDir[0] == "sum" {
 			gcs.fields = append(gcs.fields, -2)
-			defaultOrder = desc
 		} else {
-			gcs.fields = append(gcs.fields, 0) // TODO actually figure out which field. probably need the call
+			return nil, errors.Errorf("sorting is only supported on count, aggregate, or sum, not '%s'", fieldDir[0])
 		}
 
-		if len(fieldDir) == 0 {
-			gcs.order = append(gcs.order, defaultOrder)
+		if len(fieldDir) == 1 {
+			gcs.order = append(gcs.order, desc)
 		}
 		if fieldDir[1] == "asc" {
 			gcs.order = append(gcs.order, asc)
@@ -2768,6 +2764,14 @@ func (e *executor) executeGroupBy(ctx context.Context, qcx *Qcx, index string, c
 		if err != nil {
 			return nil, errors.Wrap(err, "parsing sort spec")
 		}
+		// don't want to prematurely limit the results if we're sorting
+		limit = int(^uint(0) >> 1)
+	}
+	if _, hasHaving, err := c.CallArg("having"); err != nil {
+		return nil, errors.Wrap(err, "getting 'having' argument")
+	} else if hasHaving {
+		// don't want to prematurely limit the results if we're filtering some out
+		limit = int(^uint(0) >> 1)
 	}
 
 	idx := e.Holder.Index(index)
@@ -2842,43 +2846,21 @@ func (e *executor) executeGroupBy(ctx context.Context, qcx *Qcx, index string, c
 	}
 	results, _ := other.([]GroupCount)
 
-	// Apply having.
-	if having, hasHaving, err := c.CallArg("having"); err != nil {
-		return nil, err
-	} else if hasHaving {
-		// parse the condition as PQL
-		if having.Name != "Condition" {
-			return nil, errors.New("the only supported having call is Condition()")
-		}
-		if len(having.Args) != 1 {
-			return nil, errors.New("Condition() must contain a single condition")
-		}
-		for subj, cond := range having.Args {
-			switch subj {
-			case "count", "sum":
-				results = applyConditionToGroupCounts(results, subj, cond.(*pql.Condition))
-			default:
-				return nil, errors.New("Condition() only supports count or sum")
-			}
+	// If there's no sorting, we want to apply limits before
+	// calculating the Distinct aggregate which is expensive on a
+	// per-result basis.
+	if sorter == nil {
+		results, err = applyLimitAndOffsetToGroupByResult(c, results)
+		if err != nil {
+			return nil, errors.Wrap(err, "applying limit/offset")
 		}
 	}
 
-	// Apply offset.
-	if offset, hasOffset, err := c.UintArg("offset"); err != nil {
-		return nil, err
-	} else if hasOffset {
-		if int(offset) < len(results) {
-			results = results[offset:]
-		}
-	}
-	// Apply limit.
-	if limit, hasLimit, err := c.UintArg("limit"); err != nil {
-		return nil, err
-	} else if hasLimit {
-		if int(limit) < len(results) {
-			results = results[:limit]
-		}
-	}
+	// TODO as an optimization, we could apply some "having"
+	// conditions here long as they aren't on the Count(Distinct)
+	// aggregate
+
+	// Calculate Count(Distinct) aggregate if requested.
 	aggregate, _, err := c.CallArg("aggregate")
 	if err == nil && aggregate != nil && aggregate.Name == "Count" && len(aggregate.Children) > 0 && aggregate.Children[0].Name == "Distinct" && !opt.Remote {
 		for n, gc := range results {
@@ -2898,10 +2880,10 @@ func (e *executor) executeGroupBy(ctx context.Context, qcx *Qcx, index string, c
 			countDistinctIntersect := &pql.Call{
 				Name: "Count",
 				Children: []*pql.Call{
-					&pql.Call{
+					{
 						Name: "Distinct",
 						Children: []*pql.Call{
-							&pql.Call{
+							{
 								Name:     "Intersect",
 								Children: intersectRows,
 							},
@@ -2921,11 +2903,56 @@ func (e *executor) executeGroupBy(ctx context.Context, qcx *Qcx, index string, c
 		}
 	}
 
-	if sorter != nil {
-		sorter.data = results
-		sort.Sort(sorter)
+	// Apply having.
+	if having, hasHaving, err := c.CallArg("having"); err != nil {
+		return nil, err
+	} else if hasHaving && !opt.Remote {
+		// parse the condition as PQL
+		if having.Name != "Condition" {
+			return nil, errors.New("the only supported having call is Condition()")
+		}
+		if len(having.Args) != 1 {
+			return nil, errors.New("Condition() must contain a single condition")
+		}
+		for subj, cond := range having.Args {
+			switch subj {
+			case "count", "sum":
+				results = applyConditionToGroupCounts(results, subj, cond.(*pql.Condition))
+			default:
+				return nil, errors.New("Condition() only supports count or sum")
+			}
+		}
 	}
 
+	if sorter != nil && !opt.Remote {
+		sorter.data = results
+		sort.Stable(sorter)
+		results, err = applyLimitAndOffsetToGroupByResult(c, results)
+		if err != nil {
+			return nil, errors.Wrap(err, "applying limit/offset")
+		}
+	}
+
+	return results, nil
+}
+
+func applyLimitAndOffsetToGroupByResult(c *pql.Call, results []GroupCount) ([]GroupCount, error) {
+	// Apply offset.
+	if offset, hasOffset, err := c.UintArg("offset"); err != nil {
+		return nil, err
+	} else if hasOffset {
+		if int(offset) < len(results) {
+			results = results[offset:]
+		}
+	}
+	// Apply limit.
+	if limit, hasLimit, err := c.UintArg("limit"); err != nil {
+		return nil, err
+	} else if hasLimit {
+		if int(limit) < len(results) {
+			results = results[:limit]
+		}
+	}
 	return results, nil
 }
 
