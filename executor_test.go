@@ -7021,6 +7021,12 @@ icecream,6,0
 `,
 		},
 		{
+			query: "GroupBy(Rows(field=likes), aggregate=Sum(field=net_worth), limit=2, having=Condition(sum>10))",
+			csvVerifier: `pangolin,1,100
+zebra,1,1000
+`,
+		},
+		{
 			query:       "GroupBy(Rows(field=likes), having=Condition(count>5))",
 			csvVerifier: "icecream,6,0\n",
 		},

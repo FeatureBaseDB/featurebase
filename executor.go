@@ -2767,7 +2767,8 @@ func (e *executor) executeGroupBy(ctx context.Context, qcx *Qcx, index string, c
 		// don't want to prematurely limit the results if we're sorting
 		limit = int(^uint(0) >> 1)
 	}
-	if _, hasHaving, err := c.CallArg("having"); err != nil {
+	having, hasHaving, err := c.CallArg("having")
+	if err != nil {
 		return nil, errors.Wrap(err, "getting 'having' argument")
 	} else if hasHaving {
 		// don't want to prematurely limit the results if we're filtering some out
@@ -2849,7 +2850,7 @@ func (e *executor) executeGroupBy(ctx context.Context, qcx *Qcx, index string, c
 	// If there's no sorting, we want to apply limits before
 	// calculating the Distinct aggregate which is expensive on a
 	// per-result basis.
-	if sorter == nil {
+	if sorter == nil && !hasHaving {
 		results, err = applyLimitAndOffsetToGroupByResult(c, results)
 		if err != nil {
 			return nil, errors.Wrap(err, "applying limit/offset")
@@ -2904,9 +2905,7 @@ func (e *executor) executeGroupBy(ctx context.Context, qcx *Qcx, index string, c
 	}
 
 	// Apply having.
-	if having, hasHaving, err := c.CallArg("having"); err != nil {
-		return nil, err
-	} else if hasHaving && !opt.Remote {
+	if hasHaving && !opt.Remote {
 		// parse the condition as PQL
 		if having.Name != "Condition" {
 			return nil, errors.New("the only supported having call is Condition()")
@@ -2931,6 +2930,12 @@ func (e *executor) executeGroupBy(ctx context.Context, qcx *Qcx, index string, c
 		if err != nil {
 			return nil, errors.Wrap(err, "applying limit/offset")
 		}
+	} else if hasHaving && !opt.Remote {
+		results, err = applyLimitAndOffsetToGroupByResult(c, results)
+		if err != nil {
+			return nil, errors.Wrap(err, "applying limit/offset")
+		}
+
 	}
 
 	return results, nil
