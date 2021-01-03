@@ -2613,6 +2613,7 @@ func (r RowIDs) merge(other RowIDs, limit int) RowIDs {
 	return result
 }
 
+// order denotes sort order—can be asc or desc (see constants below).
 type order bool
 
 const (
@@ -2620,6 +2621,17 @@ const (
 	desc order = false
 )
 
+// groupCountSorter sorts the output of a GroupBy request (a
+// []GroupCount) according to sorting instructions encoded in "fields"
+// and "order".
+//
+// Each field in "fields" is an integer which can be -1 to denote
+// sorting on the Count and -2 to denote sorting on the
+// sum/aggregate. Currently nothing else is supported, but the idea
+// was that if there were positive integers they would be indexes into
+// GroupCount.FieldRow and allowing sorting on the values of different
+// fields in the group. Each item in "order" corresponds to the same
+// index in "fields" and denotes the order of the sort.
 type groupCountSorter struct {
 	fields []int
 	order  []order
@@ -2650,58 +2662,10 @@ func (g *groupCountSorter) Less(i, j int) bool {
 			}
 			return gcj.Sum < gci.Sum
 		default:
-			switch compareFieldRows(gci.Group[fieldIndex], gcj.Group[fieldIndex]) {
-			case 0:
-				continue
-			case -1:
-				return fieldOrder == asc
-			case 1:
-				return fieldOrder == desc
-			}
-
+			panic("impossible")
 		}
 	}
 	return false
-}
-
-// compareFieldRows returns -1 if a < b, +1 if a > b, and 0 if they
-// are equal. It checks Value, RowKey and RowID, but assumes that
-// Field is equal.
-func compareFieldRows(a, b FieldRow) int {
-	if a.Value != nil {
-		if a.Value == b.Value {
-			return 0
-		}
-		if *a.Value < *b.Value {
-			return -1
-		}
-		return +1
-	}
-	if a.RowKey != "" {
-		if a.RowKey == b.RowKey {
-			return 0
-		}
-		if a.RowKey < b.RowKey {
-			return -1
-		}
-		return +1
-	}
-	if a.RowID != 0 {
-		if a.RowID == b.RowID {
-			return 0
-		}
-		if a.RowID < b.RowID {
-			return -1
-		}
-		return +1
-	}
-	// OK, everything in a is zero... so b must be greater unless it's
-	// also zero (because if a.Value is nil, b.Value must also be
-	// nil... or something fishy is happening)
-	if b.RowKey == "" && b.RowID == 0 {
-		return 0
-	}
-	return -1
 }
 
 // getSorter hackily parses the sortSpec and figures out how to sort
