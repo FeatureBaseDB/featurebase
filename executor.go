@@ -2646,21 +2646,17 @@ func (g *groupCountSorter) Less(i, j int) bool {
 		fieldOrder := g.order[idx]
 		switch fieldIndex {
 		case -1: // Count
-			if gci.Count == gcj.Count {
-				continue
+			if gci.Count < gcj.Count {
+				return fieldOrder == asc
+			} else if gci.Count > gcj.Count {
+				return fieldOrder == desc
 			}
-			if fieldOrder == asc {
-				return gci.Count < gcj.Count
-			}
-			return gcj.Count < gci.Count
 		case -2: // aggregate/Sum
-			if gci.Sum == gcj.Sum {
-				continue
+			if gci.Sum < gcj.Sum {
+				return fieldOrder == asc
+			} else if gci.Sum > gcj.Sum {
+				return fieldOrder == desc
 			}
-			if fieldOrder == asc {
-				return gci.Sum < gcj.Sum
-			}
-			return gcj.Sum < gci.Sum
 		default:
 			panic("impossible")
 		}
@@ -2669,8 +2665,7 @@ func (g *groupCountSorter) Less(i, j int) bool {
 }
 
 // getSorter hackily parses the sortSpec and figures out how to sort
-// the GroupBy results. TODO Probably has about a billion edge case
-// bugs.
+// the GroupBy results.
 func getSorter(sortSpec string) (*groupCountSorter, error) {
 	gcs := &groupCountSorter{
 		fields: []int{},
@@ -2679,8 +2674,10 @@ func getSorter(sortSpec string) (*groupCountSorter, error) {
 	sortOn := strings.Split(sortSpec, ",")
 	for _, sortField := range sortOn {
 		sortField = strings.TrimSpace(sortField)
-		fieldDir := strings.Split(sortField, " ")
-		if fieldDir[0] == "count" {
+		fieldDir := strings.Fields(sortField)
+		if len(fieldDir) == 0 {
+			return nil, errors.Errorf("invalid sorting directive: '%s'", sortField)
+		} else if fieldDir[0] == "count" {
 			gcs.fields = append(gcs.fields, -1)
 		} else if fieldDir[0] == "aggregate" || fieldDir[0] == "sum" {
 			gcs.fields = append(gcs.fields, -2)
@@ -2690,8 +2687,9 @@ func getSorter(sortSpec string) (*groupCountSorter, error) {
 
 		if len(fieldDir) == 1 {
 			gcs.order = append(gcs.order, desc)
-		}
-		if fieldDir[1] == "asc" {
+		} else if len(fieldDir) > 2 {
+			return nil, errors.Errorf("parsing sort directive: '%s': too many elements", sortField)
+		} else if fieldDir[1] == "asc" {
 			gcs.order = append(gcs.order, asc)
 		} else if fieldDir[1] == "desc" {
 			gcs.order = append(gcs.order, desc)
