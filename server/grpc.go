@@ -267,6 +267,46 @@ func (h *GRPCHandler) QueryPQLUnary(ctx context.Context, req *pb.QueryPQLRequest
 	return table, errToStatusError(nil)
 }
 
+// CreateIndex creates a new Index
+func (h *GRPCHandler) CreateIndex(ctx context.Context, req *pb.CreateIndexRequest) (*pb.CreateIndexResponse, error) {
+	opts := pilosa.IndexOptions{Keys: req.Keys, TrackExistence: req.TrackExistence}
+	_, err := h.api.CreateIndex(ctx, req.Name, opts)
+	if err != nil {
+		return nil, errToStatusError(err)
+	}
+	return &pb.CreateIndexResponse{}, nil
+}
+
+// GetIndexes returns a single Index given a name
+func (h *GRPCHandler) GetIndex(ctx context.Context, req *pb.GetIndexRequest) (*pb.GetIndexResponse, error) {
+	schema := h.api.Schema(ctx)
+	for _, index := range schema {
+		if req.Name == index.Name {
+			return &pb.GetIndexResponse{Index: &pb.Index{Name: index.Name}}, nil
+		}
+	}
+	return nil, status.Error(codes.NotFound, fmt.Sprintf("Index with name %s not found", req.Name))
+}
+
+// GetIndexes returns a list of all Indexes
+func (h *GRPCHandler) GetIndexes(ctx context.Context, req *pb.GetIndexesRequest) (*pb.GetIndexesResponse, error) {
+	schema := h.api.Schema(ctx)
+	indexes := make([]*pb.Index, len(schema))
+	for i, index := range schema {
+		indexes[i] = &pb.Index{Name: index.Name}
+	}
+	return &pb.GetIndexesResponse{Indexes: indexes}, nil
+}
+
+// DeleteIndex deletes an Index
+func (h *GRPCHandler) DeleteIndex(ctx context.Context, req *pb.DeleteIndexRequest) (*pb.DeleteIndexResponse, error) {
+	err := h.api.DeleteIndex(ctx, req.Name)
+	if err != nil {
+		return nil, errToStatusError(err)
+	}
+	return &pb.DeleteIndexResponse{}, nil
+}
+
 // VDSMGRPCHandler contains methods which handle the various gRPC requests, ported from VDSM.
 type VDSMGRPCHandler struct {
 	grpcHandler *GRPCHandler
