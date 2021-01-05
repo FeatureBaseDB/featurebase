@@ -441,9 +441,11 @@ var callInfoByFunc = map[string]callInfo{
 		prototypes: map[string]interface{}{
 			"filter":    nil,
 			"limit":     int64(0),
+			"offset":    int64(0),
 			"previous":  nil,
 			"aggregate": nil,
 			"having":    nil,
+			"sort":      "",
 		},
 	},
 	"Options": {

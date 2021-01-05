@@ -6789,12 +6789,12 @@ func TestMissingKeyRegression(t *testing.T) {
 func TestVariousQueries(t *testing.T) {
 	for _, clusterSize := range []int{1, 3, 4, 7} {
 		t.Run(fmt.Sprintf("%d-node", clusterSize), func(t *testing.T) {
-			testVariousQueries(t, clusterSize)
+			variousQueries(t, clusterSize)
 		})
 	}
 }
 
-func testVariousQueries(t *testing.T, clusterSize int) {
+func variousQueries(t *testing.T, clusterSize int) {
 	c := test.MustRunCluster(t, clusterSize)
 	defer c.Close()
 
@@ -6842,6 +6842,18 @@ func testVariousQueries(t *testing.T, clusterSize int) {
 		{Val: 5, Key: "userC"},
 		{Val: -5, Key: "userD"},
 		{Val: 0, Key: "userE"},
+	})
+
+	// Create and populate "affinity" int field with negative, positive, zero and null values.
+
+	c.CreateField(t, "users", pilosa.IndexOptions{Keys: true, TrackExistence: true}, "net_worth", pilosa.OptFieldTypeInt(-100000000, 100000000))
+	c.ImportIntKey(t, "users", "net_worth", []test.IntKey{
+		{Val: 1, Key: "userA"},
+		{Val: 10, Key: "userB"},
+		{Val: 100, Key: "userC"},
+		{Val: 1000, Key: "userD"},
+		{Val: 10000, Key: "userE"},
+		{Val: 100000, Key: "userF"},
 	})
 
 	c.CreateField(t, "users", pilosa.IndexOptions{Keys: true, TrackExistence: true}, "zip_code", pilosa.OptFieldTypeInt(0, 100000))
@@ -7009,6 +7021,16 @@ icecream,6,0
 `,
 		},
 		{
+			query: "GroupBy(Rows(field=likes), aggregate=Sum(field=net_worth), limit=2, having=Condition(sum>10))",
+			csvVerifier: `pangolin,1,100
+zebra,1,1000
+`,
+		},
+		{
+			query:       "GroupBy(Rows(field=likes), having=Condition(count>5))",
+			csvVerifier: "icecream,6,0\n",
+		},
+		{
 			query: "GroupBy(Rows(field=likes), filter=Row(affinity>-7))",
 			csvVerifier: `molecula,1,0
 pangolin,1,0
@@ -7027,6 +7049,10 @@ toucan,1,1
 dog,1,0
 icecream,6,3
 `,
+		},
+		{
+			query:       "GroupBy(Rows(field=likes), aggregate=Count(Distinct(field=zip_code)), having=Condition(sum>2))",
+			csvVerifier: "icecream,6,3\n",
 		},
 		{
 			query: "GroupBy(Rows(field=likes), filter=Row(affinity>-11), aggregate=Count(Distinct(field=zip_code)))",
@@ -7048,6 +7074,42 @@ toucan,1,1
 icecream,5,3
 `,
 		},
+		{
+			query: "GroupBy(Rows(field=likes), sort=\"count desc\")",
+			csvVerifier: `icecream,6,0
+molecula,1,0
+pilosa,1,0
+pangolin,1,0
+zebra,1,0
+toucan,1,0
+dog,1,0
+`,
+		},
+		{
+			query: "GroupBy(Rows(field=likes), aggregate=Sum(field=net_worth), sort=\"aggregate desc, count asc\")",
+			csvVerifier: `icecream,6,111111
+dog,1,100000
+toucan,1,10000
+zebra,1,1000
+pangolin,1,100
+pilosa,1,10
+molecula,1,1
+`,
+		},
+		{
+			query: "GroupBy(Rows(field=likes), aggregate=Sum(field=net_worth), sort=\"aggregate desc, count asc\", limit=3)",
+			csvVerifier: `icecream,6,111111
+dog,1,100000
+toucan,1,10000
+`,
+		},
+		{
+			query: "GroupBy(Rows(field=likes), aggregate=Sum(field=net_worth),sort=\"aggregate desc, count asc\",limit=3,offset=2)",
+			csvVerifier: `toucan,1,10000
+zebra,1,1000
+pangolin,1,100
+`,
+		},
 	}
 
 	for i, tst := range tests {
@@ -7064,7 +7126,7 @@ icecream,5,3
 			// verify everything after header
 			got := csvString[strings.Index(csvString, "\n")+1:]
 			if got != tst.csvVerifier {
-				t.Errorf("expected '%s', got '%s'", tst.csvVerifier, got)
+				t.Errorf("expected:\n%s\ngot:\n%s", tst.csvVerifier, got)
 			}
 
 			// TODO: add HTTP and Postgres and ability to convert
