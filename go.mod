@@ -46,7 +46,7 @@ require (
 	github.com/uber/jaeger-client-go v2.16.0+incompatible
 	github.com/uber/jaeger-lib v2.2.0+incompatible // indirect
 	github.com/zeebo/blake3 v0.0.4
-	go.etcd.io/bbolt v1.3.3
+	go.etcd.io/bbolt v1.3.5
 	go.etcd.io/etcd v0.0.0-20201125193152-8a03d2e9614b
 	golang.org/x/exp v0.0.0-20201008143054-e3b2a7f2fdc7
 	golang.org/x/mod v0.3.1-0.20200828183125-ce943fd02449
