@@ -33,24 +33,26 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	"github.com/gorilla/mux"
 	"github.com/pilosa/pilosa/v2/logger"
+	pnet "github.com/pilosa/pilosa/v2/net"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/testhook"
+	"github.com/pilosa/pilosa/v2/topology"
 	"github.com/pkg/errors"
 )
 
 // Ensure that fragCombos creates the correct fragment mapping.
 func TestFragCombos(t *testing.T) {
-	uri0, err := NewURIFromAddress("host0")
+	uri0, err := pnet.NewURIFromAddress("host0")
 	if err != nil {
 		t.Fatal(err)
 	}
-	uri1, err := NewURIFromAddress("host1")
+	uri1, err := pnet.NewURIFromAddress("host1")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	node0 := &Node{ID: "node0", URI: *uri0}
-	node1 := &Node{ID: "node1", URI: *uri1}
+	node0 := &topology.Node{ID: "node0", URI: *uri0}
+	node1 := &topology.Node{ID: "node1", URI: *uri1}
 
 	c := newCluster()
 	c.addNodeBasicSorted(node0)
@@ -110,27 +112,27 @@ func newIndexWithTempPath(tb testing.TB, name string) *Index {
 
 // Ensure that fragSources creates the correct fragment mapping.
 func TestFragSources(t *testing.T) {
-	uri0, err := NewURIFromAddress("host0")
+	uri0, err := pnet.NewURIFromAddress("host0")
 	if err != nil {
 		t.Fatal(err)
 	}
-	uri1, err := NewURIFromAddress("host1")
+	uri1, err := pnet.NewURIFromAddress("host1")
 	if err != nil {
 		t.Fatal(err)
 	}
-	uri2, err := NewURIFromAddress("host2")
+	uri2, err := pnet.NewURIFromAddress("host2")
 	if err != nil {
 		t.Fatal(err)
 	}
-	uri3, err := NewURIFromAddress("host3")
+	uri3, err := pnet.NewURIFromAddress("host3")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	node0 := &Node{ID: "node0", URI: *uri0}
-	node1 := &Node{ID: "node1", URI: *uri1}
-	node2 := &Node{ID: "node2", URI: *uri2}
-	node3 := &Node{ID: "node3", URI: *uri3}
+	node0 := &topology.Node{ID: "node0", URI: *uri0}
+	node1 := &topology.Node{ID: "node1", URI: *uri1}
+	node2 := &topology.Node{ID: "node2", URI: *uri2}
+	node3 := &topology.Node{ID: "node3", URI: *uri3}
 
 	c1 := newCluster()
 	c1.ReplicaN = 1
@@ -224,8 +226,8 @@ func TestFragSources(t *testing.T) {
 				"node0": {},
 				"node1": {},
 				"node2": {
-					{&Node{ID: "node0", URI: URI{"http", "host0", 10101}, IsCoordinator: false}, "i", "f", "standard", uint64(0)},
-					{&Node{ID: "node1", URI: URI{"http", "host1", 10101}, IsCoordinator: false}, "i", "f", "standard", uint64(2)},
+					{&topology.Node{ID: "node0", URI: pnet.URI{Scheme: "http", Host: "host0", Port: 10101}, IsCoordinator: false}, "i", "f", "standard", uint64(0)},
+					{&topology.Node{ID: "node1", URI: pnet.URI{Scheme: "http", Host: "host1", Port: 10101}, IsCoordinator: false}, "i", "f", "standard", uint64(2)},
 				},
 			},
 			err: "",
@@ -236,11 +238,11 @@ func TestFragSources(t *testing.T) {
 			idx:  idx,
 			expected: map[string][]*ResizeSource{
 				"node0": {
-					{&Node{ID: "node1", URI: URI{"http", "host1", 10101}, IsCoordinator: false}, "i", "f", "standard", uint64(1)},
+					{&topology.Node{ID: "node1", URI: pnet.URI{Scheme: "http", Host: "host1", Port: 10101}, IsCoordinator: false}, "i", "f", "standard", uint64(1)},
 				},
 				"node1": {
-					{&Node{ID: "node0", URI: URI{"http", "host0", 10101}, IsCoordinator: false}, "i", "f", "standard", uint64(0)},
-					{&Node{ID: "node0", URI: URI{"http", "host0", 10101}, IsCoordinator: false}, "i", "f", "standard", uint64(2)},
+					{&topology.Node{ID: "node0", URI: pnet.URI{Scheme: "http", Host: "host0", Port: 10101}, IsCoordinator: false}, "i", "f", "standard", uint64(0)},
+					{&topology.Node{ID: "node0", URI: pnet.URI{Scheme: "http", Host: "host0", Port: 10101}, IsCoordinator: false}, "i", "f", "standard", uint64(2)},
 				},
 			},
 			err: "",
@@ -251,11 +253,11 @@ func TestFragSources(t *testing.T) {
 			idx:  idx,
 			expected: map[string][]*ResizeSource{
 				"node0": {
-					{&Node{ID: "node2", URI: URI{"http", "host2", 10101}, IsCoordinator: false}, "i", "f", "standard", uint64(0)},
-					{&Node{ID: "node2", URI: URI{"http", "host2", 10101}, IsCoordinator: false}, "i", "f", "standard", uint64(2)},
+					{&topology.Node{ID: "node2", URI: pnet.URI{Scheme: "http", Host: "host2", Port: 10101}, IsCoordinator: false}, "i", "f", "standard", uint64(0)},
+					{&topology.Node{ID: "node2", URI: pnet.URI{Scheme: "http", Host: "host2", Port: 10101}, IsCoordinator: false}, "i", "f", "standard", uint64(2)},
 				},
 				"node1": {
-					{&Node{ID: "node0", URI: URI{"http", "host0", 10101}, IsCoordinator: false}, "i", "f", "standard", uint64(3)},
+					{&topology.Node{ID: "node0", URI: pnet.URI{Scheme: "http", Host: "host0", Port: 10101}, IsCoordinator: false}, "i", "f", "standard", uint64(3)},
 				},
 				"node2": {},
 			},
@@ -304,37 +306,37 @@ func TestFragSources(t *testing.T) {
 // Ensure that fragSources creates the correct fragment mapping.
 func TestResizeJob(t *testing.T) {
 
-	uri0, err := NewURIFromAddress("host0")
+	uri0, err := pnet.NewURIFromAddress("host0")
 	if err != nil {
 		t.Fatal(err)
 	}
-	uri1, err := NewURIFromAddress("host1")
+	uri1, err := pnet.NewURIFromAddress("host1")
 	if err != nil {
 		t.Fatal(err)
 	}
-	uri2, err := NewURIFromAddress("host2")
+	uri2, err := pnet.NewURIFromAddress("host2")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	node0 := &Node{ID: "node0", URI: *uri0}
-	node1 := &Node{ID: "node1", URI: *uri1}
-	node2 := &Node{ID: "node2", URI: *uri2}
+	node0 := &topology.Node{ID: "node0", URI: *uri0}
+	node1 := &topology.Node{ID: "node1", URI: *uri1}
+	node2 := &topology.Node{ID: "node2", URI: *uri2}
 
 	tests := []struct {
-		existingNodes []*Node
-		node          *Node
+		existingNodes []*topology.Node
+		node          *topology.Node
 		action        string
 		expectedIDs   map[string]bool
 	}{
 		{
-			existingNodes: []*Node{node0, node1},
+			existingNodes: []*topology.Node{node0, node1},
 			node:          node2,
 			action:        resizeJobActionAdd,
 			expectedIDs:   map[string]bool{node0.ID: false, node1.ID: false, node2.ID: false},
 		},
 		{
-			existingNodes: []*Node{node0, node1, node2},
+			existingNodes: []*topology.Node{node0, node1, node2},
 			node:          node2,
 			action:        resizeJobActionRemove,
 			expectedIDs:   map[string]bool{node0.ID: false, node1.ID: false},
@@ -355,7 +357,7 @@ func TestResizeJob(t *testing.T) {
 // Ensure the cluster can fairly distribute partitions across the nodes.
 func TestCluster_Owners(t *testing.T) {
 	c := cluster{
-		nodes: []*Node{
+		nodes: []*topology.Node{
 			{URI: NewTestURIFromHostPort("serverA", 1000)},
 			{URI: NewTestURIFromHostPort("serverB", 1000)},
 			{URI: NewTestURIFromHostPort("serverC", 1000)},
@@ -365,12 +367,12 @@ func TestCluster_Owners(t *testing.T) {
 	}
 
 	// Verify nodes are distributed.
-	if a := c.partitionNodes(0); !reflect.DeepEqual(a, []*Node{c.nodes[0], c.nodes[1]}) {
+	if a := c.partitionNodes(0); !reflect.DeepEqual(a, []*topology.Node{c.nodes[0], c.nodes[1]}) {
 		t.Fatalf("unexpected owners: %s", spew.Sdump(a))
 	}
 
 	// Verify nodes go around the ring.
-	if a := c.partitionNodes(2); !reflect.DeepEqual(a, []*Node{c.nodes[2], c.nodes[0]}) {
+	if a := c.partitionNodes(2); !reflect.DeepEqual(a, []*topology.Node{c.nodes[2], c.nodes[0]}) {
 		t.Fatalf("unexpected owners: %s", spew.Sdump(a))
 	}
 }
@@ -436,15 +438,15 @@ func TestCluster_Nodes(t *testing.T) {
 	uri2 := NewTestURIFromHostPort("node2", 0)
 	uri3 := NewTestURIFromHostPort("node3", 0)
 
-	node0 := &Node{ID: "node0", URI: uri0}
-	node1 := &Node{ID: "node1", URI: uri1}
-	node2 := &Node{ID: "node2", URI: uri2}
-	node3 := &Node{ID: "node3", URI: uri3}
+	node0 := &topology.Node{ID: "node0", URI: uri0}
+	node1 := &topology.Node{ID: "node1", URI: uri1}
+	node2 := &topology.Node{ID: "node2", URI: uri2}
+	node3 := &topology.Node{ID: "node3", URI: uri3}
 
-	nodes := []*Node{node0, node1, node2}
+	nodes := []*topology.Node{node0, node1, node2}
 
 	t.Run("NodeIDs", func(t *testing.T) {
-		actual := Nodes(nodes).IDs()
+		actual := topology.Nodes(nodes).IDs()
 		expected := []string{node0.ID, node1.ID, node2.ID}
 		if !reflect.DeepEqual(actual, expected) {
 			t.Errorf("expected: %v, but got: %v", expected, actual)
@@ -452,24 +454,24 @@ func TestCluster_Nodes(t *testing.T) {
 	})
 
 	t.Run("Filter", func(t *testing.T) {
-		actual := Nodes(Nodes(nodes).Filter(nodes[1])).URIs()
-		expected := []URI{uri0, uri2}
+		actual := topology.Nodes(topology.Nodes(nodes).Filter(nodes[1])).URIs()
+		expected := []pnet.URI{uri0, uri2}
 		if !reflect.DeepEqual(actual, expected) {
 			t.Errorf("expected: %v, but got: %v", expected, actual)
 		}
 	})
 
 	t.Run("FilterURI", func(t *testing.T) {
-		actual := Nodes(Nodes(nodes).FilterURI(uri1)).URIs()
-		expected := []URI{uri0, uri2}
+		actual := topology.Nodes(topology.Nodes(nodes).FilterURI(uri1)).URIs()
+		expected := []pnet.URI{uri0, uri2}
 		if !reflect.DeepEqual(actual, expected) {
 			t.Errorf("expected: %v, but got: %v", expected, actual)
 		}
 	})
 
 	t.Run("Contains", func(t *testing.T) {
-		actualTrue := Nodes(nodes).Contains(node1)
-		actualFalse := Nodes(nodes).Contains(node3)
+		actualTrue := topology.Nodes(nodes).Contains(node1)
+		actualFalse := topology.Nodes(nodes).Contains(node3)
 		if !reflect.DeepEqual(actualTrue, true) {
 			t.Errorf("expected: %v, but got: %v", true, actualTrue)
 		}
@@ -479,9 +481,9 @@ func TestCluster_Nodes(t *testing.T) {
 	})
 
 	t.Run("Clone", func(t *testing.T) {
-		clone := Nodes(nodes).Clone()
-		actual := Nodes(clone).URIs()
-		expected := []URI{uri0, uri1, uri2}
+		clone := topology.Nodes(nodes).Clone()
+		actual := topology.Nodes(clone).URIs()
+		expected := []pnet.URI{uri0, uri1, uri2}
 		if !reflect.DeepEqual(actual, expected) {
 			t.Errorf("expected: %v, but got: %v", expected, actual)
 		}
@@ -489,9 +491,9 @@ func TestCluster_Nodes(t *testing.T) {
 }
 
 func TestCluster_PreviousNode(t *testing.T) {
-	node0 := &Node{ID: "node0"}
-	node1 := &Node{ID: "node1"}
-	node2 := &Node{ID: "node2"}
+	node0 := &topology.Node{ID: "node0"}
+	node1 := &topology.Node{ID: "node1"}
+	node2 := &topology.Node{ID: "node2"}
 
 	t.Run("OneNode", func(t *testing.T) {
 		c := newCluster()
@@ -547,8 +549,8 @@ func TestCluster_Coordinator(t *testing.T) {
 	uri1 := NewTestURIFromHostPort("node1", 0)
 	uri2 := NewTestURIFromHostPort("node2", 0)
 
-	node1 := &Node{ID: "node1", URI: uri1}
-	node2 := &Node{ID: "node2", URI: uri2}
+	node1 := &topology.Node{ID: "node1", URI: uri1}
+	node2 := &topology.Node{ID: "node2", URI: uri2}
 
 	c1 := *newCluster()
 	c1.Node = node1
@@ -574,10 +576,10 @@ func TestCluster_Topology(t *testing.T) {
 	uri2 := NewTestURIFromHostPort("host2", 0)
 	invalid := NewTestURIFromHostPort("invalid", 0)
 
-	node0 := &Node{ID: "node0", URI: uri0}
-	node1 := &Node{ID: "node1", URI: uri1}
-	node2 := &Node{ID: "node2", URI: uri2}
-	nodeinvalid := &Node{ID: "nodeinvalid", URI: invalid}
+	node0 := &topology.Node{ID: "node0", URI: uri0}
+	node1 := &topology.Node{ID: "node1", URI: uri1}
+	node2 := &topology.Node{ID: "node2", URI: uri2}
+	nodeinvalid := &topology.Node{ID: "nodeinvalid", URI: invalid}
 
 	t.Run("AddNode", func(t *testing.T) {
 		err := c1.addNode(node1)
@@ -984,7 +986,7 @@ func TestCluster_confirmNodeDownUp(t *testing.T) {
 	if err != nil {
 		t.Error("bad test setup")
 	}
-	uri := URI{}
+	uri := pnet.URI{}
 	host, port, _ := net.SplitHostPort(u.Host)
 	uri.Scheme = u.Scheme
 	uri.Host = host
@@ -1018,7 +1020,7 @@ func TestCluster_confirmNodeDownTimeout(t *testing.T) {
 	if err != nil {
 		t.Error("bad test setup")
 	}
-	uri := URI{}
+	uri := pnet.URI{}
 	host, port, _ := net.SplitHostPort(u.Host)
 	uri.Scheme = u.Scheme
 	uri.Host = host
@@ -1040,7 +1042,7 @@ func TestCluster_confirmNodeDownDown(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
-	uri := URI{}
+	uri := pnet.URI{}
 	uri.Scheme = "http"
 	uri.Host = "DoesntMatter"
 	uri.Port = 6666
@@ -1063,7 +1065,7 @@ func TestCluster_GetNonPrimaryReplicas(t *testing.T) {
 	nNodes := 4
 	for i := 0; i < nNodes; i++ {
 		nodeID := fmt.Sprintf("node%d", i)
-		c.nodes = append(c.nodes, &Node{
+		c.nodes = append(c.nodes, &topology.Node{
 			ID:  nodeID,
 			URI: NewTestURI("http", fmt.Sprintf("host%d", i), uint16(0)),
 		})

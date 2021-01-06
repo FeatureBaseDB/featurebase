@@ -32,7 +32,9 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/v2/internal"
 	"github.com/pilosa/pilosa/v2/logger"
+	pnet "github.com/pilosa/pilosa/v2/net"
 	"github.com/pilosa/pilosa/v2/roaring"
+	"github.com/pilosa/pilosa/v2/topology"
 	"github.com/pilosa/pilosa/v2/tracing"
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
@@ -66,138 +68,17 @@ const (
 	defaultConfirmDownSleep   = 1 * time.Second
 )
 
-// Node represents a node in the cluster.
-type Node struct {
-	ID            string `json:"id"`
-	URI           URI    `json:"uri"`
-	GRPCURI       URI    `json:"grpc-uri"`
-	IsCoordinator bool   `json:"isCoordinator"`
-	State         string `json:"state"`
-}
-
-func (n *Node) Clone() *Node {
-	if n == nil {
-		return nil
-	}
-	other := *n
-	return &other
-}
-
-func (n Node) String() string {
-	return fmt.Sprintf("Node:%s:%s:%s", n.URI, n.State, n.ID)
-}
-
-// Nodes represents a list of nodes.
-type Nodes []*Node
-
-// Contains returns true if a node exists in the list.
-func (a Nodes) Contains(n *Node) bool {
-	for i := range a {
-		if a[i] == n {
-			return true
-		}
-	}
-	return false
-}
-
-// ContainsID returns true if host matches one of the node's id.
-func (a Nodes) ContainsID(id string) bool {
-	for _, n := range a {
-		if n.ID == id {
-			return true
-		}
-	}
-	return false
-}
-
-// NodeByID returns the node for an ID. If the ID is not found,
-// it returns nil.
-func (a Nodes) NodeByID(id string) *Node {
-	for _, n := range a {
-		if n.ID == id {
-			return n
-		}
-	}
-	return nil
-}
-
-// Filter returns a new list of nodes with node removed.
-func (a Nodes) Filter(n *Node) []*Node {
-	other := make([]*Node, 0, len(a))
-	for i := range a {
-		if a[i] != n {
-			other = append(other, a[i])
-		}
-	}
-	return other
-}
-
-// FilterID returns a new list of nodes with ID removed.
-func (a Nodes) FilterID(id string) []*Node {
-	other := make([]*Node, 0, len(a))
-	for _, node := range a {
-		if node.ID != id {
-			other = append(other, node)
-		}
-	}
-	return other
-}
-
-// FilterURI returns a new list of nodes with URI removed.
-func (a Nodes) FilterURI(uri URI) []*Node {
-	other := make([]*Node, 0, len(a))
-	for _, node := range a {
-		if node.URI != uri {
-			other = append(other, node)
-		}
-	}
-	return other
-}
-
-// IDs returns a list of all node IDs.
-func (a Nodes) IDs() []string {
-	ids := make([]string, len(a))
-	for i, n := range a {
-		ids[i] = n.ID
-	}
-	return ids
-}
-
-// URIs returns a list of all uris.
-func (a Nodes) URIs() []URI {
-	uris := make([]URI, len(a))
-	for i, n := range a {
-		uris[i] = n.URI
-	}
-	return uris
-}
-
-// Clone returns a shallow copy of nodes.
-func (a Nodes) Clone() []*Node {
-	other := make([]*Node, len(a))
-	copy(other, a)
-	return other
-}
-
-// byID implements sort.Interface for []Node based on
-// the ID field.
-type byID []*Node
-
-func (h byID) Len() int           { return len(h) }
-func (h byID) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
-func (h byID) Less(i, j int) bool { return h[i].ID < h[j].ID }
-
 // nodeAction represents a node that is joining or leaving the cluster.
 type nodeAction struct {
-	node   *Node
+	node   *topology.Node
 	action string
 }
 
 // cluster represents a collection of nodes.
 type cluster struct { // nolint: maligned
 	id    string
-	Node  *Node
-	nodes []*Node
+	Node  *topology.Node
+	nodes []*topology.Node
 
 	// Hashing algorithm used to assign partitions to nodes.
 	Hasher Hasher
@@ -303,14 +184,14 @@ func (c *cluster) abortAntiEntropy() {
 	}
 }
 
-func (c *cluster) coordinatorNode() *Node {
+func (c *cluster) coordinatorNode() *topology.Node {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.unprotectedCoordinatorNode()
 }
 
 // unprotectedCoordinatorNode returns the coordinator node.
-func (c *cluster) unprotectedCoordinatorNode() *Node {
+func (c *cluster) unprotectedCoordinatorNode() *topology.Node {
 	return c.unprotectedNodeByID(c.Coordinator)
 }
 
@@ -329,7 +210,7 @@ func (c *cluster) unprotectedIsCoordinator() bool {
 // Coordinator. In response to this, the current node
 // will consider itself coordinator and update the other
 // nodes with its version of Cluster.Status.
-func (c *cluster) setCoordinator(n *Node) error {
+func (c *cluster) setCoordinator(n *topology.Node) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	// Verify that the new Coordinator value matches
@@ -376,13 +257,13 @@ func (c *cluster) unprotectedSendSync(m Message) error {
 // changing the corresponding node's IsCoordinator value
 // to true, and sets all other nodes to false. Returns true if the value
 // changed.
-func (c *cluster) updateCoordinator(n *Node) bool { // nolint: unparam
+func (c *cluster) updateCoordinator(n *topology.Node) bool { // nolint: unparam
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.unprotectedUpdateCoordinator(n)
 }
 
-func (c *cluster) unprotectedUpdateCoordinator(n *Node) bool {
+func (c *cluster) unprotectedUpdateCoordinator(n *topology.Node) bool {
 	var changed bool
 	if c.Coordinator != n.ID {
 		c.Coordinator = n.ID
@@ -400,7 +281,7 @@ func (c *cluster) unprotectedUpdateCoordinator(n *Node) bool {
 
 // addNode adds a node to the Cluster and updates and saves the
 // new topology. unprotected.
-func (c *cluster) addNode(node *Node) error {
+func (c *cluster) addNode(node *topology.Node) error {
 	// If the node being added is the coordinator, set it for this node.
 	if node.IsCoordinator {
 		c.Coordinator = node.ID
@@ -444,7 +325,7 @@ func (c *cluster) removeNode(nodeID string) error {
 
 // nodeIDs returns the list of IDs in the cluster.
 func (c *cluster) nodeIDs() []string {
-	return Nodes(c.nodes).IDs()
+	return topology.Nodes(c.nodes).IDs()
 }
 
 func (c *cluster) unprotectedSetID(id string) {
@@ -629,14 +510,14 @@ func (c *cluster) unprotectedStatus() *ClusterStatus {
 	}
 }
 
-func (c *cluster) nodeByID(id string) *Node {
+func (c *cluster) nodeByID(id string) *topology.Node {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.unprotectedNodeByID(id)
 }
 
 // unprotectedNodeByID returns a node reference by ID.
-func (c *cluster) unprotectedNodeByID(id string) *Node {
+func (c *cluster) unprotectedNodeByID(id string) *topology.Node {
 	for _, n := range c.nodes {
 		if n.ID == id {
 			return n
@@ -668,7 +549,7 @@ func (c *cluster) nodePositionByID(nodeID string) int {
 
 // addNodeBasicSorted adds a node to the cluster, sorted by id. Returns a
 // pointer to the node and true if the node was added. unprotected.
-func (c *cluster) addNodeBasicSorted(node *Node) bool {
+func (c *cluster) addNodeBasicSorted(node *topology.Node) bool {
 	n := c.unprotectedNodeByID(node.ID)
 	if n != nil {
 		if n.State != node.State || n.IsCoordinator != node.IsCoordinator || n.URI != node.URI {
@@ -684,17 +565,17 @@ func (c *cluster) addNodeBasicSorted(node *Node) bool {
 	c.nodes = append(c.nodes, node)
 
 	// All hosts must be merged in the same order on all nodes in the cluster.
-	sort.Sort(byID(c.nodes))
+	sort.Sort(topology.ByID(c.nodes))
 
 	return true
 }
 
 // Nodes returns a copy of the slice of nodes in the cluster. Safe for
 // concurrent use, result may be modified.
-func (c *cluster) Nodes() []*Node {
+func (c *cluster) Nodes() []*topology.Node {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	ret := make([]*Node, len(c.nodes))
+	ret := make([]*topology.Node, len(c.nodes))
 	copy(ret, c.nodes)
 	return ret
 }
@@ -851,7 +732,7 @@ func (c *cluster) fragSources(to *cluster, idx *Index) (map[string][]*ResizeSour
 	srcCluster := c
 	if action == resizeJobActionAdd && c.ReplicaN > 1 {
 		srcCluster = newCluster()
-		srcCluster.nodes = Nodes(c.nodes).Clone()
+		srcCluster.nodes = topology.Nodes(c.nodes).Clone()
 		srcCluster.Hasher = c.Hasher
 		srcCluster.partitionN = c.partitionN
 		srcCluster.ReplicaN = 1
@@ -1041,26 +922,26 @@ func (c *cluster) idPartition(index string, id uint64) int {
 }
 
 // ShardNodes returns a list of nodes that own a fragment. Safe for concurrent use.
-func (c *cluster) ShardNodes(index string, shard uint64) []*Node {
+func (c *cluster) ShardNodes(index string, shard uint64) []*topology.Node {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.shardNodes(index, shard)
 }
 
 // shardNodes returns a list of nodes that own a shard. unprotected
-func (c *cluster) shardNodes(index string, shard uint64) []*Node {
+func (c *cluster) shardNodes(index string, shard uint64) []*topology.Node {
 	return c.partitionNodes(c.shardToShardPartition(index, shard))
 }
 
 // KeyNodes returns a list of nodes that own a fragment. Safe for concurrent use.
-func (c *cluster) KeyNodes(index, key string) []*Node {
+func (c *cluster) KeyNodes(index, key string) []*topology.Node {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.keyNodes(index, key)
 }
 
 // keyNodes returns a list of nodes that own a key. unprotected
-func (c *cluster) keyNodes(index, key string) []*Node {
+func (c *cluster) keyNodes(index, key string) []*topology.Node {
 	return c.partitionNodes(c.Topology.KeyPartition(index, key))
 }
 
@@ -1068,11 +949,11 @@ func (c *cluster) keyNodes(index, key string) []*Node {
 func (c *cluster) ownsShard(nodeID string, index string, shard uint64) bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	return Nodes(c.shardNodes(index, shard)).ContainsID(nodeID)
+	return topology.Nodes(c.shardNodes(index, shard)).ContainsID(nodeID)
 }
 
 // partitionNodes returns a list of nodes that own a partition. unprotected.
-func (c *cluster) partitionNodes(partitionID int) []*Node {
+func (c *cluster) partitionNodes(partitionID int) []*topology.Node {
 	// Default replica count to between one and the number of nodes.
 	// The replica count can be zero if there are no nodes.
 
@@ -1114,11 +995,11 @@ func (c *cluster) partitionNodes(partitionID int) []*Node {
 		return nil
 	}
 	// Collect nodes around the ring.
-	nodes := make([]*Node, 0, replicaN)
+	nodes := make([]*topology.Node, 0, replicaN)
 	for i := 0; i < replicaN; i++ {
 		if useTopology {
 			maybeNodeID := c.Topology.nodeIDs[(nodeIndex+i)%nodeN]
-			if node := Nodes(c.nodes).NodeByID(maybeNodeID); node != nil {
+			if node := topology.Nodes(c.nodes).NodeByID(maybeNodeID); node != nil {
 				nodes = append(nodes, node)
 			}
 		} else {
@@ -1129,14 +1010,14 @@ func (c *cluster) partitionNodes(partitionID int) []*Node {
 	return nodes
 }
 
-func (c *cluster) primaryPartitionNode(partition int) *Node {
+func (c *cluster) primaryPartitionNode(partition int) *topology.Node {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.unprotectedPrimaryPartitionNode(partition)
 }
 
 // unprotectedPrimaryPartition returns tprimary node of partition.
-func (c *cluster) unprotectedPrimaryPartitionNode(partition int) *Node {
+func (c *cluster) unprotectedPrimaryPartitionNode(partition int) *topology.Node {
 	if nodes := c.partitionNodes(partition); len(nodes) > 0 {
 		return nodes[0]
 	}
@@ -1199,7 +1080,7 @@ func (topo *Topology) GetReplicasForPrimary(primary int) (replicaNodeIDs, nonRep
 }
 
 // containsShards is like OwnsShards, but it includes replicas.
-func (c *cluster) containsShards(index string, availableShards *roaring.Bitmap, node *Node) []uint64 {
+func (c *cluster) containsShards(index string, availableShards *roaring.Bitmap, node *topology.Node) []uint64 {
 	var shards []uint64
 	_ = availableShards.ForEach(func(i uint64) error {
 		p := c.shardToShardPartition(index, i)
@@ -1417,7 +1298,7 @@ func (c *cluster) unprotectedSetStateAndBroadcast(state string) error {
 	return c.unprotectedSendSync(status) // TODO fix c.Status
 }
 
-func (c *cluster) sendTo(node *Node, m Message) error {
+func (c *cluster) sendTo(node *topology.Node, m Message) error {
 	if err := c.broadcaster.SendTo(node, m); err != nil {
 		return errors.Wrap(err, "sending")
 	}
@@ -1512,7 +1393,7 @@ func (c *cluster) unprotectedGenerateResizeJobByAction(nodeAction nodeAction) (*
 
 	// toCluster is a clone of Cluster with the new node added/removed for comparison.
 	toCluster := newCluster()
-	toCluster.nodes = Nodes(c.nodes).Clone()
+	toCluster.nodes = topology.Nodes(c.nodes).Clone()
 	toCluster.Hasher = c.Hasher
 	toCluster.partitionN = c.partitionN
 	toCluster.ReplicaN = c.ReplicaN
@@ -1830,7 +1711,7 @@ type resizeJob struct {
 }
 
 // newResizeJob returns a new instance of resizeJob.
-func newResizeJob(existingNodes []*Node, node *Node, action string) *resizeJob {
+func newResizeJob(existingNodes []*topology.Node, node *topology.Node, action string) *resizeJob {
 
 	// Build a map of uris to track their resize status.
 	// The value for a node will be set to true after that node
@@ -1918,7 +1799,7 @@ func (j *resizeJob) distributeResizeInstructions() error {
 	for _, instr := range j.Instructions {
 		// Because the node may not be in the cluster yet, create
 		// a dummy node object to use in the SendTo() method.
-		node := &Node{
+		node := &topology.Node{
 			ID:      instr.Node.ID,
 			URI:     instr.Node.URI,
 			GRPCURI: instr.Node.GRPCURI,
@@ -2147,7 +2028,7 @@ func (c *cluster) considerTopology() error {
 // band aid to protect against false nodeLeave events from memberlist
 // the test is the lightest weight endpoint of the node in question /version
 // TODO provide more robust solution to false nodeLeave events
-func (c *cluster) confirmNodeDown(uri URI) bool {
+func (c *cluster) confirmNodeDown(uri pnet.URI) bool {
 	u := url.URL{
 		Scheme: uri.Scheme,
 		Host:   uri.HostPort(),
@@ -2219,7 +2100,7 @@ func (c *cluster) ReceiveEvent(e *NodeEvent) (err error) {
 }
 
 // nodeJoin should only be called by the coordinator.
-func (c *cluster) nodeJoin(node *Node) error {
+func (c *cluster) nodeJoin(node *topology.Node) error {
 	c.abortAntiEntropy()
 	// Technically there is a race condition here which could
 	// allow the anti-entropy process to re-start (and acquire
@@ -2343,7 +2224,7 @@ func (c *cluster) nodeLeave(nodeID string) error {
 	// See if resize job can be generated
 	if _, err := c.unprotectedGenerateResizeJobByAction(
 		nodeAction{
-			node:   &Node{ID: nodeID},
+			node:   &topology.Node{ID: nodeID},
 			action: resizeJobActionRemove},
 	); err != nil {
 		return errors.Wrap(err, "generating job")
@@ -2364,7 +2245,7 @@ func (c *cluster) nodeLeave(nodeID string) error {
 	if err := c.unprotectedSetStateAndBroadcast(ClusterStateResizing); err != nil {
 		return errors.Wrap(err, "broadcasting state")
 	}
-	c.joiningLeavingNodes <- nodeAction{node: &Node{ID: nodeID}, action: resizeJobActionRemove}
+	c.joiningLeavingNodes <- nodeAction{node: &topology.Node{ID: nodeID}, action: resizeJobActionRemove}
 
 	return nil
 }
@@ -2433,7 +2314,7 @@ func (c *cluster) mergeClusterStatus(cs *ClusterStatus) error {
 		if node.ID == c.Node.ID {
 			continue
 		}
-		if Nodes(officialNodes).ContainsID(node.ID) {
+		if topology.Nodes(officialNodes).ContainsID(node.ID) {
 			continue
 		}
 		nodeIDsToRemove = append(nodeIDsToRemove, node.ID)
@@ -2455,7 +2336,7 @@ func (c *cluster) mergeClusterStatus(cs *ClusterStatus) error {
 // unprotectedPreviousNode returns the node listed before the current node in c.Nodes.
 // If there is only one node in the cluster, returns nil.
 // If the current node is the first node in the list, returns the last node.
-func (c *cluster) unprotectedPreviousNode() *Node {
+func (c *cluster) unprotectedPreviousNode() *topology.Node {
 	if len(c.nodes) <= 1 {
 		return nil
 	}
@@ -2472,13 +2353,13 @@ func (c *cluster) unprotectedPreviousNode() *Node {
 
 // PrimaryReplicaNode returns the node listed before the current node in c.Nodes.
 // This is different than "previous node" as the first node always returns nil.
-func (c *cluster) PrimaryReplicaNode() *Node {
+func (c *cluster) PrimaryReplicaNode() *topology.Node {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.unprotectedPrimaryReplicaNode()
 }
 
-func (c *cluster) unprotectedPrimaryReplicaNode() *Node {
+func (c *cluster) unprotectedPrimaryReplicaNode() *topology.Node {
 	pos := c.nodePositionByID(c.Node.ID)
 	if pos <= 0 {
 		return nil
@@ -2492,11 +2373,11 @@ func (c *cluster) setStatic(hosts []string) error {
 	c.Static = true
 	c.Coordinator = c.Node.ID
 	for _, address := range hosts {
-		uri, err := NewURIFromAddress(address)
+		uri, err := pnet.NewURIFromAddress(address)
 		if err != nil {
 			return errors.Wrap(err, "getting URI")
 		}
-		c.nodes = append(c.nodes, &Node{URI: *uri})
+		c.nodes = append(c.nodes, &topology.Node{URI: *uri})
 	}
 	return nil
 }
@@ -2822,7 +2703,7 @@ func (c *cluster) findIndexKeys(ctx context.Context, indexName string, keys ...s
 	// TODO: use local replicas to short-circuit network traffic
 
 	// Group keys by node.
-	keysByNode := make(map[*Node][]string)
+	keysByNode := make(map[*topology.Node][]string)
 	for partitionID, keys := range keysByPartition {
 		// Find the primary node for this partition.
 		primary := c.primaryPartitionNode(partitionID)
@@ -2929,7 +2810,7 @@ func (c *cluster) createIndexKeys(ctx context.Context, indexName string, keys ..
 
 	// Group keys by node.
 	// Delete remote keys from the by-partition map so that it can be used for local translation.
-	keysByNode := make(map[*Node][]string)
+	keysByNode := make(map[*topology.Node][]string)
 	for partitionID, keys := range keysByPartition {
 		// Find the primary node for this partition.
 		primary := c.primaryPartitionNode(partitionID)
@@ -3088,7 +2969,7 @@ func (c *cluster) translateIndexIDSet(ctx context.Context, indexName string, idS
 type ClusterStatus struct {
 	ClusterID string
 	State     string
-	Nodes     []*Node
+	Nodes     []*topology.Node
 	Schema    *Schema
 }
 
@@ -3096,8 +2977,8 @@ type ClusterStatus struct {
 // during a cluster resize operation.
 type ResizeInstruction struct {
 	JobID              int64
-	Node               *Node
-	Coordinator        *Node
+	Node               *topology.Node
+	Coordinator        *topology.Node
 	Sources            []*ResizeSource
 	TranslationSources []*TranslationResizeSource
 	NodeStatus         *NodeStatus
@@ -3107,17 +2988,17 @@ type ResizeInstruction struct {
 // ResizeSource is the source of data for a node acting on a
 // ResizeInstruction.
 type ResizeSource struct {
-	Node  *Node  `protobuf:"bytes,1,opt,name=Node" json:"Node,omitempty"`
-	Index string `protobuf:"bytes,2,opt,name=Index,proto3" json:"Index,omitempty"`
-	Field string `protobuf:"bytes,3,opt,name=Field,proto3" json:"Field,omitempty"`
-	View  string `protobuf:"bytes,4,opt,name=View,proto3" json:"View,omitempty"`
-	Shard uint64 `protobuf:"varint,5,opt,name=Shard,proto3" json:"Shard,omitempty"`
+	Node  *topology.Node `protobuf:"bytes,1,opt,name=Node" json:"Node,omitempty"`
+	Index string         `protobuf:"bytes,2,opt,name=Index,proto3" json:"Index,omitempty"`
+	Field string         `protobuf:"bytes,3,opt,name=Field,proto3" json:"Field,omitempty"`
+	View  string         `protobuf:"bytes,4,opt,name=View,proto3" json:"View,omitempty"`
+	Shard uint64         `protobuf:"varint,5,opt,name=Shard,proto3" json:"Shard,omitempty"`
 }
 
 // TranslationResizeSource is the source of translation data for
 // a node acting on a ResizeInstruction.
 type TranslationResizeSource struct {
-	Node        *Node
+	Node        *topology.Node
 	Index       string
 	PartitionID int
 }
@@ -3125,7 +3006,7 @@ type TranslationResizeSource struct {
 // translateResizeNode holds the node/partition pairs used
 // to create a TranslationResizeSource for each index.
 type translationResizeNode struct {
-	node        *Node
+	node        *topology.Node
 	partitionID int
 }
 
@@ -3219,18 +3100,18 @@ type DeleteViewMessage struct {
 // that the resize instructions performed on a single node have completed.
 type ResizeInstructionComplete struct {
 	JobID int64
-	Node  *Node
+	Node  *topology.Node
 	Error string
 }
 
 // SetCoordinatorMessage is an internal message instructing nodes to honor a new coordinator.
 type SetCoordinatorMessage struct {
-	New *Node
+	New *topology.Node
 }
 
 // UpdateCoordinatorMessage is an internal message for reassigning the coordinator.
 type UpdateCoordinatorMessage struct {
-	New *Node
+	New *topology.Node
 }
 
 // NodeStateMessage is an internal message for broadcasting a node's state.
@@ -3241,7 +3122,7 @@ type NodeStateMessage struct {
 
 // NodeStatus is an internal message representing the contents of a node.
 type NodeStatus struct {
-	Node    *Node
+	Node    *topology.Node
 	Indexes []*IndexStatus
 	Schema  *Schema
 }

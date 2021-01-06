@@ -24,8 +24,10 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/proto"
+	pnet "github.com/pilosa/pilosa/v2/net"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/testhook"
+	"github.com/pilosa/pilosa/v2/topology"
 	"github.com/pkg/errors"
 )
 
@@ -73,7 +75,7 @@ func NewTestCluster(tb testing.TB, n int) *cluster {
 	c.Topology = NewTopology(c.Hasher, c.partitionN, c.ReplicaN, c)
 
 	for i := 0; i < n; i++ {
-		c.nodes = append(c.nodes, &Node{
+		c.nodes = append(c.nodes, &topology.Node{
 			ID:  fmt.Sprintf("node%d", i),
 			URI: NewTestURI("http", fmt.Sprintf("host%d", i), uint16(0)),
 		})
@@ -87,17 +89,17 @@ func NewTestCluster(tb testing.TB, n int) *cluster {
 }
 
 // NewTestURI is a test URI creator that intentionally swallows errors.
-func NewTestURI(scheme, host string, port uint16) URI {
-	uri := defaultURI()
-	_ = uri.setScheme(scheme)
-	_ = uri.setHost(host)
+func NewTestURI(scheme, host string, port uint16) pnet.URI {
+	uri := pnet.DefaultURI()
+	_ = uri.SetScheme(scheme)
+	_ = uri.SetHost(host)
 	uri.SetPort(port)
 	return *uri
 }
 
-func NewTestURIFromHostPort(host string, port uint16) URI {
-	uri := defaultURI()
-	_ = uri.setHost(host)
+func NewTestURIFromHostPort(host string, port uint16) pnet.URI {
+	uri := pnet.DefaultURI()
+	_ = uri.SetHost(host)
 	uri.SetPort(port)
 	return *uri
 }
@@ -127,7 +129,7 @@ type ClusterCluster struct {
 }
 
 type commonClusterSettings struct {
-	Nodes []*Node
+	Nodes []*topology.Node
 }
 
 func (t *ClusterCluster) CreateIndex(name string) error {
@@ -257,7 +259,7 @@ func (t *ClusterCluster) addCluster(i int, saveTopology bool) (*cluster, error) 
 	id := fmt.Sprintf("node%d", i)
 	uri := NewTestURI("http", fmt.Sprintf("host%d", i), uint16(0))
 
-	node := &Node{
+	node := &topology.Node{
 		ID:  id,
 		URI: uri,
 	}
@@ -406,7 +408,7 @@ func (bcast) SendAsync(Message) error {
 }
 
 // SendTo is a test implementation of Broadcaster SendTo method.
-func (b bcast) SendTo(to *Node, m Message) error {
+func (b bcast) SendTo(to *topology.Node, m Message) error {
 	switch obj := m.(type) {
 	case *ResizeInstruction:
 		err := b.t.FollowResizeInstruction(obj)
@@ -551,7 +553,7 @@ func NewTestClusterWithReplication(tb testing.TB, nNodes, nReplicas, partitionN 
 
 	for i := 0; i < nNodes; i++ {
 		nodeID := fmt.Sprintf("node%d", i)
-		c.nodes = append(c.nodes, &Node{
+		c.nodes = append(c.nodes, &topology.Node{
 			ID:  nodeID,
 			URI: NewTestURI("http", fmt.Sprintf("host%d", i), uint16(0)),
 		})

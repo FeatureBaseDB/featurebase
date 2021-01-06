@@ -17,6 +17,7 @@ package pilosa
 import (
 	"fmt"
 
+	"github.com/pilosa/pilosa/v2/topology"
 	"github.com/pkg/errors"
 )
 
@@ -30,7 +31,7 @@ type Serializer interface {
 type broadcaster interface {
 	SendSync(Message) error
 	SendAsync(Message) error
-	SendTo(*Node, Message) error
+	SendTo(*topology.Node, Message) error
 }
 
 // Message is the interface implemented by all core pilosa types which can be serialized to messages.
@@ -49,7 +50,7 @@ func (nopBroadcaster) SendSync(Message) error { return nil }
 func (nopBroadcaster) SendAsync(Message) error { return nil }
 
 // SendTo is a no-op implementation of Broadcaster SendTo method.
-func (nopBroadcaster) SendTo(*Node, Message) error { return nil }
+func (nopBroadcaster) SendTo(*topology.Node, Message) error { return nil }
 
 // Broadcast message types.
 const (
