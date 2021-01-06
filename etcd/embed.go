@@ -17,17 +17,13 @@ package etcd
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"path"
-	"sort"
 	"strings"
 	"time"
 
-	"github.com/molecula/etcd-test/disco"
-	"github.com/molecula/etcd-test/etcd"
-	"github.com/pilosa/pilosa/v2"
+	"github.com/pilosa/pilosa/v2/disco"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pkg/errors"
 	"go.etcd.io/etcd/clientv3"
@@ -1004,66 +1000,4 @@ func (e *Etcd) RemoveShard(ctx context.Context, index, field string, shard uint6
 	}
 
 	return nil
-}
-
-var _ pilosa.Noder = &EtcdWrapper{}
-
-// EtcdWrapper is a wrapper around the imported Etcd. Once we are no long
-// importing Etcd from etcd-test, and instead have it here in the pilosa/etcd
-// package, we can get rid of the wrapper. It's here so that we can implement
-// the Noder interface without having to do that in the etcd-test repo.
-type EtcdWrapper struct {
-	*etcd.EtcdWithCache
-}
-
-// NewEtcd returns a new instance of a wrapped Etcd.
-func NewEtcd(opt etcd.Options, replicas int) *EtcdWrapper {
-	return &EtcdWrapper{
-		EtcdWithCache: etcd.NewEtcdWithCache(opt, replicas),
-	}
-}
-
-// Nodes implements the Noder interface.
-func (e *EtcdWrapper) Nodes() []*pilosa.Node {
-	// If we have looked up nodes within a certain time, then we're going to
-	// use the cached value for now. This is temporary and will be addressed
-	// correctly in #1133.
-	peers := e.Peers()
-	nodes := make([]*pilosa.Node, len(peers))
-	for i, peer := range peers {
-		node := &pilosa.Node{}
-		if meta, err := e.Metadata(context.Background(), peer.ID); err != nil {
-			log.Println(err, "getting metadata") // TODO: handle this with a logger
-		} else if err := json.Unmarshal(meta, node); err != nil {
-			log.Println(err, "unmarshaling json metadata")
-		}
-
-		node.ID = peer.ID
-
-		nodes[i] = node
-	}
-
-	// Nodes must be sorted.
-	sort.Sort(byID(nodes))
-
-	return nodes
-}
-
-// byID implements sort.Interface for []*pilosa.Node based on
-// the ID field.
-type byID []*pilosa.Node
-
-func (h byID) Len() int           { return len(h) }
-func (h byID) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
-func (h byID) Less(i, j int) bool { return h[i].ID < h[j].ID }
-
-// SetNodes implements the Noder interface.
-func (e *EtcdWrapper) SetNodes(nodes []*pilosa.Node) {}
-
-// AppendNode implements the Noder interface.
-func (e *EtcdWrapper) AppendNode(node *pilosa.Node) {}
-
-// RemoveNode implements the Noder interface.
-func (e *EtcdWrapper) RemoveNode(nodeID string) bool {
-	return false
 }

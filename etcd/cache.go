@@ -19,7 +19,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/molecula/etcd-test/disco"
+	"github.com/pilosa/pilosa/v2/disco"
 )
 
 // EtcdWithCache is a wrapper around the Etcd type which will return a

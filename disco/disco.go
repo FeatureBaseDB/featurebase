@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/molecula/etcd-test/disco"
 	"github.com/pilosa/pilosa/v2/roaring"
 )
 
@@ -128,7 +127,7 @@ type Sharder interface {
 }
 
 // NopDisCo represents a DisCo that doesn't do anything.
-var NopDisCo disco.DisCo = &nopDisCo{
+var NopDisCo DisCo = &nopDisCo{
 	Closer: nil,
 }
 
@@ -137,8 +136,8 @@ type nopDisCo struct {
 }
 
 // Start is a no-op implementation of the DisCo Start method.
-func (n *nopDisCo) Start(ctx context.Context) (disco.InitialClusterState, error) {
-	return disco.InitialClusterStateNew, nil
+func (n *nopDisCo) Start(ctx context.Context) (InitialClusterState, error) {
+	return InitialClusterStateNew, nil
 }
 
 // ID is a no-op implementation of the DisCo ID method.
@@ -152,12 +151,12 @@ func (n *nopDisCo) IsLeader() bool {
 }
 
 // Leader is a no-op implementation of the DisCo Leader method.
-func (n *nopDisCo) Leader() *disco.Peer {
+func (n *nopDisCo) Leader() *Peer {
 	return nil
 }
 
 // Peers is a no-op implementation of the DisCo Peers method.
-func (n *nopDisCo) Peers() []*disco.Peer {
+func (n *nopDisCo) Peers() []*Peer {
 	return nil
 }
 
@@ -167,12 +166,12 @@ func (n *nopDisCo) DeleteNode(context.Context, string) error {
 }
 
 // NopStator represents a Stator that doesn't do anything.
-var NopStator disco.Stator = &nopStator{}
+var NopStator Stator = &nopStator{}
 
 type nopStator struct{}
 
 // ClusterState is a no-op implementation of the Stator ClusterState method.
-func (n *nopStator) ClusterState(context.Context) (disco.ClusterState, error) {
+func (n *nopStator) ClusterState(context.Context) (ClusterState, error) {
 	return "", nil
 }
 
@@ -180,16 +179,16 @@ func (n *nopStator) Started(ctx context.Context) error {
 	return nil
 }
 
-func (n *nopStator) NodeState(context.Context, string) (disco.NodeState, error) {
-	return disco.NodeStateUnknown, nil
+func (n *nopStator) NodeState(context.Context, string) (NodeState, error) {
+	return NodeStateUnknown, nil
 }
 
-func (n *nopStator) NodeStates(context.Context) (map[string]disco.NodeState, error) {
+func (n *nopStator) NodeStates(context.Context) (map[string]NodeState, error) {
 	return nil, nil
 }
 
 // NopResizer represents a Resizer that doesn't do anything.
-var NopResizer disco.Resizer = &nopResizer{}
+var NopResizer Resizer = &nopResizer{}
 
 type nopResizer struct{}
 
@@ -198,7 +197,7 @@ func (*nopResizer) DoneResize() error                                       { re
 func (*nopResizer) Watch(context.Context, string, func([]byte) error) error { return nil }
 
 // NopSharder represents a Sharder that doesn't do anything.
-var NopSharder disco.Sharder = &nopSharder{}
+var NopSharder Sharder = &nopSharder{}
 
 type nopSharder struct{}
 
