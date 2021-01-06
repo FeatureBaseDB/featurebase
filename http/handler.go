@@ -44,6 +44,7 @@ import (
 	"github.com/pilosa/pilosa/v2/encoding/proto"
 	"github.com/pilosa/pilosa/v2/logger"
 	"github.com/pilosa/pilosa/v2/pql"
+	"github.com/pilosa/pilosa/v2/topology"
 	"github.com/pilosa/pilosa/v2/tracing"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -793,10 +794,10 @@ type getSchemaResponse struct {
 }
 
 type getStatusResponse struct {
-	State       string         `json:"state"`
-	Nodes       []*pilosa.Node `json:"nodes"`
-	LocalID     string         `json:"localID"`
-	ClusterName string         `json:"clusterName"`
+	State       string           `json:"state"`
+	Nodes       []*topology.Node `json:"nodes"`
+	LocalID     string           `json:"localID"`
+	ClusterName string           `json:"clusterName"`
 }
 
 func hash(s string) string {
@@ -2053,8 +2054,8 @@ type setCoordinatorRequest struct {
 }
 
 type setCoordinatorResponse struct {
-	Old *pilosa.Node `json:"old"`
-	New *pilosa.Node `json:"new"`
+	Old *topology.Node `json:"old"`
+	New *topology.Node `json:"new"`
 }
 
 // handlePostClusterResizeRemoveNode handles POST /cluster/resize/remove-node request.
@@ -2095,7 +2096,7 @@ type removeNodeRequest struct {
 }
 
 type removeNodeResponse struct {
-	Remove *pilosa.Node `json:"remove"`
+	Remove *topology.Node `json:"remove"`
 }
 
 // handlePostClusterResizeAbort handles POST /cluster/resize/abort request.

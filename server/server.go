@@ -46,6 +46,7 @@ import (
 	"github.com/pilosa/pilosa/v2/gossip"
 	"github.com/pilosa/pilosa/v2/http"
 	"github.com/pilosa/pilosa/v2/logger"
+	pnet "github.com/pilosa/pilosa/v2/net"
 	"github.com/pilosa/pilosa/v2/prometheus"
 	"github.com/pilosa/pilosa/v2/statik"
 	"github.com/pilosa/pilosa/v2/stats"
@@ -88,7 +89,7 @@ type Command struct {
 	grpcLn       net.Listener
 	API          *pilosa.API
 	ln           net.Listener
-	listenURI    *pilosa.URI
+	listenURI    *pnet.URI
 	tlsConfig    *tls.Config
 	closeTimeout time.Duration
 	pgserver     *PostgresServer
@@ -368,7 +369,7 @@ func (m *Command) SetupServer() error {
 	}
 
 	// Get grpc advertise address as uri.
-	advertiseGRPCURI, err := pilosa.NewURIFromAddress(m.Config.AdvertiseGRPC)
+	advertiseGRPCURI, err := pnet.NewURIFromAddress(m.Config.AdvertiseGRPC)
 	if err != nil {
 		return errors.Wrap(err, "processing grpc advertise address")
 	}
@@ -595,7 +596,7 @@ func newStatsClient(name string, host string) (stats.StatsClient, error) {
 }
 
 // getListener gets a net.Listener based on the config.
-func getListener(uri pilosa.URI, tlsconf *tls.Config) (ln net.Listener, err error) {
+func getListener(uri pnet.URI, tlsconf *tls.Config) (ln net.Listener, err error) {
 	// If bind URI has the https scheme, enable TLS
 	if uri.Scheme == "https" && tlsconf != nil {
 		ln, err = tls.Listen("tcp", uri.HostPort(), tlsconf)

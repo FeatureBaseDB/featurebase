@@ -31,8 +31,10 @@ import (
 	"github.com/hashicorp/memberlist"
 	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/logger"
+	pnet "github.com/pilosa/pilosa/v2/net"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/toml"
+	"github.com/pilosa/pilosa/v2/topology"
 	"github.com/pkg/errors"
 )
 
@@ -79,21 +81,21 @@ func (g *memberSet) Open() (err error) {
 		RetransmitMult: 3,
 	}
 
-	var uris = make([]*pilosa.URI, len(g.config.gossipSeeds))
+	var uris = make([]*pnet.URI, len(g.config.gossipSeeds))
 	for i, addr := range g.config.gossipSeeds {
-		uris[i], err = pilosa.NewURIFromAddress(addr)
+		uris[i], err = pnet.NewURIFromAddress(addr)
 		if err != nil {
 			return fmt.Errorf("new uri from address: %s", err)
 		}
 	}
 
-	var nodes = make([]*pilosa.Node, len(uris))
+	var nodes = make([]*topology.Node, len(uris))
 	for i, uri := range uris {
-		nodes[i] = &pilosa.Node{URI: *uri}
+		nodes[i] = &topology.Node{URI: *uri}
 	}
 
 	g.mu.RLock()
-	err = g.joinWithRetry(pilosa.URIs(pilosa.Nodes(nodes).URIs()).HostPortStrings())
+	err = g.joinWithRetry(pnet.URIs(topology.Nodes(nodes).URIs()).HostPortStrings())
 	g.mu.RUnlock()
 	if err != nil {
 		return errors.Wrap(err, "joinWithRetry")
@@ -447,7 +449,7 @@ func (g *eventReceiver) listen() {
 		}
 
 		// Get the node from the event.Node meta data.
-		var n pilosa.Node
+		var n topology.Node
 		if err := g.papi.Serializer.Unmarshal(e.Node.Meta, &n); err != nil {
 			panic("failed to unmarshal event node meta into node")
 		}

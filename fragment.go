@@ -42,11 +42,13 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/v2/internal"
 	"github.com/pilosa/pilosa/v2/logger"
+	pnet "github.com/pilosa/pilosa/v2/net"
 	"github.com/pilosa/pilosa/v2/pql"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/shardwidth"
 	"github.com/pilosa/pilosa/v2/stats"
 	"github.com/pilosa/pilosa/v2/testhook"
+	"github.com/pilosa/pilosa/v2/topology"
 	"github.com/pilosa/pilosa/v2/tracing"
 	"github.com/pkg/errors"
 )
@@ -3528,7 +3530,7 @@ func (h *blockHasher) WriteValue(v uint64) {
 type fragmentSyncer struct {
 	Fragment *fragment
 
-	Node    *Node
+	Node    *topology.Node
 	Cluster *cluster
 
 	// FieldType helps determine which method of syncing to use.
@@ -3720,7 +3722,7 @@ func (s *fragmentSyncer) syncBlock(id int) error {
 	f := s.Fragment
 
 	// Read pairs from each remote block.
-	var uris []*URI
+	var uris []*pnet.URI
 	var pairSets []pairSet
 	for _, node := range s.Cluster.shardNodes(f.index(), f.shard) {
 		if s.Node.ID == node.ID {

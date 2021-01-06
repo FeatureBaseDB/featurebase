@@ -14,6 +14,8 @@
 
 package pilosa
 
+import "github.com/pilosa/pilosa/v2/topology"
+
 // NodeEventType are the types of node events.
 type NodeEventType int
 
@@ -27,5 +29,5 @@ const (
 // NodeEvent is a single event related to node activity in the cluster.
 type NodeEvent struct {
 	Event NodeEventType
-	Node  *Node
+	Node  *topology.Node
 }

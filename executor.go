@@ -30,6 +30,7 @@ import (
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/shardwidth"
 	"github.com/pilosa/pilosa/v2/testhook"
+	"github.com/pilosa/pilosa/v2/topology"
 	"github.com/pilosa/pilosa/v2/tracing"
 	"github.com/pkg/errors"
 )
@@ -51,7 +52,7 @@ type executor struct {
 	Holder *Holder
 
 	// Local hostname & cluster configuration.
-	Node    *Node
+	Node    *topology.Node
 	Cluster *cluster
 
 	// Client used for remote requests.
@@ -5102,10 +5103,10 @@ func (e *executor) executeSetRowAttrs(ctx context.Context, qcx *Qcx, index strin
 	}
 
 	// Execute on remote nodes in parallel.
-	nodes := Nodes(e.Cluster.nodes).FilterID(e.Node.ID)
+	nodes := topology.Nodes(e.Cluster.nodes).FilterID(e.Node.ID)
 	resp := make(chan error, len(nodes))
 	for _, node := range nodes {
-		go func(node *Node) {
+		go func(node *topology.Node) {
 			_, err := e.remoteExec(ctx, node, index, &pql.Query{Calls: []*pql.Call{c}}, nil, nil)
 			resp <- err
 		}(node)
@@ -5214,10 +5215,10 @@ func (e *executor) executeBulkSetRowAttrs(ctx context.Context, qcx *Qcx, index s
 	}
 
 	// Execute on remote nodes in parallel.
-	nodes := Nodes(e.Cluster.nodes).FilterID(e.Node.ID)
+	nodes := topology.Nodes(e.Cluster.nodes).FilterID(e.Node.ID)
 	resp := make(chan error, len(nodes))
 	for _, node := range nodes {
-		go func(node *Node) {
+		go func(node *topology.Node) {
 			_, err := e.remoteExec(ctx, node, index, &pql.Query{Calls: calls}, nil, nil)
 			resp <- err
 		}(node)
@@ -5266,10 +5267,10 @@ func (e *executor) executeSetColumnAttrs(ctx context.Context, qcx *Qcx, index st
 	}
 
 	// Execute on remote nodes in parallel.
-	nodes := Nodes(e.Cluster.nodes).FilterID(e.Node.ID)
+	nodes := topology.Nodes(e.Cluster.nodes).FilterID(e.Node.ID)
 	resp := make(chan error, len(nodes))
 	for _, node := range nodes {
-		go func(node *Node) {
+		go func(node *topology.Node) {
 			_, err := e.remoteExec(ctx, node, index, &pql.Query{Calls: []*pql.Call{c}}, nil, nil)
 			resp <- err
 		}(node)
@@ -5286,7 +5287,7 @@ func (e *executor) executeSetColumnAttrs(ctx context.Context, qcx *Qcx, index st
 }
 
 // remoteExec executes a PQL query remotely for a set of shards on a node.
-func (e *executor) remoteExec(ctx context.Context, node *Node, index string, q *pql.Query, shards []uint64, embed []*Row) (results []interface{}, err error) { // nolint: interfacer
+func (e *executor) remoteExec(ctx context.Context, node *topology.Node, index string, q *pql.Query, shards []uint64, embed []*Row) (results []interface{}, err error) { // nolint: interfacer
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeExec")
 	defer span.Finish()
 
@@ -5308,13 +5309,13 @@ func (e *executor) remoteExec(ctx context.Context, node *Node, index string, q *
 
 // shardsByNode returns a mapping of nodes to shards.
 // Returns errShardUnavailable if a shard cannot be allocated to a node.
-func (e *executor) shardsByNode(nodes []*Node, index string, shards []uint64) (map[*Node][]uint64, error) {
-	m := make(map[*Node][]uint64)
+func (e *executor) shardsByNode(nodes []*topology.Node, index string, shards []uint64) (map[*topology.Node][]uint64, error) {
+	m := make(map[*topology.Node][]uint64)
 
 loop:
 	for _, shard := range shards {
 		for _, node := range e.Cluster.ShardNodes(index, shard) {
-			if Nodes(nodes).Contains(node) {
+			if topology.Nodes(nodes).Contains(node) {
 				m[node] = append(m[node], shard)
 				continue loop
 			}
@@ -5342,11 +5343,11 @@ func (e *executor) mapReduce(ctx context.Context, index string, shards []uint64,
 	//
 	// However, if this request is being sent from the coordinator then all
 	// processing should be done locally so we start with just the local node.
-	var nodes []*Node
+	var nodes []*topology.Node
 	if !opt.Remote {
-		nodes = Nodes(e.Cluster.nodes).Clone()
+		nodes = topology.Nodes(e.Cluster.nodes).Clone()
 	} else {
-		nodes = []*Node{e.Cluster.nodeByID(e.Node.ID)}
+		nodes = []*topology.Node{e.Cluster.nodeByID(e.Node.ID)}
 	}
 
 	// Start mapping across all primary owners.
@@ -5367,7 +5368,7 @@ func (e *executor) mapReduce(ctx context.Context, index string, shards []uint64,
 
 			if resp.err != nil {
 				// Filter out unavailable nodes.
-				nodes = Nodes(nodes).Filter(resp.node)
+				nodes = topology.Nodes(nodes).Filter(resp.node)
 
 				// Begin mapper against secondary nodes.
 				if err := e.mapper(ctx, cancel, ch, nodes, index, resp.shards, c, opt, mapFn, reduceFn); errors.Cause(err) == errShardUnavailable {
@@ -5434,7 +5435,7 @@ func makeEmbeddedDataForShards(allRows []*Row, shards []uint64) []*Row {
 	return newRows
 }
 
-func (e *executor) mapper(ctx context.Context, cancel context.CancelFunc, ch chan mapResponse, nodes []*Node, index string, shards []uint64, c *pql.Call, opt *execOptions, mapFn mapFunc, reduceFn reduceFunc) error {
+func (e *executor) mapper(ctx context.Context, cancel context.CancelFunc, ch chan mapResponse, nodes []*topology.Node, index string, shards []uint64, c *pql.Call, opt *execOptions, mapFn mapFunc, reduceFn reduceFunc) error {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.mapper")
 	defer span.Finish()
 	done := ctx.Done()
@@ -5447,7 +5448,7 @@ func (e *executor) mapper(ctx context.Context, cancel context.CancelFunc, ch cha
 
 	// Execute each node in a separate goroutine.
 	for n, nodeShards := range m {
-		go func(n *Node, nodeShards []uint64) {
+		go func(n *topology.Node, nodeShards []uint64) {
 			resp := mapResponse{node: n, shards: nodeShards}
 
 			// Send local shards to mapper, otherwise remote exec.
@@ -6831,7 +6832,7 @@ type mapFunc func(ctx context.Context, shard uint64) (_ interface{}, err error)
 type reduceFunc func(ctx context.Context, prev, v interface{}) interface{}
 
 type mapResponse struct {
-	node   *Node
+	node   *topology.Node
 	shards []uint64
 
 	result interface{}
