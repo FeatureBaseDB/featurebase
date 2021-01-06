@@ -34,6 +34,7 @@ import (
 	"github.com/pilosa/pilosa/v2/pql"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/stats"
+	"github.com/pilosa/pilosa/v2/topology"
 	"github.com/pilosa/pilosa/v2/tracing"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
@@ -682,7 +683,7 @@ func (api *API) ExportCSV(ctx context.Context, indexName string, fieldName strin
 }
 
 // ShardNodes returns the node and all replicas which should contain a shard's data.
-func (api *API) ShardNodes(ctx context.Context, indexName string, shard uint64) ([]*Node, error) {
+func (api *API) ShardNodes(ctx context.Context, indexName string, shard uint64) ([]*topology.Node, error) {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.ShardNodes")
 	defer span.Finish()
 
@@ -796,7 +797,7 @@ func (api *API) TranslateData(ctx context.Context, indexName string, partition i
 
 // Hosts returns a list of the hosts in the cluster including their ID,
 // URL, and which is the coordinator.
-func (api *API) Hosts(ctx context.Context) []*Node {
+func (api *API) Hosts(ctx context.Context) []*topology.Node {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.Hosts")
 	defer span.Finish()
 	return api.cluster.Nodes()
@@ -809,7 +810,7 @@ func (api *API) HostStates(ctx context.Context) map[string]string {
 }
 
 // Node gets the ID, URI and coordinator status for this particular node.
-func (api *API) Node() *Node {
+func (api *API) Node() *topology.Node {
 	node := api.server.node()
 	return &node
 }
@@ -1700,7 +1701,7 @@ func (api *API) indexField(indexName string, fieldName string, shard uint64) (*I
 }
 
 // SetCoordinator makes a new Node the cluster coordinator.
-func (api *API) SetCoordinator(ctx context.Context, id string) (oldNode, newNode *Node, err error) {
+func (api *API) SetCoordinator(ctx context.Context, id string) (oldNode, newNode *topology.Node, err error) {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.SetCoordinator")
 	defer span.Finish()
 
@@ -1733,7 +1734,7 @@ func (api *API) SetCoordinator(ctx context.Context, id string) (oldNode, newNode
 
 // RemoveNode puts the cluster into the "RESIZING" state and begins the job of
 // removing the given node.
-func (api *API) RemoveNode(id string) (*Node, error) {
+func (api *API) RemoveNode(id string) (*topology.Node, error) {
 	if err := api.validate(apiRemoveNode); err != nil {
 		return nil, errors.Wrap(err, "validating api method")
 	}
@@ -1743,7 +1744,7 @@ func (api *API) RemoveNode(id string) (*Node, error) {
 		if !api.cluster.topologyContainsNode(id) {
 			return nil, errors.Wrap(ErrNodeIDNotExists, "finding node to remove")
 		}
-		removeNode = &Node{
+		removeNode = &topology.Node{
 			ID: id,
 		}
 	}

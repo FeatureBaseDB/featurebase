@@ -22,8 +22,10 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/internal"
+	pnet "github.com/pilosa/pilosa/v2/net"
 	"github.com/pilosa/pilosa/v2/pql"
 	"github.com/pilosa/pilosa/v2/roaring"
+	"github.com/pilosa/pilosa/v2/topology"
 	"github.com/pkg/errors"
 )
 
@@ -184,7 +186,7 @@ func (s Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		}
 		s.decodeNodeStatus(msg, mt)
 		return nil
-	case *pilosa.Node:
+	case *topology.Node:
 		msg := &internal.Node{}
 		err := proto.Unmarshal(buf, msg)
 		if err != nil {
@@ -361,7 +363,7 @@ func (s Serializer) encodeToProto(m pilosa.Message) proto.Message {
 		return s.encodeNodeEventMessage(mt)
 	case *pilosa.NodeStatus:
 		return s.encodeNodeStatus(mt)
-	case *pilosa.Node:
+	case *topology.Node:
 		return s.encodeNode(mt)
 	case *pilosa.QueryRequest:
 		return s.encodeQueryRequest(mt)
@@ -679,7 +681,7 @@ func (s Serializer) encodeFieldOptions(o *pilosa.FieldOptions) *internal.FieldOp
 }
 
 // s.encodeNodes converts a slice of Nodes into its internal representation.
-func (s Serializer) encodeNodes(a []*pilosa.Node) []*internal.Node {
+func (s Serializer) encodeNodes(a []*topology.Node) []*internal.Node {
 	other := make([]*internal.Node, len(a))
 	for i := range a {
 		other[i] = s.encodeNode(a[i])
@@ -688,7 +690,7 @@ func (s Serializer) encodeNodes(a []*pilosa.Node) []*internal.Node {
 }
 
 // s.encodeNode converts a Node into its internal representation.
-func (s Serializer) encodeNode(n *pilosa.Node) *internal.Node {
+func (s Serializer) encodeNode(n *topology.Node) *internal.Node {
 	return &internal.Node{
 		ID:            n.ID,
 		URI:           s.encodeURI(n.URI),
@@ -698,7 +700,7 @@ func (s Serializer) encodeNode(n *pilosa.Node) *internal.Node {
 	}
 }
 
-func (s Serializer) encodeURI(u pilosa.URI) *internal.URI {
+func (s Serializer) encodeURI(u pnet.URI) *internal.URI {
 	return &internal.URI{
 		Scheme: u.Scheme,
 		Host:   u.Host,
@@ -948,9 +950,9 @@ func (s Serializer) encodeTransactionStats(stats pilosa.TransactionStats) *inter
 
 func (s Serializer) decodeResizeInstruction(ri *internal.ResizeInstruction, m *pilosa.ResizeInstruction) {
 	m.JobID = ri.JobID
-	m.Node = &pilosa.Node{}
+	m.Node = &topology.Node{}
 	s.decodeNode(ri.Node, m.Node)
-	m.Coordinator = &pilosa.Node{}
+	m.Coordinator = &topology.Node{}
 	s.decodeNode(ri.Coordinator, m.Coordinator)
 	m.Sources = make([]*pilosa.ResizeSource, len(ri.Sources))
 	s.decodeResizeSources(ri.Sources, m.Sources)
@@ -970,7 +972,7 @@ func (s Serializer) decodeResizeSources(srcs []*internal.ResizeSource, m []*pilo
 }
 
 func (s Serializer) decodeResizeSource(rs *internal.ResizeSource, m *pilosa.ResizeSource) {
-	m.Node = &pilosa.Node{}
+	m.Node = &topology.Node{}
 	s.decodeNode(rs.Node, m.Node)
 	m.Index = rs.Index
 	m.Field = rs.Field
@@ -986,7 +988,7 @@ func (s Serializer) decodeTranslationResizeSources(srcs []*internal.TranslationR
 }
 
 func (s Serializer) decodeTranslationResizeSource(rs *internal.TranslationResizeSource, m *pilosa.TranslationResizeSource) {
-	m.Node = &pilosa.Node{}
+	m.Node = &topology.Node{}
 	s.decodeNode(rs.Node, m.Node)
 	m.Index = rs.Index
 	m.PartitionID = int(rs.PartitionID)
@@ -1050,9 +1052,9 @@ func (s Serializer) decodeDecimal(d *internal.Decimal, m *pql.Decimal) {
 	m.Scale = d.Scale
 }
 
-func (s Serializer) decodeNodes(a []*internal.Node, m []*pilosa.Node) {
+func (s Serializer) decodeNodes(a []*internal.Node, m []*topology.Node) {
 	for i := range a {
-		m[i] = &pilosa.Node{}
+		m[i] = &topology.Node{}
 		s.decodeNode(a[i], m[i])
 	}
 }
@@ -1060,13 +1062,13 @@ func (s Serializer) decodeNodes(a []*internal.Node, m []*pilosa.Node) {
 func (s Serializer) decodeClusterStatus(cs *internal.ClusterStatus, m *pilosa.ClusterStatus) {
 	m.State = cs.State
 	m.ClusterID = cs.ClusterID
-	m.Nodes = make([]*pilosa.Node, len(cs.Nodes))
+	m.Nodes = make([]*topology.Node, len(cs.Nodes))
 	s.decodeNodes(cs.Nodes, m.Nodes)
 	m.Schema = &pilosa.Schema{}
 	s.decodeSchema(cs.Schema, m.Schema)
 }
 
-func (s Serializer) decodeNode(node *internal.Node, m *pilosa.Node) {
+func (s Serializer) decodeNode(node *internal.Node, m *topology.Node) {
 	m.ID = node.ID
 	s.decodeURI(node.URI, &m.URI)
 	s.decodeURI(node.GRPCURI, &m.GRPCURI)
@@ -1074,7 +1076,7 @@ func (s Serializer) decodeNode(node *internal.Node, m *pilosa.Node) {
 	m.State = node.State
 }
 
-func (s Serializer) decodeURI(i *internal.URI, m *pilosa.URI) {
+func (s Serializer) decodeURI(i *internal.URI, m *pnet.URI) {
 	m.Scheme = i.Scheme
 	m.Host = i.Host
 	m.Port = uint16(i.Port)
@@ -1137,18 +1139,18 @@ func (s Serializer) decodeDeleteViewMessage(pb *internal.DeleteViewMessage, m *p
 
 func (s Serializer) decodeResizeInstructionComplete(pb *internal.ResizeInstructionComplete, m *pilosa.ResizeInstructionComplete) {
 	m.JobID = pb.JobID
-	m.Node = &pilosa.Node{}
+	m.Node = &topology.Node{}
 	s.decodeNode(pb.Node, m.Node)
 	m.Error = pb.Error
 }
 
 func (s Serializer) decodeSetCoordinatorMessage(pb *internal.SetCoordinatorMessage, m *pilosa.SetCoordinatorMessage) {
-	m.New = &pilosa.Node{}
+	m.New = &topology.Node{}
 	s.decodeNode(pb.New, m.New)
 }
 
 func (s Serializer) decodeUpdateCoordinatorMessage(pb *internal.UpdateCoordinatorMessage, m *pilosa.UpdateCoordinatorMessage) {
-	m.New = &pilosa.Node{}
+	m.New = &topology.Node{}
 	s.decodeNode(pb.New, m.New)
 }
 
@@ -1159,12 +1161,12 @@ func (s Serializer) decodeNodeStateMessage(pb *internal.NodeStateMessage, m *pil
 
 func (s Serializer) decodeNodeEventMessage(pb *internal.NodeEventMessage, m *pilosa.NodeEvent) {
 	m.Event = pilosa.NodeEventType(pb.Event)
-	m.Node = &pilosa.Node{}
+	m.Node = &topology.Node{}
 	s.decodeNode(pb.Node, m.Node)
 }
 
 func (s Serializer) decodeNodeStatus(pb *internal.NodeStatus, m *pilosa.NodeStatus) {
-	m.Node = &pilosa.Node{}
+	m.Node = &topology.Node{}
 	m.Indexes = s.decodeIndexStatuses(pb.Indexes)
 	m.Schema = &pilosa.Schema{}
 	s.decodeSchema(pb.Schema, m.Schema)

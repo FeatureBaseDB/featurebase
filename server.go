@@ -30,9 +30,11 @@ import (
 	uuid "github.com/satori/go.uuid"
 
 	"github.com/pilosa/pilosa/v2/logger"
+	pnet "github.com/pilosa/pilosa/v2/net"
 	rbfcfg "github.com/pilosa/pilosa/v2/rbf/cfg"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/stats"
+	"github.com/pilosa/pilosa/v2/topology"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -68,8 +70,8 @@ type Server struct { // nolint: maligned
 	snapshotQueue SnapshotQueue
 
 	nodeID              string
-	uri                 URI
-	grpcURI             URI
+	uri                 pnet.URI
+	grpcURI             pnet.URI
 	antiEntropyInterval time.Duration
 	metricInterval      time.Duration
 	diagnosticInterval  time.Duration
@@ -248,7 +250,7 @@ func OptServerNodeDownRetries(retries int, sleep time.Duration) ServerOption {
 
 // OptServerURI is a functional option on Server
 // used to set the server URI.
-func OptServerURI(uri *URI) ServerOption {
+func OptServerURI(uri *pnet.URI) ServerOption {
 	return func(s *Server) error {
 		s.uri = *uri
 		return nil
@@ -257,7 +259,7 @@ func OptServerURI(uri *URI) ServerOption {
 
 // OptServerGRPCURI is a functional option on Server
 // used to set the server gRPC URI.
-func OptServerGRPCURI(uri *URI) ServerOption {
+func OptServerGRPCURI(uri *pnet.URI) ServerOption {
 	return func(s *Server) error {
 		s.grpcURI = *uri
 		return nil
@@ -459,7 +461,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	}
 
 	// Set Cluster Node.
-	node := &Node{
+	node := &topology.Node{
 		ID:            s.nodeID,
 		URI:           s.uri,
 		GRPCURI:       s.grpcURI,
@@ -499,7 +501,7 @@ func (s *Server) InternalClient() InternalClient {
 	return s.defaultClient
 }
 
-func (s *Server) GRPCURI() URI {
+func (s *Server) GRPCURI() pnet.URI {
 	return s.grpcURI
 }
 
@@ -905,7 +907,7 @@ func (s *Server) SendAsync(m Message) error {
 }
 
 // SendTo represents an implementation of Broadcaster.
-func (s *Server) SendTo(to *Node, m Message) error {
+func (s *Server) SendTo(to *topology.Node, m Message) error {
 	msg, err := s.serializer.Marshal(m)
 	if err != nil {
 		return fmt.Errorf("marshaling message: %v", err)
@@ -916,7 +918,7 @@ func (s *Server) SendTo(to *Node, m Message) error {
 
 // node returns the pilosa.node object. It is used by membership protocols to
 // get this node's name(ID), location(URI), and coordinator status.
-func (s *Server) node() Node {
+func (s *Server) node() topology.Node {
 	return *s.cluster.Node
 }
 

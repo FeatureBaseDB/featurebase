@@ -36,6 +36,7 @@ import (
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/stats"
 	"github.com/pilosa/pilosa/v2/testhook"
+	"github.com/pilosa/pilosa/v2/topology"
 	"github.com/pilosa/pilosa/v2/tracing"
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
@@ -1304,7 +1305,7 @@ type holderSyncer struct {
 
 	Holder *Holder
 
-	Node    *Node
+	Node    *topology.Node
 	Cluster *cluster
 
 	// Translation sync handling.
@@ -1416,7 +1417,7 @@ func (s *holderSyncer) syncIndex(index string) error {
 	s.Stats.CountWithCustomTags(MetricColumnAttrStoreBlocks, int64(len(blks)), 1.0, []string{indexTag})
 
 	// Sync with every other host.
-	for _, node := range Nodes(s.Cluster.nodes).FilterID(s.Node.ID) {
+	for _, node := range topology.Nodes(s.Cluster.nodes).FilterID(s.Node.ID) {
 		// Retrieve attributes from differing blocks.
 		// Skip update and recomputation if no attributes have changed.
 		m, err := s.Cluster.InternalClient.ColumnAttrDiff(ctx, &node.URI, index, blks)
@@ -1463,7 +1464,7 @@ func (s *holderSyncer) syncField(index, name string) error {
 	s.Stats.CountWithCustomTags(MetricRowAttrStoreBlocks, int64(len(blks)), 1.0, []string{indexTag, fieldTag})
 
 	// Sync with every other host.
-	for _, node := range Nodes(s.Cluster.nodes).FilterID(s.Node.ID) {
+	for _, node := range topology.Nodes(s.Cluster.nodes).FilterID(s.Node.ID) {
 		// Retrieve attributes from differing blocks.
 		// Skip update and recomputation if no attributes have changed.
 		m, err := s.Cluster.InternalClient.RowAttrDiff(ctx, &node.URI, index, name, blks)
@@ -1669,8 +1670,8 @@ func (s *holderSyncer) initializeIndexTranslateReplication() error {
 			}
 			for partitionID := 0; partitionID < s.Cluster.partitionN; partitionID++ {
 				partitionNodes := s.Cluster.partitionNodes(partitionID)
-				isPrimary := partitionNodes[0].ID == node.ID                 // remote is primary?
-				isReplica := Nodes(partitionNodes[1:]).ContainsID(s.Node.ID) // local is replica?
+				isPrimary := partitionNodes[0].ID == node.ID                          // remote is primary?
+				isReplica := topology.Nodes(partitionNodes[1:]).ContainsID(s.Node.ID) // local is replica?
 				if !isPrimary || !isReplica {
 					continue
 				}
@@ -1797,7 +1798,7 @@ func (s *holderSyncer) readFieldTranslateReader(rd TranslateEntryReader) {
 
 // holderCleaner removes fragments and data files that are no longer used.
 type holderCleaner struct {
-	Node *Node
+	Node *topology.Node
 
 	Holder  *Holder
 	Cluster *cluster

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package pilosa
+package net
 
 import (
 	"encoding/json"
@@ -54,6 +54,11 @@ func (u *URI) URL() url.URL {
 	return url.URL{Scheme: u.Scheme, Host: net.JoinHostPort(u.Host, strconv.Itoa(int(u.Port)))}
 }
 
+// DefaultURI creates and returns the default URI.
+func DefaultURI() *URI {
+	return defaultURI()
+}
+
 // defaultURI creates and returns the default URI.
 func defaultURI() *URI {
 	return &URI{
@@ -79,7 +84,7 @@ func (u URIs) HostPortStrings() []string {
 // NewURIFromHostPort returns a URI with specified host and port.
 func NewURIFromHostPort(host string, port uint16) (*URI, error) {
 	uri := defaultURI()
-	err := uri.setHost(host)
+	err := uri.SetHost(host)
 	if err != nil {
 		return nil, errors.Wrap(err, "setting uri host")
 	}
@@ -92,8 +97,8 @@ func NewURIFromAddress(address string) (*URI, error) {
 	return parseAddress(address)
 }
 
-// setScheme sets the scheme of this URI.
-func (u *URI) setScheme(scheme string) error {
+// SetScheme sets the scheme of this URI.
+func (u *URI) SetScheme(scheme string) error {
 	m := schemeRegexp.FindStringSubmatch(scheme)
 	if m == nil {
 		return errors.New("invalid scheme")
@@ -102,8 +107,8 @@ func (u *URI) setScheme(scheme string) error {
 	return nil
 }
 
-// setHost sets the host of this URI.
-func (u *URI) setHost(host string) error {
+// SetHost sets the host of this URI.
+func (u *URI) SetHost(host string) error {
 	m := hostRegexp.FindStringSubmatch(host)
 	if m == nil {
 		return errors.New("invalid host")

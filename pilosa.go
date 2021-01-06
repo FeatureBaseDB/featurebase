@@ -19,6 +19,7 @@ import (
 	"regexp"
 	"time"
 
+	pnet "github.com/pilosa/pilosa/v2/net"
 	"github.com/pkg/errors"
 )
 
@@ -208,9 +209,9 @@ func timestamp() int64 {
 
 // AddressWithDefaults converts addr into a valid address,
 // using defaults when necessary.
-func AddressWithDefaults(addr string) (*URI, error) {
+func AddressWithDefaults(addr string) (*pnet.URI, error) {
 	if addr == "" {
-		return defaultURI(), nil
+		return pnet.DefaultURI(), nil
 	}
-	return NewURIFromAddress(addr)
+	return pnet.NewURIFromAddress(addr)
 }

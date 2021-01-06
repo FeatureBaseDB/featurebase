@@ -19,13 +19,17 @@ import (
 	"compress/gzip"
 	"context"
 	"time"
+
 	//"fmt"
 	"fmt"
-	"github.com/pilosa/pilosa/v2"
-	"github.com/pilosa/pilosa/v2/http"
 	"io"
 	"io/ioutil"
 	gohttp "net/http"
+
+	"github.com/pilosa/pilosa/v2"
+	"github.com/pilosa/pilosa/v2/http"
+	pnet "github.com/pilosa/pilosa/v2/net"
+
 	//"log"
 	"os"
 	//"path/filepath"
@@ -140,15 +144,15 @@ func main() {
 	vv("total elapsed '%v'", time.Since(t0))
 }
 
-var globURI *pilosa.URI
+var globURI *pnet.URI
 
 func init() {
 	var err error
-	globURI, err = pilosa.NewURIFromHostPort("127.0.0.1", 10101)
+	globURI, err = pnet.NewURIFromHostPort("127.0.0.1", 10101)
 	panicOn(err)
 }
 
 // get correct node to go to.
-func GetImportRoaringURI(index string, shard uint64) *pilosa.URI {
+func GetImportRoaringURI(index string, shard uint64) *pnet.URI {
 	return globURI
 }
