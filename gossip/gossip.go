@@ -472,7 +472,7 @@ func (g *eventReceiver) listen() {
 type Transport struct {
 	//memberlist.Transport
 	net *memberlist.NetTransport
-	URI *pilosa.URI
+	URI *pnet.URI
 }
 
 // NewTransport returns a NetTransport based on the given host and port.
@@ -492,7 +492,7 @@ func NewTransport(host string, port int, logger *log.Logger) (*Transport, error)
 		return nil, fmt.Errorf("new transport: %s", err)
 	}
 
-	uri, err := pilosa.NewURIFromHostPort(host, uint16(net.GetAutoBindPort()))
+	uri, err := pnet.NewURIFromHostPort(host, uint16(net.GetAutoBindPort()))
 	if err != nil {
 		return nil, fmt.Errorf("new uri from host port: %s", err)
 	}

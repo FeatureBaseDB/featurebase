@@ -310,7 +310,7 @@ func (m *Command) SetupServer() error {
 		return errors.Wrap(err, "processing bind address")
 	}
 
-	grpcURI, err := pilosa.NewURIFromAddress(m.Config.BindGRPC)
+	grpcURI, err := pnet.NewURIFromAddress(m.Config.BindGRPC)
 	if err != nil {
 		return errors.Wrap(err, "processing bind grpc address")
 	}
