@@ -85,7 +85,45 @@ message IdsOrKeys {
   }
 }
 
+message Index {
+   string name = 1;
+}
+
+message CreateIndexRequest {
+   string name = 1;
+   bool keys = 2;
+}
+
+message CreateIndexResponse {
+}
+
+message GetIndexRequest {
+    string name = 1;
+}
+
+message GetIndexResponse {
+    Index index = 1;
+}
+
+message GetIndexesRequest {
+}
+
+message GetIndexesResponse {
+    repeated Index indexes = 1;
+}
+
+message DeleteIndexRequest {
+    string name = 1;
+}
+
+message DeleteIndexResponse {
+}
+
 service Pilosa {
+  rpc CreateIndex(CreateIndexRequest) returns (CreateIndexResponse) {};
+  rpc GetIndexes(GetIndexesRequest) returns (GetIndexesResponse) {};
+  rpc GetIndex(GetIndexRequest) returns (GetIndexResponse) {};
+  rpc DeleteIndex(DeleteIndexRequest) returns (DeleteIndexResponse) {};
   rpc QuerySQL(QuerySQLRequest) returns (stream RowResponse) {};
   rpc QuerySQLUnary(QuerySQLRequest) returns (TableResponse) {};
   rpc QueryPQL(QueryPQLRequest) returns (stream RowResponse) {};
