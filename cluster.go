@@ -73,6 +73,8 @@ type nodeAction struct {
 
 // cluster represents a collection of nodes.
 type cluster struct { // nolint: maligned
+	noder topology.Noder
+
 	id    string
 	Node  *topology.Node
 	nodes []*topology.Node
@@ -133,7 +135,7 @@ type cluster struct { // nolint: maligned
 
 // newCluster returns a new instance of Cluster with defaults.
 func newCluster() *cluster {
-	return &cluster{
+	c := &cluster{
 		Hasher:     &Jmphasher{},
 		partitionN: topology.DefaultPartitionN,
 		ReplicaN:   1,
@@ -152,6 +154,8 @@ func newCluster() *cluster {
 		confirmDownRetries: defaultConfirmDownRetries,
 		confirmDownSleep:   defaultConfirmDownSleep,
 	}
+	c.noder = c // TODO: this is temporary until etcd fully implements noder
+	return c
 }
 
 // initializeAntiEntropy is called by the anti entropy routine when it starts.
@@ -1923,6 +1927,27 @@ func (t *Topology) RemoveNode(nodeID string) bool {
 
 // SetNodeState implements the Noder interface.
 func (t *Topology) SetNodeState(nodeID string, state string) {}
+
+///////////////////////////////////////////
+
+///////////////////////////////////////////
+// Cluster implements the Noder interface.
+// This is temporary and should be removed once etcd is fully implemented as
+// noder.
+
+// SetNodes implements the Noder interface.
+func (c *cluster) SetNodes(nodes []*topology.Node) {}
+
+// AppendNode implements the Noder interface.
+func (c *cluster) AppendNode(node *topology.Node) {}
+
+// RemoveNode implements the Noder interface.
+func (c *cluster) RemoveNode(nodeID string) bool {
+	return false
+}
+
+// SetNodeState implements the Noder interface.
+func (c *cluster) SetNodeState(nodeID string, state string) {}
 
 ///////////////////////////////////////////
 

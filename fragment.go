@@ -3556,8 +3556,7 @@ func (s *fragmentSyncer) syncFragment() error {
 	defer span.Finish()
 
 	// Create a snapshot of the cluster to use for node/partition calculations.
-	// TODO: this needs to use Cluster.noder once that has been implemented.
-	snap := topology.NewClusterSnapshot(topology.NewLocalNoder(s.Cluster.Nodes()), s.Cluster.Hasher, s.Cluster.ReplicaN)
+	snap := topology.NewClusterSnapshot(s.Cluster.noder, s.Cluster.Hasher, s.Cluster.ReplicaN)
 
 	// Determine replica set.
 	nodes := snap.ShardNodes(s.Fragment.index(), s.Fragment.shard)
@@ -3677,8 +3676,7 @@ func (s *fragmentSyncer) syncBlockFromPrimary(id int) error {
 	f := s.Fragment
 
 	// Create a snapshot of the cluster to use for node/partition calculations.
-	// TODO: this needs to use Cluster.noder once that has been implemented.
-	snap := topology.NewClusterSnapshot(topology.NewLocalNoder(s.Cluster.Nodes()), s.Cluster.Hasher, s.Cluster.ReplicaN)
+	snap := topology.NewClusterSnapshot(s.Cluster.noder, s.Cluster.Hasher, s.Cluster.ReplicaN)
 
 	// Determine replica set. Return early if this is not
 	// the primary node.
@@ -3730,8 +3728,7 @@ func (s *fragmentSyncer) syncBlock(id int) error {
 	f := s.Fragment
 
 	// Create a snapshot of the cluster to use for node/partition calculations.
-	// TODO: this needs to use Cluster.noder once that has been implemented.
-	snap := topology.NewClusterSnapshot(topology.NewLocalNoder(s.Cluster.Nodes()), s.Cluster.Hasher, s.Cluster.ReplicaN)
+	snap := topology.NewClusterSnapshot(s.Cluster.noder, s.Cluster.Hasher, s.Cluster.ReplicaN)
 
 	// Read pairs from each remote block.
 	var uris []*pnet.URI
