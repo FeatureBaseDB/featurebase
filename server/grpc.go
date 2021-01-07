@@ -273,7 +273,8 @@ func (h *GRPCHandler) QueryPQLUnary(ctx context.Context, req *pb.QueryPQLRequest
 
 // CreateIndex creates a new Index
 func (h *GRPCHandler) CreateIndex(ctx context.Context, req *pb.CreateIndexRequest) (*pb.CreateIndexResponse, error) {
-	opts := pilosa.IndexOptions{Keys: req.Keys, TrackExistence: req.TrackExistence}
+	// Always enable TrackExistence for gRPC-created indexes
+	opts := pilosa.IndexOptions{Keys: req.Keys, TrackExistence: true}
 	_, err := h.api.CreateIndex(ctx, req.Name, opts)
 	if err != nil {
 		return nil, errToStatusError(err)

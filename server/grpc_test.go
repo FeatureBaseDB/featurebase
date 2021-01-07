@@ -995,7 +995,7 @@ func TestCRUDIndexes(t *testing.T) {
 
 	t.Run("CreateIndex", func(t *testing.T) {
 		// Try CreateIndex for testindex1
-		_, err := gh.CreateIndex(ctx, &pb.CreateIndexRequest{Name: "testindex1", Keys: true, TrackExistence: true})
+		_, err := gh.CreateIndex(ctx, &pb.CreateIndexRequest{Name: "testindex1", Keys: true})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1011,7 +1011,7 @@ func TestCRUDIndexes(t *testing.T) {
 			t.Fatal("Index Keys not set correctly")
 		}
 		if schema[0].Options.TrackExistence != true {
-			t.Fatal("Index TrackExistence not set correctly")
+			t.Fatal("Index TrackExistence should be true when created by gRPC")
 		}
 
 		// Try CreateIndex for testindex2
@@ -1036,9 +1036,6 @@ func TestCRUDIndexes(t *testing.T) {
 		}
 		if schema[0].Options.Keys != false {
 			t.Fatal("Index Keys not set correctly")
-		}
-		if schema[0].Options.TrackExistence != false {
-			t.Fatal("Index TrackExistence not set correctly")
 		}
 
 		// Check errors for CreateIndex: create index with same name
