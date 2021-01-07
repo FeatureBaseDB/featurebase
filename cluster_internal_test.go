@@ -478,10 +478,10 @@ func TestCluster_ContainsShards(t *testing.T) {
 }
 
 func TestCluster_Nodes(t *testing.T) {
-	uri0 := NewTestURIFromHostPort("node0", 0)
-	uri1 := NewTestURIFromHostPort("node1", 0)
-	uri2 := NewTestURIFromHostPort("node2", 0)
-	uri3 := NewTestURIFromHostPort("node3", 0)
+	uri0 := NewTestURIFromHostPort("node0", getport())
+	uri1 := NewTestURIFromHostPort("node1", getport())
+	uri2 := NewTestURIFromHostPort("node2", getport())
+	uri3 := NewTestURIFromHostPort("node3", getport())
 
 	node0 := &topology.Node{ID: "node0", URI: uri0}
 	node1 := &topology.Node{ID: "node1", URI: uri1}
@@ -591,8 +591,8 @@ func TestCluster_PreviousNode(t *testing.T) {
 
 // NEXT: move this test to internal and unexport IsCoordinator
 func TestCluster_Coordinator(t *testing.T) {
-	uri1 := NewTestURIFromHostPort("node1", 0)
-	uri2 := NewTestURIFromHostPort("node2", 0)
+	uri1 := NewTestURIFromHostPort("node1", getport())
+	uri2 := NewTestURIFromHostPort("node2", getport())
 
 	node1 := &topology.Node{ID: "node1", URI: uri1}
 	node2 := &topology.Node{ID: "node2", URI: uri2}
