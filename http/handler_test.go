@@ -16,12 +16,14 @@ package http_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"net"
 	"testing"
 
 	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/http"
 	"github.com/pilosa/pilosa/v2/test"
+	"github.com/pilosa/pilosa/v2/test/port"
 )
 
 func TestHandlerOptions(t *testing.T) {
@@ -33,7 +35,7 @@ func TestHandlerOptions(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected error making handler without options, got nil")
 	}
-	ln, err := net.Listen("tcp", ":0")
+	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", port.MustGetPort()))
 	if err != nil {
 		t.Fatal(err)
 	}

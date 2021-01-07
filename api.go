@@ -43,6 +43,9 @@ import (
 // API provides the top level programmatic interface to Pilosa. It is usually
 // wrapped by a handler which provides an external interface (e.g. HTTP).
 type API struct {
+	mu     sync.Mutex
+	closed bool // protected by mu
+
 	holder  *Holder
 	cluster *cluster
 	server  *Server
@@ -136,6 +139,14 @@ func (api *API) validate(f apiMethod) error {
 
 // Close closes the api and waits for it to shutdown.
 func (api *API) Close() error {
+	// only close once
+	api.mu.Lock()
+	defer api.mu.Unlock()
+	if api.closed {
+		return nil
+	}
+	api.closed = true
+
 	close(api.importWork)
 	api.importWorkersWG.Wait()
 	api.tracker.Stop()
@@ -811,8 +822,7 @@ func (api *API) HostStates(ctx context.Context) map[string]string {
 
 // Node gets the ID, URI and coordinator status for this particular node.
 func (api *API) Node() *topology.Node {
-	node := api.server.node()
-	return &node
+	return api.server.node()
 }
 
 // NodeUsage represents all usage measurements for one node.

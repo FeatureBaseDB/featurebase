@@ -39,6 +39,7 @@ import (
 	"github.com/pilosa/pilosa/v2/pql"
 	"github.com/pilosa/pilosa/v2/server"
 	"github.com/pilosa/pilosa/v2/test"
+	"github.com/pilosa/pilosa/v2/test/port"
 )
 
 func TestHandler_PostSchemaCluster(t *testing.T) {
@@ -1398,7 +1399,7 @@ func TestCluster_TranslateStore(t *testing.T) {
 			pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderWithLockerFunc(nil, &sync.Mutex{})),
 		),
 	)
-	cluster.GetNode(0).Config.Gossip.Port = "0"
+	cluster.GetNode(0).Config.Gossip.Port = fmt.Sprintf("%d", port.MustGetPort())
 	err := cluster.GetNode(0).Start()
 	if err != nil {
 		t.Fatalf("starting node 0: %v", err)
@@ -1409,31 +1410,18 @@ func TestCluster_TranslateStore(t *testing.T) {
 }
 
 func TestClusterTranslator(t *testing.T) {
-	cluster := test.MustNewCluster(t, 2)
-	cluster.Nodes[0] = test.NewCommandNode(t, true,
-		server.OptCommandServerOptions(
-			pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
-		),
+	cluster := test.MustRunCluster(t, 2,
+		[]server.CommandOption{
+			server.OptCommandServerOptions(
+				pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
+			)},
+		[]server.CommandOption{
+			server.OptCommandServerOptions(
+				pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
+				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderWithLockerFunc(nil, &sync.Mutex{})),
+			)},
 	)
-	cluster.GetNode(0).Config.Gossip.Port = "0"
-	err := cluster.GetNode(0).Start()
-	if err != nil {
-		t.Fatalf("starting node 0: %v", err)
-	}
-	defer cluster.GetNode(0).Close()
-	cluster.Nodes[1] = test.NewCommandNode(t, false,
-		server.OptCommandServerOptions(
-			pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
-			pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderWithLockerFunc(nil, &sync.Mutex{})),
-		),
-	)
-	cluster.GetNode(1).Config.Gossip.Port = "0"
-	cluster.GetNode(1).Config.Gossip.Seeds = []string{cluster.GetNode(0).GossipAddress()}
-	err = cluster.GetNode(1).Start()
-	if err != nil {
-		t.Fatalf("starting node 1: %v", err)
-	}
-	defer cluster.GetNode(1).Close()
+	defer cluster.Close()
 
 	test.Do(t, "POST", cluster.GetNode(0).URL()+"/index/i0", "{\"options\": {\"keys\": true}}")
 	test.Do(t, "POST", cluster.GetNode(0).URL()+"/index/i0/field/f0", "{\"options\": {\"keys\": true}}")
@@ -1473,27 +1461,17 @@ func TestClusterTranslator(t *testing.T) {
 }
 
 func TestQueryHistory(t *testing.T) {
-	cluster := test.MustNewCluster(t, 2)
-	cluster.Nodes[0] = test.NewCommandNode(t, true, server.OptCommandServerOptions(
-		pilosa.OptServerNodeID("1"),
-	))
-	cluster.GetNode(0).Config.Gossip.Port = "0"
-	err := cluster.GetNode(0).Start()
-	if err != nil {
-		t.Fatalf("starting node 0: %v", err)
-	}
-	defer cluster.GetNode(0).Close()
-
-	cluster.Nodes[1] = test.NewCommandNode(t, false, server.OptCommandServerOptions(
-		pilosa.OptServerNodeID("0"),
-	))
-	cluster.GetNode(1).Config.Gossip.Port = "0"
-	cluster.GetNode(1).Config.Gossip.Seeds = []string{cluster.GetNode(0).GossipAddress()}
-	err = cluster.GetNode(1).Start()
-	if err != nil {
-		t.Fatalf("starting node 1: %v", err)
-	}
-	defer cluster.GetNode(1).Close()
+	cluster := test.MustRunCluster(t, 2,
+		[]server.CommandOption{
+			server.OptCommandServerOptions(
+				pilosa.OptServerNodeID("1"),
+			)},
+		[]server.CommandOption{
+			server.OptCommandServerOptions(
+				pilosa.OptServerNodeID("0"),
+			)},
+	)
+	defer cluster.Close()
 
 	cmd := cluster.GetNode(0)
 	h := cmd.Handler.(*http.Handler).Handler

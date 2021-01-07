@@ -1926,7 +1926,7 @@ func pos(rowID, columnID uint64) uint64 {
 
 func uriPathToURL(uri *pnet.URI, path string) url.URL {
 	return url.URL{
-		Scheme: uri.Scheme,
+		Scheme: uri.Scheme, // race read
 		Host:   uri.HostPort(),
 		Path:   path,
 	}

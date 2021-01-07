@@ -127,12 +127,13 @@ type Sharder interface {
 }
 
 // NopDisCo represents a DisCo that doesn't do anything.
-var NopDisCo DisCo = &nopDisCo{
-	Closer: nil,
-}
+var NopDisCo DisCo = &nopDisCo{}
 
-type nopDisCo struct {
-	io.Closer
+type nopDisCo struct{}
+
+// Close no-op.
+func (n *nopDisCo) Close() error {
+	return nil
 }
 
 // Start is a no-op implementation of the DisCo Start method.
@@ -185,6 +186,18 @@ func (n *nopStator) NodeState(context.Context, string) (NodeState, error) {
 
 func (n *nopStator) NodeStates(context.Context) (map[string]NodeState, error) {
 	return nil, nil
+}
+
+// NopMetadator represents a Metadator that doesn't do anything.
+var NopMetadator Metadator = &nopMetadator{}
+
+type nopMetadator struct{}
+
+func (*nopMetadator) Metadata(context.Context, string) ([]byte, error) {
+	return nil, nil
+}
+func (*nopMetadator) SetMetadata(context.Context, []byte) error {
+	return nil
 }
 
 // NopResizer represents a Resizer that doesn't do anything.

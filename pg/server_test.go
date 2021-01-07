@@ -31,6 +31,7 @@ import (
 	"github.com/pilosa/pilosa/v2/logger"
 	"github.com/pilosa/pilosa/v2/pg"
 	"github.com/pilosa/pilosa/v2/pg/pgtest"
+	"github.com/pilosa/pilosa/v2/test/port"
 )
 
 // TestStartupTimeout tests that an incoming connection that does nothing times out and gets closed.
@@ -109,7 +110,7 @@ func TestPQConnect(t *testing.T) {
 		StartupTimeout: time.Second,
 		Logger:         logger.NopLogger,
 	}
-	addr, shutdown, err := pgtest.ServeTCP(":0", server)
+	addr, shutdown, err := pgtest.ServeTCP(port.ColonZeroString(), server)
 	if err != nil {
 		t.Fatalf("starting postgres server: %v", err)
 	}
@@ -140,7 +141,7 @@ func TestPQConnectSSL(t *testing.T) {
 		StartupTimeout: time.Second,
 		Logger:         logger.NopLogger,
 	}
-	addr, shutdown, err := pgtest.ServeTLS(":0", server)
+	addr, shutdown, err := pgtest.ServeTLS(port.ColonZeroString(), server)
 	if err != nil {
 		t.Fatalf("starting postgres server: %v", err)
 	}
@@ -204,7 +205,7 @@ func TestPSQLQuery(t *testing.T) {
 			StartupTimeout: time.Second,
 			Logger:         logger.NopLogger,
 		}
-		addr, shutdown, err := pgtest.ServeTCP(":0", server)
+		addr, shutdown, err := pgtest.ServeTCP(port.ColonZeroString(), server)
 		if err != nil {
 			t.Fatalf("starting postgres server: %v", err)
 		}
@@ -265,7 +266,7 @@ func TestPSQLQuery(t *testing.T) {
 			Logger:              logger.NopLogger,
 			CancellationManager: pg.NewLocalCancellationManager(rand.Reader),
 		}
-		addr, shutdown, err := pgtest.ServeTCP(":0", server)
+		addr, shutdown, err := pgtest.ServeTCP(port.ColonZeroString(), server)
 		if err != nil {
 			t.Fatalf("starting postgres server: %v", err)
 		}

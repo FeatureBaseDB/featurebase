@@ -19,7 +19,6 @@ package pilosa
 import (
 	"fmt"
 	"io/ioutil"
-	"net"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -64,12 +63,12 @@ func NilInside(iface interface{}) bool {
 // it again if the port is taken.
 // Uses net.Listen("tcp", ":0") to determine a free port, then
 // releases it back to the OS with Listener.Close().
-func GetAvailPort() int {
+/*func GetAvailPort() int {
 	l, _ := net.Listen("tcp", ":0")
 	r := l.Addr()
 	l.Close()
 	return r.(*net.TCPAddr).Port
-}
+}*/
 
 //////////////////////////////////
 // helper utility functions

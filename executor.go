@@ -134,6 +134,13 @@ func newExecutor(opts ...executorOption) *executor {
 func (e *executor) Close() error {
 	e.workMu.Lock()
 	defer e.workMu.Unlock()
+	if e.shutdown {
+		// otherwise close(e.work) can result in
+		// panic: close of closed channel.
+		// We don't comprehend: why we are called 2x though(?)
+		// But pilosa/server TestClusteringNodesReplica2 did.
+		return nil
+	}
 	e.shutdown = true
 	_ = testhook.Closed(NewAuditor(), e, nil)
 	close(e.work)

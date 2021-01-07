@@ -66,8 +66,10 @@ type memberSet struct {
 // Open implements the MemberSet interface to start network activity.
 func (g *memberSet) Open() (err error) {
 	g.mu.Lock()
+	defer g.mu.Unlock()
+
 	g.memberlist, err = memberlist.Create(g.config.memberlistConfig)
-	g.mu.Unlock()
+
 	if err != nil {
 		return errors.Wrap(err, "creating memberlist")
 	}
@@ -94,9 +96,7 @@ func (g *memberSet) Open() (err error) {
 		nodes[i] = &topology.Node{URI: *uri}
 	}
 
-	g.mu.RLock()
 	err = g.joinWithRetry(pnet.URIs(topology.Nodes(nodes).URIs()).HostPortStrings())
-	g.mu.RUnlock()
 	if err != nil {
 		return errors.Wrap(err, "joinWithRetry")
 	}
@@ -317,6 +317,7 @@ func (g *memberSet) NotifyMsg(b []byte) {
 // called when user data messages can be broadcast.
 func (g *memberSet) GetBroadcasts(overhead, limit int) [][]byte {
 	return g.broadcasts.GetBroadcasts(overhead, limit)
+
 }
 
 // LocalState implementation of the memberlist.Delegate interface
@@ -510,6 +511,10 @@ func newTransport(conf *memberlist.Config) (*memberlist.NetTransport, error) {
 		BindAddrs: []string{conf.BindAddr},
 		BindPort:  conf.BindPort,
 		Logger:    conf.Logger,
+	}
+
+	if conf.BindPort == 0 {
+		panic("TODO: remove this. problem: gossip conf.BindPort was 0!")
 	}
 
 	// See comment below for details about the retry in here.

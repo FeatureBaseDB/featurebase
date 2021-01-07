@@ -546,7 +546,7 @@ func NewTestClusterWithReplication(tb testing.TB, nNodes, nReplicas, partitionN 
 	c = newCluster()
 	c.holder = h
 	c.ReplicaN = nReplicas
-	c.Hasher = &Jmphasher{}
+	c.Hasher = &topology.Jmphasher{}
 	c.Path = path
 	c.partitionN = partitionN
 	c.Topology = NewTopology(c.Hasher, c.partitionN, c.ReplicaN, c)

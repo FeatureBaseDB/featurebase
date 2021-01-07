@@ -30,6 +30,7 @@ import (
 	"github.com/pilosa/pilosa/v2/encoding/proto"
 	"github.com/pilosa/pilosa/v2/http"
 	"github.com/pilosa/pilosa/v2/server"
+	"github.com/pilosa/pilosa/v2/test/port"
 	"github.com/pilosa/pilosa/v2/testhook"
 )
 
@@ -43,6 +44,7 @@ type Command struct {
 
 func OptAllowedOrigins(origins []string) server.CommandOption {
 	return func(m *server.Command) error {
+		fmt.Printf("OptAllowedOrigins called with origins = '%#v'", origins)
 		m.Config.Handler.AllowedOrigins = origins
 		return nil
 	}
@@ -64,15 +66,16 @@ func newCommand(tb testing.TB, opts ...server.CommandOption) *Command {
 	opts = append([]server.CommandOption{
 		server.OptCommandCloseTimeout(time.Millisecond * 2),
 	}, opts...)
+
 	m := &Command{commandOptions: opts}
 	m.Command = server.NewCommand(bytes.NewReader(nil), ioutil.Discard, ioutil.Discard, opts...)
 	m.Config.DataDir = path
 	defaultConf := server.NewConfig()
 	if m.Config.Bind == defaultConf.Bind {
-		m.Config.Bind = "http://localhost:0"
+		m.Config.Bind = fmt.Sprintf("http://localhost:%d", port.GlobalPortMap.MustGetPort())
 	}
 	if m.Config.BindGRPC == defaultConf.BindGRPC {
-		m.Config.BindGRPC = "http://localhost:0"
+		m.Config.BindGRPC = fmt.Sprintf("http://localhost:%d", port.GlobalPortMap.MustGetPort())
 	}
 	m.Config.Translation.MapSize = 140000
 	m.Config.WorkerPoolSize = 2
@@ -100,13 +103,19 @@ func NewCommandNode(tb testing.TB, isCoordinator bool, opts ...server.CommandOpt
 // RunCommand returns a new, running Main. Panic on error.
 func RunCommand(t *testing.T) *Command {
 	t.Helper()
-	m := newCommand(t, server.OptCommandServerOptions(pilosa.OptServerOpenTranslateStore(pilosa.OpenInMemTranslateStore)))
-	m.Config.Metric.Diagnostics = false // Disable diagnostics.
-	m.Config.Gossip.Port = "0"
-	if err := m.Start(); err != nil {
-		t.Fatal(err)
-	}
-	return m
+
+	// prefer MustRunCluster since it sets up for using etcd using
+	// 	the GenDisCoConfig(size) option.
+	return MustRunCluster(t, 1).GetNode(0)
+	/*
+		m := newCommand(t, server.OptCommandServerOptions(pilosa.OptServerOpenTranslateStore(pilosa.OpenInMemTranslateStore)))
+		m.Config.Metric.Diagnostics = false // Disable diagnostics.
+		m.Config.Gossip.Port = "0"
+		if err := m.Start(); err != nil {
+			t.Fatal(err)
+		}
+		return m
+	*/
 }
 
 // GossipAddress returns the address on which gossip is listening after a Main
@@ -118,7 +127,8 @@ func (m *Command) GossipAddress() string {
 
 // Close closes the program and removes the underlying data directory.
 func (m *Command) Close() error {
-	defer os.RemoveAll(m.Config.DataDir)
+	// leave the removing part to the test logic. Some tests are closing and opening again the command
+	// defer os.RemoveAll(m.Config.DataDir)
 	return m.Command.Close()
 }
 

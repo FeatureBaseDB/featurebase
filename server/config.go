@@ -24,6 +24,7 @@ import (
 	"strings"
 	"time"
 
+	petcd "github.com/pilosa/pilosa/v2/etcd"
 	"github.com/pilosa/pilosa/v2/gossip"
 	rbfcfg "github.com/pilosa/pilosa/v2/rbf/cfg"
 	"github.com/pilosa/pilosa/v2/toml"
@@ -128,6 +129,9 @@ type Config struct {
 		LongQueryTime toml.Duration `toml:"long-query-time"`
 	} `toml:"cluster"`
 
+	// DisCo config is based on embedded etcd.
+	DisCo petcd.Options `toml:"disco"`
+
 	LongQueryTime toml.Duration `toml:"long-query-time"`
 	// Gossip config is based around memberlist.Config.
 	Gossip gossip.Config `toml:"gossip"`
@@ -216,6 +220,73 @@ type Config struct {
 	QueryHistoryLength int
 }
 
+// MustValidate checks that all ports in a Config are unique and not zero.
+// We disallow zero because the tests need to be using from the pre-allocated
+// block of ports maintained by the pilosa/test/port port-mapper.
+func (c *Config) MustValidate() {
+	err := c.Validate()
+	if err != nil {
+		panic(err)
+	}
+}
+
+func (c *Config) Validate() error {
+	fmt.Printf("Validate() called on Config = '%#v'\n", c)
+	hostPort := []string{
+		"Bind", c.Bind, // :10101
+		"BindGRPC", c.BindGRPC, // :20101
+		"Advertise", c.Advertise, //  on hp = 'http://localhost:63002'
+		"AdvertiseGRPC", c.AdvertiseGRPC, //  on hp = 'http://localhost:63003'
+		"DisCo.LClientURL", c.DisCo.LClientURL, //  on hp = ':14000'
+		//c.DisCo.AClientURL, // hardcoded to same as LClientURL
+		"DisCo.LPeerURL", c.DisCo.LPeerURL, // ":"
+		//c.DisCo.APeerURL, // hardcoded to same as LPeerURL
+		"DisCo.ClusterURL", c.DisCo.ClusterURL,
+		"Gossip.Port", fmt.Sprintf(":%v", c.Gossip.Port),
+		"Gossip.AdvertisePort", fmt.Sprintf(":%v", c.Gossip.AdvertisePort),
+		"Postgres.Bind", c.Postgres.Bind,
+	}
+	ports := make(map[int]bool)
+	n := len(hostPort)
+	for i := 0; i < n; i += 2 {
+		name := hostPort[i]
+		hp := hostPort[i+1]
+		if hp == "" {
+			continue
+		}
+		if name == "Advertise" && (hp == "" || hp == ":") {
+			continue
+		}
+		if name == "AdvertiseGRPC" && (hp == "" || hp == ":") {
+			continue
+		}
+		if name == "Gossip.AdvertisePort" && (hp == "" || hp == ":") {
+			continue
+		}
+
+		fmt.Printf(" on name = '%v', hp = '%v'\n", name, hp)
+		hp = strings.TrimPrefix(hp, "http://")
+		hp = strings.TrimPrefix(hp, "https://")
+		splt := strings.Split(hp, ":")
+		if len(splt) != 2 {
+			return fmt.Errorf("'%v' host:port '%v' did not have a colon; all='%#v'", name, hp, hostPort)
+		}
+		portstring := splt[1]
+		port, err := strconv.Atoi(portstring)
+		if err != nil {
+			return fmt.Errorf("on '%v', could not convert '%v' to int in '%v': '%v'", name, portstring, hp, err)
+		}
+		if port == 0 {
+			return fmt.Errorf("name '%v': zero port found, not allowed. '%v'. all ='%#v'", name, hp, hostPort)
+		}
+		if ports[port] {
+			return fmt.Errorf("name '%v': duplicate port found, not allowed. '%v' with port %v. all ='%#v'", name, hp, port, hostPort)
+		}
+		ports[port] = true
+	}
+	return nil
+}
+
 // NewConfig returns an instance of Config with default options.
 func NewConfig() *Config {
 	c := &Config{
@@ -282,6 +353,14 @@ func NewConfig() *Config {
 	c.Postgres.ReadTimeout = toml.Duration(10 * time.Second)
 	c.Postgres.WriteTimeout = toml.Duration(10 * time.Second)
 	// we don't really need a connection limit
+
+	c.DisCo.AClientURL = "http://localhost:10301"
+	c.DisCo.LClientURL = "http://localhost:10301"
+	c.DisCo.APeerURL = "http://localhost:10401"
+	c.DisCo.LPeerURL = "http://localhost:10401"
+	c.DisCo.Dir = ""
+	c.DisCo.Name = "nodeName"
+	c.DisCo.ClusterName = "clusterName"
 
 	return c
 }

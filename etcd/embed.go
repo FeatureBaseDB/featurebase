@@ -113,7 +113,7 @@ func (e *Etcd) Close() error {
 
 func parseOptions(opt Options) *embed.Config {
 	cfg := embed.NewConfig()
-	cfg.Debug = true
+	cfg.Debug = false // true gives data races on grpc.EnableTracing in etcd
 	cfg.Name = opt.Name
 	cfg.Dir = opt.Dir
 	cfg.InitialClusterToken = opt.ClusterName
@@ -122,6 +122,10 @@ func parseOptions(opt Options) *embed.Config {
 	cfg.LPUrls = types.MustNewURLs([]string{opt.LPeerURL})
 	cfg.APUrls = types.MustNewURLs([]string{opt.APeerURL})
 
+	cfg.Logger = "zap"
+	cfg.ZapLoggerBuilder = func(*embed.Config) error {
+		return nil
+	}
 	if opt.InitCluster != "" {
 		cfg.InitialCluster = opt.InitCluster
 		cfg.ClusterState = embed.ClusterStateFlagNew
