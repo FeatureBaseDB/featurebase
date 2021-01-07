@@ -30,12 +30,13 @@ import (
 	"github.com/pilosa/pilosa/v2/mock"
 	"github.com/pilosa/pilosa/v2/server"
 	"github.com/pilosa/pilosa/v2/test"
+	"github.com/pilosa/pilosa/v2/topology"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
 
 func TestInMemTranslateStore_TranslateKey(t *testing.T) {
-	s := pilosa.NewInMemTranslateStore("IDX", "FLD", 0, pilosa.DefaultPartitionN)
+	s := pilosa.NewInMemTranslateStore("IDX", "FLD", 0, topology.DefaultPartitionN)
 
 	// Ensure initial key translates to ID 1.
 	if id, err := s.TranslateKey("foo", true); err != nil {
@@ -60,7 +61,7 @@ func TestInMemTranslateStore_TranslateKey(t *testing.T) {
 }
 
 func TestInMemTranslateStore_TranslateID(t *testing.T) {
-	s := pilosa.NewInMemTranslateStore("IDX", "FLD", 0, pilosa.DefaultPartitionN)
+	s := pilosa.NewInMemTranslateStore("IDX", "FLD", 0, topology.DefaultPartitionN)
 
 	// Setup initial keys.
 	if _, err := s.TranslateKey("foo", true); err != nil {
@@ -425,7 +426,7 @@ func TestTranslation_KeyNotFound(t *testing.T) {
 }
 
 func TestInMemTranslateStore_ReadKey(t *testing.T) {
-	s := pilosa.NewInMemTranslateStore("IDX", "FLD", 0, pilosa.DefaultPartitionN)
+	s := pilosa.NewInMemTranslateStore("IDX", "FLD", 0, topology.DefaultPartitionN)
 
 	id, err := s.TranslateKey("foo", false)
 	if err != pilosa.ErrTranslatingKeyNotFound {

@@ -32,6 +32,7 @@ import (
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/stats"
 	"github.com/pilosa/pilosa/v2/testhook"
+	"github.com/pilosa/pilosa/v2/topology"
 	"github.com/pkg/errors"
 	"github.com/zeebo/blake3"
 	"golang.org/x/sync/errgroup"
@@ -847,6 +848,9 @@ floop:
 		fmt.Printf("# ====================\n")
 	}
 
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	snap := topology.NewClusterSnapshot(topo, topo.Hasher, topo.ReplicaN)
+
 tloop:
 	for partitionID, store := range idx.translateStores {
 		partitionID := partitionID
@@ -855,7 +859,7 @@ tloop:
 		fun2 := func(worker int) error {
 			//vv("ComputeTranslatorSummary() running on store.Path = '%v'", store.GetStorePath())
 			if checkKeys {
-				prim := topo.PrimaryNodeIndex(partitionID)
+				prim := snap.PrimaryNodeIndex(partitionID)
 				primID := topo.nodeIDs[prim]
 
 				// note: we fix irrespective of nodeID == primID now, so that we
@@ -891,9 +895,9 @@ tloop:
 			sum.Index = idx.Name()
 			sum.StorePath = store.GetStorePath()
 			sum.NodeID = nodeID
-			sum.IsPrimary = topo.IsPrimary(nodeID, partitionID)
+			sum.IsPrimary = snap.IsPrimary(nodeID, partitionID)
 
-			replicas := topo.GetNonPrimaryReplicas(partitionID)
+			replicas := snap.NonPrimaryReplicas(partitionID)
 			for _, replica := range replicas {
 				if nodeID == replica {
 					sum.IsReplica = true
@@ -980,6 +984,10 @@ func (idx *Index) WriteFragmentChecksums(w io.Writer, showBits, showOps bool, to
 		IndexPath:    idx.path,
 		RelPath2fsum: make(map[string]*FragSum),
 	}
+
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	snap := topology.NewClusterSnapshot(topo, topo.Hasher, topo.ReplicaN)
+
 	paths, err := listFilesUnderDir(idx.path, false, "", true)
 	panicOn(err)
 	index := idx.name
@@ -990,7 +998,7 @@ func (idx *Index) WriteFragmentChecksums(w io.Writer, showBits, showOps bool, to
 			continue // ignore .meta paths
 		}
 		abspath := idx.path + sep + relpath
-		primary := topo.GetPrimaryForShardReplication(index, shard)
+		primary := snap.PrimaryForShardReplication(index, shard)
 
 		checksum, hotbits := RoaringFragmentChecksum(abspath, index, field, view, shard)
 		if verbose {

@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/pilosa/pilosa/v2"
+	"github.com/pilosa/pilosa/v2/topology"
 	"github.com/pkg/errors"
 	"github.com/zeebo/blake3"
 	bolt "go.etcd.io/bbolt"
@@ -626,7 +627,11 @@ func (s *TranslateStore) ComputeTranslatorSummaryCols(partitionID int, topo *pil
 	if partitionID != s.partitionID {
 		panic(fmt.Sprintf("inconsistent partitionID arg %v with TranslateStore.paritionID %v", partitionID, s.partitionID))
 	}
-	firstPrimary := topo.PrimaryNodeIndex(partitionID)
+
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	snap := topology.NewClusterSnapshot(topo, topo.Hasher, topo.ReplicaN)
+
+	firstPrimary := snap.PrimaryNodeIndex(partitionID)
 
 	err = s.db.View(func(tx *bolt.Tx) error {
 
@@ -656,7 +661,7 @@ func (s *TranslateStore) ComputeTranslatorSummaryCols(partitionID int, topo *pil
 			shard := id / pilosa.ShardWidth
 
 			ks := string(v)
-			primary := topo.GetPrimaryForColKeyTranslation(s.index, ks)
+			primary := snap.PrimaryForColKeyTranslation(s.index, ks)
 			if firstPrimary < 0 {
 				firstPrimary = primary
 			} else {
@@ -666,7 +671,7 @@ func (s *TranslateStore) ComputeTranslatorSummaryCols(partitionID int, topo *pil
 			}
 
 			// Verify the invariant that the primaries agree. Just a sanity check.
-			primaryForShard := topo.GetPrimaryForShardReplication(s.index, shard)
+			primaryForShard := snap.PrimaryForShardReplication(s.index, shard)
 			if primaryForShard != firstPrimary {
 				panic(fmt.Sprintf("primaryForShard (%v) != firstPrimary (%v); key='%v', id=%v, shard=%v; partitionID=%v", primaryForShard, firstPrimary, ks, id, shard, partitionID))
 			}
@@ -1329,11 +1334,17 @@ func makeStringKeyChanges(
 		}
 	}
 
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	var snap *topology.ClusterSnapshot
+	if topo != nil {
+		snap = topology.NewClusterSnapshot(topo, topo.Hasher, topo.ReplicaN)
+	}
+
 	for key2, id2 := range fwd2 {
 		//vv("makeStringKeyChanges on fwd2, key2='%v', id2=%x", key2, id2)
 		isPrimary := false
 		if topo != nil {
-			primary := topo.GetPrimaryForColKeyTranslation(s.index, key2)
+			primary := snap.PrimaryForColKeyTranslation(s.index, key2)
 			isPrimary = s.partitionID == primary
 		}
 		_ = isPrimary
