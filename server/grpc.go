@@ -277,7 +277,7 @@ func (h *GRPCHandler) CreateIndex(ctx context.Context, req *pb.CreateIndexReques
 	return &pb.CreateIndexResponse{}, nil
 }
 
-// GetIndexes returns a single Index given a name
+// GetIndex returns a single Index given a name
 func (h *GRPCHandler) GetIndex(ctx context.Context, req *pb.GetIndexRequest) (*pb.GetIndexResponse, error) {
 	schema := h.api.Schema(ctx)
 	for _, index := range schema {
