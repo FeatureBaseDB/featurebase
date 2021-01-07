@@ -40,6 +40,51 @@ import (
 	"github.com/pkg/errors"
 )
 
+// GlobalPortMap avoids many races and port conflicts when setting
+// up ports for test clusters. Used for tests only.
+var globalPortMap *GlobalPortMapper
+
+func init() {
+	globalPortMap = NewGlobalPortMapper(300)
+}
+
+// GlobalPortMapper maintains a pool of available ports by
+// holding them open until GetPort() is called.
+type GlobalPortMapper struct {
+	availPorts map[int]net.Listener
+}
+
+// reserve n ports
+func NewGlobalPortMapper(n int) (pm *GlobalPortMapper) {
+
+	pm = &GlobalPortMapper{
+		availPorts: make(map[int]net.Listener),
+	}
+	for i := 0; i < n; i++ {
+		lsn, _ := net.Listen("tcp", ":0")
+		r := lsn.Addr()
+		port := r.(*net.TCPAddr).Port
+		pm.availPorts[port] = lsn
+	}
+	return
+}
+
+func (pm *GlobalPortMapper) GetPort() (port int, err error) {
+	for port, lsn := range pm.availPorts {
+		lsn.Close()
+		return port, nil
+	}
+	return -1, fmt.Errorf("no more ports available")
+}
+
+func (pm *GlobalPortMapper) MustGetPort() int {
+	port, err := pm.GetPort()
+	if err != nil {
+		panic(err)
+	}
+	return port
+}
+
 // Ensure that fragCombos creates the correct fragment mapping.
 func TestFragCombos(t *testing.T) {
 	uri0, err := pnet.NewURIFromAddress("host0")
@@ -568,13 +613,17 @@ func TestCluster_Coordinator(t *testing.T) {
 	})
 }
 
+func getport() uint16 {
+	return uint16(globalPortMap.MustGetPort())
+}
+
 func TestCluster_Topology(t *testing.T) {
 	c1 := NewTestCluster(t, 1) // automatically creates Node{ID: "node0"}
 
-	uri0 := NewTestURIFromHostPort("host0", 0)
-	uri1 := NewTestURIFromHostPort("host1", 0)
-	uri2 := NewTestURIFromHostPort("host2", 0)
-	invalid := NewTestURIFromHostPort("invalid", 0)
+	uri0 := NewTestURIFromHostPort("host0", getport())
+	uri1 := NewTestURIFromHostPort("host1", getport())
+	uri2 := NewTestURIFromHostPort("host2", getport())
+	invalid := NewTestURIFromHostPort("invalid", getport())
 
 	node0 := &topology.Node{ID: "node0", URI: uri0}
 	node1 := &topology.Node{ID: "node1", URI: uri1}
