@@ -68,7 +68,7 @@ func errToStatusError(err error) error {
 	}
 
 	// Check error string.
-	switch errors.Cause(err) {
+	switch cause := errors.Cause(err); cause {
 	case pilosa.ErrIndexNotFound,
 		pilosa.ErrFieldNotFound,
 		pilosa.ErrForeignIndexNotFound,
@@ -123,6 +123,10 @@ func errToStatusError(err error) error {
 		pilosa.ErrTooManyWrites,
 		pilosa.ErrNodeIDNotExists:
 		return status.Error(codes.Internal, err.Error())
+	default:
+		if _, ok := cause.(pilosa.ConflictError); ok {
+			return status.Error(codes.AlreadyExists, err.Error())
+		}
 	}
 
 	return status.Error(codes.Unknown, err.Error())

@@ -105,11 +105,6 @@ func NewBadRequestError(err error) BadRequestError {
 	return BadRequestError{err}
 }
 
-// Cause satisfies the error causer interface
-func (e BadRequestError) Cause() error {
-	return e.error
-}
-
 // ConflictError wraps an error value to signify that a conflict with an
 // existing resource occurred such that in an HTTP scenario, http.StatusConflict
 // would be returned.
@@ -120,11 +115,6 @@ type ConflictError struct {
 // newConflictError returns err wrapped in a ConflictError.
 func newConflictError(err error) ConflictError {
 	return ConflictError{err}
-}
-
-// Cause satisfies the error causer interface
-func (e ConflictError) Cause() error {
-	return e.error
 }
 
 // NotFoundError wraps an error value to signify that a resource was not found
@@ -143,11 +133,6 @@ type PreconditionFailedError struct {
 // newPreconditionFailedError returns err wrapped in a PreconditionFailedError.
 func newPreconditionFailedError(err error) PreconditionFailedError {
 	return PreconditionFailedError{err}
-}
-
-// Cause satisfies the error causer interface
-func (e PreconditionFailedError) Cause() error {
-	return e.error
 }
 
 // Regular expression to validate index and field names.
