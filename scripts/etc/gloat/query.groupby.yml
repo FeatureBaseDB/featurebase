@@ -1,0 +1,9 @@
+name: "GroupBy() Load Testing"
+
+main: "pilosa server --data-dir ~/pilosa.query.${TXSRC} --txsrc ${TXSRC}"
+load: "pilosa-bench -type groupby -rate 100 -n 3000" 
+
+health_url:    "http://localhost:10101/status"
+health_regexp: "NORMAL"
+
+debug_url: "http://localhost:10101/debug"
