@@ -42,9 +42,6 @@ import (
 )
 
 const (
-	// DefaultPartitionN is the default number of partitions in a cluster.
-	DefaultPartitionN = 256
-
 	// ClusterState represents the state returned in the /status endpoint.
 	ClusterStateStarting = "STARTING"
 	ClusterStateDegraded = "DEGRADED" // cluster is running but we've lost some # of hosts >0 but < replicaN
@@ -138,7 +135,7 @@ type cluster struct { // nolint: maligned
 func newCluster() *cluster {
 	return &cluster{
 		Hasher:     &Jmphasher{},
-		partitionN: DefaultPartitionN,
+		partitionN: topology.DefaultPartitionN,
 		ReplicaN:   1,
 
 		joiningLeavingNodes: make(chan nodeAction, 10), // buffered channel

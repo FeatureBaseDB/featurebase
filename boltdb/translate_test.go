@@ -26,6 +26,7 @@ import (
 
 	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/boltdb"
+	"github.com/pilosa/pilosa/v2/topology"
 )
 
 //var vv = pilosa.VV
@@ -540,7 +541,7 @@ func MustNewTranslateStore() *boltdb.TranslateStore {
 		panic(err)
 	}
 
-	s := boltdb.NewTranslateStore("I", "F", 0, pilosa.DefaultPartitionN)
+	s := boltdb.NewTranslateStore("I", "F", 0, topology.DefaultPartitionN)
 	s.Path = f.Name()
 	return s
 }
@@ -653,7 +654,7 @@ func TestCryptoHashPerKey(t *testing.T) {
 		}
 
 		// done with setup
-		sum, err := s.ComputeTranslatorSummaryCols(0, pilosa.NewTopology(&pilosa.Jmphasher{}, pilosa.DefaultPartitionN, 1, nil))
+		sum, err := s.ComputeTranslatorSummaryCols(0, pilosa.NewTopology(&pilosa.Jmphasher{}, topology.DefaultPartitionN, 1, nil))
 		if err != nil {
 			panic(err)
 		}

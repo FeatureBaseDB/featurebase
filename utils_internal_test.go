@@ -285,7 +285,7 @@ func (t *ClusterCluster) addCluster(i int, saveTopology bool) (*cluster, error) 
 	c.ReplicaN = 1
 	c.Hasher = NewTestModHasher()
 	c.Path = path
-	c.partitionN = DefaultPartitionN
+	c.partitionN = topology.DefaultPartitionN
 	c.Topology = NewTopology(c.Hasher, c.partitionN, c.ReplicaN, c)
 	c.holder = h
 	c.Node = node

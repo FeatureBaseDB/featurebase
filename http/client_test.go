@@ -33,6 +33,7 @@ import (
 	"github.com/pilosa/pilosa/v2/pql"
 	"github.com/pilosa/pilosa/v2/server"
 	"github.com/pilosa/pilosa/v2/test"
+	"github.com/pilosa/pilosa/v2/topology"
 	"github.com/pkg/errors"
 )
 
@@ -297,7 +298,7 @@ func TestClient_Export(t *testing.T) {
 		bw := bufio.NewWriter(buf)
 
 		// Send export request for every partition.
-		for i := 0; i < pilosa.DefaultPartitionN; i++ {
+		for i := 0; i < topology.DefaultPartitionN; i++ {
 			if err := c.ExportCSV(context.Background(), "keyed", "unkeyedf", uint64(i), bw); err != nil {
 				t.Fatal(err)
 			}
@@ -338,7 +339,7 @@ func TestClient_Export(t *testing.T) {
 		bw := bufio.NewWriter(buf)
 
 		// Send export request.
-		for i := 0; i < pilosa.DefaultPartitionN; i++ {
+		for i := 0; i < topology.DefaultPartitionN; i++ {
 			if err := c.ExportCSV(context.Background(), "keyed", "keyedf", uint64(i), bw); err != nil {
 				t.Fatal(err)
 			}
