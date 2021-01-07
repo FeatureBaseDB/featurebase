@@ -1388,7 +1388,10 @@ func (c *Cursor) difference(key uint64, data *roaring.Container) (bool, error) {
 func (c *Cursor) Close() {
 	if c == nil {
 		panic("cannot Close nil Cursor")
+	} else if c.tx == nil || c.tx.db == nil {
+		return // already closed
 	}
+
 	tx := c.tx
 	c.tx = nil // allow tx to be garbage collected.
 
