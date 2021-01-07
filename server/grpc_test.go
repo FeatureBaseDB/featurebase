@@ -1024,7 +1024,6 @@ func TestCRUDIndexes(t *testing.T) {
 		if len(schema) != 2 {
 			t.Fatal("Schema should include two indexes")
 		}
-		schema = m.API.Schema(ctx)
 
 		_ = m.API.DeleteIndex(ctx, "testindex1")
 
@@ -1082,14 +1081,14 @@ func TestCRUDIndexes(t *testing.T) {
 		}
 
 		// Check errors for GetIndex: get index that doesn't exist
-		resp, err = gh.GetIndex(ctx, &pb.GetIndexRequest{Name: "wrongname"})
+		_, err = gh.GetIndex(ctx, &pb.GetIndexRequest{Name: "wrongname"})
 		errStatus, _ := status.FromError(err)
 		if errStatus.Code() != codes.NotFound {
 			t.Fatalf("Error code should be codes.NotFound, but is %v", errStatus.Code())
 		}
 
 		// Check errors for GetIndex: get index with invalid name
-		resp, err = gh.GetIndex(ctx, &pb.GetIndexRequest{Name: "💩"})
+		_, err = gh.GetIndex(ctx, &pb.GetIndexRequest{Name: "💩"})
 		errStatus, _ = status.FromError(err)
 		if errStatus.Code() != codes.NotFound {
 			t.Fatalf("Error code should be codes.NotFound, but is %v", errStatus.Code())
