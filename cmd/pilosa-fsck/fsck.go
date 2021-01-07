@@ -33,6 +33,7 @@ import (
 	"github.com/pilosa/pilosa/v2/boltdb"
 	"github.com/pilosa/pilosa/v2/internal"
 	"github.com/pilosa/pilosa/v2/server"
+	"github.com/pilosa/pilosa/v2/topology"
 	"github.com/pkg/errors"
 	"github.com/zeebo/blake3"
 )
@@ -782,6 +783,9 @@ func (cfg *FsckConfig) analyzeThisIndex(
 			index, len(nodes2fragsum), nodes2fragsum)
 	}
 
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	snap := topology.NewClusterSnapshot(cfg.topo, cfg.topo.Hasher, cfg.topo.ReplicaN)
+
 	for node, sum := range nodes2fragsum {
 		if !quiet {
 			fmt.Printf("# on node '%v'\n", node)
@@ -798,7 +802,7 @@ func (cfg *FsckConfig) analyzeThisIndex(
 			totalFiles++
 			//vv("checking %v on node %v", relpath, node)
 
-			replicas, nonReplicas := cfg.topo.GetReplicasForPrimary(fragsum.Primary)
+			replicas, nonReplicas := snap.ReplicasForPrimary(fragsum.Primary)
 			_, _ = replicas, nonReplicas
 			//vv("replicas = '%#v'", replicas)
 			//vv("nonReplicas = '%#v'", nonReplicas)

@@ -899,10 +899,10 @@ func shardToShardPartition(index string, shard uint64, partitionN int) int {
 	return int(h.Sum64() % uint64(partitionN))
 }
 
-// keyPartition returns the key-partition that a key belongs to.
+// KeyPartition returns the key-partition that a key belongs to.
 // NOTE: the key-partition is DIFFERENT from the shard-partition.
-func (topo *Topology) KeyPartition(index, key string) int {
-	return keyToKeyPartition(index, key, topo.PartitionN)
+func (t *Topology) KeyPartition(index, key string) int {
+	return keyToKeyPartition(index, key, t.PartitionN)
 }
 
 func keyToKeyPartition(index, key string, partitionN int) int {
@@ -1021,31 +1021,31 @@ func (c *cluster) unprotectedPrimaryPartitionNode(partition int) *topology.Node 
 	return nil
 }
 
-func (topo *Topology) IsPrimary(nodeID string, partitionID int) bool {
-	primary := topo.PrimaryNodeIndex(partitionID)
-	return nodeID == topo.nodeIDs[primary]
+func (t *Topology) IsPrimary(nodeID string, partitionID int) bool {
+	primary := t.PrimaryNodeIndex(partitionID)
+	return nodeID == t.nodeIDs[primary]
 }
 
-func (topo *Topology) PrimaryNodeIndex(partitionID int) (nodeIndex int) {
-	n := len(topo.nodeIDs)
+func (t *Topology) PrimaryNodeIndex(partitionID int) (nodeIndex int) {
+	n := len(t.nodeIDs)
 	if n == 0 {
-		if topo.cluster != nil {
-			n = len(topo.cluster.nodes)
+		if t.cluster != nil {
+			n = len(t.cluster.nodes)
 		}
 	}
-	nodeIndex = topo.Hasher.Hash(uint64(partitionID), n)
+	nodeIndex = t.Hasher.Hash(uint64(partitionID), n)
 	return
 }
 
-func (topo *Topology) GetNonPrimaryReplicas(partitionID int) (nonPrimaryReplicas []string) {
+func (t *Topology) GetNonPrimaryReplicas(partitionID int) (nonPrimaryReplicas []string) {
 
-	primary := topo.PrimaryNodeIndex(partitionID)
-	nodeN := len(topo.nodeIDs)
+	primary := t.PrimaryNodeIndex(partitionID)
+	nodeN := len(t.nodeIDs)
 
 	// Collect nodes around the ring.
 	for i := 1; i < nodeN; i++ {
-		nodeID := topo.nodeIDs[(primary+i)%nodeN]
-		if i < topo.ReplicaN {
+		nodeID := t.nodeIDs[(primary+i)%nodeN]
+		if i < t.ReplicaN {
 			nonPrimaryReplicas = append(nonPrimaryReplicas, nodeID)
 		}
 	}
@@ -1053,7 +1053,7 @@ func (topo *Topology) GetNonPrimaryReplicas(partitionID int) (nonPrimaryReplicas
 }
 
 // the map replicaNodeIDs[nodeID] will have a true value for the primary nodeID, and false for others.
-func (topo *Topology) GetReplicasForPrimary(primary int) (replicaNodeIDs, nonReplicas map[string]bool) {
+func (t *Topology) GetReplicasForPrimary(primary int) (replicaNodeIDs, nonReplicas map[string]bool) {
 	if primary < 0 {
 		// no nodes anyway
 		return
@@ -1061,12 +1061,12 @@ func (topo *Topology) GetReplicasForPrimary(primary int) (replicaNodeIDs, nonRep
 	replicaNodeIDs = make(map[string]bool)
 	nonReplicas = make(map[string]bool)
 
-	nodeN := len(topo.nodeIDs)
+	nodeN := len(t.nodeIDs)
 
 	// Collect nodes around the ring.
 	for i := 0; i < nodeN; i++ {
-		nodeID := topo.nodeIDs[(primary+i)%nodeN]
-		if i < topo.ReplicaN {
+		nodeID := t.nodeIDs[(primary+i)%nodeN]
+		if i < t.ReplicaN {
 			// mark true if primary
 			replicaNodeIDs[nodeID] = (i == 0)
 		} else {
@@ -1895,6 +1895,37 @@ func (t *Topology) String() string {
 		t.ReplicaN,
 	)
 }
+
+///////////////////////////////////////////
+// Topology implements the Noder interface.
+
+// Nodes implements the Noder interface.
+func (t *Topology) Nodes() []*topology.Node {
+	nodes := make([]*topology.Node, len(t.nodeIDs))
+	for i, nodeID := range t.nodeIDs {
+		nodes[i] = &topology.Node{
+			ID: nodeID,
+		}
+	}
+	return nodes
+}
+
+// SetNodes implements the Noder interface.
+func (t *Topology) SetNodes(nodes []*topology.Node) {}
+
+// AppendNode implements the Noder interface.
+func (t *Topology) AppendNode(node *topology.Node) {}
+
+// RemoveNode implements the Noder interface.
+func (t *Topology) RemoveNode(nodeID string) bool {
+	return false
+}
+
+// SetNodeState implements the Noder interface.
+func (t *Topology) SetNodeState(nodeID string, state string) {}
+
+///////////////////////////////////////////
+
 func (t *Topology) GetNodeIDs() []string {
 	return t.nodeIDs
 }
@@ -2609,9 +2640,9 @@ func (c *cluster) translateIndexKeys(ctx context.Context, indexName string, keys
 // are shared between replicas, and one node is the primary for
 // replication. So with 4 nodes and 3-way replication, each node has 3/4 of
 // the translation stores on it.
-func (topo *Topology) GetPrimaryForColKeyTranslation(index, key string) (primary int) {
-	partitionID := topo.KeyPartition(index, key)
-	return topo.PrimaryNodeIndex(partitionID)
+func (t *Topology) GetPrimaryForColKeyTranslation(index, key string) (primary int) {
+	partitionID := t.KeyPartition(index, key)
+	return t.PrimaryNodeIndex(partitionID)
 }
 
 // should match cluster.go:1033 cluster.ownsShard(nodeID, index, shard)
