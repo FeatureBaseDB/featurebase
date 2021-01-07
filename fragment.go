@@ -3555,8 +3555,12 @@ func (s *fragmentSyncer) syncFragment() error {
 	span, ctx := tracing.StartSpanFromContext(context.Background(), "FragmentSyncer.syncFragment")
 	defer span.Finish()
 
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	// TODO: this needs to use Cluster.noder once that has been implemented.
+	snap := topology.NewClusterSnapshot(topology.NewLocalNoder(s.Cluster.Nodes()), s.Cluster.Hasher, s.Cluster.ReplicaN)
+
 	// Determine replica set.
-	nodes := s.Cluster.shardNodes(s.Fragment.index(), s.Fragment.shard)
+	nodes := snap.ShardNodes(s.Fragment.index(), s.Fragment.shard)
 	if len(nodes) == 1 {
 		return nil
 	}
@@ -3672,9 +3676,13 @@ func (s *fragmentSyncer) syncBlockFromPrimary(id int) error {
 
 	f := s.Fragment
 
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	// TODO: this needs to use Cluster.noder once that has been implemented.
+	snap := topology.NewClusterSnapshot(topology.NewLocalNoder(s.Cluster.Nodes()), s.Cluster.Hasher, s.Cluster.ReplicaN)
+
 	// Determine replica set. Return early if this is not
 	// the primary node.
-	nodes := s.Cluster.shardNodes(f.index(), f.shard)
+	nodes := snap.ShardNodes(f.index(), f.shard)
 	if s.Node.ID != nodes[0].ID {
 		f.holder.Logger.Debugf("non-primary replica expecting sync from primary: %s, index=%s, field=%s, shard=%d", nodes[0].ID, f.index(), f.field(), f.shard)
 		return nil
@@ -3721,10 +3729,14 @@ func (s *fragmentSyncer) syncBlock(id int) error {
 
 	f := s.Fragment
 
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	// TODO: this needs to use Cluster.noder once that has been implemented.
+	snap := topology.NewClusterSnapshot(topology.NewLocalNoder(s.Cluster.Nodes()), s.Cluster.Hasher, s.Cluster.ReplicaN)
+
 	// Read pairs from each remote block.
 	var uris []*pnet.URI
 	var pairSets []pairSet
-	for _, node := range s.Cluster.shardNodes(f.index(), f.shard) {
+	for _, node := range snap.ShardNodes(f.index(), f.shard) {
 		if s.Node.ID == node.ID {
 			continue
 		}
