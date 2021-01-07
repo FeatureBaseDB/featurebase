@@ -220,7 +220,7 @@ type HolderConfig struct {
 
 func DefaultHolderConfig() *HolderConfig {
 	return &HolderConfig{
-		PartitionN:           DefaultPartitionN,
+		PartitionN:           topology.DefaultPartitionN,
 		OpenTranslateStore:   OpenInMemTranslateStore,
 		OpenTranslateReader:  nil,
 		OpenTransactionStore: OpenInMemTransactionStore,

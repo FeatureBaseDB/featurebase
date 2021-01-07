@@ -464,7 +464,7 @@ func (cfg *FsckConfig) RepairTranslationStores(ats *pilosa.AllTranslatorSummary)
 					if err != nil {
 						return errors.Wrap(err, fmt.Sprintf("RepairTranslationStores() os.RemoveAll(e.StorePath='%v')", e.StorePath))
 					}
-					store, err := boltdb.OpenTranslateStore(e.StorePath, e.Index, e.Field, e.PartitionID, pilosa.DefaultPartitionN)
+					store, err := boltdb.OpenTranslateStore(e.StorePath, e.Index, e.Field, e.PartitionID, topology.DefaultPartitionN)
 					if err != nil {
 						return errors.Wrap(err, fmt.Sprintf("RepairTranslationStores() create empty boldtdb: boltdb.OpenTranslateStore e.StorePath='%v'", e.StorePath))
 					}
@@ -600,7 +600,7 @@ func (cfg *FsckConfig) readOneDir(dir string) (idx2frag map[string]*pilosa.Index
 	}
 
 	jmphasher := &pilosa.Jmphasher{}
-	partitionN := pilosa.DefaultPartitionN
+	partitionN := topology.DefaultPartitionN
 	replicaN := cfg.ReplicaN
 	topo, err := loadTopology(dir, jmphasher, partitionN, replicaN)
 	if err != nil {
@@ -937,7 +937,7 @@ func (cfg *FsckConfig) analyzeThisIndex(
 # %v
 # ========================================================
 `,
-		cfg.Fix, index, nDir, cfg.ReplicaN, humanize.Comma(totalBytes), humanize.Comma(totalFiles), humanize.Comma(int64(nDir*pilosa.DefaultPartitionN)), humanize.Comma(int64(keyCount)), humanize.Comma(int64(idCount)), actionTaken, fragUpdate)
+		cfg.Fix, index, nDir, cfg.ReplicaN, humanize.Comma(totalBytes), humanize.Comma(totalFiles), humanize.Comma(int64(nDir*topology.DefaultPartitionN)), humanize.Comma(int64(keyCount)), humanize.Comma(int64(idCount)), actionTaken, fragUpdate)
 	return
 }
 
