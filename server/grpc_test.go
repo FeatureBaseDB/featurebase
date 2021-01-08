@@ -986,6 +986,171 @@ func TestQuerySQLUnaryWithError(t *testing.T) {
 	}
 }
 
+func TestCRUDIndexes(t *testing.T) {
+	m := test.RunCommand(t)
+	defer m.Close()
+
+	ctx := context.Background()
+	gh := server.NewGRPCHandler(m.API)
+
+	t.Run("CreateIndex", func(t *testing.T) {
+		// Try CreateIndex for testindex1
+		_, err := gh.CreateIndex(ctx, &pb.CreateIndexRequest{Name: "testindex1", Keys: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		schema := m.API.Schema(ctx)
+		if len(schema) != 1 {
+			t.Fatal("Schema should include one index")
+		}
+		if schema[0].Name != "testindex1" {
+			t.Fatal("Index name not set correctly")
+		}
+		if schema[0].Options.Keys != true {
+			t.Fatal("Index Keys not set correctly")
+		}
+		if schema[0].Options.TrackExistence != true {
+			t.Fatal("Index TrackExistence should be true when created by gRPC")
+		}
+
+		// Try CreateIndex for testindex2
+		_, err = gh.CreateIndex(ctx, &pb.CreateIndexRequest{Name: "testindex2"})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		schema = m.API.Schema(ctx)
+		if len(schema) != 2 {
+			t.Fatal("Schema should include two indexes")
+		}
+
+		_ = m.API.DeleteIndex(ctx, "testindex1")
+
+		schema = m.API.Schema(ctx)
+		if len(schema) != 1 {
+			t.Fatal("Schema should include one index")
+		}
+		if schema[0].Name != "testindex2" {
+			t.Fatal("Index name not set correctly")
+		}
+		if schema[0].Options.Keys != false {
+			t.Fatal("Index Keys not set correctly")
+		}
+
+		// Check errors for CreateIndex: create index with same name
+		_, err = gh.CreateIndex(ctx, &pb.CreateIndexRequest{Name: "testindex2"})
+		errStatus, _ := status.FromError(err)
+		if errStatus.Code() != codes.AlreadyExists {
+			t.Fatalf("Error code should be codes.AlreadyExists, but is %v", errStatus.Code())
+		}
+
+		// Check errors for CreateIndex: create index with no name
+		_, err = gh.CreateIndex(ctx, &pb.CreateIndexRequest{Name: ""})
+		errStatus, _ = status.FromError(err)
+		if errStatus.Code() != codes.Unknown {
+			t.Fatalf("Error code should be codes.Unknown, but is %v", errStatus.Code())
+		}
+
+		// Check errors for CreateIndex: create index with invalid name
+		_, err = gh.CreateIndex(ctx, &pb.CreateIndexRequest{Name: "💩"})
+		errStatus, _ = status.FromError(err)
+		if errStatus.Code() != codes.FailedPrecondition {
+			t.Fatalf("Error code should be codes.FailedPrecondition, but is %v", errStatus.Code())
+		}
+
+		_ = m.API.DeleteIndex(ctx, "testindex2")
+	})
+
+	t.Run("GetIndex", func(t *testing.T) {
+		_, err := m.API.CreateIndex(ctx, "testindex1", pilosa.IndexOptions{})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Check GetIndex for testindex1
+		resp, err := gh.GetIndex(ctx, &pb.GetIndexRequest{Name: "testindex1"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if resp.Index.Name != "testindex1" {
+			t.Fatalf("Index name does not match: %s", resp.Index.Name)
+		}
+
+		// Check errors for GetIndex: get index that doesn't exist
+		_, err = gh.GetIndex(ctx, &pb.GetIndexRequest{Name: "wrongname"})
+		errStatus, _ := status.FromError(err)
+		if errStatus.Code() != codes.NotFound {
+			t.Fatalf("Error code should be codes.NotFound, but is %v", errStatus.Code())
+		}
+
+		// Check errors for GetIndex: get index with invalid name
+		_, err = gh.GetIndex(ctx, &pb.GetIndexRequest{Name: "💩"})
+		errStatus, _ = status.FromError(err)
+		if errStatus.Code() != codes.NotFound {
+			t.Fatalf("Error code should be codes.NotFound, but is %v", errStatus.Code())
+		}
+		_ = m.API.DeleteIndex(ctx, "testindex1")
+	})
+
+	t.Run("GetIndexes", func(t *testing.T) {
+		_, err := m.API.CreateIndex(ctx, "testindex1", pilosa.IndexOptions{})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Check GetIndexes
+		resp2, err := gh.GetIndexes(ctx, &pb.GetIndexesRequest{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(resp2.Indexes) != 1 && resp2.Indexes[0].Name != "testindex1" {
+			t.Fatalf("GetIndexes did not produce the correct result set: %v", resp2.Indexes)
+		}
+
+		_, err = m.API.CreateIndex(ctx, "testindex2", pilosa.IndexOptions{})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Check GetIndexes again
+		resp, err := gh.GetIndexes(ctx, &pb.GetIndexesRequest{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(resp.Indexes) != 2 {
+			t.Fatalf("GetIndexes did not produce the correct result set: %v", resp.Indexes)
+		}
+		_ = m.API.DeleteIndex(ctx, "testindex1")
+		_ = m.API.DeleteIndex(ctx, "testindex2")
+	})
+
+	t.Run("DeleteIndexes", func(t *testing.T) {
+		_, err := m.API.CreateIndex(ctx, "testindex1", pilosa.IndexOptions{})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Try to delete index
+		_, err = gh.DeleteIndex(ctx, &pb.DeleteIndexRequest{Name: "testindex1"})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		schema := m.API.Schema(ctx)
+		if len(schema) != 0 {
+			t.Fatal("Schema should include no index")
+		}
+
+		// Try to delete non-existing index
+		_, err = gh.DeleteIndex(ctx, &pb.DeleteIndexRequest{Name: "doesnotexist"})
+		errStatus, _ := status.FromError(err)
+		if errStatus.Code() != codes.NotFound {
+			t.Fatalf("Error code should be codes.NotFound, but is %v", errStatus.Code())
+		}
+	})
+}
+
 func setUpTestQuerySQLUnary(ctx context.Context, t *testing.T) (gh *server.GRPCHandler, tearDownFunc func()) {
 	t.Helper()
 
