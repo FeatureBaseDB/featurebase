@@ -441,9 +441,11 @@ func (e *executor) handlePreCalls(ctx context.Context, qcx *Qcx, index string, c
 	// shards if the query has to go to them
 	opt.EmbeddedData = append(opt.EmbeddedData, row)
 	// and stash a copy locally, so local calls can use it
-	c.Precomputed = make(map[uint64]interface{}, len(row.segments))
-	for _, segment := range row.segments {
-		c.Precomputed[segment.shard] = &Row{segments: []rowSegment{segment}}
+	if row != nil {
+		c.Precomputed = make(map[uint64]interface{}, len(row.segments))
+		for _, segment := range row.segments {
+			c.Precomputed[segment.shard] = &Row{segments: []rowSegment{segment}}
+		}
 	}
 	return nil
 }
