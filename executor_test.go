@@ -7110,6 +7110,15 @@ zebra,1,1000
 pangolin,1,100
 `,
 		},
+		{
+			query: "GroupBy(Rows(field=affinity), aggregate=Count(Distinct(field=zip_code)))",
+			csvVerifier: `-10,1,1
+-5,1,1
+0,1,1
+5,1,1
+10,1,1
+`,
+		},
 	}
 
 	for i, tst := range tests {
