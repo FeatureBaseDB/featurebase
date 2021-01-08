@@ -2829,7 +2829,12 @@ func (e *executor) executeGroupBy(ctx context.Context, qcx *Qcx, index string, c
 		for n, gc := range results {
 			intersectRows := make([]*pql.Call, 0, len(gc.Group))
 			for _, fr := range gc.Group {
-				intersectRows = append(intersectRows, &pql.Call{Name: "Row", Args: map[string]interface{}{fr.Field: fr.RowID}})
+				var value interface{} = fr.RowID
+				// use fr.Value instead of fr.RowID if set (from int fields)
+				if fr.Value != nil {
+					value = &pql.Condition{Op: pql.EQ, Value: *fr.Value}
+				}
+				intersectRows = append(intersectRows, &pql.Call{Name: "Row", Args: map[string]interface{}{fr.Field: value}})
 			}
 			// apply any filter, if present
 			if filter != nil {
