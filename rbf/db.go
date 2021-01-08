@@ -24,7 +24,6 @@ import (
 	"syscall"
 
 	"github.com/benbjohnson/immutable"
-	"github.com/glycerine/idem"
 	rbfcfg "github.com/pilosa/pilosa/v2/rbf/cfg"
 	"github.com/pilosa/pilosa/v2/syswrap"
 )
@@ -33,9 +32,9 @@ var (
 	ErrClosed = errors.New("rbf: database closed")
 )
 
-// global in the sense that it is shared among all instances
-// of rbf.DBs in this process. This is deliberate.
-var globalCursorSyncPool = &sync.Pool{
+// shared cursor pool across all DB instances.
+// Cursors are returned on Cursor.Close().
+var cursorSyncPool = &sync.Pool{
 	New: func() interface{} {
 		return &Cursor{}
 	},
@@ -63,9 +62,6 @@ type DB struct {
 
 	// Path represents the path to the database file.
 	Path string
-
-	cursorArenaCh chan *Cursor
-	cursorCleaner *idem.Halter
 }
 
 // NewDB returns a new instance of DB.
@@ -79,12 +75,6 @@ func NewDB(path string, cfg *rbfcfg.Config) *DB {
 		txs:     make(map[*Tx]struct{}),
 		pageMap: NewPageMap(),
 		Path:    path,
-
-		cursorArenaCh: make(chan *Cursor, cfg.CursorCacheSize),
-		cursorCleaner: idem.NewHalter(),
-	}
-	for i := int64(0); i < cfg.CursorCacheSize; i++ {
-		db.cursorArenaCh <- &Cursor{}
 	}
 	db.haltCond = sync.NewCond(&db.mu)
 
@@ -271,8 +261,6 @@ func (db *DB) Close() (err error) {
 
 	db.mu.Lock()
 	defer db.mu.Unlock()
-
-	defer db.cursorCleaner.RequestStop()
 
 	db.opened = false
 
@@ -580,24 +568,10 @@ func (db *DB) readMetaPage() ([]byte, error) {
 	return db.readDBPage(0)
 }
 
-func (db *DB) getCursor(tx *Tx) (c *Cursor) {
-	if db.cfg.CursorCacheSize == 0 {
-		c = globalCursorSyncPool.Get().(*Cursor)
-		c.tx = tx
-		return
-	}
-
-	n := len(db.cursorArenaCh)
-	if n < 10 {
-		vv("warning, db.cursorArenaCh is low! %v left", n)
-	}
-	select {
-	case c = <-db.cursorArenaCh:
-		c.tx = tx
-		return
-	case <-db.cursorCleaner.ReqStop.Chan:
-		return nil
-	}
+func (db *DB) getCursor(tx *Tx) *Cursor {
+	c := cursorSyncPool.Get().(*Cursor)
+	c.tx = tx
+	return c
 }
 
 // Shared pool for in-memory database pages.
