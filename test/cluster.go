@@ -414,11 +414,23 @@ func newCluster(tb testing.TB, size int, opts ...[]server.CommandOption) (*Clust
 // MustRunCluster creates and starts a new cluster. The opts parameter
 // is slightly magical; see MustNewCluster.
 func MustRunCluster(tb testing.TB, size int, opts ...[]server.CommandOption) *Cluster {
-	cluster := MustNewCluster(tb, size, opts...)
-	if err := cluster.Start(); err != nil {
+	var tries int = 5
+	var cluster *Cluster
+	var err error
+
+	for i := 0; i < tries; i++ {
+		if i > 0 {
+			fmt.Printf("--- try starting cluster again: %d\n", i)
+		}
+		cluster = MustNewCluster(tb, size, opts...)
+		if err = cluster.Start(); err == nil {
+			break
+		}
+	}
+
+	if err != nil {
 		tb.Fatalf("run cluster: %v", err)
 	}
-	fmt.Printf("done with AwaitState\n")
 	return cluster
 }
 
