@@ -80,6 +80,7 @@ func (pm *globalPortMapper) allocate() {
 		})
 		if err != nil {
 			fmt.Printf("UDP port %v was available on tcp but not udp: %v\n", port, err)
+			lsn.Close()
 		} else {
 			_ = udpConn.Close()
 			if lsn == nil {
@@ -96,10 +97,9 @@ func (pm *globalPortMapper) allocateAtTop() {
 	println("888888 allocateAtTop ports called")
 	pm.availPorts = make([]net.Listener, pm.numPorts)
 	i := 0
-	next := 65000
-	for i < pm.numPorts {
+
+	for next := 65000; i < pm.numPorts && next > 0; next-- {
 		lsn, err := net.Listen("tcp", fmt.Sprintf(":%d", next))
-		next--
 		if err != nil {
 			//fmt.Printf("next=%v, err = %v\n", next+1, err)
 			continue
@@ -115,6 +115,7 @@ func (pm *globalPortMapper) allocateAtTop() {
 		})
 		if err != nil {
 			fmt.Printf("UDP port %v was available on tcp but not udp: %v\n", port, err)
+			lsn.Close()
 		} else {
 			_ = udpConn.Close()
 			if lsn == nil {
