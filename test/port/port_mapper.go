@@ -98,7 +98,7 @@ func (pm *globalPortMapper) allocateAtTop() {
 	pm.availPorts = make([]net.Listener, pm.numPorts)
 	i := 0
 
-	for next := 65000; i < pm.numPorts && next > 0; next-- {
+	for next := 65000; i < pm.numPorts && next > 1000; next-- {
 		lsn, err := net.Listen("tcp", fmt.Sprintf(":%d", next))
 		if err != nil {
 			//fmt.Printf("next=%v, err = %v\n", next+1, err)

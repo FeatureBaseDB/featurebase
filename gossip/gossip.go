@@ -426,7 +426,13 @@ func (g *eventReceiver) NotifyUpdate(n *memberlist.Node) {
 }
 
 func (g *eventReceiver) Close() {
-	close(g.closed)
+	// TODO workaround to make tests pass. We are going to delete this code anyways.
+	select {
+	case <-g.closed:
+		return
+	default:
+		close(g.closed)
+	}
 }
 
 func (g *eventReceiver) listen() {
