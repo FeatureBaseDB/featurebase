@@ -1399,7 +1399,12 @@ func TestCluster_TranslateStore(t *testing.T) {
 			pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderWithLockerFunc(nil, &sync.Mutex{})),
 		),
 	)
-	cluster.GetNode(0).Config.Gossip.Port = fmt.Sprintf("%d", port.MustGetPort())
+
+	port.GetPort(func(p int) error {
+		cluster.GetNode(0).Config.Gossip.Port = fmt.Sprintf("%d", p)
+		return nil
+	}, 10)
+
 	err := cluster.GetNode(0).Start()
 	if err != nil {
 		t.Fatalf("starting node 0: %v", err)

@@ -71,12 +71,18 @@ func newCommand(tb testing.TB, opts ...server.CommandOption) *Command {
 	m.Command = server.NewCommand(bytes.NewReader(nil), ioutil.Discard, ioutil.Discard, opts...)
 	m.Config.DataDir = path
 	defaultConf := server.NewConfig()
-	if m.Config.Bind == defaultConf.Bind {
-		m.Config.Bind = fmt.Sprintf("http://localhost:%d", port.GlobalPortMap.MustGetPort())
-	}
-	if m.Config.BindGRPC == defaultConf.BindGRPC {
-		m.Config.BindGRPC = fmt.Sprintf("http://localhost:%d", port.GlobalPortMap.MustGetPort())
-	}
+
+	port.GetPorts(func(ports []int) error {
+		if m.Config.Bind == defaultConf.Bind {
+			m.Config.Bind = fmt.Sprintf("http://localhost:%d", ports[0])
+		}
+		if m.Config.BindGRPC == defaultConf.BindGRPC {
+			m.Config.BindGRPC = fmt.Sprintf("http://localhost:%d", ports[1])
+		}
+
+		return nil
+	}, 2, 10)
+
 	m.Config.Translation.MapSize = 140000
 	m.Config.WorkerPoolSize = 2
 

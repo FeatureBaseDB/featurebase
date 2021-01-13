@@ -30,20 +30,29 @@ func GenDisCoConfig(clusterSize int) []*server.Config {
 	clusterURLs := make([]string, clusterSize)
 	for i := range cfgs {
 		name := fmt.Sprintf("server%d", i)
-		lClientURL := fmt.Sprintf("http://localhost:%d", port.GlobalPortMap.MustGetPort())
-		lPeerURL := fmt.Sprintf("http://localhost:%d", port.GlobalPortMap.MustGetPort())
-		cfgs[i] = &server.Config{
-			BindGRPC: port.ColonZeroString(),
-			DisCo: etcd.Options{
-				Name:        name,
-				Dir:         "",
-				ClusterName: "bartholemuuuuu",
-				LClientURL:  lClientURL,
-				AClientURL:  lClientURL,
-				LPeerURL:    lPeerURL,
-				APeerURL:    lPeerURL,
-			},
-		}
+
+		var lClientURL, lPeerURL string
+		port.GetPorts(func(ports []int) error {
+			lClientURL = fmt.Sprintf("http://localhost:%d", ports[0])
+			lPeerURL = fmt.Sprintf("http://localhost:%d", ports[1])
+
+			cfgs[i] = &server.Config{
+				BindGRPC: port.ColonZeroString(ports[2]),
+				DisCo: etcd.Options{
+					Name:        name,
+					Dir:         "",
+					ClusterName: "bartholemuuuuu",
+					LClientURL:  lClientURL,
+					AClientURL:  lClientURL,
+					LPeerURL:    lPeerURL,
+					APeerURL:    lPeerURL,
+				},
+			}
+
+			return nil
+
+		}, 3, 10)
+
 		clusterURLs[i] = fmt.Sprintf("%s=%s", name, lPeerURL)
 		fmt.Printf("\ndebug test/disco.go: on i=%v, GenDisCoConfig BindGRPC: %v\n", i, cfgs[i].BindGRPC)
 	}

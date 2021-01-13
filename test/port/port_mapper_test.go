@@ -16,6 +16,7 @@ package port_test
 
 import (
 	"fmt"
+	"log"
 	"net"
 	"testing"
 
@@ -23,36 +24,38 @@ import (
 )
 
 func TestPortsAreUnique(t *testing.T) {
-
-	local := port.NewGlobalPortMapper(port.BlockOfPortsSize)
-
-	oracle := make(map[int]bool)
-
-	for i := 0; i < port.BlockOfPortsSize; i++ {
-		port := local.MustGetPort()
-		if oracle[port] {
-			panic(fmt.Sprintf("port %v was already issued!", port))
+	portmap := make(map[int]struct{})
+	port.GetPorts(func(ports []int) error {
+		for _, p := range ports {
+			log.Println("PORTTT", p)
+			if _, exists := portmap[p]; exists {
+				panic(fmt.Sprintf("port %v was already issued!", p))
+			}
+			portmap[p] = struct{}{}
 		}
-		oracle[port] = true
-	}
+
+		return nil
+	}, 2000, 3)
 }
 
 func TestPortsAreUsable(t *testing.T) {
+	portmap := make(map[int]struct{})
+	port.GetPorts(func(ports []int) error {
+		for _, p := range ports {
+			if _, exists := portmap[p]; exists {
+				panic(fmt.Sprintf("port %v was already issued!", p))
+			}
 
-	local := port.NewGlobalPortMapper(port.BlockOfPortsSize)
+			lsn, err := net.Listen("tcp", fmt.Sprintf(":%v", p))
+			if err != nil {
+				panic(err)
+			}
 
-	oracle := make(map[int]bool)
-
-	for i := 0; i < port.BlockOfPortsSize; i++ {
-		port := local.MustGetPort()
-		if oracle[port] {
-			panic(fmt.Sprintf("port %v was already issued!", port))
+			portmap[p] = struct{}{}
+			lsn.Close()
 		}
-		lsn, err := net.Listen("tcp", fmt.Sprintf(":%v", port))
-		if err != nil {
-			panic(err)
-		}
-		oracle[port] = true
-		lsn.Close()
-	}
+
+		return nil
+	}, 2000, 3)
+
 }

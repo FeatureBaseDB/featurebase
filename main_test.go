@@ -19,14 +19,13 @@ import (
 	"net/http"
 	"testing"
 
+	_ "net/http/pprof"
+
 	"github.com/pilosa/pilosa/v2/test/port"
 	"github.com/pilosa/pilosa/v2/testhook"
-	_ "net/http/pprof"
 )
 
 func TestMain(m *testing.M) {
-	port.RaiseUlimitNofiles()
-
 	port := port.MustGetPort()
 	fmt.Printf("pilosa/ TestMain: online stack-traces: curl http://localhost:%v/debug/pprof/goroutine?debug=2\n", port)
 	go func() {

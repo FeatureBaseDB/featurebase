@@ -182,7 +182,12 @@ func TestClusterResize_AddNode(t *testing.T) {
 
 		// Configure node1
 		m1 := test.NewCommandNode(t, false)
-		m1.Config.Gossip.Port = fmt.Sprintf("%d", port.MustGetPort())
+
+		port.GetPort(func(p int) error {
+			m1.Config.Gossip.Port = fmt.Sprintf("%d", p)
+			return nil
+		}, 10)
+
 		m1.Config.Gossip.Seeds = []string{seed}
 		err := m1.Start()
 		if err != nil {
@@ -231,7 +236,11 @@ func TestClusterResize_AddNode(t *testing.T) {
 
 		// Configure node1
 		m1 := test.NewCommandNode(t, false)
-		m1.Config.Gossip.Port = fmt.Sprintf("%d", port.MustGetPort())
+
+		port.GetPort(func(p int) error {
+			m1.Config.Gossip.Port = fmt.Sprintf("%d", p)
+			return nil
+		}, 10)
 		m1.Config.Gossip.Seeds = []string{seed}
 		err := m1.Start()
 		if err != nil {
@@ -280,7 +289,10 @@ func TestClusterResize_AddNode(t *testing.T) {
 
 		// Configure node1
 		m1 := test.NewCommandNode(t, false)
-		m1.Config.Gossip.Port = fmt.Sprintf("%d", port.MustGetPort())
+		port.GetPort(func(p int) error {
+			m1.Config.Gossip.Port = fmt.Sprintf("%d", p)
+			return nil
+		}, 10)
 		m1.Config.Gossip.Seeds = []string{seed}
 		err := m1.Start()
 		if err != nil {
@@ -335,7 +347,10 @@ func TestClusterResize_AddNode(t *testing.T) {
 
 		// Configure node1
 		m1 := test.NewCommandNode(t, false)
-		m1.Config.Gossip.Port = fmt.Sprintf("%d", port.MustGetPort())
+		port.GetPort(func(p int) error {
+			m1.Config.Gossip.Port = fmt.Sprintf("%d", p)
+			return nil
+		}, 10)
 		m1.Config.Gossip.Seeds = []string{seed}
 		err := m1.Start()
 		if err != nil {
@@ -384,7 +399,10 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 
 		// Configure node1
 		m1 := test.NewCommandNode(t, false)
-		m1.Config.Gossip.Port = fmt.Sprintf("%d", port.MustGetPort())
+		port.GetPort(func(p int) error {
+			m1.Config.Gossip.Port = fmt.Sprintf("%d", p)
+			return nil
+		}, 10)
 		m1.Config.Gossip.Seeds = []string{seed}
 		err := m1.Start()
 		if err != nil {
@@ -437,7 +455,10 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 
 		// Configure node1
 		m1 := test.NewCommandNode(t, false)
-		m1.Config.Gossip.Port = fmt.Sprintf("%d", port.MustGetPort())
+		port.GetPort(func(p int) error {
+			m1.Config.Gossip.Port = fmt.Sprintf("%d", p)
+			return nil
+		}, 10)
 		m1.Config.Gossip.Seeds = []string{seed}
 		err := m1.Start()
 		if err != nil {
@@ -496,7 +517,10 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 
 		// Configure node1
 		m1 := test.NewCommandNode(t, false)
-		m1.Config.Gossip.Port = fmt.Sprintf("%d", port.MustGetPort())
+		port.GetPort(func(p int) error {
+			m1.Config.Gossip.Port = fmt.Sprintf("%d", p)
+			return nil
+		}, 10)
 		m1.Config.Gossip.Seeds = []string{seed}
 		errc := make(chan error, 1)
 		go func() {
@@ -552,7 +576,10 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 
 		// Configure node1
 		m1 := test.NewCommandNode(t, false)
-		m1.Config.Gossip.Port = fmt.Sprintf("%d", port.MustGetPort())
+		port.GetPort(func(p int) error {
+			m1.Config.Gossip.Port = fmt.Sprintf("%d", p)
+			return nil
+		}, 10)
 		m1.Config.Gossip.Seeds = []string{seed}
 		errc := make(chan error, 1)
 		go func() {
@@ -591,7 +618,10 @@ func TestCluster_GossipMembership(t *testing.T) {
 		m1 := test.NewCommandNode(t, false)
 		defer m1.Close()
 		eg.Go(func() error {
-			m1.Config.Gossip.Port = fmt.Sprintf("%d", port.MustGetPort())
+			port.GetPort(func(p int) error {
+				m1.Config.Gossip.Port = fmt.Sprintf("%d", p)
+				return nil
+			}, 10)
 			// Pass invalid seed as first in list
 			m1.Config.Gossip.Seeds = []string{"http://localhost:8765", seed}
 			err := m1.Start()
@@ -605,7 +635,10 @@ func TestCluster_GossipMembership(t *testing.T) {
 		m2 := test.NewCommandNode(t, false)
 		defer m2.Close()
 		eg.Go(func() error {
-			m2.Config.Gossip.Port = fmt.Sprintf("%d", port.MustGetPort())
+			port.GetPort(func(p int) error {
+				m1.Config.Gossip.Port = fmt.Sprintf("%d", p)
+				return nil
+			}, 10)
 			// Pass invalid seed as first in list
 			m2.Config.Gossip.Seeds = []string{seed, "http://localhost:8765"}
 			err := m2.Start()

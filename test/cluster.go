@@ -257,7 +257,11 @@ func (c *Cluster) Start() error {
 			if err != nil {
 				return errors.Wrap(err, "processing bind address")
 			}
-			cc.Config.Gossip.Port = fmt.Sprint(port.GlobalPortMap.MustGetPort()) // 63965 given out here. gossip port.
+
+			port.GetPort(func(p int) error {
+				cc.Config.Gossip.Port = fmt.Sprint(p) // 63965 given out here. gossip port.
+				return nil
+			}, 10)
 
 			gossipHost := uri.Host
 			gossipPort := cc.Config.Gossip.Port

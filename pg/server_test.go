@@ -110,7 +110,15 @@ func TestPQConnect(t *testing.T) {
 		StartupTimeout: time.Second,
 		Logger:         logger.NopLogger,
 	}
-	addr, shutdown, err := pgtest.ServeTCP(port.ColonZeroString(), server)
+
+	var addr net.Addr
+	var shutdown pgtest.ShutdownFunc
+	var err error
+	err = port.GetPort(func(p int) error {
+		addr, shutdown, err = pgtest.ServeTCP(port.ColonZeroString(p), server)
+		return err
+	}, 10)
+
 	if err != nil {
 		t.Fatalf("starting postgres server: %v", err)
 	}
@@ -141,7 +149,14 @@ func TestPQConnectSSL(t *testing.T) {
 		StartupTimeout: time.Second,
 		Logger:         logger.NopLogger,
 	}
-	addr, shutdown, err := pgtest.ServeTLS(port.ColonZeroString(), server)
+
+	var addr net.Addr
+	var shutdown pgtest.ShutdownFunc
+	var err error
+	err = port.GetPort(func(p int) error {
+		addr, shutdown, err = pgtest.ServeTCP(port.ColonZeroString(p), server)
+		return err
+	}, 10)
 	if err != nil {
 		t.Fatalf("starting postgres server: %v", err)
 	}
@@ -205,7 +220,14 @@ func TestPSQLQuery(t *testing.T) {
 			StartupTimeout: time.Second,
 			Logger:         logger.NopLogger,
 		}
-		addr, shutdown, err := pgtest.ServeTCP(port.ColonZeroString(), server)
+
+		var addr net.Addr
+		var shutdown pgtest.ShutdownFunc
+		var err error
+		err = port.GetPort(func(p int) error {
+			addr, shutdown, err = pgtest.ServeTCP(port.ColonZeroString(p), server)
+			return err
+		}, 10)
 		if err != nil {
 			t.Fatalf("starting postgres server: %v", err)
 		}
@@ -266,7 +288,14 @@ func TestPSQLQuery(t *testing.T) {
 			Logger:              logger.NopLogger,
 			CancellationManager: pg.NewLocalCancellationManager(rand.Reader),
 		}
-		addr, shutdown, err := pgtest.ServeTCP(port.ColonZeroString(), server)
+
+		var addr net.Addr
+		var shutdown pgtest.ShutdownFunc
+		var err error
+		err = port.GetPort(func(p int) error {
+			addr, shutdown, err = pgtest.ServeTCP(port.ColonZeroString(p), server)
+			return err
+		}, 10)
 		if err != nil {
 			t.Fatalf("starting postgres server: %v", err)
 		}

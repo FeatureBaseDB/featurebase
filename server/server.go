@@ -515,7 +515,10 @@ func (m *Command) setupNetworking() error {
 		// new port. See also the gossip config in gossip/gossip.go.
 		// TODO: Maybe make that more configurable here.
 		m.logger.Printf("ephemeral port %d already occupied, switching to :0 (%v)", gossipPort, err)
-		gossipPort = port.MustGetPort()
+		port.GetPort(func(p int) error {
+			gossipPort = p
+			return nil
+		}, 10)
 		m.Config.Gossip.Port = fmt.Sprintf(":%d", gossipPort)
 		m.gossipTransport, err = gossip.NewTransport(gossipHost, gossipPort, m.logger.Logger())
 	}
