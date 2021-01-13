@@ -821,25 +821,41 @@ type NodeUsage struct {
 
 // DiskUsage represents the storage space used on disk by one node.
 type DiskUsage struct {
-	Capacity uint64           `json:"capacity,omitempty"`
-	TotalUse int64            `json:"totalInUse"`
-	Indexes  map[string]int64 `json:"indexes"`
+	Capacity   uint64                `json:"capacity,omitempty"`
+	TotalUse   uint64                `json:"totalInUse"`
+	IndexUsage map[string]IndexUsage `json:"indexes"`
 }
 
-// Usage gets the disk usage per index, in a map[nodeID]NodeUsage
+// IndexUsage represents the storage space used on disk by one index, on one node.
+type IndexUsage struct {
+	Total          uint64                `json:"total"`
+	IndexKeys      uint64                `json:"indexKeys"`
+	FieldKeysTotal uint64                `json:"fieldKeysTotal"`
+	Fragments      uint64                `json:"fragments"`
+	Fields         map[string]FieldUsage `json:"fields"`
+}
+
+// FieldUsage represents the storage space used on disk by one field, on one node
+type FieldUsage struct {
+	Total     uint64 `json:"total"`
+	Fragments uint64 `json:"fragments"`
+	Keys      uint64 `json:"keys"`
+}
+
+// Usage gets the disk usage, in a map[nodeID]NodeUsage.
 func (api *API) Usage(ctx context.Context, remote bool) (map[string]NodeUsage, error) {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.Usage")
 	defer span.Finish()
 
 	nodeUsages := make(map[string]NodeUsage)
 
-	indexSizes, err := api.holder.Txf().IndexSizes()
+	indexDetails, err := api.holder.Txf().IndexUsageDetails()
 	if err != nil {
 		return nil, errors.Wrap(err, "getting index usage")
 	}
-	var totalSize int64
-	for _, s := range indexSizes {
-		totalSize += s
+	var totalSize uint64
+	for _, s := range indexDetails {
+		totalSize += s.Total
 	}
 
 	capacity, err := api.server.systemInfo.DiskCapacity(api.holder.path)
@@ -850,9 +866,9 @@ func (api *API) Usage(ctx context.Context, remote bool) (map[string]NodeUsage, e
 	// Insert into result.
 	nodeUsage := NodeUsage{
 		Disk: DiskUsage{
-			Capacity: capacity,
-			TotalUse: totalSize,
-			Indexes:  indexSizes,
+			Capacity:   capacity,
+			TotalUse:   totalSize,
+			IndexUsage: indexDetails,
 		},
 	}
 	nodeUsages[api.server.nodeID] = nodeUsage

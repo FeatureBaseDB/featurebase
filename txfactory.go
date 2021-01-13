@@ -593,40 +593,115 @@ func (f *TxFactory) DumpAll() {
 	f.dbPerShard.DumpAll()
 }
 
-func (f *TxFactory) IndexSizes() (index2bytes map[string]int64, err error) {
-	// Open storage directory.
-	index2bytes = make(map[string]int64)
+func (f *TxFactory) IndexUsageDetails() (map[string]IndexUsage, error) {
+	indexUsage := make(map[string]IndexUsage)
 	dirName, err := expandDirName(f.holder.path)
 	if err != nil {
-		return index2bytes, errors.Wrap(err, "expanding data directory")
+		return indexUsage, errors.Wrap(err, "expanding data directory")
 	}
 
 	idxs := f.holder.Indexes()
 
+	/*
+		qcx := f.NewQcx()
+		tx, finisher, err := qcx.GetTx(Txo{Write: !writable})
+		if err != nil {
+			return indexUsage, errors.Wrap(err, "qcx.GetTx")
+		}
+		defer finisher(nil)
+	*/
+
 	for _, idx := range idxs {
 		index := idx.name
-		fullName := path.Join(dirName, index)
-		roaringAndMeta, err := directoryUsage(fullName)
-		if err != nil {
-			return index2bytes, errors.Wrap(err, "getting disk usage for roaring and meta")
+		println(" i:" + index)
+		indexPath := path.Join(dirName, index)
+
+		// field usage
+		fieldUsages := make(map[string]FieldUsage)
+		fragmentsTotal := uint64(0)
+		fieldKeysTotal := uint64(0)
+		flds := idx.Fields()
+		for _, fld := range flds {
+			field := fld.Name()
+			fUsage, err := f.FieldUsage(indexPath, fld)
+			if err != nil {
+				return indexUsage, errors.Wrapf(err, "getting disk usage for index (%s)", index)
+			}
+			fieldUsages[field] = fUsage
+			keysBytes := fieldUsages[field].Keys
+			fieldKeysTotal += keysBytes
+			fragmentsTotal += fieldUsages[field].Fragments
+
+			// non-roaring field usage
+			/*
+				fieldBytes, err := tx.GetFieldSizeBytes(index, field)
+				if err != nil {
+					return indexUsage, errors.Wrapf(err, "getting disk usage for non-roaring fragments (%s)", field)
+				}
+				fieldUsages[field] = FieldUsage{
+					Total:     fieldBytes,
+					Fragments: fieldBytes - keysBytes,
+					Keys:      keysBytes,
+				}
+			*/
 		}
-		fullName += ".index.txstores@@@"
-		rbfOrLmdb, err := directoryUsage(fullName)
-		if err != nil {
-			return index2bytes, errors.Wrap(err, "getting disk usage for backend")
+
+		// index keys usage
+		keysBytes := uint64(0)
+		if idx.keys {
+			keysPath := path.Join(indexPath, translateStoreDir)
+			keysBytes, err = directoryUsage(keysPath)
+			if err != nil {
+				return indexUsage, errors.Wrapf(err, "getting disk usage for index keys (%s)", index)
+			}
 		}
-		index2bytes[index] = roaringAndMeta + rbfOrLmdb
+
+		indexUsage[index] = IndexUsage{
+			Total:          keysBytes + fieldKeysTotal + fragmentsTotal,
+			IndexKeys:      keysBytes,
+			FieldKeysTotal: fieldKeysTotal,
+			Fragments:      fragmentsTotal,
+			Fields:         fieldUsages,
+		}
 	}
 
-	return index2bytes, nil
+	return indexUsage, nil
 }
 
-func directoryUsage(fname string) (int64, error) {
-	if !DirExists(fname) {
-		return 0, nil
+func (f *TxFactory) FieldUsage(indexPath string, fld *Field) (FieldUsage, error) {
+	fieldUsage := FieldUsage{}
+
+	field := fld.name
+	println("  f:" + field)
+
+	// roaring field usage
+	fieldPath := path.Join(indexPath, field)
+	fieldBytes, err := directoryUsage(fieldPath)
+	if err != nil {
+		return fieldUsage, errors.Wrapf(err, "getting disk usage for field (%s)", field)
+	}
+	keysBytes := int64(0)
+	if fld.usesKeys {
+		keysBytes, err = fileSize(fld.TranslateStorePath())
+		if err != nil {
+			return fieldUsage, errors.Wrapf(err, "getting disk usage for field keys (%s)", field)
+		}
+	}
+	fieldUsage = FieldUsage{
+		Total:     fieldBytes,
+		Fragments: fieldBytes - uint64(keysBytes),
+		Keys:      uint64(keysBytes),
 	}
 
-	var size int64
+	return fieldUsage, nil
+}
+
+func directoryUsage(fname string) (uint64, error) {
+	if !DirExists(fname) {
+		return 0, errors.Errorf("directory does not exist (%s)", fname)
+	}
+
+	var size uint64
 
 	dir, err := os.Open(fname)
 	if err != nil {
@@ -647,7 +722,7 @@ func directoryUsage(fname string) (int64, error) {
 			}
 			size += sz
 		} else {
-			size += file.Size()
+			size += uint64(file.Size()) // NOTE this cast is safe for regular files, not necessarily others
 		}
 	}
 

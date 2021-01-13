@@ -317,3 +317,7 @@ func (c *catcherTx) ApplyFilter(index, field, view string, shard uint64, ckey ui
 func (c *catcherTx) GetSortedFieldViewList(idx *Index, shard uint64) (fvs []txkey.FieldView, err error) {
 	return c.b.GetSortedFieldViewList(idx, shard)
 }
+
+func (tx *catcherTx) GetFieldSizeBytes(index, field string) (uint64, error) {
+	return 0, nil
+}

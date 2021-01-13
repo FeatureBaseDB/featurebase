@@ -435,6 +435,10 @@ func (tx *RBFTx) GetSortedFieldViewList(idx *Index, shard uint64) (fvs []txkey.F
 	return tx.tx.GetSortedFieldViewList()
 }
 
+func (tx *RBFTx) GetFieldSizeBytes(index, field string) (uint64, error) {
+	return 0, nil
+}
+
 // rbfName returns a NULL-separated key used for identifying bitmap maps in RBF.
 func rbfName(index, field, view string, shard uint64) string {
 	return string(txkey.Prefix(index, field, view, shard))

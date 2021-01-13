@@ -663,6 +663,10 @@ func (c *blueGreenTx) ContainerIterator(index, field, view string, shard uint64,
 	return bgi, bfound, errB
 }
 
+func (tx *blueGreenTx) GetFieldSizeBytes(index, field string) (uint64, error) {
+	return 0, nil
+}
+
 func NewBlueGreenIterator(tx *blueGreenTx, ait, bit roaring.ContainerIterator) *blueGreenIterator {
 	return &blueGreenIterator{
 		tx:  tx,
