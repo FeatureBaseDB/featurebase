@@ -21,14 +21,16 @@ import (
 )
 
 type ActiveQueryStatus struct {
-	Query string        `json:"query"`
+	PQL   string        `json:"PQL"`
+	SQL   string        `json:"SQL,omitempty"`
 	Node  string        `json:"node"`
 	Index string        `json:"index"`
 	Age   time.Duration `json:"age"`
 }
 
 type PastQueryStatus struct {
-	Query   string        `json:"query"`
+	PQL     string        `json:"PQL"`
+	SQL     string        `json:"SQL,omitempty"`
 	Node    string        `json:"nodeID"`
 	Index   string        `json:"index"`
 	Start   time.Time     `json:"start"`
@@ -36,14 +38,16 @@ type PastQueryStatus struct {
 }
 
 type activeQuery struct {
-	query   string
+	PQL     string
+	SQL     string
 	node    string
 	index   string
 	started time.Time
 }
 
 type pastQuery struct {
-	query   string
+	PQL     string
+	SQL     string
 	node    string
 	index   string
 	started time.Time
@@ -123,7 +127,7 @@ func newQueryTracker(historyLength int) *queryTracker {
 			select {
 			case update := <-updates:
 				if update.end {
-					pq := pastQuery{update.q.query, update.q.node, update.q.index, update.q.started, update.endTime.Sub(update.q.started)}
+					pq := pastQuery{update.q.PQL, update.q.SQL, update.q.node, update.q.index, update.q.started, update.endTime.Sub(update.q.started)}
 					tracker.history.add(pq)
 					delete(activeQueries, update.q)
 				} else {
@@ -146,8 +150,8 @@ func newQueryTracker(historyLength int) *queryTracker {
 	return tracker
 }
 
-func (t *queryTracker) Start(query, nodeID, index string, start time.Time) *activeQuery {
-	q := &activeQuery{query, nodeID, index, start}
+func (t *queryTracker) Start(pql, sql, nodeID, index string, start time.Time) *activeQuery {
+	q := &activeQuery{pql, sql, nodeID, index, start}
 	t.updates <- queryStatusUpdate{q, false, time.Time{}}
 	return q
 }
@@ -166,9 +170,9 @@ func (t *queryTracker) ActiveQueries() []ActiveQueryStatus {
 			return true
 		case queries[i].started.After(queries[j].started):
 			return false
-		case queries[i].query < queries[j].query:
+		case queries[i].PQL < queries[j].PQL:
 			return true
-		case queries[i].query > queries[j].query:
+		case queries[i].PQL > queries[j].PQL:
 			return false
 		default:
 			return false
@@ -177,7 +181,7 @@ func (t *queryTracker) ActiveQueries() []ActiveQueryStatus {
 	now := time.Now()
 	out := make([]ActiveQueryStatus, len(queries))
 	for i, v := range queries {
-		out[i] = ActiveQueryStatus{v.query, v.node, v.index, now.Sub(v.started)}
+		out[i] = ActiveQueryStatus{v.PQL, v.SQL, v.node, v.index, now.Sub(v.started)}
 	}
 	return out
 }
@@ -186,7 +190,7 @@ func (t *queryTracker) PastQueries() []PastQueryStatus {
 	queries := t.history.slice()
 	out := make([]PastQueryStatus, len(queries))
 	for i, v := range queries {
-		out[i] = PastQueryStatus{v.query, v.node, v.index, v.started, v.runtime}
+		out[i] = PastQueryStatus{v.PQL, v.SQL, v.node, v.index, v.started, v.runtime}
 	}
 	return out
 

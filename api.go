@@ -161,7 +161,7 @@ func (api *API) Query(ctx context.Context, req *QueryRequest) (QueryResponse, er
 	}
 
 	if !req.Remote {
-		defer api.tracker.Finish(api.tracker.Start(req.Query, api.server.nodeID, req.Index, start))
+		defer api.tracker.Finish(api.tracker.Start(req.Query, req.SQLQuery, api.server.nodeID, req.Index, start))
 	}
 	// TODO can we get rid of exec options and pass the QueryRequest directly to executor?
 	execOpts := &execOptions{
