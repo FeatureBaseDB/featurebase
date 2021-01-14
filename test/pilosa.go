@@ -30,7 +30,6 @@ import (
 	"github.com/pilosa/pilosa/v2/encoding/proto"
 	"github.com/pilosa/pilosa/v2/http"
 	"github.com/pilosa/pilosa/v2/server"
-	"github.com/pilosa/pilosa/v2/test/port"
 	"github.com/pilosa/pilosa/v2/testhook"
 )
 
@@ -72,18 +71,28 @@ func newCommand(tb testing.TB, opts ...server.CommandOption) *Command {
 	m.Config.DataDir = path
 	defaultConf := server.NewConfig()
 
-	if err := port.GetPorts(func(ports []int) error {
-		if m.Config.Bind == defaultConf.Bind {
-			m.Config.Bind = fmt.Sprintf("http://localhost:%d", ports[0])
-		}
-		if m.Config.BindGRPC == defaultConf.BindGRPC {
-			m.Config.BindGRPC = fmt.Sprintf("http://localhost:%d", ports[1])
-		}
-
-		return nil
-	}, 2, 10); err != nil {
-		panic(err)
+	if m.Config.Bind == defaultConf.Bind {
+		m.Config.Bind = "http://localhost:0"
 	}
+
+	if m.Config.BindGRPC == defaultConf.BindGRPC {
+		m.Config.BindGRPC = "http://localhost:0"
+	}
+
+	/*
+		if err := port.GetPorts(func(ports []int) error {
+				if m.Config.Bind == defaultConf.Bind {
+					m.Config.Bind = fmt.Sprintf("http://localhost:%d", ports[0])
+			}
+				if m.Config.BindGRPC == defaultConf.BindGRPC {
+					m.Config.BindGRPC = fmt.Sprintf("http://localhost:%d", ports[1])
+			}
+
+			return nil
+			}, 2, 10); err != nil {
+				panic(err)
+		}
+	*/
 
 	m.Config.Translation.MapSize = 140000
 	m.Config.WorkerPoolSize = 2

@@ -19,7 +19,6 @@ import (
 	"log"
 	"net"
 	"strings"
-	"sync"
 	"syscall"
 )
 
@@ -32,12 +31,7 @@ func GetPort(wrapper func(int) error, retries int) error {
 	return GetPorts(f, 1, retries)
 }
 
-var mu = &sync.Mutex{}
-
 func GetPorts(wrapper func([]int) error, requestedPorts, retries int) error {
-	mu.Lock()
-	defer mu.Unlock()
-
 	for i := 0; i < retries; i++ {
 		// get all requested ports
 		listeners := make([]net.Listener, requestedPorts)
@@ -60,7 +54,7 @@ func GetPorts(wrapper func([]int) error, requestedPorts, retries int) error {
 		// send to wrapper and check output error
 		err := wrapper(ports)
 		if (err != nil) && (err == syscall.EADDRINUSE || strings.Contains(err.Error(), "address already in use")) {
-			log.Println("[port_mapper] address already in use error calling the wrapper", err)
+			log.Printf("[port_mapper: %+v] address already in use error calling the wrapper: %v\n", ports, err)
 			// only retry on address already in use error
 			continue
 		}
