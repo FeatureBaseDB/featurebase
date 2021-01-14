@@ -684,10 +684,13 @@ func (s *Server) Close() error {
 	// Notify goroutines to stop.
 	close(s.closing)
 	s.wg.Wait()
-
 	var errh, errd error
 	var errhs error
 	var errc error
+
+	if s.disCo != nil {
+		errd = s.disCo.Close()
+	}
 	if s.cluster != nil {
 		errc = s.cluster.close()
 	}
@@ -701,9 +704,6 @@ func (s *Server) Close() error {
 		s.snapshotQueue = nil
 	}
 
-	if s.disCo != nil {
-		errd = s.disCo.Close()
-	}
 	// prefer to return holder error over cluster
 	// error. This order is somewhat arbitrary. It would be better if we had
 	// some way to combine all the errors, but probably not important enough to
