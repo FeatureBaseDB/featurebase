@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"strings"
 	"syscall"
 )
 
@@ -52,7 +53,7 @@ func GetPorts(wrapper func([]int) error, requestedPorts, retries int) error {
 		}
 		// send to wrapper and check output error
 		err := wrapper(ports)
-		if err == syscall.EADDRINUSE {
+		if (err != nil) && (err == syscall.EADDRINUSE || strings.Contains(err.Error(), "address already in use")) {
 			log.Println("[port_mapper] address already in use error calling the wrapper", err)
 			// only retry on address already in use error
 			continue
