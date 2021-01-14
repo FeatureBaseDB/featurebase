@@ -21,6 +21,7 @@ import (
 	"math"
 	"math/bits"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -311,6 +312,8 @@ func (e *executor) safeCopy(resp QueryResponse) (out QueryResponse) {
 			// no bitmap material, so should be ok to skip Clone()
 			out.Results = append(out.Results, x)
 		case []GroupCount:
+			out.Results = append(out.Results, x)
+		case *GroupCounts:
 			out.Results = append(out.Results, x)
 		case ExtractedTable:
 			out.Results = append(out.Results, x)
@@ -2702,7 +2705,7 @@ func getSorter(sortSpec string) (*groupCountSorter, error) {
 	return gcs, nil
 }
 
-func (e *executor) executeGroupBy(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *execOptions) ([]GroupCount, error) {
+func (e *executor) executeGroupBy(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *execOptions) (*GroupCounts, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeGroupBy")
 	defer span.Finish()
 	// validate call
@@ -2787,7 +2790,7 @@ func (e *executor) executeGroupBy(ctx context.Context, qcx *Qcx, index string, c
 				return nil, errors.Wrap(err, "getting rows for ")
 			}
 			if len(childRows[i]) == 0 { // there are no results because this field has no values.
-				return []GroupCount{}, nil
+				return &GroupCounts{}, nil
 			}
 		}
 	}
@@ -2907,7 +2910,20 @@ func (e *executor) executeGroupBy(ctx context.Context, qcx *Qcx, index string, c
 
 	}
 
-	return results, nil
+	ret := NewGroupCounts()
+	if aggregate != nil {
+		switch aggregate.Name {
+		case "Sum":
+			ret.aggregateType = sumAggregate
+		case "Count":
+			ret.aggregateType = distinctAggregate
+		default:
+			ret.aggregateType = nilAggregate
+		}
+	}
+	ret.Groups = results
+
+	return ret, nil
 }
 
 func applyLimitAndOffsetToGroupByResult(c *pql.Call, results []GroupCount) ([]GroupCount, error) {
@@ -2992,17 +3008,32 @@ func (fr FieldRow) String() string {
 	return fmt.Sprintf("%s.%d.%s", fr.Field, fr.RowID, fr.RowKey)
 }
 
+type aggregateType int
+
+const (
+	nilAggregate      aggregateType = 0
+	sumAggregate      aggregateType = 1
+	distinctAggregate aggregateType = 2
+)
+
 // GroupCounts is a list of GroupCount.
-type GroupCounts []GroupCount
+type GroupCounts struct {
+	Groups        []GroupCount
+	aggregateType aggregateType
+}
+
+func NewGroupCounts() *GroupCounts {
+	return &GroupCounts{}
+}
 
 // ToTable implements the ToTabler interface.
-func (g GroupCounts) ToTable() (*pb.TableResponse, error) {
-	return pb.RowsToTable(&g, len(g))
+func (g *GroupCounts) ToTable() (*pb.TableResponse, error) {
+	return pb.RowsToTable(g, len(g.Groups))
 }
 
 // ToRows implements the ToRowser interface.
-func (g GroupCounts) ToRows(callback func(*pb.RowResponse) error) error {
-	for i, gc := range g {
+func (g *GroupCounts) ToRows(callback func(*pb.RowResponse) error) error {
+	for i, gc := range g.Groups {
 		var ci []*pb.ColumnInfo
 		if i == 0 {
 			for _, fieldRow := range gc.Group {
@@ -3042,11 +3073,44 @@ func (g GroupCounts) ToRows(callback func(*pb.RowResponse) error) error {
 	return nil
 }
 
+// MarshalJSON makes GroupCounts satisfy interface json.Marshaler and
+// customizes the JSON output of the aggregate field label.
+func (g *GroupCounts) MarshalJSON() ([]byte, error) {
+	if len(g.Groups) == 0 {
+		return []byte("[]"), nil
+	}
+	var aggregateLabel string
+	switch g.aggregateType {
+	case sumAggregate:
+		aggregateLabel = "sum"
+	case distinctAggregate:
+		aggregateLabel = "distinct" // TODO: not sure the best name here
+	}
+	var out = []byte("[")
+	for _, group := range g.Groups {
+		groupJson, err := json.Marshal(group)
+		if err != nil {
+			return nil, errors.Wrap(err, "marshaling group")
+		}
+		if g.aggregateType != nilAggregate {
+			// Insert `"aggregatelabel": aggregatevalue` at end of JSON, append comma
+			groupJson = append(groupJson[:len(groupJson)-1], []byte(",\""+aggregateLabel+"\": "+strconv.Itoa(int(group.Sum))+"},")...)
+		} else {
+			// Append comma
+			groupJson = append(groupJson, byte(','))
+		}
+		out = append(out, groupJson...)
+	}
+	// replace final comma with "]"
+	out[len(out)-1] = byte(']')
+	return out, nil
+}
+
 // GroupCount represents a result item for a group by query.
 type GroupCount struct {
 	Group []FieldRow `json:"group"`
 	Count uint64     `json:"count"`
-	Sum   int64      `json:"sum"`
+	Sum   int64      `json:"-"`
 }
 
 func (g *GroupCount) Clone() (r *GroupCount) {
@@ -6497,10 +6561,10 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 			}
 		}
 
-	case []GroupCount:
+	case GroupCounts:
 		fieldIDs := make(map[*Field]map[uint64]struct{})
 		foreignIDs := make(map[*Field]map[uint64]struct{})
-		for _, gl := range result {
+		for _, gl := range result.Groups {
 			for _, g := range gl.Group {
 				field := idx.Field(g.Field)
 				if field == nil {
@@ -6511,7 +6575,7 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 						if fi := field.ForeignIndex(); fi != "" {
 							m, ok := foreignIDs[field]
 							if !ok {
-								m = make(map[uint64]struct{}, len(result))
+								m = make(map[uint64]struct{}, len(result.Groups))
 								foreignIDs[field] = m
 							}
 
@@ -6522,7 +6586,7 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 
 					m, ok := fieldIDs[field]
 					if !ok {
-						m = make(map[uint64]struct{}, len(result))
+						m = make(map[uint64]struct{}, len(result.Groups))
 						fieldIDs[field] = m
 					}
 
@@ -6549,8 +6613,8 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 			foreignTranslations[field.Name()] = trans
 		}
 
-		other := make([]GroupCount, 0)
-		for _, gl := range result {
+		other := NewGroupCounts()
+		for _, gl := range result.Groups {
 
 			group := make([]FieldRow, len(gl.Group))
 			for i, g := range gl.Group {
@@ -6564,7 +6628,7 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 				group[i] = g
 			}
 
-			other = append(other, GroupCount{
+			other.Groups = append(other.Groups, GroupCount{
 				Group: group,
 				Count: gl.Count,
 				Sum:   gl.Sum,
