@@ -17,6 +17,7 @@ package test
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/pilosa/pilosa/v2/etcd"
 	"github.com/pilosa/pilosa/v2/gossip"
@@ -46,18 +47,20 @@ func GenPortsConfig(ports []Ports) []*server.Config {
 			},
 			BindGRPC: port.ColonZeroString(ports[i].Grpc),
 			DisCo: etcd.Options{
-				Name:        name,
-				Dir:         "",
-				ClusterName: "bartholemuuuuu",
-				LClientURL:  lClientURL,
-				AClientURL:  lClientURL,
-				LPeerURL:    lPeerURL,
-				APeerURL:    lPeerURL,
+				Name:         name,
+				Dir:          "",
+				ClusterName:  "bartholemuuuuu",
+				LClientURL:   lClientURL,
+				AClientURL:   lClientURL,
+				LPeerURL:     lPeerURL,
+				APeerURL:     lPeerURL,
+				HeartbeatTTL: 5 * int64(time.Second),
 			},
 		}
 
 		clusterURLs[i] = fmt.Sprintf("%s=%s", name, lPeerURL)
-		fmt.Printf("\ndebug test/disco.go: on i=%v, GenDisCoConfig BindGRPC: %v\n", i, cfgs[i].BindGRPC)
+		fmt.Printf("\ndebug test/disco.go: on i=%v, GenPortsConfig Gossip: %v, DisCo.Client: %v, DisCo.Peer: %v, BindGRPC: %v\n",
+			i, ports[i].Gossip, ports[i].Client, ports[i].Peer, ports[i].Grpc)
 	}
 	for i := range cfgs {
 		cfgs[i].DisCo.InitCluster = strings.Join(clusterURLs, ",")

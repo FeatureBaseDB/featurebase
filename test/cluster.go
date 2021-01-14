@@ -248,41 +248,32 @@ func (c *Cluster) Start() error {
 	err := port.GetPorts(func(ports []int) error {
 		portsCfg := GenPortsConfig(NewPorts(ports))
 
-		// seedCh is a channel of host:port values to use
-		// as gossip seeds during startup.
-		seedCh := make(chan string, len(c.Nodes))
+		var gossipSeeds []string
 		for i, cc := range c.Nodes {
 			i := i
+			// get the bind uri to use as the host portion of the gossip seed.
+			uri, err := pilosa.AddressWithDefaults(cc.Config.Bind)
+			if err != nil {
+				return errors.Wrap(err, "processing bind address")
+			}
+
+			cc.Config.Gossip.Port = portsCfg[i].Gossip.Port
+			gossipHost := uri.Host
+			gossipPort := cc.Config.Gossip.Port
+
+			gossipSeeds = append(gossipSeeds, fmt.Sprintf("%s:%s", gossipHost, gossipPort))
+		}
+
+		for i, cc := range c.Nodes {
+			cc := cc
 			cc.Config.DisCo = portsCfg[i].DisCo
 			cc.Config.BindGRPC = portsCfg[i].BindGRPC
+
 			eg.Go(func() error {
-				// get the bind uri to use as the host portion of the gossip seed.
-				uri, err := pilosa.AddressWithDefaults(cc.Config.Bind)
-				if err != nil {
-					return errors.Wrap(err, "processing bind address")
-				}
+				fmt.Printf("DISCO CONFIG: %+v\n", cc.Config.DisCo)
+				cc.Config.Gossip.Seeds = gossipSeeds
 
-				cc.Config.Gossip.Port = portsCfg[i].Gossip.Port
-				gossipHost := uri.Host
-				gossipPort := cc.Config.Gossip.Port
-
-				if gossipPort == "0" || gossipPort == "" {
-					panic("gossipPort not allowed to be 0!")
-				}
-				println("gossipPort is ", gossipPort)
-
-				// the first node doesn't need to wait for a seed.
-				if i > 0 {
-					x := <-seedCh
-					cc.Config.Gossip.Seeds = []string{x}
-				}
-				seedCh <- fmt.Sprintf("%s:%s", gossipHost, gossipPort)
-
-				if err := cc.Start(); err != nil {
-					return errors.Wrapf(err, "starting server %d", i)
-				}
-
-				return nil
+				return cc.Start()
 			})
 			// fixes race on gossip: time.Sleep(time.Second)
 		}
@@ -421,20 +412,9 @@ func newCluster(tb testing.TB, size int, opts ...[]server.CommandOption) (*Clust
 // MustRunCluster creates and starts a new cluster. The opts parameter
 // is slightly magical; see MustNewCluster.
 func MustRunCluster(tb testing.TB, size int, opts ...[]server.CommandOption) *Cluster {
-	var tries int = 5
-	var cluster *Cluster
-	var err error
 
-	for i := 0; i < tries; i++ {
-		if i > 0 {
-			fmt.Printf("--- try starting cluster again: %d\n", i)
-		}
-		cluster = MustNewCluster(tb, size, opts...)
-		if err = cluster.Start(); err == nil {
-			break
-		}
-	}
-
+	cluster := MustNewCluster(tb, size, opts...)
+	err := cluster.Start()
 	if err != nil {
 		tb.Fatalf("run cluster: %v", err)
 	}
