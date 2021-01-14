@@ -185,10 +185,15 @@ func TestClusterResize_AddNode(t *testing.T) {
 
 		m1.Config.Gossip.Seeds = []string{seed}
 
-		if err := port.GetPort(func(p int) error {
-			m1.Config.Gossip.Port = fmt.Sprintf("%d", p)
+		if err := port.GetPorts(func(ports []int) error {
+			portsCfg := test.GenPortsConfig(test.NewPorts(ports))
+
+			m1.Config.Gossip.Port = portsCfg[0].Gossip.Port
+			m1.Config.DisCo = portsCfg[0].DisCo
+			m1.Config.BindGRPC = portsCfg[0].BindGRPC
+
 			return m1.Start()
-		}, 10); err != nil {
+		}, 4, 10); err != nil {
 			t.Fatalf("starting second main: %v", err)
 		}
 		defer m1.Close()
@@ -237,10 +242,15 @@ func TestClusterResize_AddNode(t *testing.T) {
 
 		m1.Config.Gossip.Seeds = []string{seed}
 
-		if err := port.GetPort(func(p int) error {
-			m1.Config.Gossip.Port = fmt.Sprintf("%d", p)
+		if err := port.GetPorts(func(ports []int) error {
+			portsCfg := test.GenPortsConfig(test.NewPorts(ports))
+
+			m1.Config.Gossip.Port = portsCfg[0].Gossip.Port
+			m1.Config.DisCo = portsCfg[0].DisCo
+			m1.Config.BindGRPC = portsCfg[0].BindGRPC
+
 			return m1.Start()
-		}, 10); err != nil {
+		}, 4, 10); err != nil {
 			t.Fatalf("starting second main: %v", err)
 		}
 		defer m1.Close()
@@ -288,10 +298,15 @@ func TestClusterResize_AddNode(t *testing.T) {
 		m1 := test.NewCommandNode(t, false)
 		m1.Config.Gossip.Seeds = []string{seed}
 
-		if err := port.GetPort(func(p int) error {
-			m1.Config.Gossip.Port = fmt.Sprintf("%d", p)
+		if err := port.GetPorts(func(ports []int) error {
+			portsCfg := test.GenPortsConfig(test.NewPorts(ports))
+
+			m1.Config.Gossip.Port = portsCfg[0].Gossip.Port
+			m1.Config.DisCo = portsCfg[0].DisCo
+			m1.Config.BindGRPC = portsCfg[0].BindGRPC
+
 			return m1.Start()
-		}, 10); err != nil {
+		}, 4, 10); err != nil {
 			t.Fatalf("starting second main: %v", err)
 		}
 		defer m1.Close()
@@ -345,12 +360,18 @@ func TestClusterResize_AddNode(t *testing.T) {
 		m1 := test.NewCommandNode(t, false)
 		m1.Config.Gossip.Seeds = []string{seed}
 
-		if err := port.GetPort(func(p int) error {
-			m1.Config.Gossip.Port = fmt.Sprintf("%d", p)
+		if err := port.GetPorts(func(ports []int) error {
+			portsCfg := test.GenPortsConfig(test.NewPorts(ports))
+
+			m1.Config.Gossip.Port = portsCfg[0].Gossip.Port
+			m1.Config.DisCo = portsCfg[0].DisCo
+			m1.Config.BindGRPC = portsCfg[0].BindGRPC
+
 			return m1.Start()
-		}, 10); err != nil {
+		}, 4, 10); err != nil {
 			t.Fatalf("starting second main: %v", err)
 		}
+
 		defer m1.Close()
 
 		if !test.CheckClusterState(m0, pilosa.ClusterStateNormal, 1000) {

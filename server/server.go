@@ -329,10 +329,6 @@ func (m *Command) SetupServer() error {
 	}
 
 	// create gRPC listener
-
-	if grpcURI.Port == 0 {
-		return fmt.Errorf("server/server.go: must configure grpcURI as non-zero Port, else test's port-mapper won't function")
-	}
 	m.grpcLn, err = net.Listen("tcp", grpcURI.HostPort())
 	if err != nil {
 		return errors.Wrap(err, "creating grpc listener")
