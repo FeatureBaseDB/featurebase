@@ -19,40 +19,41 @@ import (
 	"strings"
 
 	"github.com/pilosa/pilosa/v2/etcd"
+	"github.com/pilosa/pilosa/v2/gossip"
 	"github.com/pilosa/pilosa/v2/server"
 	"github.com/pilosa/pilosa/v2/test/port"
 )
 
-//GenDisCoConfig creates specific configuration for etcd.
-func GenDisCoConfig(clusterSize int) []*server.Config {
-	cfgs := make([]*server.Config, clusterSize)
+type Ports struct {
+	Client, Peer int
+	Grpc, Gossip int //TODO remove
+}
 
-	clusterURLs := make([]string, clusterSize)
+//GenPortsConfig creates specific configuration for etcd.
+func GenPortsConfig(ports []Ports) []*server.Config {
+	cfgs := make([]*server.Config, len(ports))
+	clusterURLs := make([]string, len(ports))
 	for i := range cfgs {
 		name := fmt.Sprintf("server%d", i)
 
 		var lClientURL, lPeerURL string
-		err := port.GetPorts(func(ports []int) error {
-			lClientURL = fmt.Sprintf("http://localhost:%d", ports[0])
-			lPeerURL = fmt.Sprintf("http://localhost:%d", ports[1])
+		lClientURL = fmt.Sprintf("http://localhost:%d", ports[i].Client)
+		lPeerURL = fmt.Sprintf("http://localhost:%d", ports[i].Peer)
 
-			cfgs[i] = &server.Config{
-				BindGRPC: port.ColonZeroString(ports[2]),
-				DisCo: etcd.Options{
-					Name:        name,
-					Dir:         "",
-					ClusterName: "bartholemuuuuu",
-					LClientURL:  lClientURL,
-					AClientURL:  lClientURL,
-					LPeerURL:    lPeerURL,
-					APeerURL:    lPeerURL,
-				},
-			}
-
-			return nil
-		}, 3, 10)
-		if err != nil {
-			panic(err)
+		cfgs[i] = &server.Config{
+			Gossip: gossip.Config{
+				Port: fmt.Sprint(ports[i].Gossip),
+			},
+			BindGRPC: port.ColonZeroString(ports[i].Grpc),
+			DisCo: etcd.Options{
+				Name:        name,
+				Dir:         "",
+				ClusterName: "bartholemuuuuu",
+				LClientURL:  lClientURL,
+				AClientURL:  lClientURL,
+				LPeerURL:    lPeerURL,
+				APeerURL:    lPeerURL,
+			},
 		}
 
 		clusterURLs[i] = fmt.Sprintf("%s=%s", name, lPeerURL)
@@ -63,4 +64,18 @@ func GenDisCoConfig(clusterSize int) []*server.Config {
 	}
 
 	return cfgs
+}
+
+func NewPorts(ports []int) []Ports {
+	var out []Ports
+	for i := 0; i < len(ports); i = i + 4 {
+		out = append(out, Ports{
+			Client: ports[i],
+			Peer:   ports[i+1],
+			Grpc:   ports[i+2],
+			Gossip: ports[i+3],
+		})
+	}
+
+	return out
 }

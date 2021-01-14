@@ -245,21 +245,24 @@ func (c *Cluster) CreateField(t testing.TB, index string, iopts pilosa.IndexOpti
 // Start runs a Cluster
 func (c *Cluster) Start() error {
 	var eg errgroup.Group
-	// seedCh is a channel of host:port values to use
-	// as gossip seeds during startup.
-	seedCh := make(chan string, len(c.Nodes))
-	for i, cc := range c.Nodes {
-		i := i
-		cc := cc
-		eg.Go(func() error {
-			// get the bind uri to use as the host portion of the gossip seed.
-			uri, err := pilosa.AddressWithDefaults(cc.Config.Bind)
-			if err != nil {
-				return errors.Wrap(err, "processing bind address")
-			}
+	err := port.GetPorts(func(ports []int) error {
+		portsCfg := GenPortsConfig(NewPorts(ports))
 
-			if err := port.GetPort(func(p int) error {
-				cc.Config.Gossip.Port = fmt.Sprint(p)
+		// seedCh is a channel of host:port values to use
+		// as gossip seeds during startup.
+		seedCh := make(chan string, len(c.Nodes))
+		for i, cc := range c.Nodes {
+			i := i
+			cc.Config.DisCo = portsCfg[i].DisCo
+			cc.Config.BindGRPC = portsCfg[i].BindGRPC
+			eg.Go(func() error {
+				// get the bind uri to use as the host portion of the gossip seed.
+				uri, err := pilosa.AddressWithDefaults(cc.Config.Bind)
+				if err != nil {
+					return errors.Wrap(err, "processing bind address")
+				}
+
+				cc.Config.Gossip.Port = portsCfg[i].Gossip.Port
 				gossipHost := uri.Host
 				gossipPort := cc.Config.Gossip.Port
 
@@ -280,18 +283,16 @@ func (c *Cluster) Start() error {
 				}
 
 				return nil
-			}, 10); err != nil {
-				return errors.Wrap(err, "getting gossip port")
-			}
+			})
+			// fixes race on gossip: time.Sleep(time.Second)
+		}
 
-			return nil
-		})
-		// fixes race on gossip: time.Sleep(time.Second)
-	}
-	err := eg.Wait()
+		return eg.Wait()
+	}, 4*len(c.Nodes), 10)
 	if err != nil {
 		return err
 	}
+
 	return c.AwaitState(pilosa.ClusterStateNormal, 10*time.Second)
 }
 
@@ -393,7 +394,7 @@ func newCluster(tb testing.TB, size int, opts ...[]server.CommandOption) (*Clust
 		return nil, errors.New("cluster must contain at least one node")
 	}
 
-	opts = appendOpts(opts, GenDisCoConfig(size))
+	//opts = appendOpts(opts, GenDisCoConfig(size))
 
 	if len(opts) != size && len(opts) != 0 && len(opts) != 1 {
 		return nil, errors.New("Slice of CommandOptions must be of length 0, 1, or equal to the number of cluster nodes")
