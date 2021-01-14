@@ -32,7 +32,7 @@ func GenDisCoConfig(clusterSize int) []*server.Config {
 		name := fmt.Sprintf("server%d", i)
 
 		var lClientURL, lPeerURL string
-		port.GetPorts(func(ports []int) error {
+		err := port.GetPorts(func(ports []int) error {
 			lClientURL = fmt.Sprintf("http://localhost:%d", ports[0])
 			lPeerURL = fmt.Sprintf("http://localhost:%d", ports[1])
 
@@ -50,8 +50,10 @@ func GenDisCoConfig(clusterSize int) []*server.Config {
 			}
 
 			return nil
-
 		}, 3, 10)
+		if err != nil {
+			panic(err)
+		}
 
 		clusterURLs[i] = fmt.Sprintf("%s=%s", name, lPeerURL)
 		fmt.Printf("\ndebug test/disco.go: on i=%v, GenDisCoConfig BindGRPC: %v\n", i, cfgs[i].BindGRPC)

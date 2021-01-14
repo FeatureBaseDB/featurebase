@@ -1228,10 +1228,14 @@ Set("h", adec=100.22)
 }
 
 func TestMain(m *testing.M) {
-	port := port.MustGetPort()
-	fmt.Printf("server/ TestMain: online stack-traces: curl http://localhost:%v/debug/pprof/goroutine?debug=2\n", port)
 	go func() {
-		_ = nethttp.ListenAndServe(fmt.Sprintf("127.0.0.1:%v", port), nil)
+		err := port.GetPort(func(port int) error {
+			fmt.Printf("server/ TestMain: online stack-traces: curl http://localhost:%v/debug/pprof/goroutine?debug=2\n", port)
+			return nethttp.ListenAndServe(fmt.Sprintf("127.0.0.1:%v", port), nil)
+		}, 10)
+		if err != nil {
+			panic(err)
+		}
 	}()
 	os.Exit(m.Run())
 }

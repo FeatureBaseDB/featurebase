@@ -72,7 +72,7 @@ func newCommand(tb testing.TB, opts ...server.CommandOption) *Command {
 	m.Config.DataDir = path
 	defaultConf := server.NewConfig()
 
-	port.GetPorts(func(ports []int) error {
+	if err := port.GetPorts(func(ports []int) error {
 		if m.Config.Bind == defaultConf.Bind {
 			m.Config.Bind = fmt.Sprintf("http://localhost:%d", ports[0])
 		}
@@ -81,7 +81,9 @@ func newCommand(tb testing.TB, opts ...server.CommandOption) *Command {
 		}
 
 		return nil
-	}, 2, 10)
+	}, 2, 10); err != nil {
+		panic(err)
+	}
 
 	m.Config.Translation.MapSize = 140000
 	m.Config.WorkerPoolSize = 2

@@ -23,7 +23,6 @@ import (
 
 	"github.com/pilosa/pilosa/v2/cmd"
 	_ "github.com/pilosa/pilosa/v2/test"
-	"github.com/pilosa/pilosa/v2/test/port"
 	"github.com/pilosa/pilosa/v2/toml"
 	"github.com/pkg/errors"
 )
@@ -37,7 +36,7 @@ func TestServerHelp(t *testing.T) {
 }
 
 func nextPort() string {
-	return fmt.Sprintf(`"localhost:%d"`, port.GlobalPortMap.MustGetPort())
+	return fmt.Sprintf(`"localhost:%d"`, 0)
 }
 
 var _ = nextPort // happy linter

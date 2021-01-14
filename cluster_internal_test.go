@@ -436,12 +436,14 @@ func TestCluster_ContainsShards(t *testing.T) {
 func TestCluster_Nodes(t *testing.T) {
 	const urisCount = 4
 	var uris []pnet.URI
-	port.GetPorts(func(ports []int) error {
+	if err := port.GetPorts(func(ports []int) error {
 		for i := 0; i < urisCount; i++ {
 			uris = append(uris, NewTestURIFromHostPort(fmt.Sprintf("node%d", i), uint16(ports[i])))
 		}
 		return nil
-	}, urisCount, 10)
+	}, urisCount, 10); err != nil {
+		t.Fatalf("getting ports: %v", err)
+	}
 
 	node0 := &topology.Node{ID: "node0", URI: uris[0]}
 	node1 := &topology.Node{ID: "node1", URI: uris[1]}
@@ -553,12 +555,14 @@ func TestCluster_PreviousNode(t *testing.T) {
 func TestCluster_Coordinator(t *testing.T) {
 	const urisCount = 2
 	var uris []pnet.URI
-	port.GetPorts(func(ports []int) error {
+	if err := port.GetPorts(func(ports []int) error {
 		for i := 0; i < urisCount; i++ {
 			uris = append(uris, NewTestURIFromHostPort(fmt.Sprintf("node%d", i), uint16(ports[i])))
 		}
 		return nil
-	}, urisCount, 10)
+	}, urisCount, 10); err != nil {
+		t.Fatalf("getting ports: %v", err)
+	}
 
 	node1 := &topology.Node{ID: "node1", URI: uris[0]}
 	node2 := &topology.Node{ID: "node2", URI: uris[1]}
@@ -584,12 +588,14 @@ func TestCluster_Topology(t *testing.T) {
 
 	const urisCount = 4
 	var uris []pnet.URI
-	port.GetPorts(func(ports []int) error {
+	if err := port.GetPorts(func(ports []int) error {
 		for i := 0; i < urisCount; i++ {
 			uris = append(uris, NewTestURIFromHostPort(fmt.Sprintf("host%d", i), uint16(ports[i])))
 		}
 		return nil
-	}, urisCount, 10)
+	}, urisCount, 10); err != nil {
+		t.Fatalf("getting ports: %v", err)
+	}
 
 	node0 := &topology.Node{ID: "node0", URI: uris[0]}
 	node1 := &topology.Node{ID: "node1", URI: uris[1]}

@@ -154,7 +154,7 @@ func TestPQConnectSSL(t *testing.T) {
 	var shutdown pgtest.ShutdownFunc
 	var err error
 	err = port.GetPort(func(p int) error {
-		addr, shutdown, err = pgtest.ServeTCP(port.ColonZeroString(p), server)
+		addr, shutdown, err = pgtest.ServeTLS(port.ColonZeroString(p), server)
 		return err
 	}, 10)
 	if err != nil {

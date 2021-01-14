@@ -23,11 +23,12 @@ import (
 	"testing"
 	"time"
 
+	_ "net/http/pprof"
+
 	"github.com/pilosa/pilosa/v2/rbf"
 	rbfcfg "github.com/pilosa/pilosa/v2/rbf/cfg"
 	"github.com/pilosa/pilosa/v2/test/port"
 	"golang.org/x/sync/errgroup"
-	_ "net/http/pprof"
 )
 
 func TestDB_Open(t *testing.T) {
@@ -350,17 +351,14 @@ func TestDB_MultiTx(t *testing.T) {
 
 // better diagnosis of deadlocks/hung situations versus just really slow "Quick" tests.
 func TestMain(m *testing.M) {
-	port := port.MustGetPort()
-	fmt.Printf("rbf/ TestMain: online stack-traces: curl http://localhost:%v/debug/pprof/goroutine?debug=2\n", port)
 	go func() {
-		_ = http.ListenAndServe(fmt.Sprintf("127.0.0.1:%v", port), nil)
+		err := port.GetPort(func(port int) error {
+			fmt.Printf("rbf/ TestMain: online stack-traces: curl http://localhost:%v/debug/pprof/goroutine?debug=2\n", port)
+			return http.ListenAndServe(fmt.Sprintf("127.0.0.1:%v", port), nil)
+		}, 10)
+		if err != nil {
+			panic(err)
+		}
 	}()
 	os.Exit(m.Run())
 }
-
-/*func getAvailPort() int {
-	l, _ := net.Listen("tcp", ":0")
-	r := l.Addr()
-	l.Close()
-	return r.(*net.TCPAddr).Port
-}*/

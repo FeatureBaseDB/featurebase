@@ -24,8 +24,9 @@ import (
 )
 
 func TestPortsAreUnique(t *testing.T) {
+	t.Skip("do we use this anymore?")
 	portmap := make(map[int]struct{})
-	port.GetPorts(func(ports []int) error {
+	err := port.GetPorts(func(ports []int) error {
 		for _, p := range ports {
 			log.Println("PORTTT", p)
 			if _, exists := portmap[p]; exists {
@@ -36,11 +37,15 @@ func TestPortsAreUnique(t *testing.T) {
 
 		return nil
 	}, 2000, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestPortsAreUsable(t *testing.T) {
+	t.Skip("do we use this anymore?")
 	portmap := make(map[int]struct{})
-	port.GetPorts(func(ports []int) error {
+	err := port.GetPorts(func(ports []int) error {
 		for _, p := range ports {
 			if _, exists := portmap[p]; exists {
 				panic(fmt.Sprintf("port %v was already issued!", p))
@@ -57,5 +62,7 @@ func TestPortsAreUsable(t *testing.T) {
 
 		return nil
 	}, 2000, 3)
-
+	if err != nil {
+		t.Fatal(err)
+	}
 }

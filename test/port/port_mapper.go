@@ -78,7 +78,7 @@ func GetPorts(wrapper func([]int) error, requestedPorts, retries int) error {
 		err := wrapper(ports)
 		if err == syscall.EADDRINUSE {
 			log.Println("[port_mapper] address already in use error calling the wrapper", err)
-			// only retry on addres already in use error
+			// only retry on address already in use error
 			continue
 		}
 
