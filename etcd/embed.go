@@ -103,9 +103,9 @@ func (e *Etcd) Close() error {
 		if e.heartbeatCancel != nil {
 			e.heartbeatCancel()
 		}
-		// e.e.Server.Stop()
-		// e.e.Close()
-		// <-e.e.Server.StopNotify()
+		e.e.Server.Stop()
+		e.e.Close()
+		<-e.e.Server.StopNotify()
 	}
 
 	return nil
@@ -122,10 +122,6 @@ func parseOptions(opt Options) *embed.Config {
 	cfg.LPUrls = types.MustNewURLs([]string{opt.LPeerURL})
 	cfg.APUrls = types.MustNewURLs([]string{opt.APeerURL})
 
-	cfg.Logger = "zap"
-	cfg.ZapLoggerBuilder = func(*embed.Config) error {
-		return nil
-	}
 	if opt.InitCluster != "" {
 		cfg.InitialCluster = opt.InitCluster
 		cfg.ClusterState = embed.ClusterStateFlagNew
