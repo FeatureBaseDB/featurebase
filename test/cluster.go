@@ -421,13 +421,6 @@ func MustRunCluster(tb testing.TB, size int, opts ...[]server.CommandOption) *Cl
 	return cluster
 }
 
-func appendOpts(opts [][]server.CommandOption, cfgs []*server.Config) [][]server.CommandOption {
-	for i := range opts {
-		opts[i] = append(opts[i], server.OptCommandConfig(cfgs[i]))
-	}
-	return opts
-}
-
 // prependOpts applies prependTestServerOpts to each of the ops (one per
 // node, or one for the entire cluser).
 func prependOpts(opts [][]server.CommandOption, size int) [][]server.CommandOption {

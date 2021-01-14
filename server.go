@@ -688,13 +688,13 @@ func (s *Server) Close() error {
 	var errhs error
 	var errc error
 
-	if s.disCo != nil {
-		errd = s.disCo.Close()
-	}
 	if s.cluster != nil {
 		errc = s.cluster.close()
 	}
 	errhs = s.syncer.stopTranslationSync()
+	// if s.disCo != nil {
+	// 	errd = s.disCo.Close()
+	// }
 	if s.holder != nil {
 		errh = s.holder.Close()
 	}
