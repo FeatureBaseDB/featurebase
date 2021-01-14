@@ -21,30 +21,6 @@ import (
 	"syscall"
 )
 
-// lsn, err := net.Listen("tcp", ":0")
-// 		if err != nil {
-// 			panic(err)
-// 		}
-// 		// must be available to UDP too!
-// 		addr := lsn.Addr()
-// 		port := addr.(*net.TCPAddr).Port
-// 		udpConn, err := net.ListenUDP("udp4", &net.UDPAddr{
-// 			IP:   net.IP{}, // listen on all non-multicast addresses...
-// 			Port: port,
-// 		})
-// 		if err != nil {
-// 			fmt.Printf("UDP port %v was available on tcp but not udp: %v\n", port, err)
-// 			lsn.Close()
-// 		} else {
-// 			_ = udpConn.Close()
-// 			if lsn == nil {
-// 				panic("lsn should never be nil")
-// 			}
-// 			pm.availPorts[i] = lsn
-// 			i++
-// 			//println("------ bulk reservation: port mapping reserves port ", lsn.Addr().(*net.TCPAddr).Port)
-// 		}
-
 func ColonZeroString(port int) string {
 	return fmt.Sprintf(":%d", port)
 }

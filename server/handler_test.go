@@ -1402,13 +1402,8 @@ func TestCluster_TranslateStore(t *testing.T) {
 
 	if err := port.GetPort(func(p int) error {
 		cluster.GetNode(0).Config.Gossip.Port = fmt.Sprintf("%d", p)
-		return nil
+		return cluster.GetNode(0).Start()
 	}, 10); err != nil {
-		t.Fatalf("getting port: %v", err)
-	}
-
-	err := cluster.GetNode(0).Start()
-	if err != nil {
 		t.Fatalf("starting node 0: %v", err)
 	}
 	defer cluster.GetNode(0).Close()

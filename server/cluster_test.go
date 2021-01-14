@@ -183,16 +183,12 @@ func TestClusterResize_AddNode(t *testing.T) {
 		// Configure node1
 		m1 := test.NewCommandNode(t, false)
 
+		m1.Config.Gossip.Seeds = []string{seed}
+
 		if err := port.GetPort(func(p int) error {
 			m1.Config.Gossip.Port = fmt.Sprintf("%d", p)
-			return nil
+			return m1.Start()
 		}, 10); err != nil {
-			t.Fatalf("getting gossip port: %v", err)
-		}
-
-		m1.Config.Gossip.Seeds = []string{seed}
-		err := m1.Start()
-		if err != nil {
 			t.Fatalf("starting second main: %v", err)
 		}
 		defer m1.Close()
@@ -239,15 +235,12 @@ func TestClusterResize_AddNode(t *testing.T) {
 		// Configure node1
 		m1 := test.NewCommandNode(t, false)
 
+		m1.Config.Gossip.Seeds = []string{seed}
+
 		if err := port.GetPort(func(p int) error {
 			m1.Config.Gossip.Port = fmt.Sprintf("%d", p)
-			return nil
+			return m1.Start()
 		}, 10); err != nil {
-			t.Fatalf("getting gossip port: %v", err)
-		}
-		m1.Config.Gossip.Seeds = []string{seed}
-		err := m1.Start()
-		if err != nil {
 			t.Fatalf("starting second main: %v", err)
 		}
 		defer m1.Close()
@@ -293,15 +286,12 @@ func TestClusterResize_AddNode(t *testing.T) {
 
 		// Configure node1
 		m1 := test.NewCommandNode(t, false)
+		m1.Config.Gossip.Seeds = []string{seed}
+
 		if err := port.GetPort(func(p int) error {
 			m1.Config.Gossip.Port = fmt.Sprintf("%d", p)
-			return nil
+			return m1.Start()
 		}, 10); err != nil {
-			t.Fatalf("getting gossip port: %v", err)
-		}
-		m1.Config.Gossip.Seeds = []string{seed}
-		err := m1.Start()
-		if err != nil {
 			t.Fatalf("starting second main: %v", err)
 		}
 		defer m1.Close()
@@ -353,15 +343,12 @@ func TestClusterResize_AddNode(t *testing.T) {
 
 		// Configure node1
 		m1 := test.NewCommandNode(t, false)
+		m1.Config.Gossip.Seeds = []string{seed}
+
 		if err := port.GetPort(func(p int) error {
 			m1.Config.Gossip.Port = fmt.Sprintf("%d", p)
-			return nil
+			return m1.Start()
 		}, 10); err != nil {
-			t.Fatalf("getting gossip port: %v", err)
-		}
-		m1.Config.Gossip.Seeds = []string{seed}
-		err := m1.Start()
-		if err != nil {
 			t.Fatalf("starting second main: %v", err)
 		}
 		defer m1.Close()
@@ -407,15 +394,11 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 
 		// Configure node1
 		m1 := test.NewCommandNode(t, false)
+		m1.Config.Gossip.Seeds = []string{seed}
 		if err := port.GetPort(func(p int) error {
 			m1.Config.Gossip.Port = fmt.Sprintf("%d", p)
-			return nil
+			return m1.Start()
 		}, 10); err != nil {
-			t.Fatalf("getting gossip port: %v", err)
-		}
-		m1.Config.Gossip.Seeds = []string{seed}
-		err := m1.Start()
-		if err != nil {
 			t.Fatalf("starting second main: %v", err)
 		}
 		defer m1.Close()
@@ -465,15 +448,11 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 
 		// Configure node1
 		m1 := test.NewCommandNode(t, false)
+		m1.Config.Gossip.Seeds = []string{seed}
 		if err := port.GetPort(func(p int) error {
 			m1.Config.Gossip.Port = fmt.Sprintf("%d", p)
-			return nil
+			return m1.Start()
 		}, 10); err != nil {
-			t.Fatalf("getting gossip port: %v", err)
-		}
-		m1.Config.Gossip.Seeds = []string{seed}
-		err := m1.Start()
-		if err != nil {
 			t.Fatalf("starting second main: %v", err)
 		}
 		errc := make(chan error, 1)
@@ -529,20 +508,16 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 
 		// Configure node1
 		m1 := test.NewCommandNode(t, false)
+		m1.Config.Gossip.Seeds = []string{seed}
 		if err := port.GetPort(func(p int) error {
 			m1.Config.Gossip.Port = fmt.Sprintf("%d", p)
-			return nil
+			errc := make(chan error, 1)
+			go func() {
+				_, err := m0.API.CreateIndex(context.Background(), "blah", pilosa.IndexOptions{})
+				errc <- err
+			}()
+			return m1.Start()
 		}, 10); err != nil {
-			t.Fatalf("getting gossip port: %v", err)
-		}
-		m1.Config.Gossip.Seeds = []string{seed}
-		errc := make(chan error, 1)
-		go func() {
-			_, err := m0.API.CreateIndex(context.Background(), "blah", pilosa.IndexOptions{})
-			errc <- err
-		}()
-		err := m1.Start()
-		if err != nil {
 			t.Fatalf("starting second main: %v", err)
 		}
 		defer m1.Close()
@@ -590,23 +565,18 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 
 		// Configure node1
 		m1 := test.NewCommandNode(t, false)
+		m1.Config.Gossip.Seeds = []string{seed}
 		if err := port.GetPort(func(p int) error {
 			m1.Config.Gossip.Port = fmt.Sprintf("%d", p)
-			return nil
+			errc := make(chan error, 1)
+			go func() {
+				_, err := m0.API.CreateIndex(context.Background(), "blah", pilosa.IndexOptions{})
+				errc <- err
+			}()
+			return m1.Start()
 		}, 10); err != nil {
-			t.Fatalf("getting gossip port: %v", err)
-		}
-		m1.Config.Gossip.Seeds = []string{seed}
-		errc := make(chan error, 1)
-		go func() {
-			_, err := m0.API.CreateIndex(context.Background(), "blah", pilosa.IndexOptions{})
-			errc <- err
-		}()
-		err := m1.Start()
-		if err != nil {
 			t.Fatalf("starting second main: %v", err)
 		}
-		defer m1.Close()
 
 		if !test.CheckClusterState(m0, pilosa.ClusterStateNormal, 1000) {
 			t.Fatalf("unexpected node0 cluster state: %s", m0.API.State())
@@ -634,18 +604,15 @@ func TestCluster_GossipMembership(t *testing.T) {
 		m1 := test.NewCommandNode(t, false)
 		defer m1.Close()
 		eg.Go(func() error {
-			if err := port.GetPort(func(p int) error {
-				m1.Config.Gossip.Port = fmt.Sprintf("%d", p)
-				return nil
-			}, 10); err != nil {
-				t.Fatalf("getting gossip port: %v", err)
-			}
 			// Pass invalid seed as first in list
 			m1.Config.Gossip.Seeds = []string{"http://localhost:8765", seed}
-			err := m1.Start()
-			if err != nil {
+			if err := port.GetPort(func(p int) error {
+				m1.Config.Gossip.Port = fmt.Sprintf("%d", p)
+				return m1.Start()
+			}, 10); err != nil {
 				t.Fatalf("starting second main: %v", err)
 			}
+
 			return nil
 		})
 
@@ -653,18 +620,15 @@ func TestCluster_GossipMembership(t *testing.T) {
 		m2 := test.NewCommandNode(t, false)
 		defer m2.Close()
 		eg.Go(func() error {
-			if err := port.GetPort(func(p int) error {
-				m1.Config.Gossip.Port = fmt.Sprintf("%d", p)
-				return nil
-			}, 10); err != nil {
-				t.Fatalf("getting gossip port: %v", err)
-			}
 			// Pass invalid seed as first in list
 			m2.Config.Gossip.Seeds = []string{seed, "http://localhost:8765"}
-			err := m2.Start()
-			if err != nil {
+			if err := port.GetPort(func(p int) error {
+				m2.Config.Gossip.Port = fmt.Sprintf("%d", p)
+				return m2.Start()
+			}, 10); err != nil {
 				t.Fatalf("starting second main: %v", err)
 			}
+			defer m2.Close()
 			return nil
 		})
 

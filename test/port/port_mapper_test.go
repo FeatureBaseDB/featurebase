@@ -16,7 +16,6 @@ package port_test
 
 import (
 	"fmt"
-	"log"
 	"net"
 	"testing"
 
@@ -28,7 +27,6 @@ func TestPortsAreUnique(t *testing.T) {
 	portmap := make(map[int]struct{})
 	err := port.GetPorts(func(ports []int) error {
 		for _, p := range ports {
-			log.Println("PORTTT", p)
 			if _, exists := portmap[p]; exists {
 				panic(fmt.Sprintf("port %v was already issued!", p))
 			}

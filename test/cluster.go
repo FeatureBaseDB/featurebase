@@ -260,28 +260,28 @@ func (c *Cluster) Start() error {
 
 			if err := port.GetPort(func(p int) error {
 				cc.Config.Gossip.Port = fmt.Sprint(p)
+				gossipHost := uri.Host
+				gossipPort := cc.Config.Gossip.Port
+
+				if gossipPort == "0" || gossipPort == "" {
+					panic("gossipPort not allowed to be 0!")
+				}
+				println("gossipPort is ", gossipPort)
+
+				// the first node doesn't need to wait for a seed.
+				if i > 0 {
+					x := <-seedCh
+					cc.Config.Gossip.Seeds = []string{x}
+				}
+				seedCh <- fmt.Sprintf("%s:%s", gossipHost, gossipPort)
+
+				if err := cc.Start(); err != nil {
+					return errors.Wrapf(err, "starting server %d", i)
+				}
+
 				return nil
 			}, 10); err != nil {
 				return errors.Wrap(err, "getting gossip port")
-			}
-
-			gossipHost := uri.Host
-			gossipPort := cc.Config.Gossip.Port
-
-			if gossipPort == "0" || gossipPort == "" {
-				panic("gossipPort not allowed to be 0!")
-			}
-			println("gossipPort is ", gossipPort)
-
-			// the first node doesn't need to wait for a seed.
-			if i > 0 {
-				x := <-seedCh
-				cc.Config.Gossip.Seeds = []string{x}
-			}
-			seedCh <- fmt.Sprintf("%s:%s", gossipHost, gossipPort)
-
-			if err := cc.Start(); err != nil {
-				return errors.Wrapf(err, "starting server %d", i)
 			}
 
 			return nil

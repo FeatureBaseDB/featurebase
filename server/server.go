@@ -517,15 +517,13 @@ func (m *Command) setupNetworking() error {
 		m.logger.Printf("ephemeral port %d already occupied, switching to :0 (%v)", gossipPort, err)
 		if err := port.GetPort(func(p int) error {
 			gossipPort = p
-			return nil
+			m.Config.Gossip.Port = fmt.Sprintf(":%d", gossipPort)
+			m.gossipTransport, err = gossip.NewTransport(gossipHost, gossipPort, m.logger.Logger())
+			return err
 		}, 10); err != nil {
-			return errors.Wrap(err, "getting port")
+			return errors.Wrap(err, "getting transport")
 		}
-		m.Config.Gossip.Port = fmt.Sprintf(":%d", gossipPort)
-		m.gossipTransport, err = gossip.NewTransport(gossipHost, gossipPort, m.logger.Logger())
-	}
-	if err != nil {
-		return errors.Wrap(err, "getting transport")
+
 	}
 
 	gossipMemberSet, err := gossip.NewMemberSet(
