@@ -839,23 +839,31 @@ func (tx *Tx) inusePageSet() (map[uint32]struct{}, error) {
 	return m, nil
 }
 
-func (tx *Tx) GetFieldSizeBytes(index, field string) (uint64, error) {
-
-	fmt.Printf("getting RBF field size %s/%s\n", index, field)
-
-	var pgno uint32
-	var parent uint32
-
-	var pageCount uint64
-
-	if err := tx.walkTree(pgno, parent, func(pgno, parent, typ uint32) error {
-		pageCount++
-		return nil
-	}); err != nil {
+// GetSizeBytesWithPrefix returns the size of bitmaps with a given key prefix.
+func (tx *Tx) GetSizeBytesWithPrefix(prefix string) (n uint64, err error) {
+	records, err := tx.RootRecords()
+	if err != nil {
 		return 0, err
 	}
 
-	return uint64(pageCount * PageSize), nil
+	// Loop over each bitmap in the database.
+	for itr := records.Iterator(); !itr.Done(); {
+		name, pgno := itr.Next()
+
+		// Skip over any bitmaps that don't have a matching prefix.
+		if !strings.HasPrefix(name.(string), prefix) {
+			continue
+		}
+
+		// Traverse the bitmap's b-tree and count the bytes for each page.
+		if err := tx.walkTree(pgno.(uint32), 0, func(pgno, parent, typ uint32) error {
+			n += PageSize
+			return nil
+		}); err != nil {
+			return 0, err
+		}
+	}
+	return n, nil
 }
 
 // walkTree recursively iterates over a page and all its children.

@@ -602,15 +602,7 @@ func (f *TxFactory) IndexUsageDetails() (map[string]IndexUsage, error) {
 
 	idxs := f.holder.Indexes()
 
-	/*
-		qcx := f.NewQcx()
-		tx, finisher, err := qcx.GetTx(Txo{Write: !writable})
-		if err != nil {
-			return indexUsage, errors.Wrap(err, "qcx.GetTx")
-		}
-		defer finisher(nil)
-	*/
-
+	qcx := f.NewQcx()
 	for _, idx := range idxs {
 		index := idx.name
 		println(" i:" + index)
@@ -632,18 +624,30 @@ func (f *TxFactory) IndexUsageDetails() (map[string]IndexUsage, error) {
 			fieldKeysTotal += keysBytes
 			fragmentsTotal += fieldUsages[field].Fragments
 
-			// non-roaring field usage
-			/*
-				fieldBytes, err := tx.GetFieldSizeBytes(index, field)
-				if err != nil {
-					return indexUsage, errors.Wrapf(err, "getting disk usage for non-roaring fragments (%s)", field)
+			fieldUsage := FieldUsage{Keys: keysBytes}
+
+			for _, shard := range fld.AvailableShards(true).Slice() {
+				if err := func() error {
+					tx, finisher, err := qcx.GetTx(Txo{Write: !writable, Index: idx, Shard: shard})
+					if err != nil {
+						return errors.Wrap(err, "qcx.GetTx")
+					}
+					defer finisher(nil)
+
+					// non-roaring field usage
+					fieldBytes, err := tx.GetFieldSizeBytes(index, field)
+					if err != nil {
+						return errors.Wrapf(err, "getting disk usage for non-roaring fragments (%s)", field)
+					}
+					fieldUsage.Total += fieldBytes
+					return nil
+				}(); err != nil {
+					return indexUsage, err
 				}
-				fieldUsages[field] = FieldUsage{
-					Total:     fieldBytes,
-					Fragments: fieldBytes - keysBytes,
-					Keys:      keysBytes,
-				}
-			*/
+			}
+
+			fieldUsage.Fragments = fieldUsage.Total - keysBytes
+			fieldUsages[field] = fieldUsage
 		}
 
 		// index keys usage
