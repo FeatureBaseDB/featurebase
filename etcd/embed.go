@@ -103,9 +103,9 @@ func (e *Etcd) Close() error {
 		if e.heartbeatCancel != nil {
 			e.heartbeatCancel()
 		}
-		e.e.Server.Stop()
-		e.e.Close()
-		<-e.e.Server.StopNotify()
+		// e.e.Server.Stop()
+		// e.e.Close()
+		// <-e.e.Server.StopNotify()
 	}
 
 	return nil

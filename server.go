@@ -692,9 +692,9 @@ func (s *Server) Close() error {
 		errc = s.cluster.close()
 	}
 	errhs = s.syncer.stopTranslationSync()
-	// if s.disCo != nil {
-	// 	errd = s.disCo.Close()
-	// }
+	if s.disCo != nil {
+		errd = s.disCo.Close()
+	}
 	if s.holder != nil {
 		errh = s.holder.Close()
 	}
