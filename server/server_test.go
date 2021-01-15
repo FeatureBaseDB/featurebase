@@ -54,8 +54,7 @@ func TestMain_Set_Quick(t *testing.T) {
 		t.Skip("short")
 	}
 
-	for i := 0; i < 100; i++ {
-		//for i := 0; i < 10; i++ {
+	for i := 0; i < 10; i++ {
 		t.Run(fmt.Sprint(i), func(t *testing.T) {
 			t.Parallel()
 

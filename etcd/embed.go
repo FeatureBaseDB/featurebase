@@ -279,6 +279,9 @@ func (e *Etcd) Started(ctx context.Context) error {
 }
 
 func (e *Etcd) ID() string {
+	if e.e == nil || e.e.Server == nil {
+		return ""
+	}
 	return e.e.Server.ID().String()
 }
 
@@ -291,6 +294,9 @@ func (e *Etcd) Peers() []*disco.Peer {
 }
 
 func (e *Etcd) IsLeader() bool {
+	if e.e == nil || e.e.Server == nil {
+		return false
+	}
 	return e.e.Server.Leader() == e.e.Server.ID()
 }
 
