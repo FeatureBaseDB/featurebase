@@ -3265,7 +3265,7 @@ func TestExecutor_Execute_ErrMaxWritesPerRequest(t *testing.T) {
 	c := test.MustNewCluster(t, 1)
 	defer c.Close()
 	c.GetNode(0).Config.MaxWritesPerRequest = 3
-	err := c.Start(t)
+	err := c.Start()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -4498,7 +4498,7 @@ func benchmarkExistence(nn bool, b *testing.B) {
 	if err != nil {
 		b.Fatalf("getting temp dir: %v", err)
 	}
-	err = c.Start(b)
+	err = c.Start()
 	if err != nil {
 		b.Fatalf("starting cluster: %v", err)
 	}
@@ -5910,7 +5910,7 @@ func BenchmarkGroupBy(b *testing.B) {
 	if err != nil {
 		b.Fatalf("getting temp dir: %v", err)
 	}
-	err = c.Start(b)
+	err = c.Start()
 	if err != nil {
 		b.Fatalf("starting cluster: %v", err)
 	}

@@ -106,6 +106,7 @@ func (e *Etcd) Close() error {
 		e.e.Server.Stop()
 		e.e.Close()
 		<-e.e.Server.StopNotify()
+		// os.RemoveAll(e.options.Dir)
 	}
 
 	return nil

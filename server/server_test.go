@@ -671,7 +671,7 @@ func TestClusteringNodesReplica2(t *testing.T) {
 	for _, c := range cluster.Nodes {
 		c.Config.Cluster.ReplicaN = 2
 	}
-	err := cluster.Start(t)
+	err := cluster.Start()
 	if err != nil {
 		t.Fatalf("starting cluster: %v", err)
 	}
@@ -758,7 +758,7 @@ func TestRemoveNodeAfterItDies(t *testing.T) {
 	for _, c := range cluster.Nodes {
 		c.Config.Cluster.ReplicaN = 2
 	}
-	err := cluster.Start(t)
+	err := cluster.Start()
 	if err != nil {
 		t.Fatalf("starting cluster: %v", err)
 	}
@@ -807,7 +807,7 @@ func TestRemoveConcurrentIndexCreation(t *testing.T) {
 	for _, c := range cluster.Nodes {
 		c.Config.Cluster.ReplicaN = 2
 	}
-	err := cluster.Start(t)
+	err := cluster.Start()
 	if err != nil {
 		t.Fatalf("starting cluster: %v", err)
 	}
