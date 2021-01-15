@@ -6834,6 +6834,30 @@ func variousQueries(t *testing.T, clusterSize int) {
 		{"icecream", "userF"},
 	})
 
+	// Create and populate "places_visited" time field.
+	c.CreateField(t, "users", pilosa.IndexOptions{Keys: true, TrackExistence: true}, "places_visited", pilosa.OptFieldKeys(), pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YM")))
+	ts2019Jan01 := int64(1546300800) * 1e+9 // 2019 January 1st 0:00:00
+	ts2019Aug01 := int64(1564617600) * 1e+9 // 2019 August  1st 0:00:00
+	ts2020Jan01 := int64(1577836800) * 1e+9 // 2020 January 1st 0:00:00
+	c.ImportTimeQuantumKey(t, "users", "places_visited", []test.TimeQuantumKey{
+		// 2019 January: nairobi, paris, austin, toronto
+		{RowKey: "nairobi", ColKey: "userB", Ts: ts2019Jan01},
+		{RowKey: "paris", ColKey: "userC", Ts: ts2019Jan01},
+		{RowKey: "austin", ColKey: "userF", Ts: ts2019Jan01},
+		{RowKey: "toronto", ColKey: "userA", Ts: ts2019Jan01},
+		// 2019 August: nairobi, paris, austin, toronto
+		{RowKey: "toronto", ColKey: "userB", Ts: ts2019Aug01},
+		{RowKey: "toronto", ColKey: "userC", Ts: ts2019Aug01},
+		// 2020: toronto, mombasa, sydney, nairobi
+		{RowKey: "toronto", ColKey: "userB", Ts: ts2020Jan01},
+		{RowKey: "toronto", ColKey: "userD", Ts: ts2020Jan01},
+		{RowKey: "toronto", ColKey: "userE", Ts: ts2020Jan01},
+		{RowKey: "toronto", ColKey: "userF", Ts: ts2020Jan01},
+		{RowKey: "mombasa", ColKey: "userA", Ts: ts2020Jan01},
+		{RowKey: "sydney", ColKey: "userD", Ts: ts2020Jan01},
+		{RowKey: "nairobi", ColKey: "userE", Ts: ts2020Jan01},
+	})
+
 	// Create and populate "affinity" int field with negative, positive, zero and null values.
 	c.CreateField(t, "users", pilosa.IndexOptions{Keys: true, TrackExistence: true}, "affinity", pilosa.OptFieldTypeInt(-1000, 1000))
 	c.ImportIntKey(t, "users", "affinity", []test.IntKey{
