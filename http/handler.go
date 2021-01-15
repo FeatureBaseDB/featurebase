@@ -1771,16 +1771,27 @@ func (h *Handler) handleGetMetricsJSON(w http.ResponseWriter, r *http.Request) {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	for _, node := range h.api.Hosts(r.Context()) {
 		metricsURI := node.URI.String() + "/metrics"
+
+		// The buffer size of 60 is performance controlling, but we
+		// haven't studied what the optimal setting is. It was
+		// earlier set to this value to capture all output from
+		// prom2json at once. The output got larger recently, so
+		// now we handle unlimited size output using a goroutine.
 		mfChan := make(chan *dto.MetricFamily, 60)
-		err := prom2json.FetchMetricFamilies(metricsURI, mfChan, transport)
-		if err != nil {
-			http.Error(w, "fetching metrics: "+err.Error(), http.StatusInternalServerError)
-			return
-		}
+		errChan := make(chan error)
+		go func() {
+			err := prom2json.FetchMetricFamilies(metricsURI, mfChan, transport)
+			errChan <- err
+		}()
 
 		nodeMetrics := []*prom2json.Family{}
 		for mf := range mfChan {
 			nodeMetrics = append(nodeMetrics, prom2json.NewFamily(mf))
+		}
+		err := <-errChan
+		if err != nil {
+			http.Error(w, "fetching metrics: "+err.Error(), http.StatusInternalServerError)
+			return
 		}
 		metrics[node.ID] = nodeMetrics
 	}

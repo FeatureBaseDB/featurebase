@@ -22,6 +22,7 @@ import (
 	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/http"
 	"github.com/pilosa/pilosa/v2/test"
+	"github.com/pilosa/pilosa/v2/test/port"
 )
 
 func TestHandlerOptions(t *testing.T) {
@@ -33,10 +34,17 @@ func TestHandlerOptions(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected error making handler without options, got nil")
 	}
-	ln, err := net.Listen("tcp", ":0")
-	if err != nil {
-		t.Fatal(err)
-	}
+
+	var ln net.Listener
+	err = port.GetPort(func(p int) error {
+		ln, err = net.Listen("tcp", port.ColonZeroString(p))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		return err
+	}, 10)
+
 	_, err = http.NewHandler(http.OptHandlerListener(ln))
 	if err == nil {
 		t.Fatalf("expected error making handler without options, got nil")

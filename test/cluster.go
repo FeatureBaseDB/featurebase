@@ -29,7 +29,9 @@ import (
 	"github.com/pilosa/pilosa/v2/api/client"
 	"github.com/pilosa/pilosa/v2/proto"
 	"github.com/pilosa/pilosa/v2/server"
+	"github.com/pilosa/pilosa/v2/test/port"
 	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
 )
 
 // modHasher represents a simple, mod-based hashing.
@@ -266,19 +268,49 @@ func (c *Cluster) CreateField(t testing.TB, index string, iopts pilosa.IndexOpti
 
 // Start runs a Cluster
 func (c *Cluster) Start() error {
-	var gossipSeeds = make([]string, len(c.Nodes))
-	for i, cc := range c.Nodes {
-		cc.Config.Gossip.Port = "0"
-		cc.Config.Gossip.Seeds = gossipSeeds[:i]
-		if err := cc.Start(); err != nil {
-			return errors.Wrapf(err, "starting server %d", i)
+	var eg errgroup.Group
+	err := port.GetPorts(func(ports []int) error {
+		portsCfg := GenPortsConfig(NewPorts(ports))
+
+		var gossipSeeds []string
+		for i, cc := range c.Nodes {
+			i := i
+			// get the bind uri to use as the host portion of the gossip seed.
+			uri, err := pilosa.AddressWithDefaults(cc.Config.Bind)
+			if err != nil {
+				return errors.Wrap(err, "processing bind address")
+			}
+
+			cc.Config.Gossip.Port = portsCfg[i].Gossip.Port
+			gossipHost := uri.Host
+			gossipPort := cc.Config.Gossip.Port
+
+			gossipSeeds = append(gossipSeeds, fmt.Sprintf("%s:%s", gossipHost, gossipPort))
 		}
-		gossipSeeds[i] = cc.GossipAddress()
+
+		for i, cc := range c.Nodes {
+			cc := cc
+			cc.Config.DisCo = portsCfg[i].DisCo
+			cc.Config.BindGRPC = portsCfg[i].BindGRPC
+
+			eg.Go(func() error {
+				fmt.Printf("DISCO CONFIG: %+v\n", cc.Config.DisCo)
+				cc.Config.Gossip.Seeds = gossipSeeds
+
+				return cc.Start()
+			})
+		}
+
+		return eg.Wait()
+	}, 4*len(c.Nodes), 10)
+	if err != nil {
+		return err
 	}
-	return nil
+
+	return c.AwaitState(pilosa.ClusterStateNormal, 30*time.Second)
 }
 
-// Stop stops a Cluster
+// Close stops a Cluster
 func (c *Cluster) Close() error {
 	for i, cc := range c.Nodes {
 		if err := cc.Close(); err != nil {
@@ -345,6 +377,12 @@ func (c *Cluster) AwaitState(expectedState string, timeout time.Duration) (err e
 // slices of command options, which are used with corresponding nodes.
 func MustNewCluster(tb testing.TB, size int, opts ...[]server.CommandOption) *Cluster {
 	tb.Helper()
+
+	// We want tests to default to using the in-memory translate store, so we
+	// prepend opts with that functional option. If a different translate store
+	// has been specified, it will override this one.
+	opts = prependOpts(opts, size)
+
 	c, err := newCluster(tb, size, opts...)
 	if err != nil {
 		tb.Fatalf("new cluster: %v", err)
@@ -369,6 +407,9 @@ func newCluster(tb testing.TB, size int, opts ...[]server.CommandOption) (*Clust
 	if size == 0 {
 		return nil, errors.New("cluster must contain at least one node")
 	}
+
+	//opts = appendOpts(opts, GenDisCoConfig(size))
+
 	if len(opts) != size && len(opts) != 0 && len(opts) != 1 {
 		return nil, errors.New("Slice of CommandOptions must be of length 0, 1, or equal to the number of cluster nodes")
 	}
@@ -391,42 +432,33 @@ func newCluster(tb testing.TB, size int, opts ...[]server.CommandOption) (*Clust
 	return cluster, nil
 }
 
-// runCluster creates and starts a new cluster
-func runCluster(tb testing.TB, size int, opts ...[]server.CommandOption) (*Cluster, error) {
-	cluster, err := newCluster(tb, size, opts...)
-	if err != nil {
-		return nil, errors.Wrap(err, "new cluster")
-	}
-
-	if err = cluster.Start(); err != nil {
-		return nil, errors.Wrap(err, "starting cluster")
-	}
-	return cluster, nil
-}
-
 // MustRunCluster creates and starts a new cluster. The opts parameter
 // is slightly magical; see MustNewCluster.
 func MustRunCluster(tb testing.TB, size int, opts ...[]server.CommandOption) *Cluster {
-	// We want tests to default to using the in-memory translate store, so we
-	// prepend opts with that functional option. If a different translate store
-	// has been specified, it will override this one.
-	opts = prependOpts(opts)
 
-	tb.Helper()
-	c, err := runCluster(tb, size, opts...)
+	cluster := MustNewCluster(tb, size, opts...)
+	err := cluster.Start()
 	if err != nil {
 		tb.Fatalf("run cluster: %v", err)
 	}
-	return c
+	return cluster
 }
 
 // prependOpts applies prependTestServerOpts to each of the ops (one per
 // node, or one for the entire cluser).
-func prependOpts(opts [][]server.CommandOption) [][]server.CommandOption {
+func prependOpts(opts [][]server.CommandOption, size int) [][]server.CommandOption {
 	if len(opts) == 0 {
-		opts = [][]server.CommandOption{
-			prependTestServerOpts([]server.CommandOption{}),
+		opts = make([][]server.CommandOption, size)
+		for i := 0; i < size; i++ {
+			opts[i] = prependTestServerOpts([]server.CommandOption{})
 		}
+	} else if len(opts) == 1 {
+		println("len opts == 1, size = ", size)
+		opts2 := make([][]server.CommandOption, size)
+		for i := 0; i < size; i++ {
+			opts2[i] = prependTestServerOpts(opts[0])
+		}
+		return opts2
 	} else {
 		for i := range opts {
 			opts[i] = prependTestServerOpts(opts[i])

@@ -31,6 +31,11 @@ func Test_NewConfig(t *testing.T) {
 	}
 }
 
+func Test_ValidateConfig(t *testing.T) {
+	c := server.NewConfig()
+	c.MustValidate()
+}
+
 func TestDuration(t *testing.T) {
 	d := toml.Duration(time.Second * 182)
 	if d.String() != "3m2s" {

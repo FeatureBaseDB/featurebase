@@ -279,7 +279,6 @@ func TestAPI_Import(t *testing.T) {
 				t.Fatalf("found internal field '%s' in schema output", f.Name)
 			}
 		}
-
 	})
 }
 

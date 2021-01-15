@@ -19,16 +19,21 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/pilosa/pilosa/v2"
-	"github.com/pilosa/pilosa/v2/testhook"
 	_ "net/http/pprof"
+
+	"github.com/pilosa/pilosa/v2/test/port"
+	"github.com/pilosa/pilosa/v2/testhook"
 )
 
 func TestMain(m *testing.M) {
-	port := pilosa.GetAvailPort()
-	fmt.Printf("pilosa/ TestMain: online stack-traces: curl http://localhost:%v/debug/pprof/goroutine?debug=2\n", port)
 	go func() {
-		_ = http.ListenAndServe(fmt.Sprintf("127.0.0.1:%v", port), nil)
+		err := port.GetPort(func(port int) error {
+			fmt.Printf("pilosa/ TestMain: online stack-traces: curl http://localhost:%v/debug/pprof/goroutine?debug=2\n", port)
+			return http.ListenAndServe(fmt.Sprintf("127.0.0.1:%v", port), nil)
+		}, 10)
+		if err != nil {
+			panic(err)
+		}
 	}()
 	testhook.RunTestsWithHooks(m)
 }

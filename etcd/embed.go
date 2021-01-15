@@ -106,6 +106,7 @@ func (e *Etcd) Close() error {
 		e.e.Server.Stop()
 		e.e.Close()
 		<-e.e.Server.StopNotify()
+		// os.RemoveAll(e.options.Dir)
 	}
 
 	return nil
@@ -113,7 +114,9 @@ func (e *Etcd) Close() error {
 
 func parseOptions(opt Options) *embed.Config {
 	cfg := embed.NewConfig()
-	cfg.Debug = true
+	cfg.Debug = false // true gives data races on grpc.EnableTracing in etcd
+	cfg.LogLevel = "error"
+	cfg.Logger = "zap"
 	cfg.Name = opt.Name
 	cfg.Dir = opt.Dir
 	cfg.InitialClusterToken = opt.ClusterName
@@ -278,6 +281,9 @@ func (e *Etcd) Started(ctx context.Context) error {
 }
 
 func (e *Etcd) ID() string {
+	if e.e == nil || e.e.Server == nil {
+		return ""
+	}
 	return e.e.Server.ID().String()
 }
 
@@ -290,6 +296,9 @@ func (e *Etcd) Peers() []*disco.Peer {
 }
 
 func (e *Etcd) IsLeader() bool {
+	if e.e == nil || e.e.Server == nil {
+		return false
+	}
 	return e.e.Server.Leader() == e.e.Server.ID()
 }
 

@@ -35,7 +35,14 @@ func TestServerHelp(t *testing.T) {
 	}
 }
 
+func nextPort() string {
+	return fmt.Sprintf(`"localhost:%d"`, 0)
+}
+
+var _ = nextPort // happy linter
+
 func TestServerConfig(t *testing.T) {
+	t.Skip("pilosa hosts config (cmd.Server.Config.Cluster.Hosts and brethren) is test only and will go away with high probability. skip for now.")
 	actualDataDir, err := ioutil.TempDir("", "")
 	failErr(t, err, "making data dir")
 	logFile, err := ioutil.TempFile("", "")
@@ -54,8 +61,8 @@ func TestServerConfig(t *testing.T) {
 			},
 			cfgFileContent: `
 	data-dir = "/tmp/myFileDatadir"
-	bind = "localhost:0"
-	bind-grpc = "localhost:0"
+	bind = ` + nextPort() + `
+	bind-grpc = ` + nextPort() + `
 	max-writes-per-request = 3000
 	long-query-time = "1m10s"
 	
@@ -100,8 +107,8 @@ func TestServerConfig(t *testing.T) {
 				"PILOSA_PROFILE_MUTEX_FRACTION": "444",
 			},
 			cfgFileContent: `
-	bind = "localhost:0"
-	bind-grpc = "localhost:0"
+	bind = ` + nextPort() + `
+	bind-grpc = ` + nextPort() + `
 	data-dir = "` + actualDataDir + `"
 	[cluster]
 		disabled = true
@@ -198,6 +205,7 @@ func TestServerConfig(t *testing.T) {
 	}
 }
 func TestServerConfig_DeprecateLongQueryTime(t *testing.T) {
+	t.Skip("pilosa hosts config (cmd.Server.Config.Cluster.Hosts and brethren) is test only and will go away with high probability. skip for now.")
 	actualDataDir, err := ioutil.TempDir("", "")
 	failErr(t, err, "making data dir")
 
@@ -207,8 +215,8 @@ func TestServerConfig_DeprecateLongQueryTime(t *testing.T) {
 			args: []string{"server", "--long-query-time", "1m10s"},
 			env:  map[string]string{},
 			cfgFileContent: `
-            	bind = "localhost:0"
-            	bind-grpc = "localhost:0"
+            	bind = ` + nextPort() + `
+            	bind-grpc = ` + nextPort() + `
              	data-dir = "` + actualDataDir + `"
                 [gossip]
                   port = "14321"
@@ -225,8 +233,8 @@ func TestServerConfig_DeprecateLongQueryTime(t *testing.T) {
 			args: []string{"server", "--cluster.long-query-time", "1m20s"},
 			env:  map[string]string{},
 			cfgFileContent: `
-            	bind = "localhost:0"
-            	bind-grpc = "localhost:0"
+            	bind = ` + nextPort() + `
+            	bind-grpc = ` + nextPort() + `
                 [gossip]
                   port = "14321"
 `,
@@ -242,8 +250,8 @@ func TestServerConfig_DeprecateLongQueryTime(t *testing.T) {
 			args: []string{"server", "--long-query-time", "50s", "--cluster.long-query-time", "1m30s"},
 			env:  map[string]string{},
 			cfgFileContent: `
-            	bind = "localhost:0"
-            	bind-grpc = "localhost:0"
+            	bind = ` + nextPort() + `
+            	bind-grpc = ` + nextPort() + `
                 [gossip]
                   port = "14321"
 `,
