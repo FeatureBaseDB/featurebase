@@ -16,6 +16,7 @@ package test
 
 import (
 	"fmt"
+	"io/ioutil"
 	"strings"
 	"time"
 
@@ -40,6 +41,10 @@ func GenPortsConfig(ports []Ports) []*server.Config {
 		var lClientURL, lPeerURL string
 		lClientURL = fmt.Sprintf("http://localhost:%d", ports[i].Client)
 		lPeerURL = fmt.Sprintf("http://localhost:%d", ports[i].Peer)
+		discoDir := ""
+		if d, err := ioutil.TempDir("/tmp", "disco."); err == nil {
+			discoDir = d
+		}
 
 		cfgs[i] = &server.Config{
 			Gossip: gossip.Config{
@@ -48,7 +53,7 @@ func GenPortsConfig(ports []Ports) []*server.Config {
 			BindGRPC: port.ColonZeroString(ports[i].Grpc),
 			DisCo: etcd.Options{
 				Name:         name,
-				Dir:          "",
+				Dir:          discoDir,
 				ClusterName:  "bartholemuuuuu",
 				LClientURL:   lClientURL,
 				AClientURL:   lClientURL,
