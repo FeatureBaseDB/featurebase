@@ -284,7 +284,7 @@ func (c *Cluster) Start() error {
 		return err
 	}
 
-	return c.AwaitState(pilosa.ClusterStateNormal, 10*time.Second)
+	return c.AwaitState(pilosa.ClusterStateNormal, 30*time.Second)
 }
 
 // Close stops a Cluster
