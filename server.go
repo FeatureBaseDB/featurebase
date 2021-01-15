@@ -611,6 +611,7 @@ func (s *Server) Open() error {
 	if err != nil {
 		return errors.Wrap(err, "starting DisCo")
 	}
+	fmt.Println("--- disco: open:", s.disCo.ID())
 	_ = initState
 
 	// Set node ID.
@@ -679,6 +680,7 @@ func (s *Server) Open() error {
 
 // Close closes the server and waits for it to shutdown.
 func (s *Server) Close() error {
+	fmt.Println("--- disco: server close:", s.disCo.ID())
 	errE := s.executor.Close()
 
 	// Notify goroutines to stop.
@@ -693,7 +695,9 @@ func (s *Server) Close() error {
 	}
 	errhs = s.syncer.stopTranslationSync()
 	if s.disCo != nil {
+		fmt.Println("--- disco: try close:", s.disCo.ID())
 		errd = s.disCo.Close()
+		fmt.Println("--- disco: closed", s.disCo.ID(), errd)
 	}
 	if s.holder != nil {
 		errh = s.holder.Close()
