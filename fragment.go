@@ -3329,6 +3329,75 @@ func (f *fragment) rowIterator(tx Tx, wrap bool, filters ...roaring.BitmapFilter
 	return f.setRowIterator(tx, wrap, filters...)
 }
 
+type timeRowIterator struct {
+	tx        Tx
+	fragments []*fragment
+	rows      []*Row
+	rowIDs    [][]uint64
+	cur       int
+	wrap      bool
+}
+
+func timeFragmentsRowIterator(fragments []*fragment, tx Tx, wrap bool, filters ...roaring.BitmapFilter) (rowIterator, error) {
+	if len(fragments) == 0 {
+		return nil, fmt.Errorf("there should be at least 1 fragment")
+	} else if len(fragments) == 1 {
+		return fragments[0].setRowIterator(tx, wrap, filters...)
+	}
+
+	it := &timeRowIterator{
+		tx:        tx,
+		fragments: fragments,
+		rows:      make([]*Row, len(fragments)),
+		rowIDs:    make([][]uint64, len(fragments)),
+	}
+
+	for i, f := range fragments {
+		rows, err := f.rows(context.Background(), tx, 0, filters...)
+		if err != nil {
+			return nil, err
+		}
+		it.rowIDs[i] = rows
+	}
+
+	return it, nil
+}
+
+func (it *timeRowIterator) Seek(rowID uint64) {
+	rowIDs := it.rowIDs[0]
+	idx := sort.Search(len(rowIDs), func(i int) bool {
+		return rowIDs[i] >= rowID
+	})
+	it.cur = idx
+}
+
+func (it *timeRowIterator) Next() (r *Row, rowID uint64, _ *int64, wrapped bool, err error) {
+	rowIDs := it.rowIDs[0]
+	if it.cur >= len(rowIDs) {
+		if !it.wrap || len(rowIDs) == 0 {
+			return nil, 0, nil, true, nil
+		}
+		it.Seek(0)
+		wrapped = true
+	}
+
+	id := rowIDs[it.cur]
+	// gather rows
+	for i, fragment := range it.fragments {
+		row, err := fragment.row(it.tx, id)
+		if err != nil {
+			return row, rowID, nil, wrapped, err
+		}
+		it.rows[i] = row
+	}
+
+	// union rows
+	r = it.rows[0].Union(it.rows[1:]...)
+
+	it.cur++
+	return r, rowID, nil, wrapped, nil
+}
+
 type intRowIterator struct {
 	f      *fragment
 	values int64Slice         // sorted slice of int values
