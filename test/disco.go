@@ -16,14 +16,15 @@ package test
 
 import (
 	"fmt"
-	"io/ioutil"
 	"strings"
+	"testing"
 	"time"
 
 	"github.com/pilosa/pilosa/v2/etcd"
 	"github.com/pilosa/pilosa/v2/gossip"
 	"github.com/pilosa/pilosa/v2/server"
 	"github.com/pilosa/pilosa/v2/test/port"
+	"github.com/pilosa/pilosa/v2/testhook"
 )
 
 type Ports struct {
@@ -32,7 +33,7 @@ type Ports struct {
 }
 
 //GenPortsConfig creates specific configuration for etcd.
-func GenPortsConfig(ports []Ports) []*server.Config {
+func GenPortsConfig(tb testing.TB, ports []Ports) []*server.Config {
 	cfgs := make([]*server.Config, len(ports))
 	clusterURLs := make([]string, len(ports))
 	for i := range cfgs {
@@ -42,7 +43,7 @@ func GenPortsConfig(ports []Ports) []*server.Config {
 		lClientURL = fmt.Sprintf("http://localhost:%d", ports[i].Client)
 		lPeerURL = fmt.Sprintf("http://localhost:%d", ports[i].Peer)
 		discoDir := ""
-		if d, err := ioutil.TempDir("/tmp", "disco."); err == nil {
+		if d, err := testhook.TempDir(tb, "disco."); err == nil {
 			discoDir = d
 		}
 

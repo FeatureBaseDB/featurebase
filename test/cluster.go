@@ -243,10 +243,10 @@ func (c *Cluster) CreateField(t testing.TB, index string, iopts pilosa.IndexOpti
 }
 
 // Start runs a Cluster
-func (c *Cluster) Start() error {
+func (c *Cluster) Start(tb testing.TB) error {
 	var eg errgroup.Group
 	err := port.GetPorts(func(ports []int) error {
-		portsCfg := GenPortsConfig(NewPorts(ports))
+		portsCfg := GenPortsConfig(tb, NewPorts(ports))
 
 		var gossipSeeds []string
 		for i, cc := range c.Nodes {
@@ -413,7 +413,7 @@ func newCluster(tb testing.TB, size int, opts ...[]server.CommandOption) (*Clust
 func MustRunCluster(tb testing.TB, size int, opts ...[]server.CommandOption) *Cluster {
 
 	cluster := MustNewCluster(tb, size, opts...)
-	err := cluster.Start()
+	err := cluster.Start(tb)
 	if err != nil {
 		tb.Fatalf("run cluster: %v", err)
 	}

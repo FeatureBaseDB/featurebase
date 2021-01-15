@@ -436,7 +436,7 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 	c.GetNode(0).Config.AntiEntropy.Interval = 0
 	c.GetNode(1).Config.Cluster.ReplicaN = 2
 	c.GetNode(1).Config.AntiEntropy.Interval = 0
-	err := c.Start()
+	err := c.Start(t)
 
 	if err != nil {
 		t.Fatalf("starting cluster: %v", err)
@@ -550,7 +550,7 @@ func TestHolderSyncer_BlockIteratorLimits(t *testing.T) {
 	c.GetNode(1).Config.AntiEntropy.Interval = 0
 	c.GetNode(2).Config.Cluster.ReplicaN = 3
 	c.GetNode(2).Config.AntiEntropy.Interval = 0
-	err := c.Start()
+	err := c.Start(t)
 	if err != nil {
 		t.Fatalf("starting cluster: %v", err)
 	}
@@ -605,7 +605,7 @@ func TestHolderSyncer_Clears(t *testing.T) {
 	c.GetNode(0).Config.AntiEntropy.Interval = 0
 	c.GetNode(1).Config.Cluster.ReplicaN = 3
 	c.GetNode(1).Config.AntiEntropy.Interval = 0
-	err := c.Start()
+	err := c.Start(t)
 	if err != nil {
 		t.Fatalf("starting cluster: %v", err)
 	}
@@ -654,7 +654,7 @@ func TestHolderSyncer_TimeQuantum(t *testing.T) {
 	c.GetNode(0).Config.AntiEntropy.Interval = 0
 	c.GetNode(1).Config.Cluster.ReplicaN = 2
 	c.GetNode(1).Config.AntiEntropy.Interval = 0
-	err := c.Start()
+	err := c.Start(t)
 	if err != nil {
 		t.Fatalf("starting cluster: %v", err)
 	}
@@ -707,7 +707,7 @@ func TestHolderSyncer_IntField(t *testing.T) {
 		c.GetNode(0).Config.AntiEntropy.Interval = 0
 		c.GetNode(1).Config.Cluster.ReplicaN = 2
 		c.GetNode(1).Config.AntiEntropy.Interval = 0
-		err := c.Start()
+		err := c.Start(t)
 		if err != nil {
 			t.Fatalf("starting cluster: %v", err)
 		}
@@ -765,7 +765,7 @@ func TestHolderSyncer_IntField(t *testing.T) {
 		c.GetNode(0).Config.AntiEntropy.Interval = 0
 		c.GetNode(1).Config.Cluster.ReplicaN = 2
 		c.GetNode(1).Config.AntiEntropy.Interval = 0
-		err := c.Start()
+		err := c.Start(t)
 		if err != nil {
 			t.Fatalf("starting cluster: %v", err)
 		}

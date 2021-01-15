@@ -186,7 +186,7 @@ func TestClusterResize_AddNode(t *testing.T) {
 		m1.Config.Gossip.Seeds = []string{seed}
 
 		if err := port.GetPorts(func(ports []int) error {
-			portsCfg := test.GenPortsConfig(test.NewPorts(ports))
+			portsCfg := test.GenPortsConfig(t, test.NewPorts(ports))
 
 			m1.Config.Gossip.Port = portsCfg[0].Gossip.Port
 			m1.Config.DisCo = portsCfg[0].DisCo
@@ -243,7 +243,7 @@ func TestClusterResize_AddNode(t *testing.T) {
 		m1.Config.Gossip.Seeds = []string{seed}
 
 		if err := port.GetPorts(func(ports []int) error {
-			portsCfg := test.GenPortsConfig(test.NewPorts(ports))
+			portsCfg := test.GenPortsConfig(t, test.NewPorts(ports))
 
 			m1.Config.Gossip.Port = portsCfg[0].Gossip.Port
 			m1.Config.DisCo = portsCfg[0].DisCo
@@ -299,7 +299,7 @@ func TestClusterResize_AddNode(t *testing.T) {
 		m1.Config.Gossip.Seeds = []string{seed}
 
 		if err := port.GetPorts(func(ports []int) error {
-			portsCfg := test.GenPortsConfig(test.NewPorts(ports))
+			portsCfg := test.GenPortsConfig(t, test.NewPorts(ports))
 
 			m1.Config.Gossip.Port = portsCfg[0].Gossip.Port
 			m1.Config.DisCo = portsCfg[0].DisCo
@@ -361,7 +361,7 @@ func TestClusterResize_AddNode(t *testing.T) {
 		m1.Config.Gossip.Seeds = []string{seed}
 
 		if err := port.GetPorts(func(ports []int) error {
-			portsCfg := test.GenPortsConfig(test.NewPorts(ports))
+			portsCfg := test.GenPortsConfig(t, test.NewPorts(ports))
 
 			m1.Config.Gossip.Port = portsCfg[0].Gossip.Port
 			m1.Config.DisCo = portsCfg[0].DisCo
@@ -417,7 +417,7 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 		m1 := test.NewCommandNode(t, false)
 		m1.Config.Gossip.Seeds = []string{seed}
 		if err := port.GetPorts(func(ports []int) error {
-			portsCfg := test.GenPortsConfig(test.NewPorts(ports))
+			portsCfg := test.GenPortsConfig(t, test.NewPorts(ports))
 
 			m1.Config.Gossip.Port = portsCfg[0].Gossip.Port
 			m1.Config.DisCo = portsCfg[0].DisCo
@@ -475,7 +475,7 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 		m1 := test.NewCommandNode(t, false)
 		m1.Config.Gossip.Seeds = []string{seed}
 		if err := port.GetPorts(func(ports []int) error {
-			portsCfg := test.GenPortsConfig(test.NewPorts(ports))
+			portsCfg := test.GenPortsConfig(t, test.NewPorts(ports))
 
 			m1.Config.Gossip.Port = portsCfg[0].Gossip.Port
 			m1.Config.DisCo = portsCfg[0].DisCo
@@ -539,7 +539,7 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 		m1 := test.NewCommandNode(t, false)
 		m1.Config.Gossip.Seeds = []string{seed}
 		if err := port.GetPorts(func(ports []int) error {
-			portsCfg := test.GenPortsConfig(test.NewPorts(ports))
+			portsCfg := test.GenPortsConfig(t, test.NewPorts(ports))
 
 			m1.Config.Gossip.Port = portsCfg[0].Gossip.Port
 			m1.Config.DisCo = portsCfg[0].DisCo
@@ -601,7 +601,7 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 		m1 := test.NewCommandNode(t, false)
 		m1.Config.Gossip.Seeds = []string{seed}
 		if err := port.GetPorts(func(ports []int) error {
-			portsCfg := test.GenPortsConfig(test.NewPorts(ports))
+			portsCfg := test.GenPortsConfig(t, test.NewPorts(ports))
 
 			m1.Config.Gossip.Port = portsCfg[0].Gossip.Port
 			m1.Config.DisCo = portsCfg[0].DisCo
