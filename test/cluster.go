@@ -275,7 +275,6 @@ func (c *Cluster) Start() error {
 
 				return cc.Start()
 			})
-			// fixes race on gossip: time.Sleep(time.Second)
 		}
 
 		return eg.Wait()

@@ -115,6 +115,8 @@ func (e *Etcd) Close() error {
 func parseOptions(opt Options) *embed.Config {
 	cfg := embed.NewConfig()
 	cfg.Debug = false // true gives data races on grpc.EnableTracing in etcd
+	cfg.LogLevel = "error"
+	cfg.Logger = "zap"
 	cfg.Name = opt.Name
 	cfg.Dir = opt.Dir
 	cfg.InitialClusterToken = opt.ClusterName
