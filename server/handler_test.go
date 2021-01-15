@@ -1505,6 +1505,7 @@ func TestQueryHistory(t *testing.T) {
 	test.Do(t, "POST", cmd.URL()+"/index/i0/query", "Set(0, f0=0)")
 	test.Do(t, "POST", cmd.URL()+"/index/i0/query", "Set(3000000, f0=0)")
 	test.Do(t, "POST", cmd.URL()+"/index/i0/query", "TopN(f0)")
+	// TODO SQL
 
 	h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/query-history", nil))
 	if w.Code != gohttp.StatusOK {
@@ -1543,8 +1544,8 @@ func TestQueryHistory(t *testing.T) {
 	if ret[0].Node != cluster.GetNode(0).Server.NodeID() {
 		t.Fatalf("response value for 'Node' was '%s', expected '%s'", ret[0].Node, cluster.GetNode(0).Server.NodeID())
 	}
-	if ret[0].Query != "TopN(f0)" {
-		t.Fatalf("response value for 'Query' was '%s', expected 'TopN(f0)'", ret[0].Query)
+	if ret[0].PQL != "TopN(f0)" {
+		t.Fatalf("response value for 'PQL' was '%s', expected 'TopN(f0)'", ret[0].PQL)
 	}
 }
 
