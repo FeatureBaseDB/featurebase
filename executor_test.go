@@ -6895,6 +6895,32 @@ func variousQueries(t *testing.T, clusterSize int) {
 		qrVerifier  func(t *testing.T, resp pilosa.QueryResponse)
 		csvVerifier string
 	}{
+		{ // 2020 & 2019 All
+			query: `GroupBy(Rows(places_visited, from='2019-01-01T00:00', to='2020-12-31T23:59'))`,
+			csvVerifier: `nairobi,2,0
+paris,1,0
+austin,1,0
+toronto,6,0
+mombasa,1,0
+sydney,1,0
+`,
+		},
+		{ // 2019 All
+			query: `GroupBy(Rows(places_visited, from='2019-01-01T00:00', to='2019-12-31T23:59'))`,
+			csvVerifier: `nairobi,1,0
+paris,1,0
+austin,1,0
+toronto,3,0
+`,
+		},
+		{ // 2019 January only
+			query: `GroupBy(Rows(places_visited, from='2019-01-01T00:00', to='2019-02-01T00:00'))`,
+			csvVerifier: `nairobi,1,0
+paris,1,0
+austin,1,0
+toronto,1,0
+`,
+		},
 		{
 			query: "Count(All())",
 			qrVerifier: func(t *testing.T, resp pilosa.QueryResponse) {
