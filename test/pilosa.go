@@ -43,7 +43,6 @@ type Command struct {
 
 func OptAllowedOrigins(origins []string) server.CommandOption {
 	return func(m *server.Command) error {
-		fmt.Printf("OptAllowedOrigins called with origins = '%#v'", origins)
 		m.Config.Handler.AllowedOrigins = origins
 		return nil
 	}
@@ -79,21 +78,6 @@ func newCommand(tb testing.TB, opts ...server.CommandOption) *Command {
 		m.Config.BindGRPC = "http://localhost:0"
 	}
 
-	/*
-		if err := port.GetPorts(func(ports []int) error {
-				if m.Config.Bind == defaultConf.Bind {
-					m.Config.Bind = fmt.Sprintf("http://localhost:%d", ports[0])
-			}
-				if m.Config.BindGRPC == defaultConf.BindGRPC {
-					m.Config.BindGRPC = fmt.Sprintf("http://localhost:%d", ports[1])
-			}
-
-			return nil
-			}, 2, 10); err != nil {
-				panic(err)
-		}
-	*/
-
 	m.Config.Translation.MapSize = 140000
 	m.Config.WorkerPoolSize = 2
 
@@ -122,17 +106,8 @@ func RunCommand(t *testing.T) *Command {
 	t.Helper()
 
 	// prefer MustRunCluster since it sets up for using etcd using
-	// 	the GenDisCoConfig(size) option.
+	// the GenDisCoConfig(size) option.
 	return MustRunCluster(t, 1).GetNode(0)
-	/*
-		m := newCommand(t, server.OptCommandServerOptions(pilosa.OptServerOpenTranslateStore(pilosa.OpenInMemTranslateStore)))
-		m.Config.Metric.Diagnostics = false // Disable diagnostics.
-		m.Config.Gossip.Port = "0"
-		if err := m.Start(); err != nil {
-			t.Fatal(err)
-		}
-		return m
-	*/
 }
 
 // GossipAddress returns the address on which gossip is listening after a Main

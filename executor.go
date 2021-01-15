@@ -5359,7 +5359,7 @@ func (e *executor) mapReduce(ctx context.Context, index string, shards []uint64,
 	// processing should be done locally so we start with just the local node.
 	var nodes []*topology.Node
 	if !opt.Remote {
-		nodes = topology.Nodes(e.Cluster.nodes).Clone()
+		nodes = topology.Nodes(e.Cluster.Nodes()).Clone()
 	} else {
 		nodes = []*topology.Node{e.Cluster.nodeByID(e.Node.ID)}
 	}

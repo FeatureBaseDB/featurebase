@@ -628,10 +628,6 @@ func TestCluster_Coordinator(t *testing.T) {
 	})
 }
 
-func getport() uint16 {
-	return uint16(globalPortMap.MustGetPort())
-}
-
 func TestCluster_Topology(t *testing.T) {
 	c1 := NewTestCluster(t, 1) // automatically creates Node{ID: "node0"}
 

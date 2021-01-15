@@ -838,7 +838,7 @@ func TestRemoveConcurrentIndexCreation(t *testing.T) {
 		t.Fatalf("unexpected hosts: %v", hosts)
 	}
 	if err := <-errc; err != nil {
-		t.Fatalf("error from index creation: %v", err) //     server_test.go:834: error from index creation: validating api method: api method apiCreateIndex not allowed in state RESIZING
+		t.Fatalf("error from index creation: %v", err)
 	}
 }
 

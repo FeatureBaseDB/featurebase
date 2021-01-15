@@ -55,21 +55,6 @@ func NilInside(iface interface{}) bool {
 	return false
 }
 
-// GetAvailPort asks the OS for an unused port.
-// There's a race here, where the port could be grabbed by someone else
-// before the caller gets to Listen on it, but we are only using
-// it to find a random port for the test hang debugging.
-// Moreover, in practice such races are rare. Just ask for
-// it again if the port is taken.
-// Uses net.Listen("tcp", ":0") to determine a free port, then
-// releases it back to the OS with Listener.Close().
-/*func GetAvailPort() int {
-	l, _ := net.Listen("tcp", ":0")
-	r := l.Addr()
-	l.Close()
-	return r.(*net.TCPAddr).Port
-}*/
-
 //////////////////////////////////
 // helper utility functions
 

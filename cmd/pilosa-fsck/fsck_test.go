@@ -78,8 +78,6 @@ func Test_Repair(t *testing.T) {
 	)
 	// note: do not defer c.Close() here. We manually close below.
 
-	vv("MustRunCluster done.\n")
-
 	var nodes []*test.Command
 	var dirs []string
 	for i := 0; i < nNodes; i++ {
@@ -102,7 +100,6 @@ func Test_Repair(t *testing.T) {
 		if err != nil {
 			t.Fatalf("creating index: %v", err)
 		}
-		vv("past create index")
 		if idx[i].CreatedAt() == 0 {
 			t.Fatal("index createdAt is empty")
 		}

@@ -408,8 +408,6 @@ func newCluster(tb testing.TB, size int, opts ...[]server.CommandOption) (*Clust
 		return nil, errors.New("cluster must contain at least one node")
 	}
 
-	//opts = appendOpts(opts, GenDisCoConfig(size))
-
 	if len(opts) != size && len(opts) != 0 && len(opts) != 1 {
 		return nil, errors.New("Slice of CommandOptions must be of length 0, 1, or equal to the number of cluster nodes")
 	}

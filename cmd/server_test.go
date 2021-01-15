@@ -35,11 +35,10 @@ func TestServerHelp(t *testing.T) {
 	}
 }
 
-func nextPort() string {
+// I have no idea why the linter in ci is complaining about this being unused.
+func nextPort() string { //nolint:unused
 	return fmt.Sprintf(`"localhost:%d"`, 0)
 }
-
-var _ = nextPort // happy linter
 
 func TestServerConfig(t *testing.T) {
 	t.Skip("pilosa hosts config (cmd.Server.Config.Cluster.Hosts and brethren) is test only and will go away with high probability. skip for now.")

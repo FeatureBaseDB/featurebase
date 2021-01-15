@@ -336,7 +336,6 @@ func OptServerClusterHasher(h topology.Hasher) ServerOption {
 // used to specify the translation data store type.
 func OptServerOpenTranslateStore(fn OpenTranslateStoreFunc) ServerOption {
 	return func(s *Server) error {
-		//fmt.Printf("OptServerOpenTranslateStore calling fn = %p; boltdb.OpenTranslateStore= %p; pilosa.OpenInMemTranslateStore = %p", fn, boltdb.OpenTranslateStore, OpenInMemTranslateStore)
 		s.holderConfig.OpenTranslateStore = fn
 		return nil
 	}
