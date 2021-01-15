@@ -593,11 +593,13 @@ func (f *TxFactory) DumpAll() {
 	f.dbPerShard.DumpAll()
 }
 
-func (f *TxFactory) IndexUsageDetails() (map[string]IndexUsage, error) {
+// IndexUsageDetails computes the sum of filesizes used by the node, broken down
+// by index, field, fragments and keys.
+func (f *TxFactory) IndexUsageDetails() (map[string]IndexUsage, uint64, error) {
 	indexUsage := make(map[string]IndexUsage)
-	dirName, err := expandDirName(f.holder.path)
+	holderPath, err := expandDirName(f.holder.path)
 	if err != nil {
-		return indexUsage, errors.Wrap(err, "expanding data directory")
+		return indexUsage, 0, errors.Wrap(err, "expanding data directory")
 	}
 
 	idxs := f.holder.Indexes()
@@ -605,8 +607,7 @@ func (f *TxFactory) IndexUsageDetails() (map[string]IndexUsage, error) {
 	qcx := f.NewQcx()
 	for _, idx := range idxs {
 		index := idx.name
-		println(" i:" + index)
-		indexPath := path.Join(dirName, index)
+		indexPath := path.Join(holderPath, index)
 
 		// field usage
 		fieldUsages := make(map[string]FieldUsage)
@@ -615,16 +616,16 @@ func (f *TxFactory) IndexUsageDetails() (map[string]IndexUsage, error) {
 		flds := idx.Fields()
 		for _, fld := range flds {
 			field := fld.Name()
-			fUsage, err := f.FieldUsage(indexPath, fld)
-			if err != nil {
-				return indexUsage, errors.Wrapf(err, "getting disk usage for index (%s)", index)
+			if field == "_keys" {
+				continue
 			}
-			fieldUsages[field] = fUsage
-			keysBytes := fieldUsages[field].Keys
-			fieldKeysTotal += keysBytes
-			fragmentsTotal += fieldUsages[field].Fragments
+			fUsage, err := f.fieldUsage(indexPath, fld)
+			if err != nil {
+				return indexUsage, 0, errors.Wrapf(err, "getting disk usage for index (%s)", index)
+			}
 
-			fieldUsage := FieldUsage{Keys: keysBytes}
+			// non-roaring field usage
+			fragmentUsage := uint64(0)
 
 			for _, shard := range fld.AvailableShards(true).Slice() {
 				if err := func() error {
@@ -634,74 +635,107 @@ func (f *TxFactory) IndexUsageDetails() (map[string]IndexUsage, error) {
 					}
 					defer finisher(nil)
 
-					// non-roaring field usage
 					fieldBytes, err := tx.GetFieldSizeBytes(index, field)
 					if err != nil {
 						return errors.Wrapf(err, "getting disk usage for non-roaring fragments (%s)", field)
 					}
-					fieldUsage.Total += fieldBytes
+					fragmentUsage += fieldBytes
 					return nil
 				}(); err != nil {
-					return indexUsage, err
+					return indexUsage, 0, err
 				}
 			}
 
-			fieldUsage.Fragments = fieldUsage.Total - keysBytes
-			fieldUsages[field] = fieldUsage
+			// add non-roaring to roaring
+			fUsage.Fragments += fragmentUsage
+			fUsage.Total += fragmentUsage
+
+			// add to running total
+			fieldKeysTotal += fUsage.Keys
+			fragmentsTotal += fUsage.Fragments
+
+			fieldUsages[field] = fUsage
+		}
+
+		// index metadata, e.g. columnAttrs
+		indexMetaBytes, err := directoryUsage(indexPath, false)
+		if err != nil {
+			return indexUsage, 0, errors.Wrapf(err, "getting disk usage for index metadata (%s)", index)
 		}
 
 		// index keys usage
-		keysBytes := uint64(0)
+		indexKeysBytes := uint64(0)
 		if idx.keys {
 			keysPath := path.Join(indexPath, translateStoreDir)
-			keysBytes, err = directoryUsage(keysPath)
+			indexKeysBytes, err = directoryUsage(keysPath, true)
 			if err != nil {
-				return indexUsage, errors.Wrapf(err, "getting disk usage for index keys (%s)", index)
+				return indexUsage, 0, errors.Wrapf(err, "getting disk usage for index keys (%s)", index)
 			}
 		}
 
 		indexUsage[index] = IndexUsage{
-			Total:          keysBytes + fieldKeysTotal + fragmentsTotal,
-			IndexKeys:      keysBytes,
+			Total:          indexMetaBytes + indexKeysBytes + fieldKeysTotal + fragmentsTotal,
+			IndexKeys:      indexKeysBytes,
 			FieldKeysTotal: fieldKeysTotal,
 			Fragments:      fragmentsTotal,
 			Fields:         fieldUsages,
 		}
 	}
 
-	return indexUsage, nil
+	// node metadata, e.g. id allocator
+	nodeMetaBytes, err := directoryUsage(holderPath, false)
+	if err != nil {
+		return indexUsage, 0, errors.Wrapf(err, "getting disk usage for node metadata")
+	}
+
+	return indexUsage, nodeMetaBytes, nil
 }
 
-func (f *TxFactory) FieldUsage(indexPath string, fld *Field) (FieldUsage, error) {
+// fieldUsage computes the sum of filesizes used by a field in
+// the filesystem tree (roaring storage), broken down by keys and fragments.
+func (f *TxFactory) fieldUsage(indexPath string, fld *Field) (FieldUsage, error) {
 	fieldUsage := FieldUsage{}
 
 	field := fld.name
-	println("  f:" + field)
 
-	// roaring field usage
-	fieldPath := path.Join(indexPath, field)
-	fieldBytes, err := directoryUsage(fieldPath)
-	if err != nil {
-		return fieldUsage, errors.Wrapf(err, "getting disk usage for field (%s)", field)
-	}
+	// row keys
 	keysBytes := int64(0)
+	var err error
 	if fld.usesKeys {
 		keysBytes, err = fileSize(fld.TranslateStorePath())
 		if err != nil {
 			return fieldUsage, errors.Wrapf(err, "getting disk usage for field keys (%s)", field)
 		}
 	}
+
+	// field metadata, e.g. rowAttrs
+	fieldPath := path.Join(indexPath, field)
+	metaBytes, err := directoryUsage(fieldPath, false) // this includes keys
+	if err != nil {
+		return fieldUsage, errors.Wrapf(err, "getting disk usage for field meta (%s)", field)
+	}
+
+	// fragment data
+	viewsPath := path.Join(fieldPath, "views")
+	fragmentBytes := uint64(0)
+	if dirExists(viewsPath) {
+		fragmentBytes, err = directoryUsage(viewsPath, true)
+		if err != nil {
+			return fieldUsage, errors.Wrapf(err, "getting disk usage for field fragments (%s)", field)
+		}
+	}
+
 	fieldUsage = FieldUsage{
-		Total:     fieldBytes,
-		Fragments: fieldBytes - uint64(keysBytes),
+		Total:     metaBytes + fragmentBytes,
+		Fragments: fragmentBytes,
 		Keys:      uint64(keysBytes),
 	}
 
 	return fieldUsage, nil
 }
 
-func directoryUsage(fname string) (uint64, error) {
-	if !DirExists(fname) {
+func directoryUsage(fname string, recursive bool) (uint64, error) {
+	if !dirExists(fname) {
 		return 0, errors.Errorf("directory does not exist (%s)", fname)
 	}
 
@@ -719,8 +753,8 @@ func directoryUsage(fname string) (uint64, error) {
 	}
 
 	for _, file := range files {
-		if file.IsDir() {
-			sz, err := directoryUsage(path.Join(fname, file.Name()))
+		if recursive && file.IsDir() {
+			sz, err := directoryUsage(path.Join(fname, file.Name()), true)
 			if err != nil {
 				return 0, err
 			}

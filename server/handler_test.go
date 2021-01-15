@@ -396,10 +396,16 @@ func TestHandler_Endpoints(t *testing.T) {
 		}
 
 		for _, nodeUsage := range nodeUsages {
-			if len(nodeUsage.Disk.Indexes) != 2 {
-				t.Fatalf("wrong length index size list: %#v", nodeUsage.Disk.Indexes)
+			numIndexes := len(nodeUsage.Disk.IndexUsage)
+			if numIndexes != 2 {
+				t.Fatalf("wrong length index usage list: expected %d, got %d", 2, numIndexes)
+			}
+			numFields := len(nodeUsage.Disk.IndexUsage["i1"].Fields)
+			if numFields != len(i1.Fields()) {
+				t.Fatalf("wrong length field usage list: expected %d, got %d", len(i1.Fields()), numFields)
 			}
 		}
+
 	})
 
 	t.Run("UI/shard-distribution", func(t *testing.T) {

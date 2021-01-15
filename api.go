@@ -816,7 +816,7 @@ func (api *API) Node() *Node {
 
 // NodeUsage represents all usage measurements for one node.
 type NodeUsage struct {
-	Disk DiskUsage `json:"bytesOnDisk"`
+	Disk DiskUsage `json:"diskUsage"`
 }
 
 // DiskUsage represents the storage space used on disk by one node.
@@ -849,11 +849,11 @@ func (api *API) Usage(ctx context.Context, remote bool) (map[string]NodeUsage, e
 
 	nodeUsages := make(map[string]NodeUsage)
 
-	indexDetails, err := api.holder.Txf().IndexUsageDetails()
+	indexDetails, nodeMetadataBytes, err := api.holder.Txf().IndexUsageDetails()
 	if err != nil {
-		return nil, errors.Wrap(err, "getting index usage")
+		return nil, errors.Wrap(err, "getting node usage")
 	}
-	var totalSize uint64
+	totalSize := nodeMetadataBytes
 	for _, s := range indexDetails {
 		totalSize += s.Total
 	}
@@ -873,7 +873,7 @@ func (api *API) Usage(ctx context.Context, remote bool) (map[string]NodeUsage, e
 	}
 	nodeUsages[api.server.nodeID] = nodeUsage
 
-	// Collect size on disk from remote nodes
+	// Collect diskUsage from remote nodes
 	if !remote {
 		nodes := api.cluster.Nodes()
 		for _, node := range nodes {

@@ -185,7 +185,7 @@ func (m *Command) Start() (err error) {
 		return errors.Wrap(err, "opening server")
 	}
 
-	m.logger.Printf("listening! as %s\n", m.listenURI)
+	m.logger.Printf("listening as %s\n", m.listenURI)
 	go func() {
 		if err := m.grpcServer.Serve(); err != nil {
 			m.logger.Printf("grpc server error: %v", err)
