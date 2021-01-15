@@ -252,27 +252,38 @@ func pgWriteExtractedTable(w pg.QueryResultWriter, tbl pilosa.ExtractedTable) er
 	return nil
 }
 
-func pgWriteGroupCount(w pg.QueryResultWriter, counts []pilosa.GroupCount) error {
-	if len(counts) == 0 {
+func pgWriteGroupCount(w pg.QueryResultWriter, counts *pilosa.GroupCounts) error {
+	groups := counts.Groups()
+	if len(groups) == 0 {
 		// Not enough information is available to construct the header.
 		// This is a significant flaw in the data type.
 		return nil
 	}
+	expectedLen := len(groups[0].Group) + 1
 
-	headers := make([]pg.ColumnInfo, len(counts[0].Group)+2)
-	for i, g := range counts[0].Group {
+	agg := counts.AggregateColumn()
+	if agg != "" {
+		expectedLen++
+	}
+
+	headers := make([]pg.ColumnInfo, expectedLen)
+	for i, g := range groups[0].Group {
 		headers[i] = pg.ColumnInfo{
 			Name: g.Field,
 			Type: pg.TypeCharoid,
 		}
 	}
-	headers[len(headers)-2] = pg.ColumnInfo{
+	next := len(groups[0].Group)
+	headers[next] = pg.ColumnInfo{
 		Name: "count",
 		Type: pg.TypeCharoid,
 	}
-	headers[len(headers)-1] = pg.ColumnInfo{
-		Name: "sum",
-		Type: pg.TypeCharoid,
+	if agg != "" {
+		next++
+		headers[next] = pg.ColumnInfo{
+			Name: agg,
+			Type: pg.TypeCharoid,
+		}
 	}
 	err := w.WriteHeader(headers...)
 	if err != nil {
@@ -280,8 +291,10 @@ func pgWriteGroupCount(w pg.QueryResultWriter, counts []pilosa.GroupCount) error
 	}
 
 	vals := make([]string, len(headers))
-	for _, gc := range counts {
-		for j, g := range gc.Group {
+	for _, gc := range groups {
+		var j int
+		var g pilosa.FieldRow
+		for j, g = range gc.Group {
 			var v string
 			switch {
 			case g.Value != nil:
@@ -293,8 +306,12 @@ func pgWriteGroupCount(w pg.QueryResultWriter, counts []pilosa.GroupCount) error
 			}
 			vals[j] = v
 		}
-		vals[len(vals)-2] = strconv.FormatUint(gc.Count, 10)
-		vals[len(vals)-1] = strconv.FormatInt(gc.Sum, 10)
+		j++
+		vals[j] = strconv.FormatUint(gc.Count, 10)
+		if agg != "" {
+			j++
+			vals[j] = strconv.FormatInt(gc.Agg, 10)
+		}
 
 		err := w.WriteRowText(vals...)
 		if err != nil {
@@ -370,6 +387,9 @@ func pgWriteResult(w pg.QueryResultWriter, result interface{}) error {
 	case pilosa.ExtractedTable:
 		return pgWriteExtractedTable(w, result)
 	case []pilosa.GroupCount:
+		gc := pilosa.NewGroupCounts("", result...)
+		return pgWriteGroupCount(w, gc)
+	case *pilosa.GroupCounts:
 		return pgWriteGroupCount(w, result)
 	case pb.ToRowser: // we should avoid protobuf where we can...
 		return pgWriteRowser(w, result)

@@ -138,7 +138,7 @@ func TestGRPC(t *testing.T) {
 			},
 			// []GroupCount (uint64)
 			{
-				[]pilosa.GroupCount{
+				pilosa.NewGroupCounts("", []pilosa.GroupCount{
 					pilosa.GroupCount{
 						Group: []pilosa.FieldRow{
 							{Field: "a", RowID: 10},
@@ -160,22 +160,21 @@ func TestGRPC(t *testing.T) {
 						},
 						Count: 789,
 					},
-				},
+				}...),
 				[]expHeader{
 					{"a", "uint64"},
 					{"b", "uint64"},
 					{"count", "uint64"},
-					{"sum", "int64"},
 				},
 				[][]expColumn{
-					{uint64(10), uint64(11), uint64(123), int64(0)},
-					{uint64(10), uint64(12), uint64(456), int64(0)},
-					{int64(va), int64(vb), uint64(789), int64(0)},
+					{uint64(10), uint64(11), uint64(123)},
+					{uint64(10), uint64(12), uint64(456)},
+					{int64(va), int64(vb), uint64(789)},
 				},
 			},
-			// []GroupCount (string)
+			// []GroupCount (string) + sum
 			{
-				[]pilosa.GroupCount{
+				pilosa.NewGroupCounts("sum", []pilosa.GroupCount{
 					pilosa.GroupCount{
 						Group: []pilosa.FieldRow{
 							{Field: "a", RowKey: "ten"},
@@ -190,7 +189,7 @@ func TestGRPC(t *testing.T) {
 						},
 						Count: 456,
 					},
-				},
+				}...),
 				[]expHeader{
 					{"a", "string"},
 					{"b", "string"},
@@ -292,7 +291,12 @@ func TestGRPC(t *testing.T) {
 			}
 
 			// Ensure headers match.
-			for i, header := range table.GetHeaders() {
+			headers := table.GetHeaders()
+			if len(headers) < len(test.expHeaders) {
+				t.Fatalf("test %d expected %d headers, got %d, first missing header %q",
+					ti, len(test.expHeaders), len(headers), test.expHeaders[len(headers)].name)
+			}
+			for i, header := range headers {
 				if header.Name != test.expHeaders[i].name {
 					t.Fatalf("test %d expected header name: %s, but got: %s", ti, test.expHeaders[i].name, header.Name)
 				}
@@ -303,7 +307,12 @@ func TestGRPC(t *testing.T) {
 
 			// Ensure column data matches.
 			for i, row := range table.GetRows() {
-				for j, column := range row.GetColumns() {
+				columns := row.GetColumns()
+				if len(columns) != len(test.expColumns[i]) {
+					t.Fatalf("test %d expected %d columns, got %d in row %d",
+						ti, len(test.expColumns[i]), len(columns), i)
+				}
+				for j, column := range columns {
 					switch v := test.expColumns[i][j].(type) {
 					case string:
 						val := column.GetStringVal()

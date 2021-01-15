@@ -89,11 +89,8 @@ func (s *SelectHandler) execMappingResult(ctx context.Context, mr *MappingResult
 	switch res := res.(type) {
 	case pproto.ToRowser:
 		result = res
-	// TODO: replace []pilosa.GroupCount with *pilosa.GroupCounts, handle aggregate
 	case []pilosa.GroupCount:
-		gc := pilosa.NewGroupCounts()
-		gc.Groups = res
-		result = gc
+		result = pilosa.NewGroupCounts("", res...)
 	case uint64:
 		result = pproto.ConstRowser{
 			{
