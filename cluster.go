@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/proto"
+	"github.com/pilosa/pilosa/v2/disco"
 	"github.com/pilosa/pilosa/v2/internal"
 	"github.com/pilosa/pilosa/v2/logger"
 	pnet "github.com/pilosa/pilosa/v2/net"
@@ -80,7 +81,7 @@ type cluster struct { // nolint: maligned
 	nodes []*topology.Node
 
 	// Hashing algorithm used to assign partitions to nodes.
-	Hasher Hasher
+	Hasher topology.Hasher
 
 	// The number of partitions in the cluster.
 	partitionN int
@@ -97,6 +98,12 @@ type cluster struct { // nolint: maligned
 	// Data directory path.
 	Path     string
 	Topology *Topology
+
+	// Distributed Consensus
+	disCo   disco.DisCo
+	stator  disco.Stator
+	resizer disco.Resizer
+	sharder disco.Sharder
 
 	// Required for cluster Resize.
 	Static      bool // Static is primarily used for testing in a non-gossip environment.
@@ -136,7 +143,7 @@ type cluster struct { // nolint: maligned
 // newCluster returns a new instance of Cluster with defaults.
 func newCluster() *cluster {
 	c := &cluster{
-		Hasher:     &Jmphasher{},
+		Hasher:     &topology.Jmphasher{},
 		partitionN: topology.DefaultPartitionN,
 		ReplicaN:   1,
 
@@ -183,6 +190,16 @@ func (c *cluster) abortAntiEntropy() {
 	if c.abortAntiEntropyCh != nil {
 		c.abortAntiEntropyCh <- struct{}{}
 	}
+}
+
+// node gets the Node for the ID associated with this instance of cluster.
+func (c *cluster) node() *topology.Node {
+	for _, n := range c.Nodes() {
+		if n.ID == c.disCo.ID() {
+			return n
+		}
+	}
+	return nil
 }
 
 func (c *cluster) coordinatorNode() *topology.Node {
@@ -461,7 +478,9 @@ func (c *cluster) receiveNodeState(nodeID string, state string) error {
 		c.Topology.nodeStates[nodeID] = state
 		for i, n := range c.nodes {
 			if n.ID == nodeID {
+				c.nodes[i].Mu.Lock()
 				c.nodes[i].State = state
+				c.nodes[i].Mu.Unlock()
 			}
 		}
 	}
@@ -549,10 +568,15 @@ func (c *cluster) nodePositionByID(nodeID string) int {
 }
 
 // addNodeBasicSorted adds a node to the cluster, sorted by id. Returns a
-// pointer to the node and true if the node was added. unprotected.
+// pointer to the node and true if the node was added or updated. unprotected.
 func (c *cluster) addNodeBasicSorted(node *topology.Node) bool {
 	n := c.unprotectedNodeByID(node.ID)
+
 	if n != nil {
+		// prevent race on node.URI read against http/client.go:1929
+		n.Mu.Lock()
+		defer n.Mu.Unlock()
+
 		if n.State != node.State || n.IsCoordinator != node.IsCoordinator || n.URI != node.URI {
 			n.State = node.State
 			n.IsCoordinator = node.IsCoordinator
@@ -1095,32 +1119,6 @@ func (c *cluster) containsShards(index string, availableShards *roaring.Bitmap, 
 		return nil
 	})
 	return shards
-}
-
-// Hasher represents an interface to hash integers into buckets.
-type Hasher interface {
-	// Hashes the key into a number between [0,N).
-	Hash(key uint64, n int) int
-	Name() string
-}
-
-// Jmphasher represents an implementation of jmphash. Implements Hasher.
-type Jmphasher struct{}
-
-// Hash returns the integer hash for the given key.
-func (h *Jmphasher) Hash(key uint64, n int) int {
-	b, j := int64(-1), int64(0)
-	for j < int64(n) {
-		b = j
-		key = key*uint64(2862933555777941757) + 1
-		j = int64(float64(b+1) * (float64(int64(1)<<31) / float64((key>>33)+1)))
-	}
-	return int(b)
-}
-
-// Name returns the name of this hash.
-func (h *Jmphasher) Name() string {
-	return "jump-hash"
 }
 
 func (c *cluster) setup() error {
@@ -1846,7 +1844,7 @@ type Topology struct {
 	// from cluster for standalone use and comprehension:
 
 	// Hashing algorithm used to assign partitions to nodes.
-	Hasher Hasher
+	Hasher topology.Hasher
 	// The number of partitions in the cluster.
 	PartitionN int
 	// The number of replicas a partition has.
@@ -1872,7 +1870,7 @@ type Topology struct {
 // For the cluster size N, the topology gives preference to
 // len(t.nodeIDs) before falling back on len(c.nodes).
 //
-func NewTopology(hasher Hasher, partitionN int, replicaN int, c *cluster) *Topology {
+func NewTopology(hasher topology.Hasher, partitionN int, replicaN int, c *cluster) *Topology {
 	return &Topology{
 		Hasher:     hasher,
 		PartitionN: partitionN,
@@ -2118,7 +2116,12 @@ func (c *cluster) ReceiveEvent(e *NodeEvent) (err error) {
 	}
 	switch e.Event {
 	case NodeJoin:
+		e.Node.Mu.Lock()
+		c.Node.Mu.Lock()
 		c.logger.Debugf("nodeJoin of %s on %s", e.Node.URI, c.Node.URI)
+		c.Node.Mu.Unlock()
+		e.Node.Mu.Unlock()
+
 		// Ignore the event if this is not the coordinator.
 		if !c.isCoordinator() {
 			return nil
@@ -3079,7 +3082,7 @@ func encodeTopology(topology *Topology) *internal.Topology {
 }
 
 // the cluster c is optional but give it if you have it.
-func DecodeTopology(topology *internal.Topology, hasher Hasher, partitionN, replicaN int, c *cluster) (*Topology, error) {
+func DecodeTopology(topology *internal.Topology, hasher topology.Hasher, partitionN, replicaN int, c *cluster) (*Topology, error) {
 	if topology == nil {
 		return nil, nil
 	}

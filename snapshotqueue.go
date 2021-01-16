@@ -445,7 +445,7 @@ func (s *prioritySnapshotQueueScanner) ProcessFragment(f *fragment) error {
 	s.hits++
 	select {
 	case s.queue <- snapshotRequest{frag: f, when: time.Now()}:
-		s.sq.logger.Debugf("found fragment needing snapshot: %s\n", f.path)
+		s.sq.logger.Debugf("found fragment needing snapshot: %s\n", f.path())
 	case <-s.ctx.Done():
 		return io.EOF
 	}

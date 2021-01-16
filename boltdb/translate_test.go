@@ -654,7 +654,7 @@ func TestCryptoHashPerKey(t *testing.T) {
 		}
 
 		// done with setup
-		sum, err := s.ComputeTranslatorSummaryCols(0, pilosa.NewTopology(&pilosa.Jmphasher{}, topology.DefaultPartitionN, 1, nil))
+		sum, err := s.ComputeTranslatorSummaryCols(0, pilosa.NewTopology(&topology.Jmphasher{}, topology.DefaultPartitionN, 1, nil))
 		if err != nil {
 			panic(err)
 		}

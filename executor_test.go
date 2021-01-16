@@ -7110,6 +7110,15 @@ zebra,1,1000
 pangolin,1,100
 `,
 		},
+		{
+			query: "GroupBy(Rows(field=affinity), aggregate=Count(Distinct(field=zip_code)))",
+			csvVerifier: `-10,1,1
+-5,1,1
+0,1,1
+5,1,1
+10,1,1
+`,
+		},
 	}
 
 	for i, tst := range tests {
@@ -7133,6 +7142,88 @@ pangolin,1,100
 			// those results to CSV to run through CSV verifier
 		})
 	}
+}
+
+// TestVariousSingleShardQueries tests queries on a dataset which
+// consists of an unkeyed index, and data only in the first
+// shard. Turns out that there are some interesting failure modes
+// which only crop up with one shard. An example is that the mapReduce
+// logic does its first reduce call with a nil interface{} value, and
+// an actual result value. If this is the only reduce that gets done
+// (because there's only one shard), the result might never go through
+// normal merge/reduction logic and might e.g. be nil instead of an
+// empty struct resulting in an NPE later on.
+func TestVariousSingleShardQueries(t *testing.T) {
+	for _, clusterSize := range []int{1, 4} {
+		t.Run(fmt.Sprintf("%d-node", clusterSize), func(t *testing.T) {
+			variousSingleShardQueries(t, clusterSize)
+		})
+	}
+}
+
+func variousSingleShardQueries(t *testing.T, clusterSize int) {
+	c := test.MustRunCluster(t, clusterSize)
+	defer c.Close()
+
+	// Create and populate "likenums" similar to "likes", but without keys on the field.
+	c.CreateField(t, "events", pilosa.IndexOptions{Keys: false, TrackExistence: true}, "lostcount", pilosa.OptFieldTypeInt(0, 1000000000))
+	c.ImportIntID(t, "events", "lostcount", []test.IntID{
+		{Val: 0, ID: 1},
+		{Val: 1, ID: 2},
+		{Val: 0, ID: 3},
+		{Val: 2, ID: 4},
+		{Val: 2, ID: 5},
+		{Val: 0, ID: 6},
+		{Val: 3, ID: 7},
+		{Val: 3, ID: 8},
+		{Val: 3, ID: 9},
+		{Val: 0, ID: 10},
+	})
+
+	c.CreateField(t, "events", pilosa.IndexOptions{Keys: false, TrackExistence: true}, "jittermax", pilosa.OptFieldTypeInt(0, 1000000000))
+	c.ImportIntID(t, "events", "jittermax", []test.IntID{
+		{Val: 17, ID: 1},
+		{Val: 3, ID: 2},
+		{Val: 42, ID: 3},
+		{Val: 9, ID: 4},
+		{Val: 17, ID: 5},
+		{Val: 3, ID: 6},
+		{Val: 42, ID: 7},
+		{Val: 9, ID: 8},
+		{Val: 17, ID: 9},
+		{Val: 3, ID: 10},
+	})
+
+	tests := []struct {
+		query       string
+		csvVerifier string
+	}{
+		{
+			query: "GroupBy(Rows(lostcount), aggregate=Count(Distinct(field=jittermax)))",
+			csvVerifier: `0,4,3
+1,1,1
+2,2,2
+3,3,3
+`,
+		},
+	}
+
+	for i, tst := range tests {
+		t.Run(fmt.Sprintf("%d-%s", i, tst.query), func(t *testing.T) {
+			tr := c.QueryGRPC(t, "events", tst.query)
+			csvString, err := tableResponseToCSVString(tr)
+			if err != nil {
+				t.Fatal(err)
+			}
+			// verify everything after header
+			got := csvString[strings.Index(csvString, "\n")+1:]
+			if got != tst.csvVerifier {
+				t.Errorf("expected:\n%s\ngot:\n%s", tst.csvVerifier, got)
+			}
+
+		})
+	}
+
 }
 
 // tableResponseToCSV converts a generic TableResponse to a CSV format

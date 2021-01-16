@@ -101,18 +101,18 @@ func (cfg *FsckConfig) DefineFlags(fs *flag.FlagSet) {
   -fix
     	(warning: alters the backed-up node images on disk) copy primary data to replicas to create a consistent cluster.
 
-  -replicas R 
+  -replicas R
         (required) R is a positive integer, giving the replicaN or replicator factor for the cluster. This is
-        the number of replicas maintained in the cluster. Must be the same as the 
+        the number of replicas maintained in the cluster. Must be the same as the
         [cluster] 'replicas = R' entry shared across all the pilosa.conf files on each node.
 
   -index index_name
         (optional) restrict to just this index. Otherwise we default to all indexes.
 
   -readers PR
-        how many parallel readers to use to scan at once. PR==0 means do everything 
-        possible in parallel. PR==1 means serialize everything through a single reader. 
-        Adjust PR to control memory consumption if needed. As a practical limit, setting 
+        how many parallel readers to use to scan at once. PR==0 means do everything
+        possible in parallel. PR==1 means serialize everything through a single reader.
+        Adjust PR to control memory consumption if needed. As a practical limit, setting
         PR > 10000 will have no effect. (default is 10).
 
   -q
@@ -120,31 +120,31 @@ func (cfg *FsckConfig) DefineFlags(fs *flag.FlagSet) {
 
 `)
 		fmt.Fprintf(os.Stderr, `
-Welcome to pilosa-fsck. This is a scan and repair 
-tool that is modeled after the classic unix file 
-system utility fsck. 
+Welcome to pilosa-fsck. This is a scan and repair
+tool that is modeled after the classic unix file
+system utility fsck.
 
 WARNING: DO NOT RUN ON A LIVE SYSTEM.
 
 The most important point to remember is that analysis
 and repair must be done *offline*.
 
-Just as fsck must be run on an unmounted disk, 
-pilosa-fsck must be run on a backup. It must 
+Just as fsck must be run on an unmounted disk,
+pilosa-fsck must be run on a backup. It must
 not be run on the directories where a live Pilosa system
 is serving queries. Instead, take a backup first.
 A backup is a set of N Pilosa data directories that have been
-copied from your live system. They must all 
+copied from your live system. They must all
 be visible and mounted on one filesystem together.
 
 pilosa-fsck can be run in scan-mode (without -fix),
 or in repair-mode with -fix. The console output
-supplies a log documenting the analysis 
+supplies a log documenting the analysis
 and showing what data changes would have been made.
 
 REQUIRED COMMAND LINE ARGUMENTS
 
-The paths to all the top-level Pilosa 
+The paths to all the top-level Pilosa
 data directories in a cluster must be given on the command
 line. The -replicas R flag is also always required. It
 must be correct for your cluser. Here R is the same as
@@ -153,17 +153,17 @@ pilosa.conf.
 
 Example:
 
-Suppose you are ready to run pilosa-fsck: 
-you have taken a backup of your four node Pilosa 
-cluster and stored it all on one filesystem with 
+Suppose you are ready to run pilosa-fsck:
+you have taken a backup of your four node Pilosa
+cluster and stored it all on one filesystem with
 all nodes visible and uncompressed. This
-is a pre-requisite to running pilosa-fsck. 
+is a pre-requisite to running pilosa-fsck.
 Let's suppose we have replication R = 3 set.
-In this example, have stored our backed-up directories in 
+In this example, have stored our backed-up directories in
 
 /backup/molecula
 
-and the four node backups are in 
+and the four node backups are in
 subdirectories node1/ node2/ node3/ node4/ under this:
 
 /backup/molecula/node1/
@@ -188,7 +188,7 @@ subdirectories node1/ node2/ node3/ node4/ under this:
 
 NOTE: your .pilosa directories need not be named .pilosa. They can
 be something else, such as when the -d flag to pilosa server was used.
-The .id file, the .topology file, and the index directories must be 
+The .id file, the .topology file, and the index directories must be
 found directly underneath.
 
 Then a typical invocation to scan a cluster backup for issues:
@@ -200,7 +200,7 @@ A typical invocation to repair the replication in the same backup:
 
 $ pilosa-fsck -replicas 3 -fix  node1/.pilosa  node2/.pilosa  node3/.pilosa  node4/.pilosa &> log
 
-In both cases, the .id and .topology files must 
+In both cases, the .id and .topology files must
 be present in the backups.
 
 Without -fix, no modifications will be made to the backups. Only
@@ -209,7 +209,7 @@ always run with -fix to repair only if needed.
 
 A zero error code will be returned to the shell if no repairs were needed.
 
-A zero error code will be also be returned to the shell if 
+A zero error code will be also be returned to the shell if
 repairs were needed and they were accomplished under -fix.
 
 A non-zero error code indicates that repairs were needed but
@@ -600,7 +600,7 @@ func (cfg *FsckConfig) readOneDir(dir string) (idx2frag map[string]*pilosa.Index
 		fmt.Printf("# opening dir '%v'... this may take a few minutes...\n\n", dir)
 	}
 
-	jmphasher := &pilosa.Jmphasher{}
+	jmphasher := &topology.Jmphasher{}
 	partitionN := topology.DefaultPartitionN
 	replicaN := cfg.ReplicaN
 	topo, err := loadTopology(dir, jmphasher, partitionN, replicaN)
@@ -708,7 +708,7 @@ func (cfg *FsckConfig) DoingIndex(index string) bool {
 }
 
 // from cluster.go:1924
-func loadTopology(holderDir string, hasher pilosa.Hasher, partitionN, replicaN int) (*pilosa.Topology, error) {
+func loadTopology(holderDir string, hasher topology.Hasher, partitionN, replicaN int) (*pilosa.Topology, error) {
 
 	buf, err := ioutil.ReadFile(filepath.Join(holderDir, ".topology"))
 	if err != nil {
@@ -921,9 +921,9 @@ func (cfg *FsckConfig) analyzeThisIndex(
 
 	report = fmt.Sprintf(`
 # ========================================================
-#   pilosa-fsck final report 
+#   pilosa-fsck final report
 #
-#     run with    -fix: %v 
+#     run with    -fix: %v
 #
 # index examined: '%v'
 #

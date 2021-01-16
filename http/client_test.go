@@ -469,17 +469,15 @@ func TestClient_ImportColumnAttrs(t *testing.T) {
 
 // Ensure client can bulk import data.
 func TestClient_ImportRoaring(t *testing.T) {
-	cluster := test.MustNewCluster(t, 2)
-	for _, c := range cluster.Nodes {
-		c.Config.Cluster.ReplicaN = 2
-	}
-	err := cluster.Start()
-	if err != nil {
-		t.Fatalf("starting cluster: %v", err)
-	}
+	cluster := test.MustRunCluster(t, 2,
+		[]server.CommandOption{
+			server.OptCommandServerOptions(pilosa.OptServerReplicaN(2))},
+		[]server.CommandOption{
+			server.OptCommandServerOptions(pilosa.OptServerReplicaN(2))},
+	)
 	defer cluster.Close()
 
-	_, err = cluster.GetNode(0).API.CreateIndex(context.Background(), "i", pilosa.IndexOptions{})
+	_, err := cluster.GetNode(0).API.CreateIndex(context.Background(), "i", pilosa.IndexOptions{})
 	if err != nil {
 		t.Fatalf("creating index: %v", err)
 	}

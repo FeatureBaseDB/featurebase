@@ -16,6 +16,7 @@ package pgtest
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"testing"
 
@@ -64,7 +65,19 @@ func ServeTLS(addr string, server *pg.Server) (net.Addr, ShutdownFunc, error) {
 		return nil, nil, errors.Wrap(err, "server TLS setup failed")
 	}
 
-	return ServeTCP(addr, server)
+	var tries int = 5
+	var netAddr net.Addr
+	var shutdown ShutdownFunc
+
+	for i := 0; i < tries; i++ {
+		if i > 0 {
+			fmt.Printf("--- try serving TLS again: %d\n", i)
+		}
+		if netAddr, shutdown, err = ServeTCP(addr, server); err == nil {
+			break
+		}
+	}
+	return netAddr, shutdown, err
 }
 
 // ConnectFunc is a function to connect to a server.

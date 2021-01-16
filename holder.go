@@ -52,6 +52,9 @@ const (
 
 	// existenceFieldName is the name of the internal field used to store existence values.
 	existenceFieldName = "_exists"
+
+	// DefaultDiscoDir is the default data directory used by the disco implementation.
+	DefaultDiscoDir = ".disco"
 )
 
 func init() {
@@ -820,6 +823,11 @@ func (h *Holder) HasData() (bool, error) {
 		}
 		// Skip embedded db files too.
 		if h.txf.IsTxDatabasePath(fi.Name()) {
+			continue
+		}
+
+		// Skip DisCo data directory.
+		if fi.Name() == DefaultDiscoDir {
 			continue
 		}
 

@@ -16,6 +16,7 @@ package pilosa
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -29,6 +30,7 @@ import (
 
 	uuid "github.com/satori/go.uuid"
 
+	"github.com/pilosa/pilosa/v2/disco"
 	"github.com/pilosa/pilosa/v2/logger"
 	pnet "github.com/pilosa/pilosa/v2/net"
 	rbfcfg "github.com/pilosa/pilosa/v2/rbf/cfg"
@@ -62,6 +64,15 @@ type Server struct { // nolint: maligned
 	hosts            []string
 	clusterDisabled  bool
 	serializer       Serializer
+
+	// Distributed Consensus
+	disCo     disco.DisCo
+	stator    disco.Stator
+	metadator disco.Metadator
+	resizer   disco.Resizer
+	noder     topology.Noder
+	sharder   disco.Sharder
+	schemator disco.Schemator
 
 	// External
 	systemInfo    SystemInfo
@@ -314,7 +325,7 @@ func OptServerNodeID(nodeID string) ServerOption {
 // OptServerClusterHasher is a functional option on Server
 // used to specify the consistent hash algorithm for data
 // location within the cluster.
-func OptServerClusterHasher(h Hasher) ServerOption {
+func OptServerClusterHasher(h topology.Hasher) ServerOption {
 	return func(s *Server) error {
 		s.cluster.Hasher = h
 		return nil
@@ -387,6 +398,28 @@ func OptServerQueryHistoryLength(length int) ServerOption {
 	}
 }
 
+// OptServerDisCo is a functional option on Server
+// used to set the Distributed Consensus implementation.
+func OptServerDisCo(disCo disco.DisCo,
+	stator disco.Stator,
+	metadator disco.Metadator,
+	resizer disco.Resizer,
+	noder topology.Noder,
+	sharder disco.Sharder,
+	schemator disco.Schemator) ServerOption {
+
+	return func(s *Server) error {
+		s.disCo = disCo
+		s.stator = stator
+		s.metadator = metadator
+		s.resizer = resizer
+		s.noder = noder
+		s.sharder = sharder
+		s.schemator = schemator
+		return nil
+	}
+}
+
 // NewServer returns a new instance of Server.
 func NewServer(opts ...ServerOption) (*Server, error) {
 	cluster := newCluster()
@@ -403,6 +436,13 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		antiEntropyInterval: 0,
 		metricInterval:      0,
 		diagnosticInterval:  0,
+
+		disCo:     disco.NopDisCo,
+		stator:    disco.NopStator,
+		metadator: disco.NopMetadator,
+		resizer:   disco.NopResizer,
+		noder:     topology.NewLocalNoder(nil),
+		sharder:   disco.NopSharder,
 
 		confirmDownRetries: defaultConfirmDownRetries,
 		confirmDownSleep:   defaultConfirmDownSleep,
@@ -453,6 +493,11 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	s.cluster.Path = path
 	s.cluster.logger = s.logger
 	s.cluster.holder = s.holder
+	s.cluster.disCo = s.disCo
+	s.cluster.stator = s.stator
+	s.cluster.resizer = s.resizer
+	//s.cluster.noder = s.noder
+	s.cluster.sharder = s.sharder
 
 	// Get or create NodeID.
 	s.nodeID = s.loadNodeID()
@@ -558,6 +603,37 @@ func (s *Server) Open() error {
 	s.wg.Add(1)
 	go func() { defer s.wg.Done(); s.monitorResetTranslationSync() }()
 
+	// Start DisCo.
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+	initState, err := s.disCo.Start(ctx)
+	if err != nil {
+		return errors.Wrap(err, "starting DisCo")
+	}
+	fmt.Println("--- disco: open:", s.disCo.ID())
+	_ = initState
+
+	// Set node ID.
+	// TODO: doesn't work yet, because we depend upon using the disk .id file, tests like
+	// TestHolderSyncer_BlockIteratorLimits for instance.
+	// s.nodeID = s.disCo.ID()
+
+	node := s.cluster.node()
+	// TODO disco
+	if node != nil {
+		node.URI = s.uri
+		node.GRPCURI = s.grpcURI
+
+		// Set metadata for this node.
+		data, err := json.Marshal(node)
+		if err != nil {
+			return errors.Wrap(err, "marshaling json metadata")
+		}
+		if err := s.metadator.SetMetadata(context.Background(), data); err != nil {
+			return errors.Wrap(err, "setting metadata")
+		}
+	}
+
 	// Open Cluster management.
 	if err := s.cluster.waitForStarted(); err != nil {
 		return errors.Wrap(err, "opening Cluster")
@@ -581,6 +657,18 @@ func (s *Server) Open() error {
 	// buffered channel.
 	s.cluster.listenForJoins()
 
+	// if we joined existing cluster then broadcast "resize on add" message
+	// TODO
+	// if initState == disco.InitialClusterStateExisting {
+	// 	if err := s.cluster.addNode(s.nodeID); err != nil {
+	// 	    return errors.Wrap(err, "adding a node to the existing cluster")
+	// 	}
+	// }
+
+	if err := s.stator.Started(context.Background()); err != nil {
+		return errors.Wrap(err, "setting nodeState")
+	}
+
 	s.wg.Add(3)
 	go func() { defer s.wg.Done(); s.monitorAntiEntropy() }()
 	go func() { defer s.wg.Done(); s.monitorRuntime() }()
@@ -591,19 +679,25 @@ func (s *Server) Open() error {
 
 // Close closes the server and waits for it to shutdown.
 func (s *Server) Close() error {
+	fmt.Println("--- disco: server close:", s.disCo.ID())
 	errE := s.executor.Close()
 
 	// Notify goroutines to stop.
 	close(s.closing)
 	s.wg.Wait()
-
-	var errh error
+	var errh, errd error
 	var errhs error
 	var errc error
+
 	if s.cluster != nil {
 		errc = s.cluster.close()
 	}
 	errhs = s.syncer.stopTranslationSync()
+	if s.disCo != nil {
+		fmt.Println("--- disco: try close:", s.disCo.ID())
+		errd = s.disCo.Close()
+		fmt.Println("--- disco: closed", s.disCo.ID(), errd)
+	}
 	if s.holder != nil {
 		errh = s.holder.Close()
 	}
@@ -612,6 +706,7 @@ func (s *Server) Close() error {
 		s.snapshotQueue.Stop()
 		s.snapshotQueue = nil
 	}
+
 	// prefer to return holder error over cluster
 	// error. This order is somewhat arbitrary. It would be better if we had
 	// some way to combine all the errors, but probably not important enough to
@@ -625,8 +720,10 @@ func (s *Server) Close() error {
 	if errc != nil {
 		return errors.Wrap(errc, "closing cluster")
 	}
+	if errd != nil {
+		return errors.Wrap(errd, "closing disco")
+	}
 	return errors.Wrap(errE, "closing executor")
-
 }
 
 // loadNodeID gets NodeID from disk, or creates a new value.
@@ -888,13 +985,19 @@ func (s *Server) SendSync(m Message) error {
 
 	for _, node := range s.cluster.Nodes() {
 		node := node
+
+		// prevent race against cluster.addNodeBasicSorted() in cluster.go
+		node.Mu.Lock()
+		uri := node.URI // URI is a struct value
+		node.Mu.Unlock()
+
 		// Don't forward the message to ourselves.
-		if s.uri == node.URI {
+		if s.uri == uri {
 			continue
 		}
 
 		eg.Go(func() error {
-			return s.defaultClient.SendMessage(context.Background(), &node.URI, msg)
+			return s.defaultClient.SendMessage(context.Background(), &uri, msg)
 		})
 	}
 
@@ -907,19 +1010,25 @@ func (s *Server) SendAsync(m Message) error {
 }
 
 // SendTo represents an implementation of Broadcaster.
-func (s *Server) SendTo(to *topology.Node, m Message) error {
+func (s *Server) SendTo(node *topology.Node, m Message) error {
 	msg, err := s.serializer.Marshal(m)
 	if err != nil {
 		return fmt.Errorf("marshaling message: %v", err)
 	}
 	msg = append([]byte{getMessageType(m)}, msg...)
-	return s.defaultClient.SendMessage(context.Background(), &to.URI, msg)
+
+	// prevent race against cluster.addNodeBasicSorted() in cluster.go
+	node.Mu.Lock()
+	uri := node.URI // URI is a struct value
+	node.Mu.Unlock()
+
+	return s.defaultClient.SendMessage(context.Background(), &uri, msg)
 }
 
 // node returns the pilosa.node object. It is used by membership protocols to
 // get this node's name(ID), location(URI), and coordinator status.
-func (s *Server) node() topology.Node {
-	return *s.cluster.Node
+func (s *Server) node() *topology.Node {
+	return s.cluster.Node.Clone()
 }
 
 // handleRemoteStatus receives incoming NodeStatus from remote nodes.

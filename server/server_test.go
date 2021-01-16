@@ -37,6 +37,7 @@ import (
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/server"
 	"github.com/pilosa/pilosa/v2/test"
+	"github.com/pilosa/pilosa/v2/test/port"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -53,8 +54,7 @@ func TestMain_Set_Quick(t *testing.T) {
 		t.Skip("short")
 	}
 
-	for i := 0; i < 100; i++ {
-		//for i := 0; i < 10; i++ {
+	for i := 0; i < 10; i++ {
 		t.Run(fmt.Sprint(i), func(t *testing.T) {
 			t.Parallel()
 
@@ -62,6 +62,7 @@ func TestMain_Set_Quick(t *testing.T) {
 			cmds := GenerateSetCommands(1000, rand)
 
 			m := test.RunCommand(t)
+
 			defer m.Close()
 
 			// Create client.
@@ -357,6 +358,11 @@ func TestConcurrentFieldCreation(t *testing.T) {
 	cluster := test.MustRunCluster(t, 3)
 	defer cluster.Close()
 
+	err := cluster.AwaitState(pilosa.ClusterStateNormal, 100*time.Millisecond)
+	if err != nil {
+		t.Fatalf("starting cluster: %v", err)
+	}
+
 	api0 := cluster.GetNode(0).API
 	if _, err := api0.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil {
 		t.Fatalf("creating index: %v", err)
@@ -371,7 +377,7 @@ func TestConcurrentFieldCreation(t *testing.T) {
 			return nil
 		})
 	}
-	err := eg.Wait()
+	err = eg.Wait()
 	if err != nil {
 		t.Fatalf("creating concurrent field: %v", err)
 	}
@@ -796,6 +802,7 @@ func TestRemoveNodeAfterItDies(t *testing.T) {
 }
 
 func TestRemoveConcurrentIndexCreation(t *testing.T) {
+	t.Skip("TestRemoveConcurrentIndexCreation won't be supported under etcd. Under RESIZING, creating/updating schema not allowed now.")
 	cluster := test.MustNewCluster(t, 3)
 	for _, c := range cluster.Nodes {
 		c.Config.Cluster.ReplicaN = 2
@@ -805,6 +812,7 @@ func TestRemoveConcurrentIndexCreation(t *testing.T) {
 		t.Fatalf("starting cluster: %v", err)
 	}
 	defer cluster.Close()
+
 	err = cluster.AwaitState(pilosa.ClusterStateNormal, 100*time.Millisecond)
 	if err != nil {
 		t.Fatalf("starting cluster: %v", err)
@@ -947,9 +955,15 @@ func TestMain_ImportTimestampNoStandardView(t *testing.T) {
 }
 
 func TestClusterQueriesAfterRestart(t *testing.T) {
+	t.Skip("won't work on etcd since the node goes down and up but etcd old nodes won't know how to contact the restarted one.")
 	cluster := test.MustRunCluster(t, 3)
 	defer cluster.Close()
 	cmd1 := cluster.GetNode(1)
+
+	err := cluster.AwaitState(pilosa.ClusterStateNormal, 100*time.Millisecond)
+	if err != nil {
+		t.Fatalf("starting cluster: %v", err)
+	}
 
 	for _, com := range cluster.Nodes {
 		nodes := com.API.Hosts(context.Background())
@@ -968,7 +982,7 @@ func TestClusterQueriesAfterRestart(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		query.WriteString(fmt.Sprintf("Set(%d, testfield=0)", i*pilosa.ShardWidth))
 	}
-	_, err := cmd1.API.Query(context.Background(), &pilosa.QueryRequest{
+	_, err = cmd1.API.Query(context.Background(), &pilosa.QueryRequest{
 		Index: "testidx",
 		Query: query.String(),
 	})
@@ -1213,10 +1227,14 @@ Set("h", adec=100.22)
 }
 
 func TestMain(m *testing.M) {
-	port := pilosa.GetAvailPort()
-	fmt.Printf("server/ TestMain: online stack-traces: curl http://localhost:%v/debug/pprof/goroutine?debug=2\n", port)
 	go func() {
-		_ = nethttp.ListenAndServe(fmt.Sprintf("127.0.0.1:%v", port), nil)
+		err := port.GetPort(func(port int) error {
+			fmt.Printf("server/ TestMain: online stack-traces: curl http://localhost:%v/debug/pprof/goroutine?debug=2\n", port)
+			return nethttp.ListenAndServe(fmt.Sprintf("127.0.0.1:%v", port), nil)
+		}, 10)
+		if err != nil {
+			panic(err)
+		}
 	}()
 	os.Exit(m.Run())
 }
@@ -1235,15 +1253,20 @@ func TestClusterCreatedAtRace(t *testing.T) {
 			cluster := test.MustRunCluster(t, 4)
 			defer cluster.Close()
 
+			err := cluster.AwaitState(pilosa.ClusterStateNormal, 100*time.Millisecond)
+			if err != nil {
+				t.Fatalf("starting cluster: %v", err)
+			}
+
 			for _, com := range cluster.Nodes {
 				nodes := com.API.Hosts(context.Background())
 				for _, n := range nodes {
 					if n.State != "READY" {
-						t.Fatalf("unexpected node state after upping cluster: %v", nodes)
+						t.Fatalf("unexpected node state after upping cluster: %v", nodes) //     server_test.go:1245: unexpected node state after upping cluster: [Node:http://localhost:43075:READY:TestClusterCreatedAtRace/run-0__0 Node:http://localhost:42301:READY:TestClusterCreatedAtRace/run-0__1 Node:http://localhost:42031:DOWN:TestClusterCreatedAtRace/run-0__2 Node:http://localhost:43671:READY:TestClusterCreatedAtRace/run-0__3]
 					}
 				}
 			}
-			_, err := cluster.Nodes[0].API.CreateIndex(context.Background(), "anindex", pilosa.IndexOptions{})
+			_, err = cluster.Nodes[0].API.CreateIndex(context.Background(), "anindex", pilosa.IndexOptions{})
 			if err != nil && errors.Cause(err).Error() != pilosa.ErrIndexExists.Error() {
 				t.Fatal(err)
 			}

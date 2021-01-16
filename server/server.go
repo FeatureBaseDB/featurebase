@@ -23,14 +23,17 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"fmt"
 	"io"
 	"log"
 	"math/rand"
 	"net"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -41,6 +44,7 @@ import (
 	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/boltdb"
 	"github.com/pilosa/pilosa/v2/encoding/proto"
+	petcd "github.com/pilosa/pilosa/v2/etcd"
 	"github.com/pilosa/pilosa/v2/gcnotify"
 	"github.com/pilosa/pilosa/v2/gopsutil"
 	"github.com/pilosa/pilosa/v2/gossip"
@@ -52,6 +56,7 @@ import (
 	"github.com/pilosa/pilosa/v2/stats"
 	"github.com/pilosa/pilosa/v2/statsd"
 	"github.com/pilosa/pilosa/v2/syswrap"
+	"github.com/pilosa/pilosa/v2/test/port"
 	"github.com/pilosa/pilosa/v2/testhook"
 	"github.com/pkg/errors"
 )
@@ -115,6 +120,12 @@ func OptCommandCloseTimeout(d time.Duration) CommandOption {
 
 func OptCommandConfig(config *Config) CommandOption {
 	return func(c *Command) error {
+		defer c.Config.MustValidate()
+		if c.Config != nil {
+			c.Config.DisCo = config.DisCo
+			fmt.Printf("setting c.ConfigDisCo to '%#v'", config.DisCo)
+			return nil
+		}
 		c.Config = config
 		return nil
 	}
@@ -154,10 +165,12 @@ func (m *Command) Start() (err error) {
 	}
 
 	// Set up networking (i.e. gossip)
+	// Gossip no longer unsed under etcd? time to turn it off here?
 	err = m.setupNetworking()
 	if err != nil {
 		return errors.Wrap(err, "setting up networking")
 	}
+
 	go func() {
 		err := m.Handler.Serve()
 		if err != nil {
@@ -394,6 +407,19 @@ func (m *Command) SetupServer() error {
 		coordinatorOpt = pilosa.OptServerIsCoordinator(true)
 	}
 
+	// If a DisCo.Dir is not provided, nest a default under the pilosa data dir.
+	if m.Config.DisCo.Dir == "" {
+		path, err := expandDirName(m.Config.DataDir)
+		if err != nil {
+			return errors.Wrapf(err, "expanding directory name: %s", m.Config.DataDir)
+		}
+		m.Config.DisCo.Dir = filepath.Join(path, pilosa.DefaultDiscoDir)
+	}
+
+	e := petcd.NewEtcd(m.Config.DisCo, m.Config.Cluster.ReplicaN)
+	n := petcd.NewNoder(m.Config.DisCo, m.Config.Cluster.ReplicaN)
+	discoOpt := pilosa.OptServerDisCo(e, e, e, e, n, e, e)
+
 	serverOptions := []pilosa.ServerOption{
 		pilosa.OptServerAntiEntropyInterval(time.Duration(m.Config.AntiEntropy.Interval)),
 		pilosa.OptServerLongQueryTime(time.Duration(longQueryTime)),
@@ -422,6 +448,7 @@ func (m *Command) SetupServer() error {
 		pilosa.OptServerRBFConfig(m.Config.RBFConfig),
 		pilosa.OptServerQueryHistoryLength(m.Config.QueryHistoryLength),
 		coordinatorOpt,
+		discoOpt,
 	}
 
 	serverOptions = append(serverOptions, m.serverOptions...)
@@ -484,12 +511,15 @@ func (m *Command) setupNetworking() error {
 		// new port. See also the gossip config in gossip/gossip.go.
 		// TODO: Maybe make that more configurable here.
 		m.logger.Printf("ephemeral port %d already occupied, switching to :0 (%v)", gossipPort, err)
-		m.Config.Gossip.Port = "0"
-		gossipPort = 0
-		m.gossipTransport, err = gossip.NewTransport(gossipHost, gossipPort, m.logger.Logger())
-	}
-	if err != nil {
-		return errors.Wrap(err, "getting transport")
+		if err := port.GetPort(func(p int) error {
+			gossipPort = p
+			m.Config.Gossip.Port = fmt.Sprintf(":%d", gossipPort)
+			m.gossipTransport, err = gossip.NewTransport(gossipHost, gossipPort, m.logger.Logger())
+			return err
+		}, 10); err != nil {
+			return errors.Wrap(err, "getting transport")
+		}
+
 	}
 
 	gossipMemberSet, err := gossip.NewMemberSet(
@@ -642,4 +672,18 @@ func ParseConfig(s string) (Config, error) {
 	var c Config
 	err := toml.Unmarshal([]byte(s), &c)
 	return c, err
+}
+
+// expandDirName was copied from pilosa/server.go.
+// TODO: consider centralizing this if we need this across packages.
+func expandDirName(path string) (string, error) {
+	prefix := "~" + string(filepath.Separator)
+	if strings.HasPrefix(path, prefix) {
+		HomeDir := os.Getenv("HOME")
+		if HomeDir == "" {
+			return "", errors.New("data directory not specified and no home dir available")
+		}
+		return filepath.Join(HomeDir, strings.TrimPrefix(path, prefix)), nil
+	}
+	return path, nil
 }

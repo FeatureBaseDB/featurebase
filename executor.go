@@ -134,6 +134,13 @@ func newExecutor(opts ...executorOption) *executor {
 func (e *executor) Close() error {
 	e.workMu.Lock()
 	defer e.workMu.Unlock()
+	if e.shutdown {
+		// otherwise close(e.work) can result in
+		// panic: close of closed channel.
+		// We don't comprehend: why we are called 2x though(?)
+		// But pilosa/server TestClusteringNodesReplica2 did.
+		return nil
+	}
 	e.shutdown = true
 	_ = testhook.Closed(NewAuditor(), e, nil)
 	close(e.work)
@@ -442,9 +449,11 @@ func (e *executor) handlePreCalls(ctx context.Context, qcx *Qcx, index string, c
 	// shards if the query has to go to them
 	opt.EmbeddedData = append(opt.EmbeddedData, row)
 	// and stash a copy locally, so local calls can use it
-	c.Precomputed = make(map[uint64]interface{}, len(row.segments))
-	for _, segment := range row.segments {
-		c.Precomputed[segment.shard] = &Row{segments: []rowSegment{segment}}
+	if row != nil {
+		c.Precomputed = make(map[uint64]interface{}, len(row.segments))
+		for _, segment := range row.segments {
+			c.Precomputed[segment.shard] = &Row{segments: []rowSegment{segment}}
+		}
 	}
 	return nil
 }
@@ -2830,7 +2839,12 @@ func (e *executor) executeGroupBy(ctx context.Context, qcx *Qcx, index string, c
 		for n, gc := range results {
 			intersectRows := make([]*pql.Call, 0, len(gc.Group))
 			for _, fr := range gc.Group {
-				intersectRows = append(intersectRows, &pql.Call{Name: "Row", Args: map[string]interface{}{fr.Field: fr.RowID}})
+				var value interface{} = fr.RowID
+				// use fr.Value instead of fr.RowID if set (from int fields)
+				if fr.Value != nil {
+					value = &pql.Condition{Op: pql.EQ, Value: *fr.Value}
+				}
+				intersectRows = append(intersectRows, &pql.Call{Name: "Row", Args: map[string]interface{}{fr.Field: value}})
 			}
 			// apply any filter, if present
 			if filter != nil {
@@ -5345,7 +5359,7 @@ func (e *executor) mapReduce(ctx context.Context, index string, shards []uint64,
 	// processing should be done locally so we start with just the local node.
 	var nodes []*topology.Node
 	if !opt.Remote {
-		nodes = topology.Nodes(e.Cluster.nodes).Clone()
+		nodes = topology.Nodes(e.Cluster.Nodes()).Clone()
 	} else {
 		nodes = []*topology.Node{e.Cluster.nodeByID(e.Node.ID)}
 	}
