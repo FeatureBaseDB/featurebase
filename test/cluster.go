@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math"
+	"net"
 	"path"
 	"strconv"
 	"strings"
@@ -269,40 +270,52 @@ func (c *Cluster) CreateField(t testing.TB, index string, iopts pilosa.IndexOpti
 // Start runs a Cluster
 func (c *Cluster) Start() error {
 	var eg errgroup.Group
-	err := port.GetPorts(func(ports []int) error {
-		portsCfg := GenPortsConfig(NewPorts(ports))
+	err := port.GetListeners(
 
-		var gossipSeeds []string
-		for i, cc := range c.Nodes {
-			i := i
-			// get the bind uri to use as the host portion of the gossip seed.
-			uri, err := pilosa.AddressWithDefaults(cc.Config.Bind)
-			if err != nil {
-				return errors.Wrap(err, "processing bind address")
+		func(lsns []*net.TCPListener) (err0 error) {
+			sliceOfPorts := NewPorts(lsns)
+			defer func() {
+				if err0 != nil {
+					// going to retry. Close the still open listeners
+					for _, ports := range sliceOfPorts {
+						_ = ports.Close()
+					}
+				}
+			}()
+			portsCfg := GenPortsConfig(sliceOfPorts)
+
+			var gossipSeeds []string
+			for i, cc := range c.Nodes {
+				i := i
+				// get the bind uri to use as the host portion of the gossip seed.
+				uri, err := pilosa.AddressWithDefaults(cc.Config.Bind)
+				if err != nil {
+					return errors.Wrap(err, "processing bind address")
+				}
+
+				cc.Config.Gossip.Port = portsCfg[i].Gossip.Port
+				gossipHost := uri.Host
+				gossipPort := cc.Config.Gossip.Port
+
+				gossipSeeds = append(gossipSeeds, fmt.Sprintf("%s:%s", gossipHost, gossipPort))
 			}
 
-			cc.Config.Gossip.Port = portsCfg[i].Gossip.Port
-			gossipHost := uri.Host
-			gossipPort := cc.Config.Gossip.Port
+			for i, cc := range c.Nodes {
+				cc := cc
+				cc.Config.DisCo = portsCfg[i].DisCo
+				cc.Config.BindGRPC = portsCfg[i].BindGRPC
 
-			gossipSeeds = append(gossipSeeds, fmt.Sprintf("%s:%s", gossipHost, gossipPort))
-		}
+				eg.Go(func() error {
+					fmt.Printf("DISCO CONFIG: %+v\n", cc.Config.DisCo)
+					cc.Config.Gossip.Seeds = gossipSeeds
 
-		for i, cc := range c.Nodes {
-			cc := cc
-			cc.Config.DisCo = portsCfg[i].DisCo
-			cc.Config.BindGRPC = portsCfg[i].BindGRPC
+					return cc.Start()
+				})
+			}
 
-			eg.Go(func() error {
-				fmt.Printf("DISCO CONFIG: %+v\n", cc.Config.DisCo)
-				cc.Config.Gossip.Seeds = gossipSeeds
+			return eg.Wait()
+		}, 4*len(c.Nodes), 10)
 
-				return cc.Start()
-			})
-		}
-
-		return eg.Wait()
-	}, 4*len(c.Nodes), 10)
 	if err != nil {
 		return err
 	}
