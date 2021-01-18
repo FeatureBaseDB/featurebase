@@ -6921,6 +6921,18 @@ austin,1,0
 toronto,1,0
 `,
 		},
+		{ // 2020 & 2019 All
+			query:       `Rows(places_visited, from='2019-01-01T00:00', to='2020-12-31T23:59')`,
+			csvVerifier: "nairobi\nparis\naustin\ntoronto\nmombasa\nsydney\n",
+		},
+		{ // 2019 All
+			query:       `Rows(places_visited, from='2019-01-01T00:00', to='2019-12-31T23:59')`,
+			csvVerifier: "nairobi\nparis\naustin\ntoronto\n",
+		},
+		{ // 2019 January only
+			query:       `Rows(places_visited, from='2019-01-01T00:00', to='2019-02-01T00:00')`,
+			csvVerifier: "nairobi\nparis\naustin\ntoronto\n",
+		},
 		{
 			query: "Count(All())",
 			qrVerifier: func(t *testing.T, resp pilosa.QueryResponse) {
