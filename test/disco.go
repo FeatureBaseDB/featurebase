@@ -40,7 +40,6 @@ func GenPortsConfig(ports []Ports) []*server.Config {
 		name := fmt.Sprintf("server%d", i)
 
 		var lClientURL, lPeerURL string
-		name := fmt.Sprintf("server%d", i)
 		lsnC, portC := port.MustGetBoundTCPListener()
 		lClientURL := fmt.Sprintf("http://localhost:%d", portC)
 		lsnP, portP := port.MustGetBoundTCPListener()

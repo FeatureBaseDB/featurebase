@@ -2,7 +2,7 @@ module github.com/pilosa/pilosa/v2
 
 replace github.com/hashicorp/memberlist => github.com/pilosa/memberlist v0.1.4-0.20190415211605-f6512523c021
 
-replace go.etcd.io/etcd => github.com/molecula/etcd v0.0.0-20210108232729-18e95f2f5b93
+replace go.etcd.io/etcd => github.com/molecula/etcd v0.0.0-20210115113447-5d28bda617d2
 
 require (
 	github.com/CAFxX/gcnotifier v0.0.0-20190112062741-224a280d589d
