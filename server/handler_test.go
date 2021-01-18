@@ -35,6 +35,7 @@ import (
 	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/boltdb"
 	"github.com/pilosa/pilosa/v2/encoding/proto"
+	"github.com/pilosa/pilosa/v2/gopsutil"
 	"github.com/pilosa/pilosa/v2/http"
 	"github.com/pilosa/pilosa/v2/pql"
 	pb "github.com/pilosa/pilosa/v2/proto"
@@ -1568,6 +1569,94 @@ func TestQueryHistory(t *testing.T) {
 	}
 	if ret[0].PQL != "TopN(f0)" {
 		t.Fatalf("response value for 'PQL' was '%s', expected 'TopN(f0)'", ret[0].PQL)
+	}
+}
+
+func Test_DiskUsage_Roaring(t *testing.T) {
+
+	// roaring-usage-1: keys, existence
+	// roaring-usage-1/f1: set, no keys
+	// roaring-usage-1/f2: set, keys
+	// roaring-usage-2: no keys, no existence
+	// roaring-usage-2/g1: no keys, no existence
+	// roaring-usage-3: keys, no existence, no fields
+	schemaString := `{"indexes": [{"fields": [{"options": {"keys": false,"cacheSize": 50000,"cacheType": "ranked","type": "set"},"name": "f1"},{"options": {"keys": true,"cacheSize": 50000,"cacheType": "ranked","type": "set"},"name": "f2"}],"options": {"trackExistence": true,"keys": true},"name": "roaring-usage-1"},{"fields": [{"options": {"keys": true,"cacheSize": 50000,"cacheType": "ranked","type": "set"},"name": "g1"}],"options": {"trackExistence": false,"keys": false},"name": "roaring-usage-2"},{"fields": [],"options": {"trackExistence": false,"keys": true},"name": "roaring-usage-3"}]}
+`
+
+	txsrc := []string{"roaring", "rbf"}
+
+	exp0f := []string{`{"Test_DiskUsage_Roaring__0":{"diskUsage":{"capacity":%d,"totalInUse":16562,"indexes":{}}},"Test_DiskUsage_Roaring__1":{"diskUsage":{"capacity":%[1]d,"totalInUse":16562,"indexes":{}}},"Test_DiskUsage_Roaring__2":{"diskUsage":{"capacity":%[1]d,"totalInUse":16562,"indexes":{}}}}
+`, `{"Test_DiskUsage_Roaring__0":{"diskUsage":{"capacity":%d,"totalInUse":16562,"indexes":{}}},"Test_DiskUsage_Roaring__1":{"diskUsage":{"capacity":%[1]d,"totalInUse":16562,"indexes":{}}},"Test_DiskUsage_Roaring__2":{"diskUsage":{"capacity":%[1]d,"totalInUse":16562,"indexes":{}}}}
+`}
+
+	exp1f := []string{`{"Test_DiskUsage_Roaring__0":{"diskUsage":{"capacity":%[1]d,"totalInUse":115896,"indexes":{"roaring-usage-1":{"total":33156,"indexKeys":0,"fieldKeysTotal":0,"fragments":0,"fields":{"_exists":{"total":32791,"fragments":0,"keys":0},"f1":{"total":32791,"fragments":0,"keys":0},"f2":{"total":32793,"fragments":0,"keys":0}}},"roaring-usage-2":{"total":32896,"indexKeys":0,"fieldKeysTotal":0,"fragments":0,"fields":{"g1":{"total":32793,"fragments":0,"keys":0}}},"roaring-usage-3":{"total":32770,"indexKeys":0,"fieldKeysTotal":0,"fragments":0,"fields":{}}}}},"Test_DiskUsage_Roaring__1":{"diskUsage":{"capacity":%[1]d,"totalInUse":115896,"indexes":{"roaring-usage-1":{"total":33156,"indexKeys":0,"fieldKeysTotal":0,"fragments":0,"fields":{"_exists":{"total":32791,"fragments":0,"keys":0},"f1":{"total":32791,"fragments":0,"keys":0},"f2":{"total":32793,"fragments":0,"keys":0}}},"roaring-usage-2":{"total":32896,"indexKeys":0,"fieldKeysTotal":0,"fragments":0,"fields":{"g1":{"total":32793,"fragments":0,"keys":0}}},"roaring-usage-3":{"total":32770,"indexKeys":0,"fieldKeysTotal":0,"fragments":0,"fields":{}}}}},"Test_DiskUsage_Roaring__2":{"diskUsage":{"capacity":%[1]d,"totalInUse":115896,"indexes":{"roaring-usage-1":{"total":33156,"indexKeys":0,"fieldKeysTotal":0,"fragments":0,"fields":{"_exists":{"total":32791,"fragments":0,"keys":0},"f1":{"total":32791,"fragments":0,"keys":0},"f2":{"total":32793,"fragments":0,"keys":0}}},"roaring-usage-2":{"total":32896,"indexKeys":0,"fieldKeysTotal":0,"fragments":0,"fields":{"g1":{"total":32793,"fragments":0,"keys":0}}},"roaring-usage-3":{"total":32770,"indexKeys":0,"fieldKeysTotal":0,"fragments":0,"fields":{}}}}}}
+`, `{"Test_DiskUsage_Roaring__0":{"diskUsage":{"capacity":%[1]d,"totalInUse":115896,"indexes":{"roaring-usage-1":{"total":33156,"indexKeys":0,"fieldKeysTotal":0,"fragments":0,"fields":{"_exists":{"total":32791,"fragments":0,"keys":0},"f1":{"total":32791,"fragments":0,"keys":0},"f2":{"total":32793,"fragments":0,"keys":0}}},"roaring-usage-2":{"total":32896,"indexKeys":0,"fieldKeysTotal":0,"fragments":0,"fields":{"g1":{"total":32793,"fragments":0,"keys":0}}},"roaring-usage-3":{"total":32770,"indexKeys":0,"fieldKeysTotal":0,"fragments":0,"fields":{}}}}},"Test_DiskUsage_Roaring__1":{"diskUsage":{"capacity":%[1]d,"totalInUse":115896,"indexes":{"roaring-usage-1":{"total":33156,"indexKeys":0,"fieldKeysTotal":0,"fragments":0,"fields":{"_exists":{"total":32791,"fragments":0,"keys":0},"f1":{"total":32791,"fragments":0,"keys":0},"f2":{"total":32793,"fragments":0,"keys":0}}},"roaring-usage-2":{"total":32896,"indexKeys":0,"fieldKeysTotal":0,"fragments":0,"fields":{"g1":{"total":32793,"fragments":0,"keys":0}}},"roaring-usage-3":{"total":32770,"indexKeys":0,"fieldKeysTotal":0,"fragments":0,"fields":{}}}}},"Test_DiskUsage_Roaring__2":{"diskUsage":{"capacity":%[1]d,"totalInUse":115896,"indexes":{"roaring-usage-1":{"total":33156,"indexKeys":0,"fieldKeysTotal":0,"fragments":0,"fields":{"_exists":{"total":32791,"fragments":0,"keys":0},"f1":{"total":32791,"fragments":0,"keys":0},"f2":{"total":32793,"fragments":0,"keys":0}}},"roaring-usage-2":{"total":32896,"indexKeys":0,"fieldKeysTotal":0,"fragments":0,"fields":{"g1":{"total":32793,"fragments":0,"keys":0}}},"roaring-usage-3":{"total":32770,"indexKeys":0,"fieldKeysTotal":0,"fragments":0,"fields":{}}}}}}
+`}
+
+	for n := 0; n < 2; n++ {
+		cluster := test.MustRunCluster(t, 3, []server.CommandOption{test.OptTxSrc(txsrc[n])})
+		defer cluster.Close()
+		cmd := cluster.GetNode(0)
+		h := cmd.Handler.(*http.Handler).Handler
+		holder := cmd.Server.Holder()
+
+		sysInfo := gopsutil.NewSystemInfo()
+		capacity, err := sysInfo.DiskCapacity(holder.Path())
+		if err != nil {
+			t.Fatalf("unable to check disk capacity: %s", err)
+		}
+
+		// check usage for empty cluster
+		exp0 := fmt.Sprintf(exp0f[n], capacity)
+
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/ui/usage", nil))
+		if w.Code != gohttp.StatusOK {
+			fmt.Printf("%+v\n", w.Body)
+			t.Fatalf("unexpected status code: %d", w.Code)
+		}
+		body := w.Body.String()
+		if body != exp0 {
+			t.Fatalf("unexpected body:\n %s\nexpected:\n %s", body, exp0)
+		}
+
+		// create schema
+		w = httptest.NewRecorder()
+		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/schema", strings.NewReader(schemaString)))
+
+		if w.Code != gohttp.StatusNoContent {
+			bod, err := ioutil.ReadAll(w.Result().Body)
+			if err != nil {
+				t.Errorf("reading body: %v", err)
+			}
+			t.Fatalf("unexpected code: %v, bod: %s", w.Code, bod)
+		}
+
+		idx, err := cmd.API.Index(context.Background(), "roaring-usage-1")
+		if err != nil {
+			t.Fatalf("getting index: %v", err)
+		}
+		if idx.Name() != "roaring-usage-1" {
+			t.Fatalf("index did not get set, got %v", idx.Name())
+		}
+
+		// set some bits
+		test.MustNewHTTPRequest("POST", "/index/roaring-usage-1/query", strings.NewReader(`Set("col1", f2=10)`))
+		test.MustNewHTTPRequest("POST", "/index/roaring-usage-1/query", strings.NewReader(`Set("col1", f2="row1")`))
+		test.MustNewHTTPRequest("POST", "/index/roaring-usage-2/query", strings.NewReader(`Set(21, g1=42)`))
+		// check usage with data
+		exp1 := fmt.Sprintf(exp1f[n], capacity)
+
+		w = httptest.NewRecorder()
+		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/ui/usage", nil))
+		if w.Code != gohttp.StatusOK {
+			fmt.Printf("%+v\n", w.Body)
+			t.Fatalf("unexpected status code: %d", w.Code)
+		}
+		body = w.Body.String()
+		if body != exp1 {
+			t.Fatalf("unexpected body:\n %s\nexpected:\n %s", body, exp1)
+		}
 	}
 }
 
