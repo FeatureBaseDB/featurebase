@@ -3375,6 +3375,7 @@ func timeFragmentsRowIterator(fragments []*fragment, tx Tx, wrap bool, filters .
 		allRowIDs[i] = rowID
 		i++
 	}
+	sort.Slice(allRowIDs, func(i, j int) bool { return allRowIDs[i] < allRowIDs[j] })
 
 	it.rowIDToFragments = rowIDToFragments
 	it.allRowIDs = allRowIDs
