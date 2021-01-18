@@ -3330,12 +3330,11 @@ func (f *fragment) rowIterator(tx Tx, wrap bool, filters ...roaring.BitmapFilter
 }
 
 type timeRowIterator struct {
-	tx        Tx
-	fragments []*fragment
-	rows      []*Row
-	rowIDs    [][]uint64
-	cur       int
-	wrap      bool
+	tx               Tx
+	cur              int
+	wrap             bool
+	allRowIDs        []uint64
+	rowIDToFragments map[uint64][]*fragment
 }
 
 func timeFragmentsRowIterator(fragments []*fragment, tx Tx, wrap bool, filters ...roaring.BitmapFilter) (rowIterator, error) {
@@ -3346,53 +3345,77 @@ func timeFragmentsRowIterator(fragments []*fragment, tx Tx, wrap bool, filters .
 	}
 
 	it := &timeRowIterator{
-		tx:        tx,
-		fragments: fragments,
-		rows:      make([]*Row, len(fragments)),
-		rowIDs:    make([][]uint64, len(fragments)),
+		tx:   tx,
+		cur:  0,
+		wrap: wrap,
 	}
 
-	for i, f := range fragments {
-		rows, err := f.rows(context.Background(), tx, 0, filters...)
+	// create a sort of inverted index that maps each
+	// rowID back to the fragments that have that rowID
+	rowIDToFragments := make(map[uint64][]*fragment)
+	for _, f := range fragments {
+		rowIDs, err := f.rows(context.Background(), tx, 0, filters...)
 		if err != nil {
 			return nil, err
 		}
-		it.rowIDs[i] = rows
+		for _, rowID := range rowIDs {
+			fs := append(rowIDToFragments[rowID], f)
+			rowIDToFragments[rowID] = fs
+		}
 	}
+
+	// if len(rowIDToFragments) == 0 what to do ??
+	// ie all fragments returned empty rowIDs, is this possible
+	// is this an error
+
+	// collect all rowIDs from inverted index to a slice
+	allRowIDs := make([]uint64, len(rowIDToFragments))
+	i := 0
+	for rowID := range rowIDToFragments {
+		allRowIDs[i] = rowID
+		i++
+	}
+
+	it.rowIDToFragments = rowIDToFragments
+	it.allRowIDs = allRowIDs
 
 	return it, nil
 }
 
 func (it *timeRowIterator) Seek(rowID uint64) {
-	rowIDs := it.rowIDs[0]
-	idx := sort.Search(len(rowIDs), func(i int) bool {
-		return rowIDs[i] >= rowID
+	idx := sort.Search(len(it.allRowIDs), func(i int) bool {
+		return it.allRowIDs[i] >= rowID
 	})
 	it.cur = idx
 }
 
 func (it *timeRowIterator) Next() (r *Row, rowID uint64, _ *int64, wrapped bool, err error) {
-	rowIDs := it.rowIDs[0]
-	if it.cur >= len(rowIDs) {
-		if !it.wrap || len(rowIDs) == 0 {
+	if it.cur >= len(it.allRowIDs) {
+		if !it.wrap || len(it.allRowIDs) == 0 {
 			return nil, 0, nil, true, nil
 		}
 		it.Seek(0)
 		wrapped = true
 	}
 
-	id := rowIDs[it.cur]
 	// gather rows
-	for i, fragment := range it.fragments {
-		row, err := fragment.row(it.tx, id)
+	rowID = it.allRowIDs[it.cur]
+	fragments := it.rowIDToFragments[rowID]
+	rows := make([]*Row, len(fragments))
+	for i, fragment := range fragments {
+		row, err := fragment.row(it.tx, rowID)
 		if err != nil {
 			return row, rowID, nil, wrapped, err
 		}
-		it.rows[i] = row
+		rows[i] = row
 	}
 
 	// union rows
-	r = it.rows[0].Union(it.rows[1:]...)
+	if len(rows) > 1 {
+		r = rows[0].Union(rows[1:]...)
+	} else {
+		r = rows[0]
+	}
 
 	it.cur++
 	return r, rowID, nil, wrapped, nil
