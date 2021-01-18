@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"reflect"
@@ -185,8 +186,8 @@ func TestClusterResize_AddNode(t *testing.T) {
 
 		m1.Config.Gossip.Seeds = []string{seed}
 
-		if err := port.GetPorts(func(ports []int) error {
-			portsCfg := test.GenPortsConfig(test.NewPorts(ports))
+		if err := port.GetListeners(func(lsns []*net.TCPListener) error {
+			portsCfg := test.GenPortsConfig(test.NewPorts(lsns))
 
 			m1.Config.Gossip.Port = portsCfg[0].Gossip.Port
 			m1.Config.DisCo = portsCfg[0].DisCo
@@ -242,8 +243,8 @@ func TestClusterResize_AddNode(t *testing.T) {
 
 		m1.Config.Gossip.Seeds = []string{seed}
 
-		if err := port.GetPorts(func(ports []int) error {
-			portsCfg := test.GenPortsConfig(test.NewPorts(ports))
+		if err := port.GetListeners(func(lsns []*net.TCPListener) error {
+			portsCfg := test.GenPortsConfig(test.NewPorts(lsns))
 
 			m1.Config.Gossip.Port = portsCfg[0].Gossip.Port
 			m1.Config.DisCo = portsCfg[0].DisCo
@@ -298,8 +299,8 @@ func TestClusterResize_AddNode(t *testing.T) {
 		m1 := test.NewCommandNode(t, false)
 		m1.Config.Gossip.Seeds = []string{seed}
 
-		if err := port.GetPorts(func(ports []int) error {
-			portsCfg := test.GenPortsConfig(test.NewPorts(ports))
+		if err := port.GetListeners(func(lsns []*net.TCPListener) error {
+			portsCfg := test.GenPortsConfig(test.NewPorts(lsns))
 
 			m1.Config.Gossip.Port = portsCfg[0].Gossip.Port
 			m1.Config.DisCo = portsCfg[0].DisCo
@@ -360,8 +361,8 @@ func TestClusterResize_AddNode(t *testing.T) {
 		m1 := test.NewCommandNode(t, false)
 		m1.Config.Gossip.Seeds = []string{seed}
 
-		if err := port.GetPorts(func(ports []int) error {
-			portsCfg := test.GenPortsConfig(test.NewPorts(ports))
+		if err := port.GetListeners(func(lsns []*net.TCPListener) error {
+			portsCfg := test.GenPortsConfig(test.NewPorts(lsns))
 
 			m1.Config.Gossip.Port = portsCfg[0].Gossip.Port
 			m1.Config.DisCo = portsCfg[0].DisCo
@@ -416,8 +417,8 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 		// Configure node1
 		m1 := test.NewCommandNode(t, false)
 		m1.Config.Gossip.Seeds = []string{seed}
-		if err := port.GetPorts(func(ports []int) error {
-			portsCfg := test.GenPortsConfig(test.NewPorts(ports))
+		if err := port.GetListeners(func(lsns []*net.TCPListener) error {
+			portsCfg := test.GenPortsConfig(test.NewPorts(lsns))
 
 			m1.Config.Gossip.Port = portsCfg[0].Gossip.Port
 			m1.Config.DisCo = portsCfg[0].DisCo
@@ -474,8 +475,8 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 		// Configure node1
 		m1 := test.NewCommandNode(t, false)
 		m1.Config.Gossip.Seeds = []string{seed}
-		if err := port.GetPorts(func(ports []int) error {
-			portsCfg := test.GenPortsConfig(test.NewPorts(ports))
+		if err := port.GetListeners(func(lsns []*net.TCPListener) error {
+			portsCfg := test.GenPortsConfig(test.NewPorts(lsns))
 
 			m1.Config.Gossip.Port = portsCfg[0].Gossip.Port
 			m1.Config.DisCo = portsCfg[0].DisCo
@@ -538,8 +539,8 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 		// Configure node1
 		m1 := test.NewCommandNode(t, false)
 		m1.Config.Gossip.Seeds = []string{seed}
-		if err := port.GetPorts(func(ports []int) error {
-			portsCfg := test.GenPortsConfig(test.NewPorts(ports))
+		if err := port.GetListeners(func(lsns []*net.TCPListener) error {
+			portsCfg := test.GenPortsConfig(test.NewPorts(lsns))
 
 			m1.Config.Gossip.Port = portsCfg[0].Gossip.Port
 			m1.Config.DisCo = portsCfg[0].DisCo
@@ -600,8 +601,8 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 		// Configure node1
 		m1 := test.NewCommandNode(t, false)
 		m1.Config.Gossip.Seeds = []string{seed}
-		if err := port.GetPorts(func(ports []int) error {
-			portsCfg := test.GenPortsConfig(test.NewPorts(ports))
+		if err := port.GetListeners(func(lsns []*net.TCPListener) error {
+			portsCfg := test.GenPortsConfig(test.NewPorts(lsns))
 
 			m1.Config.Gossip.Port = portsCfg[0].Gossip.Port
 			m1.Config.DisCo = portsCfg[0].DisCo
@@ -661,10 +662,12 @@ func TestCluster_GossipMembership(t *testing.T) {
 		eg.Go(func() error {
 			// Pass invalid seed as first in list
 			m2.Config.Gossip.Seeds = []string{seed, "http://localhost:8765"}
-			if err := port.GetPort(func(p int) error {
+			err := port.GetPort(func(p int) error {
 				m2.Config.Gossip.Port = fmt.Sprintf("%d", p)
 				return m2.Start()
-			}, 10); err != nil {
+			}, 10)
+
+			if err != nil {
 				t.Fatalf("starting second main: %v", err)
 			}
 			defer m2.Close()

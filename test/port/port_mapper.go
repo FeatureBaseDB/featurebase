@@ -27,14 +27,16 @@ func ColonZeroString(port int) string {
 }
 
 func GetPort(wrapper func(int) error, retries int) error {
-	f := func(ports []int) error { return wrapper(ports[0]) }
+	f := func(ports []int) error {
+		return wrapper(ports[0])
+	}
 	return GetPorts(f, 1, retries)
 }
 
 func GetPorts(wrapper func([]int) error, requestedPorts, retries int) error {
 	for i := 0; i < retries; i++ {
 		// get all requested ports
-		listeners := make([]net.Listener, requestedPorts)
+		listeners := make([]*net.TCPListener, requestedPorts)
 		ports := make([]int, requestedPorts)
 		for i := 0; i < requestedPorts; i++ {
 			l, err := net.Listen("tcp", ":0")
@@ -44,7 +46,7 @@ func GetPorts(wrapper func([]int) error, requestedPorts, retries int) error {
 			}
 
 			ports[i] = l.Addr().(*net.TCPAddr).Port
-			listeners[i] = l
+			listeners[i] = l.(*net.TCPListener)
 		}
 		for _, l := range listeners {
 			if err := l.Close(); err != nil {
@@ -53,6 +55,35 @@ func GetPorts(wrapper func([]int) error, requestedPorts, retries int) error {
 		}
 		// send to wrapper and check output error
 		err := wrapper(ports)
+		if (err != nil) && (err == syscall.EADDRINUSE || strings.Contains(err.Error(), "address already in use")) {
+			log.Printf("[port_mapper: %+v] address already in use error calling the wrapper: %v\n", ports, err)
+			// only retry on address already in use error
+			continue
+		}
+
+		return err
+	}
+
+	return nil
+}
+
+func GetListeners(wrapper func([]*net.TCPListener) error, requestedPorts, retries int) error {
+	for i := 0; i < retries; i++ {
+		// get all requested ports
+		listeners := make([]*net.TCPListener, requestedPorts)
+		ports := make([]int, requestedPorts)
+		for i := 0; i < requestedPorts; i++ {
+			l, err := net.Listen("tcp", ":0")
+			if err != nil {
+				log.Println("[port_mapper] error getting a free port", err)
+				return GetListeners(wrapper, requestedPorts, retries-1)
+			}
+
+			ports[i] = l.Addr().(*net.TCPAddr).Port
+			listeners[i] = l.(*net.TCPListener)
+		}
+		// send to wrapper and check output error
+		err := wrapper(listeners)
 		if (err != nil) && (err == syscall.EADDRINUSE || strings.Contains(err.Error(), "address already in use")) {
 			log.Printf("[port_mapper: %+v] address already in use error calling the wrapper: %v\n", ports, err)
 			// only retry on address already in use error

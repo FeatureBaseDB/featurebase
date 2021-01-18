@@ -17,18 +17,33 @@ package test
 import (
 	"fmt"
 	"io/ioutil"
+	"net"
 	"strings"
 	"time"
 
 	"github.com/pilosa/pilosa/v2/etcd"
 	"github.com/pilosa/pilosa/v2/gossip"
 	"github.com/pilosa/pilosa/v2/server"
-	"github.com/pilosa/pilosa/v2/test/port"
 )
 
 type Ports struct {
-	Client, Peer int
-	Grpc, Gossip int //TODO remove
+	LsnC  *net.TCPListener
+	PortC int
+
+	LsnP  *net.TCPListener
+	PortP int
+
+	Grpc   int
+	Gossip int //TODO remove
+}
+
+func (ports *Ports) Close() error {
+	err := ports.LsnC.Close()
+	err2 := ports.LsnP.Close()
+	if err != nil {
+		return err
+	}
+	return err2
 }
 
 //GenPortsConfig creates specific configuration for etcd.
@@ -38,9 +53,11 @@ func GenPortsConfig(ports []Ports) []*server.Config {
 	for i := range cfgs {
 		name := fmt.Sprintf("server%d", i)
 
-		var lClientURL, lPeerURL string
-		lClientURL = fmt.Sprintf("http://localhost:%d", ports[i].Client)
-		lPeerURL = fmt.Sprintf("http://localhost:%d", ports[i].Peer)
+		lsnC, portC := ports[i].LsnC, ports[i].PortC
+		lClientURL := fmt.Sprintf("http://localhost:%d", portC)
+		lsnP, portP := ports[i].LsnP, ports[i].PortP
+		lPeerURL := fmt.Sprintf("http://localhost:%d", portP)
+
 		discoDir := ""
 		if d, err := ioutil.TempDir("/tmp", "disco."); err == nil {
 			discoDir = d
@@ -50,22 +67,24 @@ func GenPortsConfig(ports []Ports) []*server.Config {
 			Gossip: gossip.Config{
 				Port: fmt.Sprint(ports[i].Gossip),
 			},
-			BindGRPC: port.ColonZeroString(ports[i].Grpc),
+			BindGRPC: fmt.Sprintf(":%d", ports[i].Grpc),
 			DisCo: etcd.Options{
-				Name:         name,
-				Dir:          discoDir,
-				ClusterName:  "bartholemuuuuu",
-				LClientURL:   lClientURL,
-				AClientURL:   lClientURL,
-				LPeerURL:     lPeerURL,
-				APeerURL:     lPeerURL,
-				HeartbeatTTL: 5 * int64(time.Second),
+				Name:          name,
+				Dir:           discoDir,
+				ClusterName:   "bartholemuuuuu",
+				LClientURL:    lClientURL,
+				AClientURL:    lClientURL,
+				LPeerURL:      lPeerURL,
+				APeerURL:      lPeerURL,
+				HeartbeatTTL:  5 * int64(time.Second),
+				LPeerSocket:   []*net.TCPListener{lsnP},
+				LClientSocket: []*net.TCPListener{lsnC},
 			},
 		}
 
 		clusterURLs[i] = fmt.Sprintf("%s=%s", name, lPeerURL)
 		fmt.Printf("\ndebug test/disco.go: on i=%v, GenPortsConfig Gossip: %v, DisCo.Client: %v, DisCo.Peer: %v, BindGRPC: %v\n",
-			i, ports[i].Gossip, ports[i].Client, ports[i].Peer, ports[i].Grpc)
+			i, ports[i].Gossip, portC, portP, ports[i].Grpc)
 	}
 	for i := range cfgs {
 		cfgs[i].DisCo.InitCluster = strings.Join(clusterURLs, ",")
@@ -74,15 +93,29 @@ func GenPortsConfig(ports []Ports) []*server.Config {
 	return cfgs
 }
 
-func NewPorts(ports []int) []Ports {
+func NewPorts(lsn []*net.TCPListener) []Ports {
 	var out []Ports
-	for i := 0; i < len(ports); i = i + 4 {
+
+	n := len(lsn)
+	ports := make([]int, n)
+	for i := 0; i < n; i++ {
+		ports[i] = lsn[i].Addr().(*net.TCPAddr).Port
+	}
+
+	for i := 0; i < n; i = i + 4 {
 		out = append(out, Ports{
-			Client: ports[i],
-			Peer:   ports[i+1],
+			LsnC:  lsn[i],
+			PortC: ports[i],
+			LsnP:  lsn[i+1],
+			PortP: ports[i+1],
+
 			Grpc:   ports[i+2],
 			Gossip: ports[i+3],
 		})
+		// make Grpc and Gossip ports available to
+		// be rebound.
+		lsn[i+2].Close()
+		lsn[i+3].Close()
 	}
 
 	return out
