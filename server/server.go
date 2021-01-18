@@ -417,8 +417,7 @@ func (m *Command) SetupServer() error {
 	}
 
 	e := petcd.NewEtcd(m.Config.DisCo, m.Config.Cluster.ReplicaN)
-	n := petcd.NewNoder(m.Config.DisCo, m.Config.Cluster.ReplicaN)
-	discoOpt := pilosa.OptServerDisCo(e, e, e, e, n, e, e)
+	discoOpt := pilosa.OptServerDisCo(e, e, e, e, e, e, e)
 
 	serverOptions := []pilosa.ServerOption{
 		pilosa.OptServerAntiEntropyInterval(time.Duration(m.Config.AntiEntropy.Interval)),
