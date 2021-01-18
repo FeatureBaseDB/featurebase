@@ -662,14 +662,6 @@ func TestCluster_GossipMembership(t *testing.T) {
 		eg.Go(func() error {
 			// Pass invalid seed as first in list
 			m2.Config.Gossip.Seeds = []string{seed, "http://localhost:8765"}
-			/*
-				err := port.GetPorts(func(lsns []*net.TCPListener) error {
-					_ = lsns[0].Close()
-					p = lsns[0].Addr().(*net.TCPAddr).Port
-					m2.Config.Gossip.Port = fmt.Sprintf("%d", p)
-					return m2.Start()
-				}, 1, 10)
-			*/
 			err := port.GetPort(func(p int) error {
 				m2.Config.Gossip.Port = fmt.Sprintf("%d", p)
 				return m2.Start()

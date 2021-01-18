@@ -24,7 +24,6 @@ import (
 	"github.com/pilosa/pilosa/v2/etcd"
 	"github.com/pilosa/pilosa/v2/gossip"
 	"github.com/pilosa/pilosa/v2/server"
-	//"github.com/pilosa/pilosa/v2/test/port"
 )
 
 type Ports struct {
@@ -55,9 +54,7 @@ func GenPortsConfig(ports []Ports) []*server.Config {
 		name := fmt.Sprintf("server%d", i)
 
 		lsnC, portC := ports[i].LsnC, ports[i].PortC
-		//lsnC, portC := port.MustGetBoundTCPListener()
 		lClientURL := fmt.Sprintf("http://localhost:%d", portC)
-		//lsnP, portP := port.MustGetBoundTCPListener()
 		lsnP, portP := ports[i].LsnP, ports[i].PortP
 		lPeerURL := fmt.Sprintf("http://localhost:%d", portP)
 
