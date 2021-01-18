@@ -19,6 +19,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net"
 	"path"
 	"strings"
 	"time"
@@ -45,6 +46,9 @@ type Options struct {
 	ClusterURL   string `toml:"cluster-url"`
 	ClusterName  string `toml:"cluster-name"`
 	HeartbeatTTL int64  `toml:"heartbeat-ttl"`
+
+	LPeerSocket   []*net.TCPListener
+	LClientSocket []*net.TCPListener
 }
 
 var (
@@ -123,6 +127,19 @@ func parseOptions(opt Options) *embed.Config {
 	cfg.ACUrls = types.MustNewURLs([]string{opt.AClientURL})
 	cfg.LPUrls = types.MustNewURLs([]string{opt.LPeerURL})
 	cfg.APUrls = types.MustNewURLs([]string{opt.APeerURL})
+
+	lps := make([]*net.TCPListener, len(opt.LPeerSocket))
+	copy(lps, opt.LPeerSocket)
+	cfg.LPeerSocket = lps
+
+	lcs := make([]*net.TCPListener, len(opt.LPeerSocket))
+	copy(lcs, opt.LClientSocket)
+	cfg.LClientSocket = lcs
+
+	cfg.Logger = "zap"
+	cfg.ZapLoggerBuilder = func(*embed.Config) error {
+		return nil
+	}
 
 	if opt.InitCluster != "" {
 		cfg.InitialCluster = opt.InitCluster

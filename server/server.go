@@ -604,6 +604,10 @@ func (m *Command) Close() error {
 		}
 	}
 
+	// prevent the closed sockets from being re-injected into etcd.
+	m.Config.DisCo.LPeerSocket = nil
+	m.Config.DisCo.LClientSocket = nil
+
 	err := eg.Wait()
 	_ = testhook.Closed(pilosa.NewAuditor(), m, nil)
 	return errors.Wrap(err, "closing everything")

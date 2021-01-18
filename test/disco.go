@@ -17,6 +17,7 @@ package test
 import (
 	"fmt"
 	"io/ioutil"
+	"net"
 	"strings"
 	"time"
 
@@ -39,8 +40,12 @@ func GenPortsConfig(ports []Ports) []*server.Config {
 		name := fmt.Sprintf("server%d", i)
 
 		var lClientURL, lPeerURL string
-		lClientURL = fmt.Sprintf("http://localhost:%d", ports[i].Client)
-		lPeerURL = fmt.Sprintf("http://localhost:%d", ports[i].Peer)
+		name := fmt.Sprintf("server%d", i)
+		lsnC, portC := port.MustGetBoundTCPListener()
+		lClientURL := fmt.Sprintf("http://localhost:%d", portC)
+		lsnP, portP := port.MustGetBoundTCPListener()
+		lPeerURL := fmt.Sprintf("http://localhost:%d", portP)
+
 		discoDir := ""
 		if d, err := ioutil.TempDir("/tmp", "disco."); err == nil {
 			discoDir = d
@@ -52,14 +57,16 @@ func GenPortsConfig(ports []Ports) []*server.Config {
 			},
 			BindGRPC: port.ColonZeroString(ports[i].Grpc),
 			DisCo: etcd.Options{
-				Name:         name,
-				Dir:          discoDir,
-				ClusterName:  "bartholemuuuuu",
-				LClientURL:   lClientURL,
-				AClientURL:   lClientURL,
-				LPeerURL:     lPeerURL,
-				APeerURL:     lPeerURL,
-				HeartbeatTTL: 5 * int64(time.Second),
+				Name:          name,
+				Dir:           discoDir,
+				ClusterName:   "bartholemuuuuu",
+				LClientURL:    lClientURL,
+				AClientURL:    lClientURL,
+				LPeerURL:      lPeerURL,
+				APeerURL:      lPeerURL,
+				HeartbeatTTL:  5 * int64(time.Second),
+				LPeerSocket:   []*net.TCPListener{lsnP},
+				LClientSocket: []*net.TCPListener{lsnC},
 			},
 		}
 
