@@ -605,6 +605,7 @@ func (f *TxFactory) IndexUsageDetails() (map[string]IndexUsage, uint64, error) {
 	idxs := f.holder.Indexes()
 
 	qcx := f.NewQcx()
+	defer qcx.Abort()
 	for _, idx := range idxs {
 		index := idx.name
 		indexPath := path.Join(holderPath, index)
@@ -667,10 +668,7 @@ func (f *TxFactory) IndexUsageDetails() (map[string]IndexUsage, uint64, error) {
 		indexKeysBytes := uint64(0)
 		if idx.keys {
 			keysPath := path.Join(indexPath, translateStoreDir)
-			indexKeysBytes, err = directoryUsage(keysPath, true)
-			if err != nil {
-				return indexUsage, 0, errors.Wrapf(err, "getting disk usage for index keys (%s)", index)
-			}
+			indexKeysBytes, _ = directoryUsage(keysPath, true) // if directory doesn't exist, size = 0
 		}
 
 		indexUsage[index] = IndexUsage{
@@ -704,7 +702,8 @@ func (f *TxFactory) fieldUsage(indexPath string, fld *Field) (FieldUsage, error)
 	if fld.usesKeys {
 		keysBytes, err = fileSize(fld.TranslateStorePath())
 		if err != nil {
-			return fieldUsage, errors.Wrapf(err, "getting disk usage for field keys (%s)", field)
+			// if file doesn't exist, size = 0
+			keysBytes = 0
 		}
 	}
 
