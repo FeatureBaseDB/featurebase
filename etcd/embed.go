@@ -17,15 +17,18 @@ package etcd
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net"
 	"path"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/pilosa/pilosa/v2/disco"
 	"github.com/pilosa/pilosa/v2/roaring"
+	"github.com/pilosa/pilosa/v2/topology"
 	"github.com/pkg/errors"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/clientv3util"
@@ -1025,4 +1028,44 @@ func (e *Etcd) RemoveShard(ctx context.Context, index, field string, shard uint6
 	}
 
 	return nil
+}
+
+// Nodes implements the Noder interface.
+func (n *Etcd) Nodes() []*topology.Node {
+	// If we have looked up nodes within a certain time, then we're going to
+	// use the cached value for now. This is temporary and will be addressed
+	// correctly in #1133.
+	peers := n.Peers()
+	nodes := make([]*topology.Node, len(peers))
+	for i, peer := range peers {
+		node := &topology.Node{}
+		if meta, err := n.Metadata(context.Background(), peer.ID); err != nil {
+			log.Println(err, "getting metadata") // TODO: handle this with a logger
+		} else if err := json.Unmarshal(meta, node); err != nil {
+			log.Println(err, "unmarshaling json metadata")
+		}
+
+		node.ID = peer.ID
+
+		nodes[i] = node
+	}
+
+	// Nodes must be sorted.
+	sort.Sort(topology.ByID(nodes))
+
+	return nodes
+}
+
+// SetNodes implements the Noder interface as NOP
+// (because we can't force to set nodes for etcd).
+func (n *Etcd) SetNodes(nodes []*topology.Node) {}
+
+// AppendNode implements the Noder interface as NOP
+// (because resizer is responsible for adding new nodes).
+func (n *Etcd) AppendNode(node *topology.Node) {}
+
+// RemoveNode implements the Noder interface as NOP
+// (because resizer is responsible for removing existing nodes)
+func (n *Etcd) RemoveNode(nodeID string) bool {
+	return false
 }

@@ -56,7 +56,6 @@ import (
 	"github.com/pilosa/pilosa/v2/stats"
 	"github.com/pilosa/pilosa/v2/statsd"
 	"github.com/pilosa/pilosa/v2/syswrap"
-	"github.com/pilosa/pilosa/v2/test/port"
 	"github.com/pilosa/pilosa/v2/testhook"
 	"github.com/pkg/errors"
 )
@@ -417,8 +416,7 @@ func (m *Command) SetupServer() error {
 	}
 
 	e := petcd.NewEtcd(m.Config.DisCo, m.Config.Cluster.ReplicaN)
-	n := petcd.NewNoder(m.Config.DisCo, m.Config.Cluster.ReplicaN)
-	discoOpt := pilosa.OptServerDisCo(e, e, e, e, n, e, e)
+	discoOpt := pilosa.OptServerDisCo(e, e, e, e, e, e, e)
 
 	serverOptions := []pilosa.ServerOption{
 		pilosa.OptServerAntiEntropyInterval(time.Duration(m.Config.AntiEntropy.Interval)),
@@ -504,22 +502,8 @@ func (m *Command) setupNetworking() error {
 	// get the host portion of addr to use for binding
 	gossipHost := m.listenURI.Host
 	m.gossipTransport, err = gossip.NewTransport(gossipHost, gossipPort, m.logger.Logger())
-	if err != nil && gossipPort >= 32768 {
-		// In testing, we sometimes try to reuse an ephemeral port.
-		// Which probably works. If it doesn't, this test will take
-		// about a minute longer because we'll come back in from a
-		// new port. See also the gossip config in gossip/gossip.go.
-		// TODO: Maybe make that more configurable here.
-		m.logger.Printf("ephemeral port %d already occupied, switching to :0 (%v)", gossipPort, err)
-		if err := port.GetPort(func(p int) error {
-			gossipPort = p
-			m.Config.Gossip.Port = fmt.Sprintf(":%d", gossipPort)
-			m.gossipTransport, err = gossip.NewTransport(gossipHost, gossipPort, m.logger.Logger())
-			return err
-		}, 10); err != nil {
-			return errors.Wrap(err, "getting transport")
-		}
-
+	if err != nil {
+		return errors.Wrap(err, "getting transport")
 	}
 
 	gossipMemberSet, err := gossip.NewMemberSet(
