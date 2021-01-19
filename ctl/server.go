@@ -73,6 +73,17 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 	flags.DurationVarP((*time.Duration)(&srv.Config.Gossip.Interval), "gossip.interval", "", (time.Duration)(srv.Config.Gossip.Interval), "Interval between sending messages that need to be gossiped that haven't piggybacked on probing messages.")
 	flags.DurationVarP((*time.Duration)(&srv.Config.Gossip.ToTheDeadTime), "gossip.to-the-dead-time", "", (time.Duration)(srv.Config.Gossip.ToTheDeadTime), "Interval after which a node has died that we will still try to gossip to it.")
 
+	// DisCo
+	flags.StringVarP(&srv.Config.DisCo.Name, "disco.name", "", srv.Config.DisCo.Name, "Name of node in DisCo.")
+	flags.StringVarP(&srv.Config.DisCo.Dir, "disco.dir", "", srv.Config.DisCo.Dir, "Directory to use for DisCo.")
+	flags.StringVarP(&srv.Config.DisCo.LClientURL, "disco.listen-client-addr", "", srv.Config.DisCo.LClientURL, "Listen client address.")
+	flags.StringVarP(&srv.Config.DisCo.AClientURL, "disco.advertise-client-addr", "", srv.Config.DisCo.AClientURL, "Advertise client address.")
+	flags.StringVarP(&srv.Config.DisCo.LPeerURL, "disco.listen-peer-addr", "", srv.Config.DisCo.LPeerURL, "Listen peer address.")
+	flags.StringVarP(&srv.Config.DisCo.APeerURL, "disco.advertise-peer-addr", "", srv.Config.DisCo.APeerURL, "Advertise peer address.")
+	flags.StringVarP(&srv.Config.DisCo.ClusterURL, "disco.cluster-url", "", srv.Config.DisCo.ClusterURL, "Cluster URL to join.")
+	flags.StringVarP(&srv.Config.DisCo.ClusterName, "disco.cluster-name", "", srv.Config.DisCo.ClusterName, "Cluster name.")
+	flags.StringVarP(&srv.Config.DisCo.InitCluster, "disco.initial-cluster", "", srv.Config.DisCo.InitCluster, "Initial cluster name1=apurl1,name2=apurl2")
+
 	// AntiEntropy
 	flags.DurationVarP((*time.Duration)(&srv.Config.AntiEntropy.Interval), "anti-entropy.interval", "", (time.Duration)(srv.Config.AntiEntropy.Interval), "Interval at which to run anti-entropy routine.")
 
