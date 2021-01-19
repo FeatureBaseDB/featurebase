@@ -3402,20 +3402,20 @@ func (it *timeRowIterator) Next() (r *Row, rowID uint64, _ *int64, wrapped bool,
 	// gather rows
 	rowID = it.allRowIDs[it.cur]
 	fragments := it.rowIDToFragments[rowID]
-	rows := make([]*Row, len(fragments))
-	for i, fragment := range fragments {
+	rows := make([]*Row, 0, len(fragments))
+	for _, fragment := range fragments {
 		row, err := fragment.row(it.tx, rowID)
 		if err != nil {
 			return row, rowID, nil, wrapped, err
 		}
-		rows[i] = row
+		if row != nil {
+			rows = append(rows, row)
+		}
 	}
 
 	// union rows
-	if len(rows) > 1 {
+	if len(rows) > 0 {
 		r = rows[0].Union(rows[1:]...)
-	} else {
-		r = rows[0]
 	}
 
 	it.cur++

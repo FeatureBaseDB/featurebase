@@ -6845,7 +6845,7 @@ func variousQueries(t *testing.T, clusterSize int) {
 		{RowKey: "paris", ColKey: "userC", Ts: ts2019Jan01},
 		{RowKey: "austin", ColKey: "userF", Ts: ts2019Jan01},
 		{RowKey: "toronto", ColKey: "userA", Ts: ts2019Jan01},
-		// 2019 August: nairobi, paris, austin, toronto
+		// 2019 August: toronto only
 		{RowKey: "toronto", ColKey: "userB", Ts: ts2019Aug01},
 		{RowKey: "toronto", ColKey: "userC", Ts: ts2019Aug01},
 		// 2020: toronto, mombasa, sydney, nairobi
