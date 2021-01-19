@@ -24,6 +24,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unsafe"
 
 	"github.com/pilosa/pilosa/v2/pql"
 	pb "github.com/pilosa/pilosa/v2/proto"
@@ -311,6 +312,8 @@ func (e *executor) safeCopy(resp QueryResponse) (out QueryResponse) {
 			// no bitmap material, so should be ok to skip Clone()
 			out.Results = append(out.Results, x)
 		case []GroupCount:
+			out.Results = append(out.Results, x)
+		case *GroupCounts:
 			out.Results = append(out.Results, x)
 		case ExtractedTable:
 			out.Results = append(out.Results, x)
@@ -2653,10 +2656,10 @@ func (g *groupCountSorter) Less(i, j int) bool {
 			} else if gci.Count > gcj.Count {
 				return fieldOrder == desc
 			}
-		case -2: // aggregate/Sum
-			if gci.Sum < gcj.Sum {
+		case -2: // Aggregate
+			if gci.Agg < gcj.Agg {
 				return fieldOrder == asc
-			} else if gci.Sum > gcj.Sum {
+			} else if gci.Agg > gcj.Agg {
 				return fieldOrder == desc
 			}
 		default:
@@ -2702,7 +2705,19 @@ func getSorter(sortSpec string) (*groupCountSorter, error) {
 	return gcs, nil
 }
 
-func (e *executor) executeGroupBy(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *execOptions) ([]GroupCount, error) {
+// findGroupCounts gets a safe-to-use but possibly empty []GroupCount from
+// an interface which might be a *GroupCounts or a []GroupCount.
+func findGroupCounts(v interface{}) []GroupCount {
+	switch gc := v.(type) {
+	case []GroupCount:
+		return gc
+	case *GroupCounts:
+		return gc.Groups()
+	}
+	return nil
+}
+
+func (e *executor) executeGroupBy(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *execOptions) (*GroupCounts, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeGroupBy")
 	defer span.Finish()
 	// validate call
@@ -2787,7 +2802,7 @@ func (e *executor) executeGroupBy(ctx context.Context, qcx *Qcx, index string, c
 				return nil, errors.Wrap(err, "getting rows for ")
 			}
 			if len(childRows[i]) == 0 { // there are no results because this field has no values.
-				return []GroupCount{}, nil
+				return &GroupCounts{}, nil
 			}
 		}
 	}
@@ -2798,11 +2813,11 @@ func (e *executor) executeGroupBy(ctx context.Context, qcx *Qcx, index string, c
 	}
 	// Merge returned results at coordinating node.
 	reduceFn := func(ctx context.Context, prev, v interface{}) interface{} {
-		other, _ := prev.([]GroupCount)
+		other := findGroupCounts(prev)
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		return mergeGroupCounts(other, v.([]GroupCount), limit)
+		return mergeGroupCounts(other, findGroupCounts(v), limit)
 	}
 	// Get full result set.
 	other, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
@@ -2869,7 +2884,7 @@ func (e *executor) executeGroupBy(ctx context.Context, qcx *Qcx, index string, c
 			if err != nil {
 				return nil, err
 			}
-			results[n].Sum = int64(aggregateCount[0].(uint64))
+			results[n].Agg = int64(aggregateCount[0].(uint64))
 		}
 	}
 
@@ -2907,7 +2922,16 @@ func (e *executor) executeGroupBy(ctx context.Context, qcx *Qcx, index string, c
 
 	}
 
-	return results, nil
+	aggType := ""
+	if aggregate != nil {
+		switch aggregate.Name {
+		case "Sum":
+			aggType = "sum"
+		case "Count":
+			aggType = "aggregate"
+		}
+	}
+	return NewGroupCounts(aggType, results...), nil
 }
 
 func applyLimitAndOffsetToGroupByResult(c *pql.Call, results []GroupCount) ([]GroupCount, error) {
@@ -2992,17 +3016,70 @@ func (fr FieldRow) String() string {
 	return fmt.Sprintf("%s.%d.%s", fr.Field, fr.RowID, fr.RowKey)
 }
 
+type aggregateType int
+
+const (
+	nilAggregate      aggregateType = 0
+	sumAggregate      aggregateType = 1
+	distinctAggregate aggregateType = 2
+)
+
 // GroupCounts is a list of GroupCount.
-type GroupCounts []GroupCount
+type GroupCounts struct {
+	groups        []GroupCount
+	aggregateType aggregateType
+}
+
+// AggregateColumn gives the likely column name to use for aggregates, because
+// for historical reasons we used "sum" when it was a sum, but don't want to
+// use that when it's something else. This will likely get revisited.
+func (g *GroupCounts) AggregateColumn() string {
+	switch g.aggregateType {
+	case sumAggregate:
+		return "sum"
+	case distinctAggregate:
+		return "aggregate"
+	default:
+		return ""
+	}
+}
+
+// Groups is a convenience method to let us not worry as much about the
+// potentially-nil nature of a *GroupCounts.
+func (g *GroupCounts) Groups() []GroupCount {
+	if g == nil {
+		return nil
+	}
+	return g.groups
+}
+
+// NewGroupCounts creates a GroupCounts with the given type and slice
+// of GroupCount objects. There's intentionally no externally-accessible way
+// to change the []GroupCount after creation.
+func NewGroupCounts(agg string, groups ...GroupCount) *GroupCounts {
+	var aggType aggregateType
+	switch agg {
+	case "sum":
+		aggType = sumAggregate
+	case "aggregate":
+		aggType = distinctAggregate
+	case "":
+		aggType = nilAggregate
+	default:
+		panic(fmt.Sprintf("invalid aggregate type %q", agg))
+	}
+	return &GroupCounts{aggregateType: aggType, groups: groups}
+}
 
 // ToTable implements the ToTabler interface.
-func (g GroupCounts) ToTable() (*pb.TableResponse, error) {
-	return pb.RowsToTable(&g, len(g))
+func (g *GroupCounts) ToTable() (*pb.TableResponse, error) {
+	return pb.RowsToTable(g, len(g.Groups()))
 }
 
 // ToRows implements the ToRowser interface.
-func (g GroupCounts) ToRows(callback func(*pb.RowResponse) error) error {
-	for i, gc := range g {
+func (g *GroupCounts) ToRows(callback func(*pb.RowResponse) error) error {
+	agg := g.AggregateColumn()
+	for i, gc := range g.Groups() {
 		var ci []*pb.ColumnInfo
 		if i == 0 {
 			for _, fieldRow := range gc.Group {
@@ -3015,7 +3092,10 @@ func (g GroupCounts) ToRows(callback func(*pb.RowResponse) error) error {
 				}
 			}
 			ci = append(ci, &pb.ColumnInfo{Name: "count", Datatype: "uint64"})
-			ci = append(ci, &pb.ColumnInfo{Name: "sum", Datatype: "int64"})
+			if agg != "" {
+				ci = append(ci, &pb.ColumnInfo{Name: agg, Datatype: "int64"})
+			}
+
 		}
 		rowResp := &pb.RowResponse{
 			Headers: ci,
@@ -3032,9 +3112,11 @@ func (g GroupCounts) ToRows(callback func(*pb.RowResponse) error) error {
 			}
 		}
 		rowResp.Columns = append(rowResp.Columns,
-			&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: gc.Count}},
-			&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: gc.Sum}},
-		)
+			&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: gc.Count}})
+		if agg != "" {
+			rowResp.Columns = append(rowResp.Columns,
+				&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: gc.Agg}})
+		}
 		if err := callback(rowResp); err != nil {
 			return errors.Wrap(err, "calling callback")
 		}
@@ -3042,18 +3124,51 @@ func (g GroupCounts) ToRows(callback func(*pb.RowResponse) error) error {
 	return nil
 }
 
+// MarshalJSON makes GroupCounts satisfy interface json.Marshaler and
+// customizes the JSON output of the aggregate field label.
+func (g *GroupCounts) MarshalJSON() ([]byte, error) {
+	groups := g.Groups()
+	var counts interface{} = groups
+
+	if len(groups) == 0 {
+		return []byte("[]"), nil
+	}
+	switch g.aggregateType {
+	case sumAggregate:
+		counts = *(*[]groupCountSum)(unsafe.Pointer(&groups))
+	case distinctAggregate:
+		counts = *(*[]groupCountAggregate)(unsafe.Pointer(&groups))
+	}
+	return json.Marshal(counts)
+}
+
 // GroupCount represents a result item for a group by query.
 type GroupCount struct {
 	Group []FieldRow `json:"group"`
 	Count uint64     `json:"count"`
-	Sum   int64      `json:"sum"`
+	Agg   int64      `json:"-"`
 }
+
+type groupCountSum struct {
+	Group []FieldRow `json:"group"`
+	Count uint64     `json:"count"`
+	Agg   int64      `json:"sum"`
+}
+
+type groupCountAggregate struct {
+	Group []FieldRow `json:"group"`
+	Count uint64     `json:"count"`
+	Agg   int64      `json:"aggregate"`
+}
+
+var _ GroupCount = GroupCount(groupCountSum{})
+var _ GroupCount = GroupCount(groupCountAggregate{})
 
 func (g *GroupCount) Clone() (r *GroupCount) {
 	r = &GroupCount{
 		Group: make([]FieldRow, len(g.Group)),
 		Count: g.Count,
-		Sum:   g.Sum,
+		Agg:   g.Agg,
 	}
 	for i := range g.Group {
 		r.Group[i] = *(g.Group[i].Clone())
@@ -3077,7 +3192,7 @@ func mergeGroupCounts(a, b []GroupCount, limit int) []GroupCount {
 			i++
 		case 0:
 			a[i].Count += b[j].Count
-			a[i].Sum += b[j].Sum
+			a[i].Agg += b[j].Agg
 			ret = append(ret, a[i])
 			i++
 			j++
@@ -3184,27 +3299,27 @@ func (g GroupCount) satisfiesCondition(subj string, cond *pql.Condition) bool {
 				return false
 			}
 			if cond.Op == pql.EQ {
-				if g.Sum == val {
+				if g.Agg == val {
 					return true
 				}
 			} else if cond.Op == pql.NEQ {
-				if g.Sum != val {
+				if g.Agg != val {
 					return true
 				}
 			} else if cond.Op == pql.LT {
-				if g.Sum < val {
+				if g.Agg < val {
 					return true
 				}
 			} else if cond.Op == pql.LTE {
-				if g.Sum <= val {
+				if g.Agg <= val {
 					return true
 				}
 			} else if cond.Op == pql.GT {
-				if g.Sum > val {
+				if g.Agg > val {
 					return true
 				}
 			} else if cond.Op == pql.GTE {
-				if g.Sum >= val {
+				if g.Agg >= val {
 					return true
 				}
 			}
@@ -3214,19 +3329,19 @@ func (g GroupCount) satisfiesCondition(subj string, cond *pql.Condition) bool {
 				return false
 			}
 			if cond.Op == pql.BETWEEN {
-				if val[0] <= g.Sum && g.Sum <= val[1] {
+				if val[0] <= g.Agg && g.Agg <= val[1] {
 					return true
 				}
 			} else if cond.Op == pql.BTWN_LT_LTE {
-				if val[0] < g.Sum && g.Sum <= val[1] {
+				if val[0] < g.Agg && g.Agg <= val[1] {
 					return true
 				}
 			} else if cond.Op == pql.BTWN_LTE_LT {
-				if val[0] <= g.Sum && g.Sum < val[1] {
+				if val[0] <= g.Agg && g.Agg < val[1] {
 					return true
 				}
 			} else if cond.Op == pql.BTWN_LT_LT {
-				if val[0] < g.Sum && g.Sum < val[1] {
+				if val[0] < g.Agg && g.Agg < val[1] {
 					return true
 				}
 			}
@@ -6497,10 +6612,11 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 			}
 		}
 
-	case []GroupCount:
+	case *GroupCounts:
 		fieldIDs := make(map[*Field]map[uint64]struct{})
 		foreignIDs := make(map[*Field]map[uint64]struct{})
-		for _, gl := range result {
+		groups := result.Groups()
+		for _, gl := range groups {
 			for _, g := range gl.Group {
 				field := idx.Field(g.Field)
 				if field == nil {
@@ -6511,7 +6627,7 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 						if fi := field.ForeignIndex(); fi != "" {
 							m, ok := foreignIDs[field]
 							if !ok {
-								m = make(map[uint64]struct{}, len(result))
+								m = make(map[uint64]struct{}, len(groups))
 								foreignIDs[field] = m
 							}
 
@@ -6522,7 +6638,7 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 
 					m, ok := fieldIDs[field]
 					if !ok {
-						m = make(map[uint64]struct{}, len(result))
+						m = make(map[uint64]struct{}, len(groups))
 						fieldIDs[field] = m
 					}
 
@@ -6549,8 +6665,11 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 			foreignTranslations[field.Name()] = trans
 		}
 
-		other := make([]GroupCount, 0)
-		for _, gl := range result {
+		// We are reluctant to smash result, and I'm not sure we need
+		// to be but I'm not sure we don't need to be.
+		newGroups := make([]GroupCount, len(groups))
+		copy(newGroups, groups)
+		for gi, gl := range groups {
 
 			group := make([]FieldRow, len(gl.Group))
 			for i, g := range gl.Group {
@@ -6563,15 +6682,15 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 
 				group[i] = g
 			}
-
-			other = append(other, GroupCount{
-				Group: group,
-				Count: gl.Count,
-				Sum:   gl.Sum,
-			})
+			// Replace with translated group.
+			newGroups[gi].Group = group
 		}
+		other := &GroupCounts{}
+		if result != nil {
+			other.aggregateType = result.aggregateType
+		}
+		other.groups = newGroups
 		return other, nil
-
 	case RowIDs:
 		fieldName := callArgString(call, "_field")
 		if fieldName == "" {
@@ -7438,7 +7557,7 @@ func (gbi *groupByIterator) Next(ctx context.Context) (ret GroupCount, done bool
 					return ret, false, err
 				}
 				ret.Count = uint64(result.Count)
-				ret.Sum = result.Val
+				ret.Agg = result.Val
 			}
 		}
 		if ret.Count == 0 {

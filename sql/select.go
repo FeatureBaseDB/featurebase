@@ -90,7 +90,7 @@ func (s *SelectHandler) execMappingResult(ctx context.Context, mr *MappingResult
 	case pproto.ToRowser:
 		result = res
 	case []pilosa.GroupCount:
-		result = pilosa.GroupCounts(res)
+		result = pilosa.NewGroupCounts("", res...)
 	case uint64:
 		result = pproto.ConstRowser{
 			{

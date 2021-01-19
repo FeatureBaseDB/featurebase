@@ -456,7 +456,8 @@ func ToTablerWrapper(result interface{}) (pb.ToTabler, error) {
 	if !ok {
 		switch v := result.(type) {
 		case []pilosa.GroupCount:
-			toTabler = pilosa.GroupCounts(v)
+			gc := pilosa.NewGroupCounts("", v...)
+			toTabler = gc
 		case uint64:
 			toTabler = ResultUint64(v)
 		case bool:
@@ -477,7 +478,8 @@ func ToRowserWrapper(result interface{}) (pb.ToRowser, error) {
 	if !ok {
 		switch v := result.(type) {
 		case []pilosa.GroupCount:
-			toRowser = pilosa.GroupCounts(v)
+			gc := pilosa.NewGroupCounts("", v...)
+			toRowser = gc
 		case uint64:
 			toRowser = ResultUint64(v)
 		case bool:

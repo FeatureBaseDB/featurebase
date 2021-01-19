@@ -164,7 +164,7 @@ func TestExecutor_GroupCountCondition(t *testing.T) {
 				},
 			},
 			{
-				groupCount: GroupCount{Sum: 100},
+				groupCount: GroupCount{Agg: 100},
 				checks: []condCheck{
 					{cond: "sum == 99", exp: false},
 					{cond: "sum != 99", exp: true},
@@ -196,7 +196,7 @@ func TestExecutor_GroupCountCondition(t *testing.T) {
 				},
 			},
 			{
-				groupCount: GroupCount{Sum: -100},
+				groupCount: GroupCount{Agg: -100},
 				checks: []condCheck{
 					{cond: "sum == -99", exp: false},
 					{cond: "sum != -99", exp: true},
