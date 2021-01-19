@@ -1277,10 +1277,8 @@ func (h *Holder) LoadNodeID() (string, error) {
 
 // Log startup time and version to $DATA_DIR/.startup.log
 func (h *Holder) logStartup() error {
-	time, err := time.Now().MarshalText()
-	if err != nil {
-		return errors.Wrap(err, "creating timestamp")
-	}
+	RFC3339NanoFixedWidth := "2006-01-02T15:04:05.000000 07:00"
+	time := time.Now().Format(RFC3339NanoFixedWidth)
 	logLine := fmt.Sprintf("%s\t%s\n", time, Version)
 
 	f, err := os.OpenFile(h.path+"/.startup.log", os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)

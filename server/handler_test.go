@@ -25,6 +25,8 @@ import (
 	"math"
 	gohttp "net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"reflect"
 	"sort"
 	"strings"
@@ -1607,6 +1609,11 @@ func Test_DiskUsage_Roaring(t *testing.T) {
 		}
 
 		// check usage for empty cluster
+		dumpFile(holder.Path() + "/.id")
+		dumpFile(holder.Path() + "/.startup.log")
+		dumpFile(holder.Path() + "/.topology")
+		dumpFile(holder.Path() + "/idalloc.db")
+		dumpDir(holder.Path())
 		exp0 := fmt.Sprintf(exp0f[n], capacity)
 
 		w := httptest.NewRecorder()
@@ -1647,6 +1654,8 @@ func Test_DiskUsage_Roaring(t *testing.T) {
 		// check usage with data
 		exp1 := fmt.Sprintf(exp1f[n], capacity)
 
+		dumpDir(holder.Path())
+
 		w = httptest.NewRecorder()
 		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/ui/usage", nil))
 		if w.Code != gohttp.StatusOK {
@@ -1657,6 +1666,44 @@ func Test_DiskUsage_Roaring(t *testing.T) {
 		if body != exp1 {
 			t.Fatalf("unexpected body:\n %s\nexpected:\n %s", body, exp1)
 		}
+	}
+}
+
+func dumpFile(pth string) {
+	file, err := os.Open(pth)
+	defer file.Close()
+	msg := pth
+	if err != nil {
+		fmt.Printf("<error: %s>\n", err)
+		return
+	}
+	b, err := ioutil.ReadAll(file)
+	if err != nil {
+		fmt.Printf("<error: %s>\n", err)
+	}
+	msg += fmt.Sprintf(" (%d bytes):", len(b))
+	if len(b) <= 1000 {
+		msg += fmt.Sprintf(string(b))
+	}
+	fmt.Printf(msg)
+	fmt.Printf("\n")
+}
+
+func dumpDir(pth string) {
+	var files []string
+
+	err := filepath.Walk(pth, func(path string, info os.FileInfo, err error) error {
+		files = append(files, path)
+		return nil
+	})
+	if err != nil {
+		panic(err)
+	}
+	for _, pth2 := range files {
+		file, _ := os.Open(pth2)
+		b, _ := ioutil.ReadAll(file)
+		fmt.Printf("%10d %s\n", len(b), pth2)
+		file.Close()
 	}
 }
 
