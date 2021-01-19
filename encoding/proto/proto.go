@@ -490,6 +490,7 @@ func (s Serializer) encodeQueryRequest(m *pilosa.QueryRequest) *internal.QueryRe
 		Remote:          m.Remote,
 		ExcludeRowAttrs: m.ExcludeRowAttrs,
 		ExcludeColumns:  m.ExcludeColumns,
+		PreTranslated:   m.PreTranslated,
 		EmbeddedData:    make([]*internal.Row, len(m.EmbeddedData)),
 	}
 	for i := range m.EmbeddedData {
@@ -535,7 +536,7 @@ func (s Serializer) encodeQueryResponse(m *pilosa.QueryResponse) *internal.Query
 		case pilosa.ExtractedIDMatrix:
 			pb.Results[i].Type = queryResultTypeExtractedIDMatrix
 			pb.Results[i].ExtractedIDMatrix = s.endcodeExtractedIDMatrix(result)
-		case []pilosa.GroupCount:
+		case *pilosa.GroupCounts:
 			pb.Results[i].Type = queryResultTypeGroupCounts
 			pb.Results[i].GroupCounts = s.encodeGroupCounts(result)
 		case pilosa.RowIdentifiers:
@@ -1210,6 +1211,7 @@ func (s Serializer) decodeQueryRequest(pb *internal.QueryRequest, m *pilosa.Quer
 	m.ExcludeRowAttrs = pb.ExcludeRowAttrs
 	m.ExcludeColumns = pb.ExcludeColumns
 	m.EmbeddedData = make([]*pilosa.Row, len(pb.EmbeddedData))
+	m.PreTranslated = pb.PreTranslated
 	for i := range pb.EmbeddedData {
 		m.EmbeddedData[i] = s.decodeRow(pb.EmbeddedData[i])
 	}
@@ -1421,7 +1423,7 @@ func (s Serializer) decodeQueryResult(pb *internal.QueryResult) interface{} {
 	case queryResultTypeRowIdentifiers:
 		return s.decodeRowIdentifiers(pb.RowIdentifiers)
 	case queryResultTypeGroupCounts:
-		return s.decodeGroupCounts(pb.GroupCounts)
+		return s.decodeGroupCounts(pb.GroupCounts, pb.OldGroupCounts)
 	case queryResultTypePair:
 		return s.decodePair(pb.Pairs[0])
 	case queryResultTypePairField:
@@ -1585,16 +1587,22 @@ func (s Serializer) decodeRowIdentifiers(a *internal.RowIdentifiers) *pilosa.Row
 	}
 }
 
-func (s Serializer) decodeGroupCounts(a []*internal.GroupCount) []pilosa.GroupCount {
-	other := make([]pilosa.GroupCount, len(a))
-	for i := range a {
+func (s Serializer) decodeGroupCounts(a *internal.GroupCounts, b []*internal.GroupCount) *pilosa.GroupCounts {
+	// Workaround: If we get an old-style "[]*GroupCount", we translate it.
+	if a == nil {
+		a = &internal.GroupCounts{Aggregate: "", Groups: b}
+	}
+	other := make([]pilosa.GroupCount, len(a.Groups))
+	for i, gc := range a.Groups {
 		other[i] = pilosa.GroupCount{
-			Group: s.decodeFieldRows(a[i].Group),
-			Count: a[i].Count,
-			Sum:   a[i].Sum,
+			Group: s.decodeFieldRows(gc.Group),
+			Count: gc.Count,
+			// note: not renaming the `internal` structure members now
+			// to avoid breaking protobuf interactions.
+			Agg: gc.Agg,
 		}
 	}
-	return other
+	return pilosa.NewGroupCounts(a.Aggregate, other...)
 }
 
 func (s Serializer) decodeFieldRows(a []*internal.FieldRow) []pilosa.FieldRow {
@@ -1696,7 +1704,7 @@ func (s Serializer) encodeSignedRow(r pilosa.SignedRow) *internal.SignedRow {
 
 func (s Serializer) encodeRow(r *pilosa.Row) *internal.Row {
 	if r == nil {
-		return nil
+		return &internal.Row{} // Generated proto code doesn't like a nil Row.
 	}
 
 	ir := &internal.Row{
@@ -1721,13 +1729,17 @@ func (s Serializer) encodeRowIdentifiers(r pilosa.RowIdentifiers) *internal.RowI
 	}
 }
 
-func (s Serializer) encodeGroupCounts(counts []pilosa.GroupCount) []*internal.GroupCount {
-	result := make([]*internal.GroupCount, len(counts))
-	for i := range counts {
-		result[i] = &internal.GroupCount{
-			Group: s.encodeFieldRows(counts[i].Group),
-			Count: counts[i].Count,
-			Sum:   counts[i].Sum,
+func (s Serializer) encodeGroupCounts(counts *pilosa.GroupCounts) *internal.GroupCounts {
+	groups := counts.Groups()
+	result := &internal.GroupCounts{
+		Groups:    make([]*internal.GroupCount, len(groups)),
+		Aggregate: counts.AggregateColumn(),
+	}
+	for i, gc := range groups {
+		result.Groups[i] = &internal.GroupCount{
+			Group: s.encodeFieldRows(gc.Group),
+			Count: gc.Count,
+			Agg:   gc.Agg,
 		}
 	}
 	return result

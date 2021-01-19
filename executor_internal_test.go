@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"strconv"
 	"testing"
 
@@ -163,7 +164,7 @@ func TestExecutor_GroupCountCondition(t *testing.T) {
 				},
 			},
 			{
-				groupCount: GroupCount{Sum: 100},
+				groupCount: GroupCount{Agg: 100},
 				checks: []condCheck{
 					{cond: "sum == 99", exp: false},
 					{cond: "sum != 99", exp: true},
@@ -195,7 +196,7 @@ func TestExecutor_GroupCountCondition(t *testing.T) {
 				},
 			},
 			{
-				groupCount: GroupCount{Sum: -100},
+				groupCount: GroupCount{Agg: -100},
 				checks: []condCheck{
 					{cond: "sum == -99", exp: false},
 					{cond: "sum != -99", exp: true},
@@ -382,5 +383,95 @@ func TestToInt64(t *testing.T) {
 		if val != tc.i64 {
 			t.Fatalf("Expected: %+v, Got: %+v", tc.i64, val)
 		}
+	}
+}
+
+func TestGetSorter(t *testing.T) {
+	tests := []struct {
+		sortSpec string
+		expGCS   *groupCountSorter
+		expErr   string
+	}{
+		{
+			sortSpec: "count asc",
+			expGCS:   &groupCountSorter{fields: []int{-1}, order: []order{asc}},
+		},
+		{
+			sortSpec: "count    asc",
+			expGCS:   &groupCountSorter{fields: []int{-1}, order: []order{asc}},
+		},
+		{
+			sortSpec: "  count asc",
+			expGCS:   &groupCountSorter{fields: []int{-1}, order: []order{asc}},
+		},
+		{
+			sortSpec: "  count asc    ",
+			expGCS:   &groupCountSorter{fields: []int{-1}, order: []order{asc}},
+		},
+		{
+			sortSpec: "count",
+			expGCS:   &groupCountSorter{fields: []int{-1}, order: []order{desc}},
+		},
+		{
+			sortSpec: "sum asc",
+			expGCS:   &groupCountSorter{fields: []int{-2}, order: []order{asc}},
+		},
+		{
+			sortSpec: "aggregate asc",
+			expGCS:   &groupCountSorter{fields: []int{-2}, order: []order{asc}},
+		},
+		{
+			sortSpec: "boondoggle asc",
+			expErr:   "sorting is only supported on count, aggregate, or sum, not 'boondoggle'",
+		},
+		{
+			sortSpec: "sum asc, count desc",
+			expGCS:   &groupCountSorter{fields: []int{-2, -1}, order: []order{asc, desc}},
+		},
+		{
+			sortSpec: "count asc, sum desc",
+			expGCS:   &groupCountSorter{fields: []int{-1, -2}, order: []order{asc, desc}},
+		},
+		{
+			sortSpec: " count  asc ,  sum  desc ",
+			expGCS:   &groupCountSorter{fields: []int{-1, -2}, order: []order{asc, desc}},
+		},
+		{
+			sortSpec: " count  asc ,  sum  desc blah",
+			expErr:   "parsing sort directive: 'sum  desc blah': too many elements",
+		},
+		{
+			sortSpec: "count asc, sum fesc",
+			expErr:   "unknown sort direction 'fesc'",
+		},
+		{
+			sortSpec: " , sum fesc",
+			expErr:   "invalid sorting directive: ''",
+		},
+		{
+			// weird and useless, but I guess fine?
+			sortSpec: "count  asc,count asc ",
+			expGCS:   &groupCountSorter{fields: []int{-1, -1}, order: []order{asc, asc}},
+		},
+	}
+
+	for i, tst := range tests {
+		t.Run(fmt.Sprintf("%s_%d", tst.sortSpec, i), func(t *testing.T) {
+			gcs, err := getSorter(tst.sortSpec)
+			if err != nil {
+				if tst.expErr == "" {
+					t.Errorf("unexpected error: %v", err)
+					return
+				}
+				if tst.expErr != err.Error() {
+					t.Errorf("mismatched errors got: '%v', exp: '%s'", err, tst.expErr)
+				}
+				return
+			}
+			if !reflect.DeepEqual(gcs, tst.expGCS) {
+				t.Errorf("exp:\n%+v\ngot:\n%v\n", tst.expGCS, gcs)
+			}
+
+		})
 	}
 }

@@ -1343,7 +1343,7 @@ func TestExecutor_Execute_TopN(t *testing.T) {
 			t.Fatal(err)
 		} else if _, err := idx.CreateField("f", pilosa.OptFieldTypeInt(0, 100)); err != nil {
 			t.Fatal(err)
-		} else if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `TopN(f, n=2)`}); err == nil || err.Error() != `executing: finding top results: cannot compute TopN() on integer field: "f"` {
+		} else if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `TopN(f, n=2)`}); err == nil || !strings.Contains(err.Error(), `finding top results: cannot compute TopN() on integer field: "f"`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -1362,7 +1362,7 @@ func TestExecutor_Execute_TopN(t *testing.T) {
 			Set(0, f=1)
 		`}); err != nil {
 			t.Fatal(err)
-		} else if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `TopN(f, n=2)`}); err == nil || err.Error() != `executing: finding top results: cannot compute TopN(), field has no cache: "f"` {
+		} else if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `TopN(f, n=2)`}); err == nil || !strings.Contains(err.Error(), `finding top results: cannot compute TopN(), field has no cache: "f"`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -3066,7 +3066,7 @@ func TestExecutor_Execute_Remote_Row(t *testing.T) {
 				{Group: []pilosa.FieldRow{{Field: "f", RowID: 7}}, Count: 1},
 				{Group: []pilosa.FieldRow{{Field: "f", RowID: 10}}, Count: 4},
 			}
-			results := res.Results[0].([]pilosa.GroupCount)
+			results := res.Results[0].(*pilosa.GroupCounts).Groups()
 			test.CheckGroupBy(t, expected, results)
 		}
 	})
@@ -3108,7 +3108,7 @@ func TestExecutor_Execute_Remote_Row(t *testing.T) {
 				{Group: []pilosa.FieldRow{{Field: "fint", Value: &d}}, Count: 1},
 			}
 
-			results := res.Results[0].([]pilosa.GroupCount)
+			results := res.Results[0].(*pilosa.GroupCounts).Groups()
 			test.CheckGroupBy(t, expected, results)
 		}
 	})
@@ -3139,7 +3139,7 @@ func TestExecutor_Execute_Remote_Row(t *testing.T) {
 				{Group: []pilosa.FieldRow{{Field: "hint", Value: &c}}, Count: 1},
 			}
 
-			results := res.Results[0].([]pilosa.GroupCount)
+			results := res.Results[0].(*pilosa.GroupCounts).Groups()
 			test.CheckGroupBy(t, expected, results)
 		}
 	})
@@ -5074,20 +5074,20 @@ func TestExecutor_GroupByStrings(t *testing.T) {
 		{
 			query: "GroupBy(Rows(generals), aggregate=Sum(field=v))",
 			expected: []pilosa.GroupCount{
-				{Group: []pilosa.FieldRow{{Field: "generals", RowID: 1, RowKey: "r1"}}, Count: 5, Sum: 25},
-				{Group: []pilosa.FieldRow{{Field: "generals", RowID: 2, RowKey: "r2"}}, Count: 5, Sum: 30},
+				{Group: []pilosa.FieldRow{{Field: "generals", RowID: 1, RowKey: "r1"}}, Count: 5, Agg: 25},
+				{Group: []pilosa.FieldRow{{Field: "generals", RowID: 2, RowKey: "r2"}}, Count: 5, Agg: 30},
 			},
 		},
 		{
 			query: "GroupBy(Rows(generals), aggregate=Sum(field=v), having=Condition(sum>25))",
 			expected: []pilosa.GroupCount{
-				{Group: []pilosa.FieldRow{{Field: "generals", RowID: 2, RowKey: "r2"}}, Count: 5, Sum: 30},
+				{Group: []pilosa.FieldRow{{Field: "generals", RowID: 2, RowKey: "r2"}}, Count: 5, Agg: 30},
 			},
 		},
 		{
 			query: "GroupBy(Rows(generals), aggregate=Sum(field=v), having=Condition(-5<sum<27))",
 			expected: []pilosa.GroupCount{
-				{Group: []pilosa.FieldRow{{Field: "generals", RowID: 1, RowKey: "r1"}}, Count: 5, Sum: 25},
+				{Group: []pilosa.FieldRow{{Field: "generals", RowID: 1, RowKey: "r1"}}, Count: 5, Agg: 25},
 			},
 		},
 		{
@@ -5100,52 +5100,52 @@ func TestExecutor_GroupByStrings(t *testing.T) {
 				{
 					Group: []pilosa.FieldRow{pilosa.FieldRow{Field: "v", Value: &v1}},
 					Count: 1,
-					Sum:   0,
+					Agg:   0,
 				},
 				{
 					Group: []pilosa.FieldRow{pilosa.FieldRow{Field: "v", Value: &v2}},
 					Count: 1,
-					Sum:   0,
+					Agg:   0,
 				},
 				{
 					Group: []pilosa.FieldRow{pilosa.FieldRow{Field: "v", Value: &v3}},
 					Count: 1,
-					Sum:   0,
+					Agg:   0,
 				},
 				{
 					Group: []pilosa.FieldRow{pilosa.FieldRow{Field: "v", Value: &v4}},
 					Count: 1,
-					Sum:   0,
+					Agg:   0,
 				},
 				{
 					Group: []pilosa.FieldRow{pilosa.FieldRow{Field: "v", Value: &v5}},
 					Count: 1,
-					Sum:   0,
+					Agg:   0,
 				},
 				{
 					Group: []pilosa.FieldRow{pilosa.FieldRow{Field: "v", Value: &v6}},
 					Count: 1,
-					Sum:   0,
+					Agg:   0,
 				},
 				{
 					Group: []pilosa.FieldRow{pilosa.FieldRow{Field: "v", Value: &v7}},
 					Count: 1,
-					Sum:   0,
+					Agg:   0,
 				},
 				{
 					Group: []pilosa.FieldRow{pilosa.FieldRow{Field: "v", Value: &v8}},
 					Count: 1,
-					Sum:   0,
+					Agg:   0,
 				},
 				{
 					Group: []pilosa.FieldRow{pilosa.FieldRow{Field: "v", Value: &v9}},
 					Count: 1,
-					Sum:   0,
+					Agg:   0,
 				},
 				{
 					Group: []pilosa.FieldRow{pilosa.FieldRow{Field: "v", Value: &v10}},
 					Count: 1,
-					Sum:   0,
+					Agg:   0,
 				},
 			},
 		},
@@ -5155,12 +5155,12 @@ func TestExecutor_GroupByStrings(t *testing.T) {
 				{
 					Group: []pilosa.FieldRow{pilosa.FieldRow{Field: "vv", Value: &v3}},
 					Count: 3,
-					Sum:   9,
+					Agg:   9,
 				},
 				{
 					Group: []pilosa.FieldRow{pilosa.FieldRow{Field: "vv", Value: &v4}},
 					Count: 4,
-					Sum:   16,
+					Agg:   16,
 				},
 			},
 		},
@@ -5170,12 +5170,12 @@ func TestExecutor_GroupByStrings(t *testing.T) {
 				{
 					Group: []pilosa.FieldRow{pilosa.FieldRow{Field: "nv", Value: &nv4}},
 					Count: 4,
-					Sum:   -16,
+					Agg:   -16,
 				},
 				{
 					Group: []pilosa.FieldRow{pilosa.FieldRow{Field: "nv", Value: &nv3}},
 					Count: 3,
-					Sum:   -9,
+					Agg:   -9,
 				},
 			},
 		},
@@ -5185,12 +5185,12 @@ func TestExecutor_GroupByStrings(t *testing.T) {
 				{
 					Group: []pilosa.FieldRow{pilosa.FieldRow{Field: "nv", Value: &nv4}},
 					Count: 4,
-					Sum:   -16,
+					Agg:   -16,
 				},
 				{
 					Group: []pilosa.FieldRow{pilosa.FieldRow{Field: "nv", Value: &nv3}},
 					Count: 3,
-					Sum:   -9,
+					Agg:   -9,
 				},
 			},
 		},
@@ -5203,7 +5203,7 @@ func TestExecutor_GroupByStrings(t *testing.T) {
 						pilosa.FieldRow{Field: "nv", Value: &nv3},
 					},
 					Count: 3,
-					Sum:   9,
+					Agg:   9,
 				},
 				{
 					Group: []pilosa.FieldRow{
@@ -5211,7 +5211,7 @@ func TestExecutor_GroupByStrings(t *testing.T) {
 						pilosa.FieldRow{Field: "nv", Value: &nv4},
 					},
 					Count: 4,
-					Sum:   16,
+					Agg:   16,
 				},
 			},
 		},
@@ -5226,7 +5226,7 @@ func TestExecutor_GroupByStrings(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			results := r.Results[0].([]pilosa.GroupCount)
+			results := r.Results[0].(*pilosa.GroupCounts).Groups()
 			test.CheckGroupBy(t, tst.expected, results)
 		})
 	}
@@ -5545,6 +5545,8 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 			t.Fatal(err)
 		} else if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(1, v=100)`}); err != nil {
 			t.Fatal(err)
+		} else if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: fmt.Sprintf(`Set(%d, v=100)`, ShardWidth+10)}); err != nil { // Workaround distinct bug where v must be set in every shard
+			t.Fatal(err)
 		}
 
 		t.Run("No Field List Arguments", func(t *testing.T) {
@@ -5573,7 +5575,7 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 				{Group: []pilosa.FieldRow{{Field: "general", RowID: 12}, {Field: "sub", RowID: 110}}, Count: 1},
 			}
 
-			results := c.Query(t, "i", `GroupBy(Rows(field=general), Rows(sub))`).Results[0].([]pilosa.GroupCount)
+			results := c.Query(t, "i", `GroupBy(Rows(field=general), Rows(sub))`).Results[0].(*pilosa.GroupCounts).Groups()
 			test.CheckGroupBy(t, expected, results)
 		})
 
@@ -5585,7 +5587,7 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 				{Group: []pilosa.FieldRow{{Field: "general", RowID: 12}, {Field: "sub", RowID: 110}}, Count: 1},
 			}
 
-			results := c.Query(t, "i", `GroupBy(Rows(general), Rows(sub))`).Results[0].([]pilosa.GroupCount)
+			results := c.Query(t, "i", `GroupBy(Rows(general), Rows(sub))`).Results[0].(*pilosa.GroupCounts).Groups()
 			test.CheckGroupBy(t, expected, results)
 		})
 
@@ -5595,17 +5597,50 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 				{Group: []pilosa.FieldRow{{Field: "general", RowID: 10}, {Field: "sub", RowID: 110}}, Count: 1},
 			}
 
-			results := c.Query(t, "i", `GroupBy(Rows(general), Rows(sub), filter=Row(general=10))`).Results[0].([]pilosa.GroupCount)
+			results := c.Query(t, "i", `GroupBy(Rows(general), Rows(sub), filter=Row(general=10))`).Results[0].(*pilosa.GroupCounts).Groups()
 			test.CheckGroupBy(t, expected, results)
 		})
 
 		t.Run("Aggregate", func(t *testing.T) {
 			expected := []pilosa.GroupCount{
-				{Group: []pilosa.FieldRow{{Field: "general", RowID: 10}, {Field: "sub", RowID: 100}}, Count: 2, Sum: 110},
-				{Group: []pilosa.FieldRow{{Field: "general", RowID: 10}, {Field: "sub", RowID: 110}}, Count: 1, Sum: 10},
+				{Group: []pilosa.FieldRow{{Field: "general", RowID: 10}, {Field: "sub", RowID: 100}}, Count: 2, Agg: 110},
+				{Group: []pilosa.FieldRow{{Field: "general", RowID: 10}, {Field: "sub", RowID: 110}}, Count: 1, Agg: 10},
 			}
 
-			results := c.Query(t, "i", `GroupBy(Rows(general), Rows(sub), aggregate=Sum(field=v))`).Results[0].([]pilosa.GroupCount)
+			results := c.Query(t, "i", `GroupBy(Rows(general), Rows(sub), aggregate=Sum(field=v))`).Results[0].(*pilosa.GroupCounts).Groups()
+			test.CheckGroupBy(t, expected, results)
+		})
+
+		t.Run("AggregateCountDistinct", func(t *testing.T) {
+			expected := []pilosa.GroupCount{
+				{Group: []pilosa.FieldRow{{Field: "general", RowID: 10}, {Field: "sub", RowID: 100}}, Count: 3, Agg: 2},
+				{Group: []pilosa.FieldRow{{Field: "general", RowID: 10}, {Field: "sub", RowID: 110}}, Count: 1, Agg: 1},
+				{Group: []pilosa.FieldRow{{Field: "general", RowID: 11}, {Field: "sub", RowID: 110}}, Count: 1, Agg: 0},
+				{Group: []pilosa.FieldRow{{Field: "general", RowID: 12}, {Field: "sub", RowID: 110}}, Count: 1, Agg: 0},
+			}
+
+			results := c.Query(t, "i", `GroupBy(Rows(general), Rows(sub), aggregate=Count(Distinct(field=v)))`).Results[0].(*pilosa.GroupCounts).Groups()
+			test.CheckGroupBy(t, expected, results)
+		})
+
+		t.Run("AggregateCountDistinctFilter", func(t *testing.T) {
+			expected := []pilosa.GroupCount{
+				{Group: []pilosa.FieldRow{{Field: "general", RowID: 10}, {Field: "sub", RowID: 100}}, Count: 1, Agg: 1},
+			}
+
+			results := c.Query(t, "i", `GroupBy(Rows(general), Rows(sub), filter=Row(v > 10), aggregate=Count(Distinct(field=v)))`).Results[0].(*pilosa.GroupCounts).Groups()
+			test.CheckGroupBy(t, expected, results)
+		})
+
+		t.Run("AggregateCountDistinctFilterDistinct", func(t *testing.T) {
+			expected := []pilosa.GroupCount{
+				{Group: []pilosa.FieldRow{{Field: "general", RowID: 10}, {Field: "sub", RowID: 100}}, Count: 3, Agg: 1},
+				{Group: []pilosa.FieldRow{{Field: "general", RowID: 10}, {Field: "sub", RowID: 110}}, Count: 1, Agg: 0},
+				{Group: []pilosa.FieldRow{{Field: "general", RowID: 11}, {Field: "sub", RowID: 110}}, Count: 1, Agg: 0},
+				{Group: []pilosa.FieldRow{{Field: "general", RowID: 12}, {Field: "sub", RowID: 110}}, Count: 1, Agg: 0},
+			}
+
+			results := c.Query(t, "i", `GroupBy(Rows(general), Rows(sub), aggregate=Count(Distinct(Row(v > 10), field=v)))`).Results[0].(*pilosa.GroupCounts).Groups()
 			test.CheckGroupBy(t, expected, results)
 		})
 
@@ -5615,7 +5650,7 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 				{Group: []pilosa.FieldRow{{Field: "general", RowID: 12}}, Count: 2},
 			}
 
-			results := c.Query(t, "i", `GroupBy(Rows(general, previous=10))`).Results[0].([]pilosa.GroupCount)
+			results := c.Query(t, "i", `GroupBy(Rows(general, previous=10))`).Results[0].(*pilosa.GroupCounts).Groups()
 			test.CheckGroupBy(t, expected, results)
 		})
 
@@ -5624,7 +5659,7 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 				{Group: []pilosa.FieldRow{{Field: "general", RowID: 11}}, Count: 2},
 			}
 
-			results := c.Query(t, "i", `GroupBy(Rows(general, previous=10), limit=1)`).Results[0].([]pilosa.GroupCount)
+			results := c.Query(t, "i", `GroupBy(Rows(general, previous=10), limit=1)`).Results[0].(*pilosa.GroupCounts).Groups()
 			test.CheckGroupBy(t, expected, results)
 
 		})
@@ -5645,7 +5680,7 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 				{Group: []pilosa.FieldRow{{Field: "a", RowID: 0}, {Field: "b", RowID: 1}}, Count: 1},
 			}
 
-			results := c.Query(t, "i", `GroupBy(Rows(a), Rows(b), limit=1)`).Results[0].([]pilosa.GroupCount)
+			results := c.Query(t, "i", `GroupBy(Rows(a), Rows(b), limit=1)`).Results[0].(*pilosa.GroupCounts).Groups()
 			test.CheckGroupBy(t, expected, results)
 		})
 
@@ -5673,7 +5708,7 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 		})
 
 		t.Run("test wrapping with previous", func(t *testing.T) {
-			results := c.Query(t, "i", `GroupBy(Rows(wa), Rows(wb), Rows(wc, previous=1), limit=3)`).Results[0].([]pilosa.GroupCount)
+			results := c.Query(t, "i", `GroupBy(Rows(wa), Rows(wb), Rows(wc, previous=1), limit=3)`).Results[0].(*pilosa.GroupCounts).Groups()
 			expected := []pilosa.GroupCount{
 				{Group: []pilosa.FieldRow{{Field: "wa", RowID: 0}, {Field: "wb", RowID: 0}, {Field: "wc", RowID: 2}}, Count: 2},
 				{Group: []pilosa.FieldRow{{Field: "wa", RowID: 0}, {Field: "wb", RowID: 1}, {Field: "wc", RowID: 0}}, Count: 1},
@@ -5683,14 +5718,14 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 		})
 
 		t.Run("test previous is last result", func(t *testing.T) {
-			results := c.Query(t, "i", `GroupBy(Rows(wa, previous=3), Rows(wb, previous=3), Rows(wc, previous=3), limit=3)`).Results[0].([]pilosa.GroupCount)
+			results := c.Query(t, "i", `GroupBy(Rows(wa, previous=3), Rows(wb, previous=3), Rows(wc, previous=3), limit=3)`).Results[0].(*pilosa.GroupCounts).Groups()
 			if len(results) > 0 {
 				t.Fatalf("expected no results because previous specified last result")
 			}
 		})
 
 		t.Run("test wrapping multiple", func(t *testing.T) {
-			results := c.Query(t, "i", `GroupBy(Rows(wa), Rows(wb, previous=2), Rows(wc, previous=2), limit=1)`).Results[0].([]pilosa.GroupCount)
+			results := c.Query(t, "i", `GroupBy(Rows(wa), Rows(wb, previous=2), Rows(wc, previous=2), limit=1)`).Results[0].(*pilosa.GroupCounts).Groups()
 			expected := []pilosa.GroupCount{
 				{Group: []pilosa.FieldRow{{Field: "wa", RowID: 1}, {Field: "wb", RowID: 0}, {Field: "wc", RowID: 0}}, Count: 1},
 			}
@@ -5714,7 +5749,7 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 			{3, ShardWidth},
 		})
 		t.Run("distinct rows in different shards", func(t *testing.T) {
-			results := c.Query(t, "i", `GroupBy(Rows(ma), Rows(mb), limit=5)`).Results[0].([]pilosa.GroupCount)
+			results := c.Query(t, "i", `GroupBy(Rows(ma), Rows(mb), limit=5)`).Results[0].(*pilosa.GroupCounts).Groups()
 			expected := []pilosa.GroupCount{
 				{Group: []pilosa.FieldRow{{Field: "ma", RowID: 0}, {Field: "mb", RowID: 0}}, Count: 1},
 				{Group: []pilosa.FieldRow{{Field: "ma", RowID: 0}, {Field: "mb", RowID: 2}}, Count: 1},
@@ -5726,7 +5761,7 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 		})
 
 		t.Run("distinct rows in different shards with row limit", func(t *testing.T) {
-			results := c.Query(t, "i", `GroupBy(Rows(ma), Rows(mb, limit=2), limit=5)`).Results[0].([]pilosa.GroupCount)
+			results := c.Query(t, "i", `GroupBy(Rows(ma), Rows(mb, limit=2), limit=5)`).Results[0].(*pilosa.GroupCounts).Groups()
 			expected := []pilosa.GroupCount{
 				{Group: []pilosa.FieldRow{{Field: "ma", RowID: 0}, {Field: "mb", RowID: 0}}, Count: 1},
 				{Group: []pilosa.FieldRow{{Field: "ma", RowID: 1}, {Field: "mb", RowID: 1}}, Count: 1},
@@ -5737,7 +5772,7 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 		})
 
 		t.Run("distinct rows in different shards with column arg", func(t *testing.T) {
-			results := c.Query(t, "i", fmt.Sprintf(`GroupBy(Rows(ma), Rows(mb, column=%d), limit=5)`, ShardWidth)).Results[0].([]pilosa.GroupCount)
+			results := c.Query(t, "i", fmt.Sprintf(`GroupBy(Rows(ma), Rows(mb, column=%d), limit=5)`, ShardWidth)).Results[0].(*pilosa.GroupCounts).Groups()
 			expected := []pilosa.GroupCount{
 				{Group: []pilosa.FieldRow{{Field: "ma", RowID: 1}, {Field: "mb", RowID: 1}}, Count: 1},
 				{Group: []pilosa.FieldRow{{Field: "ma", RowID: 1}, {Field: "mb", RowID: 3}}, Count: 1},
@@ -5762,7 +5797,7 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 			{1, ShardWidth},
 		})
 		t.Run("same rows in different shards", func(t *testing.T) {
-			results := c.Query(t, "i", `GroupBy(Rows(na), Rows(nb))`).Results[0].([]pilosa.GroupCount)
+			results := c.Query(t, "i", `GroupBy(Rows(na), Rows(nb))`).Results[0].(*pilosa.GroupCounts).Groups()
 			expected := []pilosa.GroupCount{
 				{Group: []pilosa.FieldRow{{Field: "na", RowID: 0}, {Field: "nb", RowID: 0}}, Count: 2},
 				{Group: []pilosa.FieldRow{{Field: "na", RowID: 0}, {Field: "nb", RowID: 1}}, Count: 2},
@@ -5799,12 +5834,12 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 
 		t.Run("test wrapping with previous", func(t *testing.T) {
 			totalResults := make([]pilosa.GroupCount, 0)
-			results := c.Query(t, "i", `GroupBy(Rows(ppa), Rows(ppb), Rows(ppc), limit=3)`).Results[0].([]pilosa.GroupCount)
+			results := c.Query(t, "i", `GroupBy(Rows(ppa), Rows(ppb), Rows(ppc), limit=3)`).Results[0].(*pilosa.GroupCounts).Groups()
 			totalResults = append(totalResults, results...)
 			for len(totalResults) < 64 {
 				lastGroup := results[len(results)-1].Group
 				query := fmt.Sprintf("GroupBy(Rows(ppa, previous=%d), Rows(ppb, previous=%d), Rows(ppc, previous=%d), limit=3)", lastGroup[0].RowID, lastGroup[1].RowID, lastGroup[2].RowID)
-				results = c.Query(t, "i", query).Results[0].([]pilosa.GroupCount)
+				results = c.Query(t, "i", query).Results[0].(*pilosa.GroupCounts).Groups()
 				totalResults = append(totalResults, results...)
 			}
 
@@ -5846,7 +5881,7 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 				{Group: []pilosa.FieldRow{{Field: "generalk", RowID: 3, RowKey: "twelve"}, {Field: "subk", RowID: 2, RowKey: "one-hundred-ten"}}, Count: 1},
 			}
 
-			results := c.Query(t, "i", `GroupBy(Rows(generalk), Rows(subk))`).Results[0].([]pilosa.GroupCount)
+			results := c.Query(t, "i", `GroupBy(Rows(generalk), Rows(subk))`).Results[0].(*pilosa.GroupCounts).Groups()
 			test.CheckGroupBy(t, expected, results)
 
 		})
@@ -5884,7 +5919,7 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 				{Group: []pilosa.FieldRow{{Field: "child", RowID: 2, RowKey: "three"}}, Count: 2},
 			}
 
-			results := c.Query(t, "fic", `GroupBy(Rows(child))`).Results[0].([]pilosa.GroupCount)
+			results := c.Query(t, "fic", `GroupBy(Rows(child))`).Results[0].(*pilosa.GroupCounts).Groups()
 			test.CheckGroupBy(t, expected, results)
 		})
 
@@ -6470,10 +6505,11 @@ func TestExecutor_Execute_CountDistinct(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		gc, ok := resp.Results[0].([]pilosa.GroupCount)
+		gcc, ok := resp.Results[0].(*pilosa.GroupCounts)
 		if !ok {
 			t.Fatalf("invalid response type, expected: []pilosa.GroupCount, got: %T", resp.Results[0])
 		}
+		gc := gcc.Groups()
 		if len(gc) != 2 {
 			t.Fatalf("invalid group count length, expected: 2, got: %v", len(gc))
 		}
@@ -6780,7 +6816,15 @@ func TestMissingKeyRegression(t *testing.T) {
 // (single and multi-node clusters, different endpoints for the
 // queries (HTTP, GRPC, Postgres), etc.).
 func TestVariousQueries(t *testing.T) {
-	c := test.MustRunCluster(t, 3)
+	for _, clusterSize := range []int{1, 3, 4, 7} {
+		t.Run(fmt.Sprintf("%d-node", clusterSize), func(t *testing.T) {
+			variousQueries(t, clusterSize)
+		})
+	}
+}
+
+func variousQueries(t *testing.T, clusterSize int) {
+	c := test.MustRunCluster(t, clusterSize)
 	defer c.Close()
 
 	// Create and populate "likenums" similar to "likes", but without keys on the field.
@@ -6796,7 +6840,9 @@ func TestVariousQueries(t *testing.T) {
 		{ID: 7, Key: "userB"},
 		{ID: 7, Key: "userC"},
 		{ID: 7, Key: "userD"},
-		{ID: 7, Key: "userE"},
+		// we intentionally leave user E out because then there is no
+		// data for userE's shard for this field, which triggered a
+		// "fragment not found" problem
 		{ID: 7, Key: "userF"},
 	})
 
@@ -6827,6 +6873,28 @@ func TestVariousQueries(t *testing.T) {
 		{Val: 0, Key: "userE"},
 	})
 
+	// Create and populate "affinity" int field with negative, positive, zero and null values.
+
+	c.CreateField(t, "users", pilosa.IndexOptions{Keys: true, TrackExistence: true}, "net_worth", pilosa.OptFieldTypeInt(-100000000, 100000000))
+	c.ImportIntKey(t, "users", "net_worth", []test.IntKey{
+		{Val: 1, Key: "userA"},
+		{Val: 10, Key: "userB"},
+		{Val: 100, Key: "userC"},
+		{Val: 1000, Key: "userD"},
+		{Val: 10000, Key: "userE"},
+		{Val: 100000, Key: "userF"},
+	})
+
+	c.CreateField(t, "users", pilosa.IndexOptions{Keys: true, TrackExistence: true}, "zip_code", pilosa.OptFieldTypeInt(0, 100000))
+	c.ImportIntKey(t, "users", "zip_code", []test.IntKey{
+		{Val: 78739, Key: "userA"},
+		{Val: 78739, Key: "userB"},
+		{Val: 19707, Key: "userC"},
+		{Val: 19707, Key: "userD"},
+		{Val: 86753, Key: "userE"},
+		{Val: 78739, Key: "userG"},
+	})
+
 	tests := []struct {
 		query       string
 		qrVerifier  func(t *testing.T, resp pilosa.QueryResponse)
@@ -6835,11 +6903,11 @@ func TestVariousQueries(t *testing.T) {
 		{
 			query: "Count(All())",
 			qrVerifier: func(t *testing.T, resp pilosa.QueryResponse) {
-				if resp.Results[0].(uint64) != 6 {
-					t.Errorf("expected 6, got %+v", resp.Results[0])
+				if resp.Results[0].(uint64) != 7 {
+					t.Errorf("expected 7, got %+v", resp.Results[0])
 				}
 			},
-			csvVerifier: "6\n",
+			csvVerifier: "7\n",
 		},
 		{
 			query: "Count(Distinct(field=likenums))",
@@ -6970,6 +7038,116 @@ func TestVariousQueries(t *testing.T) {
 			},
 			csvVerifier: "molecula\npilosa\npangolin\nzebra\ntoucan\ndog\nicecream\n",
 		},
+		{
+			query: "GroupBy(Rows(field=likes))",
+			csvVerifier: `molecula,1
+pilosa,1
+pangolin,1
+zebra,1
+toucan,1
+dog,1
+icecream,6
+`,
+		},
+		{
+			query: "GroupBy(Rows(field=likes), aggregate=Sum(field=net_worth), limit=2, having=Condition(sum>10))",
+			csvVerifier: `pangolin,1,100
+zebra,1,1000
+`,
+		},
+		{
+			query:       "GroupBy(Rows(field=likes), having=Condition(count>5))",
+			csvVerifier: "icecream,6\n",
+		},
+		{
+			query: "GroupBy(Rows(field=likes), filter=Row(affinity>-7))",
+			csvVerifier: `molecula,1
+pangolin,1
+zebra,1
+toucan,1
+icecream,4
+`,
+		},
+		{
+			query: "GroupBy(Rows(field=likes), aggregate=Count(Distinct(field=zip_code)))",
+			csvVerifier: `molecula,1,1
+pilosa,1,1
+pangolin,1,1
+zebra,1,1
+toucan,1,1
+dog,1,0
+icecream,6,3
+`,
+		},
+		{
+			query:       "GroupBy(Rows(field=likes), aggregate=Count(Distinct(field=zip_code)), having=Condition(sum>2))",
+			csvVerifier: "icecream,6,3\n",
+		},
+		{
+			query: "GroupBy(Rows(field=likes), filter=Row(affinity>-11), aggregate=Count(Distinct(field=zip_code)))",
+			csvVerifier: `molecula,1,1
+pilosa,1,1
+pangolin,1,1
+zebra,1,1
+toucan,1,1
+icecream,5,3
+`,
+		},
+		{
+			query: "GroupBy(Rows(field=likes), filter=Row(affinity>-11), aggregate=Count(Distinct(Row(affinity>-7), field=zip_code)))",
+			csvVerifier: `molecula,1,1
+pilosa,1,0
+pangolin,1,1
+zebra,1,1
+toucan,1,1
+icecream,5,3
+`,
+		},
+		{
+			query: "GroupBy(Rows(field=likes), sort=\"count desc\")",
+			csvVerifier: `icecream,6
+molecula,1
+pilosa,1
+pangolin,1
+zebra,1
+toucan,1
+dog,1
+`,
+		},
+		{
+			query: "GroupBy(Rows(field=likes), aggregate=Sum(field=net_worth), sort=\"aggregate desc, count asc\")",
+			csvVerifier: `icecream,6,111111
+dog,1,100000
+toucan,1,10000
+zebra,1,1000
+pangolin,1,100
+pilosa,1,10
+molecula,1,1
+`,
+		},
+		{
+			query: "GroupBy(Rows(field=likes), aggregate=Sum(field=net_worth), sort=\"aggregate desc, count asc\", limit=3)",
+			csvVerifier: `icecream,6,111111
+dog,1,100000
+toucan,1,10000
+`,
+		},
+		{
+			query: "GroupBy(Rows(field=likes), aggregate=Sum(field=net_worth),sort=\"aggregate desc, count asc\",limit=3,offset=2)",
+			csvVerifier: `toucan,1,10000
+zebra,1,1000
+pangolin,1,100
+`,
+		},
+		{
+			query: "GroupBy(Rows(field=affinity), aggregate=Count(Distinct(field=zip_code)))",
+			csvVerifier: `-10,1,1
+-5,1,1
+0,1,1
+5,1,1
+10,1,1
+`,
+		},
 	}
 
 	for i, tst := range tests {
@@ -6986,13 +7164,95 @@ func TestVariousQueries(t *testing.T) {
 			// verify everything after header
 			got := csvString[strings.Index(csvString, "\n")+1:]
 			if got != tst.csvVerifier {
-				t.Errorf("expected '%s', got '%s'", tst.csvVerifier, got)
+				t.Errorf("expected:\n%s\ngot:\n%s", tst.csvVerifier, got)
 			}
 
 			// TODO: add HTTP and Postgres and ability to convert
 			// those results to CSV to run through CSV verifier
 		})
 	}
+}
+
+// TestVariousSingleShardQueries tests queries on a dataset which
+// consists of an unkeyed index, and data only in the first
+// shard. Turns out that there are some interesting failure modes
+// which only crop up with one shard. An example is that the mapReduce
+// logic does its first reduce call with a nil interface{} value, and
+// an actual result value. If this is the only reduce that gets done
+// (because there's only one shard), the result might never go through
+// normal merge/reduction logic and might e.g. be nil instead of an
+// empty struct resulting in an NPE later on.
+func TestVariousSingleShardQueries(t *testing.T) {
+	for _, clusterSize := range []int{1, 4} {
+		t.Run(fmt.Sprintf("%d-node", clusterSize), func(t *testing.T) {
+			variousSingleShardQueries(t, clusterSize)
+		})
+	}
+}
+
+func variousSingleShardQueries(t *testing.T, clusterSize int) {
+	c := test.MustRunCluster(t, clusterSize)
+	defer c.Close()
+
+	// Create and populate "likenums" similar to "likes", but without keys on the field.
+	c.CreateField(t, "events", pilosa.IndexOptions{Keys: false, TrackExistence: true}, "lostcount", pilosa.OptFieldTypeInt(0, 1000000000))
+	c.ImportIntID(t, "events", "lostcount", []test.IntID{
+		{Val: 0, ID: 1},
+		{Val: 1, ID: 2},
+		{Val: 0, ID: 3},
+		{Val: 2, ID: 4},
+		{Val: 2, ID: 5},
+		{Val: 0, ID: 6},
+		{Val: 3, ID: 7},
+		{Val: 3, ID: 8},
+		{Val: 3, ID: 9},
+		{Val: 0, ID: 10},
+	})
+
+	c.CreateField(t, "events", pilosa.IndexOptions{Keys: false, TrackExistence: true}, "jittermax", pilosa.OptFieldTypeInt(0, 1000000000))
+	c.ImportIntID(t, "events", "jittermax", []test.IntID{
+		{Val: 17, ID: 1},
+		{Val: 3, ID: 2},
+		{Val: 42, ID: 3},
+		{Val: 9, ID: 4},
+		{Val: 17, ID: 5},
+		{Val: 3, ID: 6},
+		{Val: 42, ID: 7},
+		{Val: 9, ID: 8},
+		{Val: 17, ID: 9},
+		{Val: 3, ID: 10},
+	})
+
+	tests := []struct {
+		query       string
+		csvVerifier string
+	}{
+		{
+			query: "GroupBy(Rows(lostcount), aggregate=Count(Distinct(field=jittermax)))",
+			csvVerifier: `0,4,3
+1,1,1
+2,2,2
+3,3,3
+`,
+		},
+	}
+
+	for i, tst := range tests {
+		t.Run(fmt.Sprintf("%d-%s", i, tst.query), func(t *testing.T) {
+			tr := c.QueryGRPC(t, "events", tst.query)
+			csvString, err := tableResponseToCSVString(tr)
+			if err != nil {
+				t.Fatal(err)
+			}
+			// verify everything after header
+			got := csvString[strings.Index(csvString, "\n")+1:]
+			if got != tst.csvVerifier {
+				t.Errorf("expected:\n%s\ngot:\n%s", tst.csvVerifier, got)
+			}
+
+		})
+	}
+
 }
 
 // tableResponseToCSV converts a generic TableResponse to a CSV format

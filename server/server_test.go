@@ -298,7 +298,7 @@ func TestMain_GroupBy(t *testing.T) {
 	if res, err := m.QueryProtobuf("i", `GroupBy(Rows(generalk), Rows(subk))`); err != nil {
 		t.Fatal(err)
 	} else {
-		test.CheckGroupBy(t, expected, res.Results[0].([]pilosa.GroupCount))
+		test.CheckGroupBy(t, expected, res.Results[0].(*pilosa.GroupCounts).Groups())
 	}
 }
 

@@ -152,6 +152,9 @@ prerelease-upload:
 install:
 	go install -tags='$(BUILD_TAGS)' -ldflags $(LDFLAGS) $(FLAGS) ./cmd/pilosa
 
+install-bench:
+	go install -tags='$(BUILD_TAGS)' -ldflags $(LDFLAGS) $(FLAGS) ./cmd/pilosa-bench
+
 lattice:
 	git clone git@github.com:molecula/lattice.git
 

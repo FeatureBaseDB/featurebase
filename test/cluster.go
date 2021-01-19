@@ -63,7 +63,7 @@ func (c *Cluster) QueryHTTP(t testing.TB, index, query string) (string, error) {
 	if len(c.Nodes) == 0 {
 		t.Fatal("must have at least one node in cluster to query")
 	}
-	
+
 	return c.Nodes[0].Query(t, index, "", query)
 }
 
@@ -186,6 +186,30 @@ func (c *Cluster) ImportIntKey(t testing.TB, index, field string, pairs []IntKey
 	}
 	if err := c.Nodes[0].API.ImportValue(context.Background(), nil, importRequest); err != nil {
 		t.Fatalf("importing IntKey data: %v", err)
+	}
+}
+
+type IntID struct {
+	Val int64
+	ID  uint64
+}
+
+// ImportIntID imports data into an int field in an unkeyed index.
+func (c *Cluster) ImportIntID(t testing.TB, index, field string, pairs []IntID) {
+	t.Helper()
+	importRequest := &pilosa.ImportValueRequest{
+		Index:     index,
+		Field:     field,
+		Shard:     math.MaxUint64,
+		ColumnIDs: make([]uint64, len(pairs)),
+		Values:    make([]int64, len(pairs)),
+	}
+	for i, pair := range pairs {
+		importRequest.Values[i] = pair.Val
+		importRequest.ColumnIDs[i] = pair.ID
+	}
+	if err := c.Nodes[0].API.ImportValue(context.Background(), nil, importRequest); err != nil {
+		t.Fatalf("importing IntID data: %v", err)
 	}
 }
 

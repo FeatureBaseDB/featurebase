@@ -148,6 +148,10 @@ func (ct *commandTest) setupCommand(t *testing.T) *cobra.Command {
 		err = os.Setenv(name, val)
 		failErr(t, err, fmt.Sprintf("setting environment variable '%s' to '%s'", name, val))
 	}
+	// address common case where system might have postgres bind
+	// setting that an existing running Pilosa is using (causing test
+	// failures due to port conflict)
+	os.Setenv("PILOSA_POSTGRES_BIND", "")
 
 	// make command and set args
 	rc := cmd.NewRootCommand(strings.NewReader(""), ioutil.Discard, ioutil.Discard)

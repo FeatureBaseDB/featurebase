@@ -68,7 +68,7 @@ func errToStatusError(err error) error {
 	}
 
 	// Check error string.
-	switch errors.Cause(err) {
+	switch cause := errors.Cause(err); cause {
 	case pilosa.ErrIndexNotFound,
 		pilosa.ErrFieldNotFound,
 		pilosa.ErrForeignIndexNotFound,
@@ -123,6 +123,10 @@ func errToStatusError(err error) error {
 		pilosa.ErrTooManyWrites,
 		pilosa.ErrNodeIDNotExists:
 		return status.Error(codes.Internal, err.Error())
+	default:
+		if _, ok := cause.(pilosa.ConflictError); ok {
+			return status.Error(codes.AlreadyExists, err.Error())
+		}
 	}
 
 	return status.Error(codes.Unknown, err.Error())
@@ -265,6 +269,47 @@ func (h *GRPCHandler) QueryPQLUnary(ctx context.Context, req *pb.QueryPQLRequest
 	h.stats.Count(pilosa.MetricPqlQueries, 1, 1)
 
 	return table, errToStatusError(nil)
+}
+
+// CreateIndex creates a new Index
+func (h *GRPCHandler) CreateIndex(ctx context.Context, req *pb.CreateIndexRequest) (*pb.CreateIndexResponse, error) {
+	// Always enable TrackExistence for gRPC-created indexes
+	opts := pilosa.IndexOptions{Keys: req.Keys, TrackExistence: true}
+	_, err := h.api.CreateIndex(ctx, req.Name, opts)
+	if err != nil {
+		return nil, errToStatusError(err)
+	}
+	return &pb.CreateIndexResponse{}, nil
+}
+
+// GetIndex returns a single Index given a name
+func (h *GRPCHandler) GetIndex(ctx context.Context, req *pb.GetIndexRequest) (*pb.GetIndexResponse, error) {
+	schema := h.api.Schema(ctx)
+	for _, index := range schema {
+		if req.Name == index.Name {
+			return &pb.GetIndexResponse{Index: &pb.Index{Name: index.Name}}, nil
+		}
+	}
+	return nil, status.Error(codes.NotFound, fmt.Sprintf("Index with name %s not found", req.Name))
+}
+
+// GetIndexes returns a list of all Indexes
+func (h *GRPCHandler) GetIndexes(ctx context.Context, req *pb.GetIndexesRequest) (*pb.GetIndexesResponse, error) {
+	schema := h.api.Schema(ctx)
+	indexes := make([]*pb.Index, len(schema))
+	for i, index := range schema {
+		indexes[i] = &pb.Index{Name: index.Name}
+	}
+	return &pb.GetIndexesResponse{Indexes: indexes}, nil
+}
+
+// DeleteIndex deletes an Index
+func (h *GRPCHandler) DeleteIndex(ctx context.Context, req *pb.DeleteIndexRequest) (*pb.DeleteIndexResponse, error) {
+	err := h.api.DeleteIndex(ctx, req.Name)
+	if err != nil {
+		return nil, errToStatusError(err)
+	}
+	return &pb.DeleteIndexResponse{}, nil
 }
 
 // VDSMGRPCHandler contains methods which handle the various gRPC requests, ported from VDSM.
@@ -411,7 +456,8 @@ func ToTablerWrapper(result interface{}) (pb.ToTabler, error) {
 	if !ok {
 		switch v := result.(type) {
 		case []pilosa.GroupCount:
-			toTabler = pilosa.GroupCounts(v)
+			gc := pilosa.NewGroupCounts("", v...)
+			toTabler = gc
 		case uint64:
 			toTabler = ResultUint64(v)
 		case bool:
@@ -432,7 +478,8 @@ func ToRowserWrapper(result interface{}) (pb.ToRowser, error) {
 	if !ok {
 		switch v := result.(type) {
 		case []pilosa.GroupCount:
-			toRowser = pilosa.GroupCounts(v)
+			gc := pilosa.NewGroupCounts("", v...)
+			toRowser = gc
 		case uint64:
 			toRowser = ResultUint64(v)
 		case bool:
