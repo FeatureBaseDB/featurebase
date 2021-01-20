@@ -24,9 +24,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pilosa/pilosa/v2/debugstats"
 	"github.com/pilosa/pilosa/v2/roaring"
 	txkey "github.com/pilosa/pilosa/v2/short_txkey"
-	//txkey "github.com/pilosa/pilosa/v2/txkey"
 )
 
 // statTx is useful to profile on a
@@ -69,29 +69,12 @@ func (w *callStats) reset() {
 	}
 }
 
-type LineSorter struct {
-	Line string
-	Tot  float64
-}
-
-type SortByTot []*LineSorter
-
-func (p SortByTot) Len() int {
-	return len(p)
-}
-func (p SortByTot) Less(i, j int) bool {
-	return p[i].Tot < p[j].Tot
-}
-func (p SortByTot) Swap(i, j int) {
-	p[i], p[j] = p[j], p[i]
-}
-
 func (c *callStats) report() (r string) {
 	txsrc := os.Getenv("PILOSA_TXSRC")
 	r = fmt.Sprintf("callStats: (%v)\n", txsrc)
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	var lines []*LineSorter
+	var lines []*debugstats.LineSorter
 	for i := kall(0); i < kLast; i++ {
 		slc := c.elap[i].dur
 		n := len(slc)
@@ -105,9 +88,9 @@ func (c *callStats) report() (r string) {
 			totaltm = slc[0]
 		}
 		line := fmt.Sprintf("  %20v  N=%8v   avg/op: %12v   sd: %12v  total: %12v\n", i.String(), n, time.Duration(mean), time.Duration(sd), time.Duration(totaltm))
-		lines = append(lines, &LineSorter{Line: line, Tot: totaltm})
+		lines = append(lines, &debugstats.LineSorter{Line: line, Tot: totaltm})
 	}
-	sort.Sort(SortByTot(lines))
+	sort.Sort(debugstats.SortByTot(lines))
 	for i := range lines {
 		r += lines[i].Line
 	}

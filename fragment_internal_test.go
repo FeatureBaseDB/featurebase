@@ -38,6 +38,7 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	"github.com/pilosa/pilosa/v2/pql"
 	"github.com/pilosa/pilosa/v2/roaring"
+	"github.com/pilosa/pilosa/v2/storage"
 	"github.com/pilosa/pilosa/v2/testhook"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
@@ -1720,7 +1721,7 @@ func TestFragment_RankCache_Persistence(t *testing.T) {
 
 func roaringOnlyTest(t *testing.T) {
 	src := os.Getenv("PILOSA_TXSRC")
-	if src == RoaringTxn || (DefaultTxsrc == RoaringTxn && src == "") {
+	if src == RoaringTxn || (storage.DefaultBackend == RoaringTxn && src == "") {
 		// okay to run, we are under roaring only
 	} else {
 		t.Skip("skip for everything but roaring")
@@ -1729,7 +1730,7 @@ func roaringOnlyTest(t *testing.T) {
 
 func roaringOnlyBenchmark(b *testing.B) {
 	src := os.Getenv("PILOSA_TXSRC")
-	if src == RoaringTxn || (DefaultTxsrc == RoaringTxn && src == "") {
+	if src == RoaringTxn || (storage.DefaultBackend == RoaringTxn && src == "") {
 		// okay to run, we are under roaring only
 	} else {
 		b.Skip("skip for everything but roaring")

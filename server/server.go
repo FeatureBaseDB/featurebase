@@ -55,6 +55,7 @@ import (
 	"github.com/pilosa/pilosa/v2/statik"
 	"github.com/pilosa/pilosa/v2/stats"
 	"github.com/pilosa/pilosa/v2/statsd"
+	"github.com/pilosa/pilosa/v2/storage"
 	"github.com/pilosa/pilosa/v2/syswrap"
 	"github.com/pilosa/pilosa/v2/testhook"
 	"github.com/pkg/errors"
@@ -291,17 +292,17 @@ func (m *Command) SetupServer() error {
 	envTxsrc := os.Getenv("PILOSA_TXSRC")
 	if m.Config.Txsrc == "" {
 		// INVAR: No -tx flag on the command line.
-		// We defer to the environment, and then the DefaultTxsrc
+		// We defer to the environment, and then the DefaultBackend
 		if envTxsrc == "" {
 			// no env variable requested either.
-			m.Config.Txsrc = pilosa.DefaultTxsrc
+			m.Config.Txsrc = storage.DefaultBackend
 		} else {
 			// Tell the "regular" prod server what to use.
 			m.Config.Txsrc = envTxsrc
 		}
 	}
-	// INVAR: m.Config.Txsrc is valid and not "", but pilosa.DefaultTxsrc could be bad.
-	txty := pilosa.MustTxsrcToTxtype(m.Config.Txsrc) // will panic on unknown Txsrc.
+	// INVAR: m.Config.Storage.Backend is valid and not "", but storage.DefaultBackend could be bad.
+	txty := pilosa.MustTxsrcToTxtype(m.Config.Storage.Backend) // will panic on unknown Backend.
 	os.Setenv("PILOSA_TXSRC", m.Config.Txsrc)
 	m.logger.Printf("using Txsrc '%v'/%v", m.Config.Txsrc, txty)
 	if len(txty) == 2 {

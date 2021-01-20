@@ -24,6 +24,7 @@ import (
 	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/http"
 	"github.com/pilosa/pilosa/v2/server"
+	"github.com/pilosa/pilosa/v2/storage"
 	"github.com/pilosa/pilosa/v2/test"
 )
 
@@ -61,9 +62,9 @@ func queryBalances(m0api *pilosa.API, acctOwnerID uint64, fldAcct0, fldAcct1, in
 
 func skipForRoaring(t *testing.T) {
 	src := os.Getenv("PILOSA_TXSRC")
-	// once txfactory.go DefaultTxsrc != RoaringTxn, this
+	// once txfactory.go storage.DefaultBackend != RoaringTxn, this
 	// will break, of course. Take out the src == "" below.
-	if (src == "" && pilosa.DefaultTxsrc == pilosa.RoaringTxn) || strings.Contains(src, "roaring") {
+	if (src == "" && storage.DefaultBackend == pilosa.RoaringTxn) || strings.Contains(src, "roaring") {
 		t.Skip("skip if roaring pseudo-txn involved -- won't show transactional rollback")
 	}
 }

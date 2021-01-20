@@ -31,7 +31,6 @@ import (
 	"github.com/pilosa/pilosa/v2/roaring"
 	txkey "github.com/pilosa/pilosa/v2/short_txkey"
 	"github.com/pilosa/pilosa/v2/storage"
-	//txkey "github.com/pilosa/pilosa/v2/txkey"
 	"github.com/pkg/errors"
 	"github.com/zeebo/blake3"
 )
@@ -42,11 +41,6 @@ const (
 	RBFTxn     string = "rbf"
 	BoltTxn    string = "bolt"
 )
-
-// DefaultTxsrc is set here. pilosa/server/config.go references it
-// to set the default for pilosa server exeutable.
-// Can be overridden with env variable PILOSA_TXSRC for testing.
-const DefaultTxsrc = RoaringTxn
 
 // DetectMemAccessPastTx true helps us catch places in api and executor
 // where mmapped memory is being accessed after the point in time
