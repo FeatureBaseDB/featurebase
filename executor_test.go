@@ -5487,6 +5487,34 @@ func sameStringSlice(x, y []string) bool {
 	return len(diff) == 0
 }
 
+func TestExecutor_Execute_DistinctFailure(t *testing.T) {
+	c := test.MustRunCluster(t, 1)
+	defer c.Close()
+	c.CreateField(t, "i", pilosa.IndexOptions{}, "general")
+	c.CreateField(t, "i", pilosa.IndexOptions{}, "v", pilosa.OptFieldTypeInt(0, 1000))
+	c.ImportBits(t, "i", "general", [][2]uint64{
+		{10, 0},
+		{10, 1},
+		{10, ShardWidth + 1},
+		{11, 2},
+		{11, ShardWidth + 2},
+		{12, 2},
+		{12, ShardWidth + 2},
+	})
+
+	if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(0, v=10)`}); err != nil {
+		t.Fatal(err)
+	} else if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(1, v=100)`}); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("BasicDistinct", func(t *testing.T) {
+		if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Distinct(field="v")`}); err != nil {
+			t.Fatalf("unexpected error: \"%v\"", err)
+		}
+	})
+}
+
 func TestExecutor_Execute_GroupBy(t *testing.T) {
 	groupByTest := func(t *testing.T, clusterSize int) {
 		c := test.MustRunCluster(t, 1)
