@@ -614,6 +614,7 @@ func (f *TxFactory) IndexUsageDetails() (map[string]IndexUsage, uint64, error) {
 		fieldUsages := make(map[string]FieldUsage)
 		fragmentsTotal := uint64(0)
 		fieldKeysTotal := uint64(0)
+		fieldsTotal := uint64(0)
 		flds := idx.Fields()
 		for _, fld := range flds {
 			field := fld.Name()
@@ -654,6 +655,7 @@ func (f *TxFactory) IndexUsageDetails() (map[string]IndexUsage, uint64, error) {
 			// add to running total
 			fieldKeysTotal += fUsage.Keys
 			fragmentsTotal += fUsage.Fragments
+			fieldsTotal += fUsage.Total
 
 			fieldUsages[field] = fUsage
 		}
@@ -672,7 +674,7 @@ func (f *TxFactory) IndexUsageDetails() (map[string]IndexUsage, uint64, error) {
 		}
 
 		indexUsage[index] = IndexUsage{
-			Total:          indexMetaBytes + indexKeysBytes + fieldKeysTotal + fragmentsTotal,
+			Total:          indexMetaBytes + indexKeysBytes + fieldsTotal,
 			IndexKeys:      indexKeysBytes,
 			FieldKeysTotal: fieldKeysTotal,
 			Fragments:      fragmentsTotal,
@@ -725,7 +727,7 @@ func (f *TxFactory) fieldUsage(indexPath string, fld *Field) (FieldUsage, error)
 	}
 
 	fieldUsage = FieldUsage{
-		Total:     metaBytes + fragmentBytes,
+		Total:     metaBytes + fragmentBytes, // metaBytes includes keys
 		Fragments: fragmentBytes,
 		Keys:      uint64(keysBytes),
 	}
