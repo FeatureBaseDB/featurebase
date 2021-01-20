@@ -79,7 +79,6 @@ func (s *SelectHandler) execMappingResult(ctx context.Context, mr *MappingResult
 	if mr.Query == "" {
 		return nil, errors.New("no pql query created")
 	}
-	fmt.Printf("execMappingResult: %+v\n", sql)
 
 	resp, err := s.api.Query(ctx, &pilosa.QueryRequest{Index: mr.IndexName, Query: mr.Query, SQLQuery: sql})
 	if err != nil {
