@@ -25,6 +25,8 @@ import (
 
 	rbfcfg "github.com/pilosa/pilosa/v2/rbf/cfg"
 	txkey "github.com/pilosa/pilosa/v2/short_txkey"
+	"github.com/pilosa/pilosa/v2/storage"
+
 	//txkey "github.com/pilosa/pilosa/v2/txkey"
 	"github.com/pkg/errors"
 )
@@ -61,7 +63,7 @@ type DBWrapper interface {
 }
 
 type DBRegistry interface {
-	OpenDBWrapper(path string, doAllocZero bool, rbfcfg *rbfcfg.Config) (DBWrapper, error)
+	OpenDBWrapper(path string, doAllocZero bool, cfg *storage.Config) (DBWrapper, error)
 }
 
 type DBShard struct {
@@ -243,7 +245,8 @@ type DBPerShard struct {
 
 	isBlueGreen bool
 
-	RBFConfig *rbfcfg.Config
+	StorageConfig *storage.Config
+	RBFConfig     *rbfcfg.Config
 }
 
 func newIndex2Shards() (r map[txtype]map[string]*shardSet) {
@@ -399,9 +402,8 @@ func (per *DBPerShard) LoadExistingDBs() (err error) {
 }
 
 func (txf *TxFactory) NewDBPerShard(types []txtype, holderDir string, holder *Holder) (d *DBPerShard) {
-
-	if holder.cfg == nil || holder.cfg.RBFConfig == nil {
-		panic("must have holder.cfg.RBFConfig set here")
+	if holder.cfg == nil || holder.cfg.RBFConfig == nil || holder.cfg.StorageConfig == nil {
+		panic("must have holder.cfg.RBFConfig and holder.cfg.StorageConfig set here")
 	}
 
 	useOpenList := 0
@@ -421,17 +423,18 @@ func (txf *TxFactory) NewDBPerShard(types []txtype, holderDir string, holder *Ho
 	}
 
 	d = &DBPerShard{
-		types:        types,
-		HolderDir:    holderDir,
-		holder:       holder,
-		dbh:          NewDBHolder(),
-		Flatmap:      make(map[flatkey]*DBShard),
-		txf:          txf,
-		useOpenList:  useOpenList,
-		hasRoaring:   hasRoaring,
-		isBlueGreen:  len(types) > 1,
-		index2shards: newIndex2Shards(),
-		RBFConfig:    holder.cfg.RBFConfig,
+		types:         types,
+		HolderDir:     holderDir,
+		holder:        holder,
+		dbh:           NewDBHolder(),
+		Flatmap:       make(map[flatkey]*DBShard),
+		txf:           txf,
+		useOpenList:   useOpenList,
+		hasRoaring:    hasRoaring,
+		isBlueGreen:   len(types) > 1,
+		index2shards:  newIndex2Shards(),
+		StorageConfig: holder.cfg.StorageConfig,
+		RBFConfig:     holder.cfg.RBFConfig,
 	}
 	return
 }
@@ -645,13 +648,14 @@ func (per *DBPerShard) unprotectedGetDBShard(index string, shard uint64, idx *In
 				registry = globalRoaringReg
 			case rbfTxn:
 				registry = globalRbfDBReg
+				registry.(*rbfDBRegistrar).SetRBFConfig(per.RBFConfig)
 			case boltTxn:
 				registry = globalBoltReg
 			default:
 				panic(fmt.Sprintf("unknown txtyp: '%v'", ty))
 			}
 			path := dbs.pathForType(ty)
-			w, err := registry.OpenDBWrapper(path, DetectMemAccessPastTx, per.RBFConfig)
+			w, err := registry.OpenDBWrapper(path, DetectMemAccessPastTx, per.StorageConfig)
 			panicOn(err)
 			h := idx.Holder()
 			w.SetHolder(h)

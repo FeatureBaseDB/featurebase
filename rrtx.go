@@ -26,10 +26,9 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/pilosa/pilosa/v2/rbf"
-	rbfcfg "github.com/pilosa/pilosa/v2/rbf/cfg"
 	"github.com/pilosa/pilosa/v2/roaring"
 	txkey "github.com/pilosa/pilosa/v2/short_txkey"
+	"github.com/pilosa/pilosa/v2/storage"
 
 	//txkey "github.com/pilosa/pilosa/v2/txkey"
 	"github.com/pkg/errors"
@@ -68,7 +67,7 @@ func (tx *RoaringTx) Dump(short bool, shard uint64) {
 }
 
 func (tx *RoaringTx) UseRowCache() bool {
-	return rbf.EnableRowCache()
+	return storage.EnableRowCache()
 }
 
 // based on view.openFragments()
@@ -637,8 +636,7 @@ func (r *roaringRegistrar) unregister(w *RoaringWrapper) {
 // openRoaringDB will check the registry and make a new instance only
 // if one does not exist for its path0. Otherwise it returns
 // the existing instance.
-func (r *roaringRegistrar) OpenDBWrapper(path string, doAllocZero bool, cfg *rbfcfg.Config) (DBWrapper, error) {
-
+func (r *roaringRegistrar) OpenDBWrapper(path string, doAllocZero bool, _ *storage.Config) (DBWrapper, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	w, ok := r.path2db[path]

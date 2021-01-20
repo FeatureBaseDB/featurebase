@@ -441,7 +441,7 @@ func (m *Command) SetupServer() error {
 		pilosa.OptServerClusterDisabled(m.Config.Cluster.Disabled, m.Config.Cluster.Hosts),
 		pilosa.OptServerClusterName(m.Config.Cluster.Name),
 		pilosa.OptServerSerializer(proto.Serializer{}),
-		pilosa.OptServerTxsrc(m.Config.Txsrc),
+		pilosa.OptServerStorageConfig(m.Config.Storage),
 		pilosa.OptServerRowcacheOn(m.Config.RowcacheOn),
 		pilosa.OptServerRBFConfig(m.Config.RBFConfig),
 		pilosa.OptServerQueryHistoryLength(m.Config.QueryHistoryLength),

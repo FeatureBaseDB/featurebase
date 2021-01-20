@@ -70,6 +70,12 @@ func newCommand(tb testing.TB, opts ...server.CommandOption) *Command {
 	m.Config.DataDir = path
 	defaultConf := server.NewConfig()
 
+	// TODO: this is temporary and should be removed and
+	// automatically replaced with PILOSA_STORAGE_BACKEND.
+	if txsrc := os.Getenv("PILOSA_TXSRC"); txsrc != "" {
+		m.Config.Storage.Backend = txsrc
+	}
+
 	if m.Config.Bind == defaultConf.Bind {
 		m.Config.Bind = "http://localhost:0"
 	}

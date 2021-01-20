@@ -41,6 +41,7 @@ import (
 	"github.com/pilosa/pilosa/v2/pql"
 	"github.com/pilosa/pilosa/v2/proto"
 	"github.com/pilosa/pilosa/v2/server"
+	"github.com/pilosa/pilosa/v2/storage"
 	"github.com/pilosa/pilosa/v2/test"
 	"github.com/pilosa/pilosa/v2/testhook"
 	"github.com/pkg/errors"
@@ -6689,7 +6690,11 @@ func TestTimelessClearRegression(t *testing.T) {
 }
 
 func TestMissingKeyRegression(t *testing.T) {
-	c := test.MustRunCluster(t, 1, []server.CommandOption{server.OptCommandServerOptions(pilosa.OptServerTxsrc("roaring"))})
+	c := test.MustRunCluster(t, 1, []server.CommandOption{server.OptCommandServerOptions(
+		pilosa.OptServerStorageConfig(&storage.Config{
+			Backend:      "roaring",
+			FsyncEnabled: true,
+		}))})
 	defer c.Close()
 
 	c.CreateField(t, "i", pilosa.IndexOptions{Keys: true, TrackExistence: true}, "f", pilosa.OptFieldKeys())

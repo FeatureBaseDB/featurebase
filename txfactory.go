@@ -28,9 +28,9 @@ import (
 	"text/tabwriter"
 
 	"github.com/pilosa/pilosa/v2/hash"
-	"github.com/pilosa/pilosa/v2/rbf"
 	"github.com/pilosa/pilosa/v2/roaring"
 	txkey "github.com/pilosa/pilosa/v2/short_txkey"
+	"github.com/pilosa/pilosa/v2/storage"
 	//txkey "github.com/pilosa/pilosa/v2/txkey"
 	"github.com/pkg/errors"
 	"github.com/zeebo/blake3"
@@ -521,7 +521,7 @@ func NewTxFactory(txsrc string, holderDir string, holder *Holder) (f *TxFactory,
 		f.blueGreenReg = newBlueGreenReg(types)
 		f.isBlueGreen = true
 		// blue-green can never use the rowCache.
-		rbf.SetRowcacheOn(false)
+		storage.SetRowCacheOn(false)
 	}
 	f.dbPerShard = f.NewDBPerShard(types, holderDir, holder)
 
@@ -544,7 +544,7 @@ func (f *TxFactory) Open() error {
 // to determine if it should use the rowCache. Currently it
 // doesn't have a tx Tx parameter, so we use the Txf instead.
 func (f *TxFactory) UseRowCache() bool {
-	return rbf.EnableRowCache()
+	return storage.EnableRowCache()
 }
 
 // Txo holds the transaction options

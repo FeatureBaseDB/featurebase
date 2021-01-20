@@ -20,6 +20,7 @@ import (
 
 	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/server"
+	"github.com/pilosa/pilosa/v2/storage"
 	"github.com/spf13/cobra"
 )
 
@@ -106,6 +107,15 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 	// Note: the default for --tx must be kept "" empty string. Otherwise we
 	// cannot detect and honor the PILOSA_TXSRC env var over-ride.
 	flags.StringVarP(&srv.Config.Txsrc, "txsrc", "", "", fmt.Sprintf("transaction/storage to use: one of roaring, rbf, bolt, or a blue-green setup: rbf_roaring, roaring_rbf, bolt_roaring, roaring_bolt, bolt_rbf, etc. The default is: %v. The env var PILOSA_TXSRC is over-ridden by --txsrc option on the command line.", pilosa.DefaultTxsrc))
+
+	// Storage
+	// Note: the default for --storage.backend must be kept "" empty string.
+	// Otherwise we cannot detect and honor the PILOSA_STORAGE_BACKEND env var
+	// over-ride.
+	// TODO: the comment above was carried over from the PILOSA_TXSRC flag, but
+	// we should confirm that this still applies.
+	flags.StringVar(&srv.Config.Storage.Backend, "storage.backend", storage.DefaultBackend, fmt.Sprintf("transaction/storage to use: one of roaring, rbf, bolt, or a blue-green setup: rbf_roaring, roaring_rbf, bolt_roaring, roaring_bolt, bolt_rbf, etc. The default is: %v. The env var PILOSA_STORAGE_BACKEND is over-ridden by --storage.backend option on the command line.", storage.DefaultBackend))
+	flags.BoolVar(&srv.Config.Storage.FsyncEnabled, "storage.fsync", true, "enable fsync fully safe flush-to-disk")
 
 	// RowcacheOn
 	flags.BoolVarP((&srv.Config.RowcacheOn), "rowcache-on", "", srv.Config.RowcacheOn, "turn on the rowcache for all backends (may speed some queries)")

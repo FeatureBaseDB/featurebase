@@ -27,6 +27,7 @@ import (
 	petcd "github.com/pilosa/pilosa/v2/etcd"
 	"github.com/pilosa/pilosa/v2/gossip"
 	rbfcfg "github.com/pilosa/pilosa/v2/rbf/cfg"
+	"github.com/pilosa/pilosa/v2/storage"
 	"github.com/pilosa/pilosa/v2/toml"
 	"github.com/pkg/errors"
 )
@@ -206,18 +207,20 @@ type Config struct {
 	// returned from the blueGreenTx.
 	Txsrc string `toml:"txsrc"`
 
+	Storage *storage.Config `toml:"storage"`
+
 	// RowcacheOn, if true, turns on the row cache for all storage backends.
 	// The default is now off because it makes rbf queries faster and uses
 	// much less memory.
 	RowcacheOn bool `toml:"rowcache-on"`
 
 	// RBFConfig defines all externally configurable RBF flags.
-	RBFConfig *rbfcfg.Config
+	RBFConfig *rbfcfg.Config `toml:"rbf"`
 
 	// QueryHistoryLength sets the maximum number of queries that are maintained
 	// for the /query-history endpoint. This parameter is per-node, and the
 	// result combines the history from all nodes.
-	QueryHistoryLength int
+	QueryHistoryLength int `toml:"query-history-length"`
 }
 
 // MustValidate checks that all ports in a Config are unique and not zero.
@@ -308,6 +311,7 @@ func NewConfig() *Config {
 		WorkerPoolSize:       runtime.NumCPU(),
 		ImportWorkerPoolSize: runtime.NumCPU(),
 
+		Storage:   storage.NewDefaultConfig(),
 		RBFConfig: rbfcfg.NewDefaultConfig(),
 
 		QueryHistoryLength: 100,

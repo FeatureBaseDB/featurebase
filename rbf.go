@@ -30,6 +30,8 @@ import (
 	rbfcfg "github.com/pilosa/pilosa/v2/rbf/cfg"
 	"github.com/pilosa/pilosa/v2/roaring"
 	txkey "github.com/pilosa/pilosa/v2/short_txkey"
+	"github.com/pilosa/pilosa/v2/storage"
+
 	//txkey "github.com/pilosa/pilosa/v2/txkey"
 	"github.com/pkg/errors"
 )
@@ -90,6 +92,14 @@ type rbfDBRegistrar struct {
 	mp map[*RbfDBWrapper]bool
 
 	path2db map[string]*RbfDBWrapper
+
+	rbfConfig *rbfcfg.Config
+}
+
+func (r *rbfDBRegistrar) SetRBFConfig(cfg *rbfcfg.Config) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.rbfConfig = cfg
 }
 
 func (r *rbfDBRegistrar) Size() int {
@@ -148,7 +158,7 @@ func rbfPath(path string) string {
 // if one does not exist for its path. Otherwise it returns
 // the existing instance. This insures only one RbfDBWrapper
 // per bpath in this pilosa node.
-func (r *rbfDBRegistrar) OpenDBWrapper(path0 string, doAllocZero bool, cfg *rbfcfg.Config) (DBWrapper, error) {
+func (r *rbfDBRegistrar) OpenDBWrapper(path0 string, doAllocZero bool, cfg *storage.Config) (DBWrapper, error) {
 	path := rbfPath(path0)
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -157,11 +167,12 @@ func (r *rbfDBRegistrar) OpenDBWrapper(path0 string, doAllocZero bool, cfg *rbfc
 		// creates the effect of having only one DB open per pilosa node.
 		return w, nil
 	}
-	if cfg == nil {
-		cfg = rbfcfg.NewDefaultConfig()
-		cfg.DoAllocZero = doAllocZero
+	if r.rbfConfig == nil {
+		r.rbfConfig = rbfcfg.NewDefaultConfig()
+		r.rbfConfig.DoAllocZero = doAllocZero
+		r.rbfConfig.FsyncEnabled = cfg.FsyncEnabled
 	}
-	db := rbf.NewDB(path, cfg)
+	db := rbf.NewDB(path, r.rbfConfig)
 
 	w = &RbfDBWrapper{
 		reg:         r,
@@ -169,7 +180,7 @@ func (r *rbfDBRegistrar) OpenDBWrapper(path0 string, doAllocZero bool, cfg *rbfc
 		db:          db,
 		doAllocZero: doAllocZero,
 		openTx:      make(map[*RBFTx]bool),
-		cfg:         cfg,
+		cfg:         r.rbfConfig,
 	}
 	r.unprotectedRegister(w)
 
@@ -424,7 +435,7 @@ func (tx *RBFTx) UseRowCache() bool {
 	// the rowCache without first making a copy.
 	// So we only use the rowCache if the copy is
 	// enabled.
-	return rbf.EnableRowCache()
+	return storage.EnableRowCache()
 }
 
 func (tx *RBFTx) ApplyFilter(index, field, view string, shard uint64, ckey uint64, filter roaring.BitmapFilter) (err error) {

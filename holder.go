@@ -31,10 +31,10 @@ import (
 	"time"
 
 	"github.com/pilosa/pilosa/v2/logger"
-	"github.com/pilosa/pilosa/v2/rbf"
 	rbfcfg "github.com/pilosa/pilosa/v2/rbf/cfg"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/stats"
+	"github.com/pilosa/pilosa/v2/storage"
 	"github.com/pilosa/pilosa/v2/testhook"
 	"github.com/pilosa/pilosa/v2/topology"
 	"github.com/pilosa/pilosa/v2/tracing"
@@ -150,7 +150,7 @@ type HolderOpts struct {
 	Inspect bool
 
 	// Txsrc controls the tx/storage engine we instatiate. Set by
-	// server.go OptServerTxsrc
+	// server.go OptServerStorageConfig
 	Txsrc string
 
 	// RowcacheOn, if true, turns on the row cache for all storage backends.
@@ -214,9 +214,9 @@ type HolderConfig struct {
 	StatsClient          stats.StatsClient
 	NewAttrStore         func(string) AttrStore
 	Logger               logger.Logger
-	Txsrc                string
 	RowcacheOn           bool
 
+	StorageConfig       *storage.Config
 	RBFConfig           *rbfcfg.Config
 	AntiEntropyInterval time.Duration
 }
@@ -233,7 +233,7 @@ func DefaultHolderConfig() *HolderConfig {
 		StatsClient:          stats.NopStatsClient,
 		NewAttrStore:         newNopAttrStore,
 		Logger:               logger.NopLogger,
-		Txsrc:                DefaultTxsrc,
+		StorageConfig:        storage.NewDefaultConfig(),
 		RBFConfig:            rbfcfg.NewDefaultConfig(),
 	}
 }
@@ -247,9 +247,13 @@ func NewHolder(path string, cfg *HolderConfig) *Holder {
 		if txsrc != "" {
 			_ = MustTxsrcToTxtype(txsrc)
 			// INVAR: have valid txsrc.
-			cfg.Txsrc = txsrc
+			cfg.StorageConfig.Backend = txsrc
 		}
-	} else if cfg.RBFConfig == nil {
+	}
+	if cfg.StorageConfig == nil {
+		cfg.StorageConfig = storage.NewDefaultConfig()
+	}
+	if cfg.RBFConfig == nil {
 		cfg.RBFConfig = rbfcfg.NewDefaultConfig()
 	}
 
@@ -271,7 +275,7 @@ func NewHolder(path string, cfg *HolderConfig) *Holder {
 		OpenIDAllocator:      cfg.OpenIDAllocator,
 		translationSyncer:    cfg.TranslationSyncer,
 		Logger:               cfg.Logger,
-		Opts:                 HolderOpts{Txsrc: cfg.Txsrc, RowcacheOn: cfg.RowcacheOn},
+		Opts:                 HolderOpts{Txsrc: cfg.StorageConfig.Backend, RowcacheOn: cfg.RowcacheOn},
 
 		SnapshotQueue: defaultSnapshotQueue,
 
@@ -282,9 +286,9 @@ func NewHolder(path string, cfg *HolderConfig) *Holder {
 		indexes: make(map[string]*Index),
 	}
 
-	rbf.SetRowcacheOn(cfg.RowcacheOn)
+	storage.SetRowCacheOn(cfg.RowcacheOn)
 
-	txf, err := NewTxFactory(cfg.Txsrc, path, h)
+	txf, err := NewTxFactory(cfg.StorageConfig.Backend, path, h)
 	panicOn(err)
 	h.txf = txf
 	h.txf.blueGreenOffIfRunningBlueGreen()
@@ -579,7 +583,7 @@ func (h *Holder) Open() error {
 	defer func() { h.opening = false }()
 
 	if h.txf == nil {
-		txf, err := NewTxFactory(h.cfg.Txsrc, h.path, h)
+		txf, err := NewTxFactory(h.cfg.StorageConfig.Backend, h.path, h)
 		if err != nil {
 			return errors.Wrap(err, "Holder.Open NewTxFactory()")
 		}

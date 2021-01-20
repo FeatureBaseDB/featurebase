@@ -19,30 +19,12 @@ import (
 	"io"
 	"math"
 	"os"
-	"sync/atomic"
 	"unsafe"
 
 	"github.com/pilosa/pilosa/v2/roaring"
+	"github.com/pilosa/pilosa/v2/storage"
 	"github.com/pkg/errors"
 )
-
-// if enableRowCache, then we must not return mmap-ed memory
-// directly, but only a copy.
-var enableRowcache int64 = 1
-
-// SetEnableRowCache should only be called in NewHolder before
-// all other reads.
-func SetRowcacheOn(on bool) {
-	if on {
-		atomic.StoreInt64(&enableRowcache, 1)
-	} else {
-		atomic.StoreInt64(&enableRowcache, 0)
-	}
-}
-
-func EnableRowCache() bool {
-	return atomic.LoadInt64(&enableRowcache) == 1
-}
 
 //probably should just implement the container interface
 // but for now i'll do it
@@ -192,7 +174,7 @@ func intoContainer(l leafCell, tx *Tx, replacing *roaring.Container, target []by
 	orig := l.Data
 	var cpMaybe []byte
 	var mapped bool
-	if EnableRowCache() || tx.db.cfg.DoAllocZero {
+	if storage.EnableRowCache() || tx.db.cfg.DoAllocZero {
 		// make a copy, otherwise the rowCache will see corrupted data
 		// or mmapped data that may disappear.
 		cpMaybe = target[:len(orig)]
@@ -209,7 +191,7 @@ func intoContainer(l leafCell, tx *Tx, replacing *roaring.Container, target []by
 	case ContainerTypeBitmapPtr:
 		_, bm, _ := tx.leafCellBitmap(toPgno(cpMaybe))
 		cloneMaybe := bm
-		if EnableRowCache() {
+		if storage.EnableRowCache() {
 			cloneMaybe = (*[1024]uint64)(unsafe.Pointer(&target[0]))[:1024]
 			copy(cloneMaybe, bm)
 		}
@@ -235,7 +217,7 @@ func toContainer(l leafCell, tx *Tx) (c *roaring.Container) {
 	orig := l.Data
 	var cpMaybe []byte
 	var mapped bool
-	if EnableRowCache() || tx.db.cfg.DoAllocZero {
+	if storage.EnableRowCache() || tx.db.cfg.DoAllocZero {
 		// make a copy, otherwise the rowCache will see corrupted data
 		// or mmapped data that may disappear.
 		cpMaybe = make([]byte, len(orig))
@@ -252,7 +234,7 @@ func toContainer(l leafCell, tx *Tx) (c *roaring.Container) {
 	case ContainerTypeBitmapPtr:
 		_, bm, _ := tx.leafCellBitmap(toPgno(cpMaybe))
 		cloneMaybe := bm
-		if EnableRowCache() {
+		if storage.EnableRowCache() {
 			cloneMaybe = make([]uint64, len(bm))
 			copy(cloneMaybe, bm)
 		}
