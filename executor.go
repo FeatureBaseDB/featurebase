@@ -2008,7 +2008,13 @@ func (e *executor) executeSetRow(ctx context.Context, index string, c *pql.Call,
 	}
 
 	result, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
-	return result.(bool), err
+	r, ok := result.(bool)
+	if !ok {
+		err = errors.Wrapf(err, "mapReduce result is not bool,err:%s", err.Error())
+		return false, err
+	}
+	return r, err
+	//return result.(bool), err
 }
 
 // executeSetRowShard executes a SetRow() call for a single shard.
