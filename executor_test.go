@@ -6905,6 +6905,14 @@ mombasa,1,0
 sydney,1,0
 `,
 		},
+		{ // 2019 January only
+			query: `GroupBy(Rows(places_visited, from='2019-01-01T00:00', to='2019-02-01T00:00'))`,
+			csvVerifier: `nairobi,1,0
+paris,1,0
+austin,1,0
+toronto,1,0
+`,
+		},
 		{ // 2019 All
 			query: `GroupBy(Rows(places_visited, from='2019-01-01T00:00', to='2019-12-31T23:59'))`,
 			csvVerifier: `nairobi,1,0
@@ -6913,12 +6921,26 @@ austin,1,0
 toronto,3,0
 `,
 		},
-		{ // 2019 January only
-			query: `GroupBy(Rows(places_visited, from='2019-01-01T00:00', to='2019-02-01T00:00'))`,
+		{ // 2019 All, this excludes userC (who likes pangolin & icecream) from the count.
+			// UserC visited Paris and Toronto in 2019
+			query: `GroupBy(
+					Rows(places_visited, from='2019-01-01T00:00', to='2019-12-31T23:59'), 
+					filter=Not(Intersect(Row(likes='pangolin'), Row(likes='icecream')))
+				)`,
 			csvVerifier: `nairobi,1,0
-paris,1,0
 austin,1,0
-toronto,1,0
+toronto,2,0
+`,
+		},
+		{ // After excluding UserC, this gets the sum of the networth of everyone per cities travelled
+			query: `GroupBy(
+					Rows(places_visited, from='2019-01-01T00:00', to='2019-12-31T23:59'), 
+					filter=Not(Intersect(Row(likes='pangolin'), Row(likes='icecream'))),
+					aggregate=Sum(field=net_worth)
+				)`,
+			csvVerifier: `nairobi,1,10
+austin,1,100000
+toronto,2,11
 `,
 		},
 		{ // 2020 & 2019 All
