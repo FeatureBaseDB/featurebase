@@ -25,7 +25,6 @@ import (
 	"io/ioutil"
 	"math"
 	"math/rand"
-	"os"
 	"reflect"
 	"strconv"
 	"strings"
@@ -539,7 +538,7 @@ func TestExecutor_Execute_Count(t *testing.T) {
 }
 
 func roaringOnlyTest(t *testing.T) {
-	src := os.Getenv("PILOSA_TXSRC")
+	src := pilosa.CurrentBackend()
 	if src == pilosa.RoaringTxn || (storage.DefaultBackend == pilosa.RoaringTxn && src == "") {
 		// okay to run, we are under roaring only
 	} else {

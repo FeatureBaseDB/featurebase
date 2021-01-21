@@ -1720,7 +1720,7 @@ func TestFragment_RankCache_Persistence(t *testing.T) {
 }
 
 func roaringOnlyTest(t *testing.T) {
-	src := os.Getenv("PILOSA_TXSRC")
+	src := CurrentBackend()
 	if src == RoaringTxn || (storage.DefaultBackend == RoaringTxn && src == "") {
 		// okay to run, we are under roaring only
 	} else {
@@ -1729,7 +1729,7 @@ func roaringOnlyTest(t *testing.T) {
 }
 
 func roaringOnlyBenchmark(b *testing.B) {
-	src := os.Getenv("PILOSA_TXSRC")
+	src := CurrentBackend()
 	if src == RoaringTxn || (storage.DefaultBackend == RoaringTxn && src == "") {
 		// okay to run, we are under roaring only
 	} else {
@@ -3574,7 +3574,7 @@ func mustOpenBSIFragment(tb testing.TB, index, field, view string, shard uint64)
 
 func newTestHolder(tb testing.TB) *Holder {
 	path, _ := testhook.TempDirInDir(tb, *TempDir, "holder-dir")
-	h := NewHolder(path, nil)
+	h := NewHolder(path, mustHolderConfig())
 	panicOn(h.Open())
 	testhook.Cleanup(tb, func() {
 		h.Close()
@@ -5530,8 +5530,7 @@ func TestFragment_Bug_Q2DoubleDelete(t *testing.T) {
 }
 
 func notBlueGreenTest(t *testing.T) {
-	src := os.Getenv("PILOSA_TXSRC")
-	if strings.Contains(src, "_") {
+	if strings.Contains(CurrentBackend(), "_") {
 		t.Skip("skip under blue green")
 	}
 }

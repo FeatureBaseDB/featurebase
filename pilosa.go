@@ -16,6 +16,7 @@ package pilosa
 
 import (
 	"encoding/json"
+	"os"
 	"regexp"
 	"time"
 
@@ -214,4 +215,12 @@ func AddressWithDefaults(addr string) (*pnet.URI, error) {
 		return pnet.DefaultURI(), nil
 	}
 	return pnet.NewURIFromAddress(addr)
+}
+
+// CurrentBackend is one step in an attempt to centralize (and either minimize
+// or completely remove), the calls to environment variables throughout the
+// tests. Ideally we could get rid of this and rely completely on the
+// configuration parameters.
+func CurrentBackend() string {
+	return os.Getenv("PILOSA_STORAGE_BACKEND")
 }

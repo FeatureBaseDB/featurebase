@@ -31,7 +31,7 @@ import (
 // commented out—in holder.go.
 func CPUProfileForDur(dur time.Duration, outpath string) {
 	// per-query pprof output:
-	txsrc := os.Getenv("PILOSA_TXSRC")
+	txsrc := CurrentBackend()
 	if txsrc == "" {
 		txsrc = storage.DefaultBackend
 	}
@@ -57,7 +57,7 @@ func CPUProfileForDur(dur time.Duration, outpath string) {
 // commented out—in holder.go.
 func MemProfileForDur(dur time.Duration, outpath string) {
 	// per-query pprof output:
-	txsrc := os.Getenv("PILOSA_TXSRC")
+	txsrc := CurrentBackend()
 	if txsrc == "" {
 		txsrc = storage.DefaultBackend
 	}

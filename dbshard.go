@@ -925,7 +925,7 @@ func listDirUnderDir(root string, includeRoot bool, requiredSuffix string, ignor
 // The blue is the destination -- this is always types[0].
 // The green source is always types[1]. The mnemonic is blue_geen.
 // The blue is first, so it is in types[0]. The green
-// is second, in types[1]. For example, with PILOSA_TXSRC=bolt_roaring
+// is second, in types[1]. For example, with PILOSA_STORAGE_BACKEND=bolt_roaring
 // we have bolt as blue, and roaring as green. The contents of
 // bolt must be empty or exactly match roaring. If bolt
 // starts empty, it will be populated from roaring by

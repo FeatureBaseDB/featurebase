@@ -1284,7 +1284,7 @@ func (f *TxFactory) greenHasData() (hasData bool, err error) {
 // Called by test Test_TxFactory_UpdateBlueFromGreen_OnStartup() in
 // txfactory_internal_test.go as well.
 //
-// This is a noop if we aren't running under a blue_green PILOSA_TXSRC.
+// This is a noop if we aren't running under a blue_green PILOSA_STORAGE_BACKEND.
 func (f *TxFactory) green2blue(holder *Holder) (err0 error) {
 
 	// Holder.Open will always call us, even without blue_green. Which is fine.

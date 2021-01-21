@@ -30,6 +30,7 @@ import (
 	"github.com/pilosa/pilosa/v2/api/client"
 	"github.com/pilosa/pilosa/v2/proto"
 	"github.com/pilosa/pilosa/v2/server"
+	"github.com/pilosa/pilosa/v2/storage"
 	"github.com/pilosa/pilosa/v2/test/port"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
@@ -446,7 +447,6 @@ func newCluster(tb testing.TB, size int, opts ...[]server.CommandOption) (*Clust
 // MustRunCluster creates and starts a new cluster. The opts parameter
 // is slightly magical; see MustNewCluster.
 func MustRunCluster(tb testing.TB, size int, opts ...[]server.CommandOption) *Cluster {
-
 	cluster := MustNewCluster(tb, size, opts...)
 	err := cluster.Start()
 	if err != nil {
@@ -481,7 +481,14 @@ func prependOpts(opts [][]server.CommandOption, size int) [][]server.CommandOpti
 // prependTestServerOpts prepends opts with the OpenInMemTranslateStore.
 func prependTestServerOpts(opts []server.CommandOption) []server.CommandOption {
 	defaultOpts := []server.CommandOption{
-		server.OptCommandServerOptions(pilosa.OptServerOpenTranslateStore(pilosa.OpenInMemTranslateStore), pilosa.OptServerNodeDownRetries(5, 100*time.Millisecond)),
+		server.OptCommandServerOptions(
+			pilosa.OptServerOpenTranslateStore(pilosa.OpenInMemTranslateStore),
+			pilosa.OptServerNodeDownRetries(5, 100*time.Millisecond),
+			pilosa.OptServerStorageConfig(&storage.Config{
+				Backend:      pilosa.CurrentBackend(),
+				FsyncEnabled: true,
+			}),
+		),
 	}
 	return append(defaultOpts, opts...)
 }

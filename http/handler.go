@@ -820,8 +820,7 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 	req, ok := qreq.(*pilosa.QueryRequest)
 
 	if DoPerQueryProfiling {
-
-		txsrc := os.Getenv("PILOSA_TXSRC")
+		txsrc := pilosa.CurrentBackend()
 		reqHash := hash(req.Query)
 
 		qlen := len(req.Query)
@@ -839,13 +838,6 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 		defer pprof.StopCPUProfile()
 
 	} // end DoPerQueryProfiling
-	/*
-		er = trace.Start(f)
-		if er != nil {
-			panic(er)
-		}
-		defer trace.Stop()
-	*/
 
 	var err error
 	err, _ = qerr.(error)

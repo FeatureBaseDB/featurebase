@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"os"
 	"runtime"
 	"sort"
 	"sync"
@@ -70,7 +69,7 @@ func (w *callStats) reset() {
 }
 
 func (c *callStats) report() (r string) {
-	txsrc := os.Getenv("PILOSA_TXSRC")
+	txsrc := CurrentBackend()
 	r = fmt.Sprintf("callStats: (%v)\n", txsrc)
 	c.mu.Lock()
 	defer c.mu.Unlock()

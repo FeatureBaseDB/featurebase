@@ -311,8 +311,8 @@ install-gometalinter:
 	GO111MODULE=off go get github.com/remyoudompheng/go-misc/deadcode
 
 test-txstore-rbf:
-	PILOSA_TXSRC=rbf $(MAKE) testv-race
+	PILOSA_STORAGE_BACKEND=rbf $(MAKE) testv-race
 
 test-txstore-rbf_bolt:
-	PILOSA_TXSRC=rbf_bolt $(MAKE) testv-race
+	PILOSA_STORAGE_BACKEND=rbf_bolt $(MAKE) testv-race
 

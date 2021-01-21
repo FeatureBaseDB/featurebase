@@ -242,13 +242,6 @@ func DefaultHolderConfig() *HolderConfig {
 func NewHolder(path string, cfg *HolderConfig) *Holder {
 	if cfg == nil {
 		cfg = DefaultHolderConfig()
-		// still want the PILOSA_TXSRC to override, for tests use.
-		txsrc := os.Getenv("PILOSA_TXSRC")
-		if txsrc != "" {
-			_ = MustTxsrcToTxtype(txsrc)
-			// INVAR: have valid txsrc.
-			cfg.StorageConfig.Backend = txsrc
-		}
 	}
 	if cfg.StorageConfig == nil {
 		cfg.StorageConfig = storage.NewDefaultConfig()

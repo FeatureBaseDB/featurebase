@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -144,9 +143,9 @@ func TestClusterResize_AddNode(t *testing.T) {
 	// Why are we skipping this test under blue-green with Roaring?
 	//
 	// We see red test: during resize during importRoaringBits
-	// PILOSA_TXSRC=rbf_roaring go test -v  -tags=' shardwidth20'  "-gcflags=all=-d=checkptr=0" -run TestClusterResize_AddNode/"ContinuousShards"
+	// PILOSA_STORAGE_BACKEND=rbf_roaring go test -v  -tags=' shardwidth20'  "-gcflags=all=-d=checkptr=0" -run TestClusterResize_AddNode/"ContinuousShards"
 	// green:
-	// PILOSA_TXSRC=roaring_rbf go test -v  -tags=' shardwidth20'  "-gcflags=all=-d=checkptr=0" -run TestClusterResize_AddNode/"ContinuousShards"
+	// PILOSA_STORAGE_BACKEND=roaring_rbf go test -v  -tags=' shardwidth20'  "-gcflags=all=-d=checkptr=0" -run TestClusterResize_AddNode/"ContinuousShards"
 	//
 	// but rbf_badger and badger_rbf are both green (use the same data values for containers).
 	//
@@ -807,7 +806,7 @@ func TestClusterMutualTLS(t *testing.T) {
 }
 
 func skipTestUnderBlueGreenWithRoaring(t *testing.T) {
-	src := os.Getenv("PILOSA_TXSRC")
+	src := pilosa.CurrentBackend()
 	if strings.Contains(src, "_") {
 		if strings.Contains(src, "roaring") {
 			t.Skip("skip for roaring blue-green")
