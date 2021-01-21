@@ -3408,15 +3408,11 @@ func (it *timeRowIterator) Next() (r *Row, rowID uint64, _ *int64, wrapped bool,
 		if err != nil {
 			return row, rowID, nil, wrapped, err
 		}
-		if row != nil {
-			rows = append(rows, row)
-		}
+		rows = append(rows, row)
 	}
 
 	// union rows
-	if len(rows) > 0 {
-		r = rows[0].Union(rows[1:]...)
-	}
+	r = rows[0].Union(rows[1:]...)
 
 	it.cur++
 	return r, rowID, nil, wrapped, nil
