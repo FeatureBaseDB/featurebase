@@ -47,11 +47,11 @@ func TestRingBuffer(t *testing.T) {
 		}
 
 		for n, q := range buffer.slice() {
-			if q.query != tests[k].queries[n] {
-				t.Fatalf("test[%d], buffer[%d] expected querystring '%s', found '%s'", k, n, tests[k].queries[n], q.query)
+			if q.PQL != tests[k].queries[n] {
+				t.Fatalf("test[%d], buffer[%d] expected querystring '%s', found '%s'", k, n, tests[k].queries[n], q.PQL)
 			}
 		}
-		buffer.add(pastQuery{query: fmt.Sprintf("%d", k)})
+		buffer.add(pastQuery{PQL: fmt.Sprintf("%d", k)})
 	}
 }
 
@@ -63,13 +63,13 @@ func TestQueryTracker(t *testing.T) {
 		t.Fatalf("expected no active queries; found %v", queries)
 	}
 
-	qs := tracker.Start("test query", "node0", "i", time.Now())
+	qs := tracker.Start("test query", "test SQL", "node0", "i", time.Now())
 
 	var queries []ActiveQueryStatus
 	for len(queries) < 1 {
 		queries = tracker.ActiveQueries()
 	}
-	if len(queries) > 1 || queries[0].Query != "test query" {
+	if len(queries) > 1 || queries[0].PQL != "test query" {
 		t.Fatalf("unexpected queries: %v", queries)
 	}
 

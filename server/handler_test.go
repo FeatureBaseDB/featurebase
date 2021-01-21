@@ -37,6 +37,7 @@ import (
 	"github.com/pilosa/pilosa/v2/encoding/proto"
 	"github.com/pilosa/pilosa/v2/http"
 	"github.com/pilosa/pilosa/v2/pql"
+	pb "github.com/pilosa/pilosa/v2/proto"
 	"github.com/pilosa/pilosa/v2/server"
 	"github.com/pilosa/pilosa/v2/test"
 )
@@ -1502,6 +1503,16 @@ func TestQueryHistory(t *testing.T) {
 
 	test.Do(t, "POST", cmd.URL()+"/index/i0", "")
 	test.Do(t, "POST", cmd.URL()+"/index/i0/field/f0", "")
+
+	gh := server.NewGRPCHandler(cmd.API)
+	_, err = gh.QuerySQLUnary(context.Background(), &pb.QuerySQLRequest{
+		Sql: `select * from i0`,
+	})
+
+	if err != nil {
+		t.Fatalf("QuerySQLUnary failed: %v", err)
+	}
+
 	test.Do(t, "POST", cmd.URL()+"/index/i0/query", "Set(0, f0=0)")
 	test.Do(t, "POST", cmd.URL()+"/index/i0/query", "Set(3000000, f0=0)")
 	test.Do(t, "POST", cmd.URL()+"/index/i0/query", "TopN(f0)")
@@ -1511,7 +1522,7 @@ func TestQueryHistory(t *testing.T) {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	}
 
-	ret := make([]pilosa.PastQueryStatus, 3)
+	ret := make([]pilosa.PastQueryStatus, 4)
 	b, err := ioutil.ReadAll(w.Body)
 	if err != nil {
 		t.Fatalf("reading: %v", err)
@@ -1522,10 +1533,10 @@ func TestQueryHistory(t *testing.T) {
 	}
 
 	// verify result length
-	if len(ret) != 3 {
+	if len(ret) != 4 {
 		// each set query executes on both nodes once
 		// topn query gets added to history on node0 once, node1 twice
-		t.Fatalf("expected list of length 3, got %d", len(ret))
+		t.Fatalf("expected list of length 4, got %d\n%+v", len(ret), ret)
 	}
 
 	// verify sort order
@@ -1543,8 +1554,14 @@ func TestQueryHistory(t *testing.T) {
 	if ret[0].Node != cluster.GetNode(0).Server.NodeID() {
 		t.Fatalf("response value for 'Node' was '%s', expected '%s'", ret[0].Node, cluster.GetNode(0).Server.NodeID())
 	}
-	if ret[0].Query != "TopN(f0)" {
-		t.Fatalf("response value for 'Query' was '%s', expected 'TopN(f0)'", ret[0].Query)
+	if ret[3].PQL != "Extract(All(),Rows(f0))" {
+		t.Fatalf("response value for 'PQL' was '%s', expected 'Extract(All(),Rows(f0))'", ret[0].PQL)
+	}
+	if ret[3].SQL != "select * from i0" {
+		t.Fatalf("response value for 'SQL' was '%s', expected 'select * from i0'", ret[0].SQL)
+	}
+	if ret[0].PQL != "TopN(f0)" {
+		t.Fatalf("response value for 'PQL' was '%s', expected 'TopN(f0)'", ret[0].PQL)
 	}
 }
 

@@ -102,7 +102,7 @@ message FieldRow {
 message GroupCount{
 	repeated FieldRow Group = 1;
 	uint64 Count = 2;
-	int64 Sum = 3;
+	int64 Agg = 3;
 }
 
 message ValCount {
@@ -159,9 +159,15 @@ message QueryResult {
 	uint64 N = 2;
 	repeated Pair Pairs = 3;
 	bool Changed = 4;
-    ValCount ValCount = 5;
+	ValCount ValCount = 5;
 	repeated uint64 RowIDs = 7;
-	repeated GroupCount GroupCounts = 8;
+	// In the past, GroupCounts was a []GroupCount which did not indicate
+	// whether it had an aggregate, or which aggregate it had. We've
+	// updated this, but we keep this here so that messages using the old
+	// format can get a best-effort treatment rather than causing panics.
+	// Later this can almost certainly go away, but leave a comment warning
+	// people that 8 is Spoken For if you do that, please.
+	repeated GroupCount OldGroupCounts = 8;
 	RowIdentifiers RowIdentifiers = 9;
 	SignedRow SignedRow = 10;
 	PairsField PairsField = 11;
@@ -169,6 +175,7 @@ message QueryResult {
 	ExtractedIDMatrix ExtractedIDMatrix = 13;
 	ExtractedTable ExtractedTable = 14;
 	RowMatrix RowMatrix = 15;
+	GroupCounts GroupCounts = 16;
 }
 
 message ImportRequest {
@@ -253,4 +260,9 @@ message ImportColumnAttrsRequest {
 	repeated string AttrVals = 4;
 	repeated uint64 ColumnIDs = 5;
 	int64 IndexCreatedAt = 6;
+}
+
+message GroupCounts{
+	string Aggregate = 1;
+	repeated GroupCount Groups = 2;
 }

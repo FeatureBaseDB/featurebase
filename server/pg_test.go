@@ -169,11 +169,10 @@ func TestPostgresHandler(t *testing.T) {
 					Columns: []pg.ColumnInfo{
 						{Name: "set", Type: pg.TypeCharoid},
 						{Name: "count", Type: pg.TypeCharoid},
-						{Name: "sum", Type: pg.TypeCharoid},
 					},
 					Data: [][]string{
-						{"4", "3", "0"},
-						{"5", "3", "0"},
+						{"4", "3"},
+						{"5", "3"},
 					},
 				},
 			},
