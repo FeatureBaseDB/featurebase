@@ -614,6 +614,7 @@ func (f *TxFactory) IndexUsageDetails() (map[string]IndexUsage, uint64, error) {
 		fieldUsages := make(map[string]FieldUsage)
 		fragmentsTotal := uint64(0)
 		fieldKeysTotal := uint64(0)
+		fieldMetaBytesTotal := uint64(0)
 		fieldsTotal := uint64(0)
 		flds := idx.Fields()
 		for _, fld := range flds {
@@ -653,6 +654,7 @@ func (f *TxFactory) IndexUsageDetails() (map[string]IndexUsage, uint64, error) {
 			fUsage.Total += fragmentUsage
 
 			// add to running total
+			fieldMetaBytesTotal += fUsage.Metadata
 			fieldKeysTotal += fUsage.Keys
 			fragmentsTotal += fUsage.Fragments
 			fieldsTotal += fUsage.Total
@@ -675,6 +677,7 @@ func (f *TxFactory) IndexUsageDetails() (map[string]IndexUsage, uint64, error) {
 
 		indexUsage[index] = IndexUsage{
 			Total:          indexMetaBytes + indexKeysBytes + fieldsTotal,
+			Metadata:       indexMetaBytes + fieldMetaBytesTotal,
 			IndexKeys:      indexKeysBytes,
 			FieldKeysTotal: fieldKeysTotal,
 			Fragments:      fragmentsTotal,
@@ -701,12 +704,10 @@ func (f *TxFactory) fieldUsage(indexPath string, fld *Field) (FieldUsage, error)
 	// row keys
 	keysBytes := int64(0)
 	var err error
-	if fld.usesKeys {
-		keysBytes, err = fileSize(fld.TranslateStorePath())
-		if err != nil {
-			// if file doesn't exist, size = 0
-			keysBytes = 0
-		}
+	keysBytes, err = fileSize(fld.TranslateStorePath())
+	if err != nil {
+		// if file doesn't exist, size = 0
+		keysBytes = 0
 	}
 
 	// field metadata, e.g. rowAttrs
@@ -728,6 +729,7 @@ func (f *TxFactory) fieldUsage(indexPath string, fld *Field) (FieldUsage, error)
 
 	fieldUsage = FieldUsage{
 		Total:     metaBytes + fragmentBytes, // metaBytes includes keys
+		Metadata:  metaBytes - uint64(keysBytes),
 		Fragments: fragmentBytes,
 		Keys:      uint64(keysBytes),
 	}

@@ -832,6 +832,7 @@ type IndexUsage struct {
 	IndexKeys      uint64                `json:"indexKeys"`
 	FieldKeysTotal uint64                `json:"fieldKeysTotal"`
 	Fragments      uint64                `json:"fragments"`
+	Metadata       uint64                `json:"metadata"`
 	Fields         map[string]FieldUsage `json:"fields"`
 }
 
@@ -840,6 +841,7 @@ type FieldUsage struct {
 	Total     uint64 `json:"total"`
 	Fragments uint64 `json:"fragments"`
 	Keys      uint64 `json:"keys"`
+	Metadata  uint64 `json:"metadata"`
 }
 
 // Usage gets the disk usage, in a map[nodeID]NodeUsage.
