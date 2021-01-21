@@ -29,6 +29,9 @@ type QueryRequest struct {
 	// The query string to parse and execute.
 	Query string
 
+	// The SQL source query, if applicable.
+	SQLQuery string
+
 	// The shards to include in the query execution.
 	// If empty, all shards are included.
 	Shards []uint64
