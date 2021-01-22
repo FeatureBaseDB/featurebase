@@ -69,8 +69,8 @@ func (w *callStats) reset() {
 }
 
 func (c *callStats) report() (r string) {
-	txsrc := CurrentBackend()
-	r = fmt.Sprintf("callStats: (%v)\n", txsrc)
+	backend := CurrentBackend()
+	r = fmt.Sprintf("callStats: (%v)\n", backend)
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	var lines []*debugstats.LineSorter

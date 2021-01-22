@@ -1816,7 +1816,7 @@ func (api *API) Info() serverInfo {
 		CPUMHz:           mhz,
 		CPUType:          si.CPUModel(),
 		Memory:           mem,
-		TxSrc:            api.holder.txf.TxType(),
+		StorageBackend:   api.holder.txf.TxType(),
 		ReplicaN:         api.cluster.ReplicaN,
 		ShardHash:        api.cluster.Hasher.Name(),
 		KeyHash:          api.cluster.Topology.Hasher.Name(),
@@ -2170,7 +2170,7 @@ type serverInfo struct {
 	CPUPhysicalCores int    `json:"cpuPhysicalCores"`
 	CPULogicalCores  int    `json:"cpuLogicalCores"`
 	CPUMHz           int    `json:"cpuMHz"`
-	TxSrc            string `json:"txSrc"`
+	StorageBackend   string `json:"storageBackend"`
 }
 
 type apiMethod int

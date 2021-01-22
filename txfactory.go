@@ -468,16 +468,15 @@ func (txf *TxFactory) NeedsSnapshot() (b bool) {
 	return
 }
 
-func MustTxsrcToTxtype(txsrc string) (types []txtype) {
-
+func MustBackendToTxtype(backend string) (types []txtype) {
 	var srcs []string
-	if strings.Contains(txsrc, "_") {
-		srcs = strings.Split(txsrc, "_")
+	if strings.Contains(backend, "_") {
+		srcs = strings.Split(backend, "_")
 		if len(srcs) != 2 {
 			panic("only two blue-green comparisons permitted")
 		}
 	} else {
-		srcs = append(srcs, txsrc)
+		srcs = append(srcs, backend)
 	}
 
 	for i, s := range srcs {
@@ -489,11 +488,11 @@ func MustTxsrcToTxtype(txsrc string) (types []txtype) {
 		case BoltTxn: // "bolt"
 			types = append(types, boltTxn)
 		default:
-			panic(fmt.Sprintf("unknown txsrc '%v'", s))
+			panic(fmt.Sprintf("unknown backend '%v'", s))
 		}
 		if i == 1 {
 			if types[1] == types[0] {
-				panic(fmt.Sprintf("cannot blue-green the same txsrc on both arms: '%v'", s))
+				panic(fmt.Sprintf("cannot blue-green the same backend on both arms: '%v'", s))
 			}
 		}
 	}
@@ -503,12 +502,12 @@ func MustTxsrcToTxtype(txsrc string) (types []txtype) {
 // NewTxFactory always opens an existing database. If you
 // want to a fresh database, os.RemoveAll on dir/name ahead of time.
 // We always store files in a subdir of holderDir.
-func NewTxFactory(txsrc string, holderDir string, holder *Holder) (f *TxFactory, err error) {
-	types := MustTxsrcToTxtype(txsrc)
+func NewTxFactory(backend string, holderDir string, holder *Holder) (f *TxFactory, err error) {
+	types := MustBackendToTxtype(backend)
 
 	f = &TxFactory{
 		types:    types,
-		typeOfTx: txsrc,
+		typeOfTx: backend,
 		holder:   holder,
 	}
 	if len(types) == 2 {

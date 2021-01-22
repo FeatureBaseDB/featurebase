@@ -209,9 +209,9 @@ rick.index.txstores@@@/store-rbfdb@@/shard.0223-rbfdb@
 `,
 }
 
-func makeSampleRoaringDir(root, index, txsrc string, minBytes int, h *Holder, view2shards *FieldView2Shards) (idx *Index) {
+func makeSampleRoaringDir(root, index, backend string, minBytes int, h *Holder, view2shards *FieldView2Shards) (idx *Index) {
 	shards := []uint64{0, 93, 215, 217, 219, 221, 223}
-	fns := strings.Split(sampleRoaringDirList[txsrc], "\n")
+	fns := strings.Split(sampleRoaringDirList[backend], "\n")
 	firstDone := false
 
 	for i, fn := range fns {
@@ -219,11 +219,11 @@ func makeSampleRoaringDir(root, index, txsrc string, minBytes int, h *Holder, vi
 			continue
 		}
 		var shard uint64
-		if txsrc != "roaring" {
+		if backend != "roaring" {
 			// only have shards for the non-roaring
 			shard = shards[i]
 		}
-		switch txsrc {
+		switch backend {
 		case "bolt", "rbf":
 			idx = helperCreateDBShard(h, index, shard)
 

@@ -820,14 +820,14 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 	req, ok := qreq.(*pilosa.QueryRequest)
 
 	if DoPerQueryProfiling {
-		txsrc := pilosa.CurrentBackend()
+		backend := pilosa.CurrentBackend()
 		reqHash := hash(req.Query)
 
 		qlen := len(req.Query)
 		if qlen > 100 {
 			qlen = 100
 		}
-		name := "_query." + reqHash + "." + txsrc + "." + time.Now().Format("20060102150405") + "." + req.Query[:qlen]
+		name := "_query." + reqHash + "." + backend + "." + time.Now().Format("20060102150405") + "." + req.Query[:qlen]
 		f, err := os.Create(name)
 		if err != nil {
 			panic(err)

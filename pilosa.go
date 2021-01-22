@@ -21,6 +21,7 @@ import (
 	"time"
 
 	pnet "github.com/pilosa/pilosa/v2/net"
+	"github.com/pilosa/pilosa/v2/storage"
 	"github.com/pkg/errors"
 )
 
@@ -223,4 +224,13 @@ func AddressWithDefaults(addr string) (*pnet.URI, error) {
 // configuration parameters.
 func CurrentBackend() string {
 	return os.Getenv("PILOSA_STORAGE_BACKEND")
+}
+
+// CurrentBackendOrDefault tries the environment variable first, but falls back
+// to the default backed if the environment variable is empty.
+func CurrentBackendOrDefault() string {
+	if backend := os.Getenv("PILOSA_STORAGE_BACKEND"); backend != "" {
+		return backend
+	}
+	return storage.DefaultBackend
 }

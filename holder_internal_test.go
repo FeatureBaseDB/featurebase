@@ -260,7 +260,7 @@ func TestHolderOperatorCancel(t *testing.T) {
 func mustHolderConfig() *HolderConfig {
 	cfg := DefaultHolderConfig()
 	if backend := CurrentBackend(); backend != "" {
-		_ = MustTxsrcToTxtype(backend)
+		_ = MustBackendToTxtype(backend)
 		cfg.StorageConfig.Backend = backend
 	}
 	return cfg

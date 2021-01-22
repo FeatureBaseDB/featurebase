@@ -149,9 +149,9 @@ type HolderOpts struct {
 	// about fragments when opening them.
 	Inspect bool
 
-	// Txsrc controls the tx/storage engine we instatiate. Set by
+	// StorageBackend controls the tx/storage engine we instatiate. Set by
 	// server.go OptServerStorageConfig
-	Txsrc string
+	StorageBackend string
 
 	// RowcacheOn, if true, turns on the row cache for all storage backends.
 	RowcacheOn bool
@@ -268,7 +268,7 @@ func NewHolder(path string, cfg *HolderConfig) *Holder {
 		OpenIDAllocator:      cfg.OpenIDAllocator,
 		translationSyncer:    cfg.TranslationSyncer,
 		Logger:               cfg.Logger,
-		Opts:                 HolderOpts{Txsrc: cfg.StorageConfig.Backend, RowcacheOn: cfg.RowcacheOn},
+		Opts:                 HolderOpts{StorageBackend: cfg.StorageConfig.Backend, RowcacheOn: cfg.RowcacheOn},
 
 		SnapshotQueue: defaultSnapshotQueue,
 

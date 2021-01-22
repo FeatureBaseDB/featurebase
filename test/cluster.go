@@ -464,7 +464,6 @@ func prependOpts(opts [][]server.CommandOption, size int) [][]server.CommandOpti
 			opts[i] = prependTestServerOpts([]server.CommandOption{})
 		}
 	} else if len(opts) == 1 {
-		println("len opts == 1, size = ", size)
 		opts2 := make([][]server.CommandOption, size)
 		for i := 0; i < size; i++ {
 			opts2[i] = prependTestServerOpts(opts[0])
@@ -485,7 +484,7 @@ func prependTestServerOpts(opts []server.CommandOption) []server.CommandOption {
 			pilosa.OptServerOpenTranslateStore(pilosa.OpenInMemTranslateStore),
 			pilosa.OptServerNodeDownRetries(5, 100*time.Millisecond),
 			pilosa.OptServerStorageConfig(&storage.Config{
-				Backend:      pilosa.CurrentBackend(),
+				Backend:      pilosa.CurrentBackendOrDefault(),
 				FsyncEnabled: true,
 			}),
 		),

@@ -31,11 +31,11 @@ import (
 // commented out—in holder.go.
 func CPUProfileForDur(dur time.Duration, outpath string) {
 	// per-query pprof output:
-	txsrc := CurrentBackend()
-	if txsrc == "" {
-		txsrc = storage.DefaultBackend
+	backend := CurrentBackend()
+	if backend == "" {
+		backend = storage.DefaultBackend
 	}
-	path := outpath + "." + txsrc
+	path := outpath + "." + backend
 	f, err := os.Create(path)
 	panicOn(err)
 
@@ -57,11 +57,11 @@ func CPUProfileForDur(dur time.Duration, outpath string) {
 // commented out—in holder.go.
 func MemProfileForDur(dur time.Duration, outpath string) {
 	// per-query pprof output:
-	txsrc := CurrentBackend()
-	if txsrc == "" {
-		txsrc = storage.DefaultBackend
+	backend := CurrentBackend()
+	if backend == "" {
+		backend = storage.DefaultBackend
 	}
-	path := outpath + "." + txsrc
+	path := outpath + "." + backend
 	f, err := os.Create(path)
 	panicOn(err)
 
