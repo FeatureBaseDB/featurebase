@@ -75,6 +75,9 @@ type Server struct { // nolint: maligned
 	sharder   disco.Sharder
 	schemator disco.Schemator
 
+	// TODO: this is VERY temporary!!!
+	Gossiper Gossiper
+
 	// External
 	systemInfo    SystemInfo
 	gcNotifier    GCNotifier
@@ -499,33 +502,10 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	//s.cluster.noder = s.noder
 	s.cluster.sharder = s.sharder
 
-	// Get or create NodeID.
-	s.nodeID = s.loadNodeID()
-	if s.isCoordinator {
-		s.cluster.Coordinator = s.nodeID
-	}
-
-	// Set Cluster Node.
-	node := &topology.Node{
-		ID:            s.nodeID,
-		URI:           s.uri,
-		GRPCURI:       s.grpcURI,
-		IsCoordinator: s.cluster.Coordinator == s.nodeID,
-		State:         nodeStateDown,
-	}
-	s.cluster.Node = node
-	if s.clusterDisabled {
-		err := s.cluster.setStatic(s.hosts)
-		if err != nil {
-			return nil, errors.Wrap(err, "setting cluster static")
-		}
-	}
-
 	// Append the NodeID tag to stats.
 	s.holder.Stats = s.holder.Stats.WithTags(fmt.Sprintf("node_id:%s", s.nodeID))
 
 	s.executor.Holder = s.holder
-	s.executor.Node = node
 	s.executor.Cluster = s.cluster
 	s.executor.MaxWritesPerRequest = s.maxWritesPerRequest
 	s.cluster.broadcaster = s
@@ -533,11 +513,6 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	s.cluster.confirmDownRetries = s.confirmDownRetries
 	s.cluster.confirmDownSleep = s.confirmDownSleep
 	s.holder.broadcaster = s
-
-	err = s.cluster.setup()
-	if err != nil {
-		return nil, errors.Wrap(err, "setting up cluster")
-	}
 
 	return s, nil
 }
@@ -574,6 +549,10 @@ func (s *Server) UpAndDown() error {
 	return nil
 }
 
+type Gossiper interface {
+	StartGossip() error
+}
+
 // Open opens and initializes the server.
 func (s *Server) Open() error {
 	s.logger.Printf("open server. PID %v", os.Getpid())
@@ -591,13 +570,6 @@ func (s *Server) Open() error {
 		log.Println(errors.Wrap(err, "logging startup"))
 	}
 
-	// Set up the holderSyncer.
-	s.syncer.Holder = s.holder
-	s.syncer.Node = s.cluster.Node
-	s.syncer.Cluster = s.cluster
-	s.syncer.Closing = s.closing
-	s.syncer.Stats = s.holder.Stats.WithTags("component:HolderSyncer")
-
 	// Start background process listening for translation
 	// sync resets.
 	s.wg.Add(1)
@@ -614,13 +586,28 @@ func (s *Server) Open() error {
 	_ = initState
 
 	// Set node ID.
-	// TODO: doesn't work yet, because we depend upon using the disk .id file, tests like
-	// TestHolderSyncer_BlockIteratorLimits for instance.
-	// s.nodeID = s.disCo.ID()
+	s.nodeID = s.disCo.ID()
 
-	node := s.cluster.node()
+	node := &topology.Node{
+		ID:            s.nodeID,
+		URI:           s.uri,
+		GRPCURI:       s.grpcURI,
+		IsCoordinator: s.isCoordinator,
+		State:         nodeStateDown,
+	}
+
+	s.cluster.Node = node
+	s.executor.Node = node
+
+	// Set up the holderSyncer.
+	s.syncer.Holder = s.holder
+	s.syncer.Node = node
+	s.syncer.Cluster = s.cluster
+	s.syncer.Closing = s.closing
+	s.syncer.Stats = s.holder.Stats.WithTags("component:HolderSyncer")
+
 	// TODO disco
-	if node != nil {
+	if false {
 		node.URI = s.uri
 		node.GRPCURI = s.grpcURI
 
@@ -631,6 +618,18 @@ func (s *Server) Open() error {
 		}
 		if err := s.metadator.SetMetadata(context.Background(), data); err != nil {
 			return errors.Wrap(err, "setting metadata")
+		}
+	}
+
+	err = s.cluster.setup()
+	if err != nil {
+		return errors.Wrap(err, "setting up cluster")
+	}
+
+	// ---------- TODO: this is temporary
+	if s.Gossiper != nil {
+		if err := s.Gossiper.StartGossip(); err != nil {
+			return errors.Wrap(err, "starting gossip")
 		}
 	}
 
@@ -724,20 +723,6 @@ func (s *Server) Close() error {
 		return errors.Wrap(errd, "closing disco")
 	}
 	return errors.Wrap(errE, "closing executor")
-}
-
-// loadNodeID gets NodeID from disk, or creates a new value.
-// If server.NodeID is already set, a new ID is not created.
-func (s *Server) loadNodeID() string {
-	if s.nodeID != "" {
-		return s.nodeID
-	}
-	nodeID, err := s.holder.LoadNodeID()
-	if err != nil {
-		s.logger.Printf("loading NodeID: %v", err)
-		return s.nodeID
-	}
-	return nodeID
 }
 
 // NodeID returns the server's node id.

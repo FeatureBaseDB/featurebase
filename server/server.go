@@ -152,6 +152,10 @@ func NewCommand(stdin io.Reader, stdout, stderr io.Writer, opts ...CommandOption
 	return c
 }
 
+func (m *Command) StartGossip() (err error) {
+	return m.setupNetworking()
+}
+
 // Start starts the pilosa server - it returns once the server is running.
 func (m *Command) Start() (err error) {
 	// Seed random number generator
@@ -163,12 +167,8 @@ func (m *Command) Start() (err error) {
 		return errors.Wrap(err, "setting up server")
 	}
 
-	// Set up networking (i.e. gossip)
-	// Gossip no longer unsed under etcd? time to turn it off here?
-	err = m.setupNetworking()
-	if err != nil {
-		return errors.Wrap(err, "setting up networking")
-	}
+	// TODO: this is temorary.
+	m.Server.Gossiper = m
 
 	go func() {
 		err := m.Handler.Serve()

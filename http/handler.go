@@ -448,7 +448,7 @@ func newRouter(handler *Handler) http.Handler {
 	// Endpoints to support lattice UI embedded via statik.
 	// The messiness here reflects the fact that assets live in a nontrivial
 	// directory structure that is controlled externally.
-	latticeHandler := NewStatikHandler(handler)
+	latticeHandler := newStatikHandler(handler)
 	router.PathPrefix("/static").Handler(latticeHandler)
 	router.Path("/").Handler(latticeHandler)
 	router.Path("/favicon.png").Handler(latticeHandler)
@@ -499,11 +499,13 @@ type statikHandler struct {
 	statikFS http.FileSystem
 }
 
-// NewStatikHandler returns a new instance of statikHandler
-func NewStatikHandler(h *Handler) statikHandler {
+// newStatikHandler returns a new instance of statikHandler
+func newStatikHandler(h *Handler) statikHandler {
 	fs, err := h.fileSystem.New()
 	if err == nil {
-		h.logger.Printf("enabled Web UI (%s) at %s", h.api.LatticeVersion(), h.api.Node().URI)
+		// TODO: we need to change the way this works because we don't have a node yet.
+		//h.logger.Printf("enabled Web UI (%s) at %s", h.api.LatticeVersion(), h.api.Node().URI)
+		h.logger.Printf("enabled Web UI (%s) at %s", h.api.LatticeVersion(), "TODO")
 	}
 
 	return statikHandler{

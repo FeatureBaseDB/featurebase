@@ -192,16 +192,6 @@ func (c *cluster) abortAntiEntropy() {
 	}
 }
 
-// node gets the Node for the ID associated with this instance of cluster.
-func (c *cluster) node() *topology.Node {
-	for _, n := range c.Nodes() {
-		if n.ID == c.disCo.ID() {
-			return n
-		}
-	}
-	return nil
-}
-
 func (c *cluster) coordinatorNode() *topology.Node {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -1148,6 +1138,7 @@ func (c *cluster) setup() error {
 	return nil
 }
 
+// open is only used in internal tests.
 func (c *cluster) open() error {
 	err := c.setup()
 	if err != nil {
@@ -2421,21 +2412,6 @@ func (c *cluster) unprotectedPrimaryReplicaNode() *topology.Node {
 		return nil
 	}
 	return c.nodes[pos-1]
-}
-
-// setStatic is unprotected, but only called before the cluster has been started
-// (and therefore not concurrently).
-func (c *cluster) setStatic(hosts []string) error {
-	c.Static = true
-	c.Coordinator = c.Node.ID
-	for _, address := range hosts {
-		uri, err := pnet.NewURIFromAddress(address)
-		if err != nil {
-			return errors.Wrap(err, "getting URI")
-		}
-		c.nodes = append(c.nodes, &topology.Node{URI: *uri})
-	}
-	return nil
 }
 
 // translateFieldKeys is basically a wrapper around
