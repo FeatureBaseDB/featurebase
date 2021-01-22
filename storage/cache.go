@@ -11,27 +11,26 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
-package ctl
+package storage
 
 import (
-	"bytes"
-	"testing"
-
-	"github.com/pilosa/pilosa/v2/server"
-	"github.com/spf13/cobra"
+	"sync/atomic"
 )
 
-func TestBuildServerFlags(t *testing.T) {
-	cm := &cobra.Command{}
-	buf := bytes.Buffer{}
-	stdin, stdout, stderr := GetIO(buf)
-	Server := server.NewCommand(stdin, stdout, stderr)
-	BuildServerFlags(cm, Server)
-	if cm.Flags().Lookup("data-dir").Name == "" {
-		t.Fatal("data-dir flag is required")
+// if enableRowCache, then we must not return mmap-ed memory
+// directly, but only a copy.
+var enableRowcache int64 = 1
+
+// SetRowCacheOn should only be called in NewHolder before
+// all other reads.
+func SetRowCacheOn(on bool) {
+	if on {
+		atomic.StoreInt64(&enableRowcache, 1)
+	} else {
+		atomic.StoreInt64(&enableRowcache, 0)
 	}
-	if cm.Flags().Lookup("log-path").Name == "" {
-		t.Fatal("log-path flag is required")
-	}
+}
+
+func EnableRowCache() bool {
+	return atomic.LoadInt64(&enableRowcache) == 1
 }

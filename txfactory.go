@@ -28,10 +28,9 @@ import (
 	"text/tabwriter"
 
 	"github.com/pilosa/pilosa/v2/hash"
-	"github.com/pilosa/pilosa/v2/rbf"
 	"github.com/pilosa/pilosa/v2/roaring"
 	txkey "github.com/pilosa/pilosa/v2/short_txkey"
-	//txkey "github.com/pilosa/pilosa/v2/txkey"
+	"github.com/pilosa/pilosa/v2/storage"
 	"github.com/pkg/errors"
 	"github.com/zeebo/blake3"
 )
@@ -42,11 +41,6 @@ const (
 	RBFTxn     string = "rbf"
 	BoltTxn    string = "bolt"
 )
-
-// DefaultTxsrc is set here. pilosa/server/config.go references it
-// to set the default for pilosa server exeutable.
-// Can be overridden with env variable PILOSA_TXSRC for testing.
-const DefaultTxsrc = RoaringTxn
 
 // DetectMemAccessPastTx true helps us catch places in api and executor
 // where mmapped memory is being accessed after the point in time
@@ -474,16 +468,15 @@ func (txf *TxFactory) NeedsSnapshot() (b bool) {
 	return
 }
 
-func MustTxsrcToTxtype(txsrc string) (types []txtype) {
-
+func MustBackendToTxtype(backend string) (types []txtype) {
 	var srcs []string
-	if strings.Contains(txsrc, "_") {
-		srcs = strings.Split(txsrc, "_")
+	if strings.Contains(backend, "_") {
+		srcs = strings.Split(backend, "_")
 		if len(srcs) != 2 {
 			panic("only two blue-green comparisons permitted")
 		}
 	} else {
-		srcs = append(srcs, txsrc)
+		srcs = append(srcs, backend)
 	}
 
 	for i, s := range srcs {
@@ -495,11 +488,11 @@ func MustTxsrcToTxtype(txsrc string) (types []txtype) {
 		case BoltTxn: // "bolt"
 			types = append(types, boltTxn)
 		default:
-			panic(fmt.Sprintf("unknown txsrc '%v'", s))
+			panic(fmt.Sprintf("unknown backend '%v'", s))
 		}
 		if i == 1 {
 			if types[1] == types[0] {
-				panic(fmt.Sprintf("cannot blue-green the same txsrc on both arms: '%v'", s))
+				panic(fmt.Sprintf("cannot blue-green the same backend on both arms: '%v'", s))
 			}
 		}
 	}
@@ -509,19 +502,19 @@ func MustTxsrcToTxtype(txsrc string) (types []txtype) {
 // NewTxFactory always opens an existing database. If you
 // want to a fresh database, os.RemoveAll on dir/name ahead of time.
 // We always store files in a subdir of holderDir.
-func NewTxFactory(txsrc string, holderDir string, holder *Holder) (f *TxFactory, err error) {
-	types := MustTxsrcToTxtype(txsrc)
+func NewTxFactory(backend string, holderDir string, holder *Holder) (f *TxFactory, err error) {
+	types := MustBackendToTxtype(backend)
 
 	f = &TxFactory{
 		types:    types,
-		typeOfTx: txsrc,
+		typeOfTx: backend,
 		holder:   holder,
 	}
 	if len(types) == 2 {
 		f.blueGreenReg = newBlueGreenReg(types)
 		f.isBlueGreen = true
 		// blue-green can never use the rowCache.
-		rbf.SetRowcacheOn(false)
+		storage.SetRowCacheOn(false)
 	}
 	f.dbPerShard = f.NewDBPerShard(types, holderDir, holder)
 
@@ -544,7 +537,7 @@ func (f *TxFactory) Open() error {
 // to determine if it should use the rowCache. Currently it
 // doesn't have a tx Tx parameter, so we use the Txf instead.
 func (f *TxFactory) UseRowCache() bool {
-	return rbf.EnableRowCache()
+	return storage.EnableRowCache()
 }
 
 // Txo holds the transaction options
@@ -1290,7 +1283,7 @@ func (f *TxFactory) greenHasData() (hasData bool, err error) {
 // Called by test Test_TxFactory_UpdateBlueFromGreen_OnStartup() in
 // txfactory_internal_test.go as well.
 //
-// This is a noop if we aren't running under a blue_green PILOSA_TXSRC.
+// This is a noop if we aren't running under a blue_green PILOSA_STORAGE_BACKEND.
 func (f *TxFactory) green2blue(holder *Holder) (err0 error) {
 
 	// Holder.Open will always call us, even without blue_green. Which is fine.

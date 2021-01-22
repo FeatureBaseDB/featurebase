@@ -15,17 +15,14 @@
 package pilosa
 
 import (
-	"os"
 	"testing"
 )
 
 func TestRoaring_HasData(t *testing.T) {
+	holder := newHolderWithTempPath(t, "roaring")
 
-	orig := os.Getenv("PILOSA_TXSRC")
-	defer os.Setenv("PILOSA_TXSRC", orig) // must restore or will mess up other tests!
-	os.Setenv("PILOSA_TXSRC", "roaring")
-
-	idx := newIndexWithTempPath(t, "i")
+	idx, err := holder.CreateIndex("i", IndexOptions{})
+	panicOn(err)
 	defer idx.Close()
 
 	db, err := globalRoaringReg.OpenDBWrapper(idx.path, false, nil)

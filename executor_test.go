@@ -25,7 +25,6 @@ import (
 	"io/ioutil"
 	"math"
 	"math/rand"
-	"os"
 	"reflect"
 	"strconv"
 	"strings"
@@ -41,6 +40,7 @@ import (
 	"github.com/pilosa/pilosa/v2/pql"
 	"github.com/pilosa/pilosa/v2/proto"
 	"github.com/pilosa/pilosa/v2/server"
+	"github.com/pilosa/pilosa/v2/storage"
 	"github.com/pilosa/pilosa/v2/test"
 	"github.com/pilosa/pilosa/v2/testhook"
 	"github.com/pkg/errors"
@@ -538,8 +538,8 @@ func TestExecutor_Execute_Count(t *testing.T) {
 }
 
 func roaringOnlyTest(t *testing.T) {
-	src := os.Getenv("PILOSA_TXSRC")
-	if src == pilosa.RoaringTxn || (pilosa.DefaultTxsrc == pilosa.RoaringTxn && src == "") {
+	src := pilosa.CurrentBackend()
+	if src == pilosa.RoaringTxn || (storage.DefaultBackend == pilosa.RoaringTxn && src == "") {
 		// okay to run, we are under roaring only
 	} else {
 		t.Skip("skip for everything but roaring")
@@ -6689,7 +6689,11 @@ func TestTimelessClearRegression(t *testing.T) {
 }
 
 func TestMissingKeyRegression(t *testing.T) {
-	c := test.MustRunCluster(t, 1, []server.CommandOption{server.OptCommandServerOptions(pilosa.OptServerTxsrc("roaring"))})
+	c := test.MustRunCluster(t, 1, []server.CommandOption{server.OptCommandServerOptions(
+		pilosa.OptServerStorageConfig(&storage.Config{
+			Backend:      "roaring",
+			FsyncEnabled: true,
+		}))})
 	defer c.Close()
 
 	c.CreateField(t, "i", pilosa.IndexOptions{Keys: true, TrackExistence: true}, "f", pilosa.OptFieldKeys())

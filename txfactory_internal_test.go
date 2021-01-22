@@ -23,7 +23,7 @@ import (
 )
 
 func Test_TxFactory_Qcx_query_context(t *testing.T) {
-	src := os.Getenv("PILOSA_TXSRC")
+	src := CurrentBackend()
 	if src == "rbf" || src == "bolt" {
 		// ok
 	} else {
@@ -114,10 +114,6 @@ func Test_TxFactory_Qcx_query_context(t *testing.T) {
 //       and b) we have an easy migration mechanism, to go from one storage format to another.
 //
 func Test_TxFactory_UpdateBlueFromGreen_OnStartup(t *testing.T) {
-
-	orig := os.Getenv("PILOSA_TXSRC")
-	defer os.Setenv("PILOSA_TXSRC", orig) // must restore or will mess up other tests!
-
 	checked := []string{"roaring", "rbf"}
 
 	expectError := false
@@ -140,8 +136,7 @@ func Test_TxFactory_UpdateBlueFromGreen_OnStartup(t *testing.T) {
 			//
 			// Setup happens with green only.
 
-			os.Setenv("PILOSA_TXSRC", green)
-			h, path, err := makeHolder(t)
+			h, path, err := makeHolder(t, green)
 			if err != nil {
 				t.Fatalf("creating holder: %v", err)
 			}
@@ -179,7 +174,7 @@ func Test_TxFactory_UpdateBlueFromGreen_OnStartup(t *testing.T) {
 			testMustHaveBit(t, h, "i1", "f", 100, 200)
 			testMustHaveBit(t, h, "i1", "f", 100, 12345678)
 
-			//vv("about to reopen; blue_green = '%v' but PILOSA_TXSRC='%v'", blue_green, os.Getenv("PILOSA_TXSRC"))
+			//vv("about to reopen; blue_green = '%v' but PILOSA_STORAGE_BACKEND='%v'", blue_green, os.Getenv("PILOSA_STORAGE_BACKEND"))
 			//h.DumpAllShards()
 
 			//vv("after dump, about to close")
@@ -190,7 +185,7 @@ func Test_TxFactory_UpdateBlueFromGreen_OnStartup(t *testing.T) {
 			// can we re.Open the same holder h? hopefully without a problem.
 			panicOn(h.Open())
 
-			//vv("h.Open() re-open worked; blue_green = '%v'; dump; with PILOSA_TXSRC='%v'", blue_green, os.Getenv("PILOSA_TXSRC"))
+			//vv("h.Open() re-open worked; blue_green = '%v'; dump; with PILOSA_STORAGE_BACKEND='%v'", blue_green, os.Getenv("PILOSA_STORAGE_BACKEND"))
 			//h.DumpAllShards()
 
 			testMustHaveBit(t, h, "i0", "f", rowID, colID) // panic here, colID 200 bit was cold.
@@ -202,7 +197,9 @@ func Test_TxFactory_UpdateBlueFromGreen_OnStartup(t *testing.T) {
 
 			// check that we can open a NewHolder on green, on same path, and still see our bits.
 			// Because the NewHolder is the code that creates and configures TxFactory as blue_green.
-			h2 := NewHolder(path, nil)
+			cfg := mustHolderConfig()
+			cfg.StorageConfig.Backend = green
+			h2 := NewHolder(path, cfg)
 			panicOn(h2.Open())
 
 			testMustHaveBit(t, h2, "i0", "f", rowID, colID)
@@ -212,9 +209,9 @@ func Test_TxFactory_UpdateBlueFromGreen_OnStartup(t *testing.T) {
 
 			// verify that blue does not have it.
 			// open a new holder on path, just looking at blue.
-			os.Setenv("PILOSA_TXSRC", blue)
-
-			h3 := NewHolder(path, nil)
+			cfg = mustHolderConfig()
+			cfg.StorageConfig.Backend = blue
+			h3 := NewHolder(path, cfg)
 			panicOn(h3.Open())
 
 			testMustNotHaveBit(t, h3, "i0", "f", rowID, colID)
@@ -232,11 +229,11 @@ func Test_TxFactory_UpdateBlueFromGreen_OnStartup(t *testing.T) {
 			// Since blue is empty, the blue database will get synched up
 			// with the green during Holder.Open().
 
-			os.Setenv("PILOSA_TXSRC", blue_green)
-
 			// open a holder with path again, now looking at both blue and green.
 			// The Holder.Open should do the migration from green, populating blue.
-			h4 := NewHolder(path, nil)
+			cfg = mustHolderConfig()
+			cfg.StorageConfig.Backend = blue_green
+			h4 := NewHolder(path, cfg)
 
 			//vv("about to h4.Open we should populate blue from green")
 			err = h4.Open()
@@ -263,10 +260,6 @@ func Test_TxFactory_UpdateBlueFromGreen_OnStartup(t *testing.T) {
 // go to verify it but blue has more data than green.
 // That will also cause query divergence.
 func Test_TxFactory_verifyBlueEqualsGreen(t *testing.T) {
-
-	orig := os.Getenv("PILOSA_TXSRC")
-	defer os.Setenv("PILOSA_TXSRC", orig) // must restore or will mess up other tests!
-
 	checked := []string{"roaring", "bolt", "rbf"}
 
 	for _, blue := range checked {
@@ -285,8 +278,7 @@ func Test_TxFactory_verifyBlueEqualsGreen(t *testing.T) {
 			//
 			// Setup happens with green only.
 
-			os.Setenv("PILOSA_TXSRC", green)
-			h, path, err := makeHolder(t)
+			h, path, err := makeHolder(t, green)
 			if err != nil {
 				t.Fatalf("creating holder: %v", err)
 			}
@@ -328,11 +320,12 @@ func Test_TxFactory_verifyBlueEqualsGreen(t *testing.T) {
 
 			// verify that blue does not have it.
 			// open a new holder on path, just looking at blue.
-			os.Setenv("PILOSA_TXSRC", blue)
 
 			//vv("on blue, which is '%v'", blue)
 
-			h3 := NewHolder(path, nil)
+			cfg := mustHolderConfig()
+			cfg.StorageConfig.Backend = blue
+			h3 := NewHolder(path, cfg)
 			panicOn(h3.Open())
 
 			testMustNotHaveBit(t, h3, "i0", "f", rowID, colID)
@@ -350,13 +343,13 @@ func Test_TxFactory_verifyBlueEqualsGreen(t *testing.T) {
 			// Since blue is empty, the blue database will get synched up
 			// with the green during Holder.Open().
 
-			os.Setenv("PILOSA_TXSRC", blue_green)
-
 			//vv("on blue_green, which is '%v'", blue_green)
 
 			// open a holder with path again, now looking at both blue and green.
 			// The Holder.Open should do the migration from green, populating blue.
-			h4 := NewHolder(path, nil)
+			cfg = mustHolderConfig()
+			cfg.StorageConfig.Backend = blue_green
+			h4 := NewHolder(path, cfg)
 			panicOn(h4.Open())
 
 			testMustHaveBit(t, h4, "i0", "f", rowID, colID)
@@ -365,11 +358,10 @@ func Test_TxFactory_verifyBlueEqualsGreen(t *testing.T) {
 			h4.Close()
 
 			// now open just blue, and add a bit to a new index, i2.
-			os.Setenv("PILOSA_TXSRC", blue)
-
 			//vv("on blue, which is '%v'", blue)
-
-			h5 := NewHolder(path, nil)
+			cfg = mustHolderConfig()
+			cfg.StorageConfig.Backend = blue
+			h5 := NewHolder(path, cfg)
 			panicOn(h5.Open())
 			testSetBit(t, h5, "i2", "f", 500, 777)
 
@@ -380,13 +372,14 @@ func Test_TxFactory_verifyBlueEqualsGreen(t *testing.T) {
 
 			// now open blue_green. should get a verification failure
 			// due to the extra bit in blue.
-			os.Setenv("PILOSA_TXSRC", blue_green)
 
 			// BEGIN verficiation that should ERROR out b/c blue has more data.
 
 			// open a holder with path again, now looking at both blue and green.
 			// The Holder.Open should verify blue against green and notice the extra bit.
-			h6 := NewHolder(path, nil)
+			cfg = mustHolderConfig()
+			cfg.StorageConfig.Backend = blue_green
+			h6 := NewHolder(path, cfg)
 			err = h6.Open()
 			//h6.DumpAllShards()
 

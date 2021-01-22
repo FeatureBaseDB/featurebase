@@ -27,6 +27,7 @@ import (
 	petcd "github.com/pilosa/pilosa/v2/etcd"
 	"github.com/pilosa/pilosa/v2/gossip"
 	rbfcfg "github.com/pilosa/pilosa/v2/rbf/cfg"
+	"github.com/pilosa/pilosa/v2/storage"
 	"github.com/pilosa/pilosa/v2/toml"
 	"github.com/pkg/errors"
 )
@@ -193,18 +194,18 @@ type Config struct {
 		ConnectionLimit uint16 `toml:"max-connections"`
 	} `toml:"postgres"`
 
-	// Txsrc determines which Tx implementation the holder/Index will use; one
-	// of the available transactional-storage engines. Choices are listed
-	// in the string constants below. Should be one of
-	// "roaring","bolt", "rbf", "bolt_roaring", "roaring_bolt", "rbf_roaring",
-	// "roaring_rbf", "bolt_rbf", "rbf_bolt", or any later addition. The
-	// engines with _ underscore indicate use of a blueGreenTx with a comparison
-	// of values back from each Tx method, and a panic if they differ. This
-	// is an effective test for consistency. If "rbf_roaring" is specified, then
-	// the roaring values are the ones actually returned from the blueGreenTx.
-	// If "roaring_rbf" is chosen, then the RBF values are the ones actually
+	// Storage.Backend determines which Tx implementation the holder/Index will
+	// use; one of the available transactional-storage engines. Choices are
+	// listed in the string constants below. Should be one of "roaring","bolt",
+	// "rbf", "bolt_roaring", "roaring_bolt", "rbf_roaring", "roaring_rbf",
+	// "bolt_rbf", "rbf_bolt", or any later addition. The engines with _
+	// underscore indicate use of a blueGreenTx with a comparison of values back
+	// from each Tx method, and a panic if they differ. This is an effective
+	// test for consistency. If "rbf_roaring" is specified, then the roaring
+	// values are the ones actually returned from the blueGreenTx. If
+	// "roaring_rbf" is chosen, then the RBF values are the ones actually
 	// returned from the blueGreenTx.
-	Txsrc string `toml:"txsrc"`
+	Storage *storage.Config `toml:"storage"`
 
 	// RowcacheOn, if true, turns on the row cache for all storage backends.
 	// The default is now off because it makes rbf queries faster and uses
@@ -212,12 +213,12 @@ type Config struct {
 	RowcacheOn bool `toml:"rowcache-on"`
 
 	// RBFConfig defines all externally configurable RBF flags.
-	RBFConfig *rbfcfg.Config
+	RBFConfig *rbfcfg.Config `toml:"rbf"`
 
 	// QueryHistoryLength sets the maximum number of queries that are maintained
 	// for the /query-history endpoint. This parameter is per-node, and the
 	// result combines the history from all nodes.
-	QueryHistoryLength int
+	QueryHistoryLength int `toml:"query-history-length"`
 }
 
 // MustValidate checks that all ports in a Config are unique and not zero.
@@ -308,6 +309,7 @@ func NewConfig() *Config {
 		WorkerPoolSize:       runtime.NumCPU(),
 		ImportWorkerPoolSize: runtime.NumCPU(),
 
+		Storage:   storage.NewDefaultConfig(),
 		RBFConfig: rbfcfg.NewDefaultConfig(),
 
 		QueryHistoryLength: 100,

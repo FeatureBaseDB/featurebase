@@ -36,6 +36,7 @@ import (
 	rbfcfg "github.com/pilosa/pilosa/v2/rbf/cfg"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/stats"
+	"github.com/pilosa/pilosa/v2/storage"
 	"github.com/pilosa/pilosa/v2/topology"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
@@ -360,13 +361,12 @@ func OptServerOpenTranslateReader(fn OpenTranslateReaderFunc) ServerOption {
 	}
 }
 
-// OptServerTxsrc is a functional option on Server
-// used to specify the transactional-storage to use,
-// resulting in RoaringTx, RbfTx, BadgerTx, or a blueGreen* Tx
-// being used for all Tx interface calls.
-func OptServerTxsrc(txsrc string) ServerOption {
+// OptServerStorageConfig is a functional option on Server used to specify the
+// transactional-storage backend to use, resulting in RoaringTx, RbfTx,
+// BadgerTx, or a blueGreen* Tx being used for all Tx interface calls.
+func OptServerStorageConfig(cfg *storage.Config) ServerOption {
 	return func(s *Server) error {
-		s.holderConfig.Txsrc = txsrc
+		s.holderConfig.StorageConfig = cfg
 		return nil
 	}
 }

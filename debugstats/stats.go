@@ -17,7 +17,6 @@ package debugstats
 import (
 	"fmt"
 	"math"
-	//"os"
 	"runtime"
 	"sort"
 	"sync"
@@ -67,7 +66,6 @@ func (p SortByTot) Swap(i, j int) {
 }
 
 func (c *CallStats) Report(title string) (r string) {
-	//txsrc := os.Getenv("PILOSA_TXSRC")
 	r = fmt.Sprintf("CallStats: (%v)\n", title)
 	c.mu.Lock()
 	defer c.mu.Unlock()

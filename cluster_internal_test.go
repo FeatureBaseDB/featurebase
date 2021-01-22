@@ -138,6 +138,22 @@ func TestFragCombos(t *testing.T) {
 	}
 }
 
+// newHolderWithTempPath returns a new instance of Holder.
+func newHolderWithTempPath(tb testing.TB, backend string) *Holder {
+	path, err := testhook.TempDirInDir(tb, *TempDir, "pilosa-holder-")
+	if err != nil {
+		panic(err)
+	}
+	cfg := mustHolderConfig()
+	cfg.StorageConfig.Backend = backend
+	h := NewHolder(path, cfg)
+	panicOn(h.Open())
+	testhook.Cleanup(tb, func() {
+		h.Close()
+	})
+	return h
+}
+
 // newIndexWithTempPath returns a new instance of Index.
 func newIndexWithTempPath(tb testing.TB, name string) *Index {
 	path, err := testhook.TempDirInDir(tb, *TempDir, "pilosa-index-")
