@@ -3264,7 +3264,7 @@ func TestExecutor_Execute_Remote_Row(t *testing.T) {
 func TestExecutor_Execute_ErrMaxWritesPerRequest(t *testing.T) {
 	c := test.MustNewCluster(t, 1)
 	defer c.Close()
-	c.GetNode(0).Config.MaxWritesPerRequest = 3
+	c.GetIdleNode(0).Config.MaxWritesPerRequest = 3
 	err := c.Start()
 	if err != nil {
 		t.Fatal(err)
@@ -4494,7 +4494,7 @@ func TestExecutor_Execute_SetRow(t *testing.T) {
 func benchmarkExistence(nn bool, b *testing.B) {
 	c := test.MustNewCluster(b, 1)
 	var err error
-	c.GetNode(0).Config.DataDir, err = testhook.TempDirInDir(b, *TempDir, "benchmarkExistence")
+	c.GetIdleNode(0).Config.DataDir, err = testhook.TempDirInDir(b, *TempDir, "benchmarkExistence")
 	if err != nil {
 		b.Fatalf("getting temp dir: %v", err)
 	}
@@ -5934,7 +5934,7 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 func BenchmarkGroupBy(b *testing.B) {
 	c := test.MustNewCluster(b, 1)
 	var err error
-	c.GetNode(0).Config.DataDir, err = testhook.TempDirInDir(b, *TempDir, "benchmarkGroupBy-")
+	c.GetIdleNode(0).Config.DataDir, err = testhook.TempDirInDir(b, *TempDir, "benchmarkGroupBy-")
 	if err != nil {
 		b.Fatalf("getting temp dir: %v", err)
 	}

@@ -1402,14 +1402,14 @@ func TestCluster_TranslateStore(t *testing.T) {
 	)
 
 	if err := port.GetPort(func(p int) error {
-		cluster.GetNode(0).Config.Gossip.Port = fmt.Sprintf("%d", p)
-		return cluster.GetNode(0).Start()
+		cluster.GetIdleNode(0).Config.Gossip.Port = fmt.Sprintf("%d", p)
+		return cluster.GetIdleNode(0).Start()
 	}, 10); err != nil {
 		t.Fatalf("starting node 0: %v", err)
 	}
-	defer cluster.GetNode(0).Close()
+	defer cluster.GetIdleNode(0).Close()
 
-	test.Do(t, "POST", cluster.GetNode(0).URL()+"/index/i0", "{\"options\": {\"keys\": true}}")
+	test.Do(t, "POST", cluster.GetIdleNode(0).URL()+"/index/i0", "{\"options\": {\"keys\": true}}")
 }
 
 func TestClusterTranslator(t *testing.T) {

@@ -21,6 +21,7 @@ import (
 	"math"
 	"net"
 	"path"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -92,8 +93,51 @@ func (c *Cluster) QueryGRPC(t testing.TB, index, query string) *proto.TableRespo
 	return tableResp
 }
 
-func (c *Cluster) GetNode(n int) *Command {
+// GetIdleNode gets the node at the given index. This method is used (instead of
+// `GetNode()`) when the cluster has yet to be started. In that case, etcd has
+// not assigned each node an ID, and therefore the nodes are not in their final,
+// sorted order. In other words, this method can only be used to retrieve a node
+// when order doesn't matter. An example is if you need to do something like
+// this:
+//   c.GetNode(0).Config.Cluster.ReplicaN = 2
+//   c.GetNode(1).Config.Cluster.ReplicaN = 2
+// In this example, the test needs the replication factor to be set to 2 before
+// starting; it's ok to reference each node by its index in the pre-sorted node
+// list. It's also safe to use this method after `MustRunCluster()` if the
+// cluster contains only one node.
+func (c *Cluster) GetIdleNode(n int) *Command {
 	return c.Nodes[n]
+}
+
+// GetNode gets the node at the given index; this method assumes the cluster has
+// already been started. Because the node IDs are assigned randomly, they can be
+// in an order that does not align with the test's expectations. For example, a
+// test might create a 3-node cluster and retrieve them using `GetNode(0)`,
+// `GetNode(1)`, and `GetNode(2)` respectively. But if the node IDs are `456`,
+// `123`, `789`, then we actually want `GetNode(0)` to return `c.Nodes[1]`, and
+// `GetNode(1)` to return `c.Nodes[0]`. This method looks at all the node IDs,
+// sorts them, and then returns the node that the test expects.
+func (c *Cluster) GetNode(n int) *Command {
+	// Put all the node IDs into a list to be sorted.
+	ids := make([]nodePlace, len(c.Nodes))
+	for i := range c.Nodes {
+		ids[i].id = c.Nodes[i].ID()
+		ids[i].idx = i
+	}
+
+	// Sort the list.
+	sort.SliceStable(ids, func(i, j int) bool {
+		return ids[i].id < ids[j].id
+	})
+
+	// Return the node which is at the given position in the sorted list.
+	return c.Nodes[ids[n].idx]
+}
+
+// nodePlace represents a node's ID and its index into the c.Nodes slice.
+type nodePlace struct {
+	id  string
+	idx int
 }
 
 func (c *Cluster) GetHolder(n int) *Holder {
