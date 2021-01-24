@@ -1485,7 +1485,7 @@ func TestQueryHistory(t *testing.T) {
 	test.Do(t, "POST", cmd.URL()+"/index/i0/field/f0", "")
 
 	gh := server.NewGRPCHandler(cmd.API)
-	_, err = gh.QuerySQLUnary(context.Background(), &pb.QuerySQLRequest{
+	_, err := gh.QuerySQLUnary(context.Background(), &pb.QuerySQLRequest{
 		Sql: `select * from i0`,
 	})
 
