@@ -6,4 +6,5 @@ load: "pilosa-bench -type count -rate 100 -n 3000"
 health_url:    "http://localhost:10101/status"
 health_regexp: "NORMAL"
 
-debug_url: "http://localhost:10101/debug"
+vars_urls:
+  - http://localhost:10101/debug/vars

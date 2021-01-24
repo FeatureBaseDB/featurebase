@@ -168,6 +168,36 @@ func (c *Cluster) ImportKeyKey(t testing.TB, index, field string, valAndRecKeys 
 	}
 }
 
+// TimeQuantumKey is a string key and a string+key value
+type TimeQuantumKey struct {
+	RowKey string
+	ColKey string
+	Ts     int64
+}
+
+// ImportTimeQuantumKey imports data into an index where the index is keyd
+// and the field is a time-quantum
+func (c *Cluster) ImportTimeQuantumKey(t testing.TB, index, field string, entries []TimeQuantumKey) {
+	t.Helper()
+	importRequest := &pilosa.ImportRequest{
+		Index:      index,
+		Field:      field,
+		RowKeys:    make([]string, len(entries)),
+		ColumnKeys: make([]string, len(entries)),
+		Timestamps: make([]int64, len(entries)),
+	}
+	for i, entry := range entries {
+		importRequest.ColumnKeys[i] = entry.ColKey
+		importRequest.RowKeys[i] = entry.RowKey
+		importRequest.Timestamps[i] = entry.Ts
+
+	}
+	err := c.Nodes[0].API.Import(context.Background(), nil, importRequest)
+	if err != nil {
+		t.Fatalf("importing keykey data: %v", err)
+	}
+}
+
 // IntKey is a string key and a signed integer value.
 type IntKey struct {
 	Val int64

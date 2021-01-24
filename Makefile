@@ -1,4 +1,4 @@
-.PHONY: build check-clean clean build-lattice cover cover-viz default docker docker-build docker-test docker-tag-push generate generate-protoc generate-pql generate-statik gometalinter install install-build-deps install-golangci-lint install-gometalinter install-protoc install-protoc-gen-gofast install-peg install-statik prerelease prerelease-upload release release-build test testv testv-race testvsub testvsub-race  test-txstore-rbf
+.PHONY: build check-clean clean build-lattice cover cover-viz default docker docker-build docker-test docker-tag-push generate generate-protoc generate-pql generate-statik gometalinter install install-build-deps install-golangci-lint install-gometalinter install-protoc install-protoc-gen-gofast install-peg install-statik prerelease prerelease-upload release release-build test testv testv-race testvsub testvsub-race  test-txstore-rbf lattice
 
 CLONE_URL=github.com/pilosa/pilosa
 MOD_VERSION=v2
@@ -155,11 +155,17 @@ install:
 install-bench:
 	go install -tags='$(BUILD_TAGS)' -ldflags $(LDFLAGS) $(FLAGS) ./cmd/pilosa-bench
 
+# Ensure lattice is cloned and the pinned version is checked out
 lattice:
-	git clone git@github.com:molecula/lattice.git
+	git submodule update --init
 
+# Build the lattice assets
 build-lattice: lattice require-yarn
-	cd lattice && git pull && yarn install && yarn build
+	cd lattice && yarn install && yarn build
+
+# Upgrade lattice to the latest version
+upgrade-lattice: lattice
+	git submodule update --remote
 
 # `go generate` protocol buffers
 generate-protoc: require-protoc require-protoc-gen-gofast

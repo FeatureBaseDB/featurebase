@@ -1175,7 +1175,7 @@ func (h *Handler) handleGetActiveQueries(w http.ResponseWriter, r *http.Request)
 			}
 		}
 		for i, q := range queries {
-			_, err := fmt.Fprintf(w, "%*s%q\n", -(maxlen + 2), durations[i], q.Query)
+			_, err := fmt.Fprintf(w, "%*s%q\n", -(maxlen + 2), durations[i], q.PQL)
 			if err != nil {
 				h.logger.Printf("sending GetActiveQueries response: %s", err)
 				return

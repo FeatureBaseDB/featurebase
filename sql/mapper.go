@@ -40,6 +40,7 @@ type MappedSQL struct {
 	Statement sqlparser.Statement
 	Mask      QueryMask
 	Tables    []string
+	SQL       string
 }
 
 // Mapper is responsible for mapping a SQL query to structure representation
@@ -109,5 +110,6 @@ func (m *Mapper) MapSQL(sql string) (*MappedSQL, error) {
 		Statement: stmt,
 		Mask:      qm,
 		Tables:    tableNames,
+		SQL:       sql,
 	}, nil
 }
