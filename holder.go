@@ -1343,6 +1343,10 @@ func (s *holderSyncer) SyncHolder() error {
 	s.mu.Lock() // only allow one instance of SyncHolder to be running at a time
 	defer s.mu.Unlock()
 	ti := time.Now()
+
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	snap := topology.NewClusterSnapshot(s.Cluster.noder, s.Cluster.Hasher, s.Cluster.ReplicaN)
+
 	// Iterate over schema in sorted order.
 	for _, di := range s.Holder.Schema() {
 		// Verify syncer has not closed.
@@ -1377,7 +1381,7 @@ func (s *holderSyncer) SyncHolder() error {
 				itr.Seek(0)
 				for shard, eof := itr.Next(); !eof; shard, eof = itr.Next() {
 					// Ignore shards that this host doesn't own.
-					if !s.Cluster.ownsShard(s.Node.ID, di.Name, shard) {
+					if !snap.OwnsShard(s.Node.ID, di.Name, shard) {
 						continue
 					}
 
@@ -1539,16 +1543,19 @@ func (s *holderSyncer) resetTranslationSync() error {
 		return errors.Wrap(err, "stop translation sync")
 	}
 
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	snap := topology.NewClusterSnapshot(s.Cluster.noder, s.Cluster.Hasher, s.Cluster.ReplicaN)
+
 	// Set read-only flag for all translation stores.
-	s.setTranslateReadOnlyFlags()
+	s.setTranslateReadOnlyFlags(snap)
 
 	// Connect to each node that has a primary for which we are a replica.
-	if err := s.initializeIndexTranslateReplication(); err != nil {
+	if err := s.initializeIndexTranslateReplication(snap); err != nil {
 		return errors.Wrap(err, "initialize index translate replication")
 	}
 
 	// Connect to coordinator to stream field data.
-	if err := s.initializeFieldTranslateReplication(); err != nil {
+	if err := s.initializeFieldTranslateReplication(snap); err != nil {
 		return errors.Wrap(err, "initialize field translate replication")
 	}
 	return nil
@@ -1619,9 +1626,10 @@ func (s *holderSyncer) stopTranslationSync() error {
 // setTranslateReadOnlyFlags updates all translation stores to enable or disable
 // writing new translation keys. Index stores are writable if the node owns the
 // partition. Field stores are writable if the node is the coordinator.
-func (s *holderSyncer) setTranslateReadOnlyFlags() {
+func (s *holderSyncer) setTranslateReadOnlyFlags(snap *topology.ClusterSnapshot) {
 	s.Cluster.mu.RLock()
-	isCoordinator := s.Cluster.unprotectedIsCoordinator()
+	// TODO: this needs to become: IsPrimaryFieldTranslationNode(s.Cluster.Node.ID) {
+	isPrimaryFieldTranslator := snap.IsCoordinatorNode(s.Cluster.Node.ID)
 
 	for _, index := range s.Holder.Indexes() {
 		// There is a race condition here:
@@ -1642,8 +1650,8 @@ func (s *holderSyncer) setTranslateReadOnlyFlags() {
 		//
 		// Update: there was another path down to Index.Close(), so
 		// we shrink to lock to be inside index.TranslateStore() now.
-		for partitionID := 0; partitionID < s.Cluster.partitionN; partitionID++ {
-			primary := s.Cluster.unprotectedPrimaryPartitionNode(partitionID)
+		for partitionID := 0; partitionID < snap.PartitionN; partitionID++ {
+			primary := snap.PrimaryPartitionNode(partitionID)
 			isPrimary := primary != nil && s.Node.ID == primary.ID
 
 			if ts := index.TranslateStore(partitionID); ts != nil {
@@ -1652,7 +1660,7 @@ func (s *holderSyncer) setTranslateReadOnlyFlags() {
 		}
 
 		for _, field := range index.Fields() {
-			field.TranslateStore().SetReadOnly(!isCoordinator)
+			field.TranslateStore().SetReadOnly(!isPrimaryFieldTranslator)
 		}
 	}
 	s.Cluster.mu.RUnlock()
@@ -1660,8 +1668,8 @@ func (s *holderSyncer) setTranslateReadOnlyFlags() {
 
 // initializeIndexTranslateReplication connects to each node that is the
 // primary for a partition that we are a replica of.
-func (s *holderSyncer) initializeIndexTranslateReplication() error {
-	for _, node := range s.Cluster.Nodes() {
+func (s *holderSyncer) initializeIndexTranslateReplication(snap *topology.ClusterSnapshot) error {
+	for _, node := range snap.Nodes {
 		// Skip local node.
 		if node.ID == s.Node.ID {
 			continue
@@ -1673,8 +1681,8 @@ func (s *holderSyncer) initializeIndexTranslateReplication() error {
 			if !index.Keys() {
 				continue
 			}
-			for partitionID := 0; partitionID < s.Cluster.partitionN; partitionID++ {
-				partitionNodes := s.Cluster.partitionNodes(partitionID)
+			for partitionID := 0; partitionID < snap.PartitionN; partitionID++ {
+				partitionNodes := snap.PartitionNodes(partitionID)
 				isPrimary := partitionNodes[0].ID == node.ID                          // remote is primary?
 				isReplica := topology.Nodes(partitionNodes[1:]).ContainsID(s.Node.ID) // local is replica?
 				if !isPrimary || !isReplica {
@@ -1713,9 +1721,10 @@ func (s *holderSyncer) initializeIndexTranslateReplication() error {
 }
 
 // initializeFieldTranslateReplication connects the coordinator to stream field data.
-func (s *holderSyncer) initializeFieldTranslateReplication() error {
+func (s *holderSyncer) initializeFieldTranslateReplication(snap *topology.ClusterSnapshot) error {
 	// Skip if coordinator.
-	if s.Cluster.isCoordinator() {
+	// TODO: this needs to become: IsPrimaryFieldTranslationNode(s.Cluster.Node.ID) {
+	if !snap.IsCoordinatorNode(s.Cluster.Node.ID) {
 		return nil
 	}
 
@@ -1737,9 +1746,9 @@ func (s *holderSyncer) initializeFieldTranslateReplication() error {
 		return nil
 	}
 
-	// Connect to coordinator and begin streaming.
-	coordinator := s.Cluster.coordinatorNode()
-	rd, err := s.Holder.OpenTranslateReader(context.Background(), coordinator.URI.String(), m)
+	// Connect to primary and begin streaming.
+	primary := snap.PrimaryFieldTranslationNode()
+	rd, err := s.Holder.OpenTranslateReader(context.Background(), primary.URI.String(), m)
 	if err != nil {
 		return err
 	}
@@ -1754,6 +1763,9 @@ func (s *holderSyncer) initializeFieldTranslateReplication() error {
 }
 
 func (s *holderSyncer) readIndexTranslateReader(rd TranslateEntryReader) {
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	snap := topology.NewClusterSnapshot(s.Cluster.noder, s.Cluster.Hasher, s.Cluster.ReplicaN)
+
 	for {
 		var entry TranslateEntry
 		if err := rd.ReadEntry(&entry); err != nil {
@@ -1769,7 +1781,7 @@ func (s *holderSyncer) readIndexTranslateReader(rd TranslateEntryReader) {
 		}
 
 		// Apply replication to store.
-		store := idx.TranslateStore(s.Cluster.Topology.KeyPartition(entry.Index, entry.Key))
+		store := idx.TranslateStore(snap.KeyToKeyPartition(entry.Index, entry.Key))
 		if err := store.ForceSet(entry.ID, entry.Key); err != nil {
 			s.Holder.Logger.Printf("cannot force set index translation data: %d=%q", entry.ID, entry.Key)
 			return
@@ -1825,6 +1837,9 @@ func (c *holderCleaner) IsClosing() bool {
 // CleanHolder compares the holder with the cluster state and removes
 // any unnecessary fragments and files.
 func (c *holderCleaner) CleanHolder() error {
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	snap := topology.NewClusterSnapshot(c.Cluster.noder, c.Cluster.Hasher, c.Cluster.ReplicaN)
+
 	for _, index := range c.Holder.Indexes() {
 		// Verify cleaner has not closed.
 		if c.IsClosing() {
@@ -1832,7 +1847,7 @@ func (c *holderCleaner) CleanHolder() error {
 		}
 
 		// Get the fragments that node is responsible for (based on hash(index, node)).
-		containedShards := c.Cluster.containsShards(index.Name(), index.AvailableShards(includeRemote), c.Node)
+		containedShards := snap.ContainsShards(index.Name(), index.AvailableShards(includeRemote), c.Node)
 
 		// Get the fragments registered in memory.
 		for _, field := range index.Fields() {

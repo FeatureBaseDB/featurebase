@@ -4712,8 +4712,11 @@ func (e *executor) executeClearBitField(ctx context.Context, qcx *Qcx, index str
 
 	shard := colID / ShardWidth
 
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	snap := topology.NewClusterSnapshot(e.Cluster.noder, e.Cluster.Hasher, e.Cluster.ReplicaN)
+
 	ret := false
-	for _, node := range e.Cluster.shardNodes(index, shard) {
+	for _, node := range snap.ShardNodes(index, shard) {
 		// Update locally if host matches.
 		if node.ID == e.Node.ID {
 
@@ -5070,7 +5073,10 @@ func (e *executor) executeSetBitField(ctx context.Context, qcx *Qcx, index strin
 	shard := colID / ShardWidth
 	ret := false
 
-	for _, node := range e.Cluster.shardNodes(index, shard) {
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	snap := topology.NewClusterSnapshot(e.Cluster.noder, e.Cluster.Hasher, e.Cluster.ReplicaN)
+
+	for _, node := range snap.ShardNodes(index, shard) {
 		// Update locally if host matches.
 		if node.ID == e.Node.ID {
 
@@ -5113,7 +5119,10 @@ func (e *executor) executeSetValueField(ctx context.Context, qcx *Qcx, index str
 	shard := colID / ShardWidth
 	ret := false
 
-	for _, node := range e.Cluster.shardNodes(index, shard) {
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	snap := topology.NewClusterSnapshot(e.Cluster.noder, e.Cluster.Hasher, e.Cluster.ReplicaN)
+
+	for _, node := range snap.ShardNodes(index, shard) {
 		// Update locally if host matches.
 		if node.ID == e.Node.ID {
 
@@ -5157,10 +5166,12 @@ func (e *executor) executeClearValueField(ctx context.Context, qcx *Qcx, index s
 	shard := colID / ShardWidth
 	ret := false
 
-	for _, node := range e.Cluster.shardNodes(index, shard) {
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	snap := topology.NewClusterSnapshot(e.Cluster.noder, e.Cluster.Hasher, e.Cluster.ReplicaN)
+
+	for _, node := range snap.ShardNodes(index, shard) {
 		// Update locally if host matches.
 		if node.ID == e.Node.ID {
-
 			idx := e.Holder.Index(index)
 			tx, finisher, err := qcx.GetTx(Txo{Write: writable, Index: idx, Shard: shard})
 			if err != nil {
@@ -5441,9 +5452,15 @@ func (e *executor) remoteExec(ctx context.Context, node *topology.Node, index st
 func (e *executor) shardsByNode(nodes []*topology.Node, index string, shards []uint64) (map[*topology.Node][]uint64, error) {
 	m := make(map[*topology.Node][]uint64)
 
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	// We use e.Cluster.Nodes() here instead of e.Cluster.noder because we need
+	// the node states in order to ensure that we don't include an unavailable
+	// node in the map of nodes to which we distribute the query.
+	snap := topology.NewClusterSnapshot(topology.NewLocalNoder(e.Cluster.Nodes()), e.Cluster.Hasher, e.Cluster.ReplicaN)
+
 loop:
 	for _, shard := range shards {
-		for _, node := range e.Cluster.ShardNodes(index, shard) {
+		for _, node := range snap.ShardNodes(index, shard) {
 			if topology.Nodes(nodes).Contains(node) {
 				m[node] = append(m[node], shard)
 				continue loop

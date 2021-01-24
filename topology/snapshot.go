@@ -138,6 +138,18 @@ func (c *ClusterSnapshot) IsPrimaryFieldTranslationNode(nodeID string) bool {
 	return c.PrimaryFieldTranslationNode().ID == nodeID
 }
 
+// IsCoordinatorNode returns true if nodeID represents the coordinator
+// node responsible for field translation. TODO: this is temporary until
+// we transition over to using primary
+func (c *ClusterSnapshot) IsCoordinatorNode(nodeID string) bool {
+	for i := range c.Nodes {
+		if c.Nodes[i].ID == nodeID && c.Nodes[i].IsCoordinator {
+			return true
+		}
+	}
+	return false
+}
+
 // PrimaryPartitionNode returns the primary node of the given partition.
 func (c *ClusterSnapshot) PrimaryPartitionNode(partition int) *Node {
 	if nodes := c.PartitionNodes(partition); len(nodes) > 0 {
