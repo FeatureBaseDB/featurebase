@@ -5,7 +5,6 @@ vendor
 .DS_Store
 build
 *~
-lattice
 release-pilosa-fsck.*.*.tar.gz
 /log.*
 /tourna.log.*

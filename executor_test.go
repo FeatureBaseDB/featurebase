@@ -6863,6 +6863,30 @@ func variousQueries(t *testing.T, clusterSize int) {
 		{"icecream", "userF"},
 	})
 
+	// Create and populate "places_visited" time field.
+	c.CreateField(t, "users", pilosa.IndexOptions{Keys: true, TrackExistence: true}, "places_visited", pilosa.OptFieldKeys(), pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YM")))
+	ts2019Jan01 := int64(1546300800) * 1e+9 // 2019 January 1st 0:00:00
+	ts2019Aug01 := int64(1564617600) * 1e+9 // 2019 August  1st 0:00:00
+	ts2020Jan01 := int64(1577836800) * 1e+9 // 2020 January 1st 0:00:00
+	c.ImportTimeQuantumKey(t, "users", "places_visited", []test.TimeQuantumKey{
+		// 2019 January: nairobi, paris, austin, toronto
+		{RowKey: "nairobi", ColKey: "userB", Ts: ts2019Jan01},
+		{RowKey: "paris", ColKey: "userC", Ts: ts2019Jan01},
+		{RowKey: "austin", ColKey: "userF", Ts: ts2019Jan01},
+		{RowKey: "toronto", ColKey: "userA", Ts: ts2019Jan01},
+		// 2019 August: toronto only
+		{RowKey: "toronto", ColKey: "userB", Ts: ts2019Aug01},
+		{RowKey: "toronto", ColKey: "userC", Ts: ts2019Aug01},
+		// 2020: toronto, mombasa, sydney, nairobi
+		{RowKey: "toronto", ColKey: "userB", Ts: ts2020Jan01},
+		{RowKey: "toronto", ColKey: "userD", Ts: ts2020Jan01},
+		{RowKey: "toronto", ColKey: "userE", Ts: ts2020Jan01},
+		{RowKey: "toronto", ColKey: "userF", Ts: ts2020Jan01},
+		{RowKey: "mombasa", ColKey: "userA", Ts: ts2020Jan01},
+		{RowKey: "sydney", ColKey: "userD", Ts: ts2020Jan01},
+		{RowKey: "nairobi", ColKey: "userE", Ts: ts2020Jan01},
+	})
+
 	// Create and populate "affinity" int field with negative, positive, zero and null values.
 	c.CreateField(t, "users", pilosa.IndexOptions{Keys: true, TrackExistence: true}, "affinity", pilosa.OptFieldTypeInt(-1000, 1000))
 	c.ImportIntKey(t, "users", "affinity", []test.IntKey{
@@ -6900,6 +6924,66 @@ func variousQueries(t *testing.T, clusterSize int) {
 		qrVerifier  func(t *testing.T, resp pilosa.QueryResponse)
 		csvVerifier string
 	}{
+		{ // 2020 & 2019 All
+			query: `GroupBy(Rows(places_visited, from='2019-01-01T00:00', to='2020-12-31T23:59'))`,
+			csvVerifier: `nairobi,2
+paris,1
+austin,1
+toronto,6
+mombasa,1
+sydney,1
+`,
+		},
+		{ // 2019 January only
+			query: `GroupBy(Rows(places_visited, from='2019-01-01T00:00', to='2019-02-01T00:00'))`,
+			csvVerifier: `nairobi,1
+paris,1
+austin,1
+toronto,1
+`,
+		},
+		{ // 2019 All
+			query: `GroupBy(Rows(places_visited, from='2019-01-01T00:00', to='2019-12-31T23:59'))`,
+			csvVerifier: `nairobi,1
+paris,1
+austin,1
+toronto,3
+`,
+		},
+		{ // 2019 All, this excludes userC (who likes pangolin & icecream) from the count.
+			// UserC visited Paris and Toronto in 2019
+			query: `GroupBy(
+					Rows(places_visited, from='2019-01-01T00:00', to='2019-12-31T23:59'), 
+					filter=Not(Intersect(Row(likes='pangolin'), Row(likes='icecream')))
+				)`,
+			csvVerifier: `nairobi,1
+austin,1
+toronto,2
+`,
+		},
+		{ // After excluding UserC, this gets the sum of the networth of everyone per cities travelled
+			query: `GroupBy(
+					Rows(places_visited, from='2019-01-01T00:00', to='2019-12-31T23:59'), 
+					filter=Not(Intersect(Row(likes='pangolin'), Row(likes='icecream'))),
+					aggregate=Sum(field=net_worth)
+				)`,
+			csvVerifier: `nairobi,1,10
+austin,1,100000
+toronto,2,11
+`,
+		},
+		{ // 2020 & 2019 All
+			query:       `Rows(places_visited, from='2019-01-01T00:00', to='2020-12-31T23:59')`,
+			csvVerifier: "nairobi\nparis\naustin\ntoronto\nmombasa\nsydney\n",
+		},
+		{ // 2019 All
+			query:       `Rows(places_visited, from='2019-01-01T00:00', to='2019-12-31T23:59')`,
+			csvVerifier: "nairobi\nparis\naustin\ntoronto\n",
+		},
+		{ // 2019 January only
+			query:       `Rows(places_visited, from='2019-01-01T00:00', to='2019-02-01T00:00')`,
+			csvVerifier: "nairobi\nparis\naustin\ntoronto\n",
+		},
 		{
 			query: "Count(All())",
 			qrVerifier: func(t *testing.T, resp pilosa.QueryResponse) {
