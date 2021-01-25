@@ -4144,26 +4144,26 @@ func intersectionAnyRunBitmap(a, b *Container) bool {
 	bb := b.bitmap()[:1024]
 	runs := a.runs()
 	for _, r := range runs {
-		loWord, loBit := r.Start/64, r.Start%64
-		hiWord, hiBit := r.Last/64, r.Last%64
-		if loBit != 0 {
-			w := bb[loWord]
-			mask := (uint64(1) << loBit) - 1
-			if w&^mask != 0 {
+		if r.Start/64 == r.Last/64 {
+			mask := (^uint64(0) << (r.Start % 64)) &^
+				(^uint64(0) << ((r.Last % 64) + 1))
+			if mask&bb[r.Start/64] != 0 {
 				return true
 			}
+			continue
 		}
-		for i := loWord; i < hiWord; i++ {
+
+		firstWord, lastWord := r.Start/64, r.Last/64
+		for i := firstWord + 1; i < lastWord; i++ {
 			if bb[i] != 0 {
 				return true
 			}
 		}
-		if hiBit != 0 {
-			w := bb[hiWord]
-			mask := (uint64(1) << hiBit) - 1
-			if w&mask != 0 {
-				return true
-			}
+
+		firstMask := ^uint64(0) << (r.Start % 64)
+		lastMask := ^(^uint64(0) << ((r.Last % 64) + 1))
+		if (firstMask&bb[firstWord])|(lastMask&bb[lastWord]) != 0 {
+			return true
 		}
 	}
 	return false
