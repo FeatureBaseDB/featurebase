@@ -42,6 +42,10 @@ type Row struct {
 	// query. Knowing the index and field, we can figure out how to
 	// interpret the row data.
 	Field string
+
+	// NoSplit indicates that this row may not be split.
+	// This is used for `Rows` calls in a GroupBy.
+	NoSplit bool
 }
 
 // NewRow returns a new instance of Row.
