@@ -2797,6 +2797,12 @@ func (e *executor) executeGroupBy(ctx context.Context, qcx *Qcx, index string, c
 		}
 
 		if hasLimit || hasCol { // we need to perform this query cluster-wide ahead of executeGroupByShard
+			if idx, ok := child.Args["valueidx"].(int64); ok {
+				// The rows query was already completed on the initiating node.
+				childRows[i] = opt.EmbeddedData[idx].Columns()
+				continue
+			}
+
 			childRows[i], err = e.executeRows(ctx, qcx, index, child, shards, opt)
 			if err != nil {
 				return nil, errors.Wrap(err, "getting rows for ")
@@ -2804,6 +2810,13 @@ func (e *executor) executeGroupBy(ctx context.Context, qcx *Qcx, index string, c
 			if len(childRows[i]) == 0 { // there are no results because this field has no values.
 				return &GroupCounts{}, nil
 			}
+
+			// Stuff the result into opt.EmbeddedData so that it gets sent to other nodes in the map-reduce.
+			// This is flagged as "NoSplit" to ensure that the entire row gets sent out.
+			rowsRow := NewRow(childRows[i]...)
+			rowsRow.NoSplit = true
+			child.Args["valueidx"] = int64(len(opt.EmbeddedData))
+			opt.EmbeddedData = append(opt.EmbeddedData, rowsRow)
 		}
 	}
 
@@ -5525,6 +5538,10 @@ func makeEmbeddedDataForShards(allRows []*Row, shards []uint64) []*Row {
 	newRows := make([]*Row, len(allRows))
 	for i, row := range allRows {
 		if row == nil || len(row.segments) == 0 {
+			continue
+		}
+		if row.NoSplit {
+			newRows[i] = row
 			continue
 		}
 		segments := row.segments
