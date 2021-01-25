@@ -255,13 +255,13 @@ func (t *ClusterCluster) WriteTopology(path string, top *Topology) error {
 }
 
 func (t *ClusterCluster) addCluster(i int, saveTopology bool) (*cluster, error) {
-
 	id := fmt.Sprintf("node%d", i)
 	uri := NewTestURI("http", fmt.Sprintf("host%d", i), uint16(0))
 
 	node := &topology.Node{
-		ID:  id,
-		URI: uri,
+		ID:            id,
+		URI:           uri,
+		IsCoordinator: i == 0,
 	}
 
 	// add URI to common

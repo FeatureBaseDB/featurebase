@@ -1838,7 +1838,7 @@ func (c *holderCleaner) IsClosing() bool {
 // any unnecessary fragments and files.
 func (c *holderCleaner) CleanHolder() error {
 	// Create a snapshot of the cluster to use for node/partition calculations.
-	snap := topology.NewClusterSnapshot(c.Cluster.noder, c.Cluster.Hasher, c.Cluster.ReplicaN)
+	snap := topology.NewClusterSnapshot(c.Cluster.unprotectedNoder, c.Cluster.Hasher, c.Cluster.ReplicaN)
 
 	for _, index := range c.Holder.Indexes() {
 		// Verify cleaner has not closed.

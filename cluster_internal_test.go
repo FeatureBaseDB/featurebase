@@ -892,6 +892,13 @@ func TestCluster_ResizeStates(t *testing.T) {
 			t.Fatal(err)
 		}
 
+		// Close TestCluster with defer.
+		defer func() {
+			if err := tc.Close(); err != nil {
+				t.Fatal(err)
+			}
+		}()
+
 		// Add Bit Data to node0.
 		if err := tc.CreateField("i", "f", OptFieldTypeDefault()); err != nil {
 			t.Fatalf("creating field: %v", err)
@@ -961,11 +968,6 @@ func TestCluster_ResizeStates(t *testing.T) {
 			t.Fatal(err)
 		} else if !bytes.Equal(chksum, node0Checksum) {
 			t.Fatalf("expected standard view checksum to match: %x - %x", chksum, node0Checksum)
-		}
-
-		// Close TestCluster.
-		if err := tc.Close(); err != nil {
-			t.Fatal(err)
 		}
 	})
 }

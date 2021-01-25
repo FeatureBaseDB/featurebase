@@ -605,6 +605,8 @@ func TestHolderSyncer_Clears(t *testing.T) {
 	c.GetIdleNode(0).Config.AntiEntropy.Interval = 0
 	c.GetIdleNode(1).Config.Cluster.ReplicaN = 3
 	c.GetIdleNode(1).Config.AntiEntropy.Interval = 0
+	c.GetIdleNode(2).Config.Cluster.ReplicaN = 3
+	c.GetIdleNode(2).Config.AntiEntropy.Interval = 0
 	err := c.Start()
 	if err != nil {
 		t.Fatalf("starting cluster: %v", err)

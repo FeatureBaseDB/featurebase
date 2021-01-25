@@ -884,7 +884,7 @@ func (c *InternalClient) CreateField(ctx context.Context, index, field string) e
 	return c.CreateFieldWithOptions(ctx, index, field, pilosa.FieldOptions{})
 }
 
-// CreateField creates a new field on the server.
+// CreateFieldWithOptions creates a new field on the server.
 func (c *InternalClient) CreateFieldWithOptions(ctx context.Context, index, field string, opt pilosa.FieldOptions) error {
 	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.CreateFieldWithOptions")
 	defer span.Finish()
@@ -902,20 +902,26 @@ func (c *InternalClient) CreateFieldWithOptions(ctx context.Context, index, fiel
 	// should probably happen in the field anyway??
 	fieldOpt := fieldOptions{
 		Type: opt.Type,
-		Keys: &opt.Keys,
 	}
-	if fieldOpt.Type == pilosa.FieldTypeSet {
+	switch fieldOpt.Type {
+	case pilosa.FieldTypeSet, pilosa.FieldTypeMutex:
 		fieldOpt.CacheType = &opt.CacheType
 		fieldOpt.CacheSize = &opt.CacheSize
-	} else if fieldOpt.Type == pilosa.FieldTypeInt {
+		fieldOpt.Keys = &opt.Keys
+	case pilosa.FieldTypeInt:
 		fieldOpt.Min = &opt.Min
 		fieldOpt.Max = &opt.Max
-	} else if fieldOpt.Type == pilosa.FieldTypeTime {
+	case pilosa.FieldTypeTime:
 		fieldOpt.TimeQuantum = &opt.TimeQuantum
-	} else if fieldOpt.Type == pilosa.FieldTypeDecimal {
+	case pilosa.FieldTypeBool:
+		// pass
+	case pilosa.FieldTypeDecimal:
 		fieldOpt.Min = &opt.Min
 		fieldOpt.Max = &opt.Max
 		fieldOpt.Scale = &opt.Scale
+	default:
+		fieldOpt.Type = pilosa.DefaultFieldType
+		fieldOpt.Keys = &opt.Keys
 	}
 
 	// TODO: remove buf completely? (depends on whether importer needs to create specific field types)

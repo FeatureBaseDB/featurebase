@@ -1225,8 +1225,23 @@ func TestClientTransactions(t *testing.T) {
 	c := test.MustRunCluster(t, 3)
 	defer c.Close()
 
-	client0 := MustNewClient(c.GetNode(0).URL(), http.GetHTTPClient(nil))
-	client1 := MustNewClient(c.GetNode(1).URL(), http.GetHTTPClient(nil))
+	coord := c.GetCoordinator()
+	if coord == nil {
+		t.Fatal("no coordinator node")
+	}
+	var other *test.Command
+
+	node0 := c.GetNode(0)
+	node1 := c.GetNode(1)
+
+	if coord == node0 {
+		other = node1
+	} else {
+		other = node0
+	}
+
+	client0 := MustNewClient(coord.URL(), http.GetHTTPClient(nil))
+	client1 := MustNewClient(other.URL(), http.GetHTTPClient(nil))
 
 	// can create, list, get, and finish a transaction
 	var expDeadline time.Time

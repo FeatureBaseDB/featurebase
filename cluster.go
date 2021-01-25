@@ -74,7 +74,8 @@ type nodeAction struct {
 
 // cluster represents a collection of nodes.
 type cluster struct { // nolint: maligned
-	noder topology.Noder
+	noder            topology.Noder
+	unprotectedNoder topology.Noder
 
 	id    string
 	Node  *topology.Node
@@ -161,8 +162,39 @@ func newCluster() *cluster {
 		confirmDownRetries: defaultConfirmDownRetries,
 		confirmDownSleep:   defaultConfirmDownSleep,
 	}
-	c.noder = c // TODO: this is temporary until etcd fully implements noder
+
+	// TODO: these are temporary until etcd fully implements noder
+	c.noder = c
+	c.unprotectedNoder = &unprotectedCluster{
+		c: c,
+	}
+
 	return c
+}
+
+// unprotectedCluster is a temporary struct used in cases of NewClusterSnapshot
+// which are inside of a c.mu.Lock(). These cases can't use the normal c.noder
+// (which is also temporary), because c.Nodes() aquires c.mu.Lock() as well.
+type unprotectedCluster struct {
+	c *cluster
+}
+
+// Nodes returns a copy of the slice of nodes in the cluster.
+func (uc *unprotectedCluster) Nodes() []*topology.Node {
+	ret := make([]*topology.Node, len(uc.c.nodes))
+	copy(ret, uc.c.nodes)
+	return ret
+}
+
+// SetNodes implements the Noder interface.
+func (uc *unprotectedCluster) SetNodes(nodes []*topology.Node) {}
+
+// AppendNode implements the Noder interface.
+func (uc *unprotectedCluster) AppendNode(node *topology.Node) {}
+
+// RemoveNode implements the Noder interface.
+func (uc *unprotectedCluster) RemoveNode(nodeID string) bool {
+	return false
 }
 
 // initializeAntiEntropy is called by the anti entropy routine when it starts.
@@ -667,7 +699,7 @@ func (c *cluster) fragsByHost(idx *Index) fragsByHost {
 // for the given set of shards with data.
 func (c *cluster) fragCombos(idx string, availableShards *roaring.Bitmap, fieldViews viewsByField) fragsByHost {
 	// Create a snapshot of the cluster to use for node/partition calculations.
-	snap := topology.NewClusterSnapshot(c.noder, c.Hasher, c.ReplicaN)
+	snap := topology.NewClusterSnapshot(c.unprotectedNoder, c.Hasher, c.ReplicaN)
 
 	t := make(fragsByHost)
 	_ = availableShards.ForEach(func(i uint64) error {
@@ -832,8 +864,8 @@ func (c *cluster) translationNodes(to *cluster) (map[string][]*translationResize
 	}
 
 	// Create a snapshot of the cluster to use for node/partition calculations.
-	fSnap := topology.NewClusterSnapshot(c.noder, c.Hasher, c.ReplicaN)
-	toSnap := topology.NewClusterSnapshot(to.noder, c.Hasher, to.ReplicaN)
+	fSnap := topology.NewClusterSnapshot(c.unprotectedNoder, c.Hasher, c.ReplicaN)
+	toSnap := topology.NewClusterSnapshot(to.unprotectedNoder, c.Hasher, to.ReplicaN)
 
 	for pid := 0; pid < c.partitionN; pid++ {
 		fNodes := fSnap.PartitionNodes(pid)
@@ -1466,7 +1498,7 @@ func (c *cluster) unprotectedGenerateResizeJobByAction(nodeAction nodeAction) (*
 		}
 
 		// Create a snapshot of the cluster to use for node/partition calculations.
-		snap := topology.NewClusterSnapshot(c.noder, c.Hasher, c.ReplicaN)
+		snap := topology.NewClusterSnapshot(c.unprotectedNoder, c.Hasher, c.ReplicaN)
 
 		instr := &ResizeInstruction{
 			JobID:              j.ID,
@@ -1493,7 +1525,7 @@ func (c *cluster) completeCurrentJob(state string) error {
 
 func (c *cluster) unprotectedCompleteCurrentJob(state string) error {
 	// Create a snapshot of the cluster to use for node/partition calculations.
-	snap := topology.NewClusterSnapshot(c.noder, c.Hasher, c.ReplicaN)
+	snap := topology.NewClusterSnapshot(c.unprotectedNoder, c.Hasher, c.ReplicaN)
 	// TODO: this needs to become: IsPrimaryFieldTranslationNode(c.Node.ID)
 	if !snap.IsCoordinatorNode(c.Node.ID) {
 		return ErrNodeNotCoordinator
@@ -1657,7 +1689,6 @@ func (c *cluster) followResizeInstruction(instr *ResizeInstruction) error {
 }
 
 func (c *cluster) markResizeInstructionComplete(complete *ResizeInstructionComplete) error {
-
 	j := c.job(complete.JobID)
 
 	// Abort the job if an error exists in the complete object.
@@ -2454,7 +2485,7 @@ func (c *cluster) findFieldKeys(ctx context.Context, field *Field, keys ...strin
 	}
 
 	if !field.Keys() {
-		return nil, errors.Wrap(ErrTranslatingKeyNotFound, "field is not keyed")
+		return nil, errors.Wrap(ErrTranslatingKeyNotFound, "field is not keyed 1")
 	}
 
 	// Attempt to find the keys locally.
@@ -2517,7 +2548,7 @@ func (c *cluster) createFieldKeys(ctx context.Context, field *Field, keys ...str
 	}
 
 	if !field.Keys() {
-		return nil, errors.Wrap(ErrTranslatingKeyNotFound, "field is not keyed")
+		return nil, errors.Wrap(ErrTranslatingKeyNotFound, "field is not keyed 2")
 	}
 
 	// The coordinator is the only node that can create field keys, since it owns the authoritative copy.

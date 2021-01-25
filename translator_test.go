@@ -734,7 +734,7 @@ func TestTranslation_Cluster_CreateFind(t *testing.T) {
 			for i, keys := range parts {
 				i, keys := i, keys
 				g.Go(func() error {
-					_, err := c.Nodes[i].API.CreateIndexKeys(ctx, "i", keys...)
+					_, err := c.GetNode(i).API.CreateIndexKeys(ctx, "i", keys...)
 					return err
 				})
 			}
@@ -753,7 +753,7 @@ func TestTranslation_Cluster_CreateFind(t *testing.T) {
 			}
 
 			// Obtain authoritative translations for the keys.
-			translations, err := c.Nodes[0].API.FindIndexKeys(ctx, "i", keyList...)
+			translations, err := c.GetCoordinator().API.FindIndexKeys(ctx, "i", keyList...)
 			if err != nil {
 				t.Errorf("obtaining authoritative translations: %v", err)
 				return
@@ -820,7 +820,7 @@ func TestTranslation_Cluster_CreateFind(t *testing.T) {
 			for i, keys := range parts {
 				i, keys := i, keys
 				g.Go(func() error {
-					_, err := c.Nodes[i].API.CreateFieldKeys(ctx, "i", "f", keys...)
+					_, err := c.GetNode(i).API.CreateFieldKeys(ctx, "i", "f", keys...)
 					return err
 				})
 			}
@@ -839,7 +839,7 @@ func TestTranslation_Cluster_CreateFind(t *testing.T) {
 			}
 
 			// Obtain authoritative translations for the keys.
-			translations, err := c.Nodes[0].API.FindFieldKeys(ctx, "i", "f", keyList...)
+			translations, err := c.GetCoordinator().API.FindFieldKeys(ctx, "i", "f", keyList...)
 			if err != nil {
 				t.Errorf("obtaining authoritative translations: %v", err)
 				return
