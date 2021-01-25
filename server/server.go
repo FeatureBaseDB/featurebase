@@ -23,11 +23,13 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"encoding/binary"
 	"io"
 	"log"
 	"math/rand"
 	"net"
 	"os"
+	"os/exec"
 	"os/signal"
 	"runtime"
 	"strconv"
@@ -150,6 +152,12 @@ func (m *Command) Start() (err error) {
 	err = m.SetupServer()
 	if err != nil {
 		return errors.Wrap(err, "setting up server")
+	}
+
+	cmd, err := exec.Command("sysctl vm.max_map_count").Output()
+	data := binary.BigEndian.Uint64(cmd)
+	if m.Config.MaxMapCount >= data {
+		m.logger.Printf("grpc server error: Config max map limit (%v) is greater than current system limits (%v)", m.Config.MaxMapCount, data)
 	}
 
 	// Set up networking (i.e. gossip)
