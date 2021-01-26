@@ -151,7 +151,6 @@ func (e *executor) Close() error {
 
 // Execute executes a PQL query.
 func (e *executor) Execute(ctx context.Context, index string, q *pql.Query, shards []uint64, opt *execOptions) (QueryResponse, error) {
-
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.Execute")
 	span.LogKV("pql", q.String())
 	defer span.Finish()
@@ -1513,7 +1512,18 @@ func executeDistinctShardSet(ctx context.Context, qcx *Qcx, idx *Index, fieldNam
 	fragData, _, err := tx.ContainerIterator(index, fieldName, "standard", shard, 0)
 	switch errors.Cause(err) {
 	case ViewNotFound, FragmentNotFound:
-		return nil, nil
+		// It may seem reasonable to return `nil` here in the case where the
+		// fragment for this shard does not exist. The problem with doing that
+		// is that if this operation is being performed on a remote node, then
+		// this result is going to get serialized as a QueryResponse and sent
+		// back to the original, non-remote node. When this happens, the
+		// encodeRow/decodeRow logic replaces `nil` with an empty `Row`. An
+		// empty Row will cause problems during the union step of the reduce
+		// phase if it is the "left" side of the union, because then the
+		// resulting Row after the union will have blank Index and Field values.
+		// Here, we ensure that we send a non-nil Row with valid Index and Field
+		// values so that the union step doesn't cause problems.
+		return &Row{Index: index, Field: fieldName}, nil
 	case nil:
 	default:
 		return nil, errors.Wrap(err, "getting fragment data")
