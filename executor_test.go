@@ -6569,6 +6569,30 @@ func TestExecutor_Execute_CountDistinct(t *testing.T) {
 	})
 }
 
+// Ensure that Count(Distinct()) works with negative numbers.
+func TestExecutor_Execute_CountDistinctSigned(t *testing.T) {
+	c := test.MustRunCluster(t, 2)
+	defer c.Close()
+
+	c.CreateField(t, "i", pilosa.IndexOptions{}, "ints",
+		pilosa.OptFieldTypeInt(-100, 100),
+	)
+
+	c.Query(t, "i", fmt.Sprintf(`
+			Set(0, ints=1)
+			Set(%d, ints=-1)
+		`, ShardWidth))
+
+	resp := c.Query(t, "i", "Count(Distinct(field=ints))")
+	cnt, ok := resp.Results[0].(uint64)
+	if !ok {
+		t.Fatalf("invalid response type, expected: uint64, got: %T", resp.Results[0])
+	}
+	if cnt != 2 {
+		t.Fatalf("invalid result, expected: 2, got: %v", cnt)
+	}
+}
+
 // Ensure that a top-level, bare distinct on multiple nodes
 // is handled correctly.
 func TestExecutor_BareDistinct(t *testing.T) {

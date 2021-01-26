@@ -274,14 +274,17 @@ type callStackElem struct {
 type CallType byte
 
 const (
-	// Normal calls can be executed per shard.
+	// PrecallNone calls can be executed per shard.
 	PrecallNone = CallType(iota)
-	// PreCallGlobal indicates a call which must be run globally *before*
+
+	// PrecallGlobal indicates a call which must be run globally *before*
 	// distributing the call to other shards. Example: A Distinct query,
 	// where every shard could potentially produce results for any shard,
 	// so you have to produce the results up front.
+	// These are processed directly when inside of a count operation.
 	PrecallGlobal
-	// PreCallPerNode indicates a call which needs to be run per-shard
+
+	// PrecallPerNode indicates a call which needs to be run per-shard
 	// in a way that lets it be done on each shard, but where it should
 	// be done prior to spawning per-shard goroutines. Example:
 	// A cross-index query, where each local shard may or may not need
