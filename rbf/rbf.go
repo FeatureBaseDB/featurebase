@@ -462,7 +462,7 @@ func (c *leafCell) lastValue(tx *Tx) uint16 {
 // We have to take int32 rather than uint16 because the interval is [start, end),
 // and otherwise we have no way to ask to count the entire container (the
 // high bit will be missed).
-func (c *leafCell) countRange(start, end int32) (n int) {
+func (c *leafCell) countRange(tx *Tx, start, end int32) (n int) {
 	// If the full range is being queried, simply use the precalculated count.
 	if start == 0 && end > math.MaxUint16 {
 		return c.BitN
@@ -475,6 +475,10 @@ func (c *leafCell) countRange(start, end int32) (n int) {
 		return int(roaring.RunCountRange(toInterval16(c.Data), start, end))
 	case ContainerTypeBitmap:
 		return int(roaring.BitmapCountRange(toArray64(c.Data), start, end))
+	case ContainerTypeBitmapPtr:
+		_, a, err := tx.leafCellBitmap(toPgno(c.Data))
+		panicOn(err)
+		return int(roaring.BitmapCountRange(a, start, end))
 	default:
 		panic(fmt.Sprintf("invalid container type: %d", c.Type))
 	}
