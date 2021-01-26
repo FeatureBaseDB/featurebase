@@ -1318,7 +1318,6 @@ func (tx *Tx) CountRange(name string, start, end uint64) (uint64, error) {
 	} else if err != nil {
 		return 0, err
 	}
-
 	var n uint64
 	for {
 		if err := csr.Next(); err == io.EOF {
@@ -1341,7 +1340,7 @@ func (tx *Tx) CountRange(name string, start, end uint64) (uint64, error) {
 
 		// If range is entirely in one container then just count that range.
 		if skey == ekey {
-			return uint64(c.countRange(int32(lowbits(start)), ebits)), nil
+			return uint64(c.countRange(tx, int32(lowbits(start)), ebits)), nil
 		}
 		// INVAR: skey < ekey
 
@@ -1351,7 +1350,7 @@ func (tx *Tx) CountRange(name string, start, end uint64) (uint64, error) {
 			break
 		}
 		if k == skey {
-			n += uint64(c.countRange(int32(lowbits(start)), roaring.MaxContainerVal+1))
+			n += uint64(c.countRange(tx, int32(lowbits(start)), roaring.MaxContainerVal+1))
 			continue
 		}
 		if k < ekey {
@@ -1359,7 +1358,7 @@ func (tx *Tx) CountRange(name string, start, end uint64) (uint64, error) {
 			continue
 		}
 		if k == ekey && ebits > 0 {
-			n += uint64(c.countRange(0, ebits))
+			n += uint64(c.countRange(tx, 0, ebits))
 			break
 		}
 	}

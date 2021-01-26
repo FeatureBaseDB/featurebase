@@ -2797,6 +2797,12 @@ func (e *executor) executeGroupBy(ctx context.Context, qcx *Qcx, index string, c
 		}
 
 		if hasLimit || hasCol { // we need to perform this query cluster-wide ahead of executeGroupByShard
+			if idx, ok := child.Args["valueidx"].(int64); ok {
+				// The rows query was already completed on the initiating node.
+				childRows[i] = opt.EmbeddedData[idx].Columns()
+				continue
+			}
+
 			childRows[i], err = e.executeRows(ctx, qcx, index, child, shards, opt)
 			if err != nil {
 				return nil, errors.Wrap(err, "getting rows for ")
@@ -2804,6 +2810,13 @@ func (e *executor) executeGroupBy(ctx context.Context, qcx *Qcx, index string, c
 			if len(childRows[i]) == 0 { // there are no results because this field has no values.
 				return &GroupCounts{}, nil
 			}
+
+			// Stuff the result into opt.EmbeddedData so that it gets sent to other nodes in the map-reduce.
+			// This is flagged as "NoSplit" to ensure that the entire row gets sent out.
+			rowsRow := NewRow(childRows[i]...)
+			rowsRow.NoSplit = true
+			child.Args["valueidx"] = int64(len(opt.EmbeddedData))
+			opt.EmbeddedData = append(opt.EmbeddedData, rowsRow)
 		}
 	}
 
@@ -5527,6 +5540,10 @@ func makeEmbeddedDataForShards(allRows []*Row, shards []uint64) []*Row {
 		if row == nil || len(row.segments) == 0 {
 			continue
 		}
+		if row.NoSplit {
+			newRows[i] = row
+			continue
+		}
 		segments := row.segments
 		segmentIndex := 0
 		newRows[i] = &Row{
@@ -7381,9 +7398,11 @@ func newGroupByIterator(executor *executor, qcx *Qcx, rowIDs []RowIDs, children 
 	idx := holder.Index(index)
 
 	var (
-		fieldName string
-		viewName  string
-		ok        bool
+		fieldName   string
+		viewName    string
+		ok          bool
+		views       []string
+		isTimeField bool
 	)
 	ignorePrev := false
 	for i, call := range children {
@@ -7397,9 +7416,42 @@ func newGroupByIterator(executor *executor, qcx *Qcx, rowIDs []RowIDs, children 
 		gbi.fields[i].Field = fieldName
 
 		switch field.Type() {
-		case FieldTypeSet, FieldTypeTime, FieldTypeMutex, FieldTypeBool:
+		case FieldTypeSet, FieldTypeMutex, FieldTypeBool:
 			viewName = viewStandard
+		case FieldTypeTime:
+			var (
+				err error
+				v   interface{}
+			)
 
+			// Parse "from" time, if set.
+			var (
+				hasFrom  bool
+				fromTime time.Time
+			)
+			if v, hasFrom = call.Args["from"]; hasFrom {
+				if fromTime, err = parseTime(v); err != nil {
+					return nil, errors.Wrap(err, "parsing from time")
+				}
+			}
+
+			// Parse "to" time, if set.
+			var (
+				hasTo  bool
+				toTime time.Time
+			)
+			if v, hasTo = call.Args["to"]; hasTo {
+				if toTime, err = parseTime(v); err != nil {
+					return nil, errors.Wrap(err, "parsing to time")
+				}
+			}
+
+			if hasTo || hasFrom {
+				views = viewsByTimeRange(viewStandard, fromTime, toTime, field.TimeQuantum())
+				isTimeField = true
+			} else {
+				viewName = viewStandard
+			}
 		case FieldTypeInt:
 			viewName = viewBSIGroupPrefix + fieldName
 
@@ -7408,11 +7460,6 @@ func newGroupByIterator(executor *executor, qcx *Qcx, rowIDs []RowIDs, children 
 				call.Name, strings.Join([]string{FieldTypeSet, FieldTypeTime, FieldTypeMutex, FieldTypeBool, FieldTypeInt}, ","))
 		}
 
-		// Fetch fragment.
-		frag := holder.fragment(index, fieldName, viewName, shard)
-		if frag == nil { // this means this whole shard doesn't have all it needs to continue
-			return nil, nil
-		}
 		filters := []roaring.BitmapFilter{}
 		if len(rowIDs[i]) > 0 {
 			filters = append(filters, roaring.NewBitmapRowsFilter(rowIDs[i]))
@@ -7424,9 +7471,35 @@ func newGroupByIterator(executor *executor, qcx *Qcx, rowIDs []RowIDs, children 
 		}
 		defer finisher(&err0)
 
-		gbi.rowIters[i], err = frag.rowIterator(tx, i != 0, filters...)
-		if err != nil {
-			return nil, err
+		// Fetch fragment(s), get rowIterator
+		if isTimeField {
+			var fragments []*fragment
+			for _, viewName := range views {
+				fragment := holder.fragment(index, fieldName, viewName, shard)
+				if fragment != nil {
+					fragments = append(fragments, fragment)
+				}
+			}
+			if len(fragments) == 0 {
+				// whole shard doesn't have all it needs to continue ?
+				return nil, nil
+			}
+
+			gbi.rowIters[i], err = timeFragmentsRowIterator(fragments, tx, i != 0, filters...)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			frag := holder.fragment(index, fieldName, viewName, shard)
+			if frag == nil { // this means this whole shard doesn't have all it needs to continue
+				return nil, nil
+			}
+
+			gbi.rowIters[i], err = frag.rowIterator(tx, i != 0, filters...)
+			if err != nil {
+				return nil, err
+			}
+
 		}
 
 		prev, hasPrev, err := call.UintArg("previous")

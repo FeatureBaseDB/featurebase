@@ -97,3 +97,15 @@ func TestIntersectVariants(t *testing.T) {
 		}
 	}
 }
+
+func TestIntersectionAnyRunBitmapSingleWordRegression(t *testing.T) {
+	// In a previous version, single-word runs would match any bit within the word.
+	// Verify that this no longer happens.
+	any := intersectionAnyRunBitmap(
+		NewContainerRun([]Interval16{{1, 2}}),
+		NewContainerBitmapN([]uint64{0b1001}, 2),
+	)
+	if any {
+		t.Errorf("matched an exclusive single-word run")
+	}
+}

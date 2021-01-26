@@ -3329,6 +3329,95 @@ func (f *fragment) rowIterator(tx Tx, wrap bool, filters ...roaring.BitmapFilter
 	return f.setRowIterator(tx, wrap, filters...)
 }
 
+type timeRowIterator struct {
+	tx               Tx
+	cur              int
+	wrap             bool
+	allRowIDs        []uint64
+	rowIDToFragments map[uint64][]*fragment
+}
+
+func timeFragmentsRowIterator(fragments []*fragment, tx Tx, wrap bool, filters ...roaring.BitmapFilter) (rowIterator, error) {
+	if len(fragments) == 0 {
+		return nil, fmt.Errorf("there should be at least 1 fragment")
+	} else if len(fragments) == 1 {
+		return fragments[0].setRowIterator(tx, wrap, filters...)
+	}
+
+	it := &timeRowIterator{
+		tx:   tx,
+		cur:  0,
+		wrap: wrap,
+	}
+
+	// create a sort of inverted index that maps each
+	// rowID back to the fragments that have that rowID
+	rowIDToFragments := make(map[uint64][]*fragment)
+	for _, f := range fragments {
+		rowIDs, err := f.rows(context.Background(), tx, 0, filters...)
+		if err != nil {
+			return nil, err
+		}
+		for _, rowID := range rowIDs {
+			fs := append(rowIDToFragments[rowID], f)
+			rowIDToFragments[rowID] = fs
+		}
+	}
+
+	// if len(rowIDToFragments) == 0 what to do ??
+	// ie all fragments returned empty rowIDs, is this possible
+	// is this an error
+
+	// collect all rowIDs from inverted index to a slice
+	allRowIDs := make([]uint64, len(rowIDToFragments))
+	i := 0
+	for rowID := range rowIDToFragments {
+		allRowIDs[i] = rowID
+		i++
+	}
+	sort.Slice(allRowIDs, func(i, j int) bool { return allRowIDs[i] < allRowIDs[j] })
+
+	it.rowIDToFragments = rowIDToFragments
+	it.allRowIDs = allRowIDs
+
+	return it, nil
+}
+
+func (it *timeRowIterator) Seek(rowID uint64) {
+	idx := sort.Search(len(it.allRowIDs), func(i int) bool {
+		return it.allRowIDs[i] >= rowID
+	})
+	it.cur = idx
+}
+
+func (it *timeRowIterator) Next() (r *Row, rowID uint64, _ *int64, wrapped bool, err error) {
+	if it.cur >= len(it.allRowIDs) {
+		if !it.wrap || len(it.allRowIDs) == 0 {
+			return nil, 0, nil, true, nil
+		}
+		it.Seek(0)
+		wrapped = true
+	}
+
+	// gather rows
+	rowID = it.allRowIDs[it.cur]
+	fragments := it.rowIDToFragments[rowID]
+	rows := make([]*Row, 0, len(fragments))
+	for _, fragment := range fragments {
+		row, err := fragment.row(it.tx, rowID)
+		if err != nil {
+			return row, rowID, nil, wrapped, err
+		}
+		rows = append(rows, row)
+	}
+
+	// union rows
+	r = rows[0].Union(rows[1:]...)
+
+	it.cur++
+	return r, rowID, nil, wrapped, nil
+}
+
 type intRowIterator struct {
 	f      *fragment
 	values int64Slice         // sorted slice of int values
