@@ -139,11 +139,6 @@ func parseOptions(opt Options) *embed.Config {
 	copy(lcs, opt.LClientSocket)
 	cfg.LClientSocket = lcs
 
-	cfg.Logger = "zap"
-	cfg.ZapLoggerBuilder = func(*embed.Config) error {
-		return nil
-	}
-
 	if opt.InitCluster != "" {
 		cfg.InitialCluster = opt.InitCluster
 		cfg.ClusterState = embed.ClusterStateFlagNew
