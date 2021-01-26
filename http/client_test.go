@@ -1226,19 +1226,7 @@ func TestClientTransactions(t *testing.T) {
 	defer c.Close()
 
 	coord := c.GetCoordinator()
-	if coord == nil {
-		t.Fatal("no coordinator node")
-	}
-	var other *test.Command
-
-	node0 := c.GetNode(0)
-	node1 := c.GetNode(1)
-
-	if coord == node0 {
-		other = node1
-	} else {
-		other = node0
-	}
+	other := c.GetNonCoordinator()
 
 	client0 := MustNewClient(coord.URL(), http.GetHTTPClient(nil))
 	client1 := MustNewClient(other.URL(), http.GetHTTPClient(nil))

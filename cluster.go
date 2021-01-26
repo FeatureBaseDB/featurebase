@@ -1526,8 +1526,7 @@ func (c *cluster) completeCurrentJob(state string) error {
 func (c *cluster) unprotectedCompleteCurrentJob(state string) error {
 	// Create a snapshot of the cluster to use for node/partition calculations.
 	snap := topology.NewClusterSnapshot(c.unprotectedNoder, c.Hasher, c.ReplicaN)
-	// TODO: this needs to become: IsPrimaryFieldTranslationNode(c.Node.ID)
-	if !snap.IsCoordinatorNode(c.Node.ID) {
+	if !snap.IsPrimaryFieldTranslationNode(c.Node.ID) {
 		return ErrNodeNotCoordinator
 	}
 	if c.currentJob == nil {

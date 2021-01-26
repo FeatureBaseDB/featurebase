@@ -147,6 +147,7 @@ func (c *Cluster) GetCoordinator() *Command {
 	return nil
 }
 
+// GetNonCoordinator gets first first non-coordinator node in the list of nodes.
 func (c *Cluster) GetNonCoordinator() *Command {
 	for _, n := range c.Nodes {
 		if !n.IsCoordinator() {
@@ -154,6 +155,17 @@ func (c *Cluster) GetNonCoordinator() *Command {
 		}
 	}
 	return nil
+}
+
+// GetNonCoordinators gets all nodes except the coordinator.
+func (c *Cluster) GetNonCoordinators() []*Command {
+	rtn := make([]*Command, 0)
+	for _, n := range c.Nodes {
+		if !n.IsCoordinator() {
+			rtn = append(rtn, n)
+		}
+	}
+	return rtn
 }
 
 // nodePlace represents a node's ID and its index into the c.Nodes slice.
