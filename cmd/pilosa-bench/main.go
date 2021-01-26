@@ -16,12 +16,14 @@ package main
 
 import (
 	"context"
+	"expvar"
 	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"math/rand"
 	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"sort"
 	"strings"
@@ -30,6 +32,14 @@ import (
 	"github.com/pilosa/pilosa/v2"
 	phttp "github.com/pilosa/pilosa/v2/http"
 	"golang.org/x/sync/errgroup"
+)
+
+var (
+	requestCountVar          = expvar.NewInt("request_count")
+	requestCurrentLatencyVar = expvar.NewFloat("request_current_latency") // seconds
+	requestAvgLatencyVar     = expvar.NewFloat("request_avg_latency")     // seconds
+	requestTotalLatencyVar   = expvar.NewFloat("request_total_latency")   // seconds
+	requestPerSecVar         = expvar.NewFloat("request_per_sec")
 )
 
 func main() {
@@ -85,6 +95,13 @@ func run(ctx context.Context, args []string) (err error) {
 	if err != nil {
 		return err
 	}
+
+	// Set up HTTP endpoint to provide /debug endpoints.
+	fmt.Println("Serving debug endpoint at http://localhost:7070/debug")
+	go func() { _ = http.ListenAndServe(":7070", nil) }()
+
+	// Run separate goroutine to calculate the current req/sec & latency.
+	go monitor()
 
 	// Load all id/keys for each field.
 	log.Printf("loading field identifiers")
@@ -145,15 +162,43 @@ func run(ctx context.Context, args []string) (err error) {
 		log.Printf("[query] %s", q)
 
 		g.Go(func() error {
+			t := time.Now()
 			_, err = client.Query(ctx, key.index, &pilosa.QueryRequest{Index: key.index, Query: q})
 			if err != nil {
 				return err
 			}
+			elapsed := time.Since(t).Seconds()
+			requestCountVar.Add(1)
+			requestTotalLatencyVar.Add(elapsed)
+			requestAvgLatencyVar.Set(requestTotalLatencyVar.Value() / float64(requestCountVar.Value()))
 			return nil
 		})
 	}
 
 	return g.Wait()
+}
+
+// monitor runs in a separate goroutine and updates metrics.
+func monitor() {
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	var lastTime time.Time
+	var lastN int64
+	var lastLatency float64
+	for range ticker.C {
+		now, n := time.Now(), requestCountVar.Value()
+		latency := requestTotalLatencyVar.Value()
+
+		if !lastTime.IsZero() {
+			elapsed := lastTime.Sub(now).Seconds()
+			if n > 0 {
+				requestCurrentLatencyVar.Set((lastLatency - latency) / float64(n))
+			}
+			requestPerSecVar.Set(float64(lastN-n) / elapsed)
+		}
+		lastTime, lastN, lastLatency = now, n, latency
+	}
 }
 
 func generateQuery(typ, index, field string, info *pilosa.FieldInfo, identifiers *pilosa.RowIdentifiers, opt queryOptions) (string, error) {

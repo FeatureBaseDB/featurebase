@@ -388,6 +388,7 @@ var callInfoByFunc = map[string]callInfo{
 			"from":     nil,
 			"to":       nil,
 			"like":     "",
+			"valueidx": int64(0),
 		},
 	},
 	"Shift": {allowUnknown: false,
