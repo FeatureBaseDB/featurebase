@@ -388,6 +388,11 @@ func (i *Index) createFieldIfNotExists(name string, opt FieldOptions) (*Field, e
 	return i.createField(name, opt)
 }
 
+func (i *Index) createFieldLock(name string, opt FieldOptions) (*Field, error) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	return i.createField(name, opt)
+}
 func (i *Index) createField(name string, opt FieldOptions) (*Field, error) {
 	if name == "" {
 		return nil, errors.New("field name required")
