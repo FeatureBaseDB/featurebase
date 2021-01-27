@@ -2011,7 +2011,6 @@ func (e *executor) executeSetRow(ctx context.Context, index string, c *pql.Call,
 		return false, err
 	}
 	return r, err
-	//return result.(bool), err
 }
 
 // executeSetRowShard executes a SetRow() call for a single shard.
