@@ -23,16 +23,16 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
-	"encoding/binary"
 	"io"
+	"io/ioutil"
 	"log"
 	"math/rand"
 	"net"
 	"os"
-	"os/exec"
 	"os/signal"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -154,13 +154,17 @@ func (m *Command) Start() (err error) {
 		return errors.Wrap(err, "setting up server")
 	}
 
-	result, err := exec.Command("sysctl", "vm.max_map_count").Output()
-	if err != nil {
-		m.logger.Printf("Tried unsuccessfully to check system mmap limit: %v", err)
-	} else {
-		sysMmapLimit := binary.BigEndian.Uint64(result)
-		if m.Config.MaxMapCount > sysMmapLimit {
-			m.logger.Printf("WARNING: Config max map limit (%v) is greater than current system limits (%v)", m.Config.MaxMapCount, sysMmapLimit)
+	if runtime.GOOS == "linux" {
+		result, err := ioutil.ReadFile("/proc/sys/vm/max_map_count")
+		if err != nil {
+			m.logger.Printf("Tried unsuccessfully to check system mmap limit: %v", err)
+		} else {
+			sysMmapLimit, err := strconv.ParseUint(strings.TrimSuffix(string(result), "\n"), 10, 64)
+			if err != nil {
+				m.logger.Printf("Tried unsuccessfully to check system mmap limit: %v", err)
+			} else if m.Config.MaxMapCount > sysMmapLimit {
+				m.logger.Printf("WARNING: Config max map limit (%v) is greater than current system limits (%v)", m.Config.MaxMapCount, sysMmapLimit)
+			}
 		}
 	}
 
