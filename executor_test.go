@@ -6569,30 +6569,6 @@ func TestExecutor_Execute_CountDistinct(t *testing.T) {
 	})
 }
 
-// Ensure that Count(Distinct()) works with negative numbers.
-func TestExecutor_Execute_CountDistinctSigned(t *testing.T) {
-	c := test.MustRunCluster(t, 2)
-	defer c.Close()
-
-	c.CreateField(t, "i", pilosa.IndexOptions{}, "ints",
-		pilosa.OptFieldTypeInt(-100, 100),
-	)
-
-	c.Query(t, "i", fmt.Sprintf(`
-			Set(0, ints=1)
-			Set(%d, ints=-1)
-		`, ShardWidth))
-
-	resp := c.Query(t, "i", "Count(Distinct(field=ints))")
-	cnt, ok := resp.Results[0].(uint64)
-	if !ok {
-		t.Fatalf("invalid response type, expected: uint64, got: %T", resp.Results[0])
-	}
-	if cnt != 2 {
-		t.Fatalf("invalid result, expected: 2, got: %v", cnt)
-	}
-}
-
 // Ensure that a top-level, bare distinct on multiple nodes
 // is handled correctly.
 func TestExecutor_BareDistinct(t *testing.T) {
@@ -6842,6 +6818,8 @@ func TestMissingKeyRegression(t *testing.T) {
 func TestVariousQueries(t *testing.T) {
 	for _, clusterSize := range []int{1, 3, 4, 7} {
 		t.Run(fmt.Sprintf("%d-node", clusterSize), func(t *testing.T) {
+			t.Parallel()
+
 			variousQueries(t, clusterSize)
 		})
 	}
@@ -6921,8 +6899,7 @@ func variousQueries(t *testing.T, clusterSize int) {
 		{Val: 0, Key: "userE"},
 	})
 
-	// Create and populate "affinity" int field with negative, positive, zero and null values.
-
+	// Create and populate "net_worth" int field with positive values.
 	c.CreateField(t, "users", pilosa.IndexOptions{Keys: true, TrackExistence: true}, "net_worth", pilosa.OptFieldTypeInt(-100000000, 100000000))
 	c.ImportIntKey(t, "users", "net_worth", []test.IntKey{
 		{Val: 1, Key: "userA"},
@@ -7055,6 +7032,15 @@ toronto,2,11
 				}
 			},
 			csvVerifier: "-10\n-5\n0\n5\n10\n",
+		},
+		{
+			query: "Count(Distinct(field=affinity))",
+			qrVerifier: func(t *testing.T, resp pilosa.QueryResponse) {
+				if resp.Results[0].(uint64) != 5 {
+					t.Errorf("wrong number of values: %+v", resp.Results[0])
+				}
+			},
+			csvVerifier: "5\n",
 		},
 		{
 			query: "Distinct(Row(affinity>=0),field=affinity)",
