@@ -695,8 +695,8 @@ func TestCluster_GossipMembership(t *testing.T) {
 func TestClusterResize_RemoveNode(t *testing.T) {
 	cluster := test.MustRunCluster(t, 3)
 	defer cluster.Close()
-	m0 := cluster.GetNode(0)
-	m1 := cluster.GetNode(1)
+	coord := cluster.GetCoordinator()
+	other := cluster.GetNonCoordinator()
 
 	mustNodeID := func(baseURL string) string {
 		body := test.Do(t, "GET", fmt.Sprintf("%s/status", baseURL), "").Body
@@ -712,7 +712,7 @@ func TestClusterResize_RemoveNode(t *testing.T) {
 	}
 
 	t.Run("ErrorRemoveInvalidNode", func(t *testing.T) {
-		resp := test.Do(t, "POST", m0.URL()+"/cluster/resize/remove-node", `{"id": "invalid-node-id"}`)
+		resp := test.Do(t, "POST", coord.URL()+"/cluster/resize/remove-node", `{"id": "invalid-node-id"}`)
 		expBody := "removing node: finding node to remove: node with provided ID does not exist"
 		if resp.StatusCode != http.StatusNotFound {
 			t.Fatalf("expected StatusCode %d but got %d", http.StatusNotFound, resp.StatusCode)
@@ -722,8 +722,8 @@ func TestClusterResize_RemoveNode(t *testing.T) {
 	})
 
 	t.Run("ErrorRemoveCoordinator", func(t *testing.T) {
-		nodeID := mustNodeID(m0.URL())
-		resp := test.Do(t, "POST", m0.URL()+"/cluster/resize/remove-node", fmt.Sprintf(`{"id": "%s"}`, nodeID))
+		nodeID := mustNodeID(coord.URL())
+		resp := test.Do(t, "POST", coord.URL()+"/cluster/resize/remove-node", fmt.Sprintf(`{"id": "%s"}`, nodeID))
 
 		expBody := "removing node: calling node leave: coordinator cannot be removed; first, make a different node the new coordinator"
 		if resp.StatusCode != http.StatusInternalServerError {
@@ -734,9 +734,9 @@ func TestClusterResize_RemoveNode(t *testing.T) {
 	})
 
 	t.Run("ErrorRemoveOnNonCoordinator", func(t *testing.T) {
-		coordinatorNodeID := mustNodeID(m0.URL())
-		nodeID := mustNodeID(m1.URL())
-		resp := test.Do(t, "POST", m1.URL()+"/cluster/resize/remove-node", fmt.Sprintf(`{"id": "%s"}`, nodeID))
+		coordinatorNodeID := mustNodeID(coord.URL())
+		nodeID := mustNodeID(other.URL())
+		resp := test.Do(t, "POST", other.URL()+"/cluster/resize/remove-node", fmt.Sprintf(`{"id": "%s"}`, nodeID))
 
 		expBody := fmt.Sprintf("removing node: calling node leave: node removal requests are only valid on the coordinator node: %s", coordinatorNodeID)
 		if resp.StatusCode != http.StatusInternalServerError {
@@ -747,7 +747,7 @@ func TestClusterResize_RemoveNode(t *testing.T) {
 	})
 
 	t.Run("ErrorRemoveWithoutReplicas", func(t *testing.T) {
-		client0 := m0.Client()
+		client0 := coord.Client()
 
 		// Create indexes and fields on one node.
 		if err := client0.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
@@ -763,12 +763,12 @@ func TestClusterResize_RemoveNode(t *testing.T) {
 			setColumns += fmt.Sprintf("Set(%d, f=1) ", i*pilosa.ShardWidth)
 		}
 
-		if _, err := m0.Query(t, "i", "", setColumns); err != nil {
+		if _, err := coord.Query(t, "i", "", setColumns); err != nil {
 			t.Fatal(err)
 		}
 
-		nodeID := mustNodeID(m1.URL())
-		resp := test.Do(t, "POST", m0.URL()+"/cluster/resize/remove-node", fmt.Sprintf(`{"id": "%s"}`, nodeID))
+		nodeID := mustNodeID(other.URL())
+		resp := test.Do(t, "POST", coord.URL()+"/cluster/resize/remove-node", fmt.Sprintf(`{"id": "%s"}`, nodeID))
 		expBody := "not enough data to perform resize"
 		if resp.StatusCode != http.StatusInternalServerError {
 			t.Fatalf("expected StatusCode %d but got %d", http.StatusInternalServerError, resp.StatusCode)

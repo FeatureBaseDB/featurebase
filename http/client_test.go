@@ -49,15 +49,16 @@ func TestClient_MultiNode(t *testing.T) {
 	)
 	defer c.Close()
 
-	hldr := []test.Holder{}
-	for _, command := range c.Nodes {
-		hldr = append(hldr, test.Holder{Holder: command.Server.Holder()})
-	}
+	hldr0 := c.GetHolder(0)
+	hldr1 := c.GetHolder(1)
+	hldr2 := c.GetHolder(2)
 
-	// Create a dispersed set of bitmaps across 3 nodes such that each individual node and shard width increment would reveal a different TopN.
+	// Create a dispersed set of bitmaps across 3 nodes such that each
+	// individual node and shard width increment would reveal a different TopN.
 	shardNums := []uint64{1, 2, 6}
 
-	// This was generated with: `owns := s[i].Handler.Handler.API.Cluster.OwnsShards("i", 20, s[i].HostURI())`
+	// This was generated with:
+	// `owns := s[i].Handler.Handler.API.Cluster.OwnsShards("i", 20, s[i].HostURI())`
 	owns := [][]uint64{
 		{1, 3, 4, 8, 10, 13, 17, 19},
 		{2, 5, 7, 11, 12, 14, 18},
@@ -96,26 +97,26 @@ func TestClient_MultiNode(t *testing.T) {
 		t.Fatalf("creating field: %v", err)
 	}
 
-	hldr[0].MustSetBits("i", "f", 100, baseBit0+10)
-	hldr[0].MustSetBits("i", "f", 4, baseBit0+10, baseBit0+11, baseBit0+12)
-	hldr[0].MustSetBits("i", "f", 4, baseBit0+10, baseBit0+11, baseBit0+12, baseBit0+13, baseBit0+14, baseBit0+15)
-	hldr[0].MustSetBits("i", "f", 2, baseBit0+1, baseBit0+2, baseBit0+3, baseBit0+4)
-	hldr[0].MustSetBits("i", "f", 3, baseBit0+1, baseBit0+2, baseBit0+3, baseBit0+4, baseBit0+5)
-	hldr[0].MustSetBits("i", "f", 22, baseBit0+1, baseBit0+2)
+	hldr0.MustSetBits("i", "f", 100, baseBit0+10)
+	hldr0.MustSetBits("i", "f", 4, baseBit0+10, baseBit0+11, baseBit0+12)
+	hldr0.MustSetBits("i", "f", 4, baseBit0+10, baseBit0+11, baseBit0+12, baseBit0+13, baseBit0+14, baseBit0+15)
+	hldr0.MustSetBits("i", "f", 2, baseBit0+1, baseBit0+2, baseBit0+3, baseBit0+4)
+	hldr0.MustSetBits("i", "f", 3, baseBit0+1, baseBit0+2, baseBit0+3, baseBit0+4, baseBit0+5)
+	hldr0.MustSetBits("i", "f", 22, baseBit0+1, baseBit0+2)
 
-	hldr[1].MustSetBits("i", "f", 99, baseBit1+1, baseBit1+2, baseBit1+3, baseBit1+4)
-	hldr[1].MustSetBits("i", "f", 100, baseBit1+1, baseBit1+2, baseBit1+3, baseBit1+4, baseBit1+5, baseBit1+6, baseBit1+7, baseBit1+8, baseBit1+9, baseBit1+10)
-	hldr[1].MustSetBits("i", "f", 98, baseBit1+1, baseBit1+2, baseBit1+3, baseBit1+4, baseBit1+5, baseBit1+6)
-	hldr[1].MustSetBits("i", "f", 1, baseBit1+4)
-	hldr[1].MustSetBits("i", "f", 22, baseBit1+1, baseBit1+2, baseBit1+3, baseBit1+4, baseBit1+5)
+	hldr1.MustSetBits("i", "f", 99, baseBit1+1, baseBit1+2, baseBit1+3, baseBit1+4)
+	hldr1.MustSetBits("i", "f", 100, baseBit1+1, baseBit1+2, baseBit1+3, baseBit1+4, baseBit1+5, baseBit1+6, baseBit1+7, baseBit1+8, baseBit1+9, baseBit1+10)
+	hldr1.MustSetBits("i", "f", 98, baseBit1+1, baseBit1+2, baseBit1+3, baseBit1+4, baseBit1+5, baseBit1+6)
+	hldr1.MustSetBits("i", "f", 1, baseBit1+4)
+	hldr1.MustSetBits("i", "f", 22, baseBit1+1, baseBit1+2, baseBit1+3, baseBit1+4, baseBit1+5)
 
-	hldr[2].MustSetBits("i", "f", 24, baseBit2+10, baseBit2+11, baseBit2+12, baseBit2+13, baseBit2+14)
-	hldr[2].MustSetBits("i", "f", 20, baseBit2+10, baseBit2+11, baseBit2+12, baseBit2+13)
-	hldr[2].MustSetBits("i", "f", 21, baseBit2+10)
-	hldr[2].MustSetBits("i", "f", 100, baseBit2+10)
-	hldr[2].MustSetBits("i", "f", 99, baseBit2+10, baseBit2+11, baseBit2+12)
-	hldr[2].MustSetBits("i", "f", 98, baseBit2+10, baseBit2+11)
-	hldr[2].MustSetBits("i", "f", 22, baseBit2+10, baseBit2+11, baseBit2+12)
+	hldr2.MustSetBits("i", "f", 24, baseBit2+10, baseBit2+11, baseBit2+12, baseBit2+13, baseBit2+14)
+	hldr2.MustSetBits("i", "f", 20, baseBit2+10, baseBit2+11, baseBit2+12, baseBit2+13)
+	hldr2.MustSetBits("i", "f", 21, baseBit2+10)
+	hldr2.MustSetBits("i", "f", 100, baseBit2+10)
+	hldr2.MustSetBits("i", "f", 99, baseBit2+10, baseBit2+11, baseBit2+12)
+	hldr2.MustSetBits("i", "f", 98, baseBit2+10, baseBit2+11)
+	hldr2.MustSetBits("i", "f", 22, baseBit2+10, baseBit2+11, baseBit2+12)
 
 	// Rebuild the RankCache.
 	// We have to do this to avoid the 10-second cache invalidation delay

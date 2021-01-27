@@ -299,6 +299,7 @@ func TestAPI_ImportValue(t *testing.T) {
 	)
 	defer c.Close()
 
+	coord := c.GetCoordinator()
 	m0 := c.GetNode(0)
 	m1 := c.GetNode(1)
 
@@ -307,11 +308,11 @@ func TestAPI_ImportValue(t *testing.T) {
 		index := "valck"
 		field := "f"
 
-		_, err := m0.API.CreateIndex(ctx, index, pilosa.IndexOptions{Keys: true})
+		_, err := coord.API.CreateIndex(ctx, index, pilosa.IndexOptions{Keys: true})
 		if err != nil {
 			t.Fatalf("creating index: %v", err)
 		}
-		_, err = m0.API.CreateField(ctx, index, field, pilosa.OptFieldTypeInt(math.MinInt64, math.MaxInt64))
+		_, err = coord.API.CreateField(ctx, index, field, pilosa.OptFieldTypeInt(math.MinInt64, math.MaxInt64))
 		if err != nil {
 			t.Fatalf("creating field: %v", err)
 		}
@@ -334,8 +335,8 @@ func TestAPI_ImportValue(t *testing.T) {
 			Values:     values,
 		}
 
-		qcx := m0.API.Txf().NewQcx()
-		if err := m0.API.ImportValue(ctx, qcx, req); err != nil {
+		qcx := coord.API.Txf().NewQcx()
+		if err := coord.API.ImportValue(ctx, qcx, req); err != nil {
 			t.Fatal(err)
 		}
 		panicOn(qcx.Finish())
@@ -376,7 +377,7 @@ func TestAPI_ImportValue(t *testing.T) {
 			t.Fatalf("creating field: %v", err)
 		}
 
-		// Generate some keyed records.
+		// Generate some records.
 		values := []float64{}
 		colIDs := []uint64{}
 		for i := 0; i < 10; i++ {
@@ -384,8 +385,8 @@ func TestAPI_ImportValue(t *testing.T) {
 			colIDs = append(colIDs, uint64(i))
 		}
 
-		// Import data with keys to the coordinator (node0) and verify that it gets
-		// translated and forwarded to the owner of shard 0 (node1; because of offsetModHasher)
+		// Import data with keys to node1 and verify that it gets translated and
+		// forwarded to the owner of shard 0 (node0; because of offsetModHasher)
 		req := &pilosa.ImportValueRequest{
 			Index:       index,
 			Field:       field,
@@ -431,16 +432,16 @@ func TestAPI_ImportValue(t *testing.T) {
 
 		fgnIndex := "fgnvalstr"
 
-		_, err := m0.API.CreateIndex(ctx, index, pilosa.IndexOptions{})
+		_, err := coord.API.CreateIndex(ctx, index, pilosa.IndexOptions{})
 		if err != nil {
 			t.Fatalf("creating index: %v", err)
 		}
 
-		_, err = m0.API.CreateIndex(ctx, fgnIndex, pilosa.IndexOptions{Keys: true})
+		_, err = coord.API.CreateIndex(ctx, fgnIndex, pilosa.IndexOptions{Keys: true})
 		if err != nil {
 			t.Fatalf("creating foreign index: %v", err)
 		}
-		_, err = m0.API.CreateField(ctx, index, field,
+		_, err = coord.API.CreateField(ctx, index, field,
 			pilosa.OptFieldTypeInt(0, math.MaxInt64),
 			pilosa.OptFieldForeignIndex(fgnIndex),
 		)
@@ -457,8 +458,9 @@ func TestAPI_ImportValue(t *testing.T) {
 			colIDs = append(colIDs, uint64(i))
 		}
 
-		// Import data with keys to the coordinator (node0) and verify that it gets
-		// translated and forwarded to the owner of shard 0 (node1; because of offsetModHasher)
+		// Import data with keys to the node0 and verify that it gets translated
+		// and forwarded to the owner of shard 0 (node1; because of
+		// offsetModHasher)
 		req := &pilosa.ImportValueRequest{
 			Index:        index,
 			Field:        field,
@@ -473,8 +475,8 @@ func TestAPI_ImportValue(t *testing.T) {
 
 		pql := fmt.Sprintf(`Row(%s=="strval-110")`, field)
 
-		// Query node0.
-		if res, err := m0.API.Query(ctx, &pilosa.QueryRequest{Index: index, Query: pql}); err != nil {
+		// Query node1.
+		if res, err := m1.API.Query(ctx, &pilosa.QueryRequest{Index: index, Query: pql}); err != nil {
 			t.Fatal(err)
 		} else if ids := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(ids, []uint64{1}) {
 			t.Fatalf("unexpected columns: observerd %+v;  expected '%+v'", ids, []uint64{1})

@@ -178,6 +178,17 @@ func (c *Cluster) GetHolder(n int) *Holder {
 	return &Holder{Holder: c.GetNode(n).Server.Holder()}
 }
 
+// GetCoordinatorHolder returns the Holder for the coordinator node.
+func (c *Cluster) GetCoordinatorHolder() *Holder {
+	return &Holder{Holder: c.GetCoordinator().Server.Holder()}
+}
+
+// GetNonCoordinatorHolder returns the Holder for the the first non-coordinator
+// node in the list of nodes.
+func (c *Cluster) GetNonCoordinatorHolder() *Holder {
+	return &Holder{Holder: c.GetNonCoordinator().Server.Holder()}
+}
+
 func (c *Cluster) Len() int {
 	return len(c.Nodes)
 }
@@ -440,6 +451,15 @@ func (c *Cluster) Close() error {
 		}
 	}
 	return nil
+}
+
+func (c *Cluster) CloseAndRemoveNonCoordinator() error {
+	for i, n := range c.Nodes {
+		if !n.IsCoordinator() {
+			return c.CloseAndRemove(i)
+		}
+	}
+	return errors.New("could not find non-coordinator node")
 }
 
 func (c *Cluster) CloseAndRemove(n int) error {

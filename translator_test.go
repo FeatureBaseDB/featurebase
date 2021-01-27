@@ -514,16 +514,16 @@ func TestTranslation_Replication(t *testing.T) {
 		exp := `{"results":[{"attrs":{},"columns":[],"keys":["x1","x2"]}]}`
 
 		if !test.CheckClusterState(coord, pilosa.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node0 cluster state: %s", coord.API.State())
+			t.Fatalf("unexpected coord cluster state: %s", coord.API.State())
 		} else if !test.CheckClusterState(other, pilosa.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node1 cluster state: %s", other.API.State())
+			t.Fatalf("unexpected other cluster state: %s", other.API.State())
 		}
 
 		// Verify the data exists
 		coord.QueryExpect(t, idx, "", `Row(f=1)`, exp)
 
-		// Kill one node.
-		if err := c.CloseAndRemove(1); err != nil {
+		// Kill a non-coordinator node.
+		if err := c.CloseAndRemoveNonCoordinator(); err != nil {
 			t.Fatal(err)
 		}
 

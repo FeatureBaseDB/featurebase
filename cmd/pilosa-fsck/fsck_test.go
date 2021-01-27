@@ -402,6 +402,9 @@ func check(dirs []string, cfg *FsckConfig, targetIndex string, targetPartition i
 	return firstChecksum, nil
 }
 
+// These are here to satisfy the linter in CI while the test is being skipped.
+var _ = getFwdRev
+var _ = check
 var _ = getChecksums
 
 func getChecksums(dirs []string, cfg *FsckConfig, targetPartition int) (chksum []string) {
