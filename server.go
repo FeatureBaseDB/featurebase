@@ -678,51 +678,57 @@ func (s *Server) Open() error {
 
 // Close closes the server and waits for it to shutdown.
 func (s *Server) Close() error {
-	fmt.Println("--- disco: server close:", s.disCo.ID())
-	errE := s.executor.Close()
+	select {
+	case <-s.closing:
+		return nil
+	default:
 
-	// Notify goroutines to stop.
-	close(s.closing)
-	s.wg.Wait()
-	var errh, errd error
-	var errhs error
-	var errc error
+		fmt.Println("--- disco: server close:", s.disCo.ID())
+		errE := s.executor.Close()
 
-	if s.cluster != nil {
-		errc = s.cluster.close()
-	}
-	errhs = s.syncer.stopTranslationSync()
-	if s.disCo != nil {
-		fmt.Println("--- disco: try close:", s.disCo.ID())
-		errd = s.disCo.Close()
-		fmt.Println("--- disco: closed", s.disCo.ID(), errd)
-	}
-	if s.holder != nil {
-		errh = s.holder.Close()
-	}
-	if s.snapshotQueue != nil {
-		s.holder.SnapshotQueue = nil
-		s.snapshotQueue.Stop()
-		s.snapshotQueue = nil
-	}
+		// Notify goroutines to stop.
+		close(s.closing)
+		s.wg.Wait()
+		var errh, errd error
+		var errhs error
+		var errc error
 
-	// prefer to return holder error over cluster
-	// error. This order is somewhat arbitrary. It would be better if we had
-	// some way to combine all the errors, but probably not important enough to
-	// warrant the extra complexity.
-	if errh != nil {
-		return errors.Wrap(errh, "closing holder")
+		if s.cluster != nil {
+			errc = s.cluster.close()
+		}
+		errhs = s.syncer.stopTranslationSync()
+		if s.disCo != nil {
+			fmt.Println("--- disco: try close:", s.disCo.ID())
+			errd = s.disCo.Close()
+			fmt.Println("--- disco: closed", s.disCo.ID(), errd)
+		}
+		if s.holder != nil {
+			errh = s.holder.Close()
+		}
+		if s.snapshotQueue != nil {
+			s.holder.SnapshotQueue = nil
+			s.snapshotQueue.Stop()
+			s.snapshotQueue = nil
+		}
+
+		// prefer to return holder error over cluster
+		// error. This order is somewhat arbitrary. It would be better if we had
+		// some way to combine all the errors, but probably not important enough to
+		// warrant the extra complexity.
+		if errh != nil {
+			return errors.Wrap(errh, "closing holder")
+		}
+		if errhs != nil {
+			return errors.Wrap(errhs, "terminating holder translation sync")
+		}
+		if errc != nil {
+			return errors.Wrap(errc, "closing cluster")
+		}
+		if errd != nil {
+			return errors.Wrap(errd, "closing disco")
+		}
+		return errors.Wrap(errE, "closing executor")
 	}
-	if errhs != nil {
-		return errors.Wrap(errhs, "terminating holder translation sync")
-	}
-	if errc != nil {
-		return errors.Wrap(errc, "closing cluster")
-	}
-	if errd != nil {
-		return errors.Wrap(errd, "closing disco")
-	}
-	return errors.Wrap(errE, "closing executor")
 }
 
 // NodeID returns the server's node id.

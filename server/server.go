@@ -545,30 +545,36 @@ func (m *Command) GossipTransport() *gossip.Transport {
 
 // Close shuts down the server.
 func (m *Command) Close() error {
-	defer close(m.done)
-	eg := errgroup.Group{}
-	m.grpcServer.Stop()
-	eg.Go(m.Handler.Close)
-	eg.Go(m.Server.Close)
-	eg.Go(m.API.Close)
-	eg.Go(m.pgserver.Close)
-	if m.gossipMemberSet != nil {
-		eg.Go(m.gossipMemberSet.Close)
-	}
-	if closer, ok := m.logOutput.(io.Closer); ok {
-		// If closer is os.Stdout or os.Stderr, don't close it.
-		if closer != os.Stdout && closer != os.Stderr {
-			eg.Go(closer.Close)
+	select {
+	case <-m.done:
+		return nil
+	default:
+
+		defer close(m.done)
+		eg := errgroup.Group{}
+		m.grpcServer.Stop()
+		eg.Go(m.Handler.Close)
+		eg.Go(m.Server.Close)
+		eg.Go(m.API.Close)
+		eg.Go(m.pgserver.Close)
+		if m.gossipMemberSet != nil {
+			eg.Go(m.gossipMemberSet.Close)
 		}
+		if closer, ok := m.logOutput.(io.Closer); ok {
+			// If closer is os.Stdout or os.Stderr, don't close it.
+			if closer != os.Stdout && closer != os.Stderr {
+				eg.Go(closer.Close)
+			}
+		}
+
+		// prevent the closed sockets from being re-injected into etcd.
+		m.Config.DisCo.LPeerSocket = nil
+		m.Config.DisCo.LClientSocket = nil
+
+		err := eg.Wait()
+		_ = testhook.Closed(pilosa.NewAuditor(), m, nil)
+		return errors.Wrap(err, "closing everything")
 	}
-
-	// prevent the closed sockets from being re-injected into etcd.
-	m.Config.DisCo.LPeerSocket = nil
-	m.Config.DisCo.LClientSocket = nil
-
-	err := eg.Wait()
-	_ = testhook.Closed(pilosa.NewAuditor(), m, nil)
-	return errors.Wrap(err, "closing everything")
 }
 
 // newStatsClient creates a stats client from the config
