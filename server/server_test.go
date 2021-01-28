@@ -630,38 +630,21 @@ func TestClusteringNodesReplica1(t *testing.T) {
 	cluster := test.MustRunCluster(t, 3)
 	defer cluster.Close()
 
-	err := cluster.AwaitState(pilosa.ClusterStateNormal, 100*time.Millisecond)
-	if err != nil {
+	if err := cluster.AwaitState(pilosa.ClusterStateNormal, 100*time.Millisecond); err != nil {
 		t.Fatalf("starting cluster: %v", err)
 	}
 
-	if err := cluster.GetNode(2).Command.Close(); err != nil {
+	if err := cluster.GetNonCoordinator().Command.Close(); err != nil {
 		t.Fatalf("closing third node: %v", err)
 	}
 
+	if err := cluster.AwaitCoordinatorState(pilosa.ClusterStateStarting, 30*time.Second); err != nil {
+		t.Fatalf("starting cluster: %v", err)
+	}
+
 	// confirm that cluster stops accepting queries after one node closes
-	if _, err := cluster.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{}); !strings.Contains(err.Error(), "not allowed in state STARTING") {
+	if _, err := cluster.GetCoordinator().API.Query(context.Background(), &pilosa.QueryRequest{}); !strings.Contains(err.Error(), "not allowed in state STARTING") {
 		t.Fatalf("got unexpected error querying an incomplete cluster: %v", err)
-	}
-
-	// Create new main with the same config.
-	config := cluster.GetNode(2).Command.Config
-	config.Translation.MapSize = 100000
-
-	// this isn't necessary, but makes the test run way faster
-	config.Gossip.Port = strconv.Itoa(int(cluster.GetNode(2).Command.GossipTransport().URI.Port))
-
-	cluster.GetNode(2).Command = server.NewCommand(cluster.GetNode(2).Stdin, cluster.GetNode(2).Stdout, cluster.GetNode(2).Stderr, server.OptCommandServerOptions(pilosa.OptServerOpenTranslateStore(pilosa.OpenInMemTranslateStore)))
-	cluster.GetNode(2).Command.Config = config
-
-	// Run new program.
-	if err := cluster.GetNode(2).Start(); err != nil {
-		t.Fatalf("restarting node 2: %v", err)
-	}
-
-	err = cluster.AwaitState(pilosa.ClusterStateNormal, 200*time.Millisecond)
-	if err != nil {
-		t.Fatalf("resuming normal operations: %v", err)
 	}
 }
 
@@ -681,74 +664,34 @@ func TestClusteringNodesReplica2(t *testing.T) {
 		t.Fatalf("starting cluster: %v", err)
 	}
 
-	if err := cluster.GetNode(2).Command.Close(); err != nil {
+	coord, others := cluster.GetCoordinator(), cluster.GetNonCoordinators()
+
+	if err := others[0].Close(); err != nil {
 		t.Fatalf("closing third node: %v", err)
 	}
 
-	err = cluster.AwaitCoordinatorState(pilosa.ClusterStateDegraded, 100*time.Millisecond)
+	err = cluster.AwaitCoordinatorState(pilosa.ClusterStateDegraded, 30*time.Second)
 	if err != nil {
 		t.Fatalf("after closing first server: %v", err)
 	}
 
 	// confirm that cluster keeps accepting queries if replication > 1
-	if _, err := cluster.GetNode(0).API.CreateIndex(context.Background(), "anewindex", pilosa.IndexOptions{}); err != nil {
+	if _, err := coord.API.CreateIndex(context.Background(), "anewindex", pilosa.IndexOptions{}); err != nil {
 		t.Fatalf("got unexpected error creating index: %v", err)
 	}
 
 	// confirm that cluster stops accepting queries if 2 nodes fail and replication == 2
-	if err := cluster.GetNode(1).Command.Close(); err != nil {
+	if err := others[1].Close(); err != nil {
 		t.Fatalf("closing 2nd node: %v", err)
 	}
 
-	err = cluster.AwaitCoordinatorState(pilosa.ClusterStateStarting, 100*time.Millisecond)
+	err = cluster.AwaitCoordinatorState(pilosa.ClusterStateStarting, 30*time.Second)
 	if err != nil {
 		t.Fatalf("after closing second server: %v", err)
 	}
 
-	if _, err := cluster.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{}); !strings.Contains(err.Error(), "not allowed in state STARTING") {
+	if _, err := coord.API.Query(context.Background(), &pilosa.QueryRequest{}); !strings.Contains(err.Error(), "not allowed in state STARTING") {
 		t.Fatalf("got unexpected error querying an incomplete cluster: %v", err)
-	}
-
-	// Create new main with the same config.
-	config := cluster.GetNode(2).Command.Config
-	config.Translation.MapSize = 100000
-	// config.Bind = cluster.GetNode(2).API.Node().URI.HostPort()
-
-	// this isn't necessary, but makes the test run way faster
-	config.Gossip.Port = strconv.Itoa(int(cluster.GetNode(2).Command.GossipTransport().URI.Port))
-
-	cluster.GetNode(2).Command = server.NewCommand(cluster.GetNode(2).Stdin, cluster.GetNode(2).Stdout, cluster.GetNode(2).Stderr, server.OptCommandServerOptions(pilosa.OptServerOpenTranslateStore(pilosa.OpenInMemTranslateStore)))
-	cluster.GetNode(2).Command.Config = config
-
-	// Run new program.
-	if err := cluster.GetNode(2).Start(); err != nil {
-		t.Fatalf("restarting node 2: %v", err)
-	}
-
-	err = cluster.AwaitCoordinatorState(pilosa.ClusterStateDegraded, 100*time.Millisecond)
-	if err != nil {
-		t.Fatalf("after restarting first server: %v", err)
-	}
-
-	// Create new main with the same config.
-	config = cluster.GetNode(1).Command.Config
-	// config.Bind = cluster.GetNode(1).API.Node().URI.HostPort()
-	config.Translation.MapSize = 100000
-
-	// this isn't necessary, but makes the test run way faster
-	config.Gossip.Port = strconv.Itoa(int(cluster.GetNode(1).Command.GossipTransport().URI.Port))
-
-	cluster.GetNode(1).Command = server.NewCommand(cluster.GetNode(1).Stdin, cluster.GetNode(1).Stdout, cluster.GetNode(1).Stderr, server.OptCommandServerOptions(pilosa.OptServerOpenTranslateStore(pilosa.OpenInMemTranslateStore)))
-	cluster.GetNode(1).Command.Config = config
-
-	// Run new program.
-	if err := cluster.GetNode(1).Start(); err != nil {
-		t.Fatalf("restarting node 1: %v", err)
-	}
-
-	err = cluster.AwaitState(pilosa.ClusterStateNormal, 200*time.Microsecond)
-	if err != nil {
-		t.Fatalf("resuming normal operations: %v", err)
 	}
 }
 
@@ -774,27 +717,28 @@ func TestRemoveNodeAfterItDies(t *testing.T) {
 		t.Fatalf("starting cluster: %v", err)
 	}
 
+	coord, others := cluster.GetCoordinator(), cluster.GetNonCoordinators()
 	// prevent double-closing cluster.GetNode(2) from the deferred Close above
-	disabled := cluster.GetNode(2)
-	if err := cluster.CloseAndRemove(2); err != nil {
+	disabled := others[0]
+	if err := disabled.Close(); err != nil {
 		t.Fatalf("closing third node: %v", err)
 	}
 
-	err = cluster.AwaitCoordinatorState(pilosa.ClusterStateDegraded, 100*time.Millisecond)
+	err = cluster.AwaitCoordinatorState(pilosa.ClusterStateDegraded, 30*time.Second)
 	if err != nil {
 		t.Fatalf("starting cluster: %v", err)
 	}
 
-	if _, err := cluster.GetNode(0).API.RemoveNode(disabled.API.Node().ID); err != nil {
+	if _, err := coord.API.RemoveNode(disabled.API.Node().ID); err != nil {
 		t.Fatalf("removing failed node: %v", err)
 	}
 
-	err = cluster.AwaitCoordinatorState(pilosa.ClusterStateNormal, 100*time.Millisecond)
+	err = cluster.AwaitCoordinatorState(pilosa.ClusterStateNormal, 30*time.Second)
 	if err != nil {
 		t.Fatalf("removing disabled node: %v", err)
 	}
 
-	hosts := cluster.GetNode(0).API.Hosts(context.Background())
+	hosts := coord.API.Hosts(context.Background())
 	if len(hosts) != 2 {
 		t.Fatalf("unexpected hosts: %v", hosts)
 	}

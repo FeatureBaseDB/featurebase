@@ -478,7 +478,7 @@ func (c *Cluster) AwaitCoordinatorState(expectedState string, timeout time.Durat
 	if len(c.Nodes) < 1 {
 		return errors.New("can't await coordinator state on an empty cluster")
 	}
-	onlyCoordinator := &Cluster{Nodes: c.Nodes[:1]}
+	onlyCoordinator := &Cluster{Nodes: []*Command{c.GetCoordinator()}}
 	return onlyCoordinator.AwaitState(expectedState, timeout)
 }
 
