@@ -497,7 +497,10 @@ func (api *API) ImportRoaring(ctx context.Context, indexName, fieldName string, 
 	qcx := api.Txf().NewQcx()
 	defer qcx.Abort()
 
-	nodes := api.cluster.shardNodes(indexName, shard)
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	snap := topology.NewClusterSnapshot(api.cluster.noder, api.cluster.Hasher, api.cluster.ReplicaN)
+
+	nodes := snap.ShardNodes(indexName, shard)
 	errCh := make(chan error, len(nodes))
 	for _, node := range nodes {
 		node := node
@@ -619,8 +622,11 @@ func (api *API) ExportCSV(ctx context.Context, indexName string, fieldName strin
 		return errors.Wrap(err, "validating api method")
 	}
 
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	snap := topology.NewClusterSnapshot(api.cluster.noder, api.cluster.Hasher, api.cluster.ReplicaN)
+
 	// Validate that this handler owns the shard.
-	if !api.cluster.ownsShard(api.Node().ID, indexName, shard) {
+	if !snap.OwnsShard(api.Node().ID, indexName, shard) {
 		api.server.logger.Printf("node %s does not own shard %d of index %s", api.Node().ID, shard, indexName)
 		return ErrClusterDoesNotOwnShard
 	}
@@ -668,7 +674,7 @@ func (api *API) ExportCSV(ctx context.Context, indexName string, fieldName strin
 		}
 
 		if index.Keys() {
-			if store := index.TranslateStore(api.cluster.idPartition(indexName, columnID)); store == nil {
+			if store := index.TranslateStore(snap.IDToShardPartition(indexName, columnID)); store == nil {
 				return errors.Wrap(err, "partition does not exist")
 			} else if colStr, err = store.TranslateID(columnID); err != nil {
 				return errors.Wrap(err, "translating column")
@@ -702,7 +708,10 @@ func (api *API) ShardNodes(ctx context.Context, indexName string, shard uint64) 
 		return nil, errors.Wrap(err, "validating api method")
 	}
 
-	return api.cluster.shardNodes(indexName, shard), nil
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	snap := topology.NewClusterSnapshot(api.cluster.noder, api.cluster.Hasher, api.cluster.ReplicaN)
+
+	return snap.ShardNodes(indexName, shard), nil
 }
 
 // FragmentBlockData is an endpoint for internal usage. It is not guaranteed to
@@ -1683,8 +1692,10 @@ func (api *API) LongQueryTime() time.Duration {
 }
 
 func (api *API) validateShardOwnership(indexName string, shard uint64) error {
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	snap := topology.NewClusterSnapshot(api.cluster.noder, api.cluster.Hasher, api.cluster.ReplicaN)
 	// Validate that this handler owns the shard.
-	if !api.cluster.ownsShard(api.Node().ID, indexName, shard) {
+	if !snap.OwnsShard(api.Node().ID, indexName, shard) {
 		api.server.logger.Printf("node %s does not own shard %d of index %s", api.Node().ID, shard, indexName)
 		return ErrClusterDoesNotOwnShard
 	}
@@ -2003,7 +2014,10 @@ func (api *API) CreateFieldKeys(ctx context.Context, index, field string, keys .
 
 // PrimaryReplicaNodeURL returns the URL of the cluster's primary replica.
 func (api *API) PrimaryReplicaNodeURL() url.URL {
-	node := api.cluster.PrimaryReplicaNode()
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	snap := topology.NewClusterSnapshot(api.cluster.noder, api.cluster.Hasher, api.cluster.ReplicaN)
+
+	node := snap.PrimaryReplicaNode(api.Node().ID)
 	if node == nil {
 		return url.URL{}
 	}

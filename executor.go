@@ -151,7 +151,6 @@ func (e *executor) Close() error {
 
 // Execute executes a PQL query.
 func (e *executor) Execute(ctx context.Context, index string, q *pql.Query, shards []uint64, opt *execOptions) (QueryResponse, error) {
-
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.Execute")
 	span.LogKV("pql", q.String())
 	defer span.Finish()
@@ -1513,7 +1512,18 @@ func executeDistinctShardSet(ctx context.Context, qcx *Qcx, idx *Index, fieldNam
 	fragData, _, err := tx.ContainerIterator(index, fieldName, "standard", shard, 0)
 	switch errors.Cause(err) {
 	case ViewNotFound, FragmentNotFound:
-		return nil, nil
+		// It may seem reasonable to return `nil` here in the case where the
+		// fragment for this shard does not exist. The problem with doing that
+		// is that if this operation is being performed on a remote node, then
+		// this result is going to get serialized as a QueryResponse and sent
+		// back to the original, non-remote node. When this happens, the
+		// encodeRow/decodeRow logic replaces `nil` with an empty `Row`. An
+		// empty Row will cause problems during the union step of the reduce
+		// phase if it is the "left" side of the union, because then the
+		// resulting Row after the union will have blank Index and Field values.
+		// Here, we ensure that we send a non-nil Row with valid Index and Field
+		// values so that the union step doesn't cause problems.
+		return &Row{Index: index, Field: fieldName}, nil
 	case nil:
 	default:
 		return nil, errors.Wrap(err, "getting fragment data")
@@ -4712,8 +4722,11 @@ func (e *executor) executeClearBitField(ctx context.Context, qcx *Qcx, index str
 
 	shard := colID / ShardWidth
 
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	snap := topology.NewClusterSnapshot(e.Cluster.noder, e.Cluster.Hasher, e.Cluster.ReplicaN)
+
 	ret := false
-	for _, node := range e.Cluster.shardNodes(index, shard) {
+	for _, node := range snap.ShardNodes(index, shard) {
 		// Update locally if host matches.
 		if node.ID == e.Node.ID {
 
@@ -5070,7 +5083,10 @@ func (e *executor) executeSetBitField(ctx context.Context, qcx *Qcx, index strin
 	shard := colID / ShardWidth
 	ret := false
 
-	for _, node := range e.Cluster.shardNodes(index, shard) {
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	snap := topology.NewClusterSnapshot(e.Cluster.noder, e.Cluster.Hasher, e.Cluster.ReplicaN)
+
+	for _, node := range snap.ShardNodes(index, shard) {
 		// Update locally if host matches.
 		if node.ID == e.Node.ID {
 
@@ -5113,7 +5129,10 @@ func (e *executor) executeSetValueField(ctx context.Context, qcx *Qcx, index str
 	shard := colID / ShardWidth
 	ret := false
 
-	for _, node := range e.Cluster.shardNodes(index, shard) {
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	snap := topology.NewClusterSnapshot(e.Cluster.noder, e.Cluster.Hasher, e.Cluster.ReplicaN)
+
+	for _, node := range snap.ShardNodes(index, shard) {
 		// Update locally if host matches.
 		if node.ID == e.Node.ID {
 
@@ -5157,10 +5176,12 @@ func (e *executor) executeClearValueField(ctx context.Context, qcx *Qcx, index s
 	shard := colID / ShardWidth
 	ret := false
 
-	for _, node := range e.Cluster.shardNodes(index, shard) {
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	snap := topology.NewClusterSnapshot(e.Cluster.noder, e.Cluster.Hasher, e.Cluster.ReplicaN)
+
+	for _, node := range snap.ShardNodes(index, shard) {
 		// Update locally if host matches.
 		if node.ID == e.Node.ID {
-
 			idx := e.Holder.Index(index)
 			tx, finisher, err := qcx.GetTx(Txo{Write: writable, Index: idx, Shard: shard})
 			if err != nil {
@@ -5441,9 +5462,15 @@ func (e *executor) remoteExec(ctx context.Context, node *topology.Node, index st
 func (e *executor) shardsByNode(nodes []*topology.Node, index string, shards []uint64) (map[*topology.Node][]uint64, error) {
 	m := make(map[*topology.Node][]uint64)
 
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	// We use e.Cluster.Nodes() here instead of e.Cluster.noder because we need
+	// the node states in order to ensure that we don't include an unavailable
+	// node in the map of nodes to which we distribute the query.
+	snap := topology.NewClusterSnapshot(topology.NewLocalNoder(e.Cluster.Nodes()), e.Cluster.Hasher, e.Cluster.ReplicaN)
+
 loop:
 	for _, shard := range shards {
-		for _, node := range e.Cluster.ShardNodes(index, shard) {
+		for _, node := range snap.ShardNodes(index, shard) {
 			if topology.Nodes(nodes).Contains(node) {
 				m[node] = append(m[node], shard)
 				continue loop

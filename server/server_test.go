@@ -387,32 +387,31 @@ func TestTransactionsAPI(t *testing.T) {
 	cluster := test.MustRunCluster(t, 3)
 	defer cluster.Close()
 
-	api0 := cluster.GetNode(0).API
-	api1 := cluster.GetNode(1).API
+	coord := cluster.GetCoordinator().API
+	other := cluster.GetNonCoordinator().API
 	ctx := context.Background()
-	//api2 := cluster.GetNode(2).API
 
 	// can fetch empty transactions
-	if trnsMap, err := api0.Transactions(ctx); err != nil {
+	if trnsMap, err := coord.Transactions(ctx); err != nil {
 		t.Fatalf("getting transactions: %v", err)
 	} else if len(trnsMap) != 0 {
 		t.Fatalf("unexpectedly has transactions: %v", trnsMap)
 	}
 
 	// can't fetch transactions from non-coordinator
-	if _, err := api1.Transactions(ctx); err != pilosa.ErrNodeNotCoordinator {
+	if _, err := other.Transactions(ctx); err != pilosa.ErrNodeNotCoordinator {
 		t.Errorf("api1 should return ErrNodeNotCoordinator when asked for transactions but got: %v", err)
 	}
 
 	// can start transaction
-	if trns, err := api0.StartTransaction(ctx, "a", time.Minute, false, false); err != nil {
+	if trns, err := coord.StartTransaction(ctx, "a", time.Minute, false, false); err != nil {
 		t.Errorf("couldn't start transaction: %v", err)
 	} else {
 		test.CompareTransactions(t, &pilosa.Transaction{ID: "a", Active: true, Timeout: time.Minute, Deadline: time.Now().Add(time.Minute)}, trns)
 	}
 
 	// can retrieve transaction from other nodes with remote=true
-	if trns, err := api1.GetTransaction(ctx, "a", true); err != nil {
+	if trns, err := other.GetTransaction(ctx, "a", true); err != nil {
 		t.Errorf("couldn't fetch transaction from other node with remote=true: %v", err)
 	} else {
 		test.CompareTransactions(t, &pilosa.Transaction{ID: "a", Active: true, Timeout: time.Minute, Deadline: time.Now().Add(time.Minute)}, trns)
@@ -420,7 +419,7 @@ func TestTransactionsAPI(t *testing.T) {
 
 	// can start transaction with blank id and get uuid back
 	id := ""
-	if trns, err := api0.StartTransaction(ctx, id, time.Minute, false, false); err != nil {
+	if trns, err := coord.StartTransaction(ctx, id, time.Minute, false, false); err != nil {
 		t.Errorf("couldn't start transaction: %v", err)
 	} else {
 		id = trns.ID
@@ -431,54 +430,54 @@ func TestTransactionsAPI(t *testing.T) {
 	}
 
 	// can't finish transaction on non-coordinator
-	if _, err := api1.FinishTransaction(ctx, id, false); err != pilosa.ErrNodeNotCoordinator {
+	if _, err := other.FinishTransaction(ctx, id, false); err != pilosa.ErrNodeNotCoordinator {
 		t.Errorf("unexpected error is not ErrNodeNotCoordinator: %v", err)
 	}
 
 	// can finish transaction
-	if _, err := api0.FinishTransaction(ctx, id, false); err != nil {
+	if _, err := coord.FinishTransaction(ctx, id, false); err != nil {
 		t.Errorf("couldn't finish transaction: %v", err)
 	}
 
 	// can finish previous transaction
-	if _, err := api0.FinishTransaction(ctx, "a", false); err != nil {
+	if _, err := coord.FinishTransaction(ctx, "a", false); err != nil {
 		t.Errorf("couldn't finish transaction a: %v", err)
 	}
 
 	// can start exclusive transaction
-	if te, err := api0.StartTransaction(ctx, "exc", time.Minute, true, false); err != nil {
+	if te, err := coord.StartTransaction(ctx, "exc", time.Minute, true, false); err != nil {
 		t.Errorf("couldn't start exclusive transaction: %v", err)
 	} else if !te.Active {
 		t.Errorf("expected exclusive transaction to be active: %+v", te)
 	}
 
 	// can finish exclusive transaction
-	if _, err := api0.FinishTransaction(ctx, "exc", false); err != nil {
+	if _, err := coord.FinishTransaction(ctx, "exc", false); err != nil {
 		t.Errorf("couldn't finish exclusive transaction: %v", err)
 	}
 
 	// can start transaction (with same name as previous finished transaction)
-	if trns, err := api0.StartTransaction(ctx, "a", time.Minute, false, false); err != nil {
+	if trns, err := coord.StartTransaction(ctx, "a", time.Minute, false, false); err != nil {
 		t.Errorf("couldn't start transaction: %v", err)
 	} else {
 		test.CompareTransactions(t, &pilosa.Transaction{ID: "a", Active: true, Timeout: time.Minute, Deadline: time.Now().Add(time.Minute)}, trns)
 	}
 
 	// can start exclusive transaction and is not immediately active
-	if te, err := api0.StartTransaction(ctx, "exc", time.Minute, true, false); err != nil {
+	if te, err := coord.StartTransaction(ctx, "exc", time.Minute, true, false); err != nil {
 		t.Errorf("couldn't start exclusive transaction: %v", err)
 	} else if te.Active {
 		t.Errorf("expected exclusive transaction to be inactive: %+v", te)
 	}
 
 	// can finish non-exclusive transaction
-	if _, err := api0.FinishTransaction(ctx, "a", false); err != nil {
+	if _, err := coord.FinishTransaction(ctx, "a", false); err != nil {
 		t.Errorf("couldn't finish transaction a: %v", err)
 	}
 
 	// can poll exclusive transaction and is active
 	var excTrns *pilosa.Transaction
-	if trns, err := api0.GetTransaction(ctx, "exc", false); err != nil {
+	if trns, err := coord.GetTransaction(ctx, "exc", false); err != nil {
 		t.Errorf("couldn't poll exclusive transaction: %v", err)
 	} else {
 		excTrns = &pilosa.Transaction{ID: "exc", Active: true, Exclusive: true, Timeout: time.Minute, Deadline: time.Now().Add(time.Minute)}
@@ -486,7 +485,7 @@ func TestTransactionsAPI(t *testing.T) {
 	}
 
 	// can't start another exclusive transaction
-	if trns, err := api0.StartTransaction(ctx, "exc2", time.Minute, true, false); errors.Cause(err) != pilosa.ErrTransactionExclusive {
+	if trns, err := coord.StartTransaction(ctx, "exc2", time.Minute, true, false); errors.Cause(err) != pilosa.ErrTransactionExclusive {
 		t.Errorf("unexpected error: %v", err)
 	} else {
 		// returned transaction should be the exclusive one which is blocking this one
@@ -494,14 +493,14 @@ func TestTransactionsAPI(t *testing.T) {
 	}
 
 	// can't keep the second exclusive name but make it nonexclusive and start a transaction
-	if trns, err := api0.StartTransaction(ctx, "exc2", time.Minute, false, false); errors.Cause(err) != pilosa.ErrTransactionExclusive {
+	if trns, err := coord.StartTransaction(ctx, "exc2", time.Minute, false, false); errors.Cause(err) != pilosa.ErrTransactionExclusive {
 		t.Errorf("unexpected error: %v", err)
 	} else {
 		test.CompareTransactions(t, excTrns, trns)
 	}
 
 	// transaction is active on other nodes with remote=true
-	if trns, err := api1.GetTransaction(ctx, "exc", true); err != nil {
+	if trns, err := other.GetTransaction(ctx, "exc", true); err != nil {
 		t.Errorf("couldn't poll exclusive transaction: %v", err)
 	} else {
 		test.CompareTransactions(t, &pilosa.Transaction{ID: "exc", Active: true, Exclusive: true, Timeout: time.Minute, Deadline: time.Now().Add(time.Minute)}, trns)
@@ -631,38 +630,21 @@ func TestClusteringNodesReplica1(t *testing.T) {
 	cluster := test.MustRunCluster(t, 3)
 	defer cluster.Close()
 
-	err := cluster.AwaitState(pilosa.ClusterStateNormal, 100*time.Millisecond)
-	if err != nil {
+	if err := cluster.AwaitState(pilosa.ClusterStateNormal, 100*time.Millisecond); err != nil {
 		t.Fatalf("starting cluster: %v", err)
 	}
 
-	if err := cluster.GetNode(2).Command.Close(); err != nil {
+	if err := cluster.GetNonCoordinator().Command.Close(); err != nil {
 		t.Fatalf("closing third node: %v", err)
 	}
 
+	if err := cluster.AwaitCoordinatorState(pilosa.ClusterStateStarting, 30*time.Second); err != nil {
+		t.Fatalf("starting cluster: %v", err)
+	}
+
 	// confirm that cluster stops accepting queries after one node closes
-	if _, err := cluster.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{}); !strings.Contains(err.Error(), "not allowed in state STARTING") {
+	if _, err := cluster.GetCoordinator().API.Query(context.Background(), &pilosa.QueryRequest{}); !strings.Contains(err.Error(), "not allowed in state STARTING") {
 		t.Fatalf("got unexpected error querying an incomplete cluster: %v", err)
-	}
-
-	// Create new main with the same config.
-	config := cluster.GetNode(2).Command.Config
-	config.Translation.MapSize = 100000
-
-	// this isn't necessary, but makes the test run way faster
-	config.Gossip.Port = strconv.Itoa(int(cluster.GetNode(2).Command.GossipTransport().URI.Port))
-
-	cluster.GetNode(2).Command = server.NewCommand(cluster.GetNode(2).Stdin, cluster.GetNode(2).Stdout, cluster.GetNode(2).Stderr, server.OptCommandServerOptions(pilosa.OptServerOpenTranslateStore(pilosa.OpenInMemTranslateStore)))
-	cluster.GetNode(2).Command.Config = config
-
-	// Run new program.
-	if err := cluster.GetNode(2).Start(); err != nil {
-		t.Fatalf("restarting node 2: %v", err)
-	}
-
-	err = cluster.AwaitState(pilosa.ClusterStateNormal, 200*time.Millisecond)
-	if err != nil {
-		t.Fatalf("resuming normal operations: %v", err)
 	}
 }
 
@@ -682,74 +664,34 @@ func TestClusteringNodesReplica2(t *testing.T) {
 		t.Fatalf("starting cluster: %v", err)
 	}
 
-	if err := cluster.GetNode(2).Command.Close(); err != nil {
+	coord, others := cluster.GetCoordinator(), cluster.GetNonCoordinators()
+
+	if err := others[0].Close(); err != nil {
 		t.Fatalf("closing third node: %v", err)
 	}
 
-	err = cluster.AwaitCoordinatorState(pilosa.ClusterStateDegraded, 100*time.Millisecond)
+	err = cluster.AwaitCoordinatorState(pilosa.ClusterStateDegraded, 30*time.Second)
 	if err != nil {
 		t.Fatalf("after closing first server: %v", err)
 	}
 
 	// confirm that cluster keeps accepting queries if replication > 1
-	if _, err := cluster.GetNode(0).API.CreateIndex(context.Background(), "anewindex", pilosa.IndexOptions{}); err != nil {
+	if _, err := coord.API.CreateIndex(context.Background(), "anewindex", pilosa.IndexOptions{}); err != nil {
 		t.Fatalf("got unexpected error creating index: %v", err)
 	}
 
 	// confirm that cluster stops accepting queries if 2 nodes fail and replication == 2
-	if err := cluster.GetNode(1).Command.Close(); err != nil {
+	if err := others[1].Close(); err != nil {
 		t.Fatalf("closing 2nd node: %v", err)
 	}
 
-	err = cluster.AwaitCoordinatorState(pilosa.ClusterStateStarting, 100*time.Millisecond)
+	err = cluster.AwaitCoordinatorState(pilosa.ClusterStateStarting, 30*time.Second)
 	if err != nil {
 		t.Fatalf("after closing second server: %v", err)
 	}
 
-	if _, err := cluster.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{}); !strings.Contains(err.Error(), "not allowed in state STARTING") {
+	if _, err := coord.API.Query(context.Background(), &pilosa.QueryRequest{}); !strings.Contains(err.Error(), "not allowed in state STARTING") {
 		t.Fatalf("got unexpected error querying an incomplete cluster: %v", err)
-	}
-
-	// Create new main with the same config.
-	config := cluster.GetNode(2).Command.Config
-	config.Translation.MapSize = 100000
-	// config.Bind = cluster.GetNode(2).API.Node().URI.HostPort()
-
-	// this isn't necessary, but makes the test run way faster
-	config.Gossip.Port = strconv.Itoa(int(cluster.GetNode(2).Command.GossipTransport().URI.Port))
-
-	cluster.GetNode(2).Command = server.NewCommand(cluster.GetNode(2).Stdin, cluster.GetNode(2).Stdout, cluster.GetNode(2).Stderr, server.OptCommandServerOptions(pilosa.OptServerOpenTranslateStore(pilosa.OpenInMemTranslateStore)))
-	cluster.GetNode(2).Command.Config = config
-
-	// Run new program.
-	if err := cluster.GetNode(2).Start(); err != nil {
-		t.Fatalf("restarting node 2: %v", err)
-	}
-
-	err = cluster.AwaitCoordinatorState(pilosa.ClusterStateDegraded, 100*time.Millisecond)
-	if err != nil {
-		t.Fatalf("after restarting first server: %v", err)
-	}
-
-	// Create new main with the same config.
-	config = cluster.GetNode(1).Command.Config
-	// config.Bind = cluster.GetNode(1).API.Node().URI.HostPort()
-	config.Translation.MapSize = 100000
-
-	// this isn't necessary, but makes the test run way faster
-	config.Gossip.Port = strconv.Itoa(int(cluster.GetNode(1).Command.GossipTransport().URI.Port))
-
-	cluster.GetNode(1).Command = server.NewCommand(cluster.GetNode(1).Stdin, cluster.GetNode(1).Stdout, cluster.GetNode(1).Stderr, server.OptCommandServerOptions(pilosa.OptServerOpenTranslateStore(pilosa.OpenInMemTranslateStore)))
-	cluster.GetNode(1).Command.Config = config
-
-	// Run new program.
-	if err := cluster.GetNode(1).Start(); err != nil {
-		t.Fatalf("restarting node 1: %v", err)
-	}
-
-	err = cluster.AwaitState(pilosa.ClusterStateNormal, 200*time.Microsecond)
-	if err != nil {
-		t.Fatalf("resuming normal operations: %v", err)
 	}
 }
 
@@ -775,27 +717,28 @@ func TestRemoveNodeAfterItDies(t *testing.T) {
 		t.Fatalf("starting cluster: %v", err)
 	}
 
+	coord, others := cluster.GetCoordinator(), cluster.GetNonCoordinators()
 	// prevent double-closing cluster.GetNode(2) from the deferred Close above
-	disabled := cluster.GetNode(2)
-	if err := cluster.CloseAndRemove(2); err != nil {
+	disabled := others[0]
+	if err := disabled.Close(); err != nil {
 		t.Fatalf("closing third node: %v", err)
 	}
 
-	err = cluster.AwaitCoordinatorState(pilosa.ClusterStateDegraded, 100*time.Millisecond)
+	err = cluster.AwaitCoordinatorState(pilosa.ClusterStateDegraded, 30*time.Second)
 	if err != nil {
 		t.Fatalf("starting cluster: %v", err)
 	}
 
-	if _, err := cluster.GetNode(0).API.RemoveNode(disabled.API.Node().ID); err != nil {
+	if _, err := coord.API.RemoveNode(disabled.API.Node().ID); err != nil {
 		t.Fatalf("removing failed node: %v", err)
 	}
 
-	err = cluster.AwaitCoordinatorState(pilosa.ClusterStateNormal, 100*time.Millisecond)
+	err = cluster.AwaitCoordinatorState(pilosa.ClusterStateNormal, 30*time.Second)
 	if err != nil {
 		t.Fatalf("removing disabled node: %v", err)
 	}
 
-	hosts := cluster.GetNode(0).API.Hosts(context.Background())
+	hosts := coord.API.Hosts(context.Background())
 	if len(hosts) != 2 {
 		t.Fatalf("unexpected hosts: %v", hosts)
 	}

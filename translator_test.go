@@ -483,28 +483,28 @@ func TestTranslation_Replication(t *testing.T) {
 		)
 		defer c.Close()
 
-		node0 := c.GetNode(0)
-		node1 := c.GetNode(1)
+		coord := c.GetCoordinator()
+		other := c.GetNonCoordinator()
 
 		ctx := context.Background()
 		idx := "i"
 		field := "f"
 
 		// Create an index with keys.
-		if _, err := node0.API.CreateIndex(ctx, idx,
+		if _, err := coord.API.CreateIndex(ctx, idx,
 			pilosa.IndexOptions{
 				Keys: true,
 			}); err != nil {
 			t.Fatal(err)
 		}
 
-		if _, err := node0.API.CreateField(ctx, idx, field); err != nil {
+		if _, err := coord.API.CreateField(ctx, idx, field); err != nil {
 			t.Fatal(err)
 		}
 
 		// Write data on first node.
 		// these keys are a minimal example to reproduce the problem for the case of a 3-node cluster with replication factor 2
-		if _, err := node0.Queryf(t, idx, "", `
+		if _, err := coord.Queryf(t, idx, "", `
 	    Set("x1", f=1)
 	    Set("x2", f=1)
     `); err != nil {
@@ -513,22 +513,22 @@ func TestTranslation_Replication(t *testing.T) {
 
 		exp := `{"results":[{"attrs":{},"columns":[],"keys":["x1","x2"]}]}`
 
-		if !test.CheckClusterState(node0, pilosa.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node0 cluster state: %s", node0.API.State())
-		} else if !test.CheckClusterState(node1, pilosa.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node1 cluster state: %s", node1.API.State())
+		if !test.CheckClusterState(coord, pilosa.ClusterStateNormal, 1000) {
+			t.Fatalf("unexpected coord cluster state: %s", coord.API.State())
+		} else if !test.CheckClusterState(other, pilosa.ClusterStateNormal, 1000) {
+			t.Fatalf("unexpected other cluster state: %s", other.API.State())
 		}
 
 		// Verify the data exists
-		node0.QueryExpect(t, idx, "", `Row(f=1)`, exp)
+		coord.QueryExpect(t, idx, "", `Row(f=1)`, exp)
 
-		// Kill one node.
-		if err := c.CloseAndRemove(1); err != nil {
+		// Kill a non-coordinator node.
+		if err := c.CloseAndRemoveNonCoordinator(); err != nil {
 			t.Fatal(err)
 		}
 
 		// Verify the data exists with one node down
-		node0.QueryExpect(t, idx, "", `Row(f=1)`, exp)
+		coord.QueryExpect(t, idx, "", `Row(f=1)`, exp)
 	})
 }
 
@@ -557,8 +557,8 @@ func TestTranslation_Coordinator(t *testing.T) {
 		)
 		defer c.Close()
 
-		node0 := c.GetNode(0)
-		node1 := c.GetNode(1)
+		node0 := c.GetCoordinator()
+		node1 := c.GetNonCoordinator()
 
 		ctx := context.Background()
 		idx := "i"
@@ -643,23 +643,24 @@ func TestTranslation_TranslateIDsOnCluster(t *testing.T) {
 	)
 	defer c.Close()
 
-	node0 := c.GetNode(0)
-	node3 := c.GetNode(3)
+	coord := c.GetCoordinator()
+	other := c.GetNonCoordinator()
 
 	ctx := context.Background()
 	idx, fld := "i", "f"
 	// Create an index with keys.
-	if _, err := node0.API.CreateIndex(ctx, idx, pilosa.IndexOptions{Keys: true}); err != nil {
+	if _, err := coord.API.CreateIndex(ctx, idx, pilosa.IndexOptions{Keys: true}); err != nil {
 		t.Fatal(err)
 	}
+
 	// Create an index with keys.
-	if _, err := node0.API.CreateField(ctx, idx, fld, pilosa.OptFieldKeys()); err != nil {
+	if _, err := coord.API.CreateField(ctx, idx, fld, pilosa.OptFieldKeys()); err != nil {
 		t.Fatal(err)
 	}
 
 	keys := []string{"k0", "k1", "k2", "k3", "k4", "k5", "k6", "k7", "k8", "k9"}
 	// write a new key and get id
-	req, err := node0.API.Serializer.Marshal(&pilosa.TranslateKeysRequest{
+	req, err := coord.API.Serializer.Marshal(&pilosa.TranslateKeysRequest{
 		Index:       idx,
 		Field:       fld,
 		Keys:        keys,
@@ -668,20 +669,20 @@ func TestTranslation_TranslateIDsOnCluster(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if buf, err := node0.API.TranslateKeys(ctx, bytes.NewReader(req)); err != nil {
+	if buf, err := coord.API.TranslateKeys(ctx, bytes.NewReader(req)); err != nil {
 		t.Fatal(err)
 	} else {
 		var (
 			respKeys pilosa.TranslateKeysResponse
 			respIDs  pilosa.TranslateIDsResponse
 		)
-		if err = node0.API.Serializer.Unmarshal(buf, &respKeys); err != nil {
+		if err = other.API.Serializer.Unmarshal(buf, &respKeys); err != nil {
 			t.Fatal(err)
 		}
 		ids := respKeys.IDs
 
 		// translate ids
-		req, err = node3.API.Serializer.Marshal(&pilosa.TranslateIDsRequest{
+		req, err = other.API.Serializer.Marshal(&pilosa.TranslateIDsRequest{
 			Index: idx,
 			Field: fld,
 			IDs:   ids,
@@ -689,10 +690,10 @@ func TestTranslation_TranslateIDsOnCluster(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if buf, err = node3.API.TranslateIDs(ctx, bytes.NewReader(req)); err != nil {
+		if buf, err = other.API.TranslateIDs(ctx, bytes.NewReader(req)); err != nil {
 			t.Fatal(err)
 		}
-		if err = node3.API.Serializer.Unmarshal(buf, &respIDs); err != nil {
+		if err = other.API.Serializer.Unmarshal(buf, &respIDs); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(respIDs.Keys, keys) {
 			t.Fatalf("TranslateIDs(%+v): expected: %+v, got: %+v", ids, keys, respIDs.Keys)
@@ -734,7 +735,7 @@ func TestTranslation_Cluster_CreateFind(t *testing.T) {
 			for i, keys := range parts {
 				i, keys := i, keys
 				g.Go(func() error {
-					_, err := c.Nodes[i].API.CreateIndexKeys(ctx, "i", keys...)
+					_, err := c.GetNode(i).API.CreateIndexKeys(ctx, "i", keys...)
 					return err
 				})
 			}
@@ -753,7 +754,7 @@ func TestTranslation_Cluster_CreateFind(t *testing.T) {
 			}
 
 			// Obtain authoritative translations for the keys.
-			translations, err := c.Nodes[0].API.FindIndexKeys(ctx, "i", keyList...)
+			translations, err := c.GetCoordinator().API.FindIndexKeys(ctx, "i", keyList...)
 			if err != nil {
 				t.Errorf("obtaining authoritative translations: %v", err)
 				return
@@ -820,7 +821,7 @@ func TestTranslation_Cluster_CreateFind(t *testing.T) {
 			for i, keys := range parts {
 				i, keys := i, keys
 				g.Go(func() error {
-					_, err := c.Nodes[i].API.CreateFieldKeys(ctx, "i", "f", keys...)
+					_, err := c.GetNode(i).API.CreateFieldKeys(ctx, "i", "f", keys...)
 					return err
 				})
 			}
@@ -839,7 +840,7 @@ func TestTranslation_Cluster_CreateFind(t *testing.T) {
 			}
 
 			// Obtain authoritative translations for the keys.
-			translations, err := c.Nodes[0].API.FindFieldKeys(ctx, "i", "f", keyList...)
+			translations, err := c.GetCoordinator().API.FindFieldKeys(ctx, "i", "f", keyList...)
 			if err != nil {
 				t.Errorf("obtaining authoritative translations: %v", err)
 				return

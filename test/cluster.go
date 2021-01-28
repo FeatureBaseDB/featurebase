@@ -21,6 +21,7 @@ import (
 	"math"
 	"net"
 	"path"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -56,7 +57,7 @@ func (c *Cluster) Query(t testing.TB, index, query string) pilosa.QueryResponse 
 		t.Fatal("must have at least one node in cluster to query")
 	}
 
-	return c.Nodes[0].QueryAPI(t, &pilosa.QueryRequest{Index: index, Query: query})
+	return c.GetCoordinator().QueryAPI(t, &pilosa.QueryRequest{Index: index, Query: query})
 }
 
 // QueryHTTP executes a PQL query through the HTTP endpoint. It fails
@@ -68,7 +69,7 @@ func (c *Cluster) QueryHTTP(t testing.TB, index, query string) (string, error) {
 		t.Fatal("must have at least one node in cluster to query")
 	}
 
-	return c.Nodes[0].Query(t, index, "", query)
+	return c.GetCoordinator().Query(t, index, "", query)
 }
 
 // QueryGRPC executes a PQL query through the GRPC endpoint. It fails the
@@ -79,7 +80,7 @@ func (c *Cluster) QueryGRPC(t testing.TB, index, query string) *proto.TableRespo
 		t.Fatal("must have at least one node in cluster to query")
 	}
 
-	grpcClient, err := client.NewGRPCClient([]string{fmt.Sprintf("%s:%d", c.Nodes[0].Server.GRPCURI().Host, c.Nodes[0].Server.GRPCURI().Port)}, nil)
+	grpcClient, err := client.NewGRPCClient([]string{fmt.Sprintf("%s:%d", c.GetCoordinator().Server.GRPCURI().Host, c.GetCoordinator().Server.GRPCURI().Port)}, nil)
 	if err != nil {
 		t.Fatalf("getting GRPC client: %v", err)
 	}
@@ -92,12 +93,100 @@ func (c *Cluster) QueryGRPC(t testing.TB, index, query string) *proto.TableRespo
 	return tableResp
 }
 
-func (c *Cluster) GetNode(n int) *Command {
+// GetIdleNode gets the node at the given index. This method is used (instead of
+// `GetNode()`) when the cluster has yet to be started. In that case, etcd has
+// not assigned each node an ID, and therefore the nodes are not in their final,
+// sorted order. In other words, this method can only be used to retrieve a node
+// when order doesn't matter. An example is if you need to do something like
+// this:
+//   c.GetNode(0).Config.Cluster.ReplicaN = 2
+//   c.GetNode(1).Config.Cluster.ReplicaN = 2
+// In this example, the test needs the replication factor to be set to 2 before
+// starting; it's ok to reference each node by its index in the pre-sorted node
+// list. It's also safe to use this method after `MustRunCluster()` if the
+// cluster contains only one node.
+func (c *Cluster) GetIdleNode(n int) *Command {
 	return c.Nodes[n]
 }
 
+// GetNode gets the node at the given index; this method assumes the cluster has
+// already been started. Because the node IDs are assigned randomly, they can be
+// in an order that does not align with the test's expectations. For example, a
+// test might create a 3-node cluster and retrieve them using `GetNode(0)`,
+// `GetNode(1)`, and `GetNode(2)` respectively. But if the node IDs are `456`,
+// `123`, `789`, then we actually want `GetNode(0)` to return `c.Nodes[1]`, and
+// `GetNode(1)` to return `c.Nodes[0]`. This method looks at all the node IDs,
+// sorts them, and then returns the node that the test expects.
+func (c *Cluster) GetNode(n int) *Command {
+	// Put all the node IDs into a list to be sorted.
+	ids := make([]nodePlace, len(c.Nodes))
+	for i := range c.Nodes {
+		ids[i].id = c.Nodes[i].ID()
+		ids[i].idx = i
+	}
+
+	// Sort the list.
+	sort.SliceStable(ids, func(i, j int) bool {
+		return ids[i].id < ids[j].id
+	})
+
+	// Return the node which is at the given position in the sorted list.
+	return c.Nodes[ids[n].idx]
+}
+
+// GetCoordinator gets the node which has been determined to be the coordinator.
+// This used to be node0 in tests, but since implementing etcd, the coordinator
+// can be any node in the cluster, so we have to use this method in tests which
+// need to act on the coordinator.
+func (c *Cluster) GetCoordinator() *Command {
+	for _, n := range c.Nodes {
+		if n.IsCoordinator() {
+			return n
+		}
+	}
+	return nil
+}
+
+// GetNonCoordinator gets first first non-coordinator node in the list of nodes.
+func (c *Cluster) GetNonCoordinator() *Command {
+	for _, n := range c.Nodes {
+		if !n.IsCoordinator() {
+			return n
+		}
+	}
+	return nil
+}
+
+// GetNonCoordinators gets all nodes except the coordinator.
+func (c *Cluster) GetNonCoordinators() []*Command {
+	rtn := make([]*Command, 0)
+	for _, n := range c.Nodes {
+		if !n.IsCoordinator() {
+			rtn = append(rtn, n)
+		}
+	}
+	return rtn
+}
+
+// nodePlace represents a node's ID and its index into the c.Nodes slice.
+type nodePlace struct {
+	id  string
+	idx int
+}
+
 func (c *Cluster) GetHolder(n int) *Holder {
-	return &Holder{Holder: c.Nodes[n].Server.Holder()}
+	return &Holder{Holder: c.GetNode(n).Server.Holder()}
+}
+
+// GetCoordinatorHolder returns the Holder for the coordinator node.
+func (c *Cluster) GetCoordinatorHolder() *Holder {
+	return &Holder{Holder: c.GetCoordinator().Server.Holder()}
+}
+
+// GetNonCoordinatorHolder returns the Holder for the the first non-coordinator
+// node in the list of nodes.
+func (c *Cluster) GetNonCoordinatorHolder() *Holder {
+	return &Holder{Holder: c.GetNonCoordinator().Server.Holder()}
 }
 
 func (c *Cluster) Len() int {
@@ -119,7 +208,7 @@ func (c *Cluster) ImportBits(t testing.TB, index, field string, rowcols [][2]uin
 			rowIDs[i] = bit[0]
 			colIDs[i] = bit[1]
 		}
-		nodes, err := c.Nodes[0].API.ShardNodes(context.Background(), index, shard)
+		nodes, err := c.GetCoordinator().API.ShardNodes(context.Background(), index, shard)
 		if err != nil {
 			t.Fatalf("getting shard nodes: %v", err)
 		}
@@ -162,7 +251,7 @@ func (c *Cluster) ImportKeyKey(t testing.TB, index, field string, valAndRecKeys 
 		importRequest.RowKeys[i] = vk[0]
 		importRequest.ColumnKeys[i] = vk[1]
 	}
-	err := c.Nodes[0].API.Import(context.Background(), nil, importRequest)
+	err := c.GetCoordinator().API.Import(context.Background(), nil, importRequest)
 	if err != nil {
 		t.Fatalf("importing keykey data: %v", err)
 	}
@@ -192,7 +281,7 @@ func (c *Cluster) ImportTimeQuantumKey(t testing.TB, index, field string, entrie
 		importRequest.Timestamps[i] = entry.Ts
 
 	}
-	err := c.Nodes[0].API.Import(context.Background(), nil, importRequest)
+	err := c.GetCoordinator().API.Import(context.Background(), nil, importRequest)
 	if err != nil {
 		t.Fatalf("importing keykey data: %v", err)
 	}
@@ -218,7 +307,7 @@ func (c *Cluster) ImportIntKey(t testing.TB, index, field string, pairs []IntKey
 		importRequest.Values[i] = pair.Val
 		importRequest.ColumnKeys[i] = pair.Key
 	}
-	if err := c.Nodes[0].API.ImportValue(context.Background(), nil, importRequest); err != nil {
+	if err := c.GetCoordinator().API.ImportValue(context.Background(), nil, importRequest); err != nil {
 		t.Fatalf("importing IntKey data: %v", err)
 	}
 }
@@ -242,7 +331,7 @@ func (c *Cluster) ImportIntID(t testing.TB, index, field string, pairs []IntID) 
 		importRequest.Values[i] = pair.Val
 		importRequest.ColumnIDs[i] = pair.ID
 	}
-	if err := c.Nodes[0].API.ImportValue(context.Background(), nil, importRequest); err != nil {
+	if err := c.GetCoordinator().API.ImportValue(context.Background(), nil, importRequest); err != nil {
 		t.Fatalf("importing IntID data: %v", err)
 	}
 }
@@ -267,7 +356,7 @@ func (c *Cluster) ImportIDKey(t testing.TB, index, field string, pairs []KeyID) 
 		importRequest.RowIDs[i] = pair.ID
 		importRequest.ColumnKeys[i] = pair.Key
 	}
-	err := c.Nodes[0].API.Import(context.Background(), nil, importRequest)
+	err := c.GetCoordinator().API.Import(context.Background(), nil, importRequest)
 	if err != nil {
 		t.Fatalf("importing IDKey data: %v", err)
 	}
@@ -276,11 +365,11 @@ func (c *Cluster) ImportIDKey(t testing.TB, index, field string, pairs []KeyID) 
 // CreateField creates the index (if necessary) and field specified.
 func (c *Cluster) CreateField(t testing.TB, index string, iopts pilosa.IndexOptions, field string, fopts ...pilosa.FieldOption) *pilosa.Field {
 	t.Helper()
-	idx, err := c.Nodes[0].API.CreateIndex(context.Background(), index, iopts)
+	idx, err := c.GetCoordinator().API.CreateIndex(context.Background(), index, iopts)
 	if err != nil && !strings.Contains(err.Error(), "index already exists") {
 		t.Fatalf("creating index: %v", err)
 	} else if err != nil { // index exists
-		idx, err = c.Nodes[0].API.Index(context.Background(), index)
+		idx, err = c.GetCoordinator().API.Index(context.Background(), index)
 		if err != nil {
 			t.Fatalf("getting index: %v", err)
 		}
@@ -289,7 +378,7 @@ func (c *Cluster) CreateField(t testing.TB, index string, iopts pilosa.IndexOpti
 		t.Logf("existing index options:\n%v\ndon't match given opts:\n%v\n in pilosa/test.Cluster.CreateField", idx.Options(), iopts)
 	}
 
-	f, err := c.Nodes[0].API.CreateField(context.Background(), index, field, fopts...)
+	f, err := c.GetCoordinator().API.CreateField(context.Background(), index, field, fopts...)
 	// we'll assume the field doesn't exist because checking if the options
 	// match seems painful.
 	if err != nil {
@@ -364,6 +453,15 @@ func (c *Cluster) Close() error {
 	return nil
 }
 
+func (c *Cluster) CloseAndRemoveNonCoordinator() error {
+	for i, n := range c.Nodes {
+		if !n.IsCoordinator() {
+			return c.CloseAndRemove(i)
+		}
+	}
+	return errors.New("could not find non-coordinator node")
+}
+
 func (c *Cluster) CloseAndRemove(n int) error {
 	if n < 0 || n >= len(c.Nodes) {
 		return fmt.Errorf("close/remove from cluster: index %d out of range (len %d)", n, len(c.Nodes))
@@ -380,7 +478,7 @@ func (c *Cluster) AwaitCoordinatorState(expectedState string, timeout time.Durat
 	if len(c.Nodes) < 1 {
 		return errors.New("can't await coordinator state on an empty cluster")
 	}
-	onlyCoordinator := &Cluster{Nodes: c.Nodes[:1]}
+	onlyCoordinator := &Cluster{Nodes: []*Command{c.GetCoordinator()}}
 	return onlyCoordinator.AwaitState(expectedState, timeout)
 }
 

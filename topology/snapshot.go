@@ -68,9 +68,9 @@ func NewClusterSnapshot(noder Noder, hasher Hasher, replicas int) *ClusterSnapsh
 
 //////////////////////////////////////////////////////////////////////////////
 
-// shardToShardPartition returns the shard-partition that the given shard
+// ShardToShardPartition returns the shard-partition that the given shard
 // belongs to. NOTE: This is DIFFERENT from the key-partition.
-func (c *ClusterSnapshot) shardToShardPartition(index string, shard uint64) int {
+func (c *ClusterSnapshot) ShardToShardPartition(index string, shard uint64) int {
 	return dedupShardToShardPartition(index, shard, c.PartitionN)
 }
 
@@ -88,9 +88,14 @@ func dedupShardToShardPartition(index string, shard uint64, partitionN int) int 
 	return int(h.Sum64() % uint64(partitionN))
 }
 
-// keyToKeyPartition returns the key-partition that the given key belongs to.
+// IDToShardPartition returns the shard-partition that an id belongs to.
+func (c *ClusterSnapshot) IDToShardPartition(index string, id uint64) int {
+	return c.ShardToShardPartition(index, id/ShardWidth)
+}
+
+// KeyToKeyPartition returns the key-partition that the given key belongs to.
 // NOTE: The key-partition is DIFFERENT from the shard-partition.
-func (c *ClusterSnapshot) keyToKeyPartition(index, key string) int {
+func (c *ClusterSnapshot) KeyToKeyPartition(index, key string) int {
 	// Hash the bytes and mod by partition count.
 	h := fnv.New64a()
 	_, _ = h.Write([]byte(index))
@@ -100,12 +105,17 @@ func (c *ClusterSnapshot) keyToKeyPartition(index, key string) int {
 
 // ShardNodes returns a list of nodes that own a shard.
 func (c *ClusterSnapshot) ShardNodes(index string, shard uint64) []*Node {
-	return c.PartitionNodes(c.shardToShardPartition(index, shard))
+	return c.PartitionNodes(c.ShardToShardPartition(index, shard))
+}
+
+// OwnsShard returns true if a host owns a fragment.
+func (c *ClusterSnapshot) OwnsShard(nodeID string, index string, shard uint64) bool {
+	return Nodes(c.ShardNodes(index, shard)).ContainsID(nodeID)
 }
 
 // KeyNodes returns a list of nodes that own a key.
 func (c *ClusterSnapshot) KeyNodes(index, key string) []*Node {
-	return c.PartitionNodes(c.keyToKeyPartition(index, key))
+	return c.PartitionNodes(c.KeyToKeyPartition(index, key))
 }
 
 // PartitionNodes returns a list of nodes that own the given partition.
@@ -129,13 +139,25 @@ func (c *ClusterSnapshot) PartitionNodes(partitionID int) []*Node {
 // field keys. The primary could be any node in the cluster, but we arbitrarily
 // define it to be the node responsible for partition 0.
 func (c *ClusterSnapshot) PrimaryFieldTranslationNode() *Node {
-	return c.PrimaryPartitionNode(0)
+	// return c.PrimaryPartitionNode(0)
+	for _, n := range c.Nodes {
+		if n.IsCoordinator {
+			return n
+		}
+	}
+	return nil
 }
 
 // IsPrimaryFieldTranslationNode returns true if nodeID represents the primary
 // node responsible for field translation.
 func (c *ClusterSnapshot) IsPrimaryFieldTranslationNode(nodeID string) bool {
-	return c.PrimaryFieldTranslationNode().ID == nodeID
+	// return c.PrimaryFieldTranslationNode().ID == nodeID
+	for i := range c.Nodes {
+		if c.Nodes[i].ID == nodeID && c.Nodes[i].IsCoordinator {
+			return true
+		}
+	}
+	return false
 }
 
 // PrimaryPartitionNode returns the primary node of the given partition.
@@ -204,7 +226,7 @@ func (c *ClusterSnapshot) ReplicasForPrimary(primary int) (replicaNodeIDs, nonRe
 func (c *ClusterSnapshot) ContainsShards(index string, availableShards *roaring.Bitmap, node *Node) []uint64 {
 	var shards []uint64
 	_ = availableShards.ForEach(func(i uint64) error {
-		p := c.shardToShardPartition(index, i)
+		p := c.ShardToShardPartition(index, i)
 		// Determine the nodes for partition.
 		nodes := c.PartitionNodes(p)
 		for _, n := range nodes {
@@ -223,7 +245,7 @@ func (c *ClusterSnapshot) ContainsShards(index string, availableShards *roaring.
 // replication. So with 4 nodes and 3-way replication, each node has 3/4 of
 // the translation stores on it.
 func (c *ClusterSnapshot) PrimaryForColKeyTranslation(index, key string) (primary int) {
-	partitionID := c.keyToKeyPartition(index, key)
+	partitionID := c.KeyToKeyPartition(index, key)
 	return c.PrimaryNodeIndex(partitionID)
 }
 

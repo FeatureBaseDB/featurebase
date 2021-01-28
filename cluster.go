@@ -74,7 +74,8 @@ type nodeAction struct {
 
 // cluster represents a collection of nodes.
 type cluster struct { // nolint: maligned
-	noder topology.Noder
+	noder            topology.Noder
+	unprotectedNoder topology.Noder
 
 	id    string
 	Node  *topology.Node
@@ -161,8 +162,39 @@ func newCluster() *cluster {
 		confirmDownRetries: defaultConfirmDownRetries,
 		confirmDownSleep:   defaultConfirmDownSleep,
 	}
-	c.noder = c // TODO: this is temporary until etcd fully implements noder
+
+	// TODO: these are temporary until etcd fully implements noder
+	c.noder = c
+	c.unprotectedNoder = &unprotectedCluster{
+		c: c,
+	}
+
 	return c
+}
+
+// unprotectedCluster is a temporary struct used in cases of NewClusterSnapshot
+// which are inside of a c.mu.Lock(). These cases can't use the normal c.noder
+// (which is also temporary), because c.Nodes() aquires c.mu.Lock() as well.
+type unprotectedCluster struct {
+	c *cluster
+}
+
+// Nodes returns a copy of the slice of nodes in the cluster.
+func (uc *unprotectedCluster) Nodes() []*topology.Node {
+	ret := make([]*topology.Node, len(uc.c.nodes))
+	copy(ret, uc.c.nodes)
+	return ret
+}
+
+// SetNodes implements the Noder interface.
+func (uc *unprotectedCluster) SetNodes(nodes []*topology.Node) {}
+
+// AppendNode implements the Noder interface.
+func (uc *unprotectedCluster) AppendNode(node *topology.Node) {}
+
+// RemoveNode implements the Noder interface.
+func (uc *unprotectedCluster) RemoveNode(nodeID string) bool {
+	return false
 }
 
 // initializeAntiEntropy is called by the anti entropy routine when it starts.
@@ -190,16 +222,6 @@ func (c *cluster) abortAntiEntropy() {
 	if c.abortAntiEntropyCh != nil {
 		c.abortAntiEntropyCh <- struct{}{}
 	}
-}
-
-// node gets the Node for the ID associated with this instance of cluster.
-func (c *cluster) node() *topology.Node {
-	for _, n := range c.Nodes() {
-		if n.ID == c.disCo.ID() {
-			return n
-		}
-	}
-	return nil
 }
 
 func (c *cluster) coordinatorNode() *topology.Node {
@@ -676,9 +698,12 @@ func (c *cluster) fragsByHost(idx *Index) fragsByHost {
 // by creating every combination of field/view specified in `fieldViews` up
 // for the given set of shards with data.
 func (c *cluster) fragCombos(idx string, availableShards *roaring.Bitmap, fieldViews viewsByField) fragsByHost {
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	snap := topology.NewClusterSnapshot(c.unprotectedNoder, c.Hasher, c.ReplicaN)
+
 	t := make(fragsByHost)
 	_ = availableShards.ForEach(func(i uint64) error {
-		nodes := c.shardNodes(idx, i)
+		nodes := snap.ShardNodes(idx, i)
 		for _, n := range nodes {
 			// for each field/view combination:
 			for field, views := range fieldViews {
@@ -838,9 +863,13 @@ func (c *cluster) translationNodes(to *cluster) (map[string][]*translationResize
 		m[n.ID] = nil
 	}
 
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	fSnap := topology.NewClusterSnapshot(c.unprotectedNoder, c.Hasher, c.ReplicaN)
+	toSnap := topology.NewClusterSnapshot(to.unprotectedNoder, c.Hasher, to.ReplicaN)
+
 	for pid := 0; pid < c.partitionN; pid++ {
-		fNodes := c.partitionNodes(pid)
-		tNodes := to.partitionNodes(pid)
+		fNodes := fSnap.PartitionNodes(pid)
+		tNodes := toSnap.PartitionNodes(pid)
 
 		// For `to` cluster, we include all nodes containing a
 		// replica for the partition. The source for each replica
@@ -898,9 +927,12 @@ func (c *cluster) shardDistributionByIndex(indexName string) map[string]map[stri
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	snap := topology.NewClusterSnapshot(c.noder, c.Hasher, c.ReplicaN)
+
 	for _, shard := range available {
-		p := c.shardToShardPartition(indexName, shard)
-		nodes := c.partitionNodes(p)
+		p := snap.ShardToShardPartition(indexName, shard)
+		nodes := snap.PartitionNodes(p)
 		dist[nodes[0].ID]["primary-shards"] = append(dist[nodes[0].ID]["primary-shards"], shard)
 		for k := 1; k < len(nodes); k++ {
 			dist[nodes[k].ID]["replica-shards"] = append(dist[nodes[k].ID]["replica-shards"], shard)
@@ -941,11 +973,6 @@ func keyToKeyPartition(index, key string, partitionN int) int {
 	return int(h.Sum64() % uint64(partitionN))
 }
 
-// idPartition returns the partition that an id belongs to.
-func (c *cluster) idPartition(index string, id uint64) int {
-	return shardToShardPartition(index, id/ShardWidth, c.partitionN)
-}
-
 // ShardNodes returns a list of nodes that own a fragment. Safe for concurrent use.
 func (c *cluster) ShardNodes(index string, shard uint64) []*topology.Node {
 	c.mu.RLock()
@@ -968,13 +995,6 @@ func (c *cluster) KeyNodes(index, key string) []*topology.Node {
 // keyNodes returns a list of nodes that own a key. unprotected
 func (c *cluster) keyNodes(index, key string) []*topology.Node {
 	return c.partitionNodes(c.Topology.KeyPartition(index, key))
-}
-
-// ownsShard returns true if a host owns a fragment.
-func (c *cluster) ownsShard(nodeID string, index string, shard uint64) bool {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return topology.Nodes(c.shardNodes(index, shard)).ContainsID(nodeID)
 }
 
 // partitionNodes returns a list of nodes that own a partition. unprotected.
@@ -1148,6 +1168,7 @@ func (c *cluster) setup() error {
 	return nil
 }
 
+// open is only used in internal tests.
 func (c *cluster) open() error {
 	err := c.setup()
 	if err != nil {
@@ -1475,10 +1496,14 @@ func (c *cluster) unprotectedGenerateResizeJobByAction(nodeAction nodeAction) (*
 			j.IDs[node.ID] = true
 			continue
 		}
+
+		// Create a snapshot of the cluster to use for node/partition calculations.
+		snap := topology.NewClusterSnapshot(c.unprotectedNoder, c.Hasher, c.ReplicaN)
+
 		instr := &ResizeInstruction{
 			JobID:              j.ID,
 			Node:               toCluster.unprotectedNodeByID(node.ID),
-			Coordinator:        c.unprotectedCoordinatorNode(),
+			Coordinator:        snap.PrimaryFieldTranslationNode(),
 			Sources:            fragmentSourcesByNode[node.ID],
 			TranslationSources: translationSourcesByNode[node.ID],
 			NodeStatus:         c.nodeStatus(), // Include the NodeStatus in order to ensure that schema and availableShards are in sync on the receiving node.
@@ -1499,7 +1524,9 @@ func (c *cluster) completeCurrentJob(state string) error {
 }
 
 func (c *cluster) unprotectedCompleteCurrentJob(state string) error {
-	if !c.unprotectedIsCoordinator() {
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	snap := topology.NewClusterSnapshot(c.unprotectedNoder, c.Hasher, c.ReplicaN)
+	if !snap.IsPrimaryFieldTranslationNode(c.Node.ID) {
 		return ErrNodeNotCoordinator
 	}
 	if c.currentJob == nil {
@@ -1661,7 +1688,6 @@ func (c *cluster) followResizeInstruction(instr *ResizeInstruction) error {
 }
 
 func (c *cluster) markResizeInstructionComplete(complete *ResizeInstructionComplete) error {
-
 	j := c.job(complete.JobID)
 
 	// Abort the job if an error exists in the complete object.
@@ -2423,36 +2449,24 @@ func (c *cluster) unprotectedPrimaryReplicaNode() *topology.Node {
 	return c.nodes[pos-1]
 }
 
-// setStatic is unprotected, but only called before the cluster has been started
-// (and therefore not concurrently).
-func (c *cluster) setStatic(hosts []string) error {
-	c.Static = true
-	c.Coordinator = c.Node.ID
-	for _, address := range hosts {
-		uri, err := pnet.NewURIFromAddress(address)
-		if err != nil {
-			return errors.Wrap(err, "getting URI")
-		}
-		c.nodes = append(c.nodes, &topology.Node{URI: *uri})
-	}
-	return nil
-}
-
 // translateFieldKeys is basically a wrapper around
 // field.TranslateStore().TranslateKey(key), but in
 // the case where the local node is not coordinator, then this method will forward the translation
 // request to the coordinator.
 func (c *cluster) translateFieldKeys(ctx context.Context, field *Field, keys []string, writable bool) (ids []uint64, err error) {
-	coordinator := c.coordinatorNode()
-	if coordinator == nil {
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	snap := topology.NewClusterSnapshot(c.noder, c.Hasher, c.ReplicaN)
+
+	primary := snap.PrimaryFieldTranslationNode()
+	if primary == nil {
 		return nil, errors.Errorf("translating field(%s/%s) keys(%v) - cannot find coordinator node", field.Index(), field.Name(), keys)
 	}
 
-	if c.Node.ID == coordinator.ID {
+	if c.Node.ID == primary.ID {
 		ids, err = field.TranslateStore().TranslateKeys(keys, writable)
 	} else {
 		// If it's writable, then forward the request to the coordinator.
-		ids, err = c.InternalClient.TranslateKeysNode(ctx, &coordinator.URI, field.Index(), field.Name(), keys, writable)
+		ids, err = c.InternalClient.TranslateKeysNode(ctx, &primary.URI, field.Index(), field.Name(), keys, writable)
 	}
 
 	if err != nil {
@@ -2470,7 +2484,7 @@ func (c *cluster) findFieldKeys(ctx context.Context, field *Field, keys ...strin
 	}
 
 	if !field.Keys() {
-		return nil, errors.Wrap(ErrTranslatingKeyNotFound, "field is not keyed")
+		return nil, errors.Wrap(ErrTranslatingKeyNotFound, "field is not keyed 1")
 	}
 
 	// Attempt to find the keys locally.
@@ -2533,7 +2547,7 @@ func (c *cluster) createFieldKeys(ctx context.Context, field *Field, keys ...str
 	}
 
 	if !field.Keys() {
-		return nil, errors.Wrap(ErrTranslatingKeyNotFound, "field is not keyed")
+		return nil, errors.Wrap(ErrTranslatingKeyNotFound, "field is not keyed 2")
 	}
 
 	// The coordinator is the only node that can create field keys, since it owns the authoritative copy.
@@ -2612,15 +2626,18 @@ func (c *cluster) translateFieldIDs(field *Field, ids map[uint64]struct{}) (map[
 }
 
 func (c *cluster) translateFieldListIDs(field *Field, ids []uint64) (keys []string, err error) {
-	coordinator := c.coordinatorNode()
-	if coordinator == nil {
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	snap := topology.NewClusterSnapshot(c.noder, c.Hasher, c.ReplicaN)
+
+	primary := snap.PrimaryFieldTranslationNode()
+	if primary == nil {
 		return nil, errors.Errorf("translating field(%s/%s) ids(%v) - cannot find coordinator node", field.Index(), field.Name(), ids)
 	}
 
-	if c.Node.ID == coordinator.ID {
+	if c.Node.ID == primary.ID {
 		keys, err = field.TranslateStore().TranslateIDs(ids)
 	} else {
-		keys, err = c.InternalClient.TranslateIDsNode(context.Background(), &coordinator.URI, field.Index(), field.Name(), ids)
+		keys, err = c.InternalClient.TranslateIDsNode(context.Background(), &primary.URI, field.Index(), field.Name(), ids)
 	}
 	if err != nil {
 		return nil, errors.Wrapf(err, "translating field(%s/%s) ids(%v)", field.Index(), field.Name(), ids)
@@ -2693,10 +2710,13 @@ func (c *cluster) translateIndexKeySet(ctx context.Context, indexName string, ke
 		return nil, ErrIndexNotFound
 	}
 
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	snap := topology.NewClusterSnapshot(c.noder, c.Hasher, c.ReplicaN)
+
 	// Split keys by partition.
 	keysByPartition := make(map[int][]string, c.partitionN)
 	for key := range keySet {
-		partitionID := c.Topology.KeyPartition(indexName, key)
+		partitionID := snap.KeyToKeyPartition(indexName, key)
 		keysByPartition[partitionID] = append(keysByPartition[partitionID], key)
 	}
 
@@ -2710,7 +2730,7 @@ func (c *cluster) translateIndexKeySet(ctx context.Context, indexName string, ke
 		g.Go(func() (err error) {
 			var ids []uint64
 
-			primary := c.primaryPartitionNode(partitionID)
+			primary := snap.PrimaryPartitionNode(partitionID)
 			if primary == nil {
 				return errors.Errorf("translating index(%s) keys(%v) on partition(%d) - cannot find primary node", indexName, keys, partitionID)
 			}
@@ -2973,10 +2993,13 @@ func (c *cluster) translateIndexIDSet(ctx context.Context, indexName string, idS
 		return nil, newNotFoundError(ErrIndexNotFound, indexName)
 	}
 
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	snap := topology.NewClusterSnapshot(c.noder, c.Hasher, c.ReplicaN)
+
 	// Split ids by partition.
 	idsByPartition := make(map[int][]uint64, c.partitionN)
 	for id := range idSet {
-		partitionID := c.idPartition(indexName, id)
+		partitionID := snap.IDToShardPartition(indexName, id)
 		idsByPartition[partitionID] = append(idsByPartition[partitionID], id)
 	}
 
@@ -2990,7 +3013,7 @@ func (c *cluster) translateIndexIDSet(ctx context.Context, indexName string, idS
 		g.Go(func() (err error) {
 			var keys []string
 
-			primary := c.primaryPartitionNode(partitionID)
+			primary := snap.PrimaryPartitionNode(partitionID)
 			if primary == nil {
 				return errors.Errorf("translating index(%s) ids(%v) on partition(%d) - cannot find primary node", indexName, ids, partitionID)
 			}

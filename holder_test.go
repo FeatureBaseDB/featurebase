@@ -432,10 +432,10 @@ func TestHolder_DeleteIndex(t *testing.T) {
 // Ensure holder can sync with a remote holder.
 func TestHolderSyncer_SyncHolder(t *testing.T) {
 	c := test.MustNewCluster(t, 2)
-	c.GetNode(0).Config.Cluster.ReplicaN = 2
-	c.GetNode(0).Config.AntiEntropy.Interval = 0
-	c.GetNode(1).Config.Cluster.ReplicaN = 2
-	c.GetNode(1).Config.AntiEntropy.Interval = 0
+	c.GetIdleNode(0).Config.Cluster.ReplicaN = 2
+	c.GetIdleNode(0).Config.AntiEntropy.Interval = 0
+	c.GetIdleNode(1).Config.Cluster.ReplicaN = 2
+	c.GetIdleNode(1).Config.AntiEntropy.Interval = 0
 	err := c.Start()
 
 	if err != nil {
@@ -544,12 +544,12 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 // the row boundaries of the block.
 func TestHolderSyncer_BlockIteratorLimits(t *testing.T) {
 	c := test.MustNewCluster(t, 3)
-	c.GetNode(0).Config.Cluster.ReplicaN = 3
-	c.GetNode(0).Config.AntiEntropy.Interval = 0
-	c.GetNode(1).Config.Cluster.ReplicaN = 3
-	c.GetNode(1).Config.AntiEntropy.Interval = 0
-	c.GetNode(2).Config.Cluster.ReplicaN = 3
-	c.GetNode(2).Config.AntiEntropy.Interval = 0
+	c.GetIdleNode(0).Config.Cluster.ReplicaN = 3
+	c.GetIdleNode(0).Config.AntiEntropy.Interval = 0
+	c.GetIdleNode(1).Config.Cluster.ReplicaN = 3
+	c.GetIdleNode(1).Config.AntiEntropy.Interval = 0
+	c.GetIdleNode(2).Config.Cluster.ReplicaN = 3
+	c.GetIdleNode(2).Config.AntiEntropy.Interval = 0
 	err := c.Start()
 	if err != nil {
 		t.Fatalf("starting cluster: %v", err)
@@ -601,10 +601,12 @@ func TestHolderSyncer_BlockIteratorLimits(t *testing.T) {
 // Ensure holder correctly handles clears during block sync.
 func TestHolderSyncer_Clears(t *testing.T) {
 	c := test.MustNewCluster(t, 3)
-	c.GetNode(0).Config.Cluster.ReplicaN = 3
-	c.GetNode(0).Config.AntiEntropy.Interval = 0
-	c.GetNode(1).Config.Cluster.ReplicaN = 3
-	c.GetNode(1).Config.AntiEntropy.Interval = 0
+	c.GetIdleNode(0).Config.Cluster.ReplicaN = 3
+	c.GetIdleNode(0).Config.AntiEntropy.Interval = 0
+	c.GetIdleNode(1).Config.Cluster.ReplicaN = 3
+	c.GetIdleNode(1).Config.AntiEntropy.Interval = 0
+	c.GetIdleNode(2).Config.Cluster.ReplicaN = 3
+	c.GetIdleNode(2).Config.AntiEntropy.Interval = 0
 	err := c.Start()
 	if err != nil {
 		t.Fatalf("starting cluster: %v", err)
@@ -650,10 +652,10 @@ func TestHolderSyncer_Clears(t *testing.T) {
 // Ensure holder can sync time quantum views with a remote holder.
 func TestHolderSyncer_TimeQuantum(t *testing.T) {
 	c := test.MustNewCluster(t, 2)
-	c.GetNode(0).Config.Cluster.ReplicaN = 2
-	c.GetNode(0).Config.AntiEntropy.Interval = 0
-	c.GetNode(1).Config.Cluster.ReplicaN = 2
-	c.GetNode(1).Config.AntiEntropy.Interval = 0
+	c.GetIdleNode(0).Config.Cluster.ReplicaN = 2
+	c.GetIdleNode(0).Config.AntiEntropy.Interval = 0
+	c.GetIdleNode(1).Config.Cluster.ReplicaN = 2
+	c.GetIdleNode(1).Config.AntiEntropy.Interval = 0
 	err := c.Start()
 	if err != nil {
 		t.Fatalf("starting cluster: %v", err)
@@ -703,10 +705,10 @@ func TestHolderSyncer_TimeQuantum(t *testing.T) {
 func TestHolderSyncer_IntField(t *testing.T) {
 	t.Run("BasicSync", func(t *testing.T) {
 		c := test.MustNewCluster(t, 2)
-		c.GetNode(0).Config.Cluster.ReplicaN = 2
-		c.GetNode(0).Config.AntiEntropy.Interval = 0
-		c.GetNode(1).Config.Cluster.ReplicaN = 2
-		c.GetNode(1).Config.AntiEntropy.Interval = 0
+		c.GetIdleNode(0).Config.Cluster.ReplicaN = 2
+		c.GetIdleNode(0).Config.AntiEntropy.Interval = 0
+		c.GetIdleNode(1).Config.Cluster.ReplicaN = 2
+		c.GetIdleNode(1).Config.AntiEntropy.Interval = 0
 		err := c.Start()
 		if err != nil {
 			t.Fatalf("starting cluster: %v", err)
@@ -714,7 +716,6 @@ func TestHolderSyncer_IntField(t *testing.T) {
 		defer c.Close()
 
 		var idx0 *pilosa.Index
-		_ = idx0
 		idx0, err = c.GetNode(0).API.CreateIndex(context.Background(), "i", pilosa.IndexOptions{})
 		_ = idx0
 		if err != nil {
@@ -761,10 +762,10 @@ func TestHolderSyncer_IntField(t *testing.T) {
 
 	t.Run("MultiShard", func(t *testing.T) {
 		c := test.MustNewCluster(t, 2)
-		c.GetNode(0).Config.Cluster.ReplicaN = 2
-		c.GetNode(0).Config.AntiEntropy.Interval = 0
-		c.GetNode(1).Config.Cluster.ReplicaN = 2
-		c.GetNode(1).Config.AntiEntropy.Interval = 0
+		c.GetIdleNode(0).Config.Cluster.ReplicaN = 2
+		c.GetIdleNode(0).Config.AntiEntropy.Interval = 0
+		c.GetIdleNode(1).Config.Cluster.ReplicaN = 2
+		c.GetIdleNode(1).Config.AntiEntropy.Interval = 0
 		err := c.Start()
 		if err != nil {
 			t.Fatalf("starting cluster: %v", err)

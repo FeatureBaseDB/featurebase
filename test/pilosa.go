@@ -192,6 +192,9 @@ func (m *Command) URL() string { return m.API.Node().URI.String() }
 // ID returns the node ID used by the running program.
 func (m *Command) ID() string { return m.API.Node().ID }
 
+// IsCoordinator returns true if this is the coordinator.
+func (m *Command) IsCoordinator() bool { return m.API.Node().IsCoordinator }
+
 // Client returns a client to connect to the program.
 func (m *Command) Client() *http.InternalClient {
 	return m.Server.InternalClient().(*http.InternalClient)
