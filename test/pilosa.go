@@ -337,6 +337,33 @@ func CheckGroupBy(t *testing.T, expected, results []pilosa.GroupCount) {
 	}
 }
 
+// CheckGroupByOnKey is like CheckGroupBy, but it doen't enforce a match on the GroupBy.Group.RowID value.
+// In cases where the Group has a RowKey, then the value of RowID is not consistently assigned. Instead,
+// it depends on the order of key translation IDs based on shard allocation to the
+func CheckGroupByOnKey(t *testing.T, expected, results []pilosa.GroupCount) {
+	t.Helper()
+	if len(results) != len(expected) {
+		t.Fatalf("number of groupings mismatch:\n got:%+v\nwant:%+v\n", results, expected)
+	}
+	for i, result := range results {
+		exp := expected[i]
+		if len(exp.Group) != len(result.Group) {
+			t.Fatalf("number of groups within GroupCount mismatch:\n got:%+v\nwant:%+v\n", result, exp)
+		}
+		if exp.Count != result.Count {
+			t.Fatalf("GroupCount count mismatch:\n got:%+v\nwant:%+v\n", result, exp)
+		}
+		if exp.Agg != result.Agg {
+			t.Fatalf("GroupCount aggregate mismatch:\n got:%+v\nwant:%+v\n", result, exp)
+		}
+		for j, grp := range result.Group {
+			if grp.Field != exp.Group[j].Field || grp.RowKey != exp.Group[j].RowKey {
+				t.Fatalf("GroupCount group value mismatch:\n got:%+v\nwant:%+v\n", result, exp)
+			}
+		}
+	}
+}
+
 // httpResponse is a wrapper for http.Response that holds the Body as a string.
 type httpResponse struct {
 	*gohttp.Response
