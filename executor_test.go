@@ -5397,6 +5397,19 @@ func TestExecutor_ForeignIndex(t *testing.T) {
 		pilosa.OptFieldKeys(),
 	)
 
+	// stepchild/other field needs to have usesKeys=true
+	crashSchemaJson := `{"indexes": [{"name": "stepparent","createdAt": 1611247966371721700,"options": {"keys": true,"trackExistence": true},"shardWidth": 1048576},{"name": "stepchild","createdAt": 1611247953796662800,"options": {"keys": true,"trackExistence": true},"shardWidth": 1048576,"fields": [{"name": "parent_id","createdAt": 1611247953797265700,"options": {"type": "int","base": 0,"bitDepth": 28,"min": -9223372036854776000,"max": 9223372036854776000,"keys": false,"foreignIndex": "stepparent"}},{"name": "other","createdAt": 1611247953796814000,"options": {"type": "int","base": 0,"bitDepth": 17,"min": -9223372036854776000,"max": 9223372036854776000,"keys": true,"foreignIndex": ""}}]}]}`
+
+	crashSchema := &pilosa.Schema{}
+	err := json.Unmarshal([]byte(crashSchemaJson), &crashSchema)
+	if err != nil {
+		t.Fatalf("json unmarshall: %v", err)
+	}
+	err = c.GetNode(0).API.ApplySchema(context.Background(), crashSchema, false)
+	if err != nil {
+		t.Fatalf("applying JSON schema: %v", err)
+	}
+
 	// Populate parent data.
 	c.Query(t, "parent", fmt.Sprintf(`
 			Set("one", general=1)
@@ -5440,6 +5453,12 @@ func TestExecutor_ForeignIndex(t *testing.T) {
 	row := c.Query(t, "child", `Distinct(index="child", field="parent_set_id")`).Results[0].(*pilosa.Row)
 	if !sameStringSlice(row.Keys, []string{"one", "two", "twenty-one"}) {
 		t.Fatalf("unexpected keys: %v", row.Keys)
+	}
+
+	crash := c.Query(t, "stepchild", `Distinct(Row(parent_id=3), field=other)`).Results[0].(pilosa.SignedRow)
+	if !sameStringSlice(crash.Pos.Keys, []string{}) {
+		// empty result; error condition does not require data
+		t.Fatalf("unexpected columns: %v", crash.Pos.Keys)
 	}
 
 	eq := c.Query(t, "child", `Row(parent_id=="one")`).Results[0].(*pilosa.Row)
