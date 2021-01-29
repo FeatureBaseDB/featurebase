@@ -25,14 +25,21 @@ for TYPE in row row-bsi row-range count intersect union difference xor groupby t
 do
 	WORKFLOW_PATH="${BASH_SOURCE%/*}/etc/gloat/query.${TYPE}.yml"
 	WORKFLOW_NAME="$(gloat workflow name $WORKFLOW_PATH)"
-	TITLE="$WORKFLOW_NAME, $DATE ($SHA)"
-
+	
 	# Execute RBF/Roaring benchmark.
+	STARTTIME=$(date +%s)
 	RBF_PATH=gloat/data/query/${TYPE}/rbf/${DATE}.tar.gz
 	STORAGE_BACKEND=rbf gloat run -v -o "$RBF_PATH" $WORKFLOW_PATH
+	RBF_ELAPSED=$(($(date +%s) - $STARTTIME))
+	RBF_LATENCY=$(gloat metric -n -name request_avg_latency "$RBF_PATH")
 
+	STARTTIME=$(date +%s)
 	ROARING_PATH=gloat/data/query/${TYPE}/roaring/${DATE}.tar.gz
 	STORAGE_BACKEND=roaring gloat run -v -o "$ROARING_PATH" $WORKFLOW_PATH
+	ROARING_ELAPSED=$(($(date +%s) - $STARTTIME))
+	ROARING_LATENCY=$(gloat metric -n -name request_avg_latency "$ROARING_PATH")
+
+	TITLE="$WORKFLOW_NAME, $DATE ($SHA) elapsed rbf=$RBF_ELAPSEDroaring=$ROARING_ELAPSED> latency rbf=$RBF_LATENCY roaring=$ROARING_LATENCY"
 
 	# Generate graph from results.
 	gloat graph -layout 2,5 -size 5120,820 -title "$TITLE" -name utime,stime,heap_alloc,heap_inuse,heap_objects,num_gc,rchar,wchar,syscr,syscw -series rbf,roaring -o /tmp/output.png $RBF_PATH $ROARING_PATH

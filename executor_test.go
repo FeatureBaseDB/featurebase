@@ -5517,7 +5517,7 @@ func TestExecutor_Execute_DistinctFailure(t *testing.T) {
 
 func TestExecutor_Execute_GroupBy(t *testing.T) {
 	groupByTest := func(t *testing.T, clusterSize int) {
-		c := test.MustRunCluster(t, 1)
+		c := test.MustRunCluster(t, clusterSize)
 		defer c.Close()
 		c.CreateField(t, "i", pilosa.IndexOptions{}, "general")
 		c.CreateField(t, "i", pilosa.IndexOptions{}, "sub")
@@ -5924,7 +5924,7 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 		})
 
 	}
-	for size := range []int{1, 3} {
+	for _, size := range []int{1, 3} {
 		t.Run(fmt.Sprintf("%d_nodes", size), func(t *testing.T) {
 			groupByTest(t, size)
 		})
