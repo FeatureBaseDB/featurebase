@@ -23,7 +23,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
-	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
@@ -122,8 +121,7 @@ func OptCommandConfig(config *Config) CommandOption {
 	return func(c *Command) error {
 		defer c.Config.MustValidate()
 		if c.Config != nil {
-			c.Config.DisCo = config.DisCo
-			fmt.Printf("setting c.ConfigDisCo to '%#v'", config.DisCo)
+			c.Config.Etcd = config.Etcd
 			return nil
 		}
 		c.Config = config
@@ -395,16 +393,16 @@ func (m *Command) SetupServer() error {
 		coordinatorOpt = pilosa.OptServerIsCoordinator(true)
 	}
 
-	// If a DisCo.Dir is not provided, nest a default under the pilosa data dir.
-	if m.Config.DisCo.Dir == "" {
+	// If an Etcd.Dir is not provided, nest a default under the pilosa data dir.
+	if m.Config.Etcd.Dir == "" {
 		path, err := expandDirName(m.Config.DataDir)
 		if err != nil {
 			return errors.Wrapf(err, "expanding directory name: %s", m.Config.DataDir)
 		}
-		m.Config.DisCo.Dir = filepath.Join(path, pilosa.DefaultDiscoDir)
+		m.Config.Etcd.Dir = filepath.Join(path, pilosa.DefaultDiscoDir)
 	}
 
-	e := petcd.NewEtcd(m.Config.DisCo, m.Config.Cluster.ReplicaN)
+	e := petcd.NewEtcd(m.Config.Etcd, m.Config.Cluster.ReplicaN)
 	discoOpt := pilosa.OptServerDisCo(e, e, e, e, e, e, e)
 
 	serverOptions := []pilosa.ServerOption{
@@ -583,8 +581,8 @@ func (m *Command) Close() error {
 		}
 
 		// prevent the closed sockets from being re-injected into etcd.
-		m.Config.DisCo.LPeerSocket = nil
-		m.Config.DisCo.LClientSocket = nil
+		m.Config.Etcd.LPeerSocket = nil
+		m.Config.Etcd.LClientSocket = nil
 
 		err := eg.Wait()
 		_ = testhook.Closed(pilosa.NewAuditor(), m, nil)

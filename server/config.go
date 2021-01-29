@@ -130,8 +130,8 @@ type Config struct {
 		LongQueryTime toml.Duration `toml:"long-query-time"`
 	} `toml:"cluster"`
 
-	// DisCo config is based on embedded etcd.
-	DisCo petcd.Options `toml:"disco"`
+	// Etcd config is based on embedded etcd.
+	Etcd petcd.Options `toml:"etcd"`
 
 	LongQueryTime toml.Duration `toml:"long-query-time"`
 	// Gossip config is based around memberlist.Config.
@@ -225,24 +225,24 @@ type Config struct {
 // We disallow zero because the tests need to be using from the pre-allocated
 // block of ports maintained by the pilosa/test/port port-mapper.
 func (c *Config) MustValidate() {
-	err := c.Validate()
+	err := c.validate()
 	if err != nil {
 		panic(err)
 	}
 }
 
-func (c *Config) Validate() error {
-	fmt.Printf("Validate() called on Config = '%#v'\n", c)
+// validate ...
+func (c *Config) validate() error {
 	hostPort := []string{
 		"Bind", c.Bind, // :10101
 		"BindGRPC", c.BindGRPC, // :20101
 		"Advertise", c.Advertise, //  on hp = 'http://localhost:63002'
 		"AdvertiseGRPC", c.AdvertiseGRPC, //  on hp = 'http://localhost:63003'
-		"DisCo.LClientURL", c.DisCo.LClientURL, //  on hp = ':14000'
-		//c.DisCo.AClientURL, // hardcoded to same as LClientURL
-		"DisCo.LPeerURL", c.DisCo.LPeerURL, // ":"
-		//c.DisCo.APeerURL, // hardcoded to same as LPeerURL
-		"DisCo.ClusterURL", c.DisCo.ClusterURL,
+		"Etcd.LClientURL", c.Etcd.LClientURL, //  on hp = ':14000'
+		//c.Etcd.AClientURL, // hardcoded to same as LClientURL
+		"Etcd.LPeerURL", c.Etcd.LPeerURL, // ":"
+		//c.Etcd.APeerURL, // hardcoded to same as LPeerURL
+		"Etcd.ClusterURL", c.Etcd.ClusterURL,
 		"Gossip.Port", fmt.Sprintf(":%v", c.Gossip.Port),
 		"Gossip.AdvertisePort", fmt.Sprintf(":%v", c.Gossip.AdvertisePort),
 		"Postgres.Bind", c.Postgres.Bind,
@@ -265,7 +265,6 @@ func (c *Config) Validate() error {
 			continue
 		}
 
-		fmt.Printf(" on name = '%v', hp = '%v'\n", name, hp)
 		hp = strings.TrimPrefix(hp, "http://")
 		hp = strings.TrimPrefix(hp, "https://")
 		splt := strings.Split(hp, ":")
@@ -356,13 +355,13 @@ func NewConfig() *Config {
 	c.Postgres.WriteTimeout = toml.Duration(10 * time.Second)
 	// we don't really need a connection limit
 
-	c.DisCo.AClientURL = "http://localhost:10301"
-	c.DisCo.LClientURL = "http://localhost:10301"
-	c.DisCo.APeerURL = "http://localhost:10401"
-	c.DisCo.LPeerURL = "http://localhost:10401"
-	c.DisCo.Dir = ""
-	c.DisCo.Name = "nodeName"
-	c.DisCo.ClusterName = "clusterName"
+	c.Etcd.AClientURL = "http://localhost:10301"
+	c.Etcd.LClientURL = "http://localhost:10301"
+	c.Etcd.APeerURL = "http://localhost:10401"
+	c.Etcd.LPeerURL = "http://localhost:10401"
+	c.Etcd.Dir = ""
+	c.Etcd.Name = "nodeName"
+	c.Etcd.ClusterName = "clusterName"
 
 	return c
 }

@@ -68,7 +68,7 @@ func GenPortsConfig(ports []Ports) []*server.Config {
 				Port: fmt.Sprint(ports[i].Gossip),
 			},
 			BindGRPC: fmt.Sprintf(":%d", ports[i].Grpc),
-			DisCo: etcd.Options{
+			Etcd: etcd.Options{
 				Name:          name,
 				Dir:           discoDir,
 				ClusterName:   "bartholemuuuuu",
@@ -83,11 +83,11 @@ func GenPortsConfig(ports []Ports) []*server.Config {
 		}
 
 		clusterURLs[i] = fmt.Sprintf("%s=%s", name, lPeerURL)
-		fmt.Printf("\ndebug test/disco.go: on i=%v, GenPortsConfig Gossip: %v, DisCo.Client: %v, DisCo.Peer: %v, BindGRPC: %v\n",
+		fmt.Printf("\ndebug test/disco.go: on i=%v, GenPortsConfig Gossip: %v, Etcd.Client: %v, Etcd.Peer: %v, BindGRPC: %v\n",
 			i, ports[i].Gossip, portC, portP, ports[i].Grpc)
 	}
 	for i := range cfgs {
-		cfgs[i].DisCo.InitCluster = strings.Join(clusterURLs, ",")
+		cfgs[i].Etcd.InitCluster = strings.Join(clusterURLs, ",")
 	}
 
 	return cfgs

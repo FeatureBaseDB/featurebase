@@ -422,11 +422,10 @@ func (c *Cluster) Start() error {
 
 			for i, cc := range c.Nodes {
 				cc := cc
-				cc.Config.DisCo = portsCfg[i].DisCo
+				cc.Config.Etcd = portsCfg[i].Etcd
 				cc.Config.BindGRPC = portsCfg[i].BindGRPC
 
 				eg.Go(func() error {
-					fmt.Printf("DISCO CONFIG: %+v\n", cc.Config.DisCo)
 					cc.Config.Gossip.Seeds = gossipSeeds
 
 					return cc.Start()
