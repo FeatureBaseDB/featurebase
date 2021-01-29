@@ -29,7 +29,9 @@ import (
 	"github.com/pilosa/pilosa/v2/sql"
 	"github.com/pilosa/pilosa/v2/test"
 	"github.com/pkg/errors"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
 
@@ -354,8 +356,10 @@ func TestQueryPQLUnary(t *testing.T) {
 
 	i := m.MustCreateIndex(t, "i", pilosa.IndexOptions{})
 	m.MustCreateField(t, i.Name(), "f", pilosa.OptFieldKeys())
-	ctx := context.Background()
 	gh := server.NewGRPCHandler(m.API)
+
+	stream := &MockServerTransportStream{}
+	ctx := grpc.NewContextWithServerTransportStream(context.Background(), stream)
 
 	resp, err := gh.QueryPQLUnary(ctx, &pb.QueryPQLRequest{
 		Index: i.Name(),
@@ -368,6 +372,10 @@ func TestQueryPQLUnary(t *testing.T) {
 
 	if resp.Duration == 0 {
 		t.Fatal("duration not recorded")
+	}
+	duration, err := stream.GetDuration()
+	if duration == 0 || err != nil {
+		t.Fatal("duration header not recorded")
 	}
 
 	_, err = gh.QueryPQLUnary(ctx, &pb.QueryPQLRequest{
@@ -398,6 +406,11 @@ func TestQueryPQL(t *testing.T) {
 	}, mock)
 	if err != nil {
 		t.Fatal(err)
+	}
+
+	duration, err := mock.GetDuration()
+	if duration == 0 || err != nil {
+		t.Fatal("duration header not recorded")
 	}
 
 	if len(mock.Results) != 1 {
@@ -481,7 +494,9 @@ type (
 
 func TestQuerySQL(t *testing.T) {
 
-	ctx := context.Background()
+	stream := &MockServerTransportStream{}
+	ctx := grpc.NewContextWithServerTransportStream(context.Background(), stream)
+
 	gh, tearDownFunc := setUpTestQuerySQLUnary(ctx, t)
 	defer tearDownFunc()
 
@@ -924,6 +939,11 @@ func TestQuerySQL(t *testing.T) {
 				if resp.Duration == 0 {
 					t.Fatal("duration not recorded")
 				}
+				duration, err := stream.GetDuration()
+				if duration == 0 || err != nil {
+					t.Fatal("duration header not recorded")
+				}
+				stream.ClearMD()
 				tr := toTableResponse(resp)
 				if err := test.eq(test.exp, tr); err != nil {
 					t.Fatalf("sql: %s, error: %+v", test.sql, err)
@@ -941,6 +961,10 @@ func TestQuerySQL(t *testing.T) {
 			} else {
 				if mock.Results[0].Duration == 0 {
 					t.Fatal("duration not recorded")
+				}
+				duration, err := mock.GetDuration()
+				if duration == 0 || err != nil {
+					t.Fatal("duration header not recorded")
 				}
 				if len(mock.Results) > 1 && mock.Results[1].Duration != 0 {
 					t.Fatal("duration on second result expected to be zero")
@@ -1383,7 +1407,43 @@ func equalUnordered(exp tableResponse, got tableResponse) error {
 	return nil
 }
 
+type MockServerTransportStream struct {
+	header metadata.MD
+}
+
+func (stream *MockServerTransportStream) Method() string {
+	return ""
+}
+
+func (stream *MockServerTransportStream) SetHeader(md metadata.MD) error {
+	// Should probably merge md with value of stream.header, but this works since we have only one metadata value
+	stream.header = md
+	return nil
+}
+
+func (stream *MockServerTransportStream) SendHeader(md metadata.MD) error {
+	stream.header = md
+	return nil
+}
+
+func (stream *MockServerTransportStream) SetTrailer(md metadata.MD) error {
+	return nil
+}
+
+func (stream *MockServerTransportStream) GetDuration() (int, error) {
+	duration, ok := stream.header["duration"]
+	if ok {
+		return strconv.Atoi(duration[0])
+	}
+	return 0, errors.New("duration not recorded")
+}
+
+func (stream *MockServerTransportStream) ClearMD() {
+	stream.header = metadata.New(map[string]string{})
+}
+
 type mockPilosa_QuerySQLServer struct {
+	MockServerTransportStream
 	pb.Pilosa_QuerySQLServer
 	Results []*pb.RowResponse
 }
@@ -1391,6 +1451,18 @@ type mockPilosa_QuerySQLServer struct {
 func (m *mockPilosa_QuerySQLServer) Send(result *pb.RowResponse) error {
 	m.Results = append(m.Results, result)
 	return nil
+}
+
+func (m *mockPilosa_QuerySQLServer) SendHeader(md metadata.MD) error {
+	return m.MockServerTransportStream.SendHeader(md)
+}
+
+func (m *mockPilosa_QuerySQLServer) SetHeader(md metadata.MD) error {
+	return m.MockServerTransportStream.SetHeader(md)
+}
+
+func (m *mockPilosa_QuerySQLServer) SetTrailer(md metadata.MD) {
+	m.MockServerTransportStream.SetTrailer(md)
 }
 
 func (m *mockPilosa_QuerySQLServer) Context() context.Context {
