@@ -5911,16 +5911,18 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 		`)
 
 		t.Run("test foreign index with keys", func(t *testing.T) {
-			// the execututor returns row IDs when the field has keys, so they should be included in the target.
-			// because the order is determined by the partitioned index key, they seem out of order.
+			// The execututor returns row IDs when the field has keys, but we
+			// don't include them because they are not necessary in the result
+			// comparison. Because of this, we use the CheckGroupByOnKey
+			// function here to check equality only on the key field.
 			expected := []pilosa.GroupCount{
-				{Group: []pilosa.FieldRow{{Field: "child", RowID: 0, RowKey: "one"}}, Count: 3},
-				{Group: []pilosa.FieldRow{{Field: "child", RowID: 1, RowKey: "five"}}, Count: 1},
-				{Group: []pilosa.FieldRow{{Field: "child", RowID: 2, RowKey: "three"}}, Count: 2},
+				{Group: []pilosa.FieldRow{{Field: "child", RowKey: "one"}}, Count: 3},
+				{Group: []pilosa.FieldRow{{Field: "child", RowKey: "three"}}, Count: 2},
+				{Group: []pilosa.FieldRow{{Field: "child", RowKey: "five"}}, Count: 1},
 			}
 
-			results := c.Query(t, "fic", `GroupBy(Rows(child))`).Results[0].(*pilosa.GroupCounts).Groups()
-			test.CheckGroupBy(t, expected, results)
+			results := c.Query(t, "fic", `GroupBy(Rows(child), sort="count desc")`).Results[0].(*pilosa.GroupCounts).Groups()
+			test.CheckGroupByOnKey(t, expected, results)
 		})
 
 	}
