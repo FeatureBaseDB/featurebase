@@ -6576,6 +6576,9 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 
 			if field.Keys() {
 				rslt := result.Pos
+				if rslt == nil {
+					return &SignedRow{Pos: &Row{}}, nil
+				}
 				other := &Row{Attrs: rslt.Attrs}
 				for _, segment := range rslt.Segments() {
 					keys, err := e.Cluster.translateIndexIDs(context.Background(), field.ForeignIndex(), segment.Columns())
