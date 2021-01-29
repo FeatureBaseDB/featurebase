@@ -24,6 +24,7 @@ import (
 	"context"
 	"crypto/tls"
 	"io"
+	"io/ioutil"
 	"log"
 	"math/rand"
 	"net"
@@ -31,6 +32,7 @@ import (
 	"os/signal"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -150,6 +152,20 @@ func (m *Command) Start() (err error) {
 	err = m.SetupServer()
 	if err != nil {
 		return errors.Wrap(err, "setting up server")
+	}
+
+	if runtime.GOOS == "linux" {
+		result, err := ioutil.ReadFile("/proc/sys/vm/max_map_count")
+		if err != nil {
+			m.logger.Printf("Tried unsuccessfully to check system mmap limit: %v", err)
+		} else {
+			sysMmapLimit, err := strconv.ParseUint(strings.TrimSuffix(string(result), "\n"), 10, 64)
+			if err != nil {
+				m.logger.Printf("Tried unsuccessfully to check system mmap limit: %v", err)
+			} else if m.Config.MaxMapCount > sysMmapLimit {
+				m.logger.Printf("WARNING: Config max map limit (%v) is greater than current system limits (%v)", m.Config.MaxMapCount, sysMmapLimit)
+			}
+		}
 	}
 
 	// Set up networking (i.e. gossip)
