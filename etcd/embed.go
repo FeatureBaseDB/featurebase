@@ -41,10 +41,10 @@ import (
 type Options struct {
 	Name         string `toml:"name"`
 	Dir          string `toml:"dir"`
-	LClientURL   string `toml:"listen-client-addr"`
-	AClientURL   string `toml:"advertise-client-addr"`
-	LPeerURL     string `toml:"listen-peer-addr"`
-	APeerURL     string `toml:"advertise-peer-addr"`
+	LClientURL   string `toml:"listen-client-address"`
+	AClientURL   string `toml:"advertise-client-address"`
+	LPeerURL     string `toml:"listen-peer-address"`
+	APeerURL     string `toml:"advertise-peer-address"`
 	InitCluster  string `toml:"initial-cluster"`
 	ClusterURL   string `toml:"cluster-url"`
 	ClusterName  string `toml:"cluster-name"`
@@ -127,9 +127,17 @@ func parseOptions(opt Options) *embed.Config {
 	cfg.Dir = opt.Dir
 	cfg.InitialClusterToken = opt.ClusterName
 	cfg.LCUrls = types.MustNewURLs([]string{opt.LClientURL})
-	cfg.ACUrls = types.MustNewURLs([]string{opt.AClientURL})
+	if opt.AClientURL != "" {
+		cfg.ACUrls = types.MustNewURLs([]string{opt.AClientURL})
+	} else {
+		cfg.ACUrls = cfg.LCUrls
+	}
 	cfg.LPUrls = types.MustNewURLs([]string{opt.LPeerURL})
-	cfg.APUrls = types.MustNewURLs([]string{opt.APeerURL})
+	if opt.APeerURL != "" {
+		cfg.APUrls = types.MustNewURLs([]string{opt.APeerURL})
+	} else {
+		cfg.APUrls = cfg.LPUrls
+	}
 
 	lps := make([]*net.TCPListener, len(opt.LPeerSocket))
 	copy(lps, opt.LPeerSocket)

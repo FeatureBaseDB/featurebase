@@ -393,6 +393,15 @@ func (m *Command) SetupServer() error {
 		coordinatorOpt = pilosa.OptServerIsCoordinator(true)
 	}
 
+	// Use other config parameters to set Etcd parameters which we don't want to
+	// expose in the user-facing config.
+	//
+	// Use cluster.name for etcd.cluster-name
+	m.Config.Etcd.ClusterName = m.Config.Cluster.Name
+	//
+	// Use name for etcd.name
+	m.Config.Etcd.Name = m.Config.Name
+	//
 	// If an Etcd.Dir is not provided, nest a default under the pilosa data dir.
 	if m.Config.Etcd.Dir == "" {
 		path, err := expandDirName(m.Config.DataDir)
@@ -425,7 +434,6 @@ func (m *Command) SetupServer() error {
 		pilosa.OptServerURI(advertiseURI),
 		pilosa.OptServerGRPCURI(advertiseGRPCURI),
 		pilosa.OptServerInternalClient(http.NewInternalClientFromURI(uri, c)),
-		pilosa.OptServerClusterDisabled(m.Config.Cluster.Disabled, m.Config.Cluster.Hosts),
 		pilosa.OptServerClusterName(m.Config.Cluster.Name),
 		pilosa.OptServerSerializer(proto.Serializer{}),
 		pilosa.OptServerStorageConfig(m.Config.Storage),
@@ -477,10 +485,6 @@ func (m *Command) SetupServer() error {
 
 // setupNetworking sets up internode communication based on the configuration.
 func (m *Command) setupNetworking() error {
-	if m.Config.Cluster.Disabled {
-		return nil
-	}
-
 	gossipPort, err := strconv.Atoi(m.Config.Gossip.Port)
 	if err != nil {
 		return errors.Wrap(err, "parsing port")

@@ -23,7 +23,7 @@ import (
 
 // Node represents a node in the cluster.
 type Node struct {
-	Mu sync.Mutex
+	Mu sync.Mutex `json:"-"` // TODO: we really need to get rid of this
 
 	ID            string  `json:"id"`
 	URI           net.URI `json:"uri"`

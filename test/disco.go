@@ -52,6 +52,7 @@ func GenPortsConfig(ports []Ports) []*server.Config {
 	clusterURLs := make([]string, len(ports))
 	for i := range cfgs {
 		name := fmt.Sprintf("server%d", i)
+		clusterName := "cluster-abc123"
 
 		lsnC, portC := ports[i].LsnC, ports[i].PortC
 		lClientURL := fmt.Sprintf("http://localhost:%d", portC)
@@ -59,19 +60,18 @@ func GenPortsConfig(ports []Ports) []*server.Config {
 		lPeerURL := fmt.Sprintf("http://localhost:%d", portP)
 
 		discoDir := ""
-		if d, err := ioutil.TempDir("/tmp", "disco."); err == nil {
+		if d, err := ioutil.TempDir("", "disco."); err == nil {
 			discoDir = d
 		}
 
 		cfgs[i] = &server.Config{
+			Name: name,
 			Gossip: gossip.Config{
 				Port: fmt.Sprint(ports[i].Gossip),
 			},
 			BindGRPC: fmt.Sprintf(":%d", ports[i].Grpc),
 			Etcd: etcd.Options{
-				Name:          name,
 				Dir:           discoDir,
-				ClusterName:   "bartholemuuuuu",
 				LClientURL:    lClientURL,
 				AClientURL:    lClientURL,
 				LPeerURL:      lPeerURL,
@@ -81,10 +81,9 @@ func GenPortsConfig(ports []Ports) []*server.Config {
 				LClientSocket: []*net.TCPListener{lsnC},
 			},
 		}
+		cfgs[i].Cluster.Name = clusterName
 
 		clusterURLs[i] = fmt.Sprintf("%s=%s", name, lPeerURL)
-		fmt.Printf("\ndebug test/disco.go: on i=%v, GenPortsConfig Gossip: %v, Etcd.Client: %v, Etcd.Peer: %v, BindGRPC: %v\n",
-			i, ports[i].Gossip, portC, portP, ports[i].Grpc)
 	}
 	for i := range cfgs {
 		cfgs[i].Etcd.InitCluster = strings.Join(clusterURLs, ",")

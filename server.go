@@ -62,8 +62,6 @@ type Server struct { // nolint: maligned
 	diagnostics      *diagnosticsCollector
 	executor         *executor
 	executorPoolSize int
-	hosts            []string
-	clusterDisabled  bool
 	serializer       Serializer
 
 	// Distributed Consensus
@@ -277,16 +275,6 @@ func OptServerURI(uri *pnet.URI) ServerOption {
 func OptServerGRPCURI(uri *pnet.URI) ServerOption {
 	return func(s *Server) error {
 		s.grpcURI = *uri
-		return nil
-	}
-}
-
-// OptServerClusterDisabled tells the server whether to use a static cluster with the
-// defined hosts. Mostly used for testing.
-func OptServerClusterDisabled(disabled bool, hosts []string) ServerOption {
-	return func(s *Server) error {
-		s.hosts = hosts
-		s.clusterDisabled = disabled
 		return nil
 	}
 }

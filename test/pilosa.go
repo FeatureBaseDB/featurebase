@@ -96,7 +96,6 @@ func NewCommandNode(tb testing.TB, isCoordinator bool, opts ...server.CommandOpt
 	// has been specified, it will override this one.
 	opts = prependTestServerOpts(opts)
 	m := newCommand(tb, opts...)
-	m.Config.Cluster.Disabled = false
 	m.Config.Cluster.Coordinator = isCoordinator
 	return m
 }

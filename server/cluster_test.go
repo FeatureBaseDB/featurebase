@@ -190,6 +190,8 @@ func TestClusterResize_AddNode(t *testing.T) {
 
 			m1.Config.Gossip.Port = portsCfg[0].Gossip.Port
 			m1.Config.Etcd = portsCfg[0].Etcd
+			m1.Config.Name = portsCfg[0].Name
+			m1.Config.Cluster.Name = portsCfg[0].Cluster.Name
 			m1.Config.BindGRPC = portsCfg[0].BindGRPC
 
 			return m1.Start()
@@ -247,6 +249,8 @@ func TestClusterResize_AddNode(t *testing.T) {
 
 			m1.Config.Gossip.Port = portsCfg[0].Gossip.Port
 			m1.Config.Etcd = portsCfg[0].Etcd
+			m1.Config.Name = portsCfg[0].Name
+			m1.Config.Cluster.Name = portsCfg[0].Cluster.Name
 			m1.Config.BindGRPC = portsCfg[0].BindGRPC
 
 			return m1.Start()
@@ -303,6 +307,8 @@ func TestClusterResize_AddNode(t *testing.T) {
 
 			m1.Config.Gossip.Port = portsCfg[0].Gossip.Port
 			m1.Config.Etcd = portsCfg[0].Etcd
+			m1.Config.Name = portsCfg[0].Name
+			m1.Config.Cluster.Name = portsCfg[0].Cluster.Name
 			m1.Config.BindGRPC = portsCfg[0].BindGRPC
 
 			return m1.Start()
@@ -365,6 +371,8 @@ func TestClusterResize_AddNode(t *testing.T) {
 
 			m1.Config.Gossip.Port = portsCfg[0].Gossip.Port
 			m1.Config.Etcd = portsCfg[0].Etcd
+			m1.Config.Name = portsCfg[0].Name
+			m1.Config.Cluster.Name = portsCfg[0].Cluster.Name
 			m1.Config.BindGRPC = portsCfg[0].BindGRPC
 
 			return m1.Start()
@@ -421,6 +429,8 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 
 			m1.Config.Gossip.Port = portsCfg[0].Gossip.Port
 			m1.Config.Etcd = portsCfg[0].Etcd
+			m1.Config.Name = portsCfg[0].Name
+			m1.Config.Cluster.Name = portsCfg[0].Cluster.Name
 			m1.Config.BindGRPC = portsCfg[0].BindGRPC
 			return m1.Start()
 		}, 4, 10); err != nil {
@@ -479,6 +489,8 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 
 			m1.Config.Gossip.Port = portsCfg[0].Gossip.Port
 			m1.Config.Etcd = portsCfg[0].Etcd
+			m1.Config.Name = portsCfg[0].Name
+			m1.Config.Cluster.Name = portsCfg[0].Cluster.Name
 			m1.Config.BindGRPC = portsCfg[0].BindGRPC
 			return m1.Start()
 		}, 4, 10); err != nil {
@@ -543,6 +555,8 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 
 			m1.Config.Gossip.Port = portsCfg[0].Gossip.Port
 			m1.Config.Etcd = portsCfg[0].Etcd
+			m1.Config.Name = portsCfg[0].Name
+			m1.Config.Cluster.Name = portsCfg[0].Cluster.Name
 			m1.Config.BindGRPC = portsCfg[0].BindGRPC
 
 			errc := make(chan error, 1)
@@ -605,6 +619,8 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 
 			m1.Config.Gossip.Port = portsCfg[0].Gossip.Port
 			m1.Config.Etcd = portsCfg[0].Etcd
+			m1.Config.Name = portsCfg[0].Name
+			m1.Config.Cluster.Name = portsCfg[0].Cluster.Name
 			m1.Config.BindGRPC = portsCfg[0].BindGRPC
 
 			errc := make(chan error, 1)

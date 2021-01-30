@@ -23,14 +23,6 @@ import (
 	"github.com/pilosa/pilosa/v2/toml"
 )
 
-func Test_NewConfig(t *testing.T) {
-	c := server.NewConfig()
-
-	if c.Cluster.Disabled {
-		t.Fatalf("unexpected Cluster.Disabled: %v", c.Cluster.Disabled)
-	}
-}
-
 func Test_ValidateConfig(t *testing.T) {
 	c := server.NewConfig()
 	c.MustValidate()

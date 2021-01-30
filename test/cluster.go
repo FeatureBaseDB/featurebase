@@ -17,12 +17,9 @@ package test
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"math"
 	"net"
-	"path"
 	"sort"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -423,6 +420,8 @@ func (c *Cluster) Start() error {
 			for i, cc := range c.Nodes {
 				cc := cc
 				cc.Config.Etcd = portsCfg[i].Etcd
+				cc.Config.Name = portsCfg[i].Name
+				cc.Config.Cluster.Name = portsCfg[i].Cluster.Name
 				cc.Config.BindGRPC = portsCfg[i].BindGRPC
 
 				eg.Go(func() error {
@@ -554,17 +553,12 @@ func newCluster(tb testing.TB, size int, opts ...[]server.CommandOption) (*Clust
 	}
 
 	cluster := &Cluster{Nodes: make([]*Command, size)}
-	name := tb.Name()
 	for i := 0; i < size; i++ {
 		var commandOpts []server.CommandOption
 		if len(opts) > 0 {
 			commandOpts = opts[i%len(opts)]
 		}
 		m := NewCommandNode(tb, i == 0, commandOpts...)
-		err := ioutil.WriteFile(path.Join(m.Config.DataDir, ".id"), []byte(name+"__"+strconv.Itoa(i)), 0600)
-		if err != nil {
-			return nil, errors.Wrap(err, "writing node id")
-		}
 		cluster.Nodes[i] = m
 	}
 
