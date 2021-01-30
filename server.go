@@ -584,6 +584,15 @@ func (s *Server) Open() error {
 		State:         nodeStateDown,
 	}
 
+	// Set metadata for this node.
+	data, err := json.Marshal(node)
+	if err != nil {
+		return errors.Wrap(err, "marshaling json metadata")
+	}
+	if err := s.metadator.SetMetadata(context.Background(), data); err != nil {
+		return errors.Wrap(err, "setting metadata")
+	}
+
 	s.cluster.Node = node
 	s.executor.Node = node
 
