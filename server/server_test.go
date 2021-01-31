@@ -509,7 +509,7 @@ func TestTransactionsAPI(t *testing.T) {
 	// LATER, test deadline extension on non-coordinator blocks active, exclusive transaction being returned
 }
 
-func TestMain_RecalculateHashes(t *testing.T) {
+func TestMain_RecalculateCaches(t *testing.T) {
 	const clusterSize = 5
 	cluster := test.MustRunCluster(t, clusterSize)
 	defer cluster.Close()

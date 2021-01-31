@@ -487,7 +487,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	s.cluster.disCo = s.disCo
 	s.cluster.stator = s.stator
 	s.cluster.resizer = s.resizer
-	//s.cluster.noder = s.noder
+	s.cluster.noder = s.noder
 	s.cluster.sharder = s.sharder
 
 	// Append the NodeID tag to stats.

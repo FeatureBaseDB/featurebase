@@ -16,10 +16,14 @@ package etcd
 
 import (
 	"context"
+	"encoding/json"
+	"log"
+	"sort"
 	"sync"
 	"time"
 
 	"github.com/pilosa/pilosa/v2/disco"
+	"github.com/pilosa/pilosa/v2/topology"
 )
 
 // EtcdWithCache is a wrapper around the Etcd type which will return a
@@ -145,4 +149,41 @@ func (c *EtcdWithCache) NodeState(ctx context.Context, peerID string) (disco.Nod
 	ns.lastRequest = now
 	c.nodeStates[peerID] = ns
 	return ns.val, nil
+}
+
+// Nodes implements the Noder interface.
+func (c *EtcdWithCache) Nodes() []*topology.Node {
+	peers := c.Peers()
+	nodes := make([]*topology.Node, len(peers))
+	for i, peer := range peers {
+		node := &topology.Node{}
+		if meta, err := c.Metadata(context.Background(), peer.ID); err != nil {
+			log.Println(err, "getting metadata") // TODO: handle this with a logger
+		} else if err := json.Unmarshal(meta, node); err != nil {
+			log.Println(err, "unmarshaling json metadata")
+		}
+
+		node.ID = peer.ID
+
+		nodes[i] = node
+	}
+
+	// Nodes must be sorted.
+	sort.Sort(topology.ByID(nodes))
+
+	return nodes
+}
+
+// SetNodes implements the Noder interface as NOP
+// (because we can't force to set nodes for etcd).
+func (c *EtcdWithCache) SetNodes(nodes []*topology.Node) {}
+
+// AppendNode implements the Noder interface as NOP
+// (because resizer is responsible for adding new nodes).
+func (c *EtcdWithCache) AppendNode(node *topology.Node) {}
+
+// RemoveNode implements the Noder interface as NOP
+// (because resizer is responsible for removing existing nodes)
+func (c *EtcdWithCache) RemoveNode(nodeID string) bool {
+	return false
 }
