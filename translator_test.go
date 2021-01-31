@@ -514,10 +514,14 @@ func TestTranslation_Replication(t *testing.T) {
 
 		exp := `{"results":[{"attrs":{},"columns":[],"keys":["x1","x2"]}]}`
 
-		if !test.CheckClusterState(coord, pilosa.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected coord cluster state: %s, got: %s", pilosa.ClusterStateNormal, coord.API.State())
-		} else if !test.CheckClusterState(other, pilosa.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected other cluster state: %s, got: %s", pilosa.ClusterStateNormal, other.API.State())
+		coordState, err := coord.API.State()
+		if err != nil || !test.CheckClusterState(coord, pilosa.ClusterStateNormal, 1000) {
+			t.Fatalf("unexpected coord cluster state: %s, got: %s, err: %v", pilosa.ClusterStateNormal, coordState, err)
+		}
+
+		otherState, err := other.API.State()
+		if err != nil || !test.CheckClusterState(other, pilosa.ClusterStateNormal, 1000) {
+			t.Fatalf("unexpected other cluster state: %s, got: %s, err: %v", pilosa.ClusterStateNormal, otherState, err)
 		}
 
 		// Verify the data exists
@@ -528,8 +532,9 @@ func TestTranslation_Replication(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if !test.CheckClusterState(coord, pilosa.ClusterStateDegraded, 1000) {
-			t.Fatalf("unexpected coord cluster state: %s, got: %s", pilosa.ClusterStateDegraded, coord.API.State())
+		coordState, err = coord.API.State()
+		if err != nil || !test.CheckClusterState(coord, pilosa.ClusterStateDegraded, 1000) {
+			t.Fatalf("unexpected coord cluster state: %s, got: %s", pilosa.ClusterStateDegraded, coordState)
 		}
 
 		// Verify the data exists with one node down

@@ -484,9 +484,9 @@ func (c *Cluster) AwaitCoordinatorState(expectedState string, timeout time.Durat
 // in the expected state.
 func (c *Cluster) ExceptionalState(expectedState string) error {
 	for _, node := range c.Nodes {
-		state := node.API.State()
-		if state != expectedState {
-			return fmt.Errorf("node %q: state %s", node.ID(), state)
+		state, err := node.API.State()
+		if err != nil || state != expectedState {
+			return fmt.Errorf("node %q: state %s: err %v", node.ID(), state, err)
 		}
 	}
 	return nil
@@ -534,7 +534,12 @@ func MustNewCluster(tb testing.TB, size int, opts ...[]server.CommandOption) *Cl
 // receives a matching state. It polls up to n times before returning.
 func CheckClusterState(m *Command, state string, n int) bool {
 	for i := 0; i < n; i++ {
-		if m.API.State() == state {
+
+		apiState, err := m.API.State()
+		if err != nil {
+			return false
+		}
+		if apiState == state {
 			return true
 		}
 		time.Sleep(10 * time.Millisecond)

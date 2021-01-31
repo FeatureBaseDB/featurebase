@@ -75,14 +75,16 @@ func NewTestCluster(tb testing.TB, n int) *cluster {
 	c.Topology = NewTopology(c.Hasher, c.partitionN, c.ReplicaN, c)
 
 	for i := 0; i < n; i++ {
-		c.nodes = append(c.nodes, &topology.Node{
+		c.noder.AppendNode(&topology.Node{
 			ID:  fmt.Sprintf("node%d", i),
 			URI: NewTestURI("http", fmt.Sprintf("host%d", i), uint16(0)),
 		})
 	}
 
-	c.Node = c.nodes[0]
-	c.Coordinator = c.nodes[0].ID
+	cNodes := c.noder.Nodes()
+
+	c.Node = cNodes[0]
+	c.Coordinator = cNodes[0].ID
 	c.SetState(ClusterStateNormal)
 
 	return c
@@ -231,8 +233,13 @@ func (t *ClusterCluster) addNode() error {
 			return err
 		}
 
+		state, err := coord.State()
+		if err != nil {
+			return err
+		}
+
 		// Wait for the AddNode job to finish.
-		if c.State() != ClusterStateNormal {
+		if state != ClusterStateNormal {
 			t.resizeDone = make(chan struct{})
 			t.mu.Lock()
 			t.resizing = true
@@ -339,9 +346,6 @@ func (t *ClusterCluster) Open() error {
 			return err
 		}
 		if err := c.holder.Open(); err != nil {
-			return err
-		}
-		if err := c.setNodeState(nodeStateReady); err != nil {
 			return err
 		}
 	}
@@ -553,15 +557,17 @@ func NewTestClusterWithReplication(tb testing.TB, nNodes, nReplicas, partitionN 
 
 	for i := 0; i < nNodes; i++ {
 		nodeID := fmt.Sprintf("node%d", i)
-		c.nodes = append(c.nodes, &topology.Node{
+		c.noder.AppendNode(&topology.Node{
 			ID:  nodeID,
 			URI: NewTestURI("http", fmt.Sprintf("host%d", i), uint16(0)),
 		})
 		c.Topology.addID(nodeID)
 	}
 
-	c.Node = c.nodes[0]
-	c.Coordinator = c.nodes[0].ID
+	cNodes := c.noder.Nodes()
+
+	c.Node = cNodes[0]
+	c.Coordinator = cNodes[0].ID
 	c.SetState(ClusterStateNormal)
 
 	if err := c.holder.Open(); err != nil {

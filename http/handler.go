@@ -736,8 +736,15 @@ func (h *Handler) handleGetStatus(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
 		return
 	}
+
+	state, err := h.api.State()
+	if err != nil {
+		http.Error(w, "getting cluster state error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	status := getStatusResponse{
-		State:       h.api.State(),
+		State:       state,
 		Nodes:       h.api.Hosts(r.Context()),
 		LocalID:     h.api.Node().ID,
 		ClusterName: h.api.ClusterName(),

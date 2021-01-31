@@ -161,7 +161,6 @@ func TestAPI_ImportColumnAttrs(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-
 	})
 }
 

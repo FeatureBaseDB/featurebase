@@ -130,7 +130,10 @@ func appendMap(a, b map[apiMethod]struct{}) map[apiMethod]struct{} {
 }
 
 func (api *API) validate(f apiMethod) error {
-	state := api.cluster.State()
+	state, err := api.cluster.State()
+	if err != nil {
+		return errors.Wrap(err, "getting cluster state")
+	}
 	if _, ok := validAPIMethods[state][f]; ok {
 		return nil
 	}
@@ -207,7 +210,11 @@ func (api *API) CreateIndex(ctx context.Context, indexName string, options Index
 		return nil, errors.Wrap(err, "validating api method")
 	}
 
-	if !api.holder.isCoordinator() {
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	snap := topology.NewClusterSnapshot(api.cluster.noder, api.cluster.Hasher, api.cluster.ReplicaN)
+
+	if !snap.IsPrimaryFieldTranslationNode(api.Node().ID) {
+		fmt.Println("--- DEBUG: forward to coordinator")
 		if err := api.server.defaultClient.CreateIndex(ctx, indexName, options); err != nil {
 			return nil, errors.Wrap(err, "forwarding CreateIndex to coordinator")
 		}
@@ -303,7 +310,10 @@ func (api *API) CreateField(ctx context.Context, indexName string, fieldName str
 		}
 	}
 
-	if !api.holder.isCoordinator() {
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	snap := topology.NewClusterSnapshot(api.cluster.noder, api.cluster.Hasher, api.cluster.ReplicaN)
+
+	if !snap.IsPrimaryFieldTranslationNode(api.Node().ID) {
 		if err := api.server.defaultClient.CreateFieldWithOptions(ctx, indexName, fieldName, fo); err != nil {
 			return nil, errors.Wrap(err, "forwarding CreateField to coordinator")
 		}
@@ -832,6 +842,13 @@ func (api *API) HostStates(ctx context.Context) map[string]string {
 // Node gets the ID, URI and coordinator status for this particular node.
 func (api *API) Node() *topology.Node {
 	return api.server.node()
+}
+
+// CoordinatorNode returns the coordinator node for the cluster.
+func (api *API) CoordinatorNode() *topology.Node {
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	snap := topology.NewClusterSnapshot(api.cluster.noder, api.cluster.Hasher, api.cluster.ReplicaN)
+	return snap.PrimaryFieldTranslationNode()
 }
 
 // NodeUsage represents all usage measurements for one node.
@@ -1791,7 +1808,7 @@ func (api *API) ResizeAbort() error {
 // State returns the cluster state which is usually "NORMAL", but could be
 // "STARTING", "RESIZING", or potentially others. See cluster.go for more
 // details.
-func (api *API) State() string {
+func (api *API) State() (string, error) {
 	return api.cluster.State()
 }
 
@@ -2125,7 +2142,10 @@ func (api *API) ReserveIDs(key IDAllocKey, session [32]byte, offset uint64, coun
 		return nil, errors.Wrap(err, "validating api method")
 	}
 
-	if api.holder.isCoordinator() {
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	snap := topology.NewClusterSnapshot(api.cluster.noder, api.cluster.Hasher, api.cluster.ReplicaN)
+
+	if !snap.IsPrimaryFieldTranslationNode(api.Node().ID) {
 		return api.holder.ida.reserve(key, session, offset, count)
 	}
 
@@ -2137,7 +2157,10 @@ func (api *API) CommitIDs(key IDAllocKey, session [32]byte, count uint64) error 
 		return errors.Wrap(err, "validating api method")
 	}
 
-	if api.holder.isCoordinator() {
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	snap := topology.NewClusterSnapshot(api.cluster.noder, api.cluster.Hasher, api.cluster.ReplicaN)
+
+	if !snap.IsPrimaryFieldTranslationNode(api.Node().ID) {
 		return api.holder.ida.commit(key, session, count)
 	}
 
@@ -2149,7 +2172,10 @@ func (api *API) ResetIDAlloc(index string) error {
 		return errors.Wrap(err, "validating api method")
 	}
 
-	if api.holder.isCoordinator() {
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	snap := topology.NewClusterSnapshot(api.cluster.noder, api.cluster.Hasher, api.cluster.ReplicaN)
+
+	if !snap.IsPrimaryFieldTranslationNode(api.Node().ID) {
 		return api.holder.ida.reset(index)
 	}
 

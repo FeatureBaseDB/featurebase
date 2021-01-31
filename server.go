@@ -603,21 +603,6 @@ func (s *Server) Open() error {
 	s.syncer.Closing = s.closing
 	s.syncer.Stats = s.holder.Stats.WithTags("component:HolderSyncer")
 
-	// TODO disco
-	if false {
-		node.URI = s.uri
-		node.GRPCURI = s.grpcURI
-
-		// Set metadata for this node.
-		data, err := json.Marshal(node)
-		if err != nil {
-			return errors.Wrap(err, "marshaling json metadata")
-		}
-		if err := s.metadator.SetMetadata(context.Background(), data); err != nil {
-			return errors.Wrap(err, "setting metadata")
-		}
-	}
-
 	err = s.cluster.setup()
 	if err != nil {
 		return errors.Wrap(err, "setting up cluster")
@@ -642,9 +627,6 @@ func (s *Server) Open() error {
 	// bring up the background tasks for the holder.
 	s.holder.SnapshotQueue = s.snapshotQueue
 	s.holder.Activate()
-	if err := s.cluster.setNodeState(nodeStateReady); err != nil {
-		return errors.Wrap(err, "setting nodeState")
-	}
 
 	// Listen for joining nodes.
 	// This needs to start after the Holder has opened so that nodes can join
@@ -788,7 +770,14 @@ func (s *Server) monitorAntiEntropy() {
 			s.holder.Stats.Count(MetricAntiEntropy, 1, 1.0)
 		}
 		t := time.Now()
-		if s.cluster.State() == ClusterStateResizing {
+
+		state, err := s.cluster.State()
+		if err != nil {
+			s.logger.Printf("cluster state error: err=%s", err)
+			continue
+		}
+
+		if state == ClusterStateResizing {
 			continue // don't launch anti-entropy during resize.
 			// the cluster sets its state to resizing and *then* sends to
 			// abortAntiEntropyCh before starting to resize
@@ -1021,8 +1010,14 @@ func (s *Server) node() *topology.Node {
 
 // handleRemoteStatus receives incoming NodeStatus from remote nodes.
 func (s *Server) handleRemoteStatus(pb Message) {
+	state, err := s.cluster.State()
+	if err != nil {
+		s.logger.Printf("getting cluster state: %s", err)
+		return
+	}
+
 	// Ignore NodeStatus messages until the cluster is in a Normal state.
-	if s.cluster.State() != ClusterStateNormal {
+	if state != ClusterStateNormal {
 		return
 	}
 
@@ -1081,7 +1076,7 @@ func (s *Server) monitorDiagnostics() {
 	s.diagnostics.SetVersion(Version)
 	s.diagnostics.Set("Host", s.uri.Host)
 	s.diagnostics.Set("Cluster", strings.Join(s.cluster.nodeIDs(), ","))
-	s.diagnostics.Set("NumNodes", len(s.cluster.nodes))
+	s.diagnostics.Set("NumNodes", len(s.cluster.noder.Nodes()))
 	s.diagnostics.Set("NumCPU", runtime.NumCPU())
 	s.diagnostics.Set("NodeID", s.nodeID)
 	s.diagnostics.Set("ClusterID", s.cluster.id)

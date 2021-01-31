@@ -52,7 +52,7 @@ func (n *Node) Clone() *Node {
 }
 
 func (n *Node) String() string {
-	return fmt.Sprintf("Node:%s:%s:%s", n.URI, n.State, n.ID)
+	return fmt.Sprintf("Node:%s:%s:%s(%v)", n.URI, n.State, n.ID, n.IsCoordinator)
 }
 
 // Nodes represents a list of nodes.

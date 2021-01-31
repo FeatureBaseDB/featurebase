@@ -1200,6 +1200,7 @@ func (h *Holder) recalculateCaches() {
 	}
 }
 
+// TODO: this needs to be removed
 func (h *Holder) isCoordinator() bool {
 	if s, ok := h.broadcaster.(*Server); ok {
 		return s.isCoordinator
@@ -1426,7 +1427,7 @@ func (s *holderSyncer) syncIndex(index string) error {
 	s.Stats.CountWithCustomTags(MetricColumnAttrStoreBlocks, int64(len(blks)), 1.0, []string{indexTag})
 
 	// Sync with every other host.
-	for _, node := range topology.Nodes(s.Cluster.nodes).FilterID(s.Node.ID) {
+	for _, node := range topology.Nodes(s.Cluster.noder.Nodes()).FilterID(s.Node.ID) {
 		// Retrieve attributes from differing blocks.
 		// Skip update and recomputation if no attributes have changed.
 		m, err := s.Cluster.InternalClient.ColumnAttrDiff(ctx, &node.URI, index, blks)
@@ -1473,7 +1474,7 @@ func (s *holderSyncer) syncField(index, name string) error {
 	s.Stats.CountWithCustomTags(MetricRowAttrStoreBlocks, int64(len(blks)), 1.0, []string{indexTag, fieldTag})
 
 	// Sync with every other host.
-	for _, node := range topology.Nodes(s.Cluster.nodes).FilterID(s.Node.ID) {
+	for _, node := range topology.Nodes(s.Cluster.noder.Nodes()).FilterID(s.Node.ID) {
 		// Retrieve attributes from differing blocks.
 		// Skip update and recomputation if no attributes have changed.
 		m, err := s.Cluster.InternalClient.RowAttrDiff(ctx, &node.URI, index, name, blks)
@@ -1836,7 +1837,7 @@ func (c *holderCleaner) IsClosing() bool {
 // any unnecessary fragments and files.
 func (c *holderCleaner) CleanHolder() error {
 	// Create a snapshot of the cluster to use for node/partition calculations.
-	snap := topology.NewClusterSnapshot(c.Cluster.unprotectedNoder, c.Cluster.Hasher, c.Cluster.ReplicaN)
+	snap := topology.NewClusterSnapshot(c.Cluster.noder, c.Cluster.Hasher, c.Cluster.ReplicaN)
 
 	for _, index := range c.Holder.Indexes() {
 		// Verify cleaner has not closed.

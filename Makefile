@@ -229,7 +229,7 @@ docker-test:
 # The \-\-\- FAIL avoids counting the extra two FAIL strings at then bottom of log.topt.
 topt:
 	mv log.topt.roar log.topt.roar.prev || true
-	$(eval SHELL:=/bin/bash) set -o pipefail; go test -v -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) 2>&1 | tee log.topt.roar
+	$(eval SHELL:=/bin/bash) set -o pipefail; go test -v -timeout 60m -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) 2>&1 | tee log.topt.roar
 	@echo "   log.topt.roar green: \c"; cat log.topt.roar | grep PASS |wc -l
 	@echo "   log.topt.roar   red: \c"; cat log.topt.roar | grep '\-\-\- FAIL' | wc -l
 

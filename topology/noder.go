@@ -41,6 +41,11 @@ func NewLocalNoder(nodes []*Node) *localNoder {
 	}
 }
 
+// NewEmptyLocalNoder is an empty Noder used for testing.
+func NewEmptyLocalNoder() *localNoder {
+	return &localNoder{}
+}
+
 // Nodes implements the Noder interface.
 func (n *localNoder) Nodes() []*Node {
 	return n.nodes

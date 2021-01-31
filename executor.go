@@ -5266,7 +5266,7 @@ func (e *executor) executeSetRowAttrs(ctx context.Context, qcx *Qcx, index strin
 	}
 
 	// Execute on remote nodes in parallel.
-	nodes := topology.Nodes(e.Cluster.nodes).FilterID(e.Node.ID)
+	nodes := topology.Nodes(e.Cluster.noder.Nodes()).FilterID(e.Node.ID)
 	resp := make(chan error, len(nodes))
 	for _, node := range nodes {
 		go func(node *topology.Node) {
@@ -5378,7 +5378,7 @@ func (e *executor) executeBulkSetRowAttrs(ctx context.Context, qcx *Qcx, index s
 	}
 
 	// Execute on remote nodes in parallel.
-	nodes := topology.Nodes(e.Cluster.nodes).FilterID(e.Node.ID)
+	nodes := topology.Nodes(e.Cluster.noder.Nodes()).FilterID(e.Node.ID)
 	resp := make(chan error, len(nodes))
 	for _, node := range nodes {
 		go func(node *topology.Node) {
@@ -5430,7 +5430,7 @@ func (e *executor) executeSetColumnAttrs(ctx context.Context, qcx *Qcx, index st
 	}
 
 	// Execute on remote nodes in parallel.
-	nodes := topology.Nodes(e.Cluster.nodes).FilterID(e.Node.ID)
+	nodes := topology.Nodes(e.Cluster.noder.Nodes()).FilterID(e.Node.ID)
 	resp := make(chan error, len(nodes))
 	for _, node := range nodes {
 		go func(node *topology.Node) {
@@ -5484,7 +5484,12 @@ func (e *executor) shardsByNode(nodes []*topology.Node, index string, shards []u
 loop:
 	for _, shard := range shards {
 		for _, node := range snap.ShardNodes(index, shard) {
-			if topology.Nodes(nodes).Contains(node) {
+			// If the node being considered is in any state other than STARTED,
+			// then exclude it from the map. This way, one of that node's
+			// healthy replicas will be included instead.
+			// TODO: check state once stator is implemented
+			//if topology.Nodes(nodes).ContainsID(node.ID) && node.State == disco.NodeStateStarted {
+			if topology.Nodes(nodes).ContainsID(node.ID) {
 				m[node] = append(m[node], shard)
 				continue loop
 			}
@@ -5537,7 +5542,7 @@ func (e *executor) mapReduce(ctx context.Context, index string, shards []uint64,
 
 			if resp.err != nil {
 				// Filter out unavailable nodes.
-				nodes = topology.Nodes(nodes).Filter(resp.node)
+				nodes = topology.Nodes(nodes).FilterID(resp.node.ID)
 
 				// Begin mapper against secondary nodes.
 				if err := e.mapper(ctx, cancel, ch, nodes, index, resp.shards, c, opt, mapFn, reduceFn); errors.Cause(err) == errShardUnavailable {

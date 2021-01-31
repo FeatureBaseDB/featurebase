@@ -419,22 +419,24 @@ func TestResizeJob(t *testing.T) {
 // Ensure the cluster can fairly distribute partitions across the nodes.
 func TestCluster_Owners(t *testing.T) {
 	c := cluster{
-		nodes: []*topology.Node{
+		noder: topology.NewLocalNoder([]*topology.Node{
 			{URI: NewTestURIFromHostPort("serverA", 1000)},
 			{URI: NewTestURIFromHostPort("serverB", 1000)},
 			{URI: NewTestURIFromHostPort("serverC", 1000)},
-		},
+		}),
 		Hasher:   NewTestModHasher(),
 		ReplicaN: 2,
 	}
 
+	cNodes := c.noder.Nodes()
+
 	// Verify nodes are distributed.
-	if a := c.partitionNodes(0); !reflect.DeepEqual(a, []*topology.Node{c.nodes[0], c.nodes[1]}) {
+	if a := c.partitionNodes(0); !reflect.DeepEqual(a, []*topology.Node{cNodes[0], cNodes[1]}) {
 		t.Fatalf("unexpected owners: %s", spew.Sdump(a))
 	}
 
 	// Verify nodes go around the ring.
-	if a := c.partitionNodes(2); !reflect.DeepEqual(a, []*topology.Node{c.nodes[2], c.nodes[0]}) {
+	if a := c.partitionNodes(2); !reflect.DeepEqual(a, []*topology.Node{cNodes[2], cNodes[0]}) {
 		t.Fatalf("unexpected owners: %s", spew.Sdump(a))
 	}
 }
@@ -487,7 +489,8 @@ func TestHasher(t *testing.T) {
 func TestCluster_ContainsShards(t *testing.T) {
 	c := NewTestCluster(t, 5)
 	c.ReplicaN = 3
-	shards := c.containsShards("test", roaring.NewBitmap(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10), c.nodes[2])
+	cNodes := c.noder.Nodes()
+	shards := c.containsShards("test", roaring.NewBitmap(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10), cNodes[2])
 
 	if !reflect.DeepEqual(shards, []uint64{0, 2, 3, 5, 6, 9, 10}) {
 		t.Fatalf("unexpected shars for node's index: %v", shards)
@@ -627,13 +630,16 @@ func TestCluster_Coordinator(t *testing.T) {
 
 	node1 := &topology.Node{ID: "node1", URI: uris[0]}
 	node2 := &topology.Node{ID: "node2", URI: uris[1]}
+	noder := topology.NewLocalNoder([]*topology.Node{node1, node2})
 
 	c1 := *newCluster()
 	c1.Node = node1
 	c1.Coordinator = node1.ID
+	c1.noder = noder
 	c2 := *newCluster()
 	c2.Node = node2
 	c2.Coordinator = node1.ID
+	c2.noder = noder
 
 	t.Run("IsCoordinator", func(t *testing.T) {
 		if !c1.isCoordinator() {
@@ -697,7 +703,7 @@ func TestCluster_Topology(t *testing.T) {
 
 // Ensure that general cluster functionality works as expected.
 func TestCluster_ResizeStates(t *testing.T) {
-
+	t.Skip("these tests don't really apply anymore; they were meant to tests the cluster startup process using memberlist and a topology file")
 	t.Run("Single node, no data", func(t *testing.T) {
 		tc := NewClusterCluster(t, 1)
 
@@ -708,9 +714,14 @@ func TestCluster_ResizeStates(t *testing.T) {
 
 		node := tc.Clusters[0]
 
+		state, err := node.State()
+		if err != nil {
+			t.Fatal(err)
+		}
+
 		// Ensure that node comes up in state NORMAL.
-		if node.State() != ClusterStateNormal {
-			t.Errorf("expected state: %v, but got: %v", ClusterStateNormal, node.State())
+		if state != ClusterStateNormal {
+			t.Errorf("expected state: %v, but got: %v", ClusterStateNormal, state)
 		}
 
 		expectedTop := &Topology{
@@ -749,9 +760,14 @@ func TestCluster_ResizeStates(t *testing.T) {
 			t.Fatal(err)
 		}
 
+		state, err := node.State()
+		if err != nil {
+			t.Fatal(err)
+		}
+
 		// Ensure that node comes up in state NORMAL.
-		if node.State() != ClusterStateNormal {
-			t.Errorf("expected state: %v, but got: %v", ClusterStateNormal, node.State())
+		if state != ClusterStateNormal {
+			t.Errorf("expected state: %v, but got: %v", ClusterStateNormal, state)
 		}
 
 		// Close TestCluster.
@@ -805,13 +821,22 @@ func TestCluster_ResizeStates(t *testing.T) {
 		}
 
 		node0 := tc.Clusters[0]
+		state0, err := node0.State()
+		if err != nil {
+			t.Fatal(err)
+		}
+
 		node1 := tc.Clusters[1]
+		state1, err := node1.State()
+		if err != nil {
+			t.Fatal(err)
+		}
 
 		// Ensure that nodes comes up in state NORMAL.
-		if node0.State() != ClusterStateNormal {
-			t.Errorf("expected node0 state: %v, but got: %v", ClusterStateNormal, node0.State())
-		} else if node1.State() != ClusterStateNormal {
-			t.Errorf("expected node1 state: %v, but got: %v", ClusterStateNormal, node1.State())
+		if state0 != ClusterStateNormal {
+			t.Errorf("expected node0 state: %v, but got: %v", ClusterStateNormal, state0)
+		} else if state1 != ClusterStateNormal {
+			t.Errorf("expected node1 state: %v, but got: %v", ClusterStateNormal, state1)
 		}
 
 		expectedTop := &Topology{
@@ -851,27 +876,30 @@ func TestCluster_ResizeStates(t *testing.T) {
 			t.Fatalf("opening cluster: %v", err)
 		}
 
-		// Ensure that node is in state STARTING before the other node joins.
-		if node0.State() != ClusterStateStarting {
-			t.Errorf("expected node0 state: %v, but got: %v", ClusterStateStarting, node0.State())
+		state0, err := node0.State()
+		if err != nil {
+			t.Fatal(err)
 		}
 
-		// Expect an error by adding a node not in the topology.
-		expectedError := "host is not in topology: node1"
-		if err := tc.addNode(); err == nil || err.Error() != expectedError {
-			t.Errorf("did not receive expected error: %s", expectedError)
+		// Ensure that node is in state STARTING before the other node joins.
+		if state0 != ClusterStateStarting {
+			t.Errorf("expected node0 state: %v, but got: %v", ClusterStateStarting, state0)
 		}
 
 		if err := tc.addNode(); err != nil {
 			t.Fatalf("adding node: %v", err)
 		}
-		node2 := tc.Clusters[2]
+		node1 := tc.Clusters[1]
+		state1, err := node1.State()
+		if err != nil {
+			t.Fatal(err)
+		}
 
 		// Ensure that node comes up in state NORMAL.
-		if node0.State() != ClusterStateNormal {
-			t.Errorf("expected node0 state: %v, but got: %v", ClusterStateNormal, node0.State())
-		} else if node2.State() != ClusterStateNormal {
-			t.Errorf("expected node2 state: %v, but got: %v", ClusterStateNormal, node2.State())
+		if state0 != ClusterStateNormal {
+			t.Errorf("expected node0 state: %v, but got: %v", ClusterStateNormal, state0)
+		} else if state1 != ClusterStateNormal {
+			t.Errorf("expected node2 state: %v, but got: %v", ClusterStateNormal, state1)
 		}
 
 		// Close TestCluster.
@@ -933,11 +961,21 @@ func TestCluster_ResizeStates(t *testing.T) {
 
 		node1 := tc.Clusters[1]
 
+		state1, err := node1.State()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		state0, err := node0.State()
+		if err != nil {
+			t.Fatal(err)
+		}
+
 		// Ensure that nodes come up in state NORMAL.
-		if node0.State() != ClusterStateNormal {
-			t.Errorf("expected node0 state: %v, but got: %v", ClusterStateNormal, node0.State())
-		} else if node1.State() != ClusterStateNormal {
-			t.Errorf("expected node1 state: %v, but got: %v", ClusterStateNormal, node1.State())
+		if state0 != ClusterStateNormal {
+			t.Errorf("expected node0 state: %v, but got: %v", ClusterStateNormal, state0)
+		} else if state1 != ClusterStateNormal {
+			t.Errorf("expected node1 state: %v, but got: %v", ClusterStateNormal, state1)
 		}
 		// INVAR: after node1.State() is normal, the rebalancing should have been done.
 
@@ -1030,7 +1068,6 @@ func TestAE(t *testing.T) {
 			t.Fatalf("abort should not have blocked this long")
 		}
 	})
-
 }
 
 // Ensures that coordinator can be changed.
@@ -1038,8 +1075,10 @@ func TestCluster_UpdateCoordinator(t *testing.T) {
 	t.Run("UpdateCoordinator", func(t *testing.T) {
 		c := NewTestCluster(t, 2)
 
-		oldNode := c.nodes[0]
-		newNode := c.nodes[1]
+		cNodes := c.noder.Nodes()
+
+		oldNode := cNodes[0]
+		newNode := cNodes[1]
 
 		// Update coordinator to the same value.
 		if c.updateCoordinator(oldNode) {
@@ -1085,8 +1124,8 @@ func TestCluster_confirmNodeDownUp(t *testing.T) {
 	if c.confirmNodeDown(uri) {
 		t.Errorf("expected node to be up")
 	}
-
 }
+
 func TestCluster_confirmNodeDownTimeout(t *testing.T) {
 	t.Skip("does a listen on :0, skip for now. TODO(jea) restore this.")
 	sleep := 50 * time.Millisecond
@@ -1143,7 +1182,6 @@ func TestCluster_confirmNodeDownDown(t *testing.T) {
 }
 
 func TestCluster_GetNonPrimaryReplicas(t *testing.T) {
-
 	c := newCluster()
 	c.ReplicaN = 3
 	topo := NewTopology(c.Hasher, c.partitionN, c.ReplicaN, c)
@@ -1151,7 +1189,7 @@ func TestCluster_GetNonPrimaryReplicas(t *testing.T) {
 	nNodes := 4
 	for i := 0; i < nNodes; i++ {
 		nodeID := fmt.Sprintf("node%d", i)
-		c.nodes = append(c.nodes, &topology.Node{
+		c.noder.AppendNode(&topology.Node{
 			ID:  nodeID,
 			URI: NewTestURI("http", fmt.Sprintf("host%d", i), uint16(0)),
 		})
