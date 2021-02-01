@@ -148,9 +148,12 @@ func (h *GRPCHandler) QuerySQL(req *pb.QuerySQLRequest, stream pb.Pilosa_QuerySQ
 		return err
 	}
 
-	stream.SendHeader(metadata.New(map[string]string{
+	err = stream.SendHeader(metadata.New(map[string]string{
 		"duration": strconv.Itoa(int(duration)),
 	}))
+	if err != nil {
+		return errors.Wrap(err, "sending header")
+	}
 
 	err = newDurationRowser(results, duration).ToRows(stream.Send)
 	if err != nil {
@@ -191,9 +194,12 @@ func (h *GRPCHandler) QuerySQLUnary(ctx context.Context, req *pb.QuerySQLRequest
 	}
 	duration := time.Since(start)
 	table.Duration = int64(duration)
-	grpc.SendHeader(ctx, metadata.New(map[string]string{
+	err = grpc.SendHeader(ctx, metadata.New(map[string]string{
 		"duration": strconv.Itoa(int(duration)),
 	}))
+	if err != nil {
+		return nil, errors.Wrap(err, "sending header")
+	}
 
 	return table, nil
 }
@@ -209,9 +215,12 @@ func (h *GRPCHandler) QueryPQL(req *pb.QueryPQLRequest, stream pb.Pilosa_QueryPQ
 	resp, err := h.api.Query(stream.Context(), &query)
 	durQuery := time.Since(t)
 
-	stream.SendHeader(metadata.New(map[string]string{
+	err = stream.SendHeader(metadata.New(map[string]string{
 		"duration": strconv.Itoa(int(durQuery)),
 	}))
+	if err != nil {
+		return errors.Wrap(err, "sending header")
+	}
 
 	// TODO: what about resp.CollumnAttrSets?
 	if err != nil {
@@ -280,9 +289,12 @@ func (h *GRPCHandler) QueryPQLUnary(ctx context.Context, req *pb.QueryPQLRequest
 
 	duration := durQuery + durFormat
 	table.Duration = int64(duration)
-	grpc.SendHeader(ctx, metadata.New(map[string]string{
+	err = grpc.SendHeader(ctx, metadata.New(map[string]string{
 		"duration": strconv.Itoa(int(duration)),
 	}))
+	if err != nil {
+		return nil, errors.Wrap(err, "sending header")
+	}
 
 	h.stats.Timing(pilosa.MetricGRPCUnaryQueryDurationSeconds, durQuery, 0.1)
 	h.stats.Timing(pilosa.MetricGRPCUnaryFormatDurationSeconds, durFormat, 0.1)

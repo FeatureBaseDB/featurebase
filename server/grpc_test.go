@@ -1462,7 +1462,7 @@ func (m *mockPilosa_QuerySQLServer) SetHeader(md metadata.MD) error {
 }
 
 func (m *mockPilosa_QuerySQLServer) SetTrailer(md metadata.MD) {
-	m.MockServerTransportStream.SetTrailer(md)
+	_ = m.MockServerTransportStream.SetTrailer(md)
 }
 
 func (m *mockPilosa_QuerySQLServer) Context() context.Context {
