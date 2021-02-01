@@ -121,8 +121,9 @@ func TestClusterResize_EmptyNode(t *testing.T) {
 	m0 := test.RunCommand(t)
 	defer m0.Close()
 
-	if m0.API.State() != pilosa.ClusterStateNormal {
-		t.Fatalf("unexpected cluster state: %s", m0.API.State())
+	state0, err := m0.API.State()
+	if err != nil || state0 != pilosa.ClusterStateNormal {
+		t.Fatalf("unexpected cluster state: %s, error: %v", state0, err)
 	}
 }
 
@@ -131,10 +132,12 @@ func TestClusterResize_EmptyNodes(t *testing.T) {
 	clus := test.MustRunCluster(t, 2)
 	defer clus.Close()
 
-	if clus.GetNode(0).API.State() != pilosa.ClusterStateNormal {
-		t.Fatalf("unexpected node0 cluster state: %s", clus.GetNode(0).API.State())
-	} else if clus.GetNode(1).API.State() != pilosa.ClusterStateNormal {
-		t.Fatalf("unexpected node1 cluster state: %s", clus.GetNode(1).API.State())
+	state0, err0 := clus.GetNode(0).API.State()
+	state1, err1 := clus.GetNode(1).API.State()
+	if err0 != nil || state0 != pilosa.ClusterStateNormal {
+		t.Fatalf("unexpected node0 cluster state: %s, error: %v", state0, err0)
+	} else if err1 != nil || state1 != pilosa.ClusterStateNormal {
+		t.Fatalf("unexpected node1 cluster state: %s, error: %v", state1, err1)
 	}
 }
 
@@ -157,10 +160,12 @@ func TestClusterResize_AddNode(t *testing.T) {
 		clus := test.MustRunCluster(t, 2)
 		defer clus.Close()
 
-		if !test.CheckClusterState(clus.GetNode(0), pilosa.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node0 cluster state: %s", clus.GetNode(0).API.State())
-		} else if !test.CheckClusterState(clus.GetNode(1), pilosa.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node1 cluster state: %s", clus.GetNode(1).API.State())
+		state0, err0 := clus.GetNode(0).API.State()
+		state1, err1 := clus.GetNode(1).API.State()
+		if err0 != nil || !test.CheckClusterState(clus.GetNode(0), pilosa.ClusterStateNormal, 1000) {
+			t.Fatalf("unexpected node0 cluster state: %s, error: %v", state0, err0)
+		} else if err1 != nil || !test.CheckClusterState(clus.GetNode(1), pilosa.ClusterStateNormal, 1000) {
+			t.Fatalf("unexpected node1 cluster state: %s, error: %v", state1, err1)
 		}
 	})
 	t.Run("WithIndex", func(t *testing.T) {
@@ -200,10 +205,12 @@ func TestClusterResize_AddNode(t *testing.T) {
 		}
 		defer m1.Close()
 
-		if !test.CheckClusterState(m0, pilosa.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node0 cluster state: %s", m0.API.State())
-		} else if !test.CheckClusterState(m1, pilosa.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node1 cluster state: %s", m1.API.State())
+		state0, err0 := m0.API.State()
+		state1, err1 := m1.API.State()
+		if err0 != nil || !test.CheckClusterState(m0, pilosa.ClusterStateNormal, 1000) {
+			t.Fatalf("unexpected node0 cluster state: %s, error: %v", state0, err0)
+		} else if err1 != nil || !test.CheckClusterState(m1, pilosa.ClusterStateNormal, 1000) {
+			t.Fatalf("unexpected node1 cluster state: %s, error; %v", state1, err1)
 		}
 	})
 	t.Run("ContinuousShards", func(t *testing.T) {
@@ -259,10 +266,12 @@ func TestClusterResize_AddNode(t *testing.T) {
 		}
 		defer m1.Close()
 
-		if !test.CheckClusterState(m0, pilosa.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node0 cluster state: %s", m0.API.State())
-		} else if !test.CheckClusterState(m1, pilosa.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node1 cluster state: %s", m1.API.State())
+		state0, err0 := m0.API.State()
+		state1, err1 := m1.API.State()
+		if err0 != nil || !test.CheckClusterState(m0, pilosa.ClusterStateNormal, 1000) {
+			t.Fatalf("unexpected node0 cluster state: %s, error: %v", state0, err0)
+		} else if err1 != nil || !test.CheckClusterState(m1, pilosa.ClusterStateNormal, 1000) {
+			t.Fatalf("unexpected node1 cluster state: %s, error: %v", state1, err1)
 		}
 
 		// Verify the data exists on both nodes.
@@ -317,10 +326,12 @@ func TestClusterResize_AddNode(t *testing.T) {
 		}
 		defer m1.Close()
 
-		if !test.CheckClusterState(m0, pilosa.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node0 cluster state: %s", m0.API.State())
-		} else if !test.CheckClusterState(m1, pilosa.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node1 cluster state: %s", m1.API.State())
+		state0, err0 := m0.API.State()
+		state1, err1 := m1.API.State()
+		if err0 != nil || !test.CheckClusterState(m0, pilosa.ClusterStateNormal, 1000) {
+			t.Fatalf("unexpected node0 cluster state: %s, error: %v", state0, err0)
+		} else if err1 != nil || !test.CheckClusterState(m1, pilosa.ClusterStateNormal, 1000) {
+			t.Fatalf("unexpected node1 cluster state: %s, error: %v", state1, err1)
 		}
 
 		// Verify the data exists on both nodes.
@@ -382,10 +393,12 @@ func TestClusterResize_AddNode(t *testing.T) {
 
 		defer m1.Close()
 
-		if !test.CheckClusterState(m0, pilosa.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node0 cluster state: %s", m0.API.State())
-		} else if !test.CheckClusterState(m1, pilosa.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node1 cluster state: %s", m1.API.State())
+		state0, err0 := m0.API.State()
+		state1, err1 := m1.API.State()
+		if err0 != nil || !test.CheckClusterState(m0, pilosa.ClusterStateNormal, 1000) {
+			t.Fatalf("unexpected node0 cluster state: %s, error: %v", state0, err0)
+		} else if err1 != nil || !test.CheckClusterState(m1, pilosa.ClusterStateNormal, 1000) {
+			t.Fatalf("unexpected node1 cluster state: %s, error: %v", state1, err1)
 		}
 
 		// Verify the data exists on both nodes.
@@ -438,10 +451,12 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 		}
 		defer m1.Close()
 
-		if !test.CheckClusterState(m0, pilosa.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node0 cluster state: %s", m0.API.State())
-		} else if !test.CheckClusterState(m1, pilosa.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node1 cluster state: %s", m1.API.State())
+		state0, err0 := m0.API.State()
+		state1, err1 := m1.API.State()
+		if err0 != nil || !test.CheckClusterState(m0, pilosa.ClusterStateNormal, 1000) {
+			t.Fatalf("unexpected node0 cluster state: %s, error: %v", state0, err0)
+		} else if err1 != nil || !test.CheckClusterState(m1, pilosa.ClusterStateNormal, 1000) {
+			t.Fatalf("unexpected node1 cluster state: %s, error: %v", state1, err1)
 		}
 
 		if err := <-errc; err != nil {
@@ -503,10 +518,12 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 		}()
 		defer m1.Close()
 
-		if !test.CheckClusterState(m0, pilosa.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node0 cluster state: %s", m0.API.State())
-		} else if !test.CheckClusterState(m1, pilosa.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node1 cluster state: %s", m1.API.State())
+		state0, err0 := m0.API.State()
+		state1, err1 := m1.API.State()
+		if err0 != nil || !test.CheckClusterState(m0, pilosa.ClusterStateNormal, 1000) {
+			t.Fatalf("unexpected node0 cluster state: %s, error: %v", state0, err0)
+		} else if err1 != nil || !test.CheckClusterState(m1, pilosa.ClusterStateNormal, 1000) {
+			t.Fatalf("unexpected node1 cluster state: %s, error: %v", state1, err1)
 		}
 
 		// Verify the data exists on both nodes.
@@ -570,10 +587,12 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 		}
 		defer m1.Close()
 
-		if !test.CheckClusterState(m0, pilosa.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node0 cluster state: %s", m0.API.State())
-		} else if !test.CheckClusterState(m1, pilosa.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node1 cluster state: %s", m1.API.State())
+		state0, err0 := m0.API.State()
+		state1, err1 := m1.API.State()
+		if err0 != nil || !test.CheckClusterState(m0, pilosa.ClusterStateNormal, 1000) {
+			t.Fatalf("unexpected node0 cluster state: %s, error: %v", state0, err0)
+		} else if err1 != nil || !test.CheckClusterState(m1, pilosa.ClusterStateNormal, 1000) {
+			t.Fatalf("unexpected node1 cluster state: %s, error: %v", state1, err1)
 		}
 
 		// Verify the data exists on both nodes.
@@ -633,10 +652,12 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 			t.Fatalf("starting second main: %v", err)
 		}
 
-		if !test.CheckClusterState(m0, pilosa.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node0 cluster state: %s", m0.API.State())
-		} else if !test.CheckClusterState(m1, pilosa.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node1 cluster state: %s", m1.API.State())
+		state0, err0 := m0.API.State()
+		state1, err1 := m1.API.State()
+		if err0 != nil || !test.CheckClusterState(m0, pilosa.ClusterStateNormal, 1000) {
+			t.Fatalf("unexpected node0 cluster state: %s, error: %v", state0, err0)
+		} else if err1 != nil || !test.CheckClusterState(m1, pilosa.ClusterStateNormal, 1000) {
+			t.Fatalf("unexpected node1 cluster state: %s, error: %v", state1, err1)
 		}
 		m0.QueryExpect(t, "i", "", `Row(f=1)`, exp)
 		m1.QueryExpect(t, "i", "", `Row(f=1)`, exp)
@@ -693,12 +714,15 @@ func TestCluster_GossipMembership(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if !test.CheckClusterState(m0, pilosa.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node0 cluster state: %s", m0.API.State())
-		} else if !test.CheckClusterState(m1, pilosa.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node1 cluster state: %s", m1.API.State())
-		} else if !test.CheckClusterState(m2, pilosa.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node2 cluster state: %s", m2.API.State())
+		state0, err0 := m0.API.State()
+		state1, err1 := m1.API.State()
+		state2, err2 := m2.API.State()
+		if err0 != nil || !test.CheckClusterState(m0, pilosa.ClusterStateNormal, 1000) {
+			t.Fatalf("unexpected node0 cluster state: %s, error: %v", state0, err0)
+		} else if err1 != nil || !test.CheckClusterState(m1, pilosa.ClusterStateNormal, 1000) {
+			t.Fatalf("unexpected node1 cluster state: %s, error: %v", state1, err1)
+		} else if err2 != nil || !test.CheckClusterState(m2, pilosa.ClusterStateNormal, 1000) {
+			t.Fatalf("unexpected node2 cluster state: %s, error: %v", state2, err2)
 		}
 
 		numNodes := len(m0.API.Hosts(context.Background()))

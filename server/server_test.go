@@ -32,6 +32,7 @@ import (
 	"time"
 
 	"github.com/pilosa/pilosa/v2"
+	"github.com/pilosa/pilosa/v2/disco"
 	"github.com/pilosa/pilosa/v2/http"
 	"github.com/pilosa/pilosa/v2/pql"
 	"github.com/pilosa/pilosa/v2/roaring"
@@ -630,7 +631,7 @@ func TestClusteringNodesReplica1(t *testing.T) {
 	cluster := test.MustRunCluster(t, 3)
 	defer cluster.Close()
 
-	if err := cluster.AwaitState(pilosa.ClusterStateNormal, 100*time.Millisecond); err != nil {
+	if err := cluster.AwaitState(string(disco.ClusterStateNormal), 100*time.Millisecond); err != nil {
 		t.Fatalf("starting cluster: %v", err)
 	}
 
@@ -638,12 +639,12 @@ func TestClusteringNodesReplica1(t *testing.T) {
 		t.Fatalf("closing third node: %v", err)
 	}
 
-	if err := cluster.AwaitCoordinatorState(pilosa.ClusterStateStarting, 30*time.Second); err != nil {
+	if err := cluster.AwaitCoordinatorState(string(disco.ClusterStateDown), 60*time.Second); err != nil {
 		t.Fatalf("starting cluster: %v", err)
 	}
 
 	// confirm that cluster stops accepting queries after one node closes
-	if _, err := cluster.GetCoordinator().API.Query(context.Background(), &pilosa.QueryRequest{}); !strings.Contains(err.Error(), "not allowed in state STARTING") {
+	if _, err := cluster.GetCoordinator().API.Query(context.Background(), &pilosa.QueryRequest{}); !strings.Contains(err.Error(), "not allowed in state DOWN") {
 		t.Fatalf("got unexpected error querying an incomplete cluster: %v", err)
 	}
 }
@@ -659,7 +660,7 @@ func TestClusteringNodesReplica2(t *testing.T) {
 	}
 	defer cluster.Close()
 
-	err = cluster.AwaitState(pilosa.ClusterStateNormal, 100*time.Millisecond)
+	err = cluster.AwaitState(string(disco.ClusterStateDown), 100*time.Millisecond)
 	if err != nil {
 		t.Fatalf("starting cluster: %v", err)
 	}
@@ -670,7 +671,7 @@ func TestClusteringNodesReplica2(t *testing.T) {
 		t.Fatalf("closing third node: %v", err)
 	}
 
-	err = cluster.AwaitCoordinatorState(pilosa.ClusterStateDegraded, 30*time.Second)
+	err = cluster.AwaitCoordinatorState(string(disco.ClusterStateDegraded), 30*time.Second)
 	if err != nil {
 		t.Fatalf("after closing first server: %v", err)
 	}
@@ -946,7 +947,7 @@ func TestClusterQueriesAfterRestart(t *testing.T) {
 
 	err = cmd1.Command.Close()
 	if err != nil {
-		t.Fatalf("closing node0: %v", err)
+		t.Fatalf("closing node1: %v", err)
 	}
 
 	// confirm that cluster stops accepting queries after one node closes
@@ -964,10 +965,14 @@ func TestClusterQueriesAfterRestart(t *testing.T) {
 	cmd1.Command.Config = config
 	err = cmd1.Start()
 	if err != nil {
-		t.Fatalf("reopening node 0: %v", err)
+		t.Fatalf("reopening node 1: %v", err)
 	}
 
-	for cmd1.API.State() != pilosa.ClusterStateNormal {
+	state1, err1 := cmd1.API.State()
+	if err1 != nil {
+		t.Fatalf("getting state foor node 1: %v", err)
+	}
+	for state1 != pilosa.ClusterStateNormal {
 		time.Sleep(time.Millisecond)
 	}
 

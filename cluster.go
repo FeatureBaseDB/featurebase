@@ -44,10 +44,11 @@ import (
 
 const (
 	// ClusterState represents the state returned in the /status endpoint.
-	ClusterStateStarting = "STARTING"
-	ClusterStateDegraded = "DEGRADED" // cluster is running but we've lost some # of hosts >0 but < replicaN
-	ClusterStateNormal   = "NORMAL"
-	ClusterStateResizing = "RESIZING"
+	ClusterStateStarting = disco.ClusterStateStarting
+	ClusterStateDegraded = disco.ClusterStateDegraded // cluster is running but we've lost some # of hosts >0 but < replicaN
+	ClusterStateNormal   = disco.ClusterStateNormal
+	ClusterStateResizing = disco.ClusterStateResizing
+	ClusterStateDown     = disco.ClusterStateDown
 
 	// NodeState represents the state of a node during startup.
 	nodeStateReady = "READY"
