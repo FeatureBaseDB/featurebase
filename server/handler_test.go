@@ -40,6 +40,7 @@ import (
 	pb "github.com/pilosa/pilosa/v2/proto"
 	"github.com/pilosa/pilosa/v2/server"
 	"github.com/pilosa/pilosa/v2/test"
+	"google.golang.org/grpc"
 )
 
 func TestHandler_PostSchemaCluster(t *testing.T) {
@@ -1517,7 +1518,9 @@ func TestQueryHistory(t *testing.T) {
 	test.Do(t, "POST", cmd.URL()+"/index/i0/field/f0", "")
 
 	gh := server.NewGRPCHandler(cmd.API)
-	_, err = gh.QuerySQLUnary(context.Background(), &pb.QuerySQLRequest{
+	stream := &MockServerTransportStream{}
+	ctx := grpc.NewContextWithServerTransportStream(context.Background(), stream)
+	_, err = gh.QuerySQLUnary(ctx, &pb.QuerySQLRequest{
 		Sql: `select * from i0`,
 	})
 

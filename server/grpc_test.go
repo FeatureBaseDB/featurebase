@@ -977,7 +977,8 @@ func TestQuerySQL(t *testing.T) {
 
 func TestQuerySQLUnaryWithError(t *testing.T) {
 
-	ctx := context.Background()
+	stream := &MockServerTransportStream{}
+	ctx := grpc.NewContextWithServerTransportStream(context.Background(), stream)
 	gh, tearDownFunc := setUpTestQuerySQLUnary(ctx, t)
 	defer tearDownFunc()
 
@@ -1023,7 +1024,8 @@ func TestCRUDIndexes(t *testing.T) {
 	m := test.RunCommand(t)
 	defer m.Close()
 
-	ctx := context.Background()
+	stream := &MockServerTransportStream{}
+	ctx := grpc.NewContextWithServerTransportStream(context.Background(), stream)
 	gh := server.NewGRPCHandler(m.API)
 
 	t.Run("CreateIndex", func(t *testing.T) {
