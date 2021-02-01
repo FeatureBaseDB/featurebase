@@ -215,13 +215,6 @@ func (h *GRPCHandler) QueryPQL(req *pb.QueryPQLRequest, stream pb.Pilosa_QueryPQ
 	resp, err := h.api.Query(stream.Context(), &query)
 	durQuery := time.Since(t)
 
-	err = stream.SendHeader(metadata.New(map[string]string{
-		"duration": strconv.Itoa(int(durQuery)),
-	}))
-	if err != nil {
-		return errors.Wrap(err, "sending header")
-	}
-
 	// TODO: what about resp.CollumnAttrSets?
 	if err != nil {
 		return errToStatusError(err)
@@ -238,6 +231,13 @@ func (h *GRPCHandler) QueryPQL(req *pb.QueryPQLRequest, stream pb.Pilosa_QueryPQ
 	toRowser, err := ToRowserWrapper(rslt)
 	if err != nil {
 		return errors.Wrap(err, "wrapping as type ToRowser")
+	}
+
+	err = stream.SendHeader(metadata.New(map[string]string{
+		"duration": strconv.Itoa(int(durQuery)),
+	}))
+	if err != nil {
+		return errors.Wrap(err, "sending header")
 	}
 
 	t = time.Now()
