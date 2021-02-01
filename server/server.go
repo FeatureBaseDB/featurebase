@@ -563,11 +563,9 @@ func (m *Command) GossipTransport() *gossip.Transport {
 // Close shuts down the server.
 func (m *Command) Close() error {
 	select {
-	case <-m.done:
+	case _, _ = <-m.done:
 		return nil
 	default:
-
-		defer close(m.done)
 		eg := errgroup.Group{}
 		m.grpcServer.Stop()
 		eg.Go(m.Handler.Close)
@@ -590,6 +588,8 @@ func (m *Command) Close() error {
 
 		err := eg.Wait()
 		_ = testhook.Closed(pilosa.NewAuditor(), m, nil)
+		close(m.done)
+
 		return errors.Wrap(err, "closing everything")
 	}
 }

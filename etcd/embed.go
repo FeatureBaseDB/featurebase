@@ -739,6 +739,14 @@ func (e *Etcd) leaseKeepAlive(ttl int64) (clientv3.LeaseID, func(context.Context
 			select {
 			case <-ctx.Done():
 				log.Printf("leaseKeepAlive: %v\n", ctx.Err())
+
+				if cli, err := e.client(); err != nil {
+					log.Printf("leaseKeepAlive: creates a new client: %v\n", err)
+				} else {
+					if _, err := cli.Revoke(context.Background(), leaseResp.ID); err != nil {
+						log.Printf("leaseKeepAlive: revokes the lease (ID: %v): %v\n", leaseResp.ID, err)
+					}
+				}
 				return
 
 			case <-ticker.C:
