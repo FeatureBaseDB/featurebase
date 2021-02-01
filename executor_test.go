@@ -3554,6 +3554,10 @@ func TestExecutor_Execute_Existence(t *testing.T) {
 			t.Fatal(err)
 		}
 
+		if err := c.AwaitState(string(pilosa.ClusterStateNormal), 10*time.Second); err != nil {
+			t.Fatalf("restarting cluster: %v", err)
+		}
+
 		hldr2 := c.GetHolder(0)
 		index2 := hldr2.Index("i")
 		_ = index2
