@@ -720,7 +720,7 @@ func TestCluster_ResizeStates(t *testing.T) {
 		}
 
 		// Ensure that node comes up in state NORMAL.
-		if state != ClusterStateNormal {
+		if state != string(ClusterStateNormal) {
 			t.Errorf("expected state: %v, but got: %v", ClusterStateNormal, state)
 		}
 
@@ -766,7 +766,7 @@ func TestCluster_ResizeStates(t *testing.T) {
 		}
 
 		// Ensure that node comes up in state NORMAL.
-		if state != ClusterStateNormal {
+		if state != string(ClusterStateNormal) {
 			t.Errorf("expected state: %v, but got: %v", ClusterStateNormal, state)
 		}
 
@@ -833,9 +833,9 @@ func TestCluster_ResizeStates(t *testing.T) {
 		}
 
 		// Ensure that nodes comes up in state NORMAL.
-		if state0 != ClusterStateNormal {
+		if state0 != string(ClusterStateNormal) {
 			t.Errorf("expected node0 state: %v, but got: %v", ClusterStateNormal, state0)
-		} else if state1 != ClusterStateNormal {
+		} else if state1 != string(ClusterStateNormal) {
 			t.Errorf("expected node1 state: %v, but got: %v", ClusterStateNormal, state1)
 		}
 
@@ -882,7 +882,7 @@ func TestCluster_ResizeStates(t *testing.T) {
 		}
 
 		// Ensure that node is in state STARTING before the other node joins.
-		if state0 != ClusterStateStarting {
+		if state0 != string(ClusterStateStarting) {
 			t.Errorf("expected node0 state: %v, but got: %v", ClusterStateStarting, state0)
 		}
 
@@ -896,9 +896,9 @@ func TestCluster_ResizeStates(t *testing.T) {
 		}
 
 		// Ensure that node comes up in state NORMAL.
-		if state0 != ClusterStateNormal {
+		if state0 != string(ClusterStateNormal) {
 			t.Errorf("expected node0 state: %v, but got: %v", ClusterStateNormal, state0)
-		} else if state1 != ClusterStateNormal {
+		} else if state1 != string(ClusterStateNormal) {
 			t.Errorf("expected node2 state: %v, but got: %v", ClusterStateNormal, state1)
 		}
 
@@ -972,9 +972,9 @@ func TestCluster_ResizeStates(t *testing.T) {
 		}
 
 		// Ensure that nodes come up in state NORMAL.
-		if state0 != ClusterStateNormal {
+		if state0 != string(ClusterStateNormal) {
 			t.Errorf("expected node0 state: %v, but got: %v", ClusterStateNormal, state0)
-		} else if state1 != ClusterStateNormal {
+		} else if state1 != string(ClusterStateNormal) {
 			t.Errorf("expected node1 state: %v, but got: %v", ClusterStateNormal, state1)
 		}
 		// INVAR: after node1.State() is normal, the rebalancing should have been done.

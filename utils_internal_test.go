@@ -85,7 +85,7 @@ func NewTestCluster(tb testing.TB, n int) *cluster {
 
 	c.Node = cNodes[0]
 	c.Coordinator = cNodes[0].ID
-	c.SetState(ClusterStateNormal)
+	c.SetState(string(ClusterStateNormal))
 
 	return c
 }
@@ -239,7 +239,7 @@ func (t *ClusterCluster) addNode() error {
 		}
 
 		// Wait for the AddNode job to finish.
-		if state != ClusterStateNormal {
+		if state != string(ClusterStateNormal) {
 			t.resizeDone = make(chan struct{})
 			t.mu.Lock()
 			t.resizing = true
@@ -391,7 +391,7 @@ func (b bcast) SendSync(m Message) error {
 			}
 		}
 		b.t.mu.RLock()
-		if obj.State == ClusterStateNormal && b.t.resizing {
+		if obj.State == string(ClusterStateNormal) && b.t.resizing {
 			close(b.t.resizeDone)
 		}
 		b.t.mu.RUnlock()
@@ -435,7 +435,7 @@ func (b bcast) SendTo(to *topology.Node, m Message) error {
 			}
 		}
 		b.t.mu.RLock()
-		if obj.State == ClusterStateNormal && b.t.resizing {
+		if obj.State == string(ClusterStateNormal) && b.t.resizing {
 			close(b.t.resizeDone)
 		}
 		b.t.mu.RUnlock()
@@ -568,7 +568,7 @@ func NewTestClusterWithReplication(tb testing.TB, nNodes, nReplicas, partitionN 
 
 	c.Node = cNodes[0]
 	c.Coordinator = cNodes[0].ID
-	c.SetState(ClusterStateNormal)
+	c.SetState(string(ClusterStateNormal))
 
 	if err := c.holder.Open(); err != nil {
 		panic(err)

@@ -563,7 +563,7 @@ func (m *Command) GossipTransport() *gossip.Transport {
 // Close shuts down the server.
 func (m *Command) Close() error {
 	select {
-	case _, _ = <-m.done:
+	case <-m.done:
 		return nil
 	default:
 		eg := errgroup.Group{}

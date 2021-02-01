@@ -75,8 +75,7 @@ type nodeAction struct {
 
 // cluster represents a collection of nodes.
 type cluster struct { // nolint: maligned
-	noder            topology.Noder
-	unprotectedNoder topology.Noder
+	noder topology.Noder
 
 	id   string
 	Node *topology.Node
@@ -374,9 +373,9 @@ func (c *cluster) unprotectedSetState(state string) {
 	var doCleanup bool
 
 	switch state {
-	case ClusterStateNormal, ClusterStateDegraded:
+	case string(ClusterStateNormal), string(ClusterStateDegraded):
 		// If state is RESIZING -> [NORMAL, DEGRADED] then run cleanup.
-		if c.state == ClusterStateResizing {
+		if c.state == string(ClusterStateResizing) {
 			doCleanup = true
 		}
 	}
@@ -384,7 +383,7 @@ func (c *cluster) unprotectedSetState(state string) {
 	c.state = state
 
 	switch state {
-	case ClusterStateNormal:
+	case string(ClusterStateNormal):
 		// Because the cluster state is changing to NORMAL,
 		// we [potentially] need to reset the translation sync.
 		// If, for example, the cluster has changed size and is
@@ -424,18 +423,6 @@ func (c *cluster) unprotectedSetState(state string) {
 	}
 }
 
-func (c *cluster) setMyNodeState(state string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.Node.State = state
-	nodes := c.noder.Nodes()
-	for i, n := range nodes {
-		if n.ID == c.Node.ID {
-			nodes[i].State = state
-		}
-	}
-}
-
 // receiveNodeState sets node state in Topology in order for the
 // Coordinator to keep track of, during startup, which nodes have
 // finished opening their Holder.
@@ -471,11 +458,11 @@ func (c *cluster) receiveNodeState(nodeID string, state string) error {
 
 // determineClusterState is unprotected.
 func (c *cluster) determineClusterState() (clusterState string) {
-	if c.state == ClusterStateResizing {
-		return ClusterStateResizing
+	if c.state == string(ClusterStateResizing) {
+		return string(ClusterStateResizing)
 	}
 	if c.haveTopologyAgreement() && c.allNodesReady() {
-		return ClusterStateNormal
+		return string(ClusterStateNormal)
 	}
 	// TODO:
 	// If the cluster is still STARTING, there's no need to put it into
@@ -491,9 +478,9 @@ func (c *cluster) determineClusterState() (clusterState string) {
 	// noting that it's a little confusing that a cluster starting up
 	// could possibly go into state DEGRADED.
 	if len(c.Topology.nodeIDs)-len(c.nodeIDs()) < c.ReplicaN && c.allNodesReady() {
-		return ClusterStateDegraded
+		return string(ClusterStateDegraded)
 	}
-	return ClusterStateStarting
+	return string(ClusterStateStarting)
 }
 
 // unprotectedStatus returns the the cluster's status including what nodes it contains, its ID, and current state.
@@ -1106,7 +1093,7 @@ func (c *cluster) containsShards(index string, availableShards *roaring.Bitmap, 
 
 func (c *cluster) setup() error {
 	// Cluster always comes up in state STARTING until cluster membership is determined.
-	c.state = ClusterStateStarting
+	c.state = string(ClusterStateStarting)
 
 	// Load topology file if it exists.
 	if err := c.loadTopology(); err != nil {
@@ -1191,7 +1178,7 @@ func (c *cluster) handleNodeAction(nodeAction nodeAction) error {
 	c.mu.Unlock()
 	if err != nil {
 		c.logger.Printf("generateResizeJob error: err=%s", err)
-		if err := c.setStateAndBroadcast(ClusterStateNormal); err != nil {
+		if err := c.setStateAndBroadcast(string(ClusterStateNormal)); err != nil {
 			c.logger.Printf("setStateAndBroadcast error: err=%s", err)
 		}
 		return errors.Wrap(err, "setting state")
@@ -1295,7 +1282,7 @@ func (c *cluster) listenForJoins() {
 			// Only change state to NORMAL if we have successfully added at least one host.
 			if setNormal {
 				// Put the cluster back to state NORMAL and broadcast.
-				if err := c.setStateAndBroadcast(ClusterStateNormal); err != nil {
+				if err := c.setStateAndBroadcast(string(ClusterStateNormal)); err != nil {
 					c.logger.Printf("setStateAndBroadcast error: err=%s", err)
 				}
 			}
@@ -2157,7 +2144,7 @@ func (c *cluster) nodeJoin(node *topology.Node) error {
 			// If the result of the previous AddNode completed the joining of nodes
 			// in the topology, then change the state to NORMAL.
 			if c.haveTopologyAgreement() {
-				return c.unprotectedSetStateAndBroadcast(ClusterStateNormal)
+				return c.unprotectedSetStateAndBroadcast(string(ClusterStateNormal))
 			}
 			// This lets the remote node to proceed with opening its holder,
 			// instead of waiting in DOWN state because cluster is in STARTING state.
@@ -2167,7 +2154,7 @@ func (c *cluster) nodeJoin(node *topology.Node) error {
 		}
 
 		if c.haveTopologyAgreement() && c.allNodesReady() {
-			return c.unprotectedSetStateAndBroadcast(ClusterStateNormal)
+			return c.unprotectedSetStateAndBroadcast(string(ClusterStateNormal))
 		}
 		// Send the status to the remote node. This lets the remote node
 		// know that it can proceed with opening its Holder.
@@ -2193,14 +2180,14 @@ func (c *cluster) nodeJoin(node *topology.Node) error {
 		if err := c.addNode(node); err != nil {
 			return errors.Wrap(err, "adding node")
 		}
-		return c.unprotectedSetStateAndBroadcast(ClusterStateNormal)
+		return c.unprotectedSetStateAndBroadcast(string(ClusterStateNormal))
 	} else if err != nil {
 		return errors.Wrap(err, "checking if holder has data2")
 	}
 
 	// If the cluster has data, we need to change to RESIZING and
 	// kick off the resizing process.
-	if err := c.unprotectedSetStateAndBroadcast(ClusterStateResizing); err != nil {
+	if err := c.unprotectedSetStateAndBroadcast(string(ClusterStateResizing)); err != nil {
 		return errors.Wrap(err, "broadcasting state")
 	}
 	c.joiningLeavingNodes <- nodeAction{node, resizeJobActionAdd}
@@ -2229,7 +2216,7 @@ func (c *cluster) nodeLeave(nodeID string) error {
 			c.unprotectedCoordinatorNode().ID)
 	}
 
-	if c.state != ClusterStateNormal && c.state != ClusterStateDegraded {
+	if c.state != string(ClusterStateNormal) && c.state != string(ClusterStateDegraded) {
 		return fmt.Errorf("cluster must be '%s' or '%s' to remove a node but is '%s'",
 			ClusterStateNormal, ClusterStateDegraded, c.state)
 	}
@@ -2265,7 +2252,7 @@ func (c *cluster) nodeLeave(nodeID string) error {
 
 	// If the cluster has data then change state to RESIZING and
 	// kick off the resizing process.
-	if err := c.unprotectedSetStateAndBroadcast(ClusterStateResizing); err != nil {
+	if err := c.unprotectedSetStateAndBroadcast(string(ClusterStateResizing)); err != nil {
 		return errors.Wrap(err, "broadcasting state")
 	}
 	c.joiningLeavingNodes <- nodeAction{node: &topology.Node{ID: nodeID}, action: resizeJobActionRemove}

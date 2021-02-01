@@ -77,7 +77,7 @@ func TestNewCluster(t *testing.T) {
 		t.Fatalf("wrong number of nodes in status: %s", bytes)
 	}
 
-	if body.State != pilosa.ClusterStateNormal {
+	if body.State != string(pilosa.ClusterStateNormal) {
 		t.Fatalf("cluster state should be %s but is %s", pilosa.ClusterStateNormal, body.State)
 	}
 }

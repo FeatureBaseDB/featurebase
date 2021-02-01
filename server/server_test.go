@@ -359,7 +359,7 @@ func TestConcurrentFieldCreation(t *testing.T) {
 	cluster := test.MustRunCluster(t, 3)
 	defer cluster.Close()
 
-	err := cluster.AwaitState(pilosa.ClusterStateNormal, 100*time.Millisecond)
+	err := cluster.AwaitState(string(pilosa.ClusterStateNormal), 100*time.Millisecond)
 	if err != nil {
 		t.Fatalf("starting cluster: %v", err)
 	}
@@ -686,7 +686,7 @@ func TestClusteringNodesReplica2(t *testing.T) {
 		t.Fatalf("closing 2nd node: %v", err)
 	}
 
-	err = cluster.AwaitCoordinatorState(pilosa.ClusterStateStarting, 30*time.Second)
+	err = cluster.AwaitCoordinatorState(string(pilosa.ClusterStateStarting), 30*time.Second)
 	if err != nil {
 		t.Fatalf("after closing second server: %v", err)
 	}
@@ -713,7 +713,7 @@ func TestRemoveNodeAfterItDies(t *testing.T) {
 		cluster.Close()
 	}()
 
-	err = cluster.AwaitState(pilosa.ClusterStateNormal, 100*time.Millisecond)
+	err = cluster.AwaitState(string(pilosa.ClusterStateNormal), 100*time.Millisecond)
 	if err != nil {
 		t.Fatalf("starting cluster: %v", err)
 	}
@@ -725,7 +725,7 @@ func TestRemoveNodeAfterItDies(t *testing.T) {
 		t.Fatalf("closing third node: %v", err)
 	}
 
-	err = cluster.AwaitCoordinatorState(pilosa.ClusterStateDegraded, 30*time.Second)
+	err = cluster.AwaitCoordinatorState(string(pilosa.ClusterStateDegraded), 30*time.Second)
 	if err != nil {
 		t.Fatalf("starting cluster: %v", err)
 	}
@@ -734,7 +734,7 @@ func TestRemoveNodeAfterItDies(t *testing.T) {
 		t.Fatalf("removing failed node: %v", err)
 	}
 
-	err = cluster.AwaitCoordinatorState(pilosa.ClusterStateNormal, 30*time.Second)
+	err = cluster.AwaitCoordinatorState(string(pilosa.ClusterStateNormal), 30*time.Second)
 	if err != nil {
 		t.Fatalf("removing disabled node: %v", err)
 	}
@@ -757,7 +757,7 @@ func TestRemoveConcurrentIndexCreation(t *testing.T) {
 	}
 	defer cluster.Close()
 
-	err = cluster.AwaitState(pilosa.ClusterStateNormal, 100*time.Millisecond)
+	err = cluster.AwaitState(string(pilosa.ClusterStateNormal), 100*time.Millisecond)
 	if err != nil {
 		t.Fatalf("starting cluster: %v", err)
 	}
@@ -772,7 +772,7 @@ func TestRemoveConcurrentIndexCreation(t *testing.T) {
 		t.Fatalf("removing node: %v", err)
 	}
 
-	err = cluster.AwaitCoordinatorState(pilosa.ClusterStateNormal, 100*time.Millisecond)
+	err = cluster.AwaitCoordinatorState(string(pilosa.ClusterStateNormal), 100*time.Millisecond)
 	if err != nil {
 		t.Fatalf("starting cluster: %v", err)
 	}
@@ -904,7 +904,7 @@ func TestClusterQueriesAfterRestart(t *testing.T) {
 	defer cluster.Close()
 	cmd1 := cluster.GetNode(1)
 
-	err := cluster.AwaitState(pilosa.ClusterStateNormal, 100*time.Millisecond)
+	err := cluster.AwaitState(string(pilosa.ClusterStateNormal), 100*time.Millisecond)
 	if err != nil {
 		t.Fatalf("starting cluster: %v", err)
 	}
@@ -972,7 +972,7 @@ func TestClusterQueriesAfterRestart(t *testing.T) {
 	if err1 != nil {
 		t.Fatalf("getting state foor node 1: %v", err)
 	}
-	for state1 != pilosa.ClusterStateNormal {
+	for state1 != string(pilosa.ClusterStateNormal) {
 		time.Sleep(time.Millisecond)
 	}
 
@@ -1201,7 +1201,7 @@ func TestClusterCreatedAtRace(t *testing.T) {
 			cluster := test.MustRunCluster(t, 4)
 			defer cluster.Close()
 
-			err := cluster.AwaitState(pilosa.ClusterStateNormal, 100*time.Millisecond)
+			err := cluster.AwaitState(string(pilosa.ClusterStateNormal), 100*time.Millisecond)
 			if err != nil {
 				t.Fatalf("starting cluster: %v", err)
 			}

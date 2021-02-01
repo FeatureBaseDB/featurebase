@@ -515,12 +515,12 @@ func TestTranslation_Replication(t *testing.T) {
 		exp := `{"results":[{"attrs":{},"columns":[],"keys":["x1","x2"]}]}`
 
 		coordState, err := coord.API.State()
-		if err != nil || !test.CheckClusterState(coord, pilosa.ClusterStateNormal, 1000) {
+		if err != nil || !test.CheckClusterState(coord, string(pilosa.ClusterStateNormal), 1000) {
 			t.Fatalf("unexpected coord cluster state: %s, got: %s, err: %v", pilosa.ClusterStateNormal, coordState, err)
 		}
 
 		otherState, err := other.API.State()
-		if err != nil || !test.CheckClusterState(other, pilosa.ClusterStateNormal, 1000) {
+		if err != nil || !test.CheckClusterState(other, string(pilosa.ClusterStateNormal), 1000) {
 			t.Fatalf("unexpected other cluster state: %s, got: %s, err: %v", pilosa.ClusterStateNormal, otherState, err)
 		}
 
@@ -533,7 +533,7 @@ func TestTranslation_Replication(t *testing.T) {
 		}
 
 		coordState, err = coord.API.State()
-		if err != nil || !test.CheckClusterState(coord, pilosa.ClusterStateDegraded, 1000) {
+		if err != nil || !test.CheckClusterState(coord, string(pilosa.ClusterStateDegraded), 1000) {
 			t.Fatalf("unexpected coord cluster state: %s, got: %s", pilosa.ClusterStateDegraded, coordState)
 		}
 
