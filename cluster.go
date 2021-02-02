@@ -570,13 +570,13 @@ func (c *cluster) Nodes() []*topology.Node {
 	// Set node states and IsPrimary.
 	for _, node := range nodes {
 		node.IsCoordinator = node.ID == primaryNode.ID
-		// s, err := c.stator.NodeState(context.Background(), node.ID)
-		// if err != nil {
-		// 	node.State = nodeStateDown
-		// 	continue
-		// }
-		// node.State = string(s)
 
+		s, err := c.stator.NodeState(context.Background(), node.ID)
+		if err != nil {
+			node.State = nodeStateDown
+			continue
+		}
+		node.State = string(s)
 	}
 
 	return nodes

@@ -108,6 +108,10 @@ func TestMain_Set_Quick(t *testing.T) {
 				t.Fatal(err)
 			}
 
+			if err := m.AwaitState(string(pilosa.ClusterStateNormal), 10*time.Second); err != nil {
+				t.Fatalf("restarting cluster: %v", err)
+			}
+
 			// Validate data after reopening.
 			for field, fieldSet := range SetCommands(cmds).Fields() {
 				for id, columnIDs := range fieldSet {
@@ -187,6 +191,10 @@ func TestMain_SetRowAttrs(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	if err := m.AwaitState(string(pilosa.ClusterStateNormal), 10*time.Second); err != nil {
+		t.Fatalf("restarting cluster: %v", err)
+	}
+
 	// Query rows after reopening.
 	if res, err := m.Query(t, "i", "columnAttrs=true", `Row(x=1)`); err != nil {
 		t.Fatal(err)
@@ -241,6 +249,10 @@ func TestMain_SetColumnAttrs(t *testing.T) {
 
 	if err := m.Reopen(); err != nil {
 		t.Fatal(err)
+	}
+
+	if err := m.AwaitState(string(pilosa.ClusterStateNormal), 10*time.Second); err != nil {
+		t.Fatalf("restarting cluster: %v", err)
 	}
 
 	// Query row after reopening.
@@ -650,7 +662,10 @@ func TestClusteringNodesReplica1(t *testing.T) {
 }
 
 func TestClusteringNodesReplica2(t *testing.T) {
-	cluster := test.MustNewCluster(t, 3)
+	// Because this test shuts down 2 nodes, it needs to start as a 5-node
+	// cluster in order to retain enough available nodes for raft leader
+	// election.
+	cluster := test.MustNewCluster(t, 5)
 	for _, c := range cluster.Nodes {
 		c.Config.Cluster.ReplicaN = 2
 	}
@@ -659,11 +674,6 @@ func TestClusteringNodesReplica2(t *testing.T) {
 		t.Fatalf("starting cluster: %v", err)
 	}
 	defer cluster.Close()
-
-	err = cluster.AwaitState(string(disco.ClusterStateDown), 100*time.Millisecond)
-	if err != nil {
-		t.Fatalf("starting cluster: %v", err)
-	}
 
 	coord, others := cluster.GetCoordinator(), cluster.GetNonCoordinators()
 
@@ -676,22 +686,25 @@ func TestClusteringNodesReplica2(t *testing.T) {
 		t.Fatalf("after closing first server: %v", err)
 	}
 
-	// confirm that cluster keeps accepting queries if replication > 1
-	if _, err := coord.API.CreateIndex(context.Background(), "anewindex", pilosa.IndexOptions{}); err != nil {
-		t.Fatalf("got unexpected error creating index: %v", err)
-	}
+	// We no longer support mutations or schema changes when the cluster is in
+	// state DEGRADED, so this test doesn't apply anymore.
+	//
+	// // confirm that cluster keeps accepting queries if replication > 1
+	// if _, err := coord.API.CreateIndex(context.Background(), "anewindex", pilosa.IndexOptions{}); err != nil {
+	// 	t.Fatalf("got unexpected error creating index: %v", err)
+	// }
 
 	// confirm that cluster stops accepting queries if 2 nodes fail and replication == 2
 	if err := others[1].Close(); err != nil {
 		t.Fatalf("closing 2nd node: %v", err)
 	}
 
-	err = cluster.AwaitCoordinatorState(string(pilosa.ClusterStateStarting), 30*time.Second)
+	err = cluster.AwaitCoordinatorState(string(pilosa.ClusterStateDown), 30*time.Second)
 	if err != nil {
 		t.Fatalf("after closing second server: %v", err)
 	}
 
-	if _, err := coord.API.Query(context.Background(), &pilosa.QueryRequest{}); !strings.Contains(err.Error(), "not allowed in state STARTING") {
+	if _, err := coord.API.Query(context.Background(), &pilosa.QueryRequest{}); !strings.Contains(err.Error(), "not allowed in state DOWN") {
 		t.Fatalf("got unexpected error querying an incomplete cluster: %v", err)
 	}
 }
@@ -1201,20 +1214,15 @@ func TestClusterCreatedAtRace(t *testing.T) {
 			cluster := test.MustRunCluster(t, 4)
 			defer cluster.Close()
 
-			err := cluster.AwaitState(string(pilosa.ClusterStateNormal), 100*time.Millisecond)
-			if err != nil {
-				t.Fatalf("starting cluster: %v", err)
-			}
-
 			for _, com := range cluster.Nodes {
 				nodes := com.API.Hosts(context.Background())
 				for _, n := range nodes {
-					if n.State != "READY" {
-						t.Fatalf("unexpected node state after upping cluster: %v", nodes) //     server_test.go:1245: unexpected node state after upping cluster: [Node:http://localhost:43075:READY:TestClusterCreatedAtRace/run-0__0 Node:http://localhost:42301:READY:TestClusterCreatedAtRace/run-0__1 Node:http://localhost:42031:DOWN:TestClusterCreatedAtRace/run-0__2 Node:http://localhost:43671:READY:TestClusterCreatedAtRace/run-0__3]
+					if n.State != string(disco.NodeStateStarted) {
+						t.Fatalf("unexpected node state (%s) after upping cluster: %v", n.State, nodes)
 					}
 				}
 			}
-			_, err = cluster.Nodes[0].API.CreateIndex(context.Background(), "anindex", pilosa.IndexOptions{})
+			_, err := cluster.Nodes[0].API.CreateIndex(context.Background(), "anindex", pilosa.IndexOptions{})
 			if err != nil && errors.Cause(err).Error() != pilosa.ErrIndexExists.Error() {
 				t.Fatal(err)
 			}
