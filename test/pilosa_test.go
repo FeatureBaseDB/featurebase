@@ -85,7 +85,7 @@ func TestNewCluster(t *testing.T) {
 func getCoordinator(m *test.Command) string {
 	hosts := m.API.Hosts(context.Background())
 	for _, host := range hosts {
-		if host.IsCoordinator {
+		if host.IsPrimary {
 			return host.ID
 		}
 	}

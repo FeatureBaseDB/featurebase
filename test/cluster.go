@@ -137,7 +137,7 @@ func (c *Cluster) GetNode(n int) *Command {
 // need to act on the coordinator.
 func (c *Cluster) GetCoordinator() *Command {
 	for _, n := range c.Nodes {
-		if n.IsCoordinator() {
+		if n.IsPrimary() {
 			return n
 		}
 	}
@@ -147,7 +147,7 @@ func (c *Cluster) GetCoordinator() *Command {
 // GetNonCoordinator gets first first non-coordinator node in the list of nodes.
 func (c *Cluster) GetNonCoordinator() *Command {
 	for _, n := range c.Nodes {
-		if !n.IsCoordinator() {
+		if !n.IsPrimary() {
 			return n
 		}
 	}
@@ -158,7 +158,7 @@ func (c *Cluster) GetNonCoordinator() *Command {
 func (c *Cluster) GetNonCoordinators() []*Command {
 	rtn := make([]*Command, 0)
 	for _, n := range c.Nodes {
-		if !n.IsCoordinator() {
+		if !n.IsPrimary() {
 			rtn = append(rtn, n)
 		}
 	}
@@ -453,7 +453,7 @@ func (c *Cluster) Close() error {
 
 func (c *Cluster) CloseAndRemoveNonCoordinator() error {
 	for i, n := range c.Nodes {
-		if !n.IsCoordinator() {
+		if !n.IsPrimary() {
 			return c.CloseAndRemove(i)
 		}
 	}
@@ -522,7 +522,7 @@ func newCluster(tb testing.TB, size int, opts ...[]server.CommandOption) (*Clust
 		if len(opts) > 0 {
 			commandOpts = opts[i%len(opts)]
 		}
-		m := NewCommandNode(tb, i == 0, commandOpts...)
+		m := NewCommandNode(tb, commandOpts...)
 		cluster.Nodes[i] = m
 	}
 

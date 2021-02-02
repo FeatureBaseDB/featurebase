@@ -173,7 +173,7 @@ func (c *InternalClient) CreateIndex(ctx context.Context, index string, opt pilo
 	if err != nil {
 		return fmt.Errorf("getting nodes: %s", err)
 	}
-	coord := getCoordinatorNode(nodes)
+	coord := getPrimaryNode(nodes)
 	if coord == nil {
 		return fmt.Errorf("could not find the coordinator node")
 	}
@@ -370,9 +370,9 @@ func (c *InternalClient) Import(ctx context.Context, index, field string, shard 
 	return nil
 }
 
-func getCoordinatorNode(nodes []*topology.Node) *topology.Node {
+func getPrimaryNode(nodes []*topology.Node) *topology.Node {
 	for _, node := range nodes {
-		if node.IsCoordinator {
+		if node.IsPrimary {
 			return node
 		}
 	}
@@ -417,7 +417,7 @@ func (c *InternalClient) ImportK(ctx context.Context, index, field string, bits 
 	if err != nil {
 		return fmt.Errorf("getting nodes: %s", err)
 	}
-	coord := getCoordinatorNode(nodes)
+	coord := getPrimaryNode(nodes)
 	if coord == nil {
 		return fmt.Errorf("could not find the coordinator node")
 	}
@@ -629,7 +629,7 @@ func (c *InternalClient) ImportValueK(ctx context.Context, index, field string, 
 	if err != nil {
 		return fmt.Errorf("getting nodes: %s", err)
 	}
-	coord := getCoordinatorNode(nodes)
+	coord := getPrimaryNode(nodes)
 	if coord == nil {
 		return fmt.Errorf("could not find the coordinator node")
 	}
@@ -939,7 +939,7 @@ func (c *InternalClient) CreateFieldWithOptions(ctx context.Context, index, fiel
 	if err != nil {
 		return fmt.Errorf("getting nodes: %s", err)
 	}
-	coord := getCoordinatorNode(nodes)
+	coord := getPrimaryNode(nodes)
 	if coord == nil {
 		return fmt.Errorf("could not find the coordinator node")
 	}

@@ -288,8 +288,8 @@ func TestFragSources(t *testing.T) {
 				"node0": {},
 				"node1": {},
 				"node2": {
-					{&topology.Node{ID: "node0", URI: pnet.URI{Scheme: "http", Host: "host0", Port: 10101}, IsCoordinator: false}, "i", "f", "standard", uint64(0)},
-					{&topology.Node{ID: "node1", URI: pnet.URI{Scheme: "http", Host: "host1", Port: 10101}, IsCoordinator: false}, "i", "f", "standard", uint64(2)},
+					{&topology.Node{ID: "node0", URI: pnet.URI{Scheme: "http", Host: "host0", Port: 10101}, IsPrimary: false}, "i", "f", "standard", uint64(0)},
+					{&topology.Node{ID: "node1", URI: pnet.URI{Scheme: "http", Host: "host1", Port: 10101}, IsPrimary: false}, "i", "f", "standard", uint64(2)},
 				},
 			},
 			err: "",
@@ -300,11 +300,11 @@ func TestFragSources(t *testing.T) {
 			idx:  idx,
 			expected: map[string][]*ResizeSource{
 				"node0": {
-					{&topology.Node{ID: "node1", URI: pnet.URI{Scheme: "http", Host: "host1", Port: 10101}, IsCoordinator: false}, "i", "f", "standard", uint64(1)},
+					{&topology.Node{ID: "node1", URI: pnet.URI{Scheme: "http", Host: "host1", Port: 10101}, IsPrimary: false}, "i", "f", "standard", uint64(1)},
 				},
 				"node1": {
-					{&topology.Node{ID: "node0", URI: pnet.URI{Scheme: "http", Host: "host0", Port: 10101}, IsCoordinator: false}, "i", "f", "standard", uint64(0)},
-					{&topology.Node{ID: "node0", URI: pnet.URI{Scheme: "http", Host: "host0", Port: 10101}, IsCoordinator: false}, "i", "f", "standard", uint64(2)},
+					{&topology.Node{ID: "node0", URI: pnet.URI{Scheme: "http", Host: "host0", Port: 10101}, IsPrimary: false}, "i", "f", "standard", uint64(0)},
+					{&topology.Node{ID: "node0", URI: pnet.URI{Scheme: "http", Host: "host0", Port: 10101}, IsPrimary: false}, "i", "f", "standard", uint64(2)},
 				},
 			},
 			err: "",
@@ -315,11 +315,11 @@ func TestFragSources(t *testing.T) {
 			idx:  idx,
 			expected: map[string][]*ResizeSource{
 				"node0": {
-					{&topology.Node{ID: "node2", URI: pnet.URI{Scheme: "http", Host: "host2", Port: 10101}, IsCoordinator: false}, "i", "f", "standard", uint64(0)},
-					{&topology.Node{ID: "node2", URI: pnet.URI{Scheme: "http", Host: "host2", Port: 10101}, IsCoordinator: false}, "i", "f", "standard", uint64(2)},
+					{&topology.Node{ID: "node2", URI: pnet.URI{Scheme: "http", Host: "host2", Port: 10101}, IsPrimary: false}, "i", "f", "standard", uint64(0)},
+					{&topology.Node{ID: "node2", URI: pnet.URI{Scheme: "http", Host: "host2", Port: 10101}, IsPrimary: false}, "i", "f", "standard", uint64(2)},
 				},
 				"node1": {
-					{&topology.Node{ID: "node0", URI: pnet.URI{Scheme: "http", Host: "host0", Port: 10101}, IsCoordinator: false}, "i", "f", "standard", uint64(3)},
+					{&topology.Node{ID: "node0", URI: pnet.URI{Scheme: "http", Host: "host0", Port: 10101}, IsPrimary: false}, "i", "f", "standard", uint64(3)},
 				},
 				"node2": {},
 			},
@@ -617,6 +617,9 @@ func TestCluster_PreviousNode(t *testing.T) {
 
 // NEXT: move this test to internal and unexport IsCoordinator
 func TestCluster_Coordinator(t *testing.T) {
+	// TODO check if this test still makes sense
+	t.Skip()
+
 	const urisCount = 2
 	var uris []pnet.URI
 	if err := port.GetPorts(func(ports []int) error {
@@ -634,11 +637,11 @@ func TestCluster_Coordinator(t *testing.T) {
 
 	c1 := *newCluster()
 	c1.Node = node1
-	c1.Coordinator = node1.ID
+	// c1.Coordinator = node1.ID
 	c1.noder = noder
 	c2 := *newCluster()
 	c2.Node = node2
-	c2.Coordinator = node1.ID
+	// c2.Coordinator = node1.ID
 	c2.noder = noder
 
 	t.Run("IsCoordinator", func(t *testing.T) {
@@ -1066,32 +1069,6 @@ func TestAE(t *testing.T) {
 		case <-ch:
 		case <-time.After(time.Second):
 			t.Fatalf("abort should not have blocked this long")
-		}
-	})
-}
-
-// Ensures that coordinator can be changed.
-func TestCluster_UpdateCoordinator(t *testing.T) {
-	t.Run("UpdateCoordinator", func(t *testing.T) {
-		c := NewTestCluster(t, 2)
-
-		cNodes := c.noder.Nodes()
-
-		oldNode := cNodes[0]
-		newNode := cNodes[1]
-
-		// Update coordinator to the same value.
-		if c.updateCoordinator(oldNode) {
-			t.Errorf("did not expect coordinator to change")
-		} else if c.Coordinator != oldNode.ID {
-			t.Errorf("expected coordinator: %s, but got: %s", c.Coordinator, oldNode.URI)
-		}
-
-		// Update coordinator to a new value.
-		if !c.updateCoordinator(newNode) {
-			t.Errorf("expected coordinator to change")
-		} else if c.Coordinator != newNode.ID {
-			t.Errorf("expected coordinator: %s, but got: %s", c.Coordinator, newNode.URI)
 		}
 	})
 }

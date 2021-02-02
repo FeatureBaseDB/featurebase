@@ -186,7 +186,7 @@ func TestClusterResize_AddNode(t *testing.T) {
 		}
 
 		// Configure node1
-		m1 := test.NewCommandNode(t, false)
+		m1 := test.NewCommandNode(t)
 
 		m1.Config.Gossip.Seeds = []string{seed}
 
@@ -247,7 +247,7 @@ func TestClusterResize_AddNode(t *testing.T) {
 		m0.QueryExpect(t, "i", "", `Row(f=1)`, exp)
 
 		// Configure node1
-		m1 := test.NewCommandNode(t, false)
+		m1 := test.NewCommandNode(t)
 
 		m1.Config.Gossip.Seeds = []string{seed}
 
@@ -308,7 +308,7 @@ func TestClusterResize_AddNode(t *testing.T) {
 		m0.QueryExpect(t, "i", "", `Row(f=1)`, exp)
 
 		// Configure node1
-		m1 := test.NewCommandNode(t, false)
+		m1 := test.NewCommandNode(t)
 		m1.Config.Gossip.Seeds = []string{seed}
 
 		if err := port.GetListeners(func(lsns []*net.TCPListener) error {
@@ -374,7 +374,7 @@ func TestClusterResize_AddNode(t *testing.T) {
 		m0.QueryExpect(t, "i", "", `Row(f=1)`, exp)
 
 		// Configure node1
-		m1 := test.NewCommandNode(t, false)
+		m1 := test.NewCommandNode(t)
 		m1.Config.Gossip.Seeds = []string{seed}
 
 		if err := port.GetListeners(func(lsns []*net.TCPListener) error {
@@ -435,7 +435,7 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 		}()
 
 		// Configure node1
-		m1 := test.NewCommandNode(t, false)
+		m1 := test.NewCommandNode(t)
 		m1.Config.Gossip.Seeds = []string{seed}
 		if err := port.GetListeners(func(lsns []*net.TCPListener) error {
 			portsCfg := test.GenPortsConfig(test.NewPorts(lsns))
@@ -497,7 +497,7 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 		m0.QueryExpect(t, "i", "", `Row(f=1)`, exp)
 
 		// Configure node1
-		m1 := test.NewCommandNode(t, false)
+		m1 := test.NewCommandNode(t)
 		m1.Config.Gossip.Seeds = []string{seed}
 		if err := port.GetListeners(func(lsns []*net.TCPListener) error {
 			portsCfg := test.GenPortsConfig(test.NewPorts(lsns))
@@ -565,7 +565,7 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 		m0.QueryExpect(t, "i", "", `Row(f=1)`, exp)
 
 		// Configure node1
-		m1 := test.NewCommandNode(t, false)
+		m1 := test.NewCommandNode(t)
 		m1.Config.Gossip.Seeds = []string{seed}
 		if err := port.GetListeners(func(lsns []*net.TCPListener) error {
 			portsCfg := test.GenPortsConfig(test.NewPorts(lsns))
@@ -631,7 +631,7 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 		m0.QueryExpect(t, "i", "", `Row(f=1)`, exp)
 
 		// Configure node1
-		m1 := test.NewCommandNode(t, false)
+		m1 := test.NewCommandNode(t)
 		m1.Config.Gossip.Seeds = []string{seed}
 		if err := port.GetListeners(func(lsns []*net.TCPListener) error {
 			portsCfg := test.GenPortsConfig(test.NewPorts(lsns))
@@ -677,7 +677,7 @@ func TestCluster_GossipMembership(t *testing.T) {
 		var eg errgroup.Group
 
 		// Configure node1
-		m1 := test.NewCommandNode(t, false)
+		m1 := test.NewCommandNode(t)
 		defer m1.Close()
 		eg.Go(func() error {
 			// Pass invalid seed as first in list
@@ -693,7 +693,7 @@ func TestCluster_GossipMembership(t *testing.T) {
 		})
 
 		// Configure node1
-		m2 := test.NewCommandNode(t, false)
+		m2 := test.NewCommandNode(t)
 		defer m2.Close()
 		eg.Go(func() error {
 			// Pass invalid seed as first in list

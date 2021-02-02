@@ -123,9 +123,8 @@ type Config struct {
 	ImportWorkerPoolSize int `toml:"-"`
 
 	Cluster struct {
-		Coordinator bool   `toml:"coordinator"`
-		ReplicaN    int    `toml:"replicas"`
-		Name        string `toml:"name"`
+		ReplicaN int    `toml:"replicas"`
+		Name     string `toml:"name"`
 		// This LongQueryTime is deprecated but still exists for backward compatibility
 		LongQueryTime toml.Duration `toml:"long-query-time"`
 	} `toml:"cluster"`

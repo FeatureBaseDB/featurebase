@@ -84,7 +84,6 @@ func NewTestCluster(tb testing.TB, n int) *cluster {
 	cNodes := c.noder.Nodes()
 
 	c.Node = cNodes[0]
-	c.Coordinator = cNodes[0].ID
 	c.SetState(string(ClusterStateNormal))
 
 	return c
@@ -266,9 +265,8 @@ func (t *ClusterCluster) addCluster(i int, saveTopology bool) (*cluster, error) 
 	uri := NewTestURI("http", fmt.Sprintf("host%d", i), uint16(0))
 
 	node := &topology.Node{
-		ID:            id,
-		URI:           uri,
-		IsCoordinator: i == 0,
+		ID:  id,
+		URI: uri,
 	}
 
 	// add URI to common
@@ -296,7 +294,7 @@ func (t *ClusterCluster) addCluster(i int, saveTopology bool) (*cluster, error) 
 	c.Topology = NewTopology(c.Hasher, c.partitionN, c.ReplicaN, c)
 	c.holder = h
 	c.Node = node
-	c.Coordinator = t.common.Nodes[0].ID // the first node is the coordinator
+	// c.Coordinator = t.common.Nodes[0].ID // the first node is the coordinator
 	c.broadcaster = t.broadcaster(c)
 
 	// add nodes
@@ -530,7 +528,7 @@ func (t *ClusterCluster) FollowResizeInstruction(instr *ResizeInstruction) error
 		complete.Error = err.Error()
 	}
 
-	node := instr.Coordinator
+	node := instr.Primary
 	return bcast{t: t}.SendTo(node, complete)
 }
 
@@ -567,7 +565,7 @@ func NewTestClusterWithReplication(tb testing.TB, nNodes, nReplicas, partitionN 
 	cNodes := c.noder.Nodes()
 
 	c.Node = cNodes[0]
-	c.Coordinator = cNodes[0].ID
+	// c.Coordinator = cNodes[0].ID
 	c.SetState(string(ClusterStateNormal))
 
 	if err := c.holder.Open(); err != nil {

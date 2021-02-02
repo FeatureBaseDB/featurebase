@@ -106,10 +106,6 @@ func getMessage(typ byte) Message {
 		return &ResizeInstruction{}
 	case messageTypeResizeInstructionComplete:
 		return &ResizeInstructionComplete{}
-	case messageTypeSetCoordinator:
-		return &SetCoordinatorMessage{}
-	case messageTypeUpdateCoordinator:
-		return &UpdateCoordinatorMessage{}
 	case messageTypeNodeState:
 		return &NodeStateMessage{}
 	case messageTypeRecalculateCaches:
@@ -147,10 +143,6 @@ func getMessageType(m Message) byte {
 		return messageTypeResizeInstruction
 	case *ResizeInstructionComplete:
 		return messageTypeResizeInstructionComplete
-	case *SetCoordinatorMessage:
-		return messageTypeSetCoordinator
-	case *UpdateCoordinatorMessage:
-		return messageTypeUpdateCoordinator
 	case *NodeStateMessage:
 		return messageTypeNodeState
 	case *RecalculateCaches:

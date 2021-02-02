@@ -108,7 +108,6 @@ type cluster struct { // nolint: maligned
 	// Required for cluster Resize.
 	Static      bool // Static is primarily used for testing in a non-gossip environment.
 	state       string
-	Coordinator string
 	holder      *Holder
 	broadcaster broadcaster
 
@@ -228,18 +227,6 @@ func (c *cluster) setCoordinator(n *topology.Node) error {
 		return fmt.Errorf("coordinator node does not match this node")
 	}
 
-	// Update IsCoordinator on all nodes (locally).
-	_ = c.unprotectedUpdateCoordinator(n)
-
-	// Send the update coordinator message to all nodes.
-	err := c.unprotectedSendSync(
-		&UpdateCoordinatorMessage{
-			New: n,
-		})
-	if err != nil {
-		return fmt.Errorf("problem sending UpdateCoordinator message: %v", err)
-	}
-
 	// Broadcast cluster status.
 	return c.unprotectedSendSync(c.unprotectedStatus())
 }
@@ -262,40 +249,9 @@ func (c *cluster) unprotectedSendSync(m Message) error {
 	return eg.Wait()
 }
 
-// updateCoordinator updates this nodes Coordinator value as well as
-// changing the corresponding node's IsCoordinator value
-// to true, and sets all other nodes to false. Returns true if the value
-// changed.
-func (c *cluster) updateCoordinator(n *topology.Node) bool { // nolint: unparam
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.unprotectedUpdateCoordinator(n)
-}
-
-func (c *cluster) unprotectedUpdateCoordinator(n *topology.Node) bool {
-	var changed bool
-	if c.Coordinator != n.ID {
-		c.Coordinator = n.ID
-		changed = true
-	}
-	for _, node := range c.noder.Nodes() {
-		if node.ID == n.ID {
-			node.IsCoordinator = true
-		} else {
-			node.IsCoordinator = false
-		}
-	}
-	return changed
-}
-
 // addNode adds a node to the Cluster and updates and saves the
 // new topology. unprotected.
 func (c *cluster) addNode(node *topology.Node) error {
-	// If the node being added is the coordinator, set it for this node.
-	if node.IsCoordinator {
-		c.Coordinator = node.ID
-	}
-
 	// add to cluster
 	if !c.addNodeBasicSorted(node) {
 		return nil
@@ -541,9 +497,9 @@ func (c *cluster) addNodeBasicSorted(node *topology.Node) bool {
 		n.Mu.Lock()
 		defer n.Mu.Unlock()
 
-		if n.State != node.State || n.IsCoordinator != node.IsCoordinator || n.URI != node.URI {
+		if n.State != node.State || n.IsPrimary != node.IsPrimary || n.URI != node.URI {
 			n.State = node.State
-			n.IsCoordinator = node.IsCoordinator
+			n.IsPrimary = node.IsPrimary
 			n.URI = node.URI
 			n.GRPCURI = node.GRPCURI
 			return true
@@ -570,7 +526,7 @@ func (c *cluster) Nodes() []*topology.Node {
 
 	// Set node states and IsPrimary.
 	for _, node := range nodes {
-		node.IsCoordinator = node.ID == primaryNode.ID
+		node.IsPrimary = node.ID == primaryNode.ID
 
 		s, err := c.stator.NodeState(context.Background(), node.ID)
 		if err != nil {
@@ -1432,7 +1388,7 @@ func (c *cluster) unprotectedGenerateResizeJobByAction(nodeAction nodeAction) (*
 		instr := &ResizeInstruction{
 			JobID:              j.ID,
 			Node:               toCluster.unprotectedNodeByID(node.ID),
-			Coordinator:        snap.PrimaryFieldTranslationNode(),
+			Primary:            snap.PrimaryFieldTranslationNode(),
 			Sources:            fragmentSourcesByNode[node.ID],
 			TranslationSources: translationSourcesByNode[node.ID],
 			NodeStatus:         c.nodeStatus(), // Include the NodeStatus in order to ensure that schema and availableShards are in sync on the receiving node.
@@ -1609,7 +1565,7 @@ func (c *cluster) followResizeInstruction(instr *ResizeInstruction) error {
 			complete.Error = err.Error()
 		}
 
-		if err := c.sendTo(instr.Coordinator, complete); err != nil {
+		if err := c.sendTo(instr.Primary, complete); err != nil {
 			c.logger.Printf("sending resizeInstructionComplete error: err=%s", err)
 		}
 	}()
@@ -2361,6 +2317,7 @@ func (c *cluster) PrimaryReplicaNode() *topology.Node {
 func (c *cluster) unprotectedPrimaryReplicaNode() *topology.Node {
 	pos := c.nodePositionByID(c.Node.ID)
 	if pos <= 0 {
+		fmt.Println("----------------------- PRIMARY NOT FOUND")
 		return nil
 	}
 	cNodes := c.noder.Nodes()
@@ -2975,7 +2932,7 @@ type ClusterStatus struct {
 type ResizeInstruction struct {
 	JobID              int64
 	Node               *topology.Node
-	Coordinator        *topology.Node
+	Primary            *topology.Node
 	Sources            []*ResizeSource
 	TranslationSources []*TranslationResizeSource
 	NodeStatus         *NodeStatus
@@ -3099,16 +3056,6 @@ type ResizeInstructionComplete struct {
 	JobID int64
 	Node  *topology.Node
 	Error string
-}
-
-// SetCoordinatorMessage is an internal message instructing nodes to honor a new coordinator.
-type SetCoordinatorMessage struct {
-	New *topology.Node
-}
-
-// UpdateCoordinatorMessage is an internal message for reassigning the coordinator.
-type UpdateCoordinatorMessage struct {
-	New *topology.Node
 }
 
 // NodeStateMessage is an internal message for broadcasting a node's state.

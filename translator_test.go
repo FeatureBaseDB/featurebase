@@ -204,28 +204,24 @@ func TestTranslation_Reset(t *testing.T) {
 		c := test.MustRunCluster(t, 4,
 			[]server.CommandOption{
 				server.OptCommandServerOptions(
-					pilosa.OptServerIsCoordinator(true),
 					pilosa.OptServerNodeID("2node0"),
 					pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
 					pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
 				)},
 			[]server.CommandOption{
 				server.OptCommandServerOptions(
-					pilosa.OptServerIsCoordinator(false),
 					pilosa.OptServerNodeID("4node1"),
 					pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
 					pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
 				)},
 			[]server.CommandOption{
 				server.OptCommandServerOptions(
-					pilosa.OptServerIsCoordinator(false),
 					pilosa.OptServerNodeID("3node2"),
 					pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
 					pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
 				)},
 			[]server.CommandOption{
 				server.OptCommandServerOptions(
-					pilosa.OptServerIsCoordinator(false),
 					pilosa.OptServerNodeID("1node3"),
 					pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
 					pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
@@ -304,28 +300,24 @@ func TestTranslation_KeyNotFound(t *testing.T) {
 	c := test.MustRunCluster(t, 4,
 		[]server.CommandOption{
 			server.OptCommandServerOptions(
-				pilosa.OptServerIsCoordinator(true),
 				pilosa.OptServerNodeID("node0"),
 				pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
 				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
 			)},
 		[]server.CommandOption{
 			server.OptCommandServerOptions(
-				pilosa.OptServerIsCoordinator(false),
 				pilosa.OptServerNodeID("node1"),
 				pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
 				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
 			)},
 		[]server.CommandOption{
 			server.OptCommandServerOptions(
-				pilosa.OptServerIsCoordinator(false),
 				pilosa.OptServerNodeID("node2"),
 				pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
 				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
 			)},
 		[]server.CommandOption{
 			server.OptCommandServerOptions(
-				pilosa.OptServerIsCoordinator(false),
 				pilosa.OptServerNodeID("node3"),
 				pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
 				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
@@ -462,21 +454,18 @@ func TestTranslation_Replication(t *testing.T) {
 		c := test.MustRunCluster(t, 3,
 			[]server.CommandOption{
 				server.OptCommandServerOptions(
-					pilosa.OptServerIsCoordinator(true),
 					pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
 					pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
 					pilosa.OptServerReplicaN(2),
 				)},
 			[]server.CommandOption{
 				server.OptCommandServerOptions(
-					pilosa.OptServerIsCoordinator(false),
 					pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
 					pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
 					pilosa.OptServerReplicaN(2),
 				)},
 			[]server.CommandOption{
 				server.OptCommandServerOptions(
-					pilosa.OptServerIsCoordinator(false),
 					pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
 					pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
 					pilosa.OptServerReplicaN(2),
@@ -552,14 +541,12 @@ func TestTranslation_Coordinator(t *testing.T) {
 		c := test.MustRunCluster(t, 2,
 			[]server.CommandOption{
 				server.OptCommandServerOptions(
-					pilosa.OptServerIsCoordinator(true),
 					pilosa.OptServerNodeID("node0"),
 					pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
 					pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
 				)},
 			[]server.CommandOption{
 				server.OptCommandServerOptions(
-					pilosa.OptServerIsCoordinator(false),
 					pilosa.OptServerNodeID("node1"),
 					pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
 					pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
@@ -624,28 +611,24 @@ func TestTranslation_TranslateIDsOnCluster(t *testing.T) {
 	c := test.MustRunCluster(t, 4,
 		[]server.CommandOption{
 			server.OptCommandServerOptions(
-				pilosa.OptServerIsCoordinator(true),
 				pilosa.OptServerNodeID("node0"),
 				pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
 				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
 			)},
 		[]server.CommandOption{
 			server.OptCommandServerOptions(
-				pilosa.OptServerIsCoordinator(false),
 				pilosa.OptServerNodeID("node1"),
 				pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
 				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
 			)},
 		[]server.CommandOption{
 			server.OptCommandServerOptions(
-				pilosa.OptServerIsCoordinator(false),
 				pilosa.OptServerNodeID("node2"),
 				pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
 				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
 			)},
 		[]server.CommandOption{
 			server.OptCommandServerOptions(
-				pilosa.OptServerIsCoordinator(false),
 				pilosa.OptServerNodeID("node3"),
 				pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
 				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),

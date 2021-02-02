@@ -1394,7 +1394,7 @@ func TestHandler_Endpoints(t *testing.T) {
 
 func TestCluster_TranslateStore(t *testing.T) {
 	cluster := test.MustNewCluster(t, 1)
-	cluster.Nodes[0] = test.NewCommandNode(t, true,
+	cluster.Nodes[0] = test.NewCommandNode(t,
 		server.OptCommandServerOptions(
 			pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
 			pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderWithLockerFunc(nil, &sync.Mutex{})),

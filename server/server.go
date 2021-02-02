@@ -387,12 +387,6 @@ func (m *Command) SetupServer() error {
 		m.logger.Printf("DEPRECATED: Configuration parameter cluster.long-query-time has been renamed to long-query-time")
 	}
 
-	// Set Coordinator.
-	coordinatorOpt := pilosa.OptServerIsCoordinator(false)
-	if m.Config.Cluster.Coordinator || len(m.Config.Gossip.Seeds) == 0 {
-		coordinatorOpt = pilosa.OptServerIsCoordinator(true)
-	}
-
 	// Use other config parameters to set Etcd parameters which we don't want to
 	// expose in the user-facing config.
 	//
@@ -440,7 +434,6 @@ func (m *Command) SetupServer() error {
 		pilosa.OptServerRowcacheOn(m.Config.RowcacheOn),
 		pilosa.OptServerRBFConfig(m.Config.RBFConfig),
 		pilosa.OptServerQueryHistoryLength(m.Config.QueryHistoryLength),
-		coordinatorOpt,
 		discoOpt,
 	}
 

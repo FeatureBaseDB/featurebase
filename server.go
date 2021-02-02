@@ -91,7 +91,6 @@ type Server struct { // nolint: maligned
 	maxWritesPerRequest int
 	confirmDownSleep    time.Duration
 	confirmDownRetries  int
-	isCoordinator       bool
 	syncer              holderSyncer
 
 	translationSyncer      TranslationSyncer
@@ -292,15 +291,6 @@ func OptServerClusterName(name string) ServerOption {
 func OptServerSerializer(ser Serializer) ServerOption {
 	return func(s *Server) error {
 		s.serializer = ser
-		return nil
-	}
-}
-
-// OptServerIsCoordinator is a functional option on Server
-// used to specify whether or not this server is the coordinator.
-func OptServerIsCoordinator(is bool) ServerOption {
-	return func(s *Server) error {
-		s.isCoordinator = is
 		return nil
 	}
 }
@@ -575,12 +565,14 @@ func (s *Server) Open() error {
 	// Set node ID.
 	s.nodeID = s.disCo.ID()
 
+	// TODO we cannot set IsPrimary here because we don't have all the needed info
 	node := &topology.Node{
-		ID:            s.nodeID,
-		URI:           s.uri,
-		GRPCURI:       s.grpcURI,
-		IsCoordinator: s.isCoordinator,
-		State:         nodeStateDown,
+		ID:      s.nodeID,
+		URI:     s.uri,
+		GRPCURI: s.grpcURI,
+		State:   nodeStateDown,
+		// TODO set primary
+		IsPrimary: false,
 	}
 
 	// Set metadata for this node.
@@ -876,7 +868,7 @@ func (s *Server) receiveMessage(m Message) error {
 		if err != nil {
 			return err
 		}
-		if !s.isCoordinator {
+		if !s.IsPrimary() {
 			if obj.Schema != nil {
 				s.holder.applyCreatedAt(obj.Schema.Indexes)
 			}
@@ -892,10 +884,6 @@ func (s *Server) receiveMessage(m Message) error {
 		if err != nil {
 			return err
 		}
-	case *SetCoordinatorMessage:
-		return s.cluster.setCoordinator(obj.New)
-	case *UpdateCoordinatorMessage:
-		s.cluster.updateCoordinator(obj.New)
 	case *NodeStateMessage:
 		err := s.cluster.receiveNodeState(obj.NodeID, obj.State)
 		if err != nil {
@@ -1058,6 +1046,12 @@ func (s *Server) mergeRemoteStatus(ns *NodeStatus) error {
 	return nil
 }
 
+// IsPrimary returns if this node is primary right now or not.
+func (s *Server) IsPrimary() bool {
+	primary := s.cluster.PrimaryReplicaNode()
+	return s.nodeID == primary.ID
+}
+
 // monitorDiagnostics periodically polls the Pilosa Indexes for cluster info.
 func (s *Server) monitorDiagnostics() {
 	// Do not send more than once a minute
@@ -1157,11 +1151,12 @@ func (s *Server) monitorRuntime() {
 }
 
 func (srv *Server) StartTransaction(ctx context.Context, id string, timeout time.Duration, exclusive bool, remote bool) (*Transaction, error) {
+	snap := topology.NewClusterSnapshot(srv.cluster, srv.cluster.Hasher, srv.cluster.partitionN)
 	node := srv.node()
-	if !remote && !node.IsCoordinator && len(srv.cluster.Nodes()) > 1 {
+	if !remote && !snap.IsPrimaryFieldTranslationNode(node.ID) && len(srv.cluster.Nodes()) > 1 {
 		return nil, ErrNodeNotCoordinator
 	}
-	if remote && (node.IsCoordinator || len(srv.cluster.Nodes()) == 1) {
+	if remote && (snap.IsPrimaryFieldTranslationNode(node.ID) || len(srv.cluster.Nodes()) == 1) {
 		return nil, errors.New("unexpected remote start call to coordinator or single node cluster")
 	}
 
@@ -1203,11 +1198,12 @@ func (srv *Server) StartTransaction(ctx context.Context, id string, timeout time
 }
 
 func (srv *Server) FinishTransaction(ctx context.Context, id string, remote bool) (*Transaction, error) {
+	snap := topology.NewClusterSnapshot(srv.cluster, srv.cluster.Hasher, srv.cluster.partitionN)
 	node := srv.node()
-	if !remote && !node.IsCoordinator && len(srv.cluster.Nodes()) > 1 {
+	if !remote && !snap.IsPrimaryFieldTranslationNode(node.ID) && len(srv.cluster.Nodes()) > 1 {
 		return nil, ErrNodeNotCoordinator
 	}
-	if remote && (node.IsCoordinator || len(srv.cluster.Nodes()) == 1) {
+	if remote && (snap.IsPrimaryFieldTranslationNode(node.ID) || len(srv.cluster.Nodes()) == 1) {
 		return nil, errors.New("unexpected remote finish call to coordinator or single node cluster")
 	}
 
@@ -1232,8 +1228,9 @@ func (srv *Server) FinishTransaction(ctx context.Context, id string, remote bool
 }
 
 func (srv *Server) Transactions(ctx context.Context) (map[string]*Transaction, error) {
+	snap := topology.NewClusterSnapshot(srv.cluster, srv.cluster.Hasher, srv.cluster.partitionN)
 	node := srv.node()
-	if !node.IsCoordinator && len(srv.cluster.Nodes()) > 1 {
+	if !snap.IsPrimaryFieldTranslationNode(node.ID) && len(srv.cluster.Nodes()) > 1 {
 		return nil, ErrNodeNotCoordinator
 	}
 
@@ -1241,12 +1238,14 @@ func (srv *Server) Transactions(ctx context.Context) (map[string]*Transaction, e
 }
 
 func (srv *Server) GetTransaction(ctx context.Context, id string, remote bool) (*Transaction, error) {
+	snap := topology.NewClusterSnapshot(srv.cluster, srv.cluster.Hasher, srv.cluster.partitionN)
+
 	node := srv.node()
-	if !remote && !node.IsCoordinator && len(srv.cluster.Nodes()) > 1 {
+	if !remote && !snap.IsPrimaryFieldTranslationNode(node.ID) && len(srv.cluster.Nodes()) > 1 {
 		return nil, ErrNodeNotCoordinator
 	}
 
-	if remote && (node.IsCoordinator || len(srv.cluster.Nodes()) == 1) {
+	if remote && (snap.IsPrimaryFieldTranslationNode(node.ID) || len(srv.cluster.Nodes()) == 1) {
 		return nil, errors.New("unexpected remote get call to coordinator or single node cluster")
 	}
 

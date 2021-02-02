@@ -90,13 +90,12 @@ func newCommand(tb testing.TB, opts ...server.CommandOption) *Command {
 }
 
 // NewCommandNode returns a new instance of Command with clustering enabled.
-func NewCommandNode(tb testing.TB, isCoordinator bool, opts ...server.CommandOption) *Command {
+func NewCommandNode(tb testing.TB, opts ...server.CommandOption) *Command {
 	// We want tests to default to using the in-memory translate store, so we
 	// prepend opts with that functional option. If a different translate store
 	// has been specified, it will override this one.
 	opts = prependTestServerOpts(opts)
 	m := newCommand(tb, opts...)
-	m.Config.Cluster.Coordinator = isCoordinator
 	return m
 }
 
@@ -191,9 +190,9 @@ func (m *Command) URL() string { return m.API.Node().URI.String() }
 // ID returns the node ID used by the running program.
 func (m *Command) ID() string { return m.API.Node().ID }
 
-// IsCoordinator returns true if this is the coordinator.
-func (m *Command) IsCoordinator() bool {
-	coord := m.API.CoordinatorNode()
+// IsPrimary returns true if this is the primary.
+func (m *Command) IsPrimary() bool {
+	coord := m.API.PrimaryNode()
 	if coord == nil {
 		return false
 	}

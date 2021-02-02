@@ -844,8 +844,8 @@ func (api *API) Node() *topology.Node {
 	return api.server.node()
 }
 
-// CoordinatorNode returns the coordinator node for the cluster.
-func (api *API) CoordinatorNode() *topology.Node {
+// PrimaryNode returns the coordinator node for the cluster.
+func (api *API) PrimaryNode() *topology.Node {
 	// Create a snapshot of the cluster to use for node/partition calculations.
 	snap := topology.NewClusterSnapshot(api.cluster.noder, api.cluster.Hasher, api.cluster.ReplicaN)
 	return snap.PrimaryFieldTranslationNode()
@@ -1736,38 +1736,6 @@ func (api *API) indexField(indexName string, fieldName string, shard uint64) (*I
 		return nil, nil, newNotFoundError(ErrFieldNotFound, fieldName)
 	}
 	return index, field, nil
-}
-
-// SetCoordinator makes a new Node the cluster coordinator.
-func (api *API) SetCoordinator(ctx context.Context, id string) (oldNode, newNode *topology.Node, err error) {
-	span, _ := tracing.StartSpanFromContext(ctx, "API.SetCoordinator")
-	defer span.Finish()
-
-	if err := api.validate(apiSetCoordinator); err != nil {
-		return nil, nil, errors.Wrap(err, "validating api method")
-	}
-
-	oldNode = api.cluster.nodeByID(api.cluster.Coordinator)
-	newNode = api.cluster.nodeByID(id)
-	if newNode == nil {
-		return nil, nil, errors.Wrap(ErrNodeIDNotExists, "getting new node")
-	}
-
-	// If the new coordinator is this node, do the SetCoordinator directly.
-	if newNode.ID == api.Node().ID {
-		return oldNode, newNode, api.cluster.setCoordinator(newNode)
-	}
-
-	// Send the set-coordinator message to new node.
-	err = api.server.SendTo(
-		newNode,
-		&SetCoordinatorMessage{
-			New: newNode,
-		})
-	if err != nil {
-		return nil, nil, fmt.Errorf("problem sending SetCoordinator message: %s", err)
-	}
-	return oldNode, newNode, nil
 }
 
 // RemoveNode puts the cluster into the "RESIZING" state and begins the job of

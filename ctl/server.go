@@ -47,7 +47,6 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 	flags.StringSliceVar(&srv.Config.Handler.AllowedOrigins, "handler.allowed-origins", []string{}, "Comma separated list of allowed origin URIs (for CORS/Web UI).")
 
 	// Cluster
-	flags.BoolVar(&srv.Config.Cluster.Coordinator, "cluster.coordinator", srv.Config.Cluster.Coordinator, "Host that will act as cluster coordinator during startup and resizing.")
 	flags.IntVar(&srv.Config.Cluster.ReplicaN, "cluster.replicas", 1, "Number of hosts each piece of data should be stored on.")
 	flags.DurationVar((*time.Duration)(&srv.Config.Cluster.LongQueryTime), "cluster.long-query-time", time.Duration(srv.Config.Cluster.LongQueryTime), "RENAMED TO 'long-query-time': Duration that will trigger log and stat messages for slow queries.") // negative duration indicates invalid value because 0 is meaningful
 	flags.StringVar(&srv.Config.Cluster.Name, "cluster.name", srv.Config.Cluster.Name, "Human-readable name for the cluster.")

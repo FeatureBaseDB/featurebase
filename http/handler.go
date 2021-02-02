@@ -367,7 +367,6 @@ func newRouter(handler *Handler) http.Handler {
 	router := mux.NewRouter()
 	router.HandleFunc("/cluster/resize/abort", handler.handlePostClusterResizeAbort).Methods("POST").Name("PostClusterResizeAbort")
 	router.HandleFunc("/cluster/resize/remove-node", handler.handlePostClusterResizeRemoveNode).Methods("POST").Name("PostClusterResizeRemoveNode")
-	router.HandleFunc("/cluster/resize/set-coordinator", handler.handlePostClusterResizeSetCoordinator).Methods("POST").Name("PostClusterResizeSetCoordinator")
 	router.PathPrefix("/debug/pprof/").Handler(http.DefaultServeMux).Methods("GET")
 	router.Handle("/debug/vars", expvar.Handler()).Methods("GET")
 	router.Handle("/metrics", promhttp.Handler())
@@ -2027,38 +2026,6 @@ func parseUint64Slice(s string) ([]uint64, error) {
 		a = append(a, num)
 	}
 	return a, nil
-}
-
-func (h *Handler) handlePostClusterResizeSetCoordinator(w http.ResponseWriter, r *http.Request) {
-	if !validHeaderAcceptJSON(r.Header) {
-		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
-		return
-	}
-	// Decode request.
-	var req setCoordinatorRequest
-	err := json.NewDecoder(r.Body).Decode(&req)
-	if err != nil {
-		http.Error(w, "decoding request "+err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	oldNode, newNode, err := h.api.SetCoordinator(r.Context(), req.ID)
-	if err != nil {
-		if errors.Cause(err) == pilosa.ErrNodeIDNotExists {
-			http.Error(w, "setting new coordinator: "+err.Error(), http.StatusNotFound)
-		} else {
-			http.Error(w, "setting new coordinator: "+err.Error(), http.StatusInternalServerError)
-		}
-		return
-	}
-	// Encode response.
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(setCoordinatorResponse{
-		Old: oldNode,
-		New: newNode,
-	}); err != nil {
-		h.logger.Printf("response encoding error: %s", err)
-	}
 }
 
 type setCoordinatorRequest struct {

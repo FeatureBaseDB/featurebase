@@ -647,7 +647,7 @@ func (h *Holder) Open() error {
 			return errors.Wrap(err, "opening index")
 		}
 
-		if h.isCoordinator() {
+		if h.isPrimary() {
 			index.createdAt = timestamp()
 			err = index.OpenWithTimestamp()
 		} else {
@@ -1201,9 +1201,9 @@ func (h *Holder) recalculateCaches() {
 }
 
 // TODO: this needs to be removed
-func (h *Holder) isCoordinator() bool {
+func (h *Holder) isPrimary() bool {
 	if s, ok := h.broadcaster.(*Server); ok {
-		return s.isCoordinator
+		return s.IsPrimary()
 	}
 	return false
 }
