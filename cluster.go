@@ -214,23 +214,6 @@ func (c *cluster) unprotectedIsCoordinator() bool {
 	return snap.PrimaryFieldTranslationNode().ID == c.Node.ID
 }
 
-// setCoordinator tells the current node to become the
-// Coordinator. In response to this, the current node
-// will consider itself coordinator and update the other
-// nodes with its version of Cluster.Status.
-func (c *cluster) setCoordinator(n *topology.Node) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	// Verify that the new Coordinator value matches
-	// this node.
-	if c.Node.ID != n.ID {
-		return fmt.Errorf("coordinator node does not match this node")
-	}
-
-	// Broadcast cluster status.
-	return c.unprotectedSendSync(c.unprotectedStatus())
-}
-
 // unprotectedSendSync is used in place of c.broadcaster.SendSync (which is
 // Server.SendSync) because Server.SendSync needs to obtain a cluster lock to
 // get the list of nodes. TODO: the reference loop from

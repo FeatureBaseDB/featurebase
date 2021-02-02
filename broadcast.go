@@ -64,8 +64,6 @@ const (
 	messageTypeClusterStatus
 	messageTypeResizeInstruction
 	messageTypeResizeInstructionComplete
-	messageTypeSetCoordinator
-	messageTypeUpdateCoordinator
 	messageTypeNodeState
 	messageTypeRecalculateCaches
 	messageTypeNodeEvent

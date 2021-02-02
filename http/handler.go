@@ -2028,15 +2028,6 @@ func parseUint64Slice(s string) ([]uint64, error) {
 	return a, nil
 }
 
-type setCoordinatorRequest struct {
-	ID string `json:"id"`
-}
-
-type setCoordinatorResponse struct {
-	Old *topology.Node `json:"old"`
-	New *topology.Node `json:"new"`
-}
-
 // handlePostClusterResizeRemoveNode handles POST /cluster/resize/remove-node request.
 func (h *Handler) handlePostClusterResizeRemoveNode(w http.ResponseWriter, r *http.Request) {
 	if !validHeaderAcceptJSON(r.Header) {
