@@ -512,8 +512,9 @@ func (c *cluster) unprotectedNodeByID(id string) *topology.Node {
 func (c *cluster) topologyContainsNode(id string) bool {
 	c.Topology.mu.RLock()
 	defer c.Topology.mu.RUnlock()
-	for _, nid := range c.Topology.nodeIDs {
-		if id == nid {
+
+	for _, n := range c.noder.Nodes() {
+		if id == n.ID {
 			return true
 		}
 	}
@@ -2216,9 +2217,10 @@ func (c *cluster) nodeLeave(nodeID string) error {
 			c.unprotectedCoordinatorNode().ID)
 	}
 
-	if c.state != string(ClusterStateNormal) && c.state != string(ClusterStateDegraded) {
-		return fmt.Errorf("cluster must be '%s' or '%s' to remove a node but is '%s'",
-			ClusterStateNormal, ClusterStateDegraded, c.state)
+	state, err := c.stator.ClusterState(context.TODO())
+	if err != nil || (state != disco.ClusterStateNormal && state != disco.ClusterStateDegraded) {
+		return fmt.Errorf("cluster must be '%s' or '%s' to remove a node but is '%s', error: %v",
+			ClusterStateNormal, ClusterStateDegraded, state, err)
 	}
 
 	// Ensure that node is in the cluster.
@@ -2245,16 +2247,11 @@ func (c *cluster) nodeLeave(nodeID string) error {
 		if err := c.removeNode(nodeID); err != nil {
 			return errors.Wrap(err, "removing node")
 		}
-		return c.unprotectedSetStateAndBroadcast(c.determineClusterState())
+		return nil
 	} else if err != nil {
 		return errors.Wrap(err, "checking if holder has data")
 	}
 
-	// If the cluster has data then change state to RESIZING and
-	// kick off the resizing process.
-	if err := c.unprotectedSetStateAndBroadcast(string(ClusterStateResizing)); err != nil {
-		return errors.Wrap(err, "broadcasting state")
-	}
 	c.joiningLeavingNodes <- nodeAction{node: &topology.Node{ID: nodeID}, action: resizeJobActionRemove}
 
 	return nil

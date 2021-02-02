@@ -371,12 +371,13 @@ func TestConcurrentFieldCreation(t *testing.T) {
 	cluster := test.MustRunCluster(t, 3)
 	defer cluster.Close()
 
-	err := cluster.AwaitState(string(pilosa.ClusterStateNormal), 100*time.Millisecond)
+	node0 := cluster.GetNode(0)
+	err := node0.AwaitState(string(pilosa.ClusterStateNormal), 100*time.Millisecond)
 	if err != nil {
 		t.Fatalf("starting cluster: %v", err)
 	}
 
-	api0 := cluster.GetNode(0).API
+	api0 := node0.API
 	if _, err := api0.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil {
 		t.Fatalf("creating index: %v", err)
 	}
@@ -643,7 +644,7 @@ func TestClusteringNodesReplica1(t *testing.T) {
 	cluster := test.MustRunCluster(t, 3)
 	defer cluster.Close()
 
-	if err := cluster.AwaitState(string(disco.ClusterStateNormal), 100*time.Millisecond); err != nil {
+	if err := cluster.GetNode(0).AwaitState(string(disco.ClusterStateNormal), 100*time.Millisecond); err != nil {
 		t.Fatalf("starting cluster: %v", err)
 	}
 
@@ -651,7 +652,7 @@ func TestClusteringNodesReplica1(t *testing.T) {
 		t.Fatalf("closing third node: %v", err)
 	}
 
-	if err := cluster.AwaitCoordinatorState(string(disco.ClusterStateDown), 60*time.Second); err != nil {
+	if err := cluster.GetCoordinator().AwaitState(string(disco.ClusterStateDown), 30*time.Second); err != nil {
 		t.Fatalf("starting cluster: %v", err)
 	}
 
@@ -681,7 +682,7 @@ func TestClusteringNodesReplica2(t *testing.T) {
 		t.Fatalf("closing third node: %v", err)
 	}
 
-	err = cluster.AwaitCoordinatorState(string(disco.ClusterStateDegraded), 30*time.Second)
+	err = coord.AwaitState(string(disco.ClusterStateDegraded), 30*time.Second)
 	if err != nil {
 		t.Fatalf("after closing first server: %v", err)
 	}
@@ -699,7 +700,7 @@ func TestClusteringNodesReplica2(t *testing.T) {
 		t.Fatalf("closing 2nd node: %v", err)
 	}
 
-	err = cluster.AwaitCoordinatorState(string(pilosa.ClusterStateDown), 30*time.Second)
+	err = coord.AwaitState(string(pilosa.ClusterStateDown), 30*time.Second)
 	if err != nil {
 		t.Fatalf("after closing second server: %v", err)
 	}
@@ -710,6 +711,8 @@ func TestClusteringNodesReplica2(t *testing.T) {
 }
 
 func TestRemoveNodeAfterItDies(t *testing.T) {
+	t.Skip("TestRemoveNodeAfterItDies won't be supported unless we implement resizer.")
+
 	cluster := test.MustNewCluster(t, 3)
 	for _, c := range cluster.Nodes {
 		c.Config.Cluster.ReplicaN = 2
@@ -726,19 +729,20 @@ func TestRemoveNodeAfterItDies(t *testing.T) {
 		cluster.Close()
 	}()
 
-	err = cluster.AwaitState(string(pilosa.ClusterStateNormal), 100*time.Millisecond)
+	coord, others := cluster.GetCoordinator(), cluster.GetNonCoordinators()
+
+	err = coord.AwaitState(string(pilosa.ClusterStateNormal), 100*time.Millisecond)
 	if err != nil {
 		t.Fatalf("starting cluster: %v", err)
 	}
 
-	coord, others := cluster.GetCoordinator(), cluster.GetNonCoordinators()
 	// prevent double-closing cluster.GetNode(2) from the deferred Close above
 	disabled := others[0]
 	if err := disabled.Close(); err != nil {
 		t.Fatalf("closing third node: %v", err)
 	}
 
-	err = cluster.AwaitCoordinatorState(string(pilosa.ClusterStateDegraded), 30*time.Second)
+	err = coord.AwaitState(string(pilosa.ClusterStateDegraded), 30*time.Second)
 	if err != nil {
 		t.Fatalf("starting cluster: %v", err)
 	}
@@ -747,7 +751,7 @@ func TestRemoveNodeAfterItDies(t *testing.T) {
 		t.Fatalf("removing failed node: %v", err)
 	}
 
-	err = cluster.AwaitCoordinatorState(string(pilosa.ClusterStateNormal), 30*time.Second)
+	err = coord.AwaitState(string(pilosa.ClusterStateNormal), 30*time.Second)
 	if err != nil {
 		t.Fatalf("removing disabled node: %v", err)
 	}
@@ -770,27 +774,28 @@ func TestRemoveConcurrentIndexCreation(t *testing.T) {
 	}
 	defer cluster.Close()
 
-	err = cluster.AwaitState(string(pilosa.ClusterStateNormal), 100*time.Millisecond)
+	node0 := cluster.GetNode(0)
+	err = node0.AwaitState(string(pilosa.ClusterStateNormal), 100*time.Millisecond)
 	if err != nil {
 		t.Fatalf("starting cluster: %v", err)
 	}
 
 	errc := make(chan error)
 	go func() {
-		_, err := cluster.GetNode(0).API.CreateIndex(context.Background(), "blah", pilosa.IndexOptions{})
+		_, err := node0.API.CreateIndex(context.Background(), "blah", pilosa.IndexOptions{})
 		errc <- err
 	}()
 
-	if _, err := cluster.GetNode(0).API.RemoveNode(cluster.GetNode(2).API.Node().ID); err != nil {
+	if _, err := node0.API.RemoveNode(cluster.GetNode(2).API.Node().ID); err != nil {
 		t.Fatalf("removing node: %v", err)
 	}
 
-	err = cluster.AwaitCoordinatorState(string(pilosa.ClusterStateNormal), 100*time.Millisecond)
+	err = cluster.GetCoordinator().AwaitState(string(pilosa.ClusterStateNormal), 100*time.Millisecond)
 	if err != nil {
 		t.Fatalf("starting cluster: %v", err)
 	}
 
-	hosts := cluster.GetNode(0).API.Hosts(context.Background())
+	hosts := node0.API.Hosts(context.Background())
 	if len(hosts) != 2 {
 		t.Fatalf("unexpected hosts: %v", hosts)
 	}
@@ -917,7 +922,7 @@ func TestClusterQueriesAfterRestart(t *testing.T) {
 	defer cluster.Close()
 	cmd1 := cluster.GetNode(1)
 
-	err := cluster.AwaitState(string(pilosa.ClusterStateNormal), 100*time.Millisecond)
+	err := cmd1.AwaitState(string(pilosa.ClusterStateNormal), 100*time.Millisecond)
 	if err != nil {
 		t.Fatalf("starting cluster: %v", err)
 	}
