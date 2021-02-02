@@ -728,7 +728,7 @@ func (e *Etcd) leaseKeepAlive(ttl int64) (clientv3.LeaseID, func(context.Context
 
 	leaseResp, err := cli.Grant(context.TODO(), ttl)
 	if err != nil {
-		return 0, nil, errors.Wrapf(err, "leaseKeepAlive: creates a new lease (TTL: %d)", ttl)
+		return 0, nil, errors.Wrapf(err, "leaseKeepAlive: creates a new lease (TTL: %v)", ttl)
 	}
 
 	keepaliveFunc := func(ctx context.Context, tick time.Duration) {
@@ -743,9 +743,10 @@ func (e *Etcd) leaseKeepAlive(ttl int64) (clientv3.LeaseID, func(context.Context
 				if cli, err := e.client(); err != nil {
 					log.Printf("leaseKeepAlive: creates a new client: %v\n", err)
 				} else {
-					if _, err := cli.Revoke(context.Background(), leaseResp.ID); err != nil {
-						log.Printf("leaseKeepAlive: revokes the lease (ID: %v): %v\n", leaseResp.ID, err)
+					if _, err := cli.Revoke(context.TODO(), leaseResp.ID); err != nil {
+						log.Printf("leaseKeepAlive: revokes the lease (ID: %x): %v\n", leaseResp.ID, err)
 					}
+					cli.Close()
 				}
 				return
 
@@ -754,7 +755,7 @@ func (e *Etcd) leaseKeepAlive(ttl int64) (clientv3.LeaseID, func(context.Context
 					log.Printf("leaseKeepAlive: creates a new client: %v\n", err)
 				} else {
 					if _, err = cli.KeepAliveOnce(ctx, leaseResp.ID); err != nil {
-						log.Printf("leaseKeepAlive: renews the lease (ID: %v): %v\n", leaseResp.ID, err)
+						log.Printf("leaseKeepAlive: renews the lease (ID: %x): %v\n", leaseResp.ID, err)
 					}
 					cli.Close()
 				}
@@ -767,10 +768,12 @@ func (e *Etcd) leaseKeepAlive(ttl int64) (clientv3.LeaseID, func(context.Context
 
 func (e *Etcd) client() (*clientv3.Client, error) {
 	urls := e.e.Server.Cluster().ClientURLs()
+
 	cli, err := clientv3.NewFromURLs(urls)
 	if err != nil {
 		return nil, errors.Wrapf(err, "creates a new etcd client from URLs (%v)", urls)
 	}
+
 	return cli, nil
 }
 

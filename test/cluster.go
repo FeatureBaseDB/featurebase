@@ -438,7 +438,7 @@ func (c *Cluster) Start() error {
 		return err
 	}
 
-	return c.AwaitState(string(pilosa.ClusterStateNormal), 30*time.Second)
+	return c.GetNode(0).AwaitState(string(pilosa.ClusterStateNormal), 30*time.Second)
 }
 
 // Close stops a Cluster
@@ -468,47 +468,6 @@ func (c *Cluster) CloseAndRemove(n int) error {
 	copy(c.Nodes[n:], c.Nodes[n+1:])
 	c.Nodes = c.Nodes[:len(c.Nodes)-1]
 	return err
-}
-
-// AwaitState waits for the cluster coordinator (assumed to be the first
-// node) to reach a specified state.
-func (c *Cluster) AwaitCoordinatorState(expectedState string, timeout time.Duration) error {
-	if len(c.Nodes) < 1 {
-		return errors.New("can't await coordinator state on an empty cluster")
-	}
-	onlyCoordinator := &Cluster{Nodes: []*Command{c.GetCoordinator()}}
-	return onlyCoordinator.AwaitState(expectedState, timeout)
-}
-
-// ExceptionalState returns an error if any node in the cluster is not
-// in the expected state.
-func (c *Cluster) ExceptionalState(expectedState string) error {
-	for _, node := range c.Nodes {
-		state, err := node.API.State()
-		if err != nil || state != expectedState {
-			return fmt.Errorf("node %q: state %s: err %v", node.ID(), state, err)
-		}
-	}
-	return nil
-}
-
-// AwaitState waits for the whole cluster to reach a specified state.
-func (c *Cluster) AwaitState(expectedState string, timeout time.Duration) (err error) {
-	if len(c.Nodes) < 1 {
-		return errors.New("can't await state of an empty cluster")
-	}
-	startTime := time.Now()
-	var elapsed time.Duration
-	for elapsed = 0; elapsed <= timeout; elapsed = time.Since(startTime) {
-		// Counterintuitive: We're returning if the err *is* nil,
-		// meaning we've reached the expected state.
-		if err = c.ExceptionalState(expectedState); err == nil {
-			return err
-		}
-		time.Sleep(1 * time.Millisecond)
-	}
-	return fmt.Errorf("waited %v for cluster to reach state %q: %v",
-		elapsed, expectedState, err)
 }
 
 // MustNewCluster creates a new cluster. If opts contains only one
