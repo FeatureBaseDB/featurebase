@@ -84,8 +84,6 @@ func NewTestCluster(tb testing.TB, n int) *cluster {
 	cNodes := c.noder.Nodes()
 
 	c.Node = cNodes[0]
-	c.SetState(string(ClusterStateNormal))
-
 	return c
 }
 
@@ -330,13 +328,6 @@ func NewClusterCluster(tb testing.TB, n int) *ClusterCluster {
 	return tc
 }
 
-// SetState sets the state of the cluster on each node.
-func (t *ClusterCluster) SetState(state string) {
-	for _, c := range t.Clusters {
-		c.SetState(state)
-	}
-}
-
 // Open opens all clusters in the test cluster.
 func (t *ClusterCluster) Open() error {
 	for _, c := range t.Clusters {
@@ -565,8 +556,6 @@ func NewTestClusterWithReplication(tb testing.TB, nNodes, nReplicas, partitionN 
 	cNodes := c.noder.Nodes()
 
 	c.Node = cNodes[0]
-	// c.Coordinator = cNodes[0].ID
-	c.SetState(string(ClusterStateNormal))
 
 	if err := c.holder.Open(); err != nil {
 		panic(err)

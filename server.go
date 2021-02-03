@@ -884,11 +884,6 @@ func (s *Server) receiveMessage(m Message) error {
 		if err != nil {
 			return err
 		}
-	case *NodeStateMessage:
-		err := s.cluster.receiveNodeState(obj.NodeID, obj.State)
-		if err != nil {
-			return err
-		}
 	case *RecalculateCaches:
 		s.holder.recalculateCaches()
 	case *NodeEvent:
@@ -1048,8 +1043,10 @@ func (s *Server) mergeRemoteStatus(ns *NodeStatus) error {
 
 // IsPrimary returns if this node is primary right now or not.
 func (s *Server) IsPrimary() bool {
-	primary := s.cluster.PrimaryReplicaNode()
-	return s.nodeID == primary.ID
+	if primary := s.cluster.PrimaryReplicaNode(); primary != nil {
+		return s.nodeID == primary.ID
+	}
+	return false
 }
 
 // monitorDiagnostics periodically polls the Pilosa Indexes for cluster info.
