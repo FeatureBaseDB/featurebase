@@ -50,9 +50,8 @@ const (
 	ClusterStateResizing = disco.ClusterStateResizing
 	ClusterStateDown     = disco.ClusterStateDown
 
-	// NodeState represents the state of a node during startup.
-	nodeStateReady = "READY"
-	nodeStateDown  = "DOWN"
+	// nodeStateDown represents the state of a node which is unavailable.
+	nodeStateDown = "DOWN"
 
 	// resizeJob states.
 	resizeJobStateRunning = "RUNNING"
@@ -211,24 +210,6 @@ func (c *cluster) unprotectedIsCoordinator() bool {
 	// Create a snapshot of the cluster to use for node/partition calculations.
 	snap := topology.NewClusterSnapshot(c.noder, c.Hasher, c.ReplicaN)
 	return snap.PrimaryFieldTranslationNode().ID == c.Node.ID
-}
-
-// unprotectedSendSync is used in place of c.broadcaster.SendSync (which is
-// Server.SendSync) because Server.SendSync needs to obtain a cluster lock to
-// get the list of nodes. TODO: the reference loop from
-// Server->cluster->broadcaster(Server) will likely continue to cause confusion
-// and should be refactored.
-func (c *cluster) unprotectedSendSync(m Message) error {
-	var eg errgroup.Group
-	for _, node := range c.noder.Nodes() {
-		node := node
-		// Don't send to myself.
-		if node.ID == c.Node.ID {
-			continue
-		}
-		eg.Go(func() error { return c.broadcaster.SendTo(node, m) })
-	}
-	return eg.Wait()
 }
 
 // addNode adds a node to the Cluster and updates and saves the
