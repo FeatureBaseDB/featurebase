@@ -671,7 +671,7 @@ func (s Serializer) encodeNodes(a []*topology.Node) []*internal.Node {
 
 // s.encodeNode converts a Node into its internal representation.
 func (s Serializer) encodeNode(m *topology.Node) *internal.Node {
-	n := m.ProtectedClone()
+	n := m.Clone()
 	return &internal.Node{
 		ID:      n.ID,
 		URI:     s.encodeURI(n.URI),

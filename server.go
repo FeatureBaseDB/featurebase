@@ -940,11 +940,7 @@ func (s *Server) SendSync(m Message) error {
 
 	for _, node := range s.cluster.Nodes() {
 		node := node
-
-		// prevent race against cluster.addNodeBasicSorted() in cluster.go
-		node.Mu.Lock()
 		uri := node.URI // URI is a struct value
-		node.Mu.Unlock()
 
 		// Don't forward the message to ourselves.
 		if s.uri == uri {
@@ -972,10 +968,7 @@ func (s *Server) SendTo(node *topology.Node, m Message) error {
 	}
 	msg = append([]byte{getMessageType(m)}, msg...)
 
-	// prevent race against cluster.addNodeBasicSorted() in cluster.go
-	node.Mu.Lock()
 	uri := node.URI // URI is a struct value
-	node.Mu.Unlock()
 
 	return s.defaultClient.SendMessage(context.Background(), &uri, msg)
 }
