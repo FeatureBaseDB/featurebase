@@ -1060,8 +1060,8 @@ func TestHandler_Endpoints(t *testing.T) {
 		}
 		body := mustJSONDecodeSlice(t, w.Body)
 		bmap := body[0].(map[string]interface{})
-		if bmap["isCoordinator"] != true {
-			t.Fatalf("expected true coordinator")
+		if bmap["isPrimary"] != false {
+			t.Fatalf("expected false primary, got: %+v", bmap)
 		}
 
 		// invalid argument should return BadRequest
