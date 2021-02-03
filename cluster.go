@@ -818,20 +818,6 @@ func (c *cluster) partitionNodes(partitionID int) []*topology.Node {
 	return nodes
 }
 
-func (c *cluster) primaryPartitionNode(partition int) *topology.Node {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.unprotectedPrimaryPartitionNode(partition)
-}
-
-// unprotectedPrimaryPartition returns tprimary node of partition.
-func (c *cluster) unprotectedPrimaryPartitionNode(partition int) *topology.Node {
-	if nodes := c.partitionNodes(partition); len(nodes) > 0 {
-		return nodes[0]
-	}
-	return nil
-}
-
 func (t *Topology) IsPrimary(nodeID string, partitionID int) bool {
 	primary := t.PrimaryNodeIndex(partitionID)
 	return nodeID == t.nodeIDs[primary]
@@ -1651,6 +1637,11 @@ func (t *Topology) Nodes() []*topology.Node {
 	return nodes
 }
 
+// PrimaryNodeID implements the Noder interface.
+func (t *Topology) PrimaryNodeID(topology.Hasher) string {
+	return ""
+}
+
 // SetNodes implements the Noder interface.
 func (t *Topology) SetNodes(nodes []*topology.Node) {}
 
@@ -2466,11 +2457,14 @@ func (c *cluster) findIndexKeys(ctx context.Context, indexName string, keys ...s
 
 	// TODO: use local replicas to short-circuit network traffic
 
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	snap := topology.NewClusterSnapshot(c.noder, c.Hasher, c.ReplicaN)
+
 	// Group keys by node.
 	keysByNode := make(map[*topology.Node][]string)
 	for partitionID, keys := range keysByPartition {
 		// Find the primary node for this partition.
-		primary := c.primaryPartitionNode(partitionID)
+		primary := snap.PrimaryPartitionNode(partitionID)
 		if primary == nil {
 			return nil, errors.Errorf("translating index(%s) keys(%v) on partition(%d) - cannot find primary node", indexName, keys, partitionID)
 		}
@@ -2572,12 +2566,15 @@ func (c *cluster) createIndexKeys(ctx context.Context, indexName string, keys ..
 
 	// TODO: use local replicas to short-circuit network traffic
 
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	snap := topology.NewClusterSnapshot(c.noder, c.Hasher, c.ReplicaN)
+
 	// Group keys by node.
 	// Delete remote keys from the by-partition map so that it can be used for local translation.
 	keysByNode := make(map[*topology.Node][]string)
 	for partitionID, keys := range keysByPartition {
 		// Find the primary node for this partition.
-		primary := c.primaryPartitionNode(partitionID)
+		primary := snap.PrimaryPartitionNode(partitionID)
 		if primary == nil {
 			return nil, errors.Errorf("translating index(%s) keys(%v) on partition(%d) - cannot find primary node", indexName, keys, partitionID)
 		}

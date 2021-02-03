@@ -422,7 +422,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		stator:    disco.NopStator,
 		metadator: disco.NopMetadator,
 		resizer:   disco.NopResizer,
-		noder:     topology.NewLocalNoder(nil),
+		noder:     topology.NewEmptyLocalNoder(),
 		sharder:   disco.NopSharder,
 
 		confirmDownRetries: defaultConfirmDownRetries,
@@ -565,14 +565,12 @@ func (s *Server) Open() error {
 	// Set node ID.
 	s.nodeID = s.disCo.ID()
 
-	// TODO we cannot set IsPrimary here because we don't have all the needed info
 	node := &topology.Node{
-		ID:      s.nodeID,
-		URI:     s.uri,
-		GRPCURI: s.grpcURI,
-		State:   nodeStateDown,
-		// TODO set primary
-		IsPrimary: false,
+		ID:        s.nodeID,
+		URI:       s.uri,
+		GRPCURI:   s.grpcURI,
+		State:     nodeStateDown,
+		IsPrimary: s.IsPrimary(),
 	}
 
 	// Set metadata for this node.
@@ -1036,10 +1034,7 @@ func (s *Server) mergeRemoteStatus(ns *NodeStatus) error {
 
 // IsPrimary returns if this node is primary right now or not.
 func (s *Server) IsPrimary() bool {
-	if primary := s.cluster.PrimaryReplicaNode(); primary != nil {
-		return s.nodeID == primary.ID
-	}
-	return false
+	return s.nodeID == s.noder.PrimaryNodeID(s.cluster.Hasher)
 }
 
 // monitorDiagnostics periodically polls the Pilosa Indexes for cluster info.
@@ -1141,7 +1136,7 @@ func (s *Server) monitorRuntime() {
 }
 
 func (srv *Server) StartTransaction(ctx context.Context, id string, timeout time.Duration, exclusive bool, remote bool) (*Transaction, error) {
-	snap := topology.NewClusterSnapshot(srv.cluster, srv.cluster.Hasher, srv.cluster.partitionN)
+	snap := topology.NewClusterSnapshot(srv.cluster.noder, srv.cluster.Hasher, srv.cluster.partitionN)
 	node := srv.node()
 	if !remote && !snap.IsPrimaryFieldTranslationNode(node.ID) && len(srv.cluster.Nodes()) > 1 {
 		return nil, ErrNodeNotCoordinator
@@ -1188,7 +1183,7 @@ func (srv *Server) StartTransaction(ctx context.Context, id string, timeout time
 }
 
 func (srv *Server) FinishTransaction(ctx context.Context, id string, remote bool) (*Transaction, error) {
-	snap := topology.NewClusterSnapshot(srv.cluster, srv.cluster.Hasher, srv.cluster.partitionN)
+	snap := topology.NewClusterSnapshot(srv.cluster.noder, srv.cluster.Hasher, srv.cluster.partitionN)
 	node := srv.node()
 	if !remote && !snap.IsPrimaryFieldTranslationNode(node.ID) && len(srv.cluster.Nodes()) > 1 {
 		return nil, ErrNodeNotCoordinator
@@ -1218,7 +1213,7 @@ func (srv *Server) FinishTransaction(ctx context.Context, id string, remote bool
 }
 
 func (srv *Server) Transactions(ctx context.Context) (map[string]*Transaction, error) {
-	snap := topology.NewClusterSnapshot(srv.cluster, srv.cluster.Hasher, srv.cluster.partitionN)
+	snap := topology.NewClusterSnapshot(srv.cluster.noder, srv.cluster.Hasher, srv.cluster.partitionN)
 	node := srv.node()
 	if !snap.IsPrimaryFieldTranslationNode(node.ID) && len(srv.cluster.Nodes()) > 1 {
 		return nil, ErrNodeNotCoordinator
@@ -1228,7 +1223,7 @@ func (srv *Server) Transactions(ctx context.Context) (map[string]*Transaction, e
 }
 
 func (srv *Server) GetTransaction(ctx context.Context, id string, remote bool) (*Transaction, error) {
-	snap := topology.NewClusterSnapshot(srv.cluster, srv.cluster.Hasher, srv.cluster.partitionN)
+	snap := topology.NewClusterSnapshot(srv.cluster.noder, srv.cluster.Hasher, srv.cluster.partitionN)
 
 	node := srv.node()
 	if !remote && !snap.IsPrimaryFieldTranslationNode(node.ID) && len(srv.cluster.Nodes()) > 1 {

@@ -22,6 +22,7 @@ import (
 // nodes in a cluster can be maintained outside of the cluster struct.
 type Noder interface {
 	Nodes() []*Node // Remember: this has to be sorted correctly!!
+	PrimaryNodeID(hasher Hasher) string
 	SetNodes([]*Node)
 	AppendNode(*Node)
 	RemoveNode(nodeID string) bool
@@ -49,6 +50,16 @@ func NewEmptyLocalNoder() *localNoder {
 // Nodes implements the Noder interface.
 func (n *localNoder) Nodes() []*Node {
 	return n.nodes
+}
+
+// PrimaryNodeID implements the Noder interface.
+func (n *localNoder) PrimaryNodeID(hasher Hasher) string {
+	snap := NewClusterSnapshot(NewLocalNoder(n.nodes), hasher, 1)
+	primaryNode := snap.PrimaryFieldTranslationNode()
+	if primaryNode == nil {
+		return ""
+	}
+	return primaryNode.ID
 }
 
 // SetNodes implements the Noder interface.
