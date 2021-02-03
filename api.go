@@ -816,7 +816,8 @@ func (api *API) Node() *Node {
 
 // NodeUsage represents all usage measurements for one node.
 type NodeUsage struct {
-	Disk DiskUsage `json:"diskUsage"`
+	Disk   DiskUsage   `json:"diskUsage"`
+	Memory MemoryUsage `json:"memoryUsage"`
 }
 
 // DiskUsage represents the storage space used on disk by one node.
@@ -844,7 +845,13 @@ type FieldUsage struct {
 	Metadata  uint64 `json:"metadata"`
 }
 
-// Usage gets the disk usage, in a map[nodeID]NodeUsage.
+// MemoryUsage represents the memory used by one node.
+type MemoryUsage struct {
+	Capacity uint64 `json:"capacity"`
+	TotalUse uint64 `json:"totalInUse"`
+}
+
+// Usage gets the resource usage per index, in a map[nodeID]NodeUsage
 func (api *API) Usage(ctx context.Context, remote bool) (map[string]NodeUsage, error) {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.Usage")
 	defer span.Finish()
@@ -860,22 +867,37 @@ func (api *API) Usage(ctx context.Context, remote bool) (map[string]NodeUsage, e
 		totalSize += s.Total
 	}
 
-	capacity, err := api.server.systemInfo.DiskCapacity(api.holder.path)
+	// NOTE: these errors are ignored in api.Info(), but checked here
+	si := api.server.systemInfo
+	diskCapacity, err := si.DiskCapacity(api.holder.path)
 	if err != nil {
 		api.server.logger.Printf("couldn't read disk capacity: %s", err)
+	}
+
+	memoryCapacity, err := si.MemTotal()
+	if err != nil {
+		api.server.logger.Printf("couldn't read memory capacity: %s", err)
+	}
+	memoryUse, err := si.MemUsed()
+	if err != nil {
+		api.server.logger.Printf("couldn't read memory usage: %s", err)
 	}
 
 	// Insert into result.
 	nodeUsage := NodeUsage{
 		Disk: DiskUsage{
-			Capacity:   capacity,
+			Capacity:   diskCapacity,
 			TotalUse:   totalSize,
 			IndexUsage: indexDetails,
+		},
+		Memory: MemoryUsage{
+			Capacity: memoryCapacity,
+			TotalUse: memoryUse,
 		},
 	}
 	nodeUsages[api.server.nodeID] = nodeUsage
 
-	// Collect diskUsage from remote nodes
+	// Collect usage from remote nodes
 	if !remote {
 		nodes := api.cluster.Nodes()
 		for _, node := range nodes {
