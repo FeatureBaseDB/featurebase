@@ -353,25 +353,21 @@ func (c *cluster) addNodeBasicSorted(node *topology.Node) bool {
 	n := c.unprotectedNodeByID(node.ID)
 
 	if n != nil {
-		// prevent race on node.URI read against http/client.go:1929
-		n.Mu.Lock()
-		defer n.Mu.Unlock()
-
+		nn := &topology.Node{
+			ID:        node.ID,
+			URI:       node.URI,
+			GRPCURI:   node.GRPCURI,
+			IsPrimary: node.IsPrimary,
+			State:     node.State,
+		}
 		if n.State != node.State || n.IsPrimary != node.IsPrimary || n.URI != node.URI {
-			n.State = node.State
-			n.IsPrimary = node.IsPrimary
-			n.URI = node.URI
-			n.GRPCURI = node.GRPCURI
+			*n = *nn
 			return true
 		}
 		return false
 	}
 
 	c.noder.AppendNode(node)
-
-	// All hosts must be merged in the same order on all nodes in the cluster.
-	// sort.Sort(topology.ByID(c.nodes)) // TODO: this should no longer apply
-
 	return true
 }
 
@@ -1859,12 +1855,6 @@ func (c *cluster) ReceiveEvent(e *NodeEvent) (err error) {
 	}
 	switch e.Event {
 	case NodeJoin:
-		e.Node.Mu.Lock()
-		c.Node.Mu.Lock()
-		c.logger.Debugf("nodeJoin of %s on %s", e.Node.URI, c.Node.URI)
-		c.Node.Mu.Unlock()
-		e.Node.Mu.Unlock()
-
 		// Ignore the event if this is not the coordinator.
 		if !c.isCoordinator() {
 			return nil
