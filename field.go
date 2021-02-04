@@ -1867,10 +1867,11 @@ func (p fieldSlice) Less(i, j int) bool { return p[i].Name() < p[j].Name() }
 
 // FieldInfo represents schema information for a field.
 type FieldInfo struct {
-	Name      string       `json:"name"`
-	CreatedAt int64        `json:"createdAt,omitempty"`
-	Options   FieldOptions `json:"options"`
-	Views     []*ViewInfo  `json:"views,omitempty"`
+	Name        string       `json:"name"`
+	CreatedAt   int64        `json:"createdAt,omitempty"`
+	Options     FieldOptions `json:"options"`
+	Cardinality uint64       `json:"cardinality,omitempty"`
+	Views       []*ViewInfo  `json:"views,omitempty"`
 }
 
 type fieldInfoSlice []*FieldInfo

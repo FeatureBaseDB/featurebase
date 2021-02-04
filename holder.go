@@ -851,9 +851,10 @@ func (h *Holder) Schema() []*IndexInfo {
 	var a []*IndexInfo
 	for _, index := range h.Indexes() {
 		di := &IndexInfo{
-			Name:      index.Name(),
-			CreatedAt: index.CreatedAt(),
-			Options:   index.Options(),
+			Name:       index.Name(),
+			CreatedAt:  index.CreatedAt(),
+			Options:    index.Options(),
+			ShardWidth: ShardWidth,
 		}
 		for _, field := range index.Fields() {
 			fi := &FieldInfo{
@@ -874,7 +875,7 @@ func (h *Holder) Schema() []*IndexInfo {
 	return a
 }
 
-// limitedSchema returns schema information for all indexes and fields.
+// limitedSchema returns schema information for all non-hidden indexes and fields.
 func (h *Holder) limitedSchema() []*IndexInfo {
 	var a []*IndexInfo
 	for _, index := range h.Indexes() {

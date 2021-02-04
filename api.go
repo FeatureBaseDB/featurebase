@@ -155,14 +155,20 @@ func (api *API) Query(ctx context.Context, req *QueryRequest) (QueryResponse, er
 		return QueryResponse{}, errors.Wrap(err, "validating api method")
 	}
 
+	if !req.Remote {
+		defer api.tracker.Finish(api.tracker.Start(req.Query, req.SQLQuery, api.server.nodeID, req.Index, start))
+	}
+
+	return api.query(ctx, req)
+}
+
+// query provides query functionality for internal use, without tracing, validation, or tracking
+func (api *API) query(ctx context.Context, req *QueryRequest) (QueryResponse, error) {
 	q, err := pql.NewParser(strings.NewReader(req.Query)).Parse()
 	if err != nil {
 		return QueryResponse{}, errors.Wrap(err, "parsing")
 	}
 
-	if !req.Remote {
-		defer api.tracker.Finish(api.tracker.Start(req.Query, req.SQLQuery, api.server.nodeID, req.Index, start))
-	}
 	// TODO can we get rid of exec options and pass the QueryRequest directly to executor?
 	execOpts := &execOptions{
 		Remote:          req.Remote,
@@ -987,6 +993,32 @@ func (api *API) Schema(ctx context.Context) []*IndexInfo {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.Schema")
 	defer span.Finish()
 	return api.holder.limitedSchema()
+}
+
+// SchemaDetails returns information about each index in Pilosa including which
+// fields they contain, and additional field information such as cardinality
+func (api *API) SchemaDetails(ctx context.Context) []*IndexInfo {
+	span, _ := tracing.StartSpanFromContext(ctx, "API.Schema")
+	defer span.Finish()
+	schema := api.holder.limitedSchema()
+	for _, index := range schema {
+		for _, field := range index.Fields {
+			q := fmt.Sprintf("Count(Distinct(field=%s))", field.Name)
+			req := QueryRequest{Index: index.Name, Query: q}
+			resp, err := api.query(ctx, &req)
+			if err != nil {
+				// TODO ?
+				continue
+			}
+			if len(resp.Results) == 0 {
+				continue
+			}
+			if card, ok := resp.Results[0].(uint64); ok {
+				field.Cardinality = card
+			}
+		}
+	}
+	return schema
 }
 
 // ApplySchema takes the given schema and applies it across the
