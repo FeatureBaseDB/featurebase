@@ -863,11 +863,6 @@ func (s *Server) receiveMessage(m Message) error {
 		}
 	case *RecalculateCaches:
 		s.holder.recalculateCaches()
-	case *NodeEvent:
-		err := s.cluster.ReceiveEvent(obj)
-		if err != nil {
-			return errors.Wrapf(err, "cluster receiving NodeEvent %v", obj)
-		}
 	case *NodeStatus:
 		s.handleRemoteStatus(obj)
 	case *TransactionMessage:
