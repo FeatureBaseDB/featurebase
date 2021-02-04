@@ -338,13 +338,6 @@ func (t *ClusterCluster) Open() error {
 			return err
 		}
 	}
-
-	// Start the listener on the coordinator.
-	if len(t.Clusters) == 0 {
-		return nil
-	}
-	t.Clusters[0].listenForJoins()
-
 	return nil
 }
 

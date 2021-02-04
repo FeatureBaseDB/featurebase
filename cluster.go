@@ -954,130 +954,11 @@ func (c *cluster) allNodesReady() (ret bool) {
 	return true
 }
 
-func (c *cluster) handleNodeAction(nodeAction nodeAction) error {
-	c.mu.Lock()
-	j, err := c.unprotectedGenerateResizeJob(nodeAction)
-	c.mu.Unlock()
-	if err != nil {
-		c.logger.Printf("generateResizeJob error: err=%s", err)
-		return errors.Wrap(err, "setting state")
-	}
-
-	// j.Run() runs in a goroutine because in the case where the
-	// job requires no action, it immediately writes to the j.result
-	// channel, which is not consumed until the code below.
-	var eg errgroup.Group
-	eg.Go(func() error {
-		return j.run()
-	})
-
-	// Wait for the resizeJob to finish or be aborted.
-	c.logger.Printf("wait for jobResult")
-	var jobResult string
-	select {
-	case <-c.closing:
-		return errors.New("cluster shut down during resize")
-	case jobResult = <-j.result:
-	}
-
-	// Make sure j.run() didn't return an error.
-	if eg.Wait() != nil {
-		return errors.Wrap(err, "running job")
-	}
-
-	c.logger.Printf("received jobResult: %s", jobResult)
-	switch jobResult {
-	case resizeJobStateDone:
-		if err := c.completeCurrentJob(resizeJobStateDone); err != nil {
-			return errors.Wrap(err, "completing finished job")
-		}
-		// Add/remove uri to/from the cluster.
-		if j.action == resizeJobActionRemove {
-			c.mu.Lock()
-			defer c.mu.Unlock()
-			return c.removeNode(nodeAction.node.ID)
-		} else if j.action == resizeJobActionAdd {
-			c.mu.Lock()
-			defer c.mu.Unlock()
-			return c.addNode(nodeAction.node)
-		}
-	case resizeJobStateAborted:
-		if err := c.completeCurrentJob(resizeJobStateAborted); err != nil {
-			return errors.Wrap(err, "completing aborted job")
-		}
-	}
-	return nil
-}
-
 func (c *cluster) sendTo(node *topology.Node, m Message) error {
 	if err := c.broadcaster.SendTo(node, m); err != nil {
 		return errors.Wrap(err, "sending")
 	}
 	return nil
-}
-
-// listenForJoins handles cluster-resize events.
-func (c *cluster) listenForJoins() {
-	c.wg.Add(1)
-	go func() {
-		defer c.wg.Done()
-
-		// When a cluster starts, the state is STARTING.
-		// We first want to wait for at least one node to join.
-		// Then we want to clear out the joiningLeavingNodes queue (buffered channel).
-		// Then we want to set the cluster state to NORMAL and resume processing of joiningLeavingNodes events.
-		// We use a bool `setNormal` to indicate when at least one node has joined.
-		for {
-			// Handle all pending joins before changing state back to NORMAL.
-			select {
-			case nodeAction := <-c.joiningLeavingNodes:
-				err := c.handleNodeAction(nodeAction)
-				if err != nil {
-					c.logger.Printf("handleNodeAction error: err=%s", err)
-					continue
-				}
-				continue
-			default:
-			}
-
-			// Wait for a joining host or a close.
-			select {
-			case <-c.closing:
-				return
-			case nodeAction := <-c.joiningLeavingNodes:
-				err := c.handleNodeAction(nodeAction)
-				if err != nil {
-					c.logger.Printf("handleNodeAction error: err=%s", err)
-					continue
-				}
-				continue
-			}
-		}
-	}()
-}
-
-// unprotectedGenerateResizeJob creates a new resizeJob based on the new node being
-// added/removed. It also saves a reference to the resizeJob in the `jobs` map
-// for future lookup by JobID.
-func (c *cluster) unprotectedGenerateResizeJob(nodeAction nodeAction) (*resizeJob, error) {
-	c.logger.Printf("generateResizeJob: %v", nodeAction)
-
-	j, err := c.unprotectedGenerateResizeJobByAction(nodeAction)
-	if err != nil {
-		return nil, errors.Wrap(err, "generating job")
-	}
-	c.logger.Printf("generated resizeJob: %d", j.ID)
-
-	// Save job in jobs map for future reference.
-	c.jobs[j.ID] = j
-
-	// Set job as currentJob.
-	if c.currentJob != nil {
-		return nil, fmt.Errorf("there is currently a resize job running")
-	}
-	c.currentJob = j
-
-	return j, nil
 }
 
 // unprotectedGenerateResizeJobByAction returns a resizeJob with instructions based on
@@ -1456,28 +1337,6 @@ func (j *resizeJob) setState(state string) {
 	j.mu.Unlock()
 }
 
-// run distributes ResizeInstructions.
-func (j *resizeJob) run() error {
-	j.Logger.Printf("run resizeJob")
-	// Set job state to RUNNING.
-	j.setState(resizeJobStateRunning)
-
-	// Job can be considered done in the case where it doesn't require any action.
-	if !j.nodesArePending() {
-		j.Logger.Printf("resizeJob contains no pending tasks; mark as done")
-		j.result <- resizeJobStateDone
-		return nil
-	}
-
-	j.Logger.Printf("distribute tasks for resizeJob")
-	err := j.distributeResizeInstructions()
-	if err != nil {
-		j.result <- resizeJobStateAborted
-		return errors.Wrap(err, "distributing instructions")
-	}
-	return nil
-}
-
 // isComplete return true if the job is any one of several completion states.
 func (j *resizeJob) isComplete() bool {
 	switch j.state {
@@ -1496,25 +1355,6 @@ func (j *resizeJob) nodesArePending() bool {
 		}
 	}
 	return false
-}
-
-func (j *resizeJob) distributeResizeInstructions() error {
-	j.Logger.Printf("distributeResizeInstructions for job %d", j.ID)
-	// Loop through the ResizeInstructions in resizeJob and send to each host.
-	for _, instr := range j.Instructions {
-		// Because the node may not be in the cluster yet, create
-		// a dummy node object to use in the SendTo() method.
-		node := &topology.Node{
-			ID:      instr.Node.ID,
-			URI:     instr.Node.URI,
-			GRPCURI: instr.Node.GRPCURI,
-		}
-		j.Logger.Printf("send resize instructions: %v", instr)
-		if err := j.Broadcaster.SendTo(node, instr); err != nil {
-			return errors.Wrap(err, "sending instruction")
-		}
-	}
-	return nil
 }
 
 type nodeIDs []string

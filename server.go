@@ -617,13 +617,6 @@ func (s *Server) Open() error {
 	s.holder.SnapshotQueue = s.snapshotQueue
 	s.holder.Activate()
 
-	// Listen for joining nodes.
-	// This needs to start after the Holder has opened so that nodes can join
-	// the cluster without waiting for data to load on the coordinator. Before
-	// this starts, the joins are queued up in the Cluster.joiningLeavingNodes
-	// buffered channel.
-	s.cluster.listenForJoins()
-
 	// if we joined existing cluster then broadcast "resize on add" message
 	// TODO
 	// if initState == disco.InitialClusterStateExisting {
