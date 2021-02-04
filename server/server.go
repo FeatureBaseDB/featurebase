@@ -151,10 +151,6 @@ func NewCommand(stdin io.Reader, stdout, stderr io.Writer, opts ...CommandOption
 	return c
 }
 
-func (m *Command) StartGossip() (err error) {
-	return m.setupNetworking()
-}
-
 // Start starts the pilosa server - it returns once the server is running.
 func (m *Command) Start() (err error) {
 	// Seed random number generator
@@ -165,9 +161,6 @@ func (m *Command) Start() (err error) {
 	if err != nil {
 		return errors.Wrap(err, "setting up server")
 	}
-
-	// TODO: this is temporary.
-	m.Server.Gossiper = m
 
 	if runtime.GOOS == "linux" {
 		result, err := ioutil.ReadFile("/proc/sys/vm/max_map_count")

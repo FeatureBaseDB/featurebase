@@ -73,9 +73,6 @@ type Server struct { // nolint: maligned
 	sharder   disco.Sharder
 	schemator disco.Schemator
 
-	// TODO: this is VERY temporary!!!
-	Gossiper Gossiper
-
 	// External
 	systemInfo    SystemInfo
 	gcNotifier    GCNotifier
@@ -527,10 +524,6 @@ func (s *Server) UpAndDown() error {
 	return nil
 }
 
-type Gossiper interface {
-	StartGossip() error
-}
-
 // Open opens and initializes the server.
 func (s *Server) Open() error {
 	s.logger.Printf("open server. PID %v", os.Getpid())
@@ -595,13 +588,6 @@ func (s *Server) Open() error {
 	err = s.cluster.setup()
 	if err != nil {
 		return errors.Wrap(err, "setting up cluster")
-	}
-
-	// ---------- TODO: this is temporary
-	if s.Gossiper != nil {
-		if err := s.Gossiper.StartGossip(); err != nil {
-			return errors.Wrap(err, "starting gossip")
-		}
 	}
 
 	// Open Cluster management.
