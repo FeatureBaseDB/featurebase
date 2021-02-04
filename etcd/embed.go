@@ -1044,25 +1044,18 @@ func (e *Etcd) RemoveShard(ctx context.Context, index, field string, shard uint6
 	return nil
 }
 
-// Nodes implements the Noder interface.
+// Nodes implements the Noder interface. It returns the sorted list of nodes
+// based on the etcd peers.
 func (e *Etcd) Nodes() []*topology.Node {
-	return e.nodes(true)
-}
-
-// nodes is a helper function used to get the sorted list of nodes based on the
-// etcd peers.
-func (e *Etcd) nodes(includeMeta bool) []*topology.Node {
 	peers := e.Peers()
 	nodes := make([]*topology.Node, len(peers))
 	for i, peer := range peers {
 		node := &topology.Node{}
 
-		if includeMeta {
-			if meta, err := e.Metadata(context.Background(), peer.ID); err != nil {
-				log.Println(err, "getting metadata") // TODO: handle this with a logger
-			} else if err := json.Unmarshal(meta, node); err != nil {
-				log.Println(err, "unmarshaling json metadata")
-			}
+		if meta, err := e.Metadata(context.Background(), peer.ID); err != nil {
+			log.Println(err, "getting metadata") // TODO: handle this with a logger
+		} else if err := json.Unmarshal(meta, node); err != nil {
+			log.Println(err, "unmarshaling json metadata")
 		}
 
 		node.ID = peer.ID
@@ -1078,14 +1071,17 @@ func (e *Etcd) nodes(includeMeta bool) []*topology.Node {
 
 // PrimaryNodeID implements the Noder interface.
 func (e *Etcd) PrimaryNodeID(hasher topology.Hasher) string {
-	nodes := e.nodes(false)
+	return topology.PrimaryNodeID(e.NodeIDs(), hasher)
+}
 
-	snap := topology.NewClusterSnapshot(topology.NewLocalNoder(nodes), hasher, 1)
-	primaryNode := snap.PrimaryFieldTranslationNode()
-	if primaryNode == nil {
-		return ""
+// NodeIDs returns the list of node IDs in the etcd cluster.
+func (e *Etcd) NodeIDs() []string {
+	peers := e.Peers()
+	ids := make([]string, len(peers))
+	for i, peer := range peers {
+		ids[i] = peer.ID
 	}
-	return primaryNode.ID
+	return ids
 }
 
 // SetNodes implements the Noder interface as NOP

@@ -47,6 +47,25 @@ func NewEmptyLocalNoder() *localNoder {
 	return &localNoder{}
 }
 
+// NewIDNoder is a helper function for wrapping an existing slice of Node IDs
+// with something which implements Noder.
+func NewIDNoder(ids []string) *localNoder {
+	nodes := make([]*Node, len(ids))
+	for i, id := range ids {
+		node := &Node{
+			ID: id,
+		}
+		nodes[i] = node
+	}
+
+	// Nodes must be sorted.
+	sort.Sort(ByID(nodes))
+
+	return &localNoder{
+		nodes: nodes,
+	}
+}
+
 // Nodes implements the Noder interface.
 func (n *localNoder) Nodes() []*Node {
 	return n.nodes
