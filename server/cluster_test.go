@@ -173,7 +173,7 @@ func TestClusterResize_AddNode(t *testing.T) {
 		m0 := test.MustRunCluster(t, 1).GetNode(0)
 		defer m0.Close()
 
-		seed := m0.GossipAddress()
+		seed := ""
 
 		// Create a client for each node.
 		client0 := m0.Client()
@@ -219,7 +219,7 @@ func TestClusterResize_AddNode(t *testing.T) {
 		m0 := test.MustRunCluster(t, 1).GetNode(0)
 		defer m0.Close()
 
-		seed := m0.GossipAddress()
+		seed := ""
 
 		// Create a client for each node.
 		client0 := m0.Client()
@@ -283,7 +283,7 @@ func TestClusterResize_AddNode(t *testing.T) {
 		m0 := test.MustRunCluster(t, 1).GetNode(0)
 		defer m0.Close()
 
-		seed := m0.GossipAddress()
+		seed := ""
 
 		// Create a client for each node.
 		client0 := m0.Client()
@@ -345,7 +345,7 @@ func TestClusterResize_AddNode(t *testing.T) {
 		m0 := test.MustRunCluster(t, 1).GetNode(0)
 		defer m0.Close()
 
-		seed := m0.GossipAddress()
+		seed := ""
 
 		// Create a client for each node.
 		client0 := m0.Client()
@@ -416,7 +416,7 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 		m0 := test.MustRunCluster(t, 1).GetNode(0)
 		defer m0.Close()
 
-		seed := m0.GossipAddress()
+		seed := ""
 
 		// Create a client for each node.
 		client0 := m0.Client()
@@ -468,7 +468,7 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 		m0 := test.MustRunCluster(t, 1).GetNode(0)
 		defer m0.Close()
 
-		seed := m0.GossipAddress()
+		seed := ""
 
 		// Create a client for each node.
 		client0 := m0.Client()
@@ -536,7 +536,7 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 		m0 := test.MustRunCluster(t, 1).GetNode(0)
 		defer m0.Close()
 
-		seed := m0.GossipAddress()
+		seed := ""
 
 		// Create a client for each node.
 		client0 := m0.Client()
@@ -604,7 +604,7 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 		m0 := test.MustRunCluster(t, 1).GetNode(0)
 		defer m0.Close()
 
-		seed := m0.GossipAddress()
+		seed := ""
 
 		// Create a client for each node.
 		client0 := m0.Client()
@@ -672,7 +672,7 @@ func TestCluster_GossipMembership(t *testing.T) {
 		m0 := test.MustRunCluster(t, 1).GetNode(0)
 		defer m0.Close()
 
-		seed := m0.GossipAddress()
+		seed := ""
 
 		var eg errgroup.Group
 

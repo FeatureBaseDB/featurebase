@@ -108,13 +108,6 @@ func RunCommand(t *testing.T) *Command {
 	return MustRunCluster(t, 1).GetNode(0)
 }
 
-// GossipAddress returns the address on which gossip is listening after a Main
-// has been setup. Useful to pass as a seed to other nodes when creating and
-// testing clusters.
-func (m *Command) GossipAddress() string {
-	return m.GossipTransport().URI.String()
-}
-
 // Close closes the program and removes the underlying data directory.
 func (m *Command) Close() error {
 	// leave the removing part to the test logic. Some tests are closing and opening again the command

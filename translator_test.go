@@ -263,7 +263,7 @@ func TestTranslation_Reset(t *testing.T) {
 		if err := node0.SoftOpen(); err != nil {
 			t.Fatal(err)
 		}
-		gossipSeeds := []string{node0.GossipAddress()}
+		gossipSeeds := []string{}
 
 		node1.Config.Gossip.Seeds = gossipSeeds
 		if err := node1.SoftOpen(); err != nil {

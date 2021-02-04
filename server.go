@@ -73,9 +73,6 @@ type Server struct { // nolint: maligned
 	sharder   disco.Sharder
 	schemator disco.Schemator
 
-	// TODO: this is VERY temporary!!!
-	Gossiper Gossiper
-
 	// External
 	systemInfo    SystemInfo
 	gcNotifier    GCNotifier
@@ -527,10 +524,6 @@ func (s *Server) UpAndDown() error {
 	return nil
 }
 
-type Gossiper interface {
-	StartGossip() error
-}
-
 // Open opens and initializes the server.
 func (s *Server) Open() error {
 	s.logger.Printf("open server. PID %v", os.Getpid())
@@ -597,13 +590,6 @@ func (s *Server) Open() error {
 		return errors.Wrap(err, "setting up cluster")
 	}
 
-	// ---------- TODO: this is temporary
-	if s.Gossiper != nil {
-		if err := s.Gossiper.StartGossip(); err != nil {
-			return errors.Wrap(err, "starting gossip")
-		}
-	}
-
 	// Open Cluster management.
 	if err := s.cluster.waitForStarted(); err != nil {
 		return errors.Wrap(err, "opening Cluster")
@@ -616,13 +602,6 @@ func (s *Server) Open() error {
 	// bring up the background tasks for the holder.
 	s.holder.SnapshotQueue = s.snapshotQueue
 	s.holder.Activate()
-
-	// Listen for joining nodes.
-	// This needs to start after the Holder has opened so that nodes can join
-	// the cluster without waiting for data to load on the coordinator. Before
-	// this starts, the joins are queued up in the Cluster.joiningLeavingNodes
-	// buffered channel.
-	s.cluster.listenForJoins()
 
 	// if we joined existing cluster then broadcast "resize on add" message
 	// TODO
@@ -884,11 +863,6 @@ func (s *Server) receiveMessage(m Message) error {
 		}
 	case *RecalculateCaches:
 		s.holder.recalculateCaches()
-	case *NodeEvent:
-		err := s.cluster.ReceiveEvent(obj)
-		if err != nil {
-			return errors.Wrapf(err, "cluster receiving NodeEvent %v", obj)
-		}
 	case *NodeStatus:
 		s.handleRemoteStatus(obj)
 	case *TransactionMessage:

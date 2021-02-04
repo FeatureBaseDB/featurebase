@@ -211,40 +211,6 @@ func (t *ClusterCluster) clusterByID(id string) *cluster {
 
 // addNode adds a node to the cluster and (potentially) starts a resize job.
 func (t *ClusterCluster) addNode() error {
-	id := len(t.Clusters)
-
-	c, err := t.addCluster(id, false)
-	if err != nil {
-		return err
-	}
-
-	// Send NodeJoin event to coordinator.
-	if id > 0 {
-		coord := t.Clusters[0]
-		ev := &NodeEvent{
-			Event: NodeJoin,
-			Node:  c.Node,
-		}
-
-		if err := coord.ReceiveEvent(ev); err != nil {
-			return err
-		}
-
-		state, err := coord.State()
-		if err != nil {
-			return err
-		}
-
-		// Wait for the AddNode job to finish.
-		if state != string(ClusterStateNormal) {
-			t.resizeDone = make(chan struct{})
-			t.mu.Lock()
-			t.resizing = true
-			t.mu.Unlock()
-			<-t.resizeDone
-		}
-	}
-
 	return nil
 }
 
@@ -338,13 +304,6 @@ func (t *ClusterCluster) Open() error {
 			return err
 		}
 	}
-
-	// Start the listener on the coordinator.
-	if len(t.Clusters) == 0 {
-		return nil
-	}
-	t.Clusters[0].listenForJoins()
-
 	return nil
 }
 
