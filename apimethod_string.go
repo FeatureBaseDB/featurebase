@@ -32,17 +32,23 @@ func _() {
 	_ = x[apiResizeAbort-21]
 	_ = x[apiSetCoordinator-22]
 	_ = x[apiShardNodes-23]
-	_ = x[apiViews-24]
-	_ = x[apiApplySchema-25]
-	_ = x[apiStartTransaction-26]
-	_ = x[apiFinishTransaction-27]
-	_ = x[apiTransactions-28]
-	_ = x[apiGetTransaction-29]
+	_ = x[apiState-24]
+	_ = x[apiViews-25]
+	_ = x[apiApplySchema-26]
+	_ = x[apiStartTransaction-27]
+	_ = x[apiFinishTransaction-28]
+	_ = x[apiTransactions-29]
+	_ = x[apiGetTransaction-30]
+	_ = x[apiActiveQueries-31]
+	_ = x[apiPastQueries-32]
+	_ = x[apiIDReserve-33]
+	_ = x[apiIDCommit-34]
+	_ = x[apiIDReset-35]
 }
 
-const _apiMethod_name = "apiClusterMessageapiCreateFieldapiCreateIndexapiDeleteFieldapiDeleteAvailableShardapiDeleteIndexapiDeleteViewapiExportCSVapiFragmentBlockDataapiFragmentBlocksapiFragmentDataapiTranslateDataapiFieldapiFieldAttrDiffapiImportapiImportValueapiIndexapiIndexAttrDiffapiQueryapiRecalculateCachesapiRemoveNodeapiResizeAbortapiSetCoordinatorapiShardNodesapiViewsapiApplySchemaapiStartTransactionapiFinishTransactionapiTransactionsapiGetTransaction"
+const _apiMethod_name = "apiClusterMessageapiCreateFieldapiCreateIndexapiDeleteFieldapiDeleteAvailableShardapiDeleteIndexapiDeleteViewapiExportCSVapiFragmentBlockDataapiFragmentBlocksapiFragmentDataapiTranslateDataapiFieldapiFieldAttrDiffapiImportapiImportValueapiIndexapiIndexAttrDiffapiQueryapiRecalculateCachesapiRemoveNodeapiResizeAbortapiSetCoordinatorapiShardNodesapiStateapiViewsapiApplySchemaapiStartTransactionapiFinishTransactionapiTransactionsapiGetTransactionapiActiveQueriesapiPastQueriesapiIDReserveapiIDCommitapiIDReset"
 
-var _apiMethod_index = [...]uint16{0, 17, 31, 45, 59, 82, 96, 109, 121, 141, 158, 173, 189, 197, 213, 222, 236, 244, 260, 268, 288, 301, 315, 332, 345, 353, 367, 386, 406, 421, 438}
+var _apiMethod_index = [...]uint16{0, 17, 31, 45, 59, 82, 96, 109, 121, 141, 158, 173, 189, 197, 213, 222, 236, 244, 260, 268, 288, 301, 315, 332, 345, 353, 361, 375, 394, 414, 429, 446, 462, 476, 488, 499, 509}
 
 func (i apiMethod) String() string {
 	if i < 0 || i >= apiMethod(len(_apiMethod_index)-1) {
