@@ -226,8 +226,12 @@ func TestHandler_Endpoints(t *testing.T) {
 	})
 
 	t.Run("Import", func(t *testing.T) {
-		indexInfo := cmd.API.Schema(context.Background())
-		err := cmd.API.ApplySchema(context.Background(), &pilosa.Schema{Indexes: indexInfo}, false)
+		indexInfo, err := cmd.API.Schema(context.Background())
+		if err != nil {
+			t.Fatalf("getting schema: %v", err)
+		}
+
+		err = cmd.API.ApplySchema(context.Background(), &pilosa.Schema{Indexes: indexInfo}, false)
 		if err != nil {
 			t.Fatalf("applying schema: %v", err)
 		}

@@ -668,7 +668,11 @@ func (h *Handler) handleGetSchema(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	schema := h.api.Schema(r.Context())
+	schema, err := h.api.Schema(r.Context())
+	if err != nil {
+		h.logger.Printf("getting schema error: %s", err)
+	}
+
 	if err := json.NewEncoder(w).Encode(pilosa.Schema{Indexes: schema}); err != nil {
 		h.logger.Printf("write schema response error: %s", err)
 	}
@@ -977,7 +981,12 @@ func (h *Handler) handleGetIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	indexName := mux.Vars(r)["index"]
-	for _, idx := range h.api.Schema(r.Context()) {
+	schema, err := h.api.Schema(r.Context())
+	if err != nil {
+		h.logger.Printf("getting schema error: %s", err)
+	}
+
+	for _, idx := range schema {
 		if idx.Name == indexName {
 			w.Header().Set("Content-Type", "application/json")
 			if err := json.NewEncoder(w).Encode(idx); err != nil {
