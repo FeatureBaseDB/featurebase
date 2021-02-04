@@ -980,10 +980,14 @@ func (err MessageProcessingError) Unwrap() error {
 
 // Schema returns information about each index in Pilosa including which fields
 // they contain.
-func (api *API) Schema(ctx context.Context) []*IndexInfo {
+func (api *API) Schema(ctx context.Context) ([]*IndexInfo, error) {
+	if err := api.validate(apiSchema); err != nil {
+		return nil, errors.Wrap(err, "validating api method")
+	}
+
 	span, _ := tracing.StartSpanFromContext(ctx, "API.Schema")
 	defer span.Finish()
-	return api.holder.limitedSchema()
+	return api.holder.limitedSchema(), nil
 }
 
 // ApplySchema takes the given schema and applies it across the
@@ -1777,6 +1781,10 @@ func (api *API) ResizeAbort() error {
 // "STARTING", "RESIZING", or potentially others. See cluster.go for more
 // details.
 func (api *API) State() (string, error) {
+	if err := api.validate(apiState); err != nil {
+		return "", errors.Wrap(err, "validating api method")
+	}
+
 	return api.cluster.State()
 }
 
@@ -2211,10 +2219,9 @@ const (
 	apiRecalculateCaches
 	apiRemoveNode
 	apiResizeAbort
-	//apiSchema // not implemented
-	apiSetCoordinator
+	apiSchema
 	apiShardNodes
-	//apiState // not implemented
+	apiState
 	//apiStatsWithTags // not implemented
 	//apiVersion // not implemented
 	apiViews
@@ -2232,13 +2239,36 @@ const (
 
 var methodsCommon = map[apiMethod]struct{}{
 	apiClusterMessage: {},
-	apiSetCoordinator: {},
 }
 
 var methodsResizing = map[apiMethod]struct{}{
 	apiFragmentData:  {},
 	apiTranslateData: {},
 	apiResizeAbort:   {},
+	apiSchema:        {},
+	apiState:         {},
+}
+
+var methodsDegraded = map[apiMethod]struct{}{
+	apiExportCSV:         {},
+	apiFragmentBlockData: {},
+	apiFragmentBlocks:    {},
+	apiField:             {},
+	apiFieldAttrDiff:     {},
+	apiIndex:             {},
+	apiIndexAttrDiff:     {},
+	apiQuery:             {},
+	apiRecalculateCaches: {},
+	apiRemoveNode:        {},
+	apiShardNodes:        {},
+	apiSchema:            {},
+	apiState:             {},
+	apiViews:             {},
+	apiStartTransaction:  {},
+	apiFinishTransaction: {},
+	apiTransactions:      {},
+	apiGetTransaction:    {},
+	apiActiveQueries:     {},
 }
 
 var methodsNormal = map[apiMethod]struct{}{
@@ -2261,6 +2291,8 @@ var methodsNormal = map[apiMethod]struct{}{
 	apiRecalculateCaches:    {},
 	apiRemoveNode:           {},
 	apiShardNodes:           {},
+	apiSchema:               {},
+	apiState:                {},
 	apiViews:                {},
 	apiApplySchema:          {},
 	apiStartTransaction:     {},
@@ -2268,8 +2300,4 @@ var methodsNormal = map[apiMethod]struct{}{
 	apiTransactions:         {},
 	apiGetTransaction:       {},
 	apiActiveQueries:        {},
-	apiPastQueries:          {},
-	apiIDReserve:            {},
-	apiIDCommit:             {},
-	apiIDReset:              {},
 }

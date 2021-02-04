@@ -324,9 +324,14 @@ func (g *memberSet) GetBroadcasts(overhead, limit int) [][]byte {
 // LocalState implementation of the memberlist.Delegate interface
 // sends this Node's state data.
 func (g *memberSet) LocalState(join bool) []byte {
+	schema, err := g.papi.Schema(context.Background())
+	if err != nil {
+		// just panic, this code will be removed soon
+		panic(err)
+	}
 	m := &pilosa.NodeStatus{
 		Node:   g.papi.Node(),
-		Schema: &pilosa.Schema{Indexes: g.papi.Schema(context.Background())},
+		Schema: &pilosa.Schema{Indexes: schema},
 	}
 	for _, idx := range m.Schema.Indexes {
 		is := &pilosa.IndexStatus{Name: idx.Name, CreatedAt: idx.CreatedAt}

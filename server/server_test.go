@@ -1253,7 +1253,12 @@ func TestClusterCreatedAtRace(t *testing.T) {
 
 			schemas := make([]*pilosa.IndexInfo, len(cluster.Nodes))
 			for i, cmd := range cluster.Nodes {
-				schemas[i] = cmd.API.Schema(context.Background())[0]
+				s, err := cmd.API.Schema(context.Background())
+				if err != nil {
+					t.Fatalf("getting schema: %v", err)
+				}
+
+				schemas[i] = s[0]
 			}
 
 			createdAtField := schemas[0].Fields[0].CreatedAt
