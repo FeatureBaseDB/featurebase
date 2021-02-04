@@ -29,7 +29,6 @@ import (
 	"github.com/pilosa/pilosa/v2/server"
 	"github.com/pilosa/pilosa/v2/test"
 	"github.com/pilosa/pilosa/v2/test/port"
-	"golang.org/x/sync/errgroup"
 )
 
 // Ensure program can send/receive broadcast messages.
@@ -173,8 +172,6 @@ func TestClusterResize_AddNode(t *testing.T) {
 		m0 := test.MustRunCluster(t, 1).GetNode(0)
 		defer m0.Close()
 
-		seed := ""
-
 		// Create a client for each node.
 		client0 := m0.Client()
 
@@ -188,19 +185,16 @@ func TestClusterResize_AddNode(t *testing.T) {
 		// Configure node1
 		m1 := test.NewCommandNode(t)
 
-		m1.Config.Gossip.Seeds = []string{seed}
-
 		if err := port.GetListeners(func(lsns []*net.TCPListener) error {
 			portsCfg := test.GenPortsConfig(test.NewPorts(lsns))
 
-			m1.Config.Gossip.Port = portsCfg[0].Gossip.Port
 			m1.Config.Etcd = portsCfg[0].Etcd
 			m1.Config.Name = portsCfg[0].Name
 			m1.Config.Cluster.Name = portsCfg[0].Cluster.Name
 			m1.Config.BindGRPC = portsCfg[0].BindGRPC
 
 			return m1.Start()
-		}, 4, 10); err != nil {
+		}, 3, 10); err != nil {
 			t.Fatalf("starting second main: %v", err)
 		}
 		defer m1.Close()
@@ -218,8 +212,6 @@ func TestClusterResize_AddNode(t *testing.T) {
 		// Configure node0
 		m0 := test.MustRunCluster(t, 1).GetNode(0)
 		defer m0.Close()
-
-		seed := ""
 
 		// Create a client for each node.
 		client0 := m0.Client()
@@ -249,19 +241,16 @@ func TestClusterResize_AddNode(t *testing.T) {
 		// Configure node1
 		m1 := test.NewCommandNode(t)
 
-		m1.Config.Gossip.Seeds = []string{seed}
-
 		if err := port.GetListeners(func(lsns []*net.TCPListener) error {
 			portsCfg := test.GenPortsConfig(test.NewPorts(lsns))
 
-			m1.Config.Gossip.Port = portsCfg[0].Gossip.Port
 			m1.Config.Etcd = portsCfg[0].Etcd
 			m1.Config.Name = portsCfg[0].Name
 			m1.Config.Cluster.Name = portsCfg[0].Cluster.Name
 			m1.Config.BindGRPC = portsCfg[0].BindGRPC
 
 			return m1.Start()
-		}, 4, 10); err != nil {
+		}, 3, 10); err != nil {
 			t.Fatalf("starting second main: %v", err)
 		}
 		defer m1.Close()
@@ -282,8 +271,6 @@ func TestClusterResize_AddNode(t *testing.T) {
 		// Configure node0
 		m0 := test.MustRunCluster(t, 1).GetNode(0)
 		defer m0.Close()
-
-		seed := ""
 
 		// Create a client for each node.
 		client0 := m0.Client()
@@ -309,19 +296,17 @@ func TestClusterResize_AddNode(t *testing.T) {
 
 		// Configure node1
 		m1 := test.NewCommandNode(t)
-		m1.Config.Gossip.Seeds = []string{seed}
 
 		if err := port.GetListeners(func(lsns []*net.TCPListener) error {
 			portsCfg := test.GenPortsConfig(test.NewPorts(lsns))
 
-			m1.Config.Gossip.Port = portsCfg[0].Gossip.Port
 			m1.Config.Etcd = portsCfg[0].Etcd
 			m1.Config.Name = portsCfg[0].Name
 			m1.Config.Cluster.Name = portsCfg[0].Cluster.Name
 			m1.Config.BindGRPC = portsCfg[0].BindGRPC
 
 			return m1.Start()
-		}, 4, 10); err != nil {
+		}, 3, 10); err != nil {
 			t.Fatalf("starting second main: %v", err)
 		}
 		defer m1.Close()
@@ -344,8 +329,6 @@ func TestClusterResize_AddNode(t *testing.T) {
 		// Configure node0
 		m0 := test.MustRunCluster(t, 1).GetNode(0)
 		defer m0.Close()
-
-		seed := ""
 
 		// Create a client for each node.
 		client0 := m0.Client()
@@ -375,19 +358,17 @@ func TestClusterResize_AddNode(t *testing.T) {
 
 		// Configure node1
 		m1 := test.NewCommandNode(t)
-		m1.Config.Gossip.Seeds = []string{seed}
 
 		if err := port.GetListeners(func(lsns []*net.TCPListener) error {
 			portsCfg := test.GenPortsConfig(test.NewPorts(lsns))
 
-			m1.Config.Gossip.Port = portsCfg[0].Gossip.Port
 			m1.Config.Etcd = portsCfg[0].Etcd
 			m1.Config.Name = portsCfg[0].Name
 			m1.Config.Cluster.Name = portsCfg[0].Cluster.Name
 			m1.Config.BindGRPC = portsCfg[0].BindGRPC
 
 			return m1.Start()
-		}, 4, 10); err != nil {
+		}, 3, 10); err != nil {
 			t.Fatalf("starting second main: %v", err)
 		}
 
@@ -416,8 +397,6 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 		m0 := test.MustRunCluster(t, 1).GetNode(0)
 		defer m0.Close()
 
-		seed := ""
-
 		// Create a client for each node.
 		client0 := m0.Client()
 
@@ -436,17 +415,15 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 
 		// Configure node1
 		m1 := test.NewCommandNode(t)
-		m1.Config.Gossip.Seeds = []string{seed}
 		if err := port.GetListeners(func(lsns []*net.TCPListener) error {
 			portsCfg := test.GenPortsConfig(test.NewPorts(lsns))
 
-			m1.Config.Gossip.Port = portsCfg[0].Gossip.Port
 			m1.Config.Etcd = portsCfg[0].Etcd
 			m1.Config.Name = portsCfg[0].Name
 			m1.Config.Cluster.Name = portsCfg[0].Cluster.Name
 			m1.Config.BindGRPC = portsCfg[0].BindGRPC
 			return m1.Start()
-		}, 4, 10); err != nil {
+		}, 3, 10); err != nil {
 			t.Fatalf("starting second main: %v", err)
 		}
 		defer m1.Close()
@@ -467,8 +444,6 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 		// Configure node0
 		m0 := test.MustRunCluster(t, 1).GetNode(0)
 		defer m0.Close()
-
-		seed := ""
 
 		// Create a client for each node.
 		client0 := m0.Client()
@@ -498,17 +473,15 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 
 		// Configure node1
 		m1 := test.NewCommandNode(t)
-		m1.Config.Gossip.Seeds = []string{seed}
 		if err := port.GetListeners(func(lsns []*net.TCPListener) error {
 			portsCfg := test.GenPortsConfig(test.NewPorts(lsns))
 
-			m1.Config.Gossip.Port = portsCfg[0].Gossip.Port
 			m1.Config.Etcd = portsCfg[0].Etcd
 			m1.Config.Name = portsCfg[0].Name
 			m1.Config.Cluster.Name = portsCfg[0].Cluster.Name
 			m1.Config.BindGRPC = portsCfg[0].BindGRPC
 			return m1.Start()
-		}, 4, 10); err != nil {
+		}, 3, 10); err != nil {
 			t.Fatalf("starting second main: %v", err)
 		}
 		errc := make(chan error, 1)
@@ -535,8 +508,6 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 		// Configure node0
 		m0 := test.MustRunCluster(t, 1).GetNode(0)
 		defer m0.Close()
-
-		seed := ""
 
 		// Create a client for each node.
 		client0 := m0.Client()
@@ -566,11 +537,9 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 
 		// Configure node1
 		m1 := test.NewCommandNode(t)
-		m1.Config.Gossip.Seeds = []string{seed}
 		if err := port.GetListeners(func(lsns []*net.TCPListener) error {
 			portsCfg := test.GenPortsConfig(test.NewPorts(lsns))
 
-			m1.Config.Gossip.Port = portsCfg[0].Gossip.Port
 			m1.Config.Etcd = portsCfg[0].Etcd
 			m1.Config.Name = portsCfg[0].Name
 			m1.Config.Cluster.Name = portsCfg[0].Cluster.Name
@@ -582,7 +551,7 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 				errc <- err
 			}()
 			return m1.Start()
-		}, 4, 10); err != nil {
+		}, 3, 10); err != nil {
 			t.Fatalf("starting second main: %v", err)
 		}
 		defer m1.Close()
@@ -603,8 +572,6 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 		// Configure node0
 		m0 := test.MustRunCluster(t, 1).GetNode(0)
 		defer m0.Close()
-
-		seed := ""
 
 		// Create a client for each node.
 		client0 := m0.Client()
@@ -632,11 +599,9 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 
 		// Configure node1
 		m1 := test.NewCommandNode(t)
-		m1.Config.Gossip.Seeds = []string{seed}
 		if err := port.GetListeners(func(lsns []*net.TCPListener) error {
 			portsCfg := test.GenPortsConfig(test.NewPorts(lsns))
 
-			m1.Config.Gossip.Port = portsCfg[0].Gossip.Port
 			m1.Config.Etcd = portsCfg[0].Etcd
 			m1.Config.Name = portsCfg[0].Name
 			m1.Config.Cluster.Name = portsCfg[0].Cluster.Name
@@ -648,7 +613,7 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 				errc <- err
 			}()
 			return m1.Start()
-		}, 4, 10); err != nil {
+		}, 3, 10); err != nil {
 			t.Fatalf("starting second main: %v", err)
 		}
 
@@ -661,74 +626,6 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 		}
 		m0.QueryExpect(t, "i", "", `Row(f=1)`, exp)
 		m1.QueryExpect(t, "i", "", `Row(f=1)`, exp)
-	})
-}
-
-// Ensure that redundant gossip seeds are used
-func TestCluster_GossipMembership(t *testing.T) {
-	t.Skip("skipping gossip test")
-	t.Run("Node0Down", func(t *testing.T) {
-		// Configure node0
-		m0 := test.MustRunCluster(t, 1).GetNode(0)
-		defer m0.Close()
-
-		seed := ""
-
-		var eg errgroup.Group
-
-		// Configure node1
-		m1 := test.NewCommandNode(t)
-		defer m1.Close()
-		eg.Go(func() error {
-			// Pass invalid seed as first in list
-			m1.Config.Gossip.Seeds = []string{"http://localhost:8765", seed}
-			if err := port.GetPort(func(p int) error {
-				m1.Config.Gossip.Port = fmt.Sprintf("%d", p)
-				return m1.Start()
-			}, 10); err != nil {
-				t.Fatalf("starting second main: %v", err)
-			}
-
-			return nil
-		})
-
-		// Configure node1
-		m2 := test.NewCommandNode(t)
-		defer m2.Close()
-		eg.Go(func() error {
-			// Pass invalid seed as first in list
-			m2.Config.Gossip.Seeds = []string{seed, "http://localhost:8765"}
-			err := port.GetPort(func(p int) error {
-				m2.Config.Gossip.Port = fmt.Sprintf("%d", p)
-				return m2.Start()
-			}, 10)
-
-			if err != nil {
-				t.Fatalf("starting second main: %v", err)
-			}
-			defer m2.Close()
-			return nil
-		})
-
-		if err := eg.Wait(); err != nil {
-			t.Fatal(err)
-		}
-
-		state0, err0 := m0.API.State()
-		state1, err1 := m1.API.State()
-		state2, err2 := m2.API.State()
-		if err0 != nil || !test.CheckClusterState(m0, string(pilosa.ClusterStateNormal), 1000) {
-			t.Fatalf("unexpected node0 cluster state: %s, error: %v", state0, err0)
-		} else if err1 != nil || !test.CheckClusterState(m1, string(pilosa.ClusterStateNormal), 1000) {
-			t.Fatalf("unexpected node1 cluster state: %s, error: %v", state1, err1)
-		} else if err2 != nil || !test.CheckClusterState(m2, string(pilosa.ClusterStateNormal), 1000) {
-			t.Fatalf("unexpected node2 cluster state: %s, error: %v", state2, err2)
-		}
-
-		numNodes := len(m0.API.Hosts(context.Background()))
-		if numNodes != 3 {
-			t.Fatalf("Expected 3 nodes, got %d", numNodes)
-		}
 	})
 }
 
