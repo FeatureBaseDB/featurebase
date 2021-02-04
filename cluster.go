@@ -50,9 +50,8 @@ const (
 	ClusterStateResizing = disco.ClusterStateResizing
 	ClusterStateDown     = disco.ClusterStateDown
 
-	// NodeState represents the state of a node during startup.
-	nodeStateReady = "READY"
-	nodeStateDown  = "DOWN"
+	// nodeStateDown represents the state of a node which is unavailable.
+	nodeStateDown = "DOWN"
 
 	// resizeJob states.
 	resizeJobStateRunning = "RUNNING"
@@ -211,24 +210,6 @@ func (c *cluster) unprotectedIsCoordinator() bool {
 	// Create a snapshot of the cluster to use for node/partition calculations.
 	snap := topology.NewClusterSnapshot(c.noder, c.Hasher, c.ReplicaN)
 	return snap.PrimaryFieldTranslationNode().ID == c.Node.ID
-}
-
-// unprotectedSendSync is used in place of c.broadcaster.SendSync (which is
-// Server.SendSync) because Server.SendSync needs to obtain a cluster lock to
-// get the list of nodes. TODO: the reference loop from
-// Server->cluster->broadcaster(Server) will likely continue to cause confusion
-// and should be refactored.
-func (c *cluster) unprotectedSendSync(m Message) error {
-	var eg errgroup.Group
-	for _, node := range c.noder.Nodes() {
-		node := node
-		// Don't send to myself.
-		if node.ID == c.Node.ID {
-			continue
-		}
-		eg.Go(func() error { return c.broadcaster.SendTo(node, m) })
-	}
-	return eg.Wait()
 }
 
 // addNode adds a node to the Cluster and updates and saves the
@@ -816,20 +797,6 @@ func (c *cluster) partitionNodes(partitionID int) []*topology.Node {
 	}
 
 	return nodes
-}
-
-func (c *cluster) primaryPartitionNode(partition int) *topology.Node {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.unprotectedPrimaryPartitionNode(partition)
-}
-
-// unprotectedPrimaryPartition returns tprimary node of partition.
-func (c *cluster) unprotectedPrimaryPartitionNode(partition int) *topology.Node {
-	if nodes := c.partitionNodes(partition); len(nodes) > 0 {
-		return nodes[0]
-	}
-	return nil
 }
 
 func (t *Topology) IsPrimary(nodeID string, partitionID int) bool {
@@ -1651,6 +1618,11 @@ func (t *Topology) Nodes() []*topology.Node {
 	return nodes
 }
 
+// PrimaryNodeID implements the Noder interface.
+func (t *Topology) PrimaryNodeID(topology.Hasher) string {
+	return ""
+}
+
 // SetNodes implements the Noder interface.
 func (t *Topology) SetNodes(nodes []*topology.Node) {}
 
@@ -2466,11 +2438,14 @@ func (c *cluster) findIndexKeys(ctx context.Context, indexName string, keys ...s
 
 	// TODO: use local replicas to short-circuit network traffic
 
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	snap := topology.NewClusterSnapshot(c.noder, c.Hasher, c.ReplicaN)
+
 	// Group keys by node.
 	keysByNode := make(map[*topology.Node][]string)
 	for partitionID, keys := range keysByPartition {
 		// Find the primary node for this partition.
-		primary := c.primaryPartitionNode(partitionID)
+		primary := snap.PrimaryPartitionNode(partitionID)
 		if primary == nil {
 			return nil, errors.Errorf("translating index(%s) keys(%v) on partition(%d) - cannot find primary node", indexName, keys, partitionID)
 		}
@@ -2572,12 +2547,15 @@ func (c *cluster) createIndexKeys(ctx context.Context, indexName string, keys ..
 
 	// TODO: use local replicas to short-circuit network traffic
 
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	snap := topology.NewClusterSnapshot(c.noder, c.Hasher, c.ReplicaN)
+
 	// Group keys by node.
 	// Delete remote keys from the by-partition map so that it can be used for local translation.
 	keysByNode := make(map[*topology.Node][]string)
 	for partitionID, keys := range keysByPartition {
 		// Find the primary node for this partition.
-		primary := c.primaryPartitionNode(partitionID)
+		primary := snap.PrimaryPartitionNode(partitionID)
 		if primary == nil {
 			return nil, errors.Errorf("translating index(%s) keys(%v) on partition(%d) - cannot find primary node", indexName, keys, partitionID)
 		}

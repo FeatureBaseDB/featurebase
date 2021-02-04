@@ -280,3 +280,15 @@ func NodePositionByID(nodes []*Node, nodeID string) int {
 	}
 	return -1
 }
+
+// PrimaryNodeID returns the ID of the primary node, given a list of node IDs
+// and a hasher. The order of the node IDs provided does not matter because this
+// function will re-order them in a deterministic way.
+func PrimaryNodeID(nodeIDs []string, hasher Hasher) string {
+	snap := NewClusterSnapshot(NewIDNoder(nodeIDs), hasher, 1)
+	primaryNode := snap.PrimaryFieldTranslationNode()
+	if primaryNode == nil {
+		return ""
+	}
+	return primaryNode.ID
+}

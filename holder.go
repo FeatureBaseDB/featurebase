@@ -1823,6 +1823,11 @@ type holderCleaner struct {
 	Closing <-chan struct{}
 }
 
+// TODO: this is here to satisfy the linter since holderCleaner was removed from
+// the gossip implementation of removeNode. But presumably we will use it once
+// we have ported over the etcd implementation.
+var _ holderCleaner
+
 // IsClosing returns true if the cleaner has been marked to close.
 func (c *holderCleaner) IsClosing() bool {
 	select {

@@ -1044,16 +1044,15 @@ func (e *Etcd) RemoveShard(ctx context.Context, index, field string, shard uint6
 	return nil
 }
 
-// Nodes implements the Noder interface.
-func (n *Etcd) Nodes() []*topology.Node {
-	// If we have looked up nodes within a certain time, then we're going to
-	// use the cached value for now. This is temporary and will be addressed
-	// correctly in #1133.
-	peers := n.Peers()
+// Nodes implements the Noder interface. It returns the sorted list of nodes
+// based on the etcd peers.
+func (e *Etcd) Nodes() []*topology.Node {
+	peers := e.Peers()
 	nodes := make([]*topology.Node, len(peers))
 	for i, peer := range peers {
 		node := &topology.Node{}
-		if meta, err := n.Metadata(context.Background(), peer.ID); err != nil {
+
+		if meta, err := e.Metadata(context.Background(), peer.ID); err != nil {
 			log.Println(err, "getting metadata") // TODO: handle this with a logger
 		} else if err := json.Unmarshal(meta, node); err != nil {
 			log.Println(err, "unmarshaling json metadata")
@@ -1070,16 +1069,31 @@ func (n *Etcd) Nodes() []*topology.Node {
 	return nodes
 }
 
+// PrimaryNodeID implements the Noder interface.
+func (e *Etcd) PrimaryNodeID(hasher topology.Hasher) string {
+	return topology.PrimaryNodeID(e.NodeIDs(), hasher)
+}
+
+// NodeIDs returns the list of node IDs in the etcd cluster.
+func (e *Etcd) NodeIDs() []string {
+	peers := e.Peers()
+	ids := make([]string, len(peers))
+	for i, peer := range peers {
+		ids[i] = peer.ID
+	}
+	return ids
+}
+
 // SetNodes implements the Noder interface as NOP
 // (because we can't force to set nodes for etcd).
-func (n *Etcd) SetNodes(nodes []*topology.Node) {}
+func (e *Etcd) SetNodes(nodes []*topology.Node) {}
 
 // AppendNode implements the Noder interface as NOP
 // (because resizer is responsible for adding new nodes).
-func (n *Etcd) AppendNode(node *topology.Node) {}
+func (e *Etcd) AppendNode(node *topology.Node) {}
 
 // RemoveNode implements the Noder interface as NOP
 // (because resizer is responsible for removing existing nodes)
-func (n *Etcd) RemoveNode(nodeID string) bool {
+func (e *Etcd) RemoveNode(nodeID string) bool {
 	return false
 }
