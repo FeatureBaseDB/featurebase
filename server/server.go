@@ -490,13 +490,14 @@ func (m *Command) SetupServer() error {
 }
 
 // dailyCheck runs in the background while a trial version of Molecula is being run, displaying daily reminders of the remaining days
-func (m *Command) dailyCheck(end time.Time) error {
+func (m *Command) dailyCheck(end time.Time) {
 	ticker := time.NewTicker(5 * time.Second)
 	var err error
 	for range ticker.C {
 		cur, err := m.ntpServerTime()
 		if err != nil {
-			return errors.Wrap(err, "reading ntp server time")
+			errors.Wrap(err, "reading ntp server time")
+			os.Exit(1)
 		}
 
 		m.logger.Printf("Current time remaining in trial: %v", end.Sub(cur))
@@ -507,7 +508,8 @@ func (m *Command) dailyCheck(end time.Time) error {
 			os.Exit(0) //is 0 the right exit number?
 		}
 	}
-	return errors.Wrap(err, "reading ntp server time")
+	errors.Wrap(err, "reading ntp server time")
+	os.Exit(1)
 }
 
 // ntpServerTime attempts to reach ntp servers with delays between each attempt
