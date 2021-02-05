@@ -223,3 +223,12 @@ message Transaction {
 }
 
 message TransactionStats {}
+
+message ResizeAbortMessage {
+
+}
+
+message ResizeNodeMessage {
+	string NodeID = 1;
+	string Action = 2;
+}

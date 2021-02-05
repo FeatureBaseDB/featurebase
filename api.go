@@ -2296,4 +2296,5 @@ var methodsNormal = map[apiMethod]struct{}{
 	apiTransactions:         {},
 	apiGetTransaction:       {},
 	apiActiveQueries:        {},
+	apiPastQueries:          {},
 }

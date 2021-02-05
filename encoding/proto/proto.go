@@ -306,6 +306,25 @@ func (s Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		}
 		*mt = s.decodeRowMatrix(msg)
 		return nil
+
+	case *pilosa.ResizeNodeMessage:
+		msg := &internal.ResizeNodeMessage{}
+		err := proto.Unmarshal(buf, msg)
+		if err != nil {
+			return errors.Wrap(err, "unmarshaling ResizeNodeMessage")
+		}
+		decodeResizeNodeMessage(msg, mt)
+		return nil
+
+	case *pilosa.ResizeAbortMessage:
+		msg := &internal.ResizeAbortMessage{}
+		err := proto.Unmarshal(buf, msg)
+		if err != nil {
+			return errors.Wrap(err, "unmarshaling ResizeAbortMessage")
+		}
+		decodeResizeAbortMessage(msg, mt)
+		return nil
+
 	default:
 		panic(fmt.Sprintf("unhandled pilosa.Message of type %T: %#v", mt, m))
 	}
@@ -375,6 +394,10 @@ func (s Serializer) encodeToProto(m pilosa.Message) proto.Message {
 		return s.encodeTransactionMessage(mt)
 	case *pilosa.AtomicRecord:
 		return s.encodeAtomicRecord(mt)
+	case *pilosa.ResizeNodeMessage:
+		return s.encodeResizeNodeMessage(mt)
+	case *pilosa.ResizeAbortMessage:
+		return s.encodeResizeAbortMessage(mt)
 	}
 	return nil
 }
@@ -1901,4 +1924,24 @@ func (s Serializer) encodeAttr(key string, value interface{}) *internal.Attr {
 		pb.BoolValue = value
 	}
 	return pb
+}
+
+func (s Serializer) encodeResizeNodeMessage(m *pilosa.ResizeNodeMessage) *internal.ResizeNodeMessage {
+	return &internal.ResizeNodeMessage{
+		NodeID: m.NodeID,
+		Action: m.Action,
+	}
+}
+
+func (s Serializer) encodeResizeAbortMessage(*pilosa.ResizeAbortMessage) *internal.ResizeAbortMessage {
+	return &internal.ResizeAbortMessage{}
+}
+
+func decodeResizeNodeMessage(pb *internal.ResizeNodeMessage, m *pilosa.ResizeNodeMessage) {
+	m.NodeID = pb.NodeID
+	m.Action = pb.Action
+}
+
+func decodeResizeAbortMessage(pb *internal.ResizeAbortMessage, m *pilosa.ResizeAbortMessage) {
+
 }

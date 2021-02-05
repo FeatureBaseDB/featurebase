@@ -1499,7 +1499,7 @@ func TestQueryHistory(t *testing.T) {
 
 	h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/query-history", nil))
 	if w.Code != gohttp.StatusOK {
-		t.Fatalf("unexpected status code: %d", w.Code)
+		t.Fatalf("unexpected status code: %d %s", w.Code, w.Body.String())
 	}
 
 	ret := make([]pilosa.PastQueryStatus, 4)
