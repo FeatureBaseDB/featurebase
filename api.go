@@ -114,7 +114,7 @@ func NewAPI(opts ...apiOption) (*API, error) {
 var validAPIMethods = map[string]map[apiMethod]struct{}{
 	string(ClusterStateStarting): methodsCommon,
 	string(ClusterStateNormal):   appendMap(methodsCommon, methodsNormal),
-	string(ClusterStateDegraded): appendMap(methodsCommon, methodsNormal),
+	string(ClusterStateDegraded): appendMap(methodsCommon, methodsDegraded),
 	string(ClusterStateResizing): appendMap(methodsCommon, methodsResizing),
 }
 

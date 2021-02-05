@@ -947,32 +947,6 @@ func (h *Holder) applySchema(schema *Schema) error {
 	return nil
 }
 
-func (h *Holder) applyCreatedAt(indexes []*IndexInfo) {
-	for _, ii := range indexes {
-		idx := h.Index(ii.Name)
-		if idx == nil {
-			continue
-		}
-		if ii.CreatedAt != 0 {
-			idx.mu.Lock()
-			idx.createdAt = ii.CreatedAt
-			idx.mu.Unlock()
-		}
-
-		for _, fi := range ii.Fields {
-			fld := idx.Field(fi.Name)
-			if fld == nil {
-				continue
-			}
-			if fi.CreatedAt != 0 {
-				fld.mu.Lock()
-				fld.createdAt = fi.CreatedAt
-				fld.mu.Unlock()
-			}
-		}
-	}
-}
-
 // IndexPath returns the path where a given index is stored.
 func (h *Holder) IndexPath(name string) string {
 	return filepath.Join(h.path, name)
