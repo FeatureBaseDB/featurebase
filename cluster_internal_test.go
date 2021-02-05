@@ -19,20 +19,13 @@ import (
 	"fmt"
 	"math/rand"
 	"net"
-	"net/http"
-	"net/http/httptest"
-	"net/url"
-	"os"
 	"reflect"
-	"strconv"
 	"strings"
 	"testing"
 	"testing/quick"
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
-	"github.com/gorilla/mux"
-	"github.com/pilosa/pilosa/v2/logger"
 	pnet "github.com/pilosa/pilosa/v2/net"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/test/port"
@@ -654,6 +647,8 @@ func TestCluster_Coordinator(t *testing.T) {
 }
 
 func TestCluster_Topology(t *testing.T) {
+	t.Skip("these tests don't really apply anymore; they were meant to tests the cluster and adding topology nodes.")
+
 	c1 := NewTestCluster(t, 1) // automatically creates Node{ID: "node0"}
 
 	const urisCount = 4
@@ -673,16 +668,16 @@ func TestCluster_Topology(t *testing.T) {
 	nodeinvalid := &topology.Node{ID: "nodeinvalid", URI: uris[3]}
 
 	t.Run("AddNode", func(t *testing.T) {
-		err := c1.addNode(node1)
+		err := c1.addNode(node1.ID)
 		if err != nil {
 			t.Fatal(err)
 		}
 		// add the same host.
-		err = c1.addNode(node1)
+		err = c1.addNode(node1.ID)
 		if err != nil {
 			t.Fatal(err)
 		}
-		err = c1.addNode(node2)
+		err = c1.addNode(node2.ID)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1071,91 +1066,6 @@ func TestAE(t *testing.T) {
 			t.Fatalf("abort should not have blocked this long")
 		}
 	})
-}
-
-func TestCluster_confirmNodeDownUp(t *testing.T) {
-	t.Skip("does a listen on :0, skip for now. TODO(jea) restore this.")
-	r := mux.NewRouter()
-	r.HandleFunc("/version", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		fmt.Fprintln(w, "ignored")
-	}))
-	server := httptest.NewServer(r)
-	// Close the server when test finishes
-	defer server.Close()
-	u, err := url.Parse(server.URL)
-	if err != nil {
-		t.Error("bad test setup")
-	}
-	uri := pnet.URI{}
-	host, port, _ := net.SplitHostPort(u.Host)
-	uri.Scheme = u.Scheme
-	uri.Host = host
-	iport, err := strconv.ParseUint(port, 0, 16)
-	if err != nil {
-		t.Error(err)
-	}
-	uri.Port = uint16(iport)
-	c := newCluster()
-	c.logger = logger.NewVerboseLogger(os.Stdout)
-	if c.confirmNodeDown(uri) {
-		t.Errorf("expected node to be up")
-	}
-}
-
-func TestCluster_confirmNodeDownTimeout(t *testing.T) {
-	t.Skip("does a listen on :0, skip for now. TODO(jea) restore this.")
-	sleep := 50 * time.Millisecond
-	retries := 5
-	if testing.Short() {
-		t.Skip()
-	}
-	r := mux.NewRouter()
-	r.HandleFunc("/version", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		time.Sleep(sleep * time.Duration(retries))
-		fmt.Fprintln(w, "ignored")
-	}))
-	server := httptest.NewServer(r)
-	// Close the server when test finishes
-	defer server.Close()
-	u, err := url.Parse(server.URL)
-	if err != nil {
-		t.Error("bad test setup")
-	}
-	uri := pnet.URI{}
-	host, port, _ := net.SplitHostPort(u.Host)
-	uri.Scheme = u.Scheme
-	uri.Host = host
-	iport, err := strconv.ParseUint(port, 0, 16)
-	if err != nil {
-		t.Error(err)
-	}
-	uri.Port = uint16(iport)
-	c := newCluster()
-	c.confirmDownSleep = sleep
-	c.confirmDownRetries = retries
-	c.logger = logger.NewVerboseLogger(os.Stdout)
-	if !c.confirmNodeDown(uri) {
-		t.Errorf("expected node to be down")
-	}
-}
-
-func TestCluster_confirmNodeDownDown(t *testing.T) {
-	if testing.Short() {
-		t.Skip()
-	}
-	uri := pnet.URI{}
-	uri.Scheme = "http"
-	uri.Host = "DoesntMatter"
-	uri.Port = 6666
-	c := newCluster()
-	c.confirmDownSleep = 50 * time.Millisecond
-	c.confirmDownRetries = 5
-	c.logger = logger.NewVerboseLogger(os.Stdout)
-
-	if !c.confirmNodeDown(uri) {
-		t.Errorf("expected node to be down")
-	}
 }
 
 func TestCluster_GetNonPrimaryReplicas(t *testing.T) {

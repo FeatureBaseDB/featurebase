@@ -104,6 +104,39 @@ func (c *InternalClient) maxShardByIndex(ctx context.Context) (map[string]uint64
 	return rsp.Standard, nil
 }
 
+// SchemaNode returns all index and field schema information from the specified
+// node.
+func (c *InternalClient) SchemaNode(ctx context.Context, uri *pnet.URI, views bool) ([]*pilosa.IndexInfo, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.Schema")
+	defer span.Finish()
+
+	// TODO: /?views parameter will be ignored, till we implement schemator!
+	// Execute request against the host.
+	u := uri.Path(fmt.Sprintf("/schema?views=%v", views))
+
+	// Build request.
+	req, err := http.NewRequest("GET", u, nil)
+	if err != nil {
+		return nil, errors.Wrap(err, "creating request")
+	}
+
+	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+	req.Header.Set("Accept", "application/json")
+
+	// Execute request.
+	resp, err := c.executeRequest(req.WithContext(ctx))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var rsp getSchemaResponse
+	if err := json.NewDecoder(resp.Body).Decode(&rsp); err != nil {
+		return nil, fmt.Errorf("json decode: %s", err)
+	}
+	return rsp.Indexes, nil
+}
+
 // Schema returns all index and field schema information.
 func (c *InternalClient) Schema(ctx context.Context) ([]*pilosa.IndexInfo, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.Schema")

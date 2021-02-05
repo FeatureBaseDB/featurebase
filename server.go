@@ -604,12 +604,11 @@ func (s *Server) Open() error {
 	s.holder.Activate()
 
 	// if we joined existing cluster then broadcast "resize on add" message
-	// TODO
-	// if initState == disco.InitialClusterStateExisting {
-	// 	if err := s.cluster.addNode(s.nodeID); err != nil {
-	// 	    return errors.Wrap(err, "adding a node to the existing cluster")
-	// 	}
-	// }
+	if initState == disco.InitialClusterStateExisting {
+		if err := s.cluster.addNode(s.nodeID); err != nil {
+			return errors.Wrap(err, "adding a node to the existing cluster")
+		}
+	}
 
 	if err := s.stator.Started(context.Background()); err != nil {
 		return errors.Wrap(err, "setting nodeState")
@@ -787,6 +786,7 @@ func (s *Server) receiveMessage(m Message) error {
 		if err := f.AddRemoteAvailableShards(roaring.NewBitmap(obj.Shard)); err != nil {
 			return errors.Wrap(err, "adding remote available shards")
 		}
+
 	case *CreateIndexMessage:
 		opt := obj.Meta
 		idx, err := s.holder.CreateIndex(obj.Index, *opt)
@@ -796,10 +796,12 @@ func (s *Server) receiveMessage(m Message) error {
 		idx.mu.Lock()
 		idx.createdAt = obj.CreatedAt
 		idx.mu.Unlock()
+
 	case *DeleteIndexMessage:
 		if err := s.holder.DeleteIndex(obj.Index); err != nil {
 			return err
 		}
+
 	case *CreateFieldMessage:
 		idx := s.holder.Index(obj.Index)
 		if idx == nil {
@@ -813,16 +815,19 @@ func (s *Server) receiveMessage(m Message) error {
 		fld.mu.Lock()
 		fld.createdAt = obj.CreatedAt
 		fld.mu.Unlock()
+
 	case *DeleteFieldMessage:
 		idx := s.holder.Index(obj.Index)
 		if err := idx.DeleteField(obj.Field); err != nil {
 			return err
 		}
+
 	case *DeleteAvailableShardMessage:
 		f := s.holder.Field(obj.Index, obj.Field)
 		if err := f.RemoveAvailableShard(obj.ShardID); err != nil {
 			return err
 		}
+
 	case *CreateViewMessage:
 		f := s.holder.Field(obj.Index, obj.Field)
 		if f == nil {
@@ -831,6 +836,7 @@ func (s *Server) receiveMessage(m Message) error {
 		if _, _, err := f.createViewIfNotExistsBase(obj.View); err != nil {
 			return err
 		}
+
 	case *DeleteViewMessage:
 		f := s.holder.Field(obj.Index, obj.Field)
 		if f == nil {
@@ -840,31 +846,41 @@ func (s *Server) receiveMessage(m Message) error {
 		if err != nil {
 			return err
 		}
-	case *ClusterStatus:
-		err := s.cluster.mergeClusterStatus(obj)
-		if err != nil {
-			return err
-		}
-		if !s.IsPrimary() {
-			if obj.Schema != nil {
-				s.holder.applyCreatedAt(obj.Schema.Indexes)
+
+	case *ResizeNodeMessage:
+		switch obj.Action {
+		case resizeJobActionRemove:
+			if err := s.cluster.resizeNodeOnRemove(obj.NodeID); err != nil {
+				return errors.Wrapf(err, "resizing node %s on remove %s", s.cluster.disCo.ID(), obj.NodeID)
 			}
+
+		case resizeJobActionAdd:
+			if err := s.cluster.resizeNodeOnAdd(obj.NodeID); err != nil {
+				return errors.Wrapf(err, "resizing node %s on remove %s", s.cluster.disCo.ID(), obj.NodeID)
+			}
+
+		default:
+			return fmt.Errorf("incorrect resizing node action: %s", obj.Action)
 		}
 
 	case *ResizeInstruction:
-		err := s.cluster.followResizeInstruction(obj)
+		err := s.cluster.followResizeInstruction(context.Background(), obj)
 		if err != nil {
 			return err
 		}
-	case *ResizeInstructionComplete:
-		err := s.cluster.markResizeInstructionComplete(obj)
+
+	case *ResizeAbortMessage:
+		err := s.cluster.resizeAbort()
 		if err != nil {
 			return err
 		}
+
 	case *RecalculateCaches:
 		s.holder.recalculateCaches()
+
 	case *NodeStatus:
 		s.handleRemoteStatus(obj)
+
 	case *TransactionMessage:
 		err := s.handleTransactionMessage(obj)
 		if err != nil {

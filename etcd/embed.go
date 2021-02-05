@@ -41,12 +41,12 @@ import (
 type Options struct {
 	Name         string `toml:"name"`
 	Dir          string `toml:"dir"`
-	LClientURL   string `toml:"listen-client-address"`
-	AClientURL   string `toml:"advertise-client-address"`
-	LPeerURL     string `toml:"listen-peer-address"`
-	APeerURL     string `toml:"advertise-peer-address"`
-	InitCluster  string `toml:"initial-cluster"`
+	LClientURL   string `toml:"listen-client-url"`
+	AClientURL   string `toml:"advertise-client-url"`
+	LPeerURL     string `toml:"listen-peer-url"`
+	APeerURL     string `toml:"advertise-peer-url"`
 	ClusterURL   string `toml:"cluster-url"`
+	InitCluster  string `toml:"initial-cluster"`
 	ClusterName  string `toml:"cluster-name"`
 	HeartbeatTTL int64  `toml:"heartbeat-ttl"`
 

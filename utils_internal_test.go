@@ -264,7 +264,7 @@ func (t *ClusterCluster) addCluster(i int, saveTopology bool) (*cluster, error) 
 	// add nodes
 	if saveTopology {
 		for _, n := range t.common.Nodes {
-			if err := c.addNode(n); err != nil {
+			if err := c.addNode(n.ID); err != nil {
 				return nil, err
 			}
 		}
@@ -329,15 +329,6 @@ type bcast struct {
 func (b bcast) SendSync(m Message) error {
 	switch obj := m.(type) {
 	case *ClusterStatus:
-		// Apply the send message to all nodes (except the coordinator).
-		for _, c := range b.t.Clusters {
-			if c != b.c {
-				err := c.mergeClusterStatus(obj)
-				if err != nil {
-					return err
-				}
-			}
-		}
 		b.t.mu.RLock()
 		if obj.State == string(ClusterStateNormal) && b.t.resizing {
 			close(b.t.resizeDone)
@@ -367,21 +358,7 @@ func (b bcast) SendTo(to *topology.Node, m Message) error {
 		if err != nil {
 			return err
 		}
-	case *ResizeInstructionComplete:
-		coord := b.t.clusterByID(to.ID)
-		// this used to be async, but that prevented us from checking
-		// its error status...
-		return coord.markResizeInstructionComplete(obj)
 	case *ClusterStatus:
-		// Apply the send message to the node.
-		for _, c := range b.t.Clusters {
-			if c.Node.ID == to.ID {
-				err := c.mergeClusterStatus(obj)
-				if err != nil {
-					return err
-				}
-			}
-		}
 		b.t.mu.RLock()
 		if obj.State == string(ClusterStateNormal) && b.t.resizing {
 			close(b.t.resizeDone)

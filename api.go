@@ -1748,21 +1748,19 @@ func (api *API) RemoveNode(id string) (*topology.Node, error) {
 		return nil, errors.Wrap(err, "validating api method")
 	}
 
-	removeNode := api.cluster.nodeByID(id)
-	if removeNode == nil {
-		if !api.cluster.topologyContainsNode(id) {
-			return nil, errors.Wrap(ErrNodeIDNotExists, "finding node to remove")
-		}
-		removeNode = &topology.Node{
-			ID: id,
-		}
+	if api.cluster.disCo.ID() == id {
+		return nil, errors.Wrapf(ErrPreconditionFailed, "the node %s can not be removed", id)
 	}
 
-	// Start the resize process (similar to NodeJoin)
-	err := api.cluster.nodeLeave(id)
-	if err != nil {
-		return removeNode, errors.Wrap(err, "calling node leave")
+	removeNode := api.cluster.nodeByID(id)
+	if removeNode == nil {
+		return nil, errors.Wrap(ErrNodeIDNotExists, "finding node to remove")
 	}
+
+	if err := api.cluster.removeNode(id); err != nil {
+		return nil, errors.Wrapf(err, "removing node %s", id)
+	}
+
 	return removeNode, nil
 }
 
@@ -1772,8 +1770,7 @@ func (api *API) ResizeAbort() error {
 		return errors.Wrap(err, "validating api method")
 	}
 
-	err := api.cluster.completeCurrentJob(resizeJobStateAborted)
-	return errors.Wrap(err, "complete current job")
+	return api.cluster.resizeAbortAndBroadcast()
 }
 
 // State returns the cluster state which is usually "NORMAL", but could be
