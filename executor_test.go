@@ -27,6 +27,7 @@ import (
 	"math/rand"
 	"os"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -6840,6 +6841,134 @@ func TestVariousQueries(t *testing.T) {
 			t.Parallel()
 
 			variousQueries(t, clusterSize)
+			variousQueriesOnTimeFields(t, clusterSize)
+		})
+	}
+}
+
+// tests for abbreviating time values in queries
+func variousQueriesOnTimeFields(t *testing.T, clusterSize int) {
+	c := test.MustRunCluster(t, clusterSize)
+	defer c.Close()
+
+	ts := func(t time.Time) int64 {
+		return t.Unix() * 1e+9
+	}
+
+	// generic index
+	// worth noting, since we are using YMDH resolution, both C4 & C5
+	// get binned to the same hour
+	c.CreateField(t, "t_index", pilosa.IndexOptions{Keys: true, TrackExistence: true}, "f1", pilosa.OptFieldKeys(), pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMDH")))
+	c.ImportTimeQuantumKey(t, "t_index", "f1", []test.TimeQuantumKey{
+		// from edge cases
+		{ColKey: "C1", RowKey: "R1", Ts: ts(time.Date(2019, 1, 1, 0, 0, 0, 0, time.UTC))},
+		{ColKey: "C2", RowKey: "R2", Ts: ts(time.Date(2019, 8, 1, 0, 0, 0, 0, time.UTC))},
+		{ColKey: "C3", RowKey: "R3", Ts: ts(time.Date(2019, 8, 4, 0, 0, 0, 0, time.UTC))},
+		{ColKey: "C4", RowKey: "R4", Ts: ts(time.Date(2019, 8, 4, 14, 0, 0, 0, time.UTC))},
+		{ColKey: "C5", RowKey: "R5", Ts: ts(time.Date(2019, 8, 4, 14, 36, 0, 0, time.UTC))},
+		// to edge cases
+		{ColKey: "C6", RowKey: "R6", Ts: ts(time.Date(2019, 8, 4, 16, 0, 0, 0, time.UTC))},
+		{ColKey: "C7", RowKey: "R7", Ts: ts(time.Date(2019, 8, 5, 0, 0, 0, 0, time.UTC))},
+		{ColKey: "C8", RowKey: "R8", Ts: ts(time.Date(2019, 12, 1, 0, 0, 0, 0, time.UTC))},
+		{ColKey: "C9", RowKey: "R9", Ts: ts(time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC))},
+	})
+
+	// in this field, all columns have the same row value to simplify test queries for Row
+	c.CreateField(t, "t_index", pilosa.IndexOptions{Keys: true, TrackExistence: true}, "f2", pilosa.OptFieldKeys(), pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMDH")))
+	c.ImportTimeQuantumKey(t, "t_index", "f2", []test.TimeQuantumKey{
+		// from
+		{ColKey: "C1", RowKey: "R", Ts: ts(time.Date(2019, 1, 1, 0, 0, 0, 0, time.UTC))},
+		{ColKey: "C2", RowKey: "R", Ts: ts(time.Date(2019, 8, 1, 0, 0, 0, 0, time.UTC))},
+		{ColKey: "C3", RowKey: "R", Ts: ts(time.Date(2019, 8, 4, 0, 0, 0, 0, time.UTC))},
+		{ColKey: "C4", RowKey: "R", Ts: ts(time.Date(2019, 8, 4, 14, 0, 0, 0, time.UTC))},
+		{ColKey: "C5", RowKey: "R", Ts: ts(time.Date(2019, 8, 4, 14, 36, 0, 0, time.UTC))},
+		// to
+		{ColKey: "C6", RowKey: "R", Ts: ts(time.Date(2019, 8, 4, 16, 0, 0, 0, time.UTC))},
+		{ColKey: "C7", RowKey: "R", Ts: ts(time.Date(2019, 8, 5, 0, 0, 0, 0, time.UTC))},
+		{ColKey: "C8", RowKey: "R", Ts: ts(time.Date(2019, 12, 1, 0, 0, 0, 0, time.UTC))},
+		{ColKey: "C9", RowKey: "R", Ts: ts(time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC))},
+	})
+
+	splitSortBackToCSV := func(csvStr string) string {
+		ss := strings.Split(csvStr[:len(csvStr)-1], "\n")
+		sort.Strings(ss)
+		return strings.Join(ss, "\n") + "\n"
+	}
+
+	toCSV := func(s string) string {
+		return strings.Join(strings.Split(s, " "), "\n") + "\n"
+	}
+
+	type testCase struct {
+		query       string
+		qrVerifier  func(t *testing.T, resp pilosa.QueryResponse)
+		csvVerifier string
+	}
+
+	tests := []testCase{
+		// Rows
+		{
+			query:       `Rows(f1, from='2019-08-04T14:36', to='2019-08-04T16:00')`,
+			csvVerifier: toCSV("R4 R5"),
+		},
+		{
+			query:       `Rows(f1, from='2019-08-04T14', to='2019-08-04T17:00')`,
+			csvVerifier: toCSV("R4 R5 R6"),
+		},
+		{
+			query:       `Rows(f1, from='2019-08-04', to='2019-08-05')`,
+			csvVerifier: toCSV("R3 R4 R5 R6"),
+		},
+		{
+			query:       `Rows(f1, from='2019-08', to='2019-12')`,
+			csvVerifier: toCSV("R2 R3 R4 R5 R6 R7"),
+		},
+		{
+			query:       `Rows(f1, from='2019', to='2020')`,
+			csvVerifier: toCSV("R1 R2 R3 R4 R5 R6 R7 R8"),
+		},
+		// Row
+		{
+			query:       `Row(f2='R', from='2019-08-04T14:36', to='2019-08-04T16:00')`,
+			csvVerifier: toCSV("C4 C5"),
+		},
+		{
+			query:       `Row(f2='R', from='2019-08-04T14', to='2019-08-04T17:00')`,
+			csvVerifier: toCSV("C4 C5 C6"),
+		},
+		{
+			query:       `Row(f2='R', from='2019-08-04', to='2019-08-05')`,
+			csvVerifier: toCSV("C3 C4 C5 C6"),
+		},
+		{
+			query:       `Row(f2='R', from='2019-08', to='2019-12')`,
+			csvVerifier: toCSV("C2 C3 C4 C5 C6 C7"),
+		},
+		{
+			query:       `Row(f2='R', from='2019', to='2020')`,
+			csvVerifier: toCSV("C1 C2 C3 C4 C5 C6 C7 C8"),
+		},
+	}
+
+	for i, tst := range tests {
+		t.Run(fmt.Sprintf("%d-%s", i, tst.query), func(t *testing.T) {
+			resp := c.Query(t, "t_index", tst.query)
+			tr := c.QueryGRPC(t, "t_index", tst.query)
+			if tst.qrVerifier != nil {
+				tst.qrVerifier(t, resp)
+			}
+			csvString, err := tableResponseToCSVString(tr)
+			if err != nil {
+				t.Fatal(err)
+			}
+			// verify everything after header
+			got := splitSortBackToCSV(csvString[strings.Index(csvString, "\n")+1:])
+			if got != tst.csvVerifier {
+				t.Errorf("expected:\n%s\ngot:\n%s", tst.csvVerifier, got)
+			}
+
+			// TODO: add HTTP and Postgres and ability to convert
+			// those results to CSV to run through CSV verifier
 		})
 	}
 }
