@@ -647,6 +647,8 @@ func TestCluster_Coordinator(t *testing.T) {
 }
 
 func TestCluster_Topology(t *testing.T) {
+	t.Skip("these tests don't really apply anymore; they were meant to tests the cluster and adding topology nodes.")
+
 	c1 := NewTestCluster(t, 1) // automatically creates Node{ID: "node0"}
 
 	const urisCount = 4
