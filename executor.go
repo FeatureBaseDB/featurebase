@@ -643,6 +643,41 @@ func (e *executor) preprocessQuery(ctx context.Context, qcx *Qcx, index string, 
 	}
 }
 
+type shardSlice []uint64
+
+// String creates a run-length encoded representation of a slice of shard IDs (integers).
+// For example, []uint64{0, 1, 3, 4, 5, 7, 8, 9, 11, 13} is represented as
+// [0-1,3-5,7-9,11,13].
+func (s shardSlice) String() string {
+	if len(s) == 0 {
+		// surely this is impossible
+		return "[]"
+	}
+	runs := make([]string, 0, len(s)/2)
+	start := s[0]
+	end := start
+	for n := 1; n < len(s); n++ {
+		if s[n] == end+1 {
+			end = s[n]
+		} else {
+			repr := fmt.Sprintf("%d", start)
+			if end > start {
+				repr += fmt.Sprintf("-%d", end)
+			}
+			runs = append(runs, repr)
+			start = s[n]
+			end = start
+		}
+	}
+	repr := fmt.Sprintf("%d", start)
+	if end > start {
+		repr += fmt.Sprintf("-%d", end)
+	}
+	runs = append(runs, repr)
+
+	return "[" + strings.Join(runs, ",") + "]"
+}
+
 // executeCall executes a call.
 func (e *executor) executeCall(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *execOptions) (interface{}, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeCall")
@@ -692,47 +727,49 @@ func (e *executor) executeCall(ctx context.Context, qcx *Qcx, index string, c *p
 	case "Sum":
 		statFn()
 		res, err := e.executeSum(ctx, qcx, index, c, shards, opt)
-		return res, errors.Wrapf(err, "executeSum %v", shards)
+		return res, errors.Wrapf(err, "executeSum %v", shardSlice(shards))
 	case "Min":
 		statFn()
 		res, err := e.executeMin(ctx, qcx, index, c, shards, opt)
-		return res, errors.Wrapf(err, "executeMin %v", shards)
+		return res, errors.Wrapf(err, "executeMin %v", shardSlice(shards))
 	case "Max":
 		statFn()
 		res, err := e.executeMax(ctx, qcx, index, c, shards, opt)
-		return res, errors.Wrapf(err, "executeMax %v", shards)
+		return res, errors.Wrapf(err, "executeMax %v", shardSlice(shards))
 	case "MinRow":
 		statFn()
 		res, err := e.executeMinRow(ctx, qcx, index, c, shards, opt)
-		return res, errors.Wrapf(err, "executeMinRow %v", shards)
+		return res, errors.Wrapf(err, "executeMinRow %v", shardSlice(shards))
 	case "MaxRow":
 		statFn()
 		res, err := e.executeMaxRow(ctx, qcx, index, c, shards, opt)
-		return res, errors.Wrapf(err, "executeMaxRow %v", shards)
+		return res, errors.Wrapf(err, "executeMaxRow %v", shardSlice(shards))
 	case "Clear":
 		statFn()
 		res, err := e.executeClearBit(ctx, qcx, index, c, opt)
-		return res, errors.Wrapf(err, "executeClearBit %v", shards)
+		return res, errors.Wrapf(err, "executeClearBit %v", shardSlice(shards))
 	case "ClearRow":
 		statFn()
 		res, err := e.executeClearRow(ctx, qcx, index, c, shards, opt)
-		return res, errors.Wrapf(err, "executeClearRow %v", shards)
+		return res, errors.Wrapf(err, "executeClearRow %v", shardSlice(shards))
 	case "Distinct":
 		statFn()
 		res, err := e.executeDistinct(ctx, qcx, index, c, shards, opt)
-		return res, errors.Wrapf(err, "executeDistinct %v", shards)
+		// TODO this can produce an ugly list of 256 shards
+		return res, errors.Wrapf(err, "executeDistinct %v", shardSlice(shards))
 	case "Store":
 		statFn()
 		res, err := e.executeSetRow(ctx, qcx, index, c, shards, opt)
-		return res, errors.Wrapf(err, "executeSetRow %v", shards)
+		return res, errors.Wrapf(err, "executeSetRow %v", shardSlice(shards))
 	case "Count":
 		statFn()
 		res, err := e.executeCount(ctx, qcx, index, c, shards, opt)
-		return res, errors.Wrapf(err, "executeCount %v", shards)
+		// TODO this can produce an ugly list of 256 shards
+		return res, errors.Wrapf(err, "executeCount %v", shardSlice(shards))
 	case "Set":
 		statFn()
 		res, err := e.executeSet(ctx, qcx, index, c, opt)
-		return res, errors.Wrapf(err, "executeSet %v", shards)
+		return res, errors.Wrapf(err, "executeSet %v", shardSlice(shards))
 	case "SetRowAttrs":
 		statFn()
 		return nil, errors.Wrap(e.executeSetRowAttrs(ctx, qcx, index, c, opt), "executeSetRowAttrs")
@@ -742,50 +779,50 @@ func (e *executor) executeCall(ctx context.Context, qcx *Qcx, index string, c *p
 	case "TopK":
 		statFn()
 		res, err := e.executeTopK(ctx, qcx, index, c, shards, opt)
-		return res, errors.Wrapf(err, "executeTopK %v", shards)
+		return res, errors.Wrapf(err, "executeTopK %v", shardSlice(shards))
 	case "TopN":
 		statFn()
 		res, err := e.executeTopN(ctx, qcx, index, c, shards, opt)
-		return res, errors.Wrapf(err, "executeTopN %v", shards)
+		return res, errors.Wrapf(err, "executeTopN %v", shardSlice(shards))
 	case "Rows":
 		statFn()
 		res, err := e.executeRows(ctx, qcx, index, c, shards, opt)
-		return res, errors.Wrapf(err, "executeRows %v", shards)
+		return res, errors.Wrapf(err, "executeRows %v", shardSlice(shards))
 	case "Extract":
 		statFn()
 		res, err := e.executeExtract(ctx, qcx, index, c, shards, opt)
-		return res, errors.Wrapf(err, "executeExtract %v", shards)
+		return res, errors.Wrapf(err, "executeExtract %v", shardSlice(shards))
 	case "GroupBy":
 		statFn()
 		res, err := e.executeGroupBy(ctx, qcx, index, c, shards, opt)
-		return res, errors.Wrapf(err, "executeGroupBy %v", shards)
+		return res, errors.Wrapf(err, "executeGroupBy %v", shardSlice(shards))
 	case "Options":
 		statFn()
 		res, err := e.executeOptionsCall(ctx, qcx, index, c, shards, opt)
-		return res, errors.Wrapf(err, "executeOptionsCall %v", shards)
+		return res, errors.Wrapf(err, "executeOptionsCall %v", shardSlice(shards))
 	case "IncludesColumn":
 		res, err := e.executeIncludesColumnCall(ctx, qcx, index, c, shards, opt)
-		return res, errors.Wrapf(err, "executeIncludesColumnCall %v", shards)
+		return res, errors.Wrapf(err, "executeIncludesColumnCall %v", shardSlice(shards))
 	case "FieldValue":
 		statFn()
 		res, err := e.executeFieldValueCall(ctx, qcx, index, c, shards, opt)
-		return res, errors.Wrapf(err, "executeFieldValueCall %v", shards)
+		return res, errors.Wrapf(err, "executeFieldValueCall %v", shardSlice(shards))
 	case "Precomputed":
 		res, err := e.executePrecomputedCall(ctx, qcx, index, c, shards, opt)
-		return res, errors.Wrapf(err, "executePrecomputedCall %v", shards)
+		return res, errors.Wrapf(err, "executePrecomputedCall %v", shardSlice(shards))
 	case "UnionRows":
 		res, err := e.executeUnionRows(ctx, qcx, index, c, shards, opt)
-		return res, errors.Wrapf(err, "executeUnionRows %v", shards)
+		return res, errors.Wrapf(err, "executeUnionRows %v", shardSlice(shards))
 	case "ConstRow":
 		res, err := e.executeConstRow(ctx, index, c)
-		return res, errors.Wrapf(err, "executeConstRow %v", shards)
+		return res, errors.Wrapf(err, "executeConstRow %v", shardSlice(shards))
 	case "Limit":
 		res, err := e.executeLimitCall(ctx, qcx, index, c, shards, opt)
-		return res, errors.Wrapf(err, "executeLimitCall %v", shards)
+		return res, errors.Wrapf(err, "executeLimitCall %v", shardSlice(shards))
 	default: // e.g. "Row", "Union", "Intersect" or anything that returns a bitmap.
 		statFn()
 		res, err := e.executeBitmapCall(ctx, qcx, index, c, shards, opt)
-		return res, errors.Wrapf(err, "executeBitmapCall %v", shards)
+		return res, errors.Wrapf(err, "executeBitmapCall %v", shardSlice(shards))
 	}
 }
 
@@ -2856,7 +2893,7 @@ func (e *executor) executeGroupBy(ctx context.Context, qcx *Qcx, index string, c
 	// Get full result set.
 	other, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
 	if err != nil {
-		return nil, errors.Wrapf(err, "mapReduce shards: %v", shards)
+		return nil, errors.Wrapf(err, "mapReduce shards: %v", shardSlice(shards))
 	}
 	results, _ := other.([]GroupCount)
 
@@ -5595,7 +5632,7 @@ func (e *executor) mapper(ctx context.Context, cancel context.CancelFunc, ch cha
 	// Group shards together by nodes.
 	m, err := e.shardsByNode(nodes, index, shards)
 	if err != nil {
-		return errors.Wrapf(err, "shards by node %v", shards)
+		return errors.Wrapf(err, "shards by node %v", shardSlice(shards))
 	}
 
 	// Execute each node in a separate goroutine.
