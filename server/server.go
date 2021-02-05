@@ -496,7 +496,7 @@ func (m *Command) dailyCheck(end time.Time) {
 	for range ticker.C {
 		cur, err := m.ntpServerTime()
 		if err != nil {
-			errors.Wrap(err, "reading ntp server time")
+			m.logger.Printf("reading ntp server time %v", err)
 			os.Exit(1)
 		}
 
@@ -508,7 +508,7 @@ func (m *Command) dailyCheck(end time.Time) {
 			os.Exit(0) //is 0 the right exit number?
 		}
 	}
-	errors.Wrap(err, "reading ntp server time")
+	m.logger.Printf("reading ntp server time %v", err)
 	os.Exit(1)
 }
 
