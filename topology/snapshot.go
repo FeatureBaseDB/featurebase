@@ -71,13 +71,11 @@ func NewClusterSnapshot(noder Noder, hasher Hasher, replicas int) *ClusterSnapsh
 // ShardToShardPartition returns the shard-partition that the given shard
 // belongs to. NOTE: This is DIFFERENT from the key-partition.
 func (c *ClusterSnapshot) ShardToShardPartition(index string, shard uint64) int {
-	return dedupShardToShardPartition(index, shard, c.PartitionN)
+	return ShardToShardPartition(index, shard, c.PartitionN)
 }
 
-// dedupShardToShardParition would ideally be called `shardToShardPartition`, but since
-// we can't put this into it's own package yet (see the TODO below about import loops),
-// that name conflicts with a function that already exists in the `pilosa` package.
-func dedupShardToShardPartition(index string, shard uint64, partitionN int) int {
+// ShardToShardParition ...
+func ShardToShardPartition(index string, shard uint64, partitionN int) int {
 	var buf [8]byte
 	binary.BigEndian.PutUint64(buf[:], shard)
 
@@ -238,14 +236,12 @@ func (c *ClusterSnapshot) PrimaryForColKeyTranslation(index, key string) (primar
 }
 
 // TODO: update this comment
-// should match cluster.go:1033 cluster.ownsShard(nodeID, index, shard)
-// 	return Nodes(c.shardNodes(index, shard)).ContainsID(nodeID)
 func (c *ClusterSnapshot) PrimaryForShardReplication(index string, shard uint64) int {
 	n := len(c.Nodes)
 	if n == 0 {
 		return -1
 	}
-	partition := uint64(dedupShardToShardPartition(index, shard, c.PartitionN))
+	partition := uint64(ShardToShardPartition(index, shard, c.PartitionN))
 	nodeIndex := c.Hasher.Hash(partition, n)
 	return nodeIndex
 }

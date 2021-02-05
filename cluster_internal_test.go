@@ -15,7 +15,6 @@
 package pilosa
 
 import (
-	"bytes"
 	"fmt"
 	"math/rand"
 	"net"
@@ -31,7 +30,6 @@ import (
 	"github.com/pilosa/pilosa/v2/test/port"
 	"github.com/pilosa/pilosa/v2/testhook"
 	"github.com/pilosa/pilosa/v2/topology"
-	"github.com/pkg/errors"
 )
 
 // GlobalPortMap avoids many races and port conflicts when setting
@@ -423,13 +421,16 @@ func TestCluster_Owners(t *testing.T) {
 
 	cNodes := c.noder.Nodes()
 
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	snap := topology.NewClusterSnapshot(c.noder, c.Hasher, c.ReplicaN)
+
 	// Verify nodes are distributed.
-	if a := c.partitionNodes(0); !reflect.DeepEqual(a, []*topology.Node{cNodes[0], cNodes[1]}) {
+	if a := snap.PartitionNodes(0); !reflect.DeepEqual(a, []*topology.Node{cNodes[0], cNodes[1]}) {
 		t.Fatalf("unexpected owners: %s", spew.Sdump(a))
 	}
 
 	// Verify nodes go around the ring.
-	if a := c.partitionNodes(2); !reflect.DeepEqual(a, []*topology.Node{cNodes[2], cNodes[0]}) {
+	if a := snap.PartitionNodes(2); !reflect.DeepEqual(a, []*topology.Node{cNodes[2], cNodes[0]}) {
 		t.Fatalf("unexpected owners: %s", spew.Sdump(a))
 	}
 }
@@ -440,7 +441,7 @@ func TestCluster_Partition(t *testing.T) {
 		c := newCluster()
 		c.partitionN = partitionN
 
-		partitionID := c.shardToShardPartition(index, shard)
+		partitionID := topology.ShardToShardPartition(index, shard, partitionN)
 		if partitionID < 0 || partitionID >= partitionN {
 			t.Errorf("partition out of range: shard=%d, p=%d, n=%d", shard, partitionID, partitionN)
 		}
@@ -483,7 +484,11 @@ func TestCluster_ContainsShards(t *testing.T) {
 	c := NewTestCluster(t, 5)
 	c.ReplicaN = 3
 	cNodes := c.noder.Nodes()
-	shards := c.containsShards("test", roaring.NewBitmap(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10), cNodes[2])
+
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	snap := topology.NewClusterSnapshot(c.noder, c.Hasher, c.ReplicaN)
+
+	shards := snap.ContainsShards("test", roaring.NewBitmap(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10), cNodes[2])
 
 	if !reflect.DeepEqual(shards, []uint64{0, 2, 3, 5, 6, 9, 10}) {
 		t.Fatalf("unexpected shars for node's index: %v", shards)
@@ -646,368 +651,6 @@ func TestCluster_Coordinator(t *testing.T) {
 	})
 }
 
-func TestCluster_Topology(t *testing.T) {
-	t.Skip("these tests don't really apply anymore; they were meant to tests the cluster and adding topology nodes.")
-
-	c1 := NewTestCluster(t, 1) // automatically creates Node{ID: "node0"}
-
-	const urisCount = 4
-	var uris []pnet.URI
-	if err := port.GetPorts(func(ports []int) error {
-		for i := 0; i < urisCount; i++ {
-			uris = append(uris, NewTestURIFromHostPort(fmt.Sprintf("host%d", i), uint16(ports[i])))
-		}
-		return nil
-	}, urisCount, 10); err != nil {
-		t.Fatalf("getting ports: %v", err)
-	}
-
-	node0 := &topology.Node{ID: "node0", URI: uris[0]}
-	node1 := &topology.Node{ID: "node1", URI: uris[1]}
-	node2 := &topology.Node{ID: "node2", URI: uris[2]}
-	nodeinvalid := &topology.Node{ID: "nodeinvalid", URI: uris[3]}
-
-	t.Run("AddNode", func(t *testing.T) {
-		err := c1.addNode(node1.ID)
-		if err != nil {
-			t.Fatal(err)
-		}
-		// add the same host.
-		err = c1.addNode(node1.ID)
-		if err != nil {
-			t.Fatal(err)
-		}
-		err = c1.addNode(node2.ID)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		actual := c1.nodeIDs()
-		expected := []string{node0.ID, node1.ID, node2.ID}
-
-		if !reflect.DeepEqual(actual, expected) {
-			t.Errorf("expected: %v, but got: %v", expected, actual)
-		}
-	})
-
-	t.Run("ContainsID", func(t *testing.T) {
-		if !c1.Topology.ContainsID(node1.ID) {
-			t.Errorf("!ContainsHost error: %v", node1.ID)
-		} else if c1.Topology.ContainsID(nodeinvalid.ID) {
-			t.Errorf("ContainsHost error: %v", nodeinvalid.ID)
-		}
-	})
-}
-
-// Ensure that general cluster functionality works as expected.
-func TestCluster_ResizeStates(t *testing.T) {
-	t.Skip("these tests don't really apply anymore; they were meant to tests the cluster startup process using memberlist and a topology file")
-	t.Run("Single node, no data", func(t *testing.T) {
-		tc := NewClusterCluster(t, 1)
-
-		// Open TestCluster.
-		if err := tc.Open(); err != nil {
-			t.Fatal(err)
-		}
-
-		node := tc.Clusters[0]
-
-		state, err := node.State()
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		// Ensure that node comes up in state NORMAL.
-		if state != string(ClusterStateNormal) {
-			t.Errorf("expected state: %v, but got: %v", ClusterStateNormal, state)
-		}
-
-		expectedTop := &Topology{
-			nodeIDs: []string{node.Node.ID},
-		}
-
-		// Verify topology file.
-		if !reflect.DeepEqual(node.Topology.nodeIDs, expectedTop.nodeIDs) {
-			t.Errorf("expected topology: %v, but got: %v", expectedTop.nodeIDs, node.Topology.nodeIDs)
-		}
-
-		// Close TestCluster.
-		if err := tc.Close(); err != nil {
-			t.Fatal(err)
-		}
-	})
-
-	t.Run("Single node, in topology", func(t *testing.T) {
-		tc := NewClusterCluster(t, 0)
-		if err := tc.addNode(); err != nil {
-			t.Fatalf("adding node: %v", err)
-		}
-
-		node := tc.Clusters[0]
-
-		// write topology to data file
-		top := &Topology{
-			nodeIDs: []string{node.Node.ID},
-		}
-		if err := tc.WriteTopology(node.Path, top); err != nil {
-			t.Fatalf("writing topology: %v", err)
-		}
-
-		// Open TestCluster.
-		if err := tc.Open(); err != nil {
-			t.Fatal(err)
-		}
-
-		state, err := node.State()
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		// Ensure that node comes up in state NORMAL.
-		if state != string(ClusterStateNormal) {
-			t.Errorf("expected state: %v, but got: %v", ClusterStateNormal, state)
-		}
-
-		// Close TestCluster.
-		if err := tc.Close(); err != nil {
-			t.Fatal(err)
-		}
-	})
-
-	t.Run("Single node, not in topology", func(t *testing.T) {
-		tc := NewClusterCluster(t, 0)
-		if err := tc.addNode(); err != nil {
-			t.Fatalf("adding node: %v", err)
-		}
-
-		node := tc.Clusters[0]
-
-		// write topology to data file
-		top := &Topology{
-			nodeIDs: []string{"some-other-host"},
-		}
-		if err := tc.WriteTopology(node.Path, top); err != nil {
-			t.Fatalf("writing topology: %v", err)
-		}
-
-		// Open TestCluster.
-		expected := "coordinator node0 is not in topology: [some-other-host]"
-		err := tc.Open()
-		if err == nil || errors.Cause(err).Error() != expected {
-			t.Errorf("did not receive expected error, got: %s", errors.Cause(err).Error())
-		}
-
-		// Close TestCluster.
-		if err := tc.Close(); err != nil {
-			t.Fatal(err)
-		}
-	})
-
-	t.Run("Multiple nodes, no data", func(t *testing.T) {
-		tc := NewClusterCluster(t, 0)
-		if err := tc.addNode(); err != nil {
-			t.Fatalf("adding node: %v", err)
-		}
-
-		// Open TestCluster.
-		if err := tc.Open(); err != nil {
-			t.Fatalf("opening cluster: %v", err)
-		}
-
-		if err := tc.addNode(); err != nil {
-			t.Fatalf("adding node: %v", err)
-		}
-
-		node0 := tc.Clusters[0]
-		state0, err := node0.State()
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		node1 := tc.Clusters[1]
-		state1, err := node1.State()
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		// Ensure that nodes comes up in state NORMAL.
-		if state0 != string(ClusterStateNormal) {
-			t.Errorf("expected node0 state: %v, but got: %v", ClusterStateNormal, state0)
-		} else if state1 != string(ClusterStateNormal) {
-			t.Errorf("expected node1 state: %v, but got: %v", ClusterStateNormal, state1)
-		}
-
-		expectedTop := &Topology{
-			nodeIDs: []string{node0.Node.ID, node1.Node.ID},
-		}
-
-		// Verify topology file.
-		if !reflect.DeepEqual(node0.Topology.nodeIDs, expectedTop.nodeIDs) {
-			t.Errorf("expected node0 topology: %v, but got: %v", expectedTop.nodeIDs, node0.Topology.nodeIDs)
-		} else if !reflect.DeepEqual(node1.Topology.nodeIDs, expectedTop.nodeIDs) {
-			t.Errorf("expected node1 topology: %v, but got: %v", expectedTop.nodeIDs, node1.Topology.nodeIDs)
-		}
-
-		// Close TestCluster.
-		if err := tc.Close(); err != nil {
-			t.Fatal(err)
-		}
-	})
-
-	t.Run("Multiple nodes, in/not in topology", func(t *testing.T) {
-		tc := NewClusterCluster(t, 0)
-		if err := tc.addNode(); err != nil {
-			t.Fatalf("adding node: %v", err)
-		}
-		node0 := tc.Clusters[0]
-
-		// write topology to data file
-		top := &Topology{
-			nodeIDs: []string{"node0", "node2"},
-		}
-		if err := tc.WriteTopology(node0.Path, top); err != nil {
-			t.Fatalf("writing topology: %v", err)
-		}
-
-		// Open TestCluster.
-		if err := tc.Open(); err != nil {
-			t.Fatalf("opening cluster: %v", err)
-		}
-
-		state0, err := node0.State()
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		// Ensure that node is in state STARTING before the other node joins.
-		if state0 != string(ClusterStateStarting) {
-			t.Errorf("expected node0 state: %v, but got: %v", ClusterStateStarting, state0)
-		}
-
-		if err := tc.addNode(); err != nil {
-			t.Fatalf("adding node: %v", err)
-		}
-		node1 := tc.Clusters[1]
-		state1, err := node1.State()
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		// Ensure that node comes up in state NORMAL.
-		if state0 != string(ClusterStateNormal) {
-			t.Errorf("expected node0 state: %v, but got: %v", ClusterStateNormal, state0)
-		} else if state1 != string(ClusterStateNormal) {
-			t.Errorf("expected node2 state: %v, but got: %v", ClusterStateNormal, state1)
-		}
-
-		// Close TestCluster.
-		if err := tc.Close(); err != nil {
-			t.Fatal(err)
-		}
-	})
-
-	t.Run("Multiple nodes, with data", func(t *testing.T) {
-		tc := NewClusterCluster(t, 0)
-		if err := tc.addNode(); err != nil {
-			t.Fatalf("adding node: %v", err)
-		}
-		node0 := tc.Clusters[0]
-
-		// Open TestCluster.
-		if err := tc.Open(); err != nil {
-			t.Fatal(err)
-		}
-
-		// Close TestCluster with defer.
-		defer func() {
-			if err := tc.Close(); err != nil {
-				t.Fatal(err)
-			}
-		}()
-
-		// Add Bit Data to node0.
-		if err := tc.CreateField("i", "f", OptFieldTypeDefault()); err != nil {
-			t.Fatalf("creating field: %v", err)
-		}
-		// Each tc.SetBit starts and commits its own Tx.
-		if err := tc.SetBit("i", "f", 1, 101, nil); err != nil {
-			t.Fatalf("setting bit: %v", err)
-		}
-		if err := tc.SetBit("i", "f", 1, ShardWidth+1, nil); err != nil {
-			t.Fatalf("setting bit: %v", err)
-		}
-
-		// Before starting the resize, get the CheckSum to use for
-		// comparison later.
-		node0Field := node0.holder.Field("i", "f")
-		node0View := node0Field.view("standard")
-		node0Fragment := node0View.Fragment(1)
-		node0Checksum, err := node0Fragment.Checksum()
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		idx0 := node0.holder.Index("i")
-		if idx0 == nil {
-			t.Fatal(`idx0 was nil, could not retrieve Index("i")`)
-		}
-
-		// addNode needs to block until the resize process has completed.
-		if err := tc.addNode(); err != nil {
-			t.Fatalf("adding node: %v", err)
-		}
-
-		node1 := tc.Clusters[1]
-
-		state1, err := node1.State()
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		state0, err := node0.State()
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		// Ensure that nodes come up in state NORMAL.
-		if state0 != string(ClusterStateNormal) {
-			t.Errorf("expected node0 state: %v, but got: %v", ClusterStateNormal, state0)
-		} else if state1 != string(ClusterStateNormal) {
-			t.Errorf("expected node1 state: %v, but got: %v", ClusterStateNormal, state1)
-		}
-		// INVAR: after node1.State() is normal, the rebalancing should have been done.
-
-		expectedTop := &Topology{
-			nodeIDs: []string{node0.Node.ID, node1.Node.ID},
-		}
-
-		// Verify topology file.
-		if !reflect.DeepEqual(node0.Topology.nodeIDs, expectedTop.nodeIDs) {
-			t.Errorf("expected node0 topology: %v, but got: %v", expectedTop.nodeIDs, node0.Topology.nodeIDs)
-		} else if !reflect.DeepEqual(node1.Topology.nodeIDs, expectedTop.nodeIDs) {
-			t.Errorf("expected node1 topology: %v, but got: %v", expectedTop.nodeIDs, node1.Topology.nodeIDs)
-		}
-
-		// Bits
-		// Verify that node-1 contains the fragment (i/f/standard/1) transferred from node-0.
-		node1Field := node1.holder.Field("i", "f")
-		node1View := node1Field.view("standard")
-		node1Fragment := node1View.Fragment(1)
-
-		idx1 := node1.holder.Index("i")
-		if idx1 == nil {
-			t.Fatal(`idx1 was nil, could not retrieve Index("i")`)
-		}
-
-		// Ensure checksums are the same.
-		if chksum, err := node1Fragment.Checksum(); err != nil {
-			t.Fatal(err)
-		} else if !bytes.Equal(chksum, node0Checksum) {
-			t.Fatalf("expected standard view checksum to match: %x - %x", chksum, node0Checksum)
-		}
-	})
-}
-
 func TestAE(t *testing.T) {
 	t.Run("AbortDoesn'tBlockUninitialized", func(t *testing.T) {
 		c := newCluster()
@@ -1066,27 +709,4 @@ func TestAE(t *testing.T) {
 			t.Fatalf("abort should not have blocked this long")
 		}
 	})
-}
-
-func TestCluster_GetNonPrimaryReplicas(t *testing.T) {
-	c := newCluster()
-	c.ReplicaN = 3
-	topo := NewTopology(c.Hasher, c.partitionN, c.ReplicaN, c)
-	c.Topology = topo
-	nNodes := 4
-	for i := 0; i < nNodes; i++ {
-		nodeID := fmt.Sprintf("node%d", i)
-		c.noder.AppendNode(&topology.Node{
-			ID:  nodeID,
-			URI: NewTestURI("http", fmt.Sprintf("host%d", i), uint16(0)),
-		})
-		c.Topology.addID(nodeID)
-	}
-
-	partitionID := 256
-	nonPrimes := topo.GetNonPrimaryReplicas(partitionID)
-	m := len(nonPrimes)
-	if m != c.ReplicaN-1 {
-		t.Fatalf("expected 2 non primes, got %v", m)
-	}
 }

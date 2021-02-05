@@ -22,6 +22,7 @@ import (
 	"io/ioutil"
 	"sync"
 
+	"github.com/pilosa/pilosa/v2/topology"
 	"github.com/pkg/errors"
 )
 
@@ -178,7 +179,7 @@ func GenerateNextPartitionedID(index string, prev uint64, partitionID, partition
 	// Try to use the next ID if it is in the same partition.
 	// Otherwise find ID in next shard that has a matching partition.
 	for id := prev + 1; ; id += ShardWidth {
-		if shardToShardPartition(index, id/ShardWidth, partitionN) == partitionID {
+		if topology.ShardToShardPartition(index, id/ShardWidth, partitionN) == partitionID {
 			return id
 		}
 	}

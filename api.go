@@ -1859,7 +1859,7 @@ func (api *API) Info() serverInfo {
 		StorageBackend:   api.holder.txf.TxType(),
 		ReplicaN:         api.cluster.ReplicaN,
 		ShardHash:        api.cluster.Hasher.Name(),
-		KeyHash:          api.cluster.Topology.Hasher.Name(),
+		KeyHash:          api.cluster.Hasher.Name(),
 	}
 }
 
