@@ -214,7 +214,6 @@ func (api *API) CreateIndex(ctx context.Context, indexName string, options Index
 	snap := topology.NewClusterSnapshot(api.cluster.noder, api.cluster.Hasher, api.cluster.ReplicaN)
 
 	if !snap.IsPrimaryFieldTranslationNode(api.Node().ID) {
-		fmt.Println("--- DEBUG: forward to coordinator")
 		if err := api.server.defaultClient.CreateIndex(ctx, indexName, options); err != nil {
 			return nil, errors.Wrap(err, "forwarding CreateIndex to coordinator")
 		}

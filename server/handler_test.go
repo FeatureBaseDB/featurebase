@@ -40,7 +40,6 @@ import (
 	pb "github.com/pilosa/pilosa/v2/proto"
 	"github.com/pilosa/pilosa/v2/server"
 	"github.com/pilosa/pilosa/v2/test"
-	"github.com/pilosa/pilosa/v2/test/port"
 )
 
 func TestHandler_PostSchemaCluster(t *testing.T) {
@@ -1405,10 +1404,7 @@ func TestCluster_TranslateStore(t *testing.T) {
 		),
 	)
 
-	if err := port.GetPort(func(p int) error {
-		cluster.GetIdleNode(0).Config.Gossip.Port = fmt.Sprintf("%d", p)
-		return cluster.GetIdleNode(0).Start()
-	}, 10); err != nil {
+	if err := cluster.GetIdleNode(0).Start(); err != nil {
 		t.Fatalf("starting node 0: %v", err)
 	}
 	defer cluster.GetIdleNode(0).Close()

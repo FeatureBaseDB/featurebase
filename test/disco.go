@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"github.com/pilosa/pilosa/v2/etcd"
-	"github.com/pilosa/pilosa/v2/gossip"
 	"github.com/pilosa/pilosa/v2/server"
 )
 
@@ -33,8 +32,7 @@ type Ports struct {
 	LsnP  *net.TCPListener
 	PortP int
 
-	Grpc   int
-	Gossip int //TODO remove
+	Grpc int
 }
 
 func (ports *Ports) Close() error {
@@ -65,10 +63,7 @@ func GenPortsConfig(ports []Ports) []*server.Config {
 		}
 
 		cfgs[i] = &server.Config{
-			Name: name,
-			Gossip: gossip.Config{
-				Port: fmt.Sprint(ports[i].Gossip),
-			},
+			Name:     name,
 			BindGRPC: fmt.Sprintf(":%d", ports[i].Grpc),
 			Etcd: etcd.Options{
 				Dir:           discoDir,
@@ -101,20 +96,18 @@ func NewPorts(lsn []*net.TCPListener) []Ports {
 		ports[i] = lsn[i].Addr().(*net.TCPAddr).Port
 	}
 
-	for i := 0; i < n; i = i + 4 {
+	for i := 0; i < n; i = i + 3 {
 		out = append(out, Ports{
 			LsnC:  lsn[i],
 			PortC: ports[i],
 			LsnP:  lsn[i+1],
 			PortP: ports[i+1],
 
-			Grpc:   ports[i+2],
-			Gossip: ports[i+3],
+			Grpc: ports[i+2],
 		})
-		// make Grpc and Gossip ports available to
+		// make Grpc port available to
 		// be rebound.
 		lsn[i+2].Close()
-		lsn[i+3].Close()
 	}
 
 	return out
