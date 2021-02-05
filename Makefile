@@ -1,4 +1,4 @@
-.PHONY: build check-clean clean build-lattice cover cover-viz default docker docker-build docker-test docker-tag-push generate generate-protoc generate-pql generate-statik gometalinter install install-build-deps install-golangci-lint install-gometalinter install-protoc install-protoc-gen-gofast install-peg install-statik prerelease prerelease-upload release release-build test testv testv-race testvsub testvsub-race  test-txstore-rbf lattice
+.PHONY: build check-clean clean build-lattice cover cover-viz default docker docker-build docker-test docker-tag-push generate generate-protoc generate-pql generate-statik gometalinter install install-build-deps install-golangci-lint install-gometalinter install-protoc install-protoc-gen-gofast install-peg install-statik prerelease prerelease-upload release release-build test testv testv-race testvsub testvsub-race  test-txstore-rbf lattice release-build-trial
 
 CLONE_URL=github.com/pilosa/pilosa
 MOD_VERSION=v2
@@ -11,7 +11,7 @@ BRANCH_ID := $(BRANCH)-$(GOOS)-$(GOARCH)
 BUILD_TIME := $(shell date -u +%FT%T%z)
 SHARD_WIDTH = 20
 COMMIT := $(shell git describe --exact-match >/dev/null 2>&1 || git rev-parse --short HEAD)
-LDFLAGS="-X github.com/pilosa/pilosa/v2.Version=$(VERSION) -X github.com/pilosa/pilosa/v2.BuildTime=$(BUILD_TIME) -X github.com/pilosa/pilosa/v2.Variant=$(VARIANT) -X github.com/pilosa/pilosa/v2.Commit=$(COMMIT) -X github.com/pilosa/pilosa/v2.LatticeCommit=$(LATTICE_COMMIT)"
+LDFLAGS="-X github.com/pilosa/pilosa/v2.Version=$(VERSION) -X github.com/pilosa/pilosa/v2.BuildTime=$(BUILD_TIME) -X github.com/pilosa/pilosa/v2.Variant=$(VARIANT) -X github.com/pilosa/pilosa/v2.Commit=$(COMMIT) -X github.com/pilosa/pilosa/v2.LatticeCommit=$(LATTICE_COMMIT) -X github.com/pilosa/pilosa/v2.TrialDeadline=$(TRIAL_DEADLINE)"
 GO_VERSION=1.14.10
 RELEASE ?= 0
 RELEASE_ENABLED = $(subst 0,,$(RELEASE))
@@ -97,6 +97,13 @@ cover-viz: cover
 # Compile Pilosa
 build:
 	go build -tags='$(BUILD_TAGS)' -ldflags $(LDFLAGS) $(FLAGS) ./cmd/pilosa
+
+# Create a single release trial build under the build directory
+release-build-trial:
+	$(MAKE) $(if $(DOCKER_BUILD),docker-)build FLAGS="-o build/pilosa-trial-$(VERSION_ID)/pilosa" RELEASE=1
+	cp NOTICE README.md build/pilosa-trial-$(VERSION_ID)
+	tar -cvz -C build -f build/pilosa-trial-$(VERSION_ID).tar.gz pilosa-trial-$(VERSION_ID)/
+	@echo Created release trial build: build/pilosa-trial-$(VERSION_ID).tar.gz
 
 # Create a single release build under the build directory
 release-build:
