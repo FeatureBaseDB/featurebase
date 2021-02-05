@@ -758,6 +758,10 @@ func (tx *BoltTx) ContainerIterator(index, field, view string, shard uint64, fir
 	return bi, bytes.Equal(bi.lastKey, needle), nil
 }
 
+func (tx *BoltTx) GetFieldSizeBytes(index, field string) (uint64, error) {
+	return 0, nil
+}
+
 // BoltIterator is the iterator returned from a BoltTx.ContainerIterator() call.
 // It implements the roaring.ContainerIterator interface.
 type BoltIterator struct {

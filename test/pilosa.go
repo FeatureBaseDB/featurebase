@@ -41,6 +41,13 @@ type Command struct {
 	commandOptions []server.CommandOption
 }
 
+func OptTxSrc(src string) server.CommandOption {
+	return func(m *server.Command) error {
+		m.Config.Txsrc = src
+		return nil
+	}
+}
+
 func OptAllowedOrigins(origins []string) server.CommandOption {
 	return func(m *server.Command) error {
 		m.Config.Handler.AllowedOrigins = origins

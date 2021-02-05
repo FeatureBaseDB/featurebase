@@ -663,3 +663,7 @@ func (c *statTx) Sn() int64 {
 func (c *statTx) GetSortedFieldViewList(idx *Index, shard uint64) (fvs []txkey.FieldView, err error) {
 	return c.b.GetSortedFieldViewList(idx, shard)
 }
+
+func (tx *statTx) GetFieldSizeBytes(index, field string) (uint64, error) {
+	return 0, nil
+}

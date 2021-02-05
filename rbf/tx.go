@@ -839,6 +839,33 @@ func (tx *Tx) inusePageSet() (map[uint32]struct{}, error) {
 	return m, nil
 }
 
+// GetSizeBytesWithPrefix returns the size of bitmaps with a given key prefix.
+func (tx *Tx) GetSizeBytesWithPrefix(prefix string) (n uint64, err error) {
+	records, err := tx.RootRecords()
+	if err != nil {
+		return 0, err
+	}
+
+	// Loop over each bitmap in the database.
+	for itr := records.Iterator(); !itr.Done(); {
+		name, pgno := itr.Next()
+
+		// Skip over any bitmaps that don't have a matching prefix.
+		if !strings.HasPrefix(name.(string), prefix) {
+			continue
+		}
+
+		// Traverse the bitmap's b-tree and count the bytes for each page.
+		if err := tx.walkTree(pgno.(uint32), 0, func(pgno, parent, typ uint32) error {
+			n += PageSize
+			return nil
+		}); err != nil {
+			return 0, err
+		}
+	}
+	return n, nil
+}
+
 // walkTree recursively iterates over a page and all its children.
 func (tx *Tx) walkTree(pgno, parent uint32, fn func(pgno, parent, typ uint32) error) error {
 	// Read page and iterate over children.
@@ -964,6 +991,7 @@ func (tx *Tx) deallocateTree(pgno uint32) error {
 
 func (tx *Tx) readPage(pgno uint32) (_ []byte, isHeap bool, err error) {
 	// Meta page is always cached on the transaction.
+	//fmt.Printf("readPage %d\n", pgno)
 	if pgno == 0 {
 		return tx.meta[:], false, nil
 	}
@@ -971,7 +999,7 @@ func (tx *Tx) readPage(pgno uint32) (_ []byte, isHeap bool, err error) {
 	// Verify page number requested is within current size of database.
 	pageN := readMetaPageN(tx.meta[:])
 	if pgno > pageN {
-		return nil, false, fmt.Errorf("rbf: page read out of bounds: pgno=%d max=%d", pgno, pageN)
+		return nil, false, fmt.Errorf("rbf: page read out of bounds: pgno=%d max=%d", pgno, pageN-1)
 	}
 
 	// Check if page has been updated in this tx.

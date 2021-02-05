@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -34,6 +35,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/reflection"
 	"google.golang.org/grpc/status"
 )
@@ -146,6 +148,13 @@ func (h *GRPCHandler) QuerySQL(req *pb.QuerySQLRequest, stream pb.Pilosa_QuerySQ
 		return err
 	}
 
+	err = stream.SendHeader(metadata.New(map[string]string{
+		"duration": strconv.Itoa(int(duration)),
+	}))
+	if err != nil {
+		return errors.Wrap(err, "sending header")
+	}
+
 	err = newDurationRowser(results, duration).ToRows(stream.Send)
 	if err != nil {
 		return errors.Wrap(err, "streaming result")
@@ -183,7 +192,15 @@ func (h *GRPCHandler) QuerySQLUnary(ctx context.Context, req *pb.QuerySQLRequest
 	if err != nil {
 		return nil, err
 	}
-	table.Duration = int64(time.Since(start))
+	duration := time.Since(start)
+	table.Duration = int64(duration)
+	err = grpc.SendHeader(ctx, metadata.New(map[string]string{
+		"duration": strconv.Itoa(int(duration)),
+	}))
+	if err != nil {
+		return nil, errors.Wrap(err, "sending header")
+	}
+
 	return table, nil
 }
 
@@ -197,6 +214,7 @@ func (h *GRPCHandler) QueryPQL(req *pb.QueryPQLRequest, stream pb.Pilosa_QueryPQ
 	t := time.Now()
 	resp, err := h.api.Query(stream.Context(), &query)
 	durQuery := time.Since(t)
+
 	// TODO: what about resp.CollumnAttrSets?
 	if err != nil {
 		return errToStatusError(err)
@@ -213,6 +231,13 @@ func (h *GRPCHandler) QueryPQL(req *pb.QueryPQLRequest, stream pb.Pilosa_QueryPQ
 	toRowser, err := ToRowserWrapper(rslt)
 	if err != nil {
 		return errors.Wrap(err, "wrapping as type ToRowser")
+	}
+
+	err = stream.SendHeader(metadata.New(map[string]string{
+		"duration": strconv.Itoa(int(durQuery)),
+	}))
+	if err != nil {
+		return errors.Wrap(err, "sending header")
 	}
 
 	t = time.Now()
@@ -262,7 +287,14 @@ func (h *GRPCHandler) QueryPQLUnary(ctx context.Context, req *pb.QueryPQLRequest
 	}
 	durFormat := time.Since(t)
 
-	table.Duration = int64(durQuery + durFormat)
+	duration := durQuery + durFormat
+	table.Duration = int64(duration)
+	err = grpc.SendHeader(ctx, metadata.New(map[string]string{
+		"duration": strconv.Itoa(int(duration)),
+	}))
+	if err != nil {
+		return nil, errors.Wrap(err, "sending header")
+	}
 
 	h.stats.Timing(pilosa.MetricGRPCUnaryQueryDurationSeconds, durQuery, 0.1)
 	h.stats.Timing(pilosa.MetricGRPCUnaryFormatDurationSeconds, durFormat, 0.1)
