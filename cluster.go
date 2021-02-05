@@ -51,12 +51,6 @@ const (
 	// nodeStateDown represents the state of a node which is unavailable.
 	nodeStateDown = "DOWN"
 
-	// resizeJob states.
-	resizeJobStateRunning = "RUNNING"
-	// Final states.
-	resizeJobStateDone    = "DONE"
-	resizeJobStateAborted = "ABORTED"
-
 	resizeJobActionAdd    = "ADD"
 	resizeJobActionRemove = "REMOVE"
 
@@ -131,7 +125,6 @@ type cluster struct { // nolint: maligned
 
 	mu           sync.RWMutex
 	jobs         map[int64]*resizeJob
-	currentJob   *resizeJob
 	resizeCancel context.CancelFunc
 
 	// Close management
@@ -675,17 +668,6 @@ func (c *cluster) nodeIDs() []string {
 	return topology.Nodes(c.Nodes()).IDs()
 }
 
-func (c *cluster) unprotectedSetID(id string) {
-	// Don't overwrite ClusterID.
-	if c.id != "" {
-		return
-	}
-	c.id = id
-
-	// Make sure the Topology is updated.
-	c.Topology.clusterID = c.id
-}
-
 func (c *cluster) State() (string, error) {
 	state, err := c.stator.ClusterState(context.Background())
 	if err != nil {
@@ -708,18 +690,6 @@ func (c *cluster) unprotectedNodeByID(id string) *topology.Node {
 		}
 	}
 	return nil
-}
-
-func (c *cluster) topologyContainsNode(id string) bool {
-	c.Topology.mu.RLock()
-	defer c.Topology.mu.RUnlock()
-
-	for _, n := range c.noder.Nodes() {
-		if id == n.ID {
-			return true
-		}
-	}
-	return false
 }
 
 // nodePositionByID returns the position of the node in slice c.Nodes.
@@ -1311,28 +1281,6 @@ func (c *cluster) sendTo(node *topology.Node, m Message) error {
 	return nil
 }
 
-// completeCurrentJob sets the state of the current resizeJob
-// then removes the pointer to currentJob.
-func (c *cluster) completeCurrentJob(state string) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.unprotectedCompleteCurrentJob(state)
-}
-
-func (c *cluster) unprotectedCompleteCurrentJob(state string) error {
-	// Create a snapshot of the cluster to use for node/partition calculations.
-	snap := topology.NewClusterSnapshot(c.noder, c.Hasher, c.ReplicaN)
-	if !snap.IsPrimaryFieldTranslationNode(c.Node.ID) {
-		return ErrNodeNotCoordinator
-	}
-	if c.currentJob == nil {
-		return ErrResizeNotRunning
-	}
-	c.currentJob.setState(state)
-	c.currentJob = nil
-	return nil
-}
-
 func (c *cluster) followResizeInstruction(ctx context.Context, instr *ResizeInstruction) error {
 	// Make sure the holder has opened.
 	c.holder.opened.Recv()
@@ -1485,13 +1433,6 @@ func (c *cluster) resizeAbort() error {
 	return nil
 }
 
-// job returns a resizeJob by id.
-func (c *cluster) job(id int64) *resizeJob {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.jobs[id]
-}
-
 type resizeJob struct {
 	ID           int64
 	IDs          map[string]bool
@@ -1500,9 +1441,6 @@ type resizeJob struct {
 
 	action string
 	result chan string
-
-	mu    sync.RWMutex
-	state string
 
 	Logger logger.Logger
 }
@@ -1538,34 +1476,6 @@ func newResizeJob(existingNodes []*topology.Node, node *topology.Node, action st
 		result: make(chan string),
 		Logger: logger.NopLogger,
 	}
-}
-
-func (j *resizeJob) setState(state string) {
-	j.mu.Lock()
-	if j.state == "" || j.state == resizeJobStateRunning {
-		j.state = state
-	}
-	j.mu.Unlock()
-}
-
-// isComplete return true if the job is any one of several completion states.
-func (j *resizeJob) isComplete() bool {
-	switch j.state {
-	case resizeJobStateDone, resizeJobStateAborted:
-		return true
-	default:
-		return false
-	}
-}
-
-// nodesArePending returns true if any node is still working on the resize.
-func (j *resizeJob) nodesArePending() bool {
-	for _, complete := range j.IDs {
-		if !complete {
-			return true
-		}
-	}
-	return false
 }
 
 type nodeIDs []string
@@ -1726,15 +1636,6 @@ func (t *Topology) containsID(id string) bool {
 	return nodeIDs(t.nodeIDs).ContainsID(id)
 }
 
-func (t *Topology) positionByID(nodeID string) int {
-	for i, tid := range t.nodeIDs {
-		if tid == nodeID {
-			return i
-		}
-	}
-	return -1
-}
-
 // addID adds the node ID to the topology and returns true if added.
 func (t *Topology) addID(nodeID string) bool {
 	t.mu.Lock()
@@ -1748,23 +1649,6 @@ func (t *Topology) addID(nodeID string) bool {
 		func(i, j int) bool {
 			return t.nodeIDs[i] < t.nodeIDs[j]
 		})
-
-	return true
-}
-
-// removeID removes the node ID from the topology and returns true if removed.
-func (t *Topology) removeID(nodeID string) bool {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
-	i := t.positionByID(nodeID)
-	if i < 0 {
-		return false
-	}
-
-	copy(t.nodeIDs[i:], t.nodeIDs[i+1:])
-	t.nodeIDs[len(t.nodeIDs)-1] = ""
-	t.nodeIDs = t.nodeIDs[:len(t.nodeIDs)-1]
 
 	return true
 }
