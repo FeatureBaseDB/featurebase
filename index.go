@@ -668,6 +668,21 @@ func (p indexInfoSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 func (p indexInfoSlice) Len() int           { return len(p) }
 func (p indexInfoSlice) Less(i, j int) bool { return p[i].Name < p[j].Name }
 
+// IndexDetails represents detailed schema information for an index.
+type IndexDetails struct {
+	Name       string          `json:"name"`
+	CreatedAt  int64           `json:"createdAt,omitempty"`
+	Options    IndexOptions    `json:"options"`
+	Fields     []*FieldDetails `json:"fields"`
+	ShardWidth uint64          `json:"shardWidth"`
+}
+
+type indexDetailsSlice []*IndexDetails
+
+func (p indexDetailsSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
+func (p indexDetailsSlice) Len() int           { return len(p) }
+func (p indexDetailsSlice) Less(i, j int) bool { return p[i].Name < p[j].Name }
+
 // IndexOptions represents options to set when initializing an index.
 type IndexOptions struct {
 	Keys           bool `json:"keys"`

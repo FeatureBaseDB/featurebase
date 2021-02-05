@@ -992,15 +992,15 @@ func (err MessageProcessingError) Unwrap() error {
 func (api *API) Schema(ctx context.Context) []*IndexInfo {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.Schema")
 	defer span.Finish()
-	return api.holder.limitedSchema()
+	return api.holder.Schema(false)
 }
 
 // SchemaDetails returns information about each index in Pilosa including which
 // fields they contain, and additional field information such as cardinality
-func (api *API) SchemaDetails(ctx context.Context) []*IndexInfo {
+func (api *API) SchemaDetails(ctx context.Context) []*IndexDetails {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.Schema")
 	defer span.Finish()
-	schema := api.holder.limitedSchema()
+	schema := api.holder.SchemaDetails()
 	for _, index := range schema {
 		for _, field := range index.Fields {
 			q := fmt.Sprintf("Count(Distinct(field=%s))", field.Name)

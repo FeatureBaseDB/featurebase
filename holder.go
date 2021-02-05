@@ -847,7 +847,9 @@ func (h *Holder) availableShardsByIndex() map[string]*roaring.Bitmap {
 }
 
 // Schema returns schema information for all indexes, fields, and views.
-func (h *Holder) Schema() []*IndexInfo {
+// If includeHiddenAndViews=true, include fields beginning with "_",
+// as well as view details.
+func (h *Holder) Schema(includeHiddenAndViews bool) []*IndexInfo {
 	var a []*IndexInfo
 	for _, index := range h.Indexes() {
 		di := &IndexInfo{
@@ -857,15 +859,20 @@ func (h *Holder) Schema() []*IndexInfo {
 			ShardWidth: ShardWidth,
 		}
 		for _, field := range index.Fields() {
+			if !includeHiddenAndViews && strings.HasPrefix(field.name, "_") {
+				continue
+			}
 			fi := &FieldInfo{
 				Name:      field.Name(),
 				CreatedAt: field.CreatedAt(),
 				Options:   field.Options(),
 			}
-			for _, view := range field.views() {
-				fi.Views = append(fi.Views, &ViewInfo{Name: view.name})
+			if includeHiddenAndViews {
+				for _, view := range field.views() {
+					fi.Views = append(fi.Views, &ViewInfo{Name: view.name})
+				}
+				sort.Sort(viewInfoSlice(fi.Views))
 			}
-			sort.Sort(viewInfoSlice(fi.Views))
 			di.Fields = append(di.Fields, fi)
 		}
 		sort.Sort(fieldInfoSlice(di.Fields))
@@ -875,32 +882,38 @@ func (h *Holder) Schema() []*IndexInfo {
 	return a
 }
 
-// limitedSchema returns schema information for all non-hidden indexes and fields.
-func (h *Holder) limitedSchema() []*IndexInfo {
-	var a []*IndexInfo
+// SchemaDetails returns schema information for all non-hidden indexes and fields,
+// including additional per-field details such as cardinality, actual range of integer data, etc.
+// This function duplicates the logic of Holder.Schema because the FieldDetails struct
+// includes a struct-field for cardinality, with default value 0, so the behavior of omitempty
+// is incompatible between the /schema and /schema/details HTTP endpoints. A value of 0 for
+// cardinality is meaningful, so it should be included when accurate, and not accidentally
+// reported as 0 when the struct-field has not been populated.
+func (h *Holder) SchemaDetails() []*IndexDetails {
+	var a []*IndexDetails
 	for _, index := range h.Indexes() {
-		di := &IndexInfo{
+		di := &IndexDetails{
 			Name:       index.Name(),
 			CreatedAt:  index.CreatedAt(),
 			Options:    index.Options(),
 			ShardWidth: ShardWidth,
-			Fields:     make([]*FieldInfo, 0, len(index.Fields())),
+			Fields:     make([]*FieldDetails, 0, len(index.Fields())),
 		}
 		for _, field := range index.Fields() {
 			if strings.HasPrefix(field.name, "_") {
 				continue
 			}
-			fi := &FieldInfo{
+			fi := &FieldDetails{
 				Name:      field.Name(),
 				CreatedAt: field.CreatedAt(),
 				Options:   field.Options(),
 			}
 			di.Fields = append(di.Fields, fi)
 		}
-		sort.Sort(fieldInfoSlice(di.Fields))
+		sort.Sort(fieldDetailsSlice(di.Fields))
 		a = append(a, di)
 	}
-	sort.Sort(indexInfoSlice(a))
+	sort.Sort(indexDetailsSlice(a))
 	return a
 }
 
@@ -1337,7 +1350,7 @@ func (s *holderSyncer) SyncHolder() error {
 	defer s.mu.Unlock()
 	ti := time.Now()
 	// Iterate over schema in sorted order.
-	for _, di := range s.Holder.Schema() {
+	for _, di := range s.Holder.Schema(true) {
 		// Verify syncer has not closed.
 		if s.IsClosing() {
 			return nil
