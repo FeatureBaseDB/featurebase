@@ -112,10 +112,10 @@ func NewAPI(opts ...apiOption) (*API, error) {
 // validAPIMethods specifies the api methods that are valid for each
 // cluster state.
 var validAPIMethods = map[string]map[apiMethod]struct{}{
-	ClusterStateStarting: methodsCommon,
-	ClusterStateNormal:   appendMap(methodsCommon, methodsNormal),
-	ClusterStateDegraded: appendMap(methodsCommon, methodsNormal),
-	ClusterStateResizing: appendMap(methodsCommon, methodsResizing),
+	string(ClusterStateStarting): methodsCommon,
+	string(ClusterStateNormal):   appendMap(methodsCommon, methodsNormal),
+	string(ClusterStateDegraded): appendMap(methodsCommon, methodsNormal),
+	string(ClusterStateResizing): appendMap(methodsCommon, methodsResizing),
 }
 
 func appendMap(a, b map[apiMethod]struct{}) map[apiMethod]struct{} {
@@ -130,7 +130,10 @@ func appendMap(a, b map[apiMethod]struct{}) map[apiMethod]struct{} {
 }
 
 func (api *API) validate(f apiMethod) error {
-	state := api.cluster.State()
+	state, err := api.cluster.State()
+	if err != nil {
+		return errors.Wrap(err, "getting cluster state")
+	}
 	if _, ok := validAPIMethods[state][f]; ok {
 		return nil
 	}
@@ -207,7 +210,10 @@ func (api *API) CreateIndex(ctx context.Context, indexName string, options Index
 		return nil, errors.Wrap(err, "validating api method")
 	}
 
-	if !api.holder.isCoordinator() {
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	snap := topology.NewClusterSnapshot(api.cluster.noder, api.cluster.Hasher, api.cluster.ReplicaN)
+
+	if !snap.IsPrimaryFieldTranslationNode(api.Node().ID) {
 		if err := api.server.defaultClient.CreateIndex(ctx, indexName, options); err != nil {
 			return nil, errors.Wrap(err, "forwarding CreateIndex to coordinator")
 		}
@@ -303,7 +309,10 @@ func (api *API) CreateField(ctx context.Context, indexName string, fieldName str
 		}
 	}
 
-	if !api.holder.isCoordinator() {
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	snap := topology.NewClusterSnapshot(api.cluster.noder, api.cluster.Hasher, api.cluster.ReplicaN)
+
+	if !snap.IsPrimaryFieldTranslationNode(api.Node().ID) {
 		if err := api.server.defaultClient.CreateFieldWithOptions(ctx, indexName, fieldName, fo); err != nil {
 			return nil, errors.Wrap(err, "forwarding CreateField to coordinator")
 		}
@@ -834,6 +843,13 @@ func (api *API) Node() *topology.Node {
 	return api.server.node()
 }
 
+// PrimaryNode returns the coordinator node for the cluster.
+func (api *API) PrimaryNode() *topology.Node {
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	snap := topology.NewClusterSnapshot(api.cluster.noder, api.cluster.Hasher, api.cluster.ReplicaN)
+	return snap.PrimaryFieldTranslationNode()
+}
+
 // NodeUsage represents all usage measurements for one node.
 type NodeUsage struct {
 	Disk DiskUsage `json:"bytesOnDisk"`
@@ -963,10 +979,14 @@ func (err MessageProcessingError) Unwrap() error {
 
 // Schema returns information about each index in Pilosa including which fields
 // they contain.
-func (api *API) Schema(ctx context.Context) []*IndexInfo {
+func (api *API) Schema(ctx context.Context) ([]*IndexInfo, error) {
+	if err := api.validate(apiSchema); err != nil {
+		return nil, errors.Wrap(err, "validating api method")
+	}
+
 	span, _ := tracing.StartSpanFromContext(ctx, "API.Schema")
 	defer span.Finish()
-	return api.holder.limitedSchema()
+	return api.holder.limitedSchema(), nil
 }
 
 // ApplySchema takes the given schema and applies it across the
@@ -1721,38 +1741,6 @@ func (api *API) indexField(indexName string, fieldName string, shard uint64) (*I
 	return index, field, nil
 }
 
-// SetCoordinator makes a new Node the cluster coordinator.
-func (api *API) SetCoordinator(ctx context.Context, id string) (oldNode, newNode *topology.Node, err error) {
-	span, _ := tracing.StartSpanFromContext(ctx, "API.SetCoordinator")
-	defer span.Finish()
-
-	if err := api.validate(apiSetCoordinator); err != nil {
-		return nil, nil, errors.Wrap(err, "validating api method")
-	}
-
-	oldNode = api.cluster.nodeByID(api.cluster.Coordinator)
-	newNode = api.cluster.nodeByID(id)
-	if newNode == nil {
-		return nil, nil, errors.Wrap(ErrNodeIDNotExists, "getting new node")
-	}
-
-	// If the new coordinator is this node, do the SetCoordinator directly.
-	if newNode.ID == api.Node().ID {
-		return oldNode, newNode, api.cluster.setCoordinator(newNode)
-	}
-
-	// Send the set-coordinator message to new node.
-	err = api.server.SendTo(
-		newNode,
-		&SetCoordinatorMessage{
-			New: newNode,
-		})
-	if err != nil {
-		return nil, nil, fmt.Errorf("problem sending SetCoordinator message: %s", err)
-	}
-	return oldNode, newNode, nil
-}
-
 // RemoveNode puts the cluster into the "RESIZING" state and begins the job of
 // removing the given node.
 func (api *API) RemoveNode(id string) (*topology.Node, error) {
@@ -1760,21 +1748,19 @@ func (api *API) RemoveNode(id string) (*topology.Node, error) {
 		return nil, errors.Wrap(err, "validating api method")
 	}
 
-	removeNode := api.cluster.nodeByID(id)
-	if removeNode == nil {
-		if !api.cluster.topologyContainsNode(id) {
-			return nil, errors.Wrap(ErrNodeIDNotExists, "finding node to remove")
-		}
-		removeNode = &topology.Node{
-			ID: id,
-		}
+	if api.cluster.disCo.ID() == id {
+		return nil, errors.Wrapf(ErrPreconditionFailed, "the node %s can not be removed", id)
 	}
 
-	// Start the resize process (similar to NodeJoin)
-	err := api.cluster.nodeLeave(id)
-	if err != nil {
-		return removeNode, errors.Wrap(err, "calling node leave")
+	removeNode := api.cluster.nodeByID(id)
+	if removeNode == nil {
+		return nil, errors.Wrap(ErrNodeIDNotExists, "finding node to remove")
 	}
+
+	if err := api.cluster.removeNode(id); err != nil {
+		return nil, errors.Wrapf(err, "removing node %s", id)
+	}
+
 	return removeNode, nil
 }
 
@@ -1784,14 +1770,17 @@ func (api *API) ResizeAbort() error {
 		return errors.Wrap(err, "validating api method")
 	}
 
-	err := api.cluster.completeCurrentJob(resizeJobStateAborted)
-	return errors.Wrap(err, "complete current job")
+	return api.cluster.resizeAbortAndBroadcast()
 }
 
 // State returns the cluster state which is usually "NORMAL", but could be
 // "STARTING", "RESIZING", or potentially others. See cluster.go for more
 // details.
-func (api *API) State() string {
+func (api *API) State() (string, error) {
+	if err := api.validate(apiState); err != nil {
+		return "", errors.Wrap(err, "validating api method")
+	}
+
 	return api.cluster.State()
 }
 
@@ -2125,7 +2114,10 @@ func (api *API) ReserveIDs(key IDAllocKey, session [32]byte, offset uint64, coun
 		return nil, errors.Wrap(err, "validating api method")
 	}
 
-	if api.holder.isCoordinator() {
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	snap := topology.NewClusterSnapshot(api.cluster.noder, api.cluster.Hasher, api.cluster.ReplicaN)
+
+	if !snap.IsPrimaryFieldTranslationNode(api.Node().ID) {
 		return api.holder.ida.reserve(key, session, offset, count)
 	}
 
@@ -2137,7 +2129,10 @@ func (api *API) CommitIDs(key IDAllocKey, session [32]byte, count uint64) error 
 		return errors.Wrap(err, "validating api method")
 	}
 
-	if api.holder.isCoordinator() {
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	snap := topology.NewClusterSnapshot(api.cluster.noder, api.cluster.Hasher, api.cluster.ReplicaN)
+
+	if !snap.IsPrimaryFieldTranslationNode(api.Node().ID) {
 		return api.holder.ida.commit(key, session, count)
 	}
 
@@ -2149,7 +2144,10 @@ func (api *API) ResetIDAlloc(index string) error {
 		return errors.Wrap(err, "validating api method")
 	}
 
-	if api.holder.isCoordinator() {
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	snap := topology.NewClusterSnapshot(api.cluster.noder, api.cluster.Hasher, api.cluster.ReplicaN)
+
+	if !snap.IsPrimaryFieldTranslationNode(api.Node().ID) {
 		return api.holder.ida.reset(index)
 	}
 
@@ -2217,10 +2215,9 @@ const (
 	apiRecalculateCaches
 	apiRemoveNode
 	apiResizeAbort
-	//apiSchema // not implemented
-	apiSetCoordinator
+	apiSchema
 	apiShardNodes
-	//apiState // not implemented
+	apiState
 	//apiStatsWithTags // not implemented
 	//apiVersion // not implemented
 	apiViews
@@ -2238,13 +2235,36 @@ const (
 
 var methodsCommon = map[apiMethod]struct{}{
 	apiClusterMessage: {},
-	apiSetCoordinator: {},
 }
 
 var methodsResizing = map[apiMethod]struct{}{
 	apiFragmentData:  {},
 	apiTranslateData: {},
 	apiResizeAbort:   {},
+	apiSchema:        {},
+	apiState:         {},
+}
+
+var methodsDegraded = map[apiMethod]struct{}{
+	apiExportCSV:         {},
+	apiFragmentBlockData: {},
+	apiFragmentBlocks:    {},
+	apiField:             {},
+	apiFieldAttrDiff:     {},
+	apiIndex:             {},
+	apiIndexAttrDiff:     {},
+	apiQuery:             {},
+	apiRecalculateCaches: {},
+	apiRemoveNode:        {},
+	apiShardNodes:        {},
+	apiSchema:            {},
+	apiState:             {},
+	apiViews:             {},
+	apiStartTransaction:  {},
+	apiFinishTransaction: {},
+	apiTransactions:      {},
+	apiGetTransaction:    {},
+	apiActiveQueries:     {},
 }
 
 var methodsNormal = map[apiMethod]struct{}{
@@ -2267,6 +2287,8 @@ var methodsNormal = map[apiMethod]struct{}{
 	apiRecalculateCaches:    {},
 	apiRemoveNode:           {},
 	apiShardNodes:           {},
+	apiSchema:               {},
+	apiState:                {},
 	apiViews:                {},
 	apiApplySchema:          {},
 	apiStartTransaction:     {},
@@ -2275,7 +2297,4 @@ var methodsNormal = map[apiMethod]struct{}{
 	apiGetTransaction:       {},
 	apiActiveQueries:        {},
 	apiPastQueries:          {},
-	apiIDReserve:            {},
-	apiIDCommit:             {},
-	apiIDReset:              {},
 }

@@ -507,6 +507,14 @@ func (f *Field) unprotectedSaveAvailableShards() error {
 	return nil
 }
 
+// SetRemoteAvailableShards replaces remoteAvailableShards with the provided
+// value.
+func (f *Field) SetRemoteAvailableShards(b *roaring.Bitmap) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.remoteAvailableShards = b
+}
+
 // RemoveAvailableShard removes a shard from the bitmap cache.
 //
 // NOTE: This can be overridden on the next sync so all nodes should be updated.

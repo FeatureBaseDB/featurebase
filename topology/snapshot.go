@@ -139,25 +139,13 @@ func (c *ClusterSnapshot) PartitionNodes(partitionID int) []*Node {
 // field keys. The primary could be any node in the cluster, but we arbitrarily
 // define it to be the node responsible for partition 0.
 func (c *ClusterSnapshot) PrimaryFieldTranslationNode() *Node {
-	// return c.PrimaryPartitionNode(0)
-	for _, n := range c.Nodes {
-		if n.IsCoordinator {
-			return n
-		}
-	}
-	return nil
+	return c.PrimaryPartitionNode(0)
 }
 
 // IsPrimaryFieldTranslationNode returns true if nodeID represents the primary
 // node responsible for field translation.
 func (c *ClusterSnapshot) IsPrimaryFieldTranslationNode(nodeID string) bool {
-	// return c.PrimaryFieldTranslationNode().ID == nodeID
-	for i := range c.Nodes {
-		if c.Nodes[i].ID == nodeID && c.Nodes[i].IsCoordinator {
-			return true
-		}
-	}
-	return false
+	return c.PrimaryFieldTranslationNode().ID == nodeID
 }
 
 // PrimaryPartitionNode returns the primary node of the given partition.
@@ -291,4 +279,16 @@ func NodePositionByID(nodes []*Node, nodeID string) int {
 		}
 	}
 	return -1
+}
+
+// PrimaryNodeID returns the ID of the primary node, given a list of node IDs
+// and a hasher. The order of the node IDs provided does not matter because this
+// function will re-order them in a deterministic way.
+func PrimaryNodeID(nodeIDs []string, hasher Hasher) string {
+	snap := NewClusterSnapshot(NewIDNoder(nodeIDs), hasher, 1)
+	primaryNode := snap.PrimaryFieldTranslationNode()
+	if primaryNode == nil {
+		return ""
+	}
+	return primaryNode.ID
 }

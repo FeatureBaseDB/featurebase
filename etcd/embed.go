@@ -41,12 +41,12 @@ import (
 type Options struct {
 	Name         string `toml:"name"`
 	Dir          string `toml:"dir"`
-	LClientURL   string `toml:"listen-client-addr"`
-	AClientURL   string `toml:"advertise-client-addr"`
-	LPeerURL     string `toml:"listen-peer-addr"`
-	APeerURL     string `toml:"advertise-peer-addr"`
-	InitCluster  string `toml:"initial-cluster"`
+	LClientURL   string `toml:"listen-client-url"`
+	AClientURL   string `toml:"advertise-client-url"`
+	LPeerURL     string `toml:"listen-peer-url"`
+	APeerURL     string `toml:"advertise-peer-url"`
 	ClusterURL   string `toml:"cluster-url"`
+	InitCluster  string `toml:"initial-cluster"`
 	ClusterName  string `toml:"cluster-name"`
 	HeartbeatTTL int64  `toml:"heartbeat-ttl"`
 
@@ -127,9 +127,17 @@ func parseOptions(opt Options) *embed.Config {
 	cfg.Dir = opt.Dir
 	cfg.InitialClusterToken = opt.ClusterName
 	cfg.LCUrls = types.MustNewURLs([]string{opt.LClientURL})
-	cfg.ACUrls = types.MustNewURLs([]string{opt.AClientURL})
+	if opt.AClientURL != "" {
+		cfg.ACUrls = types.MustNewURLs([]string{opt.AClientURL})
+	} else {
+		cfg.ACUrls = cfg.LCUrls
+	}
 	cfg.LPUrls = types.MustNewURLs([]string{opt.LPeerURL})
-	cfg.APUrls = types.MustNewURLs([]string{opt.APeerURL})
+	if opt.APeerURL != "" {
+		cfg.APUrls = types.MustNewURLs([]string{opt.APeerURL})
+	} else {
+		cfg.APUrls = cfg.LPUrls
+	}
 
 	lps := make([]*net.TCPListener, len(opt.LPeerSocket))
 	copy(lps, opt.LPeerSocket)
@@ -720,7 +728,7 @@ func (e *Etcd) leaseKeepAlive(ttl int64) (clientv3.LeaseID, func(context.Context
 
 	leaseResp, err := cli.Grant(context.TODO(), ttl)
 	if err != nil {
-		return 0, nil, errors.Wrapf(err, "leaseKeepAlive: creates a new lease (TTL: %d)", ttl)
+		return 0, nil, errors.Wrapf(err, "leaseKeepAlive: creates a new lease (TTL: %v)", ttl)
 	}
 
 	keepaliveFunc := func(ctx context.Context, tick time.Duration) {
@@ -731,6 +739,15 @@ func (e *Etcd) leaseKeepAlive(ttl int64) (clientv3.LeaseID, func(context.Context
 			select {
 			case <-ctx.Done():
 				log.Printf("leaseKeepAlive: %v\n", ctx.Err())
+
+				if cli, err := e.client(); err != nil {
+					log.Printf("leaseKeepAlive: creates a new client: %v\n", err)
+				} else {
+					if _, err := cli.Revoke(context.TODO(), leaseResp.ID); err != nil {
+						log.Printf("leaseKeepAlive: revokes the lease (ID: %x): %v\n", leaseResp.ID, err)
+					}
+					cli.Close()
+				}
 				return
 
 			case <-ticker.C:
@@ -738,7 +755,7 @@ func (e *Etcd) leaseKeepAlive(ttl int64) (clientv3.LeaseID, func(context.Context
 					log.Printf("leaseKeepAlive: creates a new client: %v\n", err)
 				} else {
 					if _, err = cli.KeepAliveOnce(ctx, leaseResp.ID); err != nil {
-						log.Printf("leaseKeepAlive: renews the lease (ID: %v): %v\n", leaseResp.ID, err)
+						log.Printf("leaseKeepAlive: renews the lease (ID: %x): %v\n", leaseResp.ID, err)
 					}
 					cli.Close()
 				}
@@ -751,10 +768,12 @@ func (e *Etcd) leaseKeepAlive(ttl int64) (clientv3.LeaseID, func(context.Context
 
 func (e *Etcd) client() (*clientv3.Client, error) {
 	urls := e.e.Server.Cluster().ClientURLs()
+
 	cli, err := clientv3.NewFromURLs(urls)
 	if err != nil {
 		return nil, errors.Wrapf(err, "creates a new etcd client from URLs (%v)", urls)
 	}
+
 	return cli, nil
 }
 
@@ -1025,16 +1044,15 @@ func (e *Etcd) RemoveShard(ctx context.Context, index, field string, shard uint6
 	return nil
 }
 
-// Nodes implements the Noder interface.
-func (n *Etcd) Nodes() []*topology.Node {
-	// If we have looked up nodes within a certain time, then we're going to
-	// use the cached value for now. This is temporary and will be addressed
-	// correctly in #1133.
-	peers := n.Peers()
+// Nodes implements the Noder interface. It returns the sorted list of nodes
+// based on the etcd peers.
+func (e *Etcd) Nodes() []*topology.Node {
+	peers := e.Peers()
 	nodes := make([]*topology.Node, len(peers))
 	for i, peer := range peers {
 		node := &topology.Node{}
-		if meta, err := n.Metadata(context.Background(), peer.ID); err != nil {
+
+		if meta, err := e.Metadata(context.Background(), peer.ID); err != nil {
 			log.Println(err, "getting metadata") // TODO: handle this with a logger
 		} else if err := json.Unmarshal(meta, node); err != nil {
 			log.Println(err, "unmarshaling json metadata")
@@ -1051,16 +1069,31 @@ func (n *Etcd) Nodes() []*topology.Node {
 	return nodes
 }
 
+// PrimaryNodeID implements the Noder interface.
+func (e *Etcd) PrimaryNodeID(hasher topology.Hasher) string {
+	return topology.PrimaryNodeID(e.NodeIDs(), hasher)
+}
+
+// NodeIDs returns the list of node IDs in the etcd cluster.
+func (e *Etcd) NodeIDs() []string {
+	peers := e.Peers()
+	ids := make([]string, len(peers))
+	for i, peer := range peers {
+		ids[i] = peer.ID
+	}
+	return ids
+}
+
 // SetNodes implements the Noder interface as NOP
 // (because we can't force to set nodes for etcd).
-func (n *Etcd) SetNodes(nodes []*topology.Node) {}
+func (e *Etcd) SetNodes(nodes []*topology.Node) {}
 
 // AppendNode implements the Noder interface as NOP
 // (because resizer is responsible for adding new nodes).
-func (n *Etcd) AppendNode(node *topology.Node) {}
+func (e *Etcd) AppendNode(node *topology.Node) {}
 
 // RemoveNode implements the Noder interface as NOP
 // (because resizer is responsible for removing existing nodes)
-func (n *Etcd) RemoveNode(nodeID string) bool {
+func (e *Etcd) RemoveNode(nodeID string) bool {
 	return false
 }

@@ -90,14 +90,12 @@ func newCommand(tb testing.TB, opts ...server.CommandOption) *Command {
 }
 
 // NewCommandNode returns a new instance of Command with clustering enabled.
-func NewCommandNode(tb testing.TB, isCoordinator bool, opts ...server.CommandOption) *Command {
+func NewCommandNode(tb testing.TB, opts ...server.CommandOption) *Command {
 	// We want tests to default to using the in-memory translate store, so we
 	// prepend opts with that functional option. If a different translate store
 	// has been specified, it will override this one.
 	opts = prependTestServerOpts(opts)
 	m := newCommand(tb, opts...)
-	m.Config.Cluster.Disabled = false
-	m.Config.Cluster.Coordinator = isCoordinator
 	return m
 }
 
@@ -108,13 +106,6 @@ func RunCommand(t *testing.T) *Command {
 	// prefer MustRunCluster since it sets up for using etcd using
 	// the GenDisCoConfig(size) option.
 	return MustRunCluster(t, 1).GetNode(0)
-}
-
-// GossipAddress returns the address on which gossip is listening after a Main
-// has been setup. Useful to pass as a seed to other nodes when creating and
-// testing clusters.
-func (m *Command) GossipAddress() string {
-	return m.GossipTransport().URI.String()
 }
 
 // Close closes the program and removes the underlying data directory.
@@ -192,8 +183,14 @@ func (m *Command) URL() string { return m.API.Node().URI.String() }
 // ID returns the node ID used by the running program.
 func (m *Command) ID() string { return m.API.Node().ID }
 
-// IsCoordinator returns true if this is the coordinator.
-func (m *Command) IsCoordinator() bool { return m.API.Node().IsCoordinator }
+// IsPrimary returns true if this is the primary.
+func (m *Command) IsPrimary() bool {
+	coord := m.API.PrimaryNode()
+	if coord == nil {
+		return false
+	}
+	return coord.ID == m.API.Node().ID
+}
 
 // Client returns a client to connect to the program.
 func (m *Command) Client() *http.InternalClient {
@@ -388,4 +385,29 @@ func RetryUntil(timeout time.Duration, fn func() error) (err error) {
 		case <-ticker.C:
 		}
 	}
+}
+
+// AwaitState waits for the whole cluster to reach a specified state.
+func (m *Command) AwaitState(expectedState string, timeout time.Duration) (err error) {
+	startTime := time.Now()
+	var elapsed time.Duration
+	for elapsed = 0; elapsed <= timeout; elapsed = time.Since(startTime) {
+		// Counterintuitive: We're returning if the err *is* nil,
+		// meaning we've reached the expected state.
+		if err = m.exceptionalState(expectedState); err == nil {
+			return err
+		}
+		time.Sleep(1 * time.Millisecond)
+	}
+	return fmt.Errorf("waited %v for command to reach state %q: %v",
+		elapsed, expectedState, err)
+}
+
+// exceptionalState returns an error if the node is not in the expected state.
+func (m *Command) exceptionalState(expectedState string) error {
+	state, err := m.API.State()
+	if err != nil || state != expectedState {
+		return fmt.Errorf("node %q: state %s: err %v", m.ID(), state, err)
+	}
+	return nil
 }

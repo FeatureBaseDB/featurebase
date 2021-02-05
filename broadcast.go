@@ -64,13 +64,13 @@ const (
 	messageTypeClusterStatus
 	messageTypeResizeInstruction
 	messageTypeResizeInstructionComplete
-	messageTypeSetCoordinator
-	messageTypeUpdateCoordinator
 	messageTypeNodeState
 	messageTypeRecalculateCaches
 	messageTypeNodeEvent
 	messageTypeNodeStatus
 	messageTypeTransaction
+	messageTypeResizeNodeMessage
+	messageTypeResizeAbortMessage
 )
 
 // MarshalInternalMessage serializes the pilosa message and adds pilosa internal
@@ -106,10 +106,6 @@ func getMessage(typ byte) Message {
 		return &ResizeInstruction{}
 	case messageTypeResizeInstructionComplete:
 		return &ResizeInstructionComplete{}
-	case messageTypeSetCoordinator:
-		return &SetCoordinatorMessage{}
-	case messageTypeUpdateCoordinator:
-		return &UpdateCoordinatorMessage{}
 	case messageTypeNodeState:
 		return &NodeStateMessage{}
 	case messageTypeRecalculateCaches:
@@ -120,6 +116,10 @@ func getMessage(typ byte) Message {
 		return &NodeStatus{}
 	case messageTypeTransaction:
 		return &TransactionMessage{}
+	case messageTypeResizeNodeMessage:
+		return &ResizeNodeMessage{}
+	case messageTypeResizeAbortMessage:
+		return &ResizeAbortMessage{}
 	default:
 		panic(fmt.Sprintf("unknown message type %d", typ))
 	}
@@ -147,10 +147,6 @@ func getMessageType(m Message) byte {
 		return messageTypeResizeInstruction
 	case *ResizeInstructionComplete:
 		return messageTypeResizeInstructionComplete
-	case *SetCoordinatorMessage:
-		return messageTypeSetCoordinator
-	case *UpdateCoordinatorMessage:
-		return messageTypeUpdateCoordinator
 	case *NodeStateMessage:
 		return messageTypeNodeState
 	case *RecalculateCaches:
@@ -161,6 +157,10 @@ func getMessageType(m Message) byte {
 		return messageTypeNodeStatus
 	case *TransactionMessage:
 		return messageTypeTransaction
+	case *ResizeNodeMessage:
+		return messageTypeResizeNodeMessage
+	case *ResizeAbortMessage:
+		return messageTypeResizeAbortMessage
 	default:
 		panic(fmt.Sprintf("don't have type for message %#v", m))
 	}

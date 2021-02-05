@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"github.com/pilosa/pilosa/v2/etcd"
-	"github.com/pilosa/pilosa/v2/gossip"
 	"github.com/pilosa/pilosa/v2/server"
 )
 
@@ -33,8 +32,7 @@ type Ports struct {
 	LsnP  *net.TCPListener
 	PortP int
 
-	Grpc   int
-	Gossip int //TODO remove
+	Grpc int
 }
 
 func (ports *Ports) Close() error {
@@ -52,6 +50,7 @@ func GenPortsConfig(ports []Ports) []*server.Config {
 	clusterURLs := make([]string, len(ports))
 	for i := range cfgs {
 		name := fmt.Sprintf("server%d", i)
+		clusterName := "cluster-abc123"
 
 		lsnC, portC := ports[i].LsnC, ports[i].PortC
 		lClientURL := fmt.Sprintf("http://localhost:%d", portC)
@@ -59,19 +58,15 @@ func GenPortsConfig(ports []Ports) []*server.Config {
 		lPeerURL := fmt.Sprintf("http://localhost:%d", portP)
 
 		discoDir := ""
-		if d, err := ioutil.TempDir("/tmp", "disco."); err == nil {
+		if d, err := ioutil.TempDir("", "disco."); err == nil {
 			discoDir = d
 		}
 
 		cfgs[i] = &server.Config{
-			Gossip: gossip.Config{
-				Port: fmt.Sprint(ports[i].Gossip),
-			},
+			Name:     name,
 			BindGRPC: fmt.Sprintf(":%d", ports[i].Grpc),
-			DisCo: etcd.Options{
-				Name:          name,
+			Etcd: etcd.Options{
 				Dir:           discoDir,
-				ClusterName:   "bartholemuuuuu",
 				LClientURL:    lClientURL,
 				AClientURL:    lClientURL,
 				LPeerURL:      lPeerURL,
@@ -81,13 +76,12 @@ func GenPortsConfig(ports []Ports) []*server.Config {
 				LClientSocket: []*net.TCPListener{lsnC},
 			},
 		}
+		cfgs[i].Cluster.Name = clusterName
 
 		clusterURLs[i] = fmt.Sprintf("%s=%s", name, lPeerURL)
-		fmt.Printf("\ndebug test/disco.go: on i=%v, GenPortsConfig Gossip: %v, DisCo.Client: %v, DisCo.Peer: %v, BindGRPC: %v\n",
-			i, ports[i].Gossip, portC, portP, ports[i].Grpc)
 	}
 	for i := range cfgs {
-		cfgs[i].DisCo.InitCluster = strings.Join(clusterURLs, ",")
+		cfgs[i].Etcd.InitCluster = strings.Join(clusterURLs, ",")
 	}
 
 	return cfgs
@@ -102,20 +96,18 @@ func NewPorts(lsn []*net.TCPListener) []Ports {
 		ports[i] = lsn[i].Addr().(*net.TCPAddr).Port
 	}
 
-	for i := 0; i < n; i = i + 4 {
+	for i := 0; i < n; i = i + 3 {
 		out = append(out, Ports{
 			LsnC:  lsn[i],
 			PortC: ports[i],
 			LsnP:  lsn[i+1],
 			PortP: ports[i+1],
 
-			Grpc:   ports[i+2],
-			Gossip: ports[i+3],
+			Grpc: ports[i+2],
 		})
-		// make Grpc and Gossip ports available to
+		// make Grpc port available to
 		// be rebound.
 		lsn[i+2].Close()
-		lsn[i+3].Close()
 	}
 
 	return out

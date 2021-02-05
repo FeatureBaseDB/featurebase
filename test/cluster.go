@@ -17,12 +17,9 @@ package test
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"math"
 	"net"
-	"path"
 	"sort"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -140,7 +137,7 @@ func (c *Cluster) GetNode(n int) *Command {
 // need to act on the coordinator.
 func (c *Cluster) GetCoordinator() *Command {
 	for _, n := range c.Nodes {
-		if n.IsCoordinator() {
+		if n.IsPrimary() {
 			return n
 		}
 	}
@@ -150,7 +147,7 @@ func (c *Cluster) GetCoordinator() *Command {
 // GetNonCoordinator gets first first non-coordinator node in the list of nodes.
 func (c *Cluster) GetNonCoordinator() *Command {
 	for _, n := range c.Nodes {
-		if !n.IsCoordinator() {
+		if !n.IsPrimary() {
 			return n
 		}
 	}
@@ -161,7 +158,7 @@ func (c *Cluster) GetNonCoordinator() *Command {
 func (c *Cluster) GetNonCoordinators() []*Command {
 	rtn := make([]*Command, 0)
 	for _, n := range c.Nodes {
-		if !n.IsCoordinator() {
+		if !n.IsPrimary() {
 			rtn = append(rtn, n)
 		}
 	}
@@ -404,43 +401,26 @@ func (c *Cluster) Start() error {
 			}()
 			portsCfg := GenPortsConfig(sliceOfPorts)
 
-			var gossipSeeds []string
-			for i, cc := range c.Nodes {
-				i := i
-				// get the bind uri to use as the host portion of the gossip seed.
-				uri, err := pilosa.AddressWithDefaults(cc.Config.Bind)
-				if err != nil {
-					return errors.Wrap(err, "processing bind address")
-				}
-
-				cc.Config.Gossip.Port = portsCfg[i].Gossip.Port
-				gossipHost := uri.Host
-				gossipPort := cc.Config.Gossip.Port
-
-				gossipSeeds = append(gossipSeeds, fmt.Sprintf("%s:%s", gossipHost, gossipPort))
-			}
-
 			for i, cc := range c.Nodes {
 				cc := cc
-				cc.Config.DisCo = portsCfg[i].DisCo
+				cc.Config.Etcd = portsCfg[i].Etcd
+				cc.Config.Name = portsCfg[i].Name
+				cc.Config.Cluster.Name = portsCfg[i].Cluster.Name
 				cc.Config.BindGRPC = portsCfg[i].BindGRPC
 
 				eg.Go(func() error {
-					fmt.Printf("DISCO CONFIG: %+v\n", cc.Config.DisCo)
-					cc.Config.Gossip.Seeds = gossipSeeds
-
 					return cc.Start()
 				})
 			}
 
 			return eg.Wait()
-		}, 4*len(c.Nodes), 10)
+		}, 3*len(c.Nodes), 10)
 
 	if err != nil {
 		return err
 	}
 
-	return c.AwaitState(pilosa.ClusterStateNormal, 30*time.Second)
+	return c.GetNode(0).AwaitState(string(pilosa.ClusterStateNormal), 30*time.Second)
 }
 
 // Close stops a Cluster
@@ -455,7 +435,7 @@ func (c *Cluster) Close() error {
 
 func (c *Cluster) CloseAndRemoveNonCoordinator() error {
 	for i, n := range c.Nodes {
-		if !n.IsCoordinator() {
+		if !n.IsPrimary() {
 			return c.CloseAndRemove(i)
 		}
 	}
@@ -470,47 +450,6 @@ func (c *Cluster) CloseAndRemove(n int) error {
 	copy(c.Nodes[n:], c.Nodes[n+1:])
 	c.Nodes = c.Nodes[:len(c.Nodes)-1]
 	return err
-}
-
-// AwaitState waits for the cluster coordinator (assumed to be the first
-// node) to reach a specified state.
-func (c *Cluster) AwaitCoordinatorState(expectedState string, timeout time.Duration) error {
-	if len(c.Nodes) < 1 {
-		return errors.New("can't await coordinator state on an empty cluster")
-	}
-	onlyCoordinator := &Cluster{Nodes: []*Command{c.GetCoordinator()}}
-	return onlyCoordinator.AwaitState(expectedState, timeout)
-}
-
-// ExceptionalState returns an error if any node in the cluster is not
-// in the expected state.
-func (c *Cluster) ExceptionalState(expectedState string) error {
-	for _, node := range c.Nodes {
-		state := node.API.State()
-		if state != expectedState {
-			return fmt.Errorf("node %q: state %s", node.ID(), state)
-		}
-	}
-	return nil
-}
-
-// AwaitState waits for the whole cluster to reach a specified state.
-func (c *Cluster) AwaitState(expectedState string, timeout time.Duration) (err error) {
-	if len(c.Nodes) < 1 {
-		return errors.New("can't await state of an empty cluster")
-	}
-	startTime := time.Now()
-	var elapsed time.Duration
-	for elapsed = 0; elapsed <= timeout; elapsed = time.Since(startTime) {
-		// Counterintuitive: We're returning if the err *is* nil,
-		// meaning we've reached the expected state.
-		if err = c.ExceptionalState(expectedState); err == nil {
-			return err
-		}
-		time.Sleep(1 * time.Millisecond)
-	}
-	return fmt.Errorf("waited %v for cluster to reach state %q: %v",
-		elapsed, expectedState, err)
 }
 
 // MustNewCluster creates a new cluster. If opts contains only one
@@ -536,7 +475,12 @@ func MustNewCluster(tb testing.TB, size int, opts ...[]server.CommandOption) *Cl
 // receives a matching state. It polls up to n times before returning.
 func CheckClusterState(m *Command, state string, n int) bool {
 	for i := 0; i < n; i++ {
-		if m.API.State() == state {
+
+		apiState, err := m.API.State()
+		if err != nil {
+			return false
+		}
+		if apiState == state {
 			return true
 		}
 		time.Sleep(10 * time.Millisecond)
@@ -555,17 +499,12 @@ func newCluster(tb testing.TB, size int, opts ...[]server.CommandOption) (*Clust
 	}
 
 	cluster := &Cluster{Nodes: make([]*Command, size)}
-	name := tb.Name()
 	for i := 0; i < size; i++ {
 		var commandOpts []server.CommandOption
 		if len(opts) > 0 {
 			commandOpts = opts[i%len(opts)]
 		}
-		m := NewCommandNode(tb, i == 0, commandOpts...)
-		err := ioutil.WriteFile(path.Join(m.Config.DataDir, ".id"), []byte(name+"__"+strconv.Itoa(i)), 0600)
-		if err != nil {
-			return nil, errors.Wrap(err, "writing node id")
-		}
+		m := NewCommandNode(tb, commandOpts...)
 		cluster.Nodes[i] = m
 	}
 

@@ -16,26 +16,17 @@ package topology
 
 import (
 	"fmt"
-	"sync"
 
 	"github.com/pilosa/pilosa/v2/net"
 )
 
 // Node represents a node in the cluster.
 type Node struct {
-	Mu sync.Mutex
-
-	ID            string  `json:"id"`
-	URI           net.URI `json:"uri"`
-	GRPCURI       net.URI `json:"grpc-uri"`
-	IsCoordinator bool    `json:"isCoordinator"`
-	State         string  `json:"state"`
-}
-
-func (n *Node) ProtectedClone() *Node {
-	n.Mu.Lock()
-	defer n.Mu.Unlock()
-	return n.Clone()
+	ID        string  `json:"id"`
+	URI       net.URI `json:"uri"`
+	GRPCURI   net.URI `json:"grpc-uri"`
+	IsPrimary bool    `json:"isPrimary"`
+	State     string  `json:"state"`
 }
 
 func (n *Node) Clone() *Node {
@@ -46,13 +37,13 @@ func (n *Node) Clone() *Node {
 	other.ID = n.ID
 	other.URI = n.URI
 	other.GRPCURI = n.GRPCURI
-	other.IsCoordinator = n.IsCoordinator
+	other.IsPrimary = n.IsPrimary
 	other.State = n.State
 	return &other
 }
 
 func (n *Node) String() string {
-	return fmt.Sprintf("Node:%s:%s:%s", n.URI, n.State, n.ID)
+	return fmt.Sprintf("Node:%s:%s:%s(%v)", n.URI, n.State, n.ID, n.IsPrimary)
 }
 
 // Nodes represents a list of nodes.

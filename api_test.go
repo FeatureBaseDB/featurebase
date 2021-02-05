@@ -161,7 +161,6 @@ func TestAPI_ImportColumnAttrs(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-
 	})
 }
 
@@ -270,7 +269,11 @@ func TestAPI_Import(t *testing.T) {
 	// Relies on the previous test creating an index with TrackExistence and
 	// adding some data.
 	t.Run("SchemaHasNoExists", func(t *testing.T) {
-		schema := m1.API.Schema(context.Background())
+		schema, err := m1.API.Schema(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+
 		for _, f := range schema[0].Fields {
 			if f.Name == "_exists" {
 				t.Fatalf("found _exists field in schema")

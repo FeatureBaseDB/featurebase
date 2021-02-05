@@ -138,22 +138,6 @@ func (s Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		}
 		s.decodeResizeInstructionComplete(msg, mt)
 		return nil
-	case *pilosa.SetCoordinatorMessage:
-		msg := &internal.SetCoordinatorMessage{}
-		err := proto.Unmarshal(buf, msg)
-		if err != nil {
-			return errors.Wrap(err, "unmarshaling SetCoordinatorMessage")
-		}
-		s.decodeSetCoordinatorMessage(msg, mt)
-		return nil
-	case *pilosa.UpdateCoordinatorMessage:
-		msg := &internal.UpdateCoordinatorMessage{}
-		err := proto.Unmarshal(buf, msg)
-		if err != nil {
-			return errors.Wrap(err, "unmarshaling UpdateCoordinatorMessage")
-		}
-		s.decodeUpdateCoordinatorMessage(msg, mt)
-		return nil
 	case *pilosa.NodeStateMessage:
 		msg := &internal.NodeStateMessage{}
 		err := proto.Unmarshal(buf, msg)
@@ -322,6 +306,25 @@ func (s Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		}
 		*mt = s.decodeRowMatrix(msg)
 		return nil
+
+	case *pilosa.ResizeNodeMessage:
+		msg := &internal.ResizeNodeMessage{}
+		err := proto.Unmarshal(buf, msg)
+		if err != nil {
+			return errors.Wrap(err, "unmarshaling ResizeNodeMessage")
+		}
+		decodeResizeNodeMessage(msg, mt)
+		return nil
+
+	case *pilosa.ResizeAbortMessage:
+		msg := &internal.ResizeAbortMessage{}
+		err := proto.Unmarshal(buf, msg)
+		if err != nil {
+			return errors.Wrap(err, "unmarshaling ResizeAbortMessage")
+		}
+		decodeResizeAbortMessage(msg, mt)
+		return nil
+
 	default:
 		panic(fmt.Sprintf("unhandled pilosa.Message of type %T: %#v", mt, m))
 	}
@@ -351,10 +354,6 @@ func (s Serializer) encodeToProto(m pilosa.Message) proto.Message {
 		return s.encodeResizeInstruction(mt)
 	case *pilosa.ResizeInstructionComplete:
 		return s.encodeResizeInstructionComplete(mt)
-	case *pilosa.SetCoordinatorMessage:
-		return s.encodeSetCoordinatorMessage(mt)
-	case *pilosa.UpdateCoordinatorMessage:
-		return s.encodeUpdateCoordinatorMessage(mt)
 	case *pilosa.NodeStateMessage:
 		return s.encodeNodeStateMessage(mt)
 	case *pilosa.RecalculateCaches:
@@ -395,6 +394,10 @@ func (s Serializer) encodeToProto(m pilosa.Message) proto.Message {
 		return s.encodeTransactionMessage(mt)
 	case *pilosa.AtomicRecord:
 		return s.encodeAtomicRecord(mt)
+	case *pilosa.ResizeNodeMessage:
+		return s.encodeResizeNodeMessage(mt)
+	case *pilosa.ResizeAbortMessage:
+		return s.encodeResizeAbortMessage(mt)
 	}
 	return nil
 }
@@ -574,7 +577,7 @@ func (s Serializer) encodeResizeInstruction(m *pilosa.ResizeInstruction) *intern
 	return &internal.ResizeInstruction{
 		JobID:              m.JobID,
 		Node:               s.encodeNode(m.Node),
-		Coordinator:        s.encodeNode(m.Coordinator),
+		Primary:            s.encodeNode(m.Primary),
 		Sources:            s.encodeResizeSources(m.Sources),
 		TranslationSources: s.encodeTranslationResizeSources(m.TranslationSources),
 		NodeStatus:         s.encodeNodeStatus(m.NodeStatus),
@@ -691,13 +694,12 @@ func (s Serializer) encodeNodes(a []*topology.Node) []*internal.Node {
 
 // s.encodeNode converts a Node into its internal representation.
 func (s Serializer) encodeNode(m *topology.Node) *internal.Node {
-	n := m.ProtectedClone()
+	n := m.Clone()
 	return &internal.Node{
-		ID:            n.ID,
-		URI:           s.encodeURI(n.URI),
-		IsCoordinator: n.IsCoordinator,
-		State:         n.State,
-		GRPCURI:       s.encodeURI(n.GRPCURI),
+		ID:      n.ID,
+		URI:     s.encodeURI(n.URI),
+		State:   n.State,
+		GRPCURI: s.encodeURI(n.GRPCURI),
 	}
 }
 
@@ -792,18 +794,6 @@ func (s Serializer) encodeResizeInstructionComplete(m *pilosa.ResizeInstructionC
 		JobID: m.JobID,
 		Node:  s.encodeNode(m.Node),
 		Error: m.Error,
-	}
-}
-
-func (s Serializer) encodeSetCoordinatorMessage(m *pilosa.SetCoordinatorMessage) *internal.SetCoordinatorMessage {
-	return &internal.SetCoordinatorMessage{
-		New: s.encodeNode(m.New),
-	}
-}
-
-func (s Serializer) encodeUpdateCoordinatorMessage(m *pilosa.UpdateCoordinatorMessage) *internal.UpdateCoordinatorMessage {
-	return &internal.UpdateCoordinatorMessage{
-		New: s.encodeNode(m.New),
 	}
 }
 
@@ -953,8 +943,8 @@ func (s Serializer) decodeResizeInstruction(ri *internal.ResizeInstruction, m *p
 	m.JobID = ri.JobID
 	m.Node = &topology.Node{}
 	s.decodeNode(ri.Node, m.Node)
-	m.Coordinator = &topology.Node{}
-	s.decodeNode(ri.Coordinator, m.Coordinator)
+	m.Primary = &topology.Node{}
+	s.decodeNode(ri.Primary, m.Primary)
 	m.Sources = make([]*pilosa.ResizeSource, len(ri.Sources))
 	s.decodeResizeSources(ri.Sources, m.Sources)
 	m.TranslationSources = make([]*pilosa.TranslationResizeSource, len(ri.TranslationSources))
@@ -1073,7 +1063,6 @@ func (s Serializer) decodeNode(node *internal.Node, m *topology.Node) {
 	m.ID = node.ID
 	s.decodeURI(node.URI, &m.URI)
 	s.decodeURI(node.GRPCURI, &m.GRPCURI)
-	m.IsCoordinator = node.IsCoordinator
 	m.State = node.State
 }
 
@@ -1143,16 +1132,6 @@ func (s Serializer) decodeResizeInstructionComplete(pb *internal.ResizeInstructi
 	m.Node = &topology.Node{}
 	s.decodeNode(pb.Node, m.Node)
 	m.Error = pb.Error
-}
-
-func (s Serializer) decodeSetCoordinatorMessage(pb *internal.SetCoordinatorMessage, m *pilosa.SetCoordinatorMessage) {
-	m.New = &topology.Node{}
-	s.decodeNode(pb.New, m.New)
-}
-
-func (s Serializer) decodeUpdateCoordinatorMessage(pb *internal.UpdateCoordinatorMessage, m *pilosa.UpdateCoordinatorMessage) {
-	m.New = &topology.Node{}
-	s.decodeNode(pb.New, m.New)
 }
 
 func (s Serializer) decodeNodeStateMessage(pb *internal.NodeStateMessage, m *pilosa.NodeStateMessage) {
@@ -1945,4 +1924,24 @@ func (s Serializer) encodeAttr(key string, value interface{}) *internal.Attr {
 		pb.BoolValue = value
 	}
 	return pb
+}
+
+func (s Serializer) encodeResizeNodeMessage(m *pilosa.ResizeNodeMessage) *internal.ResizeNodeMessage {
+	return &internal.ResizeNodeMessage{
+		NodeID: m.NodeID,
+		Action: m.Action,
+	}
+}
+
+func (s Serializer) encodeResizeAbortMessage(*pilosa.ResizeAbortMessage) *internal.ResizeAbortMessage {
+	return &internal.ResizeAbortMessage{}
+}
+
+func decodeResizeNodeMessage(pb *internal.ResizeNodeMessage, m *pilosa.ResizeNodeMessage) {
+	m.NodeID = pb.NodeID
+	m.Action = pb.Action
+}
+
+func decodeResizeAbortMessage(pb *internal.ResizeAbortMessage, m *pilosa.ResizeAbortMessage) {
+
 }

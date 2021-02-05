@@ -75,16 +75,15 @@ func NewTestCluster(tb testing.TB, n int) *cluster {
 	c.Topology = NewTopology(c.Hasher, c.partitionN, c.ReplicaN, c)
 
 	for i := 0; i < n; i++ {
-		c.nodes = append(c.nodes, &topology.Node{
+		c.noder.AppendNode(&topology.Node{
 			ID:  fmt.Sprintf("node%d", i),
 			URI: NewTestURI("http", fmt.Sprintf("host%d", i), uint16(0)),
 		})
 	}
 
-	c.Node = c.nodes[0]
-	c.Coordinator = c.nodes[0].ID
-	c.SetState(ClusterStateNormal)
+	cNodes := c.noder.Nodes()
 
+	c.Node = cNodes[0]
 	return c
 }
 
@@ -212,35 +211,6 @@ func (t *ClusterCluster) clusterByID(id string) *cluster {
 
 // addNode adds a node to the cluster and (potentially) starts a resize job.
 func (t *ClusterCluster) addNode() error {
-	id := len(t.Clusters)
-
-	c, err := t.addCluster(id, false)
-	if err != nil {
-		return err
-	}
-
-	// Send NodeJoin event to coordinator.
-	if id > 0 {
-		coord := t.Clusters[0]
-		ev := &NodeEvent{
-			Event: NodeJoin,
-			Node:  c.Node,
-		}
-
-		if err := coord.ReceiveEvent(ev); err != nil {
-			return err
-		}
-
-		// Wait for the AddNode job to finish.
-		if c.State() != ClusterStateNormal {
-			t.resizeDone = make(chan struct{})
-			t.mu.Lock()
-			t.resizing = true
-			t.mu.Unlock()
-			<-t.resizeDone
-		}
-	}
-
 	return nil
 }
 
@@ -259,9 +229,8 @@ func (t *ClusterCluster) addCluster(i int, saveTopology bool) (*cluster, error) 
 	uri := NewTestURI("http", fmt.Sprintf("host%d", i), uint16(0))
 
 	node := &topology.Node{
-		ID:            id,
-		URI:           uri,
-		IsCoordinator: i == 0,
+		ID:  id,
+		URI: uri,
 	}
 
 	// add URI to common
@@ -289,13 +258,13 @@ func (t *ClusterCluster) addCluster(i int, saveTopology bool) (*cluster, error) 
 	c.Topology = NewTopology(c.Hasher, c.partitionN, c.ReplicaN, c)
 	c.holder = h
 	c.Node = node
-	c.Coordinator = t.common.Nodes[0].ID // the first node is the coordinator
+	// c.Coordinator = t.common.Nodes[0].ID // the first node is the coordinator
 	c.broadcaster = t.broadcaster(c)
 
 	// add nodes
 	if saveTopology {
 		for _, n := range t.common.Nodes {
-			if err := c.addNode(n); err != nil {
+			if err := c.addNode(n.ID); err != nil {
 				return nil, err
 			}
 		}
@@ -325,13 +294,6 @@ func NewClusterCluster(tb testing.TB, n int) *ClusterCluster {
 	return tc
 }
 
-// SetState sets the state of the cluster on each node.
-func (t *ClusterCluster) SetState(state string) {
-	for _, c := range t.Clusters {
-		c.SetState(state)
-	}
-}
-
 // Open opens all clusters in the test cluster.
 func (t *ClusterCluster) Open() error {
 	for _, c := range t.Clusters {
@@ -341,17 +303,7 @@ func (t *ClusterCluster) Open() error {
 		if err := c.holder.Open(); err != nil {
 			return err
 		}
-		if err := c.setNodeState(nodeStateReady); err != nil {
-			return err
-		}
 	}
-
-	// Start the listener on the coordinator.
-	if len(t.Clusters) == 0 {
-		return nil
-	}
-	t.Clusters[0].listenForJoins()
-
 	return nil
 }
 
@@ -377,17 +329,8 @@ type bcast struct {
 func (b bcast) SendSync(m Message) error {
 	switch obj := m.(type) {
 	case *ClusterStatus:
-		// Apply the send message to all nodes (except the coordinator).
-		for _, c := range b.t.Clusters {
-			if c != b.c {
-				err := c.mergeClusterStatus(obj)
-				if err != nil {
-					return err
-				}
-			}
-		}
 		b.t.mu.RLock()
-		if obj.State == ClusterStateNormal && b.t.resizing {
+		if obj.State == string(ClusterStateNormal) && b.t.resizing {
 			close(b.t.resizeDone)
 		}
 		b.t.mu.RUnlock()
@@ -415,23 +358,9 @@ func (b bcast) SendTo(to *topology.Node, m Message) error {
 		if err != nil {
 			return err
 		}
-	case *ResizeInstructionComplete:
-		coord := b.t.clusterByID(to.ID)
-		// this used to be async, but that prevented us from checking
-		// its error status...
-		return coord.markResizeInstructionComplete(obj)
 	case *ClusterStatus:
-		// Apply the send message to the node.
-		for _, c := range b.t.Clusters {
-			if c.Node.ID == to.ID {
-				err := c.mergeClusterStatus(obj)
-				if err != nil {
-					return err
-				}
-			}
-		}
 		b.t.mu.RLock()
-		if obj.State == ClusterStateNormal && b.t.resizing {
+		if obj.State == string(ClusterStateNormal) && b.t.resizing {
 			close(b.t.resizeDone)
 		}
 		b.t.mu.RUnlock()
@@ -526,7 +455,7 @@ func (t *ClusterCluster) FollowResizeInstruction(instr *ResizeInstruction) error
 		complete.Error = err.Error()
 	}
 
-	node := instr.Coordinator
+	node := instr.Primary
 	return bcast{t: t}.SendTo(node, complete)
 }
 
@@ -553,16 +482,16 @@ func NewTestClusterWithReplication(tb testing.TB, nNodes, nReplicas, partitionN 
 
 	for i := 0; i < nNodes; i++ {
 		nodeID := fmt.Sprintf("node%d", i)
-		c.nodes = append(c.nodes, &topology.Node{
+		c.noder.AppendNode(&topology.Node{
 			ID:  nodeID,
 			URI: NewTestURI("http", fmt.Sprintf("host%d", i), uint16(0)),
 		})
 		c.Topology.addID(nodeID)
 	}
 
-	c.Node = c.nodes[0]
-	c.Coordinator = c.nodes[0].ID
-	c.SetState(ClusterStateNormal)
+	cNodes := c.noder.Nodes()
+
+	c.Node = cNodes[0]
 
 	if err := c.holder.Open(); err != nil {
 		panic(err)

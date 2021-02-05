@@ -647,7 +647,7 @@ func (h *Holder) Open() error {
 			return errors.Wrap(err, "opening index")
 		}
 
-		if h.isCoordinator() {
+		if h.isPrimary() {
 			index.createdAt = timestamp()
 			err = index.OpenWithTimestamp()
 		} else {
@@ -1200,9 +1200,10 @@ func (h *Holder) recalculateCaches() {
 	}
 }
 
-func (h *Holder) isCoordinator() bool {
+// TODO: this needs to be removed
+func (h *Holder) isPrimary() bool {
 	if s, ok := h.broadcaster.(*Server); ok {
-		return s.isCoordinator
+		return s.IsPrimary()
 	}
 	return false
 }
@@ -1426,7 +1427,7 @@ func (s *holderSyncer) syncIndex(index string) error {
 	s.Stats.CountWithCustomTags(MetricColumnAttrStoreBlocks, int64(len(blks)), 1.0, []string{indexTag})
 
 	// Sync with every other host.
-	for _, node := range topology.Nodes(s.Cluster.nodes).FilterID(s.Node.ID) {
+	for _, node := range topology.Nodes(s.Cluster.noder.Nodes()).FilterID(s.Node.ID) {
 		// Retrieve attributes from differing blocks.
 		// Skip update and recomputation if no attributes have changed.
 		m, err := s.Cluster.InternalClient.ColumnAttrDiff(ctx, &node.URI, index, blks)
@@ -1473,7 +1474,7 @@ func (s *holderSyncer) syncField(index, name string) error {
 	s.Stats.CountWithCustomTags(MetricRowAttrStoreBlocks, int64(len(blks)), 1.0, []string{indexTag, fieldTag})
 
 	// Sync with every other host.
-	for _, node := range topology.Nodes(s.Cluster.nodes).FilterID(s.Node.ID) {
+	for _, node := range topology.Nodes(s.Cluster.noder.Nodes()).FilterID(s.Node.ID) {
 		// Retrieve attributes from differing blocks.
 		// Skip update and recomputation if no attributes have changed.
 		m, err := s.Cluster.InternalClient.RowAttrDiff(ctx, &node.URI, index, name, blks)
@@ -1822,6 +1823,11 @@ type holderCleaner struct {
 	Closing <-chan struct{}
 }
 
+// TODO: this is here to satisfy the linter since holderCleaner was removed from
+// the gossip implementation of removeNode. But presumably we will use it once
+// we have ported over the etcd implementation.
+var _ holderCleaner
+
 // IsClosing returns true if the cleaner has been marked to close.
 func (c *holderCleaner) IsClosing() bool {
 	select {
@@ -1836,7 +1842,7 @@ func (c *holderCleaner) IsClosing() bool {
 // any unnecessary fragments and files.
 func (c *holderCleaner) CleanHolder() error {
 	// Create a snapshot of the cluster to use for node/partition calculations.
-	snap := topology.NewClusterSnapshot(c.Cluster.unprotectedNoder, c.Cluster.Hasher, c.Cluster.ReplicaN)
+	snap := topology.NewClusterSnapshot(c.Cluster.noder, c.Cluster.Hasher, c.Cluster.ReplicaN)
 
 	for _, index := range c.Holder.Indexes() {
 		// Verify cleaner has not closed.

@@ -53,6 +53,9 @@ type TLSConfig struct {
 
 // Config represents the configuration for the command.
 type Config struct {
+	// Name a unique name for this node in the cluster.
+	Name string `toml:"name"`
+
 	// DataDir is the directory where Pilosa stores both indexed data and
 	// running state such as cluster topology information.
 	DataDir string `toml:"data-dir"`
@@ -120,18 +123,14 @@ type Config struct {
 	ImportWorkerPoolSize int `toml:"-"`
 
 	Cluster struct {
-		// Disabled controls whether clustering functionality is enabled.
-		Disabled    bool     `toml:"disabled"`
-		Coordinator bool     `toml:"coordinator"`
-		ReplicaN    int      `toml:"replicas"`
-		Hosts       []string `toml:"hosts"`
-		Name        string   `toml:"name"`
+		ReplicaN int    `toml:"replicas"`
+		Name     string `toml:"name"`
 		// This LongQueryTime is deprecated but still exists for backward compatibility
 		LongQueryTime toml.Duration `toml:"long-query-time"`
 	} `toml:"cluster"`
 
-	// DisCo config is based on embedded etcd.
-	DisCo petcd.Options `toml:"disco"`
+	// Etcd config is based on embedded etcd.
+	Etcd petcd.Options `toml:"etcd"`
 
 	LongQueryTime toml.Duration `toml:"long-query-time"`
 	// Gossip config is based around memberlist.Config.
@@ -225,24 +224,23 @@ type Config struct {
 // We disallow zero because the tests need to be using from the pre-allocated
 // block of ports maintained by the pilosa/test/port port-mapper.
 func (c *Config) MustValidate() {
-	err := c.Validate()
+	err := c.validate()
 	if err != nil {
 		panic(err)
 	}
 }
 
-func (c *Config) Validate() error {
-	fmt.Printf("Validate() called on Config = '%#v'\n", c)
+func (c *Config) validate() error {
 	hostPort := []string{
 		"Bind", c.Bind, // :10101
 		"BindGRPC", c.BindGRPC, // :20101
 		"Advertise", c.Advertise, //  on hp = 'http://localhost:63002'
 		"AdvertiseGRPC", c.AdvertiseGRPC, //  on hp = 'http://localhost:63003'
-		"DisCo.LClientURL", c.DisCo.LClientURL, //  on hp = ':14000'
-		//c.DisCo.AClientURL, // hardcoded to same as LClientURL
-		"DisCo.LPeerURL", c.DisCo.LPeerURL, // ":"
-		//c.DisCo.APeerURL, // hardcoded to same as LPeerURL
-		"DisCo.ClusterURL", c.DisCo.ClusterURL,
+		"Etcd.LClientURL", c.Etcd.LClientURL, //  on hp = ':14000'
+		"Etcd.AClientURL", c.Etcd.AClientURL, // ""
+		"Etcd.LPeerURL", c.Etcd.LPeerURL, // ":"
+		"Etcd.APeerURL", c.Etcd.APeerURL, // ""
+		"Etcd.ClusterURL", c.Etcd.ClusterURL,
 		"Gossip.Port", fmt.Sprintf(":%v", c.Gossip.Port),
 		"Gossip.AdvertisePort", fmt.Sprintf(":%v", c.Gossip.AdvertisePort),
 		"Postgres.Bind", c.Postgres.Bind,
@@ -265,7 +263,6 @@ func (c *Config) Validate() error {
 			continue
 		}
 
-		fmt.Printf(" on name = '%v', hp = '%v'\n", name, hp)
 		hp = strings.TrimPrefix(hp, "http://")
 		hp = strings.TrimPrefix(hp, "https://")
 		splt := strings.Split(hp, ":")
@@ -291,6 +288,7 @@ func (c *Config) Validate() error {
 // NewConfig returns an instance of Config with default options.
 func NewConfig() *Config {
 	c := &Config{
+		Name:                "pilosa0",
 		DataDir:             "~/.pilosa",
 		Bind:                ":" + defaultBindPort,
 		BindGRPC:            ":" + defaultBindGRPCPort,
@@ -318,9 +316,8 @@ func NewConfig() *Config {
 	}
 
 	// Cluster config.
-	c.Cluster.Disabled = false
+	c.Cluster.Name = "cluster0"
 	c.Cluster.ReplicaN = 1
-	c.Cluster.Hosts = []string{}
 	c.Cluster.LongQueryTime = toml.Duration(-time.Minute) //TODO remove this once cluster.longQueryTime is fully deprecated
 
 	// Gossip config.
@@ -356,13 +353,14 @@ func NewConfig() *Config {
 	c.Postgres.WriteTimeout = toml.Duration(10 * time.Second)
 	// we don't really need a connection limit
 
-	c.DisCo.AClientURL = "http://localhost:10301"
-	c.DisCo.LClientURL = "http://localhost:10301"
-	c.DisCo.APeerURL = "http://localhost:10401"
-	c.DisCo.LPeerURL = "http://localhost:10401"
-	c.DisCo.Dir = ""
-	c.DisCo.Name = "nodeName"
-	c.DisCo.ClusterName = "clusterName"
+	c.Etcd.AClientURL = ""
+	c.Etcd.LClientURL = "http://localhost:10301"
+	c.Etcd.APeerURL = ""
+	c.Etcd.LPeerURL = "http://localhost:10401"
+	c.Etcd.Dir = ""
+	c.Etcd.Name = ""
+	c.Etcd.ClusterName = ""
+	c.Etcd.InitCluster = c.Name + "=" + c.Etcd.LPeerURL
 
 	return c
 }
@@ -373,34 +371,34 @@ func NewConfig() *Config {
 // completely empty, or have both a host part and a port part
 // separated by a colon. In the latter case either can be empty to
 // indicate it's left unspecified.
-func (cfg *Config) validateAddrs(ctx context.Context) error {
+func (c *Config) validateAddrs(ctx context.Context) error {
 	// Validate the advertise address.
-	advScheme, advHost, advPort, err := validateAdvertiseAddr(ctx, cfg.Advertise, cfg.Bind, defaultBindPort)
+	advScheme, advHost, advPort, err := validateAdvertiseAddr(ctx, c.Advertise, c.Bind, defaultBindPort)
 	if err != nil {
 		return errors.Wrapf(err, "validating advertise address")
 	}
-	cfg.Advertise = schemeHostPortString(advScheme, advHost, advPort)
+	c.Advertise = schemeHostPortString(advScheme, advHost, advPort)
 
 	// Validate the listen address.
-	listenScheme, listenHost, listenPort, err := validateListenAddr(ctx, cfg.Bind, defaultBindPort)
+	listenScheme, listenHost, listenPort, err := validateListenAddr(ctx, c.Bind, defaultBindPort)
 	if err != nil {
 		return errors.Wrap(err, "validating listen address")
 	}
-	cfg.Bind = schemeHostPortString(listenScheme, listenHost, listenPort)
+	c.Bind = schemeHostPortString(listenScheme, listenHost, listenPort)
 
 	// Validate the gRPC advertise address.
-	_, grpcAdvHost, grpcAdvPort, err := validateAdvertiseAddr(ctx, cfg.AdvertiseGRPC, cfg.BindGRPC, defaultBindGRPCPort)
+	_, grpcAdvHost, grpcAdvPort, err := validateAdvertiseAddr(ctx, c.AdvertiseGRPC, c.BindGRPC, defaultBindGRPCPort)
 	if err != nil {
 		return errors.Wrapf(err, "validating grpc advertise address")
 	}
-	cfg.AdvertiseGRPC = schemeHostPortString("grpc", grpcAdvHost, grpcAdvPort)
+	c.AdvertiseGRPC = schemeHostPortString("grpc", grpcAdvHost, grpcAdvPort)
 
 	// Validate the gRPC listen address.
-	_, grpcListenHost, grpcListenPort, err := validateListenAddr(ctx, cfg.BindGRPC, defaultBindGRPCPort)
+	_, grpcListenHost, grpcListenPort, err := validateListenAddr(ctx, c.BindGRPC, defaultBindGRPCPort)
 	if err != nil {
 		return errors.Wrap(err, "validating grpc listen address")
 	}
-	cfg.BindGRPC = schemeHostPortString("grpc", grpcListenHost, grpcListenPort)
+	c.BindGRPC = schemeHostPortString("grpc", grpcListenHost, grpcListenPort)
 
 	return nil
 }

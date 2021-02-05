@@ -77,7 +77,7 @@ func TestNewCluster(t *testing.T) {
 		t.Fatalf("wrong number of nodes in status: %s", bytes)
 	}
 
-	if body.State != pilosa.ClusterStateNormal {
+	if body.State != string(pilosa.ClusterStateNormal) {
 		t.Fatalf("cluster state should be %s but is %s", pilosa.ClusterStateNormal, body.State)
 	}
 }
@@ -85,7 +85,7 @@ func TestNewCluster(t *testing.T) {
 func getCoordinator(m *test.Command) string {
 	hosts := m.API.Hosts(context.Background())
 	for _, host := range hosts {
-		if host.IsCoordinator {
+		if host.IsPrimary {
 			return host.ID
 		}
 	}

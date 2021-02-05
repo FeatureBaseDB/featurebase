@@ -62,8 +62,6 @@ type Server struct { // nolint: maligned
 	diagnostics      *diagnosticsCollector
 	executor         *executor
 	executorPoolSize int
-	hosts            []string
-	clusterDisabled  bool
 	serializer       Serializer
 
 	// Distributed Consensus
@@ -74,9 +72,6 @@ type Server struct { // nolint: maligned
 	noder     topology.Noder
 	sharder   disco.Sharder
 	schemator disco.Schemator
-
-	// TODO: this is VERY temporary!!!
-	Gossiper Gossiper
 
 	// External
 	systemInfo    SystemInfo
@@ -93,7 +88,6 @@ type Server struct { // nolint: maligned
 	maxWritesPerRequest int
 	confirmDownSleep    time.Duration
 	confirmDownRetries  int
-	isCoordinator       bool
 	syncer              holderSyncer
 
 	translationSyncer      TranslationSyncer
@@ -281,16 +275,6 @@ func OptServerGRPCURI(uri *pnet.URI) ServerOption {
 	}
 }
 
-// OptServerClusterDisabled tells the server whether to use a static cluster with the
-// defined hosts. Mostly used for testing.
-func OptServerClusterDisabled(disabled bool, hosts []string) ServerOption {
-	return func(s *Server) error {
-		s.hosts = hosts
-		s.clusterDisabled = disabled
-		return nil
-	}
-}
-
 // OptServerClusterName sets the human-readable cluster name.
 func OptServerClusterName(name string) ServerOption {
 	return func(s *Server) error {
@@ -304,15 +288,6 @@ func OptServerClusterName(name string) ServerOption {
 func OptServerSerializer(ser Serializer) ServerOption {
 	return func(s *Server) error {
 		s.serializer = ser
-		return nil
-	}
-}
-
-// OptServerIsCoordinator is a functional option on Server
-// used to specify whether or not this server is the coordinator.
-func OptServerIsCoordinator(is bool) ServerOption {
-	return func(s *Server) error {
-		s.isCoordinator = is
 		return nil
 	}
 }
@@ -444,7 +419,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		stator:    disco.NopStator,
 		metadator: disco.NopMetadator,
 		resizer:   disco.NopResizer,
-		noder:     topology.NewLocalNoder(nil),
+		noder:     topology.NewEmptyLocalNoder(),
 		sharder:   disco.NopSharder,
 
 		confirmDownRetries: defaultConfirmDownRetries,
@@ -499,7 +474,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	s.cluster.disCo = s.disCo
 	s.cluster.stator = s.stator
 	s.cluster.resizer = s.resizer
-	//s.cluster.noder = s.noder
+	s.cluster.noder = s.noder
 	s.cluster.sharder = s.sharder
 
 	// Append the NodeID tag to stats.
@@ -549,10 +524,6 @@ func (s *Server) UpAndDown() error {
 	return nil
 }
 
-type Gossiper interface {
-	StartGossip() error
-}
-
 // Open opens and initializes the server.
 func (s *Server) Open() error {
 	s.logger.Printf("open server. PID %v", os.Getpid())
@@ -582,18 +553,26 @@ func (s *Server) Open() error {
 	if err != nil {
 		return errors.Wrap(err, "starting DisCo")
 	}
-	fmt.Println("--- disco: open:", s.disCo.ID())
 	_ = initState
 
 	// Set node ID.
 	s.nodeID = s.disCo.ID()
 
 	node := &topology.Node{
-		ID:            s.nodeID,
-		URI:           s.uri,
-		GRPCURI:       s.grpcURI,
-		IsCoordinator: s.isCoordinator,
-		State:         nodeStateDown,
+		ID:        s.nodeID,
+		URI:       s.uri,
+		GRPCURI:   s.grpcURI,
+		State:     nodeStateDown,
+		IsPrimary: s.IsPrimary(),
+	}
+
+	// Set metadata for this node.
+	data, err := json.Marshal(node)
+	if err != nil {
+		return errors.Wrap(err, "marshaling json metadata")
+	}
+	if err := s.metadator.SetMetadata(context.Background(), data); err != nil {
+		return errors.Wrap(err, "setting metadata")
 	}
 
 	s.cluster.Node = node
@@ -606,31 +585,9 @@ func (s *Server) Open() error {
 	s.syncer.Closing = s.closing
 	s.syncer.Stats = s.holder.Stats.WithTags("component:HolderSyncer")
 
-	// TODO disco
-	if false {
-		node.URI = s.uri
-		node.GRPCURI = s.grpcURI
-
-		// Set metadata for this node.
-		data, err := json.Marshal(node)
-		if err != nil {
-			return errors.Wrap(err, "marshaling json metadata")
-		}
-		if err := s.metadator.SetMetadata(context.Background(), data); err != nil {
-			return errors.Wrap(err, "setting metadata")
-		}
-	}
-
 	err = s.cluster.setup()
 	if err != nil {
 		return errors.Wrap(err, "setting up cluster")
-	}
-
-	// ---------- TODO: this is temporary
-	if s.Gossiper != nil {
-		if err := s.Gossiper.StartGossip(); err != nil {
-			return errors.Wrap(err, "starting gossip")
-		}
 	}
 
 	// Open Cluster management.
@@ -645,24 +602,13 @@ func (s *Server) Open() error {
 	// bring up the background tasks for the holder.
 	s.holder.SnapshotQueue = s.snapshotQueue
 	s.holder.Activate()
-	if err := s.cluster.setNodeState(nodeStateReady); err != nil {
-		return errors.Wrap(err, "setting nodeState")
-	}
-
-	// Listen for joining nodes.
-	// This needs to start after the Holder has opened so that nodes can join
-	// the cluster without waiting for data to load on the coordinator. Before
-	// this starts, the joins are queued up in the Cluster.joiningLeavingNodes
-	// buffered channel.
-	s.cluster.listenForJoins()
 
 	// if we joined existing cluster then broadcast "resize on add" message
-	// TODO
-	// if initState == disco.InitialClusterStateExisting {
-	// 	if err := s.cluster.addNode(s.nodeID); err != nil {
-	// 	    return errors.Wrap(err, "adding a node to the existing cluster")
-	// 	}
-	// }
+	if initState == disco.InitialClusterStateExisting {
+		if err := s.cluster.addNode(s.nodeID); err != nil {
+			return errors.Wrap(err, "adding a node to the existing cluster")
+		}
+	}
 
 	if err := s.stator.Started(context.Background()); err != nil {
 		return errors.Wrap(err, "setting nodeState")
@@ -682,8 +628,6 @@ func (s *Server) Close() error {
 	case <-s.closing:
 		return nil
 	default:
-
-		fmt.Println("--- disco: server close:", s.disCo.ID())
 		errE := s.executor.Close()
 
 		// Notify goroutines to stop.
@@ -698,9 +642,7 @@ func (s *Server) Close() error {
 		}
 		errhs = s.syncer.stopTranslationSync()
 		if s.disCo != nil {
-			fmt.Println("--- disco: try close:", s.disCo.ID())
 			errd = s.disCo.Close()
-			fmt.Println("--- disco: closed", s.disCo.ID(), errd)
 		}
 		if s.holder != nil {
 			errh = s.holder.Close()
@@ -791,7 +733,14 @@ func (s *Server) monitorAntiEntropy() {
 			s.holder.Stats.Count(MetricAntiEntropy, 1, 1.0)
 		}
 		t := time.Now()
-		if s.cluster.State() == ClusterStateResizing {
+
+		state, err := s.cluster.State()
+		if err != nil {
+			s.logger.Printf("cluster state error: err=%s", err)
+			continue
+		}
+
+		if state == string(ClusterStateResizing) {
 			continue // don't launch anti-entropy during resize.
 			// the cluster sets its state to resizing and *then* sends to
 			// abortAntiEntropyCh before starting to resize
@@ -837,6 +786,7 @@ func (s *Server) receiveMessage(m Message) error {
 		if err := f.AddRemoteAvailableShards(roaring.NewBitmap(obj.Shard)); err != nil {
 			return errors.Wrap(err, "adding remote available shards")
 		}
+
 	case *CreateIndexMessage:
 		opt := obj.Meta
 		idx, err := s.holder.CreateIndex(obj.Index, *opt)
@@ -846,10 +796,12 @@ func (s *Server) receiveMessage(m Message) error {
 		idx.mu.Lock()
 		idx.createdAt = obj.CreatedAt
 		idx.mu.Unlock()
+
 	case *DeleteIndexMessage:
 		if err := s.holder.DeleteIndex(obj.Index); err != nil {
 			return err
 		}
+
 	case *CreateFieldMessage:
 		idx := s.holder.Index(obj.Index)
 		if idx == nil {
@@ -863,16 +815,19 @@ func (s *Server) receiveMessage(m Message) error {
 		fld.mu.Lock()
 		fld.createdAt = obj.CreatedAt
 		fld.mu.Unlock()
+
 	case *DeleteFieldMessage:
 		idx := s.holder.Index(obj.Index)
 		if err := idx.DeleteField(obj.Field); err != nil {
 			return err
 		}
+
 	case *DeleteAvailableShardMessage:
 		f := s.holder.Field(obj.Index, obj.Field)
 		if err := f.RemoveAvailableShard(obj.ShardID); err != nil {
 			return err
 		}
+
 	case *CreateViewMessage:
 		f := s.holder.Field(obj.Index, obj.Field)
 		if f == nil {
@@ -881,6 +836,7 @@ func (s *Server) receiveMessage(m Message) error {
 		if _, _, err := f.createViewIfNotExistsBase(obj.View); err != nil {
 			return err
 		}
+
 	case *DeleteViewMessage:
 		f := s.holder.Field(obj.Index, obj.Field)
 		if f == nil {
@@ -890,45 +846,41 @@ func (s *Server) receiveMessage(m Message) error {
 		if err != nil {
 			return err
 		}
-	case *ClusterStatus:
-		err := s.cluster.mergeClusterStatus(obj)
-		if err != nil {
-			return err
-		}
-		if !s.isCoordinator {
-			if obj.Schema != nil {
-				s.holder.applyCreatedAt(obj.Schema.Indexes)
+
+	case *ResizeNodeMessage:
+		switch obj.Action {
+		case resizeJobActionRemove:
+			if err := s.cluster.resizeNodeOnRemove(obj.NodeID); err != nil {
+				return errors.Wrapf(err, "resizing node %s on remove %s", s.cluster.disCo.ID(), obj.NodeID)
 			}
+
+		case resizeJobActionAdd:
+			if err := s.cluster.resizeNodeOnAdd(obj.NodeID); err != nil {
+				return errors.Wrapf(err, "resizing node %s on remove %s", s.cluster.disCo.ID(), obj.NodeID)
+			}
+
+		default:
+			return fmt.Errorf("incorrect resizing node action: %s", obj.Action)
 		}
 
 	case *ResizeInstruction:
-		err := s.cluster.followResizeInstruction(obj)
+		err := s.cluster.followResizeInstruction(context.Background(), obj)
 		if err != nil {
 			return err
 		}
-	case *ResizeInstructionComplete:
-		err := s.cluster.markResizeInstructionComplete(obj)
+
+	case *ResizeAbortMessage:
+		err := s.cluster.resizeAbort()
 		if err != nil {
 			return err
 		}
-	case *SetCoordinatorMessage:
-		return s.cluster.setCoordinator(obj.New)
-	case *UpdateCoordinatorMessage:
-		s.cluster.updateCoordinator(obj.New)
-	case *NodeStateMessage:
-		err := s.cluster.receiveNodeState(obj.NodeID, obj.State)
-		if err != nil {
-			return err
-		}
+
 	case *RecalculateCaches:
 		s.holder.recalculateCaches()
-	case *NodeEvent:
-		err := s.cluster.ReceiveEvent(obj)
-		if err != nil {
-			return errors.Wrapf(err, "cluster receiving NodeEvent %v", obj)
-		}
+
 	case *NodeStatus:
 		s.handleRemoteStatus(obj)
+
 	case *TransactionMessage:
 		err := s.handleTransactionMessage(obj)
 		if err != nil {
@@ -976,11 +928,7 @@ func (s *Server) SendSync(m Message) error {
 
 	for _, node := range s.cluster.Nodes() {
 		node := node
-
-		// prevent race against cluster.addNodeBasicSorted() in cluster.go
-		node.Mu.Lock()
 		uri := node.URI // URI is a struct value
-		node.Mu.Unlock()
 
 		// Don't forward the message to ourselves.
 		if s.uri == uri {
@@ -1008,10 +956,7 @@ func (s *Server) SendTo(node *topology.Node, m Message) error {
 	}
 	msg = append([]byte{getMessageType(m)}, msg...)
 
-	// prevent race against cluster.addNodeBasicSorted() in cluster.go
-	node.Mu.Lock()
 	uri := node.URI // URI is a struct value
-	node.Mu.Unlock()
 
 	return s.defaultClient.SendMessage(context.Background(), &uri, msg)
 }
@@ -1024,8 +969,14 @@ func (s *Server) node() *topology.Node {
 
 // handleRemoteStatus receives incoming NodeStatus from remote nodes.
 func (s *Server) handleRemoteStatus(pb Message) {
+	state, err := s.cluster.State()
+	if err != nil {
+		s.logger.Printf("getting cluster state: %s", err)
+		return
+	}
+
 	// Ignore NodeStatus messages until the cluster is in a Normal state.
-	if s.cluster.State() != ClusterStateNormal {
+	if state != string(ClusterStateNormal) {
 		return
 	}
 
@@ -1071,6 +1022,11 @@ func (s *Server) mergeRemoteStatus(ns *NodeStatus) error {
 	return nil
 }
 
+// IsPrimary returns if this node is primary right now or not.
+func (s *Server) IsPrimary() bool {
+	return s.nodeID == s.noder.PrimaryNodeID(s.cluster.Hasher)
+}
+
 // monitorDiagnostics periodically polls the Pilosa Indexes for cluster info.
 func (s *Server) monitorDiagnostics() {
 	// Do not send more than once a minute
@@ -1084,7 +1040,7 @@ func (s *Server) monitorDiagnostics() {
 	s.diagnostics.SetVersion(Version)
 	s.diagnostics.Set("Host", s.uri.Host)
 	s.diagnostics.Set("Cluster", strings.Join(s.cluster.nodeIDs(), ","))
-	s.diagnostics.Set("NumNodes", len(s.cluster.nodes))
+	s.diagnostics.Set("NumNodes", len(s.cluster.noder.Nodes()))
 	s.diagnostics.Set("NumCPU", runtime.NumCPU())
 	s.diagnostics.Set("NodeID", s.nodeID)
 	s.diagnostics.Set("ClusterID", s.cluster.id)
@@ -1170,11 +1126,12 @@ func (s *Server) monitorRuntime() {
 }
 
 func (srv *Server) StartTransaction(ctx context.Context, id string, timeout time.Duration, exclusive bool, remote bool) (*Transaction, error) {
+	snap := topology.NewClusterSnapshot(srv.cluster.noder, srv.cluster.Hasher, srv.cluster.partitionN)
 	node := srv.node()
-	if !remote && !node.IsCoordinator && len(srv.cluster.Nodes()) > 1 {
+	if !remote && !snap.IsPrimaryFieldTranslationNode(node.ID) && len(srv.cluster.Nodes()) > 1 {
 		return nil, ErrNodeNotCoordinator
 	}
-	if remote && (node.IsCoordinator || len(srv.cluster.Nodes()) == 1) {
+	if remote && (snap.IsPrimaryFieldTranslationNode(node.ID) || len(srv.cluster.Nodes()) == 1) {
 		return nil, errors.New("unexpected remote start call to coordinator or single node cluster")
 	}
 
@@ -1216,11 +1173,12 @@ func (srv *Server) StartTransaction(ctx context.Context, id string, timeout time
 }
 
 func (srv *Server) FinishTransaction(ctx context.Context, id string, remote bool) (*Transaction, error) {
+	snap := topology.NewClusterSnapshot(srv.cluster.noder, srv.cluster.Hasher, srv.cluster.partitionN)
 	node := srv.node()
-	if !remote && !node.IsCoordinator && len(srv.cluster.Nodes()) > 1 {
+	if !remote && !snap.IsPrimaryFieldTranslationNode(node.ID) && len(srv.cluster.Nodes()) > 1 {
 		return nil, ErrNodeNotCoordinator
 	}
-	if remote && (node.IsCoordinator || len(srv.cluster.Nodes()) == 1) {
+	if remote && (snap.IsPrimaryFieldTranslationNode(node.ID) || len(srv.cluster.Nodes()) == 1) {
 		return nil, errors.New("unexpected remote finish call to coordinator or single node cluster")
 	}
 
@@ -1245,8 +1203,9 @@ func (srv *Server) FinishTransaction(ctx context.Context, id string, remote bool
 }
 
 func (srv *Server) Transactions(ctx context.Context) (map[string]*Transaction, error) {
+	snap := topology.NewClusterSnapshot(srv.cluster.noder, srv.cluster.Hasher, srv.cluster.partitionN)
 	node := srv.node()
-	if !node.IsCoordinator && len(srv.cluster.Nodes()) > 1 {
+	if !snap.IsPrimaryFieldTranslationNode(node.ID) && len(srv.cluster.Nodes()) > 1 {
 		return nil, ErrNodeNotCoordinator
 	}
 
@@ -1254,12 +1213,14 @@ func (srv *Server) Transactions(ctx context.Context) (map[string]*Transaction, e
 }
 
 func (srv *Server) GetTransaction(ctx context.Context, id string, remote bool) (*Transaction, error) {
+	snap := topology.NewClusterSnapshot(srv.cluster.noder, srv.cluster.Hasher, srv.cluster.partitionN)
+
 	node := srv.node()
-	if !remote && !node.IsCoordinator && len(srv.cluster.Nodes()) > 1 {
+	if !remote && !snap.IsPrimaryFieldTranslationNode(node.ID) && len(srv.cluster.Nodes()) > 1 {
 		return nil, ErrNodeNotCoordinator
 	}
 
-	if remote && (node.IsCoordinator || len(srv.cluster.Nodes()) == 1) {
+	if remote && (snap.IsPrimaryFieldTranslationNode(node.ID) || len(srv.cluster.Nodes()) == 1) {
 		return nil, errors.New("unexpected remote get call to coordinator or single node cluster")
 	}
 

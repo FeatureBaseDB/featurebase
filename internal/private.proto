@@ -112,7 +112,7 @@ message URI {
 message Node {
 	string ID = 1;
 	URI URI = 2;
-	bool IsCoordinator = 3;
+	bool IsPrimary = 3;
 	string State = 4;
 	URI GRPCURI = 5;
 }
@@ -174,7 +174,7 @@ message DeleteViewMessage {
 message ResizeInstruction {
 	int64 JobID = 1;
 	Node Node = 2;
-	Node Coordinator = 3;
+	Node Primary = 3;
 	repeated ResizeSource Sources = 4;
 	repeated TranslationResizeSource TranslationSources = 8;
 	NodeStatus NodeStatus = 7;
@@ -201,14 +201,6 @@ message ResizeInstructionComplete {
 	string Error = 3;
 }
 
-message SetCoordinatorMessage {
-	Node New = 1;
-}
-
-message UpdateCoordinatorMessage {
-	Node New = 1;
-}
-
 message Topology {
 	string ClusterID = 1;
 	repeated string NodeIDs = 2;
@@ -231,3 +223,12 @@ message Transaction {
 }
 
 message TransactionStats {}
+
+message ResizeAbortMessage {
+
+}
+
+message ResizeNodeMessage {
+	string NodeID = 1;
+	string Action = 2;
+}

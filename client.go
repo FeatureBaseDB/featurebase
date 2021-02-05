@@ -93,6 +93,8 @@ type InternalClient interface {
 
 // InternalQueryClient is the internal interface for querying a node.
 type InternalQueryClient interface {
+	SchemaNode(ctx context.Context, uri *pnet.URI, views bool) ([]*IndexInfo, error)
+
 	QueryNode(ctx context.Context, uri *pnet.URI, index string, queryRequest *QueryRequest) (*QueryResponse, error)
 
 	// Trasnlate keys on the particular node. The parameter writable informs TranslateStore if we can generate a new ID if any of keys does not exist.
@@ -107,6 +109,10 @@ type InternalQueryClient interface {
 }
 
 type nopInternalQueryClient struct{}
+
+func (nopInternalQueryClient) SchemaNode(ctx context.Context, uri *pnet.URI, views bool) ([]*IndexInfo, error) {
+	return nil, nil
+}
 
 func (n nopInternalQueryClient) QueryNode(ctx context.Context, uri *pnet.URI, index string, queryRequest *QueryRequest) (*QueryResponse, error) {
 	return nil, nil

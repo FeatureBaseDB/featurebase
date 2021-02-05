@@ -173,7 +173,7 @@ type nopStator struct{}
 
 // ClusterState is a no-op implementation of the Stator ClusterState method.
 func (n *nopStator) ClusterState(context.Context) (ClusterState, error) {
-	return "", nil
+	return ClusterStateUnknown, nil
 }
 
 func (n *nopStator) Started(ctx context.Context) error {

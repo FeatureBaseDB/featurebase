@@ -3526,8 +3526,9 @@ func TestExecutor_Execute_Existence(t *testing.T) {
 			t.Fatal(err)
 		}
 
+		node0 := c.GetNode(0)
 		// Set bits.
-		if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `` +
+		if _, err := node0.API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `` +
 			fmt.Sprintf("Set(%d, f=%d)\n", 3, 10) +
 			fmt.Sprintf("Set(%d, f=%d)\n", ShardWidth+1, 10) +
 			fmt.Sprintf("Set(%d, f=%d)\n", ShardWidth+2, 20),
@@ -3535,23 +3536,25 @@ func TestExecutor_Execute_Existence(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		//index.Dump("after Set 3x")
-
-		if res, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Row(f=10)`}); err != nil {
+		if res, err := node0.API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Row(f=10)`}); err != nil {
 			t.Fatal(err)
 		} else if bits := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(bits, []uint64{3, ShardWidth + 1}) {
 			t.Fatalf("unexpected columns: %+v", bits)
 		}
 
-		if res, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Not(Row(f=10))`}); err != nil {
+		if res, err := node0.API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Not(Row(f=10))`}); err != nil {
 			t.Fatal(err)
 		} else if bits := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(bits, []uint64{ShardWidth + 2}) {
 			t.Fatalf("unexpected columns after Not: %+v", bits)
 		}
 
 		// Reopen cluster to ensure existence field is reloaded.
-		if err := c.GetNode(0).Reopen(); err != nil {
+		if err := node0.Reopen(); err != nil {
 			t.Fatal(err)
+		}
+
+		if err := node0.AwaitState(string(pilosa.ClusterStateNormal), 10*time.Second); err != nil {
+			t.Fatalf("restarting cluster: %v", err)
 		}
 
 		hldr2 := c.GetHolder(0)
@@ -6959,7 +6962,7 @@ toronto,3
 		{ // 2019 All, this excludes userC (who likes pangolin & icecream) from the count.
 			// UserC visited Paris and Toronto in 2019
 			query: `GroupBy(
-					Rows(places_visited, from='2019-01-01T00:00', to='2019-12-31T23:59'), 
+					Rows(places_visited, from='2019-01-01T00:00', to='2019-12-31T23:59'),
 					filter=Not(Intersect(Row(likes='pangolin'), Row(likes='icecream')))
 				)`,
 			csvVerifier: `nairobi,1
@@ -6969,7 +6972,7 @@ toronto,2
 		},
 		{ // After excluding UserC, this gets the sum of the networth of everyone per cities travelled
 			query: `GroupBy(
-					Rows(places_visited, from='2019-01-01T00:00', to='2019-12-31T23:59'), 
+					Rows(places_visited, from='2019-01-01T00:00', to='2019-12-31T23:59'),
 					filter=Not(Intersect(Row(likes='pangolin'), Row(likes='icecream'))),
 					aggregate=Sum(field=net_worth)
 				)`,
