@@ -747,7 +747,7 @@ func (h *Handler) handleGetStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	status := getStatusResponse{
-		State:       state,
+		State:       string(state),
 		Nodes:       h.api.Hosts(r.Context()),
 		LocalID:     h.api.Node().ID,
 		ClusterName: h.api.ClusterName(),

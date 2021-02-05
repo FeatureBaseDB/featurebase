@@ -36,6 +36,7 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/boltdb"
+	"github.com/pilosa/pilosa/v2/disco"
 	"github.com/pilosa/pilosa/v2/http"
 	"github.com/pilosa/pilosa/v2/pql"
 	"github.com/pilosa/pilosa/v2/proto"
@@ -3553,7 +3554,7 @@ func TestExecutor_Execute_Existence(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if err := node0.AwaitState(string(pilosa.ClusterStateNormal), 10*time.Second); err != nil {
+		if err := node0.AwaitState(disco.ClusterStateNormal, 10*time.Second); err != nil {
 			t.Fatalf("restarting cluster: %v", err)
 		}
 
