@@ -20,7 +20,6 @@
 package server
 
 import (
-	"bytes"
 	"context"
 	"crypto/tls"
 	"io"
@@ -47,7 +46,6 @@ import (
 	petcd "github.com/pilosa/pilosa/v2/etcd"
 	"github.com/pilosa/pilosa/v2/gcnotify"
 	"github.com/pilosa/pilosa/v2/gopsutil"
-	"github.com/pilosa/pilosa/v2/gossip"
 	"github.com/pilosa/pilosa/v2/http"
 	"github.com/pilosa/pilosa/v2/logger"
 	pnet "github.com/pilosa/pilosa/v2/net"
@@ -72,10 +70,6 @@ type Command struct {
 	// Configuration.
 	Config *Config
 
-	// Gossip transport
-	gossipTransport *gossip.Transport
-	gossipMemberSet io.Closer
-
 	// Standard input/output
 	*pilosa.CmdIO
 
@@ -84,7 +78,6 @@ type Command struct {
 	// done will be closed when Command.Close() is called
 	done chan struct{}
 
-	// Passed to the Gossip implementation.
 	logOutput io.Writer
 	logger    loggerLogger
 
@@ -233,11 +226,6 @@ func (m *Command) UpAndDown() (err error) {
 		return errors.Wrap(err, "setting up server")
 	}
 
-	// SetupNetworking (so we'll have profiling)
-	err = m.setupNetworking()
-	if err != nil {
-		return errors.Wrap(err, "setting up networking")
-	}
 	go func() {
 		err := m.Handler.Serve()
 		if err != nil {
@@ -469,35 +457,6 @@ func (m *Command) SetupServer() error {
 	return errors.Wrap(err, "new handler")
 }
 
-// setupNetworking sets up internode communication based on the configuration.
-func (m *Command) setupNetworking() error {
-	gossipPort, err := strconv.Atoi(m.Config.Gossip.Port)
-	if err != nil {
-		return errors.Wrap(err, "parsing port")
-	}
-
-	// get the host portion of addr to use for binding
-	gossipHost := m.listenURI.Host
-	m.gossipTransport, err = gossip.NewTransport(gossipHost, gossipPort, m.logger.Logger())
-	if err != nil {
-		return errors.Wrap(err, "getting transport")
-	}
-
-	gossipMemberSet, err := gossip.NewMemberSet(
-		m.Config.Gossip,
-		m.API,
-		gossip.WithLogOutput(&filteredWriter{logOutput: m.logOutput, v: m.Config.Verbose}),
-		gossip.WithPilosaLogger(m.logger),
-		gossip.WithTransport(m.gossipTransport),
-	)
-	if err != nil {
-		return errors.Wrap(err, "getting memberset")
-	}
-	m.gossipMemberSet = gossipMemberSet
-
-	return errors.Wrap(gossipMemberSet.Open(), "opening gossip memberset")
-}
-
 // setupLogger sets up the logger based on the configuration.
 func (m *Command) setupLogger() error {
 	var f *logger.FileWriter
@@ -539,13 +498,6 @@ func (m *Command) setupLogger() error {
 	return nil
 }
 
-// GossipTransport allows a caller to return the gossip transport created when
-// setting up the GossipMemberSet. This is useful if one needs to determine the
-// allocated ephemeral port programmatically. (usually used in tests)
-func (m *Command) GossipTransport() *gossip.Transport {
-	return m.gossipTransport
-}
-
 // Close shuts down the server.
 func (m *Command) Close() error {
 	select {
@@ -558,9 +510,6 @@ func (m *Command) Close() error {
 		eg.Go(m.Server.Close)
 		eg.Go(m.API.Close)
 		eg.Go(m.pgserver.Close)
-		if m.gossipMemberSet != nil {
-			eg.Go(m.gossipMemberSet.Close)
-		}
 		if closer, ok := m.logOutput.(io.Closer); ok {
 			// If closer is os.Stdout or os.Stderr, don't close it.
 			if closer != os.Stdout && closer != os.Stderr {
@@ -615,27 +564,6 @@ func getListener(uri pnet.URI, tlsconf *tls.Config) (ln net.Listener, err error)
 	}
 
 	return ln, nil
-}
-
-type filteredWriter struct {
-	v         bool
-	logOutput io.Writer
-}
-
-// Write forwards the write to logOutput if verbose is true, or it doesn't
-// contain [DEBUG] or [INFO]. This implementation isn't technically correct
-// since Write could be called with only part of a log line, but I don't think
-// that actually happens, so until it becomes a problem, I don't think it's
-// worth dealing with the extra complexity. (jaffee)
-func (f *filteredWriter) Write(p []byte) (n int, err error) {
-	if bytes.Contains(p, []byte("[DEBUG]")) || bytes.Contains(p, []byte("[INFO]")) {
-		if f.v {
-			return f.logOutput.Write(p)
-		}
-	} else {
-		return f.logOutput.Write(p)
-	}
-	return len(p), nil
 }
 
 // ParseConfig parses s into a Config.

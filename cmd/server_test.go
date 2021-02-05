@@ -201,8 +201,6 @@ func TestServerConfig_DeprecateLongQueryTime(t *testing.T) {
             	bind = ` + nextPort() + `
             	bind-grpc = ` + nextPort() + `
              	data-dir = "` + actualDataDir + `"
-                [gossip]
-                  port = "14321"
 `,
 			validation: func() error {
 				v := validator{}
@@ -218,8 +216,6 @@ func TestServerConfig_DeprecateLongQueryTime(t *testing.T) {
 			cfgFileContent: `
             	bind = ` + nextPort() + `
             	bind-grpc = ` + nextPort() + `
-                [gossip]
-                  port = "14321"
 `,
 			validation: func() error {
 				v := validator{}
@@ -235,8 +231,6 @@ func TestServerConfig_DeprecateLongQueryTime(t *testing.T) {
 			cfgFileContent: `
             	bind = ` + nextPort() + `
             	bind-grpc = ` + nextPort() + `
-                [gossip]
-                  port = "14321"
 `,
 			validation: func() error {
 				v := validator{}

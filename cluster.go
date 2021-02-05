@@ -120,7 +120,7 @@ type cluster struct { // nolint: maligned
 	sharder disco.Sharder
 
 	// Required for cluster Resize.
-	Static      bool // Static is primarily used for testing in a non-gossip environment.
+	Static      bool // Static is primarily used for testing.
 	holder      *Holder
 	broadcaster broadcaster
 

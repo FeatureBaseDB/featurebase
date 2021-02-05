@@ -26,7 +26,6 @@ import (
 	"os"
 	"reflect"
 	"sort"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -977,8 +976,6 @@ func TestClusterQueriesAfterRestart(t *testing.T) {
 	config := cmd1.Command.Config
 	config.Bind = cmd1.API.Node().URI.HostPort()
 
-	// this isn't necessary, but makes the test run way faster
-	config.Gossip.Port = strconv.Itoa(int(cmd1.Command.GossipTransport().URI.Port))
 	cmd1.Command = server.NewCommand(cmd1.Stdin, cmd1.Stdout, cmd1.Stderr, server.OptCommandServerOptions(pilosa.OptServerOpenTranslateStore(pilosa.OpenInMemTranslateStore)))
 	cmd1.Command.Config = config
 	err = cmd1.Start()
@@ -1253,7 +1250,12 @@ func TestClusterCreatedAtRace(t *testing.T) {
 
 			schemas := make([]*pilosa.IndexInfo, len(cluster.Nodes))
 			for i, cmd := range cluster.Nodes {
-				schemas[i] = cmd.API.Schema(context.Background())[0]
+				s, err := cmd.API.Schema(context.Background())
+				if err != nil {
+					t.Fatalf("getting schema: %v", err)
+				}
+
+				schemas[i] = s[0]
 			}
 
 			createdAtField := schemas[0].Fields[0].CreatedAt

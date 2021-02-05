@@ -214,7 +214,6 @@ func (api *API) CreateIndex(ctx context.Context, indexName string, options Index
 	snap := topology.NewClusterSnapshot(api.cluster.noder, api.cluster.Hasher, api.cluster.ReplicaN)
 
 	if !snap.IsPrimaryFieldTranslationNode(api.Node().ID) {
-		fmt.Println("--- DEBUG: forward to coordinator")
 		if err := api.server.defaultClient.CreateIndex(ctx, indexName, options); err != nil {
 			return nil, errors.Wrap(err, "forwarding CreateIndex to coordinator")
 		}
@@ -980,10 +979,14 @@ func (err MessageProcessingError) Unwrap() error {
 
 // Schema returns information about each index in Pilosa including which fields
 // they contain.
-func (api *API) Schema(ctx context.Context) []*IndexInfo {
+func (api *API) Schema(ctx context.Context) ([]*IndexInfo, error) {
+	if err := api.validate(apiSchema); err != nil {
+		return nil, errors.Wrap(err, "validating api method")
+	}
+
 	span, _ := tracing.StartSpanFromContext(ctx, "API.Schema")
 	defer span.Finish()
-	return api.holder.limitedSchema()
+	return api.holder.limitedSchema(), nil
 }
 
 // ApplySchema takes the given schema and applies it across the
@@ -2212,8 +2215,7 @@ const (
 	apiRecalculateCaches
 	apiRemoveNode
 	apiResizeAbort
-	//apiSchema // not implemented
-	apiSetCoordinator
+	apiSchema
 	apiShardNodes
 	apiState
 	//apiStatsWithTags // not implemented
@@ -2233,13 +2235,13 @@ const (
 
 var methodsCommon = map[apiMethod]struct{}{
 	apiClusterMessage: {},
-	apiSetCoordinator: {},
 }
 
 var methodsResizing = map[apiMethod]struct{}{
 	apiFragmentData:  {},
 	apiTranslateData: {},
 	apiResizeAbort:   {},
+	apiSchema:        {},
 	apiState:         {},
 }
 
@@ -2255,7 +2257,7 @@ var methodsDegraded = map[apiMethod]struct{}{
 	apiRecalculateCaches: {},
 	apiRemoveNode:        {},
 	apiShardNodes:        {},
-	// apiSchema:            {},
+	apiSchema:            {},
 	apiState:             {},
 	apiViews:             {},
 	apiStartTransaction:  {},
@@ -2285,13 +2287,13 @@ var methodsNormal = map[apiMethod]struct{}{
 	apiRecalculateCaches:    {},
 	apiRemoveNode:           {},
 	apiShardNodes:           {},
-	// apiSchema:               {},
-	apiState:             {},
-	apiViews:             {},
-	apiApplySchema:       {},
-	apiStartTransaction:  {},
-	apiFinishTransaction: {},
-	apiTransactions:      {},
-	apiGetTransaction:    {},
-	apiActiveQueries:     {},
+	apiSchema:               {},
+	apiState:                {},
+	apiViews:                {},
+	apiApplySchema:          {},
+	apiStartTransaction:     {},
+	apiFinishTransaction:    {},
+	apiTransactions:         {},
+	apiGetTransaction:       {},
+	apiActiveQueries:        {},
 }

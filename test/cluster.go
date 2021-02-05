@@ -401,22 +401,6 @@ func (c *Cluster) Start() error {
 			}()
 			portsCfg := GenPortsConfig(sliceOfPorts)
 
-			var gossipSeeds []string
-			for i, cc := range c.Nodes {
-				i := i
-				// get the bind uri to use as the host portion of the gossip seed.
-				uri, err := pilosa.AddressWithDefaults(cc.Config.Bind)
-				if err != nil {
-					return errors.Wrap(err, "processing bind address")
-				}
-
-				cc.Config.Gossip.Port = portsCfg[i].Gossip.Port
-				gossipHost := uri.Host
-				gossipPort := cc.Config.Gossip.Port
-
-				gossipSeeds = append(gossipSeeds, fmt.Sprintf("%s:%s", gossipHost, gossipPort))
-			}
-
 			for i, cc := range c.Nodes {
 				cc := cc
 				cc.Config.Etcd = portsCfg[i].Etcd
@@ -425,14 +409,12 @@ func (c *Cluster) Start() error {
 				cc.Config.BindGRPC = portsCfg[i].BindGRPC
 
 				eg.Go(func() error {
-					cc.Config.Gossip.Seeds = gossipSeeds
-
 					return cc.Start()
 				})
 			}
 
 			return eg.Wait()
-		}, 4*len(c.Nodes), 10)
+		}, 3*len(c.Nodes), 10)
 
 	if err != nil {
 		return err

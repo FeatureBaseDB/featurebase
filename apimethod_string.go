@@ -30,7 +30,7 @@ func _() {
 	_ = x[apiRecalculateCaches-19]
 	_ = x[apiRemoveNode-20]
 	_ = x[apiResizeAbort-21]
-	_ = x[apiSetCoordinator-22]
+	_ = x[apiSchema-22]
 	_ = x[apiShardNodes-23]
 	_ = x[apiState-24]
 	_ = x[apiViews-25]
@@ -46,9 +46,9 @@ func _() {
 	_ = x[apiIDReset-35]
 }
 
-const _apiMethod_name = "apiClusterMessageapiCreateFieldapiCreateIndexapiDeleteFieldapiDeleteAvailableShardapiDeleteIndexapiDeleteViewapiExportCSVapiFragmentBlockDataapiFragmentBlocksapiFragmentDataapiTranslateDataapiFieldapiFieldAttrDiffapiImportapiImportValueapiIndexapiIndexAttrDiffapiQueryapiRecalculateCachesapiRemoveNodeapiResizeAbortapiSetCoordinatorapiShardNodesapiStateapiViewsapiApplySchemaapiStartTransactionapiFinishTransactionapiTransactionsapiGetTransactionapiActiveQueriesapiPastQueriesapiIDReserveapiIDCommitapiIDReset"
+const _apiMethod_name = "apiClusterMessageapiCreateFieldapiCreateIndexapiDeleteFieldapiDeleteAvailableShardapiDeleteIndexapiDeleteViewapiExportCSVapiFragmentBlockDataapiFragmentBlocksapiFragmentDataapiTranslateDataapiFieldapiFieldAttrDiffapiImportapiImportValueapiIndexapiIndexAttrDiffapiQueryapiRecalculateCachesapiRemoveNodeapiResizeAbortapiSchemaapiShardNodesapiStateapiViewsapiApplySchemaapiStartTransactionapiFinishTransactionapiTransactionsapiGetTransactionapiActiveQueriesapiPastQueriesapiIDReserveapiIDCommitapiIDReset"
 
-var _apiMethod_index = [...]uint16{0, 17, 31, 45, 59, 82, 96, 109, 121, 141, 158, 173, 189, 197, 213, 222, 236, 244, 260, 268, 288, 301, 315, 332, 345, 353, 361, 375, 394, 414, 429, 446, 462, 476, 488, 499, 509}
+var _apiMethod_index = [...]uint16{0, 17, 31, 45, 59, 82, 96, 109, 121, 141, 158, 173, 189, 197, 213, 222, 236, 244, 260, 268, 288, 301, 315, 324, 337, 345, 353, 367, 386, 406, 421, 438, 454, 468, 480, 491, 501}
 
 func (i apiMethod) String() string {
 	if i < 0 || i >= apiMethod(len(_apiMethod_index)-1) {

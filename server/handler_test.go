@@ -40,7 +40,6 @@ import (
 	pb "github.com/pilosa/pilosa/v2/proto"
 	"github.com/pilosa/pilosa/v2/server"
 	"github.com/pilosa/pilosa/v2/test"
-	"github.com/pilosa/pilosa/v2/test/port"
 )
 
 func TestHandler_PostSchemaCluster(t *testing.T) {
@@ -226,8 +225,12 @@ func TestHandler_Endpoints(t *testing.T) {
 	})
 
 	t.Run("Import", func(t *testing.T) {
-		indexInfo := cmd.API.Schema(context.Background())
-		err := cmd.API.ApplySchema(context.Background(), &pilosa.Schema{Indexes: indexInfo}, false)
+		indexInfo, err := cmd.API.Schema(context.Background())
+		if err != nil {
+			t.Fatalf("getting schema: %v", err)
+		}
+
+		err = cmd.API.ApplySchema(context.Background(), &pilosa.Schema{Indexes: indexInfo}, false)
 		if err != nil {
 			t.Fatalf("applying schema: %v", err)
 		}
@@ -1401,10 +1404,7 @@ func TestCluster_TranslateStore(t *testing.T) {
 		),
 	)
 
-	if err := port.GetPort(func(p int) error {
-		cluster.GetIdleNode(0).Config.Gossip.Port = fmt.Sprintf("%d", p)
-		return cluster.GetIdleNode(0).Start()
-	}, 10); err != nil {
+	if err := cluster.GetIdleNode(0).Start(); err != nil {
 		t.Fatalf("starting node 0: %v", err)
 	}
 	defer cluster.GetIdleNode(0).Close()
