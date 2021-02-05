@@ -287,8 +287,7 @@ func (m *Command) SetupServer() error {
 	m.logger.Printf("%s", pilosa.VersionInfo())
 
 	if pilosa.TrialDeadline != "" {
-		layout := "2006-02-02"
-		pilosa.TrialDeadline = "2021-02-06"
+		layout := "2006-01-02"
 		endTime, err := time.Parse(layout, pilosa.TrialDeadline)
 		if err != nil {
 			return errors.Wrap(err, "parsing curTime from make file")
@@ -499,13 +498,10 @@ func (m *Command) dailyCheck(end time.Time) {
 			m.logger.Printf("reading ntp server time %v", err)
 			os.Exit(1)
 		}
-
 		m.logger.Printf("Current time remaining in trial: %v", end.Sub(cur))
 		if end.Sub(cur) <= 0 {
-			m.logger.Printf("end: %v", end) // test line
-			m.logger.Printf("cur: %v", cur) // test line
 			m.logger.Printf("Your free trial has ended")
-			os.Exit(0) //is 0 the right exit number?
+			os.Exit(0)
 		}
 	}
 	m.logger.Printf("reading ntp server time %v", err)
