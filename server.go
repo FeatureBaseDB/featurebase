@@ -585,16 +585,6 @@ func (s *Server) Open() error {
 	s.syncer.Closing = s.closing
 	s.syncer.Stats = s.holder.Stats.WithTags("component:HolderSyncer")
 
-	err = s.cluster.setup()
-	if err != nil {
-		return errors.Wrap(err, "setting up cluster")
-	}
-
-	// Open Cluster management.
-	if err := s.cluster.waitForStarted(); err != nil {
-		return errors.Wrap(err, "opening Cluster")
-	}
-
 	// Open holder.
 	if err := s.holder.Open(); err != nil {
 		return errors.Wrap(err, "opening Holder")
