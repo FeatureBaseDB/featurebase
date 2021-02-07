@@ -73,7 +73,7 @@ type wrapper struct {
 }
 
 func (w *wrapper) Schema(ctx context.Context) ([]*pilosa.IndexInfo, error) {
-	return w.api.Schema(ctx)
+	return w.api.Schema(ctx, false)
 }
 
 func (w *wrapper) Query(ctx context.Context, index string, queryRequest *pilosa.QueryRequest) (*pilosa.QueryResponse, error) {

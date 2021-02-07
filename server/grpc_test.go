@@ -1035,7 +1035,7 @@ func TestCRUDIndexes(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		schema, err := m.API.Schema(ctx)
+		schema, err := m.API.Schema(ctx, false)
 		if err != nil {
 			t.Fatal("Getting schema error", err)
 		}
@@ -1058,7 +1058,7 @@ func TestCRUDIndexes(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		schema, err = m.API.Schema(ctx)
+		schema, err = m.API.Schema(ctx, false)
 		if err != nil {
 			t.Fatal("Getting schema error", err)
 		}
@@ -1069,7 +1069,7 @@ func TestCRUDIndexes(t *testing.T) {
 
 		_ = m.API.DeleteIndex(ctx, "testindex1")
 
-		schema, err = m.API.Schema(ctx)
+		schema, err = m.API.Schema(ctx, false)
 		if err != nil {
 			t.Fatal("Getting schema error", err)
 		}
@@ -1183,7 +1183,7 @@ func TestCRUDIndexes(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		schema, err := m.API.Schema(ctx)
+		schema, err := m.API.Schema(ctx, false)
 		if err != nil {
 			t.Fatal("Getting schema error", err)
 		}

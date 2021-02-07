@@ -226,7 +226,7 @@ func TestHandler_Endpoints(t *testing.T) {
 	})
 
 	t.Run("Import", func(t *testing.T) {
-		indexInfo, err := cmd.API.Schema(context.Background())
+		indexInfo, err := cmd.API.Schema(context.Background(), false)
 		if err != nil {
 			t.Fatalf("getting schema: %v", err)
 		}

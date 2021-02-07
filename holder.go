@@ -853,7 +853,7 @@ func (h *Holder) availableShardsByIndex() map[string]*roaring.Bitmap {
 }
 
 // Schema returns schema information for all indexes, fields, and views.
-func (h *Holder) Schema() []*IndexInfo {
+func (h *Holder) Schema() ([]*IndexInfo, error) {
 	var a []*IndexInfo
 	for _, index := range h.Indexes() {
 		di := &IndexInfo{
@@ -877,11 +877,11 @@ func (h *Holder) Schema() []*IndexInfo {
 		a = append(a, di)
 	}
 	sort.Sort(indexInfoSlice(a))
-	return a
+	return a, nil
 }
 
 // limitedSchema returns schema information for all indexes and fields.
-func (h *Holder) limitedSchema() []*IndexInfo {
+func (h *Holder) limitedSchema() ([]*IndexInfo, error) {
 	var a []*IndexInfo
 	for _, index := range h.Indexes() {
 		di := &IndexInfo{
@@ -906,7 +906,7 @@ func (h *Holder) limitedSchema() []*IndexInfo {
 		a = append(a, di)
 	}
 	sort.Sort(indexInfoSlice(a))
-	return a
+	return a, nil
 }
 
 // applySchema applies an internal Schema to Holder.
@@ -1320,8 +1320,13 @@ func (s *holderSyncer) SyncHolder() error {
 	// Create a snapshot of the cluster to use for node/partition calculations.
 	snap := topology.NewClusterSnapshot(s.Cluster.noder, s.Cluster.Hasher, s.Cluster.ReplicaN)
 
+	schema, err := s.Holder.Schema()
+	if err != nil {
+		return errors.Wrap(err, "getting schema")
+	}
+
 	// Iterate over schema in sorted order.
-	for _, di := range s.Holder.Schema() {
+	for _, di := range schema {
 		// Verify syncer has not closed.
 		if s.IsClosing() {
 			return nil

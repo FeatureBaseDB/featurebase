@@ -1020,14 +1020,19 @@ func (err MessageProcessingError) Unwrap() error {
 
 // Schema returns information about each index in Pilosa including which fields
 // they contain.
-func (api *API) Schema(ctx context.Context) ([]*IndexInfo, error) {
+func (api *API) Schema(ctx context.Context, withViews bool) ([]*IndexInfo, error) {
 	if err := api.validate(apiSchema); err != nil {
 		return nil, errors.Wrap(err, "validating api method")
 	}
 
 	span, _ := tracing.StartSpanFromContext(ctx, "API.Schema")
 	defer span.Finish()
-	return api.holder.limitedSchema(), nil
+
+	if withViews {
+		return api.holder.Schema()
+	}
+
+	return api.holder.limitedSchema()
 }
 
 // ApplySchema takes the given schema and applies it across the
