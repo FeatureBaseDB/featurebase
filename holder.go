@@ -1245,6 +1245,11 @@ func (h *Holder) DeleteIndex(name string) error {
 	// Remove reference.
 	h.deleteIndex(name)
 
+	// Delete the index from etcd as the system of record.
+	if err := h.schemator.DeleteIndex(context.TODO(), name); err != nil {
+		return errors.Wrapf(err, "deleting index from etcd: %s", name)
+	}
+
 	// I'm not sure if calling Reset() here is necessary
 	// since closing the index stops its translation
 	// sync processes.
