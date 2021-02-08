@@ -3134,11 +3134,6 @@ type Schema struct {
 	Indexes []*IndexInfo `json:"indexes"`
 }
 
-// SchemaDetails contains information about indexes and their configuration.
-type SchemaDetails struct {
-	Indexes []*IndexDetails `json:"indexes"`
-}
-
 func encodeTopology(topology *Topology) *internal.Topology {
 	if topology == nil {
 		return nil

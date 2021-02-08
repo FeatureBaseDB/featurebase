@@ -997,10 +997,10 @@ func (api *API) Schema(ctx context.Context) []*IndexInfo {
 
 // SchemaDetails returns information about each index in Pilosa including which
 // fields they contain, and additional field information such as cardinality
-func (api *API) SchemaDetails(ctx context.Context) []*IndexDetails {
+func (api *API) SchemaDetails(ctx context.Context) []*IndexInfo {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.Schema")
 	defer span.Finish()
-	schema := api.holder.SchemaDetails()
+	schema := api.holder.Schema(false)
 	for _, index := range schema {
 		for _, field := range index.Fields {
 			q := fmt.Sprintf("Count(Distinct(field=%s))", field.Name)
@@ -1014,7 +1014,7 @@ func (api *API) SchemaDetails(ctx context.Context) []*IndexDetails {
 				continue
 			}
 			if card, ok := resp.Results[0].(uint64); ok {
-				field.Cardinality = card
+				field.Cardinality = &card
 			}
 		}
 	}

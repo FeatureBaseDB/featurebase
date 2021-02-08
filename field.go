@@ -1867,10 +1867,11 @@ func (p fieldSlice) Less(i, j int) bool { return p[i].Name() < p[j].Name() }
 
 // FieldInfo represents schema information for a field.
 type FieldInfo struct {
-	Name      string       `json:"name"`
-	CreatedAt int64        `json:"createdAt,omitempty"`
-	Options   FieldOptions `json:"options"`
-	Views     []*ViewInfo  `json:"views,omitempty"`
+	Name        string       `json:"name"`
+	CreatedAt   int64        `json:"createdAt,omitempty"`
+	Options     FieldOptions `json:"options"`
+	Cardinality *uint64      `json:"cardinality,omitempty"`
+	Views       []*ViewInfo  `json:"views,omitempty"`
 }
 
 type fieldInfoSlice []*FieldInfo
@@ -1878,21 +1879,6 @@ type fieldInfoSlice []*FieldInfo
 func (p fieldInfoSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 func (p fieldInfoSlice) Len() int           { return len(p) }
 func (p fieldInfoSlice) Less(i, j int) bool { return p[i].Name < p[j].Name }
-
-// FieldDetails represents detailed schema information for a field.
-type FieldDetails struct {
-	Name        string       `json:"name"`
-	CreatedAt   int64        `json:"createdAt,omitempty"`
-	Options     FieldOptions `json:"options"`
-	Cardinality uint64       `json:"cardinality"`
-	Views       []*ViewInfo  `json:"views,omitempty"`
-}
-
-type fieldDetailsSlice []*FieldDetails
-
-func (p fieldDetailsSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
-func (p fieldDetailsSlice) Len() int           { return len(p) }
-func (p fieldDetailsSlice) Less(i, j int) bool { return p[i].Name < p[j].Name }
 
 // FieldOptions represents options to set when initializing a field.
 type FieldOptions struct {

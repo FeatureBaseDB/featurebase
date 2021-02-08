@@ -882,41 +882,6 @@ func (h *Holder) Schema(includeHiddenAndViews bool) []*IndexInfo {
 	return a
 }
 
-// SchemaDetails returns schema information for all non-hidden indexes and fields,
-// including additional per-field details such as cardinality, actual range of integer data, etc.
-// This function duplicates the logic of Holder.Schema because the FieldDetails struct
-// includes a struct-field for cardinality, with default value 0, so the behavior of omitempty
-// is incompatible between the /schema and /schema/details HTTP endpoints. A value of 0 for
-// cardinality is meaningful, so it should be included when accurate, and not accidentally
-// reported as 0 when the struct-field has not been populated.
-func (h *Holder) SchemaDetails() []*IndexDetails {
-	var a []*IndexDetails
-	for _, index := range h.Indexes() {
-		di := &IndexDetails{
-			Name:       index.Name(),
-			CreatedAt:  index.CreatedAt(),
-			Options:    index.Options(),
-			ShardWidth: ShardWidth,
-			Fields:     make([]*FieldDetails, 0, len(index.Fields())),
-		}
-		for _, field := range index.Fields() {
-			if strings.HasPrefix(field.name, "_") {
-				continue
-			}
-			fi := &FieldDetails{
-				Name:      field.Name(),
-				CreatedAt: field.CreatedAt(),
-				Options:   field.Options(),
-			}
-			di.Fields = append(di.Fields, fi)
-		}
-		sort.Sort(fieldDetailsSlice(di.Fields))
-		a = append(a, di)
-	}
-	sort.Sort(indexDetailsSlice(a))
-	return a
-}
-
 // applySchema applies an internal Schema to Holder.
 func (h *Holder) applySchema(schema *Schema) error {
 	// Create indexes that don't exist.

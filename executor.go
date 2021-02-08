@@ -755,7 +755,6 @@ func (e *executor) executeCall(ctx context.Context, qcx *Qcx, index string, c *p
 	case "Distinct":
 		statFn()
 		res, err := e.executeDistinct(ctx, qcx, index, c, shards, opt)
-		// TODO this can produce an ugly list of 256 shards
 		return res, errors.Wrapf(err, "executeDistinct %v", shardSlice(shards))
 	case "Store":
 		statFn()
@@ -764,7 +763,6 @@ func (e *executor) executeCall(ctx context.Context, qcx *Qcx, index string, c *p
 	case "Count":
 		statFn()
 		res, err := e.executeCount(ctx, qcx, index, c, shards, opt)
-		// TODO this can produce an ugly list of 256 shards
 		return res, errors.Wrapf(err, "executeCount %v", shardSlice(shards))
 	case "Set":
 		statFn()
