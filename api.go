@@ -57,6 +57,7 @@ type API struct {
 	importWork           chan importJob
 
 	Serializer Serializer
+	schemator  disco.Schemator
 }
 
 func (api *API) Holder() *Holder {
@@ -72,6 +73,7 @@ func OptAPIServer(s *Server) apiOption {
 		a.holder = s.holder
 		a.cluster = s.cluster
 		a.Serializer = s.serializer
+		a.schemator = s.schemator
 		return nil
 	}
 }
@@ -211,37 +213,19 @@ func (api *API) CreateIndex(ctx context.Context, indexName string, options Index
 		return nil, errors.Wrap(err, "validating api method")
 	}
 
-	// Create a snapshot of the cluster to use for node/partition calculations.
-	snap := topology.NewClusterSnapshot(api.cluster.noder, api.cluster.Hasher, api.cluster.ReplicaN)
-
-	if !snap.IsPrimaryFieldTranslationNode(api.Node().ID) {
-		if err := api.server.defaultClient.CreateIndex(ctx, indexName, options); err != nil {
-			return nil, errors.Wrap(err, "forwarding CreateIndex to coordinator")
-		}
-		return api.holder.Index(indexName), nil
+	// Populate the create index message.
+	cim := &CreateIndexMessage{
+		Index:     indexName,
+		CreatedAt: timestamp(),
+		Meta:      &options,
 	}
 
 	// Create index.
-	index, err := api.holder.CreateIndex(indexName, options)
+	index, err := api.holder.CreateIndexAndBroadcast(cim)
 	if err != nil {
 		return nil, errors.Wrap(err, "creating index")
 	}
 
-	createdAt := timestamp()
-	index.mu.Lock()
-	index.createdAt = createdAt
-	index.mu.Unlock()
-
-	// Send the create index message to all nodes.
-	err = api.server.SendSync(
-		&CreateIndexMessage{
-			Index:     indexName,
-			CreatedAt: createdAt,
-			Meta:      &options,
-		})
-	if err != nil {
-		return nil, errors.Wrap(err, "sending CreateIndex message")
-	}
 	api.holder.Stats.Count(MetricCreateIndex, 1, 1.0)
 	return index, nil
 }
@@ -270,6 +254,11 @@ func (api *API) DeleteIndex(ctx context.Context, indexName string) error {
 
 	if err := api.validate(apiDeleteIndex); err != nil {
 		return errors.Wrap(err, "validating api method")
+	}
+
+	// Delete the index from etcd as the system of record.
+	if err := api.schemator.DeleteIndex(ctx, indexName); err != nil {
+		return errors.Wrapf(err, "deleting index from etcd: %s", indexName)
 	}
 
 	// Delete index from the holder.
@@ -301,23 +290,10 @@ func (api *API) CreateField(ctx context.Context, indexName string, fieldName str
 		return nil, errors.Wrap(err, "validating api method")
 	}
 
-	// Apply functional options.
-	fo := FieldOptions{}
-	for _, opt := range opts {
-		err := opt(&fo)
-		if err != nil {
-			return nil, NewBadRequestError(errors.Wrap(err, "applying option"))
-		}
-	}
-
-	// Create a snapshot of the cluster to use for node/partition calculations.
-	snap := topology.NewClusterSnapshot(api.cluster.noder, api.cluster.Hasher, api.cluster.ReplicaN)
-
-	if !snap.IsPrimaryFieldTranslationNode(api.Node().ID) {
-		if err := api.server.defaultClient.CreateFieldWithOptions(ctx, indexName, fieldName, fo); err != nil {
-			return nil, errors.Wrap(err, "forwarding CreateField to coordinator")
-		}
-		return api.holder.Field(indexName, fieldName), nil
+	// Apply and validate functional options.
+	fo, err := newFieldOptions(opts...)
+	if err != nil {
+		return nil, NewBadRequestError(errors.Wrap(err, "applying option"))
 	}
 
 	// Find index.
@@ -326,27 +302,20 @@ func (api *API) CreateField(ctx context.Context, indexName string, fieldName str
 		return nil, newNotFoundError(ErrIndexNotFound, indexName)
 	}
 
+	// Populate the create field message.
+	cfm := &CreateFieldMessage{
+		Index:     indexName,
+		Field:     fieldName,
+		CreatedAt: timestamp(),
+		Meta:      fo,
+	}
+
 	// Create field.
-	field, err := index.CreateField(fieldName, opts...)
+	field, err := index.CreateFieldAndBroadcast(cfm)
 	if err != nil {
 		return nil, errors.Wrap(err, "creating field")
 	}
-	createdAt := timestamp()
-	field.mu.Lock()
-	field.createdAt = createdAt
-	field.mu.Unlock()
 
-	// Send the create field message to all nodes.
-	err = api.server.SendSync(&CreateFieldMessage{
-		Index:     indexName,
-		Field:     fieldName,
-		CreatedAt: createdAt,
-		Meta:      &fo,
-	})
-	if err != nil {
-		api.server.logger.Printf("problem sending CreateField message: %s", err)
-		return nil, errors.Wrap(err, "sending CreateField message")
-	}
 	api.holder.Stats.CountWithCustomTags(MetricCreateField, 1, 1.0, []string{fmt.Sprintf("index:%s", indexName)})
 	return field, nil
 }
@@ -569,6 +538,11 @@ func (api *API) DeleteField(ctx context.Context, indexName string, fieldName str
 	index := api.holder.Index(indexName)
 	if index == nil {
 		return newNotFoundError(ErrIndexNotFound, indexName)
+	}
+
+	// Delete the field from etcd as the system of record.
+	if err := api.schemator.DeleteField(ctx, indexName, fieldName); err != nil {
+		return errors.Wrapf(err, "deleting field from etcd: %s/%s", indexName, fieldName)
 	}
 
 	// Delete field from the index.

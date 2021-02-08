@@ -30,6 +30,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/pilosa/pilosa/v2/disco"
 	"github.com/pilosa/pilosa/v2/logger"
 	rbfcfg "github.com/pilosa/pilosa/v2/rbf/cfg"
 	"github.com/pilosa/pilosa/v2/roaring"
@@ -80,6 +81,8 @@ type Holder struct {
 	opened lockedChan
 
 	broadcaster broadcaster
+	schemator   disco.Schemator
+	serializer  Serializer
 
 	NewAttrStore func(string) AttrStore
 
@@ -571,7 +574,6 @@ func (h *Holder) Inspect(ctx context.Context, req *InspectRequest) (*HolderInfo,
 
 // Open initializes the root data directory for the holder.
 func (h *Holder) Open() error {
-
 	h.opening = true
 	defer func() { h.opening = false }()
 
@@ -854,51 +856,55 @@ func (h *Holder) availableShardsByIndex() map[string]*roaring.Bitmap {
 
 // Schema returns schema information for all indexes, fields, and views.
 func (h *Holder) Schema() ([]*IndexInfo, error) {
-	var a []*IndexInfo
-	for _, index := range h.Indexes() {
-		di := &IndexInfo{
-			Name:      index.Name(),
-			CreatedAt: index.CreatedAt(),
-			Options:   index.Options(),
-		}
-		for _, field := range index.Fields() {
-			fi := &FieldInfo{
-				Name:      field.Name(),
-				CreatedAt: field.CreatedAt(),
-				Options:   field.Options(),
-			}
-			for _, view := range field.views() {
-				fi.Views = append(fi.Views, &ViewInfo{Name: view.name})
-			}
-			sort.Sort(viewInfoSlice(fi.Views))
-			di.Fields = append(di.Fields, fi)
-		}
-		sort.Sort(fieldInfoSlice(di.Fields))
-		a = append(a, di)
-	}
-	sort.Sort(indexInfoSlice(a))
-	return a, nil
+	return h.schema(context.TODO(), true)
 }
 
 // limitedSchema returns schema information for all indexes and fields.
 func (h *Holder) limitedSchema() ([]*IndexInfo, error) {
+	return h.schema(context.TODO(), false)
+}
+
+func (h *Holder) schema(ctx context.Context, includeViews bool) ([]*IndexInfo, error) {
 	var a []*IndexInfo
-	for _, index := range h.Indexes() {
-		di := &IndexInfo{
-			Name:       index.Name(),
-			CreatedAt:  index.CreatedAt(),
-			Options:    index.Options(),
-			ShardWidth: ShardWidth,
-			Fields:     make([]*FieldInfo, 0, len(index.Fields())),
+
+	schema, err := h.schemator.Schema(ctx)
+	if err != nil {
+		return nil, errors.Wrapf(err, "getting schema via schemator")
+	}
+
+	for indexName, index := range schema {
+		cim, err := h.decodeCreateIndexMessage(index.Data)
+		if err != nil {
+			return nil, errors.Wrap(err, "decoding CreateIndexMessage")
 		}
-		for _, field := range index.Fields() {
-			if strings.HasPrefix(field.name, "_") {
-				continue
+
+		di := &IndexInfo{
+			Name:       cim.Index,
+			CreatedAt:  cim.CreatedAt,
+			Options:    *cim.Meta,
+			ShardWidth: ShardWidth,
+			Fields:     make([]*FieldInfo, 0, len(index.Fields)),
+		}
+		for fieldName, fieldData := range index.Fields {
+			createFieldMessage, err := h.decodeCreateFieldMessage(fieldData)
+			if err != nil {
+				return nil, errors.Wrap(err, "decoding CreateFieldMessage")
 			}
+
 			fi := &FieldInfo{
-				Name:      field.Name(),
-				CreatedAt: field.CreatedAt(),
-				Options:   field.Options(),
+				Name:      fieldName,
+				CreatedAt: createFieldMessage.CreatedAt,
+				Options:   *createFieldMessage.Meta,
+			}
+			if includeViews {
+				// Because views are not stored in etcd, we still rely on the
+				// local representation of views.
+				if localField := h.Field(indexName, fieldName); localField != nil {
+					for _, view := range localField.views() {
+						fi.Views = append(fi.Views, &ViewInfo{Name: view.name})
+					}
+					sort.Sort(viewInfoSlice(fi.Views))
+				}
 			}
 			di.Fields = append(di.Fields, fi)
 		}
@@ -995,7 +1001,66 @@ func (h *Holder) CreateIndex(name string, opt IndexOptions) (*Index, error) {
 	if h.Index(name) != nil {
 		return nil, newConflictError(ErrIndexExists)
 	}
-	return h.createIndex(name, opt)
+
+	cim := &CreateIndexMessage{
+		Index:     name,
+		CreatedAt: 0,
+		Meta:      &opt,
+	}
+
+	// Create the index in etcd as the system of record.
+	if err := h.persistIndex(context.Background(), cim); err != nil {
+		return nil, errors.Wrap(err, "persisting index")
+	}
+
+	return h.createIndex(cim, false)
+}
+
+// LoadIndex creates an index based on the information stored in schemator.
+// An error is returned if the index already exists.
+func (h *Holder) LoadIndex(name string) (*Index, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	// Ensure index doesn't already exist.
+	if h.Index(name) != nil {
+		return nil, newConflictError(ErrIndexExists)
+	}
+	return h.loadIndex(name)
+}
+
+// LoadField creates a field based on the information stored in schemator.
+// An error is returned if the field already exists.
+func (h *Holder) LoadField(index, field string) (*Field, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	// Ensure field doesn't already exist.
+	if h.Field(index, field) != nil {
+		return nil, newConflictError(ErrFieldExists)
+	}
+	return h.loadField(index, field)
+}
+
+// CreateIndexAndBroadcast creates an index locally, then broadcasts the
+// creation to other nodes so they can create locally as well. An error is
+// returned if the index already exists.
+//func (h *Holder) CreateIndexAndBroadcast(name string, opt IndexOptions) (*Index, error) {
+func (h *Holder) CreateIndexAndBroadcast(cim *CreateIndexMessage) (*Index, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	// Ensure index doesn't already exist.
+	if h.Index(cim.Index) != nil {
+		return nil, newConflictError(ErrIndexExists)
+	}
+
+	// Create the index in etcd as the system of record.
+	if err := h.persistIndex(context.Background(), cim); err != nil {
+		return nil, errors.Wrap(err, "persisting index")
+	}
+
+	return h.createIndex(cim, true)
 }
 
 // CreateIndexIfNotExists returns an index by name.
@@ -1008,22 +1073,62 @@ func (h *Holder) CreateIndexIfNotExists(name string, opt IndexOptions) (*Index, 
 	if index := h.Index(name); index != nil {
 		return index, nil
 	}
-	return h.createIndex(name, opt)
+
+	cim := &CreateIndexMessage{
+		Index:     name,
+		CreatedAt: 0,
+		Meta:      &opt,
+	}
+
+	// Create the index in etcd as the system of record.
+	if err := h.persistIndex(context.Background(), cim); err != nil {
+		// There is a case where the index is not in memory, but it is in
+		// persistent storage. In that case, this will return an "index exists"
+		// error, which in that case should return the index. TODO: We may need
+		// to allow for that in the future.
+		return nil, errors.Wrap(err, "persisting index")
+	}
+
+	return h.createIndex(cim, false)
 }
 
-func (h *Holder) createIndex(name string, opt IndexOptions) (*Index, error) {
-	if name == "" {
+// persistIndex stores the index information in etcd.
+func (h *Holder) persistIndex(ctx context.Context, cim *CreateIndexMessage) error {
+	if cim.Index == "" {
+		return ErrIndexRequired
+	}
+
+	if err := validateName(cim.Index); err != nil {
+		return errors.Wrap(err, "validating name")
+	}
+
+	if b, err := h.serializer.Marshal(cim); err != nil {
+		return errors.Wrap(err, "marshaling")
+	} else if err := h.schemator.CreateIndex(ctx, cim.Index, b); err != nil {
+		return errors.Wrapf(err, "writing index to disco: %s", cim.Index)
+	}
+	return nil
+}
+
+func (h *Holder) createIndex(cim *CreateIndexMessage, broadcast bool) (*Index, error) {
+	if cim.Index == "" {
 		return nil, errors.New("index name required")
 	}
 
+	opt := cim.Meta
+	if opt == nil {
+		opt = &IndexOptions{}
+	}
+
 	// Otherwise create a new index.
-	index, err := h.newIndex(h.IndexPath(name), name)
+	index, err := h.newIndex(h.IndexPath(cim.Index), cim.Index)
 	if err != nil {
 		return nil, errors.Wrap(err, "creating")
 	}
 
 	index.keys = opt.Keys
 	index.trackExistence = opt.TrackExistence
+	index.createdAt = cim.CreatedAt
 
 	if err = index.Open(); err != nil {
 		return nil, errors.Wrap(err, "opening")
@@ -1035,6 +1140,13 @@ func (h *Holder) createIndex(name string, opt IndexOptions) (*Index, error) {
 	// Update options.
 	h.addIndex(index)
 
+	if broadcast {
+		// Send the create index message to all nodes.
+		if err := h.broadcaster.SendSync(cim); err != nil {
+			return nil, errors.Wrap(err, "sending CreateIndex message")
+		}
+	}
+
 	// Since this is a new index, we need to kick off
 	// its translation sync.
 	if err := h.translationSyncer.Reset(); err != nil {
@@ -1044,6 +1156,44 @@ func (h *Holder) createIndex(name string, opt IndexOptions) (*Index, error) {
 	return index, nil
 }
 
+func (h *Holder) loadIndex(indexName string) (*Index, error) {
+	b, err := h.schemator.Index(context.TODO(), indexName)
+	if err != nil {
+		// TODO: we may need to wrap with ConflictError if the error type is
+		// ErrIndexExists.
+		return nil, errors.Wrapf(err, "getting index: %s", indexName)
+	}
+
+	cim, err := h.decodeCreateIndexMessage(b)
+	if err != nil {
+		return nil, errors.Wrap(err, "decoding CreateIndexMessage")
+	}
+
+	return h.createIndex(cim, false)
+}
+
+func (h *Holder) loadField(indexName, fieldName string) (*Field, error) {
+	b, err := h.schemator.Field(context.TODO(), indexName, fieldName)
+	if err != nil {
+		// TODO: we may need to wrap with ConflictError if the error type is
+		// ErrIndexExists.
+		return nil, errors.Wrapf(err, "getting field: %s/%s", indexName, fieldName)
+	}
+
+	// Get index.
+	idx := h.Index(indexName)
+	if idx == nil {
+		return nil, errors.Errorf("local index not found: %s", indexName)
+	}
+
+	createFieldMessage, err := h.decodeCreateFieldMessage(b)
+	if err != nil {
+		return nil, errors.Wrap(err, "decoding CreateFieldMessage")
+	}
+
+	return idx.createFieldIfNotExists(fieldName, createFieldMessage.Meta)
+}
+
 func (h *Holder) newIndex(path, name string) (*Index, error) {
 	index, err := NewIndex(h, path, name)
 	if err != nil {
@@ -1051,6 +1201,8 @@ func (h *Holder) newIndex(path, name string) (*Index, error) {
 	}
 	index.Stats = h.Stats.WithTags(fmt.Sprintf("index:%s", index.Name()))
 	index.broadcaster = h.broadcaster
+	index.serializer = h.serializer
+	index.schemator = h.schemator
 	index.newAttrStore = h.NewAttrStore
 	index.columnAttrs = h.NewAttrStore(filepath.Join(index.path, ".data"))
 	index.OpenTranslateStore = h.OpenTranslateStore
@@ -2051,4 +2203,20 @@ func (h *Holder) HasRoaringData() (has bool, err error) {
 		}
 	}
 	return
+}
+
+func (h *Holder) decodeCreateIndexMessage(b []byte) (*CreateIndexMessage, error) {
+	var cim CreateIndexMessage
+	if err := h.serializer.Unmarshal(b, &cim); err != nil {
+		return nil, errors.Wrap(err, "unmarshaling")
+	}
+	return &cim, nil
+}
+
+func (h *Holder) decodeCreateFieldMessage(b []byte) (*CreateFieldMessage, error) {
+	var cfm CreateFieldMessage
+	if err := h.serializer.Unmarshal(b, &cfm); err != nil {
+		return nil, errors.Wrap(err, "unmarshaling")
+	}
+	return &cfm, nil
 }

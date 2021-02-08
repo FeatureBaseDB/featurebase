@@ -488,6 +488,8 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	s.cluster.confirmDownRetries = s.confirmDownRetries
 	s.cluster.confirmDownSleep = s.confirmDownSleep
 	s.holder.broadcaster = s
+	s.holder.schemator = s.schemator
+	s.holder.serializer = s.serializer
 
 	return s, nil
 }
@@ -778,14 +780,9 @@ func (s *Server) receiveMessage(m Message) error {
 		}
 
 	case *CreateIndexMessage:
-		opt := obj.Meta
-		idx, err := s.holder.CreateIndex(obj.Index, *opt)
-		if err != nil {
+		if _, err := s.holder.LoadIndex(obj.Index); err != nil {
 			return err
 		}
-		idx.mu.Lock()
-		idx.createdAt = obj.CreatedAt
-		idx.mu.Unlock()
 
 	case *DeleteIndexMessage:
 		if err := s.holder.DeleteIndex(obj.Index); err != nil {
@@ -793,18 +790,9 @@ func (s *Server) receiveMessage(m Message) error {
 		}
 
 	case *CreateFieldMessage:
-		idx := s.holder.Index(obj.Index)
-		if idx == nil {
-			return fmt.Errorf("local index not found: %s", obj.Index)
-		}
-		opt := obj.Meta
-		fld, err := idx.createFieldIfNotExists(obj.Field, opt)
-		if err != nil {
+		if _, err := s.holder.LoadField(obj.Index, obj.Field); err != nil {
 			return err
 		}
-		fld.mu.Lock()
-		fld.createdAt = obj.CreatedAt
-		fld.mu.Unlock()
 
 	case *DeleteFieldMessage:
 		idx := s.holder.Index(obj.Index)

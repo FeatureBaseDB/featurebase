@@ -328,7 +328,14 @@ func Test_DBPerShard_GetFieldView2Shards_map_from_RBF(t *testing.T) {
 
 	index := "rick"
 	field := "f"
-	idx, err := holder.createIndex(index, IndexOptions{})
+
+	cim := &CreateIndexMessage{
+		Index:     index,
+		CreatedAt: 0,
+		Meta:      &IndexOptions{},
+	}
+
+	idx, err := holder.createIndex(cim, false)
 	panicOn(err)
 
 	exp := NewFieldView2Shards()

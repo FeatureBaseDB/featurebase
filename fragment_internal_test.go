@@ -3585,8 +3585,14 @@ func newTestHolder(tb testing.TB) *Holder {
 
 // fragTestMustOpenIndex returns a new, opened index at a temporary path. Panic on error.
 func fragTestMustOpenIndex(index string, holder *Holder, opt IndexOptions) *Index {
+	cim := &CreateIndexMessage{
+		Index:     index,
+		CreatedAt: 0,
+		Meta:      &opt,
+	}
+
 	holder.mu.Lock()
-	idx, err := holder.createIndex(index, opt)
+	idx, err := holder.createIndex(cim, false)
 	holder.mu.Unlock()
 	panicOn(err)
 
