@@ -233,3 +233,31 @@ func (n *nopSharder) AddShards(ctx context.Context, index, field string, shards 
 func (n *nopSharder) RemoveShard(ctx context.Context, index, field string, shard uint64) error {
 	return nil
 }
+
+// NopSchemator represents a Schemator that doesn't do anything.
+var NopSchemator Schemator = &nopSchemator{}
+
+type nopSchemator struct{}
+
+// Schema is a no-op implementation of the Schemator Schema method.
+func (*nopSchemator) Schema(ctx context.Context) (map[string]*Index, error) { return nil, nil }
+
+// Index is a no-op implementation of the Schemator Index method.
+func (*nopSchemator) Index(ctx context.Context, name string) ([]byte, error) { return nil, nil }
+
+// CreateIndex is a no-op implementation of the Schemator CreateIndex method.
+func (*nopSchemator) CreateIndex(ctx context.Context, name string, val []byte) error { return nil }
+
+// DeleteIndex is a no-op implementation of the Schemator DeleteIndex method.
+func (*nopSchemator) DeleteIndex(ctx context.Context, name string) error { return nil }
+
+// Field is a no-op implementation of the Schemator Field method.
+func (*nopSchemator) Field(ctx context.Context, index, field string) ([]byte, error) { return nil, nil }
+
+// CreateField is a no-op implementation of the Schemator CreateField method.
+func (*nopSchemator) CreateField(ctx context.Context, index, field string, val []byte) error {
+	return nil
+}
+
+// DeleteField is a no-op implementation of the Schemator DeleteField method.
+func (*nopSchemator) DeleteField(ctx context.Context, index, field string) error { return nil }

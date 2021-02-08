@@ -213,6 +213,8 @@ type HolderConfig struct {
 	OpenTransactionStore OpenTransactionStoreFunc
 	OpenIDAllocator      OpenIDAllocatorFunc
 	TranslationSyncer    TranslationSyncer
+	Serializer           Serializer
+	Schemator            disco.Schemator
 	CacheFlushInterval   time.Duration
 	StatsClient          stats.StatsClient
 	NewAttrStore         func(string) AttrStore
@@ -232,6 +234,8 @@ func DefaultHolderConfig() *HolderConfig {
 		OpenTransactionStore: OpenInMemTransactionStore,
 		OpenIDAllocator:      func(string) (*idAllocator, error) { return &idAllocator{}, nil },
 		TranslationSyncer:    NopTranslationSyncer,
+		Serializer:           NopSerializer,
+		Schemator:            disco.NopSchemator,
 		CacheFlushInterval:   defaultCacheFlushInterval,
 		StatsClient:          stats.NopStatsClient,
 		NewAttrStore:         newNopAttrStore,
@@ -270,6 +274,8 @@ func NewHolder(path string, cfg *HolderConfig) *Holder {
 		OpenTransactionStore: cfg.OpenTransactionStore,
 		OpenIDAllocator:      cfg.OpenIDAllocator,
 		translationSyncer:    cfg.TranslationSyncer,
+		serializer:           cfg.Serializer,
+		schemator:            cfg.Schemator,
 		Logger:               cfg.Logger,
 		Opts:                 HolderOpts{StorageBackend: cfg.StorageConfig.Backend, RowcacheOn: cfg.RowcacheOn},
 
