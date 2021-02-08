@@ -997,7 +997,7 @@ func (api *API) Schema(ctx context.Context) []*IndexInfo {
 
 // SchemaDetails returns information about each index in Pilosa including which
 // fields they contain, and additional field information such as cardinality
-func (api *API) SchemaDetails(ctx context.Context) []*IndexInfo {
+func (api *API) SchemaDetails(ctx context.Context) ([]*IndexInfo, error) {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.Schema")
 	defer span.Finish()
 	schema := api.holder.Schema(false)
@@ -1007,8 +1007,7 @@ func (api *API) SchemaDetails(ctx context.Context) []*IndexInfo {
 			req := QueryRequest{Index: index.Name, Query: q}
 			resp, err := api.query(ctx, &req)
 			if err != nil {
-				// TODO ?
-				continue
+				return schema, errors.Wrapf(err, "querying cardinality (%s/%s)", index.Name, field.Name)
 			}
 			if len(resp.Results) == 0 {
 				continue
@@ -1018,7 +1017,7 @@ func (api *API) SchemaDetails(ctx context.Context) []*IndexInfo {
 			}
 		}
 	}
-	return schema
+	return schema, nil
 }
 
 // ApplySchema takes the given schema and applies it across the

@@ -681,7 +681,11 @@ func (h *Handler) handleGetSchemaDetails(w http.ResponseWriter, r *http.Request)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	schema := h.api.SchemaDetails(r.Context())
+	schema, err := h.api.SchemaDetails(r.Context())
+	if err != nil {
+		h.logger.Printf("error getting detailed schema: %s", err)
+		return
+	}
 	if err := json.NewEncoder(w).Encode(pilosa.Schema{Indexes: schema}); err != nil {
 		h.logger.Printf("write schema response error: %s", err)
 	}
