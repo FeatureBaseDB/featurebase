@@ -57,7 +57,6 @@ type API struct {
 	importWork           chan importJob
 
 	Serializer Serializer
-	schemator  disco.Schemator
 }
 
 func (api *API) Holder() *Holder {
@@ -73,7 +72,6 @@ func OptAPIServer(s *Server) apiOption {
 		a.holder = s.holder
 		a.cluster = s.cluster
 		a.Serializer = s.serializer
-		a.schemator = s.schemator
 		return nil
 	}
 }
@@ -254,11 +252,6 @@ func (api *API) DeleteIndex(ctx context.Context, indexName string) error {
 
 	if err := api.validate(apiDeleteIndex); err != nil {
 		return errors.Wrap(err, "validating api method")
-	}
-
-	// Delete the index from etcd as the system of record.
-	if err := api.schemator.DeleteIndex(ctx, indexName); err != nil {
-		return errors.Wrapf(err, "deleting index from etcd: %s", indexName)
 	}
 
 	// Delete index from the holder.
@@ -538,11 +531,6 @@ func (api *API) DeleteField(ctx context.Context, indexName string, fieldName str
 	index := api.holder.Index(indexName)
 	if index == nil {
 		return newNotFoundError(ErrIndexNotFound, indexName)
-	}
-
-	// Delete the field from etcd as the system of record.
-	if err := api.schemator.DeleteField(ctx, indexName, fieldName); err != nil {
-		return errors.Wrapf(err, "deleting field from etcd: %s/%s", indexName, fieldName)
 	}
 
 	// Delete field from the index.
