@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/pilosa/pilosa/v2"
+	"github.com/pilosa/pilosa/v2/disco"
 	"github.com/pilosa/pilosa/v2/encoding/proto"
 	"github.com/pilosa/pilosa/v2/http"
 	"github.com/pilosa/pilosa/v2/server"
@@ -388,7 +389,7 @@ func RetryUntil(timeout time.Duration, fn func() error) (err error) {
 }
 
 // AwaitState waits for the whole cluster to reach a specified state.
-func (m *Command) AwaitState(expectedState string, timeout time.Duration) (err error) {
+func (m *Command) AwaitState(expectedState disco.ClusterState, timeout time.Duration) (err error) {
 	startTime := time.Now()
 	var elapsed time.Duration
 	for elapsed = 0; elapsed <= timeout; elapsed = time.Since(startTime) {
@@ -404,7 +405,7 @@ func (m *Command) AwaitState(expectedState string, timeout time.Duration) (err e
 }
 
 // exceptionalState returns an error if the node is not in the expected state.
-func (m *Command) exceptionalState(expectedState string) error {
+func (m *Command) exceptionalState(expectedState disco.ClusterState) error {
 	state, err := m.API.State()
 	if err != nil || state != expectedState {
 		return fmt.Errorf("node %q: state %s: err %v", m.ID(), state, err)

@@ -31,6 +31,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pilosa/pilosa/v2/disco"
 	"github.com/pilosa/pilosa/v2/pql"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/stats"
@@ -111,11 +112,11 @@ func NewAPI(opts ...apiOption) (*API, error) {
 
 // validAPIMethods specifies the api methods that are valid for each
 // cluster state.
-var validAPIMethods = map[string]map[apiMethod]struct{}{
-	string(ClusterStateStarting): methodsCommon,
-	string(ClusterStateNormal):   appendMap(methodsCommon, methodsNormal),
-	string(ClusterStateDegraded): appendMap(methodsCommon, methodsDegraded),
-	string(ClusterStateResizing): appendMap(methodsCommon, methodsResizing),
+var validAPIMethods = map[disco.ClusterState]map[apiMethod]struct{}{
+	disco.ClusterStateStarting: methodsCommon,
+	disco.ClusterStateNormal:   appendMap(methodsCommon, methodsNormal),
+	disco.ClusterStateDegraded: appendMap(methodsCommon, methodsDegraded),
+	disco.ClusterStateResizing: appendMap(methodsCommon, methodsResizing),
 }
 
 func appendMap(a, b map[apiMethod]struct{}) map[apiMethod]struct{} {
@@ -1814,9 +1815,9 @@ func (api *API) ResizeAbort() error {
 }
 
 // State returns the cluster state which is usually "NORMAL", but could be
-// "STARTING", "RESIZING", or potentially others. See cluster.go for more
+// "STARTING", "RESIZING", or potentially others. See disco.go for more
 // details.
-func (api *API) State() (string, error) {
+func (api *API) State() (disco.ClusterState, error) {
 	if err := api.validate(apiState); err != nil {
 		return "", errors.Wrap(err, "validating api method")
 	}

@@ -26,6 +26,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/boltdb"
+	"github.com/pilosa/pilosa/v2/disco"
 	"github.com/pilosa/pilosa/v2/http"
 	"github.com/pilosa/pilosa/v2/mock"
 	"github.com/pilosa/pilosa/v2/server"
@@ -499,13 +500,13 @@ func TestTranslation_Replication(t *testing.T) {
 		exp := `{"results":[{"attrs":{},"columns":[],"keys":["x1","x2"]}]}`
 
 		coordState, err := coord.API.State()
-		if err != nil || !test.CheckClusterState(coord, string(pilosa.ClusterStateNormal), 1000) {
-			t.Fatalf("unexpected coord cluster state: %s, got: %s, err: %v", pilosa.ClusterStateNormal, coordState, err)
+		if err != nil || !test.CheckClusterState(coord, disco.ClusterStateNormal, 1000) {
+			t.Fatalf("unexpected coord cluster state: %s, got: %s, err: %v", disco.ClusterStateNormal, coordState, err)
 		}
 
 		otherState, err := other.API.State()
-		if err != nil || !test.CheckClusterState(other, string(pilosa.ClusterStateNormal), 1000) {
-			t.Fatalf("unexpected other cluster state: %s, got: %s, err: %v", pilosa.ClusterStateNormal, otherState, err)
+		if err != nil || !test.CheckClusterState(other, disco.ClusterStateNormal, 1000) {
+			t.Fatalf("unexpected other cluster state: %s, got: %s, err: %v", disco.ClusterStateNormal, otherState, err)
 		}
 
 		// Verify the data exists
@@ -517,8 +518,8 @@ func TestTranslation_Replication(t *testing.T) {
 		}
 
 		coordState, err = coord.API.State()
-		if err != nil || !test.CheckClusterState(coord, string(pilosa.ClusterStateDegraded), 1000) {
-			t.Fatalf("unexpected coord cluster state: %s, got: %s", pilosa.ClusterStateDegraded, coordState)
+		if err != nil || !test.CheckClusterState(coord, disco.ClusterStateDegraded, 1000) {
+			t.Fatalf("unexpected coord cluster state: %s, got: %s", disco.ClusterStateDegraded, coordState)
 		}
 
 		// Verify the data exists with one node down

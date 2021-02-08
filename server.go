@@ -562,7 +562,7 @@ func (s *Server) Open() error {
 		ID:        s.nodeID,
 		URI:       s.uri,
 		GRPCURI:   s.grpcURI,
-		State:     nodeStateDown,
+		State:     string(disco.NodeStateUnknown),
 		IsPrimary: s.IsPrimary(),
 	}
 
@@ -730,7 +730,7 @@ func (s *Server) monitorAntiEntropy() {
 			continue
 		}
 
-		if state == string(ClusterStateResizing) {
+		if state == disco.ClusterStateResizing {
 			continue // don't launch anti-entropy during resize.
 			// the cluster sets its state to resizing and *then* sends to
 			// abortAntiEntropyCh before starting to resize
@@ -966,7 +966,7 @@ func (s *Server) handleRemoteStatus(pb Message) {
 	}
 
 	// Ignore NodeStatus messages until the cluster is in a Normal state.
-	if state != string(ClusterStateNormal) {
+	if state != disco.ClusterStateNormal {
 		return
 	}
 

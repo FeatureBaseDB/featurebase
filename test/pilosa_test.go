@@ -21,7 +21,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pilosa/pilosa/v2"
+	"github.com/pilosa/pilosa/v2/disco"
 	"github.com/pilosa/pilosa/v2/test"
 )
 
@@ -77,8 +77,8 @@ func TestNewCluster(t *testing.T) {
 		t.Fatalf("wrong number of nodes in status: %s", bytes)
 	}
 
-	if body.State != string(pilosa.ClusterStateNormal) {
-		t.Fatalf("cluster state should be %s but is %s", pilosa.ClusterStateNormal, body.State)
+	if body.State != string(disco.ClusterStateNormal) {
+		t.Fatalf("cluster state should be %s but is %s", disco.ClusterStateNormal, body.State)
 	}
 }
 

@@ -33,16 +33,6 @@ import (
 )
 
 const (
-	// ClusterState represents the state returned in the /status endpoint.
-	ClusterStateStarting = disco.ClusterStateStarting
-	ClusterStateDegraded = disco.ClusterStateDegraded // cluster is running but we've lost some # of hosts >0 but < replicaN
-	ClusterStateNormal   = disco.ClusterStateNormal
-	ClusterStateResizing = disco.ClusterStateResizing
-	ClusterStateDown     = disco.ClusterStateDown
-
-	// nodeStateDown represents the state of a node which is unavailable.
-	nodeStateDown = "DOWN"
-
 	resizeJobActionAdd    = "ADD"
 	resizeJobActionRemove = "REMOVE"
 
@@ -659,12 +649,8 @@ func (c *cluster) nodeIDs() []string {
 	return topology.Nodes(c.Nodes()).IDs()
 }
 
-func (c *cluster) State() (string, error) {
-	state, err := c.stator.ClusterState(context.Background())
-	if err != nil {
-		return string(disco.ClusterStateUnknown), err
-	}
-	return string(state), nil
+func (c *cluster) State() (disco.ClusterState, error) {
+	return c.stator.ClusterState(context.Background())
 }
 
 func (c *cluster) nodeByID(id string) *topology.Node {
@@ -732,7 +718,8 @@ func (c *cluster) Nodes() []*topology.Node {
 
 		s, err := c.stator.NodeState(context.Background(), node.ID)
 		if err != nil {
-			node.State = nodeStateDown
+			// TODO should we delete this?
+			node.State = string(disco.NodeStateUnknown)
 			continue
 		}
 		node.State = string(s)

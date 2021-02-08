@@ -26,6 +26,7 @@ import (
 
 	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/api/client"
+	"github.com/pilosa/pilosa/v2/disco"
 	"github.com/pilosa/pilosa/v2/proto"
 	"github.com/pilosa/pilosa/v2/server"
 	"github.com/pilosa/pilosa/v2/storage"
@@ -420,7 +421,7 @@ func (c *Cluster) Start() error {
 		return err
 	}
 
-	return c.GetNode(0).AwaitState(string(pilosa.ClusterStateNormal), 30*time.Second)
+	return c.GetNode(0).AwaitState(disco.ClusterStateNormal, 30*time.Second)
 }
 
 // Close stops a Cluster
@@ -473,7 +474,7 @@ func MustNewCluster(tb testing.TB, size int, opts ...[]server.CommandOption) *Cl
 
 // CheckClusterState polls a given cluster for its state until it
 // receives a matching state. It polls up to n times before returning.
-func CheckClusterState(m *Command, state string, n int) bool {
+func CheckClusterState(m *Command, state disco.ClusterState, n int) bool {
 	for i := 0; i < n; i++ {
 
 		apiState, err := m.API.State()
