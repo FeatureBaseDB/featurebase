@@ -896,7 +896,9 @@ func (h *Holder) schema(ctx context.Context, includeViews bool) ([]*IndexInfo, e
 			if err != nil {
 				return nil, errors.Wrap(err, "decoding CreateFieldMessage")
 			}
-
+			if fieldName == existenceFieldName {
+				continue
+			}
 			fi := &FieldInfo{
 				Name:      fieldName,
 				CreatedAt: createFieldMessage.CreatedAt,

@@ -482,13 +482,7 @@ func (e *Etcd) DeleteNode(ctx context.Context, nodeID string) error {
 }
 
 func (e *Etcd) Schema(ctx context.Context) (map[string]*disco.Index, error) {
-	cli, err := e.client()
-	if err != nil {
-		return nil, errors.Wrap(err, "Schema: creating client")
-	}
-	defer cli.Close()
-
-	keys, vals, err := e.getKey(ctx, cli, schemaPrefix)
+	keys, vals, err := e.getKey(ctx, schemaPrefix)
 	if err != nil {
 		return nil, err
 	}
@@ -580,33 +574,31 @@ func (e *Etcd) CreateIndex(ctx context.Context, name string, val []byte) error {
 }
 
 func (e *Etcd) Index(ctx context.Context, name string) ([]byte, error) {
-	cli, err := e.client()
-	if err != nil {
-		return nil, errors.Wrap(err, "Index: creating client")
-	}
-	defer cli.Close()
-
-	return e.getKeyBytes(ctx, cli, schemaPrefix+name)
+	return e.getKeyBytes(ctx, schemaPrefix+name)
 }
 
 func (e *Etcd) DeleteIndex(ctx context.Context, name string) error {
-	// Delete any fields below the index path.
-	if err := e.delKey(ctx, schemaPrefix+name+"/", true); err != nil {
-		return errors.Wrap(err, "deleting index fields")
-	}
-	// Delete the index.
-	return e.delKey(ctx, schemaPrefix+name, false)
-}
-
-func (e *Etcd) Field(ctx context.Context, indexName string, name string) ([]byte, error) {
 	cli, err := e.client()
 	if err != nil {
-		return nil, errors.Wrap(err, "GetField: creating client")
+		return errors.Wrap(err, "DeleteIndex: creating client")
 	}
 	defer cli.Close()
 
+	key := schemaPrefix + name
+	// Deleting index and fields in one transaction.
+	_, err = cli.KV.Txn(ctx).
+		If(clientv3.Compare(clientv3.Version(key), ">", -1)).
+		Then(
+			clientv3.OpDelete(key+"/", clientv3.WithPrefix()), // deleting index fields
+			clientv3.OpDelete(key),                            // deleting index
+		).Commit()
+
+	return errors.Wrap(err, "DeleteIndex")
+}
+
+func (e *Etcd) Field(ctx context.Context, indexName string, name string) ([]byte, error) {
 	key := schemaPrefix + indexName + "/" + name
-	return e.getKeyBytes(ctx, cli, key)
+	return e.getKeyBytes(ctx, key)
 }
 
 func (e *Etcd) CreateField(ctx context.Context, indexName string, name string, val []byte) error {
@@ -639,7 +631,22 @@ func (e *Etcd) CreateField(ctx context.Context, indexName string, name string, v
 }
 
 func (e *Etcd) DeleteField(ctx context.Context, indexname string, name string) error {
-	return e.delKey(ctx, schemaPrefix+indexname+"/"+name, false)
+	cli, err := e.client()
+	if err != nil {
+		return errors.Wrap(err, "DeleteField: creating client")
+	}
+	defer cli.Close()
+
+	key := schemaPrefix + indexname + "/" + name
+	// Deleting field and views in one transaction.
+	_, err = cli.KV.Txn(ctx).
+		If(clientv3.Compare(clientv3.Version(key), ">", -1)).
+		Then(
+			clientv3.OpDelete(key+"/", clientv3.WithPrefix()), // deleting field views
+			clientv3.OpDelete(key),                            // deleting field
+		).Commit()
+
+	return errors.Wrap(err, "DeleteField")
 }
 
 func (e *Etcd) putKey(ctx context.Context, key, val string, opts ...clientv3.OpOption) error {
@@ -656,7 +663,13 @@ func (e *Etcd) putKey(ctx context.Context, key, val string, opts ...clientv3.OpO
 	return nil
 }
 
-func (e *Etcd) getKeyBytes(ctx context.Context, cli *clientv3.Client, key string) ([]byte, error) {
+func (e *Etcd) getKeyBytes(ctx context.Context, key string) ([]byte, error) {
+	cli, err := e.client()
+	if err != nil {
+		return nil, errors.Wrap(err, "getKeyBytes: creates a new client")
+	}
+	defer cli.Close()
+
 	// Get the current value for the key.
 	resp, err := cli.Get(ctx, key)
 	if err != nil {
@@ -671,7 +684,13 @@ func (e *Etcd) getKeyBytes(ctx context.Context, cli *clientv3.Client, key string
 	return resp.Kvs[0].Value, nil
 }
 
-func (e *Etcd) getKey(ctx context.Context, cli *clientv3.Client, key string) ([]string, [][]byte, error) {
+func (e *Etcd) getKey(ctx context.Context, key string) ([]string, [][]byte, error) {
+	cli, err := e.client()
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "getKey: creates a new client")
+	}
+	defer cli.Close()
+
 	resp, err := cli.KV.Txn(ctx).
 		If(clientv3.Compare(clientv3.Version(key), ">", -1)).
 		Then(clientv3.OpGet(key, clientv3.WithPrefix())).
@@ -700,9 +719,9 @@ func (e *Etcd) getKey(ctx context.Context, cli *clientv3.Client, key string) ([]
 }
 
 func (e *Etcd) delKey(ctx context.Context, key string, withPrefix bool) error {
-	cli, err := clientv3.NewFromURLs(e.e.Server.Cluster().ClientURLs())
+	cli, err := e.client()
 	if err != nil {
-		return errors.Wrap(err, "delKey")
+		return errors.Wrap(err, "delKey: creates a new client")
 	}
 	defer cli.Close()
 

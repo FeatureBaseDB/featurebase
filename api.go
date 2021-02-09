@@ -1022,10 +1022,12 @@ func (api *API) ApplySchema(ctx context.Context, s *Schema, remote bool) error {
 			}
 		}
 	}
-
 	if !remote {
 		nodes := api.cluster.Nodes()
 		for i, node := range nodes {
+			if node.ID == api.Node().ID {
+				continue
+			}
 			err := api.server.defaultClient.PostSchema(ctx, &node.URI, s, true)
 			if err != nil {
 				return errors.Wrapf(err, "forwarding post schema to node %d of %d", i+1, len(nodes))
