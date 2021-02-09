@@ -891,13 +891,13 @@ func (h *Holder) schema(ctx context.Context, includeViews bool) ([]*IndexInfo, e
 			ShardWidth: ShardWidth,
 			Fields:     make([]*FieldInfo, 0, len(index.Fields)),
 		}
-		for _, field := range index.Fields {
+		for fieldName, field := range index.Fields {
+			if fieldName == existenceFieldName {
+				continue
+			}
 			cfm, err := h.decodeCreateFieldMessage(field.Data)
 			if err != nil {
 				return nil, errors.Wrap(err, "decoding CreateFieldMessage")
-			}
-			if cfm.Field == existenceFieldName {
-				continue
 			}
 			fi := &FieldInfo{
 				Name:      cfm.Field,
