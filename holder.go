@@ -878,7 +878,7 @@ func (h *Holder) schema(ctx context.Context, includeViews bool) ([]*IndexInfo, e
 		return nil, errors.Wrapf(err, "getting schema via schemator")
 	}
 
-	for indexName, index := range schema {
+	for _, index := range schema {
 		cim, err := h.decodeCreateIndexMessage(index.Data)
 		if err != nil {
 			return nil, errors.Wrap(err, "decoding CreateIndexMessage")
@@ -891,28 +891,28 @@ func (h *Holder) schema(ctx context.Context, includeViews bool) ([]*IndexInfo, e
 			ShardWidth: ShardWidth,
 			Fields:     make([]*FieldInfo, 0, len(index.Fields)),
 		}
-		for fieldName, fieldData := range index.Fields {
-			createFieldMessage, err := h.decodeCreateFieldMessage(fieldData)
+		for _, field := range index.Fields {
+			cfm, err := h.decodeCreateFieldMessage(field.Data)
 			if err != nil {
 				return nil, errors.Wrap(err, "decoding CreateFieldMessage")
 			}
-			if fieldName == existenceFieldName {
+			if cfm.Field == existenceFieldName {
 				continue
 			}
 			fi := &FieldInfo{
-				Name:      fieldName,
-				CreatedAt: createFieldMessage.CreatedAt,
-				Options:   *createFieldMessage.Meta,
+				Name:      cfm.Field,
+				CreatedAt: cfm.CreatedAt,
+				Options:   *cfm.Meta,
 			}
 			if includeViews {
-				// Because views are not stored in etcd, we still rely on the
-				// local representation of views.
-				if localField := h.Field(indexName, fieldName); localField != nil {
-					for _, view := range localField.views() {
-						fi.Views = append(fi.Views, &ViewInfo{Name: view.name})
+				for _, viewData := range field.Views {
+					cvm, err := h.decodeCreateViewMessage(viewData)
+					if err != nil {
+						return nil, errors.Wrap(err, "decoding CreateViewMessage")
 					}
-					sort.Sort(viewInfoSlice(fi.Views))
+					fi.Views = append(fi.Views, &ViewInfo{Name: cvm.View})
 				}
+				sort.Sort(viewInfoSlice(fi.Views))
 			}
 			di.Fields = append(di.Fields, fi)
 		}
@@ -1040,14 +1040,26 @@ func (h *Holder) LoadIndex(name string) (*Index, error) {
 // LoadField creates a field based on the information stored in schemator.
 // An error is returned if the field already exists.
 func (h *Holder) LoadField(index, field string) (*Field, error) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
 	// Ensure field doesn't already exist.
 	if h.Field(index, field) != nil {
 		return nil, newConflictError(ErrFieldExists)
 	}
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
 	return h.loadField(index, field)
+}
+
+// LoadView creates a view based on the information stored in schemator. Unlike
+// index and field, it is not considered an error if the view already exists.
+func (h *Holder) LoadView(index, field, view string) (*view, error) {
+	// If the view already exists, just return with it here.
+	if v := h.view(index, field, view); v != nil {
+		return v, nil
+	}
+
+	return h.loadView(index, field, view)
 }
 
 // CreateIndexAndBroadcast creates an index locally, then broadcasts the
@@ -1181,8 +1193,6 @@ func (h *Holder) loadIndex(indexName string) (*Index, error) {
 func (h *Holder) loadField(indexName, fieldName string) (*Field, error) {
 	b, err := h.schemator.Field(context.TODO(), indexName, fieldName)
 	if err != nil {
-		// TODO: we may need to wrap with ConflictError if the error type is
-		// ErrIndexExists.
 		return nil, errors.Wrapf(err, "getting field: %s/%s", indexName, fieldName)
 	}
 
@@ -1192,12 +1202,33 @@ func (h *Holder) loadField(indexName, fieldName string) (*Field, error) {
 		return nil, errors.Errorf("local index not found: %s", indexName)
 	}
 
-	createFieldMessage, err := h.decodeCreateFieldMessage(b)
+	cfm, err := h.decodeCreateFieldMessage(b)
 	if err != nil {
 		return nil, errors.Wrap(err, "decoding CreateFieldMessage")
 	}
 
-	return idx.createFieldIfNotExists(fieldName, createFieldMessage.Meta)
+	// TODO: can this take cfm?
+	return idx.createFieldIfNotExists(fieldName, cfm.Meta)
+}
+
+func (h *Holder) loadView(indexName, fieldName, viewName string) (*view, error) {
+	b, err := h.schemator.View(context.TODO(), indexName, fieldName, viewName)
+	if err != nil {
+		return nil, errors.Wrapf(err, "getting view: %s/%s/%s", indexName, fieldName, viewName)
+	}
+
+	// Get field.
+	fld := h.Field(indexName, fieldName)
+	if fld == nil {
+		return nil, errors.Errorf("local field not found: %s/%s", indexName, fieldName)
+	}
+
+	cvm, err := h.decodeCreateViewMessage(b)
+	if err != nil {
+		return nil, errors.Wrap(err, "decoding CreateFieldMessage")
+	}
+
+	return fld.createViewIfNotExists(cvm.View)
 }
 
 func (h *Holder) newIndex(path, name string) (*Index, error) {
@@ -2230,4 +2261,12 @@ func (h *Holder) decodeCreateFieldMessage(b []byte) (*CreateFieldMessage, error)
 		return nil, errors.Wrap(err, "unmarshaling")
 	}
 	return &cfm, nil
+}
+
+func (h *Holder) decodeCreateViewMessage(b []byte) (*CreateViewMessage, error) {
+	var cvm CreateViewMessage
+	if err := h.serializer.Unmarshal(b, &cvm); err != nil {
+		return nil, errors.Wrap(err, "unmarshaling")
+	}
+	return &cvm, nil
 }

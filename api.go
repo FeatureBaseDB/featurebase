@@ -1328,7 +1328,7 @@ func (api *API) Import(ctx context.Context, qcx *Qcx, req *ImportRequest, opts .
 	return nil
 }
 
-// Import bulk imports data into a particular index,field,shard.
+// ImportWithTx bulk imports data into a particular index,field,shard.
 func (api *API) ImportWithTx(ctx context.Context, qcx *Qcx, req *ImportRequest, opts ...ImportOption) error {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.Import")
 	defer span.Finish()

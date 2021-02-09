@@ -88,7 +88,14 @@ type Stator interface {
 // for each of its fields.
 type Index struct {
 	Data   []byte
-	Fields map[string][]byte
+	Fields map[string]*Field
+}
+
+// Field is a struct which contains the data encoded for the field as well as
+// for each of its views.
+type Field struct {
+	Data  []byte
+	Views map[string][]byte
 }
 
 type Schemator interface {
@@ -99,6 +106,9 @@ type Schemator interface {
 	Field(ctx context.Context, index, field string) ([]byte, error)
 	CreateField(ctx context.Context, index, field string, val []byte) error
 	DeleteField(ctx context.Context, index, field string) error
+	View(ctx context.Context, index, field, view string) ([]byte, error)
+	CreateView(ctx context.Context, index, field, view string, val []byte) error
+	DeleteView(ctx context.Context, index, field, view string) error
 }
 
 type Metadata interface {
@@ -263,3 +273,16 @@ func (*nopSchemator) CreateField(ctx context.Context, index, field string, val [
 
 // DeleteField is a no-op implementation of the Schemator DeleteField method.
 func (*nopSchemator) DeleteField(ctx context.Context, index, field string) error { return nil }
+
+// View is a no-op implementation of the Schemator View method.
+func (*nopSchemator) View(ctx context.Context, index, field, view string) ([]byte, error) {
+	return nil, nil
+}
+
+// CreateView is a no-op implementation of the Schemator CreateView method.
+func (*nopSchemator) CreateView(ctx context.Context, index, field, view string, val []byte) error {
+	return nil
+}
+
+// DeleteView is a no-op implementation of the Schemator DeleteView method.
+func (*nopSchemator) DeleteView(ctx context.Context, index, field, view string) error { return nil }

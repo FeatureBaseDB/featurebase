@@ -415,12 +415,14 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		metricInterval:      0,
 		diagnosticInterval:  0,
 
-		disCo:     disco.NopDisCo,
-		stator:    disco.NopStator,
-		metadator: disco.NopMetadator,
-		resizer:   disco.NopResizer,
-		noder:     topology.NewEmptyLocalNoder(),
-		sharder:   disco.NopSharder,
+		disCo:      disco.NopDisCo,
+		stator:     disco.NopStator,
+		metadator:  disco.NopMetadator,
+		resizer:    disco.NopResizer,
+		noder:      topology.NewEmptyLocalNoder(),
+		sharder:    disco.NopSharder,
+		schemator:  disco.NopSchemator,
+		serializer: NopSerializer,
 
 		confirmDownRetries: defaultConfirmDownRetries,
 		confirmDownSleep:   defaultConfirmDownSleep,
@@ -807,11 +809,7 @@ func (s *Server) receiveMessage(m Message) error {
 		}
 
 	case *CreateViewMessage:
-		f := s.holder.Field(obj.Index, obj.Field)
-		if f == nil {
-			return fmt.Errorf("local field not found: %s", obj.Field)
-		}
-		if _, _, err := f.createViewIfNotExistsBase(obj.View); err != nil {
+		if _, err := s.holder.LoadView(obj.Index, obj.Field, obj.View); err != nil {
 			return err
 		}
 
