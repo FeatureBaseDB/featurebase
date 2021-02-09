@@ -26,6 +26,8 @@ var (
 	ErrTooManyResults error = fmt.Errorf("too many results")
 	ErrNoResults      error = fmt.Errorf("no results")
 	ErrKeyDeleted     error = fmt.Errorf("key deleted")
+	ErrIndexExists    error = fmt.Errorf("index already exists")
+	ErrFieldExists    error = fmt.Errorf("field already exists")
 )
 
 type Peer struct {
