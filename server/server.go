@@ -39,7 +39,6 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	"github.com/beevik/ntp"
 	"github.com/pelletier/go-toml"
 	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/boltdb"
@@ -286,14 +285,7 @@ func (m *Command) SetupServer() error {
 
 	m.logger.Printf("%s", pilosa.VersionInfo())
 
-	if pilosa.TrialDeadline != "" {
-		layout := "2006-01-02"
-		endTime, err := time.Parse(layout, pilosa.TrialDeadline)
-		if err != nil {
-			return errors.Wrap(err, "parsing curTime from make file")
-		}
-		go m.dailyCheck(endTime)
-	}
+	m.trialVersion()
 
 	// If the pilosa command line uses -tx to override the
 	// PILOSA_TXSRC env variable, then we must also correct
@@ -486,47 +478,6 @@ func (m *Command) SetupServer() error {
 		http.OptHandlerMiddleware(m.grpcServer.middleware(m.Config.Handler.AllowedOrigins)),
 	)
 	return errors.Wrap(err, "new handler")
-}
-
-// dailyCheck runs in the background while a trial version of Molecula is being run, displaying daily reminders of the remaining days
-func (m *Command) dailyCheck(end time.Time) {
-	ticker := time.NewTicker(5 * time.Second)
-	var err error
-	for range ticker.C {
-		cur, err := m.ntpServerTime()
-		if err != nil {
-			m.logger.Printf("reading ntp server time %v", err)
-			os.Exit(1)
-		}
-		m.logger.Printf("Current time remaining in trial: %v", end.Sub(cur))
-		if end.Sub(cur) <= 0 {
-			m.logger.Printf("Your free trial has ended")
-			os.Exit(0)
-		}
-	}
-	m.logger.Printf("reading ntp server time %v", err)
-	os.Exit(1)
-}
-
-// ntpServerTime attempts to reach ntp servers with delays between each attempt
-func (m *Command) ntpServerTime() (time.Time, error) {
-	curTime, err := ntp.Time("0.beevik-ntp.pool.ntp.org")
-	errCount := 0
-	if err != nil {
-		for i := 0; i < 4; i++ {
-			curTime, err = ntp.Time("0.beevik-ntp.pool.ntp.org")
-			if err != nil {
-				errCount++
-				if errCount >= 4 {
-					return curTime, err
-				}
-				time.Sleep(100 * time.Millisecond)
-			} else {
-				break
-			}
-		}
-	}
-	return curTime, err
 }
 
 // setupNetworking sets up internode communication based on the configuration.
