@@ -855,7 +855,10 @@ func (s *Server) receiveMessage(m Message) error {
 		s.holder.recalculateCaches()
 
 	case *LoadSchemaMessage:
-		s.holder.LoadSchema()
+		err := s.holder.LoadSchema()
+		if err != nil {
+			return errors.Wrapf(err, "handling load schema message: %v", obj)
+		}
 
 	case *NodeStatus:
 		s.handleRemoteStatus(obj)
