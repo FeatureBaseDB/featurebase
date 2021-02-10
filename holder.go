@@ -925,28 +925,20 @@ func (h *Holder) schema(ctx context.Context, includeViews bool) ([]*IndexInfo, e
 
 // applySchema applies an internal Schema to Holder.
 func (h *Holder) applySchema(schema *Schema) error {
-	// Create indexes that don't exist.
+	// Create indexes.
+	// We use h.CreateIndex() instead of h.CreateIndexIfNotExists() because we
+	// want to limit the use of this method for now to only new indexes.
 	for _, i := range schema.Indexes {
-		idx, err := h.CreateIndexIfNotExists(i.Name, i.Options)
+		idx, err := h.CreateIndex(i.Name, i.Options)
 		if err != nil {
 			return errors.Wrap(err, "creating index")
-		}
-		if i.CreatedAt != 0 {
-			idx.mu.Lock()
-			idx.createdAt = i.CreatedAt
-			idx.mu.Unlock()
 		}
 
 		// Create fields that don't exist.
 		for _, f := range i.Fields {
-			fld, err := idx.createFieldIfNotExists(f.Name, &f.Options)
+			fld, err := idx.CreateFieldIfNotExistsWithOptions(f.Name, &f.Options)
 			if err != nil {
 				return errors.Wrap(err, "creating field")
-			}
-			if f.CreatedAt != 0 {
-				fld.mu.Lock()
-				fld.createdAt = f.CreatedAt
-				fld.mu.Unlock()
 			}
 
 			// Create views that don't exist.
@@ -958,6 +950,12 @@ func (h *Holder) applySchema(schema *Schema) error {
 			}
 		}
 	}
+
+	// Send the load schema message to all nodes.
+	if err := h.broadcaster.SendSync(&LoadSchemaMessage{}); err != nil {
+		return errors.Wrap(err, "sending LoadSchemaMessage")
+	}
+
 	return nil
 }
 
@@ -1012,7 +1010,7 @@ func (h *Holder) CreateIndex(name string, opt IndexOptions) (*Index, error) {
 
 	cim := &CreateIndexMessage{
 		Index:     name,
-		CreatedAt: 0,
+		CreatedAt: timestamp(),
 		Meta:      &opt,
 	}
 
@@ -1022,6 +1020,22 @@ func (h *Holder) CreateIndex(name string, opt IndexOptions) (*Index, error) {
 	}
 
 	return h.createIndex(cim, false)
+}
+
+// LoadSchemaMessage is an internal message used to inform a node to load the
+// latest schema from etcd.
+type LoadSchemaMessage struct{}
+
+// LoadSchema creates all indexes based on the information stored in schemator.
+// It does not return an error if an index already exists. The thinking is that
+// this method will load all indexes that don't already exist. We likely want to
+// revisit this; for example, we might want to confirm that the createdAt
+// timestamps on each of the indexes matches the value in etcd.
+func (h *Holder) LoadSchema() error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	return h.loadSchema()
 }
 
 // LoadIndex creates an index based on the information stored in schemator.
@@ -1091,7 +1105,7 @@ func (h *Holder) CreateIndexIfNotExists(name string, opt IndexOptions) (*Index, 
 
 	cim := &CreateIndexMessage{
 		Index:     name,
-		CreatedAt: 0,
+		CreatedAt: timestamp(),
 		Meta:      &opt,
 	}
 
@@ -1174,11 +1188,45 @@ func (h *Holder) createIndex(cim *CreateIndexMessage, broadcast bool) (*Index, e
 	return index, nil
 }
 
+func (h *Holder) loadSchema() error {
+	schema, err := h.schemator.Schema(context.TODO())
+	if err != nil {
+		return errors.Wrap(err, "getting schema")
+	}
+
+	// TODO: This is kind of inefficient because we're ignoring the index.Data
+	// and field.Data values, which contains the index and field information,
+	// and only using the map key to call loadIndex() and loadField(). These
+	// make another call to schemator to get the same index and field
+	// information that we already have in the map. It probably makes sense to
+	// either copy the parts of the loadIndex and loadField methods here (like
+	// decodeCreateIndexMessage) or split loadIndex and loadField into smaller
+	// methods that we could reuse here.
+	for indexName, index := range schema {
+		_, err := h.loadIndex(indexName)
+		if err != nil {
+			return errors.Wrap(err, "loading index")
+		}
+		for fieldName, field := range index.Fields {
+			_, err := h.loadField(indexName, fieldName)
+			if err != nil {
+				return errors.Wrap(err, "loading field")
+			}
+			for viewName := range field.Views {
+				_, err := h.loadView(indexName, fieldName, viewName)
+				if err != nil {
+					return errors.Wrap(err, "loading view")
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
 func (h *Holder) loadIndex(indexName string) (*Index, error) {
 	b, err := h.schemator.Index(context.TODO(), indexName)
 	if err != nil {
-		// TODO: we may need to wrap with ConflictError if the error type is
-		// ErrIndexExists.
 		return nil, errors.Wrapf(err, "getting index: %s", indexName)
 	}
 

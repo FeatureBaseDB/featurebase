@@ -208,6 +208,8 @@ message Topology {
 
 message RecalculateCaches {}
 
+message LoadSchemaMessage {}
+
 message TransactionMessage {
 	string Action = 1;
 	Transaction Transaction = 2;

@@ -854,6 +854,9 @@ func (s *Server) receiveMessage(m Message) error {
 	case *RecalculateCaches:
 		s.holder.recalculateCaches()
 
+	case *LoadSchemaMessage:
+		s.holder.LoadSchema()
+
 	case *NodeStatus:
 		s.handleRemoteStatus(obj)
 
