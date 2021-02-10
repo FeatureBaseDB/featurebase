@@ -502,9 +502,7 @@ type statikHandler struct {
 func newStatikHandler(h *Handler) statikHandler {
 	fs, err := h.fileSystem.New()
 	if err == nil {
-		// TODO: we need to change the way this works because we don't have a node yet.
-		//h.logger.Printf("enabled Web UI (%s) at %s", h.api.LatticeVersion(), h.api.Node().URI)
-		h.logger.Printf("enabled Web UI (%s) at %s", h.api.LatticeVersion(), "TODO")
+		h.logger.Printf("enabled Web UI (%s) at %s", h.api.LatticeVersion(), h.ln.Addr().String())
 	}
 
 	return statikHandler{
