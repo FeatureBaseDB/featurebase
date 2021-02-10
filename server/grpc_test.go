@@ -1094,7 +1094,7 @@ func TestCRUDIndexes(t *testing.T) {
 		// Check errors for CreateIndex: create index with no name
 		_, err = gh.CreateIndex(ctx, &pb.CreateIndexRequest{Name: ""})
 		errStatus, _ = status.FromError(err)
-		if errStatus.Code() != codes.Unknown {
+		if errStatus.Code() != codes.FailedPrecondition {
 			t.Fatalf("Error code should be codes.Unknown, but is %v", errStatus.Code())
 		}
 
