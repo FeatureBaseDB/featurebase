@@ -73,6 +73,7 @@ func TestShardPerDB_SetBit(t *testing.T) {
 func Test_DBPerShard_GetShardsForIndex_LocalOnly(t *testing.T) {
 	tmpdir, err := ioutil.TempDir("", "Test_DBPerShard_GetShardsForIndex_LocalOnly")
 	panicOn(err)
+	defer os.RemoveAll(tmpdir)
 
 	v2s := NewFieldView2Shards()
 	stdShardSet := newShardSet()
@@ -320,6 +321,7 @@ func makeTxTestDBWithViewsShards(holder *Holder, idx *Index, exp *FieldView2Shar
 func Test_DBPerShard_GetFieldView2Shards_map_from_RBF(t *testing.T) {
 	tmpdir, err := ioutil.TempDir("", "Test_DBPerShard_GetFieldView2Shards_map_from_RBF")
 	panicOn(err)
+	defer os.RemoveAll(tmpdir)
 
 	cfg := mustHolderConfig()
 	cfg.StorageConfig.Backend = "rbf"
