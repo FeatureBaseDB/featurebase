@@ -1077,27 +1077,31 @@ func (h *Holder) CreateIndexIfNotExists(name string, opt IndexOptions) (*Index, 
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	// Return index if it exists.
-	if index := h.Index(name); index != nil {
-		return index, nil
-	}
-
 	cim := &CreateIndexMessage{
 		Index:     name,
 		CreatedAt: 0,
 		Meta:      &opt,
 	}
 
+	err := h.persistIndex(context.Background(), cim)
 	// Create the index in etcd as the system of record.
-	if err := h.persistIndex(context.Background(), cim); err != nil {
-		// There is a case where the index is not in memory, but it is in
-		// persistent storage. In that case, this will return an "index exists"
-		// error, which in that case should return the index. TODO: We may need
-		// to allow for that in the future.
-		return nil, errors.Wrap(err, "persisting index")
+	if err == nil {
+		return h.createIndex(cim, false)
 	}
 
-	return h.createIndex(cim, false)
+	if errors.Cause(err) == disco.ErrIndexExists {
+		// Return index if it exists.
+		if index := h.Index(name); index != nil {
+			return index, nil
+		}
+		return h.createIndex(cim, false)
+	}
+
+	// There is a case where the index is not in memory, but it is in
+	// persistent storage. In that case, this will return an "index exists"
+	// error, which in that case should return the index. TODO: We may need
+	// to allow for that in the future.
+	return nil, errors.Wrap(err, "persisting index")
 }
 
 // persistIndex stores the index information in etcd.

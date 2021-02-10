@@ -61,9 +61,6 @@ var (
 	_ disco.Metadator = &Etcd{}
 	_ disco.Resizer   = &Etcd{}
 	_ disco.Sharder   = &Etcd{}
-
-	ErrIndexExists = errors.New("index already exists")
-	ErrFieldExists = errors.New("field already exists")
 )
 
 const (
@@ -567,7 +564,7 @@ func (e *Etcd) CreateIndex(ctx context.Context, name string, val []byte) error {
 	}
 
 	if !resp.Succeeded {
-		return ErrIndexExists
+		return disco.ErrIndexExists
 	}
 
 	return nil
@@ -624,7 +621,7 @@ func (e *Etcd) CreateField(ctx context.Context, indexName string, name string, v
 	}
 
 	if !resp.Succeeded {
-		return ErrFieldExists
+		return disco.ErrFieldExists
 	}
 
 	return nil
