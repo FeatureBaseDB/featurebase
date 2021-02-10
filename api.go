@@ -211,37 +211,19 @@ func (api *API) CreateIndex(ctx context.Context, indexName string, options Index
 		return nil, errors.Wrap(err, "validating api method")
 	}
 
-	// Create a snapshot of the cluster to use for node/partition calculations.
-	snap := topology.NewClusterSnapshot(api.cluster.noder, api.cluster.Hasher, api.cluster.ReplicaN)
-
-	if !snap.IsPrimaryFieldTranslationNode(api.Node().ID) {
-		if err := api.server.defaultClient.CreateIndex(ctx, indexName, options); err != nil {
-			return nil, errors.Wrap(err, "forwarding CreateIndex to coordinator")
-		}
-		return api.holder.Index(indexName), nil
+	// Populate the create index message.
+	cim := &CreateIndexMessage{
+		Index:     indexName,
+		CreatedAt: timestamp(),
+		Meta:      &options,
 	}
 
 	// Create index.
-	index, err := api.holder.CreateIndex(indexName, options)
+	index, err := api.holder.CreateIndexAndBroadcast(cim)
 	if err != nil {
 		return nil, errors.Wrap(err, "creating index")
 	}
 
-	createdAt := timestamp()
-	index.mu.Lock()
-	index.createdAt = createdAt
-	index.mu.Unlock()
-
-	// Send the create index message to all nodes.
-	err = api.server.SendSync(
-		&CreateIndexMessage{
-			Index:     indexName,
-			CreatedAt: createdAt,
-			Meta:      &options,
-		})
-	if err != nil {
-		return nil, errors.Wrap(err, "sending CreateIndex message")
-	}
 	api.holder.Stats.Count(MetricCreateIndex, 1, 1.0)
 	return index, nil
 }
@@ -301,23 +283,10 @@ func (api *API) CreateField(ctx context.Context, indexName string, fieldName str
 		return nil, errors.Wrap(err, "validating api method")
 	}
 
-	// Apply functional options.
-	fo := FieldOptions{}
-	for _, opt := range opts {
-		err := opt(&fo)
-		if err != nil {
-			return nil, NewBadRequestError(errors.Wrap(err, "applying option"))
-		}
-	}
-
-	// Create a snapshot of the cluster to use for node/partition calculations.
-	snap := topology.NewClusterSnapshot(api.cluster.noder, api.cluster.Hasher, api.cluster.ReplicaN)
-
-	if !snap.IsPrimaryFieldTranslationNode(api.Node().ID) {
-		if err := api.server.defaultClient.CreateFieldWithOptions(ctx, indexName, fieldName, fo); err != nil {
-			return nil, errors.Wrap(err, "forwarding CreateField to coordinator")
-		}
-		return api.holder.Field(indexName, fieldName), nil
+	// Apply and validate functional options.
+	fo, err := newFieldOptions(opts...)
+	if err != nil {
+		return nil, NewBadRequestError(errors.Wrap(err, "applying option"))
 	}
 
 	// Find index.
@@ -326,27 +295,20 @@ func (api *API) CreateField(ctx context.Context, indexName string, fieldName str
 		return nil, newNotFoundError(ErrIndexNotFound, indexName)
 	}
 
+	// Populate the create field message.
+	cfm := &CreateFieldMessage{
+		Index:     indexName,
+		Field:     fieldName,
+		CreatedAt: timestamp(),
+		Meta:      fo,
+	}
+
 	// Create field.
-	field, err := index.CreateField(fieldName, opts...)
+	field, err := index.CreateFieldAndBroadcast(cfm)
 	if err != nil {
 		return nil, errors.Wrap(err, "creating field")
 	}
-	createdAt := timestamp()
-	field.mu.Lock()
-	field.createdAt = createdAt
-	field.mu.Unlock()
 
-	// Send the create field message to all nodes.
-	err = api.server.SendSync(&CreateFieldMessage{
-		Index:     indexName,
-		Field:     fieldName,
-		CreatedAt: createdAt,
-		Meta:      &fo,
-	})
-	if err != nil {
-		api.server.logger.Printf("problem sending CreateField message: %s", err)
-		return nil, errors.Wrap(err, "sending CreateField message")
-	}
 	api.holder.Stats.CountWithCustomTags(MetricCreateField, 1, 1.0, []string{fmt.Sprintf("index:%s", indexName)})
 	return field, nil
 }
@@ -1020,14 +982,19 @@ func (err MessageProcessingError) Unwrap() error {
 
 // Schema returns information about each index in Pilosa including which fields
 // they contain.
-func (api *API) Schema(ctx context.Context) ([]*IndexInfo, error) {
+func (api *API) Schema(ctx context.Context, withViews bool) ([]*IndexInfo, error) {
 	if err := api.validate(apiSchema); err != nil {
 		return nil, errors.Wrap(err, "validating api method")
 	}
 
 	span, _ := tracing.StartSpanFromContext(ctx, "API.Schema")
 	defer span.Finish()
-	return api.holder.limitedSchema(), nil
+
+	if withViews {
+		return api.holder.Schema()
+	}
+
+	return api.holder.limitedSchema()
 }
 
 // ApplySchema takes the given schema and applies it across the
@@ -1044,29 +1011,12 @@ func (api *API) ApplySchema(ctx context.Context, s *Schema, remote bool) error {
 		return errors.Wrap(err, "validating api method")
 	}
 
-	// set CreatedAt for indexes and fields (if empty), and then apply schema.
-	for _, index := range s.Indexes {
-		if index.CreatedAt == 0 {
-			index.CreatedAt = timestamp()
-		}
-		for _, field := range index.Fields {
-			if field.CreatedAt == 0 {
-				field.CreatedAt = timestamp()
-			}
-		}
+	err := api.holder.applySchema(s)
+	if err != nil {
+		return errors.Wrap(err, "applying schema")
 	}
 
-	if !remote {
-		nodes := api.cluster.Nodes()
-		for i, node := range nodes {
-			err := api.server.defaultClient.PostSchema(ctx, &node.URI, s, true)
-			if err != nil {
-				return errors.Wrapf(err, "forwarding post schema to node %d of %d", i+1, len(nodes))
-			}
-		}
-	}
-
-	return errors.Wrap(api.holder.applySchema(s), "applying schema")
+	return nil
 }
 
 // Views returns the views in the given field.
@@ -1359,7 +1309,7 @@ func (api *API) Import(ctx context.Context, qcx *Qcx, req *ImportRequest, opts .
 	return nil
 }
 
-// Import bulk imports data into a particular index,field,shard.
+// ImportWithTx bulk imports data into a particular index,field,shard.
 func (api *API) ImportWithTx(ctx context.Context, qcx *Qcx, req *ImportRequest, opts ...ImportOption) error {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.Import")
 	defer span.Finish()

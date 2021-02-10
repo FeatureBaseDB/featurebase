@@ -27,6 +27,17 @@ type Serializer interface {
 	Unmarshal([]byte, Message) error
 }
 
+// NopSerializer represents a Serializer that doesn't do anything.
+var NopSerializer Serializer = &nopSerializer{}
+
+type nopSerializer struct{}
+
+// Marshal A no-op implementation of Serializer Marshall method.
+func (*nopSerializer) Marshal(Message) ([]byte, error) { return nil, nil }
+
+// Unmarshal A no-op implementation of Serializer Unmarshal method.
+func (*nopSerializer) Unmarshal([]byte, Message) error { return nil }
+
 // broadcaster is an interface for broadcasting messages.
 type broadcaster interface {
 	SendSync(Message) error
@@ -66,6 +77,7 @@ const (
 	messageTypeResizeInstructionComplete
 	messageTypeNodeState
 	messageTypeRecalculateCaches
+	messageTypeLoadSchemaMessage
 	messageTypeNodeEvent
 	messageTypeNodeStatus
 	messageTypeTransaction
@@ -110,6 +122,8 @@ func getMessage(typ byte) Message {
 		return &NodeStateMessage{}
 	case messageTypeRecalculateCaches:
 		return &RecalculateCaches{}
+	case messageTypeLoadSchemaMessage:
+		return &LoadSchemaMessage{}
 	case messageTypeNodeEvent:
 		return &NodeEvent{}
 	case messageTypeNodeStatus:
@@ -151,6 +165,8 @@ func getMessageType(m Message) byte {
 		return messageTypeNodeState
 	case *RecalculateCaches:
 		return messageTypeRecalculateCaches
+	case *LoadSchemaMessage:
+		return messageTypeLoadSchemaMessage
 	case *NodeEvent:
 		return messageTypeNodeEvent
 	case *NodeStatus:

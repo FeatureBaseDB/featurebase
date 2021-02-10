@@ -61,9 +61,6 @@ var (
 	_ disco.Metadator = &Etcd{}
 	_ disco.Resizer   = &Etcd{}
 	_ disco.Sharder   = &Etcd{}
-
-	ErrIndexExists = errors.New("index already exists")
-	ErrFieldExists = errors.New("field already exists")
 )
 
 const (
@@ -482,36 +479,57 @@ func (e *Etcd) DeleteNode(ctx context.Context, nodeID string) error {
 }
 
 func (e *Etcd) Schema(ctx context.Context) (map[string]*disco.Index, error) {
-	cli, err := e.client()
-	if err != nil {
-		return nil, errors.Wrap(err, "Schema: creating client")
-	}
-	defer cli.Close()
-
-	keys, vals, err := e.getKey(ctx, cli, schemaPrefix)
+	keys, vals, err := e.getKey(ctx, schemaPrefix)
 	if err != nil {
 		return nil, err
 	}
 
+	// The logic in the following for loop assumes that the list of keys is
+	// ordered such that index comes before field, which comes before view.
+	// For example:
+	//   /index1
+	//   /index1/field1
+	//   /index1/field1/view1
+	//   /index1/field1/view2
+	//   /index1/field2
+	//   /index2
+	//   /index2/field1
+	//
 	m := make(map[string]*disco.Index)
 	for i, k := range keys {
 		tokens := strings.Split(strings.Trim(k, "/"), "/")
 		// token[0] contains the schemaPrefix
+
+		// token[1]: index
 		index := tokens[1]
 		if _, ok := m[index]; !ok {
 			m[index] = &disco.Index{
 				Data:   vals[i],
-				Fields: make(map[string][]byte),
+				Fields: make(map[string]*disco.Field),
 			}
+			continue
 		}
 		flds := m[index].Fields
 
+		// token[2]: field
 		if len(tokens) > 2 {
 			field := tokens[2]
-			flds[field] = vals[i]
+			if _, ok := flds[field]; !ok {
+				flds[field] = &disco.Field{
+					Data:  vals[i],
+					Views: make(map[string][]byte),
+				}
+				continue
+			}
+			views := flds[field].Views
+
+			// token[3]: view
+			if len(tokens) > 3 {
+				view := tokens[3]
+				views[view] = vals[i]
+			}
 		}
 	}
-
 	return m, nil
 }
 
@@ -573,46 +591,44 @@ func (e *Etcd) CreateIndex(ctx context.Context, name string, val []byte) error {
 	}
 
 	if !resp.Succeeded {
-		return ErrIndexExists
+		return disco.ErrIndexExists
 	}
 
 	return nil
 }
 
 func (e *Etcd) Index(ctx context.Context, name string) ([]byte, error) {
-	cli, err := e.client()
-	if err != nil {
-		return nil, errors.Wrap(err, "Index: creating client")
-	}
-	defer cli.Close()
-
-	return e.getKeyBytes(ctx, cli, schemaPrefix+name)
+	return e.getKeyBytes(ctx, schemaPrefix+name)
 }
 
 func (e *Etcd) DeleteIndex(ctx context.Context, name string) error {
-	// Delete any fields below the index path.
-	if err := e.delKey(ctx, schemaPrefix+name+"/", true); err != nil {
-		return errors.Wrap(err, "deleting index fields")
-	}
-	// Delete the index.
-	return e.delKey(ctx, schemaPrefix+name, false)
-}
-
-func (e *Etcd) Field(ctx context.Context, indexName string, name string) ([]byte, error) {
 	cli, err := e.client()
 	if err != nil {
-		return nil, errors.Wrap(err, "GetField: creating client")
+		return errors.Wrap(err, "DeleteIndex: creating client")
 	}
 	defer cli.Close()
 
+	key := schemaPrefix + name
+	// Deleting index and fields in one transaction.
+	_, err = cli.KV.Txn(ctx).
+		If(clientv3.Compare(clientv3.Version(key), ">", -1)).
+		Then(
+			clientv3.OpDelete(key+"/", clientv3.WithPrefix()), // deleting index fields
+			clientv3.OpDelete(key),                            // deleting index
+		).Commit()
+
+	return errors.Wrap(err, "DeleteIndex")
+}
+
+func (e *Etcd) Field(ctx context.Context, indexName string, name string) ([]byte, error) {
 	key := schemaPrefix + indexName + "/" + name
-	return e.getKeyBytes(ctx, cli, key)
+	return e.getKeyBytes(ctx, key)
 }
 
 func (e *Etcd) CreateField(ctx context.Context, indexName string, name string, val []byte) error {
 	cli, err := e.client()
 	if err != nil {
-		return errors.Wrap(err, "CreateIndex: creating client")
+		return errors.Wrap(err, "CreateField: creating client")
 	}
 	defer cli.Close()
 
@@ -632,14 +648,66 @@ func (e *Etcd) CreateField(ctx context.Context, indexName string, name string, v
 	}
 
 	if !resp.Succeeded {
-		return ErrFieldExists
+		return disco.ErrFieldExists
 	}
 
 	return nil
 }
 
 func (e *Etcd) DeleteField(ctx context.Context, indexname string, name string) error {
-	return e.delKey(ctx, schemaPrefix+indexname+"/"+name, false)
+	cli, err := e.client()
+	if err != nil {
+		return errors.Wrap(err, "DeleteField: creating client")
+	}
+	defer cli.Close()
+
+	key := schemaPrefix + indexname + "/" + name
+	// Deleting field and views in one transaction.
+	_, err = cli.KV.Txn(ctx).
+		If(clientv3.Compare(clientv3.Version(key), ">", -1)).
+		Then(
+			clientv3.OpDelete(key+"/", clientv3.WithPrefix()), // deleting field views
+			clientv3.OpDelete(key),                            // deleting field
+		).Commit()
+
+	return errors.Wrap(err, "DeleteField")
+}
+
+func (e *Etcd) View(ctx context.Context, indexName, fieldName, name string) ([]byte, error) {
+	key := schemaPrefix + indexName + "/" + fieldName + "/" + name
+	return e.getKeyBytes(ctx, key)
+}
+
+// CreateView differs from CreateIndex and CreateField in that it does not
+// return an error if the view already exists. If this logic needs to be
+// changed, we likely need to return disco.ErrViewExists.
+func (e *Etcd) CreateView(ctx context.Context, indexName, fieldName, name string, val []byte) error {
+	cli, err := e.client()
+	if err != nil {
+		return errors.Wrap(err, "CreateView: creating client")
+	}
+	defer cli.Close()
+
+	key := schemaPrefix + indexName + "/" + fieldName + "/" + name
+
+	// Set up Op to write view value as bytes.
+	op := clientv3.OpPut(key, "")
+	op.WithValueBytes(val)
+
+	// Check for key existence, and execute Op within a transaction.
+	_, err = cli.KV.Txn(ctx).
+		If(clientv3util.KeyMissing(key)).
+		Then(op).
+		Commit()
+	if err != nil {
+		return errors.Wrap(err, "executing transaction")
+	}
+
+	return nil
+}
+
+func (e *Etcd) DeleteView(ctx context.Context, indexName, fieldName, name string) error {
+	return e.delKey(ctx, schemaPrefix+indexName+"/"+fieldName+"/"+name, false)
 }
 
 func (e *Etcd) putKey(ctx context.Context, key, val string, opts ...clientv3.OpOption) error {
@@ -656,7 +724,13 @@ func (e *Etcd) putKey(ctx context.Context, key, val string, opts ...clientv3.OpO
 	return nil
 }
 
-func (e *Etcd) getKeyBytes(ctx context.Context, cli *clientv3.Client, key string) ([]byte, error) {
+func (e *Etcd) getKeyBytes(ctx context.Context, key string) ([]byte, error) {
+	cli, err := e.client()
+	if err != nil {
+		return nil, errors.Wrap(err, "getKeyBytes: creates a new client")
+	}
+	defer cli.Close()
+
 	// Get the current value for the key.
 	resp, err := cli.Get(ctx, key)
 	if err != nil {
@@ -671,7 +745,13 @@ func (e *Etcd) getKeyBytes(ctx context.Context, cli *clientv3.Client, key string
 	return resp.Kvs[0].Value, nil
 }
 
-func (e *Etcd) getKey(ctx context.Context, cli *clientv3.Client, key string) ([]string, [][]byte, error) {
+func (e *Etcd) getKey(ctx context.Context, key string) ([]string, [][]byte, error) {
+	cli, err := e.client()
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "getKey: creates a new client")
+	}
+	defer cli.Close()
+
 	resp, err := cli.KV.Txn(ctx).
 		If(clientv3.Compare(clientv3.Version(key), ">", -1)).
 		Then(clientv3.OpGet(key, clientv3.WithPrefix())).
@@ -700,9 +780,9 @@ func (e *Etcd) getKey(ctx context.Context, cli *clientv3.Client, key string) ([]
 }
 
 func (e *Etcd) delKey(ctx context.Context, key string, withPrefix bool) error {
-	cli, err := clientv3.NewFromURLs(e.e.Server.Cluster().ClientURLs())
+	cli, err := e.client()
 	if err != nil {
-		return errors.Wrap(err, "delKey")
+		return errors.Wrap(err, "delKey: creates a new client")
 	}
 	defer cli.Close()
 

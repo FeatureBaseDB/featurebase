@@ -269,7 +269,7 @@ func TestAPI_Import(t *testing.T) {
 	// Relies on the previous test creating an index with TrackExistence and
 	// adding some data.
 	t.Run("SchemaHasNoExists", func(t *testing.T) {
-		schema, err := m1.API.Schema(context.Background())
+		schema, err := m1.API.Schema(context.Background(), false)
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/proto"
+	"github.com/pilosa/pilosa/v2/disco"
 	"github.com/pilosa/pilosa/v2/internal"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/stats"
@@ -56,6 +57,8 @@ type Index struct {
 	columnAttrs AttrStore
 
 	broadcaster broadcaster
+	schemator   disco.Schemator
+	serializer  Serializer
 	Stats       stats.StatsClient
 
 	// Passed to field for foreign-index lookup.
@@ -98,6 +101,9 @@ func NewIndex(holder *Holder, path, name string) (*Index, error) {
 		Stats:          stats.NopStatsClient,
 		holder:         holder,
 		trackExistence: true,
+
+		schemator:  disco.NopSchemator,
+		serializer: NopSerializer,
 
 		translateStores: make(map[int]TranslateStore),
 
@@ -511,7 +517,44 @@ func (i *Index) CreateField(name string, opts ...FieldOption) (*Field, error) {
 		return nil, errors.Wrap(err, "applying option")
 	}
 
-	return i.createField(name, fo)
+	cfm := &CreateFieldMessage{
+		Index:     i.name,
+		Field:     name,
+		CreatedAt: 0,
+		Meta:      fo,
+	}
+
+	// Create the field in etcd as the system of record.
+	if err := i.persistField(context.Background(), cfm); err != nil {
+		return nil, errors.Wrap(err, "persisting field")
+	}
+
+	return i.createField(cfm, false)
+}
+
+// CreateFieldAndBroadcast creates a field locally, then broadcasts the
+// creation to other nodes so they can create locally as well. An error is
+// returned if the field already exists.
+func (i *Index) CreateFieldAndBroadcast(cfm *CreateFieldMessage) (*Field, error) {
+	err := validateName(cfm.Field)
+	if err != nil {
+		return nil, errors.Wrap(err, "validating name")
+	}
+
+	i.mu.Lock()
+	defer i.mu.Unlock()
+
+	// Ensure field doesn't already exist.
+	if i.fields[cfm.Field] != nil {
+		return nil, newConflictError(ErrFieldExists)
+	}
+
+	// Create the field in etcd as the system of record.
+	if err := i.persistField(context.Background(), cfm); err != nil {
+		return nil, errors.Wrap(err, "persisting field")
+	}
+
+	return i.createField(cfm, true)
 }
 
 // CreateFieldIfNotExists creates a field with the given options if it doesn't exist.
@@ -535,7 +578,81 @@ func (i *Index) CreateFieldIfNotExists(name string, opts ...FieldOption) (*Field
 		return nil, errors.Wrap(err, "applying option")
 	}
 
-	return i.createField(name, fo)
+	cfm := &CreateFieldMessage{
+		Index:     i.name,
+		Field:     name,
+		CreatedAt: 0,
+		Meta:      fo,
+	}
+
+	// Create the field in etcd as the system of record.
+	if err := i.persistField(context.Background(), cfm); err != nil {
+		// There is a case where the index is not in memory, but it is in
+		// persistent storage. In that case, this will return an "index exists"
+		// error, which in that case should return the index. TODO: We may need
+		// to allow for that in the future.
+		return nil, errors.Wrap(err, "persisting field")
+	}
+
+	return i.createField(cfm, false)
+}
+
+// CreateFieldIfNotExistsWithOptions is a method which I created because I
+// needed the functionality of CreateFieldIfNotExists, but instead of taking
+// function options, taking a *FieldOptions struct. TODO: This should
+// definintely be refactored so we don't have these virtually equivalent
+// methods, but I'm puttin this here for now just to see if it works.
+func (i *Index) CreateFieldIfNotExistsWithOptions(name string, opt *FieldOptions) (*Field, error) {
+	err := validateName(name)
+	if err != nil {
+		return nil, errors.Wrap(err, "validating name")
+	}
+
+	i.mu.Lock()
+	defer i.mu.Unlock()
+
+	// Find field in cache first.
+	if f := i.fields[name]; f != nil {
+		return f, nil
+	}
+
+	cfm := &CreateFieldMessage{
+		Index:     i.name,
+		Field:     name,
+		CreatedAt: 0,
+		Meta:      opt,
+	}
+
+	// Create the field in etcd as the system of record.
+	if err := i.persistField(context.Background(), cfm); err != nil {
+		// There is a case where the index is not in memory, but it is in
+		// persistent storage. In that case, this will return an "index exists"
+		// error, which in that case should return the index. TODO: We may need
+		// to allow for that in the future.
+		return nil, errors.Wrap(err, "persisting field")
+	}
+
+	return i.createField(cfm, false)
+}
+
+// persistField stores the field information in etcd.
+func (i *Index) persistField(ctx context.Context, cfm *CreateFieldMessage) error {
+	if cfm.Index == "" {
+		return ErrIndexRequired
+	} else if cfm.Field == "" {
+		return ErrFieldRequired
+	}
+
+	if err := validateName(cfm.Field); err != nil {
+		return errors.Wrap(err, "validating name")
+	}
+
+	if b, err := i.serializer.Marshal(cfm); err != nil {
+		return errors.Wrap(err, "marshaling")
+	} else if err := i.schemator.CreateField(ctx, cfm.Index, cfm.Field, b); err != nil {
+		return errors.Wrapf(err, "writing field to disco: %s/%s", cfm.Index, cfm.Field)
+	}
+	return nil
 }
 
 func (i *Index) createFieldIfNotExists(name string, opt *FieldOptions) (*Field, error) {
@@ -547,21 +664,34 @@ func (i *Index) createFieldIfNotExists(name string, opt *FieldOptions) (*Field, 
 		return f, nil
 	}
 
-	return i.createField(name, opt)
+	cfm := &CreateFieldMessage{
+		Index:     i.name,
+		Field:     name,
+		CreatedAt: 0,
+		Meta:      opt,
+	}
+
+	return i.createField(cfm, false)
 }
 
-func (i *Index) createField(name string, opt *FieldOptions) (*Field, error) {
-	if name == "" {
+func (i *Index) createField(cfm *CreateFieldMessage, broadcast bool) (*Field, error) {
+	opt := cfm.Meta
+	if opt == nil {
+		opt = &FieldOptions{}
+	}
+
+	if cfm.Field == "" {
 		return nil, errors.New("field name required")
 	} else if opt.CacheType != "" && !isValidCacheType(opt.CacheType) {
 		return nil, ErrInvalidCacheType
 	}
 
 	// Initialize field.
-	f, err := i.newField(i.fieldPath(name), name)
+	f, err := i.newField(i.fieldPath(cfm.Field), cfm.Field)
 	if err != nil {
 		return nil, errors.Wrap(err, "initializing")
 	}
+	f.createdAt = cfm.CreatedAt
 
 	// Pass holder through to the field for use in looking
 	// up a foreign index.
@@ -580,10 +710,17 @@ func (i *Index) createField(name string, opt *FieldOptions) (*Field, error) {
 	}
 
 	// Add to index's field lookup.
-	i.fields[name] = f
+	i.fields[cfm.Field] = f
 
 	// enable Txf to find the index in field_test.go TestField_SetValue
 	f.idx = i
+
+	if broadcast {
+		// Send the create field message to all nodes.
+		if err := i.broadcaster.SendSync(cfm); err != nil {
+			return nil, errors.Wrap(err, "sending CreateField message")
+		}
+	}
 
 	// Kick off the field's translation sync process.
 	if err := i.translationSyncer.Reset(); err != nil {
@@ -601,6 +738,8 @@ func (i *Index) newField(path, name string) (*Field, error) {
 	f.idx = i
 	f.Stats = i.Stats
 	f.broadcaster = i.broadcaster
+	f.schemator = i.schemator
+	f.serializer = i.serializer
 	f.rowAttrStore = i.newAttrStore(filepath.Join(f.path, ".data"))
 	f.OpenTranslateStore = i.OpenTranslateStore
 	return f, nil
@@ -640,6 +779,11 @@ func (i *Index) DeleteField(name string) error {
 
 	// Remove reference.
 	delete(i.fields, name)
+
+	// Delete the field from etcd as the system of record.
+	if err := i.schemator.DeleteField(context.TODO(), i.name, name); err != nil {
+		return errors.Wrapf(err, "deleting field from etcd: %s/%s", i.name, name)
+	}
 
 	return i.translationSyncer.Reset()
 }

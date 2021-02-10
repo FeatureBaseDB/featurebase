@@ -26,6 +26,8 @@ var (
 	ErrTooManyResults error = fmt.Errorf("too many results")
 	ErrNoResults      error = fmt.Errorf("no results")
 	ErrKeyDeleted     error = fmt.Errorf("key deleted")
+	ErrIndexExists    error = fmt.Errorf("index already exists")
+	ErrFieldExists    error = fmt.Errorf("field already exists")
 )
 
 type Peer struct {
@@ -86,7 +88,14 @@ type Stator interface {
 // for each of its fields.
 type Index struct {
 	Data   []byte
-	Fields map[string][]byte
+	Fields map[string]*Field
+}
+
+// Field is a struct which contains the data encoded for the field as well as
+// for each of its views.
+type Field struct {
+	Data  []byte
+	Views map[string][]byte
 }
 
 type Schemator interface {
@@ -97,6 +106,9 @@ type Schemator interface {
 	Field(ctx context.Context, index, field string) ([]byte, error)
 	CreateField(ctx context.Context, index, field string, val []byte) error
 	DeleteField(ctx context.Context, index, field string) error
+	View(ctx context.Context, index, field, view string) ([]byte, error)
+	CreateView(ctx context.Context, index, field, view string, val []byte) error
+	DeleteView(ctx context.Context, index, field, view string) error
 }
 
 type Metadata interface {
@@ -233,3 +245,44 @@ func (n *nopSharder) AddShards(ctx context.Context, index, field string, shards 
 func (n *nopSharder) RemoveShard(ctx context.Context, index, field string, shard uint64) error {
 	return nil
 }
+
+// NopSchemator represents a Schemator that doesn't do anything.
+var NopSchemator Schemator = &nopSchemator{}
+
+type nopSchemator struct{}
+
+// Schema is a no-op implementation of the Schemator Schema method.
+func (*nopSchemator) Schema(ctx context.Context) (map[string]*Index, error) { return nil, nil }
+
+// Index is a no-op implementation of the Schemator Index method.
+func (*nopSchemator) Index(ctx context.Context, name string) ([]byte, error) { return nil, nil }
+
+// CreateIndex is a no-op implementation of the Schemator CreateIndex method.
+func (*nopSchemator) CreateIndex(ctx context.Context, name string, val []byte) error { return nil }
+
+// DeleteIndex is a no-op implementation of the Schemator DeleteIndex method.
+func (*nopSchemator) DeleteIndex(ctx context.Context, name string) error { return nil }
+
+// Field is a no-op implementation of the Schemator Field method.
+func (*nopSchemator) Field(ctx context.Context, index, field string) ([]byte, error) { return nil, nil }
+
+// CreateField is a no-op implementation of the Schemator CreateField method.
+func (*nopSchemator) CreateField(ctx context.Context, index, field string, val []byte) error {
+	return nil
+}
+
+// DeleteField is a no-op implementation of the Schemator DeleteField method.
+func (*nopSchemator) DeleteField(ctx context.Context, index, field string) error { return nil }
+
+// View is a no-op implementation of the Schemator View method.
+func (*nopSchemator) View(ctx context.Context, index, field, view string) ([]byte, error) {
+	return nil, nil
+}
+
+// CreateView is a no-op implementation of the Schemator CreateView method.
+func (*nopSchemator) CreateView(ctx context.Context, index, field, view string, val []byte) error {
+	return nil
+}
+
+// DeleteView is a no-op implementation of the Schemator DeleteView method.
+func (*nopSchemator) DeleteView(ctx context.Context, index, field, view string) error { return nil }

@@ -30,6 +30,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/pilosa/pilosa/v2/disco"
 	"github.com/pilosa/pilosa/v2/logger"
 	rbfcfg "github.com/pilosa/pilosa/v2/rbf/cfg"
 	"github.com/pilosa/pilosa/v2/roaring"
@@ -80,6 +81,8 @@ type Holder struct {
 	opened lockedChan
 
 	broadcaster broadcaster
+	schemator   disco.Schemator
+	serializer  Serializer
 
 	NewAttrStore func(string) AttrStore
 
@@ -210,6 +213,8 @@ type HolderConfig struct {
 	OpenTransactionStore OpenTransactionStoreFunc
 	OpenIDAllocator      OpenIDAllocatorFunc
 	TranslationSyncer    TranslationSyncer
+	Serializer           Serializer
+	Schemator            disco.Schemator
 	CacheFlushInterval   time.Duration
 	StatsClient          stats.StatsClient
 	NewAttrStore         func(string) AttrStore
@@ -229,6 +234,8 @@ func DefaultHolderConfig() *HolderConfig {
 		OpenTransactionStore: OpenInMemTransactionStore,
 		OpenIDAllocator:      func(string) (*idAllocator, error) { return &idAllocator{}, nil },
 		TranslationSyncer:    NopTranslationSyncer,
+		Serializer:           NopSerializer,
+		Schemator:            disco.NopSchemator,
 		CacheFlushInterval:   defaultCacheFlushInterval,
 		StatsClient:          stats.NopStatsClient,
 		NewAttrStore:         newNopAttrStore,
@@ -267,6 +274,8 @@ func NewHolder(path string, cfg *HolderConfig) *Holder {
 		OpenTransactionStore: cfg.OpenTransactionStore,
 		OpenIDAllocator:      cfg.OpenIDAllocator,
 		translationSyncer:    cfg.TranslationSyncer,
+		serializer:           cfg.Serializer,
+		schemator:            cfg.Schemator,
 		Logger:               cfg.Logger,
 		Opts:                 HolderOpts{StorageBackend: cfg.StorageConfig.Backend, RowcacheOn: cfg.RowcacheOn},
 
@@ -571,7 +580,6 @@ func (h *Holder) Inspect(ctx context.Context, req *InspectRequest) (*HolderInfo,
 
 // Open initializes the root data directory for the holder.
 func (h *Holder) Open() error {
-
 	h.opening = true
 	defer func() { h.opening = false }()
 
@@ -853,52 +861,58 @@ func (h *Holder) availableShardsByIndex() map[string]*roaring.Bitmap {
 }
 
 // Schema returns schema information for all indexes, fields, and views.
-func (h *Holder) Schema() []*IndexInfo {
-	var a []*IndexInfo
-	for _, index := range h.Indexes() {
-		di := &IndexInfo{
-			Name:      index.Name(),
-			CreatedAt: index.CreatedAt(),
-			Options:   index.Options(),
-		}
-		for _, field := range index.Fields() {
-			fi := &FieldInfo{
-				Name:      field.Name(),
-				CreatedAt: field.CreatedAt(),
-				Options:   field.Options(),
-			}
-			for _, view := range field.views() {
-				fi.Views = append(fi.Views, &ViewInfo{Name: view.name})
-			}
-			sort.Sort(viewInfoSlice(fi.Views))
-			di.Fields = append(di.Fields, fi)
-		}
-		sort.Sort(fieldInfoSlice(di.Fields))
-		a = append(a, di)
-	}
-	sort.Sort(indexInfoSlice(a))
-	return a
+func (h *Holder) Schema() ([]*IndexInfo, error) {
+	return h.schema(context.TODO(), true)
 }
 
 // limitedSchema returns schema information for all indexes and fields.
-func (h *Holder) limitedSchema() []*IndexInfo {
+func (h *Holder) limitedSchema() ([]*IndexInfo, error) {
+	return h.schema(context.TODO(), false)
+}
+
+func (h *Holder) schema(ctx context.Context, includeViews bool) ([]*IndexInfo, error) {
 	var a []*IndexInfo
-	for _, index := range h.Indexes() {
-		di := &IndexInfo{
-			Name:       index.Name(),
-			CreatedAt:  index.CreatedAt(),
-			Options:    index.Options(),
-			ShardWidth: ShardWidth,
-			Fields:     make([]*FieldInfo, 0, len(index.Fields())),
+
+	schema, err := h.schemator.Schema(ctx)
+	if err != nil {
+		return nil, errors.Wrapf(err, "getting schema via schemator")
+	}
+
+	for _, index := range schema {
+		cim, err := h.decodeCreateIndexMessage(index.Data)
+		if err != nil {
+			return nil, errors.Wrap(err, "decoding CreateIndexMessage")
 		}
-		for _, field := range index.Fields() {
-			if strings.HasPrefix(field.name, "_") {
+
+		di := &IndexInfo{
+			Name:       cim.Index,
+			CreatedAt:  cim.CreatedAt,
+			Options:    *cim.Meta,
+			ShardWidth: ShardWidth,
+			Fields:     make([]*FieldInfo, 0, len(index.Fields)),
+		}
+		for fieldName, field := range index.Fields {
+			if fieldName == existenceFieldName {
 				continue
 			}
+			cfm, err := h.decodeCreateFieldMessage(field.Data)
+			if err != nil {
+				return nil, errors.Wrap(err, "decoding CreateFieldMessage")
+			}
 			fi := &FieldInfo{
-				Name:      field.Name(),
-				CreatedAt: field.CreatedAt(),
-				Options:   field.Options(),
+				Name:      cfm.Field,
+				CreatedAt: cfm.CreatedAt,
+				Options:   *cfm.Meta,
+			}
+			if includeViews {
+				for _, viewData := range field.Views {
+					cvm, err := h.decodeCreateViewMessage(viewData)
+					if err != nil {
+						return nil, errors.Wrap(err, "decoding CreateViewMessage")
+					}
+					fi.Views = append(fi.Views, &ViewInfo{Name: cvm.View})
+				}
+				sort.Sort(viewInfoSlice(fi.Views))
 			}
 			di.Fields = append(di.Fields, fi)
 		}
@@ -906,33 +920,25 @@ func (h *Holder) limitedSchema() []*IndexInfo {
 		a = append(a, di)
 	}
 	sort.Sort(indexInfoSlice(a))
-	return a
+	return a, nil
 }
 
 // applySchema applies an internal Schema to Holder.
 func (h *Holder) applySchema(schema *Schema) error {
-	// Create indexes that don't exist.
+	// Create indexes.
+	// We use h.CreateIndex() instead of h.CreateIndexIfNotExists() because we
+	// want to limit the use of this method for now to only new indexes.
 	for _, i := range schema.Indexes {
-		idx, err := h.CreateIndexIfNotExists(i.Name, i.Options)
+		idx, err := h.CreateIndex(i.Name, i.Options)
 		if err != nil {
 			return errors.Wrap(err, "creating index")
-		}
-		if i.CreatedAt != 0 {
-			idx.mu.Lock()
-			idx.createdAt = i.CreatedAt
-			idx.mu.Unlock()
 		}
 
 		// Create fields that don't exist.
 		for _, f := range i.Fields {
-			fld, err := idx.createFieldIfNotExists(f.Name, &f.Options)
+			fld, err := idx.CreateFieldIfNotExistsWithOptions(f.Name, &f.Options)
 			if err != nil {
 				return errors.Wrap(err, "creating field")
-			}
-			if f.CreatedAt != 0 {
-				fld.mu.Lock()
-				fld.createdAt = f.CreatedAt
-				fld.mu.Unlock()
 			}
 
 			// Create views that don't exist.
@@ -944,6 +950,12 @@ func (h *Holder) applySchema(schema *Schema) error {
 			}
 		}
 	}
+
+	// Send the load schema message to all nodes.
+	if err := h.broadcaster.SendSync(&LoadSchemaMessage{}); err != nil {
+		return errors.Wrap(err, "sending LoadSchemaMessage")
+	}
+
 	return nil
 }
 
@@ -995,7 +1007,93 @@ func (h *Holder) CreateIndex(name string, opt IndexOptions) (*Index, error) {
 	if h.Index(name) != nil {
 		return nil, newConflictError(ErrIndexExists)
 	}
-	return h.createIndex(name, opt)
+
+	cim := &CreateIndexMessage{
+		Index:     name,
+		CreatedAt: timestamp(),
+		Meta:      &opt,
+	}
+
+	// Create the index in etcd as the system of record.
+	if err := h.persistIndex(context.Background(), cim); err != nil {
+		return nil, errors.Wrap(err, "persisting index")
+	}
+
+	return h.createIndex(cim, false)
+}
+
+// LoadSchemaMessage is an internal message used to inform a node to load the
+// latest schema from etcd.
+type LoadSchemaMessage struct{}
+
+// LoadSchema creates all indexes based on the information stored in schemator.
+// It does not return an error if an index already exists. The thinking is that
+// this method will load all indexes that don't already exist. We likely want to
+// revisit this; for example, we might want to confirm that the createdAt
+// timestamps on each of the indexes matches the value in etcd.
+func (h *Holder) LoadSchema() error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	return h.loadSchema()
+}
+
+// LoadIndex creates an index based on the information stored in schemator.
+// An error is returned if the index already exists.
+func (h *Holder) LoadIndex(name string) (*Index, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	// Ensure index doesn't already exist.
+	if h.Index(name) != nil {
+		return nil, newConflictError(ErrIndexExists)
+	}
+	return h.loadIndex(name)
+}
+
+// LoadField creates a field based on the information stored in schemator.
+// An error is returned if the field already exists.
+func (h *Holder) LoadField(index, field string) (*Field, error) {
+	// Ensure field doesn't already exist.
+	if h.Field(index, field) != nil {
+		return nil, newConflictError(ErrFieldExists)
+	}
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	return h.loadField(index, field)
+}
+
+// LoadView creates a view based on the information stored in schemator. Unlike
+// index and field, it is not considered an error if the view already exists.
+func (h *Holder) LoadView(index, field, view string) (*view, error) {
+	// If the view already exists, just return with it here.
+	if v := h.view(index, field, view); v != nil {
+		return v, nil
+	}
+
+	return h.loadView(index, field, view)
+}
+
+// CreateIndexAndBroadcast creates an index locally, then broadcasts the
+// creation to other nodes so they can create locally as well. An error is
+// returned if the index already exists.
+func (h *Holder) CreateIndexAndBroadcast(cim *CreateIndexMessage) (*Index, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	// Ensure index doesn't already exist.
+	if h.Index(cim.Index) != nil {
+		return nil, newConflictError(ErrIndexExists)
+	}
+
+	// Create the index in etcd as the system of record.
+	if err := h.persistIndex(context.Background(), cim); err != nil {
+		return nil, errors.Wrap(err, "persisting index")
+	}
+
+	return h.createIndex(cim, true)
 }
 
 // CreateIndexIfNotExists returns an index by name.
@@ -1004,26 +1102,64 @@ func (h *Holder) CreateIndexIfNotExists(name string, opt IndexOptions) (*Index, 
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	// Return index if it exists.
+	cim := &CreateIndexMessage{
+		Index:     name,
+		CreatedAt: timestamp(),
+		Meta:      &opt,
+	}
+
+	// Create the index in etcd as the system of record.
+	err := h.persistIndex(context.Background(), cim)
+	if err != nil && errors.Cause(err) != disco.ErrIndexExists {
+		return nil, errors.Wrap(err, "persisting index")
+	}
+
 	if index := h.Index(name); index != nil {
 		return index, nil
 	}
-	return h.createIndex(name, opt)
+
+	// It may happen that index is not in memory, but it's already in etcd,
+	// then we need to create it locally.
+	return h.createIndex(cim, false)
 }
 
-func (h *Holder) createIndex(name string, opt IndexOptions) (*Index, error) {
-	if name == "" {
+// persistIndex stores the index information in etcd.
+func (h *Holder) persistIndex(ctx context.Context, cim *CreateIndexMessage) error {
+	if cim.Index == "" {
+		return ErrIndexRequired
+	}
+
+	if err := validateName(cim.Index); err != nil {
+		return errors.Wrap(err, "validating name")
+	}
+
+	if b, err := h.serializer.Marshal(cim); err != nil {
+		return errors.Wrap(err, "marshaling")
+	} else if err := h.schemator.CreateIndex(ctx, cim.Index, b); err != nil {
+		return errors.Wrapf(err, "writing index to disco: %s", cim.Index)
+	}
+	return nil
+}
+
+func (h *Holder) createIndex(cim *CreateIndexMessage, broadcast bool) (*Index, error) {
+	if cim.Index == "" {
 		return nil, errors.New("index name required")
 	}
 
+	opt := cim.Meta
+	if opt == nil {
+		opt = &IndexOptions{}
+	}
+
 	// Otherwise create a new index.
-	index, err := h.newIndex(h.IndexPath(name), name)
+	index, err := h.newIndex(h.IndexPath(cim.Index), cim.Index)
 	if err != nil {
 		return nil, errors.Wrap(err, "creating")
 	}
 
 	index.keys = opt.Keys
 	index.trackExistence = opt.TrackExistence
+	index.createdAt = cim.CreatedAt
 
 	if err = index.Open(); err != nil {
 		return nil, errors.Wrap(err, "opening")
@@ -1035,6 +1171,13 @@ func (h *Holder) createIndex(name string, opt IndexOptions) (*Index, error) {
 	// Update options.
 	h.addIndex(index)
 
+	if broadcast {
+		// Send the create index message to all nodes.
+		if err := h.broadcaster.SendSync(cim); err != nil {
+			return nil, errors.Wrap(err, "sending CreateIndex message")
+		}
+	}
+
 	// Since this is a new index, we need to kick off
 	// its translation sync.
 	if err := h.translationSyncer.Reset(); err != nil {
@@ -1044,6 +1187,97 @@ func (h *Holder) createIndex(name string, opt IndexOptions) (*Index, error) {
 	return index, nil
 }
 
+func (h *Holder) loadSchema() error {
+	schema, err := h.schemator.Schema(context.TODO())
+	if err != nil {
+		return errors.Wrap(err, "getting schema")
+	}
+
+	// TODO: This is kind of inefficient because we're ignoring the index.Data
+	// and field.Data values, which contains the index and field information,
+	// and only using the map key to call loadIndex() and loadField(). These
+	// make another call to schemator to get the same index and field
+	// information that we already have in the map. It probably makes sense to
+	// either copy the parts of the loadIndex and loadField methods here (like
+	// decodeCreateIndexMessage) or split loadIndex and loadField into smaller
+	// methods that we could reuse here.
+	for indexName, index := range schema {
+		_, err := h.loadIndex(indexName)
+		if err != nil {
+			return errors.Wrap(err, "loading index")
+		}
+		for fieldName, field := range index.Fields {
+			_, err := h.loadField(indexName, fieldName)
+			if err != nil {
+				return errors.Wrap(err, "loading field")
+			}
+			for viewName := range field.Views {
+				_, err := h.loadView(indexName, fieldName, viewName)
+				if err != nil {
+					return errors.Wrap(err, "loading view")
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+func (h *Holder) loadIndex(indexName string) (*Index, error) {
+	b, err := h.schemator.Index(context.TODO(), indexName)
+	if err != nil {
+		return nil, errors.Wrapf(err, "getting index: %s", indexName)
+	}
+
+	cim, err := h.decodeCreateIndexMessage(b)
+	if err != nil {
+		return nil, errors.Wrap(err, "decoding CreateIndexMessage")
+	}
+
+	return h.createIndex(cim, false)
+}
+
+func (h *Holder) loadField(indexName, fieldName string) (*Field, error) {
+	b, err := h.schemator.Field(context.TODO(), indexName, fieldName)
+	if err != nil {
+		return nil, errors.Wrapf(err, "getting field: %s/%s", indexName, fieldName)
+	}
+
+	// Get index.
+	idx := h.Index(indexName)
+	if idx == nil {
+		return nil, errors.Errorf("local index not found: %s", indexName)
+	}
+
+	cfm, err := h.decodeCreateFieldMessage(b)
+	if err != nil {
+		return nil, errors.Wrap(err, "decoding CreateFieldMessage")
+	}
+
+	// TODO: can this take cfm?
+	return idx.createFieldIfNotExists(fieldName, cfm.Meta)
+}
+
+func (h *Holder) loadView(indexName, fieldName, viewName string) (*view, error) {
+	b, err := h.schemator.View(context.TODO(), indexName, fieldName, viewName)
+	if err != nil {
+		return nil, errors.Wrapf(err, "getting view: %s/%s/%s", indexName, fieldName, viewName)
+	}
+
+	// Get field.
+	fld := h.Field(indexName, fieldName)
+	if fld == nil {
+		return nil, errors.Errorf("local field not found: %s/%s", indexName, fieldName)
+	}
+
+	cvm, err := h.decodeCreateViewMessage(b)
+	if err != nil {
+		return nil, errors.Wrap(err, "decoding CreateFieldMessage")
+	}
+
+	return fld.createViewIfNotExists(cvm.View)
+}
+
 func (h *Holder) newIndex(path, name string) (*Index, error) {
 	index, err := NewIndex(h, path, name)
 	if err != nil {
@@ -1051,6 +1285,8 @@ func (h *Holder) newIndex(path, name string) (*Index, error) {
 	}
 	index.Stats = h.Stats.WithTags(fmt.Sprintf("index:%s", index.Name()))
 	index.broadcaster = h.broadcaster
+	index.serializer = h.serializer
+	index.schemator = h.schemator
 	index.newAttrStore = h.NewAttrStore
 	index.columnAttrs = h.NewAttrStore(filepath.Join(index.path, ".data"))
 	index.OpenTranslateStore = h.OpenTranslateStore
@@ -1086,6 +1322,11 @@ func (h *Holder) DeleteIndex(name string) error {
 
 	// Remove reference.
 	h.deleteIndex(name)
+
+	// Delete the index from etcd as the system of record.
+	if err := h.schemator.DeleteIndex(context.TODO(), name); err != nil {
+		return errors.Wrapf(err, "deleting index from etcd: %s", name)
+	}
 
 	// I'm not sure if calling Reset() here is necessary
 	// since closing the index stops its translation
@@ -1320,8 +1561,13 @@ func (s *holderSyncer) SyncHolder() error {
 	// Create a snapshot of the cluster to use for node/partition calculations.
 	snap := topology.NewClusterSnapshot(s.Cluster.noder, s.Cluster.Hasher, s.Cluster.ReplicaN)
 
+	schema, err := s.Holder.Schema()
+	if err != nil {
+		return errors.Wrap(err, "getting schema")
+	}
+
 	// Iterate over schema in sorted order.
-	for _, di := range s.Holder.Schema() {
+	for _, di := range schema {
 		// Verify syncer has not closed.
 		if s.IsClosing() {
 			return nil
@@ -2046,4 +2292,28 @@ func (h *Holder) HasRoaringData() (has bool, err error) {
 		}
 	}
 	return
+}
+
+func (h *Holder) decodeCreateIndexMessage(b []byte) (*CreateIndexMessage, error) {
+	var cim CreateIndexMessage
+	if err := h.serializer.Unmarshal(b, &cim); err != nil {
+		return nil, errors.Wrap(err, "unmarshaling")
+	}
+	return &cim, nil
+}
+
+func (h *Holder) decodeCreateFieldMessage(b []byte) (*CreateFieldMessage, error) {
+	var cfm CreateFieldMessage
+	if err := h.serializer.Unmarshal(b, &cfm); err != nil {
+		return nil, errors.Wrap(err, "unmarshaling")
+	}
+	return &cfm, nil
+}
+
+func (h *Holder) decodeCreateViewMessage(b []byte) (*CreateViewMessage, error) {
+	var cvm CreateViewMessage
+	if err := h.serializer.Unmarshal(b, &cvm); err != nil {
+		return nil, errors.Wrap(err, "unmarshaling")
+	}
+	return &cvm, nil
 }

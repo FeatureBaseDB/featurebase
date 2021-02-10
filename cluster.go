@@ -410,11 +410,15 @@ func (c *cluster) generateResizeInstructionOnAdd(addNodeID string) (*ResizeInstr
 	}
 
 	myid := c.disCo.ID()
+	nodeStatus, err := c.nodeStatus()
+	if err != nil {
+		return nil, errors.Wrap(err, "getting node status")
+	}
 	return &ResizeInstruction{
 		Node:               c.unprotectedNodeByID(myid),
 		Sources:            fragmentSourcesByNode[myid],
 		TranslationSources: translationSourcesByNode[myid],
-		NodeStatus:         c.nodeStatus(), // Include the NodeStatus in order to ensure that schema and availableShards are in sync on the receiving node.
+		NodeStatus:         nodeStatus, // Include the NodeStatus in order to ensure that schema and availableShards are in sync on the receiving node.
 		ClusterStatus:      status,
 	}, nil
 }
@@ -594,11 +598,15 @@ func (c *cluster) generateResizeInstructionOnRemove(removeNodeID string) (*Resiz
 	}
 
 	myid := c.disCo.ID()
+	nodeStatus, err := c.nodeStatus()
+	if err != nil {
+		return nil, errors.Wrap(err, "getting node status")
+	}
 	return &ResizeInstruction{
 		Node:               toCluster.unprotectedNodeByID(myid),
 		Sources:            fragmentSourcesByNode[myid],
 		TranslationSources: translationSourcesByNode[myid],
-		NodeStatus:         c.nodeStatus(), // Include the NodeStatus in order to ensure that schema and availableShards are in sync on the receiving node.
+		NodeStatus:         nodeStatus, // Include the NodeStatus in order to ensure that schema and availableShards are in sync on the receiving node.
 		ClusterStatus:      status,
 	}, nil
 }
@@ -610,13 +618,10 @@ func (c *cluster) unprotectedStatus() (*ClusterStatus, error) {
 		return nil, err
 	}
 
-	// TODO: replace following code by following code,
-	// after schemator is implemented
-	// indexes, err := c.holder.Schema()
-	// if err != nil {
-	// 	return nil, errors.Wrap(err, "getting schema")
-	// }
-	indexes := c.holder.Schema()
+	indexes, err := c.holder.Schema()
+	if err != nil {
+		return nil, errors.Wrap(err, "getting schema")
+	}
 
 	return &ClusterStatus{
 		State:  string(state),
@@ -631,9 +636,6 @@ func (c *cluster) remoteSchema() (*Schema, error) {
 			continue
 		}
 
-		// TODO: replace following line by:
-		// ii, err := c.InternalClient.SchemaNode(context.Background(), &n.URI, true)
-		// after we
 		ii, err := c.InternalClient.SchemaNode(context.Background(), &n.URI, true)
 		if err != nil {
 			return nil, errors.Wrapf(err, "getting schema from %s (%v)", n.ID, n.URI)
@@ -1272,10 +1274,14 @@ func (c *cluster) SetNodeState(nodeID string, state string) {}
 
 ///////////////////////////////////////////
 
-func (c *cluster) nodeStatus() *NodeStatus {
+func (c *cluster) nodeStatus() (*NodeStatus, error) {
+	indexes, err := c.holder.Schema()
+	if err != nil {
+		return nil, errors.Wrap(err, "getting schema")
+	}
 	ns := &NodeStatus{
 		Node:   c.Node,
-		Schema: &Schema{Indexes: c.holder.Schema()},
+		Schema: &Schema{Indexes: indexes},
 	}
 	var availableShards *roaring.Bitmap
 	for _, idx := range ns.Schema.Indexes {
@@ -1294,7 +1300,7 @@ func (c *cluster) nodeStatus() *NodeStatus {
 		}
 		ns.Indexes = append(ns.Indexes, is)
 	}
-	return ns
+	return ns, nil
 }
 
 // unprotectedPreviousNode returns the node listed before the current node in c.Nodes.

@@ -53,6 +53,8 @@ var (
 	ErrInvalidBetweenValue      = errors.New("invalid value for between operation")
 	ErrDecimalOutOfRange        = errors.New("decimal value out of range")
 
+	ErrViewRequired     = errors.New("view required")
+	ErrViewExists       = errors.New("view already exists")
 	ErrInvalidView      = errors.New("invalid view")
 	ErrInvalidCacheType = errors.New("invalid cache type")
 

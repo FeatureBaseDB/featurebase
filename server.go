@@ -415,12 +415,14 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		metricInterval:      0,
 		diagnosticInterval:  0,
 
-		disCo:     disco.NopDisCo,
-		stator:    disco.NopStator,
-		metadator: disco.NopMetadator,
-		resizer:   disco.NopResizer,
-		noder:     topology.NewEmptyLocalNoder(),
-		sharder:   disco.NopSharder,
+		disCo:      disco.NopDisCo,
+		stator:     disco.NopStator,
+		metadator:  disco.NopMetadator,
+		resizer:    disco.NopResizer,
+		noder:      topology.NewEmptyLocalNoder(),
+		sharder:    disco.NopSharder,
+		schemator:  disco.NopSchemator,
+		serializer: NopSerializer,
 
 		confirmDownRetries: defaultConfirmDownRetries,
 		confirmDownSleep:   defaultConfirmDownSleep,
@@ -488,6 +490,8 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	s.cluster.confirmDownRetries = s.confirmDownRetries
 	s.cluster.confirmDownSleep = s.confirmDownSleep
 	s.holder.broadcaster = s
+	s.holder.schemator = s.schemator
+	s.holder.serializer = s.serializer
 
 	return s, nil
 }
@@ -778,14 +782,9 @@ func (s *Server) receiveMessage(m Message) error {
 		}
 
 	case *CreateIndexMessage:
-		opt := obj.Meta
-		idx, err := s.holder.CreateIndex(obj.Index, *opt)
-		if err != nil {
+		if _, err := s.holder.LoadIndex(obj.Index); err != nil {
 			return err
 		}
-		idx.mu.Lock()
-		idx.createdAt = obj.CreatedAt
-		idx.mu.Unlock()
 
 	case *DeleteIndexMessage:
 		if err := s.holder.DeleteIndex(obj.Index); err != nil {
@@ -793,18 +792,9 @@ func (s *Server) receiveMessage(m Message) error {
 		}
 
 	case *CreateFieldMessage:
-		idx := s.holder.Index(obj.Index)
-		if idx == nil {
-			return fmt.Errorf("local index not found: %s", obj.Index)
-		}
-		opt := obj.Meta
-		fld, err := idx.createFieldIfNotExists(obj.Field, opt)
-		if err != nil {
+		if _, err := s.holder.LoadField(obj.Index, obj.Field); err != nil {
 			return err
 		}
-		fld.mu.Lock()
-		fld.createdAt = obj.CreatedAt
-		fld.mu.Unlock()
 
 	case *DeleteFieldMessage:
 		idx := s.holder.Index(obj.Index)
@@ -819,11 +809,7 @@ func (s *Server) receiveMessage(m Message) error {
 		}
 
 	case *CreateViewMessage:
-		f := s.holder.Field(obj.Index, obj.Field)
-		if f == nil {
-			return fmt.Errorf("local field not found: %s", obj.Field)
-		}
-		if _, _, err := f.createViewIfNotExistsBase(obj.View); err != nil {
+		if _, err := s.holder.LoadView(obj.Index, obj.Field, obj.View); err != nil {
 			return err
 		}
 
@@ -867,6 +853,12 @@ func (s *Server) receiveMessage(m Message) error {
 
 	case *RecalculateCaches:
 		s.holder.recalculateCaches()
+
+	case *LoadSchemaMessage:
+		err := s.holder.LoadSchema()
+		if err != nil {
+			return errors.Wrapf(err, "handling load schema message: %v", obj)
+		}
 
 	case *NodeStatus:
 		s.handleRemoteStatus(obj)

@@ -37,7 +37,13 @@ func mustOpenView(tb testing.TB, index, field, name string) *view {
 	h := NewHolder(path, nil)
 	// h needs an *Index so we can call h.Index() and get Index.Txf, in TestView_DeleteFragment
 
-	idx, err := h.createIndex(index, IndexOptions{})
+	cim := &CreateIndexMessage{
+		Index:     index,
+		CreatedAt: 0,
+		Meta:      &IndexOptions{},
+	}
+
+	idx, err := h.createIndex(cim, false)
 	testhook.Cleanup(tb, func() {
 		h.Close()
 	})

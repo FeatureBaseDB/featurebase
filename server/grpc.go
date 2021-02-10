@@ -316,7 +316,7 @@ func (h *GRPCHandler) CreateIndex(ctx context.Context, req *pb.CreateIndexReques
 
 // GetIndex returns a single Index given a name
 func (h *GRPCHandler) GetIndex(ctx context.Context, req *pb.GetIndexRequest) (*pb.GetIndexResponse, error) {
-	schema, err := h.api.Schema(ctx)
+	schema, err := h.api.Schema(ctx, false)
 	if err != nil {
 		return nil, errToStatusError(err)
 	}
@@ -331,7 +331,7 @@ func (h *GRPCHandler) GetIndex(ctx context.Context, req *pb.GetIndexRequest) (*p
 
 // GetIndexes returns a list of all Indexes
 func (h *GRPCHandler) GetIndexes(ctx context.Context, req *pb.GetIndexesRequest) (*pb.GetIndexesResponse, error) {
-	schema, err := h.api.Schema(ctx)
+	schema, err := h.api.Schema(ctx, false)
 	if err != nil {
 		return nil, errToStatusError(err)
 	}
@@ -381,7 +381,7 @@ func (h *VDSMGRPCHandler) GetVDS(ctx context.Context, req *vdsm_pb.GetVDSRequest
 	case *vdsm_pb.GetVDSRequest_Id:
 		return nil, status.Error(codes.InvalidArgument, "VDS IDs are no longer supported")
 	case *vdsm_pb.GetVDSRequest_Name:
-		schema, err := h.api.Schema(ctx)
+		schema, err := h.api.Schema(ctx, false)
 		if err != nil {
 			return nil, errToStatusError(err)
 		}
@@ -399,7 +399,7 @@ func (h *VDSMGRPCHandler) GetVDS(ctx context.Context, req *vdsm_pb.GetVDSRequest
 
 // GetVDSs returns a list of all VDSs
 func (h *VDSMGRPCHandler) GetVDSs(ctx context.Context, req *vdsm_pb.GetVDSsRequest) (*vdsm_pb.GetVDSsResponse, error) {
-	schema, err := h.api.Schema(ctx)
+	schema, err := h.api.Schema(ctx, false)
 	if err != nil {
 		return nil, errToStatusError(err)
 	}

@@ -234,7 +234,7 @@ func (h *Handler) populateValidators() {
 	h.validators["PostQuery"] = queryValidationSpecRequired().Optional("shards", "columnAttrs", "excludeRowAttrs", "excludeColumns", "profile")
 	h.validators["GetInfo"] = queryValidationSpecRequired()
 	h.validators["RecalculateCaches"] = queryValidationSpecRequired()
-	h.validators["GetSchema"] = queryValidationSpecRequired()
+	h.validators["GetSchema"] = queryValidationSpecRequired().Optional("views")
 	h.validators["PostSchema"] = queryValidationSpecRequired().Optional("remote")
 	h.validators["GetStatus"] = queryValidationSpecRequired()
 	h.validators["GetVersion"] = queryValidationSpecRequired()
@@ -665,8 +665,11 @@ func (h *Handler) handleGetSchema(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	q := r.URL.Query()
+	withViews := q.Get("views") == "true"
+
 	w.Header().Set("Content-Type", "application/json")
-	schema, err := h.api.Schema(r.Context())
+	schema, err := h.api.Schema(r.Context(), withViews)
 	if err != nil {
 		h.logger.Printf("getting schema error: %s", err)
 	}
@@ -978,8 +981,11 @@ func (h *Handler) handleGetIndex(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
 		return
 	}
+	q := r.URL.Query()
+	withViews := q.Get("views") == "true"
+
 	indexName := mux.Vars(r)["index"]
-	schema, err := h.api.Schema(r.Context())
+	schema, err := h.api.Schema(r.Context(), withViews)
 	if err != nil {
 		h.logger.Printf("getting schema error: %s", err)
 	}

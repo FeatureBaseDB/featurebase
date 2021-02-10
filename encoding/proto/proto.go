@@ -154,6 +154,14 @@ func (s Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		}
 		s.decodeRecalculateCaches(msg, mt)
 		return nil
+	case *pilosa.LoadSchemaMessage:
+		msg := &internal.LoadSchemaMessage{}
+		err := proto.Unmarshal(buf, msg)
+		if err != nil {
+			return errors.Wrap(err, "unmarshaling LoadSchemaMessage")
+		}
+		s.decodeLoadSchemaMessage(msg, mt)
+		return nil
 	case *pilosa.NodeEvent:
 		msg := &internal.NodeEventMessage{}
 		err := proto.Unmarshal(buf, msg)
@@ -358,6 +366,8 @@ func (s Serializer) encodeToProto(m pilosa.Message) proto.Message {
 		return s.encodeNodeStateMessage(mt)
 	case *pilosa.RecalculateCaches:
 		return s.encodeRecalculateCaches(mt)
+	case *pilosa.LoadSchemaMessage:
+		return s.encodeLoadSchemaMessage(mt)
 	case *pilosa.NodeEvent:
 		return s.encodeNodeEventMessage(mt)
 	case *pilosa.NodeStatus:
@@ -855,6 +865,10 @@ func (s Serializer) encodeRecalculateCaches(*pilosa.RecalculateCaches) *internal
 	return &internal.RecalculateCaches{}
 }
 
+func (s Serializer) encodeLoadSchemaMessage(*pilosa.LoadSchemaMessage) *internal.LoadSchemaMessage {
+	return &internal.LoadSchemaMessage{}
+}
+
 func (s Serializer) encodeTranslateKeysRequest(request *pilosa.TranslateKeysRequest) *internal.TranslateKeysRequest {
 	return &internal.TranslateKeysRequest{
 		Index:       request.Index,
@@ -1183,6 +1197,9 @@ func (s Serializer) decodeFieldStatus(pb *internal.FieldStatus, m *pilosa.FieldS
 }
 
 func (s Serializer) decodeRecalculateCaches(pb *internal.RecalculateCaches, m *pilosa.RecalculateCaches) {
+}
+
+func (s Serializer) decodeLoadSchemaMessage(pb *internal.LoadSchemaMessage, m *pilosa.LoadSchemaMessage) {
 }
 
 func (s Serializer) decodeQueryRequest(pb *internal.QueryRequest, m *pilosa.QueryRequest) {

@@ -651,6 +651,7 @@ func TestExecutor_Execute_Set(t *testing.T) {
 		})
 
 		t.Run("ErrInvalidColValueType", func(t *testing.T) {
+			hldr.SetBit("i", "f", 1, 0) // creates and Commits a Tx internally.
 
 			if err := idx.DeleteField("f"); err != nil {
 				t.Fatal(err)
