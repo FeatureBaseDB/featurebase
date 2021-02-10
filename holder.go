@@ -1079,7 +1079,6 @@ func (h *Holder) LoadView(index, field, view string) (*view, error) {
 // CreateIndexAndBroadcast creates an index locally, then broadcasts the
 // creation to other nodes so they can create locally as well. An error is
 // returned if the index already exists.
-//func (h *Holder) CreateIndexAndBroadcast(name string, opt IndexOptions) (*Index, error) {
 func (h *Holder) CreateIndexAndBroadcast(cim *CreateIndexMessage) (*Index, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
