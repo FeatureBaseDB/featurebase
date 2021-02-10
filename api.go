@@ -416,6 +416,12 @@ func importWorker(importWork chan importJob) {
 					case RequestActionSet:
 						fileMagic := uint32(binary.LittleEndian.Uint16(viewData[0:2]))
 						if fileMagic == roaring.MagicNumber { // if pilosa roaring format
+							if ef := j.field.idx.existenceField(); ef != nil {
+								err = ef.importRoaring(j.ctx, tx, viewData, j.shard, "standard", false)
+								if err != nil {
+									return errors.Wrap(err, "importing pilosa roaring existence")
+								}
+							}
 							err := j.field.importRoaring(j.ctx, tx, viewData, j.shard, viewName, doClear)
 							if err != nil {
 								return errors.Wrap(err, "importing pilosa roaring")
@@ -425,6 +431,12 @@ func importWorker(importWork chan importJob) {
 							// field.importRoaring changes the standard roaring run format to pilosa roaring
 							data := make([]byte, len(viewData))
 							copy(data, viewData)
+							if ef := j.field.idx.existenceField(); ef != nil {
+								err = ef.importRoaring(j.ctx, tx, data, j.shard, "standard", false)
+								if err != nil {
+									return errors.Wrap(err, "importing pilosa roaring existence")
+								}
+							}
 							err := j.field.importRoaring(j.ctx, tx, data, j.shard, viewName, doClear)
 
 							if err != nil {
@@ -468,7 +480,6 @@ func (api *API) ImportRoaring(ctx context.Context, indexName, fieldName string, 
 	span, ctx := tracing.StartSpanFromContext(ctx, "API.ImportRoaring")
 	span.LogKV("index", indexName, "field", fieldName)
 	defer span.Finish()
-
 	if err := api.validate(apiField); err != nil {
 		return errors.Wrap(err, "validating api method")
 	}

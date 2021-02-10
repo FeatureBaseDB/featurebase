@@ -4569,7 +4569,6 @@ func (e *executor) executeUnionRows(ctx context.Context, qcx *Qcx, index string,
 
 // executeAllCallShard executes an All() call for a local shard.
 func (e *executor) executeAllCallShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64) (res *Row, err0 error) {
-
 	span, _ := tracing.StartSpanFromContext(ctx, "Executor.executeAllCallShard")
 	defer span.Finish()
 
@@ -4596,7 +4595,6 @@ func (e *executor) executeAllCallShard(ctx context.Context, qcx *Qcx, index stri
 		}
 
 		defer finisher(&err0)
-
 		if existenceRow, err = existenceFrag.row(tx, 0); err != nil {
 			return nil, err
 		}
