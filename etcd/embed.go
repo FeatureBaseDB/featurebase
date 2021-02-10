@@ -484,25 +484,52 @@ func (e *Etcd) Schema(ctx context.Context) (map[string]*disco.Index, error) {
 		return nil, err
 	}
 
+	// The logic in the following for loop assumes that the list of keys is
+	// ordered such that index comes before field, which comes before view.
+	// For example:
+	//   /index1
+	//   /index1/field1
+	//   /index1/field1/view1
+	//   /index1/field1/view2
+	//   /index1/field2
+	//   /index2
+	//   /index2/field1
+	//
 	m := make(map[string]*disco.Index)
 	for i, k := range keys {
 		tokens := strings.Split(strings.Trim(k, "/"), "/")
 		// token[0] contains the schemaPrefix
+
+		// token[1]: index
 		index := tokens[1]
 		if _, ok := m[index]; !ok {
 			m[index] = &disco.Index{
 				Data:   vals[i],
-				Fields: make(map[string][]byte),
+				Fields: make(map[string]*disco.Field),
 			}
+			continue
 		}
 		flds := m[index].Fields
 
+		// token[2]: field
 		if len(tokens) > 2 {
 			field := tokens[2]
-			flds[field] = vals[i]
+			if _, ok := flds[field]; !ok {
+				flds[field] = &disco.Field{
+					Data:  vals[i],
+					Views: make(map[string][]byte),
+				}
+				continue
+			}
+			views := flds[field].Views
+
+			// token[3]: view
+			if len(tokens) > 3 {
+				view := tokens[3]
+				views[view] = vals[i]
+			}
 		}
 	}
-
 	return m, nil
 }
 
@@ -601,7 +628,7 @@ func (e *Etcd) Field(ctx context.Context, indexName string, name string) ([]byte
 func (e *Etcd) CreateField(ctx context.Context, indexName string, name string, val []byte) error {
 	cli, err := e.client()
 	if err != nil {
-		return errors.Wrap(err, "CreateIndex: creating client")
+		return errors.Wrap(err, "CreateField: creating client")
 	}
 	defer cli.Close()
 
@@ -644,6 +671,43 @@ func (e *Etcd) DeleteField(ctx context.Context, indexname string, name string) e
 		).Commit()
 
 	return errors.Wrap(err, "DeleteField")
+}
+
+func (e *Etcd) View(ctx context.Context, indexName, fieldName, name string) ([]byte, error) {
+	key := schemaPrefix + indexName + "/" + fieldName + "/" + name
+	return e.getKeyBytes(ctx, key)
+}
+
+// CreateView differs from CreateIndex and CreateField in that it does not
+// return an error if the view already exists. If this logic needs to be
+// changed, we likely need to return disco.ErrViewExists.
+func (e *Etcd) CreateView(ctx context.Context, indexName, fieldName, name string, val []byte) error {
+	cli, err := e.client()
+	if err != nil {
+		return errors.Wrap(err, "CreateView: creating client")
+	}
+	defer cli.Close()
+
+	key := schemaPrefix + indexName + "/" + fieldName + "/" + name
+
+	// Set up Op to write view value as bytes.
+	op := clientv3.OpPut(key, "")
+	op.WithValueBytes(val)
+
+	// Check for key existence, and execute Op within a transaction.
+	_, err = cli.KV.Txn(ctx).
+		If(clientv3util.KeyMissing(key)).
+		Then(op).
+		Commit()
+	if err != nil {
+		return errors.Wrap(err, "executing transaction")
+	}
+
+	return nil
+}
+
+func (e *Etcd) DeleteView(ctx context.Context, indexName, fieldName, name string) error {
+	return e.delKey(ctx, schemaPrefix+indexName+"/"+fieldName+"/"+name, false)
 }
 
 func (e *Etcd) putKey(ctx context.Context, key, val string, opts ...clientv3.OpOption) error {

@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/proto"
+	"github.com/pilosa/pilosa/v2/disco"
 	"github.com/pilosa/pilosa/v2/internal"
 	"github.com/pilosa/pilosa/v2/pql"
 	"github.com/pilosa/pilosa/v2/roaring"
@@ -102,6 +103,8 @@ type Field struct {
 
 	broadcaster broadcaster
 	Stats       stats.StatsClient
+	schemator   disco.Schemator
+	serializer  Serializer
 
 	// Field options.
 	options FieldOptions
@@ -367,6 +370,8 @@ func newField(holder *Holder, path, index, name string, opts FieldOption) (*Fiel
 
 		broadcaster: NopBroadcaster,
 		Stats:       stats.NopStatsClient,
+		schemator:   disco.NopSchemator,
+		serializer:  NopSerializer,
 
 		options: *applyDefaultOptions(&fo),
 
@@ -1147,19 +1152,22 @@ func (f *Field) recalculateCaches() {
 // createViewIfNotExists returns the named view, creating it if necessary.
 // Additionally, a CreateViewMessage is sent to the cluster.
 func (f *Field) createViewIfNotExists(name string) (*view, error) {
-	view, created, err := f.createViewIfNotExistsBase(name)
+	cvm := &CreateViewMessage{
+		Index: f.index,
+		Field: f.name,
+		View:  name,
+	}
+
+	// call this base method to isolate the mu.Lock and ensure we aren't holding
+	// the lock while calling SendSync below.
+	view, created, err := f.createViewIfNotExistsBase(cvm)
 	if err != nil {
 		return nil, err
 	}
 
 	if created {
 		// Broadcast view creation to the cluster.
-		err = f.broadcaster.SendSync(
-			&CreateViewMessage{
-				Index: f.index,
-				Field: f.name,
-				View:  name,
-			})
+		err := f.broadcaster.SendSync(cvm)
 		if err != nil {
 			return nil, errors.Wrap(err, "sending CreateView message")
 		}
@@ -1169,15 +1177,26 @@ func (f *Field) createViewIfNotExists(name string) (*view, error) {
 }
 
 // createViewIfNotExistsBase returns the named view, creating it if necessary.
-// The returned bool indicates whether the view was created or not.
-func (f *Field) createViewIfNotExistsBase(name string) (*view, bool, error) {
+// One purpose of isolating this method from createViewIfNotExists() is that we
+// need to enforce the mu.Lock on everything in this method, but we can't be
+// holding the lock when broadcasting the CreateViewMessage view
+// broadcaster.SendSync(); calling that SendSync() while holding the lock can
+// result in a deadlock waiting on the remote node to give up its lock obtained
+// by performing the same action. The returned bool indicates whether the view
+// was created or not.
+func (f *Field) createViewIfNotExistsBase(cvm *CreateViewMessage) (*view, bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	if view := f.viewMap[name]; view != nil {
+	// Create the view in etcd as the system of record.
+	if err := f.persistView(context.Background(), cvm); err != nil {
+		return nil, false, errors.Wrap(err, "persisting view")
+	}
+
+	if view := f.viewMap[cvm.View]; view != nil {
 		return view, false, nil
 	}
-	view := f.newView(f.viewPath(name), name)
+	view := f.newView(f.viewPath(cvm.View), cvm.View)
 
 	if err := view.openEmpty(); err != nil {
 		return nil, false, errors.Wrap(err, "opening view")
@@ -1215,6 +1234,11 @@ func (f *Field) deleteView(name string) error {
 	}
 
 	delete(f.viewMap, name)
+
+	// Delete the view from etcd as the system of record.
+	if err := f.schemator.DeleteView(context.TODO(), f.index, f.name, name); err != nil {
+		return errors.Wrapf(err, "deleting view from etcd: %s/%s/%s", f.index, f.name, name)
+	}
 
 	return nil
 }
@@ -2199,4 +2223,22 @@ func bitDepthInt64(v int64) uint {
 // FormatQualifiedFieldName generates a qualified name for the field to be used with Tx operations.
 func FormatQualifiedFieldName(index, field string) string {
 	return fmt.Sprintf("%s\x00%s\x00", index, field)
+}
+
+// persistView stores the view information in etcd.
+func (f *Field) persistView(ctx context.Context, cvm *CreateViewMessage) error {
+	if cvm.Index == "" {
+		return ErrIndexRequired
+	} else if cvm.Field == "" {
+		return ErrFieldRequired
+	} else if cvm.View == "" {
+		return ErrViewRequired
+	}
+
+	if b, err := f.serializer.Marshal(cvm); err != nil {
+		return errors.Wrap(err, "marshaling")
+	} else if err := f.schemator.CreateView(ctx, cvm.Index, cvm.Field, cvm.View, b); err != nil {
+		return errors.Wrapf(err, "writing field to disco: %s/%s/%s", cvm.Index, cvm.Field, cvm.View)
+	}
+	return nil
 }

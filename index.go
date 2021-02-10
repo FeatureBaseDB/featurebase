@@ -102,6 +102,9 @@ func NewIndex(holder *Holder, path, name string) (*Index, error) {
 		holder:         holder,
 		trackExistence: true,
 
+		schemator:  disco.NopSchemator,
+		serializer: NopSerializer,
+
 		translateStores: make(map[int]TranslateStore),
 
 		translationSyncer: NopTranslationSyncer,
@@ -523,7 +526,7 @@ func (i *Index) CreateField(name string, opts ...FieldOption) (*Field, error) {
 
 	// Create the field in etcd as the system of record.
 	if err := i.persistField(context.Background(), cfm); err != nil {
-		return nil, errors.Wrap(err, "persisting index")
+		return nil, errors.Wrap(err, "persisting field")
 	}
 
 	return i.createField(cfm, false)
@@ -548,7 +551,7 @@ func (i *Index) CreateFieldAndBroadcast(cfm *CreateFieldMessage) (*Field, error)
 
 	// Create the field in etcd as the system of record.
 	if err := i.persistField(context.Background(), cfm); err != nil {
-		return nil, errors.Wrap(err, "persisting index")
+		return nil, errors.Wrap(err, "persisting field")
 	}
 
 	return i.createField(cfm, true)
@@ -588,7 +591,45 @@ func (i *Index) CreateFieldIfNotExists(name string, opts ...FieldOption) (*Field
 		// persistent storage. In that case, this will return an "index exists"
 		// error, which in that case should return the index. TODO: We may need
 		// to allow for that in the future.
-		return nil, errors.Wrap(err, "persisting index")
+		return nil, errors.Wrap(err, "persisting field")
+	}
+
+	return i.createField(cfm, false)
+}
+
+// CreateFieldIfNotExistsWithOptions is a method which I created because I
+// needed the functionality of CreateFieldIfNotExists, but instead of taking
+// function options, taking a *FieldOptions struct. TODO: This should
+// definintely be refactored so we don't have these virtually equivalent
+// methods, but I'm puttin this here for now just to see if it works.
+func (i *Index) CreateFieldIfNotExistsWithOptions(name string, opt *FieldOptions) (*Field, error) {
+	err := validateName(name)
+	if err != nil {
+		return nil, errors.Wrap(err, "validating name")
+	}
+
+	i.mu.Lock()
+	defer i.mu.Unlock()
+
+	// Find field in cache first.
+	if f := i.fields[name]; f != nil {
+		return f, nil
+	}
+
+	cfm := &CreateFieldMessage{
+		Index:     i.name,
+		Field:     name,
+		CreatedAt: 0,
+		Meta:      opt,
+	}
+
+	// Create the field in etcd as the system of record.
+	if err := i.persistField(context.Background(), cfm); err != nil {
+		// There is a case where the index is not in memory, but it is in
+		// persistent storage. In that case, this will return an "index exists"
+		// error, which in that case should return the index. TODO: We may need
+		// to allow for that in the future.
+		return nil, errors.Wrap(err, "persisting field")
 	}
 
 	return i.createField(cfm, false)
@@ -697,6 +738,8 @@ func (i *Index) newField(path, name string) (*Field, error) {
 	f.idx = i
 	f.Stats = i.Stats
 	f.broadcaster = i.broadcaster
+	f.schemator = i.schemator
+	f.serializer = i.serializer
 	f.rowAttrStore = i.newAttrStore(filepath.Join(f.path, ".data"))
 	f.OpenTranslateStore = i.OpenTranslateStore
 	return f, nil

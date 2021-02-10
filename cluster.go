@@ -636,9 +636,6 @@ func (c *cluster) remoteSchema() (*Schema, error) {
 			continue
 		}
 
-		// TODO: replace following line by:
-		// ii, err := c.InternalClient.SchemaNode(context.Background(), &n.URI, true)
-		// after we
 		ii, err := c.InternalClient.SchemaNode(context.Background(), &n.URI, true)
 		if err != nil {
 			return nil, errors.Wrapf(err, "getting schema from %s (%v)", n.ID, n.URI)

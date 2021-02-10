@@ -77,6 +77,7 @@ const (
 	messageTypeResizeInstructionComplete
 	messageTypeNodeState
 	messageTypeRecalculateCaches
+	messageTypeLoadSchemaMessage
 	messageTypeNodeEvent
 	messageTypeNodeStatus
 	messageTypeTransaction
@@ -121,6 +122,8 @@ func getMessage(typ byte) Message {
 		return &NodeStateMessage{}
 	case messageTypeRecalculateCaches:
 		return &RecalculateCaches{}
+	case messageTypeLoadSchemaMessage:
+		return &LoadSchemaMessage{}
 	case messageTypeNodeEvent:
 		return &NodeEvent{}
 	case messageTypeNodeStatus:
@@ -162,6 +165,8 @@ func getMessageType(m Message) byte {
 		return messageTypeNodeState
 	case *RecalculateCaches:
 		return messageTypeRecalculateCaches
+	case *LoadSchemaMessage:
+		return messageTypeLoadSchemaMessage
 	case *NodeEvent:
 		return messageTypeNodeEvent
 	case *NodeStatus:

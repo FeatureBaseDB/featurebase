@@ -1011,31 +1011,12 @@ func (api *API) ApplySchema(ctx context.Context, s *Schema, remote bool) error {
 		return errors.Wrap(err, "validating api method")
 	}
 
-	// set CreatedAt for indexes and fields (if empty), and then apply schema.
-	for _, index := range s.Indexes {
-		if index.CreatedAt == 0 {
-			index.CreatedAt = timestamp()
-		}
-		for _, field := range index.Fields {
-			if field.CreatedAt == 0 {
-				field.CreatedAt = timestamp()
-			}
-		}
-	}
-	if !remote {
-		nodes := api.cluster.Nodes()
-		for i, node := range nodes {
-			if node.ID == api.Node().ID {
-				continue
-			}
-			err := api.server.defaultClient.PostSchema(ctx, &node.URI, s, true)
-			if err != nil {
-				return errors.Wrapf(err, "forwarding post schema to node %d of %d", i+1, len(nodes))
-			}
-		}
+	err := api.holder.applySchema(s)
+	if err != nil {
+		return errors.Wrap(err, "applying schema")
 	}
 
-	return errors.Wrap(api.holder.applySchema(s), "applying schema")
+	return nil
 }
 
 // Views returns the views in the given field.
@@ -1328,7 +1309,7 @@ func (api *API) Import(ctx context.Context, qcx *Qcx, req *ImportRequest, opts .
 	return nil
 }
 
-// Import bulk imports data into a particular index,field,shard.
+// ImportWithTx bulk imports data into a particular index,field,shard.
 func (api *API) ImportWithTx(ctx context.Context, qcx *Qcx, req *ImportRequest, opts ...ImportOption) error {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.Import")
 	defer span.Finish()
