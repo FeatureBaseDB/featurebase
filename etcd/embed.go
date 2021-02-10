@@ -680,10 +680,7 @@ func (e *Etcd) View(ctx context.Context, indexName, fieldName, name string) ([]b
 
 // CreateView differs from CreateIndex and CreateField in that it does not
 // return an error if the view already exists. If this logic needs to be
-// changed, we likely need to introduce an ErrViewExists variable and return
-// that. I decided not to do that now because it would require importing the
-// etcd package into the pilosa root package. The better way to do that may be
-// to define those error types in the disco package instead.
+// changed, we likely need to return disco.ErrViewExists.
 func (e *Etcd) CreateView(ctx context.Context, indexName, fieldName, name string, val []byte) error {
 	cli, err := e.client()
 	if err != nil {
