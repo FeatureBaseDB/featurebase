@@ -1435,3 +1435,49 @@ func TestClient_ServerInfoHasTxSrc(t *testing.T) {
 	}
 	pilosa.MustTxsrcToTxtype(si.TxSrc) // panics if invalid
 }
+func TestClient_ImportRoaringExists(t *testing.T) {
+	cluster := test.MustNewCluster(t, 1)
+	err := cluster.Start()
+	if err != nil {
+		t.Fatalf("starting cluster: %v", err)
+	}
+	defer cluster.Close()
+
+	node := cluster.GetNode(0)
+	_, err = node.API.CreateIndex(context.Background(), "i", pilosa.IndexOptions{TrackExistence: true})
+	if err != nil {
+		t.Fatalf("creating index: %v", err)
+	}
+	_, err = node.API.CreateField(context.Background(), "i", "f", pilosa.OptFieldTypeSet(pilosa.CacheTypeRanked, 100))
+	if err != nil {
+		t.Fatalf("creating field: %v", err)
+	}
+	// Send import request.
+	host := node.URL()
+	c := MustNewClient(host, http.GetHTTPClient(nil))
+	// [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 65537]
+	roaringReq := makeImportRoaringRequest(false, "3B3001000100000900010000000100010009000100")
+
+	if err := c.ImportRoaring(context.Background(), &cluster.GetNode(0).API.Node().URI, "i", "f", 0, false, roaringReq); err != nil {
+		t.Fatal(err)
+	}
+	expected := []uint64{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 65537}
+	var qr pilosa.QueryResponse
+	qr, err = node.API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: "Row(f=0)"})
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	got := qr.Results[0].(*pilosa.Row).Columns()
+	if !reflect.DeepEqual(got, expected) {
+		t.Fatalf(" Row unexpected columns: got %+v  expected: %+v", got, expected)
+	}
+	qr, err = node.API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: "All()"})
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	got = qr.Results[0].(*pilosa.Row).Columns()
+	if !reflect.DeepEqual(got, expected) {
+		t.Fatalf("All unexpected columns: got %+v  expected: %+v", got, expected)
+	}
+
+}

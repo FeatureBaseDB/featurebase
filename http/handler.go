@@ -2486,7 +2486,6 @@ func (h *Handler) handlePostImportRoaring(w http.ResponseWriter, r *http.Request
 		http.Error(w, error, code)
 		return
 	}
-
 	// Get index and field type to determine how to handle the
 	// import data.
 	indexName := mux.Vars(r)["index"]
