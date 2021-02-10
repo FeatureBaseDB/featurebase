@@ -211,7 +211,10 @@ func TestClusterResize_AddNode(t *testing.T) {
 	t.Run("ContinuousShards", func(t *testing.T) {
 
 		// Configure node0
-		m0 := test.MustRunCluster(t, 1).GetNode(0)
+		c := test.MustRunCluster(t, 2)
+		defer c.Close()
+
+		m0 := c.GetNode(0)
 		defer m0.Close()
 
 		// Create a client for each node.
@@ -240,20 +243,7 @@ func TestClusterResize_AddNode(t *testing.T) {
 		m0.QueryExpect(t, "i", "", `Row(f=1)`, exp)
 
 		// Configure node1
-		m1 := test.NewCommandNode(t)
-
-		if err := port.GetListeners(func(lsns []*net.TCPListener) error {
-			portsCfg := test.GenPortsConfig(test.NewPorts(lsns))
-
-			m1.Config.Etcd = portsCfg[0].Etcd
-			m1.Config.Name = portsCfg[0].Name
-			m1.Config.Cluster.Name = portsCfg[0].Cluster.Name
-			m1.Config.BindGRPC = portsCfg[0].BindGRPC
-
-			return m1.Start()
-		}, 3, 10); err != nil {
-			t.Fatalf("starting second main: %v", err)
-		}
+		m1 := c.GetNode(1)
 		defer m1.Close()
 
 		state0, err0 := m0.API.State()
@@ -268,9 +258,14 @@ func TestClusterResize_AddNode(t *testing.T) {
 		m0.QueryExpect(t, "i", "", `Row(f=1)`, exp)
 		m1.QueryExpect(t, "i", "", `Row(f=1)`, exp)
 	})
+
 	t.Run("OneShard", func(t *testing.T) {
 		// Configure node0
-		m0 := test.MustRunCluster(t, 1).GetNode(0)
+		c := test.MustRunCluster(t, 2)
+		defer c.Close()
+
+		// Configure node0
+		m0 := c.GetNode(0)
 		defer m0.Close()
 
 		// Create a client for each node.
@@ -296,20 +291,7 @@ func TestClusterResize_AddNode(t *testing.T) {
 		m0.QueryExpect(t, "i", "", `Row(f=1)`, exp)
 
 		// Configure node1
-		m1 := test.NewCommandNode(t)
-
-		if err := port.GetListeners(func(lsns []*net.TCPListener) error {
-			portsCfg := test.GenPortsConfig(test.NewPorts(lsns))
-
-			m1.Config.Etcd = portsCfg[0].Etcd
-			m1.Config.Name = portsCfg[0].Name
-			m1.Config.Cluster.Name = portsCfg[0].Cluster.Name
-			m1.Config.BindGRPC = portsCfg[0].BindGRPC
-
-			return m1.Start()
-		}, 3, 10); err != nil {
-			t.Fatalf("starting second main: %v", err)
-		}
+		m1 := c.GetNode(1)
 		defer m1.Close()
 
 		state0, err0 := m0.API.State()
@@ -324,11 +306,14 @@ func TestClusterResize_AddNode(t *testing.T) {
 		m0.QueryExpect(t, "i", "", `Row(f=1)`, exp)
 		m1.QueryExpect(t, "i", "", `Row(f=1)`, exp)
 	})
+
 	t.Run("SkippedShard", func(t *testing.T) {
 		// same reason as the ContinuousShards test above.
+		c := test.MustRunCluster(t, 2)
+		defer c.Close()
 
 		// Configure node0
-		m0 := test.MustRunCluster(t, 1).GetNode(0)
+		m0 := c.GetNode(0)
 		defer m0.Close()
 
 		// Create a client for each node.
@@ -358,21 +343,7 @@ func TestClusterResize_AddNode(t *testing.T) {
 		m0.QueryExpect(t, "i", "", `Row(f=1)`, exp)
 
 		// Configure node1
-		m1 := test.NewCommandNode(t)
-
-		if err := port.GetListeners(func(lsns []*net.TCPListener) error {
-			portsCfg := test.GenPortsConfig(test.NewPorts(lsns))
-
-			m1.Config.Etcd = portsCfg[0].Etcd
-			m1.Config.Name = portsCfg[0].Name
-			m1.Config.Cluster.Name = portsCfg[0].Cluster.Name
-			m1.Config.BindGRPC = portsCfg[0].BindGRPC
-
-			return m1.Start()
-		}, 3, 10); err != nil {
-			t.Fatalf("starting second main: %v", err)
-		}
-
+		m1 := c.GetNode(1)
 		defer m1.Close()
 
 		state0, err0 := m0.API.State()
