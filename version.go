@@ -55,7 +55,7 @@ func VersionInfo() string {
 	}
 	suffix += " " + GoVersion
 	if TrialDeadline != "" {
-		suffix += " limited time trial ends at: " + TrialDeadline
+		suffix += " limited time trial ends on: " + TrialDeadline
 	}
 	return prefix + "Pilosa" + suffix
 }
