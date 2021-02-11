@@ -117,6 +117,7 @@ var validAPIMethods = map[disco.ClusterState]map[apiMethod]struct{}{
 	disco.ClusterStateNormal:   appendMap(methodsCommon, methodsNormal),
 	disco.ClusterStateDegraded: appendMap(methodsCommon, methodsDegraded),
 	disco.ClusterStateResizing: appendMap(methodsCommon, methodsResizing),
+	disco.ClusterStateDown:     methodsCommon,
 }
 
 func appendMap(a, b map[apiMethod]struct{}) map[apiMethod]struct{} {
@@ -2226,6 +2227,7 @@ const (
 
 var methodsCommon = map[apiMethod]struct{}{
 	apiClusterMessage: {},
+	apiState:          {},
 }
 
 var methodsResizing = map[apiMethod]struct{}{
@@ -2233,7 +2235,6 @@ var methodsResizing = map[apiMethod]struct{}{
 	apiTranslateData: {},
 	apiResizeAbort:   {},
 	apiSchema:        {},
-	apiState:         {},
 }
 
 var methodsDegraded = map[apiMethod]struct{}{
@@ -2249,7 +2250,6 @@ var methodsDegraded = map[apiMethod]struct{}{
 	apiRemoveNode:        {},
 	apiShardNodes:        {},
 	apiSchema:            {},
-	apiState:             {},
 	apiViews:             {},
 	apiStartTransaction:  {},
 	apiFinishTransaction: {},
@@ -2279,7 +2279,6 @@ var methodsNormal = map[apiMethod]struct{}{
 	apiRemoveNode:           {},
 	apiShardNodes:           {},
 	apiSchema:               {},
-	apiState:                {},
 	apiViews:                {},
 	apiApplySchema:          {},
 	apiStartTransaction:     {},

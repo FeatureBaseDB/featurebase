@@ -107,7 +107,6 @@ func (e *Etcd) Close() error {
 		if e.heartbeatCancel != nil {
 			e.heartbeatCancel()
 		}
-		e.e.Server.Stop()
 		e.e.Close()
 		<-e.e.Server.StopNotify()
 	}
@@ -823,7 +822,7 @@ func (e *Etcd) leaseKeepAlive(ttl int64) (clientv3.LeaseID, func(context.Context
 				if cli, err := e.client(); err != nil {
 					log.Printf("leaseKeepAlive: creates a new client: %v\n", err)
 				} else {
-					if _, err := cli.Revoke(context.TODO(), leaseResp.ID); err != nil {
+					if _, err := cli.Revoke(context.Background(), leaseResp.ID); err != nil {
 						log.Printf("leaseKeepAlive: revokes the lease (ID: %x): %v\n", leaseResp.ID, err)
 					}
 					cli.Close()
