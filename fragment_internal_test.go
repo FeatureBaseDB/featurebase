@@ -456,7 +456,7 @@ func TestFragment_SetValue(t *testing.T) {
 	})
 
 	t.Run("QuickCheck", func(t *testing.T) {
-		if err := quick.Check(func(bitDepth uint, bitN uint64, values []uint64) bool {
+		if err := quick.Check(func(bitDepth uint64, bitN uint64, values []uint64) bool {
 			// Limit bit depth & maximum values.
 			bitDepth = (bitDepth % 62) + 1
 			bitN = (bitN % 99) + 1
@@ -988,7 +988,7 @@ func TestFragment_Range(t *testing.T) {
 
 // benchmarkSetValues is a helper function to explore, very roughly, the cost
 // of setting values.
-func benchmarkSetValues(b *testing.B, tx Tx, bitDepth uint, f *fragment, cfunc func(uint64) uint64) {
+func benchmarkSetValues(b *testing.B, tx Tx, bitDepth uint64, f *fragment, cfunc func(uint64) uint64) {
 	column := uint64(0)
 	for i := 0; i < b.N; i++ {
 		// We're not checking the error because this is a benchmark.
@@ -1000,7 +1000,7 @@ func benchmarkSetValues(b *testing.B, tx Tx, bitDepth uint, f *fragment, cfunc f
 
 // Benchmark performance of setValue for BSI ranges.
 func BenchmarkFragment_SetValue(b *testing.B) {
-	depths := []uint{4, 8, 16}
+	depths := []uint64{4, 8, 16}
 	for _, bitDepth := range depths {
 		name := fmt.Sprintf("Depth%d", bitDepth)
 		f, idx, tx := mustOpenFragment(b, "i", "f", viewBSIGroupPrefix+"foo", 0, "none")
@@ -1021,7 +1021,7 @@ func BenchmarkFragment_SetValue(b *testing.B) {
 
 // benchmarkImportValues is a helper function to explore, very roughly, the cost
 // of setting values using the special setter used for imports.
-func benchmarkImportValues(b *testing.B, tx Tx, bitDepth uint, f *fragment, cfunc func(uint64) uint64) {
+func benchmarkImportValues(b *testing.B, tx Tx, bitDepth uint64, f *fragment, cfunc func(uint64) uint64) {
 	column := uint64(0)
 	b.StopTimer()
 	columns := make([]uint64, b.N)
@@ -1040,7 +1040,7 @@ func benchmarkImportValues(b *testing.B, tx Tx, bitDepth uint, f *fragment, cfun
 
 // Benchmark performance of setValue for BSI ranges.
 func BenchmarkFragment_ImportValue(b *testing.B) {
-	depths := []uint{4, 8, 16}
+	depths := []uint64{4, 8, 16}
 	for _, bitDepth := range depths {
 		name := fmt.Sprintf("Depth%d", bitDepth)
 		f, idx, tx := mustOpenBSIFragment(b, "i", "f", viewBSIGroupPrefix+"foo", 0)
@@ -4405,7 +4405,7 @@ func TestFragmentPositionsForValue(t *testing.T) {
 
 	tests := []struct {
 		columnID uint64
-		bitDepth uint
+		bitDepth uint64
 		value    int64
 		clear    bool
 		toSet    []uint64
@@ -5260,7 +5260,7 @@ func TestImportMultipleValues(t *testing.T) {
 		vals      []int64
 		checkCols []uint64
 		checkVals []int64
-		depth     uint
+		depth     uint64
 	}{
 		{
 			cols:      []uint64{0, 0},
@@ -5312,7 +5312,7 @@ func TestImportValueRowCache(t *testing.T) {
 		cols      []uint64
 		vals      []int64
 		checkCols []uint64
-		depth     uint
+		depth     uint64
 	}
 	tests := []struct {
 		tc1 testCase

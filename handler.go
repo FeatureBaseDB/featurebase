@@ -226,11 +226,11 @@ type ImportRequest struct {
 
 // ValidateWithTimestamp ensures that the payload of the request is valid.
 func (ir *ImportRequest) ValidateWithTimestamp(indexCreatedAt, fieldCreatedAt int64) error {
-	if ir.IndexCreatedAt != 0 && ir.FieldCreatedAt != 0 {
-		if ir.IndexCreatedAt != indexCreatedAt || ir.FieldCreatedAt != fieldCreatedAt {
-			return ErrPreconditionFailed
-		}
+	if (ir.IndexCreatedAt != 0 && ir.IndexCreatedAt != indexCreatedAt) ||
+		(ir.FieldCreatedAt != 0 && ir.FieldCreatedAt != fieldCreatedAt) {
+		return ErrPreconditionFailed
 	}
+
 	return nil
 }
 

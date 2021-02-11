@@ -844,7 +844,7 @@ func (f *Field) loadMeta() error {
 	f.options.Max = max
 	f.options.Base = pb.Base
 	f.options.Scale = pb.Scale
-	f.options.BitDepth = uint(pb.BitDepth)
+	f.options.BitDepth = pb.BitDepth
 	f.options.TimeQuantum = TimeQuantum(pb.TimeQuantum)
 	f.options.Keys = pb.Keys
 	f.options.NoStandardView = pb.NoStandardView
@@ -1871,9 +1871,9 @@ func (f *Field) importRoaringOverwrite(ctx context.Context, tx Tx, data []byte, 
 			return err
 		}
 
-		var bitDepth uint
+		var bitDepth uint64
 		if maxRowID+1 > bsiOffsetBit {
-			bitDepth = uint(maxRowID + 1 - bsiOffsetBit)
+			bitDepth = uint64(maxRowID + 1 - bsiOffsetBit)
 		}
 
 		bsig := f.bsiGroup(f.name)
@@ -1915,7 +1915,7 @@ func (p fieldInfoSlice) Less(i, j int) bool { return p[i].Name < p[j].Name }
 // FieldOptions represents options to set when initializing a field.
 type FieldOptions struct {
 	Base           int64       `json:"base,omitempty"`
-	BitDepth       uint        `json:"bitDepth,omitempty"`
+	BitDepth       uint64      `json:"bitDepth,omitempty"`
 	Min            pql.Decimal `json:"min,omitempty"`
 	Max            pql.Decimal `json:"max,omitempty"`
 	Scale          int64       `json:"scale,omitempty"`
@@ -2009,7 +2009,7 @@ func (o *FieldOptions) MarshalJSON() ([]byte, error) {
 		return json.Marshal(struct {
 			Type         string      `json:"type"`
 			Base         int64       `json:"base"`
-			BitDepth     uint        `json:"bitDepth"`
+			BitDepth     uint64      `json:"bitDepth"`
 			Min          pql.Decimal `json:"min"`
 			Max          pql.Decimal `json:"max"`
 			Keys         bool        `json:"keys"`
@@ -2028,7 +2028,7 @@ func (o *FieldOptions) MarshalJSON() ([]byte, error) {
 			Type     string      `json:"type"`
 			Base     int64       `json:"base"`
 			Scale    int64       `json:"scale"`
-			BitDepth uint        `json:"bitDepth"`
+			BitDepth uint64      `json:"bitDepth"`
 			Min      pql.Decimal `json:"min"`
 			Max      pql.Decimal `json:"max"`
 			Keys     bool        `json:"keys"`
@@ -2109,7 +2109,7 @@ type bsiGroup struct {
 	Max      int64  `json:"max,omitempty"`
 	Base     int64  `json:"base,omitempty"`
 	Scale    int64  `json:"scale,omitempty"`
-	BitDepth uint   `json:"bitDepth,omitempty"`
+	BitDepth uint64 `json:"bitDepth,omitempty"`
 }
 
 // baseValue adjusts the value to align with the range for Field for a certain
@@ -2209,12 +2209,12 @@ func isValidCacheType(v string) bool {
 }
 
 // bitDepth returns the number of bits required to store a value.
-func bitDepth(v uint64) uint {
-	return uint(bits.Len64(v))
+func bitDepth(v uint64) uint64 {
+	return uint64(bits.Len64(v))
 }
 
 // bitDepthInt64 returns the required bit depth for abs(v).
-func bitDepthInt64(v int64) uint {
+func bitDepthInt64(v int64) uint64 {
 	if v < 0 {
 		return bitDepth(uint64(-v))
 	}

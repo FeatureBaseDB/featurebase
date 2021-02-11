@@ -4086,7 +4086,7 @@ func (e *executor) executeExtractShard(ctx context.Context, qcx *Qcx, index stri
 			mergeBits(sign, 1<<63, data)
 
 			// Copy in the significand.
-			for i := uint(0); i < bsig.BitDepth; i++ {
+			for i := uint64(0); i < bsig.BitDepth; i++ {
 				bits, err := fragment.row(tx, bsiOffsetBit+uint64(i))
 				if err != nil {
 					return ExtractedIDMatrix{}, errors.Wrap(err, "loading BSI significand bit from fragment")

@@ -20,6 +20,7 @@ import (
 	"regexp"
 	"time"
 
+	"github.com/pilosa/pilosa/v2/disco"
 	pnet "github.com/pilosa/pilosa/v2/net"
 	"github.com/pilosa/pilosa/v2/storage"
 	"github.com/pkg/errors"
@@ -30,7 +31,7 @@ var (
 	ErrHostRequired = errors.New("host required")
 
 	ErrIndexRequired = errors.New("index required")
-	ErrIndexExists   = errors.New("index already exists")
+	ErrIndexExists   = disco.ErrIndexExists
 	ErrIndexNotFound = errors.New("index not found")
 
 	ErrForeignIndexNotFound = errors.New("foreign index not found")
@@ -38,7 +39,7 @@ var (
 	// ErrFieldRequired is returned when no field is specified.
 	ErrFieldRequired  = errors.New("field required")
 	ErrColumnRequired = errors.New("column required")
-	ErrFieldExists    = errors.New("field already exists")
+	ErrFieldExists    = disco.ErrFieldExists
 	ErrFieldNotFound  = errors.New("field not found")
 
 	ErrBSIGroupNotFound         = errors.New("bsigroup not found")
@@ -54,7 +55,7 @@ var (
 	ErrDecimalOutOfRange        = errors.New("decimal value out of range")
 
 	ErrViewRequired     = errors.New("view required")
-	ErrViewExists       = errors.New("view already exists")
+	ErrViewExists       = disco.ErrViewExists
 	ErrInvalidView      = errors.New("invalid view")
 	ErrInvalidCacheType = errors.New("invalid cache type")
 

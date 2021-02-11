@@ -231,10 +231,28 @@ func TestHandler_Endpoints(t *testing.T) {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		}
 
-		body := strings.TrimSpace(w.Body.String())
-		target := fmt.Sprintf(`{"indexes":[{"name":"i0","options":{"keys":false,"trackExistence":false},"fields":[{"name":"f0","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false}},{"name":"f1","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false}}],"shardWidth":%[1]d},{"name":"i1","options":{"keys":false,"trackExistence":false},"fields":[{"name":"f0","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false}}],"shardWidth":%[1]d}]}`, pilosa.ShardWidth)
-		if body != target {
-			t.Fatalf("\n%s\n!=\n%s", target, body)
+		var bodySchema pilosa.Schema
+		if err := json.Unmarshal(w.Body.Bytes(),
+			&bodySchema); err != nil {
+			t.Fatalf("unexpected unmarshalling error: %v", err)
+		}
+		// DO NOT COMPARE `CreatedAt` - reset to 0
+		for _, i := range bodySchema.Indexes {
+			i.CreatedAt = 0
+			for _, f := range i.Fields {
+				f.CreatedAt = 0
+			}
+		}
+		//
+
+		var targetSchema pilosa.Schema
+		if err := json.Unmarshal([]byte(fmt.Sprintf(`{"indexes":[{"name":"i0","options":{"keys":false,"trackExistence":false},"fields":[{"name":"f0","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false}},{"name":"f1","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false}}],"shardWidth":%d},{"name":"i1","options":{"keys":false,"trackExistence":false},"fields":[{"name":"f0","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false}}],"shardWidth":%[1]d}]}`, pilosa.ShardWidth)),
+			&targetSchema); err != nil {
+			t.Fatalf("unexpected unmarshalling error: %v", err)
+		}
+
+		if !reflect.DeepEqual(targetSchema, bodySchema) {
+			t.Fatalf("target: %+v\nbody: %+v\n", targetSchema, bodySchema)
 		}
 	})
 
@@ -313,11 +331,6 @@ func TestHandler_Endpoints(t *testing.T) {
 			t.Fatalf("getting schema: %v", err)
 		}
 
-		err = cmd.API.ApplySchema(context.Background(), &pilosa.Schema{Indexes: indexInfo}, false)
-		if err != nil {
-			t.Fatalf("applying schema: %v", err)
-		}
-
 		idx := indexInfo[0]
 		fld := indexInfo[0].Fields[0]
 		msg := pilosa.ImportRequest{
@@ -357,7 +370,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		h.ServeHTTP(w, httpReq)
 
 		if w.Code != 412 {
-			t.Fatal("expected: Precondition Failed, got:" + w.Body.String())
+			t.Fatalf("expected: Precondition Failed, got: %d", w.Code)
 		}
 	})
 

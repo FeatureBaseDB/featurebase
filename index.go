@@ -102,7 +102,7 @@ func NewIndex(holder *Holder, path, name string) (*Index, error) {
 		holder:         holder,
 		trackExistence: true,
 
-		schemator:  disco.NopSchemator,
+		schemator:  disco.InMemSchemator,
 		serializer: NopSerializer,
 
 		translateStores: make(map[int]TranslateStore),
@@ -618,7 +618,7 @@ func (i *Index) CreateFieldIfNotExists(name string, opts ...FieldOption) (*Field
 	cfm := &CreateFieldMessage{
 		Index:     i.name,
 		Field:     name,
-		CreatedAt: 0,
+		CreatedAt: timestamp(),
 		Meta:      fo,
 	}
 
