@@ -27,7 +27,11 @@ import (
 	"github.com/pilosa/pilosa/v2"
 )
 
-func trialVersion(logger loggerLogger) {
+// handleTrialDeadline checks to see if this is a trial version of Molecula that expires at some point.
+// If it is, we contact an NTP server to get the current time and compare that to the trial deadline.
+// We launch two goroutines, one which reminds via a log message how much time is left in the trial,
+// and one which causes the process to exit once the trial is over.
+func handleTrialDeadline(logger loggerLogger) {
 	if pilosa.TrialDeadline != "" {
 		startTime, err := ntpServerTime(4, logger)
 		if err != nil {

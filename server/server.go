@@ -285,7 +285,7 @@ func (m *Command) SetupServer() error {
 
 	m.logger.Printf("%s", pilosa.VersionInfo())
 
-	trialVersion(m.logger)
+	handleTrialDeadline(m.logger)
 
 	// If the pilosa command line uses -tx to override the
 	// PILOSA_TXSRC env variable, then we must also correct
