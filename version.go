@@ -53,8 +53,10 @@ func VersionInfo() string {
 	case buildTime != "":
 		suffix += " (" + buildTime + ")"
 	}
-	suffix += " " + GoVersion + " limited time trial ends at: " + TrialDeadline
-
+	suffix += " " + GoVersion
+	if TrialDeadline != "" {
+		suffix += " limited time trial ends at: " + TrialDeadline
+	}
 	return prefix + "Pilosa" + suffix
 }
 
