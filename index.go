@@ -482,6 +482,7 @@ func (i *Index) Fields() []*Field {
 func (i *Index) existenceField() *Field {
 	i.mu.RLock()
 	defer i.mu.RUnlock()
+
 	return i.existenceFld
 }
 
