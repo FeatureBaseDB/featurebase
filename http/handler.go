@@ -67,7 +67,7 @@ type Handler struct {
 	api *pilosa.API
 
 	ln net.Listener
-	// Needed real URL for a log
+	// url is used to hold the advertise bind address for printing a log during startup.
 	url string
 
 	closeTimeout time.Duration
@@ -137,6 +137,9 @@ func OptHandlerLogger(logger logger.Logger) handlerOption {
 	}
 }
 
+// OptHandlerListener set the listener that will be used by the HTTP server.
+// Url must be the advertised URL. It will be used to show a log to the user
+// about where the Web UI is. This option is mandatory.
 func OptHandlerListener(ln net.Listener, url string) handlerOption {
 	return func(h *Handler) error {
 		h.ln = ln
