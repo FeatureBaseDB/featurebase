@@ -67,6 +67,8 @@ type Handler struct {
 	api *pilosa.API
 
 	ln net.Listener
+	// Needed real URL for a log
+	url string
 
 	closeTimeout time.Duration
 
@@ -135,9 +137,10 @@ func OptHandlerLogger(logger logger.Logger) handlerOption {
 	}
 }
 
-func OptHandlerListener(ln net.Listener) handlerOption {
+func OptHandlerListener(ln net.Listener, url string) handlerOption {
 	return func(h *Handler) error {
 		h.ln = ln
+		h.url = url
 		return nil
 	}
 }
@@ -502,7 +505,7 @@ type statikHandler struct {
 func newStatikHandler(h *Handler) statikHandler {
 	fs, err := h.fileSystem.New()
 	if err == nil {
-		h.logger.Printf("enabled Web UI (%s) at %s", h.api.LatticeVersion(), h.ln.Addr().String())
+		h.logger.Printf("enabled Web UI (%s) at %s", h.api.LatticeVersion(), h.url)
 	}
 
 	return statikHandler{

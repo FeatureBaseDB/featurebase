@@ -450,7 +450,7 @@ func (m *Command) SetupServer() error {
 		http.OptHandlerAPI(m.API),
 		http.OptHandlerLogger(m.logger),
 		http.OptHandlerFileSystem(&statik.FileSystem{}),
-		http.OptHandlerListener(m.ln),
+		http.OptHandlerListener(m.ln, uri.HostPort()),
 		http.OptHandlerCloseTimeout(m.closeTimeout),
 		http.OptHandlerMiddleware(m.grpcServer.middleware(m.Config.Handler.AllowedOrigins)),
 	)

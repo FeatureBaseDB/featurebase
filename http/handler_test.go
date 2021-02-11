@@ -45,7 +45,7 @@ func TestHandlerOptions(t *testing.T) {
 		return err
 	}, 10)
 
-	_, err = http.NewHandler(http.OptHandlerListener(ln))
+	_, err = http.NewHandler(http.OptHandlerListener(ln, ln.Addr().String()))
 	if err == nil {
 		t.Fatalf("expected error making handler without options, got nil")
 	}
