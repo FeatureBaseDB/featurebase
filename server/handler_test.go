@@ -250,23 +250,27 @@ func TestHandler_Endpoints(t *testing.T) {
 	} else if _, err := f.SetBit(tx2, 0, 0, nil); err != nil {
 		t.Fatal(err)
 	}
-	if f, err := i2.CreateFieldIfNotExists("f1", pilosa.OptFieldTypeInt(-100, 100)); err != nil {
-		t.Fatal(err)
-	} else if _, err := f.SetBit(tx2, 0, 0, nil); err != nil {
+
+	f, err := i2.CreateFieldIfNotExists("f1", pilosa.OptFieldTypeInt(-100, 100))
+	if err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := cmd.API.Query(context.Background(), &pilosa.QueryRequest{Index: "i2", Query: "Set(10, f1=4) Set(11, f1=5) Set(12, f1=6) Set(13, f1=7)"}); err != nil {
+	for n := 0; n < 4; n++ {
+		if _, err := f.SetValue(tx2, uint64(n), int64(n)); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	f, err = i2.CreateFieldIfNotExists("f2", pilosa.OptFieldTypeDecimal(1, pql.Decimal{Value: -10}, pql.Decimal{Value: 10}))
+	if err != nil {
 		t.Fatal(err)
 	}
 
-	if f, err := i2.CreateFieldIfNotExists("f2", pilosa.OptFieldTypeDecimal(1, pql.Decimal{Value: -10}, pql.Decimal{Value: 10})); err != nil {
-		t.Fatal(err)
-	} else if _, err := f.SetBit(tx2, 0, 0, nil); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := cmd.API.Query(context.Background(), &pilosa.QueryRequest{Index: "i2", Query: "Set(10, f2=4) Set(11, f2=5) Set(12, f2=6) Set(13, f2=7) Set(14, f2=8)"}); err != nil {
-		t.Fatal(err)
+	for n := 0; n < 5; n++ {
+		if _, err := f.SetValue(tx2, uint64(n), int64(n)); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	if f, err := i2.CreateFieldIfNotExists("f3", pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMDH"))); err != nil {
@@ -297,9 +301,9 @@ func TestHandler_Endpoints(t *testing.T) {
 		}
 
 		body := strings.TrimSpace(w.Body.String())
-		target := fmt.Sprintf(`{"indexes":[{"name":"i0","options":{"keys":false,"trackExistence":false},"fields":[{"name":"f0","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false},"cardinality":0},{"name":"f1","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false},"cardinality":1}],"shardWidth":%[1]d},{"name":"i1","options":{"keys":false,"trackExistence":false},"fields":[{"name":"f0","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false},"cardinality":1}],"shardWidth":%[1]d},{"name":"i2","options":{"keys":false,"trackExistence":false},"fields":[{"name":"f0","options":{"type":"set","cacheType":"ranked","cacheSize":1000,"keys":false},"cardinality":1},{"name":"f1","options":{"type":"int","base":0,"bitDepth":3,"min":-100,"max":100,"keys":false,"foreignIndex":""},"cardinality":4},{"name":"f2","options":{"type":"decimal","base":0,"scale":1,"bitDepth":7,"min":-10,"max":10,"keys":false},"cardinality":5},{"name":"f3","options":{"type":"time","timeQuantum":"YMDH","keys":false,"noStandardView":false},"cardinality":1},{"name":"f4","options":{"type":"mutex","cacheType":"ranked","cacheSize":5000,"keys":false},"cardinality":1},{"name":"f5","options":{"type":"bool"},"cardinality":1}],"shardWidth":%[1]d}]}`, pilosa.ShardWidth)
+		target := fmt.Sprintf(`{"indexes":[{"name":"i0","options":{"keys":false,"trackExistence":false},"fields":[{"name":"f0","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false},"cardinality":0},{"name":"f1","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false},"cardinality":1}],"shardWidth":%[1]d},{"name":"i1","options":{"keys":false,"trackExistence":false},"fields":[{"name":"f0","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false},"cardinality":1}],"shardWidth":%[1]d},{"name":"i2","options":{"keys":false,"trackExistence":false},"fields":[{"name":"f0","options":{"type":"set","cacheType":"ranked","cacheSize":1000,"keys":false},"cardinality":1},{"name":"f1","options":{"type":"int","base":0,"bitDepth":2,"min":-100,"max":100,"keys":false,"foreignIndex":""},"cardinality":4},{"name":"f2","options":{"type":"decimal","base":0,"scale":1,"bitDepth":3,"min":-10,"max":10,"keys":false},"cardinality":5},{"name":"f3","options":{"type":"time","timeQuantum":"YMDH","keys":false,"noStandardView":false},"cardinality":1},{"name":"f4","options":{"type":"mutex","cacheType":"ranked","cacheSize":5000,"keys":false},"cardinality":1},{"name":"f5","options":{"type":"bool"},"cardinality":1}],"shardWidth":%[1]d}]}`, pilosa.ShardWidth)
 		if body != target {
-			t.Fatalf("%s\n!=\n%s", target, body)
+			t.Fatalf("\n%s\n!=\n%s", target, body)
 		}
 	})
 
