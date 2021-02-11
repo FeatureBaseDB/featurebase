@@ -143,7 +143,6 @@ func (e *executor) Close() error {
 
 // Execute executes a PQL query.
 func (e *executor) Execute(ctx context.Context, index string, q *pql.Query, shards []uint64, opt *execOptions) (QueryResponse, error) {
-
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.Execute")
 	span.LogKV("pql", q.String())
 	defer span.Finish()
@@ -556,11 +555,22 @@ func (e *executor) execute(ctx context.Context, qcx *Qcx, index string, q *pql.Q
 		// about the positive values, because only positive values
 		// are valid column IDs. So we don't actually eat top-level
 		// pre calls.
-		err := e.handlePreCallChildren(ctx, qcx, index, call, shards, opt)
-		if err != nil {
-			return nil, err
+		if call.Name == "Count" {
+			// Handle count specially, skipping the level directly underneath it.
+			for _, child := range call.Children {
+				err := e.handlePreCallChildren(ctx, qcx, index, child, shards, opt)
+				if err != nil {
+					return nil, err
+				}
+			}
+		} else {
+			err := e.handlePreCallChildren(ctx, qcx, index, call, shards, opt)
+			if err != nil {
+				return nil, err
+			}
 		}
 		var v interface{}
+		var err error
 		// Top-level calls don't need to precompute cross-index things,
 		// because we can just pick whatever index we want, but we
 		// still need to handle them. Since everything else was
@@ -1505,7 +1515,18 @@ func executeDistinctShardSet(ctx context.Context, qcx *Qcx, idx *Index, fieldNam
 	fragData, _, err := tx.ContainerIterator(index, fieldName, "standard", shard, 0)
 	switch errors.Cause(err) {
 	case ViewNotFound, FragmentNotFound:
-		return nil, nil
+		// It may seem reasonable to return `nil` here in the case where the
+		// fragment for this shard does not exist. The problem with doing that
+		// is that if this operation is being performed on a remote node, then
+		// this result is going to get serialized as a QueryResponse and sent
+		// back to the original, non-remote node. When this happens, the
+		// encodeRow/decodeRow logic replaces `nil` with an empty Row. An empty
+		// Row will cause problems during the union step of the reduce phase if
+		// it is the "left" side of the union, because then the resulting Row
+		// after the union will have blank Index and Field values. Here, we
+		// ensure that we send a non-nil Row with valid Index and Field values
+		// so that the union step doesn't cause problems.
+		return &Row{Index: index, Field: fieldName}, nil
 	case nil:
 	default:
 		return nil, errors.Wrap(err, "getting fragment data")
@@ -4618,28 +4639,21 @@ func (e *executor) executeCount(ctx context.Context, qcx *Qcx, index string, c *
 
 	child := c.Children[0]
 
-	// If the child is precomputed, we'll bypass mapreduce, ignore
-	// shards, and just count the number of bits.
-	if child.Name == "Precomputed" {
-		count := uint64(0)
-		for _, irow := range child.Precomputed {
-			switch row := irow.(type) {
-			case *Row:
-				for _, seg := range row.segments {
-					count += seg.n
-				}
-			case SignedRow:
-				for _, seg := range row.Pos.segments {
-					count += seg.n
-				}
-				for _, seg := range row.Neg.segments {
-					count += seg.n
-				}
-			default:
-				return 0, errors.Errorf("unexpected precomputed value type inside count: %+v", row)
-			}
+	// If the child is distinct/similar, execute it directly here and count the result.
+	if child.Type == pql.PrecallGlobal {
+		result, err := e.executeCall(ctx, qcx, index, child, shards, opt)
+		if err != nil {
+			return 0, err
 		}
-		return count, nil
+
+		switch row := result.(type) {
+		case *Row:
+			return row.Count(), nil
+		case SignedRow:
+			return row.Pos.Count() + row.Neg.Count(), nil
+		default:
+			return 0, errors.Errorf("cannot count result of type %T from call %q", row, child.String())
+		}
 	}
 
 	// Execute calls in bulk on each remote node and merge.
@@ -6562,6 +6576,9 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 
 			if field.Keys() {
 				rslt := result.Pos
+				if rslt == nil {
+					return &SignedRow{Pos: &Row{}}, nil
+				}
 				other := &Row{Attrs: rslt.Attrs}
 				for _, segment := range rslt.Segments() {
 					keys, err := e.Cluster.translateIndexIDs(context.Background(), field.ForeignIndex(), segment.Columns())

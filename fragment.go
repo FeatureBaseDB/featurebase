@@ -2651,7 +2651,13 @@ func (f *fragment) importValueSmallWrite(tx Tx, columnIDs []uint64, values []int
 		}
 		return nil
 	}(); err != nil {
-		_ = f.openStorage(true)
+		errOpenStorage := f.openStorage(true)
+		if errOpenStorage != nil {
+			f.Logger.Printf("failed to import data into fragment: %v", err)
+			f.Logger.Printf("recovery with openStorage failed for fragment: %v", errOpenStorage)
+			f.Logger.Debugf("%s", debug.Stack())
+			os.Exit(1)
+		}
 		return err
 	}
 	rowSet := make(map[uint64]struct{}, bitDepth+1)
@@ -2705,7 +2711,13 @@ func (f *fragment) importValue(tx Tx, columnIDs []uint64, values []int64, bitDep
 		// Flush changes in bulk back to the transaction.
 		return txb.Flush()
 	}(); err != nil {
-		_ = f.openStorage(true)
+		errOpenStorage := f.openStorage(true)
+		if errOpenStorage != nil {
+			f.Logger.Printf("failed to import data into fragment: %v", err)
+			f.Logger.Printf("recovery with openStorage failed for fragment: %v", errOpenStorage)
+			f.Logger.Debugf("%s", debug.Stack())
+			os.Exit(1)
+		}
 		return err
 	}
 	// Keep stats accurate. We don't call incrementOpN here because it may

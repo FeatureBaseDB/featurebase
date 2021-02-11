@@ -219,6 +219,8 @@ type Tx interface {
 
 	// GetSortedFieldViewList gets the set of FieldView(s)
 	GetSortedFieldViewList(idx *Index, shard uint64) (fvs []txkey.FieldView, err error)
+
+	GetFieldSizeBytes(index, field string) (uint64, error)
 }
 
 // Closer is used by Finders

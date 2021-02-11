@@ -589,6 +589,10 @@ func (tx *RoaringTx) GetSortedFieldViewList(idx *Index, shard uint64) (fvs []txk
 	return
 }
 
+func (tx *RoaringTx) GetFieldSizeBytes(index, field string) (uint64, error) {
+	return 0, nil
+}
+
 //////// registrar and wrapper machinery
 
 // roaringRegistrar mirrors the machinery expected

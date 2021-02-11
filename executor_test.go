@@ -5397,6 +5397,19 @@ func TestExecutor_ForeignIndex(t *testing.T) {
 		pilosa.OptFieldKeys(),
 	)
 
+	// stepchild/other field needs to have usesKeys=true
+	crashSchemaJson := `{"indexes": [{"name": "stepparent","createdAt": 1611247966371721700,"options": {"keys": true,"trackExistence": true},"shardWidth": 1048576},{"name": "stepchild","createdAt": 1611247953796662800,"options": {"keys": true,"trackExistence": true},"shardWidth": 1048576,"fields": [{"name": "parent_id","createdAt": 1611247953797265700,"options": {"type": "int","base": 0,"bitDepth": 28,"min": -9223372036854776000,"max": 9223372036854776000,"keys": false,"foreignIndex": "stepparent"}},{"name": "other","createdAt": 1611247953796814000,"options": {"type": "int","base": 0,"bitDepth": 17,"min": -9223372036854776000,"max": 9223372036854776000,"keys": true,"foreignIndex": ""}}]}]}`
+
+	crashSchema := &pilosa.Schema{}
+	err := json.Unmarshal([]byte(crashSchemaJson), &crashSchema)
+	if err != nil {
+		t.Fatalf("json unmarshall: %v", err)
+	}
+	err = c.GetNode(0).API.ApplySchema(context.Background(), crashSchema, false)
+	if err != nil {
+		t.Fatalf("applying JSON schema: %v", err)
+	}
+
 	// Populate parent data.
 	c.Query(t, "parent", fmt.Sprintf(`
 			Set("one", general=1)
@@ -5440,6 +5453,12 @@ func TestExecutor_ForeignIndex(t *testing.T) {
 	row := c.Query(t, "child", `Distinct(index="child", field="parent_set_id")`).Results[0].(*pilosa.Row)
 	if !sameStringSlice(row.Keys, []string{"one", "two", "twenty-one"}) {
 		t.Fatalf("unexpected keys: %v", row.Keys)
+	}
+
+	crash := c.Query(t, "stepchild", `Distinct(Row(parent_id=3), field=other)`).Results[0].(pilosa.SignedRow)
+	if !sameStringSlice(crash.Pos.Keys, []string{}) {
+		// empty result; error condition does not require data
+		t.Fatalf("unexpected columns: %v", crash.Pos.Keys)
 	}
 
 	eq := c.Query(t, "child", `Row(parent_id=="one")`).Results[0].(*pilosa.Row)
@@ -6818,6 +6837,8 @@ func TestMissingKeyRegression(t *testing.T) {
 func TestVariousQueries(t *testing.T) {
 	for _, clusterSize := range []int{1, 3, 4, 7} {
 		t.Run(fmt.Sprintf("%d-node", clusterSize), func(t *testing.T) {
+			t.Parallel()
+
 			variousQueries(t, clusterSize)
 		})
 	}
@@ -6897,8 +6918,7 @@ func variousQueries(t *testing.T, clusterSize int) {
 		{Val: 0, Key: "userE"},
 	})
 
-	// Create and populate "affinity" int field with negative, positive, zero and null values.
-
+	// Create and populate "net_worth" int field with positive values.
 	c.CreateField(t, "users", pilosa.IndexOptions{Keys: true, TrackExistence: true}, "net_worth", pilosa.OptFieldTypeInt(-100000000, 100000000))
 	c.ImportIntKey(t, "users", "net_worth", []test.IntKey{
 		{Val: 1, Key: "userA"},
@@ -7031,6 +7051,15 @@ toronto,2,11
 				}
 			},
 			csvVerifier: "-10\n-5\n0\n5\n10\n",
+		},
+		{
+			query: "Count(Distinct(field=affinity))",
+			qrVerifier: func(t *testing.T, resp pilosa.QueryResponse) {
+				if resp.Results[0].(uint64) != 5 {
+					t.Errorf("wrong number of values: %+v", resp.Results[0])
+				}
+			},
+			csvVerifier: "5\n",
 		},
 		{
 			query: "Distinct(Row(affinity>=0),field=affinity)",
