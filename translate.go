@@ -40,7 +40,6 @@ var (
 	ErrTranslateStoreReadOnly     = errors.New("translate store could not find or create key, translate store read only")
 	ErrTranslateStoreNotFound     = errors.New("translate store not found")
 	ErrTranslatingKeyNotFound     = errors.New("translating key not found")
-	ErrCannotOpenV1TranslateFile  = errors.New("cannot open v1 translate .keys file")
 )
 
 // TranslateStore is the storage for translation string-to-uint64 values.

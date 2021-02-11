@@ -603,13 +603,6 @@ func (h *Holder) Open() error {
 		return errors.Wrap(err, "creating directory")
 	}
 
-	// Verify that we are not trying to open with v1 translation data.
-	if ok, err := h.hasV1TranslateKeysFile(); err != nil {
-		return errors.Wrap(err, "verify v1 translation file")
-	} else if !ok {
-		return ErrCannotOpenV1TranslateFile
-	}
-
 	tstore, err := h.OpenTransactionStore(h.path)
 	if err != nil {
 		return errors.Wrap(err, "opening transaction store")
@@ -621,6 +614,12 @@ func (h *Holder) Open() error {
 	h.ida, err = h.OpenIDAllocator(filepath.Join(h.path, "idalloc.db"))
 	if err != nil {
 		return errors.Wrap(err, "opening ID allocator")
+	}
+
+	// Load schema from etcd.
+	schema, err := h.schemator.Schema(context.Background())
+	if err != nil {
+		return errors.Wrap(err, "getting schema")
 	}
 
 	// Open path to read all index directories.
@@ -645,6 +644,19 @@ func (h *Holder) Open() error {
 			continue
 		}
 
+		// Only continue with indexes which are present in schema.
+		idx, ok := schema[fi.Name()]
+		if !ok {
+			continue
+		}
+
+		// decode the CreateIndexMessage from the schema data in order to
+		// get its metadata, such as CreateAt.
+		cim, err := h.decodeCreateIndexMessage(idx.Data)
+		if err != nil {
+			return errors.Wrap(err, "decoding create index message")
+		}
+
 		h.Logger.Printf("opening index: %s", filepath.Base(fi.Name()))
 
 		index, err := h.newIndex(h.IndexPath(filepath.Base(fi.Name())), filepath.Base(fi.Name()))
@@ -655,12 +667,16 @@ func (h *Holder) Open() error {
 			return errors.Wrap(err, "opening index")
 		}
 
-		if h.isPrimary() {
-			index.createdAt = timestamp()
-			err = index.OpenWithTimestamp()
-		} else {
-			err = index.Open()
-		}
+		// Since we don't have createAt stored on disk within the data
+		// directory, we need to populate it from the etcd schema data.
+		// TODO: we may no longer need the createdAt value stored in memory on
+		// the index struct; it may only be needed in the schema return value
+		// from the API, which already comes from etcd. In that case, this logic
+		// could be removed, and the createdAt on the index struct could be
+		// removed.
+		index.createdAt = cim.CreatedAt
+
+		err = index.OpenWithSchema(idx)
 		if err != nil {
 			_ = h.txf.Close()
 			if err == ErrName {
@@ -837,16 +853,6 @@ func (h *Holder) HasData() (bool, error) {
 		}
 
 		return true, nil
-	}
-	return false, nil
-}
-
-// hasV1TranslateKeysFile returns true if a v1 translation data file exists on disk.
-func (h *Holder) hasV1TranslateKeysFile() (bool, error) {
-	if _, err := os.Stat(filepath.Join(h.path, ".keys")); os.IsNotExist(err) {
-		return true, nil
-	} else if err != nil {
-		return false, err
 	}
 	return false, nil
 }
@@ -1413,14 +1419,6 @@ func (h *Holder) recalculateCaches() {
 	for _, index := range h.Indexes() {
 		index.recalculateCaches()
 	}
-}
-
-// TODO: this needs to be removed
-func (h *Holder) isPrimary() bool {
-	if s, ok := h.broadcaster.(*Server); ok {
-		return s.IsPrimary()
-	}
-	return false
 }
 
 // setFileLimit attempts to set the open file limit to the FileLimit constant defined above.

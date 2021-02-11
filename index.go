@@ -177,13 +177,16 @@ func (i *Index) options() IndexOptions {
 
 // Open opens and initializes the index.
 func (i *Index) Open() error {
-	return i.open(false)
+	return i.open(nil)
 }
 
-// OpenWithTimestamp opens and initializes the index and set a new CreatedAt timestamp for fields.
-func (i *Index) OpenWithTimestamp() error { return i.open(true) }
+// OpenWithSchema opens the index and uses the provided schema to verify that
+// the index's fields are expected.
+func (i *Index) OpenWithSchema(idx *disco.Index) error {
+	return i.open(idx)
+}
 
-func (i *Index) open(withTimestamp bool) (err error) {
+func (i *Index) open(idx *disco.Index) (err error) {
 	// Ensure the path exists.
 	i.holder.Logger.Debugf("ensure index path exists: %s", i.path)
 	if err := os.MkdirAll(i.path, 0777); err != nil {
@@ -207,7 +210,7 @@ func (i *Index) open(withTimestamp bool) (err error) {
 	i.fieldView2shard = fieldView2shard
 
 	i.holder.Logger.Debugf("open fields for index: %s", i.name)
-	if err := i.openFields(withTimestamp); err != nil {
+	if err := i.openFields(idx); err != nil {
 		return errors.Wrap(err, "opening fields")
 	}
 
@@ -256,7 +259,7 @@ func (i *Index) open(withTimestamp bool) (err error) {
 var indexQueue = make(chan struct{}, 8)
 
 // openFields opens and initializes the fields inside the index.
-func (i *Index) openFields(withTimestamp bool) error {
+func (i *Index) openFields(idx *disco.Index) error {
 	f, err := os.Open(i.path)
 	if err != nil {
 		return errors.Wrap(err, "opening directory")
@@ -269,6 +272,11 @@ func (i *Index) openFields(withTimestamp bool) error {
 	}
 	eg, ctx := errgroup.WithContext(context.Background())
 	var mu sync.Mutex
+
+	// var flds map[string]*disco.Field
+	// if idx != nil {
+	// 	flds = idx.Fields
+	// }
 
 fileLoop:
 	for _, loopFi := range fis {
@@ -285,6 +293,36 @@ fileLoop:
 				continue
 			}
 
+			var createdAt int64
+
+			// Only continue with indexes which are present in the provided,
+			// non-nil index schema. The reason we have to check for idx != nil
+			// here is because there are tests which call index.Open on an index
+			// with a NopSchemator. A better approach might be for those tests
+			// to use a mock Schemator which returns a schema containing the
+			// index. For an example, see TestField_SetTimeQuantum which
+			// re-opens a field and curiously has to re-open that field's index
+			// because at some point we introduced a pointer from the field back
+			// to its index (possibly related to transactions?).
+			if idx != nil {
+				fld, ok := idx.Fields[fi.Name()]
+				//fld, ok := flds[fi.Name()]
+				if !ok {
+					continue
+				}
+
+				// decode the CreateIndexMessage from the schema data in order to
+				// get its metadata, such as CreateAt.
+				// TODO: similar to the createdAt TODO in holder, it may no
+				// longer be necessary to keep createdAt on the in-memory field
+				// struct.
+				cfm, err := i.holder.decodeCreateFieldMessage(fld.Data)
+				if err != nil {
+					return errors.Wrap(err, "decoding create field message")
+				}
+				createdAt = cfm.CreatedAt
+			}
+
 			indexQueue <- struct{}{}
 			eg.Go(func() error {
 				defer func() {
@@ -298,9 +336,8 @@ fileLoop:
 				i.holder.addIndex(i)
 
 				fld, err := i.newField(i.fieldPath(filepath.Base(fi.Name())), filepath.Base(fi.Name()))
-				if withTimestamp {
-					fld.createdAt = timestamp()
-				}
+				fld.createdAt = createdAt
+
 				mu.Unlock()
 				if err != nil {
 					return errors.Wrapf(ErrName, "'%s'", fi.Name())
