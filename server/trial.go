@@ -1,4 +1,4 @@
-// Copyright 2017 Pilosa Corp.
+// Copyright 2021 Pilosa Corp.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -27,54 +27,56 @@ import (
 	"github.com/pilosa/pilosa/v2"
 )
 
-func (m *Command) trialVersion() {
+func trialVersion(logger loggerLogger) {
 	if pilosa.TrialDeadline != "" {
-		endTime, err := time.Parse("2006-01-02", pilosa.TrialDeadline)
+		startTime, err := ntpServerTime(4, logger)
 		if err != nil {
-			m.logger.Printf("parsing trial deadline: %v", err)
+			logger.Printf("reading ntp server time %v", err)
 			os.Exit(1)
 		}
-		go m.dailyCheck(endTime)
+		endTime, err := time.Parse("2006-01-02", pilosa.TrialDeadline)
+		if err != nil {
+			logger.Printf("parsing trial deadline: %v", err)
+			os.Exit(1)
+		}
+		maxDuration := endTime.Sub(startTime)
+		go expireAfter(maxDuration, logger)
+		go dailyCheck(maxDuration, logger)
 	}
 }
 
 const trialCheckInterval = 24 * time.Hour
 
 // dailyCheck runs in the background while a trial version of Molecula is being run, displaying daily reminders of the remaining days
-func (m *Command) dailyCheck(endTime time.Time) {
+func dailyCheck(maxDuration time.Duration, logger loggerLogger) {
+	startTime := time.Now() // we get a new start time here to ensure that it has a monotonic clock
+	remaining := maxDuration - time.Since(startTime)
+	logger.Printf("Current time remaining in trial: %d days %v", remaining/(time.Hour*24), remaining%(time.Hour*24))
 	ticker := time.NewTicker(trialCheckInterval)
-	startTime, err := m.ntpServerTime(4)
-	if err != nil {
-		m.logger.Printf("reading ntp server time %v", err)
-		os.Exit(1)
-	}
-	runDuration := endTime.Sub(startTime)
-	if runDuration <= 0 {
-		m.logger.Printf("Trial edition of Molecula has expired, exiting now!")
-		os.Exit(1)
-	}
 	for range ticker.C {
-		runningDuration := time.Since(startTime)
-		m.logger.Printf("Current time remaining in trial: %v", runDuration-runningDuration)
-		if runningDuration >= runDuration {
-			m.logger.Printf("Trial edition of Molecula has expired, exiting now!")
-			os.Exit(1)
-		}
+		remaining := maxDuration - time.Since(startTime)
+		logger.Printf("Current time remaining in trial: %d days %v", remaining/(time.Hour*24), remaining%(time.Hour*24))
 	}
 }
 
-const ntpurl = "0.beevik-ntp.pool.ntp.org"
+const ntpURL = "0.beevik-ntp.pool.ntp.org"
 const ntpRetryDelay = 100 * time.Millisecond
 
 // ntpServerTime attempts to reach ntp servers with delays between each attempt, returning the time value of the first connected server
-func (m *Command) ntpServerTime(retries int) (time.Time, error) {
-	t, err := ntp.Time(ntpurl)
+func ntpServerTime(retries int, logger loggerLogger) (time.Time, error) {
+	t, err := ntp.Time(ntpURL)
 	if err != nil && retries <= 0 {
 		return t, err
 	}
 	if err != nil {
 		time.Sleep(ntpRetryDelay)
-		return m.ntpServerTime(retries - 1)
+		return ntpServerTime(retries-1, logger)
 	}
 	return t, nil
+}
+
+func expireAfter(maxDuration time.Duration, logger loggerLogger) {
+	time.Sleep(maxDuration)
+	logger.Printf("Trial edition of Molecula has expired, exiting now!")
+	os.Exit(1)
 }
