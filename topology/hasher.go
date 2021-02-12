@@ -39,3 +39,13 @@ func (h *Jmphasher) Hash(key uint64, n int) int {
 func (h *Jmphasher) Name() string {
 	return "jump-hash"
 }
+
+// PrimaryNode yields the node that would be selected as the primary from
+// a list, for a given ID. It assumes the list is already in the
+// expected order, as from Noder.Nodes().
+func PrimaryNode(nodes []*Node, hasher Hasher) *Node {
+	if len(nodes) == 0 {
+		return nil
+	}
+	return nodes[hasher.Hash(0, len(nodes))]
+}

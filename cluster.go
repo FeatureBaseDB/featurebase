@@ -709,25 +709,29 @@ func (c *cluster) addNodeBasicSorted(node *topology.Node) bool {
 // concurrent use, result may be modified.
 func (c *cluster) Nodes() []*topology.Node {
 	nodes := c.noder.Nodes()
+	// duplicate the nodes since we're going to be altering them
+	copiedNodes := make([]topology.Node, len(nodes))
+	result := make([]*topology.Node, len(nodes))
 
 	// Create a snapshot of the cluster to use for node/partition calculations.
-	snap := topology.NewClusterSnapshot(topology.NewLocalNoder(nodes), c.Hasher, c.ReplicaN)
-	primaryNode := snap.PrimaryFieldTranslationNode()
+	primary := topology.PrimaryNode(nodes, c.Hasher)
 
 	// Set node states and IsPrimary.
-	for _, node := range nodes {
-		node.IsPrimary = node.ID == primaryNode.ID
-
+	for i, node := range nodes {
+		copiedNodes[i] = *node
+		result[i] = &copiedNodes[i]
+		if node == primary {
+			copiedNodes[i].IsPrimary = true
+		}
 		s, err := c.stator.NodeState(context.Background(), node.ID)
 		if err != nil {
 			// TODO should we delete this?
-			node.State = string(disco.NodeStateUnknown)
+			copiedNodes[i].State = string(disco.NodeStateUnknown)
 			continue
 		}
-		node.State = string(s)
+		copiedNodes[i].State = string(s)
 	}
-
-	return nodes
+	return result
 }
 
 // removeNodeBasicSorted removes a node from the cluster, maintaining the sort
