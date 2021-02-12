@@ -15,7 +15,6 @@
 package pilosa_test
 
 import (
-	"bytes"
 	"context"
 	"math"
 	"os"
@@ -32,30 +31,6 @@ import (
 )
 
 func TestHolder_Open(t *testing.T) {
-	t.Run("ErrIndexName", func(t *testing.T) {
-		h := test.MustOpenHolder(t)
-
-		bufLogger := test.NewBufferLogger()
-		h.Holder.Logger = bufLogger
-
-		defer h.Close()
-
-		if err := os.Mkdir(h.IndexPath("!"), 0777); err != nil {
-			t.Fatal(err)
-		} else if err := h.Holder.Close(); err != nil {
-			t.Fatal(err)
-		}
-		if err := h.Reopen(); err != nil {
-			t.Fatal(err)
-		}
-
-		if bufbytes, err := bufLogger.ReadAll(); err != nil {
-			t.Fatal(err)
-		} else if !bytes.Contains(bufbytes, []byte("ERROR opening index: !")) {
-			t.Fatalf("expected log error:\n%s", bufbytes)
-		}
-	})
-
 	t.Run("ErrIndexPermission", func(t *testing.T) {
 		if os.Geteuid() == 0 {
 			t.Skip("Skipping permissions test since user is root.")
