@@ -625,7 +625,7 @@ func (c *cluster) unprotectedStatus() *ClusterStatus {
 		ClusterID: c.id,
 		State:     c.state,
 		Nodes:     c.nodes,
-		Schema:    &Schema{Indexes: c.holder.Schema()},
+		Schema:    &Schema{Indexes: c.holder.Schema(true)},
 	}
 }
 
@@ -2372,7 +2372,7 @@ func (c *cluster) nodeLeave(nodeID string) error {
 func (c *cluster) nodeStatus() *NodeStatus {
 	ns := &NodeStatus{
 		Node:   c.Node,
-		Schema: &Schema{Indexes: c.holder.Schema()},
+		Schema: &Schema{Indexes: c.holder.Schema(true)},
 	}
 	var availableShards *roaring.Bitmap
 	for _, idx := range ns.Schema.Indexes {

@@ -392,6 +392,7 @@ func newRouter(handler *Handler) http.Handler {
 	router.HandleFunc("/inspect", handler.handleInspect).Methods("GET").Name("Inspect")
 	router.HandleFunc("/recalculate-caches", handler.handleRecalculateCaches).Methods("POST").Name("RecalculateCaches")
 	router.HandleFunc("/schema", handler.handleGetSchema).Methods("GET").Name("GetSchema")
+	router.HandleFunc("/schema/details", handler.handleGetSchemaDetails).Methods("GET").Name("GetSchemaDetails")
 	router.HandleFunc("/schema", handler.handlePostSchema).Methods("POST").Name("PostSchema")
 	router.HandleFunc("/status", handler.handleGetStatus).Methods("GET").Name("GetStatus")
 	router.HandleFunc("/transaction", handler.handlePostTransaction).Methods("POST").Name("PostTransaction")
@@ -667,6 +668,24 @@ func (h *Handler) handleGetSchema(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	schema := h.api.Schema(r.Context())
+	if err := json.NewEncoder(w).Encode(pilosa.Schema{Indexes: schema}); err != nil {
+		h.logger.Printf("write schema response error: %s", err)
+	}
+}
+
+// handleGetSchema handles GET /schema/details requests.
+func (h *Handler) handleGetSchemaDetails(w http.ResponseWriter, r *http.Request) {
+	if !validHeaderAcceptJSON(r.Header) {
+		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	schema, err := h.api.SchemaDetails(r.Context())
+	if err != nil {
+		h.logger.Printf("error getting detailed schema: %s", err)
+		return
+	}
 	if err := json.NewEncoder(w).Encode(pilosa.Schema{Indexes: schema}); err != nil {
 		h.logger.Printf("write schema response error: %s", err)
 	}

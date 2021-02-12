@@ -847,35 +847,9 @@ func (h *Holder) availableShardsByIndex() map[string]*roaring.Bitmap {
 }
 
 // Schema returns schema information for all indexes, fields, and views.
-func (h *Holder) Schema() []*IndexInfo {
-	var a []*IndexInfo
-	for _, index := range h.Indexes() {
-		di := &IndexInfo{
-			Name:      index.Name(),
-			CreatedAt: index.CreatedAt(),
-			Options:   index.Options(),
-		}
-		for _, field := range index.Fields() {
-			fi := &FieldInfo{
-				Name:      field.Name(),
-				CreatedAt: field.CreatedAt(),
-				Options:   field.Options(),
-			}
-			for _, view := range field.views() {
-				fi.Views = append(fi.Views, &ViewInfo{Name: view.name})
-			}
-			sort.Sort(viewInfoSlice(fi.Views))
-			di.Fields = append(di.Fields, fi)
-		}
-		sort.Sort(fieldInfoSlice(di.Fields))
-		a = append(a, di)
-	}
-	sort.Sort(indexInfoSlice(a))
-	return a
-}
-
-// limitedSchema returns schema information for all indexes and fields.
-func (h *Holder) limitedSchema() []*IndexInfo {
+// If includeHiddenAndViews=true, include fields beginning with "_",
+// as well as view details.
+func (h *Holder) Schema(includeHiddenAndViews bool) []*IndexInfo {
 	var a []*IndexInfo
 	for _, index := range h.Indexes() {
 		di := &IndexInfo{
@@ -883,16 +857,21 @@ func (h *Holder) limitedSchema() []*IndexInfo {
 			CreatedAt:  index.CreatedAt(),
 			Options:    index.Options(),
 			ShardWidth: ShardWidth,
-			Fields:     make([]*FieldInfo, 0, len(index.Fields())),
 		}
 		for _, field := range index.Fields() {
-			if strings.HasPrefix(field.name, "_") {
+			if !includeHiddenAndViews && strings.HasPrefix(field.name, "_") {
 				continue
 			}
 			fi := &FieldInfo{
 				Name:      field.Name(),
 				CreatedAt: field.CreatedAt(),
 				Options:   field.Options(),
+			}
+			if includeHiddenAndViews {
+				for _, view := range field.views() {
+					fi.Views = append(fi.Views, &ViewInfo{Name: view.name})
+				}
+				sort.Sort(viewInfoSlice(fi.Views))
 			}
 			di.Fields = append(di.Fields, fi)
 		}
@@ -1336,7 +1315,7 @@ func (s *holderSyncer) SyncHolder() error {
 	defer s.mu.Unlock()
 	ti := time.Now()
 	// Iterate over schema in sorted order.
-	for _, di := range s.Holder.Schema() {
+	for _, di := range s.Holder.Schema(true) {
 		// Verify syncer has not closed.
 		if s.IsClosing() {
 			return nil
