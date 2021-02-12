@@ -1187,6 +1187,12 @@ func (f *Field) createViewIfNotExistsBase(cvm *CreateViewMessage) (*view, bool, 
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
+	// If we already have this view, we can probably assume etcd already
+	// has it.
+	if view := f.viewMap[cvm.View]; view != nil {
+		return view, false, nil
+	}
+
 	// Create the view in etcd as the system of record.
 	// Don't persist views related to the existence field.
 	if f.name != existenceFieldName {
@@ -1195,9 +1201,6 @@ func (f *Field) createViewIfNotExistsBase(cvm *CreateViewMessage) (*view, bool, 
 		}
 	}
 
-	if view := f.viewMap[cvm.View]; view != nil {
-		return view, false, nil
-	}
 	view := f.newView(f.viewPath(cvm.View), cvm.View)
 
 	if err := view.openEmpty(); err != nil {
