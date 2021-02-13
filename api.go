@@ -802,12 +802,6 @@ func (api *API) Hosts(ctx context.Context) []*topology.Node {
 	return api.cluster.Nodes()
 }
 
-func (api *API) HostStates(ctx context.Context) map[string]string {
-	span, _ := tracing.StartSpanFromContext(ctx, "API.HostStates")
-	defer span.Finish()
-	return api.cluster.AllNodeStates()
-}
-
 // Node gets the ID, URI and coordinator status for this particular node.
 func (api *API) Node() *topology.Node {
 	return api.server.node()

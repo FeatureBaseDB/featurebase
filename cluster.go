@@ -730,15 +730,6 @@ func (c *cluster) Nodes() []*topology.Node {
 	return nodes
 }
 
-func (c *cluster) AllNodeStates() map[string]string {
-	// TODO: is this being used by the UI?
-	// c.mu.RLock()
-	// defer c.mu.RUnlock()
-	// return c.Topology.nodeStates
-	m := make(map[string]string)
-	return m
-}
-
 // removeNodeBasicSorted removes a node from the cluster, maintaining the sort
 // order. Returns true if the node was removed. unprotected.
 func (c *cluster) removeNodeBasicSorted(nodeID string) bool {
