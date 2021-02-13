@@ -112,6 +112,19 @@ func TestHandler_Endpoints(t *testing.T) {
 
 	})
 
+	t.Run("SchemaDetailsEmpty", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/schema/details", nil))
+		if w.Code != gohttp.StatusOK {
+			t.Fatalf("unexpected status code: %d", w.Code)
+		}
+		body := w.Body.String()
+		if body != "{\"indexes\":null}\n" {
+			t.Fatalf("unexpected empty schema: '%v'", body)
+		}
+
+	})
+
 	t.Run("PostSchema", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/schema", strings.NewReader(`{"indexes":[{"name":"blah","options":{"keys":false,"trackExistence":true},"fields":[{"name":"f1","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false}}],"shardWidth":1048576}]}`)))
@@ -219,9 +232,78 @@ func TestHandler_Endpoints(t *testing.T) {
 		}
 
 		body := strings.TrimSpace(w.Body.String())
-		target := fmt.Sprintf(`{"indexes":[{"name":"i0","options":{"keys":false,"trackExistence":false},"fields":[{"name":"f0","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false}},{"name":"f1","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false}}],"shardWidth":%d},{"name":"i1","options":{"keys":false,"trackExistence":false},"fields":[{"name":"f0","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false}}],"shardWidth":%[1]d}]}`, pilosa.ShardWidth)
+		target := fmt.Sprintf(`{"indexes":[{"name":"i0","options":{"keys":false,"trackExistence":false},"fields":[{"name":"f0","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false}},{"name":"f1","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false}}],"shardWidth":%[1]d},{"name":"i1","options":{"keys":false,"trackExistence":false},"fields":[{"name":"f0","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false}}],"shardWidth":%[1]d}]}`, pilosa.ShardWidth)
 		if body != target {
-			t.Fatalf("%s != %s", target, body)
+			t.Fatalf("\n%s\n!=\n%s", target, body)
+		}
+	})
+
+	// i2 is for SchemaDetails
+	i2 := hldr.MustCreateIndexIfNotExists("i2", pilosa.IndexOptions{})
+	tx2, err := holder.BeginTx(true, i2.Index, shard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx2.Rollback()
+	if f, err := i2.CreateFieldIfNotExists("f0", pilosa.OptFieldTypeSet(pilosa.CacheTypeRanked, 1000)); err != nil {
+		t.Fatal(err)
+	} else if _, err := f.SetBit(tx2, 0, 0, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	f, err := i2.CreateFieldIfNotExists("f1", pilosa.OptFieldTypeInt(-100, 100))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for n := 0; n < 4; n++ {
+		if _, err := f.SetValue(tx2, uint64(n), int64(n)); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	f, err = i2.CreateFieldIfNotExists("f2", pilosa.OptFieldTypeDecimal(1, pql.Decimal{Value: -10}, pql.Decimal{Value: 10}))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for n := 0; n < 5; n++ {
+		if _, err := f.SetValue(tx2, uint64(n), int64(n)); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if f, err := i2.CreateFieldIfNotExists("f3", pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMDH"))); err != nil {
+		t.Fatal(err)
+	} else if _, err := f.SetBit(tx2, 0, 0, nil); err != nil {
+		t.Fatal(err)
+	}
+	if f, err := i2.CreateFieldIfNotExists("f4", pilosa.OptFieldTypeMutex(pilosa.CacheTypeRanked, 5000)); err != nil {
+		t.Fatal(err)
+	} else if _, err := f.SetBit(tx2, 0, 0, nil); err != nil {
+		t.Fatal(err)
+	}
+	if f, err := i2.CreateFieldIfNotExists("f5", pilosa.OptFieldTypeBool()); err != nil {
+		t.Fatal(err)
+	} else if _, err := f.SetBit(tx2, 0, 0, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := tx2.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("SchemaDetails", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/schema/details", nil))
+		if w.Code != gohttp.StatusOK {
+			t.Fatalf("unexpected status code: %d", w.Code)
+		}
+
+		body := strings.TrimSpace(w.Body.String())
+		target := fmt.Sprintf(`{"indexes":[{"name":"i0","options":{"keys":false,"trackExistence":false},"fields":[{"name":"f0","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false},"cardinality":0},{"name":"f1","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false},"cardinality":1}],"shardWidth":%[1]d},{"name":"i1","options":{"keys":false,"trackExistence":false},"fields":[{"name":"f0","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false},"cardinality":1}],"shardWidth":%[1]d},{"name":"i2","options":{"keys":false,"trackExistence":false},"fields":[{"name":"f0","options":{"type":"set","cacheType":"ranked","cacheSize":1000,"keys":false},"cardinality":1},{"name":"f1","options":{"type":"int","base":0,"bitDepth":2,"min":-100,"max":100,"keys":false,"foreignIndex":""},"cardinality":4},{"name":"f2","options":{"type":"decimal","base":0,"scale":1,"bitDepth":3,"min":-10,"max":10,"keys":false},"cardinality":5},{"name":"f3","options":{"type":"time","timeQuantum":"YMDH","keys":false,"noStandardView":false},"cardinality":1},{"name":"f4","options":{"type":"mutex","cacheType":"ranked","cacheSize":5000,"keys":false},"cardinality":1},{"name":"f5","options":{"type":"bool"},"cardinality":1}],"shardWidth":%[1]d}]}`, pilosa.ShardWidth)
+		if body != target {
+			t.Fatalf("\n%s\n!=\n%s", target, body)
 		}
 	})
 
@@ -402,13 +484,13 @@ func TestHandler_Endpoints(t *testing.T) {
 
 		for _, nodeUsage := range nodeUsages {
 			numIndexes := len(nodeUsage.Disk.IndexUsage)
-			if nodeUsage.Disk.TotalUse < 75000 || nodeUsage.Disk.TotalUse > 300000 {
+			if nodeUsage.Disk.TotalUse < 75000 || nodeUsage.Disk.TotalUse > 500000 {
 				// Usage measurements are not consistent between machines, or
 				// over time, as features and implementations change, so checking
 				// for a range of sizes may be most useful way to test the details of this.
-				t.Fatalf("expected 75k < total < 300k, got %d", nodeUsage.Disk.TotalUse)
+				t.Fatalf("expected 75k < total < 500k, got %d", nodeUsage.Disk.TotalUse)
 			}
-			if numIndexes != 2 {
+			if numIndexes != 3 {
 				t.Fatalf("wrong length index usage list: expected %d, got %d", 2, numIndexes)
 			}
 			numFields := len(nodeUsage.Disk.IndexUsage["i1"].Fields)
@@ -487,7 +569,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/internal/shards/max", nil))
 		if w.Code != gohttp.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
-		} else if body := w.Body.String(); body != `{"standard":{"i0":3,"i1":0}}`+"\n" {
+		} else if body := w.Body.String(); body != `{"standard":{"i0":3,"i1":0,"i2":0}}`+"\n" {
 			t.Fatalf("unexpected body: %s", body)
 		}
 	})

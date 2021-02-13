@@ -25,6 +25,7 @@ var Variant string
 var BuildTime string
 var LatticeCommit string
 var GoVersion string = runtime.Version()
+var TrialDeadline string
 
 func VersionInfo() string {
 	var prefix string
@@ -53,7 +54,9 @@ func VersionInfo() string {
 		suffix += " (" + buildTime + ")"
 	}
 	suffix += " " + GoVersion
-
+	if TrialDeadline != "" {
+		suffix += " limited time trial ends on: " + TrialDeadline
+	}
 	return prefix + "Pilosa" + suffix
 }
 

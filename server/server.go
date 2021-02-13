@@ -276,6 +276,8 @@ func (m *Command) SetupServer() error {
 
 	m.logger.Printf("%s", pilosa.VersionInfo())
 
+	handleTrialDeadline(m.logger)
+
 	// validateAddrs sets the appropriate values for Bind and Advertise
 	// based on the inputs. It is not responsible for applying defaults, although
 	// it does provide a non-zero port (10101) in the case where no port is specified.

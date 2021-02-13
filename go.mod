@@ -5,6 +5,7 @@ replace go.etcd.io/etcd => github.com/molecula/etcd v0.0.0-20210115113447-5d28bd
 require (
 	github.com/CAFxX/gcnotifier v0.0.0-20190112062741-224a280d589d
 	github.com/DataDog/datadog-go v0.0.0-20180822151419-281ae9f2d895
+	github.com/beevik/ntp v0.3.0
 	github.com/benbjohnson/immutable v0.3.0
 	github.com/cespare/xxhash v1.1.0
 	github.com/codahale/hdrhistogram v0.0.0-20161010025455-3a0bb77429bd // indirect

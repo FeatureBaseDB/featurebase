@@ -461,6 +461,10 @@ func (r *Row) invalidateCount() {
 // Count returns the number of columns in the row.
 func (r *Row) Count() uint64 {
 	var n uint64
+	if r == nil {
+		// Count(Distinct()) on an empty field panics here
+		return n
+	}
 	for i := range r.segments {
 		n += r.segments[i].Count()
 	}
