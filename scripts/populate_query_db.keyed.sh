@@ -4,15 +4,15 @@ set -e
 # This script generates data query load testing to be run against.
 #
 # Environment variables:
-#   - TXSRC: Transaction store type ("roaring", "rbf")
+#   - STORAGE_BACKEND: Transaction store type ("roaring", "rbf")
 #   - CACHEDIR: Path to local GitHub Archive data, if available.
 
 # Require environment variables.
-: "${TXSRC:?Must set TXSRC environment variable}"
+: "${STORAGE_BACKEND:?Must set STORAGE_BACKEND environment variable}"
 : "${GHCACHEDIR:''}"
 
 echo "Starting pilosa"
-pilosa server --data-dir ~/pilosa.query.keyed.${TXSRC} --txsrc ${TXSRC} & pid_pilosa=$!
+pilosa server --data-dir ~/pilosa.query.keyed.${STORAGE_BACKEND} --storage.backend ${STORAGE_BACKEND} & pid_pilosa=$!
 sleep 5
 
 echo ""
