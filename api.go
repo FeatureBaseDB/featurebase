@@ -1009,7 +1009,10 @@ func (api *API) Schema(ctx context.Context, withViews bool) ([]*IndexInfo, error
 func (api *API) SchemaDetails(ctx context.Context) ([]*IndexInfo, error) {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.Schema")
 	defer span.Finish()
-	schema := api.holder.Schema(false)
+	schema, err := api.holder.Schema()
+	if err != nil {
+		return nil, errors.Wrap(err, "getting schema")
+	}
 	for _, index := range schema {
 		for _, field := range index.Fields {
 			q := fmt.Sprintf("Count(Distinct(field=%s))", field.Name)
