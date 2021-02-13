@@ -857,7 +857,9 @@ func (h *Holder) Schema(includeHiddenAndViews bool) []*IndexInfo {
 			CreatedAt:  index.CreatedAt(),
 			Options:    index.Options(),
 			ShardWidth: ShardWidth,
+			Fields:     []*FieldInfo{},
 		}
+
 		for _, field := range index.Fields() {
 			if !includeHiddenAndViews && strings.HasPrefix(field.name, "_") {
 				continue
@@ -868,6 +870,7 @@ func (h *Holder) Schema(includeHiddenAndViews bool) []*IndexInfo {
 				Options:   field.Options(),
 			}
 			if includeHiddenAndViews {
+				fi.Views = []*ViewInfo{}
 				for _, view := range field.views() {
 					fi.Views = append(fi.Views, &ViewInfo{Name: view.name})
 				}
