@@ -318,10 +318,29 @@ func TestHandler_Endpoints(t *testing.T) {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		}
 
-		body := strings.TrimSpace(w.Body.String())
-		target := fmt.Sprintf(`{"indexes":[{"name":"i0","options":{"keys":false,"trackExistence":false},"fields":[{"name":"f0","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false},"cardinality":0},{"name":"f1","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false},"cardinality":1}],"shardWidth":%[1]d},{"name":"i1","options":{"keys":false,"trackExistence":false},"fields":[{"name":"f0","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false},"cardinality":1}],"shardWidth":%[1]d},{"name":"i2","options":{"keys":false,"trackExistence":false},"fields":[{"name":"f0","options":{"type":"set","cacheType":"ranked","cacheSize":1000,"keys":false},"cardinality":1},{"name":"f1","options":{"type":"int","base":0,"bitDepth":2,"min":-100,"max":100,"keys":false,"foreignIndex":""},"cardinality":4},{"name":"f2","options":{"type":"decimal","base":0,"scale":1,"bitDepth":3,"min":-10,"max":10,"keys":false},"cardinality":5},{"name":"f3","options":{"type":"time","timeQuantum":"YMDH","keys":false,"noStandardView":false},"cardinality":1},{"name":"f4","options":{"type":"mutex","cacheType":"ranked","cacheSize":5000,"keys":false},"cardinality":1},{"name":"f5","options":{"type":"bool"},"cardinality":1}],"shardWidth":%[1]d}]}`, pilosa.ShardWidth)
-		if body != target {
-			t.Fatalf("\n%s\n!=\n%s", target, body)
+		var bodySchema pilosa.Schema
+		if err := json.Unmarshal(w.Body.Bytes(),
+			&bodySchema); err != nil {
+			t.Fatalf("unexpected unmarshalling error: %v", err)
+		}
+		// DO NOT COMPARE `CreatedAt` - reset to 0
+		for _, i := range bodySchema.Indexes {
+			i.CreatedAt = 0
+			for _, f := range i.Fields {
+				f.CreatedAt = 0
+			}
+		}
+		//
+
+		var targetSchema pilosa.Schema
+		target := fmt.Sprintf(`{"indexes":[{"name":"i0","options":{"keys":false,"trackExistence":false},"fields":[{"name":"f0","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false},"cardinality":0},{"name":"f1","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false},"cardinality":1,"views":[{"name":"standard"}]}],"shardWidth":%[1]d},{"name":"i1","options":{"keys":false,"trackExistence":false},"fields":[{"name":"f0","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false},"cardinality":1,"views":[{"name":"standard"}]}],"shardWidth":%[1]d},{"name":"i2","options":{"keys":false,"trackExistence":false},"fields":[{"name":"f0","options":{"type":"set","cacheType":"ranked","cacheSize":1000,"keys":false},"cardinality":1,"views":[{"name":"standard"}]},{"name":"f1","options":{"type":"int","base":0,"bitDepth":0,"min":-100,"max":100,"keys":false,"foreignIndex":""},"cardinality":4,"views":[{"name":"bsig_f1"}]},{"name":"f2","options":{"type":"decimal","base":0,"scale":1,"bitDepth":0,"min":-10,"max":10,"keys":false},"cardinality":5,"views":[{"name":"bsig_f2"}]},{"name":"f3","options":{"type":"time","timeQuantum":"YMDH","keys":false,"noStandardView":false},"cardinality":1,"views":[{"name":"standard"}]},{"name":"f4","options":{"type":"mutex","cacheType":"ranked","cacheSize":5000,"keys":false},"cardinality":1,"views":[{"name":"standard"}]},{"name":"f5","options":{"type":"bool"},"cardinality":1,"views":[{"name":"standard"}]}],"shardWidth":%[1]d}]}`, pilosa.ShardWidth)
+		if err := json.Unmarshal([]byte(target),
+			&targetSchema); err != nil {
+			t.Fatalf("unexpected unmarshalling error: %v", err)
+		}
+
+		if !reflect.DeepEqual(targetSchema, bodySchema) {
+			t.Fatalf("target: %+v\nbody: %+v\n", targetSchema, bodySchema)
 		}
 	})
 
