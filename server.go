@@ -557,7 +557,6 @@ func (s *Server) Open() error {
 	if err != nil {
 		return errors.Wrap(err, "starting DisCo")
 	}
-	_ = initState
 
 	// Set node ID.
 	s.nodeID = s.disCo.ID()

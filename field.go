@@ -752,7 +752,6 @@ func (f *Field) ForeignIndex() string {
 
 // openViews opens and initializes the views inside the field.
 func (f *Field) openViews() error {
-
 	view2shards := f.idx.fieldView2shard.getViewsForField(f.name)
 	if view2shards == nil {
 		// no data
@@ -1189,8 +1188,11 @@ func (f *Field) createViewIfNotExistsBase(cvm *CreateViewMessage) (*view, bool, 
 	defer f.mu.Unlock()
 
 	// Create the view in etcd as the system of record.
-	if err := f.persistView(context.Background(), cvm); err != nil {
-		return nil, false, errors.Wrap(err, "persisting view")
+	// Don't persist views related to the existence field.
+	if f.name != existenceFieldName {
+		if err := f.persistView(context.Background(), cvm); err != nil {
+			return nil, false, errors.Wrap(err, "persisting view")
+		}
 	}
 
 	if view := f.viewMap[cvm.View]; view != nil {

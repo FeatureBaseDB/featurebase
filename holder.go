@@ -1281,7 +1281,15 @@ func (h *Holder) loadView(indexName, fieldName, viewName string) (*view, error) 
 		return nil, errors.Wrap(err, "decoding CreateFieldMessage")
 	}
 
-	return fld.createViewIfNotExists(cvm.View)
+	// I think we eventually want to get rid of storing the serialized view in
+	// etcd because all it keeps is the view name. So in that case we would always
+	// just use the viewName argument here.
+	vName := cvm.View
+	if fieldName == existenceFieldName {
+		vName = viewName
+	}
+
+	return fld.createViewIfNotExists(vName)
 }
 
 func (h *Holder) newIndex(path, name string) (*Index, error) {

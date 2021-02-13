@@ -5067,7 +5067,7 @@ func (e *executor) executeSet(ctx context.Context, qcx *Qcx, index string, c *pq
 	// Set column on existence field.
 	if ef := idx.existenceField(); ef != nil {
 		// we create tx here, rather than just above, to avoid creating an extra empty shard.
-		tx, finisher, err := qcx.GetTx(Txo{Write: writable, Index: idx, Shard: shard})
+		tx, finisher, err := qcx.GetTx(Txo{Write: writable, Index: idx, Field: ef, Shard: shard})
 		if err != nil {
 			return false, err
 		}

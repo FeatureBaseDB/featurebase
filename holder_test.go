@@ -32,6 +32,7 @@ import (
 
 func TestHolder_Open(t *testing.T) {
 	t.Run("ErrIndexPermission", func(t *testing.T) {
+		t.Skip("we don't open the holder directly from disk anymore; we use the etcd schema")
 		if os.Geteuid() == 0 {
 			t.Skip("Skipping permissions test since user is root.")
 		}
@@ -50,10 +51,11 @@ func TestHolder_Open(t *testing.T) {
 		}()
 
 		if err := h.Reopen(); err == nil || !strings.Contains(err.Error(), "permission denied") {
-			t.Fatalf("unexpected error: %s", err)
+			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 	t.Run("ErrIndexAttrStoreCorrupt", func(t *testing.T) {
+		t.Skip("we don't open the holder directly from disk anymore; we use the etcd schema")
 		h := test.MustOpenHolder(t)
 		defer h.Close()
 
@@ -71,6 +73,7 @@ func TestHolder_Open(t *testing.T) {
 	})
 
 	t.Run("ErrFieldPermission", func(t *testing.T) {
+		t.Skip("we don't open the holder directly from disk anymore; we use the etcd schema")
 		if os.Geteuid() == 0 {
 			t.Skip("Skipping permissions test since user is root.")
 		}
@@ -94,6 +97,7 @@ func TestHolder_Open(t *testing.T) {
 		}
 	})
 	t.Run("ErrFieldOptionsCorrupt", func(t *testing.T) {
+		t.Skip("we don't open the holder directly from disk anymore; we use the etcd schema")
 		h := test.MustOpenHolder(t)
 		defer h.Close()
 
@@ -117,6 +121,7 @@ func TestHolder_Open(t *testing.T) {
 		}
 	})
 	t.Run("ErrFieldAttrStoreCorrupt", func(t *testing.T) {
+		t.Skip("we don't open the holder directly from disk anymore; we use the etcd schema")
 		h := test.MustOpenHolder(t)
 		defer h.Close()
 
@@ -140,6 +145,7 @@ func TestHolder_Open(t *testing.T) {
 	})
 
 	t.Run("ErrFragmentStoragePermission", func(t *testing.T) {
+		t.Skip("we don't open the holder directly from disk anymore; we use the etcd schema")
 		roaringOnlyTest(t)
 
 		if os.Geteuid() == 0 {
@@ -177,6 +183,7 @@ func TestHolder_Open(t *testing.T) {
 		}
 	})
 	t.Run("ErrFragmentStorageCorrupt", func(t *testing.T) {
+		t.Skip("we don't open the holder directly from disk anymore; we use the etcd schema")
 		roaringOnlyTest(t)
 
 		h := test.MustOpenHolder(t)
