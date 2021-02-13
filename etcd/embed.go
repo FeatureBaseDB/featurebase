@@ -477,7 +477,7 @@ func (e *Etcd) DeleteNode(ctx context.Context, nodeID string) error {
 	return nil
 }
 
-func (e *Etcd) Schema(ctx context.Context) (map[string]*disco.Index, error) {
+func (e *Etcd) Schema(ctx context.Context) (disco.Schema, error) {
 	keys, vals, err := e.getKey(ctx, schemaPrefix)
 	if err != nil {
 		return nil, err
@@ -494,7 +494,7 @@ func (e *Etcd) Schema(ctx context.Context) (map[string]*disco.Index, error) {
 	//   /index2
 	//   /index2/field1
 	//
-	m := make(map[string]*disco.Index)
+	m := make(disco.Schema)
 	for i, k := range keys {
 		tokens := strings.Split(strings.Trim(k, "/"), "/")
 		// token[0] contains the schemaPrefix

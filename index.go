@@ -102,7 +102,7 @@ func NewIndex(holder *Holder, path, name string) (*Index, error) {
 		holder:         holder,
 		trackExistence: true,
 
-		schemator:  disco.NopSchemator,
+		schemator:  disco.InMemSchemator,
 		serializer: NopSerializer,
 
 		translateStores: make(map[int]TranslateStore),
@@ -177,13 +177,16 @@ func (i *Index) options() IndexOptions {
 
 // Open opens and initializes the index.
 func (i *Index) Open() error {
-	return i.open(false)
+	return i.open(nil)
 }
 
-// OpenWithTimestamp opens and initializes the index and set a new CreatedAt timestamp for fields.
-func (i *Index) OpenWithTimestamp() error { return i.open(true) }
+// OpenWithSchema opens the index and uses the provided schema to verify that
+// the index's fields are expected.
+func (i *Index) OpenWithSchema(idx *disco.Index) error {
+	return i.open(idx)
+}
 
-func (i *Index) open(withTimestamp bool) (err error) {
+func (i *Index) open(idx *disco.Index) (err error) {
 	// Ensure the path exists.
 	i.holder.Logger.Debugf("ensure index path exists: %s", i.path)
 	if err := os.MkdirAll(i.path, 0777); err != nil {
@@ -207,7 +210,7 @@ func (i *Index) open(withTimestamp bool) (err error) {
 	i.fieldView2shard = fieldView2shard
 
 	i.holder.Logger.Debugf("open fields for index: %s", i.name)
-	if err := i.openFields(withTimestamp); err != nil {
+	if err := i.openFields(idx); err != nil {
 		return errors.Wrap(err, "opening fields")
 	}
 
@@ -256,7 +259,7 @@ func (i *Index) open(withTimestamp bool) (err error) {
 var indexQueue = make(chan struct{}, 8)
 
 // openFields opens and initializes the fields inside the index.
-func (i *Index) openFields(withTimestamp bool) error {
+func (i *Index) openFields(idx *disco.Index) error {
 	f, err := os.Open(i.path)
 	if err != nil {
 		return errors.Wrap(err, "opening directory")
@@ -269,6 +272,11 @@ func (i *Index) openFields(withTimestamp bool) error {
 	}
 	eg, ctx := errgroup.WithContext(context.Background())
 	var mu sync.Mutex
+
+	// var flds map[string]*disco.Field
+	// if idx != nil {
+	// 	flds = idx.Fields
+	// }
 
 fileLoop:
 	for _, loopFi := range fis {
@@ -285,6 +293,36 @@ fileLoop:
 				continue
 			}
 
+			var createdAt int64
+
+			// Only continue with indexes which are present in the provided,
+			// non-nil index schema. The reason we have to check for idx != nil
+			// here is because there are tests which call index.Open on an index
+			// with a NopSchemator. A better approach might be for those tests
+			// to use a mock Schemator which returns a schema containing the
+			// index. For an example, see TestField_SetTimeQuantum which
+			// re-opens a field and curiously has to re-open that field's index
+			// because at some point we introduced a pointer from the field back
+			// to its index (possibly related to transactions?).
+			if idx != nil {
+				fld, ok := idx.Fields[fi.Name()]
+				//fld, ok := flds[fi.Name()]
+				if !ok {
+					continue
+				}
+
+				// decode the CreateIndexMessage from the schema data in order to
+				// get its metadata, such as CreateAt.
+				// TODO: similar to the createdAt TODO in holder, it may no
+				// longer be necessary to keep createdAt on the in-memory field
+				// struct.
+				cfm, err := i.holder.decodeCreateFieldMessage(fld.Data)
+				if err != nil {
+					return errors.Wrap(err, "decoding create field message")
+				}
+				createdAt = cfm.CreatedAt
+			}
+
 			indexQueue <- struct{}{}
 			eg.Go(func() error {
 				defer func() {
@@ -292,32 +330,11 @@ fileLoop:
 				}()
 				i.holder.Logger.Debugf("open field: %s", fi.Name())
 
-				mu.Lock()
-
-				// goroutine safe
-				i.holder.addIndex(i)
-
-				fld, err := i.newField(i.fieldPath(filepath.Base(fi.Name())), filepath.Base(fi.Name()))
-				if withTimestamp {
-					fld.createdAt = timestamp()
-				}
-				mu.Unlock()
+				_, err := i.openField(&mu, createdAt, fi.Name())
 				if err != nil {
-					return errors.Wrapf(ErrName, "'%s'", fi.Name())
+					return errors.Wrap(err, "opening field")
 				}
 
-				// Pass holder through to the field for use in looking
-				// up a foreign index.
-				fld.holder = i.holder
-
-				// open the views we have data for.
-				if err := fld.Open(); err != nil {
-					return fmt.Errorf("open field: name=%s, err=%s", fld.Name(), err)
-				}
-				i.holder.Logger.Debugf("add field to index.fields: %s", fi.Name())
-				i.mu.Lock()
-				i.fields[fld.Name()] = fld
-				i.mu.Unlock()
 				return nil
 			})
 		}
@@ -334,8 +351,54 @@ fileLoop:
 	return err
 }
 
+// openField opens the field directory, initializes the field, and adds it to
+// the in-memory map of fields maintained by Index.
+func (i *Index) openField(mu *sync.Mutex, createdAt int64, file string) (*Field, error) {
+	mu.Lock()
+
+	// goroutine safe
+	i.holder.addIndex(i)
+
+	fld, err := i.newField(i.fieldPath(filepath.Base(file)), filepath.Base(file))
+	mu.Unlock()
+	if err != nil {
+		return nil, errors.Wrapf(ErrName, "'%s'", file)
+	}
+
+	// Pass holder through to the field for use in looking
+	// up a foreign index.
+	fld.holder = i.holder
+
+	fld.createdAt = createdAt
+
+	// open the views we have data for.
+	if err := fld.Open(); err != nil {
+		return nil, fmt.Errorf("open field: name=%s, err=%s", fld.Name(), err)
+	}
+
+	i.holder.Logger.Debugf("add field to index.fields: %s", file)
+	i.mu.Lock()
+	i.fields[fld.Name()] = fld
+	i.mu.Unlock()
+
+	return fld, nil
+}
+
 // openExistenceField gets or creates the existence field and associates it to the index.
 func (i *Index) openExistenceField() error {
+	// First try opening the existence field from disk. If it doesn't already
+	// exist on disk, then we fall through to the code path which creates it.
+	var mu sync.Mutex
+	fld, err := i.openField(&mu, 0, existenceFieldName)
+	if err == nil {
+		i.existenceFld = fld
+		return nil
+	} else if errors.Cause(err) != ErrName {
+		return errors.Wrap(err, "opening existence file")
+	}
+
+	// If we have gotten here, it means that we couldn't successfully open the
+	// existence field from disk, so we need to create it.
 	f, err := i.createFieldIfNotExists(existenceFieldName, &FieldOptions{CacheType: CacheTypeNone, CacheSize: 0})
 	if err != nil {
 		return errors.Wrap(err, "creating existence field")
@@ -465,7 +528,9 @@ func (i *Index) Field(name string) *Field {
 	return i.field(name)
 }
 
-func (i *Index) field(name string) *Field { return i.fields[name] }
+func (i *Index) field(name string) *Field {
+	return i.fields[name]
+}
 
 // Fields returns a list of all fields in the index.
 func (i *Index) Fields() []*Field {
@@ -581,7 +646,7 @@ func (i *Index) CreateFieldIfNotExists(name string, opts ...FieldOption) (*Field
 	cfm := &CreateFieldMessage{
 		Index:     i.name,
 		Field:     name,
-		CreatedAt: 0,
+		CreatedAt: timestamp(),
 		Meta:      fo,
 	}
 
@@ -655,6 +720,9 @@ func (i *Index) persistField(ctx context.Context, cfm *CreateFieldMessage) error
 	return nil
 }
 
+// createFieldIfNotExists creates the field if it does not already exist in the
+// in-memory index structure. This is not related to whether or not the field
+// exists in etcd.
 func (i *Index) createFieldIfNotExists(name string, opt *FieldOptions) (*Field, error) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
@@ -674,6 +742,10 @@ func (i *Index) createFieldIfNotExists(name string, opt *FieldOptions) (*Field, 
 	return i.createField(cfm, false)
 }
 
+// createField, in addition to creating a new Field, calls Field.Open which
+// potentially aquires a lock on Index. So until/unless we refactor the
+// Index.createField() function call path, we cannot call Index.createField
+// while holding an Index lock.
 func (i *Index) createField(cfm *CreateFieldMessage, broadcast bool) (*Field, error) {
 	opt := cfm.Meta
 	if opt == nil {

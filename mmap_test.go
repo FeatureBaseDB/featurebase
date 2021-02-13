@@ -30,7 +30,7 @@ type cv struct {
 }
 
 func forceSnapshotsCheckMapping(t *testing.T) {
-	depth := uint(6)
+	depth := uint64(6)
 	f, idx, tx := mustOpenBSIFragment(t, "i", "f", viewStandard, 0)
 	tx.Rollback()
 	f.Logger = logger.NewLogfLogger(t)

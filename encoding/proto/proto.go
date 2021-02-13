@@ -1046,7 +1046,7 @@ func (s Serializer) decodeFieldOptions(options *internal.FieldOptions, m *pilosa
 	s.decodeDecimal(options.Max, &m.Max)
 	m.Base = options.Base
 	m.Scale = options.Scale
-	m.BitDepth = uint(options.BitDepth)
+	m.BitDepth = uint64(options.BitDepth)
 	m.TimeQuantum = pilosa.TimeQuantum(options.TimeQuantum)
 	m.Keys = options.Keys
 	m.ForeignIndex = options.ForeignIndex

@@ -20,6 +20,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/pilosa/pilosa/v2/disco"
 	"github.com/pilosa/pilosa/v2/testhook"
 )
 
@@ -263,5 +264,6 @@ func mustHolderConfig() *HolderConfig {
 		_ = MustBackendToTxtype(backend)
 		cfg.StorageConfig.Backend = backend
 	}
+	cfg.Schemator = disco.InMemSchemator
 	return cfg
 }

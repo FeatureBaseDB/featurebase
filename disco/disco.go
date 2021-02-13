@@ -18,16 +18,21 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"sync"
 
 	"github.com/pilosa/pilosa/v2/roaring"
 )
 
 var (
-	ErrTooManyResults error = fmt.Errorf("too many results")
-	ErrNoResults      error = fmt.Errorf("no results")
-	ErrKeyDeleted     error = fmt.Errorf("key deleted")
-	ErrIndexExists    error = fmt.Errorf("index already exists")
-	ErrFieldExists    error = fmt.Errorf("field already exists")
+	ErrTooManyResults    error = fmt.Errorf("too many results")
+	ErrNoResults         error = fmt.Errorf("no results")
+	ErrKeyDeleted        error = fmt.Errorf("key deleted")
+	ErrIndexExists       error = fmt.Errorf("index already exists")
+	ErrIndexDoesNotExist error = fmt.Errorf("index does not exist")
+	ErrFieldExists       error = fmt.Errorf("field already exists")
+	ErrFieldDoesNotExist error = fmt.Errorf("field does not exist")
+	ErrViewExists        error = fmt.Errorf("view already exists")
+	ErrViewDoesNotExist  error = fmt.Errorf("view does not exist")
 )
 
 type Peer struct {
@@ -84,6 +89,10 @@ type Stator interface {
 	NodeStates(context.Context) (map[string]NodeState, error)
 }
 
+// Schema is a map of all indexes, each of those being a map of fields, then
+// views.
+type Schema map[string]*Index
+
 // Index is a struct which contains the data encoded for the index as well as
 // for each of its fields.
 type Index struct {
@@ -99,7 +108,7 @@ type Field struct {
 }
 
 type Schemator interface {
-	Schema(ctx context.Context) (map[string]*Index, error)
+	Schema(ctx context.Context) (Schema, error)
 	Index(ctx context.Context, name string) ([]byte, error)
 	CreateIndex(ctx context.Context, name string, val []byte) error
 	DeleteIndex(ctx context.Context, name string) error
@@ -252,7 +261,7 @@ var NopSchemator Schemator = &nopSchemator{}
 type nopSchemator struct{}
 
 // Schema is a no-op implementation of the Schemator Schema method.
-func (*nopSchemator) Schema(ctx context.Context) (map[string]*Index, error) { return nil, nil }
+func (*nopSchemator) Schema(ctx context.Context) (Schema, error) { return nil, nil }
 
 // Index is a no-op implementation of the Schemator Index method.
 func (*nopSchemator) Index(ctx context.Context, name string) ([]byte, error) { return nil, nil }
@@ -286,3 +295,160 @@ func (*nopSchemator) CreateView(ctx context.Context, index, field, view string, 
 
 // DeleteView is a no-op implementation of the Schemator DeleteView method.
 func (*nopSchemator) DeleteView(ctx context.Context, index, field, view string) error { return nil }
+
+// InMemSchemator represents a Schemator that manages the schema in memory. The
+// intention is that this would be used for testing.
+var InMemSchemator Schemator = &inMemSchemator{
+	schema: make(Schema),
+}
+
+type inMemSchemator struct {
+	mu     sync.RWMutex
+	schema Schema
+}
+
+// Schema is an in-memory implementation of the Schemator Schema method.
+func (s *inMemSchemator) Schema(ctx context.Context) (Schema, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.schema, nil
+}
+
+// Index is an in-memory implementation of the Schemator Index method.
+func (s *inMemSchemator) Index(ctx context.Context, name string) ([]byte, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	idx, ok := s.schema[name]
+	if !ok {
+		return nil, ErrIndexDoesNotExist
+	}
+	return idx.Data, nil
+}
+
+// CreateIndex is an in-memory implementation of the Schemator CreateIndex method.
+func (s *inMemSchemator) CreateIndex(ctx context.Context, name string, val []byte) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if idx, ok := s.schema[name]; ok {
+		// The current logic in pilosa doesn't allow us to return ErrIndexExists
+		// here, so for now we just update the Data value if the index already
+		// exists.
+		idx.Data = val
+		return nil
+	}
+	s.schema[name] = &Index{
+		Data:   val,
+		Fields: make(map[string]*Field),
+	}
+	return nil
+}
+
+// DeleteIndex is an in-memory implementation of the Schemator DeleteIndex method.
+func (s *inMemSchemator) DeleteIndex(ctx context.Context, name string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.schema, name)
+	return nil
+}
+
+// Field is an in-memory implementation of the Schemator Field method.
+func (s *inMemSchemator) Field(ctx context.Context, index, field string) ([]byte, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	idx, ok := s.schema[index]
+	if !ok {
+		return nil, ErrIndexDoesNotExist
+	}
+	fld, ok := idx.Fields[field]
+	if !ok {
+		return nil, ErrFieldDoesNotExist
+	}
+	return fld.Data, nil
+}
+
+// CreateField is an in-memory implementation of the Schemator CreateField method.
+func (s *inMemSchemator) CreateField(ctx context.Context, index, field string, val []byte) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	idx, ok := s.schema[index]
+	if !ok {
+		return ErrIndexDoesNotExist
+	}
+	if fld, ok := idx.Fields[field]; ok {
+		// The current logic in pilosa doesn't allow us to return ErrFieldExists
+		// here, so for now we just update the Data value if the field already
+		// exists.
+		fld.Data = val
+		return nil
+	}
+	idx.Fields[field] = &Field{
+		Data:  val,
+		Views: make(map[string][]byte),
+	}
+	return nil
+}
+
+// DeleteField is an in-memory implementation of the Schemator DeleteField method.
+func (s *inMemSchemator) DeleteField(ctx context.Context, index, field string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	idx, ok := s.schema[index]
+	if !ok {
+		return ErrIndexDoesNotExist
+	}
+	delete(idx.Fields, field)
+	return nil
+}
+
+// View is an in-memory implementation of the Schemator View method.
+func (s *inMemSchemator) View(ctx context.Context, index, field, view string) ([]byte, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	idx, ok := s.schema[index]
+	if !ok {
+		return nil, ErrIndexDoesNotExist
+	}
+	fld, ok := idx.Fields[field]
+	if !ok {
+		return nil, ErrFieldDoesNotExist
+	}
+	data, ok := fld.Views[view]
+	if !ok {
+		return nil, ErrViewDoesNotExist
+	}
+	return data, nil
+}
+
+// CreateView is an in-memory implementation of the Schemator CreateView method.
+func (s *inMemSchemator) CreateView(ctx context.Context, index, field, view string, val []byte) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	idx, ok := s.schema[index]
+	if !ok {
+		return ErrIndexDoesNotExist
+	}
+	fld, ok := idx.Fields[field]
+	if !ok {
+		return ErrFieldDoesNotExist
+	}
+	// The current logic in pilosa doesn't allow us to return ErrViewExists
+	// here, so for now we just update the value if the view already exists.
+	fld.Views[view] = val
+	return nil
+}
+
+// DeleteView is an in-memory implementation of the Schemator DeleteView method.
+func (s *inMemSchemator) DeleteView(ctx context.Context, index, field, view string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	idx, ok := s.schema[index]
+	if !ok {
+		return ErrIndexDoesNotExist
+	}
+	fld, ok := idx.Fields[field]
+	if !ok {
+		return ErrFieldDoesNotExist
+	}
+	delete(fld.Views, view)
+	return nil
+}

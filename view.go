@@ -494,7 +494,7 @@ func (v *view) clearBit(txOrig Tx, rowID, columnID uint64) (changed bool, err er
 }
 
 // value uses a column of bits to read a multi-bit value.
-func (v *view) value(txOrig Tx, columnID uint64, bitDepth uint) (value int64, exists bool, err error) {
+func (v *view) value(txOrig Tx, columnID uint64, bitDepth uint64) (value int64, exists bool, err error) {
 	shard := columnID / ShardWidth
 	frag, err := v.CreateFragmentIfNotExists(shard)
 	if err != nil {
@@ -511,7 +511,7 @@ func (v *view) value(txOrig Tx, columnID uint64, bitDepth uint) (value int64, ex
 }
 
 // setValue uses a column of bits to set a multi-bit value.
-func (v *view) setValue(txOrig Tx, columnID uint64, bitDepth uint, value int64) (changed bool, err error) {
+func (v *view) setValue(txOrig Tx, columnID uint64, bitDepth uint64, value int64) (changed bool, err error) {
 	shard := columnID / ShardWidth
 	frag, err := v.CreateFragmentIfNotExists(shard)
 	if err != nil {
@@ -534,7 +534,7 @@ func (v *view) setValue(txOrig Tx, columnID uint64, bitDepth uint, value int64) 
 }
 
 // clearValue removes a specific value assigned to columnID
-func (v *view) clearValue(txOrig Tx, columnID uint64, bitDepth uint, value int64) (changed bool, err error) {
+func (v *view) clearValue(txOrig Tx, columnID uint64, bitDepth uint64, value int64) (changed bool, err error) {
 	shard := columnID / ShardWidth
 	frag := v.Fragment(shard)
 	if frag == nil {
@@ -556,7 +556,7 @@ func (v *view) clearValue(txOrig Tx, columnID uint64, bitDepth uint, value int64
 }
 
 // rangeOp returns rows with a field value encoding matching the predicate.
-func (v *view) rangeOp(qcx *Qcx, op pql.Token, bitDepth uint, predicate int64) (_ *Row, err0 error) {
+func (v *view) rangeOp(qcx *Qcx, op pql.Token, bitDepth uint64, predicate int64) (_ *Row, err0 error) {
 	r := NewRow()
 	for _, frag := range v.allFragments() {
 
@@ -576,7 +576,7 @@ func (v *view) rangeOp(qcx *Qcx, op pql.Token, bitDepth uint, predicate int64) (
 }
 
 // upgradeViewBSIv2 upgrades the fragments of v. Returns ok true if any fragment upgraded.
-func upgradeViewBSIv2(v *view, bitDepth uint) (ok bool, _ error) {
+func upgradeViewBSIv2(v *view, bitDepth uint64) (ok bool, _ error) {
 	// If reading from an old formatted BSI roaring bitmap, upgrade and reload.
 	for _, frag := range v.allFragments() {
 		if frag.storage.Flags&roaringFlagBSIv2 == 1 {
