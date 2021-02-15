@@ -1947,7 +1947,7 @@ func (s *holderSyncer) initializeIndexTranslateReplication(snap *topology.Cluste
 // initializeFieldTranslateReplication connects the coordinator to stream field data.
 func (s *holderSyncer) initializeFieldTranslateReplication(snap *topology.ClusterSnapshot) error {
 	// Skip if coordinator.
-	if !snap.IsPrimaryFieldTranslationNode(s.Cluster.Node.ID) {
+	if snap.IsPrimaryFieldTranslationNode(s.Cluster.Node.ID) {
 		return nil
 	}
 

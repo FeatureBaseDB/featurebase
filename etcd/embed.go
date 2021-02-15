@@ -1127,9 +1127,11 @@ func (e *Etcd) RemoveShard(ctx context.Context, index, field string, shard uint6
 // based on the etcd peers.
 func (e *Etcd) Nodes() []*topology.Node {
 	peers := e.Peers()
+	// For N>1, this might actually reduce GC load. Maybe.
+	nodeData := make([]topology.Node, len(peers))
 	nodes := make([]*topology.Node, len(peers))
 	for i, peer := range peers {
-		node := &topology.Node{}
+		node := &nodeData[i]
 
 		if meta, err := e.Metadata(context.Background(), peer.ID); err != nil {
 			log.Println(err, "getting metadata") // TODO: handle this with a logger

@@ -107,8 +107,14 @@ func (c *ClusterSnapshot) ShardNodes(index string, shard uint64) []*Node {
 }
 
 // OwnsShard returns true if a host owns a fragment.
-func (c *ClusterSnapshot) OwnsShard(nodeID string, index string, shard uint64) bool {
-	return Nodes(c.ShardNodes(index, shard)).ContainsID(nodeID)
+func (c *ClusterSnapshot) OwnsShard(nodeID string, index string, shard uint64) (ret bool) {
+	idx := c.Hasher.Hash(uint64(c.ShardToShardPartition(index, shard)), len(c.Nodes))
+	for i := 0; i < c.ReplicaN; i++ {
+		if c.Nodes[(idx+i)%len(c.Nodes)].ID == nodeID {
+			return true
+		}
+	}
+	return false
 }
 
 // KeyNodes returns a list of nodes that own a key.
@@ -147,11 +153,14 @@ func (c *ClusterSnapshot) IsPrimaryFieldTranslationNode(nodeID string) bool {
 }
 
 // PrimaryPartitionNode returns the primary node of the given partition.
-func (c *ClusterSnapshot) PrimaryPartitionNode(partition int) *Node {
-	if nodes := c.PartitionNodes(partition); len(nodes) > 0 {
-		return nodes[0]
+func (c *ClusterSnapshot) PrimaryPartitionNode(partitionID int) *Node {
+	// Determine primary owner node.
+	nodeIndex := c.PrimaryNodeIndex(partitionID)
+	if nodeIndex < 0 {
+		// no nodes anyway
+		return nil
 	}
-	return nil
+	return c.Nodes[nodeIndex]
 }
 
 // IsPrimary returns true if the given node is the primary for the given

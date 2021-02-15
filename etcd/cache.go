@@ -16,9 +16,6 @@ package etcd
 
 import (
 	"context"
-	"encoding/json"
-	"log"
-	"sort"
 	"sync"
 	"time"
 
@@ -35,8 +32,12 @@ type EtcdWithCache struct {
 	peerMetadataMu sync.RWMutex
 	peerMetadata   map[string][]byte
 
-	stateMu sync.Mutex
+	stateMu sync.Mutex // cluster state cache updates
+	peersMu sync.Mutex // peer-list cache updates
 
+	nodes              []*topology.Node // unmarshalled Node data
+	nodesTTL           int              // seconds
+	nodesLastRequest   time.Time        // last time requested
 	nodeStates         map[string]nodeState
 	nodeStateTTL       int // seconds
 	nodeStateFrequency int // max requests per second allowed before using the cache
@@ -63,6 +64,7 @@ func NewEtcdWithCache(opt Options, replicas int) *EtcdWithCache {
 		nodeStateFrequency:    1,
 		clusterStateTTL:       6,
 		clusterStateFrequency: 1,
+		nodesTTL:              6,
 
 		peerMetadata: make(map[string][]byte),
 		nodeStates:   make(map[string]nodeState),
@@ -151,27 +153,17 @@ func (c *EtcdWithCache) NodeState(ctx context.Context, peerID string) (disco.Nod
 	return ns.val, nil
 }
 
-// Nodes implements the Noder interface.
+// Nodes caches the result of the underlying implementation's node list.
 func (c *EtcdWithCache) Nodes() []*topology.Node {
-	peers := c.Peers()
-	nodes := make([]*topology.Node, len(peers))
-	for i, peer := range peers {
-		node := &topology.Node{}
-		if meta, err := c.Metadata(context.Background(), peer.ID); err != nil {
-			log.Println(err, "getting metadata") // TODO: handle this with a logger
-		} else if err := json.Unmarshal(meta, node); err != nil {
-			log.Println(err, "unmarshaling json metadata")
-		}
+	c.peersMu.Lock()
+	defer c.peersMu.Unlock()
 
-		node.ID = peer.ID
-
-		nodes[i] = node
+	now := time.Now()
+	if now.Sub(c.nodesLastRequest) > (time.Duration(c.nodesTTL) * time.Second) {
+		c.nodes = c.Etcd.Nodes()
+		c.nodesLastRequest = now
 	}
-
-	// Nodes must be sorted.
-	sort.Sort(topology.ByID(nodes))
-
-	return nodes
+	return c.nodes
 }
 
 // SetNodes implements the Noder interface as NOP
