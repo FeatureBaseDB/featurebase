@@ -911,12 +911,8 @@ func (h *Holder) schema(ctx context.Context, includeViews bool) ([]*IndexInfo, e
 				Options:   *cfm.Meta,
 			}
 			if includeViews {
-				for _, viewData := range field.Views {
-					cvm, err := h.decodeCreateViewMessage(viewData)
-					if err != nil {
-						return nil, errors.Wrap(err, "decoding CreateViewMessage")
-					}
-					fi.Views = append(fi.Views, &ViewInfo{Name: cvm.View})
+				for viewName := range field.Views {
+					fi.Views = append(fi.Views, &ViewInfo{Name: viewName})
 				}
 				sort.Sort(viewInfoSlice(fi.Views))
 			}
@@ -1265,9 +1261,11 @@ func (h *Holder) loadField(indexName, fieldName string) (*Field, error) {
 }
 
 func (h *Holder) loadView(indexName, fieldName, viewName string) (*view, error) {
-	b, err := h.schemator.View(context.TODO(), indexName, fieldName, viewName)
+	b, err := h.schemator.View(context.Background(), indexName, fieldName, viewName)
 	if err != nil {
 		return nil, errors.Wrapf(err, "getting view: %s/%s/%s", indexName, fieldName, viewName)
+	} else if !b {
+		return nil, errors.Wrapf(err, "tried to load a nonexistent view: %s/%s/%s", indexName, fieldName, viewName)
 	}
 
 	// Get field.
@@ -1276,20 +1274,7 @@ func (h *Holder) loadView(indexName, fieldName, viewName string) (*view, error) 
 		return nil, errors.Errorf("local field not found: %s/%s", indexName, fieldName)
 	}
 
-	cvm, err := h.decodeCreateViewMessage(b)
-	if err != nil {
-		return nil, errors.Wrap(err, "decoding CreateFieldMessage")
-	}
-
-	// I think we eventually want to get rid of storing the serialized view in
-	// etcd because all it keeps is the view name. So in that case we would always
-	// just use the viewName argument here.
-	vName := cvm.View
-	if fieldName == existenceFieldName {
-		vName = viewName
-	}
-
-	return fld.createViewIfNotExists(vName)
+	return fld.createViewIfNotExists(viewName)
 }
 
 func (h *Holder) newIndex(path, name string) (*Index, error) {
@@ -2314,12 +2299,4 @@ func (h *Holder) decodeCreateFieldMessage(b []byte) (*CreateFieldMessage, error)
 		return nil, errors.Wrap(err, "unmarshaling")
 	}
 	return &cfm, nil
-}
-
-func (h *Holder) decodeCreateViewMessage(b []byte) (*CreateViewMessage, error) {
-	var cvm CreateViewMessage
-	if err := h.serializer.Unmarshal(b, &cvm); err != nil {
-		return nil, errors.Wrap(err, "unmarshaling")
-	}
-	return &cvm, nil
 }

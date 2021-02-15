@@ -516,7 +516,7 @@ func (e *Etcd) Schema(ctx context.Context) (disco.Schema, error) {
 			if _, ok := flds[field]; !ok {
 				flds[field] = &disco.Field{
 					Data:  vals[i],
-					Views: make(map[string][]byte),
+					Views: make(map[string]struct{}),
 				}
 				continue
 			}
@@ -525,7 +525,7 @@ func (e *Etcd) Schema(ctx context.Context) (disco.Schema, error) {
 			// token[3]: view
 			if len(tokens) > 3 {
 				view := tokens[3]
-				views[view] = vals[i]
+				views[view] = struct{}{}
 			}
 		}
 	}
@@ -672,15 +672,15 @@ func (e *Etcd) DeleteField(ctx context.Context, indexname string, name string) e
 	return errors.Wrap(err, "DeleteField")
 }
 
-func (e *Etcd) View(ctx context.Context, indexName, fieldName, name string) ([]byte, error) {
+func (e *Etcd) View(ctx context.Context, indexName, fieldName, name string) (bool, error) {
 	key := schemaPrefix + indexName + "/" + fieldName + "/" + name
-	return e.getKeyBytes(ctx, key)
+	return e.keyExists(ctx, key)
 }
 
 // CreateView differs from CreateIndex and CreateField in that it does not
 // return an error if the view already exists. If this logic needs to be
 // changed, we likely need to return disco.ErrViewExists.
-func (e *Etcd) CreateView(ctx context.Context, indexName, fieldName, name string, val []byte) error {
+func (e *Etcd) CreateView(ctx context.Context, indexName, fieldName, name string) error {
 	cli, err := e.client()
 	if err != nil {
 		return errors.Wrap(err, "CreateView: creating client")
@@ -689,14 +689,10 @@ func (e *Etcd) CreateView(ctx context.Context, indexName, fieldName, name string
 
 	key := schemaPrefix + indexName + "/" + fieldName + "/" + name
 
-	// Set up Op to write view value as bytes.
-	op := clientv3.OpPut(key, "")
-	op.WithValueBytes(val)
-
 	// Check for key existence, and execute Op within a transaction.
 	_, err = cli.KV.Txn(ctx).
 		If(clientv3util.KeyMissing(key)).
-		Then(op).
+		Then(clientv3.OpPut(key, "")).
 		Commit()
 	if err != nil {
 		return errors.Wrap(err, "executing transaction")
@@ -776,6 +772,23 @@ func (e *Etcd) getKey(ctx context.Context, key string) ([]string, [][]byte, erro
 	}
 
 	return keys, values, nil
+}
+
+func (e *Etcd) keyExists(ctx context.Context, key string) (bool, error) {
+	cli, err := e.client()
+	if err != nil {
+		return false, errors.Wrap(err, "keyExists: creates a new client")
+	}
+	defer cli.Close()
+
+	resp, err := cli.Get(ctx, key, clientv3.WithCountOnly())
+	if err != nil {
+		return false, err
+	}
+	if resp.Count > 0 {
+		return true, nil
+	}
+	return false, nil
 }
 
 func (e *Etcd) delKey(ctx context.Context, key string, withPrefix bool) error {

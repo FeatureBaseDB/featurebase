@@ -2241,10 +2241,5 @@ func (f *Field) persistView(ctx context.Context, cvm *CreateViewMessage) error {
 		return ErrViewRequired
 	}
 
-	if b, err := f.serializer.Marshal(cvm); err != nil {
-		return errors.Wrap(err, "marshaling")
-	} else if err := f.schemator.CreateView(ctx, cvm.Index, cvm.Field, cvm.View, b); err != nil {
-		return errors.Wrapf(err, "writing field to disco: %s/%s/%s", cvm.Index, cvm.Field, cvm.View)
-	}
-	return nil
+	return f.schemator.CreateView(ctx, cvm.Index, cvm.Field, cvm.View)
 }

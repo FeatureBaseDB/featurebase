@@ -104,7 +104,7 @@ type Index struct {
 // for each of its views.
 type Field struct {
 	Data  []byte
-	Views map[string][]byte
+	Views map[string]struct{}
 }
 
 type Schemator interface {
@@ -115,8 +115,8 @@ type Schemator interface {
 	Field(ctx context.Context, index, field string) ([]byte, error)
 	CreateField(ctx context.Context, index, field string, val []byte) error
 	DeleteField(ctx context.Context, index, field string) error
-	View(ctx context.Context, index, field, view string) ([]byte, error)
-	CreateView(ctx context.Context, index, field, view string, val []byte) error
+	View(ctx context.Context, index, field, view string) (bool, error)
+	CreateView(ctx context.Context, index, field, view string) error
 	DeleteView(ctx context.Context, index, field, view string) error
 }
 
@@ -284,12 +284,12 @@ func (*nopSchemator) CreateField(ctx context.Context, index, field string, val [
 func (*nopSchemator) DeleteField(ctx context.Context, index, field string) error { return nil }
 
 // View is a no-op implementation of the Schemator View method.
-func (*nopSchemator) View(ctx context.Context, index, field, view string) ([]byte, error) {
-	return nil, nil
+func (*nopSchemator) View(ctx context.Context, index, field, view string) (bool, error) {
+	return false, nil
 }
 
 // CreateView is a no-op implementation of the Schemator CreateView method.
-func (*nopSchemator) CreateView(ctx context.Context, index, field, view string, val []byte) error {
+func (*nopSchemator) CreateView(ctx context.Context, index, field, view string) error {
 	return nil
 }
 
@@ -383,7 +383,7 @@ func (s *inMemSchemator) CreateField(ctx context.Context, index, field string, v
 	}
 	idx.Fields[field] = &Field{
 		Data:  val,
-		Views: make(map[string][]byte),
+		Views: make(map[string]struct{}),
 	}
 	return nil
 }
@@ -401,26 +401,23 @@ func (s *inMemSchemator) DeleteField(ctx context.Context, index, field string) e
 }
 
 // View is an in-memory implementation of the Schemator View method.
-func (s *inMemSchemator) View(ctx context.Context, index, field, view string) ([]byte, error) {
+func (s *inMemSchemator) View(ctx context.Context, index, field, view string) (bool, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	idx, ok := s.schema[index]
 	if !ok {
-		return nil, ErrIndexDoesNotExist
+		return false, ErrIndexDoesNotExist
 	}
 	fld, ok := idx.Fields[field]
 	if !ok {
-		return nil, ErrFieldDoesNotExist
+		return false, ErrFieldDoesNotExist
 	}
-	data, ok := fld.Views[view]
-	if !ok {
-		return nil, ErrViewDoesNotExist
-	}
-	return data, nil
+	_, ok = fld.Views[view]
+	return ok, nil
 }
 
 // CreateView is an in-memory implementation of the Schemator CreateView method.
-func (s *inMemSchemator) CreateView(ctx context.Context, index, field, view string, val []byte) error {
+func (s *inMemSchemator) CreateView(ctx context.Context, index, field, view string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	idx, ok := s.schema[index]
@@ -433,7 +430,7 @@ func (s *inMemSchemator) CreateView(ctx context.Context, index, field, view stri
 	}
 	// The current logic in pilosa doesn't allow us to return ErrViewExists
 	// here, so for now we just update the value if the view already exists.
-	fld.Views[view] = val
+	fld.Views[view] = struct{}{}
 	return nil
 }
 
