@@ -1479,7 +1479,7 @@ func (api *API) ImportValue(ctx context.Context, qcx *Qcx, req *ImportValueReque
 	return api.ImportValueWithTx(ctx, qcx, req, opts...)
 }
 
-// ImportValue bulk imports values into a particular field.
+// ImportValueWithTx bulk imports values into a particular field.
 func (api *API) ImportValueWithTx(ctx context.Context, qcx *Qcx, req *ImportValueRequest, opts ...ImportOption) (err0 error) {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.ImportValue")
 	defer span.Finish()
