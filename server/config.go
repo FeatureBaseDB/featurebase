@@ -66,6 +66,12 @@ type Config struct {
 	// BindGRPC is the host:port on which Pilosa will bind for gRPC.
 	BindGRPC string `toml:"bind-grpc"`
 
+	// GRPCListener is an already-bound listener to use for gRPC.
+	// This is for use by test infrastructure, where it's useful to
+	// be able to dynamically generate the bindings by actually binding
+	// to :0, and avoid "address already in use" errors.
+	GRPCListener *net.TCPListener
+
 	// Advertise is the address advertised by the server to other nodes
 	// in the cluster. It should be reachable by all other nodes and should
 	// route to an interface that Bind is listening on.

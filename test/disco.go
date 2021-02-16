@@ -19,10 +19,13 @@ import (
 	"io/ioutil"
 	"net"
 	"strings"
+	"testing"
 	"time"
 
 	"github.com/pilosa/pilosa/v2/etcd"
 	"github.com/pilosa/pilosa/v2/server"
+	"github.com/pilosa/pilosa/v2/testhook"
+	"github.com/pkg/errors"
 )
 
 type Ports struct {
@@ -32,16 +35,90 @@ type Ports struct {
 	LsnP  *net.TCPListener
 	PortP int
 
+	LsnG *net.TCPListener
 	Grpc int
 }
 
 func (ports *Ports) Close() error {
 	err := ports.LsnC.Close()
 	err2 := ports.LsnP.Close()
+	err3 := ports.LsnG.Close()
 	if err != nil {
 		return err
 	}
-	return err2
+	if err2 != nil {
+		return err2
+	}
+	return err3
+}
+
+// listenerPortURL builds a TCP listener and corresponding http://localhost:%d
+// URL, and returns those.
+func listenerWithURL() (listener *net.TCPListener, url string, err error) {
+	l, err := net.Listen("tcp", ":0")
+	if err != nil {
+		return listener, url, err
+	}
+	listener = l.(*net.TCPListener)
+	port := listener.Addr().(*net.TCPAddr).Port
+	url = fmt.Sprintf("http://localhost:%d", port)
+	return listener, url, err
+}
+
+// GetPortsGenConfigs creates listener ports, and updates the configurations
+// of servers to match these created ports, including cross-references
+// like updating the InitCluster values in the Etcd configs.
+func GetPortsGenConfigs(tb testing.TB, nodes []*Command) error {
+	peerUrls := make([]string, len(nodes))
+	for i := range nodes {
+		if nodes[i].Config == nil {
+			nodes[i].Config = &server.Config{}
+		}
+		config := nodes[i].Config
+		name := fmt.Sprintf("server%d", i)
+		clusterName := fmt.Sprintf("cluster-%s", tb.Name())
+		discoDir, err := testhook.TempDir(tb, "disco.")
+		if err != nil {
+			return errors.Wrap(err, "creating temp directory")
+		}
+		clientListener, clientURL, err := listenerWithURL()
+		if err != nil {
+			return errors.Wrap(err, "creating client listener")
+		}
+		peerListener, peerURL, err := listenerWithURL()
+		if err != nil {
+			return errors.Wrap(err, "creating peer listener")
+		}
+		grpcListener, grpcUrl, err := listenerWithURL()
+		if err != nil {
+			return errors.Wrap(err, "creating gRPC listener")
+		}
+		// for grpc, we don't want the http part...
+		colon := strings.LastIndexByte(grpcUrl, ':')
+		if colon != -1 {
+			grpcUrl = grpcUrl[colon:]
+		}
+		config.Name = name
+		config.Cluster.Name = clusterName
+		config.BindGRPC = grpcUrl
+		config.GRPCListener = grpcListener
+		config.Etcd = etcd.Options{
+			Dir:           discoDir,
+			LClientURL:    clientURL,
+			AClientURL:    clientURL,
+			LPeerURL:      peerURL,
+			APeerURL:      peerURL,
+			HeartbeatTTL:  5 * int64(time.Second),
+			LPeerSocket:   []*net.TCPListener{peerListener},
+			LClientSocket: []*net.TCPListener{clientListener},
+		}
+		peerUrls[i] = fmt.Sprintf("%s=%s", name, peerURL)
+	}
+	allPeerUrls := strings.Join(peerUrls, ",")
+	for i := range nodes {
+		nodes[i].Config.Etcd.InitCluster = allPeerUrls
+	}
+	return nil
 }
 
 //GenPortsConfig creates specific configuration for etcd.
@@ -63,8 +140,9 @@ func GenPortsConfig(ports []Ports) []*server.Config {
 		}
 
 		cfgs[i] = &server.Config{
-			Name:     name,
-			BindGRPC: fmt.Sprintf(":%d", ports[i].Grpc),
+			Name:         name,
+			BindGRPC:     fmt.Sprintf(":%d", ports[i].Grpc),
+			GRPCListener: ports[i].LsnG,
 			Etcd: etcd.Options{
 				Dir:           discoDir,
 				LClientURL:    lClientURL,
@@ -102,12 +180,9 @@ func NewPorts(lsn []*net.TCPListener) []Ports {
 			PortC: ports[i],
 			LsnP:  lsn[i+1],
 			PortP: ports[i+1],
-
-			Grpc: ports[i+2],
+			Grpc:  ports[i+2],
+			LsnG:  lsn[i+2],
 		})
-		// make Grpc port available to
-		// be rebound.
-		lsn[i+2].Close()
 	}
 
 	return out

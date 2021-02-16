@@ -18,7 +18,6 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"net"
 	"sort"
 	"strings"
 	"testing"
@@ -30,7 +29,6 @@ import (
 	"github.com/pilosa/pilosa/v2/proto"
 	"github.com/pilosa/pilosa/v2/server"
 	"github.com/pilosa/pilosa/v2/storage"
-	"github.com/pilosa/pilosa/v2/test/port"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -45,6 +43,7 @@ func (*ModHasher) Name() string { return "mod" }
 // Cluster represents a Pilosa cluster (multiple Command instances)
 type Cluster struct {
 	Nodes []*Command
+	tb    testing.TB
 }
 
 // Query executes an API.Query through one of the cluster's node's API. It fails
@@ -376,40 +375,21 @@ func (c *Cluster) CreateField(t testing.TB, index string, iopts pilosa.IndexOpti
 
 // Start runs a Cluster
 func (c *Cluster) Start() error {
-	var eg errgroup.Group
-	err := port.GetListeners(
-
-		func(lsns []*net.TCPListener) (err0 error) {
-			sliceOfPorts := NewPorts(lsns)
-			defer func() {
-				if err0 != nil {
-					// going to retry. Close the still open listeners
-					for _, ports := range sliceOfPorts {
-						_ = ports.Close()
-					}
-				}
-			}()
-			portsCfg := GenPortsConfig(sliceOfPorts)
-
-			for i, cc := range c.Nodes {
-				cc := cc
-				cc.Config.Etcd = portsCfg[i].Etcd
-				cc.Config.Name = portsCfg[i].Name
-				cc.Config.Cluster.Name = portsCfg[i].Cluster.Name
-				cc.Config.BindGRPC = portsCfg[i].BindGRPC
-
-				eg.Go(func() error {
-					return cc.Start()
-				})
-			}
-
-			return eg.Wait()
-		}, 3*len(c.Nodes), 10)
-
+	err := GetPortsGenConfigs(c.tb, c.Nodes)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "configuring cluster ports")
 	}
-
+	var eg errgroup.Group
+	for _, cc := range c.Nodes {
+		cc := cc
+		eg.Go(func() error {
+			return cc.Start()
+		})
+	}
+	err = eg.Wait()
+	if err != nil {
+		return errors.Wrap(err, "starting cluster")
+	}
 	return c.GetNode(0).AwaitState(disco.ClusterStateNormal, 30*time.Second)
 }
 
@@ -488,7 +468,7 @@ func newCluster(tb testing.TB, size int, opts ...[]server.CommandOption) (*Clust
 		return nil, errors.New("Slice of CommandOptions must be of length 0, 1, or equal to the number of cluster nodes")
 	}
 
-	cluster := &Cluster{Nodes: make([]*Command, size)}
+	cluster := &Cluster{Nodes: make([]*Command, size), tb: tb}
 	for i := 0; i < size; i++ {
 		var commandOpts []server.CommandOption
 		if len(opts) > 0 {

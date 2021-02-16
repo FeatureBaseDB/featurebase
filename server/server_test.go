@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math/rand"
+	"net"
 	nethttp "net/http"
 	"os"
 	"reflect"
@@ -37,7 +38,6 @@ import (
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/server"
 	"github.com/pilosa/pilosa/v2/test"
-	"github.com/pilosa/pilosa/v2/test/port"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -1190,11 +1190,14 @@ Set("h", adec=100.22)
 }
 
 func TestMain(m *testing.M) {
+	l, err := net.Listen("tcp", ":0")
+	if err != nil {
+		panic(err)
+	}
+	port := l.Addr().(*net.TCPAddr).Port
+	fmt.Printf("server/ TestMain: online stack-traces: curl http://localhost:%v/debug/pprof/goroutine?debug=2\n", port)
 	go func() {
-		err := port.GetPort(func(port int) error {
-			fmt.Printf("server/ TestMain: online stack-traces: curl http://localhost:%v/debug/pprof/goroutine?debug=2\n", port)
-			return nethttp.ListenAndServe(fmt.Sprintf("127.0.0.1:%v", port), nil)
-		}, 10)
+		err := nethttp.Serve(l, nil)
 		if err != nil {
 			panic(err)
 		}

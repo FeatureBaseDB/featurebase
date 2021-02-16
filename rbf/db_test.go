@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"net"
 	"net/http"
 	"os"
 	"testing"
@@ -27,7 +28,6 @@ import (
 
 	"github.com/pilosa/pilosa/v2/rbf"
 	rbfcfg "github.com/pilosa/pilosa/v2/rbf/cfg"
-	"github.com/pilosa/pilosa/v2/test/port"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -351,11 +351,14 @@ func TestDB_MultiTx(t *testing.T) {
 
 // better diagnosis of deadlocks/hung situations versus just really slow "Quick" tests.
 func TestMain(m *testing.M) {
+	l, err := net.Listen("tcp", ":0")
+	if err != nil {
+		panic(err)
+	}
+	port := l.Addr().(*net.TCPAddr).Port
+	fmt.Printf("rbf/ TestMain: online stack-traces: curl http://localhost:%v/debug/pprof/goroutine?debug=2\n", port)
 	go func() {
-		err := port.GetPort(func(port int) error {
-			fmt.Printf("rbf/ TestMain: online stack-traces: curl http://localhost:%v/debug/pprof/goroutine?debug=2\n", port)
-			return http.ListenAndServe(fmt.Sprintf("127.0.0.1:%v", port), nil)
-		}, 10)
+		err := http.Serve(l, nil)
 		if err != nil {
 			panic(err)
 		}
