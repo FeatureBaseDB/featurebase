@@ -1256,8 +1256,7 @@ func (h *Holder) loadField(indexName, fieldName string) (*Field, error) {
 		return nil, errors.Wrap(err, "decoding CreateFieldMessage")
 	}
 
-	// TODO: can this take cfm?
-	return idx.createFieldIfNotExists(fieldName, cfm.Meta)
+	return idx.createFieldIfNotExists(cfm)
 }
 
 func (h *Holder) loadView(indexName, fieldName, viewName string) (*view, error) {

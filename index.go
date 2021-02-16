@@ -399,7 +399,14 @@ func (i *Index) openExistenceField() error {
 
 	// If we have gotten here, it means that we couldn't successfully open the
 	// existence field from disk, so we need to create it.
-	f, err := i.createFieldIfNotExists(existenceFieldName, &FieldOptions{CacheType: CacheTypeNone, CacheSize: 0})
+	cfm := &CreateFieldMessage{
+		Index:     i.name,
+		Field:     existenceFieldName,
+		CreatedAt: 0,
+		Meta:      &FieldOptions{CacheType: CacheTypeNone, CacheSize: 0},
+	}
+
+	f, err := i.createFieldIfNotExists(cfm)
 	if err != nil {
 		return errors.Wrap(err, "creating existence field")
 	}
@@ -723,20 +730,13 @@ func (i *Index) persistField(ctx context.Context, cfm *CreateFieldMessage) error
 // createFieldIfNotExists creates the field if it does not already exist in the
 // in-memory index structure. This is not related to whether or not the field
 // exists in etcd.
-func (i *Index) createFieldIfNotExists(name string, opt *FieldOptions) (*Field, error) {
+func (i *Index) createFieldIfNotExists(cfm *CreateFieldMessage) (*Field, error) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
 	// Find field in cache first.
-	if f := i.fields[name]; f != nil {
+	if f := i.fields[cfm.Field]; f != nil {
 		return f, nil
-	}
-
-	cfm := &CreateFieldMessage{
-		Index:     i.name,
-		Field:     name,
-		CreatedAt: 0,
-		Meta:      opt,
 	}
 
 	return i.createField(cfm, false)
