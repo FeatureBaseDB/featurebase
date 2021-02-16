@@ -5565,7 +5565,7 @@ func (e *executor) mapReduce(ctx context.Context, index string, shards []uint64,
 	}
 
 	// Start mapping across all primary owners.
-	if err := e.mapper(ctx, cancel, ch, nodes, index, shards, c, opt, mapFn, reduceFn); err != nil {
+	if err := e.mapper(ctx, cancel, ch, nodes, index, shards, c, opt, e.Cluster.ReplicaN == 1, mapFn, reduceFn); err != nil {
 		return nil, errors.Wrap(err, "starting mapper")
 	}
 
@@ -5590,7 +5590,7 @@ func (e *executor) mapReduce(ctx context.Context, index string, shards []uint64,
 				nodes = topology.Nodes(nodes).FilterID(resp.node.ID)
 
 				// Begin mapper against secondary nodes.
-				if err := e.mapper(ctx, cancel, ch, nodes, index, resp.shards, c, opt, mapFn, reduceFn); errors.Cause(err) == errShardUnavailable {
+				if err := e.mapper(ctx, cancel, ch, nodes, index, resp.shards, c, opt, true, mapFn, reduceFn); errors.Cause(err) == errShardUnavailable {
 					return nil, resp.err
 				} else if err != nil {
 					return nil, errors.Wrap(err, "mapping on secondary node")
@@ -5659,7 +5659,7 @@ func makeEmbeddedDataForShards(allRows []*Row, shards []uint64) []*Row {
 	return newRows
 }
 
-func (e *executor) mapper(ctx context.Context, cancel context.CancelFunc, ch chan mapResponse, nodes []*topology.Node, index string, shards []uint64, c *pql.Call, opt *execOptions, mapFn mapFunc, reduceFn reduceFunc) error {
+func (e *executor) mapper(ctx context.Context, cancel context.CancelFunc, ch chan mapResponse, nodes []*topology.Node, index string, shards []uint64, c *pql.Call, opt *execOptions, lastAttempt bool, mapFn mapFunc, reduceFn reduceFunc) error {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.mapper")
 	defer span.Finish()
 	done := ctx.Done()
@@ -5696,11 +5696,10 @@ func (e *executor) mapper(ctx context.Context, cancel context.CancelFunc, ch cha
 				// The cancel coming after the above send is intentional.
 				// We want to report the actual error that happened
 				// before we cause anything to return "context canceled".
-				// Also, we only want to call cancel if the error is from a
-				// healthy node. If the error is "connection refused" because
-				// the node is unavailable, we don't call cancel, and instead
-				// let the mapper continue trying replica nodes.
-				if resp.err != nil && !strings.Contains(resp.err.Error(), errConnectionRefused) {
+				// Also, we only want to call cancel if the error occurs on a
+				// secondary node (or a primary node with no replicas), meaning
+				// there are no other nodes remaining to which we can fail over.
+				if resp.err != nil && lastAttempt {
 					cancel()
 				}
 			}
