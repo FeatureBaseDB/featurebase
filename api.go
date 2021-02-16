@@ -1775,7 +1775,7 @@ func (api *API) RemoveNode(id string) (*topology.Node, error) {
 	}
 
 	if api.cluster.disCo.ID() == id {
-		return nil, errors.Wrapf(ErrPreconditionFailed, "the node %s can not be removed", id)
+		return nil, errors.Wrapf(ErrPreconditionFailed, "cannot issue node removal request to the node being removed, id=%s", id)
 	}
 
 	removeNode := api.cluster.nodeByID(id)

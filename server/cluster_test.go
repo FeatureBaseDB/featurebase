@@ -588,7 +588,7 @@ func TestClusterResize_RemoveNode(t *testing.T) {
 		nodeID := mustNodeID(coord.URL())
 		resp := test.Do(t, "POST", coord.URL()+"/cluster/resize/remove-node", fmt.Sprintf(`{"id": "%s"}`, nodeID))
 
-		expBody := fmt.Sprintf("removing node: the node %s can not be removed: precondition failed", nodeID)
+		expBody := fmt.Sprintf("removing node: cannot issue node removal request to the node being removed, id=%s: precondition failed", nodeID)
 		if resp.StatusCode != http.StatusInternalServerError {
 			t.Fatalf("expected StatusCode %d but got %d", http.StatusInternalServerError, resp.StatusCode)
 		} else if strings.TrimSpace(resp.Body) != expBody {
@@ -600,7 +600,7 @@ func TestClusterResize_RemoveNode(t *testing.T) {
 		nodeID := mustNodeID(other.URL())
 		resp := test.Do(t, "POST", other.URL()+"/cluster/resize/remove-node", fmt.Sprintf(`{"id": "%s"}`, nodeID))
 
-		expBody := fmt.Sprintf("removing node: the node %s can not be removed: precondition failed", nodeID)
+		expBody := fmt.Sprintf(`removing node: cannot issue node removal request to the node being removed, id=%s: precondition failed`, nodeID)
 		if resp.StatusCode != http.StatusInternalServerError {
 			t.Fatalf("expected StatusCode %d but got %d", http.StatusInternalServerError, resp.StatusCode)
 		} else if strings.TrimSpace(resp.Body) != expBody {
