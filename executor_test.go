@@ -1345,7 +1345,7 @@ func TestExecutor_Execute_TopN(t *testing.T) {
 			t.Fatal(err)
 		} else if _, err := idx.CreateField("f", pilosa.OptFieldTypeInt(0, 100)); err != nil {
 			t.Fatal(err)
-		} else if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `TopN(f, n=2)`}); err == nil || !strings.Contains(err.Error(), `finding top results: cannot compute TopN() on integer field: "f"`) {
+		} else if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `TopN(f, n=2)`}); err == nil || !strings.Contains(err.Error(), `finding top results: mapping on primary node: cannot compute TopN() on integer field: "f"`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -1364,7 +1364,7 @@ func TestExecutor_Execute_TopN(t *testing.T) {
 			Set(0, f=1)
 		`}); err != nil {
 			t.Fatal(err)
-		} else if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `TopN(f, n=2)`}); err == nil || !strings.Contains(err.Error(), `finding top results: cannot compute TopN(), field has no cache: "f"`) {
+		} else if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `TopN(f, n=2)`}); err == nil || !strings.Contains(err.Error(), `finding top results: mapping on primary node: cannot compute TopN(), field has no cache: "f"`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})

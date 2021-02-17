@@ -46,6 +46,8 @@ const (
 
 	columnLabel = "col"
 	rowLabel    = "row"
+
+	errConnectionRefused = "connect: connection refused"
 )
 
 // executor recursively executes calls in a PQL query across all shards.
@@ -3501,7 +3503,6 @@ func (e *executor) executeGroupByShard(ctx context.Context, qcx *Qcx, index stri
 }
 
 func (e *executor) executeRows(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *execOptions) (RowIDs, error) {
-
 	// Fetch field name from argument.
 	// Check "field" first for backwards compatibility.
 	// TODO: remove at Pilosa 2.0
@@ -5564,7 +5565,7 @@ func (e *executor) mapReduce(ctx context.Context, index string, shards []uint64,
 	}
 
 	// Start mapping across all primary owners.
-	if err := e.mapper(ctx, cancel, ch, nodes, index, shards, c, opt, mapFn, reduceFn); err != nil {
+	if err := e.mapper(ctx, cancel, ch, nodes, index, shards, c, opt, e.Cluster.ReplicaN == 1, mapFn, reduceFn); err != nil {
 		return nil, errors.Wrap(err, "starting mapper")
 	}
 
@@ -5579,23 +5580,29 @@ func (e *executor) mapReduce(ctx context.Context, index string, shards []uint64,
 			// On error retry against remaining nodes. If an error returns then
 			// the context will cancel and cause all open goroutines to return.
 
-			if resp.err != nil {
+			// We distinguish here between an error which indicates that the
+			// node is not available (and therefore we need to failover to a
+			// replica) and a valid error from a healthy node. In the case of
+			// the latter, there's no need to retry a replica, we should trust
+			// the error from the healthy node and return that immediately.
+			if resp.err != nil && strings.Contains(resp.err.Error(), errConnectionRefused) {
 				// Filter out unavailable nodes.
 				nodes = topology.Nodes(nodes).FilterID(resp.node.ID)
 
 				// Begin mapper against secondary nodes.
-				if err := e.mapper(ctx, cancel, ch, nodes, index, resp.shards, c, opt, mapFn, reduceFn); errors.Cause(err) == errShardUnavailable {
+				if err := e.mapper(ctx, cancel, ch, nodes, index, resp.shards, c, opt, true, mapFn, reduceFn); errors.Cause(err) == errShardUnavailable {
 					return nil, resp.err
 				} else if err != nil {
-					return nil, errors.Wrap(err, "calling mapper")
+					return nil, errors.Wrap(err, "mapping on secondary node")
 				}
 				continue
+			} else if resp.err != nil {
+				return nil, errors.Wrap(resp.err, "mapping on primary node")
 			}
 
 			// Reduce value.
 			result = reduceFn(ctx, result, resp.result)
 			if err, ok := result.(error); ok {
-				cancel()
 				return nil, err
 			}
 
@@ -5652,7 +5659,7 @@ func makeEmbeddedDataForShards(allRows []*Row, shards []uint64) []*Row {
 	return newRows
 }
 
-func (e *executor) mapper(ctx context.Context, cancel context.CancelFunc, ch chan mapResponse, nodes []*topology.Node, index string, shards []uint64, c *pql.Call, opt *execOptions, mapFn mapFunc, reduceFn reduceFunc) error {
+func (e *executor) mapper(ctx context.Context, cancel context.CancelFunc, ch chan mapResponse, nodes []*topology.Node, index string, shards []uint64, c *pql.Call, opt *execOptions, lastAttempt bool, mapFn mapFunc, reduceFn reduceFunc) error {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.mapper")
 	defer span.Finish()
 	done := ctx.Done()
@@ -5689,7 +5696,10 @@ func (e *executor) mapper(ctx context.Context, cancel context.CancelFunc, ch cha
 				// The cancel coming after the above send is intentional.
 				// We want to report the actual error that happened
 				// before we cause anything to return "context canceled".
-				if resp.err != nil {
+				// Also, we only want to call cancel if the error occurs on a
+				// secondary node (or a primary node with no replicas), meaning
+				// there are no other nodes remaining to which we can fail over.
+				if resp.err != nil && lastAttempt {
 					cancel()
 				}
 			}
