@@ -121,7 +121,8 @@ type Holder struct {
 
 	// Queue of fields (having a foreign index) which have
 	// opened before their foreign index has opened.
-	foreignIndexFields []*Field
+	foreignIndexFields   []*Field
+	foreignIndexFieldsMu sync.Mutex
 
 	// opening is set to true while Holder is opening.
 	// It's used to determine if foreign index application
@@ -738,6 +739,8 @@ func (h *Holder) Activate() {
 func (h *Holder) checkForeignIndex(f *Field) error {
 	if h.opening {
 		if fi := h.Index(f.options.ForeignIndex); fi == nil {
+			h.foreignIndexFieldsMu.Lock()
+			defer h.foreignIndexFieldsMu.Unlock()
 			h.foreignIndexFields = append(h.foreignIndexFields, f)
 			return nil
 		}
