@@ -189,10 +189,10 @@ func (ivr *ImportValueRequest) ValidateWithTimestamp(indexCreatedAt, fieldCreate
 	if valueSetCount > 1 {
 		return errors.Errorf("must pass ints, floats, or strings but not multiple")
 	}
-	if ivr.IndexCreatedAt != 0 && ivr.FieldCreatedAt != 0 {
-		if ivr.IndexCreatedAt != indexCreatedAt || ivr.FieldCreatedAt != fieldCreatedAt {
-			return ErrPreconditionFailed
-		}
+
+	if (ivr.IndexCreatedAt != 0 && ivr.IndexCreatedAt != indexCreatedAt) ||
+		(ivr.FieldCreatedAt != 0 && ivr.FieldCreatedAt != fieldCreatedAt) {
+		return ErrPreconditionFailed
 	}
 	return nil
 }
@@ -253,10 +253,9 @@ type ImportRoaringRequest struct {
 
 // ValidateWithTimestamp ensures that the payload of the request is valid.
 func (irr *ImportRoaringRequest) ValidateWithTimestamp(indexCreatedAt, fieldCreatedAt int64) error {
-	if irr.IndexCreatedAt != 0 && irr.FieldCreatedAt != 0 {
-		if irr.IndexCreatedAt != indexCreatedAt || irr.FieldCreatedAt != fieldCreatedAt {
-			return ErrPreconditionFailed
-		}
+	if (irr.IndexCreatedAt != 0 && irr.IndexCreatedAt != indexCreatedAt) ||
+		(irr.FieldCreatedAt != 0 && irr.FieldCreatedAt != fieldCreatedAt) {
+		return ErrPreconditionFailed
 	}
 	return nil
 }
