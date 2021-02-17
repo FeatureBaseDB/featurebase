@@ -26,6 +26,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/pilosa/pilosa/v2/disco"
 	"github.com/pilosa/pilosa/v2/pql"
 	pb "github.com/pilosa/pilosa/v2/proto"
 	"github.com/pilosa/pilosa/v2/roaring"
@@ -5527,9 +5528,7 @@ loop:
 			// If the node being considered is in any state other than STARTED,
 			// then exclude it from the map. This way, one of that node's
 			// healthy replicas will be included instead.
-			// TODO: check state once stator is implemented
-			//if topology.Nodes(nodes).ContainsID(node.ID) && node.State == disco.NodeStateStarted {
-			if topology.Nodes(nodes).ContainsID(node.ID) {
+			if topology.Nodes(nodes).ContainsID(node.ID) && node.State == disco.NodeStateStarted {
 				m[node] = append(m[node], shard)
 				continue loop
 			}
