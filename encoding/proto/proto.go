@@ -21,6 +21,7 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/v2"
+	"github.com/pilosa/pilosa/v2/disco"
 	"github.com/pilosa/pilosa/v2/internal"
 	pnet "github.com/pilosa/pilosa/v2/net"
 	"github.com/pilosa/pilosa/v2/pql"
@@ -708,7 +709,7 @@ func (s Serializer) encodeNode(m *topology.Node) *internal.Node {
 	return &internal.Node{
 		ID:      n.ID,
 		URI:     s.encodeURI(n.URI),
-		State:   n.State,
+		State:   string(n.State),
 		GRPCURI: s.encodeURI(n.GRPCURI),
 	}
 }
@@ -1077,7 +1078,7 @@ func (s Serializer) decodeNode(node *internal.Node, m *topology.Node) {
 	m.ID = node.ID
 	s.decodeURI(node.URI, &m.URI)
 	s.decodeURI(node.GRPCURI, &m.GRPCURI)
-	m.State = node.State
+	m.State = disco.NodeState(node.State)
 }
 
 func (s Serializer) decodeURI(i *internal.URI, m *pnet.URI) {

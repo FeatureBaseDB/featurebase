@@ -726,10 +726,10 @@ func (c *cluster) Nodes() []*topology.Node {
 		s, err := c.stator.NodeState(context.Background(), node.ID)
 		if err != nil {
 			// TODO should we delete this?
-			copiedNodes[i].State = string(disco.NodeStateUnknown)
+			copiedNodes[i].State = disco.NodeStateUnknown
 			continue
 		}
-		copiedNodes[i].State = string(s)
+		copiedNodes[i].State = s
 	}
 	return result
 }

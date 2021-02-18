@@ -565,7 +565,7 @@ func (s *Server) Open() error {
 		ID:        s.nodeID,
 		URI:       s.uri,
 		GRPCURI:   s.grpcURI,
-		State:     string(disco.NodeStateUnknown),
+		State:     disco.NodeStateUnknown,
 		IsPrimary: s.IsPrimary(),
 	}
 

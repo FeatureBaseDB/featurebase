@@ -17,16 +17,17 @@ package topology
 import (
 	"fmt"
 
+	"github.com/pilosa/pilosa/v2/disco"
 	"github.com/pilosa/pilosa/v2/net"
 )
 
 // Node represents a node in the cluster.
 type Node struct {
-	ID        string  `json:"id"`
-	URI       net.URI `json:"uri"`
-	GRPCURI   net.URI `json:"grpc-uri"`
-	IsPrimary bool    `json:"isPrimary"`
-	State     string  `json:"state"`
+	ID        string          `json:"id"`
+	URI       net.URI         `json:"uri"`
+	GRPCURI   net.URI         `json:"grpc-uri"`
+	IsPrimary bool            `json:"isPrimary"`
+	State     disco.NodeState `json:"state"`
 }
 
 func (n *Node) Clone() *Node {
