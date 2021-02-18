@@ -132,11 +132,7 @@ func (c *Cluster) GetNode(n int) *Command {
 	return c.Nodes[ids[n].idx]
 }
 
-// GetCoordinator gets the node which has been determined to be the coordinator.
-// This used to be node0 in tests, but since implementing etcd, the coordinator
-// can be any node in the cluster, so we have to use this method in tests which
-// need to act on the coordinator.
-func (c *Cluster) GetCoordinator() *Command {
+func (c *Cluster) GetPrimary() *Command {
 	for _, n := range c.Nodes {
 		if n.IsPrimary() {
 			return n
@@ -145,8 +141,7 @@ func (c *Cluster) GetCoordinator() *Command {
 	return nil
 }
 
-// GetNonCoordinator gets first first non-coordinator node in the list of nodes.
-func (c *Cluster) GetNonCoordinator() *Command {
+func (c *Cluster) GetNonPrimary() *Command {
 	for _, n := range c.Nodes {
 		if !n.IsPrimary() {
 			return n
@@ -155,8 +150,7 @@ func (c *Cluster) GetNonCoordinator() *Command {
 	return nil
 }
 
-// GetNonCoordinators gets all nodes except the coordinator.
-func (c *Cluster) GetNonCoordinators() []*Command {
+func (c *Cluster) GetNonPrimaries() []*Command {
 	rtn := make([]*Command, 0)
 	for _, n := range c.Nodes {
 		if !n.IsPrimary() {
@@ -164,6 +158,24 @@ func (c *Cluster) GetNonCoordinators() []*Command {
 		}
 	}
 	return rtn
+}
+
+// GetCoordinator gets the node which has been determined to be the coordinator.
+// This used to be node0 in tests, but since implementing etcd, the coordinator
+// can be any node in the cluster, so we have to use this method in tests which
+// need to act on the coordinator.
+func (c *Cluster) GetCoordinator() *Command {
+	return c.GetPrimary()
+}
+
+// GetNonCoordinator gets first first non-coordinator node in the list of nodes.
+func (c *Cluster) GetNonCoordinator() *Command {
+	return c.GetNonPrimary()
+}
+
+// GetNonCoordinators gets all nodes except the coordinator.
+func (c *Cluster) GetNonCoordinators() []*Command {
+	return c.GetNonPrimaries()
 }
 
 // nodePlace represents a node's ID and its index into the c.Nodes slice.

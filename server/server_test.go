@@ -1219,7 +1219,7 @@ func TestClusterCreatedAtRace(t *testing.T) {
 			for _, com := range cluster.Nodes {
 				nodes := com.API.Hosts(context.Background())
 				for _, n := range nodes {
-					if n.State != string(disco.NodeStateStarted) {
+					if n.State != disco.NodeStateStarted {
 						t.Fatalf("unexpected node state (%s) after upping cluster: %v", n.State, nodes)
 					}
 				}
@@ -1266,5 +1266,48 @@ func TestClusterCreatedAtRace(t *testing.T) {
 			}
 
 		})
+	}
+}
+
+func TestClusterQueryCountInDegraded(t *testing.T) {
+	cluster := test.MustNewCluster(t, 3)
+	for _, c := range cluster.Nodes {
+		c.Config.Cluster.ReplicaN = 2
+	}
+	err := cluster.Start()
+	if err != nil {
+		t.Fatalf("starting cluster: %v", err)
+	}
+	defer cluster.Close()
+
+	p := cluster.GetPrimary()
+	if err := p.Client().CreateIndex(context.Background(), "i", pilosa.IndexOptions{TrackExistence: true}); err != nil {
+		t.Fatal(err)
+	} else if err := p.Client().CreateField(context.Background(), "i", "f"); err != nil {
+		t.Fatal(err)
+	}
+
+	np := cluster.GetNonPrimary()
+	// Write some data
+	for i := 0; i < 10; i++ {
+		if _, err := np.Query(t, "i", "", fmt.Sprintf(`Set(%d, f=1)`, i*pilosa.ShardWidth+1)); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := p.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := np.AwaitState(disco.ClusterStateDegraded, 30*time.Second); err != nil {
+		t.Fatal(err)
+	}
+	if resp, err := np.Client().Query(context.Background(), "i", &pilosa.QueryRequest{
+		Index: "i",
+		Query: "Count(All())",
+	}); err != nil {
+		t.Fatal(err)
+	} else {
+		t.Logf("%+v", resp)
 	}
 }
