@@ -584,7 +584,7 @@ func (i *Index) CreateField(name string, opts ...FieldOption) (*Field, error) {
 	cfm := &CreateFieldMessage{
 		Index:     i.name,
 		Field:     name,
-		CreatedAt: 0,
+		CreatedAt: timestamp(),
 		Meta:      fo,
 	}
 
@@ -683,7 +683,7 @@ func (i *Index) CreateFieldIfNotExistsWithOptions(name string, opt *FieldOptions
 	cfm := &CreateFieldMessage{
 		Index:     i.name,
 		Field:     name,
-		CreatedAt: 0,
+		CreatedAt: timestamp(),
 		Meta:      opt,
 	}
 
