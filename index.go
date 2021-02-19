@@ -273,11 +273,6 @@ func (i *Index) openFields(idx *disco.Index) error {
 	eg, ctx := errgroup.WithContext(context.Background())
 	var mu sync.Mutex
 
-	// var flds map[string]*disco.Field
-	// if idx != nil {
-	// 	flds = idx.Fields
-	// }
-
 fileLoop:
 	for _, loopFi := range fis {
 		select {
@@ -293,7 +288,8 @@ fileLoop:
 				continue
 			}
 
-			var createdAt int64
+			var cfm *CreateFieldMessage = &CreateFieldMessage{}
+			var err error
 
 			// Only continue with indexes which are present in the provided,
 			// non-nil index schema. The reason we have to check for idx != nil
@@ -306,21 +302,16 @@ fileLoop:
 			// to its index (possibly related to transactions?).
 			if idx != nil {
 				fld, ok := idx.Fields[fi.Name()]
-				//fld, ok := flds[fi.Name()]
 				if !ok {
 					continue
 				}
 
-				// decode the CreateIndexMessage from the schema data in order to
-				// get its metadata, such as CreatedAt.
-				// TODO: similar to the createdAt TODO in holder, it may no
-				// longer be necessary to keep createdAt on the in-memory field
-				// struct.
-				cfm, err := i.holder.decodeCreateFieldMessage(fld.Data)
+				// Decode the CreateIndexMessage from the schema data in order to
+				// get its metadata.
+				cfm, err = i.holder.decodeCreateFieldMessage(fld.Data)
 				if err != nil {
 					return errors.Wrap(err, "decoding create field message")
 				}
-				createdAt = cfm.CreatedAt
 			}
 
 			indexQueue <- struct{}{}
@@ -330,7 +321,7 @@ fileLoop:
 				}()
 				i.holder.Logger.Debugf("open field: %s", fi.Name())
 
-				_, err := i.openField(&mu, createdAt, fi.Name())
+				_, err := i.openField(&mu, cfm, fi.Name())
 				if err != nil {
 					return errors.Wrap(err, "opening field")
 				}
@@ -353,7 +344,7 @@ fileLoop:
 
 // openField opens the field directory, initializes the field, and adds it to
 // the in-memory map of fields maintained by Index.
-func (i *Index) openField(mu *sync.Mutex, createdAt int64, file string) (*Field, error) {
+func (i *Index) openField(mu *sync.Mutex, cfm *CreateFieldMessage, file string) (*Field, error) {
 	mu.Lock()
 
 	// goroutine safe
@@ -369,7 +360,7 @@ func (i *Index) openField(mu *sync.Mutex, createdAt int64, file string) (*Field,
 	// up a foreign index.
 	fld.holder = i.holder
 
-	fld.createdAt = createdAt
+	fld.createdAt = cfm.CreatedAt
 
 	// open the views we have data for.
 	if err := fld.Open(); err != nil {
@@ -386,10 +377,17 @@ func (i *Index) openField(mu *sync.Mutex, createdAt int64, file string) (*Field,
 
 // openExistenceField gets or creates the existence field and associates it to the index.
 func (i *Index) openExistenceField() error {
+	cfm := &CreateFieldMessage{
+		Index:     i.name,
+		Field:     existenceFieldName,
+		CreatedAt: 0,
+		Meta:      &FieldOptions{CacheType: CacheTypeNone, CacheSize: 0},
+	}
+
 	// First try opening the existence field from disk. If it doesn't already
 	// exist on disk, then we fall through to the code path which creates it.
 	var mu sync.Mutex
-	fld, err := i.openField(&mu, 0, existenceFieldName)
+	fld, err := i.openField(&mu, cfm, existenceFieldName)
 	if err == nil {
 		i.existenceFld = fld
 		return nil
@@ -399,12 +397,6 @@ func (i *Index) openExistenceField() error {
 
 	// If we have gotten here, it means that we couldn't successfully open the
 	// existence field from disk, so we need to create it.
-	cfm := &CreateFieldMessage{
-		Index:     i.name,
-		Field:     existenceFieldName,
-		CreatedAt: 0,
-		Meta:      &FieldOptions{CacheType: CacheTypeNone, CacheSize: 0},
-	}
 
 	f, err := i.createFieldIfNotExists(cfm)
 	if err != nil {
