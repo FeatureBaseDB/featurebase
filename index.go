@@ -17,7 +17,6 @@ package pilosa
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sort"
@@ -25,9 +24,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/v2/disco"
-	"github.com/pilosa/pilosa/v2/internal"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/stats"
 	"github.com/pilosa/pilosa/v2/testhook"
@@ -417,25 +414,6 @@ func (i *Index) openExistenceField() error {
 	return nil
 }
 
-// saveMeta writes meta data for the index.
-func (i *Index) saveMeta() error {
-	// Marshal metadata.
-	buf, err := proto.Marshal(&internal.IndexMeta{
-		Keys:           i.keys,
-		TrackExistence: i.trackExistence,
-	})
-	if err != nil {
-		return errors.Wrap(err, "marshalling")
-	}
-
-	// Write to meta file.
-	if err := ioutil.WriteFile(filepath.Join(i.path, ".meta"), buf, 0666); err != nil {
-		return errors.Wrap(err, "writing")
-	}
-
-	return nil
-}
-
 // Close closes the index and its fields.
 func (i *Index) Close() error {
 
@@ -797,6 +775,11 @@ func (i *Index) DeleteField(name string) error {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
+	// Disallow deleting the existence field.
+	if name == existenceFieldName {
+		return newNotFoundError(ErrFieldNotFound, existenceFieldName)
+	}
+
 	// Confirm field exists.
 	f := i.field(name)
 	if f == nil {
@@ -810,18 +793,6 @@ func (i *Index) DeleteField(name string) error {
 
 	if err := i.holder.txf.DeleteFieldFromStore(i.name, name, i.fieldPath(name)); err != nil {
 		return errors.Wrap(err, "Txf.DeleteFieldFromStore")
-	}
-
-	// If the field being deleted is the existence field,
-	// turn off existence tracking on the index.
-	if name == existenceFieldName {
-		i.trackExistence = false
-		i.existenceFld = nil
-
-		// Update meta data on disk.
-		if err := i.saveMeta(); err != nil {
-			return errors.Wrap(err, "saving existence meta data")
-		}
 	}
 
 	// Remove reference.

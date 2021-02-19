@@ -1161,9 +1161,6 @@ func (h *Holder) createIndex(cim *CreateIndexMessage, broadcast bool) (*Index, e
 	if err = index.Open(); err != nil {
 		return nil, errors.Wrap(err, "opening")
 	}
-	if err = index.saveMeta(); err != nil {
-		return nil, errors.Wrap(err, "meta")
-	}
 
 	// Update options.
 	h.addIndex(index)
