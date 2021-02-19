@@ -652,7 +652,7 @@ func (h *Holder) Open() error {
 
 		// decode the CreateIndexMessage from the schema data in order to
 		// get its metadata, such as CreateAt.
-		cim, err := h.decodeCreateIndexMessage(idx.Data)
+		cim, err := decodeCreateIndexMessage(h.serializer, idx.Data)
 		if err != nil {
 			return errors.Wrap(err, "decoding create index message")
 		}
@@ -885,7 +885,7 @@ func (h *Holder) schema(ctx context.Context, includeViews bool) ([]*IndexInfo, e
 	}
 
 	for _, index := range schema {
-		cim, err := h.decodeCreateIndexMessage(index.Data)
+		cim, err := decodeCreateIndexMessage(h.serializer, index.Data)
 		if err != nil {
 			return nil, errors.Wrap(err, "decoding CreateIndexMessage")
 		}
@@ -901,7 +901,7 @@ func (h *Holder) schema(ctx context.Context, includeViews bool) ([]*IndexInfo, e
 			if fieldName == existenceFieldName {
 				continue
 			}
-			cfm, err := h.decodeCreateFieldMessage(field.Data)
+			cfm, err := decodeCreateFieldMessage(h.serializer, field.Data)
 			if err != nil {
 				return nil, errors.Wrap(err, "decoding CreateFieldMessage")
 			}
@@ -1226,7 +1226,7 @@ func (h *Holder) loadIndex(indexName string) (*Index, error) {
 		return nil, errors.Wrapf(err, "getting index: %s", indexName)
 	}
 
-	cim, err := h.decodeCreateIndexMessage(b)
+	cim, err := decodeCreateIndexMessage(h.serializer, b)
 	if err != nil {
 		return nil, errors.Wrap(err, "decoding CreateIndexMessage")
 	}
@@ -1246,7 +1246,7 @@ func (h *Holder) loadField(indexName, fieldName string) (*Field, error) {
 		return nil, errors.Errorf("local index not found: %s", indexName)
 	}
 
-	cfm, err := h.decodeCreateFieldMessage(b)
+	cfm, err := decodeCreateFieldMessage(h.serializer, b)
 	if err != nil {
 		return nil, errors.Wrap(err, "decoding CreateFieldMessage")
 	}
@@ -2279,17 +2279,17 @@ func (h *Holder) HasRoaringData() (has bool, err error) {
 	return
 }
 
-func (h *Holder) decodeCreateIndexMessage(b []byte) (*CreateIndexMessage, error) {
+func decodeCreateIndexMessage(ser Serializer, b []byte) (*CreateIndexMessage, error) {
 	var cim CreateIndexMessage
-	if err := h.serializer.Unmarshal(b, &cim); err != nil {
+	if err := ser.Unmarshal(b, &cim); err != nil {
 		return nil, errors.Wrap(err, "unmarshaling")
 	}
 	return &cim, nil
 }
 
-func (h *Holder) decodeCreateFieldMessage(b []byte) (*CreateFieldMessage, error) {
+func decodeCreateFieldMessage(ser Serializer, b []byte) (*CreateFieldMessage, error) {
 	var cfm CreateFieldMessage
-	if err := h.serializer.Unmarshal(b, &cfm); err != nil {
+	if err := ser.Unmarshal(b, &cfm); err != nil {
 		return nil, errors.Wrap(err, "unmarshaling")
 	}
 	return &cfm, nil

@@ -308,7 +308,7 @@ fileLoop:
 
 				// Decode the CreateIndexMessage from the schema data in order to
 				// get its metadata.
-				cfm, err = i.holder.decodeCreateFieldMessage(fld.Data)
+				cfm, err = decodeCreateFieldMessage(i.holder.serializer, fld.Data)
 				if err != nil {
 					return errors.Wrap(err, "decoding create field message")
 				}
