@@ -1,0 +1,199 @@
+
+* Oracle Design
+- setup server that intersepts PQL queries and proxies to live pilosa server
+- implement all the pilosa functions using SQL, specifically the sqlite flavor.  This will
+  provide validation against pilosa results
+- provide timings for each query path, PQL and SQL and compare
+- this is intended to be a correctness check and not a performance check.  the
+  sql solution is likely to be pretty slow with realitively small numbers ~1millions
+  #+BEGIN_SRC 
+   .─────.                                              
+ ,'       `.             ┌────────────┐       ┌────────┐
+;pilosa json:            │   Sauron   │   ┌──▶│ pilosa │
+:  client   ;──────────▶ │            │───┤   └────────┘
+ ╲         ╱             │            │   │   ┌────────┐
+  `.     ,'              └────────────┘   └──▶│ sqlite │
+    `───'                                     └────────┘
+  #+END_SRC
+* Setup Sql (sqlite)
+#+name: setup test
+#+header: :results silent
+#+header: :db poc.db
+  #+BEGIN_SRC sqlite
+    create table bits (field string,row string, column bigint);
+    create table bsi (field string,column bigint , val bigint);
+    CREATE VIEW columns as
+	   select distinct column from bits
+	   UNION
+	   select distinct column from bsi;
+   
+    INSERT INTO bits VALUES( 'color','red',1);
+    INSERT INTO bits VALUES( 'color','red',2);
+    INSERT INTO bits VALUES( 'color','red',3);
+    INSERT INTO bits VALUES( 'color','red',4);
+    INSERT INTO bits VALUES( 'color','red',5);
+    INSERT INTO bits VALUES( 'color','green',2);
+    INSERT INTO bits VALUES( 'color','green',4);
+    INSERT INTO bits VALUES( 'color','green',6);
+    INSERT INTO bits VALUES( 'color','green',8);
+    INSERT INTO bits VALUES( 'color','yellow',1);
+    INSERT INTO bits VALUES( 'color','yellow',3);
+    INSERT INTO bits VALUES( 'color','yellow',5);
+    INSERT INTO bits VALUES( 'color','yellow',7);
+    INSERT INTO bits VALUES( 'color','orange',5);
+    INSERT INTO bits VALUES( 'color','orange',6);
+    INSERT INTO bits VALUES( 'color','orange',7);
+    INSERT INTO bits VALUES( 'color','orange',8);
+
+    INSERT INTO bsi VALUES( 'luminosity',1, 1);
+    INSERT INTO bsi VALUES( 'luminosity',2, 2);
+    INSERT INTO bsi VALUES( 'luminosity',3, 4);
+    INSERT INTO bsi VALUES( 'luminosity',4, 5);
+    INSERT INTO bsi VALUES( 'luminosity',5, 4);
+    INSERT INTO bsi VALUES( 'luminosity',6, 3);
+    INSERT INTO bsi VALUES( 'luminosity',7, 2);
+    INSERT INTO bsi VALUES( 'luminosity',8, 1);
+  #+END_SRC
+  
+* TODO PQL to SQL TODO [10/11]
+- [X] Row(color=red)
+  #+begin_src go
+(*pql.Query)(&pql.Query{
+        Calls: ([]*pql.Call)([]*pql.Call{
+                (*pql.Call)(&pql.Call{
+                        Name: (string)("Row"),
+                        Args: (map[string]interface{})(map[string]interface{}{
+                                (string)("color"): (string)("red"),
+                        }),
+                        Children:    ([]*pql.Call)(nil),
+                        Type:        (pql.CallType)(0),
+                        Precomputed: (map[uint64]interface{})(nil),
+                }),
+        }),
+        callStack:   ([]*pql.callStackElem)([]*pql.callStackElem{}),
+        conditional: ([]string)(nil),
+})
+  #+end_src
+  #+BEGIN_SRC sqlite
+    select column from bits where field="color" AND row="red"
+  #+END_SRC
+- [X] Count(Row(color=red))
+  #+begin_src go
+(*pql.Query)(&pql.Query{
+        Calls: ([]*pql.Call)([]*pql.Call{
+                (*pql.Call)(&pql.Call{
+                        Name: (string)("Count"),
+                        Args: (map[string]interface{})(nil),
+                        Children: ([]*pql.Call)([]*pql.Call{
+                                (*pql.Call)(&pql.Call{
+                                        Name: (string)("Row"),
+                                        Args: (map[string]interface{})(map[string]interface{}{
+                                                (string)("color"): (string)("red"),
+                                        }),
+                                        Children:    ([]*pql.Call)(nil),
+                                        Type:        (pql.CallType)(0),
+                                        Precomputed: (map[uint64]interface{})(nil),
+                                }),
+                        }),
+                        Type:        (pql.CallType)(0),
+                        Precomputed: (map[uint64]interface{})(nil),
+                }),
+        }),
+        callStack:   ([]*pql.callStackElem)([]*pql.callStackElem{}),
+        conditional: ([]string)(nil),
+})
+
+  #+end_src
+  #+BEGIN_SRC sql
+    select count(*) from(
+    select column from bits where field="color" AND row="red"
+    )
+  #+END_SRC
+- [X] Intersect(Row(color=red),Row(color=green))
+  #+BEGIN_SRC sql
+    select column from bits where field="color" AND row="red"
+    intersect
+    select column from bits where field="color" AND row="green"
+  #+END_SRC
+- [X] Union(Row(color=red),Row(color=green))
+  #+BEGIN_SRC sql
+    select column from bits where field="color" AND row="red"
+    union
+    select column from bits where field="color" AND row="green"
+  #+END_SRC
+- [X] Difference(Row(color=red),Row(color=green))
+  #+BEGIN_SRC sql
+    select column from bits where field="color" AND row="red"
+    except
+    select column from bits where field="color" AND row="green"
+  #+END_SRC
+- [X] Not(Row(color=red))
+  #+BEGIN_SRC sql
+    select column from columns
+    except
+    select column from bits where field="color" AND row="red"
+  #+END_SRC
+- [X] Xor(Row(color=red),Row(color=green))
+  #+BEGIN_SRC sql
+    select column from (
+      select column from bits where field="color" AND row="green"
+      union
+      select column from bits where field="color" AND row="red"
+    )
+    except
+      select column from (
+      select column from bits where field="color" AND row="green"
+      intersect
+      select column from bits where field="color" AND row="red"
+    )
+  #+END_SRC
+- [X] Distinct(field=luminosity)
+  #+BEGIN_SRC sql
+    select distinct val from bsi where field="lumin"
+  #+END_SRC
+- [X] Distinct(Row(color="red"),field=luminosity)
+  #+BEGIN_SRC sql
+  select distinct val from bsi
+      where field="luminosity" ANDcolumn in (
+	        select column from bits where row="color" AND row="red"
+    )
+  #+END_SRC
+- [X] Distinct(Intersect(Row(color="red"),Row(color="green")),luminosity)
+  #+BEGIN_SRC sql
+      select distinct val from bsi
+      where column in (
+	select column from bits where field="color" AND row="red"
+	intersect
+	select column from bits where field="color" AND row="green"
+    )
+     AND field="luminosity"
+  #+END_SRC
+
+- [X] Count(Union(Intersect(Row(color=red),Row(color=green)),Intersect(Row(color=yellow),Row(color=orange))))
+#+begin_src sqlite
+select count(*) from (
+select column from (
+    select column from bits where field="color" AND row="green"
+    intersect
+    select column from bits where field="color" AND row="red"
+)
+union
+select column from (
+    select column from bits where field="color" AND row="yellow"
+    intersect
+    select column from bits where field="color" AND row="orange"
+))
+
+- [ ] Rows(color)
+#+begin_src sqlite
+select distinct row from bits where field="color"
+#+end_src
+
+- [ ] GroupBy(Rows(color))
+  #+BEGIN_SRC sql
+    select row,count(*) from bits where field="color" group by row;
+  #+END_SRC
+- [ ] GroupBy(Rows(color), Rows(other), limit=7)
+  #+BEGIN_SRC sql
+    select row,count(*) from bits where field="color" group by row;
+  #+END_SRC
