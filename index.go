@@ -186,6 +186,11 @@ func (i *Index) OpenWithSchema(idx *disco.Index) error {
 	return i.open(idx)
 }
 
+// open opens the index with an optional schema (disco.Index). If a schema is
+// provided, it will apply the metadata from the schema to the index, and then
+// open all fields found in the schema. If a schema is not provided, the
+// metadata for the index is not changed from its existing value, and fields are
+// not validated against the schema as they are opened.
 func (i *Index) open(idx *disco.Index) (err error) {
 	// Ensure the path exists.
 	i.holder.Logger.Debugf("ensure index path exists: %s", i.path)
@@ -193,10 +198,16 @@ func (i *Index) open(idx *disco.Index) (err error) {
 		return errors.Wrap(err, "creating directory")
 	}
 
-	// Read meta file.
-	i.holder.Logger.Debugf("load meta file for index: %s", i.name)
-	if err := i.loadMeta(); err != nil {
-		return errors.Wrap(err, "loading meta file")
+	if idx != nil {
+		// decode the CreateIndexMessage from the schema data in order to
+		// get its metadata.
+		cim, err := decodeCreateIndexMessage(i.serializer, idx.Data)
+		if err != nil {
+			return errors.Wrap(err, "decoding create index message")
+		}
+		i.createdAt = cim.CreatedAt
+		i.trackExistence = cim.Meta.TrackExistence
+		i.keys = cim.Meta.Keys
 	}
 
 	// we don't want to open *all* the views for each shard, since
@@ -403,34 +414,6 @@ func (i *Index) openExistenceField() error {
 		return errors.Wrap(err, "creating existence field")
 	}
 	i.existenceFld = f
-	return nil
-}
-
-// loadMeta reads meta data for the index, if any.
-func (i *Index) loadMeta() error {
-	// TrackExistence is by default true
-	pb := &internal.IndexMeta{TrackExistence: true}
-
-	// Read data from meta file.
-	buf, err := ioutil.ReadFile(filepath.Join(i.path, ".meta"))
-	if os.IsNotExist(err) {
-		return nil
-	} else if err != nil {
-		return errors.Wrap(err, "reading")
-	} else {
-		if err := proto.Unmarshal(buf, pb); err != nil {
-			return errors.Wrap(err, "unmarshalling")
-		}
-	}
-
-	// Copy metadata fields.
-	if pb == nil {
-		i.trackExistence = true
-	} else {
-		i.trackExistence = pb.TrackExistence
-	}
-	i.keys = pb.GetKeys()
-
 	return nil
 }
 
