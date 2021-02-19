@@ -759,27 +759,9 @@ func (f *Field) openViews() error {
 	}
 
 	for name, shardset := range view2shards {
-
 		view := f.newView(f.viewPath(name), name)
 		if err := view.openWithShardSet(shardset); err != nil {
 			return fmt.Errorf("opening view: view=%s, err=%s", view.name, err)
-		}
-
-		if f.holder.txf.TxType() == RoaringTxn {
-			// Automatically upgrade BSI v1 fragments if they exist & reopen view.
-			if bsig := f.bsiGroup(f.name); bsig != nil {
-				if ok, err := upgradeViewBSIv2(view, bsig.BitDepth); err != nil {
-					return errors.Wrap(err, "upgrade view bsi v2")
-				} else if ok {
-					if err := view.close(); err != nil {
-						return errors.Wrap(err, "closing upgraded view")
-					}
-					view = f.newView(f.viewPath(name), name)
-					if err := view.openWithShardSet(shardset); err != nil {
-						return fmt.Errorf("re-opening view: view=%s, err=%s", view.name, err)
-					}
-				}
-			}
 		}
 
 		view.rowAttrStore = f.rowAttrStore
@@ -823,16 +805,6 @@ func (f *Field) loadMeta() error {
 		max = pql.NewDecimal(pb.Max.Value, pb.Max.Scale)
 	} else {
 		max = pql.NewDecimal(pb.OldMax, pb.Scale)
-	}
-
-	// Initialize "base" to "min" when upgrading from v1 BSI format.
-	if pb.BitDepth == 0 {
-		minInt64, maxInt64 := min.ToInt64(0), max.ToInt64(0)
-		pb.Base = bsiBase(minInt64, maxInt64)
-		pb.BitDepth = uint64(bitDepthInt64(maxInt64 - minInt64))
-		if pb.BitDepth == 0 {
-			pb.BitDepth = 1
-		}
 	}
 
 	// Copy metadata fields.

@@ -3279,52 +3279,6 @@ func (f *fragment) blockToRoaringData(block int) ([]byte, error) {
 	})
 }
 
-// upgradeRoaringBSIv2 upgrades a fragment that contains old BSI formatting
-// to a new BSI format (v2). The new format moves the "exists" bit to the
-// beginning & adds a negative sign bit.
-func upgradeRoaringBSIv2(f *fragment, bitDepth uint64) (string, error) {
-	// If flag set, already upgraded. Exit.
-	if f.storage.Flags&roaringFlagBSIv2 == 1 {
-		return "", nil
-	}
-
-	other := roaring.NewBitmap()
-	other.Flags = roaringFlagBSIv2
-	func() {
-		f.mu.Lock()
-		defer f.mu.Unlock()
-
-		_ = f.storage.ForEach(func(i uint64) error {
-			rowID, columnID := i/ShardWidth, (f.shard*ShardWidth)+(i%ShardWidth)
-			if rowID == uint64(bitDepth) {
-				_, _ = other.Add(pos(bsiExistsBit, columnID)) // move exists bit to beginning
-			} else {
-				_, _ = other.Add(pos(rowID+bsiOffsetBit, columnID)) // move other bits up
-			}
-			return nil
-		})
-	}()
-
-	// Create temporary file next to existing file.
-	newPath := f.path() + ".tmp"
-	file, err := os.OpenFile(newPath, os.O_WRONLY|os.O_CREATE, 0666)
-	if err != nil {
-		return "", err
-	}
-	defer file.Close()
-
-	// Write & flush to temporary file.
-	if _, err := other.WriteTo(file); err != nil {
-		return "", err
-	} else if err := file.Sync(); err != nil {
-		return "", err
-	} else if err := file.Close(); err != nil {
-		return "", err
-	}
-
-	return newPath, nil
-}
-
 type rowIterator interface {
 	// TODO(kuba) linter suggests to use io.Seeker
 	// Seek(offset int64, whence int) (int64, error)

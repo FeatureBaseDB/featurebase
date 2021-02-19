@@ -575,28 +575,6 @@ func (v *view) rangeOp(qcx *Qcx, op pql.Token, bitDepth uint64, predicate int64)
 	return r, nil
 }
 
-// upgradeViewBSIv2 upgrades the fragments of v. Returns ok true if any fragment upgraded.
-func upgradeViewBSIv2(v *view, bitDepth uint64) (ok bool, _ error) {
-	// If reading from an old formatted BSI roaring bitmap, upgrade and reload.
-	for _, frag := range v.allFragments() {
-		if frag.storage.Flags&roaringFlagBSIv2 == 1 {
-			continue // already upgraded, skip
-		}
-		ok = true // mark as upgraded, requires reload
-
-		if tmpPath, err := upgradeRoaringBSIv2(frag, bitDepth); err != nil {
-			return ok, errors.Wrap(err, "upgrading bsi v2")
-		} else if err := frag.closeStorage(); err != nil {
-			return ok, errors.Wrap(err, "closing after bsi v2 upgrade")
-		} else if err := os.Rename(tmpPath, frag.path()); err != nil {
-			return ok, errors.Wrap(err, "renaming after bsi v2 upgrade")
-		} else if err := frag.openStorage(true); err != nil {
-			return ok, errors.Wrap(err, "re-opening after bsi v2 upgrade")
-		}
-	}
-	return ok, nil
-}
-
 // ViewInfo represents schema information for a view.
 type ViewInfo struct {
 	Name string `json:"name"`
