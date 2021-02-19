@@ -543,26 +543,6 @@ func (f *Field) Type() string {
 	return f.options.Type
 }
 
-// SetCacheSize sets the cache size for ranked fames. Persists to meta file on update.
-// defaults to DefaultCacheSize 50000
-func (f *Field) SetCacheSize(v uint32) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	// Ignore if no change occurred.
-	if v == 0 || f.options.CacheSize == v {
-		return nil
-	}
-
-	// Persist meta data to disk on change.
-	f.options.CacheSize = v
-	if err := f.saveMeta(); err != nil {
-		return errors.Wrap(err, "saving")
-	}
-
-	return nil
-}
-
 // CacheSize returns the ranked field cache size.
 func (f *Field) CacheSize() uint32 {
 	f.mu.RLock()
@@ -902,10 +882,7 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 			Scale:    opt.Scale,
 			BitDepth: opt.BitDepth,
 		}
-		// Validate bsiGroup.
-		if err := bsig.validate(); err != nil {
-			return err
-		}
+		// Validate and create bsiGroup.
 		if err := f.createBSIGroup(bsig); err != nil {
 			return errors.Wrap(err, "creating bsigroup")
 		}
@@ -919,11 +896,11 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 		f.options.BitDepth = 0
 		f.options.Keys = opt.Keys
 		f.options.NoStandardView = opt.NoStandardView
-		// Set the time quantum.
-		if err := f.setTimeQuantum(opt.TimeQuantum); err != nil {
-			f.Close()
-			return errors.Wrap(err, "setting time quantum")
+		// Validate the time quantum.
+		if !opt.TimeQuantum.Valid() {
+			return ErrInvalidTimeQuantum
 		}
+		f.options.TimeQuantum = opt.TimeQuantum
 		f.options.ForeignIndex = opt.ForeignIndex
 	case FieldTypeBool:
 		f.options.Type = FieldTypeBool
@@ -1016,17 +993,6 @@ func (f *Field) createBSIGroup(bsig *bsiGroup) error {
 	defer f.mu.Unlock()
 
 	// Append bsiGroup.
-	if err := f.addBSIGroup(bsig); err != nil {
-		return err
-	}
-	if err := f.saveMeta(); err != nil {
-		return errors.Wrap(err, "saving")
-	}
-	return nil
-}
-
-// addBSIGroup adds a single bsiGroup to bsiGroups.
-func (f *Field) addBSIGroup(bsig *bsiGroup) error {
 	if err := bsig.validate(); err != nil {
 		return errors.Wrap(err, "validating bsigroup")
 	} else if f.hasBSIGroup(bsig.Name) {
@@ -1049,27 +1015,6 @@ func (f *Field) TimeQuantum() TimeQuantum {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.options.TimeQuantum
-}
-
-// setTimeQuantum sets the time quantum for the field.
-func (f *Field) setTimeQuantum(q TimeQuantum) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	// Validate input.
-	if !q.Valid() {
-		return ErrInvalidTimeQuantum
-	}
-
-	// Update value on field.
-	f.options.TimeQuantum = q
-
-	// Persist meta data to disk.
-	if err := f.saveMeta(); err != nil {
-		return errors.Wrap(err, "saving meta")
-	}
-
-	return nil
 }
 
 // RowTime gets the row at the particular time with the granularity specified by

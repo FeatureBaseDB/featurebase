@@ -297,13 +297,11 @@ func TestField_CreateViewIfNotExists(t *testing.T) {
 }
 
 func TestField_SetTimeQuantum(t *testing.T) {
-	f := OpenField(t, OptFieldTypeTime(TimeQuantum("")))
+	f := OpenField(t, OptFieldTypeTime(TimeQuantum("YMDH")))
 	defer f.Close()
 
-	// Set & retrieve time quantum.
-	if err := f.setTimeQuantum(TimeQuantum("YMDH")); err != nil {
-		t.Fatal(err)
-	} else if q := f.TimeQuantum(); q != TimeQuantum("YMDH") {
+	// Retrieve time quantum.
+	if q := f.TimeQuantum(); q != TimeQuantum("YMDH") {
 		t.Fatalf("unexpected quantum: %s", q)
 	}
 
@@ -316,16 +314,12 @@ func TestField_SetTimeQuantum(t *testing.T) {
 }
 
 func TestField_RowTime(t *testing.T) {
-	f := OpenField(t, OptFieldTypeTime(TimeQuantum("")))
+	f := OpenField(t, OptFieldTypeTime(TimeQuantum("YMDH")))
 	defer f.Close()
 
 	// Obtain transaction.
 	tx := f.idx.holder.txf.NewTx(Txo{Write: writable, Index: f.idx, Field: f.Field, Shard: 0})
 	defer tx.Rollback()
-
-	if err := f.setTimeQuantum(TimeQuantum("YMDH")); err != nil {
-		t.Fatal(err)
-	}
 
 	f.MustSetBit(tx, 1, 1, time.Date(2010, time.January, 5, 12, 0, 0, 0, time.UTC))
 	f.MustSetBit(tx, 1, 2, time.Date(2011, time.January, 5, 12, 0, 0, 0, time.UTC))
