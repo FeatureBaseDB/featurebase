@@ -15,6 +15,9 @@
 package pilosa
 
 import (
+	"bytes"
+	"github.com/pilosa/pilosa/v2/roaring"
+	"reflect"
 	"testing"
 )
 
@@ -47,10 +50,12 @@ type memAttrStore struct {
 	store map[uint64]map[string]interface{}
 }
 
-func (s *memAttrStore) Path() string                                          { return "" }
-func (s *memAttrStore) Open() error                                           { return nil }
-func (s *memAttrStore) Close() error                                          { return nil }
-func (s *memAttrStore) Attrs(id uint64) (m map[string]interface{}, err error) { return s.store[id], nil }
+func (s *memAttrStore) Path() string { return "" }
+func (s *memAttrStore) Open() error  { return nil }
+func (s *memAttrStore) Close() error { return nil }
+func (s *memAttrStore) Attrs(id uint64) (m map[string]interface{}, err error) {
+	return s.store[id], nil
+}
 func (s *memAttrStore) SetAttrs(id uint64, m map[string]interface{}) error {
 	s.store[id] = m
 	return nil
@@ -61,5 +66,33 @@ func (s *memAttrStore) SetBulkAttrs(m map[uint64]map[string]interface{}) error {
 	}
 	return nil
 }
-func (s *memAttrStore) Blocks() ([]AttrBlock, error)                                  { return nil, nil }
-func (s *memAttrStore) BlockData(i uint64) (map[uint64]map[string]interface{}, error) { return nil, nil }
+func (s *memAttrStore) Blocks() ([]AttrBlock, error) { return nil, nil }
+func (s *memAttrStore) BlockData(i uint64) (map[uint64]map[string]interface{}, error) {
+	return nil, nil
+}
+
+func TestAPI_CombineForExistence(t *testing.T) {
+	bm := roaring.NewBitmap()
+	bm.Add(pos(1, 1))
+	bm.Add(pos(1, 2))
+	bm.Add(pos(1, 65537)) //make sure to cross container boundary
+	bm.Add(pos(1, 65538))
+	bm.Add(pos(2, 1))
+	bm.Add(pos(2, 2))
+	bm.Add(pos(2, 65537))
+	bm.Add(pos(2, 65538))
+
+	buf := new(bytes.Buffer)
+	_, err := bm.WriteTo(buf)
+	panicOn(err)
+	raw := buf.Bytes()
+	results := combineForExistence(raw)
+	bm2 := roaring.NewBitmap()
+	bm2.ImportRoaringBits(results, false, false, 1<<shardVsContainerExponent)
+	expected := []uint64{1, 2, 65537, 65538}
+	got := bm2.Slice()
+	if !reflect.DeepEqual(got, expected) {
+		t.Fatalf("expected:%v got:%v", expected, got)
+	}
+
+}

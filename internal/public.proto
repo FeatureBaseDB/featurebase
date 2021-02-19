@@ -251,6 +251,7 @@ message ImportRoaringRequest {
 	uint64 Block = 4;
 	int64 IndexCreatedAt = 5;
 	int64 FieldCreatedAt = 6;
+        bool UpdateExistence = 7;
 }
 
 message ImportColumnAttrsRequest {

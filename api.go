@@ -17,6 +17,7 @@
 package pilosa
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"encoding/csv"
@@ -421,21 +422,24 @@ func importWorker(importWork chan importJob) {
 						fallthrough
 					case RequestActionSet:
 						fileMagic := uint32(binary.LittleEndian.Uint16(viewData[0:2]))
-						if fileMagic == roaring.MagicNumber { // if pilosa roaring format
-							err := j.field.importRoaring(j.ctx, tx, viewData, j.shard, viewName, doClear)
-							if err != nil {
-								return errors.Wrap(err, "importing pilosa roaring")
-							}
-						} else {
+						data := viewData
+						if fileMagic != roaring.MagicNumber { // if pilosa roaring format
 							// must make a copy of data to operate on locally on standard roaring format.
 							// field.importRoaring changes the standard roaring run format to pilosa roaring
-							data := make([]byte, len(viewData))
+							data = make([]byte, len(viewData))
 							copy(data, viewData)
-							err := j.field.importRoaring(j.ctx, tx, data, j.shard, viewName, doClear)
-
-							if err != nil {
-								return errors.Wrap(err, "importing standard roaring")
+						}
+						if j.req.UpdateExistence {
+							if ef := j.field.idx.existenceField(); ef != nil {
+								existence := combineForExistence(data)
+								ef.importRoaring(j.ctx, tx, existence, j.shard, "standard", false)
 							}
+						}
+
+						err := j.field.importRoaring(j.ctx, tx, data, j.shard, viewName, doClear)
+
+						if err != nil {
+							return errors.Wrap(err, "importing standard roaring")
 						}
 					}
 					return nil
@@ -451,6 +455,22 @@ func importWorker(importWork chan importJob) {
 		case j.errChan <- err:
 		}
 	}
+}
+
+// merge all rows to singled existence row
+func combineForExistence(inputRoaringData []byte) []byte {
+	rowSize := uint64(1 << shardVsContainerExponent)
+	rit, err := roaring.NewRoaringIterator(inputRoaringData)
+	if err != nil {
+		panicOn(err)
+	}
+	bm := roaring.NewBitmap()
+	bm.MergeRoaringRawIteratorIntoExists(rit, rowSize)
+	buf := new(bytes.Buffer)
+
+	_, err = bm.WriteTo(buf)
+	panicOn(err)
+	return buf.Bytes()
 }
 
 // ImportRoaring is a low level interface for importing data to Pilosa when
