@@ -334,7 +334,7 @@ func Test_DBPerShard_GetFieldView2Shards_map_from_RBF(t *testing.T) {
 	cim := &CreateIndexMessage{
 		Index:     index,
 		CreatedAt: 0,
-		Meta:      &IndexOptions{},
+		Meta:      IndexOptions{},
 	}
 
 	idx, err := holder.createIndex(cim, false)

@@ -893,7 +893,7 @@ func (h *Holder) schema(ctx context.Context, includeViews bool) ([]*IndexInfo, e
 		di := &IndexInfo{
 			Name:       cim.Index,
 			CreatedAt:  cim.CreatedAt,
-			Options:    *cim.Meta,
+			Options:    cim.Meta,
 			ShardWidth: ShardWidth,
 			Fields:     make([]*FieldInfo, 0, len(index.Fields)),
 		}
@@ -1013,7 +1013,7 @@ func (h *Holder) CreateIndex(name string, opt IndexOptions) (*Index, error) {
 	cim := &CreateIndexMessage{
 		Index:     name,
 		CreatedAt: timestamp(),
-		Meta:      &opt,
+		Meta:      opt,
 	}
 
 	// Create the index in etcd as the system of record.
@@ -1107,7 +1107,7 @@ func (h *Holder) CreateIndexIfNotExists(name string, opt IndexOptions) (*Index, 
 	cim := &CreateIndexMessage{
 		Index:     name,
 		CreatedAt: timestamp(),
-		Meta:      &opt,
+		Meta:      opt,
 	}
 
 	// Create the index in etcd as the system of record.
@@ -1148,19 +1148,14 @@ func (h *Holder) createIndex(cim *CreateIndexMessage, broadcast bool) (*Index, e
 		return nil, errors.New("index name required")
 	}
 
-	opt := cim.Meta
-	if opt == nil {
-		opt = &IndexOptions{}
-	}
-
 	// Otherwise create a new index.
 	index, err := h.newIndex(h.IndexPath(cim.Index), cim.Index)
 	if err != nil {
 		return nil, errors.Wrap(err, "creating")
 	}
 
-	index.keys = opt.Keys
-	index.trackExistence = opt.TrackExistence
+	index.keys = cim.Meta.Keys
+	index.trackExistence = cim.Meta.TrackExistence
 	index.createdAt = cim.CreatedAt
 
 	if err = index.Open(); err != nil {

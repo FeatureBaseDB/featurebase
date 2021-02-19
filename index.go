@@ -312,7 +312,7 @@ fileLoop:
 				}
 
 				// decode the CreateIndexMessage from the schema data in order to
-				// get its metadata, such as CreateAt.
+				// get its metadata, such as CreatedAt.
 				// TODO: similar to the createdAt TODO in holder, it may no
 				// longer be necessary to keep createdAt on the in-memory field
 				// struct.

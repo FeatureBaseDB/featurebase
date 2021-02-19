@@ -3588,7 +3588,7 @@ func fragTestMustOpenIndex(index string, holder *Holder, opt IndexOptions) *Inde
 	cim := &CreateIndexMessage{
 		Index:     index,
 		CreatedAt: 0,
-		Meta:      &opt,
+		Meta:      opt,
 	}
 
 	holder.mu.Lock()
