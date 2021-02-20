@@ -16,9 +16,10 @@ package pilosa
 
 import (
 	"bytes"
-	"github.com/pilosa/pilosa/v2/roaring"
 	"reflect"
 	"testing"
+
+	"github.com/pilosa/pilosa/v2/roaring"
 )
 
 func TestValidateName(t *testing.T) {
@@ -73,22 +74,32 @@ func (s *memAttrStore) BlockData(i uint64) (map[uint64]map[string]interface{}, e
 
 func TestAPI_CombineForExistence(t *testing.T) {
 	bm := roaring.NewBitmap()
-	bm.Add(pos(1, 1))
-	bm.Add(pos(1, 2))
-	bm.Add(pos(1, 65537)) //make sure to cross container boundary
-	bm.Add(pos(1, 65538))
-	bm.Add(pos(2, 1))
-	bm.Add(pos(2, 2))
-	bm.Add(pos(2, 65537))
-	bm.Add(pos(2, 65538))
+	_, err := bm.Add(pos(1, 1))
+	panicOn(err)
+	_, err = bm.Add(pos(1, 2))
+	panicOn(err)
+	_, err = bm.Add(pos(1, 65537)) //make sure to cross container boundary
+	panicOn(err)
+	_, err = bm.Add(pos(1, 65538))
+	panicOn(err)
+	_, err = bm.Add(pos(2, 1))
+	panicOn(err)
+	_, err = bm.Add(pos(2, 2))
+	panicOn(err)
+	_, err = bm.Add(pos(2, 65537))
+	panicOn(err)
+	_, err = bm.Add(pos(2, 65538))
+	panicOn(err)
 
 	buf := new(bytes.Buffer)
-	_, err := bm.WriteTo(buf)
+	_, err = bm.WriteTo(buf)
 	panicOn(err)
 	raw := buf.Bytes()
-	results := combineForExistence(raw)
+	results, err := combineForExistence(raw)
+	panicOn(err)
 	bm2 := roaring.NewBitmap()
-	bm2.ImportRoaringBits(results, false, false, 1<<shardVsContainerExponent)
+	_, _, err = bm2.ImportRoaringBits(results, false, false, 1<<shardVsContainerExponent)
+	panicOn(err)
 	expected := []uint64{1, 2, 65537, 65538}
 	got := bm2.Slice()
 	if !reflect.DeepEqual(got, expected) {

@@ -1462,6 +1462,9 @@ func TestClient_ImportRoaringExists(t *testing.T) {
 		t.Fatal(err)
 	}
 	qr, err := node.API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: "All()"})
+	if err != nil {
+		t.Fatalf(" %v ", err)
+	}
 	got := qr.Results[0].(*pilosa.Row).Columns()
 	if !reflect.DeepEqual(got, []uint64{}) {
 		t.Fatalf(" Row unexpected columns: got %+v  expected: %+v", got, []uint64{})
@@ -1473,6 +1476,9 @@ func TestClient_ImportRoaringExists(t *testing.T) {
 
 	expected := []uint64{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 65537}
 	qr, err = node.API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: "All()"})
+	if err != nil {
+		t.Fatalf("Query error: %+v", err)
+	}
 	got = qr.Results[0].(*pilosa.Row).Columns()
 	if !reflect.DeepEqual(got, expected) {
 		t.Fatalf("All unexpected columns: got %+v  expected: %+v", got, expected)

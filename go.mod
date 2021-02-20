@@ -4,7 +4,9 @@ replace github.com/hashicorp/memberlist => github.com/pilosa/memberlist v0.1.4-0
 
 require (
 	github.com/CAFxX/gcnotifier v0.0.0-20190112062741-224a280d589d
-	github.com/DataDog/datadog-go v0.0.0-20180822151419-281ae9f2d895
+	github.com/DataDog/datadog-go v2.2.0+incompatible
+	github.com/OneOfOne/xxhash v1.2.5 // indirect
+	github.com/armon/go-metrics v0.0.0-20190430140413-ec5e00d3c878 // indirect
 	github.com/beevik/ntp v0.3.0
 	github.com/benbjohnson/immutable v0.3.0
 	github.com/cespare/xxhash v1.1.0
@@ -15,26 +17,30 @@ require (
 	github.com/fsnotify/fsnotify v1.4.9 // indirect
 	github.com/glycerine/goconvey v0.0.0-20190410193231-58a59202ab31 // indirect
 	github.com/glycerine/idem v0.0.0-20190127113923-7a8083893311
-	github.com/gogo/protobuf v1.2.1
+	github.com/gogo/protobuf v1.3.1
 	github.com/golang/protobuf v1.4.2
 	github.com/google/go-cmp v0.5.2
 	github.com/gopherjs/gopherjs v0.0.0-20200217142428-fce0ec30dd00 // indirect
-	github.com/gorilla/handlers v1.3.0
-	github.com/gorilla/mux v1.7.0
-	github.com/hashicorp/memberlist v0.1.3
+	github.com/gorilla/handlers v1.4.1
+	github.com/gorilla/mux v1.7.3
+	github.com/hashicorp/go-immutable-radix v1.1.0 // indirect
+	github.com/hashicorp/go-msgpack v0.5.5 // indirect
+	github.com/hashicorp/go-sockaddr v1.0.2 // indirect
+	github.com/hashicorp/memberlist v0.1.4
 	github.com/improbable-eng/grpc-web v0.13.0
 	github.com/kr/text v0.2.0 // indirect
 	github.com/lib/pq v1.8.0
+	github.com/miekg/dns v1.1.15 // indirect
 	github.com/molecula/apophenia v0.0.0-20190827192002-68b7a14a478b
 	github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e // indirect
 	github.com/opentracing/opentracing-go v1.1.0
-	github.com/pelletier/go-toml v1.2.0
+	github.com/pelletier/go-toml v1.4.0
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.0.0
 	github.com/prometheus/client_model v0.1.0
+	github.com/prometheus/procfs v0.0.3 // indirect
 	github.com/prometheus/prom2json v1.3.0
 	github.com/rakyll/statik v0.1.7
-	github.com/remyoudompheng/bigfft v0.0.0-20190728182440-6a916e37a237 // indirect
 	github.com/rs/cors v1.7.0 // indirect
 	github.com/satori/go.uuid v1.2.0
 	github.com/shirou/gopsutil/v3 v3.20.11
@@ -54,10 +60,11 @@ require (
 	golang.org/x/sys v0.0.0-20201214095126-aec9a390925b // indirect
 	golang.org/x/text v0.3.3 // indirect
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
-	google.golang.org/grpc v1.28.0
+	google.golang.org/genproto v0.0.0-20200507105951-43844f6eee31 // indirect
+	google.golang.org/grpc v1.29.1
 	gopkg.in/check.v1 v1.0.0-20200227125254-8fa46927fb4f // indirect
 	gopkg.in/yaml.v2 v2.3.0 // indirect
-	modernc.org/mathutil v1.0.0
+	modernc.org/mathutil v1.2.2
 	modernc.org/strutil v1.0.0
 	vitess.io/vitess v3.0.0-rc.3.0.20190602171040-12bfde34629c+incompatible
 )

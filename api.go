@@ -431,8 +431,15 @@ func importWorker(importWork chan importJob) {
 						}
 						if j.req.UpdateExistence {
 							if ef := j.field.idx.existenceField(); ef != nil {
-								existence := combineForExistence(data)
-								ef.importRoaring(j.ctx, tx, existence, j.shard, "standard", false)
+								existence, err := combineForExistence(data)
+								if err != nil {
+									return errors.Wrap(err, "merging existence on roaring import")
+								}
+
+								err = ef.importRoaring(j.ctx, tx, existence, j.shard, "standard", false)
+								if err != nil {
+									return errors.Wrap(err, "updating existence on roaring import")
+								}
 							}
 						}
 
@@ -458,19 +465,21 @@ func importWorker(importWork chan importJob) {
 }
 
 // merge all rows to singled existence row
-func combineForExistence(inputRoaringData []byte) []byte {
+func combineForExistence(inputRoaringData []byte) ([]byte, error) {
 	rowSize := uint64(1 << shardVsContainerExponent)
 	rit, err := roaring.NewRoaringIterator(inputRoaringData)
 	if err != nil {
-		panicOn(err)
+		return nil, err
 	}
 	bm := roaring.NewBitmap()
-	bm.MergeRoaringRawIteratorIntoExists(rit, rowSize)
+	err = bm.MergeRoaringRawIteratorIntoExists(rit, rowSize)
+	if err != nil {
+		return nil, err
+	}
 	buf := new(bytes.Buffer)
 
 	_, err = bm.WriteTo(buf)
-	panicOn(err)
-	return buf.Bytes()
+	return buf.Bytes(), err
 }
 
 // ImportRoaring is a low level interface for importing data to Pilosa when
