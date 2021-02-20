@@ -234,7 +234,7 @@ func DefaultHolderConfig() *HolderConfig {
 		OpenTransactionStore: OpenInMemTransactionStore,
 		OpenIDAllocator:      func(string) (*idAllocator, error) { return &idAllocator{}, nil },
 		TranslationSyncer:    NopTranslationSyncer,
-		Serializer:           NopSerializer,
+		Serializer:           GobSerializer,
 		Schemator:            disco.InMemSchemator,
 		CacheFlushInterval:   defaultCacheFlushInterval,
 		StatsClient:          stats.NopStatsClient,
@@ -1276,7 +1276,7 @@ func (h *Holder) newIndex(path, name string) (*Index, error) {
 	index.Stats = h.Stats.WithTags(fmt.Sprintf("index:%s", index.Name()))
 	index.broadcaster = h.broadcaster
 	index.serializer = h.serializer
-	index.schemator = h.schemator
+	index.Schemator = h.schemator
 	index.newAttrStore = h.NewAttrStore
 	index.columnAttrs = h.NewAttrStore(filepath.Join(index.path, ".data"))
 	index.OpenTranslateStore = h.OpenTranslateStore

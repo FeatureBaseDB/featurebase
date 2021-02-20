@@ -15,6 +15,7 @@
 package pilosa
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"os"
@@ -207,7 +208,8 @@ func NewTestField(t *testing.T, opts FieldOption) *TestField {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := NewHolder(path, nil)
+
+	h := NewHolder(path, DefaultHolderConfig())
 	panicOn(h.Open())
 
 	idx, err := h.CreateIndex("i", IndexOptions{})
@@ -247,7 +249,11 @@ func (f *TestField) Reopen() error {
 		f.parent = nil
 		return err
 	}
-	if err := f.parent.Open(); err != nil {
+	schema, err := f.parent.Schemator.Schema(context.Background())
+	if err != nil {
+		return err
+	}
+	if err := f.parent.OpenWithSchema(schema[f.parent.name]); err != nil {
 		f.parent = nil
 		return err
 	}
@@ -546,7 +552,7 @@ func TestField_ApplyOptions(t *testing.T) {
 	} {
 
 		fld := &Field{}
-		fld.options = *applyDefaultOptions(&FieldOptions{})
+		fld.options = applyDefaultOptions(&FieldOptions{})
 
 		if err := fld.applyOptions(tt.opts); err != nil {
 			t.Fatal(err)

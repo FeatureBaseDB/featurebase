@@ -54,7 +54,7 @@ type Index struct {
 	columnAttrs AttrStore
 
 	broadcaster broadcaster
-	schemator   disco.Schemator
+	Schemator   disco.Schemator
 	serializer  Serializer
 	Stats       stats.StatsClient
 
@@ -99,7 +99,7 @@ func NewIndex(holder *Holder, path, name string) (*Index, error) {
 		holder:         holder,
 		trackExistence: true,
 
-		schemator:  disco.InMemSchemator,
+		Schemator:  disco.InMemSchemator,
 		serializer: NopSerializer,
 
 		translateStores: make(map[int]TranslateStore),
@@ -180,6 +180,20 @@ func (i *Index) Open() error {
 // OpenWithSchema opens the index and uses the provided schema to verify that
 // the index's fields are expected.
 func (i *Index) OpenWithSchema(idx *disco.Index) error {
+	if idx == nil {
+		return ErrInvalidSchema
+	}
+
+	// decode the CreateIndexMessage from the schema data in order to
+	// get its metadata.
+	cim, err := decodeCreateIndexMessage(i.serializer, idx.Data)
+	if err != nil {
+		return errors.Wrap(err, "decoding create index message")
+	}
+	i.createdAt = cim.CreatedAt
+	i.trackExistence = cim.Meta.TrackExistence
+	i.keys = cim.Meta.Keys
+
 	return i.open(idx)
 }
 
@@ -195,18 +209,6 @@ func (i *Index) open(idx *disco.Index) (err error) {
 		return errors.Wrap(err, "creating directory")
 	}
 
-	if idx != nil {
-		// decode the CreateIndexMessage from the schema data in order to
-		// get its metadata.
-		cim, err := decodeCreateIndexMessage(i.serializer, idx.Data)
-		if err != nil {
-			return errors.Wrap(err, "decoding create index message")
-		}
-		i.createdAt = cim.CreatedAt
-		i.trackExistence = cim.Meta.TrackExistence
-		i.keys = cim.Meta.Keys
-	}
-
 	// we don't want to open *all* the views for each shard, since
 	// most are empty when we are doing time quantums. It slows
 	// down startup dramatically. So we ask for the meta data
@@ -216,6 +218,9 @@ func (i *Index) open(idx *disco.Index) (err error) {
 		return errors.Wrap(err, fmt.Sprintf("i.holder.txf.GetFieldView2ShardsMapForIndex('%v')", i.name))
 	}
 	i.fieldView2shard = fieldView2shard
+
+	// Add index to a map in holder. Used by openFields.
+	i.holder.addIndex(i)
 
 	i.holder.Logger.Debugf("open fields for index: %s", i.name)
 	if err := i.openFields(idx); err != nil {
@@ -299,22 +304,17 @@ fileLoop:
 			var cfm *CreateFieldMessage = &CreateFieldMessage{}
 			var err error
 
-			// Only continue with indexes which are present in the provided,
+			// Only continue with fields which are present in the provided,
 			// non-nil index schema. The reason we have to check for idx != nil
-			// here is because there are tests which call index.Open on an index
-			// with a NopSchemator. A better approach might be for those tests
-			// to use a mock Schemator which returns a schema containing the
-			// index. For an example, see TestField_SetTimeQuantum which
-			// re-opens a field and curiously has to re-open that field's index
-			// because at some point we introduced a pointer from the field back
-			// to its index (possibly related to transactions?).
+			// here is because there are tests which call index.Open without
+			// having a disco.Index available.
 			if idx != nil {
 				fld, ok := idx.Fields[fi.Name()]
 				if !ok {
 					continue
 				}
 
-				// Decode the CreateIndexMessage from the schema data in order to
+				// Decode the CreateFieldMessage from the schema data in order to
 				// get its metadata.
 				cfm, err = decodeCreateFieldMessage(i.holder.serializer, fld.Data)
 				if err != nil {
@@ -354,10 +354,6 @@ fileLoop:
 // the in-memory map of fields maintained by Index.
 func (i *Index) openField(mu *sync.Mutex, cfm *CreateFieldMessage, file string) (*Field, error) {
 	mu.Lock()
-
-	// goroutine safe
-	i.holder.addIndex(i)
-
 	fld, err := i.newField(i.fieldPath(filepath.Base(file)), filepath.Base(file))
 	mu.Unlock()
 	if err != nil {
@@ -369,6 +365,7 @@ func (i *Index) openField(mu *sync.Mutex, cfm *CreateFieldMessage, file string) 
 	fld.holder = i.holder
 
 	fld.createdAt = cfm.CreatedAt
+	fld.options = applyDefaultOptions(cfm.Meta)
 
 	// open the views we have data for.
 	if err := fld.Open(); err != nil {
@@ -416,7 +413,6 @@ func (i *Index) openExistenceField() error {
 
 // Close closes the index and its fields.
 func (i *Index) Close() error {
-
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	defer func() {
@@ -674,7 +670,7 @@ func (i *Index) persistField(ctx context.Context, cfm *CreateFieldMessage) error
 
 	if b, err := i.serializer.Marshal(cfm); err != nil {
 		return errors.Wrap(err, "marshaling")
-	} else if err := i.schemator.CreateField(ctx, cfm.Index, cfm.Field, b); err != nil {
+	} else if err := i.Schemator.CreateField(ctx, cfm.Index, cfm.Field, b); err != nil {
 		return errors.Wrapf(err, "writing field to disco: %s/%s", cfm.Index, cfm.Field)
 	}
 	return nil
@@ -705,6 +701,7 @@ func (i *Index) createField(cfm *CreateFieldMessage, broadcast bool) (*Field, er
 		opt = &FieldOptions{}
 	}
 
+	// TODO: can we do a general FieldOption validation here instead of just cache type?
 	if cfm.Field == "" {
 		return nil, errors.New("field name required")
 	} else if opt.CacheType != "" && !isValidCacheType(opt.CacheType) {
@@ -763,7 +760,7 @@ func (i *Index) newField(path, name string) (*Field, error) {
 	f.idx = i
 	f.Stats = i.Stats
 	f.broadcaster = i.broadcaster
-	f.schemator = i.schemator
+	f.schemator = i.Schemator
 	f.serializer = i.serializer
 	f.rowAttrStore = i.newAttrStore(filepath.Join(f.path, ".data"))
 	f.OpenTranslateStore = i.OpenTranslateStore
@@ -799,7 +796,7 @@ func (i *Index) DeleteField(name string) error {
 	delete(i.fields, name)
 
 	// Delete the field from etcd as the system of record.
-	if err := i.schemator.DeleteField(context.TODO(), i.name, name); err != nil {
+	if err := i.Schemator.DeleteField(context.TODO(), i.name, name); err != nil {
 		return errors.Wrapf(err, "deleting field from etcd: %s/%s", i.name, name)
 	}
 

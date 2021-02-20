@@ -32,10 +32,10 @@ var NopSerializer Serializer = &nopSerializer{}
 
 type nopSerializer struct{}
 
-// Marshal A no-op implementation of Serializer Marshall method.
+// Marshal is a no-op implementation of Serializer Marshal method.
 func (*nopSerializer) Marshal(Message) ([]byte, error) { return nil, nil }
 
-// Unmarshal A no-op implementation of Serializer Unmarshal method.
+// Unmarshal is a no-op implementation of Serializer Unmarshal method.
 func (*nopSerializer) Unmarshal([]byte, Message) error { return nil }
 
 // broadcaster is an interface for broadcasting messages.

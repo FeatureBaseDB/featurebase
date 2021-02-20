@@ -34,6 +34,8 @@ var (
 	ErrIndexExists   = disco.ErrIndexExists
 	ErrIndexNotFound = errors.New("index not found")
 
+	ErrInvalidSchema = errors.New("invalid schema")
+
 	ErrForeignIndexNotFound = errors.New("foreign index not found")
 
 	// ErrFieldRequired is returned when no field is specified.

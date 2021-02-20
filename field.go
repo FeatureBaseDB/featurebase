@@ -109,15 +109,6 @@ type Field struct {
 	// Field options.
 	options FieldOptions
 
-	// finalOptions is used with a final call to applyOptions.
-	// The initial call to applyOptions is made with options
-	// loaded from the meta file on disk (in the case when
-	// a field is being re-opened). If the field creator calls
-	// setOptions before calling Open(), then those options
-	// will be held in finalOptions, and applied instead of
-	// those from the meta file.
-	finalOptions *FieldOptions
-
 	bsiGroups []*bsiGroup
 
 	// Shards with data on any node in the cluster, according to this node.
@@ -373,7 +364,7 @@ func newField(holder *Holder, path, index, name string, opts FieldOption) (*Fiel
 		schemator:   disco.NopSchemator,
 		serializer:  NopSerializer,
 
-		options: *applyDefaultOptions(&fo),
+		options: applyDefaultOptions(&fo),
 
 		remoteAvailableShards: roaring.NewBitmap(),
 
@@ -567,24 +558,12 @@ func (f *Field) Open() error {
 			return errors.Wrap(err, "creating field dir")
 		}
 
-		f.holder.Logger.Debugf("load meta file for index/field: %s/%s", f.index, f.name)
-		if err := f.loadMeta(); err != nil {
-			return errors.Wrap(err, "loading meta")
-		}
-
 		f.holder.Logger.Debugf("load available shards for index/field: %s/%s", f.index, f.name)
-
 		if err := f.loadAvailableShards(); err != nil {
 			return errors.Wrap(err, "loading available shards")
 		}
 
-		// If options were provided using setOptions(), then
-		// use those instead of the options from the meta file.
-		if f.finalOptions != nil {
-			f.options = *f.finalOptions
-		}
-
-		// Apply the field options loaded from meta (or set via setOptions()).
+		// Apply the field options loaded from etcd (or set via setOptions()).
 		f.holder.Logger.Debugf("apply options for index/field: %s/%s", f.index, f.name)
 		if err := f.applyOptions(f.options); err != nil {
 			return errors.Wrap(err, "applying options")
@@ -751,59 +730,6 @@ func (f *Field) openViews() error {
 	return nil
 }
 
-// loadMeta reads meta data for the field, if any.
-func (f *Field) loadMeta() error {
-	var pb internal.FieldOptions
-
-	// Read data from meta file.
-	buf, err := ioutil.ReadFile(filepath.Join(f.path, ".meta"))
-	if os.IsNotExist(err) {
-		return nil
-	} else if err != nil {
-		return errors.Wrap(err, "reading meta")
-	} else {
-		if err := proto.Unmarshal(buf, &pb); err != nil {
-			return errors.Wrap(err, "unmarshaling")
-		}
-	}
-
-	// Since pb.Min and pb.Max were changed to pql.Decimal,
-	// and since they now have a different protobuf field
-	// number, an existing meta file may have values in the
-	// old min/max fields which need to be converted to
-	// pql.Decimal.
-	// TODO: we can remove the OldMin/OldMax once we're
-	// confident no one is still using the older version.
-	var min pql.Decimal
-	if pb.Min != nil {
-		min = pql.NewDecimal(pb.Min.Value, pb.Min.Scale)
-	} else {
-		min = pql.NewDecimal(pb.OldMin, pb.Scale)
-	}
-	var max pql.Decimal
-	if pb.Max != nil {
-		max = pql.NewDecimal(pb.Max.Value, pb.Max.Scale)
-	} else {
-		max = pql.NewDecimal(pb.OldMax, pb.Scale)
-	}
-
-	// Copy metadata fields.
-	f.options.Type = pb.Type
-	f.options.CacheType = pb.CacheType
-	f.options.CacheSize = pb.CacheSize
-	f.options.Min = min
-	f.options.Max = max
-	f.options.Base = pb.Base
-	f.options.Scale = pb.Scale
-	f.options.BitDepth = pb.BitDepth
-	f.options.TimeQuantum = TimeQuantum(pb.TimeQuantum)
-	f.options.Keys = pb.Keys
-	f.options.NoStandardView = pb.NoStandardView
-	f.options.ForeignIndex = pb.ForeignIndex
-
-	return nil
-}
-
 // saveMeta writes meta data for the field.
 func (f *Field) saveMeta() error {
 	path := filepath.Join(f.path, ".meta")
@@ -832,7 +758,7 @@ func (f *Field) saveMeta() error {
 
 // setOptions saves options for final application during Open().
 func (f *Field) setOptions(opts *FieldOptions) {
-	f.finalOptions = applyDefaultOptions(opts)
+	f.options = applyDefaultOptions(opts)
 }
 
 // applyOptions configures the field based on opt.
@@ -1876,13 +1802,16 @@ func newFieldOptions(opts ...FieldOption) (*FieldOptions, error) {
 
 // applyDefaultOptions updates FieldOptions with the default
 // values if o does not contain a valid type.
-func applyDefaultOptions(o *FieldOptions) *FieldOptions {
+func applyDefaultOptions(o *FieldOptions) FieldOptions {
+	if o == nil {
+		o = &FieldOptions{}
+	}
 	if o.Type == "" {
 		o.Type = DefaultFieldType
 		o.CacheType = DefaultCacheType
 		o.CacheSize = DefaultCacheSize
 	}
-	return o
+	return *o
 }
 
 // encode converts o into its internal representation.
