@@ -319,3 +319,63 @@ func parseTimeQuantum(v string) (TimeQuantum, error) {
 	}
 	return q, nil
 }
+
+func TestParsePartialTime(t *testing.T) {
+	// test handling of valud inputs
+	testCases := []struct {
+		userInput    string
+		expectedTime time.Time
+	}{
+		{
+			"2006",
+			time.Date(2006, 1, 1, 0, 0, 0, 0, time.UTC),
+		},
+		{
+			"2006-07",
+			time.Date(2006, time.July, 1, 0, 0, 0, 0, time.UTC),
+		},
+		{
+			"2006-07-02",
+			time.Date(2006, time.July, 2, 0, 0, 0, 0, time.UTC),
+		},
+		{
+			"2006-07-02T15",
+			time.Date(2006, time.July, 2, 15, 0, 0, 0, time.UTC),
+		},
+		{
+			"2006-07-02T15:04",
+			time.Date(2006, time.July, 2, 15, 4, 0, 0, time.UTC),
+		},
+	}
+	for _, tc := range testCases {
+		got, err := parsePartialTime(tc.userInput)
+		if err != nil {
+			t.Errorf("expected nil error given parsing for '%s'", tc.userInput)
+		}
+		if got != tc.expectedTime {
+			t.Errorf("expected %v, got %v", tc.expectedTime, got)
+		}
+	}
+
+	// test handling of invalid inputs
+	invalidInputs := []string{
+		"  2006-01-02 ",
+		" foo-bar ",
+		"2006-",
+		"2006-01-",
+		"2006-01-02T",
+		"2006T",
+		"2006T04",
+		"01-02",
+		"2006-01T04",
+		"2006-01T04:",
+		"2006-01T:04",
+	}
+	for _, invalidInput := range invalidInputs {
+		_, err := parsePartialTime(invalidInput)
+		if err == nil {
+			t.Errorf("for input '%s', error on parse expected", invalidInput)
+		}
+	}
+
+}

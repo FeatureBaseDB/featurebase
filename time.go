@@ -17,7 +17,9 @@ package pilosa
 import (
 	"errors"
 	"fmt"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -223,7 +225,10 @@ func parseTime(t interface{}) (time.Time, error) {
 	switch v := t.(type) {
 	case string:
 		if calcTime, err = time.Parse(TimeFormat, v); err != nil {
-			return time.Time{}, errors.New("cannot parse string time")
+			// if the default parsing fails, check if user tried to
+			// supply partial time eg year and month
+			calcTime, err := parsePartialTime(v)
+			return calcTime, err
 		}
 	case int64:
 		calcTime = time.Unix(v, 0).UTC()
@@ -231,6 +236,122 @@ func parseTime(t interface{}) (time.Time, error) {
 		return time.Time{}, errors.New("arg must be a timestamp")
 	}
 	return calcTime, nil
+}
+
+// parsePartialTime parses strings where the time provided is only partial
+// eg given 2006-02, it extracts the year and month and the rest of the
+// components are set to the default values. The time must have the format
+// used in parseTime. The year must be present. The rest of the components are
+// optional but if a component is present in the input, this implies that all
+// the preceding components are also specified. For example, if the hour is provided
+// then the day, month and year must be present. This function could and should be
+// simplified
+func parsePartialTime(t string) (time.Time, error) {
+	// helper parseCustomHourMinute parses strings of the form HH:MM to
+	// hour and minute component
+	parseHourMinute := func(t string) (hour, minute int, err error) {
+		// time should have the format HH:MM
+		subStrings := strings.Split(t, ":")
+		switch len(subStrings) {
+		case 2:
+			// has minutes
+			minute, err = strconv.Atoi(subStrings[1])
+			if err != nil {
+				return -1, -1, errors.New("Invalid Time")
+			}
+			fallthrough
+		case 1:
+			hour, err = strconv.Atoi(subStrings[0])
+			if err != nil {
+				return -1, -1, errors.New("Invalid Time")
+			}
+		default:
+			return -1, -1, errors.New("Invalid Time")
+		}
+
+		return
+	}
+	// helper trim function
+	trim := func(subMatches []string) (filtered []string, err error) {
+		restAreEmpty := func(ss []string) bool {
+			for _, s := range ss {
+				if s != "" {
+					return false
+				}
+			}
+			return true
+		}
+		if len(subMatches) <= 1 {
+			return nil, errors.New("Invalid time")
+		}
+		// ignore full match which is at index 0
+		subMatches = subMatches[1:] // ignore full match which is at index 0
+		for i, s := range subMatches {
+			if s != "" {
+				if i > 0 {
+					s = s[1:] // remove preceding hyphen or T
+				}
+				filtered = append(filtered, s)
+			} else {
+				// rest must be empty for date-time to be valid
+				if !restAreEmpty(subMatches[i:]) {
+					return nil, errors.New("Invalid date-time")
+				}
+				break
+			}
+		}
+		return filtered, nil
+	}
+
+	var errInvalidTime error = errors.New("cannot parse string time")
+	var regex = regexp.MustCompile(`^(\d{4})(-\d{2})?(-\d{2})?(T.+)?$`)
+	subMatches := regex.FindStringSubmatch(t)
+	subMatches, err := trim(subMatches)
+	if err != nil {
+		return time.Time{}, errInvalidTime
+	}
+	// defaults
+	var (
+		yr    int
+		month = time.January
+		day   = 1
+		hour  = 0
+		min   = 0
+	)
+	// year must be set, the rest are optional
+	switch len(subMatches) {
+	case 4:
+		// time
+		hour, min, err = parseHourMinute(subMatches[3])
+		if err != nil {
+			return time.Time{}, errInvalidTime
+		}
+		fallthrough
+	case 3:
+		// day
+		day, err = strconv.Atoi(subMatches[2])
+		if err != nil {
+			return time.Time{}, errInvalidTime
+		}
+		fallthrough
+	case 2:
+		// month
+		monthNum, err := strconv.Atoi(subMatches[1])
+		month = time.Month(monthNum)
+		if err != nil {
+			return time.Time{}, errInvalidTime
+		}
+		fallthrough
+	case 1:
+		// year
+		yr, err = strconv.Atoi(subMatches[0])
+		if err != nil {
+			return time.Time{}, errInvalidTime
+		}
+	default:
+		return time.Time{}, errInvalidTime
+	}
+	return time.Date(yr, month, day, hour, min, 0, 0, time.UTC), nil
 }
 
 // minMaxViews returns the min and max view from a list of views
