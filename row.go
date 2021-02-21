@@ -18,7 +18,7 @@ import (
 	"encoding/json"
 	"sort"
 
-	"github.com/pilosa/pilosa/roaring"
+	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pkg/errors"
 )
 

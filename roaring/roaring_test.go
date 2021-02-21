@@ -25,9 +25,9 @@ import (
 	"testing/quick"
 	"time"
 
-	"github.com/pilosa/pilosa"
-	"github.com/pilosa/pilosa/roaring"
-	_ "github.com/pilosa/pilosa/test"
+	"github.com/pilosa/pilosa/v2"
+	"github.com/pilosa/pilosa/v2/roaring"
+	_ "github.com/pilosa/pilosa/v2/test"
 )
 
 func TestContainerCount(t *testing.T) {
@@ -455,6 +455,12 @@ func TestBitmap_RunCountRange(t *testing.T) {
 	bm2 := roaring.NewFileBitmap(65536, 65537, 65538, 65539, 65540, 65541, 65542, 65543, 65544, 65545, 65546, 65547, 65548, 65549, 65550, 65551, 65552, 65553)
 	bm2.Optimize() // convert to runs
 	if n := bm2.CountRange(3, 2); n != 0 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+
+	bm3 := roaring.NewFileBitmap(1, 2, 3, 4)
+	bm3.Optimize() // convert to runs
+	if n := bm3.CountRange(1, 3); n != 2 {
 		t.Fatalf("unexpected n: %d", n)
 	}
 }

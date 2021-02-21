@@ -27,9 +27,9 @@ import (
 	"sort"
 	"strconv"
 
-	"github.com/pilosa/pilosa"
-	"github.com/pilosa/pilosa/encoding/proto"
-	"github.com/pilosa/pilosa/tracing"
+	"github.com/pilosa/pilosa/v2"
+	"github.com/pilosa/pilosa/v2/encoding/proto"
+	"github.com/pilosa/pilosa/v2/tracing"
 	"github.com/pkg/errors"
 )
 
@@ -999,7 +999,7 @@ func (c *InternalClient) RowAttrDiff(ctx context.Context, uri *pilosa.URI, index
 	resp, err := c.executeRequest(req.WithContext(ctx))
 	if err != nil {
 		if resp != nil && resp.StatusCode == http.StatusNotFound {
-			return nil, pilosa.ErrFieldNotFound
+			return nil, errors.Wrap(pilosa.ErrFieldNotFound, field)
 		}
 		return nil, err
 	}

@@ -14,13 +14,17 @@
 
 package pilosa
 
-import "io"
+import (
+	"io"
+	"log"
+)
 
 // CmdIO holds standard unix inputs and outputs.
 type CmdIO struct {
 	Stdin  io.Reader
 	Stdout io.Writer
 	Stderr io.Writer
+	logger *log.Logger
 }
 
 // NewCmdIO returns a new instance of CmdIO with inputs and outputs set to the
@@ -30,5 +34,10 @@ func NewCmdIO(stdin io.Reader, stdout, stderr io.Writer) *CmdIO {
 		Stdin:  stdin,
 		Stdout: stdout,
 		Stderr: stderr,
+		logger: log.New(stderr, "", log.LstdFlags),
 	}
+}
+
+func (c *CmdIO) Logger() *log.Logger {
+	return c.logger
 }

@@ -343,7 +343,7 @@ The config file is in the [toml format](https://github.com/toml-lang/toml) and h
 
 #### TLS Certificate
 
-* Description: Path to the TLS certificate to use for serving HTTPS. Usually has one of`.crt` or `.pem` extensions.
+* Description: Path to the TLS certificate to use for serving HTTPS. Usually has one of `.crt` or `.pem` extensions.
 * Flag: `tls.certificate=/srv/pilosa/certs/server.crt`
 * Env: `PILOSA_TLS_CERTIFICATE=/srv/pilosa/certs/server.crt`
 * Config:
@@ -365,6 +365,18 @@ The config file is in the [toml format](https://github.com/toml-lang/toml) and h
     key = "/srv/pilosa/certs/server.key"
     ```
 
+#### TLS CA Certificate
+
+* Description: Path to the TLS certificate key to use for serving HTTPS. Usually has one of `.crt` or `.pem` extensions.
+* Flag: `tls.ca-certificate=/srv/pilosa/certs/ca-chain.pem`
+* Env: `PILOSA_TLS_CA_CERTIFICATE=/srv/pilosa/certs/ca-chain.pem`
+* Config:
+
+    ```toml
+    [tls]
+    ca-certificate = "/srv/pilosa/certs/ca-chain.pem"
+    ```
+
 #### TLS Skip Verify
 
 * Description: Disables verification for checking TLS certificates. This configuration item is mainly useful for using self-signed certificates for a Pilosa cluster. Do not use in production since it makes man-in-the-middle attacks trivial.
@@ -375,6 +387,18 @@ The config file is in the [toml format](https://github.com/toml-lang/toml) and h
     ```toml
     [tls]
     skip-verify = true
+    ```
+
+#### TLS Enable Client Certificate Verification
+
+* Description: Enables verification of client certificates on incoming HTTPS requests for mutual TLS authentication.
+* Flag: `tls.enable-client-verification`
+* Env: `PILOSA_TLS_ENABLE_CLIENT_VERIFICATION`
+* Config:
+
+    ```toml
+    [tls]
+    enable-client-verification = true
     ```
 
 #### Tracing Sampler Type

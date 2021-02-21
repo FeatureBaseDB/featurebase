@@ -17,7 +17,7 @@
 package roaring
 
 import (
-	"github.com/pilosa/pilosa/stats"
+	"github.com/pilosa/pilosa/v2/stats"
 )
 
 var statsEv = stats.NewExpvarStatsClient()

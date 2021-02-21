@@ -27,9 +27,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pilosa/pilosa/logger"
-	"github.com/pilosa/pilosa/roaring"
-	"github.com/pilosa/pilosa/stats"
+	"github.com/pilosa/pilosa/v2/logger"
+	"github.com/pilosa/pilosa/v2/roaring"
+	"github.com/pilosa/pilosa/v2/stats"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -201,17 +201,6 @@ func OptServerPrimaryTranslateStore(store TranslateStore) ServerOption {
 	}
 }
 
-// OptServerPrimaryTranslateStoreFunc is a functional option on Server
-// used to specify the function used to create a new primary translate
-// store.
-func OptServerPrimaryTranslateStoreFunc(tf func(interface{}) TranslateStore) ServerOption {
-
-	return func(s *Server) error {
-		s.holder.NewPrimaryTranslateStore = tf
-		return nil
-	}
-}
-
 // OptServerStatsClient is a functional option on Server
 // used to specify the stats client.
 func OptServerStatsClient(sc stats.StatsClient) ServerOption {
@@ -286,11 +275,20 @@ func OptServerClusterHasher(h Hasher) ServerOption {
 	}
 }
 
-// OptServerTranslateFileMapSize is a functional option on Server
-// used to specify the size of the translate file.
-func OptServerTranslateFileMapSize(mapSize int) ServerOption {
+// OptServerOpenTranslateStore is a functional option on Server
+// used to specify the translation data store type.
+func OptServerOpenTranslateStore(fn OpenTranslateStoreFunc) ServerOption {
 	return func(s *Server) error {
-		s.holder.translateFile = NewTranslateFile(OptTranslateFileMapSize(mapSize))
+		s.holder.OpenTranslateStore = fn
+		return nil
+	}
+}
+
+// OptServerOpenTranslateReader is a functional option on Server
+// used to specify the remote translation data reader.
+func OptServerOpenTranslateReader(fn OpenTranslateReaderFunc) ServerOption {
+	return func(s *Server) error {
+		s.holder.OpenTranslateReader = fn
 		return nil
 	}
 }
@@ -331,7 +329,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	}
 	s.executor = newExecutor(executorOpts...)
 
-	s.holder.translateFile.logger = s.logger
+	// s.holder.translateFile.logger = s.logger
 
 	path, err := expandDirName(s.dataDir)
 	if err != nil {
@@ -339,7 +337,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	}
 
 	s.holder.Path = path
-	s.holder.translateFile.Path = filepath.Join(path, ".keys")
+	// s.holder.translateFile.Path = filepath.Join(path, ".keys")
 	s.holder.Logger = s.logger
 	s.holder.Stats.SetLogger(s.logger)
 
@@ -374,7 +372,6 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	s.executor.Holder = s.holder
 	s.executor.Node = node
 	s.executor.Cluster = s.cluster
-	s.executor.TranslateStore = s.holder.translateFile
 	s.executor.MaxWritesPerRequest = s.maxWritesPerRequest
 	s.cluster.broadcaster = s
 	s.cluster.maxWritesPerRequest = s.maxWritesPerRequest
@@ -388,6 +385,10 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	return s, nil
 }
 
+func (s *Server) InternalClient() InternalClient {
+	return s.defaultClient
+}
+
 // UpAndDown brings the server up minimally and shuts it down
 // again; basically, it exists for testing holder open and close.
 func (s *Server) UpAndDown() error {
@@ -397,11 +398,6 @@ func (s *Server) UpAndDown() error {
 	err := s.holder.logStartup()
 	if err != nil {
 		log.Println(errors.Wrap(err, "logging startup"))
-	}
-
-	// Initialize id-key storage.
-	if err := s.holder.translateFile.Open(); err != nil {
-		return errors.Wrap(err, "opening TranslateFile")
 	}
 
 	// Open holder.
@@ -425,11 +421,6 @@ func (s *Server) Open() error {
 	err := s.holder.logStartup()
 	if err != nil {
 		log.Println(errors.Wrap(err, "logging startup"))
-	}
-
-	// Initialize id-key storage.
-	if err := s.holder.translateFile.Open(); err != nil {
-		return errors.Wrap(err, "opening TranslateFile")
 	}
 
 	// Open Cluster management.
@@ -601,7 +592,7 @@ func (s *Server) receiveMessage(m Message) error {
 			return fmt.Errorf("local index not found: %s", obj.Index)
 		}
 		opt := obj.Meta
-		_, err := idx.createField(obj.Field, *opt)
+		_, err := idx.createFieldIfNotExists(obj.Field, *opt)
 		if err != nil {
 			return err
 		}

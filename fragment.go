@@ -36,14 +36,14 @@ import (
 
 	"github.com/cespare/xxhash"
 	"github.com/gogo/protobuf/proto"
-	"github.com/pilosa/pilosa/internal"
-	"github.com/pilosa/pilosa/logger"
-	"github.com/pilosa/pilosa/pql"
-	"github.com/pilosa/pilosa/roaring"
-	"github.com/pilosa/pilosa/shardwidth"
-	"github.com/pilosa/pilosa/stats"
-	"github.com/pilosa/pilosa/syswrap"
-	"github.com/pilosa/pilosa/tracing"
+	"github.com/pilosa/pilosa/v2/internal"
+	"github.com/pilosa/pilosa/v2/logger"
+	"github.com/pilosa/pilosa/v2/pql"
+	"github.com/pilosa/pilosa/v2/roaring"
+	"github.com/pilosa/pilosa/v2/shardwidth"
+	"github.com/pilosa/pilosa/v2/stats"
+	"github.com/pilosa/pilosa/v2/syswrap"
+	"github.com/pilosa/pilosa/v2/tracing"
 	"github.com/pkg/errors"
 )
 
@@ -1888,8 +1888,8 @@ func (f *fragment) mergeBlock(id int, data []pairSet) (sets, clears []pairSet, e
 	clears = make([]pairSet, len(data)+1)
 
 	// Limit upper row/column pair.
-	maxRowID := uint64(id+1) * HashBlockSize
-	maxColumnID := uint64(ShardWidth)
+	maxRowID := (uint64(id+1) * HashBlockSize) - 1
+	maxColumnID := uint64(ShardWidth) - 1
 
 	// Create buffered iterator for local block.
 	itrs := make([]*bufIterator, 1, len(data)+1)
@@ -1969,8 +1969,8 @@ func (f *fragment) mergeBlock(id int, data []pairSet) (sets, clears []pairSet, e
 				sets[i].rowIDs = append(sets[i].rowIDs, min.rowID)
 				sets[i].columnIDs = append(sets[i].columnIDs, min.columnID)
 			} else {
-				clears[i].rowIDs = append(sets[i].rowIDs, min.rowID)
-				clears[i].columnIDs = append(sets[i].columnIDs, min.columnID)
+				clears[i].rowIDs = append(clears[i].rowIDs, min.rowID)
+				clears[i].columnIDs = append(clears[i].columnIDs, min.columnID)
 			}
 		}
 	}
@@ -2191,7 +2191,14 @@ func (f *fragment) importValueSmallWrite(columnIDs []uint64, values []int64, bit
 		rowSet[uint64(i)] = struct{}{}
 	}
 	err := f.importPositions(toSet, toClear, rowSet)
-	return errors.Wrap(err, "importing positions")
+	if err != nil {
+		return errors.Wrap(err, "importing positions")
+	}
+
+	// Reset the rowCache.
+	f.rowCache = &simpleCache{make(map[uint64]*Row)}
+
+	return nil
 }
 
 // importValue bulk imports a set of range-encoded values.
@@ -2229,6 +2236,9 @@ func (f *fragment) importValue(columnIDs []uint64, values []int64, bitDepth uint
 	}
 	// We don't actually care, except we want our stats to be accurate.
 	f.incrementOpN(totalChanges)
+
+	// Reset the rowCache.
+	f.rowCache = &simpleCache{make(map[uint64]*Row)}
 
 	// in theory, this should probably have happened anyway, but if enough
 	// of the bits matched existing bits, we'll be under our opN estimate, and

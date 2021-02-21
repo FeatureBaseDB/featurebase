@@ -147,8 +147,8 @@ func (b *Bitmap) unmarshalPilosaRoaring(data []byte) error {
 
 	// Read key count in bytes sizeof(cookie)+sizeof(flag):(sizeof(cookie)+sizeof(uint32)).
 	keyN := binary.LittleEndian.Uint32(data[3+1 : 8])
-	if uint32(len(data)) < headerBaseSize+keyN*12 {
-		return fmt.Errorf("insufficient data for header + offsets: key-cardinality not provided for %d containers", int(keyN)/12)
+	if int64(len(data)) < headerBaseSize+int64(keyN)*12 {
+		return fmt.Errorf("insufficient data for header + offsets: key-cardinality not provided for %d containers", keyN)
 	}
 
 	headerSize := headerBaseSize
@@ -161,14 +161,23 @@ func (b *Bitmap) unmarshalPilosaRoaring(data []byte) error {
 			int(binary.LittleEndian.Uint16(buf[10:12]))+1,
 			true)
 	}
-	opsOffset := headerSize + int(keyN)*12
+	opsOffset := int64(headerSize) + int64(keyN)*12
 
 	// Read container offsets and attach data.
 	citer, _ := b.Containers.Iterator(0)
+	// if you have enough containers that the *headers alone* exceed 4GB, we
+	// need to start with a higher cycle offset.
+	cycleOffset := opsOffset &^ ((1 << 32) - 1)
+	prevOffset32 := uint32(opsOffset)
 	for i, buf := 0, data[opsOffset:]; i < int(keyN); i, buf = i+1, buf[4:] {
-		offset := binary.LittleEndian.Uint32(buf[0:4])
+		offset32 := binary.LittleEndian.Uint32(buf[0:4])
+		if offset32 < prevOffset32 {
+			cycleOffset += (1 << 32)
+		}
+		prevOffset32 = offset32
+		offset := int64(offset32) + cycleOffset
 		// Verify the offset is within the bounds of the input data.
-		if int(offset) >= len(data) {
+		if offset >= int64(len(data)) {
 			return fmt.Errorf("offset out of bounds: off=%d, len=%d", offset, len(data))
 		}
 
@@ -184,13 +193,13 @@ func (b *Bitmap) unmarshalPilosaRoaring(data []byte) error {
 		case containerRun:
 			runCount := binary.LittleEndian.Uint16(data[offset : offset+runCountHeaderSize])
 			c.setRuns((*[0xFFFFFFF]interval16)(unsafe.Pointer(&data[offset+runCountHeaderSize]))[:runCount:runCount])
-			opsOffset = int(offset) + runCountHeaderSize + len(c.runs())*interval16Size
+			opsOffset = offset + runCountHeaderSize + int64(len(c.runs()))*interval16Size
 		case containerArray:
 			c.setArray((*[0xFFFFFFF]uint16)(unsafe.Pointer(&data[offset]))[:c.N():c.N()])
-			opsOffset = int(offset) + len(c.array())*2 // sizeof(uint32)
+			opsOffset = offset + int64(len(c.array()))*2 // sizeof(uint32)
 		case containerBitmap:
 			c.setBitmap((*[0xFFFFFFF]uint64)(unsafe.Pointer(&data[offset]))[:bitmapN:bitmapN])
-			opsOffset = int(offset) + len(c.bitmap())*8 // sizeof(uint64)
+			opsOffset = offset + int64(len(c.bitmap()))*8 // sizeof(uint64)
 		}
 	}
 
@@ -212,6 +221,7 @@ func (b *Bitmap) unmarshalPilosaRoaring(data []byte) error {
 		// Increase the op count.
 		b.ops++
 		b.opN += opr.count()
+		opsOffset += int64(opr.size())
 		// Move the buffer forward.
 		buf = buf[opr.size():]
 	}

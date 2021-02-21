@@ -36,18 +36,18 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	"github.com/pilosa/pilosa"
-	"github.com/pilosa/pilosa/boltdb"
-	"github.com/pilosa/pilosa/encoding/proto"
-	"github.com/pilosa/pilosa/gcnotify"
-	"github.com/pilosa/pilosa/gopsutil"
-	"github.com/pilosa/pilosa/gossip"
-	"github.com/pilosa/pilosa/http"
-	"github.com/pilosa/pilosa/logger"
-	"github.com/pilosa/pilosa/prometheus"
-	"github.com/pilosa/pilosa/stats"
-	"github.com/pilosa/pilosa/statsd"
-	"github.com/pilosa/pilosa/syswrap"
+	"github.com/pilosa/pilosa/v2"
+	"github.com/pilosa/pilosa/v2/boltdb"
+	"github.com/pilosa/pilosa/v2/encoding/proto"
+	"github.com/pilosa/pilosa/v2/gcnotify"
+	"github.com/pilosa/pilosa/v2/gopsutil"
+	"github.com/pilosa/pilosa/v2/gossip"
+	"github.com/pilosa/pilosa/v2/http"
+	"github.com/pilosa/pilosa/v2/logger"
+	"github.com/pilosa/pilosa/v2/prometheus"
+	"github.com/pilosa/pilosa/v2/stats"
+	"github.com/pilosa/pilosa/v2/statsd"
+	"github.com/pilosa/pilosa/v2/syswrap"
 	"github.com/pkg/errors"
 )
 
@@ -104,6 +104,13 @@ func OptCommandCloseTimeout(d time.Duration) CommandOption {
 	}
 }
 
+func OptCommandConfig(config *Config) CommandOption {
+	return func(c *Command) error {
+		c.Config = config
+		return nil
+	}
+}
+
 // NewCommand returns a new instance of Main.
 func NewCommand(stdin io.Reader, stdout, stderr io.Writer, opts ...CommandOption) *Command {
 	c := &Command{
@@ -128,7 +135,6 @@ func NewCommand(stdin io.Reader, stdout, stderr io.Writer, opts ...CommandOption
 
 // Start starts the pilosa server - it returns once the server is running.
 func (m *Command) Start() (err error) {
-	defer close(m.Started)
 
 	// Seed random number generator
 	rand.Seed(time.Now().UTC().UnixNano())
@@ -158,6 +164,7 @@ func (m *Command) Start() (err error) {
 
 	m.logger.Printf("listening as %s\n", m.listenURI)
 
+	close(m.Started)
 	return nil
 }
 
@@ -247,19 +254,9 @@ func (m *Command) SetupServer() error {
 	// Setup TLS
 	var TLSConfig *tls.Config
 	if uri.Scheme == "https" {
-		if m.Config.TLS.CertificatePath == "" {
-			return errors.New("certificate path is required for TLS sockets")
-		}
-		if m.Config.TLS.CertificateKeyPath == "" {
-			return errors.New("certificate key path is required for TLS sockets")
-		}
-		cert, err := tls.LoadX509KeyPair(m.Config.TLS.CertificatePath, m.Config.TLS.CertificateKeyPath)
+		TLSConfig, err = GetTLSConfig(&m.Config.TLS, m.logger.Logger())
 		if err != nil {
-			return errors.Wrap(err, "load x509 key pair")
-		}
-		TLSConfig = &tls.Config{
-			Certificates:       []tls.Certificate{cert},
-			InsecureSkipVerify: m.Config.TLS.SkipVerify,
+			return errors.Wrap(err, "get tls config")
 		}
 	}
 
@@ -317,6 +314,8 @@ func (m *Command) SetupServer() error {
 		pilosa.OptServerMetricInterval(time.Duration(m.Config.Metric.PollInterval)),
 		pilosa.OptServerDiagnosticsInterval(diagnosticsInterval),
 		pilosa.OptServerExecutorPoolSize(m.Config.WorkerPoolSize),
+		pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
+		pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(c)),
 		pilosa.OptServerLogger(m.logger),
 		pilosa.OptServerAttrStoreFunc(boltdb.NewAttrStore),
 		pilosa.OptServerSystemInfo(gopsutil.NewSystemInfo()),
@@ -324,20 +323,11 @@ func (m *Command) SetupServer() error {
 		pilosa.OptServerStatsClient(statsClient),
 		pilosa.OptServerURI(advertiseURI),
 		pilosa.OptServerInternalClient(http.NewInternalClientFromURI(uri, c)),
-		pilosa.OptServerPrimaryTranslateStoreFunc(http.NewTranslateStore),
 		pilosa.OptServerClusterDisabled(m.Config.Cluster.Disabled, m.Config.Cluster.Hosts),
 		pilosa.OptServerSerializer(proto.Serializer{}),
 		coordinatorOpt,
 	}
 
-	if m.Config.Translation.MapSize > 0 {
-		serverOptions = append(
-			serverOptions,
-			pilosa.OptServerTranslateFileMapSize(
-				m.Config.Translation.MapSize,
-			),
-		)
-	}
 	serverOptions = append(serverOptions, m.serverOptions...)
 
 	m.Server, err = pilosa.NewServer(serverOptions...)

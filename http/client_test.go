@@ -26,11 +26,11 @@ import (
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
-	"github.com/pilosa/pilosa"
-	"github.com/pilosa/pilosa/http"
-	"github.com/pilosa/pilosa/pql"
-	"github.com/pilosa/pilosa/server"
-	"github.com/pilosa/pilosa/test"
+	"github.com/pilosa/pilosa/v2"
+	"github.com/pilosa/pilosa/v2/http"
+	"github.com/pilosa/pilosa/v2/pql"
+	"github.com/pilosa/pilosa/v2/server"
+	"github.com/pilosa/pilosa/v2/test"
 )
 
 // Test distributed TopN Row count across 3 nodes.
@@ -688,7 +688,7 @@ func TestClient_ImportKeys(t *testing.T) {
 				{Key: "blue", Count: 2},
 				{Key: "purple", Count: 1},
 			}) {
-				t.Fatalf("unexpected topn result: %v", pairs)
+				t.Fatalf("unexpected topn result: %#v", pairs)
 			}
 		})
 	})
@@ -773,6 +773,72 @@ func TestClient_ImportKeys(t *testing.T) {
 
 		if !reflect.DeepEqual(result.Results[0].(*pilosa.Row).Keys, []string{"col3"}) {
 			t.Fatalf("unexpected column keys: %s", spew.Sdump(result))
+		}
+	})
+}
+
+func TestClient_ImportIDs(t *testing.T) {
+	// Ensure that running a query between two imports does
+	// not affect the result set. It turns out, this is caused
+	// by the fragment.rowCache failing to be cleared after an
+	// importValue. This ensures that the rowCache is cleared
+	// after an import.
+	t.Run("ImportRangeImport", func(t *testing.T) {
+		cluster := test.MustRunCluster(t, 1)
+		defer cluster.Close()
+		cmd := cluster[0]
+		host := cmd.URL()
+		holder := cmd.Server.Holder()
+		hldr := test.Holder{Holder: holder}
+
+		idxName := "i"
+		fldName := "f"
+
+		// Load bitmap into cache to ensure cache gets updated.
+		index := hldr.MustCreateIndexIfNotExists(idxName, pilosa.IndexOptions{Keys: false})
+		_, err := index.CreateFieldIfNotExists(fldName, pilosa.OptFieldTypeInt(-10000, 10000))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Send import request.
+		c := MustNewClient(host, http.GetHTTPClient(nil))
+		if err := c.ImportValue(context.Background(), idxName, fldName, 0, []pilosa.FieldValue{
+			{ColumnID: 2, Value: 1},
+		}); err != nil {
+			t.Fatal(err)
+		}
+
+		// Verify range.
+		queryRequest := &pilosa.QueryRequest{
+			Query:  fmt.Sprintf(`Row(%s>0)`, fldName),
+			Remote: false,
+		}
+
+		if result, err := c.Query(context.Background(), idxName, queryRequest); err != nil {
+			t.Fatal(err)
+		} else {
+			res := result.Results[0].(*pilosa.Row).Columns()
+			if !reflect.DeepEqual(res, []uint64{2}) {
+				t.Fatalf("unexpected column ids: %v", res)
+			}
+		}
+
+		// Send import request.
+		if err := c.ImportValue(context.Background(), idxName, fldName, 0, []pilosa.FieldValue{
+			{ColumnID: 1000, Value: 1},
+		}); err != nil {
+			t.Fatal(err)
+		}
+
+		// Verify range.
+		if result, err := c.Query(context.Background(), idxName, queryRequest); err != nil {
+			t.Fatal(err)
+		} else {
+			res := result.Results[0].(*pilosa.Row).Columns()
+			if !reflect.DeepEqual(res, []uint64{2, 1000}) {
+				t.Fatalf("unexpected column ids: %v", res)
+			}
 		}
 	})
 }

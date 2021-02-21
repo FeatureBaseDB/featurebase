@@ -19,7 +19,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/pilosa/pilosa/pql"
+	"github.com/pilosa/pilosa/v2/pql"
 )
 
 type Args map[string]interface{}

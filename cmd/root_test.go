@@ -25,7 +25,7 @@ import (
 
 	"time"
 
-	"github.com/pilosa/pilosa/cmd"
+	"github.com/pilosa/pilosa/v2/cmd"
 	"github.com/spf13/cobra"
 )
 

@@ -19,7 +19,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/v2"
 )
 
 // Field represents a test wrapper for pilosa.Field.

@@ -22,8 +22,8 @@ import (
 	"path/filepath"
 	"syscall"
 
-	"github.com/pilosa/pilosa"
-	"github.com/pilosa/pilosa/roaring"
+	"github.com/pilosa/pilosa/v2"
+	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pkg/errors"
 )
 

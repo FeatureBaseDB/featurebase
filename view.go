@@ -25,10 +25,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pilosa/pilosa/logger"
-	"github.com/pilosa/pilosa/pql"
-	"github.com/pilosa/pilosa/roaring"
-	"github.com/pilosa/pilosa/stats"
+	"github.com/pilosa/pilosa/v2/logger"
+	"github.com/pilosa/pilosa/v2/pql"
+	"github.com/pilosa/pilosa/v2/roaring"
+	"github.com/pilosa/pilosa/v2/stats"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -134,10 +134,11 @@ func (v *view) openFragments() error {
 	eg, ctx := errgroup.WithContext(context.Background())
 	var mu sync.Mutex
 
+fileLoop:
 	for _, loopFi := range fis {
 		select {
 		case <-ctx.Done():
-			break
+			break fileLoop
 		default:
 			fi := loopFi
 
@@ -181,10 +182,11 @@ func (v *view) close() error {
 
 	// Close all fragments.
 	eg, ctx := errgroup.WithContext(context.Background())
+fragLoop:
 	for _, loopFrag := range v.fragments {
 		select {
 		case <-ctx.Done():
-			break
+			break fragLoop
 		default:
 			frag := loopFrag
 			workQueue <- struct{}{}

@@ -24,8 +24,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pilosa/pilosa"
-	"github.com/pilosa/pilosa/test"
+	"github.com/pilosa/pilosa/v2/server"
+
+	"github.com/pilosa/pilosa/v2"
+	"github.com/pilosa/pilosa/v2/test"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -633,6 +635,33 @@ func TestClusterResize_RemoveNode(t *testing.T) {
 			t.Fatalf("expected to contain '%s' but got '%s'", expBody, strings.TrimSpace(resp.Body))
 		}
 	})
+}
+
+func TestClusterMutualTLS(t *testing.T) {
+	commandOpts := make([][]server.CommandOption, 3)
+	configs := make([]*server.Config, 3)
+	for i := range configs {
+		conf := server.NewConfig()
+		configs[i] = conf
+		conf.Bind = "https://localhost:0"
+		conf.TLS.CertificatePath = "./testdata/certs/localhost.crt"
+		conf.TLS.CertificateKeyPath = "./testdata/certs/localhost.key"
+		conf.TLS.CACertPath = "./testdata/certs/pilosa-ca.crt"
+		conf.TLS.EnableClientVerification = true
+		conf.TLS.SkipVerify = false
+		commandOpts[i] = append(commandOpts[i], server.OptCommandConfig(conf))
+	}
+
+	cluster := test.MustRunCluster(t, 3, commandOpts...)
+	defer cluster.Close()
+	m0 := cluster[0]
+
+	client0 := m0.Client()
+	if err := client0.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
+		t.Fatal(err)
+	} else if err := client0.CreateField(context.Background(), "i", "f"); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // checkClusterState polls a given cluster for its state until it

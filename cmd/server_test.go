@@ -20,9 +20,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pilosa/pilosa/cmd"
-	_ "github.com/pilosa/pilosa/test"
-	"github.com/pilosa/pilosa/toml"
+	"github.com/pilosa/pilosa/v2/cmd"
+	_ "github.com/pilosa/pilosa/v2/test"
+	"github.com/pilosa/pilosa/v2/toml"
 	"github.com/pkg/errors"
 )
 
@@ -42,7 +42,7 @@ func TestServerConfig(t *testing.T) {
 	tests := []commandTest{
 		// TEST 0
 		{
-			args: []string{"server", "--data-dir", actualDataDir, "--cluster.hosts", "localhost:10111,localhost:10110", "--bind", "localhost:10111", "--translation.map-size", "100000"},
+			args: []string{"server", "--data-dir", actualDataDir, "--cluster.hosts", "localhost:42454,localhost:10110", "--bind", "localhost:42454", "--translation.map-size", "100000"},
 			env: map[string]string{
 				"PILOSA_DATA_DIR":                "/tmp/myEnvDatadir",
 				"PILOSA_CLUSTER_LONG_QUERY_TIME": "1m30s",
@@ -69,9 +69,9 @@ func TestServerConfig(t *testing.T) {
 			validation: func() error {
 				v := validator{}
 				v.Check(cmd.Server.Config.DataDir, actualDataDir)
-				v.Check(cmd.Server.Config.Bind, "localhost:10111")
+				v.Check(cmd.Server.Config.Bind, "localhost:42454")
 				v.Check(cmd.Server.Config.Cluster.ReplicaN, 2)
-				v.Check(cmd.Server.Config.Cluster.Hosts, []string{"localhost:10111", "localhost:10110"})
+				v.Check(cmd.Server.Config.Cluster.Hosts, []string{"localhost:42454", "localhost:10110"})
 				v.Check(cmd.Server.Config.Cluster.LongQueryTime, toml.Duration(time.Second*90))
 				v.Check(cmd.Server.Config.MaxWritesPerRequest, 2000)
 				v.Check(cmd.Server.Config.Translation.MapSize, 100000)

@@ -22,9 +22,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pilosa/pilosa/pql"
-	"github.com/pilosa/pilosa/shardwidth"
-	"github.com/pilosa/pilosa/tracing"
+	"github.com/pilosa/pilosa/v2/pql"
+	"github.com/pilosa/pilosa/v2/shardwidth"
+	"github.com/pilosa/pilosa/v2/tracing"
 	"github.com/pkg/errors"
 )
 
@@ -53,9 +53,6 @@ type executor struct {
 
 	// Maximum number of Set() or Clear() commands per request.
 	MaxWritesPerRequest int
-
-	// Stores key/id translation data.
-	TranslateStore TranslateStore
 
 	workersWG      sync.WaitGroup
 	workerPoolSize int
@@ -131,7 +128,7 @@ func (e *executor) Execute(ctx context.Context, index string, q *pql.Query, shar
 
 	idx := e.Holder.Index(index)
 	if idx == nil {
-		return resp, ErrIndexNotFound
+		return resp, newNotFoundError(ErrIndexNotFound, index)
 	}
 
 	// Verify that the number of writes do not exceed the maximum.
@@ -184,7 +181,7 @@ func (e *executor) Execute(ctx context.Context, index string, q *pql.Query, shar
 		// Translate column attributes, if necessary.
 		if idx.Keys() {
 			for _, col := range columnAttrSets {
-				v, err := e.Holder.translateFile.TranslateColumnToString(index, col.ID)
+				v, err := idx.translateStore.TranslateID(col.ID)
 				if err != nil {
 					return resp, err
 				}
@@ -244,7 +241,7 @@ func (e *executor) execute(ctx context.Context, index string, q *pql.Query, shar
 		// Round up the number of shards.
 		idx := e.Holder.Index(index)
 		if idx == nil {
-			return nil, ErrIndexNotFound
+			return nil, newNotFoundError(ErrIndexNotFound, index)
 		}
 		shards = idx.AvailableShards().Slice()
 		if len(shards) == 0 {
@@ -1323,12 +1320,12 @@ func (e *executor) executeRowsShard(_ context.Context, index string, fieldName s
 	// Fetch index.
 	idx := e.Holder.Index(index)
 	if idx == nil {
-		return nil, ErrIndexNotFound
+		return nil, newNotFoundError(ErrIndexNotFound, index)
 	}
 	// Fetch field.
 	f := e.Holder.Field(index, fieldName)
 	if f == nil {
-		return nil, ErrFieldNotFound
+		return nil, newNotFoundError(ErrFieldNotFound, fieldName)
 	}
 
 	// rowIDs is the result set.
@@ -1453,7 +1450,7 @@ func (e *executor) executeRowShard(ctx context.Context, index string, c *pql.Cal
 	// Fetch column label from index.
 	idx := e.Holder.Index(index)
 	if idx == nil {
-		return nil, ErrIndexNotFound
+		return nil, newNotFoundError(ErrIndexNotFound, index)
 	}
 
 	// Fetch field name from argument.
@@ -1463,7 +1460,7 @@ func (e *executor) executeRowShard(ctx context.Context, index string, c *pql.Cal
 	}
 	f := e.Holder.Field(index, fieldName)
 	if f == nil {
-		return nil, ErrFieldNotFound
+		return nil, newNotFoundError(ErrFieldNotFound, fieldName)
 	}
 
 	rowID, rowOK, rowErr := c.UintArg(fieldName)
@@ -1557,7 +1554,7 @@ func (e *executor) executeRowBSIGroupShard(ctx context.Context, index string, c 
 
 	f := e.Holder.Field(index, fieldName)
 	if f == nil {
-		return nil, ErrFieldNotFound
+		return nil, newNotFoundError(ErrFieldNotFound, fieldName)
 	}
 
 	// EQ null           (not implemented: flip frag.NotNull with max ColumnID)
@@ -1747,7 +1744,7 @@ func (e *executor) executeNotShard(ctx context.Context, index string, c *pql.Cal
 	// Make sure the index supports existence tracking.
 	idx := e.Holder.Index(index)
 	if idx == nil {
-		return nil, ErrIndexNotFound
+		return nil, newNotFoundError(ErrIndexNotFound, index)
 	} else if idx.existenceField() == nil {
 		return nil, errors.Errorf("index does not support existence tracking: %s", index)
 	}
@@ -1837,11 +1834,11 @@ func (e *executor) executeClearBit(ctx context.Context, index string, c *pql.Cal
 	// Retrieve field.
 	idx := e.Holder.Index(index)
 	if idx == nil {
-		return false, ErrIndexNotFound
+		return false, newNotFoundError(ErrIndexNotFound, index)
 	}
 	f := idx.Field(fieldName)
 	if f == nil {
-		return false, ErrFieldNotFound
+		return false, newNotFoundError(ErrFieldNotFound, fieldName)
 	}
 
 	// Read fields using labels.
@@ -1907,7 +1904,7 @@ func (e *executor) executeClearRow(ctx context.Context, index string, c *pql.Cal
 	}
 	field := e.Holder.Field(index, fieldName)
 	if field == nil {
-		return false, ErrFieldNotFound
+		return false, newNotFoundError(ErrFieldNotFound, fieldName)
 	}
 
 	switch field.Type() {
@@ -1958,7 +1955,7 @@ func (e *executor) executeClearRowShard(ctx context.Context, index string, c *pq
 
 	field := e.Holder.Field(index, fieldName)
 	if field == nil {
-		return false, ErrFieldNotFound
+		return false, newNotFoundError(ErrFieldNotFound, fieldName)
 	}
 
 	// Remove the row from all views.
@@ -1987,7 +1984,7 @@ func (e *executor) executeSetRow(ctx context.Context, index string, c *pql.Call,
 	}
 	field := e.Holder.Field(index, fieldName)
 	if field == nil {
-		return false, ErrFieldNotFound
+		return false, newNotFoundError(ErrFieldNotFound, fieldName)
 	}
 	if field.Type() != FieldTypeSet {
 		return false, fmt.Errorf("can't Store() on a %s field", field.Type())
@@ -2008,7 +2005,12 @@ func (e *executor) executeSetRow(ctx context.Context, index string, c *pql.Call,
 	}
 
 	result, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
-	return result.(bool), err
+	r, ok := result.(bool)
+	if !ok {
+		err = errors.Wrapf(err, "mapReduce result is not bool,err:%s", err.Error())
+		return false, err
+	}
+	return r, err
 }
 
 // executeSetRowShard executes a SetRow() call for a single shard.
@@ -2028,7 +2030,7 @@ func (e *executor) executeSetRowShard(ctx context.Context, index string, c *pql.
 
 	field := e.Holder.Field(index, fieldName)
 	if field == nil {
-		return false, ErrFieldNotFound
+		return false, newNotFoundError(ErrFieldNotFound, fieldName)
 	}
 
 	// Retrieve source row.
@@ -2088,11 +2090,11 @@ func (e *executor) executeSet(ctx context.Context, index string, c *pql.Call, op
 	// Retrieve field.
 	idx := e.Holder.Index(index)
 	if idx == nil {
-		return false, ErrIndexNotFound
+		return false, newNotFoundError(ErrIndexNotFound, index)
 	}
 	f := idx.Field(fieldName)
 	if f == nil {
-		return false, ErrFieldNotFound
+		return false, newNotFoundError(ErrFieldNotFound, fieldName)
 	}
 
 	// Set column on existence field.
@@ -2219,7 +2221,7 @@ func (e *executor) executeSetRowAttrs(ctx context.Context, index string, c *pql.
 	// Retrieve field.
 	field := e.Holder.Field(index, fieldName)
 	if field == nil {
-		return ErrFieldNotFound
+		return newNotFoundError(ErrFieldNotFound, fieldName)
 	}
 
 	// Parse labels.
@@ -2288,7 +2290,7 @@ func (e *executor) executeBulkSetRowAttrs(ctx context.Context, index string, cal
 		// Retrieve field.
 		f := e.Holder.Field(index, field)
 		if f == nil {
-			return nil, ErrFieldNotFound
+			return nil, newNotFoundError(ErrFieldNotFound, field)
 		}
 
 		rowID, ok, err := c.UintArg("_" + rowLabel)
@@ -2326,7 +2328,7 @@ func (e *executor) executeBulkSetRowAttrs(ctx context.Context, index string, cal
 		// Retrieve field.
 		field := e.Holder.Field(index, name)
 		if field == nil {
-			return nil, ErrFieldNotFound
+			return nil, newNotFoundError(ErrFieldNotFound, name)
 		}
 
 		// Set attributes.
@@ -2370,7 +2372,7 @@ func (e *executor) executeSetColumnAttrs(ctx context.Context, index string, c *p
 	// Retrieve index.
 	idx := e.Holder.Index(index)
 	if idx == nil {
-		return ErrIndexNotFound
+		return newNotFoundError(ErrIndexNotFound, index)
 	}
 
 	col, okCol, errCol := c.UintArg("_" + columnLabel)
@@ -2645,17 +2647,18 @@ func (e *executor) translateCall(index string, idx *Index, c *pql.Call) error {
 		fieldName = callArgString(c, "field")
 		rowKey = "row"
 	}
+
 	// Translate column key.
 	if idx.Keys() {
 		if c.Args[colKey] != nil && !isString(c.Args[colKey]) {
 			return errors.New("column value must be a string when index 'keys' option enabled")
 		}
 		if value := callArgString(c, colKey); value != "" {
-			ids, err := e.TranslateStore.TranslateColumnsToUint64(index, []string{value})
+			id, err := idx.translateStore.TranslateKey(value)
 			if err != nil {
 				return err
 			}
-			c.Args[colKey] = ids[0]
+			c.Args[colKey] = id
 		}
 	} else {
 		if isString(c.Args[colKey]) {
@@ -2692,11 +2695,11 @@ func (e *executor) translateCall(index string, idx *Index, c *pql.Call) error {
 				return errors.New("row value must be a string when field 'keys' option enabled")
 			}
 			if value := callArgString(c, rowKey); value != "" {
-				ids, err := e.TranslateStore.TranslateRowsToUint64(index, fieldName, []string{value})
+				id, err := field.translateStore.TranslateKey(value)
 				if err != nil {
 					return err
 				}
-				c.Args[rowKey] = ids[0]
+				c.Args[rowKey] = id
 			}
 		} else {
 			if isString(c.Args[rowKey]) {
@@ -2765,11 +2768,11 @@ func (e *executor) translateGroupByCall(index string, idx *Index, c *pql.Call) e
 			if !ok {
 				return errors.New("prev value must be a string when field 'keys' option enabled")
 			}
-			ids, err := e.TranslateStore.TranslateRowsToUint64(index, field.Name(), []string{prevStr})
+			id, err := field.translateStore.TranslateKey(prevStr)
 			if err != nil {
 				return errors.Wrapf(err, "translating row key '%s'", prevStr)
 			}
-			previous[i] = ids[0]
+			previous[i] = id
 		} else {
 			if prevStr, ok := prev.(string); ok {
 				return errors.Errorf("got string row val '%s' in 'previous' for field %s which doesn't use string keys", prevStr, field.Name())
@@ -2800,7 +2803,7 @@ func (e *executor) translateResult(index string, idx *Index, call *pql.Call, res
 			other := &Row{Attrs: result.Attrs}
 			for _, segment := range result.Segments() {
 				for _, col := range segment.Columns() {
-					key, err := e.TranslateStore.TranslateColumnToString(index, col)
+					key, err := idx.translateStore.TranslateID(col)
 					if err != nil {
 						return nil, err
 					}
@@ -2817,7 +2820,7 @@ func (e *executor) translateResult(index string, idx *Index, call *pql.Call, res
 				return nil, fmt.Errorf("field %q not found", fieldName)
 			}
 			if field.keys() {
-				key, err := e.TranslateStore.TranslateRowToString(index, fieldName, result.ID)
+				key, err := field.translateStore.TranslateID(result.ID)
 				if err != nil {
 					return nil, err
 				}
@@ -2838,7 +2841,7 @@ func (e *executor) translateResult(index string, idx *Index, call *pql.Call, res
 			if field.keys() {
 				other := make([]Pair, len(result))
 				for i := range result {
-					key, err := e.TranslateStore.TranslateRowToString(index, fieldName, result[i].ID)
+					key, err := field.translateStore.TranslateID(result[i].ID)
 					if err != nil {
 						return nil, err
 					}
@@ -2859,10 +2862,10 @@ func (e *executor) translateResult(index string, idx *Index, call *pql.Call, res
 				// TODO: It may be useful to cache this field lookup.
 				field := idx.Field(g.Field)
 				if field == nil {
-					return nil, ErrFieldNotFound
+					return nil, newNotFoundError(ErrFieldNotFound, g.Field)
 				}
 				if field.keys() {
-					key, err := e.TranslateStore.TranslateRowToString(index, g.Field, g.RowID)
+					key, err := field.translateStore.TranslateID(g.RowID)
 					if err != nil {
 						return nil, errors.Wrap(err, "translating row ID in Group")
 					}
@@ -2886,11 +2889,11 @@ func (e *executor) translateResult(index string, idx *Index, call *pql.Call, res
 		}
 
 		if field := idx.Field(fieldName); field == nil {
-			return nil, ErrFieldNotFound
+			return nil, newNotFoundError(ErrFieldNotFound, fieldName)
 		} else if field.keys() {
 			other.Keys = make([]string, len(result))
 			for i, id := range result {
-				key, err := e.TranslateStore.TranslateRowToString(index, fieldName, id)
+				key, err := field.translateStore.TranslateID(id)
 				if err != nil {
 					return nil, errors.Wrap(err, "translating row ID")
 				}
@@ -3101,7 +3104,7 @@ func newGroupByIterator(rowIDs []RowIDs, children []*pql.Call, filter *Row, inde
 			return nil, errors.Errorf("%s call must have field with valid (string) field name. Got %v of type %[2]T", call.Name, call.Args["_field"])
 		}
 		if holder.Field(index, fieldName) == nil {
-			return nil, ErrFieldNotFound
+			return nil, newNotFoundError(ErrFieldNotFound, fieldName)
 		}
 		gbi.fields[i].Field = fieldName
 		// Fetch fragment.
@@ -3180,6 +3183,9 @@ func (gbi *groupByIterator) nextAtIdx(i int) {
 		}
 		if wrapped && i != 0 {
 			gbi.nextAtIdx(i - 1)
+			if gbi.done {
+				return
+			}
 		}
 		if i == 0 && gbi.filter != nil {
 			gbi.rows[i].row = nr.Intersect(gbi.filter)

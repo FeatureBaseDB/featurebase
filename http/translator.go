@@ -17,104 +17,112 @@ package http
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
-	"net/url"
-	"strconv"
 
-	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/v2"
+	"github.com/pilosa/pilosa/v2/logger"
 )
 
-// Ensure implementation implements inteface.
-var _ pilosa.TranslateStore = (*translateStore)(nil)
-
-// translateStore represents an implementation of pilosa.TranslateStore that
-// communicates over HTTP. This is used with the TranslateHandler.
-type translateStore struct {
-	node *pilosa.Node
-}
-
-// NewTranslateStore returns a new instance of TranslateStore based on node.
-// DEPRECATED: Providing a string url to this function is being deprecated. Instead,
-// provide a *pilosa.Node.
-// TODO (2.0) Refactor to avoid panic
-func NewTranslateStore(node interface{}) pilosa.TranslateStore {
-	var n *pilosa.Node
-	switch v := node.(type) {
-	case string:
-		if uri, err := pilosa.NewURIFromAddress(v); err != nil {
-			panic("bad uri for translatestore in deprecated api")
-		} else {
-			n = &pilosa.Node{
-				ID:  v,
-				URI: *uri,
-			}
-		}
-	case *pilosa.Node:
-		n = v
-	default:
-		panic("*pilosa.Node is the only type supported by NewTranslateStore().")
+func GetOpenTranslateReaderFunc(client *http.Client) pilosa.OpenTranslateReaderFunc {
+	return func(ctx context.Context, nodeURL string, offsets pilosa.TranslateOffsetMap) (pilosa.TranslateEntryReader, error) {
+		return openTranslateReader(ctx, nodeURL, offsets, client)
 	}
-	return &translateStore{node: n}
 }
 
-// TranslateColumnsToUint64 is not currently implemented.
-func (s *translateStore) TranslateColumnsToUint64(index string, values []string) ([]uint64, error) {
-	return nil, pilosa.ErrNotImplemented
-}
-
-// TranslateColumnToString is not currently implemented.
-func (s *translateStore) TranslateColumnToString(index string, values uint64) (string, error) {
-	return "", pilosa.ErrNotImplemented
-}
-
-// TranslateRowsToUint64 is not currently implemented.
-func (s *translateStore) TranslateRowsToUint64(index, frame string, values []string) ([]uint64, error) {
-	return nil, pilosa.ErrNotImplemented
-}
-
-// TranslateRowToString is not currently implemented.
-func (s *translateStore) TranslateRowToString(index, frame string, values uint64) (string, error) {
-	return "", pilosa.ErrNotImplemented
-}
-
-// Reader returns a reader that can stream data from a remote store.
-func (s *translateStore) Reader(ctx context.Context, off int64) (io.ReadCloser, error) {
-	// Generate remote URL.
-	u, err := url.Parse(s.node.URI.String())
-	if err != nil {
+func openTranslateReader(ctx context.Context, nodeURL string, offsets pilosa.TranslateOffsetMap, client *http.Client) (pilosa.TranslateEntryReader, error) {
+	r := NewTranslateEntryReader(ctx, client)
+	r.URL = nodeURL + "/internal/translate/data"
+	r.Offsets = offsets
+	if err := r.Open(); err != nil {
 		return nil, err
 	}
-	u.Path = "/internal/translate/data"
-	u.RawQuery = (url.Values{
-		"offset": {strconv.FormatInt(off, 10)},
-	}).Encode()
+	return r, nil
+}
+
+// TranslateEntryReader represents an implementation of pilosa.TranslateEntryReader.
+// It consolidates all index & field translate entries into a single reader.
+type TranslateEntryReader struct {
+	ctx    context.Context
+	cancel func()
+
+	body io.ReadCloser
+	dec  *json.Decoder
+
+	// Lookup of offsets for each index & field.
+	// Must be set before calling Open().
+	Offsets pilosa.TranslateOffsetMap
+
+	// URL to stream entries from.
+	// Must be set before calling Open().
+	URL string
+
+	HTTPClient *http.Client
+
+	Logger logger.Logger
+}
+
+// NewTranslateEntryReader returns a new instance of TranslateEntryReader.
+func NewTranslateEntryReader(ctx context.Context, client *http.Client) *TranslateEntryReader {
+	if client == nil {
+		client = http.DefaultClient
+	}
+	r := &TranslateEntryReader{HTTPClient: client, Logger: logger.NopLogger}
+	r.ctx, r.cancel = context.WithCancel(ctx)
+	return r
+}
+
+// Open initiates the reader.
+func (r *TranslateEntryReader) Open() error {
+	// Serialize map of offsets to request body.
+	requestBody, err := json.Marshal(r.Offsets)
+	if err != nil {
+		return err
+	}
 
 	// Connect a stream to the remote server.
-	req, err := http.NewRequest("GET", u.String(), nil)
+	req, err := http.NewRequest("POST", r.URL, bytes.NewReader(requestBody))
 	if err != nil {
-		return nil, err
+		return err
 	}
-	req = req.WithContext(ctx)
+	req = req.WithContext(r.ctx)
 
 	// Connect a stream to the remote server.
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := r.HTTPClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("http: cannot connect to translate store endpoint: %s", err)
+		return fmt.Errorf("http: cannot connect to translate store endpoint: url=%s err=%s", r.URL, err)
 	}
+	r.body = resp.Body
+	r.dec = json.NewDecoder(r.body)
 
-	// Handle error codes or return body as stream.
-	switch resp.StatusCode {
-	case http.StatusOK:
-		return resp.Body, nil
-	case http.StatusNotImplemented:
-		resp.Body.Close()
-		return nil, pilosa.ErrNotImplemented
-	default:
+	// Handle error codes.
+	if resp.StatusCode == http.StatusNotImplemented {
+		r.body.Close()
+		return pilosa.ErrNotImplemented
+	} else if resp.StatusCode != http.StatusOK {
 		body, _ := ioutil.ReadAll(resp.Body)
-		resp.Body.Close()
-		return nil, fmt.Errorf("http: invalid translate store endpoint status: code=%d url=%s body=%q", resp.StatusCode, u.String(), bytes.TrimSpace(body))
+		r.body.Close()
+		return fmt.Errorf("http: invalid translate store endpoint status: code=%d url=%s body=%q", resp.StatusCode, r.URL, bytes.TrimSpace(body))
 	}
+	return nil
+}
+
+// Close stops the reader.
+func (r *TranslateEntryReader) Close() error {
+	if r.cancel != nil {
+		r.cancel()
+	}
+	if r.body != nil {
+		return r.body.Close()
+	}
+	return nil
+}
+
+// ReadEntry reads the next entry from the stream into entry.
+// Returns io.EOF at the end of the stream.
+func (r *TranslateEntryReader) ReadEntry(entry *pilosa.TranslateEntry) error {
+	return r.dec.Decode(&entry)
 }

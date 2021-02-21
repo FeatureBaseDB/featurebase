@@ -147,6 +147,16 @@ func TestRunCountRange(t *testing.T) {
 	c.add(10)
 	c.add(11)
 
+	cnt = c.runCountRange(4, 8)
+	if cnt != 3 {
+		t.Fatalf("should get 3 from range overlaps front of interval, but got: %v", cnt)
+	}
+
+	cnt = c.runCountRange(5, 8)
+	if cnt != 3 {
+		t.Fatalf("should get 3 from range within interval, but got: %v", cnt)
+	}
+
 	cnt = c.runCountRange(6, 8)
 	if cnt != 2 {
 		t.Fatalf("should get 2 from range within interval, but got: %v", cnt)
@@ -160,6 +170,31 @@ func TestRunCountRange(t *testing.T) {
 	cnt = c.runCountRange(9, 14)
 	if cnt != 3 {
 		t.Fatalf("should get 3 from range overlaps back of interval, but got: %v", cnt)
+	}
+
+	cnt = c.runCountRange(8, 10)
+	if cnt != 2 {
+		t.Fatalf("should get 2 from range within interval, but got: %v", cnt)
+	}
+
+	cnt = c.runCountRange(8, 11)
+	if cnt != 3 {
+		t.Fatalf("should get 3 from range within interval, but got: %v", cnt)
+	}
+
+	cnt = c.runCountRange(8, 12)
+	if cnt != 4 {
+		t.Fatalf("should get 4 from range overlaps back of interval, but got: %v", cnt)
+	}
+
+	cnt = c.runCountRange(5, 12)
+	if cnt != 7 {
+		t.Fatalf("should get 7 from interval within range, but got: %v", cnt)
+	}
+
+	cnt = c.runCountRange(5, 11)
+	if cnt != 6 {
+		t.Fatalf("should get 6 from interval equal to range, but got: %v", cnt)
 	}
 
 	c.add(17)
@@ -848,6 +883,221 @@ func TestUnionRunRun(t *testing.T) {
 	}
 }
 
+func TestUnionInterval16InPlace(t *testing.T) {
+	tests := []struct {
+		name      string
+		a         []interval16
+		b         []interval16
+		expected  []interval16
+		expectedN int32
+	}{
+		{
+			name:      "firstBitUnset lastBitSet",
+			a:         []interval16{interval16{1, 10}},
+			b:         []interval16{interval16{10, 10}},
+			expected:  []interval16{interval16{1, 10}},
+			expectedN: 10,
+		},
+		{
+			name:      "single overlap",
+			a:         []interval16{interval16{1, 10}, interval16{21, 28}},
+			b:         []interval16{interval16{8, 12}},
+			expected:  []interval16{interval16{1, 12}, interval16{21, 28}},
+			expectedN: 20,
+		},
+		{
+			name:      "nested intervals",
+			a:         []interval16{interval16{3, 13}, interval16{17, 20}},
+			b:         []interval16{interval16{1, 4}, interval16{6, 7}, interval16{8, 9}, interval16{10, 11}, interval16{14, 17}},
+			expected:  []interval16{interval16{1, 20}},
+			expectedN: 20,
+		},
+		{
+			name:      "no overlap",
+			a:         []interval16{interval16{3, 4}, interval16{7, 8}},
+			b:         []interval16{interval16{1, 2}, interval16{5, 6}, interval16{9, 10}},
+			expected:  []interval16{interval16{1, 10}},
+			expectedN: 10,
+		},
+		{
+			name:      "b in a",
+			a:         []interval16{interval16{1, 10}},
+			b:         []interval16{interval16{5, 7}},
+			expected:  []interval16{interval16{1, 10}},
+			expectedN: 10,
+		},
+		{
+			name:      "a eq b",
+			a:         []interval16{interval16{1, 10}},
+			b:         []interval16{interval16{1, 10}},
+			expected:  []interval16{interval16{1, 10}},
+			expectedN: 10,
+		},
+		{
+			name:      "a in b",
+			a:         []interval16{interval16{5, 7}},
+			b:         []interval16{interval16{1, 10}},
+			expected:  []interval16{interval16{1, 10}},
+			expectedN: 10,
+		},
+		{
+			name:      "a ahead b",
+			a:         []interval16{interval16{1, 2}, interval16{3, 4}, interval16{5, 7}},
+			b:         []interval16{interval16{10, 11}, interval16{12, 13}, interval16{14, 15}},
+			expected:  []interval16{interval16{1, 7}, interval16{10, 15}},
+			expectedN: 13,
+		},
+		{
+			name:      "b ahead a",
+			a:         []interval16{interval16{10, 11}, interval16{12, 13}, interval16{14, 15}},
+			b:         []interval16{interval16{1, 2}, interval16{3, 4}, interval16{5, 7}},
+			expected:  []interval16{interval16{1, 7}, interval16{10, 15}},
+			expectedN: 13,
+		},
+		{
+			name:      "empty a and b",
+			a:         []interval16{},
+			b:         []interval16{},
+			expected:  []interval16{},
+			expectedN: 0,
+		},
+		{
+			name:      "empty a",
+			a:         []interval16{},
+			b:         []interval16{interval16{1, 2}, interval16{3, 4}, interval16{5, 7}},
+			expected:  []interval16{interval16{1, 7}},
+			expectedN: 7,
+		},
+		{
+			name:      "empty b",
+			a:         []interval16{interval16{1, 2}, interval16{3, 4}, interval16{5, 7}},
+			b:         []interval16{},
+			expected:  []interval16{interval16{1, 7}},
+			expectedN: 7,
+		},
+		{
+			name:      "single a",
+			a:         []interval16{interval16{1, 2}},
+			b:         []interval16{},
+			expected:  []interval16{interval16{1, 2}},
+			expectedN: 2,
+		},
+		{
+			name:      "single b",
+			a:         []interval16{},
+			b:         []interval16{interval16{1, 2}},
+			expected:  []interval16{interval16{1, 2}},
+			expectedN: 2,
+		},
+		{
+			name:      "single a single b",
+			a:         []interval16{interval16{3, 4}},
+			b:         []interval16{interval16{1, 2}},
+			expected:  []interval16{interval16{1, 4}},
+			expectedN: 4,
+		},
+		{
+			name:      "oddBitsSet lastBitUnset",
+			a:         []interval16{interval16{1, 1}, interval16{3, 3}, interval16{5, 5}},
+			b:         []interval16{interval16{0, 4}},
+			expected:  []interval16{interval16{0, 5}},
+			expectedN: 6,
+		},
+		{
+			name:      "all bits",
+			a:         []interval16{interval16{1, 1}, interval16{3, 3}, interval16{5, 5}},
+			b:         []interval16{interval16{0, 0}, interval16{2, 2}, interval16{4, 4}},
+			expected:  []interval16{interval16{0, 5}},
+			expectedN: 6,
+		},
+		{
+			name:      "short a long b",
+			a:         []interval16{interval16{5, 5}, interval16{7, 7}, interval16{9, 10}, interval16{12, 12}, interval16{15, 17}, interval16{19, 20}},
+			b:         []interval16{interval16{1, 10}, interval16{12, 12}, interval16{14, 18}},
+			expected:  []interval16{interval16{1, 10}, interval16{12, 12}, interval16{14, 20}},
+			expectedN: 18,
+		},
+		{
+			name:      "common endings",
+			a:         []interval16{interval16{1, 5}, interval16{15, 20}, interval16{25, 35}},
+			b:         []interval16{interval16{1, 10}, interval16{15, 20}, interval16{30, 35}},
+			expected:  []interval16{interval16{1, 10}, interval16{15, 20}, interval16{25, 35}},
+			expectedN: 27,
+		},
+		{
+			name:      "common endings and overlap",
+			a:         []interval16{interval16{1, 5}, interval16{10, 15}},
+			b:         []interval16{interval16{5, 10}, interval16{12, 17}},
+			expected:  []interval16{interval16{1, 17}},
+			expectedN: 17,
+		},
+		{
+			name:      "no common endings and overlap",
+			a:         []interval16{interval16{5, 10}, interval16{12, 17}},
+			b:         []interval16{interval16{0, 11}, interval16{15, 20}},
+			expected:  []interval16{interval16{0, 20}},
+			expectedN: 21,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			bb := make([]interval16, len(tc.b))
+			copy(bb, tc.b)
+
+			runs, n := unionInterval16InPlace(tc.a, tc.b)
+
+			for i, v := range tc.expected {
+				if runs[i] != v {
+					t.Fatalf("runs expected: %+v, got: %+v", tc.expected, runs)
+				}
+			}
+			if n != tc.expectedN {
+				t.Fatalf("N expected: %d, got: %d", tc.expectedN, n)
+			}
+
+			for i, v := range bb {
+				if tc.b[i] != v {
+					t.Fatalf("b changed - runs expected: %+v, got: %+v", bb, tc.b)
+				}
+			}
+		})
+	}
+}
+
+func TestUnionRunRunInPlaceBitwiseCompare(t *testing.T) {
+	runs := []struct {
+		name string
+		run  []interval16
+	}{
+		{name: "FirstBitSet", run: runFirstBitSet()},
+		{name: "LastBitSet", run: runLastBitSet()},
+		{name: "FirstBitUnset", run: runFirstBitUnset()},
+		{name: "LastBitUnset", run: runLastBitUnset()},
+		{name: "InnerBitsSet", run: runInnerBitsSet()},
+		{name: "OuterBitsSet", run: runOuterBitsSet()},
+		{name: "OddBitsSet", run: runOddBitsSet()},
+		{name: "EvenBitsSet", run: runEvenBitsSet()},
+	}
+
+	for _, a := range runs {
+		for _, b := range runs {
+			t.Run(a.name+"-"+b.name, func(t *testing.T) {
+				arun := doContainer(containerRun, a.run)
+				brun := doContainer(containerRun, b.run)
+
+				out1 := unionBitmapRunInPlace(arun.runToBitmap(), brun)
+				out2 := unionRunRunInPlace(arun, brun)
+
+				err := out1.BitwiseCompare(out2.runToBitmap())
+				if err != nil {
+					t.Fatal(err)
+				}
+			})
+		}
+	}
+}
+
 func TestUnionArrayRun(t *testing.T) {
 	a := NewContainerArray(nil)
 	b := NewContainerRun(nil)
@@ -1406,11 +1656,13 @@ func TestDifferenceRunArray(t *testing.T) {
 		}
 	}
 }
+
 func MakeBitmap(start []uint64) []uint64 {
 	b := make([]uint64, bitmapN)
 	copy(b, start)
 	return b
 }
+
 func MakeLastBitSet() []uint64 {
 	obj := NewFileBitmap(65535)
 	c := obj.container(0)
@@ -2418,6 +2670,7 @@ func TestRunBinSearch(t *testing.T) {
 		}
 	}
 }
+
 func TestBitmap_RemoveEmptyContainers(t *testing.T) {
 	bm1 := NewFileBitmap(1<<16, 2<<16, 3<<16)
 	bm2 := NewFileBitmap(1<<16, 2<<16+1, 3<<16)
@@ -3453,28 +3706,6 @@ func newTestBitmapContainer() *Container {
 	return NewContainerBitmap(0, nil)
 }
 
-/*
-// This function exercises an arcane edge case in dead code.
-// It doesn't need to be run right now.
-func TestEquals(t *testing.T) {
-	bma := NewBitmap()
-	bmr := NewBitmap()
-	for i := uint64(0); i < 30; i++ {
-		bma.Add(i)
-		bmr.Add(i)
-	}
-	bmr.Optimize()
-	bmi := bma.Intersect(bmr)
-	err := bitmapsEqual(bmi, bma)
-	if err != nil {
-		t.Fatalf("expected intersection to equal array")
-	}
-	err = bitmapsEqual(bmi, bmr)
-	if err != nil {
-		t.Fatalf("expected intersection to equal run")
-	}
-}
-*/
 func TestShiftArray(t *testing.T) {
 	tests := []struct {
 		array []uint16
@@ -3846,6 +4077,47 @@ func BenchmarkUnionInPlaceRegression(b *testing.B) {
 			bm.UnionInPlace(a1BM, a2BM)
 		}
 	})
+}
+
+func BenchmarkUnionRunRunInPlace(bm *testing.B) {
+	bm.Skip("Skipping long running BenchmarkUnionRunRunInPlace")
+
+	runs := []struct {
+		name string
+		fn   func() []interval16
+	}{
+		{"FirstBitSet", runFirstBitSet},
+		{"LastBitSet", runLastBitSet},
+		{"FirstBitUnset", runFirstBitUnset},
+		{"LastBitUnset", runLastBitUnset},
+		{"InnerBitsSet", runInnerBitsSet},
+		{"OuterBitsSet", runOuterBitsSet},
+		{"OddBitsSet", runOddBitsSet},
+		{"EvenBitsSet", runEvenBitsSet},
+	}
+
+	for _, ar := range runs {
+		for _, br := range runs {
+			bm.Run("RunToBitmapRun-"+ar.name+"_"+br.name, func(bm *testing.B) {
+				for i := 0; i < bm.N; i++ {
+					arun := doContainer(containerRun, ar.fn())
+					brun := doContainer(containerRun, br.fn())
+
+					abmp := arun.runToBitmap()
+					unionBitmapRunInPlace(abmp, brun)
+				}
+			})
+
+			bm.Run("RunRun-"+ar.name+"_"+br.name, func(bm *testing.B) {
+				for i := 0; i < bm.N; i++ {
+					arun := doContainer(containerRun, ar.fn())
+					brun := doContainer(containerRun, br.fn())
+
+					unionRunRunInPlace(arun, brun)
+				}
+			})
+		}
+	}
 }
 
 func TestBitmapAny(t *testing.T) {

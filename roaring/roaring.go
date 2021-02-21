@@ -1147,7 +1147,9 @@ type baseRoaringIterator struct {
 	currentN          int
 	currentLen        int
 	currentPointer    *uint16
-	currentDataOffset uint32
+	currentDataOffset uint64
+	prevOffset32      uint32
+	chunkOffset       uint64
 	lastDataOffset    int64
 	lastErr           error
 }
@@ -1161,6 +1163,8 @@ func (b *baseRoaringIterator) SilenceLint() {
 	_ = b.offsets
 	_ = b.headers
 	_ = b.currentIdx
+	_ = b.chunkOffset
+	_ = b.prevOffset32
 }
 
 type pilosaRoaringIterator struct {
@@ -1196,14 +1200,14 @@ func newOfficialRoaringIterator(data []byte) (*officialRoaringIterator, error) {
 	r.headers = data[headerOffset:offsetOffset]
 	// note: offsets are only actually used with the no-run headers.
 	if r.haveRuns {
-		r.currentDataOffset = uint32(offsetOffset)
+		r.currentDataOffset = uint64(offsetOffset)
 	} else {
 		if len(r.data) < offsetOffset+int(r.keys*4) {
 			return nil, fmt.Errorf("insufficient data for offsets (need %d bytes, found %d)",
 				r.keys*4, len(r.data)-offsetOffset)
 		}
 		r.offsets = data[offsetOffset : offsetOffset+int(r.keys*4)]
-		r.currentDataOffset = uint32(offsetOffset)
+		r.currentDataOffset = uint64(offsetOffset)
 	}
 	// set key to -1; user should call Next first.
 	r.currentIdx = -1
@@ -1247,7 +1251,11 @@ func newPilosaRoaringIterator(data []byte) (*pilosaRoaringIterator, error) {
 	// if there's no containers, we want to act as though data started at the end
 	// of the list of offsets, which was also empty, so we don't think the entire thing
 	// is actually a malformed op
-	r.currentDataOffset = uint32(offsetEnd)
+	r.prevOffset32 = uint32(offsetEnd)
+	r.currentDataOffset = uint64(offsetEnd)
+	// it's possible that there's so many headers that we're actually over
+	// 4GB into the file already.
+	r.chunkOffset = r.currentDataOffset &^ ((1 << 32) - 1)
 	// set key to -1; user should call Next first.
 	r.currentIdx = -1
 	r.currentKey = ^uint64(0)
@@ -1304,7 +1312,12 @@ func (r *pilosaRoaringIterator) Next() (key uint64, cType byte, n int, length in
 	r.currentKey = binary.LittleEndian.Uint64(header[0:8])
 	r.currentType = byte(binary.LittleEndian.Uint16(header[8:10]))
 	r.currentN = int(binary.LittleEndian.Uint16(header[10:12])) + 1
-	r.currentDataOffset = binary.LittleEndian.Uint32(r.offsets[r.currentIdx*4:])
+	offset32 := binary.LittleEndian.Uint32(r.offsets[r.currentIdx*4:])
+	if offset32 < r.prevOffset32 {
+		r.chunkOffset += (1 << 32)
+	}
+	r.prevOffset32 = offset32
+	r.currentDataOffset = r.chunkOffset + uint64(offset32)
 
 	// a run container keeps its data after an initial 2 byte length header
 	var runCount uint16
@@ -1312,7 +1325,7 @@ func (r *pilosaRoaringIterator) Next() (key uint64, cType byte, n int, length in
 		runCount = binary.LittleEndian.Uint16(r.data[r.currentDataOffset : r.currentDataOffset+runCountHeaderSize])
 		r.currentDataOffset += 2
 	}
-	if r.currentDataOffset > uint32(len(r.data)) || r.currentDataOffset < headerBaseSize {
+	if r.currentDataOffset > uint64(len(r.data)) || r.currentDataOffset < headerBaseSize {
 		r.Done(fmt.Errorf("container %d/%d, key %d, had offset %d, maximum %d",
 			r.currentIdx, r.keys, r.currentKey, r.currentDataOffset, len(r.data)))
 		return r.Current()
@@ -1335,7 +1348,7 @@ func (r *pilosaRoaringIterator) Next() (key uint64, cType byte, n int, length in
 			r.currentIdx, r.keys, r.currentKey, r.currentDataOffset, size, len(r.data)))
 		return r.Current()
 	}
-	r.currentDataOffset += uint32(size)
+	r.currentDataOffset += uint64(size)
 	r.lastErr = nil
 	return r.Current()
 }
@@ -1358,7 +1371,7 @@ func (r *officialRoaringIterator) Next() (key uint64, cType byte, n int, length 
 	// with runs, we can't actually look up offsets; the format just stores
 	// things sequentially. so we have to actually track the offset in that case.
 	if !r.haveRuns {
-		r.currentDataOffset = binary.LittleEndian.Uint32(r.offsets[r.currentIdx*4:])
+		r.currentDataOffset = uint64(binary.LittleEndian.Uint32(r.offsets[r.currentIdx*4:]))
 	}
 	// a run container keeps its data after an initial 2 byte length header
 	var runCount uint16
@@ -1371,7 +1384,7 @@ func (r *officialRoaringIterator) Next() (key uint64, cType byte, n int, length 
 		runCount = binary.LittleEndian.Uint16(r.data[r.currentDataOffset : r.currentDataOffset+runCountHeaderSize])
 		r.currentDataOffset += 2
 	}
-	if r.currentDataOffset > uint32(len(r.data)) || r.currentDataOffset < headerBaseSize {
+	if r.currentDataOffset > uint64(len(r.data)) || r.currentDataOffset < headerBaseSize {
 		r.Done(fmt.Errorf("container %d/%d, key %d, had offset %d, maximum %d",
 			r.currentIdx, r.keys, r.currentKey, r.currentDataOffset, len(r.data)))
 		return r.Current()
@@ -1403,7 +1416,7 @@ func (r *officialRoaringIterator) Next() (key uint64, cType byte, n int, length 
 			r.currentIdx, r.keys, r.currentKey, r.currentDataOffset, size, len(r.data)))
 		return r.Current()
 	}
-	r.currentDataOffset += uint32(size)
+	r.currentDataOffset += uint64(size)
 	r.lastErr = nil
 	return r.Current()
 }
@@ -2033,18 +2046,18 @@ func (c *Container) runCountRange(start, end int32) (n int32) {
 			break
 		}
 		// iv is superset of range
-		if int32(iv.start) < start && int32(iv.last) > end {
+		if int32(iv.start) <= start && int32(iv.last) >= end {
 			return end - start
 		}
 		// iv is subset of range
-		if int32(iv.start) >= start && int32(iv.last) < end {
+		if int32(iv.start) >= start && int32(iv.last) <= end {
 			n += iv.runlen()
 		}
-		// iv overlaps beginning of range
+		// iv overlaps beginning of range without being a subset
 		if int32(iv.start) < start && int32(iv.last) < end {
 			n += int32(iv.last) - start + 1
 		}
-		// iv overlaps end of range
+		// iv overlaps end of range without being a subset
 		if int32(iv.start) > start && int32(iv.last) >= end {
 			n += end - int32(iv.start)
 		}
@@ -2183,6 +2196,95 @@ func (c *Container) Contains(v uint16) bool {
 	} else {
 		return c.bitmapContains(v)
 	}
+}
+
+// BitwiseCompare reports whether two containers are equal. It returns
+// an error describing any difference it finds. This is mostly intended
+// for use in tests that expect equality.
+func (c *Container) BitwiseCompare(c2 *Container) error {
+	if c.N() != c2.N() {
+		return errors.New("containers are different lengths")
+	}
+	if c.N() == 0 {
+		return nil
+	}
+	switch typePair(c.typ(), c2.typ()) {
+	case typePair(containerArray, containerArray):
+		return compareArrayArray(c.array(), c2.array())
+	case typePair(containerArray, containerBitmap):
+		return compareArrayBitmap(c.array(), c2.bitmap())
+	case typePair(containerBitmap, containerArray):
+		return compareArrayBitmap(c2.array(), c.bitmap())
+	case typePair(containerArray, containerRun):
+		return compareArrayRuns(c.array(), c2.runs())
+	case typePair(containerRun, containerArray):
+		return compareArrayRuns(c2.array(), c.runs())
+	default:
+		c3 := xor(c, c2)
+		if c3.N() != 0 {
+			return fmt.Errorf("%d bits differenct between containers", c3.N())
+		}
+	}
+	return nil
+}
+
+func typePair(ct1, ct2 byte) int {
+	return int((ct1 << 4) | ct2)
+}
+
+func compareArrayArray(a1, a2 []uint16) error {
+	if len(a1) != len(a2) {
+		return fmt.Errorf("unexpected length mismatch, %d vs %d", len(a1), len(a2))
+	}
+	for i := range a1 {
+		if a1[i] != a2[i] {
+			return fmt.Errorf("item %d: %d vs %d", i, a1[i], a2[i])
+		}
+	}
+	return nil
+}
+
+// compareArrayRuns determines whether an array matches a provided
+// set of runs. As with compareArrayBitmap, it only verifies presence
+// of the array's values in the run collection. the run collection
+// can't be empty; if it were, N would have been 0, and we wouldn't
+// have gotten here.
+func compareArrayRuns(a []uint16, r []interval16) error {
+	ri := 0
+	ru := r[ri]
+	ri++
+	for _, v := range a {
+		if v < ru.start {
+			return fmt.Errorf("value %d missing", v)
+		}
+		if v > ru.last {
+			if ri >= len(r) {
+				return fmt.Errorf("value %d missing", v)
+			}
+			ru = r[ri]
+			ri++
+			// if they're identical, the array value must be
+			// the start of the next run.
+			if v != ru.start {
+				return fmt.Errorf("value %d missing", v)
+			}
+		}
+	}
+	return nil
+}
+
+// compareArrayBitmap actually only verifies that everything in the array
+// is in the bitmap. It's used only after comparing the N for the containers,
+// so if there's anything in the bitmap that's not in the array, either there's
+// something in the array that's not in the bitmap, or we didn't get here.
+func compareArrayBitmap(a []uint16, b []uint64) error {
+	for _, v := range a {
+		w, bit := b[v>>6], v&63
+		if w>>bit&1 == 0 {
+			return fmt.Errorf("value %d missing", v)
+		}
+	}
+	return nil
 }
 
 func (c *Container) bitmapCountRuns() (r int32) {
@@ -2329,8 +2431,7 @@ func (c *Container) unionInPlace(other *Container) *Container {
 			c = c.runToBitmap()
 			return unionBitmapArrayInPlace(c, other)
 		case containerRun:
-			c = c.runToBitmap()
-			return unionBitmapRunInPlace(c, other)
+			return unionRunRunInPlace(c, other)
 		}
 	}
 	if roaringParanoia {
@@ -2445,7 +2546,6 @@ func (c *Container) runRemove(v uint16) (*Container, bool) {
 		runs = append(runs, interval16{})
 		copy(runs[i+2:], runs[i+1:])
 		runs[i+1] = interval16{start: v + 1, last: last}
-		// runs = append(runs[:i+1], append([]interval16{{start: v + 1, last: last}}, runs[i+1:]...)...)
 	}
 	c.setN(c.N() - 1)
 	c.setRuns(runs)
@@ -3823,6 +3923,197 @@ func unionBitmapBitmapInPlace(a, b *Container) *Container {
 		ab[i+3] |= bb[i+3]
 	}
 	return a
+}
+
+// unionRunRunInPlace unions run b into run a, mutating a in place.
+func unionRunRunInPlace(a, b *Container) *Container {
+	a = a.Thaw()
+	runs, n := unionInterval16InPlace(a.runs(), b.runs())
+
+	a.setRuns(runs)
+	a.setN(n)
+	return a
+}
+
+// unioninterval16InPlace merges two slices in place (in a).
+// The main concept is to go value by value (instead of interval by interval)
+// and count `.start` and `.last` points.
+// If we get the `state == 0` it means we just built a new interval (`val`),
+// and we can set it in `a` at the possition `off`
+func unionInterval16InPlace(a, b []interval16) ([]interval16, int32) {
+	n := int32(0)
+	an, bn := len(a), len(b)
+
+	var (
+		// ai - index of a, aii - subindex (0: a[ai].start, 1: a[ai].last).
+		ai, aii int = 0, 0
+
+		// bi - index of b, bii - subindex (0: b[bi].start, 1: b[bi].last).
+		bi, bii int = 0, 0
+
+		// Offset of a - next available index to set.
+		off int = 0
+		// Value to set/append to a at off
+		val interval16
+
+		// Current state - state equals 0 means we are clear (out of intervals)
+		// When we start a new interval we add +1,
+		// when we get out of interval we add  -1.
+		state int
+
+		// mapping: subindex (ii) to state
+		// .start: [0] ->  1
+		// .last:  [1] -> -1
+		iiMap = [2]int{1, -1}
+
+		// If fromB is equal 2 it means that both val.start and val.last come from b,
+		// so we need to extend a, first
+		fromB int8
+
+		// eval functions evaluates global state and value
+		eval = func(arr [2]uint16, ii int, onlyB bool) {
+			if state == 0 && ii == 0 {
+				// we are clear and start a new interval
+				val.start = arr[ii]
+				if onlyB {
+					fromB++
+				}
+			}
+
+			state += iiMap[ii]
+
+			if state == 0 {
+				// we just got out of interval
+				// ii == 1
+				val.last = arr[ii]
+				if onlyB {
+					fromB++
+				}
+			}
+		}
+		// eval2 function is a special variant for eval function
+		// it's only used when two interval endings are equal, e.g.:
+		// a: ------------------|
+		// b:        -----------|
+		// the most important part is to change the global for both endings
+		// before we check if we're getting out of interval and start the new one.
+		eval2 = func(arr [2]uint16, i1, i2 int) {
+			if state == 0 && (i1 == 0 || i2 == 0) {
+				// we are clear and start a new interval
+				val.start = arr[i1]
+
+			}
+
+			state += iiMap[i1]
+			state += iiMap[i2]
+
+			if state == 0 {
+				// (i1 == 1 || i2 == 1)
+				// we just got out of interval
+				val.last = arr[i1]
+			}
+		}
+	)
+
+	for {
+		// av, bv reflects a[ai] and b[bi] intervals as an array,
+		// so we can internally iterate over values (points).
+		var av, bv [2]uint16
+
+		if ai < an && bi < bn {
+			av[0], av[1] = a[ai].start, a[ai].last
+			bv[0], bv[1] = b[bi].start, b[bi].last
+
+			if av[aii] < bv[bii] {
+				// a: |-------------------
+				// b:           |-------------------
+
+				eval(av, aii, false)
+				aii++
+			} else if av[aii] == bv[bii] {
+				// a: |-------------------
+				// b: |-------------------
+				// or
+				// a: ------------------|
+				// b:                   |-------------------
+				// or
+				// a: ------------------|
+				// b:      |------------|
+				// ...
+
+				eval2(av, aii, bii)
+				aii++
+				bii++
+			} else { // bv[bii] < av[aii]
+				// a:           |-------------------
+				// b: |-------------------
+
+				eval(bv, bii, true)
+				bii++
+			}
+		} else if ai < an { // only a left
+			av[0], av[1] = a[ai].start, a[ai].last
+			eval(av, aii, false)
+			aii++
+		} else if bi < bn { // only b left
+			bv[0], bv[1] = b[bi].start, b[bi].last
+			eval(bv, bii, false)
+			bii++
+		} else {
+			break
+		}
+
+		if state == 0 {
+			if fromB == 2 {
+				// val.start and val.last come from b, so we need to extend a, first
+				a = append(a, interval16{})
+				copy(a[off+1:], a[off:])
+				ai++
+				an++
+			}
+			fromB = 0
+			a, off = appendinterval16At(a, val, off)
+			n += int32(val.last) - int32(val.start) + 1
+		}
+
+		if aii == 2 {
+			// move to the next a's interval
+			aii = 0
+			ai++
+		}
+
+		if bii == 2 {
+			// move to the next b's interval
+			bii = 0
+			bi++
+		}
+	}
+
+	if len(a) > 0 {
+		a = a[:off]
+	}
+	return a, n
+}
+
+// appendinterval16At appends or sets val in a at off position
+// The function returns modified a ([]interval16) and new offset (off)
+func appendinterval16At(a []interval16, val interval16, off int) ([]interval16, int) {
+
+	if off > 0 && int32(val.start)-int32(a[off-1].last) <= 1 {
+		a[off-1].last = val.last
+		return a, off
+	}
+
+	if off == len(a) {
+		a = append(a, val)
+		off++
+		return a, off
+	}
+
+	a[off] = val
+	off++
+
+	return a, off
 }
 
 func difference(a, b *Container) *Container {

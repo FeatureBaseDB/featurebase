@@ -30,10 +30,10 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/proto"
-	"github.com/pilosa/pilosa/internal"
-	"github.com/pilosa/pilosa/logger"
-	"github.com/pilosa/pilosa/roaring"
-	"github.com/pilosa/pilosa/tracing"
+	"github.com/pilosa/pilosa/v2/internal"
+	"github.com/pilosa/pilosa/v2/logger"
+	"github.com/pilosa/pilosa/v2/roaring"
+	"github.com/pilosa/pilosa/v2/tracing"
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
 	"golang.org/x/sync/errgroup"
@@ -73,6 +73,14 @@ type Node struct {
 	URI           URI    `json:"uri"`
 	IsCoordinator bool   `json:"isCoordinator"`
 	State         string `json:"state"`
+}
+
+func (n *Node) Clone() *Node {
+	if n == nil {
+		return nil
+	}
+	other := *n
+	return &other
 }
 
 func (n Node) String() string {
@@ -382,6 +390,14 @@ func (c *cluster) addNode(node *Node) error {
 		return nil
 	}
 
+	// If the cluster membership has changed, reset the primary for
+	// translate store replication.
+	if c.holder != nil {
+		if err := c.holder.setPrimaryTranslateStore(c.unprotectedPrimaryReplicaNode()); err != nil {
+			return err
+		}
+	}
+
 	// add to topology
 	if c.Topology == nil {
 		return fmt.Errorf("Cluster.Topology is nil")
@@ -400,6 +416,14 @@ func (c *cluster) addNode(node *Node) error {
 func (c *cluster) removeNode(nodeID string) error {
 	// remove from cluster
 	c.removeNodeBasicSorted(nodeID)
+
+	// If the cluster membership has changed, reset the primary for
+	// translate store replication.
+	if c.holder != nil {
+		if err := c.holder.setPrimaryTranslateStore(c.unprotectedPrimaryReplicaNode()); err != nil {
+			return err
+		}
+	}
 
 	// remove from topology
 	if c.Topology == nil {
@@ -876,6 +900,7 @@ func (c *cluster) ownsShard(nodeID string, index string, shard uint64) bool {
 
 // partitionNodes returns a list of nodes that own a partition. unprotected.
 func (c *cluster) partitionNodes(partitionID int) []*Node {
+
 	// Default replica count to between one and the number of nodes.
 	// The replica count can be zero if there are no nodes.
 	replicaN := c.ReplicaN
@@ -1170,6 +1195,9 @@ func (c *cluster) listenForJoins() {
 // for future lookup by JobID.
 func (c *cluster) unprotectedGenerateResizeJob(nodeAction nodeAction) (*resizeJob, error) {
 	c.logger.Printf("generateResizeJob: %v", nodeAction)
+	if c.currentJob != nil {
+		return nil, fmt.Errorf("there is currently a resize job running")
+	}
 
 	j, err := c.unprotectedGenerateResizeJobByAction(nodeAction)
 	if err != nil {
@@ -1181,9 +1209,6 @@ func (c *cluster) unprotectedGenerateResizeJob(nodeAction nodeAction) (*resizeJo
 	c.jobs[j.ID] = j
 
 	// Set job as currentJob.
-	if c.currentJob != nil {
-		return nil, fmt.Errorf("there is currently a resize job running")
-	}
 	c.currentJob = j
 
 	return j, nil
@@ -1331,7 +1356,7 @@ func (c *cluster) followResizeInstruction(instr *ResizeInstruction) error {
 				// Retrieve field.
 				f := c.holder.Field(src.Index, src.Field)
 				if f == nil {
-					return ErrFieldNotFound
+					return newNotFoundError(ErrFieldNotFound, src.Field)
 				}
 
 				// Create view.
@@ -1918,7 +1943,7 @@ func (c *cluster) nodeStatus() *NodeStatus {
 func (c *cluster) mergeClusterStatus(cs *ClusterStatus) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.logger.Printf("merge cluster status: %v", cs)
+	c.logger.Printf("merge cluster status: node=%s cluster=%v", c.Node.ID, cs)
 	// Ignore status updates from self (coordinator).
 	if c.unprotectedIsCoordinator() {
 		return nil
@@ -1966,10 +1991,6 @@ func (c *cluster) mergeClusterStatus(cs *ClusterStatus) error {
 		}
 	}
 
-	// If the cluster membership has changed, reset the primary for
-	// translate store replication.
-	c.holder.setPrimaryTranslateStore(c.unprotectedPreviousNode())
-
 	c.unprotectedSetState(cs.State)
 
 	c.markAsJoined()
@@ -1993,6 +2014,22 @@ func (c *cluster) unprotectedPreviousNode() *Node {
 	} else {
 		return c.nodes[pos-1]
 	}
+}
+
+// PrimaryReplicaNode returns the node listed before the current node in c.Nodes.
+// This is different than "previous node" as the first node always returns nil.
+func (c *cluster) PrimaryReplicaNode() *Node {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.unprotectedPrimaryReplicaNode()
+}
+
+func (c *cluster) unprotectedPrimaryReplicaNode() *Node {
+	pos := c.nodePositionByID(c.Node.ID)
+	if pos <= 0 {
+		return nil
+	}
+	return c.nodes[pos-1]
 }
 
 // setStatic is unprotected, but only called before the cluster has been started

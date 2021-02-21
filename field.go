@@ -28,12 +28,12 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/proto"
-	"github.com/pilosa/pilosa/internal"
-	"github.com/pilosa/pilosa/logger"
-	"github.com/pilosa/pilosa/pql"
-	"github.com/pilosa/pilosa/roaring"
-	"github.com/pilosa/pilosa/stats"
-	"github.com/pilosa/pilosa/tracing"
+	"github.com/pilosa/pilosa/v2/internal"
+	"github.com/pilosa/pilosa/v2/logger"
+	"github.com/pilosa/pilosa/v2/pql"
+	"github.com/pilosa/pilosa/v2/roaring"
+	"github.com/pilosa/pilosa/v2/stats"
+	"github.com/pilosa/pilosa/v2/tracing"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -73,6 +73,9 @@ type Field struct {
 	// Row attribute storage and cache
 	rowAttrStore AttrStore
 
+	// Key/ID translation store.
+	translateStore TranslateStore
+
 	broadcaster broadcaster
 	Stats       stats.StatsClient
 
@@ -87,6 +90,9 @@ type Field struct {
 	logger logger.Logger
 
 	snapshotQueue chan *fragment
+
+	// Instantiates new translation store on open.
+	OpenTranslateStore OpenTranslateStoreFunc
 }
 
 // FieldOption is a functional option type for pilosa.fieldOptions.
@@ -232,6 +238,8 @@ func newField(path, index, name string, opts FieldOption) (*Field, error) {
 		remoteAvailableShards: roaring.NewBitmap(),
 
 		logger: logger.NopLogger,
+
+		OpenTranslateStore: OpenInMemTranslateStore,
 	}
 	return f, nil
 }
@@ -247,6 +255,9 @@ func (f *Field) Path() string { return f.path }
 
 // RowAttrStore returns the attribute storage.
 func (f *Field) RowAttrStore() AttrStore { return f.rowAttrStore }
+
+// TranslateStore returns the underlying translation store for the field.
+func (f *Field) TranslateStore() TranslateStore { return f.translateStore }
 
 // AvailableShards returns a bitmap of shards that contain data.
 func (f *Field) AvailableShards() *roaring.Bitmap {
@@ -390,7 +401,7 @@ func (f *Field) Options() FieldOptions {
 
 // Open opens and initializes the field.
 func (f *Field) Open() error {
-	if err := func() error {
+	if err := func() (err error) {
 		// Ensure the field's path exists.
 		f.logger.Debugf("ensure field path exists: %s", f.path)
 		if err := os.MkdirAll(f.path, 0777); err != nil {
@@ -423,6 +434,11 @@ func (f *Field) Open() error {
 			return errors.Wrap(err, "opening attrstore")
 		}
 
+		// Instantiate & open translation store.
+		if f.translateStore, err = f.OpenTranslateStore(filepath.Join(f.path, "keys"), f.index, f.name); err != nil {
+			return errors.Wrap(err, "opening translate store")
+		}
+
 		return nil
 	}(); err != nil {
 		f.Close()
@@ -452,10 +468,11 @@ func (f *Field) openViews() error {
 	eg, ctx := errgroup.WithContext(context.Background())
 	var mu sync.Mutex
 
+fileLoop:
 	for _, loopFi := range fis {
 		select {
 		case <-ctx.Done():
-			break
+			break fileLoop
 		default:
 			fi := loopFi
 			if !fi.IsDir() {
@@ -579,12 +596,10 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 		if opt.CacheType != "" {
 			f.options.CacheType = opt.CacheType
 		}
-		if opt.CacheSize != 0 {
-			if opt.CacheType == CacheTypeNone {
-				f.options.CacheSize = 0
-			} else {
-				f.options.CacheSize = opt.CacheSize
-			}
+		if opt.CacheType == CacheTypeNone {
+			f.options.CacheSize = 0
+		} else if opt.CacheSize != 0 {
+			f.options.CacheSize = opt.CacheSize
 		}
 		f.options.Min = 0
 		f.options.Max = 0
@@ -668,6 +683,12 @@ func (f *Field) Close() error {
 		}
 	}
 	f.viewMap = make(map[string]*view)
+
+	if f.translateStore != nil {
+		if err := f.translateStore.Close(); err != nil {
+			return err
+		}
+	}
 
 	return nil
 }
@@ -1269,34 +1290,12 @@ func (f *Field) importValue(columnIDs []uint64, values []int64, options *ImportO
 		return errors.Wrap(ErrBSIGroupNotFound, f.name)
 	}
 
-	// Find the lowest/highest values.
+	// We want to determine the required bit depth, in case the field doesn't
+	// have as many bits currently as would be needed to represent these values,
+	// but only if the values are in-range for the field.
 	var min, max int64
-	for i, value := range values {
-		if i == 0 || value < min {
-			min = value
-		}
-		if i == 0 || value > max {
-			max = value
-		}
-	}
-
-	// Determine the highest bit depth required by the min & max.
-	requiredDepth := bitDepthInt64(min - bsig.Base)
-	if v := bitDepthInt64(max - bsig.Base); v > requiredDepth {
-		requiredDepth = v
-	}
-
-	// Increase bit depth if required.
-	if requiredDepth > bsig.BitDepth {
-		if err := func() error {
-			f.mu.Lock()
-			defer f.mu.Unlock()
-			bsig.BitDepth = requiredDepth
-			f.options.BitDepth = requiredDepth
-			return f.saveMeta()
-		}(); err != nil {
-			return errors.Wrap(err, "increasing bsi bit depth")
-		}
+	if len(values) > 0 {
+		min, max = values[0], values[0]
 	}
 
 	// Split import data by fragment.
@@ -1308,6 +1307,12 @@ func (f *Field) importValue(columnIDs []uint64, values []int64, options *ImportO
 		} else if value < bsig.Min {
 			return fmt.Errorf("%v, columnID=%v, value=%v", ErrBSIGroupValueTooLow, columnID, value)
 		}
+		if value > max {
+			max = value
+		}
+		if value < min {
+			min = value
+		}
 
 		// Attach value to each bsiGroup view.
 		for _, name := range []string{viewName} {
@@ -1317,6 +1322,26 @@ func (f *Field) importValue(columnIDs []uint64, values []int64, options *ImportO
 			data.Values = append(data.Values, value)
 			dataByFragment[key] = data
 		}
+	}
+
+	// Determine the highest bit depth required by the min & max.
+	requiredDepth := bitDepthInt64(min - bsig.Base)
+	if v := bitDepthInt64(max - bsig.Base); v > requiredDepth {
+		requiredDepth = v
+	}
+	// Increase bit depth if required.
+	if requiredDepth > bsig.BitDepth {
+		if err := func() error {
+			f.mu.Lock()
+			defer f.mu.Unlock()
+			bsig.BitDepth = requiredDepth
+			f.options.BitDepth = requiredDepth
+			return f.saveMeta()
+		}(); err != nil {
+			return errors.Wrap(err, "increasing bsi bit depth")
+		}
+	} else {
+		requiredDepth = bsig.BitDepth
 	}
 
 	// Import into each fragment.

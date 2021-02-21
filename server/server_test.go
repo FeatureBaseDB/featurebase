@@ -31,11 +31,11 @@ import (
 	"time"
 
 	"github.com/pelletier/go-toml"
-	"github.com/pilosa/pilosa"
-	"github.com/pilosa/pilosa/http"
-	"github.com/pilosa/pilosa/roaring"
-	"github.com/pilosa/pilosa/server"
-	"github.com/pilosa/pilosa/test"
+	"github.com/pilosa/pilosa/v2"
+	"github.com/pilosa/pilosa/v2/http"
+	"github.com/pilosa/pilosa/v2/roaring"
+	"github.com/pilosa/pilosa/v2/server"
+	"github.com/pilosa/pilosa/v2/test"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -315,6 +315,30 @@ func TestConfig_Parse_DataDir(t *testing.T) {
 		t.Fatal(err)
 	} else if c.DataDir != "/tmp/foo" {
 		t.Fatalf("unexpected data dir: %s", c.DataDir)
+	}
+}
+
+func TestConcurrentFieldCreation(t *testing.T) {
+	cluster := test.MustRunCluster(t, 3)
+	defer cluster.Close()
+
+	api0 := cluster[0].API
+	if _, err := api0.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil {
+		t.Fatalf("creating index: %v", err)
+	}
+	eg := errgroup.Group{}
+	for i := 0; i < 100; i++ {
+		i := i
+		eg.Go(func() error {
+			if _, err := api0.CreateField(context.Background(), "i", fmt.Sprintf("f%d", i)); err != nil {
+				return err
+			}
+			return nil
+		})
+	}
+	err := eg.Wait()
+	if err != nil {
+		t.Fatalf("creating concurrent field: %v", err)
 	}
 }
 

@@ -25,9 +25,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/pilosa/pilosa"
-	"github.com/pilosa/pilosa/http"
-	"github.com/pilosa/pilosa/server"
+	"github.com/pilosa/pilosa/v2"
+	"github.com/pilosa/pilosa/v2/http"
+	"github.com/pilosa/pilosa/v2/server"
 	"github.com/pkg/errors"
 )
 
@@ -80,7 +80,7 @@ func NewImportCommand(stdin io.Reader, stdout, stderr io.Writer) *ImportCommand 
 
 // Run executes the main program execution.
 func (cmd *ImportCommand) Run(ctx context.Context) error {
-	logger := log.New(cmd.Stderr, "", log.LstdFlags)
+	logger := cmd.Logger()
 
 	// Validate arguments.
 	// Index and field are validated early before the files are parsed.

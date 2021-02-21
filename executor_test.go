@@ -31,9 +31,11 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"github.com/pilosa/pilosa"
-	"github.com/pilosa/pilosa/server"
-	"github.com/pilosa/pilosa/test"
+	"github.com/pilosa/pilosa/v2"
+	"github.com/pilosa/pilosa/v2/boltdb"
+	"github.com/pilosa/pilosa/v2/http"
+	"github.com/pilosa/pilosa/v2/server"
+	"github.com/pilosa/pilosa/v2/test"
 	"github.com/pkg/errors"
 )
 
@@ -671,6 +673,52 @@ func TestExecutor_Execute_Clear(t *testing.T) {
 			pilosa.OptFieldKeys())
 		if !responses[0].Results[0].(bool) {
 			t.Fatalf("expected column changed")
+		}
+	})
+
+	t.Run("RowKeyColumnKey_NotClearNot", func(t *testing.T) {
+		writeQuery := `Set("one", f="ten")`
+		readQueries := []string{
+			`Not(Row(f="whatever"))`,
+			`Clear("one", f="whatever")`,
+			`Not(Row(f="whatever")) `,
+			`Clear("one", f="ten")`,
+			`Not(Row(f="whatever")) `,
+		}
+		results := []interface{}{
+			"one",
+			false,
+			"one",
+			true,
+			"one",
+		}
+
+		responses := runCallTest(t, writeQuery, readQueries, &pilosa.IndexOptions{
+			Keys:           true,
+			TrackExistence: true,
+		}, pilosa.OptFieldKeys())
+		for i, resp := range responses {
+			if len(resp.Results) != 1 {
+				t.Fatalf("response %d: len(results) expected: 1, got: %d", i, len(resp.Results))
+			}
+
+			switch r := resp.Results[0].(type) {
+			case bool:
+				if results[i] != r {
+					t.Fatalf("response %d: expected: %v, got: %v", i, results[i], r)
+				}
+
+			case *pilosa.Row:
+				if len(r.Keys) != 1 {
+					t.Fatalf("response %d: len(keys) expected: 1, got: %d", i, len(r.Keys))
+				}
+				if results[i] != r.Keys[0] {
+					t.Fatalf("response %d: expected: %v, got: %v", i, results[i], r.Keys[0])
+				}
+
+			default:
+				t.Fatalf("response %d: expected: %T, got: %T", i, results[i], r)
+			}
 		}
 	})
 }
@@ -2712,7 +2760,12 @@ func TestExecutor_ExecuteOptions(t *testing.T) {
 // Ensure an existence field is maintained.
 func TestExecutor_Execute_Existence(t *testing.T) {
 	t.Run("Row", func(t *testing.T) {
-		c := test.MustRunCluster(t, 1)
+		c := test.MustRunCluster(t, 1, []server.CommandOption{
+			server.OptCommandServerOptions(
+				pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
+				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+			),
+		})
 		defer c.Close()
 		hldr := test.Holder{Holder: c[0].Server.Holder()}
 		index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{TrackExistence: true})

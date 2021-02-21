@@ -28,10 +28,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pilosa/pilosa"
-	"github.com/pilosa/pilosa/encoding/proto"
-	"github.com/pilosa/pilosa/http"
-	"github.com/pilosa/pilosa/server"
+	"github.com/pilosa/pilosa/v2"
+	"github.com/pilosa/pilosa/v2/encoding/proto"
+	"github.com/pilosa/pilosa/v2/http"
+	"github.com/pilosa/pilosa/v2/server"
 	"github.com/pkg/errors"
 )
 
@@ -69,8 +69,10 @@ func newCommand(opts ...server.CommandOption) *Command {
 	m := &Command{commandOptions: opts}
 	m.Command = server.NewCommand(bytes.NewReader(nil), ioutil.Discard, ioutil.Discard, opts...)
 	m.Config.DataDir = path
-	m.Config.Bind = "http://localhost:0"
-	m.Config.Cluster.Disabled = true
+	defaultConf := server.NewConfig()
+	if m.Config.Bind == defaultConf.Bind {
+		m.Config.Bind = "http://localhost:0"
+	}
 	m.Config.Translation.MapSize = 140000
 	m.Config.WorkerPoolSize = 2
 
@@ -94,6 +96,7 @@ func NewCommandNode(isCoordinator bool, opts ...server.CommandOption) *Command {
 func MustRunCommand() *Command {
 	m := newCommand()
 	m.Config.Metric.Diagnostics = false // Disable diagnostics.
+	m.Config.Gossip.Port = "0"
 	if err := m.Start(); err != nil {
 		panic(err)
 	}
@@ -172,11 +175,7 @@ func (m *Command) URL() string { return m.API.Node().URI.String() }
 
 // Client returns a client to connect to the program.
 func (m *Command) Client() *http.InternalClient {
-	client, err := http.NewInternalClient(m.API.Node().URI.HostPort(), http.GetHTTPClient(nil))
-	if err != nil {
-		panic(err)
-	}
-	return client
+	return m.Server.InternalClient().(*http.InternalClient)
 }
 
 // Query executes a query against the program through the HTTP API.
@@ -441,4 +440,24 @@ func CheckGroupBy(t *testing.T, expected, results []pilosa.GroupCount) {
 type httpResponse struct {
 	*gohttp.Response
 	Body string
+}
+
+// RetryUntil repeatedly executes fn until it returns nil or timeout occurs.
+func RetryUntil(timeout time.Duration, fn func() error) (err error) {
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		if err = fn(); err == nil {
+			return nil
+		}
+
+		select {
+		case <-timer.C:
+			return err
+		case <-ticker.C:
+		}
+	}
 }

@@ -21,7 +21,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pilosa/pilosa/pql"
+	"github.com/pilosa/pilosa/v2/pql"
 )
 
 func TestExecutor_TranslateGroupByCall(t *testing.T) {
@@ -34,14 +34,6 @@ func TestExecutor_TranslateGroupByCall(t *testing.T) {
 		t.Fatalf("opening holder: %v", err)
 	}
 
-	e.TranslateStore = e.Holder.translateFile
-	tf, _ := ioutil.TempFile("", "")
-	e.Holder.translateFile.Path = tf.Name()
-	err = e.Holder.translateFile.Open()
-	if err != nil {
-		t.Fatalf("opening translateFile: %v", err)
-	}
-
 	idx, err := e.Holder.CreateIndex("i", IndexOptions{})
 	if err != nil {
 		t.Fatalf("creating index: %v", err)
@@ -52,12 +44,6 @@ func TestExecutor_TranslateGroupByCall(t *testing.T) {
 	_, errc := idx.CreateField("ck", OptFieldKeys())
 	if erra != nil || errb != nil || errc != nil {
 		t.Fatalf("creating fields %v, %v, %v", erra, errb, errc)
-	}
-
-	_, erra = e.TranslateStore.TranslateRowsToUint64("i", "ak", []string{"la"})
-	_, errb = e.TranslateStore.TranslateRowsToUint64("i", "ck", []string{"ha"})
-	if erra != nil || errb != nil {
-		t.Fatalf("translating rows %v, %v", erra, errb)
 	}
 
 	query, err := pql.ParseString(`GroupBy(Rows(ak), Rows(b), Rows(ck), previous=["la", 0, "ha"])`)

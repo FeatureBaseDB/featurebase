@@ -33,8 +33,8 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/davecgh/go-spew/spew"
-	"github.com/pilosa/pilosa/pql"
-	"github.com/pilosa/pilosa/roaring"
+	"github.com/pilosa/pilosa/v2/pql"
+	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pkg/errors"
 )
 
@@ -3363,7 +3363,7 @@ func TestImportMultipleValues(t *testing.T) {
 		cols      []uint64
 		vals      []int64
 		checkCols []uint64
-		checkVals []uint64
+		checkVals []int64
 		depth     uint
 	}{
 		{
@@ -3371,7 +3371,7 @@ func TestImportMultipleValues(t *testing.T) {
 			vals:      []int64{97, 100},
 			depth:     7,
 			checkCols: []uint64{0},
-			checkVals: []uint64{100},
+			checkVals: []int64{100},
 		},
 	}
 
@@ -3395,12 +3395,72 @@ func TestImportMultipleValues(t *testing.T) {
 					if !exists {
 						t.Errorf("column %d should exist", cc)
 					}
-					if n != 100 {
+					if n != cv {
 						t.Errorf("wrong value: %d is not %d", n, cv)
 					}
 				}
 			})
 
+		}
+	}
+}
+
+func TestImportValueRowCache(t *testing.T) {
+	type testCase struct {
+		cols      []uint64
+		vals      []int64
+		checkCols []uint64
+		depth     uint
+	}
+	tests := []struct {
+		tc1 testCase
+		tc2 testCase
+	}{
+		{
+			tc1: testCase{
+				cols:      []uint64{2},
+				vals:      []int64{1},
+				depth:     1,
+				checkCols: []uint64{2},
+			},
+			tc2: testCase{
+				cols:      []uint64{1000},
+				vals:      []int64{1},
+				depth:     1,
+				checkCols: []uint64{2, 1000},
+			},
+		},
+	}
+
+	for i, test := range tests {
+		for _, maxOpN := range []int{1, 10000} {
+			t.Run(fmt.Sprintf("%dMaxOpN%d", i, maxOpN), func(t *testing.T) {
+				f := mustOpenBSIFragment("i", "f", viewBSIGroupPrefix+"foo", 0)
+				f.MaxOpN = maxOpN
+				defer f.Clean(t)
+
+				// First import (tc1)
+				if err := f.importValue(test.tc1.cols, test.tc1.vals, test.tc1.depth, false); err != nil {
+					t.Fatalf("importing values: %v", err)
+				}
+
+				if r, err := f.rangeOp(pql.GT, test.tc1.depth, 0); err != nil {
+					t.Error("getting range of values")
+				} else if !reflect.DeepEqual(r.Columns(), test.tc1.checkCols) {
+					t.Errorf("wrong column values. expected: %v, but got: %v", test.tc1.checkCols, r.Columns())
+				}
+
+				// Second import (tc2)
+				if err := f.importValue(test.tc2.cols, test.tc2.vals, test.tc2.depth, false); err != nil {
+					t.Fatalf("importing values: %v", err)
+				}
+
+				if r, err := f.rangeOp(pql.GT, test.tc2.depth, 0); err != nil {
+					t.Error("getting range of values")
+				} else if !reflect.DeepEqual(r.Columns(), test.tc2.checkCols) {
+					t.Errorf("wrong column values. expected: %v, but got: %v", test.tc2.checkCols, r.Columns())
+				}
+			})
 		}
 	}
 }

@@ -768,7 +768,7 @@ curl -O https://raw.githubusercontent.com/pilosa/getting-started/master/language
 We will also download two text files. One is the `requirements.txt` that will install python-pilosa later on and the other is `languages.txt` which will provide context to the `language` field.
 ```
 curl -O https://raw.githubusercontent.com/pilosa/getting-started/master/python/requirements.txt
-curl -O https://raw.githubusercontent.com/pilosa/getting-started/master/language.txt
+curl -O https://raw.githubusercontent.com/pilosa/getting-started/master/languages.txt
 ```
 We will now create the python environment:
 ```

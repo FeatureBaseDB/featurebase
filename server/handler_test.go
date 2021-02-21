@@ -30,11 +30,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pilosa/pilosa"
-	"github.com/pilosa/pilosa/encoding/proto"
-	"github.com/pilosa/pilosa/http"
-	"github.com/pilosa/pilosa/server"
-	"github.com/pilosa/pilosa/test"
+	"github.com/pilosa/pilosa/v2"
+	"github.com/pilosa/pilosa/v2/boltdb"
+	"github.com/pilosa/pilosa/v2/encoding/proto"
+	"github.com/pilosa/pilosa/v2/http"
+	"github.com/pilosa/pilosa/v2/server"
+	"github.com/pilosa/pilosa/v2/test"
 )
 
 func TestHandler_PostSchemaCluster(t *testing.T) {
@@ -513,7 +514,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i0/query", strings.NewReader(`Row(row=30)`)))
 		if w.Code != gohttp.StatusBadRequest {
 			t.Fatalf("unexpected status code: %d", w.Code)
-		} else if body := w.Body.String(); body != `{"error":"executing: map reduce: field not found"}`+"\n" {
+		} else if body := w.Body.String(); body != `{"error":"executing: map reduce: row: field not found"}`+"\n" {
 			t.Fatalf("unexpected body: %q", body)
 		}
 	})
@@ -530,7 +531,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		var resp pilosa.QueryResponse
 		if err := cmd.API.Serializer.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 			t.Fatal(err)
-		} else if s := resp.Err.Error(); s != `executing: map reduce: field not found` {
+		} else if s := resp.Err.Error(); s != `executing: map reduce: row: field not found` {
 			t.Fatalf("unexpected error: %s", s)
 		}
 	})
@@ -914,7 +915,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		h.ServeHTTP(w, r)
 		if w.Code != gohttp.StatusNotFound {
 			t.Errorf("unexpected status code: %d", w.Code)
-		} else if w.Body.String() != `{"success":false,"error":{"message":"deleting field: field not found"}}`+"\n" {
+		} else if w.Body.String() != `{"success":false,"error":{"message":"deleting field: fld1: field not found"}}`+"\n" {
 			t.Errorf("unexpected body: %q", w.Body.String())
 		}
 
@@ -934,7 +935,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		h.ServeHTTP(w, r)
 		if w.Code != gohttp.StatusNotFound {
 			t.Errorf("unexpected status code: %d", w.Code)
-		} else if w.Body.String() != `{"success":false,"error":{"message":"deleting index: index not found"}}`+"\n" {
+		} else if w.Body.String() != `{"success":false,"error":{"message":"deleting index: idx1: index not found"}}`+"\n" {
 			t.Errorf("unexpected body: %q", w.Body.String())
 		}
 	})
@@ -1033,10 +1034,10 @@ func TestClusterTranslator(t *testing.T) {
 	if err != nil {
 		t.Fatalf("starting cluster 1: %v", err)
 	}
-	httpTranslateStore := http.NewTranslateStore(cluster[0].URL())
 	cluster[1] = test.NewCommandNode(false,
 		server.OptCommandServerOptions(
-			pilosa.OptServerPrimaryTranslateStore(httpTranslateStore),
+			pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
+			pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
 		),
 	)
 	cluster[1].Config.Gossip.Port = "0"
@@ -1051,14 +1052,16 @@ func TestClusterTranslator(t *testing.T) {
 
 	test.MustDo("POST", cluster[0].URL()+"/index/i0/query", "Set(\"foo\", f0=\"bar\")")
 
-	// wait for key to replicate to second node
-	time.Sleep(500 * time.Millisecond)
-
-	result0 := test.MustDo("POST", cluster[0].URL()+"/index/i0/query", "Row(f0=\"bar\")").Body
-	result1 := test.MustDo("POST", cluster[1].URL()+"/index/i0/query", "Row(f0=\"bar\")").Body
-
-	if result0 != result1 {
-		t.Fatalf("`%s` != `%s`", result0, result1)
+	var result0, result1 string
+	if err := test.RetryUntil(2*time.Second, func() error {
+		result0 = test.MustDo("POST", cluster[0].URL()+"/index/i0/query", "Row(f0=\"bar\")").Body
+		result1 = test.MustDo("POST", cluster[1].URL()+"/index/i0/query", "Row(f0=\"bar\")").Body
+		if result0 != result1 {
+			return fmt.Errorf("`%s` != `%s`", result0, result1)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
 	}
 
 	for _, i := range []string{result0, result1} {
