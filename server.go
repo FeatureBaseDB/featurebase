@@ -600,8 +600,10 @@ func (s *Server) receiveMessage(m Message) error {
 		if idx == nil {
 			return fmt.Errorf("local index not found: %s", obj.Index)
 		}
-		opt := obj.Meta
-		_, err := idx.createField(obj.Field, *opt)
+		_, err := idx.CreateField(obj.Field, func(fo *FieldOptions) error {
+			*fo = *obj.Meta
+			return nil
+		})
 		if err != nil {
 			return err
 		}
