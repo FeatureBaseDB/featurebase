@@ -462,12 +462,13 @@ func (s Serializer) encodeImportRoaringRequest(m *pilosa.ImportRoaringRequest) *
 		i++
 	}
 	return &internal.ImportRoaringRequest{
-		IndexCreatedAt: m.IndexCreatedAt,
-		FieldCreatedAt: m.FieldCreatedAt,
-		Clear:          m.Clear,
-		Action:         m.Action,
-		Block:          uint64(m.Block),
-		Views:          views,
+		IndexCreatedAt:  m.IndexCreatedAt,
+		FieldCreatedAt:  m.FieldCreatedAt,
+		Clear:           m.Clear,
+		Action:          m.Action,
+		Block:           uint64(m.Block),
+		Views:           views,
+		UpdateExistence: m.UpdateExistence,
 	}
 }
 
@@ -1256,6 +1257,7 @@ func (s Serializer) decodeImportRoaringRequest(pb *internal.ImportRoaringRequest
 	m.Views = views
 	m.IndexCreatedAt = pb.IndexCreatedAt
 	m.FieldCreatedAt = pb.FieldCreatedAt
+	m.UpdateExistence = pb.UpdateExistence
 }
 
 func (s Serializer) decodeImportColumnAttrsRequest(pb *internal.ImportColumnAttrsRequest, m *pilosa.ImportColumnAttrsRequest) {
