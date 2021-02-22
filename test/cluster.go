@@ -81,6 +81,7 @@ func (c *Cluster) QueryGRPC(t testing.TB, index, query string) *proto.TableRespo
 	if err != nil {
 		t.Fatalf("getting GRPC client: %v", err)
 	}
+	defer grpcClient.Close()
 
 	tableResp, err := grpcClient.QueryUnary(context.Background(), index, query)
 	if err != nil {
