@@ -238,6 +238,27 @@ func newFragment(holder *Holder, spec fragSpec, shard uint64, flags byte) *fragm
 // cachePath returns the path to the fragment's cache data.
 func (f *fragment) cachePath() string { return f.path() + cacheExt }
 
+func (f *fragment) bitDepth() (uint64, error) {
+	var maxBitDepth uint64
+
+	tx, err := f.holder.BeginTx(false, f.idx, f.shard)
+	if err != nil {
+		return 0, errors.Wrapf(err, "beginning new tx(false, %s, %d)", f.index(), f.shard)
+	}
+	defer tx.Rollback()
+
+	maxRowID, _, err := f.maxRow(tx, nil)
+	if err != nil {
+		return 0, errors.Wrapf(err, "getting fragment max row id")
+	}
+
+	//if maxRowID+1 > bsiOffsetBit {
+	if maxRowID+1-bsiOffsetBit > maxBitDepth {
+		maxBitDepth = uint64(maxRowID + 1 - bsiOffsetBit)
+	}
+	return maxBitDepth, nil
+}
+
 type FragmentInfo struct {
 	BitmapInfo     roaring.BitmapInfo
 	BlockChecksums []FragmentBlock `json:"BlockChecksums,omitempty"`

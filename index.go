@@ -227,6 +227,19 @@ func (i *Index) open(idx *disco.Index) (err error) {
 		return errors.Wrap(err, "opening fields")
 	}
 
+	// Set bit depths.
+	// This is called in Index.open() (as opposed to Field.Open()) because the
+	// Field.bitDepth() method uses a transaction which relies on the index and
+	// its entry for the field in the Index.field map. If we try to set a
+	// field's BitDepth in Field.Open(), which itself might be inside the
+	// Index.openField() loop, then the field has not yet been added to the
+	// Index.field map. I think it would be better if Field.bitDepth didn't rely
+	// on its index at all, but perhaps with transactions that not possible. I
+	// don't know.
+	if err := i.setFieldBitDepths(); err != nil {
+		return errors.Wrap(err, "setting field bitDepths")
+	}
+
 	if i.trackExistence {
 		if err := i.openExistenceField(); err != nil {
 			return errors.Wrap(err, "opening existence field")
@@ -408,6 +421,26 @@ func (i *Index) openExistenceField() error {
 		return errors.Wrap(err, "creating existence field")
 	}
 	i.existenceFld = f
+	return nil
+}
+
+// setFieldBitDepths sets the BitDepth for all int and decimal fields in the index.
+func (i *Index) setFieldBitDepths() error {
+	for name, f := range i.fields {
+		switch f.Type() {
+		case FieldTypeInt, FieldTypeDecimal:
+			// pass
+		default:
+			continue
+		}
+		bd, err := f.bitDepth()
+		if err != nil {
+			return errors.Wrapf(err, "getting bit depth for field: %s", name)
+		}
+		f.mu.Lock()
+		f.options.BitDepth = bd
+		f.mu.Unlock()
+	}
 	return nil
 }
 
@@ -724,11 +757,6 @@ func (i *Index) createField(cfm *CreateFieldMessage, broadcast bool) (*Field, er
 	// Open field.
 	if err := f.Open(); err != nil {
 		return nil, errors.Wrap(err, "opening")
-	}
-
-	if err := f.saveMeta(); err != nil {
-		f.Close()
-		return nil, errors.Wrap(err, "saving meta")
 	}
 
 	// Add to index's field lookup.

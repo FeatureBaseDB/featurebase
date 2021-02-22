@@ -30,9 +30,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/v2/disco"
-	"github.com/pilosa/pilosa/v2/internal"
 	"github.com/pilosa/pilosa/v2/pql"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/stats"
@@ -591,6 +589,7 @@ func (f *Field) Open() error {
 				return errors.Wrap(err, "checking foreign index")
 			}
 		}
+
 		f.availableShardChan = make(chan []byte)
 		f.doneChan = make(chan struct{})
 		f.wg.Add(1)
@@ -709,6 +708,28 @@ func (f *Field) ForeignIndex() string {
 	return f.options.ForeignIndex
 }
 
+func (f *Field) bitDepth() (uint64, error) {
+	var maxBitDepth uint64
+
+	view2shards := f.idx.fieldView2shard.getViewsForField(f.name)
+	for name, shardset := range view2shards {
+		view := f.view(name)
+		if view == nil {
+			continue
+		}
+
+		bd, err := view.bitDepth(shardset.shards())
+		if err != nil {
+			return 0, errors.Wrapf(err, "getting view(%s) bit depth", name)
+		}
+		if bd > maxBitDepth {
+			maxBitDepth = bd
+		}
+	}
+
+	return maxBitDepth, nil
+}
+
 // openViews opens and initializes the views inside the field.
 func (f *Field) openViews() error {
 	view2shards := f.idx.fieldView2shard.getViewsForField(f.name)
@@ -727,32 +748,6 @@ func (f *Field) openViews() error {
 		f.holder.Logger.Debugf("add index/field/view to field.viewMap: %s/%s/%s", f.index, f.name, view.name)
 		f.viewMap[view.name] = view
 	}
-	return nil
-}
-
-// saveMeta writes meta data for the field.
-func (f *Field) saveMeta() error {
-	path := filepath.Join(f.path, ".meta")
-	// Create a temporary file to marshal to.
-	tempPath := f.path + tempExt
-
-	// Marshal metadata.
-	fo := f.options
-	buf, err := proto.Marshal(fo.encode())
-	if err != nil {
-		return errors.Wrap(err, "marshaling")
-	}
-
-	// Write to meta file.
-	if err := ioutil.WriteFile(tempPath, buf, 0666); err != nil {
-		return errors.Wrap(err, "writing meta")
-	}
-
-	// Move temp file to data file location.
-	if err := os.Rename(tempPath, path); err != nil {
-		return fmt.Errorf("rename temp: %s", err)
-	}
-
 	return nil
 }
 
@@ -1291,22 +1286,16 @@ func (f *Field) SetValue(tx Tx, columnID uint64, value int64) (changed bool, err
 
 	// Increase bit depth value if the unsigned value is greater.
 	if requiredBitDepth > bsig.BitDepth {
-		if err := func() error {
-			f.mu.Lock()
-			defer f.mu.Unlock()
-
-			uvalue := uint64(baseValue)
-			if value < 0 {
-				uvalue = uint64(-baseValue)
-			}
-			bitDepth := bitDepth(uvalue)
-
-			bsig.BitDepth = bitDepth
-			f.options.BitDepth = bitDepth
-			return f.saveMeta()
-		}(); err != nil {
-			return false, errors.Wrap(err, "increasing bsi max")
+		uvalue := uint64(baseValue)
+		if value < 0 {
+			uvalue = uint64(-baseValue)
 		}
+		bitDepth := bitDepth(uvalue)
+
+		f.mu.Lock()
+		bsig.BitDepth = bitDepth
+		f.options.BitDepth = bitDepth
+		f.mu.Unlock()
 	}
 
 	// Fetch target view.
@@ -1607,20 +1596,14 @@ func (f *Field) importValue(qcx *Qcx, columnIDs []uint64, values []int64, option
 		requiredDepth = v
 	}
 	// Increase bit depth if required.
-	if err := func() error {
+	bitDepth := bsig.BitDepth
+	if requiredDepth > bitDepth {
 		f.mu.Lock()
-		defer f.mu.Unlock()
-		bitDepth := bsig.BitDepth
-		if requiredDepth > bitDepth {
-			bsig.BitDepth = requiredDepth
-			f.options.BitDepth = requiredDepth
-			return f.saveMeta()
-		} else {
-			requiredDepth = bitDepth
-		}
-		return nil
-	}(); err != nil {
-		return errors.Wrap(err, "increasing bsi bit depth")
+		bsig.BitDepth = requiredDepth
+		f.options.BitDepth = requiredDepth
+		f.mu.Unlock()
+	} else {
+		requiredDepth = bitDepth
 	}
 
 	// Import into each fragment.
@@ -1812,31 +1795,6 @@ func applyDefaultOptions(o *FieldOptions) FieldOptions {
 		o.CacheSize = DefaultCacheSize
 	}
 	return *o
-}
-
-// encode converts o into its internal representation.
-func (o *FieldOptions) encode() *internal.FieldOptions {
-	return encodeFieldOptions(o)
-}
-
-func encodeFieldOptions(o *FieldOptions) *internal.FieldOptions {
-	if o == nil {
-		return nil
-	}
-	return &internal.FieldOptions{
-		Type:           o.Type,
-		CacheType:      o.CacheType,
-		CacheSize:      o.CacheSize,
-		Base:           o.Base,
-		Scale:          o.Scale,
-		BitDepth:       uint64(o.BitDepth),
-		Min:            &internal.Decimal{Value: o.Min.Value, Scale: o.Min.Scale},
-		Max:            &internal.Decimal{Value: o.Max.Value, Scale: o.Max.Scale},
-		TimeQuantum:    string(o.TimeQuantum),
-		Keys:           o.Keys,
-		NoStandardView: o.NoStandardView,
-		ForeignIndex:   o.ForeignIndex,
-	}
 }
 
 // MarshalJSON marshals FieldOptions to JSON such that

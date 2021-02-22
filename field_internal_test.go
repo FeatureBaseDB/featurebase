@@ -922,3 +922,36 @@ func TestBSIGroup_TxReopenDB(t *testing.T) {
 	// the test: can we re-open a BSI fragment under Tx store
 	_ = f.Reopen()
 }
+
+// Ensure that an integer field has the same BitDepth after reopening.
+func TestField_SaveMeta(t *testing.T) {
+	f := OpenField(t, OptFieldTypeInt(-10, 1000))
+	defer f.Close()
+
+	colID := uint64(1)
+	val := int64(88)
+	expBitDepth := uint64(7)
+
+	// Obtain transaction.
+	tx := f.idx.holder.txf.NewTx(Txo{Write: writable, Index: f.idx, Field: f.Field, Shard: 0})
+	defer tx.Rollback()
+
+	if changed, err := f.SetValue(tx, colID, val); err != nil {
+		t.Fatal(err)
+	} else if !changed {
+		t.Fatal("expected SetValue to return changed = true")
+	}
+
+	if f.options.BitDepth != expBitDepth {
+		t.Fatalf("expected BitDepth after set to be: %d, got: %d", expBitDepth, f.options.BitDepth)
+	}
+
+	// Reload field and verify that it is persisted.
+	if err := f.Reopen(); err != nil {
+		t.Fatal(err)
+	}
+
+	if f.options.BitDepth != expBitDepth {
+		t.Fatalf("expected BitDepth after reopen to be: %d, got: %d", expBitDepth, f.options.BitDepth)
+	}
+}

@@ -575,6 +575,28 @@ func (v *view) rangeOp(qcx *Qcx, op pql.Token, bitDepth uint64, predicate int64)
 	return r, nil
 }
 
+func (v *view) bitDepth(shards []uint64) (uint64, error) {
+	var maxBitDepth uint64
+
+	for _, shard := range shards {
+		frag, ok := v.fragments[shard]
+		if !ok || frag == nil {
+			continue
+		}
+
+		bd, err := frag.bitDepth()
+		if err != nil {
+			return 0, errors.Wrapf(err, "getting fragment(%d) bit depth", shard)
+		}
+
+		if bd > maxBitDepth {
+			maxBitDepth = bd
+		}
+	}
+
+	return maxBitDepth, nil
+}
+
 // ViewInfo represents schema information for a view.
 type ViewInfo struct {
 	Name string `json:"name"`

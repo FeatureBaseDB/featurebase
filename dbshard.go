@@ -255,7 +255,7 @@ func newIndex2Shards() (r map[txtype]map[string]*shardSet) {
 }
 
 type shardSet struct {
-	shards    map[uint64]bool
+	shardsMap map[uint64]bool
 	shardsVer int64 // increment with each change.
 
 	// give out readonly to repeated consumers if
@@ -272,11 +272,11 @@ func (a *shardSet) unionInPlace(b *shardSet) {
 }
 
 func (a *shardSet) equals(b *shardSet) bool {
-	if len(a.shards) != len(b.shards) {
+	if len(a.shardsMap) != len(b.shardsMap) {
 		return false
 	}
-	for shardInA := range a.shards {
-		_, ok := b.shards[shardInA]
+	for shardInA := range a.shardsMap {
+		_, ok := b.shardsMap[shardInA]
 		if !ok {
 			return false
 		}
@@ -285,9 +285,17 @@ func (a *shardSet) equals(b *shardSet) bool {
 
 }
 
+func (a *shardSet) shards() []uint64 {
+	s := make([]uint64, 0, len(a.shardsMap))
+	for si := range a.shardsMap {
+		s = append(s, si)
+	}
+	return s
+}
+
 func (ss *shardSet) String() (r string) {
 	r = "["
-	for k := range ss.shards {
+	for k := range ss.shardsMap {
 		r += fmt.Sprintf("%v, ", k)
 	}
 	r += "]"
@@ -295,9 +303,9 @@ func (ss *shardSet) String() (r string) {
 }
 
 func (ss *shardSet) add(shard uint64) {
-	_, already := ss.shards[shard]
+	_, already := ss.shardsMap[shard]
 	if !already {
-		ss.shards[shard] = true
+		ss.shardsMap[shard] = true
 		ss.shardsVer++
 	}
 }
@@ -318,7 +326,7 @@ func (ss *shardSet) CloneMaybe() map[uint64]bool {
 	// must make a fully new copy here.
 	ss.readonly = make(map[uint64]bool)
 
-	for k, v := range ss.shards {
+	for k, v := range ss.shardsMap {
 		ss.readonly[k] = v
 	}
 	ss.readonlyVer = ss.shardsVer
@@ -327,12 +335,12 @@ func (ss *shardSet) CloneMaybe() map[uint64]bool {
 
 func newShardSet() *shardSet {
 	return &shardSet{
-		shards: make(map[uint64]bool),
+		shardsMap: make(map[uint64]bool),
 	}
 }
 func newShardSetFromMap(m map[uint64]bool) *shardSet {
 	return &shardSet{
-		shards:    m,
+		shardsMap: m,
 		shardsVer: 1,
 	}
 }
