@@ -239,8 +239,6 @@ func newFragment(holder *Holder, spec fragSpec, shard uint64, flags byte) *fragm
 func (f *fragment) cachePath() string { return f.path() + cacheExt }
 
 func (f *fragment) bitDepth() (uint64, error) {
-	var maxBitDepth uint64
-
 	tx, err := f.holder.BeginTx(false, f.idx, f.shard)
 	if err != nil {
 		return 0, errors.Wrapf(err, "beginning new tx(false, %s, %d)", f.index(), f.shard)
@@ -252,11 +250,10 @@ func (f *fragment) bitDepth() (uint64, error) {
 		return 0, errors.Wrapf(err, "getting fragment max row id")
 	}
 
-	//if maxRowID+1 > bsiOffsetBit {
-	if maxRowID+1-bsiOffsetBit > maxBitDepth {
-		maxBitDepth = uint64(maxRowID + 1 - bsiOffsetBit)
+	if maxRowID+1 > bsiOffsetBit {
+		return maxRowID + 1 - bsiOffsetBit, nil
 	}
-	return maxBitDepth, nil
+	return 0, nil
 }
 
 type FragmentInfo struct {
