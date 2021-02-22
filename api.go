@@ -423,9 +423,10 @@ func importWorker(importWork chan importJob) {
 					case RequestActionSet:
 						fileMagic := uint32(binary.LittleEndian.Uint16(viewData[0:2]))
 						data := viewData
-						if fileMagic != roaring.MagicNumber { // if pilosa roaring format
-							// must make a copy of data to operate on locally on standard roaring format.
-							// field.importRoaring changes the standard roaring run format to pilosa roaring
+						if fileMagic != roaring.MagicNumber {
+							// if the view data arrives is in the "standard" roaring format, we must
+							// make a copy of data in order allow for the convertion to the pilosa roaring run format
+							// in field.importRoaring
 							data = make([]byte, len(viewData))
 							copy(data, viewData)
 						}
