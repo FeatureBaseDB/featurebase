@@ -123,6 +123,11 @@ type Holder struct {
 	// opened before their foreign index has opened.
 	foreignIndexFields []*Field
 
+	// Queue of messages to broadcast in bulk when the cluster comes up.
+	// This is wrong, but. . . yeah.
+	startMsgs   []Message
+	startMsgsMu sync.Mutex
+
 	// opening is set to true while Holder is opening.
 	// It's used to determine if foreign index application
 	// needs to be queued and completed after all indexes
@@ -718,6 +723,27 @@ func (h *Holder) Open() error {
 
 }
 
+func (h *Holder) sendOrSpool(msg Message) error {
+	if h.maybeSpool(msg) {
+		return nil
+	}
+
+	return h.broadcaster.SendSync(msg)
+}
+
+func (h *Holder) maybeSpool(msg Message) bool {
+	h.startMsgsMu.Lock()
+	defer h.startMsgsMu.Unlock()
+
+	if h.startMsgs == nil {
+		// Startup is done.
+		return false
+	}
+
+	h.startMsgs = append(h.startMsgs, msg)
+	return true
+}
+
 // Activate runs the background tasks relevant to keeping a holder in a stable
 // state, such as scanning it for needed snapshots, or flushing caches. This
 // is separate from opening because, while a server would nearly always want
@@ -954,7 +980,7 @@ func (h *Holder) applySchema(schema *Schema) error {
 	}
 
 	// Send the load schema message to all nodes.
-	if err := h.broadcaster.SendSync(&LoadSchemaMessage{}); err != nil {
+	if err := h.sendOrSpool(&LoadSchemaMessage{}); err != nil {
 		return errors.Wrap(err, "sending LoadSchemaMessage")
 	}
 

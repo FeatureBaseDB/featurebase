@@ -767,7 +767,7 @@ func (i *Index) createField(cfm *CreateFieldMessage, broadcast bool) (*Field, er
 
 	if broadcast {
 		// Send the create field message to all nodes.
-		if err := i.broadcaster.SendSync(cfm); err != nil {
+		if err := i.holder.sendOrSpool(cfm); err != nil {
 			return nil, errors.Wrap(err, "sending CreateField message")
 		}
 	}

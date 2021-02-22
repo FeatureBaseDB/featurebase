@@ -340,7 +340,6 @@ func (v *view) CreateFragmentIfNotExists(shard uint64) (*fragment, error) {
 }
 
 func (v *view) notifyIfNewShard(shard uint64) {
-
 	// if single node, don't bother serializing only to drop it b/c
 	// we won't send to ourselves.
 	srv, ok := v.broadcaster.(*Server)
@@ -355,24 +354,22 @@ func (v *view) notifyIfNewShard(shard uint64) {
 	broadcastChan := make(chan struct{})
 
 	go func() {
-		msg := &CreateShardMessage{
+		err := v.holder.sendOrSpool(&CreateShardMessage{
 			Index: v.index,
 			Field: v.field,
 			Shard: shard,
-		}
-		// Broadcast a message that a new max shard was just created.
-		err := v.broadcaster.SendSync(msg)
+		})
 		if err != nil {
 			v.holder.Logger.Printf("broadcasting create shard: %v", err)
 		}
 		close(broadcastChan)
 	}()
 
-	// We want to wait until the broadcast is complete, but what if it
-	// takes a really long time? So we time out.
+	timer := time.NewTimer(50 * time.Millisecond)
 	select {
 	case <-broadcastChan:
-	case <-time.After(50 * time.Millisecond):
+		timer.Stop()
+	case <-timer.C:
 		v.holder.Logger.Debugf("broadcasting create shard took >50ms")
 	}
 }
