@@ -2282,7 +2282,7 @@ func (b *Bitmap) ImportRoaringBits(data []byte, clear bool, log bool, rowSize ui
 func (b *Bitmap) MergeRoaringRawIteratorIntoExists(itr RoaringIterator, rowSize uint64) error {
 
        if itr == nil {
-               return errors.New("bad roaring iterator, but don't know why")
+               return errors.New("nil RoaringIterator passed to MergeRoaringRawIteratorIntoExists")
        }
        var synthC Container
        importUpdater := func(oldC *Container, existed bool) (newC *Container, write bool) {
