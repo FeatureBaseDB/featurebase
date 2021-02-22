@@ -26,8 +26,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/disco"
 	"github.com/pilosa/pilosa/v2/roaring"
+	"github.com/pilosa/pilosa/v2/testhook"
 	"github.com/pilosa/pilosa/v2/topology"
 	"github.com/pkg/errors"
 	"go.etcd.io/etcd/clientv3"
@@ -100,6 +102,7 @@ func NewEtcd(opt Options, replicas int) *Etcd {
 
 // Close implements io.Closer
 func (e *Etcd) Close() error {
+	_ = testhook.Closed(pilosa.NewAuditor(), e, nil)
 	if e.e != nil {
 		if e.resizeCancel != nil {
 			e.resizeCancel()
@@ -153,10 +156,11 @@ func parseOptions(opt Options) *embed.Config {
 	if opt.ClusterURL != "" {
 		cfg.ClusterState = embed.ClusterStateFlagExisting
 
-		cli, err := clientv3.NewFromURL(opt.ClusterURL)
+		t, err := clientv3.NewFromURL(opt.ClusterURL)
 		if err != nil {
 			panic(err)
 		}
+		cli := &hookedClient{Client: t}
 		defer cli.Close()
 
 		log.Println("Cluster Members:")
@@ -183,6 +187,7 @@ func (e *Etcd) Start(ctx context.Context) (disco.InitialClusterState, error) {
 	if err != nil {
 		return state, errors.Wrap(err, "starting etcd")
 	}
+	_ = testhook.Opened(pilosa.NewAuditor(), e, nil)
 	e.e = etcd
 
 	select {
@@ -205,12 +210,11 @@ func (e *Etcd) startHeartbeat() error {
 	}
 	defer cli.Close()
 
-	heartbeatID, heartbeatFunc, err := e.leaseKeepAlive(e.options.HeartbeatTTL)
+	heartbeatID, ctx, heartbeatCancel, err := e.leaseKeepAlive(context.Background(), e.options.HeartbeatTTL)
 	if err != nil {
 		return errors.Wrap(err, "startHeartbeat: creates a new hearbeat")
 	}
 
-	ctx, heartbeatCancel := context.WithCancel(context.Background())
 	key, value := heartbeatPrefix+e.e.Server.ID().String(), disco.ClusterStateStarting
 	if e.e.Config().ClusterState == embed.ClusterStateFlagExisting {
 		value = disco.ClusterStateResizing
@@ -222,7 +226,6 @@ func (e *Etcd) startHeartbeat() error {
 	}
 
 	e.heartbeatID, e.heartbeatCancel = heartbeatID, heartbeatCancel
-	go heartbeatFunc(ctx, time.Second)
 
 	return nil
 }
@@ -237,7 +240,7 @@ func (e *Etcd) NodeState(ctx context.Context, peerID string) (disco.NodeState, e
 	return e.nodeState(ctx, cli, peerID)
 }
 
-func (e *Etcd) nodeState(ctx context.Context, cli *clientv3.Client, peerID string) (disco.NodeState, error) {
+func (e *Etcd) nodeState(ctx context.Context, cli *hookedClient, peerID string) (disco.NodeState, error) {
 	resp, err := cli.Get(ctx, path.Join(resizePrefix, peerID), clientv3.WithCountOnly())
 	if err != nil {
 		return disco.NodeStateUnknown, err
@@ -387,12 +390,11 @@ func (e *Etcd) Resize(ctx context.Context) (func([]byte) error, error) {
 	}
 	defer cli.Close()
 
-	resizeID, resizeFunc, err := e.leaseKeepAlive(e.options.HeartbeatTTL)
+	resizeID, ctx, resizeCancel, err := e.leaseKeepAlive(ctx, e.options.HeartbeatTTL)
 	if err != nil {
 		return nil, errors.Wrap(err, "Resize: creates a new hearbeat")
 	}
 
-	ctx, resizeCancel := context.WithCancel(ctx)
 	// Check if key exists - maybe we are still resizing
 	key := path.Join(resizePrefix, e.e.Server.ID().String())
 	txnResp, err := cli.Txn(ctx).
@@ -410,7 +412,6 @@ func (e *Etcd) Resize(ctx context.Context) (func([]byte) error, error) {
 	}
 
 	e.resizeCancel = resizeCancel
-	go resizeFunc(ctx, time.Second)
 
 	return func(value []byte) error {
 		log.Println("Update progress:", key, string(value))
@@ -811,37 +812,45 @@ func (e *Etcd) delKey(ctx context.Context, key string, withPrefix bool) error {
 	return err
 }
 
-func (e *Etcd) leaseKeepAlive(ttl int64) (clientv3.LeaseID, func(context.Context, time.Duration), error) {
+// leaseKeepAlive creates a lease with the given ttl (treated as a time.Duration),
+// then refreshes it periodically, and cancels it when done. it yields the lease ID,
+// and also a context and cancelfunc that can be used to abort the heartbeat.
+func (e *Etcd) leaseKeepAlive(ctx context.Context, ttl int64) (clientv3.LeaseID, context.Context, context.CancelFunc, error) {
 	cli, err := e.client()
 	if err != nil {
-		return 0, nil, errors.Wrap(err, "leaseKeepAlive: creates a new client")
+		return 0, nil, nil, errors.Wrap(err, "leaseKeepAlive: creates a new client")
 	}
 	defer cli.Close()
 
-	leaseResp, err := cli.Grant(context.TODO(), ttl)
+	ctx, cancelFunc := context.WithCancel(ctx)
+
+	leaseResp, err := cli.Grant(ctx, ttl)
 	if err != nil {
-		return 0, nil, errors.Wrapf(err, "leaseKeepAlive: creates a new lease (TTL: %v)", ttl)
+		cancelFunc()
+		return 0, nil, nil, errors.Wrapf(err, "leaseKeepAlive: creates a new lease (TTL: %v)", ttl)
 	}
 
-	keepaliveFunc := func(ctx context.Context, tick time.Duration) {
+	keepaliveFunc := func(tick time.Duration) {
 		ticker := time.NewTicker(tick)
 		defer ticker.Stop()
 
 		for {
 			select {
 			case <-ctx.Done():
-				log.Printf("leaseKeepAlive: %v\n", ctx.Err())
-
+				// Because of the load balancer, this can take ridiculously
+				// long times to run if the cluster's already down when we get
+				// here, resulting in massive piles of excess goroutines.
+				revoker, cancel := context.WithTimeout(context.Background(), time.Duration(ttl))
+				defer cancel()
 				if cli, err := e.client(); err != nil {
 					log.Printf("leaseKeepAlive: creates a new client: %v\n", err)
 				} else {
-					if _, err := cli.Revoke(context.Background(), leaseResp.ID); err != nil {
-						log.Printf("leaseKeepAlive: revokes the lease (ID: %x): %v\n", leaseResp.ID, err)
+					if _, err := cli.Revoke(revoker, leaseResp.ID); err != nil {
+						log.Printf("leaseKeepAlive: revokes the lease (ID: %x): %#v\n", leaseResp.ID, err)
 					}
 					cli.Close()
 				}
 				return
-
 			case <-ticker.C:
 				if cli, err := e.client(); err != nil {
 					log.Printf("leaseKeepAlive: creates a new client: %v\n", err)
@@ -854,11 +863,21 @@ func (e *Etcd) leaseKeepAlive(ttl int64) (clientv3.LeaseID, func(context.Context
 			}
 		}
 	}
+	go keepaliveFunc(1 * time.Second)
 
-	return leaseResp.ID, keepaliveFunc, nil
+	return leaseResp.ID, ctx, cancelFunc, nil
 }
 
-func (e *Etcd) client() (*clientv3.Client, error) {
+type hookedClient struct {
+	*clientv3.Client
+}
+
+func (h *hookedClient) Close() {
+	_ = testhook.Closed(pilosa.NewAuditor(), h.Client, nil)
+	h.Client.Close()
+}
+
+func (e *Etcd) client() (*hookedClient, error) {
 	urls := e.e.Server.Cluster().ClientURLs()
 
 	cli, err := clientv3.NewFromURLs(urls)
@@ -866,10 +885,11 @@ func (e *Etcd) client() (*clientv3.Client, error) {
 		return nil, errors.Wrapf(err, "creates a new etcd client from URLs (%v)", urls)
 	}
 
-	return cli, nil
+	_ = testhook.Opened(pilosa.NewAuditor(), cli, nil)
+	return &hookedClient{Client: cli}, nil
 }
 
-func memberList(cli *clientv3.Client) (ids []uint64, names []string, urls []string) {
+func memberList(cli *hookedClient) (ids []uint64, names []string, urls []string) {
 	ml, err := cli.MemberList(context.TODO())
 	if err != nil {
 		panic(err)
@@ -885,7 +905,7 @@ func memberList(cli *clientv3.Client) (ids []uint64, names []string, urls []stri
 	return
 }
 
-func memberAdd(cli *clientv3.Client, peerURL string) (id uint64, name string) {
+func memberAdd(cli *hookedClient, peerURL string) (id uint64, name string) {
 	ma, err := cli.MemberAdd(context.TODO(), []string{peerURL})
 	if err != nil {
 		return 0, ""
@@ -905,7 +925,7 @@ func (e *Etcd) Shards(ctx context.Context, index, field string) (*roaring.Bitmap
 	return e.shards(ctx, cli, index, field)
 }
 
-func (e *Etcd) shards(ctx context.Context, cli *clientv3.Client, index, field string) (*roaring.Bitmap, error) {
+func (e *Etcd) shards(ctx context.Context, cli *hookedClient, index, field string) (*roaring.Bitmap, error) {
 	key := path.Join(shardPrefix, index, field)
 
 	// Get the current shards for the field.
@@ -948,7 +968,7 @@ func (e *Etcd) AddShards(ctx context.Context, index, field string, shards *roari
 	// }
 
 	// Create a session to acquire a lock.
-	sess, _ := concurrency.NewSession(cli)
+	sess, _ := concurrency.NewSession(cli.Client)
 	defer sess.Close()
 
 	muKey := path.Join(lockPrefix, index, field)
@@ -1013,7 +1033,7 @@ func (e *Etcd) AddShard(ctx context.Context, index, field string, shard uint64) 
 	// write shards to etcd.
 
 	// Create a session to acquire a lock.
-	sess, _ := concurrency.NewSession(cli)
+	sess, _ := concurrency.NewSession(cli.Client)
 	defer sess.Close()
 
 	muKey := path.Join(lockPrefix, index, field)
@@ -1082,7 +1102,7 @@ func (e *Etcd) RemoveShard(ctx context.Context, index, field string, shard uint6
 	// write shards to etcd.
 
 	// Create a session to acquire a lock.
-	sess, _ := concurrency.NewSession(cli)
+	sess, _ := concurrency.NewSession(cli.Client)
 	defer sess.Close()
 
 	muKey := path.Join(lockPrefix, index, field)
