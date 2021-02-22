@@ -73,30 +73,15 @@ func (s *memAttrStore) BlockData(i uint64) (map[uint64]map[string]interface{}, e
 }
 
 func TestAPI_CombineForExistence(t *testing.T) {
-	bm := roaring.NewBitmap()
-	_, err := bm.Add(pos(1, 1))
-	panicOn(err)
-	_, err = bm.Add(pos(1, 2))
-	panicOn(err)
-	_, err = bm.Add(pos(1, 65537)) //make sure to cross container boundary
-	panicOn(err)
-	_, err = bm.Add(pos(1, 65538))
-	panicOn(err)
-	_, err = bm.Add(pos(2, 1))
-	panicOn(err)
-	_, err = bm.Add(pos(2, 2))
-	panicOn(err)
-	_, err = bm.Add(pos(2, 65537))
-	panicOn(err)
-	_, err = bm.Add(pos(2, 65538))
-	panicOn(err)
-
+	bm := roaring.NewBitmap(pos(1, 1), pos(1, 2), pos(1, 65537), pos(1, 65538), pos(2, 1), pos(2, 2), pos(2, 65537), pos(2, 65538))
 	buf := new(bytes.Buffer)
-	_, err = bm.WriteTo(buf)
+	_, err := bm.WriteTo(buf)
 	panicOn(err)
 	raw := buf.Bytes()
 	results, err := combineForExistence(raw)
-	panicOn(err)
+	if err != nil {
+		t.Fatalf("failure to combine: %v", err)
+	}
 	bm2 := roaring.NewBitmap()
 	_, _, err = bm2.ImportRoaringBits(results, false, false, 1<<shardVsContainerExponent)
 	panicOn(err)
