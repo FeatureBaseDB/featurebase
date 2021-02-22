@@ -7013,6 +7013,17 @@ func variousQueries(t *testing.T, clusterSize int) {
 		{"icecream", "userF"},
 	})
 
+	// Create and populate "dinner" field.
+	c.CreateField(t, "users", pilosa.IndexOptions{Keys: true, TrackExistence: true}, "dinner", pilosa.OptFieldKeys())
+	c.ImportKeyKey(t, "users", "dinner", [][2]string{
+		{"leftovers", "userB"},
+		{"pizza", "userA"},
+		{"pizza", "userB"},
+		{"chinese", "userA"},
+		{"chinese", "userB"},
+		{"chinese", "userF"},
+	})
+
 	// Create and populate "places_visited" time field.
 	c.CreateField(t, "users", pilosa.IndexOptions{Keys: true, TrackExistence: true}, "places_visited", pilosa.OptFieldKeys(), pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YM")))
 	ts2019Jan01 := int64(1546300800) * 1e+9 // 2019 January 1st 0:00:00
@@ -7388,6 +7399,12 @@ pangolin,1,100
 0,1,1
 5,1,1
 10,1,1
+`,
+		},
+		{
+			query: "GroupBy(Rows(field=dinner), sort=\"count desc\", limit=2)",
+			csvVerifier: `chinese,3
+pizza,2
 `,
 		},
 	}
