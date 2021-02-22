@@ -465,7 +465,7 @@ func importWorker(importWork chan importJob) {
 	}
 }
 
-// merge all rows to singled existence row
+// combineForExistence unions all rows in the fragment to be imported into a single row to update the existence field. TODO: It would probably be more efficient to only unmarshal the input data once, and use the calculated existence Bitmap directly rather than returning it to bytes, but most of our ingest paths update existence separately, so it's more important that this just be obviously correct at the moment.
 func combineForExistence(inputRoaringData []byte) ([]byte, error) {
 	rowSize := uint64(1 << shardVsContainerExponent)
 	rit, err := roaring.NewRoaringIterator(inputRoaringData)
