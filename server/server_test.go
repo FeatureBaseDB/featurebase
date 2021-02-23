@@ -412,8 +412,8 @@ func TestTransactionsAPI(t *testing.T) {
 	}
 
 	// can't fetch transactions from non-coordinator
-	if _, err := other.Transactions(ctx); err != pilosa.ErrNodeNotCoordinator {
-		t.Errorf("api1 should return ErrNodeNotCoordinator when asked for transactions but got: %v", err)
+	if _, err := other.Transactions(ctx); err != pilosa.ErrNodeNotPrimary {
+		t.Errorf("api1 should return ErrNodeNotPrimary when asked for transactions but got: %v", err)
 	}
 
 	// can start transaction
@@ -443,8 +443,8 @@ func TestTransactionsAPI(t *testing.T) {
 	}
 
 	// can't finish transaction on non-coordinator
-	if _, err := other.FinishTransaction(ctx, id, false); err != pilosa.ErrNodeNotCoordinator {
-		t.Errorf("unexpected error is not ErrNodeNotCoordinator: %v", err)
+	if _, err := other.FinishTransaction(ctx, id, false); err != pilosa.ErrNodeNotPrimary {
+		t.Errorf("unexpected error is not ErrNodeNotPrimary: %v", err)
 	}
 
 	// can finish transaction

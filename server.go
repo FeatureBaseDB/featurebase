@@ -1110,7 +1110,7 @@ func (srv *Server) StartTransaction(ctx context.Context, id string, timeout time
 	snap := topology.NewClusterSnapshot(srv.cluster.noder, srv.cluster.Hasher, srv.cluster.partitionN)
 	node := srv.node()
 	if !remote && !snap.IsPrimaryFieldTranslationNode(node.ID) && len(srv.cluster.Nodes()) > 1 {
-		return nil, ErrNodeNotCoordinator
+		return nil, ErrNodeNotPrimary
 	}
 	if remote && (snap.IsPrimaryFieldTranslationNode(node.ID) || len(srv.cluster.Nodes()) == 1) {
 		return nil, errors.New("unexpected remote start call to coordinator or single node cluster")
@@ -1157,7 +1157,7 @@ func (srv *Server) FinishTransaction(ctx context.Context, id string, remote bool
 	snap := topology.NewClusterSnapshot(srv.cluster.noder, srv.cluster.Hasher, srv.cluster.partitionN)
 	node := srv.node()
 	if !remote && !snap.IsPrimaryFieldTranslationNode(node.ID) && len(srv.cluster.Nodes()) > 1 {
-		return nil, ErrNodeNotCoordinator
+		return nil, ErrNodeNotPrimary
 	}
 	if remote && (snap.IsPrimaryFieldTranslationNode(node.ID) || len(srv.cluster.Nodes()) == 1) {
 		return nil, errors.New("unexpected remote finish call to coordinator or single node cluster")
@@ -1187,7 +1187,7 @@ func (srv *Server) Transactions(ctx context.Context) (map[string]*Transaction, e
 	snap := topology.NewClusterSnapshot(srv.cluster.noder, srv.cluster.Hasher, srv.cluster.partitionN)
 	node := srv.node()
 	if !snap.IsPrimaryFieldTranslationNode(node.ID) && len(srv.cluster.Nodes()) > 1 {
-		return nil, ErrNodeNotCoordinator
+		return nil, ErrNodeNotPrimary
 	}
 
 	return srv.holder.Transactions(ctx)
@@ -1198,7 +1198,7 @@ func (srv *Server) GetTransaction(ctx context.Context, id string, remote bool) (
 
 	node := srv.node()
 	if !remote && !snap.IsPrimaryFieldTranslationNode(node.ID) && len(srv.cluster.Nodes()) > 1 {
-		return nil, ErrNodeNotCoordinator
+		return nil, ErrNodeNotPrimary
 	}
 
 	if remote && (snap.IsPrimaryFieldTranslationNode(node.ID) || len(srv.cluster.Nodes()) == 1) {

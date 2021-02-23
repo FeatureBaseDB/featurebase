@@ -1510,7 +1510,7 @@ func (h *Handler) handleGetTransactionList(w http.ResponseWriter, r *http.Reques
 	trnsMap, err := h.api.Transactions(r.Context())
 	if err != nil {
 		switch errors.Cause(err) {
-		case pilosa.ErrNodeNotCoordinator:
+		case pilosa.ErrNodeNotPrimary:
 			http.Error(w, err.Error(), http.StatusBadRequest)
 		default:
 			http.Error(w, "problem getting transactions: "+err.Error(), http.StatusInternalServerError)
@@ -1545,7 +1545,7 @@ func (h *Handler) handleGetTransactions(w http.ResponseWriter, r *http.Request) 
 	trnsMap, err := h.api.Transactions(r.Context())
 	if err != nil {
 		switch errors.Cause(err) {
-		case pilosa.ErrNodeNotCoordinator:
+		case pilosa.ErrNodeNotPrimary:
 			http.Error(w, err.Error(), http.StatusBadRequest)
 		default:
 			http.Error(w, "problem getting transactions: "+err.Error(), http.StatusInternalServerError)
@@ -1567,7 +1567,7 @@ type TransactionResponse struct {
 func (h *Handler) doTransactionResponse(w http.ResponseWriter, err error, trns *pilosa.Transaction) {
 	if err != nil {
 		switch errors.Cause(err) {
-		case pilosa.ErrNodeNotCoordinator, pilosa.ErrTransactionExists:
+		case pilosa.ErrNodeNotPrimary, pilosa.ErrTransactionExists:
 			w.WriteHeader(http.StatusBadRequest)
 		case pilosa.ErrTransactionExclusive:
 			w.WriteHeader(http.StatusConflict)
@@ -2117,7 +2117,7 @@ func (h *Handler) handlePostClusterResizeAbort(w http.ResponseWriter, r *http.Re
 	var msg string
 	if err != nil {
 		switch errors.Cause(err) {
-		case pilosa.ErrNodeNotCoordinator:
+		case pilosa.ErrNodeNotPrimary:
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		case pilosa.ErrResizeNotRunning:

@@ -121,7 +121,7 @@ func errToStatusError(err error) error {
 	case pilosa.ErrClusterDoesNotOwnShard,
 		pilosa.ErrResizeNoReplicas,
 		pilosa.ErrResizeNotRunning,
-		pilosa.ErrNodeNotCoordinator,
+		pilosa.ErrNodeNotPrimary,
 		pilosa.ErrTooManyWrites,
 		pilosa.ErrNodeIDNotExists:
 		return status.Error(codes.Internal, err.Error())

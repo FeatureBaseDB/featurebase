@@ -75,10 +75,10 @@ var (
 	// ErrPreconditionFailed is returned when specified index/field createdAt timestamps don't match
 	ErrPreconditionFailed = errors.New("precondition failed")
 
-	ErrNodeIDNotExists    = errors.New("node with provided ID does not exist")
-	ErrNodeNotCoordinator = errors.New("node is not the coordinator")
-	ErrResizeNotRunning   = errors.New("no resize job currently running")
-	ErrResizeNoReplicas   = errors.New("not enough data to perform resize (replica factor may need to be increased)")
+	ErrNodeIDNotExists  = errors.New("node with provided ID does not exist")
+	ErrNodeNotPrimary   = errors.New("node is not the primary")
+	ErrResizeNotRunning = errors.New("no resize job currently running")
+	ErrResizeNoReplicas = errors.New("not enough data to perform resize (replica factor may need to be increased)")
 
 	ErrNotImplemented            = errors.New("not implemented")
 	ErrFieldsArgumentRequired    = errors.New("fields argument required")
