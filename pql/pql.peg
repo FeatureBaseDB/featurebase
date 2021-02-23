@@ -14,6 +14,7 @@ Call <-  "Set" {p.startCall("Set")} open col comma args (comma timestamp)? close
        / "Store" {p.startCall("Store")} open Call comma arg close {p.endCall()}
        / "TopN" {p.startCall("TopN")} open posfield (comma allargs)? close {p.endCall()}
        / "TopK" {p.startCall("TopK")} open posfield (comma allargs)? close {p.endCall()}
+       / "Percentile" {p.startCall("Percentile")} open posfield (comma allargs)? close {p.endCall()}       
        / "Rows" {p.startCall("Rows")} open posfield (comma allargs)? close {p.endCall()}
        / "Range" {p.startCall("Range")} open field eq value comma 'from='? {p.addField("from")} timestampfmt {p.addVal(text)} comma 'to='? sp {p.addField("to")} timestampfmt {p.addVal(text)} close {p.endCall()}
        / < IDENT > { p.startCall(text) } open allargs comma? close { p.endCall() }

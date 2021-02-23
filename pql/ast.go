@@ -433,6 +433,14 @@ var callInfoByFunc = map[string]callInfo{
 
 	// things that take _field
 	"TopN": allowUnderField,
+	"Percentile": {
+		allowUnknown: false,
+		prototypes: map[string]interface{}{
+			"field":  "",
+			"filter": nil,
+			"nth":    nil,
+		},
+	},
 	// special cases:
 	"Clear": {
 		allowUnknown: true,
