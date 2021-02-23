@@ -1359,7 +1359,7 @@ func TestClientTransactions(t *testing.T) {
 
 	// non-coordinator
 	if trns, err := client1.StartTransaction(context.Background(), "blah", time.Minute, false); err == nil ||
-		!strings.Contains(err.Error(), pilosa.ErrNodeNotCoordinator.Error()) {
+		!strings.Contains(err.Error(), pilosa.ErrNodeNotPrimary.Error()) {
 		t.Fatalf("unexpected error starting on non-coordinator: %v", err)
 	} else {
 		test.CompareTransactions(t,
