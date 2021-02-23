@@ -1322,15 +1322,14 @@ func (e *executor) executePercentile(ctx context.Context, qcx *Qcx, index string
 		return ValCount{}, errors.Wrap(err, "executing Max call for Percentile")
 	}
 	// set up reusables
-	countQuery, _ := pql.ParseString("Count(Row(fld < 0))")
+	countQuery, _ := pql.ParseString(fmt.Sprintf("Count(Row(%s < 0))", fieldName))
 	countCall := countQuery.Calls[0]
-	rangeQuery, _ := pql.ParseString("Row(fld < 0)")
-	rangeCall := rangeQuery.Calls[0]
+	rangeCall := countCall.Children[0]
 
 	min, max := minVal.Val, maxVal.Val
 	// estimate nth val, eg median when nth=0.5
 	for min < max {
-		possibleNthVal := (max - min) / 2
+		possibleNthVal := (max + min) / 2
 		// get left count
 		rangeCall.Args[fieldName] = &pql.Condition{
 			Op:    pql.Token(pql.LT),

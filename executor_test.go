@@ -6896,7 +6896,7 @@ func variousQueriesOnPercentiles(t *testing.T, clusterSize int) {
 		// Rows
 		{
 			query:       `Percentile(field="net_worth", nth=0.5)`,
-			csvVerifier: "10,1\n",
+			csvVerifier: "40,1\n",
 		},
 	}
 
