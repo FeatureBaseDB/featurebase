@@ -6871,23 +6871,19 @@ func variousQueriesOnPercentiles(t *testing.T, clusterSize int) {
 	// get binned to the same hour
 	c.CreateField(t, "users", pilosa.IndexOptions{Keys: true, TrackExistence: true}, "net_worth", pilosa.OptFieldTypeInt(-1000, 1000))
 	c.ImportIntKey(t, "users", "net_worth", []test.IntKey{
-		{Key: "user1", Val: 1},
-		{Key: "user2", Val: 2},
-		{Key: "user3", Val: 3},
-		{Key: "user4", Val: 4},
-		{Key: "user5", Val: 5},
-		{Key: "user6", Val: 6},
-		{Key: "user7", Val: 7},
+		{Key: "user1", Val: 10},
+		{Key: "user2", Val: 20},
+		{Key: "user3", Val: 30},
+		{Key: "user4", Val: 40},
+		{Key: "user5", Val: 50},
+		{Key: "user6", Val: 60},
+		{Key: "user7", Val: 70},
 	})
 
 	splitSortBackToCSV := func(csvStr string) string {
 		ss := strings.Split(csvStr[:len(csvStr)-1], "\n")
 		sort.Strings(ss)
 		return strings.Join(ss, "\n") + "\n"
-	}
-
-	toCSV := func(s string) string {
-		return strings.Join(strings.Split(s, " "), "\n") + "\n"
 	}
 
 	type testCase struct {
@@ -6900,7 +6896,7 @@ func variousQueriesOnPercentiles(t *testing.T, clusterSize int) {
 		// Rows
 		{
 			query:       `Percentile(field="net_worth", nth=0.5)`,
-			csvVerifier: toCSV("4"),
+			csvVerifier: "10,1\n",
 		},
 	}
 

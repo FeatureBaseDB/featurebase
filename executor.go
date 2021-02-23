@@ -830,6 +830,9 @@ func (e *executor) executeCall(ctx context.Context, qcx *Qcx, index string, c *p
 	case "Limit":
 		res, err := e.executeLimitCall(ctx, qcx, index, c, shards, opt)
 		return res, errors.Wrapf(err, "executeLimitCall %v", shardSlice(shards))
+	case "Percentile":
+		res, err := e.executePercentile(ctx, qcx, index, c, shards, opt)
+		return res, errors.Wrapf(err, "executePercentile %v", shardSlice(shards))
 	default: // e.g. "Row", "Union", "Intersect" or anything that returns a bitmap.
 		statFn()
 		res, err := e.executeBitmapCall(ctx, qcx, index, c, shards, opt)
@@ -1291,6 +1294,79 @@ func (e *executor) executeMax(ctx context.Context, qcx *Qcx, index string, c *pq
 		return ValCount{}, nil
 	}
 	return other, nil
+}
+
+// executePercentile executes a Percentile() call.
+func (e *executor) executePercentile(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *execOptions) (_ ValCount, err error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executePercentile")
+	defer span.Finish()
+
+	if field := c.Args["field"]; field == "" {
+		return ValCount{}, errors.New("Percentile(): field required")
+	}
+	fieldName, _, _ := c.StringArg("field")
+
+	// get min
+	q, _ := pql.ParseString(fmt.Sprintf(`Min(field="%s")`, fieldName))
+	minCall := q.Calls[0]
+	minVal, err := e.executeMin(ctx, qcx, index, minCall, shards, opt)
+	if err != nil {
+		return ValCount{}, errors.Wrap(err, "executing Min call for Percentile")
+	}
+
+	// get max
+	q, _ = pql.ParseString(fmt.Sprintf(`Max(field="%s")`, fieldName))
+	maxCall := q.Calls[0]
+	maxVal, err := e.executeMax(ctx, qcx, index, maxCall, shards, opt)
+	if err != nil {
+		return ValCount{}, errors.Wrap(err, "executing Max call for Percentile")
+	}
+	// set up reusables
+	countQuery, _ := pql.ParseString("Count(Row(fld < 0))")
+	countCall := countQuery.Calls[0]
+	rangeQuery, _ := pql.ParseString("Row(fld < 0)")
+	rangeCall := rangeQuery.Calls[0]
+
+	min, max := minVal.Val, maxVal.Val
+	// estimate nth val, eg median when nth=0.5
+	for min < max {
+		possibleNthVal := (max - min) / 2
+		// get left count
+		rangeCall.Args[fieldName] = &pql.Condition{
+			Op:    pql.Token(pql.LT),
+			Value: possibleNthVal,
+		}
+		countCall.Children = []*pql.Call{rangeCall}
+		leftCountUint64, err := e.executeCount(ctx, qcx, index, countCall, shards, opt)
+		if err != nil {
+			return ValCount{}, errors.Wrap(err, "executing Count call L for Percentile")
+		}
+		leftCount := int64(leftCountUint64)
+
+		// get right count
+		rangeCall.Args[fieldName] = &pql.Condition{
+			Op:    pql.Token(pql.GT),
+			Value: possibleNthVal,
+		}
+		countCall.Children = []*pql.Call{rangeCall}
+		rightCountUint64, err := e.executeCount(ctx, qcx, index, countCall, shards, opt)
+		if err != nil {
+			return ValCount{}, errors.Wrap(err, "executing Count call R for Percentile")
+		}
+		rightCount := int64(rightCountUint64)
+
+		// binary search
+		if leftCount > rightCount {
+			max = possibleNthVal - 1
+		} else if leftCount < rightCount {
+			min = possibleNthVal + 1
+		} else {
+			return ValCount{Val: possibleNthVal, Count: 1}, nil
+		}
+	}
+
+	return ValCount{Val: min, Count: 1}, nil
+
 }
 
 // executeMinRow executes a MinRow() call.
