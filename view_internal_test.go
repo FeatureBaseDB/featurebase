@@ -40,7 +40,7 @@ func mustOpenView(tb testing.TB, index, field, name string) *view {
 	cim := &CreateIndexMessage{
 		Index:     index,
 		CreatedAt: 0,
-		Meta:      &IndexOptions{},
+		Meta:      IndexOptions{},
 	}
 
 	idx, err := h.createIndex(cim, false)

@@ -17,7 +17,6 @@ package pilosa
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sort"
@@ -25,9 +24,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/v2/disco"
-	"github.com/pilosa/pilosa/v2/internal"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/stats"
 	"github.com/pilosa/pilosa/v2/testhook"
@@ -57,7 +54,7 @@ type Index struct {
 	columnAttrs AttrStore
 
 	broadcaster broadcaster
-	schemator   disco.Schemator
+	Schemator   disco.Schemator
 	serializer  Serializer
 	Stats       stats.StatsClient
 
@@ -102,7 +99,7 @@ func NewIndex(holder *Holder, path, name string) (*Index, error) {
 		holder:         holder,
 		trackExistence: true,
 
-		schemator:  disco.InMemSchemator,
+		Schemator:  disco.InMemSchemator,
 		serializer: NopSerializer,
 
 		translateStores: make(map[int]TranslateStore),
@@ -183,20 +180,33 @@ func (i *Index) Open() error {
 // OpenWithSchema opens the index and uses the provided schema to verify that
 // the index's fields are expected.
 func (i *Index) OpenWithSchema(idx *disco.Index) error {
+	if idx == nil {
+		return ErrInvalidSchema
+	}
+
+	// decode the CreateIndexMessage from the schema data in order to
+	// get its metadata.
+	cim, err := decodeCreateIndexMessage(i.serializer, idx.Data)
+	if err != nil {
+		return errors.Wrap(err, "decoding create index message")
+	}
+	i.createdAt = cim.CreatedAt
+	i.trackExistence = cim.Meta.TrackExistence
+	i.keys = cim.Meta.Keys
+
 	return i.open(idx)
 }
 
+// open opens the index with an optional schema (disco.Index). If a schema is
+// provided, it will apply the metadata from the schema to the index, and then
+// open all fields found in the schema. If a schema is not provided, the
+// metadata for the index is not changed from its existing value, and fields are
+// not validated against the schema as they are opened.
 func (i *Index) open(idx *disco.Index) (err error) {
 	// Ensure the path exists.
 	i.holder.Logger.Debugf("ensure index path exists: %s", i.path)
 	if err := os.MkdirAll(i.path, 0777); err != nil {
 		return errors.Wrap(err, "creating directory")
-	}
-
-	// Read meta file.
-	i.holder.Logger.Debugf("load meta file for index: %s", i.name)
-	if err := i.loadMeta(); err != nil {
-		return errors.Wrap(err, "loading meta file")
 	}
 
 	// we don't want to open *all* the views for each shard, since
@@ -209,9 +219,25 @@ func (i *Index) open(idx *disco.Index) (err error) {
 	}
 	i.fieldView2shard = fieldView2shard
 
+	// Add index to a map in holder. Used by openFields.
+	i.holder.addIndex(i)
+
 	i.holder.Logger.Debugf("open fields for index: %s", i.name)
 	if err := i.openFields(idx); err != nil {
 		return errors.Wrap(err, "opening fields")
+	}
+
+	// Set bit depths.
+	// This is called in Index.open() (as opposed to Field.Open()) because the
+	// Field.bitDepth() method uses a transaction which relies on the index and
+	// its entry for the field in the Index.field map. If we try to set a
+	// field's BitDepth in Field.Open(), which itself might be inside the
+	// Index.openField() loop, then the field has not yet been added to the
+	// Index.field map. I think it would be better if Field.bitDepth didn't rely
+	// on its index at all, but perhaps with transactions that not possible. I
+	// don't know.
+	if err := i.setFieldBitDepths(); err != nil {
+		return errors.Wrap(err, "setting field bitDepths")
 	}
 
 	if i.trackExistence {
@@ -273,11 +299,6 @@ func (i *Index) openFields(idx *disco.Index) error {
 	eg, ctx := errgroup.WithContext(context.Background())
 	var mu sync.Mutex
 
-	// var flds map[string]*disco.Field
-	// if idx != nil {
-	// 	flds = idx.Fields
-	// }
-
 fileLoop:
 	for _, loopFi := range fis {
 		select {
@@ -293,34 +314,25 @@ fileLoop:
 				continue
 			}
 
-			var createdAt int64
+			var cfm *CreateFieldMessage = &CreateFieldMessage{}
+			var err error
 
-			// Only continue with indexes which are present in the provided,
+			// Only continue with fields which are present in the provided,
 			// non-nil index schema. The reason we have to check for idx != nil
-			// here is because there are tests which call index.Open on an index
-			// with a NopSchemator. A better approach might be for those tests
-			// to use a mock Schemator which returns a schema containing the
-			// index. For an example, see TestField_SetTimeQuantum which
-			// re-opens a field and curiously has to re-open that field's index
-			// because at some point we introduced a pointer from the field back
-			// to its index (possibly related to transactions?).
+			// here is because there are tests which call index.Open without
+			// having a disco.Index available.
 			if idx != nil {
 				fld, ok := idx.Fields[fi.Name()]
-				//fld, ok := flds[fi.Name()]
 				if !ok {
 					continue
 				}
 
-				// decode the CreateIndexMessage from the schema data in order to
-				// get its metadata, such as CreateAt.
-				// TODO: similar to the createdAt TODO in holder, it may no
-				// longer be necessary to keep createdAt on the in-memory field
-				// struct.
-				cfm, err := i.holder.decodeCreateFieldMessage(fld.Data)
+				// Decode the CreateFieldMessage from the schema data in order to
+				// get its metadata.
+				cfm, err = decodeCreateFieldMessage(i.holder.serializer, fld.Data)
 				if err != nil {
 					return errors.Wrap(err, "decoding create field message")
 				}
-				createdAt = cfm.CreatedAt
 			}
 
 			indexQueue <- struct{}{}
@@ -330,7 +342,7 @@ fileLoop:
 				}()
 				i.holder.Logger.Debugf("open field: %s", fi.Name())
 
-				_, err := i.openField(&mu, createdAt, fi.Name())
+				_, err := i.openField(&mu, cfm, fi.Name())
 				if err != nil {
 					return errors.Wrap(err, "opening field")
 				}
@@ -353,12 +365,8 @@ fileLoop:
 
 // openField opens the field directory, initializes the field, and adds it to
 // the in-memory map of fields maintained by Index.
-func (i *Index) openField(mu *sync.Mutex, createdAt int64, file string) (*Field, error) {
+func (i *Index) openField(mu *sync.Mutex, cfm *CreateFieldMessage, file string) (*Field, error) {
 	mu.Lock()
-
-	// goroutine safe
-	i.holder.addIndex(i)
-
 	fld, err := i.newField(i.fieldPath(filepath.Base(file)), filepath.Base(file))
 	mu.Unlock()
 	if err != nil {
@@ -369,7 +377,8 @@ func (i *Index) openField(mu *sync.Mutex, createdAt int64, file string) (*Field,
 	// up a foreign index.
 	fld.holder = i.holder
 
-	fld.createdAt = createdAt
+	fld.createdAt = cfm.CreatedAt
+	fld.options = applyDefaultOptions(cfm.Meta)
 
 	// open the views we have data for.
 	if err := fld.Open(); err != nil {
@@ -386,10 +395,17 @@ func (i *Index) openField(mu *sync.Mutex, createdAt int64, file string) (*Field,
 
 // openExistenceField gets or creates the existence field and associates it to the index.
 func (i *Index) openExistenceField() error {
+	cfm := &CreateFieldMessage{
+		Index:     i.name,
+		Field:     existenceFieldName,
+		CreatedAt: 0,
+		Meta:      &FieldOptions{CacheType: CacheTypeNone, CacheSize: 0},
+	}
+
 	// First try opening the existence field from disk. If it doesn't already
 	// exist on disk, then we fall through to the code path which creates it.
 	var mu sync.Mutex
-	fld, err := i.openField(&mu, 0, existenceFieldName)
+	fld, err := i.openField(&mu, cfm, existenceFieldName)
 	if err == nil {
 		i.existenceFld = fld
 		return nil
@@ -399,12 +415,6 @@ func (i *Index) openExistenceField() error {
 
 	// If we have gotten here, it means that we couldn't successfully open the
 	// existence field from disk, so we need to create it.
-	cfm := &CreateFieldMessage{
-		Index:     i.name,
-		Field:     existenceFieldName,
-		CreatedAt: 0,
-		Meta:      &FieldOptions{CacheType: CacheTypeNone, CacheSize: 0},
-	}
 
 	f, err := i.createFieldIfNotExists(cfm)
 	if err != nil {
@@ -414,56 +424,28 @@ func (i *Index) openExistenceField() error {
 	return nil
 }
 
-// loadMeta reads meta data for the index, if any.
-func (i *Index) loadMeta() error {
-	// TrackExistence is by default true
-	pb := &internal.IndexMeta{TrackExistence: true}
-
-	// Read data from meta file.
-	buf, err := ioutil.ReadFile(filepath.Join(i.path, ".meta"))
-	if os.IsNotExist(err) {
-		return nil
-	} else if err != nil {
-		return errors.Wrap(err, "reading")
-	} else {
-		if err := proto.Unmarshal(buf, pb); err != nil {
-			return errors.Wrap(err, "unmarshalling")
+// setFieldBitDepths sets the BitDepth for all int and decimal fields in the index.
+func (i *Index) setFieldBitDepths() error {
+	for name, f := range i.fields {
+		switch f.Type() {
+		case FieldTypeInt, FieldTypeDecimal:
+			// pass
+		default:
+			continue
 		}
+		bd, err := f.bitDepth()
+		if err != nil {
+			return errors.Wrapf(err, "getting bit depth for field: %s", name)
+		}
+		f.mu.Lock()
+		f.options.BitDepth = bd
+		f.mu.Unlock()
 	}
-
-	// Copy metadata fields.
-	if pb == nil {
-		i.trackExistence = true
-	} else {
-		i.trackExistence = pb.TrackExistence
-	}
-	i.keys = pb.GetKeys()
-
-	return nil
-}
-
-// saveMeta writes meta data for the index.
-func (i *Index) saveMeta() error {
-	// Marshal metadata.
-	buf, err := proto.Marshal(&internal.IndexMeta{
-		Keys:           i.keys,
-		TrackExistence: i.trackExistence,
-	})
-	if err != nil {
-		return errors.Wrap(err, "marshalling")
-	}
-
-	// Write to meta file.
-	if err := ioutil.WriteFile(filepath.Join(i.path, ".meta"), buf, 0666); err != nil {
-		return errors.Wrap(err, "writing")
-	}
-
 	return nil
 }
 
 // Close closes the index and its fields.
 func (i *Index) Close() error {
-
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	defer func() {
@@ -592,7 +574,7 @@ func (i *Index) CreateField(name string, opts ...FieldOption) (*Field, error) {
 	cfm := &CreateFieldMessage{
 		Index:     i.name,
 		Field:     name,
-		CreatedAt: 0,
+		CreatedAt: timestamp(),
 		Meta:      fo,
 	}
 
@@ -691,7 +673,7 @@ func (i *Index) CreateFieldIfNotExistsWithOptions(name string, opt *FieldOptions
 	cfm := &CreateFieldMessage{
 		Index:     i.name,
 		Field:     name,
-		CreatedAt: 0,
+		CreatedAt: timestamp(),
 		Meta:      opt,
 	}
 
@@ -721,7 +703,7 @@ func (i *Index) persistField(ctx context.Context, cfm *CreateFieldMessage) error
 
 	if b, err := i.serializer.Marshal(cfm); err != nil {
 		return errors.Wrap(err, "marshaling")
-	} else if err := i.schemator.CreateField(ctx, cfm.Index, cfm.Field, b); err != nil {
+	} else if err := i.Schemator.CreateField(ctx, cfm.Index, cfm.Field, b); err != nil {
 		return errors.Wrapf(err, "writing field to disco: %s/%s", cfm.Index, cfm.Field)
 	}
 	return nil
@@ -752,6 +734,7 @@ func (i *Index) createField(cfm *CreateFieldMessage, broadcast bool) (*Field, er
 		opt = &FieldOptions{}
 	}
 
+	// TODO: can we do a general FieldOption validation here instead of just cache type?
 	if cfm.Field == "" {
 		return nil, errors.New("field name required")
 	} else if opt.CacheType != "" && !isValidCacheType(opt.CacheType) {
@@ -774,11 +757,6 @@ func (i *Index) createField(cfm *CreateFieldMessage, broadcast bool) (*Field, er
 	// Open field.
 	if err := f.Open(); err != nil {
 		return nil, errors.Wrap(err, "opening")
-	}
-
-	if err := f.saveMeta(); err != nil {
-		f.Close()
-		return nil, errors.Wrap(err, "saving meta")
 	}
 
 	// Add to index's field lookup.
@@ -810,7 +788,7 @@ func (i *Index) newField(path, name string) (*Field, error) {
 	f.idx = i
 	f.Stats = i.Stats
 	f.broadcaster = i.broadcaster
-	f.schemator = i.schemator
+	f.schemator = i.Schemator
 	f.serializer = i.serializer
 	f.rowAttrStore = i.newAttrStore(filepath.Join(f.path, ".data"))
 	f.OpenTranslateStore = i.OpenTranslateStore
@@ -821,6 +799,11 @@ func (i *Index) newField(path, name string) (*Field, error) {
 func (i *Index) DeleteField(name string) error {
 	i.mu.Lock()
 	defer i.mu.Unlock()
+
+	// Disallow deleting the existence field.
+	if name == existenceFieldName {
+		return newNotFoundError(ErrFieldNotFound, existenceFieldName)
+	}
 
 	// Confirm field exists.
 	f := i.field(name)
@@ -837,23 +820,11 @@ func (i *Index) DeleteField(name string) error {
 		return errors.Wrap(err, "Txf.DeleteFieldFromStore")
 	}
 
-	// If the field being deleted is the existence field,
-	// turn off existence tracking on the index.
-	if name == existenceFieldName {
-		i.trackExistence = false
-		i.existenceFld = nil
-
-		// Update meta data on disk.
-		if err := i.saveMeta(); err != nil {
-			return errors.Wrap(err, "saving existence meta data")
-		}
-	}
-
 	// Remove reference.
 	delete(i.fields, name)
 
 	// Delete the field from etcd as the system of record.
-	if err := i.schemator.DeleteField(context.TODO(), i.name, name); err != nil {
+	if err := i.Schemator.DeleteField(context.TODO(), i.name, name); err != nil {
 		return errors.Wrapf(err, "deleting field from etcd: %s/%s", i.name, name)
 	}
 

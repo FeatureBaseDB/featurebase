@@ -234,7 +234,7 @@ func DefaultHolderConfig() *HolderConfig {
 		OpenTransactionStore: OpenInMemTransactionStore,
 		OpenIDAllocator:      func(string) (*idAllocator, error) { return &idAllocator{}, nil },
 		TranslationSyncer:    NopTranslationSyncer,
-		Serializer:           NopSerializer,
+		Serializer:           GobSerializer,
 		Schemator:            disco.InMemSchemator,
 		CacheFlushInterval:   defaultCacheFlushInterval,
 		StatsClient:          stats.NopStatsClient,
@@ -652,7 +652,7 @@ func (h *Holder) Open() error {
 
 		// decode the CreateIndexMessage from the schema data in order to
 		// get its metadata, such as CreateAt.
-		cim, err := h.decodeCreateIndexMessage(idx.Data)
+		cim, err := decodeCreateIndexMessage(h.serializer, idx.Data)
 		if err != nil {
 			return errors.Wrap(err, "decoding create index message")
 		}
@@ -885,7 +885,7 @@ func (h *Holder) schema(ctx context.Context, includeViews bool) ([]*IndexInfo, e
 	}
 
 	for _, index := range schema {
-		cim, err := h.decodeCreateIndexMessage(index.Data)
+		cim, err := decodeCreateIndexMessage(h.serializer, index.Data)
 		if err != nil {
 			return nil, errors.Wrap(err, "decoding CreateIndexMessage")
 		}
@@ -893,7 +893,7 @@ func (h *Holder) schema(ctx context.Context, includeViews bool) ([]*IndexInfo, e
 		di := &IndexInfo{
 			Name:       cim.Index,
 			CreatedAt:  cim.CreatedAt,
-			Options:    *cim.Meta,
+			Options:    cim.Meta,
 			ShardWidth: ShardWidth,
 			Fields:     make([]*FieldInfo, 0, len(index.Fields)),
 		}
@@ -901,7 +901,7 @@ func (h *Holder) schema(ctx context.Context, includeViews bool) ([]*IndexInfo, e
 			if fieldName == existenceFieldName {
 				continue
 			}
-			cfm, err := h.decodeCreateFieldMessage(field.Data)
+			cfm, err := decodeCreateFieldMessage(h.serializer, field.Data)
 			if err != nil {
 				return nil, errors.Wrap(err, "decoding CreateFieldMessage")
 			}
@@ -1013,7 +1013,7 @@ func (h *Holder) CreateIndex(name string, opt IndexOptions) (*Index, error) {
 	cim := &CreateIndexMessage{
 		Index:     name,
 		CreatedAt: timestamp(),
-		Meta:      &opt,
+		Meta:      opt,
 	}
 
 	// Create the index in etcd as the system of record.
@@ -1107,7 +1107,7 @@ func (h *Holder) CreateIndexIfNotExists(name string, opt IndexOptions) (*Index, 
 	cim := &CreateIndexMessage{
 		Index:     name,
 		CreatedAt: timestamp(),
-		Meta:      &opt,
+		Meta:      opt,
 	}
 
 	// Create the index in etcd as the system of record.
@@ -1148,26 +1148,18 @@ func (h *Holder) createIndex(cim *CreateIndexMessage, broadcast bool) (*Index, e
 		return nil, errors.New("index name required")
 	}
 
-	opt := cim.Meta
-	if opt == nil {
-		opt = &IndexOptions{}
-	}
-
 	// Otherwise create a new index.
 	index, err := h.newIndex(h.IndexPath(cim.Index), cim.Index)
 	if err != nil {
 		return nil, errors.Wrap(err, "creating")
 	}
 
-	index.keys = opt.Keys
-	index.trackExistence = opt.TrackExistence
+	index.keys = cim.Meta.Keys
+	index.trackExistence = cim.Meta.TrackExistence
 	index.createdAt = cim.CreatedAt
 
 	if err = index.Open(); err != nil {
 		return nil, errors.Wrap(err, "opening")
-	}
-	if err = index.saveMeta(); err != nil {
-		return nil, errors.Wrap(err, "meta")
 	}
 
 	// Update options.
@@ -1231,7 +1223,7 @@ func (h *Holder) loadIndex(indexName string) (*Index, error) {
 		return nil, errors.Wrapf(err, "getting index: %s", indexName)
 	}
 
-	cim, err := h.decodeCreateIndexMessage(b)
+	cim, err := decodeCreateIndexMessage(h.serializer, b)
 	if err != nil {
 		return nil, errors.Wrap(err, "decoding CreateIndexMessage")
 	}
@@ -1251,7 +1243,7 @@ func (h *Holder) loadField(indexName, fieldName string) (*Field, error) {
 		return nil, errors.Errorf("local index not found: %s", indexName)
 	}
 
-	cfm, err := h.decodeCreateFieldMessage(b)
+	cfm, err := decodeCreateFieldMessage(h.serializer, b)
 	if err != nil {
 		return nil, errors.Wrap(err, "decoding CreateFieldMessage")
 	}
@@ -1284,7 +1276,7 @@ func (h *Holder) newIndex(path, name string) (*Index, error) {
 	index.Stats = h.Stats.WithTags(fmt.Sprintf("index:%s", index.Name()))
 	index.broadcaster = h.broadcaster
 	index.serializer = h.serializer
-	index.schemator = h.schemator
+	index.Schemator = h.schemator
 	index.newAttrStore = h.NewAttrStore
 	index.columnAttrs = h.NewAttrStore(filepath.Join(index.path, ".data"))
 	index.OpenTranslateStore = h.OpenTranslateStore
@@ -2284,17 +2276,17 @@ func (h *Holder) HasRoaringData() (has bool, err error) {
 	return
 }
 
-func (h *Holder) decodeCreateIndexMessage(b []byte) (*CreateIndexMessage, error) {
+func decodeCreateIndexMessage(ser Serializer, b []byte) (*CreateIndexMessage, error) {
 	var cim CreateIndexMessage
-	if err := h.serializer.Unmarshal(b, &cim); err != nil {
+	if err := ser.Unmarshal(b, &cim); err != nil {
 		return nil, errors.Wrap(err, "unmarshaling")
 	}
 	return &cim, nil
 }
 
-func (h *Holder) decodeCreateFieldMessage(b []byte) (*CreateFieldMessage, error) {
+func decodeCreateFieldMessage(ser Serializer, b []byte) (*CreateFieldMessage, error) {
 	var cfm CreateFieldMessage
-	if err := h.serializer.Unmarshal(b, &cfm); err != nil {
+	if err := ser.Unmarshal(b, &cfm); err != nil {
 		return nil, errors.Wrap(err, "unmarshaling")
 	}
 	return &cfm, nil

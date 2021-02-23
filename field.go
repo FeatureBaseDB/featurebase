@@ -30,9 +30,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/v2/disco"
-	"github.com/pilosa/pilosa/v2/internal"
 	"github.com/pilosa/pilosa/v2/pql"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/stats"
@@ -108,15 +106,6 @@ type Field struct {
 
 	// Field options.
 	options FieldOptions
-
-	// finalOptions is used with a final call to applyOptions.
-	// The initial call to applyOptions is made with options
-	// loaded from the meta file on disk (in the case when
-	// a field is being re-opened). If the field creator calls
-	// setOptions before calling Open(), then those options
-	// will be held in finalOptions, and applied instead of
-	// those from the meta file.
-	finalOptions *FieldOptions
 
 	bsiGroups []*bsiGroup
 
@@ -373,7 +362,7 @@ func newField(holder *Holder, path, index, name string, opts FieldOption) (*Fiel
 		schemator:   disco.NopSchemator,
 		serializer:  NopSerializer,
 
-		options: *applyDefaultOptions(&fo),
+		options: applyDefaultOptions(&fo),
 
 		remoteAvailableShards: roaring.NewBitmap(),
 
@@ -543,26 +532,6 @@ func (f *Field) Type() string {
 	return f.options.Type
 }
 
-// SetCacheSize sets the cache size for ranked fames. Persists to meta file on update.
-// defaults to DefaultCacheSize 50000
-func (f *Field) SetCacheSize(v uint32) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	// Ignore if no change occurred.
-	if v == 0 || f.options.CacheSize == v {
-		return nil
-	}
-
-	// Persist meta data to disk on change.
-	f.options.CacheSize = v
-	if err := f.saveMeta(); err != nil {
-		return errors.Wrap(err, "saving")
-	}
-
-	return nil
-}
-
 // CacheSize returns the ranked field cache size.
 func (f *Field) CacheSize() uint32 {
 	f.mu.RLock()
@@ -587,24 +556,12 @@ func (f *Field) Open() error {
 			return errors.Wrap(err, "creating field dir")
 		}
 
-		f.holder.Logger.Debugf("load meta file for index/field: %s/%s", f.index, f.name)
-		if err := f.loadMeta(); err != nil {
-			return errors.Wrap(err, "loading meta")
-		}
-
 		f.holder.Logger.Debugf("load available shards for index/field: %s/%s", f.index, f.name)
-
 		if err := f.loadAvailableShards(); err != nil {
 			return errors.Wrap(err, "loading available shards")
 		}
 
-		// If options were provided using setOptions(), then
-		// use those instead of the options from the meta file.
-		if f.finalOptions != nil {
-			f.options = *f.finalOptions
-		}
-
-		// Apply the field options loaded from meta (or set via setOptions()).
+		// Apply the field options loaded from etcd (or set via setOptions()).
 		f.holder.Logger.Debugf("apply options for index/field: %s/%s", f.index, f.name)
 		if err := f.applyOptions(f.options); err != nil {
 			return errors.Wrap(err, "applying options")
@@ -632,6 +589,7 @@ func (f *Field) Open() error {
 				return errors.Wrap(err, "checking foreign index")
 			}
 		}
+
 		f.availableShardChan = make(chan []byte)
 		f.doneChan = make(chan struct{})
 		f.wg.Add(1)
@@ -750,6 +708,28 @@ func (f *Field) ForeignIndex() string {
 	return f.options.ForeignIndex
 }
 
+func (f *Field) bitDepth() (uint64, error) {
+	var maxBitDepth uint64
+
+	view2shards := f.idx.fieldView2shard.getViewsForField(f.name)
+	for name, shardset := range view2shards {
+		view := f.view(name)
+		if view == nil {
+			continue
+		}
+
+		bd, err := view.bitDepth(shardset.shards())
+		if err != nil {
+			return 0, errors.Wrapf(err, "getting view(%s) bit depth", name)
+		}
+		if bd > maxBitDepth {
+			maxBitDepth = bd
+		}
+	}
+
+	return maxBitDepth, nil
+}
+
 // openViews opens and initializes the views inside the field.
 func (f *Field) openViews() error {
 	view2shards := f.idx.fieldView2shard.getViewsForField(f.name)
@@ -759,27 +739,9 @@ func (f *Field) openViews() error {
 	}
 
 	for name, shardset := range view2shards {
-
 		view := f.newView(f.viewPath(name), name)
 		if err := view.openWithShardSet(shardset); err != nil {
 			return fmt.Errorf("opening view: view=%s, err=%s", view.name, err)
-		}
-
-		if f.holder.txf.TxType() == RoaringTxn {
-			// Automatically upgrade BSI v1 fragments if they exist & reopen view.
-			if bsig := f.bsiGroup(f.name); bsig != nil {
-				if ok, err := upgradeViewBSIv2(view, bsig.BitDepth); err != nil {
-					return errors.Wrap(err, "upgrade view bsi v2")
-				} else if ok {
-					if err := view.close(); err != nil {
-						return errors.Wrap(err, "closing upgraded view")
-					}
-					view = f.newView(f.viewPath(name), name)
-					if err := view.openWithShardSet(shardset); err != nil {
-						return fmt.Errorf("re-opening view: view=%s, err=%s", view.name, err)
-					}
-				}
-			}
 		}
 
 		view.rowAttrStore = f.rowAttrStore
@@ -789,98 +751,9 @@ func (f *Field) openViews() error {
 	return nil
 }
 
-// loadMeta reads meta data for the field, if any.
-func (f *Field) loadMeta() error {
-	var pb internal.FieldOptions
-
-	// Read data from meta file.
-	buf, err := ioutil.ReadFile(filepath.Join(f.path, ".meta"))
-	if os.IsNotExist(err) {
-		return nil
-	} else if err != nil {
-		return errors.Wrap(err, "reading meta")
-	} else {
-		if err := proto.Unmarshal(buf, &pb); err != nil {
-			return errors.Wrap(err, "unmarshaling")
-		}
-	}
-
-	// Since pb.Min and pb.Max were changed to pql.Decimal,
-	// and since they now have a different protobuf field
-	// number, an existing meta file may have values in the
-	// old min/max fields which need to be converted to
-	// pql.Decimal.
-	// TODO: we can remove the OldMin/OldMax once we're
-	// confident no one is still using the older version.
-	var min pql.Decimal
-	if pb.Min != nil {
-		min = pql.NewDecimal(pb.Min.Value, pb.Min.Scale)
-	} else {
-		min = pql.NewDecimal(pb.OldMin, pb.Scale)
-	}
-	var max pql.Decimal
-	if pb.Max != nil {
-		max = pql.NewDecimal(pb.Max.Value, pb.Max.Scale)
-	} else {
-		max = pql.NewDecimal(pb.OldMax, pb.Scale)
-	}
-
-	// Initialize "base" to "min" when upgrading from v1 BSI format.
-	if pb.BitDepth == 0 {
-		minInt64, maxInt64 := min.ToInt64(0), max.ToInt64(0)
-		pb.Base = bsiBase(minInt64, maxInt64)
-		pb.BitDepth = uint64(bitDepthInt64(maxInt64 - minInt64))
-		if pb.BitDepth == 0 {
-			pb.BitDepth = 1
-		}
-	}
-
-	// Copy metadata fields.
-	f.options.Type = pb.Type
-	f.options.CacheType = pb.CacheType
-	f.options.CacheSize = pb.CacheSize
-	f.options.Min = min
-	f.options.Max = max
-	f.options.Base = pb.Base
-	f.options.Scale = pb.Scale
-	f.options.BitDepth = pb.BitDepth
-	f.options.TimeQuantum = TimeQuantum(pb.TimeQuantum)
-	f.options.Keys = pb.Keys
-	f.options.NoStandardView = pb.NoStandardView
-	f.options.ForeignIndex = pb.ForeignIndex
-
-	return nil
-}
-
-// saveMeta writes meta data for the field.
-func (f *Field) saveMeta() error {
-	path := filepath.Join(f.path, ".meta")
-	// Create a temporary file to marshal to.
-	tempPath := f.path + tempExt
-
-	// Marshal metadata.
-	fo := f.options
-	buf, err := proto.Marshal(fo.encode())
-	if err != nil {
-		return errors.Wrap(err, "marshaling")
-	}
-
-	// Write to meta file.
-	if err := ioutil.WriteFile(tempPath, buf, 0666); err != nil {
-		return errors.Wrap(err, "writing meta")
-	}
-
-	// Move temp file to data file location.
-	if err := os.Rename(tempPath, path); err != nil {
-		return fmt.Errorf("rename temp: %s", err)
-	}
-
-	return nil
-}
-
 // setOptions saves options for final application during Open().
 func (f *Field) setOptions(opts *FieldOptions) {
-	f.finalOptions = applyDefaultOptions(opts)
+	f.options = applyDefaultOptions(opts)
 }
 
 // applyOptions configures the field based on opt.
@@ -930,10 +803,7 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 			Scale:    opt.Scale,
 			BitDepth: opt.BitDepth,
 		}
-		// Validate bsiGroup.
-		if err := bsig.validate(); err != nil {
-			return err
-		}
+		// Validate and create bsiGroup.
 		if err := f.createBSIGroup(bsig); err != nil {
 			return errors.Wrap(err, "creating bsigroup")
 		}
@@ -947,11 +817,11 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 		f.options.BitDepth = 0
 		f.options.Keys = opt.Keys
 		f.options.NoStandardView = opt.NoStandardView
-		// Set the time quantum.
-		if err := f.setTimeQuantum(opt.TimeQuantum); err != nil {
-			f.Close()
-			return errors.Wrap(err, "setting time quantum")
+		// Validate the time quantum.
+		if !opt.TimeQuantum.Valid() {
+			return ErrInvalidTimeQuantum
 		}
+		f.options.TimeQuantum = opt.TimeQuantum
 		f.options.ForeignIndex = opt.ForeignIndex
 	case FieldTypeBool:
 		f.options.Type = FieldTypeBool
@@ -1044,17 +914,6 @@ func (f *Field) createBSIGroup(bsig *bsiGroup) error {
 	defer f.mu.Unlock()
 
 	// Append bsiGroup.
-	if err := f.addBSIGroup(bsig); err != nil {
-		return err
-	}
-	if err := f.saveMeta(); err != nil {
-		return errors.Wrap(err, "saving")
-	}
-	return nil
-}
-
-// addBSIGroup adds a single bsiGroup to bsiGroups.
-func (f *Field) addBSIGroup(bsig *bsiGroup) error {
 	if err := bsig.validate(); err != nil {
 		return errors.Wrap(err, "validating bsigroup")
 	} else if f.hasBSIGroup(bsig.Name) {
@@ -1077,27 +936,6 @@ func (f *Field) TimeQuantum() TimeQuantum {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.options.TimeQuantum
-}
-
-// setTimeQuantum sets the time quantum for the field.
-func (f *Field) setTimeQuantum(q TimeQuantum) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	// Validate input.
-	if !q.Valid() {
-		return ErrInvalidTimeQuantum
-	}
-
-	// Update value on field.
-	f.options.TimeQuantum = q
-
-	// Persist meta data to disk.
-	if err := f.saveMeta(); err != nil {
-		return errors.Wrap(err, "saving meta")
-	}
-
-	return nil
 }
 
 // RowTime gets the row at the particular time with the granularity specified by
@@ -1448,22 +1286,16 @@ func (f *Field) SetValue(tx Tx, columnID uint64, value int64) (changed bool, err
 
 	// Increase bit depth value if the unsigned value is greater.
 	if requiredBitDepth > bsig.BitDepth {
-		if err := func() error {
-			f.mu.Lock()
-			defer f.mu.Unlock()
-
-			uvalue := uint64(baseValue)
-			if value < 0 {
-				uvalue = uint64(-baseValue)
-			}
-			bitDepth := bitDepth(uvalue)
-
-			bsig.BitDepth = bitDepth
-			f.options.BitDepth = bitDepth
-			return f.saveMeta()
-		}(); err != nil {
-			return false, errors.Wrap(err, "increasing bsi max")
+		uvalue := uint64(baseValue)
+		if value < 0 {
+			uvalue = uint64(-baseValue)
 		}
+		bitDepth := bitDepth(uvalue)
+
+		f.mu.Lock()
+		bsig.BitDepth = bitDepth
+		f.options.BitDepth = bitDepth
+		f.mu.Unlock()
 	}
 
 	// Fetch target view.
@@ -1764,20 +1596,14 @@ func (f *Field) importValue(qcx *Qcx, columnIDs []uint64, values []int64, option
 		requiredDepth = v
 	}
 	// Increase bit depth if required.
-	if err := func() error {
+	bitDepth := bsig.BitDepth
+	if requiredDepth > bitDepth {
 		f.mu.Lock()
-		defer f.mu.Unlock()
-		bitDepth := bsig.BitDepth
-		if requiredDepth > bitDepth {
-			bsig.BitDepth = requiredDepth
-			f.options.BitDepth = requiredDepth
-			return f.saveMeta()
-		} else {
-			requiredDepth = bitDepth
-		}
-		return nil
-	}(); err != nil {
-		return errors.Wrap(err, "increasing bsi bit depth")
+		bsig.BitDepth = requiredDepth
+		f.options.BitDepth = requiredDepth
+		f.mu.Unlock()
+	} else {
+		requiredDepth = bitDepth
 	}
 
 	// Import into each fragment.
@@ -1959,38 +1785,16 @@ func newFieldOptions(opts ...FieldOption) (*FieldOptions, error) {
 
 // applyDefaultOptions updates FieldOptions with the default
 // values if o does not contain a valid type.
-func applyDefaultOptions(o *FieldOptions) *FieldOptions {
+func applyDefaultOptions(o *FieldOptions) FieldOptions {
+	if o == nil {
+		o = &FieldOptions{}
+	}
 	if o.Type == "" {
 		o.Type = DefaultFieldType
 		o.CacheType = DefaultCacheType
 		o.CacheSize = DefaultCacheSize
 	}
-	return o
-}
-
-// encode converts o into its internal representation.
-func (o *FieldOptions) encode() *internal.FieldOptions {
-	return encodeFieldOptions(o)
-}
-
-func encodeFieldOptions(o *FieldOptions) *internal.FieldOptions {
-	if o == nil {
-		return nil
-	}
-	return &internal.FieldOptions{
-		Type:           o.Type,
-		CacheType:      o.CacheType,
-		CacheSize:      o.CacheSize,
-		Base:           o.Base,
-		Scale:          o.Scale,
-		BitDepth:       uint64(o.BitDepth),
-		Min:            &internal.Decimal{Value: o.Min.Value, Scale: o.Min.Scale},
-		Max:            &internal.Decimal{Value: o.Max.Value, Scale: o.Max.Scale},
-		TimeQuantum:    string(o.TimeQuantum),
-		Keys:           o.Keys,
-		NoStandardView: o.NoStandardView,
-		ForeignIndex:   o.ForeignIndex,
-	}
+	return *o
 }
 
 // MarshalJSON marshals FieldOptions to JSON such that

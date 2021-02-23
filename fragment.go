@@ -238,6 +238,24 @@ func newFragment(holder *Holder, spec fragSpec, shard uint64, flags byte) *fragm
 // cachePath returns the path to the fragment's cache data.
 func (f *fragment) cachePath() string { return f.path() + cacheExt }
 
+func (f *fragment) bitDepth() (uint64, error) {
+	tx, err := f.holder.BeginTx(false, f.idx, f.shard)
+	if err != nil {
+		return 0, errors.Wrapf(err, "beginning new tx(false, %s, %d)", f.index(), f.shard)
+	}
+	defer tx.Rollback()
+
+	maxRowID, _, err := f.maxRow(tx, nil)
+	if err != nil {
+		return 0, errors.Wrapf(err, "getting fragment max row id")
+	}
+
+	if maxRowID+1 > bsiOffsetBit {
+		return maxRowID + 1 - bsiOffsetBit, nil
+	}
+	return 0, nil
+}
+
 type FragmentInfo struct {
 	BitmapInfo     roaring.BitmapInfo
 	BlockChecksums []FragmentBlock `json:"BlockChecksums,omitempty"`
@@ -3277,52 +3295,6 @@ func (f *fragment) blockToRoaringData(block int) ([]byte, error) {
 		columnIDs: columnIDs,
 		rowIDs:    rowIDs,
 	})
-}
-
-// upgradeRoaringBSIv2 upgrades a fragment that contains old BSI formatting
-// to a new BSI format (v2). The new format moves the "exists" bit to the
-// beginning & adds a negative sign bit.
-func upgradeRoaringBSIv2(f *fragment, bitDepth uint64) (string, error) {
-	// If flag set, already upgraded. Exit.
-	if f.storage.Flags&roaringFlagBSIv2 == 1 {
-		return "", nil
-	}
-
-	other := roaring.NewBitmap()
-	other.Flags = roaringFlagBSIv2
-	func() {
-		f.mu.Lock()
-		defer f.mu.Unlock()
-
-		_ = f.storage.ForEach(func(i uint64) error {
-			rowID, columnID := i/ShardWidth, (f.shard*ShardWidth)+(i%ShardWidth)
-			if rowID == uint64(bitDepth) {
-				_, _ = other.Add(pos(bsiExistsBit, columnID)) // move exists bit to beginning
-			} else {
-				_, _ = other.Add(pos(rowID+bsiOffsetBit, columnID)) // move other bits up
-			}
-			return nil
-		})
-	}()
-
-	// Create temporary file next to existing file.
-	newPath := f.path() + ".tmp"
-	file, err := os.OpenFile(newPath, os.O_WRONLY|os.O_CREATE, 0666)
-	if err != nil {
-		return "", err
-	}
-	defer file.Close()
-
-	// Write & flush to temporary file.
-	if _, err := other.WriteTo(file); err != nil {
-		return "", err
-	} else if err := file.Sync(); err != nil {
-		return "", err
-	} else if err := file.Close(); err != nil {
-		return "", err
-	}
-
-	return newPath, nil
 }
 
 type rowIterator interface {

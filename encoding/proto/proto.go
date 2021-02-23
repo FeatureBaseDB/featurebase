@@ -743,7 +743,7 @@ func (s Serializer) encodeCreateIndexMessage(m *pilosa.CreateIndexMessage) *inte
 	return &internal.CreateIndexMessage{
 		Index:     m.Index,
 		CreatedAt: m.CreatedAt,
-		Meta:      s.encodeIndexMeta(m.Meta),
+		Meta:      s.encodeIndexMeta(&m.Meta),
 	}
 }
 
@@ -1096,8 +1096,8 @@ func (s Serializer) decodeCreateShardMessage(pb *internal.CreateShardMessage, m 
 func (s Serializer) decodeCreateIndexMessage(pb *internal.CreateIndexMessage, m *pilosa.CreateIndexMessage) {
 	m.Index = pb.Index
 	m.CreatedAt = pb.CreatedAt
-	m.Meta = &pilosa.IndexOptions{}
-	s.decodeIndexMeta(pb.Meta, m.Meta)
+	m.Meta = pilosa.IndexOptions{}
+	s.decodeIndexMeta(pb.Meta, &m.Meta)
 }
 
 func (s Serializer) decodeIndexMeta(pb *internal.IndexMeta, m *pilosa.IndexOptions) {

@@ -222,7 +222,7 @@ func (api *API) CreateIndex(ctx context.Context, indexName string, options Index
 	cim := &CreateIndexMessage{
 		Index:     indexName,
 		CreatedAt: timestamp(),
-		Meta:      &options,
+		Meta:      options,
 	}
 
 	// Create index.

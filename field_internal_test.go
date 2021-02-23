@@ -15,6 +15,7 @@
 package pilosa
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"os"
@@ -207,7 +208,8 @@ func NewTestField(t *testing.T, opts FieldOption) *TestField {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := NewHolder(path, nil)
+
+	h := NewHolder(path, DefaultHolderConfig())
 	panicOn(h.Open())
 
 	idx, err := h.CreateIndex("i", IndexOptions{})
@@ -247,7 +249,11 @@ func (f *TestField) Reopen() error {
 		f.parent = nil
 		return err
 	}
-	if err := f.parent.Open(); err != nil {
+	schema, err := f.parent.Schemator.Schema(context.Background())
+	if err != nil {
+		return err
+	}
+	if err := f.parent.OpenWithSchema(schema[f.parent.name]); err != nil {
 		f.parent = nil
 		return err
 	}
@@ -297,13 +303,11 @@ func TestField_CreateViewIfNotExists(t *testing.T) {
 }
 
 func TestField_SetTimeQuantum(t *testing.T) {
-	f := OpenField(t, OptFieldTypeTime(TimeQuantum("")))
+	f := OpenField(t, OptFieldTypeTime(TimeQuantum("YMDH")))
 	defer f.Close()
 
-	// Set & retrieve time quantum.
-	if err := f.setTimeQuantum(TimeQuantum("YMDH")); err != nil {
-		t.Fatal(err)
-	} else if q := f.TimeQuantum(); q != TimeQuantum("YMDH") {
+	// Retrieve time quantum.
+	if q := f.TimeQuantum(); q != TimeQuantum("YMDH") {
 		t.Fatalf("unexpected quantum: %s", q)
 	}
 
@@ -316,16 +320,12 @@ func TestField_SetTimeQuantum(t *testing.T) {
 }
 
 func TestField_RowTime(t *testing.T) {
-	f := OpenField(t, OptFieldTypeTime(TimeQuantum("")))
+	f := OpenField(t, OptFieldTypeTime(TimeQuantum("YMDH")))
 	defer f.Close()
 
 	// Obtain transaction.
 	tx := f.idx.holder.txf.NewTx(Txo{Write: writable, Index: f.idx, Field: f.Field, Shard: 0})
 	defer tx.Rollback()
-
-	if err := f.setTimeQuantum(TimeQuantum("YMDH")); err != nil {
-		t.Fatal(err)
-	}
 
 	f.MustSetBit(tx, 1, 1, time.Date(2010, time.January, 5, 12, 0, 0, 0, time.UTC))
 	f.MustSetBit(tx, 1, 2, time.Date(2011, time.January, 5, 12, 0, 0, 0, time.UTC))
@@ -552,7 +552,7 @@ func TestField_ApplyOptions(t *testing.T) {
 	} {
 
 		fld := &Field{}
-		fld.options = *applyDefaultOptions(&FieldOptions{})
+		fld.options = applyDefaultOptions(&FieldOptions{})
 
 		if err := fld.applyOptions(tt.opts); err != nil {
 			t.Fatal(err)
@@ -921,4 +921,37 @@ func TestBSIGroup_TxReopenDB(t *testing.T) {
 
 	// the test: can we re-open a BSI fragment under Tx store
 	_ = f.Reopen()
+}
+
+// Ensure that an integer field has the same BitDepth after reopening.
+func TestField_SaveMeta(t *testing.T) {
+	f := OpenField(t, OptFieldTypeInt(-10, 1000))
+	defer f.Close()
+
+	colID := uint64(1)
+	val := int64(88)
+	expBitDepth := uint64(7)
+
+	// Obtain transaction.
+	tx := f.idx.holder.txf.NewTx(Txo{Write: writable, Index: f.idx, Field: f.Field, Shard: 0})
+	defer tx.Rollback()
+
+	if changed, err := f.SetValue(tx, colID, val); err != nil {
+		t.Fatal(err)
+	} else if !changed {
+		t.Fatal("expected SetValue to return changed = true")
+	}
+
+	if f.options.BitDepth != expBitDepth {
+		t.Fatalf("expected BitDepth after set to be: %d, got: %d", expBitDepth, f.options.BitDepth)
+	}
+
+	// Reload field and verify that it is persisted.
+	if err := f.Reopen(); err != nil {
+		t.Fatal(err)
+	}
+
+	if f.options.BitDepth != expBitDepth {
+		t.Fatalf("expected BitDepth after reopen to be: %d, got: %d", expBitDepth, f.options.BitDepth)
+	}
 }

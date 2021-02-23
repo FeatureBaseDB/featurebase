@@ -1975,7 +1975,7 @@ type CreateShardMessage struct {
 type CreateIndexMessage struct {
 	Index     string
 	CreatedAt int64
-	Meta      *IndexOptions
+	Meta      IndexOptions
 }
 
 // DeleteIndexMessage is an internal message indicating index deletion.
