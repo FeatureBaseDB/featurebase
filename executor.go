@@ -2876,10 +2876,12 @@ func (e *executor) executeGroupBy(ctx context.Context, qcx *Qcx, index string, c
 		}
 	}
 
+	ignoreLimit := sorter != nil
 	// Execute calls in bulk on each remote node and merge.
 	mapFn := func(ctx context.Context, shard uint64) (_ interface{}, err error) {
-		return e.executeGroupByShard(ctx, qcx, index, c, filter, shard, childRows, bases)
+		return e.executeGroupByShard(ctx, qcx, index, c, filter, shard, childRows, bases, ignoreLimit)
 	}
+
 	// Merge returned results at coordinating node.
 	reduceFn := func(ctx context.Context, prev, v interface{}) interface{} {
 		other := findGroupCounts(prev)
@@ -3434,7 +3436,7 @@ func applyConditionToGroupCounts(gcs []GroupCount, subj string, cond *pql.Condit
 	return gcs[:i]
 }
 
-func (e *executor) executeGroupByShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, filter *pql.Call, shard uint64, childRows []RowIDs, bases map[int]int64) (_ []GroupCount, err error) {
+func (e *executor) executeGroupByShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, filter *pql.Call, shard uint64, childRows []RowIDs, bases map[int]int64, ignoreLimit bool) (_ []GroupCount, err error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeGroupByShard")
 	defer span.Finish()
 
@@ -3464,7 +3466,7 @@ func (e *executor) executeGroupByShard(ctx context.Context, qcx *Qcx, index stri
 	limit := int(^uint(0) >> 1)
 	if lim, hasLimit, err := c.UintArg("limit"); err != nil {
 		return nil, err
-	} else if hasLimit {
+	} else if !ignoreLimit && hasLimit {
 		limit = int(lim)
 	}
 
