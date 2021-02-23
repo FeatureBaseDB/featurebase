@@ -2960,11 +2960,11 @@ func TestExecutor_Execute_Remote_Row(t *testing.T) {
 	hldr0 := c.GetHolder(0)
 	hldr1 := c.GetHolder(1)
 
-	_, err := c.GetCoordinator().API.CreateIndex(context.Background(), "i", pilosa.IndexOptions{})
+	_, err := c.GetPrimary().API.CreateIndex(context.Background(), "i", pilosa.IndexOptions{})
 	if err != nil {
 		t.Fatalf("creating index: %v", err)
 	}
-	_, err = c.GetCoordinator().API.CreateField(context.Background(), "i", "f", pilosa.OptFieldTypeSet(pilosa.DefaultCacheType, pilosa.DefaultCacheSize))
+	_, err = c.GetPrimary().API.CreateField(context.Background(), "i", "f", pilosa.OptFieldTypeSet(pilosa.DefaultCacheType, pilosa.DefaultCacheSize))
 	if err != nil {
 		t.Fatalf("creating field: %v", err)
 	}
@@ -2997,7 +2997,7 @@ func TestExecutor_Execute_Remote_Row(t *testing.T) {
 	})
 
 	t.Run("remote with timestamp", func(t *testing.T) {
-		_, err = c.GetCoordinator().API.CreateField(context.Background(), "i", "z", pilosa.OptFieldTypeTime("Y"))
+		_, err = c.GetPrimary().API.CreateField(context.Background(), "i", "z", pilosa.OptFieldTypeTime("Y"))
 		if err != nil {
 			t.Fatalf("creating field: %v", err)
 		}
@@ -3012,7 +3012,7 @@ func TestExecutor_Execute_Remote_Row(t *testing.T) {
 	})
 
 	t.Run("remote topn", func(t *testing.T) {
-		_, err = c.GetCoordinator().API.CreateField(context.Background(), "i", "fn", pilosa.OptFieldTypeSet(pilosa.CacheTypeRanked, 100))
+		_, err = c.GetPrimary().API.CreateField(context.Background(), "i", "fn", pilosa.OptFieldTypeSet(pilosa.CacheTypeRanked, 100))
 		if err != nil {
 			t.Fatalf("creating field: %v", err)
 		}
@@ -3075,7 +3075,7 @@ func TestExecutor_Execute_Remote_Row(t *testing.T) {
 	})
 
 	t.Run("remote groupBy on ints", func(t *testing.T) {
-		_, err = c.GetCoordinator().API.CreateField(context.Background(), "i", "fint", pilosa.OptFieldTypeInt(-1000, 1000))
+		_, err = c.GetPrimary().API.CreateField(context.Background(), "i", "fint", pilosa.OptFieldTypeInt(-1000, 1000))
 		if err != nil {
 			t.Fatalf("creating field: %v", err)
 		}
@@ -3117,7 +3117,7 @@ func TestExecutor_Execute_Remote_Row(t *testing.T) {
 	})
 
 	t.Run("groupBy on ints with offset regression", func(t *testing.T) {
-		_, err = c.GetCoordinator().API.CreateField(context.Background(), "i", "hint", pilosa.OptFieldTypeInt(1, 1000))
+		_, err = c.GetPrimary().API.CreateField(context.Background(), "i", "hint", pilosa.OptFieldTypeInt(1, 1000))
 		if err != nil {
 			t.Fatalf("creating field: %v", err)
 		}
@@ -3148,12 +3148,12 @@ func TestExecutor_Execute_Remote_Row(t *testing.T) {
 	})
 
 	t.Run("Row on ints with ASSIGN condition", func(t *testing.T) {
-		_, err := c.GetCoordinator().API.CreateIndex(context.Background(), "intidx", pilosa.IndexOptions{})
+		_, err := c.GetPrimary().API.CreateIndex(context.Background(), "intidx", pilosa.IndexOptions{})
 		if err != nil {
 			t.Fatalf("creating index: %v", err)
 		}
 
-		_, err = c.GetCoordinator().API.CreateField(context.Background(), "intidx", "gint", pilosa.OptFieldTypeInt(-1000, 1000))
+		_, err = c.GetPrimary().API.CreateField(context.Background(), "intidx", "gint", pilosa.OptFieldTypeInt(-1000, 1000))
 		if err != nil {
 			t.Fatalf("creating field: %v", err)
 		}
@@ -3183,12 +3183,12 @@ func TestExecutor_Execute_Remote_Row(t *testing.T) {
 	})
 
 	t.Run("Row on decimals with ASSIGN condition", func(t *testing.T) {
-		_, err := c.GetCoordinator().API.CreateIndex(context.Background(), "decidx", pilosa.IndexOptions{})
+		_, err := c.GetPrimary().API.CreateIndex(context.Background(), "decidx", pilosa.IndexOptions{})
 		if err != nil {
 			t.Fatalf("creating index: %v", err)
 		}
 
-		_, err = c.GetCoordinator().API.CreateField(context.Background(), "decidx", "fdec", pilosa.OptFieldTypeDecimal(0))
+		_, err = c.GetPrimary().API.CreateField(context.Background(), "decidx", "fdec", pilosa.OptFieldTypeDecimal(0))
 		if err != nil {
 			t.Fatalf("creating field: %v", err)
 		}
@@ -3217,19 +3217,19 @@ func TestExecutor_Execute_Remote_Row(t *testing.T) {
 	})
 
 	t.Run("Row on foreign key with ASSIGN condition", func(t *testing.T) {
-		_, err := c.GetCoordinator().API.CreateIndex(context.Background(), "parent", pilosa.IndexOptions{Keys: true})
+		_, err := c.GetPrimary().API.CreateIndex(context.Background(), "parent", pilosa.IndexOptions{Keys: true})
 		if err != nil {
 			t.Fatalf("creating index: %v", err)
 		}
-		_, err = c.GetCoordinator().API.CreateField(context.Background(), "parent", "general", pilosa.OptFieldTypeSet(pilosa.DefaultCacheType, pilosa.DefaultCacheSize))
+		_, err = c.GetPrimary().API.CreateField(context.Background(), "parent", "general", pilosa.OptFieldTypeSet(pilosa.DefaultCacheType, pilosa.DefaultCacheSize))
 		if err != nil {
 			t.Fatalf("creating field: %v", err)
 		}
-		_, err = c.GetCoordinator().API.CreateIndex(context.Background(), "child", pilosa.IndexOptions{Keys: false})
+		_, err = c.GetPrimary().API.CreateIndex(context.Background(), "child", pilosa.IndexOptions{Keys: false})
 		if err != nil {
 			t.Fatalf("creating index: %v", err)
 		}
-		_, err = c.GetCoordinator().API.CreateField(context.Background(), "child", "parentid",
+		_, err = c.GetPrimary().API.CreateField(context.Background(), "child", "parentid",
 			pilosa.OptFieldForeignIndex("parent"),
 			pilosa.OptFieldTypeInt(-9223372036854775808, 9223372036854775807),
 		)

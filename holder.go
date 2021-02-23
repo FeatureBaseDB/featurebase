@@ -1755,7 +1755,7 @@ func (s *holderSyncer) resetTranslationSync() error {
 		return errors.Wrap(err, "initialize index translate replication")
 	}
 
-	// Connect to coordinator to stream field data.
+	// Connect to primary to stream field data.
 	if err := s.initializeFieldTranslateReplication(snap); err != nil {
 		return errors.Wrap(err, "initialize field translate replication")
 	}
@@ -1826,7 +1826,7 @@ func (s *holderSyncer) stopTranslationSync() error {
 
 // setTranslateReadOnlyFlags updates all translation stores to enable or disable
 // writing new translation keys. Index stores are writable if the node owns the
-// partition. Field stores are writable if the node is the coordinator.
+// partition. Field stores are writable if the node is the primary.
 func (s *holderSyncer) setTranslateReadOnlyFlags(snap *topology.ClusterSnapshot) {
 	s.Cluster.mu.RLock()
 	isPrimaryFieldTranslator := snap.IsPrimaryFieldTranslationNode(s.Cluster.Node.ID)
@@ -1920,9 +1920,9 @@ func (s *holderSyncer) initializeIndexTranslateReplication(snap *topology.Cluste
 	return nil
 }
 
-// initializeFieldTranslateReplication connects the coordinator to stream field data.
+// initializeFieldTranslateReplication connects the primary to stream field data.
 func (s *holderSyncer) initializeFieldTranslateReplication(snap *topology.ClusterSnapshot) error {
-	// Skip if coordinator.
+	// Skip if primary.
 	if snap.IsPrimaryFieldTranslationNode(s.Cluster.Node.ID) {
 		return nil
 	}

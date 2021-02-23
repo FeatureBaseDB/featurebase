@@ -5554,7 +5554,7 @@ func (e *executor) mapReduce(ctx context.Context, index string, shards []uint64,
 
 	// If this is the coordinating node then start with all nodes in the cluster.
 	//
-	// However, if this request is being sent from the coordinator then all
+	// However, if this request is being sent from the primary then all
 	// processing should be done locally so we start with just the local node.
 	var nodes []*topology.Node
 	if !opt.Remote {

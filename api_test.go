@@ -224,7 +224,7 @@ func TestAPI_Import(t *testing.T) {
 
 		colKeys = colKeys[:N]
 
-		// Import data with keys to the coordinator (node0) and verify that it gets
+		// Import data with keys to the primary and verify that it gets
 		// translated and forwarded to the owner of shard 0 (node1; because of offsetModHasher)
 		req := &pilosa.ImportRequest{
 			Index:          indexName,
@@ -302,7 +302,7 @@ func TestAPI_ImportValue(t *testing.T) {
 	)
 	defer c.Close()
 
-	coord := c.GetCoordinator()
+	coord := c.GetPrimary()
 	m0 := c.GetNode(0)
 	m1 := c.GetNode(1)
 
@@ -329,7 +329,7 @@ func TestAPI_ImportValue(t *testing.T) {
 		// Column keys are sharded so their order is not guaranteed.
 		colKeys := []string{"col10", "col8", "col9", "col6", "col7", "col4", "col5", "col2", "col3", "col1"}
 
-		// Import data with keys to the coordinator (node0) and verify that it gets
+		// Import data with keys to the primary and verify that it gets
 		// translated and forwarded to the owner of shard 0 (node1; because of offsetModHasher)
 		req := &pilosa.ImportValueRequest{
 			Index:      index,

@@ -558,8 +558,8 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 func TestClusterResize_RemoveNode(t *testing.T) {
 	cluster := test.MustRunCluster(t, 3)
 	defer cluster.Close()
-	coord := cluster.GetCoordinator()
-	other := cluster.GetNonCoordinator()
+	coord := cluster.GetPrimary()
+	other := cluster.GetNonPrimary()
 
 	mustNodeID := func(baseURL string) string {
 		body := test.Do(t, "GET", fmt.Sprintf("%s/status", baseURL), "").Body
@@ -584,7 +584,7 @@ func TestClusterResize_RemoveNode(t *testing.T) {
 		}
 	})
 
-	t.Run("ErrorRemoveCoordinator", func(t *testing.T) {
+	t.Run("ErrorRemovePrimary", func(t *testing.T) {
 		nodeID := mustNodeID(coord.URL())
 		resp := test.Do(t, "POST", coord.URL()+"/cluster/resize/remove-node", fmt.Sprintf(`{"id": "%s"}`, nodeID))
 
@@ -596,7 +596,7 @@ func TestClusterResize_RemoveNode(t *testing.T) {
 		}
 	})
 
-	t.Run("ErrorRemoveOnNonCoordinator", func(t *testing.T) {
+	t.Run("ErrorRemoveOnNonPrimary", func(t *testing.T) {
 		nodeID := mustNodeID(other.URL())
 		resp := test.Do(t, "POST", other.URL()+"/cluster/resize/remove-node", fmt.Sprintf(`{"id": "%s"}`, nodeID))
 

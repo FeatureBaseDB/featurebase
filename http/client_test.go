@@ -764,7 +764,7 @@ func TestClient_ImportKeys(t *testing.T) {
 			}
 		})
 
-		// Import to node1 (ensure import is routed to coordinator for translation).
+		// Import to node1 (ensure import is routed to primary for translation).
 		t.Run("Import node1", func(t *testing.T) {
 			if err := c1.ImportK(context.Background(), "keyed", "keyedf1", []pilosa.Bit{
 				{RowKey: "green", ColumnKey: "eve"},
@@ -1226,8 +1226,8 @@ func TestClientTransactions(t *testing.T) {
 	c := test.MustRunCluster(t, 3)
 	defer c.Close()
 
-	coord := c.GetCoordinator()
-	other := c.GetNonCoordinator()
+	coord := c.GetPrimary()
+	other := c.GetNonPrimary()
 
 	client0 := MustNewClient(coord.URL(), http.GetHTTPClient(nil))
 	client1 := MustNewClient(other.URL(), http.GetHTTPClient(nil))
@@ -1357,10 +1357,10 @@ func TestClientTransactions(t *testing.T) {
 			trns)
 	}
 
-	// non-coordinator
+	// non-primary
 	if trns, err := client1.StartTransaction(context.Background(), "blah", time.Minute, false); err == nil ||
 		!strings.Contains(err.Error(), pilosa.ErrNodeNotPrimary.Error()) {
-		t.Fatalf("unexpected error starting on non-coordinator: %v", err)
+		t.Fatalf("unexpected error starting on non-primary: %v", err)
 	} else {
 		test.CompareTransactions(t,
 			nil,
