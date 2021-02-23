@@ -6866,19 +6866,68 @@ func variousQueriesOnPercentiles(t *testing.T, clusterSize int) {
 	c := test.MustRunCluster(t, clusterSize)
 	defer c.Close()
 
-	// generic index
-	// worth noting, since we are using YMDH resolution, both C4 & C5
-	// get binned to the same hour
-	c.CreateField(t, "users", pilosa.IndexOptions{Keys: true, TrackExistence: true}, "net_worth", pilosa.OptFieldTypeInt(-1000, 1000))
-	c.ImportIntKey(t, "users", "net_worth", []test.IntKey{
-		{Key: "user1", Val: 10},
-		{Key: "user2", Val: 20},
-		{Key: "user3", Val: 30},
-		{Key: "user4", Val: 40},
-		{Key: "user5", Val: 50},
-		{Key: "user6", Val: 60},
-		{Key: "user7", Val: 70},
+	// todo, make more randoms
+	r := rand.New(rand.NewSource(42))
+
+	// gen Numbers to test percentile query on, shuffle for extra spice
+	// size should always be greater than 0
+	size := 10000
+	nums := make([]int64, size)
+	for i := 0; i < size; i++ {
+		nums[i] = int64(r.Uint64())
+	}
+	r.Shuffle(len(nums), func(i, j int) {
+		nums[i], nums[j] = nums[j], nums[i]
 	})
+
+	// get min and max for calculating both expected median
+	// and bounds for bsi field
+	// get min & max
+	min, max := nums[0], nums[0]
+	for _, n := range nums[1:] {
+		if n < min {
+			min = n
+		}
+		if n > max {
+			max = n
+		}
+	}
+
+	// generate entries for index
+	entries := make([]test.IntKey, size)
+	for i := 0; i < size; i++ {
+		key := fmt.Sprintf("user%d", i+1)
+		val := nums[i]
+		entries[i] = test.IntKey{Key: key, Val: val}
+	}
+
+	// calculate the expected Median
+	expectedMedian := func(nums []int64, min, max int64) int64 {
+		// bin search
+		for min < max {
+			possibleMedian := (max + min) / 2
+			leftCount, rightCount := int64(0), int64(0)
+			for _, n := range nums {
+				if n < possibleMedian {
+					leftCount++
+				} else if n > possibleMedian {
+					rightCount++
+				}
+			}
+			if leftCount > rightCount {
+				max = possibleMedian - 1
+			} else if leftCount < rightCount {
+				min = possibleMedian + 1
+			} else { // perfectly balanced, as all things should be
+				return possibleMedian
+			}
+		}
+		return min
+	}(nums, min, max)
+
+	// generic index
+	c.CreateField(t, "users", pilosa.IndexOptions{Keys: true, TrackExistence: true}, "net_worth", pilosa.OptFieldTypeInt(min, max))
+	c.ImportIntKey(t, "users", "net_worth", entries)
 
 	splitSortBackToCSV := func(csvStr string) string {
 		ss := strings.Split(csvStr[:len(csvStr)-1], "\n")
@@ -6896,7 +6945,7 @@ func variousQueriesOnPercentiles(t *testing.T, clusterSize int) {
 		// Rows
 		{
 			query:       `Percentile(field="net_worth", nth=0.5)`,
-			csvVerifier: "40,1\n",
+			csvVerifier: fmt.Sprintf("%d,1\n", expectedMedian),
 		},
 	}
 
