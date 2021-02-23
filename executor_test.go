@@ -6854,8 +6854,76 @@ func TestVariousQueries(t *testing.T) {
 			c := test.MustRunCluster(t, clusterSize)
 			defer c.Close()
 
-			variousQueries(t, c)
-			variousQueriesOnTimeFields(t, c)
+			variousQueries(t, clusterSize)
+			variousQueriesOnTimeFields(t, clusterSize)
+			variousQueriesOnPercentiles(t, clusterSize)
+		})
+	}
+}
+
+// tests for abbreviating time values in queries
+func variousQueriesOnPercentiles(t *testing.T, clusterSize int) {
+	c := test.MustRunCluster(t, clusterSize)
+	defer c.Close()
+
+	// generic index
+	// worth noting, since we are using YMDH resolution, both C4 & C5
+	// get binned to the same hour
+	c.CreateField(t, "users", pilosa.IndexOptions{Keys: true, TrackExistence: true}, "net_worth", pilosa.OptFieldTypeInt(-1000, 1000))
+	c.ImportIntKey(t, "users", "net_worth", []test.IntKey{
+		{Key: "user1", Val: 1},
+		{Key: "user2", Val: 2},
+		{Key: "user3", Val: 3},
+		{Key: "user4", Val: 4},
+		{Key: "user5", Val: 5},
+		{Key: "user6", Val: 6},
+		{Key: "user7", Val: 7},
+	})
+
+	splitSortBackToCSV := func(csvStr string) string {
+		ss := strings.Split(csvStr[:len(csvStr)-1], "\n")
+		sort.Strings(ss)
+		return strings.Join(ss, "\n") + "\n"
+	}
+
+	toCSV := func(s string) string {
+		return strings.Join(strings.Split(s, " "), "\n") + "\n"
+	}
+
+	type testCase struct {
+		query       string
+		qrVerifier  func(t *testing.T, resp pilosa.QueryResponse)
+		csvVerifier string
+	}
+
+	tests := []testCase{
+		// Rows
+		{
+			query:       `Percentile(field="net_worth", nth=0.5)`,
+			csvVerifier: toCSV("4"),
+		},
+	}
+
+	for i, tst := range tests {
+		t.Run(fmt.Sprintf("%d-%s", i, tst.query), func(t *testing.T) {
+			resp := c.Query(t, "users", tst.query)
+			tr := c.QueryGRPC(t, "users", tst.query)
+			if tst.qrVerifier != nil {
+				tst.qrVerifier(t, resp)
+			}
+			csvString, err := tableResponseToCSVString(tr)
+			if err != nil {
+				t.Fatal(err)
+			}
+			// verify everything after header
+			got := splitSortBackToCSV(csvString[strings.Index(csvString, "\n")+1:])
+			if got != tst.csvVerifier {
+				t.Errorf("expected:\n%s\ngot:\n%s", tst.csvVerifier, got)
+			}
+
+			// TODO: add HTTP and Postgres and ability to convert
+			// those results to CSV to run through CSV verifier
+>>>>>>> Add basic test for Percentile query
 		})
 	}
 }
