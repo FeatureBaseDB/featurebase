@@ -40,13 +40,17 @@ func (q TimeQuantum) HasDay() bool { return strings.ContainsRune(string(q), 'D')
 // HasHour returns true if the quantum contains a 'H' unit.
 func (q TimeQuantum) HasHour() bool { return strings.ContainsRune(string(q), 'H') }
 
+// Has10Minute returns true if the quantum contains a 'm' unit.
+func (q TimeQuantum) Has10Minute() bool { return strings.ContainsRune(string(q), 'm') }
+
 // Valid returns true if q is a valid time quantum value.
 func (q TimeQuantum) Valid() bool {
 	switch q {
-	case "Y", "YM", "YMD", "YMDH",
-		"M", "MD", "MDH",
-		"D", "DH",
-		"H",
+	case "Y", "YM", "YMD", "YMDH", "YMDH10m",
+		"M", "MD", "MDH", "MDH10m",
+		"D", "DH", "DH10m",
+		"H", "H10m",
+		"10m",
 		"":
 		return true
 	default:
@@ -82,6 +86,8 @@ func viewByTimeUnit(name string, t time.Time, unit rune) string {
 		return fmt.Sprintf("%s_%s", name, t.Format("20060102"))
 	case 'H':
 		return fmt.Sprintf("%s_%s", name, t.Format("2006010215"))
+	case 'm':
+		return fmt.Sprintf("%s_%s", name, t.Format("200601021504")[:11]+"0")
 	default:
 		return ""
 	}
@@ -102,19 +108,33 @@ func viewsByTime(name string, t time.Time, q TimeQuantum) []string { // nolint: 
 
 // viewsByTimeRange returns a list of views to traverse to query a time range.
 func viewsByTimeRange(name string, start, end time.Time, q TimeQuantum) []string { // nolint: unparam
-	t := start
+	layout := "200601021504"
+	t, _ := time.Parse(layout, start.Format(layout)[:11]+"0")
+
+	// end -> lte
+	end = end.Add(time.Minute)
 
 	// Save flags for performance.
 	hasYear := q.HasYear()
 	hasMonth := q.HasMonth()
 	hasDay := q.HasDay()
 	hasHour := q.HasHour()
+	has10Minute := q.Has10Minute()
 
 	var results []string
 
 	// Walk up from smallest units to largest units.
-	if hasHour || hasDay || hasMonth {
+	if has10Minute || hasHour || hasDay || hasMonth {
 		for t.Before(end) {
+			if has10Minute {
+				if !nextHourGTE(t, end) {
+					break
+				} else if t.Minute() != 0 {
+					results = append(results, viewByTimeUnit(name, t, 'm'))
+					t = t.Add(10 * time.Minute)
+					continue
+				}
+			}
 			if hasHour {
 				if !nextDayGTE(t, end) {
 					break
@@ -164,10 +184,14 @@ func viewsByTimeRange(name string, start, end time.Time, q TimeQuantum) []string
 		} else if hasDay && nextDayGTE(t, end) {
 			results = append(results, viewByTimeUnit(name, t, 'D'))
 			t = t.AddDate(0, 0, 1)
-		} else if hasHour {
+		} else if hasHour && nextHourGTE(t, end) {
 			results = append(results, viewByTimeUnit(name, t, 'H'))
 			t = t.Add(time.Hour)
+		} else if has10Minute {
+			results = append(results, viewByTimeUnit(name, t, 'm'))
+			t = t.Add(10 * time.Minute)
 		} else {
+
 			break
 		}
 	}
@@ -216,6 +240,18 @@ func nextDayGTE(t time.Time, end time.Time) bool {
 	return end.After(next)
 }
 
+func nextHourGTE(t time.Time, end time.Time) bool {
+	next := t.Add(time.Hour)
+	y1, m1, d1 := next.Date()
+	h1 := next.Hour()
+	y2, m2, d2 := end.Date()
+	h2 := end.Hour()
+	if (y1 == y2) && (m1 == m2) && (d1 == d2) && (h1 == h2) {
+		return true
+	}
+	return end.After(next)
+}
+
 // parseTime parses a string or int64 into a time.Time value.
 func parseTime(t interface{}) (time.Time, error) {
 	var err error
@@ -252,6 +288,8 @@ func minMaxViews(views []string, q TimeQuantum) (min string, max string) {
 		chars = 8
 	} else if q.HasHour() {
 		chars = 10
+	} else if q.Has10Minute() {
+		chars = 12
 	}
 
 	// min: get the first view with the matching number of time chars.
@@ -281,7 +319,7 @@ func timeOfView(v string, adj bool) (time.Time, error) {
 		return time.Time{}, nil
 	}
 
-	layout := "2006010203"
+	layout := "200601021504"
 	timePart := viewTimePart(v)
 
 	switch len(timePart) {
@@ -321,6 +359,16 @@ func timeOfView(v string, adj bool) (time.Time, error) {
 			t = t.Add(time.Hour)
 		}
 		return t, nil
+	case 12: // minute
+		t, err := time.Parse(layout[:12], timePart[:11]+"0")
+		if err != nil {
+			return time.Time{}, err
+		}
+		if adj {
+			t = t.Add(10 * time.Minute)
+		}
+		return t, nil
+
 	}
 
 	return time.Time{}, fmt.Errorf("invalid time format on view: %s", v)

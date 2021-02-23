@@ -16,7 +16,6 @@ package pilosa
 
 import (
 	"reflect"
-	"strings"
 	"testing"
 	"time"
 )
@@ -59,6 +58,11 @@ func TestViewByTimeUnit(t *testing.T) {
 	})
 	t.Run("H", func(t *testing.T) {
 		if s := viewByTimeUnit("F", ts, 'H'); s != "F_2000010203" {
+			t.Fatalf("unexpected name: %s", s)
+		}
+	})
+	t.Run("10m", func(t *testing.T) {
+		if s := viewByTimeUnit("F", ts, 'm'); s != "F_200001020300" {
 			t.Fatalf("unexpected name: %s", s)
 		}
 	})
@@ -163,6 +167,13 @@ func TestViewsByTimeRange(t *testing.T) {
 			t.Fatalf("unexpected fields: %#v", a)
 		}
 	})
+	t.Run("10m", func(t *testing.T) {
+		a := viewsByTimeRange("F", mustParseTime("2000-01-01 00:00"), mustParseTime("2000-01-01 00:30"), mustParseTimeQuantum("10m"))
+		if !reflect.DeepEqual(a, []string{"F_200001010000", "F_200001010010", "F_200001010020", "F_200001010030"}) {
+			t.Fatalf("unexpected fields: %#v", a)
+		}
+	})
+
 }
 
 func TestMinMaxViews(t *testing.T) {
@@ -253,6 +264,13 @@ func TestTimeOfView(t *testing.T) {
 				"",
 			},
 			{
+				"std_201902030810",
+				time.Date(2019, 2, 3, 8, 10, 0, 0, time.UTC),
+				time.Date(2019, 2, 3, 8, 20, 0, 0, time.UTC),
+				"",
+			},
+
+			{
 				"foo",
 				time.Time{},
 				time.Time{},
@@ -260,9 +278,9 @@ func TestTimeOfView(t *testing.T) {
 			},
 			{
 				"std_201902030801",
-				time.Time{},
-				time.Time{},
-				"invalid time format on view: std_201902030801",
+				time.Date(2019, 2, 3, 8, 00, 0, 0, time.UTC),
+				time.Date(2019, 2, 3, 8, 10, 0, 0, time.UTC),
+				"",
 			},
 		}
 		for i, test := range tests {
@@ -313,7 +331,7 @@ func mustParseTimeQuantum(v string) TimeQuantum {
 
 // parseTimeQuantum parses v into a time quantum.
 func parseTimeQuantum(v string) (TimeQuantum, error) {
-	q := TimeQuantum(strings.ToUpper(v))
+	q := TimeQuantum(v)
 	if !q.Valid() {
 		return "", ErrInvalidTimeQuantum
 	}
