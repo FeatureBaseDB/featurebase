@@ -1335,7 +1335,6 @@ func (e *executor) executePercentile(ctx context.Context, qcx *Qcx, index string
 			Op:    pql.Token(pql.LT),
 			Value: possibleNthVal,
 		}
-		countCall.Children = []*pql.Call{rangeCall}
 		leftCountUint64, err := e.executeCount(ctx, qcx, index, countCall, shards, opt)
 		if err != nil {
 			return ValCount{}, errors.Wrap(err, "executing Count call L for Percentile")
@@ -1347,7 +1346,6 @@ func (e *executor) executePercentile(ctx context.Context, qcx *Qcx, index string
 			Op:    pql.Token(pql.GT),
 			Value: possibleNthVal,
 		}
-		countCall.Children = []*pql.Call{rangeCall}
 		rightCountUint64, err := e.executeCount(ctx, qcx, index, countCall, shards, opt)
 		if err != nil {
 			return ValCount{}, errors.Wrap(err, "executing Count call R for Percentile")
