@@ -24,7 +24,6 @@ import (
 	"math/rand"
 	"net"
 	nethttp "net/http"
-	"os"
 	"reflect"
 	"sort"
 	"strings"
@@ -38,6 +37,7 @@ import (
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/server"
 	"github.com/pilosa/pilosa/v2/test"
+	"github.com/pilosa/pilosa/v2/testhook"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -1202,7 +1202,7 @@ func TestMain(m *testing.M) {
 			panic(err)
 		}
 	}()
-	os.Exit(m.Run())
+	testhook.RunTestsWithHooks(m)
 }
 
 // TestClusterCreatedAtRace is a regression test for an issue where
