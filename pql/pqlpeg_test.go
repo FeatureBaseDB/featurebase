@@ -523,6 +523,19 @@ func TestPQLDeepEquality(t *testing.T) {
 				},
 			}},
 		{
+			name: "TopNwithField=",
+			call: "TopN(field=myfield, Row(), a=7)",
+			exp: &Call{
+				Name: "TopN",
+				Args: map[string]interface{}{
+					"a":      int64(7),
+					"_field": "myfield",
+				},
+				Children: []*Call{
+					{Name: "Row"},
+				},
+			}},
+		{
 			name: "RangeEQ",
 			call: "Row(a==7)",
 			exp: &Call{
