@@ -30,10 +30,10 @@ func TestNewCluster(t *testing.T) {
 	cluster := test.MustRunCluster(t, numNodes)
 	defer cluster.Close()
 
-	coordinator := getCoordinator(cluster.Nodes[0])
+	primary := getPrimary(cluster.Nodes[0])
 	for i := 1; i < numNodes; i++ {
-		if coordi := getCoordinator(cluster.Nodes[i]); coordi != coordinator {
-			t.Fatalf("node %d does not have the same coordinator as node 0. '%v' and '%v' respectively", i, coordi, coordinator)
+		if coordi := getPrimary(cluster.Nodes[i]); coordi != primary {
+			t.Fatalf("node %d does not have the same primary as node 0. '%v' and '%v' respectively", i, coordi, primary)
 		}
 	}
 	req, err := http.NewRequest(
@@ -82,12 +82,12 @@ func TestNewCluster(t *testing.T) {
 	}
 }
 
-func getCoordinator(m *test.Command) string {
+func getPrimary(m *test.Command) string {
 	hosts := m.API.Hosts(context.Background())
 	for _, host := range hosts {
 		if host.IsPrimary {
 			return host.ID
 		}
 	}
-	panic("no coordinator in cluster")
+	panic("no primary in cluster")
 }

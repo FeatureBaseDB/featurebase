@@ -943,7 +943,7 @@ func (s *Server) SendTo(node *topology.Node, m Message) error {
 }
 
 // node returns the pilosa.node object. It is used by membership protocols to
-// get this node's name(ID), location(URI), and coordinator status.
+// get this node's name(ID), location(URI), and primary status.
 func (s *Server) node() *topology.Node {
 	return s.cluster.Node.Clone()
 }
@@ -1113,7 +1113,7 @@ func (srv *Server) StartTransaction(ctx context.Context, id string, timeout time
 		return nil, ErrNodeNotPrimary
 	}
 	if remote && (snap.IsPrimaryFieldTranslationNode(node.ID) || len(srv.cluster.Nodes()) == 1) {
-		return nil, errors.New("unexpected remote start call to coordinator or single node cluster")
+		return nil, errors.New("unexpected remote start call to primary or single node cluster")
 	}
 
 	if remote {
@@ -1160,7 +1160,7 @@ func (srv *Server) FinishTransaction(ctx context.Context, id string, remote bool
 		return nil, ErrNodeNotPrimary
 	}
 	if remote && (snap.IsPrimaryFieldTranslationNode(node.ID) || len(srv.cluster.Nodes()) == 1) {
-		return nil, errors.New("unexpected remote finish call to coordinator or single node cluster")
+		return nil, errors.New("unexpected remote finish call to primary or single node cluster")
 	}
 
 	if remote {
@@ -1202,7 +1202,7 @@ func (srv *Server) GetTransaction(ctx context.Context, id string, remote bool) (
 	}
 
 	if remote && (snap.IsPrimaryFieldTranslationNode(node.ID) || len(srv.cluster.Nodes()) == 1) {
-		return nil, errors.New("unexpected remote get call to coordinator or single node cluster")
+		return nil, errors.New("unexpected remote get call to primary or single node cluster")
 	}
 
 	trns, err := srv.holder.GetTransaction(ctx, id)

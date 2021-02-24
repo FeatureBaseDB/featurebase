@@ -613,44 +613,6 @@ func TestCluster_PreviousNode(t *testing.T) {
 	})
 }
 
-// NEXT: move this test to internal and unexport IsCoordinator
-func TestCluster_Coordinator(t *testing.T) {
-	// TODO check if this test still makes sense
-	t.Skip()
-
-	const urisCount = 2
-	var uris []pnet.URI
-	if err := port.GetPorts(func(ports []int) error {
-		for i := 0; i < urisCount; i++ {
-			uris = append(uris, NewTestURIFromHostPort(fmt.Sprintf("node%d", i), uint16(ports[i])))
-		}
-		return nil
-	}, urisCount, 10); err != nil {
-		t.Fatalf("getting ports: %v", err)
-	}
-
-	node1 := &topology.Node{ID: "node1", URI: uris[0]}
-	node2 := &topology.Node{ID: "node2", URI: uris[1]}
-	noder := topology.NewLocalNoder([]*topology.Node{node1, node2})
-
-	c1 := *newCluster()
-	c1.Node = node1
-	// c1.Coordinator = node1.ID
-	c1.noder = noder
-	c2 := *newCluster()
-	c2.Node = node2
-	// c2.Coordinator = node1.ID
-	c2.noder = noder
-
-	t.Run("IsCoordinator", func(t *testing.T) {
-		if !c1.isCoordinator() {
-			t.Errorf("!IsCoordinator error: %v", c1.Node)
-		} else if c2.isCoordinator() {
-			t.Errorf("IsCoordinator error: %v", c2.Node)
-		}
-	})
-}
-
 func TestAE(t *testing.T) {
 	t.Run("AbortDoesn'tBlockUninitialized", func(t *testing.T) {
 		c := newCluster()

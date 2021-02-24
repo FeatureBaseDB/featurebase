@@ -224,7 +224,6 @@ func (h *Handler) populateValidators() {
 	h.validators = map[string]*queryValidationSpec{}
 	h.validators["PostClusterResizeAbort"] = queryValidationSpecRequired()
 	h.validators["PostClusterResizeRemoveNode"] = queryValidationSpecRequired()
-	h.validators["PostClusterResizeSetCoordinator"] = queryValidationSpecRequired()
 	h.validators["GetExport"] = queryValidationSpecRequired("index", "field", "shard")
 	h.validators["GetIndexes"] = queryValidationSpecRequired()
 	h.validators["GetIndex"] = queryValidationSpecRequired()

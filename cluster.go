@@ -173,26 +173,15 @@ func (c *cluster) abortAntiEntropy() {
 	}
 }
 
-func (c *cluster) coordinatorNode() *topology.Node {
-	return c.unprotectedCoordinatorNode()
+func (c *cluster) primaryNode() *topology.Node {
+	return c.unprotectedPrimaryNode()
 }
 
-// unprotectedCoordinatorNode returns the coordinator node.
-func (c *cluster) unprotectedCoordinatorNode() *topology.Node {
+// unprotectedPrimaryNode returns the primary node.
+func (c *cluster) unprotectedPrimaryNode() *topology.Node {
 	// Create a snapshot of the cluster to use for node/partition calculations.
 	snap := topology.NewClusterSnapshot(c.noder, c.Hasher, c.ReplicaN)
 	return snap.PrimaryFieldTranslationNode()
-}
-
-// isCoordinator is true if this node is the coordinator.
-func (c *cluster) isCoordinator() bool {
-	return c.unprotectedIsCoordinator()
-}
-
-func (c *cluster) unprotectedIsCoordinator() bool {
-	// Create a snapshot of the cluster to use for node/partition calculations.
-	snap := topology.NewClusterSnapshot(c.noder, c.Hasher, c.ReplicaN)
-	return snap.PrimaryFieldTranslationNode().ID == c.Node.ID
 }
 
 func (c *cluster) applySchemaWithNewShards(schema *Schema) error {
@@ -1127,7 +1116,7 @@ func (c *cluster) followResizeInstruction(ctx context.Context, instr *ResizeInst
 			if err != nil {
 				// For now it is an acceptable error if the fragment is not found
 				// on the remote node. This occurs when a shard has been skipped and
-				// therefore doesn't contain data. The coordinator correctly determined
+				// therefore doesn't contain data. The primary correctly determined
 				// the resize instruction to retrieve the shard, but it doesn't have data.
 				// TODO: figure out a way to distinguish from "fragment not found" errors
 				// which are true errors and which simply mean the fragment doesn't have data.
@@ -1336,21 +1325,21 @@ func (c *cluster) unprotectedPrimaryReplicaNode() *topology.Node {
 
 // translateFieldKeys is basically a wrapper around
 // field.TranslateStore().TranslateKey(key), but in
-// the case where the local node is not coordinator, then this method will forward the translation
-// request to the coordinator.
+// the case where the local node is not primary, then this method will forward the translation
+// request to the primary.
 func (c *cluster) translateFieldKeys(ctx context.Context, field *Field, keys []string, writable bool) (ids []uint64, err error) {
 	// Create a snapshot of the cluster to use for node/partition calculations.
 	snap := topology.NewClusterSnapshot(c.noder, c.Hasher, c.ReplicaN)
 
 	primary := snap.PrimaryFieldTranslationNode()
 	if primary == nil {
-		return nil, errors.Errorf("translating field(%s/%s) keys(%v) - cannot find coordinator node", field.Index(), field.Name(), keys)
+		return nil, errors.Errorf("translating field(%s/%s) keys(%v) - cannot find primary node", field.Index(), field.Name(), keys)
 	}
 
 	if c.Node.ID == primary.ID {
 		ids, err = field.TranslateStore().TranslateKeys(keys, writable)
 	} else {
-		// If it's writable, then forward the request to the coordinator.
+		// If it's writable, then forward the request to the primary.
 		ids, err = c.InternalClient.TranslateKeysNode(ctx, &primary.URI, field.Index(), field.Name(), keys, writable)
 	}
 
@@ -1399,18 +1388,18 @@ func (c *cluster) findFieldKeys(ctx context.Context, field *Field, keys ...strin
 	}
 
 	// It is possible that the missing keys exist, but have not been synced to the local replica.
-	coordinator := c.coordinatorNode()
-	if coordinator == nil {
-		return nil, errors.Errorf("translating field(%s/%s) keys(%v) - cannot find coordinator node", field.Index(), field.Name(), keys)
+	primary := c.primaryNode()
+	if primary == nil {
+		return nil, errors.Errorf("translating field(%s/%s) keys(%v) - cannot find primary node", field.Index(), field.Name(), keys)
 	}
-	if c.Node.ID == coordinator.ID {
+	if c.Node.ID == primary.ID {
 		// The local copy is the authoritative copy.
 		return localTranslations, nil
 	}
 
-	// Forward the missing keys to the coordinator.
-	// The coordinator has the authoritative copy.
-	remoteTranslations, err := c.InternalClient.FindFieldKeysNode(ctx, &coordinator.URI, field.Index(), field.Name(), missing...)
+	// Forward the missing keys to the primary.
+	// The primary has the authoritative copy.
+	remoteTranslations, err := c.InternalClient.FindFieldKeysNode(ctx, &primary.URI, field.Index(), field.Name(), missing...)
 	if err != nil {
 		return nil, errors.Wrapf(err, "translating field(%s/%s) keys(%v) remotely", field.Index(), field.Name(), keys)
 	}
@@ -1435,12 +1424,12 @@ func (c *cluster) createFieldKeys(ctx context.Context, field *Field, keys ...str
 		return nil, errors.Wrap(ErrTranslatingKeyNotFound, "field is not keyed")
 	}
 
-	// The coordinator is the only node that can create field keys, since it owns the authoritative copy.
-	coordinator := c.coordinatorNode()
-	if coordinator == nil {
-		return nil, errors.Errorf("translating field(%s/%s) keys(%v) - cannot find coordinator node", field.Index(), field.Name(), keys)
+	// The primary is the only node that can create field keys, since it owns the authoritative copy.
+	primary := c.primaryNode()
+	if primary == nil {
+		return nil, errors.Errorf("translating field(%s/%s) keys(%v) - cannot find primary node", field.Index(), field.Name(), keys)
 	}
-	if c.Node.ID == coordinator.ID {
+	if c.Node.ID == primary.ID {
 		// The local copy is the authoritative copy.
 		return field.TranslateStore().CreateKeys(keys...)
 	}
@@ -1473,8 +1462,8 @@ func (c *cluster) createFieldKeys(ctx context.Context, field *Field, keys ...str
 		return localTranslations, nil
 	}
 
-	// Forward the missing keys to the coordinator to be created.
-	remoteTranslations, err := c.InternalClient.CreateFieldKeysNode(ctx, &coordinator.URI, field.Index(), field.Name(), missing...)
+	// Forward the missing keys to the primary to be created.
+	remoteTranslations, err := c.InternalClient.CreateFieldKeysNode(ctx, &primary.URI, field.Index(), field.Name(), missing...)
 	if err != nil {
 		return nil, errors.Wrapf(err, "translating field(%s/%s) keys(%v) remotely", field.Index(), field.Name(), keys)
 	}
@@ -1516,7 +1505,7 @@ func (c *cluster) translateFieldListIDs(field *Field, ids []uint64) (keys []stri
 
 	primary := snap.PrimaryFieldTranslationNode()
 	if primary == nil {
-		return nil, errors.Errorf("translating field(%s/%s) ids(%v) - cannot find coordinator node", field.Index(), field.Name(), ids)
+		return nil, errors.Errorf("translating field(%s/%s) ids(%v) - cannot find primary node", field.Index(), field.Name(), ids)
 	}
 
 	if c.Node.ID == primary.ID {
@@ -2018,7 +2007,7 @@ type DeleteViewMessage struct {
 	View  string
 }
 
-// ResizeInstructionComplete is an internal message to the coordinator indicating
+// ResizeInstructionComplete is an internal message to the primary indicating
 // that the resize instructions performed on a single node have completed.
 type ResizeInstructionComplete struct {
 	JobID int64

@@ -200,15 +200,15 @@ func (c *InternalClient) CreateIndex(ctx context.Context, index string, opt pilo
 	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.CreateIndex")
 	defer span.Finish()
 
-	// Get the coordinator node. Schema changes must go through
-	// coordinator to avoid weird race conditions.
+	// Get the primary node. Schema changes must go through
+	// primary to avoid weird race conditions.
 	nodes, err := c.Nodes(ctx)
 	if err != nil {
 		return fmt.Errorf("getting nodes: %s", err)
 	}
 	coord := getPrimaryNode(nodes)
 	if coord == nil {
-		return fmt.Errorf("could not find the coordinator node")
+		return fmt.Errorf("could not find the primary node")
 	}
 
 	// Encode query request.
@@ -437,13 +437,13 @@ func (c *InternalClient) ImportK(ctx context.Context, index, field string, bits 
 		return fmt.Errorf("Error Creating Payload: %s", err)
 	}
 
-	// Get the coordinator node; all bits are sent to the
-	// primary translate store (i.e. coordinator).
+	// Get the primary node; all bits are sent to the
+	// primary translate store (i.e. primary).
 	// TODO... is that right^^?
 	// RESPONSE: It looks like in ctl/import.go, we could change the
 	// logic in ImportCommand.importBits() to only use ImportK
 	// when useRowKeys = true. It's no longer necessary to
-	// send column key translations to the coordinator (although
+	// send column key translations to the primary (although
 	// it should still work). As far as I know, the only thing
 	// that uses ImportK is the pilosa import sub-command.
 	nodes, err := c.Nodes(ctx)
@@ -452,7 +452,7 @@ func (c *InternalClient) ImportK(ctx context.Context, index, field string, bits 
 	}
 	coord := getPrimaryNode(nodes)
 	if coord == nil {
-		return fmt.Errorf("could not find the coordinator node")
+		return fmt.Errorf("could not find the primary node")
 	}
 
 	// Import to node.
@@ -656,15 +656,15 @@ func (c *InternalClient) ImportValueK(ctx context.Context, index, field string, 
 		}
 	}
 
-	// Get the coordinator node; all bits are sent to the
-	// primary translate store (i.e. coordinator).
+	// Get the primary node; all bits are sent to the
+	// primary translate store.
 	nodes, err := c.Nodes(ctx)
 	if err != nil {
 		return fmt.Errorf("getting nodes: %s", err)
 	}
 	coord := getPrimaryNode(nodes)
 	if coord == nil {
-		return fmt.Errorf("could not find the coordinator node")
+		return fmt.Errorf("could not find the primary node")
 	}
 
 	// Import to node.
@@ -966,15 +966,15 @@ func (c *InternalClient) CreateFieldWithOptions(ctx context.Context, index, fiel
 		return errors.Wrap(err, "marshaling")
 	}
 
-	// Get the coordinator node. Schema changes must go through
-	// coordinator to avoid weird race conditions.
+	// Get the primary node. Schema changes must go through
+	// primary to avoid weird race conditions.
 	nodes, err := c.Nodes(ctx)
 	if err != nil {
 		return fmt.Errorf("getting nodes: %s", err)
 	}
 	coord := getPrimaryNode(nodes)
 	if coord == nil {
-		return fmt.Errorf("could not find the coordinator node")
+		return fmt.Errorf("could not find the primary node")
 	}
 
 	// Create URL & HTTP request.
@@ -1202,8 +1202,8 @@ func (c *InternalClient) SendMessage(ctx context.Context, uri *pnet.URI, msg []b
 	return errors.Wrap(err, "draining SendMessage response body")
 }
 
-// TranslateKeysNode function is mainly called to translate keys from coordinator node.
-// If coordinator node returns 404 error the function wraps it with pilosa.ErrTranslatingKeyNotFound.
+// TranslateKeysNode function is mainly called to translate keys from primary node.
+// If primary node returns 404 error the function wraps it with pilosa.ErrTranslatingKeyNotFound.
 func (c *InternalClient) TranslateKeysNode(ctx context.Context, uri *pnet.URI, index, field string, keys []string, writable bool) ([]uint64, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "TranslateKeysNode")
 	defer span.Finish()
@@ -1608,7 +1608,7 @@ func (c *InternalClient) StartTransaction(ctx context.Context, id string, timeou
 	// We're using the defaultURI here because this is only used by
 	// tests, and we want to test requests against all hosts. A robust
 	// client implementation would ensure that these requests go to
-	// the coordinator.
+	// the primary.
 	u := uriPathToURL(c.defaultURI, "/transaction/"+id)
 	req, err := http.NewRequest("POST", u.String(), bytes.NewReader(buf))
 	if err != nil {
@@ -1680,7 +1680,7 @@ func (c *InternalClient) GetTransaction(ctx context.Context, id string) (*pilosa
 	// We're using the defaultURI here because this is only used by
 	// tests, and we want to test requests against all hosts. A robust
 	// client implementation would ensure that these requests go to
-	// the coordinator.
+	// the primary.
 	u := uriPathToURL(c.defaultURI, "/transaction/"+id)
 	req, err := http.NewRequest("GET", u.String(), nil)
 	if err != nil {

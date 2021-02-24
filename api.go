@@ -795,14 +795,14 @@ func (api *API) TranslateData(ctx context.Context, indexName string, partition i
 }
 
 // Hosts returns a list of the hosts in the cluster including their ID,
-// URL, and which is the coordinator.
+// URL, and which is the primary.
 func (api *API) Hosts(ctx context.Context) []*topology.Node {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.Hosts")
 	defer span.Finish()
 	return api.cluster.Nodes()
 }
 
-// Node gets the ID, URI and coordinator status for this particular node.
+// Node gets the ID, URI and primary status for this particular node.
 func (api *API) Node() *topology.Node {
 	return api.server.node()
 }
@@ -813,7 +813,7 @@ func (api *API) NodeID() string {
 	return api.server.nodeID
 }
 
-// PrimaryNode returns the coordinator node for the cluster.
+// PrimaryNode returns the primary node for the cluster.
 func (api *API) PrimaryNode() *topology.Node {
 	// Create a snapshot of the cluster to use for node/partition calculations.
 	snap := topology.NewClusterSnapshot(api.cluster.noder, api.cluster.Hasher, api.cluster.ReplicaN)
@@ -1372,7 +1372,7 @@ func (api *API) ImportWithTx(ctx context.Context, qcx *Qcx, req *ImportRequest, 
 		"field", req.Field)
 
 	// Unless explicitly ignoring key validation (meaning keys have been
-	// translated to ids in a previous step at the coordinator node), then
+	// translated to ids in a previous step at the primary node), then
 	// check to see if keys need translation.
 	if !options.IgnoreKeyCheck {
 		// Translate row keys.
@@ -1511,7 +1511,7 @@ func (api *API) ImportValueWithTx(ctx context.Context, qcx *Qcx, req *ImportValu
 		"index", req.Index,
 		"field", req.Field)
 	// Unless explicitly ignoring key validation (meaning keys have been
-	// translate to ids in a previous step at the coordinator node), then
+	// translate to ids in a previous step at the primary node), then
 	// check to see if keys need translation.
 	if !options.IgnoreKeyCheck {
 		// Translate column keys.
@@ -2147,7 +2147,7 @@ func (api *API) ReserveIDs(key IDAllocKey, session [32]byte, offset uint64, coun
 		return api.holder.ida.reserve(key, session, offset, count)
 	}
 
-	return nil, errors.New("cannot reserve IDs on a non-coordinator node")
+	return nil, errors.New("cannot reserve IDs on a non-primary node")
 }
 
 func (api *API) CommitIDs(key IDAllocKey, session [32]byte, count uint64) error {
@@ -2162,7 +2162,7 @@ func (api *API) CommitIDs(key IDAllocKey, session [32]byte, count uint64) error 
 		return api.holder.ida.commit(key, session, count)
 	}
 
-	return errors.New("cannot commit IDs on a non-coordinator node")
+	return errors.New("cannot commit IDs on a non-primary node")
 }
 
 func (api *API) ResetIDAlloc(index string) error {
@@ -2177,7 +2177,7 @@ func (api *API) ResetIDAlloc(index string) error {
 		return api.holder.ida.reset(index)
 	}
 
-	return errors.New("cannot reset IDs on a non-coordinator node")
+	return errors.New("cannot reset IDs on a non-primary node")
 }
 
 // TranslateIndexDB is an internal function to load the index keys database

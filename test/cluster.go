@@ -55,7 +55,7 @@ func (c *Cluster) Query(t testing.TB, index, query string) pilosa.QueryResponse 
 		t.Fatal("must have at least one node in cluster to query")
 	}
 
-	return c.GetCoordinator().QueryAPI(t, &pilosa.QueryRequest{Index: index, Query: query})
+	return c.GetPrimary().QueryAPI(t, &pilosa.QueryRequest{Index: index, Query: query})
 }
 
 // QueryHTTP executes a PQL query through the HTTP endpoint. It fails
@@ -67,7 +67,7 @@ func (c *Cluster) QueryHTTP(t testing.TB, index, query string) (string, error) {
 		t.Fatal("must have at least one node in cluster to query")
 	}
 
-	return c.GetCoordinator().Query(t, index, "", query)
+	return c.GetPrimary().Query(t, index, "", query)
 }
 
 // QueryGRPC executes a PQL query through the GRPC endpoint. It fails the
@@ -78,7 +78,7 @@ func (c *Cluster) QueryGRPC(t testing.TB, index, query string) *proto.TableRespo
 		t.Fatal("must have at least one node in cluster to query")
 	}
 
-	grpcClient, err := client.NewGRPCClient([]string{fmt.Sprintf("%s:%d", c.GetCoordinator().Server.GRPCURI().Host, c.GetCoordinator().Server.GRPCURI().Port)}, nil)
+	grpcClient, err := client.NewGRPCClient([]string{fmt.Sprintf("%s:%d", c.GetPrimary().Server.GRPCURI().Host, c.GetPrimary().Server.GRPCURI().Port)}, nil)
 	if err != nil {
 		t.Fatalf("getting GRPC client: %v", err)
 	}
@@ -132,6 +132,10 @@ func (c *Cluster) GetNode(n int) *Command {
 	return c.Nodes[ids[n].idx]
 }
 
+// GetPrimary gets the node which has been determined to be the primary.
+// This used to be node0 in tests, but since implementing etcd, the primary
+// can be any node in the cluster, so we have to use this method in tests which
+// need to act on the primary.
 func (c *Cluster) GetPrimary() *Command {
 	for _, n := range c.Nodes {
 		if n.IsPrimary() {
@@ -141,6 +145,7 @@ func (c *Cluster) GetPrimary() *Command {
 	return nil
 }
 
+// GetNonPrimary gets first first non-primary node in the list of nodes.
 func (c *Cluster) GetNonPrimary() *Command {
 	for _, n := range c.Nodes {
 		if !n.IsPrimary() {
@@ -150,6 +155,7 @@ func (c *Cluster) GetNonPrimary() *Command {
 	return nil
 }
 
+// GetNonPrimaries gets all nodes except the primary.
 func (c *Cluster) GetNonPrimaries() []*Command {
 	rtn := make([]*Command, 0)
 	for _, n := range c.Nodes {
@@ -160,24 +166,6 @@ func (c *Cluster) GetNonPrimaries() []*Command {
 	return rtn
 }
 
-// GetCoordinator gets the node which has been determined to be the coordinator.
-// This used to be node0 in tests, but since implementing etcd, the coordinator
-// can be any node in the cluster, so we have to use this method in tests which
-// need to act on the coordinator.
-func (c *Cluster) GetCoordinator() *Command {
-	return c.GetPrimary()
-}
-
-// GetNonCoordinator gets first first non-coordinator node in the list of nodes.
-func (c *Cluster) GetNonCoordinator() *Command {
-	return c.GetNonPrimary()
-}
-
-// GetNonCoordinators gets all nodes except the coordinator.
-func (c *Cluster) GetNonCoordinators() []*Command {
-	return c.GetNonPrimaries()
-}
-
 // nodePlace represents a node's ID and its index into the c.Nodes slice.
 type nodePlace struct {
 	id  string
@@ -186,17 +174,6 @@ type nodePlace struct {
 
 func (c *Cluster) GetHolder(n int) *Holder {
 	return &Holder{Holder: c.GetNode(n).Server.Holder()}
-}
-
-// GetCoordinatorHolder returns the Holder for the coordinator node.
-func (c *Cluster) GetCoordinatorHolder() *Holder {
-	return &Holder{Holder: c.GetCoordinator().Server.Holder()}
-}
-
-// GetNonCoordinatorHolder returns the Holder for the the first non-coordinator
-// node in the list of nodes.
-func (c *Cluster) GetNonCoordinatorHolder() *Holder {
-	return &Holder{Holder: c.GetNonCoordinator().Server.Holder()}
 }
 
 func (c *Cluster) Len() int {
@@ -218,7 +195,7 @@ func (c *Cluster) ImportBits(t testing.TB, index, field string, rowcols [][2]uin
 			rowIDs[i] = bit[0]
 			colIDs[i] = bit[1]
 		}
-		nodes, err := c.GetCoordinator().API.ShardNodes(context.Background(), index, shard)
+		nodes, err := c.GetPrimary().API.ShardNodes(context.Background(), index, shard)
 		if err != nil {
 			t.Fatalf("getting shard nodes: %v", err)
 		}
@@ -261,7 +238,7 @@ func (c *Cluster) ImportKeyKey(t testing.TB, index, field string, valAndRecKeys 
 		importRequest.RowKeys[i] = vk[0]
 		importRequest.ColumnKeys[i] = vk[1]
 	}
-	err := c.GetCoordinator().API.Import(context.Background(), nil, importRequest)
+	err := c.GetPrimary().API.Import(context.Background(), nil, importRequest)
 	if err != nil {
 		t.Fatalf("importing keykey data: %v", err)
 	}
@@ -291,7 +268,7 @@ func (c *Cluster) ImportTimeQuantumKey(t testing.TB, index, field string, entrie
 		importRequest.Timestamps[i] = entry.Ts
 
 	}
-	err := c.GetCoordinator().API.Import(context.Background(), nil, importRequest)
+	err := c.GetPrimary().API.Import(context.Background(), nil, importRequest)
 	if err != nil {
 		t.Fatalf("importing keykey data: %v", err)
 	}
@@ -317,7 +294,7 @@ func (c *Cluster) ImportIntKey(t testing.TB, index, field string, pairs []IntKey
 		importRequest.Values[i] = pair.Val
 		importRequest.ColumnKeys[i] = pair.Key
 	}
-	if err := c.GetCoordinator().API.ImportValue(context.Background(), nil, importRequest); err != nil {
+	if err := c.GetPrimary().API.ImportValue(context.Background(), nil, importRequest); err != nil {
 		t.Fatalf("importing IntKey data: %v", err)
 	}
 }
@@ -341,7 +318,7 @@ func (c *Cluster) ImportIntID(t testing.TB, index, field string, pairs []IntID) 
 		importRequest.Values[i] = pair.Val
 		importRequest.ColumnIDs[i] = pair.ID
 	}
-	if err := c.GetCoordinator().API.ImportValue(context.Background(), nil, importRequest); err != nil {
+	if err := c.GetPrimary().API.ImportValue(context.Background(), nil, importRequest); err != nil {
 		t.Fatalf("importing IntID data: %v", err)
 	}
 }
@@ -366,7 +343,7 @@ func (c *Cluster) ImportIDKey(t testing.TB, index, field string, pairs []KeyID) 
 		importRequest.RowIDs[i] = pair.ID
 		importRequest.ColumnKeys[i] = pair.Key
 	}
-	err := c.GetCoordinator().API.Import(context.Background(), nil, importRequest)
+	err := c.GetPrimary().API.Import(context.Background(), nil, importRequest)
 	if err != nil {
 		t.Fatalf("importing IDKey data: %v", err)
 	}
@@ -375,11 +352,11 @@ func (c *Cluster) ImportIDKey(t testing.TB, index, field string, pairs []KeyID) 
 // CreateField creates the index (if necessary) and field specified.
 func (c *Cluster) CreateField(t testing.TB, index string, iopts pilosa.IndexOptions, field string, fopts ...pilosa.FieldOption) *pilosa.Field {
 	t.Helper()
-	idx, err := c.GetCoordinator().API.CreateIndex(context.Background(), index, iopts)
+	idx, err := c.GetPrimary().API.CreateIndex(context.Background(), index, iopts)
 	if err != nil && !strings.Contains(err.Error(), "index already exists") {
 		t.Fatalf("creating index: %v", err)
 	} else if err != nil { // index exists
-		idx, err = c.GetCoordinator().API.Index(context.Background(), index)
+		idx, err = c.GetPrimary().API.Index(context.Background(), index)
 		if err != nil {
 			t.Fatalf("getting index: %v", err)
 		}
@@ -388,7 +365,7 @@ func (c *Cluster) CreateField(t testing.TB, index string, iopts pilosa.IndexOpti
 		t.Logf("existing index options:\n%v\ndon't match given opts:\n%v\n in pilosa/test.Cluster.CreateField", idx.Options(), iopts)
 	}
 
-	f, err := c.GetCoordinator().API.CreateField(context.Background(), index, field, fopts...)
+	f, err := c.GetPrimary().API.CreateField(context.Background(), index, field, fopts...)
 	// we'll assume the field doesn't exist because checking if the options
 	// match seems painful.
 	if err != nil {
@@ -446,13 +423,13 @@ func (c *Cluster) Close() error {
 	return nil
 }
 
-func (c *Cluster) CloseAndRemoveNonCoordinator() error {
+func (c *Cluster) CloseAndRemoveNonPrimary() error {
 	for i, n := range c.Nodes {
 		if !n.IsPrimary() {
 			return c.CloseAndRemove(i)
 		}
 	}
-	return errors.New("could not find non-coordinator node")
+	return errors.New("could not find non-primary node")
 }
 
 func (c *Cluster) CloseAndRemove(n int) error {

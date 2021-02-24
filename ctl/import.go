@@ -261,7 +261,7 @@ func (cmd *ImportCommand) bufferBits(ctx context.Context, useColumnKeys, useRowK
 func (cmd *ImportCommand) importBits(ctx context.Context, useColumnKeys, useRowKeys bool, bits []pilosa.Bit) error {
 	logger := log.New(cmd.Stderr, "", log.LstdFlags)
 
-	// If keys are used, all bits are sent to the primary translate store (i.e. coordinator).
+	// If keys are used, all bits are sent to the primary translate store.
 	if useColumnKeys || useRowKeys {
 		logger.Printf("importing keys: n=%d", len(bits))
 		if err := cmd.client.ImportK(ctx, cmd.Index, cmd.Field, bits, pilosa.OptImportOptionsClear(cmd.Clear)); err != nil {

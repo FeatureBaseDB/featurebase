@@ -400,8 +400,8 @@ func TestTransactionsAPI(t *testing.T) {
 	cluster := test.MustRunCluster(t, 3)
 	defer cluster.Close()
 
-	coord := cluster.GetCoordinator().API
-	other := cluster.GetNonCoordinator().API
+	coord := cluster.GetPrimary().API
+	other := cluster.GetNonPrimary().API
 	ctx := context.Background()
 
 	// can fetch empty transactions
@@ -411,7 +411,7 @@ func TestTransactionsAPI(t *testing.T) {
 		t.Fatalf("unexpectedly has transactions: %v", trnsMap)
 	}
 
-	// can't fetch transactions from non-coordinator
+	// can't fetch transactions from non-primary
 	if _, err := other.Transactions(ctx); err != pilosa.ErrNodeNotPrimary {
 		t.Errorf("api1 should return ErrNodeNotPrimary when asked for transactions but got: %v", err)
 	}
@@ -442,7 +442,7 @@ func TestTransactionsAPI(t *testing.T) {
 		test.CompareTransactions(t, &pilosa.Transaction{ID: id, Active: true, Timeout: time.Minute, Deadline: time.Now().Add(time.Minute)}, trns)
 	}
 
-	// can't finish transaction on non-coordinator
+	// can't finish transaction on non-primary
 	if _, err := other.FinishTransaction(ctx, id, false); err != pilosa.ErrNodeNotPrimary {
 		t.Errorf("unexpected error is not ErrNodeNotPrimary: %v", err)
 	}
@@ -519,7 +519,7 @@ func TestTransactionsAPI(t *testing.T) {
 		test.CompareTransactions(t, &pilosa.Transaction{ID: "exc", Active: true, Exclusive: true, Timeout: time.Minute, Deadline: time.Now().Add(time.Minute)}, trns)
 	}
 
-	// LATER, test deadline extension on non-coordinator blocks active, exclusive transaction being returned
+	// LATER, test deadline extension on non-primary blocks active, exclusive transaction being returned
 }
 
 func TestMain_RecalculateCaches(t *testing.T) {
@@ -647,16 +647,16 @@ func TestClusteringNodesReplica1(t *testing.T) {
 		t.Fatalf("starting cluster: %v", err)
 	}
 
-	if err := cluster.GetNonCoordinator().Command.Close(); err != nil {
+	if err := cluster.GetNonPrimary().Command.Close(); err != nil {
 		t.Fatalf("closing third node: %v", err)
 	}
 
-	if err := cluster.GetCoordinator().AwaitState(disco.ClusterStateDown, 30*time.Second); err != nil {
+	if err := cluster.GetPrimary().AwaitState(disco.ClusterStateDown, 30*time.Second); err != nil {
 		t.Fatalf("starting cluster: %v", err)
 	}
 
 	// confirm that cluster stops accepting queries after one node closes
-	if _, err := cluster.GetCoordinator().API.Query(context.Background(), &pilosa.QueryRequest{}); !strings.Contains(err.Error(), "not allowed in state DOWN") {
+	if _, err := cluster.GetPrimary().API.Query(context.Background(), &pilosa.QueryRequest{}); !strings.Contains(err.Error(), "not allowed in state DOWN") {
 		t.Fatalf("got unexpected error querying an incomplete cluster: %v", err)
 	}
 }
@@ -675,7 +675,7 @@ func TestClusteringNodesReplica2(t *testing.T) {
 	}
 	defer cluster.Close()
 
-	coord, others := cluster.GetCoordinator(), cluster.GetNonCoordinators()
+	coord, others := cluster.GetPrimary(), cluster.GetNonPrimaries()
 
 	if err := others[0].Close(); err != nil {
 		t.Fatalf("closing third node: %v", err)
@@ -728,7 +728,7 @@ func TestRemoveNodeAfterItDies(t *testing.T) {
 		cluster.Close()
 	}()
 
-	coord, others := cluster.GetCoordinator(), cluster.GetNonCoordinators()
+	coord, others := cluster.GetPrimary(), cluster.GetNonPrimaries()
 
 	err = coord.AwaitState(disco.ClusterStateNormal, 100*time.Millisecond)
 	if err != nil {
@@ -789,7 +789,7 @@ func TestRemoveConcurrentIndexCreation(t *testing.T) {
 		t.Fatalf("removing node: %v", err)
 	}
 
-	err = cluster.GetCoordinator().AwaitState(disco.ClusterStateNormal, 100*time.Millisecond)
+	err = cluster.GetPrimary().AwaitState(disco.ClusterStateNormal, 100*time.Millisecond)
 	if err != nil {
 		t.Fatalf("starting cluster: %v", err)
 	}

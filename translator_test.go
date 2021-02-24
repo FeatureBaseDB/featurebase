@@ -469,8 +469,8 @@ func TestTranslation_Replication(t *testing.T) {
 		)
 		defer c.Close()
 
-		coord := c.GetCoordinator()
-		other := c.GetNonCoordinator()
+		coord := c.GetPrimary()
+		other := c.GetNonPrimary()
 
 		ctx := context.Background()
 		idx := "i"
@@ -512,8 +512,8 @@ func TestTranslation_Replication(t *testing.T) {
 		// Verify the data exists
 		coord.QueryExpect(t, idx, "", `Row(f=1)`, exp)
 
-		// Kill a non-coordinator node.
-		if err := c.CloseAndRemoveNonCoordinator(); err != nil {
+		// Kill a non-primary node.
+		if err := c.CloseAndRemoveNonPrimary(); err != nil {
 			t.Fatal(err)
 		}
 
@@ -528,9 +528,9 @@ func TestTranslation_Replication(t *testing.T) {
 }
 
 // Test key translation with multiple nodes.
-func TestTranslation_Coordinator(t *testing.T) {
+func TestTranslation_Primary(t *testing.T) {
 	// Ensure that field key translations requests sent to
-	// non-coordinator nodes are forwarded to the coordinator.
+	// non-primary nodes are forwarded to the primary.
 	t.Run("ForwardFieldKey", func(t *testing.T) {
 		t.Skip("Short term skip to avoid go 1.13 test Should remove ASAP")
 		// Start a 2-node cluster.
@@ -550,8 +550,8 @@ func TestTranslation_Coordinator(t *testing.T) {
 		)
 		defer c.Close()
 
-		node0 := c.GetCoordinator()
-		node1 := c.GetNonCoordinator()
+		node0 := c.GetPrimary()
+		node1 := c.GetNonPrimary()
 
 		ctx := context.Background()
 		idx := "i"
@@ -576,7 +576,7 @@ func TestTranslation_Coordinator(t *testing.T) {
 		for i := range keys {
 			pql := fmt.Sprintf(`Set(%d, %s="%s")`, i+1, fld, keys[i])
 
-			// Send a translation request to node1 (non-coordinator).
+			// Send a translation request to node1 (non-primary).
 			_, err := node1.API.Query(ctx,
 				&pilosa.QueryRequest{Index: idx, Query: pql},
 			)
@@ -632,8 +632,8 @@ func TestTranslation_TranslateIDsOnCluster(t *testing.T) {
 	)
 	defer c.Close()
 
-	coord := c.GetCoordinator()
-	other := c.GetNonCoordinator()
+	coord := c.GetPrimary()
+	other := c.GetNonPrimary()
 
 	ctx := context.Background()
 	idx, fld := "i", "f"
@@ -743,7 +743,7 @@ func TestTranslation_Cluster_CreateFind(t *testing.T) {
 			}
 
 			// Obtain authoritative translations for the keys.
-			translations, err := c.GetCoordinator().API.FindIndexKeys(ctx, "i", keyList...)
+			translations, err := c.GetPrimary().API.FindIndexKeys(ctx, "i", keyList...)
 			if err != nil {
 				t.Errorf("obtaining authoritative translations: %v", err)
 				return
@@ -829,7 +829,7 @@ func TestTranslation_Cluster_CreateFind(t *testing.T) {
 			}
 
 			// Obtain authoritative translations for the keys.
-			translations, err := c.GetCoordinator().API.FindFieldKeys(ctx, "i", "f", keyList...)
+			translations, err := c.GetPrimary().API.FindFieldKeys(ctx, "i", "f", keyList...)
 			if err != nil {
 				t.Errorf("obtaining authoritative translations: %v", err)
 				return
