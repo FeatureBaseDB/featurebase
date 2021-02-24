@@ -476,6 +476,7 @@ func newCluster(tb testing.TB, size int, opts ...[]server.CommandOption) (*Clust
 			commandOpts = opts[i%len(opts)]
 		}
 		m := NewCommandNode(tb, commandOpts...)
+		m.Config.ImportWorkerPoolSize = 2
 		cluster.Nodes[i] = m
 	}
 
