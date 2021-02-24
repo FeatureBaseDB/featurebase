@@ -36,6 +36,7 @@ import (
 	"go.etcd.io/etcd/clientv3/clientv3util"
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.etcd.io/etcd/embed"
+	"go.etcd.io/etcd/mvcc"
 	"go.etcd.io/etcd/mvcc/mvccpb"
 	"go.etcd.io/etcd/pkg/types"
 )
@@ -237,11 +238,11 @@ func (e *Etcd) NodeState(ctx context.Context, peerID string) (disco.NodeState, e
 	}
 	defer cli.Close()
 
-	return e.nodeState(ctx, cli, peerID)
+	return e.nodeState(ctx, peerID)
 }
 
-func (e *Etcd) nodeState(ctx context.Context, cli *hookedClient, peerID string) (disco.NodeState, error) {
-	resp, err := cli.Get(ctx, path.Join(resizePrefix, peerID), clientv3.WithCountOnly())
+func (e *Etcd) nodeState(ctx context.Context, peerID string) (disco.NodeState, error) {
+	resp, err := e.e.Server.KV().Range([]byte(path.Join(resizePrefix, peerID)), nil, mvcc.RangeOptions{Count: true})
 	if err != nil {
 		return disco.NodeStateUnknown, err
 	}
@@ -249,20 +250,20 @@ func (e *Etcd) nodeState(ctx context.Context, cli *hookedClient, peerID string) 
 		return disco.NodeStateResizing, nil
 	}
 
-	resp, err = cli.Get(ctx, path.Join(heartbeatPrefix, peerID))
+	resp, err = e.e.Server.KV().Range([]byte(path.Join(heartbeatPrefix, peerID)), nil, mvcc.RangeOptions{})
 	if err != nil {
 		return disco.NodeStateUnknown, err
 	}
 
-	if len(resp.Kvs) > 1 {
+	if len(resp.KVs) > 1 {
 		return disco.NodeStateUnknown, disco.ErrTooManyResults
 	}
 
-	if len(resp.Kvs) == 0 {
+	if len(resp.KVs) == 0 {
 		return disco.NodeStateUnknown, disco.ErrNoResults
 	}
 
-	return disco.NodeState(resp.Kvs[0].Value), nil
+	return disco.NodeState(resp.KVs[0].Value), nil
 }
 
 func (e *Etcd) NodeStates(ctx context.Context) (map[string]disco.NodeState, error) {
@@ -276,7 +277,7 @@ func (e *Etcd) NodeStates(ctx context.Context) (map[string]disco.NodeState, erro
 
 	members := e.e.Server.Cluster().Members()
 	for _, member := range members {
-		s, err := e.nodeState(ctx, cli, member.ID.String())
+		s, err := e.nodeState(ctx, member.ID.String())
 		if err != nil {
 			log.Println("NodeStates get node state", member.ID.String(), err.Error())
 		}
@@ -347,7 +348,7 @@ func (e *Etcd) ClusterState(ctx context.Context) (disco.ClusterState, error) {
 	)
 	members := e.e.Server.Cluster().Members()
 	for _, m := range members {
-		ns, err := e.nodeState(ctx, cli, m.ID.String())
+		ns, err := e.nodeState(ctx, m.ID.String())
 		if err != nil {
 			log.Println("ClusterState get node state", err.Error())
 			continue
