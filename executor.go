@@ -2631,7 +2631,7 @@ func (e *executor) translateCalls(ctx context.Context, index string, idx *Index,
 func (e *executor) translateCall(index string, idx *Index, c *pql.Call) error {
 	var colKey, rowKey, fieldName string
 	switch c.Name {
-	case "Set", "Clear", "Row", "Range", "SetColumnAttrs", "ClearRow":
+	case "Set", "Clear", "Row", "Range", "SetColumnAttrs", "ClearRow", "Store":
 		// Positional args in new PQL syntax require special handling here.
 		colKey = "_" + columnLabel
 		fieldName, _ = c.FieldArg()
