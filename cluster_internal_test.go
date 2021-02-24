@@ -27,7 +27,6 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	pnet "github.com/pilosa/pilosa/v2/net"
 	"github.com/pilosa/pilosa/v2/roaring"
-	"github.com/pilosa/pilosa/v2/test/port"
 	"github.com/pilosa/pilosa/v2/testhook"
 	"github.com/pilosa/pilosa/v2/topology"
 )
@@ -498,13 +497,9 @@ func TestCluster_ContainsShards(t *testing.T) {
 func TestCluster_Nodes(t *testing.T) {
 	const urisCount = 4
 	var uris []pnet.URI
-	if err := port.GetPorts(func(ports []int) error {
-		for i := 0; i < urisCount; i++ {
-			uris = append(uris, NewTestURIFromHostPort(fmt.Sprintf("node%d", i), uint16(ports[i])))
-		}
-		return nil
-	}, urisCount, 10); err != nil {
-		t.Fatalf("getting ports: %v", err)
+	arbitraryPorts := []int{17384, 17385, 17386, 17387}
+	for i := 0; i < urisCount; i++ {
+		uris = append(uris, NewTestURIFromHostPort(fmt.Sprintf("node%d", i), uint16(arbitraryPorts[i])))
 	}
 
 	node0 := &topology.Node{ID: "node0", URI: uris[0]}

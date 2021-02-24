@@ -1596,15 +1596,15 @@ func (f *Field) importValue(qcx *Qcx, columnIDs []uint64, values []int64, option
 		requiredDepth = v
 	}
 	// Increase bit depth if required.
+	f.mu.Lock()
 	bitDepth := bsig.BitDepth
 	if requiredDepth > bitDepth {
-		f.mu.Lock()
 		bsig.BitDepth = requiredDepth
 		f.options.BitDepth = requiredDepth
-		f.mu.Unlock()
 	} else {
 		requiredDepth = bitDepth
 	}
+	f.mu.Unlock()
 
 	// Import into each fragment.
 	for key, data := range dataByFragment {

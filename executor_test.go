@@ -6848,20 +6848,20 @@ func TestMissingKeyRegression(t *testing.T) {
 // queries (HTTP, GRPC, Postgres), etc.).
 func TestVariousQueries(t *testing.T) {
 	for _, clusterSize := range []int{1, 3, 4, 7} {
+		clusterSize := clusterSize
 		t.Run(fmt.Sprintf("%d-node", clusterSize), func(t *testing.T) {
 			t.Parallel()
+			c := test.MustRunCluster(t, clusterSize)
+			defer c.Close()
 
-			variousQueries(t, clusterSize)
-			variousQueriesOnTimeFields(t, clusterSize)
+			variousQueries(t, c)
+			variousQueriesOnTimeFields(t, c)
 		})
 	}
 }
 
 // tests for abbreviating time values in queries
-func variousQueriesOnTimeFields(t *testing.T, clusterSize int) {
-	c := test.MustRunCluster(t, clusterSize)
-	defer c.Close()
-
+func variousQueriesOnTimeFields(t *testing.T, c *test.Cluster) {
 	ts := func(t time.Time) int64 {
 		return t.Unix() * 1e+9
 	}
@@ -6984,10 +6984,7 @@ func variousQueriesOnTimeFields(t *testing.T, clusterSize int) {
 	}
 }
 
-func variousQueries(t *testing.T, clusterSize int) {
-	c := test.MustRunCluster(t, clusterSize)
-	defer c.Close()
-
+func variousQueries(t *testing.T, c *test.Cluster) {
 	// Create and populate "likenums" similar to "likes", but without keys on the field.
 	c.CreateField(t, "users", pilosa.IndexOptions{Keys: true, TrackExistence: true}, "likenums")
 	c.ImportIDKey(t, "users", "likenums", []test.KeyID{

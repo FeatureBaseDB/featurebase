@@ -31,7 +31,6 @@ import (
 	"github.com/pilosa/pilosa/v2/logger"
 	"github.com/pilosa/pilosa/v2/pg"
 	"github.com/pilosa/pilosa/v2/pg/pgtest"
-	"github.com/pilosa/pilosa/v2/test/port"
 )
 
 // TestStartupTimeout tests that an incoming connection that does nothing times out and gets closed.
@@ -111,14 +110,7 @@ func TestPQConnect(t *testing.T) {
 		Logger:         logger.NopLogger,
 	}
 
-	var addr net.Addr
-	var shutdown pgtest.ShutdownFunc
-	var err error
-	err = port.GetPort(func(p int) error {
-		addr, shutdown, err = pgtest.ServeTCP(port.ColonZeroString(p), server)
-		return err
-	}, 10)
-
+	addr, shutdown, err := pgtest.ServeTCP(":0", server)
 	if err != nil {
 		t.Fatalf("starting postgres server: %v", err)
 	}
@@ -150,13 +142,7 @@ func TestPQConnectSSL(t *testing.T) {
 		Logger:         logger.NopLogger,
 	}
 
-	var addr net.Addr
-	var shutdown pgtest.ShutdownFunc
-	var err error
-	err = port.GetPort(func(p int) error {
-		addr, shutdown, err = pgtest.ServeTLS(port.ColonZeroString(p), server)
-		return err
-	}, 10)
+	addr, shutdown, err := pgtest.ServeTLS(":0", server)
 	if err != nil {
 		t.Fatalf("starting postgres server: %v", err)
 	}
@@ -221,13 +207,7 @@ func TestPSQLQuery(t *testing.T) {
 			Logger:         logger.NopLogger,
 		}
 
-		var addr net.Addr
-		var shutdown pgtest.ShutdownFunc
-		var err error
-		err = port.GetPort(func(p int) error {
-			addr, shutdown, err = pgtest.ServeTCP(port.ColonZeroString(p), server)
-			return err
-		}, 10)
+		addr, shutdown, err := pgtest.ServeTCP(":0", server)
 		if err != nil {
 			t.Fatalf("starting postgres server: %v", err)
 		}
@@ -289,13 +269,7 @@ func TestPSQLQuery(t *testing.T) {
 			CancellationManager: pg.NewLocalCancellationManager(rand.Reader),
 		}
 
-		var addr net.Addr
-		var shutdown pgtest.ShutdownFunc
-		var err error
-		err = port.GetPort(func(p int) error {
-			addr, shutdown, err = pgtest.ServeTCP(port.ColonZeroString(p), server)
-			return err
-		}, 10)
+		addr, shutdown, err := pgtest.ServeTCP(":0", server)
 		if err != nil {
 			t.Fatalf("starting postgres server: %v", err)
 		}

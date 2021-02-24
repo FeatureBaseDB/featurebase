@@ -296,16 +296,18 @@ func (m *Command) SetupServer() error {
 	if err != nil {
 		return errors.Wrap(err, "processing bind grpc address")
 	}
-
-	// create gRPC listener
-	m.grpcLn, err = net.Listen("tcp", grpcURI.HostPort())
-	if err != nil {
-		return errors.Wrap(err, "creating grpc listener")
-	}
-
-	// If grpc port is 0, get auto-allocated port from listener
-	if grpcURI.Port == 0 {
-		grpcURI.SetPort(uint16(m.grpcLn.Addr().(*net.TCPAddr).Port))
+	if m.Config.GRPCListener == nil {
+		// create gRPC listener
+		m.grpcLn, err = net.Listen("tcp", grpcURI.HostPort())
+		if err != nil {
+			return errors.Wrap(err, "creating grpc listener")
+		}
+		// If grpc port is 0, get auto-allocated port from listener
+		if grpcURI.Port == 0 {
+			grpcURI.SetPort(uint16(m.grpcLn.Addr().(*net.TCPAddr).Port))
+		}
+	} else {
+		m.grpcLn = m.Config.GRPCListener
 	}
 
 	// Setup TLS
