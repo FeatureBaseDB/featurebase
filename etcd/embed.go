@@ -37,6 +37,7 @@ import (
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.etcd.io/etcd/embed"
 	"go.etcd.io/etcd/etcdserver/api/v3client"
+	"go.etcd.io/etcd/mvcc"
 	"go.etcd.io/etcd/mvcc/mvccpb"
 	"go.etcd.io/etcd/pkg/types"
 )
@@ -241,9 +242,9 @@ func (e *Etcd) NodeState(ctx context.Context, peerID string) (disco.NodeState, e
 }
 
 func (e *Etcd) nodeState(ctx context.Context, peerID string) (disco.NodeState, error) {
-	resp, err := e.cli.Get(ctx, path.Join(resizePrefix, peerID), clientv3.WithCountOnly())
-	// kv := e.e.Server.KV()
-	// resp, err := kv.Range([]byte(path.Join(resizePrefix, peerID)), nil, mvcc.RangeOptions{Count: true})
+	// resp, err := e.cli.Get(ctx, path.Join(resizePrefix, peerID), clientv3.WithCountOnly())
+	kv := e.e.Server.KV()
+	resp, err := kv.Range([]byte(path.Join(resizePrefix, peerID)), nil, mvcc.RangeOptions{Count: true})
 	if err != nil {
 		return disco.NodeStateUnknown, err
 	}
@@ -251,12 +252,12 @@ func (e *Etcd) nodeState(ctx context.Context, peerID string) (disco.NodeState, e
 		return disco.NodeStateResizing, nil
 	}
 
-	resp, err = e.cli.Get(ctx, path.Join(heartbeatPrefix, peerID))
-	// resp, err = kv.Range([]byte(path.Join(heartbeatPrefix, peerID)), nil, mvcc.RangeOptions{})
+	// resp, err = e.cli.Get(ctx, path.Join(heartbeatPrefix, peerID))
+	resp, err = kv.Range([]byte(path.Join(heartbeatPrefix, peerID)), nil, mvcc.RangeOptions{})
 	if err != nil {
 		return disco.NodeStateUnknown, err
 	}
-	kvs := resp.Kvs
+	kvs := resp.KVs
 
 	if len(kvs) > 1 {
 		return disco.NodeStateUnknown, disco.ErrTooManyResults
@@ -501,20 +502,23 @@ func (e *Etcd) Schema(ctx context.Context) (disco.Schema, error) {
 }
 
 func (e *Etcd) Metadata(ctx context.Context, peerID string) ([]byte, error) {
-	resp, err := e.cli.Get(ctx, path.Join(metadataPrefix, peerID))
+	// resp, err := e.cli.Get(ctx, path.Join(metadataPrefix, peerID))
+	kv := e.e.Server.KV()
+	resp, err := kv.Range([]byte(path.Join(metadataPrefix, peerID)), nil, mvcc.RangeOptions{})
 	if err != nil {
 		return nil, err
 	}
+	kvs := resp.KVs
 
-	if len(resp.Kvs) > 1 {
+	if len(kvs) > 1 {
 		return nil, disco.ErrTooManyResults
 	}
 
-	if len(resp.Kvs) == 0 {
+	if len(kvs) == 0 {
 		return nil, disco.ErrNoResults
 	}
 
-	return resp.Kvs[0].Value, nil
+	return kvs[0].Value, nil
 }
 
 func (e *Etcd) SetMetadata(ctx context.Context, metadata []byte) error {
@@ -647,31 +651,53 @@ func (e *Etcd) putKey(ctx context.Context, key, val string, opts ...clientv3.OpO
 
 func (e *Etcd) getKeyBytes(ctx context.Context, key string) ([]byte, error) {
 	// Get the current value for the key.
-	resp, err := e.cli.Get(ctx, key)
+	// resp, err := e.cli.Get(ctx, key)
+	kv := e.e.Server.KV()
+	resp, err := kv.Range([]byte(key), nil, mvcc.RangeOptions{})
 	if err != nil {
 		return nil, err
 	}
+	kvs := resp.KVs
 
 	// TODO: consider returning a "key does not exist" error instead of (nil, nil)
-	if len(resp.Kvs) == 0 {
+	if len(kvs) == 0 {
 		return nil, nil
 	}
 
-	return resp.Kvs[0].Value, nil
+	return kvs[0].Value, nil
 }
 
 func (e *Etcd) getKey(ctx context.Context, key string) ([]string, [][]byte, error) {
-	resp, err := e.cli.Get(ctx, key, clientv3.WithPrefix())
+	getPrefix := func(key []byte) []byte {
+		end := make([]byte, len(key))
+		copy(end, key)
+		for i := len(end) - 1; i >= 0; i-- {
+			if end[i] < 0xff {
+				end[i] = end[i] + 1
+				end = end[:i+1]
+				return end
+			}
+		}
+		// next prefix does not exist (e.g., 0xffff);
+		// default to WithFromKey policy
+		return nil
+	}
+
+	kv := e.e.Server.KV()
+	resp, err := kv.Range([]byte(key), getPrefix([]byte(key)), mvcc.RangeOptions{})
+
+	// resp, err := e.cli.Get(ctx, key, clientv3.WithPrefix())
 	if err != nil {
 		return nil, nil, err
 	}
+	kvs := resp.KVs
 
 	var (
 		keys   []string
 		values [][]byte
 	)
 
-	for _, kv := range resp.Kvs {
+	for _, kv := range kvs {
 		keys = append(keys, string(kv.Key))
 		values = append(values, kv.Value)
 	}
@@ -680,7 +706,9 @@ func (e *Etcd) getKey(ctx context.Context, key string) ([]string, [][]byte, erro
 }
 
 func (e *Etcd) keyExists(ctx context.Context, key string) (bool, error) {
-	resp, err := e.cli.Get(ctx, key, clientv3.WithCountOnly())
+	// resp, err := e.cli.Get(ctx, key, clientv3.WithCountOnly())
+	kv := e.e.Server.KV()
+	resp, err := kv.Range([]byte(key), nil, mvcc.RangeOptions{Count: true})
 	if err != nil {
 		return false, err
 	}
