@@ -1301,14 +1301,37 @@ func (e *executor) executePercentile(ctx context.Context, qcx *Qcx, index string
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executePercentile")
 	defer span.Finish()
 
-	if field := c.Args["field"]; field == "" {
+	// get nth
+	var nth float64
+	if nthArg, ok := c.Args["nth"].(pql.Decimal); ok {
+		nth = nthArg.Float64()
+		if nth <= 0 || nth >= 1.0 {
+			return ValCount{}, errors.Errorf("Percentile(): invalid nth value(%f), should be > 0 and < 1.0", nth)
+		}
+	} else {
+		return ValCount{}, errors.New("Percentile(): nth required")
+	}
+
+	// get field
+	if fieldArg := c.Args["field"]; fieldArg == "" {
 		return ValCount{}, errors.New("Percentile(): field required")
 	}
 	fieldName, _, _ := c.StringArg("field")
 
+	// filter call for min & max
+	var filterCall *pql.Call
+
+	// check if filter provided
+	if filterArg, ok := c.Args["filter"].(*pql.Call); ok && filterArg != nil {
+		filterCall = filterArg
+	}
+
 	// get min
 	q, _ := pql.ParseString(fmt.Sprintf(`Min(field="%s")`, fieldName))
 	minCall := q.Calls[0]
+	if filterCall != nil {
+		minCall.Children = append(minCall.Children, filterCall)
+	}
 	minVal, err := e.executeMin(ctx, qcx, index, minCall, shards, opt)
 	if err != nil {
 		return ValCount{}, errors.Wrap(err, "executing Min call for Percentile")
@@ -1317,19 +1340,32 @@ func (e *executor) executePercentile(ctx context.Context, qcx *Qcx, index string
 	// get max
 	q, _ = pql.ParseString(fmt.Sprintf(`Max(field="%s")`, fieldName))
 	maxCall := q.Calls[0]
+	if filterCall != nil {
+		maxCall.Children = append(maxCall.Children, filterCall)
+	}
 	maxVal, err := e.executeMax(ctx, qcx, index, maxCall, shards, opt)
 	if err != nil {
 		return ValCount{}, errors.Wrap(err, "executing Max call for Percentile")
 	}
 	// set up reusables
-	countQuery, _ := pql.ParseString(fmt.Sprintf("Count(Row(%s < 0))", fieldName))
-	countCall := countQuery.Calls[0]
-	rangeCall := countCall.Children[0]
+	var countCall, rangeCall *pql.Call
+	if filterCall == nil {
+		countQuery, _ := pql.ParseString(fmt.Sprintf("Count(Row(%s < 0))", fieldName))
+		countCall = countQuery.Calls[0]
+		rangeCall = countCall.Children[0]
+	} else {
+		countQuery, _ := pql.ParseString(fmt.Sprintf(`Count(Intersect(Row(%s < 0)))`, fieldName))
+		countCall = countQuery.Calls[0]
+		intersectCall := countCall.Children[0]
+		intersectCall.Children = append(intersectCall.Children, filterCall)
+		rangeCall = intersectCall.Children[0]
+	}
+	k := (1 - nth) / nth
 
 	min, max := minVal.Val, maxVal.Val
 	// estimate nth val, eg median when nth=0.5
 	for min < max {
-		possibleNthVal := (max + min) / 2
+		possibleNthVal := int64(math.Round(float64(max+min) * nth))
 		// get left count
 		rangeCall.Args[fieldName] = &pql.Condition{
 			Op:    pql.Token(pql.LT),
@@ -1352,10 +1388,13 @@ func (e *executor) executePercentile(ctx context.Context, qcx *Qcx, index string
 		}
 		rightCount := int64(rightCountUint64)
 
+		// 'weight' the left count as per k
+		leftCountWeighted := int64(math.Round(k * float64(leftCount)))
+
 		// binary search
-		if leftCount > rightCount {
+		if leftCountWeighted > rightCount {
 			max = possibleNthVal - 1
-		} else if leftCount < rightCount {
+		} else if leftCountWeighted < rightCount {
 			min = possibleNthVal + 1
 		} else {
 			return ValCount{Val: possibleNthVal, Count: 1}, nil

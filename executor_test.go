@@ -6866,68 +6866,116 @@ func variousQueriesOnPercentiles(t *testing.T, clusterSize int) {
 	c := test.MustRunCluster(t, clusterSize)
 	defer c.Close()
 
-	// todo, make more randoms
+	// todo, make rand more random, 42 isnt the answer to everything
+	// however, to make tests reproducible, seed should be printed
+	// on failure?
 	r := rand.New(rand.NewSource(42))
 
 	// gen Numbers to test percentile query on, shuffle for extra spice
 	// size should always be greater than 0
-	size := 10000
-	nums := make([]int64, size)
-	for i := 0; i < size; i++ {
-		nums[i] = int64(r.Uint64())
+	type testValue struct {
+		colKey string
+		num    int64
+		rowKey string
 	}
-	r.Shuffle(len(nums), func(i, j int) {
-		nums[i], nums[j] = nums[j], nums[i]
+	size := 100
+	nths := []float64{0.25}
+	testValues := make([]testValue, size)
+	rowKeys := [2]string{"foo", "bar"}
+	for i := 0; i < size; i++ {
+		testValues[i] = testValue{
+			colKey: fmt.Sprintf("user%d", i+1),
+			num:    int64(r.Uint64()),
+			rowKey: rowKeys[r.Uint64()%2], // flip a coin
+		}
+	}
+	r.Shuffle(len(testValues), func(i, j int) {
+		testValues[i], testValues[j] = testValues[j], testValues[i]
 	})
+
+	// filter out nums that fulfil predicate
+	var nums []int64
+	for _, v := range testValues {
+		if v.rowKey == "foo" {
+			nums = append(nums, v.num)
+		}
+	}
 
 	// get min and max for calculating both expected median
 	// and bounds for bsi field
 	// get min & max
-	min, max := nums[0], nums[0]
-	for _, n := range nums[1:] {
-		if n < min {
-			min = n
-		}
-		if n > max {
-			max = n
-		}
-	}
 
-	// generate entries for index
-	entries := make([]test.IntKey, size)
-	for i := 0; i < size; i++ {
-		key := fmt.Sprintf("user%d", i+1)
-		val := nums[i]
-		entries[i] = test.IntKey{Key: key, Val: val}
-	}
+	// helper function for calculating percentiles to
+	// cross-check with Pilosa's results
+	getExpectedPercentile := func(nums []int64, nth float64) int64 {
+		min, max := nums[0], nums[0]
+		for _, num := range nums {
+			if num < min {
+				min = num
+			}
+			if num > max {
+				max = num
+			}
+		}
+		k := (1 - nth) / nth
 
-	// calculate the expected Median
-	expectedMedian := func(nums []int64, min, max int64) int64 {
 		// bin search
 		for min < max {
-			possibleMedian := (max + min) / 2
+			possibleNthVal := int64(math.Round(float64(max+min) * nth))
 			leftCount, rightCount := int64(0), int64(0)
-			for _, n := range nums {
-				if n < possibleMedian {
+			for _, num := range nums {
+				if num < possibleNthVal {
 					leftCount++
-				} else if n > possibleMedian {
+				} else if num > possibleNthVal {
 					rightCount++
 				}
 			}
-			if leftCount > rightCount {
-				max = possibleMedian - 1
-			} else if leftCount < rightCount {
-				min = possibleMedian + 1
+
+			leftCountWeighted := int64(math.Round(k * float64(leftCount)))
+
+			if leftCountWeighted > rightCount {
+				max = possibleNthVal - 1
+			} else if leftCountWeighted < rightCount {
+				min = possibleNthVal + 1
 			} else { // perfectly balanced, as all things should be
-				return possibleMedian
+				return possibleNthVal
 			}
 		}
 		return min
-	}(nums, min, max)
+	}
+
+	// generate numeric entries for index
+	intEntries := make([]test.IntKey, size)
+	for i := 0; i < size; i++ {
+		key := testValues[i].colKey
+		val := testValues[i].num
+		intEntries[i] = test.IntKey{Key: key, Val: val}
+	}
+
+	// generate string-set entries for index
+	var stringEntries [][2]string
+	for _, v := range testValues {
+		stringEntries = append(stringEntries,
+			[2]string{v.rowKey, v.colKey})
+	}
+
+	// get min max for bsi bounds
+	min, max := testValues[0].num, testValues[0].num
+	for _, v := range testValues {
+		if v.num < min {
+			min = v.num
+		}
+		if v.num > max {
+			max = v.num
+		}
+	}
 
 	// generic index
 	c.CreateField(t, "users", pilosa.IndexOptions{Keys: true, TrackExistence: true}, "net_worth", pilosa.OptFieldTypeInt(min, max))
-	c.ImportIntKey(t, "users", "net_worth", entries)
+	c.ImportIntKey(t, "users", "net_worth", intEntries)
+
+	c.CreateField(t, "users", pilosa.IndexOptions{Keys: true, TrackExistence: true}, "val", pilosa.OptFieldKeys())
+	c.ImportKeyKey(t, "users", "val", stringEntries)
 
 	splitSortBackToCSV := func(csvStr string) string {
 		ss := strings.Split(csvStr[:len(csvStr)-1], "\n")
@@ -6941,12 +6989,15 @@ func variousQueriesOnPercentiles(t *testing.T, clusterSize int) {
 		csvVerifier string
 	}
 
-	tests := []testCase{
-		// Rows
-		{
-			query:       `Percentile(field="net_worth", nth=0.5)`,
-			csvVerifier: fmt.Sprintf("%d,1\n", expectedMedian),
-		},
+	// generate test cases per each nth argument
+	var tests []testCase
+	for _, nth := range nths {
+		query := fmt.Sprintf(`Percentile(field="net_worth", filter=Row(val="foo"), nth=%f)`, nth)
+		expectedPercentile := getExpectedPercentile(nums, nth)
+		tests = append(tests, testCase{
+			query:       query,
+			csvVerifier: fmt.Sprintf("%d,1\n", expectedPercentile),
+		})
 	}
 
 	for i, tst := range tests {
