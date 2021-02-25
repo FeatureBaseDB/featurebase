@@ -24,6 +24,7 @@ import (
 	"path"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/pilosa/pilosa/v2"
@@ -37,7 +38,6 @@ import (
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.etcd.io/etcd/embed"
 	"go.etcd.io/etcd/etcdserver/api/v3client"
-	"go.etcd.io/etcd/mvcc"
 	"go.etcd.io/etcd/mvcc/mvccpb"
 	"go.etcd.io/etcd/pkg/types"
 )
@@ -93,12 +93,14 @@ type Etcd struct {
 
 	e   *embed.Etcd
 	cli *clientv3.Client
+	wg  *sync.WaitGroup
 }
 
 func NewEtcd(opt Options, replicas int) *Etcd {
 	e := &Etcd{
 		options:  opt,
 		replicas: replicas,
+		wg:       &sync.WaitGroup{},
 	}
 	return e
 }
@@ -114,6 +116,8 @@ func (e *Etcd) Close() error {
 		if e.heartbeatCancel != nil {
 			e.heartbeatCancel()
 		}
+
+		e.wg.Wait()
 		e.e.Close()
 		<-e.e.Server.StopNotify()
 	}
@@ -240,9 +244,7 @@ func (e *Etcd) NodeState(ctx context.Context, peerID string) (disco.NodeState, e
 }
 
 func (e *Etcd) nodeState(ctx context.Context, peerID string) (disco.NodeState, error) {
-	kv := e.e.Server.KV()
-
-	resp, err := kv.Range([]byte(path.Join(resizePrefix, peerID)), nil, mvcc.RangeOptions{Count: true})
+	resp, err := e.cli.Get(ctx, path.Join(resizePrefix, peerID), clientv3.WithCountOnly())
 	if err != nil {
 		return disco.NodeStateUnknown, err
 	}
@@ -250,20 +252,20 @@ func (e *Etcd) nodeState(ctx context.Context, peerID string) (disco.NodeState, e
 		return disco.NodeStateResizing, nil
 	}
 
-	resp, err = kv.Range([]byte(path.Join(heartbeatPrefix, peerID)), nil, mvcc.RangeOptions{})
+	resp, err = e.cli.Get(ctx, path.Join(heartbeatPrefix, peerID))
 	if err != nil {
 		return disco.NodeStateUnknown, err
 	}
 
-	if len(resp.KVs) > 1 {
+	if len(resp.Kvs) > 1 {
 		return disco.NodeStateUnknown, disco.ErrTooManyResults
 	}
 
-	if len(resp.KVs) == 0 {
+	if len(resp.Kvs) == 0 {
 		return disco.NodeStateUnknown, disco.ErrNoResults
 	}
 
-	return disco.NodeState(resp.KVs[0].Value), nil
+	return disco.NodeState(resp.Kvs[0].Value), nil
 }
 
 func (e *Etcd) NodeStates(ctx context.Context) (map[string]disco.NodeState, error) {
@@ -723,7 +725,10 @@ func (e *Etcd) leaseKeepAlive(ctx context.Context, ttl int64) (clientv3.LeaseID,
 
 	keepaliveFunc := func(tick time.Duration) {
 		ticker := time.NewTicker(tick)
-		defer ticker.Stop()
+		defer func() {
+			ticker.Stop()
+			e.wg.Done()
+		}()
 
 		for {
 			select {
@@ -733,7 +738,6 @@ func (e *Etcd) leaseKeepAlive(ctx context.Context, ttl int64) (clientv3.LeaseID,
 				// here, resulting in massive piles of excess goroutines.
 				revoker, cancel := context.WithTimeout(context.Background(), time.Duration(ttl))
 				defer cancel()
-
 				if _, err := e.cli.Revoke(revoker, leaseResp.ID); err != nil {
 					log.Printf("leaseKeepAlive: revokes the lease (ID: %x): %#v\n", leaseResp.ID, err)
 				}
@@ -745,6 +749,8 @@ func (e *Etcd) leaseKeepAlive(ctx context.Context, ttl int64) (clientv3.LeaseID,
 			}
 		}
 	}
+
+	e.wg.Add(1)
 	go keepaliveFunc(time.Second)
 
 	return leaseResp.ID, ctx, cancelFunc, nil
