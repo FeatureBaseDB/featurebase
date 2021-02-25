@@ -18,7 +18,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"log"
 	"net"
 	"path"
@@ -243,6 +242,8 @@ func (e *Etcd) NodeState(ctx context.Context, peerID string) (disco.NodeState, e
 
 func (e *Etcd) nodeState(ctx context.Context, peerID string) (disco.NodeState, error) {
 	resp, err := e.cli.Get(ctx, path.Join(resizePrefix, peerID), clientv3.WithCountOnly())
+	// kv := e.e.Server.KV()
+	// resp, err := kv.Range([]byte(path.Join(resizePrefix, peerID)), nil, mvcc.RangeOptions{Count: true})
 	if err != nil {
 		return disco.NodeStateUnknown, err
 	}
@@ -251,19 +252,21 @@ func (e *Etcd) nodeState(ctx context.Context, peerID string) (disco.NodeState, e
 	}
 
 	resp, err = e.cli.Get(ctx, path.Join(heartbeatPrefix, peerID))
+	// resp, err = kv.Range([]byte(path.Join(heartbeatPrefix, peerID)), nil, mvcc.RangeOptions{})
 	if err != nil {
 		return disco.NodeStateUnknown, err
 	}
+	kvs := resp.Kvs
 
-	if len(resp.Kvs) > 1 {
+	if len(kvs) > 1 {
 		return disco.NodeStateUnknown, disco.ErrTooManyResults
 	}
 
-	if len(resp.Kvs) == 0 {
+	if len(kvs) == 0 {
 		return disco.NodeStateUnknown, disco.ErrNoResults
 	}
 
-	return disco.NodeState(resp.Kvs[0].Value), nil
+	return disco.NodeState(kvs[0].Value), nil
 }
 
 func (e *Etcd) NodeStates(ctx context.Context) (map[string]disco.NodeState, error) {
@@ -658,16 +661,9 @@ func (e *Etcd) getKeyBytes(ctx context.Context, key string) ([]byte, error) {
 }
 
 func (e *Etcd) getKey(ctx context.Context, key string) ([]string, [][]byte, error) {
-	resp, err := e.cli.Txn(ctx).
-		If(clientv3.Compare(clientv3.Version(key), ">", -1)).
-		Then(clientv3.OpGet(key, clientv3.WithPrefix())).
-		Commit()
+	resp, err := e.cli.Get(ctx, key, clientv3.WithPrefix())
 	if err != nil {
 		return nil, nil, err
-	}
-
-	if !resp.Succeeded {
-		return nil, nil, fmt.Errorf("key %s does not exist", key)
 	}
 
 	var (
@@ -675,11 +671,9 @@ func (e *Etcd) getKey(ctx context.Context, key string) ([]string, [][]byte, erro
 		values [][]byte
 	)
 
-	for _, r := range resp.Responses {
-		for _, kv := range r.GetResponseRange().Kvs {
-			keys = append(keys, string(kv.Key))
-			values = append(values, kv.Value)
-		}
+	for _, kv := range resp.Kvs {
+		keys = append(keys, string(kv.Key))
+		values = append(values, kv.Value)
 	}
 
 	return keys, values, nil
@@ -697,16 +691,11 @@ func (e *Etcd) keyExists(ctx context.Context, key string) (bool, error) {
 }
 
 func (e *Etcd) delKey(ctx context.Context, key string, withPrefix bool) (err error) {
-	var opts []clientv3.OpOption
 	if withPrefix {
-		opts = append(opts, clientv3.WithPrefix())
+		_, err = e.cli.Delete(ctx, key, clientv3.WithPrefix())
+	} else {
+		_, err = e.cli.Delete(ctx, key)
 	}
-
-	_, err = e.cli.KV.Txn(ctx).
-		If(clientv3.Compare(clientv3.Version(key), ">", -1)).
-		Then(clientv3.OpDelete(key, opts...)).
-		Commit()
-
 	return err
 }
 
