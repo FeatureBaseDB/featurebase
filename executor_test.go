@@ -7247,6 +7247,15 @@ toronto,2,11
 			csvVerifier: "pilosa\nzebra\nicecream\n",
 		},
 		{
+			query: "Rows(affinity<0),field=likes)",
+			qrVerifier: func(t *testing.T, resp pilosa.QueryResponse) {
+				if !reflect.DeepEqual(resp.Results[0].(*pilosa.Row).Keys, []string{"pilosa", "zebra", "icecream"}) {
+					t.Errorf("wrong values: %+v", resp.Results[0])
+				}
+			},
+			csvVerifier: "pilosa\nzebra\nicecream\n",
+		},
+		{
 			query: "Distinct(Row(affinity>0),field=likes)",
 			qrVerifier: func(t *testing.T, resp pilosa.QueryResponse) {
 				if !reflect.DeepEqual(resp.Results[0].(*pilosa.Row).Keys, []string{"molecula", "pangolin", "icecream"}) {
