@@ -92,7 +92,7 @@ type Etcd struct {
 	lm leaseMetadata
 
 	e   *embed.Etcd
-	cli *clientv3.Client
+	cli *hookedClient
 	wg  *sync.WaitGroup
 }
 
@@ -123,9 +123,7 @@ func (e *Etcd) Close() error {
 	}
 
 	if e.cli != nil {
-		if err := e.cli.Close(); err != nil {
-			log.Printf("Error closing etcd client: %v", err)
-		}
+		e.cli.Close()
 	}
 
 	return nil
@@ -203,7 +201,7 @@ func (e *Etcd) Start(ctx context.Context) (disco.InitialClusterState, error) {
 	}
 	_ = testhook.Opened(pilosa.NewAuditor(), e, nil)
 	e.e = etcd
-	e.cli = v3client.New(e.e.Server)
+	e.cli = &hookedClient{Client: v3client.New(e.e.Server)}
 
 	select {
 	case <-ctx.Done():
@@ -738,6 +736,7 @@ func (e *Etcd) leaseKeepAlive(ctx context.Context, ttl int64) (clientv3.LeaseID,
 				// here, resulting in massive piles of excess goroutines.
 				revoker, cancel := context.WithTimeout(context.Background(), time.Duration(ttl))
 				defer cancel()
+
 				if _, err := e.cli.Revoke(revoker, leaseResp.ID); err != nil {
 					log.Printf("leaseKeepAlive: revokes the lease (ID: %x): %#v\n", leaseResp.ID, err)
 				}
@@ -837,7 +836,7 @@ func (e *Etcd) AddShards(ctx context.Context, index, field string, shards *roari
 	// }
 
 	// Create a session to acquire a lock.
-	sess, _ := concurrency.NewSession(e.cli)
+	sess, _ := concurrency.NewSession(e.cli.Client)
 	defer sess.Close()
 
 	muKey := path.Join(lockPrefix, index, field)
@@ -896,7 +895,7 @@ func (e *Etcd) AddShard(ctx context.Context, index, field string, shard uint64) 
 	// write shards to etcd.
 
 	// Create a session to acquire a lock.
-	sess, _ := concurrency.NewSession(e.cli)
+	sess, _ := concurrency.NewSession(e.cli.Client)
 	defer sess.Close()
 
 	muKey := path.Join(lockPrefix, index, field)
@@ -959,7 +958,7 @@ func (e *Etcd) RemoveShard(ctx context.Context, index, field string, shard uint6
 	// write shards to etcd.
 
 	// Create a session to acquire a lock.
-	sess, _ := concurrency.NewSession(e.cli)
+	sess, _ := concurrency.NewSession(e.cli.Client)
 	defer sess.Close()
 
 	muKey := path.Join(lockPrefix, index, field)
