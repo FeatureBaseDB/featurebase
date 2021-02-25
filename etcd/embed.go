@@ -250,15 +250,15 @@ func (e *Etcd) nodeState(ctx context.Context, peerID string) (disco.NodeState, e
 		return disco.NodeStateUnknown, err
 	}
 
-	if len(resp.Kvs) > 1 {
+	if len(resp.KVs) > 1 {
 		return disco.NodeStateUnknown, disco.ErrTooManyResults
 	}
 
-	if len(resp.Kvs) == 0 {
+	if len(resp.KVs) == 0 {
 		return disco.NodeStateUnknown, disco.ErrNoResults
 	}
 
-	return disco.NodeState(resp.Kvs[0].Value), nil
+	return disco.NodeState(resp.KVs[0].Value), nil
 }
 
 func (e *Etcd) NodeStates(ctx context.Context) (map[string]disco.NodeState, error) {
