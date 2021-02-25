@@ -37,6 +37,7 @@ import (
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.etcd.io/etcd/embed"
 	"go.etcd.io/etcd/etcdserver/api/v3client"
+	"go.etcd.io/etcd/mvcc"
 	"go.etcd.io/etcd/mvcc/mvccpb"
 	"go.etcd.io/etcd/pkg/types"
 )
@@ -106,12 +107,6 @@ func NewEtcd(opt Options, replicas int) *Etcd {
 func (e *Etcd) Close() error {
 	_ = testhook.Closed(pilosa.NewAuditor(), e, nil)
 
-	if e.cli != nil {
-		if err := e.cli.Close(); err != nil {
-			log.Printf("Error closing etcd client: %v", err)
-		}
-	}
-
 	if e.e != nil {
 		if e.resizeCancel != nil {
 			e.resizeCancel()
@@ -121,6 +116,12 @@ func (e *Etcd) Close() error {
 		}
 		e.e.Close()
 		<-e.e.Server.StopNotify()
+	}
+
+	if e.cli != nil {
+		if err := e.cli.Close(); err != nil {
+			log.Printf("Error closing etcd client: %v", err)
+		}
 	}
 
 	return nil
@@ -239,7 +240,9 @@ func (e *Etcd) NodeState(ctx context.Context, peerID string) (disco.NodeState, e
 }
 
 func (e *Etcd) nodeState(ctx context.Context, peerID string) (disco.NodeState, error) {
-	resp, err := e.cli.Get(ctx, path.Join(resizePrefix, peerID), clientv3.WithCountOnly())
+	kv := e.e.Server.KV()
+
+	resp, err := kv.Range([]byte(path.Join(resizePrefix, peerID)), nil, mvcc.RangeOptions{Count: true})
 	if err != nil {
 		return disco.NodeStateUnknown, err
 	}
@@ -247,20 +250,20 @@ func (e *Etcd) nodeState(ctx context.Context, peerID string) (disco.NodeState, e
 		return disco.NodeStateResizing, nil
 	}
 
-	resp, err = e.cli.Get(ctx, path.Join(heartbeatPrefix, peerID))
+	resp, err = kv.Range([]byte(path.Join(heartbeatPrefix, peerID)), nil, mvcc.RangeOptions{})
 	if err != nil {
 		return disco.NodeStateUnknown, err
 	}
 
-	if len(resp.Kvs) > 1 {
+	if len(resp.KVs) > 1 {
 		return disco.NodeStateUnknown, disco.ErrTooManyResults
 	}
 
-	if len(resp.Kvs) == 0 {
+	if len(resp.KVs) == 0 {
 		return disco.NodeStateUnknown, disco.ErrNoResults
 	}
 
-	return disco.NodeState(resp.Kvs[0].Value), nil
+	return disco.NodeState(resp.KVs[0].Value), nil
 }
 
 func (e *Etcd) NodeStates(ctx context.Context) (map[string]disco.NodeState, error) {
