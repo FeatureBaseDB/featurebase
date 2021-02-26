@@ -1360,6 +1360,7 @@ func (e *executor) executePercentile(ctx context.Context, qcx *Qcx, index string
 		intersectCall.Children = append(intersectCall.Children, filterCall)
 		rangeCall = intersectCall.Children[0]
 	}
+
 	k := (1 - nth) / nth
 
 	min, max := minVal.Val, maxVal.Val

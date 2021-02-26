@@ -25,6 +25,7 @@ import (
 	"io/ioutil"
 	"math"
 	"math/rand"
+	_ "net/http/pprof"
 	"reflect"
 	"sort"
 	"strconv"
@@ -6854,8 +6855,15 @@ func TestVariousQueries(t *testing.T) {
 			c := test.MustRunCluster(t, clusterSize)
 			defer c.Close()
 
-			variousQueries(t, clusterSize)
-			variousQueriesOnTimeFields(t, clusterSize)
+			variousQueries(t, c)
+			variousQueriesOnTimeFields(t, c)
+		})
+	}
+}
+
+func TestVariousQueriesOnPercentiles(t *testing.T) {
+	for _, clusterSize := range []int{1, 3, 4, 7} {
+		t.Run(fmt.Sprintf("%d-node", clusterSize), func(t *testing.T) {
 			variousQueriesOnPercentiles(t, clusterSize)
 		})
 	}
@@ -6987,8 +6995,8 @@ func variousQueriesOnPercentiles(t *testing.T, clusterSize int) {
 	}
 
 	type testCase struct {
-		query       string
-		qrVerifier  func(t *testing.T, resp pilosa.QueryResponse)
+		query string
+		// qrVerifier  func(t *testing.T, resp pilosa.QueryResponse)
 		csvVerifier string
 	}
 
@@ -7023,7 +7031,6 @@ func variousQueriesOnPercentiles(t *testing.T, clusterSize int) {
 
 			// TODO: add HTTP and Postgres and ability to convert
 			// those results to CSV to run through CSV verifier
->>>>>>> Add basic test for Percentile query
 		})
 	}
 }
