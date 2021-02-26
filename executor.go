@@ -1365,7 +1365,7 @@ func (e *executor) executePercentile(ctx context.Context, qcx *Qcx, index string
 	min, max := minVal.Val, maxVal.Val
 	// estimate nth val, eg median when nth=0.5
 	for min < max {
-		possibleNthVal := int64(math.Round(float64(max+min) * nth))
+		possibleNthVal := (max + min) / 2
 		// get left count
 		rangeCall.Args[fieldName] = &pql.Condition{
 			Op:    pql.Token(pql.LT),

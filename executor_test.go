@@ -6878,14 +6878,19 @@ func variousQueriesOnPercentiles(t *testing.T, clusterSize int) {
 		num    int64
 		rowKey string
 	}
-	size := 100
-	nths := []float64{0.25}
+	size := 1000
+	nths := []float64{0.1, 0.25, 0.5, 0.75, 0.9, 0.99, 0.999}
 	testValues := make([]testValue, size)
 	rowKeys := [2]string{"foo", "bar"}
 	for i := 0; i < size; i++ {
+		num := int64(r.Uint32())
+		// flip coin to negate
+		if r.Uint64()%2 == 0 {
+			num = -num
+		}
 		testValues[i] = testValue{
 			colKey: fmt.Sprintf("user%d", i+1),
-			num:    int64(r.Uint64()),
+			num:    num,
 			rowKey: rowKeys[r.Uint64()%2], // flip a coin
 		}
 	}
@@ -6919,9 +6924,10 @@ func variousQueriesOnPercentiles(t *testing.T, clusterSize int) {
 		}
 		k := (1 - nth) / nth
 
+		possibleNthVal := int64(0)
 		// bin search
 		for min < max {
-			possibleNthVal := int64(math.Round(float64(max+min) * nth))
+			possibleNthVal = (max + min) / 2
 			leftCount, rightCount := int64(0), int64(0)
 			for _, num := range nums {
 				if num < possibleNthVal {
