@@ -26,6 +26,8 @@ import (
 	"time"
 	"unsafe"
 
+	"golang.org/x/sync/errgroup"
+
 	"github.com/pilosa/pilosa/v2/disco"
 	"github.com/pilosa/pilosa/v2/pql"
 	pb "github.com/pilosa/pilosa/v2/proto"
@@ -5542,6 +5544,10 @@ loop:
 //
 // If a mapping of shards to a node fails then the shards are resplit across
 // secondary nodes and retried. This continues to occur until all nodes are exhausted.
+//
+// mapReduce has to ensure that it never returns before any work it spawned has
+// terminated. It's not enough to cancel the jobs; we have to wait for them to be
+// done, or we can unmap resources they're still using.
 func (e *executor) mapReduce(ctx context.Context, index string, shards []uint64, c *pql.Call, opt *execOptions, mapFn mapFunc, reduceFn reduceFunc) (_ interface{}, err error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.mapReduce")
 	defer span.Finish()
@@ -5550,6 +5556,8 @@ func (e *executor) mapReduce(ctx context.Context, index string, shards []uint64,
 
 	// Wrap context with a cancel to kill goroutines on exit.
 	ctx, cancel := context.WithCancel(ctx)
+	// Create an errgroup so we can wait for all the goroutines to exit
+	eg, ctx := errgroup.WithContext(ctx)
 	defer cancel()
 
 	// If this is the coordinating node then start with all nodes in the cluster.
@@ -5564,17 +5572,19 @@ func (e *executor) mapReduce(ctx context.Context, index string, shards []uint64,
 	}
 
 	// Start mapping across all primary owners.
-	if err := e.mapper(ctx, cancel, ch, nodes, index, shards, c, opt, e.Cluster.ReplicaN == 1, mapFn, reduceFn); err != nil {
+	if err = e.mapper(ctx, eg, ch, nodes, index, shards, c, opt, e.Cluster.ReplicaN == 1, mapFn, reduceFn); err != nil {
 		return nil, errors.Wrap(err, "starting mapper")
 	}
 
 	// Iterate over all map responses and reduce.
 	var result interface{}
 	var shardN int
+	done := ctx.Done()
+accumulating:
 	for {
 		select {
-		case <-ctx.Done():
-			return nil, errors.Wrap(ctx.Err(), "context done")
+		case <-done:
+			return nil, eg.Wait()
 		case resp := <-ch:
 			// On error retry against remaining nodes. If an error returns then
 			// the context will cancel and cause all open goroutines to return.
@@ -5589,7 +5599,7 @@ func (e *executor) mapReduce(ctx context.Context, index string, shards []uint64,
 				nodes = topology.Nodes(nodes).FilterID(resp.node.ID)
 
 				// Begin mapper against secondary nodes.
-				if err := e.mapper(ctx, cancel, ch, nodes, index, resp.shards, c, opt, true, mapFn, reduceFn); errors.Cause(err) == errShardUnavailable {
+				if err := e.mapper(ctx, eg, ch, nodes, index, resp.shards, c, opt, true, mapFn, reduceFn); errors.Cause(err) == errShardUnavailable {
 					return nil, resp.err
 				} else if err != nil {
 					return nil, errors.Wrap(err, "mapping on secondary node")
@@ -5601,17 +5611,25 @@ func (e *executor) mapReduce(ctx context.Context, index string, shards []uint64,
 
 			// Reduce value.
 			result = reduceFn(ctx, result, resp.result)
-			if err, ok := result.(error); ok {
-				return nil, err
+			var ok bool
+			// note *not* shadowed.
+			if err, ok = result.(error); ok {
+				cancel()
+				break accumulating
 			}
 
 			// If all shards have been processed then return.
 			shardN += len(resp.shards)
 			if shardN >= len(shards) {
-				return result, nil
+				break accumulating
 			}
 		}
 	}
+	waitErr := eg.Wait()
+	if err != nil {
+		return nil, err
+	}
+	return result, waitErr
 }
 
 // makeEmbeddedDataForShards produces new rows containing the rowSegments
@@ -5658,20 +5676,22 @@ func makeEmbeddedDataForShards(allRows []*Row, shards []uint64) []*Row {
 	return newRows
 }
 
-func (e *executor) mapper(ctx context.Context, cancel context.CancelFunc, ch chan mapResponse, nodes []*topology.Node, index string, shards []uint64, c *pql.Call, opt *execOptions, lastAttempt bool, mapFn mapFunc, reduceFn reduceFunc) error {
+func (e *executor) mapper(ctx context.Context, eg *errgroup.Group, ch chan mapResponse, nodes []*topology.Node, index string, shards []uint64, c *pql.Call, opt *execOptions, lastAttempt bool, mapFn mapFunc, reduceFn reduceFunc) error {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.mapper")
 	defer span.Finish()
-	done := ctx.Done()
 
 	// Group shards together by nodes.
 	m, err := e.shardsByNode(nodes, index, shards)
 	if err != nil {
 		return errors.Wrapf(err, "shards by node %v", shardSlice(shards))
 	}
+	done := ctx.Done()
 
 	// Execute each node in a separate goroutine.
 	for n, nodeShards := range m {
-		go func(n *topology.Node, nodeShards []uint64) {
+		n := n
+		nodeShards := nodeShards
+		eg.Go(func() error {
 			resp := mapResponse{node: n, shards: nodeShards}
 
 			// Send local shards to mapper, otherwise remote exec.
@@ -5692,20 +5712,18 @@ func (e *executor) mapper(ctx context.Context, cancel context.CancelFunc, ch cha
 			select {
 			case <-done:
 			case ch <- resp:
-				// The cancel coming after the above send is intentional.
-				// We want to report the actual error that happened
-				// before we cause anything to return "context canceled".
-				// Also, we only want to call cancel if the error occurs on a
-				// secondary node (or a primary node with no replicas), meaning
-				// there are no other nodes remaining to which we can fail over.
+				// We make sure to send this before returning
+				// an error that will cause other things to potentially
+				// return context cancelled errors, so the original
+				// error is what gets reported.
 				if resp.err != nil && lastAttempt {
-					cancel()
+					return err
 				}
 			}
-		}(n, nodeShards)
+			return nil
+		})
 	}
-
-	return nil
+	return err
 }
 
 type job struct {
@@ -5719,10 +5737,7 @@ func worker(work chan job) {
 	for j := range work {
 		result, err := j.mapFn(j.ctx, j.shard)
 
-		select {
-		case <-j.ctx.Done():
-		case j.resultChan <- mapResponse{result: result, err: err}:
-		}
+		j.resultChan <- mapResponse{result: result, err: err}
 	}
 }
 
@@ -5744,39 +5759,45 @@ func (e *executor) mapperLocal(ctx context.Context, shards []uint64, mapFn mapFu
 
 	ch := make(chan mapResponse, len(shards))
 
+	expected := 0
 	for _, shard := range shards {
-		e.work <- job{
+		j := job{
 			shard:      shard,
 			mapFn:      mapFn,
 			ctx:        ctx,
 			resultChan: ch,
 		}
-	}
-
-	// Reduce results
-	var maxShard int
-	var result interface{}
-	for {
 		select {
 		case <-done:
-			return nil, ctx.Err()
-		case resp := <-ch:
-			if resp.err != nil {
-				return nil, resp.err
-			}
-			result = reduceFn(ctx, result, resp.result)
-			if err, ok := result.(error); ok {
-				cancel()
-				return nil, err
-			}
-			maxShard++
-		}
-
-		// Exit once all shards are processed.
-		if maxShard == len(shards) {
-			return result, nil
+			break
+		case e.work <- j:
+			expected++
 		}
 	}
+	// we *absolutely must* get responses for everything we successfully
+	// transmitted to the work queue, or there could be ongoing access to
+	// the parent Qcx's stuff.
+
+	// Reduce results
+	var result interface{}
+	for expected > 0 {
+		resp := <-ch
+		expected--
+		if resp.err != nil && err == nil {
+			err = resp.err
+		}
+		if resp.err == nil && ctx.Err() == nil {
+			// Only useful to do a possibly-expensive
+			// reduce if we don't already know we don't
+			// need it.
+			result = reduceFn(ctx, result, resp.result)
+			if resultErr, ok := result.(error); ok {
+				cancel()
+				err = resultErr
+			}
+		}
+	}
+	return result, err
 }
 
 func (e *executor) preTranslate(ctx context.Context, index string, calls ...*pql.Call) (cols map[string]map[string]uint64, rows map[string]map[string]map[string]uint64, err error) {
