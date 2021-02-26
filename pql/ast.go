@@ -332,13 +332,6 @@ type stringOrInt64Type struct{}
 
 var stringOrInt64 stringOrInt64Type
 
-var allowUnderField = callInfo{
-	allowUnknown: true,
-	prototypes: map[string]interface{}{
-		"_field": "",
-	},
-}
-
 var allowField = callInfo{
 	allowUnknown: false,
 	prototypes: map[string]interface{}{
