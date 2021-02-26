@@ -367,6 +367,7 @@ func NewConfig() *Config {
 	c.Etcd.Name = ""
 	c.Etcd.ClusterName = ""
 	c.Etcd.InitCluster = c.Name + "=" + c.Etcd.LPeerURL
+	c.Etcd.HeartbeatTTL = 5
 
 	return c
 }
