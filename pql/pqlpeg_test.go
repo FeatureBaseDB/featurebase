@@ -457,7 +457,6 @@ func TestPQLDeepEquality(t *testing.T) {
 			exp: &Call{
 				Name: "Rows",
 				Args: map[string]interface{}{
-					"z":      int64(4),
 					"_field": "myfield",
 				},
 			}},
@@ -467,7 +466,6 @@ func TestPQLDeepEquality(t *testing.T) {
 			exp: &Call{
 				Name: "Rows",
 				Args: map[string]interface{}{
-					"z":      int64(4),
 					"_field": "myfield",
 				},
 			}},
