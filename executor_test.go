@@ -7008,11 +7008,11 @@ func variousQueriesOnPercentiles(t *testing.T, clusterSize int) {
 
 	for i, tst := range tests {
 		t.Run(fmt.Sprintf("%d-%s", i, tst.query), func(t *testing.T) {
-			resp := c.Query(t, "users2", tst.query)
+			//resp := c.Query(t, "users2", tst.query)
 			tr := c.QueryGRPC(t, "users2", tst.query)
-			if tst.qrVerifier != nil {
-				tst.qrVerifier(t, resp)
-			}
+			// if tst.qrVerifier != nil {
+			// 	tst.qrVerifier(t, resp)
+			// }
 			csvString, err := tableResponseToCSVString(tr)
 			if err != nil {
 				t.Fatal(err)
