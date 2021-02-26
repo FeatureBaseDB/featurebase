@@ -169,19 +169,20 @@ func (m *Command) Start() (err error) {
 		}
 	}
 
-	go func() {
-		err := m.Handler.Serve()
-		if err != nil {
-			m.logger.Printf("handler serve error: %v", err)
-		}
-	}()
-
 	// Initialize server.
 	if err = m.Server.Open(); err != nil {
 		return errors.Wrap(err, "opening server")
 	}
 
+	// Initialize HTTP.
+	go func() {
+		if err := m.Handler.Serve(); err != nil {
+			m.logger.Printf("handler serve error: %v", err)
+		}
+	}()
 	m.logger.Printf("listening as %s\n", m.listenURI)
+
+	// Initialize gRPC.
 	go func() {
 		if err := m.grpcServer.Serve(); err != nil {
 			m.logger.Printf("grpc server error: %v", err)
