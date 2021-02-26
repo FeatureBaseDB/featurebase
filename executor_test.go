@@ -6977,11 +6977,11 @@ func variousQueriesOnPercentiles(t *testing.T, clusterSize int) {
 	}
 
 	// generic index
-	c.CreateField(t, "users", pilosa.IndexOptions{Keys: true, TrackExistence: true}, "net_worth", pilosa.OptFieldTypeInt(min, max))
-	c.ImportIntKey(t, "users", "net_worth", intEntries)
+	c.CreateField(t, "users2", pilosa.IndexOptions{Keys: true, TrackExistence: true}, "net_worth", pilosa.OptFieldTypeInt(min, max))
+	c.ImportIntKey(t, "users2", "net_worth", intEntries)
 
-	c.CreateField(t, "users", pilosa.IndexOptions{Keys: true, TrackExistence: true}, "val", pilosa.OptFieldKeys())
-	c.ImportKeyKey(t, "users", "val", stringEntries)
+	c.CreateField(t, "users2", pilosa.IndexOptions{Keys: true, TrackExistence: true}, "val", pilosa.OptFieldKeys())
+	c.ImportKeyKey(t, "users2", "val", stringEntries)
 
 	splitSortBackToCSV := func(csvStr string) string {
 		ss := strings.Split(csvStr[:len(csvStr)-1], "\n")
