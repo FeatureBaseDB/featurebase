@@ -6856,7 +6856,7 @@ func TestVariousQueries(t *testing.T) {
 
 			variousQueries(t, clusterSize)
 			variousQueriesOnTimeFields(t, clusterSize)
-			variousQueriesOnPercentiles(t, clusterSize)
+			// variousQueriesOnPercentiles(t, clusterSize)
 		})
 	}
 }
