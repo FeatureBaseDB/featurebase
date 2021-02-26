@@ -6856,7 +6856,7 @@ func TestVariousQueries(t *testing.T) {
 
 			variousQueries(t, clusterSize)
 			variousQueriesOnTimeFields(t, clusterSize)
-			// variousQueriesOnPercentiles(t, clusterSize)
+			variousQueriesOnPercentiles(t, clusterSize)
 		})
 	}
 }
@@ -6878,8 +6878,8 @@ func variousQueriesOnPercentiles(t *testing.T, clusterSize int) {
 		num    int64
 		rowKey string
 	}
-	size := 1000
-	nths := []float64{0.1, 0.25, 0.5, 0.75, 0.9, 0.99, 0.999}
+	size := 100
+	nths := []float64{0.1, 0.25, 0.5, 0.75, 0.9, 0.99}
 	testValues := make([]testValue, size)
 	rowKeys := [2]string{"foo", "bar"}
 	for i := 0; i < size; i++ {
