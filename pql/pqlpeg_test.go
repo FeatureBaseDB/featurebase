@@ -427,7 +427,7 @@ func TestPQLDeepEquality(t *testing.T) {
 			}},
 		{
 			name: "TopK",
-			call: "TopK(myfield, Row()), k=7",
+			call: "TopK(myfield, Row(), k=7)",
 			exp: &Call{
 				Name: "TopK",
 				Args: map[string]interface{}{
@@ -453,7 +453,7 @@ func TestPQLDeepEquality(t *testing.T) {
 			}},
 		{
 			name: "Rows",
-			call: "Rows(myfield, z=4)",
+			call: "Rows(myfield)",
 			exp: &Call{
 				Name: "Rows",
 				Args: map[string]interface{}{
@@ -463,7 +463,7 @@ func TestPQLDeepEquality(t *testing.T) {
 			}},
 		{
 			name: "RowsWithField=",
-			call: "Rows(field=myfield, z=4)",
+			call: "Rows(field=myfield)",
 			exp: &Call{
 				Name: "Rows",
 				Args: map[string]interface{}{
