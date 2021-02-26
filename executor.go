@@ -5786,7 +5786,7 @@ func (e *executor) mapperLocal(ctx context.Context, shards []uint64, mapFn mapFu
 		if resp.err != nil && err == nil {
 			err = resp.err
 		}
-		if ctx.Err() == nil {
+		if resp.err == nil && ctx.Err() == nil {
 			// Only useful to do a possibly-expensive
 			// reduce if we don't already know we don't
 			// need it.
