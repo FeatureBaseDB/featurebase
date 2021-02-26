@@ -427,12 +427,12 @@ func TestPQLDeepEquality(t *testing.T) {
 			}},
 		{
 			name: "TopK",
-			call: "TopK(myfield, Row(), a=7)",
+			call: "TopK(myfield, Row()), k=7",
 			exp: &Call{
 				Name: "TopK",
 				Args: map[string]interface{}{
-					"a":      int64(7),
 					"_field": "myfield",
+					"k":      int64(7),
 				},
 				Children: []*Call{
 					{Name: "Row"},
@@ -440,12 +440,12 @@ func TestPQLDeepEquality(t *testing.T) {
 			}},
 		{
 			name: "TopKWithField=",
-			call: "TopK(field=myfield, Row(), a=7)",
+			call: "TopK(field=myfield, Row(), k=7)",
 			exp: &Call{
 				Name: "TopK",
 				Args: map[string]interface{}{
-					"a":      int64(7),
 					"_field": "myfield",
+					"k":      int64(7),
 				},
 				Children: []*Call{
 					{Name: "Row"},
@@ -453,24 +453,22 @@ func TestPQLDeepEquality(t *testing.T) {
 			}},
 		{
 			name: "Rows",
-			call: "Rows(myfield, 9, z=4)",
+			call: "Rows(myfield, z=4)",
 			exp: &Call{
 				Name: "Rows",
 				Args: map[string]interface{}{
 					"z":      int64(4),
 					"_field": "myfield",
-					"_row":   int64(9),
 				},
 			}},
 		{
 			name: "RowsWithField=",
-			call: "Rows(field=myfield, 9, z=4)",
+			call: "Rows(field=myfield, z=4)",
 			exp: &Call{
 				Name: "Rows",
 				Args: map[string]interface{}{
 					"z":      int64(4),
 					"_field": "myfield",
-					"_row":   int64(9),
 				},
 			}},
 		{

@@ -63,7 +63,11 @@ func (q *Query) lastCallStackElem() *callStackElem {
 }
 
 func (q *Query) addPosNum(key, value string) {
-	q.addField(key)
+	if key == "field" {
+		q.addField("_field")
+	} else {
+		q.addField(key)
+	}
 	q.addNumVal(value)
 }
 
@@ -431,8 +435,13 @@ var callInfoByFunc = map[string]callInfo{
 		},
 	},
 
-	// things that take _field
-	"TopN": allowUnderField,
+	"TopN": {
+		allowUnknown: true,
+		prototypes: map[string]interface{}{
+			"_field": "",
+			"field":  "",
+		},
+	},
 	// special cases:
 	"Clear": {
 		allowUnknown: true,
