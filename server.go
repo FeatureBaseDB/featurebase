@@ -589,6 +589,12 @@ func (s *Server) Open() error {
 	s.syncer.Stats = s.holder.Stats.WithTags("component:HolderSyncer")
 
 	// Open holder.
+	func() {
+		s.holder.startMsgsMu.Lock()
+		defer s.holder.startMsgsMu.Unlock()
+
+		s.holder.startMsgs = []Message{}
+	}()
 	if err := s.holder.Open(); err != nil {
 		return errors.Wrap(err, "opening Holder")
 	}
@@ -611,6 +617,92 @@ func (s *Server) Open() error {
 	go func() { defer s.wg.Done(); s.monitorAntiEntropy() }()
 	go func() { defer s.wg.Done(); s.monitorRuntime() }()
 	go func() { defer s.wg.Done(); s.monitorDiagnostics() }()
+
+	toSend := func() []Message {
+		s.holder.startMsgsMu.Lock()
+		defer s.holder.startMsgsMu.Unlock()
+
+		toSend := s.holder.startMsgs
+		s.holder.startMsgs = nil
+		return toSend
+	}()
+
+	s.wg.Add(1)
+	go func() {
+		defer s.wg.Done()
+
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		s.wg.Add(1)
+		go func() {
+			defer s.wg.Done()
+			defer cancel()
+			select {
+			case <-s.closing:
+			case <-ctx.Done():
+			}
+		}()
+
+		timer := time.NewTimer(0)
+		defer timer.Stop()
+		if !timer.Stop() {
+			<-timer.C
+		}
+		for {
+			state, err := s.stator.ClusterState(ctx)
+			if err != nil {
+				s.logger.Printf("failed to check cluster state: %v", err)
+				timer.Reset(time.Second)
+				select {
+				case <-s.closing:
+					return
+				case <-timer.C:
+					continue
+				}
+			}
+			switch state {
+			case disco.ClusterStateStarting, disco.ClusterStateUnknown, disco.ClusterStateDown:
+				timer.Reset(time.Second)
+				select {
+				case <-s.closing:
+					return
+				case <-timer.C:
+					continue
+				}
+			}
+			break
+		}
+
+		start := time.Now()
+		prevMsg := start
+		s.logger.Printf("start initial cluster state sync")
+		for i := range toSend {
+			for {
+				err := s.holder.broadcaster.SendSync(&toSend[i])
+				if err != nil {
+					s.logger.Printf("failed to broadcast startup cluster message (trying again in a bit): %v", err)
+					timer.Reset(time.Second)
+					select {
+					case <-s.closing:
+						return
+					case <-timer.C:
+						continue
+					}
+				}
+				break
+			}
+
+			if now := time.Now(); now.Sub(prevMsg) > time.Second {
+				progressRatio := float64(i+1) / float64(len(toSend))
+				remainingRatio := 1 - progressRatio
+				timeRemaining := time.Duration(float64(now.Sub(prevMsg)) * (remainingRatio / progressRatio))
+				s.logger.Printf("synced %d/%d messages (%.2f%% complete; %s remaining)", i+1, len(toSend), 100*progressRatio, timeRemaining)
+				prevMsg = now
+			}
+		}
+		s.logger.Printf("completed initial cluster state sync in %s", time.Since(start).String())
+	}()
 
 	return nil
 }

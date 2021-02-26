@@ -1004,7 +1004,7 @@ func (f *Field) createViewIfNotExists(name string) (*view, error) {
 
 	if created {
 		// Broadcast view creation to the cluster.
-		err := f.broadcaster.SendSync(cvm)
+		err := f.holder.sendOrSpool(cvm)
 		if err != nil {
 			return nil, errors.Wrap(err, "sending CreateView message")
 		}
