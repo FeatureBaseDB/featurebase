@@ -6879,7 +6879,7 @@ func variousQueriesOnPercentiles(t *testing.T, clusterSize int) {
 		rowKey string
 	}
 	size := 100
-	nths := []float64{0.1, 0.25, 0.5, 0.75, 0.9, 0.99}
+
 	testValues := make([]testValue, size)
 	rowKeys := [2]string{"foo", "bar"}
 	for i := 0; i < size; i++ {
@@ -6901,9 +6901,9 @@ func variousQueriesOnPercentiles(t *testing.T, clusterSize int) {
 	// filter out nums that fulfil predicate
 	var nums []int64
 	for _, v := range testValues {
-		if v.rowKey == "foo" {
-			nums = append(nums, v.num)
-		}
+		// if v.rowKey == "foo" {
+		nums = append(nums, v.num)
+		// }
 	}
 
 	// get min and max for calculating both expected median
@@ -6996,9 +6996,10 @@ func variousQueriesOnPercentiles(t *testing.T, clusterSize int) {
 	}
 
 	// generate test cases per each nth argument
+	nths := []float64{0.1, 0.25, 0.5, 0.75, 0.9, 0.99}
 	var tests []testCase
 	for _, nth := range nths {
-		query := fmt.Sprintf(`Percentile(field="net_worth", filter=Row(val="foo"), nth=%f)`, nth)
+		query := fmt.Sprintf(`Percentile(field="net_worth", nth=%f)`, nth)
 		expectedPercentile := getExpectedPercentile(nums, nth)
 		tests = append(tests, testCase{
 			query:       query,
@@ -7008,7 +7009,7 @@ func variousQueriesOnPercentiles(t *testing.T, clusterSize int) {
 
 	for i, tst := range tests {
 		t.Run(fmt.Sprintf("%d-%s", i, tst.query), func(t *testing.T) {
-			//resp := c.Query(t, "users2", tst.query)
+			// resp := c.Query(t, "users2", tst.query)
 			tr := c.QueryGRPC(t, "users2", tst.query)
 			// if tst.qrVerifier != nil {
 			// 	tst.qrVerifier(t, resp)
