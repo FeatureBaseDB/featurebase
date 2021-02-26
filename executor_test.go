@@ -7247,15 +7247,6 @@ toronto,2,11
 			csvVerifier: "pilosa\nzebra\nicecream\n",
 		},
 		{
-			query: "Rows(affinity<0),field=likes)",
-			qrVerifier: func(t *testing.T, resp pilosa.QueryResponse) {
-				if !reflect.DeepEqual(resp.Results[0].(*pilosa.Row).Keys, []string{"pilosa", "zebra", "icecream"}) {
-					t.Errorf("wrong values: %+v", resp.Results[0])
-				}
-			},
-			csvVerifier: "pilosa\nzebra\nicecream\n",
-		},
-		{
 			query: "Distinct(Row(affinity>0),field=likes)",
 			qrVerifier: func(t *testing.T, resp pilosa.QueryResponse) {
 				if !reflect.DeepEqual(resp.Results[0].(*pilosa.Row).Keys, []string{"molecula", "pangolin", "icecream"}) {
@@ -7414,6 +7405,20 @@ pangolin,1,100
 			query: "GroupBy(Rows(field=dinner), sort=\"count desc\", limit=2)",
 			csvVerifier: `chinese,3
 pizza,2
+`,
+		},
+		{
+			query: "TopK(dinner)",
+			csvVerifier: `chinese,3
+pizza,2
+leftovers,1
+`,
+		},
+		{
+			query: "TopK(field=dinner)",
+			csvVerifier: `chinese,3
+pizza,2
+leftovers,1
 `,
 		},
 	}
