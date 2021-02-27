@@ -660,16 +660,20 @@ func (e *Etcd) putKey(ctx context.Context, key, val string, opts ...clientv3.OpO
 
 func (e *Etcd) getKeyBytes(ctx context.Context, key string) ([]byte, error) {
 	// Get the current value for the key.
-	kv := e.e.Server.KV()
-	resp, err := kv.Range([]byte(key), nil, mvcc.RangeOptions{})
+	op := clientv3.OpGet(key)
+	resp, err := e.cli.Txn(ctx).Then(op).Commit()
 	if err != nil {
 		return nil, err
 	}
-	kvs := resp.KVs
 
-	// TODO: consider returning a "key does not exist" error instead of (nil, nil)
+	kvs := resp.Responses[0].GetResponseRange().Kvs
+
+	if !resp.Succeeded {
+		return nil, errors.New("tx failed")
+	}
+
 	if len(kvs) == 0 {
-		return nil, nil
+		return nil, errors.New("key does not exist")
 	}
 
 	return kvs[0].Value, nil
