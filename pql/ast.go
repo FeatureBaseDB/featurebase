@@ -421,6 +421,7 @@ var callInfoByFunc = map[string]callInfo{
 		allowUnknown: false,
 		prototypes: map[string]interface{}{
 			"_field": "",
+			"field":  "",
 			"k":      int64(0),
 			"filter": nil,
 			"from":   nil,
@@ -483,6 +484,7 @@ var callInfoByFunc = map[string]callInfo{
 		allowUnknown: true,
 		prototypes: map[string]interface{}{
 			"_field": "",
+			"field":  "",
 			"_row":   stringOrInt64,
 		},
 	},
