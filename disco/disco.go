@@ -90,20 +90,20 @@ type Stator interface {
 	// are up and running.
 	Started(ctx context.Context) error
 
-	// ClusterState summarize the state of all nodes and gives
+	// ClusterState considers the state of all nodes and gives
 	// a general cluster state. The output calculation is as follows:
 	// - If any of the nodes are still starting: "STARTING"
 	// - If all nodes are up and running: "NORMAL"
 	// - If number of nodes down is lower than number of replicas: "DEGRADED"
-	// - If number of nodes down is bigger than number of replicas: "DOWN"
+	// - If number of nodes down is bigger than (or equal to) the number of replicas: "DOWN"
 	// - If any of the nodes started a resize operation, or a new
 	// node was specifically added or removed from the cluster: "RESIZING"
 	ClusterState(context.Context) (ClusterState, error)
 
-	// NodeState returns the specific state of a node giving its ID.
+	// NodeState returns the specific state of a node given its ID.
 	NodeState(context.Context, string) (NodeState, error)
 
-	// NodeStates will return all the states by node ID of the actual nodes on the cluster.
+	// NodeStates will return all the states by node ID of the actual nodes in the cluster.
 	NodeStates(context.Context) (map[string]NodeState, error)
 }
 
@@ -146,7 +146,7 @@ type Schemator interface {
 	DeleteView(ctx context.Context, index, field, view string) error
 }
 
-// Metadator is in charge of store specific metadata per node.
+// Metadator is in charge of storing specific metadata per node.
 // This metadata can be retrieved by any node using the specific peerID.
 type Metadator interface {
 	Metadata(ctx context.Context, peerID string) ([]byte, error)
@@ -163,7 +163,7 @@ type Resizer interface {
 	// DoneResize will mark the resize event as done. This will be called when all the resize actions are done.
 	DoneResize() error
 
-	// Watch will give information about a resize event in other node, using its peerID.
+	// Watch will give information about a resize event in another node, using its peerID.
 	// onUpdate function will be called per each event sent by the node in RESIZE state.
 	Watch(ctx context.Context, peerID string, onUpdate func([]byte) error) error
 }
