@@ -506,12 +506,11 @@ func (e *Etcd) Schema(ctx context.Context) (disco.Schema, error) {
 }
 
 func (e *Etcd) Metadata(ctx context.Context, peerID string) ([]byte, error) {
-	kv := e.e.Server.KV()
-	resp, err := kv.Range([]byte(path.Join(metadataPrefix, peerID)), nil, mvcc.RangeOptions{})
+	resp, err := e.cli.KV.Get(ctx, path.Join(metadataPrefix, peerID))
 	if err != nil {
 		return nil, err
 	}
-	kvs := resp.KVs
+	kvs := resp.Kvs
 
 	if len(kvs) > 1 {
 		return nil, disco.ErrTooManyResults
