@@ -26,10 +26,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/disco"
 	"github.com/pilosa/pilosa/v2/roaring"
-	"github.com/pilosa/pilosa/v2/testhook"
 	"github.com/pilosa/pilosa/v2/topology"
 	"github.com/pkg/errors"
 	"go.etcd.io/etcd/clientv3"
@@ -93,7 +91,7 @@ type Etcd struct {
 	lm leaseMetadata
 
 	e   *embed.Etcd
-	cli *hookedClient
+	cli *clientv3.Client
 	wg  *sync.WaitGroup
 }
 
@@ -108,8 +106,6 @@ func NewEtcd(opt Options, replicas int) *Etcd {
 
 // Close implements io.Closer
 func (e *Etcd) Close() error {
-	_ = testhook.Closed(pilosa.NewAuditor(), e, nil)
-
 	if e.e != nil {
 		if e.resizeCancel != nil {
 			e.resizeCancel()
@@ -169,11 +165,10 @@ func parseOptions(opt Options) *embed.Config {
 	if opt.ClusterURL != "" {
 		cfg.ClusterState = embed.ClusterStateFlagExisting
 
-		t, err := clientv3.NewFromURL(opt.ClusterURL)
+		cli, err := clientv3.NewFromURL(opt.ClusterURL)
 		if err != nil {
 			panic(err)
 		}
-		cli := &hookedClient{Client: t}
 		defer cli.Close()
 
 		log.Println("Cluster Members:")
@@ -200,9 +195,8 @@ func (e *Etcd) Start(ctx context.Context) (disco.InitialClusterState, error) {
 	if err != nil {
 		return state, errors.Wrap(err, "starting etcd")
 	}
-	_ = testhook.Opened(pilosa.NewAuditor(), e, nil)
 	e.e = etcd
-	e.cli = &hookedClient{Client: v3client.New(e.e.Server)}
+	e.cli = v3client.New(e.e.Server)
 
 	select {
 	case <-ctx.Done():
@@ -762,7 +756,7 @@ func (e *Etcd) leaseKeepAlive(ctx context.Context, cancelFunc context.CancelFunc
 					// have lost track of the lease, it's likely that we've also
 					// lost the client at e.cli.
 					// TODO: should this close/reset e.cli instead?
-					cli := &hookedClient{Client: v3client.New(e.e.Server)}
+					cli := v3client.New(e.e.Server)
 					var err error
 					leaseResp, err = cli.Grant(ctx, ttl)
 					cli.Close()
@@ -803,21 +797,7 @@ func (e *Etcd) leaseKeepAlive(ctx context.Context, cancelFunc context.CancelFunc
 	return leaseResp.ID, nil
 }
 
-type hookedClient struct {
-	*clientv3.Client
-}
-
-func (h *hookedClient) Close() {
-	// The hook open/closed test here is disabled because there's a
-	// slight delay before the client actually gets closed in
-	// some cases, which is long enough to frequently be caught
-	// if there was a client in the last test run, even though it'd
-	// be fine a few seconds later.
-	// _ = testhook.Closed(pilosa.NewAuditor(), h.Client, nil)
-	h.Client.Close()
-}
-
-func memberList(cli *hookedClient) (ids []uint64, names []string, urls []string) {
+func memberList(cli *clientv3.Client) (ids []uint64, names []string, urls []string) {
 	ml, err := cli.MemberList(context.TODO())
 	if err != nil {
 		panic(err)
@@ -833,7 +813,7 @@ func memberList(cli *hookedClient) (ids []uint64, names []string, urls []string)
 	return
 }
 
-func memberAdd(cli *hookedClient, peerURL string) (id uint64, name string) {
+func memberAdd(cli *clientv3.Client, peerURL string) (id uint64, name string) {
 	ma, err := cli.MemberAdd(context.TODO(), []string{peerURL})
 	if err != nil {
 		return 0, ""
@@ -884,7 +864,7 @@ func (e *Etcd) AddShards(ctx context.Context, index, field string, shards *roari
 	// }
 
 	// Create a session to acquire a lock.
-	sess, _ := concurrency.NewSession(e.cli.Client)
+	sess, _ := concurrency.NewSession(e.cli)
 	defer sess.Close()
 
 	muKey := path.Join(lockPrefix, index, field)
@@ -943,7 +923,7 @@ func (e *Etcd) AddShard(ctx context.Context, index, field string, shard uint64) 
 	// write shards to etcd.
 
 	// Create a session to acquire a lock.
-	sess, _ := concurrency.NewSession(e.cli.Client)
+	sess, _ := concurrency.NewSession(e.cli)
 	defer sess.Close()
 
 	muKey := path.Join(lockPrefix, index, field)
@@ -1006,7 +986,7 @@ func (e *Etcd) RemoveShard(ctx context.Context, index, field string, shard uint6
 	// write shards to etcd.
 
 	// Create a session to acquire a lock.
-	sess, _ := concurrency.NewSession(e.cli.Client)
+	sess, _ := concurrency.NewSession(e.cli)
 	defer sess.Close()
 
 	muKey := path.Join(lockPrefix, index, field)

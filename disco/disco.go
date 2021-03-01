@@ -57,20 +57,21 @@ type DisCo interface {
 
 type (
 	InitialClusterState string
-	ClusterState        string
+
+	// ClusterState represents the state returned in the /status endpoint.
+	ClusterState string
 )
 
 const (
 	InitialClusterStateNew      InitialClusterState = "new"
 	InitialClusterStateExisting InitialClusterState = "existing"
 
-	// ClusterState represents the state returned in the /status endpoint.
-	ClusterStateUnknown  ClusterState = "UNKNOWN"
-	ClusterStateStarting ClusterState = "STARTING"
-	ClusterStateDegraded ClusterState = "DEGRADED" // cluster is running but we've lost some # of hosts >0 but < replicaN
-	ClusterStateNormal   ClusterState = "NORMAL"
-	ClusterStateResizing ClusterState = "RESIZING" // cluster is replicating data to other nodes
-	ClusterStateDown     ClusterState = "DOWN"     // cluster is unable to serve queries
+	ClusterStateUnknown  ClusterState = "UNKNOWN"  // default cluster state. It is returned when we are not able to get the real actual state.
+	ClusterStateStarting ClusterState = "STARTING" // cluster is starting and some internal services are not ready yet.
+	ClusterStateDegraded ClusterState = "DEGRADED" // cluster is running but we've lost some # of hosts >0 but < replicaN. Only read queries are allowed.
+	ClusterStateNormal   ClusterState = "NORMAL"   // cluster is up and running.
+	ClusterStateResizing ClusterState = "RESIZING" // cluster is replicating data to other nodes.
+	ClusterStateDown     ClusterState = "DOWN"     // cluster is unable to serve queries.
 )
 
 type NodeState string
@@ -83,9 +84,26 @@ const (
 )
 
 type Stator interface {
+
+	// Started will mark the actual node as already started.
+	// It must be called after all initialization processes
+	// are up and running.
 	Started(ctx context.Context) error
+
+	// ClusterState summarize the state of all nodes and gives
+	// a general cluster state. The output calculation is as follows:
+	// - If any of the nodes are still starting: "STARTING"
+	// - If all nodes are up and running: "NORMAL"
+	// - If number of nodes down is lower than number of replicas: "DEGRADED"
+	// - If number of nodes down is bigger than number of replicas: "DOWN"
+	// - If any of the nodes started a resize operation, or a new
+	// node was specifically added or removed from the cluster: "RESIZING"
 	ClusterState(context.Context) (ClusterState, error)
+
+	// NodeState returns the specific state of a node giving its ID.
 	NodeState(context.Context, string) (NodeState, error)
+
+	// NodeStates will return all the states by node ID of the actual nodes on the cluster.
 	NodeStates(context.Context) (map[string]NodeState, error)
 }
 
@@ -107,9 +125,17 @@ type Field struct {
 	Views map[string]struct{}
 }
 
+// Schemator is the source of truth for different schema elements.
+// All nodes will store and retrieve information from the same source,
+// having the same information at the same time.
 type Schemator interface {
+
+	// Schema return the actual pilosa schema. If the schema is not present, an error is returned.
 	Schema(ctx context.Context) (Schema, error)
+
+	// Index gets a specific index data by name.
 	Index(ctx context.Context, name string) ([]byte, error)
+
 	CreateIndex(ctx context.Context, name string, val []byte) error
 	DeleteIndex(ctx context.Context, name string) error
 	Field(ctx context.Context, index, field string) ([]byte, error)
@@ -120,11 +146,8 @@ type Schemator interface {
 	DeleteView(ctx context.Context, index, field, view string) error
 }
 
-type Metadata interface {
-	Marshal() ([]byte, error)
-	Unmarshal([]byte) error
-}
-
+// Metadator is in charge of store specific metadata per node.
+// This metadata can be retrieved by any node using the specific peerID.
 type Metadator interface {
 	Metadata(ctx context.Context, peerID string) ([]byte, error)
 	SetMetadata(ctx context.Context, metadata []byte) error
@@ -133,8 +156,15 @@ type Metadator interface {
 // Resizer triggers resizing the node and changes cluster state into RESIZING.
 // We can also return some kind of handler from Resize function (e.g. key-value)
 type Resizer interface {
+	// Resize will trigger a resize event. Node state will change to RESIZE state.
+	// The returned function can be used to send info about the resize process to other nodes.
 	Resize(ctx context.Context) (func([]byte) error, error)
+
+	// DoneResize will mark the resize event as done. This will be called when all the resize actions are done.
 	DoneResize() error
+
+	// Watch will give information about a resize event in other node, using its peerID.
+	// onUpdate function will be called per each event sent by the node in RESIZE state.
 	Watch(ctx context.Context, peerID string, onUpdate func([]byte) error) error
 }
 
