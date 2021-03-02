@@ -6851,7 +6851,6 @@ func TestVariousQueries(t *testing.T) {
 	for _, clusterSize := range []int{1, 3, 4, 7} {
 		clusterSize := clusterSize
 		t.Run(fmt.Sprintf("%d-node", clusterSize), func(t *testing.T) {
-			t.Parallel()
 			c := test.MustRunCluster(t, clusterSize)
 			defer c.Close()
 
