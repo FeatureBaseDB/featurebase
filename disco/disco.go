@@ -94,8 +94,8 @@ type Stator interface {
 	// a general cluster state. The output calculation is as follows:
 	// - If any of the nodes are still starting: "STARTING"
 	// - If all nodes are up and running: "NORMAL"
-	// - If number of nodes down is lower than number of replicas: "DEGRADED"
-	// - If number of nodes down is bigger than (or equal to) the number of replicas: "DOWN"
+	// - If number of DOWN nodes is lower than number of replicas: "DEGRADED"
+	// - If number of unresponsive nodes is greater than (or equal to) the number of replicas: "DOWN"
 	// - If any of the nodes started a resize operation, or a new
 	// node was specifically added or removed from the cluster: "RESIZING"
 	ClusterState(context.Context) (ClusterState, error)
