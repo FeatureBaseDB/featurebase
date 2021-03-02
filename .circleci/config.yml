@@ -154,7 +154,8 @@ jobs:
       name: golang
     steps:
       - checkout-plus
-      - setup_remote_docker
+      - setup_remote_docker:
+          version: 19.03.13 # see https://support.circleci.com/hc/en-us/articles/360050934711
       - run: echo -n $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
       - run: make docker
       - run: docker run pilosa:$(git describe --tags) help
@@ -164,7 +165,8 @@ jobs:
       name: golang
     steps:
       - checkout-plus
-      - setup_remote_docker
+      - setup_remote_docker:
+          version: 19.03.13 # see https://support.circleci.com/hc/en-us/articles/360050934711
       - run: echo -n $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
       - run: make docker
       - run: docker run pilosa:$(git describe --tags) help
