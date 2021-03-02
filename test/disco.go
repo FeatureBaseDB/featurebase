@@ -20,7 +20,6 @@ import (
 	"net"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/pilosa/pilosa/v2/etcd"
 	"github.com/pilosa/pilosa/v2/server"
@@ -108,7 +107,7 @@ func GetPortsGenConfigs(tb testing.TB, nodes []*Command) error {
 			AClientURL:    clientURL,
 			LPeerURL:      peerURL,
 			APeerURL:      peerURL,
-			HeartbeatTTL:  5 * int64(time.Second),
+			HeartbeatTTL:  5,
 			LPeerSocket:   []*net.TCPListener{peerListener},
 			LClientSocket: []*net.TCPListener{clientListener},
 		}
@@ -149,7 +148,7 @@ func GenPortsConfig(ports []Ports) []*server.Config {
 				AClientURL:    lClientURL,
 				LPeerURL:      lPeerURL,
 				APeerURL:      lPeerURL,
-				HeartbeatTTL:  5 * int64(time.Second),
+				HeartbeatTTL:  5,
 				LPeerSocket:   []*net.TCPListener{lsnP},
 				LClientSocket: []*net.TCPListener{lsnC},
 			},
