@@ -52,7 +52,7 @@ const (
 	existenceFieldName = "_exists"
 
 	// DefaultDiscoDir is the default data directory used by the disco implementation.
-	DefaultDiscoDir = ".disco"
+	DefaultDiscoDir = "disco"
 
 	// DefaultIndexesDir is the default indexes directory used by the holder.
 	DefaultIndexesDir = "indexes"
