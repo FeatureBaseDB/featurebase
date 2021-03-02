@@ -5548,7 +5548,7 @@ loop:
 // mapReduce has to ensure that it never returns before any work it spawned has
 // terminated. It's not enough to cancel the jobs; we have to wait for them to be
 // done, or we can unmap resources they're still using.
-func (e *executor) mapReduce(ctx context.Context, index string, shards []uint64, c *pql.Call, opt *execOptions, mapFn mapFunc, reduceFn reduceFunc) (_ interface{}, err error) {
+func (e *executor) mapReduce(ctx context.Context, index string, shards []uint64, c *pql.Call, opt *execOptions, mapFn mapFunc, reduceFn reduceFunc) (result interface{}, err error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.mapReduce")
 	defer span.Finish()
 
@@ -5558,8 +5558,18 @@ func (e *executor) mapReduce(ctx context.Context, index string, shards []uint64,
 	ctx, cancel := context.WithCancel(ctx)
 	// Create an errgroup so we can wait for all the goroutines to exit
 	eg, ctx := errgroup.WithContext(ctx)
-	defer cancel()
 
+	// After we're done processing, we have to wait for any outstanding
+	// functions in the ErrGroup to complete. If we didn't have an error
+	// already at that point, we'll report any errors from the ErrGroup
+	// instead.
+	defer func() {
+		cancel()
+		errWait := eg.Wait()
+		if err == nil {
+			err = errWait
+		}
+	}()
 	// If this is the coordinating node then start with all nodes in the cluster.
 	//
 	// However, if this request is being sent from the primary then all
@@ -5577,14 +5587,12 @@ func (e *executor) mapReduce(ctx context.Context, index string, shards []uint64,
 	}
 
 	// Iterate over all map responses and reduce.
-	var result interface{}
-	var shardN int
+	expected := len(shards)
 	done := ctx.Done()
-accumulating:
-	for {
+	for expected > 0 {
 		select {
 		case <-done:
-			return nil, eg.Wait()
+			return nil, ctx.Err()
 		case resp := <-ch:
 			// On error retry against remaining nodes. If an error returns then
 			// the context will cancel and cause all open goroutines to return.
@@ -5608,6 +5616,9 @@ accumulating:
 			} else if resp.err != nil {
 				return nil, errors.Wrap(resp.err, "mapping on primary node")
 			}
+			// if we got a response that we aren't discarding
+			// because it's an error, subtract it from our count...
+			expected -= len(resp.shards)
 
 			// Reduce value.
 			result = reduceFn(ctx, result, resp.result)
@@ -5615,21 +5626,12 @@ accumulating:
 			// note *not* shadowed.
 			if err, ok = result.(error); ok {
 				cancel()
-				break accumulating
-			}
-
-			// If all shards have been processed then return.
-			shardN += len(resp.shards)
-			if shardN >= len(shards) {
-				break accumulating
+				return nil, err
 			}
 		}
 	}
-	waitErr := eg.Wait()
-	if err != nil {
-		return nil, err
-	}
-	return result, waitErr
+	// note the deferred Wait above which might override this nil.
+	return result, nil
 }
 
 // makeEmbeddedDataForShards produces new rows containing the rowSegments
@@ -5711,19 +5713,30 @@ func (e *executor) mapper(ctx context.Context, eg *errgroup.Group, ch chan mapRe
 			// Return response to the channel.
 			select {
 			case <-done:
+				// If someone just canceled the context
+				// arbitrarily, we could end up here with this
+				// being the first non-nil error handed to
+				// the ErrGroup, in which case, it's the best
+				// explanation we have for why everything's
+				// stopping.
+				return ctx.Err()
 			case ch <- resp:
-				// We make sure to send this before returning
-				// an error that will cause other things to potentially
-				// return context cancelled errors, so the original
-				// error is what gets reported.
+				// If we return a non-nil error from this, the
+				// entire errGroup gets canceled. So we don't
+				// want to return a non-nil error if mapReduce
+				// might try to run another mapper against a
+				// different set of nodes. Note that this shouldn't
+				// matter; we just sent the error to mapReduce
+				// anyway, so it probably cancels the ErrGroup
+				// too.
 				if resp.err != nil && lastAttempt {
-					return err
+					return resp.err
 				}
 			}
 			return nil
 		})
 	}
-	return err
+	return nil
 }
 
 type job struct {
@@ -5735,8 +5748,14 @@ type job struct {
 
 func worker(work chan job) {
 	for j := range work {
+		// Skip out early if the context is done, but still send
+		// an ack so mapperLocal can be sure we aren't about to
+		// work on something it sent us.
+		if err := j.ctx.Err(); err != nil {
+			j.resultChan <- mapResponse{result: nil, err: err}
+			continue
+		}
 		result, err := j.mapFn(j.ctx, j.shard)
-
 		j.resultChan <- mapResponse{result: result, err: err}
 	}
 }
