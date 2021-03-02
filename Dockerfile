@@ -28,7 +28,7 @@ COPY . ./
 COPY --from=lattice-builder /lattice/build /lattice
 RUN /go/bin/statik -src=/lattice -dest=/pilosa
 
-RUN make build ${MAKE_FLAGS}
+RUN make build FLAGS="-o build/pilosa" ${MAKE_FLAGS}
 
 #####################
 ### Pilosa runner ###
