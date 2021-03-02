@@ -209,7 +209,9 @@ func NewTestField(t *testing.T, opts FieldOption) *TestField {
 		t.Fatal(err)
 	}
 
-	h := NewHolder(path, DefaultHolderConfig())
+	cfg := DefaultHolderConfig()
+	cfg.StorageConfig.Backend = CurrentBackendOrDefault()
+	h := NewHolder(path, cfg)
 	panicOn(h.Open())
 
 	idx, err := h.CreateIndex("i", IndexOptions{})
@@ -940,6 +942,8 @@ func TestField_SaveMeta(t *testing.T) {
 		t.Fatal(err)
 	} else if !changed {
 		t.Fatal("expected SetValue to return changed = true")
+	} else if err := tx.Commit(); err != nil {
+		t.Fatal(err)
 	}
 
 	if f.options.BitDepth != expBitDepth {
