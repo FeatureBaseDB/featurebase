@@ -155,9 +155,9 @@ jobs:
     steps:
       - checkout-plus
       - setup_remote_docker
+      - run: echo -n $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
       - run: make docker
       - run: docker run pilosa:$(git describe --tags) help
-      - run: echo -n $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
       - run: make docker-tag-push DOCKER_TARGET=moleculacorp/pilosa:<< pipeline.git.branch >>
   dockerhub-upload-stable:
     executor:
@@ -165,9 +165,9 @@ jobs:
     steps:
       - checkout-plus
       - setup_remote_docker
+      - run: echo -n $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
       - run: make docker
       - run: docker run pilosa:$(git describe --tags) help
-      - run: echo -n $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
       - run: make docker-tag-push DOCKER_TARGET=moleculacorp/pilosa:<< pipeline.git.tag >>
       - run: make docker-tag-push DOCKER_TARGET=moleculacorp/pilosa:latest
 
