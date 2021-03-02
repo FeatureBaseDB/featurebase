@@ -61,9 +61,7 @@ func queryBalances(m0api *pilosa.API, acctOwnerID uint64, fldAcct0, fldAcct1, in
 
 func skipForRoaring(t *testing.T) {
 	src := pilosa.CurrentBackend()
-	// once txfactory.go storage.DefaultBackend != RoaringTxn, this
-	// will break, of course. Take out the src == "" below.
-	if (src == "" && storage.DefaultBackend == pilosa.RoaringTxn) || strings.Contains(src, "roaring") {
+	if (storage.DefaultBackend == pilosa.RoaringTxn) || strings.Contains(src, "roaring") {
 		t.Skip("skip if roaring pseudo-txn involved -- won't show transactional rollback")
 	}
 }
