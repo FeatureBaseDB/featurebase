@@ -31,8 +31,9 @@ import (
 )
 
 const (
-	defaultBindPort     = "10101"
-	defaultBindGRPCPort = "20101"
+	defaultBindPort            = "10101"
+	defaultBindGRPCPort        = "20101"
+	defaultDiagnosticsInterval = 1 * time.Hour
 )
 
 // TLSConfig contains TLS configuration

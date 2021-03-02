@@ -5,7 +5,7 @@ executors:
     parameters:
       version:
         type: string
-        default: "1.15.5"
+        default: "1.15.8"
       resource_class:
         type: string
         default: medium
@@ -17,7 +17,8 @@ executors:
 commands:
   add-github-auth:
     steps:
-      - run: git config --global url."https://moleculacorp:${GITHUB_PERSONAL_ACCESS_TOKEN}@github.com".insteadOf "https://github.com"
+      - run: git config --global url."https://${GITHUB_USER}:${GITHUB_PERSONAL_ACCESS_TOKEN}@github.com/".insteadOf "https://github.com/"
+      - run: git config --global url."https://${GITHUB_USER}:${GITHUB_PERSONAL_ACCESS_TOKEN}@github.com/".insteadOf "git@github.com:"
   restore-mod-cache:
     steps:
       - restore_cache:
@@ -67,7 +68,7 @@ jobs:
       name: golang
     steps:
       - run: '[[ -n $CIRCLE_PULL_REQUEST ]] || circleci step halt || true' # Skip if this is not a pull request
-      - run: curl https://moleculacorp:$GITHUB_PERSONAL_ACCESS_TOKEN@api.github.com/repos/molecula/pilosa/pulls/$(basename $CIRCLE_PULL_REQUEST) | jq "[.labels[] | .name | startswith(\"changelog\")] | any" -e
+      - run: curl https://$GITHUB_USER:$GITHUB_PERSONAL_ACCESS_TOKEN@api.github.com/repos/molecula/pilosa/pulls/$(basename $CIRCLE_PULL_REQUEST) | jq "[.labels[] | .name | startswith(\"changelog\")] | any" -e
   test-build-arm:
     executor:
       name: golang
@@ -84,7 +85,7 @@ jobs:
         default: medium
       golang_version:
         type: string
-        default: "1.15.5"
+        default: "1.15.8"
       shard_width:
         type: string
         default: "20"
@@ -114,17 +115,6 @@ jobs:
       - checkout-plus
       - setup_remote_docker
       - run: make clustertests-build
-  prerelease:
-    executor:
-      name: golang
-    steps:
-      - checkout-plus
-      - run: make prerelease
-      - store_artifacts:
-          path: build
-      - persist_to_workspace:
-          root: .
-          paths: build
   release:
     executor:
       name: golang
@@ -132,28 +122,32 @@ jobs:
       - checkout-plus
       - attach_workspace:
           at: .
-      - run: make release
+      - setup_remote_docker:
+          version: 19.03.13 # see https://support.circleci.com/hc/en-us/articles/360050934711
+      - run: echo -n $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
+      - run: make docker-release
       - store_artifacts:
           path: build
       - persist_to_workspace:
           root: .
           paths: build
-  prerelease-upload:
-    docker:
-      - image: circleci/python:2.7-jessie
+  publish_release:
+    executor:
+      name: golang
     steps:
-      - checkout-plus
       - attach_workspace:
           at: .
-      - run: sudo pip install awscli
-      - run: make prerelease-upload
+      - run: go get github.com/tcnksm/ghr
+      - run: ghr -t ${GITHUB_PERSONAL_ACCESS_TOKEN} -u ${CIRCLE_PROJECT_USERNAME} -r ${CIRCLE_PROJECT_REPONAME} -c ${CIRCLE_SHA1} -delete ${CIRCLE_TAG} ./build/
   docker-build:
     executor:
       name: golang
     steps:
       - checkout-plus
-      - setup_remote_docker
-      - run: make docker
+      - setup_remote_docker:
+          version: 19.03.13 # see https://support.circleci.com/hc/en-us/articles/360050934711
+      - run: echo -n $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
+      - run: make docker GO_VERSION=1.15.8
       - run: docker run pilosa:$(git describe --tags) help
   dockerhub-upload-unstable:
     executor:
@@ -163,7 +157,7 @@ jobs:
       - setup_remote_docker
       - run: make docker
       - run: docker run pilosa:$(git describe --tags) help
-      - run: docker login -u $DOCKER_USER -p $DOCKER_PASS
+      - run: echo -n $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
       - run: make docker-tag-push DOCKER_TARGET=moleculacorp/pilosa:<< pipeline.git.branch >>
   dockerhub-upload-stable:
     executor:
@@ -173,7 +167,7 @@ jobs:
       - setup_remote_docker
       - run: make docker
       - run: docker run pilosa:$(git describe --tags) help
-      - run: docker login -u $DOCKER_USER -p $DOCKER_PASS
+      - run: echo -n $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
       - run: make docker-tag-push DOCKER_TARGET=moleculacorp/pilosa:<< pipeline.git.tag >>
       - run: make docker-tag-push DOCKER_TARGET=moleculacorp/pilosa:latest
 
@@ -186,12 +180,15 @@ workflows:
             tags:
               only: /^v.*/
       - linter:
+          context: molecula
           requires:
             - setup
       - check-license-headers:
+          context: molecula
           requires:
             - setup
       - go-mod-tidy:
+          context: molecula
           requires:
             - setup
       - check-changelog-label:
@@ -199,6 +196,7 @@ workflows:
           requires:
             - setup
       - test-build-arm:
+          context: molecula
           requires:
             - setup
       - test:
@@ -209,7 +207,7 @@ workflows:
             - setup
           matrix:
             parameters:
-              golang_version: ["1.14.12", "1.15.5"]
+              golang_version: ["1.14.15", "1.15.8"]
       - test:
           name: << matrix.test_make_target >>
           resource_class: xlarge
@@ -221,22 +219,37 @@ workflows:
               test_make_target: ["test-race", "test-txstore-rbf", "test-txstore-rbf_bolt"]
       - test:
           name: test-shardwidth-22
+          context: molecula
           shard_width: "22"
           resource_class: large
           requires:
             - setup
       - cluster-tests:
+          context: molecula
           requires:
             - setup
       - docker-build:
           context: molecula
           requires:
             - setup
-      - prerelease:
+      - release:
+          context: molecula
           requires:
-            - linter
-            - check-license-headers
-            - test-golang-1.15.5
+            - setup
+          filters:
+            tags:
+              only: /^v.*/
+            branches:
+              ignore: /.*/
+      - publish_release:
+          context: molecula
+          requires:
+            - release
+          filters:
+            tags:
+              only: /^v.*/
+            branches:
+              ignore: /.*/
       - dockerhub-upload-unstable:
           context: molecula
           requires:
