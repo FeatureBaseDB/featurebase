@@ -7407,6 +7407,20 @@ pangolin,1,100
 pizza,2
 `,
 		},
+		{
+			query: "TopK(dinner)",
+			csvVerifier: `chinese,3
+pizza,2
+leftovers,1
+`,
+		},
+		{
+			query: "TopK(field=dinner)",
+			csvVerifier: `chinese,3
+pizza,2
+leftovers,1
+`,
+		},
 	}
 
 	for i, tst := range tests {
