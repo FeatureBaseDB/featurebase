@@ -208,7 +208,7 @@ func CurrentBackend() string {
 }
 
 // CurrentBackendOrDefault tries the environment variable first, but falls back
-// to the default backed if the environment variable is empty.
+// to the default backend if the environment variable is empty.
 func CurrentBackendOrDefault() string {
 	if backend := os.Getenv("PILOSA_STORAGE_BACKEND"); backend != "" {
 		return backend
