@@ -594,6 +594,10 @@ func (f *TxFactory) IndexUsageDetails() (map[string]IndexUsage, uint64, error) {
 	if err != nil {
 		return indexUsage, 0, errors.Wrap(err, "expanding data directory")
 	}
+	indexesPath, err := expandDirName(f.holder.IndexesPath())
+	if err != nil {
+		return indexUsage, 0, errors.Wrap(err, "expanding indexes directory")
+	}
 
 	idxs := f.holder.Indexes()
 
@@ -601,7 +605,7 @@ func (f *TxFactory) IndexUsageDetails() (map[string]IndexUsage, uint64, error) {
 	defer qcx.Abort()
 	for _, idx := range idxs {
 		index := idx.name
-		indexPath := path.Join(holderPath, index)
+		indexPath := path.Join(indexesPath, index)
 
 		// field usage
 		fieldUsages := make(map[string]FieldUsage)

@@ -240,7 +240,7 @@ func TestHolder_Open(t *testing.T) {
 			t.Fatal(err)
 		} else if err := h.Holder.Close(); err != nil {
 			t.Fatal(err)
-		} else if err := os.Truncate(filepath.Join(h.Path(), "foo", "bar", "views", "standard", "fragments", "0"), 20); err != nil {
+		} else if err := os.Truncate(filepath.Join(h.IndexesPath(), "foo", "bar", "views", "standard", "fragments", "0"), 20); err != nil {
 			t.Fatal(err)
 		}
 
@@ -353,7 +353,8 @@ func TestHolder_HasData(t *testing.T) {
 	})
 
 	t.Run("Peek", func(t *testing.T) {
-		h := test.NewHolder(t)
+		h := test.MustOpenHolder(t)
+		defer h.Close()
 
 		if ok, err := h.HasData(); ok || err != nil {
 			t.Fatal("expected HasData to return false, no err, but", ok, err)
