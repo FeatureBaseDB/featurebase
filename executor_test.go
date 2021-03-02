@@ -6857,23 +6857,13 @@ func TestVariousQueries(t *testing.T) {
 
 			variousQueries(t, c)
 			variousQueriesOnTimeFields(t, c)
-		})
-	}
-}
-
-func TestVariousQueriesOnPercentiles(t *testing.T) {
-	for _, clusterSize := range []int{1, 3, 4, 7} {
-		t.Run(fmt.Sprintf("%d-node", clusterSize), func(t *testing.T) {
-			variousQueriesOnPercentiles(t, clusterSize)
+			variousQueriesOnPercentiles(t, c)
 		})
 	}
 }
 
 // tests for abbreviating time values in queries
-func variousQueriesOnPercentiles(t *testing.T, clusterSize int) {
-	c := test.MustRunCluster(t, clusterSize)
-	defer c.Close()
-
+func variousQueriesOnPercentiles(t *testing.T, c *test.Cluster) {
 	// todo, make rand more random, 42 isnt the answer to everything
 	// however, to make tests reproducible, seed should be printed
 	// on failure?
