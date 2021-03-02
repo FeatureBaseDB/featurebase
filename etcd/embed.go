@@ -34,6 +34,7 @@ import (
 	"go.etcd.io/etcd/clientv3/clientv3util"
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.etcd.io/etcd/embed"
+	"go.etcd.io/etcd/etcdserver/api/membership"
 	"go.etcd.io/etcd/etcdserver/api/v3client"
 	"go.etcd.io/etcd/etcdserver/api/v3rpc/rpctypes"
 	"go.etcd.io/etcd/mvcc"
@@ -240,10 +241,24 @@ func (e *Etcd) startHeartbeat() error {
 }
 
 func (e *Etcd) NodeState(ctx context.Context, peerID string) (disco.NodeState, error) {
-	return e.nodeState(ctx, peerID)
+	if state, err := e.nodeStateFast(ctx, peerID); err == nil && state == disco.NodeStateStarted {
+		return disco.NodeStateStarted, nil
+	}
+
+	states, err := e.NodeStates(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	state, ok := states[peerID]
+	if !ok {
+		return disco.NodeStateUnknown, nil
+	}
+
+	return state, nil
 }
 
-func (e *Etcd) nodeState(ctx context.Context, peerID string) (disco.NodeState, error) {
+func (e *Etcd) nodeStateFast(ctx context.Context, peerID string) (disco.NodeState, error) {
 	kv := e.e.Server.KV()
 	resp, err := kv.Range([]byte(path.Join(resizePrefix, peerID)), nil, mvcc.RangeOptions{Count: true})
 	if err != nil {
@@ -271,18 +286,67 @@ func (e *Etcd) nodeState(ctx context.Context, peerID string) (disco.NodeState, e
 }
 
 func (e *Etcd) NodeStates(ctx context.Context) (map[string]disco.NodeState, error) {
-	out := make(map[string]disco.NodeState)
 	members := e.e.Server.Cluster().Members()
-	for _, member := range members {
-		s, err := e.nodeState(ctx, member.ID.String())
-		if err != nil {
-			log.Println("NodeStates get node state", member.ID.String(), err.Error())
-		}
+	if states := e.nodeStatesFast(ctx, members); states != nil {
+		return states, nil
+	}
 
-		out[member.ID.String()] = s
+	ops := make([]clientv3.Op, 2*(len(members)))
+	for i, member := range members {
+		peerID := member.ID.String()
+		ops[2*i] = clientv3.OpGet(path.Join(resizePrefix, peerID), clientv3.WithCountOnly())
+		ops[2*i+1] = clientv3.OpGet(path.Join(heartbeatPrefix, peerID))
+	}
+
+doTxn:
+	resp, err := e.cli.Txn(ctx).Then(ops...).Commit()
+	if err != nil {
+		return nil, err
+	}
+	if !resp.Succeeded {
+		goto doTxn
+	}
+
+	out := make(map[string]disco.NodeState, len(members))
+	for i, member := range members {
+		peerID := member.ID.String()
+		switch resp.Responses[2*i].GetResponseRange().Count {
+		case 0:
+		case 1:
+			// This node is processing a resize operation.
+			out[peerID] = disco.NodeStateResizing
+			continue
+		default:
+			return nil, disco.ErrTooManyResults
+		}
+		switch resp := resp.Responses[2*i+1].GetResponseRange(); len(resp.Kvs) {
+		case 0:
+			// The node has not reported a state.
+			out[peerID] = disco.NodeStateUnknown
+		case 1:
+			// The node has reported its state.
+			out[peerID] = disco.NodeState(resp.Kvs[0].Value)
+		default:
+			return nil, disco.ErrTooManyResults
+		}
 	}
 
 	return out, nil
+}
+
+func (e *Etcd) nodeStatesFast(ctx context.Context, members []*membership.Member) map[string]disco.NodeState {
+	out := make(map[string]disco.NodeState, len(members))
+	for _, member := range members {
+		peerID := member.ID.String()
+		state, err := e.nodeStateFast(ctx, peerID)
+		if err != nil || state != disco.NodeStateStarted {
+			return nil
+		}
+
+		out[peerID] = disco.NodeStateStarted
+	}
+
+	return out
 }
 
 func (e *Etcd) Started(ctx context.Context) (err error) {
@@ -331,23 +395,22 @@ func (e *Etcd) ClusterState(ctx context.Context) (disco.ClusterState, error) {
 		resize     bool
 		starting   bool
 	)
-	members := e.e.Server.Cluster().Members()
-	for _, m := range members {
-		ns, err := e.nodeState(ctx, m.ID.String())
-		if err != nil {
-			log.Println("ClusterState get node state", err.Error())
+	states, err := e.NodeStates(ctx)
+	if err != nil {
+		return disco.ClusterStateUnknown, err
+	}
+
+	for _, state := range states {
+		switch state {
+		case disco.NodeStateStarting:
+			starting = true
+		case disco.NodeStateResizing:
+			resize = true
+		case disco.NodeStateUnknown:
 			continue
 		}
 
 		heartbeats++
-
-		if ns == disco.NodeStateStarting {
-			starting = true
-		}
-
-		if ns == disco.NodeStateResizing {
-			resize = true
-		}
 	}
 
 	if resize {
@@ -358,8 +421,8 @@ func (e *Etcd) ClusterState(ctx context.Context) (disco.ClusterState, error) {
 		return disco.ClusterStateStarting, nil
 	}
 
-	if heartbeats < len(members) {
-		if len(members)-heartbeats >= e.replicas {
+	if heartbeats < len(states) {
+		if len(states)-heartbeats >= e.replicas {
 			return disco.ClusterStateDown, nil
 		}
 
@@ -693,6 +756,21 @@ func (e *Etcd) getKeyWithPrefix(ctx context.Context, key string) ([]string, [][]
 }
 
 func (e *Etcd) keyExists(ctx context.Context, key string) (bool, error) {
+	if ok, err := e.keyExistsFast(ctx, key); err == nil && ok {
+		return true, nil
+	}
+
+	resp, err := e.cli.Txn(ctx).Then(clientv3.OpGet(key, clientv3.WithCountOnly())).Commit()
+	if err != nil {
+		return false, err
+	}
+	if resp.Responses[0].GetResponseRange().Count > 0 {
+		return true, nil
+	}
+	return false, nil
+}
+
+func (e *Etcd) keyExistsFast(ctx context.Context, key string) (bool, error) {
 	kv := e.e.Server.KV()
 	resp, err := kv.Range([]byte(key), nil, mvcc.RangeOptions{Count: true})
 	if err != nil {
