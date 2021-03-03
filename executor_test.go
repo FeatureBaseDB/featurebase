@@ -25,6 +25,7 @@ import (
 	"io/ioutil"
 	"math"
 	"math/rand"
+	_ "net/http/pprof"
 	"reflect"
 	"sort"
 	"strconv"
@@ -6850,12 +6851,178 @@ func TestVariousQueries(t *testing.T) {
 	for _, clusterSize := range []int{1, 3, 4, 7} {
 		clusterSize := clusterSize
 		t.Run(fmt.Sprintf("%d-node", clusterSize), func(t *testing.T) {
-			t.Parallel()
 			c := test.MustRunCluster(t, clusterSize)
 			defer c.Close()
 
 			variousQueries(t, c)
 			variousQueriesOnTimeFields(t, c)
+			variousQueriesOnPercentiles(t, c)
+		})
+	}
+}
+
+// tests for abbreviating time values in queries
+func variousQueriesOnPercentiles(t *testing.T, c *test.Cluster) {
+	// todo, make rand more random, 42 isnt the answer to everything
+	// however, to make tests reproducible, seed should be printed
+	// on failure?
+	r := rand.New(rand.NewSource(42))
+
+	// gen Numbers to test percentile query on, shuffle for extra spice
+	// size should always be greater than 0
+	type testValue struct {
+		colKey string
+		num    int64
+		rowKey string
+	}
+	size := 100
+
+	testValues := make([]testValue, size)
+	rowKeys := [2]string{"foo", "bar"}
+	for i := 0; i < size; i++ {
+		num := int64(r.Uint32())
+		// flip coin to negate
+		if r.Uint64()%2 == 0 {
+			num = -num
+		}
+		testValues[i] = testValue{
+			colKey: fmt.Sprintf("user%d", i+1),
+			num:    num,
+			rowKey: rowKeys[r.Uint64()%2], // flip a coin
+		}
+	}
+
+	// filter out nums that fulfil predicate
+	var nums []int64
+	for _, v := range testValues {
+		if v.rowKey == "foo" {
+			nums = append(nums, v.num)
+		}
+	}
+
+	// get min and max for calculating both expected median
+	// and bounds for bsi field
+	// get min & max
+
+	// helper function for calculating percentiles to
+	// cross-check with Pilosa's results
+	getExpectedPercentile := func(nums []int64, nth float64) int64 {
+		min, max := nums[0], nums[0]
+		for _, num := range nums {
+			if num < min {
+				min = num
+			}
+			if num > max {
+				max = num
+			}
+		}
+		if nth == 0.0 {
+			return min
+		}
+		k := (1 - nth) / nth
+
+		possibleNthVal := int64(0)
+		// bin search
+		for min < max {
+			possibleNthVal = (max + min) / 2
+			leftCount, rightCount := int64(0), int64(0)
+			for _, num := range nums {
+				if num < possibleNthVal {
+					leftCount++
+				} else if num > possibleNthVal {
+					rightCount++
+				}
+			}
+
+			leftCountWeighted := int64(math.Round(k * float64(leftCount)))
+
+			if leftCountWeighted > rightCount {
+				max = possibleNthVal - 1
+			} else if leftCountWeighted < rightCount {
+				min = possibleNthVal + 1
+			} else { // perfectly balanced, as all things should be
+				return possibleNthVal
+			}
+		}
+		return min
+	}
+
+	// generate numeric entries for index
+	intEntries := make([]test.IntKey, size)
+	for i := 0; i < size; i++ {
+		key := testValues[i].colKey
+		val := testValues[i].num
+		intEntries[i] = test.IntKey{Key: key, Val: val}
+	}
+
+	// generate string-set entries for index
+	var stringEntries [][2]string
+	for _, v := range testValues {
+		stringEntries = append(stringEntries,
+			[2]string{v.rowKey, v.colKey})
+	}
+
+	// get min max for bsi bounds
+	min, max := testValues[0].num, testValues[0].num
+	for _, v := range testValues {
+		if v.num < min {
+			min = v.num
+		}
+		if v.num > max {
+			max = v.num
+		}
+	}
+
+	// generic index
+	c.CreateField(t, "users2", pilosa.IndexOptions{Keys: true, TrackExistence: true}, "net_worth", pilosa.OptFieldTypeInt(min, max))
+	c.ImportIntKey(t, "users2", "net_worth", intEntries)
+
+	c.CreateField(t, "users2", pilosa.IndexOptions{Keys: true, TrackExistence: true}, "val", pilosa.OptFieldKeys())
+	c.ImportKeyKey(t, "users2", "val", stringEntries)
+
+	splitSortBackToCSV := func(csvStr string) string {
+		ss := strings.Split(csvStr[:len(csvStr)-1], "\n")
+		sort.Strings(ss)
+		return strings.Join(ss, "\n") + "\n"
+	}
+
+	type testCase struct {
+		query string
+		// qrVerifier  func(t *testing.T, resp pilosa.QueryResponse)
+		csvVerifier string
+	}
+
+	// generate test cases per each nth argument
+	nths := []float64{0.0, 0.1, 0.25, 0.5, 0.75, 0.9, 0.99}
+	var tests []testCase
+	for _, nth := range nths {
+		query := fmt.Sprintf(`Percentile(field="net_worth", filter=Row(val="foo"), nth=%f)`, nth)
+		expectedPercentile := getExpectedPercentile(nums, nth)
+		tests = append(tests, testCase{
+			query:       query,
+			csvVerifier: fmt.Sprintf("%d,1\n", expectedPercentile),
+		})
+	}
+
+	for i, tst := range tests {
+		t.Run(fmt.Sprintf("%d-%s", i, tst.query), func(t *testing.T) {
+			// resp := c.Query(t, "users2", tst.query)
+			tr := c.QueryGRPC(t, "users2", tst.query)
+			// if tst.qrVerifier != nil {
+			// 	tst.qrVerifier(t, resp)
+			// }
+			csvString, err := tableResponseToCSVString(tr)
+			if err != nil {
+				t.Fatal(err)
+			}
+			// verify everything after header
+			got := splitSortBackToCSV(csvString[strings.Index(csvString, "\n")+1:])
+			if got != tst.csvVerifier {
+				t.Errorf("expected:\n%s\ngot:\n%s", tst.csvVerifier, got)
+			}
+
+			// TODO: add HTTP and Postgres and ability to convert
+			// those results to CSV to run through CSV verifier
 		})
 	}
 }

@@ -830,6 +830,9 @@ func (e *executor) executeCall(ctx context.Context, qcx *Qcx, index string, c *p
 	case "Limit":
 		res, err := e.executeLimitCall(ctx, qcx, index, c, shards, opt)
 		return res, errors.Wrapf(err, "executeLimitCall %v", shardSlice(shards))
+	case "Percentile":
+		res, err := e.executePercentile(ctx, qcx, index, c, shards, opt)
+		return res, errors.Wrapf(err, "executePercentile %v", shardSlice(shards))
 	default: // e.g. "Row", "Union", "Intersect" or anything that returns a bitmap.
 		statFn()
 		res, err := e.executeBitmapCall(ctx, qcx, index, c, shards, opt)
@@ -1291,6 +1294,119 @@ func (e *executor) executeMax(ctx context.Context, qcx *Qcx, index string, c *pq
 		return ValCount{}, nil
 	}
 	return other, nil
+}
+
+// executePercentile executes a Percentile() call.
+func (e *executor) executePercentile(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *execOptions) (_ ValCount, err error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executePercentile")
+	defer span.Finish()
+
+	// get nth
+	var nth float64
+	if nthArg, ok := c.Args["nth"].(pql.Decimal); ok {
+		nth = nthArg.Float64()
+		if nth < 0 || nth > 1.0 {
+			return ValCount{}, errors.Errorf("Percentile(): invalid nth value(%f), should be >= 0 and <= 1.0", nth)
+		}
+	} else {
+		return ValCount{}, errors.New("Percentile(): nth required")
+	}
+
+	// get field
+	if fieldArg := c.Args["field"]; fieldArg == "" {
+		return ValCount{}, errors.New("Percentile(): field required")
+	}
+	fieldName, _, _ := c.StringArg("field")
+
+	// filter call for min & max
+	var filterCall *pql.Call
+
+	// check if filter provided
+	if filterArg, ok := c.Args["filter"].(*pql.Call); ok && filterArg != nil {
+		filterCall = filterArg
+	}
+
+	// get min
+	q, _ := pql.ParseString(fmt.Sprintf(`Min(field="%s")`, fieldName))
+	minCall := q.Calls[0]
+	if filterCall != nil {
+		minCall.Children = append(minCall.Children, filterCall)
+	}
+	minVal, err := e.executeMin(ctx, qcx, index, minCall, shards, opt)
+	if err != nil {
+		return ValCount{}, errors.Wrap(err, "executing Min call for Percentile")
+	}
+	if nth == 0.0 {
+		return ValCount{Val: minVal.Val, Count: minVal.Count}, nil
+	}
+
+	// get max
+	q, _ = pql.ParseString(fmt.Sprintf(`Max(field="%s")`, fieldName))
+	maxCall := q.Calls[0]
+	if filterCall != nil {
+		maxCall.Children = append(maxCall.Children, filterCall)
+	}
+	maxVal, err := e.executeMax(ctx, qcx, index, maxCall, shards, opt)
+	if err != nil {
+		return ValCount{}, errors.Wrap(err, "executing Max call for Percentile")
+	}
+	// set up reusables
+	var countCall, rangeCall *pql.Call
+	if filterCall == nil {
+		countQuery, _ := pql.ParseString(fmt.Sprintf("Count(Row(%s < 0))", fieldName))
+		countCall = countQuery.Calls[0]
+		rangeCall = countCall.Children[0]
+	} else {
+		countQuery, _ := pql.ParseString(fmt.Sprintf(`Count(Intersect(Row(%s < 0)))`, fieldName))
+		countCall = countQuery.Calls[0]
+		intersectCall := countCall.Children[0]
+		intersectCall.Children = append(intersectCall.Children, filterCall)
+		rangeCall = intersectCall.Children[0]
+	}
+
+	k := (1 - nth) / nth
+
+	min, max := minVal.Val, maxVal.Val
+	// estimate nth val, eg median when nth=0.5
+	for min < max {
+		possibleNthVal := (max + min) / 2
+		// get left count
+		rangeCall.Args[fieldName] = &pql.Condition{
+			Op:    pql.Token(pql.LT),
+			Value: possibleNthVal,
+		}
+		leftCountUint64, err := e.executeCount(ctx, qcx, index, countCall, shards, opt)
+		if err != nil {
+			return ValCount{}, errors.Wrap(err, "executing Count call L for Percentile")
+		}
+		leftCount := int64(leftCountUint64)
+
+		// get right count
+		rangeCall.Args[fieldName] = &pql.Condition{
+			Op:    pql.Token(pql.GT),
+			Value: possibleNthVal,
+		}
+		rightCountUint64, err := e.executeCount(ctx, qcx, index, countCall, shards, opt)
+		if err != nil {
+			return ValCount{}, errors.Wrap(err, "executing Count call R for Percentile")
+		}
+		rightCount := int64(rightCountUint64)
+
+		// 'weight' the left count as per k
+		leftCountWeighted := int64(math.Round(k * float64(leftCount)))
+
+		// binary search
+		if leftCountWeighted > rightCount {
+			max = possibleNthVal - 1
+		} else if leftCountWeighted < rightCount {
+			min = possibleNthVal + 1
+		} else {
+			return ValCount{Val: possibleNthVal, Count: 1}, nil
+		}
+	}
+
+	return ValCount{Val: min, Count: 1}, nil
+
 }
 
 // executeMinRow executes a MinRow() call.

@@ -236,7 +236,7 @@ topt:
 
 topt-race:
 	mv log.topt.race log.topt.race.prev || true
-	$(eval SHELL:=/bin/bash) set -o pipefail; CGO_ENABLED=1 go test -race -v -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) 2>&1 | tee log.topt.race
+	$(eval SHELL:=/bin/bash) set -o pipefail; CGO_ENABLED=1 go test -race -timeout 60m -v -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) 2>&1 | tee log.topt.race
 	@echo "   log.topt.race green: \c"; cat log.topt.race | grep PASS |wc -l
 	@echo "   log.topt.race   red: \c"; cat log.topt.race | grep '\-\-\- FAIL' | wc -l
 
