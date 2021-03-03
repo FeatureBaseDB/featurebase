@@ -89,9 +89,8 @@ func TestClusterStuff(t *testing.T) {
 			t.Fatalf("waiting on pumba pause cmd: %v", err)
 		}
 
-		// TODO change the sleep to wait for status to return to NORMAL - need support in internal client for getting status
 		t.Log("done with pause, waiting for stability")
-		time.Sleep(time.Second * 20)
+		waitForStatus(t, cli1, "NORMAL", 30, time.Second)
 		t.Log("done waiting for stability")
 
 		// Check query results from each node.
@@ -105,5 +104,29 @@ func TestClusterStuff(t *testing.T) {
 			}
 		}
 	})
+}
 
+func waitForStatus(t *testing.T, c *picli.InternalClient, status string, n int, sleep time.Duration) {
+	t.Helper()
+
+	for i := 0; i < n; i++ {
+		s, err := c.Status(context.TODO())
+		if err != nil {
+			t.Logf("Status (%d/%d): %v (sleep: %s)\\n", i, n, err, sleep.String())
+		} else {
+			t.Logf("Status (%d/%d): %s (sleep: %s)\n", i, n, s, sleep.String())
+		}
+		if s == status {
+			return
+		}
+		time.Sleep(sleep)
+	}
+
+	s, err := c.Status(context.TODO())
+	if err != nil {
+		t.Fatalf("querying status: %v", err)
+	}
+	if status != s {
+		t.Fatalf("waited %d %v for status: %v, got: %v", n, sleep, status, s)
+	}
 }

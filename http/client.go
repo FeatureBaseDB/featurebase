@@ -104,6 +104,36 @@ func (c *InternalClient) maxShardByIndex(ctx context.Context) (map[string]uint64
 	return rsp.Standard, nil
 }
 
+func (c *InternalClient) Status(ctx context.Context) (string, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.Status")
+	defer span.Finish()
+
+	// Execute request against the host.
+	u := c.defaultURI.Path("/status")
+
+	// Build request.
+	req, err := http.NewRequest("GET", u, nil)
+	if err != nil {
+		return "", errors.Wrap(err, "creating request")
+	}
+
+	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+	req.Header.Set("Accept", "application/json")
+
+	// Execute request.
+	resp, err := c.executeRequest(req.WithContext(ctx))
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	var rsp getStatusResponse
+	if err := json.NewDecoder(resp.Body).Decode(&rsp); err != nil {
+		return "", fmt.Errorf("json decode: %s", err)
+	}
+	return rsp.State, nil
+}
+
 // SchemaNode returns all index and field schema information from the specified
 // node.
 func (c *InternalClient) SchemaNode(ctx context.Context, uri *pnet.URI, views bool) ([]*pilosa.IndexInfo, error) {
