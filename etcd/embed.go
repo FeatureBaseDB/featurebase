@@ -264,12 +264,16 @@ func (e *Etcd) nodeState(ctx context.Context, peerID string) (disco.NodeState, e
 		return disco.NodeStateResizing, nil
 	}
 
-	kvs := resp.Responses[0].GetResponseRange().Kvs
-	if len(kvs) > 1 {
-		return disco.NodeStateUnknown, disco.ErrTooManyResults
+	if len(resp.Responses) == 0 {
+		return disco.NodeStateUnknown, disco.ErrNoResults
 	}
+
+	kvs := resp.Responses[0].GetResponseRange().Kvs
 	if len(kvs) == 0 {
 		return disco.NodeStateUnknown, disco.ErrNoResults
+	}
+	if len(kvs) > 1 {
+		return disco.NodeStateUnknown, disco.ErrTooManyResults
 	}
 
 	return disco.NodeState(kvs[0].Value), nil
@@ -698,12 +702,11 @@ func (e *Etcd) getKeyBytes(ctx context.Context, key string) ([]byte, error) {
 		return nil, err
 	}
 
-	kvs := resp.Responses[0].GetResponseRange().Kvs
-
-	if !resp.Succeeded {
-		return nil, errors.New("tx failed")
+	if len(resp.Responses) == 0 {
+		return nil, errors.New("key does not exist")
 	}
 
+	kvs := resp.Responses[0].GetResponseRange().Kvs
 	if len(kvs) == 0 {
 		return nil, errors.New("key does not exist")
 	}
@@ -711,24 +714,28 @@ func (e *Etcd) getKeyBytes(ctx context.Context, key string) ([]byte, error) {
 	return kvs[0].Value, nil
 }
 
-func (e *Etcd) getKeyWithPrefix(ctx context.Context, key string) ([]string, [][]byte, error) {
-
+func (e *Etcd) getKeyWithPrefix(ctx context.Context, key string) (keys []string, values [][]byte, err error) {
 	resp, err := e.cli.Txn(ctx).
 		Then(clientv3.OpGet(key, clientv3.WithPrefix())).
 		Commit()
 	if err != nil {
 		return nil, nil, err
 	}
+
+	if len(resp.Responses) == 0 {
+		return nil, nil, errors.New("key does not exist")
+	}
+
 	kvs := resp.Responses[0].GetResponseRange().Kvs
+	if len(kvs) == 0 {
+		return nil, nil, nil
+	}
 
-	var (
-		keys   []string
-		values [][]byte
-	)
-
-	for _, kv := range kvs {
-		keys = append(keys, string(kv.Key))
-		values = append(values, kv.Value)
+	keys = make([]string, len(kvs))
+	values = make([][]byte, len(kvs))
+	for i, kv := range kvs {
+		keys[i] = string(kv.Key)
+		values[i] = kv.Value
 	}
 
 	return keys, values, nil
@@ -746,6 +753,9 @@ func (e *Etcd) keyExists(ctx context.Context, key string) (bool, error) {
 		return false, nil
 	}
 
+	if len(resp.Responses) == 0 {
+		return false, nil
+	}
 	return resp.Responses[0].GetResponseRange().Count > 0, nil
 }
 
