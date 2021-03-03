@@ -17,6 +17,7 @@
 package pilosa
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"encoding/csv"
@@ -406,21 +407,32 @@ func importWorker(importWork chan importJob) {
 						fallthrough
 					case RequestActionSet:
 						fileMagic := uint32(binary.LittleEndian.Uint16(viewData[0:2]))
-						if fileMagic == roaring.MagicNumber { // if pilosa roaring format
-							err := j.field.importRoaring(j.ctx, tx, viewData, j.shard, viewName, doClear)
-							if err != nil {
-								return errors.Wrap(err, "importing pilosa roaring")
-							}
-						} else {
-							// must make a copy of data to operate on locally on standard roaring format.
-							// field.importRoaring changes the standard roaring run format to pilosa roaring
-							data := make([]byte, len(viewData))
+						data := viewData
+						if fileMagic != roaring.MagicNumber {
+							// if the view data arrives is in the "standard" roaring format, we must
+							// make a copy of data in order allow for the conversion to the pilosa roaring run format
+							// in field.importRoaring
+							data = make([]byte, len(viewData))
 							copy(data, viewData)
-							err := j.field.importRoaring(j.ctx, tx, data, j.shard, viewName, doClear)
+						}
+						if j.req.UpdateExistence {
+							if ef := j.field.idx.existenceField(); ef != nil {
+								existence, err := combineForExistence(data)
+								if err != nil {
+									return errors.Wrap(err, "merging existence on roaring import")
+								}
 
-							if err != nil {
-								return errors.Wrap(err, "importing standard roaring")
+								err = ef.importRoaring(j.ctx, tx, existence, j.shard, "standard", false)
+								if err != nil {
+									return errors.Wrap(err, "updating existence on roaring import")
+								}
 							}
+						}
+
+						err := j.field.importRoaring(j.ctx, tx, data, j.shard, viewName, doClear)
+
+						if err != nil {
+							return errors.Wrap(err, "importing standard roaring")
 						}
 					}
 					return nil
@@ -436,6 +448,24 @@ func importWorker(importWork chan importJob) {
 		case j.errChan <- err:
 		}
 	}
+}
+
+// combineForExistence unions all rows in the fragment to be imported into a single row to update the existence field. TODO: It would probably be more efficient to only unmarshal the input data once, and use the calculated existence Bitmap directly rather than returning it to bytes, but most of our ingest paths update existence separately, so it's more important that this just be obviously correct at the moment.
+func combineForExistence(inputRoaringData []byte) ([]byte, error) {
+	rowSize := uint64(1 << shardVsContainerExponent)
+	rit, err := roaring.NewRoaringIterator(inputRoaringData)
+	if err != nil {
+		return nil, err
+	}
+	bm := roaring.NewBitmap()
+	err = bm.MergeRoaringRawIteratorIntoExists(rit, rowSize)
+	if err != nil {
+		return nil, err
+	}
+	buf := new(bytes.Buffer)
+
+	_, err = bm.WriteTo(buf)
+	return buf.Bytes(), err
 }
 
 // ImportRoaring is a low level interface for importing data to Pilosa when

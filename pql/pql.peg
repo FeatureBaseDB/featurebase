@@ -55,7 +55,7 @@ singlequotedstring <- ( '\\\'' / '\\\\' / '\\n' / '\\t' /  [^'\\] )*
 fieldExpr <- ( [[A-Z]] / '_' ) ( [[A-Z]] / [0-9] / '_' / '-' )*
 field <- <fieldExpr / reserved> { p.addField(text) }
 reserved <- '_row' / '_col' / '_start' / '_end' / '_timestamp' / '_field'
-posfield <- <fieldExpr> { p.addPosStr("_field", text) }
+posfield <- 'field='? <fieldExpr> { p.addPosStr("_field", text) }
 col <-   < digits > {p.addPosNum("_col", text)}
         / < '\'' singlequotedstring '\'' > {p.addPosStr("_col", text)}
         / < '"' doublequotedstring '"' > {p.addPosStr("_col", text)}

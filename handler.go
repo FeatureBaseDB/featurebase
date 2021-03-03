@@ -243,12 +243,13 @@ const (
 // ImportRoaringRequest describes the import request structure
 // for an import containing roaring-encoded data.
 type ImportRoaringRequest struct {
-	IndexCreatedAt int64
-	FieldCreatedAt int64
-	Clear          bool
-	Action         string // [set, clear, overwrite]
-	Block          int
-	Views          map[string][]byte
+	IndexCreatedAt  int64
+	FieldCreatedAt  int64
+	Clear           bool
+	Action          string // [set, clear, overwrite]
+	Block           int
+	Views           map[string][]byte
+	UpdateExistence bool
 }
 
 // ValidateWithTimestamp ensures that the payload of the request is valid.

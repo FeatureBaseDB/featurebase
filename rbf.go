@@ -195,7 +195,6 @@ type RBFTx struct {
 	// initialIndex is only a debugging aid. Transactions
 	// can cross indexes. It can be left empty without consequence.
 	initialIndex string
-	frag         *fragment
 	tx           *rbf.Tx
 	o            Txo
 	sn           int64 // serial number
@@ -531,7 +530,6 @@ func (w *RbfDBWrapper) NewTx(write bool, initialIndex string, o Txo) (_ Tx, err 
 	rtx := &RBFTx{
 		tx:           tx,
 		initialIndex: initialIndex,
-		frag:         o.Fragment,
 		o:            o,
 		sn:           sn,
 		Db:           w,

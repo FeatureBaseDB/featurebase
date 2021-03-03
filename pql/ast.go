@@ -63,7 +63,11 @@ func (q *Query) lastCallStackElem() *callStackElem {
 }
 
 func (q *Query) addPosNum(key, value string) {
-	q.addField(key)
+	if key == "field" {
+		q.addField("_field")
+	} else {
+		q.addField(key)
+	}
 	q.addNumVal(value)
 }
 
@@ -328,13 +332,6 @@ type stringOrInt64Type struct{}
 
 var stringOrInt64 stringOrInt64Type
 
-var allowUnderField = callInfo{
-	allowUnknown: true,
-	prototypes: map[string]interface{}{
-		"_field": "",
-	},
-}
-
 var allowField = callInfo{
 	allowUnknown: false,
 	prototypes: map[string]interface{}{
@@ -424,6 +421,7 @@ var callInfoByFunc = map[string]callInfo{
 		allowUnknown: false,
 		prototypes: map[string]interface{}{
 			"_field": "",
+			"field":  "",
 			"k":      int64(0),
 			"filter": nil,
 			"from":   nil,
@@ -431,8 +429,12 @@ var callInfoByFunc = map[string]callInfo{
 		},
 	},
 
-	// things that take _field
-	"TopN": allowUnderField,
+	"TopN": {
+		allowUnknown: true,
+		prototypes: map[string]interface{}{
+			"_field": "",
+			"field":  "",
+		},
 	"Percentile": {
 		allowUnknown: false,
 		prototypes: map[string]interface{}{
@@ -489,6 +491,7 @@ var callInfoByFunc = map[string]callInfo{
 		allowUnknown: true,
 		prototypes: map[string]interface{}{
 			"_field": "",
+			"field":  "",
 			"_row":   stringOrInt64,
 		},
 	},

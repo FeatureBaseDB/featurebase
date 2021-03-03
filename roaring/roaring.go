@@ -2280,6 +2280,51 @@ func (b *Bitmap) ImportRoaringBits(data []byte, clear bool, log bool, rowSize ui
 	return b.ImportRoaringRawIterator(itr, clear, log, rowSize)
 }
 
+// MergeRoaringRawIteratorIntoExists is a special merge iterator that flattens the results onto a
+// single row which is used for determining existence. All row references are removed and only the column
+// is considered.
+func (b *Bitmap) MergeRoaringRawIteratorIntoExists(itr RoaringIterator, rowSize uint64) error {
+
+	if itr == nil {
+		return errors.New("nil RoaringIterator passed to MergeRoaringRawIteratorIntoExists")
+	}
+	var synthC Container
+	importUpdater := func(oldC *Container, existed bool) (newC *Container, write bool) {
+		existN := oldC.N()
+		if existN == MaxContainerVal+1 {
+			return oldC, false
+		}
+		if existN == 0 {
+			newerC := synthC.Clone()
+			return newerC, true
+		}
+		newC = oldC.unionInPlace(&synthC)
+		if newC.typeID == ContainerBitmap {
+			newC.Repair()
+		}
+		if newC.N() != existN {
+			return newC, true
+		}
+		return oldC, false
+	}
+	itrKey, itrCType, itrN, itrLen, itrPointer, itrErr := itr.Next()
+	for itrErr == nil {
+		synthC.typeID = itrCType
+		synthC.n = int32(itrN)
+		synthC.len = int32(itrLen)
+		synthC.cap = int32(itrLen)
+		synthC.pointer = itrPointer
+		b.Containers.Update(itrKey%rowSize, importUpdater)
+		itrKey, itrCType, itrN, itrLen, itrPointer, itrErr = itr.Next()
+	}
+	// note: if we get a non-EOF err, it's possible that we made SOME
+	// changes but didn't log them. I don't have a good solution to this.
+	if itrErr != io.EOF {
+		return itrErr
+	}
+	return nil
+}
+
 func (b *Bitmap) ImportRoaringRawIterator(itr RoaringIterator, clear bool, log bool, rowSize uint64) (changed int, rowSet map[uint64]int, err error) {
 	var itrKey uint64
 	var itrCType byte

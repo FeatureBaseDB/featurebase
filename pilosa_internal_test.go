@@ -15,7 +15,11 @@
 package pilosa
 
 import (
+	"bytes"
+	"reflect"
 	"testing"
+
+	"github.com/pilosa/pilosa/v2/roaring"
 )
 
 func TestValidateName(t *testing.T) {
@@ -47,10 +51,12 @@ type memAttrStore struct {
 	store map[uint64]map[string]interface{}
 }
 
-func (s *memAttrStore) Path() string                                          { return "" }
-func (s *memAttrStore) Open() error                                           { return nil }
-func (s *memAttrStore) Close() error                                          { return nil }
-func (s *memAttrStore) Attrs(id uint64) (m map[string]interface{}, err error) { return s.store[id], nil }
+func (s *memAttrStore) Path() string { return "" }
+func (s *memAttrStore) Open() error  { return nil }
+func (s *memAttrStore) Close() error { return nil }
+func (s *memAttrStore) Attrs(id uint64) (m map[string]interface{}, err error) {
+	return s.store[id], nil
+}
 func (s *memAttrStore) SetAttrs(id uint64, m map[string]interface{}) error {
 	s.store[id] = m
 	return nil
@@ -61,5 +67,28 @@ func (s *memAttrStore) SetBulkAttrs(m map[uint64]map[string]interface{}) error {
 	}
 	return nil
 }
-func (s *memAttrStore) Blocks() ([]AttrBlock, error)                                  { return nil, nil }
-func (s *memAttrStore) BlockData(i uint64) (map[uint64]map[string]interface{}, error) { return nil, nil }
+func (s *memAttrStore) Blocks() ([]AttrBlock, error) { return nil, nil }
+func (s *memAttrStore) BlockData(i uint64) (map[uint64]map[string]interface{}, error) {
+	return nil, nil
+}
+
+func TestAPI_CombineForExistence(t *testing.T) {
+	bm := roaring.NewBitmap(pos(1, 1), pos(1, 2), pos(1, 3), pos(1, 65537), pos(1, 65538), pos(2, 1), pos(2, 2), pos(2, 5), pos(2, 65537), pos(2, 65538))
+	buf := new(bytes.Buffer)
+	_, err := bm.WriteTo(buf)
+	panicOn(err)
+	raw := buf.Bytes()
+	results, err := combineForExistence(raw)
+	if err != nil {
+		t.Fatalf("failure to combine: %v", err)
+	}
+	bm2 := roaring.NewBitmap()
+	_, _, err = bm2.ImportRoaringBits(results, false, false, 1<<shardVsContainerExponent)
+	panicOn(err)
+	expected := []uint64{1, 2, 3, 5, 65537, 65538}
+	got := bm2.Slice()
+	if !reflect.DeepEqual(got, expected) {
+		t.Fatalf("expected:%v got:%v", expected, got)
+	}
+
+}
