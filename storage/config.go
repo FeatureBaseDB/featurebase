@@ -23,7 +23,7 @@ const (
 
 // DefaultBackend is set here. pilosa/server/config.go references it
 // to set the default for pilosa server exeutable.
-const DefaultBackend = RoaringBackend
+const DefaultBackend = RBFBackend
 
 // Config represents configuration which applies to multiple storage engines.
 type Config struct {
