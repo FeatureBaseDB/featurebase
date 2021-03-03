@@ -1336,6 +1336,9 @@ func (e *executor) executePercentile(ctx context.Context, qcx *Qcx, index string
 	if err != nil {
 		return ValCount{}, errors.Wrap(err, "executing Min call for Percentile")
 	}
+	if nth == 0.0 {
+		return ValCount{Val: minVal.Val, Count: minVal.Count}, nil
+	}
 
 	// get max
 	q, _ = pql.ParseString(fmt.Sprintf(`Max(field="%s")`, fieldName))
@@ -1359,10 +1362,6 @@ func (e *executor) executePercentile(ctx context.Context, qcx *Qcx, index string
 		intersectCall := countCall.Children[0]
 		intersectCall.Children = append(intersectCall.Children, filterCall)
 		rangeCall = intersectCall.Children[0]
-	}
-
-	if nth == 0.0 {
-		return ValCount{Val: minVal.Val, Count: minVal.Count}, nil
 	}
 
 	k := (1 - nth) / nth
