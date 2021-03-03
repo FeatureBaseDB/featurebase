@@ -435,6 +435,7 @@ var callInfoByFunc = map[string]callInfo{
 			"_field": "",
 			"field":  "",
 		},
+	},
 	"Percentile": {
 		allowUnknown: false,
 		prototypes: map[string]interface{}{
