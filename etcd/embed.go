@@ -34,10 +34,8 @@ import (
 	"go.etcd.io/etcd/clientv3/clientv3util"
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.etcd.io/etcd/embed"
-	"go.etcd.io/etcd/etcdserver/api/membership"
 	"go.etcd.io/etcd/etcdserver/api/v3client"
 	"go.etcd.io/etcd/etcdserver/api/v3rpc/rpctypes"
-	"go.etcd.io/etcd/mvcc"
 	"go.etcd.io/etcd/mvcc/mvccpb"
 	"go.etcd.io/etcd/pkg/types"
 )
@@ -101,6 +99,10 @@ func NewEtcd(opt Options, replicas int) *Etcd {
 		options:  opt,
 		replicas: replicas,
 		wg:       &sync.WaitGroup{},
+	}
+
+	if e.options.HeartbeatTTL == 0 {
+		e.options.HeartbeatTTL = 5 // seconds
 	}
 	return e
 }
@@ -217,14 +219,19 @@ func (e *Etcd) startHeartbeat() error {
 	e.heartbeatCancel = heartbeatCancel
 
 	cb := func(heartbeatID clientv3.LeaseID) error {
-		key, value := heartbeatPrefix+e.e.Server.ID().String(), disco.ClusterStateStarting
+		key, value := heartbeatPrefix+e.e.Server.ID().String(), disco.NodeStateStarting
 		if e.e.Config().ClusterState == embed.ClusterStateFlagExisting {
-			value = disco.ClusterStateResizing
+			value = disco.NodeStateResizing
+		} else if e.lm.started {
+			value = disco.NodeStateStarted
 		}
 
-		if _, err := e.cli.Put(ctx, key, string(value), clientv3.WithLease(heartbeatID)); err != nil {
+		if _, err := e.cli.Txn(ctx).
+			Then(clientv3.OpPut(key, string(value), clientv3.WithLease(heartbeatID))).
+			Commit(); err != nil {
+
 			heartbeatCancel()
-			return errors.Wrapf(err, "startHeartbeat: puts a key-value (%s, %s) with lease (%v)", key, value, heartbeatID)
+			return errors.Wrapf(err, "startHeartbeat: txn puts a key-value (%s, %s) with lease (%v)", key, value, heartbeatID)
 		}
 
 		e.heartbeatID = heartbeatID
@@ -232,7 +239,7 @@ func (e *Etcd) startHeartbeat() error {
 		return nil
 	}
 
-	_, err := e.leaseKeepAlive(ctx, heartbeatCancel, e.options.HeartbeatTTL, cb)
+	_, err := e.leaseKeepAlive(ctx, heartbeatCancel, cb)
 	if err != nil {
 		return errors.Wrap(err, "startHeartbeat: creates a new heartbeat")
 	}
@@ -241,43 +248,26 @@ func (e *Etcd) startHeartbeat() error {
 }
 
 func (e *Etcd) NodeState(ctx context.Context, peerID string) (disco.NodeState, error) {
-	if state, err := e.nodeStateFast(ctx, peerID); err == nil && state == disco.NodeStateStarted {
-		return disco.NodeStateStarted, nil
-	}
-
-	states, err := e.NodeStates(ctx)
-	if err != nil {
-		return "", err
-	}
-
-	state, ok := states[peerID]
-	if !ok {
-		return disco.NodeStateUnknown, nil
-	}
-
-	return state, nil
+	return e.nodeState(ctx, peerID)
 }
 
-func (e *Etcd) nodeStateFast(ctx context.Context, peerID string) (disco.NodeState, error) {
-	kv := e.e.Server.KV()
-	resp, err := kv.Range([]byte(path.Join(resizePrefix, peerID)), nil, mvcc.RangeOptions{Count: true})
+func (e *Etcd) nodeState(ctx context.Context, peerID string) (disco.NodeState, error) {
+	resp, err := e.cli.Txn(ctx).
+		If(clientv3util.KeyMissing(path.Join(resizePrefix, peerID))).
+		Then(clientv3.OpGet(path.Join(heartbeatPrefix, peerID))).
+		Commit()
 	if err != nil {
 		return disco.NodeStateUnknown, err
 	}
-	if resp.Count > 0 {
+
+	if !resp.Succeeded {
 		return disco.NodeStateResizing, nil
 	}
 
-	resp, err = kv.Range([]byte(path.Join(heartbeatPrefix, peerID)), nil, mvcc.RangeOptions{})
-	if err != nil {
-		return disco.NodeStateUnknown, err
-	}
-	kvs := resp.KVs
-
+	kvs := resp.Responses[0].GetResponseRange().Kvs
 	if len(kvs) > 1 {
 		return disco.NodeStateUnknown, disco.ErrTooManyResults
 	}
-
 	if len(kvs) == 0 {
 		return disco.NodeStateUnknown, disco.ErrNoResults
 	}
@@ -287,10 +277,6 @@ func (e *Etcd) nodeStateFast(ctx context.Context, peerID string) (disco.NodeStat
 
 func (e *Etcd) NodeStates(ctx context.Context) (map[string]disco.NodeState, error) {
 	members := e.e.Server.Cluster().Members()
-	if states := e.nodeStatesFast(ctx, members); states != nil {
-		return states, nil
-	}
-
 	ops := make([]clientv3.Op, 2*(len(members)))
 	for i, member := range members {
 		peerID := member.ID.String()
@@ -298,34 +284,28 @@ func (e *Etcd) NodeStates(ctx context.Context) (map[string]disco.NodeState, erro
 		ops[2*i+1] = clientv3.OpGet(path.Join(heartbeatPrefix, peerID))
 	}
 
-doTxn:
 	resp, err := e.cli.Txn(ctx).Then(ops...).Commit()
 	if err != nil {
 		return nil, err
-	}
-	if !resp.Succeeded {
-		goto doTxn
 	}
 
 	out := make(map[string]disco.NodeState, len(members))
 	for i, member := range members {
 		peerID := member.ID.String()
-		switch resp.Responses[2*i].GetResponseRange().Count {
-		case 0:
-		case 1:
+		if resp.Responses[2*i].GetResponseRange().Count > 0 {
 			// This node is processing a resize operation.
 			out[peerID] = disco.NodeStateResizing
 			continue
-		default:
-			return nil, disco.ErrTooManyResults
 		}
-		switch resp := resp.Responses[2*i+1].GetResponseRange(); len(resp.Kvs) {
+
+		kvs := resp.Responses[2*i+1].GetResponseRange().Kvs
+		switch len(kvs) {
 		case 0:
 			// The node has not reported a state.
 			out[peerID] = disco.NodeStateUnknown
 		case 1:
 			// The node has reported its state.
-			out[peerID] = disco.NodeState(resp.Kvs[0].Value)
+			out[peerID] = disco.NodeState(kvs[0].Value)
 		default:
 			return nil, disco.ErrTooManyResults
 		}
@@ -334,24 +314,13 @@ doTxn:
 	return out, nil
 }
 
-func (e *Etcd) nodeStatesFast(ctx context.Context, members []*membership.Member) map[string]disco.NodeState {
-	out := make(map[string]disco.NodeState, len(members))
-	for _, member := range members {
-		peerID := member.ID.String()
-		state, err := e.nodeStateFast(ctx, peerID)
-		if err != nil || state != disco.NodeStateStarted {
-			return nil
-		}
-
-		out[peerID] = disco.NodeStateStarted
-	}
-
-	return out
-}
-
 func (e *Etcd) Started(ctx context.Context) (err error) {
 	key, value := heartbeatPrefix+e.e.Server.ID().String(), disco.NodeStateStarted
-	if _, err = e.cli.Put(ctx, key, string(value), clientv3.WithLease(e.heartbeatID)); err == nil {
+	_, err = e.cli.Txn(ctx).
+		Then(clientv3.OpPut(key, string(value), clientv3.WithLease(e.heartbeatID))).
+		Commit()
+
+	if err == nil {
 		e.lm.started = true
 	}
 	return err
@@ -381,8 +350,13 @@ func (e *Etcd) IsLeader() bool {
 
 func (e *Etcd) Leader() *disco.Peer {
 	id := e.e.Server.Leader()
-	m := e.e.Server.Cluster().Member(id)
-	return &disco.Peer{ID: id.String(), URL: m.PickPeerURL()}
+	peer := &disco.Peer{ID: id.String()}
+
+	if m := e.e.Server.Cluster().Member(id); m != nil {
+		peer.URL = m.PickPeerURL()
+	}
+
+	return peer
 }
 
 func (e *Etcd) ClusterState(ctx context.Context) (disco.ClusterState, error) {
@@ -437,7 +411,7 @@ func (e *Etcd) Resize(ctx context.Context) (func([]byte) error, error) {
 
 	cb := func(clientv3.LeaseID) error { return nil }
 
-	resizeID, err := e.leaseKeepAlive(ctx, resizeCancel, e.options.HeartbeatTTL, cb)
+	resizeID, err := e.leaseKeepAlive(ctx, resizeCancel, cb)
 	if err != nil {
 		return nil, errors.Wrap(err, "Resize: creates a new hearbeat")
 	}
@@ -707,7 +681,9 @@ func (e *Etcd) DeleteView(ctx context.Context, indexName, fieldName, name string
 }
 
 func (e *Etcd) putKey(ctx context.Context, key, val string, opts ...clientv3.OpOption) error {
-	if _, err := e.cli.Put(ctx, key, val, opts...); err != nil {
+	if _, err := e.cli.Txn(ctx).
+		Then(clientv3.OpPut(key, val, opts...)).
+		Commit(); err != nil {
 		return errors.Wrapf(err, "putKey: Put(%s, %s)", key, val)
 	}
 
@@ -736,11 +712,14 @@ func (e *Etcd) getKeyBytes(ctx context.Context, key string) ([]byte, error) {
 }
 
 func (e *Etcd) getKeyWithPrefix(ctx context.Context, key string) ([]string, [][]byte, error) {
-	resp, err := e.cli.Get(ctx, key, clientv3.WithPrefix())
+
+	resp, err := e.cli.Txn(ctx).
+		Then(clientv3.OpGet(key, clientv3.WithPrefix())).
+		Commit()
 	if err != nil {
 		return nil, nil, err
 	}
-	kvs := resp.Kvs
+	kvs := resp.Responses[0].GetResponseRange().Kvs
 
 	var (
 		keys   []string
@@ -756,30 +735,18 @@ func (e *Etcd) getKeyWithPrefix(ctx context.Context, key string) ([]string, [][]
 }
 
 func (e *Etcd) keyExists(ctx context.Context, key string) (bool, error) {
-	if ok, err := e.keyExistsFast(ctx, key); err == nil && ok {
-		return true, nil
-	}
-
-	resp, err := e.cli.Txn(ctx).Then(clientv3.OpGet(key, clientv3.WithCountOnly())).Commit()
+	resp, err := e.cli.Txn(ctx).
+		If(clientv3util.KeyExists(key)).
+		Then(clientv3.OpGet(key, clientv3.WithCountOnly())).
+		Commit()
 	if err != nil {
 		return false, err
 	}
-	if resp.Responses[0].GetResponseRange().Count > 0 {
-		return true, nil
+	if !resp.Succeeded {
+		return false, nil
 	}
-	return false, nil
-}
 
-func (e *Etcd) keyExistsFast(ctx context.Context, key string) (bool, error) {
-	kv := e.e.Server.KV()
-	resp, err := kv.Range([]byte(key), nil, mvcc.RangeOptions{Count: true})
-	if err != nil {
-		return false, err
-	}
-	if resp.Count > 0 {
-		return true, nil
-	}
-	return false, nil
+	return resp.Responses[0].GetResponseRange().Count > 0, nil
 }
 
 func (e *Etcd) delKey(ctx context.Context, key string, withPrefix bool) (err error) {
@@ -794,11 +761,11 @@ func (e *Etcd) delKey(ctx context.Context, key string, withPrefix bool) (err err
 // leaseKeepAlive creates a lease with the given ttl (treated as a time.Duration),
 // then refreshes it periodically, and cancels it when done. it yields the lease ID,
 // and also a context and cancelfunc that can be used to abort the heartbeat.
-func (e *Etcd) leaseKeepAlive(ctx context.Context, cancelFunc context.CancelFunc, ttl int64, cb func(clientv3.LeaseID) error) (clientv3.LeaseID, error) {
-	leaseResp, err := e.cli.Grant(ctx, ttl)
+func (e *Etcd) leaseKeepAlive(ctx context.Context, cancelFunc context.CancelFunc, cb func(clientv3.LeaseID) error) (clientv3.LeaseID, error) {
+	leaseResp, err := e.cli.Grant(ctx, e.options.HeartbeatTTL)
 	if err != nil {
 		cancelFunc()
-		return 0, errors.Wrapf(err, "leaseKeepAlive: creates a new lease (TTL: %v)", ttl)
+		return 0, errors.Wrapf(err, "leaseKeepAlive: creates a new lease (TTL: %d s.)", e.options.HeartbeatTTL)
 	}
 
 	keepaliveFunc := func(tick time.Duration) error {
@@ -818,7 +785,7 @@ func (e *Etcd) leaseKeepAlive(ctx context.Context, cancelFunc context.CancelFunc
 				// Because of the load balancer, this can take ridiculously
 				// long times to run if the cluster's already down when we get
 				// here, resulting in massive piles of excess goroutines.
-				revoker, cancel := context.WithTimeout(context.Background(), time.Duration(ttl))
+				revoker, cancel := context.WithTimeout(context.Background(), time.Duration(e.options.HeartbeatTTL)*time.Second)
 				defer cancel()
 
 				if _, err := e.cli.Revoke(revoker, leaseResp.ID); err != nil {
@@ -835,11 +802,11 @@ func (e *Etcd) leaseKeepAlive(ctx context.Context, cancelFunc context.CancelFunc
 					// TODO: should this close/reset e.cli instead?
 					cli := v3client.New(e.e.Server)
 					var err error
-					leaseResp, err = cli.Grant(ctx, ttl)
+					leaseResp, err = cli.Grant(ctx, e.options.HeartbeatTTL)
 					cli.Close()
 					if err != nil {
 						cancelFunc()
-						return errors.Wrapf(err, "leaseKeepAlive: creates a new lease (TTL: %v)", ttl)
+						return errors.Wrapf(err, "leaseKeepAlive: creates a new lease (TTL: %d s.)", e.options.HeartbeatTTL)
 					}
 
 					// Call the callback.
