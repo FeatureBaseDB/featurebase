@@ -2078,3 +2078,36 @@ func (c *InternalClient) ImportFieldKeys(ctx context.Context, uri *pnet.URI, ind
 	defer resp.Body.Close()
 	return nil
 }
+
+// Status function is just a public function for this particular implementation of InternalClient.
+// It's not require by pilosa.InternalClient interface.
+// The function returns pilosa cluster state as a string ("NORMAL", "DEGRADED", "DOWN", "RESIZING", ...)
+func (c *InternalClient) Status(ctx context.Context) (string, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.Status")
+	defer span.Finish()
+
+	// Execute request against the host.
+	u := c.defaultURI.Path("/status")
+
+	// Build request.
+	req, err := http.NewRequest("GET", u, nil)
+	if err != nil {
+		return "", errors.Wrap(err, "creating request")
+	}
+
+	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+	req.Header.Set("Accept", "application/json")
+
+	// Execute request.
+	resp, err := c.executeRequest(req.WithContext(ctx))
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	var rsp getStatusResponse
+	if err := json.NewDecoder(resp.Body).Decode(&rsp); err != nil {
+		return "", fmt.Errorf("json decode: %s", err)
+	}
+	return rsp.State, nil
+}

@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/pilosa/pilosa/v2"
+	"github.com/pilosa/pilosa/v2/disco"
 	picli "github.com/pilosa/pilosa/v2/http"
 )
 
@@ -89,9 +90,8 @@ func TestClusterStuff(t *testing.T) {
 			t.Fatalf("waiting on pumba pause cmd: %v", err)
 		}
 
-		// TODO change the sleep to wait for status to return to NORMAL - need support in internal client for getting status
 		t.Log("done with pause, waiting for stability")
-		time.Sleep(time.Second * 20)
+		waitForStatus(t, cli1.Status, string(disco.ClusterStateNormal), 30, time.Second)
 		t.Log("done waiting for stability")
 
 		// Check query results from each node.
@@ -105,5 +105,30 @@ func TestClusterStuff(t *testing.T) {
 			}
 		}
 	})
+}
 
+func waitForStatus(t *testing.T, stator func(context.Context) (string, error), status string, n int, sleep time.Duration) {
+	t.Helper()
+
+	for i := 0; i < n; i++ {
+		s, err := stator(context.TODO())
+		if err != nil {
+			t.Logf("Status (try %d/%d): %v (retrying in %s)", i, n, err, sleep.String())
+		} else {
+			t.Logf("Status (try %d/%d): %s (retrying in %s)", i, n, s, sleep.String())
+		}
+		if s == status {
+			return
+		}
+		time.Sleep(sleep)
+	}
+
+	s, err := stator(context.TODO())
+	if err != nil {
+		t.Fatalf("querying status: %v", err)
+	}
+	if status != s {
+		waited := time.Duration(n) * sleep
+		t.Fatalf("waited %s for status: %s, got: %s", waited.String(), status, s)
+	}
 }
