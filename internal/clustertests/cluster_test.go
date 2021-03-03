@@ -91,7 +91,7 @@ func TestClusterStuff(t *testing.T) {
 		}
 
 		t.Log("done with pause, waiting for stability")
-		waitForStatus(t, cli1, string(disco.ClusterStateNormal), 30, time.Second)
+		waitForStatus(t, cli1.Status, string(disco.ClusterStateNormal), 30, time.Second)
 		t.Log("done waiting for stability")
 
 		// Check query results from each node.
@@ -107,11 +107,11 @@ func TestClusterStuff(t *testing.T) {
 	})
 }
 
-func waitForStatus(t *testing.T, c *picli.InternalClient, status string, n int, sleep time.Duration) {
+func waitForStatus(t *testing.T, stator func(context.Context) (string, error), status string, n int, sleep time.Duration) {
 	t.Helper()
 
 	for i := 0; i < n; i++ {
-		s, err := c.Status(context.TODO())
+		s, err := stator(context.TODO())
 		if err != nil {
 			t.Logf("Status (try %d/%d): %v (retrying in %s)", i, n, err, sleep.String())
 		} else {
@@ -123,7 +123,7 @@ func waitForStatus(t *testing.T, c *picli.InternalClient, status string, n int, 
 		time.Sleep(sleep)
 	}
 
-	s, err := c.Status(context.TODO())
+	s, err := stator(context.TODO())
 	if err != nil {
 		t.Fatalf("querying status: %v", err)
 	}
