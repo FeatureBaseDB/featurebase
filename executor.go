@@ -1361,6 +1361,10 @@ func (e *executor) executePercentile(ctx context.Context, qcx *Qcx, index string
 		rangeCall = intersectCall.Children[0]
 	}
 
+	if nth == 0.0 {
+		return ValCount{Val: minVal.Val, Count: minVal.Count}, nil
+	}
+
 	k := (1 - nth) / nth
 
 	min, max := minVal.Val, maxVal.Val
