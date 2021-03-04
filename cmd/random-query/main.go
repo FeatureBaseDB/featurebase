@@ -27,24 +27,24 @@ import (
 	"time"
 
 	"github.com/pilosa/pilosa/v2"
-	"github.com/pilosa/pilosa/v2/pql"
 	"github.com/pilosa/pilosa/v2/http"
+	"github.com/pilosa/pilosa/v2/pql"
 )
 
 // RandomQueryConfig
 type RandomQueryConfig struct {
 
 	// user facing flags
-	HostPort   string // -hostport
-	TreeDepth  int    // -d
-	QueryCount int    // -n
-	Verbose    bool   // -v
-	VeryVerbose bool  // -V
-	TimeFromArg   string // --time.from
-	TimeToArg     string // --time.to
-	TimeFrom   time.Time // parsed time
-	TimeTo     time.Time // parsed time
-	TimeRange      int64 // hours between parsed times
+	HostPort    string    // -hostport
+	TreeDepth   int       // -d
+	QueryCount  int       // -n
+	Verbose     bool      // -v
+	VeryVerbose bool      // -V
+	TimeFromArg string    // --time.from
+	TimeToArg   string    // --time.to
+	TimeFrom    time.Time // parsed time
+	TimeTo      time.Time // parsed time
+	TimeRange   int64     // hours between parsed times
 
 	IndexMap map[string]*Features
 
@@ -73,7 +73,7 @@ type wrapper struct {
 }
 
 func (w *wrapper) Schema(ctx context.Context) ([]*pilosa.IndexInfo, error) {
-	return w.api.Schema(ctx), nil
+	return w.api.Schema(ctx, false)
 }
 
 func (w *wrapper) Query(ctx context.Context, index string, queryRequest *pilosa.QueryRequest) (*pilosa.QueryResponse, error) {
@@ -234,11 +234,11 @@ NewSetup:
 }
 
 type Features struct {
-	Slc []IndexFieldRow
-	Ranges []IndexFieldRange
+	Slc           []IndexFieldRow
+	Ranges        []IndexFieldRange
 	Distinctables []IndexFieldRange
-	SlcWeight int
-	RangeWeight int
+	SlcWeight     int
+	RangeWeight   int
 }
 
 // Pick either a feature entry or a random query on a range, weighted
@@ -274,7 +274,7 @@ func (fea *IndexFieldRow) Query(cfg *RandomQueryConfig) *Tree {
 	// anyway.
 	if fea.HasTime && cfg.Rnd.Int63n(20) != 0 {
 		startHours := (cfg.Rnd.Int63n(cfg.TimeRange - 1))
-		endHours := cfg.Rnd.Int63n(cfg.TimeRange - startHours) + 1 + startHours
+		endHours := cfg.Rnd.Int63n(cfg.TimeRange-startHours) + 1 + startHours
 		startTime := cfg.TimeFrom.Add(time.Duration(startHours) * time.Hour)
 		endTime := cfg.TimeFrom.Add(time.Duration(endHours) * time.Hour)
 		fromTo = fmt.Sprintf(", from=%s, to=%s",
@@ -288,11 +288,11 @@ func (fea *IndexFieldRow) Query(cfg *RandomQueryConfig) *Tree {
 }
 
 type IndexFieldRange struct {
-	Index string
-	Field string
+	Index           string
+	Field           string
 	Min, Max, Scale int64
-	ScaleDiv float64
-	Range uint64
+	ScaleDiv        float64
+	Range           uint64
 }
 
 // We want to pick one of (1) a single-operation filter, (2) a
@@ -316,8 +316,8 @@ func (i *IndexFieldRange) Query(cfg *RandomQueryConfig) *Tree {
 	v2 = v2 + uint64(i.Min)
 	var v1s, v2s string
 	if i.Scale != 0 {
-		v1s = fmt.Sprintf("%.*f", i.Scale, float64(int64(v1)) / i.ScaleDiv)
-		v2s = fmt.Sprintf("%.*f", i.Scale, float64(int64(v2)) / i.ScaleDiv)
+		v1s = fmt.Sprintf("%.*f", i.Scale, float64(int64(v1))/i.ScaleDiv)
+		v2s = fmt.Sprintf("%.*f", i.Scale, float64(int64(v2))/i.ScaleDiv)
 	} else {
 		v1s = strconv.FormatInt(int64(v1), 10)
 		v2s = strconv.FormatInt(int64(v2), 10)
@@ -332,7 +332,7 @@ func (i *IndexFieldRange) Query(cfg *RandomQueryConfig) *Tree {
 		if cfg.Rnd.Int63n(2) == 1 {
 			v1s = v2s
 		}
-		return &Tree{S: fmt.Sprintf("Row(%s %s %s)", i.Field, binaryOps[r - 4], v1s)}
+		return &Tree{S: fmt.Sprintf("Row(%s %s %s)", i.Field, binaryOps[r-4], v1s)}
 	}
 }
 
@@ -463,8 +463,8 @@ func (cfg *RandomQueryConfig) GenQuery(index string) (pql string, err error) {
 }
 
 type Tree struct {
-	Chd []*Tree
-	S string
+	Chd  []*Tree
+	S    string
 	Args []string // Extra args to pass after children, such as a field for Distinct.
 }
 
@@ -496,6 +496,7 @@ func (tr *Tree) StringIndent(ind int) (s string) {
 }
 
 const pilosaTimeFmt = "2006-01-02T15:04"
+
 func (cfg *RandomQueryConfig) GenTree(index string, depth int) (tr *Tree) {
 	features := cfg.IndexMap[index]
 	if depth == 0 {

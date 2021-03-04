@@ -32,6 +32,7 @@ import (
 
 	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/http"
+	pnet "github.com/pilosa/pilosa/v2/net"
 )
 
 // slurp: slurp is a load-tester for importing bulk data.
@@ -191,7 +192,7 @@ func main() {
 	flag.StringVar(&tarSrcPath, "src", "q2.tar.gz", "data to import")
 	flag.Parse()
 
-	uri, err := pilosa.NewURIFromAddress(host)
+	uri, err := pnet.NewURIFromAddress(host)
 	panicOn(err)
 	globURI = uri
 
@@ -253,9 +254,9 @@ func stopProfile(host, outfile string) {
 
 }
 
-var globURI *pilosa.URI
+var globURI *pnet.URI
 
 // get correct node to go to.
-func GetImportRoaringURI(index string, shard uint64) *pilosa.URI {
+func GetImportRoaringURI(index string, shard uint64) *pnet.URI {
 	return globURI
 }

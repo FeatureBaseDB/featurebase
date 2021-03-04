@@ -22,16 +22,20 @@ import (
 	"time"
 
 	_ "net/http/pprof" // Imported for its side-effect of registering pprof endpoints with the server.
+
+	"github.com/pilosa/pilosa/v2/storage"
 )
 
+// CPUProfileForDur (where "Dur" is short for "Duration"), is used for
+// performance tuning during development. It's only called—but is currently
+// commented out—in holder.go.
 func CPUProfileForDur(dur time.Duration, outpath string) {
-
 	// per-query pprof output:
-	txsrc := os.Getenv("PILOSA_TXSRC")
-	if txsrc == "" {
-		txsrc = DefaultTxsrc
+	backend := CurrentBackend()
+	if backend == "" {
+		backend = storage.DefaultBackend
 	}
-	path := outpath + "." + txsrc
+	path := outpath + "." + backend
 	f, err := os.Create(path)
 	panicOn(err)
 
@@ -48,14 +52,16 @@ func CPUProfileForDur(dur time.Duration, outpath string) {
 	}()
 }
 
+// MemProfileForDur (where "Dur" is short for "Duration"), is used for
+// performance tuning during development. It's only called—but is currently
+// commented out—in holder.go.
 func MemProfileForDur(dur time.Duration, outpath string) {
-
 	// per-query pprof output:
-	txsrc := os.Getenv("PILOSA_TXSRC")
-	if txsrc == "" {
-		txsrc = DefaultTxsrc
+	backend := CurrentBackend()
+	if backend == "" {
+		backend = storage.DefaultBackend
 	}
-	path := outpath + "." + txsrc
+	path := outpath + "." + backend
 	f, err := os.Create(path)
 	panicOn(err)
 

@@ -1035,7 +1035,10 @@ func TestCRUDIndexes(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		schema := m.API.Schema(ctx)
+		schema, err := m.API.Schema(ctx, false)
+		if err != nil {
+			t.Fatal("Getting schema error", err)
+		}
 		if len(schema) != 1 {
 			t.Fatal("Schema should include one index")
 		}
@@ -1055,14 +1058,22 @@ func TestCRUDIndexes(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		schema = m.API.Schema(ctx)
+		schema, err = m.API.Schema(ctx, false)
+		if err != nil {
+			t.Fatal("Getting schema error", err)
+		}
+
 		if len(schema) != 2 {
 			t.Fatal("Schema should include two indexes")
 		}
 
 		_ = m.API.DeleteIndex(ctx, "testindex1")
 
-		schema = m.API.Schema(ctx)
+		schema, err = m.API.Schema(ctx, false)
+		if err != nil {
+			t.Fatal("Getting schema error", err)
+		}
+
 		if len(schema) != 1 {
 			t.Fatal("Schema should include one index")
 		}
@@ -1083,7 +1094,7 @@ func TestCRUDIndexes(t *testing.T) {
 		// Check errors for CreateIndex: create index with no name
 		_, err = gh.CreateIndex(ctx, &pb.CreateIndexRequest{Name: ""})
 		errStatus, _ = status.FromError(err)
-		if errStatus.Code() != codes.Unknown {
+		if errStatus.Code() != codes.FailedPrecondition {
 			t.Fatalf("Error code should be codes.Unknown, but is %v", errStatus.Code())
 		}
 
@@ -1172,7 +1183,11 @@ func TestCRUDIndexes(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		schema := m.API.Schema(ctx)
+		schema, err := m.API.Schema(ctx, false)
+		if err != nil {
+			t.Fatal("Getting schema error", err)
+		}
+
 		if len(schema) != 0 {
 			t.Fatal("Schema should include no index")
 		}

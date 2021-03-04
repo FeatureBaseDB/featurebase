@@ -248,13 +248,13 @@ docker-test:
 # The \-\-\- FAIL avoids counting the extra two FAIL strings at then bottom of log.topt.
 topt:
 	mv log.topt.roar log.topt.roar.prev || true
-	$(eval SHELL:=/bin/bash) set -o pipefail; $(GO) test -v -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) 2>&1 | tee log.topt.roar
+	$(eval SHELL:=/bin/bash) set -o pipefail; $(GO) test -v -timeout 60m -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) 2>&1 | tee log.topt.roar
 	@echo "   log.topt.roar green: \c"; cat log.topt.roar | grep PASS |wc -l
 	@echo "   log.topt.roar   red: \c"; cat log.topt.roar | grep '\-\-\- FAIL' | wc -l
 
 topt-race:
 	mv log.topt.race log.topt.race.prev || true
-	$(eval SHELL:=/bin/bash) set -o pipefail; CGO_ENABLED=1 $(GO) test -race -v -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) 2>&1 | tee log.topt.race
+	$(eval SHELL:=/bin/bash) set -o pipefail; CGO_ENABLED=1 $(GO) test -race -timeout 60m -v -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) 2>&1 | tee log.topt.race
 	@echo "   log.topt.race green: \c"; cat log.topt.race | grep PASS |wc -l
 	@echo "   log.topt.race   red: \c"; cat log.topt.race | grep '\-\-\- FAIL' | wc -l
 
@@ -336,8 +336,8 @@ install-gometalinter:
 	GO111MODULE=off $(GO) get github.com/remyoudompheng/go-misc/deadcode
 
 test-txstore-rbf:
-	PILOSA_TXSRC=rbf $(MAKE) testv-race
+	PILOSA_STORAGE_BACKEND=rbf $(MAKE) testv-race
 
 test-txstore-rbf_bolt:
-	PILOSA_TXSRC=rbf_bolt $(MAKE) testv-race
+	PILOSA_STORAGE_BACKEND=rbf_bolt $(MAKE) testv-race
 

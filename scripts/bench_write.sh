@@ -29,10 +29,10 @@ do
 
 	# Execute RBF/Roaring benchmark.
 	RBF_PATH=gloat/data/1m/rbf/${DATE}.tar.gz
-	TXSRC=rbf gloat run -v -o $RBF_PATH $WORKFLOW_PATH
+	STORAGE_BACKEND=rbf gloat run -v -o $RBF_PATH $WORKFLOW_PATH
 
 	ROARING_PATH=gloat/data/1m/roaring/${DATE}.tar.gz
-	TXSRC=roaring gloat run -v -o $ROARING_PATH $WORKFLOW_PATH
+	STORAGE_BACKEND=roaring gloat run -v -o $ROARING_PATH $WORKFLOW_PATH
 
 	# Generate graph from results.
 	gloat graph -layout 2,5 -size 5120,820 -title "$TITLE" -name utime,stime,heap_alloc,heap_inuse,heap_objects,num_gc,rchar,wchar,syscr,syscw -series rbf,roaring -o /tmp/output.png $RBF_PATH $ROARING_PATH

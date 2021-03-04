@@ -29,13 +29,13 @@ do
 	# Execute RBF/Roaring benchmark.
 	STARTTIME=$(date +%s)
 	RBF_PATH=gloat/data/query/${TYPE}/rbf/${DATE}.tar.gz
-	TXSRC=rbf gloat run -v -o "$RBF_PATH" $WORKFLOW_PATH
+	STORAGE_BACKEND=rbf gloat run -v -o "$RBF_PATH" $WORKFLOW_PATH
 	RBF_ELAPSED=$(($(date +%s) - $STARTTIME))
 	RBF_LATENCY=$(gloat metric -n -name request_avg_latency "$RBF_PATH")
 
 	STARTTIME=$(date +%s)
 	ROARING_PATH=gloat/data/query/${TYPE}/roaring/${DATE}.tar.gz
-	TXSRC=roaring gloat run -v -o "$ROARING_PATH" $WORKFLOW_PATH
+	STORAGE_BACKEND=roaring gloat run -v -o "$ROARING_PATH" $WORKFLOW_PATH
 	ROARING_ELAPSED=$(($(date +%s) - $STARTTIME))
 	ROARING_LATENCY=$(gloat metric -n -name request_avg_latency "$ROARING_PATH")
 

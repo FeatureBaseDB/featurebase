@@ -17,16 +17,13 @@ package pilosa
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
-	"path/filepath"
-	"sync"
 	"testing"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
+	pnet "github.com/pilosa/pilosa/v2/net"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/testhook"
-	"github.com/pkg/errors"
+	"github.com/pilosa/pilosa/v2/topology"
 )
 
 // utilities used by tests
@@ -70,34 +67,32 @@ func NewTestCluster(tb testing.TB, n int) *cluster {
 	c.ReplicaN = 1
 	c.Hasher = NewTestModHasher()
 	c.Path = path
-	c.Topology = NewTopology(c.Hasher, c.partitionN, c.ReplicaN, c)
 
 	for i := 0; i < n; i++ {
-		c.nodes = append(c.nodes, &Node{
+		c.noder.AppendNode(&topology.Node{
 			ID:  fmt.Sprintf("node%d", i),
 			URI: NewTestURI("http", fmt.Sprintf("host%d", i), uint16(0)),
 		})
 	}
 
-	c.Node = c.nodes[0]
-	c.Coordinator = c.nodes[0].ID
-	c.SetState(ClusterStateNormal)
+	cNodes := c.noder.Nodes()
 
+	c.Node = cNodes[0]
 	return c
 }
 
 // NewTestURI is a test URI creator that intentionally swallows errors.
-func NewTestURI(scheme, host string, port uint16) URI {
-	uri := defaultURI()
-	_ = uri.setScheme(scheme)
-	_ = uri.setHost(host)
+func NewTestURI(scheme, host string, port uint16) pnet.URI {
+	uri := pnet.DefaultURI()
+	_ = uri.SetScheme(scheme)
+	_ = uri.SetHost(host)
 	uri.SetPort(port)
 	return *uri
 }
 
-func NewTestURIFromHostPort(host string, port uint16) URI {
-	uri := defaultURI()
-	_ = uri.setHost(host)
+func NewTestURIFromHostPort(host string, port uint16) pnet.URI {
+	uri := pnet.DefaultURI()
+	_ = uri.SetHost(host)
 	uri.SetPort(port)
 	return *uri
 }
@@ -111,422 +106,6 @@ func NewTestModHasher() *TestModHasher { return &TestModHasher{} }
 func (*TestModHasher) Hash(key uint64, n int) int { return int(key) % n }
 
 func (*TestModHasher) Name() string { return "mod" }
-
-// ClusterCluster represents a cluster of test nodes, each of which
-// has a Cluster.
-// ClusterCluster implements Broadcaster interface.
-type ClusterCluster struct {
-	Clusters []*cluster
-
-	common *commonClusterSettings
-
-	mu         sync.RWMutex
-	resizing   bool
-	resizeDone chan struct{}
-	tb         testing.TB
-}
-
-type commonClusterSettings struct {
-	Nodes []*Node
-}
-
-func (t *ClusterCluster) CreateIndex(name string) error {
-	for _, c := range t.Clusters {
-		if _, err := c.holder.CreateIndexIfNotExists(name, IndexOptions{}); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (t *ClusterCluster) CreateIndexWithOpt(name string, opt IndexOptions) error {
-	for _, c := range t.Clusters {
-		if _, err := c.holder.CreateIndexIfNotExists(name, opt); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (t *ClusterCluster) CreateField(index, field string, opts FieldOption) error {
-	for _, c := range t.Clusters {
-		idx, err := c.holder.CreateIndexIfNotExists(index, IndexOptions{})
-		if err != nil {
-			return err
-		}
-		if _, err := idx.CreateField(field, opts); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (t *ClusterCluster) SetBit(index, field string, rowID, colID uint64, x *time.Time) error {
-	// Determine which node should receive the SetBit.
-	c0 := t.Clusters[0] // use the first node's cluster to determine shard location.
-	shard := colID / ShardWidth
-	nodes := c0.shardNodes(index, shard)
-
-	for _, node := range nodes {
-		c := t.clusterByID(node.ID)
-		if c == nil {
-			continue
-		}
-		f := c.holder.Field(index, field)
-		if f == nil {
-			return fmt.Errorf("index/field does not exist: %s/%s", index, field)
-		}
-
-		if err := func() error {
-			idx := c.holder.Index(f.index)
-			shard := colID / ShardWidth
-			tx := idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Shard: shard})
-			if tx != nil {
-				defer tx.Rollback()
-			}
-
-			if _, err := f.SetBit(tx, rowID, colID, x); err != nil {
-				return err
-			} else if err := tx.Commit(); err != nil {
-				return err
-			}
-			return nil
-		}(); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func (t *ClusterCluster) clusterByID(id string) *cluster {
-	for _, c := range t.Clusters {
-		if c.Node.ID == id {
-			return c
-		}
-	}
-	return nil
-}
-
-// addNode adds a node to the cluster and (potentially) starts a resize job.
-func (t *ClusterCluster) addNode() error {
-	id := len(t.Clusters)
-
-	c, err := t.addCluster(id, false)
-	if err != nil {
-		return err
-	}
-
-	// Send NodeJoin event to coordinator.
-	if id > 0 {
-		coord := t.Clusters[0]
-		ev := &NodeEvent{
-			Event: NodeJoin,
-			Node:  c.Node,
-		}
-
-		if err := coord.ReceiveEvent(ev); err != nil {
-			return err
-		}
-
-		// Wait for the AddNode job to finish.
-		if c.State() != ClusterStateNormal {
-			t.resizeDone = make(chan struct{})
-			t.mu.Lock()
-			t.resizing = true
-			t.mu.Unlock()
-			<-t.resizeDone
-		}
-	}
-
-	return nil
-}
-
-// WriteTopology writes the given topology to disk.
-func (t *ClusterCluster) WriteTopology(path string, top *Topology) error {
-	if buf, err := proto.Marshal(top.encode()); err != nil {
-		return err
-	} else if err := ioutil.WriteFile(filepath.Join(path, ".topology"), buf, 0666); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (t *ClusterCluster) addCluster(i int, saveTopology bool) (*cluster, error) {
-
-	id := fmt.Sprintf("node%d", i)
-	uri := NewTestURI("http", fmt.Sprintf("host%d", i), uint16(0))
-
-	node := &Node{
-		ID:  id,
-		URI: uri,
-	}
-
-	// add URI to common
-	//t.common.NodeIDs = append(t.common.NodeIDs, id)
-	//sort.Sort(t.common.NodeIDs)
-
-	// add node to common
-	t.common.Nodes = append(t.common.Nodes, node)
-
-	// create node-specific temp directory
-	path, err := testhook.TempDirInDir(t.tb, *TempDir, fmt.Sprintf("pilosa-cluster-node-%d-", i))
-	if err != nil {
-		return nil, err
-	}
-
-	// holder
-	h := NewHolder(path, nil)
-
-	// cluster
-	c := newCluster()
-	c.ReplicaN = 1
-	c.Hasher = NewTestModHasher()
-	c.Path = path
-	c.partitionN = DefaultPartitionN
-	c.Topology = NewTopology(c.Hasher, c.partitionN, c.ReplicaN, c)
-	c.holder = h
-	c.Node = node
-	c.Coordinator = t.common.Nodes[0].ID // the first node is the coordinator
-	c.broadcaster = t.broadcaster(c)
-
-	// add nodes
-	if saveTopology {
-		for _, n := range t.common.Nodes {
-			if err := c.addNode(n); err != nil {
-				return nil, err
-			}
-		}
-	}
-
-	// Add this node to the ClusterCluster.
-	t.Clusters = append(t.Clusters, c)
-
-	return c, nil
-}
-
-// NewClusterCluster returns a new instance of test.Cluster.
-func NewClusterCluster(tb testing.TB, n int) *ClusterCluster {
-
-	tc := &ClusterCluster{
-		common: &commonClusterSettings{},
-		tb:     tb,
-	}
-
-	// add clusters
-	for i := 0; i < n; i++ {
-		_, err := tc.addCluster(i, true)
-		if err != nil {
-			panic(err)
-		}
-	}
-	return tc
-}
-
-// SetState sets the state of the cluster on each node.
-func (t *ClusterCluster) SetState(state string) {
-	for _, c := range t.Clusters {
-		c.SetState(state)
-	}
-}
-
-// Open opens all clusters in the test cluster.
-func (t *ClusterCluster) Open() error {
-	for _, c := range t.Clusters {
-		if err := c.open(); err != nil {
-			return err
-		}
-		if err := c.holder.Open(); err != nil {
-			return err
-		}
-		if err := c.setNodeState(nodeStateReady); err != nil {
-			return err
-		}
-	}
-
-	// Start the listener on the coordinator.
-	if len(t.Clusters) == 0 {
-		return nil
-	}
-	t.Clusters[0].listenForJoins()
-
-	return nil
-}
-
-// Close closes all clusters in the test cluster.
-func (t *ClusterCluster) Close() error {
-	for _, c := range t.Clusters {
-		err := c.close()
-		if err != nil {
-			return err
-		}
-		// Make sure open indexes get shut down too. we wouldn't do
-		// this normally for a cluster, but we want to for test cases.
-		c.holder.Close()
-	}
-	return nil
-}
-
-type bcast struct {
-	t *ClusterCluster
-	c *cluster
-}
-
-func (b bcast) SendSync(m Message) error {
-	switch obj := m.(type) {
-	case *ClusterStatus:
-		// Apply the send message to all nodes (except the coordinator).
-		for _, c := range b.t.Clusters {
-			if c != b.c {
-				err := c.mergeClusterStatus(obj)
-				if err != nil {
-					return err
-				}
-			}
-		}
-		b.t.mu.RLock()
-		if obj.State == ClusterStateNormal && b.t.resizing {
-			close(b.t.resizeDone)
-		}
-		b.t.mu.RUnlock()
-	}
-	return nil
-}
-
-func (t *ClusterCluster) broadcaster(c *cluster) broadcaster {
-	return bcast{
-		t: t,
-		c: c,
-	}
-}
-
-// SendAsync is a test implemenetation of Broadcaster SendAsync method.
-func (bcast) SendAsync(Message) error {
-	return nil
-}
-
-// SendTo is a test implementation of Broadcaster SendTo method.
-func (b bcast) SendTo(to *Node, m Message) error {
-	switch obj := m.(type) {
-	case *ResizeInstruction:
-		err := b.t.FollowResizeInstruction(obj)
-		if err != nil {
-			return err
-		}
-	case *ResizeInstructionComplete:
-		coord := b.t.clusterByID(to.ID)
-		// this used to be async, but that prevented us from checking
-		// its error status...
-		return coord.markResizeInstructionComplete(obj)
-	case *ClusterStatus:
-		// Apply the send message to the node.
-		for _, c := range b.t.Clusters {
-			if c.Node.ID == to.ID {
-				err := c.mergeClusterStatus(obj)
-				if err != nil {
-					return err
-				}
-			}
-		}
-		b.t.mu.RLock()
-		if obj.State == ClusterStateNormal && b.t.resizing {
-			close(b.t.resizeDone)
-		}
-		b.t.mu.RUnlock()
-	default:
-		panic(fmt.Sprintf("message not handled:\n%#v\n", obj))
-	}
-	return nil
-}
-
-// FollowResizeInstruction is a version of cluster.followResizeInstruction used for testing.
-func (t *ClusterCluster) FollowResizeInstruction(instr *ResizeInstruction) error {
-	// Prepare the return message.
-	complete := &ResizeInstructionComplete{
-		JobID: instr.JobID,
-		Node:  instr.Node,
-		Error: "",
-	}
-
-	// Stop processing on any error.
-	if err := func() error {
-
-		// figure out which node it was meant for, then call the operation on that cluster
-		// basically need to mimic this: client.RetrieveShardFromURI(context.Background(), src.Index, src.Field, src.View, src.Shard, srcURI)
-		instrNode := instr.Node
-		destCluster := t.clusterByID(instrNode.ID)
-
-		// Sync the schema received in the resize instruction.
-		if err := destCluster.holder.applySchema(instr.NodeStatus.Schema); err != nil {
-			return err
-		}
-
-		// Sync available shards.
-		for k, is := range instr.NodeStatus.Indexes {
-			_ = k
-			for _, fs := range is.Fields {
-				f := destCluster.holder.Field(is.Name, fs.Name)
-
-				// if we don't know about a field locally, log an error because
-				// fields should be created and synced prior to shard creation
-				if f == nil {
-					continue
-				}
-				if err := f.AddRemoteAvailableShards(fs.AvailableShards); err != nil {
-					return errors.Wrap(err, "adding remote available shards")
-				}
-			}
-		}
-
-		for _, src := range instr.Sources {
-			srcCluster := t.clusterByID(src.Node.ID)
-
-			srcFragment := srcCluster.holder.fragment(src.Index, src.Field, src.View, src.Shard)
-			destFragment := destCluster.holder.fragment(src.Index, src.Field, src.View, src.Shard)
-			if destFragment == nil {
-				// Create fragment on destination if it doesn't exist.
-				f := destCluster.holder.Field(src.Index, src.Field)
-				v := f.view(src.View)
-				var err error
-				destFragment, err = v.CreateFragmentIfNotExists(src.Shard)
-				if err != nil {
-					return err
-				}
-			}
-
-			// this is the *test* version of a network call, transferring fragments between
-			// nodes in a cluster. So it is allowed to be kind of a hack.
-
-			// there will be two -rbfdb directories/databases, we need to copy
-			// from src to dest the fragment. This simulates sending the fragment over the network.
-			srcIdx := srcCluster.holder.Index(src.Index)
-			srctx := srcIdx.holder.txf.NewTx(Txo{Write: !writable, Index: srcIdx, Fragment: srcFragment, Shard: srcFragment.shard})
-
-			destIdx := destCluster.holder.Index(src.Index)
-
-			desttx := destIdx.holder.txf.NewTx(Txo{Write: writable, Index: destIdx, Fragment: destFragment, Shard: destFragment.shard})
-
-			citer, _, err := srctx.ContainerIterator(src.Index, src.Field, src.View, src.Shard, 0)
-			panicOn(err)
-			d := destFragment
-			for citer.Next() {
-				ckey, c := citer.Value()
-				err := desttx.PutContainer(d.index(), d.field(), d.view(), d.shard, ckey, c)
-				panicOn(err)
-			}
-			citer.Close()
-			panicOn(desttx.Commit())
-			srctx.Rollback()
-		}
-
-		return nil
-	}(); err != nil {
-		complete.Error = err.Error()
-	}
-
-	node := instr.Coordinator
-	return bcast{t: t}.SendTo(node, complete)
-}
 
 var _ = NewTestClusterWithReplication // happy linter
 
@@ -544,23 +123,21 @@ func NewTestClusterWithReplication(tb testing.TB, nNodes, nReplicas, partitionN 
 	c = newCluster()
 	c.holder = h
 	c.ReplicaN = nReplicas
-	c.Hasher = &Jmphasher{}
+	c.Hasher = &topology.Jmphasher{}
 	c.Path = path
 	c.partitionN = partitionN
-	c.Topology = NewTopology(c.Hasher, c.partitionN, c.ReplicaN, c)
 
 	for i := 0; i < nNodes; i++ {
 		nodeID := fmt.Sprintf("node%d", i)
-		c.nodes = append(c.nodes, &Node{
+		c.noder.AppendNode(&topology.Node{
 			ID:  nodeID,
 			URI: NewTestURI("http", fmt.Sprintf("host%d", i), uint16(0)),
 		})
-		c.Topology.addID(nodeID)
 	}
 
-	c.Node = c.nodes[0]
-	c.Coordinator = c.nodes[0].ID
-	c.SetState(ClusterStateNormal)
+	cNodes := c.noder.Nodes()
+
+	c.Node = cNodes[0]
 
 	if err := c.holder.Open(); err != nil {
 		panic(err)

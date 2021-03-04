@@ -29,9 +29,8 @@ import (
 	"time"
 
 	"github.com/pilosa/pilosa/v2/hash"
-	"github.com/pilosa/pilosa/v2/rbf"
-	rbfcfg "github.com/pilosa/pilosa/v2/rbf/cfg"
 	"github.com/pilosa/pilosa/v2/roaring"
+	"github.com/pilosa/pilosa/v2/storage"
 
 	// On Bolt only, we still use the long txkey, because
 	// this allows Max() to work readily.
@@ -130,7 +129,7 @@ func boltPath(path string) string {
 // if one does not exist for its bpath. Otherwise it returns
 // the existing instance. This insures only one boltDB
 // per bpath in this pilosa node.
-func (r *boltRegistrar) OpenDBWrapper(path0 string, doAllocZero bool, rbfcfg *rbfcfg.Config) (DBWrapper, error) {
+func (r *boltRegistrar) OpenDBWrapper(path0 string, doAllocZero bool, cfg *storage.Config) (DBWrapper, error) {
 	path := boltPath(path0)
 
 	r.mu.Lock()
@@ -171,7 +170,7 @@ func (r *boltRegistrar) OpenDBWrapper(path0 string, doAllocZero bool, rbfcfg *rb
 	// re-sync during recovery.
 	// NoFreelistSync bool
 
-	if rbfcfg != nil && !rbfcfg.FsyncEnabled {
+	if cfg != nil && !cfg.FsyncEnabled {
 		db.NoSync = true
 		db.NoFreelistSync = true
 	} else {
@@ -479,7 +478,7 @@ func (tx *BoltTx) Type() string {
 }
 
 func (tx *BoltTx) UseRowCache() bool {
-	return rbf.EnableRowCache()
+	return storage.EnableRowCache()
 }
 
 // Pointer gives us a memory address for the underlying transaction for debugging.

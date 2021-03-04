@@ -15,6 +15,7 @@
 package test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/pilosa/pilosa/v2"
@@ -32,7 +33,7 @@ func newIndex(tb testing.TB) *Index {
 	if err != nil {
 		panic(err)
 	}
-	h := pilosa.NewHolder(path, nil)
+	h := pilosa.NewHolder(path, pilosa.DefaultHolderConfig())
 	testhook.Cleanup(tb, func() {
 		h.Close()
 	})
@@ -59,7 +60,11 @@ func (i *Index) Reopen() error {
 	if err := i.Index.Close(); err != nil {
 		return err
 	}
-	return i.Index.Open()
+	schema, err := i.Schemator.Schema(context.Background())
+	if err != nil {
+		return err
+	}
+	return i.OpenWithSchema(schema[i.Name()])
 }
 
 // CreateField creates a field with the given options.

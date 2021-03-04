@@ -33,6 +33,7 @@ import (
 	"github.com/pilosa/pilosa/v2/pql"
 	"github.com/pilosa/pilosa/v2/server"
 	"github.com/pilosa/pilosa/v2/test"
+	"github.com/pilosa/pilosa/v2/topology"
 	"github.com/pkg/errors"
 )
 
@@ -48,15 +49,16 @@ func TestClient_MultiNode(t *testing.T) {
 	)
 	defer c.Close()
 
-	hldr := []test.Holder{}
-	for _, command := range c.Nodes {
-		hldr = append(hldr, test.Holder{Holder: command.Server.Holder()})
-	}
+	hldr0 := c.GetHolder(0)
+	hldr1 := c.GetHolder(1)
+	hldr2 := c.GetHolder(2)
 
-	// Create a dispersed set of bitmaps across 3 nodes such that each individual node and shard width increment would reveal a different TopN.
+	// Create a dispersed set of bitmaps across 3 nodes such that each
+	// individual node and shard width increment would reveal a different TopN.
 	shardNums := []uint64{1, 2, 6}
 
-	// This was generated with: `owns := s[i].Handler.Handler.API.Cluster.OwnsShards("i", 20, s[i].HostURI())`
+	// This was generated with:
+	// `owns := s[i].Handler.Handler.API.Cluster.OwnsShards("i", 20, s[i].HostURI())`
 	owns := [][]uint64{
 		{1, 3, 4, 8, 10, 13, 17, 19},
 		{2, 5, 7, 11, 12, 14, 18},
@@ -95,26 +97,26 @@ func TestClient_MultiNode(t *testing.T) {
 		t.Fatalf("creating field: %v", err)
 	}
 
-	hldr[0].MustSetBits("i", "f", 100, baseBit0+10)
-	hldr[0].MustSetBits("i", "f", 4, baseBit0+10, baseBit0+11, baseBit0+12)
-	hldr[0].MustSetBits("i", "f", 4, baseBit0+10, baseBit0+11, baseBit0+12, baseBit0+13, baseBit0+14, baseBit0+15)
-	hldr[0].MustSetBits("i", "f", 2, baseBit0+1, baseBit0+2, baseBit0+3, baseBit0+4)
-	hldr[0].MustSetBits("i", "f", 3, baseBit0+1, baseBit0+2, baseBit0+3, baseBit0+4, baseBit0+5)
-	hldr[0].MustSetBits("i", "f", 22, baseBit0+1, baseBit0+2)
+	hldr0.MustSetBits("i", "f", 100, baseBit0+10)
+	hldr0.MustSetBits("i", "f", 4, baseBit0+10, baseBit0+11, baseBit0+12)
+	hldr0.MustSetBits("i", "f", 4, baseBit0+10, baseBit0+11, baseBit0+12, baseBit0+13, baseBit0+14, baseBit0+15)
+	hldr0.MustSetBits("i", "f", 2, baseBit0+1, baseBit0+2, baseBit0+3, baseBit0+4)
+	hldr0.MustSetBits("i", "f", 3, baseBit0+1, baseBit0+2, baseBit0+3, baseBit0+4, baseBit0+5)
+	hldr0.MustSetBits("i", "f", 22, baseBit0+1, baseBit0+2)
 
-	hldr[1].MustSetBits("i", "f", 99, baseBit1+1, baseBit1+2, baseBit1+3, baseBit1+4)
-	hldr[1].MustSetBits("i", "f", 100, baseBit1+1, baseBit1+2, baseBit1+3, baseBit1+4, baseBit1+5, baseBit1+6, baseBit1+7, baseBit1+8, baseBit1+9, baseBit1+10)
-	hldr[1].MustSetBits("i", "f", 98, baseBit1+1, baseBit1+2, baseBit1+3, baseBit1+4, baseBit1+5, baseBit1+6)
-	hldr[1].MustSetBits("i", "f", 1, baseBit1+4)
-	hldr[1].MustSetBits("i", "f", 22, baseBit1+1, baseBit1+2, baseBit1+3, baseBit1+4, baseBit1+5)
+	hldr1.MustSetBits("i", "f", 99, baseBit1+1, baseBit1+2, baseBit1+3, baseBit1+4)
+	hldr1.MustSetBits("i", "f", 100, baseBit1+1, baseBit1+2, baseBit1+3, baseBit1+4, baseBit1+5, baseBit1+6, baseBit1+7, baseBit1+8, baseBit1+9, baseBit1+10)
+	hldr1.MustSetBits("i", "f", 98, baseBit1+1, baseBit1+2, baseBit1+3, baseBit1+4, baseBit1+5, baseBit1+6)
+	hldr1.MustSetBits("i", "f", 1, baseBit1+4)
+	hldr1.MustSetBits("i", "f", 22, baseBit1+1, baseBit1+2, baseBit1+3, baseBit1+4, baseBit1+5)
 
-	hldr[2].MustSetBits("i", "f", 24, baseBit2+10, baseBit2+11, baseBit2+12, baseBit2+13, baseBit2+14)
-	hldr[2].MustSetBits("i", "f", 20, baseBit2+10, baseBit2+11, baseBit2+12, baseBit2+13)
-	hldr[2].MustSetBits("i", "f", 21, baseBit2+10)
-	hldr[2].MustSetBits("i", "f", 100, baseBit2+10)
-	hldr[2].MustSetBits("i", "f", 99, baseBit2+10, baseBit2+11, baseBit2+12)
-	hldr[2].MustSetBits("i", "f", 98, baseBit2+10, baseBit2+11)
-	hldr[2].MustSetBits("i", "f", 22, baseBit2+10, baseBit2+11, baseBit2+12)
+	hldr2.MustSetBits("i", "f", 24, baseBit2+10, baseBit2+11, baseBit2+12, baseBit2+13, baseBit2+14)
+	hldr2.MustSetBits("i", "f", 20, baseBit2+10, baseBit2+11, baseBit2+12, baseBit2+13)
+	hldr2.MustSetBits("i", "f", 21, baseBit2+10)
+	hldr2.MustSetBits("i", "f", 100, baseBit2+10)
+	hldr2.MustSetBits("i", "f", 99, baseBit2+10, baseBit2+11, baseBit2+12)
+	hldr2.MustSetBits("i", "f", 98, baseBit2+10, baseBit2+11)
+	hldr2.MustSetBits("i", "f", 22, baseBit2+10, baseBit2+11, baseBit2+12)
 
 	// Rebuild the RankCache.
 	// We have to do this to avoid the 10-second cache invalidation delay
@@ -297,7 +299,7 @@ func TestClient_Export(t *testing.T) {
 		bw := bufio.NewWriter(buf)
 
 		// Send export request for every partition.
-		for i := 0; i < pilosa.DefaultPartitionN; i++ {
+		for i := 0; i < topology.DefaultPartitionN; i++ {
 			if err := c.ExportCSV(context.Background(), "keyed", "unkeyedf", uint64(i), bw); err != nil {
 				t.Fatal(err)
 			}
@@ -338,7 +340,7 @@ func TestClient_Export(t *testing.T) {
 		bw := bufio.NewWriter(buf)
 
 		// Send export request.
-		for i := 0; i < pilosa.DefaultPartitionN; i++ {
+		for i := 0; i < topology.DefaultPartitionN; i++ {
 			if err := c.ExportCSV(context.Background(), "keyed", "keyedf", uint64(i), bw); err != nil {
 				t.Fatal(err)
 			}
@@ -468,17 +470,15 @@ func TestClient_ImportColumnAttrs(t *testing.T) {
 
 // Ensure client can bulk import data.
 func TestClient_ImportRoaring(t *testing.T) {
-	cluster := test.MustNewCluster(t, 2)
-	for _, c := range cluster.Nodes {
-		c.Config.Cluster.ReplicaN = 2
-	}
-	err := cluster.Start()
-	if err != nil {
-		t.Fatalf("starting cluster: %v", err)
-	}
+	cluster := test.MustRunCluster(t, 2,
+		[]server.CommandOption{
+			server.OptCommandServerOptions(pilosa.OptServerReplicaN(2))},
+		[]server.CommandOption{
+			server.OptCommandServerOptions(pilosa.OptServerReplicaN(2))},
+	)
 	defer cluster.Close()
 
-	_, err = cluster.GetNode(0).API.CreateIndex(context.Background(), "i", pilosa.IndexOptions{})
+	_, err := cluster.GetNode(0).API.CreateIndex(context.Background(), "i", pilosa.IndexOptions{})
 	if err != nil {
 		t.Fatalf("creating index: %v", err)
 	}
@@ -764,7 +764,7 @@ func TestClient_ImportKeys(t *testing.T) {
 			}
 		})
 
-		// Import to node1 (ensure import is routed to coordinator for translation).
+		// Import to node1 (ensure import is routed to primary for translation).
 		t.Run("Import node1", func(t *testing.T) {
 			if err := c1.ImportK(context.Background(), "keyed", "keyedf1", []pilosa.Bit{
 				{RowKey: "green", ColumnKey: "eve"},
@@ -1226,8 +1226,11 @@ func TestClientTransactions(t *testing.T) {
 	c := test.MustRunCluster(t, 3)
 	defer c.Close()
 
-	client0 := MustNewClient(c.GetNode(0).URL(), http.GetHTTPClient(nil))
-	client1 := MustNewClient(c.GetNode(1).URL(), http.GetHTTPClient(nil))
+	coord := c.GetPrimary()
+	other := c.GetNonPrimary()
+
+	client0 := MustNewClient(coord.URL(), http.GetHTTPClient(nil))
+	client1 := MustNewClient(other.URL(), http.GetHTTPClient(nil))
 
 	// can create, list, get, and finish a transaction
 	var expDeadline time.Time
@@ -1354,10 +1357,10 @@ func TestClientTransactions(t *testing.T) {
 			trns)
 	}
 
-	// non-coordinator
+	// non-primary
 	if trns, err := client1.StartTransaction(context.Background(), "blah", time.Minute, false); err == nil ||
-		!strings.Contains(err.Error(), pilosa.ErrNodeNotCoordinator.Error()) {
-		t.Fatalf("unexpected error starting on non-coordinator: %v", err)
+		!strings.Contains(err.Error(), pilosa.ErrNodeNotPrimary.Error()) {
+		t.Fatalf("unexpected error starting on non-primary: %v", err)
 	} else {
 		test.CompareTransactions(t,
 			nil,
@@ -1423,17 +1426,17 @@ func makeImportColumnAttrsRequest(index string, shard int64, attrKey string) *pi
 	}
 }
 
-// verify that serverInfo has TxSrc
-func TestClient_ServerInfoHasTxSrc(t *testing.T) {
+// verify that serverInfo has Backend
+func TestClient_ServerInfoHasBackend(t *testing.T) {
 	//srcs := []string{"roaring", "rbf", "lmdb"}
 	cluster := test.MustRunCluster(t, 1)
 	defer cluster.Close()
 	cmd := cluster.GetNode(0)
 	si := cmd.API.Info()
-	if si.TxSrc == "" {
-		panic("should have gotten a TxSrc back")
+	if si.StorageBackend == "" {
+		panic("should have gotten a StorageBackend back")
 	}
-	pilosa.MustTxsrcToTxtype(si.TxSrc) // panics if invalid
+	pilosa.MustBackendToTxtype(si.StorageBackend) // panics if invalid
 }
 func TestClient_ImportRoaringExists(t *testing.T) {
 	cluster := test.MustNewCluster(t, 1)

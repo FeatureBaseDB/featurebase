@@ -340,7 +340,6 @@ func (v *view) CreateFragmentIfNotExists(shard uint64) (*fragment, error) {
 }
 
 func (v *view) notifyIfNewShard(shard uint64) {
-
 	// if single node, don't bother serializing only to drop it b/c
 	// we won't send to ourselves.
 	srv, ok := v.broadcaster.(*Server)
@@ -355,24 +354,22 @@ func (v *view) notifyIfNewShard(shard uint64) {
 	broadcastChan := make(chan struct{})
 
 	go func() {
-		msg := &CreateShardMessage{
+		err := v.holder.sendOrSpool(&CreateShardMessage{
 			Index: v.index,
 			Field: v.field,
 			Shard: shard,
-		}
-		// Broadcast a message that a new max shard was just created.
-		err := v.broadcaster.SendSync(msg)
+		})
 		if err != nil {
 			v.holder.Logger.Printf("broadcasting create shard: %v", err)
 		}
 		close(broadcastChan)
 	}()
 
-	// We want to wait until the broadcast is complete, but what if it
-	// takes a really long time? So we time out.
+	timer := time.NewTimer(50 * time.Millisecond)
 	select {
 	case <-broadcastChan:
-	case <-time.After(50 * time.Millisecond):
+		timer.Stop()
+	case <-timer.C:
 		v.holder.Logger.Debugf("broadcasting create shard took >50ms")
 	}
 }
@@ -494,7 +491,7 @@ func (v *view) clearBit(txOrig Tx, rowID, columnID uint64) (changed bool, err er
 }
 
 // value uses a column of bits to read a multi-bit value.
-func (v *view) value(txOrig Tx, columnID uint64, bitDepth uint) (value int64, exists bool, err error) {
+func (v *view) value(txOrig Tx, columnID uint64, bitDepth uint64) (value int64, exists bool, err error) {
 	shard := columnID / ShardWidth
 	frag, err := v.CreateFragmentIfNotExists(shard)
 	if err != nil {
@@ -511,7 +508,7 @@ func (v *view) value(txOrig Tx, columnID uint64, bitDepth uint) (value int64, ex
 }
 
 // setValue uses a column of bits to set a multi-bit value.
-func (v *view) setValue(txOrig Tx, columnID uint64, bitDepth uint, value int64) (changed bool, err error) {
+func (v *view) setValue(txOrig Tx, columnID uint64, bitDepth uint64, value int64) (changed bool, err error) {
 	shard := columnID / ShardWidth
 	frag, err := v.CreateFragmentIfNotExists(shard)
 	if err != nil {
@@ -534,7 +531,7 @@ func (v *view) setValue(txOrig Tx, columnID uint64, bitDepth uint, value int64) 
 }
 
 // clearValue removes a specific value assigned to columnID
-func (v *view) clearValue(txOrig Tx, columnID uint64, bitDepth uint, value int64) (changed bool, err error) {
+func (v *view) clearValue(txOrig Tx, columnID uint64, bitDepth uint64, value int64) (changed bool, err error) {
 	shard := columnID / ShardWidth
 	frag := v.Fragment(shard)
 	if frag == nil {
@@ -556,7 +553,7 @@ func (v *view) clearValue(txOrig Tx, columnID uint64, bitDepth uint, value int64
 }
 
 // rangeOp returns rows with a field value encoding matching the predicate.
-func (v *view) rangeOp(qcx *Qcx, op pql.Token, bitDepth uint, predicate int64) (_ *Row, err0 error) {
+func (v *view) rangeOp(qcx *Qcx, op pql.Token, bitDepth uint64, predicate int64) (_ *Row, err0 error) {
 	r := NewRow()
 	for _, frag := range v.allFragments() {
 
@@ -575,26 +572,26 @@ func (v *view) rangeOp(qcx *Qcx, op pql.Token, bitDepth uint, predicate int64) (
 	return r, nil
 }
 
-// upgradeViewBSIv2 upgrades the fragments of v. Returns ok true if any fragment upgraded.
-func upgradeViewBSIv2(v *view, bitDepth uint) (ok bool, _ error) {
-	// If reading from an old formatted BSI roaring bitmap, upgrade and reload.
-	for _, frag := range v.allFragments() {
-		if frag.storage.Flags&roaringFlagBSIv2 == 1 {
-			continue // already upgraded, skip
-		}
-		ok = true // mark as upgraded, requires reload
+func (v *view) bitDepth(shards []uint64) (uint64, error) {
+	var maxBitDepth uint64
 
-		if tmpPath, err := upgradeRoaringBSIv2(frag, bitDepth); err != nil {
-			return ok, errors.Wrap(err, "upgrading bsi v2")
-		} else if err := frag.closeStorage(); err != nil {
-			return ok, errors.Wrap(err, "closing after bsi v2 upgrade")
-		} else if err := os.Rename(tmpPath, frag.path()); err != nil {
-			return ok, errors.Wrap(err, "renaming after bsi v2 upgrade")
-		} else if err := frag.openStorage(true); err != nil {
-			return ok, errors.Wrap(err, "re-opening after bsi v2 upgrade")
+	for _, shard := range shards {
+		frag, ok := v.fragments[shard]
+		if !ok || frag == nil {
+			continue
+		}
+
+		bd, err := frag.bitDepth()
+		if err != nil {
+			return 0, errors.Wrapf(err, "getting fragment(%d) bit depth", shard)
+		}
+
+		if bd > maxBitDepth {
+			maxBitDepth = bd
 		}
 	}
-	return ok, nil
+
+	return maxBitDepth, nil
 }
 
 // ViewInfo represents schema information for a view.

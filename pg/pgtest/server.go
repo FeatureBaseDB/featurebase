@@ -16,6 +16,7 @@ package pgtest
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"testing"
 
@@ -36,13 +37,8 @@ func (f ShutdownFunc) Finish(tb testing.TB, name string) {
 	}
 }
 
-// ServeTCP creates a TCP listener and serves postgres wire protocol on it.
-func ServeTCP(addr string, server *pg.Server) (net.Addr, ShutdownFunc, error) {
-	listener, err := net.Listen("tcp", addr)
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "listening on TCP")
-	}
-
+// ServeListener serves postgres wire protocol on a listener.
+func ServeListener(listener net.Listener, server *pg.Server) (net.Addr, ShutdownFunc, error) {
 	laddr := listener.Addr()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -57,6 +53,37 @@ func ServeTCP(addr string, server *pg.Server) (net.Addr, ShutdownFunc, error) {
 		nil
 }
 
+// ServeTCP creates a TCP listener and serves postgres wire protocol on it.
+func ServeTCP(addr string, server *pg.Server) (net.Addr, ShutdownFunc, error) {
+	listener, err := net.Listen("tcp", addr)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "listening on TCP")
+	}
+	return ServeListener(listener, server)
+}
+
+// ServeTLSListener sets up TLS on the server and invokes ServeListener.
+func ServeTLSListener(listener net.Listener, server *pg.Server) (net.Addr, ShutdownFunc, error) {
+	err := SetupTLS(server)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "server TLS setup failed")
+	}
+
+	var tries int = 5
+	var netAddr net.Addr
+	var shutdown ShutdownFunc
+
+	for i := 0; i < tries; i++ {
+		if i > 0 {
+			fmt.Printf("--- try serving TLS again: %d\n", i)
+		}
+		if netAddr, shutdown, err = ServeListener(listener, server); err == nil {
+			break
+		}
+	}
+	return netAddr, shutdown, err
+}
+
 // ServeTLS sets up TLS on the server and invokes ServeTCP.
 func ServeTLS(addr string, server *pg.Server) (net.Addr, ShutdownFunc, error) {
 	err := SetupTLS(server)
@@ -64,7 +91,19 @@ func ServeTLS(addr string, server *pg.Server) (net.Addr, ShutdownFunc, error) {
 		return nil, nil, errors.Wrap(err, "server TLS setup failed")
 	}
 
-	return ServeTCP(addr, server)
+	var tries int = 5
+	var netAddr net.Addr
+	var shutdown ShutdownFunc
+
+	for i := 0; i < tries; i++ {
+		if i > 0 {
+			fmt.Printf("--- try serving TLS again: %d\n", i)
+		}
+		if netAddr, shutdown, err = ServeTCP(addr, server); err == nil {
+			break
+		}
+	}
+	return netAddr, shutdown, err
 }
 
 // ConnectFunc is a function to connect to a server.

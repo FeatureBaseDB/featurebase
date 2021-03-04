@@ -21,7 +21,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pilosa/pilosa/v2"
+	"github.com/pilosa/pilosa/v2/disco"
 	"github.com/pilosa/pilosa/v2/test"
 )
 
@@ -30,10 +30,10 @@ func TestNewCluster(t *testing.T) {
 	cluster := test.MustRunCluster(t, numNodes)
 	defer cluster.Close()
 
-	coordinator := getCoordinator(cluster.Nodes[0])
+	primary := getPrimary(cluster.Nodes[0])
 	for i := 1; i < numNodes; i++ {
-		if coordi := getCoordinator(cluster.Nodes[i]); coordi != coordinator {
-			t.Fatalf("node %d does not have the same coordinator as node 0. '%v' and '%v' respectively", i, coordi, coordinator)
+		if coordi := getPrimary(cluster.Nodes[i]); coordi != primary {
+			t.Fatalf("node %d does not have the same primary as node 0. '%v' and '%v' respectively", i, coordi, primary)
 		}
 	}
 	req, err := http.NewRequest(
@@ -77,17 +77,17 @@ func TestNewCluster(t *testing.T) {
 		t.Fatalf("wrong number of nodes in status: %s", bytes)
 	}
 
-	if body.State != pilosa.ClusterStateNormal {
-		t.Fatalf("cluster state should be %s but is %s", pilosa.ClusterStateNormal, body.State)
+	if body.State != string(disco.ClusterStateNormal) {
+		t.Fatalf("cluster state should be %s but is %s", disco.ClusterStateNormal, body.State)
 	}
 }
 
-func getCoordinator(m *test.Command) string {
+func getPrimary(m *test.Command) string {
 	hosts := m.API.Hosts(context.Background())
 	for _, host := range hosts {
-		if host.IsCoordinator {
+		if host.IsPrimary {
 			return host.ID
 		}
 	}
-	panic("no coordinator in cluster")
+	panic("no primary in cluster")
 }

@@ -25,7 +25,7 @@ import (
 	"io/ioutil"
 	"math"
 	"math/rand"
-	"os"
+	_ "net/http/pprof"
 	"reflect"
 	"sort"
 	"strconv"
@@ -38,10 +38,12 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/boltdb"
+	"github.com/pilosa/pilosa/v2/disco"
 	"github.com/pilosa/pilosa/v2/http"
 	"github.com/pilosa/pilosa/v2/pql"
 	"github.com/pilosa/pilosa/v2/proto"
 	"github.com/pilosa/pilosa/v2/server"
+	"github.com/pilosa/pilosa/v2/storage"
 	"github.com/pilosa/pilosa/v2/test"
 	"github.com/pilosa/pilosa/v2/testhook"
 	"github.com/pkg/errors"
@@ -539,8 +541,8 @@ func TestExecutor_Execute_Count(t *testing.T) {
 }
 
 func roaringOnlyTest(t *testing.T) {
-	src := os.Getenv("PILOSA_TXSRC")
-	if src == pilosa.RoaringTxn || (pilosa.DefaultTxsrc == pilosa.RoaringTxn && src == "") {
+	src := pilosa.CurrentBackend()
+	if src == pilosa.RoaringTxn || (storage.DefaultBackend == pilosa.RoaringTxn && src == "") {
 		// okay to run, we are under roaring only
 	} else {
 		t.Skip("skip for everything but roaring")
@@ -651,6 +653,7 @@ func TestExecutor_Execute_Set(t *testing.T) {
 		})
 
 		t.Run("ErrInvalidColValueType", func(t *testing.T) {
+			hldr.SetBit("i", "f", 1, 0) // creates and Commits a Tx internally.
 
 			if err := idx.DeleteField("f"); err != nil {
 				t.Fatal(err)
@@ -1344,7 +1347,7 @@ func TestExecutor_Execute_TopN(t *testing.T) {
 			t.Fatal(err)
 		} else if _, err := idx.CreateField("f", pilosa.OptFieldTypeInt(0, 100)); err != nil {
 			t.Fatal(err)
-		} else if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `TopN(f, n=2)`}); err == nil || !strings.Contains(err.Error(), `finding top results: cannot compute TopN() on integer field: "f"`) {
+		} else if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `TopN(f, n=2)`}); err == nil || !strings.Contains(err.Error(), `finding top results: mapping on primary node: cannot compute TopN() on integer field: "f"`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -1363,7 +1366,7 @@ func TestExecutor_Execute_TopN(t *testing.T) {
 			Set(0, f=1)
 		`}); err != nil {
 			t.Fatal(err)
-		} else if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `TopN(f, n=2)`}); err == nil || !strings.Contains(err.Error(), `finding top results: cannot compute TopN(), field has no cache: "f"`) {
+		} else if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `TopN(f, n=2)`}); err == nil || !strings.Contains(err.Error(), `finding top results: mapping on primary node: cannot compute TopN(), field has no cache: "f"`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -2958,11 +2961,11 @@ func TestExecutor_Execute_Remote_Row(t *testing.T) {
 	hldr0 := c.GetHolder(0)
 	hldr1 := c.GetHolder(1)
 
-	_, err := c.GetNode(0).API.CreateIndex(context.Background(), "i", pilosa.IndexOptions{})
+	_, err := c.GetPrimary().API.CreateIndex(context.Background(), "i", pilosa.IndexOptions{})
 	if err != nil {
 		t.Fatalf("creating index: %v", err)
 	}
-	_, err = c.GetNode(0).API.CreateField(context.Background(), "i", "f", pilosa.OptFieldTypeSet(pilosa.DefaultCacheType, pilosa.DefaultCacheSize))
+	_, err = c.GetPrimary().API.CreateField(context.Background(), "i", "f", pilosa.OptFieldTypeSet(pilosa.DefaultCacheType, pilosa.DefaultCacheSize))
 	if err != nil {
 		t.Fatalf("creating field: %v", err)
 	}
@@ -2995,7 +2998,7 @@ func TestExecutor_Execute_Remote_Row(t *testing.T) {
 	})
 
 	t.Run("remote with timestamp", func(t *testing.T) {
-		_, err = c.GetNode(0).API.CreateField(context.Background(), "i", "z", pilosa.OptFieldTypeTime("Y"))
+		_, err = c.GetPrimary().API.CreateField(context.Background(), "i", "z", pilosa.OptFieldTypeTime("Y"))
 		if err != nil {
 			t.Fatalf("creating field: %v", err)
 		}
@@ -3010,7 +3013,7 @@ func TestExecutor_Execute_Remote_Row(t *testing.T) {
 	})
 
 	t.Run("remote topn", func(t *testing.T) {
-		_, err = c.GetNode(0).API.CreateField(context.Background(), "i", "fn", pilosa.OptFieldTypeSet(pilosa.CacheTypeRanked, 100))
+		_, err = c.GetPrimary().API.CreateField(context.Background(), "i", "fn", pilosa.OptFieldTypeSet(pilosa.CacheTypeRanked, 100))
 		if err != nil {
 			t.Fatalf("creating field: %v", err)
 		}
@@ -3057,7 +3060,7 @@ func TestExecutor_Execute_Remote_Row(t *testing.T) {
 	})
 
 	t.Run("remote groupBy", func(t *testing.T) {
-		if res, err := c.GetNode(1).API.Query(context.Background(), &pilosa.QueryRequest{
+		if res, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{
 			Index: "i",
 			Query: `GroupBy(Rows(f))`,
 		}); err != nil {
@@ -3073,7 +3076,7 @@ func TestExecutor_Execute_Remote_Row(t *testing.T) {
 	})
 
 	t.Run("remote groupBy on ints", func(t *testing.T) {
-		_, err = c.GetNode(0).API.CreateField(context.Background(), "i", "fint", pilosa.OptFieldTypeInt(-1000, 1000))
+		_, err = c.GetPrimary().API.CreateField(context.Background(), "i", "fint", pilosa.OptFieldTypeInt(-1000, 1000))
 		if err != nil {
 			t.Fatalf("creating field: %v", err)
 		}
@@ -3115,7 +3118,7 @@ func TestExecutor_Execute_Remote_Row(t *testing.T) {
 	})
 
 	t.Run("groupBy on ints with offset regression", func(t *testing.T) {
-		_, err = c.GetNode(0).API.CreateField(context.Background(), "i", "hint", pilosa.OptFieldTypeInt(1, 1000))
+		_, err = c.GetPrimary().API.CreateField(context.Background(), "i", "hint", pilosa.OptFieldTypeInt(1, 1000))
 		if err != nil {
 			t.Fatalf("creating field: %v", err)
 		}
@@ -3146,12 +3149,12 @@ func TestExecutor_Execute_Remote_Row(t *testing.T) {
 	})
 
 	t.Run("Row on ints with ASSIGN condition", func(t *testing.T) {
-		_, err := c.GetNode(0).API.CreateIndex(context.Background(), "intidx", pilosa.IndexOptions{})
+		_, err := c.GetPrimary().API.CreateIndex(context.Background(), "intidx", pilosa.IndexOptions{})
 		if err != nil {
 			t.Fatalf("creating index: %v", err)
 		}
 
-		_, err = c.GetNode(0).API.CreateField(context.Background(), "intidx", "gint", pilosa.OptFieldTypeInt(-1000, 1000))
+		_, err = c.GetPrimary().API.CreateField(context.Background(), "intidx", "gint", pilosa.OptFieldTypeInt(-1000, 1000))
 		if err != nil {
 			t.Fatalf("creating field: %v", err)
 		}
@@ -3181,12 +3184,12 @@ func TestExecutor_Execute_Remote_Row(t *testing.T) {
 	})
 
 	t.Run("Row on decimals with ASSIGN condition", func(t *testing.T) {
-		_, err := c.GetNode(0).API.CreateIndex(context.Background(), "decidx", pilosa.IndexOptions{})
+		_, err := c.GetPrimary().API.CreateIndex(context.Background(), "decidx", pilosa.IndexOptions{})
 		if err != nil {
 			t.Fatalf("creating index: %v", err)
 		}
 
-		_, err = c.GetNode(0).API.CreateField(context.Background(), "decidx", "fdec", pilosa.OptFieldTypeDecimal(0))
+		_, err = c.GetPrimary().API.CreateField(context.Background(), "decidx", "fdec", pilosa.OptFieldTypeDecimal(0))
 		if err != nil {
 			t.Fatalf("creating field: %v", err)
 		}
@@ -3215,19 +3218,19 @@ func TestExecutor_Execute_Remote_Row(t *testing.T) {
 	})
 
 	t.Run("Row on foreign key with ASSIGN condition", func(t *testing.T) {
-		_, err := c.GetNode(0).API.CreateIndex(context.Background(), "parent", pilosa.IndexOptions{Keys: true})
+		_, err := c.GetPrimary().API.CreateIndex(context.Background(), "parent", pilosa.IndexOptions{Keys: true})
 		if err != nil {
 			t.Fatalf("creating index: %v", err)
 		}
-		_, err = c.GetNode(0).API.CreateField(context.Background(), "parent", "general", pilosa.OptFieldTypeSet(pilosa.DefaultCacheType, pilosa.DefaultCacheSize))
+		_, err = c.GetPrimary().API.CreateField(context.Background(), "parent", "general", pilosa.OptFieldTypeSet(pilosa.DefaultCacheType, pilosa.DefaultCacheSize))
 		if err != nil {
 			t.Fatalf("creating field: %v", err)
 		}
-		_, err = c.GetNode(0).API.CreateIndex(context.Background(), "child", pilosa.IndexOptions{Keys: false})
+		_, err = c.GetPrimary().API.CreateIndex(context.Background(), "child", pilosa.IndexOptions{Keys: false})
 		if err != nil {
 			t.Fatalf("creating index: %v", err)
 		}
-		_, err = c.GetNode(0).API.CreateField(context.Background(), "child", "parentid",
+		_, err = c.GetPrimary().API.CreateField(context.Background(), "child", "parentid",
 			pilosa.OptFieldForeignIndex("parent"),
 			pilosa.OptFieldTypeInt(-9223372036854775808, 9223372036854775807),
 		)
@@ -3265,7 +3268,7 @@ func TestExecutor_Execute_Remote_Row(t *testing.T) {
 func TestExecutor_Execute_ErrMaxWritesPerRequest(t *testing.T) {
 	c := test.MustNewCluster(t, 1)
 	defer c.Close()
-	c.GetNode(0).Config.MaxWritesPerRequest = 3
+	c.GetIdleNode(0).Config.MaxWritesPerRequest = 3
 	err := c.Start()
 	if err != nil {
 		t.Fatal(err)
@@ -3527,8 +3530,9 @@ func TestExecutor_Execute_Existence(t *testing.T) {
 			t.Fatal(err)
 		}
 
+		node0 := c.GetNode(0)
 		// Set bits.
-		if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `` +
+		if _, err := node0.API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `` +
 			fmt.Sprintf("Set(%d, f=%d)\n", 3, 10) +
 			fmt.Sprintf("Set(%d, f=%d)\n", ShardWidth+1, 10) +
 			fmt.Sprintf("Set(%d, f=%d)\n", ShardWidth+2, 20),
@@ -3536,23 +3540,25 @@ func TestExecutor_Execute_Existence(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		//index.Dump("after Set 3x")
-
-		if res, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Row(f=10)`}); err != nil {
+		if res, err := node0.API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Row(f=10)`}); err != nil {
 			t.Fatal(err)
 		} else if bits := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(bits, []uint64{3, ShardWidth + 1}) {
 			t.Fatalf("unexpected columns: %+v", bits)
 		}
 
-		if res, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Not(Row(f=10))`}); err != nil {
+		if res, err := node0.API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Not(Row(f=10))`}); err != nil {
 			t.Fatal(err)
 		} else if bits := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(bits, []uint64{ShardWidth + 2}) {
 			t.Fatalf("unexpected columns after Not: %+v", bits)
 		}
 
 		// Reopen cluster to ensure existence field is reloaded.
-		if err := c.GetNode(0).Reopen(); err != nil {
+		if err := node0.Reopen(); err != nil {
 			t.Fatal(err)
+		}
+
+		if err := node0.AwaitState(disco.ClusterStateNormal, 10*time.Second); err != nil {
+			t.Fatalf("restarting cluster: %v", err)
 		}
 
 		hldr2 := c.GetHolder(0)
@@ -4495,7 +4501,7 @@ func TestExecutor_Execute_SetRow(t *testing.T) {
 func benchmarkExistence(nn bool, b *testing.B) {
 	c := test.MustNewCluster(b, 1)
 	var err error
-	c.GetNode(0).Config.DataDir, err = testhook.TempDirInDir(b, *TempDir, "benchmarkExistence")
+	c.GetIdleNode(0).Config.DataDir, err = testhook.TempDirInDir(b, *TempDir, "benchmarkExistence")
 	if err != nil {
 		b.Fatalf("getting temp dir: %v", err)
 	}
@@ -5931,16 +5937,18 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 		`)
 
 		t.Run("test foreign index with keys", func(t *testing.T) {
-			// the execututor returns row IDs when the field has keys, so they should be included in the target.
-			// because the order is determined by the partitioned index key, they seem out of order.
+			// The execututor returns row IDs when the field has keys, but we
+			// don't include them because they are not necessary in the result
+			// comparison. Because of this, we use the CheckGroupByOnKey
+			// function here to check equality only on the key field.
 			expected := []pilosa.GroupCount{
-				{Group: []pilosa.FieldRow{{Field: "child", RowID: 0, RowKey: "one"}}, Count: 3},
-				{Group: []pilosa.FieldRow{{Field: "child", RowID: 1, RowKey: "five"}}, Count: 1},
-				{Group: []pilosa.FieldRow{{Field: "child", RowID: 2, RowKey: "three"}}, Count: 2},
+				{Group: []pilosa.FieldRow{{Field: "child", RowKey: "one"}}, Count: 3},
+				{Group: []pilosa.FieldRow{{Field: "child", RowKey: "three"}}, Count: 2},
+				{Group: []pilosa.FieldRow{{Field: "child", RowKey: "five"}}, Count: 1},
 			}
 
-			results := c.Query(t, "fic", `GroupBy(Rows(child))`).Results[0].(*pilosa.GroupCounts).Groups()
-			test.CheckGroupBy(t, expected, results)
+			results := c.Query(t, "fic", `GroupBy(Rows(child), sort="count desc")`).Results[0].(*pilosa.GroupCounts).Groups()
+			test.CheckGroupByOnKey(t, expected, results)
 		})
 
 	}
@@ -5954,7 +5962,7 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 func BenchmarkGroupBy(b *testing.B) {
 	c := test.MustNewCluster(b, 1)
 	var err error
-	c.GetNode(0).Config.DataDir, err = testhook.TempDirInDir(b, *TempDir, "benchmarkGroupBy-")
+	c.GetIdleNode(0).Config.DataDir, err = testhook.TempDirInDir(b, *TempDir, "benchmarkGroupBy-")
 	if err != nil {
 		b.Fatalf("getting temp dir: %v", err)
 	}
@@ -6738,7 +6746,11 @@ func TestTimelessClearRegression(t *testing.T) {
 }
 
 func TestMissingKeyRegression(t *testing.T) {
-	c := test.MustRunCluster(t, 1, []server.CommandOption{server.OptCommandServerOptions(pilosa.OptServerTxsrc("roaring"))})
+	c := test.MustRunCluster(t, 1, []server.CommandOption{server.OptCommandServerOptions(
+		pilosa.OptServerStorageConfig(&storage.Config{
+			Backend:      "roaring",
+			FsyncEnabled: true,
+		}))})
 	defer c.Close()
 
 	c.CreateField(t, "i", pilosa.IndexOptions{Keys: true, TrackExistence: true}, "f", pilosa.OptFieldKeys())
@@ -6837,20 +6849,186 @@ func TestMissingKeyRegression(t *testing.T) {
 // queries (HTTP, GRPC, Postgres), etc.).
 func TestVariousQueries(t *testing.T) {
 	for _, clusterSize := range []int{1, 3, 4, 7} {
+		clusterSize := clusterSize
 		t.Run(fmt.Sprintf("%d-node", clusterSize), func(t *testing.T) {
-			t.Parallel()
+			c := test.MustRunCluster(t, clusterSize)
+			defer c.Close()
 
-			variousQueries(t, clusterSize)
-			variousQueriesOnTimeFields(t, clusterSize)
+			variousQueries(t, c)
+			variousQueriesOnTimeFields(t, c)
+			variousQueriesOnPercentiles(t, c)
 		})
 	}
 }
 
 // tests for abbreviating time values in queries
-func variousQueriesOnTimeFields(t *testing.T, clusterSize int) {
-	c := test.MustRunCluster(t, clusterSize)
-	defer c.Close()
+func variousQueriesOnPercentiles(t *testing.T, c *test.Cluster) {
+	// todo, make rand more random, 42 isnt the answer to everything
+	// however, to make tests reproducible, seed should be printed
+	// on failure?
+	r := rand.New(rand.NewSource(42))
 
+	// gen Numbers to test percentile query on, shuffle for extra spice
+	// size should always be greater than 0
+	type testValue struct {
+		colKey string
+		num    int64
+		rowKey string
+	}
+	size := 100
+
+	testValues := make([]testValue, size)
+	rowKeys := [2]string{"foo", "bar"}
+	for i := 0; i < size; i++ {
+		num := int64(r.Uint32())
+		// flip coin to negate
+		if r.Uint64()%2 == 0 {
+			num = -num
+		}
+		testValues[i] = testValue{
+			colKey: fmt.Sprintf("user%d", i+1),
+			num:    num,
+			rowKey: rowKeys[r.Uint64()%2], // flip a coin
+		}
+	}
+
+	// filter out nums that fulfil predicate
+	var nums []int64
+	for _, v := range testValues {
+		if v.rowKey == "foo" {
+			nums = append(nums, v.num)
+		}
+	}
+
+	// get min and max for calculating both expected median
+	// and bounds for bsi field
+	// get min & max
+
+	// helper function for calculating percentiles to
+	// cross-check with Pilosa's results
+	getExpectedPercentile := func(nums []int64, nth float64) int64 {
+		min, max := nums[0], nums[0]
+		for _, num := range nums {
+			if num < min {
+				min = num
+			}
+			if num > max {
+				max = num
+			}
+		}
+		if nth == 0.0 {
+			return min
+		}
+		k := (1 - nth) / nth
+
+		possibleNthVal := int64(0)
+		// bin search
+		for min < max {
+			possibleNthVal = (max + min) / 2
+			leftCount, rightCount := int64(0), int64(0)
+			for _, num := range nums {
+				if num < possibleNthVal {
+					leftCount++
+				} else if num > possibleNthVal {
+					rightCount++
+				}
+			}
+
+			leftCountWeighted := int64(math.Round(k * float64(leftCount)))
+
+			if leftCountWeighted > rightCount {
+				max = possibleNthVal - 1
+			} else if leftCountWeighted < rightCount {
+				min = possibleNthVal + 1
+			} else { // perfectly balanced, as all things should be
+				return possibleNthVal
+			}
+		}
+		return min
+	}
+
+	// generate numeric entries for index
+	intEntries := make([]test.IntKey, size)
+	for i := 0; i < size; i++ {
+		key := testValues[i].colKey
+		val := testValues[i].num
+		intEntries[i] = test.IntKey{Key: key, Val: val}
+	}
+
+	// generate string-set entries for index
+	var stringEntries [][2]string
+	for _, v := range testValues {
+		stringEntries = append(stringEntries,
+			[2]string{v.rowKey, v.colKey})
+	}
+
+	// get min max for bsi bounds
+	min, max := testValues[0].num, testValues[0].num
+	for _, v := range testValues {
+		if v.num < min {
+			min = v.num
+		}
+		if v.num > max {
+			max = v.num
+		}
+	}
+
+	// generic index
+	c.CreateField(t, "users2", pilosa.IndexOptions{Keys: true, TrackExistence: true}, "net_worth", pilosa.OptFieldTypeInt(min, max))
+	c.ImportIntKey(t, "users2", "net_worth", intEntries)
+
+	c.CreateField(t, "users2", pilosa.IndexOptions{Keys: true, TrackExistence: true}, "val", pilosa.OptFieldKeys())
+	c.ImportKeyKey(t, "users2", "val", stringEntries)
+
+	splitSortBackToCSV := func(csvStr string) string {
+		ss := strings.Split(csvStr[:len(csvStr)-1], "\n")
+		sort.Strings(ss)
+		return strings.Join(ss, "\n") + "\n"
+	}
+
+	type testCase struct {
+		query string
+		// qrVerifier  func(t *testing.T, resp pilosa.QueryResponse)
+		csvVerifier string
+	}
+
+	// generate test cases per each nth argument
+	nths := []float64{0.0, 0.1, 0.25, 0.5, 0.75, 0.9, 0.99}
+	var tests []testCase
+	for _, nth := range nths {
+		query := fmt.Sprintf(`Percentile(field="net_worth", filter=Row(val="foo"), nth=%f)`, nth)
+		expectedPercentile := getExpectedPercentile(nums, nth)
+		tests = append(tests, testCase{
+			query:       query,
+			csvVerifier: fmt.Sprintf("%d,1\n", expectedPercentile),
+		})
+	}
+
+	for i, tst := range tests {
+		t.Run(fmt.Sprintf("%d-%s", i, tst.query), func(t *testing.T) {
+			// resp := c.Query(t, "users2", tst.query)
+			tr := c.QueryGRPC(t, "users2", tst.query)
+			// if tst.qrVerifier != nil {
+			// 	tst.qrVerifier(t, resp)
+			// }
+			csvString, err := tableResponseToCSVString(tr)
+			if err != nil {
+				t.Fatal(err)
+			}
+			// verify everything after header
+			got := splitSortBackToCSV(csvString[strings.Index(csvString, "\n")+1:])
+			if got != tst.csvVerifier {
+				t.Errorf("expected:\n%s\ngot:\n%s", tst.csvVerifier, got)
+			}
+
+			// TODO: add HTTP and Postgres and ability to convert
+			// those results to CSV to run through CSV verifier
+		})
+	}
+}
+
+// tests for abbreviating time values in queries
+func variousQueriesOnTimeFields(t *testing.T, c *test.Cluster) {
 	ts := func(t time.Time) int64 {
 		return t.Unix() * 1e+9
 	}
@@ -6973,10 +7151,7 @@ func variousQueriesOnTimeFields(t *testing.T, clusterSize int) {
 	}
 }
 
-func variousQueries(t *testing.T, clusterSize int) {
-	c := test.MustRunCluster(t, clusterSize)
-	defer c.Close()
-
+func variousQueries(t *testing.T, c *test.Cluster) {
 	// Create and populate "likenums" similar to "likes", but without keys on the field.
 	c.CreateField(t, "users", pilosa.IndexOptions{Keys: true, TrackExistence: true}, "likenums")
 	c.ImportIDKey(t, "users", "likenums", []test.KeyID{
@@ -7113,7 +7288,7 @@ toronto,3
 		{ // 2019 All, this excludes userC (who likes pangolin & icecream) from the count.
 			// UserC visited Paris and Toronto in 2019
 			query: `GroupBy(
-					Rows(places_visited, from='2019-01-01T00:00', to='2019-12-31T23:59'), 
+					Rows(places_visited, from='2019-01-01T00:00', to='2019-12-31T23:59'),
 					filter=Not(Intersect(Row(likes='pangolin'), Row(likes='icecream')))
 				)`,
 			csvVerifier: `nairobi,1
@@ -7123,7 +7298,7 @@ toronto,2
 		},
 		{ // After excluding UserC, this gets the sum of the networth of everyone per cities travelled
 			query: `GroupBy(
-					Rows(places_visited, from='2019-01-01T00:00', to='2019-12-31T23:59'), 
+					Rows(places_visited, from='2019-01-01T00:00', to='2019-12-31T23:59'),
 					filter=Not(Intersect(Row(likes='pangolin'), Row(likes='icecream'))),
 					aggregate=Sum(field=net_worth)
 				)`,

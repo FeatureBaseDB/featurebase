@@ -20,7 +20,6 @@
 package server
 
 import (
-	"bytes"
 	"context"
 	"crypto/tls"
 	"io"
@@ -30,6 +29,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -43,11 +43,12 @@ import (
 	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/boltdb"
 	"github.com/pilosa/pilosa/v2/encoding/proto"
+	petcd "github.com/pilosa/pilosa/v2/etcd"
 	"github.com/pilosa/pilosa/v2/gcnotify"
 	"github.com/pilosa/pilosa/v2/gopsutil"
-	"github.com/pilosa/pilosa/v2/gossip"
 	"github.com/pilosa/pilosa/v2/http"
 	"github.com/pilosa/pilosa/v2/logger"
+	pnet "github.com/pilosa/pilosa/v2/net"
 	"github.com/pilosa/pilosa/v2/prometheus"
 	"github.com/pilosa/pilosa/v2/statik"
 	"github.com/pilosa/pilosa/v2/stats"
@@ -69,10 +70,6 @@ type Command struct {
 	// Configuration.
 	Config *Config
 
-	// Gossip transport
-	gossipTransport *gossip.Transport
-	gossipMemberSet io.Closer
-
 	// Standard input/output
 	*pilosa.CmdIO
 
@@ -81,7 +78,6 @@ type Command struct {
 	// done will be closed when Command.Close() is called
 	done chan struct{}
 
-	// Passed to the Gossip implementation.
 	logOutput io.Writer
 	logger    loggerLogger
 
@@ -90,7 +86,7 @@ type Command struct {
 	grpcLn       net.Listener
 	API          *pilosa.API
 	ln           net.Listener
-	listenURI    *pilosa.URI
+	listenURI    *pnet.URI
 	tlsConfig    *tls.Config
 	closeTimeout time.Duration
 	pgserver     *PostgresServer
@@ -116,6 +112,11 @@ func OptCommandCloseTimeout(d time.Duration) CommandOption {
 
 func OptCommandConfig(config *Config) CommandOption {
 	return func(c *Command) error {
+		defer c.Config.MustValidate()
+		if c.Config != nil {
+			c.Config.Etcd = config.Etcd
+			return nil
+		}
 		c.Config = config
 		return nil
 	}
@@ -168,24 +169,20 @@ func (m *Command) Start() (err error) {
 		}
 	}
 
-	// Set up networking (i.e. gossip)
-	err = m.setupNetworking()
-	if err != nil {
-		return errors.Wrap(err, "setting up networking")
-	}
-	go func() {
-		err := m.Handler.Serve()
-		if err != nil {
-			m.logger.Printf("handler serve error: %v", err)
-		}
-	}()
-
 	// Initialize server.
 	if err = m.Server.Open(); err != nil {
 		return errors.Wrap(err, "opening server")
 	}
 
+	// Initialize HTTP.
+	go func() {
+		if err := m.Handler.Serve(); err != nil {
+			m.logger.Printf("handler serve error: %v", err)
+		}
+	}()
 	m.logger.Printf("listening as %s\n", m.listenURI)
+
+	// Initialize gRPC.
 	go func() {
 		if err := m.grpcServer.Serve(); err != nil {
 			m.logger.Printf("grpc server error: %v", err)
@@ -230,11 +227,6 @@ func (m *Command) UpAndDown() (err error) {
 		return errors.Wrap(err, "setting up server")
 	}
 
-	// SetupNetworking (so we'll have profiling)
-	err = m.setupNetworking()
-	if err != nil {
-		return errors.Wrap(err, "setting up networking")
-	}
 	go func() {
 		err := m.Handler.Serve()
 		if err != nil {
@@ -287,32 +279,6 @@ func (m *Command) SetupServer() error {
 
 	handleTrialDeadline(m.logger)
 
-	// If the pilosa command line uses -tx to override the
-	// PILOSA_TXSRC env variable, then we must also correct
-	// the environment, so that pilosa/txfactory.go can determine the
-	// desired Tx engine. This enables "go test" testing in pilosa that
-	// does not spin up a full server, while still respecting the pilosa
-	// server's choice when run full in production.
-	envTxsrc := os.Getenv("PILOSA_TXSRC")
-	if m.Config.Txsrc == "" {
-		// INVAR: No -tx flag on the command line.
-		// We defer to the environment, and then the DefaultTxsrc
-		if envTxsrc == "" {
-			// no env variable requested either.
-			m.Config.Txsrc = pilosa.DefaultTxsrc
-		} else {
-			// Tell the "regular" prod server what to use.
-			m.Config.Txsrc = envTxsrc
-		}
-	}
-	// INVAR: m.Config.Txsrc is valid and not "", but pilosa.DefaultTxsrc could be bad.
-	txty := pilosa.MustTxsrcToTxtype(m.Config.Txsrc) // will panic on unknown Txsrc.
-	os.Setenv("PILOSA_TXSRC", m.Config.Txsrc)
-	m.logger.Printf("using Txsrc '%v'/%v", m.Config.Txsrc, txty)
-	if len(txty) == 2 {
-		m.logger.Printf("blue='%v' / green='%v'", txty[0], txty[1])
-	}
-
 	// validateAddrs sets the appropriate values for Bind and Advertise
 	// based on the inputs. It is not responsible for applying defaults, although
 	// it does provide a non-zero port (10101) in the case where no port is specified.
@@ -327,20 +293,22 @@ func (m *Command) SetupServer() error {
 		return errors.Wrap(err, "processing bind address")
 	}
 
-	grpcURI, err := pilosa.NewURIFromAddress(m.Config.BindGRPC)
+	grpcURI, err := pnet.NewURIFromAddress(m.Config.BindGRPC)
 	if err != nil {
 		return errors.Wrap(err, "processing bind grpc address")
 	}
-
-	// create gRPC listener
-	m.grpcLn, err = net.Listen("tcp", grpcURI.HostPort())
-	if err != nil {
-		return errors.Wrap(err, "creating grpc listener")
-	}
-
-	// If grpc port is 0, get auto-allocated port from listener
-	if grpcURI.Port == 0 {
-		grpcURI.SetPort(uint16(m.grpcLn.Addr().(*net.TCPAddr).Port))
+	if m.Config.GRPCListener == nil {
+		// create gRPC listener
+		m.grpcLn, err = net.Listen("tcp", grpcURI.HostPort())
+		if err != nil {
+			return errors.Wrap(err, "creating grpc listener")
+		}
+		// If grpc port is 0, get auto-allocated port from listener
+		if grpcURI.Port == 0 {
+			grpcURI.SetPort(uint16(m.grpcLn.Addr().(*net.TCPAddr).Port))
+		}
+	} else {
+		m.grpcLn = m.Config.GRPCListener
 	}
 
 	// Setup TLS
@@ -386,7 +354,7 @@ func (m *Command) SetupServer() error {
 	}
 
 	// Get grpc advertise address as uri.
-	advertiseGRPCURI, err := pilosa.NewURIFromAddress(m.Config.AdvertiseGRPC)
+	advertiseGRPCURI, err := pnet.NewURIFromAddress(m.Config.AdvertiseGRPC)
 	if err != nil {
 		return errors.Wrap(err, "processing grpc advertise address")
 	}
@@ -405,11 +373,26 @@ func (m *Command) SetupServer() error {
 		m.logger.Printf("DEPRECATED: Configuration parameter cluster.long-query-time has been renamed to long-query-time")
 	}
 
-	// Set Coordinator.
-	coordinatorOpt := pilosa.OptServerIsCoordinator(false)
-	if m.Config.Cluster.Coordinator || len(m.Config.Gossip.Seeds) == 0 {
-		coordinatorOpt = pilosa.OptServerIsCoordinator(true)
+	// Use other config parameters to set Etcd parameters which we don't want to
+	// expose in the user-facing config.
+	//
+	// Use cluster.name for etcd.cluster-name
+	m.Config.Etcd.ClusterName = m.Config.Cluster.Name
+	//
+	// Use name for etcd.name
+	m.Config.Etcd.Name = m.Config.Name
+	//
+	// If an Etcd.Dir is not provided, nest a default under the pilosa data dir.
+	if m.Config.Etcd.Dir == "" {
+		path, err := expandDirName(m.Config.DataDir)
+		if err != nil {
+			return errors.Wrapf(err, "expanding directory name: %s", m.Config.DataDir)
+		}
+		m.Config.Etcd.Dir = filepath.Join(path, pilosa.DefaultDiscoDir)
 	}
+
+	e := petcd.NewEtcdWithCache(m.Config.Etcd, m.Config.Cluster.ReplicaN)
+	discoOpt := pilosa.OptServerDisCo(e, e, e, e, e, e, e)
 
 	serverOptions := []pilosa.ServerOption{
 		pilosa.OptServerAntiEntropyInterval(time.Duration(m.Config.AntiEntropy.Interval)),
@@ -431,14 +414,13 @@ func (m *Command) SetupServer() error {
 		pilosa.OptServerURI(advertiseURI),
 		pilosa.OptServerGRPCURI(advertiseGRPCURI),
 		pilosa.OptServerInternalClient(http.NewInternalClientFromURI(uri, c)),
-		pilosa.OptServerClusterDisabled(m.Config.Cluster.Disabled, m.Config.Cluster.Hosts),
 		pilosa.OptServerClusterName(m.Config.Cluster.Name),
 		pilosa.OptServerSerializer(proto.Serializer{}),
-		pilosa.OptServerTxsrc(m.Config.Txsrc),
+		pilosa.OptServerStorageConfig(m.Config.Storage),
 		pilosa.OptServerRowcacheOn(m.Config.RowcacheOn),
 		pilosa.OptServerRBFConfig(m.Config.RBFConfig),
 		pilosa.OptServerQueryHistoryLength(m.Config.QueryHistoryLength),
-		coordinatorOpt,
+		discoOpt,
 	}
 
 	serverOptions = append(serverOptions, m.serverOptions...)
@@ -473,55 +455,11 @@ func (m *Command) SetupServer() error {
 		http.OptHandlerAPI(m.API),
 		http.OptHandlerLogger(m.logger),
 		http.OptHandlerFileSystem(&statik.FileSystem{}),
-		http.OptHandlerListener(m.ln),
+		http.OptHandlerListener(m.ln, m.Config.Advertise),
 		http.OptHandlerCloseTimeout(m.closeTimeout),
 		http.OptHandlerMiddleware(m.grpcServer.middleware(m.Config.Handler.AllowedOrigins)),
 	)
 	return errors.Wrap(err, "new handler")
-}
-
-// setupNetworking sets up internode communication based on the configuration.
-func (m *Command) setupNetworking() error {
-	if m.Config.Cluster.Disabled {
-		return nil
-	}
-
-	gossipPort, err := strconv.Atoi(m.Config.Gossip.Port)
-	if err != nil {
-		return errors.Wrap(err, "parsing port")
-	}
-
-	// get the host portion of addr to use for binding
-	gossipHost := m.listenURI.Host
-	m.gossipTransport, err = gossip.NewTransport(gossipHost, gossipPort, m.logger.Logger())
-	if err != nil && gossipPort >= 32768 {
-		// In testing, we sometimes try to reuse an ephemeral port.
-		// Which probably works. If it doesn't, this test will take
-		// about a minute longer because we'll come back in from a
-		// new port. See also the gossip config in gossip/gossip.go.
-		// TODO: Maybe make that more configurable here.
-		m.logger.Printf("ephemeral port %d already occupied, switching to :0 (%v)", gossipPort, err)
-		m.Config.Gossip.Port = "0"
-		gossipPort = 0
-		m.gossipTransport, err = gossip.NewTransport(gossipHost, gossipPort, m.logger.Logger())
-	}
-	if err != nil {
-		return errors.Wrap(err, "getting transport")
-	}
-
-	gossipMemberSet, err := gossip.NewMemberSet(
-		m.Config.Gossip,
-		m.API,
-		gossip.WithLogOutput(&filteredWriter{logOutput: m.logOutput, v: m.Config.Verbose}),
-		gossip.WithPilosaLogger(m.logger),
-		gossip.WithTransport(m.gossipTransport),
-	)
-	if err != nil {
-		return errors.Wrap(err, "getting memberset")
-	}
-	m.gossipMemberSet = gossipMemberSet
-
-	return errors.Wrap(gossipMemberSet.Open(), "opening gossip memberset")
 }
 
 // setupLogger sets up the logger based on the configuration.
@@ -565,35 +503,35 @@ func (m *Command) setupLogger() error {
 	return nil
 }
 
-// GossipTransport allows a caller to return the gossip transport created when
-// setting up the GossipMemberSet. This is useful if one needs to determine the
-// allocated ephemeral port programmatically. (usually used in tests)
-func (m *Command) GossipTransport() *gossip.Transport {
-	return m.gossipTransport
-}
-
 // Close shuts down the server.
 func (m *Command) Close() error {
-	defer close(m.done)
-	eg := errgroup.Group{}
-	m.grpcServer.Stop()
-	eg.Go(m.Handler.Close)
-	eg.Go(m.Server.Close)
-	eg.Go(m.API.Close)
-	eg.Go(m.pgserver.Close)
-	if m.gossipMemberSet != nil {
-		eg.Go(m.gossipMemberSet.Close)
-	}
-	if closer, ok := m.logOutput.(io.Closer); ok {
-		// If closer is os.Stdout or os.Stderr, don't close it.
-		if closer != os.Stdout && closer != os.Stderr {
-			eg.Go(closer.Close)
+	select {
+	case <-m.done:
+		return nil
+	default:
+		eg := errgroup.Group{}
+		m.grpcServer.Stop()
+		eg.Go(m.Handler.Close)
+		eg.Go(m.Server.Close)
+		eg.Go(m.API.Close)
+		eg.Go(m.pgserver.Close)
+		if closer, ok := m.logOutput.(io.Closer); ok {
+			// If closer is os.Stdout or os.Stderr, don't close it.
+			if closer != os.Stdout && closer != os.Stderr {
+				eg.Go(closer.Close)
+			}
 		}
-	}
 
-	err := eg.Wait()
-	_ = testhook.Closed(pilosa.NewAuditor(), m, nil)
-	return errors.Wrap(err, "closing everything")
+		// prevent the closed sockets from being re-injected into etcd.
+		m.Config.Etcd.LPeerSocket = nil
+		m.Config.Etcd.LClientSocket = nil
+
+		err := eg.Wait()
+		_ = testhook.Closed(pilosa.NewAuditor(), m, nil)
+		close(m.done)
+
+		return errors.Wrap(err, "closing everything")
+	}
 }
 
 // newStatsClient creates a stats client from the config
@@ -613,7 +551,7 @@ func newStatsClient(name string, host string) (stats.StatsClient, error) {
 }
 
 // getListener gets a net.Listener based on the config.
-func getListener(uri pilosa.URI, tlsconf *tls.Config) (ln net.Listener, err error) {
+func getListener(uri pnet.URI, tlsconf *tls.Config) (ln net.Listener, err error) {
 	// If bind URI has the https scheme, enable TLS
 	if uri.Scheme == "https" && tlsconf != nil {
 		ln, err = tls.Listen("tcp", uri.HostPort(), tlsconf)
@@ -633,30 +571,23 @@ func getListener(uri pilosa.URI, tlsconf *tls.Config) (ln net.Listener, err erro
 	return ln, nil
 }
 
-type filteredWriter struct {
-	v         bool
-	logOutput io.Writer
-}
-
-// Write forwards the write to logOutput if verbose is true, or it doesn't
-// contain [DEBUG] or [INFO]. This implementation isn't technically correct
-// since Write could be called with only part of a log line, but I don't think
-// that actually happens, so until it becomes a problem, I don't think it's
-// worth dealing with the extra complexity. (jaffee)
-func (f *filteredWriter) Write(p []byte) (n int, err error) {
-	if bytes.Contains(p, []byte("[DEBUG]")) || bytes.Contains(p, []byte("[INFO]")) {
-		if f.v {
-			return f.logOutput.Write(p)
-		}
-	} else {
-		return f.logOutput.Write(p)
-	}
-	return len(p), nil
-}
-
 // ParseConfig parses s into a Config.
 func ParseConfig(s string) (Config, error) {
 	var c Config
 	err := toml.Unmarshal([]byte(s), &c)
 	return c, err
+}
+
+// expandDirName was copied from pilosa/server.go.
+// TODO: consider centralizing this if we need this across packages.
+func expandDirName(path string) (string, error) {
+	prefix := "~" + string(filepath.Separator)
+	if strings.HasPrefix(path, prefix) {
+		HomeDir := os.Getenv("HOME")
+		if HomeDir == "" {
+			return "", errors.New("data directory not specified and no home dir available")
+		}
+		return filepath.Join(HomeDir, strings.TrimPrefix(path, prefix)), nil
+	}
+	return path, nil
 }

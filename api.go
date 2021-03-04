@@ -32,9 +32,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pilosa/pilosa/v2/disco"
 	"github.com/pilosa/pilosa/v2/pql"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/stats"
+	"github.com/pilosa/pilosa/v2/topology"
 	"github.com/pilosa/pilosa/v2/tracing"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
@@ -43,6 +45,9 @@ import (
 // API provides the top level programmatic interface to Pilosa. It is usually
 // wrapped by a handler which provides an external interface (e.g. HTTP).
 type API struct {
+	mu     sync.Mutex
+	closed bool // protected by mu
+
 	holder  *Holder
 	cluster *cluster
 	server  *Server
@@ -108,11 +113,12 @@ func NewAPI(opts ...apiOption) (*API, error) {
 
 // validAPIMethods specifies the api methods that are valid for each
 // cluster state.
-var validAPIMethods = map[string]map[apiMethod]struct{}{
-	ClusterStateStarting: methodsCommon,
-	ClusterStateNormal:   appendMap(methodsCommon, methodsNormal),
-	ClusterStateDegraded: appendMap(methodsCommon, methodsNormal),
-	ClusterStateResizing: appendMap(methodsCommon, methodsResizing),
+var validAPIMethods = map[disco.ClusterState]map[apiMethod]struct{}{
+	disco.ClusterStateStarting: methodsCommon,
+	disco.ClusterStateNormal:   appendMap(methodsCommon, methodsNormal),
+	disco.ClusterStateDegraded: appendMap(methodsCommon, methodsDegraded),
+	disco.ClusterStateResizing: appendMap(methodsCommon, methodsResizing),
+	disco.ClusterStateDown:     methodsCommon,
 }
 
 func appendMap(a, b map[apiMethod]struct{}) map[apiMethod]struct{} {
@@ -127,7 +133,10 @@ func appendMap(a, b map[apiMethod]struct{}) map[apiMethod]struct{} {
 }
 
 func (api *API) validate(f apiMethod) error {
-	state := api.cluster.State()
+	state, err := api.cluster.State()
+	if err != nil {
+		return errors.Wrap(err, "getting cluster state")
+	}
 	if _, ok := validAPIMethods[state][f]; ok {
 		return nil
 	}
@@ -136,6 +145,14 @@ func (api *API) validate(f apiMethod) error {
 
 // Close closes the api and waits for it to shutdown.
 func (api *API) Close() error {
+	// only close once
+	api.mu.Lock()
+	defer api.mu.Unlock()
+	if api.closed {
+		return nil
+	}
+	api.closed = true
+
 	close(api.importWork)
 	api.importWorkersWG.Wait()
 	api.tracker.Stop()
@@ -202,34 +219,19 @@ func (api *API) CreateIndex(ctx context.Context, indexName string, options Index
 		return nil, errors.Wrap(err, "validating api method")
 	}
 
-	if !api.holder.isCoordinator() {
-		if err := api.server.defaultClient.CreateIndex(ctx, indexName, options); err != nil {
-			return nil, errors.Wrap(err, "forwarding CreateIndex to coordinator")
-		}
-		return api.holder.Index(indexName), nil
+	// Populate the create index message.
+	cim := &CreateIndexMessage{
+		Index:     indexName,
+		CreatedAt: timestamp(),
+		Meta:      options,
 	}
 
 	// Create index.
-	index, err := api.holder.CreateIndex(indexName, options)
+	index, err := api.holder.CreateIndexAndBroadcast(cim)
 	if err != nil {
 		return nil, errors.Wrap(err, "creating index")
 	}
 
-	createdAt := timestamp()
-	index.mu.Lock()
-	index.createdAt = createdAt
-	index.mu.Unlock()
-
-	// Send the create index message to all nodes.
-	err = api.server.SendSync(
-		&CreateIndexMessage{
-			Index:     indexName,
-			CreatedAt: createdAt,
-			Meta:      &options,
-		})
-	if err != nil {
-		return nil, errors.Wrap(err, "sending CreateIndex message")
-	}
 	api.holder.Stats.Count(MetricCreateIndex, 1, 1.0)
 	return index, nil
 }
@@ -289,20 +291,10 @@ func (api *API) CreateField(ctx context.Context, indexName string, fieldName str
 		return nil, errors.Wrap(err, "validating api method")
 	}
 
-	// Apply functional options.
-	fo := FieldOptions{}
-	for _, opt := range opts {
-		err := opt(&fo)
-		if err != nil {
-			return nil, NewBadRequestError(errors.Wrap(err, "applying option"))
-		}
-	}
-
-	if !api.holder.isCoordinator() {
-		if err := api.server.defaultClient.CreateFieldWithOptions(ctx, indexName, fieldName, fo); err != nil {
-			return nil, errors.Wrap(err, "forwarding CreateField to coordinator")
-		}
-		return api.holder.Field(indexName, fieldName), nil
+	// Apply and validate functional options.
+	fo, err := newFieldOptions(opts...)
+	if err != nil {
+		return nil, NewBadRequestError(errors.Wrap(err, "applying option"))
 	}
 
 	// Find index.
@@ -311,27 +303,20 @@ func (api *API) CreateField(ctx context.Context, indexName string, fieldName str
 		return nil, newNotFoundError(ErrIndexNotFound, indexName)
 	}
 
+	// Populate the create field message.
+	cfm := &CreateFieldMessage{
+		Index:     indexName,
+		Field:     fieldName,
+		CreatedAt: timestamp(),
+		Meta:      fo,
+	}
+
 	// Create field.
-	field, err := index.CreateField(fieldName, opts...)
+	field, err := index.CreateFieldAndBroadcast(cfm)
 	if err != nil {
 		return nil, errors.Wrap(err, "creating field")
 	}
-	createdAt := timestamp()
-	field.mu.Lock()
-	field.createdAt = createdAt
-	field.mu.Unlock()
 
-	// Send the create field message to all nodes.
-	err = api.server.SendSync(&CreateFieldMessage{
-		Index:     indexName,
-		Field:     fieldName,
-		CreatedAt: createdAt,
-		Meta:      &fo,
-	})
-	if err != nil {
-		api.server.logger.Printf("problem sending CreateField message: %s", err)
-		return nil, errors.Wrap(err, "sending CreateField message")
-	}
 	api.holder.Stats.CountWithCustomTags(MetricCreateField, 1, 1.0, []string{fmt.Sprintf("index:%s", indexName)})
 	return field, nil
 }
@@ -521,7 +506,10 @@ func (api *API) ImportRoaring(ctx context.Context, indexName, fieldName string, 
 	qcx := api.Txf().NewQcx()
 	defer qcx.Abort()
 
-	nodes := api.cluster.shardNodes(indexName, shard)
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	snap := topology.NewClusterSnapshot(api.cluster.noder, api.cluster.Hasher, api.cluster.ReplicaN)
+
+	nodes := snap.ShardNodes(indexName, shard)
 	errCh := make(chan error, len(nodes))
 	for _, node := range nodes {
 		node := node
@@ -643,9 +631,12 @@ func (api *API) ExportCSV(ctx context.Context, indexName string, fieldName strin
 		return errors.Wrap(err, "validating api method")
 	}
 
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	snap := topology.NewClusterSnapshot(api.cluster.noder, api.cluster.Hasher, api.cluster.ReplicaN)
+
 	// Validate that this handler owns the shard.
-	if !api.cluster.ownsShard(api.Node().ID, indexName, shard) {
-		api.server.logger.Printf("node %s does not own shard %d of index %s", api.Node().ID, shard, indexName)
+	if !snap.OwnsShard(api.NodeID(), indexName, shard) {
+		api.server.logger.Printf("node %s does not own shard %d of index %s", api.NodeID(), shard, indexName)
 		return ErrClusterDoesNotOwnShard
 	}
 
@@ -692,7 +683,7 @@ func (api *API) ExportCSV(ctx context.Context, indexName string, fieldName strin
 		}
 
 		if index.Keys() {
-			if store := index.TranslateStore(api.cluster.idPartition(indexName, columnID)); store == nil {
+			if store := index.TranslateStore(snap.IDToShardPartition(indexName, columnID)); store == nil {
 				return errors.Wrap(err, "partition does not exist")
 			} else if colStr, err = store.TranslateID(columnID); err != nil {
 				return errors.Wrap(err, "translating column")
@@ -718,7 +709,7 @@ func (api *API) ExportCSV(ctx context.Context, indexName string, fieldName strin
 }
 
 // ShardNodes returns the node and all replicas which should contain a shard's data.
-func (api *API) ShardNodes(ctx context.Context, indexName string, shard uint64) ([]*Node, error) {
+func (api *API) ShardNodes(ctx context.Context, indexName string, shard uint64) ([]*topology.Node, error) {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.ShardNodes")
 	defer span.Finish()
 
@@ -726,7 +717,10 @@ func (api *API) ShardNodes(ctx context.Context, indexName string, shard uint64) 
 		return nil, errors.Wrap(err, "validating api method")
 	}
 
-	return api.cluster.shardNodes(indexName, shard), nil
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	snap := topology.NewClusterSnapshot(api.cluster.noder, api.cluster.Hasher, api.cluster.ReplicaN)
+
+	return snap.ShardNodes(indexName, shard), nil
 }
 
 // FragmentBlockData is an endpoint for internal usage. It is not guaranteed to
@@ -831,23 +825,29 @@ func (api *API) TranslateData(ctx context.Context, indexName string, partition i
 }
 
 // Hosts returns a list of the hosts in the cluster including their ID,
-// URL, and which is the coordinator.
-func (api *API) Hosts(ctx context.Context) []*Node {
+// URL, and which is the primary.
+func (api *API) Hosts(ctx context.Context) []*topology.Node {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.Hosts")
 	defer span.Finish()
 	return api.cluster.Nodes()
 }
 
-func (api *API) HostStates(ctx context.Context) map[string]string {
-	span, _ := tracing.StartSpanFromContext(ctx, "API.HostStates")
-	defer span.Finish()
-	return api.cluster.AllNodeStates()
+// Node gets the ID, URI and primary status for this particular node.
+func (api *API) Node() *topology.Node {
+	return api.server.node()
 }
 
-// Node gets the ID, URI and coordinator status for this particular node.
-func (api *API) Node() *Node {
-	node := api.server.node()
-	return &node
+// NodeID gets the ID alone, so it doesn't have to do a complete lookup
+// of the node, searching by its ID, to return the ID it searched for.
+func (api *API) NodeID() string {
+	return api.server.nodeID
+}
+
+// PrimaryNode returns the primary node for the cluster.
+func (api *API) PrimaryNode() *topology.Node {
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	snap := topology.NewClusterSnapshot(api.cluster.noder, api.cluster.Hasher, api.cluster.ReplicaN)
+	return snap.PrimaryFieldTranslationNode()
 }
 
 // NodeUsage represents all usage measurements for one node.
@@ -1019,10 +1019,19 @@ func (err MessageProcessingError) Unwrap() error {
 
 // Schema returns information about each index in Pilosa including which fields
 // they contain.
-func (api *API) Schema(ctx context.Context) []*IndexInfo {
+func (api *API) Schema(ctx context.Context, withViews bool) ([]*IndexInfo, error) {
+	if err := api.validate(apiSchema); err != nil {
+		return nil, errors.Wrap(err, "validating api method")
+	}
+
 	span, _ := tracing.StartSpanFromContext(ctx, "API.Schema")
 	defer span.Finish()
-	return api.holder.Schema(false)
+
+	if withViews {
+		return api.holder.Schema()
+	}
+
+	return api.holder.limitedSchema()
 }
 
 // SchemaDetails returns information about each index in Pilosa including which
@@ -1030,7 +1039,10 @@ func (api *API) Schema(ctx context.Context) []*IndexInfo {
 func (api *API) SchemaDetails(ctx context.Context) ([]*IndexInfo, error) {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.Schema")
 	defer span.Finish()
-	schema := api.holder.Schema(false)
+	schema, err := api.holder.Schema()
+	if err != nil {
+		return nil, errors.Wrap(err, "getting schema")
+	}
 	for _, index := range schema {
 		for _, field := range index.Fields {
 			q := fmt.Sprintf("Count(Distinct(field=%s))", field.Name)
@@ -1064,29 +1076,12 @@ func (api *API) ApplySchema(ctx context.Context, s *Schema, remote bool) error {
 		return errors.Wrap(err, "validating api method")
 	}
 
-	// set CreatedAt for indexes and fields (if empty), and then apply schema.
-	for _, index := range s.Indexes {
-		if index.CreatedAt == 0 {
-			index.CreatedAt = timestamp()
-		}
-		for _, field := range index.Fields {
-			if field.CreatedAt == 0 {
-				field.CreatedAt = timestamp()
-			}
-		}
+	err := api.holder.applySchema(s)
+	if err != nil {
+		return errors.Wrap(err, "applying schema")
 	}
 
-	if !remote {
-		nodes := api.cluster.Nodes()
-		for i, node := range nodes {
-			err := api.server.defaultClient.PostSchema(ctx, &node.URI, s, true)
-			if err != nil {
-				return errors.Wrapf(err, "forwarding post schema to node %d of %d", i+1, len(nodes))
-			}
-		}
-	}
-
-	return errors.Wrap(api.holder.applySchema(s), "applying schema")
+	return nil
 }
 
 // Views returns the views in the given field.
@@ -1379,7 +1374,7 @@ func (api *API) Import(ctx context.Context, qcx *Qcx, req *ImportRequest, opts .
 	return nil
 }
 
-// Import bulk imports data into a particular index,field,shard.
+// ImportWithTx bulk imports data into a particular index,field,shard.
 func (api *API) ImportWithTx(ctx context.Context, qcx *Qcx, req *ImportRequest, opts ...ImportOption) error {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.Import")
 	defer span.Finish()
@@ -1407,7 +1402,7 @@ func (api *API) ImportWithTx(ctx context.Context, qcx *Qcx, req *ImportRequest, 
 		"field", req.Field)
 
 	// Unless explicitly ignoring key validation (meaning keys have been
-	// translated to ids in a previous step at the coordinator node), then
+	// translated to ids in a previous step at the primary node), then
 	// check to see if keys need translation.
 	if !options.IgnoreKeyCheck {
 		// Translate row keys.
@@ -1514,7 +1509,7 @@ func (api *API) ImportValue(ctx context.Context, qcx *Qcx, req *ImportValueReque
 	return api.ImportValueWithTx(ctx, qcx, req, opts...)
 }
 
-// ImportValue bulk imports values into a particular field.
+// ImportValueWithTx bulk imports values into a particular field.
 func (api *API) ImportValueWithTx(ctx context.Context, qcx *Qcx, req *ImportValueRequest, opts ...ImportOption) (err0 error) {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.ImportValue")
 	defer span.Finish()
@@ -1546,7 +1541,7 @@ func (api *API) ImportValueWithTx(ctx context.Context, qcx *Qcx, req *ImportValu
 		"index", req.Index,
 		"field", req.Field)
 	// Unless explicitly ignoring key validation (meaning keys have been
-	// translate to ids in a previous step at the coordinator node), then
+	// translate to ids in a previous step at the primary node), then
 	// check to see if keys need translation.
 	if !options.IgnoreKeyCheck {
 		// Translate column keys.
@@ -1773,9 +1768,11 @@ func (api *API) LongQueryTime() time.Duration {
 }
 
 func (api *API) validateShardOwnership(indexName string, shard uint64) error {
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	snap := topology.NewClusterSnapshot(api.cluster.noder, api.cluster.Hasher, api.cluster.ReplicaN)
 	// Validate that this handler owns the shard.
-	if !api.cluster.ownsShard(api.Node().ID, indexName, shard) {
-		api.server.logger.Printf("node %s does not own shard %d of index %s", api.Node().ID, shard, indexName)
+	if !snap.OwnsShard(api.NodeID(), indexName, shard) {
+		api.server.logger.Printf("node %s does not own shard %d of index %s", api.NodeID(), shard, indexName)
 		return ErrClusterDoesNotOwnShard
 	}
 	return nil
@@ -1800,60 +1797,26 @@ func (api *API) indexField(indexName string, fieldName string, shard uint64) (*I
 	return index, field, nil
 }
 
-// SetCoordinator makes a new Node the cluster coordinator.
-func (api *API) SetCoordinator(ctx context.Context, id string) (oldNode, newNode *Node, err error) {
-	span, _ := tracing.StartSpanFromContext(ctx, "API.SetCoordinator")
-	defer span.Finish()
-
-	if err := api.validate(apiSetCoordinator); err != nil {
-		return nil, nil, errors.Wrap(err, "validating api method")
-	}
-
-	oldNode = api.cluster.nodeByID(api.cluster.Coordinator)
-	newNode = api.cluster.nodeByID(id)
-	if newNode == nil {
-		return nil, nil, errors.Wrap(ErrNodeIDNotExists, "getting new node")
-	}
-
-	// If the new coordinator is this node, do the SetCoordinator directly.
-	if newNode.ID == api.Node().ID {
-		return oldNode, newNode, api.cluster.setCoordinator(newNode)
-	}
-
-	// Send the set-coordinator message to new node.
-	err = api.server.SendTo(
-		newNode,
-		&SetCoordinatorMessage{
-			New: newNode,
-		})
-	if err != nil {
-		return nil, nil, fmt.Errorf("problem sending SetCoordinator message: %s", err)
-	}
-	return oldNode, newNode, nil
-}
-
 // RemoveNode puts the cluster into the "RESIZING" state and begins the job of
 // removing the given node.
-func (api *API) RemoveNode(id string) (*Node, error) {
+func (api *API) RemoveNode(id string) (*topology.Node, error) {
 	if err := api.validate(apiRemoveNode); err != nil {
 		return nil, errors.Wrap(err, "validating api method")
 	}
 
-	removeNode := api.cluster.nodeByID(id)
-	if removeNode == nil {
-		if !api.cluster.topologyContainsNode(id) {
-			return nil, errors.Wrap(ErrNodeIDNotExists, "finding node to remove")
-		}
-		removeNode = &Node{
-			ID: id,
-		}
+	if api.cluster.disCo.ID() == id {
+		return nil, errors.Wrapf(ErrPreconditionFailed, "cannot issue node removal request to the node being removed, id=%s", id)
 	}
 
-	// Start the resize process (similar to NodeJoin)
-	err := api.cluster.nodeLeave(id)
-	if err != nil {
-		return removeNode, errors.Wrap(err, "calling node leave")
+	removeNode := api.cluster.nodeByID(id)
+	if removeNode == nil {
+		return nil, errors.Wrap(ErrNodeIDNotExists, "finding node to remove")
 	}
+
+	if err := api.cluster.removeNode(id); err != nil {
+		return nil, errors.Wrapf(err, "removing node %s", id)
+	}
+
 	return removeNode, nil
 }
 
@@ -1863,14 +1826,17 @@ func (api *API) ResizeAbort() error {
 		return errors.Wrap(err, "validating api method")
 	}
 
-	err := api.cluster.completeCurrentJob(resizeJobStateAborted)
-	return errors.Wrap(err, "complete current job")
+	return api.cluster.resizeAbortAndBroadcast()
 }
 
 // State returns the cluster state which is usually "NORMAL", but could be
-// "STARTING", "RESIZING", or potentially others. See cluster.go for more
+// "STARTING", "RESIZING", or potentially others. See disco.go for more
 // details.
-func (api *API) State() string {
+func (api *API) State() (disco.ClusterState, error) {
+	if err := api.validate(apiState); err != nil {
+		return "", errors.Wrap(err, "validating api method")
+	}
+
 	return api.cluster.State()
 }
 
@@ -1906,10 +1872,10 @@ func (api *API) Info() serverInfo {
 		CPUMHz:           mhz,
 		CPUType:          si.CPUModel(),
 		Memory:           mem,
-		TxSrc:            api.holder.txf.TxType(),
+		StorageBackend:   api.holder.txf.TxType(),
 		ReplicaN:         api.cluster.ReplicaN,
 		ShardHash:        api.cluster.Hasher.Name(),
-		KeyHash:          api.cluster.Topology.Hasher.Name(),
+		KeyHash:          api.cluster.Hasher.Name(),
 	}
 }
 
@@ -2093,7 +2059,10 @@ func (api *API) CreateFieldKeys(ctx context.Context, index, field string, keys .
 
 // PrimaryReplicaNodeURL returns the URL of the cluster's primary replica.
 func (api *API) PrimaryReplicaNodeURL() url.URL {
-	node := api.cluster.PrimaryReplicaNode()
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	snap := topology.NewClusterSnapshot(api.cluster.noder, api.cluster.Hasher, api.cluster.ReplicaN)
+
+	node := snap.PrimaryReplicaNode(api.NodeID())
 	if node == nil {
 		return url.URL{}
 	}
@@ -2201,11 +2170,14 @@ func (api *API) ReserveIDs(key IDAllocKey, session [32]byte, offset uint64, coun
 		return nil, errors.Wrap(err, "validating api method")
 	}
 
-	if api.holder.isCoordinator() {
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	snap := topology.NewClusterSnapshot(api.cluster.noder, api.cluster.Hasher, api.cluster.ReplicaN)
+
+	if !snap.IsPrimaryFieldTranslationNode(api.NodeID()) {
 		return api.holder.ida.reserve(key, session, offset, count)
 	}
 
-	return nil, errors.New("cannot reserve IDs on a non-coordinator node")
+	return nil, errors.New("cannot reserve IDs on a non-primary node")
 }
 
 func (api *API) CommitIDs(key IDAllocKey, session [32]byte, count uint64) error {
@@ -2213,11 +2185,14 @@ func (api *API) CommitIDs(key IDAllocKey, session [32]byte, count uint64) error 
 		return errors.Wrap(err, "validating api method")
 	}
 
-	if api.holder.isCoordinator() {
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	snap := topology.NewClusterSnapshot(api.cluster.noder, api.cluster.Hasher, api.cluster.ReplicaN)
+
+	if !snap.IsPrimaryFieldTranslationNode(api.NodeID()) {
 		return api.holder.ida.commit(key, session, count)
 	}
 
-	return errors.New("cannot commit IDs on a non-coordinator node")
+	return errors.New("cannot commit IDs on a non-primary node")
 }
 
 func (api *API) ResetIDAlloc(index string) error {
@@ -2225,11 +2200,14 @@ func (api *API) ResetIDAlloc(index string) error {
 		return errors.Wrap(err, "validating api method")
 	}
 
-	if api.holder.isCoordinator() {
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	snap := topology.NewClusterSnapshot(api.cluster.noder, api.cluster.Hasher, api.cluster.ReplicaN)
+
+	if !snap.IsPrimaryFieldTranslationNode(api.NodeID()) {
 		return api.holder.ida.reset(index)
 	}
 
-	return errors.New("cannot reset IDs on a non-coordinator node")
+	return errors.New("cannot reset IDs on a non-primary node")
 }
 
 // TranslateIndexDB is an internal function to load the index keys database
@@ -2260,7 +2238,7 @@ type serverInfo struct {
 	CPUPhysicalCores int    `json:"cpuPhysicalCores"`
 	CPULogicalCores  int    `json:"cpuLogicalCores"`
 	CPUMHz           int    `json:"cpuMHz"`
-	TxSrc            string `json:"txSrc"`
+	StorageBackend   string `json:"storageBackend"`
 }
 
 type apiMethod int
@@ -2293,10 +2271,9 @@ const (
 	apiRecalculateCaches
 	apiRemoveNode
 	apiResizeAbort
-	//apiSchema // not implemented
-	apiSetCoordinator
+	apiSchema
 	apiShardNodes
-	//apiState // not implemented
+	apiState
 	//apiStatsWithTags // not implemented
 	//apiVersion // not implemented
 	apiViews
@@ -2314,13 +2291,35 @@ const (
 
 var methodsCommon = map[apiMethod]struct{}{
 	apiClusterMessage: {},
-	apiSetCoordinator: {},
+	apiState:          {},
 }
 
 var methodsResizing = map[apiMethod]struct{}{
 	apiFragmentData:  {},
 	apiTranslateData: {},
 	apiResizeAbort:   {},
+	apiSchema:        {},
+}
+
+var methodsDegraded = map[apiMethod]struct{}{
+	apiExportCSV:         {},
+	apiFragmentBlockData: {},
+	apiFragmentBlocks:    {},
+	apiField:             {},
+	apiFieldAttrDiff:     {},
+	apiIndex:             {},
+	apiIndexAttrDiff:     {},
+	apiQuery:             {},
+	apiRecalculateCaches: {},
+	apiRemoveNode:        {},
+	apiShardNodes:        {},
+	apiSchema:            {},
+	apiViews:             {},
+	apiStartTransaction:  {},
+	apiFinishTransaction: {},
+	apiTransactions:      {},
+	apiGetTransaction:    {},
+	apiActiveQueries:     {},
 }
 
 var methodsNormal = map[apiMethod]struct{}{
@@ -2343,6 +2342,7 @@ var methodsNormal = map[apiMethod]struct{}{
 	apiRecalculateCaches:    {},
 	apiRemoveNode:           {},
 	apiShardNodes:           {},
+	apiSchema:               {},
 	apiViews:                {},
 	apiApplySchema:          {},
 	apiStartTransaction:     {},
@@ -2351,7 +2351,4 @@ var methodsNormal = map[apiMethod]struct{}{
 	apiGetTransaction:       {},
 	apiActiveQueries:        {},
 	apiPastQueries:          {},
-	apiIDReserve:            {},
-	apiIDCommit:             {},
-	apiIDReset:              {},
 }

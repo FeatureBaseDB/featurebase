@@ -16,9 +16,13 @@ package pilosa
 
 import (
 	"encoding/json"
+	"os"
 	"regexp"
 	"time"
 
+	"github.com/pilosa/pilosa/v2/disco"
+	pnet "github.com/pilosa/pilosa/v2/net"
+	"github.com/pilosa/pilosa/v2/storage"
 	"github.com/pkg/errors"
 )
 
@@ -27,15 +31,17 @@ var (
 	ErrHostRequired = errors.New("host required")
 
 	ErrIndexRequired = errors.New("index required")
-	ErrIndexExists   = errors.New("index already exists")
+	ErrIndexExists   = disco.ErrIndexExists
 	ErrIndexNotFound = errors.New("index not found")
+
+	ErrInvalidSchema = errors.New("invalid schema")
 
 	ErrForeignIndexNotFound = errors.New("foreign index not found")
 
 	// ErrFieldRequired is returned when no field is specified.
 	ErrFieldRequired  = errors.New("field required")
 	ErrColumnRequired = errors.New("column required")
-	ErrFieldExists    = errors.New("field already exists")
+	ErrFieldExists    = disco.ErrFieldExists
 	ErrFieldNotFound  = errors.New("field not found")
 
 	ErrBSIGroupNotFound         = errors.New("bsigroup not found")
@@ -50,6 +56,8 @@ var (
 	ErrInvalidBetweenValue      = errors.New("invalid value for between operation")
 	ErrDecimalOutOfRange        = errors.New("decimal value out of range")
 
+	ErrViewRequired     = errors.New("view required")
+	ErrViewExists       = disco.ErrViewExists
 	ErrInvalidView      = errors.New("invalid view")
 	ErrInvalidCacheType = errors.New("invalid cache type")
 
@@ -69,10 +77,10 @@ var (
 	// ErrPreconditionFailed is returned when specified index/field createdAt timestamps don't match
 	ErrPreconditionFailed = errors.New("precondition failed")
 
-	ErrNodeIDNotExists    = errors.New("node with provided ID does not exist")
-	ErrNodeNotCoordinator = errors.New("node is not the coordinator")
-	ErrResizeNotRunning   = errors.New("no resize job currently running")
-	ErrResizeNoReplicas   = errors.New("not enough data to perform resize (replica factor may need to be increased)")
+	ErrNodeIDNotExists  = errors.New("node with provided ID does not exist")
+	ErrNodeNotPrimary   = errors.New("node is not the primary")
+	ErrResizeNotRunning = errors.New("no resize job currently running")
+	ErrResizeNoReplicas = errors.New("not enough data to perform resize (replica factor may need to be increased)")
 
 	ErrNotImplemented            = errors.New("not implemented")
 	ErrFieldsArgumentRequired    = errors.New("fields argument required")
@@ -178,39 +186,32 @@ func validateName(name string) error {
 	return nil
 }
 
-// stringSlicesAreEqual determines if two string slices are equal.
-func stringSlicesAreEqual(a, b []string) bool {
-
-	if a == nil && b == nil {
-		return true
-	}
-
-	if a == nil || b == nil {
-		return false
-	}
-
-	if len(a) != len(b) {
-		return false
-	}
-
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-
-	return true
-}
-
 func timestamp() int64 {
 	return time.Now().UnixNano()
 }
 
 // AddressWithDefaults converts addr into a valid address,
 // using defaults when necessary.
-func AddressWithDefaults(addr string) (*URI, error) {
+func AddressWithDefaults(addr string) (*pnet.URI, error) {
 	if addr == "" {
-		return defaultURI(), nil
+		return pnet.DefaultURI(), nil
 	}
-	return NewURIFromAddress(addr)
+	return pnet.NewURIFromAddress(addr)
+}
+
+// CurrentBackend is one step in an attempt to centralize (and either minimize
+// or completely remove), the calls to environment variables throughout the
+// tests. Ideally we could get rid of this and rely completely on the
+// configuration parameters.
+func CurrentBackend() string {
+	return os.Getenv("PILOSA_STORAGE_BACKEND")
+}
+
+// CurrentBackendOrDefault tries the environment variable first, but falls back
+// to the default backend if the environment variable is empty.
+func CurrentBackendOrDefault() string {
+	if backend := os.Getenv("PILOSA_STORAGE_BACKEND"); backend != "" {
+		return backend
+	}
+	return storage.DefaultBackend
 }

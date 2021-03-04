@@ -26,11 +26,15 @@ import (
 	"time"
 	"unsafe"
 
+	"golang.org/x/sync/errgroup"
+
+	"github.com/pilosa/pilosa/v2/disco"
 	"github.com/pilosa/pilosa/v2/pql"
 	pb "github.com/pilosa/pilosa/v2/proto"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/shardwidth"
 	"github.com/pilosa/pilosa/v2/testhook"
+	"github.com/pilosa/pilosa/v2/topology"
 	"github.com/pilosa/pilosa/v2/tracing"
 	"github.com/pkg/errors"
 )
@@ -45,6 +49,8 @@ const (
 
 	columnLabel = "col"
 	rowLabel    = "row"
+
+	errConnectionRefused = "connect: connection refused"
 )
 
 // executor recursively executes calls in a PQL query across all shards.
@@ -52,7 +58,7 @@ type executor struct {
 	Holder *Holder
 
 	// Local hostname & cluster configuration.
-	Node    *Node
+	Node    *topology.Node
 	Cluster *cluster
 
 	// Client used for remote requests.
@@ -134,6 +140,13 @@ func newExecutor(opts ...executorOption) *executor {
 func (e *executor) Close() error {
 	e.workMu.Lock()
 	defer e.workMu.Unlock()
+	if e.shutdown {
+		// otherwise close(e.work) can result in
+		// panic: close of closed channel.
+		// We don't comprehend: why we are called 2x though(?)
+		// But pilosa/server TestClusteringNodesReplica2 did.
+		return nil
+	}
 	e.shutdown = true
 	_ = testhook.Closed(NewAuditor(), e, nil)
 	close(e.work)
@@ -817,6 +830,9 @@ func (e *executor) executeCall(ctx context.Context, qcx *Qcx, index string, c *p
 	case "Limit":
 		res, err := e.executeLimitCall(ctx, qcx, index, c, shards, opt)
 		return res, errors.Wrapf(err, "executeLimitCall %v", shardSlice(shards))
+	case "Percentile":
+		res, err := e.executePercentile(ctx, qcx, index, c, shards, opt)
+		return res, errors.Wrapf(err, "executePercentile %v", shardSlice(shards))
 	default: // e.g. "Row", "Union", "Intersect" or anything that returns a bitmap.
 		statFn()
 		res, err := e.executeBitmapCall(ctx, qcx, index, c, shards, opt)
@@ -1278,6 +1294,119 @@ func (e *executor) executeMax(ctx context.Context, qcx *Qcx, index string, c *pq
 		return ValCount{}, nil
 	}
 	return other, nil
+}
+
+// executePercentile executes a Percentile() call.
+func (e *executor) executePercentile(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *execOptions) (_ ValCount, err error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executePercentile")
+	defer span.Finish()
+
+	// get nth
+	var nth float64
+	if nthArg, ok := c.Args["nth"].(pql.Decimal); ok {
+		nth = nthArg.Float64()
+		if nth < 0 || nth > 1.0 {
+			return ValCount{}, errors.Errorf("Percentile(): invalid nth value(%f), should be >= 0 and <= 1.0", nth)
+		}
+	} else {
+		return ValCount{}, errors.New("Percentile(): nth required")
+	}
+
+	// get field
+	if fieldArg := c.Args["field"]; fieldArg == "" {
+		return ValCount{}, errors.New("Percentile(): field required")
+	}
+	fieldName, _, _ := c.StringArg("field")
+
+	// filter call for min & max
+	var filterCall *pql.Call
+
+	// check if filter provided
+	if filterArg, ok := c.Args["filter"].(*pql.Call); ok && filterArg != nil {
+		filterCall = filterArg
+	}
+
+	// get min
+	q, _ := pql.ParseString(fmt.Sprintf(`Min(field="%s")`, fieldName))
+	minCall := q.Calls[0]
+	if filterCall != nil {
+		minCall.Children = append(minCall.Children, filterCall)
+	}
+	minVal, err := e.executeMin(ctx, qcx, index, minCall, shards, opt)
+	if err != nil {
+		return ValCount{}, errors.Wrap(err, "executing Min call for Percentile")
+	}
+	if nth == 0.0 {
+		return ValCount{Val: minVal.Val, Count: minVal.Count}, nil
+	}
+
+	// get max
+	q, _ = pql.ParseString(fmt.Sprintf(`Max(field="%s")`, fieldName))
+	maxCall := q.Calls[0]
+	if filterCall != nil {
+		maxCall.Children = append(maxCall.Children, filterCall)
+	}
+	maxVal, err := e.executeMax(ctx, qcx, index, maxCall, shards, opt)
+	if err != nil {
+		return ValCount{}, errors.Wrap(err, "executing Max call for Percentile")
+	}
+	// set up reusables
+	var countCall, rangeCall *pql.Call
+	if filterCall == nil {
+		countQuery, _ := pql.ParseString(fmt.Sprintf("Count(Row(%s < 0))", fieldName))
+		countCall = countQuery.Calls[0]
+		rangeCall = countCall.Children[0]
+	} else {
+		countQuery, _ := pql.ParseString(fmt.Sprintf(`Count(Intersect(Row(%s < 0)))`, fieldName))
+		countCall = countQuery.Calls[0]
+		intersectCall := countCall.Children[0]
+		intersectCall.Children = append(intersectCall.Children, filterCall)
+		rangeCall = intersectCall.Children[0]
+	}
+
+	k := (1 - nth) / nth
+
+	min, max := minVal.Val, maxVal.Val
+	// estimate nth val, eg median when nth=0.5
+	for min < max {
+		possibleNthVal := (max + min) / 2
+		// get left count
+		rangeCall.Args[fieldName] = &pql.Condition{
+			Op:    pql.Token(pql.LT),
+			Value: possibleNthVal,
+		}
+		leftCountUint64, err := e.executeCount(ctx, qcx, index, countCall, shards, opt)
+		if err != nil {
+			return ValCount{}, errors.Wrap(err, "executing Count call L for Percentile")
+		}
+		leftCount := int64(leftCountUint64)
+
+		// get right count
+		rangeCall.Args[fieldName] = &pql.Condition{
+			Op:    pql.Token(pql.GT),
+			Value: possibleNthVal,
+		}
+		rightCountUint64, err := e.executeCount(ctx, qcx, index, countCall, shards, opt)
+		if err != nil {
+			return ValCount{}, errors.Wrap(err, "executing Count call R for Percentile")
+		}
+		rightCount := int64(rightCountUint64)
+
+		// 'weight' the left count as per k
+		leftCountWeighted := int64(math.Round(k * float64(leftCount)))
+
+		// binary search
+		if leftCountWeighted > rightCount {
+			max = possibleNthVal - 1
+		} else if leftCountWeighted < rightCount {
+			min = possibleNthVal + 1
+		} else {
+			return ValCount{Val: possibleNthVal, Count: 1}, nil
+		}
+	}
+
+	return ValCount{Val: min, Count: 1}, nil
+
 }
 
 // executeMinRow executes a MinRow() call.
@@ -3495,7 +3624,6 @@ func (e *executor) executeGroupByShard(ctx context.Context, qcx *Qcx, index stri
 }
 
 func (e *executor) executeRows(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *execOptions) (RowIDs, error) {
-
 	// Fetch field name from argument.
 	// Check "field" first for backwards compatibility.
 	// TODO: remove at Pilosa 2.0
@@ -4080,7 +4208,7 @@ func (e *executor) executeExtractShard(ctx context.Context, qcx *Qcx, index stri
 			mergeBits(sign, 1<<63, data)
 
 			// Copy in the significand.
-			for i := uint(0); i < bsig.BitDepth; i++ {
+			for i := uint64(0); i < bsig.BitDepth; i++ {
 				bits, err := fragment.row(tx, bsiOffsetBit+uint64(i))
 				if err != nil {
 					return ExtractedIDMatrix{}, errors.Wrap(err, "loading BSI significand bit from fragment")
@@ -4768,8 +4896,11 @@ func (e *executor) executeClearBitField(ctx context.Context, qcx *Qcx, index str
 
 	shard := colID / ShardWidth
 
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	snap := topology.NewClusterSnapshot(e.Cluster.noder, e.Cluster.Hasher, e.Cluster.ReplicaN)
+
 	ret := false
-	for _, node := range e.Cluster.shardNodes(index, shard) {
+	for _, node := range snap.ShardNodes(index, shard) {
 		// Update locally if host matches.
 		if node.ID == e.Node.ID {
 
@@ -5058,7 +5189,7 @@ func (e *executor) executeSet(ctx context.Context, qcx *Qcx, index string, c *pq
 	// Set column on existence field.
 	if ef := idx.existenceField(); ef != nil {
 		// we create tx here, rather than just above, to avoid creating an extra empty shard.
-		tx, finisher, err := qcx.GetTx(Txo{Write: writable, Index: idx, Shard: shard})
+		tx, finisher, err := qcx.GetTx(Txo{Write: writable, Index: idx, Field: ef, Shard: shard})
 		if err != nil {
 			return false, err
 		}
@@ -5126,7 +5257,10 @@ func (e *executor) executeSetBitField(ctx context.Context, qcx *Qcx, index strin
 	shard := colID / ShardWidth
 	ret := false
 
-	for _, node := range e.Cluster.shardNodes(index, shard) {
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	snap := topology.NewClusterSnapshot(e.Cluster.noder, e.Cluster.Hasher, e.Cluster.ReplicaN)
+
+	for _, node := range snap.ShardNodes(index, shard) {
 		// Update locally if host matches.
 		if node.ID == e.Node.ID {
 
@@ -5169,7 +5303,10 @@ func (e *executor) executeSetValueField(ctx context.Context, qcx *Qcx, index str
 	shard := colID / ShardWidth
 	ret := false
 
-	for _, node := range e.Cluster.shardNodes(index, shard) {
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	snap := topology.NewClusterSnapshot(e.Cluster.noder, e.Cluster.Hasher, e.Cluster.ReplicaN)
+
+	for _, node := range snap.ShardNodes(index, shard) {
 		// Update locally if host matches.
 		if node.ID == e.Node.ID {
 
@@ -5213,10 +5350,12 @@ func (e *executor) executeClearValueField(ctx context.Context, qcx *Qcx, index s
 	shard := colID / ShardWidth
 	ret := false
 
-	for _, node := range e.Cluster.shardNodes(index, shard) {
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	snap := topology.NewClusterSnapshot(e.Cluster.noder, e.Cluster.Hasher, e.Cluster.ReplicaN)
+
+	for _, node := range snap.ShardNodes(index, shard) {
 		// Update locally if host matches.
 		if node.ID == e.Node.ID {
-
 			idx := e.Holder.Index(index)
 			tx, finisher, err := qcx.GetTx(Txo{Write: writable, Index: idx, Shard: shard})
 			if err != nil {
@@ -5288,10 +5427,10 @@ func (e *executor) executeSetRowAttrs(ctx context.Context, qcx *Qcx, index strin
 	}
 
 	// Execute on remote nodes in parallel.
-	nodes := Nodes(e.Cluster.nodes).FilterID(e.Node.ID)
+	nodes := topology.Nodes(e.Cluster.noder.Nodes()).FilterID(e.Node.ID)
 	resp := make(chan error, len(nodes))
 	for _, node := range nodes {
-		go func(node *Node) {
+		go func(node *topology.Node) {
 			_, err := e.remoteExec(ctx, node, index, &pql.Query{Calls: []*pql.Call{c}}, nil, nil)
 			resp <- err
 		}(node)
@@ -5400,10 +5539,10 @@ func (e *executor) executeBulkSetRowAttrs(ctx context.Context, qcx *Qcx, index s
 	}
 
 	// Execute on remote nodes in parallel.
-	nodes := Nodes(e.Cluster.nodes).FilterID(e.Node.ID)
+	nodes := topology.Nodes(e.Cluster.noder.Nodes()).FilterID(e.Node.ID)
 	resp := make(chan error, len(nodes))
 	for _, node := range nodes {
-		go func(node *Node) {
+		go func(node *topology.Node) {
 			_, err := e.remoteExec(ctx, node, index, &pql.Query{Calls: calls}, nil, nil)
 			resp <- err
 		}(node)
@@ -5452,10 +5591,10 @@ func (e *executor) executeSetColumnAttrs(ctx context.Context, qcx *Qcx, index st
 	}
 
 	// Execute on remote nodes in parallel.
-	nodes := Nodes(e.Cluster.nodes).FilterID(e.Node.ID)
+	nodes := topology.Nodes(e.Cluster.noder.Nodes()).FilterID(e.Node.ID)
 	resp := make(chan error, len(nodes))
 	for _, node := range nodes {
-		go func(node *Node) {
+		go func(node *topology.Node) {
 			_, err := e.remoteExec(ctx, node, index, &pql.Query{Calls: []*pql.Call{c}}, nil, nil)
 			resp <- err
 		}(node)
@@ -5472,7 +5611,7 @@ func (e *executor) executeSetColumnAttrs(ctx context.Context, qcx *Qcx, index st
 }
 
 // remoteExec executes a PQL query remotely for a set of shards on a node.
-func (e *executor) remoteExec(ctx context.Context, node *Node, index string, q *pql.Query, shards []uint64, embed []*Row) (results []interface{}, err error) { // nolint: interfacer
+func (e *executor) remoteExec(ctx context.Context, node *topology.Node, index string, q *pql.Query, shards []uint64, embed []*Row) (results []interface{}, err error) { // nolint: interfacer
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeExec")
 	defer span.Finish()
 
@@ -5494,13 +5633,22 @@ func (e *executor) remoteExec(ctx context.Context, node *Node, index string, q *
 
 // shardsByNode returns a mapping of nodes to shards.
 // Returns errShardUnavailable if a shard cannot be allocated to a node.
-func (e *executor) shardsByNode(nodes []*Node, index string, shards []uint64) (map[*Node][]uint64, error) {
-	m := make(map[*Node][]uint64)
+func (e *executor) shardsByNode(nodes []*topology.Node, index string, shards []uint64) (map[*topology.Node][]uint64, error) {
+	m := make(map[*topology.Node][]uint64)
+
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	// We use e.Cluster.Nodes() here instead of e.Cluster.noder because we need
+	// the node states in order to ensure that we don't include an unavailable
+	// node in the map of nodes to which we distribute the query.
+	snap := topology.NewClusterSnapshot(topology.NewLocalNoder(e.Cluster.Nodes()), e.Cluster.Hasher, e.Cluster.ReplicaN)
 
 loop:
 	for _, shard := range shards {
-		for _, node := range e.Cluster.ShardNodes(index, shard) {
-			if Nodes(nodes).Contains(node) {
+		for _, node := range snap.ShardNodes(index, shard) {
+			// If the node being considered is in any state other than STARTED,
+			// then exclude it from the map. This way, one of that node's
+			// healthy replicas will be included instead.
+			if topology.Nodes(nodes).ContainsID(node.ID) && node.State == disco.NodeStateStarted {
 				m[node] = append(m[node], shard)
 				continue loop
 			}
@@ -5514,7 +5662,11 @@ loop:
 //
 // If a mapping of shards to a node fails then the shards are resplit across
 // secondary nodes and retried. This continues to occur until all nodes are exhausted.
-func (e *executor) mapReduce(ctx context.Context, index string, shards []uint64, c *pql.Call, opt *execOptions, mapFn mapFunc, reduceFn reduceFunc) (_ interface{}, err error) {
+//
+// mapReduce has to ensure that it never returns before any work it spawned has
+// terminated. It's not enough to cancel the jobs; we have to wait for them to be
+// done, or we can unmap resources they're still using.
+func (e *executor) mapReduce(ctx context.Context, index string, shards []uint64, c *pql.Call, opt *execOptions, mapFn mapFunc, reduceFn reduceFunc) (result interface{}, err error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.mapReduce")
 	defer span.Finish()
 
@@ -5522,62 +5674,82 @@ func (e *executor) mapReduce(ctx context.Context, index string, shards []uint64,
 
 	// Wrap context with a cancel to kill goroutines on exit.
 	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
+	// Create an errgroup so we can wait for all the goroutines to exit
+	eg, ctx := errgroup.WithContext(ctx)
 
+	// After we're done processing, we have to wait for any outstanding
+	// functions in the ErrGroup to complete. If we didn't have an error
+	// already at that point, we'll report any errors from the ErrGroup
+	// instead.
+	defer func() {
+		cancel()
+		errWait := eg.Wait()
+		if err == nil {
+			err = errWait
+		}
+	}()
 	// If this is the coordinating node then start with all nodes in the cluster.
 	//
-	// However, if this request is being sent from the coordinator then all
+	// However, if this request is being sent from the primary then all
 	// processing should be done locally so we start with just the local node.
-	var nodes []*Node
+	var nodes []*topology.Node
 	if !opt.Remote {
-		nodes = Nodes(e.Cluster.nodes).Clone()
+		nodes = topology.Nodes(e.Cluster.Nodes()).Clone()
 	} else {
-		nodes = []*Node{e.Cluster.nodeByID(e.Node.ID)}
+		nodes = []*topology.Node{e.Cluster.nodeByID(e.Node.ID)}
 	}
 
 	// Start mapping across all primary owners.
-	if err := e.mapper(ctx, cancel, ch, nodes, index, shards, c, opt, mapFn, reduceFn); err != nil {
+	if err = e.mapper(ctx, eg, ch, nodes, index, shards, c, opt, e.Cluster.ReplicaN == 1, mapFn, reduceFn); err != nil {
 		return nil, errors.Wrap(err, "starting mapper")
 	}
 
 	// Iterate over all map responses and reduce.
-	var result interface{}
-	var shardN int
-	for {
+	expected := len(shards)
+	done := ctx.Done()
+	for expected > 0 {
 		select {
-		case <-ctx.Done():
-			return nil, errors.Wrap(ctx.Err(), "context done")
+		case <-done:
+			return nil, ctx.Err()
 		case resp := <-ch:
 			// On error retry against remaining nodes. If an error returns then
 			// the context will cancel and cause all open goroutines to return.
 
-			if resp.err != nil {
+			// We distinguish here between an error which indicates that the
+			// node is not available (and therefore we need to failover to a
+			// replica) and a valid error from a healthy node. In the case of
+			// the latter, there's no need to retry a replica, we should trust
+			// the error from the healthy node and return that immediately.
+			if resp.err != nil && strings.Contains(resp.err.Error(), errConnectionRefused) {
 				// Filter out unavailable nodes.
-				nodes = Nodes(nodes).Filter(resp.node)
+				nodes = topology.Nodes(nodes).FilterID(resp.node.ID)
 
 				// Begin mapper against secondary nodes.
-				if err := e.mapper(ctx, cancel, ch, nodes, index, resp.shards, c, opt, mapFn, reduceFn); errors.Cause(err) == errShardUnavailable {
+				if err := e.mapper(ctx, eg, ch, nodes, index, resp.shards, c, opt, true, mapFn, reduceFn); errors.Cause(err) == errShardUnavailable {
 					return nil, resp.err
 				} else if err != nil {
-					return nil, errors.Wrap(err, "calling mapper")
+					return nil, errors.Wrap(err, "mapping on secondary node")
 				}
 				continue
+			} else if resp.err != nil {
+				return nil, errors.Wrap(resp.err, "mapping on primary node")
 			}
+			// if we got a response that we aren't discarding
+			// because it's an error, subtract it from our count...
+			expected -= len(resp.shards)
 
 			// Reduce value.
 			result = reduceFn(ctx, result, resp.result)
-			if err, ok := result.(error); ok {
+			var ok bool
+			// note *not* shadowed.
+			if err, ok = result.(error); ok {
 				cancel()
 				return nil, err
 			}
-
-			// If all shards have been processed then return.
-			shardN += len(resp.shards)
-			if shardN >= len(shards) {
-				return result, nil
-			}
 		}
 	}
+	// note the deferred Wait above which might override this nil.
+	return result, nil
 }
 
 // makeEmbeddedDataForShards produces new rows containing the rowSegments
@@ -5624,20 +5796,22 @@ func makeEmbeddedDataForShards(allRows []*Row, shards []uint64) []*Row {
 	return newRows
 }
 
-func (e *executor) mapper(ctx context.Context, cancel context.CancelFunc, ch chan mapResponse, nodes []*Node, index string, shards []uint64, c *pql.Call, opt *execOptions, mapFn mapFunc, reduceFn reduceFunc) error {
+func (e *executor) mapper(ctx context.Context, eg *errgroup.Group, ch chan mapResponse, nodes []*topology.Node, index string, shards []uint64, c *pql.Call, opt *execOptions, lastAttempt bool, mapFn mapFunc, reduceFn reduceFunc) error {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.mapper")
 	defer span.Finish()
-	done := ctx.Done()
 
 	// Group shards together by nodes.
 	m, err := e.shardsByNode(nodes, index, shards)
 	if err != nil {
 		return errors.Wrapf(err, "shards by node %v", shardSlice(shards))
 	}
+	done := ctx.Done()
 
 	// Execute each node in a separate goroutine.
 	for n, nodeShards := range m {
-		go func(n *Node, nodeShards []uint64) {
+		n := n
+		nodeShards := nodeShards
+		eg.Go(func() error {
 			resp := mapResponse{node: n, shards: nodeShards}
 
 			// Send local shards to mapper, otherwise remote exec.
@@ -5657,17 +5831,29 @@ func (e *executor) mapper(ctx context.Context, cancel context.CancelFunc, ch cha
 			// Return response to the channel.
 			select {
 			case <-done:
+				// If someone just canceled the context
+				// arbitrarily, we could end up here with this
+				// being the first non-nil error handed to
+				// the ErrGroup, in which case, it's the best
+				// explanation we have for why everything's
+				// stopping.
+				return ctx.Err()
 			case ch <- resp:
-				// The cancel coming after the above send is intentional.
-				// We want to report the actual error that happened
-				// before we cause anything to return "context canceled".
-				if resp.err != nil {
-					cancel()
+				// If we return a non-nil error from this, the
+				// entire errGroup gets canceled. So we don't
+				// want to return a non-nil error if mapReduce
+				// might try to run another mapper against a
+				// different set of nodes. Note that this shouldn't
+				// matter; we just sent the error to mapReduce
+				// anyway, so it probably cancels the ErrGroup
+				// too.
+				if resp.err != nil && lastAttempt {
+					return resp.err
 				}
 			}
-		}(n, nodeShards)
+			return nil
+		})
 	}
-
 	return nil
 }
 
@@ -5680,12 +5866,15 @@ type job struct {
 
 func worker(work chan job) {
 	for j := range work {
-		result, err := j.mapFn(j.ctx, j.shard)
-
-		select {
-		case <-j.ctx.Done():
-		case j.resultChan <- mapResponse{result: result, err: err}:
+		// Skip out early if the context is done, but still send
+		// an ack so mapperLocal can be sure we aren't about to
+		// work on something it sent us.
+		if err := j.ctx.Err(); err != nil {
+			j.resultChan <- mapResponse{result: nil, err: err}
+			continue
 		}
+		result, err := j.mapFn(j.ctx, j.shard)
+		j.resultChan <- mapResponse{result: result, err: err}
 	}
 }
 
@@ -5707,39 +5896,45 @@ func (e *executor) mapperLocal(ctx context.Context, shards []uint64, mapFn mapFu
 
 	ch := make(chan mapResponse, len(shards))
 
+	expected := 0
 	for _, shard := range shards {
-		e.work <- job{
+		j := job{
 			shard:      shard,
 			mapFn:      mapFn,
 			ctx:        ctx,
 			resultChan: ch,
 		}
-	}
-
-	// Reduce results
-	var maxShard int
-	var result interface{}
-	for {
 		select {
 		case <-done:
-			return nil, ctx.Err()
-		case resp := <-ch:
-			if resp.err != nil {
-				return nil, resp.err
-			}
-			result = reduceFn(ctx, result, resp.result)
-			if err, ok := result.(error); ok {
-				cancel()
-				return nil, err
-			}
-			maxShard++
-		}
-
-		// Exit once all shards are processed.
-		if maxShard == len(shards) {
-			return result, nil
+			break
+		case e.work <- j:
+			expected++
 		}
 	}
+	// we *absolutely must* get responses for everything we successfully
+	// transmitted to the work queue, or there could be ongoing access to
+	// the parent Qcx's stuff.
+
+	// Reduce results
+	var result interface{}
+	for expected > 0 {
+		resp := <-ch
+		expected--
+		if resp.err != nil && err == nil {
+			err = resp.err
+		}
+		if resp.err == nil && ctx.Err() == nil {
+			// Only useful to do a possibly-expensive
+			// reduce if we don't already know we don't
+			// need it.
+			result = reduceFn(ctx, result, resp.result)
+			if resultErr, ok := result.(error); ok {
+				cancel()
+				err = resultErr
+			}
+		}
+	}
+	return result, err
 }
 
 func (e *executor) preTranslate(ctx context.Context, index string, calls ...*pql.Call) (cols map[string]map[string]uint64, rows map[string]map[string]map[string]uint64, err error) {
@@ -7028,7 +7223,7 @@ type mapFunc func(ctx context.Context, shard uint64) (_ interface{}, err error)
 type reduceFunc func(ctx context.Context, prev, v interface{}) interface{}
 
 type mapResponse struct {
-	node   *Node
+	node   *topology.Node
 	shards []uint64
 
 	result interface{}

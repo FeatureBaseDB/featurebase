@@ -15,72 +15,10 @@
 package test
 
 import (
-	"os"
-	"testing"
-
 	"github.com/pilosa/pilosa/v2"
-	"github.com/pilosa/pilosa/v2/testhook"
 )
 
 // Field represents a test wrapper for pilosa.Field.
 type Field struct {
 	*pilosa.Field
-}
-
-// newField returns a new instance of Field.
-func newField(tb testing.TB, opts pilosa.FieldOption) *Field {
-	path, err := testhook.TempDir(tb, "pilosa-field-")
-	if err != nil {
-		panic(err)
-	}
-	// This path is probably wrong, but we don't care much because it's a scratch holder anyway.
-	field, err := pilosa.NewField(pilosa.NewHolder(path, nil), path, "i", "f", opts)
-	if err != nil {
-		panic(err)
-	}
-	return &Field{Field: field}
-}
-
-// mustOpenField returns a new, opened field at a temporary path. Panic on error.
-func mustOpenField(tb testing.TB, opts pilosa.FieldOption) *Field {
-	f := newField(tb, opts)
-	if err := f.Open(); err != nil {
-		panic(err)
-	}
-	return f
-}
-
-// close closes the field and removes the underlying data.
-func (f *Field) close() error { // nolint: unparam
-	defer os.RemoveAll(f.Path())
-	return f.Field.Close()
-}
-
-// reopen closes the index and reopens it.
-func (f *Field) reopen() error {
-	if err := f.Field.Close(); err != nil {
-		return err
-	}
-	return f.Field.Open()
-}
-
-// Ensure field can set its cache
-func TestField_SetCacheSize(t *testing.T) {
-	f := mustOpenField(t, pilosa.OptFieldTypeDefault())
-	defer f.close()
-	cacheSize := uint32(100)
-
-	// Set & retrieve field cache size.
-	if err := f.SetCacheSize(cacheSize); err != nil {
-		t.Fatal(err)
-	} else if q := f.CacheSize(); q != cacheSize {
-		t.Fatalf("unexpected field cache size: %d", q)
-	}
-
-	// Reload field and verify that it is persisted.
-	if err := f.reopen(); err != nil {
-		t.Fatal(err)
-	} else if q := f.CacheSize(); q != cacheSize {
-		t.Fatalf("unexpected field cache size (reopen): %d", q)
-	}
 }

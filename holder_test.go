@@ -15,7 +15,6 @@
 package pilosa_test
 
 import (
-	"bytes"
 	"context"
 	"math"
 	"os"
@@ -32,31 +31,8 @@ import (
 )
 
 func TestHolder_Open(t *testing.T) {
-	t.Run("ErrIndexName", func(t *testing.T) {
-		h := test.MustOpenHolder(t)
-
-		bufLogger := test.NewBufferLogger()
-		h.Holder.Logger = bufLogger
-
-		defer h.Close()
-
-		if err := os.Mkdir(h.IndexPath("!"), 0777); err != nil {
-			t.Fatal(err)
-		} else if err := h.Holder.Close(); err != nil {
-			t.Fatal(err)
-		}
-		if err := h.Reopen(); err != nil {
-			t.Fatal(err)
-		}
-
-		if bufbytes, err := bufLogger.ReadAll(); err != nil {
-			t.Fatal(err)
-		} else if !bytes.Contains(bufbytes, []byte("ERROR opening index: !")) {
-			t.Fatalf("expected log error:\n%s", bufbytes)
-		}
-	})
-
 	t.Run("ErrIndexPermission", func(t *testing.T) {
+		t.Skip("we don't open the holder directly from disk anymore; we use the etcd schema")
 		if os.Geteuid() == 0 {
 			t.Skip("Skipping permissions test since user is root.")
 		}
@@ -75,10 +51,11 @@ func TestHolder_Open(t *testing.T) {
 		}()
 
 		if err := h.Reopen(); err == nil || !strings.Contains(err.Error(), "permission denied") {
-			t.Fatalf("unexpected error: %s", err)
+			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 	t.Run("ErrIndexAttrStoreCorrupt", func(t *testing.T) {
+		t.Skip("we don't open the holder directly from disk anymore; we use the etcd schema")
 		h := test.MustOpenHolder(t)
 		defer h.Close()
 
@@ -96,6 +73,7 @@ func TestHolder_Open(t *testing.T) {
 	})
 
 	t.Run("ErrFieldPermission", func(t *testing.T) {
+		t.Skip("we don't open the holder directly from disk anymore; we use the etcd schema")
 		if os.Geteuid() == 0 {
 			t.Skip("Skipping permissions test since user is root.")
 		}
@@ -119,6 +97,7 @@ func TestHolder_Open(t *testing.T) {
 		}
 	})
 	t.Run("ErrFieldOptionsCorrupt", func(t *testing.T) {
+		t.Skip("we don't open the holder directly from disk anymore; we use the etcd schema")
 		h := test.MustOpenHolder(t)
 		defer h.Close()
 
@@ -142,6 +121,7 @@ func TestHolder_Open(t *testing.T) {
 		}
 	})
 	t.Run("ErrFieldAttrStoreCorrupt", func(t *testing.T) {
+		t.Skip("we don't open the holder directly from disk anymore; we use the etcd schema")
 		h := test.MustOpenHolder(t)
 		defer h.Close()
 
@@ -165,6 +145,7 @@ func TestHolder_Open(t *testing.T) {
 	})
 
 	t.Run("ErrFragmentStoragePermission", func(t *testing.T) {
+		t.Skip("we don't open the holder directly from disk anymore; we use the etcd schema")
 		roaringOnlyTest(t)
 
 		if os.Geteuid() == 0 {
@@ -202,6 +183,7 @@ func TestHolder_Open(t *testing.T) {
 		}
 	})
 	t.Run("ErrFragmentStorageCorrupt", func(t *testing.T) {
+		t.Skip("we don't open the holder directly from disk anymore; we use the etcd schema")
 		roaringOnlyTest(t)
 
 		h := test.MustOpenHolder(t)
@@ -432,11 +414,12 @@ func TestHolder_DeleteIndex(t *testing.T) {
 // Ensure holder can sync with a remote holder.
 func TestHolderSyncer_SyncHolder(t *testing.T) {
 	c := test.MustNewCluster(t, 2)
-	c.GetNode(0).Config.Cluster.ReplicaN = 2
-	c.GetNode(0).Config.AntiEntropy.Interval = 0
-	c.GetNode(1).Config.Cluster.ReplicaN = 2
-	c.GetNode(1).Config.AntiEntropy.Interval = 0
+	c.GetIdleNode(0).Config.Cluster.ReplicaN = 2
+	c.GetIdleNode(0).Config.AntiEntropy.Interval = 0
+	c.GetIdleNode(1).Config.Cluster.ReplicaN = 2
+	c.GetIdleNode(1).Config.AntiEntropy.Interval = 0
 	err := c.Start()
+
 	if err != nil {
 		t.Fatalf("starting cluster: %v", err)
 	}
@@ -543,10 +526,12 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 // the row boundaries of the block.
 func TestHolderSyncer_BlockIteratorLimits(t *testing.T) {
 	c := test.MustNewCluster(t, 3)
-	c.GetNode(0).Config.Cluster.ReplicaN = 3
-	c.GetNode(0).Config.AntiEntropy.Interval = 0
-	c.GetNode(1).Config.Cluster.ReplicaN = 3
-	c.GetNode(1).Config.AntiEntropy.Interval = 0
+	c.GetIdleNode(0).Config.Cluster.ReplicaN = 3
+	c.GetIdleNode(0).Config.AntiEntropy.Interval = 0
+	c.GetIdleNode(1).Config.Cluster.ReplicaN = 3
+	c.GetIdleNode(1).Config.AntiEntropy.Interval = 0
+	c.GetIdleNode(2).Config.Cluster.ReplicaN = 3
+	c.GetIdleNode(2).Config.AntiEntropy.Interval = 0
 	err := c.Start()
 	if err != nil {
 		t.Fatalf("starting cluster: %v", err)
@@ -598,10 +583,12 @@ func TestHolderSyncer_BlockIteratorLimits(t *testing.T) {
 // Ensure holder correctly handles clears during block sync.
 func TestHolderSyncer_Clears(t *testing.T) {
 	c := test.MustNewCluster(t, 3)
-	c.GetNode(0).Config.Cluster.ReplicaN = 3
-	c.GetNode(0).Config.AntiEntropy.Interval = 0
-	c.GetNode(1).Config.Cluster.ReplicaN = 3
-	c.GetNode(1).Config.AntiEntropy.Interval = 0
+	c.GetIdleNode(0).Config.Cluster.ReplicaN = 3
+	c.GetIdleNode(0).Config.AntiEntropy.Interval = 0
+	c.GetIdleNode(1).Config.Cluster.ReplicaN = 3
+	c.GetIdleNode(1).Config.AntiEntropy.Interval = 0
+	c.GetIdleNode(2).Config.Cluster.ReplicaN = 3
+	c.GetIdleNode(2).Config.AntiEntropy.Interval = 0
 	err := c.Start()
 	if err != nil {
 		t.Fatalf("starting cluster: %v", err)
@@ -647,10 +634,10 @@ func TestHolderSyncer_Clears(t *testing.T) {
 // Ensure holder can sync time quantum views with a remote holder.
 func TestHolderSyncer_TimeQuantum(t *testing.T) {
 	c := test.MustNewCluster(t, 2)
-	c.GetNode(0).Config.Cluster.ReplicaN = 2
-	c.GetNode(0).Config.AntiEntropy.Interval = 0
-	c.GetNode(1).Config.Cluster.ReplicaN = 2
-	c.GetNode(1).Config.AntiEntropy.Interval = 0
+	c.GetIdleNode(0).Config.Cluster.ReplicaN = 2
+	c.GetIdleNode(0).Config.AntiEntropy.Interval = 0
+	c.GetIdleNode(1).Config.Cluster.ReplicaN = 2
+	c.GetIdleNode(1).Config.AntiEntropy.Interval = 0
 	err := c.Start()
 	if err != nil {
 		t.Fatalf("starting cluster: %v", err)
@@ -700,10 +687,10 @@ func TestHolderSyncer_TimeQuantum(t *testing.T) {
 func TestHolderSyncer_IntField(t *testing.T) {
 	t.Run("BasicSync", func(t *testing.T) {
 		c := test.MustNewCluster(t, 2)
-		c.GetNode(0).Config.Cluster.ReplicaN = 2
-		c.GetNode(0).Config.AntiEntropy.Interval = 0
-		c.GetNode(1).Config.Cluster.ReplicaN = 2
-		c.GetNode(1).Config.AntiEntropy.Interval = 0
+		c.GetIdleNode(0).Config.Cluster.ReplicaN = 2
+		c.GetIdleNode(0).Config.AntiEntropy.Interval = 0
+		c.GetIdleNode(1).Config.Cluster.ReplicaN = 2
+		c.GetIdleNode(1).Config.AntiEntropy.Interval = 0
 		err := c.Start()
 		if err != nil {
 			t.Fatalf("starting cluster: %v", err)
@@ -711,7 +698,6 @@ func TestHolderSyncer_IntField(t *testing.T) {
 		defer c.Close()
 
 		var idx0 *pilosa.Index
-		_ = idx0
 		idx0, err = c.GetNode(0).API.CreateIndex(context.Background(), "i", pilosa.IndexOptions{})
 		_ = idx0
 		if err != nil {
@@ -758,10 +744,10 @@ func TestHolderSyncer_IntField(t *testing.T) {
 
 	t.Run("MultiShard", func(t *testing.T) {
 		c := test.MustNewCluster(t, 2)
-		c.GetNode(0).Config.Cluster.ReplicaN = 2
-		c.GetNode(0).Config.AntiEntropy.Interval = 0
-		c.GetNode(1).Config.Cluster.ReplicaN = 2
-		c.GetNode(1).Config.AntiEntropy.Interval = 0
+		c.GetIdleNode(0).Config.Cluster.ReplicaN = 2
+		c.GetIdleNode(0).Config.AntiEntropy.Interval = 0
+		c.GetIdleNode(1).Config.Cluster.ReplicaN = 2
+		c.GetIdleNode(1).Config.AntiEntropy.Interval = 0
 		err := c.Start()
 		if err != nil {
 			t.Fatalf("starting cluster: %v", err)

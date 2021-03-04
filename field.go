@@ -30,8 +30,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
-	"github.com/pilosa/pilosa/v2/internal"
+	"github.com/pilosa/pilosa/v2/disco"
 	"github.com/pilosa/pilosa/v2/pql"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/stats"
@@ -102,18 +101,11 @@ type Field struct {
 
 	broadcaster broadcaster
 	Stats       stats.StatsClient
+	schemator   disco.Schemator
+	serializer  Serializer
 
 	// Field options.
 	options FieldOptions
-
-	// finalOptions is used with a final call to applyOptions.
-	// The initial call to applyOptions is made with options
-	// loaded from the meta file on disk (in the case when
-	// a field is being re-opened). If the field creator calls
-	// setOptions before calling Open(), then those options
-	// will be held in finalOptions, and applied instead of
-	// those from the meta file.
-	finalOptions *FieldOptions
 
 	bsiGroups []*bsiGroup
 
@@ -367,8 +359,10 @@ func newField(holder *Holder, path, index, name string, opts FieldOption) (*Fiel
 
 		broadcaster: NopBroadcaster,
 		Stats:       stats.NopStatsClient,
+		schemator:   disco.NopSchemator,
+		serializer:  NopSerializer,
 
-		options: *applyDefaultOptions(&fo),
+		options: applyDefaultOptions(&fo),
 
 		remoteAvailableShards: roaring.NewBitmap(),
 
@@ -507,6 +501,14 @@ func (f *Field) unprotectedSaveAvailableShards() error {
 	return nil
 }
 
+// SetRemoteAvailableShards replaces remoteAvailableShards with the provided
+// value.
+func (f *Field) SetRemoteAvailableShards(b *roaring.Bitmap) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.remoteAvailableShards = b
+}
+
 // RemoveAvailableShard removes a shard from the bitmap cache.
 //
 // NOTE: This can be overridden on the next sync so all nodes should be updated.
@@ -528,26 +530,6 @@ func (f *Field) Type() string {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 	return f.options.Type
-}
-
-// SetCacheSize sets the cache size for ranked fames. Persists to meta file on update.
-// defaults to DefaultCacheSize 50000
-func (f *Field) SetCacheSize(v uint32) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	// Ignore if no change occurred.
-	if v == 0 || f.options.CacheSize == v {
-		return nil
-	}
-
-	// Persist meta data to disk on change.
-	f.options.CacheSize = v
-	if err := f.saveMeta(); err != nil {
-		return errors.Wrap(err, "saving")
-	}
-
-	return nil
 }
 
 // CacheSize returns the ranked field cache size.
@@ -574,24 +556,12 @@ func (f *Field) Open() error {
 			return errors.Wrap(err, "creating field dir")
 		}
 
-		f.holder.Logger.Debugf("load meta file for index/field: %s/%s", f.index, f.name)
-		if err := f.loadMeta(); err != nil {
-			return errors.Wrap(err, "loading meta")
-		}
-
 		f.holder.Logger.Debugf("load available shards for index/field: %s/%s", f.index, f.name)
-
 		if err := f.loadAvailableShards(); err != nil {
 			return errors.Wrap(err, "loading available shards")
 		}
 
-		// If options were provided using setOptions(), then
-		// use those instead of the options from the meta file.
-		if f.finalOptions != nil {
-			f.options = *f.finalOptions
-		}
-
-		// Apply the field options loaded from meta (or set via setOptions()).
+		// Apply the field options loaded from etcd (or set via setOptions()).
 		f.holder.Logger.Debugf("apply options for index/field: %s/%s", f.index, f.name)
 		if err := f.applyOptions(f.options); err != nil {
 			return errors.Wrap(err, "applying options")
@@ -619,6 +589,7 @@ func (f *Field) Open() error {
 				return errors.Wrap(err, "checking foreign index")
 			}
 		}
+
 		f.availableShardChan = make(chan []byte)
 		f.doneChan = make(chan struct{})
 		f.wg.Add(1)
@@ -737,9 +708,30 @@ func (f *Field) ForeignIndex() string {
 	return f.options.ForeignIndex
 }
 
+func (f *Field) bitDepth() (uint64, error) {
+	var maxBitDepth uint64
+
+	view2shards := f.idx.fieldView2shard.getViewsForField(f.name)
+	for name, shardset := range view2shards {
+		view := f.view(name)
+		if view == nil {
+			continue
+		}
+
+		bd, err := view.bitDepth(shardset.shards())
+		if err != nil {
+			return 0, errors.Wrapf(err, "getting view(%s) bit depth", name)
+		}
+		if bd > maxBitDepth {
+			maxBitDepth = bd
+		}
+	}
+
+	return maxBitDepth, nil
+}
+
 // openViews opens and initializes the views inside the field.
 func (f *Field) openViews() error {
-
 	view2shards := f.idx.fieldView2shard.getViewsForField(f.name)
 	if view2shards == nil {
 		// no data
@@ -747,27 +739,9 @@ func (f *Field) openViews() error {
 	}
 
 	for name, shardset := range view2shards {
-
 		view := f.newView(f.viewPath(name), name)
 		if err := view.openWithShardSet(shardset); err != nil {
 			return fmt.Errorf("opening view: view=%s, err=%s", view.name, err)
-		}
-
-		if f.holder.txf.TxType() == RoaringTxn {
-			// Automatically upgrade BSI v1 fragments if they exist & reopen view.
-			if bsig := f.bsiGroup(f.name); bsig != nil {
-				if ok, err := upgradeViewBSIv2(view, bsig.BitDepth); err != nil {
-					return errors.Wrap(err, "upgrade view bsi v2")
-				} else if ok {
-					if err := view.close(); err != nil {
-						return errors.Wrap(err, "closing upgraded view")
-					}
-					view = f.newView(f.viewPath(name), name)
-					if err := view.openWithShardSet(shardset); err != nil {
-						return fmt.Errorf("re-opening view: view=%s, err=%s", view.name, err)
-					}
-				}
-			}
 		}
 
 		view.rowAttrStore = f.rowAttrStore
@@ -777,98 +751,9 @@ func (f *Field) openViews() error {
 	return nil
 }
 
-// loadMeta reads meta data for the field, if any.
-func (f *Field) loadMeta() error {
-	var pb internal.FieldOptions
-
-	// Read data from meta file.
-	buf, err := ioutil.ReadFile(filepath.Join(f.path, ".meta"))
-	if os.IsNotExist(err) {
-		return nil
-	} else if err != nil {
-		return errors.Wrap(err, "reading meta")
-	} else {
-		if err := proto.Unmarshal(buf, &pb); err != nil {
-			return errors.Wrap(err, "unmarshaling")
-		}
-	}
-
-	// Since pb.Min and pb.Max were changed to pql.Decimal,
-	// and since they now have a different protobuf field
-	// number, an existing meta file may have values in the
-	// old min/max fields which need to be converted to
-	// pql.Decimal.
-	// TODO: we can remove the OldMin/OldMax once we're
-	// confident no one is still using the older version.
-	var min pql.Decimal
-	if pb.Min != nil {
-		min = pql.NewDecimal(pb.Min.Value, pb.Min.Scale)
-	} else {
-		min = pql.NewDecimal(pb.OldMin, pb.Scale)
-	}
-	var max pql.Decimal
-	if pb.Max != nil {
-		max = pql.NewDecimal(pb.Max.Value, pb.Max.Scale)
-	} else {
-		max = pql.NewDecimal(pb.OldMax, pb.Scale)
-	}
-
-	// Initialize "base" to "min" when upgrading from v1 BSI format.
-	if pb.BitDepth == 0 {
-		minInt64, maxInt64 := min.ToInt64(0), max.ToInt64(0)
-		pb.Base = bsiBase(minInt64, maxInt64)
-		pb.BitDepth = uint64(bitDepthInt64(maxInt64 - minInt64))
-		if pb.BitDepth == 0 {
-			pb.BitDepth = 1
-		}
-	}
-
-	// Copy metadata fields.
-	f.options.Type = pb.Type
-	f.options.CacheType = pb.CacheType
-	f.options.CacheSize = pb.CacheSize
-	f.options.Min = min
-	f.options.Max = max
-	f.options.Base = pb.Base
-	f.options.Scale = pb.Scale
-	f.options.BitDepth = uint(pb.BitDepth)
-	f.options.TimeQuantum = TimeQuantum(pb.TimeQuantum)
-	f.options.Keys = pb.Keys
-	f.options.NoStandardView = pb.NoStandardView
-	f.options.ForeignIndex = pb.ForeignIndex
-
-	return nil
-}
-
-// saveMeta writes meta data for the field.
-func (f *Field) saveMeta() error {
-	path := filepath.Join(f.path, ".meta")
-	// Create a temporary file to marshal to.
-	tempPath := f.path + tempExt
-
-	// Marshal metadata.
-	fo := f.options
-	buf, err := proto.Marshal(fo.encode())
-	if err != nil {
-		return errors.Wrap(err, "marshaling")
-	}
-
-	// Write to meta file.
-	if err := ioutil.WriteFile(tempPath, buf, 0666); err != nil {
-		return errors.Wrap(err, "writing meta")
-	}
-
-	// Move temp file to data file location.
-	if err := os.Rename(tempPath, path); err != nil {
-		return fmt.Errorf("rename temp: %s", err)
-	}
-
-	return nil
-}
-
 // setOptions saves options for final application during Open().
 func (f *Field) setOptions(opts *FieldOptions) {
-	f.finalOptions = applyDefaultOptions(opts)
+	f.options = applyDefaultOptions(opts)
 }
 
 // applyOptions configures the field based on opt.
@@ -918,10 +803,7 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 			Scale:    opt.Scale,
 			BitDepth: opt.BitDepth,
 		}
-		// Validate bsiGroup.
-		if err := bsig.validate(); err != nil {
-			return err
-		}
+		// Validate and create bsiGroup.
 		if err := f.createBSIGroup(bsig); err != nil {
 			return errors.Wrap(err, "creating bsigroup")
 		}
@@ -935,11 +817,11 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 		f.options.BitDepth = 0
 		f.options.Keys = opt.Keys
 		f.options.NoStandardView = opt.NoStandardView
-		// Set the time quantum.
-		if err := f.setTimeQuantum(opt.TimeQuantum); err != nil {
-			f.Close()
-			return errors.Wrap(err, "setting time quantum")
+		// Validate the time quantum.
+		if !opt.TimeQuantum.Valid() {
+			return ErrInvalidTimeQuantum
 		}
+		f.options.TimeQuantum = opt.TimeQuantum
 		f.options.ForeignIndex = opt.ForeignIndex
 	case FieldTypeBool:
 		f.options.Type = FieldTypeBool
@@ -1032,17 +914,6 @@ func (f *Field) createBSIGroup(bsig *bsiGroup) error {
 	defer f.mu.Unlock()
 
 	// Append bsiGroup.
-	if err := f.addBSIGroup(bsig); err != nil {
-		return err
-	}
-	if err := f.saveMeta(); err != nil {
-		return errors.Wrap(err, "saving")
-	}
-	return nil
-}
-
-// addBSIGroup adds a single bsiGroup to bsiGroups.
-func (f *Field) addBSIGroup(bsig *bsiGroup) error {
 	if err := bsig.validate(); err != nil {
 		return errors.Wrap(err, "validating bsigroup")
 	} else if f.hasBSIGroup(bsig.Name) {
@@ -1065,27 +936,6 @@ func (f *Field) TimeQuantum() TimeQuantum {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.options.TimeQuantum
-}
-
-// setTimeQuantum sets the time quantum for the field.
-func (f *Field) setTimeQuantum(q TimeQuantum) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	// Validate input.
-	if !q.Valid() {
-		return ErrInvalidTimeQuantum
-	}
-
-	// Update value on field.
-	f.options.TimeQuantum = q
-
-	// Persist meta data to disk.
-	if err := f.saveMeta(); err != nil {
-		return errors.Wrap(err, "saving meta")
-	}
-
-	return nil
 }
 
 // RowTime gets the row at the particular time with the granularity specified by
@@ -1139,19 +989,22 @@ func (f *Field) recalculateCaches() {
 // createViewIfNotExists returns the named view, creating it if necessary.
 // Additionally, a CreateViewMessage is sent to the cluster.
 func (f *Field) createViewIfNotExists(name string) (*view, error) {
-	view, created, err := f.createViewIfNotExistsBase(name)
+	cvm := &CreateViewMessage{
+		Index: f.index,
+		Field: f.name,
+		View:  name,
+	}
+
+	// call this base method to isolate the mu.Lock and ensure we aren't holding
+	// the lock while calling SendSync below.
+	view, created, err := f.createViewIfNotExistsBase(cvm)
 	if err != nil {
 		return nil, err
 	}
 
 	if created {
 		// Broadcast view creation to the cluster.
-		err = f.broadcaster.SendSync(
-			&CreateViewMessage{
-				Index: f.index,
-				Field: f.name,
-				View:  name,
-			})
+		err := f.holder.sendOrSpool(cvm)
 		if err != nil {
 			return nil, errors.Wrap(err, "sending CreateView message")
 		}
@@ -1161,15 +1014,32 @@ func (f *Field) createViewIfNotExists(name string) (*view, error) {
 }
 
 // createViewIfNotExistsBase returns the named view, creating it if necessary.
-// The returned bool indicates whether the view was created or not.
-func (f *Field) createViewIfNotExistsBase(name string) (*view, bool, error) {
+// One purpose of isolating this method from createViewIfNotExists() is that we
+// need to enforce the mu.Lock on everything in this method, but we can't be
+// holding the lock when broadcasting the CreateViewMessage view
+// broadcaster.SendSync(); calling that SendSync() while holding the lock can
+// result in a deadlock waiting on the remote node to give up its lock obtained
+// by performing the same action. The returned bool indicates whether the view
+// was created or not.
+func (f *Field) createViewIfNotExistsBase(cvm *CreateViewMessage) (*view, bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	if view := f.viewMap[name]; view != nil {
+	// If we already have this view, we can probably assume etcd already
+	// has it.
+	if view := f.viewMap[cvm.View]; view != nil {
 		return view, false, nil
 	}
-	view := f.newView(f.viewPath(name), name)
+
+	// Create the view in etcd as the system of record.
+	// Don't persist views related to the existence field.
+	if f.name != existenceFieldName {
+		if err := f.persistView(context.Background(), cvm); err != nil {
+			return nil, false, errors.Wrap(err, "persisting view")
+		}
+	}
+
+	view := f.newView(f.viewPath(cvm.View), cvm.View)
 
 	if err := view.openEmpty(); err != nil {
 		return nil, false, errors.Wrap(err, "opening view")
@@ -1207,6 +1077,11 @@ func (f *Field) deleteView(name string) error {
 	}
 
 	delete(f.viewMap, name)
+
+	// Delete the view from etcd as the system of record.
+	if err := f.schemator.DeleteView(context.TODO(), f.index, f.name, name); err != nil {
+		return errors.Wrapf(err, "deleting view from etcd: %s/%s/%s", f.index, f.name, name)
+	}
 
 	return nil
 }
@@ -1411,22 +1286,16 @@ func (f *Field) SetValue(tx Tx, columnID uint64, value int64) (changed bool, err
 
 	// Increase bit depth value if the unsigned value is greater.
 	if requiredBitDepth > bsig.BitDepth {
-		if err := func() error {
-			f.mu.Lock()
-			defer f.mu.Unlock()
-
-			uvalue := uint64(baseValue)
-			if value < 0 {
-				uvalue = uint64(-baseValue)
-			}
-			bitDepth := bitDepth(uvalue)
-
-			bsig.BitDepth = bitDepth
-			f.options.BitDepth = bitDepth
-			return f.saveMeta()
-		}(); err != nil {
-			return false, errors.Wrap(err, "increasing bsi max")
+		uvalue := uint64(baseValue)
+		if value < 0 {
+			uvalue = uint64(-baseValue)
 		}
+		bitDepth := bitDepth(uvalue)
+
+		f.mu.Lock()
+		bsig.BitDepth = bitDepth
+		f.options.BitDepth = bitDepth
+		f.mu.Unlock()
 	}
 
 	// Fetch target view.
@@ -1727,21 +1596,15 @@ func (f *Field) importValue(qcx *Qcx, columnIDs []uint64, values []int64, option
 		requiredDepth = v
 	}
 	// Increase bit depth if required.
-	if err := func() error {
-		f.mu.Lock()
-		defer f.mu.Unlock()
-		bitDepth := bsig.BitDepth
-		if requiredDepth > bitDepth {
-			bsig.BitDepth = requiredDepth
-			f.options.BitDepth = requiredDepth
-			return f.saveMeta()
-		} else {
-			requiredDepth = bitDepth
-		}
-		return nil
-	}(); err != nil {
-		return errors.Wrap(err, "increasing bsi bit depth")
+	f.mu.Lock()
+	bitDepth := bsig.BitDepth
+	if requiredDepth > bitDepth {
+		bsig.BitDepth = requiredDepth
+		f.options.BitDepth = requiredDepth
+	} else {
+		requiredDepth = bitDepth
 	}
+	f.mu.Unlock()
 
 	// Import into each fragment.
 	for key, data := range dataByFragment {
@@ -1839,9 +1702,9 @@ func (f *Field) importRoaringOverwrite(ctx context.Context, tx Tx, data []byte, 
 			return err
 		}
 
-		var bitDepth uint
+		var bitDepth uint64
 		if maxRowID+1 > bsiOffsetBit {
-			bitDepth = uint(maxRowID + 1 - bsiOffsetBit)
+			bitDepth = uint64(maxRowID + 1 - bsiOffsetBit)
 		}
 
 		bsig := f.bsiGroup(f.name)
@@ -1883,7 +1746,7 @@ func (p fieldInfoSlice) Less(i, j int) bool { return p[i].Name < p[j].Name }
 // FieldOptions represents options to set when initializing a field.
 type FieldOptions struct {
 	Base           int64       `json:"base,omitempty"`
-	BitDepth       uint        `json:"bitDepth,omitempty"`
+	BitDepth       uint64      `json:"bitDepth,omitempty"`
 	Min            pql.Decimal `json:"min,omitempty"`
 	Max            pql.Decimal `json:"max,omitempty"`
 	Scale          int64       `json:"scale,omitempty"`
@@ -1922,38 +1785,16 @@ func newFieldOptions(opts ...FieldOption) (*FieldOptions, error) {
 
 // applyDefaultOptions updates FieldOptions with the default
 // values if o does not contain a valid type.
-func applyDefaultOptions(o *FieldOptions) *FieldOptions {
+func applyDefaultOptions(o *FieldOptions) FieldOptions {
+	if o == nil {
+		o = &FieldOptions{}
+	}
 	if o.Type == "" {
 		o.Type = DefaultFieldType
 		o.CacheType = DefaultCacheType
 		o.CacheSize = DefaultCacheSize
 	}
-	return o
-}
-
-// encode converts o into its internal representation.
-func (o *FieldOptions) encode() *internal.FieldOptions {
-	return encodeFieldOptions(o)
-}
-
-func encodeFieldOptions(o *FieldOptions) *internal.FieldOptions {
-	if o == nil {
-		return nil
-	}
-	return &internal.FieldOptions{
-		Type:           o.Type,
-		CacheType:      o.CacheType,
-		CacheSize:      o.CacheSize,
-		Base:           o.Base,
-		Scale:          o.Scale,
-		BitDepth:       uint64(o.BitDepth),
-		Min:            &internal.Decimal{Value: o.Min.Value, Scale: o.Min.Scale},
-		Max:            &internal.Decimal{Value: o.Max.Value, Scale: o.Max.Scale},
-		TimeQuantum:    string(o.TimeQuantum),
-		Keys:           o.Keys,
-		NoStandardView: o.NoStandardView,
-		ForeignIndex:   o.ForeignIndex,
-	}
+	return *o
 }
 
 // MarshalJSON marshals FieldOptions to JSON such that
@@ -1977,7 +1818,7 @@ func (o *FieldOptions) MarshalJSON() ([]byte, error) {
 		return json.Marshal(struct {
 			Type         string      `json:"type"`
 			Base         int64       `json:"base"`
-			BitDepth     uint        `json:"bitDepth"`
+			BitDepth     uint64      `json:"bitDepth"`
 			Min          pql.Decimal `json:"min"`
 			Max          pql.Decimal `json:"max"`
 			Keys         bool        `json:"keys"`
@@ -1996,7 +1837,7 @@ func (o *FieldOptions) MarshalJSON() ([]byte, error) {
 			Type     string      `json:"type"`
 			Base     int64       `json:"base"`
 			Scale    int64       `json:"scale"`
-			BitDepth uint        `json:"bitDepth"`
+			BitDepth uint64      `json:"bitDepth"`
 			Min      pql.Decimal `json:"min"`
 			Max      pql.Decimal `json:"max"`
 			Keys     bool        `json:"keys"`
@@ -2077,7 +1918,7 @@ type bsiGroup struct {
 	Max      int64  `json:"max,omitempty"`
 	Base     int64  `json:"base,omitempty"`
 	Scale    int64  `json:"scale,omitempty"`
-	BitDepth uint   `json:"bitDepth,omitempty"`
+	BitDepth uint64 `json:"bitDepth,omitempty"`
 }
 
 // baseValue adjusts the value to align with the range for Field for a certain
@@ -2177,12 +2018,12 @@ func isValidCacheType(v string) bool {
 }
 
 // bitDepth returns the number of bits required to store a value.
-func bitDepth(v uint64) uint {
-	return uint(bits.Len64(v))
+func bitDepth(v uint64) uint64 {
+	return uint64(bits.Len64(v))
 }
 
 // bitDepthInt64 returns the required bit depth for abs(v).
-func bitDepthInt64(v int64) uint {
+func bitDepthInt64(v int64) uint64 {
 	if v < 0 {
 		return bitDepth(uint64(-v))
 	}
@@ -2192,4 +2033,17 @@ func bitDepthInt64(v int64) uint {
 // FormatQualifiedFieldName generates a qualified name for the field to be used with Tx operations.
 func FormatQualifiedFieldName(index, field string) string {
 	return fmt.Sprintf("%s\x00%s\x00", index, field)
+}
+
+// persistView stores the view information in etcd.
+func (f *Field) persistView(ctx context.Context, cvm *CreateViewMessage) error {
+	if cvm.Index == "" {
+		return ErrIndexRequired
+	} else if cvm.Field == "" {
+		return ErrFieldRequired
+	} else if cvm.View == "" {
+		return ErrViewRequired
+	}
+
+	return f.schemator.CreateView(ctx, cvm.Index, cvm.Field, cvm.View)
 }

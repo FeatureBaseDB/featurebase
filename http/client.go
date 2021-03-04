@@ -30,13 +30,15 @@ import (
 
 	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/encoding/proto"
+	pnet "github.com/pilosa/pilosa/v2/net"
+	"github.com/pilosa/pilosa/v2/topology"
 	"github.com/pilosa/pilosa/v2/tracing"
 	"github.com/pkg/errors"
 )
 
 // InternalClient represents a client to the Pilosa cluster.
 type InternalClient struct {
-	defaultURI *pilosa.URI
+	defaultURI *pnet.URI
 	serializer pilosa.Serializer
 
 	// The client to use for HTTP communication.
@@ -49,7 +51,7 @@ func NewInternalClient(host string, remoteClient *http.Client) (*InternalClient,
 		return nil, pilosa.ErrHostRequired
 	}
 
-	uri, err := pilosa.NewURIFromAddress(host)
+	uri, err := pnet.NewURIFromAddress(host)
 	if err != nil {
 		return nil, errors.Wrap(err, "getting URI")
 	}
@@ -58,7 +60,7 @@ func NewInternalClient(host string, remoteClient *http.Client) (*InternalClient,
 	return client, nil
 }
 
-func NewInternalClientFromURI(defaultURI *pilosa.URI, remoteClient *http.Client) *InternalClient {
+func NewInternalClientFromURI(defaultURI *pnet.URI, remoteClient *http.Client) *InternalClient {
 	return &InternalClient{
 		defaultURI: defaultURI,
 		serializer: proto.Serializer{},
@@ -102,6 +104,39 @@ func (c *InternalClient) maxShardByIndex(ctx context.Context) (map[string]uint64
 	return rsp.Standard, nil
 }
 
+// SchemaNode returns all index and field schema information from the specified
+// node.
+func (c *InternalClient) SchemaNode(ctx context.Context, uri *pnet.URI, views bool) ([]*pilosa.IndexInfo, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.Schema")
+	defer span.Finish()
+
+	// TODO: /?views parameter will be ignored, till we implement schemator!
+	// Execute request against the host.
+	u := uri.Path(fmt.Sprintf("/schema?views=%v", views))
+
+	// Build request.
+	req, err := http.NewRequest("GET", u, nil)
+	if err != nil {
+		return nil, errors.Wrap(err, "creating request")
+	}
+
+	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+	req.Header.Set("Accept", "application/json")
+
+	// Execute request.
+	resp, err := c.executeRequest(req.WithContext(ctx))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var rsp getSchemaResponse
+	if err := json.NewDecoder(resp.Body).Decode(&rsp); err != nil {
+		return nil, fmt.Errorf("json decode: %s", err)
+	}
+	return rsp.Indexes, nil
+}
+
 // Schema returns all index and field schema information.
 func (c *InternalClient) Schema(ctx context.Context) ([]*pilosa.IndexInfo, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.Schema")
@@ -133,7 +168,7 @@ func (c *InternalClient) Schema(ctx context.Context) ([]*pilosa.IndexInfo, error
 	return rsp.Indexes, nil
 }
 
-func (c *InternalClient) PostSchema(ctx context.Context, uri *pilosa.URI, s *pilosa.Schema, remote bool) error {
+func (c *InternalClient) PostSchema(ctx context.Context, uri *pnet.URI, s *pilosa.Schema, remote bool) error {
 	u := uri.Path(fmt.Sprintf("/schema?remote=%v", remote))
 	buf, err := json.Marshal(s)
 	if err != nil {
@@ -165,15 +200,15 @@ func (c *InternalClient) CreateIndex(ctx context.Context, index string, opt pilo
 	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.CreateIndex")
 	defer span.Finish()
 
-	// Get the coordinator node. Schema changes must go through
-	// coordinator to avoid weird race conditions.
+	// Get the primary node. Schema changes must go through
+	// primary to avoid weird race conditions.
 	nodes, err := c.Nodes(ctx)
 	if err != nil {
 		return fmt.Errorf("getting nodes: %s", err)
 	}
-	coord := getCoordinatorNode(nodes)
+	coord := getPrimaryNode(nodes)
 	if coord == nil {
-		return fmt.Errorf("could not find the coordinator node")
+		return fmt.Errorf("could not find the primary node")
 	}
 
 	// Encode query request.
@@ -207,7 +242,7 @@ func (c *InternalClient) CreateIndex(ctx context.Context, index string, opt pilo
 }
 
 // FragmentNodes returns a list of nodes that own a shard.
-func (c *InternalClient) FragmentNodes(ctx context.Context, index string, shard uint64) ([]*pilosa.Node, error) {
+func (c *InternalClient) FragmentNodes(ctx context.Context, index string, shard uint64) ([]*topology.Node, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.FragmentNodes")
 	defer span.Finish()
 
@@ -231,7 +266,7 @@ func (c *InternalClient) FragmentNodes(ctx context.Context, index string, shard 
 	}
 	defer resp.Body.Close()
 
-	var a []*pilosa.Node
+	var a []*topology.Node
 	if err := json.NewDecoder(resp.Body).Decode(&a); err != nil {
 		return nil, fmt.Errorf("json decode: %s", err)
 	}
@@ -239,7 +274,7 @@ func (c *InternalClient) FragmentNodes(ctx context.Context, index string, shard 
 }
 
 // Nodes returns a list of all nodes.
-func (c *InternalClient) Nodes(ctx context.Context) ([]*pilosa.Node, error) {
+func (c *InternalClient) Nodes(ctx context.Context) ([]*topology.Node, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.Nodes")
 	defer span.Finish()
 
@@ -262,7 +297,7 @@ func (c *InternalClient) Nodes(ctx context.Context) ([]*pilosa.Node, error) {
 	}
 	defer resp.Body.Close()
 
-	var a []*pilosa.Node
+	var a []*topology.Node
 	if err := json.NewDecoder(resp.Body).Decode(&a); err != nil {
 		return nil, fmt.Errorf("json decode: %s", err)
 	}
@@ -277,7 +312,7 @@ func (c *InternalClient) Query(ctx context.Context, index string, queryRequest *
 }
 
 // QueryNode executes query against the index, sending the request to the node specified.
-func (c *InternalClient) QueryNode(ctx context.Context, uri *pilosa.URI, index string, queryRequest *pilosa.QueryRequest) (*pilosa.QueryResponse, error) {
+func (c *InternalClient) QueryNode(ctx context.Context, uri *pnet.URI, index string, queryRequest *pilosa.QueryRequest) (*pilosa.QueryResponse, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "QueryNode")
 	defer span.Finish()
 
@@ -368,9 +403,9 @@ func (c *InternalClient) Import(ctx context.Context, index, field string, shard 
 	return nil
 }
 
-func getCoordinatorNode(nodes []*pilosa.Node) *pilosa.Node {
+func getPrimaryNode(nodes []*topology.Node) *topology.Node {
 	for _, node := range nodes {
-		if node.IsCoordinator {
+		if node.IsPrimary {
 			return node
 		}
 	}
@@ -402,22 +437,22 @@ func (c *InternalClient) ImportK(ctx context.Context, index, field string, bits 
 		return fmt.Errorf("Error Creating Payload: %s", err)
 	}
 
-	// Get the coordinator node; all bits are sent to the
-	// primary translate store (i.e. coordinator).
+	// Get the primary node; all bits are sent to the
+	// primary translate store (i.e. primary).
 	// TODO... is that right^^?
 	// RESPONSE: It looks like in ctl/import.go, we could change the
 	// logic in ImportCommand.importBits() to only use ImportK
 	// when useRowKeys = true. It's no longer necessary to
-	// send column key translations to the coordinator (although
+	// send column key translations to the primary (although
 	// it should still work). As far as I know, the only thing
 	// that uses ImportK is the pilosa import sub-command.
 	nodes, err := c.Nodes(ctx)
 	if err != nil {
 		return fmt.Errorf("getting nodes: %s", err)
 	}
-	coord := getCoordinatorNode(nodes)
+	coord := getPrimaryNode(nodes)
 	if coord == nil {
-		return fmt.Errorf("could not find the coordinator node")
+		return fmt.Errorf("could not find the primary node")
 	}
 
 	// Import to node.
@@ -482,7 +517,7 @@ func (c *InternalClient) marshalImportPayload(index, field string, shard uint64,
 }
 
 // importNode sends a pre-marshaled import request to a node.
-func (c *InternalClient) importNode(ctx context.Context, node *pilosa.Node, index, field string, buf []byte, opts *pilosa.ImportOptions) error {
+func (c *InternalClient) importNode(ctx context.Context, node *topology.Node, index, field string, buf []byte, opts *pilosa.ImportOptions) error {
 	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.importNode")
 	defer span.Finish()
 
@@ -621,15 +656,15 @@ func (c *InternalClient) ImportValueK(ctx context.Context, index, field string, 
 		}
 	}
 
-	// Get the coordinator node; all bits are sent to the
-	// primary translate store (i.e. coordinator).
+	// Get the primary node; all bits are sent to the
+	// primary translate store.
 	nodes, err := c.Nodes(ctx)
 	if err != nil {
 		return fmt.Errorf("getting nodes: %s", err)
 	}
-	coord := getCoordinatorNode(nodes)
+	coord := getPrimaryNode(nodes)
 	if coord == nil {
-		return fmt.Errorf("could not find the coordinator node")
+		return fmt.Errorf("could not find the primary node")
 	}
 
 	// Import to node.
@@ -664,7 +699,7 @@ func (c *InternalClient) marshalImportValuePayload(index, field string, shard ui
 
 // ImportRoaring does fast import of raw bits in roaring format (pilosa or
 // official format, see API.ImportRoaring).
-func (c *InternalClient) ImportRoaring(ctx context.Context, uri *pilosa.URI, index, field string, shard uint64, remote bool, req *pilosa.ImportRoaringRequest) error {
+func (c *InternalClient) ImportRoaring(ctx context.Context, uri *pnet.URI, index, field string, shard uint64, remote bool, req *pilosa.ImportRoaringRequest) error {
 	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.ImportRoaring")
 	defer span.Finish()
 
@@ -718,7 +753,7 @@ func (c *InternalClient) ImportRoaring(ctx context.Context, uri *pilosa.URI, ind
 }
 
 // ImportColumnAttrs does bulk import of column attrs
-func (c *InternalClient) ImportColumnAttrs(ctx context.Context, uri *pilosa.URI, index string, req *pilosa.ImportColumnAttrsRequest) error {
+func (c *InternalClient) ImportColumnAttrs(ctx context.Context, uri *pnet.URI, index string, req *pilosa.ImportColumnAttrsRequest) error {
 	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.ImportRoaring")
 	defer span.Finish()
 
@@ -802,7 +837,7 @@ func (c *InternalClient) ExportCSV(ctx context.Context, index, field string, sha
 }
 
 // exportNode copies a CSV export from a node to w.
-func (c *InternalClient) exportNodeCSV(ctx context.Context, node *pilosa.Node, index, field string, shard uint64, w io.Writer) error {
+func (c *InternalClient) exportNodeCSV(ctx context.Context, node *topology.Node, index, field string, shard uint64, w io.Writer) error {
 	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.exportNodeCSV")
 	defer span.Finish()
 
@@ -840,11 +875,11 @@ func (c *InternalClient) exportNodeCSV(ctx context.Context, node *pilosa.Node, i
 // RetrieveShardFromURI returns a ReadCloser which contains the data of the
 // specified shard from the specified node. Caller *must* close the returned
 // ReadCloser or risk leaking goroutines/tcp connections.
-func (c *InternalClient) RetrieveShardFromURI(ctx context.Context, index, field, view string, shard uint64, uri pilosa.URI) (io.ReadCloser, error) {
+func (c *InternalClient) RetrieveShardFromURI(ctx context.Context, index, field, view string, shard uint64, uri pnet.URI) (io.ReadCloser, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.RetrieveShardFromURI")
 	defer span.Finish()
 
-	node := &pilosa.Node{
+	node := &topology.Node{
 		URI: uri,
 	}
 
@@ -882,7 +917,7 @@ func (c *InternalClient) CreateField(ctx context.Context, index, field string) e
 	return c.CreateFieldWithOptions(ctx, index, field, pilosa.FieldOptions{})
 }
 
-// CreateField creates a new field on the server.
+// CreateFieldWithOptions creates a new field on the server.
 func (c *InternalClient) CreateFieldWithOptions(ctx context.Context, index, field string, opt pilosa.FieldOptions) error {
 	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.CreateFieldWithOptions")
 	defer span.Finish()
@@ -900,20 +935,26 @@ func (c *InternalClient) CreateFieldWithOptions(ctx context.Context, index, fiel
 	// should probably happen in the field anyway??
 	fieldOpt := fieldOptions{
 		Type: opt.Type,
-		Keys: &opt.Keys,
 	}
-	if fieldOpt.Type == pilosa.FieldTypeSet {
+	switch fieldOpt.Type {
+	case pilosa.FieldTypeSet, pilosa.FieldTypeMutex:
 		fieldOpt.CacheType = &opt.CacheType
 		fieldOpt.CacheSize = &opt.CacheSize
-	} else if fieldOpt.Type == pilosa.FieldTypeInt {
+		fieldOpt.Keys = &opt.Keys
+	case pilosa.FieldTypeInt:
 		fieldOpt.Min = &opt.Min
 		fieldOpt.Max = &opt.Max
-	} else if fieldOpt.Type == pilosa.FieldTypeTime {
+	case pilosa.FieldTypeTime:
 		fieldOpt.TimeQuantum = &opt.TimeQuantum
-	} else if fieldOpt.Type == pilosa.FieldTypeDecimal {
+	case pilosa.FieldTypeBool:
+		// pass
+	case pilosa.FieldTypeDecimal:
 		fieldOpt.Min = &opt.Min
 		fieldOpt.Max = &opt.Max
 		fieldOpt.Scale = &opt.Scale
+	default:
+		fieldOpt.Type = pilosa.DefaultFieldType
+		fieldOpt.Keys = &opt.Keys
 	}
 
 	// TODO: remove buf completely? (depends on whether importer needs to create specific field types)
@@ -925,15 +966,15 @@ func (c *InternalClient) CreateFieldWithOptions(ctx context.Context, index, fiel
 		return errors.Wrap(err, "marshaling")
 	}
 
-	// Get the coordinator node. Schema changes must go through
-	// coordinator to avoid weird race conditions.
+	// Get the primary node. Schema changes must go through
+	// primary to avoid weird race conditions.
 	nodes, err := c.Nodes(ctx)
 	if err != nil {
 		return fmt.Errorf("getting nodes: %s", err)
 	}
-	coord := getCoordinatorNode(nodes)
+	coord := getPrimaryNode(nodes)
 	if coord == nil {
-		return fmt.Errorf("could not find the coordinator node")
+		return fmt.Errorf("could not find the primary node")
 	}
 
 	// Create URL & HTTP request.
@@ -961,7 +1002,7 @@ func (c *InternalClient) CreateFieldWithOptions(ctx context.Context, index, fiel
 
 // FragmentBlocks returns a list of block checksums for a fragment on a host.
 // Only returns blocks which contain data.
-func (c *InternalClient) FragmentBlocks(ctx context.Context, uri *pilosa.URI, index, field, view string, shard uint64) ([]pilosa.FragmentBlock, error) {
+func (c *InternalClient) FragmentBlocks(ctx context.Context, uri *pnet.URI, index, field, view string, shard uint64) ([]pilosa.FragmentBlock, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.FragmentBlocks")
 	defer span.Finish()
 
@@ -1005,7 +1046,7 @@ func (c *InternalClient) FragmentBlocks(ctx context.Context, uri *pilosa.URI, in
 }
 
 // BlockData returns row/column id pairs for a block.
-func (c *InternalClient) BlockData(ctx context.Context, uri *pilosa.URI, index, field, view string, shard uint64, block int) ([]uint64, []uint64, error) {
+func (c *InternalClient) BlockData(ctx context.Context, uri *pnet.URI, index, field, view string, shard uint64, block int) ([]uint64, []uint64, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.BlockData")
 	defer span.Finish()
 
@@ -1054,7 +1095,7 @@ func (c *InternalClient) BlockData(ctx context.Context, uri *pilosa.URI, index, 
 }
 
 // ColumnAttrDiff returns data from differing blocks on a remote host.
-func (c *InternalClient) ColumnAttrDiff(ctx context.Context, uri *pilosa.URI, index string, blks []pilosa.AttrBlock) (map[uint64]map[string]interface{}, error) {
+func (c *InternalClient) ColumnAttrDiff(ctx context.Context, uri *pnet.URI, index string, blks []pilosa.AttrBlock) (map[uint64]map[string]interface{}, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.ColumnAttrDiff")
 	defer span.Finish()
 
@@ -1094,7 +1135,7 @@ func (c *InternalClient) ColumnAttrDiff(ctx context.Context, uri *pilosa.URI, in
 }
 
 // RowAttrDiff returns data from differing blocks on a remote host.
-func (c *InternalClient) RowAttrDiff(ctx context.Context, uri *pilosa.URI, index, field string, blks []pilosa.AttrBlock) (map[uint64]map[string]interface{}, error) {
+func (c *InternalClient) RowAttrDiff(ctx context.Context, uri *pnet.URI, index, field string, blks []pilosa.AttrBlock) (map[uint64]map[string]interface{}, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.RowAttrDiff")
 	defer span.Finish()
 
@@ -1137,7 +1178,7 @@ func (c *InternalClient) RowAttrDiff(ctx context.Context, uri *pilosa.URI, index
 }
 
 // SendMessage posts a message synchronously.
-func (c *InternalClient) SendMessage(ctx context.Context, uri *pilosa.URI, msg []byte) error {
+func (c *InternalClient) SendMessage(ctx context.Context, uri *pnet.URI, msg []byte) error {
 	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.SendMessage")
 	defer span.Finish()
 
@@ -1161,9 +1202,9 @@ func (c *InternalClient) SendMessage(ctx context.Context, uri *pilosa.URI, msg [
 	return errors.Wrap(err, "draining SendMessage response body")
 }
 
-// TranslateKeysNode function is mainly called to translate keys from coordinator node.
-// If coordinator node returns 404 error the function wraps it with pilosa.ErrTranslatingKeyNotFound.
-func (c *InternalClient) TranslateKeysNode(ctx context.Context, uri *pilosa.URI, index, field string, keys []string, writable bool) ([]uint64, error) {
+// TranslateKeysNode function is mainly called to translate keys from primary node.
+// If primary node returns 404 error the function wraps it with pilosa.ErrTranslatingKeyNotFound.
+func (c *InternalClient) TranslateKeysNode(ctx context.Context, uri *pnet.URI, index, field string, keys []string, writable bool) ([]uint64, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "TranslateKeysNode")
 	defer span.Finish()
 
@@ -1218,7 +1259,7 @@ func (c *InternalClient) TranslateKeysNode(ctx context.Context, uri *pilosa.URI,
 }
 
 // TranslateIDsNode sends an id translation request to a specific node.
-func (c *InternalClient) TranslateIDsNode(ctx context.Context, uri *pilosa.URI, index, field string, ids []uint64) ([]string, error) {
+func (c *InternalClient) TranslateIDsNode(ctx context.Context, uri *pnet.URI, index, field string, ids []uint64) ([]string, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "TranslateIDsNode")
 	defer span.Finish()
 
@@ -1269,7 +1310,7 @@ func (c *InternalClient) TranslateIDsNode(ctx context.Context, uri *pilosa.URI, 
 }
 
 // GetNodeUsage retrieves the size-on-disk information for the specified node.
-func (c *InternalClient) GetNodeUsage(ctx context.Context, uri *pilosa.URI) (map[string]pilosa.NodeUsage, error) {
+func (c *InternalClient) GetNodeUsage(ctx context.Context, uri *pnet.URI) (map[string]pilosa.NodeUsage, error) {
 	u := uri.Path("/ui/usage?remote=true")
 	req, err := http.NewRequest("GET", u, nil)
 	if err != nil {
@@ -1300,7 +1341,7 @@ func (c *InternalClient) GetNodeUsage(ctx context.Context, uri *pilosa.URI) (map
 }
 
 // GetPastQueries retrieves the query history log for the specified node.
-func (c *InternalClient) GetPastQueries(ctx context.Context, uri *pilosa.URI) ([]pilosa.PastQueryStatus, error) {
+func (c *InternalClient) GetPastQueries(ctx context.Context, uri *pnet.URI) ([]pilosa.PastQueryStatus, error) {
 	u := uri.Path("/query-history?remote=true")
 	req, err := http.NewRequest("GET", u, nil)
 	if err != nil {
@@ -1330,7 +1371,7 @@ func (c *InternalClient) GetPastQueries(ctx context.Context, uri *pilosa.URI) ([
 	return queries, nil
 }
 
-func (c *InternalClient) FindIndexKeysNode(ctx context.Context, uri *pilosa.URI, index string, keys ...string) (transMap map[string]uint64, err error) {
+func (c *InternalClient) FindIndexKeysNode(ctx context.Context, uri *pnet.URI, index string, keys ...string) (transMap map[string]uint64, err error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.FindIndexKeysNode")
 	defer span.Finish()
 
@@ -1379,7 +1420,7 @@ func (c *InternalClient) FindIndexKeysNode(ctx context.Context, uri *pilosa.URI,
 	return transMap, nil
 }
 
-func (c *InternalClient) FindFieldKeysNode(ctx context.Context, uri *pilosa.URI, index string, field string, keys ...string) (transMap map[string]uint64, err error) {
+func (c *InternalClient) FindFieldKeysNode(ctx context.Context, uri *pnet.URI, index string, field string, keys ...string) (transMap map[string]uint64, err error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.FindFieldKeysNode")
 	defer span.Finish()
 
@@ -1427,7 +1468,7 @@ func (c *InternalClient) FindFieldKeysNode(ctx context.Context, uri *pilosa.URI,
 	return transMap, nil
 }
 
-func (c *InternalClient) CreateIndexKeysNode(ctx context.Context, uri *pilosa.URI, index string, keys ...string) (transMap map[string]uint64, err error) {
+func (c *InternalClient) CreateIndexKeysNode(ctx context.Context, uri *pnet.URI, index string, keys ...string) (transMap map[string]uint64, err error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.CreateIndexKeysNode")
 	defer span.Finish()
 
@@ -1476,7 +1517,7 @@ func (c *InternalClient) CreateIndexKeysNode(ctx context.Context, uri *pilosa.UR
 	return transMap, nil
 }
 
-func (c *InternalClient) CreateFieldKeysNode(ctx context.Context, uri *pilosa.URI, index string, field string, keys ...string) (transMap map[string]uint64, err error) {
+func (c *InternalClient) CreateFieldKeysNode(ctx context.Context, uri *pnet.URI, index string, field string, keys ...string) (transMap map[string]uint64, err error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.CreateFieldKeysNode")
 	defer span.Finish()
 
@@ -1567,7 +1608,7 @@ func (c *InternalClient) StartTransaction(ctx context.Context, id string, timeou
 	// We're using the defaultURI here because this is only used by
 	// tests, and we want to test requests against all hosts. A robust
 	// client implementation would ensure that these requests go to
-	// the coordinator.
+	// the primary.
 	u := uriPathToURL(c.defaultURI, "/transaction/"+id)
 	req, err := http.NewRequest("POST", u.String(), bytes.NewReader(buf))
 	if err != nil {
@@ -1639,7 +1680,7 @@ func (c *InternalClient) GetTransaction(ctx context.Context, id string) (*pilosa
 	// We're using the defaultURI here because this is only used by
 	// tests, and we want to test requests against all hosts. A robust
 	// client implementation would ensure that these requests go to
-	// the coordinator.
+	// the primary.
 	u := uriPathToURL(c.defaultURI, "/transaction/"+id)
 	req, err := http.NewRequest("GET", u.String(), nil)
 	if err != nil {
@@ -1922,7 +1963,7 @@ func pos(rowID, columnID uint64) uint64 {
 	return (rowID * pilosa.ShardWidth) + (columnID % pilosa.ShardWidth)
 }
 
-func uriPathToURL(uri *pilosa.URI, path string) url.URL {
+func uriPathToURL(uri *pnet.URI, path string) url.URL {
 	return url.URL{
 		Scheme: uri.Scheme,
 		Host:   uri.HostPort(),
@@ -1930,7 +1971,7 @@ func uriPathToURL(uri *pilosa.URI, path string) url.URL {
 	}
 }
 
-func nodePathToURL(node *pilosa.Node, path string) url.URL {
+func nodePathToURL(node *topology.Node, path string) url.URL {
 	return url.URL{
 		Scheme: node.URI.Scheme,
 		Host:   node.URI.HostPort(),
@@ -1941,11 +1982,11 @@ func nodePathToURL(node *pilosa.Node, path string) url.URL {
 // RetrieveTranslatePartitionFromURI returns a ReadCloser which contains the data of the
 // specified translate partition from the specified node. Caller *must* close the returned
 // ReadCloser or risk leaking goroutines/tcp connections.
-func (c *InternalClient) RetrieveTranslatePartitionFromURI(ctx context.Context, index string, partition int, uri pilosa.URI) (io.ReadCloser, error) {
+func (c *InternalClient) RetrieveTranslatePartitionFromURI(ctx context.Context, index string, partition int, uri pnet.URI) (io.ReadCloser, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.RetrieveTranslatePartitionFromURI")
 	defer span.Finish()
 
-	node := &pilosa.Node{
+	node := &topology.Node{
 		URI: uri,
 	}
 
@@ -1974,7 +2015,7 @@ func (c *InternalClient) RetrieveTranslatePartitionFromURI(ctx context.Context, 
 
 	return resp.Body, nil
 }
-func (c *InternalClient) ImportIndexKeys(ctx context.Context, uri *pilosa.URI, index string, partitionID int, remote bool, rddbdata io.Reader) error {
+func (c *InternalClient) ImportIndexKeys(ctx context.Context, uri *pnet.URI, index string, partitionID int, remote bool, rddbdata io.Reader) error {
 	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.ImportIndexKeys")
 	defer span.Finish()
 
@@ -2006,7 +2047,7 @@ func (c *InternalClient) ImportIndexKeys(ctx context.Context, uri *pilosa.URI, i
 	return nil
 }
 
-func (c *InternalClient) ImportFieldKeys(ctx context.Context, uri *pilosa.URI, index, field string, remote bool, rddbdata io.Reader) error {
+func (c *InternalClient) ImportFieldKeys(ctx context.Context, uri *pnet.URI, index, field string, remote bool, rddbdata io.Reader) error {
 	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.ImportFieldKeys")
 	defer span.Finish()
 
@@ -2036,4 +2077,37 @@ func (c *InternalClient) ImportFieldKeys(ctx context.Context, uri *pilosa.URI, i
 	}
 	defer resp.Body.Close()
 	return nil
+}
+
+// Status function is just a public function for this particular implementation of InternalClient.
+// It's not require by pilosa.InternalClient interface.
+// The function returns pilosa cluster state as a string ("NORMAL", "DEGRADED", "DOWN", "RESIZING", ...)
+func (c *InternalClient) Status(ctx context.Context) (string, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.Status")
+	defer span.Finish()
+
+	// Execute request against the host.
+	u := c.defaultURI.Path("/status")
+
+	// Build request.
+	req, err := http.NewRequest("GET", u, nil)
+	if err != nil {
+		return "", errors.Wrap(err, "creating request")
+	}
+
+	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+	req.Header.Set("Accept", "application/json")
+
+	// Execute request.
+	resp, err := c.executeRequest(req.WithContext(ctx))
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	var rsp getStatusResponse
+	if err := json.NewDecoder(resp.Body).Decode(&rsp); err != nil {
+		return "", fmt.Errorf("json decode: %s", err)
+	}
+	return rsp.State, nil
 }

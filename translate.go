@@ -22,6 +22,7 @@ import (
 	"io/ioutil"
 	"sync"
 
+	"github.com/pilosa/pilosa/v2/topology"
 	"github.com/pkg/errors"
 )
 
@@ -39,7 +40,6 @@ var (
 	ErrTranslateStoreReadOnly     = errors.New("translate store could not find or create key, translate store read only")
 	ErrTranslateStoreNotFound     = errors.New("translate store not found")
 	ErrTranslatingKeyNotFound     = errors.New("translating key not found")
-	ErrCannotOpenV1TranslateFile  = errors.New("cannot open v1 translate .keys file")
 )
 
 // TranslateStore is the storage for translation string-to-uint64 values.
@@ -99,16 +99,6 @@ type TranslateStore interface { // TODO: refactor this interface; readonly shoul
 	// It should read from the reader and replace the data store with
 	// the read payload.
 	ReadFrom(io.Reader) (int64, error)
-
-	ComputeTranslatorSummaryRows() (sum *TranslatorSummary, err error)
-	ComputeTranslatorSummaryCols(partitionID int, topo *Topology) (sum *TranslatorSummary, err error)
-
-	KeyWalker(walk func(key string, col uint64)) error
-	IDWalker(walk func(key string, col uint64)) error
-
-	RepairKeys(topo *Topology, verbose, applyKeyRepairs bool) (changed bool, err error)
-
-	GetStorePath() string
 }
 
 // TranslatorSummary is returned, for example from the boltdb string key translators,
@@ -188,7 +178,7 @@ func GenerateNextPartitionedID(index string, prev uint64, partitionID, partition
 	// Try to use the next ID if it is in the same partition.
 	// Otherwise find ID in next shard that has a matching partition.
 	for id := prev + 1; ; id += ShardWidth {
-		if shardToShardPartition(index, id/ShardWidth, partitionN) == partitionID {
+		if topology.ShardToShardPartition(index, id/ShardWidth, partitionN) == partitionID {
 			return id
 		}
 	}
@@ -365,48 +355,12 @@ func NewInMemTranslateStore(index, field string, partitionID, partitionN int) *I
 	}
 }
 
-func (s *InMemTranslateStore) GetStorePath() string {
-	return ""
-}
-
-// KeyWalker executes walk for every pair in the database
-func (s *InMemTranslateStore) KeyWalker(walk func(key string, col uint64)) error {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	for id, key := range s.keysByID {
-		walk(key, id)
-	}
-	return nil
-}
-
-// IDWalker executes walk for every pair in the database
-func (s *InMemTranslateStore) IDWalker(walk func(key string, col uint64)) error {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	for key, id := range s.idsByKey {
-		walk(key, id)
-	}
-	return nil
-}
-
 var _ OpenTranslateStoreFunc = OpenInMemTranslateStore
 
 // OpenInMemTranslateStore returns a new instance of InMemTranslateStore.
 // Implements OpenTranslateStoreFunc.
 func OpenInMemTranslateStore(rawurl, index, field string, partitionID, partitionN int) (TranslateStore, error) {
 	return NewInMemTranslateStore(index, field, partitionID, partitionN), nil
-}
-
-func (s *InMemTranslateStore) ComputeTranslatorSummaryRows() (sum *TranslatorSummary, err error) {
-	panic("TODO")
-}
-
-func (s *InMemTranslateStore) ComputeTranslatorSummaryCols(partitionID int, topo *Topology) (sum *TranslatorSummary, err error) {
-	panic("TODO")
-}
-
-func (s *InMemTranslateStore) RepairKeys(topo *Topology, verbose, applyKeyRepairs bool) (changed bool, err error) {
-	panic("TODO")
 }
 
 func (s *InMemTranslateStore) Close() error {

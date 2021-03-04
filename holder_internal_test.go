@@ -20,6 +20,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/pilosa/pilosa/v2/disco"
 	"github.com/pilosa/pilosa/v2/testhook"
 )
 
@@ -76,12 +77,16 @@ func (t *testHolderOperator) ProcessFragment(*fragment) error {
 	return nil
 }
 
-func makeHolder(tb testing.TB) (*Holder, string, error) {
+func makeHolder(tb testing.TB, backend string) (*Holder, string, error) {
 	path, err := testhook.TempDir(tb, "pilosa-")
 	if err != nil {
 		return nil, "", err
 	}
-	h := NewHolder(path, nil)
+	cfg := mustHolderConfig()
+	if backend != "" {
+		cfg.StorageConfig.Backend = backend
+	}
+	h := NewHolder(path, cfg)
 	return h, path, h.Open()
 }
 
@@ -170,7 +175,7 @@ func testHasBit(t *testing.T, h *Holder, index, field string, rowID, columnID ui
 }
 
 func TestHolderOperatorProcess(t *testing.T) {
-	h, path, err := makeHolder(t)
+	h, path, err := makeHolder(t, "")
 	if err != nil {
 		t.Fatalf("creating holder: %v", err)
 	}
@@ -200,7 +205,7 @@ func TestHolderOperatorProcess(t *testing.T) {
 }
 
 func TestHolderOperatorCancel(t *testing.T) {
-	h, path, err := makeHolder(t)
+	h, path, err := makeHolder(t, "")
 	if err != nil {
 		t.Fatalf("creating holder: %v", err)
 	}
@@ -246,4 +251,19 @@ func TestHolderOperatorCancel(t *testing.T) {
 	if testOp == expected {
 		t.Fatalf("holder processor did not cancel. expected something other than %#v", expected)
 	}
+}
+
+// mustHolderConfig is meant to help minimize the number of places in the code
+// where we're reading the PILOSA_STORAGE_BACKEND environment variable for
+// testing purposes. Ideally we would handle this differently, but this is a
+// first attempt at improving things. Note: the actual os.Getenv() call was
+// moved to the CurrentBackend() function.
+func mustHolderConfig() *HolderConfig {
+	cfg := DefaultHolderConfig()
+	if backend := CurrentBackend(); backend != "" {
+		_ = MustBackendToTxtype(backend)
+		cfg.StorageConfig.Backend = backend
+	}
+	cfg.Schemator = disco.InMemSchemator
+	return cfg
 }

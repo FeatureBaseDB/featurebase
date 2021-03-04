@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/pilosa/pilosa/v2"
+	"github.com/pilosa/pilosa/v2/disco"
 	"github.com/pilosa/pilosa/v2/encoding/proto"
 	"github.com/pilosa/pilosa/v2/http"
 	"github.com/pilosa/pilosa/v2/server"
@@ -39,13 +40,6 @@ type Command struct {
 	*server.Command
 
 	commandOptions []server.CommandOption
-}
-
-func OptTxSrc(src string) server.CommandOption {
-	return func(m *server.Command) error {
-		m.Config.Txsrc = src
-		return nil
-	}
 }
 
 func OptAllowedOrigins(origins []string) server.CommandOption {
@@ -71,16 +65,20 @@ func newCommand(tb testing.TB, opts ...server.CommandOption) *Command {
 	opts = append([]server.CommandOption{
 		server.OptCommandCloseTimeout(time.Millisecond * 2),
 	}, opts...)
+
 	m := &Command{commandOptions: opts}
 	m.Command = server.NewCommand(bytes.NewReader(nil), ioutil.Discard, ioutil.Discard, opts...)
 	m.Config.DataDir = path
 	defaultConf := server.NewConfig()
+
 	if m.Config.Bind == defaultConf.Bind {
 		m.Config.Bind = "http://localhost:0"
 	}
+
 	if m.Config.BindGRPC == defaultConf.BindGRPC {
 		m.Config.BindGRPC = "http://localhost:0"
 	}
+
 	m.Config.Translation.MapSize = 140000
 	m.Config.WorkerPoolSize = 2
 
@@ -93,39 +91,28 @@ func newCommand(tb testing.TB, opts ...server.CommandOption) *Command {
 }
 
 // NewCommandNode returns a new instance of Command with clustering enabled.
-func NewCommandNode(tb testing.TB, isCoordinator bool, opts ...server.CommandOption) *Command {
+func NewCommandNode(tb testing.TB, opts ...server.CommandOption) *Command {
 	// We want tests to default to using the in-memory translate store, so we
 	// prepend opts with that functional option. If a different translate store
 	// has been specified, it will override this one.
 	opts = prependTestServerOpts(opts)
 	m := newCommand(tb, opts...)
-	m.Config.Cluster.Disabled = false
-	m.Config.Cluster.Coordinator = isCoordinator
 	return m
 }
 
 // RunCommand returns a new, running Main. Panic on error.
 func RunCommand(t *testing.T) *Command {
 	t.Helper()
-	m := newCommand(t, server.OptCommandServerOptions(pilosa.OptServerOpenTranslateStore(pilosa.OpenInMemTranslateStore)))
-	m.Config.Metric.Diagnostics = false // Disable diagnostics.
-	m.Config.Gossip.Port = "0"
-	if err := m.Start(); err != nil {
-		t.Fatal(err)
-	}
-	return m
-}
 
-// GossipAddress returns the address on which gossip is listening after a Main
-// has been setup. Useful to pass as a seed to other nodes when creating and
-// testing clusters.
-func (m *Command) GossipAddress() string {
-	return m.GossipTransport().URI.String()
+	// prefer MustRunCluster since it sets up for using etcd using
+	// the GenDisCoConfig(size) option.
+	return MustRunCluster(t, 1).GetNode(0)
 }
 
 // Close closes the program and removes the underlying data directory.
 func (m *Command) Close() error {
-	defer os.RemoveAll(m.Config.DataDir)
+	// leave the removing part to the test logic. Some tests are closing and opening again the command
+	// defer os.RemoveAll(m.Config.DataDir)
 	return m.Command.Close()
 }
 
@@ -196,6 +183,15 @@ func (m *Command) URL() string { return m.API.Node().URI.String() }
 
 // ID returns the node ID used by the running program.
 func (m *Command) ID() string { return m.API.Node().ID }
+
+// IsPrimary returns true if this is the primary.
+func (m *Command) IsPrimary() bool {
+	coord := m.API.PrimaryNode()
+	if coord == nil {
+		return false
+	}
+	return coord.ID == m.API.Node().ID
+}
 
 // Client returns a client to connect to the program.
 func (m *Command) Client() *http.InternalClient {
@@ -339,6 +335,33 @@ func CheckGroupBy(t *testing.T, expected, results []pilosa.GroupCount) {
 	}
 }
 
+// CheckGroupByOnKey is like CheckGroupBy, but it doen't enforce a match on the GroupBy.Group.RowID value.
+// In cases where the Group has a RowKey, then the value of RowID is not consistently assigned. Instead,
+// it depends on the order of key translation IDs based on shard allocation to the
+func CheckGroupByOnKey(t *testing.T, expected, results []pilosa.GroupCount) {
+	t.Helper()
+	if len(results) != len(expected) {
+		t.Fatalf("number of groupings mismatch:\n got:%+v\nwant:%+v\n", results, expected)
+	}
+	for i, result := range results {
+		exp := expected[i]
+		if len(exp.Group) != len(result.Group) {
+			t.Fatalf("number of groups within GroupCount mismatch:\n got:%+v\nwant:%+v\n", result, exp)
+		}
+		if exp.Count != result.Count {
+			t.Fatalf("GroupCount count mismatch:\n got:%+v\nwant:%+v\n", result, exp)
+		}
+		if exp.Agg != result.Agg {
+			t.Fatalf("GroupCount aggregate mismatch:\n got:%+v\nwant:%+v\n", result, exp)
+		}
+		for j, grp := range result.Group {
+			if grp.Field != exp.Group[j].Field || grp.RowKey != exp.Group[j].RowKey {
+				t.Fatalf("GroupCount group value mismatch:\n got:%+v\nwant:%+v\n", result, exp)
+			}
+		}
+	}
+}
+
 // httpResponse is a wrapper for http.Response that holds the Body as a string.
 type httpResponse struct {
 	*gohttp.Response
@@ -363,4 +386,29 @@ func RetryUntil(timeout time.Duration, fn func() error) (err error) {
 		case <-ticker.C:
 		}
 	}
+}
+
+// AwaitState waits for the whole cluster to reach a specified state.
+func (m *Command) AwaitState(expectedState disco.ClusterState, timeout time.Duration) (err error) {
+	startTime := time.Now()
+	var elapsed time.Duration
+	for elapsed = 0; elapsed <= timeout; elapsed = time.Since(startTime) {
+		// Counterintuitive: We're returning if the err *is* nil,
+		// meaning we've reached the expected state.
+		if err = m.exceptionalState(expectedState); err == nil {
+			return err
+		}
+		time.Sleep(1 * time.Millisecond)
+	}
+	return fmt.Errorf("waited %v for command to reach state %q: %v",
+		elapsed, expectedState, err)
+}
+
+// exceptionalState returns an error if the node is not in the expected state.
+func (m *Command) exceptionalState(expectedState disco.ClusterState) error {
+	state, err := m.API.State()
+	if err != nil || state != expectedState {
+		return fmt.Errorf("node %q: state %s: err %v", m.ID(), state, err)
+	}
+	return nil
 }

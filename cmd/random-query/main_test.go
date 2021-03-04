@@ -116,7 +116,7 @@ func Test_RandomQuery(t *testing.T) {
 			timestamps = timestamps[:N]
 		}
 
-		// Import data with keys to the coordinator (node0) and verify that it gets
+		// Import data with keys to the primary and verify that it gets
 		// translated and forwarded to the owner of shard 0 (node1; because of offsetModHasher)
 		req := &pilosa.ImportRequest{
 			Index:          indexes[i],

@@ -71,12 +71,9 @@ func TestShardPerDB_SetBit(t *testing.T) {
 
 // test that we find all *local* shards
 func Test_DBPerShard_GetShardsForIndex_LocalOnly(t *testing.T) {
-
 	tmpdir, err := ioutil.TempDir("", "Test_DBPerShard_GetShardsForIndex_LocalOnly")
 	panicOn(err)
-
-	orig := os.Getenv("PILOSA_TXSRC")
-	defer os.Setenv("PILOSA_TXSRC", orig) // must restore or will mess up other tests!
+	defer os.RemoveAll(tmpdir)
 
 	v2s := NewFieldView2Shards()
 	stdShardSet := newShardSet()
@@ -88,11 +85,9 @@ func Test_DBPerShard_GetShardsForIndex_LocalOnly(t *testing.T) {
 	}
 
 	for _, src := range []string{"roaring", "bolt", "rbf"} {
-
-		os.Setenv("PILOSA_TXSRC", src)
-
-		// must make Holder AFTER setting src.
-		holder := NewHolder(tmpdir, nil)
+		cfg := mustHolderConfig()
+		cfg.StorageConfig.Backend = src
+		holder := NewHolder(tmpdir, cfg)
 
 		index := "rick"
 		idx := makeSampleRoaringDir(tmpdir, index, src, 1, holder, v2s)
@@ -215,10 +210,9 @@ rick.index.txstores@@@/store-rbfdb@@/shard.0223-rbfdb@
 `,
 }
 
-func makeSampleRoaringDir(root, index, txsrc string, minBytes int, h *Holder, view2shards *FieldView2Shards) (idx *Index) {
-
+func makeSampleRoaringDir(root, index, backend string, minBytes int, h *Holder, view2shards *FieldView2Shards) (idx *Index) {
 	shards := []uint64{0, 93, 215, 217, 219, 221, 223}
-	fns := strings.Split(sampleRoaringDirList[txsrc], "\n")
+	fns := strings.Split(sampleRoaringDirList[backend], "\n")
 	firstDone := false
 
 	for i, fn := range fns {
@@ -226,11 +220,11 @@ func makeSampleRoaringDir(root, index, txsrc string, minBytes int, h *Holder, vi
 			continue
 		}
 		var shard uint64
-		if txsrc != "roaring" {
+		if backend != "roaring" {
 			// only have shards for the non-roaring
 			shard = shards[i]
 		}
-		switch txsrc {
+		switch backend {
 		case "bolt", "rbf":
 			idx = helperCreateDBShard(h, index, shard)
 
@@ -327,19 +321,23 @@ func makeTxTestDBWithViewsShards(holder *Holder, idx *Index, exp *FieldView2Shar
 func Test_DBPerShard_GetFieldView2Shards_map_from_RBF(t *testing.T) {
 	tmpdir, err := ioutil.TempDir("", "Test_DBPerShard_GetFieldView2Shards_map_from_RBF")
 	panicOn(err)
+	defer os.RemoveAll(tmpdir)
 
-	orig := os.Getenv("PILOSA_TXSRC")
-	defer os.Setenv("PILOSA_TXSRC", orig) // must restore or will mess up other tests!
-
-	os.Setenv("PILOSA_TXSRC", "rbf")
-
-	// must make Holder AFTER setting src.
-	holder := NewHolder(tmpdir, nil)
+	cfg := mustHolderConfig()
+	cfg.StorageConfig.Backend = "rbf"
+	holder := NewHolder(tmpdir, cfg)
 	defer holder.Close()
 
 	index := "rick"
 	field := "f"
-	idx, err := holder.createIndex(index, IndexOptions{})
+
+	cim := &CreateIndexMessage{
+		Index:     index,
+		CreatedAt: 0,
+		Meta:      IndexOptions{},
+	}
+
+	idx, err := holder.createIndex(cim, false)
 	panicOn(err)
 
 	exp := NewFieldView2Shards()

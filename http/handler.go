@@ -44,6 +44,7 @@ import (
 	"github.com/pilosa/pilosa/v2/encoding/proto"
 	"github.com/pilosa/pilosa/v2/logger"
 	"github.com/pilosa/pilosa/v2/pql"
+	"github.com/pilosa/pilosa/v2/topology"
 	"github.com/pilosa/pilosa/v2/tracing"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -66,6 +67,8 @@ type Handler struct {
 	api *pilosa.API
 
 	ln net.Listener
+	// url is used to hold the advertise bind address for printing a log during startup.
+	url string
 
 	closeTimeout time.Duration
 
@@ -134,9 +137,13 @@ func OptHandlerLogger(logger logger.Logger) handlerOption {
 	}
 }
 
-func OptHandlerListener(ln net.Listener) handlerOption {
+// OptHandlerListener set the listener that will be used by the HTTP server.
+// Url must be the advertised URL. It will be used to show a log to the user
+// about where the Web UI is. This option is mandatory.
+func OptHandlerListener(ln net.Listener, url string) handlerOption {
 	return func(h *Handler) error {
 		h.ln = ln
+		h.url = url
 		return nil
 	}
 }
@@ -217,7 +224,6 @@ func (h *Handler) populateValidators() {
 	h.validators = map[string]*queryValidationSpec{}
 	h.validators["PostClusterResizeAbort"] = queryValidationSpecRequired()
 	h.validators["PostClusterResizeRemoveNode"] = queryValidationSpecRequired()
-	h.validators["PostClusterResizeSetCoordinator"] = queryValidationSpecRequired()
 	h.validators["GetExport"] = queryValidationSpecRequired("index", "field", "shard")
 	h.validators["GetIndexes"] = queryValidationSpecRequired()
 	h.validators["GetIndex"] = queryValidationSpecRequired()
@@ -233,7 +239,7 @@ func (h *Handler) populateValidators() {
 	h.validators["PostQuery"] = queryValidationSpecRequired().Optional("shards", "columnAttrs", "excludeRowAttrs", "excludeColumns", "profile")
 	h.validators["GetInfo"] = queryValidationSpecRequired()
 	h.validators["RecalculateCaches"] = queryValidationSpecRequired()
-	h.validators["GetSchema"] = queryValidationSpecRequired()
+	h.validators["GetSchema"] = queryValidationSpecRequired().Optional("views")
 	h.validators["PostSchema"] = queryValidationSpecRequired().Optional("remote")
 	h.validators["GetStatus"] = queryValidationSpecRequired()
 	h.validators["GetVersion"] = queryValidationSpecRequired()
@@ -366,7 +372,6 @@ func newRouter(handler *Handler) http.Handler {
 	router := mux.NewRouter()
 	router.HandleFunc("/cluster/resize/abort", handler.handlePostClusterResizeAbort).Methods("POST").Name("PostClusterResizeAbort")
 	router.HandleFunc("/cluster/resize/remove-node", handler.handlePostClusterResizeRemoveNode).Methods("POST").Name("PostClusterResizeRemoveNode")
-	router.HandleFunc("/cluster/resize/set-coordinator", handler.handlePostClusterResizeSetCoordinator).Methods("POST").Name("PostClusterResizeSetCoordinator")
 	router.PathPrefix("/debug/pprof/").Handler(http.DefaultServeMux).Methods("GET")
 	router.Handle("/debug/vars", expvar.Handler()).Methods("GET")
 	router.Handle("/metrics", promhttp.Handler())
@@ -448,7 +453,7 @@ func newRouter(handler *Handler) http.Handler {
 	// Endpoints to support lattice UI embedded via statik.
 	// The messiness here reflects the fact that assets live in a nontrivial
 	// directory structure that is controlled externally.
-	latticeHandler := NewStatikHandler(handler)
+	latticeHandler := newStatikHandler(handler)
 	router.PathPrefix("/static").Handler(latticeHandler)
 	router.Path("/").Handler(latticeHandler)
 	router.Path("/favicon.png").Handler(latticeHandler)
@@ -499,11 +504,11 @@ type statikHandler struct {
 	statikFS http.FileSystem
 }
 
-// NewStatikHandler returns a new instance of statikHandler
-func NewStatikHandler(h *Handler) statikHandler {
+// newStatikHandler returns a new instance of statikHandler
+func newStatikHandler(h *Handler) statikHandler {
 	fs, err := h.fileSystem.New()
 	if err == nil {
-		h.logger.Printf("enabled Web UI (%s) at %s", h.api.LatticeVersion(), h.api.Node().URI)
+		h.logger.Printf("enabled Web UI (%s) at %s", h.api.LatticeVersion(), h.url)
 	}
 
 	return statikHandler{
@@ -666,8 +671,15 @@ func (h *Handler) handleGetSchema(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	q := r.URL.Query()
+	withViews := q.Get("views") == "true"
+
 	w.Header().Set("Content-Type", "application/json")
-	schema := h.api.Schema(r.Context())
+	schema, err := h.api.Schema(r.Context(), withViews)
+	if err != nil {
+		h.logger.Printf("getting schema error: %s", err)
+	}
+
 	if err := json.NewEncoder(w).Encode(pilosa.Schema{Indexes: schema}); err != nil {
 		h.logger.Printf("write schema response error: %s", err)
 	}
@@ -752,8 +764,15 @@ func (h *Handler) handleGetStatus(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
 		return
 	}
+
+	state, err := h.api.State()
+	if err != nil {
+		http.Error(w, "getting cluster state error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	status := getStatusResponse{
-		State:       h.api.State(),
+		State:       string(state),
 		Nodes:       h.api.Hosts(r.Context()),
 		LocalID:     h.api.Node().ID,
 		ClusterName: h.api.ClusterName(),
@@ -812,10 +831,10 @@ type getSchemaResponse struct {
 }
 
 type getStatusResponse struct {
-	State       string         `json:"state"`
-	Nodes       []*pilosa.Node `json:"nodes"`
-	LocalID     string         `json:"localID"`
-	ClusterName string         `json:"clusterName"`
+	State       string           `json:"state"`
+	Nodes       []*topology.Node `json:"nodes"`
+	LocalID     string           `json:"localID"`
+	ClusterName string           `json:"clusterName"`
 }
 
 func hash(s string) string {
@@ -838,15 +857,14 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 	req, ok := qreq.(*pilosa.QueryRequest)
 
 	if DoPerQueryProfiling {
-
-		txsrc := os.Getenv("PILOSA_TXSRC")
+		backend := pilosa.CurrentBackend()
 		reqHash := hash(req.Query)
 
 		qlen := len(req.Query)
 		if qlen > 100 {
 			qlen = 100
 		}
-		name := "_query." + reqHash + "." + txsrc + "." + time.Now().Format("20060102150405") + "." + req.Query[:qlen]
+		name := "_query." + reqHash + "." + backend + "." + time.Now().Format("20060102150405") + "." + req.Query[:qlen]
 		f, err := os.Create(name)
 		if err != nil {
 			panic(err)
@@ -857,13 +875,6 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 		defer pprof.StopCPUProfile()
 
 	} // end DoPerQueryProfiling
-	/*
-		er = trace.Start(f)
-		if er != nil {
-			panic(er)
-		}
-		defer trace.Stop()
-	*/
 
 	var err error
 	err, _ = qerr.(error)
@@ -994,8 +1005,16 @@ func (h *Handler) handleGetIndex(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
 		return
 	}
+	q := r.URL.Query()
+	withViews := q.Get("views") == "true"
+
 	indexName := mux.Vars(r)["index"]
-	for _, idx := range h.api.Schema(r.Context()) {
+	schema, err := h.api.Schema(r.Context(), withViews)
+	if err != nil {
+		h.logger.Printf("getting schema error: %s", err)
+	}
+
+	for _, idx := range schema {
 		if idx.Name == indexName {
 			w.Header().Set("Content-Type", "application/json")
 			if err := json.NewEncoder(w).Encode(idx); err != nil {
@@ -1490,7 +1509,7 @@ func (h *Handler) handleGetTransactionList(w http.ResponseWriter, r *http.Reques
 	trnsMap, err := h.api.Transactions(r.Context())
 	if err != nil {
 		switch errors.Cause(err) {
-		case pilosa.ErrNodeNotCoordinator:
+		case pilosa.ErrNodeNotPrimary:
 			http.Error(w, err.Error(), http.StatusBadRequest)
 		default:
 			http.Error(w, "problem getting transactions: "+err.Error(), http.StatusInternalServerError)
@@ -1525,7 +1544,7 @@ func (h *Handler) handleGetTransactions(w http.ResponseWriter, r *http.Request) 
 	trnsMap, err := h.api.Transactions(r.Context())
 	if err != nil {
 		switch errors.Cause(err) {
-		case pilosa.ErrNodeNotCoordinator:
+		case pilosa.ErrNodeNotPrimary:
 			http.Error(w, err.Error(), http.StatusBadRequest)
 		default:
 			http.Error(w, "problem getting transactions: "+err.Error(), http.StatusInternalServerError)
@@ -1547,7 +1566,7 @@ type TransactionResponse struct {
 func (h *Handler) doTransactionResponse(w http.ResponseWriter, err error, trns *pilosa.Transaction) {
 	if err != nil {
 		switch errors.Cause(err) {
-		case pilosa.ErrNodeNotCoordinator, pilosa.ErrTransactionExists:
+		case pilosa.ErrNodeNotPrimary, pilosa.ErrTransactionExists:
 			w.WriteHeader(http.StatusBadRequest)
 		case pilosa.ErrTransactionExclusive:
 			w.WriteHeader(http.StatusConflict)
@@ -1789,16 +1808,27 @@ func (h *Handler) handleGetMetricsJSON(w http.ResponseWriter, r *http.Request) {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	for _, node := range h.api.Hosts(r.Context()) {
 		metricsURI := node.URI.String() + "/metrics"
+
+		// The buffer size of 60 is performance controlling, but we
+		// haven't studied what the optimal setting is. It was
+		// earlier set to this value to capture all output from
+		// prom2json at once. The output got larger recently, so
+		// now we handle unlimited size output using a goroutine.
 		mfChan := make(chan *dto.MetricFamily, 60)
-		err := prom2json.FetchMetricFamilies(metricsURI, mfChan, transport)
-		if err != nil {
-			http.Error(w, "fetching metrics: "+err.Error(), http.StatusInternalServerError)
-			return
-		}
+		errChan := make(chan error)
+		go func() {
+			err := prom2json.FetchMetricFamilies(metricsURI, mfChan, transport)
+			errChan <- err
+		}()
 
 		nodeMetrics := []*prom2json.Family{}
 		for mf := range mfChan {
 			nodeMetrics = append(nodeMetrics, prom2json.NewFamily(mf))
+		}
+		err := <-errChan
+		if err != nil {
+			http.Error(w, "fetching metrics: "+err.Error(), http.StatusInternalServerError)
+			return
 		}
 		metrics[node.ID] = nodeMetrics
 	}
@@ -2035,47 +2065,6 @@ func parseUint64Slice(s string) ([]uint64, error) {
 	return a, nil
 }
 
-func (h *Handler) handlePostClusterResizeSetCoordinator(w http.ResponseWriter, r *http.Request) {
-	if !validHeaderAcceptJSON(r.Header) {
-		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
-		return
-	}
-	// Decode request.
-	var req setCoordinatorRequest
-	err := json.NewDecoder(r.Body).Decode(&req)
-	if err != nil {
-		http.Error(w, "decoding request "+err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	oldNode, newNode, err := h.api.SetCoordinator(r.Context(), req.ID)
-	if err != nil {
-		if errors.Cause(err) == pilosa.ErrNodeIDNotExists {
-			http.Error(w, "setting new coordinator: "+err.Error(), http.StatusNotFound)
-		} else {
-			http.Error(w, "setting new coordinator: "+err.Error(), http.StatusInternalServerError)
-		}
-		return
-	}
-	// Encode response.
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(setCoordinatorResponse{
-		Old: oldNode,
-		New: newNode,
-	}); err != nil {
-		h.logger.Printf("response encoding error: %s", err)
-	}
-}
-
-type setCoordinatorRequest struct {
-	ID string `json:"id"`
-}
-
-type setCoordinatorResponse struct {
-	Old *pilosa.Node `json:"old"`
-	New *pilosa.Node `json:"new"`
-}
-
 // handlePostClusterResizeRemoveNode handles POST /cluster/resize/remove-node request.
 func (h *Handler) handlePostClusterResizeRemoveNode(w http.ResponseWriter, r *http.Request) {
 	if !validHeaderAcceptJSON(r.Header) {
@@ -2114,7 +2103,7 @@ type removeNodeRequest struct {
 }
 
 type removeNodeResponse struct {
-	Remove *pilosa.Node `json:"remove"`
+	Remove *topology.Node `json:"remove"`
 }
 
 // handlePostClusterResizeAbort handles POST /cluster/resize/abort request.
@@ -2127,7 +2116,7 @@ func (h *Handler) handlePostClusterResizeAbort(w http.ResponseWriter, r *http.Re
 	var msg string
 	if err != nil {
 		switch errors.Cause(err) {
-		case pilosa.ErrNodeNotCoordinator:
+		case pilosa.ErrNodeNotPrimary:
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		case pilosa.ErrResizeNotRunning:

@@ -30,12 +30,14 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/pilosa/pilosa/v2/disco"
 	"github.com/pilosa/pilosa/v2/logger"
-	"github.com/pilosa/pilosa/v2/rbf"
 	rbfcfg "github.com/pilosa/pilosa/v2/rbf/cfg"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/stats"
+	"github.com/pilosa/pilosa/v2/storage"
 	"github.com/pilosa/pilosa/v2/testhook"
+	"github.com/pilosa/pilosa/v2/topology"
 	"github.com/pilosa/pilosa/v2/tracing"
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
@@ -51,6 +53,9 @@ const (
 
 	// existenceFieldName is the name of the internal field used to store existence values.
 	existenceFieldName = "_exists"
+
+	// DefaultDiscoDir is the default data directory used by the disco implementation.
+	DefaultDiscoDir = ".disco"
 )
 
 func init() {
@@ -76,6 +81,8 @@ type Holder struct {
 	opened lockedChan
 
 	broadcaster broadcaster
+	schemator   disco.Schemator
+	serializer  Serializer
 
 	NewAttrStore func(string) AttrStore
 
@@ -114,7 +121,13 @@ type Holder struct {
 
 	// Queue of fields (having a foreign index) which have
 	// opened before their foreign index has opened.
-	foreignIndexFields []*Field
+	foreignIndexFields   []*Field
+	foreignIndexFieldsMu sync.Mutex
+
+	// Queue of messages to broadcast in bulk when the cluster comes up.
+	// This is wrong, but. . . yeah.
+	startMsgs   []Message
+	startMsgsMu sync.Mutex
 
 	// opening is set to true while Holder is opening.
 	// It's used to determine if foreign index application
@@ -145,9 +158,9 @@ type HolderOpts struct {
 	// about fragments when opening them.
 	Inspect bool
 
-	// Txsrc controls the tx/storage engine we instatiate. Set by
-	// server.go OptServerTxsrc
-	Txsrc string
+	// StorageBackend controls the tx/storage engine we instatiate. Set by
+	// server.go OptServerStorageConfig
+	StorageBackend string
 
 	// RowcacheOn, if true, turns on the row cache for all storage backends.
 	RowcacheOn bool
@@ -206,30 +219,34 @@ type HolderConfig struct {
 	OpenTransactionStore OpenTransactionStoreFunc
 	OpenIDAllocator      OpenIDAllocatorFunc
 	TranslationSyncer    TranslationSyncer
+	Serializer           Serializer
+	Schemator            disco.Schemator
 	CacheFlushInterval   time.Duration
 	StatsClient          stats.StatsClient
 	NewAttrStore         func(string) AttrStore
 	Logger               logger.Logger
-	Txsrc                string
 	RowcacheOn           bool
 
+	StorageConfig       *storage.Config
 	RBFConfig           *rbfcfg.Config
 	AntiEntropyInterval time.Duration
 }
 
 func DefaultHolderConfig() *HolderConfig {
 	return &HolderConfig{
-		PartitionN:           DefaultPartitionN,
+		PartitionN:           topology.DefaultPartitionN,
 		OpenTranslateStore:   OpenInMemTranslateStore,
 		OpenTranslateReader:  nil,
 		OpenTransactionStore: OpenInMemTransactionStore,
 		OpenIDAllocator:      func(string) (*idAllocator, error) { return &idAllocator{}, nil },
 		TranslationSyncer:    NopTranslationSyncer,
+		Serializer:           GobSerializer,
+		Schemator:            disco.InMemSchemator,
 		CacheFlushInterval:   defaultCacheFlushInterval,
 		StatsClient:          stats.NopStatsClient,
 		NewAttrStore:         newNopAttrStore,
 		Logger:               logger.NopLogger,
-		Txsrc:                DefaultTxsrc,
+		StorageConfig:        storage.NewDefaultConfig(),
 		RBFConfig:            rbfcfg.NewDefaultConfig(),
 	}
 }
@@ -238,14 +255,11 @@ func DefaultHolderConfig() *HolderConfig {
 func NewHolder(path string, cfg *HolderConfig) *Holder {
 	if cfg == nil {
 		cfg = DefaultHolderConfig()
-		// still want the PILOSA_TXSRC to override, for tests use.
-		txsrc := os.Getenv("PILOSA_TXSRC")
-		if txsrc != "" {
-			_ = MustTxsrcToTxtype(txsrc)
-			// INVAR: have valid txsrc.
-			cfg.Txsrc = txsrc
-		}
-	} else if cfg.RBFConfig == nil {
+	}
+	if cfg.StorageConfig == nil {
+		cfg.StorageConfig = storage.NewDefaultConfig()
+	}
+	if cfg.RBFConfig == nil {
 		cfg.RBFConfig = rbfcfg.NewDefaultConfig()
 	}
 
@@ -266,8 +280,10 @@ func NewHolder(path string, cfg *HolderConfig) *Holder {
 		OpenTransactionStore: cfg.OpenTransactionStore,
 		OpenIDAllocator:      cfg.OpenIDAllocator,
 		translationSyncer:    cfg.TranslationSyncer,
+		serializer:           cfg.Serializer,
+		schemator:            cfg.Schemator,
 		Logger:               cfg.Logger,
-		Opts:                 HolderOpts{Txsrc: cfg.Txsrc, RowcacheOn: cfg.RowcacheOn},
+		Opts:                 HolderOpts{StorageBackend: cfg.StorageConfig.Backend, RowcacheOn: cfg.RowcacheOn},
 
 		SnapshotQueue: defaultSnapshotQueue,
 
@@ -278,9 +294,9 @@ func NewHolder(path string, cfg *HolderConfig) *Holder {
 		indexes: make(map[string]*Index),
 	}
 
-	rbf.SetRowcacheOn(cfg.RowcacheOn)
+	storage.SetRowCacheOn(cfg.RowcacheOn)
 
-	txf, err := NewTxFactory(cfg.Txsrc, path, h)
+	txf, err := NewTxFactory(cfg.StorageConfig.Backend, path, h)
 	panicOn(err)
 	h.txf = txf
 	h.txf.blueGreenOffIfRunningBlueGreen()
@@ -570,12 +586,11 @@ func (h *Holder) Inspect(ctx context.Context, req *InspectRequest) (*HolderInfo,
 
 // Open initializes the root data directory for the holder.
 func (h *Holder) Open() error {
-
 	h.opening = true
 	defer func() { h.opening = false }()
 
 	if h.txf == nil {
-		txf, err := NewTxFactory(h.cfg.Txsrc, h.path, h)
+		txf, err := NewTxFactory(h.cfg.StorageConfig.Backend, h.path, h)
 		if err != nil {
 			return errors.Wrap(err, "Holder.Open NewTxFactory()")
 		}
@@ -594,13 +609,6 @@ func (h *Holder) Open() error {
 		return errors.Wrap(err, "creating directory")
 	}
 
-	// Verify that we are not trying to open with v1 translation data.
-	if ok, err := h.hasV1TranslateKeysFile(); err != nil {
-		return errors.Wrap(err, "verify v1 translation file")
-	} else if !ok {
-		return ErrCannotOpenV1TranslateFile
-	}
-
 	tstore, err := h.OpenTransactionStore(h.path)
 	if err != nil {
 		return errors.Wrap(err, "opening transaction store")
@@ -612,6 +620,12 @@ func (h *Holder) Open() error {
 	h.ida, err = h.OpenIDAllocator(filepath.Join(h.path, "idalloc.db"))
 	if err != nil {
 		return errors.Wrap(err, "opening ID allocator")
+	}
+
+	// Load schema from etcd.
+	schema, err := h.schemator.Schema(context.Background())
+	if err != nil {
+		return errors.Wrap(err, "getting schema")
 	}
 
 	// Open path to read all index directories.
@@ -636,6 +650,19 @@ func (h *Holder) Open() error {
 			continue
 		}
 
+		// Only continue with indexes which are present in schema.
+		idx, ok := schema[fi.Name()]
+		if !ok {
+			continue
+		}
+
+		// decode the CreateIndexMessage from the schema data in order to
+		// get its metadata, such as CreateAt.
+		cim, err := decodeCreateIndexMessage(h.serializer, idx.Data)
+		if err != nil {
+			return errors.Wrap(err, "decoding create index message")
+		}
+
 		h.Logger.Printf("opening index: %s", filepath.Base(fi.Name()))
 
 		index, err := h.newIndex(h.IndexPath(filepath.Base(fi.Name())), filepath.Base(fi.Name()))
@@ -646,12 +673,16 @@ func (h *Holder) Open() error {
 			return errors.Wrap(err, "opening index")
 		}
 
-		if h.isCoordinator() {
-			index.createdAt = timestamp()
-			err = index.OpenWithTimestamp()
-		} else {
-			err = index.Open()
-		}
+		// Since we don't have createAt stored on disk within the data
+		// directory, we need to populate it from the etcd schema data.
+		// TODO: we may no longer need the createdAt value stored in memory on
+		// the index struct; it may only be needed in the schema return value
+		// from the API, which already comes from etcd. In that case, this logic
+		// could be removed, and the createdAt on the index struct could be
+		// removed.
+		index.createdAt = cim.CreatedAt
+
+		err = index.OpenWithSchema(idx)
 		if err != nil {
 			_ = h.txf.Close()
 			if err == ErrName {
@@ -693,6 +724,27 @@ func (h *Holder) Open() error {
 
 }
 
+func (h *Holder) sendOrSpool(msg Message) error {
+	if h.maybeSpool(msg) {
+		return nil
+	}
+
+	return h.broadcaster.SendSync(msg)
+}
+
+func (h *Holder) maybeSpool(msg Message) bool {
+	h.startMsgsMu.Lock()
+	defer h.startMsgsMu.Unlock()
+
+	if h.startMsgs == nil {
+		// Startup is done.
+		return false
+	}
+
+	h.startMsgs = append(h.startMsgs, msg)
+	return true
+}
+
 // Activate runs the background tasks relevant to keeping a holder in a stable
 // state, such as scanning it for needed snapshots, or flushing caches. This
 // is separate from opening because, while a server would nearly always want
@@ -713,6 +765,8 @@ func (h *Holder) Activate() {
 func (h *Holder) checkForeignIndex(f *Field) error {
 	if h.opening {
 		if fi := h.Index(f.options.ForeignIndex); fi == nil {
+			h.foreignIndexFieldsMu.Lock()
+			defer h.foreignIndexFieldsMu.Unlock()
 			h.foreignIndexFields = append(h.foreignIndexFields, f)
 			return nil
 		}
@@ -822,17 +876,12 @@ func (h *Holder) HasData() (bool, error) {
 			continue
 		}
 
-		return true, nil
-	}
-	return false, nil
-}
+		// Skip DisCo data directory.
+		if fi.Name() == DefaultDiscoDir {
+			continue
+		}
 
-// hasV1TranslateKeysFile returns true if a v1 translation data file exists on disk.
-func (h *Holder) hasV1TranslateKeysFile() (bool, error) {
-	if _, err := os.Stat(filepath.Join(h.path, ".keys")); os.IsNotExist(err) {
 		return true, nil
-	} else if err != nil {
-		return false, err
 	}
 	return false, nil
 }
@@ -847,32 +896,52 @@ func (h *Holder) availableShardsByIndex() map[string]*roaring.Bitmap {
 }
 
 // Schema returns schema information for all indexes, fields, and views.
-// If includeHiddenAndViews=true, include fields beginning with "_",
-// as well as view details.
-func (h *Holder) Schema(includeHiddenAndViews bool) []*IndexInfo {
+func (h *Holder) Schema() ([]*IndexInfo, error) {
+	return h.schema(context.TODO(), true)
+}
+
+// limitedSchema returns schema information for all indexes and fields.
+func (h *Holder) limitedSchema() ([]*IndexInfo, error) {
+	return h.schema(context.TODO(), false)
+}
+
+func (h *Holder) schema(ctx context.Context, includeViews bool) ([]*IndexInfo, error) {
 	var a []*IndexInfo
-	for _, index := range h.Indexes() {
-		di := &IndexInfo{
-			Name:       index.Name(),
-			CreatedAt:  index.CreatedAt(),
-			Options:    index.Options(),
-			ShardWidth: ShardWidth,
-			Fields:     []*FieldInfo{},
+
+	schema, err := h.schemator.Schema(ctx)
+	if err != nil {
+		return nil, errors.Wrapf(err, "getting schema via schemator")
+	}
+
+	for _, index := range schema {
+		cim, err := decodeCreateIndexMessage(h.serializer, index.Data)
+		if err != nil {
+			return nil, errors.Wrap(err, "decoding CreateIndexMessage")
 		}
 
-		for _, field := range index.Fields() {
-			if !includeHiddenAndViews && strings.HasPrefix(field.name, "_") {
+		di := &IndexInfo{
+			Name:       cim.Index,
+			CreatedAt:  cim.CreatedAt,
+			Options:    cim.Meta,
+			ShardWidth: ShardWidth,
+			Fields:     make([]*FieldInfo, 0, len(index.Fields)),
+		}
+		for fieldName, field := range index.Fields {
+			if fieldName == existenceFieldName {
 				continue
 			}
-			fi := &FieldInfo{
-				Name:      field.Name(),
-				CreatedAt: field.CreatedAt(),
-				Options:   field.Options(),
+			cfm, err := decodeCreateFieldMessage(h.serializer, field.Data)
+			if err != nil {
+				return nil, errors.Wrap(err, "decoding CreateFieldMessage")
 			}
-			if includeHiddenAndViews {
-				fi.Views = []*ViewInfo{}
-				for _, view := range field.views() {
-					fi.Views = append(fi.Views, &ViewInfo{Name: view.name})
+			fi := &FieldInfo{
+				Name:      cfm.Field,
+				CreatedAt: cfm.CreatedAt,
+				Options:   *cfm.Meta,
+			}
+			if includeViews {
+				for viewName := range field.Views {
+					fi.Views = append(fi.Views, &ViewInfo{Name: viewName})
 				}
 				sort.Sort(viewInfoSlice(fi.Views))
 			}
@@ -882,33 +951,25 @@ func (h *Holder) Schema(includeHiddenAndViews bool) []*IndexInfo {
 		a = append(a, di)
 	}
 	sort.Sort(indexInfoSlice(a))
-	return a
+	return a, nil
 }
 
 // applySchema applies an internal Schema to Holder.
 func (h *Holder) applySchema(schema *Schema) error {
-	// Create indexes that don't exist.
+	// Create indexes.
+	// We use h.CreateIndex() instead of h.CreateIndexIfNotExists() because we
+	// want to limit the use of this method for now to only new indexes.
 	for _, i := range schema.Indexes {
-		idx, err := h.CreateIndexIfNotExists(i.Name, i.Options)
+		idx, err := h.CreateIndex(i.Name, i.Options)
 		if err != nil {
 			return errors.Wrap(err, "creating index")
-		}
-		if i.CreatedAt != 0 {
-			idx.mu.Lock()
-			idx.createdAt = i.CreatedAt
-			idx.mu.Unlock()
 		}
 
 		// Create fields that don't exist.
 		for _, f := range i.Fields {
-			fld, err := idx.createFieldIfNotExists(f.Name, &f.Options)
+			fld, err := idx.CreateFieldIfNotExistsWithOptions(f.Name, &f.Options)
 			if err != nil {
 				return errors.Wrap(err, "creating field")
-			}
-			if f.CreatedAt != 0 {
-				fld.mu.Lock()
-				fld.createdAt = f.CreatedAt
-				fld.mu.Unlock()
 			}
 
 			// Create views that don't exist.
@@ -920,33 +981,13 @@ func (h *Holder) applySchema(schema *Schema) error {
 			}
 		}
 	}
-	return nil
-}
 
-func (h *Holder) applyCreatedAt(indexes []*IndexInfo) {
-	for _, ii := range indexes {
-		idx := h.Index(ii.Name)
-		if idx == nil {
-			continue
-		}
-		if ii.CreatedAt != 0 {
-			idx.mu.Lock()
-			idx.createdAt = ii.CreatedAt
-			idx.mu.Unlock()
-		}
-
-		for _, fi := range ii.Fields {
-			fld := idx.Field(fi.Name)
-			if fld == nil {
-				continue
-			}
-			if fi.CreatedAt != 0 {
-				fld.mu.Lock()
-				fld.createdAt = fi.CreatedAt
-				fld.mu.Unlock()
-			}
-		}
+	// Send the load schema message to all nodes.
+	if err := h.sendOrSpool(&LoadSchemaMessage{}); err != nil {
+		return errors.Wrap(err, "sending LoadSchemaMessage")
 	}
+
+	return nil
 }
 
 // IndexPath returns the path where a given index is stored.
@@ -997,7 +1038,93 @@ func (h *Holder) CreateIndex(name string, opt IndexOptions) (*Index, error) {
 	if h.Index(name) != nil {
 		return nil, newConflictError(ErrIndexExists)
 	}
-	return h.createIndex(name, opt)
+
+	cim := &CreateIndexMessage{
+		Index:     name,
+		CreatedAt: timestamp(),
+		Meta:      opt,
+	}
+
+	// Create the index in etcd as the system of record.
+	if err := h.persistIndex(context.Background(), cim); err != nil {
+		return nil, errors.Wrap(err, "persisting index")
+	}
+
+	return h.createIndex(cim, false)
+}
+
+// LoadSchemaMessage is an internal message used to inform a node to load the
+// latest schema from etcd.
+type LoadSchemaMessage struct{}
+
+// LoadSchema creates all indexes based on the information stored in schemator.
+// It does not return an error if an index already exists. The thinking is that
+// this method will load all indexes that don't already exist. We likely want to
+// revisit this; for example, we might want to confirm that the createdAt
+// timestamps on each of the indexes matches the value in etcd.
+func (h *Holder) LoadSchema() error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	return h.loadSchema()
+}
+
+// LoadIndex creates an index based on the information stored in schemator.
+// An error is returned if the index already exists.
+func (h *Holder) LoadIndex(name string) (*Index, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	// Ensure index doesn't already exist.
+	if h.Index(name) != nil {
+		return nil, newConflictError(ErrIndexExists)
+	}
+	return h.loadIndex(name)
+}
+
+// LoadField creates a field based on the information stored in schemator.
+// An error is returned if the field already exists.
+func (h *Holder) LoadField(index, field string) (*Field, error) {
+	// Ensure field doesn't already exist.
+	if h.Field(index, field) != nil {
+		return nil, newConflictError(ErrFieldExists)
+	}
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	return h.loadField(index, field)
+}
+
+// LoadView creates a view based on the information stored in schemator. Unlike
+// index and field, it is not considered an error if the view already exists.
+func (h *Holder) LoadView(index, field, view string) (*view, error) {
+	// If the view already exists, just return with it here.
+	if v := h.view(index, field, view); v != nil {
+		return v, nil
+	}
+
+	return h.loadView(index, field, view)
+}
+
+// CreateIndexAndBroadcast creates an index locally, then broadcasts the
+// creation to other nodes so they can create locally as well. An error is
+// returned if the index already exists.
+func (h *Holder) CreateIndexAndBroadcast(cim *CreateIndexMessage) (*Index, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	// Ensure index doesn't already exist.
+	if h.Index(cim.Index) != nil {
+		return nil, newConflictError(ErrIndexExists)
+	}
+
+	// Create the index in etcd as the system of record.
+	if err := h.persistIndex(context.Background(), cim); err != nil {
+		return nil, errors.Wrap(err, "persisting index")
+	}
+
+	return h.createIndex(cim, true)
 }
 
 // CreateIndexIfNotExists returns an index by name.
@@ -1006,36 +1133,73 @@ func (h *Holder) CreateIndexIfNotExists(name string, opt IndexOptions) (*Index, 
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	// Return index if it exists.
+	cim := &CreateIndexMessage{
+		Index:     name,
+		CreatedAt: timestamp(),
+		Meta:      opt,
+	}
+
+	// Create the index in etcd as the system of record.
+	err := h.persistIndex(context.Background(), cim)
+	if err != nil && errors.Cause(err) != disco.ErrIndexExists {
+		return nil, errors.Wrap(err, "persisting index")
+	}
+
 	if index := h.Index(name); index != nil {
 		return index, nil
 	}
-	return h.createIndex(name, opt)
+
+	// It may happen that index is not in memory, but it's already in etcd,
+	// then we need to create it locally.
+	return h.createIndex(cim, false)
 }
 
-func (h *Holder) createIndex(name string, opt IndexOptions) (*Index, error) {
-	if name == "" {
+// persistIndex stores the index information in etcd.
+func (h *Holder) persistIndex(ctx context.Context, cim *CreateIndexMessage) error {
+	if cim.Index == "" {
+		return ErrIndexRequired
+	}
+
+	if err := validateName(cim.Index); err != nil {
+		return errors.Wrap(err, "validating name")
+	}
+
+	if b, err := h.serializer.Marshal(cim); err != nil {
+		return errors.Wrap(err, "marshaling")
+	} else if err := h.schemator.CreateIndex(ctx, cim.Index, b); err != nil {
+		return errors.Wrapf(err, "writing index to disco: %s", cim.Index)
+	}
+	return nil
+}
+
+func (h *Holder) createIndex(cim *CreateIndexMessage, broadcast bool) (*Index, error) {
+	if cim.Index == "" {
 		return nil, errors.New("index name required")
 	}
 
 	// Otherwise create a new index.
-	index, err := h.newIndex(h.IndexPath(name), name)
+	index, err := h.newIndex(h.IndexPath(cim.Index), cim.Index)
 	if err != nil {
 		return nil, errors.Wrap(err, "creating")
 	}
 
-	index.keys = opt.Keys
-	index.trackExistence = opt.TrackExistence
+	index.keys = cim.Meta.Keys
+	index.trackExistence = cim.Meta.TrackExistence
+	index.createdAt = cim.CreatedAt
 
 	if err = index.Open(); err != nil {
 		return nil, errors.Wrap(err, "opening")
 	}
-	if err = index.saveMeta(); err != nil {
-		return nil, errors.Wrap(err, "meta")
-	}
 
 	// Update options.
 	h.addIndex(index)
+
+	if broadcast {
+		// Send the create index message to all nodes.
+		if err := h.broadcaster.SendSync(cim); err != nil {
+			return nil, errors.Wrap(err, "sending CreateIndex message")
+		}
+	}
 
 	// Since this is a new index, we need to kick off
 	// its translation sync.
@@ -1046,6 +1210,93 @@ func (h *Holder) createIndex(name string, opt IndexOptions) (*Index, error) {
 	return index, nil
 }
 
+func (h *Holder) loadSchema() error {
+	schema, err := h.schemator.Schema(context.TODO())
+	if err != nil {
+		return errors.Wrap(err, "getting schema")
+	}
+
+	// TODO: This is kind of inefficient because we're ignoring the index.Data
+	// and field.Data values, which contains the index and field information,
+	// and only using the map key to call loadIndex() and loadField(). These
+	// make another call to schemator to get the same index and field
+	// information that we already have in the map. It probably makes sense to
+	// either copy the parts of the loadIndex and loadField methods here (like
+	// decodeCreateIndexMessage) or split loadIndex and loadField into smaller
+	// methods that we could reuse here.
+	for indexName, index := range schema {
+		_, err := h.loadIndex(indexName)
+		if err != nil {
+			return errors.Wrap(err, "loading index")
+		}
+		for fieldName, field := range index.Fields {
+			_, err := h.loadField(indexName, fieldName)
+			if err != nil {
+				return errors.Wrap(err, "loading field")
+			}
+			for viewName := range field.Views {
+				_, err := h.loadView(indexName, fieldName, viewName)
+				if err != nil {
+					return errors.Wrap(err, "loading view")
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+func (h *Holder) loadIndex(indexName string) (*Index, error) {
+	b, err := h.schemator.Index(context.TODO(), indexName)
+	if err != nil {
+		return nil, errors.Wrapf(err, "getting index: %s", indexName)
+	}
+
+	cim, err := decodeCreateIndexMessage(h.serializer, b)
+	if err != nil {
+		return nil, errors.Wrap(err, "decoding CreateIndexMessage")
+	}
+
+	return h.createIndex(cim, false)
+}
+
+func (h *Holder) loadField(indexName, fieldName string) (*Field, error) {
+	b, err := h.schemator.Field(context.TODO(), indexName, fieldName)
+	if err != nil {
+		return nil, errors.Wrapf(err, "getting field: %s/%s", indexName, fieldName)
+	}
+
+	// Get index.
+	idx := h.Index(indexName)
+	if idx == nil {
+		return nil, errors.Errorf("local index not found: %s", indexName)
+	}
+
+	cfm, err := decodeCreateFieldMessage(h.serializer, b)
+	if err != nil {
+		return nil, errors.Wrap(err, "decoding CreateFieldMessage")
+	}
+
+	return idx.createFieldIfNotExists(cfm)
+}
+
+func (h *Holder) loadView(indexName, fieldName, viewName string) (*view, error) {
+	b, err := h.schemator.View(context.Background(), indexName, fieldName, viewName)
+	if err != nil {
+		return nil, errors.Wrapf(err, "getting view: %s/%s/%s", indexName, fieldName, viewName)
+	} else if !b {
+		return nil, errors.Wrapf(err, "tried to load a nonexistent view: %s/%s/%s", indexName, fieldName, viewName)
+	}
+
+	// Get field.
+	fld := h.Field(indexName, fieldName)
+	if fld == nil {
+		return nil, errors.Errorf("local field not found: %s/%s", indexName, fieldName)
+	}
+
+	return fld.createViewIfNotExists(viewName)
+}
+
 func (h *Holder) newIndex(path, name string) (*Index, error) {
 	index, err := NewIndex(h, path, name)
 	if err != nil {
@@ -1053,6 +1304,8 @@ func (h *Holder) newIndex(path, name string) (*Index, error) {
 	}
 	index.Stats = h.Stats.WithTags(fmt.Sprintf("index:%s", index.Name()))
 	index.broadcaster = h.broadcaster
+	index.serializer = h.serializer
+	index.Schemator = h.schemator
 	index.newAttrStore = h.NewAttrStore
 	index.columnAttrs = h.NewAttrStore(filepath.Join(index.path, ".data"))
 	index.OpenTranslateStore = h.OpenTranslateStore
@@ -1088,6 +1341,11 @@ func (h *Holder) DeleteIndex(name string) error {
 
 	// Remove reference.
 	h.deleteIndex(name)
+
+	// Delete the index from etcd as the system of record.
+	if err := h.schemator.DeleteIndex(context.TODO(), name); err != nil {
+		return errors.Wrapf(err, "deleting index from etcd: %s", name)
+	}
 
 	// I'm not sure if calling Reset() here is necessary
 	// since closing the index stops its translation
@@ -1174,13 +1432,6 @@ func (h *Holder) recalculateCaches() {
 	for _, index := range h.Indexes() {
 		index.recalculateCaches()
 	}
-}
-
-func (h *Holder) isCoordinator() bool {
-	if s, ok := h.broadcaster.(*Server); ok {
-		return s.isCoordinator
-	}
-	return false
 }
 
 // setFileLimit attempts to set the open file limit to the FileLimit constant defined above.
@@ -1284,7 +1535,7 @@ type holderSyncer struct {
 
 	Holder *Holder
 
-	Node    *Node
+	Node    *topology.Node
 	Cluster *cluster
 
 	// Translation sync handling.
@@ -1317,8 +1568,17 @@ func (s *holderSyncer) SyncHolder() error {
 	s.mu.Lock() // only allow one instance of SyncHolder to be running at a time
 	defer s.mu.Unlock()
 	ti := time.Now()
+
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	snap := topology.NewClusterSnapshot(s.Cluster.noder, s.Cluster.Hasher, s.Cluster.ReplicaN)
+
+	schema, err := s.Holder.Schema()
+	if err != nil {
+		return errors.Wrap(err, "getting schema")
+	}
+
 	// Iterate over schema in sorted order.
-	for _, di := range s.Holder.Schema(true) {
+	for _, di := range schema {
 		// Verify syncer has not closed.
 		if s.IsClosing() {
 			return nil
@@ -1351,7 +1611,7 @@ func (s *holderSyncer) SyncHolder() error {
 				itr.Seek(0)
 				for shard, eof := itr.Next(); !eof; shard, eof = itr.Next() {
 					// Ignore shards that this host doesn't own.
-					if !s.Cluster.ownsShard(s.Node.ID, di.Name, shard) {
+					if !snap.OwnsShard(s.Node.ID, di.Name, shard) {
 						continue
 					}
 
@@ -1396,7 +1656,7 @@ func (s *holderSyncer) syncIndex(index string) error {
 	s.Stats.CountWithCustomTags(MetricColumnAttrStoreBlocks, int64(len(blks)), 1.0, []string{indexTag})
 
 	// Sync with every other host.
-	for _, node := range Nodes(s.Cluster.nodes).FilterID(s.Node.ID) {
+	for _, node := range topology.Nodes(s.Cluster.noder.Nodes()).FilterID(s.Node.ID) {
 		// Retrieve attributes from differing blocks.
 		// Skip update and recomputation if no attributes have changed.
 		m, err := s.Cluster.InternalClient.ColumnAttrDiff(ctx, &node.URI, index, blks)
@@ -1443,7 +1703,7 @@ func (s *holderSyncer) syncField(index, name string) error {
 	s.Stats.CountWithCustomTags(MetricRowAttrStoreBlocks, int64(len(blks)), 1.0, []string{indexTag, fieldTag})
 
 	// Sync with every other host.
-	for _, node := range Nodes(s.Cluster.nodes).FilterID(s.Node.ID) {
+	for _, node := range topology.Nodes(s.Cluster.noder.Nodes()).FilterID(s.Node.ID) {
 		// Retrieve attributes from differing blocks.
 		// Skip update and recomputation if no attributes have changed.
 		m, err := s.Cluster.InternalClient.RowAttrDiff(ctx, &node.URI, index, name, blks)
@@ -1513,16 +1773,19 @@ func (s *holderSyncer) resetTranslationSync() error {
 		return errors.Wrap(err, "stop translation sync")
 	}
 
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	snap := topology.NewClusterSnapshot(s.Cluster.noder, s.Cluster.Hasher, s.Cluster.ReplicaN)
+
 	// Set read-only flag for all translation stores.
-	s.setTranslateReadOnlyFlags()
+	s.setTranslateReadOnlyFlags(snap)
 
 	// Connect to each node that has a primary for which we are a replica.
-	if err := s.initializeIndexTranslateReplication(); err != nil {
+	if err := s.initializeIndexTranslateReplication(snap); err != nil {
 		return errors.Wrap(err, "initialize index translate replication")
 	}
 
-	// Connect to coordinator to stream field data.
-	if err := s.initializeFieldTranslateReplication(); err != nil {
+	// Connect to primary to stream field data.
+	if err := s.initializeFieldTranslateReplication(snap); err != nil {
 		return errors.Wrap(err, "initialize field translate replication")
 	}
 	return nil
@@ -1592,10 +1855,10 @@ func (s *holderSyncer) stopTranslationSync() error {
 
 // setTranslateReadOnlyFlags updates all translation stores to enable or disable
 // writing new translation keys. Index stores are writable if the node owns the
-// partition. Field stores are writable if the node is the coordinator.
-func (s *holderSyncer) setTranslateReadOnlyFlags() {
+// partition. Field stores are writable if the node is the primary.
+func (s *holderSyncer) setTranslateReadOnlyFlags(snap *topology.ClusterSnapshot) {
 	s.Cluster.mu.RLock()
-	isCoordinator := s.Cluster.unprotectedIsCoordinator()
+	isPrimaryFieldTranslator := snap.IsPrimaryFieldTranslationNode(s.Cluster.Node.ID)
 
 	for _, index := range s.Holder.Indexes() {
 		// There is a race condition here:
@@ -1616,8 +1879,8 @@ func (s *holderSyncer) setTranslateReadOnlyFlags() {
 		//
 		// Update: there was another path down to Index.Close(), so
 		// we shrink to lock to be inside index.TranslateStore() now.
-		for partitionID := 0; partitionID < s.Cluster.partitionN; partitionID++ {
-			primary := s.Cluster.unprotectedPrimaryPartitionNode(partitionID)
+		for partitionID := 0; partitionID < snap.PartitionN; partitionID++ {
+			primary := snap.PrimaryPartitionNode(partitionID)
 			isPrimary := primary != nil && s.Node.ID == primary.ID
 
 			if ts := index.TranslateStore(partitionID); ts != nil {
@@ -1626,7 +1889,7 @@ func (s *holderSyncer) setTranslateReadOnlyFlags() {
 		}
 
 		for _, field := range index.Fields() {
-			field.TranslateStore().SetReadOnly(!isCoordinator)
+			field.TranslateStore().SetReadOnly(!isPrimaryFieldTranslator)
 		}
 	}
 	s.Cluster.mu.RUnlock()
@@ -1634,8 +1897,8 @@ func (s *holderSyncer) setTranslateReadOnlyFlags() {
 
 // initializeIndexTranslateReplication connects to each node that is the
 // primary for a partition that we are a replica of.
-func (s *holderSyncer) initializeIndexTranslateReplication() error {
-	for _, node := range s.Cluster.Nodes() {
+func (s *holderSyncer) initializeIndexTranslateReplication(snap *topology.ClusterSnapshot) error {
+	for _, node := range snap.Nodes {
 		// Skip local node.
 		if node.ID == s.Node.ID {
 			continue
@@ -1647,10 +1910,10 @@ func (s *holderSyncer) initializeIndexTranslateReplication() error {
 			if !index.Keys() {
 				continue
 			}
-			for partitionID := 0; partitionID < s.Cluster.partitionN; partitionID++ {
-				partitionNodes := s.Cluster.partitionNodes(partitionID)
-				isPrimary := partitionNodes[0].ID == node.ID                 // remote is primary?
-				isReplica := Nodes(partitionNodes[1:]).ContainsID(s.Node.ID) // local is replica?
+			for partitionID := 0; partitionID < snap.PartitionN; partitionID++ {
+				partitionNodes := snap.PartitionNodes(partitionID)
+				isPrimary := partitionNodes[0].ID == node.ID                          // remote is primary?
+				isReplica := topology.Nodes(partitionNodes[1:]).ContainsID(s.Node.ID) // local is replica?
 				if !isPrimary || !isReplica {
 					continue
 				}
@@ -1686,10 +1949,10 @@ func (s *holderSyncer) initializeIndexTranslateReplication() error {
 	return nil
 }
 
-// initializeFieldTranslateReplication connects the coordinator to stream field data.
-func (s *holderSyncer) initializeFieldTranslateReplication() error {
-	// Skip if coordinator.
-	if s.Cluster.isCoordinator() {
+// initializeFieldTranslateReplication connects the primary to stream field data.
+func (s *holderSyncer) initializeFieldTranslateReplication(snap *topology.ClusterSnapshot) error {
+	// Skip if primary.
+	if snap.IsPrimaryFieldTranslationNode(s.Cluster.Node.ID) {
 		return nil
 	}
 
@@ -1711,9 +1974,9 @@ func (s *holderSyncer) initializeFieldTranslateReplication() error {
 		return nil
 	}
 
-	// Connect to coordinator and begin streaming.
-	coordinator := s.Cluster.coordinatorNode()
-	rd, err := s.Holder.OpenTranslateReader(context.Background(), coordinator.URI.String(), m)
+	// Connect to primary and begin streaming.
+	primary := snap.PrimaryFieldTranslationNode()
+	rd, err := s.Holder.OpenTranslateReader(context.Background(), primary.URI.String(), m)
 	if err != nil {
 		return err
 	}
@@ -1728,6 +1991,9 @@ func (s *holderSyncer) initializeFieldTranslateReplication() error {
 }
 
 func (s *holderSyncer) readIndexTranslateReader(rd TranslateEntryReader) {
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	snap := topology.NewClusterSnapshot(s.Cluster.noder, s.Cluster.Hasher, s.Cluster.ReplicaN)
+
 	for {
 		var entry TranslateEntry
 		if err := rd.ReadEntry(&entry); err != nil {
@@ -1743,7 +2009,7 @@ func (s *holderSyncer) readIndexTranslateReader(rd TranslateEntryReader) {
 		}
 
 		// Apply replication to store.
-		store := idx.TranslateStore(s.Cluster.Topology.KeyPartition(entry.Index, entry.Key))
+		store := idx.TranslateStore(snap.KeyToKeyPartition(entry.Index, entry.Key))
 		if err := store.ForceSet(entry.ID, entry.Key); err != nil {
 			s.Holder.Logger.Printf("cannot force set index translation data: %d=%q", entry.ID, entry.Key)
 			return
@@ -1777,7 +2043,7 @@ func (s *holderSyncer) readFieldTranslateReader(rd TranslateEntryReader) {
 
 // holderCleaner removes fragments and data files that are no longer used.
 type holderCleaner struct {
-	Node *Node
+	Node *topology.Node
 
 	Holder  *Holder
 	Cluster *cluster
@@ -1785,6 +2051,11 @@ type holderCleaner struct {
 	// Signals that the sync should stop.
 	Closing <-chan struct{}
 }
+
+// TODO: this is here to satisfy the linter since holderCleaner was removed from
+// the gossip implementation of removeNode. But presumably we will use it once
+// we have ported over the etcd implementation.
+var _ holderCleaner
 
 // IsClosing returns true if the cleaner has been marked to close.
 func (c *holderCleaner) IsClosing() bool {
@@ -1799,6 +2070,9 @@ func (c *holderCleaner) IsClosing() bool {
 // CleanHolder compares the holder with the cluster state and removes
 // any unnecessary fragments and files.
 func (c *holderCleaner) CleanHolder() error {
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	snap := topology.NewClusterSnapshot(c.Cluster.noder, c.Cluster.Hasher, c.Cluster.ReplicaN)
+
 	for _, index := range c.Holder.Indexes() {
 		// Verify cleaner has not closed.
 		if c.IsClosing() {
@@ -1806,7 +2080,7 @@ func (c *holderCleaner) CleanHolder() error {
 		}
 
 		// Get the fragments that node is responsible for (based on hash(index, node)).
-		containedShards := c.Cluster.containsShards(index.Name(), index.AvailableShards(includeRemote), c.Node)
+		containedShards := snap.ContainsShards(index.Name(), index.AvailableShards(includeRemote), c.Node)
 
 		// Get the fragments registered in memory.
 		for _, field := range index.Fields() {
@@ -2029,4 +2303,20 @@ func (h *Holder) HasRoaringData() (has bool, err error) {
 		}
 	}
 	return
+}
+
+func decodeCreateIndexMessage(ser Serializer, b []byte) (*CreateIndexMessage, error) {
+	var cim CreateIndexMessage
+	if err := ser.Unmarshal(b, &cim); err != nil {
+		return nil, errors.Wrap(err, "unmarshaling")
+	}
+	return &cim, nil
+}
+
+func decodeCreateFieldMessage(ser Serializer, b []byte) (*CreateFieldMessage, error) {
+	var cfm CreateFieldMessage
+	if err := ser.Unmarshal(b, &cfm); err != nil {
+		return nil, errors.Wrap(err, "unmarshaling")
+	}
+	return &cfm, nil
 }

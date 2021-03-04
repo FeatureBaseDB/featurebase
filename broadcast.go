@@ -17,6 +17,7 @@ package pilosa
 import (
 	"fmt"
 
+	"github.com/pilosa/pilosa/v2/topology"
 	"github.com/pkg/errors"
 )
 
@@ -26,11 +27,22 @@ type Serializer interface {
 	Unmarshal([]byte, Message) error
 }
 
+// NopSerializer represents a Serializer that doesn't do anything.
+var NopSerializer Serializer = &nopSerializer{}
+
+type nopSerializer struct{}
+
+// Marshal is a no-op implementation of Serializer Marshal method.
+func (*nopSerializer) Marshal(Message) ([]byte, error) { return nil, nil }
+
+// Unmarshal is a no-op implementation of Serializer Unmarshal method.
+func (*nopSerializer) Unmarshal([]byte, Message) error { return nil }
+
 // broadcaster is an interface for broadcasting messages.
 type broadcaster interface {
 	SendSync(Message) error
 	SendAsync(Message) error
-	SendTo(*Node, Message) error
+	SendTo(*topology.Node, Message) error
 }
 
 // Message is the interface implemented by all core pilosa types which can be serialized to messages.
@@ -49,7 +61,7 @@ func (nopBroadcaster) SendSync(Message) error { return nil }
 func (nopBroadcaster) SendAsync(Message) error { return nil }
 
 // SendTo is a no-op implementation of Broadcaster SendTo method.
-func (nopBroadcaster) SendTo(*Node, Message) error { return nil }
+func (nopBroadcaster) SendTo(*topology.Node, Message) error { return nil }
 
 // Broadcast message types.
 const (
@@ -63,13 +75,14 @@ const (
 	messageTypeClusterStatus
 	messageTypeResizeInstruction
 	messageTypeResizeInstructionComplete
-	messageTypeSetCoordinator
-	messageTypeUpdateCoordinator
 	messageTypeNodeState
 	messageTypeRecalculateCaches
+	messageTypeLoadSchemaMessage
 	messageTypeNodeEvent
 	messageTypeNodeStatus
 	messageTypeTransaction
+	messageTypeResizeNodeMessage
+	messageTypeResizeAbortMessage
 )
 
 // MarshalInternalMessage serializes the pilosa message and adds pilosa internal
@@ -105,20 +118,22 @@ func getMessage(typ byte) Message {
 		return &ResizeInstruction{}
 	case messageTypeResizeInstructionComplete:
 		return &ResizeInstructionComplete{}
-	case messageTypeSetCoordinator:
-		return &SetCoordinatorMessage{}
-	case messageTypeUpdateCoordinator:
-		return &UpdateCoordinatorMessage{}
 	case messageTypeNodeState:
 		return &NodeStateMessage{}
 	case messageTypeRecalculateCaches:
 		return &RecalculateCaches{}
+	case messageTypeLoadSchemaMessage:
+		return &LoadSchemaMessage{}
 	case messageTypeNodeEvent:
 		return &NodeEvent{}
 	case messageTypeNodeStatus:
 		return &NodeStatus{}
 	case messageTypeTransaction:
 		return &TransactionMessage{}
+	case messageTypeResizeNodeMessage:
+		return &ResizeNodeMessage{}
+	case messageTypeResizeAbortMessage:
+		return &ResizeAbortMessage{}
 	default:
 		panic(fmt.Sprintf("unknown message type %d", typ))
 	}
@@ -146,20 +161,22 @@ func getMessageType(m Message) byte {
 		return messageTypeResizeInstruction
 	case *ResizeInstructionComplete:
 		return messageTypeResizeInstructionComplete
-	case *SetCoordinatorMessage:
-		return messageTypeSetCoordinator
-	case *UpdateCoordinatorMessage:
-		return messageTypeUpdateCoordinator
 	case *NodeStateMessage:
 		return messageTypeNodeState
 	case *RecalculateCaches:
 		return messageTypeRecalculateCaches
+	case *LoadSchemaMessage:
+		return messageTypeLoadSchemaMessage
 	case *NodeEvent:
 		return messageTypeNodeEvent
 	case *NodeStatus:
 		return messageTypeNodeStatus
 	case *TransactionMessage:
 		return messageTypeTransaction
+	case *ResizeNodeMessage:
+		return messageTypeResizeNodeMessage
+	case *ResizeAbortMessage:
+		return messageTypeResizeAbortMessage
 	default:
 		panic(fmt.Sprintf("don't have type for message %#v", m))
 	}

@@ -189,11 +189,7 @@ bind = "127.0.0.1:10101"
 
 [cluster]
   replicas = 2
-  partitions = 128
-  hosts = [
-    "127.0.0.1:10101",
-    "127.0.0.1:10111",
-  ]`
+  partitions = 128`
 	if _, err := file.Write([]byte(config)); err != nil {
 		t.Fatalf("writing config file: %v", err)
 	}

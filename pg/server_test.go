@@ -109,6 +109,7 @@ func TestPQConnect(t *testing.T) {
 		StartupTimeout: time.Second,
 		Logger:         logger.NopLogger,
 	}
+
 	addr, shutdown, err := pgtest.ServeTCP(":0", server)
 	if err != nil {
 		t.Fatalf("starting postgres server: %v", err)
@@ -140,6 +141,7 @@ func TestPQConnectSSL(t *testing.T) {
 		StartupTimeout: time.Second,
 		Logger:         logger.NopLogger,
 	}
+
 	addr, shutdown, err := pgtest.ServeTLS(":0", server)
 	if err != nil {
 		t.Fatalf("starting postgres server: %v", err)
@@ -204,6 +206,7 @@ func TestPSQLQuery(t *testing.T) {
 			StartupTimeout: time.Second,
 			Logger:         logger.NopLogger,
 		}
+
 		addr, shutdown, err := pgtest.ServeTCP(":0", server)
 		if err != nil {
 			t.Fatalf("starting postgres server: %v", err)
@@ -265,6 +268,7 @@ func TestPSQLQuery(t *testing.T) {
 			Logger:              logger.NopLogger,
 			CancellationManager: pg.NewLocalCancellationManager(rand.Reader),
 		}
+
 		addr, shutdown, err := pgtest.ServeTCP(":0", server)
 		if err != nil {
 			t.Fatalf("starting postgres server: %v", err)

@@ -16,19 +16,28 @@ package pilosa_test
 
 import (
 	"fmt"
+	"net"
 	"net/http"
 	"testing"
 
-	"github.com/pilosa/pilosa/v2"
-	"github.com/pilosa/pilosa/v2/testhook"
 	_ "net/http/pprof"
+
+	"github.com/pilosa/pilosa/v2/testhook"
 )
 
 func TestMain(m *testing.M) {
-	port := pilosa.GetAvailPort()
+	l, err := net.Listen("tcp", ":0")
+	if err != nil {
+		panic(err)
+	}
+	port := l.Addr().(*net.TCPAddr).Port
 	fmt.Printf("pilosa/ TestMain: online stack-traces: curl http://localhost:%v/debug/pprof/goroutine?debug=2\n", port)
 	go func() {
-		_ = http.ListenAndServe(fmt.Sprintf("127.0.0.1:%v", port), nil)
+		err := http.Serve(l, nil)
+		if err != nil {
+			panic(err)
+		}
 	}()
 	testhook.RunTestsWithHooks(m)
+
 }

@@ -17,8 +17,6 @@ package pilosa
 import (
 	"context"
 	"fmt"
-	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sort"
@@ -26,14 +24,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
-	"github.com/pilosa/pilosa/v2/hash"
-	"github.com/pilosa/pilosa/v2/internal"
+	"github.com/pilosa/pilosa/v2/disco"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/stats"
 	"github.com/pilosa/pilosa/v2/testhook"
 	"github.com/pkg/errors"
-	"github.com/zeebo/blake3"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -59,6 +54,8 @@ type Index struct {
 	columnAttrs AttrStore
 
 	broadcaster broadcaster
+	Schemator   disco.Schemator
+	serializer  Serializer
 	Stats       stats.StatsClient
 
 	// Passed to field for foreign-index lookup.
@@ -101,6 +98,9 @@ func NewIndex(holder *Holder, path, name string) (*Index, error) {
 		Stats:          stats.NopStatsClient,
 		holder:         holder,
 		trackExistence: true,
+
+		Schemator:  disco.InMemSchemator,
+		serializer: NopSerializer,
 
 		translateStores: make(map[int]TranslateStore),
 
@@ -174,23 +174,39 @@ func (i *Index) options() IndexOptions {
 
 // Open opens and initializes the index.
 func (i *Index) Open() error {
-	return i.open(false)
+	return i.open(nil)
 }
 
-// OpenWithTimestamp opens and initializes the index and set a new CreatedAt timestamp for fields.
-func (i *Index) OpenWithTimestamp() error { return i.open(true) }
+// OpenWithSchema opens the index and uses the provided schema to verify that
+// the index's fields are expected.
+func (i *Index) OpenWithSchema(idx *disco.Index) error {
+	if idx == nil {
+		return ErrInvalidSchema
+	}
 
-func (i *Index) open(withTimestamp bool) (err error) {
+	// decode the CreateIndexMessage from the schema data in order to
+	// get its metadata.
+	cim, err := decodeCreateIndexMessage(i.serializer, idx.Data)
+	if err != nil {
+		return errors.Wrap(err, "decoding create index message")
+	}
+	i.createdAt = cim.CreatedAt
+	i.trackExistence = cim.Meta.TrackExistence
+	i.keys = cim.Meta.Keys
+
+	return i.open(idx)
+}
+
+// open opens the index with an optional schema (disco.Index). If a schema is
+// provided, it will apply the metadata from the schema to the index, and then
+// open all fields found in the schema. If a schema is not provided, the
+// metadata for the index is not changed from its existing value, and fields are
+// not validated against the schema as they are opened.
+func (i *Index) open(idx *disco.Index) (err error) {
 	// Ensure the path exists.
 	i.holder.Logger.Debugf("ensure index path exists: %s", i.path)
 	if err := os.MkdirAll(i.path, 0777); err != nil {
 		return errors.Wrap(err, "creating directory")
-	}
-
-	// Read meta file.
-	i.holder.Logger.Debugf("load meta file for index: %s", i.name)
-	if err := i.loadMeta(); err != nil {
-		return errors.Wrap(err, "loading meta file")
 	}
 
 	// we don't want to open *all* the views for each shard, since
@@ -203,9 +219,25 @@ func (i *Index) open(withTimestamp bool) (err error) {
 	}
 	i.fieldView2shard = fieldView2shard
 
+	// Add index to a map in holder. Used by openFields.
+	i.holder.addIndex(i)
+
 	i.holder.Logger.Debugf("open fields for index: %s", i.name)
-	if err := i.openFields(withTimestamp); err != nil {
+	if err := i.openFields(idx); err != nil {
 		return errors.Wrap(err, "opening fields")
+	}
+
+	// Set bit depths.
+	// This is called in Index.open() (as opposed to Field.Open()) because the
+	// Field.bitDepth() method uses a transaction which relies on the index and
+	// its entry for the field in the Index.field map. If we try to set a
+	// field's BitDepth in Field.Open(), which itself might be inside the
+	// Index.openField() loop, then the field has not yet been added to the
+	// Index.field map. I think it would be better if Field.bitDepth didn't rely
+	// on its index at all, but perhaps with transactions that not possible. I
+	// don't know.
+	if err := i.setFieldBitDepths(); err != nil {
+		return errors.Wrap(err, "setting field bitDepths")
 	}
 
 	if i.trackExistence {
@@ -253,7 +285,7 @@ func (i *Index) open(withTimestamp bool) (err error) {
 var indexQueue = make(chan struct{}, 8)
 
 // openFields opens and initializes the fields inside the index.
-func (i *Index) openFields(withTimestamp bool) error {
+func (i *Index) openFields(idx *disco.Index) error {
 	f, err := os.Open(i.path)
 	if err != nil {
 		return errors.Wrap(err, "opening directory")
@@ -282,6 +314,27 @@ fileLoop:
 				continue
 			}
 
+			var cfm *CreateFieldMessage = &CreateFieldMessage{}
+			var err error
+
+			// Only continue with fields which are present in the provided,
+			// non-nil index schema. The reason we have to check for idx != nil
+			// here is because there are tests which call index.Open without
+			// having a disco.Index available.
+			if idx != nil {
+				fld, ok := idx.Fields[fi.Name()]
+				if !ok {
+					continue
+				}
+
+				// Decode the CreateFieldMessage from the schema data in order to
+				// get its metadata.
+				cfm, err = decodeCreateFieldMessage(i.holder.serializer, fld.Data)
+				if err != nil {
+					return errors.Wrap(err, "decoding create field message")
+				}
+			}
+
 			indexQueue <- struct{}{}
 			eg.Go(func() error {
 				defer func() {
@@ -289,32 +342,11 @@ fileLoop:
 				}()
 				i.holder.Logger.Debugf("open field: %s", fi.Name())
 
-				mu.Lock()
-
-				// goroutine safe
-				i.holder.addIndex(i)
-
-				fld, err := i.newField(i.fieldPath(filepath.Base(fi.Name())), filepath.Base(fi.Name()))
-				if withTimestamp {
-					fld.createdAt = timestamp()
-				}
-				mu.Unlock()
+				_, err := i.openField(&mu, cfm, fi.Name())
 				if err != nil {
-					return errors.Wrapf(ErrName, "'%s'", fi.Name())
+					return errors.Wrap(err, "opening field")
 				}
 
-				// Pass holder through to the field for use in looking
-				// up a foreign index.
-				fld.holder = i.holder
-
-				// open the views we have data for.
-				if err := fld.Open(); err != nil {
-					return fmt.Errorf("open field: name=%s, err=%s", fld.Name(), err)
-				}
-				i.holder.Logger.Debugf("add field to index.fields: %s", fi.Name())
-				i.mu.Lock()
-				i.fields[fld.Name()] = fld
-				i.mu.Unlock()
 				return nil
 			})
 		}
@@ -331,9 +363,60 @@ fileLoop:
 	return err
 }
 
+// openField opens the field directory, initializes the field, and adds it to
+// the in-memory map of fields maintained by Index.
+func (i *Index) openField(mu *sync.Mutex, cfm *CreateFieldMessage, file string) (*Field, error) {
+	mu.Lock()
+	fld, err := i.newField(i.fieldPath(filepath.Base(file)), filepath.Base(file))
+	mu.Unlock()
+	if err != nil {
+		return nil, errors.Wrapf(ErrName, "'%s'", file)
+	}
+
+	// Pass holder through to the field for use in looking
+	// up a foreign index.
+	fld.holder = i.holder
+
+	fld.createdAt = cfm.CreatedAt
+	fld.options = applyDefaultOptions(cfm.Meta)
+
+	// open the views we have data for.
+	if err := fld.Open(); err != nil {
+		return nil, fmt.Errorf("open field: name=%s, err=%s", fld.Name(), err)
+	}
+
+	i.holder.Logger.Debugf("add field to index.fields: %s", file)
+	i.mu.Lock()
+	i.fields[fld.Name()] = fld
+	i.mu.Unlock()
+
+	return fld, nil
+}
+
 // openExistenceField gets or creates the existence field and associates it to the index.
 func (i *Index) openExistenceField() error {
-	f, err := i.createFieldIfNotExists(existenceFieldName, &FieldOptions{CacheType: CacheTypeNone, CacheSize: 0})
+	cfm := &CreateFieldMessage{
+		Index:     i.name,
+		Field:     existenceFieldName,
+		CreatedAt: 0,
+		Meta:      &FieldOptions{CacheType: CacheTypeNone, CacheSize: 0},
+	}
+
+	// First try opening the existence field from disk. If it doesn't already
+	// exist on disk, then we fall through to the code path which creates it.
+	var mu sync.Mutex
+	fld, err := i.openField(&mu, cfm, existenceFieldName)
+	if err == nil {
+		i.existenceFld = fld
+		return nil
+	} else if errors.Cause(err) != ErrName {
+		return errors.Wrap(err, "opening existence file")
+	}
+
+	// If we have gotten here, it means that we couldn't successfully open the
+	// existence field from disk, so we need to create it.
+
+	f, err := i.createFieldIfNotExists(cfm)
 	if err != nil {
 		return errors.Wrap(err, "creating existence field")
 	}
@@ -341,56 +424,28 @@ func (i *Index) openExistenceField() error {
 	return nil
 }
 
-// loadMeta reads meta data for the index, if any.
-func (i *Index) loadMeta() error {
-	// TrackExistence is by default true
-	pb := &internal.IndexMeta{TrackExistence: true}
-
-	// Read data from meta file.
-	buf, err := ioutil.ReadFile(filepath.Join(i.path, ".meta"))
-	if os.IsNotExist(err) {
-		return nil
-	} else if err != nil {
-		return errors.Wrap(err, "reading")
-	} else {
-		if err := proto.Unmarshal(buf, pb); err != nil {
-			return errors.Wrap(err, "unmarshalling")
+// setFieldBitDepths sets the BitDepth for all int and decimal fields in the index.
+func (i *Index) setFieldBitDepths() error {
+	for name, f := range i.fields {
+		switch f.Type() {
+		case FieldTypeInt, FieldTypeDecimal:
+			// pass
+		default:
+			continue
 		}
+		bd, err := f.bitDepth()
+		if err != nil {
+			return errors.Wrapf(err, "getting bit depth for field: %s", name)
+		}
+		f.mu.Lock()
+		f.options.BitDepth = bd
+		f.mu.Unlock()
 	}
-
-	// Copy metadata fields.
-	if pb == nil {
-		i.trackExistence = true
-	} else {
-		i.trackExistence = pb.TrackExistence
-	}
-	i.keys = pb.GetKeys()
-
-	return nil
-}
-
-// saveMeta writes meta data for the index.
-func (i *Index) saveMeta() error {
-	// Marshal metadata.
-	buf, err := proto.Marshal(&internal.IndexMeta{
-		Keys:           i.keys,
-		TrackExistence: i.trackExistence,
-	})
-	if err != nil {
-		return errors.Wrap(err, "marshalling")
-	}
-
-	// Write to meta file.
-	if err := ioutil.WriteFile(filepath.Join(i.path, ".meta"), buf, 0666); err != nil {
-		return errors.Wrap(err, "writing")
-	}
-
 	return nil
 }
 
 // Close closes the index and its fields.
 func (i *Index) Close() error {
-
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	defer func() {
@@ -462,7 +517,9 @@ func (i *Index) Field(name string) *Field {
 	return i.field(name)
 }
 
-func (i *Index) field(name string) *Field { return i.fields[name] }
+func (i *Index) field(name string) *Field {
+	return i.fields[name]
+}
 
 // Fields returns a list of all fields in the index.
 func (i *Index) Fields() []*Field {
@@ -514,7 +571,44 @@ func (i *Index) CreateField(name string, opts ...FieldOption) (*Field, error) {
 		return nil, errors.Wrap(err, "applying option")
 	}
 
-	return i.createField(name, fo)
+	cfm := &CreateFieldMessage{
+		Index:     i.name,
+		Field:     name,
+		CreatedAt: timestamp(),
+		Meta:      fo,
+	}
+
+	// Create the field in etcd as the system of record.
+	if err := i.persistField(context.Background(), cfm); err != nil {
+		return nil, errors.Wrap(err, "persisting field")
+	}
+
+	return i.createField(cfm, false)
+}
+
+// CreateFieldAndBroadcast creates a field locally, then broadcasts the
+// creation to other nodes so they can create locally as well. An error is
+// returned if the field already exists.
+func (i *Index) CreateFieldAndBroadcast(cfm *CreateFieldMessage) (*Field, error) {
+	err := validateName(cfm.Field)
+	if err != nil {
+		return nil, errors.Wrap(err, "validating name")
+	}
+
+	i.mu.Lock()
+	defer i.mu.Unlock()
+
+	// Ensure field doesn't already exist.
+	if i.fields[cfm.Field] != nil {
+		return nil, newConflictError(ErrFieldExists)
+	}
+
+	// Create the field in etcd as the system of record.
+	if err := i.persistField(context.Background(), cfm); err != nil {
+		return nil, errors.Wrap(err, "persisting field")
+	}
+
+	return i.createField(cfm, true)
 }
 
 // CreateFieldIfNotExists creates a field with the given options if it doesn't exist.
@@ -538,10 +632,36 @@ func (i *Index) CreateFieldIfNotExists(name string, opts ...FieldOption) (*Field
 		return nil, errors.Wrap(err, "applying option")
 	}
 
-	return i.createField(name, fo)
+	cfm := &CreateFieldMessage{
+		Index:     i.name,
+		Field:     name,
+		CreatedAt: timestamp(),
+		Meta:      fo,
+	}
+
+	// Create the field in etcd as the system of record.
+	if err := i.persistField(context.Background(), cfm); err != nil {
+		// There is a case where the index is not in memory, but it is in
+		// persistent storage. In that case, this will return an "index exists"
+		// error, which in that case should return the index. TODO: We may need
+		// to allow for that in the future.
+		return nil, errors.Wrap(err, "persisting field")
+	}
+
+	return i.createField(cfm, false)
 }
 
-func (i *Index) createFieldIfNotExists(name string, opt *FieldOptions) (*Field, error) {
+// CreateFieldIfNotExistsWithOptions is a method which I created because I
+// needed the functionality of CreateFieldIfNotExists, but instead of taking
+// function options, taking a *FieldOptions struct. TODO: This should
+// definintely be refactored so we don't have these virtually equivalent
+// methods, but I'm puttin this here for now just to see if it works.
+func (i *Index) CreateFieldIfNotExistsWithOptions(name string, opt *FieldOptions) (*Field, error) {
+	err := validateName(name)
+	if err != nil {
+		return nil, errors.Wrap(err, "validating name")
+	}
+
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
@@ -550,21 +670,83 @@ func (i *Index) createFieldIfNotExists(name string, opt *FieldOptions) (*Field, 
 		return f, nil
 	}
 
-	return i.createField(name, opt)
+	cfm := &CreateFieldMessage{
+		Index:     i.name,
+		Field:     name,
+		CreatedAt: timestamp(),
+		Meta:      opt,
+	}
+
+	// Create the field in etcd as the system of record.
+	if err := i.persistField(context.Background(), cfm); err != nil {
+		// There is a case where the index is not in memory, but it is in
+		// persistent storage. In that case, this will return an "index exists"
+		// error, which in that case should return the index. TODO: We may need
+		// to allow for that in the future.
+		return nil, errors.Wrap(err, "persisting field")
+	}
+
+	return i.createField(cfm, false)
 }
 
-func (i *Index) createField(name string, opt *FieldOptions) (*Field, error) {
-	if name == "" {
+// persistField stores the field information in etcd.
+func (i *Index) persistField(ctx context.Context, cfm *CreateFieldMessage) error {
+	if cfm.Index == "" {
+		return ErrIndexRequired
+	} else if cfm.Field == "" {
+		return ErrFieldRequired
+	}
+
+	if err := validateName(cfm.Field); err != nil {
+		return errors.Wrap(err, "validating name")
+	}
+
+	if b, err := i.serializer.Marshal(cfm); err != nil {
+		return errors.Wrap(err, "marshaling")
+	} else if err := i.Schemator.CreateField(ctx, cfm.Index, cfm.Field, b); err != nil {
+		return errors.Wrapf(err, "writing field to disco: %s/%s", cfm.Index, cfm.Field)
+	}
+	return nil
+}
+
+// createFieldIfNotExists creates the field if it does not already exist in the
+// in-memory index structure. This is not related to whether or not the field
+// exists in etcd.
+func (i *Index) createFieldIfNotExists(cfm *CreateFieldMessage) (*Field, error) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+
+	// Find field in cache first.
+	if f := i.fields[cfm.Field]; f != nil {
+		return f, nil
+	}
+
+	return i.createField(cfm, false)
+}
+
+// createField, in addition to creating a new Field, calls Field.Open which
+// potentially aquires a lock on Index. So until/unless we refactor the
+// Index.createField() function call path, we cannot call Index.createField
+// while holding an Index lock.
+func (i *Index) createField(cfm *CreateFieldMessage, broadcast bool) (*Field, error) {
+	opt := cfm.Meta
+	if opt == nil {
+		opt = &FieldOptions{}
+	}
+
+	// TODO: can we do a general FieldOption validation here instead of just cache type?
+	if cfm.Field == "" {
 		return nil, errors.New("field name required")
 	} else if opt.CacheType != "" && !isValidCacheType(opt.CacheType) {
 		return nil, ErrInvalidCacheType
 	}
 
 	// Initialize field.
-	f, err := i.newField(i.fieldPath(name), name)
+	f, err := i.newField(i.fieldPath(cfm.Field), cfm.Field)
 	if err != nil {
 		return nil, errors.Wrap(err, "initializing")
 	}
+	f.createdAt = cfm.CreatedAt
 
 	// Pass holder through to the field for use in looking
 	// up a foreign index.
@@ -577,16 +759,18 @@ func (i *Index) createField(name string, opt *FieldOptions) (*Field, error) {
 		return nil, errors.Wrap(err, "opening")
 	}
 
-	if err := f.saveMeta(); err != nil {
-		f.Close()
-		return nil, errors.Wrap(err, "saving meta")
-	}
-
 	// Add to index's field lookup.
-	i.fields[name] = f
+	i.fields[cfm.Field] = f
 
 	// enable Txf to find the index in field_test.go TestField_SetValue
 	f.idx = i
+
+	if broadcast {
+		// Send the create field message to all nodes.
+		if err := i.holder.sendOrSpool(cfm); err != nil {
+			return nil, errors.Wrap(err, "sending CreateField message")
+		}
+	}
 
 	// Kick off the field's translation sync process.
 	if err := i.translationSyncer.Reset(); err != nil {
@@ -604,6 +788,8 @@ func (i *Index) newField(path, name string) (*Field, error) {
 	f.idx = i
 	f.Stats = i.Stats
 	f.broadcaster = i.broadcaster
+	f.schemator = i.Schemator
+	f.serializer = i.serializer
 	f.rowAttrStore = i.newAttrStore(filepath.Join(f.path, ".data"))
 	f.OpenTranslateStore = i.OpenTranslateStore
 	return f, nil
@@ -613,6 +799,11 @@ func (i *Index) newField(path, name string) (*Field, error) {
 func (i *Index) DeleteField(name string) error {
 	i.mu.Lock()
 	defer i.mu.Unlock()
+
+	// Disallow deleting the existence field.
+	if name == existenceFieldName {
+		return newNotFoundError(ErrFieldNotFound, existenceFieldName)
+	}
 
 	// Confirm field exists.
 	f := i.field(name)
@@ -629,20 +820,13 @@ func (i *Index) DeleteField(name string) error {
 		return errors.Wrap(err, "Txf.DeleteFieldFromStore")
 	}
 
-	// If the field being deleted is the existence field,
-	// turn off existence tracking on the index.
-	if name == existenceFieldName {
-		i.trackExistence = false
-		i.existenceFld = nil
-
-		// Update meta data on disk.
-		if err := i.saveMeta(); err != nil {
-			return errors.Wrap(err, "saving existence meta data")
-		}
-	}
-
 	// Remove reference.
 	delete(i.fields, name)
+
+	// Delete the field from etcd as the system of record.
+	if err := i.Schemator.DeleteField(context.TODO(), i.name, name); err != nil {
+		return errors.Wrapf(err, "deleting field from etcd: %s/%s", i.name, name)
+	}
 
 	return i.translationSyncer.Reset()
 }
@@ -706,323 +890,12 @@ func FormatQualifiedIndexName(index string) string {
 
 // Dump prints to stdout the contents of the roaring Containers
 // stored in idx. Mostly for debugging.
-func (idx *Index) Dump(label string) {
+func (i *Index) Dump(label string) {
 	fileline := FileLine(2)
 	fmt.Printf("\n%v Dump: %v\n\n", fileline, label)
-	idx.holder.txf.dbPerShard.DumpAll()
+	i.holder.txf.dbPerShard.DumpAll()
 }
 
-func (idx *Index) SliceOfShards(field, view, viewPath string) (sliceOfShards []uint64, err error) {
-
-	// SliceOfShards is based on view.openFragments()
-	// If we go to a database per shard then index will need this, or
-	// something like it, to read database files/directories
-	// and figure out what all the shards are so that a view
-	// can open its fragments.
-
-	file, err := os.Open(filepath.Join(viewPath, "fragments"))
-	if os.IsNotExist(err) {
-		return
-	} else if err != nil {
-		return nil, errors.Wrap(err, "opening fragments directory")
-	}
-	defer file.Close()
-
-	fis, err := file.Readdir(0)
-	if err != nil {
-		return nil, errors.Wrap(err, "reading fragments directory")
-	}
-
-	for _, fi := range fis {
-		if fi.IsDir() {
-			continue
-		}
-		// Parse filename into integer.
-		shard, err := strconv.ParseUint(filepath.Base(fi.Name()), 10, 64)
-		if err != nil {
-			idx.holder.Logger.Debugf("WARNING: couldn't use non-integer file as shard in index/field/view %s/%s/%s: %s", idx.name, field, view, fi.Name())
-			continue
-		}
-		sliceOfShards = append(sliceOfShards, shard)
-	}
-	return
-}
-
-type AllTranslatorSummary struct {
-	Sums []*TranslatorSummary
-
-	RepairNeeded bool
-}
-
-func (ats *AllTranslatorSummary) Checksum() string {
-	ats.Sort()
-	hasher := blake3.New()
-	for _, sum := range ats.Sums {
-		_, _ = hasher.Write([]byte(sum.Checksum))
-	}
-	var buf [16]byte
-	_, _ = hasher.Digest().Read(buf[0:])
-	return fmt.Sprintf("blake3-%x", buf)
-}
-
-func NewAllTranslatorSummary() *AllTranslatorSummary {
-	return &AllTranslatorSummary{}
-}
-func (ats *AllTranslatorSummary) Append(b *AllTranslatorSummary) {
-	ats.Sums = append(ats.Sums, b.Sums...)
-	ats.RepairNeeded = ats.RepairNeeded || b.RepairNeeded
-}
-
-func (ats *AllTranslatorSummary) Sort() {
-	// return sorted by index then PartitionID then Field
-	sort.Slice(ats.Sums, func(i, j int) bool {
-		a := ats.Sums[i]
-		b := ats.Sums[j]
-		if a.Index < b.Index {
-			return true
-		}
-		if a.Index > b.Index {
-			return false
-		}
-		// INVAR: a.Index == b.Index
-		if a.PartitionID < b.PartitionID {
-			return true
-		}
-		if a.PartitionID > b.PartitionID {
-			return false
-		}
-		if a.Field < b.Field {
-			return true
-		}
-		if a.Field > b.Field {
-			return false
-		}
-		return a.NodeID < b.NodeID
-	})
-}
-
-// sums is only guaranteed to be sorted by (index, PartitionID, field) iff err returns nil
-func (idx *Index) ComputeTranslatorSummary(verbose, checkKeys, applyKeyRepairs bool, topo *Topology, nodeID string, parallelReaders int) (ats *AllTranslatorSummary, err error) {
-	idx.mu.RLock()
-	defer idx.mu.RUnlock()
-
-	ats = &AllTranslatorSummary{}
-	var atsMu sync.Mutex
-
-	if verbose {
-		fmt.Printf("\n# index: %v\n# =================\n", idx.name)
-	}
-
-	pjob := newParallelJobs(parallelReaders)
-
-floop:
-	for _, fld := range idx.fields {
-		fld := fld
-
-		fun := func(worker int) error {
-			//vv("ComputeTranslatorSummary() on fld '%v'", fld.name)
-			sum, err := fld.translateStore.ComputeTranslatorSummaryRows()
-			if err != nil {
-				return err
-			}
-			sum.Field = fld.name
-			sum.Index = idx.Name()
-			sum.Checksum = hash.Blake3sum16([]byte(fmt.Sprintf("%v/%v/%v", sum.Checksum, fld.name, idx.Name())))
-			sum.IsColKey = false
-			if verbose {
-				fmt.Printf("# row blake3-%v keyN: %5v idN: %5v field: '%v'\n", sum.Checksum, sum.KeyCount, sum.IDCount, fld.name)
-			}
-			atsMu.Lock()
-			ats.Sums = append(ats.Sums, sum)
-			atsMu.Unlock()
-			return nil
-		}
-
-		if !pjob.run(fun) {
-			break floop
-		}
-	} // end floop
-
-	if verbose {
-		fmt.Printf("# ====================\n")
-	}
-
-tloop:
-	for partitionID, store := range idx.translateStores {
-		partitionID := partitionID
-		store := store
-
-		fun2 := func(worker int) error {
-			//vv("ComputeTranslatorSummary() running on store.Path = '%v'", store.GetStorePath())
-			if checkKeys {
-				prim := topo.PrimaryNodeIndex(partitionID)
-				primID := topo.nodeIDs[prim]
-
-				// note: we fix irrespective of nodeID == primID now, so that we
-				// get a fine grain report of what maps were off.
-
-				if verbose {
-					// This is pilosa-fsck output, not regular log.
-					fmt.Printf("# doing analysis of keys on nodeID '%v', and primID '%v'\n", nodeID, primID)
-				}
-				changed, err := store.RepairKeys(topo, verbose, applyKeyRepairs)
-				if err != nil {
-					return errors.Wrap(err, "ComputeTranslatorSummary() call to store.Repair()")
-				}
-				if changed {
-					atsMu.Lock()
-					ats.RepairNeeded = true
-					atsMu.Unlock()
-				}
-			}
-
-			// key repair has to be above, because we compute the checksum below.
-
-			sum, err := store.ComputeTranslatorSummaryCols(partitionID, topo)
-			if err != nil {
-				return err
-			}
-			if sum == nil {
-				// probably one of the Noop stores from the tests.
-				return nil
-			}
-			sum.IsColKey = true
-			sum.PartitionID = partitionID
-			sum.Index = idx.Name()
-			sum.StorePath = store.GetStorePath()
-			sum.NodeID = nodeID
-			sum.IsPrimary = topo.IsPrimary(nodeID, partitionID)
-
-			replicas := topo.GetNonPrimaryReplicas(partitionID)
-			for _, replica := range replicas {
-				if nodeID == replica {
-					sum.IsReplica = true
-					break
-				}
-			}
-
-			sum.Checksum = hash.Blake3sum16([]byte(fmt.Sprintf("%v/%v/%v", sum.Checksum, partitionID, idx.Name())))
-			if verbose {
-				// This is not regular index logging. This is output of the pilosa-fsck tool.
-				// So it must be printing straight to stdout.
-				fmt.Printf("# col blake3-%v keyN: %10v idN: %10v paritionID: %03v primary: %03v\n", sum.Checksum, sum.KeyCount, sum.IDCount, partitionID, sum.PrimaryNodeIndex)
-			}
-			atsMu.Lock()
-			ats.Sums = append(ats.Sums, sum)
-			atsMu.Unlock()
-
-			return nil
-		}
-		if !pjob.run(fun2) {
-			break tloop
-		}
-
-	} // end tloop
-
-	err = pjob.waitForFinish()
-
-	return ats, err
-}
-
-// returned by WriteFragmentChecksums
-type IndexFragmentSummary struct {
-	Dir       string
-	NodeID    string
-	Index     string
-	IndexPath string
-	Frg       []*FragSum
-
-	RelPath2fsum map[string]*FragSum
-}
-
-func (ifs *IndexFragmentSummary) String() (s string) {
-	s = fmt.Sprintf(`&pilosa.IndexFragmentSummary{
-  Dir:    '%v'
-  NodeID: '%v'
-  Index:     '%v'
-  IndexPath: '%v'
-`, ifs.Dir, ifs.NodeID, ifs.Index, ifs.IndexPath)
-	for _, frg := range ifs.Frg {
-		s += frg.String() + "\n"
-	}
-	s += "}\n"
-	return
-}
-
-// used in IndexFragmentSummary
-type FragSum struct {
-	AbsPath string
-	RelPath string
-
-	// critically, NodeID is how pilosa-fsck figures out if this
-	// fragment should be deleted if it is on a node it should not be.
-	NodeID string
-
-	Index    string
-	Field    string
-	View     string
-	Shard    uint64
-	Hotbits  int
-	Checksum string
-	Primary  int
-
-	ScanDone bool // pilosa-fsck will set this once done to avoid repairing multiple times.
-}
-
-func (fsum *FragSum) String() (s string) {
-	return fmt.Sprintf("%#v", fsum)
-}
-
-// if verbose, then print to w.
-func (idx *Index) WriteFragmentChecksums(w io.Writer, showBits, showOps bool, topo *Topology, verbose bool) (sum *IndexFragmentSummary) {
-	sum = &IndexFragmentSummary{
-		Index:        idx.name,
-		IndexPath:    idx.path,
-		RelPath2fsum: make(map[string]*FragSum),
-	}
-	paths, err := listFilesUnderDir(idx.path, false, "", true)
-	panicOn(err)
-	index := idx.name
-	n := 0
-	for _, relpath := range paths {
-		field, view, shard, err := fragmentSpecFromRoaringPath(relpath)
-		if err != nil {
-			continue // ignore .meta paths
-		}
-		abspath := idx.path + sep + relpath
-		primary := topo.GetPrimaryForShardReplication(index, shard)
-
-		checksum, hotbits := RoaringFragmentChecksum(abspath, index, field, view, shard)
-		if verbose {
-			fmt.Fprintf(w, "# frg blake3-%v field: '%v' view: '%v' shard: %3v hotbits: %10v primary:%03v\n", checksum, field, view, shard, hotbits, primary)
-		}
-		fsum := &FragSum{
-			AbsPath:  abspath,
-			RelPath:  relpath,
-			Index:    index,
-			Field:    field,
-			View:     view,
-			Shard:    shard,
-			Hotbits:  hotbits,
-			Checksum: checksum,
-			Primary:  primary,
-		}
-		sum.Frg = append(sum.Frg, fsum)
-		_, already := sum.RelPath2fsum[relpath]
-		if already {
-			panic(fmt.Sprintf("relpath '%v' was already present!?!", relpath))
-		}
-		sum.RelPath2fsum[relpath] = fsum
-		n++
-	}
-	if n == 0 {
-		if verbose {
-			fmt.Fprintf(w, "empty index '%v'", idx.path)
-		}
-	}
-	return
-}
-
-func (idx *Index) Txf() *TxFactory {
-	return idx.holder.txf
+func (i *Index) Txf() *TxFactory {
+	return i.holder.txf
 }

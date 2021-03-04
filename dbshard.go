@@ -25,6 +25,8 @@ import (
 
 	rbfcfg "github.com/pilosa/pilosa/v2/rbf/cfg"
 	txkey "github.com/pilosa/pilosa/v2/short_txkey"
+	"github.com/pilosa/pilosa/v2/storage"
+
 	//txkey "github.com/pilosa/pilosa/v2/txkey"
 	"github.com/pkg/errors"
 )
@@ -61,7 +63,7 @@ type DBWrapper interface {
 }
 
 type DBRegistry interface {
-	OpenDBWrapper(path string, doAllocZero bool, rbfcfg *rbfcfg.Config) (DBWrapper, error)
+	OpenDBWrapper(path string, doAllocZero bool, cfg *storage.Config) (DBWrapper, error)
 }
 
 type DBShard struct {
@@ -243,7 +245,8 @@ type DBPerShard struct {
 
 	isBlueGreen bool
 
-	RBFConfig *rbfcfg.Config
+	StorageConfig *storage.Config
+	RBFConfig     *rbfcfg.Config
 }
 
 func newIndex2Shards() (r map[txtype]map[string]*shardSet) {
@@ -252,7 +255,7 @@ func newIndex2Shards() (r map[txtype]map[string]*shardSet) {
 }
 
 type shardSet struct {
-	shards    map[uint64]bool
+	shardsMap map[uint64]bool
 	shardsVer int64 // increment with each change.
 
 	// give out readonly to repeated consumers if
@@ -269,11 +272,11 @@ func (a *shardSet) unionInPlace(b *shardSet) {
 }
 
 func (a *shardSet) equals(b *shardSet) bool {
-	if len(a.shards) != len(b.shards) {
+	if len(a.shardsMap) != len(b.shardsMap) {
 		return false
 	}
-	for shardInA := range a.shards {
-		_, ok := b.shards[shardInA]
+	for shardInA := range a.shardsMap {
+		_, ok := b.shardsMap[shardInA]
 		if !ok {
 			return false
 		}
@@ -282,9 +285,17 @@ func (a *shardSet) equals(b *shardSet) bool {
 
 }
 
+func (a *shardSet) shards() []uint64 {
+	s := make([]uint64, 0, len(a.shardsMap))
+	for si := range a.shardsMap {
+		s = append(s, si)
+	}
+	return s
+}
+
 func (ss *shardSet) String() (r string) {
 	r = "["
-	for k := range ss.shards {
+	for k := range ss.shardsMap {
 		r += fmt.Sprintf("%v, ", k)
 	}
 	r += "]"
@@ -292,9 +303,9 @@ func (ss *shardSet) String() (r string) {
 }
 
 func (ss *shardSet) add(shard uint64) {
-	_, already := ss.shards[shard]
+	_, already := ss.shardsMap[shard]
 	if !already {
-		ss.shards[shard] = true
+		ss.shardsMap[shard] = true
 		ss.shardsVer++
 	}
 }
@@ -315,7 +326,7 @@ func (ss *shardSet) CloneMaybe() map[uint64]bool {
 	// must make a fully new copy here.
 	ss.readonly = make(map[uint64]bool)
 
-	for k, v := range ss.shards {
+	for k, v := range ss.shardsMap {
 		ss.readonly[k] = v
 	}
 	ss.readonlyVer = ss.shardsVer
@@ -324,12 +335,12 @@ func (ss *shardSet) CloneMaybe() map[uint64]bool {
 
 func newShardSet() *shardSet {
 	return &shardSet{
-		shards: make(map[uint64]bool),
+		shardsMap: make(map[uint64]bool),
 	}
 }
 func newShardSetFromMap(m map[uint64]bool) *shardSet {
 	return &shardSet{
-		shards:    m,
+		shardsMap: m,
 		shardsVer: 1,
 	}
 }
@@ -399,9 +410,8 @@ func (per *DBPerShard) LoadExistingDBs() (err error) {
 }
 
 func (txf *TxFactory) NewDBPerShard(types []txtype, holderDir string, holder *Holder) (d *DBPerShard) {
-
-	if holder.cfg == nil || holder.cfg.RBFConfig == nil {
-		panic("must have holder.cfg.RBFConfig set here")
+	if holder.cfg == nil || holder.cfg.RBFConfig == nil || holder.cfg.StorageConfig == nil {
+		panic("must have holder.cfg.RBFConfig and holder.cfg.StorageConfig set here")
 	}
 
 	useOpenList := 0
@@ -421,17 +431,18 @@ func (txf *TxFactory) NewDBPerShard(types []txtype, holderDir string, holder *Ho
 	}
 
 	d = &DBPerShard{
-		types:        types,
-		HolderDir:    holderDir,
-		holder:       holder,
-		dbh:          NewDBHolder(),
-		Flatmap:      make(map[flatkey]*DBShard),
-		txf:          txf,
-		useOpenList:  useOpenList,
-		hasRoaring:   hasRoaring,
-		isBlueGreen:  len(types) > 1,
-		index2shards: newIndex2Shards(),
-		RBFConfig:    holder.cfg.RBFConfig,
+		types:         types,
+		HolderDir:     holderDir,
+		holder:        holder,
+		dbh:           NewDBHolder(),
+		Flatmap:       make(map[flatkey]*DBShard),
+		txf:           txf,
+		useOpenList:   useOpenList,
+		hasRoaring:    hasRoaring,
+		isBlueGreen:   len(types) > 1,
+		index2shards:  newIndex2Shards(),
+		StorageConfig: holder.cfg.StorageConfig,
+		RBFConfig:     holder.cfg.RBFConfig,
 	}
 	return
 }
@@ -645,13 +656,14 @@ func (per *DBPerShard) unprotectedGetDBShard(index string, shard uint64, idx *In
 				registry = globalRoaringReg
 			case rbfTxn:
 				registry = globalRbfDBReg
+				registry.(*rbfDBRegistrar).SetRBFConfig(per.RBFConfig)
 			case boltTxn:
 				registry = globalBoltReg
 			default:
 				panic(fmt.Sprintf("unknown txtyp: '%v'", ty))
 			}
 			path := dbs.pathForType(ty)
-			w, err := registry.OpenDBWrapper(path, DetectMemAccessPastTx, per.RBFConfig)
+			w, err := registry.OpenDBWrapper(path, DetectMemAccessPastTx, per.StorageConfig)
 			panicOn(err)
 			h := idx.Holder()
 			w.SetHolder(h)
@@ -921,7 +933,7 @@ func listDirUnderDir(root string, includeRoot bool, requiredSuffix string, ignor
 // The blue is the destination -- this is always types[0].
 // The green source is always types[1]. The mnemonic is blue_geen.
 // The blue is first, so it is in types[0]. The green
-// is second, in types[1]. For example, with PILOSA_TXSRC=bolt_roaring
+// is second, in types[1]. For example, with PILOSA_STORAGE_BACKEND=bolt_roaring
 // we have bolt as blue, and roaring as green. The contents of
 // bolt must be empty or exactly match roaring. If bolt
 // starts empty, it will be populated from roaring by

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package pilosa
+package net
 
 import "testing"
 
@@ -79,7 +79,7 @@ func TestURIPath(t *testing.T) {
 func TestSetScheme(t *testing.T) {
 	uri := defaultURI()
 	target := "fun"
-	err := uri.setScheme(target)
+	err := uri.SetScheme(target)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,7 +91,7 @@ func TestSetScheme(t *testing.T) {
 func TestSetHost(t *testing.T) {
 	uri := defaultURI()
 	target := "10.20.30.40"
-	err := uri.setHost(target)
+	err := uri.SetHost(target)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,7 +111,7 @@ func TestSetPort(t *testing.T) {
 
 func TestSetInvalidScheme(t *testing.T) {
 	uri := defaultURI()
-	err := uri.setScheme("?invalid")
+	err := uri.SetScheme("?invalid")
 	if err == nil {
 		t.Fatalf("Should have failed")
 	}
@@ -119,7 +119,7 @@ func TestSetInvalidScheme(t *testing.T) {
 
 func TestSetInvalidHost(t *testing.T) {
 	uri := defaultURI()
-	err := uri.setHost("index?.pilosa.com")
+	err := uri.SetHost("index?.pilosa.com")
 	if err == nil {
 		t.Fatalf("Should have failed")
 	}

@@ -33,11 +33,13 @@ func TestHandlerOptions(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected error making handler without options, got nil")
 	}
+
 	ln, err := net.Listen("tcp", ":0")
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("creating listener: %v", err)
 	}
-	_, err = http.NewHandler(http.OptHandlerListener(ln))
+
+	_, err = http.NewHandler(http.OptHandlerListener(ln, ln.Addr().String()))
 	if err == nil {
 		t.Fatalf("expected error making handler without options, got nil")
 	}

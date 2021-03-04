@@ -54,7 +54,10 @@ func (s *ShowHandler) Handle(ctx context.Context, mapped *MappedSQL) (pproto.ToR
 }
 
 func (s *ShowHandler) execShowTables(ctx context.Context, showStmt *sqlparser.Show) (pproto.ToRowser, error) {
-	indexInfo := s.api.Schema(ctx)
+	indexInfo, err := s.api.Schema(ctx, false)
+	if err != nil {
+		return nil, errors.Wrap(err, "getting schema")
+	}
 
 	result := make(pproto.ConstRowser, len(indexInfo))
 	for i, ii := range indexInfo {

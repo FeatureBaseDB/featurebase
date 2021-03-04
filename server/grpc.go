@@ -121,7 +121,7 @@ func errToStatusError(err error) error {
 	case pilosa.ErrClusterDoesNotOwnShard,
 		pilosa.ErrResizeNoReplicas,
 		pilosa.ErrResizeNotRunning,
-		pilosa.ErrNodeNotCoordinator,
+		pilosa.ErrNodeNotPrimary,
 		pilosa.ErrTooManyWrites,
 		pilosa.ErrNodeIDNotExists:
 		return status.Error(codes.Internal, err.Error())
@@ -316,7 +316,11 @@ func (h *GRPCHandler) CreateIndex(ctx context.Context, req *pb.CreateIndexReques
 
 // GetIndex returns a single Index given a name
 func (h *GRPCHandler) GetIndex(ctx context.Context, req *pb.GetIndexRequest) (*pb.GetIndexResponse, error) {
-	schema := h.api.Schema(ctx)
+	schema, err := h.api.Schema(ctx, false)
+	if err != nil {
+		return nil, errToStatusError(err)
+	}
+
 	for _, index := range schema {
 		if req.Name == index.Name {
 			return &pb.GetIndexResponse{Index: &pb.Index{Name: index.Name}}, nil
@@ -327,7 +331,11 @@ func (h *GRPCHandler) GetIndex(ctx context.Context, req *pb.GetIndexRequest) (*p
 
 // GetIndexes returns a list of all Indexes
 func (h *GRPCHandler) GetIndexes(ctx context.Context, req *pb.GetIndexesRequest) (*pb.GetIndexesResponse, error) {
-	schema := h.api.Schema(ctx)
+	schema, err := h.api.Schema(ctx, false)
+	if err != nil {
+		return nil, errToStatusError(err)
+	}
+
 	indexes := make([]*pb.Index, len(schema))
 	for i, index := range schema {
 		indexes[i] = &pb.Index{Name: index.Name}
@@ -373,7 +381,11 @@ func (h *VDSMGRPCHandler) GetVDS(ctx context.Context, req *vdsm_pb.GetVDSRequest
 	case *vdsm_pb.GetVDSRequest_Id:
 		return nil, status.Error(codes.InvalidArgument, "VDS IDs are no longer supported")
 	case *vdsm_pb.GetVDSRequest_Name:
-		schema := h.api.Schema(ctx)
+		schema, err := h.api.Schema(ctx, false)
+		if err != nil {
+			return nil, errToStatusError(err)
+		}
+
 		for _, index := range schema {
 			if idOrName.Name == index.Name {
 				return &vdsm_pb.GetVDSResponse{Vds: &vdsm_pb.VDS{Name: index.Name}}, nil
@@ -387,7 +399,11 @@ func (h *VDSMGRPCHandler) GetVDS(ctx context.Context, req *vdsm_pb.GetVDSRequest
 
 // GetVDSs returns a list of all VDSs
 func (h *VDSMGRPCHandler) GetVDSs(ctx context.Context, req *vdsm_pb.GetVDSsRequest) (*vdsm_pb.GetVDSsResponse, error) {
-	schema := h.api.Schema(ctx)
+	schema, err := h.api.Schema(ctx, false)
+	if err != nil {
+		return nil, errToStatusError(err)
+	}
+
 	vdss := make([]*vdsm_pb.VDS, len(schema))
 	for i, index := range schema {
 		vdss[i] = &vdsm_pb.VDS{Name: index.Name}

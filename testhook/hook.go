@@ -87,6 +87,7 @@ func TempDir(tb testing.TB, pattern string) (path string, err error) {
 	if err == nil {
 		Cleanup(tb, func() {
 			os.RemoveAll(path)
+			fmt.Println("--- testhook:", path, tb.Name())
 		})
 	}
 	return path, err
