@@ -25,7 +25,6 @@ import (
 	"time"
 
 	petcd "github.com/pilosa/pilosa/v2/etcd"
-	"github.com/pilosa/pilosa/v2/gossip"
 	rbfcfg "github.com/pilosa/pilosa/v2/rbf/cfg"
 	"github.com/pilosa/pilosa/v2/storage"
 	"github.com/pilosa/pilosa/v2/toml"
@@ -140,8 +139,6 @@ type Config struct {
 	Etcd petcd.Options `toml:"etcd"`
 
 	LongQueryTime toml.Duration `toml:"long-query-time"`
-	// Gossip config is based around memberlist.Config.
-	Gossip gossip.Config `toml:"gossip"`
 
 	Translation struct {
 		MapSize int `toml:"map-size"`
@@ -248,8 +245,6 @@ func (c *Config) validate() error {
 		"Etcd.LPeerURL", c.Etcd.LPeerURL, // ":"
 		"Etcd.APeerURL", c.Etcd.APeerURL, // ""
 		"Etcd.ClusterURL", c.Etcd.ClusterURL,
-		"Gossip.Port", fmt.Sprintf(":%v", c.Gossip.Port),
-		"Gossip.AdvertisePort", fmt.Sprintf(":%v", c.Gossip.AdvertisePort),
 		"Postgres.Bind", c.Postgres.Bind,
 	}
 	ports := make(map[int]bool)
@@ -264,9 +259,6 @@ func (c *Config) validate() error {
 			continue
 		}
 		if name == "AdvertiseGRPC" && (hp == "" || hp == ":") {
-			continue
-		}
-		if name == "Gossip.AdvertisePort" && (hp == "" || hp == ":") {
 			continue
 		}
 
@@ -326,17 +318,6 @@ func NewConfig() *Config {
 	c.Cluster.Name = "cluster0"
 	c.Cluster.ReplicaN = 1
 	c.Cluster.LongQueryTime = toml.Duration(-time.Minute) //TODO remove this once cluster.longQueryTime is fully deprecated
-
-	// Gossip config.
-	c.Gossip.Port = "14000"
-	c.Gossip.StreamTimeout = toml.Duration(10 * time.Second)
-	c.Gossip.SuspicionMult = 4
-	c.Gossip.PushPullInterval = toml.Duration(30 * time.Second)
-	c.Gossip.ProbeInterval = toml.Duration(1 * time.Second)
-	c.Gossip.ProbeTimeout = toml.Duration(500 * time.Millisecond)
-	c.Gossip.Interval = toml.Duration(200 * time.Millisecond)
-	c.Gossip.Nodes = 3
-	c.Gossip.ToTheDeadTime = toml.Duration(30 * time.Second)
 
 	// AntiEntropy config.
 	c.AntiEntropy.Interval = toml.Duration(0)
