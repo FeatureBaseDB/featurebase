@@ -242,7 +242,7 @@ workflows:
             tags:
               only: /^v.*/
             branches:
-              ignore: /.*/
+              only: master
       - publish_release:
           context: molecula
           requires:
