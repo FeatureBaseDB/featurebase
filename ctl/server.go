@@ -55,22 +55,6 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 	flags.StringVar(&srv.Config.Translation.PrimaryURL, "translation.primary-url", srv.Config.Translation.PrimaryURL, "DEPRECATED: URL for primary translation node for replication.")
 	flags.IntVar(&srv.Config.Translation.MapSize, "translation.map-size", srv.Config.Translation.MapSize, "Size in bytes of mmap to allocate for key translation.")
 
-	// Gossip
-	flags.StringVar(&srv.Config.Gossip.Port, "gossip.port", srv.Config.Gossip.Port, "Port to which pilosa should bind for internal state sharing.")
-	flags.StringVar(&srv.Config.Gossip.AdvertiseHost, "gossip.advertise-host", srv.Config.Gossip.AdvertiseHost, "Host on which memberlist should advertise.")
-	flags.StringVar(&srv.Config.Gossip.AdvertisePort, "gossip.advertise-port", srv.Config.Gossip.AdvertisePort, "Port on which memberlist should advertise.")
-
-	flags.StringSliceVar(&srv.Config.Gossip.Seeds, "gossip.seeds", srv.Config.Gossip.Seeds, "Host with which to seed the gossip membership.")
-	flags.StringVar(&srv.Config.Gossip.Key, "gossip.key", srv.Config.Gossip.Key, "The path to file of the encryption key for gossip. The contents of the file should be either 16, 24, or 32 bytes to select AES-128, AES-192, or AES-256.")
-	flags.DurationVar((*time.Duration)(&srv.Config.Gossip.StreamTimeout), "gossip.stream-timeout", (time.Duration)(srv.Config.Gossip.StreamTimeout), "Timeout for establishing a stream connection with a remote node for a full state sync.")
-	flags.IntVar(&srv.Config.Gossip.SuspicionMult, "gossip.suspicion-mult", srv.Config.Gossip.SuspicionMult, "Multiplier for determining the time an inaccessible node is considered suspect before declaring it dead.")
-	flags.DurationVar((*time.Duration)(&srv.Config.Gossip.PushPullInterval), "gossip.push-pull-interval", (time.Duration)(srv.Config.Gossip.PushPullInterval), "Interval between complete state syncs.")
-	flags.DurationVar((*time.Duration)(&srv.Config.Gossip.ProbeTimeout), "gossip.probe-timeout", (time.Duration)(srv.Config.Gossip.ProbeTimeout), "Timeout to wait for an ack from a probed node before assuming it is unhealthy.")
-	flags.DurationVar((*time.Duration)(&srv.Config.Gossip.ProbeInterval), "gossip.probe-interval", (time.Duration)(srv.Config.Gossip.ProbeInterval), "Interval between random node probes.")
-	flags.IntVar(&srv.Config.Gossip.Nodes, "gossip.nodes", srv.Config.Gossip.Nodes, "Number of random nodes to send gossip messages to per GossipInterval.")
-	flags.DurationVar((*time.Duration)(&srv.Config.Gossip.Interval), "gossip.interval", (time.Duration)(srv.Config.Gossip.Interval), "Interval between sending messages that need to be gossiped that haven't piggybacked on probing messages.")
-	flags.DurationVar((*time.Duration)(&srv.Config.Gossip.ToTheDeadTime), "gossip.to-the-dead-time", (time.Duration)(srv.Config.Gossip.ToTheDeadTime), "Interval after which a node has died that we will still try to gossip to it.")
-
 	// Etcd
 	// Etcd.Name used Config.Name for it's value.
 	// Etcd.Dir defaults to a directory under the pilosa data directory.
