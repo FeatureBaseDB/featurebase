@@ -1883,6 +1883,9 @@ func (s *holderSyncer) initializeIndexTranslateReplication(snap *topology.Cluste
 				}
 
 				store := index.TranslateStore(partitionID)
+				if store == nil {
+					return fmt.Errorf("no store available for index %q, partition %d", index.Name(), partitionID)
+				}
 				offset, err := store.MaxID()
 				if err != nil {
 					return errors.Wrapf(err, "cannot determine max id for %q", index.Name())
@@ -1974,6 +1977,10 @@ func (s *holderSyncer) readIndexTranslateReader(rd TranslateEntryReader) {
 
 		// Apply replication to store.
 		store := idx.TranslateStore(snap.KeyToKeyPartition(entry.Index, entry.Key))
+		if store == nil {
+			s.Holder.Logger.Printf("no translate store suitable for index %q, key %q", entry.Index, entry.Key)
+			return
+		}
 		if err := store.ForceSet(entry.ID, entry.Key); err != nil {
 			s.Holder.Logger.Printf("cannot force set index translation data: %d=%q", entry.ID, entry.Key)
 			return
@@ -1998,6 +2005,10 @@ func (s *holderSyncer) readFieldTranslateReader(rd TranslateEntryReader) {
 
 		// Apply replication to store.
 		store := f.TranslateStore()
+		if store == nil {
+			s.Holder.Logger.Printf("no translate store suitable for index %q, field %q, key %q", entry.Index, entry.Field, entry.Key)
+			return
+		}
 		if err := store.ForceSet(entry.ID, entry.Key); err != nil {
 			s.Holder.Logger.Printf("cannot force set field translation data: %d=%q", entry.ID, entry.Key)
 			return
