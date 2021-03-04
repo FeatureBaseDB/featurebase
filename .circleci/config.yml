@@ -239,6 +239,8 @@ workflows:
           requires:
             - setup
           filters:
+            tags:
+              only: /^v.*/
             branches:
               only: master
       - publish_release:
