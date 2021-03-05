@@ -78,7 +78,7 @@ type Etcd struct {
 	e   *embed.Etcd
 	cli *clientv3.Client
 
-	heartBeatLeasedKV, resizeLeasedKV *leasedKV
+	heartbeatLeasedKV, resizeLeasedKV *leasedKV
 }
 
 func NewEtcd(opt Options, replicas int) *Etcd {
@@ -100,8 +100,8 @@ func (e *Etcd) Close() error {
 			e.resizeLeasedKV.Stop()
 			e.resizeLeasedKV = nil
 		}
-		if e.heartBeatLeasedKV != nil {
-			e.heartBeatLeasedKV.Stop()
+		if e.heartbeatLeasedKV != nil {
+			e.heartbeatLeasedKV.Stop()
 		}
 
 		e.e.Close()
@@ -202,9 +202,9 @@ func (e *Etcd) Start(ctx context.Context) (disco.InitialClusterState, error) {
 
 func (e *Etcd) startHeartbeat(ctx context.Context) error {
 	key := heartbeatPrefix + e.e.Server.ID().String()
-	e.heartBeatLeasedKV = newLeasedKV(e.cli, key, e.options.HeartbeatTTL)
+	e.heartbeatLeasedKV = newLeasedKV(e.cli, key, e.options.HeartbeatTTL)
 
-	if err := e.heartBeatLeasedKV.Start(string(disco.NodeStateStarting)); err != nil {
+	if err := e.heartbeatLeasedKV.Start(string(disco.NodeStateStarting)); err != nil {
 		return errors.Wrap(err, "startHeartbeat: starting a new heartbeat")
 	}
 
@@ -283,7 +283,7 @@ func (e *Etcd) NodeStates(ctx context.Context) (map[string]disco.NodeState, erro
 }
 
 func (e *Etcd) Started(ctx context.Context) (err error) {
-	return e.heartBeatLeasedKV.Set(ctx, string(disco.NodeStateStarted))
+	return e.heartbeatLeasedKV.Set(ctx, string(disco.NodeStateStarted))
 }
 
 func (e *Etcd) ID() string {
