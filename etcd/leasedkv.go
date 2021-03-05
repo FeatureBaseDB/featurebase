@@ -26,15 +26,19 @@ import (
 	"go.etcd.io/etcd/clientv3/clientv3util"
 )
 
+// leasedKV is an etcd key and value attached to a lease. It can be used to detect if a node went down.
+// It will try to renew the lease at any cost after losing it.
+// It will recreate the previous existing value for the key again.
 type leasedKV struct {
 	cli    *clientv3.Client
 	cancel context.CancelFunc
 
-	mu sync.Mutex
-
-	key, value string
-	stopped    bool
+	key        string
 	ttlSeconds int64
+
+	mu      sync.Mutex
+	value   string // protected by mu
+	stopped bool   // protected by mu
 }
 
 func newLeasedKV(cli *clientv3.Client, key string, ttlSeconds int64) *leasedKV {
@@ -45,6 +49,8 @@ func newLeasedKV(cli *clientv3.Client, key string, ttlSeconds int64) *leasedKV {
 	}
 }
 
+// Start creates the key and attaches it to a lease.
+// If the lease cannot be renewed in time, it will try to renew it ad finitum.
 func (l *leasedKV) Start(initValue string) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -105,6 +111,8 @@ func (l *leasedKV) consumeLease(ch <-chan *clientv3.LeaseKeepAliveResponse) {
 	}
 }
 
+// Stop will cancel the lease renewal.
+// After calling Stop, this object should be discarded and not used anymore.
 func (l *leasedKV) Stop() {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -116,6 +124,7 @@ func (l *leasedKV) Stop() {
 	l.stopped = true
 }
 
+// Set will change the specific value for this key.
 func (l *leasedKV) Set(ctx context.Context, value string) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -131,6 +140,7 @@ func (l *leasedKV) Set(ctx context.Context, value string) error {
 	return nil
 }
 
+// Get will obtain the actual value for the key.
 func (l *leasedKV) Get(ctx context.Context) (string, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
