@@ -89,19 +89,23 @@ func (l *leasedKV) consumeLease(ch <-chan *clientv3.LeaseKeepAliveResponse) {
 	for {
 		kresp, ok := <-ch
 		if !ok {
+			l.mu.Lock()
+
 			if l.stopped {
+				l.mu.Unlock()
 				return
 			}
 
-			l.mu.Lock()
-			defer l.mu.Unlock()
-
-			retry(1*time.Second, func() error {
+			if ok := retry(1*time.Second, func() error {
 				return l.create(l.value)
-			})
+			}); !ok {
+				log.Println("lease cannot be recreated. Key:", l.key)
+				l.mu.Unlock()
+				return
+			}
 
 			log.Println("lease recreated after a problem. Key:", l.key)
-
+			l.mu.Unlock()
 			return
 		}
 
@@ -162,11 +166,16 @@ func (l *leasedKV) Get(ctx context.Context) (string, error) {
 	return l.value, nil
 }
 
-func retry(sleep time.Duration, f func() error) {
+func retry(sleep time.Duration, f func() error) bool {
 	for {
 		err := f()
 		if err == nil {
-			return
+			return true
+		}
+
+		// sometimes the element in charge of stopping the lease renewal doesn't do it, causing context errors.
+		if errors.Is(err, context.DeadlineExceeded) {
+			return false
 		}
 
 		time.Sleep(sleep)
