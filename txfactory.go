@@ -423,10 +423,6 @@ const (
 	boltTxn    txtype = 4
 )
 
-// these need to be skipped by the holder.go field scanner that
-// calls IsTxDatabasePath
-var allTypesWithSuffixes = []txtype{rbfTxn, boltTxn}
-
 // FileSuffix is used to determine backend directory names.
 // We append '@' to be sure we never collide with a field name
 // inside the index directory. In the future for different
@@ -437,24 +433,11 @@ func (ty txtype) FileSuffix() string {
 	case roaringTxn:
 		return ""
 	case rbfTxn:
-		return "-rbfdb@"
+		return "-rbf"
 	case boltTxn:
-		return "-boltdb@"
+		return "-boltdb"
 	}
 	panic(fmt.Sprintf("unkown txtype %v", int(ty)))
-}
-
-func (txf *TxFactory) IsTxDatabasePath(path string) bool {
-	if strings.HasSuffix(filepath.Base(path), ".txstores@@@") {
-		// top level dir
-		return true
-	}
-	for _, ty := range allTypesWithSuffixes {
-		if strings.HasSuffix(path, ty.FileSuffix()) {
-			return true
-		}
-	}
-	return false
 }
 
 func (txf *TxFactory) NeedsSnapshot() (b bool) {

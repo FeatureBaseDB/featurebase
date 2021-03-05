@@ -314,10 +314,6 @@ fileLoop:
 			if !fi.IsDir() {
 				continue
 			}
-			// Skip embedded db files too.
-			if i.holder.txf.IsTxDatabasePath(fi.Name()) {
-				continue
-			}
 
 			var cfm *CreateFieldMessage = &CreateFieldMessage{}
 			var err error

@@ -455,10 +455,6 @@ func roaringGetFieldView2Shards(idx *Index) (vs *FieldView2Shards, err error) {
 
 		fieldPath := filepath.Join(idx.FieldsPath(), field)
 
-		// Skip embedded db files too.
-		if idx.holder.txf.IsTxDatabasePath(field) {
-			continue
-		}
 		viewsDir := filepath.Join(fieldPath, "views")
 		file, err := os.Open(viewsDir)
 		if os.IsNotExist(err) {
@@ -531,10 +527,6 @@ func (tx *RoaringTx) GetSortedFieldViewList(idx *Index, shard uint64) (fvs []txk
 
 		fieldPath := filepath.Join(idx.FieldsPath(), field)
 
-		// Skip embedded db files too.
-		if idx.holder.txf.IsTxDatabasePath(field) {
-			continue
-		}
 		viewsDir := filepath.Join(fieldPath, "views")
 		file, err := os.Open(viewsDir)
 		if os.IsNotExist(err) {

@@ -659,10 +659,6 @@ func (h *Holder) Open() error {
 		if !fi.IsDir() || strings.HasPrefix(fi.Name(), ".") {
 			continue
 		}
-		// Skip embedded db files too.
-		if h.txf.IsTxDatabasePath(fi.Name()) {
-			continue
-		}
 
 		// Only continue with indexes which are present in schema.
 		idx, ok := schema[fi.Name()]
@@ -883,10 +879,6 @@ func (h *Holder) HasData() (bool, error) {
 
 	for _, fi := range fis {
 		if !fi.IsDir() {
-			continue
-		}
-		// Skip embedded db files too.
-		if h.txf.IsTxDatabasePath(fi.Name()) {
 			continue
 		}
 
@@ -1486,13 +1478,13 @@ func (h *Holder) setFileLimit() {
 	}
 }
 
-// Log startup time and version to $DATA_DIR/.startup.log
+// Log startup time and version to $DATA_DIR/startup.log
 func (h *Holder) logStartup() error {
 	RFC3339NanoFixedWidth := "2006-01-02T15:04:05.000000 07:00"
 	time := time.Now().Format(RFC3339NanoFixedWidth)
 	logLine := fmt.Sprintf("%s\t%s\n", time, Version)
 
-	f, err := os.OpenFile(h.path+"/.startup.log", os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
+	f, err := os.OpenFile(h.path+"/startup.log", os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
 	if err != nil {
 		return errors.Wrap(err, "opening startup log")
 	}

@@ -144,15 +144,15 @@ func (r *rbfDBRegistrar) unregister(w *RbfDBWrapper) {
 // rbfPath is a helper for determining the full directory
 // in which the RBF database will be stored.
 func rbfPath(path string) string {
-	if !strings.HasSuffix(path, "-rbfdb@") {
-		return path + "-rbfdb@"
+	if !strings.HasSuffix(path, "-rbf") {
+		return path + "-rbf"
 	}
 	return path
 }
 
-// OpenDBWrapper opens the database in the path directoy
+// OpenDBWrapper opens the database in the path directory
 // without deleting any prior content. Any
-// database directory will have the "-rbfdb@" suffix.
+// database directory will have the "-rbf" suffix.
 //
 // OpenDBWrapper will check the registry and make a new instance only
 // if one does not exist for its path. Otherwise it returns

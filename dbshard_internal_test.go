@@ -89,7 +89,7 @@ func Test_DBPerShard_GetShardsForIndex_LocalOnly(t *testing.T) {
 		holder := NewHolder(tmpdir, cfg)
 
 		index := "rick"
-		idx := makeSampleRoaringDir(tmpdir, index, src, 1, holder, v2s)
+		idx := makeSampleRoaringDir(t, tmpdir, index, src, 1, holder, v2s)
 		if idx == nil {
 			idx, err = NewIndex(holder, filepath.Join(tmpdir, index), index)
 			panicOn(err)
@@ -192,39 +192,41 @@ rick/fields/_exists/views/standard/fragments/219
 rick/fields/_exists/views/standard/fragments/223
 `,
 	"bolt": `
-rick.index.txstores@@@/store-boltdb@@/shard.0093-boltdb@/bolt.db
-rick.index.txstores@@@/store-boltdb@@/shard.0215-boltdb@/bolt.db
-rick.index.txstores@@@/store-boltdb@@/shard.0217-boltdb@/bolt.db
-rick.index.txstores@@@/store-boltdb@@/shard.0219-boltdb@/bolt.db
-rick.index.txstores@@@/store-boltdb@@/shard.0221-boltdb@/bolt.db
-rick.index.txstores@@@/store-boltdb@@/shard.0223-boltdb@/bolt.db
+rick/backends/backend-boltdb/shard.0093-bolt/bolt.db
+rick/backends/backend-boltdb/shard.0215-bolt/bolt.db
+rick/backends/backend-boltdb/shard.0217-bolt/bolt.db
+rick/backends/backend-boltdb/shard.0219-bolt/bolt.db
+rick/backends/backend-boltdb/shard.0221-bolt/bolt.db
+rick/backends/backend-boltdb/shard.0223-bolt/bolt.db
 `,
 	"rbf": `
-rick.index.txstores@@@/store-rbfdb@@/shard.0093-rbfdb@
-rick.index.txstores@@@/store-rbfdb@@/shard.0215-rbfdb@
-rick.index.txstores@@@/store-rbfdb@@/shard.0217-rbfdb@
-rick.index.txstores@@@/store-rbfdb@@/shard.0219-rbfdb@
-rick.index.txstores@@@/store-rbfdb@@/shard.0221-rbfdb@
-rick.index.txstores@@@/store-rbfdb@@/shard.0223-rbfdb@
+rick/backends/backend-rbf/shard.0093-rbf
+rick/backends/backend-rbf/shard.0215-rbf
+rick/backends/backend-rbf/shard.0217-rbf
+rick/backends/backend-rbf/shard.0219-rbf
+rick/backends/backend-rbf/shard.0221-rbf
+rick/backends/backend-rbf/shard.0223-rbf
 `,
 }
 
-func makeSampleRoaringDir(root, index, backend string, minBytes int, h *Holder, view2shards *FieldView2Shards) (idx *Index) {
+func makeSampleRoaringDir(t *testing.T, root, index, backend string, minBytes int, h *Holder, view2shards *FieldView2Shards) (idx *Index) {
 	shards := []uint64{0, 93, 215, 217, 219, 221, 223}
 	fns := strings.Split(sampleRoaringDirList[backend], "\n")
 	firstDone := false
 
 	for i, fn := range fns {
+		// This check is here because in sampleRoaringDirList, the first entry
+		// of each map value is a line feed, so the strings.Split() above
+		// results in a blank entry for the first item. This means that the
+		// slice of shards above has an initial entry "0" which is not used.
 		if fn == "" {
 			continue
 		}
 		var shard uint64
-		if backend != "roaring" {
-			// only have shards for the non-roaring
-			shard = shards[i]
-		}
 		switch backend {
 		case "bolt", "rbf":
+			shard = shards[i]
+
 			idx = helperCreateDBShard(h, index, shard)
 
 			// first time only, we'll actually make all the shards at this point because
@@ -234,6 +236,9 @@ func makeSampleRoaringDir(root, index, backend string, minBytes int, h *Holder, 
 				makeTxTestDBWithViewsShards(h, idx, view2shards)
 			}
 			continue
+		case "roaring":
+		default:
+			t.Fatalf("invalid backend: %s", backend)
 		}
 
 		path := root + sep + filepath.Dir(fn)
@@ -252,6 +257,7 @@ func makeSampleRoaringDir(root, index, backend string, minBytes int, h *Holder, 
 func helperCreateDBShard(h *Holder, index string, shard uint64) *Index {
 	idx, err := h.CreateIndexIfNotExists(index, IndexOptions{})
 	panicOn(err)
+	// TODO: It's not clear that this is actually doing anything.
 	dbs, err := h.txf.dbPerShard.GetDBShard(index, shard, idx)
 	panicOn(err)
 	_ = dbs
