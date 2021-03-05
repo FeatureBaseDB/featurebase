@@ -59,6 +59,12 @@ const (
 
 	// DefaultFieldsDir is the default fields directory used by each index.
 	DefaultFieldsDir = "fields"
+
+	// ColumnAttrsFileName is the name of the file used for the column attributes store.
+	ColumnAttrsFileName = "column-attributes"
+
+	// RowAttrsFileName is the name of the file used for the row attributes store.
+	RowAttrsFileName = "row-attributes"
 )
 
 func init() {
@@ -1304,7 +1310,7 @@ func (h *Holder) newIndex(path, name string) (*Index, error) {
 	index.serializer = h.serializer
 	index.Schemator = h.schemator
 	index.newAttrStore = h.NewAttrStore
-	index.columnAttrs = h.NewAttrStore(filepath.Join(index.path, ".data"))
+	index.columnAttrs = h.NewAttrStore(filepath.Join(index.path, ColumnAttrsFileName))
 	index.OpenTranslateStore = h.OpenTranslateStore
 	index.translationSyncer = h.translationSyncer
 	return index, nil

@@ -795,7 +795,7 @@ func (i *Index) newField(path, name string) (*Field, error) {
 	f.broadcaster = i.broadcaster
 	f.schemator = i.Schemator
 	f.serializer = i.serializer
-	f.rowAttrStore = i.newAttrStore(filepath.Join(f.path, ".data"))
+	f.rowAttrStore = i.newAttrStore(filepath.Join(f.path, RowAttrsFileName))
 	f.OpenTranslateStore = i.OpenTranslateStore
 	return f, nil
 }

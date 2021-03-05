@@ -63,7 +63,7 @@ func TestHolder_Open(t *testing.T) {
 			t.Fatal(err)
 		} else if err := h.Holder.Close(); err != nil {
 			t.Fatal(err)
-		} else if err := os.Truncate(filepath.Join(h.IndexPath("test"), ".data"), 2); err != nil {
+		} else if err := os.Truncate(filepath.Join(h.IndexPath("test"), pilosa.ColumnAttrsFileName), 2); err != nil {
 			t.Fatal(err)
 		}
 
@@ -135,7 +135,7 @@ func TestHolder_Open(t *testing.T) {
 			t.Fatal(err)
 		} else if err := h.Holder.Close(); err != nil {
 			t.Fatal(err)
-		} else if err := os.Truncate(filepath.Join(h.Path(), "foo", "bar", ".data"), 2); err != nil {
+		} else if err := os.Truncate(filepath.Join(h.Path(), "foo", "bar", pilosa.RowAttrsFileName), 2); err != nil {
 			t.Fatal(err)
 		}
 
