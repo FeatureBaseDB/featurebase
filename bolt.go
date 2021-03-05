@@ -115,8 +115,8 @@ func DumpAllBolt() {
 // boltPath is a helper for determining the full directory
 // in which the bolt database will be stored.
 func boltPath(path string) string {
-	if !strings.HasSuffix(path, "-boltdb@") {
-		return path + "-boltdb@"
+	if !strings.HasSuffix(path, "-boltdb") {
+		return path + "-boltdb"
 	}
 	return path
 }

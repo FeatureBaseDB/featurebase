@@ -64,7 +64,6 @@ func TestBSIAdd(t *testing.T) {
 					if max < i {
 						max = i
 					}
-					t.Log("num: ", i)
 					break
 				}
 				idToIndex[id] = int(i)
@@ -99,8 +98,6 @@ func TestBSIAdd(t *testing.T) {
 			}
 		})
 	}
-	t.Log("min", min)
-	t.Log("max", max)
 }
 
 type bsiAddCase struct {

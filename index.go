@@ -140,6 +140,11 @@ func (i *Index) Path() string {
 	return i.path
 }
 
+// FieldsPath returns the path of the fields directory.
+func (i *Index) FieldsPath() string {
+	return filepath.Join(i.path, FieldsDir)
+}
+
 // TranslateStorePath returns the translation database path for a partition.
 func (i *Index) TranslateStorePath(partitionID int) string {
 	return filepath.Join(i.path, translateStoreDir, strconv.Itoa(partitionID))
@@ -204,8 +209,8 @@ func (i *Index) OpenWithSchema(idx *disco.Index) error {
 // not validated against the schema as they are opened.
 func (i *Index) open(idx *disco.Index) (err error) {
 	// Ensure the path exists.
-	i.holder.Logger.Debugf("ensure index path exists: %s", i.path)
-	if err := os.MkdirAll(i.path, 0777); err != nil {
+	i.holder.Logger.Debugf("ensure index path exists: %s", i.FieldsPath())
+	if err := os.MkdirAll(i.FieldsPath(), 0777); err != nil {
 		return errors.Wrap(err, "creating directory")
 	}
 
@@ -286,9 +291,9 @@ var indexQueue = make(chan struct{}, 8)
 
 // openFields opens and initializes the fields inside the index.
 func (i *Index) openFields(idx *disco.Index) error {
-	f, err := os.Open(i.path)
+	f, err := os.Open(i.FieldsPath())
 	if err != nil {
-		return errors.Wrap(err, "opening directory")
+		return errors.Wrap(err, "opening fields directory")
 	}
 	defer f.Close()
 
@@ -307,10 +312,6 @@ fileLoop:
 		default:
 			fi := loopFi
 			if !fi.IsDir() {
-				continue
-			}
-			// Skip embedded db files too.
-			if i.holder.txf.IsTxDatabasePath(fi.Name()) {
 				continue
 			}
 
@@ -508,7 +509,7 @@ func (i *Index) BeginTx(writable bool, shard uint64) (Tx, error) {
 }
 
 // fieldPath returns the path to a field in the index.
-func (i *Index) fieldPath(name string) string { return filepath.Join(i.path, name) }
+func (i *Index) fieldPath(name string) string { return filepath.Join(i.FieldsPath(), name) }
 
 // Field returns a field in the index by name.
 func (i *Index) Field(name string) *Field {
@@ -790,7 +791,7 @@ func (i *Index) newField(path, name string) (*Field, error) {
 	f.broadcaster = i.broadcaster
 	f.schemator = i.Schemator
 	f.serializer = i.serializer
-	f.rowAttrStore = i.newAttrStore(filepath.Join(f.path, ".data"))
+	f.rowAttrStore = i.newAttrStore(filepath.Join(f.path, RowAttrsFileName))
 	f.OpenTranslateStore = i.OpenTranslateStore
 	return f, nil
 }

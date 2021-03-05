@@ -17,9 +17,7 @@ package pilosa
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
-	"path"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -40,7 +38,6 @@ import (
 	"github.com/pilosa/pilosa/v2/topology"
 	"github.com/pilosa/pilosa/v2/tracing"
 	"github.com/pkg/errors"
-	uuid "github.com/satori/go.uuid"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -54,8 +51,20 @@ const (
 	// existenceFieldName is the name of the internal field used to store existence values.
 	existenceFieldName = "_exists"
 
-	// DefaultDiscoDir is the default data directory used by the disco implementation.
-	DefaultDiscoDir = ".disco"
+	// DiscoDir is the default data directory used by the disco implementation.
+	DiscoDir = "disco"
+
+	// IndexesDir is the default indexes directory used by the holder.
+	IndexesDir = "indexes"
+
+	// FieldsDir is the default fields directory used by each index.
+	FieldsDir = "fields"
+
+	// ColumnAttrsFileName is the name of the file used for the column attributes store.
+	ColumnAttrsFileName = "column-attributes"
+
+	// RowAttrsFileName is the name of the file used for the row attributes store.
+	RowAttrsFileName = "row-attributes"
 )
 
 func init() {
@@ -296,7 +305,7 @@ func NewHolder(path string, cfg *HolderConfig) *Holder {
 
 	storage.SetRowCacheOn(cfg.RowcacheOn)
 
-	txf, err := NewTxFactory(cfg.StorageConfig.Backend, path, h)
+	txf, err := NewTxFactory(cfg.StorageConfig.Backend, h.IndexesPath(), h)
 	panicOn(err)
 	h.txf = txf
 	h.txf.blueGreenOffIfRunningBlueGreen()
@@ -305,9 +314,14 @@ func NewHolder(path string, cfg *HolderConfig) *Holder {
 	return h
 }
 
-// Path() returns the path directory the holder was created with.
+// Path returns the path directory the holder was created with.
 func (h *Holder) Path() string {
 	return h.path
+}
+
+// IndexesPath returns the path of the indexes directory.
+func (h *Holder) IndexesPath() string {
+	return filepath.Join(h.path, IndexesDir)
 }
 
 type HolderInfo struct {
@@ -590,7 +604,7 @@ func (h *Holder) Open() error {
 	defer func() { h.opening = false }()
 
 	if h.txf == nil {
-		txf, err := NewTxFactory(h.cfg.StorageConfig.Backend, h.path, h)
+		txf, err := NewTxFactory(h.cfg.StorageConfig.Backend, h.IndexesPath(), h)
 		if err != nil {
 			return errors.Wrap(err, "Holder.Open NewTxFactory()")
 		}
@@ -605,7 +619,7 @@ func (h *Holder) Open() error {
 	h.setFileLimit()
 
 	h.Logger.Printf("open holder path: %s", h.path)
-	if err := os.MkdirAll(h.path, 0777); err != nil {
+	if err := os.MkdirAll(h.IndexesPath(), 0777); err != nil {
 		return errors.Wrap(err, "creating directory")
 	}
 
@@ -629,7 +643,7 @@ func (h *Holder) Open() error {
 	}
 
 	// Open path to read all index directories.
-	f, err := os.Open(h.path)
+	f, err := os.Open(h.IndexesPath())
 	if err != nil {
 		return errors.Wrap(err, "opening directory")
 	}
@@ -643,10 +657,6 @@ func (h *Holder) Open() error {
 	for _, fi := range fis {
 		// Skip files or hidden directories.
 		if !fi.IsDir() || strings.HasPrefix(fi.Name(), ".") {
-			continue
-		}
-		// Skip embedded db files too.
-		if h.txf.IsTxDatabasePath(fi.Name()) {
 			continue
 		}
 
@@ -850,13 +860,13 @@ func (h *Holder) HasData() (bool, error) {
 		return true, nil
 	}
 	// Open path to read all index directories.
-	if _, err := os.Stat(h.path); os.IsNotExist(err) {
+	if _, err := os.Stat(h.IndexesPath()); os.IsNotExist(err) {
 		return false, nil
 	} else if err != nil {
 		return false, errors.Wrap(err, "statting data dir")
 	}
 
-	f, err := os.Open(h.path)
+	f, err := os.Open(h.IndexesPath())
 	if err != nil {
 		return false, errors.Wrap(err, "opening data dir")
 	}
@@ -871,16 +881,6 @@ func (h *Holder) HasData() (bool, error) {
 		if !fi.IsDir() {
 			continue
 		}
-		// Skip embedded db files too.
-		if h.txf.IsTxDatabasePath(fi.Name()) {
-			continue
-		}
-
-		// Skip DisCo data directory.
-		if fi.Name() == DefaultDiscoDir {
-			continue
-		}
-
 		return true, nil
 	}
 	return false, nil
@@ -992,18 +992,7 @@ func (h *Holder) applySchema(schema *Schema) error {
 
 // IndexPath returns the path where a given index is stored.
 func (h *Holder) IndexPath(name string) string {
-	return filepath.Join(h.path, name)
-}
-
-// HolderPathFromIndexPath is
-// used by test/index.go:71 in test.Index.Reopen() to get the right
-// path into a test Holder that doesn't know its own proper path.
-// If the Holder changes index paths to being something other than
-// holderPath + "/" + indexName, this will need adjusting too.
-func (h *Holder) HolderPathFromIndexPath(indexPath, indexName string) string {
-	n := len(indexPath)
-	hpath2 := indexPath[:n-(len(indexName)+1)]
-	return hpath2
+	return filepath.Join(h.IndexesPath(), name)
 }
 
 // Index returns the index by name.
@@ -1307,7 +1296,7 @@ func (h *Holder) newIndex(path, name string) (*Index, error) {
 	index.serializer = h.serializer
 	index.Schemator = h.schemator
 	index.newAttrStore = h.NewAttrStore
-	index.columnAttrs = h.NewAttrStore(filepath.Join(index.path, ".data"))
+	index.columnAttrs = h.NewAttrStore(filepath.Join(index.path, ColumnAttrsFileName))
 	index.OpenTranslateStore = h.OpenTranslateStore
 	index.translationSyncer = h.translationSyncer
 	return index, nil
@@ -1483,38 +1472,13 @@ func (h *Holder) setFileLimit() {
 	}
 }
 
-func (h *Holder) LoadNodeID() (string, error) {
-	idPath := path.Join(h.path, ".id")
-	h.Logger.Printf("load NodeID: %s", idPath)
-	if err := os.MkdirAll(h.path, 0777); err != nil {
-		return "", errors.Wrap(err, "creating directory")
-	}
-
-	nodeIDBytes, err := ioutil.ReadFile(idPath)
-	if err == nil {
-		nodeid := strings.TrimSpace(string(nodeIDBytes))
-		h.Logger.Printf("I am NodeID: %s", nodeid)
-		return nodeid, nil
-	}
-	if !os.IsNotExist(err) {
-		return "", errors.Wrap(err, "reading file")
-	}
-	nodeID := uuid.NewV4().String()
-	err = ioutil.WriteFile(idPath, []byte(nodeID), 0600)
-	if err != nil {
-		return "", errors.Wrap(err, "writing file")
-	}
-	h.Logger.Printf("I am NodeID: %s", nodeID)
-	return nodeID, nil
-}
-
-// Log startup time and version to $DATA_DIR/.startup.log
+// Log startup time and version to $DATA_DIR/startup.log
 func (h *Holder) logStartup() error {
 	RFC3339NanoFixedWidth := "2006-01-02T15:04:05.000000 07:00"
 	time := time.Now().Format(RFC3339NanoFixedWidth)
 	logLine := fmt.Sprintf("%s\t%s\n", time, Version)
 
-	f, err := os.OpenFile(h.path+"/.startup.log", os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
+	f, err := os.OpenFile(h.path+"/startup.log", os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
 	if err != nil {
 		return errors.Wrap(err, "opening startup log")
 	}
@@ -1793,7 +1757,7 @@ func (s *holderSyncer) resetTranslationSync() error {
 
 ////////////////////////////////////////////////////////////
 
-// translationSyncer provides an interface allowing a function
+// TranslationSyncer provides an interface allowing a function
 // to notify the server that an action has occurred which requires
 // the translation sync process to be reset. In general, this
 // includes anything which modifies schema (add/remove index, etc),
@@ -2270,14 +2234,13 @@ func (h *Holder) Txf() *TxFactory {
 	return h.txf
 }
 
-// Begin starts a transaction on the holder. The index and shard
+// BeginTx starts a transaction on the holder. The index and shard
 // must be specified.
 func (h *Holder) BeginTx(writable bool, idx *Index, shard uint64) (Tx, error) {
 	return h.txf.NewTx(Txo{Write: writable, Index: idx, Shard: shard}), nil
 }
 
 func (h *Holder) HasRoaringData() (has bool, err error) {
-
 	idxs := h.Indexes()
 	for _, idx := range idxs {
 		paths, err := listFilesUnderDir(idx.path, false, "", true)
