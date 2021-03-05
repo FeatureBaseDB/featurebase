@@ -16,7 +16,9 @@ package etcd
 
 import (
 	"context"
+	"log"
 	"sync"
+	"time"
 
 	"github.com/pilosa/pilosa/v2/disco"
 	"github.com/pkg/errors"
@@ -31,6 +33,7 @@ type leasedKV struct {
 	mu sync.Mutex
 
 	key, value string
+	stopped    bool
 	ttlSeconds int64
 }
 
@@ -42,17 +45,17 @@ func newLeasedKV(cli *clientv3.Client, key string, ttlSeconds int64) *leasedKV {
 	}
 }
 
-func (l *leasedKV) Start(ctx context.Context, initValue string) error {
+func (l *leasedKV) Start(initValue string) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	ctx, cancel := context.WithCancel(ctx)
-	l.cancel = cancel
-
-	return l.create(ctx, initValue)
+	return l.create(initValue)
 }
 
-func (l *leasedKV) create(ctx context.Context, initValue string) error {
+func (l *leasedKV) create(initValue string) error {
+	ctx, cancel := context.WithCancel(context.Background())
+	l.cancel = cancel
+
 	leaseResp, err := l.cli.Grant(ctx, l.ttlSeconds)
 	if err != nil {
 		return errors.Wrap(err, "creating a lease")
@@ -64,13 +67,42 @@ func (l *leasedKV) create(ctx context.Context, initValue string) error {
 		return errors.Wrapf(err, "creating key %s with value [%s]", l.key, initValue)
 	}
 
-	if _, err := l.cli.KeepAlive(ctx, leaseResp.ID); err != nil {
+	kaChann, err := l.cli.KeepAlive(ctx, leaseResp.ID)
+	if err != nil {
 		return errors.Wrapf(err, "keeping alive the lease for the key %s with value %s", l.key, l.value)
 	}
 
 	l.value = initValue
 
+	go l.consumeLease(kaChann)
+
 	return nil
+}
+
+func (l *leasedKV) consumeLease(ch <-chan *clientv3.LeaseKeepAliveResponse) {
+	for {
+		kresp, ok := <-ch
+		if !ok {
+			if l.stopped {
+				return
+			}
+
+			l.mu.Lock()
+			defer l.mu.Unlock()
+
+			retry(1*time.Second, func() error {
+				return l.create(l.value)
+			})
+
+			log.Println("lease recreated after a problem. Key:", l.key)
+
+			return
+		}
+
+		if kresp == nil {
+			continue
+		}
+	}
 }
 
 func (l *leasedKV) Stop() {
@@ -80,6 +112,8 @@ func (l *leasedKV) Stop() {
 	if l.cancel != nil {
 		l.cancel()
 	}
+
+	l.stopped = true
 }
 
 func (l *leasedKV) Set(ctx context.Context, value string) error {
@@ -116,4 +150,17 @@ func (l *leasedKV) Get(ctx context.Context) (string, error) {
 	l.value = string(getResp.Responses[0].GetResponseRange().Kvs[0].Value)
 
 	return l.value, nil
+}
+
+func retry(sleep time.Duration, f func() error) {
+	for {
+		err := f()
+		if err == nil {
+			return
+		}
+
+		time.Sleep(sleep)
+
+		log.Println("retrying after error:", err)
+	}
 }

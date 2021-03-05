@@ -201,10 +201,10 @@ func (e *Etcd) Start(ctx context.Context) (disco.InitialClusterState, error) {
 }
 
 func (e *Etcd) startHeartbeat(ctx context.Context) error {
-	key, value := heartbeatPrefix+e.e.Server.ID().String(), disco.NodeStateStarting
+	key := heartbeatPrefix + e.e.Server.ID().String()
 	e.heartBeatLeasedKV = newLeasedKV(e.cli, key, e.options.HeartbeatTTL)
 
-	if err := e.heartBeatLeasedKV.Start(ctx, string(value)); err != nil {
+	if err := e.heartBeatLeasedKV.Start(string(disco.NodeStateStarting)); err != nil {
 		return errors.Wrap(err, "startHeartbeat: starting a new heartbeat")
 	}
 
@@ -372,7 +372,7 @@ func (e *Etcd) Resize(ctx context.Context) (func([]byte) error, error) {
 		e.resizeLeasedKV = newLeasedKV(e.cli, key, e.options.HeartbeatTTL)
 	}
 
-	if err := e.resizeLeasedKV.Start(ctx, ""); err != nil {
+	if err := e.resizeLeasedKV.Start(""); err != nil {
 		return nil, errors.Wrap(err, "Resize: creates a new hearbeat")
 	}
 
