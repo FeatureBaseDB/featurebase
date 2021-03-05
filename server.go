@@ -679,7 +679,7 @@ func (s *Server) Open() error {
 		s.logger.Printf("start initial cluster state sync")
 		for i := range toSend {
 			for {
-				err := s.holder.broadcaster.SendSync(&toSend[i])
+				err := s.holder.broadcaster.SendSync(toSend[i])
 				if err != nil {
 					s.logger.Printf("failed to broadcast startup cluster message (trying again in a bit): %v", err)
 					timer.Reset(time.Second)

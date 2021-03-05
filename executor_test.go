@@ -3512,6 +3512,58 @@ func TestExecutor_ExecuteOptions(t *testing.T) {
 	})
 }
 
+func TestReopenCluster(t *testing.T) {
+	commandOpts := make([][]server.CommandOption, 3)
+	configs := make([]*server.Config, 3)
+	for i := range configs {
+		conf := server.NewConfig()
+		configs[i] = conf
+		conf.Cluster.ReplicaN = 2
+		commandOpts[i] = append(commandOpts[i], server.OptCommandConfig(conf))
+	}
+	c := test.MustRunCluster(t, 3, commandOpts...)
+	defer c.Close()
+	c.CreateField(t, "users", pilosa.IndexOptions{Keys: true, TrackExistence: true}, "likenums")
+	c.ImportIDKey(t, "users", "likenums", []test.KeyID{
+		{ID: 1, Key: "userA"},
+		{ID: 2, Key: "userB"},
+		{ID: 3, Key: "userC"},
+		{ID: 4, Key: "userD"},
+		{ID: 5, Key: "userE"},
+		{ID: 6, Key: "userF"},
+		{ID: 7, Key: "userA"},
+		{ID: 7, Key: "userB"},
+		{ID: 7, Key: "userC"},
+		{ID: 7, Key: "userD"},
+		// we intentionally leave user E out because then there is no
+		// data for userE's shard for this field, which triggered a
+		// "fragment not found" problem
+		{ID: 7, Key: "userF"},
+	})
+
+	node0 := c.GetNode(0)
+	if err := node0.Reopen(); err != nil {
+		t.Fatal(err)
+	}
+	if err := node0.AwaitState(disco.ClusterStateNormal, 10*time.Second); err != nil {
+		t.Fatalf("restarting cluster: %v", err)
+	}
+
+	// TODO this test was supposed to reproduce an issue where spooled messages got sent improperly in Server.Open in this area:
+	//
+	//   for i := range toSend {
+	//     for {
+	//		 err := s.holder.broadcaster.SendSync(toSend[i])
+	//
+	// It was previously sending &toSend[i] which wasn't a valid
+	// pilosa.Message. Unfortunately because that's all happening in a
+	// goroutine, the Reopen continues happily and things appear to
+	// work whether the bug is present or not. I'd like to pass in a
+	// logger and detect when "completed initial cluster state sync"
+	// is logged, but it's more involved than I have time for at the
+	// moment, so I'm creating a follow up ticket. (CORE-318)
+}
+
 // Ensure an existence field is maintained.
 func TestExecutor_Execute_Existence(t *testing.T) {
 	t.Run("Row", func(t *testing.T) {
