@@ -55,7 +55,7 @@ func (l *leasedKV) Start(initValue string) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	kaChann, err := l.create(l.value)
+	kaChann, err := l.create(initValue)
 	if err != nil {
 		return err
 	}
