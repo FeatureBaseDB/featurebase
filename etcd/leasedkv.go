@@ -91,7 +91,7 @@ func (l *leasedKV) create(initValue string) (<-chan *clientv3.LeaseKeepAliveResp
 
 func (l *leasedKV) consumeLease(ch <-chan *clientv3.LeaseKeepAliveResponse) {
 	for {
-		kresp, ok := <-ch
+		_, ok := <-ch
 		if !ok {
 			l.mu.Lock()
 

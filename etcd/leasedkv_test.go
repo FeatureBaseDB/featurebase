@@ -84,7 +84,7 @@ func TestLeasedKv(t *testing.T) {
 	}
 
 	if v != newVal {
-		t.Fatal("obtained value is not the same as expected. Obtained:", v, "Expected:", initVal)
+		t.Fatal("obtained value is not the same as expected. Obtained:", v, "Expected:", newVal)
 	}
 
 	time.Sleep(5 * time.Second)
