@@ -430,7 +430,7 @@ func roaringGetFieldView2Shards(idx *Index) (vs *FieldView2Shards, err error) {
 	vs = NewFieldView2Shards()
 
 	// A) open the index directory
-	f, err := os.Open(idx.path)
+	f, err := os.Open(idx.FieldsPath())
 	if err != nil {
 		return nil, errors.Wrap(err, "opening directory")
 	}
@@ -453,7 +453,7 @@ func roaringGetFieldView2Shards(idx *Index) (vs *FieldView2Shards, err error) {
 
 		//vv("roaringGetFieldView2Shards B) on field '%v'", field)
 
-		fieldPath := filepath.Join(idx.path, field)
+		fieldPath := filepath.Join(idx.FieldsPath(), field)
 
 		// Skip embedded db files too.
 		if idx.holder.txf.IsTxDatabasePath(field) {
@@ -506,7 +506,7 @@ func roaringGetFieldView2Shards(idx *Index) (vs *FieldView2Shards, err error) {
 func (tx *RoaringTx) GetSortedFieldViewList(idx *Index, shard uint64) (fvs []txkey.FieldView, err error) {
 
 	// A) open the index directory
-	f, err := os.Open(idx.path)
+	f, err := os.Open(idx.FieldsPath())
 	if err != nil {
 		return nil, errors.Wrap(err, "opening directory")
 	}
@@ -529,7 +529,7 @@ func (tx *RoaringTx) GetSortedFieldViewList(idx *Index, shard uint64) (fvs []txk
 
 		//vv("B) on field '%v'", field)
 
-		fieldPath := filepath.Join(idx.path, field)
+		fieldPath := filepath.Join(idx.FieldsPath(), field)
 
 		// Skip embedded db files too.
 		if idx.holder.txf.IsTxDatabasePath(field) {

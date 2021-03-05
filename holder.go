@@ -56,6 +56,9 @@ const (
 
 	// DefaultIndexesDir is the default indexes directory used by the holder.
 	DefaultIndexesDir = "indexes"
+
+	// DefaultFieldsDir is the default fields directory used by each index.
+	DefaultFieldsDir = "fields"
 )
 
 func init() {
@@ -1762,7 +1765,7 @@ func (s *holderSyncer) resetTranslationSync() error {
 
 ////////////////////////////////////////////////////////////
 
-// translationSyncer provides an interface allowing a function
+// TranslationSyncer provides an interface allowing a function
 // to notify the server that an action has occurred which requires
 // the translation sync process to be reset. In general, this
 // includes anything which modifies schema (add/remove index, etc),

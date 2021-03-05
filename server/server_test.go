@@ -839,7 +839,7 @@ func TestMain_ImportTimestamp(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Ensure the correct views were created.
-	dir := fmt.Sprintf("%s/%s/%s/%s/views", m.Config.DataDir, pilosa.DefaultIndexesDir, indexName, fieldName)
+	dir := fmt.Sprintf("%s/%s/%s/%s/%s/views", m.Config.DataDir, pilosa.DefaultIndexesDir, indexName, pilosa.DefaultFieldsDir, fieldName)
 	files, err := ioutil.ReadDir(dir)
 	if err != nil {
 		t.Fatal(err)
@@ -895,7 +895,7 @@ func TestMain_ImportTimestampNoStandardView(t *testing.T) {
 	}
 
 	// Ensure the correct views were created.
-	dir := fmt.Sprintf("%s/%s/%s/%s/views", m.Config.DataDir, pilosa.DefaultIndexesDir, indexName, fieldName)
+	dir := fmt.Sprintf("%s/%s/%s/%s/%s/views", m.Config.DataDir, pilosa.DefaultIndexesDir, indexName, pilosa.DefaultFieldsDir, fieldName)
 	files, err := ioutil.ReadDir(dir)
 	if err != nil {
 		t.Fatal(err)

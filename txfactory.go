@@ -708,7 +708,7 @@ func (f *TxFactory) fieldUsage(indexPath string, fld *Field) (FieldUsage, error)
 	}
 
 	// field metadata, e.g. rowAttrs
-	fieldPath := path.Join(indexPath, field)
+	fieldPath := path.Join(indexPath, DefaultFieldsDir, field)
 	metaBytes, err := directoryUsage(fieldPath, false) // this includes keys
 	if err != nil {
 		return fieldUsage, errors.Wrapf(err, "getting disk usage for field meta (%s)", field)
@@ -1005,19 +1005,19 @@ func fragmentSpecFromRoaringPath(path string) (field, view string, shard uint64,
 	}
 
 	// sample path:
-	// field         view               shard
-	// myfield/views/standard/fragments/0
+	//        field         view               shard
+	// fields/myfield/views/standard/fragments/0
 	s := strings.Split(path, "/")
 	n := len(s)
-	if n != 5 {
+	if n != 6 {
 		err = fmt.Errorf("len(s)=%v, but expected 5. path='%v'", n, path)
 		return
 	}
-	field = s[0]
-	view = s[2]
-	shard, err = strconv.ParseUint(s[4], 10, 64)
+	field = s[1]
+	view = s[3]
+	shard, err = strconv.ParseUint(s[5], 10, 64)
 	if err != nil {
-		err = fmt.Errorf("fragmentSpecFromRoaringPath(path='%v') could not parse shard '%v' as uint: '%v'", path, s[4], err)
+		err = fmt.Errorf("fragmentSpecFromRoaringPath(path='%v') could not parse shard '%v' as uint: '%v'", path, s[5], err)
 	}
 	return
 }
