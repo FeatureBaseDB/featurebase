@@ -55,34 +55,38 @@ func (l *leasedKV) Start(initValue string) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	return l.create(initValue)
+	kaChann, err := l.create(l.value)
+	if err != nil {
+		return err
+	}
+
+	go l.consumeLease(kaChann)
+	return nil
 }
 
-func (l *leasedKV) create(initValue string) error {
+func (l *leasedKV) create(initValue string) (<-chan *clientv3.LeaseKeepAliveResponse, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	l.cancel = cancel
 
 	leaseResp, err := l.cli.Grant(ctx, l.ttlSeconds)
 	if err != nil {
-		return errors.Wrap(err, "creating a lease")
+		return nil, errors.Wrap(err, "creating a lease")
 	}
 
 	if _, err := l.cli.Txn(ctx).
 		Then(clientv3.OpPut(l.key, initValue, clientv3.WithLease(leaseResp.ID))).
 		Commit(); err != nil {
-		return errors.Wrapf(err, "creating key %s with value [%s]", l.key, initValue)
+		return nil, errors.Wrapf(err, "creating key %s with value [%s]", l.key, initValue)
 	}
 
 	kaChann, err := l.cli.KeepAlive(ctx, leaseResp.ID)
 	if err != nil {
-		return errors.Wrapf(err, "keeping alive the lease for the key %s with value %s", l.key, l.value)
+		return nil, errors.Wrapf(err, "keeping alive the lease for the key %s with value %s", l.key, l.value)
 	}
 
 	l.value = initValue
 
-	go l.consumeLease(kaChann)
-
-	return nil
+	return kaChann, nil
 }
 
 func (l *leasedKV) consumeLease(ch <-chan *clientv3.LeaseKeepAliveResponse) {
@@ -97,7 +101,13 @@ func (l *leasedKV) consumeLease(ch <-chan *clientv3.LeaseKeepAliveResponse) {
 			}
 
 			if ok := retry(1*time.Second, func() error {
-				return l.create(l.value)
+				kaChann, err := l.create(l.value)
+				if err != nil {
+					return err
+				}
+
+				go l.consumeLease(kaChann)
+				return nil
 			}); !ok {
 				log.Println("lease cannot be recreated. Key:", l.key)
 				l.mu.Unlock()
@@ -107,10 +117,6 @@ func (l *leasedKV) consumeLease(ch <-chan *clientv3.LeaseKeepAliveResponse) {
 			log.Println("lease recreated after a problem. Key:", l.key)
 			l.mu.Unlock()
 			return
-		}
-
-		if kresp == nil {
-			continue
 		}
 	}
 }
