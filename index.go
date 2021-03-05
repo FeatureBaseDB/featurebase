@@ -142,7 +142,7 @@ func (i *Index) Path() string {
 
 // FieldsPath returns the path of the fields directory.
 func (i *Index) FieldsPath() string {
-	return filepath.Join(i.path, DefaultFieldsDir)
+	return filepath.Join(i.path, FieldsDir)
 }
 
 // TranslateStorePath returns the translation database path for a partition.

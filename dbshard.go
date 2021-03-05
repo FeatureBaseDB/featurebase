@@ -34,12 +34,12 @@ import (
 var _ = sort.Sort
 
 const (
-	// DefaultBackendsDir is the default backends directory used to store the
+	// backendsDir is the default backends directory used to store the
 	// data for each backend.
-	DefaultBackendsDir = "backends"
+	backendsDir = "backends"
 
-	// DefaultBackendDirPrefix is the default prefix of each backend directory.
-	DefaultBackendDirPrefix = "backend"
+	// backendDirPrefix is the default prefix of each backend directory.
+	backendDirPrefix = "backend"
 )
 
 // types to support a database file per shard
@@ -131,10 +131,6 @@ func (dbs *DBShard) Close() (err error) {
 	}
 	dbs.closed = true
 	return
-}
-
-func (dbs *DBShard) HolderString() string {
-	return dbs.HolderPath
 }
 
 // Cleanup must be called at every commit/rollback of a Tx, in
@@ -570,7 +566,7 @@ func (dbs *DBShard) pathForType(ty txtype) string {
 	// what here for roaring? well, roaringRegistrar.OpenDBWrapper()
 	// is a no-op anyhow. so doesn't need to be correct atm.
 
-	path := dbs.HolderPath + sep + dbs.Index + sep + DefaultBackendsDir + sep + DefaultBackendDirPrefix + ty.FileSuffix() + sep + fmt.Sprintf("shard.%04v%v", dbs.Shard, ty.FileSuffix())
+	path := dbs.HolderPath + sep + dbs.Index + sep + backendsDir + sep + backendDirPrefix + ty.FileSuffix() + sep + fmt.Sprintf("shard.%04v%v", dbs.Shard, ty.FileSuffix())
 	if ty == boltTxn {
 		// special case:
 		// bolt doesn't use a directory like the others, just a direct path.
@@ -583,7 +579,7 @@ func (dbs *DBShard) pathForType(ty txtype) string {
 // prefixForType and pathForType must be kept in sync!
 func (per *DBPerShard) prefixForType(idx *Index, ty txtype) string {
 	// top level paths will end in "@@"
-	return per.HolderDir + sep + idx.name + sep + DefaultBackendsDir + sep + DefaultBackendDirPrefix + ty.FileSuffix() + sep
+	return per.HolderDir + sep + idx.name + sep + backendsDir + sep + backendDirPrefix + ty.FileSuffix() + sep
 }
 
 var ErrNoData = fmt.Errorf("no data")

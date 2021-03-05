@@ -691,7 +691,7 @@ func (f *TxFactory) fieldUsage(indexPath string, fld *Field) (FieldUsage, error)
 	}
 
 	// field metadata, e.g. rowAttrs
-	fieldPath := path.Join(indexPath, DefaultFieldsDir, field)
+	fieldPath := path.Join(indexPath, FieldsDir, field)
 	metaBytes, err := directoryUsage(fieldPath, false) // this includes keys
 	if err != nil {
 		return fieldUsage, errors.Wrapf(err, "getting disk usage for field meta (%s)", field)
@@ -750,10 +750,9 @@ func directoryUsage(fname string, recursive bool) (uint64, error) {
 	return size, nil
 }
 
+// CloseIndex is a no-op. This seems to be in place for debugging purposes.
 func (f *TxFactory) CloseIndex(idx *Index) error {
-	// under roaring and all the new databases, this is a no-op.
 	//idx.Dump("CloseIndex")
-
 	return nil
 }
 

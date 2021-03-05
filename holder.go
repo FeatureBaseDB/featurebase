@@ -51,14 +51,14 @@ const (
 	// existenceFieldName is the name of the internal field used to store existence values.
 	existenceFieldName = "_exists"
 
-	// DefaultDiscoDir is the default data directory used by the disco implementation.
-	DefaultDiscoDir = "disco"
+	// DiscoDir is the default data directory used by the disco implementation.
+	DiscoDir = "disco"
 
-	// DefaultIndexesDir is the default indexes directory used by the holder.
-	DefaultIndexesDir = "indexes"
+	// IndexesDir is the default indexes directory used by the holder.
+	IndexesDir = "indexes"
 
-	// DefaultFieldsDir is the default fields directory used by each index.
-	DefaultFieldsDir = "fields"
+	// FieldsDir is the default fields directory used by each index.
+	FieldsDir = "fields"
 
 	// ColumnAttrsFileName is the name of the file used for the column attributes store.
 	ColumnAttrsFileName = "column-attributes"
@@ -321,7 +321,7 @@ func (h *Holder) Path() string {
 
 // IndexesPath returns the path of the indexes directory.
 func (h *Holder) IndexesPath() string {
-	return filepath.Join(h.path, DefaultIndexesDir)
+	return filepath.Join(h.path, IndexesDir)
 }
 
 type HolderInfo struct {

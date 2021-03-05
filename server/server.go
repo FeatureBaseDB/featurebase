@@ -388,7 +388,7 @@ func (m *Command) SetupServer() error {
 		if err != nil {
 			return errors.Wrapf(err, "expanding directory name: %s", m.Config.DataDir)
 		}
-		m.Config.Etcd.Dir = filepath.Join(path, pilosa.DefaultDiscoDir)
+		m.Config.Etcd.Dir = filepath.Join(path, pilosa.DiscoDir)
 	}
 
 	e := petcd.NewEtcdWithCache(m.Config.Etcd, m.Config.Cluster.ReplicaN)
