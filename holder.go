@@ -881,12 +881,6 @@ func (h *Holder) HasData() (bool, error) {
 		if !fi.IsDir() {
 			continue
 		}
-
-		// Skip DisCo data directory.
-		if fi.Name() == DefaultDiscoDir {
-			continue
-		}
-
 		return true, nil
 	}
 	return false, nil
