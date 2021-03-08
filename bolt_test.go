@@ -85,7 +85,7 @@ func BoltMustDeleteBitvalue(dbwrap *BoltWrapper, index, field, view string, shar
 
 func mustOpenEmptyBoltWrapper(path string) (w *BoltWrapper, cleaner func()) {
 	var err error
-	fn := boltPath(path)
+	fn := path
 	panicOn(os.RemoveAll(fn))
 	ww, err := globalBoltReg.OpenDBWrapper(fn, DetectMemAccessPastTx, nil)
 	panicOn(err)

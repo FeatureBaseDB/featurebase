@@ -423,19 +423,18 @@ const (
 	boltTxn    txtype = 4
 )
 
-// FileSuffix is used to determine backend directory names.
-// We append '@' to be sure we never collide with a field name
-// inside the index directory. In the future for different
-// versions of the same backend, there might be version
-// identifier tacked on too.
-func (ty txtype) FileSuffix() string {
+// DirectoryName just returns a string version of the transaction type. We
+// really need to consolidate the storage backend and tx stuff because it's
+// currently rather confusing. This method should be addressed (i.e.
+// replaced/removed) during that refactor.
+func (ty txtype) DirectoryName() string {
 	switch ty {
 	case roaringTxn:
-		return ""
+		return "roaring"
 	case rbfTxn:
-		return "-rbf"
+		return "rbf"
 	case boltTxn:
-		return "-boltdb"
+		return "boltdb"
 	}
 	panic(fmt.Sprintf("unkown txtype %v", int(ty)))
 }
