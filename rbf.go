@@ -141,15 +141,6 @@ func (r *rbfDBRegistrar) unregister(w *RbfDBWrapper) {
 	r.mu.Unlock()
 }
 
-// rbfPath is a helper for determining the full directory
-// in which the RBF database will be stored.
-func rbfPath(path string) string {
-	if !strings.HasSuffix(path, "-rbf") {
-		return path + "-rbf"
-	}
-	return path
-}
-
 // OpenDBWrapper opens the database in the path directory
 // without deleting any prior content. Any
 // database directory will have the "-rbf" suffix.
@@ -158,8 +149,7 @@ func rbfPath(path string) string {
 // if one does not exist for its path. Otherwise it returns
 // the existing instance. This insures only one RbfDBWrapper
 // per bpath in this pilosa node.
-func (r *rbfDBRegistrar) OpenDBWrapper(path0 string, doAllocZero bool, cfg *storage.Config) (DBWrapper, error) {
-	path := rbfPath(path0)
+func (r *rbfDBRegistrar) OpenDBWrapper(path string, doAllocZero bool, cfg *storage.Config) (DBWrapper, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	w, ok := r.path2db[path]

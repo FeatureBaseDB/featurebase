@@ -112,15 +112,6 @@ func DumpAllBolt() {
 	}
 }
 
-// boltPath is a helper for determining the full directory
-// in which the bolt database will be stored.
-func boltPath(path string) string {
-	if !strings.HasSuffix(path, "-boltdb") {
-		return path + "-boltdb"
-	}
-	return path
-}
-
 // openBoltDB opens the database in the bpath directoy
 // without deleting any prior content. Any BoltDB
 // database directory will have the "-bolt" suffix.
@@ -129,9 +120,7 @@ func boltPath(path string) string {
 // if one does not exist for its bpath. Otherwise it returns
 // the existing instance. This insures only one boltDB
 // per bpath in this pilosa node.
-func (r *boltRegistrar) OpenDBWrapper(path0 string, doAllocZero bool, cfg *storage.Config) (DBWrapper, error) {
-	path := boltPath(path0)
-
+func (r *boltRegistrar) OpenDBWrapper(path string, doAllocZero bool, cfg *storage.Config) (DBWrapper, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	w, ok := r.path2db[path]

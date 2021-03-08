@@ -37,9 +37,6 @@ const (
 	// backendsDir is the default backends directory used to store the
 	// data for each backend.
 	backendsDir = "backends"
-
-	// backendDirPrefix is the default prefix of each backend directory.
-	backendDirPrefix = "backend"
 )
 
 // types to support a database file per shard
@@ -566,7 +563,7 @@ func (dbs *DBShard) pathForType(ty txtype) string {
 	// what here for roaring? well, roaringRegistrar.OpenDBWrapper()
 	// is a no-op anyhow. so doesn't need to be correct atm.
 
-	path := dbs.HolderPath + sep + dbs.Index + sep + backendsDir + sep + backendDirPrefix + ty.FileSuffix() + sep + fmt.Sprintf("shard.%04v%v", dbs.Shard, ty.FileSuffix())
+	path := dbs.HolderPath + sep + dbs.Index + sep + backendsDir + sep + ty.DirectoryName() + sep + fmt.Sprintf("shard.%04v", dbs.Shard)
 	if ty == boltTxn {
 		// special case:
 		// bolt doesn't use a directory like the others, just a direct path.
@@ -579,7 +576,7 @@ func (dbs *DBShard) pathForType(ty txtype) string {
 // prefixForType and pathForType must be kept in sync!
 func (per *DBPerShard) prefixForType(idx *Index, ty txtype) string {
 	// top level paths will end in "@@"
-	return per.HolderDir + sep + idx.name + sep + backendsDir + sep + backendDirPrefix + ty.FileSuffix() + sep
+	return per.HolderDir + sep + idx.name + sep + backendsDir + sep + ty.DirectoryName() + sep
 }
 
 var ErrNoData = fmt.Errorf("no data")
@@ -807,31 +804,25 @@ func (per *DBPerShard) TypedDBPerShardGetShardsForIndex(ty txtype, idx *Index, r
 	}
 	// INVAR: not-roaring.
 
-	requiredSuffix := ty.FileSuffix()
 	path := per.prefixForType(idx, ty)
 
 	ignoreEmpty := false
 	includeRoot := true
-	dbf, err := listDirUnderDir(path, includeRoot, requiredSuffix, ignoreEmpty)
+	dbf, err := listDirUnderDir(path, includeRoot, ignoreEmpty)
 	panicOn(err)
 
 	for _, nm := range dbf {
-
 		base := filepath.Base(nm)
 
-		splt := strings.Split(base, requiredSuffix)
-		if len(splt) != 2 {
-			panic(fmt.Sprintf("should have 2 parts: nm='%v', base(nm)='%v'; requiredSuffix='%v'", nm, base, requiredSuffix))
-		}
-		prefix := splt[0]
+		// We're only interested in "shard.*" files, so skip everything else.
 		const shardPrefix = "shard."
 		const lenOfShardPrefix = len(shardPrefix)
-		if !strings.HasPrefix(prefix, shardPrefix) {
+		if !strings.HasPrefix(base, shardPrefix) {
 			continue
 		}
 
 		// Parse filename into integer.
-		shard, err := strconv.ParseUint(prefix[lenOfShardPrefix:], 10, 64)
+		shard, err := strconv.ParseUint(base[lenOfShardPrefix:], 10, 64)
 		if err != nil {
 			panicOn(err)
 			continue
@@ -877,7 +868,7 @@ func (per *DBPerShard) unprotectedTypedIndexShardHasData(ty txtype, idx *Index, 
 	return dbs.W[whichty].HasData()
 }
 
-func listDirUnderDir(root string, includeRoot bool, requiredSuffix string, ignoreEmpty bool) (files []string, err error) {
+func listDirUnderDir(root string, includeRoot bool, ignoreEmpty bool) (files []string, err error) {
 	if !dirExists(root) {
 		return
 	}
@@ -901,9 +892,7 @@ func listDirUnderDir(root string, includeRoot bool, requiredSuffix string, ignor
 				if ignoreEmpty && info.Size() == 0 {
 					return nil
 				}
-				if requiredSuffix == "" || strings.HasSuffix(path, requiredSuffix) {
-					files = append(files, path[n:])
-				}
+				files = append(files, path[n:])
 			}
 		}
 		return nil
