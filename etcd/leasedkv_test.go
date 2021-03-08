@@ -44,8 +44,12 @@ func TestLeasedKv(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	cli := v3client.New(etcd.Server)
+	defer func() {
+		etcd.Close()
+		<-etcd.Server.StopNotify()
+		cli.Close()
+	}()
 
 	lkv := newLeasedKV(cli, "/test", 1)
 
