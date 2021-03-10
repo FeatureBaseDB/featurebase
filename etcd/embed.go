@@ -487,18 +487,26 @@ func (e *Etcd) Schema(ctx context.Context) (disco.Schema, error) {
 }
 
 func (e *Etcd) Metadata(ctx context.Context, peerID string) ([]byte, error) {
-	resp, err := e.cli.KV.Get(ctx, path.Join(metadataPrefix, peerID))
+	key := path.Join(metadataPrefix, peerID)
+
+	resp, err := e.cli.Txn(ctx).
+		If(clientv3util.KeyExists(key)).
+		Then(clientv3.OpGet(key)).
+		Commit()
 	if err != nil {
-		return nil, err
-	}
-	kvs := resp.Kvs
-
-	if len(kvs) > 1 {
-		return nil, disco.ErrTooManyResults
+		return nil, errors.Wrapf(err, "Metadata(%s)", key)
 	}
 
+	if !resp.Succeeded || len(resp.Responses) == 0 {
+		return nil, disco.ErrNoResults
+	}
+
+	kvs := resp.Responses[0].GetResponseRange().Kvs
 	if len(kvs) == 0 {
 		return nil, disco.ErrNoResults
+	}
+	if len(kvs) > 1 {
+		return nil, disco.ErrTooManyResults
 	}
 
 	return kvs[0].Value, nil
@@ -659,7 +667,7 @@ func (e *Etcd) getKeyWithPrefix(ctx context.Context, key string) (keys []string,
 		Then(clientv3.OpGet(key, clientv3.WithPrefix())).
 		Commit()
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, errors.Wrapf(err, "getKeyWithPrefix(%s)", key)
 	}
 
 	if len(resp.Responses) == 0 {
@@ -955,26 +963,24 @@ func (e *Etcd) RemoveShard(ctx context.Context, index, field string, shard uint6
 // based on the etcd peers.
 func (e *Etcd) Nodes() []*topology.Node {
 	peers := e.Peers()
-	// For N>1, this might actually reduce GC load. Maybe.
-	nodeData := make([]topology.Node, len(peers))
-	nodes := make([]*topology.Node, len(peers))
-	for i, peer := range peers {
-		node := &nodeData[i]
+	nodes := make([]*topology.Node, 0, len(peers))
+	for _, peer := range peers {
+		var node *topology.Node
 
 		if meta, err := e.Metadata(context.Background(), peer.ID); err != nil {
 			log.Println(err, "getting metadata") // TODO: handle this with a logger
-		} else if err := json.Unmarshal(meta, node); err != nil {
+		} else if err := json.Unmarshal(meta, &node); err != nil {
 			log.Println(err, "unmarshaling json metadata")
 		}
 
-		node.ID = peer.ID
-
-		nodes[i] = node
+		if node != nil && peer != nil {
+			node.ID = peer.ID
+			nodes = append(nodes, node)
+		}
 	}
 
 	// Nodes must be sorted.
 	sort.Sort(topology.ByID(nodes))
-
 	return nodes
 }
 
