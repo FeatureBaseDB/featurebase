@@ -18,7 +18,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math/rand"
 	"os"
 	"runtime"
@@ -27,6 +26,7 @@ import (
 
 	"github.com/pilosa/pilosa/v2/rbf"
 	rbfcfg "github.com/pilosa/pilosa/v2/rbf/cfg"
+	"github.com/pilosa/pilosa/v2/testhook"
 )
 
 var quickCheckN *int = flag.Int("quickchecks", 10, "The number of iterations for each quickcheck")
@@ -61,8 +61,8 @@ func TestReadWriteRootRecord(t *testing.T) {
 }
 
 // NewDB returns a new instance of DB with a temporary path.
-func NewDB(cfg ...*rbfcfg.Config) *rbf.DB {
-	path, err := ioutil.TempDir("", "")
+func NewDB(tb testing.TB, cfg ...*rbfcfg.Config) *rbf.DB {
+	path, err := testhook.TempDir(tb, "rbfdb")
 	if err != nil {
 		panic(err)
 	}
@@ -78,7 +78,7 @@ func NewDB(cfg ...*rbfcfg.Config) *rbf.DB {
 // MustOpenDB returns a db opened on a temporary file. On error, fail test.
 func MustOpenDB(tb testing.TB, cfg ...*rbfcfg.Config) *rbf.DB {
 	tb.Helper()
-	db := NewDB(cfg...)
+	db := NewDB(tb, cfg...)
 	if err := db.Open(); err != nil {
 		tb.Fatal(err)
 	}

@@ -17,12 +17,12 @@ package etcd
 import (
 	"context"
 	"errors"
-	"io/ioutil"
 	"os"
 	"testing"
 	"time"
 
 	"github.com/pilosa/pilosa/v2/disco"
+	"github.com/pilosa/pilosa/v2/testhook"
 	"go.etcd.io/etcd/embed"
 	"go.etcd.io/etcd/etcdserver/api/v3client"
 )
@@ -33,7 +33,7 @@ const newVal = "newValue"
 func TestLeasedKv(t *testing.T) {
 	cfg := embed.NewConfig()
 
-	dir, err := ioutil.TempDir("", "leasedkv-*")
+	dir, err := testhook.TempDir(t, "leasedkv-*")
 	if err != nil {
 		t.Fatal(err)
 	}

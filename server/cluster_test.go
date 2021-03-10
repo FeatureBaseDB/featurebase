@@ -192,7 +192,7 @@ func TestClusterResize_AddNode(t *testing.T) {
 			}
 			lsns[i] = l.(*net.TCPListener)
 		}
-		portsCfg := test.GenPortsConfig(test.NewPorts(lsns))
+		portsCfg := test.GenPortsConfig(t, test.NewPorts(lsns))
 
 		m1.Config.Etcd = portsCfg[0].Etcd
 		m1.Config.Name = portsCfg[0].Name

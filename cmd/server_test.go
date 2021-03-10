@@ -16,13 +16,13 @@ package cmd_test
 
 import (
 	"fmt"
-	"io/ioutil"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/pilosa/pilosa/v2/cmd"
 	_ "github.com/pilosa/pilosa/v2/test"
+	"github.com/pilosa/pilosa/v2/testhook"
 	"github.com/pilosa/pilosa/v2/toml"
 	"github.com/pkg/errors"
 )
@@ -42,9 +42,9 @@ func nextPort() string { //nolint:unused
 
 func TestServerConfig(t *testing.T) {
 	t.Skip("pilosa hosts config (cmd.Server.Config.Cluster.Hosts and brethren) is test only and will go away with high probability. skip for now.")
-	actualDataDir, err := ioutil.TempDir("", "")
+	actualDataDir, err := testhook.TempDir(t, "")
 	failErr(t, err, "making data dir")
-	logFile, err := ioutil.TempFile("", "")
+	logFile, err := testhook.TempFile(t, "")
 	failErr(t, err, "making log file")
 	tests := []commandTest{
 		// TEST 0
@@ -64,7 +64,7 @@ func TestServerConfig(t *testing.T) {
 	bind-grpc = ` + nextPort() + `
 	max-writes-per-request = 3000
 	long-query-time = "1m10s"
-	
+
 	[cluster]
 		replicas = 2
 		long-query-time = "1m10s"
@@ -189,7 +189,7 @@ func TestServerConfig(t *testing.T) {
 }
 func TestServerConfig_DeprecateLongQueryTime(t *testing.T) {
 	t.Skip("pilosa hosts config (cmd.Server.Config.Cluster.Hosts and brethren) is test only and will go away with high probability. skip for now.")
-	actualDataDir, err := ioutil.TempDir("", "")
+	actualDataDir, err := testhook.TempDir(t, "")
 	failErr(t, err, "making data dir")
 
 	tests := []commandTest{
