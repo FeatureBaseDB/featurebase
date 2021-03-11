@@ -34,7 +34,6 @@ require (
 	github.com/prometheus/client_model v0.1.0
 	github.com/prometheus/prom2json v1.3.0
 	github.com/rakyll/statik v0.1.7
-	github.com/remyoudompheng/bigfft v0.0.0-20190728182440-6a916e37a237 // indirect
 	github.com/rs/cors v1.7.0 // indirect
 	github.com/satori/go.uuid v1.2.0
 	github.com/shirou/gopsutil/v3 v3.20.11
@@ -52,12 +51,12 @@ require (
 	golang.org/x/mod v0.3.1-0.20200828183125-ce943fd02449
 	golang.org/x/net v0.0.0-20200822124328-c89045814202 // indirect
 	golang.org/x/sync v0.0.0-20200625203802-6e8e738ad208
-	golang.org/x/sys v0.0.0-20201214095126-aec9a390925b // indirect
+	golang.org/x/sys v0.0.0-20210124154548-22da62e12c0c // indirect
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 	google.golang.org/grpc v1.28.0
 	gopkg.in/check.v1 v1.0.0-20200227125254-8fa46927fb4f // indirect
 	gopkg.in/yaml.v2 v2.3.0 // indirect
-	modernc.org/mathutil v1.0.0
+	modernc.org/mathutil v1.2.2
 	modernc.org/strutil v1.0.0
 	sigs.k8s.io/yaml v1.2.0 // indirect
 	vitess.io/vitess v3.0.0-rc.3.0.20190602171040-12bfde34629c+incompatible
