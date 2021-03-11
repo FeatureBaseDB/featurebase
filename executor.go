@@ -15,6 +15,7 @@
 package pilosa
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -3162,6 +3163,16 @@ type FieldRow struct {
 	Value  *int64 `json:"value,omitempty"`
 }
 
+func (p FieldRow) Less(o FieldRow) bool {
+	if p.Field == o.Field {
+		if p.RowKey != "" {
+			return p.RowKey < o.RowKey
+		}
+		return p.RowID < o.RowID
+	}
+	return p.Field < o.Field
+}
+
 func (fr *FieldRow) Clone() (clone *FieldRow) {
 	clone = &FieldRow{
 		Field:  fr.Field,
@@ -3328,7 +3339,7 @@ func (g *GroupCounts) ToRows(callback func(*pb.RowResponse) error) error {
 // customizes the JSON output of the aggregate field label.
 func (g *GroupCounts) MarshalJSON() ([]byte, error) {
 	groups := g.Groups()
-	var counts interface{} = groups
+	var counts interface{} = SortedGroupCount(groups)
 
 	if len(groups) == 0 {
 		return []byte("[]"), nil
@@ -3342,11 +3353,81 @@ func (g *GroupCounts) MarshalJSON() ([]byte, error) {
 	return json.Marshal(counts)
 }
 
+type SortedGroupCount []GroupCount
+
+// Provides determanistic ordering for the JSON output
+func (sortgroup SortedGroupCount) MarshalJSON() ([]byte, error) {
+	sort.Slice(sortgroup, func(i, j int) bool {
+		if sortgroup[j].Count == sortgroup[i].Count {
+			for x := range sortgroup[j].Group {
+				if sortgroup[j].Group[x] == sortgroup[i].Group[x] {
+					continue
+				}
+				return sortgroup[j].Group[x].Less(sortgroup[i].Group[x])
+			}
+
+		}
+		return sortgroup[j].Count < sortgroup[i].Count
+	})
+	buffer := new(bytes.Buffer)
+	_, err := buffer.Write([]byte("["))
+	if err != nil {
+		return nil, err
+	}
+	for i, groupCount := range sortgroup {
+		jsonValue, err := json.Marshal(groupCount)
+		if err != nil {
+			return nil, err
+		}
+		if i != 0 {
+			_, err = buffer.Write([]byte(","))
+			if err != nil {
+				return nil, err
+			}
+		}
+		_, err = buffer.Write(jsonValue)
+		if err != nil {
+			return nil, err
+		}
+	}
+	_, err = buffer.Write([]byte("]"))
+	if err != nil {
+		return nil, err
+	}
+	return buffer.Bytes(), nil
+}
+
 // GroupCount represents a result item for a group by query.
 type GroupCount struct {
 	Group []FieldRow `json:"group"`
 	Count uint64     `json:"count"`
 	Agg   int64      `json:"-"`
+}
+
+// comparing json structures in the oracle demand that map values have a consistent order
+// docs say it should be lexigraphically but experimentation proved otherwise int the
+// groupcount state
+func (group GroupCount) MarshalJSON() ([]byte, error) {
+	// TODO(twg) figure out how to access struct tags from code
+	var buf bytes.Buffer
+	sort.Slice(group.Group, func(i, j int) bool {
+		return group.Group[i].Field < group.Group[j].Field
+	})
+
+	//write the Counts
+	buf.WriteString(fmt.Sprintf(`{"count": %v,`, group.Count))
+	//write the Groups
+	buf.WriteString(`"group":[`)
+	for i, g := range group.Group {
+		part, _ := g.MarshalJSON()
+		if i != 0 {
+			buf.Write([]byte(","))
+		}
+		buf.Write(part)
+	}
+
+	buf.WriteString("]}")
+	return buf.Bytes(), nil
 }
 
 type groupCountSum struct {
@@ -3843,6 +3924,43 @@ func (kid KeyOrID) MarshalJSON() ([]byte, error) {
 type ExtractedTableColumn struct {
 	Column KeyOrID       `json:"column"`
 	Rows   []interface{} `json:"rows"`
+}
+
+func (etc ExtractedTableColumn) MarshalJSON() ([]byte, error) {
+	buf := new(bytes.Buffer)
+	buf.WriteString(`{"column":`)
+	b, _ := etc.Column.MarshalJSON()
+	buf.Write(b)
+	buf.WriteString(`,"rows":[`)
+	for i, row := range etc.Rows {
+		if i != 0 {
+			buf.WriteByte(44) //write a comma
+		}
+		buf.WriteString(`[`)
+		switch v := row.(type) {
+		case []string:
+			sort.Slice(v, func(i, j int) bool {
+				return v[i] < v[j]
+			})
+			for si, s := range v {
+				if si != 0 {
+					buf.WriteByte(44) //write a comma
+				}
+				buf.WriteString(fmt.Sprintf(`"%v"`, s))
+			}
+		case []uint64:
+			for si, s := range v {
+				if si != 0 {
+					buf.WriteByte(44) //write a comma
+				}
+				buf.WriteString(fmt.Sprintf(`%v`, s))
+			}
+		}
+		buf.WriteString(`]`)
+
+	}
+	buf.WriteString(`]}`)
+	return buf.Bytes(), nil
 }
 
 type ExtractedTable struct {
@@ -7405,6 +7523,21 @@ type ValCount struct {
 	FloatVal   float64      `json:"floatValue"`
 	DecimalVal *pql.Decimal `json:"decimalValue"`
 	Count      int64        `json:"count"`
+}
+
+func (vc ValCount) MarshalJSON() ([]byte, error) {
+	buf := new(bytes.Buffer)
+	nullOrVal := "null"
+	if vc.DecimalVal != nil {
+		nullOrVal = fmt.Sprintf("%v", vc.DecimalVal)
+	}
+	_, err := buf.WriteString(fmt.Sprintf(`{
+	               "count": %v,
+	               "decimalValue": %v,
+	               "floatValue": %v,
+	               "value":%v 
+	         }`, vc.Count, nullOrVal, vc.FloatVal, vc.Val))
+	return buf.Bytes(), err
 }
 
 func (v *ValCount) Clone() (r *ValCount) {
