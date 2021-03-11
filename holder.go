@@ -906,12 +906,12 @@ func (h *Holder) limitedSchema() ([]*IndexInfo, error) {
 }
 
 func (h *Holder) schema(ctx context.Context, includeViews bool) ([]*IndexInfo, error) {
-	var a []*IndexInfo
-
 	schema, err := h.schemator.Schema(ctx)
 	if err != nil {
 		return nil, errors.Wrapf(err, "getting schema via schemator")
 	}
+
+	a := make([]*IndexInfo, 0, len(schema))
 
 	for _, index := range schema {
 		cim, err := decodeCreateIndexMessage(h.serializer, index.Data)

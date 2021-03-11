@@ -106,7 +106,7 @@ func TestHandler_Endpoints(t *testing.T) {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		}
 		body := w.Body.String()
-		if body != "{\"indexes\":null}\n" {
+		if body != "{\"indexes\":[]}\n" {
 			t.Fatalf("unexpected empty schema: '%v'", body)
 		}
 
@@ -119,7 +119,7 @@ func TestHandler_Endpoints(t *testing.T) {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		}
 		body := w.Body.String()
-		if body != "{\"indexes\":null}\n" {
+		if body != "{\"indexes\":[]}\n" {
 			t.Fatalf("unexpected empty schema: '%v'", body)
 		}
 
