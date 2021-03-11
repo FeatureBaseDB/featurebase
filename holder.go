@@ -1743,16 +1743,11 @@ func (s *holderSyncer) resetTranslationSync() error {
 	// Set read-only flag for all translation stores.
 	s.setTranslateReadOnlyFlags(snap)
 
-	// Connect to each node that has a primary for which we are a replica.
-	if err := s.initializeIndexTranslateReplication(snap); err != nil {
-		return errors.Wrap(err, "initialize index translate replication")
-	}
-
-	// Connect to primary to stream field data.
-	if err := s.initializeFieldTranslateReplication(snap); err != nil {
-		return errors.Wrap(err, "initialize field translate replication")
+	if err := s.initializeReplication(snap); err != nil {
+		return errors.Wrap(err, "initializing translation replication")
 	}
 	return nil
+
 }
 
 ////////////////////////////////////////////////////////////
@@ -1859,11 +1854,83 @@ func (s *holderSyncer) setTranslateReadOnlyFlags(snap *topology.ClusterSnapshot)
 	s.Cluster.mu.RUnlock()
 }
 
-// initializeIndexTranslateReplication connects to each node that is the
-// primary for a partition that we are a replica of.
-func (s *holderSyncer) initializeIndexTranslateReplication(snap *topology.ClusterSnapshot) error {
+// initializeReplication builds a map of nodes for which we need to replicate
+// any key translation, whether that's field keys (every node replicates these
+// from the primary) or index keys (only the replica nodes for each partition
+// replicate these from whichever node is primary for that partition).
+func (s *holderSyncer) initializeReplication(snap *topology.ClusterSnapshot) error {
+	nodeMaps := make(map[string]TranslateOffsetMap)
+
+	if snap.ReplicaN > 1 {
+		if err := s.populateIndexReplication(nodeMaps, snap); err != nil {
+			return err
+		}
+	}
+	if err := s.populateFieldReplication(nodeMaps, snap); err != nil {
+		return err
+	}
+
 	for _, node := range snap.Nodes {
-		// Skip local node.
+		m := nodeMaps[node.ID]
+		if m.Empty() {
+			continue
+		}
+
+		// Connect to remote node and begin streaming.
+		rd, err := s.Holder.OpenTranslateReader(context.Background(), node.URI.String(), m)
+		if err != nil {
+			return err
+		}
+		s.readers = append(s.readers, rd)
+
+		s.syncers.Go(func() error {
+			defer rd.Close()
+			s.readBothTranslateReader(rd, snap)
+			return nil
+		})
+	}
+	return nil
+}
+
+// populateFieldReplication populates a map from node IDs to TranslateOffsetMaps
+// to record that we need to translate fields which have key translation
+// from the primary node.
+func (s *holderSyncer) populateFieldReplication(nodeMaps map[string]TranslateOffsetMap, snap *topology.ClusterSnapshot) error {
+	// Set up field translation
+	if !snap.IsPrimaryFieldTranslationNode(s.Cluster.Node.ID) {
+		primaryID := snap.PrimaryFieldTranslationNode().ID
+		// Build a map of field key offsets to stream from.
+		m := nodeMaps[primaryID]
+		if m == nil {
+			m = make(TranslateOffsetMap)
+			nodeMaps[primaryID] = m
+		}
+		for _, index := range s.Holder.Indexes() {
+			for _, field := range index.Fields() {
+				store := field.TranslateStore()
+				// I think right now this is supposed to be impossible;
+				// we use an InMemTranslateStore by default even if
+				// no translate store is being used or attempted.
+				if store == nil {
+					return fmt.Errorf("no translate store for field %q/%q", index.Name(), field.Name())
+				}
+				offset, err := store.MaxID()
+				if err != nil {
+					return errors.Wrapf(err, "cannot determine max id for %q/%q", index.Name(), field.Name())
+				}
+				m.SetFieldOffset(index.Name(), field.Name(), offset)
+			}
+		}
+	}
+	return nil
+}
+
+// populateIndexReplication populates a map of node IDs to TranslateOffsetMaps
+// to record which nodes we need to replicate index key translation for.
+// That means nodes which are the primary for a partition that we're a
+// non-primary replica for.
+func (s *holderSyncer) populateIndexReplication(nodeMaps map[string]TranslateOffsetMap, snap *topology.ClusterSnapshot) error {
+	for _, node := range snap.Nodes {
 		if node.ID == s.Node.ID {
 			continue
 		}
@@ -1883,6 +1950,9 @@ func (s *holderSyncer) initializeIndexTranslateReplication(snap *topology.Cluste
 				}
 
 				store := index.TranslateStore(partitionID)
+				if store == nil {
+					return fmt.Errorf("no store available for index %q, partition %d", index.Name(), partitionID)
+				}
 				offset, err := store.MaxID()
 				if err != nil {
 					return errors.Wrapf(err, "cannot determine max id for %q", index.Name())
@@ -1895,109 +1965,49 @@ func (s *holderSyncer) initializeIndexTranslateReplication(snap *topology.Cluste
 		if len(m) == 0 {
 			continue
 		}
-
-		// Connect to remote node and begin streaming.
-		rd, err := s.Holder.OpenTranslateReader(context.Background(), node.URI.String(), m)
-		if err != nil {
-			return err
-		}
-		s.readers = append(s.readers, rd)
-
-		s.syncers.Go(func() error {
-			defer rd.Close()
-			s.readIndexTranslateReader(rd)
-			return nil
-		})
+		nodeMaps[node.ID] = m
 	}
-
 	return nil
 }
 
-// initializeFieldTranslateReplication connects the primary to stream field data.
-func (s *holderSyncer) initializeFieldTranslateReplication(snap *topology.ClusterSnapshot) error {
-	// Skip if primary.
-	if snap.IsPrimaryFieldTranslationNode(s.Cluster.Node.ID) {
-		return nil
-	}
+// readBothTranslateReader reads key translation for field keys or
+// index keys from a remote node. Both field and index keys may be sent,
+// the distinction is that field keys have a non-empty field name.
+func (s *holderSyncer) readBothTranslateReader(rd TranslateEntryReader, snap *topology.ClusterSnapshot) {
+	for {
+		var entry TranslateEntry
+		if err := rd.ReadEntry(&entry); err != nil {
+			s.Holder.Logger.Printf("cannot read translate entry: %s", err)
+			return
+		}
 
-	// Build a map of partition offsets to stream from.
-	m := make(TranslateOffsetMap)
-	for _, index := range s.Holder.Indexes() {
-		for _, field := range index.Fields() {
-			store := field.TranslateStore()
-			offset, err := store.MaxID()
-			if err != nil {
-				return errors.Wrapf(err, "cannot determine max id for %q/%q", index.Name(), field.Name())
+		var store TranslateStore
+		if entry.Field != "" {
+			// Find appropriate store.
+			f := s.Holder.Field(entry.Index, entry.Field)
+			if f == nil {
+				s.Holder.Logger.Printf("field not found: %s/%s", entry.Index, entry.Field)
+				return
 			}
-			m.SetFieldOffset(index.Name(), field.Name(), offset)
+			store = f.TranslateStore()
+			if store == nil {
+				s.Holder.Logger.Printf("no translate store suitable for index %q, field %q, key %q", entry.Index, entry.Field, entry.Key)
+				return
+			}
+		} else {
+			// Find appropriate store.
+			idx := s.Holder.Index(entry.Index)
+			if idx == nil {
+				s.Holder.Logger.Printf("index not found: %q", entry.Index)
+				return
+			}
+			store = idx.TranslateStore(snap.KeyToKeyPartition(entry.Index, entry.Key))
+			if store == nil {
+				s.Holder.Logger.Printf("no translate store suitable for index %q, key %q", entry.Index, entry.Key)
+				return
+			}
 		}
-	}
-
-	// Skip if no replication required.
-	if len(m) == 0 {
-		return nil
-	}
-
-	// Connect to primary and begin streaming.
-	primary := snap.PrimaryFieldTranslationNode()
-	rd, err := s.Holder.OpenTranslateReader(context.Background(), primary.URI.String(), m)
-	if err != nil {
-		return err
-	}
-	s.readers = append(s.readers, rd)
-
-	s.syncers.Go(func() error {
-		defer rd.Close()
-		s.readFieldTranslateReader(rd)
-		return nil
-	})
-	return nil
-}
-
-func (s *holderSyncer) readIndexTranslateReader(rd TranslateEntryReader) {
-	// Create a snapshot of the cluster to use for node/partition calculations.
-	snap := topology.NewClusterSnapshot(s.Cluster.noder, s.Cluster.Hasher, s.Cluster.ReplicaN)
-
-	for {
-		var entry TranslateEntry
-		if err := rd.ReadEntry(&entry); err != nil {
-			s.Holder.Logger.Printf("cannot read index translate entry: %s", err)
-			return
-		}
-
-		// Find appropriate store.
-		idx := s.Holder.Index(entry.Index)
-		if idx == nil {
-			s.Holder.Logger.Printf("index not found: %q", entry.Index)
-			return
-		}
-
 		// Apply replication to store.
-		store := idx.TranslateStore(snap.KeyToKeyPartition(entry.Index, entry.Key))
-		if err := store.ForceSet(entry.ID, entry.Key); err != nil {
-			s.Holder.Logger.Printf("cannot force set index translation data: %d=%q", entry.ID, entry.Key)
-			return
-		}
-	}
-}
-
-func (s *holderSyncer) readFieldTranslateReader(rd TranslateEntryReader) {
-	for {
-		var entry TranslateEntry
-		if err := rd.ReadEntry(&entry); err != nil {
-			s.Holder.Logger.Printf("cannot read field translate entry: %s", err)
-			return
-		}
-
-		// Find appropriate store.
-		f := s.Holder.Field(entry.Index, entry.Field)
-		if f == nil {
-			s.Holder.Logger.Printf("field not found: %s/%s", entry.Index, entry.Field)
-			return
-		}
-
-		// Apply replication to store.
-		store := f.TranslateStore()
 		if err := store.ForceSet(entry.ID, entry.Key); err != nil {
 			s.Holder.Logger.Printf("cannot force set field translation data: %d=%q", entry.ID, entry.Key)
 			return
