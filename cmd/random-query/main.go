@@ -398,7 +398,6 @@ func (cfg *RandomQueryConfig) Setup(api API) (err error) {
 
 				cfg.AddIntField(ii.Name, fld.Name, m, x, fld.Options.Scale, fld.Options.Type == "decimal")
 			case "decimal":
-				vv("decimal '%#v'", fld)
 				cfg.AddIntField(ii.Name, fld.Name, fld.Options.Min, fld.Options.Max, fld.Options.Scale, fld.Options.Type == "decimal")
 			default:
 				AlwaysPrintf("ignoring field %q: unhandled type %q\n", fld.Name, fld.Options.Type)
@@ -541,10 +540,6 @@ func (cfg *RandomQueryConfig) GenTree(index string, depth int) (tr *Tree) {
 		numChild = 2
 	case "Distinct":
 		numChild = 1
-		// sometimes do a bare distinct without a filter //TODO (twg) i don't think this is valid
-		//if cfg.Rnd.Intn(10) == 0 {
-		//numChild = 0
-		//	}
 		r = cfg.Rnd.Intn(len(features.Distinctables))
 		tr.Args = append(tr.Args, fmt.Sprintf("field=%s", features.Distinctables[r].Field))
 	}
