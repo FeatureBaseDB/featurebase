@@ -472,11 +472,6 @@ func (cfg *RandomQueryConfig) AddIntField(index, field string, min, max pql.Deci
 func (cfg *RandomQueryConfig) GenQuery(index string) (pql string, err error) {
 
 	tree := cfg.GenTree(index, cfg.TreeDepth)
-	/*
-		if cfg.Verbose {
-			fmt.Printf("%v\n", tree.StringIndent(0))
-		}
-	*/
 	pql = tree.ToPQL()
 
 	// avoid using too much bandwidth, just count the final bitmap.
