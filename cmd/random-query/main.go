@@ -212,15 +212,18 @@ NewSetup:
 		pql, err := cfg.GenQuery(index)
 		panicOn(err)
 
-		if cfg.Verbose {
-			fmt.Printf("pql = '%v'\n", pql)
-		}
-
 		// Query node0.
 		res, err := cli.Query(ctx, index, &pilosa.QueryRequest{Index: index, Query: pql})
+		colorReset := "\033[0m"
 		if err != nil {
-			AlwaysPrintf("QUERY FAILED! queries before this=%v; err = '%v', pql='%v'", loops, err, pql)
-			return err
+			colorRed := "\033[31m"
+			colorCyan := "\033[36m"
+			AlwaysPrintf("\n%vDIFF%v queries before this=%v;\nPQL=%v%v%v\nerr='%v'", colorRed, colorReset, loops, colorCyan, pql, colorReset, err)
+		} else {
+			colorYellow := "\033[33m"
+			if cfg.Verbose {
+				fmt.Printf("pql = %v%v%v\n", colorYellow, pql, colorReset)
+			}
 		}
 		if cfg.VeryVerbose {
 			fmt.Printf("success on pql = '%v'; res='%v'\n", pql, res.Results[0])
@@ -374,9 +377,28 @@ func (cfg *RandomQueryConfig) Setup(api API) (err error) {
 				}
 			case "int":
 				foundIntField = true
-				fallthrough // I bet you thought you'd never see this used
+				minPQL := fmt.Sprintf("Min(field=%v)", fld.Name)
+				resp, err := api.Query(ctx, ii.Name, &pilosa.QueryRequest{Index: ii.Name, Query: minPQL})
+				if err != nil {
+					return err
+				}
+				min := resp.Results[0]
+				maxPQL := fmt.Sprintf("Max(field=%v)", fld.Name)
+				resp, err = api.Query(ctx, ii.Name, &pilosa.QueryRequest{Index: ii.Name, Query: maxPQL})
+				if err != nil {
+					return err
+				}
+				max := resp.Results[0]
+				m := pql.Decimal{}
+				x := pql.Decimal{}
+				m.Scale = fld.Options.Scale
+				m.Value = min.(pilosa.ValCount).Val
+				x.Value = max.(pilosa.ValCount).Val
+				x.Scale = fld.Options.Scale
+
+				cfg.AddIntField(ii.Name, fld.Name, m, x, fld.Options.Scale, fld.Options.Type == "decimal")
 			case "decimal":
-				// we'll ignore row keys and just use value ranges
+				vv("decimal '%#v'", fld)
 				cfg.AddIntField(ii.Name, fld.Name, fld.Options.Min, fld.Options.Max, fld.Options.Scale, fld.Options.Type == "decimal")
 			default:
 				AlwaysPrintf("ignoring field %q: unhandled type %q\n", fld.Name, fld.Options.Type)
@@ -451,10 +473,11 @@ func (cfg *RandomQueryConfig) AddIntField(index, field string, min, max pql.Deci
 func (cfg *RandomQueryConfig) GenQuery(index string) (pql string, err error) {
 
 	tree := cfg.GenTree(index, cfg.TreeDepth)
-
-	if cfg.Verbose {
-		fmt.Printf("%v\n", tree.StringIndent(0))
-	}
+	/*
+		if cfg.Verbose {
+			fmt.Printf("%v\n", tree.StringIndent(0))
+		}
+	*/
 	pql = tree.ToPQL()
 
 	// avoid using too much bandwidth, just count the final bitmap.
@@ -508,18 +531,20 @@ func (cfg *RandomQueryConfig) GenTree(index string, depth int) (tr *Tree) {
 	tr = &Tree{S: f}
 	numChild := 2
 	switch f {
-	case "Union", "Intersect", "Xor":
+	case "Union", "Intersect":
 		numChild = cfg.Rnd.Intn(8) + 2
+	case "Xor":
+		numChild = cfg.Rnd.Intn(2) + 1
 	case "Not":
 		numChild = 1
 	case "Difference":
 		numChild = 2
 	case "Distinct":
 		numChild = 1
-		// sometimes do a bare distinct without a filter
-		if cfg.Rnd.Intn(10) == 0 {
-			numChild = 0
-		}
+		// sometimes do a bare distinct without a filter //TODO (twg) i don't think this is valid
+		//if cfg.Rnd.Intn(10) == 0 {
+		//numChild = 0
+		//	}
 		r = cfg.Rnd.Intn(len(features.Distinctables))
 		tr.Args = append(tr.Args, fmt.Sprintf("field=%s", features.Distinctables[r].Field))
 	}
