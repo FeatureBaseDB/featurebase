@@ -16,20 +16,22 @@ package ctl
 
 import (
 	"bytes"
-	"encoding/hex"
 	"io"
-	"io/ioutil"
-	"math/rand"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"context"
+
+	"github.com/pilosa/pilosa/v2/testhook"
 )
 
 func TestCheckCommand_RunCacheFile(t *testing.T) {
-	cacheFile := TempFileName("test", ".cache")
+	fi, err := testhook.TempFile(t, "test*.cache")
+	if err != nil {
+		t.Fatalf("creating test file: %v", err)
+	}
+	cacheFile := fi.Name()
 
 	rder := []byte{}
 	stdin := bytes.NewReader(rder)
@@ -37,7 +39,7 @@ func TestCheckCommand_RunCacheFile(t *testing.T) {
 	cm := NewCheckCommand(stdin, w, w)
 	cm.Paths = []string{cacheFile}
 
-	err := cm.Run(context.Background())
+	err = cm.Run(context.Background())
 	w.Close()
 	var buf bytes.Buffer
 	if _, err := io.Copy(&buf, r); err != nil {
@@ -50,7 +52,11 @@ func TestCheckCommand_RunCacheFile(t *testing.T) {
 }
 
 func TestCheckCommand_RunSnapshot(t *testing.T) {
-	snapshotFile := TempFileName("test", ".snapshotting")
+	fi, err := testhook.TempFile(t, "test*.snapshotting")
+	if err != nil {
+		t.Fatalf("creating test file: %v", err)
+	}
+	snapshotFile := fi.Name()
 
 	rder := []byte{}
 	stdin := bytes.NewReader(rder)
@@ -58,7 +64,7 @@ func TestCheckCommand_RunSnapshot(t *testing.T) {
 	cm := NewCheckCommand(stdin, w, w)
 	cm.Paths = []string{snapshotFile}
 
-	err := cm.Run(context.Background())
+	err = cm.Run(context.Background())
 	w.Close()
 	var buf bytes.Buffer
 	if _, err := io.Copy(&buf, r); err != nil {
@@ -71,10 +77,11 @@ func TestCheckCommand_RunSnapshot(t *testing.T) {
 }
 
 func TestCheckCommand_Run(t *testing.T) {
-	file, err := ioutil.TempFile("", "")
+	file, err := testhook.TempFile(t, "run-command")
 	if err != nil {
 		t.Fatal(err)
 	}
+	fname := file.Name()
 	if _, err := file.Write([]byte("1234,1223")); err != nil {
 		t.Fatalf("writing to temp file: %v", err)
 	}
@@ -84,7 +91,7 @@ func TestCheckCommand_Run(t *testing.T) {
 	stdin := bytes.NewReader(rder)
 	r, w, _ := os.Pipe()
 	cm := NewCheckCommand(stdin, w, w)
-	cm.Paths = []string{file.Name()}
+	cm.Paths = []string{fname}
 
 	err = cm.Run(context.Background())
 	w.Close()
@@ -98,11 +105,4 @@ func TestCheckCommand_Run(t *testing.T) {
 		t.Fatalf("expect error: '%s...', actual: '%s'", expectedPrefix, err)
 	}
 	//	Todo: need correct roaring file for happy path
-}
-
-// TempFileName generates a temporary filename with extension
-func TempFileName(prefix, suffix string) string {
-	randBytes := make([]byte, 16)
-	rand.Read(randBytes)
-	return filepath.Join(os.TempDir(), prefix+hex.EncodeToString(randBytes)+suffix)
 }

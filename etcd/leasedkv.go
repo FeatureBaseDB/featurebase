@@ -100,7 +100,7 @@ func (l *leasedKV) consumeLease(ch <-chan *clientv3.LeaseKeepAliveResponse) {
 				return
 			}
 
-			if ok := retry(1*time.Second, func() error {
+			if e := retry("consumeLease", 1*time.Second, func() error {
 				kaChann, err := l.create(l.value)
 				if err != nil {
 					return err
@@ -108,13 +108,13 @@ func (l *leasedKV) consumeLease(ch <-chan *clientv3.LeaseKeepAliveResponse) {
 
 				go l.consumeLease(kaChann)
 				return nil
-			}); !ok {
-				log.Println("lease cannot be recreated. Key:", l.key)
+			}); e != nil {
+				log.Printf("lease %q cannot be recreated: %v", l.key, e)
 				l.mu.Unlock()
 				return
 			}
 
-			log.Println("lease recreated after a problem. Key:", l.key)
+			log.Printf("lease %q recreated after a problem", l.key)
 			l.mu.Unlock()
 			return
 		}
@@ -172,20 +172,21 @@ func (l *leasedKV) Get(ctx context.Context) (string, error) {
 	return l.value, nil
 }
 
-func retry(sleep time.Duration, f func() error) bool {
+func retry(desc string, sleep time.Duration, f func() error) (err error) {
 	for {
-		err := f()
-		if err == nil {
-			return true
+		lastErr := f()
+		if lastErr == nil {
+			return lastErr
 		}
-
-		// sometimes the element in charge of stopping the lease renewal doesn't do it, causing context errors.
-		if errors.Is(err, context.DeadlineExceeded) {
-			return false
+		if errors.Is(lastErr, context.DeadlineExceeded) {
+			if err != nil {
+				return err
+			} else {
+				return lastErr
+			}
 		}
-
+		log.Printf("%s: got error %v, retrying", desc, lastErr)
+		err = lastErr
 		time.Sleep(sleep)
-
-		log.Println("retrying after error:", err)
 	}
 }

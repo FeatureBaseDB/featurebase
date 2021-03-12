@@ -32,7 +32,7 @@ import (
 )
 
 func TestDB_Open(t *testing.T) {
-	db := NewDB()
+	db := NewDB(t)
 	if err := db.Open(); err != nil {
 		t.Fatal(err)
 	} else if err := db.Close(); err != nil {

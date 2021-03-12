@@ -18,10 +18,11 @@ import (
 	"bytes"
 	"context"
 	"io"
-	"io/ioutil"
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/pilosa/pilosa/v2/testhook"
 )
 
 func TestInspectCommand_Run(t *testing.T) {
@@ -30,7 +31,7 @@ func TestInspectCommand_Run(t *testing.T) {
 	r, w, _ := os.Pipe()
 
 	cm := NewInspectCommand(stdin, w, w)
-	file, err := ioutil.TempFile("", "inspectTest")
+	file, err := testhook.TempFile(t, "inspectTest")
 	if err != nil {
 		t.Fatalf("Error creating tempfile: %s", err)
 	}
