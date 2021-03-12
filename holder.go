@@ -1478,6 +1478,10 @@ func (h *Holder) logStartup() error {
 	time := time.Now().Format(RFC3339NanoFixedWidth)
 	logLine := fmt.Sprintf("%s\t%s\n", time, Version)
 
+	if err := os.MkdirAll(h.path, 0777); err != nil {
+		return errors.Wrap(err, "creating data directory")
+	}
+
 	f, err := os.OpenFile(h.path+"/startup.log", os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
 	if err != nil {
 		return errors.Wrap(err, "opening startup log")
