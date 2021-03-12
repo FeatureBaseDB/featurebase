@@ -730,6 +730,23 @@ func (f *Field) bitDepth() (uint64, error) {
 	return maxBitDepth, nil
 }
 
+// cacheBitDepth is used by Index.setFieldBitDepths() to updated the in-memory
+// bitDepth values for each field and its bsiGroup.
+func (f *Field) cacheBitDepth(bd uint64) error {
+	// Get the assocated bsiGroup so that its bitDepth can be updated as well.
+	bsig := f.bsiGroup(f.name)
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.options.BitDepth = bd
+	if bsig != nil {
+		bsig.BitDepth = bd
+	}
+
+	return nil
+}
+
 // openViews opens and initializes the views inside the field.
 func (f *Field) openViews() error {
 	view2shards := f.idx.fieldView2shard.getViewsForField(f.name)
