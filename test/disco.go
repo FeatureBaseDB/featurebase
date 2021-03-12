@@ -16,7 +16,6 @@ package test
 
 import (
 	"fmt"
-	"io/ioutil"
 	"net"
 	"strings"
 	"testing"
@@ -121,7 +120,7 @@ func GetPortsGenConfigs(tb testing.TB, nodes []*Command) error {
 }
 
 //GenPortsConfig creates specific configuration for etcd.
-func GenPortsConfig(ports []Ports) []*server.Config {
+func GenPortsConfig(tb testing.TB, ports []Ports) []*server.Config {
 	cfgs := make([]*server.Config, len(ports))
 	clusterURLs := make([]string, len(ports))
 	for i := range cfgs {
@@ -134,7 +133,7 @@ func GenPortsConfig(ports []Ports) []*server.Config {
 		lPeerURL := fmt.Sprintf("http://localhost:%d", portP)
 
 		discoDir := ""
-		if d, err := ioutil.TempDir("", "disco."); err == nil {
+		if d, err := testhook.TempDir(tb, "disco."); err == nil {
 			discoDir = d
 		}
 

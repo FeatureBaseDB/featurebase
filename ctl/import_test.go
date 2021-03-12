@@ -29,6 +29,7 @@ import (
 
 	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/test"
+	"github.com/pilosa/pilosa/v2/testhook"
 )
 
 func TestImportCommand_Validation(t *testing.T) {
@@ -58,7 +59,7 @@ func TestImportCommand_Basic(t *testing.T) {
 		buf := bytes.Buffer{}
 		stdin, stdout, stderr := GetIO(buf)
 		cm := NewImportCommand(stdin, stdout, stderr)
-		file, err := ioutil.TempFile("", "import.csv")
+		file, err := testhook.TempFile(t, "import.csv")
 		if err != nil {
 			t.Fatalf("creating tempfile: %v", err)
 		}
@@ -90,7 +91,7 @@ func TestImportCommand_Basic(t *testing.T) {
 		buf := bytes.Buffer{}
 		stdin, stdout, stderr := GetIO(buf)
 		cm := NewImportCommand(stdin, stdout, stderr)
-		file, err := ioutil.TempFile("", "import.csv")
+		file, err := testhook.TempFile(t, "import.csv")
 		if err != nil {
 			t.Fatalf("creating tempfile: %v", err)
 		}
@@ -123,7 +124,7 @@ func TestImportCommand_RunValue(t *testing.T) {
 		buf := bytes.Buffer{}
 		stdin, stdout, stderr := GetIO(buf)
 		cm := NewImportCommand(stdin, stdout, stderr)
-		file, err := ioutil.TempFile("", "import-value.csv")
+		file, err := testhook.TempFile(t, "import-value.csv")
 		if err != nil {
 			t.Fatalf("creating tempfile: %v", err)
 		}
@@ -162,7 +163,7 @@ func TestImportCommand_RunValue(t *testing.T) {
 		buf := bytes.Buffer{}
 		stdin, stdout, stderr := GetIO(buf)
 		cm := NewImportCommand(stdin, stdout, stderr)
-		file, err := ioutil.TempFile("", "import-value.csv")
+		file, err := testhook.TempFile(t, "import-value.csv")
 		if err != nil {
 			t.Fatalf("creating tempfile: %v", err)
 		}
@@ -207,7 +208,7 @@ func TestImportCommand_RunKeys(t *testing.T) {
 	buf := bytes.Buffer{}
 	stdin, stdout, stderr := GetIO(buf)
 	cm := NewImportCommand(stdin, stdout, stderr)
-	file, err := ioutil.TempFile("", "import-key.csv")
+	file, err := testhook.TempFile(t, "import-key.csv")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -247,7 +248,7 @@ func TestImportCommand_KeyReplication(t *testing.T) {
 	buf := bytes.Buffer{}
 	stdin, stdout, stderr := GetIO(buf)
 	cm := NewImportCommand(stdin, stdout, stderr)
-	file, err := ioutil.TempFile("", "import-key.csv")
+	file, err := testhook.TempFile(t, "import-key.csv")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -327,7 +328,7 @@ func TestImportCommand_RunValueKeys(t *testing.T) {
 	buf := bytes.Buffer{}
 	stdin, stdout, stderr := GetIO(buf)
 	cm := NewImportCommand(stdin, stdout, stderr)
-	file, err := ioutil.TempFile("", "import-key.csv")
+	file, err := testhook.TempFile(t, "import-key.csv")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -373,7 +374,7 @@ func TestImportCommand_InvalidFile(t *testing.T) {
 	cm.Host = cmd.API.Node().URI.HostPort()
 	cm.Index = "i"
 	cm.Field = "f"
-	file, err := ioutil.TempFile("", "import.csv")
+	file, err := testhook.TempFile(t, "import.csv")
 	if err != nil {
 		t.Fatalf("creating tempfile: %v", err)
 	}
@@ -387,7 +388,7 @@ func TestImportCommand_InvalidFile(t *testing.T) {
 		t.Fatalf("expect error: invalid row id on row, actual: %s", err)
 	}
 
-	file, err = ioutil.TempFile("", "import1.csv")
+	file, err = testhook.TempFile(t, "import1.csv")
 	if err != nil {
 		t.Fatalf("creating tempfile: %v", err)
 	}
@@ -401,7 +402,7 @@ func TestImportCommand_InvalidFile(t *testing.T) {
 		t.Fatalf("expect error: invalid column id on row, actual: %s", err)
 	}
 
-	file, err = ioutil.TempFile("", "import1.csv")
+	file, err = testhook.TempFile(t, "import1.csv")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -415,7 +416,7 @@ func TestImportCommand_InvalidFile(t *testing.T) {
 		t.Fatalf("expect error: invalid timestamp on row, actual: %s", err)
 	}
 
-	file, err = ioutil.TempFile("", "import1.csv")
+	file, err = testhook.TempFile(t, "import1.csv")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -458,7 +459,7 @@ func TestImportCommand_BugOverwriteValue(t *testing.T) {
 	buf := bytes.Buffer{}
 	stdin, stdout, stderr := GetIO(buf)
 	cm := NewImportCommand(stdin, stdout, stderr)
-	file, err := ioutil.TempFile("", "import-value.csv")
+	file, err := testhook.TempFile(t, "import-value.csv")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -490,7 +491,7 @@ func TestImportCommand_BugOverwriteValue(t *testing.T) {
 	}
 
 	file.Close()
-	file, err = ioutil.TempFile("", "import-value2.csv")
+	file, err = testhook.TempFile(t, "import-value2.csv")
 	if err != nil {
 		t.Fatalf("Error creating tempfile: %s", err)
 	}
@@ -505,7 +506,7 @@ func TestImportCommand_BugOverwriteValue(t *testing.T) {
 	}
 
 	file.Close()
-	file, err = ioutil.TempFile("", "import-value3.csv")
+	file, err = testhook.TempFile(t, "import-value3.csv")
 	if err != nil {
 		t.Fatalf("Error creating tempfile: %s", err)
 	}
@@ -547,7 +548,7 @@ func TestImportCommand_RunBool(t *testing.T) {
 	cm.Field = "f"
 
 	t.Run("Valid", func(t *testing.T) {
-		file, err := ioutil.TempFile("", "import-bool.csv")
+		file, err := testhook.TempFile(t, "import-bool.csv")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -565,7 +566,7 @@ func TestImportCommand_RunBool(t *testing.T) {
 
 	// Ensure that invalid bool values return an error.
 	t.Run("Invalid", func(t *testing.T) {
-		file, err := ioutil.TempFile("", "import-invalid-bool.csv")
+		file, err := testhook.TempFile(t, "import-invalid-bool.csv")
 		if err != nil {
 			t.Fatal(err)
 		}

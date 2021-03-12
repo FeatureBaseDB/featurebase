@@ -19,7 +19,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sync"
@@ -32,7 +31,6 @@ import (
 	"runtime/pprof"
 )
 
-var _ = ioutil.TempFile
 var _ = pprof.StartCPUProfile
 
 var (

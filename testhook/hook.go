@@ -87,10 +87,25 @@ func TempDir(tb testing.TB, pattern string) (path string, err error) {
 	if err == nil {
 		Cleanup(tb, func() {
 			os.RemoveAll(path)
-			fmt.Println("--- testhook:", path, tb.Name())
+			// fmt.Println("--- testhook: cleaning up dir", path, tb.Name())
 		})
 	}
 	return path, err
+}
+
+// TempFile creates a temp file that will be automatically deleted when
+// this test completes, using go1.14's [TB].Cleanup() if available.
+func TempFile(tb testing.TB, pattern string) (file *os.File, err error) {
+	file, err = ioutil.TempFile("", pattern)
+	if err == nil {
+		path := file.Name()
+		Cleanup(tb, func() {
+			file.Close()
+			os.Remove(path)
+			// fmt.Println("--- testhook: cleaning up file", path, tb.Name())
+		})
+	}
+	return file, err
 }
 
 // TempDirInDir creates a temp directory that will be automatically deleted when
@@ -105,4 +120,20 @@ func TempDirInDir(tb testing.TB, dir string, pattern string) (path string, err e
 		})
 	}
 	return path, err
+}
+
+// TempFileInDir creates a temp file that will be automatically deleted when
+// this test completes, using go1.14's [TB].Cleanup(), but with a specified
+// path instead of the default Go TMPDIR. Only some tests use this, which is
+// possibly an error...
+func TempFileInDir(tb testing.TB, dir string, pattern string) (file *os.File, err error) {
+	file, err = ioutil.TempFile(dir, pattern)
+	if err == nil {
+		path := file.Name()
+		Cleanup(tb, func() {
+			file.Close()
+			os.Remove(path)
+		})
+	}
+	return file, err
 }
