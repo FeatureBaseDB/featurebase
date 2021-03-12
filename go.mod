@@ -16,7 +16,7 @@ require (
 	github.com/glycerine/goconvey v0.0.0-20190410193231-58a59202ab31 // indirect
 	github.com/glycerine/idem v0.0.0-20190127113923-7a8083893311
 	github.com/gogo/protobuf v1.2.1
-	github.com/golang/protobuf v1.4.2
+	github.com/golang/protobuf v1.3.3
 	github.com/google/go-cmp v0.5.2
 	github.com/google/uuid v1.1.4 // indirect
 	github.com/gopherjs/gopherjs v0.0.0-20200217142428-fce0ec30dd00 // indirect
