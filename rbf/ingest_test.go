@@ -16,17 +16,19 @@ package rbf
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"runtime"
 	"runtime/pprof"
 	"strings"
 	"testing"
+
 	//"time"
 
 	"github.com/pilosa/pilosa/v2/rbf/cfg"
 	"github.com/pilosa/pilosa/v2/roaring"
+	"github.com/pilosa/pilosa/v2/testhook"
+
 	// "github.com/pilosa/pilosa/v2/txkey"
 	txkey "github.com/pilosa/pilosa/v2/short_txkey"
 )
@@ -71,7 +73,7 @@ func TestIngest_lots_of_views(t *testing.T) {
 		//vv("m1.TotalAlloc = %v", m1.TotalAlloc)
 	}()
 
-	path, err := ioutil.TempDir("", "rbf_ingest_lots_of_views")
+	path, err := testhook.TempDir(t, "rbf_ingest_lots_of_views")
 	panicOn(err)
 	defer os.Remove(path)
 

@@ -15,7 +15,6 @@
 package pilosa_test
 
 import (
-	"io/ioutil"
 	"os"
 	"reflect"
 	"runtime"
@@ -24,11 +23,12 @@ import (
 
 	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/boltdb"
+	"github.com/pilosa/pilosa/v2/testhook"
 )
 
 // Ensure database can set and retrieve column attributes.
 func TestAttrStore_Attrs(t *testing.T) {
-	s := MustOpenAttrStore()
+	s := MustOpenAttrStore(t)
 	defer s.Close()
 
 	// Set attributes.
@@ -57,7 +57,7 @@ func TestAttrStore_Attrs(t *testing.T) {
 
 // Ensure database returns a non-nil empty map if unset.
 func TestAttrStore_Attrs_Empty(t *testing.T) {
-	s := MustOpenAttrStore()
+	s := MustOpenAttrStore(t)
 	defer s.Close()
 
 	if m, err := s.Attrs(100); err != nil {
@@ -69,7 +69,7 @@ func TestAttrStore_Attrs_Empty(t *testing.T) {
 
 // Ensure database can unset attributes if explicitly set to nil.
 func TestAttrStore_Attrs_Unset(t *testing.T) {
-	s := MustOpenAttrStore()
+	s := MustOpenAttrStore(t)
 	defer s.Close()
 
 	// Set attributes.
@@ -89,7 +89,7 @@ func TestAttrStore_Attrs_Unset(t *testing.T) {
 
 // Ensure attribute block checksums can be returned.
 func TestAttrStore_Blocks(t *testing.T) {
-	s := MustOpenAttrStore()
+	s := MustOpenAttrStore(t)
 	defer s.Close()
 
 	// Set attributes.
@@ -135,19 +135,22 @@ type AttrStore struct {
 }
 
 // NewAttrStore returns a new instance of AttrStore.
-func NewAttrStore(string) pilosa.AttrStore {
-	f, err := ioutil.TempFile("", "pilosa-attr-")
+func NewAttrStore(tb testing.TB) pilosa.AttrStore {
+	f, err := testhook.TempFile(tb, "pilosa-attr-")
 	if err != nil {
 		panic(err)
 	}
+	// Note, even though the file is closed, TempFile will still avoid
+	// creating the same name again if we leave it existing. The boltdb
+	// code may already be deleting this, so the TestHook deletion
+	// may not matter but it's more reliable this way.
 	f.Close()
-	os.Remove(f.Name())
 
 	return &AttrStore{boltdb.NewAttrStore(f.Name())}
 }
 
 func BenchmarkAttrStore_Duplicate(b *testing.B) {
-	s := MustOpenAttrStore()
+	s := MustOpenAttrStore(b)
 	defer s.Close()
 
 	// Set attributes.
@@ -186,8 +189,8 @@ func BenchmarkAttrStore_Duplicate(b *testing.B) {
 }
 
 // MustOpenAttrStore returns a new, opened attribute store at a temporary path. Panic on error.
-func MustOpenAttrStore() pilosa.AttrStore {
-	s := NewAttrStore("")
+func MustOpenAttrStore(tb testing.TB) pilosa.AttrStore {
+	s := NewAttrStore(tb)
 	if err := s.Open(); err != nil {
 		panic(err)
 	}

@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/pilosa/pilosa/v2/cmd"
+	"github.com/pilosa/pilosa/v2/testhook"
 	"github.com/spf13/cobra"
 )
 
@@ -135,7 +136,7 @@ func executeDry(t *testing.T, tests []commandTest) {
 // a temp config file with the cfgFileContent string as its content.
 func (ct *commandTest) setupCommand(t *testing.T) *cobra.Command {
 	// make config file
-	cfgFile, err := ioutil.TempFile("", "")
+	cfgFile, err := testhook.TempFile(t, "cmdconf")
 	failErr(t, err, "making temp file")
 	_, err = cfgFile.WriteString(ct.cfgFileContent)
 	failErr(t, err, "writing config to temp file")
@@ -180,9 +181,9 @@ func TestRootCommand(t *testing.T) {
 }
 
 func TestRootCommand_Config(t *testing.T) {
-	file, err := ioutil.TempFile("", "test.conf")
+	file, err := testhook.TempFile(t, "test.conf")
 	if err != nil {
-		panic(err)
+		t.Fatalf("creating config file: %v", err)
 	}
 	config := `data-dir = "/tmp/pil5_0"
 bind = "127.0.0.1:10101"

@@ -16,12 +16,12 @@ package rbf
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"testing"
 
 	rbfcfg "github.com/pilosa/pilosa/v2/rbf/cfg"
 	"github.com/pilosa/pilosa/v2/roaring"
+	"github.com/pilosa/pilosa/v2/testhook"
 )
 
 // util_test adds reusable utilities for testing.
@@ -144,7 +144,7 @@ func verifyElemNBitN(tx *Tx, lc leafCell) {
 func testHelperMustOpenNewDB(tb testing.TB, cfg ...*rbfcfg.Config) *DB {
 	tb.Helper()
 
-	path, err := ioutil.TempDir("", "")
+	path, err := testhook.TempDir(tb, "rbfdb")
 	if err != nil {
 		panic(err)
 	}
