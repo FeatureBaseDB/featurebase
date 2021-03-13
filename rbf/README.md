@@ -8,7 +8,7 @@ leafs of a b-tree. This allows the bitmap to be efficiently queried & updated.
 ## File Format
 
 The RBF file is divided into equal 8KB pages. Each page after the meta page
-is numbered incrementally from 1 to 1^31.
+is numbered incrementally from 1 to 2^31.
 
 Pages can be one of the following types:
 
@@ -24,6 +24,8 @@ All integer values are little endian encoded.
 
 Every page type except the bitmap page contains the following header:
 
+	[4] page number
+	[4] flags (indicates the type of the page)
 
 ### Meta page
 
