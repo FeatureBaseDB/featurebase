@@ -16,7 +16,6 @@ package pilosa
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -25,6 +24,7 @@ import (
 	"github.com/pilosa/pilosa/v2/rbf"
 	"github.com/pilosa/pilosa/v2/shardwidth"
 	txkey "github.com/pilosa/pilosa/v2/short_txkey"
+	"github.com/pilosa/pilosa/v2/testhook"
 )
 
 // Shard per db evaluation
@@ -70,7 +70,7 @@ func TestShardPerDB_SetBit(t *testing.T) {
 
 // test that we find all *local* shards
 func Test_DBPerShard_GetShardsForIndex_LocalOnly(t *testing.T) {
-	tmpdir, err := ioutil.TempDir("", "Test_DBPerShard_GetShardsForIndex_LocalOnly")
+	tmpdir, err := testhook.TempDir(t, "Test_DBPerShard_GetShardsForIndex_LocalOnly")
 	panicOn(err)
 	defer os.RemoveAll(tmpdir)
 
@@ -324,7 +324,7 @@ func makeTxTestDBWithViewsShards(holder *Holder, idx *Index, exp *FieldView2Shar
 
 // test that rbf can give us a map[view]*shardSet
 func Test_DBPerShard_GetFieldView2Shards_map_from_RBF(t *testing.T) {
-	tmpdir, err := ioutil.TempDir("", "Test_DBPerShard_GetFieldView2Shards_map_from_RBF")
+	tmpdir, err := testhook.TempDir(t, "Test_DBPerShard_GetFieldView2Shards_map_from_RBF")
 	panicOn(err)
 	defer os.RemoveAll(tmpdir)
 

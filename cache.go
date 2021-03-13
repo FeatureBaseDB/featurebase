@@ -369,6 +369,12 @@ type Pair struct {
 	Count uint64 `json:"count"`
 }
 
+func (pair Pair) MarshalJSON() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	_, err := buffer.WriteString(fmt.Sprintf(`{"count":%v,"id":%v,"key":"%v"}`, pair.Count, pair.ID, pair.Key))
+	return buffer.Bytes(), err
+}
+
 // PairField is a Pair with its associated field.
 type PairField struct {
 	Pair  Pair
@@ -561,7 +567,47 @@ func (p *PairsField) ToRows(callback func(*pb.RowResponse) error) error {
 // MarshalJSON marshals PairsField into a JSON-encoded byte slice,
 // excluding `Field`.
 func (p PairsField) MarshalJSON() ([]byte, error) {
-	return json.Marshal(p.Pairs)
+	return json.Marshal(SortedPairs(p.Pairs))
+}
+
+type SortedPairs []Pair
+
+func (sortPair SortedPairs) MarshalJSON() ([]byte, error) {
+	sort.Slice(sortPair, func(i, j int) bool {
+		if sortPair[j].Count == sortPair[i].Count {
+			if sortPair[j].Key != "" {
+				return sortPair[j].Key < sortPair[i].Key
+			}
+			return sortPair[j].ID < sortPair[i].ID
+		}
+		return sortPair[j].Count < sortPair[i].Count
+	})
+	buffer := new(bytes.Buffer)
+	_, err := buffer.Write([]byte("["))
+	if err != nil {
+		return nil, err
+	}
+	for i, pair := range sortPair {
+		jsonValue, err := json.Marshal(pair)
+		if err != nil {
+			return nil, err
+		}
+		if i != 0 {
+			_, err = buffer.Write([]byte(","))
+			if err != nil {
+				return nil, err
+			}
+		}
+		_, err = buffer.Write(jsonValue)
+		if err != nil {
+			return nil, err
+		}
+	}
+	_, err = buffer.Write([]byte("]"))
+	if err != nil {
+		return nil, err
+	}
+	return buffer.Bytes(), nil
 }
 
 // int64Slice represents a sortable slice of int64 numbers.

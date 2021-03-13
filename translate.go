@@ -304,6 +304,18 @@ func (m TranslateOffsetMap) FieldOffset(index, name string) uint64 {
 	return m[index].Fields[name]
 }
 
+// Empty reports whether there are any actual entries in the map. This
+// is distinct from len(m) == 0 in that an entry in this map which is
+// itself empty doesn't count as non-empty.
+func (m TranslateOffsetMap) Empty() bool {
+	for _, sub := range m {
+		if !sub.Empty() {
+			return false
+		}
+	}
+	return true
+}
+
 // SetFieldOffset sets the offset for the given field.
 func (m TranslateOffsetMap) SetFieldOffset(index, name string, offset uint64) {
 	if m[index] == nil {
@@ -315,6 +327,11 @@ func (m TranslateOffsetMap) SetFieldOffset(index, name string, offset uint64) {
 type IndexTranslateOffsetMap struct {
 	Partitions map[int]uint64    `json:"partitions"`
 	Fields     map[string]uint64 `json:"fields"`
+}
+
+// Empty reports whether this map has neither partitions nor fields.
+func (i *IndexTranslateOffsetMap) Empty() bool {
+	return len(i.Partitions) == 0 && len(i.Fields) == 0
 }
 
 func NewIndexTranslateOffsetMap() *IndexTranslateOffsetMap {

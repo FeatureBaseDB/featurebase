@@ -17,8 +17,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
-	"os"
 	"reflect"
 	"strconv"
 	"testing"
@@ -26,13 +24,14 @@ import (
 
 	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/boltdb"
+	"github.com/pilosa/pilosa/v2/testhook"
 	"github.com/pilosa/pilosa/v2/topology"
 )
 
 //var vv = pilosa.VV
 
 func TestTranslateStore_TranslateKey(t *testing.T) {
-	s := MustOpenNewTranslateStore()
+	s := MustOpenNewTranslateStore(t)
 	defer MustCloseTranslateStore(s)
 
 	// Ensure initial key translates to first ID for shard
@@ -57,7 +56,7 @@ func TestTranslateStore_TranslateKey(t *testing.T) {
 }
 
 func TestTranslateStore_TranslateKeys(t *testing.T) {
-	s := MustOpenNewTranslateStore()
+	s := MustOpenNewTranslateStore(t)
 	defer MustCloseTranslateStore(s)
 
 	ids, err := s.TranslateKeys([]string{"abc", "abc"}, true)
@@ -97,7 +96,7 @@ func TestTranslateStore_TranslateKeys(t *testing.T) {
 }
 
 func TestTranslateStore_CreateKeys(t *testing.T) {
-	s := MustOpenNewTranslateStore()
+	s := MustOpenNewTranslateStore(t)
 	defer MustCloseTranslateStore(s)
 
 	ids, err := s.CreateKeys("abc", "abc")
@@ -137,7 +136,7 @@ func TestTranslateStore_CreateKeys(t *testing.T) {
 }
 
 func TestTranslateStore_ReadKey(t *testing.T) {
-	s := MustOpenNewTranslateStore()
+	s := MustOpenNewTranslateStore(t)
 	defer MustCloseTranslateStore(s)
 
 	id, err := s.TranslateKey("foo", false)
@@ -172,7 +171,7 @@ func TestTranslateStore_ReadKey(t *testing.T) {
 }
 
 func TestTranslateStore_ReadKeys(t *testing.T) {
-	s := MustOpenNewTranslateStore()
+	s := MustOpenNewTranslateStore(t)
 	defer MustCloseTranslateStore(s)
 
 	ids, err := s.TranslateKeys([]string{"foo", "bar", "baz", "baz", "bar", "foo"}, false)
@@ -200,7 +199,7 @@ func TestTranslateStore_ReadKeys(t *testing.T) {
 	}
 }
 func TestTranslateStore_TranslateID(t *testing.T) {
-	s := MustOpenNewTranslateStore()
+	s := MustOpenNewTranslateStore(t)
 	defer MustCloseTranslateStore(s)
 
 	// Setup initial keys.
@@ -239,7 +238,7 @@ func TestTranslateStore_TranslateID(t *testing.T) {
 }
 
 func TestTranslateStore_TranslateIDs(t *testing.T) {
-	s := MustOpenNewTranslateStore()
+	s := MustOpenNewTranslateStore(t)
 	defer MustCloseTranslateStore(s)
 
 	// Setup initial keys.
@@ -293,7 +292,7 @@ func TestTranslateStore_FindKeys(t *testing.T) {
 	for _, c := range cases {
 		c := c
 		t.Run(c.name, func(t *testing.T) {
-			s := MustOpenNewTranslateStore()
+			s := MustOpenNewTranslateStore(t)
 			defer MustCloseTranslateStore(s)
 
 			var naiveMap map[string]uint64
@@ -339,7 +338,7 @@ func TestTranslateStore_FindKeys(t *testing.T) {
 }
 
 func TestTranslateStore_MaxID(t *testing.T) {
-	s := MustOpenNewTranslateStore()
+	s := MustOpenNewTranslateStore(t)
 	defer MustCloseTranslateStore(s)
 
 	// Generate a bunch of keys.
@@ -364,7 +363,7 @@ func TestTranslateStore_MaxID(t *testing.T) {
 
 func TestTranslateStore_EntryReader(t *testing.T) {
 	t.Run("OK", func(t *testing.T) {
-		s := MustOpenNewTranslateStore()
+		s := MustOpenNewTranslateStore(t)
 		defer MustCloseTranslateStore(s)
 
 		// Create multiple new keys.
@@ -422,7 +421,7 @@ func TestTranslateStore_EntryReader(t *testing.T) {
 
 	// Ensure reader will read as soon as a new write comes in using WriteNotify().
 	t.Run("WriteNotify", func(t *testing.T) {
-		s := MustOpenNewTranslateStore()
+		s := MustOpenNewTranslateStore(t)
 		defer MustCloseTranslateStore(s)
 
 		// Start reader from initial position.
@@ -465,7 +464,7 @@ func TestTranslateStore_EntryReader(t *testing.T) {
 
 	// Ensure exits read on close.
 	t.Run("Close", func(t *testing.T) {
-		s := MustOpenNewTranslateStore()
+		s := MustOpenNewTranslateStore(t)
 		defer MustCloseTranslateStore(s)
 
 		// Start reader from initial position.
@@ -499,7 +498,7 @@ func TestTranslateStore_EntryReader(t *testing.T) {
 
 	// Ensure exits read on store close.
 	t.Run("StoreClose", func(t *testing.T) {
-		s := MustOpenNewTranslateStore()
+		s := MustOpenNewTranslateStore(t)
 		defer MustCloseTranslateStore(s)
 
 		// Start reader from initial position.
@@ -533,8 +532,8 @@ func TestTranslateStore_EntryReader(t *testing.T) {
 }
 
 // MustNewTranslateStore returns a new TranslateStore with a temporary path.
-func MustNewTranslateStore() *boltdb.TranslateStore {
-	f, err := ioutil.TempFile("", "")
+func MustNewTranslateStore(tb testing.TB) *boltdb.TranslateStore {
+	f, err := testhook.TempFile(tb, "translate-store")
 	if err != nil {
 		panic(err)
 	} else if err := f.Close(); err != nil {
@@ -548,7 +547,7 @@ func MustNewTranslateStore() *boltdb.TranslateStore {
 
 func TestTranslateStore_ReadWrite(t *testing.T) {
 	t.Run("WriteTo_ReadFrom", func(t *testing.T) {
-		s := MustOpenNewTranslateStore()
+		s := MustOpenNewTranslateStore(t)
 		defer MustCloseTranslateStore(s)
 
 		batch0 := []string{}
@@ -612,8 +611,8 @@ func TestTranslateStore_ReadWrite(t *testing.T) {
 }
 
 // MustOpenNewTranslateStore returns a new, opened TranslateStore.
-func MustOpenNewTranslateStore() *boltdb.TranslateStore {
-	s := MustNewTranslateStore()
+func MustOpenNewTranslateStore(tb testing.TB) *boltdb.TranslateStore {
+	s := MustNewTranslateStore(tb)
 	if err := s.Open(); err != nil {
 		panic(err)
 	}
@@ -623,8 +622,6 @@ func MustOpenNewTranslateStore() *boltdb.TranslateStore {
 // MustCloseTranslateStore closes s and removes the underlying data file.
 func MustCloseTranslateStore(s *boltdb.TranslateStore) {
 	if err := s.Close(); err != nil {
-		panic(err)
-	} else if err := os.Remove(s.Path); err != nil {
 		panic(err)
 	}
 }

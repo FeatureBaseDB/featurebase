@@ -17,18 +17,17 @@ package pilosa
 import (
 	"crypto/rand"
 	"io"
-	"io/ioutil"
-	"os"
 	"reflect"
 	"testing"
 	"time"
 
+	"github.com/pilosa/pilosa/v2/testhook"
 	bolt "go.etcd.io/bbolt"
 )
 
 func TestIDAlloc(t *testing.T) {
 	// Acquire a temporary file.
-	f, err := ioutil.TempFile("", "")
+	f, err := testhook.TempFile(t, "idalloc")
 	if err != nil {
 		t.Errorf("acquiring temporary file: %v", err)
 		return
@@ -42,10 +41,6 @@ func TestIDAlloc(t *testing.T) {
 
 	// Open bolt.
 	db, err := bolt.Open(f.Name(), 0666, &bolt.Options{Timeout: 1 * time.Second})
-	if rerr := os.Remove(f.Name()); rerr != nil {
-		t.Errorf("removing temporary file: %v", rerr)
-		return
-	}
 	if err != nil {
 		t.Errorf("opening bolt: %v", err)
 		return

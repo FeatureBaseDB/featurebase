@@ -284,15 +284,21 @@ func (tx *RBFTx) addOrRemove(index, field, view string, shard uint64, batched, r
 				// not first time through, write what we got.
 				if remove && (rc == nil || rc.N() == 0) {
 					err = tx.RemoveContainer(index, field, view, shard, lastHi)
-					panicOn(err)
+					if err != nil {
+						return 0, errors.Wrap(err, "failed to remove container")
+					}
 				} else {
 					err = tx.PutContainer(index, field, view, shard, lastHi, rc)
-					panicOn(err)
+					if err != nil {
+						return 0, errors.Wrap(err, "failed to put container")
+					}
 				}
 			}
 			// get the next container
 			rc, err = tx.Container(index, field, view, shard, hi)
-			panicOn(err)
+			if err != nil {
+				return 0, errors.Wrap(err, "failed to retrieve container")
+			}
 		} // else same container, keep adding bits to rct.
 		chng := false
 		// rc can be nil before, and nil after, in both Remove/Add below.
@@ -311,17 +317,23 @@ func (tx *RBFTx) addOrRemove(index, field, view string, shard uint64, batched, r
 	if remove {
 		if rc == nil || rc.N() == 0 {
 			err = tx.RemoveContainer(index, field, view, shard, hi)
-			panicOn(err)
+			if err != nil {
+				return 0, errors.Wrap(err, "failed to remove container")
+			}
 		} else {
 			err = tx.PutContainer(index, field, view, shard, hi, rc)
-			panicOn(err)
+			if err != nil {
+				return 0, errors.Wrap(err, "failed to put container")
+			}
 		}
 	} else {
 		if rc == nil || rc.N() == 0 {
 			panic("there should be no way to have an empty bitmap AFTER an Add() operation")
 		}
 		err = tx.PutContainer(index, field, view, shard, hi, rc)
-		panicOn(err)
+		if err != nil {
+			return 0, errors.Wrap(err, "failed to put container")
+		}
 	}
 	return
 }

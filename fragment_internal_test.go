@@ -3166,7 +3166,7 @@ func BenchmarkImportIntoLargeFragment(b *testing.B) {
 		if err != nil {
 			b.Fatalf("opening frag file: %v", err)
 		}
-		fi, err := ioutil.TempFile(*TempDir, "")
+		fi, err := testhook.TempFileInDir(b, *TempDir, "")
 		if err != nil {
 			b.Fatalf("getting temp file: %v", err)
 		}
@@ -3216,7 +3216,7 @@ func BenchmarkImportRoaringIntoLargeFragment(b *testing.B) {
 		if err != nil {
 			b.Fatalf("opening frag file: %v", err)
 		}
-		fi, err := ioutil.TempFile(*TempDir, "")
+		fi, err := testhook.TempFileInDir(b, *TempDir, "")
 		if err != nil {
 			b.Fatalf("getting temp file: %v", err)
 		}
@@ -3472,6 +3472,10 @@ func BenchmarkFileWrite(b *testing.B) {
 		b.Run(fmt.Sprintf("Rows%d", numRows), func(b *testing.B) {
 			b.StopTimer()
 			for i := 0; i < b.N; i++ {
+				// DO NOT CONVERT THIS ONE TO USE TESTHOOK.
+				// We're deleting these files as we go because
+				// otherwise the benchmark could fill up
+				// $TMPDIR before it finishes running.
 				f, err := ioutil.TempFile(*TempDir, "")
 				if err != nil {
 					b.Fatalf("getting temp file: %v", err)
@@ -3479,14 +3483,17 @@ func BenchmarkFileWrite(b *testing.B) {
 				b.StartTimer()
 				_, err = f.Write(data)
 				if err != nil {
+					os.Remove(f.Name())
 					b.Fatal(err)
 				}
 				err = f.Sync()
 				if err != nil {
+					os.Remove(f.Name())
 					b.Fatal(err)
 				}
 				err = f.Close()
 				if err != nil {
+					os.Remove(f.Name())
 					b.Fatal(err)
 				}
 				b.StopTimer()
