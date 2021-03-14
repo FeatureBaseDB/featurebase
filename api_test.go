@@ -16,6 +16,7 @@ package pilosa_test
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
 	"math"
 	"reflect"
@@ -624,5 +625,47 @@ func TestAPI_ClearFlagForImportAndImportValues(t *testing.T) {
 	bal = queryAcct(m0api, acctOwnerID, fieldAcct0, index)
 	if bal != 0 {
 		panic(fmt.Sprintf("expected %v, observed %v starting acct0 balance", acct0bal, 0))
+	}
+}
+
+func TestAPI_IDAlloc(t *testing.T) {
+	c := test.MustRunCluster(t, 3)
+	defer c.Close()
+
+	primary := c.GetPrimary().API
+
+	key := pilosa.IDAllocKey{
+		Index: "index",
+		Key:   "key",
+	}
+	var session [32]byte
+	_, err := rand.Read(session[:])
+	if err != nil {
+		t.Fatalf("obtaining random bytes: %v", err)
+	}
+
+	const toReserve = 2
+
+	ids, err := primary.ReserveIDs(key, session, ^uint64(0), toReserve)
+	if err != nil {
+		t.Fatalf("reserving IDs: %v", err)
+	}
+
+	var numIds uint64
+	for _, idr := range ids {
+		numIds += (idr.Last - idr.First) + 1
+	}
+	if numIds != toReserve {
+		t.Errorf("expected %d ids but got %d: %v", toReserve, numIds, ids)
+	}
+
+	err = primary.CommitIDs(key, session, numIds)
+	if err != nil {
+		t.Fatalf("committing IDs: %v", err)
+	}
+
+	err = primary.ResetIDAlloc(key.Index)
+	if err != nil {
+		t.Fatalf("resetting ID alloc: %v", err)
 	}
 }

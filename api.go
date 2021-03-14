@@ -2174,10 +2174,10 @@ func (api *API) ReserveIDs(key IDAllocKey, session [32]byte, offset uint64, coun
 	snap := topology.NewClusterSnapshot(api.cluster.noder, api.cluster.Hasher, api.cluster.ReplicaN)
 
 	if !snap.IsPrimaryFieldTranslationNode(api.NodeID()) {
-		return api.holder.ida.reserve(key, session, offset, count)
+		return nil, errors.New("cannot reserve IDs on a non-primary node")
 	}
 
-	return nil, errors.New("cannot reserve IDs on a non-primary node")
+	return api.holder.ida.reserve(key, session, offset, count)
 }
 
 func (api *API) CommitIDs(key IDAllocKey, session [32]byte, count uint64) error {
@@ -2189,10 +2189,10 @@ func (api *API) CommitIDs(key IDAllocKey, session [32]byte, count uint64) error 
 	snap := topology.NewClusterSnapshot(api.cluster.noder, api.cluster.Hasher, api.cluster.ReplicaN)
 
 	if !snap.IsPrimaryFieldTranslationNode(api.NodeID()) {
-		return api.holder.ida.commit(key, session, count)
+		return errors.New("cannot commit IDs on a non-primary node")
 	}
 
-	return errors.New("cannot commit IDs on a non-primary node")
+	return api.holder.ida.commit(key, session, count)
 }
 
 func (api *API) ResetIDAlloc(index string) error {
@@ -2204,10 +2204,10 @@ func (api *API) ResetIDAlloc(index string) error {
 	snap := topology.NewClusterSnapshot(api.cluster.noder, api.cluster.Hasher, api.cluster.ReplicaN)
 
 	if !snap.IsPrimaryFieldTranslationNode(api.NodeID()) {
-		return api.holder.ida.reset(index)
+		return errors.New("cannot reset IDs on a non-primary node")
 	}
 
-	return errors.New("cannot reset IDs on a non-primary node")
+	return api.holder.ida.reset(index)
 }
 
 // TranslateIndexDB is an internal function to load the index keys database
@@ -2351,4 +2351,7 @@ var methodsNormal = map[apiMethod]struct{}{
 	apiGetTransaction:       {},
 	apiActiveQueries:        {},
 	apiPastQueries:          {},
+	apiIDReserve:            {},
+	apiIDCommit:             {},
+	apiIDReset:              {},
 }
