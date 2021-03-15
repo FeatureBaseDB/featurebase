@@ -950,6 +950,16 @@ func TestField_SaveMeta(t *testing.T) {
 		t.Fatalf("expected BitDepth after set to be: %d, got: %d", expBitDepth, f.options.BitDepth)
 	}
 
+	tx2 := f.idx.holder.txf.NewTx(Txo{Index: f.idx, Field: f.Field, Shard: 0})
+	defer tx2.Rollback()
+	if rslt, ok, err := f.Value(tx2, colID); err != nil {
+		t.Fatal(err)
+	} else if !ok {
+		t.Fatal("expected Value() to return exists = true")
+	} else if rslt != val {
+		t.Fatalf("expected value to be: %d, got: %d", val, rslt)
+	}
+
 	// Reload field and verify that it is persisted.
 	if err := f.Reopen(); err != nil {
 		t.Fatal(err)
@@ -957,5 +967,15 @@ func TestField_SaveMeta(t *testing.T) {
 
 	if f.options.BitDepth != expBitDepth {
 		t.Fatalf("expected BitDepth after reopen to be: %d, got: %d", expBitDepth, f.options.BitDepth)
+	}
+
+	tx3 := f.idx.holder.txf.NewTx(Txo{Index: f.idx, Field: f.Field, Shard: 0})
+	defer tx3.Rollback()
+	if rslt, ok, err := f.Value(tx3, colID); err != nil {
+		t.Fatal(err)
+	} else if !ok {
+		t.Fatal("expected Value() after reopen to return exists = true")
+	} else if rslt != val {
+		t.Fatalf("expected value after reopen to be: %d, got: %d", val, rslt)
 	}
 }

@@ -438,9 +438,9 @@ func (i *Index) setFieldBitDepths() error {
 		if err != nil {
 			return errors.Wrapf(err, "getting bit depth for field: %s", name)
 		}
-		f.mu.Lock()
-		f.options.BitDepth = bd
-		f.mu.Unlock()
+		if err := f.cacheBitDepth(bd); err != nil {
+			return errors.Wrapf(err, "caching field bitDepth: %d", bd)
+		}
 	}
 	return nil
 }
