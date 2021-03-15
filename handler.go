@@ -16,7 +16,6 @@ package pilosa
 
 import (
 	"encoding/json"
-	"sort"
 
 	"github.com/pilosa/pilosa/v2/tracing"
 	"github.com/pkg/errors"
@@ -97,56 +96,6 @@ func (resp *QueryResponse) MarshalJSON() ([]byte, error) {
 		ColumnAttrSets: resp.ColumnAttrSets,
 		Profile:        resp.Profile,
 	})
-}
-
-// used in the oracle, orders keys lexigraphically
-func (resp *QueryResponse) Equals(other *QueryResponse) bool {
-	other.Sort()
-	resp.Sort()
-
-	a, err := resp.MarshalJSON()
-	panicOn(err)
-	b, err := other.MarshalJSON()
-	panicOn(err)
-	return string(a) == string(b)
-
-}
-
-// SortIfIsRowIdentifiers forces a certain order of rowkeys so that the sauron
-// tool gets comparable results
-func SortIfIsRowIdentifiers(i interface{}) (bool, interface{}) {
-	if m, ok := i.(map[string]interface{}); ok {
-		it, ok := m["keys"]
-		if ok {
-			items := it.([]interface{})
-			if len(items) > 0 {
-				sort.Slice(items, func(p, q int) bool {
-					return items[p].(string) < items[q].(string)
-				})
-				return true, items
-				//return true, ToGenericArray(sitems)
-			}
-		}
-
-	}
-	return false, nil
-}
-
-// TODO (twg) probably going to get fancy here but hardcode to test idea
-func (resp *QueryResponse) Sort() bool {
-	modified := false
-	if resp == nil || resp.Results == nil {
-		return false
-	}
-	for i, result := range resp.Results {
-		sorted, results := SortIfIsRowIdentifiers(result)
-		if sorted {
-			resp.Results[i] = results
-			modified = true
-		}
-	}
-
-	return modified
 }
 
 // Handler is the interface for the data handler, a wrapper around
