@@ -1125,12 +1125,9 @@ func (e *executor) executeSum(ctx context.Context, qcx *Qcx, index string, c *pq
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeSum")
 	defer span.Finish()
 
-	fieldName := c.ArgString("field")
-	if fieldName == "" {
-		fieldName = c.ArgString("_field")
-	}
-	if fieldName == "" {
-		return ValCount{}, errors.New("Sum(): field required")
+	fieldName, err := c.FirstStringArg("field", "_field")
+	if err != nil {
+		return ValCount{}, errors.Wrap(err, "Sum(): field required")
 	}
 
 	if len(c.Children) > 1 {
@@ -1233,12 +1230,8 @@ func (e *executor) executeMin(ctx context.Context, qcx *Qcx, index string, c *pq
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeMin")
 	defer span.Finish()
 
-	field := c.Args["field"]
-	if field == "" {
-		field = c.ArgString("_field")
-	}
-	if field == "" {
-		return ValCount{}, errors.New("Min(): field required")
+	if _, err := c.FirstStringArg("field", "_field"); err != nil {
+		return ValCount{}, errors.Wrap(err, "Min(): field required")
 	}
 
 	if len(c.Children) > 1 {
@@ -1273,12 +1266,8 @@ func (e *executor) executeMax(ctx context.Context, qcx *Qcx, index string, c *pq
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeMax")
 	defer span.Finish()
 
-	field := c.ArgString("field")
-	if field == "" {
-		field = c.ArgString("_field")
-	}
-	if field == "" {
-		return ValCount{}, errors.New("Max(): field required")
+	if _, err := c.FirstStringArg("field", "_field"); err != nil {
+		return ValCount{}, errors.Wrap(err, "Max(): field required")
 	}
 
 	if len(c.Children) > 1 {
@@ -1901,12 +1890,9 @@ func (e *executor) executeSumCountShard(ctx context.Context, qcx *Qcx, index str
 		filter = row
 	}
 
-	fieldName := c.ArgString("field")
-	if fieldName == "" {
-		fieldName = c.ArgString("_field")
-	}
-	if fieldName == "" {
-		return ValCount{}, errors.New("Sum(): field required")
+	fieldName, err := c.FirstStringArg("field", "_field")
+	if err != nil {
+		return ValCount{}, errors.Wrap(err, "Sum(): field required")
 	}
 
 	field := e.Holder.Field(index, fieldName)
@@ -1958,12 +1944,9 @@ func (e *executor) executeMinShard(ctx context.Context, qcx *Qcx, index string, 
 		filter = row
 	}
 
-	fieldName, ok := c.Args["field"].(string)
-	if !ok || fieldName == "" {
-		fieldName = c.ArgString("_field")
-	}
-	if fieldName == "" {
-		return ValCount{}, errors.New("Min(): field required")
+	fieldName, err := c.FirstStringArg("field", "_field")
+	if err != nil {
+		return ValCount{}, errors.Wrap(err, "Min(): field required")
 	}
 
 	field := e.Holder.Field(index, fieldName)
@@ -1993,12 +1976,9 @@ func (e *executor) executeMaxShard(ctx context.Context, qcx *Qcx, index string, 
 		filter = row
 	}
 
-	fieldName := c.ArgString("field")
-	if fieldName == "" {
-		fieldName = c.ArgString("_field")
-	}
-	if fieldName == "" {
-		return ValCount{}, errors.New("Max(): field required")
+	fieldName, err := c.FirstStringArg("field", "_field")
+	if err != nil {
+		return ValCount{}, errors.Wrap(err, "Max(): field required")
 	}
 
 	field := e.Holder.Field(index, fieldName)

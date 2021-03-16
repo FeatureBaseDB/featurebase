@@ -723,6 +723,21 @@ func (c *Call) StringArg(key string) (string, bool, error) {
 	}
 }
 
+func (c *Call) FirstStringArg(keys ...string) (string, error) {
+	for _, k := range keys {
+		val, ok, err := c.StringArg(k)
+		if err != nil {
+			return "", err
+		}
+		if !ok {
+			continue
+		}
+		return val, nil
+	}
+
+	return "", fmt.Errorf("keys: %v not found", keys)
+}
+
 // CallArg is for reading the value at key from call.Args as a Call. If the
 // key is not in Call.Args, the value of the returned value will be nil, and
 // the error will be nil. An error is returned if the value is not a Call.
