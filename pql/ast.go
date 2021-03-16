@@ -335,7 +335,8 @@ var stringOrInt64 stringOrInt64Type
 var allowField = callInfo{
 	allowUnknown: false,
 	prototypes: map[string]interface{}{
-		"field": "",
+		"_field": "",
+		"field":  "",
 	},
 }
 
