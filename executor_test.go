@@ -587,7 +587,7 @@ func TestExecutor_Execute_Set(t *testing.T) {
 		})
 
 		t.Run("ErrInvalidRowValueType", func(t *testing.T) {
-			if _, err := cmd.API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(2, f="bar")`}); err == nil || !hasCause(err, pilosa.ErrTranslatingKeyNotFound) || !strings.Contains(err.Error(), "field is not keyed") {
+			if _, err := cmd.API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(2, f="bar")`}); err == nil || !strings.Contains(err.Error(), "cannot create keys on unkeyed field") {
 				t.Fatal(err)
 			}
 		})
@@ -990,24 +990,11 @@ func TestExecutor_Execute_SetValue(t *testing.T) {
 		})
 
 		t.Run("InvalidBSIGroupValueType", func(t *testing.T) {
-			if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(10, f="hello")`}); err == nil || !hasCause(err, pilosa.ErrTranslatingKeyNotFound) || !strings.Contains(err.Error(), "field is not keyed") {
+			if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(10, f="hello")`}); err == nil || !strings.Contains(err.Error(), "cannot create keys on unkeyed field") {
 				t.Fatalf("unexpected error: %s", err)
 			}
 		})
 	})
-}
-
-func hasCause(err, cause error) bool {
-	for err != cause {
-		innerErr := errors.Cause(err)
-		if innerErr == err {
-			// This is the innermost accessible error, and it does not have that cause.
-			return false
-		}
-		err = innerErr
-	}
-
-	return true
 }
 
 // Ensure a SetRowAttrs() query can be executed.
