@@ -335,7 +335,8 @@ var stringOrInt64 stringOrInt64Type
 var allowField = callInfo{
 	allowUnknown: false,
 	prototypes: map[string]interface{}{
-		"field": "",
+		"_field": "",
+		"field":  "",
 	},
 }
 
@@ -720,6 +721,21 @@ func (c *Call) StringArg(key string) (string, bool, error) {
 	default:
 		return "", true, fmt.Errorf("unexpected type %T in StringArg, val %v", tval, tval)
 	}
+}
+
+func (c *Call) FirstStringArg(keys ...string) (string, error) {
+	for _, k := range keys {
+		val, ok, err := c.StringArg(k)
+		if err != nil {
+			return "", err
+		}
+		if !ok {
+			continue
+		}
+		return val, nil
+	}
+
+	return "", fmt.Errorf("keys: %v not found", keys)
 }
 
 // CallArg is for reading the value at key from call.Args as a Call. If the

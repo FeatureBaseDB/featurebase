@@ -879,6 +879,70 @@ func TestTranslation_Cluster_CreateFind(t *testing.T) {
 	})
 }
 
+func TestTranslation_Cluster_CreateFindUnkeyed(t *testing.T) {
+	c := test.MustRunCluster(t, 3)
+	defer c.Close()
+
+	c.CreateField(t, "i", pilosa.IndexOptions{}, "f")
+
+	t.Run("Index", func(t *testing.T) {
+		t.Run("Create", func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			_, err := c.GetNonPrimary().API.CreateIndexKeys(ctx, "i", "foo")
+			if err == nil {
+				t.Fatal("unexpected success")
+			}
+			expect := `cannot create keys on unkeyed index "i"`
+			if got := err.Error(); got != expect {
+				t.Fatalf("expected error %q but got %q", expect, got)
+			}
+		})
+		t.Run("Find", func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			_, err := c.GetNonPrimary().API.FindIndexKeys(ctx, "i", "foo")
+			if err == nil {
+				t.Fatal("unexpected success")
+			}
+			expect := `cannot find keys on unkeyed index "i"`
+			if got := err.Error(); got != expect {
+				t.Fatalf("expected error %q but got %q", expect, got)
+			}
+		})
+	})
+	t.Run("Field", func(t *testing.T) {
+		t.Run("Create", func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			_, err := c.GetNonPrimary().API.CreateFieldKeys(ctx, "i", "f", "foo")
+			if err == nil {
+				t.Fatal("unexpected success")
+			}
+			expect := `cannot create keys on unkeyed field "f"`
+			if got := err.Error(); got != expect {
+				t.Fatalf("expected error %q but got %q", expect, got)
+			}
+		})
+		t.Run("Find", func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			_, err := c.GetNonPrimary().API.FindFieldKeys(ctx, "i", "f", "foo")
+			if err == nil {
+				t.Fatal("unexpected success")
+			}
+			expect := `cannot find keys on unkeyed field "f"`
+			if got := err.Error(); got != expect {
+				t.Fatalf("expected error %q but got %q", expect, got)
+			}
+		})
+	})
+}
+
 func compareTranslations(expected, got map[string]uint64) error {
 	for key, id := range got {
 		if realID, ok := expected[key]; !ok {

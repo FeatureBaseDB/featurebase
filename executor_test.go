@@ -587,7 +587,7 @@ func TestExecutor_Execute_Set(t *testing.T) {
 		})
 
 		t.Run("ErrInvalidRowValueType", func(t *testing.T) {
-			if _, err := cmd.API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(2, f="bar")`}); err == nil || !hasCause(err, pilosa.ErrTranslatingKeyNotFound) || !strings.Contains(err.Error(), "field is not keyed") {
+			if _, err := cmd.API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(2, f="bar")`}); err == nil || !strings.Contains(err.Error(), "cannot create keys on unkeyed field") {
 				t.Fatal(err)
 			}
 		})
@@ -990,24 +990,11 @@ func TestExecutor_Execute_SetValue(t *testing.T) {
 		})
 
 		t.Run("InvalidBSIGroupValueType", func(t *testing.T) {
-			if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(10, f="hello")`}); err == nil || !hasCause(err, pilosa.ErrTranslatingKeyNotFound) || !strings.Contains(err.Error(), "field is not keyed") {
+			if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(10, f="hello")`}); err == nil || !strings.Contains(err.Error(), "cannot create keys on unkeyed field") {
 				t.Fatalf("unexpected error: %s", err)
 			}
 		})
 	})
-}
-
-func hasCause(err, cause error) bool {
-	for err != cause {
-		innerErr := errors.Cause(err)
-		if innerErr == err {
-			// This is the innermost accessible error, and it does not have that cause.
-			return false
-		}
-		err = innerErr
-	}
-
-	return true
 }
 
 // Ensure a SetRowAttrs() query can be executed.
@@ -1581,6 +1568,42 @@ func TestExecutor_Execute_MinMax(t *testing.T) {
 							t.Fatalf("unexpected max result, test %d: %s", i, spew.Sdump(result))
 						}
 					})
+
+					t.Run("Min", func(t *testing.T) {
+						pql = fmt.Sprintf(`Min(field="%s")`, fld)
+						if result, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: pql}); err != nil {
+							t.Fatal(err)
+						} else if !reflect.DeepEqual(result.Results[0], pilosa.ValCount{Val: test.set, Count: 1}) {
+							t.Fatalf("unexpected min result, test %d: %s", i, spew.Sdump(result))
+						}
+					})
+
+					t.Run("Max", func(t *testing.T) {
+						pql = fmt.Sprintf(`Max(field="%s")`, fld)
+						if result, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: pql}); err != nil {
+							t.Fatal(err)
+						} else if !reflect.DeepEqual(result.Results[0], pilosa.ValCount{Val: test.set, Count: 1}) {
+							t.Fatalf("unexpected max result, test %d: %s", i, spew.Sdump(result))
+						}
+					})
+
+					t.Run("Min", func(t *testing.T) {
+						pql = fmt.Sprintf(`Min(%s)`, fld)
+						if result, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: pql}); err != nil {
+							t.Fatal(err)
+						} else if !reflect.DeepEqual(result.Results[0], pilosa.ValCount{Val: test.set, Count: 1}) {
+							t.Fatalf("unexpected min result, test %d: %s", i, spew.Sdump(result))
+						}
+					})
+
+					t.Run("Max", func(t *testing.T) {
+						pql = fmt.Sprintf(`Max(%s)`, fld)
+						if result, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: pql}); err != nil {
+							t.Fatal(err)
+						} else if !reflect.DeepEqual(result.Results[0], pilosa.ValCount{Val: test.set, Count: 1}) {
+							t.Fatalf("unexpected max result, test %d: %s", i, spew.Sdump(result))
+						}
+					})
 				})
 			}
 		})
@@ -1689,6 +1712,24 @@ func TestExecutor_Execute_MinMax(t *testing.T) {
 
 					t.Run("Max", func(t *testing.T) {
 						pql = fmt.Sprintf(`Max(field=%s)`, fld)
+						if result, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: pql}); err != nil {
+							t.Fatal(err)
+						} else if !reflect.DeepEqual(result.Results[0], pilosa.ValCount{DecimalVal: &test.exp, Count: 1}) {
+							t.Fatalf("unexpected max result, test %d: %s", i, spew.Sdump(result))
+						}
+					})
+
+					t.Run("Min", func(t *testing.T) {
+						pql = fmt.Sprintf(`Min(%s)`, fld)
+						if result, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: pql}); err != nil {
+							t.Fatal(err)
+						} else if !reflect.DeepEqual(result.Results[0], pilosa.ValCount{DecimalVal: &test.exp, Count: 1}) {
+							t.Fatalf("unexpected min result, test %d: %s", i, spew.Sdump(result))
+						}
+					})
+
+					t.Run("Max", func(t *testing.T) {
+						pql = fmt.Sprintf(`Max(%s)`, fld)
 						if result, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: pql}); err != nil {
 							t.Fatal(err)
 						} else if !reflect.DeepEqual(result.Results[0], pilosa.ValCount{DecimalVal: &test.exp, Count: 1}) {
@@ -2024,8 +2065,32 @@ func TestExecutor_Execute_Sum(t *testing.T) {
 				}
 			})
 
+			t.Run("NoFilter", func(t *testing.T) {
+				if result, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Sum(field="foo")`}); err != nil {
+					t.Fatal(err)
+				} else if !reflect.DeepEqual(result.Results[0], pilosa.ValCount{Val: 200, Count: 5}) {
+					t.Fatalf("unexpected result: %s", spew.Sdump(result))
+				}
+			})
+
+			t.Run("NoFilter", func(t *testing.T) {
+				if result, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Sum(foo)`}); err != nil {
+					t.Fatal(err)
+				} else if !reflect.DeepEqual(result.Results[0], pilosa.ValCount{Val: 200, Count: 5}) {
+					t.Fatalf("unexpected result: %s", spew.Sdump(result))
+				}
+			})
+
 			t.Run("WithFilter", func(t *testing.T) {
 				if result, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Sum(Row(x=0), field=foo)`}); err != nil {
+					t.Fatal(err)
+				} else if !reflect.DeepEqual(result.Results[0], pilosa.ValCount{Val: 80, Count: 2}) {
+					t.Fatalf("unexpected result: %s", spew.Sdump(result))
+				}
+			})
+
+			t.Run("WithFilter", func(t *testing.T) {
+				if result, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Sum(foo, Row(x=0))`}); err != nil {
 					t.Fatal(err)
 				} else if !reflect.DeepEqual(result.Results[0], pilosa.ValCount{Val: 80, Count: 2}) {
 					t.Fatalf("unexpected result: %s", spew.Sdump(result))
@@ -2049,6 +2114,23 @@ func TestExecutor_Execute_Sum(t *testing.T) {
 					t.Fatalf("unexpected result: %s", spew.Sdump(result))
 				}
 			})
+
+			t.Run("NoFilter", func(t *testing.T) {
+				if result, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Sum(dec)`}); err != nil {
+					t.Fatal(err)
+				} else if !reflect.DeepEqual(result.Results[0], pilosa.ValCount{DecimalVal: &pql.Decimal{Value: 700007, Scale: 3}, Count: 3}) {
+					t.Fatalf("unexpected result: %s", spew.Sdump(result))
+				}
+			})
+
+			t.Run("WithFilter", func(t *testing.T) {
+				if result, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Sum(dec, Row(x=0))`}); err != nil {
+					t.Fatal(err)
+				} else if !reflect.DeepEqual(result.Results[0], pilosa.ValCount{DecimalVal: &pql.Decimal{Value: 500005, Scale: 3}, Count: 2}) {
+					t.Fatalf("unexpected result: %s", spew.Sdump(result))
+				}
+			})
+
 		})
 	})
 

@@ -712,11 +712,56 @@ func TestPQLDeepEquality(t *testing.T) {
 			}},
 		{
 			name: "Sum",
+			call: "Sum(f)",
+			exp: &Call{
+				Name: "Sum",
+				Args: map[string]interface{}{
+					"_field": "f",
+				},
+			}},
+		{
+			name: "Sum",
 			call: "Sum(field=f)",
 			exp: &Call{
 				Name: "Sum",
 				Args: map[string]interface{}{
-					"field": "f",
+					"_field": "f",
+				},
+			}},
+		{
+			name: "Max",
+			call: "Max(f)",
+			exp: &Call{
+				Name: "Max",
+				Args: map[string]interface{}{
+					"_field": "f",
+				},
+			}},
+		{
+			name: "Max",
+			call: "Max(field=f)",
+			exp: &Call{
+				Name: "Max",
+				Args: map[string]interface{}{
+					"_field": "f",
+				},
+			}},
+		{
+			name: "Min",
+			call: "Min(f)",
+			exp: &Call{
+				Name: "Min",
+				Args: map[string]interface{}{
+					"_field": "f",
+				},
+			}},
+		{
+			name: "Min",
+			call: "Min(field=f)",
+			exp: &Call{
+				Name: "Min",
+				Args: map[string]interface{}{
+					"_field": "f",
 				},
 			}},
 		{
@@ -735,6 +780,18 @@ func TestPQLDeepEquality(t *testing.T) {
 				Name: "Sum",
 				Args: map[string]interface{}{
 					"field": "f",
+				},
+				Children: []*Call{
+					{Name: "Row"},
+				},
+			}},
+		{
+			name: "SumChild",
+			call: "Sum(f, Row())",
+			exp: &Call{
+				Name: "Sum",
+				Args: map[string]interface{}{
+					"_field": "f",
 				},
 				Children: []*Call{
 					{Name: "Row"},

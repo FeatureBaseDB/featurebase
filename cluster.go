@@ -1356,9 +1356,8 @@ func (c *cluster) findFieldKeys(ctx context.Context, field *Field, keys ...strin
 		// Therefore, the field keys are actually column keys on a different index.
 		return c.findIndexKeys(ctx, idx, keys...)
 	}
-
 	if !field.Keys() {
-		return nil, errors.Wrap(ErrTranslatingKeyNotFound, "field is not keyed")
+		return nil, errors.Errorf("cannot find keys on unkeyed field %q", field.Name())
 	}
 
 	// Attempt to find the keys locally.
@@ -1421,7 +1420,7 @@ func (c *cluster) createFieldKeys(ctx context.Context, field *Field, keys ...str
 	}
 
 	if !field.Keys() {
-		return nil, errors.Wrap(ErrTranslatingKeyNotFound, "field is not keyed")
+		return nil, errors.Errorf("cannot create keys on unkeyed field %q", field.Name())
 	}
 
 	// The primary is the only node that can create field keys, since it owns the authoritative copy.
@@ -1621,6 +1620,9 @@ func (c *cluster) findIndexKeys(ctx context.Context, indexName string, keys ...s
 	if idx == nil {
 		return nil, ErrIndexNotFound
 	}
+	if !idx.Keys() {
+		return nil, errors.Errorf("cannot find keys on unkeyed index %q", indexName)
+	}
 
 	// Create a snapshot of the cluster to use for node/partition calculations.
 	snap := topology.NewClusterSnapshot(c.noder, c.Hasher, c.ReplicaN)
@@ -1728,7 +1730,7 @@ func (c *cluster) createIndexKeys(ctx context.Context, indexName string, keys ..
 	}
 
 	if !idx.keys {
-		return nil, errors.Errorf("can't create index keys on unkeyed index %s", indexName)
+		return nil, errors.Errorf("cannot create keys on unkeyed index %q", indexName)
 	}
 
 	// Create a snapshot of the cluster to use for node/partition calculations.
