@@ -351,6 +351,12 @@ func NewConfig() *Config {
 	c.Etcd.InitCluster = c.Name + "=" + c.Etcd.LPeerURL
 	c.Etcd.HeartbeatTTL = 5
 
+	c.Etcd.TrustedCAFile = ""
+	c.Etcd.ClientCertFile = ""
+	c.Etcd.ClientKeyFile = ""
+	c.Etcd.PeerCertFile = ""
+	c.Etcd.PeerKeyFile = ""
+
 	return c
 }
 

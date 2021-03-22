@@ -63,8 +63,13 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 	flags.StringVar(&srv.Config.Etcd.LPeerURL, "etcd.listen-peer-address", srv.Config.Etcd.LPeerURL, "Listen peer address.")
 	flags.StringVar(&srv.Config.Etcd.APeerURL, "etcd.advertise-peer-address", srv.Config.Etcd.APeerURL, "Advertise peer address. If not provided, uses the listen peer address.")
 	flags.StringVar(&srv.Config.Etcd.ClusterURL, "etcd.cluster-url", srv.Config.Etcd.ClusterURL, "Cluster URL to join.")
-	// Etcd.ClusterName uses Cluster.Name for its value.
 	flags.StringVar(&srv.Config.Etcd.InitCluster, "etcd.initial-cluster", srv.Config.Etcd.InitCluster, "Initial cluster name1=apurl1,name2=apurl2")
+	// Etcd specified tls configuration options
+	flags.StringVar(&srv.Config.Etcd.TrustedCAFile, "etcd.tls-trusted-cafile", srv.Config.Etcd.TrustedCAFile, "Certificate Authority certificate")
+	flags.StringVar(&srv.Config.Etcd.ClientCertFile, "etcd.tls-cert-file", srv.Config.Etcd.ClientCertFile, "Client certificate (required for tls)")
+	flags.StringVar(&srv.Config.Etcd.ClientKeyFile, "etcd.tls-key-file", srv.Config.Etcd.ClientKeyFile, "Client key file (required for tls)")
+	flags.StringVar(&srv.Config.Etcd.PeerCertFile, "etcd.tls-peer-cert-file", srv.Config.Etcd.PeerCertFile, "Peer certificate (required for tls)")
+	flags.StringVar(&srv.Config.Etcd.PeerKeyFile, "etcd.tls-peer-key-file", srv.Config.Etcd.PeerKeyFile, "Peer key file (required for tls)")
 
 	// AntiEntropy
 	flags.DurationVar((*time.Duration)(&srv.Config.AntiEntropy.Interval), "anti-entropy.interval", (time.Duration)(srv.Config.AntiEntropy.Interval), "Interval at which to run anti-entropy routine.")
