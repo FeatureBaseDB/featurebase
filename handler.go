@@ -290,7 +290,7 @@ type TranslateKeysRequest struct {
 	Field string
 	Keys  []string
 
-	// it's a awkward name, just to keep backward compatibility with go-pilosa and idk.
+	// it's a awkward name, just to keep backward compatibility with client and idk.
 	NotWritable bool
 }
 

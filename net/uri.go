@@ -26,9 +26,14 @@ import (
 	"github.com/pkg/errors"
 )
 
-var schemeRegexp = regexp.MustCompile("^[+a-z]+$")
-var hostRegexp = regexp.MustCompile(`^[0-9a-z.-]+$|^\[[:0-9a-fA-F]+\]$`)
-var addressRegexp = regexp.MustCompile(`^(([+a-z]+):\/\/)?([0-9a-z.-]+|\[[:0-9a-fA-F]+\])?(:([0-9]+))?$`)
+var (
+	schemeRegexp  = regexp.MustCompile("^[+a-z]+$")
+	hostRegexp    = regexp.MustCompile(`^[0-9a-z.-]+$|^\[[:0-9a-fA-F]+\]$`)
+	addressRegexp = regexp.MustCompile(`^(([+a-z]+):\/\/)?([0-9a-z.-]+|\[[:0-9a-fA-F]+\])?(:([0-9]+))?$`)
+
+	ErrInvalidAddress = errors.New("invalid address")
+	ErrInvalidSchema  = errors.New("invalid schema")
+)
 
 // URI represents a Pilosa URI.
 // A Pilosa URI consists of three parts:
@@ -56,11 +61,6 @@ func (u *URI) URL() url.URL {
 
 // DefaultURI creates and returns the default URI.
 func DefaultURI() *URI {
-	return defaultURI()
-}
-
-// defaultURI creates and returns the default URI.
-func defaultURI() *URI {
 	return &URI{
 		Scheme: "http",
 		Host:   "localhost",
@@ -83,7 +83,7 @@ func (u URIs) HostPortStrings() []string {
 
 // NewURIFromHostPort returns a URI with specified host and port.
 func NewURIFromHostPort(host string, port uint16) (*URI, error) {
-	uri := defaultURI()
+	uri := DefaultURI()
 	err := uri.SetHost(host)
 	if err != nil {
 		return nil, errors.Wrap(err, "setting uri host")
@@ -97,11 +97,17 @@ func NewURIFromAddress(address string) (*URI, error) {
 	return parseAddress(address)
 }
 
+// URIFromAddress creates a URI from the given address.
+func URIFromAddress(host string) *URI {
+	uri, _ := NewURIFromAddress(host)
+	return uri
+}
+
 // SetScheme sets the scheme of this URI.
 func (u *URI) SetScheme(scheme string) error {
 	m := schemeRegexp.FindStringSubmatch(scheme)
 	if m == nil {
-		return errors.New("invalid scheme")
+		return ErrInvalidSchema
 	}
 	u.Scheme = scheme
 	return nil
@@ -133,13 +139,23 @@ func (u *URI) HostPort() string {
 }
 
 // normalize returns the address in a form usable by a HTTP client.
-func (u *URI) normalize() string {
+func (u *URI) Normalize() string {
 	scheme := u.Scheme
 	index := strings.Index(scheme, "+")
 	if index >= 0 {
 		scheme = scheme[:index]
 	}
 	return fmt.Sprintf("%s://%s:%d", scheme, u.Host, u.Port)
+}
+
+// Equals returns true if the checked URI is equivalent to this URI.
+func (u URI) Equals(other *URI) bool {
+	if other == nil {
+		return false
+	}
+	return u.Scheme == other.Scheme &&
+		u.Host == other.Host &&
+		u.Port == other.Port
 }
 
 // String returns the address as a string.
@@ -149,7 +165,7 @@ func (u URI) String() string {
 
 // Path returns URI with path
 func (u *URI) Path(path string) string {
-	return fmt.Sprintf("%s%s", u.normalize(), path)
+	return fmt.Sprintf("%s%s", u.Normalize(), path)
 }
 
 // The following methods are required to implement pflag Value interface.
@@ -169,10 +185,18 @@ func (u URI) Type() string {
 	return "URI"
 }
 
+// Translate returns the translated URI based on the provided NAT map.
+func (u URI) Translate(nat map[URI]URI) URI {
+	if translated, ok := nat[u]; ok {
+		return translated
+	}
+	return u
+}
+
 func parseAddress(address string) (uri *URI, err error) {
 	m := addressRegexp.FindStringSubmatch(address)
 	if m == nil {
-		return nil, errors.New("invalid address")
+		return nil, ErrInvalidAddress
 	}
 	scheme := "http"
 	if m[2] != "" {
