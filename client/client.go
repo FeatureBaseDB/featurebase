@@ -1,35 +1,19 @@
 // Copyright 2017 Pilosa Corp.
 //
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions
-// are met:
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
 //
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
+//     http://www.apache.org/licenses/LICENSE-2.0
 //
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the copyright holder nor the names of its
-// contributors may be used to endorse or promote products derived
-// from this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
-// CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
-// INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
-// MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-// DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
-// BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-// SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
-// WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
-// DAMAGE.
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
+// package ctl contains all pilosa subcommands other than 'server'. These are
+// generally administration, testing, and debugging tools.
 package client
 
 import (
@@ -53,8 +37,8 @@ import (
 	"github.com/golang/protobuf/proto" //nolint:staticcheck
 	"github.com/opentracing/opentracing-go"
 	"github.com/pilosa/pilosa/v2"
-	"github.com/pilosa/pilosa/v2/internal"
 	pnet "github.com/pilosa/pilosa/v2/net"
+	"github.com/pilosa/pilosa/v2/pb"
 	"github.com/pilosa/pilosa/v2/pql"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/stats"
@@ -323,7 +307,7 @@ func (c *Client) Query(query PQLQuery, options ...interface{}) (*QueryResponse, 
 	if err != nil {
 		return nil, err
 	}
-	iqr := &internal.QueryResponse{}
+	iqr := &pb.QueryResponse{}
 	err = proto.Unmarshal(respData, iqr)
 	if err != nil {
 		return nil, err
@@ -541,7 +525,7 @@ func (c *Client) Import(field *Field, shard uint64, vals, ids []uint64, clear bo
 // EncodeImport computes the HTTP path and payload for an import
 // request. It is typically followed by a call to DoImport.
 func (c *Client) EncodeImport(field *Field, shard uint64, vals, ids []uint64, clear bool) (path string, data []byte, err error) {
-	msg := &internal.ImportRequest{
+	msg := &pb.ImportRequest{
 		Index:          field.index.Name(),
 		IndexCreatedAt: field.index.CreatedAt(),
 		Field:          field.Name(),
@@ -588,7 +572,7 @@ func (c *Client) DoImport(index string, shard uint64, path string, data []byte) 
 // import-values request. It is typically followed by a call to
 // DoImportValues.
 func (c *Client) EncodeImportValues(field *Field, shard uint64, vals []int64, ids []uint64, clear bool) (path string, data []byte, err error) {
-	msg := &internal.ImportValueRequest{
+	msg := &pb.ImportValueRequest{
 		Index:          field.index.Name(),
 		IndexCreatedAt: field.index.CreatedAt(),
 		Field:          field.Name(),
@@ -632,7 +616,7 @@ func (c *Client) fetchFragmentNodes(indexName string, shard uint64) ([]fragmentN
 	if c.manualFragmentNode != nil {
 		return []fragmentNode{*c.manualFragmentNode}, nil
 	}
-	path := fmt.Sprintf("/internal/fragment/nodes?shard=%d&index=%s", shard, indexName)
+	path := fmt.Sprintf("/pb.fragment/nodes?shard=%d&index=%s", shard, indexName)
 	_, body, err := c.HTTPRequest("GET", path, []byte{}, nil)
 	if err != nil {
 		return nil, err
@@ -693,14 +677,14 @@ func (c *Client) ImportRoaringBitmap(field *Field, shard uint64, views map[strin
 }
 
 func (c *Client) importRoaringBitmap(uri *pnet.URI, field *Field, shard uint64, views viewImports, options *ImportOptions) error {
-	protoViews := []*internal.ImportRoaringRequestView{}
+	protoViews := []*pb.ImportRoaringRequestView{}
 	for name, bmp := range views {
 		buf := &bytes.Buffer{}
 		_, err := bmp.WriteTo(buf)
 		if err != nil {
 			return errors.Wrap(err, "marshalling bitmap")
 		}
-		protoViews = append(protoViews, &internal.ImportRoaringRequestView{
+		protoViews = append(protoViews, &pb.ImportRoaringRequestView{
 			Name: name,
 			Data: buf.Bytes(),
 		})
@@ -708,7 +692,7 @@ func (c *Client) importRoaringBitmap(uri *pnet.URI, field *Field, shard uint64, 
 	params := url.Values{}
 	params.Add("clear", strconv.FormatBool(options.clear))
 	path := makeRoaringImportPath(field, shard, params)
-	req := &internal.ImportRoaringRequest{
+	req := &pb.ImportRoaringRequest{
 		Clear:          options.clear,
 		Views:          protoViews,
 		IndexCreatedAt: field.index.CreatedAt(),
@@ -803,14 +787,14 @@ func (c *Client) readSchema() ([]SchemaIndex, error) {
 }
 
 func (c *Client) shardsMax() (map[string]uint64, error) {
-	_, data, err := c.HTTPRequest("GET", "/internal/shards/max", nil, nil)
+	_, data, err := c.HTTPRequest("GET", "/pb.shards/max", nil, nil)
 	if err != nil {
-		return nil, errors.Wrap(err, "requesting /internal/shards/max")
+		return nil, errors.Wrap(err, "requesting /pb.shards/max")
 	}
 	m := map[string]map[string]uint64{}
 	err = json.Unmarshal(data, &m)
 	if err != nil {
-		return nil, errors.Wrap(err, "unmarshaling /internal/shards/max data")
+		return nil, errors.Wrap(err, "unmarshaling /pb.shards/max data")
 	}
 	return m["standard"], nil
 }
@@ -1033,7 +1017,7 @@ func (c *Client) augmentHeaders(headers map[string]string) map[string]string {
 }
 
 func (c *Client) TranslateRowKeys(field *Field, keys []string) ([]uint64, error) {
-	req := &internal.TranslateKeysRequest{
+	req := &pb.TranslateKeysRequest{
 		Index: field.index.name,
 		Field: field.name,
 		Keys:  keys,
@@ -1046,7 +1030,7 @@ func (c *Client) TranslateColumnKeys(index *Index, keys []string) ([]uint64, err
 	// point in partitioning the translation request on the client
 	// because every request is going to be sent to the manual URI.
 	if c.manualServerURI != nil {
-		req := &internal.TranslateKeysRequest{
+		req := &pb.TranslateKeysRequest{
 			Index: index.name,
 			Keys:  keys,
 		}
@@ -1084,7 +1068,7 @@ func (c *Client) TranslateColumnKeys(index *Index, keys []string) ([]uint64, err
 		uri := uri
 		keys := keys
 		eg.Go(func() error {
-			req := &internal.TranslateKeysRequest{
+			req := &pb.TranslateKeysRequest{
 				Index: index.name,
 				Keys:  keys,
 			}
@@ -1150,7 +1134,7 @@ func keyPartition(index, key string, partitionN int) int {
 	return int(h.Sum64() % uint64(partitionN))
 }
 
-func (c *Client) translateKeys(req *internal.TranslateKeysRequest, uris ...pnet.URI) ([]uint64, error) {
+func (c *Client) translateKeys(req *pb.TranslateKeysRequest, uris ...pnet.URI) ([]uint64, error) {
 	if len(req.Keys) == 0 {
 		return []uint64{}, nil
 	}
@@ -1161,16 +1145,16 @@ func (c *Client) translateKeys(req *internal.TranslateKeysRequest, uris ...pnet.
 
 	var respData []byte
 	if len(uris) == 0 {
-		if _, respData, err = c.httpRequest("POST", "/internal/translate/keys", reqData, defaultProtobufHeaders(), true); err != nil {
+		if _, respData, err = c.httpRequest("POST", "/pb.translate/keys", reqData, defaultProtobufHeaders(), true); err != nil {
 			return nil, err
 		}
 	} else {
-		if _, respData, err = c.doRequest(&uris[0], "POST", "/internal/translate/keys", defaultProtobufHeaders(), reqData); err != nil {
-			return nil, errors.Wrapf(err, "reading response body of /internal/translate/keys request to %v", uris[0])
+		if _, respData, err = c.doRequest(&uris[0], "POST", "/pb.translate/keys", defaultProtobufHeaders(), reqData); err != nil {
+			return nil, errors.Wrapf(err, "reading response body of /pb.translate/keys request to %v", uris[0])
 		}
 	}
 
-	idsResp := &internal.TranslateKeysResponse{}
+	idsResp := &pb.TranslateKeysResponse{}
 	err = proto.Unmarshal(respData, idsResp)
 	if err != nil {
 		return nil, errors.Wrap(err, "unmarshalling traslate keys response")
@@ -1332,7 +1316,7 @@ func newHTTPClient(options *ClientOptions) *http.Client {
 }
 
 func makeRequestData(query string, options *QueryOptions) ([]byte, error) {
-	request := &internal.QueryRequest{
+	request := &pb.QueryRequest{
 		Query:           query,
 		Shards:          options.Shards,
 		ColumnAttrs:     options.ColumnAttrs,

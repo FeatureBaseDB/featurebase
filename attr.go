@@ -19,7 +19,7 @@ import (
 	"sort"
 
 	"github.com/gogo/protobuf/proto"
-	"github.com/pilosa/pilosa/v2/internal"
+	"github.com/pilosa/pilosa/v2/pb"
 )
 
 // Attribute data type enum.
@@ -119,21 +119,21 @@ func (a attrBlocks) Diff(other []AttrBlock) []uint64 {
 	}
 }
 
-func encodeAttrs(m map[string]interface{}) []*internal.Attr {
+func encodeAttrs(m map[string]interface{}) []*pb.Attr {
 	keys := make([]string, 0, len(m))
 	for k := range m {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
 
-	a := make([]*internal.Attr, len(keys))
+	a := make([]*pb.Attr, len(keys))
 	for i := range keys {
 		a[i] = encodeAttr(keys[i], m[keys[i]])
 	}
 	return a
 }
 
-func decodeAttrs(pb []*internal.Attr) map[string]interface{} {
+func decodeAttrs(pb []*pb.Attr) map[string]interface{} {
 	m := make(map[string]interface{}, len(pb))
 	for i := range pb {
 		key, value := decodeAttr(pb[i])
@@ -142,9 +142,9 @@ func decodeAttrs(pb []*internal.Attr) map[string]interface{} {
 	return m
 }
 
-// encodeAttr converts a key/value pair into an Attr internal representation.
-func encodeAttr(key string, value interface{}) *internal.Attr {
-	pb := &internal.Attr{Key: key}
+// encodeAttr converts a key/value pair into an Attr pb.representation.
+func encodeAttr(key string, value interface{}) *pb.Attr {
+	pb := &pb.Attr{Key: key}
 	switch value := value.(type) {
 	case string:
 		pb.Type = attrTypeString
@@ -165,8 +165,8 @@ func encodeAttr(key string, value interface{}) *internal.Attr {
 	return pb
 }
 
-// decodeAttr converts from an Attr internal representation to a key/value pair.
-func decodeAttr(attr *internal.Attr) (key string, value interface{}) {
+// decodeAttr converts from an Attr pb.representation to a key/value pair.
+func decodeAttr(attr *pb.Attr) (key string, value interface{}) {
 	switch attr.Type {
 	case attrTypeString:
 		return attr.Key, attr.StringValue
@@ -192,12 +192,12 @@ func cloneAttrs(m map[string]interface{}) map[string]interface{} {
 
 // EncodeAttrs encodes an attribute map into a byte slice.
 func EncodeAttrs(attr map[string]interface{}) ([]byte, error) {
-	return proto.Marshal(&internal.AttrMap{Attrs: encodeAttrs(attr)})
+	return proto.Marshal(&pb.AttrMap{Attrs: encodeAttrs(attr)})
 }
 
 // DecodeAttrs decodes a byte slice into an  attribute map.
 func DecodeAttrs(v []byte) (map[string]interface{}, error) {
-	var pb internal.AttrMap
+	var pb pb.AttrMap
 	if err := proto.Unmarshal(v, &pb); err != nil {
 		return nil, err
 	}

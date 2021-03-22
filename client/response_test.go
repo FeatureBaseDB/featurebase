@@ -1,34 +1,19 @@
 // Copyright 2017 Pilosa Corp.
 //
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions
-// are met:
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
 //
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
+//     http://www.apache.org/licenses/LICENSE-2.0
 //
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the copyright holder nor the names of its
-// contributors may be used to endorse or promote products derived
-// from this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
-// CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
-// INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
-// MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-// DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
-// BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-// SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
-// WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
-// DAMAGE.
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// package ctl contains all pilosa subcommands other than 'server'. These are
+// generally administration, testing, and debugging tools.
 
 package client
 
@@ -39,7 +24,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/pilosa/pilosa/v2/internal"
+	"github.com/pilosa/pilosa/v2/pb"
 )
 
 func TestNewRowResultFromInternal(t *testing.T) {
@@ -50,13 +35,13 @@ func TestNewRowResultFromInternal(t *testing.T) {
 		"height":     1.83,
 	}
 	targetColumns := []uint64{5, 10}
-	attrs := []*internal.Attr{
+	attrs := []*pb.Attr{
 		{Key: "name", StringValue: "some string", Type: 1},
 		{Key: "age", IntValue: 95, Type: 2},
 		{Key: "registered", BoolValue: true, Type: 3},
 		{Key: "height", FloatValue: 1.83, Type: 4},
 	}
-	row := &internal.Row{
+	row := &pb.Row{
 		Attrs:   attrs,
 		Columns: []uint64{5, 10},
 	}
@@ -84,21 +69,21 @@ func TestNewQueryResponseFromInternal(t *testing.T) {
 	targetCountItems := []CountResultItem{
 		{ID: 10, Count: 100},
 	}
-	attrs := []*internal.Attr{
+	attrs := []*pb.Attr{
 		{Key: "name", StringValue: "some string", Type: 1},
 		{Key: "age", IntValue: 95, Type: 2},
 		{Key: "registered", BoolValue: true, Type: 3},
 		{Key: "height", FloatValue: 1.83, Type: 4},
 	}
-	row := &internal.Row{
+	row := &pb.Row{
 		Attrs:   attrs,
 		Columns: []uint64{5, 10},
 	}
-	pairs := []*internal.Pair{
+	pairs := []*pb.Pair{
 		{ID: 10, Count: 100},
 	}
-	response := &internal.QueryResponse{
-		Results: []*internal.QueryResult{
+	response := &pb.QueryResponse{
+		Results: []*pb.QueryResult{
 			{Type: QueryResultTypeRow, Row: row},
 			{Type: QueryResultTypePairs, Pairs: pairs},
 		},
@@ -134,7 +119,7 @@ func TestNewQueryResponseFromInternal(t *testing.T) {
 }
 
 func TestNewQueryResponseWithErrorFromInternal(t *testing.T) {
-	response := &internal.QueryResponse{
+	response := &pb.QueryResponse{
 		Err: "some error",
 	}
 	qr, err := newQueryResponseFromInternal(response)
@@ -153,21 +138,21 @@ func TestNewQueryResponseWithErrorFromInternal(t *testing.T) {
 }
 
 func TestNewQueryResponseFromInternalFailure(t *testing.T) {
-	attrs := []*internal.Attr{
+	attrs := []*pb.Attr{
 		{Key: "name", StringValue: "some string", Type: 99},
 	}
-	row := &internal.Row{
+	row := &pb.Row{
 		Attrs: attrs,
 	}
-	response := &internal.QueryResponse{
-		Results: []*internal.QueryResult{{Type: QueryResultTypeRow, Row: row}},
+	response := &pb.QueryResponse{
+		Results: []*pb.QueryResult{{Type: QueryResultTypeRow, Row: row}},
 	}
 	qr, err := newQueryResponseFromInternal(response)
 	if qr != nil && err == nil {
 		t.Fatalf("Should have failed")
 	}
-	response = &internal.QueryResponse{
-		ColumnAttrSets: []*internal.ColumnAttrSet{{ID: 1, Attrs: attrs}},
+	response = &pb.QueryResponse{
+		ColumnAttrSets: []*pb.ColumnAttrSet{{ID: 1, Attrs: attrs}},
 	}
 	qr, err = newQueryResponseFromInternal(response)
 	if qr != nil && err == nil {
@@ -197,20 +182,20 @@ func TestCountResultItemToString(t *testing.T) {
 }
 
 func TestMarshalResults(t *testing.T) {
-	attrs := []*internal.Attr{
+	attrs := []*pb.Attr{
 		{Key: "name", StringValue: "some string", Type: 1},
 		{Key: "age", IntValue: 95, Type: 2},
 		{Key: "registered", BoolValue: true, Type: 3},
 		{Key: "height", FloatValue: 1.83, Type: 4},
 	}
-	row := &internal.Row{
+	row := &pb.Row{
 		Attrs:   attrs,
 		Columns: []uint64{5, 10},
 	}
-	pairs := []*internal.Pair{
+	pairs := []*pb.Pair{
 		{ID: 10, Count: 100},
 	}
-	pbufResults := []*internal.QueryResult{
+	pbufResults := []*pb.QueryResult{
 		{Type: QueryResultTypeRow, Row: row},
 		{Type: QueryResultTypePairs, Pairs: pairs},
 	}
@@ -239,7 +224,7 @@ func TestMarshalResults(t *testing.T) {
 }
 
 func TestUnknownQueryResultType(t *testing.T) {
-	result := &internal.QueryResult{
+	result := &pb.QueryResult{
 		Type: 999,
 	}
 	_, err := newQueryResultFromInternal(result)

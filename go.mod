@@ -23,7 +23,6 @@ require (
 	github.com/gorilla/handlers v1.3.0
 	github.com/gorilla/mux v1.7.0
 	github.com/improbable-eng/grpc-web v0.13.0
-	github.com/kisielk/errcheck v1.5.0 // indirect
 	github.com/lib/pq v1.8.0
 	github.com/molecula/apophenia v0.0.0-20190827192002-68b7a14a478b
 	github.com/opentracing/opentracing-go v1.1.0
@@ -51,7 +50,6 @@ require (
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	golang.org/x/sys v0.0.0-20210320140829-1e4c9ba3b0c4 // indirect
 	golang.org/x/text v0.3.5 // indirect
-	golang.org/x/tools v0.0.0-20210106214847-113979e3529a // indirect
 	google.golang.org/grpc v1.28.0
 	gopkg.in/yaml.v2 v2.3.0 // indirect
 	modernc.org/mathutil v1.0.0

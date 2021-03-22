@@ -1,5 +1,3 @@
-//+build integration
-
 // Copyright 2017 Pilosa Corp.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,6 +11,8 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
+//+build integration
 
 package client
 
@@ -33,8 +33,8 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto" //nolint:staticcheck
-	"github.com/pilosa/pilosa/v2/internal"
 	pnet "github.com/pilosa/pilosa/v2/net"
+	"github.com/pilosa/pilosa/v2/pb"
 	"github.com/pkg/errors"
 )
 
@@ -1323,7 +1323,7 @@ func TestImportNodeFails(t *testing.T) {
 	defer server.Close()
 	uri, _ := pnet.NewURIFromAddress(server.URL)
 	client, _ := NewClient(uri, OptClientRetries(0))
-	importRequest := &internal.ImportRequest{
+	importRequest := &pb.ImportRequest{
 		ColumnIDs:  []uint64{},
 		RowIDs:     []uint64{},
 		Timestamps: []int64{},
@@ -1353,12 +1353,12 @@ func TestQueryUnmarshalFails(t *testing.T) {
 }
 
 func TestResponseWithInvalidType(t *testing.T) {
-	qr := &internal.QueryResponse{
+	qr := &pb.QueryResponse{
 		Err: "",
-		ColumnAttrSets: []*internal.ColumnAttrSet{
+		ColumnAttrSets: []*pb.ColumnAttrSet{
 			{
 				ID: 0,
-				Attrs: []*internal.Attr{
+				Attrs: []*pb.Attr{
 					{
 						Type:        9999,
 						StringValue: "NOVAL",
@@ -1366,7 +1366,7 @@ func TestResponseWithInvalidType(t *testing.T) {
 				},
 			},
 		},
-		Results: []*internal.QueryResult{},
+		Results: []*pb.QueryResult{},
 	}
 	data, err := proto.Marshal(qr)
 	if err != nil {
@@ -1473,7 +1473,7 @@ func TestExportFieldFailure(t *testing.T) {
 			statusCode:    404,
 			contentLength: -1,
 		},
-		"/internal/shards/max": {
+		"/pb.shards/max": {
 			content:       []byte(`{"standard":{"go-testindex": 0}}`),
 			statusCode:    404,
 			contentLength: -1,
@@ -1493,9 +1493,9 @@ func TestExportFieldFailure(t *testing.T) {
 	if err == nil {
 		t.Fatal("should have failed")
 	}
-	statusItem = paths["/internal/shards/max"]
+	statusItem = paths["/pb.shards/max"]
 	statusItem.statusCode = 200
-	paths["/internal/shards/max"] = statusItem
+	paths["/pb.shards/max"] = statusItem
 	_, err = client.ExportField(testField)
 	if err == nil {
 		t.Fatal("should have failed")
@@ -1616,7 +1616,7 @@ func TestServerWarning(t *testing.T) {
 		}
 	}()
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		content, err := proto.Marshal(&internal.QueryResponse{})
+		content, err := proto.Marshal(&pb.QueryResponse{})
 		if err != nil {
 			// Cannot directly interact with t from another goroutine.
 			herr = err
@@ -1963,14 +1963,14 @@ func TestImportAtomicRecord(t *testing.T) {
 	transferUSD := int64(100)
 
 	setBal := func(bal0, bal1 int64) (data []byte, err error) {
-		ivr0 := &internal.ImportValueRequest{
+		ivr0 := &pb.ImportValueRequest{
 			Index:     indexARname,
 			Field:     fieldAcct0,
 			Shard:     shard,
 			ColumnIDs: []uint64{acctOwnerID},
 			Values:    []int64{bal0},
 		}
-		ivr1 := &internal.ImportValueRequest{
+		ivr1 := &pb.ImportValueRequest{
 			Index:     indexARname,
 			Field:     fieldAcct1,
 			Shard:     shard,
@@ -1978,10 +1978,10 @@ func TestImportAtomicRecord(t *testing.T) {
 			Values:    []int64{bal1},
 		}
 
-		ar := &internal.AtomicRecord{
+		ar := &pb.AtomicRecord{
 			Index: indexARname,
 			Shard: shard,
-			Ivr: []*internal.ImportValueRequest{
+			Ivr: []*pb.ImportValueRequest{
 				ivr0, ivr1,
 			},
 		}

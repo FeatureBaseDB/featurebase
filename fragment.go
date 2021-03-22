@@ -40,9 +40,9 @@ import (
 
 	"github.com/cespare/xxhash"
 	"github.com/gogo/protobuf/proto"
-	"github.com/pilosa/pilosa/v2/internal"
 	"github.com/pilosa/pilosa/v2/logger"
 	pnet "github.com/pilosa/pilosa/v2/net"
+	"github.com/pilosa/pilosa/v2/pb"
 	"github.com/pilosa/pilosa/v2/pql"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/shardwidth"
@@ -533,7 +533,7 @@ func (f *fragment) openCache() error {
 	}
 
 	// Unmarshal cache data.
-	var pb internal.Cache
+	var pb pb.Cache
 	if err := proto.Unmarshal(buf, &pb); err != nil {
 		f.holder.Logger.Printf("error unmarshaling cache data, skipping: path=%s, err=%s", path, err)
 		return nil
@@ -696,7 +696,7 @@ func (f *fragment) setBit(tx Tx, rowID, columnID uint64) (changed bool, err erro
 		err = f.gen.Transaction(wp, doSetFunc)
 	} else {
 		if tx.Type() == RoaringTxn {
-			panic("internal error: f.gen was nil. should never happen under roaring b/c storage should be open")
+			panic("pb.error: f.gen was nil. should never happen under roaring b/c storage should be open")
 		}
 		// else blue green or transactional backend. Just do it.
 		err = doSetFunc()
@@ -2535,7 +2535,7 @@ func (f *fragment) importPositions(tx Tx, set, clear []uint64, rowSet map[uint64
 		err = f.gen.Transaction(wp, doFunc)
 	} else {
 		if tx.Type() == RoaringTxn {
-			panic("internal error: 2nd place, f.gen was nil. should never happen under roaring b/c storage should be open")
+			panic("pb.error: 2nd place, f.gen was nil. should never happen under roaring b/c storage should be open")
 		}
 		// else blue green or transactional backend. Just do it.
 		err = doFunc()
@@ -2992,7 +2992,7 @@ func (f *fragment) flushCache() error {
 	ids := f.cache.IDs()
 
 	// Marshal cache data to bytes.
-	buf, err := proto.Marshal(&internal.Cache{IDs: ids})
+	buf, err := proto.Marshal(&pb.Cache{IDs: ids})
 	if err != nil {
 		return errors.Wrap(err, "marshalling")
 	}

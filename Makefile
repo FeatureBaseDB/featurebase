@@ -163,7 +163,7 @@ upgrade-lattice: lattice
 
 # `go generate` protocol buffers
 generate-protoc: require-protoc require-protoc-gen-gofast
-	$(GO) generate github.com/pilosa/pilosa/v2/internal
+	$(GO) generate github.com/pilosa/pilosa/v2/pb
 
 # `go generate` statik assets (lattice UI)
 generate-statik: build-lattice require-statik
