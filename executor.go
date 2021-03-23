@@ -1306,8 +1306,8 @@ func (e *executor) executePercentile(ctx context.Context, qcx *Qcx, index string
 	var nth float64
 	if nthArg, ok := c.Args["nth"].(pql.Decimal); ok {
 		nth = nthArg.Float64()
-		if nth < 0 || nth > 1.0 {
-			return ValCount{}, errors.Errorf("Percentile(): invalid nth value(%f), should be >= 0 and <= 1.0", nth)
+		if nth < 0 || nth > 100.0 {
+			return ValCount{}, errors.Errorf("Percentile(): invalid nth value(%f), should be >= 0 and <= 100", nth)
 		}
 	} else {
 		return ValCount{}, errors.New("Percentile(): nth required")
