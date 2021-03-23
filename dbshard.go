@@ -484,7 +484,7 @@ func (per *DBPerShard) DeleteFieldFromStore(index, field, fieldPath string) (err
 	per.Mu.Lock()
 	defer func() {
 		if fieldPath != "" {
-			panicOn(os.RemoveAll(fieldPath))
+			_ = os.RemoveAll(fieldPath)
 		}
 		per.Mu.Unlock()
 	}()
@@ -498,11 +498,12 @@ func (per *DBPerShard) DeleteFieldFromStore(index, field, fieldPath string) (err
 	}
 	for _, dbs := range dbi.Shard {
 		for _, w := range dbs.W {
-			err := w.DeleteField(index, field, fieldPath)
-			panicOn(err)
+			if e := w.DeleteField(index, field, fieldPath); e != nil && err == nil {
+				err = errors.Wrap(e, "DeleteFieldFromStore()")
+			}
 		}
 	}
-	return
+	return err
 }
 
 func (per *DBPerShard) DeleteFragment(index, field, view string, shard uint64, frag *fragment) error {
