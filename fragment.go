@@ -696,7 +696,7 @@ func (f *fragment) setBit(tx Tx, rowID, columnID uint64) (changed bool, err erro
 		err = f.gen.Transaction(wp, doSetFunc)
 	} else {
 		if tx.Type() == RoaringTxn {
-			panic("pb.error: f.gen was nil. should never happen under roaring b/c storage should be open")
+			return changed, errors.New("internal error: f.gen was nil and tx.Type is RoaringTxn - should never happen under roaring b/c storage should be open")
 		}
 		// else blue green or transactional backend. Just do it.
 		err = doSetFunc()
@@ -2535,9 +2535,8 @@ func (f *fragment) importPositions(tx Tx, set, clear []uint64, rowSet map[uint64
 		err = f.gen.Transaction(wp, doFunc)
 	} else {
 		if tx.Type() == RoaringTxn {
-			panic("pb.error: 2nd place, f.gen was nil. should never happen under roaring b/c storage should be open")
+			return errors.New("internal error: f.gen was nil and tx.Type is RoaringTxn - should never happen under roaring b/c storage should be open")
 		}
-		// else blue green or transactional backend. Just do it.
 		err = doFunc()
 	}
 
