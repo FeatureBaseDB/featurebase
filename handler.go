@@ -290,7 +290,7 @@ type TranslateKeysRequest struct {
 	Field string
 	Keys  []string
 
-	// it's a awkward name, just to keep backward compatibility with client and idk.
+	// NotWritable is an awkward name, but it's just to keep backward compatibility with client and idk.
 	NotWritable bool
 }
 
