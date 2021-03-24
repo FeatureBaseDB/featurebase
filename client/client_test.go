@@ -79,7 +79,10 @@ func TestNewClient(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	targetURI := pnet.URIFromAddress(":9999")
+	targetURI, err := pnet.NewURIFromAddress(":9999")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !reflect.DeepEqual(targetURI, client.manualServerURI) {
 		t.Fatalf("%v != %v", targetURI, client.manualServerURI)
 	}
@@ -95,7 +98,13 @@ func TestNewClient(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	target := []*pnet.URI{pnet.URIFromAddress(":9999")}
+
+	targetURI, err = pnet.NewURIFromAddress(":9999")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	target := []*pnet.URI{targetURI}
 	if !reflect.DeepEqual(target, client.cluster.hosts) {
 		t.Fatalf("%v != %v", target, client.cluster.hosts)
 	}
@@ -107,20 +116,30 @@ func TestNewClient(t *testing.T) {
 		t.Fatalf("%v != %v", target, client.cluster.hosts)
 	}
 
-	client, err = NewClient([]*pnet.URI{pnet.URIFromAddress(":9999"), pnet.URIFromAddress(":8888")})
+	targetURI1, err := pnet.NewURIFromAddress(":8888")
 	if err != nil {
 		t.Fatal(err)
 	}
-	target = []*pnet.URI{pnet.URIFromAddress(":9999"), pnet.URIFromAddress(":8888")}
+	targetURI2, err := pnet.NewURIFromAddress(":9999")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	client, err = NewClient([]*pnet.URI{targetURI1, targetURI2})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	target = []*pnet.URI{targetURI1, targetURI2}
 	if !reflect.DeepEqual(target, client.cluster.hosts) {
 		t.Fatalf("%v != %v", target, client.cluster.hosts)
 	}
 
-	client, err = NewClient([]*pnet.URI{pnet.URIFromAddress(":9999")})
+	client, err = NewClient([]*pnet.URI{targetURI})
 	if err != nil {
 		t.Fatal(err)
 	}
-	target = []*pnet.URI{pnet.URIFromAddress(":9999")}
+	target = []*pnet.URI{targetURI}
 	if !reflect.DeepEqual(target, client.cluster.hosts) {
 		t.Fatalf("%v != %v", target, client.cluster.hosts)
 	}
@@ -166,7 +185,17 @@ func TestNewClientManualAddressWithMultipleURIs(t *testing.T) {
 	if err != ErrSingleServerAddressRequired {
 		t.Fatalf("%v != %v", ErrSingleServerAddressRequired, err)
 	}
-	_, err = NewClient([]*pnet.URI{pnet.URIFromAddress(":9000"), pnet.URIFromAddress(":5000")}, OptClientManualServerAddress(true))
+
+	targetURI1, err := pnet.NewURIFromAddress(":9000")
+	if err != nil {
+		t.Fatal(err)
+	}
+	targetURI2, err := pnet.NewURIFromAddress(":5000")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = NewClient([]*pnet.URI{targetURI1, targetURI2}, OptClientManualServerAddress(true))
 	if err != ErrSingleServerAddressRequired {
 		t.Fatalf("%v != %v", ErrSingleServerAddressRequired, err)
 	}

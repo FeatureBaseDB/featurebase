@@ -873,7 +873,9 @@ func (c *Client) host(usePrimary bool) (*pnet.URI, error) {
 					c.primaryLock.Unlock()
 					return nil, errors.Wrap(err, "fetching primary node")
 				}
-				host = pnet.URIFromAddress(fmt.Sprintf("%s://%s:%d", node.Scheme, node.Host, node.Port))
+				if host, err = pnet.NewURIFromAddress(fmt.Sprintf("%s://%s:%d", node.Scheme, node.Host, node.Port)); err != nil {
+					return nil, errors.Wrap(err, "parsing primary node URL")
+				}
 			} else {
 				host = c.primaryURI
 			}

@@ -97,12 +97,6 @@ func NewURIFromAddress(address string) (*URI, error) {
 	return parseAddress(address)
 }
 
-// URIFromAddress creates a URI from the given address.
-func URIFromAddress(host string) *URI {
-	uri, _ := NewURIFromAddress(host)
-	return uri
-}
-
 // SetScheme sets the scheme of this URI.
 func (u *URI) SetScheme(scheme string) error {
 	m := schemeRegexp.FindStringSubmatch(scheme)

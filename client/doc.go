@@ -16,7 +16,7 @@
 // generally administration, testing, and debugging tools.
 
 /*
-Package pilosa enables querying a Pilosa server.
+Package client enables querying a Pilosa server.
 
 This client uses Pilosa's http+protobuf API.
 
@@ -28,10 +28,10 @@ Usage:
 	)
 
 	// Create a Client instance
-	client := client.DefaultClient()
+	cli := client.DefaultClient()
 
 	// Create a Schema instance
-	schema, err := client.Schema()
+	schema, err := cli.Schema()
 	if err != nil {
 		panic(err)
 	}
@@ -49,13 +49,13 @@ Usage:
 	}
 
 	// Sync the schema with the server-side, so non-existing indexes/fields are created on the server-side.
-	err = client.SyncSchema(schema)
+	err = cli.SyncSchema(schema)
 	if err != nil {
 		panic(err)
 	}
 
 	// Execute a query
-	response, err := client.Query(stargazer.Row(5))
+	response, err := cli.Query(stargazer.Row(5))
 	if err != nil {
 		panic(err)
 	}
