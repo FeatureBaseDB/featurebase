@@ -34,6 +34,7 @@ import (
 	"go.etcd.io/etcd/embed"
 	"go.etcd.io/etcd/etcdserver/api/v3client"
 	"go.etcd.io/etcd/mvcc/mvccpb"
+	"go.etcd.io/etcd/pkg/transport"
 	"go.etcd.io/etcd/pkg/types"
 )
 
@@ -48,6 +49,12 @@ type Options struct {
 	InitCluster  string `toml:"initial-cluster"`
 	ClusterName  string `toml:"cluster-name"`
 	HeartbeatTTL int64  `toml:"heartbeat-ttl"`
+	// TLS provided tls files
+	TrustedCAFile  string `toml:"tls-trusted-cafile"`
+	ClientCertFile string `toml:"tls-cert-file"`
+	ClientKeyFile  string `toml:"tls-key-file"`
+	PeerCertFile   string `toml:"tls-peer-cert-file"`
+	PeerKeyFile    string `toml:"tls-peer-key-file"`
 
 	LPeerSocket   []*net.TCPListener
 	LClientSocket []*net.TCPListener
@@ -170,6 +177,17 @@ func parseOptions(opt Options) *embed.Config {
 		log.Println("Joining Cluster:")
 		id, name := memberAdd(cli, opt.APeerURL)
 		log.Printf("\tid: %d, name: %s\n", id, name)
+	}
+	// can only use tls if not using pre-configured listeners
+	cfg.ClientTLSInfo = transport.TLSInfo{
+		TrustedCAFile: opt.TrustedCAFile,
+		CertFile:      opt.ClientCertFile,
+		KeyFile:       opt.ClientKeyFile,
+	}
+	cfg.PeerTLSInfo = transport.TLSInfo{
+		TrustedCAFile: opt.TrustedCAFile,
+		CertFile:      opt.PeerCertFile,
+		KeyFile:       opt.PeerKeyFile,
 	}
 
 	return cfg

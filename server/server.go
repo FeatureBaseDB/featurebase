@@ -381,6 +381,12 @@ func (m *Command) SetupServer() error {
 	//
 	// Use name for etcd.name
 	m.Config.Etcd.Name = m.Config.Name
+	// use the pilosa provided tls credentials if available
+	m.Config.Etcd.TrustedCAFile = m.Config.TLS.CACertPath
+	m.Config.Etcd.ClientCertFile = m.Config.TLS.CertificatePath
+	m.Config.Etcd.ClientKeyFile = m.Config.TLS.CertificateKeyPath
+	m.Config.Etcd.PeerCertFile = m.Config.TLS.CertificatePath
+	m.Config.Etcd.PeerKeyFile = m.Config.TLS.CertificateKeyPath
 	//
 	// If an Etcd.Dir is not provided, nest a default under the pilosa data dir.
 	if m.Config.Etcd.Dir == "" {
