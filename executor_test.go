@@ -7127,7 +7127,7 @@ func variousQueriesOnPercentiles(t *testing.T, c *test.Cluster) {
 	}
 
 	// generate test cases per each nth argument
-	nths := []float64{0.0, 10, 25, 50, 75, 90, 99.99}
+	nths := []float64{0.0, 10, 25, 50, 75, 90, 99}
 	var tests []testCase
 	for _, nth := range nths {
 		query := fmt.Sprintf(`Percentile(field="net_worth", filter=Row(val="foo"), nth=%f)`, nth)

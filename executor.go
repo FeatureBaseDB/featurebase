@@ -1365,7 +1365,7 @@ func (e *executor) executePercentile(ctx context.Context, qcx *Qcx, index string
 		rangeCall = intersectCall.Children[0]
 	}
 
-	k := (1 - nth) / nth
+	k := (100 - nth) / nth
 
 	min, max := minVal.Val, maxVal.Val
 	// estimate nth val, eg median when nth=0.5
