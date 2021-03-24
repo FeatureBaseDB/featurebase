@@ -66,6 +66,11 @@ func (l *leasedKV) Start(initValue string) error {
 
 func (l *leasedKV) create(initValue string) (<-chan *clientv3.LeaseKeepAliveResponse, error) {
 	ctx, cancel := context.WithCancel(context.Background())
+
+	if l.cancel != nil {
+		l.cancel()
+	}
+
 	l.cancel = cancel
 
 	leaseResp, err := l.cli.Grant(ctx, l.ttlSeconds)
