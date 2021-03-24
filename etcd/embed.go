@@ -78,10 +78,10 @@ const (
 	// We put all the things the node-watcher watches in /node so we
 	// can use a single watcher for them.
 	nodePrefix      = "/node/"
-	heartbeatPrefix = "/node/heartbeat/"
+	heartbeatPrefix = nodePrefix + "heartbeat/"
 	schemaPrefix    = "/schema/"
-	resizePrefix    = "/node/resize/"
-	metadataPrefix  = "/node/metadata/"
+	resizePrefix    = nodePrefix + "resize/"
+	metadataPrefix  = nodePrefix + "metadata/"
 	shardPrefix     = "/shard/"
 	lockPrefix      = "/lock/"
 )
@@ -190,6 +190,12 @@ func (e *Etcd) Close() error {
 // retryClient attempts to do a thing, but also tries to handle the
 // specific case where the client fails because of a leader election,
 // in which case we need to restart the client and retry the thing.
+//
+// We have to let go of the lock while calling `fn` because some fn are
+// long-lasting ones, like watchNodesOnce. So we grab a local copy of
+// the client object, then call things on that object. This should error
+// out sanely instead of panicing if we close the client while something
+// is running on it.
 func (e *Etcd) retryClient(fn func(cli *clientv3.Client) error) (err error) {
 	e.cliMu.Lock()
 	cli := e.cli
@@ -200,9 +206,14 @@ func (e *Etcd) retryClient(fn func(cli *clientv3.Client) error) (err error) {
 	}
 	// we can't do much with an error from closing e.cli at this point, so
 	// we try again.
+	e.cliMu.Lock()
+	if cli != e.cli {
+		cli = e.cli
+		e.cliMu.Unlock()
+		return fn(cli)
+	}
 	_ = cli.Close()
 	cli = v3client.New(e.e.Server)
-	e.cliMu.Lock()
 	e.cli = cli
 	e.cliMu.Unlock()
 	return fn(cli)
@@ -312,7 +323,12 @@ func (e *Etcd) Start(ctx context.Context) (_ disco.InitialClusterState, err erro
 		// heard from yet.
 		for _, member := range members {
 			peerID := member.ID.String()
-			e.knownNodes[peerID] = &nodeData{}
+			e.knownNodes[peerID] = &nodeData{
+				topologyNode: &topology.Node{
+					ID:    peerID,
+					State: disco.NodeStateUnknown,
+				},
+			}
 			e.nodeStates[peerID] = disco.NodeStateUnknown
 		}
 		e.nodeStatesDirty = true
@@ -324,7 +340,6 @@ func (e *Etcd) Start(ctx context.Context) (_ disco.InitialClusterState, err erro
 // watcher that watches for changes to events we care about.
 func (e *Etcd) startHeartbeatAndWatcher(ctx context.Context) error {
 	key := heartbeatPrefix + e.e.Server.ID().String()
-	// e.logger.Printf("starting heartbeat: %q => %q", e.options.Name, e.e.Server.ID())
 	e.heartbeatLeasedKV = newLeasedKV(e, key, e.options.HeartbeatTTL)
 
 	if err := e.heartbeatLeasedKV.Start(string(disco.NodeStateStarting)); err != nil {
@@ -407,9 +422,6 @@ func (e *Etcd) ClusterState(ctx context.Context) (out disco.ClusterState, err er
 	err = e.populateNodeStates(ctx)
 	states := e.nodeStates
 	e.nodeMu.Unlock()
-	// defer func() {
-	// 	e.logger.Printf("ClusterState %q: out %s, states %#v", e.options.Name, out, states)
-	// }()
 	if err != nil {
 		e.logger.Printf("ClusterState %q: getting node states: %v", e.options.Name, states)
 		return disco.ClusterStateUnknown, err
@@ -497,17 +509,17 @@ func (e *Etcd) Watch(ctx context.Context, peerID string, onUpdate func([]byte) e
 	return nil
 }
 
-// parseNodeKey reads "/node/heartbeat/23" and yields ("heartbeat", "23", nil).
+// parseNodeKey reads heartbeatPrefix + "23" and yields (heartbeatPrefix, "23", nil).
 func parseNodeKey(key []byte) (prefix string, peerID string, err error) {
-	// we're looking for "/node/"
-	if !bytes.HasPrefix(key, []byte("/node/")) {
+	// we're looking for things starting with nodePrefix
+	if !bytes.HasPrefix(key, []byte(nodePrefix)) {
 		return "", "", fmt.Errorf("not a node key: %q", key)
 	}
-	vals := bytes.SplitN(key[6:], []byte("/"), 2)
-	if len(vals) != 2 {
+	peerIndex := bytes.LastIndex(key, []byte("/"))
+	if peerIndex < 6 {
 		return "", "", fmt.Errorf("not a valid node key: %q", key)
 	}
-	return string(vals[0]), string(vals[1]), nil
+	return string(key[:peerIndex+1]), string(key[peerIndex+1:]), nil
 }
 
 // deleteNodeData is like putNodeData, but handles deletes rather than cases
@@ -521,20 +533,20 @@ func (e *Etcd) deleteNodeData(key []byte, revision int64) error {
 		e.nodeRev = revision
 	}
 	switch prefix {
-	case "heartbeat":
+	case heartbeatPrefix:
 		if e.knownNodes[peerID] == nil {
 			e.knownNodes[peerID] = &nodeData{}
 		}
 		e.knownNodes[peerID].heartbeatState = ""
 		e.nodeStatesDirty = true
-	case "metadata":
+	case metadataPrefix:
 		if e.knownNodes[peerID] == nil {
 			e.knownNodes[peerID] = &nodeData{}
 		}
 		e.knownNodes[peerID].metadata = nil
 		e.knownNodes[peerID].topologyNode = &topology.Node{}
 		e.nodeStatesDirty = true
-	case "resize":
+	case resizePrefix:
 		if e.knownNodes[peerID] == nil {
 			e.knownNodes[peerID] = &nodeData{}
 		}
@@ -550,9 +562,6 @@ func (e *Etcd) deleteNodeData(key []byte, revision int64) error {
 // given an incoming heartbeat, metadata, or resizing change. It requires
 // that you already hold the node mutex.
 func (e *Etcd) putNodeData(key []byte, value []byte, revision int64) (err error) {
-	// defer func() {
-	// 	e.logger.Printf("putNodeData %q: key %q, rev %d, dirty %t, err %v", e.options.Name, key, e.nodeRev, e.nodeStatesDirty, err)
-	// }()
 	prefix, peerID, err := parseNodeKey(key)
 	if err != nil {
 		return err
@@ -561,13 +570,13 @@ func (e *Etcd) putNodeData(key []byte, value []byte, revision int64) (err error)
 		e.nodeRev = revision
 	}
 	switch prefix {
-	case "heartbeat":
+	case heartbeatPrefix:
 		if e.knownNodes[peerID] == nil {
 			e.knownNodes[peerID] = &nodeData{}
 		}
 		e.knownNodes[peerID].heartbeatState = string(value)
 		e.nodeStatesDirty = true
-	case "metadata":
+	case metadataPrefix:
 		if e.knownNodes[peerID] == nil {
 			e.knownNodes[peerID] = &nodeData{}
 		}
@@ -577,12 +586,11 @@ func (e *Etcd) putNodeData(key []byte, value []byte, revision int64) (err error)
 		if err != nil {
 			return fmt.Errorf("json unmarshal of node metadata: %v\n", err)
 		}
-		// e.logger.Printf("unmarshalling topologyNode for %q", peerID)
 		e.knownNodes[peerID].topologyNode = &newNode
 		// This saves us one remake of the node later, probably.
 		e.knownNodes[peerID].topologyNode.State = e.knownNodes[peerID].computedState()
 		e.nodeStatesDirty = true
-	case "resize":
+	case resizePrefix:
 		if e.knownNodes[peerID] == nil {
 			e.knownNodes[peerID] = &nodeData{}
 		}
@@ -601,20 +609,6 @@ func (e *Etcd) populateNodeStates(ctx context.Context) error {
 	if !e.nodeStatesDirty {
 		return nil
 	}
-	updated := false
-	for peerID, data := range e.knownNodes {
-		newState := data.computedState()
-		if data.topologyNode == nil || newState != data.topologyNode.State || newState != e.nodeStates[peerID] {
-			updated = true
-			break
-		}
-	}
-	// no changes
-	if !updated {
-		e.nodeStatesDirty = false
-		return nil
-	}
-	// make a new node state map, because something changed.
 	e.nodeStates = make(map[string]disco.NodeState, len(e.knownNodes))
 	e.sortedNodes = make([]*topology.Node, 0, len(e.knownNodes))
 	for peerID, data := range e.knownNodes {
@@ -631,8 +625,6 @@ func (e *Etcd) populateNodeStates(ctx context.Context) error {
 				data.topologyNode = &newNode
 			}
 			e.sortedNodes = append(e.sortedNodes, data.topologyNode)
-		} else {
-			e.logger.Printf("no topologyNode for peer %q, metadata %q", peerID, data.metadata)
 		}
 	}
 	// sort list by ID. list now contains sorted nodes which have their
@@ -650,11 +642,8 @@ func (e *Etcd) watchNodesOnce(ctx context.Context, cli *clientv3.Client) (err er
 	// currently seen, we don't want one equal to it.
 	minRev := e.nodeRev + 1
 	e.nodeMu.Unlock()
-	// e.logger.Printf("watchNodesOnce %q: minRev %d", e.options.Name, minRev)
 	for resp := range cli.Watch(ctx, nodePrefix, clientv3.WithPrefix(), clientv3.WithRev(minRev)) {
-		// e.logger.Printf("watchp %q: resp rev %d with err %v, %d events\n", e.options.Name, resp.Header.Revision, resp.Err(), len(resp.Events))
 		if err := resp.Err(); err != nil {
-			e.logger.Printf("node watch %q: resp err %v", e.options.Name, err)
 			return err
 		}
 		// lock the node mutex for this whole process of updating so
@@ -664,13 +653,11 @@ func (e *Etcd) watchNodesOnce(ctx context.Context, cli *clientv3.Client) (err er
 		for _, ev := range resp.Events {
 			switch ev.Type {
 			case mvccpb.PUT:
-				// e.logger.Printf("watchp %q: PUT rev %d value %q=%q\n", e.options.Name, ev.Kv.ModRevision, ev.Kv.Key, ev.Kv.Value)
 				err := e.putNodeData(ev.Kv.Key, ev.Kv.Value, ev.Kv.ModRevision)
 				if err != nil {
 					e.logger.Printf("put event: %v", err)
 				}
 			case mvccpb.DELETE:
-				// e.logger.Printf("watchp %q: DELETE %q\n", e.options.Name, ev.Kv.Key)
 				err := e.deleteNodeData(ev.Kv.Key, ev.Kv.ModRevision)
 				if err != nil {
 					e.logger.Printf("delete event: %v", err)
@@ -690,7 +677,6 @@ func (e *Etcd) watchNodesOnce(ctx context.Context, cli *clientv3.Client) (err er
 func (e *Etcd) WatchNodes() {
 	ctx, cancel := context.WithCancel(context.Background())
 	e.watchCancel = cancel
-	// e.logger.Printf("WatchNodes %q: starting with rev %d", e.options.Name, e.nodeRev)
 	watchInContext := func(cli *clientv3.Client) error {
 		return e.watchNodesOnce(ctx, cli)
 	}
@@ -1275,10 +1261,8 @@ func (e *Etcd) Nodes() []*topology.Node {
 	defer e.nodeMu.Unlock()
 	err := e.populateNodeStates(context.TODO())
 	if err != nil {
-		// e.logger.Printf("requesting node list: %v", err)
 		return nil
 	}
-	// e.logger.Printf("Nodes(): returning %d nodes", len(e.sortedNodes))
 	return e.sortedNodes
 }
 

@@ -3764,7 +3764,7 @@ func TestReopenCluster(t *testing.T) {
 	if err := node0.Reopen(); err != nil {
 		t.Fatal(err)
 	}
-	if err := node0.AwaitState(disco.ClusterStateNormal, 10*time.Second); err != nil {
+	if err := c.AwaitState(disco.ClusterStateNormal, 10*time.Second); err != nil {
 		t.Fatalf("restarting cluster: %v", err)
 	}
 
@@ -3828,7 +3828,7 @@ func TestExecutor_Execute_Existence(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if err := node0.AwaitState(disco.ClusterStateNormal, 10*time.Second); err != nil {
+		if err := c.AwaitState(disco.ClusterStateNormal, 10*time.Second); err != nil {
 			t.Fatalf("restarting cluster: %v", err)
 		}
 
