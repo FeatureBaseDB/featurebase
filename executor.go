@@ -1303,11 +1303,16 @@ func (e *executor) executePercentile(ctx context.Context, qcx *Qcx, index string
 	defer span.Finish()
 
 	// get nth
-	var nth float64
+	var nthFloat float64
 	if nthArg, ok := c.Args["nth"].(pql.Decimal); ok {
-		nth = nthArg.Float64()
-		if nth < 0 || nth > 100.0 {
-			return ValCount{}, errors.Errorf("Percentile(): invalid nth value(%f), should be >= 0 and <= 100", nth)
+		switch c.Args["nth"].(type) {
+		case pql.Decimal:
+			nthFloat = nthArg.Float64()
+		case int64:
+			nthFloat = float64(nthArg.Int64())
+		}
+		if nthFloat < 0 || nthFloat > 100.0 {
+			return ValCount{}, errors.Errorf("Percentile(): invalid nth value(%f), should be >= 0 and <= 100", nthFloat)
 		}
 	} else {
 		return ValCount{}, errors.New("Percentile(): nth required")
@@ -1337,7 +1342,7 @@ func (e *executor) executePercentile(ctx context.Context, qcx *Qcx, index string
 	if err != nil {
 		return ValCount{}, errors.Wrap(err, "executing Min call for Percentile")
 	}
-	if nth == 0.0 {
+	if nthFloat == 0.0 {
 		return ValCount{Val: minVal.Val, Count: minVal.Count}, nil
 	}
 
@@ -1365,7 +1370,7 @@ func (e *executor) executePercentile(ctx context.Context, qcx *Qcx, index string
 		rangeCall = intersectCall.Children[0]
 	}
 
-	k := (100 - nth) / nth
+	k := (100 - nthFloat) / nthFloat
 
 	min, max := minVal.Val, maxVal.Val
 	// estimate nth val, eg median when nth=0.5
