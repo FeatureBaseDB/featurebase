@@ -17,7 +17,7 @@ package net
 import "testing"
 
 func TestDefaultURI(t *testing.T) {
-	uri := defaultURI()
+	uri := DefaultURI()
 	compare(t, uri, "http", "localhost", 10101)
 }
 
@@ -60,7 +60,7 @@ func TestNormalizedAddress(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Can't parse address")
 	}
-	if uri.normalize() != "http://big-data.pilosa.com:6888" {
+	if uri.Normalize() != "http://big-data.pilosa.com:6888" {
 		t.Fatalf("Normalized address is not normal")
 	}
 }
@@ -77,7 +77,7 @@ func TestURIPath(t *testing.T) {
 }
 
 func TestSetScheme(t *testing.T) {
-	uri := defaultURI()
+	uri := DefaultURI()
 	target := "fun"
 	err := uri.SetScheme(target)
 	if err != nil {
@@ -89,7 +89,7 @@ func TestSetScheme(t *testing.T) {
 }
 
 func TestSetHost(t *testing.T) {
-	uri := defaultURI()
+	uri := DefaultURI()
 	target := "10.20.30.40"
 	err := uri.SetHost(target)
 	if err != nil {
@@ -101,7 +101,7 @@ func TestSetHost(t *testing.T) {
 }
 
 func TestSetPort(t *testing.T) {
-	uri := defaultURI()
+	uri := DefaultURI()
 	target := uint16(9999)
 	uri.SetPort(target)
 	if uri.Port != target {
@@ -110,7 +110,7 @@ func TestSetPort(t *testing.T) {
 }
 
 func TestSetInvalidScheme(t *testing.T) {
-	uri := defaultURI()
+	uri := DefaultURI()
 	err := uri.SetScheme("?invalid")
 	if err == nil {
 		t.Fatalf("Should have failed")
@@ -118,7 +118,7 @@ func TestSetInvalidScheme(t *testing.T) {
 }
 
 func TestSetInvalidHost(t *testing.T) {
-	uri := defaultURI()
+	uri := DefaultURI()
 	err := uri.SetHost("index?.pilosa.com")
 	if err == nil {
 		t.Fatalf("Should have failed")

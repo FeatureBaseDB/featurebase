@@ -57,7 +57,7 @@ func newCommand(tb testing.TB, opts ...server.CommandOption) *Command {
 	}
 
 	// Set aggressive close timeout by default to avoid hanging tests. This was
-	// a problem with PDK tests which used go-pilosa as well. We put it at the
+	// a problem with PDK tests which used pilosa/client as well. We put it at the
 	// beginning of the option slice so that it can be overridden by user-passed
 	// options.
 	// Also set TranslateFile MapSize to a smaller number so memory allocation

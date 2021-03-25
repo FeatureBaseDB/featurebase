@@ -34,7 +34,8 @@ var (
 	ErrIndexExists   = disco.ErrIndexExists
 	ErrIndexNotFound = errors.New("index not found")
 
-	ErrInvalidSchema = errors.New("invalid schema")
+	ErrInvalidAddress = errors.New("invalid address")
+	ErrInvalidSchema  = errors.New("invalid schema")
 
 	ErrForeignIndexNotFound = errors.New("foreign index not found")
 
