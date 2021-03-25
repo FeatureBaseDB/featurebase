@@ -245,20 +245,6 @@ func (d Decimal) Float64() float64 {
 	return ret
 }
 
-// Int64 returns d as a int64.
-// TODO: this could very easily lose precision; we should audit
-// its use and protect against unexpected results.
-func (d Decimal) Int64() int64 {
-	var ret int64
-	if d.Scale == 0 {
-		ret = int64(d.Value)
-	} else {
-		temp := float64(d.Value) / math.Pow10(int(d.Scale))
-		ret = int64(temp)
-	}
-	return ret
-}
-
 // String returns the string representation of the decimal.
 func (d Decimal) String() string {
 	var s string

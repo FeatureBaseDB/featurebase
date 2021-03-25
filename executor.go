@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"math"
 	"math/bits"
+	"reflect"
 	"sort"
 	"strings"
 	"sync"
@@ -1309,10 +1310,12 @@ func (e *executor) executePercentile(ctx context.Context, qcx *Qcx, index string
 		case pql.Decimal:
 			nthFloat = nthArg.Float64()
 		case int64:
-			nthFloat = float64(nthArg.Int64())
+			nthFloat = float64(nthArg.ToInt64(0))
+		default:
+			return ValCount{}, errors.Errorf("Percentile(): invalid nth type (%f), should be int64 or pql.Decimal", reflect.TypeOf(nthArg))
 		}
 		if nthFloat < 0 || nthFloat > 100.0 {
-			return ValCount{}, errors.Errorf("Percentile(): invalid nth value(%f), should be >= 0 and <= 100", nthFloat)
+			return ValCount{}, errors.Errorf("Percentile(): invalid nth value (%f), should be >= 0 and <= 100", nthFloat)
 		}
 	} else {
 		return ValCount{}, errors.New("Percentile(): nth required")
