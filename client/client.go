@@ -1147,12 +1147,12 @@ func (c *Client) translateKeys(req *pb.TranslateKeysRequest, uris ...pnet.URI) (
 
 	var respData []byte
 	if len(uris) == 0 {
-		if _, respData, err = c.httpRequest("POST", "/pb.translate/keys", reqData, defaultProtobufHeaders(), true); err != nil {
+		if _, respData, err = c.httpRequest("POST", "/internal/translate/keys", reqData, defaultProtobufHeaders(), true); err != nil {
 			return nil, err
 		}
 	} else {
-		if _, respData, err = c.doRequest(&uris[0], "POST", "/pb.translate/keys", defaultProtobufHeaders(), reqData); err != nil {
-			return nil, errors.Wrapf(err, "reading response body of /pb.translate/keys request to %v", uris[0])
+		if _, respData, err = c.doRequest(&uris[0], "POST", "/internal/translate/keys", defaultProtobufHeaders(), reqData); err != nil {
+			return nil, errors.Wrapf(err, "reading response body of /internal/translate/keys request to %v", uris[0])
 		}
 	}
 
