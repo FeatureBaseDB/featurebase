@@ -108,6 +108,19 @@ jobs:
       - run:
           command: make << parameters.test_make_target >> SHARD_WIDTH=<< parameters.shard_width >> GOARCH=<< parameters.goarch >>
           no_output_timeout: 30m
+  test-external-lookup:
+    docker:
+      - image: circleci/golang:1.15.8
+      - image: circleci/postgres:13.2-ram
+        environment:
+          POSTGRES_PASSWORD=password
+    steps:
+      - checkout-plus
+      - run: sudo apt-get install postgresql-client
+      - run: (for i in `seq 1 20`; do pg_isready -h localhost && exit 0 || sleep 1; done; exit 1)
+      - run:
+          command: make test-external-lookup EXTERNAL_LOOKUP_DSN=postgresql://postgres:password@localhost/circle_test?sslmode=disable
+          no_output_timeout: 30m
   cluster-tests:
     executor:
       name: golang
@@ -224,6 +237,10 @@ workflows:
           context: molecula
           shard_width: "22"
           resource_class: large
+          requires:
+            - setup
+      - test-external-lookup:
+          context: molecula
           requires:
             - setup
       - cluster-tests:

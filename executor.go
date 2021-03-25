@@ -16,10 +16,12 @@ package pilosa
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"math"
 	"math/bits"
+	"reflect"
 	"sort"
 	"strings"
 	"sync"
@@ -28,6 +30,7 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
+	"github.com/lib/pq"
 	"github.com/pilosa/pilosa/v2/disco"
 	"github.com/pilosa/pilosa/v2/pql"
 	"github.com/pilosa/pilosa/v2/proto"
@@ -799,6 +802,10 @@ func (e *executor) executeCall(ctx context.Context, qcx *Qcx, index string, c *p
 		statFn()
 		res, err := e.executeRows(ctx, qcx, index, c, shards, opt)
 		return res, errors.Wrapf(err, "executeRows %v", shardSlice(shards))
+	case "ExternalLookup":
+		statFn()
+		res, err := e.executeExternalLookup(ctx, qcx, index, c, shards, opt)
+		return res, errors.Wrapf(err, "executeExternalLookup %v", shardSlice(shards))
 	case "Extract":
 		statFn()
 		res, err := e.executeExtract(ctx, qcx, index, c, shards, opt)
@@ -3990,6 +3997,235 @@ func (e *ExtractedIDMatrix) Append(m ExtractedIDMatrix) {
 	if e.Fields == nil {
 		e.Fields = m.Fields
 	}
+}
+
+var (
+	typeSQLNullString = reflect.TypeOf(sql.NullString{})
+	typeSQLNullBool   = reflect.TypeOf(sql.NullBool{})
+	typeSQLNullInt32  = reflect.TypeOf(sql.NullInt32{})
+	typeSQLNullInt64  = reflect.TypeOf(sql.NullInt64{})
+)
+
+func (e *executor) executeExternalLookup(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *execOptions) (res ExtractedTable, err error) {
+	if e.Holder.externalDB == nil {
+		return ExtractedTable{}, errors.New("external DB connection is not configured")
+	}
+
+	idx := e.Holder.Index(index)
+	if idx == nil {
+		return ExtractedTable{}, errors.Errorf("index not found: %q", index)
+	}
+
+	query, ok, err := c.StringArg("query")
+	if err != nil {
+		return ExtractedTable{}, errors.Wrap(err, "looking up query")
+	}
+	if !ok {
+		return ExtractedTable{}, errors.New("missing query")
+	}
+
+	switch len(c.Children) {
+	case 0:
+		return ExtractedTable{}, errors.New("missing lookup input")
+	case 1:
+	default:
+		return ExtractedTable{}, errors.New("too many inputs to lookup query")
+	}
+
+	rawArg, err := e.executeCall(ctx, qcx, index, c.Children[0], shards, opt)
+	if err != nil {
+		return ExtractedTable{}, errors.Wrapf(err, "evaluating SQL argument call %q", c.String())
+	}
+
+	qr := []interface{}{rawArg}
+	err = e.translateResults(ctx, index, idx, c.Children, qr)
+	if err != nil {
+		return ExtractedTable{}, errors.Wrap(err, "translating query result")
+	}
+	argRow := qr[0].(*Row)
+	if !argRow.Any() {
+		// If we attempt to substitute in an empty slice, the substitution will fail.
+		// Do not attempt to execute the query.
+		return ExtractedTable{}, nil
+	}
+
+	var arg interface{}
+	if argRow.Keys != nil {
+		arg = argRow.Keys
+	} else {
+		arg = argRow.Columns()
+	}
+
+	result, err := e.Holder.externalDB.QueryContext(ctx, query, pq.Array(arg))
+	if err != nil {
+		return ExtractedTable{}, errors.Wrapf(err, "SQL query failed")
+	}
+	defer func() {
+		cerr := result.Close()
+		if cerr != nil && err == nil {
+			err = cerr
+		}
+	}()
+	if !result.Next() {
+		return ExtractedTable{}, errors.Wrap(result.Err(), "reading SQL query result")
+	}
+
+	colTypes, err := result.ColumnTypes()
+	if err != nil {
+		return ExtractedTable{}, errors.Wrapf(err, "fetching SQL query result types")
+	}
+
+	scanSlots := make([]interface{}, len(colTypes))
+	scanMapper := make([]func() interface{}, len(colTypes))
+	header := make([]ExtractedTableField, len(colTypes))
+	for i, colType := range colTypes {
+		scanType := colType.ScanType()
+	setupScan:
+		if scanType.PkgPath() != "" {
+			// This is a named type.
+			switch scanType {
+			case typeSQLNullString:
+				var dst sql.NullString
+				scanSlots[i] = &dst
+				scanMapper[i] = func() interface{} {
+					if !dst.Valid {
+						return nil
+					}
+
+					return dst.String
+				}
+				header[i] = ExtractedTableField{
+					Name: colType.Name(),
+					Type: "string",
+				}
+
+			case typeSQLNullBool:
+				var dst sql.NullBool
+				scanSlots[i] = &dst
+				scanMapper[i] = func() interface{} {
+					if !dst.Valid {
+						return nil
+					}
+
+					return dst.Bool
+				}
+				header[i] = ExtractedTableField{
+					Name: colType.Name(),
+					Type: "bool",
+				}
+
+			case typeSQLNullInt32:
+				var dst sql.NullInt32
+				scanSlots[i] = &dst
+				scanMapper[i] = func() interface{} {
+					if !dst.Valid {
+						return nil
+					}
+
+					return int64(dst.Int32)
+				}
+				header[i] = ExtractedTableField{
+					Name: colType.Name(),
+					Type: "int64",
+				}
+
+			case typeSQLNullInt64:
+				var dst sql.NullInt64
+				scanSlots[i] = &dst
+				scanMapper[i] = func() interface{} {
+					if !dst.Valid {
+						return nil
+					}
+
+					return dst.Int64
+				}
+				header[i] = ExtractedTableField{
+					Name: colType.Name(),
+					Type: "int64",
+				}
+
+			default:
+				return ExtractedTable{}, errors.Errorf("unable to process result type %v from SQL query %q", scanType, query)
+			}
+			continue
+		}
+
+		switch scanType.Kind() {
+		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+			var dst uint64
+			scanSlots[i] = &dst
+			scanMapper[i] = func() interface{} { return dst }
+			header[i] = ExtractedTableField{
+				Name: colType.Name(),
+				Type: "uint64",
+			}
+
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+			// The database may have lied and this may be nullable.
+			scanType = typeSQLNullInt64
+			goto setupScan
+
+		case reflect.String:
+			// The database may have lied and this may be nullable.
+			scanType = typeSQLNullString
+			goto setupScan
+
+		case reflect.Bool:
+			// The database may have lied and this may be nullable.
+			scanType = typeSQLNullBool
+			goto setupScan
+
+		default:
+			return ExtractedTable{}, errors.Errorf("unable to process result type %v from SQL query %q", scanType, query)
+		}
+	}
+
+	var columns []ExtractedTableColumn
+	for {
+		err := result.Scan(scanSlots...)
+		if err != nil {
+			return ExtractedTable{}, errors.Wrap(err, "scanning SQL result")
+		}
+
+		var col KeyOrID
+		switch v := scanMapper[0]().(type) {
+		case nil:
+			return ExtractedTable{}, errors.Errorf("missing primary key in result")
+		case uint64:
+			col.ID = v
+		case int64:
+			col.ID = uint64(v)
+		case string:
+			col.Keyed = true
+			col.Key = v
+		default:
+			return ExtractedTable{}, errors.Wrap(err, "cannot use %v of type %T as primary key for result table")
+		}
+
+		data := make([]interface{}, len(scanMapper)-1)
+		for i, m := range scanMapper[1:] {
+			data[i] = m()
+		}
+
+		columns = append(columns, ExtractedTableColumn{
+			Column: col,
+			Rows:   data,
+		})
+
+		if !result.Next() {
+			break
+		}
+	}
+
+	err = result.Err()
+	if err != nil {
+		return ExtractedTable{}, errors.Wrap(err, "reading SQL result")
+	}
+
+	return ExtractedTable{
+		Fields:  header[1:],
+		Columns: columns,
+	}, nil
 }
 
 func (e *executor) executeExtract(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *execOptions) (ExtractedIDMatrix, error) {

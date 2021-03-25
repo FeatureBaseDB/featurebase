@@ -40,6 +40,8 @@ import (
 	"github.com/pilosa/pilosa/v2/topology"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
+
+	_ "github.com/lib/pq"
 )
 
 // Default server settings.
@@ -394,6 +396,14 @@ func OptServerDisCo(disCo disco.DisCo,
 		s.noder = noder
 		s.sharder = sharder
 		s.schemator = schemator
+		return nil
+	}
+}
+
+// OptServerExternalDB configures a connection to an external postgres database.
+func OptServerExternalDB(dsn string) ServerOption {
+	return func(s *Server) error {
+		s.holderConfig.ExternalDB = dsn
 		return nil
 	}
 }

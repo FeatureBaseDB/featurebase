@@ -16,6 +16,7 @@ package pilosa
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -150,6 +151,8 @@ type Holder struct {
 
 	txf *TxFactory
 
+	externalDB *sql.DB
+
 	// a separate lock out for indexes, to avoid the deadlock/race dilema
 	// on holding mu.
 	imu     sync.RWMutex
@@ -239,6 +242,8 @@ type HolderConfig struct {
 	StorageConfig       *storage.Config
 	RBFConfig           *rbfcfg.Config
 	AntiEntropyInterval time.Duration
+
+	ExternalDB string
 }
 
 func DefaultHolderConfig() *HolderConfig {
@@ -728,6 +733,17 @@ func (h *Holder) Open() error {
 
 	h.txf.blueGreenOnIfRunningBlueGreen()
 
+	if h.cfg.ExternalDB != "" {
+		h.Logger.Printf("connecting to external DB")
+
+		db, err := sql.Open("postgres", h.cfg.ExternalDB)
+		if err != nil {
+			return errors.Wrap(err, "connecting to external database")
+		}
+
+		h.externalDB = db
+	}
+
 	h.Logger.Printf("open holder: complete")
 
 	return nil
@@ -836,6 +852,14 @@ func (h *Holder) Close() error {
 	if h.SnapshotQueue != nil {
 		h.SnapshotQueue.Stop()
 		h.SnapshotQueue = nil
+	}
+
+	if h.externalDB != nil {
+		err := h.externalDB.Close()
+		if err != nil {
+			return errors.Wrap(err, "closing DB")
+		}
+		h.externalDB = nil
 	}
 
 	_ = testhook.Closed(h.Auditor, h, nil)
