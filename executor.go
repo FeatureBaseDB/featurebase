@@ -1319,7 +1319,7 @@ func (e *executor) executePercentile(ctx context.Context, qcx *Qcx, index string
 	}
 	if OK {
 		if nthFloat < 0 || nthFloat > 100.0 {
-			return ValCount{}, errors.Errorf("Percentile(): invalid nth value (%f), should be >= 0 and <= 100", nthFloat)
+			return ValCount{}, errors.Errorf("Percentile(): invalid nth value (%f), should be between 0 and 100 inclusive", nthFloat)
 		}
 	} else if c.Args["nth"] == nil {
 		return ValCount{}, errors.New("Percentile(): nth required")
