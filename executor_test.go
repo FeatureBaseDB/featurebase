@@ -7127,11 +7127,20 @@ func variousQueriesOnPercentiles(t *testing.T, c *test.Cluster) {
 	}
 
 	// generate test cases per each nth argument
-	nths := []float64{0.0, 10, 25, 50, 75, 90, 99}
+	nthsFloat := []float64{0, 10, 25, 50, 75, 90, 99}
 	var tests []testCase
-	for _, nth := range nths {
+	for _, nth := range nthsFloat {
 		query := fmt.Sprintf(`Percentile(field="net_worth", filter=Row(val="foo"), nth=%f)`, nth)
 		expectedPercentile := getExpectedPercentile(nums, nth)
+		tests = append(tests, testCase{
+			query:       query,
+			csvVerifier: fmt.Sprintf("%d,1\n", expectedPercentile),
+		})
+	}
+	nthsInt := []int64{0, 10, 25, 50, 75, 90, 99}
+	for _, nth := range nthsInt {
+		query := fmt.Sprintf(`Percentile(field="net_worth", filter=Row(val="foo"), nth=%d)`, nth)
+		expectedPercentile := getExpectedPercentile(nums, float64(nth))
 		tests = append(tests, testCase{
 			query:       query,
 			csvVerifier: fmt.Sprintf("%d,1\n", expectedPercentile),
