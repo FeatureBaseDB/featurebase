@@ -470,11 +470,13 @@ func TestClient_ImportColumnAttrs(t *testing.T) {
 
 // Ensure client can bulk import data.
 func TestClient_ImportRoaring(t *testing.T) {
-	cluster := test.MustRunCluster(t, 2,
+	cluster := test.MustRunCluster(t, 3,
 		[]server.CommandOption{
-			server.OptCommandServerOptions(pilosa.OptServerReplicaN(2))},
+			server.OptCommandServerOptions(pilosa.OptServerReplicaN(3))},
 		[]server.CommandOption{
-			server.OptCommandServerOptions(pilosa.OptServerReplicaN(2))},
+			server.OptCommandServerOptions(pilosa.OptServerReplicaN(3))},
+		[]server.CommandOption{
+			server.OptCommandServerOptions(pilosa.OptServerReplicaN(3))},
 	)
 	defer cluster.Close()
 
@@ -722,7 +724,7 @@ func TestClient_ImportKeys(t *testing.T) {
 	})
 
 	t.Run("MultiNode", func(t *testing.T) {
-		cluster := test.MustRunCluster(t, 2)
+		cluster := test.MustRunCluster(t, 3)
 		defer cluster.Close()
 		cmd0 := cluster.GetNode(0)
 		cmd1 := cluster.GetNode(1)

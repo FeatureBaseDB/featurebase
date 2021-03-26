@@ -270,7 +270,7 @@ func TestImportCommand_KeyReplication(t *testing.T) {
 	}
 	ctx := context.Background()
 
-	c := test.MustRunCluster(t, 2)
+	c := test.MustRunCluster(t, 3)
 	defer c.Close()
 	cmd0 := c.GetNode(0)
 	cmd1 := c.GetNode(1)
