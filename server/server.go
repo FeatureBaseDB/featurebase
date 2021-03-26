@@ -396,7 +396,7 @@ func (m *Command) SetupServer() error {
 		m.Config.Etcd.Dir = filepath.Join(path, pilosa.DiscoDir)
 	}
 
-	e := petcd.NewEtcdWithCache(m.Config.Etcd, m.Config.Cluster.ReplicaN)
+	e := petcd.NewEtcd(m.Config.Etcd, m.Config.Cluster.ReplicaN)
 	discoOpt := pilosa.OptServerDisCo(e, e, e, e, e, e, e)
 
 	serverOptions := []pilosa.ServerOption{
