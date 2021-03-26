@@ -3033,8 +3033,6 @@ func TestExecutor_Execute_Range_BSIGroup_Deprecated(t *testing.T) {
 
 // Ensure a remote query can return a row.
 func TestExecutor_Execute_Remote_Row(t *testing.T) {
-	//TODO
-	t.Skip("ERROR:  unexpected columns: []")
 	c := test.MustRunCluster(t, 3,
 		[]server.CommandOption{
 			server.OptCommandServerOptions(pilosa.OptServerNodeID("node0"), pilosa.OptServerClusterHasher(&test.ModHasher{}))},
@@ -3046,6 +3044,7 @@ func TestExecutor_Execute_Remote_Row(t *testing.T) {
 	defer c.Close()
 	hldr0 := c.GetHolder(0)
 	hldr1 := c.GetHolder(1)
+	hldr2 := c.GetHolder(2)
 
 	_, err := c.GetPrimary().API.CreateIndex(context.Background(), "i", pilosa.IndexOptions{})
 	if err != nil {
@@ -3055,10 +3054,8 @@ func TestExecutor_Execute_Remote_Row(t *testing.T) {
 	if err != nil {
 		t.Fatalf("creating field: %v", err)
 	}
-
-	hldr1.MustSetBits("i", "f", 10, ShardWidth+1, ShardWidth+2, (3*ShardWidth)+4)
-	hldr0.SetBit("i", "f", 10, 1)
-
+	hldr0.MustSetBits("i", "f", 10, ShardWidth+1, ShardWidth+2, (3*ShardWidth)+4)
+	hldr2.SetBit("i", "f", 10, 1)
 	if res, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Row(f=10)`}); err != nil {
 		t.Fatal(err)
 	} else if columns := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(columns, []uint64{1, ShardWidth + 1, ShardWidth + 2, (3 * ShardWidth) + 4}) {
@@ -3078,7 +3075,7 @@ func TestExecutor_Execute_Remote_Row(t *testing.T) {
 			t.Fatalf("querying remote: %v", err)
 		}
 
-		if !reflect.DeepEqual(hldr1.Row("i", "f", 7).Columns(), []uint64{pilosa.ShardWidth + 1}) {
+		if !reflect.DeepEqual(hldr0.Row("i", "f", 7).Columns(), []uint64{pilosa.ShardWidth + 1}) {
 			t.Fatalf("unexpected cols from row 7: %v", hldr1.Row("i", "f", 7).Columns())
 		}
 	})
@@ -3093,7 +3090,7 @@ func TestExecutor_Execute_Remote_Row(t *testing.T) {
 			t.Fatalf("quuerying remote: %v", err)
 		}
 
-		if !reflect.DeepEqual(hldr1.RowTime("i", "z", 5, time.Date(2010, time.January, 1, 0, 0, 0, 0, time.UTC), "Y").Columns(), []uint64{pilosa.ShardWidth + 1}) {
+		if !reflect.DeepEqual(hldr0.RowTime("i", "z", 5, time.Date(2010, time.January, 1, 0, 0, 0, 0, time.UTC), "Y").Columns(), []uint64{pilosa.ShardWidth + 1}) {
 			t.Fatalf("unexpected cols from row 7: %v", hldr1.RowTime("i", "z", 5, time.Date(2010, time.January, 1, 0, 0, 0, 0, time.UTC), "Y").Columns())
 		}
 	})
@@ -3169,12 +3166,12 @@ func TestExecutor_Execute_Remote_Row(t *testing.T) {
 		if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `
 		Set(0, fint=1)
 		Set(1, fint=2)
-
+	
 		Set(2,fint=-2)
 		Set(3,fint=-1)
-
+	
 		Set(4,fint=4)
-
+		
 		Set(10, fint=0)
 		Set(100, fint=0)
 		Set(1000, fint=0)
