@@ -69,9 +69,6 @@ func TestAPI_ImportColumnAttrs(t *testing.T) {
 	m1 := c.GetNode(1)
 
 	t.Run("ImportColumnAttrs", func(t *testing.T) {
-		// TODO
-		t.Skip("ERROR: validating shard ownership: node does not own shard")
-
 		ctx := context.Background()
 		indexName := "i"
 		fieldName := "f"
@@ -120,7 +117,7 @@ func TestAPI_ImportColumnAttrs(t *testing.T) {
 			IndexCreatedAt: index.CreatedAt(),
 		}
 
-		if err := m1.API.ImportColumnAttrs(ctx, req); err != nil {
+		if err := m0.API.ImportColumnAttrs(ctx, req); err != nil {
 			t.Fatal(err)
 		}
 
@@ -134,7 +131,7 @@ func TestAPI_ImportColumnAttrs(t *testing.T) {
 			IndexCreatedAt: index.CreatedAt(),
 		}
 
-		if err := m0.API.ImportColumnAttrs(ctx, req); err != nil {
+		if err := m1.API.ImportColumnAttrs(ctx, req); err != nil {
 			t.Fatal(err)
 		}
 
@@ -328,6 +325,7 @@ func TestAPI_ImportValue(t *testing.T) {
 	coord := c.GetPrimary()
 	m0 := c.GetNode(0)
 	m1 := c.GetNode(1)
+	m2 := c.GetNode(2)
 
 	t.Run("ValColumnKey", func(t *testing.T) {
 		ctx := context.Background()
@@ -390,22 +388,17 @@ func TestAPI_ImportValue(t *testing.T) {
 	})
 
 	t.Run("ValDecimalField", func(t *testing.T) {
-		// TODO
-		t.Skip("ERROR: validating shard ownership: node does not own shard")
-
 		ctx := context.Background()
 		index := "valdec"
 		field := "fdec"
-
-		_, err := m1.API.CreateIndex(ctx, index, pilosa.IndexOptions{})
+		_, err := m2.API.CreateIndex(ctx, index, pilosa.IndexOptions{})
 		if err != nil {
 			t.Fatalf("creating index: %v", err)
 		}
-		_, err = m1.API.CreateField(ctx, index, field, pilosa.OptFieldTypeDecimal(1))
+		_, err = m2.API.CreateField(ctx, index, field, pilosa.OptFieldTypeDecimal(1))
 		if err != nil {
 			t.Fatalf("creating field: %v", err)
 		}
-
 		// Generate some records.
 		values := []float64{}
 		colIDs := []uint64{}
@@ -413,7 +406,6 @@ func TestAPI_ImportValue(t *testing.T) {
 			values = append(values, float64(i)+0.1)
 			colIDs = append(colIDs, uint64(i))
 		}
-
 		// Import data with keys to node1 and verify that it gets translated and
 		// forwarded to the owner of shard 0 (node0; because of offsetModHasher)
 		req := &pilosa.ImportValueRequest{
@@ -422,15 +414,12 @@ func TestAPI_ImportValue(t *testing.T) {
 			ColumnIDs:   colIDs,
 			FloatValues: values,
 		}
-
-		qcx := m1.API.Txf().NewQcx()
-		if err := m1.API.ImportValue(ctx, qcx, req); err != nil {
+		qcx := m0.API.Txf().NewQcx()
+		if err := m0.API.ImportValue(ctx, qcx, req); err != nil {
 			t.Fatal(err)
 		}
 		panicOn(qcx.Finish())
-
 		query := fmt.Sprintf("Row(%s>6)", field)
-
 		// Query node0.
 		if res, err := m0.API.Query(ctx, &pilosa.QueryRequest{Index: index, Query: query}); err != nil {
 			t.Fatal(err)
