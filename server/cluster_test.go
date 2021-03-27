@@ -33,7 +33,7 @@ import (
 
 // Ensure program can send/receive broadcast messages.
 func TestMain_SendReceiveMessage(t *testing.T) {
-	ms := test.MustRunCluster(t, 2)
+	ms := test.MustRunCluster(t, 3)
 	m0, m1 := ms.GetNode(0), ms.GetNode(1)
 	defer ms.Close()
 
@@ -128,7 +128,7 @@ func TestClusterResize_EmptyNode(t *testing.T) {
 
 // Ensure that a cluster of empty nodes comes up in a NORMAL state.
 func TestClusterResize_EmptyNodes(t *testing.T) {
-	clus := test.MustRunCluster(t, 2)
+	clus := test.MustRunCluster(t, 3)
 	defer clus.Close()
 
 	state0, err0 := clus.GetNode(0).API.State()
@@ -156,7 +156,7 @@ func TestClusterResize_AddNode(t *testing.T) {
 	skipTestUnderBlueGreenWithRoaring(t)
 
 	t.Run("NoData", func(t *testing.T) {
-		clus := test.MustRunCluster(t, 2)
+		clus := test.MustRunCluster(t, 3)
 		defer clus.Close()
 
 		state0, err0 := clus.GetNode(0).API.State()
@@ -218,7 +218,7 @@ func TestClusterResize_AddNode(t *testing.T) {
 	t.Run("ContinuousShards", func(t *testing.T) {
 
 		// Configure node0
-		c := test.MustRunCluster(t, 2)
+		c := test.MustRunCluster(t, 3)
 		defer c.Close()
 
 		m0 := c.GetNode(0)
@@ -268,7 +268,7 @@ func TestClusterResize_AddNode(t *testing.T) {
 
 	t.Run("OneShard", func(t *testing.T) {
 		// Configure node0
-		c := test.MustRunCluster(t, 2)
+		c := test.MustRunCluster(t, 3)
 		defer c.Close()
 
 		// Configure node0
@@ -316,7 +316,7 @@ func TestClusterResize_AddNode(t *testing.T) {
 
 	t.Run("SkippedShard", func(t *testing.T) {
 		// same reason as the ContinuousShards test above.
-		c := test.MustRunCluster(t, 2)
+		c := test.MustRunCluster(t, 3)
 		defer c.Close()
 
 		// Configure node0
@@ -372,7 +372,7 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 	skipTestUnderBlueGreenWithRoaring(t)
 
 	t.Run("WithIndex", func(t *testing.T) {
-		c := test.MustRunCluster(t, 2)
+		c := test.MustRunCluster(t, 3)
 		defer c.Close()
 
 		// Configure node0
@@ -413,7 +413,7 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 	})
 
 	t.Run("ContinuousShards", func(t *testing.T) {
-		c := test.MustRunCluster(t, 2)
+		c := test.MustRunCluster(t, 3)
 		defer c.Close()
 
 		// Configure node0
@@ -464,7 +464,7 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 	})
 
 	t.Run("SkippedShard", func(t *testing.T) {
-		c := test.MustRunCluster(t, 2)
+		c := test.MustRunCluster(t, 3)
 		defer c.Close()
 
 		// Configure node0
@@ -515,7 +515,7 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 	})
 
 	t.Run("WithIndexKeys", func(t *testing.T) {
-		c := test.MustRunCluster(t, 2)
+		c := test.MustRunCluster(t, 3)
 		defer c.Close()
 
 		// Configure node0

@@ -46,7 +46,7 @@ func TestAPI_ImportColumnAttrs(t *testing.T) {
 	   10000    5.156
 	   100000  38.179
 	*/
-	c := test.MustRunCluster(t, 2,
+	c := test.MustRunCluster(t, 3,
 		[]server.CommandOption{
 			server.OptCommandServerOptions(
 				pilosa.OptServerNodeID("node0"),
@@ -57,11 +57,17 @@ func TestAPI_ImportColumnAttrs(t *testing.T) {
 				pilosa.OptServerNodeID("node1"),
 				pilosa.OptServerClusterHasher(&offsetModHasher{}),
 			)},
+		[]server.CommandOption{
+			server.OptCommandServerOptions(
+				pilosa.OptServerNodeID("node2"),
+				pilosa.OptServerClusterHasher(&offsetModHasher{}),
+			)},
 	)
 	defer c.Close()
 
 	m0 := c.GetNode(0)
 	m1 := c.GetNode(1)
+
 	t.Run("ImportColumnAttrs", func(t *testing.T) {
 		ctx := context.Background()
 		indexName := "i"
@@ -111,7 +117,7 @@ func TestAPI_ImportColumnAttrs(t *testing.T) {
 			IndexCreatedAt: index.CreatedAt(),
 		}
 
-		if err := m1.API.ImportColumnAttrs(ctx, req); err != nil {
+		if err := m0.API.ImportColumnAttrs(ctx, req); err != nil {
 			t.Fatal(err)
 		}
 
@@ -125,7 +131,7 @@ func TestAPI_ImportColumnAttrs(t *testing.T) {
 			IndexCreatedAt: index.CreatedAt(),
 		}
 
-		if err := m0.API.ImportColumnAttrs(ctx, req); err != nil {
+		if err := m1.API.ImportColumnAttrs(ctx, req); err != nil {
 			t.Fatal(err)
 		}
 
@@ -166,7 +172,7 @@ func TestAPI_ImportColumnAttrs(t *testing.T) {
 }
 
 func TestAPI_Import(t *testing.T) {
-	c := test.MustRunCluster(t, 2,
+	c := test.MustRunCluster(t, 3,
 		[]server.CommandOption{
 			server.OptCommandServerOptions(
 				pilosa.OptServerNodeID("node0"),
@@ -177,6 +183,13 @@ func TestAPI_Import(t *testing.T) {
 		[]server.CommandOption{
 			server.OptCommandServerOptions(
 				pilosa.OptServerNodeID("node1"),
+				pilosa.OptServerClusterHasher(&offsetModHasher{}),
+				pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
+				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+			)},
+		[]server.CommandOption{
+			server.OptCommandServerOptions(
+				pilosa.OptServerNodeID("node2"),
 				pilosa.OptServerClusterHasher(&offsetModHasher{}),
 				pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
 				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
@@ -287,7 +300,7 @@ func TestAPI_Import(t *testing.T) {
 }
 
 func TestAPI_ImportValue(t *testing.T) {
-	c := test.MustRunCluster(t, 2,
+	c := test.MustRunCluster(t, 3,
 		[]server.CommandOption{
 			server.OptCommandServerOptions(
 				pilosa.OptServerNodeID("node0"),
@@ -300,12 +313,19 @@ func TestAPI_ImportValue(t *testing.T) {
 				pilosa.OptServerClusterHasher(&offsetModHasher{}),
 				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
 			)},
+		[]server.CommandOption{
+			server.OptCommandServerOptions(
+				pilosa.OptServerNodeID("node2"),
+				pilosa.OptServerClusterHasher(&offsetModHasher{}),
+				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+			)},
 	)
 	defer c.Close()
 
 	coord := c.GetPrimary()
 	m0 := c.GetNode(0)
 	m1 := c.GetNode(1)
+	m2 := c.GetNode(2)
 
 	t.Run("ValColumnKey", func(t *testing.T) {
 		ctx := context.Background()
@@ -371,16 +391,14 @@ func TestAPI_ImportValue(t *testing.T) {
 		ctx := context.Background()
 		index := "valdec"
 		field := "fdec"
-
-		_, err := m1.API.CreateIndex(ctx, index, pilosa.IndexOptions{})
+		_, err := m2.API.CreateIndex(ctx, index, pilosa.IndexOptions{})
 		if err != nil {
 			t.Fatalf("creating index: %v", err)
 		}
-		_, err = m1.API.CreateField(ctx, index, field, pilosa.OptFieldTypeDecimal(1))
+		_, err = m2.API.CreateField(ctx, index, field, pilosa.OptFieldTypeDecimal(1))
 		if err != nil {
 			t.Fatalf("creating field: %v", err)
 		}
-
 		// Generate some records.
 		values := []float64{}
 		colIDs := []uint64{}
@@ -388,7 +406,6 @@ func TestAPI_ImportValue(t *testing.T) {
 			values = append(values, float64(i)+0.1)
 			colIDs = append(colIDs, uint64(i))
 		}
-
 		// Import data with keys to node1 and verify that it gets translated and
 		// forwarded to the owner of shard 0 (node0; because of offsetModHasher)
 		req := &pilosa.ImportValueRequest{
@@ -397,15 +414,12 @@ func TestAPI_ImportValue(t *testing.T) {
 			ColumnIDs:   colIDs,
 			FloatValues: values,
 		}
-
-		qcx := m1.API.Txf().NewQcx()
-		if err := m1.API.ImportValue(ctx, qcx, req); err != nil {
+		qcx := m0.API.Txf().NewQcx()
+		if err := m0.API.ImportValue(ctx, qcx, req); err != nil {
 			t.Fatal(err)
 		}
 		panicOn(qcx.Finish())
-
 		query := fmt.Sprintf("Row(%s>6)", field)
-
 		// Query node0.
 		if res, err := m0.API.Query(ctx, &pilosa.QueryRequest{Index: index, Query: query}); err != nil {
 			t.Fatal(err)

@@ -534,7 +534,7 @@ func TestTranslation_Primary(t *testing.T) {
 	t.Run("ForwardFieldKey", func(t *testing.T) {
 		t.Skip("Short term skip to avoid go 1.13 test Should remove ASAP")
 		// Start a 2-node cluster.
-		c := test.MustRunCluster(t, 2,
+		c := test.MustRunCluster(t, 3,
 			[]server.CommandOption{
 				server.OptCommandServerOptions(
 					pilosa.OptServerNodeID("node0"),
@@ -544,6 +544,12 @@ func TestTranslation_Primary(t *testing.T) {
 			[]server.CommandOption{
 				server.OptCommandServerOptions(
 					pilosa.OptServerNodeID("node1"),
+					pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
+					pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+				)},
+			[]server.CommandOption{
+				server.OptCommandServerOptions(
+					pilosa.OptServerNodeID("node2"),
 					pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
 					pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
 				)},
