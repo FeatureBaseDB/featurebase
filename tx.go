@@ -257,6 +257,9 @@ type TxBitmap struct {
 	field string
 	view  string
 	shard uint64
+	// Container keys we've already snagged containers for, even if
+	// those containers have since been deleted by remove ops.
+	seen map[uint64]struct{}
 }
 
 func NewTxBitmap(tx Tx, index, field, view string, shard uint64) *TxBitmap {
@@ -267,6 +270,7 @@ func NewTxBitmap(tx Tx, index, field, view string, shard uint64) *TxBitmap {
 		field: field,
 		view:  view,
 		shard: shard,
+		seen:  make(map[uint64]struct{}),
 	}
 }
 
@@ -288,14 +292,14 @@ func (b *TxBitmap) Remove(a ...uint64) (changed bool, err error) {
 func (b *TxBitmap) ensureContainers(a ...uint64) error {
 	for _, v := range a {
 		key := highbits(v)
-		if b.b.Containers.Get(key) != nil {
+		if _, ok := b.seen[key]; ok {
 			continue
 		}
-
 		c, err := b.tx.Container(b.index, b.field, b.view, b.shard, key)
 		if err != nil {
 			return err
 		}
+		b.seen[key] = struct{}{}
 		b.b.Containers.Put(key, c)
 	}
 	return nil
@@ -306,6 +310,14 @@ func (b *TxBitmap) Flush() error {
 	for it, _ := b.b.Containers.Iterator(0); it.Next(); {
 		key, c := it.Value()
 		if err := b.tx.PutContainer(b.index, b.field, b.view, b.shard, key, c); err != nil {
+			return err
+		}
+		delete(b.seen, key)
+	}
+	// remove containers we have seen but no longer have, because that means
+	// we deleted everything from them.
+	for key := range b.seen {
+		if err := b.tx.RemoveContainer(b.index, b.field, b.view, b.shard, key); err != nil {
 			return err
 		}
 	}
