@@ -403,7 +403,7 @@ func OptServerDisCo(disCo disco.DisCo,
 // OptServerExternalDB configures a connection to an external postgres database.
 func OptServerExternalDB(dsn string) ServerOption {
 	return func(s *Server) error {
-		s.holderConfig.ExternalDB = dsn
+		s.holderConfig.ExternalDBDSN = dsn
 		return nil
 	}
 }

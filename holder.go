@@ -243,7 +243,7 @@ type HolderConfig struct {
 	RBFConfig           *rbfcfg.Config
 	AntiEntropyInterval time.Duration
 
-	ExternalDB string
+	ExternalDBDSN string
 }
 
 func DefaultHolderConfig() *HolderConfig {
@@ -733,10 +733,10 @@ func (h *Holder) Open() error {
 
 	h.txf.blueGreenOnIfRunningBlueGreen()
 
-	if h.cfg.ExternalDB != "" {
+	if h.cfg.ExternalDBDSN != "" {
 		h.Logger.Printf("connecting to external DB")
 
-		db, err := sql.Open("postgres", h.cfg.ExternalDB)
+		db, err := sql.Open("postgres", h.cfg.ExternalDBDSN)
 		if err != nil {
 			return errors.Wrap(err, "connecting to external database")
 		}

@@ -67,7 +67,7 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 	flags.StringVar(&srv.Config.Etcd.InitCluster, "etcd.initial-cluster", srv.Config.Etcd.InitCluster, "Initial cluster name1=apurl1,name2=apurl2")
 
 	// External DB
-	flags.StringVar(&srv.Config.ExternalDB, "externaldb", "", "external (postgres) database DSN to use for ExternalQuery calls")
+	flags.StringVar(&srv.Config.ExternalDBDSN, "external-db-dsn", "", "external (postgres) database DSN to use for ExternalLookup calls")
 
 	// AntiEntropy
 	flags.DurationVar((*time.Duration)(&srv.Config.AntiEntropy.Interval), "anti-entropy.interval", (time.Duration)(srv.Config.AntiEntropy.Interval), "Interval at which to run anti-entropy routine.")

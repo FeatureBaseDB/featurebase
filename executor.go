@@ -4042,10 +4042,11 @@ func (e *executor) executeExternalLookup(ctx context.Context, qcx *Qcx, index st
 	if err != nil {
 		return ExtractedTable{}, errors.Wrap(err, "translating query result")
 	}
-	argRow := qr[0].(*Row)
+	argRow, ok := qr[0].(*Row)
+	if !ok {
+		return ExtractedTable{}, errors.Errorf("argument call result is a %T but expected a row", qr[0])
+	}
 	if !argRow.Any() {
-		// If we attempt to substitute in an empty slice, the substitution will fail.
-		// Do not attempt to execute the query.
 		return ExtractedTable{}, nil
 	}
 

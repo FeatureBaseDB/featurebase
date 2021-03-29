@@ -429,8 +429,8 @@ func (m *Command) SetupServer() error {
 		discoOpt,
 	}
 
-	if m.Config.ExternalDB != "" {
-		serverOptions = append(serverOptions, pilosa.OptServerExternalDB(m.Config.ExternalDB))
+	if m.Config.ExternalDBDSN != "" {
+		serverOptions = append(serverOptions, pilosa.OptServerExternalDB(m.Config.ExternalDBDSN))
 	}
 
 	serverOptions = append(serverOptions, m.serverOptions...)
