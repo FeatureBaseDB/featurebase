@@ -58,7 +58,10 @@ func (b *Bitmap) UnmarshalBinary(data []byte) (err error) {
 		default:
 			panic("invalid container type")
 		}
-		newC.setMapped(true)
+		// If we're using the iterator's pointer, we're "mapped". But
+		// for instance, small arrays may use their own data structures,
+		// which is fine.
+		newC.setMapped(newC.pointer == itrPointer)
 		if !b.preferMapping {
 			newC = newC.unmapOrClone()
 		}
@@ -150,10 +153,14 @@ func InspectBinary(data []byte, mapped bool, info *BitmapInfo) (b *Bitmap, mappe
 		default:
 			panic("invalid container type")
 		}
-		newC.setMapped(true)
+		// If our pointer isn't itrPointer, we aren't actually mapped.
+		newC.setMapped(newC.pointer == itrPointer)
 		if !mapped {
 			newC = newC.unmapOrClone()
 		}
+		// Pristine means this is the original object read in from
+		// roaring data, even if it's not mapped, which this is for
+		// now.
 		newC.flags |= flagPristine
 		if newC.flags&flagMapped != 0 {
 			mappedAny = true
@@ -169,6 +176,7 @@ func InspectBinary(data []byte, mapped bool, info *BitmapInfo) (b *Bitmap, mappe
 		})
 		info.ContainerCount++
 		info.BitCount += uint64(newC.n)
+		b.Containers.Put(itrKey, newC)
 		itrKey, itrCType, itrN, itrLen, itrPointer, itrErr = itr.Next()
 	}
 	// note: if we get a non-EOF err, it's possible that we made SOME
