@@ -30,6 +30,7 @@ import (
 	"github.com/benbjohnson/immutable"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/shardwidth"
+	. "github.com/pilosa/pilosa/v2/vprint"
 )
 
 const (
@@ -355,8 +356,9 @@ func (c *leafCell) Bitmap(tx *Tx) []uint64 {
 		_, bm, _ := tx.leafCellBitmap(toPgno(c.Data))
 		return bm
 	default:
-		panic(fmt.Sprintf("invalid container type: %d", c.Type))
+		PanicOn(fmt.Errorf("invalid container type: %d", c.Type))
 	}
+	return nil
 }
 
 // Values returns a slice of 16-bit values from a container.
@@ -382,8 +384,9 @@ func (c *leafCell) Values(tx *Tx) []uint16 {
 	case ContainerTypeNone:
 		return []uint16{}
 	default:
-		panic(fmt.Sprintf("invalid container type: %d", c.Type))
+		PanicOn(fmt.Errorf("invalid container type: %d", c.Type))
 	}
+	return nil
 }
 
 func bitmapValues(bm []uint64) []uint16 {
@@ -409,7 +412,7 @@ func (c *leafCell) firstValue(tx *Tx) uint16 {
 		return r[0].Start
 	case ContainerTypeBitmapPtr:
 		_, slc, err := tx.leafCellBitmap(toPgno(c.Data))
-		panicOn(err)
+		PanicOn(err)
 		for i, v := range slc {
 			for j := uint(0); j < 64; j++ {
 				if v&(1<<j) != 0 {
@@ -417,10 +420,12 @@ func (c *leafCell) firstValue(tx *Tx) uint16 {
 				}
 			}
 		}
-		panic(fmt.Sprintf("rbf.leafCell.firstValue(): no values set in bitmap container: key=%d", c.Key))
+		PanicOn(fmt.Errorf("rbf.leafCell.firstValue(): no values set in bitmap container: key=%d", c.Key))
 	default:
-		panic(fmt.Sprintf("invalid container type: %d", c.Type))
+		PanicOn(fmt.Errorf("invalid container type: %d", c.Type))
 	}
+
+	return 0
 }
 
 // helper for lastValue()
@@ -432,7 +437,8 @@ func (c *leafCell) lastValueFromBitmap(a []uint64) uint16 {
 			}
 		}
 	}
-	panic(fmt.Sprintf("rbf.leafCell.lastValueFromBitmap(): no values set in bitmap container: key=%d", c.Key))
+	PanicOn(fmt.Errorf("rbf.leafCell.lastValueFromBitmap(): no values set in bitmap container: key=%d", c.Key))
+	return 0
 }
 
 // lastValue the last value from the container.
@@ -451,11 +457,12 @@ func (c *leafCell) lastValue(tx *Tx) uint16 {
 
 	case ContainerTypeBitmapPtr:
 		_, a, err := tx.leafCellBitmap(toPgno(c.Data))
-		panicOn(err)
+		PanicOn(err)
 		return c.lastValueFromBitmap(a)
 	default:
-		panic(fmt.Sprintf("invalid container type: %d", c.Type))
+		PanicOn(fmt.Errorf("invalid container type: %d", c.Type))
 	}
+	return 0
 }
 
 // countRange returns the bit count within the given range.
@@ -477,11 +484,12 @@ func (c *leafCell) countRange(tx *Tx, start, end int32) (n int) {
 		return int(roaring.BitmapCountRange(toArray64(c.Data), start, end))
 	case ContainerTypeBitmapPtr:
 		_, a, err := tx.leafCellBitmap(toPgno(c.Data))
-		panicOn(err)
+		PanicOn(err)
 		return int(roaring.BitmapCountRange(a, start, end))
 	default:
-		panic(fmt.Sprintf("invalid container type: %d", c.Type))
+		PanicOn(fmt.Errorf("invalid container type: %d", c.Type))
 	}
+	return
 }
 
 func readLeafCellKey(page []byte, i int) uint64 {
@@ -560,8 +568,9 @@ func readLeafCellBytesAtOffset(page []byte, offset int) []byte {
 	case ContainerTypeBitmapPtr:
 		return buf[:leafCellHeaderSize+4]
 	default:
-		panic(fmt.Sprintf("invalid cell type: %d", typ))
+		PanicOn(fmt.Errorf("invalid cell type: %d", typ))
 	}
+	return nil
 }
 
 // leafPageSize returns the number of bytes used on a leaf page.
@@ -715,13 +724,13 @@ func Walk(tx *Tx, pgno uint32, v func(uint32, []*RootRecord)) {
 	for pgno := readMetaRootRecordPageNo(tx.meta[:]); pgno != 0; {
 		page, _, err := tx.readPage(pgno)
 		if err != nil {
-			panic(err)
+			PanicOn(err)
 		}
 
 		// Read all records on the page.
 		a, err := readRootRecords(page)
 		if err != nil {
-			panic(err)
+			PanicOn(err)
 		}
 		v(pgno, a)
 		// Read next overflow page number.
@@ -731,7 +740,7 @@ func Walk(tx *Tx, pgno uint32, v func(uint32, []*RootRecord)) {
 
 func assert(condition bool) {
 	if !condition {
-		panic("assertion failed")
+		PanicOn(fmt.Errorf("assertion failed"))
 	}
 }
 

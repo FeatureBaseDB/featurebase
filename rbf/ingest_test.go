@@ -29,8 +29,8 @@ import (
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/testhook"
 
-	// "github.com/pilosa/pilosa/v2/txkey"
 	txkey "github.com/pilosa/pilosa/v2/short_txkey"
+	. "github.com/pilosa/pilosa/v2/vprint" // nolint:staticcheck
 )
 
 func rbfName(index, field, view string, shard uint64) string {
@@ -74,17 +74,17 @@ func TestIngest_lots_of_views(t *testing.T) {
 	}()
 
 	path, err := testhook.TempDir(t, "rbf_ingest_lots_of_views")
-	panicOn(err)
+	PanicOn(err)
 	defer os.Remove(path)
 
 	cfg := cfg.NewDefaultConfig()
 	db := NewDB(path, cfg)
-	panicOn(db.Open())
+	PanicOn(db.Open())
 
 	// setup profiling
 	if false {
 		profile, err := os.Create("./rbf_ingest_put_ct.cpu")
-		panicOn(err)
+		PanicOn(err)
 		_ = pprof.StartCPUProfile(profile)
 		defer func() {
 			pprof.StopCPUProfile()
@@ -94,7 +94,7 @@ func TestIngest_lots_of_views(t *testing.T) {
 
 	// put containers
 	tx, err := db.Begin(true)
-	panicOn(err)
+	PanicOn(err)
 
 	index := "i"
 	field := "f"
@@ -117,30 +117,30 @@ func TestIngest_lots_of_views(t *testing.T) {
 		view = fmt.Sprintf("view_%v", i)
 		name := rbfName(index, field, view, shard)
 		err = tx.PutContainer(name, ckey, ct)
-		panicOn(err)
+		PanicOn(err)
 		ct2, err := tx.Container(name, ckey)
-		panicOn(err)
+		PanicOn(err)
 		if err := ct2.BitwiseCompare(ct); err != nil {
-			panic("ct2 != ct")
+			PanicOn("ct2 != ct")
 		}
 
 		// write .dot of it...
 		if false { //ckey == nCt-1 {
 			c, err := tx.cursor(name)
 			if err == ErrBitmapNotFound {
-				panic("not found")
+				PanicOn("not found")
 			} else if err != nil {
-				panic(err)
+				PanicOn(err)
 			}
 			defer c.Close()
 			c.Dump("one.bitmap.dot.dump")
 		}
 	}
 
-	panicOn(tx.Commit())
+	PanicOn(tx.Commit())
 
 	sz, err := DiskUse(path, "")
-	panicOn(err)
+	PanicOn(err)
 	_ = sz
 	//vv("sz in bytes= %v", sz)
 	db.Close()
@@ -153,7 +153,7 @@ func DiskUse(root string, requiredSuffix string) (tot int, err error) {
 
 	err = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		if info == nil {
-			panic(fmt.Sprintf("info was nil for path = '%v'", path))
+			PanicOn(fmt.Sprintf("info was nil for path = '%v'", path))
 		}
 		if info.IsDir() {
 			// skip the size of directories themselves, only summing files.

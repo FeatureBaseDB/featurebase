@@ -26,9 +26,9 @@ import (
 	rbfcfg "github.com/pilosa/pilosa/v2/rbf/cfg"
 	txkey "github.com/pilosa/pilosa/v2/short_txkey"
 	"github.com/pilosa/pilosa/v2/storage"
-
-	//txkey "github.com/pilosa/pilosa/v2/txkey"
 	"github.com/pkg/errors"
+
+	. "github.com/pilosa/pilosa/v2/vprint" // nolint:staticcheck
 )
 
 var _ = sort.Sort
@@ -176,10 +176,10 @@ func (dbs *DBShard) NewTx(write bool, initialIndexName string, o Txo) (tx Tx, er
 		}
 	}
 	if o.dbs != dbs {
-		panic(fmt.Sprintf("TxFactory.NewTx() should have set o.dbs(%p) to equal dbs(%p)", o.dbs, dbs))
+		PanicOn(fmt.Sprintf("TxFactory.NewTx() should have set o.dbs(%p) to equal dbs(%p)", o.dbs, dbs))
 	}
 	if o.Shard != dbs.Shard {
-		panic(fmt.Sprintf("shard disagreement! o.Shard='%v' but dbs.Shard='%v'", int(o.Shard), int(dbs.Shard)))
+		PanicOn(fmt.Sprintf("shard disagreement! o.Shard='%v' but dbs.Shard='%v'", int(o.Shard), int(dbs.Shard)))
 	}
 	var txns []Tx
 
@@ -413,7 +413,7 @@ func (per *DBPerShard) LoadExistingDBs() (err error) {
 
 func (txf *TxFactory) NewDBPerShard(types []txtype, holderDir string, holder *Holder) (d *DBPerShard) {
 	if holder.cfg == nil || holder.cfg.RBFConfig == nil || holder.cfg.StorageConfig == nil {
-		panic("must have holder.cfg.RBFConfig and holder.cfg.StorageConfig set here")
+		PanicOn("must have holder.cfg.RBFConfig and holder.cfg.StorageConfig set here")
 	}
 
 	useOpenList := 0
@@ -522,7 +522,7 @@ func (dbs *DBShard) DumpAll() {
 	for i, ty := range dbs.types {
 		_ = i
 		tx, err := dbs.W[i].NewTx(!writable, "", Txo{Index: dbs.idx})
-		panicOn(err)
+		PanicOn(err)
 		defer tx.Rollback()
 		fmt.Printf("\n============= dumping dbs.W[%v] %v ========\n", i, ty)
 		tx.Dump(short, dbs.Shard)
@@ -532,7 +532,7 @@ func (dbs *DBShard) DumpAll() {
 		case rbfTxn:
 		case boltTxn:
 		default:
-			panic(fmt.Sprintf("unknown txtyp: '%v'", ty))
+			PanicOn(fmt.Sprintf("unknown txtyp: '%v'", ty))
 		}
 	}
 	fmt.Printf("\n============= end of DumpAll index='%v', shard=%v ========\n", dbs.Index, int(dbs.Shard))
@@ -627,7 +627,7 @@ func (per *DBPerShard) unprotectedGetDBShard(index string, shard uint64, idx *In
 		if len(per.types) == 1 && per.types[0] == roaringTxn {
 			// roaring txn are nil/fake anyway. Don't freak out.
 		} else {
-			panic(fmt.Sprintf("cannot retain closed dbs across holder ReOpen dbs='%p'; per.types[0]='%v'; len(per.types)=%v", dbs, per.types[0], len(per.types)))
+			PanicOn(fmt.Sprintf("cannot retain closed dbs across holder ReOpen dbs='%p'; per.types[0]='%v'; len(per.types)=%v", dbs, per.types[0], len(per.types)))
 		}
 	}
 	if !ok {
@@ -663,11 +663,11 @@ func (per *DBPerShard) unprotectedGetDBShard(index string, shard uint64, idx *In
 			case boltTxn:
 				registry = globalBoltReg
 			default:
-				panic(fmt.Sprintf("unknown txtyp: '%v'", ty))
+				PanicOn(fmt.Sprintf("unknown txtyp: '%v'", ty))
 			}
 			path := dbs.pathForType(ty)
 			w, err := registry.OpenDBWrapper(path, DetectMemAccessPastTx, per.StorageConfig)
-			panicOn(err)
+			PanicOn(err)
 			h := idx.Holder()
 			w.SetHolder(h)
 			dbs.Open = true
@@ -688,7 +688,7 @@ func (per *DBPerShard) Del(dbs *DBShard) (err error) {
 	if err != nil {
 		return
 	}
-	panicOn(dbs.DeleteDBPath())
+	PanicOn(dbs.DeleteDBPath())
 	delete(per.Flatmap, flatkey{index: dbs.Index, shard: dbs.Shard})
 
 	// delete from the heirarchy
@@ -703,7 +703,7 @@ func (per *DBPerShard) Close() (err error) {
 	for _, dbi := range per.dbh.Index {
 		for _, dbs := range dbi.Shard {
 			err = dbs.Close()
-			panicOn(err)
+			PanicOn(err)
 		}
 	}
 	return
@@ -716,7 +716,7 @@ func (f *TxFactory) GetShardsForIndex(idx *Index, roaringViewPath string, requir
 
 	n := len(f.types)
 	if n != 1 && n != 2 {
-		panic(fmt.Sprintf("internal error. only green or blue/green supported. we see types len %v", n))
+		PanicOn(fmt.Sprintf("internal error. only green or blue/green supported. we see types len %v", n))
 	}
 
 	var shards []map[uint64]bool
@@ -810,7 +810,7 @@ func (per *DBPerShard) TypedDBPerShardGetShardsForIndex(ty txtype, idx *Index, r
 	ignoreEmpty := false
 	includeRoot := true
 	dbf, err := listDirUnderDir(path, includeRoot, ignoreEmpty)
-	panicOn(err)
+	PanicOn(err)
 
 	for _, nm := range dbf {
 		base := filepath.Base(nm)
@@ -825,7 +825,7 @@ func (per *DBPerShard) TypedDBPerShardGetShardsForIndex(ty txtype, idx *Index, r
 		// Parse filename into integer.
 		shard, err := strconv.ParseUint(base[lenOfShardPrefix:], 10, 64)
 		if err != nil {
-			panicOn(err)
+			PanicOn(err)
 			continue
 		}
 
@@ -938,7 +938,7 @@ func (dbs *DBShard) populateBlueFromGreen() (err error) {
 
 	n := len(dbs.W)
 	if n != 2 {
-		panic(fmt.Sprintf("populateBlueFromGreen did not find 2 open DBs: have %v", n))
+		PanicOn(fmt.Sprintf("populateBlueFromGreen did not find 2 open DBs: have %v", n))
 	}
 
 	dest := dbs.W[0] // blue
@@ -948,11 +948,11 @@ func (dbs *DBShard) populateBlueFromGreen() (err error) {
 	// Since a shard is fairly small, we think one Tx will suffice.
 
 	readtx, err := src.NewTx(!writable, dbs.Index, Txo{Write: !writable, Index: dbs.idx, Shard: dbs.Shard})
-	panicOn(err)
+	PanicOn(err)
 	defer readtx.Rollback()
 
 	writetx, err := dest.NewTx(writable, dbs.Index, Txo{Write: writable, Index: dbs.idx, Shard: dbs.Shard})
-	panicOn(err)
+	PanicOn(err)
 	defer writetx.Rollback()
 
 	ctWriteCount := 0
@@ -1024,18 +1024,18 @@ func (dbs *DBShard) verifyBlueEqualsGreen() (err error) {
 
 	n := len(dbs.W)
 	if n != 2 {
-		panic(fmt.Sprintf("verifyBlueEqualsGreen did not find 2 open DBs: have %v", n))
+		PanicOn(fmt.Sprintf("verifyBlueEqualsGreen did not find 2 open DBs: have %v", n))
 	}
 
 	blue := dbs.W[0]
 	green := dbs.W[1]
 
 	greentx, err := green.NewTx(!writable, dbs.Index, Txo{Write: !writable, Index: dbs.idx, Shard: dbs.Shard})
-	panicOn(err)
+	PanicOn(err)
 	defer greentx.Rollback()
 
 	bluetx, err := blue.NewTx(!writable, dbs.Index, Txo{Write: !writable, Index: dbs.idx, Shard: dbs.Shard})
-	panicOn(err)
+	PanicOn(err)
 	defer bluetx.Rollback()
 
 	for _, fld := range dbs.idx.Fields() {

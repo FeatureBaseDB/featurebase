@@ -46,6 +46,7 @@ import (
 	"github.com/pilosa/pilosa/v2/storage"
 	"github.com/pilosa/pilosa/v2/test"
 	"github.com/pilosa/pilosa/v2/testhook"
+	. "github.com/pilosa/pilosa/v2/vprint" // nolint:staticcheck
 	"github.com/pkg/errors"
 )
 
@@ -3166,12 +3167,12 @@ func TestExecutor_Execute_Remote_Row(t *testing.T) {
 		if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `
 		Set(0, fint=1)
 		Set(1, fint=2)
-	
+
 		Set(2,fint=-2)
 		Set(3,fint=-1)
-	
+
 		Set(4,fint=4)
-		
+
 		Set(10, fint=0)
 		Set(100, fint=0)
 		Set(1000, fint=0)
@@ -4063,12 +4064,12 @@ func TestExecutor_Execute_All(t *testing.T) {
 		if err := m0.API.Import(context.Background(), qcx, req); err != nil {
 			t.Fatal(err)
 		}
-		panicOn(qcx.Finish())
+		PanicOn(qcx.Finish())
 
 		i0, err := m0.API.Index(context.Background(), "i")
-		panicOn(err)
+		PanicOn(err)
 		if i0 == nil {
-			panic("nil index i0?")
+			PanicOn("nil index i0?")
 		}
 
 		tests := []struct {
@@ -4145,7 +4146,7 @@ func TestExecutor_Execute_All(t *testing.T) {
 		if err := c.GetNode(0).API.Import(context.Background(), qcx, req); err != nil {
 			t.Fatal(err)
 		}
-		panicOn(qcx.Finish())
+		PanicOn(qcx.Finish())
 
 		tests := []struct {
 			qry     string
@@ -4676,7 +4677,7 @@ func benchmarkExistence(nn bool, b *testing.B) {
 		if err := nodeAPI.Import(context.Background(), qcx, req); err != nil {
 			b.Fatal(err)
 		}
-		panicOn(qcx.Finish())
+		PanicOn(qcx.Finish())
 	}
 }
 

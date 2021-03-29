@@ -25,12 +25,13 @@ import (
 	"github.com/pilosa/pilosa/v2/server"
 	"github.com/pilosa/pilosa/v2/storage"
 	"github.com/pilosa/pilosa/v2/test"
+	. "github.com/pilosa/pilosa/v2/vprint" // nolint:staticcheck
 )
 
 func queryIRABit(m0api *pilosa.API, acctOwnerID uint64, iraField string, iraRowID uint64, index string) (bit bool) {
 	query := fmt.Sprintf("Row(%v=%v)", iraField, iraRowID) // acctOwnerID)
 	res, err := m0api.Query(context.Background(), &pilosa.QueryRequest{Index: index, Query: query})
-	panicOn(err)
+	PanicOn(err)
 	cols := res.Results[0].(*pilosa.Row).Columns()
 	for i := range cols {
 		if cols[i] == acctOwnerID {
@@ -43,7 +44,7 @@ func queryIRABit(m0api *pilosa.API, acctOwnerID uint64, iraField string, iraRowI
 func mustQueryAcct(m0api *pilosa.API, acctOwnerID uint64, fieldAcct0, index string) (acctBal int64) {
 	query := fmt.Sprintf("FieldValue(field=%v, column=%v)", fieldAcct0, acctOwnerID)
 	res, err := m0api.Query(context.Background(), &pilosa.QueryRequest{Index: index, Query: query})
-	panicOn(err)
+	PanicOn(err)
 
 	if len(res.Results) == 0 {
 		return 0
@@ -171,17 +172,17 @@ func TestAPI_ImportAtomicRecord(t *testing.T) {
 
 	iraBit := queryIRABit(m0api, acctOwnerID, iraField, iraRowID, index)
 	if !iraBit {
-		panic("IRA bit should have been set")
+		PanicOn("IRA bit should have been set")
 	}
 
 	startingBalanceAcct0, startingBalanceAcct1 := queryBalances(m0api, acctOwnerID, fieldAcct0, fieldAcct1, index)
 	//vv("starting balance: acct0=%v,  acct1=%v", startingBalanceAcct0, startingBalanceAcct1)
 
 	if startingBalanceAcct0 != expectedBalStartingAcct0 {
-		panic(fmt.Sprintf("expected %v, observed %v starting acct0 balance", expectedBalStartingAcct0, startingBalanceAcct0))
+		PanicOn(fmt.Sprintf("expected %v, observed %v starting acct0 balance", expectedBalStartingAcct0, startingBalanceAcct0))
 	}
 	if startingBalanceAcct1 != expectedBalStartingAcct1 {
-		panic(fmt.Sprintf("expected %v, observed %v starting acct1 balance", expectedBalStartingAcct1, startingBalanceAcct1))
+		PanicOn(fmt.Sprintf("expected %v, observed %v starting acct1 balance", expectedBalStartingAcct1, startingBalanceAcct1))
 	}
 
 	//vv("sad path: transferUSD %v from %v -> %v, with power loss half-way through", transferUSD, fieldAcct0, fieldAcct1)
@@ -200,7 +201,7 @@ func TestAPI_ImportAtomicRecord(t *testing.T) {
 	err = m0api.ImportAtomicRecord(ctx, qcx, air, opt)
 	//err = m0api.ImportAtomicRecord(ctx, nil, air, opt)
 	if err != pilosa.ErrAborted {
-		panic(fmt.Sprintf("expected ErrTxnAborted but got err='%#v'", err))
+		PanicOn(fmt.Sprintf("expected ErrTxnAborted but got err='%#v'", err))
 	}
 	// sad path, cleanup
 	qcx.Abort()
@@ -210,10 +211,10 @@ func TestAPI_ImportAtomicRecord(t *testing.T) {
 	//vv("after power failure tx, balance: acct0=%v,  acct1=%v", b0, b1)
 
 	if b0 != expectedBalStartingAcct0 {
-		panic(fmt.Sprintf("expected %v, observed %v starting acct0 balance", expectedBalStartingAcct0, b0))
+		PanicOn(fmt.Sprintf("expected %v, observed %v starting acct0 balance", expectedBalStartingAcct0, b0))
 	}
 	if b1 != expectedBalStartingAcct1 {
-		panic(fmt.Sprintf("expected %v, observed %v starting acct1 balance", expectedBalStartingAcct1, b1))
+		PanicOn(fmt.Sprintf("expected %v, observed %v starting acct1 balance", expectedBalStartingAcct1, b1))
 	}
 	//vv("good: with power loss half-way, no change in account balances; acct0=%v; acct1=%v", b0, b1)
 
@@ -223,14 +224,14 @@ func TestAPI_ImportAtomicRecord(t *testing.T) {
 	// happy path with no power failure half-way through.
 
 	err = m0api.ImportAtomicRecord(ctx, nil, air)
-	panicOn(err)
+	PanicOn(err)
 
 	eb0, eb1 := queryBalances(m0api, acctOwnerID, fieldAcct0, fieldAcct1, index)
 
 	// should have been applied this time.
 	if eb0 != expectedBalEndingAcct0 ||
 		eb1 != expectedBalEndingAcct1 {
-		panic(fmt.Sprintf("problem: transaction did not get committed/applied. transferUSD=%v, but we see: startingBalanceAcct0=%v -> endingBalanceAcct0=%v; startingBalanceAcct1=%v -> endingBalanceAcct1=%v", transferUSD, startingBalanceAcct0, eb0, startingBalanceAcct1, eb1))
+		PanicOn(fmt.Sprintf("problem: transaction did not get committed/applied. transferUSD=%v, but we see: startingBalanceAcct0=%v -> endingBalanceAcct0=%v; startingBalanceAcct1=%v -> endingBalanceAcct1=%v", transferUSD, startingBalanceAcct0, eb0, startingBalanceAcct1, eb1))
 	}
 	//vv("ending balance: acct0=%v,  acct1=%v", eb0, eb1)
 
@@ -240,18 +241,18 @@ func TestAPI_ImportAtomicRecord(t *testing.T) {
 	air.Ir[0].Clear = true
 
 	err = m0api.ImportAtomicRecord(ctx, nil, air)
-	panicOn(err)
+	PanicOn(err)
 
 	eb0, eb1 = queryBalances(m0api, acctOwnerID, fieldAcct0, fieldAcct1, index)
 	if eb0 != 0 ||
 		eb1 != 0 {
-		panic("problem: bits did not clear")
+		PanicOn("problem: bits did not clear")
 	}
 	//vv("cleared balances: acct0=%v,  acct1=%v", eb0, eb1)
 
 	iraBit = queryIRABit(m0api, acctOwnerID, iraField, iraRowID, index)
 	if iraBit {
-		panic("IRA bit should have been cleared")
+		PanicOn("IRA bit should have been cleared")
 	}
 
 }

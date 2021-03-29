@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/pilosa/pilosa/v2/testhook"
+	. "github.com/pilosa/pilosa/v2/vprint" // nolint:staticcheck
 	"golang.org/x/sync/errgroup"
 )
 
@@ -26,7 +27,7 @@ import (
 func mustOpenView(tb testing.TB, index, field, name string) *view {
 	path, err := testhook.TempDirInDir(tb, *TempDir, "pilosa-view-")
 	if err != nil {
-		panic(err)
+		PanicOn(err)
 	}
 
 	fo := FieldOptions{
@@ -47,12 +48,12 @@ func mustOpenView(tb testing.TB, index, field, name string) *view {
 	testhook.Cleanup(tb, func() {
 		h.Close()
 	})
-	panicOn(err)
+	PanicOn(err)
 
 	v := newView(h, path, index, field, name, fo)
 	v.idx = idx
 	if err := v.openEmpty(); err != nil {
-		panic(err)
+		PanicOn(err)
 	}
 	v.rowAttrStore = &memAttrStore{
 		store: make(map[uint64]map[string]interface{}),

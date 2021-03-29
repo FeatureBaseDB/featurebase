@@ -1534,7 +1534,7 @@ func TestCluster_TranslateStore(t *testing.T) {
 	if err := cluster.GetIdleNode(0).Start(); err != nil {
 		t.Fatalf("starting node 0: %v", err)
 	}
-	defer cluster.GetIdleNode(0).Close()
+	defer cluster.GetIdleNode(0).Close() // nolint: errcheck
 
 	test.Do(t, "POST", cluster.GetIdleNode(0).URL()+"/index/i0", "{\"options\": {\"keys\": true}}")
 }

@@ -29,6 +29,7 @@ import (
 	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/http"
 	"github.com/pilosa/pilosa/v2/pql"
+	. "github.com/pilosa/pilosa/v2/vprint" // nolint:staticcheck
 )
 
 // RandomQueryConfig
@@ -210,7 +211,7 @@ NewSetup:
 		index := indexes[cfg.Rnd.Intn(len(indexes))]
 
 		pql, err := cfg.GenQuery(index)
-		panicOn(err)
+		PanicOn(err)
 
 		if cfg.Verbose {
 			fmt.Printf("pql = '%v'\n", pql)
@@ -355,7 +356,7 @@ func (cfg *RandomQueryConfig) Setup(api API) (err error) {
 				pql := fmt.Sprintf("Rows(%v)", fld.Name)
 
 				res, err := api.Query(ctx, ii.Name, &pilosa.QueryRequest{Index: ii.Name, Query: pql})
-				panicOn(err)
+				PanicOn(err)
 				if cfg.VeryVerbose {
 					fmt.Printf("success on pql = '%v'; res='%v'\n", pql, res.Results[0])
 				}
@@ -411,7 +412,7 @@ func (cfg *RandomQueryConfig) AddIntField(index, field string, min, max pql.Deci
 		cfg.IndexMap[index] = f
 	}
 	if min.Scale != scale || max.Scale != scale {
-		panic(fmt.Sprintf("scale error; min scale %d, max scale %d, field scale %d, assumed they'd be equal",
+		PanicOn(fmt.Sprintf("scale error; min scale %d, max scale %d, field scale %d, assumed they'd be equal",
 			min.Scale, max.Scale, scale))
 	}
 

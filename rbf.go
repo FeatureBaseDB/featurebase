@@ -32,7 +32,7 @@ import (
 	txkey "github.com/pilosa/pilosa/v2/short_txkey"
 	"github.com/pilosa/pilosa/v2/storage"
 
-	//txkey "github.com/pilosa/pilosa/v2/txkey"
+	. "github.com/pilosa/pilosa/v2/vprint" // nolint:staticcheck
 	"github.com/pkg/errors"
 )
 
@@ -402,7 +402,7 @@ func (tx *RBFTx) RoaringBitmapReader(index, field, view string, shard uint64, fr
 
 func (tx *RBFTx) NewTxIterator(index, field, view string, shard uint64) *roaring.Iterator {
 	b, err := tx.RoaringBitmap(index, field, view, shard)
-	panicOn(err)
+	PanicOn(err)
 	return b.Iterator()
 }
 

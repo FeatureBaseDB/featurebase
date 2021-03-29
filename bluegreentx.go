@@ -23,7 +23,7 @@ import (
 
 	"github.com/pilosa/pilosa/v2/roaring"
 	txkey "github.com/pilosa/pilosa/v2/short_txkey"
-	//txkey "github.com/pilosa/pilosa/v2/txkey"
+	. "github.com/pilosa/pilosa/v2/vprint"
 )
 
 // blueGreenTx runs two Tx together and notices differences in their output.
@@ -129,7 +129,7 @@ func (b *blueGreenRegistry) Close() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if len(b.m) > 0 {
-		panic(fmt.Sprintf("still have open/unchecked blueGreenTx: '%#v'", b.m))
+		PanicOn(fmt.Sprintf("still have open/unchecked blueGreenTx: '%#v'", b.m))
 		//AlwaysPrintf("still have unchecked blueGreenTx: '%#v'", b.m)
 	}
 }
@@ -191,7 +191,7 @@ func (c *blueGreenTx) Readonly() bool {
 	a := c.a.Readonly()
 	b := c.b.Readonly()
 	if a != b {
-		panic(fmt.Sprintf("Readonly difference, a=%v, but b =%v", a, b))
+		PanicOn(fmt.Sprintf("Readonly difference, a=%v, but b =%v", a, b))
 	}
 	return b
 }
@@ -240,41 +240,41 @@ func (c *blueGreenTx) compareTxState(index, field, view string, shard uint64) {
 
 	if aFound != bFound {
 		c.Dump(c.short, shard)
-		panic(fmt.Sprintf("compareTxState[%v]: A(%v) ContainerIterator had aFound=%v, but B(%v) had bFound=%v; at '%v'", here, c.as, aFound, c.bs, bFound, stack()))
+		PanicOn(fmt.Sprintf("compareTxState[%v]: A(%v) ContainerIterator had aFound=%v, but B(%v) had bFound=%v; at '%v'", here, c.as, aFound, c.bs, bFound, Stack()))
 	}
 
 	if aErr != nil || bErr != nil {
 		if aErr != nil && bErr != nil {
 			c.Dump(c.short, shard)
-			panic(fmt.Sprintf("compareTxState[%v]: A(%v) reported err '%v'; B(%v) reported err '%v' at %v", here, c.as, aErr, c.bs, bErr, stack()))
+			PanicOn(fmt.Sprintf("compareTxState[%v]: A(%v) reported err '%v'; B(%v) reported err '%v' at %v", here, c.as, aErr, c.bs, bErr, Stack()))
 		}
 		if aErr != nil {
 			c.Dump(c.short, shard)
-			panic(fmt.Sprintf("compareTxState[%v]: A(%v) reported err %v at %v; but B(%v) did not", here, c.as, aErr, c.bs, stack()))
+			PanicOn(fmt.Sprintf("compareTxState[%v]: A(%v) reported err %v at %v; but B(%v) did not", here, c.as, aErr, c.bs, Stack()))
 		}
 		if bErr != nil {
 			c.Dump(c.short, shard)
-			panic(fmt.Sprintf("compareTxState[%v]: B(%v) reported err %v at %v; but A(%v) did not", here, c.bs, bErr, c.as, stack()))
+			PanicOn(fmt.Sprintf("compareTxState[%v]: B(%v) reported err %v at %v; but A(%v) did not", here, c.bs, bErr, c.as, Stack()))
 		}
 	}
 	for aIter.Next() {
 		aKey, aValue := aIter.Value()
 
 		if !bIter.Next() {
-			AlwaysPrintf("compareTxState[%v]: A(%v) found key %v, B(%v) didn't, dump to follow, stack=\n %v\n\n and here is dump:", here, c.as, aKey, c.bs, stack())
+			AlwaysPrintf("compareTxState[%v]: A(%v) found key %v, B(%v) didn't, dump to follow, Stack=\n %v\n\n and here is dump:", here, c.as, aKey, c.bs, Stack())
 			c.Dump(c.short, shard)
-			panic(fmt.Sprintf("compareTxState[%v]: A(%v) found key %v, B(%v) didn't, at %v", here, c.as, aKey, c.bs, stack()))
+			PanicOn(fmt.Sprintf("compareTxState[%v]: A(%v) found key %v, B(%v) didn't, at %v", here, c.as, aKey, c.bs, Stack()))
 		}
 		bKey, bValue := bIter.Value()
 		if bKey != aKey {
 			AlwaysPrintf("problem in caller %v", Caller(2))
 			c.Dump(c.short, shard)
-			panic(fmt.Sprintf("compareTxState[%v]: A(%v) found key %v, B(%v) found %v, at %v", here, c.as, aKey, c.bs, bKey, stack()))
+			PanicOn(fmt.Sprintf("compareTxState[%v]: A(%v) found key %v, B(%v) found %v, at %v", here, c.as, aKey, c.bs, bKey, Stack()))
 		}
 		if err := aValue.BitwiseCompare(bValue); err != nil {
 			c.Dump(c.short, shard)
-			//vv("compareTxState[%v]: key %v differs: %v;  A=%v; B=%v; at stack=%v", here, aKey, err, c.as, c.bs, stack())
-			panic(fmt.Sprintf("compareTxState[%v]: key %v differs: %v;  A=%v; B=%v; at stack=%v", here, aKey, err, c.as, c.bs, stack()))
+			//vv("compareTxState[%v]: key %v differs: %v;  A=%v; B=%v; at Stack=%v", here, aKey, err, c.as, c.bs, Stack())
+			PanicOn(fmt.Sprintf("compareTxState[%v]: key %v differs: %v;  A=%v; B=%v; at Stack=%v", here, aKey, err, c.as, c.bs, Stack()))
 		}
 		//vv("successfully matched aKey(%v)='%v' and bKey(%v)='%v'", c.as, aKey, c.bs, bKey)
 	}
@@ -283,7 +283,7 @@ func (c *blueGreenTx) compareTxState(index, field, view string, shard uint64) {
 		AlwaysPrintf("bIter has more than it should. problem in caller %v. _sn_ %v", Caller(2), c.Sn())
 		c.Dump(c.short, shard)
 		bKey, _ := bIter.Value()
-		panic(fmt.Sprintf("compareTxState[%v]: B(%v) found key %v, A(%v) didn't, (a.sn=%v) (b.sn=%v) at %v", here, c.bs, bKey, c.as, c.a.Sn(), c.b.Sn(), stack()))
+		PanicOn(fmt.Sprintf("compareTxState[%v]: B(%v) found key %v, A(%v) didn't, (a.sn=%v) (b.sn=%v) at %v", here, c.bs, bKey, c.as, c.a.Sn(), c.b.Sn(), Stack()))
 	}
 	//vv("done without problem. compareTxState here = '%v', _sn_ %v gid=%v", here, c.Sn(), curGID())
 }
@@ -341,7 +341,7 @@ func (c *blueGreenTx) Rollback() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.rollbackOrCommitDone {
-		return // avoid using discarded tx for Dump, which will panic.
+		return // avoid using discarded tx for Dump, which will PanicOn.
 	}
 	c.rollbackOrCommitDone = true
 
@@ -350,8 +350,8 @@ func (c *blueGreenTx) Rollback() {
 	}
 	defer func() {
 		if r := recover(); r != nil {
-			AlwaysPrintf("see Rollback() panic '%v' at '%v'", r, stack())
-			panic(r)
+			AlwaysPrintf("see Rollback() PanicOn '%v' at '%v'", r, Stack())
+			PanicOn(r)
 		}
 	}()
 	//vv("blueGreenTx.Rollback() about to call (%v) a.Rollback()", c.as)
@@ -379,8 +379,8 @@ func (c *blueGreenTx) Commit() error {
 	}
 	defer func() {
 		if r := recover(); r != nil {
-			AlwaysPrintf("see Commit() panic '%v' at '%v'", r, stack())
-			panic(r)
+			AlwaysPrintf("see Commit() PanicOn '%v' at '%v'", r, Stack())
+			PanicOn(r)
 		}
 	}()
 	errA := c.a.Commit()
@@ -396,8 +396,8 @@ func (c *blueGreenTx) RoaringBitmap(index, field, view string, shard uint64) (*r
 	c.checker.see(index, field, view, shard)
 	defer func() {
 		if r := recover(); r != nil {
-			AlwaysPrintf("see RoaringBitmap() panic '%v' at '%v'", r, stack())
-			panic(r)
+			AlwaysPrintf("see RoaringBitmap() PanicOn '%v' at '%v'", r, Stack())
+			PanicOn(r)
 		}
 	}()
 	a, errA := c.a.RoaringBitmap(index, field, view, shard)
@@ -409,7 +409,7 @@ func (c *blueGreenTx) RoaringBitmap(index, field, view string, shard uint64) (*r
 		slcA := a.Slice()
 		slcB := b.Slice()
 		if !reflect.DeepEqual(slcA, slcB) {
-			panic("blueGreenTx.RoaringBitmap() returning different roaring.Bitmaps!")
+			PanicOn("blueGreenTx.RoaringBitmap() returning different roaring.Bitmaps!")
 		}
 	}
 	return b, errB
@@ -419,8 +419,8 @@ func (c *blueGreenTx) Container(index, field, view string, shard uint64, key uin
 	c.checker.see(index, field, view, shard)
 	defer func() {
 		if r := recover(); r != nil {
-			AlwaysPrintf("see Container() panic '%v' at '%v'", r, stack())
-			panic(r)
+			AlwaysPrintf("see Container() PanicOn '%v' at '%v'", r, Stack())
+			PanicOn(r)
 		}
 	}()
 	a, errA := c.a.Container(index, field, view, shard, key)
@@ -429,7 +429,7 @@ func (c *blueGreenTx) Container(index, field, view string, shard uint64, key uin
 	if !c.o.blueGreenOff {
 		compareErrors(errA, errB)
 		err = a.BitwiseCompare(b)
-		panicOn(err)
+		PanicOn(err)
 	}
 	return b, errB
 }
@@ -438,8 +438,8 @@ func (c *blueGreenTx) PutContainer(index, field, view string, shard uint64, key 
 	c.checker.see(index, field, view, shard)
 	defer func() {
 		if r := recover(); r != nil {
-			AlwaysPrintf("see PutContainer() panic '%v' at '%v'", r, stack())
-			panic(r)
+			AlwaysPrintf("see PutContainer() PanicOn '%v' at '%v'", r, Stack())
+			PanicOn(r)
 		}
 	}()
 	errA := c.a.PutContainer(index, field, view, shard, key, rc)
@@ -463,14 +463,14 @@ func (c *blueGreenTx) ImportRoaringBits(index, field, view string, shard uint64,
 	// ==================   end save comments.
 	defer func() {
 		if r := recover(); r != nil {
-			AlwaysPrintf("see ImportRoaringBits() panic '%v' at '%v'", r, stack())
-			panic(r)
+			AlwaysPrintf("see ImportRoaringBits() PanicOn '%v' at '%v'", r, Stack())
+			PanicOn(r)
 		}
 	}()
 
 	// remember where the iterator started, so we can replay it a second time.
 	rit2 := rit.Clone()
-	panicOn(err)
+	PanicOn(err)
 
 	changedA, rowSetA, errA := c.a.ImportRoaringBits(index, field, view, shard, rit, clear, log, rowSize, data)
 	changedB, rowSetB, errB := c.b.ImportRoaringBits(index, field, view, shard, rit2, clear, log, rowSize, data)
@@ -482,18 +482,18 @@ func (c *blueGreenTx) ImportRoaringBits(index, field, view string, shard uint64,
 			// case where we know that RoaringTx.ImportRoaringBits changed and rowSet will
 			// be inaccurate.
 			if changedA != changedB {
-				panic(fmt.Sprintf("changedA = %v, but changedB = %v", changedA, changedB))
+				PanicOn(fmt.Sprintf("changedA = %v, but changedB = %v", changedA, changedB))
 			}
 			if len(rowSetA) != len(rowSetB) {
-				panic(fmt.Sprintf("rowSetA = %#v, but rowSetB = %#v", rowSetA, rowSetB))
+				PanicOn(fmt.Sprintf("rowSetA = %#v, but rowSetB = %#v", rowSetA, rowSetB))
 			}
 			for k, va := range rowSetA {
 				vb, ok := rowSetB[k]
 				if !ok {
-					panic(fmt.Sprintf("diff on key '%v': present in rowSetA, but not in rowSet B. rowSetA = %#v, but rowSetB = %#v", k, rowSetA, rowSetB))
+					PanicOn(fmt.Sprintf("diff on key '%v': present in rowSetA, but not in rowSet B. rowSetA = %#v, but rowSetB = %#v", k, rowSetA, rowSetB))
 				}
 				if va != vb {
-					panic(fmt.Sprintf("diff on key '%v', rowSetA has value '%v', but rowSetB has value '%v'", k, va, vb))
+					PanicOn(fmt.Sprintf("diff on key '%v', rowSetA has value '%v', but rowSetB has value '%v'", k, va, vb))
 				}
 			}
 		}
@@ -507,8 +507,8 @@ func (c *blueGreenTx) RemoveContainer(index, field, view string, shard uint64, k
 	c.checker.see(index, field, view, shard)
 	defer func() {
 		if r := recover(); r != nil {
-			AlwaysPrintf("see RemoveContainer() panic '%v' at '%v'", r, stack())
-			panic(r)
+			AlwaysPrintf("see RemoveContainer() PanicOn '%v' at '%v'", r, Stack())
+			PanicOn(r)
 		}
 	}()
 	errA := c.a.RemoveContainer(index, field, view, shard, key)
@@ -531,9 +531,9 @@ var _ = (&blueGreenTx{}).isIn // happy linter
 func (c *blueGreenTx) isIn(index, field, view string, shard uint64, ckey uint64) (r []bool) {
 	r = make([]bool, 2)
 	inA, errA := c.a.Contains(index, field, view, shard, ckey)
-	panicOn(errA)
+	PanicOn(errA)
 	inB, errB := c.b.Contains(index, field, view, shard, ckey)
-	panicOn(errB)
+	PanicOn(errB)
 	r[0] = inA
 	r[1] = inB
 	return
@@ -544,8 +544,8 @@ func (c *blueGreenTx) Add(index, field, view string, shard uint64, batched bool,
 	//vv("blueGreenTx) Add(index=%v, field=%v, view=%v, shard=%v", index, field, view, shard)
 	defer func() {
 		if r := recover(); r != nil {
-			AlwaysPrintf("see Add() panic '%v' for index='%v', field='%v', view='%v', shard='%v' at '%v'", r, index, field, view, shard, stack())
-			panic(r)
+			AlwaysPrintf("see Add() PanicOn '%v' for index='%v', field='%v', view='%v', shard='%v' at '%v'", r, index, field, view, shard, Stack())
+			PanicOn(r)
 		}
 	}()
 
@@ -562,7 +562,7 @@ func (c *blueGreenTx) Add(index, field, view string, shard uint64, batched bool,
 	if !c.o.blueGreenOff {
 
 		if ach != bch {
-			panic(fmt.Sprintf("Add() difference, ach=%v, but bch=%v; errA='%v'; errB='%v'", ach, bch, errA, errB))
+			PanicOn(fmt.Sprintf("Add() difference, ach=%v, but bch=%v; errA='%v'; errB='%v'", ach, bch, errA, errB))
 		}
 		compareErrors(errA, errB)
 	}
@@ -575,14 +575,14 @@ func compareErrors(errA, errB error) {
 	case errA == nil && errB == nil:
 		// OK
 	case errA == nil:
-		panic(fmt.Sprintf("errA is nil, but errB = %#v", errB))
+		PanicOn(fmt.Sprintf("errA is nil, but errB = %#v", errB))
 	case errB == nil:
-		panic(fmt.Sprintf("errB is nil, but errA = %#v", errA))
+		PanicOn(fmt.Sprintf("errB is nil, but errA = %#v", errA))
 	default:
 		ae := errA.Error()
 		be := errB.Error()
 		if ae != be {
-			panic(fmt.Sprintf("errA is '%v', but errB is '%v'", ae, be))
+			PanicOn(fmt.Sprintf("errA is '%v', but errB is '%v'", ae, be))
 		}
 	}
 }
@@ -591,8 +591,8 @@ func (c *blueGreenTx) Remove(index, field, view string, shard uint64, a ...uint6
 	c.checker.see(index, field, view, shard)
 	defer func() {
 		if r := recover(); r != nil {
-			AlwaysPrintf("see Remove() panic '%v' at '%v'", r, stack())
-			panic(r)
+			AlwaysPrintf("see Remove() PanicOn '%v' at '%v'", r, Stack())
+			PanicOn(r)
 		}
 	}()
 	ach, errA := c.a.Remove(index, field, view, shard, a...)
@@ -609,8 +609,8 @@ func (c *blueGreenTx) Contains(index, field, view string, shard uint64, key uint
 	c.checker.see(index, field, view, shard)
 	defer func() {
 		if r := recover(); r != nil {
-			AlwaysPrintf("see Contains() panic '%v' at '%v'", r, stack())
-			panic(r)
+			AlwaysPrintf("see Contains() PanicOn '%v' at '%v'", r, Stack())
+			PanicOn(r)
 		}
 	}()
 	ax, errA := c.a.Contains(index, field, view, shard, key)
@@ -627,8 +627,8 @@ func (c *blueGreenTx) ContainerIterator(index, field, view string, shard uint64,
 	c.checker.see(index, field, view, shard)
 	defer func() {
 		if r := recover(); r != nil {
-			AlwaysPrintf("see ContainerIterator() panic '%v' at '%v'", r, stack())
-			panic(r)
+			AlwaysPrintf("see ContainerIterator() PanicOn '%v' at '%v'", r, Stack())
+			PanicOn(r)
 		}
 	}()
 
@@ -690,7 +690,7 @@ func (bgi *blueGreenIterator) Next() bool {
 	na := bgi.ait.Next()
 	nb := bgi.bit.Next()
 	if na != nb {
-		panic(fmt.Sprintf("na=%v(%v) != nb(%v)=%v", na, bgi.as, bgi.bs, nb))
+		PanicOn(fmt.Sprintf("na=%v(%v) != nb(%v)=%v", na, bgi.as, bgi.bs, nb))
 	}
 	return nb
 }
@@ -701,10 +701,10 @@ func (bgi *blueGreenIterator) Value() (uint64, *roaring.Container) {
 
 	if !bgi.tx.o.blueGreenOff {
 		if ka != kb {
-			panic(fmt.Sprintf("ka=%v != kb=%v", ka, kb))
+			PanicOn(fmt.Sprintf("ka=%v != kb=%v", ka, kb))
 		}
 		err := ca.BitwiseCompare(cb)
-		panicOn(err)
+		PanicOn(err)
 	}
 	return kb, cb
 }
@@ -718,8 +718,8 @@ func (bgi *blueGreenIterator) Close() {
 func (c *blueGreenTx) ForEach(index, field, view string, shard uint64, fn func(i uint64) error) error {
 	defer func() {
 		if r := recover(); r != nil {
-			AlwaysPrintf("see ForEach() panic '%v' at '%v'", r, stack())
-			panic(r)
+			AlwaysPrintf("see ForEach() PanicOn '%v' at '%v'", r, Stack())
+			PanicOn(r)
 		}
 	}()
 	return c.b.ForEach(index, field, view, shard, fn)
@@ -733,8 +733,8 @@ func (c *blueGreenTx) ForEachRange(index, field, view string, shard uint64, star
 
 	defer func() {
 		if r := recover(); r != nil {
-			AlwaysPrintf("see ForEachRange() panic '%v' at '%v'", r, stack())
-			panic(r)
+			AlwaysPrintf("see ForEachRange() PanicOn '%v' at '%v'", r, Stack())
+			PanicOn(r)
 		}
 	}()
 
@@ -748,8 +748,8 @@ func (c *blueGreenTx) Count(index, field, view string, shard uint64) (uint64, er
 	c.checker.see(index, field, view, shard)
 	defer func() {
 		if r := recover(); r != nil {
-			AlwaysPrintf("see Count() panic '%v' at '%v'", r, stack())
-			panic(r)
+			AlwaysPrintf("see Count() PanicOn '%v' at '%v'", r, Stack())
+			PanicOn(r)
 		}
 	}()
 	a, errA := c.a.Count(index, field, view, shard)
@@ -767,8 +767,8 @@ func (c *blueGreenTx) Max(index, field, view string, shard uint64) (uint64, erro
 	c.checker.see(index, field, view, shard)
 	defer func() {
 		if r := recover(); r != nil {
-			AlwaysPrintf("see Max() panic '%v' at '%v'", r, stack())
-			panic(r)
+			AlwaysPrintf("see Max() PanicOn '%v' at '%v'", r, Stack())
+			PanicOn(r)
 		}
 	}()
 	a, errA := c.a.Max(index, field, view, shard)
@@ -786,8 +786,8 @@ func (c *blueGreenTx) Min(index, field, view string, shard uint64) (uint64, bool
 	c.checker.see(index, field, view, shard)
 	defer func() {
 		if r := recover(); r != nil {
-			AlwaysPrintf("see Min() panic '%v' at '%v'", r, stack())
-			panic(r)
+			AlwaysPrintf("see Min() PanicOn '%v' at '%v'", r, Stack())
+			PanicOn(r)
 		}
 	}()
 	amin, afound, errA := c.a.Min(index, field, view, shard)
@@ -805,8 +805,8 @@ func (c *blueGreenTx) UnionInPlace(index, field, view string, shard uint64, othe
 	c.checker.see(index, field, view, shard)
 	defer func() {
 		if r := recover(); r != nil {
-			AlwaysPrintf("see UnionInPlace() panic '%v' at '%v'", r, stack())
-			panic(r)
+			AlwaysPrintf("see UnionInPlace() PanicOn '%v' at '%v'", r, Stack())
+			PanicOn(r)
 		}
 	}()
 	errA := c.a.UnionInPlace(index, field, view, shard, others...)
@@ -822,8 +822,8 @@ func (c *blueGreenTx) CountRange(index, field, view string, shard uint64, start,
 	defer func() {
 		if r := recover(); r != nil {
 			c.Dump(c.short, shard)
-			AlwaysPrintf("see CountRange() panic '%v' at '%v'", r, stack())
-			panic(r)
+			AlwaysPrintf("see CountRange() PanicOn '%v' at '%v'", r, Stack())
+			PanicOn(r)
 		}
 	}()
 	a, errA := c.a.CountRange(index, field, view, shard, start, end)
@@ -831,7 +831,7 @@ func (c *blueGreenTx) CountRange(index, field, view string, shard uint64, start,
 
 	if !c.o.blueGreenOff {
 		if a != b {
-			panic(fmt.Sprintf("a(%v) = %v, but b(%v) = %v", c.as, a, c.bs, b))
+			PanicOn(fmt.Sprintf("a(%v) = %v, but b(%v) = %v", c.as, a, c.bs, b))
 		}
 
 		compareErrors(errA, errB)
@@ -843,8 +843,8 @@ func (c *blueGreenTx) OffsetRange(index, field, view string, shard, offset, star
 	c.checker.see(index, field, view, shard)
 	defer func() {
 		if r := recover(); r != nil {
-			AlwaysPrintf("see OffsetRange() on _sn_ %v, panic '%v' at '%v'", c.Sn(), r, stack())
-			panic(r)
+			AlwaysPrintf("see OffsetRange() on _sn_ %v, PanicOn '%v' at '%v'", c.Sn(), r, Stack())
+			PanicOn(r)
 		}
 	}()
 	a, errA := c.a.OffsetRange(index, field, view, shard, offset, start, end)
@@ -855,7 +855,7 @@ func (c *blueGreenTx) OffsetRange(index, field, view string, shard, offset, star
 		err = roaringBitmapDiff(a, b)
 		if err != nil {
 			c.Dump(false, shard)
-			panicOn(fmt.Errorf("on _sn_ %v OffsetRange(index='%v', field='%v', view='%v', shard='%v', offset: %v start: %v, end: %v) err: %v", c.Sn(), index, field, view, int(shard), offset, start, end, err))
+			PanicOn(fmt.Errorf("on _sn_ %v OffsetRange(index='%v', field='%v', view='%v', shard='%v', offset: %v start: %v, end: %v) err: %v", c.Sn(), index, field, view, int(shard), offset, start, end, err))
 		}
 		compareErrors(errA, errB)
 	}
@@ -868,8 +868,8 @@ func (c *blueGreenTx) RoaringBitmapReader(index, field, view string, shard uint6
 	defer func() {
 		if r := recover(); r != nil {
 			c.Dump(c.short, shard)
-			AlwaysPrintf("see RoaringBitmapReader() panic '%v' at '%v'", r, stack())
-			panic(r)
+			AlwaysPrintf("see RoaringBitmapReader() PanicOn '%v' at '%v'", r, Stack())
+			PanicOn(r)
 		}
 	}()
 
@@ -891,7 +891,7 @@ func (c *blueGreenTx) RoaringBitmapReader(index, field, view string, shard uint6
 	}
 	if sizeMustMatch {
 		if szA != szB {
-			panic(fmt.Sprintf("szA(%v) = %v, but szB(%v) = %v;  fragmentPathForRoaring='%v'", c.as, szA, c.bs, szB, fragmentPathForRoaring))
+			PanicOn(fmt.Sprintf("szA(%v) = %v, but szB(%v) = %v;  fragmentPathForRoaring='%v'", c.as, szA, c.bs, szB, fragmentPathForRoaring))
 		}
 		return &MultiReaderB{a: rcA, b: rcB}, szB, errB
 	} else {
@@ -955,14 +955,14 @@ func (m *MultiReaderB) Read(p []byte) (nB int, errB error) {
 
 	if !m.allowSizeVariation {
 		if errA == io.ErrUnexpectedEOF {
-			panic(fmt.Sprintf("MultiReaderB got ErrUnexpectedEOF: read %v bytes from B, but could only read %v bytes for A", nB, nA))
+			PanicOn(fmt.Sprintf("MultiReaderB got ErrUnexpectedEOF: read %v bytes from B, but could only read %v bytes for A", nB, nA))
 		}
 		if nA != nB {
-			panic(fmt.Sprintf("MultiReaderB read %v bytes from B, but could only read %v bytes for A", nB, nA))
+			PanicOn(fmt.Sprintf("MultiReaderB read %v bytes from B, but could only read %v bytes for A", nB, nA))
 		}
 		cmp := bytes.Compare(p[:nB], p2[:nB])
 		if cmp != 0 {
-			panic(fmt.Sprintf("MultiReaderB reads p and p2 (cmp= %v) differed.", cmp))
+			PanicOn(fmt.Sprintf("MultiReaderB reads p and p2 (cmp= %v) differed.", cmp))
 		}
 	}
 	return

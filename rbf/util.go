@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	txkey "github.com/pilosa/pilosa/v2/short_txkey"
+	. "github.com/pilosa/pilosa/v2/vprint"
 )
 
 func (tx *Tx) dumpAllPages(showLeaves bool) error {
@@ -56,9 +57,9 @@ func (tx *Tx) dumpAllPages(showLeaves bool) error {
 			fmt.Printf("next=%d\n", info.Next)
 
 			page, _, err := tx.readPage(uint32(pgno))
-			panicOn(err)
+			PanicOn(err)
 			rootRecords, err := readRootRecords(page)
-			panicOn(err)
+			PanicOn(err)
 			for k, rr := range rootRecords {
 				fmt.Printf("  [%02v] Name:'%v'  pgno:%v\n", k, prefixToString(rr.Name), rr.Pgno)
 			}
@@ -73,7 +74,7 @@ func (tx *Tx) dumpAllPages(showLeaves bool) error {
 			fmt.Printf("flags=x%x,celln=%d\n", info.Flags, info.CellN)
 
 			page, _, err := tx.readPage(uint32(pgno))
-			panicOn(err)
+			PanicOn(err)
 
 			var leafCells [PageSize / 8]leafCell
 			cells := readLeafCells(page, leafCells[:])
@@ -88,7 +89,7 @@ func (tx *Tx) dumpAllPages(showLeaves bool) error {
 			fmt.Printf("flags=x%x,celln=%d\n", info.Flags, info.CellN)
 
 			page, _, err := tx.readPage(uint32(pgno))
-			panicOn(err)
+			PanicOn(err)
 
 			cells := readBranchCells(page)
 			for i, cell := range cells {
@@ -240,12 +241,12 @@ func (c_orig *Cursor) debugStringBitmaps() (r string) {
 		if err == io.EOF {
 			break
 		}
-		panicOn(err)
+		PanicOn(err)
 
 		//instead of cell := c2.cell()
 		elem := &c2.stack.elems[c2.stack.top]
 		leafPage, _, err := c2.tx.readPage(elem.pgno)
-		panicOn(err)
+		PanicOn(err)
 		cell := readLeafCell(leafPage, elem.index)
 
 		ckey := cell.Key
