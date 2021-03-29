@@ -7137,7 +7137,7 @@ func variousQueriesOnPercentiles(t *testing.T, c *test.Cluster) {
 			csvVerifier: fmt.Sprintf("%d,1\n", expectedPercentile),
 		})
 	}
-	nthsInt := []int64{10}
+	nthsInt := []int64{0, 10, 100}
 	for _, nth := range nthsInt {
 		query := fmt.Sprintf(`Percentile(field="net_worth", filter=Row(val="foo"), nth=%d)`, nth)
 		expectedPercentile := getExpectedPercentile(nums, float64(nth))
