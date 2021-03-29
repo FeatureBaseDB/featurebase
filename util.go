@@ -28,6 +28,7 @@ import (
 	"unsafe"
 
 	"github.com/pilosa/pilosa/v2/roaring"
+	. "github.com/pilosa/pilosa/v2/vprint" // nolint:staticcheck
 	"github.com/pkg/errors"
 )
 
@@ -147,7 +148,7 @@ func roaringBitmapDiff(a, b *roaring.Bitmap) error {
 func dirAsString(path string) (r string) {
 	r = fmt.Sprintf("dump of directory '%v':\n", path)
 	files, err := ioutil.ReadDir(path)
-	panicOn(err)
+	PanicOn(err)
 	for _, f := range files {
 		r += f.Name() + "\n"
 	}
@@ -203,7 +204,7 @@ func fromArray16(a []uint16) []byte {
 		return []byte{}
 	}
 	if len(a) > 4096 {
-		panic(fmt.Sprintf("cannot put more than 4096 integers into an array container: %v too big", len(a)))
+		PanicOn(fmt.Sprintf("cannot put more than 4096 integers into an array container: %v too big", len(a)))
 	}
 	return (*[8192]byte)(unsafe.Pointer(&a[0]))[: len(a)*2 : len(a)*2]
 }
@@ -222,7 +223,7 @@ func fromInterval16(a []roaring.Interval16) []byte {
 		return []byte{}
 	}
 	if len(a) > 2048 {
-		panic(fmt.Sprintf("cannot put more than 2048 roaring.Interval16 into a container: %v too big", len(a)))
+		PanicOn(fmt.Sprintf("cannot put more than 2048 roaring.Interval16 into a container: %v too big", len(a)))
 	}
 	return (*[8192]byte)(unsafe.Pointer(&a[0]))[: len(a)*4 : len(a)*4]
 }
@@ -237,7 +238,7 @@ func DiskUse(root string, requiredSuffix string) (tot int, err error) {
 
 	err = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		if info == nil {
-			panic(fmt.Sprintf("info was nil for path = '%v'", path))
+			PanicOn(fmt.Sprintf("info was nil for path = '%v'", path))
 		}
 		if info.IsDir() {
 			// skip the size of directories themselves, only summing files.
@@ -262,7 +263,7 @@ func SubdirLargestDirWithSuffix(rootDir, requiredDirSuffix string) (exists bool,
 
 	err = filepath.Walk(rootDir, func(path string, info os.FileInfo, err error) error {
 		if info == nil {
-			panic(fmt.Sprintf("info was nil for path = '%v'", path))
+			PanicOn(fmt.Sprintf("info was nil for path = '%v'", path))
 		}
 
 		if info.IsDir() && strings.HasSuffix(path, requiredDirSuffix) {

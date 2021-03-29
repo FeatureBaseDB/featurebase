@@ -26,7 +26,7 @@ import (
 	"github.com/pilosa/pilosa/v2/hash"
 	"github.com/pilosa/pilosa/v2/roaring"
 	txkey "github.com/pilosa/pilosa/v2/short_txkey"
-	//txkey "github.com/pilosa/pilosa/v2/txkey"
+	. "github.com/pilosa/pilosa/v2/vprint"
 )
 
 var _ = txkey.ToString
@@ -135,7 +135,7 @@ func (tx *Tx) Rollback() {
 	// Disconnect transaction from DB.
 	tx.db.mu.Lock()
 	defer tx.db.mu.Unlock()
-	panicOn(tx.db.removeTx(tx))
+	PanicOn(tx.db.removeTx(tx))
 }
 
 // Root returns the root page number for a bitmap. Returns 0 if the bitmap does not exist.
@@ -919,7 +919,7 @@ func (tx *Tx) allocatePgno() (uint32, error) {
 		if changed, err := c.Remove(uint64(pgno)); err != nil {
 			return 0, err
 		} else if !changed {
-			panic(fmt.Sprintf("tx.Tx.allocatePgno(): double alloc: %d", pgno))
+			PanicOn(fmt.Sprintf("tx.Tx.allocatePgno(): double alloc: %d", pgno))
 		}
 		return pgno, nil
 	}
@@ -960,7 +960,7 @@ func (tx *Tx) freePgno(pgno uint32) error {
 	if changed, err := c.Add(uint64(pgno)); err != nil {
 		return err
 	} else if !changed {
-		panic(fmt.Sprintf("rbf.Tx.freePgno(): double free: %d", pgno))
+		PanicOn(fmt.Sprintf("rbf.Tx.freePgno(): double free: %d", pgno))
 	}
 	return nil
 }
@@ -1200,7 +1200,7 @@ func (tx *Tx) ForEachRange(name string, start, end uint64, fn func(uint64) error
 				}
 			}
 		default:
-			panic(fmt.Sprintf("invalid container type: %d", cell.Type))
+			PanicOn(fmt.Sprintf("invalid container type: %d", cell.Type))
 		}
 	}
 }
@@ -1299,7 +1299,7 @@ func (tx *Tx) Min(name string) (uint64, bool, error) {
 
 func (tx *Tx) UnionInPlace(name string, others ...*roaring.Bitmap) error {
 	rbm, err := tx.RoaringBitmap(name)
-	panicOn(err)
+	PanicOn(err)
 
 	rbm.UnionInPlace(others...)
 	// iterate over the containers that changed within rbm, and write them back to disk.
@@ -1313,7 +1313,7 @@ func (tx *Tx) UnionInPlace(name string, others ...*roaring.Bitmap) error {
 		// TODO: only write the changed ones back, as optimization?
 		//       Compare to ImportRoaringBits.
 		err := tx.PutContainer(name, containerKey, rc)
-		panicOn(err)
+		PanicOn(err)
 	}
 	return nil
 }
@@ -1395,11 +1395,11 @@ func (tx *Tx) CountRange(name string, start, end uint64) (uint64, error) {
 
 func (tx *Tx) OffsetRange(name string, offset, start, endx uint64) (*roaring.Bitmap, error) {
 	if lowbits(offset) != 0 {
-		panic("offset must not contain low bits")
+		PanicOn("offset must not contain low bits")
 	} else if lowbits(start) != 0 {
-		panic("range start must not contain low bits")
+		PanicOn("range start must not contain low bits")
 	} else if lowbits(endx) != 0 {
-		panic("range endx must not contain low bits")
+		PanicOn("range endx must not contain low bits")
 	}
 
 	tx.mu.RLock()
@@ -1532,7 +1532,8 @@ func (si *emptyContainerIterator) Next() bool {
 	return false
 }
 func (si *emptyContainerIterator) Value() (uint64, *roaring.Container) {
-	panic("emptyContainerIterator never has any Values")
+	PanicOn("emptyContainerIterator never has any Values")
+	return 0, nil
 }
 
 func (tx *Tx) Dump(short bool, shard uint64) {
@@ -1544,14 +1545,14 @@ func (tx *Tx) DumpString(short bool, shard uint64) (r string) {
 
 	// grab root records, for a list of bitmaps.
 	records, err := tx.RootRecords()
-	panicOn(err)
+	PanicOn(err)
 	n := 0
 
 	for itr := records.Iterator(); !itr.Done(); {
 		name, _ := itr.Next()
 
 		c, err := tx.cursor(name.(string))
-		panicOn(err)
+		PanicOn(err)
 		defer c.Close()
 
 		err = c.First() // First will rewind to beginning.
@@ -1560,17 +1561,17 @@ func (tx *Tx) DumpString(short bool, shard uint64) (r string) {
 			n++
 			continue
 		}
-		panicOn(err)
+		PanicOn(err)
 		for {
 			err := c.Next()
 			if err == io.EOF {
 				break
 			}
-			panicOn(err)
+			PanicOn(err)
 
 			elem := &c.stack.elems[c.stack.top]
 			leafPage, _, err := c.tx.readPage(elem.pgno)
-			panicOn(err)
+			PanicOn(err)
 			cell := readLeafCell(leafPage, elem.index)
 
 			ckey := cell.Key
@@ -1595,7 +1596,7 @@ func containerToBytes(ct *roaring.Container) []byte {
 	ty := roaring.ContainerType(ct)
 	switch ty {
 	case roaring.ContainerNil:
-		panic("nil container")
+		PanicOn("nil container")
 	case roaring.ContainerArray:
 		return fromArray16(roaring.AsArray(ct))
 	case roaring.ContainerBitmap:
@@ -1603,7 +1604,8 @@ func containerToBytes(ct *roaring.Container) []byte {
 	case roaring.ContainerRun:
 		return fromInterval16(roaring.AsRuns(ct))
 	}
-	panic(fmt.Sprintf("unknown container type '%v'", int(ty)))
+	PanicOn(fmt.Sprintf("unknown container type '%v'", int(ty)))
+	return nil
 }
 
 func bitmapAsString(rbm *roaring.Bitmap) (r string) {
@@ -1785,7 +1787,7 @@ func (tx *Tx) ImportRoaringBits(name string, itr roaring.RoaringIterator, clear 
 
 				err = tx.putContainerWithCursor(cur, itrKey, newC)
 				if err != nil {
-					panicOn(err)
+					PanicOn(err)
 					return
 				}
 				continue
@@ -1927,7 +1929,7 @@ func (tx *Tx) Pages(pgnos []uint32) ([]Page, error) {
 			pages = append(pages, &FreePage{FreePageInfo: info})
 
 		default:
-			panic(fmt.Sprintf("invalid page info type %T", info))
+			PanicOn(fmt.Sprintf("invalid page info type %T", info))
 		}
 	}
 
@@ -2047,7 +2049,7 @@ func (tx *Tx) walkPageInfo(infos []PageInfo, root uint32, name string) error {
 				Tree:   name,
 			}
 		default:
-			panic(fmt.Sprintf("unexpected page type %d for page %d", typ, pgno))
+			PanicOn(fmt.Sprintf("unexpected page type %d for page %d", typ, pgno))
 		}
 
 		return nil

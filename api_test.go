@@ -30,6 +30,7 @@ import (
 	"github.com/pilosa/pilosa/v2/http"
 	"github.com/pilosa/pilosa/v2/server"
 	"github.com/pilosa/pilosa/v2/test"
+	. "github.com/pilosa/pilosa/v2/vprint" // nolint:staticcheck
 )
 
 // attrFun defines a mapping from columnID -> attr value
@@ -256,7 +257,7 @@ func TestAPI_Import(t *testing.T) {
 		if err := m0.API.Import(ctx, qcx, req); err != nil {
 			t.Fatal(err)
 		}
-		panicOn(qcx.Finish())
+		PanicOn(qcx.Finish())
 
 		pql := fmt.Sprintf("Row(%s=%d)", fieldName, rowID)
 
@@ -363,7 +364,7 @@ func TestAPI_ImportValue(t *testing.T) {
 		if err := coord.API.ImportValue(ctx, qcx, req); err != nil {
 			t.Fatal(err)
 		}
-		panicOn(qcx.Finish())
+		PanicOn(qcx.Finish())
 
 		pql := fmt.Sprintf("Row(%s>0)", field)
 
@@ -418,7 +419,7 @@ func TestAPI_ImportValue(t *testing.T) {
 		if err := m0.API.ImportValue(ctx, qcx, req); err != nil {
 			t.Fatal(err)
 		}
-		panicOn(qcx.Finish())
+		PanicOn(qcx.Finish())
 		query := fmt.Sprintf("Row(%s>6)", field)
 		// Query node0.
 		if res, err := m0.API.Query(ctx, &pilosa.QueryRequest{Index: index, Query: query}); err != nil {
@@ -489,7 +490,7 @@ func TestAPI_ImportValue(t *testing.T) {
 		if err := m0.API.ImportValue(ctx, qcx, req); err != nil {
 			t.Fatal(err)
 		}
-		panicOn(qcx.Finish())
+		PanicOn(qcx.Finish())
 
 		pql := fmt.Sprintf(`Row(%s=="strval-110")`, field)
 
@@ -579,12 +580,12 @@ func TestAPI_ClearFlagForImportAndImportValues(t *testing.T) {
 	if err := m0api.ImportValue(ctx, qcx, ivr0); err != nil {
 		t.Fatal(err)
 	}
-	panicOn(qcx.Finish())
+	PanicOn(qcx.Finish())
 
 	bitIsSet := func() bool {
 		query := fmt.Sprintf("Row(%v=%v)", iraField, iraRowID)
 		res, err := m0api.Query(context.Background(), &pilosa.QueryRequest{Index: index, Query: query})
-		panicOn(err)
+		PanicOn(err)
 		cols := res.Results[0].(*pilosa.Row).Columns()
 		for i := range cols {
 			if cols[i] == acctOwnerID {
@@ -595,13 +596,13 @@ func TestAPI_ClearFlagForImportAndImportValues(t *testing.T) {
 	}
 
 	if !bitIsSet() {
-		panic("IRA bit should have been set")
+		PanicOn("IRA bit should have been set")
 	}
 
 	queryAcct := func(m0api *pilosa.API, acctOwnerID uint64, fieldAcct0, index string) (acctBal int64) {
 		query := fmt.Sprintf("FieldValue(field=%v, column=%v)", fieldAcct0, acctOwnerID)
 		res, err := m0api.Query(context.Background(), &pilosa.QueryRequest{Index: index, Query: query})
-		panicOn(err)
+		PanicOn(err)
 
 		if len(res.Results) == 0 {
 			return 0
@@ -613,7 +614,7 @@ func TestAPI_ClearFlagForImportAndImportValues(t *testing.T) {
 	bal := queryAcct(m0api, acctOwnerID, fieldAcct0, index)
 
 	if bal != acct0bal {
-		panic(fmt.Sprintf("expected %v, observed %v starting acct0 balance", acct0bal, bal))
+		PanicOn(fmt.Sprintf("expected %v, observed %v starting acct0 balance", acct0bal, bal))
 	}
 
 	// clear the bit
@@ -622,10 +623,10 @@ func TestAPI_ClearFlagForImportAndImportValues(t *testing.T) {
 	if err := m0api.Import(ctx, qcx, ir0); err != nil {
 		t.Fatal(err)
 	}
-	panicOn(qcx.Finish())
+	PanicOn(qcx.Finish())
 
 	if bitIsSet() {
-		panic("IRA bit should have been cleared")
+		PanicOn("IRA bit should have been cleared")
 	}
 
 	// clear the BSI
@@ -634,11 +635,11 @@ func TestAPI_ClearFlagForImportAndImportValues(t *testing.T) {
 	if err := m0api.ImportValue(ctx, qcx, ivr0); err != nil {
 		t.Fatal(err)
 	}
-	panicOn(qcx.Finish())
+	PanicOn(qcx.Finish())
 
 	bal = queryAcct(m0api, acctOwnerID, fieldAcct0, index)
 	if bal != 0 {
-		panic(fmt.Sprintf("expected %v, observed %v starting acct0 balance", acct0bal, 0))
+		PanicOn(fmt.Sprintf("expected %v, observed %v starting acct0 balance", acct0bal, 0))
 	}
 }
 

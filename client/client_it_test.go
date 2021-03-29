@@ -1930,13 +1930,13 @@ func queryBalances(client *Client, acctOwnerID uint64, fieldAcct0, fieldAcct1 st
 	q := fmt.Sprintf("FieldValue(field=%v, column=%v)", fieldAcct0, acctOwnerID)
 	pql := NewPQLBaseQuery(q, indexAR, nil)
 	r, err := client.Query(pql)
-	panicOn(err)
+	PanicOn(err)
 	acct0bal = r.ResultList[0].(*ValCountResult).Val
 
 	q = fmt.Sprintf("FieldValue(field=%v, column=%v)", fieldAcct1, acctOwnerID)
 	pql = NewPQLBaseQuery(q, indexAR, nil)
 	r, err = client.Query(pql)
-	panicOn(err)
+	PanicOn(err)
 	acct1bal = r.ResultList[0].(*ValCountResult).Val
 
 	return
@@ -1987,7 +1987,7 @@ func TestImportAtomicRecord(t *testing.T) {
 		}
 
 		data, err = proto.Marshal(ar)
-		panicOn(err)
+		PanicOn(err)
 
 		return
 	}
@@ -2000,9 +2000,9 @@ func TestImportAtomicRecord(t *testing.T) {
 	expectedBalStartingAcct1 := int64(700)
 
 	data, err := setBal(expectedBalStartingAcct0, expectedBalStartingAcct1)
-	panicOn(err)
+	PanicOn(err)
 	err = client.importData(uri, "/import-atomic-record", data)
-	panicOn(err)
+	PanicOn(err)
 
 	// start the main test, reading two balances and writing two updates.
 
@@ -2018,7 +2018,7 @@ func TestImportAtomicRecord(t *testing.T) {
 	}
 
 	data, err = setBal(expectedBalStartingAcct0-transferUSD, expectedBalStartingAcct1+transferUSD)
-	panicOn(err)
+	PanicOn(err)
 
 	//vv("sad path: transferUSD %v from %v -> %v, with power loss half-way through", transferUSD, fieldAcct0, fieldAcct1)
 	err = client.importData(uri, "/import-atomic-record?simPowerLossAfter=1", data)
@@ -2045,7 +2045,7 @@ func TestImportAtomicRecord(t *testing.T) {
 	// happy path with no power failure half-way through.
 
 	err = client.importData(uri, "/import-atomic-record?simPowerLossAfter=0", data)
-	panicOn(err)
+	PanicOn(err)
 	endingBalanceAcct0, endingBalanceAcct1 = queryBalances(client, acctOwnerID, fieldAcct0, fieldAcct1)
 
 	// should have been applied this time.

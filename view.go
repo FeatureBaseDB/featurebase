@@ -29,6 +29,7 @@ import (
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/stats"
 	"github.com/pilosa/pilosa/v2/testhook"
+	. "github.com/pilosa/pilosa/v2/vprint" // nolint:staticcheck
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -69,7 +70,7 @@ type view struct {
 
 // newView returns a new instance of View.
 func newView(holder *Holder, path, index, field, name string, fieldOptions FieldOptions) *view {
-	panicOn(validateName(name))
+	PanicOn(validateName(name))
 
 	return &view{
 		path:          path,
@@ -115,7 +116,7 @@ func (v *view) addKnownShard(shard uint64) {
 		atomic.StoreUint32(&v.knownShardsCopied, 0)
 	}
 	_, err := v.knownShards.Add(shard)
-	panicOn(err)
+	PanicOn(err)
 }
 
 // removeKnownShard removes a known shard from v. See the notes on addKnownShard.
@@ -458,7 +459,7 @@ func (v *view) setBit(txOrig Tx, rowID, columnID uint64) (changed bool, err erro
 		tx = v.idx.holder.txf.NewTx(Txo{Write: writable, Index: v.idx, Fragment: frag, Shard: shard})
 		defer func() {
 			if err == nil {
-				panicOn(tx.Commit())
+				PanicOn(tx.Commit())
 			} else {
 				tx.Rollback()
 			}
@@ -480,7 +481,7 @@ func (v *view) clearBit(txOrig Tx, rowID, columnID uint64) (changed bool, err er
 		tx = v.idx.holder.txf.NewTx(Txo{Write: writable, Index: v.idx, Fragment: frag, Shard: shard})
 		defer func() {
 			if err == nil {
-				panicOn(tx.Commit())
+				PanicOn(tx.Commit())
 			} else {
 				tx.Rollback()
 			}
@@ -520,7 +521,7 @@ func (v *view) setValue(txOrig Tx, columnID uint64, bitDepth uint64, value int64
 		tx = v.idx.holder.txf.NewTx(Txo{Write: writable, Index: v.idx, Fragment: frag, Shard: shard})
 		defer func() {
 			if err == nil {
-				panicOn(tx.Commit())
+				PanicOn(tx.Commit())
 			} else {
 				tx.Rollback()
 			}
@@ -543,7 +544,7 @@ func (v *view) clearValue(txOrig Tx, columnID uint64, bitDepth uint64, value int
 		tx = v.idx.holder.txf.NewTx(Txo{Write: writable, Index: v.idx, Fragment: frag, Shard: shard})
 		defer func() {
 			if err == nil {
-				panicOn(tx.Commit())
+				PanicOn(tx.Commit())
 			} else {
 				tx.Rollback()
 			}

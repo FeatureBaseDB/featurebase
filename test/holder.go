@@ -23,10 +23,9 @@ import (
 	"github.com/pilosa/pilosa/v2/boltdb"
 	"github.com/pilosa/pilosa/v2/pql"
 	"github.com/pilosa/pilosa/v2/testhook"
+	. "github.com/pilosa/pilosa/v2/vprint" // nolint:staticcheck
 	"github.com/pkg/errors"
 )
-
-var panicOn = pilosa.PanicOn
 
 // Holder is a test wrapper for pilosa.Holder.
 type Holder struct {
@@ -148,9 +147,6 @@ func (h *Holder) SetBit(index, field string, rowID, columnID uint64) {
 	h.SetBitTime(index, field, rowID, columnID, nil)
 }
 
-var vv = pilosa.VV
-var _ = vv // happy linter
-
 // SetBitTime sets a bit with timestamp on the given field.
 func (h *Holder) SetBitTime(index, field string, rowID, columnID uint64, t *time.Time) {
 	idx := h.MustCreateIndexIfNotExists(index, pilosa.IndexOptions{})
@@ -167,7 +163,7 @@ func (h *Holder) SetBitTime(index, field string, rowID, columnID uint64, t *time
 	if err != nil {
 		panic(err)
 	}
-	panicOn(tx.Commit())
+	PanicOn(tx.Commit())
 }
 
 // ClearBit clears a bit on the given field.
@@ -186,7 +182,7 @@ func (h *Holder) ClearBit(index, field string, rowID, columnID uint64) {
 	if err != nil {
 		panic(err)
 	}
-	panicOn(tx.Commit())
+	PanicOn(tx.Commit())
 }
 
 // MustSetBits sets columns on a row. Panic on error.

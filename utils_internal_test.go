@@ -24,6 +24,7 @@ import (
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/testhook"
 	"github.com/pilosa/pilosa/v2/topology"
+	. "github.com/pilosa/pilosa/v2/vprint" // nolint:staticcheck
 )
 
 // utilities used by tests
@@ -31,13 +32,13 @@ import (
 // mustAddR is a helper for calling roaring.Container.Add() in tests to
 // keep the linter happy that we are checking the error.
 func mustAddR(changed bool, err error) {
-	panicOn(err)
+	PanicOn(err)
 }
 
 // mustRemove is a helper for calling Tx.Remove() in tests to
 // keep the linter happy that we are checking the error.
 func mustRemove(changeCount int, err error) {
-	panicOn(err)
+	PanicOn(err)
 }
 
 func getTestBitmapAsRawRoaring(bitsToSet ...uint64) []byte {

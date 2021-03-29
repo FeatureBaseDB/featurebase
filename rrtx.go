@@ -30,7 +30,7 @@ import (
 	txkey "github.com/pilosa/pilosa/v2/short_txkey"
 	"github.com/pilosa/pilosa/v2/storage"
 
-	//txkey "github.com/pilosa/pilosa/v2/txkey"
+	. "github.com/pilosa/pilosa/v2/vprint" // nolint:staticcheck
 	"github.com/pkg/errors"
 )
 
@@ -120,7 +120,7 @@ func (tx *RoaringTx) Pointer() string {
 // the transaction Commits or Rollsback.
 func (tx *RoaringTx) NewTxIterator(index, field, view string, shard uint64) *roaring.Iterator {
 	b, err := tx.bitmap(index, field, view, shard)
-	panicOn(err)
+	PanicOn(err)
 	return b.Iterator()
 }
 
@@ -150,7 +150,7 @@ func (tx *RoaringTx) Readonly() bool {
 
 func (tx *RoaringTx) IncrementOpN(index, field, view string, shard uint64, changedN int) {
 	frag, err := tx.getFragment(index, field, view, shard)
-	panicOn(err)
+	PanicOn(err)
 	frag.incrementOpN(changedN)
 }
 
