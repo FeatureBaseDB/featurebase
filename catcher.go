@@ -151,7 +151,7 @@ func (c *catcherTx) IsDone() bool {
 	return c.b.IsDone()
 }
 
-func (c *catcherTx) Add(index, field, view string, shard uint64, batched bool, a ...uint64) (changeCount int, err error) {
+func (c *catcherTx) Add(index, field, view string, shard uint64, a ...uint64) (changeCount int, err error) {
 
 	defer func() {
 		if r := recover(); r != nil {
@@ -159,7 +159,7 @@ func (c *catcherTx) Add(index, field, view string, shard uint64, batched bool, a
 			panic(r)
 		}
 	}()
-	return c.b.Add(index, field, view, shard, batched, a...)
+	return c.b.Add(index, field, view, shard, a...)
 }
 
 func (c *catcherTx) Remove(index, field, view string, shard uint64, a ...uint64) (changeCount int, err error) {

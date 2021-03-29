@@ -708,7 +708,7 @@ func (f *fragment) unprotectedSetBit(tx Tx, rowID, columnID uint64) (changed boo
 
 	// Write to storage.
 	changeCount := 0
-	changeCount, err = tx.Add(f.index(), f.field(), f.view(), f.shard, doBatched, pos)
+	changeCount, err = tx.Add(f.index(), f.field(), f.view(), f.shard, pos)
 	changed = changeCount > 0
 	if err != nil {
 		return false, errors.Wrap(err, "writing")
@@ -2465,8 +2465,7 @@ func (f *fragment) importPositions(tx Tx, set, clear []uint64, rowSet map[uint64
 			f.stats.Count(MetricImportingN, int64(len(set)), 1)
 
 			// TODO benchmark Add/RemoveN behavior with sorted/unsorted positions
-			// Note: AddN() avoids writing to the op-log. While Add() does.
-			changedN, err := tx.Add(f.index(), f.field(), f.view(), f.shard, !doBatched, set...)
+			changedN, err := tx.Add(f.index(), f.field(), f.view(), f.shard, set...)
 			if err != nil {
 				return errors.Wrap(err, "adding positions")
 			}

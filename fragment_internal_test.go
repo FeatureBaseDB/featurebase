@@ -5426,7 +5426,7 @@ func TestRemapCache(t *testing.T) {
 	}()
 
 	// create a container
-	_, err := tx.Add(index, field, view, shard, !doBatched, 65537)
+	_, err := tx.Add(index, field, view, shard, 65537)
 	if err != nil {
 		t.Fatalf("storage add: %v", err)
 	}
@@ -5439,7 +5439,7 @@ func TestRemapCache(t *testing.T) {
 	_ = f.mustRow(tx, 0)
 	// add a bit that isn't in that container, so that container doesn't
 	// change
-	_, err = tx.Add(index, field, view, shard, !doBatched, 2)
+	_, err = tx.Add(index, field, view, shard, 2)
 	if err != nil {
 		t.Fatalf("storage add: %v", err)
 	}

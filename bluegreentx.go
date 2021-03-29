@@ -539,7 +539,7 @@ func (c *blueGreenTx) isIn(index, field, view string, shard uint64, ckey uint64)
 	return
 }
 
-func (c *blueGreenTx) Add(index, field, view string, shard uint64, batched bool, a ...uint64) (changeCount int, err error) {
+func (c *blueGreenTx) Add(index, field, view string, shard uint64, a ...uint64) (changeCount int, err error) {
 	c.checker.see(index, field, view, shard)
 	//vv("blueGreenTx) Add(index=%v, field=%v, view=%v, shard=%v", index, field, view, shard)
 	defer func() {
@@ -554,10 +554,10 @@ func (c *blueGreenTx) Add(index, field, view string, shard uint64, batched bool,
 	a2 := make([]uint64, len(a))
 	copy(a2, a)
 
-	ach, errA := c.a.Add(index, field, view, shard, batched, a...)
+	ach, errA := c.a.Add(index, field, view, shard, a...)
 	_, _ = ach, errA
 
-	bch, errB := c.b.Add(index, field, view, shard, batched, a2...)
+	bch, errB := c.b.Add(index, field, view, shard, a2...)
 
 	if !c.o.blueGreenOff {
 
