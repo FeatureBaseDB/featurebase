@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"sync"
 	"testing"
 	"time"
 
@@ -99,17 +100,24 @@ func TestTx_CommitRollback(t *testing.T) {
 		db := MustOpenDB(t)
 		defer MustCloseDB(t, db)
 
+		var wg sync.WaitGroup
+		defer wg.Wait()
+
 		// Start write transaction.
 		ch0 := make(chan struct{})
 		tx0 := MustBegin(t, db, true)
+		wg.Add(1)
 		go func() {
+			defer wg.Done()
 			<-ch0
 			tx0.Rollback()
 		}()
 
 		// Start separate write transaction in different goroutine.
 		ch1 := make(chan struct{})
+		wg.Add(1)
 		go func() {
+			defer wg.Done()
 			tx1 := MustBegin(t, db, true)
 			close(ch1)
 			_ = tx1.Commit()
