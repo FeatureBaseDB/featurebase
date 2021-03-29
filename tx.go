@@ -22,11 +22,6 @@ import (
 	//txkey "github.com/pilosa/pilosa/v2/txkey"
 )
 
-// batch operations want Tx.Add(batched=doBatch), while bit-at-a-time want Tx.Add(batched=!doBatched)
-// Used in Tx.Add() to get consistency between RoaringTx and other Tx implementations on
-// the changeCount returned.
-const doBatched = false // must be false, do not change this without adjusting the Add() implementations correspondingly.
-
 // writable initializes Tx that update, use !writable for read-only.
 const writable = true
 
@@ -136,23 +131,7 @@ type Tx interface {
 	// in the specified fragment.
 	RemoveContainer(index, field, view string, shard uint64, ckey uint64) error
 
-	// Add adds the 'a' bits to the specified fragment.
-	//
-	// Using batched=true allows efficient bulk-import.
-	//
-	// Notes on the RoaringTx implementation:
-	// If the batched flag is true, then the roaring.Bitmap.AddN() is used, which does oplog batches.
-	// If the batched flag is false, then the roaring.Bitmap.Add() is used, which does simple opTypeAdd single adds.
-	//
-	// Beware: if batched is false, then changeCount will only ever be 0 or 1,
-	// because it calls roaring.Add().
-	// If batched is true, we call roaring.DirectAddN() and then changeCount
-	// will be accurate if the changeCount is greater than 0.
-	//
-	// Hence: only ever call Add(batched=false) if changeCount is expected to be 0 or 1.
-	// Or, must use Add(batched=true) if changeCount can be > 1.
-	//
-	Add(index, field, view string, shard uint64, batched bool, a ...uint64) (changeCount int, err error)
+	Add(index, field, view string, shard uint64, a ...uint64) (changeCount int, err error)
 
 	// Remove removes the 'a' values from the Bitmap for the fragment.
 	Remove(index, field, view string, shard uint64, a ...uint64) (changeCount int, err error)
@@ -278,6 +257,9 @@ type TxBitmap struct {
 	field string
 	view  string
 	shard uint64
+	// Container keys we've already snagged containers for, even if
+	// those containers have since been deleted by remove ops.
+	seen map[uint64]struct{}
 }
 
 func NewTxBitmap(tx Tx, index, field, view string, shard uint64) *TxBitmap {
@@ -288,6 +270,7 @@ func NewTxBitmap(tx Tx, index, field, view string, shard uint64) *TxBitmap {
 		field: field,
 		view:  view,
 		shard: shard,
+		seen:  make(map[uint64]struct{}),
 	}
 }
 
@@ -309,14 +292,14 @@ func (b *TxBitmap) Remove(a ...uint64) (changed bool, err error) {
 func (b *TxBitmap) ensureContainers(a ...uint64) error {
 	for _, v := range a {
 		key := highbits(v)
-		if b.b.Containers.Get(key) != nil {
+		if _, ok := b.seen[key]; ok {
 			continue
 		}
-
 		c, err := b.tx.Container(b.index, b.field, b.view, b.shard, key)
 		if err != nil {
 			return err
 		}
+		b.seen[key] = struct{}{}
 		b.b.Containers.Put(key, c)
 	}
 	return nil
@@ -327,6 +310,14 @@ func (b *TxBitmap) Flush() error {
 	for it, _ := b.b.Containers.Iterator(0); it.Next(); {
 		key, c := it.Value()
 		if err := b.tx.PutContainer(b.index, b.field, b.view, b.shard, key, c); err != nil {
+			return err
+		}
+		delete(b.seen, key)
+	}
+	// remove containers we have seen but no longer have, because that means
+	// we deleted everything from them.
+	for key := range b.seen {
+		if err := b.tx.RemoveContainer(b.index, b.field, b.view, b.shard, key); err != nil {
 			return err
 		}
 	}
