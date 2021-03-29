@@ -8020,7 +8020,7 @@ func TestExternalLookup(t *testing.T) {
 	}()
 
 	// Start up a Pilosa cluster with access to the DB.
-	c := test.MustRunCluster(t, 3, []server.CommandOption{server.OptCommandServerOptions(pilosa.OptServerExternalDB(dbDSN))})
+	c := test.MustRunCluster(t, 3, []server.CommandOption{server.OptCommandServerOptions(pilosa.OptServerLookupDB(dbDSN))})
 	defer c.Close()
 
 	// Populate a field with some data that can be used in queries.

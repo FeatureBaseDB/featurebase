@@ -151,7 +151,7 @@ type Holder struct {
 
 	txf *TxFactory
 
-	externalDB *sql.DB
+	lookupDB *sql.DB
 
 	// a separate lock out for indexes, to avoid the deadlock/race dilema
 	// on holding mu.
@@ -243,7 +243,7 @@ type HolderConfig struct {
 	RBFConfig           *rbfcfg.Config
 	AntiEntropyInterval time.Duration
 
-	ExternalDBDSN string
+	LookupDBDSN string
 }
 
 func DefaultHolderConfig() *HolderConfig {
@@ -733,15 +733,15 @@ func (h *Holder) Open() error {
 
 	h.txf.blueGreenOnIfRunningBlueGreen()
 
-	if h.cfg.ExternalDBDSN != "" {
-		h.Logger.Printf("connecting to external DB")
+	if h.cfg.LookupDBDSN != "" {
+		h.Logger.Printf("connecting to lookup DB")
 
-		db, err := sql.Open("postgres", h.cfg.ExternalDBDSN)
+		db, err := sql.Open("postgres", h.cfg.LookupDBDSN)
 		if err != nil {
-			return errors.Wrap(err, "connecting to external database")
+			return errors.Wrap(err, "connecting to lookup database")
 		}
 
-		h.externalDB = db
+		h.lookupDB = db
 	}
 
 	h.Logger.Printf("open holder: complete")
@@ -854,12 +854,12 @@ func (h *Holder) Close() error {
 		h.SnapshotQueue = nil
 	}
 
-	if h.externalDB != nil {
-		err := h.externalDB.Close()
+	if h.lookupDB != nil {
+		err := h.lookupDB.Close()
 		if err != nil {
 			return errors.Wrap(err, "closing DB")
 		}
-		h.externalDB = nil
+		h.lookupDB = nil
 	}
 
 	_ = testhook.Closed(h.Auditor, h, nil)

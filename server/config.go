@@ -223,8 +223,8 @@ type Config struct {
 	// result combines the history from all nodes.
 	QueryHistoryLength int `toml:"query-history-length"`
 
-	// ExternalDBDSN is an external database to connect to for `ExternalLookup` queries.
-	ExternalDBDSN string `toml:"external-db-dsn"`
+	// LookupDBDSN is an external database to connect to for `ExternalLookup` queries.
+	LookupDBDSN string `toml:"lookup-db-dsn"`
 }
 
 // MustValidate checks that all ports in a Config are unique and not zero.

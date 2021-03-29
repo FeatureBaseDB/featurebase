@@ -4007,7 +4007,7 @@ var (
 )
 
 func (e *executor) executeExternalLookup(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *execOptions) (res ExtractedTable, err error) {
-	if e.Holder.externalDB == nil {
+	if e.Holder.lookupDB == nil {
 		return ExtractedTable{}, errors.New("external DB connection is not configured")
 	}
 
@@ -4057,7 +4057,7 @@ func (e *executor) executeExternalLookup(ctx context.Context, qcx *Qcx, index st
 		arg = argRow.Columns()
 	}
 
-	result, err := e.Holder.externalDB.QueryContext(ctx, query, pq.Array(arg))
+	result, err := e.Holder.lookupDB.QueryContext(ctx, query, pq.Array(arg))
 	if err != nil {
 		return ExtractedTable{}, errors.Wrapf(err, "SQL query failed")
 	}

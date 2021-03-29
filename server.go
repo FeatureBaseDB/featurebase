@@ -400,10 +400,10 @@ func OptServerDisCo(disCo disco.DisCo,
 	}
 }
 
-// OptServerExternalDB configures a connection to an external postgres database.
-func OptServerExternalDB(dsn string) ServerOption {
+// OptServerLookupDB configures a connection to an external postgres database for ExternalLookup queries.
+func OptServerLookupDB(dsn string) ServerOption {
 	return func(s *Server) error {
-		s.holderConfig.ExternalDBDSN = dsn
+		s.holderConfig.LookupDBDSN = dsn
 		return nil
 	}
 }
