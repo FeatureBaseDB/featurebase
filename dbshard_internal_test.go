@@ -300,7 +300,6 @@ func makeRBFtestDB(path string, h *Holder, shard uint64) {
 func makeTxTestDBWithViewsShards(holder *Holder, idx *Index, exp *FieldView2Shards) {
 
 	// TODO(jea): need date time quantum views!!
-	batched := false
 	for field, viewmap := range exp.m {
 		for view, shset := range viewmap {
 
@@ -310,7 +309,7 @@ func makeTxTestDBWithViewsShards(holder *Holder, idx *Index, exp *FieldView2Shar
 				// simply write 1 bit to each shard to force its creation.
 				bits := []uint64{(shard << shardwidth.Exponent) + 1}
 				tx := idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Shard: shard})
-				changeCount, err := tx.Add(idx.name, field, view, shard, batched, bits...)
+				changeCount, err := tx.Add(idx.name, field, view, shard, bits...)
 				PanicOn(err)
 				if changeCount != len(bits) {
 					panic(fmt.Sprintf("writing field '%v', view '%v' shard '%v', expected changeCount to equal len bits = %v but was %v", field, view, shard, len(bits), changeCount))

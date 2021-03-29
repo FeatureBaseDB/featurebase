@@ -429,7 +429,7 @@ func (c *statTx) IsDone() (done bool) {
 	return c.b.IsDone()
 }
 
-func (c *statTx) Add(index, field, view string, shard uint64, batched bool, a ...uint64) (changeCount int, err error) {
+func (c *statTx) Add(index, field, view string, shard uint64, a ...uint64) (changeCount int, err error) {
 	me := kAdd
 
 	t0 := time.Now()
@@ -443,7 +443,7 @@ func (c *statTx) Add(index, field, view string, shard uint64, batched bool, a ..
 			PanicOn(r)
 		}
 	}()
-	return c.b.Add(index, field, view, shard, batched, a...)
+	return c.b.Add(index, field, view, shard, a...)
 }
 
 func (c *statTx) Remove(index, field, view string, shard uint64, a ...uint64) (changeCount int, err error) {

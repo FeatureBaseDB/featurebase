@@ -241,27 +241,16 @@ func (tx *RBFTx) RemoveContainer(index, field, view string, shard uint64, key ui
 }
 
 // Add sets all the a bits hot in the specified fragment.
-func (tx *RBFTx) Add(index, field, view string, shard uint64, batched bool, a ...uint64) (changeCount int, err error) {
-	return tx.addOrRemove(index, field, view, shard, batched, false, a...)
+func (tx *RBFTx) Add(index, field, view string, shard uint64, a ...uint64) (changeCount int, err error) {
+	return tx.addOrRemove(index, field, view, shard, false, a...)
 }
 
 // Remove clears all the specified a bits in the chosen fragment.
 func (tx *RBFTx) Remove(index, field, view string, shard uint64, a ...uint64) (changeCount int, err error) {
-	const batched = false
-	const remove = true
-	return tx.addOrRemove(index, field, view, shard, batched, remove, a...)
+	return tx.addOrRemove(index, field, view, shard, true, a...)
 }
 
-func (tx *RBFTx) addOrRemove(index, field, view string, shard uint64, batched, remove bool, a ...uint64) (changeCount int, err error) {
-	// pure hack to match RoaringTx
-	defer func() {
-		if !remove && !batched {
-			if changeCount > 0 {
-				changeCount = 1
-			}
-		}
-	}()
-
+func (tx *RBFTx) addOrRemove(index, field, view string, shard uint64, remove bool, a ...uint64) (changeCount int, err error) {
 	if len(a) == 0 {
 		return 0, nil
 	}

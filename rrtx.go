@@ -199,25 +199,16 @@ func (tx *RoaringTx) RemoveContainer(index, field, view string, shard uint64, ke
 	return nil
 }
 
-func (tx *RoaringTx) Add(index, field, view string, shard uint64, batched bool, a ...uint64) (changeCount int, err error) {
+func (tx *RoaringTx) Add(index, field, view string, shard uint64, a ...uint64) (changeCount int, err error) {
 	//vv("RoaringTx.Add(index='%v', shard='%v') stack=\n%v", index, shard, stack())
 	b, err := tx.bitmap(index, field, view, shard)
 	if err != nil {
 		return 0, err
 	}
-	if !batched {
-		changed, err := b.Add(a...)
-		if changed {
-			return 1, err
-		}
-		return 0, err
-	}
-
 	// Note: do not replace b.AddN() with b.DirectAddN().
-	// DirectAddN() does not do op-log operations inside roaring
-	// This creates a problem because RoaringTx needs the op-log
-	// to know when to flush the fragment to disk.
-	count, err := b.AddN(a...) // AddN does oplog batches. needed to keep op-log up to date.
+	// DirectAddN() does not do op-log operations inside roaring, so the
+	// on-disk representation no longer matches the in-memory operations.
+	count, err := b.AddN(a...)
 	return count, err
 }
 
@@ -226,16 +217,7 @@ func (tx *RoaringTx) Remove(index, field, view string, shard uint64, a ...uint64
 	if err != nil {
 		return 0, err
 	}
-	changed, err := b.Remove(a...) // green TestFragment_Bug_Q2DoubleDelete
-	if changed {
-		return 1, err
-	} else {
-		return 0, err
-	}
-
-	// Note: don't replace b.Remove(a...) with b.RemoveN(a...) or
-	// with b.DirectRemoveN(a...). If you do, you'll see
-	// TestFragment_Bug_Q2DoubleDelete go red.
+	return b.RemoveN(a...)
 }
 
 func (tx *RoaringTx) Contains(index, field, view string, shard uint64, v uint64) (exists bool, err error) {
