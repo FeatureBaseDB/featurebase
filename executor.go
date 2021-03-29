@@ -1304,25 +1304,20 @@ func (e *executor) executePercentile(ctx context.Context, qcx *Qcx, index string
 
 	// get nth
 	var nthFloat float64
-	OK := false
-	switch c.Args["nth"].(type) {
-	case pql.Decimal:
-		nthArg, ok := c.Args["nth"].(pql.Decimal)
-		nthFloat = nthArg.Float64()
-		OK = ok
-	case int64:
-		nthArg, ok := c.Args["nth"].(int64)
-		nthFloat = float64(nthArg)
-		OK = ok
-	default:
-		return ValCount{}, errors.Errorf("Percentile(): invalid nth type (%T), should be int64 or pql.Decimal", c.Args["nth"])
-	}
-	if OK {
-		if nthFloat < 0 || nthFloat > 100.0 {
-			return ValCount{}, errors.Errorf("Percentile(): invalid nth value (%f), should be between 0 and 100 inclusive", nthFloat)
-		}
-	} else if c.Args["nth"] == nil {
+	nthArg := c.Args["nth"]
+	if nthArg == nil {
 		return ValCount{}, errors.New("Percentile(): nth required")
+	}
+	switch nthArg.(type) {
+	case pql.Decimal:
+		nthFloat = nthArg.(pql.Decimal).Float64()
+	case int64:
+		nthFloat = float64(nthArg.(int64))
+	default:
+		return ValCount{}, errors.Errorf("Percentile(): invalid nth='%v' of type (%[1]T), should be int64 or pql.Decimal", c.Args["nth"])
+	}
+	if nthFloat < 0 || nthFloat > 100.0 {
+		return ValCount{}, errors.Errorf("Percentile(): invalid nth value (%f), should be between 0 and 100 inclusive", nthFloat)
 	}
 
 	// get field
