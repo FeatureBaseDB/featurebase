@@ -6057,3 +6057,84 @@ func TestSliceDifference(t *testing.T) {
 		compareSlices(t, name, tc.expected, result)
 	}
 }
+
+func TestBitmapGrowth(t *testing.T) {
+	roaringOnlyTest(t)
+	f, _, tx := mustOpenFragment(t, "i", "f", viewBSIGroupPrefix+"foo", 0, "")
+	path := f.path()
+	defer f.Clean(t)
+	const values = 500
+	cols := make([]uint64, values)
+	vals := make([]int64, values)
+	for i := range cols {
+		cols[i] = uint64(rand.Int63n(65536))
+		vals[i] = rand.Int63n(24)
+	}
+	err := f.importValue(tx, cols, vals, 7, false)
+	if err != nil {
+		t.Fatalf("importing values: %v", err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("statting %s: %v", path, err)
+	}
+	prevSize := info.Size()
+	prevOpN := f.opN
+	err = f.importValue(tx, cols, vals, 7, false)
+	if err != nil {
+		t.Fatalf("importing values: %v", err)
+	}
+	info, err = os.Stat(path)
+	if err != nil {
+		t.Fatalf("statting %s: %v", path, err)
+	}
+	deltaSize := info.Size() - prevSize
+	deltaOpN := f.opN - prevOpN
+	// This is somewhat arbitrary, but the issue tested for was that
+	// opN would grow by 0 or 1 with multiple KB of actual ops written.
+	// If deltaOpN is at least 20, we'll probably see snapshots happening
+	// at least occasionally, and if deltaSize is under 1024, the writes
+	// are probably going to be small enough that the regular backlog of
+	// snapshotting catches them anyway.
+	if deltaSize > 1024 && deltaOpN < 20 {
+		t.Fatalf("bitmap grew by %d bytes but OpN only grew by %d",
+			deltaSize, deltaOpN)
+	}
+}
+
+func TestTxBitmap(t *testing.T) {
+	f, _, tx := mustOpenFragment(t, "i", "f", viewBSIGroupPrefix+"foo", 0, "")
+	defer f.Clean(t)
+	f.MaxOpN = 8
+	cols := []uint64{1, 2, 3, 4, 5, 6, 65537, 131073}
+	vals := []int64{4, 4, 4, 4, 4, 4, 4, 4}
+	zeros := []int64{0, 0, 0, 0, 0, 0, 0, 0}
+	err := f.importValue(tx, cols, vals, 7, false)
+	if err != nil {
+		t.Fatalf("importing values: %v", err)
+	}
+	expected := []uint64{1, (4 * ShardWidth) + 1}
+	var got []uint64
+	_ = tx.ForEach("i", "f", viewBSIGroupPrefix+"foo", 0, func(i uint64) error {
+		got = append(got, i)
+		return nil
+	})
+	t.Logf("initial: %d", got)
+	err = f.importValue(tx, cols[1:], zeros[1:], 7, true)
+	if err != nil {
+		t.Fatalf("clearing values: %v", err)
+	}
+	got = got[:0]
+	_ = tx.ForEach("i", "f", viewBSIGroupPrefix+"foo", 0, func(i uint64) error {
+		got = append(got, i)
+		return nil
+	})
+	if len(got) != len(expected) {
+		t.Fatalf("bitmap clear unsuccessful: expected %d, got %d", expected, got)
+	}
+	for i := range expected {
+		if expected[i] != got[i] {
+			t.Fatalf("bitmap clear unsuccessful: expected %d, got %d", expected, got)
+		}
+	}
+}
