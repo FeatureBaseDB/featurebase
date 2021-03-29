@@ -1308,11 +1308,11 @@ func (e *executor) executePercentile(ctx context.Context, qcx *Qcx, index string
 	if nthArg == nil {
 		return ValCount{}, errors.New("Percentile(): nth required")
 	}
-	switch nthArg.(type) {
+	switch nthArg := nthArg.(type) {
 	case pql.Decimal:
-		nthFloat = nthArg.(pql.Decimal).Float64()
+		nthFloat = nthArg.Float64()
 	case int64:
-		nthFloat = float64(nthArg.(int64))
+		nthFloat = float64(nthArg)
 	default:
 		return ValCount{}, errors.Errorf("Percentile(): invalid nth='%v' of type (%[1]T), should be int64 or pql.Decimal", c.Args["nth"])
 	}
