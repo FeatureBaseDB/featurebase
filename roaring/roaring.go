@@ -6470,16 +6470,14 @@ func (b *Bitmap) BitwiseEqual(c *Bitmap) (bool, error) {
 			bct++
 			break
 		}
-		bn = biter.Next()
 	}
 	for cn {
 		cn = citer.Next()
-		ck, cc = biter.Value()
+		ck, cc = citer.Value()
 		if cc.N() != 0 {
 			cct++
 			break
 		}
-		cn = biter.Next()
 	}
 	if bn {
 		return false, fmt.Errorf("container mismatch: %d vs %d containers, first bitmap has extra container %d [%v bits]", bct, cct, bk, bc)
