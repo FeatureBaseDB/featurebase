@@ -29,6 +29,7 @@ import (
 	"syscall"
 	"text/tabwriter"
 	"time"
+	"unsafe"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/v2"
@@ -360,15 +361,23 @@ func (cmd *InspectCommand) InspectFile(f *os.File, fi os.FileInfo) error {
 			fmt.Fprintf(cmd.Stderr, "inspect command: munmap failed: %v", err)
 		}
 	}()
+	mappedFrom := uintptr(unsafe.Pointer(&data[0]))
+	mappedTo := mappedFrom + uintptr(len(data))
 	// Attach the mmap file to the bitmap.
 	t := time.Now()
 	fmt.Fprintf(cmd.Stderr, "inspecting bitmap...")
 	var info roaring.BitmapInfo
-	_, _, err = roaring.InspectBinary(data, true, &info)
+	bitmap, _, err := roaring.InspectBinary(data, true, &info)
 	fmt.Fprintf(cmd.Stderr, " (%s)\n", time.Since(t))
 	cmd.DisplayInfo(info)
 	if err != nil {
 		return errors.Wrap(err, "inspecting")
+	}
+	mappedIn, mappedOut, unmappedIn, errs, err := bitmap.SanityCheckMapping(mappedFrom, mappedTo)
+	if err != nil {
+		fmt.Fprintf(cmd.Stderr, "sanity check: %d mapped in, %d mapped out, %d unmapped in, %d errors\n",
+			mappedIn, mappedOut, unmappedIn, errs)
+		fmt.Fprintf(cmd.Stderr, "last error: %v\n", err)
 	}
 	return nil
 }

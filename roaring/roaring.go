@@ -6002,7 +6002,7 @@ func (op *op) UnmarshalBinary(data []byte) error {
 
 	switch op.typ {
 	case opTypeAdd, opTypeRemove:
-		// nothing to do, just being not-default
+		op.opN = 1
 	case opTypeAddBatch, opTypeRemoveBatch:
 		// This ensures that in doing 13+op.value*8, the max int won't be exceeded and a wrap around case
 		// (resulting in a negative value) won't occur in the slice indexing while writing
@@ -6013,8 +6013,9 @@ func (op *op) UnmarshalBinary(data []byte) error {
 			return fmt.Errorf("op data truncated - expected %d, got %d", 13+op.value*8, len(data))
 		}
 		_, _ = h.Write(data[13 : 13+op.value*8])
-		op.values = make([]uint64, op.value)
-		for i := uint64(0); i < op.value; i++ {
+		op.opN = int(op.value)
+		op.values = make([]uint64, op.opN)
+		for i := range op.values {
 			start := 13 + i*8
 			op.values[i] = binary.LittleEndian.Uint64(data[start : start+8])
 		}
