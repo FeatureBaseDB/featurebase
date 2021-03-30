@@ -40,9 +40,9 @@ import (
 
 	"github.com/cespare/xxhash"
 	"github.com/gogo/protobuf/proto"
-	"github.com/pilosa/pilosa/v2/internal"
 	"github.com/pilosa/pilosa/v2/logger"
 	pnet "github.com/pilosa/pilosa/v2/net"
+	"github.com/pilosa/pilosa/v2/pb"
 	"github.com/pilosa/pilosa/v2/pql"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/shardwidth"
@@ -50,6 +50,7 @@ import (
 	"github.com/pilosa/pilosa/v2/testhook"
 	"github.com/pilosa/pilosa/v2/topology"
 	"github.com/pilosa/pilosa/v2/tracing"
+	. "github.com/pilosa/pilosa/v2/vprint" // nolint:staticcheck
 	"github.com/pkg/errors"
 )
 
@@ -212,7 +213,7 @@ func newFragment(holder *Holder, spec fragSpec, shard uint64, flags byte) *fragm
 	idx := holder.Index(spec.index.name)
 
 	if idx == nil {
-		panic(fmt.Sprintf("got nil idx back for '%v' from holder!", spec.index))
+		PanicOn(fmt.Sprintf("got nil idx back for '%v' from holder!", spec.index))
 	}
 
 	f := &fragment{
@@ -533,7 +534,7 @@ func (f *fragment) openCache() error {
 	}
 
 	// Unmarshal cache data.
-	var pb internal.Cache
+	var pb pb.Cache
 	if err := proto.Unmarshal(buf, &pb); err != nil {
 		f.holder.Logger.Printf("error unmarshaling cache data, skipping: path=%s, err=%s", path, err)
 		return nil
@@ -616,7 +617,7 @@ func (f *fragment) row(tx Tx, rowID uint64) (*Row, error) {
 func (f *fragment) mustRow(tx Tx, rowID uint64) *Row {
 	row, err := f.row(tx, rowID)
 	if err != nil {
-		panic(err)
+		PanicOn(err)
 	}
 	return row
 }
@@ -696,7 +697,7 @@ func (f *fragment) setBit(tx Tx, rowID, columnID uint64) (changed bool, err erro
 		err = f.gen.Transaction(wp, doSetFunc)
 	} else {
 		if tx.Type() == RoaringTxn {
-			panic("internal error: f.gen was nil. should never happen under roaring b/c storage should be open")
+			return changed, errors.New("internal error: f.gen was nil and tx.Type is RoaringTxn - should never happen under roaring b/c storage should be open")
 		}
 		// else blue green or transactional backend. Just do it.
 		err = doSetFunc()
@@ -1073,7 +1074,7 @@ func (f *fragment) setValueBase(txOrig Tx, columnID uint64, bitDepth uint64, val
 		tx = f.idx.holder.txf.NewTx(Txo{Write: writable, Index: f.idx, Fragment: f, Shard: f.shard})
 		defer func() {
 			if err == nil {
-				panicOn(tx.Commit())
+				PanicOn(tx.Commit())
 			} else {
 				tx.Rollback()
 			}
@@ -2070,7 +2071,9 @@ func (f *fragment) Blocks() ([]FragmentBlock, error) {
 
 	idx := f.holder.Index(f.index())
 	if idx == nil {
-		panic(fmt.Sprintf("index() was nil in fragment.Blocks(): f.index()='%v'\n", f.index()))
+		err := fmt.Errorf("index() was nil in fragment.Blocks(): f.index()='%v'", f.index())
+		PanicOn(err)
+		return nil, err
 	}
 	tx := idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: f.shard})
 	defer tx.Rollback()
@@ -2404,7 +2407,7 @@ func (p *parallelSlices) fullPrune() {
 		return
 	}
 	if len(p.rows) != len(p.cols) {
-		panic("parallelSlices must have same length for rows and columns")
+		PanicOn("parallelSlices must have same length for rows and columns")
 	}
 	unsorted := p.prune()
 	if unsorted {
@@ -2535,9 +2538,8 @@ func (f *fragment) importPositions(tx Tx, set, clear []uint64, rowSet map[uint64
 		err = f.gen.Transaction(wp, doFunc)
 	} else {
 		if tx.Type() == RoaringTxn {
-			panic("internal error: 2nd place, f.gen was nil. should never happen under roaring b/c storage should be open")
+			return errors.New("internal error: f.gen was nil and tx.Type is RoaringTxn - should never happen under roaring b/c storage should be open")
 		}
-		// else blue green or transactional backend. Just do it.
 		err = doFunc()
 	}
 
@@ -2902,7 +2904,7 @@ func (f *fragment) snapshot() (err error) {
 						f.path(), mappedIn, mappedOut, unmappedIn, errs)
 				}
 			} else {
-				err = fmt.Errorf("non-error panic: %v", r)
+				err = fmt.Errorf("non-error PanicOn: %v", r)
 			}
 		}
 	}()
@@ -2992,7 +2994,7 @@ func (f *fragment) flushCache() error {
 	ids := f.cache.IDs()
 
 	// Marshal cache data to bytes.
-	buf, err := proto.Marshal(&internal.Cache{IDs: ids})
+	buf, err := proto.Marshal(&pb.Cache{IDs: ids})
 	if err != nil {
 		return errors.Wrap(err, "marshalling")
 	}

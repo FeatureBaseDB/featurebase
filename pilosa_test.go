@@ -40,7 +40,7 @@ func TestAddressWithDefaults(t *testing.T) {
 		{addr: "1.2.3.4:", expected: "1.2.3.4:10101"},
 		{addr: "1.2.3.4:55555", expected: "1.2.3.4:55555"},
 		// The following tests check the error conditions.
-		{addr: "[invalid][addr]:port", err: "invalid address"},
+		{addr: "[invalid][addr]:port", err: pilosa.ErrInvalidAddress.Error()},
 	}
 	for _, test := range tests {
 		actual, err := pilosa.AddressWithDefaults(test.addr)

@@ -22,8 +22,8 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/disco"
-	"github.com/pilosa/pilosa/v2/internal"
 	pnet "github.com/pilosa/pilosa/v2/net"
+	"github.com/pilosa/pilosa/v2/pb"
 	"github.com/pilosa/pilosa/v2/pql"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/topology"
@@ -52,7 +52,7 @@ func (s Serializer) Marshal(m pilosa.Message) ([]byte, error) {
 func (s Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 	switch mt := m.(type) {
 	case *pilosa.CreateShardMessage:
-		msg := &internal.CreateShardMessage{}
+		msg := &pb.CreateShardMessage{}
 		err := proto.Unmarshal(buf, msg)
 		if err != nil {
 			return errors.Wrap(err, "unmarshaling CreateShardMessage")
@@ -60,7 +60,7 @@ func (s Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		s.decodeCreateShardMessage(msg, mt)
 		return nil
 	case *pilosa.CreateIndexMessage:
-		msg := &internal.CreateIndexMessage{}
+		msg := &pb.CreateIndexMessage{}
 		err := proto.Unmarshal(buf, msg)
 		if err != nil {
 			return errors.Wrap(err, "unmarshaling CreateIndexMessage")
@@ -68,7 +68,7 @@ func (s Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		s.decodeCreateIndexMessage(msg, mt)
 		return nil
 	case *pilosa.DeleteIndexMessage:
-		msg := &internal.DeleteIndexMessage{}
+		msg := &pb.DeleteIndexMessage{}
 		err := proto.Unmarshal(buf, msg)
 		if err != nil {
 			return errors.Wrap(err, "unmarshaling DeleteIndexMessage")
@@ -76,7 +76,7 @@ func (s Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		s.decodeDeleteIndexMessage(msg, mt)
 		return nil
 	case *pilosa.CreateFieldMessage:
-		msg := &internal.CreateFieldMessage{}
+		msg := &pb.CreateFieldMessage{}
 		err := proto.Unmarshal(buf, msg)
 		if err != nil {
 			return errors.Wrap(err, "unmarshaling CreateFieldMessage")
@@ -84,7 +84,7 @@ func (s Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		s.decodeCreateFieldMessage(msg, mt)
 		return nil
 	case *pilosa.DeleteFieldMessage:
-		msg := &internal.DeleteFieldMessage{}
+		msg := &pb.DeleteFieldMessage{}
 		err := proto.Unmarshal(buf, msg)
 		if err != nil {
 			return errors.Wrap(err, "unmarshaling DeleteFieldMessage")
@@ -92,7 +92,7 @@ func (s Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		s.decodeDeleteFieldMessage(msg, mt)
 		return nil
 	case *pilosa.DeleteAvailableShardMessage:
-		msg := &internal.DeleteAvailableShardMessage{}
+		msg := &pb.DeleteAvailableShardMessage{}
 		err := proto.Unmarshal(buf, msg)
 		if err != nil {
 			return errors.Wrap(err, "unmarshaling DeleteAvailableShardMessage")
@@ -100,7 +100,7 @@ func (s Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		s.decodeDeleteAvailableShardMessage(msg, mt)
 		return nil
 	case *pilosa.CreateViewMessage:
-		msg := &internal.CreateViewMessage{}
+		msg := &pb.CreateViewMessage{}
 		err := proto.Unmarshal(buf, msg)
 		if err != nil {
 			return errors.Wrap(err, "unmarshaling CreateViewMessage")
@@ -108,7 +108,7 @@ func (s Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		s.decodeCreateViewMessage(msg, mt)
 		return nil
 	case *pilosa.DeleteViewMessage:
-		msg := &internal.DeleteViewMessage{}
+		msg := &pb.DeleteViewMessage{}
 		err := proto.Unmarshal(buf, msg)
 		if err != nil {
 			return errors.Wrap(err, "unmarshaling DeleteViewMessage")
@@ -116,7 +116,7 @@ func (s Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		s.decodeDeleteViewMessage(msg, mt)
 		return nil
 	case *pilosa.ClusterStatus:
-		msg := &internal.ClusterStatus{}
+		msg := &pb.ClusterStatus{}
 		err := proto.Unmarshal(buf, msg)
 		if err != nil {
 			return errors.Wrap(err, "unmarshaling ClusterStatus")
@@ -124,7 +124,7 @@ func (s Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		s.decodeClusterStatus(msg, mt)
 		return nil
 	case *pilosa.ResizeInstruction:
-		msg := &internal.ResizeInstruction{}
+		msg := &pb.ResizeInstruction{}
 		err := proto.Unmarshal(buf, msg)
 		if err != nil {
 			return errors.Wrap(err, "unmarshaling ResizeInstruction")
@@ -132,7 +132,7 @@ func (s Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		s.decodeResizeInstruction(msg, mt)
 		return nil
 	case *pilosa.ResizeInstructionComplete:
-		msg := &internal.ResizeInstructionComplete{}
+		msg := &pb.ResizeInstructionComplete{}
 		err := proto.Unmarshal(buf, msg)
 		if err != nil {
 			return errors.Wrap(err, "unmarshaling ResizeInstructionComplete")
@@ -140,7 +140,7 @@ func (s Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		s.decodeResizeInstructionComplete(msg, mt)
 		return nil
 	case *pilosa.NodeStateMessage:
-		msg := &internal.NodeStateMessage{}
+		msg := &pb.NodeStateMessage{}
 		err := proto.Unmarshal(buf, msg)
 		if err != nil {
 			return errors.Wrap(err, "unmarshaling NodeStateMessage")
@@ -148,7 +148,7 @@ func (s Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		s.decodeNodeStateMessage(msg, mt)
 		return nil
 	case *pilosa.RecalculateCaches:
-		msg := &internal.RecalculateCaches{}
+		msg := &pb.RecalculateCaches{}
 		err := proto.Unmarshal(buf, msg)
 		if err != nil {
 			return errors.Wrap(err, "unmarshaling RecalculateCaches")
@@ -156,7 +156,7 @@ func (s Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		s.decodeRecalculateCaches(msg, mt)
 		return nil
 	case *pilosa.LoadSchemaMessage:
-		msg := &internal.LoadSchemaMessage{}
+		msg := &pb.LoadSchemaMessage{}
 		err := proto.Unmarshal(buf, msg)
 		if err != nil {
 			return errors.Wrap(err, "unmarshaling LoadSchemaMessage")
@@ -164,7 +164,7 @@ func (s Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		s.decodeLoadSchemaMessage(msg, mt)
 		return nil
 	case *pilosa.NodeEvent:
-		msg := &internal.NodeEventMessage{}
+		msg := &pb.NodeEventMessage{}
 		err := proto.Unmarshal(buf, msg)
 		if err != nil {
 			return errors.Wrap(err, "unmarshaling NodeEvent")
@@ -172,7 +172,7 @@ func (s Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		s.decodeNodeEventMessage(msg, mt)
 		return nil
 	case *pilosa.NodeStatus:
-		msg := &internal.NodeStatus{}
+		msg := &pb.NodeStatus{}
 		err := proto.Unmarshal(buf, msg)
 		if err != nil {
 			return errors.Wrap(err, "unmarshaling NodeStatus")
@@ -180,7 +180,7 @@ func (s Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		s.decodeNodeStatus(msg, mt)
 		return nil
 	case *topology.Node:
-		msg := &internal.Node{}
+		msg := &pb.Node{}
 		err := proto.Unmarshal(buf, msg)
 		if err != nil {
 			return errors.Wrap(err, "unmarshaling Node")
@@ -188,7 +188,7 @@ func (s Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		s.decodeNode(msg, mt)
 		return nil
 	case *pilosa.QueryRequest:
-		msg := &internal.QueryRequest{}
+		msg := &pb.QueryRequest{}
 		err := proto.Unmarshal(buf, msg)
 		if err != nil {
 			return errors.Wrap(err, "unmarshaling QueryRequest")
@@ -196,7 +196,7 @@ func (s Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		s.decodeQueryRequest(msg, mt)
 		return nil
 	case *pilosa.QueryResponse:
-		msg := &internal.QueryResponse{}
+		msg := &pb.QueryResponse{}
 		err := proto.Unmarshal(buf, msg)
 		if err != nil {
 			return errors.Wrap(err, "unmarshaling QueryResponse")
@@ -204,7 +204,7 @@ func (s Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		s.decodeQueryResponse(msg, mt)
 		return nil
 	case *pilosa.ImportRequest:
-		msg := &internal.ImportRequest{}
+		msg := &pb.ImportRequest{}
 		err := proto.Unmarshal(buf, msg)
 		if err != nil {
 			return errors.Wrap(err, "unmarshaling ImportRequest")
@@ -212,7 +212,7 @@ func (s Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		s.decodeImportRequest(msg, mt)
 		return nil
 	case *pilosa.ImportValueRequest:
-		msg := &internal.ImportValueRequest{}
+		msg := &pb.ImportValueRequest{}
 		err := proto.Unmarshal(buf, msg)
 		if err != nil {
 			return errors.Wrap(err, "unmarshaling ImportValueRequest")
@@ -220,7 +220,7 @@ func (s Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		s.decodeImportValueRequest(msg, mt)
 		return nil
 	case *pilosa.ImportRoaringRequest:
-		msg := &internal.ImportRoaringRequest{}
+		msg := &pb.ImportRoaringRequest{}
 		err := proto.Unmarshal(buf, msg)
 		if err != nil {
 			return errors.Wrap(err, "unmarshaling ImportRoaringRequest")
@@ -228,7 +228,7 @@ func (s Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		s.decodeImportRoaringRequest(msg, mt)
 		return nil
 	case *pilosa.ImportColumnAttrsRequest:
-		msg := &internal.ImportColumnAttrsRequest{}
+		msg := &pb.ImportColumnAttrsRequest{}
 		err := proto.Unmarshal(buf, msg)
 		if err != nil {
 			return errors.Wrap(err, "unmarshaling ImportColumnAttrsRequest")
@@ -236,7 +236,7 @@ func (s Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		s.decodeImportColumnAttrsRequest(msg, mt)
 		return nil
 	case *pilosa.ImportResponse:
-		msg := &internal.ImportResponse{}
+		msg := &pb.ImportResponse{}
 		err := proto.Unmarshal(buf, msg)
 		if err != nil {
 			return errors.Wrap(err, "unmarshaling ImportResponse")
@@ -244,7 +244,7 @@ func (s Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		s.decodeImportResponse(msg, mt)
 		return nil
 	case *pilosa.BlockDataRequest:
-		msg := &internal.BlockDataRequest{}
+		msg := &pb.BlockDataRequest{}
 		err := proto.Unmarshal(buf, msg)
 		if err != nil {
 			return errors.Wrap(err, "unmarshaling BlockDataRequest")
@@ -252,7 +252,7 @@ func (s Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		s.decodeBlockDataRequest(msg, mt)
 		return nil
 	case *pilosa.BlockDataResponse:
-		msg := &internal.BlockDataResponse{}
+		msg := &pb.BlockDataResponse{}
 		err := proto.Unmarshal(buf, msg)
 		if err != nil {
 			return errors.Wrap(err, "unmarshaling BlockDataResponse")
@@ -260,7 +260,7 @@ func (s Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		s.decodeBlockDataResponse(msg, mt)
 		return nil
 	case *pilosa.TranslateKeysRequest:
-		msg := &internal.TranslateKeysRequest{}
+		msg := &pb.TranslateKeysRequest{}
 		err := proto.Unmarshal(buf, msg)
 		if err != nil {
 			return errors.Wrap(err, "unmarshaling TranslateKeysRequest")
@@ -268,7 +268,7 @@ func (s Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		s.decodeTranslateKeysRequest(msg, mt)
 		return nil
 	case *pilosa.TranslateKeysResponse:
-		msg := &internal.TranslateKeysResponse{}
+		msg := &pb.TranslateKeysResponse{}
 		err := proto.Unmarshal(buf, msg)
 		if err != nil {
 			return errors.Wrap(err, "unmarshaling TranslateKeysResponse")
@@ -276,7 +276,7 @@ func (s Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		s.decodeTranslateKeysResponse(msg, mt)
 		return nil
 	case *pilosa.TranslateIDsRequest:
-		msg := &internal.TranslateIDsRequest{}
+		msg := &pb.TranslateIDsRequest{}
 		err := proto.Unmarshal(buf, msg)
 		if err != nil {
 			return errors.Wrap(err, "unmarshaling TranslateIDsRequest")
@@ -284,7 +284,7 @@ func (s Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		s.decodeTranslateIDsRequest(msg, mt)
 		return nil
 	case *pilosa.TranslateIDsResponse:
-		msg := &internal.TranslateIDsResponse{}
+		msg := &pb.TranslateIDsResponse{}
 		err := proto.Unmarshal(buf, msg)
 		if err != nil {
 			return errors.Wrap(err, "unmarshaling TranslateIDsResponse")
@@ -292,7 +292,7 @@ func (s Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		s.decodeTranslateIDsResponse(msg, mt)
 		return nil
 	case *pilosa.TransactionMessage:
-		msg := &internal.TransactionMessage{}
+		msg := &pb.TransactionMessage{}
 		err := proto.Unmarshal(buf, msg)
 		if err != nil {
 			return errors.Wrap(err, "unmarshaling TransactionMessage")
@@ -300,7 +300,7 @@ func (s Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		decodeTransactionMessage(msg, mt)
 		return nil
 	case *pilosa.AtomicRecord:
-		msg := &internal.AtomicRecord{}
+		msg := &pb.AtomicRecord{}
 		err := proto.Unmarshal(buf, msg)
 		if err != nil {
 			return errors.Wrap(err, "unmarshaling AtomicRecord")
@@ -308,7 +308,7 @@ func (s Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		s.decodeAtomicRecord(msg, mt)
 		return nil
 	case *[]*pilosa.Row:
-		msg := &internal.RowMatrix{}
+		msg := &pb.RowMatrix{}
 		err := proto.Unmarshal(buf, msg)
 		if err != nil {
 			return errors.Wrap(err, "unmarshaling RowMatrix")
@@ -317,7 +317,7 @@ func (s Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		return nil
 
 	case *pilosa.ResizeNodeMessage:
-		msg := &internal.ResizeNodeMessage{}
+		msg := &pb.ResizeNodeMessage{}
 		err := proto.Unmarshal(buf, msg)
 		if err != nil {
 			return errors.Wrap(err, "unmarshaling ResizeNodeMessage")
@@ -326,7 +326,7 @@ func (s Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		return nil
 
 	case *pilosa.ResizeAbortMessage:
-		msg := &internal.ResizeAbortMessage{}
+		msg := &pb.ResizeAbortMessage{}
 		err := proto.Unmarshal(buf, msg)
 		if err != nil {
 			return errors.Wrap(err, "unmarshaling ResizeAbortMessage")
@@ -413,8 +413,8 @@ func (s Serializer) encodeToProto(m pilosa.Message) proto.Message {
 	return nil
 }
 
-func (s Serializer) encodeBlockDataRequest(m *pilosa.BlockDataRequest) *internal.BlockDataRequest {
-	return &internal.BlockDataRequest{
+func (s Serializer) encodeBlockDataRequest(m *pilosa.BlockDataRequest) *pb.BlockDataRequest {
+	return &pb.BlockDataRequest{
 		Index: m.Index,
 		Field: m.Field,
 		View:  m.View,
@@ -422,21 +422,21 @@ func (s Serializer) encodeBlockDataRequest(m *pilosa.BlockDataRequest) *internal
 		Block: m.Block,
 	}
 }
-func (s Serializer) encodeBlockDataResponse(m *pilosa.BlockDataResponse) *internal.BlockDataResponse {
-	return &internal.BlockDataResponse{
+func (s Serializer) encodeBlockDataResponse(m *pilosa.BlockDataResponse) *pb.BlockDataResponse {
+	return &pb.BlockDataResponse{
 		RowIDs:    m.RowIDs,
 		ColumnIDs: m.ColumnIDs,
 	}
 }
 
-func (s Serializer) encodeImportResponse(m *pilosa.ImportResponse) *internal.ImportResponse {
-	return &internal.ImportResponse{
+func (s Serializer) encodeImportResponse(m *pilosa.ImportResponse) *pb.ImportResponse {
+	return &pb.ImportResponse{
 		Err: m.Err,
 	}
 }
 
-func (s Serializer) encodeImportRequest(m *pilosa.ImportRequest) *internal.ImportRequest {
-	return &internal.ImportRequest{
+func (s Serializer) encodeImportRequest(m *pilosa.ImportRequest) *pb.ImportRequest {
+	return &pb.ImportRequest{
 		Index:          m.Index,
 		Field:          m.Field,
 		IndexCreatedAt: m.IndexCreatedAt,
@@ -451,8 +451,8 @@ func (s Serializer) encodeImportRequest(m *pilosa.ImportRequest) *internal.Impor
 	}
 }
 
-func (s Serializer) encodeImportValueRequest(m *pilosa.ImportValueRequest) *internal.ImportValueRequest {
-	return &internal.ImportValueRequest{
+func (s Serializer) encodeImportValueRequest(m *pilosa.ImportValueRequest) *pb.ImportValueRequest {
+	return &pb.ImportValueRequest{
 		Index:          m.Index,
 		Field:          m.Field,
 		IndexCreatedAt: m.IndexCreatedAt,
@@ -467,17 +467,17 @@ func (s Serializer) encodeImportValueRequest(m *pilosa.ImportValueRequest) *inte
 	}
 }
 
-func (s Serializer) encodeImportRoaringRequest(m *pilosa.ImportRoaringRequest) *internal.ImportRoaringRequest {
-	views := make([]*internal.ImportRoaringRequestView, len(m.Views))
+func (s Serializer) encodeImportRoaringRequest(m *pilosa.ImportRoaringRequest) *pb.ImportRoaringRequest {
+	views := make([]*pb.ImportRoaringRequestView, len(m.Views))
 	i := 0
 	for viewName, viewData := range m.Views {
-		views[i] = &internal.ImportRoaringRequestView{
+		views[i] = &pb.ImportRoaringRequestView{
 			Name: viewName,
 			Data: viewData,
 		}
 		i++
 	}
-	return &internal.ImportRoaringRequest{
+	return &pb.ImportRoaringRequest{
 		IndexCreatedAt:  m.IndexCreatedAt,
 		FieldCreatedAt:  m.FieldCreatedAt,
 		Clear:           m.Clear,
@@ -488,8 +488,8 @@ func (s Serializer) encodeImportRoaringRequest(m *pilosa.ImportRoaringRequest) *
 	}
 }
 
-func (s Serializer) encodeImportColumnAttrsRequest(m *pilosa.ImportColumnAttrsRequest) *internal.ImportColumnAttrsRequest {
-	return &internal.ImportColumnAttrsRequest{
+func (s Serializer) encodeImportColumnAttrsRequest(m *pilosa.ImportColumnAttrsRequest) *pb.ImportColumnAttrsRequest {
+	return &pb.ImportColumnAttrsRequest{
 		Index:          m.Index,
 		IndexCreatedAt: m.IndexCreatedAt,
 		Shard:          m.Shard,
@@ -499,8 +499,8 @@ func (s Serializer) encodeImportColumnAttrsRequest(m *pilosa.ImportColumnAttrsRe
 	}
 }
 
-func (s Serializer) encodeQueryRequest(m *pilosa.QueryRequest) *internal.QueryRequest {
-	r := &internal.QueryRequest{
+func (s Serializer) encodeQueryRequest(m *pilosa.QueryRequest) *pb.QueryRequest {
+	r := &pb.QueryRequest{
 		Query:           m.Query,
 		Shards:          m.Shards,
 		ColumnAttrs:     m.ColumnAttrs,
@@ -508,7 +508,7 @@ func (s Serializer) encodeQueryRequest(m *pilosa.QueryRequest) *internal.QueryRe
 		ExcludeRowAttrs: m.ExcludeRowAttrs,
 		ExcludeColumns:  m.ExcludeColumns,
 		PreTranslated:   m.PreTranslated,
-		EmbeddedData:    make([]*internal.Row, len(m.EmbeddedData)),
+		EmbeddedData:    make([]*pb.Row, len(m.EmbeddedData)),
 	}
 	for i := range m.EmbeddedData {
 		r.EmbeddedData[i] = s.encodeRow(m.EmbeddedData[i])
@@ -516,77 +516,77 @@ func (s Serializer) encodeQueryRequest(m *pilosa.QueryRequest) *internal.QueryRe
 	return r
 }
 
-func (s Serializer) encodeQueryResponse(m *pilosa.QueryResponse) *internal.QueryResponse {
-	pb := &internal.QueryResponse{
-		Results:        make([]*internal.QueryResult, len(m.Results)),
+func (s Serializer) encodeQueryResponse(m *pilosa.QueryResponse) *pb.QueryResponse {
+	resp := &pb.QueryResponse{
+		Results:        make([]*pb.QueryResult, len(m.Results)),
 		ColumnAttrSets: s.encodeColumnAttrSets(m.ColumnAttrSets),
 	}
 
 	for i := range m.Results {
-		pb.Results[i] = &internal.QueryResult{}
+		resp.Results[i] = &pb.QueryResult{}
 
 		switch result := m.Results[i].(type) {
 		case pilosa.SignedRow:
-			pb.Results[i].Type = queryResultTypeSignedRow
-			pb.Results[i].SignedRow = s.encodeSignedRow(result)
+			resp.Results[i].Type = queryResultTypeSignedRow
+			resp.Results[i].SignedRow = s.encodeSignedRow(result)
 		case *pilosa.Row:
-			pb.Results[i].Type = queryResultTypeRow
-			pb.Results[i].Row = s.encodeRow(result)
+			resp.Results[i].Type = queryResultTypeRow
+			resp.Results[i].Row = s.encodeRow(result)
 		case []pilosa.Pair:
-			pb.Results[i].Type = queryResultTypePairs
-			pb.Results[i].Pairs = s.encodePairs(result)
+			resp.Results[i].Type = queryResultTypePairs
+			resp.Results[i].Pairs = s.encodePairs(result)
 		case *pilosa.PairsField:
-			pb.Results[i].Type = queryResultTypePairsField
-			pb.Results[i].PairsField = s.encodePairsField(result)
+			resp.Results[i].Type = queryResultTypePairsField
+			resp.Results[i].PairsField = s.encodePairsField(result)
 		case pilosa.ValCount:
-			pb.Results[i].Type = queryResultTypeValCount
-			pb.Results[i].ValCount = s.encodeValCount(result)
+			resp.Results[i].Type = queryResultTypeValCount
+			resp.Results[i].ValCount = s.encodeValCount(result)
 		case uint64:
-			pb.Results[i].Type = queryResultTypeUint64
-			pb.Results[i].N = result
+			resp.Results[i].Type = queryResultTypeUint64
+			resp.Results[i].N = result
 		case bool:
-			pb.Results[i].Type = queryResultTypeBool
-			pb.Results[i].Changed = result
+			resp.Results[i].Type = queryResultTypeBool
+			resp.Results[i].Changed = result
 		case pilosa.RowIDs:
-			pb.Results[i].Type = queryResultTypeRowIDs
-			pb.Results[i].RowIDs = result
+			resp.Results[i].Type = queryResultTypeRowIDs
+			resp.Results[i].RowIDs = result
 		case pilosa.ExtractedIDMatrix:
-			pb.Results[i].Type = queryResultTypeExtractedIDMatrix
-			pb.Results[i].ExtractedIDMatrix = s.endcodeExtractedIDMatrix(result)
+			resp.Results[i].Type = queryResultTypeExtractedIDMatrix
+			resp.Results[i].ExtractedIDMatrix = s.endcodeExtractedIDMatrix(result)
 		case *pilosa.GroupCounts:
-			pb.Results[i].Type = queryResultTypeGroupCounts
-			pb.Results[i].GroupCounts = s.encodeGroupCounts(result)
+			resp.Results[i].Type = queryResultTypeGroupCounts
+			resp.Results[i].GroupCounts = s.encodeGroupCounts(result)
 		case pilosa.RowIdentifiers:
-			pb.Results[i].Type = queryResultTypeRowIdentifiers
-			pb.Results[i].RowIdentifiers = s.encodeRowIdentifiers(result)
+			resp.Results[i].Type = queryResultTypeRowIdentifiers
+			resp.Results[i].RowIdentifiers = s.encodeRowIdentifiers(result)
 		case pilosa.ExtractedTable:
-			pb.Results[i].Type = queryResultTypeExtractedTable
-			pb.Results[i].ExtractedTable = s.encodeExtractedTable(result)
+			resp.Results[i].Type = queryResultTypeExtractedTable
+			resp.Results[i].ExtractedTable = s.encodeExtractedTable(result)
 		case pilosa.Pair:
-			pb.Results[i].Type = queryResultTypePair
-			pb.Results[i].Pairs = []*internal.Pair{s.encodePair(result)}
+			resp.Results[i].Type = queryResultTypePair
+			resp.Results[i].Pairs = []*pb.Pair{s.encodePair(result)}
 		case pilosa.PairField:
-			pb.Results[i].Type = queryResultTypePairField
-			pb.Results[i].PairField = s.encodePairField(result)
+			resp.Results[i].Type = queryResultTypePairField
+			resp.Results[i].PairField = s.encodePairField(result)
 		case []*pilosa.Row:
-			pb.Results[i].Type = queryResultTypeRowMatrix
-			pb.Results[i].RowMatrix = s.encodeRowMatrix(result)
+			resp.Results[i].Type = queryResultTypeRowMatrix
+			resp.Results[i].RowMatrix = s.encodeRowMatrix(result)
 		case nil:
-			pb.Results[i].Type = queryResultTypeNil
+			resp.Results[i].Type = queryResultTypeNil
 		default:
 			panic(fmt.Errorf("unknown type: %T", m.Results[i]))
 		}
 	}
 
 	if m.Err != nil {
-		pb.Err = m.Err.Error()
+		resp.Err = m.Err.Error()
 	}
 
-	return pb
+	return resp
 }
 
-func (s Serializer) encodeResizeInstruction(m *pilosa.ResizeInstruction) *internal.ResizeInstruction {
-	return &internal.ResizeInstruction{
+func (s Serializer) encodeResizeInstruction(m *pilosa.ResizeInstruction) *pb.ResizeInstruction {
+	return &pb.ResizeInstruction{
 		JobID:              m.JobID,
 		Node:               s.encodeNode(m.Node),
 		Primary:            s.encodeNode(m.Primary),
@@ -597,16 +597,16 @@ func (s Serializer) encodeResizeInstruction(m *pilosa.ResizeInstruction) *intern
 	}
 }
 
-func (s Serializer) encodeResizeSources(srcs []*pilosa.ResizeSource) []*internal.ResizeSource {
-	new := make([]*internal.ResizeSource, 0, len(srcs))
+func (s Serializer) encodeResizeSources(srcs []*pilosa.ResizeSource) []*pb.ResizeSource {
+	new := make([]*pb.ResizeSource, 0, len(srcs))
 	for _, src := range srcs {
 		new = append(new, s.encodeResizeSource(src))
 	}
 	return new
 }
 
-func (s Serializer) encodeResizeSource(m *pilosa.ResizeSource) *internal.ResizeSource {
-	return &internal.ResizeSource{
+func (s Serializer) encodeResizeSource(m *pilosa.ResizeSource) *pb.ResizeSource {
+	return &pb.ResizeSource{
 		Node:  s.encodeNode(m.Node),
 		Index: m.Index,
 		Field: m.Field,
@@ -615,38 +615,38 @@ func (s Serializer) encodeResizeSource(m *pilosa.ResizeSource) *internal.ResizeS
 	}
 }
 
-func (s Serializer) encodeTranslationResizeSources(srcs []*pilosa.TranslationResizeSource) []*internal.TranslationResizeSource {
-	new := make([]*internal.TranslationResizeSource, 0, len(srcs))
+func (s Serializer) encodeTranslationResizeSources(srcs []*pilosa.TranslationResizeSource) []*pb.TranslationResizeSource {
+	new := make([]*pb.TranslationResizeSource, 0, len(srcs))
 	for _, src := range srcs {
 		new = append(new, s.encodeTranslationResizeSource(src))
 	}
 	return new
 }
 
-func (s Serializer) encodeTranslationResizeSource(m *pilosa.TranslationResizeSource) *internal.TranslationResizeSource {
-	return &internal.TranslationResizeSource{
+func (s Serializer) encodeTranslationResizeSource(m *pilosa.TranslationResizeSource) *pb.TranslationResizeSource {
+	return &pb.TranslationResizeSource{
 		Node:        s.encodeNode(m.Node),
 		Index:       m.Index,
 		PartitionID: int32(m.PartitionID),
 	}
 }
 
-func (s Serializer) encodeSchema(m *pilosa.Schema) *internal.Schema {
-	return &internal.Schema{
+func (s Serializer) encodeSchema(m *pilosa.Schema) *pb.Schema {
+	return &pb.Schema{
 		Indexes: s.encodeIndexInfos(m.Indexes),
 	}
 }
 
-func (s Serializer) encodeIndexInfos(idxs []*pilosa.IndexInfo) []*internal.Index {
-	new := make([]*internal.Index, 0, len(idxs))
+func (s Serializer) encodeIndexInfos(idxs []*pilosa.IndexInfo) []*pb.Index {
+	new := make([]*pb.Index, 0, len(idxs))
 	for _, idx := range idxs {
 		new = append(new, s.encodeIndexInfo(idx))
 	}
 	return new
 }
 
-func (s Serializer) encodeIndexInfo(idx *pilosa.IndexInfo) *internal.Index {
-	return &internal.Index{
+func (s Serializer) encodeIndexInfo(idx *pilosa.IndexInfo) *pb.Index {
+	return &pb.Index{
 		Name:      idx.Name,
 		CreatedAt: idx.CreatedAt,
 		Options:   s.encodeIndexMeta(&idx.Options),
@@ -654,16 +654,16 @@ func (s Serializer) encodeIndexInfo(idx *pilosa.IndexInfo) *internal.Index {
 	}
 }
 
-func (s Serializer) encodeFieldInfos(fs []*pilosa.FieldInfo) []*internal.Field {
-	new := make([]*internal.Field, 0, len(fs))
+func (s Serializer) encodeFieldInfos(fs []*pilosa.FieldInfo) []*pb.Field {
+	new := make([]*pb.Field, 0, len(fs))
 	for _, f := range fs {
 		new = append(new, s.encodeFieldInfo(f))
 	}
 	return new
 }
 
-func (s Serializer) encodeFieldInfo(f *pilosa.FieldInfo) *internal.Field {
-	ifield := &internal.Field{
+func (s Serializer) encodeFieldInfo(f *pilosa.FieldInfo) *pb.Field {
+	ifield := &pb.Field{
 		Name:      f.Name,
 		CreatedAt: f.CreatedAt,
 		Meta:      s.encodeFieldOptions(&f.Options),
@@ -676,16 +676,16 @@ func (s Serializer) encodeFieldInfo(f *pilosa.FieldInfo) *internal.Field {
 	return ifield
 }
 
-func (s Serializer) encodeFieldOptions(o *pilosa.FieldOptions) *internal.FieldOptions {
+func (s Serializer) encodeFieldOptions(o *pilosa.FieldOptions) *pb.FieldOptions {
 	if o == nil {
 		return nil
 	}
-	return &internal.FieldOptions{
+	return &pb.FieldOptions{
 		Type:         o.Type,
 		CacheType:    o.CacheType,
 		CacheSize:    o.CacheSize,
-		Min:          &internal.Decimal{Value: o.Min.Value, Scale: o.Min.Scale},
-		Max:          &internal.Decimal{Value: o.Max.Value, Scale: o.Max.Scale},
+		Min:          &pb.Decimal{Value: o.Min.Value, Scale: o.Min.Scale},
+		Max:          &pb.Decimal{Value: o.Max.Value, Scale: o.Max.Scale},
 		Base:         o.Base,
 		Scale:        o.Scale,
 		BitDepth:     uint64(o.BitDepth),
@@ -695,19 +695,19 @@ func (s Serializer) encodeFieldOptions(o *pilosa.FieldOptions) *internal.FieldOp
 	}
 }
 
-// s.encodeNodes converts a slice of Nodes into its internal representation.
-func (s Serializer) encodeNodes(a []*topology.Node) []*internal.Node {
-	other := make([]*internal.Node, len(a))
+// s.encodeNodes converts a slice of Nodes into its pb.representation.
+func (s Serializer) encodeNodes(a []*topology.Node) []*pb.Node {
+	other := make([]*pb.Node, len(a))
 	for i := range a {
 		other[i] = s.encodeNode(a[i])
 	}
 	return other
 }
 
-// s.encodeNode converts a Node into its internal representation.
-func (s Serializer) encodeNode(m *topology.Node) *internal.Node {
+// s.encodeNode converts a Node into its pb.representation.
+func (s Serializer) encodeNode(m *topology.Node) *pb.Node {
 	n := m.Clone()
-	return &internal.Node{
+	return &pb.Node{
 		ID:      n.ID,
 		URI:     s.encodeURI(n.URI),
 		State:   string(n.State),
@@ -715,16 +715,16 @@ func (s Serializer) encodeNode(m *topology.Node) *internal.Node {
 	}
 }
 
-func (s Serializer) encodeURI(u pnet.URI) *internal.URI {
-	return &internal.URI{
+func (s Serializer) encodeURI(u pnet.URI) *pb.URI {
+	return &pb.URI{
 		Scheme: u.Scheme,
 		Host:   u.Host,
 		Port:   uint32(u.Port),
 	}
 }
 
-func (s Serializer) encodeClusterStatus(m *pilosa.ClusterStatus) *internal.ClusterStatus {
-	return &internal.ClusterStatus{
+func (s Serializer) encodeClusterStatus(m *pilosa.ClusterStatus) *pb.ClusterStatus {
+	return &pb.ClusterStatus{
 		State:     m.State,
 		ClusterID: m.ClusterID,
 		Nodes:     s.encodeNodes(m.Nodes),
@@ -732,37 +732,37 @@ func (s Serializer) encodeClusterStatus(m *pilosa.ClusterStatus) *internal.Clust
 	}
 }
 
-func (s Serializer) encodeCreateShardMessage(m *pilosa.CreateShardMessage) *internal.CreateShardMessage {
-	return &internal.CreateShardMessage{
+func (s Serializer) encodeCreateShardMessage(m *pilosa.CreateShardMessage) *pb.CreateShardMessage {
+	return &pb.CreateShardMessage{
 		Index: m.Index,
 		Field: m.Field,
 		Shard: m.Shard,
 	}
 }
 
-func (s Serializer) encodeCreateIndexMessage(m *pilosa.CreateIndexMessage) *internal.CreateIndexMessage {
-	return &internal.CreateIndexMessage{
+func (s Serializer) encodeCreateIndexMessage(m *pilosa.CreateIndexMessage) *pb.CreateIndexMessage {
+	return &pb.CreateIndexMessage{
 		Index:     m.Index,
 		CreatedAt: m.CreatedAt,
 		Meta:      s.encodeIndexMeta(&m.Meta),
 	}
 }
 
-func (s Serializer) encodeIndexMeta(m *pilosa.IndexOptions) *internal.IndexMeta {
-	return &internal.IndexMeta{
+func (s Serializer) encodeIndexMeta(m *pilosa.IndexOptions) *pb.IndexMeta {
+	return &pb.IndexMeta{
 		Keys:           m.Keys,
 		TrackExistence: m.TrackExistence,
 	}
 }
 
-func (s Serializer) encodeDeleteIndexMessage(m *pilosa.DeleteIndexMessage) *internal.DeleteIndexMessage {
-	return &internal.DeleteIndexMessage{
+func (s Serializer) encodeDeleteIndexMessage(m *pilosa.DeleteIndexMessage) *pb.DeleteIndexMessage {
+	return &pb.DeleteIndexMessage{
 		Index: m.Index,
 	}
 }
 
-func (s Serializer) encodeCreateFieldMessage(m *pilosa.CreateFieldMessage) *internal.CreateFieldMessage {
-	return &internal.CreateFieldMessage{
+func (s Serializer) encodeCreateFieldMessage(m *pilosa.CreateFieldMessage) *pb.CreateFieldMessage {
+	return &pb.CreateFieldMessage{
 		Index:     m.Index,
 		Field:     m.Field,
 		CreatedAt: m.CreatedAt,
@@ -770,109 +770,109 @@ func (s Serializer) encodeCreateFieldMessage(m *pilosa.CreateFieldMessage) *inte
 	}
 }
 
-func (s Serializer) encodeDeleteFieldMessage(m *pilosa.DeleteFieldMessage) *internal.DeleteFieldMessage {
-	return &internal.DeleteFieldMessage{
+func (s Serializer) encodeDeleteFieldMessage(m *pilosa.DeleteFieldMessage) *pb.DeleteFieldMessage {
+	return &pb.DeleteFieldMessage{
 		Index: m.Index,
 		Field: m.Field,
 	}
 }
 
-func (s Serializer) encodeDeleteAvailableShardMessage(m *pilosa.DeleteAvailableShardMessage) *internal.DeleteAvailableShardMessage {
-	return &internal.DeleteAvailableShardMessage{
+func (s Serializer) encodeDeleteAvailableShardMessage(m *pilosa.DeleteAvailableShardMessage) *pb.DeleteAvailableShardMessage {
+	return &pb.DeleteAvailableShardMessage{
 		Index:   m.Index,
 		Field:   m.Field,
 		ShardID: m.ShardID,
 	}
 }
 
-func (s Serializer) encodeCreateViewMessage(m *pilosa.CreateViewMessage) *internal.CreateViewMessage {
-	return &internal.CreateViewMessage{
+func (s Serializer) encodeCreateViewMessage(m *pilosa.CreateViewMessage) *pb.CreateViewMessage {
+	return &pb.CreateViewMessage{
 		Index: m.Index,
 		Field: m.Field,
 		View:  m.View,
 	}
 }
 
-func (s Serializer) encodeDeleteViewMessage(m *pilosa.DeleteViewMessage) *internal.DeleteViewMessage {
-	return &internal.DeleteViewMessage{
+func (s Serializer) encodeDeleteViewMessage(m *pilosa.DeleteViewMessage) *pb.DeleteViewMessage {
+	return &pb.DeleteViewMessage{
 		Index: m.Index,
 		Field: m.Field,
 		View:  m.View,
 	}
 }
 
-func (s Serializer) encodeResizeInstructionComplete(m *pilosa.ResizeInstructionComplete) *internal.ResizeInstructionComplete {
-	return &internal.ResizeInstructionComplete{
+func (s Serializer) encodeResizeInstructionComplete(m *pilosa.ResizeInstructionComplete) *pb.ResizeInstructionComplete {
+	return &pb.ResizeInstructionComplete{
 		JobID: m.JobID,
 		Node:  s.encodeNode(m.Node),
 		Error: m.Error,
 	}
 }
 
-func (s Serializer) encodeNodeStateMessage(m *pilosa.NodeStateMessage) *internal.NodeStateMessage {
-	return &internal.NodeStateMessage{
+func (s Serializer) encodeNodeStateMessage(m *pilosa.NodeStateMessage) *pb.NodeStateMessage {
+	return &pb.NodeStateMessage{
 		NodeID: m.NodeID,
 		State:  m.State,
 	}
 }
 
-func (s Serializer) encodeNodeEventMessage(m *pilosa.NodeEvent) *internal.NodeEventMessage {
-	return &internal.NodeEventMessage{
+func (s Serializer) encodeNodeEventMessage(m *pilosa.NodeEvent) *pb.NodeEventMessage {
+	return &pb.NodeEventMessage{
 		Event: uint32(m.Event),
 		Node:  s.encodeNode(m.Node),
 	}
 }
 
-func (s Serializer) encodeNodeStatus(m *pilosa.NodeStatus) *internal.NodeStatus {
-	return &internal.NodeStatus{
+func (s Serializer) encodeNodeStatus(m *pilosa.NodeStatus) *pb.NodeStatus {
+	return &pb.NodeStatus{
 		Node:    s.encodeNode(m.Node),
 		Indexes: s.encodeIndexStatuses(m.Indexes),
 		Schema:  s.encodeSchema(m.Schema),
 	}
 }
 
-func (s Serializer) encodeIndexStatus(m *pilosa.IndexStatus) *internal.IndexStatus {
-	return &internal.IndexStatus{
+func (s Serializer) encodeIndexStatus(m *pilosa.IndexStatus) *pb.IndexStatus {
+	return &pb.IndexStatus{
 		Name:      m.Name,
 		CreatedAt: m.CreatedAt,
 		Fields:    s.encodeFieldStatuses(m.Fields),
 	}
 }
 
-func (s Serializer) encodeIndexStatuses(a []*pilosa.IndexStatus) []*internal.IndexStatus {
-	other := make([]*internal.IndexStatus, len(a))
+func (s Serializer) encodeIndexStatuses(a []*pilosa.IndexStatus) []*pb.IndexStatus {
+	other := make([]*pb.IndexStatus, len(a))
 	for i := range a {
 		other[i] = s.encodeIndexStatus(a[i])
 	}
 	return other
 }
 
-func (s Serializer) encodeFieldStatus(m *pilosa.FieldStatus) *internal.FieldStatus {
-	return &internal.FieldStatus{
+func (s Serializer) encodeFieldStatus(m *pilosa.FieldStatus) *pb.FieldStatus {
+	return &pb.FieldStatus{
 		Name:            m.Name,
 		CreatedAt:       m.CreatedAt,
 		AvailableShards: m.AvailableShards.Slice(),
 	}
 }
 
-func (s Serializer) encodeFieldStatuses(a []*pilosa.FieldStatus) []*internal.FieldStatus {
-	other := make([]*internal.FieldStatus, len(a))
+func (s Serializer) encodeFieldStatuses(a []*pilosa.FieldStatus) []*pb.FieldStatus {
+	other := make([]*pb.FieldStatus, len(a))
 	for i := range a {
 		other[i] = s.encodeFieldStatus(a[i])
 	}
 	return other
 }
 
-func (s Serializer) encodeRecalculateCaches(*pilosa.RecalculateCaches) *internal.RecalculateCaches {
-	return &internal.RecalculateCaches{}
+func (s Serializer) encodeRecalculateCaches(*pilosa.RecalculateCaches) *pb.RecalculateCaches {
+	return &pb.RecalculateCaches{}
 }
 
-func (s Serializer) encodeLoadSchemaMessage(*pilosa.LoadSchemaMessage) *internal.LoadSchemaMessage {
-	return &internal.LoadSchemaMessage{}
+func (s Serializer) encodeLoadSchemaMessage(*pilosa.LoadSchemaMessage) *pb.LoadSchemaMessage {
+	return &pb.LoadSchemaMessage{}
 }
 
-func (s Serializer) encodeTranslateKeysRequest(request *pilosa.TranslateKeysRequest) *internal.TranslateKeysRequest {
-	return &internal.TranslateKeysRequest{
+func (s Serializer) encodeTranslateKeysRequest(request *pilosa.TranslateKeysRequest) *pb.TranslateKeysRequest {
+	return &pb.TranslateKeysRequest{
 		Index:       request.Index,
 		Field:       request.Field,
 		Keys:        request.Keys,
@@ -880,35 +880,35 @@ func (s Serializer) encodeTranslateKeysRequest(request *pilosa.TranslateKeysRequ
 	}
 }
 
-func (s Serializer) encodeTranslateKeysResponse(response *pilosa.TranslateKeysResponse) *internal.TranslateKeysResponse {
-	return &internal.TranslateKeysResponse{
+func (s Serializer) encodeTranslateKeysResponse(response *pilosa.TranslateKeysResponse) *pb.TranslateKeysResponse {
+	return &pb.TranslateKeysResponse{
 		IDs: response.IDs,
 	}
 }
 
-func (s Serializer) encodeTranslateIDsRequest(request *pilosa.TranslateIDsRequest) *internal.TranslateIDsRequest {
-	return &internal.TranslateIDsRequest{
+func (s Serializer) encodeTranslateIDsRequest(request *pilosa.TranslateIDsRequest) *pb.TranslateIDsRequest {
+	return &pb.TranslateIDsRequest{
 		Index: request.Index,
 		Field: request.Field,
 		IDs:   request.IDs,
 	}
 }
 
-func (s Serializer) encodeTranslateIDsResponse(response *pilosa.TranslateIDsResponse) *internal.TranslateIDsResponse {
-	return &internal.TranslateIDsResponse{
+func (s Serializer) encodeTranslateIDsResponse(response *pilosa.TranslateIDsResponse) *pb.TranslateIDsResponse {
+	return &pb.TranslateIDsResponse{
 		Keys: response.Keys,
 	}
 }
 
-func (s Serializer) encodeTransactionMessage(msg *pilosa.TransactionMessage) *internal.TransactionMessage {
-	return &internal.TransactionMessage{
+func (s Serializer) encodeTransactionMessage(msg *pilosa.TransactionMessage) *pb.TransactionMessage {
+	return &pb.TransactionMessage{
 		Action:      msg.Action,
 		Transaction: s.encodeTransaction(msg.Transaction),
 	}
 }
 
-func (s Serializer) encodeAtomicRecord(msg *pilosa.AtomicRecord) *internal.AtomicRecord {
-	ar := &internal.AtomicRecord{
+func (s Serializer) encodeAtomicRecord(msg *pilosa.AtomicRecord) *pb.AtomicRecord {
+	ar := &pb.AtomicRecord{
 		Index: msg.Index,
 		Shard: msg.Shard,
 	}
@@ -921,20 +921,20 @@ func (s Serializer) encodeAtomicRecord(msg *pilosa.AtomicRecord) *internal.Atomi
 	return ar
 }
 
-func (s Serializer) encodeRowMatrix(msg []*pilosa.Row) *internal.RowMatrix {
-	rows := make([]*internal.Row, len(msg))
+func (s Serializer) encodeRowMatrix(msg []*pilosa.Row) *pb.RowMatrix {
+	rows := make([]*pb.Row, len(msg))
 	for i, r := range msg {
 		rows[i] = s.encodeRow(r)
 	}
 
-	return &internal.RowMatrix{Rows: rows}
+	return &pb.RowMatrix{Rows: rows}
 }
 
-func (s Serializer) encodeTransaction(trns *pilosa.Transaction) *internal.Transaction {
+func (s Serializer) encodeTransaction(trns *pilosa.Transaction) *pb.Transaction {
 	if trns == nil {
 		return nil
 	}
-	return &internal.Transaction{
+	return &pb.Transaction{
 		ID:        trns.ID,
 		Active:    trns.Active,
 		Exclusive: trns.Exclusive,
@@ -951,11 +951,11 @@ func (s Serializer) encodeTransactionDeadline(deadline time.Time) int64 {
 	return deadline.UnixNano()
 }
 
-func (s Serializer) encodeTransactionStats(stats pilosa.TransactionStats) *internal.TransactionStats {
-	return &internal.TransactionStats{}
+func (s Serializer) encodeTransactionStats(stats pilosa.TransactionStats) *pb.TransactionStats {
+	return &pb.TransactionStats{}
 }
 
-func (s Serializer) decodeResizeInstruction(ri *internal.ResizeInstruction, m *pilosa.ResizeInstruction) {
+func (s Serializer) decodeResizeInstruction(ri *pb.ResizeInstruction, m *pilosa.ResizeInstruction) {
 	m.JobID = ri.JobID
 	m.Node = &topology.Node{}
 	s.decodeNode(ri.Node, m.Node)
@@ -971,14 +971,14 @@ func (s Serializer) decodeResizeInstruction(ri *internal.ResizeInstruction, m *p
 	s.decodeClusterStatus(ri.ClusterStatus, m.ClusterStatus)
 }
 
-func (s Serializer) decodeResizeSources(srcs []*internal.ResizeSource, m []*pilosa.ResizeSource) {
+func (s Serializer) decodeResizeSources(srcs []*pb.ResizeSource, m []*pilosa.ResizeSource) {
 	for i := range srcs {
 		m[i] = &pilosa.ResizeSource{}
 		s.decodeResizeSource(srcs[i], m[i])
 	}
 }
 
-func (s Serializer) decodeResizeSource(rs *internal.ResizeSource, m *pilosa.ResizeSource) {
+func (s Serializer) decodeResizeSource(rs *pb.ResizeSource, m *pilosa.ResizeSource) {
 	m.Node = &topology.Node{}
 	s.decodeNode(rs.Node, m.Node)
 	m.Index = rs.Index
@@ -987,33 +987,33 @@ func (s Serializer) decodeResizeSource(rs *internal.ResizeSource, m *pilosa.Resi
 	m.Shard = rs.Shard
 }
 
-func (s Serializer) decodeTranslationResizeSources(srcs []*internal.TranslationResizeSource, m []*pilosa.TranslationResizeSource) {
+func (s Serializer) decodeTranslationResizeSources(srcs []*pb.TranslationResizeSource, m []*pilosa.TranslationResizeSource) {
 	for i := range srcs {
 		m[i] = &pilosa.TranslationResizeSource{}
 		s.decodeTranslationResizeSource(srcs[i], m[i])
 	}
 }
 
-func (s Serializer) decodeTranslationResizeSource(rs *internal.TranslationResizeSource, m *pilosa.TranslationResizeSource) {
+func (s Serializer) decodeTranslationResizeSource(rs *pb.TranslationResizeSource, m *pilosa.TranslationResizeSource) {
 	m.Node = &topology.Node{}
 	s.decodeNode(rs.Node, m.Node)
 	m.Index = rs.Index
 	m.PartitionID = int(rs.PartitionID)
 }
 
-func (s Serializer) decodeSchema(sc *internal.Schema, m *pilosa.Schema) {
+func (s Serializer) decodeSchema(sc *pb.Schema, m *pilosa.Schema) {
 	m.Indexes = make([]*pilosa.IndexInfo, len(sc.Indexes))
 	s.decodeIndexes(sc.Indexes, m.Indexes)
 }
 
-func (s Serializer) decodeIndexes(idxs []*internal.Index, m []*pilosa.IndexInfo) {
+func (s Serializer) decodeIndexes(idxs []*pb.Index, m []*pilosa.IndexInfo) {
 	for i := range idxs {
 		m[i] = &pilosa.IndexInfo{}
 		s.decodeIndex(idxs[i], m[i])
 	}
 }
 
-func (s Serializer) decodeIndex(idx *internal.Index, m *pilosa.IndexInfo) {
+func (s Serializer) decodeIndex(idx *pb.Index, m *pilosa.IndexInfo) {
 	m.Name = idx.Name
 	m.CreatedAt = idx.CreatedAt
 	m.Options = pilosa.IndexOptions{}
@@ -1022,14 +1022,14 @@ func (s Serializer) decodeIndex(idx *internal.Index, m *pilosa.IndexInfo) {
 	s.decodeFields(idx.Fields, m.Fields)
 }
 
-func (s Serializer) decodeFields(fs []*internal.Field, m []*pilosa.FieldInfo) {
+func (s Serializer) decodeFields(fs []*pb.Field, m []*pilosa.FieldInfo) {
 	for i := range fs {
 		m[i] = &pilosa.FieldInfo{}
 		s.decodeField(fs[i], m[i])
 	}
 }
 
-func (s Serializer) decodeField(f *internal.Field, m *pilosa.FieldInfo) {
+func (s Serializer) decodeField(f *pb.Field, m *pilosa.FieldInfo) {
 	m.Name = f.Name
 	m.CreatedAt = f.CreatedAt
 	m.Options = pilosa.FieldOptions{}
@@ -1040,7 +1040,7 @@ func (s Serializer) decodeField(f *internal.Field, m *pilosa.FieldInfo) {
 	}
 }
 
-func (s Serializer) decodeFieldOptions(options *internal.FieldOptions, m *pilosa.FieldOptions) {
+func (s Serializer) decodeFieldOptions(options *pb.FieldOptions, m *pilosa.FieldOptions) {
 	m.Type = options.Type
 	m.CacheType = options.CacheType
 	m.CacheSize = options.CacheSize
@@ -1054,19 +1054,19 @@ func (s Serializer) decodeFieldOptions(options *internal.FieldOptions, m *pilosa
 	m.ForeignIndex = options.ForeignIndex
 }
 
-func (s Serializer) decodeDecimal(d *internal.Decimal, m *pql.Decimal) {
+func (s Serializer) decodeDecimal(d *pb.Decimal, m *pql.Decimal) {
 	m.Value = d.Value
 	m.Scale = d.Scale
 }
 
-func (s Serializer) decodeNodes(a []*internal.Node, m []*topology.Node) {
+func (s Serializer) decodeNodes(a []*pb.Node, m []*topology.Node) {
 	for i := range a {
 		m[i] = &topology.Node{}
 		s.decodeNode(a[i], m[i])
 	}
 }
 
-func (s Serializer) decodeClusterStatus(cs *internal.ClusterStatus, m *pilosa.ClusterStatus) {
+func (s Serializer) decodeClusterStatus(cs *pb.ClusterStatus, m *pilosa.ClusterStatus) {
 	m.State = cs.State
 	m.ClusterID = cs.ClusterID
 	m.Nodes = make([]*topology.Node, len(cs.Nodes))
@@ -1075,44 +1075,44 @@ func (s Serializer) decodeClusterStatus(cs *internal.ClusterStatus, m *pilosa.Cl
 	s.decodeSchema(cs.Schema, m.Schema)
 }
 
-func (s Serializer) decodeNode(node *internal.Node, m *topology.Node) {
+func (s Serializer) decodeNode(node *pb.Node, m *topology.Node) {
 	m.ID = node.ID
 	s.decodeURI(node.URI, &m.URI)
 	s.decodeURI(node.GRPCURI, &m.GRPCURI)
 	m.State = disco.NodeState(node.State)
 }
 
-func (s Serializer) decodeURI(i *internal.URI, m *pnet.URI) {
+func (s Serializer) decodeURI(i *pb.URI, m *pnet.URI) {
 	m.Scheme = i.Scheme
 	m.Host = i.Host
 	m.Port = uint16(i.Port)
 }
 
-func (s Serializer) decodeCreateShardMessage(pb *internal.CreateShardMessage, m *pilosa.CreateShardMessage) {
+func (s Serializer) decodeCreateShardMessage(pb *pb.CreateShardMessage, m *pilosa.CreateShardMessage) {
 	m.Index = pb.Index
 	m.Field = pb.Field
 	m.Shard = pb.Shard
 }
 
-func (s Serializer) decodeCreateIndexMessage(pb *internal.CreateIndexMessage, m *pilosa.CreateIndexMessage) {
+func (s Serializer) decodeCreateIndexMessage(pb *pb.CreateIndexMessage, m *pilosa.CreateIndexMessage) {
 	m.Index = pb.Index
 	m.CreatedAt = pb.CreatedAt
 	m.Meta = pilosa.IndexOptions{}
 	s.decodeIndexMeta(pb.Meta, &m.Meta)
 }
 
-func (s Serializer) decodeIndexMeta(pb *internal.IndexMeta, m *pilosa.IndexOptions) {
+func (s Serializer) decodeIndexMeta(pb *pb.IndexMeta, m *pilosa.IndexOptions) {
 	if pb != nil {
 		m.Keys = pb.Keys
 		m.TrackExistence = pb.TrackExistence
 	}
 }
 
-func (s Serializer) decodeDeleteIndexMessage(pb *internal.DeleteIndexMessage, m *pilosa.DeleteIndexMessage) {
+func (s Serializer) decodeDeleteIndexMessage(pb *pb.DeleteIndexMessage, m *pilosa.DeleteIndexMessage) {
 	m.Index = pb.Index
 }
 
-func (s Serializer) decodeCreateFieldMessage(pb *internal.CreateFieldMessage, m *pilosa.CreateFieldMessage) {
+func (s Serializer) decodeCreateFieldMessage(pb *pb.CreateFieldMessage, m *pilosa.CreateFieldMessage) {
 	m.Index = pb.Index
 	m.Field = pb.Field
 	m.CreatedAt = pb.CreatedAt
@@ -1120,55 +1120,55 @@ func (s Serializer) decodeCreateFieldMessage(pb *internal.CreateFieldMessage, m 
 	s.decodeFieldOptions(pb.Meta, m.Meta)
 }
 
-func (s Serializer) decodeDeleteFieldMessage(pb *internal.DeleteFieldMessage, m *pilosa.DeleteFieldMessage) {
+func (s Serializer) decodeDeleteFieldMessage(pb *pb.DeleteFieldMessage, m *pilosa.DeleteFieldMessage) {
 	m.Index = pb.Index
 	m.Field = pb.Field
 }
 
-func (s Serializer) decodeDeleteAvailableShardMessage(pb *internal.DeleteAvailableShardMessage, m *pilosa.DeleteAvailableShardMessage) {
+func (s Serializer) decodeDeleteAvailableShardMessage(pb *pb.DeleteAvailableShardMessage, m *pilosa.DeleteAvailableShardMessage) {
 	m.Index = pb.Index
 	m.Field = pb.Field
 	m.ShardID = pb.ShardID
 }
 
-func (s Serializer) decodeCreateViewMessage(pb *internal.CreateViewMessage, m *pilosa.CreateViewMessage) {
+func (s Serializer) decodeCreateViewMessage(pb *pb.CreateViewMessage, m *pilosa.CreateViewMessage) {
 	m.Index = pb.Index
 	m.Field = pb.Field
 	m.View = pb.View
 }
 
-func (s Serializer) decodeDeleteViewMessage(pb *internal.DeleteViewMessage, m *pilosa.DeleteViewMessage) {
+func (s Serializer) decodeDeleteViewMessage(pb *pb.DeleteViewMessage, m *pilosa.DeleteViewMessage) {
 	m.Index = pb.Index
 	m.Field = pb.Field
 	m.View = pb.View
 }
 
-func (s Serializer) decodeResizeInstructionComplete(pb *internal.ResizeInstructionComplete, m *pilosa.ResizeInstructionComplete) {
+func (s Serializer) decodeResizeInstructionComplete(pb *pb.ResizeInstructionComplete, m *pilosa.ResizeInstructionComplete) {
 	m.JobID = pb.JobID
 	m.Node = &topology.Node{}
 	s.decodeNode(pb.Node, m.Node)
 	m.Error = pb.Error
 }
 
-func (s Serializer) decodeNodeStateMessage(pb *internal.NodeStateMessage, m *pilosa.NodeStateMessage) {
+func (s Serializer) decodeNodeStateMessage(pb *pb.NodeStateMessage, m *pilosa.NodeStateMessage) {
 	m.NodeID = pb.NodeID
 	m.State = pb.State
 }
 
-func (s Serializer) decodeNodeEventMessage(pb *internal.NodeEventMessage, m *pilosa.NodeEvent) {
+func (s Serializer) decodeNodeEventMessage(pb *pb.NodeEventMessage, m *pilosa.NodeEvent) {
 	m.Event = pilosa.NodeEventType(pb.Event)
 	m.Node = &topology.Node{}
 	s.decodeNode(pb.Node, m.Node)
 }
 
-func (s Serializer) decodeNodeStatus(pb *internal.NodeStatus, m *pilosa.NodeStatus) {
+func (s Serializer) decodeNodeStatus(pb *pb.NodeStatus, m *pilosa.NodeStatus) {
 	m.Node = &topology.Node{}
 	m.Indexes = s.decodeIndexStatuses(pb.Indexes)
 	m.Schema = &pilosa.Schema{}
 	s.decodeSchema(pb.Schema, m.Schema)
 }
 
-func (s Serializer) decodeIndexStatuses(a []*internal.IndexStatus) []*pilosa.IndexStatus {
+func (s Serializer) decodeIndexStatuses(a []*pb.IndexStatus) []*pilosa.IndexStatus {
 	m := make([]*pilosa.IndexStatus, 0)
 	for i := range a {
 		m = append(m, &pilosa.IndexStatus{})
@@ -1177,13 +1177,13 @@ func (s Serializer) decodeIndexStatuses(a []*internal.IndexStatus) []*pilosa.Ind
 	return m
 }
 
-func (s Serializer) decodeIndexStatus(pb *internal.IndexStatus, m *pilosa.IndexStatus) {
+func (s Serializer) decodeIndexStatus(pb *pb.IndexStatus, m *pilosa.IndexStatus) {
 	m.Name = pb.Name
 	m.CreatedAt = pb.CreatedAt
 	m.Fields = s.decodeFieldStatuses(pb.Fields)
 }
 
-func (s Serializer) decodeFieldStatuses(a []*internal.FieldStatus) []*pilosa.FieldStatus {
+func (s Serializer) decodeFieldStatuses(a []*pb.FieldStatus) []*pilosa.FieldStatus {
 	m := make([]*pilosa.FieldStatus, 0)
 	for i := range a {
 		m = append(m, &pilosa.FieldStatus{})
@@ -1192,19 +1192,19 @@ func (s Serializer) decodeFieldStatuses(a []*internal.FieldStatus) []*pilosa.Fie
 	return m
 }
 
-func (s Serializer) decodeFieldStatus(pb *internal.FieldStatus, m *pilosa.FieldStatus) {
+func (s Serializer) decodeFieldStatus(pb *pb.FieldStatus, m *pilosa.FieldStatus) {
 	m.Name = pb.Name
 	m.CreatedAt = pb.CreatedAt
 	m.AvailableShards = roaring.NewBitmap(pb.AvailableShards...)
 }
 
-func (s Serializer) decodeRecalculateCaches(pb *internal.RecalculateCaches, m *pilosa.RecalculateCaches) {
+func (s Serializer) decodeRecalculateCaches(pb *pb.RecalculateCaches, m *pilosa.RecalculateCaches) {
 }
 
-func (s Serializer) decodeLoadSchemaMessage(pb *internal.LoadSchemaMessage, m *pilosa.LoadSchemaMessage) {
+func (s Serializer) decodeLoadSchemaMessage(pb *pb.LoadSchemaMessage, m *pilosa.LoadSchemaMessage) {
 }
 
-func (s Serializer) decodeQueryRequest(pb *internal.QueryRequest, m *pilosa.QueryRequest) {
+func (s Serializer) decodeQueryRequest(pb *pb.QueryRequest, m *pilosa.QueryRequest) {
 	m.Query = pb.Query
 	m.Shards = pb.Shards
 	m.ColumnAttrs = pb.ColumnAttrs
@@ -1218,7 +1218,7 @@ func (s Serializer) decodeQueryRequest(pb *internal.QueryRequest, m *pilosa.Quer
 	}
 }
 
-func (s Serializer) decodeImportRequest(pb *internal.ImportRequest, m *pilosa.ImportRequest) {
+func (s Serializer) decodeImportRequest(pb *pb.ImportRequest, m *pilosa.ImportRequest) {
 	m.Index = pb.Index
 	m.Field = pb.Field
 	m.Shard = pb.Shard
@@ -1232,7 +1232,7 @@ func (s Serializer) decodeImportRequest(pb *internal.ImportRequest, m *pilosa.Im
 	m.Clear = pb.Clear
 }
 
-func (s Serializer) decodeImportValueRequest(pb *internal.ImportValueRequest, m *pilosa.ImportValueRequest) {
+func (s Serializer) decodeImportValueRequest(pb *pb.ImportValueRequest, m *pilosa.ImportValueRequest) {
 	m.Index = pb.Index
 	m.Field = pb.Field
 	m.Shard = pb.Shard
@@ -1246,7 +1246,7 @@ func (s Serializer) decodeImportValueRequest(pb *internal.ImportValueRequest, m 
 	m.Clear = pb.Clear
 }
 
-func (s Serializer) decodeImportRoaringRequest(pb *internal.ImportRoaringRequest, m *pilosa.ImportRoaringRequest) {
+func (s Serializer) decodeImportRoaringRequest(pb *pb.ImportRoaringRequest, m *pilosa.ImportRoaringRequest) {
 	views := map[string][]byte{}
 	for _, view := range pb.Views {
 		views[view.Name] = view.Data
@@ -1260,7 +1260,7 @@ func (s Serializer) decodeImportRoaringRequest(pb *internal.ImportRoaringRequest
 	m.UpdateExistence = pb.UpdateExistence
 }
 
-func (s Serializer) decodeImportColumnAttrsRequest(pb *internal.ImportColumnAttrsRequest, m *pilosa.ImportColumnAttrsRequest) {
+func (s Serializer) decodeImportColumnAttrsRequest(pb *pb.ImportColumnAttrsRequest, m *pilosa.ImportColumnAttrsRequest) {
 	m.Index = pb.Index
 	m.IndexCreatedAt = pb.IndexCreatedAt
 	m.Shard = pb.Shard
@@ -1269,11 +1269,11 @@ func (s Serializer) decodeImportColumnAttrsRequest(pb *internal.ImportColumnAttr
 	m.ColumnIDs = pb.ColumnIDs
 }
 
-func (s Serializer) decodeImportResponse(pb *internal.ImportResponse, m *pilosa.ImportResponse) {
+func (s Serializer) decodeImportResponse(pb *pb.ImportResponse, m *pilosa.ImportResponse) {
 	m.Err = pb.Err
 }
 
-func (s Serializer) decodeBlockDataRequest(pb *internal.BlockDataRequest, m *pilosa.BlockDataRequest) {
+func (s Serializer) decodeBlockDataRequest(pb *pb.BlockDataRequest, m *pilosa.BlockDataRequest) {
 	m.Index = pb.Index
 	m.Field = pb.Field
 	m.View = pb.View
@@ -1281,12 +1281,12 @@ func (s Serializer) decodeBlockDataRequest(pb *internal.BlockDataRequest, m *pil
 	m.Block = pb.Block
 }
 
-func (s Serializer) decodeBlockDataResponse(pb *internal.BlockDataResponse, m *pilosa.BlockDataResponse) {
+func (s Serializer) decodeBlockDataResponse(pb *pb.BlockDataResponse, m *pilosa.BlockDataResponse) {
 	m.RowIDs = pb.RowIDs
 	m.ColumnIDs = pb.ColumnIDs
 }
 
-func (s Serializer) decodeQueryResponse(pb *internal.QueryResponse, m *pilosa.QueryResponse) {
+func (s Serializer) decodeQueryResponse(pb *pb.QueryResponse, m *pilosa.QueryResponse) {
 	m.ColumnAttrSets = make([]*pilosa.ColumnAttrSet, len(pb.ColumnAttrSets))
 	s.decodeColumnAttrSets(pb.ColumnAttrSets, m.ColumnAttrSets)
 	if pb.Err == "" {
@@ -1298,47 +1298,47 @@ func (s Serializer) decodeQueryResponse(pb *internal.QueryResponse, m *pilosa.Qu
 	s.decodeQueryResults(pb.Results, m.Results)
 }
 
-func (s Serializer) decodeColumnAttrSets(pb []*internal.ColumnAttrSet, m []*pilosa.ColumnAttrSet) {
+func (s Serializer) decodeColumnAttrSets(pb []*pb.ColumnAttrSet, m []*pilosa.ColumnAttrSet) {
 	for i := range pb {
 		m[i] = &pilosa.ColumnAttrSet{}
 		s.decodeColumnAttrSet(pb[i], m[i])
 	}
 }
 
-func (s Serializer) decodeColumnAttrSet(pb *internal.ColumnAttrSet, m *pilosa.ColumnAttrSet) {
+func (s Serializer) decodeColumnAttrSet(pb *pb.ColumnAttrSet, m *pilosa.ColumnAttrSet) {
 	m.ID = pb.ID
 	m.Key = pb.Key
 	m.Attrs = s.decodeAttrs(pb.Attrs)
 }
 
-func (s Serializer) decodeQueryResults(pb []*internal.QueryResult, m []interface{}) {
+func (s Serializer) decodeQueryResults(pb []*pb.QueryResult, m []interface{}) {
 	for i := range pb {
 		m[i] = s.decodeQueryResult(pb[i])
 	}
 }
 
-func (s Serializer) decodeTranslateKeysRequest(pb *internal.TranslateKeysRequest, m *pilosa.TranslateKeysRequest) {
+func (s Serializer) decodeTranslateKeysRequest(pb *pb.TranslateKeysRequest, m *pilosa.TranslateKeysRequest) {
 	m.Index = pb.Index
 	m.Field = pb.Field
 	m.Keys = pb.Keys
 	m.NotWritable = pb.NotWritable
 }
 
-func (s Serializer) decodeTranslateKeysResponse(pb *internal.TranslateKeysResponse, m *pilosa.TranslateKeysResponse) {
+func (s Serializer) decodeTranslateKeysResponse(pb *pb.TranslateKeysResponse, m *pilosa.TranslateKeysResponse) {
 	m.IDs = pb.IDs
 }
 
-func (s Serializer) decodeTranslateIDsRequest(pb *internal.TranslateIDsRequest, m *pilosa.TranslateIDsRequest) {
+func (s Serializer) decodeTranslateIDsRequest(pb *pb.TranslateIDsRequest, m *pilosa.TranslateIDsRequest) {
 	m.Index = pb.Index
 	m.Field = pb.Field
 	m.IDs = pb.IDs
 }
 
-func (s Serializer) decodeTranslateIDsResponse(pb *internal.TranslateIDsResponse, m *pilosa.TranslateIDsResponse) {
+func (s Serializer) decodeTranslateIDsResponse(pb *pb.TranslateIDsResponse, m *pilosa.TranslateIDsResponse) {
 	m.Keys = pb.Keys
 }
 
-func decodeTransactionMessage(pb *internal.TransactionMessage, m *pilosa.TransactionMessage) {
+func decodeTransactionMessage(pb *pb.TransactionMessage, m *pilosa.TransactionMessage) {
 	m.Action = pb.Action
 	if pb.Transaction == nil {
 		m.Transaction = nil
@@ -1349,7 +1349,7 @@ func decodeTransactionMessage(pb *internal.TransactionMessage, m *pilosa.Transac
 	decodeTransaction(pb.Transaction, m.Transaction)
 }
 
-func (s Serializer) decodeAtomicRecord(pb *internal.AtomicRecord, m *pilosa.AtomicRecord) {
+func (s Serializer) decodeAtomicRecord(pb *pb.AtomicRecord, m *pilosa.AtomicRecord) {
 	m.Index = pb.Index
 	m.Shard = pb.Shard
 	m.Ivr = make([]*pilosa.ImportValueRequest, len(pb.Ivr))
@@ -1365,7 +1365,7 @@ func (s Serializer) decodeAtomicRecord(pb *internal.AtomicRecord, m *pilosa.Atom
 	}
 }
 
-func (s Serializer) decodeRowMatrix(pb *internal.RowMatrix) []*pilosa.Row {
+func (s Serializer) decodeRowMatrix(pb *pb.RowMatrix) []*pilosa.Row {
 	rows := make([]*pilosa.Row, len(pb.Rows))
 	for i, r := range pb.Rows {
 		rows[i] = s.decodeRow(r)
@@ -1373,7 +1373,7 @@ func (s Serializer) decodeRowMatrix(pb *internal.RowMatrix) []*pilosa.Row {
 	return rows
 }
 
-func decodeTransaction(pb *internal.Transaction, trns *pilosa.Transaction) {
+func decodeTransaction(pb *pb.Transaction, trns *pilosa.Transaction) {
 	trns.ID = pb.ID
 	trns.Active = pb.Active
 	trns.Exclusive = pb.Exclusive
@@ -1402,7 +1402,7 @@ const (
 	queryResultTypeExtractedTable
 )
 
-func (s Serializer) decodeQueryResult(pb *internal.QueryResult) interface{} {
+func (s Serializer) decodeQueryResult(pb *pb.QueryResult) interface{} {
 	switch pb.Type {
 	case queryResultTypeSignedRow:
 		return s.decodeSignedRow(pb.SignedRow)
@@ -1440,8 +1440,8 @@ func (s Serializer) decodeQueryResult(pb *internal.QueryResult) interface{} {
 	panic(fmt.Sprintf("unknown type: %d", pb.Type))
 }
 
-// s.decodeRow converts r from its internal representation.
-func (s Serializer) decodeRow(pr *internal.Row) *pilosa.Row {
+// s.decodeRow converts r from its pb.representation.
+func (s Serializer) decodeRow(pr *pb.Row) *pilosa.Row {
 	if pr == nil {
 		return pilosa.NewRow()
 	}
@@ -1463,7 +1463,7 @@ func (s Serializer) decodeRow(pr *internal.Row) *pilosa.Row {
 	return r
 }
 
-func (s Serializer) decodeSignedRow(pr *internal.SignedRow) pilosa.SignedRow {
+func (s Serializer) decodeSignedRow(pr *pb.SignedRow) pilosa.SignedRow {
 	if pr == nil {
 		return pilosa.SignedRow{}
 	}
@@ -1474,7 +1474,7 @@ func (s Serializer) decodeSignedRow(pr *internal.SignedRow) pilosa.SignedRow {
 	return r
 }
 
-func (s Serializer) decodeAttrs(pb []*internal.Attr) map[string]interface{} {
+func (s Serializer) decodeAttrs(pb []*pb.Attr) map[string]interface{} {
 	m := make(map[string]interface{}, len(pb))
 	for i := range pb {
 		key, value := s.decodeAttr(pb[i])
@@ -1490,7 +1490,7 @@ const (
 	attrTypeFloat  = 4
 )
 
-func (s Serializer) decodeAttr(attr *internal.Attr) (key string, value interface{}) {
+func (s Serializer) decodeAttr(attr *pb.Attr) (key string, value interface{}) {
 	switch attr.Type {
 	case attrTypeString:
 		return attr.Key, attr.StringValue
@@ -1505,7 +1505,7 @@ func (s Serializer) decodeAttr(attr *internal.Attr) (key string, value interface
 	}
 }
 
-func (s Serializer) decodeExtractedIDMatrix(m *internal.ExtractedIDMatrix) pilosa.ExtractedIDMatrix {
+func (s Serializer) decodeExtractedIDMatrix(m *pb.ExtractedIDMatrix) pilosa.ExtractedIDMatrix {
 	cols := make([]pilosa.ExtractedIDColumn, len(m.Columns))
 	for i, c := range m.Columns {
 		rows := make([][]uint64, len(c.Vals))
@@ -1525,7 +1525,7 @@ func (s Serializer) decodeExtractedIDMatrix(m *internal.ExtractedIDMatrix) pilos
 	}
 }
 
-func (s Serializer) decodeExtractedTable(t *internal.ExtractedTable) pilosa.ExtractedTable {
+func (s Serializer) decodeExtractedTable(t *pb.ExtractedTable) pilosa.ExtractedTable {
 	fields := make([]pilosa.ExtractedTableField, len(t.Fields))
 	for i, f := range t.Fields {
 		fields[i] = pilosa.ExtractedTableField{
@@ -1538,11 +1538,11 @@ func (s Serializer) decodeExtractedTable(t *internal.ExtractedTable) pilosa.Extr
 	for i, c := range t.Columns {
 		var col pilosa.KeyOrID
 		switch kid := c.KeyOrID.(type) {
-		case *internal.ExtractedTableColumn_ID:
+		case *pb.ExtractedTableColumn_ID:
 			col = pilosa.KeyOrID{
 				ID: kid.ID,
 			}
-		case *internal.ExtractedTableColumn_Key:
+		case *pb.ExtractedTableColumn_Key:
 			col = pilosa.KeyOrID{
 				Keyed: true,
 				Key:   kid.Key,
@@ -1553,17 +1553,17 @@ func (s Serializer) decodeExtractedTable(t *internal.ExtractedTable) pilosa.Extr
 		for j, v := range rows {
 			var val interface{}
 			switch v := v.(type) {
-			case *internal.ExtractedTableValue_IDs:
+			case *pb.ExtractedTableValue_IDs:
 				val = v.IDs.IDs
-			case *internal.ExtractedTableValue_Keys:
+			case *pb.ExtractedTableValue_Keys:
 				val = v.Keys.Keys
-			case *internal.ExtractedTableValue_BSIValue:
+			case *pb.ExtractedTableValue_BSIValue:
 				val = v.BSIValue
-			case *internal.ExtractedTableValue_MutexID:
+			case *pb.ExtractedTableValue_MutexID:
 				val = v.MutexID
-			case *internal.ExtractedTableValue_MutexKey:
+			case *pb.ExtractedTableValue_MutexKey:
 				val = v.MutexKey
-			case *internal.ExtractedTableValue_Bool:
+			case *pb.ExtractedTableValue_Bool:
 				val = v.Bool
 			}
 
@@ -1582,24 +1582,24 @@ func (s Serializer) decodeExtractedTable(t *internal.ExtractedTable) pilosa.Extr
 	}
 }
 
-func (s Serializer) decodeRowIdentifiers(a *internal.RowIdentifiers) *pilosa.RowIdentifiers {
+func (s Serializer) decodeRowIdentifiers(a *pb.RowIdentifiers) *pilosa.RowIdentifiers {
 	return &pilosa.RowIdentifiers{
 		Rows: a.Rows,
 		Keys: a.Keys,
 	}
 }
 
-func (s Serializer) decodeGroupCounts(a *internal.GroupCounts, b []*internal.GroupCount) *pilosa.GroupCounts {
+func (s Serializer) decodeGroupCounts(a *pb.GroupCounts, b []*pb.GroupCount) *pilosa.GroupCounts {
 	// Workaround: If we get an old-style "[]*GroupCount", we translate it.
 	if a == nil {
-		a = &internal.GroupCounts{Aggregate: "", Groups: b}
+		a = &pb.GroupCounts{Aggregate: "", Groups: b}
 	}
 	other := make([]pilosa.GroupCount, len(a.Groups))
 	for i, gc := range a.Groups {
 		other[i] = pilosa.GroupCount{
 			Group: s.decodeFieldRows(gc.Group),
 			Count: gc.Count,
-			// note: not renaming the `internal` structure members now
+			// note: not renaming the `pb. structure members now
 			// to avoid breaking protobuf interactions.
 			Agg: gc.Agg,
 		}
@@ -1607,7 +1607,7 @@ func (s Serializer) decodeGroupCounts(a *internal.GroupCounts, b []*internal.Gro
 	return pilosa.NewGroupCounts(a.Aggregate, other...)
 }
 
-func (s Serializer) decodeFieldRows(a []*internal.FieldRow) []pilosa.FieldRow {
+func (s Serializer) decodeFieldRows(a []*pb.FieldRow) []pilosa.FieldRow {
 	other := make([]pilosa.FieldRow, len(a))
 	for i := range a {
 		fr := a[i]
@@ -1623,7 +1623,7 @@ func (s Serializer) decodeFieldRows(a []*internal.FieldRow) []pilosa.FieldRow {
 	return other
 }
 
-func (s Serializer) decodePairs(a []*internal.Pair) []pilosa.Pair {
+func (s Serializer) decodePairs(a []*pb.Pair) []pilosa.Pair {
 	other := make([]pilosa.Pair, len(a))
 	for i := range a {
 		other[i] = s.decodePair(a[i])
@@ -1631,7 +1631,7 @@ func (s Serializer) decodePairs(a []*internal.Pair) []pilosa.Pair {
 	return other
 }
 
-func (s Serializer) decodePairsField(a *internal.PairsField) *pilosa.PairsField {
+func (s Serializer) decodePairsField(a *pb.PairsField) *pilosa.PairsField {
 	other := &pilosa.PairsField{
 		Pairs: make([]pilosa.Pair, len(a.Pairs)),
 	}
@@ -1642,7 +1642,7 @@ func (s Serializer) decodePairsField(a *internal.PairsField) *pilosa.PairsField 
 	return other
 }
 
-func (s Serializer) decodePair(pb *internal.Pair) pilosa.Pair {
+func (s Serializer) decodePair(pb *pb.Pair) pilosa.Pair {
 	return pilosa.Pair{
 		ID:    pb.ID,
 		Key:   pb.Key,
@@ -1650,7 +1650,7 @@ func (s Serializer) decodePair(pb *internal.Pair) pilosa.Pair {
 	}
 }
 
-func (s Serializer) decodePairField(pb *internal.PairField) pilosa.PairField {
+func (s Serializer) decodePairField(pb *pb.PairField) pilosa.PairField {
 	return pilosa.PairField{
 		Pair: pilosa.Pair{
 			ID:    pb.Pair.ID,
@@ -1661,7 +1661,7 @@ func (s Serializer) decodePairField(pb *internal.PairField) pilosa.PairField {
 	}
 }
 
-func (s Serializer) decodeValCount(pb *internal.ValCount) pilosa.ValCount {
+func (s Serializer) decodeValCount(pb *pb.ValCount) pilosa.ValCount {
 	return pilosa.ValCount{
 		Val:        pb.Val,
 		FloatVal:   pb.FloatVal,
@@ -1670,7 +1670,7 @@ func (s Serializer) decodeValCount(pb *internal.ValCount) pilosa.ValCount {
 	}
 }
 
-func (s Serializer) decodeDecimalStruct(pb *internal.Decimal) *pql.Decimal {
+func (s Serializer) decodeDecimalStruct(pb *pb.Decimal) *pql.Decimal {
 	if pb == nil {
 		return nil
 	}
@@ -1680,36 +1680,36 @@ func (s Serializer) decodeDecimalStruct(pb *internal.Decimal) *pql.Decimal {
 	}
 }
 
-func (s Serializer) encodeColumnAttrSets(a []*pilosa.ColumnAttrSet) []*internal.ColumnAttrSet {
-	other := make([]*internal.ColumnAttrSet, len(a))
+func (s Serializer) encodeColumnAttrSets(a []*pilosa.ColumnAttrSet) []*pb.ColumnAttrSet {
+	other := make([]*pb.ColumnAttrSet, len(a))
 	for i := range a {
 		other[i] = s.encodeColumnAttrSet(a[i])
 	}
 	return other
 }
 
-func (s Serializer) encodeColumnAttrSet(set *pilosa.ColumnAttrSet) *internal.ColumnAttrSet {
-	return &internal.ColumnAttrSet{
+func (s Serializer) encodeColumnAttrSet(set *pilosa.ColumnAttrSet) *pb.ColumnAttrSet {
+	return &pb.ColumnAttrSet{
 		ID:    set.ID,
 		Key:   set.Key,
 		Attrs: s.encodeAttrs(set.Attrs),
 	}
 }
 
-func (s Serializer) encodeSignedRow(r pilosa.SignedRow) *internal.SignedRow {
-	ir := &internal.SignedRow{
+func (s Serializer) encodeSignedRow(r pilosa.SignedRow) *pb.SignedRow {
+	ir := &pb.SignedRow{
 		Pos: s.encodeRow(r.Pos),
 		Neg: s.encodeRow(r.Neg),
 	}
 	return ir
 }
 
-func (s Serializer) encodeRow(r *pilosa.Row) *internal.Row {
+func (s Serializer) encodeRow(r *pilosa.Row) *pb.Row {
 	if r == nil {
-		return &internal.Row{} // Generated proto code doesn't like a nil Row.
+		return &pb.Row{} // Generated proto code doesn't like a nil Row.
 	}
 
-	ir := &internal.Row{
+	ir := &pb.Row{
 		Keys:  r.Keys,
 		Attrs: s.encodeAttrs(r.Attrs),
 		Index: r.Index,
@@ -1723,22 +1723,22 @@ func (s Serializer) encodeRow(r *pilosa.Row) *internal.Row {
 	return ir
 }
 
-func (s Serializer) encodeRowIdentifiers(r pilosa.RowIdentifiers) *internal.RowIdentifiers {
-	return &internal.RowIdentifiers{
+func (s Serializer) encodeRowIdentifiers(r pilosa.RowIdentifiers) *pb.RowIdentifiers {
+	return &pb.RowIdentifiers{
 		Rows: r.Rows,
 		Keys: r.Keys,
 		//Attrs:   s.encodeAttrs(r.Attrs),
 	}
 }
 
-func (s Serializer) encodeGroupCounts(counts *pilosa.GroupCounts) *internal.GroupCounts {
+func (s Serializer) encodeGroupCounts(counts *pilosa.GroupCounts) *pb.GroupCounts {
 	groups := counts.Groups()
-	result := &internal.GroupCounts{
-		Groups:    make([]*internal.GroupCount, len(groups)),
+	result := &pb.GroupCounts{
+		Groups:    make([]*pb.GroupCount, len(groups)),
 		Aggregate: counts.AggregateColumn(),
 	}
 	for i, gc := range groups {
-		result.Groups[i] = &internal.GroupCount{
+		result.Groups[i] = &pb.GroupCount{
 			Group: s.encodeFieldRows(gc.Group),
 			Count: gc.Count,
 			Agg:   gc.Agg,
@@ -1747,14 +1747,14 @@ func (s Serializer) encodeGroupCounts(counts *pilosa.GroupCounts) *internal.Grou
 	return result
 }
 
-func (s Serializer) encodeFieldRows(a []pilosa.FieldRow) []*internal.FieldRow {
-	other := make([]*internal.FieldRow, len(a))
+func (s Serializer) encodeFieldRows(a []pilosa.FieldRow) []*pb.FieldRow {
+	other := make([]*pb.FieldRow, len(a))
 	for i := range a {
 		fr := a[i]
-		other[i] = &internal.FieldRow{Field: fr.Field}
+		other[i] = &pb.FieldRow{Field: fr.Field}
 
 		if fr.Value != nil {
-			other[i].Value = &internal.Int64{Value: *fr.Value}
+			other[i].Value = &pb.Int64{Value: *fr.Value}
 		} else if fr.RowKey == "" {
 			other[i].RowID = fr.RowID
 		} else {
@@ -1764,82 +1764,82 @@ func (s Serializer) encodeFieldRows(a []pilosa.FieldRow) []*internal.FieldRow {
 	return other
 }
 
-func (s Serializer) endcodeExtractedIDMatrix(m pilosa.ExtractedIDMatrix) *internal.ExtractedIDMatrix {
-	cols := make([]*internal.ExtractedIDColumn, len(m.Columns))
+func (s Serializer) endcodeExtractedIDMatrix(m pilosa.ExtractedIDMatrix) *pb.ExtractedIDMatrix {
+	cols := make([]*pb.ExtractedIDColumn, len(m.Columns))
 	for i, v := range m.Columns {
-		vals := make([]*internal.IDList, len(v.Rows))
+		vals := make([]*pb.IDList, len(v.Rows))
 		for j, f := range v.Rows {
-			vals[j] = &internal.IDList{IDs: f}
+			vals[j] = &pb.IDList{IDs: f}
 		}
-		cols[i] = &internal.ExtractedIDColumn{
+		cols[i] = &pb.ExtractedIDColumn{
 			ID:   v.ColumnID,
 			Vals: vals,
 		}
 	}
-	return &internal.ExtractedIDMatrix{
+	return &pb.ExtractedIDMatrix{
 		Fields:  m.Fields,
 		Columns: cols,
 	}
 }
 
-func (s Serializer) encodeExtractedTable(t pilosa.ExtractedTable) *internal.ExtractedTable {
-	fields := make([]*internal.ExtractedTableField, len(t.Fields))
+func (s Serializer) encodeExtractedTable(t pilosa.ExtractedTable) *pb.ExtractedTable {
+	fields := make([]*pb.ExtractedTableField, len(t.Fields))
 	for i, f := range t.Fields {
-		fields[i] = &internal.ExtractedTableField{
+		fields[i] = &pb.ExtractedTableField{
 			Name: f.Name,
 			Type: f.Type,
 		}
 	}
 
-	cols := make([]*internal.ExtractedTableColumn, len(t.Columns))
+	cols := make([]*pb.ExtractedTableColumn, len(t.Columns))
 	for i, c := range t.Columns {
-		var col internal.ExtractedTableColumn
+		var col pb.ExtractedTableColumn
 		if c.Column.Keyed {
-			col.KeyOrID = &internal.ExtractedTableColumn_Key{Key: c.Column.Key}
+			col.KeyOrID = &pb.ExtractedTableColumn_Key{Key: c.Column.Key}
 		} else {
-			col.KeyOrID = &internal.ExtractedTableColumn_ID{ID: c.Column.ID}
+			col.KeyOrID = &pb.ExtractedTableColumn_ID{ID: c.Column.ID}
 		}
 
-		rows := make([]*internal.ExtractedTableValue, len(c.Rows))
+		rows := make([]*pb.ExtractedTableValue, len(c.Rows))
 		for j, v := range c.Rows {
 			switch v := v.(type) {
 			case []uint64:
-				rows[j] = &internal.ExtractedTableValue{
-					Value: &internal.ExtractedTableValue_IDs{
-						IDs: &internal.IDList{
+				rows[j] = &pb.ExtractedTableValue{
+					Value: &pb.ExtractedTableValue_IDs{
+						IDs: &pb.IDList{
 							IDs: v,
 						},
 					},
 				}
 			case []string:
-				rows[j] = &internal.ExtractedTableValue{
-					Value: &internal.ExtractedTableValue_Keys{
-						Keys: &internal.KeyList{
+				rows[j] = &pb.ExtractedTableValue{
+					Value: &pb.ExtractedTableValue_Keys{
+						Keys: &pb.KeyList{
 							Keys: v,
 						},
 					},
 				}
 			case int64:
-				rows[j] = &internal.ExtractedTableValue{
-					Value: &internal.ExtractedTableValue_BSIValue{
+				rows[j] = &pb.ExtractedTableValue{
+					Value: &pb.ExtractedTableValue_BSIValue{
 						BSIValue: v,
 					},
 				}
 			case uint64:
-				rows[j] = &internal.ExtractedTableValue{
-					Value: &internal.ExtractedTableValue_MutexID{
+				rows[j] = &pb.ExtractedTableValue{
+					Value: &pb.ExtractedTableValue_MutexID{
 						MutexID: v,
 					},
 				}
 			case string:
-				rows[j] = &internal.ExtractedTableValue{
-					Value: &internal.ExtractedTableValue_MutexKey{
+				rows[j] = &pb.ExtractedTableValue{
+					Value: &pb.ExtractedTableValue_MutexKey{
 						MutexKey: v,
 					},
 				}
 			case bool:
-				rows[j] = &internal.ExtractedTableValue{
-					Value: &internal.ExtractedTableValue_Bool{
+				rows[j] = &pb.ExtractedTableValue{
+					Value: &pb.ExtractedTableValue_Bool{
 						Bool: v,
 					},
 				}
@@ -1850,23 +1850,23 @@ func (s Serializer) encodeExtractedTable(t pilosa.ExtractedTable) *internal.Extr
 		cols[i] = &col
 	}
 
-	return &internal.ExtractedTable{
+	return &pb.ExtractedTable{
 		Fields:  fields,
 		Columns: cols,
 	}
 }
 
-func (s Serializer) encodePairs(a pilosa.Pairs) []*internal.Pair {
-	other := make([]*internal.Pair, len(a))
+func (s Serializer) encodePairs(a pilosa.Pairs) []*pb.Pair {
+	other := make([]*pb.Pair, len(a))
 	for i := range a {
 		other[i] = s.encodePair(a[i])
 	}
 	return other
 }
 
-func (s Serializer) encodePairsField(a *pilosa.PairsField) *internal.PairsField {
-	other := &internal.PairsField{
-		Pairs: make([]*internal.Pair, len(a.Pairs)),
+func (s Serializer) encodePairsField(a *pilosa.PairsField) *pb.PairsField {
+	other := &pb.PairsField{
+		Pairs: make([]*pb.Pair, len(a.Pairs)),
 	}
 	for i := range a.Pairs {
 		other.Pairs[i] = s.encodePair(a.Pairs[i])
@@ -1875,23 +1875,23 @@ func (s Serializer) encodePairsField(a *pilosa.PairsField) *internal.PairsField 
 	return other
 }
 
-func (s Serializer) encodePair(p pilosa.Pair) *internal.Pair {
-	return &internal.Pair{
+func (s Serializer) encodePair(p pilosa.Pair) *pb.Pair {
+	return &pb.Pair{
 		ID:    p.ID,
 		Key:   p.Key,
 		Count: p.Count,
 	}
 }
 
-func (s Serializer) encodePairField(p pilosa.PairField) *internal.PairField {
-	return &internal.PairField{
+func (s Serializer) encodePairField(p pilosa.PairField) *pb.PairField {
+	return &pb.PairField{
 		Pair:  s.encodePair(p.Pair),
 		Field: p.Field,
 	}
 }
 
-func (s Serializer) encodeValCount(vc pilosa.ValCount) *internal.ValCount {
-	return &internal.ValCount{
+func (s Serializer) encodeValCount(vc pilosa.ValCount) *pb.ValCount {
+	return &pb.ValCount{
 		Val:        vc.Val,
 		FloatVal:   vc.FloatVal,
 		DecimalVal: s.encodeDecimal(vc.DecimalVal),
@@ -1899,33 +1899,33 @@ func (s Serializer) encodeValCount(vc pilosa.ValCount) *internal.ValCount {
 	}
 }
 
-func (s Serializer) encodeDecimal(p *pql.Decimal) *internal.Decimal {
+func (s Serializer) encodeDecimal(p *pql.Decimal) *pb.Decimal {
 	if p == nil {
 		return nil
 	}
-	return &internal.Decimal{
+	return &pb.Decimal{
 		Value: p.Value,
 		Scale: p.Scale,
 	}
 }
 
-func (s Serializer) encodeAttrs(m map[string]interface{}) []*internal.Attr {
+func (s Serializer) encodeAttrs(m map[string]interface{}) []*pb.Attr {
 	keys := make([]string, 0, len(m))
 	for k := range m {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
 
-	a := make([]*internal.Attr, len(keys))
+	a := make([]*pb.Attr, len(keys))
 	for i := range keys {
 		a[i] = s.encodeAttr(keys[i], m[keys[i]])
 	}
 	return a
 }
 
-// s.encodeAttr converts a key/value pair into an Attr internal representation.
-func (s Serializer) encodeAttr(key string, value interface{}) *internal.Attr {
-	pb := &internal.Attr{Key: key}
+// s.encodeAttr converts a key/value pair into an Attr pb.representation.
+func (s Serializer) encodeAttr(key string, value interface{}) *pb.Attr {
+	pb := &pb.Attr{Key: key}
 	switch value := value.(type) {
 	case string:
 		pb.Type = attrTypeString
@@ -1946,22 +1946,22 @@ func (s Serializer) encodeAttr(key string, value interface{}) *internal.Attr {
 	return pb
 }
 
-func (s Serializer) encodeResizeNodeMessage(m *pilosa.ResizeNodeMessage) *internal.ResizeNodeMessage {
-	return &internal.ResizeNodeMessage{
+func (s Serializer) encodeResizeNodeMessage(m *pilosa.ResizeNodeMessage) *pb.ResizeNodeMessage {
+	return &pb.ResizeNodeMessage{
 		NodeID: m.NodeID,
 		Action: m.Action,
 	}
 }
 
-func (s Serializer) encodeResizeAbortMessage(*pilosa.ResizeAbortMessage) *internal.ResizeAbortMessage {
-	return &internal.ResizeAbortMessage{}
+func (s Serializer) encodeResizeAbortMessage(*pilosa.ResizeAbortMessage) *pb.ResizeAbortMessage {
+	return &pb.ResizeAbortMessage{}
 }
 
-func decodeResizeNodeMessage(pb *internal.ResizeNodeMessage, m *pilosa.ResizeNodeMessage) {
+func decodeResizeNodeMessage(pb *pb.ResizeNodeMessage, m *pilosa.ResizeNodeMessage) {
 	m.NodeID = pb.NodeID
 	m.Action = pb.Action
 }
 
-func decodeResizeAbortMessage(pb *internal.ResizeAbortMessage, m *pilosa.ResizeAbortMessage) {
+func decodeResizeAbortMessage(pb *pb.ResizeAbortMessage, m *pilosa.ResizeAbortMessage) {
 
 }

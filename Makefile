@@ -63,7 +63,7 @@ testv-race: topt-race testvsub-race
 #            find which test is hung/deadlocked.
 #
 testvsub:
-	set -e; for i in boltdb ctl http pg pql rbf roaring server sql txkey; do \
+	set -e; for i in boltdb client ctl http pg pql rbf roaring server sql txkey; do \
            echo; echo "___ testing subpkg $$i"; \
            cd $$i; pwd; \
            $(GO) test -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) -v -timeout 60m || break; \
@@ -72,7 +72,7 @@ testvsub:
         done
 
 testvsub-race:
-	set -e; for i in boltdb ctl http pg pql rbf roaring server sql txkey; do \
+	set -e; for i in boltdb client ctl http pg pql rbf roaring server sql txkey; do \
            echo; echo "___ testing subpkg $$i -race"; \
            cd $$i; pwd; \
            CGO_ENABLED=1 $(GO) test -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) -v -race -timeout 60m || break; \
@@ -163,7 +163,7 @@ upgrade-lattice: lattice
 
 # `go generate` protocol buffers
 generate-protoc: require-protoc require-protoc-gen-gofast
-	$(GO) generate github.com/pilosa/pilosa/v2/internal
+	$(GO) generate github.com/pilosa/pilosa/v2/pb
 
 # `go generate` statik assets (lattice UI)
 generate-statik: build-lattice require-statik

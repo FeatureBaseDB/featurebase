@@ -49,12 +49,12 @@ func Test_SynthLoad_ImportSchema(t *testing.T) {
 	// get the holder.Path to write to
 	h := m0.API.Holder()
 	target := h.Path()
-	panicOn(h.Close())
+	PanicOn(h.Close())
 
-	panicOn(unpackTarball(tarball, target))
+	PanicOn(unpackTarball(tarball, target))
 
 	// reopen
-	panicOn(h.Open())
+	PanicOn(h.Open())
 
 	qs := strings.Split(pql, "\n\n")
 	//vv("qs = '%#v'", qs)
@@ -92,7 +92,7 @@ func Test_SynthLoad_ImportSchema(t *testing.T) {
 		}
 
 		qr, err := m0.API.Query(context.Background(), req)
-		panicOn(err)
+		PanicOn(err)
 		vv("qr = '%#v'", qr)
 	}
 }
@@ -103,22 +103,22 @@ func applySchema(m0 *test.Command, schemaStr string) {
 	// don't need schema now that we import the tarball, it has it all.
 	schema := &pilosa.Schema{}
 	err := json.NewDecoder(bytes.NewBufferString(schemaStr)).Decode(schema)
-	panicOn(err)
+	PanicOn(err)
 
 	ctx := context.Background()
 	remote := false
 	err = m0.API.ApplySchema(ctx, schema, remote)
-	panicOn(err)
+	PanicOn(err)
 }
 
 func unpackTarball(tarball, target string) error {
 
 	vv("target = '%v'", target)
 	fd, err := os.Open(tarball)
-	panicOn(err)
+	PanicOn(err)
 	defer fd.Close()
 	gz, err := gzip.NewReader(fd)
-	panicOn(err)
+	PanicOn(err)
 	defer gz.Close()
 
 	tarReader := tar.NewReader(gz)
@@ -134,16 +134,16 @@ func unpackTarball(tarball, target string) error {
 		info := header.FileInfo()
 		if info.IsDir() {
 			if err = os.MkdirAll(path, info.Mode()); err != nil {
-				panicOn(err)
+				PanicOn(err)
 			}
 			continue
 		}
 
 		file, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, info.Mode())
-		panicOn(err)
+		PanicOn(err)
 
 		_, err = io.Copy(file, tarReader)
-		panicOn(err)
+		PanicOn(err)
 		file.Close()
 	}
 	return nil

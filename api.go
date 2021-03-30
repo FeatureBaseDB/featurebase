@@ -1893,7 +1893,7 @@ func (api *API) GetTranslateEntryReader(ctx context.Context, offsets TranslateOf
 	defer func() {
 		if err != nil {
 			for i := range a {
-				a[i].Close()
+				a[i].Close() // nolint: errcheck
 			}
 		}
 	}()

@@ -30,7 +30,7 @@ import (
 
 	"github.com/pilosa/pilosa/v2/disco"
 	"github.com/pilosa/pilosa/v2/pql"
-	pb "github.com/pilosa/pilosa/v2/proto"
+	"github.com/pilosa/pilosa/v2/proto"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/shardwidth"
 	"github.com/pilosa/pilosa/v2/testhook"
@@ -2741,37 +2741,37 @@ func (r *RowIdentifiers) Clone() (clone *RowIdentifiers) {
 }
 
 // ToTable implements the ToTabler interface.
-func (r RowIdentifiers) ToTable() (*pb.TableResponse, error) {
+func (r RowIdentifiers) ToTable() (*proto.TableResponse, error) {
 	var n int
 	if len(r.Keys) > 0 {
 		n = len(r.Keys)
 	} else {
 		n = len(r.Rows)
 	}
-	return pb.RowsToTable(&r, n)
+	return proto.RowsToTable(&r, n)
 }
 
 // ToRows implements the ToRowser interface.
-func (r RowIdentifiers) ToRows(callback func(*pb.RowResponse) error) error {
+func (r RowIdentifiers) ToRows(callback func(*proto.RowResponse) error) error {
 	if len(r.Keys) > 0 {
-		ci := []*pb.ColumnInfo{{Name: r.Field(), Datatype: "string"}}
+		ci := []*proto.ColumnInfo{{Name: r.Field(), Datatype: "string"}}
 		for _, key := range r.Keys {
-			if err := callback(&pb.RowResponse{
+			if err := callback(&proto.RowResponse{
 				Headers: ci,
-				Columns: []*pb.ColumnResponse{
-					&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_StringVal{StringVal: key}},
+				Columns: []*proto.ColumnResponse{
+					&proto.ColumnResponse{ColumnVal: &proto.ColumnResponse_StringVal{StringVal: key}},
 				}}); err != nil {
 				return errors.Wrap(err, "calling callback")
 			}
 			ci = nil
 		}
 	} else {
-		ci := []*pb.ColumnInfo{{Name: r.Field(), Datatype: "uint64"}}
+		ci := []*proto.ColumnInfo{{Name: r.Field(), Datatype: "uint64"}}
 		for _, id := range r.Rows {
-			if err := callback(&pb.RowResponse{
+			if err := callback(&proto.RowResponse{
 				Headers: ci,
-				Columns: []*pb.ColumnResponse{
-					&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: uint64(id)}},
+				Columns: []*proto.ColumnResponse{
+					&proto.ColumnResponse{ColumnVal: &proto.ColumnResponse_Uint64Val{Uint64Val: uint64(id)}},
 				}}); err != nil {
 				return errors.Wrap(err, "calling callback")
 			}
@@ -3289,50 +3289,50 @@ func NewGroupCounts(agg string, groups ...GroupCount) *GroupCounts {
 }
 
 // ToTable implements the ToTabler interface.
-func (g *GroupCounts) ToTable() (*pb.TableResponse, error) {
-	return pb.RowsToTable(g, len(g.Groups()))
+func (g *GroupCounts) ToTable() (*proto.TableResponse, error) {
+	return proto.RowsToTable(g, len(g.Groups()))
 }
 
 // ToRows implements the ToRowser interface.
-func (g *GroupCounts) ToRows(callback func(*pb.RowResponse) error) error {
+func (g *GroupCounts) ToRows(callback func(*proto.RowResponse) error) error {
 	agg := g.AggregateColumn()
 	for i, gc := range g.Groups() {
-		var ci []*pb.ColumnInfo
+		var ci []*proto.ColumnInfo
 		if i == 0 {
 			for _, fieldRow := range gc.Group {
 				if fieldRow.RowKey != "" {
-					ci = append(ci, &pb.ColumnInfo{Name: fieldRow.Field, Datatype: "string"})
+					ci = append(ci, &proto.ColumnInfo{Name: fieldRow.Field, Datatype: "string"})
 				} else if fieldRow.Value != nil {
-					ci = append(ci, &pb.ColumnInfo{Name: fieldRow.Field, Datatype: "int64"})
+					ci = append(ci, &proto.ColumnInfo{Name: fieldRow.Field, Datatype: "int64"})
 				} else {
-					ci = append(ci, &pb.ColumnInfo{Name: fieldRow.Field, Datatype: "uint64"})
+					ci = append(ci, &proto.ColumnInfo{Name: fieldRow.Field, Datatype: "uint64"})
 				}
 			}
-			ci = append(ci, &pb.ColumnInfo{Name: "count", Datatype: "uint64"})
+			ci = append(ci, &proto.ColumnInfo{Name: "count", Datatype: "uint64"})
 			if agg != "" {
-				ci = append(ci, &pb.ColumnInfo{Name: agg, Datatype: "int64"})
+				ci = append(ci, &proto.ColumnInfo{Name: agg, Datatype: "int64"})
 			}
 
 		}
-		rowResp := &pb.RowResponse{
+		rowResp := &proto.RowResponse{
 			Headers: ci,
-			Columns: []*pb.ColumnResponse{},
+			Columns: []*proto.ColumnResponse{},
 		}
 
 		for _, fieldRow := range gc.Group {
 			if fieldRow.RowKey != "" {
-				rowResp.Columns = append(rowResp.Columns, &pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_StringVal{StringVal: fieldRow.RowKey}})
+				rowResp.Columns = append(rowResp.Columns, &proto.ColumnResponse{ColumnVal: &proto.ColumnResponse_StringVal{StringVal: fieldRow.RowKey}})
 			} else if fieldRow.Value != nil {
-				rowResp.Columns = append(rowResp.Columns, &pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: *fieldRow.Value}})
+				rowResp.Columns = append(rowResp.Columns, &proto.ColumnResponse{ColumnVal: &proto.ColumnResponse_Int64Val{Int64Val: *fieldRow.Value}})
 			} else {
-				rowResp.Columns = append(rowResp.Columns, &pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: fieldRow.RowID}})
+				rowResp.Columns = append(rowResp.Columns, &proto.ColumnResponse{ColumnVal: &proto.ColumnResponse_Uint64Val{Uint64Val: fieldRow.RowID}})
 			}
 		}
 		rowResp.Columns = append(rowResp.Columns,
-			&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: gc.Count}})
+			&proto.ColumnResponse{ColumnVal: &proto.ColumnResponse_Uint64Val{Uint64Val: gc.Count}})
 		if agg != "" {
 			rowResp.Columns = append(rowResp.Columns,
-				&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: gc.Agg}})
+				&proto.ColumnResponse{ColumnVal: &proto.ColumnResponse_Int64Val{Int64Val: gc.Agg}})
 		}
 		if err := callback(rowResp); err != nil {
 			return errors.Wrap(err, "calling callback")
@@ -3868,93 +3868,93 @@ type ExtractedTable struct {
 }
 
 // ToRows implements the ToRowser interface.
-func (t ExtractedTable) ToRows(callback func(*pb.RowResponse) error) error {
+func (t ExtractedTable) ToRows(callback func(*proto.RowResponse) error) error {
 	if len(t.Columns) == 0 {
 		return nil
 	}
 
-	headers := make([]*pb.ColumnInfo, len(t.Fields)+1)
+	headers := make([]*proto.ColumnInfo, len(t.Fields)+1)
 	colType := "uint64"
 	if t.Columns[0].Column.Keyed {
 		colType = "string"
 	}
-	headers[0] = &pb.ColumnInfo{
+	headers[0] = &proto.ColumnInfo{
 		Name:     "_id",
 		Datatype: colType,
 	}
 	dataHeaders := headers[1:]
 	for i, f := range t.Fields {
-		dataHeaders[i] = &pb.ColumnInfo{
+		dataHeaders[i] = &proto.ColumnInfo{
 			Name:     f.Name,
 			Datatype: f.Type,
 		}
 	}
 
 	for _, c := range t.Columns {
-		cols := make([]*pb.ColumnResponse, len(c.Rows)+1)
+		cols := make([]*proto.ColumnResponse, len(c.Rows)+1)
 		if c.Column.Keyed {
-			cols[0] = &pb.ColumnResponse{
-				ColumnVal: &pb.ColumnResponse_StringVal{
+			cols[0] = &proto.ColumnResponse{
+				ColumnVal: &proto.ColumnResponse_StringVal{
 					StringVal: c.Column.Key,
 				},
 			}
 		} else {
-			cols[0] = &pb.ColumnResponse{
-				ColumnVal: &pb.ColumnResponse_Uint64Val{
+			cols[0] = &proto.ColumnResponse{
+				ColumnVal: &proto.ColumnResponse_Uint64Val{
 					Uint64Val: c.Column.ID,
 				},
 			}
 		}
 		valCols := cols[1:]
 		for i, r := range c.Rows {
-			var col *pb.ColumnResponse
+			var col *proto.ColumnResponse
 			switch r := r.(type) {
 			case nil:
-				col = &pb.ColumnResponse{}
+				col = &proto.ColumnResponse{}
 			case bool:
-				col = &pb.ColumnResponse{
-					ColumnVal: &pb.ColumnResponse_BoolVal{
+				col = &proto.ColumnResponse{
+					ColumnVal: &proto.ColumnResponse_BoolVal{
 						BoolVal: r,
 					},
 				}
 			case int64:
-				col = &pb.ColumnResponse{
-					ColumnVal: &pb.ColumnResponse_Int64Val{
+				col = &proto.ColumnResponse{
+					ColumnVal: &proto.ColumnResponse_Int64Val{
 						Int64Val: r,
 					},
 				}
 			case uint64:
-				col = &pb.ColumnResponse{
-					ColumnVal: &pb.ColumnResponse_Uint64Val{
+				col = &proto.ColumnResponse{
+					ColumnVal: &proto.ColumnResponse_Uint64Val{
 						Uint64Val: r,
 					},
 				}
 			case string:
-				col = &pb.ColumnResponse{
-					ColumnVal: &pb.ColumnResponse_StringVal{
+				col = &proto.ColumnResponse{
+					ColumnVal: &proto.ColumnResponse_StringVal{
 						StringVal: r,
 					},
 				}
 			case []uint64:
-				col = &pb.ColumnResponse{
-					ColumnVal: &pb.ColumnResponse_Uint64ArrayVal{
-						Uint64ArrayVal: &pb.Uint64Array{
+				col = &proto.ColumnResponse{
+					ColumnVal: &proto.ColumnResponse_Uint64ArrayVal{
+						Uint64ArrayVal: &proto.Uint64Array{
 							Vals: r,
 						},
 					},
 				}
 			case []string:
-				col = &pb.ColumnResponse{
-					ColumnVal: &pb.ColumnResponse_StringArrayVal{
-						StringArrayVal: &pb.StringArray{
+				col = &proto.ColumnResponse{
+					ColumnVal: &proto.ColumnResponse_StringArrayVal{
+						StringArrayVal: &proto.StringArray{
 							Vals: r,
 						},
 					},
 				}
 			case pql.Decimal:
-				col = &pb.ColumnResponse{
-					ColumnVal: &pb.ColumnResponse_DecimalVal{
-						DecimalVal: &pb.Decimal{
+				col = &proto.ColumnResponse{
+					ColumnVal: &proto.ColumnResponse_DecimalVal{
+						DecimalVal: &proto.Decimal{
 							Value: r.Value,
 							Scale: r.Scale,
 						},
@@ -3965,7 +3965,7 @@ func (t ExtractedTable) ToRows(callback func(*pb.RowResponse) error) error {
 			}
 			valCols[i] = col
 		}
-		err := callback(&pb.RowResponse{
+		err := callback(&proto.RowResponse{
 			Headers: headers,
 			Columns: cols,
 		})
@@ -3978,8 +3978,8 @@ func (t ExtractedTable) ToRows(callback func(*pb.RowResponse) error) error {
 }
 
 // ToTable converts the table to protobuf format.
-func (t ExtractedTable) ToTable() (*pb.TableResponse, error) {
-	return pb.RowsToTable(t, len(t.Columns))
+func (t ExtractedTable) ToTable() (*proto.TableResponse, error) {
+	return proto.RowsToTable(t, len(t.Columns))
 }
 
 type ExtractedIDColumn struct {
@@ -5640,12 +5640,12 @@ func (e *executor) remoteExec(ctx context.Context, node *topology.Node, index st
 		EmbeddedData: embed,
 	}
 
-	pb, err := e.client.QueryNode(ctx, &node.URI, index, pbreq)
+	resp, err := e.client.QueryNode(ctx, &node.URI, index, pbreq)
 	if err != nil {
 		return nil, err
 	}
 
-	return pb.Results, pb.Err
+	return resp.Results, resp.Err
 }
 
 // shardsByNode returns a mapping of nodes to shards.
@@ -7312,7 +7312,7 @@ func (s *SignedRow) Field() string {
 }
 
 // ToTable implements the ToTabler interface.
-func (s SignedRow) ToTable() (*pb.TableResponse, error) {
+func (s SignedRow) ToTable() (*proto.TableResponse, error) {
 	var n uint64
 	if s.Neg != nil {
 		n += s.Neg.Count()
@@ -7320,13 +7320,13 @@ func (s SignedRow) ToTable() (*pb.TableResponse, error) {
 	if s.Pos != nil {
 		n += s.Pos.Count()
 	}
-	return pb.RowsToTable(&s, int(n))
+	return proto.RowsToTable(&s, int(n))
 }
 
 // ToRows implements the ToRowser interface.
-func (s SignedRow) ToRows(callback func(*pb.RowResponse) error) error {
+func (s SignedRow) ToRows(callback func(*proto.RowResponse) error) error {
 
-	ci := []*pb.ColumnInfo{{Name: s.Field(), Datatype: "int64"}}
+	ci := []*proto.ColumnInfo{{Name: s.Field(), Datatype: "int64"}}
 	if s.Neg != nil {
 		negs := s.Neg.Columns()
 		for i := len(negs) - 1; i >= 0; i-- {
@@ -7335,10 +7335,10 @@ func (s SignedRow) ToRows(callback func(*pb.RowResponse) error) error {
 				return errors.Wrap(err, "converting uint64 to int64 (negative)")
 			}
 
-			if err := callback(&pb.RowResponse{
+			if err := callback(&proto.RowResponse{
 				Headers: ci,
-				Columns: []*pb.ColumnResponse{
-					&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: val}},
+				Columns: []*proto.ColumnResponse{
+					&proto.ColumnResponse{ColumnVal: &proto.ColumnResponse_Int64Val{Int64Val: val}},
 				},
 			}); err != nil {
 				return errors.Wrap(err, "calling callback")
@@ -7353,10 +7353,10 @@ func (s SignedRow) ToRows(callback func(*pb.RowResponse) error) error {
 				return errors.Wrap(err, "converting uint64 to int64 (positive)")
 			}
 
-			if err := callback(&pb.RowResponse{
+			if err := callback(&proto.RowResponse{
 				Headers: ci,
-				Columns: []*pb.ColumnResponse{
-					&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: val}},
+				Columns: []*proto.ColumnResponse{
+					&proto.ColumnResponse{ColumnVal: &proto.ColumnResponse_Int64Val{Int64Val: val}},
 				},
 			}); err != nil {
 				return errors.Wrap(err, "calling callback")
@@ -7437,51 +7437,51 @@ func (v *ValCount) Clone() (r *ValCount) {
 }
 
 // ToTable implements the ToTabler interface.
-func (v ValCount) ToTable() (*pb.TableResponse, error) {
-	return pb.RowsToTable(&v, 1)
+func (v ValCount) ToTable() (*proto.TableResponse, error) {
+	return proto.RowsToTable(&v, 1)
 }
 
 // ToRows implements the ToRowser interface.
-func (v ValCount) ToRows(callback func(*pb.RowResponse) error) error {
-	var ci []*pb.ColumnInfo
+func (v ValCount) ToRows(callback func(*proto.RowResponse) error) error {
+	var ci []*proto.ColumnInfo
 	// ValCount can have a decimal, float, or integer value, but
 	// not more than one (as of this writing).
 	if v.DecimalVal != nil {
-		ci = []*pb.ColumnInfo{
+		ci = []*proto.ColumnInfo{
 			{Name: "value", Datatype: "decimal"},
 			{Name: "count", Datatype: "int64"},
 		}
-		if err := callback(&pb.RowResponse{
+		if err := callback(&proto.RowResponse{
 			Headers: ci,
-			Columns: []*pb.ColumnResponse{
-				&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_DecimalVal{DecimalVal: &pb.Decimal{Value: v.DecimalVal.Value, Scale: v.DecimalVal.Scale}}},
-				&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: v.Count}},
+			Columns: []*proto.ColumnResponse{
+				&proto.ColumnResponse{ColumnVal: &proto.ColumnResponse_DecimalVal{DecimalVal: &proto.Decimal{Value: v.DecimalVal.Value, Scale: v.DecimalVal.Scale}}},
+				&proto.ColumnResponse{ColumnVal: &proto.ColumnResponse_Int64Val{Int64Val: v.Count}},
 			}}); err != nil {
 			return errors.Wrap(err, "calling callback")
 		}
 	} else if v.FloatVal != 0 {
-		ci = []*pb.ColumnInfo{
+		ci = []*proto.ColumnInfo{
 			{Name: "value", Datatype: "float64"},
 			{Name: "count", Datatype: "int64"},
 		}
-		if err := callback(&pb.RowResponse{
+		if err := callback(&proto.RowResponse{
 			Headers: ci,
-			Columns: []*pb.ColumnResponse{
-				&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Float64Val{Float64Val: v.FloatVal}},
-				&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: v.Count}},
+			Columns: []*proto.ColumnResponse{
+				&proto.ColumnResponse{ColumnVal: &proto.ColumnResponse_Float64Val{Float64Val: v.FloatVal}},
+				&proto.ColumnResponse{ColumnVal: &proto.ColumnResponse_Int64Val{Int64Val: v.Count}},
 			}}); err != nil {
 			return errors.Wrap(err, "calling callback")
 		}
 	} else {
-		ci = []*pb.ColumnInfo{
+		ci = []*proto.ColumnInfo{
 			{Name: "value", Datatype: "int64"},
 			{Name: "count", Datatype: "int64"},
 		}
-		if err := callback(&pb.RowResponse{
+		if err := callback(&proto.RowResponse{
 			Headers: ci,
-			Columns: []*pb.ColumnResponse{
-				&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: v.Val}},
-				&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: v.Count}},
+			Columns: []*proto.ColumnResponse{
+				&proto.ColumnResponse{ColumnVal: &proto.ColumnResponse_Int64Val{Int64Val: v.Val}},
+				&proto.ColumnResponse{ColumnVal: &proto.ColumnResponse_Int64Val{Int64Val: v.Count}},
 			}}); err != nil {
 			return errors.Wrap(err, "calling callback")
 		}

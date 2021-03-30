@@ -40,6 +40,7 @@ import (
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/storage"
 	"github.com/pilosa/pilosa/v2/testhook"
+	. "github.com/pilosa/pilosa/v2/vprint" // nolint:staticcheck
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -76,7 +77,7 @@ func TestFragment_SetBit(t *testing.T) {
 	}
 
 	// commit the change, and verify it is still there
-	panicOn(tx.Commit())
+	PanicOn(tx.Commit())
 
 	// Close and reopen the fragment & verify the data.
 	err := f.Reopen()
@@ -114,7 +115,7 @@ func TestFragment_ClearBit(t *testing.T) {
 	}
 	// The Reopen below implies this test is looking at storage consistency.
 	// In that spirit, we will check that the Tx Commit is visible afterwards.
-	panicOn(tx.Commit())
+	PanicOn(tx.Commit())
 
 	tx = idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: f.shard})
 	defer tx.Rollback()
@@ -200,7 +201,7 @@ func TestFragment_ClearRow(t *testing.T) {
 	if n := f.mustRow(tx, 1000).Count(); n != 0 {
 		t.Fatalf("unexpected count: %d", n)
 	}
-	panicOn(tx.Commit())
+	PanicOn(tx.Commit())
 	tx = idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: f.shard})
 	defer tx.Rollback()
 
@@ -247,7 +248,7 @@ func TestFragment_SetRow(t *testing.T) {
 		t.Fatalf("expected changed value: %v", changed)
 	}
 
-	panicOn(tx.Commit())
+	PanicOn(tx.Commit())
 	tx = idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f, Shard: f.shard})
 	defer tx.Rollback()
 
@@ -260,7 +261,7 @@ func TestFragment_SetRow(t *testing.T) {
 		t.Fatalf("unexpected count after set row: %d", n)
 	}
 
-	panicOn(tx.Commit())
+	PanicOn(tx.Commit())
 	tx = idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: f.shard})
 
 	// Close and reopen the fragment & verify the data.
@@ -285,7 +286,7 @@ func TestFragment_SetRow(t *testing.T) {
 	if cols := f.mustRow(tx, rowID).Columns(); len(cols) != 0 {
 		t.Fatalf("expected setting a row with no entries to clear the cache")
 	}
-	panicOn(tx.Commit())
+	PanicOn(tx.Commit())
 }
 
 // Ensure a fragment can set & read a value.
@@ -543,7 +544,7 @@ func TestFragment_Sum(t *testing.T) {
 		}
 	}
 
-	panicOn(tx.Commit())
+	PanicOn(tx.Commit())
 	tx = idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: f.shard})
 	defer tx.Rollback()
 
@@ -576,7 +577,7 @@ func TestFragment_Sum(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	panicOn(tx.Commit())
+	PanicOn(tx.Commit())
 	tx = idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: f.shard})
 	defer tx.Rollback()
 
@@ -615,7 +616,7 @@ func TestFragment_MinMax(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	panicOn(tx.Commit())
+	PanicOn(tx.Commit())
 
 	// the new tx is shared by Min/Max below.
 	tx = idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: f.shard})
@@ -1215,7 +1216,7 @@ func TestFragment_Snapshot(t *testing.T) {
 	} else if _, err := f.clearBit(tx, 1000, 1); err != nil {
 		t.Fatal(err)
 	}
-	panicOn(tx.Commit())
+	PanicOn(tx.Commit())
 	tx = idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: f.shard})
 	defer tx.Rollback()
 
@@ -1308,7 +1309,7 @@ func TestFragment_Top_Filter(t *testing.T) {
 		t.Fatalf("setAttrs: %v", err)
 	}
 
-	panicOn(tx.Commit())
+	PanicOn(tx.Commit())
 	tx = idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: f.shard})
 	defer tx.Rollback()
 
@@ -1481,7 +1482,7 @@ func TestFragment_TopN_CacheSize(t *testing.T) {
 
 	f := frag
 	if err := f.Open(); err != nil {
-		panic(err)
+		PanicOn(err)
 	}
 	defer f.Clean(t)
 
@@ -1538,7 +1539,7 @@ func TestFragment_Checksum(t *testing.T) {
 	} else if _, err := f.setBit(tx, HashBlockSize*2, 200); err != nil {
 		t.Fatal(err)
 	}
-	panicOn(tx.Commit())
+	PanicOn(tx.Commit())
 
 	// Ensure new checksum is different.
 	if chksum, err := f.Checksum(); err != nil {
@@ -1561,7 +1562,7 @@ func TestFragment_Blocks(t *testing.T) {
 	if _, err := f.setBit(tx, 0, 0); err != nil {
 		t.Fatal(err)
 	}
-	panicOn(tx.Commit())
+	PanicOn(tx.Commit())
 	blocks, err := f.Blocks() // FAIL: TestFragment_Blocks b/c 0 blocks back
 	if err != nil {
 		t.Fatal(err)
@@ -1575,7 +1576,7 @@ func TestFragment_Blocks(t *testing.T) {
 	if _, err := f.setBit(tx, 20, 0); err != nil {
 		t.Fatal(err)
 	}
-	panicOn(tx.Commit())
+	PanicOn(tx.Commit())
 	blocks, err = f.Blocks()
 	if err != nil {
 		t.Fatal(err)
@@ -1590,7 +1591,7 @@ func TestFragment_Blocks(t *testing.T) {
 	if _, err := f.setBit(tx, 20, 100); err != nil {
 		t.Fatal(err)
 	}
-	panicOn(tx.Commit())
+	PanicOn(tx.Commit())
 	blocks, err = f.Blocks()
 	if err != nil {
 		t.Fatal(err)
@@ -1609,7 +1610,7 @@ func TestFragment_Blocks_Empty(t *testing.T) {
 	if _, err := f.setBit(tx, 100, 1); err != nil {
 		t.Fatal(err)
 	}
-	panicOn(tx.Commit()) // f.Blocks() will start a new Tx, so the SetBit needs to be visible before that.
+	PanicOn(tx.Commit()) // f.Blocks() will start a new Tx, so the SetBit needs to be visible before that.
 
 	// Ensure checksum for block 1 is blank.
 	if blocks, err := f.Blocks(); err != nil {
@@ -1641,7 +1642,7 @@ func TestFragment_LRUCache_Persistence(t *testing.T) {
 		t.Fatalf("unexpected cache len: %d", cache.Len())
 	}
 
-	panicOn(tx.Commit())
+	PanicOn(tx.Commit())
 
 	// Reopen the fragment.
 	if err := f.Reopen(); err != nil {
@@ -1692,7 +1693,7 @@ func TestFragment_RankCache_Persistence(t *testing.T) {
 		}
 	}
 
-	panicOn(tx.Commit())
+	PanicOn(tx.Commit())
 	tx = index.holder.txf.NewTx(Txo{Write: !writable, Index: index, Fragment: f, Shard: f.shard})
 	defer tx.Rollback()
 
@@ -1837,7 +1838,7 @@ func BenchmarkFragment_IntersectionCount(b *testing.B) {
 		}
 	}
 
-	panicOn(tx.Commit())
+	PanicOn(tx.Commit())
 	tx = idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: f.shard})
 	defer tx.Rollback()
 
@@ -2178,7 +2179,7 @@ func TestFragment_ImportSet_WithTxCommit(t *testing.T) {
 				t.Fatalf("bulk importing ids: %v", err)
 			}
 
-			panicOn(tx.Commit())
+			PanicOn(tx.Commit())
 			tx = idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: f.shard})
 			defer tx.Rollback()
 
@@ -2200,7 +2201,7 @@ func TestFragment_ImportSet_WithTxCommit(t *testing.T) {
 				t.Fatalf("bulk clearing ids: %v", err)
 			}
 
-			panicOn(tx.Commit())
+			PanicOn(tx.Commit())
 			tx = idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: f.shard})
 			defer tx.Rollback()
 
@@ -2230,12 +2231,12 @@ func TestFragment_ConcurrentImport(t *testing.T) {
 		eg := errgroup.Group{}
 		eg.Go(func() error {
 			tx := idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f, Shard: shard})
-			defer func() { panicOn(tx.Commit()) }()
+			defer func() { PanicOn(tx.Commit()) }()
 			return f.bulkImportStandard(tx, []uint64{1, 2}, []uint64{1, 2}, &ImportOptions{})
 		})
 		eg.Go(func() error {
 			tx := idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f, Shard: shard})
-			defer func() { panicOn(tx.Commit()) }()
+			defer func() { PanicOn(tx.Commit()) }()
 			return f.bulkImportStandard(tx, []uint64{3, 4}, []uint64{3, 4}, &ImportOptions{})
 		})
 		err := eg.Wait()
@@ -2457,7 +2458,7 @@ func TestFragment_ImportMutex_WithTxCommit(t *testing.T) {
 				t.Fatalf("bulk importing ids: %v", err)
 			}
 
-			panicOn(tx.Commit())
+			PanicOn(tx.Commit())
 			tx = idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: f.shard})
 			defer tx.Rollback()
 
@@ -2479,7 +2480,7 @@ func TestFragment_ImportMutex_WithTxCommit(t *testing.T) {
 				t.Fatalf("bulk clearing ids: %v", err)
 			}
 
-			panicOn(tx.Commit())
+			PanicOn(tx.Commit())
 			tx = idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: f.shard})
 			defer tx.Rollback()
 
@@ -2707,7 +2708,7 @@ func TestFragment_ImportBool_WithTxCommit(t *testing.T) {
 				t.Fatalf("bulk importing ids: %v", err)
 			}
 
-			panicOn(tx.Commit())
+			PanicOn(tx.Commit())
 			tx = idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: f.shard})
 			defer tx.Rollback()
 
@@ -2729,7 +2730,7 @@ func TestFragment_ImportBool_WithTxCommit(t *testing.T) {
 				t.Fatalf("bulk importing ids: %v", err)
 			}
 
-			panicOn(tx.Commit())
+			PanicOn(tx.Commit())
 			tx = idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: f.shard})
 			defer tx.Rollback()
 
@@ -3059,7 +3060,7 @@ func BenchmarkImportRoaringUpdate(b *testing.B) {
 						// is excessive. force storage into snapshotted state, then use import
 						// to generate an op log and/or snapshot.
 						itr, err := roaring.NewRoaringIterator(data)
-						panicOn(err)
+						PanicOn(err)
 						_, _, err = tx.ImportRoaringBits(f.index(), f.field(), f.view(), f.shard, itr, false, false, 0, nil)
 						if err != nil {
 							b.Errorf("import error: %v", err)
@@ -3143,15 +3144,15 @@ func initBigFrag(tb testing.TB) {
 			data := getZipfRowsSliceRoaring(10000000, i, 0, ShardWidth)
 			err := f.importRoaringT(tx, data, false)
 			if err != nil {
-				panic(fmt.Sprintf("setting up fragment data: %v", err))
+				PanicOn(fmt.Sprintf("setting up fragment data: %v", err))
 			}
 		}
 		err := f.Close()
 		if err != nil {
-			panic(fmt.Sprintf("closing fragment: %v", err))
+			PanicOn(fmt.Sprintf("closing fragment: %v", err))
 		}
 		bigFrag = f.path()
-		panicOn(tx.Commit())
+		PanicOn(tx.Commit())
 	}
 }
 
@@ -3178,9 +3179,9 @@ func BenchmarkImportIntoLargeFragment(b *testing.B) {
 		fi.Close()
 
 		h := NewHolder(fi.Name(), nil)
-		panicOn(h.Open())
+		PanicOn(h.Open())
 		idx, err := h.CreateIndex("i", IndexOptions{})
-		panicOn(err)
+		PanicOn(err)
 
 		f := newFragment(h, makeTestFragSpec(fi.Name(), "i", "f", viewStandard), 0, 0)
 		err = f.Open()
@@ -3200,7 +3201,7 @@ func BenchmarkImportIntoLargeFragment(b *testing.B) {
 		if err != nil {
 			b.Fatalf("bulkImport: %v", err)
 		}
-		panicOn(tx.Commit())
+		PanicOn(tx.Commit())
 		f.Clean(b)
 		h.Close()
 	}
@@ -3375,7 +3376,7 @@ func getZipfRowsSliceRoaring(numRows uint64, seed int64, startCol, endCol uint64
 	buf := bytes.NewBuffer(make([]byte, 0, 100000))
 	_, err := b.WriteTo(buf)
 	if err != nil {
-		panic(err)
+		PanicOn(err)
 	}
 	return buf.Bytes()
 }
@@ -3401,7 +3402,7 @@ func getUniformRowsSliceRoaring(numRows uint64, seed int64, startCol, endCol uin
 	buf := bytes.NewBuffer(make([]byte, 0, 100000))
 	_, err := b.WriteTo(buf)
 	if err != nil {
-		panic(err)
+		PanicOn(err)
 	}
 	return buf.Bytes()
 }
@@ -3428,7 +3429,7 @@ func getUpdataRoaring(numRows, numCols uint64, seed int64) []byte {
 	buf := bytes.NewBuffer(make([]byte, 0, 100000))
 	_, err := b.WriteTo(buf)
 	if err != nil {
-		panic(err)
+		PanicOn(err)
 	}
 	return buf.Bytes()
 }
@@ -3582,7 +3583,7 @@ func mustOpenBSIFragment(tb testing.TB, index, field, view string, shard uint64)
 func newTestHolder(tb testing.TB) *Holder {
 	path, _ := testhook.TempDirInDir(tb, *TempDir, "holder-dir")
 	h := NewHolder(path, mustHolderConfig())
-	panicOn(h.Open())
+	PanicOn(h.Open())
 	testhook.Cleanup(tb, func() {
 		h.Close()
 	})
@@ -3601,13 +3602,13 @@ func fragTestMustOpenIndex(index string, holder *Holder, opt IndexOptions) *Inde
 	holder.mu.Lock()
 	idx, err := holder.createIndex(cim, false)
 	holder.mu.Unlock()
-	panicOn(err)
+	PanicOn(err)
 
 	idx.keys = opt.Keys
 	idx.trackExistence = opt.TrackExistence
 
 	if err := idx.Open(); err != nil {
-		panic(err)
+		PanicOn(err)
 	}
 	return idx
 }
@@ -3625,14 +3626,14 @@ func mustOpenFragmentFlags(tb testing.TB, index, field, view string, shard uint6
 	}
 
 	fragDir := fmt.Sprintf("%v/%v/views/%v/fragments/", idx.path, field, view)
-	panicOn(os.MkdirAll(fragDir, 0777))
+	PanicOn(os.MkdirAll(fragDir, 0777))
 	fragPath := fragDir + fmt.Sprintf("%v", shard)
 	f := newFragment(th, makeTestFragSpec(fragPath, index, field, view), shard, flags)
 
 	tx := idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f, Shard: shard})
 	testhook.Cleanup(tb, func() {
 		tx.Rollback()
-		panicOn(idx.holder.txf.CloseIndex(idx))
+		PanicOn(idx.holder.txf.CloseIndex(idx))
 	})
 
 	f.CacheType = cacheType
@@ -3641,7 +3642,7 @@ func mustOpenFragmentFlags(tb testing.TB, index, field, view string, shard uint6
 	}
 
 	if err := f.Open(); err != nil {
-		panic(err)
+		PanicOn(err)
 	}
 	return f, idx, tx
 }
@@ -3676,7 +3677,7 @@ func (f *fragment) Reopen() error {
 func (f *fragment) mustSetBits(tx Tx, rowID uint64, columnIDs ...uint64) {
 	for _, columnID := range columnIDs {
 		if _, err := f.setBit(tx, rowID, columnID); err != nil {
-			panic(err)
+			PanicOn(err)
 		}
 	}
 }
@@ -3737,7 +3738,7 @@ func TestFragment_RowsIteration(t *testing.T) {
 		} else if _, err := f.setBit(tx, 2, 166000); err != nil {
 			t.Fatal(err)
 		}
-		panicOn(tx.Commit())
+		PanicOn(tx.Commit())
 
 		tx = idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: f.shard})
 		defer tx.Rollback()
@@ -3928,7 +3929,7 @@ func toRowsCols(roaring []uint64) (rowIDs, colIDs []uint64) {
 
 func calcTop(rowIDs, colIDs []uint64) []Pair {
 	if len(rowIDs) != len(colIDs) {
-		panic("row and col ids must be of equal len")
+		PanicOn("row and col ids must be of equal len")
 	}
 	// make map of rowID to colID set in order to dedup
 	counts := make(map[uint64]map[uint64]struct{})
@@ -4166,7 +4167,7 @@ func TestFragmentRowIterator_WithTxCommit(t *testing.T) {
 		f.mustSetBits(tx, 2, 0)
 		f.mustSetBits(tx, 3, 0)
 
-		panicOn(tx.Commit())
+		PanicOn(tx.Commit())
 		tx = idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: f.shard})
 		defer tx.Rollback()
 
@@ -4214,7 +4215,7 @@ func TestFragmentRowIterator_WithTxCommit(t *testing.T) {
 		f.mustSetBits(tx, 5, 0)
 		f.mustSetBits(tx, 7, 0)
 
-		panicOn(tx.Commit())
+		PanicOn(tx.Commit())
 		tx = idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: f.shard})
 		defer tx.Rollback()
 
@@ -4262,7 +4263,7 @@ func TestFragmentRowIterator_WithTxCommit(t *testing.T) {
 		f.mustSetBits(tx, 2, 0)
 		f.mustSetBits(tx, 3, 0)
 
-		panicOn(tx.Commit())
+		PanicOn(tx.Commit())
 		tx = idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: f.shard})
 		defer tx.Rollback()
 
@@ -4299,7 +4300,7 @@ func TestFragmentRowIterator_WithTxCommit(t *testing.T) {
 		f.mustSetBits(tx, 5, 0)
 		f.mustSetBits(tx, 7, 0)
 
-		panicOn(tx.Commit())
+		PanicOn(tx.Commit())
 		tx = idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: f.shard})
 		defer tx.Rollback()
 
@@ -4535,7 +4536,7 @@ func TestFragmentBSIUnsigned(t *testing.T) {
 			t.Fatalf("no change when setting col %d to %d", uint64(i), int64(i))
 		}
 	}
-	panicOn(tx.Commit()) // t.Run beolow on different goro and so need their own Tx anyway.
+	PanicOn(tx.Commit()) // t.Run beolow on different goro and so need their own Tx anyway.
 
 	// Generate a list of columns.
 	cols := make([]uint64, 1<<k)
@@ -4719,7 +4720,7 @@ func TestFragmentBSIUnsigned_WithTxCommit(t *testing.T) {
 		}
 	}
 
-	panicOn(tx.Commit())
+	PanicOn(tx.Commit())
 	tx = idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: f.shard})
 	defer tx.Rollback()
 
@@ -4882,7 +4883,7 @@ func TestFragmentBSISigned(t *testing.T) {
 		}
 	}
 
-	panicOn(tx.Commit())
+	PanicOn(tx.Commit())
 	tx = idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: f.shard})
 	defer tx.Rollback()
 
@@ -5094,7 +5095,7 @@ func TestImportClearRestart(t *testing.T) {
 				if err != nil {
 					t.Fatalf("closing fragment: %v", err)
 				}
-				panicOn(tx.Commit())
+				PanicOn(tx.Commit())
 
 				err = f.Open()
 				tx = idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f, Shard: f.shard})
@@ -5114,14 +5115,14 @@ func TestImportClearRestart(t *testing.T) {
 				h := newTestHolder(t)
 				idx2, err := h.CreateIndex("i", IndexOptions{})
 				_ = idx2
-				panicOn(err)
+				PanicOn(err)
 
 				// OVERWRITING the f.path with a new fragment
 				f2 := newFragment(h, makeTestFragSpec(f.path(), "i", "f", viewStandard), 0, 0)
 				f2.MaxOpN = maxOpN
 				f2.CacheType = f.CacheType
 
-				panicOn(tx.Commit()) // match the f.closeStorage which overlaps the f2 creation.
+				PanicOn(tx.Commit()) // match the f.closeStorage which overlaps the f2 creation.
 
 				tx2 := idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f2, Shard: f2.shard})
 				defer tx2.Rollback()
@@ -5158,7 +5159,7 @@ func TestImportClearRestart(t *testing.T) {
 
 				check(t, tx2, f2, exp)
 
-				panicOn(tx2.Commit())
+				PanicOn(tx2.Commit())
 
 				h3 := NewHolder(filepath.Dir(f2.path()), nil)
 				testhook.Cleanup(t, func() {
@@ -5167,7 +5168,7 @@ func TestImportClearRestart(t *testing.T) {
 
 				idx3, err := h3.CreateIndex("i", IndexOptions{})
 				_ = idx3
-				panicOn(err)
+				PanicOn(err)
 
 				f3 := newFragment(h3, makeTestFragSpec(f2.path(), "i", "f", viewStandard), 0, 0)
 				f3.MaxOpN = maxOpN
@@ -5291,7 +5292,7 @@ func TestImportMultipleValues(t *testing.T) {
 				}
 
 				// probably too slow, would hit disk alot:
-				//panicOn(tx.Commit())
+				//PanicOn(tx.Commit())
 				//tx = idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard:f.shard, ShardSet:true})
 				//defer tx.Rollback()
 
@@ -5398,7 +5399,7 @@ func TestFragmentConcurrentReadWrite(t *testing.T) {
 				return errors.Wrap(err, "setting bit")
 			}
 		}
-		panicOn(tx.Commit())
+		PanicOn(tx.Commit())
 		return nil
 	})
 
@@ -5423,7 +5424,7 @@ func TestRemapCache(t *testing.T) {
 	defer f.Close()
 	index, field, view, shard := f.index(), f.field(), f.view(), f.shard
 
-	// request a panic that doesn't kill the program on fault
+	// request a PanicOn that doesn't kill the program on fault
 	wouldFault := debug.SetPanicOnFault(true)
 	defer func() {
 		debug.SetPanicOnFault(wouldFault)
@@ -5435,7 +5436,7 @@ func TestRemapCache(t *testing.T) {
 					t.Fatalf("segfault trapped during remap test (expected failure mode)")
 				}
 			}
-			t.Fatalf("unexpected panic: %v", r)
+			t.Fatalf("unexpected PanicOn: %v", r)
 		}
 	}()
 

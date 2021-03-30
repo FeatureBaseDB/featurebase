@@ -29,6 +29,7 @@ import (
 	"github.com/pilosa/pilosa/v2/pql"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/testhook"
+	. "github.com/pilosa/pilosa/v2/vprint" // nolint:staticcheck
 )
 
 // Ensure a bsiGroup can adjust to its baseValue.
@@ -212,7 +213,7 @@ func NewTestField(t *testing.T, opts FieldOption) *TestField {
 	cfg := DefaultHolderConfig()
 	cfg.StorageConfig.Backend = CurrentBackendOrDefault()
 	h := NewHolder(path, cfg)
-	panicOn(h.Open())
+	PanicOn(h.Open())
 
 	idx, err := h.CreateIndex("i", IndexOptions{})
 	if err != nil {
@@ -238,7 +239,7 @@ func OpenField(t *testing.T, opts FieldOption) *TestField {
 // Close closes the field and removes the underlying data.
 func (f *TestField) Close() error {
 	if f.idx != nil {
-		panicOn(f.idx.holder.txf.CloseIndex(f.idx))
+		PanicOn(f.idx.holder.txf.CloseIndex(f.idx))
 	}
 	defer os.RemoveAll(f.Path())
 	return f.Field.Close()
@@ -335,7 +336,7 @@ func TestField_RowTime(t *testing.T) {
 	f.MustSetBit(tx, 1, 4, time.Date(2010, time.January, 6, 12, 0, 0, 0, time.UTC))
 	f.MustSetBit(tx, 1, 5, time.Date(2010, time.January, 5, 13, 0, 0, 0, time.UTC))
 
-	panicOn(tx.Commit())
+	PanicOn(tx.Commit())
 
 	// obtain 2nd transaction to read it back.
 	tx = f.idx.holder.txf.NewTx(Txo{Write: !writable, Index: f.idx, Field: f.Field, Shard: 0})
@@ -610,14 +611,14 @@ func TestBSIGroup_importValue(t *testing.T) {
 		if err := f.importValue(qcx, tt.columnIDs, tt.values, options); err != nil {
 			t.Fatalf("test %d, importing values: %s", i, err.Error())
 		}
-		panicOn(qcx.Finish())
+		PanicOn(qcx.Finish())
 		qcx.Reset()
 		if row, err := f.Range(qcx, f.name, pql.EQ, tt.checkVal); err != nil {
 			t.Fatalf("test %d, getting range: %s", i, err.Error())
 		} else if !reflect.DeepEqual(row.Columns(), tt.expCols) {
 			t.Fatalf("test %d, expected columns: %v, but got: %v", i, tt.expCols, row.Columns())
 		}
-		panicOn(qcx.Finish())
+		PanicOn(qcx.Finish())
 		qcx.Reset()
 	} // loop
 }
@@ -682,7 +683,7 @@ func TestIntField_MinMaxForShard(t *testing.T) {
 			if err := f.importValue(qcx, test.columnIDs, test.values, options); err != nil {
 				t.Fatalf("test %d, importing values: %s", i, err.Error())
 			}
-			panicOn(qcx.Finish())
+			PanicOn(qcx.Finish())
 			qcx.Reset()
 
 			shard := uint64(0)
@@ -909,7 +910,7 @@ func TestBSIGroup_TxReopenDB(t *testing.T) {
 		if err := f.importValue(qcx, tt.columnIDs, tt.values, options); err != nil {
 			t.Fatalf("test %d, importing values: %s", i, err.Error())
 		}
-		panicOn(qcx.Finish())
+		PanicOn(qcx.Finish())
 		qcx.Reset()
 
 		if row, err := f.Range(qcx, f.name, pql.EQ, tt.checkVal); err != nil {
@@ -917,7 +918,7 @@ func TestBSIGroup_TxReopenDB(t *testing.T) {
 		} else if !reflect.DeepEqual(row.Columns(), tt.expCols) {
 			t.Fatalf("test %d, expected columns: %v, but got: %v", i, tt.expCols, row.Columns())
 		}
-		panicOn(qcx.Finish())
+		PanicOn(qcx.Finish())
 		qcx.Reset()
 	} // loop
 

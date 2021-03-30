@@ -32,7 +32,7 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/v2"
-	"github.com/pilosa/pilosa/v2/internal"
+	"github.com/pilosa/pilosa/v2/pb"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pkg/errors"
 )
@@ -234,7 +234,7 @@ func (cmd *InspectCommand) Run(ctx context.Context) error {
 }
 
 // loadTopology is copied almost exactly from pilosa/cluster.go.
-func loadTopology(path string) (topology internal.Topology, myID string, err error) {
+func loadTopology(path string) (topology pb.Topology, myID string, err error) {
 	buf, err := ioutil.ReadFile(filepath.Join(path, ".topology"))
 	if os.IsNotExist(err) {
 		return topology, myID, err

@@ -46,6 +46,7 @@ import (
 	"github.com/pilosa/pilosa/v2/storage"
 	"github.com/pilosa/pilosa/v2/test"
 	"github.com/pilosa/pilosa/v2/testhook"
+	. "github.com/pilosa/pilosa/v2/vprint" // nolint:staticcheck
 	"github.com/pkg/errors"
 )
 
@@ -69,7 +70,7 @@ func getTempDirString() (td *string) {
 }
 
 func TestExecutor_Execute_ConstRow(t *testing.T) {
-	c := test.MustRunCluster(t, 2)
+	c := test.MustRunCluster(t, 3)
 	defer c.Close()
 
 	c.CreateField(t, "i", pilosa.IndexOptions{}, "h")
@@ -1058,7 +1059,7 @@ func TestExecutor_Execute_SetRowAttrs(t *testing.T) {
 }
 
 func TestExecutor_Execute_TopK_Set(t *testing.T) {
-	c := test.MustRunCluster(t, 2)
+	c := test.MustRunCluster(t, 3)
 	defer c.Close()
 
 	// Load some test data into a set field.
@@ -1089,7 +1090,7 @@ func TestExecutor_Execute_TopK_Set(t *testing.T) {
 }
 
 func TestExecutor_Execute_TopK_Time(t *testing.T) {
-	c := test.MustRunCluster(t, 2)
+	c := test.MustRunCluster(t, 3)
 	defer c.Close()
 
 	// Load some test data into a time field.
@@ -3033,15 +3034,18 @@ func TestExecutor_Execute_Range_BSIGroup_Deprecated(t *testing.T) {
 
 // Ensure a remote query can return a row.
 func TestExecutor_Execute_Remote_Row(t *testing.T) {
-	c := test.MustRunCluster(t, 2,
+	c := test.MustRunCluster(t, 3,
 		[]server.CommandOption{
 			server.OptCommandServerOptions(pilosa.OptServerNodeID("node0"), pilosa.OptServerClusterHasher(&test.ModHasher{}))},
 		[]server.CommandOption{
 			server.OptCommandServerOptions(pilosa.OptServerNodeID("node1"), pilosa.OptServerClusterHasher(&test.ModHasher{}))},
+		[]server.CommandOption{
+			server.OptCommandServerOptions(pilosa.OptServerNodeID("node2"), pilosa.OptServerClusterHasher(&test.ModHasher{}))},
 	)
 	defer c.Close()
 	hldr0 := c.GetHolder(0)
 	hldr1 := c.GetHolder(1)
+	hldr2 := c.GetHolder(2)
 
 	_, err := c.GetPrimary().API.CreateIndex(context.Background(), "i", pilosa.IndexOptions{})
 	if err != nil {
@@ -3051,10 +3055,8 @@ func TestExecutor_Execute_Remote_Row(t *testing.T) {
 	if err != nil {
 		t.Fatalf("creating field: %v", err)
 	}
-
-	hldr1.MustSetBits("i", "f", 10, ShardWidth+1, ShardWidth+2, (3*ShardWidth)+4)
-	hldr0.SetBit("i", "f", 10, 1)
-
+	hldr0.MustSetBits("i", "f", 10, ShardWidth+1, ShardWidth+2, (3*ShardWidth)+4)
+	hldr2.SetBit("i", "f", 10, 1)
 	if res, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Row(f=10)`}); err != nil {
 		t.Fatal(err)
 	} else if columns := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(columns, []uint64{1, ShardWidth + 1, ShardWidth + 2, (3 * ShardWidth) + 4}) {
@@ -3074,7 +3076,7 @@ func TestExecutor_Execute_Remote_Row(t *testing.T) {
 			t.Fatalf("querying remote: %v", err)
 		}
 
-		if !reflect.DeepEqual(hldr1.Row("i", "f", 7).Columns(), []uint64{pilosa.ShardWidth + 1}) {
+		if !reflect.DeepEqual(hldr0.Row("i", "f", 7).Columns(), []uint64{pilosa.ShardWidth + 1}) {
 			t.Fatalf("unexpected cols from row 7: %v", hldr1.Row("i", "f", 7).Columns())
 		}
 	})
@@ -3089,7 +3091,7 @@ func TestExecutor_Execute_Remote_Row(t *testing.T) {
 			t.Fatalf("quuerying remote: %v", err)
 		}
 
-		if !reflect.DeepEqual(hldr1.RowTime("i", "z", 5, time.Date(2010, time.January, 1, 0, 0, 0, 0, time.UTC), "Y").Columns(), []uint64{pilosa.ShardWidth + 1}) {
+		if !reflect.DeepEqual(hldr0.RowTime("i", "z", 5, time.Date(2010, time.January, 1, 0, 0, 0, 0, time.UTC), "Y").Columns(), []uint64{pilosa.ShardWidth + 1}) {
 			t.Fatalf("unexpected cols from row 7: %v", hldr1.RowTime("i", "z", 5, time.Date(2010, time.January, 1, 0, 0, 0, 0, time.UTC), "Y").Columns())
 		}
 	})
@@ -3786,7 +3788,7 @@ func TestExecutor_Execute_Not(t *testing.T) {
 
 // Ensure an all query can be executed.
 func TestExecutor_Execute_FieldValue(t *testing.T) {
-	c := test.MustRunCluster(t, 2)
+	c := test.MustRunCluster(t, 3)
 	defer c.Close()
 
 	node0 := c.GetNode(0)
@@ -3879,7 +3881,7 @@ func TestExecutor_Execute_FieldValue(t *testing.T) {
 
 // Ensure a Limit query can be executed.
 func TestExecutor_Execute_Limit(t *testing.T) {
-	c := test.MustRunCluster(t, 2)
+	c := test.MustRunCluster(t, 3)
 	defer c.Close()
 
 	c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "f")
@@ -4062,12 +4064,12 @@ func TestExecutor_Execute_All(t *testing.T) {
 		if err := m0.API.Import(context.Background(), qcx, req); err != nil {
 			t.Fatal(err)
 		}
-		panicOn(qcx.Finish())
+		PanicOn(qcx.Finish())
 
 		i0, err := m0.API.Index(context.Background(), "i")
-		panicOn(err)
+		PanicOn(err)
 		if i0 == nil {
-			panic("nil index i0?")
+			PanicOn("nil index i0?")
 		}
 
 		tests := []struct {
@@ -4144,7 +4146,7 @@ func TestExecutor_Execute_All(t *testing.T) {
 		if err := c.GetNode(0).API.Import(context.Background(), qcx, req); err != nil {
 			t.Fatal(err)
 		}
-		panicOn(qcx.Finish())
+		PanicOn(qcx.Finish())
 
 		tests := []struct {
 			qry     string
@@ -4675,7 +4677,7 @@ func benchmarkExistence(nn bool, b *testing.B) {
 		if err := nodeAPI.Import(context.Background(), qcx, req); err != nil {
 			b.Fatal(err)
 		}
-		panicOn(qcx.Finish())
+		PanicOn(qcx.Finish())
 	}
 }
 
@@ -6735,7 +6737,7 @@ func TestExecutor_Execute_CountDistinct(t *testing.T) {
 // is handled correctly.
 func TestExecutor_BareDistinct(t *testing.T) {
 	t.Helper()
-	c := test.MustRunCluster(t, 2)
+	c := test.MustRunCluster(t, 3)
 	defer c.Close()
 
 	c.CreateField(t, "i", pilosa.IndexOptions{}, "ints",
@@ -6816,7 +6818,7 @@ func TestExecutor_Execute_TopNDistinct(t *testing.T) {
 }
 
 func Test_Executor_Execute_UnionRows(t *testing.T) {
-	c := test.MustRunCluster(t, 2)
+	c := test.MustRunCluster(t, 3)
 	defer c.Close()
 
 	c.CreateField(t, "i", pilosa.IndexOptions{}, "s",
