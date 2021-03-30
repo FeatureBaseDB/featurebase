@@ -454,7 +454,7 @@ func CheckClusterState(m *Command, state disco.ClusterState, n int) bool {
 		if apiState == state {
 			return true
 		}
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 	}
 	return false
 }

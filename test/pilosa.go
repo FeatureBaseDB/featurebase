@@ -131,20 +131,6 @@ func (m *Command) Reopen() error {
 	return m.Start()
 }
 
-// SoftOpen is like Reopen, but doesn't close the program first.
-// This is useful in the case where a test needs to decouple the
-// close from the re-open (for example, there may need to be
-// actions which take place between those two steps).
-func (m *Command) SoftOpen() error {
-	// Create new main with the same config.
-	config := m.Command.Config
-	m.Command = server.NewCommand(bytes.NewReader(nil), ioutil.Discard, ioutil.Discard, m.commandOptions...)
-	m.Command.Config = config
-
-	// Run new program.
-	return m.Start()
-}
-
 // MustCreateIndex uses this command's API to create an index and fails the test
 // if there is an error.
 func (m *Command) MustCreateIndex(tb testing.TB, name string, opts pilosa.IndexOptions) *pilosa.Index {

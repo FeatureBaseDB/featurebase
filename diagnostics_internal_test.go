@@ -27,8 +27,6 @@ import (
 )
 
 func TestDiagnosticsClient(t *testing.T) {
-	t.Skip("does a listen on :0, skip for now. TODO(jea) restore this.")
-
 	// Mock server.
 	server := httptest.NewServer(nil)
 	defer server.Close()
@@ -114,8 +112,6 @@ func TestDiagnosticsVersion_Compare(t *testing.T) {
 }
 
 func TestDiagnosticsVersion_Check(t *testing.T) {
-	t.Skip("does a listen on :0, skip for now. TODO(jea) restore this.")
-
 	// Mock server.
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)

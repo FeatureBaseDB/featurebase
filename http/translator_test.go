@@ -30,9 +30,8 @@ func TestTranslateStore_EntryReader(t *testing.T) {
 	// Ensure client can connect and stream the translate store data.
 	t.Run("OK", func(t *testing.T) {
 		t.Run("ServerDisconnect", func(t *testing.T) {
-			// This test is currently flawed, breaking intermittently with message:
-			// "translator_test.go:65: unexpected EOF"
-			t.Skip()
+			// This test is currently flawed
+			t.Skip("failing with error: invalid memory address or nil pointer dereference when reading entry")
 
 			cluster := test.MustRunCluster(t, 1)
 			defer cluster.Close()
@@ -77,80 +76,7 @@ func TestTranslateStore_EntryReader(t *testing.T) {
 				t.Fatal(err)
 			}
 		})
-
-		/*
-			// Ensure server closes store reader if client disconnects.
-			t.Run("ClientDisconnect", func(t *testing.T) {
-				t.Skip() // can't mock server from http package
-				// Setup mock so that Read() hangs.
-				done := make(chan struct{})
-
-				var mrc mock.ReadCloser
-				mrc.ReadFunc = func(p []byte) (int, error) {
-					<-done
-					return 0, io.EOF
-				}
-
-				closeInvoked := make(chan struct{})
-
-				mrc.CloseFunc = func() error {
-					close(closeInvoked)
-					return nil
-				}
-
-				var translateStore mock.TranslateStore
-
-				translateStore.ReaderFunc = func(ctx context.Context, off int64) (io.ReadCloser, error) {
-					return &mrc, nil
-				}
-
-				opts := server.OptCommandServerOptions(pilosa.OptServerPrimaryTranslateStore(translateStore))
-				cluster := test.MustRunCluster(t, 1, []server.CommandOption{opts})
-				defer cluster.Close()
-				primary := cluster[0]
-
-				defer close(done)
-
-				// Connect to server and begin streaming.
-				ctx, cancel := context.WithCancel(context.Background())
-				store := http.NewTranslateStore(primary.URL())
-				if _, err := store.Reader(ctx, 0); err != nil {
-					t.Fatal(err)
-				}
-
-				// Cancel the context and check if server is closed.
-				cancel()
-				select {
-				case <-time.NewTimer(time.Millisecond * 100).C:
-					t.Fatal("expected server close")
-				case <-closeInvoked:
-					return
-				}
-			})
-		*/
 	})
-
-	/*
-		// Ensure client is notified if the server doesn't support streaming replication.
-		t.Run("ErrNotImplemented", func(t *testing.T) {
-			t.Skip() // can't mock server from http package
-			var translateStore mock.TranslateStore
-			translateStore.ReaderFunc = func(ctx context.Context, off int64) (io.ReadCloser, error) {
-				return nil, pilosa.ErrNotImplemented
-			}
-
-			opts := server.OptCommandServerOptions(pilosa.OptServerPrimaryTranslateStore(translateStore))
-			cluster := test.MustRunCluster(t, 1, []server.CommandOption{opts})
-			defer cluster.Close()
-			primary := cluster[0]
-
-			ts := http.NewTranslateStore(primary.URL())
-			_, err := ts.Reader(context.Background(), 0)
-			if err != pilosa.ErrNotImplemented {
-				t.Fatalf("unexpected error: %s", err)
-			}
-		})
-	*/
 }
 
 func benchmarkSetup(b *testing.B, ctx context.Context, key string, nkeys int) (string, pilosa.TranslateOffsetMap, func()) {

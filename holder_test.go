@@ -32,7 +32,6 @@ import (
 
 func TestHolder_Open(t *testing.T) {
 	t.Run("ErrIndexPermission", func(t *testing.T) {
-		t.Skip("we don't open the holder directly from disk anymore; we use the etcd schema")
 		if os.Geteuid() == 0 {
 			t.Skip("Skipping permissions test since user is root.")
 		}
@@ -41,7 +40,7 @@ func TestHolder_Open(t *testing.T) {
 
 		if _, err := h.CreateIndex("test", pilosa.IndexOptions{}); err != nil {
 			t.Fatal(err)
-		} else if err := h.Holder.Close(); err != nil {
+		} else if err := h.Close(); err != nil {
 			t.Fatal(err)
 		} else if err := os.Chmod(h.IndexPath("test"), 0000); err != nil {
 			t.Fatal(err)
@@ -55,13 +54,12 @@ func TestHolder_Open(t *testing.T) {
 		}
 	})
 	t.Run("ErrIndexAttrStoreCorrupt", func(t *testing.T) {
-		t.Skip("we don't open the holder directly from disk anymore; we use the etcd schema")
 		h := test.MustOpenHolder(t)
 		defer h.Close()
 
 		if _, err := h.CreateIndex("test", pilosa.IndexOptions{}); err != nil {
 			t.Fatal(err)
-		} else if err := h.Holder.Close(); err != nil {
+		} else if err := h.Close(); err != nil {
 			t.Fatal(err)
 		} else if err := os.Truncate(filepath.Join(h.IndexPath("test"), pilosa.ColumnAttrsFileName), 2); err != nil {
 			t.Fatal(err)
@@ -71,81 +69,7 @@ func TestHolder_Open(t *testing.T) {
 			t.Fatalf("unexpected error: %s", err)
 		}
 	})
-
-	t.Run("ErrFieldPermission", func(t *testing.T) {
-		t.Skip("we don't open the holder directly from disk anymore; we use the etcd schema")
-		if os.Geteuid() == 0 {
-			t.Skip("Skipping permissions test since user is root.")
-		}
-		h := test.MustOpenHolder(t)
-		defer h.Close()
-
-		if idx, err := h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
-			t.Fatal(err)
-		} else if _, err := idx.CreateField("bar", pilosa.OptFieldTypeDefault()); err != nil {
-			t.Fatal(err)
-		} else if err := h.Holder.Close(); err != nil {
-			t.Fatal(err)
-		} else if err := os.Chmod(filepath.Join(h.Path(), "foo", "bar"), 0000); err != nil {
-			t.Fatal(err)
-		}
-		defer func() {
-			_ = os.Chmod(filepath.Join(h.Path(), "foo", "bar"), 0755)
-		}()
-		if err := h.Reopen(); err == nil || !strings.Contains(err.Error(), "permission denied") {
-			t.Fatalf("unexpected error: %s", err)
-		}
-	})
-	t.Run("ErrFieldOptionsCorrupt", func(t *testing.T) {
-		t.Skip("we don't open the holder directly from disk anymore; we use the etcd schema")
-		h := test.MustOpenHolder(t)
-		defer h.Close()
-
-		var idx *pilosa.Index
-		var err error
-
-		if idx, err = h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
-			t.Fatal(err)
-		}
-
-		if _, err := idx.CreateField("bar", pilosa.OptFieldTypeDefault()); err != nil {
-			t.Fatal(err)
-		} else if err := h.Holder.Close(); err != nil {
-			t.Fatal(err)
-		} else if err := os.Truncate(filepath.Join(h.Path(), "foo", "bar", ".meta"), 2); err != nil {
-			t.Fatal(err)
-		}
-
-		if err := h.Reopen(); err == nil || !strings.Contains(err.Error(), "open index: name=foo, err=opening fields: open field: name=bar, err=loading meta: unmarshaling: unexpected EOF") {
-			t.Fatalf("unexpected error: %s", err)
-		}
-	})
-	t.Run("ErrFieldAttrStoreCorrupt", func(t *testing.T) {
-		t.Skip("we don't open the holder directly from disk anymore; we use the etcd schema")
-		h := test.MustOpenHolder(t)
-		defer h.Close()
-
-		var idx *pilosa.Index
-		var err error
-		if idx, err = h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
-			t.Fatal(err)
-		}
-
-		if _, err := idx.CreateField("bar", pilosa.OptFieldTypeDefault()); err != nil {
-			t.Fatal(err)
-		} else if err := h.Holder.Close(); err != nil {
-			t.Fatal(err)
-		} else if err := os.Truncate(filepath.Join(h.Path(), "foo", "bar", pilosa.RowAttrsFileName), 2); err != nil {
-			t.Fatal(err)
-		}
-
-		if err := h.Reopen(); err == nil || !strings.Contains(err.Error(), "open index: name=foo, err=opening fields: open field: name=bar, err=opening attrstore: opening storage: invalid database") {
-			t.Fatalf("unexpected error: %s", err)
-		}
-	})
-
 	t.Run("ErrFragmentStoragePermission", func(t *testing.T) {
-		t.Skip("we don't open the holder directly from disk anymore; we use the etcd schema")
 		roaringOnlyTest(t)
 
 		if os.Geteuid() == 0 {
@@ -183,7 +107,6 @@ func TestHolder_Open(t *testing.T) {
 		}
 	})
 	t.Run("ErrFragmentStorageCorrupt", func(t *testing.T) {
-		t.Skip("we don't open the holder directly from disk anymore; we use the etcd schema")
 		roaringOnlyTest(t)
 
 		h := test.MustOpenHolder(t)
