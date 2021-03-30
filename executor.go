@@ -1308,9 +1308,6 @@ func (e *executor) executePercentile(ctx context.Context, qcx *Qcx, index string
 	if !ok {
 		return ValCount{}, errors.New("Percentile(): nth required")
 	}
-	if nthArg == nil {
-		return ValCount{}, errors.New("Percentile(): nth required")
-	}
 	switch nthArg := nthArg.(type) {
 	case pql.Decimal:
 		nthFloat = nthArg.Float64()
