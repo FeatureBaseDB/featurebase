@@ -616,7 +616,7 @@ func (c *Client) fetchFragmentNodes(indexName string, shard uint64) ([]fragmentN
 	if c.manualFragmentNode != nil {
 		return []fragmentNode{*c.manualFragmentNode}, nil
 	}
-	path := fmt.Sprintf("/pb.fragment/nodes?shard=%d&index=%s", shard, indexName)
+	path := fmt.Sprintf("/internal/fragment/nodes?shard=%d&index=%s", shard, indexName)
 	_, body, err := c.HTTPRequest("GET", path, []byte{}, nil)
 	if err != nil {
 		return nil, err
@@ -787,14 +787,14 @@ func (c *Client) readSchema() ([]SchemaIndex, error) {
 }
 
 func (c *Client) shardsMax() (map[string]uint64, error) {
-	_, data, err := c.HTTPRequest("GET", "/pb.shards/max", nil, nil)
+	_, data, err := c.HTTPRequest("GET", "/internal/shards/max", nil, nil)
 	if err != nil {
-		return nil, errors.Wrap(err, "requesting /pb.shards/max")
+		return nil, errors.Wrap(err, "requesting /internal/shards/max")
 	}
 	m := map[string]map[string]uint64{}
 	err = json.Unmarshal(data, &m)
 	if err != nil {
-		return nil, errors.Wrap(err, "unmarshaling /pb.shards/max data")
+		return nil, errors.Wrap(err, "unmarshaling /internal/shards/max data")
 	}
 	return m["standard"], nil
 }

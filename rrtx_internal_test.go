@@ -16,22 +16,24 @@ package pilosa
 
 import (
 	"testing"
+
+	. "github.com/pilosa/pilosa/v2/vprint" // nolint:staticcheck
 )
 
 func TestRoaring_HasData(t *testing.T) {
 	holder := newHolderWithTempPath(t, "roaring")
 
 	idx, err := holder.CreateIndex("i", IndexOptions{})
-	panicOn(err)
+	PanicOn(err)
 	defer idx.Close()
 
 	db, err := globalRoaringReg.OpenDBWrapper(idx.path, false, nil)
-	panicOn(err)
+	PanicOn(err)
 	db.SetHolder(idx.holder)
 
 	// HasData should start out false.
 	hasAnything, err := db.HasData()
-	panicOn(err)
+	PanicOn(err)
 
 	if hasAnything {
 		t.Fatalf("HasData reported existing data on an empty database")
@@ -45,10 +47,10 @@ func TestRoaring_HasData(t *testing.T) {
 	defer tx.Rollback()
 
 	f, err := idx.CreateField(field)
-	panicOn(err)
+	PanicOn(err)
 	_, err = f.SetBit(tx, 1, 1, nil)
-	panicOn(err)
-	panicOn(tx.Commit())
+	PanicOn(err)
+	PanicOn(tx.Commit())
 
 	hasAnything, err = db.HasData()
 	if err != nil {

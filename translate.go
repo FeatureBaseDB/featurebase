@@ -233,7 +233,7 @@ func NewMultiTranslateEntryReader(ctx context.Context, readers []TranslateEntryR
 func (r *MultiTranslateEntryReader) Close() error {
 	r.cancel()
 	for i := range r.readers {
-		r.readers[i].Close()
+		r.readers[i].Close() // nolint: errcheck
 	}
 	r.wg.Wait()
 	return nil

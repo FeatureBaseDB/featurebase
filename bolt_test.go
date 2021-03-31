@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/pilosa/pilosa/v2/roaring"
+	. "github.com/pilosa/pilosa/v2/vprint" // nolint:staticcheck
 )
 
 // helpers, each runs their own new txn, and commits if a change/delete
@@ -31,7 +32,7 @@ func BoltMustHaveBitvalue(dbwrap *BoltWrapper, index, field, view string, shard 
 	tx, _ := dbwrap.NewTx(!writable, index, Txo{})
 	defer tx.Rollback()
 	exists, err := tx.Contains(index, field, view, shard, bitvalue)
-	panicOn(err)
+	PanicOn(err)
 	if !exists {
 		panic(fmt.Sprintf("ARG bitvalue '%v' was NOT SET!!!", bitvalue))
 	}
@@ -44,7 +45,7 @@ func BoltMustNotHaveBitvalue(dbwrap *BoltWrapper, index, field, view string, sha
 	tx, _ := dbwrap.NewTx(!writable, index, Txo{})
 	defer tx.Rollback()
 	exists, err := tx.Contains(index, field, view, shard, bitvalue)
-	panicOn(err)
+	PanicOn(err)
 	if exists {
 		panic(fmt.Sprintf("ARG bitvalue '%v' WAS SET but should not have been.!!!", bitvalue))
 	}
@@ -59,36 +60,36 @@ func BoltMustSetBitvalue(dbwrap *BoltWrapper, index, field, view string, shard u
 	if changed != 1 {
 		panic("should have 1 bit changed")
 	}
-	panicOn(err)
+	PanicOn(err)
 
 	exists, err := tx.Contains(index, field, view, shard, putme)
-	panicOn(err)
+	PanicOn(err)
 	if !exists {
 		panic("ARG putme was NOT SET!!!")
 	}
-	panicOn(tx.Commit())
+	PanicOn(tx.Commit())
 }
 
 func BoltMustDeleteBitvalueContainer(dbwrap *BoltWrapper, index, field, view string, shard uint64, putme uint64) {
 	tx, _ := dbwrap.NewTx(writable, index, Txo{})
 	hi := highbits(putme)
-	panicOn(tx.RemoveContainer(index, field, view, shard, hi))
-	panicOn(tx.Commit())
+	PanicOn(tx.RemoveContainer(index, field, view, shard, hi))
+	PanicOn(tx.Commit())
 }
 
 func BoltMustDeleteBitvalue(dbwrap *BoltWrapper, index, field, view string, shard uint64, putme uint64) {
 	tx, _ := dbwrap.NewTx(writable, index, Txo{})
 	_, err := tx.Remove(index, field, view, shard, putme)
-	panicOn(err)
-	panicOn(tx.Commit())
+	PanicOn(err)
+	PanicOn(tx.Commit())
 }
 
 func mustOpenEmptyBoltWrapper(path string) (w *BoltWrapper, cleaner func()) {
 	var err error
 	fn := path
-	panicOn(os.RemoveAll(fn))
+	PanicOn(os.RemoveAll(fn))
 	ww, err := globalBoltReg.OpenDBWrapper(fn, DetectMemAccessPastTx, nil)
-	panicOn(err)
+	PanicOn(err)
 	w = ww.(*BoltWrapper)
 
 	// verify it is empty
@@ -99,7 +100,7 @@ func mustOpenEmptyBoltWrapper(path string) (w *BoltWrapper, cleaner func()) {
 
 	return w, func() {
 		w.Close()
-		panicOn(os.RemoveAll(fn))
+		PanicOn(os.RemoveAll(fn))
 	}
 }
 
@@ -126,28 +127,28 @@ func TestBolt_DeleteFragment(t *testing.T) {
 			if changed <= 0 {
 				panic("should have changed")
 			}
-			panicOn(err)
+			PanicOn(err)
 		}
 	}
 
 	for _, view := range views {
 		for _, v := range bits {
 			exists, err := tx.Contains(index, field, view, shard, v)
-			panicOn(err)
+			PanicOn(err)
 			if !exists {
 				panic("ARG bitvalue was NOT SET!!!")
 			}
 		}
 	}
 	err := tx.Commit()
-	panicOn(err)
+	PanicOn(err)
 
 	// end of setup
 
 	victim := "v1"
 	survivor := "v2"
 	err = dbwrap.DeleteFragment(index, field, victim, shard, nil)
-	panicOn(err)
+	PanicOn(err)
 
 	tx, _ = dbwrap.NewTx(!writable, index, Txo{})
 	defer tx.Rollback()
@@ -155,7 +156,7 @@ func TestBolt_DeleteFragment(t *testing.T) {
 	for _, view := range views {
 		for _, v := range bits {
 			exists, err := tx.Contains(index, field, view, shard, v)
-			panicOn(err)
+			PanicOn(err)
 			if view == survivor {
 				if !exists {
 					panic(fmt.Sprintf("ARG survivor died : bit %v", v))
@@ -209,7 +210,7 @@ func TestBolt_Max_on_many_containers(t *testing.T) {
 
 	for _, shard := range shards {
 		max, err := tx.Max(index, field, view, uint64(shard))
-		panicOn(err)
+		PanicOn(err)
 		if max != uint64(shard) {
 			panic(fmt.Sprintf("expected max (%v) to be == shard = %v", max, shard))
 		}
@@ -217,12 +218,12 @@ func TestBolt_Max_on_many_containers(t *testing.T) {
 
 	// check for not found
 	max, err := tx.Max(index, field, view, uint64(200))
-	panicOn(err)
+	PanicOn(err)
 	if max != 0 {
 		panic("expected not found to give 0 max back with nil err")
 	}
 	max, err = tx.Max(index, field, view, uint64(400))
-	panicOn(err)
+	PanicOn(err)
 	if max != 0 {
 		panic("expected not found to give 0 max back with nil err")
 	}
@@ -242,16 +243,16 @@ func TestBolt_SetBitmap(t *testing.T) {
 	if changed <= 0 {
 		panic("should have changed")
 	}
-	panicOn(err)
+	PanicOn(err)
 
 	exists, err := tx.Contains(index, field, view, shard, bitvalue)
-	panicOn(err)
+	PanicOn(err)
 	if !exists {
 		panic("ARG bitvalue was NOT SET!!!")
 	}
 
 	err = tx.Commit()
-	panicOn(err)
+	PanicOn(err)
 
 	//
 	// commited, so should be visible outside the txn
@@ -259,13 +260,13 @@ func TestBolt_SetBitmap(t *testing.T) {
 
 	tx2, _ := dbwrap.NewTx(!writable, index, Txo{})
 	exists, err = tx2.Contains(index, field, view, shard, bitvalue)
-	panicOn(err)
+	PanicOn(err)
 	if !exists {
 		panic("ARG bitvalue was NOT SET!!! on tx2")
 	}
 
 	n, err := tx2.Count(index, field, view, shard)
-	panicOn(err)
+	PanicOn(err)
 	if n != 1 {
 		panic(fmt.Sprintf("should have Count 1; instead n = %v", n))
 	}
@@ -284,28 +285,28 @@ func TestBolt_OffsetRange(t *testing.T) {
 	if changed <= 0 {
 		panic("should have changed")
 	}
-	panicOn(err)
+	PanicOn(err)
 
 	bitvalue2 := uint64(1<<20 + 1)
 	changed, err = tx.Add(index, field, view, shard, doBatched, bitvalue2)
 	if changed <= 0 {
 		panic("should have changed")
 	}
-	panicOn(err)
+	PanicOn(err)
 
 	exists, err := tx.Contains(index, field, view, shard, bitvalue)
-	panicOn(err)
+	PanicOn(err)
 	if !exists {
 		panic("ARG bitvalue was NOT SET!!!")
 	}
 	exists, err = tx.Contains(index, field, view, shard, bitvalue2)
-	panicOn(err)
+	PanicOn(err)
 	if !exists {
 		panic("ARG bitvalue2 was NOT SET!!!")
 	}
 
 	err = tx.Commit()
-	panicOn(err)
+	PanicOn(err)
 
 	offset := uint64(0 << 20)
 	start := uint64(0 << 16)
@@ -313,7 +314,7 @@ func TestBolt_OffsetRange(t *testing.T) {
 
 	tx2, _ := dbwrap.NewTx(!writable, index, Txo{})
 	rbm2, err := tx2.OffsetRange(index, field, view, shard, offset, start, endx)
-	panicOn(err)
+	PanicOn(err)
 	tx2.Rollback()
 
 	// should see our 1M value
@@ -327,7 +328,7 @@ func TestBolt_OffsetRange(t *testing.T) {
 	offset = uint64(2 << 20)
 	tx3, _ := dbwrap.NewTx(!writable, index, Txo{})
 	rbm3, err := tx3.OffsetRange(index, field, view, shard, offset, start, endx)
-	panicOn(err)
+	PanicOn(err)
 	tx3.Rollback()
 
 	//expect to see 3M == 3145728
@@ -357,7 +358,7 @@ func TestBolt_Count_on_many_containers(t *testing.T) {
 	defer tx.Rollback()
 
 	n, err := tx.Count(index, field, view, shard)
-	panicOn(err)
+	PanicOn(err)
 	if int(n) != len(putmeValues) {
 		panic(fmt.Sprintf("expected Count of %v but got n=%v", len(putmeValues), n))
 	}
@@ -374,7 +375,7 @@ func TestBolt_Count_dense_containers(t *testing.T) {
 	expected := 0
 	for i := uint64(0); i < (1<<16)+2; i += 2 {
 		changed, err := tx.Add(index, field, view, shard, doBatched, i)
-		panicOn(err)
+		PanicOn(err)
 		if changed <= 0 {
 			panic("wat? should have changed")
 		}
@@ -383,7 +384,7 @@ func TestBolt_Count_dense_containers(t *testing.T) {
 	defer tx.Rollback()
 
 	n, err := tx.Count(index, field, view, shard)
-	panicOn(err)
+	PanicOn(err)
 	if int(n) != expected {
 		panic(fmt.Sprintf("expected Count of %v but got n=%v", expected, n))
 	}
@@ -399,12 +400,12 @@ func TestBolt_ContainerIterator_on_empty(t *testing.T) {
 	defer tx.Rollback()
 	bitvalue := uint64(0)
 	citer, found, err := tx.ContainerIterator(index, field, view, shard, bitvalue)
-	panicOn(err)
+	PanicOn(err)
 	defer citer.Close()
 	if found {
 		panic("should not have found anything")
 	}
-	panicOn(err)
+	PanicOn(err)
 }
 
 func TestBolt_ContainerIterator_on_one_bit(t *testing.T) {
@@ -423,10 +424,10 @@ func TestBolt_ContainerIterator_on_one_bit(t *testing.T) {
 	if changed <= 0 {
 		panic("should have changed")
 	}
-	panicOn(err)
+	PanicOn(err)
 
 	exists, err := tx.Contains(index, field, view, shard, bitvalue)
-	panicOn(err)
+	PanicOn(err)
 	if !exists {
 		panic("ARG bitvalue was NOT SET!!!")
 	}
@@ -437,7 +438,7 @@ func TestBolt_ContainerIterator_on_one_bit(t *testing.T) {
 	if !found {
 		panic("ContainerIterator did not find the 42 bit")
 	}
-	panicOn(err)
+	PanicOn(err)
 	defer citer.Close()
 
 	loopCount := 0
@@ -481,10 +482,10 @@ func TestBolt_ContainerIterator_on_one_bit_fail_to_find(t *testing.T) {
 	if changed <= 0 {
 		panic("should have changed")
 	}
-	panicOn(err)
+	PanicOn(err)
 
 	exists, err := tx.Contains(index, field, view, shard, putme)
-	panicOn(err)
+	PanicOn(err)
 	if !exists {
 		panic("ARG putme was NOT SET!!!")
 	}
@@ -517,7 +518,7 @@ func TestBolt_ContainerIterator_on_one_bit_fail_to_find(t *testing.T) {
 			break
 		}
 	}
-	panicOn(err)
+	PanicOn(err)
 }
 
 func TestBolt_ContainerIterator_empty_iteration_loop(t *testing.T) {
@@ -536,10 +537,10 @@ func TestBolt_ContainerIterator_empty_iteration_loop(t *testing.T) {
 	if changed <= 0 {
 		panic("should have changed")
 	}
-	panicOn(err)
+	PanicOn(err)
 
 	exists, err := tx.Contains(index, field, view, shard, putme)
-	panicOn(err)
+	PanicOn(err)
 	if !exists {
 		panic("ARG putme was NOT SET!!!")
 	}
@@ -547,7 +548,7 @@ func TestBolt_ContainerIterator_empty_iteration_loop(t *testing.T) {
 	// same Tx, continues in use.
 
 	citer, found, err := tx.ContainerIterator(index, field, view, shard, highbits(searchme))
-	panicOn(err)
+	PanicOn(err)
 	if found {
 		panic("ContainerIterator found the searchme, when it should not have")
 	}
@@ -585,10 +586,10 @@ func TestBolt_ForEach_on_one_bit(t *testing.T) {
 	if changed <= 0 {
 		panic("should have changed")
 	}
-	panicOn(err)
+	PanicOn(err)
 
 	exists, err := tx.Contains(index, field, view, shard, bitvalue)
-	panicOn(err)
+	PanicOn(err)
 	if !exists {
 		panic("ARG bitvalue was NOT SET!!!")
 	}
@@ -602,7 +603,7 @@ func TestBolt_ForEach_on_one_bit(t *testing.T) {
 		count += 1
 		return nil
 	})
-	panicOn(err)
+	PanicOn(err)
 	if count != 1 {
 		panic(fmt.Sprintf("Expected single iteration got %v ", count))
 	}
@@ -637,7 +638,7 @@ func TestBolt_RemoveContainer_one_bit_test(t *testing.T) {
 		// delete, but rollback instead of commit
 		tx, _ := dbwrap.NewTx(writable, index, Txo{})
 		hi := highbits(putme)
-		panicOn(tx.RemoveContainer(index, field, view, shard, hi))
+		PanicOn(tx.RemoveContainer(index, field, view, shard, hi))
 		tx.Rollback()
 
 		// verify that the rollback undid the deletion.
@@ -648,15 +649,15 @@ func TestBolt_RemoveContainer_one_bit_test(t *testing.T) {
 		hi = highbits(putme)
 
 		exists, err := tx.Contains(index, field, view, shard, putme)
-		panicOn(err)
+		PanicOn(err)
 		if !exists {
 			panic(fmt.Sprintf("ARG putme '%v' was NOT SET!!!", putme))
 		}
 
-		panicOn(tx.RemoveContainer(index, field, view, shard, hi))
+		PanicOn(tx.RemoveContainer(index, field, view, shard, hi))
 
 		exists, err = tx.Contains(index, field, view, shard, putme)
-		panicOn(err)
+		PanicOn(err)
 		if exists {
 			panic(fmt.Sprintf("ARG putme '%v' was SET even after RemoveContiner in this txn.", putme))
 		}
@@ -700,7 +701,7 @@ func TestBolt_Remove_one_bit_test(t *testing.T) {
 		hi, lo := highbits(putme), lowbits(putme)
 		_, _ = hi, lo
 		_, err := tx.Remove(index, field, view, shard, hi)
-		panicOn(err)
+		PanicOn(err)
 		tx.Rollback()
 
 		// verify that the rollback undid the deletion.
@@ -710,7 +711,7 @@ func TestBolt_Remove_one_bit_test(t *testing.T) {
 		tx, _ = dbwrap.NewTx(writable, index, Txo{})
 
 		exists, err := tx.Contains(index, field, view, shard, putme)
-		panicOn(err)
+		PanicOn(err)
 		if !exists {
 			panic(fmt.Sprintf("ARG putme '%v' was NOT SET!!!", putme))
 		}
@@ -718,7 +719,7 @@ func TestBolt_Remove_one_bit_test(t *testing.T) {
 		mustRemove(tx.Remove(index, field, view, shard, putme))
 
 		exists, err = tx.Contains(index, field, view, shard, putme)
-		panicOn(err)
+		PanicOn(err)
 		if exists {
 			panic(fmt.Sprintf("ARG putme '%v' was SET even after Remove in this txn.", putme))
 		}
@@ -742,7 +743,7 @@ func TestBolt_Min_on_many_containers(t *testing.T) {
 	tx, _ := dbwrap.NewTx(!writable, index, Txo{})
 	min, containersExist, err := tx.Min(index, field, view, shard)
 	_ = min
-	panicOn(err)
+	PanicOn(err)
 	if containersExist {
 		panic("no containers should exist")
 	}
@@ -760,7 +761,7 @@ func TestBolt_Min_on_many_containers(t *testing.T) {
 	defer tx.Rollback()
 
 	min, containersExist, err = tx.Min(index, field, view, shard)
-	panicOn(err)
+	PanicOn(err)
 	if !containersExist {
 		panic("containers should exist")
 	}
@@ -779,7 +780,7 @@ func TestBolt_CountRange_on_many_containers(t *testing.T) {
 	// verify no containers flag works
 	tx, _ := dbwrap.NewTx(!writable, index, Txo{})
 	n, err := tx.CountRange(index, field, view, shard, 0, math.MaxUint64)
-	panicOn(err)
+	PanicOn(err)
 	if n != 0 {
 		panic("no containers should exist")
 	}
@@ -797,7 +798,7 @@ func TestBolt_CountRange_on_many_containers(t *testing.T) {
 	defer tx.Rollback()
 
 	n, err = tx.CountRange(index, field, view, shard, 0, math.MaxUint64)
-	panicOn(err)
+	PanicOn(err)
 	if n == 0 {
 		panic("containers should exist")
 	}
@@ -826,7 +827,7 @@ func TestBolt_CountRange_middle_container(t *testing.T) {
 
 	// pick out just the middle container with the 1 bit set on it.
 	n, err := tx.CountRange(index, field, view, shard, 4, (2<<16)+1)
-	panicOn(err)
+	PanicOn(err)
 	if n != 1 {
 		panic("middle 1 bit container should exist")
 	}
@@ -851,7 +852,7 @@ func TestBolt_CountRange_many_middle_container(t *testing.T) {
 
 	// get them all
 	n, err := tx.CountRange(index, field, view, shard, 0, (4<<16)+1)
-	panicOn(err)
+	PanicOn(err)
 	if n != 3 {
 		panic("count should have been all 3 bits")
 	}
@@ -879,7 +880,7 @@ func TestBolt_UnionInPlace(t *testing.T) {
 
 	tx2, _ := dbwrap.NewTx(!writable, index, Txo{})
 	n, err := tx2.Count(index, field, view, shard)
-	panicOn(err)
+	PanicOn(err)
 	if n != 2 {
 		panic("should have 2 bits set")
 	}
@@ -895,11 +896,11 @@ func TestBolt_UnionInPlace(t *testing.T) {
 	tx, _ := dbwrap.NewTx(writable, index, Txo{})
 	defer tx.Rollback()
 	err = tx.UnionInPlace(index, field, view, shard, others, others2, others3)
-	panicOn(err)
+	PanicOn(err)
 
 	// end game, check we got the union.
 	rbm, err := tx.RoaringBitmap(index, field, view, shard)
-	panicOn(err)
+	PanicOn(err)
 	n = rbm.Count()
 	if n != 7 {
 		panic("should have a total 3 + 3 +1 = 7 bits set on the containers")
@@ -921,7 +922,7 @@ func TestBolt_RoaringBitmap(t *testing.T) {
 	defer tx.Rollback()
 
 	rbm, err := tx.RoaringBitmap(index, field, view, shard)
-	panicOn(err)
+	PanicOn(err)
 
 	slc := rbm.Slice()
 	if slc[0] != uint64(expected) {
@@ -947,7 +948,7 @@ func TestBolt_ImportRoaringBits(t *testing.T) {
 	bits := []uint64{0, 2, 5, 1<<16 + 1, 2 << 16}
 	data := getTestBitmapAsRawRoaring(bits...)
 	itr, err := roaring.NewRoaringIterator(data)
-	panicOn(err)
+	PanicOn(err)
 	clear := false
 	logme := false
 
@@ -956,11 +957,11 @@ func TestBolt_ImportRoaringBits(t *testing.T) {
 	if changed != len(bits) {
 		panic(fmt.Sprintf("should have changed %v bits: changed='%v', rowSet='%#v', err='%v'", len(bits), changed, rowSet, err))
 	}
-	panicOn(err)
+	PanicOn(err)
 
 	for _, v := range bits {
 		exists, err := tx.Contains(index, field, view, shard, v)
-		panicOn(err)
+		PanicOn(err)
 		if !exists {
 			panic(fmt.Sprintf("ARG bitvalue was NOT SET!!! '%v'", v))
 		}
@@ -973,11 +974,11 @@ func TestBolt_ImportRoaringBits(t *testing.T) {
 	if changed != 0 {
 		panic(fmt.Sprintf("should have not changed any bits on the second import, but we see changed='%v', rowSet='%#v', err='%v'", changed, rowSet, err))
 	}
-	panicOn(err)
+	PanicOn(err)
 
 	for _, v := range bits {
 		exists, err := tx.Contains(index, field, view, shard, v)
-		panicOn(err)
+		PanicOn(err)
 		if !exists {
 			panic(fmt.Sprintf("ARG bitvalue was NOT SET!!! '%v'", v))
 		}
@@ -990,17 +991,17 @@ func TestBolt_ImportRoaringBits(t *testing.T) {
 		// clear 1 bit at a time
 		data := getTestBitmapAsRawRoaring(v)
 		itr, err := roaring.NewRoaringIterator(data)
-		panicOn(err)
+		PanicOn(err)
 
 		changed, rowSet, err := tx.ImportRoaringBits(index, field, view, shard, itr, clear, logme, rowSize, nil)
 		_ = rowSet
 		if changed != 1 {
 			panic(fmt.Sprintf("should have changed 1 bit: '%v', rowSet='%#v', err='%v'", changed, rowSet, err))
 		}
-		panicOn(err)
+		PanicOn(err)
 	}
 	n, err := tx.Count(index, field, view, shard)
-	panicOn(err)
+	PanicOn(err)
 	if n != 0 {
 		panic(fmt.Sprintf("n = %v not zero so the clearbits didn't happen!", n))
 	}
@@ -1027,12 +1028,12 @@ func TestBolt_ImportRoaringBits_set_nonoverlapping_bits(t *testing.T) {
 	bits := []uint64{0, 2, 1 << 16, 1<<16 + 2}
 	data := getTestBitmapAsRawRoaring(bits...)
 	itr, err := roaring.NewRoaringIterator(data)
-	panicOn(err)
+	PanicOn(err)
 
 	bits2 := []uint64{1, 2, 3, 1<<16 + 1, 1<<16 + 2, 1<<16 + 3} //, 5, 1<<16 + 1, 2 << 16}
 	data2 := getTestBitmapAsRawRoaring(bits2...)
 	itr2, err := roaring.NewRoaringIterator(data2)
-	panicOn(err)
+	PanicOn(err)
 
 	clear := false
 	logme := false
@@ -1042,11 +1043,11 @@ func TestBolt_ImportRoaringBits_set_nonoverlapping_bits(t *testing.T) {
 	if changed != len(bits) {
 		panic(fmt.Sprintf("should have changed %v bits: changed='%v', rowSet='%#v', err='%v'", len(bits), changed, rowSet, err))
 	}
-	panicOn(err)
+	PanicOn(err)
 
 	for _, v := range bits {
 		exists, err := tx.Contains(index, field, view, shard, v)
-		panicOn(err)
+		PanicOn(err)
 		if !exists {
 			panic(fmt.Sprintf("ARG bitvalue was NOT SET!!! '%v'", v))
 		}
@@ -1059,7 +1060,7 @@ func TestBolt_ImportRoaringBits_set_nonoverlapping_bits(t *testing.T) {
 	if changed != 4 {
 		panic(fmt.Sprintf("should have changed 2 bits: the 1 and the 3, but we see changed='%v', rowSet='%#v', err='%v'", changed, rowSet, err))
 	}
-	panicOn(err)
+	PanicOn(err)
 }
 
 func TestBolt_ImportRoaringBits_clear_nonoverlapping_bits(t *testing.T) {
@@ -1077,12 +1078,12 @@ func TestBolt_ImportRoaringBits_clear_nonoverlapping_bits(t *testing.T) {
 	bits := []uint64{0, 2, 1 << 16, 1<<16 + 2} //, 5, 1<<16 + 1, 2 << 16}
 	data := getTestBitmapAsRawRoaring(bits...)
 	itr, err := roaring.NewRoaringIterator(data)
-	panicOn(err)
+	PanicOn(err)
 
 	bits2 := []uint64{1, 2, 3, 1<<16 + 1, 1<<16 + 2, 1<<16 + 3} //, 5, 1<<16 + 1, 2 << 16}
 	data2 := getTestBitmapAsRawRoaring(bits2...)
 	itr2, err := roaring.NewRoaringIterator(data2)
-	panicOn(err)
+	PanicOn(err)
 
 	clear := false
 	logme := false
@@ -1092,11 +1093,11 @@ func TestBolt_ImportRoaringBits_clear_nonoverlapping_bits(t *testing.T) {
 	if changed != len(bits) {
 		panic(fmt.Sprintf("should have changed %v bits: changed='%v', rowSet='%#v', err='%v'", len(bits), changed, rowSet, err))
 	}
-	panicOn(err)
+	PanicOn(err)
 
 	for _, v := range bits {
 		exists, err := tx.Contains(index, field, view, shard, v)
-		panicOn(err)
+		PanicOn(err)
 		if !exists {
 			panic(fmt.Sprintf("ARG bitvalue was NOT SET!!! '%v'", v))
 		}
@@ -1110,10 +1111,10 @@ func TestBolt_ImportRoaringBits_clear_nonoverlapping_bits(t *testing.T) {
 	if changed != 2 {
 		panic(fmt.Sprintf("should have changed 1 bit: the 2, but we see changed='%v', rowSet='%#v', err='%v'", changed, rowSet, err))
 	}
-	panicOn(err)
+	PanicOn(err)
 
 	n, err := tx.Count(index, field, view, shard)
-	panicOn(err)
+	PanicOn(err)
 	if n != 2 { // just the 0 and the 1<<16 bits should be left set.
 		panic(fmt.Sprintf("n = %v not 2 so the clearbits didn't happen!", n))
 	}
@@ -1135,7 +1136,7 @@ func TestBolt_DeleteIndex(t *testing.T) {
 		if changed <= 0 {
 			panic("should have changed")
 		}
-		panicOn(err)
+		PanicOn(err)
 	}
 
 	index2 := "i2" // should not be deleted, even though it shares a prefix with 'i'
@@ -1143,38 +1144,38 @@ func TestBolt_DeleteIndex(t *testing.T) {
 	if changed <= 0 {
 		panic("should have changed")
 	}
-	panicOn(err)
+	PanicOn(err)
 
 	for _, v := range bits {
 		exists, err := tx.Contains(index, field, view, shard, v)
-		panicOn(err)
+		PanicOn(err)
 		if !exists {
 			panic("ARG bitvalue was NOT SET!!!")
 		}
 	}
 	exists, err := tx.Contains(index2, field, view, shard, bitvalue)
-	panicOn(err)
+	PanicOn(err)
 	if !exists {
 		panic("ARG bitvalue was NOT SET!!! on index2")
 	}
 	err = tx.Commit()
-	panicOn(err)
+	PanicOn(err)
 
 	// end of setup
 	err = dbwrap.DeleteIndex(index)
-	panicOn(err)
+	PanicOn(err)
 
 	tx, _ = dbwrap.NewTx(!writable, index2, Txo{})
 	defer tx.Rollback()
 	exists, err = tx.Contains(index2, field, view, shard, bitvalue)
-	panicOn(err)
+	PanicOn(err)
 	if !exists {
 		panic(fmt.Sprintf("after delete of '%v', another index '%v' was gone too?!?", index, index2))
 	}
 
 	for _, v := range bits {
 		exists, err = tx.Contains(index, field, view, shard, v)
-		panicOn(err)
+		PanicOn(err)
 		if exists {
 			allkeys := stringifiedBoltKeysTx(tx.(*BoltTx), false)
 			panic(fmt.Sprintf("after delete of index '%v', bit v=%v was not gone?!?; allkeys='%v'", index, v, allkeys))
@@ -1199,9 +1200,9 @@ func TestBolt_DeleteIndex_over100k(t *testing.T) {
 		if changed <= 0 {
 			panic("should have changed")
 		}
-		panicOn(err)
+		PanicOn(err)
 		if v%100000 == 0 {
-			panicOn(tx.Commit())
+			PanicOn(tx.Commit())
 			tx, _ = dbwrap.NewTx(writable, index, Txo{})
 		}
 	}
@@ -1211,25 +1212,25 @@ func TestBolt_DeleteIndex_over100k(t *testing.T) {
 	if changed <= 0 {
 		panic("should have changed")
 	}
-	panicOn(err)
+	PanicOn(err)
 	err = tx.Commit()
-	panicOn(err)
+	PanicOn(err)
 
 	// end of setup
 	err = dbwrap.DeleteIndex(index)
-	panicOn(err)
+	PanicOn(err)
 
 	tx, _ = dbwrap.NewTx(!writable, index2, Txo{})
 	defer tx.Rollback()
 	exists, err := tx.Contains(index2, field, view, shard, bitvalue)
-	panicOn(err)
+	PanicOn(err)
 	if !exists {
 		panic(fmt.Sprintf("after delete of '%v', another index '%v' was gone too?!?", index, index2))
 	}
 
 	for v := uint64(0); v < limit; v++ {
 		exists, err = tx.Contains(index, field, view, shard, v<<16)
-		panicOn(err)
+		PanicOn(err)
 		if exists {
 			allkeys := stringifiedBoltKeysTx(tx.(*BoltTx), false)
 			panic(fmt.Sprintf("after delete of index '%v', bit v=%v was not gone?!?; allkeys='%v'", index, v, allkeys))

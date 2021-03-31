@@ -38,6 +38,7 @@ import (
 	"github.com/pilosa/pilosa/v2/testhook"
 	"github.com/pilosa/pilosa/v2/topology"
 	"github.com/pilosa/pilosa/v2/tracing"
+	. "github.com/pilosa/pilosa/v2/vprint" // nolint:staticcheck
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -311,7 +312,7 @@ func NewHolder(path string, cfg *HolderConfig) *Holder {
 	storage.SetRowCacheOn(cfg.RowcacheOn)
 
 	txf, err := NewTxFactory(cfg.StorageConfig.Backend, h.IndexesPath(), h)
-	panicOn(err)
+	PanicOn(err)
 	h.txf = txf
 	h.txf.blueGreenOffIfRunningBlueGreen()
 

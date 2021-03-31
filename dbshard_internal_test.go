@@ -25,6 +25,7 @@ import (
 	"github.com/pilosa/pilosa/v2/shardwidth"
 	txkey "github.com/pilosa/pilosa/v2/short_txkey"
 	"github.com/pilosa/pilosa/v2/testhook"
+	. "github.com/pilosa/pilosa/v2/vprint" // nolint:staticcheck
 )
 
 // Shard per db evaluation
@@ -51,7 +52,7 @@ func TestShardPerDB_SetBit(t *testing.T) {
 	}
 
 	// commit the change, and verify it is still there
-	panicOn(tx.Commit())
+	PanicOn(tx.Commit())
 
 	// Close and reopen the fragment & verify the data.
 	err := f.Reopen() // roaring data not being flushed? red on roaring
@@ -71,7 +72,7 @@ func TestShardPerDB_SetBit(t *testing.T) {
 // test that we find all *local* shards
 func Test_DBPerShard_GetShardsForIndex_LocalOnly(t *testing.T) {
 	tmpdir, err := testhook.TempDir(t, "Test_DBPerShard_GetShardsForIndex_LocalOnly")
-	panicOn(err)
+	PanicOn(err)
 	defer os.RemoveAll(tmpdir)
 
 	v2s := NewFieldView2Shards()
@@ -92,13 +93,13 @@ func Test_DBPerShard_GetShardsForIndex_LocalOnly(t *testing.T) {
 		idx := makeSampleRoaringDir(t, tmpdir, index, src, 1, holder, v2s)
 		if idx == nil {
 			idx, err = NewIndex(holder, filepath.Join(tmpdir, index), index)
-			panicOn(err)
+			PanicOn(err)
 		}
 		estd := "rick/fields/_exists/views/standard"
 		std := "rick/fields/f/views/standard"
 
 		shards, err := holder.txf.GetShardsForIndex(idx, tmpdir+sep+std, false)
-		panicOn(err)
+		PanicOn(err)
 
 		for _, shard := range []uint64{93, 223, 221, 215, 219, 217} {
 			if !shards[shard] {
@@ -108,7 +109,7 @@ func Test_DBPerShard_GetShardsForIndex_LocalOnly(t *testing.T) {
 		if src == "roaring" {
 			// check estd too
 			shards, err = holder.txf.GetShardsForIndex(idx, tmpdir+sep+estd, false)
-			panicOn(err)
+			PanicOn(err)
 			for _, shard := range []uint64{93, 223, 221, 215, 219, 217} {
 				if !shards[shard] {
 					panic(fmt.Sprintf("missing shard=%v from shards='%#v'", shard, shards))
@@ -117,12 +118,12 @@ func Test_DBPerShard_GetShardsForIndex_LocalOnly(t *testing.T) {
 
 			// check GetSortedFieldViewList() and roaringGetFieldView2Shards()
 			vs, err := roaringGetFieldView2Shards(idx)
-			panicOn(err)
+			PanicOn(err)
 
 			for _, shard := range []uint64{93, 223, 221, 215, 219, 217} {
 				tx := idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Shard: shard})
 				fvs, err := tx.GetSortedFieldViewList(idx, shard)
-				panicOn(err)
+				PanicOn(err)
 				// expect these same two field/views for all 6 shards
 				expect0 := txkey.FieldView{Field: "_exists", View: "standard"}
 				expect1 := txkey.FieldView{Field: "f", View: "standard"}
@@ -149,7 +150,7 @@ func Test_DBPerShard_GetShardsForIndex_LocalOnly(t *testing.T) {
 			for _, shard := range []uint64{93, 223, 221, 215, 219, 217} {
 				tx := idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Shard: shard})
 				fvs, err := tx.GetSortedFieldViewList(idx, shard)
-				panicOn(err)
+				PanicOn(err)
 				// expect these same two field/views for all 6 shards
 				expect0 := txkey.FieldView{Field: "_exists", View: "standard"}
 				expect1 := txkey.FieldView{Field: "f", View: "standard"}
@@ -242,12 +243,12 @@ func makeSampleRoaringDir(t *testing.T, root, index, backend string, minBytes in
 		}
 
 		path := root + sep + filepath.Dir(fn)
-		panicOn(os.MkdirAll(path, 0755))
+		PanicOn(os.MkdirAll(path, 0755))
 		fd, err := os.Create(root + sep + fn)
-		panicOn(err)
+		PanicOn(err)
 		if minBytes > 0 {
 			_, err := fd.Write(make([]byte, minBytes))
-			panicOn(err)
+			PanicOn(err)
 		}
 		fd.Close()
 	}
@@ -256,10 +257,10 @@ func makeSampleRoaringDir(t *testing.T, root, index, backend string, minBytes in
 
 func helperCreateDBShard(h *Holder, index string, shard uint64) *Index {
 	idx, err := h.CreateIndexIfNotExists(index, IndexOptions{})
-	panicOn(err)
+	PanicOn(err)
 	// TODO: It's not clear that this is actually doing anything.
 	dbs, err := h.txf.dbPerShard.GetDBShard(index, shard, idx)
-	panicOn(err)
+	PanicOn(err)
 	_ = dbs
 	return idx
 }
@@ -280,20 +281,20 @@ func makeRBFtestDB(path string, h *Holder, shard uint64) {
 
 	db := rbf.NewDB(path, nil)
 	err := db.Open()
-	panicOn(err)
+	PanicOn(err)
 	defer db.Close()
 
 	tx, err := db.Begin(true)
-	panicOn(err)
+	PanicOn(err)
 
 	err = tx.CreateBitmap("x")
-	panicOn(err)
+	PanicOn(err)
 
 	_, err = tx.Add("x", i)
-	panicOn(err)
+	PanicOn(err)
 
 	err = tx.Commit()
-	panicOn(err)
+	PanicOn(err)
 }
 
 func makeTxTestDBWithViewsShards(holder *Holder, idx *Index, exp *FieldView2Shards) {
@@ -310,12 +311,12 @@ func makeTxTestDBWithViewsShards(holder *Holder, idx *Index, exp *FieldView2Shar
 				bits := []uint64{(shard << shardwidth.Exponent) + 1}
 				tx := idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Shard: shard})
 				changeCount, err := tx.Add(idx.name, field, view, shard, batched, bits...)
-				panicOn(err)
+				PanicOn(err)
 				if changeCount != len(bits) {
 					panic(fmt.Sprintf("writing field '%v', view '%v' shard '%v', expected changeCount to equal len bits = %v but was %v", field, view, shard, len(bits), changeCount))
 				}
 
-				panicOn(tx.Commit())
+				PanicOn(tx.Commit())
 			}
 		}
 	}
@@ -325,7 +326,7 @@ func makeTxTestDBWithViewsShards(holder *Holder, idx *Index, exp *FieldView2Shar
 // test that rbf can give us a map[view]*shardSet
 func Test_DBPerShard_GetFieldView2Shards_map_from_RBF(t *testing.T) {
 	tmpdir, err := testhook.TempDir(t, "Test_DBPerShard_GetFieldView2Shards_map_from_RBF")
-	panicOn(err)
+	PanicOn(err)
 	defer os.RemoveAll(tmpdir)
 
 	cfg := mustHolderConfig()
@@ -343,7 +344,7 @@ func Test_DBPerShard_GetFieldView2Shards_map_from_RBF(t *testing.T) {
 	}
 
 	idx, err := holder.createIndex(cim, false)
-	panicOn(err)
+	PanicOn(err)
 
 	exp := NewFieldView2Shards()
 
@@ -360,7 +361,7 @@ func Test_DBPerShard_GetFieldView2Shards_map_from_RBF(t *testing.T) {
 
 	// setup is done
 	view2shard, err := holder.txf.GetFieldView2ShardsMapForIndex(idx)
-	panicOn(err)
+	PanicOn(err)
 
 	// compare against setup
 	if !view2shard.equals(exp) {

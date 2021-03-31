@@ -24,6 +24,7 @@ import (
 	_ "net/http/pprof" // Imported for its side-effect of registering pprof endpoints with the server.
 
 	"github.com/pilosa/pilosa/v2/storage"
+	. "github.com/pilosa/pilosa/v2/vprint" // nolint:staticcheck
 )
 
 // CPUProfileForDur (where "Dur" is short for "Duration"), is used for
@@ -37,7 +38,7 @@ func CPUProfileForDur(dur time.Duration, outpath string) {
 	}
 	path := outpath + "." + backend
 	f, err := os.Create(path)
-	panicOn(err)
+	PanicOn(err)
 
 	if dur == 0 {
 		dur = time.Minute
@@ -63,7 +64,7 @@ func MemProfileForDur(dur time.Duration, outpath string) {
 	}
 	path := outpath + "." + backend
 	f, err := os.Create(path)
-	panicOn(err)
+	PanicOn(err)
 
 	if dur == 0 {
 		dur = time.Minute
@@ -73,7 +74,7 @@ func MemProfileForDur(dur time.Duration, outpath string) {
 		<-time.After(dur)
 		runtime.GC() // get up-to-date statistics
 		if err := pprof.WriteHeapProfile(f); err != nil {
-			panic(fmt.Sprintf("could not write memory profile: %v", err))
+			PanicOn(fmt.Sprintf("could not write memory profile: %v", err))
 		}
 		f.Close()
 		AlwaysPrintf("wrote memory profile after dur '%v', output: '%v'", dur, path)
@@ -91,7 +92,7 @@ var _ = pprofProfile{}
 func newPprof() (pp *pprofProfile) {
 	pp = &pprofProfile{}
 	f, err := os.Create("cpu.manual.pprof")
-	panicOn(err)
+	PanicOn(err)
 	pp.fdCpu = f
 
 	_ = pprof.StartCPUProfile(pp.fdCpu)
@@ -104,11 +105,11 @@ func (pp *pprofProfile) Close() {
 	pp.fdCpu.Close()
 
 	f, err := os.Create("mem.manual.pprof")
-	panicOn(err)
+	PanicOn(err)
 
 	runtime.GC() // get up-to-date statistics
 	if err := pprof.WriteHeapProfile(f); err != nil {
-		panic(fmt.Sprintf("could not write memory profile: %v", err))
+		PanicOn(fmt.Sprintf("could not write memory profile: %v", err))
 	}
 	f.Close()
 }

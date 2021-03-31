@@ -31,6 +31,7 @@ import (
 	"github.com/pilosa/pilosa/v2/roaring"
 	txkey "github.com/pilosa/pilosa/v2/short_txkey"
 	"github.com/pilosa/pilosa/v2/storage"
+	. "github.com/pilosa/pilosa/v2/vprint" // nolint:staticcheck
 	"github.com/pkg/errors"
 	"github.com/zeebo/blake3"
 )
@@ -140,7 +141,7 @@ func (q *Qcx) Finish() (err error) {
 	defer q.mu.Unlock()
 	if q.RequiredForAtomicWriteTx != nil {
 		if q.RequiredTxo.Write {
-			err = (*q.RequiredForAtomicWriteTx).Commit() // panic here on 2nd. is this a double commit?
+			err = (*q.RequiredForAtomicWriteTx).Commit() // PanicOn here on 2nd. is this a double commit?
 		} else {
 			(*q.RequiredForAtomicWriteTx).Rollback()
 		}
@@ -173,7 +174,7 @@ func (q *Qcx) Reset() {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	if !q.done {
-		panic("must call Qcx.Abort() or Qcx.Finish() before calling Reset().")
+		PanicOn("must call Qcx.Abort() or Qcx.Finish() before calling Reset().")
 	}
 	q.unprotected_reset()
 }
@@ -270,16 +271,16 @@ func (qcx *Qcx) GetTx(o Txo) (tx Tx, finisher func(perr *error), err error) {
 		// verify that shard and index match!
 		ro := qcx.RequiredTxo
 		if o.Shard != ro.Shard {
-			panic(fmt.Sprintf("shard mismatch: o.Shard = %v while qcx.RequiredTxo.Shard = %v", o.Shard, ro.Shard))
+			PanicOn(fmt.Sprintf("shard mismatch: o.Shard = %v while qcx.RequiredTxo.Shard = %v", o.Shard, ro.Shard))
 		}
 		if o.Index == nil {
-			panic("o.Index annot be nil")
+			PanicOn("o.Index annot be nil")
 		}
 		if ro.Index == nil {
-			panic("ro.Index annot be nil")
+			PanicOn("ro.Index annot be nil")
 		}
 		if o.Index.name != ro.Index.name {
-			panic(fmt.Sprintf("index mismatch: o.Index = %v while qcx.RequiredTxo.Index = %v", o.Index.name, ro.Index.name))
+			PanicOn(fmt.Sprintf("index mismatch: o.Index = %v while qcx.RequiredTxo.Index = %v", o.Index.name, ro.Index.name))
 		}
 		return *qcx.RequiredForAtomicWriteTx, NoopFinisher, nil
 	}
@@ -311,7 +312,7 @@ func (qcx *Qcx) GetTx(o Txo) (tx Tx, finisher func(perr *error), err error) {
 			// so defer finisher(nil) means always Commit writes, ignoring
 			// the enclosing functions return status.
 			if perr == nil || *perr == nil {
-				panicOn(tx.Commit())
+				PanicOn(tx.Commit())
 			} else {
 				tx.Rollback()
 			}
@@ -330,7 +331,7 @@ func (qcx *Qcx) GetTx(o Txo) (tx Tx, finisher func(perr *error), err error) {
 // to this shard/index will re-use it.
 func (qcx *Qcx) StartAtomicWriteTx(o Txo) {
 	if !o.Write {
-		panic("must have o.Write true")
+		PanicOn("must have o.Write true")
 	}
 	qcx.mu.Lock()
 	defer qcx.mu.Unlock()
@@ -349,22 +350,22 @@ func (qcx *Qcx) StartAtomicWriteTx(o Txo) {
 	// verify that shard and index match!
 	ro := qcx.RequiredTxo
 	if o.Shard != ro.Shard {
-		panic(fmt.Sprintf("shard mismatch: o.Shard = %v while qcx.RequiredTxo.Shard = %v", o.Shard, ro.Shard))
+		PanicOn(fmt.Sprintf("shard mismatch: o.Shard = %v while qcx.RequiredTxo.Shard = %v", o.Shard, ro.Shard))
 	}
 	if o.Index == nil {
-		panic("o.Index annot be nil")
+		PanicOn("o.Index annot be nil")
 	}
 	if ro.Index == nil {
-		panic("ro.Index annot be nil")
+		PanicOn("ro.Index annot be nil")
 	}
 	if o.Index.name != ro.Index.name {
-		panic(fmt.Sprintf("index mismatch: o.Index = %v while qcx.RequiredTxo.Index = %v", o.Index.name, ro.Index.name))
+		PanicOn(fmt.Sprintf("index mismatch: o.Index = %v while qcx.RequiredTxo.Index = %v", o.Index.name, ro.Index.name))
 	}
 }
 
 func (qcx *Qcx) SetRequiredForAtomicWriteTx(tx Tx) {
 	if tx == nil || NilInside(tx) {
-		panic("cannot set nil tx in SetRequiredForAtomicWriteTx")
+		PanicOn("cannot set nil tx in SetRequiredForAtomicWriteTx")
 	}
 	qcx.mu.Lock()
 	qcx.RequiredForAtomicWriteTx = &tx
@@ -436,7 +437,8 @@ func (ty txtype) DirectoryName() string {
 	case boltTxn:
 		return "boltdb"
 	}
-	panic(fmt.Sprintf("unkown txtype %v", int(ty)))
+	PanicOn(fmt.Sprintf("unkown txtype %v", int(ty)))
+	return ""
 }
 
 func (txf *TxFactory) NeedsSnapshot() (b bool) {
@@ -455,7 +457,7 @@ func MustBackendToTxtype(backend string) (types []txtype) {
 	if strings.Contains(backend, "_") {
 		srcs = strings.Split(backend, "_")
 		if len(srcs) != 2 {
-			panic("only two blue-green comparisons permitted")
+			PanicOn("only two blue-green comparisons permitted")
 		}
 	} else {
 		srcs = append(srcs, backend)
@@ -470,11 +472,11 @@ func MustBackendToTxtype(backend string) (types []txtype) {
 		case BoltTxn: // "bolt"
 			types = append(types, boltTxn)
 		default:
-			panic(fmt.Sprintf("unknown backend '%v'", s))
+			PanicOn(fmt.Sprintf("unknown backend '%v'", s))
 		}
 		if i == 1 {
 			if types[1] == types[0] {
-				panic(fmt.Sprintf("cannot blue-green the same backend on both arms: '%v'", s))
+				PanicOn(fmt.Sprintf("cannot blue-green the same backend on both arms: '%v'", s))
 			}
 		}
 	}
@@ -796,7 +798,7 @@ type grpkey struct {
 
 func mustHaveIndexShard(o *Txo) {
 	if o.Index == nil || o.Index.name == "" {
-		panic("index must be set on Txo")
+		PanicOn("index must be set on Txo")
 	}
 }
 
@@ -843,10 +845,10 @@ func (g *TxGroup) AddTx(tx Tx) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if g.finished {
-		panic("in TxGroup.Finish(): TxGroup already finished")
+		PanicOn("in TxGroup.Finish(): TxGroup already finished")
 	}
 	if NilInside(tx) {
-		panic("Cannot add nil Tx to TxGroup")
+		PanicOn("Cannot add nil Tx to TxGroup")
 	}
 
 	if tx.Readonly() {
@@ -860,7 +862,7 @@ func (g *TxGroup) AddTx(tx Tx) {
 	key := grpkey{write: o.Write, index: o.Index.name, shard: o.Shard}
 	prior, ok := g.all[key]
 	if ok {
-		panic(fmt.Sprintf("already have Tx in group for this, we should have re-used it! prior is '%v'; tx='%v'", prior, tx))
+		PanicOn(fmt.Sprintf("already have Tx in group for this, we should have re-used it! prior is '%v'; tx='%v'", prior, tx))
 	}
 	g.all[key] = tx
 }
@@ -872,7 +874,7 @@ func (g *TxGroup) FinishGroup() (err error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if g.finished {
-		panic("in TxGroup.Finish(): TxGroup already finished")
+		PanicOn("in TxGroup.Finish(): TxGroup already finished")
 	}
 	g.finished = true
 	for i, tx := range g.writes {
@@ -930,20 +932,20 @@ func (f *TxFactory) NewTx(o Txo) (txn Tx) {
 
 	if o.Fragment != nil {
 		if o.Fragment.index() != indexName {
-			panic(fmt.Sprintf("inconsistent NewTx request: o.Fragment.index='%v' but indexName='%v'", o.Fragment.index(), indexName))
+			PanicOn(fmt.Sprintf("inconsistent NewTx request: o.Fragment.index='%v' but indexName='%v'", o.Fragment.index(), indexName))
 		}
 		if o.Fragment.shard != o.Shard {
-			panic(fmt.Sprintf("inconsistent NewTx request: o.Fragment.shard='%v' but o.Shard='%v'", o.Fragment.shard, o.Shard))
+			PanicOn(fmt.Sprintf("inconsistent NewTx request: o.Fragment.shard='%v' but o.Shard='%v'", o.Fragment.shard, o.Shard))
 		}
 	}
 
 	// look up in the collection of open databases, and get our
 	// per-shard database. Opens a new one if needed.
 	dbs, err := f.dbPerShard.GetDBShard(indexName, o.Shard, o.Index)
-	panicOn(err)
+	PanicOn(err)
 
 	if dbs.Shard != o.Shard {
-		panic(fmt.Sprintf("asked for o.Shard=%v but got dbs.Shard=%v", int(o.Shard), int(dbs.Shard)))
+		PanicOn(fmt.Sprintf("asked for o.Shard=%v but got dbs.Shard=%v", int(o.Shard), int(dbs.Shard)))
 	}
 	//vv("got dbs='%p' for o.Index='%v'; shard='%v'; dbs.types='%#v'; dbs.W='%#v'", dbs, o.Index.name, o.Shard, dbs.types, dbs.W)
 
@@ -952,7 +954,7 @@ func (f *TxFactory) NewTx(o Txo) (txn Tx) {
 
 	tx, err := dbs.NewTx(o.Write, indexName, o)
 	if err != nil {
-		panic(errors.Wrap(err, "dbs.NewTx transaction errored"))
+		PanicOn(errors.Wrap(err, "dbs.NewTx transaction errored"))
 	}
 	return tx
 }
@@ -969,7 +971,8 @@ func (ty txtype) String() string {
 	case boltTxn:
 		return "bolt"
 	}
-	panic(fmt.Sprintf("unhandled ty '%v' in txtype.String()", int(ty)))
+	PanicOn(fmt.Sprintf("unhandled ty '%v' in txtype.String()", int(ty)))
+	return ""
 }
 
 // fragmentSpecFromRoaringPath takes a path releative to the
@@ -1007,7 +1010,7 @@ func fragmentSpecFromRoaringPath(path string) (field, view string, shard uint64,
 // showOps means display the ops log.
 func (idx *Index) StringifiedRoaringKeys(hashOnly, showOps bool, o Txo) (r string) {
 	paths, err := listFilesUnderDir(idx.path, false, "", true)
-	panicOn(err)
+	PanicOn(err)
 	index := idx.name
 
 	r = "allkeys:[\n"
@@ -1023,7 +1026,7 @@ func (idx *Index) StringifiedRoaringKeys(hashOnly, showOps bool, o Txo) (r strin
 		abspath := idx.path + sep + relpath
 
 		s, _, err := stringifiedRawRoaringFragment(abspath, index, field, view, shard, showOps, hashOnly, os.Stdout)
-		panicOn(err)
+		PanicOn(err)
 		//r += fmt.Sprintf("path:'%v' fragment contains:\n") + s
 		//if s == "" {
 		//s = "<empty bitmap>"
@@ -1044,7 +1047,7 @@ func RoaringFragmentChecksum(path string, index, field, view string, shard uint6
 	defer func() {
 		r := recover()
 		if r != nil {
-			panic(fmt.Sprintf("caught panic on path='%v', index='%v', field='%v', view='%v', shard='%v': %v",
+			PanicOn(fmt.Sprintf("caught PanicOn on path='%v', index='%v', field='%v', view='%v', shard='%v': %v",
 				path, index, field, view, shard, r))
 		}
 	}()
@@ -1052,7 +1055,7 @@ func RoaringFragmentChecksum(path string, index, field, view string, shard uint6
 	showOps := false
 	hashOnly := true
 	hash, hotbits, err := stringifiedRawRoaringFragment(path, index, field, view, shard, showOps, hashOnly, hasher)
-	panicOn(err)
+	PanicOn(err)
 	fmt.Fprintf(hasher, "%v/%v/%v/%v/%v", index, field, view, shard, hash)
 	var buf [16]byte
 	_, _ = hasher.Digest().Read(buf[0:])
@@ -1066,14 +1069,14 @@ func stringifiedRawRoaringFragment(path string, index, field, view string, shard
 	_ = info
 	var f *os.File
 	f, err = os.Open(path)
-	panicOn(err)
+	PanicOn(err)
 	if err != nil {
 		return
 	}
 
 	var fi os.FileInfo
 	fi, err = f.Stat()
-	panicOn(err)
+	PanicOn(err)
 	if err != nil {
 		return
 	}
@@ -1086,9 +1089,9 @@ func stringifiedRawRoaringFragment(path string, index, field, view string, shard
 	defer func() {
 		err := syscall.Munmap(data)
 		if err != nil {
-			panic(fmt.Errorf("loadRawRoaringContainer: munmap failed: %v", err))
+			PanicOn(fmt.Errorf("loadRawRoaringContainer: munmap failed: %v", err))
 		}
-		panicOn(f.Close())
+		PanicOn(f.Close())
 	}()
 
 	// Attach the mmap file to the bitmap.
@@ -1115,7 +1118,7 @@ func stringifiedRawRoaringFragment(path string, index, field, view string, shard
 	}
 
 	citer, found := rbm.Containers.Iterator(0)
-	_ = found // probably gonna use just the Ops log instead, so don't panic if !found.
+	_ = found // probably gonna use just the Ops log instead, so don't PanicOn if !found.
 
 	for citer.Next() {
 		ckey, ct := citer.Value()
@@ -1162,7 +1165,7 @@ func listFilesUnderDir(root string, includeRoot bool, requiredSuffix string, ign
 			// ignore
 		} else {
 			if info == nil {
-				panic(fmt.Sprintf("info was nil for path = '%v'", path))
+				PanicOn(fmt.Sprintf("info was nil for path = '%v'", path))
 			}
 			if info.IsDir() {
 				// skip directories.
@@ -1205,7 +1208,7 @@ func containerToBytes(ct *roaring.Container) []byte {
 	ty := roaring.ContainerType(ct)
 	switch ty {
 	case roaring.ContainerNil:
-		panic("nil roaring.Container")
+		PanicOn("nil roaring.Container")
 	case roaring.ContainerArray:
 		return fromArray16(roaring.AsArray(ct))
 	case roaring.ContainerBitmap:
@@ -1213,7 +1216,8 @@ func containerToBytes(ct *roaring.Container) []byte {
 	case roaring.ContainerRun:
 		return fromInterval16(roaring.AsRuns(ct))
 	}
-	panic(fmt.Sprintf("unknown roaring.Container type '%v'", int(ty)))
+	PanicOn(fmt.Sprintf("unknown roaring.Container type '%v'", int(ty)))
+	return nil
 }
 
 type pointerContext struct {
@@ -1374,7 +1378,9 @@ func (f *TxFactory) greenHasData() (hasData bool, err error) {
 	case 2:
 		return f.dbPerShard.HasData(1)
 	}
-	panic(fmt.Sprintf("unsupported len(f.types): %v. Must be 1 or 2.", n))
+	err = fmt.Errorf("unsupported len(f.types): %v. Must be 1 or 2.", n)
+	PanicOn(err)
+	return
 }
 
 // green2blue is called at the very end of Holder.Open(), so
@@ -1461,7 +1467,7 @@ indexloop:
 		if verifyInsteadOfCopy {
 			diff := f.shardSetDiff(blueShards, greenShards)
 			if diff != "" {
-				return fmt.Errorf("verifyInsteadOfCopy true, blue[%v]=%#v and green[%v]=%#v have different shards for index '%v': '%v'; stack=\n%v", blueDest, blueShards, greenSrc, greenShards, idx.name, diff, stack())
+				return fmt.Errorf("verifyInsteadOfCopy true, blue[%v]=%#v and green[%v]=%#v have different shards for index '%v': '%v'; stack=\n%v", blueDest, blueShards, greenSrc, greenShards, idx.name, diff, Stack())
 			}
 
 			// can also check against meta data

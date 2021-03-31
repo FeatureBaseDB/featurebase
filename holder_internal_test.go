@@ -22,6 +22,7 @@ import (
 
 	"github.com/pilosa/pilosa/v2/disco"
 	"github.com/pilosa/pilosa/v2/testhook"
+	. "github.com/pilosa/pilosa/v2/vprint" // nolint:staticcheck
 )
 
 var _ = fmt.Printf
@@ -113,7 +114,7 @@ func testMustHaveBit(t *testing.T, h *Holder, index, field string, rowID, column
 
 	// hmm... if its a new holder, meta data isn't there, so ask for it.
 	idx, err := h.CreateIndexIfNotExists(index, IndexOptions{})
-	panicOn(err)
+	PanicOn(err)
 
 	f := idx.Field(field)
 	if f == nil {

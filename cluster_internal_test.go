@@ -29,6 +29,7 @@ import (
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/testhook"
 	"github.com/pilosa/pilosa/v2/topology"
+	. "github.com/pilosa/pilosa/v2/vprint" // nolint:staticcheck
 )
 
 // GlobalPortMap avoids many races and port conflicts when setting
@@ -137,7 +138,7 @@ func newHolderWithTempPath(tb testing.TB, backend string) *Holder {
 	cfg := mustHolderConfig()
 	cfg.StorageConfig.Backend = backend
 	h := NewHolder(path, cfg)
-	panicOn(h.Open())
+	PanicOn(h.Open())
 	testhook.Cleanup(tb, func() {
 		h.Close()
 	})
@@ -151,7 +152,7 @@ func newIndexWithTempPath(tb testing.TB, name string) *Index {
 		panic(err)
 	}
 	h := NewHolder(path, nil)
-	panicOn(h.Open())
+	PanicOn(h.Open())
 	index, err := h.CreateIndex(name, IndexOptions{})
 	testhook.Cleanup(tb, func() {
 		h.Close()
@@ -232,7 +233,7 @@ func TestFragSources(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	panicOn(tx.Commit())
+	PanicOn(tx.Commit())
 
 	shard = 1
 	tx = idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Shard: shard})
@@ -241,7 +242,7 @@ func TestFragSources(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	panicOn(tx.Commit())
+	PanicOn(tx.Commit())
 
 	shard = 2
 	tx = idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Shard: shard})
@@ -251,7 +252,7 @@ func TestFragSources(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	panicOn(tx.Commit())
+	PanicOn(tx.Commit())
 
 	shard = 3
 	tx = idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Shard: shard})
@@ -261,7 +262,7 @@ func TestFragSources(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	panicOn(tx.Commit())
+	PanicOn(tx.Commit())
 
 	tests := []struct {
 		from     *cluster

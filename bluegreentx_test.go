@@ -24,6 +24,8 @@ import (
 	"testing"
 
 	cryrand "crypto/rand"
+
+	. "github.com/pilosa/pilosa/v2/vprint" // nolint:staticcheck
 )
 
 var _ = context.Background
@@ -42,7 +44,7 @@ func TestMultiReaderB(t *testing.T) {
 		nr := 0
 		for nr < n {
 			na, err := src.Read(a)
-			panicOn(err)
+			PanicOn(err)
 			nr += na
 		}
 		if nr != n {
@@ -62,7 +64,7 @@ func TestMultiReaderB(t *testing.T) {
 
 		// should not trigger the internal panic of MultiReadB
 		ncp, err := io.Copy(ioutil.Discard, m)
-		panicOn(err)
+		PanicOn(err)
 		if ncp != int64(n) {
 			panic("short copy")
 		}

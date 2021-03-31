@@ -20,6 +20,8 @@ import (
 	"os"
 	"testing"
 	"time"
+
+	. "github.com/pilosa/pilosa/v2/vprint" // nolint:staticcheck
 )
 
 func Test_TxFactory_Qcx_query_context(t *testing.T) {
@@ -52,7 +54,7 @@ func Test_TxFactory_Qcx_query_context(t *testing.T) {
 			qcx := idx.holder.txf.NewQcx()
 
 			tx, finisher, err := qcx.GetTx(Txo{Write: true, Index: idx, Shard: f.shard})
-			panicOn(err)
+			PanicOn(err)
 
 			// Set bits on the fragment.
 			if _, err := f.setBit(tx, 120, 1); err != nil {
@@ -72,11 +74,11 @@ func Test_TxFactory_Qcx_query_context(t *testing.T) {
 			}
 			finisher(nil) // hit the write tx.Commit path
 			// commit the change, and verify it is still there
-			panicOn(qcx.Finish())
+			PanicOn(qcx.Finish())
 			qcx.Reset()
 
 			tx, finread, err := qcx.GetTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: f.shard})
-			panicOn(err)
+			PanicOn(err)
 			if n := f.mustRow(tx, 120).Count(); n != 2 {
 				panic(fmt.Sprintf("unexpected count (reopen): %d", n))
 			} else if n := f.mustRow(tx, 121).Count(); n != 1 {
@@ -183,7 +185,7 @@ func Test_TxFactory_UpdateBlueFromGreen_OnStartup(t *testing.T) {
 			//vv("after close, about to re-open")
 
 			// can we re.Open the same holder h? hopefully without a problem.
-			panicOn(h.Open())
+			PanicOn(h.Open())
 
 			//vv("h.Open() re-open worked; blue_green = '%v'; dump; with PILOSA_STORAGE_BACKEND='%v'", blue_green, os.Getenv("PILOSA_STORAGE_BACKEND"))
 			//h.DumpAllShards()
@@ -200,7 +202,7 @@ func Test_TxFactory_UpdateBlueFromGreen_OnStartup(t *testing.T) {
 			cfg := mustHolderConfig()
 			cfg.StorageConfig.Backend = green
 			h2 := NewHolder(path, cfg)
-			panicOn(h2.Open())
+			PanicOn(h2.Open())
 
 			testMustHaveBit(t, h2, "i0", "f", rowID, colID)
 			testMustHaveBit(t, h2, "i1", "f", 100, 200)
@@ -212,7 +214,7 @@ func Test_TxFactory_UpdateBlueFromGreen_OnStartup(t *testing.T) {
 			cfg = mustHolderConfig()
 			cfg.StorageConfig.Backend = blue
 			h3 := NewHolder(path, cfg)
-			panicOn(h3.Open())
+			PanicOn(h3.Open())
 
 			testMustNotHaveBit(t, h3, "i0", "f", rowID, colID)
 			testMustNotHaveBit(t, h3, "i1", "f", 100, 200)
@@ -242,7 +244,7 @@ func Test_TxFactory_UpdateBlueFromGreen_OnStartup(t *testing.T) {
 					panic("expected error since migration to roaring not supported")
 				}
 			} else {
-				panicOn(err)
+				PanicOn(err)
 			}
 
 			testMustHaveBit(t, h4, "i0", "f", rowID, colID)
@@ -326,7 +328,7 @@ func Test_TxFactory_verifyBlueEqualsGreen(t *testing.T) {
 			cfg := mustHolderConfig()
 			cfg.StorageConfig.Backend = blue
 			h3 := NewHolder(path, cfg)
-			panicOn(h3.Open())
+			PanicOn(h3.Open())
 
 			testMustNotHaveBit(t, h3, "i0", "f", rowID, colID)
 			testMustNotHaveBit(t, h3, "i1", "f", 100, 200)
@@ -350,7 +352,7 @@ func Test_TxFactory_verifyBlueEqualsGreen(t *testing.T) {
 			cfg = mustHolderConfig()
 			cfg.StorageConfig.Backend = blue_green
 			h4 := NewHolder(path, cfg)
-			panicOn(h4.Open())
+			PanicOn(h4.Open())
 
 			testMustHaveBit(t, h4, "i0", "f", rowID, colID)
 			testMustHaveBit(t, h4, "i1", "f", 100, 200)
@@ -362,7 +364,7 @@ func Test_TxFactory_verifyBlueEqualsGreen(t *testing.T) {
 			cfg = mustHolderConfig()
 			cfg.StorageConfig.Backend = blue
 			h5 := NewHolder(path, cfg)
-			panicOn(h5.Open())
+			PanicOn(h5.Open())
 			testSetBit(t, h5, "i2", "f", 500, 777)
 
 			//vv("after adding a bit to blue, we have:")

@@ -25,6 +25,7 @@ import (
 	"github.com/pilosa/pilosa/v2/http"
 	"github.com/pilosa/pilosa/v2/server"
 	"github.com/pilosa/pilosa/v2/test"
+	. "github.com/pilosa/pilosa/v2/vprint" // nolint:staticcheck
 )
 
 func Test_RandomQuery(t *testing.T) {
@@ -139,18 +140,18 @@ func Test_RandomQuery(t *testing.T) {
 		if err := nodes[0].API.Import(ctx, qcx, req); err != nil {
 			t.Fatal(err)
 		}
-		panicOn(qcx.Finish())
+		PanicOn(qcx.Finish())
 		//qcx.Reset()
 	}
 	// end of setup.
 
-	panicOn(cfg.Setup(wrapApiToInternalClient(nodes[0].API)))
+	PanicOn(cfg.Setup(wrapApiToInternalClient(nodes[0].API)))
 
 	for j := 0; j < 4; j++ {
 		index := indexes[rand.Intn(len(indexes))]
 
 		pql, err := cfg.GenQuery(index)
-		panicOn(err)
+		PanicOn(err)
 
 		//vv("pql = '%v'", pql)
 

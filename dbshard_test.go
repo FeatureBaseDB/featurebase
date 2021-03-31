@@ -25,6 +25,7 @@ import (
 	"github.com/pilosa/pilosa/v2/http"
 	"github.com/pilosa/pilosa/v2/server"
 	"github.com/pilosa/pilosa/v2/test"
+	. "github.com/pilosa/pilosa/v2/vprint" // nolint:staticcheck
 )
 
 func TestAPI_SimplerOneNode_ImportColumnKey(t *testing.T) {
@@ -94,7 +95,7 @@ func TestAPI_SimplerOneNode_ImportColumnKey(t *testing.T) {
 		if err := m0.API.Import(ctx, qcx, req); err != nil {
 			t.Fatal(err)
 		}
-		panicOn(qcx.Finish())
+		PanicOn(qcx.Finish())
 
 		//select {}
 

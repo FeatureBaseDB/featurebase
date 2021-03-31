@@ -31,6 +31,7 @@ import (
 	"github.com/pilosa/pilosa/v2/hash"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/storage"
+	. "github.com/pilosa/pilosa/v2/vprint"
 
 	// On Bolt only, we still use the long txkey, because
 	// this allows Max() to work readily.
@@ -132,7 +133,7 @@ func (r *boltRegistrar) OpenDBWrapper(path string, doAllocZero bool, cfg *storag
 
 	dir := filepath.Dir(path)
 	if !DirExists(path) {
-		panicOn(os.MkdirAll(dir, 0755))
+		PanicOn(os.MkdirAll(dir, 0755))
 	}
 
 	db, err := bolt.Open(path, 0666, &bolt.Options{Timeout: 5 * time.Second, InitialMmapSize: TxInitialMmapSize})
@@ -522,7 +523,7 @@ func (tx *BoltTx) Commit() error {
 	defer tx.mu.Unlock()
 
 	err := tx.tx.Commit()
-	panicOn(err)
+	PanicOn(err)
 
 	tx.o.dbs.Cleanup(tx)
 	return err
@@ -657,15 +658,15 @@ func (tx *BoltTx) addOrRemove(index, field, view string, shard uint64, batched, 
 				// not first time through, write what we got.
 				if remove && (rc == nil || rc.N() == 0) {
 					err = tx.RemoveContainer(index, field, view, shard, lastHi)
-					panicOn(err)
+					PanicOn(err)
 				} else {
 					err = tx.PutContainer(index, field, view, shard, lastHi, rc)
-					panicOn(err)
+					PanicOn(err)
 				}
 			}
 			// get the next container
 			rc, err = tx.Container(index, field, view, shard, hi)
-			panicOn(err)
+			PanicOn(err)
 		} // else same container, keep adding bits to rct.
 		chng := false
 		// rc can be nil before, and nil after, in both Remove/Add below.
@@ -684,17 +685,17 @@ func (tx *BoltTx) addOrRemove(index, field, view string, shard uint64, batched, 
 	if remove {
 		if rc == nil || rc.N() == 0 {
 			err = tx.RemoveContainer(index, field, view, shard, hi)
-			panicOn(err)
+			PanicOn(err)
 		} else {
 			err = tx.PutContainer(index, field, view, shard, hi, rc)
-			panicOn(err)
+			PanicOn(err)
 		}
 	} else {
 		if rc == nil || rc.N() == 0 {
 			panic("there should be no way to have an empty bitmap AFTER an Add() operation")
 		}
 		err = tx.PutContainer(index, field, view, shard, hi, rc)
-		panicOn(err)
+		PanicOn(err)
 	}
 	return
 }
@@ -955,7 +956,7 @@ type boltFinder struct {
 // FindIterator lets boltFinder implement the roaring.FindIterator interface.
 func (bf *boltFinder) FindIterator(seek uint64) (roaring.ContainerIterator, bool) {
 	a, found, err := bf.tx.ContainerIterator(bf.index, bf.field, bf.view, bf.shard, seek)
-	panicOn(err)
+	PanicOn(err)
 	bf.needClose = append(bf.needClose, a)
 	return a, found
 }
@@ -1015,7 +1016,7 @@ func (tx *BoltTx) ForEachRange(index, field, view string, shard uint64, start, e
 func (tx *BoltTx) Count(index, field, view string, shard uint64) (uint64, error) {
 
 	a, found, err := tx.ContainerIterator(index, field, view, shard, 0)
-	panicOn(err)
+	PanicOn(err)
 	defer a.Close()
 	if !found {
 		return 0, nil
@@ -1101,7 +1102,7 @@ func (tx *BoltTx) Min(index, field, view string, shard uint64) (uint64, bool, er
 func (tx *BoltTx) UnionInPlace(index, field, view string, shard uint64, others ...*roaring.Bitmap) error {
 
 	rbm, err := tx.RoaringBitmap(index, field, view, shard)
-	panicOn(err)
+	PanicOn(err)
 
 	rbm.UnionInPlace(others...)
 	// iterate over the containers that changed within rbm, and write them back to disk.
@@ -1115,7 +1116,7 @@ func (tx *BoltTx) UnionInPlace(index, field, view string, shard uint64, others .
 		// TODO: only write the changed ones back, as optimization?
 		//       Compare to ImportRoaringBits.
 		err := tx.PutContainer(index, field, view, shard, containerKey, rc)
-		panicOn(err)
+		PanicOn(err)
 	}
 	return nil
 }
@@ -1133,7 +1134,7 @@ func (tx *BoltTx) CountRange(index, field, view string, shard uint64, start, end
 
 	citer, found, err := tx.ContainerIterator(index, field, view, shard, skey)
 	_ = found
-	panicOn(err)
+	PanicOn(err)
 
 	defer citer.Close()
 
@@ -1265,7 +1266,7 @@ func (tx *BoltTx) ImportRoaringBits(index, field, view string, shard uint64, itr
 		// INVAR: nsynth > 0
 
 		oldC, err = tx.Container(index, field, view, shard, itrKey)
-		panicOn(err)
+		PanicOn(err)
 		if err != nil {
 			return
 		}
@@ -1346,7 +1347,7 @@ func (tx *BoltTx) ImportRoaringBits(index, field, view string, shard uint64, itr
 
 				err = tx.PutContainer(index, field, view, shard, itrKey, newC)
 				if err != nil {
-					panicOn(err)
+					PanicOn(err)
 					return
 				}
 				continue
@@ -1567,7 +1568,7 @@ func (w *BoltWrapper) DeletePrefix(prefix []byte) error {
 	w.muDb.Unlock()
 
 	err := tx.Commit()
-	panicOn(err)
+	PanicOn(err)
 
 	return nil
 }

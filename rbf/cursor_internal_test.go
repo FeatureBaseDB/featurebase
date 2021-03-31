@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/pilosa/pilosa/v2/roaring"
+	. "github.com/pilosa/pilosa/v2/vprint" // nolint:staticcheck
 )
 
 func getRoaringIter(bitsToSet ...uint64) roaring.RoaringIterator {
@@ -28,15 +29,15 @@ func getRoaringIter(bitsToSet ...uint64) roaring.RoaringIterator {
 	changed := b.DirectAddN(bitsToSet...)
 	n := len(bitsToSet)
 	if changed != n {
-		panic(fmt.Sprintf("changed=%v but bitsToSet len = %v", changed, n))
+		PanicOn(fmt.Sprintf("changed=%v but bitsToSet len = %v", changed, n))
 	}
 	buf := bytes.NewBuffer(make([]byte, 0, 100000))
 	_, err := b.WriteTo(buf)
 	if err != nil {
-		panic(err)
+		PanicOn(err)
 	}
 	itr, err := roaring.NewRoaringIterator(buf.Bytes())
-	panicOn(err)
+	PanicOn(err)
 	return itr
 }
 
@@ -59,14 +60,14 @@ func TestCursor_RoaringImport(t *testing.T) {
 	defer tx.Rollback()
 
 	changed, rowSet, err := tx.ImportRoaringBits(name, itr, clear, false, rowSize, nil)
-	panicOn(err) // writeTheTailOfLeafCellsFromIter has to be AFTER any pre-existing data. ckey=0 was found already in db.
+	PanicOn(err) // writeTheTailOfLeafCellsFromIter has to be AFTER any pre-existing data. ckey=0 was found already in db.
 	_ = rowSet
 	if changed != 1 {
 		t.Fatalf("expected 1 changed, got %v", changed)
 	}
 	if false {
 		cur, err := tx.cursor(name)
-		panicOn(err)
+		PanicOn(err)
 
 		cur.dump()
 
@@ -93,7 +94,7 @@ func TestCursor_RoaringImport_clear_bits(t *testing.T) {
 	defer tx.Rollback()
 
 	changed, rowSet, err := tx.ImportRoaringBits(name, itr, clear, false, rowSize, nil)
-	panicOn(err)
+	PanicOn(err)
 	_ = rowSet
 	if changed != 1 {
 		t.Fatalf("expected 1 changed, got %v", changed)
@@ -104,7 +105,7 @@ func TestCursor_RoaringImport_clear_bits(t *testing.T) {
 	itr2 := getRoaringIter([]uint64{1}...)
 
 	changed, rowSet, err = tx.ImportRoaringBits(name, itr2, clear, false, rowSize, nil)
-	panicOn(err)
+	PanicOn(err)
 	_ = rowSet
 	if changed != 1 {
 		t.Fatalf("expected 1 changed on clear true, got %v", changed)
@@ -112,7 +113,7 @@ func TestCursor_RoaringImport_clear_bits(t *testing.T) {
 
 	if false {
 		cur, err := tx.cursor(name)
-		panicOn(err)
+		PanicOn(err)
 
 		cur.dump()
 
@@ -152,14 +153,14 @@ func TestCursor_RoaringImport_two_leaves(t *testing.T) {
 	defer tx.Rollback()
 
 	changed, rowSet, err := tx.ImportRoaringBits(name, itr, clear, false, rowSize, nil)
-	panicOn(err) // writeTheTailOfLeafCellsFromIter has to be AFTER any pre-existing data. ckey=0 was found already in db.
+	PanicOn(err) // writeTheTailOfLeafCellsFromIter has to be AFTER any pre-existing data. ckey=0 was found already in db.
 	_ = rowSet
 	if changed != 6000 {
 		t.Fatalf("expected 6000 bits changed, got %v", changed)
 	}
 	if false {
 		cur, err := tx.cursor(name)
-		panicOn(err)
+		PanicOn(err)
 
 		cur.dump()
 
@@ -211,7 +212,7 @@ func TestCursor_RoaringImport_many_leaves_manual_split(t *testing.T) {
 
 	//vv("DONE WITH Add()")
 	changed, _, err := tx.ImportRoaringBits(name, itr, clear, false, rowSize, nil)
-	panicOn(err) // writeTheTailOfLeafCellsFromIter has to be AFTER any pre-existing data. ckey=0 was found already in db.
+	PanicOn(err) // writeTheTailOfLeafCellsFromIter has to be AFTER any pre-existing data. ckey=0 was found already in db.
 	if changed != expectedBitsChanged-3000 {
 		t.Fatalf("expected %v bits changed, got %v", expectedBitsChanged-3000, changed)
 	}
@@ -219,7 +220,7 @@ func TestCursor_RoaringImport_many_leaves_manual_split(t *testing.T) {
 
 	//vv("about to do itr2, that starts with key %v", itr2.ContainerKeys()[0])
 	changed, _, err = tx.ImportRoaringBits(name, itr2, clear, false, rowSize, nil)
-	panicOn(err)
+	PanicOn(err)
 	if changed != 3000 {
 		t.Fatalf("expected %v bits changed, got %v", 3000, changed)
 	}
@@ -228,7 +229,7 @@ func TestCursor_RoaringImport_many_leaves_manual_split(t *testing.T) {
 
 	dump := func() {
 		cur, err := tx.cursor(name)
-		panicOn(err)
+		PanicOn(err)
 		//cur.dump()
 		_ = cur.tx.dumpAllPages(true)
 	}
@@ -242,7 +243,7 @@ func TestCursor_RoaringImport_many_leaves_manual_split(t *testing.T) {
 	itr3 := getRoaringIter(want...)
 
 	changed, _, err = tx.ImportRoaringBits(name, itr3, clear, false, rowSize, nil)
-	panicOn(err)
+	PanicOn(err)
 	if changed != expectedBitsChanged {
 		//     cursor_internal_test.go:235: expected 2,724,000 bits changed, got 2,721,000
 		t.Fatalf("expected %v bits changed, got %v", expectedBitsChanged, changed)
@@ -292,7 +293,7 @@ func TestCursor_RoaringImport_auto_many_leaves(t *testing.T) {
 	//vv("DONE WITH Add()")
 
 	changed, _, err := tx.ImportRoaringBits(name, itr, clear, false, rowSize, nil)
-	panicOn(err) // writeTheTailOfLeafCellsFromIter has to be AFTER any pre-existing data. ckey=0 was found already in db.
+	PanicOn(err) // writeTheTailOfLeafCellsFromIter has to be AFTER any pre-existing data. ckey=0 was found already in db.
 	if changed != expectedBitsChanged {
 		t.Fatalf("expected %v bits changed, got %v", expectedBitsChanged, changed)
 	}
@@ -300,7 +301,7 @@ func TestCursor_RoaringImport_auto_many_leaves(t *testing.T) {
 
 	dump := func() {
 		cur, err := tx.cursor(name)
-		panicOn(err)
+		PanicOn(err)
 		//cur.dump()
 		_ = cur.tx.dumpAllPages(true)
 	}
@@ -313,7 +314,7 @@ func TestCursor_RoaringImport_auto_many_leaves(t *testing.T) {
 	itr2 := getRoaringIter(want...)
 
 	changed, _, err = tx.ImportRoaringBits(name, itr2, clear, false, rowSize, nil)
-	panicOn(err)
+	PanicOn(err)
 	if changed != expectedBitsChanged {
 		t.Fatalf("expected %v bits changed, got %v", expectedBitsChanged, changed)
 	}
@@ -372,13 +373,13 @@ func TestCursor_putBranchCellsHandlesLotsOfNewBranchesAtTheRoot(t *testing.T) {
 		t.Fatal(err)
 	}
 	c, err := tx.cursor(name)
-	panicOn(err)
+	PanicOn(err)
 
 	ikeys := itr.ContainerKeys()
 
 	for _, ckey := range ikeys {
 		_, err := c.Seek(ckey)
-		panicOn(err)
+		PanicOn(err)
 		break // after the first seek
 	}
 
@@ -404,7 +405,7 @@ func TestCursor_putBranchCellsHandlesLotsOfNewBranchesAtTheRoot(t *testing.T) {
 		branch := branchCell{LeftKey: group[0].Key}
 
 		branch.ChildPgno, err = c.tx.allocatePgno()
-		panicOn(err)
+		PanicOn(err)
 
 		branches = append(branches, branch)
 		//vv("on group i=%v of %v, group[0].Key = %v; branch.ChildPgno=%v; branch.Key=%v", i, len(groups.slc), int(group[0].Key), (branch.ChildPgno), int(branch.Key))
@@ -422,13 +423,13 @@ func TestCursor_putBranchCellsHandlesLotsOfNewBranchesAtTheRoot(t *testing.T) {
 		}
 
 		err = c.tx.writePage(buf[:])
-		panicOn(err)
+		PanicOn(err)
 	}
 
 	//vv("branches ckeys = '%#v'", keysFromParents(branches))
 
 	err = c.putBranchCells(0, branches)
-	panicOn(err)
+	PanicOn(err)
 
 	//c.tx.dumpAllPages(true)
 }
@@ -476,7 +477,7 @@ func TestCursor_incrementally_add_pages_and_view_them(t *testing.T) {
 	defer tx.Rollback()
 	dump := func() {
 		cur, err := tx.cursor(name)
-		panicOn(err)
+		PanicOn(err)
 		//cur.dump()
 		_ = cur.tx.dumpAllPages(true)
 	}
@@ -487,7 +488,7 @@ func TestCursor_incrementally_add_pages_and_view_them(t *testing.T) {
 		itr := getRoaringIter(want[i*3000 : (i+1)*3000]...)
 
 		changed, _, err := tx.ImportRoaringBits(name, itr, clear, false, rowSize, nil)
-		panicOn(err) // writeTheTailOfLeafCellsFromIter has to be AFTER any pre-existing data. ckey=0 was found already in db.
+		PanicOn(err) // writeTheTailOfLeafCellsFromIter has to be AFTER any pre-existing data. ckey=0 was found already in db.
 		if changed != 3000 {
 			t.Fatalf("expected %v bits changed, got %v", 3000, changed)
 		}
@@ -505,7 +506,7 @@ func TestCursor_incrementally_add_pages_and_view_them(t *testing.T) {
 		itr := getRoaringIter(want[i*3000 : (i+1)*3000]...)
 
 		changed, _, err := tx.ImportRoaringBits(name, itr, clear, false, rowSize, nil)
-		panicOn(err) // writeTheTailOfLeafCellsFromIter has to be AFTER any pre-existing data. ckey=0 was found already in db.
+		PanicOn(err) // writeTheTailOfLeafCellsFromIter has to be AFTER any pre-existing data. ckey=0 was found already in db.
 		if changed != 3000 {
 			t.Fatalf("expected %v bits changed, got %v", 3000, changed)
 		}
@@ -559,7 +560,7 @@ func TestCursor_from_B_to_C(t *testing.T) {
 	defer tx.Rollback()
 	dump := func() {
 		cur, err := tx.cursor(name)
-		panicOn(err)
+		PanicOn(err)
 		//cur.dump()
 		_ = cur.tx.dumpAllPages(true)
 	}
@@ -567,7 +568,7 @@ func TestCursor_from_B_to_C(t *testing.T) {
 	itr := getRoaringIter(want[:6000]...)
 
 	changed, _, err := tx.ImportRoaringBits(name, itr, clear, false, rowSize, nil)
-	panicOn(err) // writeTheTailOfLeafCellsFromIter has to be AFTER any pre-existing data. ckey=0 was found already in db.
+	PanicOn(err) // writeTheTailOfLeafCellsFromIter has to be AFTER any pre-existing data. ckey=0 was found already in db.
 	if changed != 6000 {
 		t.Fatalf("expected %v bits changed, got %v", 6000, changed)
 	}
@@ -578,7 +579,7 @@ func TestCursor_from_B_to_C(t *testing.T) {
 	itr = getRoaringIter(want[6000:9000]...)
 
 	changed, _, err = tx.ImportRoaringBits(name, itr, clear, false, rowSize, nil)
-	panicOn(err) // writeTheTailOfLeafCellsFromIter has to be AFTER any pre-existing data. ckey=0 was found already in db.
+	PanicOn(err) // writeTheTailOfLeafCellsFromIter has to be AFTER any pre-existing data. ckey=0 was found already in db.
 	if changed != 3000 {
 		t.Fatalf("expected %v bits changed, got %v", 3000, changed)
 	}
@@ -595,7 +596,7 @@ func TestCursor_from_B_to_C(t *testing.T) {
 		itr := getRoaringIter(want[i*3000 : (i+1)*3000]...)
 
 		changed, _, err := tx.ImportRoaringBits(name, itr, clear, false, rowSize, nil)
-		panicOn(err) // writeTheTailOfLeafCellsFromIter has to be AFTER any pre-existing data. ckey=0 was found already in db.
+		PanicOn(err) // writeTheTailOfLeafCellsFromIter has to be AFTER any pre-existing data. ckey=0 was found already in db.
 		if changed != 3000 {
 			t.Fatalf("expected %v bits changed, got %v", 3000, changed) // failing here got 0
 		}
