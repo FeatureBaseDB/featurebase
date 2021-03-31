@@ -400,6 +400,12 @@ var callInfoByFunc = map[string]callInfo{
 	"Union":     {allowUnknown: false},
 	"UnionRows": {allowUnknown: false, callType: PrecallGlobal},
 	"Extract":   {allowUnknown: false},
+	"ExternalLookup": {
+		allowUnknown: false,
+		prototypes: map[string]interface{}{
+			"query": "",
+		},
+	},
 	"Limit": {
 		allowUnknown: false,
 		prototypes: map[string]interface{}{

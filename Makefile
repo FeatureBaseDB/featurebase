@@ -341,3 +341,5 @@ test-txstore-rbf:
 test-txstore-rbf_bolt:
 	PILOSA_STORAGE_BACKEND=rbf_bolt $(MAKE) testv-race
 
+test-external-lookup:
+	$(GO) test . -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) -run ^TestExternalLookup$$ -externalLookupDSN $(EXTERNAL_LOOKUP_DSN)
