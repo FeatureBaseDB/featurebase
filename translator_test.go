@@ -26,7 +26,6 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/boltdb"
-	"github.com/pilosa/pilosa/v2/disco"
 	"github.com/pilosa/pilosa/v2/http"
 	"github.com/pilosa/pilosa/v2/mock"
 	"github.com/pilosa/pilosa/v2/server"
@@ -189,109 +188,6 @@ func TestMultiTranslateEntryReader(t *testing.T) {
 	})
 }
 
-// Test key translation with multiple nodes.
-func TestTranslation_Reset(t *testing.T) {
-	// We need to ensure that the translate key partitions for each
-	// node are getting set as read-only based on the full cluster,
-	// not just the state of the cluster at the time of the individual
-	// node restart.
-	t.Run("RollingRestart", func(t *testing.T) {
-		t.Skip("skipping because disco needs asynchrounous restart")
-		// Start a 4-node cluster.
-		// Note that the prefix on the nodeID is intentional; it puts the
-		// nodes in a specific order which exercises the condition for
-		// which we are testing. In a normal use case, these would be
-		// randomly generated uuids, so this is mimicking that.
-		c := test.MustRunCluster(t, 4,
-			[]server.CommandOption{
-				server.OptCommandServerOptions(
-					pilosa.OptServerNodeID("2node0"),
-					pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
-					pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
-				)},
-			[]server.CommandOption{
-				server.OptCommandServerOptions(
-					pilosa.OptServerNodeID("4node1"),
-					pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
-					pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
-				)},
-			[]server.CommandOption{
-				server.OptCommandServerOptions(
-					pilosa.OptServerNodeID("3node2"),
-					pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
-					pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
-				)},
-			[]server.CommandOption{
-				server.OptCommandServerOptions(
-					pilosa.OptServerNodeID("1node3"),
-					pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
-					pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
-				)},
-		)
-		defer c.Close()
-
-		node0 := c.GetNode(0)
-		node1 := c.GetNode(1)
-		node2 := c.GetNode(2)
-		node3 := c.GetNode(3)
-
-		ctx := context.Background()
-		idx := "i"
-
-		// Create an index with keys.
-		if _, err := node0.API.CreateIndex(ctx, idx,
-			pilosa.IndexOptions{
-				Keys: true,
-			}); err != nil {
-			t.Fatal(err)
-		}
-
-		// Stop the cluster.
-		if err := node0.Command.Close(); err != nil {
-			t.Fatal(err)
-		}
-		if err := node1.Command.Close(); err != nil {
-			t.Fatal(err)
-		}
-		if err := node2.Command.Close(); err != nil {
-			t.Fatal(err)
-		}
-		if err := node3.Command.Close(); err != nil {
-			t.Fatal(err)
-		}
-
-		// Restart the nodes serially.
-		if err := node0.SoftOpen(); err != nil {
-			t.Fatal(err)
-		}
-		if err := node1.SoftOpen(); err != nil {
-			t.Fatal(err)
-		}
-		if err := node2.SoftOpen(); err != nil {
-			t.Fatal(err)
-		}
-		if err := node3.SoftOpen(); err != nil {
-			t.Fatal(err)
-		}
-
-		// Send a key translation request that triggers
-		// a read-only translate store error if the
-		// translate store sync is not reset correctly.
-
-		// Generate request body for translate row keys request
-		reqBody, err := node0.API.Serializer.Marshal(&pilosa.TranslateKeysRequest{
-			Index: idx,
-			Keys:  []string{"a1"},
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if _, err := node0.API.TranslateKeys(ctx, bytes.NewReader(reqBody)); err != nil {
-			t.Fatal(err)
-		}
-	})
-}
-
 func TestTranslation_KeyNotFound(t *testing.T) {
 	c := test.MustRunCluster(t, 4,
 		[]server.CommandOption{
@@ -443,96 +339,11 @@ func TestInMemTranslateStore_ReadKey(t *testing.T) {
 
 }
 
-// Test index key translation replication under node failure.
-func TestTranslation_Replication(t *testing.T) {
-	t.Run("Replication", func(t *testing.T) {
-		t.Skip("this test is fragile and doesn't work with randomly ordered nodes. it also seems to assume failover for index key partitions, which does not exist")
-		c := test.MustRunCluster(t, 3,
-			[]server.CommandOption{
-				server.OptCommandServerOptions(
-					pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
-					pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
-					pilosa.OptServerReplicaN(2),
-				)},
-			[]server.CommandOption{
-				server.OptCommandServerOptions(
-					pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
-					pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
-					pilosa.OptServerReplicaN(2),
-				)},
-			[]server.CommandOption{
-				server.OptCommandServerOptions(
-					pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
-					pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
-					pilosa.OptServerReplicaN(2),
-				)},
-		)
-		defer c.Close()
-
-		coord := c.GetPrimary()
-		other := c.GetNonPrimary()
-
-		ctx := context.Background()
-		idx := "i"
-		field := "f"
-
-		// Create an index with keys.
-		if _, err := coord.API.CreateIndex(ctx, idx,
-			pilosa.IndexOptions{
-				Keys: true,
-			}); err != nil {
-			t.Fatal(err)
-		}
-
-		if _, err := coord.API.CreateField(ctx, idx, field); err != nil {
-			t.Fatal(err)
-		}
-
-		// Write data on first node.
-		// these keys are a minimal example to reproduce the problem for the case of a 3-node cluster with replication factor 2
-		if _, err := coord.Queryf(t, idx, "", `
-	    Set("x1", f=1)
-	    Set("x2", f=1)
-    `); err != nil {
-			t.Fatal(err)
-		}
-
-		exp := `{"results":[{"attrs":{},"columns":[],"keys":["x1","x2"]}]}`
-
-		coordState, err := coord.API.State()
-		if err != nil || !test.CheckClusterState(coord, disco.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected coord cluster state: %s, got: %s, err: %v", disco.ClusterStateNormal, coordState, err)
-		}
-
-		otherState, err := other.API.State()
-		if err != nil || !test.CheckClusterState(other, disco.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected other cluster state: %s, got: %s, err: %v", disco.ClusterStateNormal, otherState, err)
-		}
-
-		// Verify the data exists
-		coord.QueryExpect(t, idx, "", `Row(f=1)`, exp)
-
-		// Kill a non-primary node.
-		if err := c.CloseAndRemoveNonPrimary(); err != nil {
-			t.Fatal(err)
-		}
-
-		coordState, err = coord.API.State()
-		if err != nil || !test.CheckClusterState(coord, disco.ClusterStateDegraded, 1000) {
-			t.Fatalf("unexpected coord cluster state: %s, got: %s", disco.ClusterStateDegraded, coordState)
-		}
-
-		// Verify the data exists with one node down
-		coord.QueryExpect(t, idx, "", `Row(f=1)`, exp)
-	})
-}
-
 // Test key translation with multiple nodes.
 func TestTranslation_Primary(t *testing.T) {
 	// Ensure that field key translations requests sent to
 	// non-primary nodes are forwarded to the primary.
 	t.Run("ForwardFieldKey", func(t *testing.T) {
-		t.Skip("Short term skip to avoid go 1.13 test Should remove ASAP")
 		// Start a 2-node cluster.
 		c := test.MustRunCluster(t, 3,
 			[]server.CommandOption{

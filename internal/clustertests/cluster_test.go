@@ -28,7 +28,7 @@ import (
 
 func TestClusterStuff(t *testing.T) {
 	if os.Getenv("ENABLE_PILOSA_CLUSTER_TESTS") != "1" {
-		t.Skip()
+		t.Skip("pilosa cluster tests are not enabled")
 	}
 	cli1, err := picli.NewInternalClient("pilosa1:10101", picli.GetHTTPClient(nil))
 	if err != nil {

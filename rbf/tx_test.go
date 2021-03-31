@@ -96,7 +96,6 @@ func TestTx_CommitRollback(t *testing.T) {
 	})
 
 	t.Run("SingleWriter", func(t *testing.T) {
-		//t.Skip("NEED TO FIX IN RACE") //TODO (twg)
 		db := MustOpenDB(t)
 		defer MustCloseDB(t, db)
 
