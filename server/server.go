@@ -429,6 +429,10 @@ func (m *Command) SetupServer() error {
 		discoOpt,
 	}
 
+	if m.Config.LookupDBDSN != "" {
+		serverOptions = append(serverOptions, pilosa.OptServerLookupDB(m.Config.LookupDBDSN))
+	}
+
 	serverOptions = append(serverOptions, m.serverOptions...)
 
 	m.Server, err = pilosa.NewServer(serverOptions...)

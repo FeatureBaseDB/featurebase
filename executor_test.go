@@ -17,6 +17,7 @@ package pilosa_test
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/csv"
 	"encoding/json"
 	"flag"
@@ -7898,4 +7899,280 @@ func tableResponseToCSVString(m *proto.TableResponse) (string, error) {
 		return "", errors.Wrap(err, "writing tableResponse CSV to bytes.Buffer")
 	}
 	return buf.String(), nil
+}
+
+var dbDSN string
+
+func init() {
+	flag.StringVar(&dbDSN, "externalLookupDSN", "", "SQL DSN to use for external database access")
+}
+
+func TestExternalLookup(t *testing.T) {
+	// Set up access to a SQL database.
+	if dbDSN == "" {
+		t.Skip("no database provided")
+	}
+	db, err := sql.Open("postgres", dbDSN)
+	if err != nil {
+		t.Fatalf("failed to set up test database: %v", err)
+	}
+	defer func() {
+		if cerr := db.Close(); cerr != nil {
+			t.Errorf("failed to close test database: %v", cerr)
+		}
+	}()
+
+	// Set up some data to use in the SQL DB.
+	// This creates 3 tables:
+	// - "lookup" - which stores an id->string mapping
+	// - "misc" - which has misc non-nullable fields
+	// - "nullable" - to test handling of nullable fields
+	func() {
+		// Set up a write transaction.
+		// This uses a function scope so that the defer is scoped appropriately.
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		tx, err := db.BeginTx(ctx, nil)
+		if err != nil {
+			t.Fatalf("failed to create transaction: %v", err)
+		}
+		var ok bool
+		defer func() {
+			if !ok {
+				rerr := tx.Rollback()
+				if rerr != nil {
+					t.Errorf("failed to roll-back transaction: %v", rerr)
+				}
+			}
+		}()
+
+		// Delete all tables so that we start fresh.
+		_, err = tx.Exec(`DROP INDEX IF EXISTS lookupIndex`)
+		if err != nil {
+			t.Fatalf("deleting lookup index: %v", err)
+		}
+		_, err = tx.Exec(`DROP TABLE IF EXISTS lookup`)
+		if err != nil {
+			t.Fatalf("deleting lookup table: %v", err)
+		}
+		_, err = tx.Exec(`DROP TABLE IF EXISTS misc`)
+		if err != nil {
+			t.Fatalf("deleting misc table: %v", err)
+		}
+		_, err = tx.Exec(`DROP TABLE IF EXISTS nullable`)
+		if err != nil {
+			t.Fatalf("deleting nullable table: %v", err)
+		}
+
+		_, err = tx.Exec(`CREATE TABLE lookup (
+			id int NOT NULL,
+			data text NOT NULL
+		)`)
+		if err != nil {
+			t.Fatalf("failed to create lookup table: %v", err)
+		}
+		_, err = tx.Exec(`INSERT INTO lookup (id, data) VALUES
+			(0, 'h'),
+			(1, 'xyzzy'),
+			(2, 'plugh'),
+			(3, 'wow')
+		`)
+		if err != nil {
+			t.Fatalf("failed to populate lookup table: %v", err)
+		}
+		_, err = tx.Exec(`CREATE UNIQUE INDEX lookupIndex ON lookup (id);`)
+		if err != nil {
+			t.Fatalf("failed to index lookup table: %v", err)
+		}
+
+		_, err = tx.Exec(`CREATE TABLE misc (
+			id int NOT NULL,
+			stringval text NOT NULL,
+			boolval boolean NOT NULL,
+			intval int NOT NULL
+		)`)
+		if err != nil {
+			t.Fatalf("failed to create misc table: %v", err)
+		}
+		_, err = tx.Exec(`INSERT INTO misc (id, stringval, boolval, intval) VALUES
+			(0, 'h', true, 4),
+			(1, 'y', false, 11)
+		`)
+		if err != nil {
+			t.Fatalf("failed to populate misc table: %v", err)
+		}
+
+		_, err = tx.Exec(`CREATE TABLE nullable (
+			id int NOT NULL,
+			stringval text,
+			boolval boolean,
+			intval int
+		)`)
+		if err != nil {
+			t.Fatalf("failed to create nullable table: %v", err)
+		}
+		_, err = tx.Exec(`INSERT INTO nullable (id, stringval, boolval, intval) VALUES
+			(0, 'h', true, 4),
+			(1, 'y', false, 11),
+			(2, null, null, null),
+			(3, null, true, null),
+			(4, 'plugh', null, 0)
+		;`)
+		if err != nil {
+			t.Fatalf("failed to populate nullable table: %v", err)
+		}
+
+		err = tx.Commit()
+		if err != nil {
+			t.Fatalf("failed to commit DB setup transaction: %v", err)
+		}
+
+		ok = true
+	}()
+
+	// Start up a Pilosa cluster with access to the DB.
+	c := test.MustRunCluster(t, 3, []server.CommandOption{server.OptCommandServerOptions(pilosa.OptServerLookupDB(dbDSN))})
+	defer c.Close()
+
+	// Populate a field with some data that can be used in queries.
+	c.CreateField(t, "i", pilosa.IndexOptions{}, "f")
+	c.ImportBits(t, "i", "f", [][2]uint64{
+		{1, 1},
+		{1, 3},
+		{2, 2},
+		{2, 3},
+	})
+
+	cases := []struct {
+		name   string
+		query  string
+		expect pilosa.QueryResponse
+	}{
+		{
+			name:  "Empty",
+			query: `ExternalLookup(Union(), query="select * from lookup where id = ANY($1)")`,
+			expect: pilosa.QueryResponse{
+				Results: []interface{}{
+					pilosa.ExtractedTable{},
+				},
+			},
+		},
+		{
+			name:  "ConstRowLookup",
+			query: `ExternalLookup(ConstRow(columns=[1, 3]), query="select id, data from lookup where id = ANY($1)")`,
+			expect: pilosa.QueryResponse{
+				Results: []interface{}{
+					pilosa.ExtractedTable{
+						Fields: []pilosa.ExtractedTableField{
+							{Name: "data", Type: "string"},
+						},
+						Columns: []pilosa.ExtractedTableColumn{
+							{
+								Column: pilosa.KeyOrID{ID: 1},
+								Rows:   []interface{}{"xyzzy"},
+							},
+							{
+								Column: pilosa.KeyOrID{ID: 3},
+								Rows:   []interface{}{"wow"},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name:  "ComputedFilter",
+			query: `ExternalLookup(Intersect(Row(f=1), Row(f=2)), query="select id, data from lookup where id = ANY($1)")`,
+			expect: pilosa.QueryResponse{
+				Results: []interface{}{
+					pilosa.ExtractedTable{
+						Fields: []pilosa.ExtractedTableField{
+							{Name: "data", Type: "string"},
+						},
+						Columns: []pilosa.ExtractedTableColumn{
+							{
+								Column: pilosa.KeyOrID{ID: 3},
+								Rows:   []interface{}{"wow"},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name:  "Misc",
+			query: `ExternalLookup(ConstRow(columns=[0, 1]), query="select id, stringval, boolval, intval from misc where id = ANY($1)")`,
+			expect: pilosa.QueryResponse{
+				Results: []interface{}{
+					pilosa.ExtractedTable{
+						Fields: []pilosa.ExtractedTableField{
+							{Name: "stringval", Type: "string"},
+							{Name: "boolval", Type: "bool"},
+							{Name: "intval", Type: "int64"},
+						},
+						Columns: []pilosa.ExtractedTableColumn{
+							{
+								Column: pilosa.KeyOrID{ID: 0},
+								Rows:   []interface{}{"h", true, int64(4)},
+							},
+							{
+								Column: pilosa.KeyOrID{ID: 1},
+								Rows:   []interface{}{"y", false, int64(11)},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name:  "Nullable",
+			query: `ExternalLookup(ConstRow(columns=[0, 1, 2, 3, 4]), query="select id, stringval, boolval, intval from nullable where id = ANY($1)")`,
+			expect: pilosa.QueryResponse{
+				Results: []interface{}{
+					pilosa.ExtractedTable{
+						Fields: []pilosa.ExtractedTableField{
+							{Name: "stringval", Type: "string"},
+							{Name: "boolval", Type: "bool"},
+							{Name: "intval", Type: "int64"},
+						},
+						Columns: []pilosa.ExtractedTableColumn{
+							{
+								Column: pilosa.KeyOrID{ID: 0},
+								Rows:   []interface{}{"h", true, int64(4)},
+							},
+							{
+								Column: pilosa.KeyOrID{ID: 1},
+								Rows:   []interface{}{"y", false, int64(11)},
+							},
+							{
+								Column: pilosa.KeyOrID{ID: 2},
+								Rows:   []interface{}{nil, nil, nil},
+							},
+							{
+								Column: pilosa.KeyOrID{ID: 3},
+								Rows:   []interface{}{nil, true, nil},
+							},
+							{
+								Column: pilosa.KeyOrID{ID: 4},
+								Rows:   []interface{}{"plugh", nil, int64(0)},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	t.Run("Query", func(t *testing.T) {
+		for _, tc := range cases {
+			tc := tc
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+
+				result := c.Query(t, "i", tc.query)
+				if !reflect.DeepEqual(result, tc.expect) {
+					t.Errorf("expected %v but got %v", tc.expect, result)
+				}
+			})
+		}
+	})
 }

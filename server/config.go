@@ -222,6 +222,9 @@ type Config struct {
 	// for the /query-history endpoint. This parameter is per-node, and the
 	// result combines the history from all nodes.
 	QueryHistoryLength int `toml:"query-history-length"`
+
+	// LookupDBDSN is an external database to connect to for `ExternalLookup` queries.
+	LookupDBDSN string `toml:"lookup-db-dsn"`
 }
 
 // MustValidate checks that all ports in a Config are unique and not zero.
