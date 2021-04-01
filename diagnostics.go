@@ -233,7 +233,7 @@ func (d *diagnosticsCollector) EnrichWithSchemaProperties() {
 		numIndexes++
 		for _, field := range index.Fields() {
 			numFields++
-			if field.Type() == FieldTypeInt || field.Type() == FieldTypeDecimal {
+			if field.Type() == FieldTypeInt || field.Type() == FieldTypeDecimal || field.Type() == FieldTypeTimestamp {
 				bsiFieldCount++
 			}
 			if field.TimeQuantum() != "" {

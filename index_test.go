@@ -89,7 +89,7 @@ func TestIndex_CreateField(t *testing.T) {
 
 	// Ensure field can include range columns.
 	t.Run("BSIFields", func(t *testing.T) {
-		t.Run("OK", func(t *testing.T) {
+		t.Run("Int", func(t *testing.T) {
 			index := test.MustOpenIndex(t)
 			defer index.Close()
 
@@ -104,6 +104,25 @@ func TestIndex_CreateField(t *testing.T) {
 			if err := index.Reopen(); err != nil {
 				t.Fatal(err)
 			} else if f := index.Field("f"); !reflect.DeepEqual(f.Type(), pilosa.FieldTypeInt) {
+				t.Fatalf("unexpected type after reopen: %#v", f.Type())
+			}
+		})
+
+		t.Run("Timestamp", func(t *testing.T) {
+			index := test.MustOpenIndex(t)
+			defer index.Close()
+
+			// Create field with schema and verify it exists.
+			if f, err := index.CreateField("f", pilosa.OptFieldTypeTimestamp(pilosa.MinTimestamp, pilosa.MaxTimestamp, pilosa.TimeUnitSeconds)); err != nil {
+				t.Fatal(err)
+			} else if !reflect.DeepEqual(f.Type(), pilosa.FieldTypeTimestamp) {
+				t.Fatalf("unexpected type: %#v", f.Type())
+			}
+
+			// Reopen the index & verify the fields are loaded.
+			if err := index.Reopen(); err != nil {
+				t.Fatal(err)
+			} else if f := index.Field("f"); !reflect.DeepEqual(f.Type(), pilosa.FieldTypeTimestamp) {
 				t.Fatalf("unexpected type after reopen: %#v", f.Type())
 			}
 		})

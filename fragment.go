@@ -3644,7 +3644,7 @@ func (s *fragmentSyncer) syncFragment() error {
 	// to continue processing int/decimal fields.
 	if nodes[0].ID != s.Node.ID {
 		switch s.FieldType {
-		case FieldTypeInt, FieldTypeDecimal:
+		case FieldTypeInt, FieldTypeDecimal, FieldTypeTimestamp:
 			return nil
 		}
 	}
@@ -3721,7 +3721,7 @@ func (s *fragmentSyncer) syncFragment() error {
 		s.Fragment.holder.Logger.Debugf("sync block from primary: index='%v' field='%v' view='%v' shard='%v' id=%d", s.Fragment.index(), s.Fragment.field(), s.Fragment.view(), s.Fragment.shard, blockID)
 
 		switch s.FieldType {
-		case FieldTypeInt, FieldTypeDecimal:
+		case FieldTypeInt, FieldTypeDecimal, FieldTypeTimestamp:
 			// Synchronize block from the primary replica.
 			if err := s.syncBlockFromPrimary(blockID); err != nil {
 				return fmt.Errorf("sync block from primary: id=%d, err=%s", blockID, err)

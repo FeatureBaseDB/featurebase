@@ -55,12 +55,13 @@ const (
 
 // Field types.
 const (
-	FieldTypeSet     = "set"
-	FieldTypeInt     = "int"
-	FieldTypeTime    = "time"
-	FieldTypeMutex   = "mutex"
-	FieldTypeBool    = "bool"
-	FieldTypeDecimal = "decimal"
+	FieldTypeSet       = "set"
+	FieldTypeInt       = "int"
+	FieldTypeTime      = "time"
+	FieldTypeMutex     = "mutex"
+	FieldTypeBool      = "bool"
+	FieldTypeDecimal   = "decimal"
+	FieldTypeTimestamp = "timestamp"
 )
 
 type protected struct {
@@ -200,6 +201,33 @@ func OptFieldTypeInt(min, max int64) FieldOption {
 		fo.Min = pql.NewDecimal(min, 0)
 		fo.Max = pql.NewDecimal(max, 0)
 		fo.Base = bsiBase(min, max)
+		return nil
+	}
+}
+
+// OptFieldTypeTimestamp is a functional option on FieldOptions
+// used to specify the field as being type `timestamp` and to
+// provide any respective configuration values.
+func OptFieldTypeTimestamp(min, max time.Time, timeUnit string) FieldOption {
+	return func(fo *FieldOptions) error {
+		minNano := min.UnixNano()
+		maxNano := max.UnixNano()
+		if fo.Type != "" {
+			return errors.Errorf("field type is already set to: %s", fo.Type)
+		}
+		if timeUnit == "" {
+			return errors.Errorf("time unit required for timestamp field")
+		} else if !IsValidTimeUnit(timeUnit) {
+			return errors.Errorf("invalid time unit: %q", fo.TimeUnit)
+		}
+		if min.After(max) {
+			return errors.New("timestamp field min cannot be greater than max")
+		}
+		fo.Type = FieldTypeTimestamp
+		fo.TimeUnit = timeUnit
+		fo.Min = pql.NewDecimal(minNano, 0)
+		fo.Max = pql.NewDecimal(maxNano, 0)
+		fo.Base = bsiBase(minNano, maxNano)
 		return nil
 	}
 }
@@ -797,7 +825,7 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 		f.options.TimeQuantum = ""
 		f.options.Keys = opt.Keys
 		f.options.ForeignIndex = opt.ForeignIndex
-	case FieldTypeInt, FieldTypeDecimal:
+	case FieldTypeInt, FieldTypeDecimal, FieldTypeTimestamp:
 		f.options.Type = opt.Type
 		f.options.CacheType = CacheTypeNone
 		f.options.CacheSize = 0
@@ -806,6 +834,7 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 		f.options.Base = opt.Base
 		f.options.Scale = opt.Scale
 		f.options.BitDepth = opt.BitDepth
+		f.options.TimeUnit = opt.TimeUnit
 		f.options.TimeQuantum = ""
 		f.options.Keys = opt.Keys
 		f.options.ForeignIndex = opt.ForeignIndex
@@ -818,6 +847,7 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 			Max:      opt.Max.ToInt64(opt.Scale),
 			Base:     opt.Base,
 			Scale:    opt.Scale,
+			TimeUnit: opt.TimeUnit,
 			BitDepth: opt.BitDepth,
 		}
 		// Validate and create bsiGroup.
@@ -1386,6 +1416,8 @@ func (f *Field) MaxForShard(tx Tx, shard uint64, filter *Row) (ValCount, error) 
 	if f.Options().Type == FieldTypeDecimal {
 		dec := pql.NewDecimal(max+bsig.Base, bsig.Scale)
 		valCount.DecimalVal = &dec
+	} else if f.Options().Type == FieldTypeTimestamp {
+		valCount.TimestampVal = time.Unix(0, (max + bsig.Base)).UTC()
 	} else {
 		valCount.Val = max + bsig.Base
 	}
@@ -1430,6 +1462,8 @@ func (f *Field) MinForShard(tx Tx, shard uint64, filter *Row) (ValCount, error) 
 	if f.Options().Type == FieldTypeDecimal {
 		dec := pql.NewDecimal(min+bsig.Base, bsig.Scale)
 		valCount.DecimalVal = &dec
+	} else if f.Options().Type == FieldTypeTimestamp {
+		valCount.TimestampVal = time.Unix(0, (min + bsig.Base)).UTC()
 	} else {
 		valCount.Val = min + bsig.Base
 	}
@@ -1708,10 +1742,10 @@ func (f *Field) importRoaringOverwrite(ctx context.Context, tx Tx, data []byte, 
 		return err
 	}
 
-	// If field is int or decimal, then we need to update field.options.BitDepth
-	// and bsiGroup.BitDepth based on the imported data.
+	// If field is int, decimal, or timestamp, then we need to update
+	// field.options.BitDepth and bsiGroup.BitDepth based on the imported data.
 	switch f.Options().Type {
-	case FieldTypeInt, FieldTypeDecimal:
+	case FieldTypeInt, FieldTypeDecimal, FieldTypeTimestamp:
 		frag.mu.Lock()
 		maxRowID, _, err := frag.maxRow(tx, nil)
 		frag.mu.Unlock()
@@ -1772,6 +1806,7 @@ type FieldOptions struct {
 	CacheSize      uint32      `json:"cacheSize,omitempty"`
 	CacheType      string      `json:"cacheType,omitempty"`
 	Type           string      `json:"type,omitempty"`
+	TimeUnit       string      `json:"timeUnit,omitempty"`
 	TimeQuantum    TimeQuantum `json:"timeQuantum,omitempty"`
 	ForeignIndex   string      `json:"foreignIndex"`
 }
@@ -1794,6 +1829,9 @@ func newFieldOptions(opts ...FieldOption) (*FieldOptions, error) {
 
 		case FieldTypeDecimal:
 			return nil, ErrDecimalFieldWithKeys
+
+		case FieldTypeTimestamp:
+			return nil, ErrTimestampFieldWithKeys
 		}
 	}
 
@@ -1867,6 +1905,26 @@ func (o *FieldOptions) MarshalJSON() ([]byte, error) {
 			o.Max,
 			o.Keys,
 		})
+	case FieldTypeTimestamp:
+		return json.Marshal(struct {
+			Type         string      `json:"type"`
+			Base         int64       `json:"base"`
+			BitDepth     uint64      `json:"bitDepth"`
+			Min          pql.Decimal `json:"min"`
+			Max          pql.Decimal `json:"max"`
+			Keys         bool        `json:"keys"`
+			TimeUnit     string      `json:"timeUnit"`
+			ForeignIndex string      `json:"foreignIndex"`
+		}{
+			o.Type,
+			o.Base,
+			o.BitDepth,
+			o.Min,
+			o.Max,
+			o.Keys,
+			o.TimeUnit,
+			o.ForeignIndex,
+		})
 	case FieldTypeTime:
 		return json.Marshal(struct {
 			Type           string      `json:"type"`
@@ -1899,6 +1957,16 @@ func (o *FieldOptions) MarshalJSON() ([]byte, error) {
 		})
 	}
 	return nil, errors.New("invalid field type")
+}
+
+// MinTimestamp returns the minimum value for a timestamp field.
+func (o FieldOptions) MinTimestamp() time.Time {
+	return time.Unix(0, o.Min.ToInt64(0)*int64(TimeUnitNano(o.TimeUnit)))
+}
+
+// MaxTimestamp returns the maxnimum value for a timestamp field.
+func (o FieldOptions) MaxTimestamp() time.Time {
+	return time.Unix(0, o.Max.ToInt64(0)*int64(TimeUnitNano(o.TimeUnit)))
 }
 
 // List of bsiGroup types.
@@ -1935,6 +2003,7 @@ type bsiGroup struct {
 	Max      int64  `json:"max,omitempty"`
 	Base     int64  `json:"base,omitempty"`
 	Scale    int64  `json:"scale,omitempty"`
+	TimeUnit string `json:"timeUnit,omitempty"`
 	BitDepth uint64 `json:"bitDepth,omitempty"`
 }
 
@@ -2063,4 +2132,42 @@ func (f *Field) persistView(ctx context.Context, cvm *CreateViewMessage) error {
 	}
 
 	return f.schemator.CreateView(ctx, cvm.Index, cvm.Field, cvm.View)
+}
+
+// Timestamp field range.
+var (
+	MinTimestamp = time.Unix(-1<<42, 0).UTC()
+	MaxTimestamp = time.Unix(1<<42, 0).UTC()
+)
+
+// List of time units.
+const (
+	TimeUnitSeconds      = "s"
+	TimeUnitMilliseconds = "ms"
+	TimeUnitMicroseconds = "µs"
+	TimeUnitNanoseconds  = "ns"
+)
+
+// IsValidTimeUnit returns true if unit is valid.
+func IsValidTimeUnit(unit string) bool {
+	switch unit {
+	case TimeUnitSeconds, TimeUnitMilliseconds, TimeUnitMicroseconds, TimeUnitNanoseconds:
+		return true
+	default:
+		return false
+	}
+}
+
+// TimeUnitNano returns the number of nanoseconds in unit.
+func TimeUnitNano(unit string) int64 {
+	switch unit {
+	case TimeUnitSeconds:
+		return int64(time.Second)
+	case TimeUnitMilliseconds:
+		return int64(time.Millisecond)
+	case TimeUnitMicroseconds:
+		return int64(time.Microsecond)
+	default:
+		return int64(time.Nanosecond)
+	}
 }

@@ -16,6 +16,7 @@ package pilosa
 
 import (
 	"encoding/json"
+	"time"
 
 	"github.com/pilosa/pilosa/v2/tracing"
 	"github.com/pkg/errors"
@@ -128,13 +129,14 @@ type ImportValueRequest struct {
 	FieldCreatedAt int64
 	// if Shard is MaxUint64 (an impossible shard value), this
 	// indicates that the column IDs may come from multiple shards.
-	Shard        uint64
-	ColumnIDs    []uint64 // e.g. weather stationID
-	ColumnKeys   []string
-	Values       []int64 // e.g. temperature, humidity, barometric pressure
-	FloatValues  []float64
-	StringValues []string
-	Clear        bool
+	Shard           uint64
+	ColumnIDs       []uint64 // e.g. weather stationID
+	ColumnKeys      []string
+	Values          []int64 // e.g. temperature, humidity, barometric pressure
+	FloatValues     []float64
+	TimestampValues []time.Time
+	StringValues    []string
+	Clear           bool
 }
 
 // AtomicRecord applies all its Ivr and Ivr atomically, in a Tx.
@@ -158,6 +160,8 @@ func (ivr *ImportValueRequest) Swap(i, j int) {
 		ivr.Values[i], ivr.Values[j] = ivr.Values[j], ivr.Values[i]
 	} else if len(ivr.FloatValues) > 0 {
 		ivr.FloatValues[i], ivr.FloatValues[j] = ivr.FloatValues[j], ivr.FloatValues[i]
+	} else if len(ivr.TimestampValues) > 0 {
+		ivr.TimestampValues[i], ivr.TimestampValues[j] = ivr.TimestampValues[j], ivr.TimestampValues[i]
 	} else if len(ivr.StringValues) > 0 {
 		ivr.StringValues[i], ivr.StringValues[j] = ivr.StringValues[j], ivr.StringValues[i]
 	}
@@ -181,6 +185,9 @@ func (ivr *ImportValueRequest) ValidateWithTimestamp(indexCreatedAt, fieldCreate
 		valueSetCount++
 	}
 	if len(ivr.FloatValues) != 0 {
+		valueSetCount++
+	}
+	if len(ivr.TimestampValues) != 0 {
 		valueSetCount++
 	}
 	if len(ivr.StringValues) != 0 {

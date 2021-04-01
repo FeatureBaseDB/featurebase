@@ -19,6 +19,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/pql"
@@ -251,7 +252,7 @@ func extractWhere(index *pilosa.Index, expr sqlparser.Expr) (string, error) {
 		}
 
 		switch field.Type() {
-		case pilosa.FieldTypeInt, pilosa.FieldTypeDecimal:
+		case pilosa.FieldTypeInt, pilosa.FieldTypeDecimal, pilosa.FieldTypeTimestamp:
 			switch op {
 			case "=":
 				return Equals(field.Name(), val), nil
@@ -365,6 +366,16 @@ func extractWhere(index *pilosa.Index, expr sqlparser.Expr) (string, error) {
 				return "", err
 			}
 			return Between(field.Name(), fromNum, toNum), nil
+		case pilosa.FieldTypeTimestamp:
+			fromTime, err := extractTimestamp(e.From)
+			if err != nil {
+				return "", err
+			}
+			toTime, err := extractTimestamp(e.To)
+			if err != nil {
+				return "", err
+			}
+			return Between(field.Name(), fromTime, toTime), nil
 		default:
 			return "", errors.New("only int and float64 fields are supported")
 		}
@@ -374,13 +385,13 @@ func extractWhere(index *pilosa.Index, expr sqlparser.Expr) (string, error) {
 			return "", errors.New("left operand must be a column name")
 		}
 		field := index.Field(left.Name.String())
-		if field.Type() == pilosa.FieldTypeInt {
+		if field.Type() == pilosa.FieldTypeInt || field.Type() == pilosa.FieldTypeTimestamp {
 			if e.Operator == "is not null" {
 				return NotNull(field.Name()), nil
 			}
-			return "", errors.New("only `is not null` is supported for int fields")
+			return "", fmt.Errorf("only `is not null` is supported for %s fields", field.Type())
 		}
-		return "", errors.New("`is` expression is supported only for int fields")
+		return "", fmt.Errorf("`is` expression is supported only for %s fields", field.Type())
 	}
 	return "", errors.New("cannot extract where")
 }
@@ -521,6 +532,22 @@ func extractFloat(e sqlparser.Expr) (float64, error) {
 		return 0, errors.New("value must be convertable to a float64")
 	}
 	return num, nil
+}
+
+func extractTimestamp(e sqlparser.Expr) (time.Time, error) {
+	val, err := extractVal(e)
+	if err != nil {
+		return time.Time{}, err
+	}
+	s, ok := val.(string)
+	if !ok {
+		return time.Time{}, errors.New("value must be an ISO 8601-formated timestamp string")
+	}
+	t, err := time.Parse(time.RFC3339Nano, s)
+	if err != nil {
+		return time.Time{}, errors.New("value must be an ISO 8601-formated timestamp string")
+	}
+	return t, nil
 }
 
 func extractStr(e sqlparser.Expr) (string, error) {
@@ -961,26 +988,32 @@ func extractWheres(indexes []*pilosa.Index, tbls parseTables, expr sqlparser.Exp
 			table: pTable,
 		}
 
-		if field.Type() == pilosa.FieldTypeInt {
-			num, ok := val.(int)
-			if !ok {
-				return nil, errors.New("right operand must be a number")
+		if field.Type() == pilosa.FieldTypeInt || field.Type() == pilosa.FieldTypeTimestamp {
+			if field.Type() == pilosa.FieldTypeInt {
+				if _, ok := val.(int); !ok {
+					return nil, errors.New("right operand must be a number")
+				}
+			} else { // timestamp
+				if _, ok := val.(time.Time); !ok {
+					return nil, errors.New("right operand must be a timestamp")
+				}
 			}
+
 			switch op {
 			case "=":
-				tw.where = Equals(field.Name(), num)
+				tw.where = Equals(field.Name(), val)
 			case "<":
-				tw.where = LT(field.Name(), num)
+				tw.where = LT(field.Name(), val)
 			case "<=":
-				tw.where = LTE(field.Name(), num)
+				tw.where = LTE(field.Name(), val)
 			case ">":
-				tw.where = GT(field.Name(), num)
+				tw.where = GT(field.Name(), val)
 			case ">=":
-				tw.where = GTE(field.Name(), num)
+				tw.where = GTE(field.Name(), val)
 			case "<>":
 				fallthrough
 			case "!=":
-				tw.where = NotEquals(field.Name(), num)
+				tw.where = NotEquals(field.Name(), val)
 			}
 			return append(wheres, tw), nil
 		}
@@ -1148,7 +1181,19 @@ func extractWheres(indexes []*pilosa.Index, tbls parseTables, expr sqlparser.Exp
 			tw.where = Between(field.Name(), fromNum, toNum)
 			return append(wheres, tw), nil
 		}
-		return nil, errors.New("only int fields are supported")
+		if field.Type() == pilosa.FieldTypeTimestamp {
+			fromTime, err := extractTimestamp(e.From)
+			if err != nil {
+				return nil, err
+			}
+			toTime, err := extractTimestamp(e.To)
+			if err != nil {
+				return nil, err
+			}
+			tw.where = Between(field.Name(), fromTime, toTime)
+			return append(wheres, tw), nil
+		}
+		return nil, errors.New("only int or timestamp fields are supported")
 	case *sqlparser.IsExpr:
 		left, ok := e.Expr.(*sqlparser.ColName)
 		if !ok {
@@ -1172,14 +1217,14 @@ func extractWheres(indexes []*pilosa.Index, tbls parseTables, expr sqlparser.Exp
 		}
 
 		field := pTable.index.Field(pCol.name)
-		if field.Type() == pilosa.FieldTypeInt {
+		if field.Type() == pilosa.FieldTypeInt || field.Type() == pilosa.FieldTypeTimestamp {
 			if e.Operator == "is not null" {
 				tw.where = NotNull(field.Name())
 				return append(wheres, tw), nil
 			}
-			return nil, errors.New("only `is not null` is supported for int fields")
+			return nil, fmt.Errorf("only `is not null` is supported for %s fields", field.Type())
 		}
-		return nil, errors.New("`is` expression is supported only for int fields")
+		return nil, fmt.Errorf("`is` expression is supported only for %s fields", field.Type())
 	}
 	return nil, errors.New("cannot extract where")
 }

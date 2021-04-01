@@ -430,7 +430,7 @@ func (i *Index) openExistenceField() error {
 func (i *Index) setFieldBitDepths() error {
 	for name, f := range i.fields {
 		switch f.Type() {
-		case FieldTypeInt, FieldTypeDecimal:
+		case FieldTypeInt, FieldTypeDecimal, FieldTypeTimestamp:
 			// pass
 		default:
 			continue
