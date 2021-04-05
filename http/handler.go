@@ -2892,10 +2892,27 @@ func (h *Handler) handleReserveIDs(w http.ResponseWriter, r *http.Request) {
 
 	ids, err := h.api.ReserveIDs(req.Key, req.Session, req.Offset, req.Count)
 	if err != nil {
+		var esync pilosa.ErrIDOffsetDesync
+		if errors.As(err, &esync) {
+			w.Header().Add("Content-Type", "application/json")
+			w.WriteHeader(http.StatusConflict)
+			err = json.NewEncoder(w).Encode(struct {
+				pilosa.ErrIDOffsetDesync
+				Err string `json:"error"`
+			}{
+				ErrIDOffsetDesync: esync,
+				Err:               err.Error(),
+			})
+			if err != nil {
+				h.logger.Debugf("failed to send desync error: %v", err)
+			}
+			return
+		}
 		http.Error(w, fmt.Sprintf("reserving IDs: %v", err.Error()), http.StatusBadRequest)
 		return
 	}
 
+	w.Header().Add("Content-Type", "application/json")
 	err = json.NewEncoder(w).Encode(ids)
 	if err != nil {
 		http.Error(w, "encoding result", http.StatusBadRequest)
