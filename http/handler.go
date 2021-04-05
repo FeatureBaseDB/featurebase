@@ -334,7 +334,7 @@ func (h *Handler) collectStats(next http.Handler) http.Handler {
 				queryString = req.Query
 			}
 
-			h.logger.Printf("%s %s %v %s", r.Method, r.URL.String(), dur, queryString)
+			h.logger.Printf("HTTP query duration %v exceeds %v: %s %s %s", dur, longQueryTime, r.Method, r.URL.String(), queryString)
 			statsTags = append(statsTags, "slow:true")
 		} else {
 			statsTags = append(statsTags, "slow:false")
