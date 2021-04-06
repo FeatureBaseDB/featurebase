@@ -335,7 +335,7 @@ func (h handlerSelectDistinctFromTable) Apply(stmt *sqlparser.Select, qm QueryMa
 	// Otherwise, use Rows()
 	// TODO: ensure this works for all field types (bool, time, etc).
 	var qo string
-	if fieldCol.Field.Type() == pilosa.FieldTypeInt {
+	if fieldCol.Field.Type() == pilosa.FieldTypeInt || fieldCol.Field.Type() == pilosa.FieldTypeTimestamp {
 		qo = Distinct(fieldCol.Field.Index(), fieldCol.Field.Name())
 	} else {
 		if !qm.HasOrderBy() && limit > 0 {

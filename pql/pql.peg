@@ -6,7 +6,7 @@ type PQL Peg {
 
 # All input queries consist of a sequence of calls, at the top level.
 Calls <- sp (Call sp)* !.
-Call <-  "Set" {p.startCall("Set")} open col comma args (comma timestamp)? close {p.endCall()}
+Call <-  "Set" {p.startCall("Set")} open col comma args (comma time)? close {p.endCall()}
        / "SetRowAttrs" {p.startCall("SetRowAttrs")} open posfield comma row comma args close {p.endCall()}
        / "SetColumnAttrs" {p.startCall("SetColumnAttrs")} open col comma args close {p.endCall()}
        / "Clear" {p.startCall("Clear")} open col comma args close {p.endCall()}
@@ -19,7 +19,7 @@ Call <-  "Set" {p.startCall("Set")} open col comma args (comma timestamp)? close
        / "Min" {p.startCall("Min")} open posfield (comma allargs)? close {p.endCall()}
        / "Max" {p.startCall("Max")} open posfield (comma allargs)? close {p.endCall()}
        / "Sum" {p.startCall("Sum")} open posfield (comma allargs)? close {p.endCall()}
-       / "Range" {p.startCall("Range")} open field eq value comma 'from='? {p.addField("from")} timestampfmt {p.addVal(text)} comma 'to='? sp {p.addField("to")} timestampfmt {p.addVal(text)} close {p.endCall()}
+       / "Range" {p.startCall("Range")} open field eq value comma 'from='? {p.addField("from")} timefmt {p.addVal(text)} comma 'to='? sp {p.addField("to")} timefmt {p.addVal(text)} close {p.endCall()}
        / < IDENT > { p.startCall(text) } open allargs comma? close { p.endCall() }
 allargs <- Call (comma Call)* (comma args)? / args / sp
 args <- arg (comma args)? sp
@@ -45,7 +45,8 @@ items <- item (comma items)?
 item <-   'null' &(comma / close) { p.addVal(nil) }
          / 'true' &(comma / close) { p.addVal(true) }
          / 'false' &(comma / close) { p.addVal(false) }
-         / timestampfmt { p.addVal(text) }
+         / timefmt { p.addVal(text) }
+         / timestampfmt { p.addTimestampVal(text) }
          / < decimal > { p.addNumVal(text) }
          / < IDENT > { p.startCall(text) } open allargs comma? close { p.addVal(p.endCall()) }
          / < ([[A-Z]] / [0-9] / '-' / '_' / ':')+ > { p.addVal(text) }
@@ -79,6 +80,12 @@ signedDigits <- '-'? digits
 decimal <- signedDigits ('.' digits?)?
          / '-'? '.' digits
 
-timestampbasicfmt <- [0-9][0-9][0-9][0-9]'-'[01][0-9]'-'[0-3][0-9]'T'[0-9][0-9]':'[0-9][0-9]
+tz <- 'Z' / '-' [0-9][0-9]':'[0-9][0-9] / '+'[0-9][0-9]':'[0-9][0-9]
+iso8601 <- [0-9][0-9][0-9][0-9]'-'[01][0-9]'-'[0-3][0-9]'T'[0-9][0-9]':'[0-9][0-9]':'[0-9][0-9] <tz>
+iso8601nano <- [0-9][0-9][0-9][0-9]'-'[01][0-9]'-'[0-3][0-9]'T'[0-9][0-9]':'[0-9][0-9]':'[0-9][0-9]'.'[0-9]+ <tz>
+timestampbasicfmt <- iso8601nano / iso8601
 timestampfmt <- '"' <timestampbasicfmt> '"' / '\'' <timestampbasicfmt> '\'' / <timestampbasicfmt>
-timestamp <- <timestampfmt> {p.addPosStr("_timestamp", text)}
+
+timebasicfmt <- [0-9][0-9][0-9][0-9]'-'[01][0-9]'-'[0-3][0-9]'T'[0-9][0-9]':'[0-9][0-9]
+timefmt <- '"' <timebasicfmt> '"' / '\'' <timebasicfmt> '\'' / <timebasicfmt>
+time <- <timefmt> {p.addPosStr("_timestamp", text)}

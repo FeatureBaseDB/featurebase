@@ -202,6 +202,38 @@ func (q *Query) addNumVal(val string) {
 	elem.lastCond = ILLEGAL
 }
 
+func (q *Query) addTimestampVal(val string) {
+	elem := q.lastCallStackElem()
+	if elem == nil || elem.lastField == "" {
+		panic(fmt.Sprintf("addTimestampVal called with '%s' when lastField is empty", val))
+	}
+	tsval := parseTimestamp(val)
+	if elem.inList {
+		if elem.lastCond != ILLEGAL {
+			list := elem.call.Args[elem.lastField].(*Condition).Value.([]interface{})
+			elem.call.Args[elem.lastField] = &Condition{
+				Op:    elem.lastCond,
+				Value: append(list, tsval),
+			}
+		} else {
+			list := elem.call.Args[elem.lastField].([]interface{})
+			elem.call.Args[elem.lastField] = append(list, tsval)
+		}
+		return
+	} else if elem.lastCond != ILLEGAL {
+		q.validateArgField(elem) // case 3
+		elem.call.Args[elem.lastField] = &Condition{
+			Op:    elem.lastCond,
+			Value: tsval,
+		}
+	} else {
+		q.validateArgField(elem) // case 4
+		elem.call.Args[elem.lastField] = tsval
+	}
+	elem.lastField = ""
+	elem.lastCond = ILLEGAL
+}
+
 func (q *Query) startList() {
 	elem := q.lastCallStackElem()
 	q.validateArgField(elem) // case 5
@@ -1108,4 +1140,12 @@ func parseNum(val string) interface{} {
 		panic(fmt.Sprintf("%s: %s", intOutOfRangeError, err))
 	}
 	return ival
+}
+
+func parseTimestamp(val string) time.Time {
+	tsval, err := time.Parse(time.RFC3339Nano, val)
+	if err != nil {
+		panic(fmt.Sprintf("%s: %s", invalidTimestampError, err))
+	}
+	return tsval
 }

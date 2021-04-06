@@ -31,6 +31,7 @@ const timeFormat = "2006-01-02T15:04"
 // error strings in the parser
 const duplicateArgErrorMessage = "duplicate argument provided"
 const intOutOfRangeError = "integer is not in signed 64-bit range"
+const invalidTimestampError = "string is not a timestamp"
 
 // parser represents a parser for the PQL language.
 type parser struct {
