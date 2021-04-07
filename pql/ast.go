@@ -377,6 +377,7 @@ var callInfoByFunc = map[string]callInfo{
 	// taking field=value cases
 	"Bitmap": {allowUnknown: true},
 	"Count":  {allowUnknown: true},
+	"Delete": {allowUnknown: true},
 	"Row":    {allowUnknown: true},
 	"Range":  {allowUnknown: true},
 
