@@ -1022,6 +1022,7 @@ func TestORM(t *testing.T) {
 			9999,
 			pql.NewDecimal(0, 0),
 			pql.NewDecimal(0, 0),
+			"",
 			"")
 	})
 
@@ -1040,6 +1041,7 @@ func TestORM(t *testing.T) {
 			0,
 			pql.NewDecimal(-10, 0),
 			pql.NewDecimal(100, 0),
+			"",
 			"")
 
 		field = sampleIndex.Field("int-field2", OptFieldTypeInt(-10))
@@ -1057,6 +1059,7 @@ func TestORM(t *testing.T) {
 			0,
 			pql.NewDecimal(-10, 0),
 			pql.NewDecimal(math.MaxInt64, 0),
+			"",
 			"")
 		field = sampleIndex.Field("int-field3", OptFieldTypeInt())
 		jsonString = field.options.String()
@@ -1072,6 +1075,7 @@ func TestORM(t *testing.T) {
 			0,
 			pql.NewDecimal(math.MinInt64, 0),
 			pql.NewDecimal(math.MaxInt64, 0),
+			"",
 			"")
 
 		field = sampleIndex.Field("int-field4", OptFieldTypeInt(), OptFieldForeignIndex("blerg"))
@@ -1088,7 +1092,8 @@ func TestORM(t *testing.T) {
 			0,
 			pql.NewDecimal(math.MinInt64, 0),
 			pql.NewDecimal(math.MaxInt64, 0),
-			"blerg")
+			"blerg",
+			"")
 	})
 
 	t.Run("TimeFieldOptions", func(t *testing.T) {
@@ -1109,6 +1114,7 @@ func TestORM(t *testing.T) {
 			0,
 			pql.NewDecimal(0, 0),
 			pql.NewDecimal(0, 0),
+			"",
 			"")
 	})
 
@@ -1127,6 +1133,7 @@ func TestORM(t *testing.T) {
 			9999,
 			pql.NewDecimal(0, 0),
 			pql.NewDecimal(0, 0),
+			"",
 			"")
 	})
 
@@ -1145,6 +1152,7 @@ func TestORM(t *testing.T) {
 			0,
 			pql.NewDecimal(0, 0),
 			pql.NewDecimal(0, 0),
+			"",
 			"")
 	})
 
@@ -1163,7 +1171,46 @@ func TestORM(t *testing.T) {
 			0,
 			pql.NewDecimal(7, 3),
 			pql.NewDecimal(999, 3),
+			"",
 			"")
+	})
+
+	t.Run("DecimalFieldOptions", func(t *testing.T) {
+		field := sampleIndex.Field("decimal-field", OptFieldTypeDecimal(3, pql.NewDecimal(7, 3), pql.NewDecimal(999, 3)))
+		jsonString := field.options.String()
+		targetString := `{"options":{"type":"decimal","scale":3,"max":0.999,"min":0.007}}`
+		if sortedString(targetString) != sortedString(jsonString) {
+			t.Fatalf("`%s` != `%s`", targetString, jsonString)
+		}
+		compareFieldOptions(t,
+			field.Options(),
+			FieldTypeDecimal,
+			TimeQuantumNone,
+			CacheTypeDefault,
+			0,
+			pql.NewDecimal(7, 3),
+			pql.NewDecimal(999, 3),
+			"",
+			"")
+	})
+
+	t.Run("TimestampFieldOptions", func(t *testing.T) {
+		field := sampleIndex.Field("timestamp-field", OptFieldTypeTimestamp(time.Unix(0, 2), time.Unix(0, 5000), "s"))
+		jsonString := field.options.String()
+		targetString := `{"options":{"type":"timestamp","timeUnit":"s","max":5000,"min":2}}`
+		if sortedString(targetString) != sortedString(jsonString) {
+			t.Fatalf("`%s` != `%s`", targetString, jsonString)
+		}
+		compareFieldOptions(t,
+			field.Options(),
+			FieldTypeTimestamp,
+			TimeQuantumNone,
+			CacheTypeDefault,
+			0,
+			pql.NewDecimal(2, 0),
+			pql.NewDecimal(5000, 0),
+			"",
+			"s")
 	})
 
 	t.Run("EncodeMapPanicsOnMarshalFailure", func(t *testing.T) {
@@ -1211,7 +1258,7 @@ func comparePQL(t *testing.T, target string, q PQLQuery) {
 	}
 }
 
-func compareFieldOptions(t *testing.T, opts *FieldOptions, fieldType FieldType, timeQuantum TimeQuantum, cacheType CacheType, cacheSize int, min pql.Decimal, max pql.Decimal, foreignIndex string) {
+func compareFieldOptions(t *testing.T, opts *FieldOptions, fieldType FieldType, timeQuantum TimeQuantum, cacheType CacheType, cacheSize int, min pql.Decimal, max pql.Decimal, foreignIndex string, timeUnit string) {
 	if fieldType != opts.Type() {
 		t.Fatalf("%s != %s", fieldType, opts.Type())
 	}
@@ -1232,6 +1279,9 @@ func compareFieldOptions(t *testing.T, opts *FieldOptions, fieldType FieldType, 
 	}
 	if foreignIndex != opts.ForeignIndex() {
 		t.Fatalf("%s != %s", foreignIndex, opts.ForeignIndex())
+	}
+	if timeUnit != opts.TimeUnit() {
+		t.Fatalf("%s != %s", timeUnit, opts.TimeUnit())
 	}
 }
 
