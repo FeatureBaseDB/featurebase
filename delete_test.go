@@ -27,6 +27,7 @@ import (
 )
 
 func TestExecutor_DeleteRecords(t *testing.T) {
+	pilosa.NotBlueGreenTest(t)
 	indexName := "i"
 	setup := func(t *testing.T, r *require.Assertions, c *test.Cluster) {
 		t.Helper()
