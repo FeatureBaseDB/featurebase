@@ -1438,8 +1438,6 @@ func (o *fieldOptions) validate() error {
 			return pilosa.NewBadRequestError(errors.New("cacheSize does not apply to field type int"))
 		} else if o.TimeQuantum != nil {
 			return pilosa.NewBadRequestError(errors.New("timeQuantum does not apply to field type int"))
-		} else if o.ForeignIndex != nil {
-			return pilosa.NewBadRequestError(errors.New("int field cannot be a foreign key"))
 		}
 	case pilosa.FieldTypeDecimal:
 		if o.Scale == nil {
