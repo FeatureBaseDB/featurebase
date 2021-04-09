@@ -210,8 +210,8 @@ func OptFieldTypeInt(min, max int64) FieldOption {
 // provide any respective configuration values.
 func OptFieldTypeTimestamp(min, max time.Time, timeUnit string) FieldOption {
 	return func(fo *FieldOptions) error {
-		minValue := min.UnixNano() / TimeUnitNano(timeUnit)
-		maxValue := max.UnixNano() / TimeUnitNano(timeUnit)
+		minValue := min.UnixNano() / TimeUnitNanos(timeUnit)
+		maxValue := max.UnixNano() / TimeUnitNanos(timeUnit)
 		if fo.Type != "" {
 			return errors.Errorf("field type is already set to: %s", fo.Type)
 		}
@@ -1421,7 +1421,7 @@ func (f *Field) MaxForShard(tx Tx, shard uint64, filter *Row) (ValCount, error) 
 		dec := pql.NewDecimal(max+bsig.Base, bsig.Scale)
 		valCount.DecimalVal = &dec
 	} else if f.Options().Type == FieldTypeTimestamp {
-		valCount.TimestampVal = time.Unix(0, (max+bsig.Base)*TimeUnitNano(f.options.TimeUnit)).UTC()
+		valCount.TimestampVal = time.Unix(0, (max+bsig.Base)*TimeUnitNanos(f.options.TimeUnit)).UTC()
 	} else {
 		valCount.Val = max + bsig.Base
 	}
@@ -1467,7 +1467,7 @@ func (f *Field) MinForShard(tx Tx, shard uint64, filter *Row) (ValCount, error) 
 		dec := pql.NewDecimal(min+bsig.Base, bsig.Scale)
 		valCount.DecimalVal = &dec
 	} else if f.Options().Type == FieldTypeTimestamp {
-		valCount.TimestampVal = time.Unix(0, (min+bsig.Base)*TimeUnitNano(f.options.TimeUnit)).UTC()
+		valCount.TimestampVal = time.Unix(0, (min+bsig.Base)*TimeUnitNanos(f.options.TimeUnit)).UTC()
 	} else {
 		valCount.Val = min + bsig.Base
 	}
@@ -1599,6 +1599,19 @@ func (f *Field) importFloatValue(qcx *Qcx, columnIDs []uint64, values []float64,
 		ivalues[i] = int64(fval * mult)
 	}
 	// then call importValue
+	return f.importValue(qcx, columnIDs, ivalues, options)
+}
+
+func (f *Field) importTimestampValue(qcx *Qcx, columnIDs []uint64, values []time.Time, options *ImportOptions) error {
+	ivalues := make([]int64, len(values))
+	bsig := f.bsiGroup(f.name)
+	if bsig == nil {
+		return errors.Wrap(ErrBSIGroupNotFound, f.name)
+	}
+
+	for i, t := range values {
+		ivalues[i] = t.UnixNano() / TimeUnitNanos(f.options.TimeUnit)
+	}
 	return f.importValue(qcx, columnIDs, ivalues, options)
 }
 
@@ -1921,10 +1934,10 @@ func (o *FieldOptions) MarshalJSON() ([]byte, error) {
 			ForeignIndex  string    `json:"foreignIndex"`
 		}{
 			o.Type,
-			time.Unix(0, o.Base*TimeUnitNano(o.TimeUnit)).UTC(),
+			time.Unix(0, o.Base*TimeUnitNanos(o.TimeUnit)).UTC(),
 			o.BitDepth,
-			time.Unix(0, o.Min.Value*TimeUnitNano(o.TimeUnit)).UTC(),
-			time.Unix(0, o.Max.Value*TimeUnitNano(o.TimeUnit)).UTC(),
+			time.Unix(0, o.Min.Value*TimeUnitNanos(o.TimeUnit)).UTC(),
+			time.Unix(0, o.Max.Value*TimeUnitNanos(o.TimeUnit)).UTC(),
 			o.Keys,
 			o.TimeUnit,
 			o.ForeignIndex,
@@ -1965,12 +1978,12 @@ func (o *FieldOptions) MarshalJSON() ([]byte, error) {
 
 // MinTimestamp returns the minimum value for a timestamp field.
 func (o FieldOptions) MinTimestamp() time.Time {
-	return time.Unix(0, o.Min.ToInt64(0)*int64(TimeUnitNano(o.TimeUnit)))
+	return time.Unix(0, o.Min.ToInt64(0)*int64(TimeUnitNanos(o.TimeUnit)))
 }
 
 // MaxTimestamp returns the maxnimum value for a timestamp field.
 func (o FieldOptions) MaxTimestamp() time.Time {
-	return time.Unix(0, o.Max.ToInt64(0)*int64(TimeUnitNano(o.TimeUnit)))
+	return time.Unix(0, o.Max.ToInt64(0)*int64(TimeUnitNanos(o.TimeUnit)))
 }
 
 // List of bsiGroup types.
@@ -2162,8 +2175,8 @@ func IsValidTimeUnit(unit string) bool {
 	}
 }
 
-// TimeUnitNano returns the number of nanoseconds in unit.
-func TimeUnitNano(unit string) int64 {
+// TimeUnitNanos returns the number of nanoseconds in unit.
+func TimeUnitNanos(unit string) int64 {
 	switch unit {
 	case TimeUnitSeconds:
 		return int64(time.Second)

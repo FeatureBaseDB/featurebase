@@ -1613,6 +1613,11 @@ func (api *API) ImportValueWithTx(ctx context.Context, qcx *Qcx, req *ImportValu
 			if err != nil {
 				api.server.logger.Printf("import error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
 			}
+		} else if len(req.TimestampValues) > 0 {
+			err = field.importTimestampValue(qcx, req.ColumnIDs, req.TimestampValues, options)
+			if err != nil {
+				api.server.logger.Printf("import error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
+			}
 		} else if len(req.FloatValues) > 0 {
 			err = field.importFloatValue(qcx, req.ColumnIDs, req.FloatValues, options)
 			if err != nil {
