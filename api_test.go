@@ -17,6 +17,7 @@ package pilosa_test
 import (
 	"context"
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"math"
 	"reflect"
@@ -698,38 +699,116 @@ func TestAPI_IDAlloc(t *testing.T) {
 
 	primary := c.GetPrimary().API
 
-	key := pilosa.IDAllocKey{
-		Index: "index",
-		Key:   "key",
-	}
-	var session [32]byte
-	_, err := rand.Read(session[:])
-	if err != nil {
-		t.Fatalf("obtaining random bytes: %v", err)
-	}
+	t.Run("Normal", func(t *testing.T) {
+		key := pilosa.IDAllocKey{
+			Index: "normal",
+			Key:   "key",
+		}
+		var session [32]byte
+		_, err := rand.Read(session[:])
+		if err != nil {
+			t.Fatalf("obtaining random bytes: %v", err)
+		}
 
-	const toReserve = 2
+		const toReserve = 2
 
-	ids, err := primary.ReserveIDs(key, session, ^uint64(0), toReserve)
-	if err != nil {
-		t.Fatalf("reserving IDs: %v", err)
-	}
+		ids, err := primary.ReserveIDs(key, session, ^uint64(0), toReserve)
+		if err != nil {
+			t.Fatalf("reserving IDs: %v", err)
+		}
 
-	var numIds uint64
-	for _, idr := range ids {
-		numIds += (idr.Last - idr.First) + 1
-	}
-	if numIds != toReserve {
-		t.Errorf("expected %d ids but got %d: %v", toReserve, numIds, ids)
-	}
+		var numIds uint64
+		for _, idr := range ids {
+			numIds += (idr.Last - idr.First) + 1
+		}
+		if numIds != toReserve {
+			t.Errorf("expected %d ids but got %d: %v", toReserve, numIds, ids)
+		}
 
-	err = primary.CommitIDs(key, session, numIds)
-	if err != nil {
-		t.Fatalf("committing IDs: %v", err)
-	}
+		err = primary.CommitIDs(key, session, numIds)
+		if err != nil {
+			t.Fatalf("committing IDs: %v", err)
+		}
 
-	err = primary.ResetIDAlloc(key.Index)
-	if err != nil {
-		t.Fatalf("resetting ID alloc: %v", err)
-	}
+		err = primary.ResetIDAlloc(key.Index)
+		if err != nil {
+			t.Fatalf("resetting ID alloc: %v", err)
+		}
+	})
+	t.Run("Offset", func(t *testing.T) {
+		key := pilosa.IDAllocKey{
+			Index: "offset",
+			Key:   "key",
+		}
+		var session [32]byte
+		_, err := rand.Read(session[:])
+		if err != nil {
+			t.Fatalf("obtaining random bytes: %v", err)
+		}
+
+		ids, err := primary.ReserveIDs(key, session, 0, 2)
+		if err != nil {
+			t.Fatalf("reserving IDs: %v", err)
+		}
+
+		{
+			var numIds uint64
+			for _, idr := range ids {
+				numIds += (idr.Last - idr.First) + 1
+			}
+			if numIds != 2 {
+				t.Errorf("expected %d ids but got %d: %v", 2, numIds, ids)
+			}
+		}
+
+		_, err = rand.Read(session[:])
+		if err != nil {
+			t.Fatalf("obtaining random bytes: %v", err)
+		}
+		ids2, err := primary.ReserveIDs(key, session, 1, 2)
+		if err != nil {
+			t.Fatalf("reserving IDs with partially increased offset: %v", err)
+		}
+
+		var numIds uint64
+		for _, idr := range ids2 {
+			numIds += (idr.Last - idr.First) + 1
+		}
+		if numIds != 2 {
+			t.Errorf("expected %d ids but got %d: %v", 2, numIds, ids2)
+		}
+
+		if prevEnd, newStart := ids[len(ids)-1].Last, ids2[0].First; prevEnd != newStart {
+			t.Errorf("expected reuse of last ID (%d), but started with %d", prevEnd, newStart)
+		}
+
+		err = primary.CommitIDs(key, session, numIds)
+		if err != nil {
+			t.Errorf("committing IDs: %v", err)
+		}
+
+		_, err = rand.Read(session[:])
+		if err != nil {
+			t.Fatalf("obtaining random bytes: %v", err)
+		}
+		ids3, err := primary.ReserveIDs(key, session, 0, 2)
+		var esync pilosa.ErrIDOffsetDesync
+		if errors.As(err, &esync) {
+			if esync.Requested != 0 {
+				t.Errorf("incorrect requested offset in error: provided %d but got %d", 0, esync.Requested)
+			}
+			if esync.Base != 3 {
+				t.Errorf("incorrect base offset: expected %d but got %d", 3, esync.Base)
+			}
+		} else if err == nil {
+			t.Errorf("successfully re-reserved at a committed offset: %v", ids3)
+		} else {
+			t.Fatalf("unexpected error when reserving committed IDs: %v", err)
+		}
+
+		err = primary.ResetIDAlloc(key.Index)
+		if err != nil {
+			t.Fatalf("resetting ID alloc: %v", err)
+		}
+	})
 }
