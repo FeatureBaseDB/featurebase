@@ -8412,18 +8412,20 @@ func (e *executor) executeDeleteRecordFromShard(ctx context.Context, qcx *Qcx, i
 			}
 		}
 	}
-	for _, view := range idx.existenceFld.views() {
-		frag, ok := view.fragments[shard]
-		if !ok {
-			continue
-		}
-		for _, bit := range columns.Slice() {
-			c, err := frag.clearBit(tx, 0, bit)
-			if err != nil {
-				return false, nil
+	if idx.trackExistence {
+		for _, view := range idx.existenceFld.views() {
+			frag, ok := view.fragments[shard]
+			if !ok {
+				continue
 			}
-			if c {
-				changed = true
+			for _, bit := range columns.Slice() {
+				c, err := frag.clearBit(tx, 0, bit)
+				if err != nil {
+					return false, nil
+				}
+				if c {
+					changed = true
+				}
 			}
 		}
 	}
