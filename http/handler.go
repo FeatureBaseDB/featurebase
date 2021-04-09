@@ -1342,16 +1342,16 @@ func (h *Handler) handlePostField(w http.ResponseWriter, r *http.Request) {
 		fos = append(fos, pilosa.OptFieldTypeDecimal(scale, minmax...))
 	case pilosa.FieldTypeTimestamp:
 		if req.Options.Min == nil {
-			min := pql.NewDecimal(pilosa.MinTimestamp.UnixNano()/pilosa.TimeUnitNano(*req.Options.TimeUnit), 0)
+			min := pql.NewDecimal(pilosa.MinTimestamp.UnixNano()/pilosa.TimeUnitNanos(*req.Options.TimeUnit), 0)
 			req.Options.Min = &min
 		}
 		if req.Options.Max == nil {
-			max := pql.NewDecimal(pilosa.MaxTimestamp.UnixNano()/pilosa.TimeUnitNano(*req.Options.TimeUnit), 0)
+			max := pql.NewDecimal(pilosa.MaxTimestamp.UnixNano()/pilosa.TimeUnitNanos(*req.Options.TimeUnit), 0)
 			req.Options.Max = &max
 		}
 		fos = append(fos, pilosa.OptFieldTypeTimestamp(
-			time.Unix(0, req.Options.Min.ToInt64(0)*pilosa.TimeUnitNano(*req.Options.TimeUnit)).UTC(),
-			time.Unix(0, req.Options.Max.ToInt64(0)*pilosa.TimeUnitNano(*req.Options.TimeUnit)).UTC(),
+			time.Unix(0, req.Options.Min.ToInt64(0)*pilosa.TimeUnitNanos(*req.Options.TimeUnit)).UTC(),
+			time.Unix(0, req.Options.Max.ToInt64(0)*pilosa.TimeUnitNanos(*req.Options.TimeUnit)).UTC(),
 			*req.Options.TimeUnit,
 		))
 	case pilosa.FieldTypeTime:

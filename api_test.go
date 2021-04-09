@@ -446,8 +446,6 @@ func TestAPI_ImportValue(t *testing.T) {
 	})
 
 	t.Run("ValTimestampField", func(t *testing.T) {
-		t.Skip("TODO(benbjohnson): timestamp")
-
 		ctx := context.Background()
 		index := "valts"
 		field := "fts"
@@ -484,7 +482,7 @@ func TestAPI_ImportValue(t *testing.T) {
 		}
 		PanicOn(qcx.Finish())
 
-		query := fmt.Sprintf("Row(%s>'1833-11-24T17:31:50Z')", field)
+		query := fmt.Sprintf("Row(%s>='1833-11-24T17:31:50Z')", field) // 6s after MinTimestamp
 
 		// Query node0.
 		if res, err := m0.API.Query(ctx, &pilosa.QueryRequest{Index: index, Query: query}); err != nil {
