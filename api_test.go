@@ -462,11 +462,10 @@ func TestAPI_ImportValue(t *testing.T) {
 		}
 
 		// Generate some records.
-		t0 := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
 		values := []time.Time{}
 		colIDs := []uint64{}
 		for i := 0; i < 10; i++ {
-			values = append(values, t0.AddDate(0, 1, 0))
+			values = append(values, pilosa.MinTimestamp.Add(time.Duration(i)*time.Second))
 			colIDs = append(colIDs, uint64(i))
 		}
 
@@ -479,13 +478,13 @@ func TestAPI_ImportValue(t *testing.T) {
 			TimestampValues: values,
 		}
 
-		qcx := m1.API.Txf().NewQcx()
-		if err := m1.API.ImportValue(ctx, qcx, req); err != nil {
+		qcx := m2.API.Txf().NewQcx()
+		if err := m2.API.ImportValue(ctx, qcx, req); err != nil {
 			t.Fatal(err)
 		}
 		PanicOn(qcx.Finish())
 
-		query := fmt.Sprintf("Row(%s>6)", field)
+		query := fmt.Sprintf("Row(%s>'1833-11-24T17:31:50Z')", field)
 
 		// Query node0.
 		if res, err := m0.API.Query(ctx, &pilosa.QueryRequest{Index: index, Query: query}); err != nil {
