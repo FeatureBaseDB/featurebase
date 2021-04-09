@@ -1590,7 +1590,6 @@ func (api *API) ImportValueWithTx(ctx context.Context, qcx *Qcx, req *ImportValu
 
 	// if we're importing into a specific shard
 	if req.Shard != math.MaxUint64 {
-
 		// Check that column IDs match the stated shard.
 		if s1, s2 := req.ColumnIDs[0]/ShardWidth, req.ColumnIDs[len(req.ColumnIDs)-1]/ShardWidth; s1 != s2 && s2 != req.Shard {
 			return errors.Errorf("shard %d specified, but import spans shards %d to %d", req.Shard, s1, s2)
