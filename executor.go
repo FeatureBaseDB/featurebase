@@ -1034,7 +1034,7 @@ func (e *executor) executeFieldValueCallShard(ctx context.Context, qcx *Qcx, fie
 		other.FloatVal = 0
 		other.Val = 0
 	} else if field.Type() == FieldTypeTimestamp {
-		other.TimestampVal = time.Unix(0, value*int64(TimeUnitNano(field.Options().TimeUnit)))
+		other.TimestampVal = time.Unix(0, value*int64(TimeUnitNanos(field.Options().TimeUnit)))
 	}
 
 	return other, nil
@@ -4496,7 +4496,6 @@ func (e *executor) executeExtractShard(ctx context.Context, qcx *Qcx, index stri
 }
 
 func (e *executor) executeRowShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64) (_ *Row, err0 error) {
-
 	span, _ := tracing.StartSpanFromContext(ctx, "Executor.executeRowShard")
 	defer span.Finish()
 
@@ -4547,7 +4546,6 @@ func (e *executor) executeRowShard(ctx context.Context, qcx *Qcx, index string, 
 	// Simply return row if times are not set.
 	timeNotSet := fromTime.IsZero() && toTime.IsZero()
 	if c.Name == "Row" && timeNotSet {
-
 		frag := e.Holder.fragment(index, fieldName, viewStandard, shard)
 		if frag == nil {
 			return NewRow(), nil
@@ -4606,7 +4604,6 @@ func (e *executor) executeRowShard(ctx context.Context, qcx *Qcx, index string, 
 
 // executeRowBSIGroupShard executes a range(bsiGroup) call for a local shard.
 func (e *executor) executeRowBSIGroupShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64) (_ *Row, err0 error) {
-
 	span, _ := tracing.StartSpanFromContext(ctx, "Executor.executeRowBSIGroupShard")
 	defer span.Finish()
 
@@ -7404,7 +7401,7 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 					case 0:
 						return nil, nil
 					case 1:
-						return time.Unix(0, int64(ids[0])*int64(TimeUnitNano(field.Options().TimeUnit))).UTC(), nil
+						return time.Unix(0, int64(ids[0])*int64(TimeUnitNanos(field.Options().TimeUnit))).UTC(), nil
 					default:
 						return nil, errors.Errorf("BSI field %q has too many values: %v", field.Name(), ids)
 					}
@@ -8272,7 +8269,7 @@ func getScaledInt(f *Field, v interface{}) (int64, error) {
 	} else if opt.Type == FieldTypeTimestamp {
 		switch tv := v.(type) {
 		case time.Time:
-			value = tv.UnixNano() / TimeUnitNano(f.options.TimeUnit)
+			value = tv.UnixNano() / TimeUnitNanos(f.options.TimeUnit)
 		default:
 			return 0, errors.Errorf("unexpected timestamp value type %T, val %v", tv, tv)
 		}
