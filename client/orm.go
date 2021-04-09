@@ -793,6 +793,7 @@ type FieldOptions struct {
 	keys           bool
 	noStandardView bool
 	foreignIndex   string
+	timeUnit       string
 }
 
 // Type returns the type of the field. Currently "set", "int", or "time".
@@ -841,6 +842,10 @@ func (fo FieldOptions) ForeignIndex() string {
 	return fo.foreignIndex
 }
 
+func (fo FieldOptions) TimeUnit() string {
+	return fo.timeUnit
+}
+
 // NoStandardView suppresses creating the standard view for supported field types (currently, time)
 func (fo FieldOptions) NoStandardView() bool {
 	return fo.noStandardView
@@ -877,6 +882,10 @@ func (fo FieldOptions) String() string {
 	case FieldTypeTime:
 		mopt["timeQuantum"] = string(fo.timeQuantum)
 		mopt["noStandardView"] = fo.noStandardView
+	case FieldTypeTimestamp:
+		mopt["min"] = fo.min
+		mopt["max"] = fo.max
+		mopt["timeUnit"] = fo.timeUnit
 	}
 
 	if fo.fieldType != FieldTypeDefault {
@@ -898,6 +907,16 @@ func (fo *FieldOptions) addOptions(options ...FieldOption) {
 		}
 		option(fo)
 	}
+}
+
+// MinTimestamp returns the minimum value for a timestamp field.
+func (o FieldOptions) MinTimestamp() time.Time {
+	return time.Unix(0, o.min.ToInt64(0)*int64(TimeUnitNano(o.TimeUnit())))
+}
+
+// MaxTimestamp returns the maxnimum value for a timestamp field.
+func (o FieldOptions) MaxTimestamp() time.Time {
+	return time.Unix(0, o.max.ToInt64(0)*int64(TimeUnitNano(o.TimeUnit())))
 }
 
 // FieldOption is used to pass an option to index.Field function.
@@ -947,6 +966,18 @@ func OptFieldTypeTime(quantum TimeQuantum, opts ...bool) FieldOption {
 		if len(opts) > 0 && opts[0] {
 			options.noStandardView = true
 		}
+	}
+}
+
+func OptFieldTypeTimestamp(min, max time.Time, timeUnit string) FieldOption {
+	return func(fo *FieldOptions) {
+		minNano := min.UnixNano()
+		maxNano := max.UnixNano()
+		fo.fieldType = FieldTypeTimestamp
+		fo.timeUnit = timeUnit
+		fo.min = pql.NewDecimal(minNano, 0)
+		fo.max = pql.NewDecimal(maxNano, 0)
+		// fo.Base = bsiBase(minNano, maxNano)
 	}
 }
 
@@ -1287,7 +1318,8 @@ const (
 	// FieldTypeDecimal can store floating point numbers as integers
 	// with a scale factor. This field type is only available in
 	// Molecula's Pilosa with enterprise extensions.
-	FieldTypeDecimal FieldType = "decimal"
+	FieldTypeDecimal   FieldType = "decimal"
+	FieldTypeTimestamp FieldType = "timestamp"
 )
 
 // TimeQuantum type represents valid time quantum values time fields.
@@ -1307,6 +1339,28 @@ const (
 	TimeQuantumMonthDayHour     TimeQuantum = "MDH"
 	TimeQuantumYearMonthDayHour TimeQuantum = "YMDH"
 )
+
+// List of time units.
+const (
+	TimeUnitSeconds      = "s"
+	TimeUnitMilliseconds = "ms"
+	TimeUnitMicroseconds = "µs"
+	TimeUnitNanoseconds  = "ns"
+)
+
+// TimeUnitNano returns the number of nanoseconds in unit.
+func TimeUnitNano(unit string) int64 {
+	switch unit {
+	case TimeUnitSeconds:
+		return int64(time.Second)
+	case TimeUnitMilliseconds:
+		return int64(time.Millisecond)
+	case TimeUnitMicroseconds:
+		return int64(time.Microsecond)
+	default:
+		return int64(time.Nanosecond)
+	}
+}
 
 // CacheType represents cache type for a field
 type CacheType string
