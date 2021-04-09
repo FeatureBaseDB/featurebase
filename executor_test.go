@@ -997,6 +997,51 @@ func TestExecutor_Execute_SetValue(t *testing.T) {
 			}
 		})
 	})
+
+	t.Run("Timestamp", func(t *testing.T) {
+		c := test.MustRunCluster(t, 1)
+		defer c.Close()
+		hldr := c.GetHolder(0)
+
+		// Create fields.
+		index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
+		if _, err := index.CreateFieldIfNotExists("f", pilosa.OptFieldTypeTimestamp(pilosa.MinTimestamp, pilosa.MaxTimestamp, pilosa.TimeUnitSeconds)); err != nil {
+			t.Fatal(err)
+		} else if _, err := index.CreateFieldIfNotExists("xxx", pilosa.OptFieldTypeDefault()); err != nil {
+			t.Fatal(err)
+		}
+
+		// Set bsiGroup values.
+		if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(10, f='2000-01-01T00:00:00.000000000Z')`}); err != nil {
+			t.Fatal(err)
+		} else if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(100, f='2000-01-02T00:00:00Z')`}); err != nil {
+			t.Fatal(err)
+		}
+
+		// Obtain transaction.
+		idx := index.Index
+		shard := uint64(0)
+		tx := idx.Txf().NewTx(pilosa.Txo{Write: !writable, Index: idx, Shard: shard})
+		defer tx.Rollback()
+
+		f := hldr.Field("i", "f")
+		if value, exists, err := f.Value(tx, 10); err != nil {
+			t.Fatal(err)
+		} else if !exists {
+			t.Fatal("expected value to exist")
+		} else if value != time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC).UnixNano() {
+			t.Fatalf("unexpected value: %v", value)
+		}
+
+		if value, exists, err := f.Value(tx, 100); err != nil {
+			t.Fatal(err)
+		} else if !exists {
+			t.Fatal("expected value to exist")
+		} else if value != time.Date(2000, time.January, 2, 0, 0, 0, 0, time.UTC).UnixNano() {
+			t.Fatalf("unexpected value: %v", value)
+		}
+	})
+
 }
 
 // Ensure a SetRowAttrs() query can be executed.
@@ -1336,7 +1381,7 @@ func TestExecutor_Execute_TopN(t *testing.T) {
 			t.Fatal(err)
 		} else if _, err := idx.CreateField("f", pilosa.OptFieldTypeInt(0, 100)); err != nil {
 			t.Fatal(err)
-		} else if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `TopN(f, n=2)`}); err == nil || !strings.Contains(err.Error(), `finding top results: mapping on primary node: cannot compute TopN() on integer field: "f"`) {
+		} else if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `TopN(f, n=2)`}); err == nil || !strings.Contains(err.Error(), `finding top results: mapping on primary node: cannot compute TopN() on integer, decimal, or timestamp field: "f"`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -1735,6 +1780,95 @@ func TestExecutor_Execute_MinMax(t *testing.T) {
 						if result, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: pql}); err != nil {
 							t.Fatal(err)
 						} else if !reflect.DeepEqual(result.Results[0], pilosa.ValCount{DecimalVal: &test.exp, Count: 1}) {
+							t.Fatalf("unexpected max result, test %d: %s", i, spew.Sdump(result))
+						}
+					})
+				})
+			}
+		})
+
+		t.Run("Timestamp", func(t *testing.T) {
+			c := test.MustRunCluster(t, 1)
+			defer c.Close()
+			hldr := c.GetHolder(0)
+
+			idx, err := hldr.CreateIndex("i", pilosa.IndexOptions{})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			tests := []struct {
+				min time.Time
+				max time.Time
+				set time.Time
+			}{
+				{
+					time.Date(2000, time.January, 10, 0, 0, 0, 0, time.UTC),
+					time.Date(2000, time.January, 20, 0, 0, 0, 0, time.UTC),
+					time.Date(2000, time.January, 11, 0, 0, 0, 0, time.UTC),
+				},
+			}
+			for i, test := range tests {
+				fld := fmt.Sprintf("f%d", i)
+				t.Run("MinMaxField_"+fld, func(t *testing.T) {
+					if _, err := idx.CreateField(fld, pilosa.OptFieldTypeTimestamp(test.min, test.max, pilosa.TimeUnitSeconds)); err != nil {
+						t.Fatal(err)
+					} else if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: fmt.Sprintf(`Set(10, %s="%s")`, fld, test.set.Format(time.RFC3339))}); err != nil {
+						t.Fatal(err)
+					}
+
+					var pql string
+
+					t.Run("Min", func(t *testing.T) {
+						pql = fmt.Sprintf(`Min(field=%s)`, fld)
+						if result, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: pql}); err != nil {
+							t.Fatal(err)
+						} else if !reflect.DeepEqual(result.Results[0], pilosa.ValCount{TimestampVal: test.set, Count: 1}) {
+							t.Fatalf("unexpected min result, test %d: %s", i, spew.Sdump(result))
+						}
+					})
+
+					t.Run("Max", func(t *testing.T) {
+						pql = fmt.Sprintf(`Max(field=%s)`, fld)
+						if result, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: pql}); err != nil {
+							t.Fatal(err)
+						} else if !reflect.DeepEqual(result.Results[0], pilosa.ValCount{TimestampVal: test.set, Count: 1}) {
+							t.Fatalf("unexpected max result, test %d: %s", i, spew.Sdump(result))
+						}
+					})
+
+					t.Run("Min", func(t *testing.T) {
+						pql = fmt.Sprintf(`Min(field="%s")`, fld)
+						if result, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: pql}); err != nil {
+							t.Fatal(err)
+						} else if !reflect.DeepEqual(result.Results[0], pilosa.ValCount{TimestampVal: test.set, Count: 1}) {
+							t.Fatalf("unexpected min result, test %d: %s", i, spew.Sdump(result))
+						}
+					})
+
+					t.Run("Max", func(t *testing.T) {
+						pql = fmt.Sprintf(`Max(field="%s")`, fld)
+						if result, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: pql}); err != nil {
+							t.Fatal(err)
+						} else if !reflect.DeepEqual(result.Results[0], pilosa.ValCount{TimestampVal: test.set, Count: 1}) {
+							t.Fatalf("unexpected max result, test %d: %s", i, spew.Sdump(result))
+						}
+					})
+
+					t.Run("Min", func(t *testing.T) {
+						pql = fmt.Sprintf(`Min(%s)`, fld)
+						if result, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: pql}); err != nil {
+							t.Fatal(err)
+						} else if !reflect.DeepEqual(result.Results[0], pilosa.ValCount{TimestampVal: test.set, Count: 1}) {
+							t.Fatalf("unexpected min result, test %d: %s", i, spew.Sdump(result))
+						}
+					})
+
+					t.Run("Max", func(t *testing.T) {
+						pql = fmt.Sprintf(`Max(%s)`, fld)
+						if result, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: pql}); err != nil {
+							t.Fatal(err)
+						} else if !reflect.DeepEqual(result.Results[0], pilosa.ValCount{TimestampVal: test.set, Count: 1}) {
 							t.Fatalf("unexpected max result, test %d: %s", i, spew.Sdump(result))
 						}
 					})

@@ -445,6 +445,56 @@ func TestAPI_ImportValue(t *testing.T) {
 		}
 	})
 
+	t.Run("ValTimestampField", func(t *testing.T) {
+		t.Skip("TODO(benbjohnson): timestamp")
+
+		ctx := context.Background()
+		index := "valts"
+		field := "fts"
+
+		_, err := m1.API.CreateIndex(ctx, index, pilosa.IndexOptions{})
+		if err != nil {
+			t.Fatalf("creating index: %v", err)
+		}
+		_, err = m1.API.CreateField(ctx, index, field, pilosa.OptFieldTypeTimestamp(pilosa.MinTimestamp, pilosa.MaxTimestamp, pilosa.TimeUnitSeconds))
+		if err != nil {
+			t.Fatalf("creating field: %v", err)
+		}
+
+		// Generate some records.
+		t0 := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
+		values := []time.Time{}
+		colIDs := []uint64{}
+		for i := 0; i < 10; i++ {
+			values = append(values, t0.AddDate(0, 1, 0))
+			colIDs = append(colIDs, uint64(i))
+		}
+
+		// Import data with keys to node1 and verify that it gets translated and
+		// forwarded to the owner of shard 0 (node0; because of offsetModHasher)
+		req := &pilosa.ImportValueRequest{
+			Index:           index,
+			Field:           field,
+			ColumnIDs:       colIDs,
+			TimestampValues: values,
+		}
+
+		qcx := m1.API.Txf().NewQcx()
+		if err := m1.API.ImportValue(ctx, qcx, req); err != nil {
+			t.Fatal(err)
+		}
+		PanicOn(qcx.Finish())
+
+		query := fmt.Sprintf("Row(%s>6)", field)
+
+		// Query node0.
+		if res, err := m0.API.Query(ctx, &pilosa.QueryRequest{Index: index, Query: query}); err != nil {
+			t.Fatal(err)
+		} else if ids := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(ids, colIDs[6:]) {
+			t.Fatalf("unexpected column keys: observerd %+v;  expected '%+v'", ids, colIDs[6:])
+		}
+	})
+
 	t.Run("ValStringField", func(t *testing.T) {
 		ctx := context.Background()
 		index := "valstr"

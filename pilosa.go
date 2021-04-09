@@ -87,8 +87,9 @@ var (
 	ErrFieldsArgumentRequired    = errors.New("fields argument required")
 	ErrExpectedFieldListArgument = errors.New("expected field list argument")
 
-	ErrIntFieldWithKeys     = errors.New("int field cannot be created with 'keys=true' option")
-	ErrDecimalFieldWithKeys = errors.New("decimal field cannot be created with 'keys=true' option")
+	ErrIntFieldWithKeys       = errors.New("int field cannot be created with 'keys=true' option")
+	ErrDecimalFieldWithKeys   = errors.New("decimal field cannot be created with 'keys=true' option")
+	ErrTimestampFieldWithKeys = errors.New("timestamp field cannot be created with 'keys=true' option")
 )
 
 // apiMethodNotAllowedError wraps an error value indicating that a particular

@@ -1029,6 +1029,8 @@ func (e *executor) executeFieldValueCallShard(ctx context.Context, qcx *Qcx, fie
 			Scale: field.Options().Scale}
 		other.FloatVal = 0
 		other.Val = 0
+	} else if field.Type() == FieldTypeTimestamp {
+		other.TimestampVal = time.Unix(0, value*int64(TimeUnitNano(field.Options().TimeUnit)))
 	}
 
 	return other, nil
@@ -2620,8 +2622,8 @@ func (e *executor) executeTopNShard(ctx context.Context, qcx *Qcx, index string,
 	n, _, err := c.UintArg("n")
 	if err != nil {
 		return nil, fmt.Errorf("executeTopNShard: %v", err)
-	} else if f := e.Holder.Field(index, fieldName); f != nil && (f.Type() == FieldTypeInt || f.Type() == FieldTypeDecimal) {
-		return nil, fmt.Errorf("cannot compute TopN() on integer field: %q", fieldName)
+	} else if f := e.Holder.Field(index, fieldName); f != nil && (f.Type() == FieldTypeInt || f.Type() == FieldTypeDecimal || f.Type() == FieldTypeTimestamp) {
+		return nil, fmt.Errorf("cannot compute TopN() on integer, decimal, or timestamp field: %q", fieldName)
 	}
 
 	attrName, _ := c.Args["attrName"].(string)
@@ -3001,7 +3003,7 @@ func (e *executor) executeGroupBy(ctx context.Context, qcx *Qcx, index string, c
 			return nil, newNotFoundError(ErrFieldNotFound, fieldName)
 		}
 		switch f.Type() {
-		case FieldTypeInt:
+		case FieldTypeInt, FieldTypeTimestamp:
 			bases[i] = f.bsiGroup(f.name).Base
 		}
 
@@ -4420,7 +4422,7 @@ func (e *executor) executeExtractShard(ctx context.Context, qcx *Qcx, index stri
 				}
 			}
 
-		case FieldTypeInt, FieldTypeDecimal:
+		case FieldTypeInt, FieldTypeDecimal, FieldTypeTimestamp:
 			// Handle an int/decimal field by rotating a BSI matrix.
 
 			// Extract the BSI view fragment.
@@ -5128,8 +5130,8 @@ func (e *executor) executeClearBit(ctx context.Context, qcx *Qcx, index string, 
 		return false, newNotFoundError(ErrFieldNotFound, fieldName)
 	}
 
-	// Int field.
-	if f.Type() == FieldTypeInt || f.Type() == FieldTypeDecimal {
+	// BSI field
+	if f.Type() == FieldTypeInt || f.Type() == FieldTypeDecimal || f.Type() == FieldTypeTimestamp {
 		return e.executeClearValueField(ctx, qcx, index, c, f, colID, opt)
 	}
 
@@ -5457,8 +5459,8 @@ func (e *executor) executeSet(ctx context.Context, qcx *Qcx, index string, c *pq
 	}
 
 	switch f.Type() {
-	case FieldTypeInt, FieldTypeDecimal:
-		// Int or Decimal field.
+	case FieldTypeInt, FieldTypeDecimal, FieldTypeTimestamp:
+		// Fetch field
 		v, ok := c.Arg(fieldName)
 		if !ok {
 			return false, fmt.Errorf("Set() row argument '%v' required", rowLabel)
@@ -6518,6 +6520,7 @@ func fieldValidateValue(f *Field, val interface{}) error {
 		case int64:
 		case float64:
 		case pql.Decimal:
+		case time.Time:
 		case []interface{}:
 			for _, v := range v {
 				if err := fieldValidateValue(f, v); err != nil {
@@ -6569,6 +6572,12 @@ func fieldValidateValue(f *Field, val interface{}) error {
 		case pql.Decimal:
 		default:
 			return errors.Errorf("invalid value %v for decimal field %q", v, f.Name())
+		}
+	case FieldTypeTimestamp:
+		switch v := val.(type) {
+		case time.Time:
+		default:
+			return errors.Errorf("invalid value %v for timestamp field %q", v, f.Name())
 		}
 	default:
 		return errors.Errorf("unsupported type %s of field %q", f.Type(), f.Name())
@@ -6631,9 +6640,9 @@ func (e *executor) translateCall(c *pql.Call, index string, columnKeys map[strin
 			}
 			if c.Name == "Row" {
 				switch f.Type() {
-				case FieldTypeInt, FieldTypeDecimal:
+				case FieldTypeInt, FieldTypeDecimal, FieldTypeTimestamp:
 					if _, ok := arg.(*pql.Condition); !ok {
-						// This is workaround to support pql.ASSIGN ('=') as condition ('==') for int and decimal fields.
+						// This is workaround to support pql.ASSIGN ('=') as condition ('==') for BSI fields.
 						arg = &pql.Condition{
 							Op:    pql.EQ,
 							Value: arg,
@@ -7384,6 +7393,18 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 						return nil, errors.Errorf("BSI field %q has too many values: %v", field.Name(), ids)
 					}
 				}
+			case FieldTypeTimestamp:
+				datatype = "timestamp"
+				mapper = func(ids []uint64) (_ interface{}, err error) {
+					switch len(ids) {
+					case 0:
+						return nil, nil
+					case 1:
+						return time.Unix(0, int64(ids[0])*int64(TimeUnitNano(field.Options().TimeUnit))).UTC(), nil
+					default:
+						return nil, errors.Errorf("BSI field %q has too many values: %v", field.Name(), ids)
+					}
+				}
 			default:
 				return nil, errors.Errorf("field type %q not yet supported", typ)
 			}
@@ -7655,17 +7676,19 @@ func (sr *SignedRow) union(other SignedRow) SignedRow {
 
 // ValCount represents a grouping of sum & count for Sum() and Average() calls. Also Min, Max....
 type ValCount struct {
-	Val        int64        `json:"value"`
-	FloatVal   float64      `json:"floatValue"`
-	DecimalVal *pql.Decimal `json:"decimalValue"`
-	Count      int64        `json:"count"`
+	Val          int64        `json:"value"`
+	FloatVal     float64      `json:"floatValue"`
+	DecimalVal   *pql.Decimal `json:"decimalValue"`
+	TimestampVal time.Time    `json:"timestampValue"`
+	Count        int64        `json:"count"`
 }
 
 func (v *ValCount) Clone() (r *ValCount) {
 	r = &ValCount{
-		Val:      v.Val,
-		FloatVal: v.FloatVal,
-		Count:    v.Count,
+		Val:          v.Val,
+		FloatVal:     v.FloatVal,
+		TimestampVal: v.TimestampVal,
+		Count:        v.Count,
 	}
 	if v.DecimalVal != nil {
 		r.DecimalVal = v.DecimalVal.Clone()
@@ -7705,6 +7728,19 @@ func (v ValCount) ToRows(callback func(*proto.RowResponse) error) error {
 			Headers: ci,
 			Columns: []*proto.ColumnResponse{
 				&proto.ColumnResponse{ColumnVal: &proto.ColumnResponse_Float64Val{Float64Val: v.FloatVal}},
+				&proto.ColumnResponse{ColumnVal: &proto.ColumnResponse_Int64Val{Int64Val: v.Count}},
+			}}); err != nil {
+			return errors.Wrap(err, "calling callback")
+		}
+	} else if !v.TimestampVal.IsZero() {
+		ci = []*proto.ColumnInfo{
+			{Name: "value", Datatype: "string"},
+			{Name: "count", Datatype: "int64"},
+		}
+		if err := callback(&proto.RowResponse{
+			Headers: ci,
+			Columns: []*proto.ColumnResponse{
+				&proto.ColumnResponse{ColumnVal: &proto.ColumnResponse_StringVal{StringVal: v.TimestampVal.Format(time.RFC3339Nano)}},
 				&proto.ColumnResponse{ColumnVal: &proto.ColumnResponse_Int64Val{Int64Val: v.Count}},
 			}}); err != nil {
 			return errors.Wrap(err, "calling callback")
@@ -7955,12 +7991,12 @@ func newGroupByIterator(executor *executor, qcx *Qcx, rowIDs []RowIDs, children 
 			} else {
 				viewName = viewStandard
 			}
-		case FieldTypeInt:
+		case FieldTypeInt, FieldTypeTimestamp:
 			viewName = viewBSIGroupPrefix + fieldName
 
 		default: // FieldTypeDecimal
 			return nil, errors.Errorf("%s call must have field of one of types: %s",
-				call.Name, strings.Join([]string{FieldTypeSet, FieldTypeTime, FieldTypeMutex, FieldTypeBool, FieldTypeInt}, ","))
+				call.Name, strings.Join([]string{FieldTypeSet, FieldTypeTime, FieldTypeMutex, FieldTypeBool, FieldTypeInt, FieldTypeTimestamp}, ","))
 		}
 
 		filters := []roaring.BitmapFilter{}
@@ -8228,6 +8264,13 @@ func getScaledInt(f *Field, v interface{}) (int64, error) {
 			value = int64(tv * math.Pow10(int(opt.Scale)))
 		default:
 			return 0, errors.Errorf("unexpected decimal value type %T, val %v", tv, tv)
+		}
+	} else if opt.Type == FieldTypeTimestamp {
+		switch tv := v.(type) {
+		case time.Time:
+			value = tv.UnixNano()
+		default:
+			return 0, errors.Errorf("unexpected timestamp value type %T, val %v", tv, tv)
 		}
 	} else {
 		switch tv := v.(type) {

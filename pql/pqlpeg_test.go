@@ -143,6 +143,22 @@ func TestPEGWorking(t *testing.T) {
 			input:  "Set(1, a=4, 2017-04-03T19:34)",
 			ncalls: 1},
 		{
+			name:   "SetTimestampField",
+			input:  "Set(1, a='2017-04-03T19:34:00Z')",
+			ncalls: 1},
+		{
+			name:   "SetTimestampTZField",
+			input:  "Set(1, a='2017-04-03T19:34:00-07:00')",
+			ncalls: 1},
+		{
+			name:   "SetTimestampTZField",
+			input:  "Set(1, a='2017-04-03T19:34:00+07:00')",
+			ncalls: 1},
+		{
+			name:   "SetTimestampNanoField",
+			input:  "Set(1, a='2017-04-03T19:34:00.000000Z')",
+			ncalls: 1},
+		{
 			name:   "Union()",
 			input:  "Union()",
 			ncalls: 1},

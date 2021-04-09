@@ -334,7 +334,7 @@ func (h *Handler) collectStats(next http.Handler) http.Handler {
 				queryString = req.Query
 			}
 
-			h.logger.Printf("%s %s %v %s", r.Method, r.URL.String(), dur, queryString)
+			h.logger.Printf("HTTP query duration %v exceeds %v: %s %s %s", dur, longQueryTime, r.Method, r.URL.String(), queryString)
 			statsTags = append(statsTags, "slow:true")
 		} else {
 			statsTags = append(statsTags, "slow:false")
@@ -1340,6 +1340,20 @@ func (h *Handler) handlePostField(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		fos = append(fos, pilosa.OptFieldTypeDecimal(scale, minmax...))
+	case pilosa.FieldTypeTimestamp:
+		if req.Options.Min == nil {
+			min := pql.NewDecimal(pilosa.MinTimestamp.UnixNano()/pilosa.TimeUnitNano(*req.Options.TimeUnit), 0)
+			req.Options.Min = &min
+		}
+		if req.Options.Max == nil {
+			max := pql.NewDecimal(pilosa.MaxTimestamp.UnixNano()/pilosa.TimeUnitNano(*req.Options.TimeUnit), 0)
+			req.Options.Max = &max
+		}
+		fos = append(fos, pilosa.OptFieldTypeTimestamp(
+			time.Unix(0, req.Options.Min.ToInt64(0)*pilosa.TimeUnitNano(*req.Options.TimeUnit)).UTC(),
+			time.Unix(0, req.Options.Max.ToInt64(0)*pilosa.TimeUnitNano(*req.Options.TimeUnit)).UTC(),
+			*req.Options.TimeUnit,
+		))
 	case pilosa.FieldTypeTime:
 		fos = append(fos, pilosa.OptFieldTypeTime(*req.Options.TimeQuantum, req.Options.NoStandardView))
 	case pilosa.FieldTypeMutex:
@@ -1384,6 +1398,7 @@ type fieldOptions struct {
 	Min            *pql.Decimal        `json:"min,omitempty"`
 	Max            *pql.Decimal        `json:"max,omitempty"`
 	Scale          *int64              `json:"scale,omitempty"`
+	TimeUnit       *string             `json:"timeUnit,omitempty"`
 	TimeQuantum    *pilosa.TimeQuantum `json:"timeQuantum,omitempty"`
 	Keys           *bool               `json:"keys,omitempty"`
 	NoStandardView bool                `json:"noStandardView,omitempty"`
@@ -1423,8 +1438,8 @@ func (o *fieldOptions) validate() error {
 			return pilosa.NewBadRequestError(errors.New("cacheSize does not apply to field type int"))
 		} else if o.TimeQuantum != nil {
 			return pilosa.NewBadRequestError(errors.New("timeQuantum does not apply to field type int"))
-		} else if o.ForeignIndex != nil && o.Type == pilosa.FieldTypeDecimal {
-			return pilosa.NewBadRequestError(errors.New("decimal field cannot be a foreign key"))
+		} else if o.ForeignIndex != nil {
+			return pilosa.NewBadRequestError(errors.New("int field cannot be a foreign key"))
 		}
 	case pilosa.FieldTypeDecimal:
 		if o.Scale == nil {
@@ -1437,6 +1452,20 @@ func (o *fieldOptions) validate() error {
 			return pilosa.NewBadRequestError(errors.New("timeQuantum does not apply to field type int"))
 		} else if o.ForeignIndex != nil && o.Type == pilosa.FieldTypeDecimal {
 			return pilosa.NewBadRequestError(errors.New("decimal field cannot be a foreign key"))
+		}
+	case pilosa.FieldTypeTimestamp:
+		if o.TimeUnit == nil {
+			return pilosa.NewBadRequestError(errors.New("timestamp field requires a timeUnit argument"))
+		} else if !pilosa.IsValidTimeUnit(*o.TimeUnit) {
+			return pilosa.NewBadRequestError(errors.New("invalid timeUnit argument"))
+		} else if o.CacheType != nil {
+			return pilosa.NewBadRequestError(errors.New("cacheType does not apply to field type timestamp"))
+		} else if o.CacheSize != nil {
+			return pilosa.NewBadRequestError(errors.New("cacheSize does not apply to field type timestamp"))
+		} else if o.TimeQuantum != nil {
+			return pilosa.NewBadRequestError(errors.New("timeQuantum does not apply to field type timestamp"))
+		} else if o.ForeignIndex != nil {
+			return pilosa.NewBadRequestError(errors.New("timestamp field cannot be a foreign key"))
 		}
 	case pilosa.FieldTypeTime:
 		if o.CacheType != nil {
@@ -2343,8 +2372,8 @@ func (h *Handler) handlePostImportAtomicRecord(w http.ResponseWriter, r *http.Re
 // handlePostImport handles /import requests.
 func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 	// Verify that request is only communicating over protobufs.
-	if error, code := validateProtobufHeader(r); error != "" {
-		http.Error(w, error, code)
+	if err, code := validateProtobufHeader(r); err != "" {
+		http.Error(w, err, code)
 		return
 	}
 
@@ -2363,7 +2392,7 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 	fieldName := mux.Vars(r)["field"]
 	field := index.Field(fieldName)
 	if field == nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
+		http.Error(w, pilosa.ErrFieldNotFound.Error(), http.StatusNotFound)
 		return
 	}
 
@@ -2384,7 +2413,7 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Unmarshal request based on field type.
-	if field.Type() == pilosa.FieldTypeInt || field.Type() == pilosa.FieldTypeDecimal {
+	if field.Type() == pilosa.FieldTypeInt || field.Type() == pilosa.FieldTypeDecimal || field.Type() == pilosa.FieldTypeTimestamp {
 		// Field type: Int
 		// Marshal into request object.
 		req := &pilosa.ImportValueRequest{}
