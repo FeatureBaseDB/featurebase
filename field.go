@@ -210,8 +210,8 @@ func OptFieldTypeInt(min, max int64) FieldOption {
 // provide any respective configuration values.
 func OptFieldTypeTimestamp(min, max time.Time, timeUnit string) FieldOption {
 	return func(fo *FieldOptions) error {
-		minNano := min.UnixNano()
-		maxNano := max.UnixNano()
+		minValue := min.UnixNano() / TimeUnitNano(timeUnit)
+		maxValue := max.UnixNano() / TimeUnitNano(timeUnit)
 		if fo.Type != "" {
 			return errors.Errorf("field type is already set to: %s", fo.Type)
 		}
@@ -220,14 +220,18 @@ func OptFieldTypeTimestamp(min, max time.Time, timeUnit string) FieldOption {
 		} else if !IsValidTimeUnit(timeUnit) {
 			return errors.Errorf("invalid time unit: %q", fo.TimeUnit)
 		}
-		if min.After(max) {
+		if min.Before(MinTimestamp) {
+			return errors.New("timestamp field min is too low")
+		} else if max.After(MaxTimestamp) {
+			return errors.New("timestamp field max is too high")
+		} else if min.After(max) {
 			return errors.New("timestamp field min cannot be greater than max")
 		}
 		fo.Type = FieldTypeTimestamp
 		fo.TimeUnit = timeUnit
-		fo.Min = pql.NewDecimal(minNano, 0)
-		fo.Max = pql.NewDecimal(maxNano, 0)
-		fo.Base = bsiBase(minNano, maxNano)
+		fo.Min = pql.NewDecimal(minValue, 0)
+		fo.Max = pql.NewDecimal(maxValue, 0)
+		fo.Base = bsiBase(minValue, maxValue)
 		return nil
 	}
 }
@@ -1417,7 +1421,7 @@ func (f *Field) MaxForShard(tx Tx, shard uint64, filter *Row) (ValCount, error) 
 		dec := pql.NewDecimal(max+bsig.Base, bsig.Scale)
 		valCount.DecimalVal = &dec
 	} else if f.Options().Type == FieldTypeTimestamp {
-		valCount.TimestampVal = time.Unix(0, (max + bsig.Base)).UTC()
+		valCount.TimestampVal = time.Unix(0, (max+bsig.Base)*TimeUnitNano(f.options.TimeUnit)).UTC()
 	} else {
 		valCount.Val = max + bsig.Base
 	}
@@ -1463,7 +1467,7 @@ func (f *Field) MinForShard(tx Tx, shard uint64, filter *Row) (ValCount, error) 
 		dec := pql.NewDecimal(min+bsig.Base, bsig.Scale)
 		valCount.DecimalVal = &dec
 	} else if f.Options().Type == FieldTypeTimestamp {
-		valCount.TimestampVal = time.Unix(0, (min + bsig.Base)).UTC()
+		valCount.TimestampVal = time.Unix(0, (min+bsig.Base)*TimeUnitNano(f.options.TimeUnit)).UTC()
 	} else {
 		valCount.Val = min + bsig.Base
 	}
@@ -1907,20 +1911,20 @@ func (o *FieldOptions) MarshalJSON() ([]byte, error) {
 		})
 	case FieldTypeTimestamp:
 		return json.Marshal(struct {
-			Type         string      `json:"type"`
-			Base         int64       `json:"base"`
-			BitDepth     uint64      `json:"bitDepth"`
-			Min          pql.Decimal `json:"min"`
-			Max          pql.Decimal `json:"max"`
-			Keys         bool        `json:"keys"`
-			TimeUnit     string      `json:"timeUnit"`
-			ForeignIndex string      `json:"foreignIndex"`
+			Type          string    `json:"type"`
+			BaseTimestamp time.Time `json:"baseTimestamp"`
+			BitDepth      uint64    `json:"bitDepth"`
+			MinTimestamp  time.Time `json:"minTimestamp"`
+			MaxTimestamp  time.Time `json:"maxTimestamp"`
+			Keys          bool      `json:"keys"`
+			TimeUnit      string    `json:"timeUnit"`
+			ForeignIndex  string    `json:"foreignIndex"`
 		}{
 			o.Type,
-			o.Base,
+			time.Unix(0, o.Base*TimeUnitNano(o.TimeUnit)).UTC(),
 			o.BitDepth,
-			o.Min,
-			o.Max,
+			time.Unix(0, o.Min.Value*TimeUnitNano(o.TimeUnit)).UTC(),
+			time.Unix(0, o.Max.Value*TimeUnitNano(o.TimeUnit)).UTC(),
 			o.Keys,
 			o.TimeUnit,
 			o.ForeignIndex,
@@ -2136,8 +2140,8 @@ func (f *Field) persistView(ctx context.Context, cvm *CreateViewMessage) error {
 
 // Timestamp field range.
 var (
-	MinTimestamp = time.Unix(-1<<42, 0).UTC()
-	MaxTimestamp = time.Unix(1<<42, 0).UTC()
+	MinTimestamp = time.Unix(-1<<32, 0).UTC() // 1833-11-24T17:31:44Z
+	MaxTimestamp = time.Unix(1<<32, 0).UTC()  // 2106-02-07T06:28:16Z
 )
 
 // List of time units.

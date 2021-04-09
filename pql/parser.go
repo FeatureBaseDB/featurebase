@@ -25,9 +25,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-// timeFormat is the go-style time format used to parse string dates.
-const timeFormat = "2006-01-02T15:04"
-
 // error strings in the parser
 const duplicateArgErrorMessage = "duplicate argument provided"
 const intOutOfRangeError = "integer is not in signed 64-bit range"

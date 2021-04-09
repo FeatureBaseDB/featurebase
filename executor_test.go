@@ -1029,7 +1029,7 @@ func TestExecutor_Execute_SetValue(t *testing.T) {
 			t.Fatal(err)
 		} else if !exists {
 			t.Fatal("expected value to exist")
-		} else if value != time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC).UnixNano() {
+		} else if value != time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC).UnixNano()/int64(time.Second) {
 			t.Fatalf("unexpected value: %v", value)
 		}
 
@@ -1037,7 +1037,7 @@ func TestExecutor_Execute_SetValue(t *testing.T) {
 			t.Fatal(err)
 		} else if !exists {
 			t.Fatal("expected value to exist")
-		} else if value != time.Date(2000, time.January, 2, 0, 0, 0, 0, time.UTC).UnixNano() {
+		} else if value != time.Date(2000, time.January, 2, 0, 0, 0, 0, time.UTC).UnixNano()/int64(time.Second) {
 			t.Fatalf("unexpected value: %v", value)
 		}
 	})

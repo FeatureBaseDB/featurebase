@@ -8268,7 +8268,7 @@ func getScaledInt(f *Field, v interface{}) (int64, error) {
 	} else if opt.Type == FieldTypeTimestamp {
 		switch tv := v.(type) {
 		case time.Time:
-			value = tv.UnixNano()
+			value = tv.UnixNano() / TimeUnitNano(f.options.TimeUnit)
 		default:
 			return 0, errors.Errorf("unexpected timestamp value type %T, val %v", tv, tv)
 		}

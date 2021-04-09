@@ -16,6 +16,7 @@ package pilosa
 
 import (
 	"encoding/binary"
+	"fmt"
 	"math/bits"
 	"sort"
 	"time"
@@ -71,6 +72,21 @@ func (ida *idAllocator) Close() error {
 	return ida.db.Close()
 }
 
+// ErrIDOffsetDesync is an error generated when attempting to reserve IDs at a committed offset.
+// This will typically happen when kafka partitions are moved between kafka ingesters - there may be a brief period in which 2 ingesters are processing the same messages at the same time.
+// The ingester can resolve this by ignoring messages under base.
+type ErrIDOffsetDesync struct {
+	// Requested is the offset that the client attempted to reserve.
+	Requested uint64 `json:"requested"`
+
+	// Base is the next uncommitted offset for which IDs may be reserved.
+	Base uint64 `json:"base"`
+}
+
+func (err ErrIDOffsetDesync) Error() string {
+	return fmt.Sprintf("attempted to reserve IDs at committed offset %d (base offset: %d)", err.Requested, err.Base)
+}
+
 func (ida *idAllocator) reserve(key IDAllocKey, session [32]byte, offset, count uint64) ([]IDRange, error) {
 	if session == [32]byte{} {
 		return nil, errors.New("detected a broken session key")
@@ -94,9 +110,12 @@ func (ida *idAllocator) reserve(key IDAllocKey, session [32]byte, offset, count 
 		if offset != ^uint64(0) && offset != res.offset {
 			// Offset control is in use and the offset differs.
 			if offset < res.offset {
-				// The client is confused.
-				// Abort before we break something.
-				return errors.New("unable to rewind ID generation")
+				// This probbably means that 2 clients are running at the same time.
+				// This is fine - just tell the client that is behind what had been dealt with.
+				return ErrIDOffsetDesync{
+					Requested: offset,
+					Base:      res.offset,
+				}
 			}
 
 			// Roll the IDs forward.

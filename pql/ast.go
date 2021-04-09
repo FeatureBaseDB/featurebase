@@ -1076,7 +1076,7 @@ func formatValue(v interface{}) string {
 	case []uint64:
 		return joinUint64Slice(v)
 	case time.Time:
-		return fmt.Sprintf("\"%s\"", v.Format(timeFormat))
+		return fmt.Sprintf("\"%s\"", v.Format(time.RFC3339Nano))
 	case *Condition:
 		return v.String()
 	default:

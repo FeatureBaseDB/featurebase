@@ -2372,8 +2372,8 @@ func (h *Handler) handlePostImportAtomicRecord(w http.ResponseWriter, r *http.Re
 // handlePostImport handles /import requests.
 func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 	// Verify that request is only communicating over protobufs.
-	if error, code := validateProtobufHeader(r); error != "" {
-		http.Error(w, error, code)
+	if err, code := validateProtobufHeader(r); err != "" {
+		http.Error(w, err, code)
 		return
 	}
 
@@ -2392,7 +2392,7 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 	fieldName := mux.Vars(r)["field"]
 	field := index.Field(fieldName)
 	if field == nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
+		http.Error(w, pilosa.ErrFieldNotFound.Error(), http.StatusNotFound)
 		return
 	}
 
@@ -2921,10 +2921,27 @@ func (h *Handler) handleReserveIDs(w http.ResponseWriter, r *http.Request) {
 
 	ids, err := h.api.ReserveIDs(req.Key, req.Session, req.Offset, req.Count)
 	if err != nil {
+		var esync pilosa.ErrIDOffsetDesync
+		if errors.As(err, &esync) {
+			w.Header().Add("Content-Type", "application/json")
+			w.WriteHeader(http.StatusConflict)
+			err = json.NewEncoder(w).Encode(struct {
+				pilosa.ErrIDOffsetDesync
+				Err string `json:"error"`
+			}{
+				ErrIDOffsetDesync: esync,
+				Err:               err.Error(),
+			})
+			if err != nil {
+				h.logger.Debugf("failed to send desync error: %v", err)
+			}
+			return
+		}
 		http.Error(w, fmt.Sprintf("reserving IDs: %v", err.Error()), http.StatusBadRequest)
 		return
 	}
 
+	w.Header().Add("Content-Type", "application/json")
 	err = json.NewEncoder(w).Encode(ids)
 	if err != nil {
 		http.Error(w, "encoding result", http.StatusBadRequest)
