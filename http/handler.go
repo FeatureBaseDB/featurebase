@@ -2372,8 +2372,8 @@ func (h *Handler) handlePostImportAtomicRecord(w http.ResponseWriter, r *http.Re
 // handlePostImport handles /import requests.
 func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 	// Verify that request is only communicating over protobufs.
-	if error, code := validateProtobufHeader(r); error != "" {
-		http.Error(w, error, code)
+	if err, code := validateProtobufHeader(r); err != "" {
+		http.Error(w, err, code)
 		return
 	}
 
@@ -2392,7 +2392,7 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 	fieldName := mux.Vars(r)["field"]
 	field := index.Field(fieldName)
 	if field == nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
+		http.Error(w, pilosa.ErrFieldNotFound.Error(), http.StatusNotFound)
 		return
 	}
 
