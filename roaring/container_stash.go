@@ -125,6 +125,8 @@ func NewContainer() *Container {
 	return NewContainerArray(nil)
 }
 
+// RemakeContainerBitmap overwrites the contents of c, which must not be
+// frozen, with a provided bitmap, and computes a correct N.
 func RemakeContainerBitmap(c *Container, bitmap []uint64) *Container {
 	*c = Container{typeID: ContainerBitmap}
 	c.setBitmap(bitmap)
@@ -132,15 +134,41 @@ func RemakeContainerBitmap(c *Container, bitmap []uint64) *Container {
 	return c
 }
 
+// RemakeContainerBitmapN uses the provided n instead of counting bits. The
+// provided container must not be frozen.
+func RemakeContainerBitmapN(c *Container, bitmap []uint64, n int32) *Container {
+	*c = Container{typeID: ContainerBitmap}
+	c.setBitmap(bitmap)
+	c.n = n
+	return c
+}
+
+// RemakeContainerArray populates c with an array container using the provided
+// array. It must not be used on a frozen container.
 func RemakeContainerArray(c *Container, array []uint16) *Container {
 	*c = Container{typeID: ContainerArray}
 	c.setArray(array)
 	return c
 }
 
+// RemakeContainerRun repopulates c with the provided intervals. c must not
+// be frozen.
 func RemakeContainerRun(c *Container, intervals []Interval16) *Container {
 	*c = Container{typeID: ContainerRun}
 	c.setRuns(intervals)
+	c.n = 0
+	for _, r := range intervals {
+		c.n += int32(r.Last - r.Start + 1)
+	}
+	return c
+}
+
+// RemakeContainerRunN repopulates c with the provided intervals, but
+// assumes the provided n is accurate. c must not be frozen.
+func RemakeContainerRunN(c *Container, intervals []Interval16, n int32) *Container {
+	*c = Container{typeID: ContainerRun}
+	c.setRuns(intervals)
+	c.n = n
 	return c
 }
 
