@@ -1005,7 +1005,7 @@ func TestExecutor_Execute_SetValue(t *testing.T) {
 
 		// Create fields.
 		index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
-		if _, err := index.CreateFieldIfNotExists("f", pilosa.OptFieldTypeTimestamp(pilosa.MinTimestamp, pilosa.MaxTimestamp, pilosa.TimeUnitSeconds)); err != nil {
+		if _, err := index.CreateFieldIfNotExists("f", pilosa.OptFieldTypeTimestamp(pilosa.DefaultEpoch, pilosa.TimeUnitSeconds)); err != nil {
 			t.Fatal(err)
 		} else if _, err := index.CreateFieldIfNotExists("xxx", pilosa.OptFieldTypeDefault()); err != nil {
 			t.Fatal(err)
@@ -1798,20 +1798,18 @@ func TestExecutor_Execute_MinMax(t *testing.T) {
 			}
 
 			tests := []struct {
-				min time.Time
-				max time.Time
-				set time.Time
+				epoch time.Time
+				set   time.Time
 			}{
 				{
 					time.Date(2000, time.January, 10, 0, 0, 0, 0, time.UTC),
-					time.Date(2000, time.January, 20, 0, 0, 0, 0, time.UTC),
 					time.Date(2000, time.January, 11, 0, 0, 0, 0, time.UTC),
 				},
 			}
 			for i, test := range tests {
 				fld := fmt.Sprintf("f%d", i)
 				t.Run("MinMaxField_"+fld, func(t *testing.T) {
-					if _, err := idx.CreateField(fld, pilosa.OptFieldTypeTimestamp(test.min, test.max, pilosa.TimeUnitSeconds)); err != nil {
+					if _, err := idx.CreateField(fld, pilosa.OptFieldTypeTimestamp(test.epoch, pilosa.TimeUnitSeconds)); err != nil {
 						t.Fatal(err)
 					} else if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: fmt.Sprintf(`Set(10, %s="%s")`, fld, test.set.Format(time.RFC3339))}); err != nil {
 						t.Fatal(err)

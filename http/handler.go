@@ -1341,19 +1341,11 @@ func (h *Handler) handlePostField(w http.ResponseWriter, r *http.Request) {
 		}
 		fos = append(fos, pilosa.OptFieldTypeDecimal(scale, minmax...))
 	case pilosa.FieldTypeTimestamp:
-		if req.Options.Min == nil {
-			min := pql.NewDecimal(pilosa.MinTimestamp.UnixNano()/pilosa.TimeUnitNanos(*req.Options.TimeUnit), 0)
-			req.Options.Min = &min
+		if req.Options.Epoch == nil {
+			epoch := pilosa.DefaultEpoch
+			req.Options.Epoch = &epoch
 		}
-		if req.Options.Max == nil {
-			max := pql.NewDecimal(pilosa.MaxTimestamp.UnixNano()/pilosa.TimeUnitNanos(*req.Options.TimeUnit), 0)
-			req.Options.Max = &max
-		}
-		fos = append(fos, pilosa.OptFieldTypeTimestamp(
-			time.Unix(0, req.Options.Min.ToInt64(0)*pilosa.TimeUnitNanos(*req.Options.TimeUnit)).UTC(),
-			time.Unix(0, req.Options.Max.ToInt64(0)*pilosa.TimeUnitNanos(*req.Options.TimeUnit)).UTC(),
-			*req.Options.TimeUnit,
-		))
+		fos = append(fos, pilosa.OptFieldTypeTimestamp(req.Options.Epoch.UTC(), *req.Options.TimeUnit))
 	case pilosa.FieldTypeTime:
 		fos = append(fos, pilosa.OptFieldTypeTime(*req.Options.TimeQuantum, req.Options.NoStandardView))
 	case pilosa.FieldTypeMutex:
@@ -1398,6 +1390,7 @@ type fieldOptions struct {
 	Min            *pql.Decimal        `json:"min,omitempty"`
 	Max            *pql.Decimal        `json:"max,omitempty"`
 	Scale          *int64              `json:"scale,omitempty"`
+	Epoch          *time.Time          `json:"epoch,omitempty"`
 	TimeUnit       *string             `json:"timeUnit,omitempty"`
 	TimeQuantum    *pilosa.TimeQuantum `json:"timeQuantum,omitempty"`
 	Keys           *bool               `json:"keys,omitempty"`
