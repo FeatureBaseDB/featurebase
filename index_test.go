@@ -113,7 +113,7 @@ func TestIndex_CreateField(t *testing.T) {
 			defer index.Close()
 
 			// Create field with schema and verify it exists.
-			if f, err := index.CreateField("f", pilosa.OptFieldTypeTimestamp(pilosa.MinTimestamp, pilosa.MaxTimestamp, pilosa.TimeUnitSeconds)); err != nil {
+			if f, err := index.CreateField("f", pilosa.OptFieldTypeTimestamp(pilosa.DefaultEpoch, pilosa.TimeUnitSeconds)); err != nil {
 				t.Fatal(err)
 			} else if !reflect.DeepEqual(f.Type(), pilosa.FieldTypeTimestamp) {
 				t.Fatalf("unexpected type: %#v", f.Type())
