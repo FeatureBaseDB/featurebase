@@ -840,6 +840,10 @@ func (e *executor) executeCall(ctx context.Context, qcx *Qcx, index string, c *p
 	case "Percentile":
 		res, err := e.executePercentile(ctx, qcx, index, c, shards, opt)
 		return res, errors.Wrapf(err, "executePercentile %v", shardSlice(shards))
+	case "Delete":
+		statFn() //TODO(twg) need this?
+		res, err := e.executeDeleteRecords(ctx, qcx, index, c, shards, opt)
+		return res, errors.Wrapf(err, "executeDelete %v", shardSlice(shards))
 	default: // e.g. "Row", "Union", "Intersect" or anything that returns a bitmap.
 		statFn()
 		res, err := e.executeBitmapCall(ctx, qcx, index, c, shards, opt)
@@ -8301,4 +8305,118 @@ func decimalToInt64(dec pql.Decimal, opt FieldOptions) int64 {
 	}
 
 	return 0
+}
+
+// executeDeleteRecords executes a delete() call.
+func (e *executor) executeDeleteRecords(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *execOptions) (bool, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeDelete")
+	defer span.Finish()
+
+	if len(c.Children) == 0 {
+		return false, errors.New("Delete() requires an input bitmap")
+	} else if len(c.Children) > 1 {
+		return false, errors.New("Delete() only accepts a single bitmap input")
+	}
+
+	// Execute calls in bulk on each remote node and merge.
+	mapFn := func(ctx context.Context, shard uint64) (_ interface{}, err error) {
+		return e.executeDeleteRecordFromShard(ctx, qcx, index, c, shard)
+	}
+
+	// Merge returned results at coordinating node.
+	reduceFn := func(ctx context.Context, prev, v interface{}) interface{} {
+		other, _ := prev.(bool)
+		return other || v.(bool)
+	}
+
+	result, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
+	if err != nil {
+		return false, err
+	}
+	n, _ := result.(bool)
+
+	return n, nil
+}
+
+func (e *executor) executeDeleteRecordFromShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64) (bool, error) {
+
+	span, _ := tracing.StartSpanFromContext(ctx, "Executor.executeDeleteRecordFromShard")
+	defer span.Finish()
+	//need to build the bitmap in the call
+	child := c.Children[0]
+	row, err := e.executeBitmapCallShard(ctx, qcx, index, child, shard)
+	if err != nil {
+		return false, err
+	}
+	if len(row.segments) == 0 { //nothing to remove
+		return false, nil
+	}
+	columns := row.segments[0].data //should only be one segment
+	if columns.Count() == 0 {
+		return false, nil
+	}
+
+	// Fetch index.
+	idx := e.Holder.Index(index)
+	if idx == nil {
+		return false, newNotFoundError(ErrIndexNotFound, index)
+	}
+
+	columnIDs := make([]uint64, 0)
+	none := make([]uint64, 0) // no bits will be set
+
+	tx, finisher, err := qcx.GetTx(Txo{Write: writable, Index: idx, Shard: shard})
+	if err != nil {
+		return false, err
+	}
+	defer finisher(&err)
+	changed := false
+	colCounts := make([]int, 0)
+	toClear := columnIDs[:0]
+	rowSet := make(map[uint64]struct{})
+	callback := func(pos uint64) error {
+		toClear = append(toClear, pos)
+		rowID := pos / ShardWidth
+		rowSet[rowID] = struct{}{}
+		return nil
+	}
+	findExisting := roaring.NewBitmapBitmapFilter(columns, callback)
+
+	clearFragment := func(frag *fragment) (bool, error) {
+		// re-zero these
+		toClear = columnIDs[:0]
+		rowSet = make(map[uint64]struct{})
+
+		err = tx.ApplyFilter(frag.index(), frag.field(), frag.view(), frag.shard, 0, findExisting)
+		if err != nil {
+			return false, err
+		}
+		colCounts = append(colCounts, len(toClear))
+		// this will be the remove part
+		if len(toClear) > 0 {
+			err = frag.importPositions(tx, none, toClear, rowSet)
+			if err != nil {
+				return false, err
+			}
+			return true, nil
+		}
+		return false, nil
+	}
+	for _, field := range idx.Fields() {
+		for _, view := range field.views() {
+
+			frag, ok := view.fragments[shard]
+			if !ok {
+				continue
+			}
+			c, err := clearFragment(frag)
+			if err != nil {
+				return false, err
+			}
+			if c {
+				changed = true
+			}
+		}
+	}
+	return changed, nil
 }
