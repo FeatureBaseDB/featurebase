@@ -197,9 +197,9 @@ func intoContainer(l leafCell, tx *Tx, replacing *roaring.Container, target []by
 		}
 		c = roaring.RemakeContainerBitmap(replacing, cloneMaybe)
 	case ContainerTypeBitmap:
-		c = roaring.RemakeContainerBitmap(replacing, toArray64(cpMaybe))
+		c = roaring.RemakeContainerBitmapN(replacing, toArray64(cpMaybe), int32(l.BitN))
 	case ContainerTypeRLE:
-		c = roaring.RemakeContainerRun(replacing, toInterval16(cpMaybe))
+		c = roaring.RemakeContainerRunN(replacing, toInterval16(cpMaybe), int32(l.BitN))
 	}
 	// Note: If the "roaringparanoia" build tag isn't set, this
 	// should be optimized away entirely. Otherwise it's moderately

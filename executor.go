@@ -8351,13 +8351,17 @@ func (e *executor) executeDeleteRecordFromShard(ctx context.Context, qcx *Qcx, i
 	if len(row.segments) == 0 { //nothing to remove
 		return false, nil
 	}
+	columns := row.segments[0].data //should only be one segment
+	if columns.Count() == 0 {
+		return false, nil
+	}
 
 	// Fetch index.
 	idx := e.Holder.Index(index)
 	if idx == nil {
 		return false, newNotFoundError(ErrIndexNotFound, index)
 	}
-	columns := row.segments[0].data //should only be one segment
+
 	columnIDs := make([]uint64, 0)
 	none := make([]uint64, 0) // no bits will be set
 
@@ -8367,22 +8371,27 @@ func (e *executor) executeDeleteRecordFromShard(ctx context.Context, qcx *Qcx, i
 	}
 	defer finisher(&err)
 	changed := false
-	clearFragment := func(frag *fragment) (bool, error) {
-		toClear := columnIDs[:0]
-		rowSet := make(map[uint64]struct{})
+	colCounts := make([]int, 0)
+	toClear := columnIDs[:0]
+	rowSet := make(map[uint64]struct{})
+	callback := func(pos uint64) error {
+		toClear = append(toClear, pos)
+		rowID := pos / ShardWidth
+		rowSet[rowID] = struct{}{}
+		return nil
+	}
+	findExisting := roaring.NewBitmapBitmapFilter(columns, callback)
 
-		callback := func(pos uint64) error {
-			toClear = append(toClear, pos)
-			rowID := pos / ShardWidth
-			rowSet[rowID] = struct{}{}
-			return nil
-		}
-		findExisting := roaring.NewBitmapBitmapFilter(columns, callback)
+	clearFragment := func(frag *fragment) (bool, error) {
+		// re-zero these
+		toClear = columnIDs[:0]
+		rowSet = make(map[uint64]struct{})
 
 		err = tx.ApplyFilter(frag.index(), frag.field(), frag.view(), frag.shard, 0, findExisting)
 		if err != nil {
 			return false, err
 		}
+		colCounts = append(colCounts, len(toClear))
 		// this will be the remove part
 		if len(toClear) > 0 {
 			err = frag.importPositions(tx, none, toClear, rowSet)
@@ -8406,23 +8415,6 @@ func (e *executor) executeDeleteRecordFromShard(ctx context.Context, qcx *Qcx, i
 			}
 			if c {
 				changed = true
-			}
-		}
-	}
-	if idx.trackExistence {
-		for _, view := range idx.existenceFld.views() {
-			frag, ok := view.fragments[shard]
-			if !ok {
-				continue
-			}
-			for _, bit := range columns.Slice() {
-				c, err := frag.clearBit(tx, 0, bit)
-				if err != nil {
-					return false, nil
-				}
-				if c {
-					changed = true
-				}
 			}
 		}
 	}
