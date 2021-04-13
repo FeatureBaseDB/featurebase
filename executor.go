@@ -3973,6 +3973,12 @@ func (t ExtractedTable) ToRows(callback func(*proto.RowResponse) error) error {
 						},
 					},
 				}
+			case time.Time:
+				col = &proto.ColumnResponse{
+					ColumnVal: &proto.ColumnResponse_TimestampVal{
+						TimestampVal: r.UTC().Format(time.RFC3339Nano),
+					},
+				}
 			default:
 				return errors.Errorf("unsupported field value: %v (type: %T)", r, r)
 			}

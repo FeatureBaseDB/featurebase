@@ -53,6 +53,7 @@ message ColumnResponse{
     StringArray stringArrayVal = 7;
     double float64Val = 8;
     Decimal decimalVal = 9;
+    string timestampVal = 10;
   }
 }
 

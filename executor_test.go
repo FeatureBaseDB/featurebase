@@ -4883,6 +4883,13 @@ func TestExecutor_Execute_Extract(t *testing.T) {
 		Set(3, bsidecimal=-1.01)
 	`)
 
+	c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "timestamp", pilosa.OptFieldTypeTimestamp(pilosa.MinTimestamp, pilosa.MaxTimestamp, pilosa.TimeUnitSeconds))
+	c.Query(t, "i", `
+		Set(0, timestamp='2000-01-01T00:00:00Z')
+		Set(1, timestamp='2000-01-01T00:00:01Z')
+		Set(3, timestamp='2000-01-01T00:00:03Z')
+	`)
+
 	c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "bool", pilosa.OptFieldTypeBool())
 	c.Query(t, "i", `
 		Set(0, bool=true)
@@ -4890,7 +4897,7 @@ func TestExecutor_Execute_Extract(t *testing.T) {
 		Set(3, bool=true)
 	`)
 
-	resp := c.Query(t, "i", `Extract(All(), Rows(set), Rows(keyset), Rows(mutex), Rows(keymutex), Rows(time), Rows(keytime), Rows(bsint), Rows(bsidecimal), Rows(bool))`)
+	resp := c.Query(t, "i", `Extract(All(), Rows(set), Rows(keyset), Rows(mutex), Rows(keymutex), Rows(time), Rows(keytime), Rows(bsint), Rows(bsidecimal), Rows(timestamp), Rows(bool))`)
 	expect := []interface{}{
 		pilosa.ExtractedTable{
 			Fields: []pilosa.ExtractedTableField{
@@ -4927,6 +4934,10 @@ func TestExecutor_Execute_Extract(t *testing.T) {
 					Type: "decimal",
 				},
 				{
+					Name: "timestamp",
+					Type: "timestamp",
+				},
+				{
 					Name: "bool",
 					Type: "bool",
 				},
@@ -4951,6 +4962,7 @@ func TestExecutor_Execute_Extract(t *testing.T) {
 						},
 						int64(1),
 						pql.NewDecimal(1, 2),
+						time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC),
 						true,
 					},
 				},
@@ -4975,6 +4987,7 @@ func TestExecutor_Execute_Extract(t *testing.T) {
 						},
 						int64(-1),
 						pql.NewDecimal(100, 2),
+						time.Date(2000, time.January, 1, 0, 0, 1, 0, time.UTC),
 						false,
 					},
 				},
@@ -4989,6 +5002,7 @@ func TestExecutor_Execute_Extract(t *testing.T) {
 						nil,
 						[]uint64{},
 						[]string{},
+						nil,
 						nil,
 						nil,
 						nil,
@@ -5007,6 +5021,7 @@ func TestExecutor_Execute_Extract(t *testing.T) {
 						[]string{},
 						int64(2),
 						pql.NewDecimal(-101, 2),
+						time.Date(2000, time.January, 1, 0, 0, 3, 0, time.UTC),
 						true,
 					},
 				},
@@ -5019,6 +5034,7 @@ func TestExecutor_Execute_Extract(t *testing.T) {
 						nil,
 						[]uint64{},
 						[]string{},
+						nil,
 						nil,
 						nil,
 						nil,
@@ -5035,6 +5051,7 @@ func TestExecutor_Execute_Extract(t *testing.T) {
 						nil,
 						[]uint64{},
 						[]string{},
+						nil,
 						nil,
 						nil,
 						nil,
