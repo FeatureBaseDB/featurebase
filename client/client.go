@@ -23,7 +23,6 @@ import (
 	"fmt"
 	"hash/fnv"
 	"io"
-	"log"
 	"math/rand"
 	"net"
 	"net/http"
@@ -38,6 +37,7 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/pilosa/pilosa/v2"
 	pnet "github.com/pilosa/pilosa/v2/net"
+	"github.com/pilosa/pilosa/v2/logger"
 	"github.com/pilosa/pilosa/v2/pb"
 	"github.com/pilosa/pilosa/v2/pql"
 	"github.com/pilosa/pilosa/v2/roaring"
@@ -58,7 +58,7 @@ const maxHosts = 10
 type Client struct {
 	cluster            *Cluster
 	client             *http.Client
-	logger             *log.Logger
+	logger             logger.Logger
 	primaryURI         *pnet.URI
 	primaryLock        *sync.RWMutex
 	manualFragmentNode *fragmentNode
@@ -131,7 +131,7 @@ func (c *Client) detectClusterChanges() {
 			needsUnlock = false
 			newURIs, err := c.getURIsForShard(index, shard) // refetch URIs from server.
 			if err != nil {
-				c.logger.Printf("problem invalidating shard node cache: %v", err)
+				c.logger.Errorf("problem invalidating shard node cache: %v", err)
 				return
 			}
 			if len(uris) != len(newURIs) {
@@ -201,7 +201,7 @@ func newClientWithOptions(options *ClientOptions) *Client {
 
 	c := &Client{
 		client:      newHTTPClient(options.withDefaults()),
-		logger:      log.New(os.Stderr, "", log.Ldate|log.Ltime|log.Lmicroseconds),
+		logger:      logger.NewStandardLogger(os.Stderr),
 		primaryLock: &sync.RWMutex{},
 
 		shardNodes: newShardNodes(),
@@ -910,7 +910,7 @@ func (c *Client) doRequest(host *pnet.URI, method, path string, headers map[stri
 			return 0, nil, errors.Wrap(err, "sending request")
 		}
 		if warning := resp.Header.Get("warning"); warning != "" {
-			c.logger.Println(warning)
+			c.logger.Warnf(warning)
 		}
 
 		buf := bytes.NewBuffer(make([]byte, 0, 1+resp.ContentLength))
@@ -973,7 +973,7 @@ func (c *Client) doRequest(host *pnet.URI, method, path string, headers map[stri
 			return resp.StatusCode, nil, errors.Wrapf(err, "max backoff (%s) time exceeded", c.maxBackoff)
 		}
 		retry++
-		c.logger.Printf("request failed with: '%v' status: %d, retrying %d after %v ", err, resp.StatusCode, retry, sleepTime)
+		c.logger.Errorf("request failed with: '%v' status: %d, retrying %d after %v ", err, resp.StatusCode, retry, sleepTime)
 		time.Sleep(sleepTime)
 	}
 	// Unreachable code
