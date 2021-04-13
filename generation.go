@@ -139,7 +139,7 @@ func (m *mmapGeneration) Transaction(fileP *io.Writer, fn func() error) (transac
 	// open.
 	if m.dead {
 		elapsed := time.Since(m.deadSince)
-		m.logger.Printf("WARNING: transaction against %s, which has been dead for %v\n", m.id, elapsed)
+		m.logger.Warnf("transaction against %s, which has been dead for %v\n", m.id, elapsed)
 	}
 	if fileP != nil {
 		if m.file == nil {
@@ -217,7 +217,7 @@ func (m *mmapGeneration) Done() {
 	m.deadSince = time.Now()
 	err := m.closeFile()
 	if err != nil {
-		m.logger.Printf("error closing generation %s: %v", m.id, err)
+		m.logger.Errorf("error closing generation %s: %v", m.id, err)
 	}
 	// If we're not debugging, the finalizer won't have been enabled
 	// previously. Finalizers have non-zero cost, so having them not be
@@ -274,18 +274,18 @@ func (m *mmapGeneration) openFile() (shouldClose bool, err error) {
 func generationFinalizer(m *mmapGeneration) {
 	m.mu.Lock()
 	if !m.dead {
-		m.logger.Printf("finalizing generation %s which isn't dead yet\n",
+		m.logger.Infof("finalizing generation %s which isn't dead yet\n",
 			m.id)
 	}
 	m.mu.Unlock()
 	err := m.closeFile()
 	if err != nil {
-		m.logger.Printf("finalizing generation, closing file: %v\n", err)
+		m.logger.Errorf("finalizing generation, closing file: %v\n", err)
 	}
 	if m.data != nil {
 		err := syswrap.Munmap(m.data)
 		if err != nil {
-			m.logger.Printf("finalizing generation, munmap: %v\n", err)
+			m.logger.Errorf("finalizing generation, munmap: %v\n", err)
 		}
 		m.data = nil
 	}
@@ -308,7 +308,7 @@ func (m *mmapGeneration) Cancel() {
 	}
 	err := m.closeFile()
 	if err != nil {
-		m.logger.Printf("error cancelling generation %s: %v", m.id, err)
+		m.logger.Errorf("error cancelling generation %s: %v", m.id, err)
 	}
 	runtime.SetFinalizer(m, nil)
 	m.dead = true
@@ -362,7 +362,7 @@ func newGeneration(existing generation, path string, readData bool, setup func([
 		data, err = syswrap.Mmap(int(m.file.Fd()), 0, int(fi.Size()), syscall.PROT_READ, syscall.MAP_SHARED)
 		if err == syswrap.ErrMaxMapCountReached {
 			// I have no idea where/how to display this message.
-			m.logger.Printf("maximum number of maps reached, reading file '%s' instead", m.path)
+			m.logger.Warnf("maximum number of maps reached, reading file '%s' instead", m.path)
 		} else if err != nil {
 			m.Cancel()
 			return nil, errors.Wrap(err, "mmap failed")
@@ -389,12 +389,12 @@ func newGeneration(existing generation, path string, readData bool, setup func([
 		// be truncated: For instance, if a bitmap has a corrupted
 		// ops log, we could truncate that part of it and retry.
 		if err, ok := err.(roaring.FileShouldBeTruncatedError); ok && m.retries < 1 {
-			m.logger.Printf("file %s read partially, but should-be-truncated at %d bytes\n", m.path, err.SuggestedLength())
+			m.logger.Infof("file %s read partially, but should-be-truncated at %d bytes\n", m.path, err.SuggestedLength())
 			// close this generation, then try again. once.
 			m.retries++
 			err := os.Truncate(m.path, err.SuggestedLength())
 			if err != nil {
-				m.logger.Printf("truncating file failed [but retrying anyway]: %v\n", err)
+				m.logger.Errorf("truncating file failed [but retrying anyway]: %v\n", err)
 			}
 			return newGeneration(&m, path, readData, setup, logger)
 		}
@@ -417,7 +417,7 @@ func newGeneration(existing generation, path string, readData bool, setup func([
 			// doesn't need to exist, yay.
 			unmapErr := syswrap.Munmap(data)
 			if unmapErr != nil {
-				m.logger.Printf("error unmapping (probably harmless): %v", unmapErr)
+				m.logger.Errorf("error unmapping (probably harmless): %v", unmapErr)
 			}
 		}
 	}
@@ -427,7 +427,7 @@ func newGeneration(existing generation, path string, readData bool, setup func([
 	if shouldClose {
 		err := m.closeFile()
 		if err != nil {
-			m.logger.Printf("closing file to preserve open files failed: %v\n", err)
+			m.logger.Errorf("closing file to preserve open files failed: %v\n", err)
 		}
 	}
 	// It's possible that the generation has no actual data to track,

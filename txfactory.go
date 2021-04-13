@@ -503,7 +503,7 @@ func NewTxFactory(backend string, holderDir string, holder *Holder) (f *TxFactor
 	f.dbPerShard = f.NewDBPerShard(types, holderDir, holder)
 
 	if f.hasRBF() {
-		holder.Logger.Printf("rbf config = %#v", holder.cfg.RBFConfig)
+		holder.Logger.Infof("rbf config = %#v", holder.cfg.RBFConfig)
 	}
 
 	return f, err
@@ -1399,7 +1399,7 @@ func (f *TxFactory) green2blue(holder *Holder) (err0 error) {
 		return nil
 	}
 
-	holder.Logger.Printf("green2blue analysis begins.")
+	holder.Logger.Infof("green2blue analysis begins.")
 
 	blueDest := f.types[0]
 	greenSrc := f.types[1]
@@ -1422,12 +1422,12 @@ func (f *TxFactory) green2blue(holder *Holder) (err0 error) {
 		return errors.Wrap(err, "TxFactory.green2blue f.greenHasData()")
 	}
 	if !blueHasData && !greenHasData {
-		holder.Logger.Printf("no data in blue or green. No migration or verification to do.")
+		holder.Logger.Infof("no data in blue or green. No migration or verification to do.")
 		return nil
 	}
 	// INVAR: blue has data.
 	if !greenHasData {
-		holder.Logger.Printf("error: cannot migrate from green '%v' because it has no data in it.", greenSrc)
+		holder.Logger.Errorf("cannot migrate from green '%v' because it has no data in it.", greenSrc)
 		return fmt.Errorf("error: cannot migrate from green '%v' because it has no data in it.", greenSrc)
 	}
 
@@ -1441,11 +1441,11 @@ func (f *TxFactory) green2blue(holder *Holder) (err0 error) {
 	action := "verify"
 	if blueHasData {
 		verifyInsteadOfCopy = true
-		defer holder.Logger.Printf("bitmap-backend verification done    : %v compared to %v", blueDest, greenSrc)
+		defer holder.Logger.Infof("bitmap-backend verification done    : %v compared to %v", blueDest, greenSrc)
 	} else {
 		action = "migrate"
-		holder.Logger.Printf("bitmap-backend migration starting: populating %v from %v with %v threads", blueDest, greenSrc, nGoro)
-		defer holder.Logger.Printf("bitmap-backend migration done    : populated  %v from %v", blueDest, greenSrc)
+		holder.Logger.Infof("bitmap-backend migration starting: populating %v from %v with %v threads", blueDest, greenSrc, nGoro)
+		defer holder.Logger.Infof("bitmap-backend migration done    : populated  %v from %v", blueDest, greenSrc)
 	}
 	firstPjobStarted := false
 
@@ -1496,7 +1496,7 @@ indexloop:
 					return errors.Wrap(err, fmt.Sprintf("GetDBShard(index='%v', shard='%v')", idx.name, int(shard)))
 				}
 
-				holder.Logger.Printf("%v progress on index '%v' (%v of %v): on shard '%v' (%v of %v) [worker %v]",
+				holder.Logger.Infof("%v progress on index '%v' (%v of %v): on shard '%v' (%v of %v) [worker %v]",
 					action, idx.name, k+1, len(idxs), shard, shnum, len(greenShards), worker)
 
 				if verifyInsteadOfCopy {

@@ -108,7 +108,7 @@ func (s *Server) Serve(ctx context.Context, l net.Listener) (err error) {
 		if limit != nil {
 			// Wait for connection limit.
 			if len(limit) == cap(limit) {
-				s.Logger.Printf("postgres connection limit reached")
+				s.Logger.Warnf("postgres connection limit reached")
 			}
 			select {
 			case limit <- struct{}{}:
@@ -133,7 +133,7 @@ func (s *Server) Serve(ctx context.Context, l net.Listener) (err error) {
 			}
 			err := s.handle(ctx, conn)
 			if err != nil {
-				s.Logger.Printf("postgres connection terminated with error: %v", err)
+				s.Logger.Errorf("postgres connection terminated with error: %v", err)
 			}
 		}()
 	}

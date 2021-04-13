@@ -125,7 +125,7 @@ func (d *diagnosticsCollector) CheckVersion() error {
 
 	d.lastVersion = rsp.Version
 	if err := d.compareVersion(rsp.Version); err != nil {
-		d.Logger.Printf("%s\n", err.Error())
+		d.Logger.Infof("%s\n", err.Error())
 	}
 
 	return nil
@@ -169,7 +169,7 @@ func (d *diagnosticsCollector) Set(name string, value interface{}) {
 // logErr logs the error and returns true if an error exists
 func (d *diagnosticsCollector) logErr(err error) bool {
 	if err != nil {
-		d.Logger.Printf("%v", err)
+		d.Logger.Errorf("%v", err)
 		return true
 	}
 	return false

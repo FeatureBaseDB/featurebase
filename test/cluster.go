@@ -26,6 +26,7 @@ import (
 	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/api/client"
 	"github.com/pilosa/pilosa/v2/disco"
+	"github.com/pilosa/pilosa/v2/logger"
 	"github.com/pilosa/pilosa/v2/proto"
 	"github.com/pilosa/pilosa/v2/server"
 	"github.com/pilosa/pilosa/v2/storage"
@@ -77,7 +78,7 @@ func (c *Cluster) QueryGRPC(t testing.TB, index, query string) *proto.TableRespo
 		t.Fatal("must have at least one node in cluster to query")
 	}
 
-	grpcClient, err := client.NewGRPCClient([]string{fmt.Sprintf("%s:%d", c.GetPrimary().Server.GRPCURI().Host, c.GetPrimary().Server.GRPCURI().Port)}, nil)
+	grpcClient, err := client.NewGRPCClient([]string{fmt.Sprintf("%s:%d", c.GetPrimary().Server.GRPCURI().Host, c.GetPrimary().Server.GRPCURI().Port)}, nil, logger.NopLogger)
 	if err != nil {
 		t.Fatalf("getting GRPC client: %v", err)
 	}

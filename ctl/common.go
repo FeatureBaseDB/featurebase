@@ -15,9 +15,8 @@
 package ctl
 
 import (
-	"log"
-
 	"github.com/pilosa/pilosa/v2/http"
+	"github.com/pilosa/pilosa/v2/logger"
 	"github.com/pilosa/pilosa/v2/server"
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
@@ -27,7 +26,7 @@ import (
 type CommandWithTLSSupport interface {
 	TLSHost() string
 	TLSConfiguration() server.TLSConfig
-	Logger() *log.Logger
+	Logger() logger.Logger
 }
 
 // SetTLSConfig creates common TLS flags

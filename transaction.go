@@ -175,7 +175,7 @@ func (tm *TransactionManager) finish(id string) (*Transaction, error) {
 	// After removing, check to see if we need to activate an exclusive transaction
 	trnsMap, err := tm.store.List()
 	if err != nil {
-		tm.log().Printf("error listing transactions in Finish: %v", err)
+		tm.log().Errorf("error listing transactions in Finish: %v", err)
 		return trns, nil
 	}
 
@@ -188,7 +188,7 @@ func (tm *TransactionManager) finish(id string) (*Transaction, error) {
 				etrans.Active = true
 				etrans.Deadline = time.Now().Add(etrans.Timeout)
 				if err := tm.store.Put(etrans); err != nil {
-					tm.log().Printf("activating exclusive transaction after finishing last transaction: %v", err)
+					tm.log().Errorf("activating exclusive transaction after finishing last transaction: %v", err)
 					return trns, nil
 				}
 			}
@@ -262,7 +262,7 @@ func (tm *TransactionManager) checkDeadlines() time.Duration {
 
 	trnsMap, err := tm.store.List()
 	if err != nil {
-		tm.log().Printf("transaction deadline checker couldn't list transactions: %v", err)
+		tm.log().Errorf("transaction deadline checker couldn't list transactions: %v", err)
 		return 0
 	}
 
@@ -287,9 +287,9 @@ func (tm *TransactionManager) checkDeadlines() time.Duration {
 		if !now.Before(trns.Deadline) {
 			trnsF, err := tm.finish(id)
 			if err != nil {
-				tm.log().Printf("error finishing expired transaction '%s': %+v: %v", id, trnsF, err)
+				tm.log().Errorf("error finishing expired transaction '%s': %+v: %v", id, trnsF, err)
 			} else {
-				tm.log().Printf("cleared expired transaction: %+v", trnsF)
+				tm.log().Infof("cleared expired transaction: %+v", trnsF)
 			}
 		} else {
 			interval := trns.Deadline.Sub(now)

@@ -716,7 +716,7 @@ func (e *executor) executeCall(ctx context.Context, qcx *Qcx, index string, c *p
 	// See: https://github.com/pilosa/pilosa/issues/2009
 	// TODO: Remove at version 2.0
 	if e.detectRangeCall(c) {
-		e.Holder.Logger.Printf("DEPRECATED: Range() is deprecated, please use Row() instead.")
+		e.Holder.Logger.Infof("DEPRECATED: Range() is deprecated, please use Row() instead.")
 	}
 
 	// If shards are specified, then use that value for shards. If shards aren't

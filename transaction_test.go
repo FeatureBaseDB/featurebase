@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/pilosa/pilosa/v2"
+	"github.com/pilosa/pilosa/v2/logger"
 	"github.com/pilosa/pilosa/v2/test"
 )
 
@@ -32,7 +33,7 @@ func TestTransactionManager(t *testing.T) {
 	store := pilosa.NewInMemTransactionStore()
 
 	tm := pilosa.NewTransactionManager(store)
-	tm.Log = test.NewBufferLogger()
+	tm.Log = logger.NewBufferLogger()
 	ctx := context.Background()
 
 	// can add a non-exclusive transaction

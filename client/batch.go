@@ -696,7 +696,7 @@ func (b *Batch) Import() error {
 	defer func() {
 		trns, err := b.client.FinishTransaction(trns.ID)
 		if err != nil {
-			b.log.Printf("error finishing transaction: %v. trns: %+v", err, trns)
+			b.log.Errorf("error finishing transaction: %v. trns: %+v", err, trns)
 		}
 		b.client.Stats.Timing(MetricBatchImportDurationSeconds, time.Since(start), 1.0)
 	}()
@@ -753,7 +753,7 @@ func (b *Batch) Flush() error {
 	defer func() {
 		trns, err := b.client.FinishTransaction(trns.ID)
 		if err != nil {
-			b.log.Printf("error finishing transaction: %v. trns: %+v", err, trns)
+			b.log.Errorf("error finishing transaction: %v. trns: %+v", err, trns)
 		}
 		b.client.Stats.Timing(MetricBatchFlushDurationSeconds, time.Since(start), 1.0)
 	}()

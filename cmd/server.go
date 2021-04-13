@@ -89,7 +89,7 @@ on the configured port.`,
 					return errors.Wrap(err, "initializing jaeger tracer")
 				}
 				defer closer.Close()
-				tracing.GlobalTracer = opentracing.NewTracer(tracer)
+				tracing.GlobalTracer = opentracing.NewTracer(tracer, Server.Logger())
 			}
 
 			return errors.Wrap(Server.Wait(), "waiting on Server")
