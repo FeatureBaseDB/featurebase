@@ -231,7 +231,7 @@ type bufferLogger struct {
 	mu  sync.Mutex
 }
 
-// NewBufferLogger returns a new instance of BufferLogger.
+// NewBufferLogger returns a new instance of bufferLogger.
 func NewBufferLogger() *bufferLogger {
 	return &bufferLogger{
 		buf: &bytes.Buffer{},
