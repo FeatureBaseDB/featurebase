@@ -361,7 +361,7 @@ func (v *view) notifyIfNewShard(shard uint64) {
 			Shard: shard,
 		})
 		if err != nil {
-			v.holder.Logger.Printf("broadcasting create shard: %v", err)
+			v.holder.Logger.Errorf("broadcasting create shard: %v", err)
 		}
 		close(broadcastChan)
 	}()
@@ -409,7 +409,7 @@ func (v *view) deleteFragment(shard uint64) error {
 		return ErrFragmentNotFound
 	}
 
-	v.holder.Logger.Printf("delete fragment: (%s/%s/%s) %d", v.index, v.field, v.name, shard)
+	v.holder.Logger.Infof("delete fragment: (%s/%s/%s) %d", v.index, v.field, v.name, shard)
 
 	idx := f.holder.Index(v.index)
 	f.Close()

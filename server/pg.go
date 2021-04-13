@@ -82,7 +82,7 @@ func (s *PostgresServer) Start(addr string) error {
 		return errors.Wrap(err, "creating listener")
 	}
 
-	s.logger.Printf("serving postgres wire protocol on %s", l.Addr())
+	s.logger.Infof("serving postgres wire protocol on %s", l.Addr())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	s.stop = cancel
@@ -102,7 +102,7 @@ func (s *PostgresServer) Close() error {
 	}
 	s.stop()
 
-	s.logger.Printf("waiting for postgres connections to shut down")
+	s.logger.Infof("waiting for postgres connections to shut down")
 
 	return s.eg.Wait()
 }

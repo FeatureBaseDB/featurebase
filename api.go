@@ -273,7 +273,7 @@ func (api *API) DeleteIndex(ctx context.Context, indexName string) error {
 			Index: indexName,
 		})
 	if err != nil {
-		api.server.logger.Printf("problem sending DeleteIndex message: %s", err)
+		api.server.logger.Errorf("problem sending DeleteIndex message: %s", err)
 		return errors.Wrap(err, "sending DeleteIndex message")
 	}
 	api.holder.Stats.Count(MetricDeleteIndex, 1, 1.0)
@@ -582,7 +582,7 @@ func (api *API) DeleteField(ctx context.Context, indexName string, fieldName str
 			Field: fieldName,
 		})
 	if err != nil {
-		api.server.logger.Printf("problem sending DeleteField message: %s", err)
+		api.server.logger.Errorf("problem sending DeleteField message: %s", err)
 		return errors.Wrap(err, "sending DeleteField message")
 	}
 	api.holder.Stats.CountWithCustomTags(MetricDeleteField, 1, 1.0, []string{fmt.Sprintf("index:%s", indexName)})
@@ -614,7 +614,7 @@ func (api *API) DeleteAvailableShard(_ context.Context, indexName, fieldName str
 			ShardID: shardID,
 		})
 	if err != nil {
-		api.server.logger.Printf("problem sending DeleteAvailableShard message: %s", err)
+		api.server.logger.Errorf("problem sending DeleteAvailableShard message: %s", err)
 		return errors.Wrap(err, "sending DeleteAvailableShard message")
 	}
 	api.holder.Stats.CountWithCustomTags(MetricDeleteAvailableShard, 1, 1.0, []string{fmt.Sprintf("index:%s", indexName)})
@@ -636,7 +636,7 @@ func (api *API) ExportCSV(ctx context.Context, indexName string, fieldName strin
 
 	// Validate that this handler owns the shard.
 	if !snap.OwnsShard(api.NodeID(), indexName, shard) {
-		api.server.logger.Printf("node %s does not own shard %d of index %s", api.NodeID(), shard, indexName)
+		api.server.logger.Errorf("node %s does not own shard %d of index %s", api.NodeID(), shard, indexName)
 		return ErrClusterDoesNotOwnShard
 	}
 
@@ -907,16 +907,16 @@ func (api *API) Usage(ctx context.Context, remote bool) (map[string]NodeUsage, e
 	si := api.server.systemInfo
 	diskCapacity, err := si.DiskCapacity(api.holder.path)
 	if err != nil {
-		api.server.logger.Printf("couldn't read disk capacity: %s", err)
+		api.server.logger.Infof("couldn't read disk capacity: %s", err)
 	}
 
 	memoryCapacity, err := si.MemTotal()
 	if err != nil {
-		api.server.logger.Printf("couldn't read memory capacity: %s", err)
+		api.server.logger.Infof("couldn't read memory capacity: %s", err)
 	}
 	memoryUse, err := si.MemUsed()
 	if err != nil {
-		api.server.logger.Printf("couldn't read memory usage: %s", err)
+		api.server.logger.Infof("couldn't read memory usage: %s", err)
 	}
 
 	// Insert into result.
@@ -1135,7 +1135,7 @@ func (api *API) DeleteView(ctx context.Context, indexName string, fieldName stri
 			View:  viewName,
 		})
 	if err != nil {
-		api.server.logger.Printf("problem sending DeleteView message: %s", err)
+		api.server.logger.Errorf("problem sending DeleteView message: %s", err)
 	}
 
 	return errors.Wrap(err, "sending DeleteView message")
@@ -1483,7 +1483,7 @@ func (api *API) ImportWithTx(ctx context.Context, qcx *Qcx, req *ImportRequest, 
 	// so don't expect it to be invariant.
 	if !options.Clear {
 		if err := importExistenceColumns(qcx, idx, req.ColumnIDs); err != nil {
-			api.server.logger.Printf("import existence error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
+			api.server.logger.Errorf("import existence error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
 			return err
 		}
 		if err != nil {
@@ -1494,7 +1494,7 @@ func (api *API) ImportWithTx(ctx context.Context, qcx *Qcx, req *ImportRequest, 
 	// Import into fragment.
 	err = field.Import(qcx, req.RowIDs, req.ColumnIDs, timestamps, opts...)
 	if err != nil {
-		api.server.logger.Printf("import error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
+		api.server.logger.Errorf("import error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
 		return errors.Wrap(err, "importing")
 	}
 	return errors.Wrap(err, "committing")
@@ -1602,7 +1602,7 @@ func (api *API) ImportValueWithTx(ctx context.Context, qcx *Qcx, req *ImportValu
 		// Import columnIDs into existence field.
 		if !options.Clear {
 			if err := importExistenceColumns(qcx, idx, req.ColumnIDs); err != nil {
-				api.server.logger.Printf("import existence error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
+				api.server.logger.Errorf("import existence error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
 				return errors.Wrap(err, "importing existence columns")
 			}
 		}
@@ -1611,17 +1611,17 @@ func (api *API) ImportValueWithTx(ctx context.Context, qcx *Qcx, req *ImportValu
 		if len(req.Values) > 0 {
 			err = field.importValue(qcx, req.ColumnIDs, req.Values, options)
 			if err != nil {
-				api.server.logger.Printf("import error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
+				api.server.logger.Errorf("import error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
 			}
 		} else if len(req.TimestampValues) > 0 {
 			err = field.importTimestampValue(qcx, req.ColumnIDs, req.TimestampValues, options)
 			if err != nil {
-				api.server.logger.Printf("import error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
+				api.server.logger.Errorf("import error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
 			}
 		} else if len(req.FloatValues) > 0 {
 			err = field.importFloatValue(qcx, req.ColumnIDs, req.FloatValues, options)
 			if err != nil {
-				api.server.logger.Printf("import error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
+				api.server.logger.Errorf("import error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
 			}
 		}
 		return errors.Wrap(err, "importing value")
@@ -1704,7 +1704,7 @@ func (api *API) ImportColumnAttrs(ctx context.Context, req *ImportColumnAttrsReq
 		bulkAttrs[uint64(req.ColumnIDs[n])] = map[string]interface{}{req.AttrKey: req.AttrVals[n]}
 	}
 	if err := index.ColumnAttrStore().SetBulkAttrs(bulkAttrs); err != nil {
-		api.server.logger.Printf("import error: index=%s, shard=%d, len(columns)=%d, err=%s", req.Index, req.Shard, len(req.ColumnIDs), err)
+		api.server.logger.Errorf("import error: index=%s, shard=%d, len(columns)=%d, err=%s", req.Index, req.Shard, len(req.ColumnIDs), err)
 		return errors.Wrap(err, "importing column attrs")
 	}
 	return nil
@@ -1776,7 +1776,7 @@ func (api *API) validateShardOwnership(indexName string, shard uint64) error {
 	snap := topology.NewClusterSnapshot(api.cluster.noder, api.cluster.Hasher, api.cluster.ReplicaN)
 	// Validate that this handler owns the shard.
 	if !snap.OwnsShard(api.NodeID(), indexName, shard) {
-		api.server.logger.Printf("node %s does not own shard %d of index %s", api.NodeID(), shard, indexName)
+		api.server.logger.Errorf("node %s does not own shard %d of index %s", api.NodeID(), shard, indexName)
 		return ErrClusterDoesNotOwnShard
 	}
 	return nil
@@ -1788,14 +1788,14 @@ func (api *API) indexField(indexName string, fieldName string, shard uint64) (*I
 	// Find the Index.
 	index := api.holder.Index(indexName)
 	if index == nil {
-		api.server.logger.Printf("fragment error: index=%s, field=%s, shard=%d, err=%s", indexName, fieldName, shard, ErrIndexNotFound.Error())
+		api.server.logger.Errorf("fragment error: index=%s, field=%s, shard=%d, err=%s", indexName, fieldName, shard, ErrIndexNotFound.Error())
 		return nil, nil, newNotFoundError(ErrIndexNotFound, indexName)
 	}
 
 	// Retrieve field.
 	field := index.Field(fieldName)
 	if field == nil {
-		api.server.logger.Printf("field error: index=%s, field=%s, shard=%d, err=%s", indexName, fieldName, shard, ErrFieldNotFound.Error())
+		api.server.logger.Errorf("field error: index=%s, field=%s, shard=%d, err=%s", indexName, fieldName, shard, ErrFieldNotFound.Error())
 		return nil, nil, newNotFoundError(ErrFieldNotFound, fieldName)
 	}
 	return index, field, nil

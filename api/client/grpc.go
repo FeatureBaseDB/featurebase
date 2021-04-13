@@ -17,9 +17,9 @@ package client
 import (
 	"context"
 	"crypto/tls"
-	"log"
 	"sync"
 
+	"github.com/pilosa/pilosa/v2/logger"
 	pb "github.com/pilosa/pilosa/v2/proto"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
@@ -33,6 +33,7 @@ const maxMsgSize = 1024 * 1024 * 100 // 100 megs ought to be enough for anybody!
 type GRPCClient struct {
 	dialTargets []string
 	tlsConfig   *tls.Config
+	logger      logger.Logger
 
 	mu          sync.RWMutex
 	conn        *grpc.ClientConn
@@ -40,10 +41,11 @@ type GRPCClient struct {
 }
 
 // NewGRPCClient returns a new instance of GRPCClient.
-func NewGRPCClient(dialTargets []string, tlsConfig *tls.Config) (*GRPCClient, error) {
+func NewGRPCClient(dialTargets []string, tlsConfig *tls.Config, logger logger.Logger) (*GRPCClient, error) {
 	c := &GRPCClient{
 		dialTargets: dialTargets,
 		tlsConfig:   tlsConfig,
+		logger:      logger,
 	}
 	// resetConn sets GRPCClient.conn when it doesn't
 	// exist yet.
@@ -124,8 +126,7 @@ func (c *GRPCClient) Conn() *grpc.ClientConn {
 	c.mu.RUnlock()
 
 	if err := c.resetConn(); err != nil {
-		// TODO: log this error with logger
-		log.Printf("error resetting connection: %s", err)
+		c.logger.Errorf("error resetting connection: %s", err)
 	}
 
 	c.mu.RLock()

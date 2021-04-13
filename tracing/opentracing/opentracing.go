@@ -16,11 +16,11 @@ package opentracing
 
 import (
 	"context"
-	"log"
 	"net/http"
 
 	"github.com/opentracing/opentracing-go"
 	"github.com/opentracing/opentracing-go/ext"
+	"github.com/pilosa/pilosa/v2/logger"
 	"github.com/pilosa/pilosa/v2/tracing"
 )
 
@@ -30,11 +30,12 @@ var _ tracing.Tracer = (*Tracer)(nil)
 // Tracer represents a wrapper for OpenTracing that implements tracing.Tracer.
 type Tracer struct {
 	tracer opentracing.Tracer
+	logger logger.Logger
 }
 
 // NewTracer returns a new instance of Tracer.
-func NewTracer(tracer opentracing.Tracer) *Tracer {
-	return &Tracer{tracer: tracer}
+func NewTracer(tracer opentracing.Tracer, logger logger.Logger) *Tracer {
+	return &Tracer{tracer: tracer, logger: logger}
 }
 
 // StartSpanFromContext returns a new child span and context from a given context.
@@ -55,7 +56,7 @@ func (t *Tracer) InjectHTTPHeaders(r *http.Request) {
 			opentracing.HTTPHeaders,
 			opentracing.HTTPHeadersCarrier(r.Header),
 		); err != nil {
-			log.Printf("opentracing inject error: %s", err)
+			t.logger.Errorf("opentracing inject error: %s", err)
 		}
 	}
 }

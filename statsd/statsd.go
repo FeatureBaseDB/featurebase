@@ -82,7 +82,7 @@ func (c *statsClient) WithTags(tags ...string) stats.StatsClient {
 // Count tracks the number of times something occurs per second.
 func (c *statsClient) Count(name string, value int64, rate float64) {
 	if err := c.client.Count(prefix+name, value, c.tags, rate); err != nil {
-		c.logger.Printf("statsd.StatsClient.Count error: %s", err)
+		c.logger.Errorf("statsd.StatsClient.Count error: %s", err)
 	}
 }
 
@@ -90,35 +90,35 @@ func (c *statsClient) Count(name string, value int64, rate float64) {
 func (c *statsClient) CountWithCustomTags(name string, value int64, rate float64, t []string) {
 	tags := append(c.tags, t...)
 	if err := c.client.Count(prefix+name, value, tags, rate); err != nil {
-		c.logger.Printf("statsd.StatsClient.Count error: %s", err)
+		c.logger.Errorf("statsd.StatsClient.Count error: %s", err)
 	}
 }
 
 // Gauge sets the value of a metric.
 func (c *statsClient) Gauge(name string, value float64, rate float64) {
 	if err := c.client.Gauge(prefix+name, value, c.tags, rate); err != nil {
-		c.logger.Printf("statsd.StatsClient.Gauge error: %s", err)
+		c.logger.Errorf("statsd.StatsClient.Gauge error: %s", err)
 	}
 }
 
 // Histogram tracks statistical distribution of a metric.
 func (c *statsClient) Histogram(name string, value float64, rate float64) {
 	if err := c.client.Histogram(prefix+name, value, c.tags, rate); err != nil {
-		c.logger.Printf("statsd.StatsClient.Histogram error: %s", err)
+		c.logger.Errorf("statsd.StatsClient.Histogram error: %s", err)
 	}
 }
 
 // Set tracks number of unique elements.
 func (c *statsClient) Set(name string, value string, rate float64) {
 	if err := c.client.Set(prefix+name, value, c.tags, rate); err != nil {
-		c.logger.Printf("statsd.StatsClient.Set error: %s", err)
+		c.logger.Errorf("statsd.StatsClient.Set error: %s", err)
 	}
 }
 
 // Timing tracks timing information for a metric.
 func (c *statsClient) Timing(name string, value time.Duration, rate float64) {
 	if err := c.client.Timing(prefix+name, value, c.tags, rate); err != nil {
-		c.logger.Printf("statsd.StatsClient.Timing error: %s", err)
+		c.logger.Errorf("statsd.StatsClient.Timing error: %s", err)
 	}
 }
 

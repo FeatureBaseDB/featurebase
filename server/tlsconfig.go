@@ -49,12 +49,12 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"io/ioutil"
-	"log"
 	"os"
 	"os/signal"
 	"sync"
 	"syscall"
 
+	"github.com/pilosa/pilosa/v2/logger"
 	"github.com/pkg/errors"
 )
 
@@ -65,7 +65,7 @@ type keypairReloader struct {
 	keyPath  string
 }
 
-func NewKeypairReloader(certPath, keyPath string, logger *log.Logger) (*keypairReloader, error) {
+func NewKeypairReloader(certPath, keyPath string, logger logger.Logger) (*keypairReloader, error) {
 	result := &keypairReloader{
 		certPath: certPath,
 		keyPath:  keyPath,
@@ -79,9 +79,9 @@ func NewKeypairReloader(certPath, keyPath string, logger *log.Logger) (*keypairR
 		c := make(chan os.Signal, 1)
 		signal.Notify(c, syscall.SIGHUP)
 		for range c {
-			logger.Printf("Received SIGHUP, reloading TLS certificate and key from %q and %q", certPath, keyPath)
+			logger.Infof("Received SIGHUP, reloading TLS certificate and key from %q and %q", certPath, keyPath)
 			if err := result.maybeReload(); err != nil {
-				logger.Printf("Keeping old TLS certificate because the new one could not be loaded: %v", err)
+				logger.Printf("ERROR: Keeping old TLS certificate because the new one could not be loaded: %v", err)
 			}
 		}
 	}()
@@ -115,7 +115,7 @@ func (kpr *keypairReloader) GetClientCertificateFunc() func(*tls.CertificateRequ
 	}
 }
 
-func GetTLSConfig(tlsConfig *TLSConfig, logger *log.Logger) (TLSConfig *tls.Config, err error) {
+func GetTLSConfig(tlsConfig *TLSConfig, logger logger.Logger) (TLSConfig *tls.Config, err error) {
 	if tlsConfig.CertificatePath != "" && tlsConfig.CertificateKeyPath != "" {
 		kpr, err := NewKeypairReloader(tlsConfig.CertificatePath, tlsConfig.CertificateKeyPath, logger)
 		if err != nil {
