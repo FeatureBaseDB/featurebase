@@ -62,7 +62,7 @@ func (n *nopLogger) Printf(format string, v ...interface{}) {}
 // Debugf is a no-op implementation of the Logger Debugf method.
 func (n *nopLogger) Debugf(format string, v ...interface{}) {}
 
-// Infof is a no-op implementation of the Logger Printf method.
+// Infof is a no-op implementation of the Logger Infof method.
 func (n *nopLogger) Infof(format string, v ...interface{}) {}
 
 // Warnf is a no-op implementation of the Logger Warnf method.
