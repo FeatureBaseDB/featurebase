@@ -183,7 +183,7 @@ func TestFragment_RowcacheMap(t *testing.T) {
 
 // Ensure a fragment can clear a row.
 func TestFragment_ClearRow(t *testing.T) {
-	notBlueGreenTest(t)
+	NotBlueGreenTest(t)
 	f, idx, tx := mustOpenFragment(t, "i", "f", viewStandard, 0, "")
 	_ = idx
 	defer f.Clean(t)
@@ -215,7 +215,7 @@ func TestFragment_ClearRow(t *testing.T) {
 
 // Ensure a fragment can set a row.
 func TestFragment_SetRow(t *testing.T) {
-	notBlueGreenTest(t)
+	NotBlueGreenTest(t)
 	f, idx, tx := mustOpenFragment(t, "i", "f", viewStandard, 7, "")
 	_ = idx
 	defer f.Clean(t)
@@ -5382,7 +5382,7 @@ func TestFragmentConcurrentReadWrite(t *testing.T) {
 	// actual transaction backends, there won't be any
 	// data, and in particular, the blue-green tests will
 	// note this and fire a false-positive.
-	notBlueGreenTest(t)
+	NotBlueGreenTest(t)
 
 	f, idx, tx := mustOpenFragment(t, "i", "f", viewStandard, 0, CacheTypeRanked)
 	defer f.Clean(t)
@@ -5543,7 +5543,7 @@ func TestFragment_Bug_Q2DoubleDelete(t *testing.T) {
 	}
 }
 
-func notBlueGreenTest(t *testing.T) {
+func NotBlueGreenTest(t *testing.T) {
 	if strings.Contains(CurrentBackend(), "_") {
 		t.Skip("skip under blue green")
 	}

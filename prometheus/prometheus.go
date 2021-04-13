@@ -146,7 +146,7 @@ func (c *prometheusClient) Count(name string, value int64, rate float64) {
 		var err error
 		counter, err = counterVec.GetMetricWith(labels)
 		if err != nil {
-			c.logger.Printf("counterVec.GetMetricWith error: %s", err)
+			c.logger.Errorf("counterVec.GetMetricWith error: %s", err)
 		}
 	}
 	if value == 1 {
@@ -195,7 +195,7 @@ func (c *prometheusClient) Gauge(name string, value float64, rate float64) {
 		var err error
 		gauge, err = gaugeVec.GetMetricWith(labels)
 		if err != nil {
-			c.logger.Printf("gaugeVec.GetMetricWith error: %s", err)
+			c.logger.Errorf("gaugeVec.GetMetricWith error: %s", err)
 			return
 		}
 	}
@@ -238,7 +238,7 @@ func (c *prometheusClient) Histogram(name string, value float64, rate float64) {
 		var err error
 		observer, err = summaryVec.GetMetricWith(labels)
 		if err != nil {
-			c.logger.Printf("summaryVec.GetMetricWith error: %s", err)
+			c.logger.Errorf("summaryVec.GetMetricWith error: %s", err)
 			return
 		}
 	}
@@ -247,7 +247,7 @@ func (c *prometheusClient) Histogram(name string, value float64, rate float64) {
 
 // Set tracks number of unique elements.
 func (c *prometheusClient) Set(name string, value string, rate float64) {
-	c.logger.Printf("prometheusClient.Set unimplemented: %s=%s", name, value)
+	c.logger.Infof("prometheusClient.Set unimplemented: %s=%s", name, value)
 }
 
 // Timing tracks timing information for a metric.
@@ -301,7 +301,7 @@ func tagsToLabels(tags []string, logger logger.Logger) (labels prometheus.Labels
 		tagParts := strings.SplitAfterN(tag, ":", 2)
 		if len(tagParts) != 2 {
 			// only process tags in "key:value" form
-			logger.Printf("Error: invalid Prometheus label: %v\n", tag)
+			logger.Errorf("invalid Prometheus label: %v\n", tag)
 			continue
 		}
 		labels[tagParts[0][0:len(tagParts[0])-1]] = tagParts[1]

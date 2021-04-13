@@ -683,7 +683,7 @@ func (h *Holder) Open() error {
 
 		index, err := h.newIndex(h.IndexPath(filepath.Base(fi.Name())), filepath.Base(fi.Name()))
 		if errors.Cause(err) == ErrName {
-			h.Logger.Printf("ERROR opening index: %s, err=%s", fi.Name(), err)
+			h.Logger.Errorf("opening index: %s, err=%s", fi.Name(), err)
 			continue
 		} else if err != nil {
 			return errors.Wrap(err, "opening index")
@@ -702,7 +702,7 @@ func (h *Holder) Open() error {
 		if err != nil {
 			_ = h.txf.Close()
 			if err == ErrName {
-				h.Logger.Printf("ERROR opening index: %s, err=%s", index.Name(), err)
+				h.Logger.Errorf("opening index: %s, err=%s", index.Name(), err)
 				continue
 			}
 			return fmt.Errorf("open index: name=%s, err=%s", index.Name(), err)
@@ -1428,7 +1428,7 @@ func (h *Holder) flushCaches() {
 					}
 
 					if err := fragment.FlushCache(); err != nil {
-						h.Logger.Printf("ERROR flushing cache: err=%s, path=%s", err, fragment.cachePath())
+						h.Logger.Errorf("flushing cache: err=%s, path=%s", err, fragment.cachePath())
 					}
 				}
 			}
@@ -1454,7 +1454,7 @@ func (h *Holder) setFileLimit() {
 	newLimit := &syscall.Rlimit{}
 
 	if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, oldLimit); err != nil {
-		h.Logger.Printf("ERROR checking open file limit: %s", err)
+		h.Logger.Errorf("checking open file limit: %s", err)
 		return
 	}
 	// If the soft limit is lower than the FileLimit constant, we will try to change it.
@@ -1478,26 +1478,26 @@ func (h *Holder) setFileLimit() {
 				}
 				// Try setting again with lowered Max (hard limit)
 				if err := syscall.Setrlimit(syscall.RLIMIT_NOFILE, newLimit); err != nil {
-					h.Logger.Printf("ERROR setting open file limit: %s", err)
+					h.Logger.Errorf("setting open file limit: %s", err)
 				}
 				// If we weren't trying to change the hard limit, let the user know something is wrong.
 			} else {
-				h.Logger.Printf("ERROR setting open file limit: %s", err)
+				h.Logger.Errorf("setting open file limit: %s", err)
 			}
 		}
 
 		// Check the limit after setting it. OS may not obey Setrlimit call.
 		if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, oldLimit); err != nil {
-			h.Logger.Printf("ERROR checking open file limit: %s", err)
+			h.Logger.Errorf("checking open file limit: %s", err)
 		} else {
 			if oldLimit.Cur < fileLimit {
-				h.Logger.Printf("WARNING: Tried to set open file limit to %d, but it is %d. You may consider running \"sudo ulimit -n %d\" before starting Pilosa to avoid \"too many open files\" error. See https://www.pilosa.com/docs/latest/administration/#open-file-limits for more information.", fileLimit, oldLimit.Cur, fileLimit)
+				h.Logger.Warnf("Tried to set open file limit to %d, but it is %d. You may consider running \"sudo ulimit -n %d\" before starting Pilosa to avoid \"too many open files\" error. See https://www.pilosa.com/docs/latest/administration/#open-file-limits for more information.", fileLimit, oldLimit.Cur, fileLimit)
 			}
 		}
 	}
 }
 
-// Log startup time and version to $DATA_DIR/startup.log
+// Log startup time and version to $DATA_DIR/.startup.log
 func (h *Holder) logStartup() error {
 	RFC3339NanoFixedWidth := "2006-01-02T15:04:05.000000 07:00"
 	time := time.Now().Format(RFC3339NanoFixedWidth)
@@ -2006,7 +2006,7 @@ func (s *holderSyncer) readBothTranslateReader(rd TranslateEntryReader, snap *to
 	for {
 		var entry TranslateEntry
 		if err := rd.ReadEntry(&entry); err != nil {
-			s.Holder.Logger.Printf("cannot read translate entry: %s", err)
+			s.Holder.Logger.Errorf("cannot read translate entry: %s", err)
 			return
 		}
 
@@ -2015,30 +2015,30 @@ func (s *holderSyncer) readBothTranslateReader(rd TranslateEntryReader, snap *to
 			// Find appropriate store.
 			f := s.Holder.Field(entry.Index, entry.Field)
 			if f == nil {
-				s.Holder.Logger.Printf("field not found: %s/%s", entry.Index, entry.Field)
+				s.Holder.Logger.Errorf("field not found: %s/%s", entry.Index, entry.Field)
 				return
 			}
 			store = f.TranslateStore()
 			if store == nil {
-				s.Holder.Logger.Printf("no translate store suitable for index %q, field %q, key %q", entry.Index, entry.Field, entry.Key)
+				s.Holder.Logger.Errorf("no translate store suitable for index %q, field %q, key %q", entry.Index, entry.Field, entry.Key)
 				return
 			}
 		} else {
 			// Find appropriate store.
 			idx := s.Holder.Index(entry.Index)
 			if idx == nil {
-				s.Holder.Logger.Printf("index not found: %q", entry.Index)
+				s.Holder.Logger.Errorf("index not found: %q", entry.Index)
 				return
 			}
 			store = idx.TranslateStore(snap.KeyToKeyPartition(entry.Index, entry.Key))
 			if store == nil {
-				s.Holder.Logger.Printf("no translate store suitable for index %q, key %q", entry.Index, entry.Key)
+				s.Holder.Logger.Errorf("no translate store suitable for index %q, key %q", entry.Index, entry.Key)
 				return
 			}
 		}
 		// Apply replication to store.
 		if err := store.ForceSet(entry.ID, entry.Key); err != nil {
-			s.Holder.Logger.Printf("cannot force set field translation data: %d=%q", entry.ID, entry.Key)
+			s.Holder.Logger.Errorf("cannot force set field translation data: %d=%q", entry.ID, entry.Key)
 			return
 		}
 	}

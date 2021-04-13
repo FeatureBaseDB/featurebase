@@ -148,7 +148,6 @@ func NewCommand(stdin io.Reader, stdout, stderr io.Writer, opts ...CommandOption
 func (m *Command) Start() (err error) {
 	// Seed random number generator
 	rand.Seed(time.Now().UTC().UnixNano())
-
 	// SetupServer
 	err = m.SetupServer()
 	if err != nil {
@@ -158,13 +157,13 @@ func (m *Command) Start() (err error) {
 	if runtime.GOOS == "linux" {
 		result, err := ioutil.ReadFile("/proc/sys/vm/max_map_count")
 		if err != nil {
-			m.logger.Printf("Tried unsuccessfully to check system mmap limit: %v", err)
+			m.logger.Infof("Tried unsuccessfully to check system mmap limit: %v", err)
 		} else {
 			sysMmapLimit, err := strconv.ParseUint(strings.TrimSuffix(string(result), "\n"), 10, 64)
 			if err != nil {
-				m.logger.Printf("Tried unsuccessfully to check system mmap limit: %v", err)
+				m.logger.Infof("Tried unsuccessfully to check system mmap limit: %v", err)
 			} else if m.Config.MaxMapCount > sysMmapLimit {
-				m.logger.Printf("WARNING: Config max map limit (%v) is greater than current system limits (%v)", m.Config.MaxMapCount, sysMmapLimit)
+				m.logger.Warnf("Config max map limit (%v) is greater than current system limits (%v)", m.Config.MaxMapCount, sysMmapLimit)
 			}
 		}
 	}
@@ -177,7 +176,7 @@ func (m *Command) Start() (err error) {
 	// Initialize HTTP.
 	go func() {
 		if err := m.Handler.Serve(); err != nil {
-			m.logger.Printf("handler serve error: %v", err)
+			m.logger.Errorf("handler serve error: %v", err)
 		}
 	}()
 	m.logger.Printf("listening as %s\n", m.listenURI)
@@ -185,7 +184,7 @@ func (m *Command) Start() (err error) {
 	// Initialize gRPC.
 	go func() {
 		if err := m.grpcServer.Serve(); err != nil {
-			m.logger.Printf("grpc server error: %v", err)
+			m.logger.Errorf("grpc server error: %v", err)
 		}
 	}()
 
@@ -194,7 +193,7 @@ func (m *Command) Start() (err error) {
 	if m.Config.Postgres.Bind != "" {
 		var tlsConf *tls.Config
 		if m.Config.Postgres.TLS.CertificatePath != "" {
-			conf, err := GetTLSConfig(&m.Config.Postgres.TLS, m.logger.Logger())
+			conf, err := GetTLSConfig(&m.Config.Postgres.TLS, m.logger)
 			if err != nil {
 				return errors.Wrap(err, "setting up postgres TLS")
 			}
@@ -230,7 +229,7 @@ func (m *Command) UpAndDown() (err error) {
 	go func() {
 		err := m.Handler.Serve()
 		if err != nil {
-			m.logger.Printf("handler serve error: %v", err)
+			m.logger.Errorf("handler serve error: %v", err)
 		}
 	}()
 
@@ -239,7 +238,7 @@ func (m *Command) UpAndDown() (err error) {
 		return errors.Wrap(err, "bringing server up and down")
 	}
 
-	m.logger.Printf("brought up and shut down again")
+	m.logger.Errorf("brought up and shut down again")
 
 	return nil
 }
@@ -251,13 +250,13 @@ func (m *Command) Wait() error {
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	select {
 	case sig := <-c:
-		m.logger.Printf("received signal '%s', gracefully shutting down...\n", sig.String())
+		m.logger.Infof("received signal '%s', gracefully shutting down...\n", sig.String())
 
 		// Second signal causes a hard shutdown.
 		go func() { <-c; os.Exit(1) }()
 		return errors.Wrap(m.Close(), "closing command")
 	case <-m.done:
-		m.logger.Printf("server closed externally")
+		m.logger.Infof("server closed externally")
 		return nil
 	}
 }
@@ -275,7 +274,7 @@ func (m *Command) SetupServer() error {
 		return errors.Wrap(err, "setting up logger")
 	}
 
-	m.logger.Printf("%s", pilosa.VersionInfo())
+	m.logger.Infof("%s", pilosa.VersionInfo())
 
 	handleTrialDeadline(m.logger)
 
@@ -313,7 +312,7 @@ func (m *Command) SetupServer() error {
 
 	// Setup TLS
 	if uri.Scheme == "https" {
-		m.tlsConfig, err = GetTLSConfig(&m.Config.TLS, m.logger.Logger())
+		m.tlsConfig, err = GetTLSConfig(&m.Config.TLS, m.logger)
 		if err != nil {
 			return errors.Wrap(err, "get tls config")
 		}
@@ -364,13 +363,13 @@ func (m *Command) SetupServer() error {
 
 	// Primary store configuration is handled automatically now.
 	if m.Config.Translation.PrimaryURL != "" {
-		m.logger.Printf("DEPRECATED: The primary-url configuration option is no longer used.")
+		m.logger.Infof("DEPRECATED: The primary-url configuration option is no longer used.")
 	}
 	// Handle renamed and deprecated config parameter
 	longQueryTime := m.Config.LongQueryTime
 	if m.Config.Cluster.LongQueryTime >= 0 {
 		longQueryTime = m.Config.Cluster.LongQueryTime
-		m.logger.Printf("DEPRECATED: Configuration parameter cluster.long-query-time has been renamed to long-query-time")
+		m.logger.Infof("DEPRECATED: Configuration parameter cluster.long-query-time has been renamed to long-query-time")
 	}
 
 	// Use other config parameters to set Etcd parameters which we don't want to
@@ -498,14 +497,14 @@ func (m *Command) setupLogger() error {
 				// duplicate stderr onto log file
 				err := m.dup(int(f.Fd()), int(os.Stderr.Fd()))
 				if err != nil {
-					m.logger.Printf("syscall dup: %s\n", err.Error())
+					m.logger.Errorf("syscall dup: %s\n", err.Error())
 				}
 
 				// reopen log file on SIGHUP
 				<-sighup
 				err = f.Reopen()
 				if err != nil {
-					m.logger.Printf("reopen: %s\n", err.Error())
+					m.logger.Infof("reopen: %s\n", err.Error())
 				}
 			}
 		}()

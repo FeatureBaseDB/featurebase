@@ -367,8 +367,7 @@ func (c *leafCell) Values(tx *Tx) []uint16 {
 	case ContainerTypeArray:
 		return toArray16(c.Data)
 	case ContainerTypeRLE:
-		//a := make([]uint16, c.N)
-		a := make([]uint16, ArrayMaxSize)
+		a := make([]uint16, c.BitN)
 		n := int32(0)
 		for _, r := range toInterval16(c.Data) {
 			for v := int(r.Start); v <= int(r.Last); v++ {

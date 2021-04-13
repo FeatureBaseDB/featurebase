@@ -225,7 +225,7 @@ func OptServerExecutorPoolSize(size int) ServerOption {
 // OptServerPrimaryTranslateStore has been deprecated.
 func OptServerPrimaryTranslateStore(store TranslateStore) ServerOption {
 	return func(s *Server) error {
-		s.logger.Printf("DEPRECATED: OptServerPrimaryTranslateStore")
+		s.logger.Infof("DEPRECATED: OptServerPrimaryTranslateStore")
 		return nil
 	}
 }
@@ -472,13 +472,13 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	}
 	s.holder = NewHolder(path, s.holderConfig)
 	s.holder.Stats.SetLogger(s.logger)
-	s.holder.Logger.Printf("RowCacheOn: %v", s.holderConfig.RowcacheOn)
+	s.holder.Logger.Infof("RowCacheOn: %v", s.holderConfig.RowcacheOn)
 	cwd, err := os.Getwd()
 	if err != nil {
 		return nil, err
 	}
-	s.holder.Logger.Printf("cwd: %v", cwd)
-	s.holder.Logger.Printf("cmd line: %v", strings.Join(os.Args, " "))
+	s.holder.Logger.Infof("cwd: %v", cwd)
+	s.holder.Logger.Infof("cmd line: %v", strings.Join(os.Args, " "))
 
 	s.cluster.Path = path
 	s.cluster.logger = s.logger
@@ -517,7 +517,7 @@ func (s *Server) GRPCURI() pnet.URI {
 // UpAndDown brings the server up minimally and shuts it down
 // again; basically, it exists for testing holder open and close.
 func (s *Server) UpAndDown() error {
-	s.logger.Printf("open server. PID %v", os.Getpid())
+	s.logger.Infof("open server. PID %v", os.Getpid())
 
 	// Log startup
 	err := s.holder.logStartup()
@@ -540,7 +540,7 @@ func (s *Server) UpAndDown() error {
 
 // Open opens and initializes the server.
 func (s *Server) Open() error {
-	s.logger.Printf("open server. PID %v", os.Getpid())
+	s.logger.Infof("open server. PID %v", os.Getpid())
 
 	if s.holder.NeedsSnapshot() {
 		// Start background monitoring.
@@ -781,14 +781,14 @@ func (s *Server) SyncData() error {
 // listens for events indicating the need to reset the translation
 // sync processes.
 func (s *Server) monitorResetTranslationSync() {
-	s.logger.Printf("holder translation sync monitor initializing")
+	s.logger.Infof("holder translation sync monitor initializing")
 	for {
 		// Wait for a reset or a close.
 		select {
 		case <-s.closing:
 			return
 		case <-s.resetTranslationSyncCh:
-			s.logger.Printf("holder translation sync beginning")
+			s.logger.Infof("holder translation sync beginning")
 			s.wg.Add(1)
 			go func() {
 				// Obtaining this lock ensures that there is only
@@ -798,7 +798,7 @@ func (s *Server) monitorResetTranslationSync() {
 				defer s.syncer.mu.Unlock()
 				defer s.wg.Done()
 				if err := s.syncer.resetTranslationSync(); err != nil {
-					s.logger.Printf("holder translation sync error: err=%s", err)
+					s.logger.Errorf("holder translation sync error: err=%s", err)
 				}
 			}()
 		}
@@ -814,7 +814,7 @@ func (s *Server) monitorAntiEntropy() {
 	ticker := time.NewTicker(s.antiEntropyInterval)
 	defer ticker.Stop()
 
-	s.logger.Printf("holder sync monitor initializing (%s interval)", s.antiEntropyInterval)
+	s.logger.Infof("holder sync monitor initializing (%s interval)", s.antiEntropyInterval)
 
 	// Initialize syncer with local holder and remote client.
 	for {
@@ -842,17 +842,17 @@ func (s *Server) monitorAntiEntropy() {
 		}
 
 		// Sync holders.
-		s.logger.Printf("holder sync beginning")
+		s.logger.Infof("holder sync beginning")
 		s.cluster.muAntiEntropy.Lock()
 		if err := s.syncer.SyncHolder(); err != nil {
 			s.cluster.muAntiEntropy.Unlock()
-			s.logger.Printf("holder sync error: err=%s", err)
+			s.logger.Errorf("holder sync error: err=%s", err)
 			continue
 		}
 		s.cluster.muAntiEntropy.Unlock()
 
 		// Record successful sync in log.
-		s.logger.Printf("holder sync complete")
+		s.logger.Infof("holder sync complete")
 		dif := time.Since(t)
 		s.holder.Stats.Timing(MetricAntiEntropyDurationSeconds, dif, 1.0)
 
@@ -1069,7 +1069,7 @@ func (s *Server) handleRemoteStatus(pb Message) {
 
 		err := s.mergeRemoteStatus(pb.(*NodeStatus))
 		if err != nil {
-			s.logger.Printf("merge remote status: %s", err)
+			s.logger.Errorf("merge remote status: %s", err)
 		}
 	}()
 }
@@ -1093,7 +1093,7 @@ func (s *Server) mergeRemoteStatus(ns *NodeStatus) error {
 			// if we don't know about a field locally, log an error because
 			// fields should be created and synced prior to shard creation
 			if f == nil {
-				s.logger.Printf("local field not found: %s/%s", is.Name, fs.Name)
+				s.logger.Errorf("local field not found: %s/%s", is.Name, fs.Name)
 				continue
 			}
 			if err := f.AddRemoteAvailableShards(fs.AvailableShards); err != nil {
@@ -1114,10 +1114,10 @@ func (s *Server) IsPrimary() bool {
 func (s *Server) monitorDiagnostics() {
 	// Do not send more than once a minute
 	if s.diagnosticInterval < time.Minute {
-		s.logger.Printf("diagnostics disabled")
+		s.logger.Infof("diagnostics disabled")
 		return
 	}
-	s.logger.Printf("Pilosa is currently configured to send small diagnostics reports to our team every %v. More information here: https://www.pilosa.com/docs/latest/administration/#diagnostics", s.diagnosticInterval)
+	s.logger.Infof("Pilosa is currently configured to send small diagnostics reports to our team every %v. More information here: https://www.pilosa.com/docs/latest/administration/#diagnostics", s.diagnosticInterval)
 
 	s.diagnostics.Logger = s.logger
 	s.diagnostics.SetVersion(Version)
@@ -1141,11 +1141,11 @@ func (s *Server) monitorDiagnostics() {
 		s.diagnostics.EnrichWithSchemaProperties()
 		err = s.diagnostics.CheckVersion()
 		if err != nil {
-			s.logger.Printf("can't check version: %v", err)
+			s.logger.Errorf("can't check version: %v", err)
 		}
 		err = s.diagnostics.Flush()
 		if err != nil {
-			s.logger.Printf("diagnostics error: %s", err)
+			s.logger.Errorf("diagnostics error: %s", err)
 		}
 	}
 
@@ -1176,7 +1176,7 @@ func (s *Server) monitorRuntime() {
 
 	defer s.gcNotifier.Close()
 
-	s.logger.Printf("runtime stats initializing (%s interval)", s.metricInterval)
+	s.logger.Infof("runtime stats initializing (%s interval)", s.metricInterval)
 
 	for {
 		// Wait for tick or a close.
@@ -1245,7 +1245,7 @@ func (srv *Server) StartTransaction(ctx context.Context, id string, timeout time
 			},
 		)
 		if errLocal != nil || errBroadcast != nil {
-			srv.logger.Printf("error(s) while trying to clean up transaction which failed to start, local: %v, broadcast: %v",
+			srv.logger.Errorf("error(s) while trying to clean up transaction which failed to start, local: %v, broadcast: %v",
 				errLocal,
 				errBroadcast,
 			)
@@ -1279,7 +1279,7 @@ func (srv *Server) FinishTransaction(ctx context.Context, id string, remote bool
 		},
 	)
 	if err != nil {
-		srv.logger.Printf("error broadcasting transaction finish: %v", err)
+		srv.logger.Errorf("error broadcasting transaction finish: %v", err)
 		// TODO retry?
 	}
 	return trns, nil

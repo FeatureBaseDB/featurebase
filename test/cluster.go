@@ -26,6 +26,7 @@ import (
 	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/api/client"
 	"github.com/pilosa/pilosa/v2/disco"
+	"github.com/pilosa/pilosa/v2/logger"
 	"github.com/pilosa/pilosa/v2/proto"
 	"github.com/pilosa/pilosa/v2/server"
 	"github.com/pilosa/pilosa/v2/storage"
@@ -77,7 +78,7 @@ func (c *Cluster) QueryGRPC(t testing.TB, index, query string) *proto.TableRespo
 		t.Fatal("must have at least one node in cluster to query")
 	}
 
-	grpcClient, err := client.NewGRPCClient([]string{fmt.Sprintf("%s:%d", c.GetPrimary().Server.GRPCURI().Host, c.GetPrimary().Server.GRPCURI().Port)}, nil)
+	grpcClient, err := client.NewGRPCClient([]string{fmt.Sprintf("%s:%d", c.GetPrimary().Server.GRPCURI().Host, c.GetPrimary().Server.GRPCURI().Port)}, nil, logger.NopLogger)
 	if err != nil {
 		t.Fatalf("getting GRPC client: %v", err)
 	}
@@ -180,12 +181,16 @@ func (c *Cluster) Len() int {
 	return len(c.Nodes)
 }
 
-func (c *Cluster) ImportBits(t testing.TB, index, field string, rowcols [][2]uint64) {
+func (c *Cluster) ImportBitsWithTimestamp(t testing.TB, index, field string, rowcols [][2]uint64, timestamps []int64) {
 	t.Helper()
 	byShard := make(map[uint64][][2]uint64)
-	for _, rowcol := range rowcols {
+	byShardTs := make(map[uint64][]int64)
+	for i, rowcol := range rowcols {
 		shard := rowcol[1] / pilosa.ShardWidth
 		byShard[shard] = append(byShard[shard], rowcol)
+		if len(timestamps) > 0 {
+			byShardTs[shard] = append(byShardTs[shard], timestamps[i])
+		}
 	}
 
 	for shard, bits := range byShard {
@@ -208,20 +213,39 @@ func (c *Cluster) ImportBits(t testing.TB, index, field string, rowcols [][2]uin
 				if com.API.Node().ID != node.ID {
 					continue
 				}
+				if len(timestamps) == 0 {
+					err := com.API.Import(context.Background(), nil, &pilosa.ImportRequest{
+						Index:     index,
+						Field:     field,
+						Shard:     shard,
+						RowIDs:    rowIDs,
+						ColumnIDs: colIDs,
+					})
+					if err != nil {
+						t.Fatalf("importing data: %v", err)
+					}
+				} else {
+					ts := byShardTs[shard]
+					err := com.API.Import(context.Background(), nil, &pilosa.ImportRequest{
+						Index:      index,
+						Field:      field,
+						Shard:      shard,
+						RowIDs:     rowIDs,
+						ColumnIDs:  colIDs,
+						Timestamps: ts,
+					})
+					if err != nil {
+						t.Fatalf("importing data: %v", err)
+					}
 
-				err := com.API.Import(context.Background(), nil, &pilosa.ImportRequest{
-					Index:     index,
-					Field:     field,
-					Shard:     shard,
-					RowIDs:    rowIDs,
-					ColumnIDs: colIDs,
-				})
-				if err != nil {
-					t.Fatalf("importing data: %v", err)
 				}
 			}
 		}
 	}
+}
+func (c *Cluster) ImportBits(t testing.TB, index, field string, rowcols [][2]uint64) {
+	var noTime []int64
+	c.ImportBitsWithTimestamp(t, index, field, rowcols, noTime)
 }
 
 // ImportKeyKey imports data into an index where both the index and

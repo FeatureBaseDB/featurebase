@@ -1061,7 +1061,7 @@ func (c *cluster) followResizeInstruction(ctx context.Context, instr *ResizeInst
 			// if we don't know about a field locally, log an error because
 			// fields should be created and synced prior to shard creation
 			if f == nil {
-				c.logger.Printf("local field not found: %s/%s", is.Name, fs.Name)
+				c.logger.Errorf("local field not found: %s/%s", is.Name, fs.Name)
 				continue
 			}
 
