@@ -224,7 +224,7 @@ func (h *GRPCHandler) QueryPQL(req *pb.QueryPQLRequest, stream pb.Pilosa_QueryPQ
 	}
 	longQueryTime := h.api.LongQueryTime()
 	if longQueryTime > 0 && durQuery > longQueryTime {
-		h.logger.Printf("GRPC QueryPQL %v %s", durQuery, query.Query)
+		h.logger.Infof("GRPC QueryPQL %v %s", durQuery, query.Query)
 	}
 
 	rslt := resp.Results[0]
@@ -271,7 +271,7 @@ func (h *GRPCHandler) QueryPQLUnary(ctx context.Context, req *pb.QueryPQLRequest
 	}
 	longQueryTime := h.api.LongQueryTime()
 	if longQueryTime > 0 && durQuery > longQueryTime {
-		h.logger.Printf("GRPC QueryPQLUnary %v %s", durQuery, query.Query)
+		h.logger.Infof("GRPC QueryPQLUnary %v %s", durQuery, query.Query)
 	}
 
 	rslt := resp.Results[0]
@@ -569,7 +569,7 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 	const defaultLimit = 100000
 
 	h.inspectDeprecated.Do(func() {
-		h.logger.Printf("DEPRECATED: Inspect is deprecated, please use Extract() instead.")
+		h.logger.Infof("DEPRECATED: Inspect is deprecated, please use Extract() instead.")
 	})
 
 	index, err := h.api.Index(stream.Context(), req.Index)
@@ -1358,7 +1358,7 @@ func OptGRPCServerStats(stats stats.StatsClient) grpcServerOption {
 }
 
 func (s *grpcServer) Serve() error {
-	s.logger.Printf("enabled grpc listening on %s", s.ln.Addr())
+	s.logger.Infof("enabled grpc listening on %s", s.ln.Addr())
 
 	// and start...
 	if err := s.grpcServer.Serve(s.ln); err != nil {

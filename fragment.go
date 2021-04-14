@@ -372,7 +372,7 @@ func (f *fragment) importStorage(data []byte, file *os.File, newGen generation, 
 			}
 			return false, fmt.Errorf("unmarshal storage: file=%s, err=%s", file.Name(), err)
 		}
-		f.holder.Logger.Printf("warning: unmarshal storage, file=%s, err=%v", file.Name(), err)
+		f.holder.Logger.Warnf("unmarshal storage, file=%s, err=%v", file.Name(), err)
 		trunc, ok := cause.(roaring.FileShouldBeTruncatedError)
 		if ok && !f.holder.Opts.ReadOnly {
 			// if the holder is ReadOnly, we silently ignore the "advisory"
@@ -401,7 +401,7 @@ func (f *fragment) applyStorage(data []byte, file *os.File, newGen generation, m
 		if file != nil {
 			fi, err := file.Stat()
 			if err != nil {
-				f.holder.Logger.Printf("trying to apply new storage to existing bitmap, stat failed: %v", err)
+				f.holder.Logger.Errorf("trying to apply new storage to existing bitmap, stat failed: %v", err)
 			}
 			if err == nil && fi != nil && fi.Size() == 0 {
 				return f.emptyStorage(file)
@@ -536,7 +536,7 @@ func (f *fragment) openCache() error {
 	// Unmarshal cache data.
 	var pb pb.Cache
 	if err := proto.Unmarshal(buf, &pb); err != nil {
-		f.holder.Logger.Printf("error unmarshaling cache data, skipping: path=%s, err=%s", path, err)
+		f.holder.Logger.Errorf("error unmarshaling cache data, skipping: path=%s, err=%s", path, err)
 		return nil
 	}
 
@@ -576,13 +576,13 @@ func (f *fragment) Close() error {
 func (f *fragment) close() error {
 	// Flush cache if closing gracefully.
 	if err := f.flushCache(); err != nil {
-		f.holder.Logger.Printf("fragment: error flushing cache on close: err=%s, path=%s", err, f.path())
+		f.holder.Logger.Errorf("fragment: error flushing cache on close: err=%s, path=%s", err, f.path())
 		return errors.Wrap(err, "flushing cache")
 	}
 
 	// Close underlying storage.
 	if err := f.closeStorage(); err != nil {
-		f.holder.Logger.Printf("fragment: error closing storage: err=%s, path=%s", err, f.path())
+		f.holder.Logger.Errorf("fragment: error closing storage: err=%s, path=%s", err, f.path())
 		return errors.Wrap(err, "closing storage")
 	}
 
@@ -2547,11 +2547,11 @@ func (f *fragment) importPositions(tx Tx, set, clear []uint64, rowSet map[uint64
 		// we got an error. it's possible that the error indicates that something went wrong.
 		mappedIn, mappedOut, unmappedIn, errs, e2 := f.storage.SanityCheckMapping(f.currdata.from, f.currdata.to)
 		if errs != 0 {
-			f.holder.Logger.Printf("transaction failed on %s. storage has %d mapped in range, %d mapped out of range, %d unmapped in range, %d errors total, last %v",
+			f.holder.Logger.Errorf("transaction failed on %s. storage has %d mapped in range, %d mapped out of range, %d unmapped in range, %d errors total, last %v",
 				f.path(), mappedIn, mappedOut, unmappedIn, errs, e2)
 			if f.prevdata.from != f.currdata.from {
 				mappedIn, mappedOut, unmappedIn, errs, e2 = f.storage.SanityCheckMapping(f.prevdata.from, f.prevdata.to)
-				f.holder.Logger.Printf("with previous map, storage would have %d mapped in range, %d mapped out of range, %d unmapped in range, %d errors total, last %v",
+				f.holder.Logger.Errorf("with previous map, storage would have %d mapped in range, %d mapped out of range, %d unmapped in range, %d errors total, last %v",
 					mappedIn, mappedOut, unmappedIn, errs, e2)
 			}
 		}
@@ -2675,8 +2675,8 @@ func (f *fragment) importValueSmallWrite(tx Tx, columnIDs []uint64, values []int
 	}(); err != nil {
 		errOpenStorage := f.openStorage(true)
 		if errOpenStorage != nil {
-			f.Logger.Printf("failed to import data into fragment: %v", err)
-			f.Logger.Printf("recovery with openStorage failed for fragment: %v", errOpenStorage)
+			f.Logger.Errorf("failed to import data into fragment: %v", err)
+			f.Logger.Errorf("recovery with openStorage failed for fragment: %v", errOpenStorage)
 			f.Logger.Debugf("%s", debug.Stack())
 			os.Exit(1)
 		}
@@ -2735,8 +2735,8 @@ func (f *fragment) importValue(tx Tx, columnIDs []uint64, values []int64, bitDep
 	}(); err != nil {
 		errOpenStorage := f.openStorage(true)
 		if errOpenStorage != nil {
-			f.Logger.Printf("failed to import data into fragment: %v", err)
-			f.Logger.Printf("recovery with openStorage failed for fragment: %v", errOpenStorage)
+			f.Logger.Errorf("failed to import data into fragment: %v", err)
+			f.Logger.Errorf("recovery with openStorage failed for fragment: %v", errOpenStorage)
 			f.Logger.Debugf("%s", debug.Stack())
 			os.Exit(1)
 		}
@@ -2900,7 +2900,7 @@ func (f *fragment) snapshot() (err error) {
 				// we can't see the actual values that were used to generate this, probably.
 				if e2.Error() == "runtime error: invalid memory address or nil pointer dereference" {
 					mappedIn, mappedOut, unmappedIn, errs, _ := f.storage.SanityCheckMapping(f.currdata.from, f.currdata.to)
-					f.holder.Logger.Printf("transaction failed on %s. storage has %d mapped in range, %d mapped out of range, %d unmapped in range, %d errors total",
+					f.holder.Logger.Errorf("transaction failed on %s. storage has %d mapped in range, %d mapped out of range, %d unmapped in range, %d errors total",
 						f.path(), mappedIn, mappedOut, unmappedIn, errs)
 				}
 			} else {

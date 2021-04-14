@@ -159,13 +159,8 @@ func TestClusterResize_AddNode(t *testing.T) {
 		clus := test.MustRunCluster(t, 3)
 		defer clus.Close()
 
-		state0, err0 := clus.GetNode(0).API.State()
-		state1, err1 := clus.GetNode(1).API.State()
-		if err0 != nil || !test.CheckClusterState(clus.GetNode(0), disco.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node0 cluster state: %s, error: %v", state0, err0)
-		} else if err1 != nil || !test.CheckClusterState(clus.GetNode(1), disco.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node1 cluster state: %s, error: %v", state1, err1)
-		}
+		clus.GetNode(0).AssertState(t, disco.ClusterStateNormal, 1*time.Second)
+		clus.GetNode(1).AssertState(t, disco.ClusterStateNormal, 1*time.Second)
 	})
 	t.Run("WithIndex", func(t *testing.T) {
 		// Configure node0
@@ -207,13 +202,8 @@ func TestClusterResize_AddNode(t *testing.T) {
 
 		defer m1.Close()
 
-		state0, err0 := m0.API.State()
-		state1, err1 := m1.API.State()
-		if err0 != nil || !test.CheckClusterState(m0, disco.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node0 cluster state: %s, error: %v", state0, err0)
-		} else if err1 != nil || !test.CheckClusterState(m1, disco.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node1 cluster state: %s, error; %v", state1, err1)
-		}
+		m0.AssertState(t, disco.ClusterStateNormal, 1*time.Second)
+		m1.AssertState(t, disco.ClusterStateNormal, 1*time.Second)
 	})
 	t.Run("ContinuousShards", func(t *testing.T) {
 
@@ -253,13 +243,8 @@ func TestClusterResize_AddNode(t *testing.T) {
 		m1 := c.GetNode(1)
 		defer m1.Close()
 
-		state0, err0 := m0.API.State()
-		state1, err1 := m1.API.State()
-		if err0 != nil || !test.CheckClusterState(m0, disco.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node0 cluster state: %s, error: %v", state0, err0)
-		} else if err1 != nil || !test.CheckClusterState(m1, disco.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node1 cluster state: %s, error: %v", state1, err1)
-		}
+		m0.AssertState(t, disco.ClusterStateNormal, 1*time.Second)
+		m1.AssertState(t, disco.ClusterStateNormal, 1*time.Second)
 
 		// Verify the data exists on both nodes.
 		m0.QueryExpect(t, "i", "", `Row(f=1)`, exp)
@@ -301,13 +286,8 @@ func TestClusterResize_AddNode(t *testing.T) {
 		m1 := c.GetNode(1)
 		defer m1.Close()
 
-		state0, err0 := m0.API.State()
-		state1, err1 := m1.API.State()
-		if err0 != nil || !test.CheckClusterState(m0, disco.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node0 cluster state: %s, error: %v", state0, err0)
-		} else if err1 != nil || !test.CheckClusterState(m1, disco.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node1 cluster state: %s, error: %v", state1, err1)
-		}
+		m0.AssertState(t, disco.ClusterStateNormal, 1*time.Second)
+		m1.AssertState(t, disco.ClusterStateNormal, 1*time.Second)
 
 		// Verify the data exists on both nodes.
 		m0.QueryExpect(t, "i", "", `Row(f=1)`, exp)
@@ -353,13 +333,8 @@ func TestClusterResize_AddNode(t *testing.T) {
 		m1 := c.GetNode(1)
 		defer m1.Close()
 
-		state0, err0 := m0.API.State()
-		state1, err1 := m1.API.State()
-		if err0 != nil || !test.CheckClusterState(m0, disco.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node0 cluster state: %s, error: %v", state0, err0)
-		} else if err1 != nil || !test.CheckClusterState(m1, disco.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node1 cluster state: %s, error: %v", state1, err1)
-		}
+		m0.AssertState(t, disco.ClusterStateNormal, 1*time.Second)
+		m1.AssertState(t, disco.ClusterStateNormal, 1*time.Second)
 
 		// Verify the data exists on both nodes.
 		m0.QueryExpect(t, "i", "", `Row(f=1)`, exp)
@@ -399,13 +374,8 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 		m1 := c.GetNode(1)
 		defer m1.Close()
 
-		state0, err0 := m0.API.State()
-		state1, err1 := m1.API.State()
-		if err0 != nil || !test.CheckClusterState(m0, disco.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node0 cluster state: %s, error: %v", state0, err0)
-		} else if err1 != nil || !test.CheckClusterState(m1, disco.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node1 cluster state: %s, error: %v", state1, err1)
-		}
+		m0.AssertState(t, disco.ClusterStateNormal, 1*time.Second)
+		m1.AssertState(t, disco.ClusterStateNormal, 1*time.Second)
 
 		if err := <-errc; err != nil {
 			t.Fatalf("error from index creation: %v", err)
@@ -450,13 +420,8 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 		m1 := c.GetNode(1)
 		defer m1.Close()
 
-		state0, err0 := m0.API.State()
-		state1, err1 := m1.API.State()
-		if err0 != nil || !test.CheckClusterState(m0, disco.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node0 cluster state: %s, error: %v", state0, err0)
-		} else if err1 != nil || !test.CheckClusterState(m1, disco.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node1 cluster state: %s, error: %v", state1, err1)
-		}
+		m0.AssertState(t, disco.ClusterStateNormal, 1*time.Second)
+		m1.AssertState(t, disco.ClusterStateNormal, 1*time.Second)
 
 		// Verify the data exists on both nodes.
 		m0.QueryExpect(t, "i", "", `Row(f=1)`, exp)
@@ -501,13 +466,8 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 		m1 := c.GetNode(1)
 		defer m1.Close()
 
-		state0, err0 := m0.API.State()
-		state1, err1 := m1.API.State()
-		if err0 != nil || !test.CheckClusterState(m0, disco.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node0 cluster state: %s, error: %v", state0, err0)
-		} else if err1 != nil || !test.CheckClusterState(m1, disco.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node1 cluster state: %s, error: %v", state1, err1)
-		}
+		m0.AssertState(t, disco.ClusterStateNormal, 1*time.Second)
+		m1.AssertState(t, disco.ClusterStateNormal, 1*time.Second)
 
 		// Verify the data exists on both nodes.
 		m0.QueryExpect(t, "i", "", `Row(f=1)`, exp)
@@ -550,13 +510,9 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 		m1 := c.GetNode(1)
 		defer m1.Close()
 
-		state0, err0 := m0.API.State()
-		state1, err1 := m1.API.State()
-		if err0 != nil || !test.CheckClusterState(m0, disco.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node0 cluster state: %s, error: %v", state0, err0)
-		} else if err1 != nil || !test.CheckClusterState(m1, disco.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node1 cluster state: %s, error: %v", state1, err1)
-		}
+		m0.AssertState(t, disco.ClusterStateNormal, 1*time.Second)
+		m1.AssertState(t, disco.ClusterStateNormal, 1*time.Second)
+
 		m0.QueryExpect(t, "i", "", `Row(f=1)`, exp)
 		m1.QueryExpect(t, "i", "", `Row(f=1)`, exp)
 	})

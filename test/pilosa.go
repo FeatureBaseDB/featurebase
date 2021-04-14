@@ -384,10 +384,27 @@ func (m *Command) AwaitState(expectedState disco.ClusterState, timeout time.Dura
 		if err = m.exceptionalState(expectedState); err == nil {
 			return err
 		}
-		time.Sleep(1 * time.Millisecond)
+		time.Sleep(50 * time.Millisecond)
 	}
 	return fmt.Errorf("waited %v for command to reach state %q: %v",
 		elapsed, expectedState, err)
+}
+
+// AssertState waits for the whole cluster to reach a specified state, or
+// fails the calling test if it can't.
+func (m *Command) AssertState(t testing.TB, expectedState disco.ClusterState, timeout time.Duration) {
+	startTime := time.Now()
+	var elapsed time.Duration
+	var err error
+	for elapsed = 0; elapsed <= timeout; elapsed = time.Since(startTime) {
+		// Counterintuitive: We're returning if the err *is* nil,
+		// meaning we've reached the expected state.
+		if err = m.exceptionalState(expectedState); err == nil {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatalf("waited %v for command to reach state %q: %v", elapsed, expectedState, err)
 }
 
 // exceptionalState returns an error if the node is not in the expected state.

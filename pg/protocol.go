@@ -423,7 +423,7 @@ func (s *Server) handleStandard(ctx context.Context, proto Protocol, conn net.Co
 		default:
 			// The message is not supported yet.
 			// Send an error.
-			s.Logger.Printf("unrecognized postgres packet %v", msg)
+			s.Logger.Errorf("unrecognized postgres packet %v", msg)
 			msg, err = encoder.Error(
 				message.NoticeField{
 					Type: message.NoticeFieldSeverity,

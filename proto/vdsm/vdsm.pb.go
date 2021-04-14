@@ -706,7 +706,9 @@ func init() {
 	proto.RegisterType((*InspectRequest)(nil), "vdsm.InspectRequest")
 }
 
-func init() { proto.RegisterFile("vdsm/vdsm.proto", fileDescriptor_3849c3e549495f50) }
+func init() {
+	proto.RegisterFile("vdsm/vdsm.proto", fileDescriptor_3849c3e549495f50)
+}
 
 var fileDescriptor_3849c3e549495f50 = []byte{
 	// 719 bytes of a gzipped FileDescriptorProto
@@ -759,11 +761,11 @@ var fileDescriptor_3849c3e549495f50 = []byte{
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ context.Context
-var _ grpc.ClientConn
+var _ grpc.ClientConnInterface
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the grpc package it is being compiled against.
-const _ = grpc.SupportPackageIsVersion4
+const _ = grpc.SupportPackageIsVersion6
 
 // MoleculaClient is the client API for Molecula service.
 //
@@ -781,10 +783,10 @@ type MoleculaClient interface {
 }
 
 type moleculaClient struct {
-	cc *grpc.ClientConn
+	cc grpc.ClientConnInterface
 }
 
-func NewMoleculaClient(cc *grpc.ClientConn) MoleculaClient {
+func NewMoleculaClient(cc grpc.ClientConnInterface) MoleculaClient {
 	return &moleculaClient{cc}
 }
 

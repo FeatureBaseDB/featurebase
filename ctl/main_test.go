@@ -1,4 +1,4 @@
-// Copyright 2017 Pilosa Corp.
+// Copyright 2020 Pilosa Corp.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,33 +12,32 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package pilosa
+package ctl_test
 
 import (
-	"io"
+	"fmt"
+	"net"
+	"net/http"
+	"testing"
 
-	"github.com/pilosa/pilosa/v2/logger"
+	_ "net/http/pprof"
+
+	"github.com/pilosa/pilosa/v2/testhook"
 )
 
-// CmdIO holds standard unix inputs and outputs.
-type CmdIO struct {
-	Stdin  io.Reader
-	Stdout io.Writer
-	Stderr io.Writer
-	logger logger.Logger
-}
-
-// NewCmdIO returns a new instance of CmdIO with inputs and outputs set to the
-// arguments.
-func NewCmdIO(stdin io.Reader, stdout, stderr io.Writer) *CmdIO {
-	return &CmdIO{
-		Stdin:  stdin,
-		Stdout: stdout,
-		Stderr: stderr,
-		logger: logger.NewStandardLogger(stderr),
+func TestMain(m *testing.M) {
+	l, err := net.Listen("tcp", ":0")
+	if err != nil {
+		panic(err)
 	}
-}
+	port := l.Addr().(*net.TCPAddr).Port
+	fmt.Printf("pilosa/ctl TestMain: online stack-traces: curl http://localhost:%v/debug/pprof/goroutine?debug=2\n", port)
+	go func() {
+		err := http.Serve(l, nil)
+		if err != nil {
+			panic(err)
+		}
+	}()
+	testhook.RunTestsWithHooks(m)
 
-func (c *CmdIO) Logger() logger.Logger {
-	return c.logger
 }

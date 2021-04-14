@@ -145,7 +145,7 @@ func (sq *prioritySnapshotQueue) spawnWorkers(w int) {
 	sq.mu.Lock()
 	defer sq.mu.Unlock()
 	if sq.ctx.Err() != nil {
-		sq.logger.Printf("prioritySnapshotQueue worker: already done")
+		sq.logger.Infof("prioritySnapshotQueue worker: already done")
 		return
 	}
 	sq.workerWG.Add(w)
@@ -193,8 +193,8 @@ func (sq *prioritySnapshotQueue) process(req snapshotRequest) {
 	if f.snapshotStamp.Before(req.when) {
 		f.snapshotErr = f.snapshot()
 		if f.snapshotErr != nil {
-			fmt.Printf("snapshot error: %v\n", f.snapshotErr)
-			sq.logger.Printf("snapshot error: %v", f.snapshotErr)
+			fmt.Printf("ERROR: snapshot error: %v\n", f.snapshotErr)
+			sq.logger.Errorf("snapshot error: %v", f.snapshotErr)
 		}
 		f.snapshotPending = false
 		f.snapshotCond.Broadcast()
@@ -225,7 +225,7 @@ func (sq *prioritySnapshotQueue) Stop() {
 	enqueued := atomic.LoadUint32(&sq.stats.enqueued)
 	skipped := atomic.LoadUint32(&sq.stats.skipped)
 	if skipped > 0 || enqueued > 1 {
-		sq.logger.Printf("snapshot queue: enqueued %d, skipped %d\n", sq.stats.enqueued, sq.stats.skipped)
+		sq.logger.Infof("snapshot queue: enqueued %d, skipped %d\n", sq.stats.enqueued, sq.stats.skipped)
 	}
 }
 
@@ -239,7 +239,7 @@ func (sq *prioritySnapshotQueue) Enqueue(f *fragment) {
 	sq.mu.RLock()
 	defer sq.mu.RUnlock()
 	if sq.normal == nil {
-		sq.logger.Printf("requested snapshot after snapshot queue was closed")
+		sq.logger.Infof("requested snapshot after snapshot queue was closed")
 		return
 	}
 	// we have to set this before enqueing, because it's
@@ -286,7 +286,7 @@ func (sq *prioritySnapshotQueue) Immediate(f *fragment) error {
 	// *don't* need this lock anymore so someone else should have it.
 	if sq.urgent == nil {
 		sq.mu.RUnlock()
-		sq.logger.Printf("requested immediate snapshot after snapshot queue was closed")
+		sq.logger.Errorf("requested immediate snapshot after snapshot queue was closed")
 		return errors.New("requested immediate snapshot after snapshot queue was closed")
 	}
 	f.snapshotPending = true
@@ -376,7 +376,7 @@ func (sq *prioritySnapshotQueue) computeMaxOpN() {
 				sq.maxOpN--
 			}
 			if prevMaxOpN != sq.maxOpN {
-				sq.logger.Printf("background scan: %d/%d fragments considered have opN %d or higher\n",
+				sq.logger.Infof("background scan: %d/%d fragments considered have opN %d or higher\n",
 					subTotal, total, sq.maxOpN)
 			}
 			break
@@ -490,7 +490,7 @@ func (sq *prioritySnapshotQueue) scanHolderWorker(h *Holder, background chan sna
 		}
 
 		if scanner.hits > 0 {
-			sq.logger.Printf("background scan: %d/%d fragments needed snapshots\n", scanner.hits, scanner.seen)
+			sq.logger.Infof("background scan: %d/%d fragments needed snapshots\n", scanner.hits, scanner.seen)
 			scanner.hits = 0
 		} else {
 			sq.logger.Debugf("background scan: no fragments needed snapshots, waiting\n")

@@ -371,7 +371,7 @@ func TestConcurrentFieldCreation(t *testing.T) {
 	defer cluster.Close()
 
 	node0 := cluster.GetNode(0)
-	err := node0.AwaitState(disco.ClusterStateNormal, 100*time.Millisecond)
+	err := cluster.AwaitState(disco.ClusterStateNormal, 100*time.Millisecond)
 	if err != nil {
 		t.Fatalf("starting cluster: %v", err)
 	}
@@ -643,7 +643,7 @@ func TestClusteringNodesReplica1(t *testing.T) {
 	cluster := test.MustRunCluster(t, 3)
 	defer cluster.Close()
 
-	if err := cluster.GetNode(0).AwaitState(disco.ClusterStateNormal, 100*time.Millisecond); err != nil {
+	if err := cluster.AwaitState(disco.ClusterStateNormal, 100*time.Millisecond); err != nil {
 		t.Fatalf("starting cluster: %v", err)
 	}
 
@@ -651,7 +651,7 @@ func TestClusteringNodesReplica1(t *testing.T) {
 		t.Fatalf("closing third node: %v", err)
 	}
 
-	if err := cluster.GetPrimary().AwaitState(disco.ClusterStateDown, 30*time.Second); err != nil {
+	if err := cluster.AwaitPrimaryState(disco.ClusterStateDown, 30*time.Second); err != nil {
 		t.Fatalf("starting cluster: %v", err)
 	}
 
@@ -681,7 +681,7 @@ func TestClusteringNodesReplica2(t *testing.T) {
 		t.Fatalf("closing third node: %v", err)
 	}
 
-	err = coord.AwaitState(disco.ClusterStateDegraded, 30*time.Second)
+	err = cluster.AwaitPrimaryState(disco.ClusterStateDegraded, 30*time.Second)
 	if err != nil {
 		t.Fatalf("after closing first server: %v", err)
 	}
@@ -699,7 +699,7 @@ func TestClusteringNodesReplica2(t *testing.T) {
 		t.Fatalf("closing 2nd node: %v", err)
 	}
 
-	err = coord.AwaitState(disco.ClusterStateDown, 30*time.Second)
+	err = cluster.AwaitPrimaryState(disco.ClusterStateDown, 30*time.Second)
 	if err != nil {
 		t.Fatalf("after closing second server: %v", err)
 	}
@@ -730,7 +730,7 @@ func TestRemoveNodeAfterItDies(t *testing.T) {
 
 	coord, others := cluster.GetPrimary(), cluster.GetNonPrimaries()
 
-	err = coord.AwaitState(disco.ClusterStateNormal, 100*time.Millisecond)
+	err = cluster.AwaitState(disco.ClusterStateNormal, 100*time.Millisecond)
 	if err != nil {
 		t.Fatalf("starting cluster: %v", err)
 	}
@@ -741,16 +741,16 @@ func TestRemoveNodeAfterItDies(t *testing.T) {
 		t.Fatalf("closing third node: %v", err)
 	}
 
-	err = coord.AwaitState(disco.ClusterStateDegraded, 30*time.Second)
+	err = cluster.AwaitPrimaryState(disco.ClusterStateDegraded, 30*time.Second)
 	if err != nil {
-		t.Fatalf("starting cluster: %v", err)
+		t.Fatalf("degrading cluster: %v", err)
 	}
 
 	if _, err := coord.API.RemoveNode(disabled.API.Node().ID); err != nil {
 		t.Fatalf("removing failed node: %v", err)
 	}
 
-	err = coord.AwaitState(disco.ClusterStateNormal, 30*time.Second)
+	err = cluster.AwaitPrimaryState(disco.ClusterStateNormal, 30*time.Second)
 	if err != nil {
 		t.Fatalf("removing disabled node: %v", err)
 	}
@@ -774,7 +774,7 @@ func TestRemoveConcurrentIndexCreation(t *testing.T) {
 	defer cluster.Close()
 
 	node0 := cluster.GetNode(0)
-	err = node0.AwaitState(disco.ClusterStateNormal, 100*time.Millisecond)
+	err = cluster.AwaitState(disco.ClusterStateNormal, 100*time.Millisecond)
 	if err != nil {
 		t.Fatalf("starting cluster: %v", err)
 	}
@@ -789,7 +789,7 @@ func TestRemoveConcurrentIndexCreation(t *testing.T) {
 		t.Fatalf("removing node: %v", err)
 	}
 
-	err = cluster.GetPrimary().AwaitState(disco.ClusterStateNormal, 100*time.Millisecond)
+	err = cluster.AwaitPrimaryState(disco.ClusterStateNormal, 100*time.Millisecond)
 	if err != nil {
 		t.Fatalf("starting cluster: %v", err)
 	}

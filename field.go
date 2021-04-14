@@ -487,7 +487,7 @@ func (f *Field) loadAvailableShards() error {
 	}
 	// some other problem:
 	if err != nil {
-		f.holder.Logger.Printf("available shards file present but unreadable, discarding: %v", err)
+		f.holder.Logger.Errorf("available shards file present but unreadable, discarding: %v", err)
 		err = os.Remove(path)
 		if err != nil {
 			return errors.Wrap(err, "deleting corrupt available shards list")
@@ -496,7 +496,7 @@ func (f *Field) loadAvailableShards() error {
 	}
 	bm := roaring.NewBitmap()
 	if err = bm.UnmarshalBinary(buf); err != nil {
-		f.holder.Logger.Printf("available shards file corrupt, discarding: %v", err)
+		f.holder.Logger.Errorf("available shards file corrupt, discarding: %v", err)
 		err = os.Remove(path)
 		if err != nil {
 			return errors.Wrap(err, "deleting corrupt available shards list")
@@ -581,6 +581,7 @@ func (f *Field) Open() error {
 		}
 
 		f.holder.Logger.Debugf("load available shards for index/field: %s/%s", f.index, f.name)
+
 		if err := f.loadAvailableShards(); err != nil {
 			return errors.Wrap(err, "loading available shards")
 		}
@@ -629,8 +630,8 @@ func (f *Field) Open() error {
 	return nil
 }
 
-func blockingWriteAvailableShards(fieldPath string, availableShardBytes []byte) {
-	path := filepath.Join(fieldPath, ".available.shards")
+func (f *Field) blockingWriteAvailableShards(availableShardBytes []byte) {
+	path := filepath.Join(f.path, ".available.shards")
 
 	// Create a temporary file to save to.
 	tempPath := path + tempExt
@@ -642,15 +643,15 @@ func blockingWriteAvailableShards(fieldPath string, availableShardBytes []byte) 
 
 	// Move snapshot to data file location.
 	if err := os.Rename(tempPath, path); err != nil {
-		log.Printf("rename snapshot: %s", err)
+		f.holder.Logger.Errorf("rename snapshot: %s", err)
 	}
 }
-func nonBlockingWriteAvailableShards(fieldPath string, availableShardBytes []byte, done chan bool) {
+func (f *Field) nonBlockingWriteAvailableShards(availableShardBytes []byte, done chan bool) {
 	if len(availableShardBytes) == 0 {
 		return
 	}
 	go func() {
-		blockingWriteAvailableShards(fieldPath, availableShardBytes)
+		f.blockingWriteAvailableShards(availableShardBytes)
 		done <- true
 	}()
 }
@@ -670,7 +671,7 @@ func (f *Field) writeAvailableShards() {
 			if len(data) > 0 {
 				if !writing {
 					writing = true
-					nonBlockingWriteAvailableShards(f.path, data, tracker)
+					f.nonBlockingWriteAvailableShards(data, tracker)
 					data = nil
 				}
 			}
@@ -681,7 +682,7 @@ func (f *Field) writeAvailableShards() {
 				<-tracker
 			}
 			if len(data) > 0 {
-				blockingWriteAvailableShards(f.path, data)
+				f.blockingWriteAvailableShards(data)
 			}
 			alive = false
 		}
@@ -1916,19 +1917,15 @@ func (o *FieldOptions) MarshalJSON() ([]byte, error) {
 		})
 	case FieldTypeTimestamp:
 		return json.Marshal(struct {
-			Type         string    `json:"type"`
-			Epoch        time.Time `json:"epoch"`
-			BitDepth     uint64    `json:"bitDepth"`
-			Keys         bool      `json:"keys"`
-			TimeUnit     string    `json:"timeUnit"`
-			ForeignIndex string    `json:"foreignIndex"`
+			Type     string    `json:"type"`
+			Epoch    time.Time `json:"epoch"`
+			BitDepth uint64    `json:"bitDepth"`
+			TimeUnit string    `json:"timeUnit"`
 		}{
 			o.Type,
 			time.Unix(0, o.Base*TimeUnitNanos(o.TimeUnit)).UTC(),
 			o.BitDepth,
-			o.Keys,
 			o.TimeUnit,
-			o.ForeignIndex,
 		})
 	case FieldTypeTime:
 		return json.Marshal(struct {
