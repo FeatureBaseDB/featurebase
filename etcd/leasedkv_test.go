@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/pilosa/pilosa/v2/disco"
+	"github.com/pilosa/pilosa/v2/logger"
 	"github.com/pilosa/pilosa/v2/testhook"
 	"go.etcd.io/etcd/embed"
 	"go.etcd.io/etcd/etcdserver/api/v3client"
@@ -50,8 +51,9 @@ func TestLeasedKv(t *testing.T) {
 		<-etcd.Server.StopNotify()
 		cli.Close()
 	}()
+	wrapper := &Etcd{e: etcd, cli: cli, logger: logger.NewLogfLogger(t)}
 
-	lkv := newLeasedKV(cli, "/test", 1)
+	lkv := newLeasedKV(wrapper, "/test", 1)
 
 	ctx := context.Background()
 

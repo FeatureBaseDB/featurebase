@@ -794,6 +794,7 @@ type FieldOptions struct {
 	noStandardView bool
 	foreignIndex   string
 	timeUnit       string
+	base           int64
 }
 
 // Type returns the type of the field. Currently "set", "int", or "time".
@@ -969,15 +970,36 @@ func OptFieldTypeTime(quantum TimeQuantum, opts ...bool) FieldOption {
 	}
 }
 
-func OptFieldTypeTimestamp(min, max time.Time, timeUnit string) FieldOption {
+// Timestamp field range.
+var (
+	DefaultEpoch = time.Unix(0, 0).UTC() // 1970-01-01T00:00:00Z
+
+	MinTimestamp = time.Unix(-1<<32, 0).UTC() // 1833-11-24T17:31:44Z
+	MaxTimestamp = time.Unix(1<<32, 0).UTC()  // 2106-02-07T06:28:16Z
+)
+
+// TimeUnitNanos returns the number of nanoseconds in unit.
+func TimeUnitNanos(unit string) int64 {
+	switch unit {
+	case TimeUnitSeconds:
+		return int64(time.Second)
+	case TimeUnitMilliseconds:
+		return int64(time.Millisecond)
+	case TimeUnitMicroseconds:
+		return int64(time.Microsecond)
+	default:
+		return int64(time.Nanosecond)
+	}
+}
+
+func OptFieldTypeTimestamp(epoch time.Time, timeUnit string) FieldOption {
 	return func(fo *FieldOptions) {
-		minNano := min.UnixNano()
-		maxNano := max.UnixNano()
+		epochValue := epoch.UnixNano() / TimeUnitNanos(timeUnit)
 		fo.fieldType = FieldTypeTimestamp
 		fo.timeUnit = timeUnit
-		fo.min = pql.NewDecimal(minNano, 0)
-		fo.max = pql.NewDecimal(maxNano, 0)
-		// fo.Base = bsiBase(minNano, maxNano)
+		fo.min = pql.NewDecimal(MinTimestamp.UnixNano()/TimeUnitNanos(timeUnit), 0)
+		fo.max = pql.NewDecimal(MaxTimestamp.UnixNano()/TimeUnitNanos(timeUnit), 0)
+		fo.base = epochValue
 	}
 }
 

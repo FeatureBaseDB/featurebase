@@ -415,7 +415,7 @@ func (c *Cluster) Start() error {
 	if err != nil {
 		return errors.Wrap(err, "starting cluster")
 	}
-	return c.GetNode(0).AwaitState(disco.ClusterStateNormal, 30*time.Second)
+	return c.AwaitState(disco.ClusterStateNormal, 30*time.Second)
 }
 
 // Close stops a Cluster
@@ -447,6 +447,67 @@ func (c *Cluster) CloseAndRemove(n int) error {
 	return err
 }
 
+// AwaitPrimaryState waits for the cluster primary to reach a specified cluster state.
+// When this happens, we know etcd reached a combination of node states that
+// would imply this cluster state, but some nodes may not have caught up yet;
+// we just test that the coordinator thought the cluster was in the given state.
+func (c *Cluster) AwaitPrimaryState(expectedState disco.ClusterState, timeout time.Duration) error {
+	if len(c.Nodes) < 1 {
+		return errors.New("can't await coordinator state on an empty cluster")
+	}
+	primary := c.GetPrimary()
+	if primary == nil {
+		startTime := time.Now()
+		var elapsed time.Duration
+		for elapsed = 0; elapsed <= timeout; elapsed = time.Since(startTime) {
+			time.Sleep(50 * time.Millisecond)
+			primary = c.GetPrimary()
+			if primary != nil {
+				break
+			}
+		}
+		if primary == nil {
+			return errors.New("timed out waiting for cluster to have valid topology")
+		}
+		// we used up some of our timeout waiting for this
+		c.tb.Logf("had to wait %v for cluster topology", elapsed)
+		timeout -= elapsed
+	}
+	onlyCoordinator := &Cluster{Nodes: []*Command{primary}}
+	return onlyCoordinator.AwaitState(expectedState, timeout)
+}
+
+// ExceptionalState returns an error if any node in the cluster is not
+// in the expected state.
+func (c *Cluster) ExceptionalState(expectedState disco.ClusterState) error {
+	for _, node := range c.Nodes {
+		state, err := node.API.State()
+		if err != nil || state != expectedState {
+			return fmt.Errorf("node %q: state %s: err %v", node.ID(), state, err)
+		}
+	}
+	return nil
+}
+
+// AwaitState waits for the whole cluster to reach a specified state.
+func (c *Cluster) AwaitState(expectedState disco.ClusterState, timeout time.Duration) (err error) {
+	if len(c.Nodes) < 1 {
+		return errors.New("can't await state of an empty cluster")
+	}
+	startTime := time.Now()
+	var elapsed time.Duration
+	for elapsed = 0; elapsed <= timeout; elapsed = time.Since(startTime) {
+		// Counterintuitive: We're returning if the err *is* nil,
+		// meaning we've reached the expected state.
+		if err = c.ExceptionalState(expectedState); err == nil {
+			return err
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	return fmt.Errorf("waited %v for cluster to reach state %q: %v",
+		elapsed, expectedState, err)
+}
+
 // MustNewCluster creates a new cluster. If opts contains only one
 // slice of command options, those options are used with every node.
 // If it is empty, default options are used. Otherwise, it must contain size
@@ -464,23 +525,6 @@ func MustNewCluster(tb testing.TB, size int, opts ...[]server.CommandOption) *Cl
 		tb.Fatalf("new cluster: %v", err)
 	}
 	return c
-}
-
-// CheckClusterState polls a given cluster for its state until it
-// receives a matching state. It polls up to n times before returning.
-func CheckClusterState(m *Command, state disco.ClusterState, n int) bool {
-	for i := 0; i < n; i++ {
-
-		apiState, err := m.API.State()
-		if err != nil {
-			return false
-		}
-		if apiState == state {
-			return true
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-	return false
 }
 
 // newCluster creates a new cluster

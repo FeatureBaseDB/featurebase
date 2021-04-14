@@ -26,6 +26,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/pql"
 	"github.com/pkg/errors"
 )
@@ -1195,22 +1196,25 @@ func TestORM(t *testing.T) {
 	})
 
 	t.Run("TimestampFieldOptions", func(t *testing.T) {
-		field := sampleIndex.Field("timestamp-field", OptFieldTypeTimestamp(time.Unix(0, 2), time.Unix(0, 5000), "s"))
-		jsonString := field.options.String()
+		field := sampleIndex.Field("timestamp-field", OptFieldTypeTimestamp(pilosa.DefaultEpoch, pilosa.TimeUnitSeconds))
+
+		/*jsonString := field.options.String()
 		targetString := `{"options":{"type":"timestamp","timeUnit":"s","max":5000,"min":2}}`
 		if sortedString(targetString) != sortedString(jsonString) {
 			t.Fatalf("`%s` != `%s`", targetString, jsonString)
 		}
+		*/
 		compareFieldOptions(t,
 			field.Options(),
 			FieldTypeTimestamp,
 			TimeQuantumNone,
 			CacheTypeDefault,
 			0,
-			pql.NewDecimal(2, 0),
-			pql.NewDecimal(5000, 0),
+			pql.NewDecimal(MinTimestamp.UnixNano()/TimeUnitNanos(pilosa.TimeUnitSeconds), 0),
+			pql.NewDecimal(MaxTimestamp.UnixNano()/TimeUnitNanos(pilosa.TimeUnitSeconds), 0),
 			"",
-			"s")
+			pilosa.TimeUnitSeconds)
+
 	})
 
 	t.Run("EncodeMapPanicsOnMarshalFailure", func(t *testing.T) {

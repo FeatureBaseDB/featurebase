@@ -30,7 +30,7 @@ import (
 // It will try to renew the lease at any cost after losing it.
 // It will recreate the previous existing value for the key again.
 type leasedKV struct {
-	cli    *clientv3.Client
+	e      *Etcd
 	cancel context.CancelFunc
 
 	key        string
@@ -41,9 +41,9 @@ type leasedKV struct {
 	stopped bool   // protected by mu
 }
 
-func newLeasedKV(cli *clientv3.Client, key string, ttlSeconds int64) *leasedKV {
+func newLeasedKV(e *Etcd, key string, ttlSeconds int64) *leasedKV {
 	return &leasedKV{
-		cli:        cli,
+		e:          e,
 		key:        key,
 		ttlSeconds: ttlSeconds,
 	}
@@ -72,26 +72,38 @@ func (l *leasedKV) create(initValue string) (<-chan *clientv3.LeaseKeepAliveResp
 	}
 
 	l.cancel = cancel
+	var leaseResp *clientv3.LeaseGrantResponse
 
-	leaseResp, err := l.cli.Grant(ctx, l.ttlSeconds)
+	err := l.e.retryClient(func(cli *clientv3.Client) (err error) {
+		leaseResp, err = cli.Grant(ctx, l.ttlSeconds)
+		return err
+	})
 	if err != nil {
 		return nil, errors.Wrap(err, "creating a lease")
 	}
 
-	if _, err := l.cli.Txn(ctx).
-		Then(clientv3.OpPut(l.key, initValue, clientv3.WithLease(leaseResp.ID))).
-		Commit(); err != nil {
+	err = l.e.retryClient(func(cli *clientv3.Client) (err error) {
+		_, err = cli.Txn(ctx).
+			Then(clientv3.OpPut(l.key, initValue, clientv3.WithLease(leaseResp.ID))).
+			Commit()
+		return err
+	})
+	if err != nil {
 		return nil, errors.Wrapf(err, "creating key %s with value [%s]", l.key, initValue)
 	}
 
-	kaChann, err := l.cli.KeepAlive(ctx, leaseResp.ID)
+	var kaChan <-chan *clientv3.LeaseKeepAliveResponse
+	err = l.e.retryClient(func(cli *clientv3.Client) (err error) {
+		kaChan, err = cli.KeepAlive(ctx, leaseResp.ID)
+		return err
+	})
 	if err != nil {
 		return nil, errors.Wrapf(err, "keeping alive the lease for the key %s with value %s", l.key, l.value)
 	}
 
 	l.value = initValue
 
-	return kaChann, nil
+	return kaChan, nil
 }
 
 func (l *leasedKV) consumeLease(ch <-chan *clientv3.LeaseKeepAliveResponse) {
@@ -144,9 +156,15 @@ func (l *leasedKV) Set(ctx context.Context, value string) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	if _, err := l.cli.Txn(ctx).
-		Then(clientv3.OpPut(l.key, value, clientv3.WithIgnoreLease())).
-		Commit(); err != nil {
+	err := l.e.retryClient(func(cli *clientv3.Client) (err error) {
+		_, err = cli.Txn(ctx).
+			Then(clientv3.OpPut(l.key, value, clientv3.WithIgnoreLease())).
+			Commit()
+		return err
+	})
+	// l.e.logger.Printf("set key %q on %q value %q: err %v", l.key, l.e.options.Name, value, err)
+
+	if err != nil {
 		return errors.Wrapf(err, "creating key %s with value [%s]", l.key, l.value)
 	}
 
@@ -160,10 +178,14 @@ func (l *leasedKV) Get(ctx context.Context) (string, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	getResp, err := l.cli.Txn(ctx).
-		If(clientv3util.KeyExists(l.key)).
-		Then(clientv3.OpGet(l.key, clientv3.WithIgnoreLease())).
-		Commit()
+	var getResp *clientv3.TxnResponse
+	err := l.e.retryClient(func(cli *clientv3.Client) (err error) {
+		getResp, err = cli.Txn(ctx).
+			If(clientv3util.KeyExists(l.key)).
+			Then(clientv3.OpGet(l.key, clientv3.WithIgnoreLease())).
+			Commit()
+		return err
+	})
 	if err != nil {
 		return "", errors.Wrapf(err, "getting key %s", l.key)
 	}
