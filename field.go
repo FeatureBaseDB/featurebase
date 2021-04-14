@@ -208,10 +208,9 @@ func OptFieldTypeInt(min, max int64) FieldOption {
 // OptFieldTypeTimestamp is a functional option on FieldOptions
 // used to specify the field as being type `timestamp` and to
 // provide any respective configuration values.
-func OptFieldTypeTimestamp(min, max time.Time, timeUnit string) FieldOption {
+func OptFieldTypeTimestamp(epoch time.Time, timeUnit string) FieldOption {
 	return func(fo *FieldOptions) error {
-		minValue := min.UnixNano() / TimeUnitNanos(timeUnit)
-		maxValue := max.UnixNano() / TimeUnitNanos(timeUnit)
+		epochValue := epoch.UnixNano() / TimeUnitNanos(timeUnit)
 		if fo.Type != "" {
 			return errors.Errorf("field type is already set to: %s", fo.Type)
 		}
@@ -220,18 +219,11 @@ func OptFieldTypeTimestamp(min, max time.Time, timeUnit string) FieldOption {
 		} else if !IsValidTimeUnit(timeUnit) {
 			return errors.Errorf("invalid time unit: %q", fo.TimeUnit)
 		}
-		if min.Before(MinTimestamp) {
-			return errors.New("timestamp field min is too low")
-		} else if max.After(MaxTimestamp) {
-			return errors.New("timestamp field max is too high")
-		} else if min.After(max) {
-			return errors.New("timestamp field min cannot be greater than max")
-		}
 		fo.Type = FieldTypeTimestamp
 		fo.TimeUnit = timeUnit
-		fo.Min = pql.NewDecimal(minValue, 0)
-		fo.Max = pql.NewDecimal(maxValue, 0)
-		fo.Base = bsiBase(minValue, maxValue)
+		fo.Min = pql.NewDecimal(MinTimestamp.UnixNano()/TimeUnitNanos(timeUnit), 0)
+		fo.Max = pql.NewDecimal(MaxTimestamp.UnixNano()/TimeUnitNanos(timeUnit), 0)
+		fo.Base = epochValue
 		return nil
 	}
 }
@@ -1925,23 +1917,15 @@ func (o *FieldOptions) MarshalJSON() ([]byte, error) {
 		})
 	case FieldTypeTimestamp:
 		return json.Marshal(struct {
-			Type          string    `json:"type"`
-			BaseTimestamp time.Time `json:"baseTimestamp"`
-			BitDepth      uint64    `json:"bitDepth"`
-			MinTimestamp  time.Time `json:"minTimestamp"`
-			MaxTimestamp  time.Time `json:"maxTimestamp"`
-			Keys          bool      `json:"keys"`
-			TimeUnit      string    `json:"timeUnit"`
-			ForeignIndex  string    `json:"foreignIndex"`
+			Type     string    `json:"type"`
+			Epoch    time.Time `json:"epoch"`
+			BitDepth uint64    `json:"bitDepth"`
+			TimeUnit string    `json:"timeUnit"`
 		}{
 			o.Type,
 			time.Unix(0, o.Base*TimeUnitNanos(o.TimeUnit)).UTC(),
 			o.BitDepth,
-			time.Unix(0, o.Min.Value*TimeUnitNanos(o.TimeUnit)).UTC(),
-			time.Unix(0, o.Max.Value*TimeUnitNanos(o.TimeUnit)).UTC(),
-			o.Keys,
 			o.TimeUnit,
-			o.ForeignIndex,
 		})
 	case FieldTypeTime:
 		return json.Marshal(struct {
@@ -2154,6 +2138,8 @@ func (f *Field) persistView(ctx context.Context, cvm *CreateViewMessage) error {
 
 // Timestamp field range.
 var (
+	DefaultEpoch = time.Unix(0, 0).UTC() // 1970-01-01T00:00:00Z
+
 	MinTimestamp = time.Unix(-1<<32, 0).UTC() // 1833-11-24T17:31:44Z
 	MaxTimestamp = time.Unix(1<<32, 0).UTC()  // 2106-02-07T06:28:16Z
 )

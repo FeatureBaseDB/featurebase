@@ -454,7 +454,7 @@ func TestAPI_ImportValue(t *testing.T) {
 		if err != nil {
 			t.Fatalf("creating index: %v", err)
 		}
-		_, err = m1.API.CreateField(ctx, index, field, pilosa.OptFieldTypeTimestamp(pilosa.MinTimestamp, pilosa.MaxTimestamp, pilosa.TimeUnitSeconds))
+		_, err = m1.API.CreateField(ctx, index, field, pilosa.OptFieldTypeTimestamp(pilosa.DefaultEpoch, pilosa.TimeUnitSeconds))
 		if err != nil {
 			t.Fatalf("creating field: %v", err)
 		}
