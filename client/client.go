@@ -901,7 +901,6 @@ func (c *Client) doRequest(host *pnet.URI, method, path string, headers map[stri
 		sleepTime time.Duration
 		rand      = rand.New(rand.NewSource(time.Now().UnixNano()))
 	)
-
 	for retry := 0; ; {
 		if req, err = buildRequest(host, method, path, headers, data); err != nil {
 			return 0, nil, errors.Wrap(err, "building request")
@@ -1723,6 +1722,7 @@ type SchemaOptions struct {
 	Keys           bool        `json:"keys"`
 	NoStandardView bool        `json:"noStandardView"`
 	TrackExistence bool        `json:"trackExistence"`
+	TimeUnit       string      `json:"timeUnit"`
 }
 
 func (so SchemaOptions) asIndexOptions() *IndexOptions {
@@ -1745,6 +1745,7 @@ func (so SchemaOptions) asFieldOptions() *FieldOptions {
 		scale:          so.Scale,
 		keys:           so.Keys,
 		noStandardView: so.NoStandardView,
+		timeUnit:       so.TimeUnit,
 	}
 }
 
