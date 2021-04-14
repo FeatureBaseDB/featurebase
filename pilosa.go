@@ -180,8 +180,8 @@ func (cas ColumnAttrSet) MarshalJSON() ([]byte, error) {
 // TimeFormat is the go-style time format used to parse string dates.
 const TimeFormat = "2006-01-02T15:04"
 
-// validateName ensures that the index or field or view name is a valid format.
-func validateName(name string) error {
+// ValidateName ensures that the index or field or view name is a valid format.
+func ValidateName(name string) error {
 	if !nameRegexp.Match([]byte(name)) {
 		return errors.Wrapf(ErrName, "'%s'", name)
 	}

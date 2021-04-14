@@ -1174,7 +1174,7 @@ func (h *Holder) persistIndex(ctx context.Context, cim *CreateIndexMessage) erro
 		return ErrIndexRequired
 	}
 
-	if err := validateName(cim.Index); err != nil {
+	if err := ValidateName(cim.Index); err != nil {
 		return errors.Wrap(err, "validating name")
 	}
 
