@@ -106,7 +106,7 @@ func GetPortsGenConfigs(tb testing.TB, nodes []*Command) error {
 			AClientURL:    clientURL,
 			LPeerURL:      peerURL,
 			APeerURL:      peerURL,
-			HeartbeatTTL:  5,
+			HeartbeatTTL:  12,
 			LPeerSocket:   []*net.TCPListener{peerListener},
 			LClientSocket: []*net.TCPListener{clientListener},
 		}

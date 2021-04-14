@@ -702,7 +702,6 @@ func (c *cluster) Nodes() []*topology.Node {
 	copiedNodes := make([]topology.Node, len(nodes))
 	result := make([]*topology.Node, len(nodes))
 
-	// Create a snapshot of the cluster to use for node/partition calculations.
 	primary := topology.PrimaryNode(nodes, c.Hasher)
 
 	// Set node states and IsPrimary.
@@ -712,13 +711,6 @@ func (c *cluster) Nodes() []*topology.Node {
 		if node == primary {
 			copiedNodes[i].IsPrimary = true
 		}
-		s, err := c.stator.NodeState(context.Background(), node.ID)
-		if err != nil {
-			// TODO should we delete this?
-			copiedNodes[i].State = disco.NodeStateUnknown
-			continue
-		}
-		copiedNodes[i].State = s
 	}
 	return result
 }

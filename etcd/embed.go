@@ -18,13 +18,17 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net"
 	"path"
 	"sort"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/pilosa/pilosa/v2/disco"
+	"github.com/pilosa/pilosa/v2/logger"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/topology"
 	"github.com/pkg/errors"
@@ -32,6 +36,7 @@ import (
 	"go.etcd.io/etcd/clientv3/clientv3util"
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.etcd.io/etcd/embed"
+	"go.etcd.io/etcd/etcdserver"
 	"go.etcd.io/etcd/etcdserver/api/v3client"
 	"go.etcd.io/etcd/mvcc/mvccpb"
 	"go.etcd.io/etcd/pkg/transport"
@@ -70,28 +75,85 @@ var (
 )
 
 const (
-	heartbeatPrefix = "/heartbeat/"
+	// We put all the things the node-watcher watches in /node so we
+	// can use a single watcher for them.
+	nodePrefix      = "/node/"
+	heartbeatPrefix = nodePrefix + "heartbeat/"
 	schemaPrefix    = "/schema/"
-	resizePrefix    = "/resize/"
-	metadataPrefix  = "/metadata/"
+	resizePrefix    = nodePrefix + "resize/"
+	metadataPrefix  = nodePrefix + "metadata/"
 	shardPrefix     = "/shard/"
 	lockPrefix      = "/lock/"
 )
+
+var (
+	etcdLeaderChanged = etcdserver.ErrLeaderChanged.Error()
+)
+
+// nodeData is an internal tracker of the data we're keeping about
+// nodes in etcd, which we update from data collected either directly
+// from the KV, or via heartbeats.
+//
+// Any change to the topology.Node should create a new Node rather
+// than reusing the old one, so we can return the structure and not worry
+// about data races.
+//
+// We have to track the revisions of individual components so we can
+// discard updates which are genuinely out-of-order for a given field,
+// but still handle cases where we get updates to several fields that
+// reach us out of order.
+type nodeData struct {
+	heartbeatState string
+	resizeState    string
+	metadata       []byte
+	topologyNode   *topology.Node
+}
+
+func (n *nodeData) computedState() disco.NodeState {
+	if n.resizeState != "" {
+		return disco.NodeStateResizing
+	}
+	if n.heartbeatState != "" {
+		return disco.NodeState(n.heartbeatState)
+	}
+	return disco.NodeStateUnknown
+}
 
 type Etcd struct {
 	options  Options
 	replicas int
 
-	e   *embed.Etcd
-	cli *clientv3.Client
+	e     *embed.Etcd
+	cli   *clientv3.Client
+	cliMu sync.Mutex
 
 	heartbeatLeasedKV, resizeLeasedKV *leasedKV
+
+	// We have a watcher running. watchCancel() cancels its context.
+	watchCancel func()
+
+	// knownNodes and sortedNodes get updated by data coming in from
+	// watchers. Any change to the contents of a *topology.Node here
+	// should be implemented by making a new one and replacing the pointer,
+	// so the old pointer stays valid and can be used.
+	nodeMu          sync.Mutex
+	nodeRev         int64
+	knownNodes      map[string]*nodeData
+	sortedNodes     []*topology.Node
+	nodeStates      map[string]disco.NodeState
+	nodeStatesDirty bool // do we need to remake the nodeStates map to use it?
+
+	// we want to inherit parent's logging functionality
+	logger logger.Logger
 }
 
-func NewEtcd(opt Options, replicas int) *Etcd {
+func NewEtcd(opt Options, logger logger.Logger, replicas int) *Etcd {
 	e := &Etcd{
-		options:  opt,
-		replicas: replicas,
+		options:    opt,
+		logger:     logger,
+		replicas:   replicas,
+		knownNodes: make(map[string]*nodeData),
+		nodeStates: make(map[string]disco.NodeState),
 	}
 
 	if e.options.HeartbeatTTL == 0 {
@@ -102,6 +164,9 @@ func NewEtcd(opt Options, replicas int) *Etcd {
 
 // Close implements io.Closer
 func (e *Etcd) Close() error {
+	if e.watchCancel != nil {
+		e.watchCancel()
+	}
 	if e.e != nil {
 		if e.resizeLeasedKV != nil {
 			e.resizeLeasedKV.Stop()
@@ -120,6 +185,38 @@ func (e *Etcd) Close() error {
 	}
 
 	return nil
+}
+
+// retryClient attempts to do a thing, but also tries to handle the
+// specific case where the client fails because of a leader election,
+// in which case we need to restart the client and retry the thing.
+//
+// We have to let go of the lock while calling `fn` because some fn are
+// long-lasting ones, like watchNodesOnce. So we grab a local copy of
+// the client object, then call things on that object. This should error
+// out sanely instead of panicing if we close the client while something
+// is running on it.
+func (e *Etcd) retryClient(fn func(cli *clientv3.Client) error) (err error) {
+	e.cliMu.Lock()
+	cli := e.cli
+	e.cliMu.Unlock()
+	if err = fn(cli); err == nil || err.Error() != etcdLeaderChanged {
+		// either it's nil or it's an error we don't try to handle here
+		return err
+	}
+	// we can't do much with an error from closing e.cli at this point, so
+	// we try again.
+	e.cliMu.Lock()
+	if cli != e.cli {
+		cli = e.cli
+		e.cliMu.Unlock()
+		return fn(cli)
+	}
+	_ = cli.Close()
+	cli = v3client.New(e.e.Server)
+	e.cli = cli
+	e.cliMu.Unlock()
+	return fn(cli)
 }
 
 func parseOptions(opt Options) *embed.Config {
@@ -194,38 +291,65 @@ func parseOptions(opt Options) *embed.Config {
 }
 
 // Start starts etcd and hearbeat
-func (e *Etcd) Start(ctx context.Context) (disco.InitialClusterState, error) {
+func (e *Etcd) Start(ctx context.Context) (_ disco.InitialClusterState, err error) {
 	opts := parseOptions(e.options)
 	state := disco.InitialClusterState(opts.ClusterState)
 
-	etcd, err := embed.StartEtcd(opts)
+	e.e, err = embed.StartEtcd(opts)
 	if err != nil {
 		return state, errors.Wrap(err, "starting etcd")
 	}
-	e.e = etcd
+	// If we are returning an error, the caller won't be shutting us down
+	// later, so we have to stop the server ourselves.
+	defer func() {
+		if err != nil {
+			e.e.Server.Stop()
+		}
+	}()
 	e.cli = v3client.New(e.e.Server)
 
 	select {
 	case <-ctx.Done():
-		e.e.Server.Stop()
 		return state, ctx.Err()
 
 	case err := <-e.e.Err():
 		return state, err
 
 	case <-e.e.Server.ReadyNotify():
-		return state, e.startHeartbeat(ctx)
+		members := e.e.Server.Cluster().Members()
+		e.nodeMu.Lock()
+		defer e.nodeMu.Unlock()
+		// mark everything unknown so we show a state for nodes we haven't
+		// heard from yet.
+		for _, member := range members {
+			peerID := member.ID.String()
+			e.knownNodes[peerID] = &nodeData{
+				topologyNode: &topology.Node{
+					ID:    peerID,
+					State: disco.NodeStateUnknown,
+				},
+			}
+			e.nodeStates[peerID] = disco.NodeStateUnknown
+		}
+		e.nodeStatesDirty = true
+		return state, e.startHeartbeatAndWatcher(ctx)
 	}
 }
 
-func (e *Etcd) startHeartbeat(ctx context.Context) error {
+// startHeartbeatAndWatcher spins up the heartbeat, and also a background
+// watcher that watches for changes to events we care about.
+func (e *Etcd) startHeartbeatAndWatcher(ctx context.Context) error {
 	key := heartbeatPrefix + e.e.Server.ID().String()
-	e.heartbeatLeasedKV = newLeasedKV(e.cli, key, e.options.HeartbeatTTL)
+	e.heartbeatLeasedKV = newLeasedKV(e, key, e.options.HeartbeatTTL)
 
 	if err := e.heartbeatLeasedKV.Start(string(disco.NodeStateStarting)); err != nil {
 		return errors.Wrap(err, "startHeartbeat: starting a new heartbeat")
 	}
-
+	// WatchNodes does not check for an error, and will need to be shut
+	// down later. We only get this far at a point where we're returning
+	// a nil error, and thus, the caller is expected to cleanly shut down
+	// the server later.
+	go e.WatchNodes()
 	return nil
 }
 
@@ -234,70 +358,17 @@ func (e *Etcd) NodeState(ctx context.Context, peerID string) (disco.NodeState, e
 }
 
 func (e *Etcd) nodeState(ctx context.Context, peerID string) (disco.NodeState, error) {
-	resp, err := e.cli.Txn(ctx).
-		If(clientv3util.KeyMissing(path.Join(resizePrefix, peerID))).
-		Then(clientv3.OpGet(path.Join(heartbeatPrefix, peerID))).
-		Commit()
-	if err != nil {
-		return disco.NodeStateUnknown, err
-	}
-
-	if !resp.Succeeded {
-		return disco.NodeStateResizing, nil
-	}
-
-	if len(resp.Responses) == 0 {
-		return disco.NodeStateUnknown, disco.ErrNoResults
-	}
-
-	kvs := resp.Responses[0].GetResponseRange().Kvs
-	if len(kvs) == 0 {
-		return disco.NodeStateUnknown, disco.ErrNoResults
-	}
-	if len(kvs) > 1 {
-		return disco.NodeStateUnknown, disco.ErrTooManyResults
-	}
-
-	return disco.NodeState(kvs[0].Value), nil
+	e.nodeMu.Lock()
+	defer e.nodeMu.Unlock()
+	err := e.populateNodeStates(ctx)
+	return e.nodeStates[peerID], err
 }
 
 func (e *Etcd) NodeStates(ctx context.Context) (map[string]disco.NodeState, error) {
-	members := e.e.Server.Cluster().Members()
-	ops := make([]clientv3.Op, 2*(len(members)))
-	for i, member := range members {
-		peerID := member.ID.String()
-		ops[2*i] = clientv3.OpGet(path.Join(resizePrefix, peerID), clientv3.WithCountOnly())
-		ops[2*i+1] = clientv3.OpGet(path.Join(heartbeatPrefix, peerID))
-	}
-
-	resp, err := e.cli.Txn(ctx).Then(ops...).Commit()
-	if err != nil {
-		return nil, err
-	}
-
-	out := make(map[string]disco.NodeState, len(members))
-	for i, member := range members {
-		peerID := member.ID.String()
-		if resp.Responses[2*i].GetResponseRange().Count > 0 {
-			// This node is processing a resize operation.
-			out[peerID] = disco.NodeStateResizing
-			continue
-		}
-
-		kvs := resp.Responses[2*i+1].GetResponseRange().Kvs
-		switch len(kvs) {
-		case 0:
-			// The node has not reported a state.
-			out[peerID] = disco.NodeStateUnknown
-		case 1:
-			// The node has reported its state.
-			out[peerID] = disco.NodeState(kvs[0].Value)
-		default:
-			return nil, disco.ErrTooManyResults
-		}
-	}
-
-	return out, nil
+	e.nodeMu.Lock()
+	defer e.nodeMu.Unlock()
+	err := e.populateNodeStates(ctx)
+	return e.nodeStates, err
 }
 
 func (e *Etcd) Started(ctx context.Context) (err error) {
@@ -337,7 +408,7 @@ func (e *Etcd) Leader() *disco.Peer {
 	return peer
 }
 
-func (e *Etcd) ClusterState(ctx context.Context) (disco.ClusterState, error) {
+func (e *Etcd) ClusterState(ctx context.Context) (out disco.ClusterState, err error) {
 	if e.e == nil {
 		return disco.ClusterStateUnknown, nil
 	}
@@ -347,11 +418,14 @@ func (e *Etcd) ClusterState(ctx context.Context) (disco.ClusterState, error) {
 		resize     bool
 		starting   bool
 	)
-	states, err := e.NodeStates(ctx)
+	e.nodeMu.Lock()
+	err = e.populateNodeStates(ctx)
+	states := e.nodeStates
+	e.nodeMu.Unlock()
 	if err != nil {
+		e.logger.Printf("ClusterState %q: getting node states: %v", e.options.Name, states)
 		return disco.ClusterStateUnknown, err
 	}
-
 	for _, state := range states {
 		switch state {
 		case disco.NodeStateStarting:
@@ -387,7 +461,7 @@ func (e *Etcd) ClusterState(ctx context.Context) (disco.ClusterState, error) {
 func (e *Etcd) Resize(ctx context.Context) (func([]byte) error, error) {
 	key := path.Join(resizePrefix, e.e.Server.ID().String())
 	if e.resizeLeasedKV == nil {
-		e.resizeLeasedKV = newLeasedKV(e.cli, key, e.options.HeartbeatTTL)
+		e.resizeLeasedKV = newLeasedKV(e, key, e.options.HeartbeatTTL)
 	}
 
 	if err := e.resizeLeasedKV.Start(""); err != nil {
@@ -433,6 +507,191 @@ func (e *Etcd) Watch(ctx context.Context, peerID string, onUpdate func([]byte) e
 	}
 
 	return nil
+}
+
+// parseNodeKey reads heartbeatPrefix + "23" and yields (heartbeatPrefix, "23", nil).
+func parseNodeKey(key []byte) (prefix string, peerID string, err error) {
+	// we're looking for things starting with nodePrefix
+	if !bytes.HasPrefix(key, []byte(nodePrefix)) {
+		return "", "", fmt.Errorf("not a node key: %q", key)
+	}
+	peerIndex := bytes.LastIndex(key, []byte("/"))
+	if peerIndex < 6 {
+		return "", "", fmt.Errorf("not a valid node key: %q", key)
+	}
+	return string(key[:peerIndex+1]), string(key[peerIndex+1:]), nil
+}
+
+// deleteNodeData is like putNodeData, but handles deletes rather than cases
+// where a value exists. you should call it with the node mutex locked.
+func (e *Etcd) deleteNodeData(key []byte, revision int64) error {
+	prefix, peerID, err := parseNodeKey(key)
+	if err != nil {
+		return err
+	}
+	if revision > e.nodeRev {
+		e.nodeRev = revision
+	}
+	switch prefix {
+	case heartbeatPrefix:
+		if e.knownNodes[peerID] == nil {
+			e.knownNodes[peerID] = &nodeData{}
+		}
+		e.knownNodes[peerID].heartbeatState = ""
+		e.nodeStatesDirty = true
+	case metadataPrefix:
+		if e.knownNodes[peerID] == nil {
+			e.knownNodes[peerID] = &nodeData{}
+		}
+		e.knownNodes[peerID].metadata = nil
+		e.knownNodes[peerID].topologyNode = &topology.Node{}
+		e.nodeStatesDirty = true
+	case resizePrefix:
+		if e.knownNodes[peerID] == nil {
+			e.knownNodes[peerID] = &nodeData{}
+		}
+		e.knownNodes[peerID].resizeState = ""
+		e.nodeStatesDirty = true
+	default:
+		return fmt.Errorf("node watch: invalid prefix %q\n", prefix)
+	}
+	return nil
+}
+
+// putNodeData does the actual updating of the node state maps, etc,
+// given an incoming heartbeat, metadata, or resizing change. It requires
+// that you already hold the node mutex.
+func (e *Etcd) putNodeData(key []byte, value []byte, revision int64) (err error) {
+	prefix, peerID, err := parseNodeKey(key)
+	if err != nil {
+		return err
+	}
+	if revision > e.nodeRev {
+		e.nodeRev = revision
+	}
+	switch prefix {
+	case heartbeatPrefix:
+		if e.knownNodes[peerID] == nil {
+			e.knownNodes[peerID] = &nodeData{}
+		}
+		e.knownNodes[peerID].heartbeatState = string(value)
+		e.nodeStatesDirty = true
+	case metadataPrefix:
+		if e.knownNodes[peerID] == nil {
+			e.knownNodes[peerID] = &nodeData{}
+		}
+		e.knownNodes[peerID].metadata = value
+		var newNode topology.Node
+		err := json.Unmarshal(value, &newNode)
+		if err != nil {
+			return fmt.Errorf("json unmarshal of node metadata: %v\n", err)
+		}
+		e.knownNodes[peerID].topologyNode = &newNode
+		// This saves us one remake of the node later, probably.
+		e.knownNodes[peerID].topologyNode.State = e.knownNodes[peerID].computedState()
+		e.nodeStatesDirty = true
+	case resizePrefix:
+		if e.knownNodes[peerID] == nil {
+			e.knownNodes[peerID] = &nodeData{}
+		}
+		e.knownNodes[peerID].resizeState = string(value)
+		e.nodeStatesDirty = true
+	default:
+		return fmt.Errorf("node watch: invalid prefix %q\n", prefix)
+	}
+	return nil
+}
+
+// compute the states of all the nodes. we compute all of them because
+// we might have returned the old map in response to a query, so we want to
+// make a new one. You should have the node state lock held when you call this.
+func (e *Etcd) populateNodeStates(ctx context.Context) error {
+	if !e.nodeStatesDirty {
+		return nil
+	}
+	e.nodeStates = make(map[string]disco.NodeState, len(e.knownNodes))
+	e.sortedNodes = make([]*topology.Node, 0, len(e.knownNodes))
+	for peerID, data := range e.knownNodes {
+		newState := data.computedState()
+		e.nodeStates[peerID] = newState
+		// update the state with the current state, so we can
+		// reuse these nodes later. sortedNodes may end up shorter
+		// than the whole node list if we don't have all the nodes
+		// yet!
+		if data.topologyNode != nil {
+			if data.topologyNode.State != newState {
+				newNode := *data.topologyNode
+				newNode.State = newState
+				data.topologyNode = &newNode
+			}
+			e.sortedNodes = append(e.sortedNodes, data.topologyNode)
+		}
+	}
+	// sort list by ID. list now contains sorted nodes which have their
+	// current states.
+	sort.Sort(topology.ByID(e.sortedNodes))
+	e.nodeStatesDirty = false
+	return nil
+}
+
+// watchNodesOnce is a helper function to use with the retry logic
+// to let us restart the client if we need to.
+func (e *Etcd) watchNodesOnce(ctx context.Context, cli *clientv3.Client) (err error) {
+	e.nodeMu.Lock()
+	// we are looking for revisions HIGHER than the highest revision we've
+	// currently seen, we don't want one equal to it.
+	minRev := e.nodeRev + 1
+	e.nodeMu.Unlock()
+	for resp := range cli.Watch(ctx, nodePrefix, clientv3.WithPrefix(), clientv3.WithRev(minRev)) {
+		if err := resp.Err(); err != nil {
+			return err
+		}
+		// lock the node mutex for this whole process of updating so
+		// we never see partial updates; everything that comes into the
+		// watcher as a single message will be processed atomically.
+		e.nodeMu.Lock()
+		for _, ev := range resp.Events {
+			switch ev.Type {
+			case mvccpb.PUT:
+				err := e.putNodeData(ev.Kv.Key, ev.Kv.Value, ev.Kv.ModRevision)
+				if err != nil {
+					e.logger.Printf("put event: %v", err)
+				}
+			case mvccpb.DELETE:
+				err := e.deleteNodeData(ev.Kv.Key, ev.Kv.ModRevision)
+				if err != nil {
+					e.logger.Printf("delete event: %v", err)
+				}
+			default:
+				e.logger.Printf("watchp %q: unknown event %#v", e.options.Name, ev)
+			}
+		}
+		e.nodeMu.Unlock()
+
+	}
+	return nil
+}
+
+// WatchNodes monitors changes to /heartbeat/, /resizing/, and /metadata/;
+// basically, it catches changes to cluster state, but ignores the schema.
+func (e *Etcd) WatchNodes() {
+	ctx, cancel := context.WithCancel(context.Background())
+	e.watchCancel = cancel
+	watchInContext := func(cli *clientv3.Client) error {
+		return e.watchNodesOnce(ctx, cli)
+	}
+	// retryClient will retry on leader failure, but not for other failures
+	// such as ErrCompacted which can terminate a watch. But we want to resume
+	// watching again as long as our context isn't cancelled. The context
+	// should get cancelled when this Etcd gets shut down.
+	for ctx.Err() == nil {
+		err := e.retryClient(watchInContext)
+		if err != nil {
+			e.logger.Printf("WatchNodes: error from watch client: %v", err)
+		}
+		// delay slightly on error so we don't go completely crazy
+		time.Sleep(1 * time.Second)
+	}
 }
 
 func (e *Etcd) DeleteNode(ctx context.Context, nodeID string) error {
@@ -505,29 +764,17 @@ func (e *Etcd) Schema(ctx context.Context) (disco.Schema, error) {
 }
 
 func (e *Etcd) Metadata(ctx context.Context, peerID string) ([]byte, error) {
-	key := path.Join(metadataPrefix, peerID)
-
-	resp, err := e.cli.Txn(ctx).
-		If(clientv3util.KeyExists(key)).
-		Then(clientv3.OpGet(key)).
-		Commit()
+	e.nodeMu.Lock()
+	defer e.nodeMu.Unlock()
+	err := e.populateNodeStates(ctx)
 	if err != nil {
-		return nil, errors.Wrapf(err, "Metadata(%s)", key)
+		return nil, err
 	}
-
-	if !resp.Succeeded || len(resp.Responses) == 0 {
-		return nil, disco.ErrNoResults
+	data, ok := e.knownNodes[peerID]
+	if !ok {
+		return nil, errors.New("node not found")
 	}
-
-	kvs := resp.Responses[0].GetResponseRange().Kvs
-	if len(kvs) == 0 {
-		return nil, disco.ErrNoResults
-	}
-	if len(kvs) > 1 {
-		return nil, disco.ErrTooManyResults
-	}
-
-	return kvs[0].Value, nil
+	return data.metadata, nil
 }
 
 func (e *Etcd) SetMetadata(ctx context.Context, metadata []byte) error {
@@ -550,10 +797,14 @@ func (e *Etcd) CreateIndex(ctx context.Context, name string, val []byte) error {
 	op.WithValueBytes(val)
 
 	// Check for key existence, and execute Op within a transaction.
-	resp, err := e.cli.Txn(ctx).
-		If(clientv3util.KeyMissing(key)).
-		Then(op).
-		Commit()
+	var resp *clientv3.TxnResponse
+	err := e.retryClient(func(cli *clientv3.Client) (err error) {
+		resp, err = cli.Txn(ctx).
+			If(clientv3util.KeyMissing(key)).
+			Then(op).
+			Commit()
+		return err
+	})
 	if err != nil {
 		return errors.Wrap(err, "executing transaction")
 	}
@@ -572,12 +823,16 @@ func (e *Etcd) Index(ctx context.Context, name string) ([]byte, error) {
 func (e *Etcd) DeleteIndex(ctx context.Context, name string) (err error) {
 	key := schemaPrefix + name
 	// Deleting index and fields in one transaction.
-	_, err = e.cli.Txn(ctx).
-		If(clientv3.Compare(clientv3.Version(key), ">", -1)).
-		Then(
-			clientv3.OpDelete(key+"/", clientv3.WithPrefix()), // deleting index fields
-			clientv3.OpDelete(key),                            // deleting index
-		).Commit()
+
+	err = e.retryClient(func(cli *clientv3.Client) error {
+		_, err = cli.Txn(ctx).
+			If(clientv3.Compare(clientv3.Version(key), ">", -1)).
+			Then(
+				clientv3.OpDelete(key+"/", clientv3.WithPrefix()), // deleting index fields
+				clientv3.OpDelete(key),                            // deleting index
+			).Commit()
+		return err
+	})
 
 	return errors.Wrap(err, "DeleteIndex")
 }
@@ -595,10 +850,15 @@ func (e *Etcd) CreateField(ctx context.Context, indexName string, name string, v
 	op.WithValueBytes(val)
 
 	// Check for key existence, and execute Op within a transaction.
-	resp, err := e.cli.Txn(ctx).
-		If(clientv3util.KeyMissing(key)).
-		Then(op).
-		Commit()
+	var resp *clientv3.TxnResponse
+
+	err := e.retryClient(func(cli *clientv3.Client) (err error) {
+		resp, err = cli.Txn(ctx).
+			If(clientv3util.KeyMissing(key)).
+			Then(op).
+			Commit()
+		return err
+	})
 	if err != nil {
 		return errors.Wrap(err, "executing transaction")
 	}
@@ -613,12 +873,15 @@ func (e *Etcd) CreateField(ctx context.Context, indexName string, name string, v
 func (e *Etcd) DeleteField(ctx context.Context, indexname string, name string) (err error) {
 	key := schemaPrefix + indexname + "/" + name
 	// Deleting field and views in one transaction.
-	_, err = e.cli.Txn(ctx).
-		If(clientv3.Compare(clientv3.Version(key), ">", -1)).
-		Then(
-			clientv3.OpDelete(key+"/", clientv3.WithPrefix()), // deleting field views
-			clientv3.OpDelete(key),                            // deleting field
-		).Commit()
+	err = e.retryClient(func(cli *clientv3.Client) (err error) {
+		_, err = cli.Txn(ctx).
+			If(clientv3.Compare(clientv3.Version(key), ">", -1)).
+			Then(
+				clientv3.OpDelete(key+"/", clientv3.WithPrefix()), // deleting field views
+				clientv3.OpDelete(key),                            // deleting field
+			).Commit()
+		return err
+	})
 
 	return errors.Wrap(err, "DeleteField")
 }
@@ -635,10 +898,13 @@ func (e *Etcd) CreateView(ctx context.Context, indexName, fieldName, name string
 	key := schemaPrefix + indexName + "/" + fieldName + "/" + name
 
 	// Check for key existence, and execute Op within a transaction.
-	_, err = e.cli.Txn(ctx).
-		If(clientv3util.KeyMissing(key)).
-		Then(clientv3.OpPut(key, "")).
-		Commit()
+	err = e.retryClient(func(cli *clientv3.Client) (err error) {
+		_, err = cli.Txn(ctx).
+			If(clientv3util.KeyMissing(key)).
+			Then(clientv3.OpPut(key, "")).
+			Commit()
+		return err
+	})
 	if err != nil {
 		return errors.Wrap(err, "executing transaction")
 	}
@@ -651,19 +917,23 @@ func (e *Etcd) DeleteView(ctx context.Context, indexName, fieldName, name string
 }
 
 func (e *Etcd) putKey(ctx context.Context, key, val string, opts ...clientv3.OpOption) error {
-	if _, err := e.cli.Txn(ctx).
-		Then(clientv3.OpPut(key, val, opts...)).
-		Commit(); err != nil {
-		return errors.Wrapf(err, "putKey: Put(%s, %s)", key, val)
-	}
-
-	return nil
+	err := e.retryClient(func(cli *clientv3.Client) (err error) {
+		_, err = cli.Txn(ctx).
+			Then(clientv3.OpPut(key, val, opts...)).
+			Commit()
+		return err
+	})
+	return errors.Wrapf(err, "putKey: Put(%s, %s)", key, val)
 }
 
 func (e *Etcd) getKeyBytes(ctx context.Context, key string) ([]byte, error) {
 	// Get the current value for the key.
 	op := clientv3.OpGet(key)
-	resp, err := e.cli.Txn(ctx).Then(op).Commit()
+	var resp *clientv3.TxnResponse
+	err := e.retryClient(func(cli *clientv3.Client) (err error) {
+		resp, err = cli.Txn(ctx).Then(op).Commit()
+		return err
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -681,9 +951,12 @@ func (e *Etcd) getKeyBytes(ctx context.Context, key string) ([]byte, error) {
 }
 
 func (e *Etcd) getKeyWithPrefix(ctx context.Context, key string) (keys []string, values [][]byte, err error) {
-	resp, err := e.cli.Txn(ctx).
-		Then(clientv3.OpGet(key, clientv3.WithPrefix())).
-		Commit()
+	op := clientv3.OpGet(key, clientv3.WithPrefix())
+	var resp *clientv3.TxnResponse
+	err = e.retryClient(func(cli *clientv3.Client) (err error) {
+		resp, err = cli.Txn(ctx).Then(op).Commit()
+		return err
+	})
 	if err != nil {
 		return nil, nil, errors.Wrapf(err, "getKeyWithPrefix(%s)", key)
 	}
@@ -708,10 +981,14 @@ func (e *Etcd) getKeyWithPrefix(ctx context.Context, key string) (keys []string,
 }
 
 func (e *Etcd) keyExists(ctx context.Context, key string) (bool, error) {
-	resp, err := e.cli.Txn(ctx).
-		If(clientv3util.KeyExists(key)).
-		Then(clientv3.OpGet(key, clientv3.WithCountOnly())).
-		Commit()
+	var resp *clientv3.TxnResponse
+	err := e.retryClient(func(cli *clientv3.Client) (err error) {
+		resp, err = cli.Txn(ctx).
+			If(clientv3util.KeyExists(key)).
+			Then(clientv3.OpGet(key, clientv3.WithCountOnly())).
+			Commit()
+		return err
+	})
 	if err != nil {
 		return false, err
 	}
@@ -980,26 +1257,13 @@ func (e *Etcd) RemoveShard(ctx context.Context, index, field string, shard uint6
 // Nodes implements the Noder interface. It returns the sorted list of nodes
 // based on the etcd peers.
 func (e *Etcd) Nodes() []*topology.Node {
-	peers := e.Peers()
-	nodes := make([]*topology.Node, 0, len(peers))
-	for _, peer := range peers {
-		var node *topology.Node
-
-		if meta, err := e.Metadata(context.Background(), peer.ID); err != nil {
-			log.Println(err, "getting metadata") // TODO: handle this with a logger
-		} else if err := json.Unmarshal(meta, &node); err != nil {
-			log.Println(err, "unmarshaling json metadata")
-		}
-
-		if node != nil && peer != nil {
-			node.ID = peer.ID
-			nodes = append(nodes, node)
-		}
+	e.nodeMu.Lock()
+	defer e.nodeMu.Unlock()
+	err := e.populateNodeStates(context.TODO())
+	if err != nil {
+		return nil
 	}
-
-	// Nodes must be sorted.
-	sort.Sort(topology.ByID(nodes))
-	return nodes
+	return e.sortedNodes
 }
 
 // PrimaryNodeID implements the Noder interface.
