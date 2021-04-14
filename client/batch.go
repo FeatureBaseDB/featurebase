@@ -240,7 +240,7 @@ func NewBatch(client *Client, size int, index *Index, fields []*Field, opts ...B
 				ttSets[field.Name()] = make(map[string][]int)
 			}
 			hasTime = typ == FieldTypeTime || hasTime
-		case FieldTypeInt, FieldTypeDecimal:
+		case FieldTypeInt, FieldTypeDecimal, FieldTypeTimestamp:
 			// tt line only needed if int field is string foreign key
 			tt[i] = make(map[string][]int)
 			values[field.Name()] = make([]int64, 0, size)
