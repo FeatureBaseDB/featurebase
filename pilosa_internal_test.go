@@ -29,7 +29,7 @@ func TestValidateName(t *testing.T) {
 		"longbutnottoolongaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa12345689012345689012345678901234567890",
 	}
 	for _, name := range names {
-		if validateName(name) != nil {
+		if ValidateName(name) != nil {
 			t.Fatalf("Should be valid index name: %s", name)
 		}
 	}
@@ -41,7 +41,7 @@ func TestValidateNameInvalid(t *testing.T) {
 		"long123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1", "_exists",
 	}
 	for _, name := range names {
-		if validateName(name) == nil {
+		if ValidateName(name) == nil {
 			t.Fatalf("Should be invalid index name: %s", name)
 		}
 	}

@@ -82,7 +82,7 @@ func NewIndex(holder *Holder, path, name string) (*Index, error) {
 	// the defaults, because we may be under a simple "go test" run where
 	// not all that command line machinery has been spun up.
 
-	err := validateName(name)
+	err := ValidateName(name)
 	if err != nil {
 		return nil, errors.Wrap(err, "validating name")
 	}
@@ -554,7 +554,7 @@ func (i *Index) recalculateCaches() {
 
 // CreateField creates a field.
 func (i *Index) CreateField(name string, opts ...FieldOption) (*Field, error) {
-	err := validateName(name)
+	err := ValidateName(name)
 	if err != nil {
 		return nil, errors.Wrap(err, "validating name")
 	}
@@ -592,7 +592,7 @@ func (i *Index) CreateField(name string, opts ...FieldOption) (*Field, error) {
 // creation to other nodes so they can create locally as well. An error is
 // returned if the field already exists.
 func (i *Index) CreateFieldAndBroadcast(cfm *CreateFieldMessage) (*Field, error) {
-	err := validateName(cfm.Field)
+	err := ValidateName(cfm.Field)
 	if err != nil {
 		return nil, errors.Wrap(err, "validating name")
 	}
@@ -615,7 +615,7 @@ func (i *Index) CreateFieldAndBroadcast(cfm *CreateFieldMessage) (*Field, error)
 
 // CreateFieldIfNotExists creates a field with the given options if it doesn't exist.
 func (i *Index) CreateFieldIfNotExists(name string, opts ...FieldOption) (*Field, error) {
-	err := validateName(name)
+	err := ValidateName(name)
 	if err != nil {
 		return nil, errors.Wrap(err, "validating name")
 	}
@@ -659,7 +659,7 @@ func (i *Index) CreateFieldIfNotExists(name string, opts ...FieldOption) (*Field
 // definintely be refactored so we don't have these virtually equivalent
 // methods, but I'm puttin this here for now just to see if it works.
 func (i *Index) CreateFieldIfNotExistsWithOptions(name string, opt *FieldOptions) (*Field, error) {
-	err := validateName(name)
+	err := ValidateName(name)
 	if err != nil {
 		return nil, errors.Wrap(err, "validating name")
 	}
@@ -699,7 +699,7 @@ func (i *Index) persistField(ctx context.Context, cfm *CreateFieldMessage) error
 		return ErrFieldRequired
 	}
 
-	if err := validateName(cfm.Field); err != nil {
+	if err := ValidateName(cfm.Field); err != nil {
 		return errors.Wrap(err, "validating name")
 	}
 

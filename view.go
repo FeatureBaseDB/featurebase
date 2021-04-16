@@ -70,7 +70,7 @@ type view struct {
 
 // newView returns a new instance of View.
 func newView(holder *Holder, path, index, field, name string, fieldOptions FieldOptions) *view {
-	PanicOn(validateName(name))
+	PanicOn(ValidateName(name))
 
 	return &view{
 		path:          path,

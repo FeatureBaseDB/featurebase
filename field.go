@@ -354,7 +354,7 @@ func OptFieldTypeBool() FieldOption {
 // this function couldn't be used to set, for example,
 // `FieldOptions.Keys`.
 func NewField(holder *Holder, path, index, name string, opts FieldOption) (*Field, error) {
-	err := validateName(name)
+	err := ValidateName(name)
 	if err != nil {
 		return nil, errors.Wrap(err, "validating name")
 	}
