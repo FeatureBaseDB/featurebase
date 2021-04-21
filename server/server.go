@@ -22,6 +22,7 @@ package server
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
@@ -144,6 +145,81 @@ func NewCommand(stdin io.Reader, stdout, stderr io.Writer, opts ...CommandOption
 	return c
 }
 
+// defaultFileLimit is a suggested open file count limit for Pilosa to run with
+const (
+	defaultFileLimit = uint64(256 * 1024)
+)
+
+// we want to set resource limits *exactly once*, and then be able
+// to report on whether or not that succeeded.
+var setupResourceLimitsOnce sync.Once
+var setupResourceLimitsErr error
+
+// doSetupResourceLimits is the function which actually does the
+// resource limit setup, possibly yielding an error. it's a Command
+// method because it uses the command's logger, but is in fact
+// expected to work globally.
+func (m *Command) doSetupResourceLimits() error {
+	oldLimit := &syscall.Rlimit{}
+
+	if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, oldLimit); err != nil {
+		return fmt.Errorf("checking open file limit: %w", err)
+	}
+	// inherit existing limit
+	targetFileLimit := defaultFileLimit
+	if targetFileLimit > oldLimit.Max {
+		m.logger.Warnf("open file maximum (%d) lower than suggested open files (%d)",
+			oldLimit.Max, defaultFileLimit)
+		targetFileLimit = oldLimit.Max
+	}
+	// If the soft limit is lower than the defaultFileLimit constant, we will try to change it.
+	if oldLimit.Cur < targetFileLimit {
+		newLimit := &syscall.Rlimit{
+			Cur: targetFileLimit,
+			Max: oldLimit.Max,
+		}
+		// Try to set the limit
+		if err := syscall.Setrlimit(syscall.RLIMIT_NOFILE, newLimit); err != nil {
+			return fmt.Errorf("setting open file limit: %w", err)
+		}
+
+		// Check the limit after setting it. OS may not obey Setrlimit call.
+		if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, oldLimit); err != nil {
+			return fmt.Errorf("checking open file limit: %w", err)
+		} else {
+			if oldLimit.Cur != targetFileLimit {
+				m.logger.Warnf("tried to set open file limit to %d, but it is %d; see https://docs.molecula.cloud/reference/hostsystem#operating-system-configuration", targetFileLimit, oldLimit.Cur)
+			}
+		}
+	}
+	// We don't have corresponding options for non-Linux right now, but probably should.
+	if runtime.GOOS == "linux" {
+		result, err := ioutil.ReadFile("/proc/sys/vm/max_map_count")
+		if err != nil {
+			m.logger.Infof("Tried unsuccessfully to check system mmap limit: %w", err)
+		} else {
+			sysMmapLimit, err := strconv.ParseUint(strings.TrimSuffix(string(result), "\n"), 10, 64)
+			if err != nil {
+				m.logger.Infof("Tried unsuccessfully to check system mmap limit: %w", err)
+			} else if m.Config.MaxMapCount > sysMmapLimit {
+				m.logger.Warnf("Config max map limit (%v) is greater than current system limits (%v)", m.Config.MaxMapCount, sysMmapLimit)
+			}
+		}
+	}
+	return nil
+}
+
+// setupResourceLimits tries to set up resource limits, like mmap limits
+// and open files, if that hasn't been done already, and returns an error
+// if the attempt failed in a way that we didn't anticipate. Mere permission
+// denied errors are not that concerning.
+func (m *Command) setupResourceLimits() error {
+	setupResourceLimitsOnce.Do(func() {
+		setupResourceLimitsErr = m.doSetupResourceLimits()
+	})
+	return setupResourceLimitsErr
+}
+
 // Start starts the pilosa server - it returns once the server is running.
 func (m *Command) Start() (err error) {
 	// Seed random number generator
@@ -153,19 +229,9 @@ func (m *Command) Start() (err error) {
 	if err != nil {
 		return errors.Wrap(err, "setting up server")
 	}
-
-	if runtime.GOOS == "linux" {
-		result, err := ioutil.ReadFile("/proc/sys/vm/max_map_count")
-		if err != nil {
-			m.logger.Infof("Tried unsuccessfully to check system mmap limit: %v", err)
-		} else {
-			sysMmapLimit, err := strconv.ParseUint(strings.TrimSuffix(string(result), "\n"), 10, 64)
-			if err != nil {
-				m.logger.Infof("Tried unsuccessfully to check system mmap limit: %v", err)
-			} else if m.Config.MaxMapCount > sysMmapLimit {
-				m.logger.Warnf("Config max map limit (%v) is greater than current system limits (%v)", m.Config.MaxMapCount, sysMmapLimit)
-			}
-		}
+	err = m.setupResourceLimits()
+	if err != nil {
+		return errors.Wrap(err, "setting resource limits")
 	}
 
 	// Initialize server.
