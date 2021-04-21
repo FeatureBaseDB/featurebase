@@ -56,7 +56,7 @@ func BoltMustSetBitvalue(dbwrap *BoltWrapper, index, field, view string, shard u
 	tx, _ := dbwrap.NewTx(writable, index, Txo{})
 
 	// add a bit
-	changed, err := tx.Add(index, field, view, shard, doBatched, putme)
+	changed, err := tx.Add(index, field, view, shard, putme)
 	if changed != 1 {
 		panic("should have 1 bit changed")
 	}
@@ -123,7 +123,7 @@ func TestBolt_DeleteFragment(t *testing.T) {
 	views := []string{"v1", "v2"}
 	for _, view := range views {
 		for _, v := range bits {
-			changed, err := tx.Add(index, field, view, shard, doBatched, v)
+			changed, err := tx.Add(index, field, view, shard, v)
 			if changed <= 0 {
 				panic("should have changed")
 			}
@@ -239,7 +239,7 @@ func TestBolt_SetBitmap(t *testing.T) {
 	index, field, view, shard := "i", "f", "v", uint64(0)
 	tx, _ := dbwrap.NewTx(writable, index, Txo{})
 	bitvalue := uint64(0)
-	changed, err := tx.Add(index, field, view, shard, doBatched, bitvalue)
+	changed, err := tx.Add(index, field, view, shard, bitvalue)
 	if changed <= 0 {
 		panic("should have changed")
 	}
@@ -281,14 +281,14 @@ func TestBolt_OffsetRange(t *testing.T) {
 	tx, _ := dbwrap.NewTx(writable, index, Txo{})
 
 	bitvalue := uint64(1 << 20)
-	changed, err := tx.Add(index, field, view, shard, doBatched, bitvalue)
+	changed, err := tx.Add(index, field, view, shard, bitvalue)
 	if changed <= 0 {
 		panic("should have changed")
 	}
 	PanicOn(err)
 
 	bitvalue2 := uint64(1<<20 + 1)
-	changed, err = tx.Add(index, field, view, shard, doBatched, bitvalue2)
+	changed, err = tx.Add(index, field, view, shard, bitvalue2)
 	if changed <= 0 {
 		panic("should have changed")
 	}
@@ -374,7 +374,7 @@ func TestBolt_Count_dense_containers(t *testing.T) {
 
 	expected := 0
 	for i := uint64(0); i < (1<<16)+2; i += 2 {
-		changed, err := tx.Add(index, field, view, shard, doBatched, i)
+		changed, err := tx.Add(index, field, view, shard, i)
 		PanicOn(err)
 		if changed <= 0 {
 			panic("wat? should have changed")
@@ -420,7 +420,7 @@ func TestBolt_ContainerIterator_on_one_bit(t *testing.T) {
 	bitvalue := uint64(42)
 
 	// add a bit
-	changed, err := tx.Add(index, field, view, shard, doBatched, bitvalue)
+	changed, err := tx.Add(index, field, view, shard, bitvalue)
 	if changed <= 0 {
 		panic("should have changed")
 	}
@@ -478,7 +478,7 @@ func TestBolt_ContainerIterator_on_one_bit_fail_to_find(t *testing.T) {
 	searchme := putme + 1
 
 	// add a bit
-	changed, err := tx.Add(index, field, view, shard, doBatched, putme)
+	changed, err := tx.Add(index, field, view, shard, putme)
 	if changed <= 0 {
 		panic("should have changed")
 	}
@@ -533,7 +533,7 @@ func TestBolt_ContainerIterator_empty_iteration_loop(t *testing.T) {
 	searchme := uint64(1 << 17) // in the next container, key:2
 
 	// add a bit
-	changed, err := tx.Add(index, field, view, shard, doBatched, putme)
+	changed, err := tx.Add(index, field, view, shard, putme)
 	if changed <= 0 {
 		panic("should have changed")
 	}
@@ -582,7 +582,7 @@ func TestBolt_ForEach_on_one_bit(t *testing.T) {
 	bitvalue := uint64(42)
 
 	// add a bit
-	changed, err := tx.Add(index, field, view, shard, doBatched, bitvalue)
+	changed, err := tx.Add(index, field, view, shard, bitvalue)
 	if changed <= 0 {
 		panic("should have changed")
 	}
@@ -1132,7 +1132,7 @@ func TestBolt_DeleteIndex(t *testing.T) {
 	bitvalue := uint64(777)
 	bits := []uint64{0, 3, 1 << 16, 1<<16 + 3, 8 << 16}
 	for _, v := range bits {
-		changed, err := tx.Add(index, field, view, shard, doBatched, v)
+		changed, err := tx.Add(index, field, view, shard, v)
 		if changed <= 0 {
 			panic("should have changed")
 		}
@@ -1140,7 +1140,7 @@ func TestBolt_DeleteIndex(t *testing.T) {
 	}
 
 	index2 := "i2" // should not be deleted, even though it shares a prefix with 'i'
-	changed, err := tx.Add(index2, field, view, shard, doBatched, bitvalue)
+	changed, err := tx.Add(index2, field, view, shard, bitvalue)
 	if changed <= 0 {
 		panic("should have changed")
 	}
@@ -1196,7 +1196,7 @@ func TestBolt_DeleteIndex_over100k(t *testing.T) {
 	//limit := uint64(101)
 	for v := uint64(1); v < limit; v++ {
 		// shift by << 16 to get into a different shard
-		changed, err := tx.Add(index, field, view, shard, doBatched, v<<16)
+		changed, err := tx.Add(index, field, view, shard, v<<16)
 		if changed <= 0 {
 			panic("should have changed")
 		}
@@ -1208,7 +1208,7 @@ func TestBolt_DeleteIndex_over100k(t *testing.T) {
 	}
 
 	index2 := "i2" // should not be deleted, even though it shares a prefix with 'i'
-	changed, err := tx.Add(index2, field, view, shard, doBatched, bitvalue)
+	changed, err := tx.Add(index2, field, view, shard, bitvalue)
 	if changed <= 0 {
 		panic("should have changed")
 	}
