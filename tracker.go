@@ -29,12 +29,13 @@ type ActiveQueryStatus struct {
 }
 
 type PastQueryStatus struct {
-	PQL     string        `json:"PQL"`
-	SQL     string        `json:"SQL,omitempty"`
-	Node    string        `json:"nodeID"`
-	Index   string        `json:"index"`
-	Start   time.Time     `json:"start"`
-	Runtime time.Duration `json:"runtime"`
+	PQL       string        `json:"PQL"`
+	SQL       string        `json:"SQL,omitempty"`
+	Node      string        `json:"nodeID"`
+	Index     string        `json:"index"`
+	Start     time.Time     `json:"start"`
+	Runtime   time.Duration `json:"runtime"`  // deprecated
+	RuntimeNs time.Duration `json:"runtimeNanoseconds"`
 }
 
 type activeQuery struct {
@@ -190,7 +191,7 @@ func (t *queryTracker) PastQueries() []PastQueryStatus {
 	queries := t.history.slice()
 	out := make([]PastQueryStatus, len(queries))
 	for i, v := range queries {
-		out[i] = PastQueryStatus{v.PQL, v.SQL, v.node, v.index, v.started, v.runtime}
+		out[i] = PastQueryStatus{v.PQL, v.SQL, v.node, v.index, v.started, v.runtime, v.runtime}
 	}
 	return out
 
