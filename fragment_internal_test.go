@@ -5544,7 +5544,7 @@ func requireMutexSampleData(tb testing.TB) {
 // a few mutex tests want common largeish pools of mutex data
 type mutexSampleData struct {
 	name           string
-	colIDs, rowIDs [2][]uint64
+	colIDs, rowIDs [3][]uint64
 }
 
 // scratchSpace copies the values over corresponding entries in slices,
@@ -5614,125 +5614,123 @@ var mutexDensities = []mutexDensity{
 	{"64K", 16},
 	// {"32K", 15}, // 50-50
 	// {"16K", 14}, // 1/4
-	// {"4K", 12},  // a fair number of things
+	// {"8K", 13},
+	// {"4K", 12}, // a fair number of things
+	{"1K", 10},
 	// {"1", 0},   // about one per container
 	// {"empty", -14}, // almost none
 }
 
 var mutexSizes = []mutexSize{
-	{"4r", 2},
-	{"16r", 4},
-	{"256r", 8},
+	// {"4r", 2},
+	// {"16r", 4},
+	// {"256r", 8},
+	{"2Kr", 11},
 	// {"65Kr", 16},
 }
 
 var mutexCaches = []string{
-	// "ranked",
+	"ranked",
 	"none",
 }
 
-const mutexSampleDataSize = ShardWidth << 1
+const mutexSampleDataSize = ShardWidth * len(mutexSampleData{}.colIDs)
 
-// prepareMutexSampleData creates two sets of data for each density and
+// prepareMutexSampleData creates multiple sets of data for each density and
 // number of rows, so that we can test performance when overwriting also.
 func prepareMutexSampleData(tb testing.TB) {
 	myrand := rand.New(rand.NewSource(9))
 	for _, d := range mutexDensities {
+		// at density 16, we want everything to be adjacent.
+		// at density 0, we want about 65k between items.
+		// The average spacing we want is 1<<(16 - density),
+		// so random numbers between 0 and twice that would
+		// be close, but we never want 0, so, subtract 1 from
+		// "twice that", then add 1 to the result.
+		//
+		// So for density 16, we compute spacing of 1, then
+		// draw random numbers in [0,1), and add 1 to them.
+		spacing := ((1 << (16 - d.density)) * 2) - 1
 		for _, s := range mutexSizes {
 			rng := newMutexSampleRange(d.density, s.rows)
 			col := uint64(0)
-			// at density 16, we want everything to be adjacent.
-			// at density 0, we want about 65k between items.
-			// The average spacing we want is 1<<(16 - density),
-			// so random numbers between 0 and twice that would
-			// be close, but we never want 0, so, subtract 1 from
-			// "twice that", then add 1 to the result.
-			//
-			// So for density 16, we compute spacing of 1, then
-			// draw random numbers in [0,1), and add 1 to them.
-			spacing := ((1 << (16 - d.density)) * 2) - 1
+
 			rows := (int64(1) << s.rows)
-			expected := mutexSampleDataSize
-			if (ShardWidth / spacing) < mutexSampleDataSize {
-				expected = (ShardWidth / spacing) * 2
-				if expected < 2 {
-					expected = 2
-				}
-			}
+
 			colIDs := make([]uint64, mutexSampleDataSize)
 			rowIDs := make([]uint64, mutexSampleDataSize)
 			data := &mutexSampleData{name: d.name + "/" + s.name}
 			prev := uint64(0)
 			generated := 0
-			for i := 0; i < expected; i++ {
-				col += uint64(myrand.Int63n(int64(spacing))) + 1
+			for idx := 0; int(prev) < len(data.colIDs); idx++ {
+				if spacing > 1 {
+					col += uint64(myrand.Int63n(int64(spacing))) + 1
+				} else {
+					col++
+				}
 				// can only import one fragment at a time,
 				// though!
 				if col/ShardWidth > prev {
-					data.colIDs[prev] = colIDs[generated:i:i]
-					data.rowIDs[prev] = rowIDs[generated:i:i]
-					generated = i
+					data.colIDs[prev] = colIDs[generated:idx:idx]
+					data.rowIDs[prev] = rowIDs[generated:idx:idx]
+					generated = idx
 					prev = col / ShardWidth
 					if int(prev) >= len(data.colIDs) {
 						break
 					}
 				}
 				row := uint64(myrand.Int63n(rows))
-				colIDs[i] = col % ShardWidth
-				rowIDs[i] = row
-			}
-			if int(prev) < len(data.colIDs) {
-				data.colIDs[prev] = colIDs[generated:expected:expected]
-				data.rowIDs[prev] = rowIDs[generated:expected:expected]
+				colIDs[idx] = col % ShardWidth
+				rowIDs[idx] = row
 			}
 			sampleMutexData[rng] = data
 		}
 	}
 }
 
-var importBatchSizes = []int{65536}
+var importBatchSizes = []int{40, 80, 240, 2048}
 
 func TestImportMutexSampleData(t *testing.T) {
 	requireMutexSampleData(t)
 	var scratchCols []uint64
 	var scratchRows []uint64
 	for rng, data := range sampleMutexData {
-		// skip the larger ones, they'll be slow
-		if rng.rows() > 256 {
-			continue
-		}
 		scratchCols, scratchRows = data.scratchSpace(0, scratchCols, scratchRows)
 		t.Run(data.name, func(t *testing.T) {
-			for _, batchSize := range importBatchSizes {
-				t.Run(fmt.Sprintf("%d", batchSize), func(t *testing.T) {
-					f, _, tx := mustOpenMutexFragment(t, "i", "f", viewStandard, 0, "")
-					defer f.Clean(t)
-					// Set import.
-					var err error
-					for i := 0; i < len(scratchCols); i += batchSize {
-						max := i + batchSize
-						if len(scratchCols) < max {
-							max = len(scratchCols)
-						}
-						err = f.bulkImport(tx, scratchRows[i:max:max], scratchCols[i:max:max], &ImportOptions{})
-						if err != nil {
-							t.Fatalf("bulk importing ids [%d:%d]: %v", i, max, err)
-						}
-					}
-					count := uint64(0)
-					for k := uint32(0); k < rng.rows(); k++ {
-						count += f.mustRow(tx, uint64(k)).Count()
-					}
-					if int(count) != len(data.colIDs[0]) {
-						t.Fatalf("for %d rows, %d density: expected %d results, got %d",
-							rng.rows(), rng.density(), len(data.colIDs[0]), count)
-					}
-				})
+			batchSize := 16384
+			f, _, tx := mustOpenMutexFragment(t, "i", "f", viewStandard, 0, "")
+			defer f.Clean(t)
+			// Set import.
+			var err error
+			for i := 0; i < len(scratchCols); i += batchSize {
+				max := i + batchSize
+				if len(scratchCols) < max {
+					max = len(scratchCols)
+				}
+				err = f.bulkImport(tx, scratchRows[i:max:max], scratchCols[i:max:max], &ImportOptions{})
+				if err != nil {
+					t.Fatalf("bulk importing ids [%d:%d]: %v", i, max, err)
+				}
+			}
+			count := uint64(0)
+			for k := uint32(0); k < rng.rows(); k++ {
+				count += f.mustRow(tx, uint64(k)).Count()
+			}
+			if int(count) != len(data.colIDs[0]) {
+				t.Fatalf("for %d rows, %d density: expected %d results, got %d",
+					rng.rows(), rng.density(), len(data.colIDs[0]), count)
 			}
 		})
 	}
 }
 
+// BenchmarkImportMutexSampleData tries to time importing mutex data.
+// The tricky part is defining a meaningful b.N that can apply across
+// different batch sizes, densities, and so on. So, basically, we take
+// b.N, and multiply by 65536, to get "N containers" of data, meaning
+// that the amount of data we want to process is independent of all of
+// the other factors. But for sparse data sets, that means rewriting
+// the same data a number of times, which isn't ideal.
 func BenchmarkImportMutexSampleData(b *testing.B) {
 	requireMutexSampleData(b)
 	var cols []uint64
@@ -5743,16 +5741,27 @@ func BenchmarkImportMutexSampleData(b *testing.B) {
 	var frag *fragment
 	var tx Tx
 	var idx *Index
-	benchmarkOneFragmentImports := func(b *testing.B, i int) {
-		cols, rows = data.scratchSpace(i, cols, rows)
-		for i := 0; i < len(cols) && i < (batchSize*b.N); i += batchSize {
-			max := i + batchSize
+	benchmarkOneFragmentImports := func(b *testing.B, idx int) {
+		cols, rows = data.scratchSpace(idx, cols, rows)
+		toDo := b.N << 16
+		start := 0
+		for toDo > 0 {
+			max := start + batchSize
 			if len(cols) < max {
 				max = len(cols)
 			}
-			err := frag.bulkImport(tx, rows[i:max:max], cols[i:max:max], &ImportOptions{})
+			err := frag.bulkImport(tx, rows[start:max:max], cols[start:max:max], &ImportOptions{})
 			if err != nil {
-				b.Fatalf("bulk importing ids [%d:%d]: %v", i, max, err)
+				b.Fatalf("bulk importing ids [%d:%d]: %v", start, max, err)
+			}
+			toDo -= (max - start)
+			start = max
+			if start >= len(cols) {
+				start = 0
+				b.StopTimer()
+				// recreate data again because bulkImport overwrote it
+				cols, rows = data.scratchSpace(idx, cols, rows)
+				b.StartTimer()
 			}
 		}
 	}
