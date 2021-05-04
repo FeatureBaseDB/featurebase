@@ -4445,6 +4445,23 @@ func intersectionCallbackArrayArray(a, b *Container, fn func(uint16)) {
 		ca, cb = cb, ca
 		na, nb = nb, na // nolint: staticcheck, ineffassign
 	}
+	if (na << 2) < nb {
+		for _, va := range ca {
+			for cb[0] < va {
+				if len(cb) > 8 && cb[0] < va {
+					cb = cb[8:]
+				}
+				cb = cb[1:]
+				if len(cb) == 0 {
+					return
+				}
+			}
+			if cb[0] == va {
+				fn(va)
+			}
+		}
+		return
+	}
 	j := 0
 	for _, va := range ca {
 		for cb[j] < va {
