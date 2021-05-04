@@ -44,6 +44,7 @@ import (
 	"github.com/pilosa/pilosa/v2/encoding/proto"
 	"github.com/pilosa/pilosa/v2/logger"
 	"github.com/pilosa/pilosa/v2/pql"
+	"github.com/pilosa/pilosa/v2/rbf"
 	"github.com/pilosa/pilosa/v2/topology"
 	"github.com/pilosa/pilosa/v2/tracing"
 	"github.com/pkg/errors"
@@ -229,7 +230,7 @@ func (h *Handler) populateValidators() {
 	h.validators["GetIndex"] = queryValidationSpecRequired()
 	h.validators["PostIndex"] = queryValidationSpecRequired()
 	h.validators["DeleteIndex"] = queryValidationSpecRequired()
-	h.validators["GetTranslateData"] = queryValidationSpecRequired("index", "partition")
+	h.validators["GetTranslateData"] = queryValidationSpecRequired("index").Optional("partition", "field")
 	h.validators["PostTranslateKeys"] = queryValidationSpecRequired()
 	h.validators["PostField"] = queryValidationSpecRequired()
 	h.validators["DeleteField"] = queryValidationSpecRequired()
@@ -430,6 +431,8 @@ func newRouter(handler *Handler) http.Handler {
 	router.HandleFunc("/internal/translate/ids", handler.handlePostTranslateIDs).Methods("POST").Name("PostTranslateIDs")
 	router.HandleFunc("/internal/index/{index}/field/{field}/attr/diff", handler.handlePostFieldAttrDiff).Methods("POST").Name("PostFieldAttrDiff")
 	router.HandleFunc("/internal/index/{index}/field/{field}/remote-available-shards/{shardID}", handler.handleDeleteRemoteAvailableShard).Methods("DELETE")
+	router.HandleFunc("/internal/index/{index}/shard/{shard}/snapshot", handler.handleGetIndexShardSnapshot).Methods("GET").Name("GetIndexShardSnapshot")
+	router.HandleFunc("/internal/index/{index}/shards", handler.handleGetIndexAvailableShards).Methods("GET").Name("GetIndexAvailableShards")
 	router.HandleFunc("/internal/nodes", handler.handleGetNodes).Methods("GET").Name("GetNodes")
 	router.HandleFunc("/internal/shards/max", handler.handleGetShardsMax).Methods("GET").Name("GetShardsMax") // TODO: deprecate, but it's being used by the client
 
@@ -974,6 +977,30 @@ func (h *Handler) handleCPUProfileStop(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+}
+
+// handleGetIndexAvailableShards handles GET /internal/index/:index/shards requests.
+func (h *Handler) handleGetIndexAvailableShards(w http.ResponseWriter, r *http.Request) {
+	if !validHeaderAcceptJSON(r.Header) {
+		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
+		return
+	}
+
+	indexName := mux.Vars(r)["index"]
+	shards, err := h.api.AvailableShards(r.Context(), indexName)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(getIndexAvailableShardsResponse{Shards: shards.Slice()}); err != nil {
+		h.logger.Errorf("write shards-max response error: %s", err)
+	}
+}
+
+type getIndexAvailableShardsResponse struct {
+	Shards []uint64 `json:"shards"`
 }
 
 // handleGetShardsMax handles GET /internal/shards/max requests.
@@ -1714,6 +1741,34 @@ type postFieldAttrDiffResponse struct {
 	Attrs map[uint64]map[string]interface{} `json:"attrs"`
 }
 
+// handleGetIndexShardSnapshot handles GET /internal/index/{index}/shard/{shard}/snapshot requests.
+func (h *Handler) handleGetIndexShardSnapshot(w http.ResponseWriter, r *http.Request) {
+	indexName := mux.Vars(r)["index"]
+	shard, err := strconv.ParseUint(mux.Vars(r)["shard"], 10, 64)
+	if err != nil {
+		http.Error(w, "Invalid shard parameter", http.StatusBadRequest)
+		return
+	}
+
+	rc, err := h.api.IndexShardSnapshot(r.Context(), indexName, shard)
+	if err != nil {
+		switch errors.Cause(err) {
+		case pilosa.ErrIndexNotFound:
+			http.Error(w, err.Error(), http.StatusNotFound)
+		default:
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		return
+	}
+	defer rc.Close()
+
+	// Copy data to response body.
+	if _, err := io.CopyBuffer(&passthroughWriter{w}, rc, make([]byte, rbf.PageSize)); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+}
+
 // readQueryRequest parses an query parameters from r.
 func (h *Handler) readQueryRequest(r *http.Request) (*pilosa.QueryRequest, error) {
 	switch r.Header.Get("Content-Type") {
@@ -1722,6 +1777,16 @@ func (h *Handler) readQueryRequest(r *http.Request) (*pilosa.QueryRequest, error
 	default:
 		return h.readURLQueryRequest(r)
 	}
+}
+
+// passthroughWriter is used to remove non-Writer interfaces from an io.Writer.
+// For example, a writer that implements io.ReaderFrom can change io.Copy() behavior.
+type passthroughWriter struct {
+	w io.Writer
+}
+
+func (w *passthroughWriter) Write(p []byte) (int, error) {
+	return w.w.Write(p)
 }
 
 // readProtobufQueryRequest parses query parameters in protobuf from r.
@@ -2023,13 +2088,29 @@ func (h *Handler) handleGetFragmentData(w http.ResponseWriter, r *http.Request) 
 
 // handleGetTranslateData handles GET /internal/translate/data requests.
 func (h *Handler) handleGetTranslateData(w http.ResponseWriter, r *http.Request) {
-	// Read partition parameter.
 	q := r.URL.Query()
+
+	// Perform field translation copy, if field specified.
+	if fieldName := q.Get("field"); fieldName != "" {
+		// Retrieve field data from holder.
+		p, err := h.api.FieldTranslateData(r.Context(), q.Get("index"), fieldName)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		// Stream translate data to response body.
+		if _, err := p.WriteTo(w); err != nil {
+			h.logger.Errorf("error streaming translation data: %s", err)
+		}
+	}
+
+	// Otherwise read partition parameter for index translation copy.
 	partition, err := strconv.ParseUint(q.Get("partition"), 10, 32)
 	if err != nil {
-		http.Error(w, "partition required", http.StatusBadRequest)
+		http.Error(w, "partition or field required", http.StatusBadRequest)
 		return
 	}
+
 	// Retrieve partition data from holder.
 	p, err := h.api.TranslateData(r.Context(), q.Get("index"), int(partition))
 	if err != nil {
