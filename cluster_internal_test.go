@@ -30,6 +30,7 @@ import (
 	"github.com/pilosa/pilosa/v2/testhook"
 	"github.com/pilosa/pilosa/v2/topology"
 	. "github.com/pilosa/pilosa/v2/vprint" // nolint:staticcheck
+	"github.com/pkg/errors"
 )
 
 // GlobalPortMap avoids many races and port conflicts when setting
@@ -53,7 +54,10 @@ func NewGlobalPortMapper(n int) (pm *GlobalPortMapper) {
 		availPorts: make(map[int]net.Listener),
 	}
 	for i := 0; i < n; i++ {
-		lsn, _ := net.Listen("tcp", ":0")
+		lsn, err := net.Listen("tcp", ":0")
+		if err != nil {
+			panic(errors.Wrap(err, "trying to listen on ephemeral port"))
+		}
 		r := lsn.Addr()
 		port := r.(*net.TCPAddr).Port
 		pm.availPorts[port] = lsn
