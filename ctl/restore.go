@@ -1,0 +1,122 @@
+// Copyright 2017 Pilosa Corp.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package ctl
+
+import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
+	"context"
+	"io"
+	"os"
+	"strings"
+
+	gohttp "net/http"
+
+	"github.com/pilosa/pilosa/v2"
+	"github.com/pilosa/pilosa/v2/http"
+)
+
+// RestoreCommand represents a command for restoring a backup to
+type RestoreCommand struct {
+	// Filepath to the backup file.
+	Path   string
+	Host   string
+	client *http.InternalClient
+	// Standard input/output
+	*pilosa.CmdIO
+}
+
+// NewRestoreCommand returns a new instance of RestoreCommand.
+func NewRestoreCommand(stdin io.Reader, stdout, stderr io.Writer) *RestoreCommand {
+	h := &gohttp.Client{}
+	host := "SOMETHING"
+	c, err := http.NewInternalClient(host, h)
+	if err != nil {
+		panic(err)
+	}
+
+	return &RestoreCommand{
+		CmdIO:  pilosa.NewCmdIO(stdin, stdout, stderr),
+		client: c,
+	}
+}
+
+/* helper to allow for both gz and just plan tar
+	f, err := os.Open(cmd.Path)
+	if err != nil {
+		return (err)
+	}
+	defer f.Close()
+	var tarReader *tar.Reader
+	if strings.HasSuffix(cmd.Path, "gz") {
+		gzf, err := gzip.NewReader(f)
+		if err != nil {
+			return err
+		}
+		tarReader = tar.NewReader(gzf)
+	} else {
+		tarReader = tar.NewReader(f)
+	}
+return
+}
+*/
+func readSchema(path string) string {
+	return "{}"
+}
+
+// Run executes the restore.
+func (cmd *RestoreCommand) Run(ctx context.Context) error {
+	f, err := os.Open(cmd.Path)
+	if err != nil {
+		return (err)
+	}
+	defer f.Close()
+	var tarReader *tar.Reader
+	if strings.HasSuffix(cmd.Path, "gz") {
+		gzf, err := gzip.NewReader(f)
+		if err != nil {
+			return err
+		}
+		tarReader = tar.NewReader(gzf)
+	} else {
+		tarReader = tar.NewReader(f)
+	}
+	schemaJson := readSchema(cmd.Path)
+	//Push the schema from the archive into the cluster belonging to the host.
+	client := &gohttp.Client{}
+	url := "FIXME"
+	_, err = client.Post(url+"/schema", "application/json", bytes.NewBufferString(schemaJson))
+	if err != nil {
+		return err
+	}
+
+	for {
+		header, err := tarReader.Next()
+		//fmt.Println("What %v", header.Name)
+		_ = header
+		if err == io.EOF {
+			break
+		}
+	}
+	/*	Fetch the cluster nodes from the target host.
+		For each index:
+		Upload the RBF snapshot for each shard to the nodes that own the shard.
+		Upload the index & field translation BoltDB snapshots to each node.
+		If possible, trigger the node to reload itself. Otherwise a restart would be required.
+	*/
+
+	return nil
+}
