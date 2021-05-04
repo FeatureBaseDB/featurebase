@@ -828,7 +828,6 @@ func (api *API) TranslateData(ctx context.Context, indexName string, partition i
 func (api *API) FieldTranslateData(ctx context.Context, indexName, fieldName string) (io.WriterTo, error) {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.FieldTranslateData")
 	defer span.Finish()
-
 	if err := api.validate(apiFieldTranslateData); err != nil {
 		return nil, errors.Wrap(err, "validating api method")
 	}
@@ -2423,6 +2422,7 @@ var methodsNormal = map[apiMethod]struct{}{
 	apiFragmentBlockData:    {},
 	apiFragmentBlocks:       {},
 	apiField:                {},
+	apiFieldTranslateData:   {},
 	apiFieldAttrDiff:        {},
 	apiImport:               {},
 	apiImportValue:          {},
@@ -2438,6 +2438,7 @@ var methodsNormal = map[apiMethod]struct{}{
 	apiStartTransaction:     {},
 	apiFinishTransaction:    {},
 	apiTransactions:         {},
+	apiTranslateData:        {},
 	apiGetTransaction:       {},
 	apiActiveQueries:        {},
 	apiPastQueries:          {},
