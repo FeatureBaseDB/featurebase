@@ -262,6 +262,8 @@ func (c *rankCache) invalidate() {
 		// The cache will remain flagged as dirty and will be recalculated if Top is called.
 		// This may cause unexpected memory growth, so record it in metrics for debugging purposes.
 		c.stats.Count(MetricInvalidateCacheSkipped, 1, 1.0)
+		// Ensure that we're marked as dirty even if we weren't otherwise.
+		c.dirty = true
 		return
 	}
 	c.stats.Count(MetricInvalidateCache, 1, 1.0)
