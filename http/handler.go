@@ -250,7 +250,9 @@ func (h *Handler) populateValidators() {
 	h.validators["GetFragmentData"] = queryValidationSpecRequired("index", "field", "view", "shard")
 	h.validators["GetFragmentNodes"] = queryValidationSpecRequired("shard", "index")
 	h.validators["PostIndexAttrDiff"] = queryValidationSpecRequired()
+	h.validators["GetIndexAttrData"] = queryValidationSpecRequired()
 	h.validators["PostFieldAttrDiff"] = queryValidationSpecRequired()
+	h.validators["GetFieldAttrData"] = queryValidationSpecRequired()
 	h.validators["GetNodes"] = queryValidationSpecRequired()
 	h.validators["GetShardMax"] = queryValidationSpecRequired()
 	h.validators["GetTransactionList"] = queryValidationSpecRequired()
@@ -425,12 +427,14 @@ func newRouter(handler *Handler) http.Handler {
 	router.HandleFunc("/internal/fragment/data", handler.handleGetFragmentData).Methods("GET").Name("GetFragmentData")
 	router.HandleFunc("/internal/fragment/nodes", handler.handleGetFragmentNodes).Methods("GET").Name("GetFragmentNodes")
 	router.HandleFunc("/internal/index/{index}/attr/diff", handler.handlePostIndexAttrDiff).Methods("POST").Name("PostIndexAttrDiff")
+	router.HandleFunc("/internal/index/{index}/attr/data", handler.handleGetIndexAttrData).Methods("GET").Name("GetIndexAttrData")
 	router.HandleFunc("/internal/translate/data", handler.handleGetTranslateData).Methods("GET").Name("GetTranslateData")
 	router.HandleFunc("/internal/translate/data", handler.handlePostTranslateData).Methods("POST").Name("PostTranslateData")
 	router.HandleFunc("/internal/translate/keys", handler.handlePostTranslateKeys).Methods("POST").Name("PostTranslateKeys")
 	router.HandleFunc("/internal/translate/ids", handler.handlePostTranslateIDs).Methods("POST").Name("PostTranslateIDs")
 	router.HandleFunc("/internal/index/{index}/field/{field}/attr/diff", handler.handlePostFieldAttrDiff).Methods("POST").Name("PostFieldAttrDiff")
 	router.HandleFunc("/internal/index/{index}/field/{field}/remote-available-shards/{shardID}", handler.handleDeleteRemoteAvailableShard).Methods("DELETE")
+	router.HandleFunc("/internal/index/{index}/field/{field}/attr/data", handler.handleGetFieldAttrData).Methods("GET").Name("GetFieldAttrData")
 	router.HandleFunc("/internal/index/{index}/shard/{shard}/snapshot", handler.handleGetIndexShardSnapshot).Methods("GET").Name("GetIndexShardSnapshot")
 	router.HandleFunc("/internal/index/{index}/shards", handler.handleGetIndexAvailableShards).Methods("GET").Name("GetIndexAvailableShards")
 	router.HandleFunc("/internal/nodes", handler.handleGetNodes).Methods("GET").Name("GetNodes")
@@ -446,6 +450,7 @@ func newRouter(handler *Handler) http.Handler {
 	router.HandleFunc("/internal/idalloc/reserve", handler.handleReserveIDs).Methods("POST").Name("ReserveIDs")
 	router.HandleFunc("/internal/idalloc/commit", handler.handleCommitIDs).Methods("POST").Name("CommitIDs")
 	router.HandleFunc("/internal/idalloc/reset/{index}", handler.handleResetIDAlloc).Methods("POST").Name("ResetIDAlloc")
+	router.HandleFunc("/internal/idalloc/data", handler.handleIDAllocData).Methods("GET").Name("IDAllocData")
 
 	// endpoints for collecting cpu profiles from a chosen begin point to
 	// when the client wants to stop. Used for profiling imports that
@@ -1217,6 +1222,14 @@ func (h *Handler) handlePostIndexAttrDiff(w http.ResponseWriter, r *http.Request
 	}
 }
 
+// handleGetIndexAttrData handles GET /internal/index/{index}/attr/data requests.
+func (h *Handler) handleGetIndexAttrData(w http.ResponseWriter, r *http.Request) {
+	if err := h.api.WriteColumnAttrDataTo(r.Context(), w, mux.Vars(r)["index"]); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+}
+
 func (h *Handler) handleGetActiveQueries(w http.ResponseWriter, r *http.Request) {
 	var rtype string
 	switch {
@@ -1739,6 +1752,14 @@ type postFieldAttrDiffRequest struct {
 
 type postFieldAttrDiffResponse struct {
 	Attrs map[uint64]map[string]interface{} `json:"attrs"`
+}
+
+// handleGetFieldAttrData handles GET /internal/index/{index}/field/{field}/attr/data requests.
+func (h *Handler) handleGetFieldAttrData(w http.ResponseWriter, r *http.Request) {
+	if err := h.api.WriteRowAttrDataTo(r.Context(), w, mux.Vars(r)["index"], mux.Vars(r)["field"]); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 }
 
 // handleGetIndexShardSnapshot handles GET /internal/index/{index}/shard/{shard}/snapshot requests.
@@ -3070,4 +3091,12 @@ func (h *Handler) handleResetIDAlloc(w http.ResponseWriter, r *http.Request) {
 	w.Header().Add("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("OK")) //nolint:errcheck
+}
+
+func (h *Handler) handleIDAllocData(w http.ResponseWriter, r *http.Request) {
+	w.Header().Add("Content-Type", "application/octet-stream")
+	if err := h.api.WriteIDAllocDataTo(w); err != nil {
+		http.Error(w, fmt.Sprintf("writeing id allocation data: %v", err.Error()), http.StatusInternalServerError)
+		return
+	}
 }

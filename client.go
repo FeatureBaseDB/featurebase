@@ -82,8 +82,12 @@ type InternalClient interface {
 	ImportRoaring(ctx context.Context, uri *pnet.URI, index, field string, shard uint64, remote bool, req *ImportRoaringRequest) error
 	ImportColumnAttrs(ctx context.Context, uri *pnet.URI, index string, req *ImportColumnAttrsRequest) error
 	ShardReader(ctx context.Context, index string, shard uint64) (io.ReadCloser, error)
+
+	IDAllocDataReader(ctx context.Context) (io.ReadCloser, error)
 	IndexTranslateDataReader(ctx context.Context, index string, partitionID int) (io.ReadCloser, error)
+	IndexAttrDataReader(ctx context.Context, index string) (io.ReadCloser, error)
 	FieldTranslateDataReader(ctx context.Context, index, field string) (io.ReadCloser, error)
+	FieldAttrDataReader(ctx context.Context, index, field string) (io.ReadCloser, error)
 
 	StartTransaction(ctx context.Context, id string, timeout time.Duration, exclusive bool) (*Transaction, error)
 	FinishTransaction(ctx context.Context, id string) (*Transaction, error)
@@ -209,11 +213,23 @@ func (n nopInternalClient) ShardReader(ctx context.Context, index string, shard 
 	return nil, nil
 }
 
+func (n nopInternalClient) IDAllocDataReader(ctx context.Context) (io.ReadCloser, error) {
+	return nil, nil
+}
+
 func (n nopInternalClient) IndexTranslateDataReader(ctx context.Context, index string, partitionID int) (io.ReadCloser, error) {
 	return nil, nil
 }
 
+func (n nopInternalClient) IndexAttrDataReader(ctx context.Context, index string) (io.ReadCloser, error) {
+	return nil, nil
+}
+
 func (n nopInternalClient) FieldTranslateDataReader(ctx context.Context, index, field string) (io.ReadCloser, error) {
+	return nil, nil
+}
+
+func (n nopInternalClient) FieldAttrDataReader(ctx context.Context, index, field string) (io.ReadCloser, error) {
 	return nil, nil
 }
 

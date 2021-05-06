@@ -2136,6 +2136,28 @@ func (c *InternalClient) ShardReader(ctx context.Context, index string, shard ui
 	return resp.Body, nil
 }
 
+// IDAllocDataReader returns a reader that provides a snapshot of ID allocation data.
+func (c *InternalClient) IDAllocDataReader(ctx context.Context) (io.ReadCloser, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.IDAllocDataReader")
+	defer span.Finish()
+
+	// Build request.
+	req, err := http.NewRequest("GET", c.defaultURI.String()+"/internal/idalloc/data", nil)
+	if err != nil {
+		return nil, errors.Wrap(err, "creating request")
+	}
+
+	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+	req.Header.Set("Accept", "application/octet-stream")
+
+	// Execute request.
+	resp, err := c.executeRequest(req.WithContext(ctx))
+	if err != nil {
+		return nil, err
+	}
+	return resp.Body, nil
+}
+
 // IndexTranslateDataReader returns a reader that provides a snapshot of
 // translation data for a partition in an index.
 func (c *InternalClient) IndexTranslateDataReader(ctx context.Context, index string, partitionID int) (io.ReadCloser, error) {
@@ -2165,6 +2187,29 @@ func (c *InternalClient) IndexTranslateDataReader(ctx context.Context, index str
 	return resp.Body, nil
 }
 
+// IndexAttrDataReader returns a reader that provides a snapshot of column attributes data.
+func (c *InternalClient) IndexAttrDataReader(ctx context.Context, index string) (io.ReadCloser, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.IndexAttrDataReader")
+	defer span.Finish()
+
+	// Build request.
+	u := fmt.Sprintf("%s/internal/index/%s/attr/data", c.defaultURI.String(), url.QueryEscape(index))
+	req, err := http.NewRequest("GET", u, nil)
+	if err != nil {
+		return nil, errors.Wrap(err, "creating request")
+	}
+
+	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+	req.Header.Set("Accept", "application/octet-stream")
+
+	// Execute request.
+	resp, err := c.executeRequest(req.WithContext(ctx))
+	if err != nil {
+		return nil, err
+	}
+	return resp.Body, nil
+}
+
 // FieldTranslateDataReader returns a reader that provides a snapshot of
 // translation data for a field.
 func (c *InternalClient) FieldTranslateDataReader(ctx context.Context, index, field string) (io.ReadCloser, error) {
@@ -2189,6 +2234,29 @@ func (c *InternalClient) FieldTranslateDataReader(ctx context.Context, index, fi
 		resp.Body.Close()
 		return nil, pilosa.ErrTranslateStoreNotFound
 	} else if err != nil {
+		return nil, err
+	}
+	return resp.Body, nil
+}
+
+// FieldAttrDataReader returns a reader that provides a snapshot of row attributes data.
+func (c *InternalClient) FieldAttrDataReader(ctx context.Context, index, field string) (io.ReadCloser, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.FieldAttrDataReader")
+	defer span.Finish()
+
+	// Build request.
+	u := fmt.Sprintf("%s/internal/index/%s/field/%s/attr/data", c.defaultURI.String(), url.QueryEscape(index), url.QueryEscape(field))
+	req, err := http.NewRequest("GET", u, nil)
+	if err != nil {
+		return nil, errors.Wrap(err, "creating request")
+	}
+
+	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+	req.Header.Set("Accept", "application/octet-stream")
+
+	// Execute request.
+	resp, err := c.executeRequest(req.WithContext(ctx))
+	if err != nil {
 		return nil, err
 	}
 	return resp.Body, nil

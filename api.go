@@ -280,6 +280,15 @@ func (api *API) DeleteIndex(ctx context.Context, indexName string) error {
 	return nil
 }
 
+func (api *API) WriteColumnAttrDataTo(ctx context.Context, w io.Writer, indexName string) error {
+	index := api.holder.Index(indexName)
+	if index == nil {
+		return newNotFoundError(ErrIndexNotFound, indexName)
+	}
+	_, err := index.ColumnAttrStore().WriteTo(w)
+	return err
+}
+
 // CreateField makes the named field in the named index with the given options.
 // This method currently only takes a single functional option, but that may be
 // changed in the future to support multiple options.
@@ -335,6 +344,15 @@ func (api *API) Field(ctx context.Context, indexName, fieldName string) (*Field,
 		return nil, newNotFoundError(ErrFieldNotFound, fieldName)
 	}
 	return field, nil
+}
+
+func (api *API) WriteRowAttrDataTo(ctx context.Context, w io.Writer, indexName, fieldName string) error {
+	field := api.holder.Field(indexName, fieldName)
+	if field == nil {
+		return newNotFoundError(ErrFieldNotFound, fieldName)
+	}
+	_, err := field.RowAttrStore().WriteTo(w)
+	return err
 }
 
 func setUpImportOptions(opts ...ImportOption) (*ImportOptions, error) {
@@ -2295,6 +2313,11 @@ func (api *API) ResetIDAlloc(index string) error {
 	}
 
 	return api.holder.ida.reset(index)
+}
+
+func (api *API) WriteIDAllocDataTo(w io.Writer) error {
+	_, err := api.holder.ida.WriteTo(w)
+	return err
 }
 
 // TranslateIndexDB is an internal function to load the index keys database

@@ -16,9 +16,9 @@ package boltdb
 
 import (
 	"bytes"
-
 	"encoding/binary"
 	"fmt"
+	"io"
 	"sort"
 	"sync"
 	"time"
@@ -274,6 +274,16 @@ func (s *attrStore) BlockData(i uint64) (m map[uint64]map[string]interface{}, er
 		return nil, errors.Wrap(err, "getting block data")
 	}
 	return m, nil
+}
+
+// WriteTo writes the underlying database to w.
+func (s *attrStore) WriteTo(w io.Writer) (int64, error) {
+	tx, err := s.db.Begin(false)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	return tx.WriteTo(w)
 }
 
 // txAttrs returns a map of attributes for an id.
