@@ -101,6 +101,8 @@ func (cmd *BackupCommand) Run(ctx context.Context) error {
 	// Backup schema.
 	if err := cmd.backupSchema(ctx, tw, schema); err != nil {
 		return fmt.Errorf("cannot back up schema: %w", err)
+	} else if err := cmd.backupIDAllocData(ctx, tw); err != nil {
+		return fmt.Errorf("cannot back up id alloc data: %w", err)
 	}
 
 	// Backup data for each index.
