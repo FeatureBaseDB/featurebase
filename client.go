@@ -53,6 +53,7 @@ type FieldValue struct {
 type InternalClient interface {
 	InternalQueryClient
 
+	AvailableShards(ctx context.Context, indexName string) ([]uint64, error)
 	MaxShardByIndex(ctx context.Context) (map[string]uint64, error)
 	Schema(ctx context.Context) ([]*IndexInfo, error)
 	PostSchema(ctx context.Context, uri *pnet.URI, s *Schema, remote bool) error
@@ -80,6 +81,13 @@ type InternalClient interface {
 	RetrieveTranslatePartitionFromURI(ctx context.Context, index string, partition int, uri pnet.URI) (io.ReadCloser, error)
 	ImportRoaring(ctx context.Context, uri *pnet.URI, index, field string, shard uint64, remote bool, req *ImportRoaringRequest) error
 	ImportColumnAttrs(ctx context.Context, uri *pnet.URI, index string, req *ImportColumnAttrsRequest) error
+	ShardReader(ctx context.Context, index string, shard uint64) (io.ReadCloser, error)
+
+	IDAllocDataReader(ctx context.Context) (io.ReadCloser, error)
+	IndexTranslateDataReader(ctx context.Context, index string, partitionID int) (io.ReadCloser, error)
+	IndexAttrDataReader(ctx context.Context, index string) (io.ReadCloser, error)
+	FieldTranslateDataReader(ctx context.Context, index, field string) (io.ReadCloser, error)
+	FieldAttrDataReader(ctx context.Context, index, field string) (io.ReadCloser, error)
 
 	StartTransaction(ctx context.Context, id string, timeout time.Duration, exclusive bool) (*Transaction, error)
 	FinishTransaction(ctx context.Context, id string) (*Transaction, error)
@@ -159,6 +167,10 @@ func newNopInternalClient() nopInternalClient {
 
 var _ InternalClient = newNopInternalClient()
 
+func (n nopInternalClient) AvailableShards(ctx context.Context, indexName string) ([]uint64, error) {
+	return nil, nil
+}
+
 func (n nopInternalClient) MaxShardByIndex(context.Context) (map[string]uint64, error) {
 	return nil, nil
 }
@@ -195,6 +207,30 @@ func (n nopInternalClient) ImportRoaring(ctx context.Context, uri *pnet.URI, ind
 
 func (n nopInternalClient) ImportColumnAttrs(ctx context.Context, uri *pnet.URI, index string, req *ImportColumnAttrsRequest) error {
 	return nil
+}
+
+func (n nopInternalClient) ShardReader(ctx context.Context, index string, shard uint64) (io.ReadCloser, error) {
+	return nil, nil
+}
+
+func (n nopInternalClient) IDAllocDataReader(ctx context.Context) (io.ReadCloser, error) {
+	return nil, nil
+}
+
+func (n nopInternalClient) IndexTranslateDataReader(ctx context.Context, index string, partitionID int) (io.ReadCloser, error) {
+	return nil, nil
+}
+
+func (n nopInternalClient) IndexAttrDataReader(ctx context.Context, index string) (io.ReadCloser, error) {
+	return nil, nil
+}
+
+func (n nopInternalClient) FieldTranslateDataReader(ctx context.Context, index, field string) (io.ReadCloser, error) {
+	return nil, nil
+}
+
+func (n nopInternalClient) FieldAttrDataReader(ctx context.Context, index, field string) (io.ReadCloser, error) {
+	return nil, nil
 }
 
 func (n nopInternalClient) EnsureIndex(ctx context.Context, name string, options IndexOptions) error {

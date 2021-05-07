@@ -440,6 +440,11 @@ func (tx *RBFTx) GetFieldSizeBytes(index, field string) (uint64, error) {
 	return tx.tx.GetSizeBytesWithPrefix(string(txkey.FieldPrefix(index, field)))
 }
 
+// SnapshotReader returns a reader that provides a snapshot of the current database.
+func (tx *RBFTx) SnapshotReader() (io.Reader, error) {
+	return tx.tx.SnapshotReader()
+}
+
 // rbfName returns a NULL-separated key used for identifying bitmap maps in RBF.
 func rbfName(index, field, view string, shard uint64) string {
 	return string(txkey.Prefix(index, field, view, shard))

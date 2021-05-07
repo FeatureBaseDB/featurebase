@@ -280,6 +280,15 @@ func (api *API) DeleteIndex(ctx context.Context, indexName string) error {
 	return nil
 }
 
+func (api *API) WriteColumnAttrDataTo(ctx context.Context, w io.Writer, indexName string) error {
+	index := api.holder.Index(indexName)
+	if index == nil {
+		return newNotFoundError(ErrIndexNotFound, indexName)
+	}
+	_, err := index.ColumnAttrStore().WriteTo(w)
+	return err
+}
+
 // CreateField makes the named field in the named index with the given options.
 // This method currently only takes a single functional option, but that may be
 // changed in the future to support multiple options.
@@ -335,6 +344,15 @@ func (api *API) Field(ctx context.Context, indexName, fieldName string) (*Field,
 		return nil, newNotFoundError(ErrFieldNotFound, fieldName)
 	}
 	return field, nil
+}
+
+func (api *API) WriteRowAttrDataTo(ctx context.Context, w io.Writer, indexName, fieldName string) error {
+	field := api.holder.Field(indexName, fieldName)
+	if field == nil {
+		return newNotFoundError(ErrFieldNotFound, fieldName)
+	}
+	_, err := field.RowAttrStore().WriteTo(w)
+	return err
 }
 
 func setUpImportOptions(opts ...ImportOption) (*ImportOptions, error) {
@@ -824,6 +842,34 @@ func (api *API) TranslateData(ctx context.Context, indexName string, partition i
 	return store, nil
 }
 
+// FieldTranslateData returns all translation data in the specified field.
+func (api *API) FieldTranslateData(ctx context.Context, indexName, fieldName string) (io.WriterTo, error) {
+	span, _ := tracing.StartSpanFromContext(ctx, "API.FieldTranslateData")
+	defer span.Finish()
+	if err := api.validate(apiFieldTranslateData); err != nil {
+		return nil, errors.Wrap(err, "validating api method")
+	}
+
+	// Retrieve index from holder.
+	idx := api.holder.Index(indexName)
+	if idx == nil {
+		return nil, newNotFoundError(ErrIndexNotFound, indexName)
+	}
+
+	// Retrieve field from index.
+	field := idx.Field(fieldName)
+	if field == nil {
+		return nil, newNotFoundError(ErrFieldNotFound, fieldName)
+	}
+
+	// Retrieve translatestore from holder.
+	store := field.TranslateStore()
+	if store == nil {
+		return nil, ErrTranslateStoreNotFound
+	}
+	return store, nil
+}
+
 // Hosts returns a list of the hosts in the cluster including their ID,
 // URL, and which is the primary.
 func (api *API) Hosts(ctx context.Context) []*topology.Node {
@@ -1215,6 +1261,48 @@ func (api *API) FieldAttrDiff(ctx context.Context, indexName string, fieldName s
 		}
 	}
 	return attrs, nil
+}
+
+// IndexShardSnapshot returns a reader that contains the contents of an RBF snapshot for an index/shard.
+func (api *API) IndexShardSnapshot(ctx context.Context, indexName string, shard uint64) (io.ReadCloser, error) {
+	span, _ := tracing.StartSpanFromContext(ctx, "API.IndexShardSnapshot")
+	defer span.Finish()
+
+	// Find index.
+	index := api.holder.Index(indexName)
+	if index == nil {
+		return nil, newNotFoundError(ErrIndexNotFound, indexName)
+	}
+
+	// Start transaction.
+	tx := index.holder.txf.NewTx(Txo{Index: index, Shard: shard})
+
+	// Ensure transaction is an RBF transaction.
+	rtx, ok := tx.(*RBFTx)
+	if !ok {
+		tx.Rollback()
+		return nil, fmt.Errorf("snapshot not available for %q storage", tx.Type())
+	}
+
+	r, err := rtx.SnapshotReader()
+	if err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+	return &txReadCloser{tx: tx, Reader: r}, nil
+}
+
+var _ io.ReadCloser = (*txReadCloser)(nil)
+
+// txReadCloser wraps a reader to close a tx on close.
+type txReadCloser struct {
+	io.Reader
+	tx Tx
+}
+
+func (r *txReadCloser) Close() error {
+	r.tx.Rollback()
+	return nil
 }
 
 // ImportOptions holds the options for the API.Import
@@ -1756,6 +1844,19 @@ func (api *API) AvailableShardsByIndex(ctx context.Context) map[string]*roaring.
 	return api.holder.availableShardsByIndex()
 }
 
+// AvailableShards returns bitmap of available shards for a single index.
+func (api *API) AvailableShards(ctx context.Context, indexName string) (*roaring.Bitmap, error) {
+	span, _ := tracing.StartSpanFromContext(ctx, "API.AvailableShards")
+	defer span.Finish()
+
+	// Find the index.
+	index := api.holder.Index(indexName)
+	if index == nil {
+		return nil, newNotFoundError(ErrIndexNotFound, indexName)
+	}
+	return index.AvailableShards(false), nil
+}
+
 // StatsWithTags returns an instance of whatever implementation of StatsClient
 // pilosa is using with the given tags.
 func (api *API) StatsWithTags(tags []string) stats.StatsClient {
@@ -2214,6 +2315,11 @@ func (api *API) ResetIDAlloc(index string) error {
 	return api.holder.ida.reset(index)
 }
 
+func (api *API) WriteIDAllocDataTo(w io.Writer) error {
+	_, err := api.holder.ida.WriteTo(w)
+	return err
+}
+
 // TranslateIndexDB is an internal function to load the index keys database
 // rd is a boltdb file.
 func (api *API) TranslateIndexDB(ctx context.Context, indexName string, partitionID int, rd io.Reader) error {
@@ -2261,6 +2367,7 @@ const (
 	apiFragmentBlocks
 	apiFragmentData
 	apiTranslateData
+	apiFieldTranslateData
 	apiField
 	apiFieldAttrDiff
 	//apiHosts // not implemented
@@ -2299,10 +2406,11 @@ var methodsCommon = map[apiMethod]struct{}{
 }
 
 var methodsResizing = map[apiMethod]struct{}{
-	apiFragmentData:  {},
-	apiTranslateData: {},
-	apiResizeAbort:   {},
-	apiSchema:        {},
+	apiFragmentData:       {},
+	apiTranslateData:      {},
+	apiFieldTranslateData: {},
+	apiResizeAbort:        {},
+	apiSchema:             {},
 }
 
 var methodsDegraded = map[apiMethod]struct{}{
@@ -2337,6 +2445,7 @@ var methodsNormal = map[apiMethod]struct{}{
 	apiFragmentBlockData:    {},
 	apiFragmentBlocks:       {},
 	apiField:                {},
+	apiFieldTranslateData:   {},
 	apiFieldAttrDiff:        {},
 	apiImport:               {},
 	apiImportValue:          {},
@@ -2352,6 +2461,7 @@ var methodsNormal = map[apiMethod]struct{}{
 	apiStartTransaction:     {},
 	apiFinishTransaction:    {},
 	apiTransactions:         {},
+	apiTranslateData:        {},
 	apiGetTransaction:       {},
 	apiActiveQueries:        {},
 	apiPastQueries:          {},
