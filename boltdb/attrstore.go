@@ -282,7 +282,7 @@ func (s *attrStore) WriteTo(w io.Writer) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	return tx.WriteTo(w)
 }
 
