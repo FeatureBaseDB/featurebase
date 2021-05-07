@@ -95,6 +95,30 @@ func TestTx_CommitRollback(t *testing.T) {
 		}
 	})
 
+	t.Run("ReopenReadOnly", func(t *testing.T) {
+		db := MustOpenDB(t)
+		defer func() { MustCloseDB(t, db) }()
+
+		// Create bitmap in transaction and commit.
+		if tx, err := db.Begin(true); err != nil {
+			t.Fatal(err)
+		} else if err := tx.CreateBitmap("x"); err != nil {
+			t.Fatal(err)
+		} else if err := tx.Commit(); err != nil {
+			t.Fatal(err)
+		}
+		db = MustReopenDB(t, db)
+
+		// Create bitmap again but it should fail as it already exists.
+		if tx, err := db.Begin(false); err != nil {
+			t.Fatal(err)
+		} else if _, err := tx.Count("x"); err != nil {
+			t.Fatal(err)
+		} else if err := tx.Commit(); err != nil {
+			t.Fatal(err)
+		}
+	})
+
 	t.Run("SingleWriter", func(t *testing.T) {
 		db := MustOpenDB(t)
 		defer MustCloseDB(t, db)

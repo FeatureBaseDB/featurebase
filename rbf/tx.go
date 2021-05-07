@@ -1217,7 +1217,9 @@ func (tx *Tx) Count(name string) (uint64, error) {
 	}
 	defer c.Close()
 
-	if err := c.First(); err != nil {
+	if err := c.First(); err == io.EOF {
+		return 0, nil
+	} else if err != nil {
 		return 0, err
 	}
 
