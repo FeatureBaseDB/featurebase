@@ -81,7 +81,6 @@ const (
 	resizePrefix    = nodePrefix + "resize/"
 	metadataPrefix  = nodePrefix + "metadata/"
 	shardPrefix     = "/shard/"
-	lockPrefix      = "/lock/"
 )
 
 var (
