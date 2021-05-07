@@ -89,6 +89,7 @@ type Holder struct {
 
 	broadcaster broadcaster
 	schemator   disco.Schemator
+	sharder     disco.Sharder
 	serializer  Serializer
 
 	NewAttrStore func(string) AttrStore
@@ -230,6 +231,7 @@ type HolderConfig struct {
 	TranslationSyncer    TranslationSyncer
 	Serializer           Serializer
 	Schemator            disco.Schemator
+	Sharder              disco.Sharder
 	CacheFlushInterval   time.Duration
 	StatsClient          stats.StatsClient
 	NewAttrStore         func(string) AttrStore
@@ -253,6 +255,7 @@ func DefaultHolderConfig() *HolderConfig {
 		TranslationSyncer:    NopTranslationSyncer,
 		Serializer:           GobSerializer,
 		Schemator:            disco.InMemSchemator,
+		Sharder:              disco.InMemSharder,
 		CacheFlushInterval:   defaultCacheFlushInterval,
 		StatsClient:          stats.NopStatsClient,
 		NewAttrStore:         newNopAttrStore,
@@ -292,6 +295,7 @@ func NewHolder(path string, cfg *HolderConfig) *Holder {
 		OpenIDAllocator:      cfg.OpenIDAllocator,
 		translationSyncer:    cfg.TranslationSyncer,
 		serializer:           cfg.Serializer,
+		sharder:              cfg.Sharder,
 		schemator:            cfg.Schemator,
 		Logger:               cfg.Logger,
 		Opts:                 HolderOpts{StorageBackend: cfg.StorageConfig.Backend, RowcacheOn: cfg.RowcacheOn},

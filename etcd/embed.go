@@ -29,12 +29,10 @@ import (
 
 	"github.com/pilosa/pilosa/v2/disco"
 	"github.com/pilosa/pilosa/v2/logger"
-	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/topology"
 	"github.com/pkg/errors"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/clientv3util"
-	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.etcd.io/etcd/embed"
 	"go.etcd.io/etcd/etcdserver"
 	"go.etcd.io/etcd/etcdserver/api/v3client"
@@ -939,12 +937,12 @@ func (e *Etcd) getKeyBytes(ctx context.Context, key string) ([]byte, error) {
 	}
 
 	if len(resp.Responses) == 0 {
-		return nil, errors.New("key does not exist")
+		return nil, disco.ErrKeyDoesNotExist
 	}
 
 	kvs := resp.Responses[0].GetResponseRange().Kvs
 	if len(kvs) == 0 {
-		return nil, errors.New("key does not exist")
+		return nil, disco.ErrKeyDoesNotExist
 	}
 
 	return kvs[0].Value, nil
@@ -962,7 +960,7 @@ func (e *Etcd) getKeyWithPrefix(ctx context.Context, key string) (keys []string,
 	}
 
 	if len(resp.Responses) == 0 {
-		return nil, nil, errors.New("key does not exist")
+		return nil, nil, disco.ErrKeyDoesNotExist
 	}
 
 	kvs := resp.Responses[0].GetResponseRange().Kvs
@@ -1037,221 +1035,28 @@ func memberAdd(cli *clientv3.Client, peerURL string) (id uint64, name string) {
 }
 
 // Shards implements the Sharder interface.
-func (e *Etcd) Shards(ctx context.Context, index, field string) (*roaring.Bitmap, error) {
-	return e.shards(ctx, index, field)
+func (e *Etcd) Shards(ctx context.Context, index, field string) ([]byte, error) {
+	key := path.Join(shardPrefix, index, field)
+	b, err := e.getKeyBytes(ctx, key)
+
+	if errors.Cause(err) == disco.ErrKeyDoesNotExist {
+		e.logger.Warnf("key: %s, err: %v", key, err)
+		err = nil
+	}
+	return b, err
 }
 
-func (e *Etcd) shards(ctx context.Context, index, field string) (*roaring.Bitmap, error) {
+// SetShards implements the Sharder interface.
+func (e *Etcd) SetShards(ctx context.Context, index, field string, shardBytes []byte) error {
 	key := path.Join(shardPrefix, index, field)
-
-	// Get the current shards for the field.
-	resp, err := e.cli.Get(ctx, key)
-	if err != nil {
-		return nil, err
-	}
-
-	bm := roaring.NewBitmap()
-
-	if len(resp.Kvs) == 0 {
-		return bm, nil
-	}
-
-	bytes := resp.Kvs[0].Value
-	if err = bm.UnmarshalBinary(bytes); err != nil {
-		return nil, errors.Wrap(err, "unmarshalling shards")
-	}
-
-	return bm, nil
-}
-
-// AddShards implements the Sharder interface.
-func (e *Etcd) AddShards(ctx context.Context, index, field string, shards *roaring.Bitmap) (*roaring.Bitmap, error) {
-	key := path.Join(shardPrefix, index, field)
-
-	// This tended to add more overhead than it saved.
-	// // Read shards outside of a lock just to check if shard is already included.
-	// // If shard is already included, no-op.
-	// if currentShards, err := e.shards(ctx, cli, index, field); err != nil {
-	// 	return nil, errors.Wrap(err, "reading shards")
-	// } else if currentShards.Count() == currentShards.Union(shards).Count() {
-	// 	return currentShards, nil
-	// }
-
-	// Create a session to acquire a lock.
-	sess, _ := concurrency.NewSession(e.cli)
-	defer sess.Close()
-
-	muKey := path.Join(lockPrefix, index, field)
-	mu := concurrency.NewMutex(sess, muKey)
-
-	// Acquire lock (or wait to have it).
-	if err := mu.Lock(ctx); err != nil {
-		return nil, errors.Wrap(err, "acquiring lock")
-	}
-
-	// Read shards within lock.
-	globalShards, err := e.shards(ctx, index, field)
-	if err != nil {
-		return nil, errors.Wrap(err, "reading shards")
-	}
-
-	// Union shard into shards.
-	globalShards.UnionInPlace(shards)
-
-	// Write shards to etcd.
-	var buf bytes.Buffer
-	if _, err := globalShards.WriteTo(&buf); err != nil {
-		return nil, errors.Wrap(err, "writing shards to bytes buffer")
-	}
 
 	op := clientv3.OpPut(key, "")
-	op.WithValueBytes(buf.Bytes())
+	op.WithValueBytes(shardBytes)
 
-	if _, err := e.cli.Do(ctx, op); err != nil {
-		return nil, errors.Wrap(err, "doing op")
-	}
-
-	// Release lock.
-	if err := mu.Unlock(ctx); err != nil {
-		return nil, errors.Wrap(err, "releasing lock")
-	}
-
-	return globalShards, nil
-}
-
-// AddShard implements the Sharder interface.
-func (e *Etcd) AddShard(ctx context.Context, index, field string, shard uint64) error {
-	key := path.Join(shardPrefix, index, field)
-
-	// Read shards outside of a lock just to check if shard is already included.
-	// If shard is already included, no-op.
-	if shards, err := e.shards(ctx, index, field); err != nil {
-		return errors.Wrap(err, "reading shards")
-	} else if shards.Contains(shard) {
-		return nil
-	}
-
-	// According to the previous read, shard is not yet included in shards. So
-	// we will acquire a distributed lock, read shards again (in case it has
-	// been updated since we last read it), add shard to shards, and finally
-	// write shards to etcd.
-
-	// Create a session to acquire a lock.
-	sess, _ := concurrency.NewSession(e.cli)
-	defer sess.Close()
-
-	muKey := path.Join(lockPrefix, index, field)
-	mu := concurrency.NewMutex(sess, muKey)
-
-	// Acquire lock (or wait to have it).
-	if err := mu.Lock(ctx); err != nil {
-		return errors.Wrap(err, "acquiring lock")
-	}
-
-	// Read shards again (within lock).
-	shards, err := e.shards(ctx, index, field)
-	if err != nil {
-		return errors.Wrap(err, "reading shards")
-	}
-
-	if shards.Contains(shard) {
-		return nil
-	}
-
-	// Union shard into shards.
-	shards.UnionInPlace(roaring.NewBitmap(shard))
-
-	// Write shards to etcd.
-	var buf bytes.Buffer
-	if _, err := shards.WriteTo(&buf); err != nil {
-		return errors.Wrap(err, "writing shards to bytes buffer")
-	}
-
-	op := clientv3.OpPut(key, "")
-	op.WithValueBytes(buf.Bytes())
-
-	if _, err := e.cli.Do(ctx, op); err != nil {
-		return errors.Wrap(err, "doing op")
-	}
-
-	// Release lock.
-	if err := mu.Unlock(ctx); err != nil {
-		return errors.Wrap(err, "releasing lock")
-	}
-
-	return nil
-}
-
-// RemoveShard implements the Sharder interface.
-func (e *Etcd) RemoveShard(ctx context.Context, index, field string, shard uint64) error {
-	key := path.Join(shardPrefix, index, field)
-
-	// Read shards outside of a lock just to check if shard is already excluded.
-	// If shard is already excluded, no-op.
-	if shards, err := e.shards(ctx, index, field); err != nil {
-		return errors.Wrap(err, "reading shards")
-	} else if !shards.Contains(shard) {
-		return nil
-	}
-
-	// According to the previous read, shard is included in shards. So
-	// we will acquire a distributed lock, read shards again (in case it has
-	// been updated since we last read it), remove shard from shards, and finally
-	// write shards to etcd.
-
-	// Create a session to acquire a lock.
-	sess, _ := concurrency.NewSession(e.cli)
-	defer sess.Close()
-
-	muKey := path.Join(lockPrefix, index, field)
-	mu := concurrency.NewMutex(sess, muKey)
-
-	// Acquire lock (or wait to have it).
-	if err := mu.Lock(ctx); err != nil {
-		return errors.Wrap(err, "acquiring lock")
-	}
-
-	// Read shards again (within lock).
-	shards, err := e.shards(ctx, index, field)
-	if err != nil {
-		return errors.Wrap(err, "reading shards")
-	}
-
-	if !shards.Contains(shard) {
-		return nil
-	}
-
-	// Remove shard from shards.
-	if _, err := shards.RemoveN(shard); err != nil {
-		return errors.Wrap(err, "removing shard")
-	}
-
-	// If this is removing the last bit from the shards bitmap, then instead of
-	// writing an empty bitmap, just delete the key.
-	if shards.Count() == 0 {
-		_, err := e.cli.Delete(ctx, key)
-		return err
-	}
-
-	// Write shards to etcd.
-	var buf bytes.Buffer
-	if _, err := shards.WriteTo(&buf); err != nil {
-		return errors.Wrap(err, "writing shards to bytes buffer")
-	}
-
-	op := clientv3.OpPut(key, "")
-	op.WithValueBytes(buf.Bytes())
-
-	if _, err := e.cli.Do(ctx, op); err != nil {
-		return errors.Wrap(err, "doing op")
-	}
-
-	// Release lock.
-	if err := mu.Unlock(ctx); err != nil {
-		return errors.Wrap(err, "releasing lock")
-	}
-
-	return nil
+	return e.retryClient(func(cli *clientv3.Client) (err error) {
+		_, err = cli.Txn(ctx).Then(op).Commit()
+		return
+	})
 }
 
 // Nodes implements the Noder interface. It returns the sorted list of nodes

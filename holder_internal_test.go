@@ -266,5 +266,6 @@ func mustHolderConfig() *HolderConfig {
 		cfg.StorageConfig.Backend = backend
 	}
 	cfg.Schemator = disco.InMemSchemator
+	cfg.Sharder = disco.InMemSharder
 	return cfg
 }

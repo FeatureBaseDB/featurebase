@@ -19,8 +19,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
-	"log"
 	"math"
 	"math/bits"
 	"os"
@@ -440,7 +438,6 @@ func (f *Field) AvailableShards(localOnly bool) *roaring.Bitmap {
 		b = f.remoteAvailableShards.Clone()
 	}
 	for _, view := range f.viewMap {
-		//b.Union(view.availableShards())
 		b.UnionInPlace(view.availableShards())
 	}
 	return b
@@ -455,7 +452,6 @@ func (f *Field) LocalAvailableShards() *roaring.Bitmap {
 
 	b := roaring.NewBitmap()
 	for _, view := range f.viewMap {
-		//b.Union(view.availableShards())
 		b.UnionInPlace(view.availableShards())
 	}
 	return b
@@ -478,30 +474,17 @@ func (f *Field) mergeRemoteAvailableShards(b *roaring.Bitmap) {
 
 // loadAvailableShards reads remoteAvailableShards data for the field, if any.
 func (f *Field) loadAvailableShards() error {
-	// Read data from meta file.
-	path := filepath.Join(f.path, ".available.shards")
-	buf, err := ioutil.ReadFile(path)
-	// doesn't exist: this is fine
-	if os.IsNotExist(err) {
-		return nil
-	}
-	// some other problem:
-	if err != nil {
-		f.holder.Logger.Errorf("available shards file present but unreadable, discarding: %v", err)
-		err = os.Remove(path)
-		if err != nil {
-			return errors.Wrap(err, "deleting corrupt available shards list")
-		}
-		return nil
-	}
 	bm := roaring.NewBitmap()
-	if err = bm.UnmarshalBinary(buf); err != nil {
-		f.holder.Logger.Errorf("available shards file corrupt, discarding: %v", err)
-		err = os.Remove(path)
-		if err != nil {
-			return errors.Wrap(err, "deleting corrupt available shards list")
+
+	shardBytes, err := f.holder.sharder.Shards(context.Background(), f.index, f.name)
+	if err != nil {
+		return errors.Wrap(err, "loading available shards")
+	}
+
+	if shardBytes != nil {
+		if err = bm.UnmarshalBinary(shardBytes); err != nil {
+			return errors.Wrap(err, "available shards corrupt")
 		}
-		return nil
 	}
 	// Merge bitmap from file into field.
 	f.mergeRemoteAvailableShards(bm)
@@ -523,14 +506,6 @@ func (f *Field) unprotectedSaveAvailableShards() error {
 	}
 	f.availableShardChan <- buf.Bytes()
 	return nil
-}
-
-// SetRemoteAvailableShards replaces remoteAvailableShards with the provided
-// value.
-func (f *Field) SetRemoteAvailableShards(b *roaring.Bitmap) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.remoteAvailableShards = b
 }
 
 // RemoveAvailableShard removes a shard from the bitmap cache.
@@ -631,21 +606,12 @@ func (f *Field) Open() error {
 }
 
 func (f *Field) blockingWriteAvailableShards(availableShardBytes []byte) {
-	path := filepath.Join(f.path, ".available.shards")
-
-	// Create a temporary file to save to.
-	tempPath := path + tempExt
-	err := ioutil.WriteFile(tempPath, availableShardBytes, 0666)
+	err := f.holder.sharder.SetShards(context.Background(), f.index, f.name, availableShardBytes)
 	if err != nil {
-		log.Println("failed to write ", tempPath)
-		return
-	}
-
-	// Move snapshot to data file location.
-	if err := os.Rename(tempPath, path); err != nil {
-		f.holder.Logger.Errorf("rename snapshot: %s", err)
+		f.holder.Logger.Errorf("writting available shards: %v", err)
 	}
 }
+
 func (f *Field) nonBlockingWriteAvailableShards(availableShardBytes []byte, done chan bool) {
 	if len(availableShardBytes) == 0 {
 		return

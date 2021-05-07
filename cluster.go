@@ -196,11 +196,10 @@ func (c *cluster) applySchemaWithNewShards(schema *Schema) error {
 	// Get and set the shards for each field.
 	for _, idx := range c.holder.indexes {
 		for _, fld := range idx.fields {
-			b, err := c.sharder.Shards(context.Background(), idx.name, fld.name)
+			err := fld.loadAvailableShards()
 			if err != nil {
 				return errors.Wrapf(err, "getting shards for field: %s/%s", idx.name, fld.name)
 			}
-			fld.SetRemoteAvailableShards(b)
 		}
 	}
 
@@ -1062,12 +1061,11 @@ func (c *cluster) followResizeInstruction(ctx context.Context, instr *ResizeInst
 				return ctx.Err()
 
 			default:
-				// Get the shards for the field.
-				b, err := c.sharder.Shards(ctx, is.Name, f.name)
+				err := f.loadAvailableShards()
 				if err != nil {
 					return errors.Wrapf(err, "getting shards for field: %s/%s", is.Name, f.name)
 				}
-				f.SetRemoteAvailableShards(b)
+
 			}
 		}
 	}
