@@ -29,7 +29,6 @@ import (
 
 	"github.com/pilosa/pilosa/v2/disco"
 	"github.com/pilosa/pilosa/v2/logger"
-	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/topology"
 	"github.com/pkg/errors"
 	"go.etcd.io/etcd/clientv3"
@@ -1035,40 +1034,24 @@ func memberAdd(cli *clientv3.Client, peerURL string) (id uint64, name string) {
 }
 
 // Shards implements the Sharder interface.
-func (e *Etcd) Shards(ctx context.Context, index, field string) (*roaring.Bitmap, error) {
+func (e *Etcd) Shards(ctx context.Context, index, field string) ([][]byte, error) {
 	key := path.Join(shardPrefix, index, field)
 	_, vals, err := e.getKeyWithPrefix(ctx, key)
 
-	bm := roaring.NewBitmap()
 	if errors.Cause(err) == disco.ErrKeyDoesNotExist {
 		e.logger.Warnf("key: %s, err: %v", key, err)
-		return bm, nil
+		return nil, nil
 	}
 
-	for _, v := range vals {
-		b := roaring.NewBitmap()
-		if err = b.UnmarshalBinary(v); err != nil {
-			return nil, errors.Wrap(err, "unmarshalling shards")
-		}
-		bm.UnionInPlace(b)
-	}
-
-	return bm, nil
+	return vals, nil
 }
 
 // SetShards implements the Sharder interface.
-func (e *Etcd) SetShards(ctx context.Context, index, field string, shards *roaring.Bitmap) error {
+func (e *Etcd) SetShards(ctx context.Context, index, field string, shards []byte) error {
 	key := path.Join(shardPrefix, index, field, e.e.Server.ID().String())
 
-	// Write shards to etcd.
-	var buf bytes.Buffer
-	if _, err := shards.WriteTo(&buf); err != nil {
-		return errors.Wrap(err, "writing shards to bytes buffer")
-	}
-
 	op := clientv3.OpPut(key, "")
-	op.WithValueBytes(buf.Bytes())
-
+	op.WithValueBytes(shards)
 	return e.retryClient(func(cli *clientv3.Client) (err error) {
 		_, err = cli.Txn(ctx).Then(op).Commit()
 		return
