@@ -496,6 +496,17 @@ func (db *DB) Begin(writable bool) (_ *Tx, err error) {
 	// Track transaction with the DB.
 	db.txs[tx] = struct{}{}
 
+	// If no root records are cached, build the cache the first time.
+	// Normally the cache is updated by successful write transactions but
+	// this avoids recomputing the cache if there are no write txs for a while.
+	if db.rootRecords == nil {
+		if db.rootRecords, err = tx.RootRecords(); err != nil {
+			db.mu.Unlock()
+			tx.Rollback()
+			return nil, err
+		}
+	}
+
 	db.mu.Unlock()
 	return tx, nil
 }

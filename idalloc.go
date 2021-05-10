@@ -17,6 +17,7 @@ package pilosa
 import (
 	"encoding/binary"
 	"fmt"
+	"io"
 	"math/bits"
 	"sort"
 	"time"
@@ -70,6 +71,20 @@ func (ida *idAllocator) Close() error {
 	}
 	defer func() { ida.db = nil }()
 	return ida.db.Close()
+}
+
+func (ida *idAllocator) WriteTo(w io.Writer) (int64, error) {
+	if ida == nil || ida.db == nil {
+		return 0, fmt.Errorf("idAllocator closed")
+	}
+
+	tx, err := ida.db.Begin(false)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	return tx.WriteTo(w)
 }
 
 // ErrIDOffsetDesync is an error generated when attempting to reserve IDs at a committed offset.

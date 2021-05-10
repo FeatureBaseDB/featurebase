@@ -17,6 +17,7 @@ package boltdb
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"os"
@@ -232,6 +233,13 @@ func (s *TranslateStore) FindKeys(keys ...string) (map[string]uint64, error) {
 	return result, nil
 }
 
+// translateTransactionSize governs the number of writes to a single
+// boltDB bucket we will make in a single db.Update(), before starting
+// a new Update. We do this because Put() is quadratic, but Commit is
+// expensive enough that we want to do a fair number of updates before
+// paying for it.
+const translateTransactionSize = 16384
+
 // CreateKeys maps all keys to IDs, creating the IDs if they do not exist.
 // If the translator is read-only, this will return an error.
 func (s *TranslateStore) CreateKeys(keys ...string) (map[string]uint64, error) {
@@ -241,34 +249,48 @@ func (s *TranslateStore) CreateKeys(keys ...string) (map[string]uint64, error) {
 
 	written := false
 	result := make(map[string]uint64, len(keys))
-	err := s.db.Update(func(tx *bolt.Tx) error {
-		keyBucket := tx.Bucket(bucketKeys)
-		if keyBucket == nil {
-			return errors.Errorf(errFmtTranslateBucketNotFound, bucketKeys)
-		}
-		idBucket := tx.Bucket(bucketIDs)
-		if keyBucket == nil {
-			return errors.Errorf(errFmtTranslateBucketNotFound, bucketIDs)
-		}
-		for _, key := range keys {
-			id, boltKey := findIDByKey(keyBucket, key)
-			if id == 0 {
-				// The key does not exist.
+	idScratch := make([]byte, translateTransactionSize*8)
+	for len(keys) > 0 {
+		// boltdb performs badly if you write really large numbers of
+		// keys all at once...
+		err := s.db.Update(func(tx *bolt.Tx) error {
+			keyBucket := tx.Bucket(bucketKeys)
+			if keyBucket == nil {
+				return errors.Errorf(errFmtTranslateBucketNotFound, bucketKeys)
+			}
+			idBucket := tx.Bucket(bucketIDs)
+			if idBucket == nil {
+				return errors.Errorf(errFmtTranslateBucketNotFound, bucketIDs)
+			}
+			puts := 0
+			for idx, key := range keys {
+				id, boltKey := findIDByKey(keyBucket, key)
+				if id != 0 {
+					result[key] = id
+					continue
+				}
 				id = pilosa.GenerateNextPartitionedID(s.index, maxID(tx), s.partitionID, s.partitionN)
-				if err := keyBucket.Put(boltKey, u64tob(id)); err != nil {
+				idBytes := idScratch[puts*8 : puts*8+8]
+				binary.BigEndian.PutUint64(idBytes, id)
+				puts++
+				if err := keyBucket.Put(boltKey, idBytes); err != nil {
 					return err
-				} else if err := idBucket.Put(u64tob(id), boltKey); err != nil {
+				} else if err := idBucket.Put(idBytes, boltKey); err != nil {
 					return err
 				}
+				result[key] = id
 				written = true
+				if puts == translateTransactionSize {
+					keys = keys[idx+1:]
+					return nil
+				}
 			}
-
-			result[key] = id
+			keys = keys[len(keys):]
+			return nil
+		})
+		if err != nil {
+			return nil, err
 		}
-		return nil
-	})
-	if err != nil {
-		return nil, err
 	}
 	if written {
 		s.notifyWrite()
@@ -310,28 +332,51 @@ func (s *TranslateStore) translateKeys(keys []string, writable bool) ([]uint64, 
 	}
 
 	// Find or create ids under write lock if any keys were not found.
-	var written bool
-	if err := s.db.Update(func(tx *bolt.Tx) (err error) {
-		bkt := tx.Bucket(bucketKeys)
-		for _, key := range keys {
-			id, boltKey := findIDByKey(bkt, key)
-			if id != 0 {
+	written := false
+	idScratch := make([]byte, translateTransactionSize*8)
+	for len(keys) > 0 {
+		// boltdb performs badly if you write really large numbers of
+		// keys all at once...
+		if err := s.db.Update(func(tx *bolt.Tx) (err error) {
+			keyBucket := tx.Bucket(bucketKeys)
+			if keyBucket == nil {
+				return errors.Errorf(errFmtTranslateBucketNotFound, bucketKeys)
+			}
+			idBucket := tx.Bucket(bucketIDs)
+			if idBucket == nil {
+				return errors.Errorf(errFmtTranslateBucketNotFound, bucketIDs)
+			}
+			puts := 0
+			for idx, key := range keys {
+				id, boltKey := findIDByKey(keyBucket, key)
+				if id != 0 {
+					ids = append(ids, id)
+					continue
+				}
+				id = pilosa.GenerateNextPartitionedID(s.index, maxID(tx), s.partitionID, s.partitionN)
+				idBytes := idScratch[puts*8 : puts*8+8]
+				binary.BigEndian.PutUint64(idBytes, id)
+				puts++
+				if err := keyBucket.Put(boltKey, idBytes); err != nil {
+					return err
+				} else if err := idBucket.Put(idBytes, boltKey); err != nil {
+					return err
+				}
 				ids = append(ids, id)
-				continue
+				written = true
+				if puts == translateTransactionSize {
+					keys = keys[idx+1:]
+					return nil
+				}
 			}
-			id = pilosa.GenerateNextPartitionedID(s.index, maxID(tx), s.partitionID, s.partitionN)
-			if err := bkt.Put(boltKey, u64tob(id)); err != nil {
-				return err
-			} else if err := tx.Bucket(bucketIDs).Put(u64tob(id), boltKey); err != nil {
-				return err
-			}
-			ids = append(ids, id)
-			written = true
+			// this marks that we've processed the whole list.
+			keys = keys[len(keys):]
+			return nil
+		}); err != nil {
+			return nil, err
 		}
-		return nil
-	}); err != nil {
-		return nil, err
 	}
+
 	if written {
 		s.notifyWrite()
 	}

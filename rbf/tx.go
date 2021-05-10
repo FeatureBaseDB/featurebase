@@ -1217,7 +1217,9 @@ func (tx *Tx) Count(name string) (uint64, error) {
 	}
 	defer c.Close()
 
-	if err := c.First(); err != nil {
+	if err := c.First(); err == io.EOF {
+		return 0, nil
+	} else if err != nil {
 		return 0, err
 	}
 
@@ -2075,6 +2077,40 @@ func (tx *Tx) GetSortedFieldViewList() (fvs []txkey.FieldView, _ error) {
 		fvs = append(fvs, fv)
 	}
 	return
+}
+
+// SnapshotReader returns a reader that provides a snapshot for the current database state.
+func (tx *Tx) SnapshotReader() (io.Reader, error) {
+	if tx.db == nil {
+		return nil, ErrTxClosed
+	}
+	return &snapshotReader{tx: tx}, nil
+}
+
+type snapshotReader struct {
+	tx   *Tx
+	pgno uint32
+}
+
+func (r *snapshotReader) Read(p []byte) (n int, err error) {
+	// Exit if we are past the end of the database.
+	if r.pgno >= readMetaPageN(r.tx.meta[:]) {
+		return 0, io.EOF
+	}
+
+	// Otherwise look up the page data from mmap or page cache and copy it out.
+	buf, _, err := r.tx.readPage(r.pgno)
+	if err != nil {
+		return 0, err
+	} else if len(p) < len(buf) {
+		return 0, io.ErrShortBuffer
+	}
+	copy(p, buf)
+
+	// Increment the page number.
+	r.pgno++
+
+	return len(buf), nil
 }
 
 type PageInfo interface {

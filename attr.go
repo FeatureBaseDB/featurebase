@@ -16,6 +16,7 @@ package pilosa
 
 import (
 	"bytes"
+	"io"
 	"sort"
 
 	"github.com/gogo/protobuf/proto"
@@ -32,6 +33,8 @@ const (
 
 // AttrStore represents an interface for handling row/column attributes.
 type AttrStore interface {
+	io.WriterTo
+
 	Path() string
 	Open() error
 	Close() error
@@ -75,6 +78,9 @@ func (s nopAttrStore) Blocks() ([]AttrBlock, error) { return nil, nil }
 
 // BlockData is a no-op implementation of AttrStore BlockData method.
 func (s nopAttrStore) BlockData(i uint64) (map[uint64]map[string]interface{}, error) { return nil, nil }
+
+// WriteTo is a no-op implementation of AttrStore WriteTo method.
+func (s nopAttrStore) WriteTo(w io.Writer) (int64, error) { return 0, nil }
 
 // AttrBlock represents a checksummed block of the attribute store.
 type AttrBlock struct {
