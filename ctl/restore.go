@@ -94,6 +94,7 @@ func (cmd *RestoreCommand) Run(ctx context.Context) error {
 	} else {
 		tarReader = tar.NewReader(f)
 	}
+	//maybe begin transaction?
 	schemaJson := readSchema(cmd.Path)
 	//Push the schema from the archive into the cluster belonging to the host.
 	client := &gohttp.Client{}
@@ -102,6 +103,13 @@ func (cmd *RestoreCommand) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	//TODO (twg) load schema
+	//TODO (twg) load rbf shard
+	//TODO (twg) load row keys
+	//TODO (twg) load column keys
+	//TODO (twg) load row attributes keys
+	//TODO (twg) load col attributes keys
+	//TODO (twg) load idalloc
 
 	for {
 		header, err := tarReader.Next()

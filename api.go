@@ -17,6 +17,7 @@
 package pilosa
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/binary"
@@ -26,6 +27,7 @@ import (
 	"io/ioutil"
 	"math"
 	"net/url"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -38,6 +40,7 @@ import (
 	"github.com/pilosa/pilosa/v2/stats"
 	"github.com/pilosa/pilosa/v2/topology"
 	"github.com/pilosa/pilosa/v2/tracing"
+	"github.com/pilosa/pilosa/v2/vprint"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -2217,6 +2220,43 @@ func (api *API) TranslateFieldDB(ctx context.Context, indexName, fieldName strin
 	store := field.TranslateStore()
 	_, err := store.ReadFrom(rd)
 	return err
+}
+
+// RestoreShard
+func (api *API) RestoreShard(ctx context.Context, indexName string, shard uint64, rd io.Reader) error {
+	snap := topology.NewClusterSnapshot(api.cluster.noder, api.cluster.Hasher, api.cluster.ReplicaN)
+	if !snap.OwnsShard(api.server.nodeID, indexName, shard) {
+		return ErrClusterDoesNotOwnShard // TODO (twg)really just node doesn't own shard but leave for now
+	}
+
+	idx := api.holder.Index(indexName)
+	//need to get a dbShard
+	dbs, err := idx.Txf().dbPerShard.GetDBShard(indexName, shard, idx)
+	if err != nil {
+		return err
+	}
+	dbs.Close()
+	//need to find the path to the db
+	//will not work on blue green
+	finalPath := dbs.W[0].Path()
+	tempPath := finalPath + ".tmp"
+	vprint.VV("restore to %v", tempPath)
+	o, err := os.OpenFile(tempPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
+	if err != nil {
+		return err
+	}
+	w := bufio.NewWriter(o)
+	//close db if open
+	vprint.VV("restore index:%v shard:%v", indexName, shard)
+	_, err = io.Copy(w, rd)
+	w.Flush()
+	o.Close()
+	if err != nil {
+		_ = os.Remove(tempPath)
+		return err
+	}
+	vprint.VV("Rename %v to %v", tempPath, finalPath)
+	return os.Rename(tempPath, finalPath)
 }
 
 type serverInfo struct {
