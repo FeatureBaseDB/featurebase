@@ -15,6 +15,7 @@
 package pilosa
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -609,9 +610,14 @@ func (f *Field) protectedRemoteAvailableShards() *roaring.Bitmap {
 
 func (f *Field) flushAvailableShards(ctx context.Context) {
 	shards := f.protectedRemoteAvailableShards()
-	err := f.holder.sharder.SetShards(ctx, f.index, f.name, shards)
-	if err != nil {
+	var buf bytes.Buffer
+	if _, err := shards.WriteTo(&buf); err != nil {
 		f.holder.Logger.Errorf("writting available shards: %v", err)
+		return
+	}
+
+	if err := f.holder.sharder.SetShards(ctx, f.index, f.name, buf.Bytes()); err != nil {
+		f.holder.Logger.Errorf("setting available shards: %v", err)
 	}
 }
 
