@@ -260,7 +260,6 @@ func (h *Handler) populateValidators() {
 	h.validators["GetTransaction"] = queryValidationSpecRequired()
 	h.validators["PostTransaction"] = queryValidationSpecRequired()
 	h.validators["PostFinishTransaction"] = queryValidationSpecRequired()
-	h.validators["Inspect"] = queryValidationSpecRequired().Optional("indexes", "fields", "views", "shards", "checksum", "containers")
 
 }
 
@@ -799,37 +798,6 @@ func (h *Handler) handleGetInfo(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(info); err != nil {
 		h.logger.Errorf("write info response error: %s", err)
-	}
-}
-
-func (h *Handler) handleInspect(w http.ResponseWriter, r *http.Request) {
-	if !validHeaderAcceptJSON(r.Header) {
-		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
-		return
-	}
-	q := r.URL.Query()
-	_, checksum := q["checksum"]
-	_, containers := q["containers"]
-	req := pilosa.InspectRequest{
-		HolderFilterParams: pilosa.HolderFilterParams{
-			Indexes: q.Get("indexes"),
-			Fields:  q.Get("fields"),
-			Views:   q.Get("views"),
-			Shards:  q.Get("shards"),
-		},
-		InspectRequestParams: pilosa.InspectRequestParams{
-			Checksum:   checksum,
-			Containers: containers,
-		},
-	}
-	info, err := h.api.Inspect(r.Context(), &req)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("inspect request: %v", err), http.StatusBadRequest)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(info); err != nil {
-		h.logger.Errorf("write inspect response error: %s", err)
 	}
 }
 
