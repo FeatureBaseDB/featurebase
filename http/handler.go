@@ -397,7 +397,6 @@ func newRouter(handler *Handler) http.Handler {
 	router.HandleFunc("/index/{index}/field/{field}/import-roaring/{shard}", handler.handlePostImportRoaring).Methods("POST").Name("PostImportRoaring")
 	router.HandleFunc("/index/{index}/query", handler.handlePostQuery).Methods("POST").Name("PostQuery")
 	router.HandleFunc("/info", handler.handleGetInfo).Methods("GET").Name("GetInfo")
-	router.HandleFunc("/inspect", handler.handleInspect).Methods("GET").Name("Inspect")
 	router.HandleFunc("/recalculate-caches", handler.handleRecalculateCaches).Methods("POST").Name("RecalculateCaches")
 	router.HandleFunc("/schema", handler.handleGetSchema).Methods("GET").Name("GetSchema")
 	router.HandleFunc("/schema/details", handler.handleGetSchemaDetails).Methods("GET").Name("GetSchemaDetails")
