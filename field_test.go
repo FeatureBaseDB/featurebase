@@ -212,7 +212,7 @@ func TestField_AvailableShards(t *testing.T) {
 	idx := test.MustOpenIndex(t)
 	defer idx.Close()
 
-	f, err := idx.CreateField("f", pilosa.OptFieldTypeDefault())
+	f, err := idx.CreateField("fld-shards", pilosa.OptFieldTypeDefault())
 	if err != nil {
 		t.Fatal(err)
 	}

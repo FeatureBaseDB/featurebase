@@ -15,7 +15,6 @@
 package pilosa
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -127,7 +126,7 @@ type Field struct {
 
 	// Synchronization primitives needed for async writing of
 	// the remoteAvailableShards
-	availableShardChan chan []byte
+	availableShardChan chan *roaring.Bitmap
 	doneChan           chan struct{}
 	wg                 sync.WaitGroup
 }
@@ -474,20 +473,13 @@ func (f *Field) mergeRemoteAvailableShards(b *roaring.Bitmap) {
 
 // loadAvailableShards reads remoteAvailableShards data for the field, if any.
 func (f *Field) loadAvailableShards() error {
-	bm := roaring.NewBitmap()
-
-	shardBytes, err := f.holder.sharder.Shards(context.Background(), f.index, f.name)
+	shards, err := f.holder.sharder.Shards(context.Background(), f.index, f.name)
 	if err != nil {
 		return errors.Wrap(err, "loading available shards")
 	}
 
-	if shardBytes != nil {
-		if err = bm.UnmarshalBinary(shardBytes); err != nil {
-			return errors.Wrap(err, "available shards corrupt")
-		}
-	}
 	// Merge bitmap from file into field.
-	f.mergeRemoteAvailableShards(bm)
+	f.mergeRemoteAvailableShards(shards)
 
 	return nil
 }
@@ -500,11 +492,8 @@ func (f *Field) saveAvailableShards() error {
 }
 
 func (f *Field) unprotectedSaveAvailableShards() error {
-	var buf bytes.Buffer
-	if _, err := f.remoteAvailableShards.WriteTo(&buf); err != nil {
-		return errors.Wrap(err, "rendering available shards ")
-	}
-	f.availableShardChan <- buf.Bytes()
+	f.remoteAvailableShards.Optimize()
+	f.availableShardChan <- f.remoteAvailableShards
 	return nil
 }
 
@@ -590,7 +579,7 @@ func (f *Field) Open() error {
 			}
 		}
 
-		f.availableShardChan = make(chan []byte)
+		f.availableShardChan = make(chan *roaring.Bitmap)
 		f.doneChan = make(chan struct{})
 		f.wg.Add(1)
 		go f.writeAvailableShards()
@@ -605,19 +594,19 @@ func (f *Field) Open() error {
 	return nil
 }
 
-func (f *Field) blockingWriteAvailableShards(availableShardBytes []byte) {
-	err := f.holder.sharder.SetShards(context.Background(), f.index, f.name, availableShardBytes)
+func (f *Field) blockingWriteAvailableShards(availableShards *roaring.Bitmap) {
+	err := f.holder.sharder.SetShards(context.Background(), f.index, f.name, availableShards)
 	if err != nil {
 		f.holder.Logger.Errorf("writting available shards: %v", err)
 	}
 }
 
-func (f *Field) nonBlockingWriteAvailableShards(availableShardBytes []byte, done chan bool) {
-	if len(availableShardBytes) == 0 {
+func (f *Field) nonBlockingWriteAvailableShards(availableShards *roaring.Bitmap, done chan bool) {
+	if availableShards == nil {
 		return
 	}
 	go func() {
-		f.blockingWriteAvailableShards(availableShardBytes)
+		f.blockingWriteAvailableShards(availableShards)
 		done <- true
 	}()
 }
@@ -625,7 +614,7 @@ func (f *Field) nonBlockingWriteAvailableShards(availableShardBytes []byte, done
 func (f *Field) writeAvailableShards() {
 	defer f.wg.Done()
 	ticker := time.NewTicker(availableShardFileFlushDuration.Get())
-	var data []byte
+	var data *roaring.Bitmap
 	tracker := make(chan bool)
 	writing := false
 
@@ -634,7 +623,7 @@ func (f *Field) writeAvailableShards() {
 		case newdata := <-f.availableShardChan:
 			data = newdata
 		case <-ticker.C:
-			if len(data) > 0 {
+			if data != nil {
 				if !writing {
 					writing = true
 					f.nonBlockingWriteAvailableShards(data, tracker)
@@ -647,7 +636,7 @@ func (f *Field) writeAvailableShards() {
 			if writing { //wait to writing is complete
 				<-tracker
 			}
-			if len(data) > 0 {
+			if data != nil {
 				f.blockingWriteAvailableShards(data)
 			}
 			alive = false

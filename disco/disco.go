@@ -20,6 +20,8 @@ import (
 	"io"
 	"path"
 	"sync"
+
+	"github.com/pilosa/pilosa/v2/roaring"
 )
 
 var (
@@ -171,8 +173,8 @@ type Resizer interface {
 // Sharder is an interface used to maintain the set of availableShards bitmaps
 // per field.
 type Sharder interface {
-	Shards(ctx context.Context, index, field string) ([]byte, error)
-	SetShards(ctx context.Context, index, field string, shardBytes []byte) error
+	Shards(ctx context.Context, index, field string) (*roaring.Bitmap, error)
+	SetShards(ctx context.Context, index, field string, shards *roaring.Bitmap) error
 }
 
 // NopDisCo represents a DisCo that doesn't do anything.
@@ -264,12 +266,12 @@ var NopSharder Sharder = &nopSharder{}
 type nopSharder struct{}
 
 // Shards is a no-op implementation of the Sharder Shards method.
-func (n *nopSharder) Shards(ctx context.Context, index, field string) ([]byte, error) {
+func (n *nopSharder) Shards(ctx context.Context, index, field string) (*roaring.Bitmap, error) {
 	return nil, nil
 }
 
 // AddShards is a no-op implementation of the Sharder AddShards method.
-func (n *nopSharder) SetShards(ctx context.Context, index, field string, shardBytes []byte) error {
+func (n *nopSharder) SetShards(ctx context.Context, index, field string, shards *roaring.Bitmap) error {
 	return nil
 }
 
@@ -469,27 +471,30 @@ func (s *inMemSchemator) DeleteView(ctx context.Context, index, field, view stri
 }
 
 var InMemSharder Sharder = &inMemSharder{
-	shards: make(map[string][]byte),
+	shards: make(map[string]*roaring.Bitmap),
 }
 
 type inMemSharder struct {
 	mu     sync.RWMutex
-	shards map[string][]byte
+	shards map[string]*roaring.Bitmap
 }
 
-func (s *inMemSharder) Shards(ctx context.Context, index, field string) ([]byte, error) {
+func (s *inMemSharder) Shards(ctx context.Context, index, field string) (*roaring.Bitmap, error) {
 	key := path.Join("/shard/", index, field)
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	b := s.shards[key]
+	if b == nil {
+		return roaring.NewBitmap(), nil
+	}
 	return b, nil
 }
 
-func (s *inMemSharder) SetShards(ctx context.Context, index, field string, shardBytes []byte) error {
+func (s *inMemSharder) SetShards(ctx context.Context, index, field string, shards *roaring.Bitmap) error {
 	key := path.Join("/shard/", index, field)
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.shards[key] = shardBytes
+	s.shards[key] = shards
 	return nil
 }
