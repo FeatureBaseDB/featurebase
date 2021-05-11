@@ -610,16 +610,23 @@ func (b *BitmapBitmapFilter) ConsiderData(key FilterKey, data *Container) Filter
 	pos := key & keyMask
 	base := uint64(key << 16)
 	filter := b.containers[pos]
-	if filter == nil || !IntersectionAny(data, filter) {
+	if filter == nil {
 		key.RejectUntilOffset(b.nextOffsets[pos])
 	}
-	matching := intersect(data, filter)
-	offsets := matching.Slice()
-	for _, v := range offsets {
+	var lastErr error
+	matched := false
+	intersectionCallback(data, filter, func(v uint16) {
+		matched = true
 		err := b.callback(base + uint64(v))
 		if err != nil {
-			return key.Fail(err)
+			lastErr = err
 		}
+	})
+	if lastErr != nil {
+		return key.Fail(lastErr)
+	}
+	if !matched {
+		return key.RejectUntilOffset(b.nextOffsets[pos])
 	}
 	return key.MatchOneUntilOffset(b.nextOffsets[pos])
 }

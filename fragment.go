@@ -2525,7 +2525,7 @@ func (f *fragment) importPositions(tx Tx, set, clear []uint64, rowSet map[uint64
 		}
 
 		if f.CacheType != CacheTypeNone {
-			f.cache.Recalculate()
+			f.cache.Invalidate()
 		}
 		return nil
 	}
@@ -2823,7 +2823,7 @@ func (f *fragment) unprotectedImportRoaring(ctx context.Context, tx Tx, data []b
 	}
 	// we only set this if we need to update the cache
 	if anyChanged {
-		f.cache.Recalculate()
+		f.cache.Invalidate()
 	}
 
 	span, _ = tracing.StartSpanFromContext(ctx, "importRoaring.incrementOpN")
