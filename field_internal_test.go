@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"math"
 	"os"
-	"path/filepath"
 	"reflect"
 	"strconv"
 	"strings"
@@ -390,121 +389,8 @@ func TestField_PersistAvailableShards(t *testing.T) {
 	// Reload field and verify that shard data is persisted.
 	if err := f.Reopen(); err != nil {
 		t.Fatal(err)
-	} else if !reflect.DeepEqual(f.remoteAvailableShards.Slice(), bm.Slice()) {
-		t.Fatalf("unexpected available shards (reopen). expected: %v, but got: %v", bm.Slice(), f.remoteAvailableShards.Slice())
-	}
-
-}
-
-func TestField_CorruptAvailableShards(t *testing.T) {
-	availableShardFileFlushDuration.Set(200 * time.Millisecond) //shorten the default time to force a file write
-	f := OpenField(t, OptFieldTypeDefault())
-	defer f.Close()
-
-	// bm represents remote available shards.
-	bm := roaring.NewBitmap(1, 2, 3)
-
-	if err := f.AddRemoteAvailableShards(bm); err != nil {
-		t.Fatal(err)
-	}
-	time.Sleep(2 * availableShardFileFlushDuration.Get())
-
-	path := filepath.Join(f.path, ".available.shards")
-
-	avail, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0644)
-	if err != nil {
-		t.Fatal(err)
-	}
-	n, err := avail.Write([]byte{23})
-	if err != nil || n != 1 {
-		t.Fatal(err)
-	}
-	avail.Close()
-
-	// Reload field and verify that shard data is persisted.
-	if err := f.Reopen(); err != nil {
-		t.Fatal(err)
-	} else if !reflect.DeepEqual(f.remoteAvailableShards.Slice(), []uint64(nil)) {
-		t.Fatalf("unexpected available shards (reopen). expected: %#v, but got: %#v", []uint64{}, f.remoteAvailableShards.Slice())
-	}
-}
-
-func TestField_TruncatedAvailableShards(t *testing.T) {
-	availableShardFileFlushDuration.Set(200 * time.Millisecond) //shorten the default time to force a file write
-	f := OpenField(t, OptFieldTypeDefault())
-	defer f.Close()
-
-	// bm represents remote available shards.
-	bm := roaring.NewBitmap(1, 2, 3)
-
-	if err := f.AddRemoteAvailableShards(bm); err != nil {
-		t.Fatal(err)
-	}
-	time.Sleep(2 * availableShardFileFlushDuration.Get())
-
-	path := filepath.Join(f.path, ".available.shards")
-
-	avail, err := os.OpenFile(path, os.O_TRUNC|os.O_WRONLY, 0644)
-	if err != nil {
-		t.Fatal(err)
-	}
-	avail.Close()
-
-	// Reload field and verify that shard data is persisted.
-	if err := f.Reopen(); err != nil {
-		t.Fatal(err)
-	} else if !reflect.DeepEqual(f.remoteAvailableShards.Slice(), []uint64(nil)) {
-		t.Fatalf("unexpected available shards (reopen). expected: %#v, but got: %#v", []uint64{}, f.remoteAvailableShards.Slice())
-	}
-}
-
-// Ensure that persisting available shards having a smaller footprint (for example,
-// when going from a bitmap to a smaller, RLE representation) succeeds.
-func TestField_PersistAvailableShardsFootprint(t *testing.T) {
-	availableShardFileFlushDuration.Set(200 * time.Millisecond) //shorten the default time to force a file write
-	f := OpenField(t, OptFieldTypeDefault())
-	defer f.Close()
-
-	// bm represents remote available shards.
-	bm := roaring.NewBitmap()
-	for i := uint64(0); i < 1204; i += 2 {
-		_, err := bm.Add(i)
-		if err != nil {
-			t.Fatalf("adding bits: %v", err)
-		}
-	}
-
-	if err := f.AddRemoteAvailableShards(bm); err != nil {
-		t.Fatal(err)
-	}
-	time.Sleep(2 * availableShardFileFlushDuration.Get())
-
-	// Reload field and verify that shard data is persisted.
-	if err := f.Reopen(); err != nil {
-		t.Fatal(err)
-	} else if !reflect.DeepEqual(f.remoteAvailableShards.Slice(), bm.Slice()) {
-		t.Fatalf("unexpected available shards (reopen). expected: %v, \n but got: %v", bm.Slice(), f.remoteAvailableShards.Slice())
-
-	}
-
-	bm1 := roaring.NewBitmap()
-	for i := uint64(1); i < 1204; i += 2 {
-		_, err := bm1.Add(i)
-		if err != nil {
-			t.Fatalf("adding bits: %v", err)
-		}
-	}
-
-	if err := f.AddRemoteAvailableShards(bm1); err != nil {
-		t.Fatal(err)
-	}
-
-	// Reload field and verify that shard data is persisted.
-	result := bm.Union(bm1)
-	if err := f.Reopen(); err != nil {
-		t.Fatal(err)
-	} else if !reflect.DeepEqual(f.remoteAvailableShards.Slice(), result.Slice()) {
-		t.Fatalf("unexpected available shards (reopen). expected: %v, but got: %v", bm.Slice(), f.remoteAvailableShards.Slice())
+	} else if !reflect.DeepEqual(f.protectedRemoteAvailableShards().Slice(), bm.Slice()) {
+		t.Fatalf("unexpected available shards (reopen). expected: %v, but got: %v", bm.Slice(), f.protectedRemoteAvailableShards().Slice())
 	}
 
 }

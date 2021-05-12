@@ -19,8 +19,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
-	"log"
 	"math"
 	"math/bits"
 	"os"
@@ -111,7 +109,8 @@ type Field struct {
 	bsiGroups []*bsiGroup
 
 	// Shards with data on any node in the cluster, according to this node.
-	remoteAvailableShards *roaring.Bitmap
+	remoteAvailableShardsMu sync.Mutex
+	remoteAvailableShards   *roaring.Bitmap
 
 	translateStore TranslateStore
 
@@ -129,8 +128,7 @@ type Field struct {
 
 	// Synchronization primitives needed for async writing of
 	// the remoteAvailableShards
-	availableShardChan chan []byte
-	doneChan           chan struct{}
+	availableShardChan chan struct{}
 	wg                 sync.WaitGroup
 }
 
@@ -432,6 +430,8 @@ func (f *Field) RowAttrStore() AttrStore { return f.rowAttrStore }
 func (f *Field) AvailableShards(localOnly bool) *roaring.Bitmap {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
+	f.remoteAvailableShardsMu.Lock()
+	defer f.remoteAvailableShardsMu.Unlock()
 
 	var b *roaring.Bitmap
 	if localOnly {
@@ -440,7 +440,6 @@ func (f *Field) AvailableShards(localOnly bool) *roaring.Bitmap {
 		b = f.remoteAvailableShards.Clone()
 	}
 	for _, view := range f.viewMap {
-		//b.Union(view.availableShards())
 		b.UnionInPlace(view.availableShards())
 	}
 	return b
@@ -455,7 +454,6 @@ func (f *Field) LocalAvailableShards() *roaring.Bitmap {
 
 	b := roaring.NewBitmap()
 	for _, view := range f.viewMap {
-		//b.Union(view.availableShards())
 		b.UnionInPlace(view.availableShards())
 	}
 	return b
@@ -471,37 +469,25 @@ func (f *Field) AddRemoteAvailableShards(b *roaring.Bitmap) error {
 
 // mergeRemoteAvailableShards merges the set of available shards into the current known set.
 func (f *Field) mergeRemoteAvailableShards(b *roaring.Bitmap) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
+	f.remoteAvailableShardsMu.Lock()
+	defer f.remoteAvailableShardsMu.Unlock()
 	f.remoteAvailableShards = f.remoteAvailableShards.Union(b)
 }
 
 // loadAvailableShards reads remoteAvailableShards data for the field, if any.
 func (f *Field) loadAvailableShards() error {
-	// Read data from meta file.
-	path := filepath.Join(f.path, ".available.shards")
-	buf, err := ioutil.ReadFile(path)
-	// doesn't exist: this is fine
-	if os.IsNotExist(err) {
-		return nil
-	}
-	// some other problem:
+	shards, err := f.holder.sharder.Shards(context.Background(), f.index, f.name)
 	if err != nil {
-		f.holder.Logger.Errorf("available shards file present but unreadable, discarding: %v", err)
-		err = os.Remove(path)
-		if err != nil {
-			return errors.Wrap(err, "deleting corrupt available shards list")
-		}
-		return nil
+		return errors.Wrap(err, "loading available shards")
 	}
+
 	bm := roaring.NewBitmap()
-	if err = bm.UnmarshalBinary(buf); err != nil {
-		f.holder.Logger.Errorf("available shards file corrupt, discarding: %v", err)
-		err = os.Remove(path)
-		if err != nil {
-			return errors.Wrap(err, "deleting corrupt available shards list")
+	for _, s := range shards {
+		b := roaring.NewBitmap()
+		if err = b.UnmarshalBinary(s); err != nil {
+			return errors.Wrap(err, "available shards corrupt")
 		}
-		return nil
+		bm.UnionInPlace(b)
 	}
 	// Merge bitmap from file into field.
 	f.mergeRemoteAvailableShards(bm)
@@ -511,34 +497,19 @@ func (f *Field) loadAvailableShards() error {
 
 // saveAvailableShards writes remoteAvailableShards data for the field.
 func (f *Field) saveAvailableShards() error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return f.unprotectedSaveAvailableShards()
-}
-
-func (f *Field) unprotectedSaveAvailableShards() error {
-	var buf bytes.Buffer
-	if _, err := f.remoteAvailableShards.WriteTo(&buf); err != nil {
-		return errors.Wrap(err, "rendering available shards ")
+	select {
+	case f.availableShardChan <- struct{}{}:
+	default:
 	}
-	f.availableShardChan <- buf.Bytes()
 	return nil
-}
-
-// SetRemoteAvailableShards replaces remoteAvailableShards with the provided
-// value.
-func (f *Field) SetRemoteAvailableShards(b *roaring.Bitmap) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.remoteAvailableShards = b
 }
 
 // RemoveAvailableShard removes a shard from the bitmap cache.
 //
 // NOTE: This can be overridden on the next sync so all nodes should be updated.
 func (f *Field) RemoveAvailableShard(v uint64) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
+	f.remoteAvailableShardsMu.Lock()
+	defer f.remoteAvailableShardsMu.Unlock()
 
 	b := f.remoteAvailableShards.Clone()
 	if _, err := b.Remove(v); err != nil {
@@ -546,7 +517,7 @@ func (f *Field) RemoveAvailableShard(v uint64) error {
 	}
 	f.remoteAvailableShards = b
 
-	return f.unprotectedSaveAvailableShards()
+	return f.saveAvailableShards()
 }
 
 // Type returns the field type.
@@ -615,8 +586,7 @@ func (f *Field) Open() error {
 			}
 		}
 
-		f.availableShardChan = make(chan []byte)
-		f.doneChan = make(chan struct{})
+		f.availableShardChan = make(chan struct{}, 1)
 		f.wg.Add(1)
 		go f.writeAvailableShards()
 		return nil
@@ -630,64 +600,61 @@ func (f *Field) Open() error {
 	return nil
 }
 
-func (f *Field) blockingWriteAvailableShards(availableShardBytes []byte) {
-	path := filepath.Join(f.path, ".available.shards")
+func (f *Field) protectedRemoteAvailableShards() *roaring.Bitmap {
+	f.remoteAvailableShardsMu.Lock()
+	defer f.remoteAvailableShardsMu.Unlock()
 
-	// Create a temporary file to save to.
-	tempPath := path + tempExt
-	err := ioutil.WriteFile(tempPath, availableShardBytes, 0666)
-	if err != nil {
-		log.Println("failed to write ", tempPath)
-		return
-	}
-
-	// Move snapshot to data file location.
-	if err := os.Rename(tempPath, path); err != nil {
-		f.holder.Logger.Errorf("rename snapshot: %s", err)
-	}
+	f.remoteAvailableShards.Optimize()
+	return f.remoteAvailableShards.Clone()
 }
-func (f *Field) nonBlockingWriteAvailableShards(availableShardBytes []byte, done chan bool) {
-	if len(availableShardBytes) == 0 {
+
+func (f *Field) flushAvailableShards(ctx context.Context) {
+	shards := f.protectedRemoteAvailableShards()
+	var buf bytes.Buffer
+	if _, err := shards.WriteTo(&buf); err != nil {
+		f.holder.Logger.Errorf("writting available shards: %v", err)
 		return
 	}
-	go func() {
-		f.blockingWriteAvailableShards(availableShardBytes)
-		done <- true
-	}()
+
+	if err := f.holder.sharder.SetShards(ctx, f.index, f.name, buf.Bytes()); err != nil {
+		f.holder.Logger.Errorf("setting available shards: %v", err)
+	}
 }
 
 func (f *Field) writeAvailableShards() {
 	defer f.wg.Done()
-	ticker := time.NewTicker(availableShardFileFlushDuration.Get())
-	var data []byte
-	tracker := make(chan bool)
-	writing := false
 
-	for alive := true; alive; {
-		select {
-		case newdata := <-f.availableShardChan:
-			data = newdata
-		case <-ticker.C:
-			if len(data) > 0 {
-				if !writing {
-					writing = true
-					f.nonBlockingWriteAvailableShards(data, tracker)
-					data = nil
+	interval := availableShardFileFlushDuration.Get()
+	timer := time.NewTimer(interval)
+	defer timer.Stop()
+
+	for range f.availableShardChan {
+		// Available shards have been updated.
+
+		// Wait a bit so that we batch writes.
+	timerWait:
+		for {
+			select {
+			case _, ok := <-f.availableShardChan:
+				if !ok {
+					// The server is shutting down.
+					// Do the write immediately.
+					timer.Stop()
+					break timerWait
 				}
+
+			case <-timer.C:
+				// We have waited long enough.
+				break timerWait
 			}
-		case <-tracker:
-			writing = false
-		case <-f.doneChan:
-			if writing { //wait to writing is complete
-				<-tracker
-			}
-			if len(data) > 0 {
-				f.blockingWriteAvailableShards(data)
-			}
-			alive = false
 		}
+
+		// Set the timer for the next flush.
+		timer.Reset(interval)
+
+		// Actually write the shards.
+		f.flushAvailableShards(context.Background())
 	}
-	ticker.Stop()
 }
 
 // applyTranslateStore opens the configured translate store.
@@ -893,12 +860,10 @@ func (f *Field) Close() error {
 		_ = testhook.Closed(f.holder.Auditor, f, nil)
 	}()
 	// Shutdown the available shards writer
-	if f.doneChan != nil {
-		close(f.doneChan)
-		f.wg.Wait()
+	if f.availableShardChan != nil {
 		close(f.availableShardChan)
+		f.wg.Wait()
 		f.availableShardChan = nil
-		f.doneChan = nil
 	}
 	// Close the attribute store.
 	if f.rowAttrStore != nil {

@@ -501,6 +501,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	s.cluster.confirmDownSleep = s.confirmDownSleep
 	s.holder.broadcaster = s
 	s.holder.schemator = s.schemator
+	s.holder.sharder = s.sharder
 	s.holder.serializer = s.serializer
 
 	return s, nil
