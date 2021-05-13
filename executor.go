@@ -3052,7 +3052,7 @@ func (e *executor) executeGroupBy(ctx context.Context, qcx *Qcx, index string, c
 	// Get full result set.
 	other, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
 	if err != nil {
-		return nil, errors.Wrapf(err, "mapReduce shards: %v", shardSlice(shards))
+		return nil, errors.Wrapf(err, "mapReduce shards: %v", shardSlice(shards).String())
 	}
 	results, _ := other.([]GroupCount)
 
@@ -6066,7 +6066,7 @@ func (e *executor) mapper(ctx context.Context, eg *errgroup.Group, ch chan mapRe
 	// Group shards together by nodes.
 	m, err := e.shardsByNode(nodes, index, shards)
 	if err != nil {
-		return errors.Wrapf(err, "shards by node %v", shardSlice(shards))
+		return errors.Wrapf(err, "shards by node %v", shardSlice(shards).String())
 	}
 	done := ctx.Done()
 
