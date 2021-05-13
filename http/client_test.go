@@ -22,7 +22,6 @@ import (
 	"fmt"
 	gohttp "net/http"
 	"reflect"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -412,60 +411,6 @@ func TestClient_Import(t *testing.T) {
 	if a := hldr.Row("i", "f", 200).Columns(); !reflect.DeepEqual(a, []uint64{}) {
 		t.Fatalf("unexpected columns: %+v", a)
 	}
-}
-
-// Ensure client can bulk import column attrs.
-func TestClient_ImportColumnAttrs(t *testing.T) {
-	cluster := test.MustNewCluster(t, 2)
-	for _, c := range cluster.Nodes {
-		c.Config.Cluster.ReplicaN = 2
-	}
-	err := cluster.Start()
-	if err != nil {
-		t.Fatalf("starting cluster: %v", err)
-	}
-	defer cluster.Close()
-
-	ctx := context.Background()
-	_, err = cluster.GetNode(0).API.CreateIndex(ctx, "i", pilosa.IndexOptions{})
-	if err != nil {
-		t.Fatalf("creating index: %v", err)
-	}
-	_, err = cluster.GetNode(0).API.CreateField(ctx, "i", "f", pilosa.OptFieldTypeSet(pilosa.CacheTypeRanked, 100))
-	if err != nil {
-		t.Fatalf("creating field: %v", err)
-	}
-	_, err = cluster.GetNode(0).API.Query(ctx, &pilosa.QueryRequest{Index: "i", Query: "Set(0, f=0) Set(1, f=0) Set(2, f=0) Set(3, f=0) Set(4, f=0)"})
-	if err != nil {
-		t.Fatalf("querying: %v", err)
-	}
-
-	attrKey := "k"
-	// Send import request.
-	host := cluster.GetNode(0).URL()
-	c := MustNewClient(host, http.GetHTTPClient(nil))
-	colAttrsReq := makeImportColumnAttrsRequest("i", 0, attrKey)
-	if err := c.ImportColumnAttrs(ctx, &cluster.GetNode(1).API.Node().URI, "i", colAttrsReq); err != nil {
-		t.Fatal(err)
-	}
-
-	// Verify data.
-	pql := "Options(Row(f=0), columnAttrs=true)"
-	res, err := cluster.GetNode(1).API.Query(ctx, &pilosa.QueryRequest{Index: "i", Query: pql})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(res.ColumnAttrSets) != 5 {
-		t.Fatal("incorrect number of column attrs set")
-	}
-
-	for _, v := range res.ColumnAttrSets {
-		attrVal := attrFun(v.ID)
-		if attrVal != v.Attrs[attrKey] {
-			t.Fatal(err)
-		}
-	}
-
 }
 
 // Ensure client can bulk import data.
@@ -1405,26 +1350,6 @@ func makeImportRoaringRequest(clear bool, viewData string) *pilosa.ImportRoaring
 		Views: map[string][]byte{
 			"": roaringData,
 		},
-	}
-}
-
-func attrFun(id uint64) string {
-	return strconv.FormatInt(int64(id), 10)
-}
-
-func makeImportColumnAttrsRequest(index string, shard int64, attrKey string) *pilosa.ImportColumnAttrsRequest {
-	colIDs := make([]uint64, 0, 5)
-	attrVals := make([]string, 0, 5)
-	for n := uint64(0); n < 5; n++ {
-		colIDs = append(colIDs, n)
-		attrVals = append(attrVals, attrFun(n))
-	}
-	return &pilosa.ImportColumnAttrsRequest{
-		Index:     index,
-		Shard:     shard,
-		AttrKey:   attrKey,
-		ColumnIDs: colIDs,
-		AttrVals:  attrVals,
 	}
 }
 

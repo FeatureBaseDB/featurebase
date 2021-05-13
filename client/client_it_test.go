@@ -132,59 +132,6 @@ func TestClientAgainstCluster(t *testing.T) {
 				require.Equalf([]uint64{1, shardWidth * 3}, cols, "Unexpected results: %#v", cols)
 			})
 
-			t.Run("QueryWithColumns", func(t *testing.T) {
-				setup(t, require, cli)
-				defer tearDown(t, require, cli)
-
-				targetAttrs := map[string]interface{}{
-					"name":       "some string",
-					"age":        int64(95),
-					"registered": true,
-					"height":     1.83,
-				}
-				_, err := cli.Query(testField.Set(1, 100))
-				require.NoErrorf(err, "Set(1, 100)")
-
-				resp, err := cli.Query(testIndex.SetColumnAttrs(100, targetAttrs))
-				require.NoErrorf(err, "SetColumnAttrs(100, %v)", targetAttrs)
-				require.Equalf(ColumnItem{}, resp.Column(), "No columns should be returned if it wasn't explicitly requested")
-
-				resp, err = cli.Query(testField.Row(1), &QueryOptions{ColumnAttrs: true})
-				require.NoErrorf(err, "Row(1) QueryOptions{ColumnAttrs: true}")
-				require.Equalf(1, len(resp.ColumnAttrs()), "ColumnAttrs count should be == 1")
-
-				cols := resp.Columns()
-				require.Equalf(1, len(cols), "Column count")
-				require.Equalf(uint64(100), cols[0].ID, "Column ID")
-
-				require.Equalf(targetAttrs, cols[0].Attributes, "Column attrs.")
-
-				require.Equalf(cols[0], resp.Column(), "Column() should be equivalent to first column in the response")
-			})
-
-			t.Run("SetRowAttrs", func(t *testing.T) {
-				setup(t, require, cli)
-				defer tearDown(t, require, cli)
-
-				targetAttrs := map[string]interface{}{
-					"name":       "some string",
-					"age":        int64(95),
-					"registered": true,
-					"height":     1.83,
-				}
-
-				_, err := cli.Query(testField.Set(1, 100))
-				require.NoErrorf(err, "Set(1, 100)")
-
-				_, err = cli.Query(testField.SetRowAttrs(1, targetAttrs))
-				require.NoErrorf(err, "SetRowAttrs(1, %v)", targetAttrs)
-
-				resp, err := cli.Query(testField.Row(1), &QueryOptions{ColumnAttrs: true})
-				require.NoErrorf(err, "Row(1) QueryOptions{ColumnAttrs: true}")
-
-				require.Equalf(targetAttrs, resp.Result().Row().Attributes, "Row attributes should be set")
-			})
-
 			t.Run("OrmCount", func(t *testing.T) {
 				setup(t, require, cli)
 				defer tearDown(t, require, cli)
@@ -278,19 +225,6 @@ func TestClientAgainstCluster(t *testing.T) {
 				item := items[0]
 				require.Equalf(uint64(10), item.ID, "TopN result item[0].ID")
 				require.Equalf(uint64(3), item.Count, "TopN result item[0].Count")
-
-				_, err = cli.Query(testFieldTopN.SetRowAttrs(10, map[string]interface{}{"foo": "bar"}))
-				require.NoErrorf(err, "SetRowAttrs(10)")
-
-				resp, err = cli.Query(testFieldTopN.FilterAttrTopN(5, nil, "foo", "bar"))
-				require.NoErrorf(err, `FilterAttrTopN(5, nil, "foo", "bar")`)
-
-				items = resp.Result().CountItems()
-				require.Equalf(1, len(items), "FilterAttrTopN result CountItems")
-
-				item = items[0]
-				require.Equalf(uint64(10), item.ID, "FilterAttrTopN result item[0].ID")
-				require.Equalf(uint64(3), item.Count, "FilterAttrTopN result item[0].Count")
 			})
 
 			t.Run("MinMaxRow", func(t *testing.T) {
@@ -575,8 +509,7 @@ func TestClientAgainstCluster(t *testing.T) {
 				uri, _ := pnet.NewURIFromAddress("does-not-resolve.foo.bar")
 				tmpcli, _ := NewClient(NewClusterWithHost(uri, uri, uri, uri), OptClientRetries(0))
 
-				attrs := map[string]interface{}{"a": 1}
-				_, err := tmpcli.Query(testIndex.SetColumnAttrs(0, attrs))
+				_, err := tmpcli.Query(testIndex.All())
 				require.Error(err, ErrTriedMaxHosts)
 			})
 

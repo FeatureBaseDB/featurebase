@@ -82,33 +82,11 @@ func TestExecutor(t *testing.T) {
 				fmt.Sprintf("Set(%d, f=%d)\n", 3, 10) +
 				fmt.Sprintf("Set(%d, f=%d)\n", ShardWidth+1, 10) +
 				fmt.Sprintf("Set(%d, f=%d)\n", ShardWidth+1, 20) +
-				`SetRowAttrs(f, 10, foo="bar", baz=123)` +
-				`Set(1000, f=100)` +
-				`SetColumnAttrs(1000, foo="bar", baz=123)`
-			readQueries := []string{
-				`Row(f=10)`,
-				`Options(Row(f=10), excludeColumns=true)`,
-				`Options(Row(f=10), excludeRowAttrs=true)`,
-			}
+				`Set(1000, f=100)`
+			readQueries := []string{`Row(f=10)`}
 			responses := runCallTest(c, t, writeQuery, readQueries, nil)
 			if bits := responses[0].Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(bits, []uint64{3, ShardWidth + 1}) {
 				t.Fatalf("unexpected columns: %+v", bits)
-			} else if attrs := responses[0].Results[0].(*pilosa.Row).Attrs; !reflect.DeepEqual(attrs, map[string]interface{}{"foo": "bar", "baz": int64(123)}) {
-				t.Fatalf("unexpected attrs: %s", spew.Sdump(attrs))
-			}
-
-			// Inhibit column attributes.
-			if columns := responses[1].Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(columns, []uint64{}) {
-				t.Fatalf("unexpected columns: %+v", columns)
-			} else if attrs := responses[1].Results[0].(*pilosa.Row).Attrs; !reflect.DeepEqual(attrs, map[string]interface{}{"foo": "bar", "baz": int64(123)}) {
-				t.Fatalf("unexpected attrs: %s", spew.Sdump(attrs))
-			}
-
-			// Inhibit row attributes.
-			if columns := responses[2].Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(columns, []uint64{3, ShardWidth + 1}) {
-				t.Fatalf("unexpected columns: %+v", columns)
-			} else if attrs := responses[2].Results[0].(*pilosa.Row).Attrs; !reflect.DeepEqual(attrs, map[string]interface{}{}) {
-				t.Fatalf("unexpected attrs: %s", spew.Sdump(attrs))
 			}
 		})
 
@@ -147,7 +125,7 @@ func TestExecutor(t *testing.T) {
 				&pilosa.IndexOptions{Keys: true},
 				pilosa.OptFieldKeys())
 			if diff := cmp.Diff(responses[0].Results, []interface{}{
-				&pilosa.Row{Keys: []string{"bat", "foo"}, Attrs: map[string]interface{}{}},
+				&pilosa.Row{Keys: []string{"bat", "foo"}},
 			}, cmpopts.IgnoreUnexported(pilosa.Row{})); diff != "" {
 				t.Fatal(diff)
 			}
@@ -844,92 +822,6 @@ func TestExecutor(t *testing.T) {
 	})
 
 	t.Run("Options", func(t *testing.T) {
-		t.Run("excludeRowAttrs", func(t *testing.T) {
-			writeQuery := `
-				Set(100, f=10)
-				SetRowAttrs(f, 10, foo="bar")`
-			readQueries := []string{`Options(Row(f=10), excludeRowAttrs=true)`}
-			responses := runCallTest(c, t, writeQuery, readQueries, nil)
-			if bits := responses[0].Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(bits, []uint64{100}) {
-				t.Fatalf("unexpected columns: %+v", bits)
-			} else if attrs := responses[0].Results[0].(*pilosa.Row).Attrs; !reflect.DeepEqual(attrs, map[string]interface{}{}) {
-				t.Fatalf("unexpected attrs: %s", spew.Sdump(attrs))
-			}
-		})
-
-		t.Run("excludeColumns", func(t *testing.T) {
-			writeQuery := `
-				Set(100, f=10)
-				SetRowAttrs(f, 10, foo="bar")`
-			readQueries := []string{`Options(Row(f=10), excludeColumns=true)`}
-			responses := runCallTest(c, t, writeQuery, readQueries, nil)
-			if bits := responses[0].Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(bits, []uint64{}) {
-				t.Fatalf("unexpected columns: %+v", bits)
-			} else if attrs := responses[0].Results[0].(*pilosa.Row).Attrs; !reflect.DeepEqual(attrs, map[string]interface{}{"foo": "bar"}) {
-				t.Fatalf("unexpected attrs: %s", spew.Sdump(attrs))
-			}
-		})
-
-		t.Run("columnAttrs", func(t *testing.T) {
-			writeQuery := `
-				Set(0, f=10)
-				SetColumnAttrs(0, foo="baz")
-				Set(100, f=10)
-				SetColumnAttrs(100, foo="bar")`
-			readQueries := []string{`Options(Row(f=10), columnAttrs=true)`}
-			responses := runCallTest(c, t, writeQuery, readQueries, nil)
-			targetColAttrSets := []*pilosa.ColumnAttrSet{
-				{ID: 0, Attrs: map[string]interface{}{"foo": "baz"}},
-				{ID: 100, Attrs: map[string]interface{}{"foo": "bar"}},
-			}
-
-			targetJSON := `[{"id":0,"attrs":{"foo":"baz"}},{"id":100,"attrs":{"foo":"bar"}}]`
-
-			if bits := responses[0].Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(bits, []uint64{0, 100}) {
-				t.Fatalf("unexpected columns: %+v", bits)
-			} else if attrs := responses[0].ColumnAttrSets; !reflect.DeepEqual(attrs, targetColAttrSets) {
-				t.Fatalf("unexpected attrs: %s", spew.Sdump(attrs))
-			} else {
-				// Ensure the JSON is marshaled correctly.
-				jres, err := json.Marshal(attrs)
-				if err != nil {
-					t.Fatal(err)
-				} else if string(jres) != targetJSON {
-					t.Fatalf("json marshal expected: %s, but got: %s", targetJSON, jres)
-				}
-			}
-		})
-
-		t.Run("columnAttrsWithKeys", func(t *testing.T) {
-			writeQuery := `
-				Set("one-hundred", f="ten")
-				SetColumnAttrs("one-hundred", foo="bar")`
-			readQueries := []string{`Options(Row(f="ten"), columnAttrs=true)`}
-			responses := runCallTest(c, t, writeQuery, readQueries,
-				&pilosa.IndexOptions{Keys: true},
-				pilosa.OptFieldKeys())
-
-			targetColAttrSets := []*pilosa.ColumnAttrSet{
-				{Key: "one-hundred", Attrs: map[string]interface{}{"foo": "bar"}},
-			}
-
-			targetJSON := `[{"key":"one-hundred","attrs":{"foo":"bar"}}]`
-
-			if keys := responses[0].Results[0].(*pilosa.Row).Keys; !reflect.DeepEqual(keys, []string{"one-hundred"}) {
-				t.Fatalf("unexpected keys: %+v", keys)
-			} else if attrs := responses[0].ColumnAttrSets; !reflect.DeepEqual(attrs, targetColAttrSets) {
-				t.Fatalf("unexpected attrs: %s", spew.Sdump(attrs))
-			} else {
-				// Ensure the JSON is marshaled correctly.
-				jres, err := json.Marshal(attrs)
-				if err != nil {
-					t.Fatal(err)
-				} else if string(jres) != targetJSON {
-					t.Fatalf("json marshal expected: %s, but got: %s", targetJSON, jres)
-				}
-			}
-		})
-
 		t.Run("shards", func(t *testing.T) {
 			writeQuery := fmt.Sprintf(`
 				Set(100, f=10)
@@ -939,26 +831,6 @@ func TestExecutor(t *testing.T) {
 			responses := runCallTest(c, t, writeQuery, readQueries, nil)
 			if bits := responses[0].Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(bits, []uint64{100, ShardWidth * 2}) {
 				t.Fatalf("unexpected columns: %+v", bits)
-			}
-		})
-
-		t.Run("multipleOpt", func(t *testing.T) {
-			writeQuery := `
-				Set(100, f=10)
-				SetRowAttrs(f, 10, foo="bar")`
-			readQueries := []string{
-				`Options(Row(f=10), excludeColumns=true)
-				 Options(Row(f=10), excludeRowAttrs=true)`,
-			}
-			responses := runCallTest(c, t, writeQuery, readQueries, nil)
-			if bits := responses[0].Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(bits, []uint64{}) {
-				t.Fatalf("unexpected columns: %+v", bits)
-			} else if attrs := responses[0].Results[0].(*pilosa.Row).Attrs; !reflect.DeepEqual(attrs, map[string]interface{}{"foo": "bar"}) {
-				t.Fatalf("unexpected attrs: %s", spew.Sdump(attrs))
-			} else if bits := responses[0].Results[1].(*pilosa.Row).Columns(); !reflect.DeepEqual(bits, []uint64{100}) {
-				t.Fatalf("unexpected columns: %+v", bits)
-			} else if attrs := responses[0].Results[1].(*pilosa.Row).Attrs; !reflect.DeepEqual(attrs, map[string]interface{}{}) {
-				t.Fatalf("unexpected attrs: %s", spew.Sdump(attrs))
 			}
 		})
 	})
@@ -1816,66 +1688,6 @@ func TestExecutor_Execute_SetValue(t *testing.T) {
 
 }
 
-// Ensure a SetRowAttrs() query can be executed.
-func TestExecutor_Execute_SetRowAttrs(t *testing.T) {
-	c := test.MustRunCluster(t, 1)
-	defer c.Close()
-	hldr := c.GetHolder(0)
-
-	// Create fields.
-	index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
-	if _, err := index.CreateFieldIfNotExists("f", pilosa.OptFieldTypeDefault()); err != nil {
-		t.Fatal(err)
-	} else if _, err := index.CreateFieldIfNotExists("xxx", pilosa.OptFieldTypeDefault()); err != nil {
-		t.Fatal(err)
-	} else if _, err := index.CreateFieldIfNotExists("kf", pilosa.OptFieldTypeDefault(), pilosa.OptFieldKeys()); err != nil {
-		t.Fatal(err)
-	}
-	t.Run("rowID", func(t *testing.T) {
-		// Set two attrs on f/10.
-		// Also set attrs on other rows and fields to test isolation.
-		if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `SetRowAttrs(f, 10, foo="bar")`}); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `SetRowAttrs(f, 200, YYY=1)`}); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `SetRowAttrs(xxx, 10, YYY=1)`}); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `SetRowAttrs(f, 10, baz=123, bat=true)`}); err != nil {
-			t.Fatal(err)
-		}
-
-		f := hldr.Field("i", "f")
-		if m, err := f.RowAttrStore().Attrs(10); err != nil {
-			t.Fatal(err)
-		} else if !reflect.DeepEqual(m, map[string]interface{}{"foo": "bar", "baz": int64(123), "bat": true}) {
-			t.Fatalf("unexpected row attr: %#v", m)
-		}
-	})
-
-	t.Run("rowKey", func(t *testing.T) {
-		// Set two attrs on f/10.
-		// Also set attrs on other rows and fields to test isolation.
-		if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `SetRowAttrs(kf, "row10", foo="bar")`}); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `SetRowAttrs(kf, "row200", YYY=1)`}); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `SetRowAttrs(kf, "row10", baz=123, bat=true)`}); err != nil {
-			t.Fatal(err)
-		}
-
-		if result, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Row(kf="row10")`}); err != nil {
-			t.Fatal(err)
-		} else if attrs := result.Results[0].(*pilosa.Row).Attrs; !reflect.DeepEqual(attrs, map[string]interface{}{"foo": "bar", "baz": int64(123), "bat": true}) {
-			t.Fatalf("unexpected attrs: %+v", attrs)
-		}
-	})
-}
-
 func TestExecutor_Execute_TopK_Set(t *testing.T) {
 	c := test.MustRunCluster(t, 3)
 	defer c.Close()
@@ -2275,56 +2087,6 @@ func TestExecutor_Execute_TopN_Src(t *testing.T) {
 			{ID: 20, Count: 3},
 			{ID: 10, Count: 2},
 			{ID: 0, Count: 1},
-		},
-		Field: "f",
-	}}) {
-		t.Fatalf("unexpected result: %s", spew.Sdump(result))
-	}
-}
-
-//Ensure TopN handles Attribute filters
-func TestExecutor_Execute_TopN_Attr(t *testing.T) {
-	c := test.MustRunCluster(t, 1)
-	defer c.Close()
-	hldr := c.GetHolder(0)
-	hldr.SetBit("i", "f", 0, 0)
-	hldr.SetBit("i", "f", 0, 1)
-	hldr.SetBit("i", "f", 10, ShardWidth)
-
-	if err := hldr.Field("i", "f").RowAttrStore().SetAttrs(10, map[string]interface{}{"category": int64(123)}); err != nil {
-		t.Fatal(err)
-	}
-	if result, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `TopN(f, n=1, attrName="category", attrValues=[123])`}); err != nil {
-		t.Fatal(err)
-	} else if !reflect.DeepEqual(result.Results, []interface{}{&pilosa.PairsField{
-		Pairs: []pilosa.Pair{
-			{ID: 10, Count: 1},
-		},
-		Field: "f",
-	}}) {
-		t.Fatalf("unexpected result: %s", spew.Sdump(result))
-	}
-
-}
-
-//Ensure TopN handles Attribute filters with source row
-func TestExecutor_Execute_TopN_Attr_Src(t *testing.T) {
-	c := test.MustRunCluster(t, 1)
-	defer c.Close()
-	hldr := c.GetHolder(0)
-
-	hldr.SetBit("i", "f", 0, 0)
-	hldr.SetBit("i", "f", 0, 1)
-	hldr.SetBit("i", "f", 10, ShardWidth)
-
-	if err := hldr.Field("i", "f").RowAttrStore().SetAttrs(10, map[string]interface{}{"category": uint64(123)}); err != nil {
-		t.Fatal(err)
-	}
-	if result, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `TopN(f, Row(f=10), n=1, attrName="category", attrValues=[123])`}); err != nil {
-		t.Fatal(err)
-	} else if !reflect.DeepEqual(result.Results, []interface{}{&pilosa.PairsField{
-		Pairs: []pilosa.Pair{
-			{ID: 10, Count: 1},
 		},
 		Field: "f",
 	}}) {
@@ -3695,17 +3457,6 @@ func TestExecutor_Execute_Remote_Row(t *testing.T) {
 		}
 	})
 
-	t.Run("remote setrowattrs", func(t *testing.T) {
-		if _, err := c.GetNode(1).API.Query(context.Background(), &pilosa.QueryRequest{
-			Index: "i",
-			Query: `SetRowAttrs(_field="f", _row=10, bat=true, baz=123)`,
-		}); err != nil {
-			t.Fatalf("setrowattrs querying: %v", err)
-		} else if attrst, err := hldr0.RowAttrStore("i", "f").Attrs(10); err != nil || !attrst["bat"].(bool) || attrst["baz"].(int64) != 123 {
-			t.Fatalf("wrong attrs: %v", attrst)
-		}
-	})
-
 	t.Run("remote groupBy", func(t *testing.T) {
 		if res, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{
 			Index: "i",
@@ -3925,57 +3676,6 @@ func TestExecutor_Execute_ErrMaxWritesPerRequest(t *testing.T) {
 	if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set() Clear() Set() Set()`}); errors.Cause(err) != pilosa.ErrTooManyWrites {
 		t.Fatalf("unexpected error: %s", err)
 	}
-}
-
-// Ensure SetColumnAttrs doesn't save `field` as an attribute
-func TestExecutor_SetColumnAttrs_ExcludeField(t *testing.T) {
-	c := test.MustRunCluster(t, 1)
-	defer c.Close()
-	hldr := c.GetHolder(0)
-
-	index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
-	_, err := index.CreateField("f", pilosa.OptFieldTypeDefault())
-	if err != nil {
-		t.Fatalf("creating field: %v", err)
-	}
-	targetAttrs := map[string]interface{}{
-		"foo": "bar",
-	}
-
-	// SetColumnAttrs call should exclude the field attribute
-	_, err = c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: "Set(10, f=1)"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: "SetColumnAttrs(10, foo='bar')"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	attrs, err := index.ColumnAttrStore().Attrs(10)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(attrs, targetAttrs) {
-		t.Fatalf("%#v != %#v", targetAttrs, attrs)
-	}
-
-	// SetColumnAttrs call should not break if field is not specified
-	_, err = c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: "Set(20, f=10)"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: "SetColumnAttrs(20, foo='bar')"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	attrs, err = index.ColumnAttrStore().Attrs(20)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(attrs, targetAttrs) {
-		t.Fatalf("%#v != %#v", targetAttrs, attrs)
-	}
-
 }
 
 func TestExecutor_Time_Clear_Quantums(t *testing.T) {

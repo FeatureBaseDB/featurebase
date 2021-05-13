@@ -237,7 +237,7 @@ func (h *Handler) populateValidators() {
 	h.validators["PostImport"] = queryValidationSpecRequired().Optional("clear", "ignoreKeyCheck")
 	h.validators["PostImportAtomicRecord"] = queryValidationSpecRequired().Optional("simPowerLossAfter")
 	h.validators["PostImportRoaring"] = queryValidationSpecRequired().Optional("remote", "clear")
-	h.validators["PostQuery"] = queryValidationSpecRequired().Optional("shards", "columnAttrs", "excludeRowAttrs", "excludeColumns", "profile")
+	h.validators["PostQuery"] = queryValidationSpecRequired().Optional("shards", "excludeColumns", "profile")
 	h.validators["GetInfo"] = queryValidationSpecRequired()
 	h.validators["RecalculateCaches"] = queryValidationSpecRequired()
 	h.validators["GetSchema"] = queryValidationSpecRequired().Optional("views")
@@ -249,10 +249,6 @@ func (h *Handler) populateValidators() {
 	h.validators["GetFragmentBlocks"] = queryValidationSpecRequired("index", "field", "view", "shard")
 	h.validators["GetFragmentData"] = queryValidationSpecRequired("index", "field", "view", "shard")
 	h.validators["GetFragmentNodes"] = queryValidationSpecRequired("shard", "index")
-	h.validators["PostIndexAttrDiff"] = queryValidationSpecRequired()
-	h.validators["GetIndexAttrData"] = queryValidationSpecRequired()
-	h.validators["PostFieldAttrDiff"] = queryValidationSpecRequired()
-	h.validators["GetFieldAttrData"] = queryValidationSpecRequired()
 	h.validators["GetNodes"] = queryValidationSpecRequired()
 	h.validators["GetShardMax"] = queryValidationSpecRequired()
 	h.validators["GetTransactionList"] = queryValidationSpecRequired()
@@ -387,7 +383,6 @@ func newRouter(handler *Handler) http.Handler {
 	router.HandleFunc("/index/{index}", handler.handlePostIndex).Methods("POST").Name("PostIndex")
 	router.HandleFunc("/index/{index}", handler.handleDeleteIndex).Methods("DELETE").Name("DeleteIndex")
 	//router.HandleFunc("/index/{index}/field", handler.handleGetFields).Methods("GET") // Not implemented.
-	router.HandleFunc("/index/{index}/import-column-attrs", handler.handlePostImportColumnAttrs).Methods("POST").Name("PostImportColumnAttrs")
 	router.HandleFunc("/index/{index}/field", handler.handlePostField).Methods("POST").Name("PostField")
 	router.HandleFunc("/index/{index}/field/", handler.handlePostField).Methods("POST").Name("PostField")
 	router.HandleFunc("/index/{index}/field/{field}", handler.handlePostField).Methods("POST").Name("PostField")
@@ -424,15 +419,11 @@ func newRouter(handler *Handler) http.Handler {
 	router.HandleFunc("/internal/fragment/blocks", handler.handleGetFragmentBlocks).Methods("GET").Name("GetFragmentBlocks")
 	router.HandleFunc("/internal/fragment/data", handler.handleGetFragmentData).Methods("GET").Name("GetFragmentData")
 	router.HandleFunc("/internal/fragment/nodes", handler.handleGetFragmentNodes).Methods("GET").Name("GetFragmentNodes")
-	router.HandleFunc("/internal/index/{index}/attr/diff", handler.handlePostIndexAttrDiff).Methods("POST").Name("PostIndexAttrDiff")
-	router.HandleFunc("/internal/index/{index}/attr/data", handler.handleGetIndexAttrData).Methods("GET").Name("GetIndexAttrData")
 	router.HandleFunc("/internal/translate/data", handler.handleGetTranslateData).Methods("GET").Name("GetTranslateData")
 	router.HandleFunc("/internal/translate/data", handler.handlePostTranslateData).Methods("POST").Name("PostTranslateData")
 	router.HandleFunc("/internal/translate/keys", handler.handlePostTranslateKeys).Methods("POST").Name("PostTranslateKeys")
 	router.HandleFunc("/internal/translate/ids", handler.handlePostTranslateIDs).Methods("POST").Name("PostTranslateIDs")
-	router.HandleFunc("/internal/index/{index}/field/{field}/attr/diff", handler.handlePostFieldAttrDiff).Methods("POST").Name("PostFieldAttrDiff")
 	router.HandleFunc("/internal/index/{index}/field/{field}/remote-available-shards/{shardID}", handler.handleDeleteRemoteAvailableShard).Methods("DELETE")
-	router.HandleFunc("/internal/index/{index}/field/{field}/attr/data", handler.handleGetFieldAttrData).Methods("GET").Name("GetFieldAttrData")
 	router.HandleFunc("/internal/index/{index}/shard/{shard}/snapshot", handler.handleGetIndexShardSnapshot).Methods("GET").Name("GetIndexShardSnapshot")
 	router.HandleFunc("/internal/index/{index}/shards", handler.handleGetIndexAvailableShards).Methods("GET").Name("GetIndexAvailableShards")
 	router.HandleFunc("/internal/nodes", handler.handleGetNodes).Methods("GET").Name("GetNodes")
@@ -1155,48 +1146,6 @@ func (h *Handler) handlePostIndex(w http.ResponseWriter, r *http.Request) {
 	resp.write(w, err)
 }
 
-// handlePostIndexAttrDiff handles POST /internal/index/attr/diff requests.
-func (h *Handler) handlePostIndexAttrDiff(w http.ResponseWriter, r *http.Request) {
-	if !validHeaderAcceptJSON(r.Header) {
-		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
-		return
-	}
-	indexName := mux.Vars(r)["index"]
-
-	// Decode request.
-	var req postIndexAttrDiffRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	attrs, err := h.api.IndexAttrDiff(r.Context(), indexName, req.Blocks)
-	if err != nil {
-		if errors.Cause(err) == pilosa.ErrIndexNotFound {
-			http.Error(w, err.Error(), http.StatusNotFound)
-		} else {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-		return
-	}
-
-	// Encode response.
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(postIndexAttrDiffResponse{
-		Attrs: attrs,
-	}); err != nil {
-		h.logger.Errorf("response encoding error: %s", err)
-	}
-}
-
-// handleGetIndexAttrData handles GET /internal/index/{index}/attr/data requests.
-func (h *Handler) handleGetIndexAttrData(w http.ResponseWriter, r *http.Request) {
-	if err := h.api.WriteColumnAttrDataTo(r.Context(), w, mux.Vars(r)["index"]); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-}
-
 func (h *Handler) handleGetActiveQueries(w http.ResponseWriter, r *http.Request) {
 	var rtype string
 	switch {
@@ -1262,14 +1211,6 @@ func (h *Handler) handleGetPastQueries(w http.ResponseWriter, r *http.Request) {
 		h.logger.Errorf("encoding GetActiveQueries response: %s", err)
 	}
 
-}
-
-type postIndexAttrDiffRequest struct {
-	Blocks []pilosa.AttrBlock `json:"blocks"`
-}
-
-type postIndexAttrDiffResponse struct {
-	Attrs map[uint64]map[string]interface{} `json:"attrs"`
 }
 
 // handlePostField handles POST /field request.
@@ -1677,58 +1618,6 @@ func (h *Handler) handleDeleteRemoteAvailableShard(w http.ResponseWriter, r *htt
 	resp.write(w, err)
 }
 
-// handlePostFieldAttrDiff handles POST /internal/field/attr/diff requests.
-func (h *Handler) handlePostFieldAttrDiff(w http.ResponseWriter, r *http.Request) {
-	if !validHeaderAcceptJSON(r.Header) {
-		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
-		return
-	}
-	indexName := mux.Vars(r)["index"]
-	fieldName := mux.Vars(r)["field"]
-
-	// Decode request.
-	var req postFieldAttrDiffRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	attrs, err := h.api.FieldAttrDiff(r.Context(), indexName, fieldName, req.Blocks)
-	if err != nil {
-		switch errors.Cause(err) {
-		case pilosa.ErrFragmentNotFound:
-			http.Error(w, err.Error(), http.StatusNotFound)
-		default:
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-		return
-	}
-
-	// Encode response.
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(postFieldAttrDiffResponse{
-		Attrs: attrs,
-	}); err != nil {
-		h.logger.Errorf("response encoding error: %s", err)
-	}
-}
-
-type postFieldAttrDiffRequest struct {
-	Blocks []pilosa.AttrBlock `json:"blocks"`
-}
-
-type postFieldAttrDiffResponse struct {
-	Attrs map[uint64]map[string]interface{} `json:"attrs"`
-}
-
-// handleGetFieldAttrData handles GET /internal/index/{index}/field/{field}/attr/data requests.
-func (h *Handler) handleGetFieldAttrData(w http.ResponseWriter, r *http.Request) {
-	if err := h.api.WriteRowAttrDataTo(r.Context(), w, mux.Vars(r)["index"], mux.Vars(r)["field"]); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-}
-
 // handleGetIndexShardSnapshot handles GET /internal/index/{index}/shard/{shard}/snapshot requests.
 func (h *Handler) handleGetIndexShardSnapshot(w http.ResponseWriter, r *http.Request) {
 	indexName := mux.Vars(r)["index"]
@@ -1821,12 +1710,9 @@ func (h *Handler) readURLQueryRequest(r *http.Request) (*pilosa.QueryRequest, er
 	}
 
 	return &pilosa.QueryRequest{
-		Query:           query,
-		Shards:          shards,
-		Profile:         profile,
-		ColumnAttrs:     q.Get("columnAttrs") == "true",
-		ExcludeRowAttrs: q.Get("excludeRowAttrs") == "true",
-		ExcludeColumns:  q.Get("excludeColumns") == "true",
+		Query:   query,
+		Shards:  shards,
+		Profile: profile,
 	}, nil
 }
 
@@ -2531,48 +2417,6 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 	_, err = w.Write(importOk)
 	if err != nil {
 		h.logger.Errorf("writing import response: %v", err)
-	}
-}
-
-// handlePostImportColumnAttrs
-func (h *Handler) handlePostImportColumnAttrs(w http.ResponseWriter, r *http.Request) {
-	// Verify that request is only communicating over protobufs.
-	if r.Header.Get("Content-Type") != "application/x-protobuf" {
-		http.Error(w, "Unsupported media type", http.StatusUnsupportedMediaType)
-		return
-	} else if r.Header.Get("Accept") != "application/x-protobuf" {
-		http.Error(w, "Not acceptable", http.StatusNotAcceptable)
-		return
-	}
-
-	opts := []pilosa.ImportOption{}
-
-	body, err := readBody(r)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	req := &pilosa.ImportColumnAttrsRequest{}
-	if err := proto.DefaultSerializer.Unmarshal(body, req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	if err := h.api.ImportColumnAttrs(r.Context(), req, opts...); err != nil {
-		switch errors.Cause(err) {
-		case pilosa.ErrClusterDoesNotOwnShard, pilosa.ErrPreconditionFailed:
-			http.Error(w, err.Error(), http.StatusPreconditionFailed)
-		default:
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-		return
-	}
-
-	// Write response.
-	_, err = w.Write(importOk)
-	if err != nil {
-		h.logger.Errorf("writing import-column-attrs response: %v", err)
 	}
 }
 

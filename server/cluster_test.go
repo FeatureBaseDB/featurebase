@@ -234,7 +234,7 @@ func TestClusterResize_AddNode(t *testing.T) {
 			t.Fatal(err)
 		}
 		// exp is the expected result for the Row queries that follow.
-		exp := fmt.Sprintf(`{"results":[{"attrs":{},"columns":[1,%d]}]}`, col)
+		exp := fmt.Sprintf(`{"results":[{"columns":[1,%d]}]}`, col)
 
 		// Verify the data exists on the single node.
 		m0.QueryExpect(t, "i", "", `Row(f=1)`, exp)
@@ -277,7 +277,7 @@ func TestClusterResize_AddNode(t *testing.T) {
 			t.Fatal(err)
 		}
 		// exp is the expected result for the Row queries that follow.
-		exp := `{"results":[{"attrs":{},"columns":[1]}]}`
+		exp := `{"results":[{"columns":[1]}]}`
 
 		// Verify the data exists on the single node.
 		m0.QueryExpect(t, "i", "", `Row(f=1)`, exp)
@@ -324,7 +324,7 @@ func TestClusterResize_AddNode(t *testing.T) {
 		}
 
 		// exp is the expected result for the Row queries that follow.
-		exp := fmt.Sprintf(`{"results":[{"attrs":{},"columns":[1,%d]}]}`, col)
+		exp := fmt.Sprintf(`{"results":[{"columns":[1,%d]}]}`, col)
 
 		// Verify the data exists on the single node.
 		m0.QueryExpect(t, "i", "", `Row(f=1)`, exp)
@@ -411,7 +411,7 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 		}
 
 		// exp is the expected result for the Row queries that follow.
-		exp := fmt.Sprintf(`{"results":[{"attrs":{},"columns":[1,%d]}]}`, col)
+		exp := fmt.Sprintf(`{"results":[{"columns":[1,%d]}]}`, col)
 
 		// Verify the data exists on the single node.
 		m0.QueryExpect(t, "i", "", `Row(f=1)`, exp)
@@ -457,7 +457,7 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 		}
 
 		// exp is the expected result for the Row queries that follow.
-		exp := fmt.Sprintf(`{"results":[{"attrs":{},"columns":[1,%d]}]}`, col)
+		exp := fmt.Sprintf(`{"results":[{"columns":[1,%d]}]}`, col)
 
 		// Verify the data exists on the single node.
 		m0.QueryExpect(t, "i", "", `Row(f=1)`, exp)
@@ -501,7 +501,7 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 		}
 
 		// exp is the expected result for the Row queries that follow.
-		exp := `{"results":[{"attrs":{},"columns":[],"keys":["col2","col1"]}]}`
+		exp := `{"results":[{"columns":[],"keys":["col2","col1"]}]}`
 
 		// Verify the data exists on the single node.
 		m0.QueryExpect(t, "i", "", `Row(f=1)`, exp)

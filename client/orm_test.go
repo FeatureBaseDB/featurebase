@@ -398,12 +398,6 @@ func TestORM(t *testing.T) {
 		comparePQL(t,
 			"TopN(collaboration,Row(collaboration=3),n=10)",
 			collabField.RowTopN(10, collabField.Row(3)))
-		comparePQL(t,
-			"TopN(sample-field,Row(collaboration=7),n=12,attrName='category',attrValues=[80,81])",
-			sampleField.FilterAttrTopN(12, collabField.Row(7), "category", 80, 81))
-		comparePQL(t,
-			"TopN(sample-field,n=12,attrName='category',attrValues=[80,81])",
-			sampleField.FilterAttrTopN(12, nil, "category", 80, 81))
 	})
 
 	t.Run("FieldLT", func(t *testing.T) {
@@ -511,22 +505,8 @@ func TestORM(t *testing.T) {
 		}
 	})
 
-	t.Run("FilterFieldTopNInvalidField", func(t *testing.T) {
-		q := sampleField.FilterAttrTopN(12, collabField.Row(7), "$invalid$", 80, 81)
-		if q.Error() == nil {
-			t.Fatalf("should have failed")
-		}
-	})
-
-	t.Run("FilterFieldTopNInvalidValue", func(t *testing.T) {
-		q := sampleField.FilterAttrTopN(12, collabField.Row(7), "category", 80, func() {})
-		if q.Error() == nil {
-			t.Fatalf("should have failed")
-		}
-	})
-
 	t.Run("RowOperationInvalidArg", func(t *testing.T) {
-		invalid := sampleField.FilterAttrTopN(12, collabField.Row(7), "$invalid$", 80, 81)
+		invalid := NewPQLRowQuery("", sampleIndex, errors.New("invalid"))
 		// invalid argument in pos 1
 		q := sampleIndex.Union(invalid, b1)
 		if q.Error() == nil {
@@ -560,64 +540,6 @@ func TestORM(t *testing.T) {
 		}
 	})
 
-	t.Run("SetColumnAttrs", func(t *testing.T) {
-		attrs := map[string]interface{}{
-			"quote": "\"Don't worry, be happy\"",
-			"happy": true,
-		}
-		comparePQL(t,
-			"SetColumnAttrs(5,happy=true,quote=\"\\\"Don't worry, be happy\\\"\")",
-			projectIndex.SetColumnAttrs(5, attrs))
-
-		q := projectIndex.SetColumnAttrs(false, attrs)
-		if q.err == nil {
-			t.Fatalf("should have failed")
-		}
-	})
-
-	t.Run("SetColumnAttrsInvalidAttr", func(t *testing.T) {
-		attrs := map[string]interface{}{
-			"color":     "blue",
-			"$invalid$": true,
-		}
-		if projectIndex.SetColumnAttrs(5, attrs).Error() == nil {
-			t.Fatalf("Should have failed")
-		}
-	})
-
-	t.Run("SetRowAttrs", func(t *testing.T) {
-		attrs := map[string]interface{}{
-			"quote":  "\"Don't worry, be happy\"",
-			"active": true,
-		}
-		comparePQL(t,
-			`SetRowAttrs(collaboration,5,active=true,quote="\"Don't worry, be happy\"")`,
-			collabField.SetRowAttrs(5, attrs))
-
-		comparePQL(t,
-			"SetRowAttrs(collaboration,'foo',active=true,quote=\"\\\"Don't worry, be happy\\\"\")",
-			collabField.SetRowAttrs("foo", attrs))
-
-		q := collabField.SetRowAttrs(nil, attrs)
-		if q.err == nil {
-			t.Fatalf("should have failed")
-		}
-	})
-
-	t.Run("SetRowAttrsInvalidAttr", func(t *testing.T) {
-		attrs := map[string]interface{}{
-			"color":     "blue",
-			"$invalid$": true,
-		}
-		if collabField.SetRowAttrs(5, attrs).Error() == nil {
-			t.Fatalf("Should have failed")
-		}
-
-		if collabField.SetRowAttrs("foo", attrs).Error() == nil {
-			t.Fatalf("Should have failed")
-		}
-	})
-
 	t.Run("Store", func(t *testing.T) {
 		comparePQL(t,
 			"Store(Row(collaboration=5),sample-field=10)",
@@ -630,17 +552,9 @@ func TestORM(t *testing.T) {
 
 	t.Run("Options", func(t *testing.T) {
 		comparePQL(t,
-			"Options(Row(collaboration=5),columnAttrs=true,excludeColumns=true,excludeRowAttrs=true,shards=[1,3])",
+			"Options(Row(collaboration=5),shards=[1,3])",
 			sampleIndex.Options(collabField.Row(5),
-				OptOptionsColumnAttrs(true),
-				OptOptionsExcludeColumns(true),
-				OptOptionsExcludeRowAttrs(true),
 				OptOptionsShards(1, 3),
-			))
-		comparePQL(t,
-			"Options(Row(collaboration=5),columnAttrs=true,excludeColumns=false,excludeRowAttrs=false)",
-			sampleIndex.Options(collabField.Row(5),
-				OptOptionsColumnAttrs(true),
 			))
 	})
 
@@ -664,7 +578,7 @@ func TestORM(t *testing.T) {
 
 	t.Run("BatchQueryWithError", func(t *testing.T) {
 		q := sampleIndex.BatchQuery()
-		q.Add(sampleField.FilterAttrTopN(12, collabField.Row(7), "$invalid$", 80, 81))
+		q.Add(NewPQLBaseQuery("", nil, errors.New("invalid")))
 		if q.Error() == nil {
 			t.Fatalf("The error must be set")
 		}

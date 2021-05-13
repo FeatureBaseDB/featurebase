@@ -282,7 +282,7 @@ func (q *Query) WriteCallN() int {
 	var n int
 	for _, call := range q.Calls {
 		switch call.Name {
-		case "Set", "Clear", "SetRowAttrs", "SetColumnAttrs", "ClearRow", "Store", "SetBit":
+		case "Set", "Clear", "ClearRow", "Store", "SetBit":
 			n++
 		}
 	}
@@ -506,10 +506,7 @@ var callInfoByFunc = map[string]callInfo{
 	"Options": {
 		allowUnknown: false,
 		prototypes: map[string]interface{}{
-			"excludeRowAttrs": true,
-			"excludeColumns":  true,
-			"columnAttrs":     true,
-			"shards":          nil,
+			"shards": nil,
 		},
 	},
 	"Set": {
@@ -528,21 +525,6 @@ var callInfoByFunc = map[string]callInfo{
 			"_col": stringOrInt64,
 		},
 	},
-	"SetRowAttrs": {
-		allowUnknown: true,
-		prototypes: map[string]interface{}{
-			"_field": "",
-			"field":  "",
-			"_row":   stringOrInt64,
-		},
-	},
-	"SetColumnAttrs": {
-		allowUnknown: true,
-		prototypes: map[string]interface{}{
-			"_field": "",
-			"_col":   stringOrInt64,
-		},
-	},
 	"IncludesColumn": {
 		allowUnknown: false,
 		prototypes: map[string]interface{}{
@@ -552,7 +534,7 @@ var callInfoByFunc = map[string]callInfo{
 }
 
 // We want to allow case-insensitive names, but we want to continue using
-// friendly easy-to-read names like "SetRowAttrs", not "setrowattrs". So,
+// friendly easy-to-read names like "SetBit", not "setbit". So,
 // we make a map; put in a ToLower() string, get back the canonical
 // capitalization. This might not have seemed like the best strategy if we
 // didn't already have so much code relying on the exact strings.
@@ -888,13 +870,10 @@ func (c *Call) HasConditionArg() bool {
 // TranslateInfo returns the relevant translation fields.
 func (c *Call) TranslateInfo(columnLabel, rowLabel string) (colKey, rowKey, fieldName string) {
 	switch c.Name {
-	case "Set", "Clear", "Row", "Range", "SetColumnAttrs", "ClearRow":
+	case "Set", "Clear", "Row", "Range", "ClearRow":
 		// Positional args in new PQL syntax require special handling here.
 		fieldName, _ = c.FieldArg()
 		return "_" + columnLabel, fieldName, fieldName
-	case "SetRowAttrs":
-		// Positional args in new PQL syntax require special handling here.
-		return "", "_" + rowLabel, c.ArgString("_field")
 	case "Rows":
 		return "column", "previous", c.ArgString("_field")
 	case "IncludesColumn":
@@ -909,7 +888,7 @@ func (c *Call) TranslateInfo(columnLabel, rowLabel string) (colKey, rowKey, fiel
 // Writable returns true if call is mutable (e.g. can write new translation keys)
 func (c *Call) Writable() bool {
 	switch c.Name {
-	case "Set", "SetRowAttrs", "SetColumnAttrs", "SetBit":
+	case "Set", "SetBit":
 		return true
 	case "Not":
 		// to support queries like Not(Row(f="garbage"))

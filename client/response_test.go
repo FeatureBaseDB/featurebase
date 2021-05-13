@@ -28,30 +28,13 @@ import (
 )
 
 func TestNewRowResultFromInternal(t *testing.T) {
-	targetAttrs := map[string]interface{}{
-		"name":       "some string",
-		"age":        int64(95),
-		"registered": true,
-		"height":     1.83,
-	}
 	targetColumns := []uint64{5, 10}
-	attrs := []*pb.Attr{
-		{Key: "name", StringValue: "some string", Type: 1},
-		{Key: "age", IntValue: 95, Type: 2},
-		{Key: "registered", BoolValue: true, Type: 3},
-		{Key: "height", FloatValue: 1.83, Type: 4},
-	}
 	row := &pb.Row{
-		Attrs:   attrs,
 		Columns: []uint64{5, 10},
 	}
 	result, err := newRowResultFromInternal(row)
 	if err != nil {
 		t.Fatalf("Failed with error: %s", err)
-	}
-	// assertMapEquals(t, targetAttrs, result.Attributes)
-	if !reflect.DeepEqual(targetAttrs, result.Attributes) {
-		t.Fatal()
 	}
 	if !reflect.DeepEqual(targetColumns, result.Columns) {
 		t.Fatal()
@@ -59,24 +42,11 @@ func TestNewRowResultFromInternal(t *testing.T) {
 }
 
 func TestNewQueryResponseFromInternal(t *testing.T) {
-	targetAttrs := map[string]interface{}{
-		"name":       "some string",
-		"age":        int64(95),
-		"registered": true,
-		"height":     1.83,
-	}
 	targetColumns := []uint64{5, 10}
 	targetCountItems := []CountResultItem{
 		{ID: 10, Count: 100},
 	}
-	attrs := []*pb.Attr{
-		{Key: "name", StringValue: "some string", Type: 1},
-		{Key: "age", IntValue: 95, Type: 2},
-		{Key: "registered", BoolValue: true, Type: 3},
-		{Key: "height", FloatValue: 1.83, Type: 4},
-	}
 	row := &pb.Row{
-		Attrs:   attrs,
 		Columns: []uint64{5, 10},
 	}
 	pairs := []*pb.Pair{
@@ -107,9 +77,6 @@ func TestNewQueryResponseFromInternal(t *testing.T) {
 	if results[0] != qr.Result() {
 		t.Fatalf("Result() should return the first result")
 	}
-	if !reflect.DeepEqual(targetAttrs, results[0].Row().Attributes) {
-		t.Fatalf("The row result should contain the attributes")
-	}
 	if !reflect.DeepEqual(targetColumns, results[0].Row().Columns) {
 		t.Fatalf("The row result should contain the columns")
 	}
@@ -137,29 +104,6 @@ func TestNewQueryResponseWithErrorFromInternal(t *testing.T) {
 	}
 }
 
-func TestNewQueryResponseFromInternalFailure(t *testing.T) {
-	attrs := []*pb.Attr{
-		{Key: "name", StringValue: "some string", Type: 99},
-	}
-	row := &pb.Row{
-		Attrs: attrs,
-	}
-	response := &pb.QueryResponse{
-		Results: []*pb.QueryResult{{Type: QueryResultTypeRow, Row: row}},
-	}
-	qr, err := newQueryResponseFromInternal(response)
-	if qr != nil && err == nil {
-		t.Fatalf("Should have failed")
-	}
-	response = &pb.QueryResponse{
-		ColumnAttrSets: []*pb.ColumnAttrSet{{ID: 1, Attrs: attrs}},
-	}
-	qr, err = newQueryResponseFromInternal(response)
-	if qr != nil && err == nil {
-		t.Fatalf("Should have failed")
-	}
-}
-
 func TestCountResultItemToString(t *testing.T) {
 	tests := []struct {
 		item     *CountResultItem
@@ -182,14 +126,7 @@ func TestCountResultItemToString(t *testing.T) {
 }
 
 func TestMarshalResults(t *testing.T) {
-	attrs := []*pb.Attr{
-		{Key: "name", StringValue: "some string", Type: 1},
-		{Key: "age", IntValue: 95, Type: 2},
-		{Key: "registered", BoolValue: true, Type: 3},
-		{Key: "height", FloatValue: 1.83, Type: 4},
-	}
 	row := &pb.Row{
-		Attrs:   attrs,
 		Columns: []uint64{5, 10},
 	}
 	pairs := []*pb.Pair{
@@ -212,7 +149,7 @@ func TestMarshalResults(t *testing.T) {
 		resultJSONStrings[i] = string(b)
 	}
 	targetJSON := []string{
-		`{"attrs":{"age":95,"height":1.83,"name":"some string","registered":true},"columns":[5,10],"keys":[]}`,
+		`{"columns":[5,10],"keys":[]}`,
 		`[{"id":10,"count":100}]`,
 	}
 	for i := range targetJSON {

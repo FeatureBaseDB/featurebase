@@ -30,8 +30,7 @@ func TestQueryWithError(t *testing.T) {
 	var err error
 	client := DefaultClient()
 	index := NewIndex("foo")
-	field := index.Field("foo")
-	invalid := field.FilterAttrTopN(12, field.Row(7), "$invalid$", 80, 81)
+	invalid := NewPQLRowQuery("", index, errors.New("invalid"))
 	_, err = client.Query(invalid, nil)
 	if err == nil {
 		t.Fatalf("Should have failed")
@@ -204,76 +203,6 @@ func TestNewClientManualAddressWithMultipleURIs(t *testing.T) {
 func ClientOptionErr(int) ClientOption {
 	return func(*ClientOptions) error {
 		return errors.New("Some error")
-	}
-}
-
-func TestQueryOptions(t *testing.T) {
-	targets := []*QueryOptions{
-		{ColumnAttrs: true},
-		{ColumnAttrs: false},
-		{ExcludeRowAttrs: true},
-		{ExcludeRowAttrs: false},
-		{ExcludeColumns: true},
-		{ExcludeColumns: false},
-	}
-
-	optionsList := [][]interface{}{
-		{OptQueryColumnAttrs(true)},
-		{OptQueryColumnAttrs(false)},
-		{OptQueryExcludeAttrs(true)},
-		{OptQueryExcludeAttrs(false)},
-		{OptQueryExcludeColumns(true)},
-		{OptQueryExcludeColumns(false)},
-	}
-
-	for i := 0; i < len(targets); i++ {
-		options := &QueryOptions{}
-		err := options.addOptions(optionsList[i]...)
-		if err != nil {
-			t.Fatal(err)
-		}
-		target := targets[i]
-		if !reflect.DeepEqual(target, options) {
-			t.Fatalf("%v != %v", target, options)
-		}
-	}
-
-	target := &QueryOptions{
-		ColumnAttrs:     true,
-		ExcludeRowAttrs: true,
-		ExcludeColumns:  true,
-	}
-	options := &QueryOptions{}
-	err := options.addOptions(&QueryOptions{
-		ColumnAttrs:     true,
-		ExcludeRowAttrs: true,
-		ExcludeColumns:  true,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(target, options) {
-		t.Fatalf("%v != %v", target, options)
-	}
-}
-
-func TestQueryOptionsWithError(t *testing.T) {
-	options := &QueryOptions{}
-	err := options.addOptions(1)
-	if err == nil {
-		t.Fatalf("should have failed")
-	}
-	err = options.addOptions(OptQueryColumnAttrs(true), nil)
-	if err == nil {
-		t.Fatalf("should have failed")
-	}
-	err = options.addOptions(OptQueryColumnAttrs(true), &QueryOptions{})
-	if err == nil {
-		t.Fatalf("should have failed")
-	}
-	err = options.addOptions(QueryOptionErr(0))
-	if err == nil {
-		t.Fatalf("should have failed")
 	}
 }
 

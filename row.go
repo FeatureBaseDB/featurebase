@@ -23,16 +23,12 @@ import (
 	"github.com/pkg/errors"
 )
 
-// Row is a set of integers (the associated columns), and attributes which are
-// arbitrary key/value pairs storing metadata about what the row represents.
+// Row is a set of integers (the associated columns).
 type Row struct {
 	segments []rowSegment
 
 	// String keys translated to/from segment columns.
 	Keys []string
-
-	// Attributes associated with the row.
-	Attrs map[string]interface{}
 
 	// Index tells what index this row is from - needed for key translation.
 	Index string
@@ -67,13 +63,8 @@ func (r *Row) Clone() (clone *Row) {
 		copy(keyClone, r.Keys)
 	}
 
-	attrClone := make(map[string]interface{})
-	for k, v := range r.Attrs {
-		attrClone[k] = v
-	}
 	clone = &Row{
 		Keys:  keyClone,
-		Attrs: attrClone,
 		Index: r.Index,
 		Field: r.Field,
 	}
@@ -474,17 +465,11 @@ func (r *Row) Count() uint64 {
 // MarshalJSON returns a JSON-encoded byte slice of r.
 func (r *Row) MarshalJSON() ([]byte, error) {
 	var o struct {
-		Attrs   map[string]interface{} `json:"attrs"`
-		Columns []uint64               `json:"columns"`
-		Keys    []string               `json:"keys,omitempty"`
+		Columns []uint64 `json:"columns"`
+		Keys    []string `json:"keys,omitempty"`
 	}
 	o.Columns = r.Columns()
 	o.Keys = r.Keys
-
-	o.Attrs = r.Attrs
-	if o.Attrs == nil {
-		o.Attrs = make(map[string]interface{})
-	}
 
 	return json.Marshal(&o)
 }

@@ -580,35 +580,6 @@ func (p uint64Slice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 func (p uint64Slice) Len() int           { return len(p) }
 func (p uint64Slice) Less(i, j int) bool { return p[i] < p[j] }
 
-// merge combines p and other to a unique sorted set of values.
-// p and other must both have unique sets and be sorted.
-func (p uint64Slice) merge(other []uint64) []uint64 {
-	ret := make([]uint64, 0, len(p))
-
-	i, j := 0, 0
-	for i < len(p) && j < len(other) {
-		a, b := p[i], other[j]
-		if a == b {
-			ret = append(ret, a)
-			i, j = i+1, j+1
-		} else if a < b {
-			ret = append(ret, a)
-			i++
-		} else {
-			ret = append(ret, b)
-			j++
-		}
-	}
-
-	if i < len(p) {
-		ret = append(ret, p[i:]...)
-	} else if j < len(other) {
-		ret = append(ret, other[j:]...)
-	}
-
-	return ret
-}
-
 // simpleCache implements a bitmap Rowcache.
 // it is meant to be a short-lived cache for cases where writes are continuing to access
 // the same row within a short time frame (i.e. good for write-heavy loads)

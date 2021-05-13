@@ -5,7 +5,6 @@ package pb;
 message Row {
 	repeated uint64 Columns = 1;
 	repeated string Keys = 3;
-	repeated Attr Attrs = 2;
 	bytes Roaring = 4;
 	string Index = 5;
 	string Field = 6;
@@ -117,32 +116,10 @@ message Decimal {
 	int64 Scale = 2;
 }
 
-message ColumnAttrSet {
-	uint64 ID = 1;
-	string Key = 3;
-	repeated Attr Attrs = 2;
-}
-
-message Attr {
-	string Key = 1;
-	uint64 Type = 2;
-	string StringValue = 3;
-	int64 IntValue = 4;
-	bool BoolValue = 5;
-	double FloatValue = 6;
-}
-
-message AttrMap {
-	repeated Attr Attrs = 1;
-}
-
 message QueryRequest {
 	string Query = 1;
 	repeated uint64 Shards = 2;
-	bool ColumnAttrs = 3;
 	bool Remote = 5;
-	bool ExcludeRowAttrs = 6;
-	bool ExcludeColumns = 7;
 	repeated Row EmbeddedData = 8;
 	bool PreTranslated = 9;
 }
@@ -150,7 +127,6 @@ message QueryRequest {
 message QueryResponse {
 	string Err = 1;
 	repeated QueryResult Results = 2;
-	repeated ColumnAttrSet ColumnAttrSets = 3;
 }
 
 message QueryResult {
@@ -252,15 +228,6 @@ message ImportRoaringRequest {
 	int64 IndexCreatedAt = 5;
 	int64 FieldCreatedAt = 6;
         bool UpdateExistence = 7;
-}
-
-message ImportColumnAttrsRequest {
-	string Index = 1;
-	int64 Shard = 2;
-	string AttrKey = 3;
-	repeated string AttrVals = 4;
-	repeated uint64 ColumnIDs = 5;
-	int64 IndexCreatedAt = 6;
 }
 
 message GroupCounts{

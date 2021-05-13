@@ -16,7 +16,6 @@ package proto
 
 import (
 	"fmt"
-	"sort"
 	"time"
 
 	"github.com/gogo/protobuf/proto"
@@ -227,14 +226,6 @@ func (s Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		}
 		s.decodeImportRoaringRequest(msg, mt)
 		return nil
-	case *pilosa.ImportColumnAttrsRequest:
-		msg := &pb.ImportColumnAttrsRequest{}
-		err := proto.Unmarshal(buf, msg)
-		if err != nil {
-			return errors.Wrap(err, "unmarshaling ImportColumnAttrsRequest")
-		}
-		s.decodeImportColumnAttrsRequest(msg, mt)
-		return nil
 	case *pilosa.ImportResponse:
 		msg := &pb.ImportResponse{}
 		err := proto.Unmarshal(buf, msg)
@@ -385,8 +376,6 @@ func (s Serializer) encodeToProto(m pilosa.Message) proto.Message {
 		return s.encodeImportValueRequest(mt)
 	case *pilosa.ImportRoaringRequest:
 		return s.encodeImportRoaringRequest(mt)
-	case *pilosa.ImportColumnAttrsRequest:
-		return s.encodeImportColumnAttrsRequest(mt)
 	case *pilosa.ImportResponse:
 		return s.encodeImportResponse(mt)
 	case *pilosa.BlockDataRequest:
@@ -488,27 +477,13 @@ func (s Serializer) encodeImportRoaringRequest(m *pilosa.ImportRoaringRequest) *
 	}
 }
 
-func (s Serializer) encodeImportColumnAttrsRequest(m *pilosa.ImportColumnAttrsRequest) *pb.ImportColumnAttrsRequest {
-	return &pb.ImportColumnAttrsRequest{
-		Index:          m.Index,
-		IndexCreatedAt: m.IndexCreatedAt,
-		Shard:          m.Shard,
-		AttrKey:        m.AttrKey,
-		AttrVals:       m.AttrVals,
-		ColumnIDs:      m.ColumnIDs,
-	}
-}
-
 func (s Serializer) encodeQueryRequest(m *pilosa.QueryRequest) *pb.QueryRequest {
 	r := &pb.QueryRequest{
-		Query:           m.Query,
-		Shards:          m.Shards,
-		ColumnAttrs:     m.ColumnAttrs,
-		Remote:          m.Remote,
-		ExcludeRowAttrs: m.ExcludeRowAttrs,
-		ExcludeColumns:  m.ExcludeColumns,
-		PreTranslated:   m.PreTranslated,
-		EmbeddedData:    make([]*pb.Row, len(m.EmbeddedData)),
+		Query:         m.Query,
+		Shards:        m.Shards,
+		Remote:        m.Remote,
+		PreTranslated: m.PreTranslated,
+		EmbeddedData:  make([]*pb.Row, len(m.EmbeddedData)),
 	}
 	for i := range m.EmbeddedData {
 		r.EmbeddedData[i] = s.encodeRow(m.EmbeddedData[i])
@@ -518,8 +493,7 @@ func (s Serializer) encodeQueryRequest(m *pilosa.QueryRequest) *pb.QueryRequest 
 
 func (s Serializer) encodeQueryResponse(m *pilosa.QueryResponse) *pb.QueryResponse {
 	resp := &pb.QueryResponse{
-		Results:        make([]*pb.QueryResult, len(m.Results)),
-		ColumnAttrSets: s.encodeColumnAttrSets(m.ColumnAttrSets),
+		Results: make([]*pb.QueryResult, len(m.Results)),
 	}
 
 	for i := range m.Results {
@@ -1209,10 +1183,7 @@ func (s Serializer) decodeLoadSchemaMessage(pb *pb.LoadSchemaMessage, m *pilosa.
 func (s Serializer) decodeQueryRequest(pb *pb.QueryRequest, m *pilosa.QueryRequest) {
 	m.Query = pb.Query
 	m.Shards = pb.Shards
-	m.ColumnAttrs = pb.ColumnAttrs
 	m.Remote = pb.Remote
-	m.ExcludeRowAttrs = pb.ExcludeRowAttrs
-	m.ExcludeColumns = pb.ExcludeColumns
 	m.EmbeddedData = make([]*pilosa.Row, len(pb.EmbeddedData))
 	m.PreTranslated = pb.PreTranslated
 	for i := range pb.EmbeddedData {
@@ -1262,15 +1233,6 @@ func (s Serializer) decodeImportRoaringRequest(pb *pb.ImportRoaringRequest, m *p
 	m.UpdateExistence = pb.UpdateExistence
 }
 
-func (s Serializer) decodeImportColumnAttrsRequest(pb *pb.ImportColumnAttrsRequest, m *pilosa.ImportColumnAttrsRequest) {
-	m.Index = pb.Index
-	m.IndexCreatedAt = pb.IndexCreatedAt
-	m.Shard = pb.Shard
-	m.AttrKey = pb.AttrKey
-	m.AttrVals = pb.AttrVals
-	m.ColumnIDs = pb.ColumnIDs
-}
-
 func (s Serializer) decodeImportResponse(pb *pb.ImportResponse, m *pilosa.ImportResponse) {
 	m.Err = pb.Err
 }
@@ -1289,8 +1251,6 @@ func (s Serializer) decodeBlockDataResponse(pb *pb.BlockDataResponse, m *pilosa.
 }
 
 func (s Serializer) decodeQueryResponse(pb *pb.QueryResponse, m *pilosa.QueryResponse) {
-	m.ColumnAttrSets = make([]*pilosa.ColumnAttrSet, len(pb.ColumnAttrSets))
-	s.decodeColumnAttrSets(pb.ColumnAttrSets, m.ColumnAttrSets)
 	if pb.Err == "" {
 		m.Err = nil
 	} else {
@@ -1298,19 +1258,6 @@ func (s Serializer) decodeQueryResponse(pb *pb.QueryResponse, m *pilosa.QueryRes
 	}
 	m.Results = make([]interface{}, len(pb.Results))
 	s.decodeQueryResults(pb.Results, m.Results)
-}
-
-func (s Serializer) decodeColumnAttrSets(pb []*pb.ColumnAttrSet, m []*pilosa.ColumnAttrSet) {
-	for i := range pb {
-		m[i] = &pilosa.ColumnAttrSet{}
-		s.decodeColumnAttrSet(pb[i], m[i])
-	}
-}
-
-func (s Serializer) decodeColumnAttrSet(pb *pb.ColumnAttrSet, m *pilosa.ColumnAttrSet) {
-	m.ID = pb.ID
-	m.Key = pb.Key
-	m.Attrs = s.decodeAttrs(pb.Attrs)
 }
 
 func (s Serializer) decodeQueryResults(pb []*pb.QueryResult, m []interface{}) {
@@ -1457,7 +1404,6 @@ func (s Serializer) decodeRow(pr *pb.Row) *pilosa.Row {
 			r.SetBit(v)
 		}
 	}
-	r.Attrs = s.decodeAttrs(pr.Attrs)
 	r.Keys = pr.Keys
 	r.Index = pr.Index
 	r.Field = pr.Field
@@ -1474,37 +1420,6 @@ func (s Serializer) decodeSignedRow(pr *pb.SignedRow) pilosa.SignedRow {
 		Neg: s.decodeRow(pr.Neg),
 	}
 	return r
-}
-
-func (s Serializer) decodeAttrs(pb []*pb.Attr) map[string]interface{} {
-	m := make(map[string]interface{}, len(pb))
-	for i := range pb {
-		key, value := s.decodeAttr(pb[i])
-		m[key] = value
-	}
-	return m
-}
-
-const (
-	attrTypeString = 1
-	attrTypeInt    = 2
-	attrTypeBool   = 3
-	attrTypeFloat  = 4
-)
-
-func (s Serializer) decodeAttr(attr *pb.Attr) (key string, value interface{}) {
-	switch attr.Type {
-	case attrTypeString:
-		return attr.Key, attr.StringValue
-	case attrTypeInt:
-		return attr.Key, attr.IntValue
-	case attrTypeBool:
-		return attr.Key, attr.BoolValue
-	case attrTypeFloat:
-		return attr.Key, attr.FloatValue
-	default:
-		return attr.Key, nil
-	}
 }
 
 func (s Serializer) decodeExtractedIDMatrix(m *pb.ExtractedIDMatrix) pilosa.ExtractedIDMatrix {
@@ -1682,22 +1597,6 @@ func (s Serializer) decodeDecimalStruct(pb *pb.Decimal) *pql.Decimal {
 	}
 }
 
-func (s Serializer) encodeColumnAttrSets(a []*pilosa.ColumnAttrSet) []*pb.ColumnAttrSet {
-	other := make([]*pb.ColumnAttrSet, len(a))
-	for i := range a {
-		other[i] = s.encodeColumnAttrSet(a[i])
-	}
-	return other
-}
-
-func (s Serializer) encodeColumnAttrSet(set *pilosa.ColumnAttrSet) *pb.ColumnAttrSet {
-	return &pb.ColumnAttrSet{
-		ID:    set.ID,
-		Key:   set.Key,
-		Attrs: s.encodeAttrs(set.Attrs),
-	}
-}
-
 func (s Serializer) encodeSignedRow(r pilosa.SignedRow) *pb.SignedRow {
 	ir := &pb.SignedRow{
 		Pos: s.encodeRow(r.Pos),
@@ -1713,7 +1612,6 @@ func (s Serializer) encodeRow(r *pilosa.Row) *pb.Row {
 
 	ir := &pb.Row{
 		Keys:  r.Keys,
-		Attrs: s.encodeAttrs(r.Attrs),
 		Index: r.Index,
 		Field: r.Field,
 	}
@@ -1729,7 +1627,6 @@ func (s Serializer) encodeRowIdentifiers(r pilosa.RowIdentifiers) *pb.RowIdentif
 	return &pb.RowIdentifiers{
 		Rows: r.Rows,
 		Keys: r.Keys,
-		//Attrs:   s.encodeAttrs(r.Attrs),
 	}
 }
 
@@ -1909,43 +1806,6 @@ func (s Serializer) encodeDecimal(p *pql.Decimal) *pb.Decimal {
 		Value: p.Value,
 		Scale: p.Scale,
 	}
-}
-
-func (s Serializer) encodeAttrs(m map[string]interface{}) []*pb.Attr {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-
-	a := make([]*pb.Attr, len(keys))
-	for i := range keys {
-		a[i] = s.encodeAttr(keys[i], m[keys[i]])
-	}
-	return a
-}
-
-// s.encodeAttr converts a key/value pair into an Attr pb.representation.
-func (s Serializer) encodeAttr(key string, value interface{}) *pb.Attr {
-	pb := &pb.Attr{Key: key}
-	switch value := value.(type) {
-	case string:
-		pb.Type = attrTypeString
-		pb.StringValue = value
-	case float64:
-		pb.Type = attrTypeFloat
-		pb.FloatValue = value
-	case uint64:
-		pb.Type = attrTypeInt
-		pb.IntValue = int64(value)
-	case int64:
-		pb.Type = attrTypeInt
-		pb.IntValue = value
-	case bool:
-		pb.Type = attrTypeBool
-		pb.BoolValue = value
-	}
-	return pb
 }
 
 func (s Serializer) encodeResizeNodeMessage(m *pilosa.ResizeNodeMessage) *pb.ResizeNodeMessage {

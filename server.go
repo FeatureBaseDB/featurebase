@@ -141,16 +141,6 @@ func OptServerDataDir(dir string) ServerOption {
 	}
 }
 
-// OptServerAttrStoreFunc is a functional option on Server
-// used to provide the function to use to generate a new
-// attribute store.
-func OptServerAttrStoreFunc(af func(string) AttrStore) ServerOption {
-	return func(s *Server) error {
-		s.holderConfig.NewAttrStore = af
-		return nil
-	}
-}
-
 // OptServerAntiEntropyInterval is a functional option on Server
 // used to set the anti-entropy interval.
 func OptServerAntiEntropyInterval(interval time.Duration) ServerOption {

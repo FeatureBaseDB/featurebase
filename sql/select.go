@@ -178,9 +178,7 @@ type selectFunc struct {
 }
 
 type selectFeatures struct {
-	HasRowAttrs bool
-	HasColAttrs bool
-	funcs       []selectFunc
+	funcs []selectFunc
 }
 
 type HavingClause struct {

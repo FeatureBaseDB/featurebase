@@ -36,8 +36,8 @@ import (
 	"github.com/golang/protobuf/proto" //nolint:staticcheck
 	"github.com/opentracing/opentracing-go"
 	"github.com/pilosa/pilosa/v2"
-	pnet "github.com/pilosa/pilosa/v2/net"
 	"github.com/pilosa/pilosa/v2/logger"
+	pnet "github.com/pilosa/pilosa/v2/net"
 	"github.com/pilosa/pilosa/v2/pb"
 	"github.com/pilosa/pilosa/v2/pql"
 	"github.com/pilosa/pilosa/v2/roaring"
@@ -1318,11 +1318,8 @@ func newHTTPClient(options *ClientOptions) *http.Client {
 
 func makeRequestData(query string, options *QueryOptions) ([]byte, error) {
 	request := &pb.QueryRequest{
-		Query:           query,
-		Shards:          options.Shards,
-		ColumnAttrs:     options.ColumnAttrs,
-		ExcludeRowAttrs: options.ExcludeRowAttrs,
-		ExcludeColumns:  options.ExcludeColumns,
+		Query:  query,
+		Shards: options.Shards,
 	}
 	r, err := proto.Marshal(request)
 	if err != nil {
@@ -1492,12 +1489,6 @@ func (co *ClientOptions) withDefaults() (updated *ClientOptions) {
 type QueryOptions struct {
 	// Shards restricts query to a subset of shards. Queries all shards if nil.
 	Shards []uint64
-	// ColumnAttrs enables returning columns in the query response.
-	ColumnAttrs bool
-	// ExcludeRowAttrs inhibits returning attributes
-	ExcludeRowAttrs bool
-	// ExcludeColumns inhibits returning columns
-	ExcludeColumns bool
 }
 
 func (qo *QueryOptions) addOptions(options ...interface{}) error {
@@ -1528,34 +1519,10 @@ func (qo *QueryOptions) addOptions(options ...interface{}) error {
 // QueryOption is used when using options with a client.Query,
 type QueryOption func(options *QueryOptions) error
 
-// OptQueryColumnAttrs enables returning column attributes in the result.
-func OptQueryColumnAttrs(enable bool) QueryOption {
-	return func(options *QueryOptions) error {
-		options.ColumnAttrs = enable
-		return nil
-	}
-}
-
 // OptQueryShards restricts the set of shards on which a query operates.
 func OptQueryShards(shards ...uint64) QueryOption {
 	return func(options *QueryOptions) error {
 		options.Shards = append(options.Shards, shards...)
-		return nil
-	}
-}
-
-// OptQueryExcludeAttrs enables discarding attributes from a result,
-func OptQueryExcludeAttrs(enable bool) QueryOption {
-	return func(options *QueryOptions) error {
-		options.ExcludeRowAttrs = enable
-		return nil
-	}
-}
-
-// OptQueryExcludeColumns enables discarding columns from a result,
-func OptQueryExcludeColumns(enable bool) QueryOption {
-	return func(options *QueryOptions) error {
-		options.ExcludeColumns = enable
 		return nil
 	}
 }
