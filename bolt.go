@@ -217,6 +217,23 @@ func (w *BoltWrapper) HasData() (has bool, err error) {
 func (w *BoltWrapper) CleanupTx(tx Tx) {
 	// inlined into Rollback and Commit, so this is a no-op, just here to satisfy the interface.
 }
+func (w *BoltWrapper) CloseDB() error {
+	w.muDb.Lock()
+	defer w.muDb.Unlock()
+	w.closed = true
+	return w.db.Close()
+}
+func (w *BoltWrapper) OpenDB() error {
+	w.muDb.Lock()
+	defer w.muDb.Unlock()
+	db, err := bolt.Open(w.path, 0666, &bolt.Options{Timeout: 5 * time.Second, InitialMmapSize: TxInitialMmapSize})
+	if err != nil {
+		return err
+	}
+	w.db = db
+	w.closed = false
+	return nil
+}
 
 func (tx *BoltTx) IsDone() (done bool) {
 	return atomic.LoadInt64(&tx.unlocked) == 1

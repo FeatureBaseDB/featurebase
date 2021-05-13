@@ -66,6 +66,9 @@ type DBWrapper interface {
 	Path() string
 	HasData() (has bool, err error)
 	SetHolder(h *Holder)
+	//needed for restore
+	CloseDB() error
+	OpenDB() error
 }
 
 type DBRegistry interface {

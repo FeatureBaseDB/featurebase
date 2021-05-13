@@ -571,6 +571,26 @@ func (w *RbfDBWrapper) Close() error {
 	return w.db.Close()
 }
 
+// needed to handle the special case on reload, the close method unregisters the wrapper and all that is
+// required is the backing file get reloaded
+
+func (w *RbfDBWrapper) CloseDB() error {
+	w.muDb.Lock()
+	defer w.muDb.Unlock()
+	w.closed = true
+	return w.db.Close()
+}
+func (w *RbfDBWrapper) OpenDB() error {
+	w.muDb.Lock()
+	defer w.muDb.Unlock()
+	err := w.db.Open()
+	if err != nil {
+		return err
+	}
+	w.closed = false
+	return nil
+}
+
 var globalNextTxSnRBFTx int64
 
 func (w *RbfDBWrapper) NewTx(write bool, initialIndex string, o Txo) (_ Tx, err error) {

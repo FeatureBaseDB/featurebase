@@ -16,17 +16,15 @@ package ctl
 
 import (
 	"archive/tar"
-	"bytes"
 	"compress/gzip"
 	"context"
 	"io"
 	"os"
 	"strings"
 
-	gohttp "net/http"
-
 	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/http"
+	"github.com/pilosa/pilosa/v2/vprint"
 )
 
 // RestoreCommand represents a command for restoring a backup to
@@ -41,16 +39,18 @@ type RestoreCommand struct {
 
 // NewRestoreCommand returns a new instance of RestoreCommand.
 func NewRestoreCommand(stdin io.Reader, stdout, stderr io.Writer) *RestoreCommand {
-	h := &gohttp.Client{}
-	host := "SOMETHING"
-	c, err := http.NewInternalClient(host, h)
-	if err != nil {
-		panic(err)
-	}
+	/*
+		h := &gohttp.Client{}
+		host := "SOMETHING"
+		c, err := http.NewInternalClient(host, h)
+		if err != nil {
+			panic(err)
+		}
+	*/
 
 	return &RestoreCommand{
-		CmdIO:  pilosa.NewCmdIO(stdin, stdout, stderr),
-		client: c,
+		CmdIO: pilosa.NewCmdIO(stdin, stdout, stderr),
+		//		client: c,
 	}
 }
 
@@ -95,14 +95,16 @@ func (cmd *RestoreCommand) Run(ctx context.Context) error {
 		tarReader = tar.NewReader(f)
 	}
 	//maybe begin transaction?
-	schemaJson := readSchema(cmd.Path)
-	//Push the schema from the archive into the cluster belonging to the host.
-	client := &gohttp.Client{}
-	url := "FIXME"
-	_, err = client.Post(url+"/schema", "application/json", bytes.NewBufferString(schemaJson))
-	if err != nil {
-		return err
-	}
+	/*
+		schemaJson := readSchema(cmd.Path)
+		//Push the schema from the archive into the cluster belonging to the host.
+		client := &gohttp.Client{}
+		url := "FIXME"
+		_, err = client.Post(url+"/schema", "application/json", bytes.NewBufferString(schemaJson))
+		if err != nil {
+			return err
+		}
+	*/
 	//TODO (twg) load schema
 	//TODO (twg) load rbf shard
 	//TODO (twg) load row keys
@@ -113,11 +115,44 @@ func (cmd *RestoreCommand) Run(ctx context.Context) error {
 
 	for {
 		header, err := tarReader.Next()
-		//fmt.Println("What %v", header.Name)
-		_ = header
 		if err == io.EOF {
 			break
 		}
+		record := strings.Split(header.Name, "/")
+		if len(record) == 1 {
+			switch record[0] {
+			case "schema":
+				vprint.VV("Load Schema")
+			case "idalloc":
+				vprint.VV("Load ids")
+			default:
+				panic("UNKNOWN " + record[0])
+
+			}
+			continue
+		}
+		indexName := record[1]
+		switch record[2] {
+		case "shards":
+			shard := record[3]
+			vprint.VV("shard %v %v", shard, indexName)
+		case "translate":
+			vprint.VV("column keys %v", indexName)
+		case "attributes":
+			vprint.VV("column attributes %v", indexName)
+		case "fields":
+			fieldName := record[3]
+			switch action := record[4]; action {
+			case "translate":
+				vprint.VV("field keys %v %v", indexName, fieldName)
+			case "attributes":
+				vprint.VV("field attributes %v %v", indexName, fieldName)
+			default:
+				panic("unknown:" + action)
+			}
+
+		}
+
 	}
 	/*	Fetch the cluster nodes from the target host.
 		For each index:
