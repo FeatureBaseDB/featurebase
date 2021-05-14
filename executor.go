@@ -4443,16 +4443,16 @@ func (e *executor) executeRowShard(ctx context.Context, qcx *Qcx, index string, 
 	// Union bitmaps across all time-based views.
 	views := viewsByTimeRange(viewStandard, fromTime, toTime, q)
 	rows := make([]*Row, 0, len(views))
+	tx, finisher, err := qcx.GetTx(Txo{Write: !writable, Index: idx, Shard: shard})
+	defer finisher(&err0)
 	for _, view := range views {
 		f := e.Holder.fragment(index, fieldName, view, shard)
 		if f == nil {
 			continue
 		}
-		tx, finisher, err := qcx.GetTx(Txo{Write: !writable, Fragment: f, Index: idx, Shard: shard})
 		if err != nil {
 			return nil, err
 		}
-		defer finisher(&err0)
 
 		row, err := f.row(tx, rowID)
 		if err != nil {
@@ -4743,8 +4743,7 @@ func (e *executor) executeNotShard(ctx context.Context, qcx *Qcx, index string, 
 	if err != nil {
 		return nil, err
 	}
-
-	defer finisher(&err0)
+	defer finisher(nil)
 
 	var existenceRow *Row
 	existenceFrag := e.Holder.fragment(index, existenceFieldName, viewStandard, shard)
@@ -4755,6 +4754,11 @@ func (e *executor) executeNotShard(ctx context.Context, qcx *Qcx, index string, 
 			return nil, err
 		}
 	}
+	// the finishers returned by a write tx, which we might be in if there's
+	// a higher-level write in this call OR ANY OTHER CALL, are safe to
+	// double-call, but we have to be sure of finishing before starting a
+	// bitmap call, or we lock against ourselves.
+	finisher(nil)
 
 	row, err := e.executeBitmapCallShard(ctx, qcx, index, c.Children[0], shard)
 	if err != nil {
