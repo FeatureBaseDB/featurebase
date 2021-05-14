@@ -23,6 +23,7 @@ import (
 	"io"
 	gohttp "net/http"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/pilosa/pilosa/v2"
@@ -171,8 +172,18 @@ func (cmd *RestoreCommand) Run(ctx context.Context) error {
 		indexName := record[1]
 		switch record[2] {
 		case "shards":
-			shard := record[3]
+			sshard := record[3]
+			shard, err := strconv.Atoi(sshard)
+			if err != nil {
+				return err
+			}
 			vprint.VV("shard %v %v", shard, indexName)
+			url := primary.URI.Path(fmt.Sprintf("/internal/restore/%v/%v", indexName, shard))
+			vprint.VV("%v", url)
+			_, err = c.Post(url, "application/octet-stream", tarReader)
+			if err != nil {
+				return err
+			}
 		case "translate":
 			vprint.VV("column keys %v", indexName)
 		case "attributes":
