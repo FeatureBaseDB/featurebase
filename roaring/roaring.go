@@ -2987,6 +2987,58 @@ func BitmapCountRange(bitmap []uint64, start, end int32) int32 {
 	return int32(n)
 }
 
+func callbackBits(w uint64, base uint16, fn func(uint16)) {
+	bit := uint16(0)
+	for w != 0 {
+		trail := bits.TrailingZeros64(w)
+		bit += uint16(trail)
+		w >>= (trail + 1)
+		fn(base + bit)
+	}
+}
+
+func bitmapCallbackRange(bitmap []uint64, start, end int32, fn func(uint16)) {
+	if roaringParanoia {
+		if start > end {
+			panic(fmt.Sprintf("counting in range but %v > %v", start, end))
+		}
+	}
+	i, j := start/64, end/64
+	// Special case when start and end fall in the same word.
+	if i == j {
+		offi, offj := uint(start%64), uint(64-end%64)
+		w := (bitmap[i] >> offi) << (offj + offi)
+		if w != 0 {
+			callbackBits(w, uint16(i)*64, fn)
+		}
+	}
+
+	// Count partial starting word.
+	if off := uint(start) % 64; off != 0 {
+		w := (bitmap[i] >> off) << off
+		if w != 0 {
+			callbackBits(w, (uint16(i) * 64), fn)
+		}
+		i++
+	}
+
+	// Count words in between.
+	for ; i < j; i++ {
+		if bitmap[i] != 0 {
+			callbackBits(bitmap[i], uint16(i)*64, fn)
+		}
+	}
+
+	// Count partial ending word.
+	if j < int32(len(bitmap)) {
+		off := 64 - (uint(end) % 64)
+		w := (bitmap[j] << off) >> off
+		if w != 0 {
+			callbackBits(w, uint16(j)*64, fn)
+		}
+	}
+}
+
 // RunCountRange returns the ranged bit count for RLE pairs.
 func RunCountRange(runs []Interval16, start, end int32) (n int32) {
 	if roaringParanoia {
@@ -4179,6 +4231,73 @@ func intersectionAnyBitmapBitmap(a, b *Container) bool {
 	return false
 }
 
+func containerCallback(a *Container, fn func(uint16)) {
+	if a.N() == 0 {
+		return
+	}
+	switch {
+	case a.isArray():
+		values := a.array()
+		for _, v := range values {
+			fn(v)
+		}
+	case a.isBitmap():
+		values := a.bitmap()
+		for i, w := range values {
+			if w == 0 {
+				continue
+			}
+			callbackBits(w, uint16(i)*64, fn)
+		}
+	case a.isRun():
+		values := a.runs()
+		for _, r := range values {
+			for i := int(r.Start); i <= int(r.Last); i++ {
+				fn(uint16(i))
+			}
+		}
+	}
+}
+
+func intersectionCallback(a, b *Container, fn func(uint16)) {
+	if a.N() == MaxContainerVal+1 {
+		containerCallback(b, fn)
+		return
+	}
+	if b.N() == MaxContainerVal+1 {
+		containerCallback(a, fn)
+		return
+	}
+	if a.N() == 0 || b.N() == 0 {
+		return
+	}
+	if a.isArray() {
+		if b.isArray() {
+			intersectionCallbackArrayArray(a, b, fn)
+		} else if b.isRun() {
+			intersectionCallbackArrayRun(a, b, fn)
+		} else {
+			intersectionCallbackArrayBitmap(a, b, fn)
+		}
+	} else if a.isRun() {
+		if b.isArray() {
+			intersectionCallbackArrayRun(b, a, fn)
+		} else if b.isRun() {
+			intersectionCallbackRunRun(a, b, fn)
+		} else {
+			intersectionCallbackBitmapRun(b, a, fn)
+		}
+	} else {
+		if b.isArray() {
+			intersectionCallbackArrayBitmap(b, a, fn)
+		} else if b.isRun() {
+			intersectionCallbackBitmapRun(a, b, fn)
+		} else {
+			intersectionCallbackBitmapBitmap(a, b, fn)
+		}
+	}
+}
+
 func intersectionCount(a, b *Container) int32 {
 	if a.N() == MaxContainerVal+1 {
 		return b.N()
@@ -4316,6 +4435,137 @@ func intersectionCountArrayBitmap(a, b *Container) (n int32) {
 func intersectionCountBitmapBitmap(a, b *Container) (n int32) {
 	statsHit("intersectionCount/BitmapBitmap")
 	return int32(popcountAndSlice(a.bitmap(), b.bitmap()))
+}
+
+func intersectionCallbackArrayArray(a, b *Container, fn func(uint16)) {
+	statsHit("intersectionCallback/ArrayArray")
+	ca, cb := a.array(), b.array()
+	na, nb := len(ca), len(cb)
+	if na > nb {
+		ca, cb = cb, ca
+		na, nb = nb, na // nolint: staticcheck, ineffassign
+	}
+	if (na << 2) < nb {
+		for _, va := range ca {
+			for cb[0] < va {
+				if len(cb) > 8 && cb[0] < va {
+					cb = cb[8:]
+				}
+				cb = cb[1:]
+				if len(cb) == 0 {
+					return
+				}
+			}
+			if cb[0] == va {
+				fn(va)
+			}
+		}
+		return
+	}
+	j := 0
+	for _, va := range ca {
+		for cb[j] < va {
+			j++
+			if j >= nb {
+				return
+			}
+		}
+		if cb[j] == va {
+			fn(va)
+		}
+	}
+}
+
+func intersectionCallbackArrayRun(a, b *Container, fn func(uint16)) {
+	statsHit("intersectionCallback/ArrayRun")
+	array, runs := a.array(), b.runs()
+	na, nb := len(array), len(runs)
+	for i, j := 0, 0; i < na && j < nb; {
+		va, vb := array[i], runs[j]
+		if va < vb.Start {
+			i++
+		} else if va >= vb.Start && va <= vb.Last {
+			i++
+			fn(va)
+		} else if va > vb.Last {
+			j++
+		}
+	}
+}
+
+func intersectionCallbackRunRun(a, b *Container, fn func(uint16)) {
+	statsHit("intersectionCount/RunRun")
+	ra, rb := a.runs(), b.runs()
+	na, nb := len(ra), len(rb)
+	for i, j := 0, 0; i < na && j < nb; {
+		va, vb := ra[i], rb[j]
+		if va.Last < vb.Start {
+			// |--va--| |--vb--|
+			i++
+		} else if va.Start > vb.Last {
+			// |--vb--| |--va--|
+			j++
+		} else if va.Last > vb.Last && va.Start >= vb.Start {
+			// |--vb-|-|-va--|
+			for i := int(va.Start); i <= int(vb.Last); i++ {
+				fn(uint16(i))
+			}
+			j++
+		} else if va.Last > vb.Last && va.Start < vb.Start {
+			// |--va|--vb--|--|
+			for i := int(vb.Start); i <= int(vb.Last); i++ {
+				fn(uint16(i))
+			}
+			j++
+		} else if va.Last <= vb.Last && va.Start >= vb.Start {
+			// |--vb|--va--|--|
+			for i := int(va.Start); i <= int(va.Last); i++ {
+				fn(uint16(i))
+			}
+			i++
+		} else if va.Last <= vb.Last && va.Start < vb.Start {
+			// |--va-|-|-vb--|
+			for i := int(vb.Start); i <= int(va.Last); i++ {
+				fn(uint16(i))
+			}
+			i++
+		}
+	}
+}
+
+func intersectionCallbackBitmapRun(a, b *Container, fn func(uint16)) {
+	statsHit("intersectionCount/BitmapRun")
+	for _, iv := range b.runs() {
+		bitmapCallbackRange(a.bitmap(), int32(iv.Start), int32(iv.Last)+1, fn)
+	}
+}
+
+func intersectionCallbackArrayBitmap(a, b *Container, fn func(uint16)) (n int32) {
+	statsHit("intersectionCount/ArrayBitmap")
+	bitmap := b.bitmap()
+	ln := len(bitmap)
+	for _, val := range a.array() {
+		i := int(val >> 6)
+		if i >= ln {
+			break
+		}
+		off := val % 64
+		n += int32(bitmap[i]>>off) & 1
+	}
+	return n
+}
+
+func intersectionCallbackBitmapBitmap(a, b *Container, fn func(uint16)) {
+	statsHit("intersectionCount/BitmapBitmap")
+	ab, bb := a.bitmap(), b.bitmap()
+	for i := range ab {
+		w := ab[i] & bb[i]
+		if w == 0 {
+			continue
+		}
+		base := uint16(i) * 64
+		callbackBits(w, base, fn)
+	}
 }
 
 func intersect(a, b *Container) (c *Container) {
