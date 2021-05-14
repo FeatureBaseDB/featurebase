@@ -55,9 +55,6 @@ func mustOpenView(tb testing.TB, index, field, name string) *view {
 	if err := v.openEmpty(); err != nil {
 		PanicOn(err)
 	}
-	v.rowAttrStore = &memAttrStore{
-		store: make(map[uint64]map[string]interface{}),
-	}
 	return v
 }
 

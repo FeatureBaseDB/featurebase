@@ -643,7 +643,7 @@ func (f *TxFactory) IndexUsageDetails() (map[string]IndexUsage, uint64, error) {
 			fieldUsages[field] = fUsage
 		}
 
-		// index metadata, e.g. columnAttrs
+		// index metadata
 		indexMetaBytes, err := directoryUsage(indexPath, false)
 		if err != nil {
 			return indexUsage, 0, errors.Wrapf(err, "getting disk usage for index metadata (%s)", index)
@@ -691,7 +691,7 @@ func (f *TxFactory) fieldUsage(indexPath string, fld *Field) (FieldUsage, error)
 		keysBytes = 0
 	}
 
-	// field metadata, e.g. rowAttrs
+	// field metadata
 	fieldPath := path.Join(indexPath, FieldsDir, field)
 	metaBytes, err := directoryUsage(fieldPath, false) // this includes keys
 	if err != nil {

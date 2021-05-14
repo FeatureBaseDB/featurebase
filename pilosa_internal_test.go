@@ -16,7 +16,6 @@ package pilosa
 
 import (
 	"bytes"
-	"io"
 	"reflect"
 	"testing"
 
@@ -47,34 +46,6 @@ func TestValidateNameInvalid(t *testing.T) {
 		}
 	}
 }
-
-// memAttrStore represents an in-memory implementation of the AttrStore interface.
-type memAttrStore struct {
-	store map[uint64]map[string]interface{}
-}
-
-func (s *memAttrStore) Path() string { return "" }
-func (s *memAttrStore) Open() error  { return nil }
-func (s *memAttrStore) Close() error { return nil }
-func (s *memAttrStore) Attrs(id uint64) (m map[string]interface{}, err error) {
-	return s.store[id], nil
-}
-func (s *memAttrStore) SetAttrs(id uint64, m map[string]interface{}) error {
-	s.store[id] = m
-	return nil
-}
-func (s *memAttrStore) SetBulkAttrs(m map[uint64]map[string]interface{}) error {
-	for id, v := range m {
-		s.store[id] = v
-	}
-	return nil
-}
-func (s *memAttrStore) Blocks() ([]AttrBlock, error) { return nil, nil }
-func (s *memAttrStore) BlockData(i uint64) (map[uint64]map[string]interface{}, error) {
-	return nil, nil
-}
-
-func (s *memAttrStore) WriteTo(w io.Writer) (int64, error) { return 0, nil }
 
 func TestAPI_CombineForExistence(t *testing.T) {
 	bm := roaring.NewBitmap(pos(1, 1), pos(1, 2), pos(1, 3), pos(1, 65537), pos(1, 65538), pos(2, 1), pos(2, 2), pos(2, 5), pos(2, 65537), pos(2, 65538))

@@ -60,9 +60,8 @@ type view struct {
 	// Fragments by shard.
 	fragments map[uint64]*fragment
 
-	broadcaster  broadcaster
-	stats        stats.StatsClient
-	rowAttrStore AttrStore
+	broadcaster broadcaster
+	stats       stats.StatsClient
 
 	knownShards       *roaring.Bitmap
 	knownShardsCopied uint32
@@ -148,7 +147,6 @@ func (v *view) openWithShardSet(ss *shardSet) error {
 	for shard := range shards {
 		frag := v.newFragment(shard)
 		frags = append(frags, frag)
-		frag.RowAttrStore = v.rowAttrStore
 		v.fragments[frag.shard] = frag
 	}
 
@@ -333,7 +331,6 @@ func (v *view) CreateFragmentIfNotExists(shard uint64) (*fragment, error) {
 	if err := frag.Open(); err != nil {
 		return nil, errors.Wrap(err, "opening fragment")
 	}
-	frag.RowAttrStore = v.rowAttrStore
 
 	v.fragments[shard] = frag
 	v.addKnownShard(shard)

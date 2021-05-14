@@ -1289,46 +1289,6 @@ func TestFragment_Top(t *testing.T) {
 	}
 }
 
-// Ensure a fragment can filter rows when retrieving the top n rows.
-func TestFragment_Top_Filter(t *testing.T) {
-	f, idx, tx := mustOpenFragment(t, "i", "f", viewStandard, 0, CacheTypeRanked)
-	defer f.Clean(t)
-
-	// Set bits on the rows 100, 101, & 102.
-	f.mustSetBits(tx, 100, 1, 3, 200)
-	f.mustSetBits(tx, 101, 1)
-	f.mustSetBits(tx, 102, 1, 2)
-	f.RecalculateCache()
-	// Assign attributes.
-	err := f.RowAttrStore.SetAttrs(101, map[string]interface{}{"x": int64(10)})
-	if err != nil {
-		t.Fatalf("setAttrs: %v", err)
-	}
-	err = f.RowAttrStore.SetAttrs(102, map[string]interface{}{"x": int64(20)})
-	if err != nil {
-		t.Fatalf("setAttrs: %v", err)
-	}
-
-	PanicOn(tx.Commit())
-	tx = idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: f.shard})
-	defer tx.Rollback()
-
-	// Retrieve top rows.
-	if pairs, err := f.top(tx, topOptions{
-		N:            2,
-		FilterName:   "x",
-		FilterValues: []interface{}{int64(10), int64(15), int64(20)},
-	}); err != nil {
-		t.Fatal(err)
-	} else if len(pairs) != 2 {
-		t.Fatalf("unexpected count: %d", len(pairs))
-	} else if pairs[0] != (Pair{ID: 102, Count: 2}) {
-		t.Fatalf("unexpected pair(0): %v", pairs[0])
-	} else if pairs[1] != (Pair{ID: 101, Count: 1}) {
-		t.Fatalf("unexpected pair(1): %v", pairs[1])
-	}
-}
-
 // Ensure a fragment can return top rows that intersect with an input row.
 func TestFragment_TopN_Intersect(t *testing.T) {
 	f, idx, tx := mustOpenFragment(t, "i", "f", viewStandard, 0, CacheTypeRanked)
@@ -3637,9 +3597,6 @@ func mustOpenFragmentFlags(tb testing.TB, index, field, view string, shard uint6
 	})
 
 	f.CacheType = cacheType
-	f.RowAttrStore = &memAttrStore{
-		store: make(map[uint64]map[string]interface{}),
-	}
 
 	if err := f.Open(); err != nil {
 		PanicOn(err)

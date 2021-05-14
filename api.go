@@ -189,13 +189,10 @@ func (api *API) query(ctx context.Context, req *QueryRequest) (QueryResponse, er
 
 	// TODO can we get rid of exec options and pass the QueryRequest directly to executor?
 	execOpts := &execOptions{
-		Remote:          req.Remote,
-		Profile:         req.Profile,
-		ExcludeRowAttrs: req.ExcludeRowAttrs, // NOTE: Kept for Pilosa 1.x compat.
-		ExcludeColumns:  req.ExcludeColumns,  // NOTE: Kept for Pilosa 1.x compat.
-		ColumnAttrs:     req.ColumnAttrs,     // NOTE: Kept for Pilosa 1.x compat.
-		PreTranslated:   req.PreTranslated,
-		EmbeddedData:    req.EmbeddedData, // precomputed values that needed to be passed with the request
+		Remote:        req.Remote,
+		Profile:       req.Profile,
+		PreTranslated: req.PreTranslated,
+		EmbeddedData:  req.EmbeddedData, // precomputed values that needed to be passed with the request
 	}
 	resp, err := api.server.executor.Execute(ctx, req.Index, q, req.Shards, execOpts)
 	if err != nil {
@@ -280,15 +277,6 @@ func (api *API) DeleteIndex(ctx context.Context, indexName string) error {
 	return nil
 }
 
-func (api *API) WriteColumnAttrDataTo(ctx context.Context, w io.Writer, indexName string) error {
-	index := api.holder.Index(indexName)
-	if index == nil {
-		return newNotFoundError(ErrIndexNotFound, indexName)
-	}
-	_, err := index.ColumnAttrStore().WriteTo(w)
-	return err
-}
-
 // CreateField makes the named field in the named index with the given options.
 // This method currently only takes a single functional option, but that may be
 // changed in the future to support multiple options.
@@ -344,15 +332,6 @@ func (api *API) Field(ctx context.Context, indexName, fieldName string) (*Field,
 		return nil, newNotFoundError(ErrFieldNotFound, fieldName)
 	}
 	return field, nil
-}
-
-func (api *API) WriteRowAttrDataTo(ctx context.Context, w io.Writer, indexName, fieldName string) error {
-	field := api.holder.Field(indexName, fieldName)
-	if field == nil {
-		return newNotFoundError(ErrFieldNotFound, fieldName)
-	}
-	_, err := field.RowAttrStore().WriteTo(w)
-	return err
 }
 
 func setUpImportOptions(opts ...ImportOption) (*ImportOptions, error) {
@@ -1187,82 +1166,6 @@ func (api *API) DeleteView(ctx context.Context, indexName string, fieldName stri
 	return errors.Wrap(err, "sending DeleteView message")
 }
 
-// IndexAttrDiff determines the local column attribute data blocks which differ from those provided.
-func (api *API) IndexAttrDiff(ctx context.Context, indexName string, blocks []AttrBlock) (map[uint64]map[string]interface{}, error) {
-	span, _ := tracing.StartSpanFromContext(ctx, "API.IndexAttrDiff")
-	defer span.Finish()
-
-	if err := api.validate(apiIndexAttrDiff); err != nil {
-		return nil, errors.Wrap(err, "validating api method")
-	}
-
-	// Retrieve index from holder.
-	index := api.holder.Index(indexName)
-	if index == nil {
-		return nil, newNotFoundError(ErrIndexNotFound, indexName)
-	}
-
-	// Retrieve local blocks.
-	localBlocks, err := index.ColumnAttrStore().Blocks()
-	if err != nil {
-		return nil, errors.Wrap(err, "getting blocks")
-	}
-
-	// Read all attributes from all mismatched blocks.
-	attrs := make(map[uint64]map[string]interface{})
-	for _, blockID := range attrBlocks(localBlocks).Diff(blocks) {
-		// Retrieve block data.
-		m, err := index.ColumnAttrStore().BlockData(blockID)
-		if err != nil {
-			return nil, errors.Wrap(err, "getting block")
-		}
-
-		// Copy to index-wide struct.
-		for k, v := range m {
-			attrs[k] = v
-		}
-	}
-	return attrs, nil
-}
-
-// FieldAttrDiff determines the local row attribute data blocks which differ from those provided.
-func (api *API) FieldAttrDiff(ctx context.Context, indexName string, fieldName string, blocks []AttrBlock) (map[uint64]map[string]interface{}, error) {
-	span, _ := tracing.StartSpanFromContext(ctx, "API.FieldAttrDiff")
-	defer span.Finish()
-
-	if err := api.validate(apiFieldAttrDiff); err != nil {
-		return nil, errors.Wrap(err, "validating api method")
-	}
-
-	// Retrieve index from holder.
-	f := api.holder.Field(indexName, fieldName)
-	if f == nil {
-		return nil, newNotFoundError(ErrFieldNotFound, fieldName)
-	}
-
-	// Retrieve local blocks.
-	localBlocks, err := f.RowAttrStore().Blocks()
-	if err != nil {
-		return nil, errors.Wrap(err, "getting blocks")
-	}
-
-	// Read all attributes from all mismatched blocks.
-	attrs := make(map[uint64]map[string]interface{})
-	for _, blockID := range attrBlocks(localBlocks).Diff(blocks) {
-		// Retrieve block data.
-		m, err := f.RowAttrStore().BlockData(blockID)
-		if err != nil {
-			return nil, errors.Wrap(err, "getting block")
-		}
-
-		// Copy to index-wide struct.
-		for k, v := range m {
-			attrs[k] = v
-		}
-	}
-	return attrs, nil
-}
-
 // IndexShardSnapshot returns a reader that contains the contents of an RBF snapshot for an index/shard.
 func (api *API) IndexShardSnapshot(ctx context.Context, indexName string, shard uint64) (io.ReadCloser, error) {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.IndexShardSnapshot")
@@ -1764,36 +1667,6 @@ func (api *API) ImportValueWithTx(ctx context.Context, qcx *Qcx, req *ImportValu
 	}
 	if isLocalQcx {
 		return qcx.Finish()
-	}
-	return nil
-}
-
-func (api *API) ImportColumnAttrs(ctx context.Context, req *ImportColumnAttrsRequest, opts ...ImportOption) error {
-	span, _ := tracing.StartSpanFromContext(ctx, "API.ImportColumnAttrs")
-	defer span.Finish()
-
-	index, err := api.Index(ctx, req.Index)
-	if err != nil {
-		return errors.Wrap(err, "getting index")
-	}
-
-	if err := api.validateShardOwnership(req.Index, uint64(req.Shard)); err != nil {
-		return errors.Wrap(err, "validating shard ownership")
-	}
-
-	if req.IndexCreatedAt != 0 {
-		if index.CreatedAt() != req.IndexCreatedAt {
-			return ErrPreconditionFailed
-		}
-	}
-
-	bulkAttrs := make(map[uint64]map[string]interface{})
-	for n := 0; n < len(req.ColumnIDs); n++ {
-		bulkAttrs[uint64(req.ColumnIDs[n])] = map[string]interface{}{req.AttrKey: req.AttrVals[n]}
-	}
-	if err := index.ColumnAttrStore().SetBulkAttrs(bulkAttrs); err != nil {
-		api.server.logger.Errorf("import error: index=%s, shard=%d, len(columns)=%d, err=%s", req.Index, req.Shard, len(req.ColumnIDs), err)
-		return errors.Wrap(err, "importing column attrs")
 	}
 	return nil
 }
@@ -2369,12 +2242,10 @@ const (
 	apiTranslateData
 	apiFieldTranslateData
 	apiField
-	apiFieldAttrDiff
 	//apiHosts // not implemented
 	apiImport
 	apiImportValue
 	apiIndex
-	apiIndexAttrDiff
 	//apiLocalID // not implemented
 	//apiLongQueryTime // not implemented
 	//apiMaxShards // not implemented
@@ -2418,9 +2289,7 @@ var methodsDegraded = map[apiMethod]struct{}{
 	apiFragmentBlockData: {},
 	apiFragmentBlocks:    {},
 	apiField:             {},
-	apiFieldAttrDiff:     {},
 	apiIndex:             {},
-	apiIndexAttrDiff:     {},
 	apiQuery:             {},
 	apiRecalculateCaches: {},
 	apiRemoveNode:        {},
@@ -2446,11 +2315,9 @@ var methodsNormal = map[apiMethod]struct{}{
 	apiFragmentBlocks:       {},
 	apiField:                {},
 	apiFieldTranslateData:   {},
-	apiFieldAttrDiff:        {},
 	apiImport:               {},
 	apiImportValue:          {},
 	apiIndex:                {},
-	apiIndexAttrDiff:        {},
 	apiQuery:                {},
 	apiRecalculateCaches:    {},
 	apiRemoveNode:           {},

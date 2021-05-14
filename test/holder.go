@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"github.com/pilosa/pilosa/v2"
-	"github.com/pilosa/pilosa/v2/boltdb"
 	"github.com/pilosa/pilosa/v2/pql"
 	"github.com/pilosa/pilosa/v2/testhook"
 	. "github.com/pilosa/pilosa/v2/vprint" // nolint:staticcheck
@@ -40,7 +39,6 @@ func NewHolder(tb testing.TB) *Holder {
 	}
 
 	h := &Holder{Holder: pilosa.NewHolder(path, nil)}
-	h.Holder.NewAttrStore = boltdb.NewAttrStore
 
 	return h
 }
@@ -113,15 +111,6 @@ func (h *Holder) ReadRow(index, field string, rowID uint64) *pilosa.Row {
 	// clone it so that mmapped storage doesn't disappear from under it
 	// once the tx goes away.
 	return row.Clone()
-}
-
-func (h *Holder) RowAttrStore(index, field string) pilosa.AttrStore {
-	idx := h.MustCreateIndexIfNotExists(index, pilosa.IndexOptions{})
-	f, err := idx.CreateFieldIfNotExists(field, pilosa.OptFieldTypeDefault())
-	if err != nil {
-		panic(err)
-	}
-	return f.RowAttrStore()
 }
 
 func (h *Holder) RowTime(index, field string, rowID uint64, t time.Time, quantum string) *pilosa.Row {

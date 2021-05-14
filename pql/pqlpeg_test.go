@@ -36,16 +36,6 @@ SetBit(Union(Zitmap(row==4), Intersect(Qitmap(blah>4), Ritmap(field="http://zoo9
 	}
 	p.Execute()
 
-	p = PQL{Buffer: `SetRowAttrs(attr="http://zoo9.com=\\'hello' "and \"hello\"")`}
-	err = p.Init()
-	if err != nil {
-		t.Fatal(errors.Wrap(err, "creating parser"))
-	}
-	err = p.Parse()
-	if err == nil {
-		t.Fatalf("should have been an error because of the interior unescaped double quote")
-	}
-
 	q, err := ParseString("TopN(blah, Bitmap(id==other), field=f, n=0)")
 	if err != nil {
 		t.Fatalf("should have parsed: %v", err)
@@ -191,38 +181,6 @@ func TestPEGWorking(t *testing.T) {
 			input:  `Row(a='zm""e')`,
 			ncalls: 1},
 		{
-			name:   "SetRowAttrs",
-			input:  "SetRowAttrs(blah, 9, a=47)",
-			ncalls: 1},
-		{
-			name:   "SetRowAttrs2args",
-			input:  "SetRowAttrs(blah, 9, a=47, b=bval)",
-			ncalls: 1},
-		{
-			name:   "SetRowAttrsWithRowKeySingleQuote",
-			input:  "SetRowAttrs(blah, 'rowKey', a=47)",
-			ncalls: 1},
-		{
-			name:   "SetRowAttrsWithRowKeyDoubleQuote",
-			input:  `SetRowAttrs(blah, "rowKey", a=47)`,
-			ncalls: 1},
-		{
-			name:   "SetColumnAttrs",
-			input:  "SetColumnAttrs(9, a=47)",
-			ncalls: 1},
-		{
-			name:   "SetColumnAttrs2args",
-			input:  "SetColumnAttrs(9, a=47, b=bval)",
-			ncalls: 1},
-		{
-			name:   "SetColumnAttrsWithColKeySingleQuote",
-			input:  "SetColumnAttrs('colKey', a=47)",
-			ncalls: 1},
-		{
-			name:   "SetColumnAttrsWithColKeyDoubleQuote",
-			input:  `SetColumnAttrs("colKey", a=47)`,
-			ncalls: 1},
-		{
 			name:   "Clear",
 			input:  "Clear(1, a=53)",
 			ncalls: 1},
@@ -353,9 +311,6 @@ func TestPEGErrors(t *testing.T) {
 			name:  "StartinCommaArb",
 			input: "Row(, a=4)"},
 		{
-			name:  "SetRowAttrs0args",
-			input: "SetRowAttrs(blah, 9)"},
-		{
 			name:  "Clear0args",
 			input: "Clear(9)"},
 		{
@@ -483,91 +438,6 @@ func TestPQLDeepEquality(t *testing.T) {
 				Name: "Rows",
 				Args: map[string]interface{}{
 					"_field": "myfield",
-				},
-			}},
-		{
-			name: "SetRowAttrs",
-			call: "SetRowAttrs(myfield, 9, z=4)",
-			exp: &Call{
-				Name: "SetRowAttrs",
-				Args: map[string]interface{}{
-					"z":      int64(4),
-					"_field": "myfield",
-					"_row":   int64(9),
-				},
-			}},
-		{
-			name: "SetRowAttrsWithField=",
-			call: "SetRowAttrs(field=myfield, 9, z=4)",
-			exp: &Call{
-				Name: "SetRowAttrs",
-				Args: map[string]interface{}{
-					"z":      int64(4),
-					"_field": "myfield",
-					"_row":   int64(9),
-				},
-			}},
-		{
-			name: "SetRowAttrsWithRowKeySingleQuote",
-			call: "SetRowAttrs(myfield, 'rowKey', z=4)",
-			exp: &Call{
-				Name: "SetRowAttrs",
-				Args: map[string]interface{}{
-					"z":      int64(4),
-					"_field": "myfield",
-					"_row":   "rowKey",
-				},
-			}},
-		{
-			name: "SetRowAttrsWithRowKeyDoubleQuote",
-			call: `SetRowAttrs(myfield, "rowKey", z=4)`,
-			exp: &Call{
-				Name: "SetRowAttrs",
-				Args: map[string]interface{}{
-					"z":      int64(4),
-					"_field": "myfield",
-					"_row":   "rowKey",
-				},
-			}},
-		{
-			name: "SetRowAttrsWithUnicodeValues",
-			call: `SetRowAttrs(myfield, "∫", z="∀", a="∑")`,
-			exp: &Call{
-				Name: "SetRowAttrs",
-				Args: map[string]interface{}{
-					"z":      "∀",
-					"a":      "∑",
-					"_field": "myfield",
-					"_row":   "∫",
-				},
-			}}, {
-			name: "SetColumnAttrs",
-			call: "SetColumnAttrs(9, z=4)",
-			exp: &Call{
-				Name: "SetColumnAttrs",
-				Args: map[string]interface{}{
-					"z":    int64(4),
-					"_col": int64(9),
-				},
-			}},
-		{
-			name: "SetColumnAttrsWithColKeySingleQuote",
-			call: "SetColumnAttrs('colKey', z=4)",
-			exp: &Call{
-				Name: "SetColumnAttrs",
-				Args: map[string]interface{}{
-					"z":    int64(4),
-					"_col": "colKey",
-				},
-			}},
-		{
-			name: "SetColumnAttrsWithColKeyDoubleQuote",
-			call: `SetColumnAttrs("colKey", z=4)`,
-			exp: &Call{
-				Name: "SetColumnAttrs",
-				Args: map[string]interface{}{
-					"z":    int64(4),
-					"_col": "colKey",
 				},
 			}},
 		{
@@ -839,11 +709,15 @@ func TestPQLDeepEquality(t *testing.T) {
 			}},
 		{
 			name: "OptionsWrapper",
-			call: "Options(Row(f1=123), excludeRowAttrs=true)",
+			call: "Options(Row(f1=123), shards=[1,2,3])",
 			exp: &Call{
 				Name: "Options",
 				Args: map[string]interface{}{
-					"excludeRowAttrs": true,
+					"shards": []interface{}{
+						int64(1),
+						int64(2),
+						int64(3),
+					},
 				},
 				Children: []*Call{
 					{

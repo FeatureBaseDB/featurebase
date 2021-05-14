@@ -198,17 +198,11 @@ func (cmd *BackupCommand) backupIndex(ctx context.Context, tw *tar.Writer, ii *p
 	if err := cmd.backupIndexTranslateData(ctx, tw, ii.Name); err != nil {
 		return err
 	}
-	if err := cmd.backupIndexAttrData(ctx, tw, ii.Name); err != nil {
-		return err
-	}
 
-	// Back up field translation & attribute data.
+	// Back up field translation data.
 	for _, fi := range ii.Fields {
 		if err := cmd.backupFieldTranslateData(ctx, tw, ii.Name, fi.Name); err != nil {
 			return fmt.Errorf("cannot backup field translation data for field %q on index %q: %w", fi.Name, ii.Name, err)
-		}
-		if err := cmd.backupFieldAttrData(ctx, tw, ii.Name, fi.Name); err != nil {
-			return fmt.Errorf("cannot backup field attr data for field %q on index %q: %w", fi.Name, ii.Name, err)
 		}
 	}
 
@@ -294,36 +288,6 @@ func (cmd *BackupCommand) backupIndexPartitionTranslateData(ctx context.Context,
 	return nil
 }
 
-func (cmd *BackupCommand) backupIndexAttrData(ctx context.Context, tw *tar.Writer, name string) error {
-	logger := cmd.Logger()
-	logger.Printf("backing up index attr data: %s", name)
-
-	rc, err := cmd.client.IndexAttrDataReader(ctx, name)
-	if err != nil {
-		return fmt.Errorf("fetching index attr data reader: %w", err)
-	}
-	defer rc.Close()
-
-	// Read to buffer to determine size.
-	var buf bytes.Buffer
-	if _, err := buf.ReadFrom(rc); err != nil {
-		return fmt.Errorf("copying index attr data to memory: %w", err)
-	}
-
-	// Build header & copy data to archive.
-	if err = tw.WriteHeader(&tar.Header{
-		Name:    path.Join("indexes", name, "attributes"),
-		Mode:    0666,
-		Size:    int64(buf.Len()),
-		ModTime: time.Now(),
-	}); err != nil {
-		return err
-	} else if _, err := io.Copy(tw, &buf); err != nil {
-		return fmt.Errorf("copying index attr data to archive: %w", err)
-	}
-	return nil
-}
-
 func (cmd *BackupCommand) backupFieldTranslateData(ctx context.Context, tw *tar.Writer, indexName, fieldName string) error {
 	logger := cmd.Logger()
 	logger.Printf("backing up field translation data: %s/%s", indexName, fieldName)
@@ -352,36 +316,6 @@ func (cmd *BackupCommand) backupFieldTranslateData(ctx context.Context, tw *tar.
 		return err
 	} else if _, err := io.Copy(tw, &buf); err != nil {
 		return fmt.Errorf("copying translate data to archive: %w", err)
-	}
-	return nil
-}
-
-func (cmd *BackupCommand) backupFieldAttrData(ctx context.Context, tw *tar.Writer, indexName, fieldName string) error {
-	logger := cmd.Logger()
-	logger.Printf("backing up field attr data: %s/%s", indexName, fieldName)
-
-	rc, err := cmd.client.FieldAttrDataReader(ctx, indexName, fieldName)
-	if err != nil {
-		return fmt.Errorf("fetching field attr data reader: %w", err)
-	}
-	defer rc.Close()
-
-	// Read to buffer to determine size.
-	var buf bytes.Buffer
-	if _, err := buf.ReadFrom(rc); err != nil {
-		return fmt.Errorf("copying field attr data to memory: %w", err)
-	}
-
-	// Build header & copy data to archive.
-	if err = tw.WriteHeader(&tar.Header{
-		Name:    path.Join("indexes", indexName, "fields", fieldName, "attributes"),
-		Mode:    0666,
-		Size:    int64(buf.Len()),
-		ModTime: time.Now(),
-	}); err != nil {
-		return err
-	} else if _, err := io.Copy(tw, &buf); err != nil {
-		return fmt.Errorf("copying field attr data to archive: %w", err)
 	}
 	return nil
 }

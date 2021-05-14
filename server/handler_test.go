@@ -687,28 +687,8 @@ func TestHandler_Endpoints(t *testing.T) {
 		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i0/query", strings.NewReader("Row(f0=30)")))
 		if w.Code != gohttp.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
-		} else if body := w.Body.String(); body != fmt.Sprintf(`{"results":[{"attrs":{},"columns":[%d,%d,%d]}]}`, pilosa.ShardWidth+1, pilosa.ShardWidth+2, 3*pilosa.ShardWidth+4)+"\n" {
+		} else if body := w.Body.String(); body != fmt.Sprintf(`{"results":[{"columns":[%d,%d,%d]}]}`, pilosa.ShardWidth+1, pilosa.ShardWidth+2, 3*pilosa.ShardWidth+4)+"\n" {
 			t.Fatalf("unexpected body: %s", body)
-		}
-	})
-
-	f0 := i0.Field("f0")
-	if err := i0.ColumnAttrStore().SetAttrs((1*pilosa.ShardWidth)+1, map[string]interface{}{"x": "y"}); err != nil {
-		t.Fatal(err)
-	} else if err := i0.ColumnAttrStore().SetAttrs((1*pilosa.ShardWidth)+2, map[string]interface{}{"y": 123, "z": false}); err != nil {
-		t.Fatal(err)
-	} else if err := f0.RowAttrStore().SetAttrs(30, map[string]interface{}{"a": "b", "c": 1, "d": true}); err != nil {
-		t.Fatal(err)
-	}
-
-	t.Run("ColumnAttrs_JSON", func(t *testing.T) {
-		w := httptest.NewRecorder()
-		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i0/query?columnAttrs=true", strings.NewReader("Row(f0=30)")))
-		exp := fmt.Sprintf(`{"results":[{"attrs":{"a":"b","c":1,"d":true},"columns":[%[1]d,%[2]d,%[3]d]}],"columnAttrs":[{"id":%[1]d,"attrs":{"x":"y"}},{"id":%[2]d,"attrs":{"y":123,"z":false}}]}`, pilosa.ShardWidth+1, pilosa.ShardWidth+2, 3*pilosa.ShardWidth+4) + "\n"
-		if w.Code != gohttp.StatusOK {
-			t.Fatalf("unexpected status code: %d. body: %s", w.Code, w.Body.String())
-		} else if body := w.Body.String(); body != exp {
-			t.Fatalf("unexpected body: \n%s\ngot:\n%s", body, exp)
 		}
 	})
 
@@ -726,62 +706,6 @@ func TestHandler_Endpoints(t *testing.T) {
 			t.Fatal(err)
 		} else if columns := resp.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(columns, []uint64{pilosa.ShardWidth + 1, pilosa.ShardWidth + 2, (3 * pilosa.ShardWidth) + 4}) {
 			t.Fatalf("unexpected columns: %+v", columns)
-		} else if attrs := resp.Results[0].(*pilosa.Row).Attrs; len(attrs) != 3 {
-			t.Fatalf("unexpected attr length: %d", len(attrs))
-		} else if attrs["a"] != "b" {
-			t.Fatalf("unexpected attr[a]: %v", attrs["a"])
-		} else if attrs["c"] != int64(1) {
-			t.Fatalf("unexpected attr[c]: %v", attrs["c"])
-		} else if !attrs["d"].(bool) {
-			t.Fatalf("unexpected attr[d]: %v", attrs["d"])
-		}
-	})
-
-	t.Run("Row columnattrs protobuf", func(t *testing.T) {
-		// Encode request body.
-		buf, err := cmd.API.Serializer.Marshal(&pilosa.QueryRequest{
-			Query:       "Row(f0=30)",
-			ColumnAttrs: true,
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		w := httptest.NewRecorder()
-		r := test.MustNewHTTPRequest("POST", "/index/i0/query", bytes.NewReader(buf))
-		r.Header.Set("Content-Type", "application/x-protobuf")
-		r.Header.Set("Accept", "application/x-protobuf")
-		h.ServeHTTP(w, r)
-		if w.Code != gohttp.StatusOK {
-			t.Fatalf("unexpected status code: %d", w.Code)
-		}
-
-		var resp pilosa.QueryResponse
-		if err := cmd.API.Serializer.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-			t.Fatal(err)
-		}
-		if columns := resp.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(columns, []uint64{pilosa.ShardWidth + 1, pilosa.ShardWidth + 2, (3 * pilosa.ShardWidth) + 4}) {
-			t.Fatalf("unexpected columns: %+v", columns)
-		} else if _, ok := resp.Results[0].(*pilosa.Row); !ok {
-			t.Fatalf("unexpected response type: %#v", resp.Results[0])
-		} else if attrs := resp.Results[0].(*pilosa.Row).Attrs; len(attrs) != 3 {
-			t.Fatalf("unexpected attr length: %d", len(attrs))
-		} else if attrs["a"] != "b" {
-			t.Fatalf("unexpected attr[a]: %v", attrs["a"])
-		} else if attrs["c"] != int64(1) {
-			t.Fatalf("unexpected attr[c]: %v", attrs["c"])
-		} else if !attrs["d"].(bool) {
-			t.Fatalf("unexpected attr[d]: %v", attrs["d"])
-		}
-
-		if a := resp.ColumnAttrSets; len(a) != 2 {
-			t.Fatalf("unexpected column attributes length: %d", len(a))
-		} else if a[0].ID != pilosa.ShardWidth+1 {
-			t.Fatalf("unexpected id: %d", a[0].ID)
-		} else if len(a[0].Attrs) != 1 {
-			t.Fatalf("unexpected column attr length: %d", len(a))
-		} else if a[0].Attrs["x"] != "y" {
-			t.Fatalf("unexpected attr[x]: %v", a[0].Attrs["x"])
 		}
 	})
 
@@ -1091,83 +1015,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		}
 	})
 
-	i := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
-	if err := i.ColumnAttrStore().SetAttrs(1, map[string]interface{}{"foo": 1, "bar": 2}); err != nil {
-		t.Fatal(err)
-	} else if err := i.ColumnAttrStore().SetAttrs(100, map[string]interface{}{"x": "y"}); err != nil {
-		t.Fatal(err)
-	} else if err := i.ColumnAttrStore().SetAttrs(200, map[string]interface{}{"snowman": "☃"}); err != nil {
-		t.Fatal(err)
-	}
-
-	t.Run("AttrStore Diff", func(t *testing.T) {
-		blks, err := i.ColumnAttrStore().Blocks()
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		blks = blks[1:]
-		blks[1].Checksum = []byte("MISMATCHED_CHECKSUM")
-
-		// Send block checksums to determine diff.
-		req := test.MustNewHTTPRequest(
-			"POST",
-			"/internal/index/i/attr/diff",
-			strings.NewReader(`{"blocks":`+string(test.MustMarshalJSON(blks))+`}`),
-		)
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Accept", "application/json")
-		w := httptest.NewRecorder()
-		h.ServeHTTP(w, req)
-		if w.Code != gohttp.StatusOK {
-			t.Fatalf("unexpected status code: %d, body: %s", w.Code, w.Body.String())
-		}
-
-		// Read and validate body.
-		if w.Body.String() != `{"attrs":{"1":{"bar":2,"foo":1},"200":{"snowman":"☃"}}}`+"\n" {
-			t.Fatalf("unexpected body: %s", w.Body.String())
-		}
-	})
-
-	meta, err := i.CreateFieldIfNotExists("meta", pilosa.OptFieldTypeDefault())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := meta.RowAttrStore().SetAttrs(1, map[string]interface{}{"foo": 1, "bar": 2}); err != nil {
-		t.Fatal(err)
-	} else if err := meta.RowAttrStore().SetAttrs(100, map[string]interface{}{"x": "y"}); err != nil {
-		t.Fatal(err)
-	} else if err := meta.RowAttrStore().SetAttrs(200, map[string]interface{}{"snowman": "☃"}); err != nil {
-		t.Fatal(err)
-	}
-
-	t.Run("field attrstore diff", func(t *testing.T) {
-		blks, err := meta.RowAttrStore().Blocks()
-		if err != nil {
-			t.Fatal(err)
-		}
-		blks = blks[1:]
-		blks[1].Checksum = []byte("MISMATCHED_CHECKSUM")
-
-		// Send block checksums to determine diff.
-		req := test.MustNewHTTPRequest(
-			"POST",
-			"/internal/index/i/field/meta/attr/diff",
-			strings.NewReader(`{"blocks":`+string(test.MustMarshalJSON(blks))+`}`),
-		)
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Accept", "application/json")
-		w := httptest.NewRecorder()
-		h.ServeHTTP(w, req)
-		if w.Code != gohttp.StatusOK {
-			t.Fatalf("unexpected status code: %d, body: %s", w.Code, w.Body.String())
-		}
-
-		// Read and validate body.
-		if w.Body.String() != `{"attrs":{"1":{"bar":2,"foo":1},"200":{"snowman":"☃"}}}`+"\n" {
-			t.Fatalf("unexpected body: %s", w.Body.String())
-		}
-	})
+	hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
 
 	t.Run("Version", func(t *testing.T) {
 		w := httptest.NewRecorder()

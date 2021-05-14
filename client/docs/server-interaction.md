@@ -101,12 +101,6 @@ You can send queries to a Pilosa server using the `Query` function of the `Clien
 response, err := cli.Query(field.Row(5));
 ```
 
-`Query` accepts zero or more options:
-
-```go
-response, err := cli.Query(field.Row(5), pilosa.ColumnAttrs(true), pilosa.ExcludeColumns(true))
-```
-
 ## Server Response
 
 When a query is sent to a Pilosa server, the server either fulfills the query or sends an error message. In the case of an error, a `pilosa.Error` struct is returned, otherwise a `QueryResponse` struct is returned.
@@ -131,17 +125,6 @@ for _, result := range response.Results() {
 }
 ```
 
-Similarly, a `QueryResponse` struct may include a number of column attributes if `ColumnAttrs` query option was set to `true`:
-
-```go
-var column *pilosa.ColumnItem
-
-// iterate over all columns
-for _, column = range response.ColumnAttrs() {
-    // Act on the column item
-}
-```
-
 `QueryResult` objects contain:
 
 * `Row()` function to retrieve a row result,
@@ -153,7 +136,6 @@ for _, column = range response.ColumnAttrs() {
 ```go
 row := result.Row()
 columns := row.Columns
-attributes := row.Attributes
 
 countItems := result.CountItems()
 

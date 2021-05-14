@@ -37,15 +37,6 @@ type QueryRequest struct {
 	// If empty, all shards are included.
 	Shards []uint64
 
-	// Return column attributes, if true.
-	ColumnAttrs bool
-
-	// Do not return row attributes, if true.
-	ExcludeRowAttrs bool
-
-	// Do not return columns, if true.
-	ExcludeColumns bool
-
 	// If true, indicates that query is part of a larger distributed query.
 	// If false, this request is on the originating node.
 	Remote bool
@@ -70,9 +61,6 @@ type QueryResponse struct {
 	// ValCount, Pair, Pairs, bool, uint64.
 	Results []interface{}
 
-	// Set of column attribute objects matching IDs returned in Result.
-	ColumnAttrSets []*ColumnAttrSet
-
 	// Error during parsing or execution.
 	Err error
 
@@ -89,13 +77,11 @@ func (resp *QueryResponse) MarshalJSON() ([]byte, error) {
 	}
 
 	return json.Marshal(struct {
-		Results        []interface{}    `json:"results"`
-		ColumnAttrSets []*ColumnAttrSet `json:"columnAttrs,omitempty"`
-		Profile        *tracing.Profile `json:"profile,omitempty"`
+		Results []interface{}    `json:"results"`
+		Profile *tracing.Profile `json:"profile,omitempty"`
 	}{
-		Results:        resp.Results,
-		ColumnAttrSets: resp.ColumnAttrSets,
-		Profile:        resp.Profile,
+		Results: resp.Results,
+		Profile: resp.Profile,
 	})
 }
 
@@ -202,17 +188,6 @@ func (ivr *ImportValueRequest) ValidateWithTimestamp(indexCreatedAt, fieldCreate
 		return ErrPreconditionFailed
 	}
 	return nil
-}
-
-// ImportColumnAttrsRequest describes the import request structure
-// for a ColumnAttr import.
-type ImportColumnAttrsRequest struct {
-	AttrKey        string
-	ColumnIDs      []uint64
-	AttrVals       []string
-	Shard          int64
-	Index          string
-	IndexCreatedAt int64
 }
 
 // ImportRequest describes the import request structure
