@@ -172,8 +172,7 @@ func (cmd *RestoreCommand) Run(ctx context.Context) error {
 		indexName := record[1]
 		switch record[2] {
 		case "shards":
-			sshard := record[3]
-			shard, err := strconv.Atoi(sshard)
+			shard, err := strconv.Atoi(record[3])
 			if err != nil {
 				return err
 			}
@@ -186,7 +185,16 @@ func (cmd *RestoreCommand) Run(ctx context.Context) error {
 				return err
 			}
 		case "translate":
-			vprint.VV("column keys %v", indexName)
+			partitionID, err := strconv.Atoi(record[3])
+			vprint.VV("column keys %v (%v)", indexName, partitionID)
+			if err != nil {
+				return err
+			}
+
+			err = cmd.client.ImportIndexKeys(ctx, &primary.URI, indexName, partitionID, false, tarReader)
+			if err != nil {
+				return err
+			}
 		case "attributes":
 			vprint.VV("column attributes %v", indexName)
 		case "fields":
