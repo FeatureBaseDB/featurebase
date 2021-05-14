@@ -46,6 +46,14 @@ func newRestoreCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command
 	}
 	flags := restoreCmd.Flags()
 	flags.StringVarP(&c.Host, "host", "", "localhost:10101", "host:port of Pilosa.")
+	flags.StringVarP(&c.Path, "source", "s", "", "pilosa backup file")
+	ctl.SetTLSConfig(
+		flags, "",
+		&c.TLS.CertificatePath,
+		&c.TLS.CertificateKeyPath,
+		&c.TLS.CACertPath,
+		&c.TLS.SkipVerify,
+		&c.TLS.EnableClientVerification)
 
 	return restoreCmd
 }

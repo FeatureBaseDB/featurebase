@@ -18,23 +18,30 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"context"
+	"errors"
+	"fmt"
 	"io"
+	gohttp "net/http"
 	"os"
 	"strings"
 
 	"github.com/pilosa/pilosa/v2"
-	"github.com/pilosa/pilosa/v2/http"
+	"github.com/pilosa/pilosa/v2/server"
+	"github.com/pilosa/pilosa/v2/topology"
 	"github.com/pilosa/pilosa/v2/vprint"
 )
 
 // RestoreCommand represents a command for restoring a backup to
 type RestoreCommand struct {
 	// Filepath to the backup file.
-	Path   string
-	Host   string
-	client *http.InternalClient
+	Path string
+	Host string
+	// Reusable client.
+	client pilosa.InternalClient
+
 	// Standard input/output
 	*pilosa.CmdIO
+	TLS server.TLSConfig
 }
 
 // NewRestoreCommand returns a new instance of RestoreCommand.
@@ -79,6 +86,13 @@ func readSchema(path string) string {
 
 // Run executes the restore.
 func (cmd *RestoreCommand) Run(ctx context.Context) error {
+	// Create a client to the server.
+	client, err := commandClient(cmd)
+	if err != nil {
+		return fmt.Errorf("creating client: %w", err)
+	}
+	cmd.client = client
+
 	f, err := os.Open(cmd.Path)
 	if err != nil {
 		return (err)
@@ -112,7 +126,22 @@ func (cmd *RestoreCommand) Run(ctx context.Context) error {
 	//TODO (twg) load row attributes keys
 	//TODO (twg) load col attributes keys
 	//TODO (twg) load idalloc
+	nodes, err := cmd.client.Nodes(ctx)
+	if err != nil {
+		return err
+	}
+	var primary *topology.Node
+	for _, node := range nodes {
+		if node.IsPrimary {
+			primary = node
+			break
+		}
 
+	}
+	c := &gohttp.Client{}
+	if primary == nil {
+		return errors.New("no primary")
+	}
 	for {
 		header, err := tarReader.Next()
 		if err == io.EOF {
@@ -123,6 +152,14 @@ func (cmd *RestoreCommand) Run(ctx context.Context) error {
 			switch record[0] {
 			case "schema":
 				vprint.VV("Load Schema")
+				url := primary.URI.Path("/schema")
+				vprint.VV("SCHEMA %v", url)
+				//schemaBytes, err := ioutil.ReadAll(tarReader)
+				_, err = c.Post(url, "application/json", tarReader)
+				if err != nil {
+					return err
+				}
+
 			case "idalloc":
 				vprint.VV("Load ids")
 			default:
@@ -163,3 +200,6 @@ func (cmd *RestoreCommand) Run(ctx context.Context) error {
 
 	return nil
 }
+func (cmd *RestoreCommand) TLSHost() string { return cmd.Host }
+
+func (cmd *RestoreCommand) TLSConfiguration() server.TLSConfig { return cmd.TLS }

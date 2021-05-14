@@ -199,7 +199,6 @@ func (c *InternalClient) Schema(ctx context.Context) ([]*pilosa.IndexInfo, error
 	}
 	return rsp.Indexes, nil
 }
-
 func (c *InternalClient) PostSchema(ctx context.Context, uri *pnet.URI, s *pilosa.Schema, remote bool) error {
 	u := uri.Path(fmt.Sprintf("/schema?remote=%v", remote))
 	buf, err := json.Marshal(s)
