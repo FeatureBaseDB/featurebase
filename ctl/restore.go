@@ -180,6 +180,7 @@ func (cmd *RestoreCommand) Run(ctx context.Context) error {
 			vprint.VV("shard %v %v", shard, indexName)
 			url := primary.URI.Path(fmt.Sprintf("/internal/restore/%v/%v", indexName, shard))
 			vprint.VV("%v", url)
+			//TODO (twg) cluster aware client
 			_, err = c.Post(url, "application/octet-stream", tarReader)
 			if err != nil {
 				return err
@@ -193,6 +194,10 @@ func (cmd *RestoreCommand) Run(ctx context.Context) error {
 			switch action := record[4]; action {
 			case "translate":
 				vprint.VV("field keys %v %v", indexName, fieldName)
+				err := cmd.client.ImportFieldKeys(ctx, &primary.URI, indexName, fieldName, false, tarReader)
+				if err != nil {
+					return err
+				}
 			case "attributes":
 				vprint.VV("field attributes %v %v", indexName, fieldName)
 			default:
