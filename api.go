@@ -40,7 +40,6 @@ import (
 	"github.com/pilosa/pilosa/v2/stats"
 	"github.com/pilosa/pilosa/v2/topology"
 	"github.com/pilosa/pilosa/v2/tracing"
-	"github.com/pilosa/pilosa/v2/vprint"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -2203,6 +2202,9 @@ func (api *API) WriteIDAllocDataTo(w io.Writer) error {
 	_, err := api.holder.ida.WriteTo(w)
 	return err
 }
+func (api *API) RestoreIDAlloc(r io.Reader) error {
+	return api.holder.ida.Replace(r)
+}
 
 // TranslateIndexDB is an internal function to load the index keys database
 // rd is a boltdb file.
@@ -2240,16 +2242,13 @@ func (api *API) RestoreShard(ctx context.Context, indexName string, shard uint64
 	db := dbs.W[0]
 	finalPath := db.Path() + "/data"
 	tempPath := finalPath + ".tmp"
-	vprint.VV("restore to %v", tempPath)
 	o, err := os.OpenFile(tempPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
 	if err != nil {
 		return err
 	}
 	w := bufio.NewWriter(o)
 	//close db if open
-	vprint.VV("restore index:%v shard:%v", indexName, shard)
-	n, err := io.Copy(w, rd)
-	vprint.VV("Written:%v", n)
+	_, err = io.Copy(w, rd)
 	w.Flush()
 	o.Close()
 	if err != nil {
@@ -2260,7 +2259,6 @@ func (api *API) RestoreShard(ctx context.Context, indexName string, shard uint64
 	if err != nil {
 		return err
 	}
-	vprint.VV("Rename %v to %v", tempPath, finalPath)
 	err = os.Rename(tempPath, finalPath)
 	if err != nil {
 		_ = os.Remove(tempPath)

@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"io"
 	"math/bits"
+	"os"
 	"sort"
 	"time"
 
@@ -63,6 +64,37 @@ func OpenIDAllocator(path string) (*idAllocator, error) {
 		return nil, err
 	}
 	return &idAllocator{db}, nil
+}
+func (ida *idAllocator) Replace(reader io.Reader) error {
+	newFile := ida.db.Path() + ".bak"
+	liveFile := ida.db.Path()
+	file, err := os.OpenFile(newFile, os.O_RDWR|os.O_CREATE, 0600)
+	if err != nil {
+		return nil
+	}
+	_, err = io.Copy(file, reader)
+	if err != nil {
+		return err
+	}
+	file.Close()
+	err = ida.db.Close()
+	if err != nil {
+		return err
+	}
+	err = os.Rename(liveFile, liveFile+".sav")
+	if err != nil {
+		return err
+	}
+	err = os.Rename(newFile, liveFile)
+	if err != nil {
+		err = os.Rename(liveFile+".sav", liveFile)
+		return err
+	} else {
+		_ = os.Remove(liveFile + ".sav")
+	}
+	db, err := bolt.Open(liveFile, 0666, &bolt.Options{Timeout: 1 * time.Second})
+	ida.db = db
+	return err
 }
 
 func (ida *idAllocator) Close() error {

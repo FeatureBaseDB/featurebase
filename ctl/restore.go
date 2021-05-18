@@ -155,7 +155,6 @@ func (cmd *RestoreCommand) Run(ctx context.Context) error {
 				vprint.VV("Load Schema")
 				url := primary.URI.Path("/schema")
 				vprint.VV("SCHEMA %v", url)
-				//schemaBytes, err := ioutil.ReadAll(tarReader)
 				_, err = c.Post(url, "application/json", tarReader)
 				if err != nil {
 					return err
@@ -163,6 +162,11 @@ func (cmd *RestoreCommand) Run(ctx context.Context) error {
 
 			case "idalloc":
 				vprint.VV("Load ids")
+				url := primary.URI.Path("/internal/idalloc/restore")
+				_, err = c.Post(url, "application/octet-stream", tarReader)
+				if err != nil {
+					return err
+				}
 			default:
 				panic("UNKNOWN " + record[0])
 
@@ -196,7 +200,8 @@ func (cmd *RestoreCommand) Run(ctx context.Context) error {
 				return err
 			}
 		case "attributes":
-			vprint.VV("column attributes %v", indexName)
+			//skip
+			//vprint.VV("column attributes %v", indexName)
 		case "fields":
 			fieldName := record[3]
 			switch action := record[4]; action {
@@ -207,7 +212,7 @@ func (cmd *RestoreCommand) Run(ctx context.Context) error {
 					return err
 				}
 			case "attributes":
-				vprint.VV("field attributes %v %v", indexName, fieldName)
+			//	vprint.VV("field attributes %v %v", indexName, fieldName)
 			default:
 				panic("unknown:" + action)
 			}

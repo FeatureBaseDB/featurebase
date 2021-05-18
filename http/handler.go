@@ -438,6 +438,7 @@ func newRouter(handler *Handler) http.Handler {
 
 	router.HandleFunc("/internal/idalloc/reserve", handler.handleReserveIDs).Methods("POST").Name("ReserveIDs")
 	router.HandleFunc("/internal/idalloc/commit", handler.handleCommitIDs).Methods("POST").Name("CommitIDs")
+	router.HandleFunc("/internal/idalloc/restore", handler.handleRestoreIDAlloc).Methods("POST").Name("RestoreIDAllocData")
 	router.HandleFunc("/internal/idalloc/reset/{index}", handler.handleResetIDAlloc).Methods("POST").Name("ResetIDAlloc")
 	router.HandleFunc("/internal/idalloc/data", handler.handleIDAllocData).Methods("GET").Name("IDAllocData")
 
@@ -2913,6 +2914,15 @@ func (h *Handler) handleIDAllocData(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (h *Handler) handleRestoreIDAlloc(w http.ResponseWriter, r *http.Request) {
+	if err := h.api.RestoreIDAlloc(r.Body); err != nil {
+		http.Error(w, fmt.Sprintf("restoring id allocation: %v", err.Error()), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Add("Content-Type", "text/plain")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("OK")) //nolint:errcheck
+}
 func (h *Handler) handlePostRestore(w http.ResponseWriter, r *http.Request) {
 	/*
 		if !validHeaderAcceptType(r.Header, "text", "plain") {
