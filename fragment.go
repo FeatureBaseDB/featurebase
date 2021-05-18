@@ -2215,6 +2215,34 @@ func (f *fragment) bulkImport(tx Tx, rowIDs, columnIDs []uint64, options *Import
 	return f.bulkImportStandard(tx, rowIDs, columnIDs, options)
 }
 
+// rowColumnSet is a sortable set of row and column IDs which
+// correspond, allowing us to ensure that we produce values in
+// a predictable order
+type rowColumnSet struct {
+	r []uint64
+	c []uint64
+}
+
+func (r rowColumnSet) Len() int {
+	return len(r.r)
+}
+
+func (r rowColumnSet) Swap(i, j int) {
+	r.r[i], r.r[j] = r.r[j], r.r[i]
+	r.c[i], r.c[j] = r.c[j], r.c[i]
+}
+
+// Sort by row ID first, column second, to sort by fragment position
+func (r rowColumnSet) Less(i, j int) bool {
+	if r.r[i] < r.r[j] {
+		return true
+	}
+	if r.r[i] > r.r[j] {
+		return false
+	}
+	return r.c[i] < r.c[j]
+}
+
 // bulkImportStandard performs a bulk import on a standard fragment. May mutate
 // its rowIDs and columnIDs arguments.
 func (f *fragment) bulkImportStandard(tx Tx, rowIDs, columnIDs []uint64, options *ImportOptions) (err error) {
@@ -2226,13 +2254,21 @@ func (f *fragment) bulkImportStandard(tx Tx, rowIDs, columnIDs []uint64, options
 	lastRowID := uint64(1 << 63)
 
 	// replace columnIDs with calculated positions to avoid allocation.
+	sort.Sort(rowColumnSet{r: rowIDs, c: columnIDs})
+	prevRow, prevCol := ^uint64(0), ^uint64(0)
+	next := 0
 	for i := 0; i < len(columnIDs); i++ {
 		rowID, columnID := rowIDs[i], columnIDs[i]
+		if rowID == prevRow && columnID == prevCol {
+			continue
+		}
+		prevRow, prevCol = rowID, columnID
 		pos, err := f.pos(rowID, columnID)
 		if err != nil {
 			return err
 		}
-		columnIDs[i] = pos
+		columnIDs[next] = pos
+		next++
 
 		// Add row to rowSet.
 		if rowID != lastRowID {
@@ -2240,7 +2276,7 @@ func (f *fragment) bulkImportStandard(tx Tx, rowIDs, columnIDs []uint64, options
 			rowSet[rowID] = struct{}{}
 		}
 	}
-	positions := columnIDs
+	positions := columnIDs[:next]
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if options.Clear {
