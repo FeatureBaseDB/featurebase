@@ -589,13 +589,6 @@ func TestIntField_MinMaxForShard(t *testing.T) {
 			expMax:    ValCount{Val: 20, Count: 2},
 			expMin:    ValCount{Val: 10, Count: 3},
 		},
-		{
-			name:      "middlevals",
-			columnIDs: []uint64{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 100000000, 100000001},
-			values:    []int64{10, 20, 10, 10, 20, 11, 12, 11, 13, 11, 44, 1},
-			expMax:    ValCount{Val: 20, Count: 2},
-			expMin:    ValCount{Val: 10, Count: 3},
-		},
 	} {
 		t.Run(test.name+strconv.Itoa(i), func(t *testing.T) {
 			if err := f.importValue(qcx, test.columnIDs, test.values, options); err != nil {
@@ -753,13 +746,6 @@ func TestDecimalField_MinMaxForShard(t *testing.T) {
 			name:      "middlevals",
 			columnIDs: []uint64{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
 			values:    []float64{10.1, 20.2, 10.1, 10.1, 20.2, 11, 12, 11, 13, 11},
-			expMax:    ValCount{DecimalVal: &pql.Decimal{Value: 20200, Scale: 3}, Count: 2},
-			expMin:    ValCount{DecimalVal: &pql.Decimal{Value: 10100, Scale: 3}, Count: 3},
-		},
-		{
-			name:      "another shard",
-			columnIDs: []uint64{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 100000000, 100000001},
-			values:    []float64{10.1, 20.2, 10.1, 10.1, 20.2, 11, 12, 11, 13, 11, 44.39, 0.23},
 			expMax:    ValCount{DecimalVal: &pql.Decimal{Value: 20200, Scale: 3}, Count: 2},
 			expMin:    ValCount{DecimalVal: &pql.Decimal{Value: 10100, Scale: 3}, Count: 3},
 		},
