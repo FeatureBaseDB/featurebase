@@ -861,11 +861,6 @@ type importData struct {
 	ColumnIDs []uint64
 }
 
-type importValueData struct {
-	ColumnIDs []uint64
-	Values    []int64
-}
-
 // FormatQualifiedIndexName generates a qualified name for the index to be used with Tx operations.
 func FormatQualifiedIndexName(index string) string {
 	return fmt.Sprintf("%s\x00", index)
