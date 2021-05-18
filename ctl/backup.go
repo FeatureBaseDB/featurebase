@@ -17,8 +17,8 @@ package ctl
 import (
 	"archive/tar"
 	"bytes"
-	"compress/gzip"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -28,12 +28,15 @@ import (
 	"time"
 
 	"github.com/pilosa/pilosa/v2"
+	"github.com/pilosa/pilosa/v2/http"
 	"github.com/pilosa/pilosa/v2/server"
 	"github.com/pilosa/pilosa/v2/topology"
 )
 
 // BackupCommand represents a command for backing up a Pilosa node.
 type BackupCommand struct { // nolint: maligned
+	tlsConfig *tls.Config
+
 	// Destination host and port.
 	Host string `json:"host"`
 
@@ -63,12 +66,18 @@ func (cmd *BackupCommand) TempPath() string {
 }
 
 // Run executes the main program execution.
-func (cmd *BackupCommand) Run(ctx context.Context) error {
+func (cmd *BackupCommand) Run(ctx context.Context) (err error) {
 	logger := cmd.Logger()
 
 	// Validate arguments.
 	if cmd.OutputPath == "" {
 		return fmt.Errorf("-o flag required")
+	}
+
+	// Parse TLS configuration for node-specific clients.
+	tls := cmd.TLSConfiguration()
+	if cmd.tlsConfig, err = server.GetTLSConfig(&tls, cmd.Logger()); err != nil {
+		return fmt.Errorf("parsing tls config: %w", err)
 	}
 
 	// Create a client to the server.
@@ -92,10 +101,8 @@ func (cmd *BackupCommand) Run(ctx context.Context) error {
 	}
 	defer w.Close()
 
-	// Open a tar/gzip writer to the temporary file.
-	gw := gzip.NewWriter(w)
-	defer gw.Close()
-	tw := tar.NewWriter(gw)
+	// Open a tar writer to the temporary file.
+	tw := tar.NewWriter(w)
 	defer tw.Close()
 
 	// Backup schema.
@@ -110,6 +117,11 @@ func (cmd *BackupCommand) Run(ctx context.Context) error {
 		if err := cmd.backupIndex(ctx, tw, ii); err != nil {
 			return err
 		}
+	}
+
+	// Close archive.
+	if err := tw.Close(); err != nil {
+		return err
 	}
 
 	// Move data file to final location.
@@ -210,13 +222,33 @@ func (cmd *BackupCommand) backupIndex(ctx context.Context, tw *tar.Writer, ii *p
 }
 
 // backupShard backs up a single shard from a single index.
-func (cmd *BackupCommand) backupShard(ctx context.Context, tw *tar.Writer, indexName string, shard uint64) error {
+func (cmd *BackupCommand) backupShard(ctx context.Context, tw *tar.Writer, indexName string, shard uint64) (err error) {
+	nodes, err := cmd.client.FragmentNodes(ctx, indexName, shard)
+	if err != nil {
+		return fmt.Errorf("cannot determine fragment nodes: %w", err)
+	} else if len(nodes) == 0 {
+		return fmt.Errorf("no nodes available")
+	}
+
+	for _, node := range nodes {
+		if e := cmd.backupShardNode(ctx, tw, indexName, shard, node); e == nil {
+			return nil // backup ok, exit
+		} else if err == nil {
+			err = e // save first error, try next node
+		}
+	}
+	return err
+}
+
+// backupShardNode backs up a single shard from a single index on a specific node.
+func (cmd *BackupCommand) backupShardNode(ctx context.Context, tw *tar.Writer, indexName string, shard uint64, node *topology.Node) error {
 	logger := cmd.Logger()
 	logger.Printf("backing up shard: index=%q id=%d", indexName, shard)
 
 	filename := path.Join("indexes", indexName, "shards", fmt.Sprintf("%04d", shard))
 
-	rc, err := cmd.client.ShardReader(ctx, indexName, shard)
+	client := http.NewInternalClientFromURI(&node.URI, http.GetHTTPClient(cmd.tlsConfig))
+	rc, err := client.ShardReader(ctx, indexName, shard)
 	if err != nil {
 		return fmt.Errorf("fetching shard reader: %w", err)
 	}
