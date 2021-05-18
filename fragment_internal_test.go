@@ -1020,34 +1020,58 @@ func BenchmarkFragment_SetValue(b *testing.B) {
 	}
 }
 
+func makeBenchmarkImportValueData(b *testing.B, bitDepth uint64, cfunc func(uint64) uint64) []ImportValueRequest {
+	b.StopTimer()
+	column := uint64(0)
+	// we don't average an alloc-per-bit, so we use a much larger N to get
+	// meaningful data from -benchmem
+	n := b.N * 10000
+	batches := make([]ImportValueRequest, 0, (n/ShardWidth)+1)
+	mask := int64(1<<bitDepth) - 1
+	prev := uint64(0)
+	var values []int64
+	var columns []uint64
+	for i := 0; i < n; i++ {
+		values = append(values, int64(i)&mask)
+		columns = append(columns, column)
+		column = cfunc(column)
+		if column < prev {
+			req := ImportValueRequest{ColumnIDs: columns, Values: values}
+			columns = []uint64{}
+			values = []int64{}
+			batches = append(batches, req)
+		}
+		prev = column
+	}
+	if len(columns) > 0 {
+		req := ImportValueRequest{ColumnIDs: columns, Values: values}
+		batches = append(batches, req)
+	}
+	b.StartTimer()
+	return batches
+}
+
 // benchmarkImportValues is a helper function to explore, very roughly, the cost
 // of setting values using the special setter used for imports.
 func benchmarkImportValues(b *testing.B, tx Tx, bitDepth uint64, f *fragment, cfunc func(uint64) uint64) {
-	column := uint64(0)
-	b.StopTimer()
-	columns := make([]uint64, b.N)
-	values := make([]int64, b.N)
-	for i := 0; i < b.N; i++ {
-		values[i] = int64(i)
-		columns[i] = column
-		column = cfunc(column)
-	}
-	b.StartTimer()
-	err := f.importValue(tx, columns, values, bitDepth, false)
-	if err != nil {
-		b.Fatalf("error importing values: %s", err)
+	batches := makeBenchmarkImportValueData(b, bitDepth, cfunc)
+	for _, req := range batches {
+		err := f.importValue(tx, req.ColumnIDs, req.Values, bitDepth, false)
+		if err != nil {
+			b.Fatalf("error importing values: %s", err)
+		}
 	}
 }
 
 // Benchmark performance of setValue for BSI ranges.
 func BenchmarkFragment_ImportValue(b *testing.B) {
-	depths := []uint64{4, 8, 16}
+	depths := []uint64{4, 8, 16, 32}
 	for _, bitDepth := range depths {
 		name := fmt.Sprintf("Depth%d", bitDepth)
 		f, idx, tx := mustOpenBSIFragment(b, "i", "f", viewBSIGroupPrefix+"foo", 0)
 		_ = idx
 		b.Run(name+"_Sparse", func(b *testing.B) {
-			benchmarkImportValues(b, tx, bitDepth, f, func(u uint64) uint64 { return (u + 70000) & (ShardWidth - 1) })
+			benchmarkImportValues(b, tx, bitDepth, f, func(u uint64) uint64 { return (u + 19) & (ShardWidth - 1) })
 		})
 		f.Clean(b)
 		f, idx, tx = mustOpenBSIFragment(b, "i", "f", viewBSIGroupPrefix+"foo", 0)

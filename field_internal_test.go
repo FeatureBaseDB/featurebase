@@ -203,7 +203,7 @@ type TestField struct {
 }
 
 // NewTestField returns a new instance of TestField d/0.
-func NewTestField(t *testing.T, opts FieldOption) *TestField {
+func NewTestField(t testing.TB, opts FieldOption) *TestField {
 	path, err := testhook.TempDirInDir(t, *TempDir, "pilosa-field-")
 	if err != nil {
 		t.Fatal(err)
@@ -230,7 +230,7 @@ func NewTestField(t *testing.T, opts FieldOption) *TestField {
 }
 
 // OpenField returns a new, opened field at a temporary path.
-func OpenField(t *testing.T, opts FieldOption) *TestField {
+func OpenField(t testing.TB, opts FieldOption) *TestField {
 	f := NewTestField(t, opts)
 	return f
 }
@@ -507,6 +507,38 @@ func TestBSIGroup_importValue(t *testing.T) {
 		PanicOn(qcx.Finish())
 		qcx.Reset()
 	} // loop
+}
+
+// benchmarkImportValues is a helper function to explore, very roughly, the cost
+// of setting values using the special setter used for imports.
+func benchmarkFieldImportValues(b *testing.B, qcx *Qcx, bitDepth uint64, f *TestField, cfunc func(uint64) uint64) {
+	batches := makeBenchmarkImportValueData(b, bitDepth, cfunc)
+	for _, req := range batches {
+		err := f.importValue(qcx, req.ColumnIDs, req.Values, &ImportOptions{})
+		if err != nil {
+			b.Fatalf("error importing values: %s", err)
+		}
+	}
+}
+
+// Benchmark performance of setValue for BSI ranges.
+func BenchmarkField_ImportValue(b *testing.B) {
+	depths := []uint64{4, 8, 16, 32}
+
+	for _, bitDepth := range depths {
+		f := OpenField(b, OptFieldTypeInt(0, 1<<bitDepth))
+		defer f.Close()
+
+		qcx := f.idx.holder.txf.NewQcx()
+		defer qcx.Abort()
+		name := fmt.Sprintf("Depth%d", bitDepth)
+		b.Run(name+"_Sparse", func(b *testing.B) {
+			benchmarkFieldImportValues(b, qcx, bitDepth, f, func(u uint64) uint64 { return (u + 19) & (ShardWidth - 1) })
+		})
+		b.Run(name+"_Dense", func(b *testing.B) {
+			benchmarkFieldImportValues(b, qcx, bitDepth, f, func(u uint64) uint64 { return (u + 1) & (ShardWidth - 1) })
+		})
+	}
 }
 
 func TestIntField_MinMaxForShard(t *testing.T) {
