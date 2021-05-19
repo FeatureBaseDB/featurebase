@@ -13,8 +13,13 @@ BRANCH_ID := $(BRANCH)-$(GOOS)-$(GOARCH)
 BUILD_TIME := $(shell date -u +%FT%T%z)
 SHARD_WIDTH = 20
 COMMIT := $(shell git describe --exact-match >/dev/null 2>&1 || git rev-parse --short HEAD)
+<<<<<<< HEAD
 LDFLAGS="-X github.com/pilosa/pilosa/v2.Version=$(VERSION) -X github.com/pilosa/pilosa/v2.BuildTime=$(BUILD_TIME) -X github.com/pilosa/pilosa/v2.Variant=$(VARIANT) -X github.com/pilosa/pilosa/v2.Commit=$(COMMIT) -X github.com/pilosa/pilosa/v2.TrialDeadline=$(TRIAL_DEADLINE)"
 GO_VERSION=1.15.8
+=======
+LDFLAGS="-X github.com/pilosa/pilosa/v2.Version=$(VERSION) -X github.com/pilosa/pilosa/v2.BuildTime=$(BUILD_TIME) -X github.com/pilosa/pilosa/v2.Variant=$(VARIANT) -X github.com/pilosa/pilosa/v2.Commit=$(COMMIT) -X github.com/pilosa/pilosa/v2.LatticeCommit=$(LATTICE_COMMIT) -X github.com/pilosa/pilosa/v2.TrialDeadline=$(TRIAL_DEADLINE)"
+GO_VERSION=1.16
+>>>>>>> f47d7a1b (add darwin-arm64 support)
 DOCKER_BUILD= # set to 1 to use `docker-build` instead of `build` when creating a release
 BUILD_TAGS += shardwidth$(SHARD_WIDTH)
 TEST_TAGS = roaringparanoia
@@ -114,12 +119,14 @@ endif
 # Create release build tarballs for all supported platforms. DEPRECATED: Use `docker-release`
 release: check-clean generate-statik-docker
 	$(MAKE) release-build GOOS=darwin GOARCH=amd64
+	$(MAKE) release-build GOOS=darwin GOARCH=arm64
 	$(MAKE) release-build GOOS=linux GOARCH=amd64
 
 # Create release build tarballs for all supported platforms. Same as `release`, but without embedded Lattice UI.
 release-sans-ui: check-clean
 	rm -f statik/statik.go
 	$(MAKE) release-build GOOS=darwin GOARCH=amd64
+	$(MAKE) release-build GOOS=darwin GOARCH=arm64
 	$(MAKE) release-build GOOS=linux GOARCH=amd64
 
 # try (e.g.) internal/clustertests/docker-compose-replication2.yml
@@ -187,6 +194,7 @@ generate: generate-protoc generate-statik generate-stringer generate-pql
 docker-release:
 	$(MAKE) docker-build GOOS=linux GOARCH=amd64
 	$(MAKE) docker-build GOOS=darwin GOARCH=amd64
+	$(MAKE) docker-build GOOS=darwin GOARCH=arm64
 
 # Build a release in Docker
 docker-build: vendor

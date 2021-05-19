@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// +build !arm64
+// +build darwin linux,amd64
 
 package server
 
