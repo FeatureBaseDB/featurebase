@@ -123,6 +123,7 @@ type ImportValueRequest struct {
 	TimestampValues []time.Time
 	StringValues    []string
 	Clear           bool
+	scratch         []int // scratch space to allow us to get a stable sort in reasonable time
 }
 
 // AtomicRecord applies all its Ivr and Ivr atomically, in a Tx.
@@ -138,8 +139,20 @@ type AtomicRecord struct {
 	Ir  []*ImportRequest      // other field types, e.g. single bit
 }
 
-func (ivr *ImportValueRequest) Len() int           { return len(ivr.ColumnIDs) }
-func (ivr *ImportValueRequest) Less(i, j int) bool { return ivr.ColumnIDs[i] < ivr.ColumnIDs[j] }
+func (ivr *ImportValueRequest) Len() int { return len(ivr.ColumnIDs) }
+func (ivr *ImportValueRequest) Less(i, j int) bool {
+	if ivr.ColumnIDs[i] < ivr.ColumnIDs[j] {
+		return true
+	}
+	if ivr.ColumnIDs[i] > ivr.ColumnIDs[j] {
+		return false
+	}
+	if len(ivr.scratch) > 0 {
+		return ivr.scratch[i] < ivr.scratch[j]
+	}
+	return false
+}
+
 func (ivr *ImportValueRequest) Swap(i, j int) {
 	ivr.ColumnIDs[i], ivr.ColumnIDs[j] = ivr.ColumnIDs[j], ivr.ColumnIDs[i]
 	if len(ivr.Values) > 0 {
@@ -150,6 +163,9 @@ func (ivr *ImportValueRequest) Swap(i, j int) {
 		ivr.TimestampValues[i], ivr.TimestampValues[j] = ivr.TimestampValues[j], ivr.TimestampValues[i]
 	} else if len(ivr.StringValues) > 0 {
 		ivr.StringValues[i], ivr.StringValues[j] = ivr.StringValues[j], ivr.StringValues[i]
+	}
+	if len(ivr.scratch) > 0 {
+		ivr.scratch[i], ivr.scratch[j] = ivr.scratch[j], ivr.scratch[i]
 	}
 }
 
