@@ -73,6 +73,7 @@ func (cmd *BackupCommand) Run(ctx context.Context) (err error) {
 	if cmd.OutputPath == "" {
 		return fmt.Errorf("-o flag required")
 	}
+	useStdout := cmd.OutputPath == "-"
 
 	// Parse TLS configuration for node-specific clients.
 	tls := cmd.TLSConfiguration()
@@ -94,12 +95,17 @@ func (cmd *BackupCommand) Run(ctx context.Context) (err error) {
 	}
 	schema := &pilosa.Schema{Indexes: indexes}
 
-	// Create output file in temporary location.
-	w, err := os.Create(cmd.OutputPath + ".tmp")
-	if err != nil {
-		return err
+	// Create output file in temporary location, or send to stdout if a dash is specified.
+	var w io.Writer
+	if useStdout {
+		w = os.Stdout
+	} else {
+		f, err := os.Create(cmd.OutputPath + ".tmp")
+		if err != nil {
+			return err
+		}
+		defer f.Close()
 	}
-	defer w.Close()
 
 	// Open a tar writer to the temporary file.
 	tw := tar.NewWriter(w)
@@ -125,9 +131,11 @@ func (cmd *BackupCommand) Run(ctx context.Context) (err error) {
 	}
 
 	// Move data file to final location.
-	logger.Printf("writing backup: %s", cmd.OutputPath)
-	if err := os.Rename(cmd.OutputPath+".tmp", cmd.OutputPath); err != nil {
-		return err
+	if !useStdout {
+		logger.Printf("writing backup: %s", cmd.OutputPath)
+		if err := os.Rename(cmd.OutputPath+".tmp", cmd.OutputPath); err != nil {
+			return err
+		}
 	}
 
 	return nil
