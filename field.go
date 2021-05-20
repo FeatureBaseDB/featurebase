@@ -95,9 +95,6 @@ type Field struct {
 
 	viewMap map[string]*view
 
-	// Row attribute storage and cache
-	rowAttrStore AttrStore
-
 	broadcaster broadcaster
 	Stats       stats.StatsClient
 	schemator   disco.Schemator
@@ -377,8 +374,6 @@ func newField(holder *Holder, path, index, name string, opts FieldOption) (*Fiel
 
 		viewMap: make(map[string]*view),
 
-		rowAttrStore: nopStore,
-
 		broadcaster: NopBroadcaster,
 		Stats:       stats.NopStatsClient,
 		schemator:   disco.NopSchemator,
@@ -422,9 +417,6 @@ func (f *Field) TranslateStorePath() string {
 func (f *Field) TranslateStore() TranslateStore {
 	return f.translateStore
 }
-
-// RowAttrStore returns the attribute storage.
-func (f *Field) RowAttrStore() AttrStore { return f.rowAttrStore }
 
 // AvailableShards returns a bitmap of shards that contain data.
 func (f *Field) AvailableShards(localOnly bool) *roaring.Bitmap {
@@ -566,11 +558,6 @@ func (f *Field) Open() error {
 		f.holder.Logger.Debugf("open views for index/field: %s/%s", f.index, f.name)
 		if err := f.openViews(); err != nil {
 			return errors.Wrap(err, "opening views")
-		}
-
-		f.holder.Logger.Debugf("open row attribute store for index/field: %s/%s", f.index, f.name)
-		if err := f.rowAttrStore.Open(); err != nil {
-			return errors.Wrap(err, "opening attrstore")
 		}
 
 		// Apply the field-specific translateStore.
@@ -753,7 +740,6 @@ func (f *Field) openViews() error {
 			return fmt.Errorf("opening view: view=%s, err=%s", view.name, err)
 		}
 
-		view.rowAttrStore = f.rowAttrStore
 		f.holder.Logger.Debugf("add index/field/view to field.viewMap: %s/%s/%s", f.index, f.name, view.name)
 		f.viewMap[view.name] = view
 	}
@@ -864,10 +850,6 @@ func (f *Field) Close() error {
 		close(f.availableShardChan)
 		f.wg.Wait()
 		f.availableShardChan = nil
-	}
-	// Close the attribute store.
-	if f.rowAttrStore != nil {
-		_ = f.rowAttrStore.Close()
 	}
 
 	// Close field translation store.
@@ -1053,7 +1035,6 @@ func (f *Field) createViewIfNotExistsBase(cvm *CreateViewMessage) (*view, bool, 
 	if err := view.openEmpty(); err != nil {
 		return nil, false, errors.Wrap(err, "opening view")
 	}
-	view.rowAttrStore = f.rowAttrStore
 	f.viewMap[view.name] = view
 
 	return view, true, nil
@@ -1062,7 +1043,6 @@ func (f *Field) createViewIfNotExistsBase(cvm *CreateViewMessage) (*view, bool, 
 func (f *Field) newView(path, name string) *view {
 	view := newView(f.holder, path, f.index, f.name, name, f.options)
 	view.idx = f.idx
-	view.rowAttrStore = f.rowAttrStore
 	view.stats = f.Stats
 	view.broadcaster = f.broadcaster
 	return view

@@ -49,11 +49,6 @@ type Index struct {
 	// Fields by name.
 	fields map[string]*Field
 
-	newAttrStore func(string) AttrStore
-
-	// Column attribute storage and cache.
-	columnAttrs AttrStore
-
 	broadcaster broadcaster
 	Schemator   disco.Schemator
 	serializer  Serializer
@@ -91,9 +86,6 @@ func NewIndex(holder *Holder, path, name string) (*Index, error) {
 		path:   path,
 		name:   name,
 		fields: make(map[string]*Field),
-
-		newAttrStore: newNopAttrStore,
-		columnAttrs:  nopStore,
 
 		broadcaster:    NopBroadcaster,
 		Stats:          stats.NopStatsClient,
@@ -160,9 +152,6 @@ func (i *Index) TranslateStore(partitionID int) TranslateStore {
 
 // Keys returns true if the index uses string keys.
 func (i *Index) Keys() bool { return i.keys }
-
-// ColumnAttrStore returns the storage for column attributes.
-func (i *Index) ColumnAttrStore() AttrStore { return i.columnAttrs }
 
 // Options returns all options for this index.
 func (i *Index) Options() IndexOptions {
@@ -250,10 +239,6 @@ func (i *Index) open(idx *disco.Index) (err error) {
 		if err := i.openExistenceField(); err != nil {
 			return errors.Wrap(err, "opening existence field")
 		}
-	}
-
-	if err := i.columnAttrs.Open(); err != nil {
-		return errors.Wrap(err, "opening attrstore")
 	}
 
 	if i.keys {
@@ -458,9 +443,6 @@ func (i *Index) Close() error {
 	if err != nil {
 		return errors.Wrap(err, "closing index")
 	}
-
-	// Close the attribute store.
-	i.columnAttrs.Close()
 
 	// Close partitioned translation stores.
 	for _, store := range i.translateStores {
@@ -792,7 +774,6 @@ func (i *Index) newField(path, name string) (*Field, error) {
 	f.broadcaster = i.broadcaster
 	f.schemator = i.Schemator
 	f.serializer = i.serializer
-	f.rowAttrStore = i.newAttrStore(filepath.Join(f.path, RowAttrsFileName))
 	f.OpenTranslateStore = i.OpenTranslateStore
 	return f, nil
 }

@@ -615,3 +615,13 @@ func findKeyByID(bkt *bolt.Bucket, id uint64) string {
 	}
 	return string(boltKey)
 }
+
+// u64tob encodes v to big endian encoding.
+func u64tob(v uint64) []byte {
+	b := make([]byte, 8)
+	binary.BigEndian.PutUint64(b, v)
+	return b
+}
+
+// btou64 decodes b from big endian encoding.
+func btou64(b []byte) uint64 { return binary.BigEndian.Uint64(b) }

@@ -19,7 +19,6 @@ package client
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 
 	"github.com/pilosa/pilosa/v2/pb"
@@ -45,7 +44,6 @@ const (
 // QueryResponse represents the response from a Pilosa query.
 type QueryResponse struct {
 	ResultList   []QueryResult `json:"results,omitempty"`
-	ColumnList   []ColumnItem  `json:"columns,omitempty"`
 	ErrorMessage string        `json:"error-message,omitempty"`
 	Success      bool          `json:"success,omitempty"`
 }
@@ -65,18 +63,9 @@ func newQueryResponseFromInternal(response *pb.QueryResponse) (*QueryResponse, e
 		}
 		results = append(results, result)
 	}
-	columns := make([]ColumnItem, 0, len(response.ColumnAttrSets))
-	for _, p := range response.ColumnAttrSets {
-		columnItem, err := newColumnItemFromInternal(p)
-		if err != nil {
-			return nil, err
-		}
-		columns = append(columns, columnItem)
-	}
 
 	return &QueryResponse{
 		ResultList: results,
-		ColumnList: columns,
 		Success:    true,
 	}, nil
 }
@@ -92,26 +81,6 @@ func (qr *QueryResponse) Result() QueryResult {
 		return nil
 	}
 	return qr.ResultList[0]
-}
-
-// Columns returns all column attributes in the response.
-// *DEPRECATED*
-func (qr *QueryResponse) Columns() []ColumnItem {
-	return qr.ColumnList
-}
-
-// Column returns the attributes for first column.
-// *DEPRECATED*
-func (qr *QueryResponse) Column() ColumnItem {
-	if len(qr.ColumnList) == 0 {
-		return ColumnItem{}
-	}
-	return qr.ColumnList[0]
-}
-
-// ColumnAttrs returns all column attributes in the response.
-func (qr *QueryResponse) ColumnAttrs() []ColumnItem {
-	return qr.ColumnList
 }
 
 // QueryResult represents one of the results in the response.
@@ -256,22 +225,15 @@ func (TopNResult) RowIdentifiers() RowIdentifiersResult { return RowIdentifiersR
 
 // RowResult represents a result from Row, Union, Intersect, Difference and Range PQL calls.
 type RowResult struct {
-	Attributes map[string]interface{} `json:"attrs"`
-	Columns    []uint64               `json:"columns"`
-	Keys       []string               `json:"keys"`
+	Columns []uint64 `json:"columns"`
+	Keys    []string `json:"keys"`
 }
 
 func newRowResultFromInternal(row *pb.Row) (*RowResult, error) {
-	attrs, err := convertInternalAttrsToMap(row.Attrs)
-	if err != nil {
-		return nil, err
-	}
-	result := &RowResult{
-		Attributes: attrs,
-		Columns:    row.Columns,
-		Keys:       row.Keys,
-	}
-	return result, nil
+	return &RowResult{
+		Columns: row.Columns,
+		Keys:    row.Keys,
+	}, nil
 }
 
 // Type is the type of this result.
@@ -312,13 +274,11 @@ func (b RowResult) MarshalJSON() ([]byte, error) {
 		keys = []string{}
 	}
 	return json.Marshal(struct {
-		Attributes map[string]interface{} `json:"attrs"`
-		Columns    []uint64               `json:"columns"`
-		Keys       []string               `json:"keys"`
+		Columns []uint64 `json:"columns"`
+		Keys    []string `json:"keys"`
 	}{
-		Attributes: b.Attributes,
-		Columns:    columns,
-		Keys:       keys,
+		Columns: columns,
+		Keys:    keys,
 	})
 }
 
@@ -415,7 +375,7 @@ func (BoolResult) GroupCounts() []GroupCount { return nil }
 // RowIdentifiers returns the result of a Rows call.
 func (BoolResult) RowIdentifiers() RowIdentifiersResult { return RowIdentifiersResult{} }
 
-// NilResult is returned from calls which don't return a value, such as SetRowAttrs.
+// NilResult is returned from calls which don't return a value.
 type NilResult struct{}
 
 // Type is the type of this result.
@@ -545,51 +505,4 @@ func groupCountsFromInternal(items *pb.GroupCounts) GroupCountResult {
 		})
 	}
 	return GroupCountResult(result)
-}
-
-const (
-	stringType = 1
-	intType    = 2
-	boolType   = 3
-	floatType  = 4
-)
-
-func convertInternalAttrsToMap(attrs []*pb.Attr) (attrsMap map[string]interface{}, err error) {
-	attrsMap = make(map[string]interface{}, len(attrs))
-	for _, attr := range attrs {
-		switch attr.Type {
-		case stringType:
-			attrsMap[attr.Key] = attr.StringValue
-		case intType:
-			attrsMap[attr.Key] = attr.IntValue
-		case boolType:
-			attrsMap[attr.Key] = attr.BoolValue
-		case floatType:
-			attrsMap[attr.Key] = attr.FloatValue
-		default:
-			return nil, errors.New("Unknown attribute type")
-		}
-	}
-
-	return attrsMap, nil
-}
-
-// ColumnItem represents data about a column.
-// Column data is only returned if QueryOptions.Columns was set to true.
-type ColumnItem struct {
-	ID         uint64                 `json:"id,omitempty"`
-	Key        string                 `json:"key,omitempty"`
-	Attributes map[string]interface{} `json:"attributes,omitempty"`
-}
-
-func newColumnItemFromInternal(column *pb.ColumnAttrSet) (ColumnItem, error) {
-	attrs, err := convertInternalAttrsToMap(column.Attrs)
-	if err != nil {
-		return ColumnItem{}, err
-	}
-	return ColumnItem{
-		ID:         column.ID,
-		Key:        column.Key,
-		Attributes: attrs,
-	}, nil
 }

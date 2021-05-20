@@ -21,7 +21,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -343,50 +342,23 @@ func OptIndexTrackExistence(trackExistence bool) IndexOption {
 
 // OptionsOptions is used to pass an option to Option call.
 type OptionsOptions struct {
-	columnAttrs     bool
-	excludeColumns  bool
-	excludeRowAttrs bool
-	shards          []uint64
+	shards []uint64
 }
 
 func (oo OptionsOptions) marshal() string {
-	part1 := fmt.Sprintf("columnAttrs=%s,excludeColumns=%s,excludeRowAttrs=%s",
-		strconv.FormatBool(oo.columnAttrs),
-		strconv.FormatBool(oo.excludeColumns),
-		strconv.FormatBool(oo.excludeRowAttrs))
 	if oo.shards != nil {
 		shardsStr := make([]string, len(oo.shards))
 		for i, shard := range oo.shards {
 			shardsStr[i] = strconv.FormatUint(shard, 10)
 		}
-		return fmt.Sprintf("%s,shards=[%s]", part1, strings.Join(shardsStr, ","))
+		return fmt.Sprintf("shards=[%s]", strings.Join(shardsStr, ","))
 	}
-	return part1
+
+	return ""
 }
 
 // OptionsOption is an option for Index.Options call.
 type OptionsOption func(options *OptionsOptions)
-
-// OptOptionsColumnAttrs enables returning column attributes.
-func OptOptionsColumnAttrs(enable bool) OptionsOption {
-	return func(options *OptionsOptions) {
-		options.columnAttrs = enable
-	}
-}
-
-// OptOptionsExcludeColumns enables preventing returning columns.
-func OptOptionsExcludeColumns(enable bool) OptionsOption {
-	return func(options *OptionsOptions) {
-		options.excludeColumns = enable
-	}
-}
-
-// OptOptionsExcludeRowAttrs enables preventing returning row attributes.
-func OptOptionsExcludeRowAttrs(enable bool) OptionsOption {
-	return func(options *OptionsOptions) {
-		options.excludeRowAttrs = enable
-	}
-}
 
 // OptOptionsShards run the query using only the data from the given shards.
 // By default, the entire data set (i.e. data from all shards) is used.
@@ -397,7 +369,7 @@ func OptOptionsShards(shards ...uint64) OptionsOption {
 }
 
 // Index is a Pilosa index. The purpose of the Index is to represent a data namespace.
-// You cannot perform cross-index queries. Column-level attributes are global to the Index.
+// You cannot perform cross-index queries.
 type Index struct {
 	mu         sync.RWMutex
 	name       string
@@ -581,22 +553,6 @@ func (idx *Index) All() *PQLRowQuery {
 }
 
 // TODO: impelement AllLimit(limit, offset uint64) *PQLRowQuery
-
-// SetColumnAttrs creates a SetColumnAttrs query.
-// SetColumnAttrs associates arbitrary key/value pairs with a column in an index.
-// Following types are accepted: integer, float, string and boolean types.
-func (idx *Index) SetColumnAttrs(colIDOrKey interface{}, attrs map[string]interface{}) *PQLBaseQuery {
-	colStr, err := formatIDKey(colIDOrKey)
-	if err != nil {
-		return NewPQLBaseQuery("", idx, err)
-	}
-	attrsString, err := createAttributesString(attrs)
-	if err != nil {
-		return NewPQLBaseQuery("", idx, err)
-	}
-	q := fmt.Sprintf("SetColumnAttrs(%s,%s)", colStr, attrsString)
-	return NewPQLBaseQuery(q, idx, nil)
-}
 
 // Options creates an Options query.
 func (idx *Index) Options(row *PQLRowQuery, opts ...OptionsOption) *PQLBaseQuery {
@@ -1053,7 +1009,6 @@ func OptFieldForeignIndex(index string) FieldOption {
 
 // Field structs are used to segment and define different functional characteristics within your entire index.
 // You can think of a Field as a table-like data partition within your Index.
-// Row-level attributes are namespaced at the Field level.
 type Field struct {
 	name      string
 	createdAt int64
@@ -1096,7 +1051,6 @@ func (f *Field) copy() *Field {
 
 // Row creates a Row query.
 // Row retrieves the indices of all the set columns in a row.
-// It also retrieves any attributes set on that row or column.
 func (f *Field) Row(rowIDOrKey interface{}) *PQLRowQuery {
 	rowStr, err := formatIDKeyBool(rowIDOrKey)
 	if err != nil {
@@ -1174,32 +1128,6 @@ func (f *Field) RowTopN(n uint64, row *PQLRowQuery) *PQLRowQuery {
 	return q
 }
 
-// FilterAttrTopN creates a TopN query with the given item count, row, attribute name and filter values for that field
-// The attrName and attrValues arguments work together to only return Rows which have the attribute specified by attrName with one of the values specified in attrValues.
-func (f *Field) FilterAttrTopN(n uint64, row *PQLRowQuery, attrName string, attrValues ...interface{}) *PQLRowQuery {
-	return f.filterAttrTopN(n, row, attrName, attrValues...)
-}
-
-func (f *Field) filterAttrTopN(n uint64, row *PQLRowQuery, field string, values ...interface{}) *PQLRowQuery {
-	if err := validateLabel(field); err != nil {
-		return NewPQLRowQuery("", f.index, err)
-	}
-	b, err := json.Marshal(values)
-	if err != nil {
-		return NewPQLRowQuery("", f.index, err)
-	}
-	var q *PQLRowQuery
-	if row == nil {
-		q = NewPQLRowQuery(fmt.Sprintf("TopN(%s,n=%d,attrName='%s',attrValues=%s)",
-			f.name, n, field, string(b)), f.index, nil)
-	} else {
-		serializedRow := row.serialize()
-		q = NewPQLRowQuery(fmt.Sprintf("TopN(%s,%s,n=%d,attrName='%s',attrValues=%s)",
-			f.name, serializedRow.String(), n, field, string(b)), f.index, nil)
-	}
-	return q
-}
-
 // Range creates a Range query.
 // Similar to Row, but only returns columns which were set with timestamps between the given start and end timestamps.
 // *Deprecated at Pilosa 1.3*
@@ -1226,24 +1154,6 @@ func (f *Field) RowRange(rowIDOrKey interface{}, start time.Time, end time.Time)
 	return q
 }
 
-// SetRowAttrs creates a SetRowAttrs query.
-// SetRowAttrs associates arbitrary key/value pairs with a row in a field.
-// Following types are accepted: integer, float, string and boolean types.
-func (f *Field) SetRowAttrs(rowIDOrKey interface{}, attrs map[string]interface{}) *PQLBaseQuery {
-	rowStr, err := formatIDKeyBool(rowIDOrKey)
-	if err != nil {
-		return NewPQLBaseQuery("", f.index, err)
-	}
-	attrsString, err := createAttributesString(attrs)
-	if err != nil {
-		return NewPQLBaseQuery("", f.index, err)
-	}
-	text := fmt.Sprintf("SetRowAttrs(%s,%s,%s)", f.name, rowStr, attrsString)
-	q := NewPQLBaseQuery(text, f.index, nil)
-	q.hasKeys = f.options.keys || f.index.options.keys
-	return q
-}
-
 // Store creates a Store call.
 // Store writes the result of the row query to the specified row. If the row already exists, it will be replaced. The destination field must be of field type set.
 func (f *Field) Store(row *PQLRowQuery, rowIDOrKey interface{}) *PQLBaseQuery {
@@ -1252,23 +1162,6 @@ func (f *Field) Store(row *PQLRowQuery, rowIDOrKey interface{}) *PQLBaseQuery {
 		return NewPQLBaseQuery("", f.index, err)
 	}
 	return NewPQLBaseQuery(fmt.Sprintf("Store(%s,%s=%s)", row.serialize().String(), f.name, rowStr), f.index, nil)
-}
-
-func createAttributesString(attrs map[string]interface{}) (string, error) {
-	attrsList := make([]string, 0, len(attrs))
-	for k, v := range attrs {
-		// TODO: validate the type of v is one of string, int64, float64, bool
-		if err := validateLabel(k); err != nil {
-			return "", err
-		}
-		if vs, ok := v.(string); ok {
-			attrsList = append(attrsList, fmt.Sprintf("%s=%s", k, strconv.Quote(vs)))
-		} else {
-			attrsList = append(attrsList, fmt.Sprintf("%s=%v", k, v))
-		}
-	}
-	sort.Strings(attrsList)
-	return strings.Join(attrsList, ","), nil
 }
 
 func formatIDKey(idKey interface{}) (string, error) {

@@ -221,44 +221,6 @@ func (e *executor) Execute(ctx context.Context, index string, q *pql.Query, shar
 	}
 	resp.Results = results
 
-	// Fill column attributes if requested.
-	if opt.ColumnAttrs {
-		// Consolidate all column ids across all calls.
-		var columnIDs []uint64
-		for _, result := range results {
-			bm, ok := result.(*Row)
-			if !ok {
-				continue
-			}
-			columnIDs = uint64Slice(columnIDs).merge(bm.Columns())
-		}
-
-		// Retrieve column attributes across all calls.
-		columnAttrSets, err := e.readColumnAttrSets(e.Holder.Index(index), columnIDs)
-		if err != nil {
-			return resp, errors.Wrap(err, "reading column attrs")
-		}
-
-		// Translate column attributes, if necessary.
-		if idx.Keys() {
-			idSet := make(map[uint64]struct{})
-			for _, col := range columnAttrSets {
-				idSet[col.ID] = struct{}{}
-			}
-
-			idMap, err := e.Cluster.translateIndexIDSet(ctx, index, idSet)
-			if err != nil {
-				return resp, errors.Wrap(err, "translating id set")
-			}
-
-			for _, col := range columnAttrSets {
-				col.Key, col.ID = idMap[col.ID], 0
-			}
-		}
-
-		resp.ColumnAttrSets = columnAttrSets
-	}
-
 	// Translate response objects from ids to keys, if necessary.
 	// No need to translate a remote call.
 	if !opt.Remote {
@@ -293,10 +255,8 @@ func (e *executor) Execute(ctx context.Context, index string, q *pql.Query, shar
 // to avoid anything coming from the mmap-ed Tx storage.
 func (e *executor) safeCopy(resp QueryResponse) (out QueryResponse) {
 	out = QueryResponse{
-		// not transactional, from attribute storage so no need to clone these:
-		ColumnAttrSets: resp.ColumnAttrSets, // []*ColumnAttrSet
-		Err:            resp.Err,            //  error
-		Profile:        resp.Profile,        //  *tracing.Profile
+		Err:     resp.Err,     //  error
+		Profile: resp.Profile, //  *tracing.Profile
 	}
 	// Results can contain *roaring.Bitmap, so need to copy from Tx mmap-ed memory.
 	for _, v := range resp.Results {
@@ -353,29 +313,6 @@ func (e *executor) safeCopy(resp QueryResponse) (out QueryResponse) {
 		}
 	}
 	return
-}
-
-// readColumnAttrSets returns a list of column attribute objects by id.
-func (e *executor) readColumnAttrSets(index *Index, ids []uint64) ([]*ColumnAttrSet, error) {
-	if index == nil {
-		return nil, nil
-	}
-
-	ax := make([]*ColumnAttrSet, 0, len(ids))
-	for _, id := range ids {
-		// Read attributes for column. Skip column if empty.
-		attrs, err := index.ColumnAttrStore().Attrs(id)
-		if err != nil {
-			return nil, errors.Wrap(err, "getting attrs")
-		} else if len(attrs) == 0 {
-			continue
-		}
-
-		// Append column with attributes.
-		ax = append(ax, &ColumnAttrSet{ID: id, Attrs: attrs})
-	}
-
-	return ax, nil
 }
 
 // handlePreCalls traverses the call tree looking for calls that need
@@ -536,11 +473,6 @@ func (e *executor) execute(ctx context.Context, qcx *Qcx, index string, q *pql.Q
 		if len(shards) == 0 {
 			shards = []uint64{0}
 		}
-	}
-
-	// Optimize handling for bulk attribute insertion.
-	if hasOnlySetRowAttrs(q.Calls) {
-		return e.executeBulkSetRowAttrs(ctx, qcx, index, q.Calls, opt, colTranslations, rowTranslations)
 	}
 
 	// Execute each call serially.
@@ -784,12 +716,6 @@ func (e *executor) executeCall(ctx context.Context, qcx *Qcx, index string, c *p
 		statFn()
 		res, err := e.executeSet(ctx, qcx, index, c, opt)
 		return res, errors.Wrapf(err, "executeSet %v", shardSlice(shards))
-	case "SetRowAttrs":
-		statFn()
-		return nil, errors.Wrap(e.executeSetRowAttrs(ctx, qcx, index, c, opt), "executeSetRowAttrs")
-	case "SetColumnAttrs":
-		statFn()
-		return nil, errors.Wrap(e.executeSetColumnAttrs(ctx, qcx, index, c, opt), "executeSetColumnAttrs")
 	case "TopK":
 		statFn()
 		res, err := e.executeTopK(ctx, qcx, index, c, shards, opt)
@@ -876,27 +802,6 @@ func (e *executor) executeOptionsCall(ctx context.Context, qcx *Qcx, index strin
 
 	optCopy := &execOptions{}
 	*optCopy = *opt
-	if arg, ok := c.Args["columnAttrs"]; ok {
-		if value, ok := arg.(bool); ok {
-			opt.ColumnAttrs = value
-		} else {
-			return nil, errors.New("Query(): columnAttrs must be a bool")
-		}
-	}
-	if arg, ok := c.Args["excludeRowAttrs"]; ok {
-		if value, ok := arg.(bool); ok {
-			optCopy.ExcludeRowAttrs = value
-		} else {
-			return nil, errors.New("Query(): excludeRowAttrs must be a bool")
-		}
-	}
-	if arg, ok := c.Args["excludeColumns"]; ok {
-		if value, ok := arg.(bool); ok {
-			optCopy.ExcludeColumns = value
-		} else {
-			return nil, errors.New("Query(): excludeColumns must be a bool")
-		}
-	}
 	if arg, ok := c.Args["shards"]; ok {
 		if optShards, ok := arg.([]interface{}); ok {
 			shards = []uint64{}
@@ -1560,46 +1465,7 @@ func (e *executor) executeBitmapCall(ctx context.Context, qcx *Qcx, index string
 		return nil, errors.Wrap(err, "map reduce")
 	}
 
-	// Attach attributes for non-BSI Row() calls.
-	// If the column label is used then return column attributes.
-	// If the row label is used then return bitmap attributes.
 	row, _ := other.(*Row)
-	if c.Name == "Row" && !c.HasConditionArg() {
-		if opt.ExcludeRowAttrs {
-			row.Attrs = map[string]interface{}{}
-		} else {
-			idx := e.Holder.Index(index)
-			if idx != nil {
-				if columnID, ok, err := c.UintArg("_" + columnLabel); ok && err == nil {
-					attrs, err := idx.ColumnAttrStore().Attrs(columnID)
-					if err != nil {
-						return nil, errors.Wrap(err, "getting column attrs")
-					}
-					row.Attrs = attrs
-				} else if err != nil {
-					return nil, err
-				} else {
-					// field, _ := c.Args["field"].(string)
-					fieldName, _ := c.FieldArg()
-					if fr := idx.Field(fieldName); fr != nil {
-						rowID, _, err := c.UintArg(fieldName)
-						if err != nil {
-							return nil, errors.Wrap(err, "getting row")
-						}
-						attrs, err := fr.RowAttrStore().Attrs(rowID)
-						if err != nil {
-							return nil, errors.Wrap(err, "getting row attrs")
-						}
-						row.Attrs = attrs
-					}
-				}
-			}
-		}
-	}
-
-	if opt.ExcludeColumns {
-		row.segments = []rowSegment{}
-	}
 
 	return row, nil
 }
@@ -2630,7 +2496,6 @@ func (e *executor) executeTopNShard(ctx context.Context, qcx *Qcx, index string,
 		return nil, fmt.Errorf("cannot compute TopN() on integer, decimal, or timestamp field: %q", fieldName)
 	}
 
-	attrName, _ := c.Args["attrName"].(string)
 	rowIDs, _, err := c.UintSliceArg("ids")
 	if err != nil {
 		return nil, fmt.Errorf("executeTopNShard: %v", err)
@@ -2639,7 +2504,6 @@ func (e *executor) executeTopNShard(ctx context.Context, qcx *Qcx, index string,
 	if err != nil {
 		return nil, fmt.Errorf("executeTopNShard: %v", err)
 	}
-	attrValues, _ := c.Args["attrValues"].([]interface{})
 	tanimotoThreshold, _, err := c.UintArg("tanimotoThreshold")
 	if err != nil {
 		return nil, fmt.Errorf("executeTopNShard: %v", err)
@@ -2688,8 +2552,6 @@ func (e *executor) executeTopNShard(ctx context.Context, qcx *Qcx, index string,
 		N:                 int(n),
 		Src:               src,
 		RowIDs:            rowIDs,
-		FilterName:        attrName,
-		FilterValues:      attrValues,
 		MinThreshold:      minThreshold,
 		TanimotoThreshold: tanimotoThreshold,
 	})
@@ -5650,229 +5512,6 @@ func (e *executor) executeClearValueField(ctx context.Context, qcx *Qcx, index s
 	return ret, nil
 }
 
-// executeSetRowAttrs executes a SetRowAttrs() call.
-func (e *executor) executeSetRowAttrs(ctx context.Context, qcx *Qcx, index string, c *pql.Call, opt *execOptions) error {
-	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeSetRowAttrs")
-	defer span.Finish()
-
-	fieldName, ok := c.Args["_field"].(string)
-	if !ok {
-		return errors.New("SetRowAttrs() field required")
-	}
-
-	// Retrieve field.
-	field := e.Holder.Field(index, fieldName)
-	if field == nil {
-		return newNotFoundError(ErrFieldNotFound, fieldName)
-	}
-
-	// Parse labels.
-	rowID, ok, err := c.UintArg("_" + rowLabel)
-	if err != nil {
-		return fmt.Errorf("reading SetRowAttrs() row: %v", err)
-	} else if !ok {
-		return fmt.Errorf("SetRowAttrs() row field '%v' required", rowLabel)
-	}
-
-	// Copy args and remove reserved fields.
-	attrs := pql.CopyArgsDecimalToFloat(c.Args)
-	delete(attrs, "_field")
-	delete(attrs, "_"+rowLabel)
-
-	// Set attributes.
-	if err := field.RowAttrStore().SetAttrs(rowID, attrs); err != nil {
-		return err
-	}
-
-	// Do not forward call if this is already being forwarded.
-	if opt.Remote {
-		return nil
-	}
-
-	// Execute on remote nodes in parallel.
-	nodes := topology.Nodes(e.Cluster.noder.Nodes()).FilterID(e.Node.ID)
-	resp := make(chan error, len(nodes))
-	for _, node := range nodes {
-		go func(node *topology.Node) {
-			_, err := e.remoteExec(ctx, node, index, &pql.Query{Calls: []*pql.Call{c}}, nil, nil)
-			resp <- err
-		}(node)
-	}
-
-	// Return first error.
-	for range nodes {
-		if err := <-resp; err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// executeBulkSetRowAttrs executes a set of SetRowAttrs() calls.
-func (e *executor) executeBulkSetRowAttrs(ctx context.Context, qcx *Qcx, index string, calls []*pql.Call, opt *execOptions, colTranslations map[string]map[string]uint64, rowTranslations map[string]map[string]map[string]uint64) ([]interface{}, error) {
-	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeBulkSetRowAttrs")
-	defer span.Finish()
-
-	// Collect attributes by field/id.
-	m := make(map[string]map[uint64]map[string]interface{})
-	for i, c := range calls {
-		if i%10 == 0 {
-			if err := validateQueryContext(ctx); err != nil {
-				return nil, err
-			}
-		}
-
-		// Apply call translation.
-		if !opt.Remote {
-			translated, err := e.translateCall(c, index, colTranslations, rowTranslations)
-			if err != nil {
-				return nil, errors.Wrap(err, "translating call")
-			}
-			if translated == nil {
-				continue
-			}
-
-			c = translated
-		}
-
-		field, ok := c.Args["_field"].(string)
-		if !ok {
-			return nil, errors.New("SetRowAttrs() field required")
-		}
-
-		// Retrieve field.
-		f := e.Holder.Field(index, field)
-		if f == nil {
-			return nil, newNotFoundError(ErrFieldNotFound, field)
-		}
-
-		rowID, ok, err := c.UintArg("_" + rowLabel)
-		if err != nil {
-			return nil, errors.Wrap(err, "reading SetRowAttrs() row")
-		} else if !ok {
-			return nil, fmt.Errorf("SetRowAttrs row field '%v' required", rowLabel)
-		}
-
-		// Copy args and remove reserved fields.
-		attrs := pql.CopyArgsDecimalToFloat(c.Args)
-		delete(attrs, "_field")
-		delete(attrs, "_"+rowLabel)
-
-		// Create field group, if not exists.
-		fieldMap := m[field]
-		if fieldMap == nil {
-			fieldMap = make(map[uint64]map[string]interface{})
-			m[field] = fieldMap
-		}
-
-		// Set or merge attributes.
-		attr := fieldMap[rowID]
-		if attr == nil {
-			fieldMap[rowID] = cloneAttrs(attrs)
-		} else {
-			for k, v := range attrs {
-				attr[k] = v
-			}
-		}
-	}
-
-	// Bulk insert attributes by field.
-	for name, fieldMap := range m {
-		// Retrieve field.
-		field := e.Holder.Field(index, name)
-		if field == nil {
-			return nil, newNotFoundError(ErrFieldNotFound, name)
-		}
-
-		// Set attributes.
-		if err := field.RowAttrStore().SetBulkAttrs(fieldMap); err != nil {
-			return nil, err
-		}
-	}
-
-	if !opt.Remote {
-		tags := []string{"index:" + index, "bulk:true"}
-		e.Holder.Stats.CountWithCustomTags(MetricSetRowAttrs, int64(len(m)), 1.0, tags)
-	}
-
-	// Do not forward call if this is already being forwarded.
-	if opt.Remote {
-		return make([]interface{}, len(calls)), nil
-	}
-
-	// Execute on remote nodes in parallel.
-	nodes := topology.Nodes(e.Cluster.noder.Nodes()).FilterID(e.Node.ID)
-	resp := make(chan error, len(nodes))
-	for _, node := range nodes {
-		go func(node *topology.Node) {
-			_, err := e.remoteExec(ctx, node, index, &pql.Query{Calls: calls}, nil, nil)
-			resp <- err
-		}(node)
-	}
-
-	// Return first error.
-	for range nodes {
-		if err := <-resp; err != nil {
-			return nil, err
-		}
-	}
-
-	// Return a set of nil responses to match the non-optimized return.
-	return make([]interface{}, len(calls)), nil
-}
-
-// executeSetColumnAttrs executes a SetColumnAttrs() call.
-func (e *executor) executeSetColumnAttrs(ctx context.Context, qcx *Qcx, index string, c *pql.Call, opt *execOptions) error {
-	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeSetColumnAttrs")
-	defer span.Finish()
-
-	// Retrieve index.
-	idx := e.Holder.Index(index)
-	if idx == nil {
-		return newNotFoundError(ErrIndexNotFound, index)
-	}
-
-	col, okCol, errCol := c.UintArg("_" + columnLabel)
-	if errCol != nil || !okCol {
-		return fmt.Errorf("reading SetColumnAttrs() col errs: %v found %v", errCol, okCol)
-	}
-
-	// Copy args and remove reserved fields.
-	attrs := pql.CopyArgsDecimalToFloat(c.Args)
-	delete(attrs, "_"+columnLabel)
-	delete(attrs, "field")
-
-	// Set attributes.
-
-	if err := idx.ColumnAttrStore().SetAttrs(col, attrs); err != nil {
-		return err
-	}
-	// Do not forward call if this is already being forwarded.
-	if opt.Remote {
-		return nil
-	}
-
-	// Execute on remote nodes in parallel.
-	nodes := topology.Nodes(e.Cluster.noder.Nodes()).FilterID(e.Node.ID)
-	resp := make(chan error, len(nodes))
-	for _, node := range nodes {
-		go func(node *topology.Node) {
-			_, err := e.remoteExec(ctx, node, index, &pql.Query{Calls: []*pql.Call{c}}, nil, nil)
-			resp <- err
-		}(node)
-	}
-
-	// Return first error.
-	for range nodes {
-		if err := <-resp; err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
 // remoteExec executes a PQL query remotely for a set of shards on a node.
 func (e *executor) remoteExec(ctx context.Context, node *topology.Node, index string, q *pql.Query, shards []uint64, embed []*Row) (results []interface{}, err error) { // nolint: interfacer
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeExec")
@@ -6367,7 +6006,7 @@ func (e *executor) collectCallKeys(dst *keyCollector, c *pql.Call, index string)
 	// Handle _col.
 	if col, ok := c.Args["_col"].(string); ok {
 		switch c.Name {
-		case "Set", "SetColumnAttrs":
+		case "Set":
 			dst.CreateColumns(index, col)
 		default:
 			dst.FindColumns(index, col)
@@ -6385,12 +6024,7 @@ func (e *executor) collectCallKeys(dst *keyCollector, c *pql.Call, index string)
 			return errors.Wrap(ErrFieldNotFound, "finding field for _row argument")
 		}
 
-		switch c.Name {
-		case "SetRowAttrs":
-			dst.CreateRows(index, field, row)
-		default:
-			dst.FindRows(index, field, row)
-		}
+		dst.FindRows(index, field, row)
 	}
 
 	// Handle queries that need a "column" argument.
@@ -6700,7 +6334,7 @@ func (e *executor) translateCall(c *pql.Call, index string, columnKeys map[strin
 			c.Args["_col"] = id
 		} else {
 			switch c.Name {
-			case "Set", "SetColumnAttrs":
+			case "Set":
 				return nil, errors.Wrapf(ErrTranslatingKeyNotFound, "destination key not found %q in index %q", col, index)
 			default:
 				return e.callZero(c), nil
@@ -6736,12 +6370,7 @@ func (e *executor) translateCall(c *pql.Call, index string, columnKeys map[strin
 			if translation, ok := indexRows[field][row]; ok {
 				c.Args["_row"] = translation
 			} else {
-				switch c.Name {
-				case "SetRowAttrs":
-					return nil, errors.Errorf("row key missing in %q", c.String())
-				default:
-					return e.callZero(c), nil
-				}
+				return e.callZero(c), nil
 			}
 		}
 	}
@@ -7023,7 +6652,7 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 		}
 		switch strategy {
 		case byCurrentIndex:
-			other := &Row{Attrs: result.Attrs}
+			other := &Row{}
 			for _, segment := range result.Segments() {
 				for _, col := range segment.Columns() {
 					other.Keys = append(other.Keys, idSet[col])
@@ -7081,7 +6710,7 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 				if rslt == nil {
 					return &SignedRow{Pos: &Row{}}, nil
 				}
-				other := &Row{Attrs: rslt.Attrs}
+				other := &Row{}
 				for _, segment := range rslt.Segments() {
 					keys, err := e.Cluster.translateIndexIDs(context.Background(), field.ForeignIndex(), segment.Columns())
 					if err != nil {
@@ -7514,27 +7143,10 @@ type mapResponse struct {
 
 // execOptions represents an execution context for a single Execute() call.
 type execOptions struct {
-	Remote          bool
-	Profile         bool
-	ExcludeRowAttrs bool
-	ExcludeColumns  bool
-	ColumnAttrs     bool
-	PreTranslated   bool
-	EmbeddedData    []*Row
-}
-
-// hasOnlySetRowAttrs returns true if calls only contains SetRowAttrs() calls.
-func hasOnlySetRowAttrs(calls []*pql.Call) bool {
-	if len(calls) == 0 {
-		return false
-	}
-
-	for _, call := range calls {
-		if call.Name != "SetRowAttrs" {
-			return false
-		}
-	}
-	return true
+	Remote        bool
+	Profile       bool
+	PreTranslated bool
+	EmbeddedData  []*Row
 }
 
 func needsShards(calls []*pql.Call) bool {
@@ -7543,7 +7155,7 @@ func needsShards(calls []*pql.Call) bool {
 	}
 	for _, call := range calls {
 		switch call.Name {
-		case "Clear", "Set", "SetRowAttrs", "SetColumnAttrs":
+		case "Clear", "Set":
 			continue
 		case "Count", "TopN", "Rows":
 			return true

@@ -192,10 +192,6 @@ type fragment struct {
 	// Logger used for out-of-band log entries.
 	Logger logger.Logger
 
-	// Row attribute storage.
-	// This is set by the parent field unless overridden for testing.
-	RowAttrStore AttrStore
-
 	// mutexVector is used for mutex field types. It's checked for an
 	// existing value (to clear) prior to setting a new value.
 	mutexVector vector
@@ -1830,7 +1826,6 @@ func (f *fragment) forEachBit(tx Tx, fn func(rowID, columnID uint64) error) erro
 
 // top returns the top rows from the fragment.
 // If opt.Src is specified then only rows which intersect src are returned.
-// If opt.FilterValues exist then the row attribute specified by field is matched.
 func (f *fragment) top(tx Tx, opt topOptions) ([]Pair, error) {
 	// Retrieve pairs. If no row ids specified then return from cache.
 	pairs, err := f.topBitmapPairs(tx, opt.RowIDs)
@@ -1841,15 +1836,6 @@ func (f *fragment) top(tx Tx, opt topOptions) ([]Pair, error) {
 	// If row ids are provided, we don't want to truncate the result set
 	if len(opt.RowIDs) > 0 {
 		opt.N = 0
-	}
-
-	// Create a fast lookup of filter values.
-	var filters map[interface{}]struct{}
-	if opt.FilterName != "" && len(opt.FilterValues) > 0 {
-		filters = make(map[interface{}]struct{})
-		for _, v := range opt.FilterValues {
-			filters[v] = struct{}{}
-		}
 	}
 
 	// Use `tanimotoThreshold > 0` to indicate whether or not we are considering Tanimoto.
@@ -1882,20 +1868,6 @@ func (f *fragment) top(tx Tx, opt topOptions) ([]Pair, error) {
 		} else {
 			// Ignore counts less than MinThreshold.
 			if cnt < opt.MinThreshold {
-				continue
-			}
-		}
-
-		// Apply filter, if set.
-		if filters != nil {
-			attr, err := f.RowAttrStore.Attrs(rowID)
-			if err != nil {
-				return nil, errors.Wrap(err, "getting attrs")
-			} else if attr == nil {
-				continue
-			} else if attrValue := attr[opt.FilterName]; attrValue == nil {
-				continue
-			} else if _, ok := filters[attrValue]; !ok {
 				continue
 			}
 		}
@@ -2030,9 +2002,6 @@ type topOptions struct {
 	RowIDs       []uint64
 	MinThreshold uint64
 
-	// Filter field name & values.
-	FilterName        string
-	FilterValues      []interface{}
 	TanimotoThreshold uint64
 }
 

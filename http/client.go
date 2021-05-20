@@ -784,57 +784,6 @@ func (c *InternalClient) ImportRoaring(ctx context.Context, uri *pnet.URI, index
 	return nil
 }
 
-// ImportColumnAttrs does bulk import of column attrs
-func (c *InternalClient) ImportColumnAttrs(ctx context.Context, uri *pnet.URI, index string, req *pilosa.ImportColumnAttrsRequest) error {
-	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.ImportRoaring")
-	defer span.Finish()
-
-	if index == "" {
-		return pilosa.ErrIndexRequired
-	}
-	if uri == nil {
-		uri = c.defaultURI
-	}
-
-	url := fmt.Sprintf("%s/index/%s/import-column-attrs", uri, index)
-
-	// Marshal data to protobuf.
-	data, err := c.serializer.Marshal(req)
-	if err != nil {
-		return errors.Wrap(err, "marshal import-column-attrs request")
-	}
-
-	// Generate HTTP request.
-	httpReq, err := http.NewRequest("POST", url, bytes.NewBuffer(data))
-	if err != nil {
-		return errors.Wrap(err, "creating request")
-	}
-	httpReq.Header.Set("Content-Type", "application/x-protobuf")
-	httpReq.Header.Set("Accept", "application/x-protobuf")
-	httpReq.Header.Set("X-Pilosa-Row", "roaring")
-	httpReq.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
-
-	// Execute request against the host.
-	resp, err := c.executeRequest(httpReq.WithContext(ctx))
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	dec := json.NewDecoder(resp.Body)
-	rbody := &pilosa.ImportResponse{}
-	err = dec.Decode(rbody)
-	// Decode can return EOF when no error occurred. helpful!
-	if err != nil && err != io.EOF {
-		return errors.Wrap(err, "decoding response body")
-	}
-	if rbody.Err != "" {
-		return errors.Wrap(errors.New(rbody.Err), "importing roaring")
-	}
-
-	return nil
-}
-
 // ExportCSV bulk exports data for a single shard from a host to CSV format.
 func (c *InternalClient) ExportCSV(ctx context.Context, index, field string, shard uint64, w io.Writer) error {
 	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.ExportCSV")
@@ -1124,89 +1073,6 @@ func (c *InternalClient) BlockData(ctx context.Context, uri *pnet.URI, index, fi
 		return nil, nil, errors.Wrap(err, "unmarshalling")
 	}
 	return rsp.RowIDs, rsp.ColumnIDs, nil
-}
-
-// ColumnAttrDiff returns data from differing blocks on a remote host.
-func (c *InternalClient) ColumnAttrDiff(ctx context.Context, uri *pnet.URI, index string, blks []pilosa.AttrBlock) (map[uint64]map[string]interface{}, error) {
-	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.ColumnAttrDiff")
-	defer span.Finish()
-
-	if uri == nil {
-		uri = c.defaultURI
-	}
-	u := uriPathToURL(uri, fmt.Sprintf("/internal/index/%s/attr/diff", index))
-
-	// Encode request.
-	buf, err := json.Marshal(postIndexAttrDiffRequest{Blocks: blks})
-	if err != nil {
-		return nil, errors.Wrap(err, "marshaling")
-	}
-
-	// Build request.
-	req, err := http.NewRequest("POST", u.String(), bytes.NewReader(buf))
-	if err != nil {
-		return nil, errors.Wrap(err, "creating request")
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
-	req.Header.Set("Accept", "application/json")
-
-	// Execute request.
-	resp, err := c.executeRequest(req.WithContext(ctx))
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	// Decode response object.
-	var rsp postIndexAttrDiffResponse
-	if err := json.NewDecoder(resp.Body).Decode(&rsp); err != nil {
-		return nil, errors.Wrap(err, "decoding")
-	}
-	return rsp.Attrs, nil
-}
-
-// RowAttrDiff returns data from differing blocks on a remote host.
-func (c *InternalClient) RowAttrDiff(ctx context.Context, uri *pnet.URI, index, field string, blks []pilosa.AttrBlock) (map[uint64]map[string]interface{}, error) {
-	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.RowAttrDiff")
-	defer span.Finish()
-
-	if uri == nil {
-		uri = c.defaultURI
-	}
-	u := uriPathToURL(uri, fmt.Sprintf("/internal/index/%s/field/%s/attr/diff", index, field))
-
-	// Encode request.
-	buf, err := json.Marshal(postFieldAttrDiffRequest{Blocks: blks})
-	if err != nil {
-		return nil, errors.Wrap(err, "marshaling")
-	}
-
-	// Build request.
-	req, err := http.NewRequest("POST", u.String(), bytes.NewReader(buf))
-	if err != nil {
-		return nil, errors.Wrap(err, "creating request")
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
-	req.Header.Set("Accept", "application/json")
-
-	// Execute request.
-	resp, err := c.executeRequest(req.WithContext(ctx))
-	if err != nil {
-		if resp != nil && resp.StatusCode == http.StatusNotFound {
-			return nil, errors.Wrap(pilosa.ErrFieldNotFound, field)
-		}
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	// Decode response object.
-	var rsp postFieldAttrDiffResponse
-	if err := json.NewDecoder(resp.Body).Decode(&rsp); err != nil {
-		return nil, errors.Wrap(err, "decoding")
-	}
-	return rsp.Attrs, nil
 }
 
 // SendMessage posts a message synchronously.
@@ -2187,29 +2053,6 @@ func (c *InternalClient) IndexTranslateDataReader(ctx context.Context, index str
 	return resp.Body, nil
 }
 
-// IndexAttrDataReader returns a reader that provides a snapshot of column attributes data.
-func (c *InternalClient) IndexAttrDataReader(ctx context.Context, index string) (io.ReadCloser, error) {
-	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.IndexAttrDataReader")
-	defer span.Finish()
-
-	// Build request.
-	u := fmt.Sprintf("%s/internal/index/%s/attr/data", c.defaultURI.String(), url.QueryEscape(index))
-	req, err := http.NewRequest("GET", u, nil)
-	if err != nil {
-		return nil, errors.Wrap(err, "creating request")
-	}
-
-	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
-	req.Header.Set("Accept", "application/octet-stream")
-
-	// Execute request.
-	resp, err := c.executeRequest(req.WithContext(ctx))
-	if err != nil {
-		return nil, err
-	}
-	return resp.Body, nil
-}
-
 // FieldTranslateDataReader returns a reader that provides a snapshot of
 // translation data for a field.
 func (c *InternalClient) FieldTranslateDataReader(ctx context.Context, index, field string) (io.ReadCloser, error) {
@@ -2234,29 +2077,6 @@ func (c *InternalClient) FieldTranslateDataReader(ctx context.Context, index, fi
 		resp.Body.Close()
 		return nil, pilosa.ErrTranslateStoreNotFound
 	} else if err != nil {
-		return nil, err
-	}
-	return resp.Body, nil
-}
-
-// FieldAttrDataReader returns a reader that provides a snapshot of row attributes data.
-func (c *InternalClient) FieldAttrDataReader(ctx context.Context, index, field string) (io.ReadCloser, error) {
-	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.FieldAttrDataReader")
-	defer span.Finish()
-
-	// Build request.
-	u := fmt.Sprintf("%s/internal/index/%s/field/%s/attr/data", c.defaultURI.String(), url.QueryEscape(index), url.QueryEscape(field))
-	req, err := http.NewRequest("GET", u, nil)
-	if err != nil {
-		return nil, errors.Wrap(err, "creating request")
-	}
-
-	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
-	req.Header.Set("Accept", "application/octet-stream")
-
-	// Execute request.
-	resp, err := c.executeRequest(req.WithContext(ctx))
-	if err != nil {
 		return nil, err
 	}
 	return resp.Body, nil

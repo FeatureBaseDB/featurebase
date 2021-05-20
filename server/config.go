@@ -83,8 +83,7 @@ type Config struct {
 	AdvertiseGRPC string `toml:"advertise-grpc"`
 
 	// MaxWritesPerRequest limits the number of mutating commands that can be in
-	// a single request to the server. This includes Set, Clear,
-	// SetRowAttrs & SetColumnAttrs.
+	// a single request to the server. This includes Set, Clear, ClearRow, Store, and SetBit.
 	MaxWritesPerRequest int `toml:"max-writes-per-request"`
 
 	// LogPath configures where Pilosa will write logs.

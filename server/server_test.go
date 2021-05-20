@@ -91,7 +91,6 @@ func TestMain_Set_Quick(t *testing.T) {
 						"results": []interface{}{
 							map[string]interface{}{
 								"columns": columnIDs,
-								"attrs":   map[string]interface{}{},
 							},
 						},
 					}) + "\n"
@@ -118,7 +117,6 @@ func TestMain_Set_Quick(t *testing.T) {
 						"results": []interface{}{
 							map[string]interface{}{
 								"columns": columnIDs,
-								"attrs":   map[string]interface{}{},
 							},
 						},
 					}) + "\n"
@@ -130,135 +128,6 @@ func TestMain_Set_Quick(t *testing.T) {
 				}
 			}
 		})
-	}
-}
-
-// Ensure program can set row attributes and retrieve them.
-func TestMain_SetRowAttrs(t *testing.T) {
-	m := test.RunCommand(t)
-	defer m.Close()
-
-	// Create fields.
-	client := m.Client()
-	if err := client.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
-		t.Fatal(err)
-	} else if err := client.CreateField(context.Background(), "i", "x"); err != nil {
-		t.Fatal(err)
-	} else if err := client.CreateField(context.Background(), "i", "z"); err != nil {
-		t.Fatal(err)
-	} else if err := client.CreateField(context.Background(), "i", "neg"); err != nil {
-		t.Fatal(err)
-	}
-
-	// Set columns on different rows in different fields.
-	if _, err := m.Query(t, "i", "", `Set(100, x=1)`); err != nil {
-		t.Fatal(err)
-	} else if _, err := m.Query(t, "i", "", `Set(100, x=2)`); err != nil {
-		t.Fatal(err)
-	} else if _, err := m.Query(t, "i", "", `Set(100, x=2)`); err != nil {
-		t.Fatal(err)
-	} else if _, err := m.Query(t, "i", "", `Set(100, neg=3)`); err != nil {
-		t.Fatal(err)
-	}
-
-	// Set row attributes.
-	if _, err := m.Query(t, "i", "", `SetRowAttrs(x, 1, x=100)`); err != nil {
-		t.Fatal(err)
-	} else if _, err := m.Query(t, "i", "", `SetRowAttrs(x, 2, x=-200)`); err != nil {
-		t.Fatal(err)
-	} else if _, err := m.Query(t, "i", "", `SetRowAttrs(z, 2, x=300)`); err != nil {
-		t.Fatal(err)
-	} else if _, err := m.Query(t, "i", "", `SetRowAttrs(neg, 3, x=-0.44)`); err != nil {
-		t.Fatal(err)
-	}
-
-	// Query row x/1.
-	if res, err := m.Query(t, "i", "", `Row(x=1)`); err != nil {
-		t.Fatal(err)
-	} else if res != `{"results":[{"attrs":{"x":100},"columns":[100]}]}`+"\n" {
-		t.Fatalf("unexpected result: %s", res)
-	}
-
-	// Query row x/2.
-	if res, err := m.Query(t, "i", "", `Row(x=2)`); err != nil {
-		t.Fatal(err)
-	} else if res != `{"results":[{"attrs":{"x":-200},"columns":[100]}]}`+"\n" {
-		t.Fatalf("unexpected result: %s", res)
-	}
-
-	if err := m.Reopen(); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := m.AwaitState(disco.ClusterStateNormal, 10*time.Second); err != nil {
-		t.Fatalf("restarting cluster: %v", err)
-	}
-
-	// Query rows after reopening.
-	if res, err := m.Query(t, "i", "columnAttrs=true", `Row(x=1)`); err != nil {
-		t.Fatal(err)
-	} else if res != `{"results":[{"attrs":{"x":100},"columns":[100]}]}`+"\n" {
-		t.Fatalf("unexpected result(reopen): %s", res)
-	}
-
-	if res, err := m.Query(t, "i", "columnAttrs=true", `Row(neg=3)`); err != nil {
-		t.Fatal(err)
-	} else if res != `{"results":[{"attrs":{"x":-0.44},"columns":[100]}]}`+"\n" {
-		t.Fatalf("unexpected result(reopen): %s", res)
-	}
-	// Query row x/2.
-	if res, err := m.Query(t, "i", "", `Row(x=2)`); err != nil {
-		t.Fatal(err)
-	} else if res != `{"results":[{"attrs":{"x":-200},"columns":[100]}]}`+"\n" {
-		t.Fatalf("unexpected result: %s", res)
-	}
-}
-
-// Ensure program can set column attributes and retrieve them.
-func TestMain_SetColumnAttrs(t *testing.T) {
-	m := test.RunCommand(t)
-	defer m.Close()
-
-	// Create fields.
-	client := m.Client()
-	if err := client.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
-		t.Fatal(err)
-	} else if err := client.CreateField(context.Background(), "i", "x"); err != nil {
-		t.Fatal(err)
-	}
-
-	// Set columns on row.
-	if _, err := m.Query(t, "i", "", `Set(100, x=1)`); err != nil {
-		t.Fatal(err)
-	} else if _, err := m.Query(t, "i", "", `Set(101, x=1)`); err != nil {
-		t.Fatal(err)
-	}
-
-	// Set column attributes.
-	if _, err := m.Query(t, "i", "", `SetColumnAttrs(100, foo="bar")`); err != nil {
-		t.Fatal(err)
-	}
-
-	// Query row.
-	if res, err := m.Query(t, "i", "columnAttrs=true", `Row(x=1)`); err != nil {
-		t.Fatal(err)
-	} else if res != `{"results":[{"attrs":{},"columns":[100,101]}],"columnAttrs":[{"id":100,"attrs":{"foo":"bar"}}]}`+"\n" {
-		t.Fatalf("unexpected result: %s", res)
-	}
-
-	if err := m.Reopen(); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := m.AwaitState(disco.ClusterStateNormal, 10*time.Second); err != nil {
-		t.Fatalf("restarting cluster: %v", err)
-	}
-
-	// Query row after reopening.
-	if res, err := m.Query(t, "i", "columnAttrs=true", `Row(x=1)`); err != nil {
-		t.Fatal(err)
-	} else if res != `{"results":[{"attrs":{},"columns":[100,101]}],"columnAttrs":[{"id":100,"attrs":{"foo":"bar"}}]}`+"\n" {
-		t.Fatalf("unexpected result(reopen): %s", res)
 	}
 }
 

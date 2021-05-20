@@ -33,8 +33,6 @@ var (
 	ErrMultipleSQLStatements = errors.New("statement contains multiple sql queries")
 )
 
-type Attributes map[string]interface{}
-
 type MappedSQL struct {
 	SQLType   string
 	Statement sqlparser.Statement

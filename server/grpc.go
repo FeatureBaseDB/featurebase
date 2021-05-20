@@ -215,7 +215,6 @@ func (h *GRPCHandler) QueryPQL(req *pb.QueryPQLRequest, stream pb.Pilosa_QueryPQ
 	resp, err := h.api.Query(stream.Context(), &query)
 	durQuery := time.Since(t)
 
-	// TODO: what about resp.CollumnAttrSets?
 	if err != nil {
 		return errToStatusError(err)
 	} else if len(resp.Results) != 1 {

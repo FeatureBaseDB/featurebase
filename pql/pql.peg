@@ -7,8 +7,6 @@ type PQL Peg {
 # All input queries consist of a sequence of calls, at the top level.
 Calls <- sp (Call sp)* !.
 Call <-  "Set" {p.startCall("Set")} open col comma args (comma time)? close {p.endCall()}
-       / "SetRowAttrs" {p.startCall("SetRowAttrs")} open posfield comma row comma args close {p.endCall()}
-       / "SetColumnAttrs" {p.startCall("SetColumnAttrs")} open col comma args close {p.endCall()}
        / "Clear" {p.startCall("Clear")} open col comma args close {p.endCall()}
        / "ClearRow" {p.startCall("ClearRow")} open arg close {p.endCall()}
        / "Store" {p.startCall("Store")} open Call comma arg close {p.endCall()}
@@ -63,9 +61,6 @@ posfield <- 'field='? <fieldExpr> { p.addPosStr("_field", text) }
 col <-   < digits > {p.addPosNum("_col", text)}
         / < '\'' singlequotedstring '\'' > {p.addPosStr("_col", text)}
         / < '"' doublequotedstring '"' > {p.addPosStr("_col", text)}
-row <-   < digits > {p.addPosNum("_row", text)}
-        / < '\'' singlequotedstring '\'' > {p.addPosStr("_row", text)}
-        / < '"' doublequotedstring '"' > {p.addPosStr("_row", text)}
 
 open <- '(' sp
 close <- sp ')' sp

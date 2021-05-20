@@ -22,34 +22,32 @@ func _() {
 	_ = x[apiTranslateData-11]
 	_ = x[apiFieldTranslateData-12]
 	_ = x[apiField-13]
-	_ = x[apiFieldAttrDiff-14]
-	_ = x[apiImport-15]
-	_ = x[apiImportValue-16]
-	_ = x[apiIndex-17]
-	_ = x[apiIndexAttrDiff-18]
-	_ = x[apiQuery-19]
-	_ = x[apiRecalculateCaches-20]
-	_ = x[apiRemoveNode-21]
-	_ = x[apiResizeAbort-22]
-	_ = x[apiSchema-23]
-	_ = x[apiShardNodes-24]
-	_ = x[apiState-25]
-	_ = x[apiViews-26]
-	_ = x[apiApplySchema-27]
-	_ = x[apiStartTransaction-28]
-	_ = x[apiFinishTransaction-29]
-	_ = x[apiTransactions-30]
-	_ = x[apiGetTransaction-31]
-	_ = x[apiActiveQueries-32]
-	_ = x[apiPastQueries-33]
-	_ = x[apiIDReserve-34]
-	_ = x[apiIDCommit-35]
-	_ = x[apiIDReset-36]
+	_ = x[apiImport-14]
+	_ = x[apiImportValue-15]
+	_ = x[apiIndex-16]
+	_ = x[apiQuery-17]
+	_ = x[apiRecalculateCaches-18]
+	_ = x[apiRemoveNode-19]
+	_ = x[apiResizeAbort-20]
+	_ = x[apiSchema-21]
+	_ = x[apiShardNodes-22]
+	_ = x[apiState-23]
+	_ = x[apiViews-24]
+	_ = x[apiApplySchema-25]
+	_ = x[apiStartTransaction-26]
+	_ = x[apiFinishTransaction-27]
+	_ = x[apiTransactions-28]
+	_ = x[apiGetTransaction-29]
+	_ = x[apiActiveQueries-30]
+	_ = x[apiPastQueries-31]
+	_ = x[apiIDReserve-32]
+	_ = x[apiIDCommit-33]
+	_ = x[apiIDReset-34]
 }
 
-const _apiMethod_name = "apiClusterMessageapiCreateFieldapiCreateIndexapiDeleteFieldapiDeleteAvailableShardapiDeleteIndexapiDeleteViewapiExportCSVapiFragmentBlockDataapiFragmentBlocksapiFragmentDataapiTranslateDataapiFieldTranslateDataapiFieldapiFieldAttrDiffapiImportapiImportValueapiIndexapiIndexAttrDiffapiQueryapiRecalculateCachesapiRemoveNodeapiResizeAbortapiSchemaapiShardNodesapiStateapiViewsapiApplySchemaapiStartTransactionapiFinishTransactionapiTransactionsapiGetTransactionapiActiveQueriesapiPastQueriesapiIDReserveapiIDCommitapiIDReset"
+const _apiMethod_name = "apiClusterMessageapiCreateFieldapiCreateIndexapiDeleteFieldapiDeleteAvailableShardapiDeleteIndexapiDeleteViewapiExportCSVapiFragmentBlockDataapiFragmentBlocksapiFragmentDataapiTranslateDataapiFieldTranslateDataapiFieldapiImportapiImportValueapiIndexapiQueryapiRecalculateCachesapiRemoveNodeapiResizeAbortapiSchemaapiShardNodesapiStateapiViewsapiApplySchemaapiStartTransactionapiFinishTransactionapiTransactionsapiGetTransactionapiActiveQueriesapiPastQueriesapiIDReserveapiIDCommitapiIDReset"
 
-var _apiMethod_index = [...]uint16{0, 17, 31, 45, 59, 82, 96, 109, 121, 141, 158, 173, 189, 210, 218, 234, 243, 257, 265, 281, 289, 309, 322, 336, 345, 358, 366, 374, 388, 407, 427, 442, 459, 475, 489, 501, 512, 522}
+var _apiMethod_index = [...]uint16{0, 17, 31, 45, 59, 82, 96, 109, 121, 141, 158, 173, 189, 210, 218, 227, 241, 249, 257, 277, 290, 304, 313, 326, 334, 342, 356, 375, 395, 410, 427, 443, 457, 469, 480, 490}
 
 func (i apiMethod) String() string {
 	if i < 0 || i >= apiMethod(len(_apiMethod_index)-1) {

@@ -36,7 +36,6 @@ import (
 	"github.com/pilosa/pilosa/v2/storage"
 	"github.com/pilosa/pilosa/v2/testhook"
 	"github.com/pilosa/pilosa/v2/topology"
-	"github.com/pilosa/pilosa/v2/tracing"
 	. "github.com/pilosa/pilosa/v2/vprint" // nolint:staticcheck
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
@@ -57,12 +56,6 @@ const (
 
 	// FieldsDir is the default fields directory used by each index.
 	FieldsDir = "fields"
-
-	// ColumnAttrsFileName is the name of the file used for the column attributes store.
-	ColumnAttrsFileName = "column-attributes"
-
-	// RowAttrsFileName is the name of the file used for the row attributes store.
-	RowAttrsFileName = "row-attributes"
 )
 
 func init() {
@@ -91,8 +84,6 @@ type Holder struct {
 	schemator   disco.Schemator
 	sharder     disco.Sharder
 	serializer  Serializer
-
-	NewAttrStore func(string) AttrStore
 
 	// Close management
 	wg      sync.WaitGroup
@@ -234,7 +225,6 @@ type HolderConfig struct {
 	Sharder              disco.Sharder
 	CacheFlushInterval   time.Duration
 	StatsClient          stats.StatsClient
-	NewAttrStore         func(string) AttrStore
 	Logger               logger.Logger
 	RowcacheOn           bool
 
@@ -258,7 +248,6 @@ func DefaultHolderConfig() *HolderConfig {
 		Sharder:              disco.InMemSharder,
 		CacheFlushInterval:   defaultCacheFlushInterval,
 		StatsClient:          stats.NopStatsClient,
-		NewAttrStore:         newNopAttrStore,
 		Logger:               logger.NopLogger,
 		StorageConfig:        storage.NewDefaultConfig(),
 		RBFConfig:            rbfcfg.NewDefaultConfig(),
@@ -287,7 +276,6 @@ func NewHolder(path string, cfg *HolderConfig) *Holder {
 
 		partitionN:           cfg.PartitionN,
 		Stats:                cfg.StatsClient,
-		NewAttrStore:         cfg.NewAttrStore,
 		cacheFlushInterval:   cfg.CacheFlushInterval,
 		OpenTranslateStore:   cfg.OpenTranslateStore,
 		OpenTranslateReader:  cfg.OpenTranslateReader,
@@ -1318,8 +1306,6 @@ func (h *Holder) newIndex(path, name string) (*Index, error) {
 	index.broadcaster = h.broadcaster
 	index.serializer = h.serializer
 	index.Schemator = h.schemator
-	index.newAttrStore = h.NewAttrStore
-	index.columnAttrs = h.NewAttrStore(filepath.Join(index.path, ColumnAttrsFileName))
 	index.OpenTranslateStore = h.OpenTranslateStore
 	index.translationSyncer = h.translationSyncer
 	return index, nil
@@ -1526,21 +1512,11 @@ func (s *holderSyncer) SyncHolder() error {
 			return nil
 		}
 
-		// Sync index column attributes.
-		if err := s.syncIndex(di.Name); err != nil {
-			return fmt.Errorf("index sync error: index=%s, err=%s", di.Name, err)
-		}
-
 		tf := time.Now()
 		for _, fi := range di.Fields {
 			// Verify syncer has not closed.
 			if s.IsClosing() {
 				return nil
-			}
-
-			// Sync field row attributes.
-			if err := s.syncField(di.Name, fi.Name); err != nil {
-				return fmt.Errorf("field sync error: index=%s, field=%s, err=%s", di.Name, fi.Name, err)
 			}
 
 			for _, vi := range fi.Views {
@@ -1573,101 +1549,6 @@ func (s *holderSyncer) SyncHolder() error {
 		}
 		s.Stats.Timing(MetricSyncIndexDurationSeconds, time.Since(ti), 1.0)
 		ti = time.Now() // reset ti
-	}
-
-	return nil
-}
-
-// syncIndex synchronizes index attributes with the rest of the cluster.
-func (s *holderSyncer) syncIndex(index string) error {
-	span, ctx := tracing.StartSpanFromContext(context.Background(), "HolderSyncer.syncIndex")
-	defer span.Finish()
-
-	// Retrieve index reference.
-	idx := s.Holder.Index(index)
-	if idx == nil {
-		return nil
-	}
-	indexTag := fmt.Sprintf("index:%s", index)
-
-	// Read block checksums.
-	blks, err := idx.ColumnAttrStore().Blocks()
-	if err != nil {
-		return errors.Wrap(err, "getting blocks")
-	}
-	s.Stats.CountWithCustomTags(MetricColumnAttrStoreBlocks, int64(len(blks)), 1.0, []string{indexTag})
-
-	// Sync with every other host.
-	for _, node := range topology.Nodes(s.Cluster.noder.Nodes()).FilterID(s.Node.ID) {
-		// Retrieve attributes from differing blocks.
-		// Skip update and recomputation if no attributes have changed.
-		m, err := s.Cluster.InternalClient.ColumnAttrDiff(ctx, &node.URI, index, blks)
-		if err != nil {
-			return errors.Wrap(err, "getting differing blocks")
-		} else if len(m) == 0 {
-			continue
-		}
-		s.Stats.CountWithCustomTags(MetricColumnAttrDiff, int64(len(m)), 1.0, []string{indexTag, node.ID})
-
-		// Update local copy.
-		if err := idx.ColumnAttrStore().SetBulkAttrs(m); err != nil {
-			return errors.Wrap(err, "setting attrs")
-		}
-
-		// Recompute blocks.
-		blks, err = idx.ColumnAttrStore().Blocks()
-		if err != nil {
-			return errors.Wrap(err, "recomputing blocks")
-		}
-	}
-
-	return nil
-}
-
-// syncField synchronizes field attributes with the rest of the cluster.
-func (s *holderSyncer) syncField(index, name string) error {
-	span, ctx := tracing.StartSpanFromContext(context.Background(), "HolderSyncer.syncField")
-	defer span.Finish()
-
-	// Retrieve field reference.
-	f := s.Holder.Field(index, name)
-	if f == nil {
-		return nil
-	}
-	indexTag := fmt.Sprintf("index:%s", index)
-	fieldTag := fmt.Sprintf("field:%s", name)
-
-	// Read block checksums.
-	blks, err := f.RowAttrStore().Blocks()
-	if err != nil {
-		return errors.Wrap(err, "getting blocks")
-	}
-	s.Stats.CountWithCustomTags(MetricRowAttrStoreBlocks, int64(len(blks)), 1.0, []string{indexTag, fieldTag})
-
-	// Sync with every other host.
-	for _, node := range topology.Nodes(s.Cluster.noder.Nodes()).FilterID(s.Node.ID) {
-		// Retrieve attributes from differing blocks.
-		// Skip update and recomputation if no attributes have changed.
-		m, err := s.Cluster.InternalClient.RowAttrDiff(ctx, &node.URI, index, name, blks)
-		if errors.Cause(err) == ErrFieldNotFound {
-			continue // field not created remotely yet, skip
-		} else if err != nil {
-			return errors.Wrap(err, "getting differing blocks")
-		} else if len(m) == 0 {
-			continue
-		}
-		s.Stats.CountWithCustomTags(MetricRowAttrDiff, int64(len(m)), 1.0, []string{indexTag, fieldTag, node.ID})
-
-		// Update local copy.
-		if err := f.RowAttrStore().SetBulkAttrs(m); err != nil {
-			return errors.Wrap(err, "setting attrs")
-		}
-
-		// Recompute blocks.
-		blks, err = f.RowAttrStore().Blocks()
-		if err != nil {
-			return errors.Wrap(err, "recomputing blocks")
-		}
 	}
 
 	return nil
