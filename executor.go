@@ -5705,7 +5705,7 @@ func (e *executor) mapper(ctx context.Context, eg *errgroup.Group, ch chan mapRe
 	// Group shards together by nodes.
 	m, err := e.shardsByNode(nodes, index, shards)
 	if err != nil {
-		return errors.Wrapf(err, "shards by node %v", shardSlice(shards))
+		return errors.Wrapf(err, "shards by node")
 	}
 	done := ctx.Done()
 

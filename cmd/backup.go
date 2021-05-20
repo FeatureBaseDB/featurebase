@@ -28,7 +28,7 @@ func newBackupCommand(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobr
 		Use:   "backup",
 		Short: "Back up pilosa server",
 		Long: `
-Backs up a pilosa server to a local snapshot file.
+Backs up a pilosa server to a local, tar-formatted snapshot file.
 `,
 		RunE: func(c *cobra.Command, args []string) error {
 			return cmd.Run(context.Background())
@@ -36,7 +36,7 @@ Backs up a pilosa server to a local snapshot file.
 	}
 
 	flags := ccmd.Flags()
-	flags.StringVarP(&cmd.OutputPath, "output", "o", "", "output path to write to")
+	flags.StringVarP(&cmd.OutputPath, "output", "o", "", "output path to write to; specify '-' to send to stdout")
 	flags.StringVar(&cmd.Host, "host", "localhost:10101", "host:port of Pilosa.")
 	ctl.SetTLSConfig(flags, "", &cmd.TLS.CertificatePath, &cmd.TLS.CertificateKeyPath, &cmd.TLS.CACertPath, &cmd.TLS.SkipVerify, &cmd.TLS.EnableClientVerification)
 	return ccmd
