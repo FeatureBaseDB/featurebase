@@ -2283,7 +2283,11 @@ func (api *API) RestoreShard(ctx context.Context, indexName string, shard uint64
 				return err
 			}
 		}
-		_, err = view.CreateFragmentIfNotExists(shard)
+		frag, err := view.CreateFragmentIfNotExists(shard)
+		if err != nil {
+			return err
+		}
+		err = frag.RebuildRankCache(ctx)
 		if err != nil {
 			return err
 		}
