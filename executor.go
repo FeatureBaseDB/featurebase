@@ -3688,7 +3688,6 @@ func (e *executor) executeRowsShard(ctx context.Context, qcx *Qcx, index string,
 		return nil, err
 	}
 	defer finisher(&err0)
-
 	for _, view := range views {
 		if err := ctx.Err(); err != nil {
 			return nil, err

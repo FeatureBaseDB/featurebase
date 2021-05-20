@@ -2265,9 +2265,31 @@ func (api *API) RestoreShard(ctx context.Context, indexName string, shard uint64
 		return err
 	}
 	api.holder.recalculateCaches()
+	err = db.OpenDB()
+	if err != nil {
+		return err
+	}
+	tx, err := db.NewTx(false, idx.name, Txo{})
+	defer tx.Rollback()
+	//arguments idx,shard do not matter for rbf they
+	//are ignored
+	flvs, err := tx.GetSortedFieldViewList(idx, shard)
+	for _, flv := range flvs {
+		fld := idx.field(flv.Field)
+		view, ok := fld.viewMap[flv.View]
+		if !ok {
+			view, err = fld.createViewIfNotExists(flv.View)
+			if err != nil {
+				return err
+			}
+		}
+		_, err = view.CreateFragmentIfNotExists(shard)
+		if err != nil {
+			return err
+		}
+	}
 
-	return db.OpenDB()
-
+	return nil
 }
 
 type serverInfo struct {

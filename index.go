@@ -814,6 +814,10 @@ func (i *Index) DeleteField(name string) error {
 	return i.translationSyncer.Reset()
 }
 
+func (i *Index) UpdateAvailbleShards(field, view string, shard uint64) {
+
+}
+
 type indexSlice []*Index
 
 func (p indexSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
