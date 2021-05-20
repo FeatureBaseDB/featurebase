@@ -47,42 +47,9 @@ type RestoreCommand struct {
 
 // NewRestoreCommand returns a new instance of RestoreCommand.
 func NewRestoreCommand(stdin io.Reader, stdout, stderr io.Writer) *RestoreCommand {
-	/*
-		h := &gohttp.Client{}
-		host := "SOMETHING"
-		c, err := http.NewInternalClient(host, h)
-		if err != nil {
-			panic(err)
-		}
-	*/
-
 	return &RestoreCommand{
 		CmdIO: pilosa.NewCmdIO(stdin, stdout, stderr),
-		//		client: c,
 	}
-}
-
-/* helper to allow for both gz and just plan tar
-	f, err := os.Open(cmd.Path)
-	if err != nil {
-		return (err)
-	}
-	defer f.Close()
-	var tarReader *tar.Reader
-	if strings.HasSuffix(cmd.Path, "gz") {
-		gzf, err := gzip.NewReader(f)
-		if err != nil {
-			return err
-		}
-		tarReader = tar.NewReader(gzf)
-	} else {
-		tarReader = tar.NewReader(f)
-	}
-return
-}
-*/
-func readSchema(path string) string {
-	return "{}"
 }
 
 // Run executes the restore.
@@ -93,10 +60,15 @@ func (cmd *RestoreCommand) Run(ctx context.Context) error {
 		return fmt.Errorf("creating client: %w", err)
 	}
 	cmd.client = client
-
-	f, err := os.Open(cmd.Path)
-	if err != nil {
-		return (err)
+	var f *os.File
+	// read from Stdin if path specified as -
+	if cmd.Path == "-" {
+		f = os.Stdin
+	} else {
+		f, err = os.Open(cmd.Path)
+		if err != nil {
+			return (err)
+		}
 	}
 	defer f.Close()
 	var tarReader *tar.Reader
@@ -109,24 +81,6 @@ func (cmd *RestoreCommand) Run(ctx context.Context) error {
 	} else {
 		tarReader = tar.NewReader(f)
 	}
-	//maybe begin transaction?
-	/*
-		schemaJson := readSchema(cmd.Path)
-		//Push the schema from the archive into the cluster belonging to the host.
-		client := &gohttp.Client{}
-		url := "FIXME"
-		_, err = client.Post(url+"/schema", "application/json", bytes.NewBufferString(schemaJson))
-		if err != nil {
-			return err
-		}
-	*/
-	//TODO (twg) load schema
-	//TODO (twg) load rbf shard
-	//TODO (twg) load row keys
-	//TODO (twg) load column keys
-	//TODO (twg) load row attributes keys
-	//TODO (twg) load col attributes keys
-	//TODO (twg) load idalloc
 	nodes, err := cmd.client.Nodes(ctx)
 	if err != nil {
 		return err
@@ -154,7 +108,6 @@ func (cmd *RestoreCommand) Run(ctx context.Context) error {
 			case "schema":
 				vprint.VV("Load Schema")
 				url := primary.URI.Path("/schema")
-				vprint.VV("SCHEMA %v", url)
 				_, err = c.Post(url, "application/json", tarReader)
 				if err != nil {
 					return err
