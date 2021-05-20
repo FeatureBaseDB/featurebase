@@ -1,0 +1,87 @@
+.item {
+  .details {
+    display: block;
+  }
+}
+
+.summary {
+  width: calc(100% - 84px);
+}
+
+.durationWrapper {
+  min-width: 75px;
+}
+
+.duration {
+  margin-right: 8px;
+  border-radius: 4px;
+  background: rgba(var(--primary-rgb), 0.3);
+  font-size: 11px;
+  padding: 3px 4px 2px;
+  line-height: 20px;
+}
+
+.queryHeader {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+}
+
+.queryString {
+  text-overflow: ellipsis;
+}
+
+.fullQuery {
+  display: block;
+  word-wrap: break-word;
+  font-size: 11px;
+}
+
+.pqlTranslation {
+  margin-top: 8px;
+
+  label {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+  }
+}
+
+.showHideLink {
+  color: var(--primary);
+  font-size: 11px;
+
+  &:hover {
+    cursor: pointer;
+    text-decoration: underline;
+  }
+}
+
+.metadata {
+  display: flex;
+
+  .cell {
+    display: flex;
+    flex-direction: column;
+    white-space: nowrap;
+    margin-bottom: 16px;
+
+    &:not(:last-child) {
+      padding-right: 4%;
+    }
+
+    label {
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      margin-bottom: 4px;
+    }
+  }
+
+  .nodeId {
+    display: flex;
+    align-items: center;
+  }
+}

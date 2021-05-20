@@ -1,0 +1,25 @@
+{
+    "defaultSeverity": "error",
+    "extends": [
+        "tslint:recommended"
+    ],
+    "jsRules": {},
+    "rules": {
+        "interface-name": false,
+        "ordered-imports": false,
+        "no-shadowed-variable": false,
+        "no-string-literal": false,
+        "quotemark": {
+            "options": ["single", "jsx-double", "avoid-escape"]
+        },
+        "trailing-comma": {
+            "options": {
+                "multiline": "never"
+            }
+        },
+        "variable-name": {
+            "options": ["ban-keywords", "check-format", "allow-leading-underscore", "allow-pascal-case"]
+        }
+    },
+    "rulesDirectory": []
+}

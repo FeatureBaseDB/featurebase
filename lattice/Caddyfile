@@ -1,0 +1,3 @@
+:80
+root * /lattice
+file_server

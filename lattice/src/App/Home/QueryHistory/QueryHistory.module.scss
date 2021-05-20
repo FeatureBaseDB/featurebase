@@ -1,0 +1,28 @@
+.actions {
+  display: flex;
+  padding: 20px 0;
+}
+
+.sortByList {
+  padding: 0;
+}
+
+.nodeFilter {
+  margin-left: 32px;
+}
+
+.filterLabel {
+  font-size: 12px;
+  color: var(--text-secondary);
+  position: relative;
+  top: -11px;
+}
+
+.indicators {
+  position: relative;
+  top: -4px;
+}
+
+.noQueries {
+  padding: 12px 16px;
+}
