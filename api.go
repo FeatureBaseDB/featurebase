@@ -59,6 +59,8 @@ type API struct {
 	importWorkerPoolSize int
 	importWork           chan importJob
 
+	usageCache map[string]NodeUsage
+
 	Serializer Serializer
 }
 
@@ -934,9 +936,11 @@ func (api *API) Usage(ctx context.Context, remote bool) (map[string]NodeUsage, e
 	span, _ := tracing.StartSpanFromContext(ctx, "API.Usage")
 	defer span.Finish()
 
-	nodeUsages := make(map[string]NodeUsage)
+	if api.usageCache == nil {
+		api.usageCache = make(map[string]NodeUsage)
+	}
 
-	indexDetails, nodeMetadataBytes, err := api.holder.Txf().IndexUsageDetails()
+	indexDetails, nodeMetadataBytes, err := api.holder.Txf().IndexUsageDetails(api.usageCache[api.server.nodeID].Disk.IndexUsage)
 	if err != nil {
 		return nil, errors.Wrap(err, "getting node usage")
 	}

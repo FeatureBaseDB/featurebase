@@ -572,7 +572,7 @@ func (f *TxFactory) DumpAll() {
 
 // IndexUsageDetails computes the sum of filesizes used by the node, broken down
 // by index, field, fragments and keys.
-func (f *TxFactory) IndexUsageDetails() (map[string]IndexUsage, uint64, error) {
+func (f *TxFactory) IndexUsageDetails(cache *map[string]IndexUsage) (map[string]IndexUsage, uint64, error) {
 	indexUsage := make(map[string]IndexUsage)
 	holderPath, err := expandDirName(f.holder.path)
 	if err != nil {
