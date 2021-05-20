@@ -21,7 +21,6 @@ import (
 	"io/ioutil"
 	"math"
 	"os"
-	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -250,21 +249,79 @@ func (tx *RBFTx) Remove(index, field, view string, shard uint64, a ...uint64) (c
 	return tx.addOrRemove(index, field, view, shard, true, a...)
 }
 
+// sortedParanoia is a flag to enable a check for unsorted inputs to addOrRemove,
+// which is expensive in practice and only really useful occasionally.
+const sortedParanoia = false
+
 func (tx *RBFTx) addOrRemove(index, field, view string, shard uint64, remove bool, a ...uint64) (changeCount int, err error) {
 	if len(a) == 0 {
 		return 0, nil
 	}
-
-	// have to sort, b/c input is not always sorted.
-	sort.Slice(a, func(i, j int) bool { return a[i] < a[j] })
+	name := rbfName(index, field, view, shard)
+	// this special case can/should possibly go away, except that it
+	// turns out to be by far the most common case, and we need to know
+	// there's at least two items to simplify the check-sorted thing.
+	if len(a) == 1 {
+		hi, lo := highbits(a[0]), lowbits(a[0])
+		rc, err := tx.tx.Container(name, hi)
+		if err != nil {
+			return 0, errors.Wrap(err, "failed to retrieve container")
+		}
+		if remove {
+			if rc.N() == 0 {
+				return 0, nil
+			}
+			rc, chng := rc.Remove(lo)
+			if !chng {
+				return 0, nil
+			}
+			if rc.N() == 0 {
+				err = tx.tx.RemoveContainer(name, hi)
+			} else {
+				err = tx.tx.PutContainer(name, hi, rc)
+			}
+			if err != nil {
+				return 0, err
+			}
+			return 1, nil
+		} else {
+			rc, chng := rc.Add(lo)
+			if !chng {
+				return 0, nil
+			}
+			err = tx.tx.PutContainer(name, hi, rc)
+			if err != nil {
+				return 0, err
+			}
+			return 1, nil
+		}
+	}
 
 	var lastHi uint64 = math.MaxUint64 // highbits is always less than this starter.
 	var rc *roaring.Container
 	var hi uint64
 	var lo uint16
 
+	// we can accept sorted either ascending or descending.
+	sign := a[1] - a[0]
+	prev := a[0] - sign
+	sign >>= 63
 	for i, v := range a {
-
+		// This check is noticably expensive (a few percent in some
+		// use cases) and as long as it passes occasionally it's probably
+		// not important to run it all the time, and anyway panic is
+		// not a good choice outside of testing.
+		if sortedParanoia {
+			if (v-prev)>>63 != sign {
+				explain := fmt.Sprintf("addOrRemove: %d < %d != %d < %d", v, prev, a[1], a[0])
+				panic(explain)
+			}
+			if v == prev {
+				explain := fmt.Sprintf("addOrRemove: %d twice", v)
+				panic(explain)
+			}
+		}
+		prev = v
 		hi, lo = highbits(v), lowbits(v)
 		if hi != lastHi {
 			// either first time through, or changed to a different container.
@@ -272,19 +329,19 @@ func (tx *RBFTx) addOrRemove(index, field, view string, shard uint64, remove boo
 			if i > 0 {
 				// not first time through, write what we got.
 				if remove && (rc == nil || rc.N() == 0) {
-					err = tx.RemoveContainer(index, field, view, shard, lastHi)
+					err = tx.tx.RemoveContainer(name, lastHi)
 					if err != nil {
 						return 0, errors.Wrap(err, "failed to remove container")
 					}
 				} else {
-					err = tx.PutContainer(index, field, view, shard, lastHi, rc)
+					err = tx.tx.PutContainer(name, lastHi, rc)
 					if err != nil {
 						return 0, errors.Wrap(err, "failed to put container")
 					}
 				}
 			}
 			// get the next container
-			rc, err = tx.Container(index, field, view, shard, hi)
+			rc, err = tx.tx.Container(name, hi)
 			if err != nil {
 				return 0, errors.Wrap(err, "failed to retrieve container")
 			}
@@ -305,12 +362,12 @@ func (tx *RBFTx) addOrRemove(index, field, view string, shard uint64, remove boo
 	// write the last updates.
 	if remove {
 		if rc == nil || rc.N() == 0 {
-			err = tx.RemoveContainer(index, field, view, shard, hi)
+			err = tx.tx.RemoveContainer(name, hi)
 			if err != nil {
 				return 0, errors.Wrap(err, "failed to remove container")
 			}
 		} else {
-			err = tx.PutContainer(index, field, view, shard, hi, rc)
+			err = tx.tx.PutContainer(name, hi, rc)
 			if err != nil {
 				return 0, errors.Wrap(err, "failed to put container")
 			}
@@ -319,7 +376,7 @@ func (tx *RBFTx) addOrRemove(index, field, view string, shard uint64, remove boo
 		if rc == nil || rc.N() == 0 {
 			panic("there should be no way to have an empty bitmap AFTER an Add() operation")
 		}
-		err = tx.PutContainer(index, field, view, shard, hi, rc)
+		err = tx.tx.PutContainer(name, hi, rc)
 		if err != nil {
 			return 0, errors.Wrap(err, "failed to put container")
 		}

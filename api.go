@@ -1568,7 +1568,15 @@ func (api *API) ImportValueWithTx(ctx context.Context, qcx *Qcx, req *ImportValu
 	}
 
 	if !options.Presorted {
+		// horrible hackery: we implement a secondary key so we can
+		// get a stable sort without using sort.Stable
+		req.scratch = make([]int, len(req.ColumnIDs))
+		for i := range req.scratch {
+			req.scratch[i] = i
+		}
 		sort.Sort(req)
+		// don't keep that list around since we don't need it anymore
+		req.scratch = nil
 	}
 	isLocalQcx := false
 	if qcx == nil {

@@ -1136,74 +1136,6 @@ func (f *fragment) setValueBase(txOrig Tx, columnID uint64, bitDepth uint64, val
 	return changed, err
 }
 
-// importSetValue is a more efficient SetValue just for imports.
-func (f *fragment) importSetValue(txb *TxBitmap, columnID uint64, bitDepth uint64, value int64, clear bool) (changed int, err error) { // nolint: unparam
-	// Convert value to an unsigned representation.
-	uvalue := uint64(value)
-	if value < 0 {
-		uvalue = uint64(-value)
-	}
-
-	for i := uint64(0); i < bitDepth; i++ {
-		bit, err := f.pos(uint64(bsiOffsetBit+i), columnID)
-		if err != nil {
-			return changed, errors.Wrap(err, "getting pos")
-		}
-
-		if uvalue&(1<<i) != 0 {
-			c, err := txb.Add(bit)
-			if err != nil {
-				return changed, errors.Wrap(err, "adding")
-			} else if c {
-				changed++
-			}
-		} else {
-			c, err := txb.Remove(bit)
-			if err != nil {
-				return changed, errors.Wrap(err, "removing")
-			} else if c {
-				changed++
-			}
-		}
-	}
-
-	// Mark value as set.
-	if p, err := f.pos(uint64(bsiExistsBit), columnID); err != nil {
-		return changed, errors.Wrap(err, "getting not-null pos")
-	} else if clear {
-		if c, err := txb.Remove(p); err != nil {
-			return changed, errors.Wrap(err, "removing not-null from storage")
-		} else if c {
-			changed++
-		}
-	} else {
-		if c, err := txb.Add(p); err != nil {
-			return changed, errors.Wrap(err, "adding not-null to storage")
-		} else if c {
-			changed++
-		}
-	}
-
-	// Mark sign bit.
-	if p, err := f.pos(uint64(bsiSignBit), columnID); err != nil {
-		return changed, errors.Wrap(err, "getting sign pos")
-	} else if value >= 0 || clear {
-		if c, err := txb.Remove(p); err != nil {
-			return changed, errors.Wrap(err, "removing sign from storage")
-		} else if c {
-			changed++
-		}
-	} else {
-		if c, err := txb.Add(p); err != nil {
-			return changed, errors.Wrap(err, "adding sign to storage")
-		} else if c {
-			changed++
-		}
-	}
-
-	return changed, nil
-}
-
 // sum returns the sum of a given bsiGroup as well as the number of columns involved.
 // A bitmap can be passed in to optionally filter the computed columns.
 func (f *fragment) sum(tx Tx, filter *Row, bitDepth uint64) (sum int64, count uint64, err error) {
@@ -2283,6 +2215,34 @@ func (f *fragment) bulkImport(tx Tx, rowIDs, columnIDs []uint64, options *Import
 	return f.bulkImportStandard(tx, rowIDs, columnIDs, options)
 }
 
+// rowColumnSet is a sortable set of row and column IDs which
+// correspond, allowing us to ensure that we produce values in
+// a predictable order
+type rowColumnSet struct {
+	r []uint64
+	c []uint64
+}
+
+func (r rowColumnSet) Len() int {
+	return len(r.r)
+}
+
+func (r rowColumnSet) Swap(i, j int) {
+	r.r[i], r.r[j] = r.r[j], r.r[i]
+	r.c[i], r.c[j] = r.c[j], r.c[i]
+}
+
+// Sort by row ID first, column second, to sort by fragment position
+func (r rowColumnSet) Less(i, j int) bool {
+	if r.r[i] < r.r[j] {
+		return true
+	}
+	if r.r[i] > r.r[j] {
+		return false
+	}
+	return r.c[i] < r.c[j]
+}
+
 // bulkImportStandard performs a bulk import on a standard fragment. May mutate
 // its rowIDs and columnIDs arguments.
 func (f *fragment) bulkImportStandard(tx Tx, rowIDs, columnIDs []uint64, options *ImportOptions) (err error) {
@@ -2294,13 +2254,21 @@ func (f *fragment) bulkImportStandard(tx Tx, rowIDs, columnIDs []uint64, options
 	lastRowID := uint64(1 << 63)
 
 	// replace columnIDs with calculated positions to avoid allocation.
+	sort.Sort(rowColumnSet{r: rowIDs, c: columnIDs})
+	prevRow, prevCol := ^uint64(0), ^uint64(0)
+	next := 0
 	for i := 0; i < len(columnIDs); i++ {
 		rowID, columnID := rowIDs[i], columnIDs[i]
+		if rowID == prevRow && columnID == prevCol {
+			continue
+		}
+		prevRow, prevCol = rowID, columnID
 		pos, err := f.pos(rowID, columnID)
 		if err != nil {
 			return err
 		}
-		columnIDs[i] = pos
+		columnIDs[next] = pos
+		next++
 
 		// Add row to rowSet.
 		if rowID != lastRowID {
@@ -2308,7 +2276,7 @@ func (f *fragment) bulkImportStandard(tx Tx, rowIDs, columnIDs []uint64, options
 			rowSet[rowID] = struct{}{}
 		}
 	}
-	positions := columnIDs
+	positions := columnIDs[:next]
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if options.Clear {
@@ -2613,57 +2581,6 @@ func (f *fragment) bulkImportMutex(tx Tx, rowIDs, columnIDs []uint64) error {
 	return errors.Wrap(f.importPositions(tx, toSet, toClear, rowSet), "importing positions")
 }
 
-func (f *fragment) importValueSmallWrite(tx Tx, columnIDs []uint64, values []int64, bitDepth uint64, clear bool) error {
-	// TODO figure out how to avoid re-allocating these each time. Probably
-	// possible to store them on the fragment with a capacity based on
-	// MaxOpN. For now, we know that the total number of bits to be
-	// set+cleared is len(values)*(bitDepth+1), so we make each slice
-	// slightly more than half of that to try to avoid reallocation.
-	toSet := make([]uint64, 0, len(columnIDs)*int(bitDepth+1)*(5/8))
-	toClear := make([]uint64, 0, len(columnIDs)*int(bitDepth+1)*(5/8))
-	colSet := make(map[uint64]struct{}, len(columnIDs))
-
-	if err := func() (err error) {
-		for i := len(columnIDs) - 1; i >= 0; i-- {
-			columnID, value := columnIDs[i], values[i]
-			if _, ok := colSet[columnID]; ok {
-				continue
-			}
-
-			colSet[columnID] = struct{}{}
-			toSet, toClear, err = f.positionsForValue(columnID, bitDepth, value, clear, toSet, toClear)
-			if err != nil {
-				return errors.Wrap(err, "getting positions for value")
-			}
-		}
-		return nil
-	}(); err != nil {
-		errOpenStorage := f.openStorage(true)
-		if errOpenStorage != nil {
-			f.Logger.Errorf("failed to import data into fragment: %v", err)
-			f.Logger.Errorf("recovery with openStorage failed for fragment: %v", errOpenStorage)
-			f.Logger.Debugf("%s", debug.Stack())
-			os.Exit(1)
-		}
-		return err
-	}
-	rowSet := make(map[uint64]struct{}, bitDepth+1)
-	for i := uint64(0); i < bitDepth+1; i++ {
-		rowSet[uint64(i)] = struct{}{}
-	}
-	err := f.importPositions(tx, toSet, toClear, rowSet)
-	if err != nil {
-		return errors.Wrap(err, "importing positions")
-	}
-
-	if tx.UseRowCache() {
-		// Reset the rowCache.
-		f.rowCache = newSimpleCache()
-	}
-
-	return nil
-}
-
 // importValue bulk imports a set of range-encoded values.
 func (f *fragment) importValue(tx Tx, columnIDs []uint64, values []int64, bitDepth uint64, clear bool) error {
 	f.mu.Lock()
@@ -2673,56 +2590,84 @@ func (f *fragment) importValue(tx Tx, columnIDs []uint64, values []int64, bitDep
 	if len(columnIDs) != len(values) {
 		return fmt.Errorf("mismatch of column/value len: %d != %d", len(columnIDs), len(values))
 	}
-
-	if len(columnIDs)*int(bitDepth+1)+f.opN < f.MaxOpN {
-		return errors.Wrap(f.importValueSmallWrite(tx, columnIDs, values, bitDepth, clear), "import small write")
+	positionsByDepth := make([][]uint64, bitDepth+2)
+	toSetByDepth := make([]int, bitDepth+2)
+	toClearByDepth := make([]int, bitDepth+2)
+	batchSize := len(columnIDs)
+	if batchSize > 65536 {
+		batchSize = 65536
+	}
+	for i := 0; i < int(bitDepth)+2; i++ {
+		positionsByDepth[i] = make([]uint64, batchSize)
+		toClearByDepth[i] = batchSize
 	}
 
-	// Process every value.
-	// If an error occurs then reopen the storage.
-	if f.storage != nil {
-		f.storage.OpWriter = nil
-	}
-
-	var totalChanges int
-	if err := func() (err error) {
-		// Build changes into temporary bitmap.
-		txb := NewTxBitmap(tx, f.index(), f.field(), f.view(), f.shard)
-		for i := range columnIDs {
-			columnID, value := columnIDs[i], values[i]
-			if _, err := f.importSetValue(txb, columnID, bitDepth, value, clear); err != nil {
-				return errors.Wrapf(err, "importSetValue")
+	row := 0
+	columnID := uint64(0)
+	value := int64(0)
+	// arbitrarily set prev to be not equal to the first column ID
+	// we will encounter.
+	prev := columnIDs[len(columnIDs)-1] + 1
+	for len(columnIDs) > 0 {
+		downTo := len(columnIDs) - batchSize
+		if downTo < 0 {
+			downTo = 0
+		}
+		for i := range positionsByDepth {
+			toSetByDepth[i] = 0
+			toClearByDepth[i] = batchSize
+		}
+		for i := len(columnIDs) - 1; i >= downTo; i-- {
+			columnID, value = columnIDs[i], values[i]
+			columnID = columnID % ShardWidth
+			if columnID == prev {
+				continue
+			}
+			prev = columnID
+			row = 0
+			if clear {
+				toClearByDepth[row]--
+				positionsByDepth[row][toClearByDepth[row]] = columnID
+			} else {
+				positionsByDepth[row][toSetByDepth[row]] = columnID
+				toSetByDepth[row]++
+			}
+			row++
+			columnID += ShardWidth
+			if value < 0 {
+				positionsByDepth[row][toSetByDepth[row]] = columnID
+				toSetByDepth[row]++
+				value *= -1
+			} else {
+				toClearByDepth[row]--
+				positionsByDepth[row][toClearByDepth[row]] = columnID
+			}
+			row++
+			columnID += ShardWidth
+			for j := 0; j < int(bitDepth); j++ {
+				if value&1 != 0 {
+					positionsByDepth[row][toSetByDepth[row]] = columnID
+					toSetByDepth[row]++
+				} else {
+					toClearByDepth[row]--
+					positionsByDepth[row][toClearByDepth[row]] = columnID
+				}
+				row++
+				columnID += ShardWidth
+				value >>= 1
 			}
 		}
 
-		// Flush changes in bulk back to the transaction.
-		return txb.Flush()
-	}(); err != nil {
-		errOpenStorage := f.openStorage(true)
-		if errOpenStorage != nil {
-			f.Logger.Errorf("failed to import data into fragment: %v", err)
-			f.Logger.Errorf("recovery with openStorage failed for fragment: %v", errOpenStorage)
-			f.Logger.Debugf("%s", debug.Stack())
-			os.Exit(1)
+		for i := range positionsByDepth {
+			err := f.importPositions(tx, positionsByDepth[i][:toSetByDepth[i]], positionsByDepth[i][toClearByDepth[i]:], nil)
+			if err != nil {
+				return errors.Wrap(err, "importing positions")
+			}
 		}
-		return err
-	}
-	// Keep stats accurate. We don't call incrementOpN here because it may
-	// or may not enqueue a request, which would then be in the queue
-	// taking up space and otherwise being a possible nuisance, when we're
-	// about to force a snapshot anyway.
-	f.opN += totalChanges
-	f.ops++
-
-	if tx.UseRowCache() {
-		// Reset the rowCache.
-		f.rowCache = newSimpleCache()
+		columnIDs = columnIDs[:downTo]
 	}
 
-	// in theory, this should probably have been queued anyway, but if enough
-	// of the bits matched existing bits, we'll be under our opN estimate, and
-	// we want to ensure that the snapshot happens.
-	return f.holder.SnapshotQueue.Immediate(f)
+	return nil
 }
 
 // importRoaring imports from the official roaring data format defined at

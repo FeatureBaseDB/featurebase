@@ -1525,6 +1525,9 @@ func (f *Field) Import(qcx *Qcx, rowIDs, columnIDs []uint64, timestamps []*time.
 	return nil
 }
 
+// importFloatValue imports floating point values. In current usage, this
+// should only ever be called with data for a single shard; the API calls
+// around this are splitting it up per shard.
 func (f *Field) importFloatValue(qcx *Qcx, columnIDs []uint64, values []float64, options *ImportOptions) error {
 	// convert values to int64 values based on scale
 	ivalues := make([]int64, len(values))
@@ -1540,6 +1543,9 @@ func (f *Field) importFloatValue(qcx *Qcx, columnIDs []uint64, values []float64,
 	return f.importValue(qcx, columnIDs, ivalues, options)
 }
 
+// importFloatValue imports timestamp values. In current usage, this
+// should only ever be called with data for a single shard; the API calls
+// around this are splitting it up per shard.
 func (f *Field) importTimestampValue(qcx *Qcx, columnIDs []uint64, values []time.Time, options *ImportOptions) error {
 	ivalues := make([]int64, len(values))
 	bsig := f.bsiGroup(f.name)
@@ -1553,8 +1559,17 @@ func (f *Field) importTimestampValue(qcx *Qcx, columnIDs []uint64, values []time
 	return f.importValue(qcx, columnIDs, ivalues, options)
 }
 
-// importValue bulk imports range-encoded value data.
+// importValue bulk imports range-encoded value data. This function should
+// only be called with data for a single shard; the API calls that wrap
+// this handle splitting the data up per-shard.
 func (f *Field) importValue(qcx *Qcx, columnIDs []uint64, values []int64, options *ImportOptions) (err0 error) {
+	// no data to import
+	if len(columnIDs) == 0 {
+		return nil
+	}
+	if len(values) != len(columnIDs) {
+		return fmt.Errorf("importValue: mismatch between column IDs and values: %d != %d", len(columnIDs), len(values))
+	}
 	viewName := viewBSIGroupPrefix + f.name
 	// Get the bsiGroup so we know bitDepth.
 	bsig := f.bsiGroup(f.name)
@@ -1565,13 +1580,10 @@ func (f *Field) importValue(qcx *Qcx, columnIDs []uint64, values []int64, option
 	// We want to determine the required bit depth, in case the field doesn't
 	// have as many bits currently as would be needed to represent these values,
 	// but only if the values are in-range for the field.
-	var min, max int64
-	if len(values) > 0 {
-		min, max = values[0], values[0]
-	}
+	min, max := values[0], values[0]
 
-	// Split import data by fragment.
-	dataByFragment := make(map[importKey]importValueData)
+	// Check for minimum/maximum in case we need to expand the field's
+	// stated bit depth.
 	for i := range columnIDs {
 		columnID, value := columnIDs[i], values[i]
 		if value > bsig.Max {
@@ -1584,15 +1596,6 @@ func (f *Field) importValue(qcx *Qcx, columnIDs []uint64, values []int64, option
 		}
 		if value < min {
 			min = value
-		}
-
-		// Attach value to each bsiGroup view.
-		for _, name := range []string{viewName} {
-			key := importKey{View: name, Shard: columnID / ShardWidth}
-			data := dataByFragment[key]
-			data.ColumnIDs = append(data.ColumnIDs, columnID)
-			data.Values = append(data.Values, value)
-			dataByFragment[key] = data
 		}
 	}
 
@@ -1612,40 +1615,36 @@ func (f *Field) importValue(qcx *Qcx, columnIDs []uint64, values []int64, option
 	}
 	f.mu.Unlock()
 
-	// Import into each fragment.
-	for key, data := range dataByFragment {
-		// The view must already exist (i.e. we can't create it)
-		// because we need to know bitDepth (based on min/max value).
-		view, err := f.createViewIfNotExists(key.View)
-		if err != nil {
-			return errors.Wrap(err, "creating view")
-		}
+	// Since all data should be for the same shard, we can just compute
+	// this from the first value.
+	shard := columnIDs[0] / ShardWidth
 
-		frag, err := view.CreateFragmentIfNotExists(key.Shard)
-		if err != nil {
-			return errors.Wrap(err, "creating fragment")
-		}
+	view, err := f.createViewIfNotExists(viewName)
+	if err != nil {
+		return errors.Wrap(err, "creating view")
+	}
 
-		baseValues := make([]int64, len(data.Values))
-		for i, value := range data.Values {
-			baseValues[i] = value - bsig.Base
-		}
+	frag, err := view.CreateFragmentIfNotExists(shard)
+	if err != nil {
+		return errors.Wrap(err, "creating fragment")
+	}
 
-		// now we know which shard we discovered.
-		tx, finisher, err := qcx.GetTx(Txo{Write: writable, Index: f.idx, Shard: frag.shard})
-		if err != nil {
-			return err
-		}
-		// by deferring, even though we are in loop, we get en-mass commit at once if they all succeed,
-		// or en-mass rollback if any fail.
-		defer finisher(&err0)
-
-		if err = frag.importValue(tx, data.ColumnIDs, baseValues, requiredDepth, options.Clear); err != nil {
-			return err
+	if bsig.Base != 0 {
+		for i, v := range values {
+			values[i] = v - bsig.Base
 		}
 	}
 
-	return nil
+	// now we know which shard we discovered.
+	tx, finisher, err := qcx.GetTx(Txo{Write: writable, Index: f.idx, Shard: frag.shard})
+	if err != nil {
+		return err
+	}
+	// defer the finisher, so it will check the error returned and
+	// possibly rollback.
+	defer finisher(&err0)
+
+	return frag.importValue(tx, columnIDs, values, requiredDepth, options.Clear)
 }
 
 func (f *Field) importRoaring(ctx context.Context, tx Tx, data []byte, shard uint64, viewName string, clear bool) error {
