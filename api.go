@@ -2264,7 +2264,6 @@ func (api *API) RestoreShard(ctx context.Context, indexName string, shard uint64
 		_ = os.Remove(tempPath)
 		return err
 	}
-	api.holder.recalculateCaches()
 	err = db.OpenDB()
 	if err != nil {
 		return err
