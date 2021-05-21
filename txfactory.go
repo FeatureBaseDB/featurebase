@@ -600,7 +600,17 @@ func (f *TxFactory) IndexUsageDetails(indexUsage map[string]IndexUsage) (map[str
 		for _, fld := range flds {
 			field := fld.Name()
 			_, found := indexUsage[index].Fields[field]
-			if !found {
+			var valid bool
+			if found {
+				fieldPath := path.Join(indexPath, FieldsDir, field)
+				fstat, err := os.Stat(fieldPath)
+				if err != nil {
+					return indexUsage, 0, errors.Wrap(err, "getting field path")
+				}
+				valid = indexUsage[index].Fields[field].ChangeTime == fstat.Sys().(*syscall.Stat_t).Ctimespec
+
+			}
+			if !found || !valid {
 				if field == "_keys" {
 					continue
 				}
@@ -635,7 +645,7 @@ func (f *TxFactory) IndexUsageDetails(indexUsage map[string]IndexUsage) (map[str
 				fUsage.Fragments += fragmentUsage
 				fUsage.Total += fragmentUsage
 
-				fieldUsages[field] = fUsage
+				indexUsage[index].Fields[field] = fUsage
 			}
 			// add to running total
 			fieldMetaBytesTotal += indexUsage[index].Fields[field].Metadata
@@ -726,26 +736,24 @@ func directoryUsage(fname string, recursive bool) (uint64, error) {
 
 	var size uint64
 
-	dir, err := os.Open(fname)
-	if err != nil {
-		return 0, errors.Wrap(err, "opening data subdirectory")
-	}
-	defer dir.Close()
-
-	files, err := dir.Readdir(-1)
+	entries, err := os.ReadDir(fname)
 	if err != nil {
 		return 0, errors.Wrap(err, "reading data subdirectory")
 	}
 
-	for _, file := range files {
-		if recursive && file.IsDir() {
-			sz, err := directoryUsage(path.Join(fname, file.Name()), true)
+	for _, entry := range entries {
+		if recursive && entry.IsDir() {
+			sz, err := directoryUsage(path.Join(fname, entry.Name()), true)
 			if err != nil {
 				return 0, err
 			}
 			size += sz
 		} else {
-			size += uint64(file.Size()) // NOTE this cast is safe for regular files, not necessarily others
+			fi, err := entry.Info()
+			if err != nil {
+				return 0, errors.Wrap(err, "getting file info")
+			}
+			size += uint64(fi.Size()) // NOTE this cast is safe for regular files, not necessarily others
 		}
 	}
 
