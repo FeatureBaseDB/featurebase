@@ -32,6 +32,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/pilosa/pilosa/v2/disco"
@@ -919,10 +920,11 @@ type IndexUsage struct {
 
 // FieldUsage represents the storage space used on disk by one field, on one node
 type FieldUsage struct {
-	Total     uint64 `json:"total"`
-	Fragments uint64 `json:"fragments"`
-	Keys      uint64 `json:"keys"`
-	Metadata  uint64 `json:"metadata"`
+	Total      uint64 `json:"total"`
+	Fragments  uint64 `json:"fragments"`
+	Keys       uint64 `json:"keys"`
+	Metadata   uint64 `json:"metadata"`
+	ChangeTime syscall.Timespec
 }
 
 // MemoryUsage represents the memory used by one node.
@@ -936,8 +938,16 @@ func (api *API) Usage(ctx context.Context, remote bool) (map[string]NodeUsage, e
 	span, _ := tracing.StartSpanFromContext(ctx, "API.Usage")
 	defer span.Finish()
 
+	//initialize cache
 	if api.usageCache == nil {
 		api.usageCache = make(map[string]NodeUsage)
+	}
+	if api.usageCache[api.server.nodeID].Disk.IndexUsage == nil {
+		api.usageCache[api.server.nodeID] = NodeUsage{
+			Disk: DiskUsage{
+				IndexUsage: make(map[string]IndexUsage),
+			},
+		}
 	}
 
 	indexDetails, nodeMetadataBytes, err := api.holder.Txf().IndexUsageDetails(api.usageCache[api.server.nodeID].Disk.IndexUsage)
@@ -977,7 +987,7 @@ func (api *API) Usage(ctx context.Context, remote bool) (map[string]NodeUsage, e
 			TotalUse: memoryUse,
 		},
 	}
-	nodeUsages[api.server.nodeID] = nodeUsage
+	api.usageCache[api.server.nodeID] = nodeUsage
 
 	// Collect usage from remote nodes
 	if !remote {
@@ -990,10 +1000,10 @@ func (api *API) Usage(ctx context.Context, remote bool) (map[string]NodeUsage, e
 			if err != nil {
 				return nil, errors.Wrapf(err, "collecting disk usage from %s", node.URI)
 			}
-			nodeUsages[node.ID] = nodeUsage[node.ID]
+			api.usageCache[node.ID] = nodeUsage[node.ID]
 		}
 	}
-	return nodeUsages, nil
+	return api.usageCache, nil
 }
 
 // RecalculateCaches forces all TopN caches to be updated.

@@ -599,18 +599,15 @@ func (f *TxFactory) IndexUsageDetails(indexUsage map[string]IndexUsage) (map[str
 		flds := idx.Fields()
 		for _, fld := range flds {
 			field := fld.Name()
-			_, found := indexUsage[index].Fields[field]
-			var valid bool
-			if found {
-				fieldPath := path.Join(indexPath, FieldsDir, field)
-				fstat, err := os.Stat(fieldPath)
-				if err != nil {
-					return indexUsage, 0, errors.Wrap(err, "getting field path")
-				}
-				valid = indexUsage[index].Fields[field].ChangeTime == fstat.Sys().(*syscall.Stat_t).Ctimespec
-
+			fieldPath := path.Join(indexPath, FieldsDir, field)
+			fstat, err := os.Stat(fieldPath)
+			if err != nil {
+				return indexUsage, 0, errors.Wrap(err, "getting field path")
 			}
-			if !found || !valid {
+			changeTime := fstat.Sys().(*syscall.Stat_t).Ctimespec
+			_, found := indexUsage[index].Fields[field]
+
+			if !found || (indexUsage[index].Fields[field].ChangeTime != changeTime) {
 				if field == "_keys" {
 					continue
 				}
@@ -644,6 +641,7 @@ func (f *TxFactory) IndexUsageDetails(indexUsage map[string]IndexUsage) (map[str
 				// add non-roaring to roaring
 				fUsage.Fragments += fragmentUsage
 				fUsage.Total += fragmentUsage
+				fUsage.ChangeTime = changeTime
 
 				indexUsage[index].Fields[field] = fUsage
 			}
