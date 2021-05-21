@@ -572,8 +572,7 @@ func (f *TxFactory) DumpAll() {
 
 // IndexUsageDetails computes the sum of filesizes used by the node, broken down
 // by index, field, fragments and keys.
-func (f *TxFactory) IndexUsageDetails(cache *map[string]IndexUsage) (map[string]IndexUsage, uint64, error) {
-	indexUsage := make(map[string]IndexUsage)
+func (f *TxFactory) IndexUsageDetails(indexUsage map[string]IndexUsage) (map[string]IndexUsage, uint64, error) {
 	holderPath, err := expandDirName(f.holder.path)
 	if err != nil {
 		return indexUsage, 0, errors.Wrap(err, "expanding data directory")
@@ -600,47 +599,49 @@ func (f *TxFactory) IndexUsageDetails(cache *map[string]IndexUsage) (map[string]
 		flds := idx.Fields()
 		for _, fld := range flds {
 			field := fld.Name()
-			if field == "_keys" {
-				continue
-			}
-			fUsage, err := f.fieldUsage(indexPath, fld)
-			if err != nil {
-				return indexUsage, 0, errors.Wrapf(err, "getting disk usage for index (%s)", index)
-			}
-
-			// non-roaring field usage
-			fragmentUsage := uint64(0)
-
-			for _, shard := range fld.AvailableShards(true).Slice() {
-				if err := func() error {
-					tx, finisher, err := qcx.GetTx(Txo{Write: !writable, Index: idx, Shard: shard})
-					if err != nil {
-						return errors.Wrap(err, "qcx.GetTx")
-					}
-					defer finisher(nil)
-
-					fieldBytes, err := tx.GetFieldSizeBytes(index, field)
-					if err != nil {
-						return errors.Wrapf(err, "getting disk usage for non-roaring fragments (%s)", field)
-					}
-					fragmentUsage += fieldBytes
-					return nil
-				}(); err != nil {
-					return indexUsage, 0, err
+			_, found := indexUsage[index].Fields[field]
+			if !found {
+				if field == "_keys" {
+					continue
 				}
+				fUsage, err := f.fieldUsage(indexPath, fld)
+				if err != nil {
+					return indexUsage, 0, errors.Wrapf(err, "getting disk usage for index (%s)", index)
+				}
+
+				// non-roaring field usage
+				fragmentUsage := uint64(0)
+
+				for _, shard := range fld.AvailableShards(true).Slice() {
+					if err := func() error {
+						tx, finisher, err := qcx.GetTx(Txo{Write: !writable, Index: idx, Shard: shard})
+						if err != nil {
+							return errors.Wrap(err, "qcx.GetTx")
+						}
+						defer finisher(nil)
+
+						fieldBytes, err := tx.GetFieldSizeBytes(index, field)
+						if err != nil {
+							return errors.Wrapf(err, "getting disk usage for non-roaring fragments (%s)", field)
+						}
+						fragmentUsage += fieldBytes
+						return nil
+					}(); err != nil {
+						return indexUsage, 0, err
+					}
+				}
+
+				// add non-roaring to roaring
+				fUsage.Fragments += fragmentUsage
+				fUsage.Total += fragmentUsage
+
+				fieldUsages[field] = fUsage
 			}
-
-			// add non-roaring to roaring
-			fUsage.Fragments += fragmentUsage
-			fUsage.Total += fragmentUsage
-
 			// add to running total
-			fieldMetaBytesTotal += fUsage.Metadata
-			fieldKeysTotal += fUsage.Keys
-			fragmentsTotal += fUsage.Fragments
-			fieldsTotal += fUsage.Total
-
-			fieldUsages[field] = fUsage
+			fieldMetaBytesTotal += indexUsage[index].Fields[field].Metadata
+			fieldKeysTotal += indexUsage[index].Fields[field].Keys
+			fragmentsTotal += indexUsage[index].Fields[field].Fragments
+			fieldsTotal += indexUsage[index].Fields[field].Total
 		}
 
 		// index metadata
