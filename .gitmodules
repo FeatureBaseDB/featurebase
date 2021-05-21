@@ -1,3 +1,0 @@
-[submodule "lattice"]
-	path = lattice
-	url = git@github.com:molecula/lattice.git

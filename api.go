@@ -2269,10 +2269,17 @@ func (api *API) RestoreShard(ctx context.Context, indexName string, shard uint64
 		return err
 	}
 	tx, err := db.NewTx(false, idx.name, Txo{})
+	if err != nil {
+		return err
+	}
 	defer tx.Rollback()
 	//arguments idx,shard do not matter for rbf they
 	//are ignored
 	flvs, err := tx.GetSortedFieldViewList(idx, shard)
+	if err != nil {
+		return nil
+	}
+
 	for _, flv := range flvs {
 		fld := idx.field(flv.Field)
 		view, ok := fld.viewMap[flv.View]
