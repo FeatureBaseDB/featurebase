@@ -1,9 +1,8 @@
-.PHONY: build check-clean clean build-lattice cover cover-viz default docker docker-build docker-test docker-tag-push generate generate-protoc generate-pql generate-statik gometalinter install install-build-deps install-golangci-lint install-gometalinter install-protoc install-protoc-gen-gofast install-peg install-statik release release-build test testv testv-race testvsub testvsub-race  test-txstore-rbf lattice
+.PHONY: build check-clean clean build-lattice cover cover-viz default docker docker-build docker-test docker-tag-push generate generate-protoc generate-pql generate-statik gometalinter install install-build-deps install-golangci-lint install-gometalinter install-protoc install-protoc-gen-gofast install-peg install-statik release release-build test testv testv-race testvsub testvsub-race test-txstore-rbf
 
 CLONE_URL=github.com/pilosa/pilosa
 MOD_VERSION=v2
 VERSION := $(shell git describe --tags 2> /dev/null || echo unknown)
-LATTICE_COMMIT := $(shell git -C lattice rev-parse --short HEAD 2>/dev/null)
 VARIANT = Molecula
 GO=go
 GOOS=$(shell $(GO) env GOOS)
@@ -14,7 +13,7 @@ BRANCH_ID := $(BRANCH)-$(GOOS)-$(GOARCH)
 BUILD_TIME := $(shell date -u +%FT%T%z)
 SHARD_WIDTH = 20
 COMMIT := $(shell git describe --exact-match >/dev/null 2>&1 || git rev-parse --short HEAD)
-LDFLAGS="-X github.com/pilosa/pilosa/v2.Version=$(VERSION) -X github.com/pilosa/pilosa/v2.BuildTime=$(BUILD_TIME) -X github.com/pilosa/pilosa/v2.Variant=$(VARIANT) -X github.com/pilosa/pilosa/v2.Commit=$(COMMIT) -X github.com/pilosa/pilosa/v2.LatticeCommit=$(LATTICE_COMMIT) -X github.com/pilosa/pilosa/v2.TrialDeadline=$(TRIAL_DEADLINE)"
+LDFLAGS="-X github.com/pilosa/pilosa/v2.Version=$(VERSION) -X github.com/pilosa/pilosa/v2.BuildTime=$(BUILD_TIME) -X github.com/pilosa/pilosa/v2.Variant=$(VARIANT) -X github.com/pilosa/pilosa/v2.Commit=$(COMMIT) -X github.com/pilosa/pilosa/v2.TrialDeadline=$(TRIAL_DEADLINE)"
 GO_VERSION=1.15.8
 DOCKER_BUILD= # set to 1 to use `docker-build` instead of `build` when creating a release
 BUILD_TAGS += shardwidth$(SHARD_WIDTH)
@@ -148,18 +147,10 @@ install:
 install-bench:
 	$(GO) install -tags='$(BUILD_TAGS)' -ldflags $(LDFLAGS) $(FLAGS) ./cmd/pilosa-bench
 
-# Ensure lattice is cloned and the pinned version is checked out
-lattice:
-	git submodule update --init
-
 # Build the lattice assets
-build-lattice: lattice
+build-lattice:
 	docker build -t lattice:build ./lattice
 	export LATTICE=`docker create lattice:build`; docker cp $$LATTICE:/lattice/. ./lattice/build && docker rm $$LATTICE
-
-# Upgrade lattice to the latest version
-upgrade-lattice: lattice
-	git submodule update --remote
 
 # `go generate` protocol buffers
 generate-protoc: require-protoc require-protoc-gen-gofast
@@ -198,7 +189,7 @@ docker-release:
 	$(MAKE) docker-build GOOS=darwin GOARCH=amd64
 
 # Build a release in Docker
-docker-build: vendor lattice
+docker-build: vendor
 	docker build \
 	    --build-arg GO_VERSION=$(GO_VERSION) \
 	    --build-arg MAKE_FLAGS="TRIAL_DEADLINE=$(TRIAL_DEADLINE) GOOS=$(GOOS) GOARCH=$(GOARCH)" \
@@ -212,7 +203,7 @@ docker-build: vendor lattice
 	tar -cvz -C build -f build/pilosa-$(VERSION_ID).tar.gz pilosa-$(VERSION_ID)/
 
 # Create Docker image from Dockerfile
-docker-image: vendor lattice
+docker-image: vendor
 	docker build \
 	    --build-arg GO_VERSION=$(GO_VERSION) \
 	    --build-arg MAKE_FLAGS="TRIAL_DEADLINE=$(TRIAL_DEADLINE)" \

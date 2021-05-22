@@ -1,0 +1,28 @@
+.wrapper {
+  display: inline-block;
+  margin: 0 8px;
+}
+
+.indicator {
+  width: 15px;
+  height: 15px;
+  margin: -2px 0 0 -2px;
+  border-radius: 50%;
+  position: relative;
+  transition: opacity 0.3s ease;
+
+  &.clickable:hover {
+    cursor: pointer;
+  }
+}
+
+.indicator::after {
+  content: ' ';
+  top: -2px;
+  right: -2px;
+  bottom: -2px;
+  left: -2px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 50%;
+  position: absolute;
+}
