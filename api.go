@@ -2246,11 +2246,19 @@ func (api *API) RestoreShard(ctx context.Context, indexName string, shard uint64
 	if err != nil {
 		return err
 	}
-	w := bufio.NewWriter(o)
-	//close db if open
-	_, err = io.Copy(w, rd)
-	w.Flush()
-	o.Close()
+	defer o.Close()
+
+	bw := bufio.NewWriter(o)
+	if _, err = io.Copy(bw, rd); err != nil {
+		return err
+	} else if err := bw.Flush(); err != nil {
+		return err
+	} else if err := o.Sync(); err != nil {
+		return err
+	} else if err := o.Close(); err != nil {
+		return err
+	}
+
 	if err != nil {
 		_ = os.Remove(tempPath)
 		return err

@@ -2924,11 +2924,6 @@ func (h *Handler) handleRestoreIDAlloc(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("OK")) //nolint:errcheck
 }
 func (h *Handler) handlePostRestore(w http.ResponseWriter, r *http.Request) {
-	/*
-		if !validHeaderAcceptType(r.Header, "text", "plain") {
-			http.Error(w, "text/plain is not an acceptable response type", http.StatusNotAcceptable)
-		}
-	*/
 	indexName, ok := mux.Vars(r)["index"]
 	if !ok {
 		http.Error(w, "index name is required", http.StatusBadRequest)

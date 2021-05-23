@@ -120,7 +120,7 @@ func (cmd *RestoreCommand) Run(ctx context.Context) error {
 					return err
 				}
 			default:
-				panic("UNKNOWN " + record[0])
+				return err
 
 			}
 			continue
