@@ -1,4 +1,4 @@
-import React, { FC, Fragment, useState } from 'react';
+import React, { FC, Fragment, useEffect, useState } from 'react';
 import AddIcon from '@material-ui/icons/Add';
 import ArrowForwardIosIcon from '@material-ui/icons/ArrowForwardIos';
 import ArrowBackIcon from '@material-ui/icons/ArrowBack';
@@ -30,6 +30,7 @@ import { ResultType } from 'App/Query/QueryContainer';
 import { RowCall } from './RowCall';
 import { SavedQueries } from './SavedQueries';
 import { Select } from 'shared/Select';
+import { stringifyRowData } from './utils';
 import css from './QueryBuilder.module.scss';
 
 type QueryBuilderProps = {
@@ -46,7 +47,7 @@ type QueryBuilderProps = {
     columns: string[],
     operator?: Operator
   ) => void;
-  onRunGroupBy: (table: any, rowsData: RowsCallType) => void;
+  onRunGroupBy: (table: any, rowsData: RowsCallType, filter?: string) => void;
   onExternalLookup: (table: string, columns: number[]) => void;
   onClear: () => void;
 };
@@ -92,11 +93,21 @@ export const QueryBuilder: FC<QueryBuilderProps> = ({
   const [queriesList, setQueriesList] = useState<any[]>(
     JSON.parse(localStorage.getItem('saved-queries') || '[]')
   );
+  const [groupByFilters, setGroupByFilters] = useState<any[]>([]);
+  const [filter, setFilter] = useState<string>();
   const colSizes = JSON.parse(
     localStorage.getItem('builderColSizes') || '[25, 75]'
   );
   const queryNameIdx = queriesList.findIndex((q) => q.name === queryName);
   const inEditMode = editSavedIdx >= 0;
+
+  useEffect(() => {
+    setGroupByFilters(
+      queriesList.filter(
+        (q) => q.table === selectedTable.name && q.operation === 'Extract'
+      )
+    );
+  }, [selectedTable]);
 
   const getColumnsToShow = (cols?: { name: string; show: boolean }[]) => {
     let columns: string[] = [];
@@ -216,7 +227,11 @@ export const QueryBuilder: FC<QueryBuilderProps> = ({
 
   const onRunClick = () => {
     if (operation === 'GroupBy') {
-      onRunGroupBy(selectedTable, groupByCall);
+      const isInvalid = groupByCall.primary ? false : true;
+      setHasInvalid(isInvalid);
+      if (!isInvalid) {
+        onRunGroupBy(selectedTable, groupByCall, filter);
+      }
     } else {
       const { cleanRowCalls, isInvalid } = cleanupRows();
 
@@ -248,6 +263,7 @@ export const QueryBuilder: FC<QueryBuilderProps> = ({
       operator,
       rowCalls: cleanRowCalls,
       groupByCall,
+      filter,
       isInvalid
     };
 
@@ -282,6 +298,7 @@ export const QueryBuilder: FC<QueryBuilderProps> = ({
       operator,
       rowCalls,
       groupByCall,
+      filter,
       isInvalid
     } = queriesList[idx];
     const tableDetails = tables.find((t) => t.name === table);
@@ -303,10 +320,11 @@ export const QueryBuilder: FC<QueryBuilderProps> = ({
     setQueryName(name);
     setQueryDescription(description || '');
     setHasInvalid(!!isInvalid);
+    setFilter(filter);
 
     if (!isInvalid) {
       if (operation === 'GroupBy') {
-        onRunGroupBy(tableDetails, groupByCall);
+        onRunGroupBy(tableDetails, groupByCall, filter);
       } else {
         onQuery(tableDetails, operation, rowCalls, columns, operator);
       }
@@ -338,6 +356,7 @@ export const QueryBuilder: FC<QueryBuilderProps> = ({
       primary: '',
       secondary: ''
     });
+    setFilter(undefined);
     onClear();
   };
 
@@ -546,6 +565,7 @@ export const QueryBuilder: FC<QueryBuilderProps> = ({
                       primary: value.toString()
                     })
                   }
+                  error={hasInvalid && !groupByCall.primary}
                 />
                 <Select
                   className={css.fieldSelector}
@@ -565,6 +585,35 @@ export const QueryBuilder: FC<QueryBuilderProps> = ({
                     })
                   }
                 />
+
+                <div className={css.filterHeader}>
+                  <Typography variant="caption" color="textSecondary">
+                    Filter (optional)
+                  </Typography>
+                  {filter ? (
+                    <span
+                      className={css.link}
+                      onClick={() => setFilter(undefined)}
+                    >
+                      Clear Filter
+                    </span>
+                  ) : null}
+                </div>
+                {filter ? (
+                  <Typography variant="caption">{filter}</Typography>
+                ) : (
+                  <SavedQueries
+                    queries={groupByFilters}
+                    tables={tables}
+                    onClickSaved={(queryIdx) => {
+                      const { rowCalls, operator } = groupByFilters[queryIdx];
+                      const res = stringifyRowData(rowCalls, operator);
+                      if (!res.error) {
+                        setFilter(res.query);
+                      }
+                    }}
+                  />
+                )}
               </div>
             ) : (
               <div className={css.newGroup}>
@@ -721,6 +770,7 @@ export const QueryBuilder: FC<QueryBuilderProps> = ({
                   primary: '',
                   secondary: ''
                 });
+                setFilter(undefined);
                 onClear();
               }}
             >

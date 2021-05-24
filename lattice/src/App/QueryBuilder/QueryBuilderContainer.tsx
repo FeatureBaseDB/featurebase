@@ -13,7 +13,7 @@ import { ResultType } from 'App/Query/QueryContainer';
 import { queryPQL } from 'services/grpcServices';
 import { grpc } from '@improbable-eng/grpc-web';
 import { RowResponse } from 'proto/pilosa_pb';
-import { getIPRange } from 'get-ip-range';
+import { stringifyRowData } from './utils';
 import css from './QueryBuilderContainer.module.scss';
 
 let streamingResults: ResultType = {
@@ -89,70 +89,11 @@ export const QueryBuilderContainer = () => {
     if (rowData.length === 0) {
       query = 'All()';
     } else {
-      let rowsMap: string[][] = [];
-      rowData.forEach((group, groupIdx) => {
-        rowsMap.push([]);
-        group.row.forEach((row) => {
-          let rowString = '';
-          const { field, rowOperator, value, type } = row;
-          const isNegatory = rowOperator === '!=';
-          const isUnion =
-            ['=', '!='].includes(rowOperator) && value.split(',').length > 1;
-          const operator = isNegatory ? '=' : rowOperator;
-          if (isUnion) {
-            const values = value.split(',');
-            const unionRows = values
-              .map((v) => `Row(${field}="${v.trim()}")`)
-              .join(', ');
-            rowString = `Union(${unionRows})`;
-          } else if (rowOperator === 'cidr') {
-            try {
-              const ipRange = getIPRange(value);
-              const ipRows = ipRange
-                .map((ip) => `Row(${field}="${ip}")`)
-                .join(', ');
-              rowString = `Union(${ipRows})`;
-            } catch (error) {
-              streamingResults.error = error.message;
-            }
-          } else {
-            rowString = ['set', 'timestamp'].includes(type)
-              ? `Row(${field}${operator}"${value}")`
-              : `Row(${field}${operator}${value})`;
-          }
-
-          if (isNegatory) {
-            rowsMap[groupIdx].push(`Not(${rowString})`);
-          } else {
-            rowsMap[groupIdx].push(rowString);
-          }
-        });
-      });
-
-      query = rowsMap
-        .map((group, idx) => {
-          let joined = '';
-          if (group.length > 1) {
-            joined = group.map((r) => r).join(', ');
-            const operator = rowData[idx].operator;
-            if (operator === 'and') {
-              joined = `Intersect(${joined})`;
-            } else if (operator === 'or') {
-              joined = `Union(${joined})`;
-            }
-          } else {
-            joined = group[0];
-          }
-          return rowData[idx].isNot ? `Not(${joined})` : joined;
-        })
-        .join(', ');
-
-      if (rowData.length > 1 && operator) {
-        if (operator === 'and') {
-          query = `Intersect(${query})`;
-        } else if (operator === 'or') {
-          query = `Union(${query})`;
-        }
+      const res = stringifyRowData(rowData, operator);
+      if (res.error) {
+        streamingResults.error = res.query;
+      } else {
+        query = res.query;
       }
     }
 
@@ -216,7 +157,11 @@ export const QueryBuilderContainer = () => {
     }
   };
 
-  const onRunGroupBy = (table: any, rowsData: RowsCallType) => {
+  const onRunGroupBy = (
+    table: any,
+    rowsData: RowsCallType,
+    filter?: string
+  ) => {
     streamingResults = {
       query: '',
       operation: 'GroupBy',
@@ -229,9 +174,11 @@ export const QueryBuilderContainer = () => {
     };
     startTime = moment();
     setLoading(true);
+    const filterString =
+      filter && filter.length > 0 ? `, filter=${filter}` : '';
     const query = rowsData.secondary
-      ? `GroupBy(Rows(${rowsData.primary}), Rows(${rowsData.secondary}))`
-      : `GroupBy(Rows(${rowsData.primary}))`;
+      ? `GroupBy(Rows(${rowsData.primary}), Rows(${rowsData.secondary})${filterString})`
+      : `GroupBy(Rows(${rowsData.primary})${filterString})`;
     streamingResults.query = query;
     queryPQL(table.name, query, handleQueryMessages, handleQueryEnd);
   };
