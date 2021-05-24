@@ -1978,6 +1978,7 @@ func (h *Handler) handleGetTranslateData(w http.ResponseWriter, r *http.Request)
 		if _, err := p.WriteTo(w); err != nil {
 			h.logger.Errorf("error streaming translation data: %s", err)
 		}
+		return
 	}
 
 	// Otherwise read partition parameter for index translation copy.
