@@ -1,0 +1,42 @@
+.homeLink,
+.logo {
+  height: 25px;
+}
+
+.toolbarLayout {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.toolbarActions {
+  display: flex;
+  align-items: center;
+}
+
+.toggle {
+  margin: 0 8px;
+}
+
+.appToolbar {
+  .nameLabel {
+    font-family: 'Ubuntu', sans-serif;
+    display: inline;
+
+    &:hover {
+      cursor: pointer;
+    }
+  }
+  
+  .appBarMenu {
+    li {
+      padding-left: 32px;
+      padding-right: 32px;
+    }
+  }
+
+  .avatar {
+    margin-right: 4px;
+  }
+}

@@ -1,0 +1,15 @@
+.container {
+  height: calc(100vh - 64px);
+}
+
+.layout {
+  display: grid;
+  height: 100%;
+  grid-template-areas: 'left-nav main-content';
+  grid-template-columns: 250px calc(100vw - 250px);
+  grid-template-rows: 1fr;
+}
+
+.mainContent {
+  grid-area: main-content;
+}
