@@ -64,6 +64,7 @@ at https://www.pilosa.com/docs/.
 	rc.PersistentFlags().StringP("config", "c", "", "Configuration file to read from.")
 
 	rc.AddCommand(newBackupCommand(stdin, stdout, stderr))
+	rc.AddCommand(newRestoreCommand(stdin, stdout, stderr))
 	rc.AddCommand(newCheckCommand(stdin, stdout, stderr))
 	rc.AddCommand(newConfigCommand(stdin, stdout, stderr))
 	rc.AddCommand(newExportCommand(stdin, stdout, stderr))

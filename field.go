@@ -1029,7 +1029,6 @@ func (f *Field) createViewIfNotExistsBase(cvm *CreateViewMessage) (*view, bool, 
 			return nil, false, errors.Wrap(err, "persisting view")
 		}
 	}
-
 	view := f.newView(f.viewPath(cvm.View), cvm.View)
 
 	if err := view.openEmpty(); err != nil {
