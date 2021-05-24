@@ -105,6 +105,7 @@ func (cmd *BackupCommand) Run(ctx context.Context) (err error) {
 			return err
 		}
 		defer f.Close()
+		w = f
 	}
 
 	// Open a tar writer to the temporary file.
