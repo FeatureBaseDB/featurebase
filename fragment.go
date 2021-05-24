@@ -2890,6 +2890,31 @@ func (f *fragment) FlushCache() error {
 	defer f.mu.Unlock()
 	return f.flushCache()
 }
+func (f *fragment) RebuildRankCache(ctx context.Context) error {
+	if f.CacheType != CacheTypeRanked {
+		return nil //only rebuild ranked caches
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	tx, err := f.holder.BeginTx(false, f.idx, f.shard)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	rows, err := f.unprotectedRows(ctx, tx, uint64(0))
+	if err != nil {
+		return err
+	}
+	for _, id := range rows {
+		n, err := tx.CountRange(f.index(), f.field(), f.view(), f.shard, id*ShardWidth, (id+1)*ShardWidth)
+		if err != nil {
+			return errors.Wrap(err, "CountRange")
+		}
+		f.cache.BulkAdd(id, n)
+	}
+	f.cache.Invalidate()
+	return nil
+}
 
 func (f *fragment) flushCache() error {
 	if f.cache == nil {
@@ -2909,6 +2934,9 @@ func (f *fragment) flushCache() error {
 		return errors.Wrap(err, "marshalling")
 	}
 
+	if err := os.MkdirAll(filepath.Dir(f.cachePath()), 0777); err != nil {
+		return errors.Wrap(err, "mkdir")
+	}
 	// Write to disk.
 	if err := ioutil.WriteFile(f.cachePath(), buf, 0666); err != nil {
 		return errors.Wrap(err, "writing")

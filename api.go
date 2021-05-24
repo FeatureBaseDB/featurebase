@@ -17,6 +17,7 @@
 package pilosa
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/binary"
@@ -26,6 +27,7 @@ import (
 	"io/ioutil"
 	"math"
 	"net/url"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -2200,6 +2202,9 @@ func (api *API) WriteIDAllocDataTo(w io.Writer) error {
 	_, err := api.holder.ida.WriteTo(w)
 	return err
 }
+func (api *API) RestoreIDAlloc(r io.Reader) error {
+	return api.holder.ida.Replace(r)
+}
 
 // TranslateIndexDB is an internal function to load the index keys database
 // rd is a boltdb file.
@@ -2217,6 +2222,92 @@ func (api *API) TranslateFieldDB(ctx context.Context, indexName, fieldName strin
 	store := field.TranslateStore()
 	_, err := store.ReadFrom(rd)
 	return err
+}
+
+// RestoreShard
+func (api *API) RestoreShard(ctx context.Context, indexName string, shard uint64, rd io.Reader) error {
+	snap := topology.NewClusterSnapshot(api.cluster.noder, api.cluster.Hasher, api.cluster.ReplicaN)
+	if !snap.OwnsShard(api.server.nodeID, indexName, shard) {
+		return ErrClusterDoesNotOwnShard // TODO (twg)really just node doesn't own shard but leave for now
+	}
+
+	idx := api.holder.Index(indexName)
+	//need to get a dbShard
+	dbs, err := idx.Txf().dbPerShard.GetDBShard(indexName, shard, idx)
+	if err != nil {
+		return err
+	}
+	//need to find the path to the db
+	//will not work on blue green
+	db := dbs.W[0]
+	finalPath := db.Path() + "/data"
+	tempPath := finalPath + ".tmp"
+	o, err := os.OpenFile(tempPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
+	if err != nil {
+		return err
+	}
+	defer o.Close()
+
+	bw := bufio.NewWriter(o)
+	if _, err = io.Copy(bw, rd); err != nil {
+		return err
+	} else if err := bw.Flush(); err != nil {
+		return err
+	} else if err := o.Sync(); err != nil {
+		return err
+	} else if err := o.Close(); err != nil {
+		return err
+	}
+
+	if err != nil {
+		_ = os.Remove(tempPath)
+		return err
+	}
+	err = db.CloseDB()
+	if err != nil {
+		return err
+	}
+	err = os.Rename(tempPath, finalPath)
+	if err != nil {
+		_ = os.Remove(tempPath)
+		return err
+	}
+	err = db.OpenDB()
+	if err != nil {
+		return err
+	}
+	tx, err := db.NewTx(false, idx.name, Txo{})
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	//arguments idx,shard do not matter for rbf they
+	//are ignored
+	flvs, err := tx.GetSortedFieldViewList(idx, shard)
+	if err != nil {
+		return nil
+	}
+
+	for _, flv := range flvs {
+		fld := idx.field(flv.Field)
+		view, ok := fld.viewMap[flv.View]
+		if !ok {
+			view, err = fld.createViewIfNotExists(flv.View)
+			if err != nil {
+				return err
+			}
+		}
+		frag, err := view.CreateFragmentIfNotExists(shard)
+		if err != nil {
+			return err
+		}
+		err = frag.RebuildRankCache(ctx)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 type serverInfo struct {

@@ -91,6 +91,9 @@ type InternalClient interface {
 
 	GetNodeUsage(ctx context.Context, uri *pnet.URI) (map[string]NodeUsage, error)
 	GetPastQueries(ctx context.Context, uri *pnet.URI) ([]PastQueryStatus, error)
+
+	ImportFieldKeys(ctx context.Context, uri *pnet.URI, index, field string, remote bool, rddbdata io.Reader) error
+	ImportIndexKeys(ctx context.Context, uri *pnet.URI, index string, partitionID int, remote bool, rddbdata io.Reader) error
 }
 
 //===============
@@ -273,4 +276,11 @@ func (n nopInternalClient) GetNodeUsage(ctx context.Context, uri *pnet.URI) (map
 
 func (n nopInternalClient) GetPastQueries(ctx context.Context, uri *pnet.URI) ([]PastQueryStatus, error) {
 	return nil, nil
+}
+func (c nopInternalClient) ImportFieldKeys(ctx context.Context, uri *pnet.URI, index, field string, remote bool, rddbdata io.Reader) error {
+	return nil
+}
+
+func (c nopInternalClient) ImportIndexKeys(ctx context.Context, uri *pnet.URI, index string, partitionID int, remote bool, rddbdata io.Reader) error {
+	return nil
 }

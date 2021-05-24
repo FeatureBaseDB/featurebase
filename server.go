@@ -493,7 +493,6 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	s.holder.schemator = s.schemator
 	s.holder.sharder = s.sharder
 	s.holder.serializer = s.serializer
-
 	return s, nil
 }
 

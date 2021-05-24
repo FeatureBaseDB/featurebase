@@ -438,9 +438,11 @@ func newRouter(handler *Handler) http.Handler {
 
 	router.HandleFunc("/internal/idalloc/reserve", handler.handleReserveIDs).Methods("POST").Name("ReserveIDs")
 	router.HandleFunc("/internal/idalloc/commit", handler.handleCommitIDs).Methods("POST").Name("CommitIDs")
+	router.HandleFunc("/internal/idalloc/restore", handler.handleRestoreIDAlloc).Methods("POST").Name("RestoreIDAllocData")
 	router.HandleFunc("/internal/idalloc/reset/{index}", handler.handleResetIDAlloc).Methods("POST").Name("ResetIDAlloc")
 	router.HandleFunc("/internal/idalloc/data", handler.handleIDAllocData).Methods("GET").Name("IDAllocData")
 
+	router.HandleFunc("/internal/restore/{index}/{shardID}", handler.handlePostRestore).Methods("POST").Name("Restore")
 	// endpoints for collecting cpu profiles from a chosen begin point to
 	// when the client wants to stop. Used for profiling imports that
 	// could be long or short.
@@ -2910,4 +2912,42 @@ func (h *Handler) handleIDAllocData(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("writeing id allocation data: %v", err.Error()), http.StatusInternalServerError)
 		return
 	}
+}
+
+func (h *Handler) handleRestoreIDAlloc(w http.ResponseWriter, r *http.Request) {
+	if err := h.api.RestoreIDAlloc(r.Body); err != nil {
+		http.Error(w, fmt.Sprintf("restoring id allocation: %v", err.Error()), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Add("Content-Type", "text/plain")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("OK")) //nolint:errcheck
+}
+func (h *Handler) handlePostRestore(w http.ResponseWriter, r *http.Request) {
+	indexName, ok := mux.Vars(r)["index"]
+	if !ok {
+		http.Error(w, "index name is required", http.StatusBadRequest)
+		return
+	}
+	shardID, ok := mux.Vars(r)["shardID"]
+	if !ok {
+		http.Error(w, "shardID is required", http.StatusBadRequest)
+		return
+	}
+	shard, err := strconv.ParseUint(shardID, 10, 64)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed to parse shard %v %v err:%v", indexName, shardID, err), http.StatusBadRequest)
+		return
+	}
+	ctx := context.Background()
+	//validate shard for this node
+	err = h.api.RestoreShard(ctx, indexName, shard, r.Body)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed to restore shared %v %v err:%v", indexName, shard, err), http.StatusBadRequest)
+		return
+	}
+
+	w.Header().Add("Content-Type", "text/plain")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("OK")) //nolint:errcheck
 }

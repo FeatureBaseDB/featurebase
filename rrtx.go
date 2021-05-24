@@ -663,6 +663,13 @@ func (w *RoaringWrapper) OpenSnList() (slc []int64) {
 	return nil
 }
 
+func (w *RoaringWrapper) CloseDB() error {
+	return errors.New("CloseDB not supported in roaring")
+}
+func (w *RoaringWrapper) OpenDB() error {
+	return errors.New("OpenDB not supported in roaring")
+}
+
 // statically confirm that RoaringTx satisfies the Tx interface.
 var _ Tx = (*RoaringTx)(nil)
 
