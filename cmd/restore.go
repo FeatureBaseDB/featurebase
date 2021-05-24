@@ -16,7 +16,6 @@ package cmd
 
 import (
 	"context"
-	"fmt"
 	"io"
 
 	"github.com/pilosa/pilosa/v2/ctl"
@@ -24,36 +23,28 @@ import (
 )
 
 func newRestoreCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
-	c := ctl.NewRestoreCommand(stdin, stdout, stderr)
+	cmd := ctl.NewRestoreCommand(stdin, stdout, stderr)
 	restoreCmd := &cobra.Command{
-		Use:   "restore [flags] PATH ",
-		Short: "restore a backup",
+		Use:   "restore",
+		Short: "Restore from a backup",
 		Long: `
-		The restore command will take a backup archive and restore it to a new, clean cluster.
+The Restore command will take a backup archive and restore it to a new, clean cluster.
 `,
-		Args: func(cmd *cobra.Command, args []string) error {
-			if len(args) == 0 {
-				return fmt.Errorf("data directory path required")
-			} else if len(args) > 1 {
-				return fmt.Errorf("too many command line arguments")
-			}
-			c.Path = args[0]
-			return nil
-		},
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return c.Run(context.Background())
+		RunE: func(c *cobra.Command, args []string) error {
+			return cmd.Run(context.Background())
 		},
 	}
 	flags := restoreCmd.Flags()
-	flags.StringVarP(&c.Host, "host", "", "localhost:10101", "host:port of Pilosa.")
-	flags.StringVarP(&c.Path, "source", "s", "", "pilosa backup file")
+	flags.StringVarP(&cmd.Path, "source", "s", "", "pilosa backup file; specify '-' to restore from stdin tar stream")
+	flags.StringVar(&cmd.Host, "host", "localhost:10101", "host:port of Pilosa.")
 	ctl.SetTLSConfig(
 		flags, "",
-		&c.TLS.CertificatePath,
-		&c.TLS.CertificateKeyPath,
-		&c.TLS.CACertPath,
-		&c.TLS.SkipVerify,
-		&c.TLS.EnableClientVerification)
+		&cmd.TLS.CertificatePath,
+		&cmd.TLS.CertificateKeyPath,
+		&cmd.TLS.CACertPath,
+		&cmd.TLS.SkipVerify,
+		&cmd.TLS.EnableClientVerification,
+	)
 
 	return restoreCmd
 }

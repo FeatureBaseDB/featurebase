@@ -18,6 +18,7 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
@@ -33,8 +34,8 @@ import (
 
 // RestoreCommand represents a command for restoring a backup to
 type RestoreCommand struct {
-	TLS  server.TLSConfig
-	Host string
+	tlsConfig *tls.Config
+	Host      string
 
 	// Filepath to the backup file.
 	Path string
@@ -43,6 +44,7 @@ type RestoreCommand struct {
 
 	// Standard input/output
 	*pilosa.CmdIO
+	TLS server.TLSConfig
 }
 
 // NewRestoreCommand returns a new instance of RestoreCommand.
@@ -53,7 +55,7 @@ func NewRestoreCommand(stdin io.Reader, stdout, stderr io.Writer) *RestoreComman
 }
 
 // Run executes the restore.
-func (cmd *RestoreCommand) Run(ctx context.Context) error {
+func (cmd *RestoreCommand) Run(ctx context.Context) (err error) {
 	logger := cmd.Logger()
 
 	// Validate arguments.
@@ -67,11 +69,17 @@ func (cmd *RestoreCommand) Run(ctx context.Context) error {
 	if useStdin {
 		f = os.Stdin
 	} else {
-		f, err := os.Open(cmd.Path)
+		f, err = os.Open(cmd.Path)
 		if err != nil {
 			return (err)
 		}
 		defer f.Close()
+	}
+
+	// Parse TLS configuration for node-specific clients.
+	tls := cmd.TLSConfiguration()
+	if cmd.tlsConfig, err = server.GetTLSConfig(&tls, logger); err != nil {
+		return fmt.Errorf("parsing tls config: %w", err)
 	}
 	// Create a client to the server.
 	client, err := commandClient(cmd)
