@@ -1,0 +1,85 @@
+.transactionsHeader {
+  display: flex;
+  align-items: center;
+  margin-bottom: 20px;
+
+  .refresh {
+    display: flex;
+    align-items: center;
+    margin-left: 4px;
+    font-size: 1rem;
+    transition: opacity 0.3s ease;
+    opacity: 0.3;
+
+    &:hover {
+      opacity: 1;
+      cursor: pointer;
+    }
+  }
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 2fr 3fr;
+  align-items: flex-start;
+}
+
+.list {
+  min-height: 200px;
+}
+
+.transactionItem {
+  display: flex;
+  align-items: center;
+
+  &:last-child {
+    border-bottom: 0;
+  }
+
+  &.inactive {
+    opacity: 0.5;
+  }
+}
+
+.errorIcon,
+.waitingIcon,
+.activeIcon {
+  margin-right: 8px;
+}
+
+.exclusiveIcon {
+  margin-left: 8px;
+  opacity: 0.3;
+}
+
+.itemWrapper {
+  display: flex;
+
+  .dividerLeft {
+    height: 1px;
+    width: 10px;
+    margin-left: 6px;
+    background: var(--divider);
+    align-self: center;
+  }
+
+  .dividerRight {
+    border: 1px solid var(--divider);
+    border-right: 0;
+    width: 10px;
+    margin: 3px 6px 3px 0;
+  }
+
+  .item {
+    flex-grow: 1;
+  }
+}
+
+@keyframes rotation {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(-359deg);
+  }
+}

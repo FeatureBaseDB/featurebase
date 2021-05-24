@@ -34,6 +34,14 @@ commands:
       - add-github-auth
       - checkout
       - restore-mod-cache
+  skip-if-root-unchanged:
+    description: "skips the parent job if the PR includes no changes to pilosa"
+    steps:
+      - run: '[ -n "$(git diff --name-only HEAD $(git merge-base master HEAD) | grep -v \"^lattice/\")" ] || circleci step halt || true'
+  skip-if-lattice-unchanged:
+    description: "skips the parent job if the PR includes no changes to lattice"
+    steps:
+      - run: '[ -n "$(git diff --name-only HEAD $(git merge-base master HEAD) | grep ^lattice/\")" ] || circleci step halt || true'
 
 jobs:
   setup:
@@ -48,12 +56,14 @@ jobs:
       name: golang
     steps:
       - checkout-plus
+      - skip-if-root-unchanged
       - run: make check-license-headers
   linter:
     executor:
       name: golang
     steps:
       - checkout-plus
+      - skip-if-root-unchanged
       - run: curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sudo sh -s -- -b /usr/local/bin v1.31.0
       - run: make golangci-lint
   go-mod-tidy:
@@ -61,6 +71,7 @@ jobs:
       name: golang
     steps:
       - checkout-plus
+      - skip-if-root-unchanged
       - run: go mod tidy
       - run: git diff --exit-code -- go.mod go.sum
   check-changelog-label:
@@ -74,6 +85,7 @@ jobs:
       name: golang
     steps:
       - checkout-plus
+      - skip-if-root-unchanged
       - run: make build GOOS=linux GOARCH=arm GOARM=5
       - run: make build GOOS=linux GOARCH=arm GOARM=6
       - run: make build GOOS=linux GOARCH=arm GOARM=7
@@ -104,6 +116,7 @@ jobs:
       resource_class: << parameters.resource_class >>
     steps:
       - checkout-plus
+      - skip-if-root-unchanged
       - run: sudo apt-get update
       - run: sudo apt-get install lsof
       - run:
@@ -117,6 +130,7 @@ jobs:
           POSTGRES_PASSWORD=password
     steps:
       - checkout-plus
+      - skip-if-root-unchanged
       - run: sudo apt-get update
       - run: sudo apt-get install postgresql-client
       - run: (for i in `seq 1 20`; do pg_isready -h localhost && exit 0 || sleep 1; done; exit 1)
@@ -128,6 +142,7 @@ jobs:
       name: golang
     steps:
       - checkout-plus
+      - skip-if-root-unchanged
       - setup_remote_docker
       - run: make clustertests-build
   release:
