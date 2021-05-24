@@ -54,7 +54,7 @@ export const SavedQueries: FC<SavedQueriesProps> = ({
                   >
                     <ListItemText
                       primary={name}
-                      secondary={`hi[${table}] ${description}`}
+                      secondary={`[${table}] ${description}`}
                     />
                     <ListItemSecondaryAction>
                       {!tableExists ? (
