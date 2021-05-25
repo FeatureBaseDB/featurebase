@@ -113,9 +113,6 @@ func NewAPI(opts ...apiOption) (*API, error) {
 
 	api.tracker = newQueryTracker(api.server.queryHistoryLength)
 
-	api.initUsageCache()
-	go api.refreshUsageCache()
-
 	return api, nil
 }
 
@@ -931,11 +928,10 @@ type IndexUsage struct {
 
 // FieldUsage represents the storage space used on disk by one field, on one node
 type FieldUsage struct {
-	Total      uint64 `json:"total"`
-	Fragments  uint64 `json:"fragments"`
-	Keys       uint64 `json:"keys"`
-	Metadata   uint64 `json:"metadata"`
-	ChangeTime time.Time
+	Total     uint64 `json:"total"`
+	Fragments uint64 `json:"fragments"`
+	Keys      uint64 `json:"keys"`
+	Metadata  uint64 `json:"metadata"`
 }
 
 // MemoryUsage represents the memory used by one node.
@@ -950,19 +946,23 @@ func (api *API) Usage(ctx context.Context, remote bool) (map[string]NodeUsage, e
 	span, _ := tracing.StartSpanFromContext(ctx, "API.Usage")
 	defer span.Finish()
 
-	api.calculateUsage()
-	// Include or exclude remote nodes
-	if !remote {
-		return api.usageCache.data, nil
-	} else {
-		api.calculateNodeUsage(ctx)
-		return api.usageCache.data, nil
+	var t time.Time
+	if api.usageCache.lastUpdated == t {
+		api.calculateUsage()
 	}
+	// Include or exclude remote nodes
+	if remote {
+		api.calculateNodeUsage(ctx)
+	}
+	api.server.logger.Infof("disk usage results last updated: %v", api.usageCache.lastUpdated.Format(time.RFC1123))
+	return api.usageCache.data, nil
 }
 
 func (api *API) initUsageCache() {
+	fmt.Println("Init Usage Cache")
 	api.usageCache = &usageCache{
-		data: make(map[string]NodeUsage),
+		data:            make(map[string]NodeUsage),
+		refreshRateMins: 10,
 	}
 
 	api.usageCache.data[api.server.nodeID] = NodeUsage{
@@ -982,7 +982,6 @@ func (api *API) initUsageCache() {
 }
 
 func (api *API) calculateNodeUsage(ctx context.Context) {
-	cache := api.usageCache
 	nodes := api.cluster.Nodes()
 	for _, node := range nodes {
 		if node.ID == api.server.nodeID {
@@ -992,20 +991,21 @@ func (api *API) calculateNodeUsage(ctx context.Context) {
 		if err != nil {
 			errors.Wrapf(err, "collecting disk usage from %s", node.URI)
 		}
-		cache.data[node.ID] = nodeUsage[node.ID]
+		api.usageCache.data[node.ID] = nodeUsage[node.ID]
 	}
 }
 
 // Calculates disk usage from scratch for each index and stores the results in the usage cache
 func (api *API) calculateUsage() {
-	cache := api.usageCache
-	cache.mu.Lock()
-	defer cache.mu.Unlock()
+	api.usageCache.mu.Lock()
+	defer api.usageCache.mu.Unlock()
 
-	if cache.lastUpdated.After(time.Now().Add(time.Minute * time.Duration(api.usageCache.refreshRateMins) * -1)) {
+	if api.usageCache.lastUpdated.After(time.Now().Add(time.Minute * time.Duration(api.usageCache.refreshRateMins) * -1)) {
+		fmt.Printf("RefreshRate, too soon: time: %v, current time: %v \n", api.usageCache.lastUpdated, time.Now())
 		return
 	} else {
-		api.initUsageCache()
+		fmt.Printf("RefreshRate, expired: time: %v, current time: %v \n", api.usageCache.lastUpdated, time.Now())
+
 		indexDetails, nodeMetadataBytes, err := api.holder.Txf().IndexUsageDetails()
 		if err != nil {
 			errors.Wrap(err, "getting node usage")
@@ -1043,18 +1043,19 @@ func (api *API) calculateUsage() {
 				TotalUse: memoryUse,
 			},
 		}
-		cache.data[api.server.nodeID] = nodeUsage
+		api.usageCache.data[api.server.nodeID] = nodeUsage
 
 	}
-	cache.lastUpdated = time.Now()
+	api.usageCache.lastUpdated = time.Now()
 
 }
 
 // Periodically calculates disk usage
-func (api *API) refreshUsageCache() {
+func (api *API) RefreshUsageCache() {
+	api.initUsageCache()
 	for {
 		api.calculateUsage()
-		time.Sleep(15 * time.Minute)
+		time.Sleep(time.Duration(api.usageCache.refreshRateMins) * time.Minute)
 	}
 }
 
