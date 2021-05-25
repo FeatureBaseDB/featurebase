@@ -23,7 +23,7 @@ type SavedQueriesProps = {
   }[];
   tables: any[];
   onClickSaved: (queryIdx: number) => void;
-  onRemoveQuery: (queryIdx: number) => void;
+  onRemoveQuery?: (queryIdx: number) => void;
 };
 
 export const SavedQueries: FC<SavedQueriesProps> = ({
@@ -70,13 +70,15 @@ export const SavedQueries: FC<SavedQueriesProps> = ({
                           </span>
                         </Tooltip>
                       ) : null}
-                      <IconButton
-                        edge="end"
-                        aria-label="Delete saved query"
-                        onClick={() => onRemoveQuery(idx)}
-                      >
-                        <DeleteIcon />
-                      </IconButton>
+                      {onRemoveQuery ? (
+                        <IconButton
+                          edge="end"
+                          aria-label="Delete saved query"
+                          onClick={() => onRemoveQuery(idx)}
+                        >
+                          <DeleteIcon />
+                        </IconButton>
+                      ) : null}
                     </ListItemSecondaryAction>
                   </ListItem>
                 </MotionSlideItem>
