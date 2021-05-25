@@ -958,11 +958,11 @@ func (api *API) Usage(ctx context.Context, remote bool) (map[string]NodeUsage, e
 	return api.usageCache.data, nil
 }
 
-func (api *API) initUsageCache() {
+func (api *API) initUsageCache(refresh int) {
 	fmt.Println("Init Usage Cache")
 	api.usageCache = &usageCache{
 		data:            make(map[string]NodeUsage),
-		refreshRateMins: 10,
+		refreshRateMins: refresh,
 	}
 
 	api.usageCache.data[api.server.nodeID] = NodeUsage{
@@ -1051,8 +1051,8 @@ func (api *API) calculateUsage() {
 }
 
 // Periodically calculates disk usage
-func (api *API) RefreshUsageCache() {
-	api.initUsageCache()
+func (api *API) RefreshUsageCache(refresh int) {
+	api.initUsageCache(refresh)
 	for {
 		api.calculateUsage()
 		time.Sleep(time.Duration(api.usageCache.refreshRateMins) * time.Minute)
