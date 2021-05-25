@@ -572,7 +572,8 @@ func (f *TxFactory) DumpAll() {
 
 // IndexUsageDetails computes the sum of filesizes used by the node, broken down
 // by index, field, fragments and keys.
-func (f *TxFactory) IndexUsageDetails(indexUsage map[string]IndexUsage) (map[string]IndexUsage, uint64, error) {
+func (f *TxFactory) IndexUsageDetails() (map[string]IndexUsage, uint64, error) {
+	indexUsage := make(map[string]IndexUsage)
 	holderPath, err := expandDirName(f.holder.path)
 	if err != nil {
 		return indexUsage, 0, errors.Wrap(err, "expanding data directory")
@@ -584,23 +585,14 @@ func (f *TxFactory) IndexUsageDetails(indexUsage map[string]IndexUsage) (map[str
 
 	idxs := f.holder.Indexes()
 
-	indexSet := make(map[string]bool)
-	fieldSet := make(map[string]bool)
-
 	qcx := f.NewQcx()
 	defer qcx.Abort()
 	for _, idx := range idxs {
 		index := idx.name
 		indexPath := path.Join(indexesPath, index)
-		indexSet[index] = true
-		if indexUsage[index].Fields == nil {
-			indexUsage[index] = IndexUsage{
-				Fields: make(map[string]FieldUsage),
-			}
-		}
 
 		// field usage
-		// fieldUsages := make(map[string]FieldUsage)
+		fieldUsages := make(map[string]FieldUsage)
 		fragmentsTotal := uint64(0)
 		fieldKeysTotal := uint64(0)
 		fieldMetaBytesTotal := uint64(0)
@@ -608,65 +600,47 @@ func (f *TxFactory) IndexUsageDetails(indexUsage map[string]IndexUsage) (map[str
 		flds := idx.Fields()
 		for _, fld := range flds {
 			field := fld.Name()
-			fieldPath := path.Join(indexPath, FieldsDir, field)
-			fieldSet[field] = true
-			fstat, err := os.Stat(fieldPath)
+			if field == "_keys" {
+				continue
+			}
+			fUsage, err := f.fieldUsage(indexPath, fld)
 			if err != nil {
-				return indexUsage, 0, errors.Wrap(err, "getting field path")
+				return indexUsage, 0, errors.Wrapf(err, "getting disk usage for index (%s)", index)
 			}
-			changeTime := fstat.Sys().(*syscall.Stat_t).Ctimespec
-			_, found := indexUsage[index].Fields[field]
 
-			if !found || (indexUsage[index].Fields[field].ChangeTime != changeTime) {
-				if field == "_keys" {
-					continue
-				}
-				// if indexUsage[index].Fields[field] == nil{
-				// 	indexUsage[index].Fields[field] = make(map[string]FieldUsage)
-				// }
-				fUsage, err := f.fieldUsage(indexPath, fld)
-				if err != nil {
-					return indexUsage, 0, errors.Wrapf(err, "getting disk usage for index (%s)", index)
-				}
+			// non-roaring field usage
+			fragmentUsage := uint64(0)
 
-				// non-roaring field usage
-				fragmentUsage := uint64(0)
-
-				for _, shard := range fld.AvailableShards(true).Slice() {
-					if err := func() error {
-						tx, finisher, err := qcx.GetTx(Txo{Write: !writable, Index: idx, Shard: shard})
-						if err != nil {
-							return errors.Wrap(err, "qcx.GetTx")
-						}
-						defer finisher(nil)
-
-						fieldBytes, err := tx.GetFieldSizeBytes(index, field)
-						if err != nil {
-							return errors.Wrapf(err, "getting disk usage for non-roaring fragments (%s)", field)
-						}
-						fragmentUsage += fieldBytes
-						return nil
-					}(); err != nil {
-						return indexUsage, 0, err
+			for _, shard := range fld.AvailableShards(true).Slice() {
+				if err := func() error {
+					tx, finisher, err := qcx.GetTx(Txo{Write: !writable, Index: idx, Shard: shard})
+					if err != nil {
+						return errors.Wrap(err, "qcx.GetTx")
 					}
-				}
+					defer finisher(nil)
 
-				// add non-roaring to roaring
-				fUsage.Fragments += fragmentUsage
-				fUsage.Total += fragmentUsage
-				fUsage.ChangeTime = changeTime
-				indexUsage[index].Fields[field] = FieldUsage{
-					Fragments:  fUsage.Fragments,
-					Total:      fUsage.Total,
-					ChangeTime: changeTime,
-					Keys:       fUsage.Keys,
+					fieldBytes, err := tx.GetFieldSizeBytes(index, field)
+					if err != nil {
+						return errors.Wrapf(err, "getting disk usage for non-roaring fragments (%s)", field)
+					}
+					fragmentUsage += fieldBytes
+					return nil
+				}(); err != nil {
+					return indexUsage, 0, err
 				}
 			}
+
+			// add non-roaring to roaring
+			fUsage.Fragments += fragmentUsage
+			fUsage.Total += fragmentUsage
+
 			// add to running total
-			fieldMetaBytesTotal += indexUsage[index].Fields[field].Metadata
-			fieldKeysTotal += indexUsage[index].Fields[field].Keys
-			fragmentsTotal += indexUsage[index].Fields[field].Fragments
-			fieldsTotal += indexUsage[index].Fields[field].Total
+			fieldMetaBytesTotal += fUsage.Metadata
+			fieldKeysTotal += fUsage.Keys
+			fragmentsTotal += fUsage.Fragments
+			fieldsTotal += fUsage.Total
+
+			fieldUsages[field] = fUsage
 		}
 
 		// index metadata
@@ -688,7 +662,7 @@ func (f *TxFactory) IndexUsageDetails(indexUsage map[string]IndexUsage) (map[str
 			IndexKeys:      indexKeysBytes,
 			FieldKeysTotal: fieldKeysTotal,
 			Fragments:      fragmentsTotal,
-			Fields:         indexUsage[index].Fields,
+			Fields:         fieldUsages,
 		}
 	}
 
@@ -698,24 +672,7 @@ func (f *TxFactory) IndexUsageDetails(indexUsage map[string]IndexUsage) (map[str
 		return indexUsage, 0, errors.Wrapf(err, "getting disk usage for node metadata")
 	}
 
-	cleanCache(indexUsage, indexSet, fieldSet)
-
 	return indexUsage, nodeMetaBytes, nil
-}
-
-func cleanCache(cache map[string]IndexUsage, idxSet, fldSet map[string]bool) {
-	for ki, vi := range cache {
-		fmt.Printf("index k: %v, v %v \n", ki, vi)
-		for kf, vf := range vi.Fields {
-			fmt.Printf("field k: %v, v %v \n", kf, vf)
-			if !fldSet[kf] {
-				delete(vi.Fields, kf)
-			}
-		}
-		if !idxSet[ki] {
-			delete(cache, ki)
-		}
-	}
 }
 
 // fieldUsage computes the sum of filesizes used by a field in
