@@ -592,7 +592,7 @@ export const QueryBuilder: FC<QueryBuilderProps> = ({
                     {groupByFilters.length > 0 && (
                       <Tooltip
                         className={css.filterInfo}
-                        title={`To use filters, save an Extract query for ${selectedTable.name} with a Row call.`}
+                        title={`To use filters, save an Extract query for ${selectedTable.name} with at least one field constraint.`}
                         placement="top"
                         arrow
                       >
@@ -626,7 +626,7 @@ export const QueryBuilder: FC<QueryBuilderProps> = ({
                 ) : (
                   <div className={css.infoMessage}>
                     No available filters. To use filters, save an Extract query
-                    for {selectedTable.name} with a Row call.
+                    for {selectedTable.name} with at least one field constraint.
                   </div>
                 )}
               </div>
