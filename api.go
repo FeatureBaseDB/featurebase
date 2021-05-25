@@ -32,7 +32,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/pilosa/pilosa/v2/disco"
@@ -60,7 +59,8 @@ type API struct {
 	importWorkerPoolSize int
 	importWork           chan importJob
 
-	usageCache map[string]NodeUsage
+	// usageCache map[string]NodeUsage
+	usageCache *usageCache
 
 	Serializer Serializer
 }
@@ -112,6 +112,9 @@ func NewAPI(opts ...apiOption) (*API, error) {
 	}
 
 	api.tracker = newQueryTracker(api.server.queryHistoryLength)
+
+	api.initUsageCache()
+	go api.refreshUsageCache()
 
 	return api, nil
 }
@@ -895,6 +898,14 @@ func (api *API) PrimaryNode() *topology.Node {
 	return snap.PrimaryFieldTranslationNode()
 }
 
+// Cache of disk usage statistics
+type usageCache struct {
+	data            map[string]NodeUsage
+	lastUpdated     time.Time
+	mu              sync.Mutex
+	refreshRateMins int
+}
+
 // NodeUsage represents all usage measurements for one node.
 type NodeUsage struct {
 	Disk   DiskUsage   `json:"diskUsage"`
@@ -924,7 +935,7 @@ type FieldUsage struct {
 	Fragments  uint64 `json:"fragments"`
 	Keys       uint64 `json:"keys"`
 	Metadata   uint64 `json:"metadata"`
-	ChangeTime syscall.Timespec
+	ChangeTime time.Time
 }
 
 // MemoryUsage represents the memory used by one node.
@@ -934,76 +945,116 @@ type MemoryUsage struct {
 }
 
 // Usage gets the resource usage per index, in a map[nodeID]NodeUsage
+// Returns disk usage from cache. Calculates it if cache is empty.
 func (api *API) Usage(ctx context.Context, remote bool) (map[string]NodeUsage, error) {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.Usage")
 	defer span.Finish()
 
-	//initialize cache
-	if api.usageCache == nil {
-		api.usageCache = make(map[string]NodeUsage)
+	api.calculateUsage()
+	// Include or exclude remote nodes
+	if !remote {
+		return api.usageCache.data, nil
+	} else {
+		api.calculateNodeUsage(ctx)
+		return api.usageCache.data, nil
 	}
-	if api.usageCache[api.server.nodeID].Disk.IndexUsage == nil {
-		api.usageCache[api.server.nodeID] = NodeUsage{
+}
+
+func (api *API) initUsageCache() {
+	api.usageCache = &usageCache{
+		data: make(map[string]NodeUsage),
+	}
+
+	api.usageCache.data[api.server.nodeID] = NodeUsage{
+		Disk: DiskUsage{
+			IndexUsage: make(map[string]IndexUsage),
+		},
+	}
+
+	nodes := api.cluster.Nodes()
+	for _, node := range nodes {
+		api.usageCache.data[node.ID] = NodeUsage{
 			Disk: DiskUsage{
 				IndexUsage: make(map[string]IndexUsage),
 			},
 		}
 	}
+}
 
-	indexDetails, nodeMetadataBytes, err := api.holder.Txf().IndexUsageDetails(api.usageCache[api.server.nodeID].Disk.IndexUsage)
-	if err != nil {
-		return nil, errors.Wrap(err, "getting node usage")
-	}
-	totalSize := nodeMetadataBytes
-	for _, s := range indexDetails {
-		totalSize += s.Total
-	}
-
-	// NOTE: these errors are ignored in api.Info(), but checked here
-	si := api.server.systemInfo
-	diskCapacity, err := si.DiskCapacity(api.holder.path)
-	if err != nil {
-		api.server.logger.Infof("couldn't read disk capacity: %s", err)
-	}
-
-	memoryCapacity, err := si.MemTotal()
-	if err != nil {
-		api.server.logger.Infof("couldn't read memory capacity: %s", err)
-	}
-	memoryUse, err := si.MemUsed()
-	if err != nil {
-		api.server.logger.Infof("couldn't read memory usage: %s", err)
-	}
-
-	// Insert into result.
-	nodeUsage := NodeUsage{
-		Disk: DiskUsage{
-			Capacity:   diskCapacity,
-			TotalUse:   totalSize,
-			IndexUsage: indexDetails,
-		},
-		Memory: MemoryUsage{
-			Capacity: memoryCapacity,
-			TotalUse: memoryUse,
-		},
-	}
-	api.usageCache[api.server.nodeID] = nodeUsage
-
-	// Collect usage from remote nodes
-	if !remote {
-		nodes := api.cluster.Nodes()
-		for _, node := range nodes {
-			if node.ID == api.server.nodeID {
-				continue
-			}
-			nodeUsage, err := api.server.defaultClient.GetNodeUsage(ctx, &node.URI)
-			if err != nil {
-				return nil, errors.Wrapf(err, "collecting disk usage from %s", node.URI)
-			}
-			api.usageCache[node.ID] = nodeUsage[node.ID]
+func (api *API) calculateNodeUsage(ctx context.Context) {
+	cache := api.usageCache
+	nodes := api.cluster.Nodes()
+	for _, node := range nodes {
+		if node.ID == api.server.nodeID {
+			continue
 		}
+		nodeUsage, err := api.server.defaultClient.GetNodeUsage(ctx, &node.URI)
+		if err != nil {
+			errors.Wrapf(err, "collecting disk usage from %s", node.URI)
+		}
+		cache.data[node.ID] = nodeUsage[node.ID]
 	}
-	return api.usageCache, nil
+}
+
+// Calculates disk usage from scratch for each index and stores the results in the usage cache
+func (api *API) calculateUsage() {
+	cache := api.usageCache
+	cache.mu.Lock()
+	defer cache.mu.Unlock()
+
+	if cache.lastUpdated.After(time.Now().Add(time.Minute * time.Duration(api.usageCache.refreshRateMins) * -1)) {
+		return
+	} else {
+		api.initUsageCache()
+		indexDetails, nodeMetadataBytes, err := api.holder.Txf().IndexUsageDetails()
+		if err != nil {
+			errors.Wrap(err, "getting node usage")
+		}
+		totalSize := nodeMetadataBytes
+		for _, s := range indexDetails {
+			totalSize += s.Total
+		}
+
+		// NOTE: these errors are ignored in api.Info(), but checked here
+		si := api.server.systemInfo
+		diskCapacity, err := si.DiskCapacity(api.holder.path)
+		if err != nil {
+			api.server.logger.Infof("couldn't read disk capacity: %s", err)
+		}
+
+		memoryCapacity, err := si.MemTotal()
+		if err != nil {
+			api.server.logger.Infof("couldn't read memory capacity: %s", err)
+		}
+		memoryUse, err := si.MemUsed()
+		if err != nil {
+			api.server.logger.Infof("couldn't read memory usage: %s", err)
+		}
+
+		// Insert into result.
+		nodeUsage := NodeUsage{
+			Disk: DiskUsage{
+				Capacity:   diskCapacity,
+				TotalUse:   totalSize,
+				IndexUsage: indexDetails,
+			},
+			Memory: MemoryUsage{
+				Capacity: memoryCapacity,
+				TotalUse: memoryUse,
+			},
+		}
+		cache.data[api.server.nodeID] = nodeUsage
+
+	}
+
+}
+
+// Periodically calculates disk usage
+func (api *API) refreshUsageCache() {
+	for {
+		api.calculateUsage()
+		time.Sleep(15 * time.Minute)
+	}
 }
 
 // RecalculateCaches forces all TopN caches to be updated.
