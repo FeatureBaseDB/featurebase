@@ -493,7 +493,7 @@ export const QueryBuilder: FC<QueryBuilderProps> = ({
               />
             </div>
 
-            {selectedTable
+            {selectedTable && operation !== 'GroupBy'
               ? rowCalls.map((rowCall, idx) => (
                   <Fragment key={`group-${idx}`}>
                     {idx > 0 ? (
@@ -589,6 +589,16 @@ export const QueryBuilder: FC<QueryBuilderProps> = ({
                 <div className={css.filterHeader}>
                   <Typography variant="caption" color="textSecondary">
                     Filter (optional)
+                    {groupByFilters.length > 0 && (
+                      <Tooltip
+                        className={css.filterInfo}
+                        title={`To use filters, save an Extract query for ${selectedTable.name} with a Row call.`}
+                        placement="top"
+                        arrow
+                      >
+                        <InfoIcon fontSize="inherit" />
+                      </Tooltip>
+                    )}
                   </Typography>
                   {filter ? (
                     <span
@@ -601,7 +611,7 @@ export const QueryBuilder: FC<QueryBuilderProps> = ({
                 </div>
                 {filter ? (
                   <Typography variant="caption">{filter}</Typography>
-                ) : (
+                ) : groupByFilters.length > 0 ? (
                   <SavedQueries
                     queries={groupByFilters}
                     tables={tables}
@@ -613,6 +623,11 @@ export const QueryBuilder: FC<QueryBuilderProps> = ({
                       }
                     }}
                   />
+                ) : (
+                  <div className={css.infoMessage}>
+                    No available filters. To use filters, save an Extract query
+                    for {selectedTable.name} with a Row call.
+                  </div>
                 )}
               </div>
             ) : (
