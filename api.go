@@ -900,7 +900,7 @@ type usageCache struct {
 	data            map[string]NodeUsage
 	lastUpdated     time.Time
 	mu              sync.Mutex
-	refreshRateMins int
+	refreshInterval time.Duration
 }
 
 // NodeUsage represents all usage measurements for one node.
@@ -976,7 +976,8 @@ func (api *API) calculateUsage() {
 	api.usageCache.mu.Lock()
 	defer api.usageCache.mu.Unlock()
 
-	if api.usageCache.lastUpdated.After(time.Now().Add(time.Minute * time.Duration(api.usageCache.refreshRateMins) * -1)) {
+	// if api.usageCache.lastUpdated.After(time.Now().Add(time.Minute * time.Duration(api.usageCache.refreshInterval) * -1)) {
+	if time.Since(api.usageCache.lastUpdated) < api.usageCache.refreshInterval {
 		fmt.Printf("RefreshRate, too soon: time: %v, current time: %v \n", api.usageCache.lastUpdated, time.Now())
 		return
 	} else {
@@ -1029,15 +1030,15 @@ func (api *API) calculateUsage() {
 }
 
 // Periodically calculates disk usage
-func (api *API) RefreshUsageCache(refresh int) {
+func (api *API) RefreshUsageCache(refresh time.Duration) {
 	api.usageCache = &usageCache{
 		data:            make(map[string]NodeUsage),
-		refreshRateMins: refresh,
+		refreshInterval: refresh,
 	}
 	for {
 		api.calculateUsage()
 		api.calculateNodeUsage()
-		time.Sleep(time.Duration(api.usageCache.refreshRateMins) * time.Minute)
+		time.Sleep(api.usageCache.refreshInterval)
 	}
 }
 

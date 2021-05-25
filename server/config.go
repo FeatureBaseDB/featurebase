@@ -225,9 +225,9 @@ type Config struct {
 	// LookupDBDSN is an external database to connect to for `ExternalLookup` queries.
 	LookupDBDSN string `toml:"lookup-db-dsn"`
 
-	// Disk Usage refresh rate in minutes for ui/usage http endpoint
+	// Disk Usage refresh interval for ui/usage http endpoint
 	DiskUsage struct {
-		Interval int `toml:"disk-usage-interval"`
+		Interval toml.Duration `toml:"disk-usage-interval"`
 	}
 }
 
@@ -364,7 +364,7 @@ func NewConfig() *Config {
 	c.Etcd.PeerCertFile = ""
 	c.Etcd.PeerKeyFile = ""
 
-	c.DiskUsage.Interval = 6 * 60 // 6 hours
+	c.DiskUsage.Interval = toml.Duration(6 * 60 * time.Minute) // 6 hours
 
 	return c
 }
