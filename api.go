@@ -942,7 +942,7 @@ type MemoryUsage struct {
 }
 
 // Usage gets the resource usage per index, in a map[nodeID]NodeUsage
-// Returns disk usage from cache. Calculates it if cache is empty.
+// Returns disk usage from cache. Waits for calculation if cache is empty.
 func (api *API) Usage(ctx context.Context, remote bool) (map[string]NodeUsage, error) {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.Usage")
 	defer span.Finish()
@@ -951,21 +951,19 @@ func (api *API) Usage(ctx context.Context, remote bool) (map[string]NodeUsage, e
 	if api.usageCache.lastUpdated == t {
 		api.calculateUsage()
 	}
-	// Include or exclude remote nodes
-	if remote {
-		api.calculateNodeUsage(ctx)
-	}
+
 	api.server.logger.Infof("disk usage results last updated: %v", api.usageCache.lastUpdated.Format(time.RFC1123))
 	return api.usageCache.data, nil
 }
 
-func (api *API) calculateNodeUsage(ctx context.Context) {
+// Calculate node usage for each node in cluster
+func (api *API) calculateNodeUsage() {
 	nodes := api.cluster.Nodes()
 	for _, node := range nodes {
 		if node.ID == api.server.nodeID {
 			continue
 		}
-		nodeUsage, err := api.server.defaultClient.GetNodeUsage(ctx, &node.URI)
+		nodeUsage, err := api.server.defaultClient.GetNodeUsage(context.Background(), &node.URI)
 		if err != nil {
 			errors.Wrapf(err, "collecting disk usage from %s", node.URI)
 		}
@@ -1038,6 +1036,7 @@ func (api *API) RefreshUsageCache(refresh int) {
 	}
 	for {
 		api.calculateUsage()
+		api.calculateNodeUsage()
 		time.Sleep(time.Duration(api.usageCache.refreshRateMins) * time.Minute)
 	}
 }
