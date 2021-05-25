@@ -959,28 +959,6 @@ func (api *API) Usage(ctx context.Context, remote bool) (map[string]NodeUsage, e
 	return api.usageCache.data, nil
 }
 
-func (api *API) initUsageCache(refresh int) {
-	api.usageCache = &usageCache{
-		data:            make(map[string]NodeUsage),
-		refreshRateMins: refresh,
-	}
-
-	api.usageCache.data[api.server.nodeID] = NodeUsage{
-		Disk: DiskUsage{
-			IndexUsage: make(map[string]IndexUsage),
-		},
-	}
-
-	nodes := api.cluster.Nodes()
-	for _, node := range nodes {
-		api.usageCache.data[node.ID] = NodeUsage{
-			Disk: DiskUsage{
-				IndexUsage: make(map[string]IndexUsage),
-			},
-		}
-	}
-}
-
 func (api *API) calculateNodeUsage(ctx context.Context) {
 	nodes := api.cluster.Nodes()
 	for _, node := range nodes {
@@ -1005,6 +983,7 @@ func (api *API) calculateUsage() {
 		return
 	} else {
 		fmt.Printf("RefreshRate, expired: time: %v, current time: %v \n", api.usageCache.lastUpdated, time.Now())
+		api.usageCache.data = make(map[string]NodeUsage)
 
 		indexDetails, nodeMetadataBytes, err := api.holder.Txf().IndexUsageDetails()
 		if err != nil {
@@ -1053,7 +1032,10 @@ func (api *API) calculateUsage() {
 
 // Periodically calculates disk usage
 func (api *API) RefreshUsageCache(refresh int) {
-	api.initUsageCache(refresh)
+	api.usageCache = &usageCache{
+		data:            make(map[string]NodeUsage),
+		refreshRateMins: refresh,
+	}
 	for {
 		api.calculateUsage()
 		time.Sleep(time.Duration(api.usageCache.refreshRateMins) * time.Minute)
