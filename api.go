@@ -905,8 +905,9 @@ type usageCache struct {
 
 // NodeUsage represents all usage measurements for one node.
 type NodeUsage struct {
-	Disk   DiskUsage   `json:"diskUsage"`
-	Memory MemoryUsage `json:"memoryUsage"`
+	Disk        DiskUsage   `json:"diskUsage"`
+	Memory      MemoryUsage `json:"memoryUsage"`
+	LastUpdated time.Time   `json:"lastUpdated"`
 }
 
 // DiskUsage represents the storage space used on disk by one node.
@@ -1041,6 +1042,7 @@ func (api *API) calculateUsage() {
 				Capacity: memoryCapacity,
 				TotalUse: memoryUse,
 			},
+			LastUpdated: time.Now(),
 		}
 		api.usageCache.data[api.server.nodeID] = nodeUsage
 
