@@ -112,5 +112,5 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 	flags.Uint16Var(&srv.Config.Postgres.ConnectionLimit, "postgres.connection-limit", srv.Config.Postgres.ConnectionLimit, "Maximum number of simultaneous postgres connections to allow. (set 0 to disable)")
 
 	// Disk Usage refresh rate in minutes for ui/usage http endpoint
-	flags.IntVar(&srv.Config.DiskUsageRefreshRate, "disk-usage-refresh-rate", srv.Config.DiskUsageRefreshRate, "Number in minutes between recalculations of disk usage cache")
+	flags.IntVar(&srv.Config.DiskUsage.RefreshRate, "disk-usage-refresh-rate", srv.Config.DiskUsage.RefreshRate, "Number in minutes between recalculations of disk usage cache")
 }

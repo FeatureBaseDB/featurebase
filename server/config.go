@@ -226,7 +226,9 @@ type Config struct {
 	LookupDBDSN string `toml:"lookup-db-dsn"`
 
 	// Disk Usage refresh rate in minutes for ui/usage http endpoint
-	DiskUsageRefreshRate int `toml:"disk-ussage-refresh-rate"`
+	DiskUsage struct {
+		RefreshRate int `toml:"disk-ussage-refresh-rate"`
+	}
 }
 
 // MustValidate checks that all ports in a Config are unique and not zero.
@@ -361,6 +363,8 @@ func NewConfig() *Config {
 	c.Etcd.ClientKeyFile = ""
 	c.Etcd.PeerCertFile = ""
 	c.Etcd.PeerKeyFile = ""
+
+	c.DiskUsage.RefreshRate = 6 * 60 // 6 hours
 
 	return c
 }
