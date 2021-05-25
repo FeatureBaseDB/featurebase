@@ -959,7 +959,6 @@ func (api *API) Usage(ctx context.Context, remote bool) (map[string]NodeUsage, e
 }
 
 func (api *API) initUsageCache(refresh int) {
-	fmt.Println("Init Usage Cache")
 	api.usageCache = &usageCache{
 		data:            make(map[string]NodeUsage),
 		refreshRateMins: refresh,

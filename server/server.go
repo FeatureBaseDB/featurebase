@@ -277,7 +277,7 @@ func (m *Command) Start() (err error) {
 		}
 	}
 
-	go m.API.RefreshUsageCache(m.Config.DiskUsageRefreshRate)
+	go m.API.RefreshUsageCache(m.Config.DiskUsage.RefreshRate)
 
 	_ = testhook.Opened(pilosa.NewAuditor(), m, nil)
 	close(m.Started)
