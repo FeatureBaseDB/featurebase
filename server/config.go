@@ -227,7 +227,7 @@ type Config struct {
 
 	// Disk Usage refresh rate in minutes for ui/usage http endpoint
 	DiskUsage struct {
-		RefreshRate int `toml:"disk-ussage-refresh-rate"`
+		Interval int `toml:"disk-usage-interval"`
 	}
 }
 
@@ -364,7 +364,7 @@ func NewConfig() *Config {
 	c.Etcd.PeerCertFile = ""
 	c.Etcd.PeerKeyFile = ""
 
-	c.DiskUsage.RefreshRate = 6 * 60 // 6 hours
+	c.DiskUsage.Interval = 6 * 60 // 6 hours
 
 	return c
 }
