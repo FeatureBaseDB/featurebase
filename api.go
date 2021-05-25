@@ -1046,6 +1046,7 @@ func (api *API) calculateUsage() {
 		cache.data[api.server.nodeID] = nodeUsage
 
 	}
+	cache.lastUpdated = time.Now()
 
 }
 
