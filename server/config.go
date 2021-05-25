@@ -224,6 +224,9 @@ type Config struct {
 
 	// LookupDBDSN is an external database to connect to for `ExternalLookup` queries.
 	LookupDBDSN string `toml:"lookup-db-dsn"`
+
+	// Disk Usage refresh rate in minutes for ui/usage http endpoint
+	DiskUsageRefreshRate int `toml:"disk-ussage-refresh-rate"`
 }
 
 // MustValidate checks that all ports in a Config are unique and not zero.
