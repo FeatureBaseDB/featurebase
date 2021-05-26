@@ -38,25 +38,21 @@ commands:
     description: "skips the parent job if the PR includes no changes to pilosa"
     steps:
       - run: |
-          ROOT_CHANGED_FILES="$(git diff --name-only HEAD $(git merge-base master HEAD) | grep -v '^lattice/')"
+          ROOT_CHANGED_FILES="$(git diff --name-only HEAD $(git merge-base master HEAD) | grep -v '^lattice/')" || true
           echo "ROOT_CHANGED_FILES = $ROOT_CHANGED_FILES"
-          if [ -z $ROOT_CHANGED_FILES ] ; then
+          if [ -z "$ROOT_CHANGED_FILES" ] ; then
             echo "halting step"
             circleci step halt
-          else
-            true
           fi
   skip-if-lattice-unchanged:
     description: "skips the parent job if the PR includes no changes to lattice"
     steps:
       - run: |
-          LATTICE_CHANGED_FILES="$(git diff --name-only HEAD $(git merge-base master HEAD) | grep '^lattice/')"
+          LATTICE_CHANGED_FILES="$(git diff --name-only HEAD $(git merge-base master HEAD) | grep '^lattice/')" || true
           echo "LATTICE_CHANGED_FILES = $LATTICE_CHANGED_FILES"
-          if [ -z $LATTICE_CHANGED_FILES ] ; then
+          if [ -z "$LATTICE_CHANGED_FILES" ] ; then
             echo "halting step"
             circleci step halt
-          else
-            true
           fi
 
 jobs:
