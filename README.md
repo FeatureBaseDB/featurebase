@@ -58,15 +58,6 @@ Check out how the Pilosa [Data Model](https://www.pilosa.com/docs/data-model/) w
 You can interact with Pilosa directly in the console using the [Pilosa Query Language](https://www.pilosa.com/docs/query-language/) (PQL).
 
 
-## Upgrading UI
-
-Lattice is now a submodule of Pilosa, for the purpose of keeping the frontend and backend components of the UI system synchronized. When making a change to the UI that requires changing both the backend and frontend, follow steps in this order:
-
-1. merge frontend (Lattice) PR
-2. run `make upgrade-lattice`
-3. run `git add lattice`, `git commit -m"Upgrade Lattice"`, `git push`
-4. merge backend (Pilosa) PR
-
 ## Client Libraries
 
 There are supported libraries for the following languages:
