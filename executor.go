@@ -3912,6 +3912,11 @@ func (e *executor) executeExternalLookup(ctx context.Context, qcx *Qcx, index st
 		return ExtractedTable{}, errors.New("too many inputs to lookup query")
 	}
 
+	write, _, err := c.BoolArg("write")
+	if err != nil {
+		return ExtractedTable{}, errors.Wrap(err, "parsing write argument")
+	}
+
 	rawArg, err := e.executeCall(ctx, qcx, index, c.Children[0], shards, opt)
 	if err != nil {
 		return ExtractedTable{}, errors.Wrapf(err, "evaluating SQL argument call %q", c.String())
@@ -3935,6 +3940,21 @@ func (e *executor) executeExternalLookup(ctx context.Context, qcx *Qcx, index st
 		arg = argRow.Keys
 	} else {
 		arg = argRow.Columns()
+	}
+
+	if write {
+		tx, err := e.Holder.lookupDB.BeginTx(ctx, nil)
+		if err != nil {
+			return ExtractedTable{}, errors.Wrap(err, "creating postgres transaction")
+		}
+		defer tx.Rollback() //nolint:errcheck
+
+		_, err = tx.ExecContext(ctx, query, pq.Array(arg))
+		if err != nil {
+			return ExtractedTable{}, errors.Wrap(err, "executing postgres write")
+		}
+
+		return ExtractedTable{}, errors.Wrap(tx.Commit(), "committing postgres transaction")
 	}
 
 	result, err := e.Holder.lookupDB.QueryContext(ctx, query, pq.Array(arg))
