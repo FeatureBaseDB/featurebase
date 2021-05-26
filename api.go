@@ -941,7 +941,6 @@ type MemoryUsage struct {
 	TotalUse uint64 `json:"totalInUse"`
 }
 
-// Usage gets the resource usage per index, in a map[nodeID]NodeUsage
 // Returns disk usage from cache. Waits for calculation if cache is empty.
 func (api *API) Usage(ctx context.Context, remote bool) (map[string]NodeUsage, error) {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.Usage")
@@ -956,8 +955,8 @@ func (api *API) Usage(ctx context.Context, remote bool) (map[string]NodeUsage, e
 	return api.usageCache.data, nil
 }
 
-// Calculate node usage for each node in cluster
-func (api *API) calculateNodeUsage() {
+// Makes a ui/usage request for each node in cluster to calculates its usage and adds it to the cache
+func (api *API) requestUsageOfNodes() {
 	nodes := api.cluster.Nodes()
 	for _, node := range nodes {
 		if node.ID == api.server.nodeID {
@@ -1037,7 +1036,7 @@ func (api *API) RefreshUsageCache(refresh time.Duration) {
 	}
 	for {
 		api.calculateUsage()
-		api.calculateNodeUsage()
+		api.requestUsageOfNodes()
 		time.Sleep(api.usageCache.refreshInterval)
 	}
 }
