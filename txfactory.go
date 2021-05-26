@@ -718,6 +718,8 @@ func (f *TxFactory) fieldUsage(indexPath string, fld *Field) (FieldUsage, error)
 	return fieldUsage, nil
 }
 
+// NOTE: Go 1.16 introduced a new Readdir() method that is supposed to be more performant.
+// Not yet upgraded b/c new method is not compatible with older versions of Go.
 func directoryUsage(fname string, recursive bool) (uint64, error) {
 	if !dirExists(fname) {
 		return 0, errors.Errorf("directory does not exist (%s)", fname)
@@ -725,24 +727,26 @@ func directoryUsage(fname string, recursive bool) (uint64, error) {
 
 	var size uint64
 
-	entries, err := os.ReadDir(fname)
+	dir, err := os.Open(fname)
+	if err != nil {
+		return 0, errors.Wrap(err, "opening data subdirectory")
+	}
+	defer dir.Close()
+
+	files, err := dir.Readdir(-1)
 	if err != nil {
 		return 0, errors.Wrap(err, "reading data subdirectory")
 	}
 
-	for _, entry := range entries {
-		if recursive && entry.IsDir() {
-			sz, err := directoryUsage(path.Join(fname, entry.Name()), true)
+	for _, file := range files {
+		if recursive && file.IsDir() {
+			sz, err := directoryUsage(path.Join(fname, file.Name()), true)
 			if err != nil {
 				return 0, err
 			}
 			size += sz
 		} else {
-			fi, err := entry.Info()
-			if err != nil {
-				return 0, errors.Wrap(err, "getting file info")
-			}
-			size += uint64(fi.Size()) // NOTE this cast is safe for regular files, not necessarily others
+			size += uint64(file.Size()) // NOTE this cast is safe for regular files, not necessarily others
 		}
 	}
 
