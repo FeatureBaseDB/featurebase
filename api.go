@@ -899,7 +899,8 @@ func (api *API) PrimaryNode() *topology.Node {
 type usageCache struct {
 	data            map[string]NodeUsage
 	lastUpdated     time.Time
-	mu              sync.Mutex
+	muWrite         sync.Mutex
+	muRead          sync.Mutex
 	refreshInterval time.Duration
 }
 
@@ -945,6 +946,8 @@ type MemoryUsage struct {
 func (api *API) Usage(ctx context.Context, remote bool) (map[string]NodeUsage, error) {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.Usage")
 	defer span.Finish()
+	api.usageCache.muRead.Lock()
+	defer api.usageCache.muRead.Unlock()
 
 	var t time.Time
 	if api.usageCache.lastUpdated == t {
@@ -972,12 +975,11 @@ func (api *API) requestUsageOfNodes() {
 
 // Calculates disk usage from scratch for each index and stores the results in the usage cache
 func (api *API) calculateUsage() {
-	api.usageCache.mu.Lock()
-	defer api.usageCache.mu.Unlock()
+	api.usageCache.muWrite.Lock()
+	defer api.usageCache.muWrite.Unlock()
 
 	if time.Since(api.usageCache.lastUpdated) > api.usageCache.refreshInterval {
 		fmt.Printf("RefreshRate, expired: time: %v, current time: %v \n", api.usageCache.lastUpdated, time.Now())
-		api.usageCache.data = make(map[string]NodeUsage)
 
 		indexDetails, nodeMetadataBytes, err := api.holder.Txf().IndexUsageDetails()
 		if err != nil {
@@ -1017,6 +1019,9 @@ func (api *API) calculateUsage() {
 			},
 			LastUpdated: time.Now(),
 		}
+		api.usageCache.muRead.Lock()
+		defer api.usageCache.muRead.Unlock()
+		api.usageCache.data = make(map[string]NodeUsage)
 		api.usageCache.data[api.server.nodeID] = nodeUsage
 	}
 }
