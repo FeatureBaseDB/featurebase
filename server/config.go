@@ -226,8 +226,8 @@ type Config struct {
 	LookupDBDSN string `toml:"lookup-db-dsn"`
 
 	// Disk Usage refresh interval for ui/usage http endpoint
-	DiskUsage struct {
-		Interval toml.Duration `toml:"disk-usage-interval"`
+	Usage struct {
+		Interval toml.Duration `toml:"usage-interval"`
 	}
 }
 
@@ -364,7 +364,7 @@ func NewConfig() *Config {
 	c.Etcd.PeerCertFile = ""
 	c.Etcd.PeerKeyFile = ""
 
-	c.DiskUsage.Interval = toml.Duration(6 * 60 * time.Minute) // 6 hours
+	c.Usage.Interval = toml.Duration(6 * 60 * time.Minute) // 6 hours
 
 	return c
 }
