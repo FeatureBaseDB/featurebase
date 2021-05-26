@@ -7913,7 +7913,7 @@ func TestExternalLookup(t *testing.T) {
 	defer c.Close()
 
 	// Populate a field with some data that can be used in queries.
-	c.CreateField(t, "i", pilosa.IndexOptions{}, "f")
+	c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "f")
 	c.ImportBits(t, "i", "f", [][2]uint64{
 		{1, 1},
 		{1, 3},
@@ -8051,6 +8051,14 @@ func TestExternalLookup(t *testing.T) {
 					t.Errorf("expected %v but got %v", tc.expect, result)
 				}
 			})
+		}
+	})
+	t.Run("Delete", func(t *testing.T) {
+		c.Query(t, "i", `ExternalLookup(All(), query="delete from lookup where id = ANY($1)", write=true)`)
+		res := c.Query(t, "i", `ExternalLookup(All(), query="select id from lookup where id = ANY($1)")`)
+		tbl := res.Results[0].(pilosa.ExtractedTable)
+		if len(tbl.Columns) != 0 {
+			t.Errorf("unexpected remaining records: %v", tbl)
 		}
 	})
 }

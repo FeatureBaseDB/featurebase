@@ -437,6 +437,7 @@ var callInfoByFunc = map[string]callInfo{
 		allowUnknown: false,
 		prototypes: map[string]interface{}{
 			"query": "",
+			"write": true,
 		},
 	},
 	"Limit": {
