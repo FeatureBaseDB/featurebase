@@ -43,6 +43,8 @@ commands:
           if [ -z $ROOT_CHANGED_FILES ] ; then
             echo "halting step"
             circleci step halt
+          else
+            true
           fi
   skip-if-lattice-unchanged:
     description: "skips the parent job if the PR includes no changes to lattice"
@@ -53,6 +55,8 @@ commands:
           if [ -z $LATTICE_CHANGED_FILES ] ; then
             echo "halting step"
             circleci step halt
+          else
+            true
           fi
 
 jobs:
