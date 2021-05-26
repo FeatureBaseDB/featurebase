@@ -969,6 +969,8 @@ func (api *API) requestUsageOfNodes() {
 		if err != nil {
 			api.server.logger.Infof("couldn't collect disk usage from %s: %s", node.URI, err)
 		}
+		api.usageCache.muRead.Lock()
+		defer api.usageCache.muRead.Unlock()
 		api.usageCache.data[node.ID] = nodeUsage[node.ID]
 	}
 }
@@ -978,7 +980,11 @@ func (api *API) calculateUsage() {
 	api.usageCache.muWrite.Lock()
 	defer api.usageCache.muWrite.Unlock()
 
-	if time.Since(api.usageCache.lastUpdated) > api.usageCache.refreshInterval {
+	api.usageCache.muRead.Lock()
+	lastUpdated := api.usageCache.lastUpdated
+	api.usageCache.muRead.Unlock()
+
+	if time.Since(lastUpdated) > api.usageCache.refreshInterval {
 		fmt.Printf("RefreshRate, expired: time: %v, current time: %v \n", api.usageCache.lastUpdated, time.Now())
 
 		indexDetails, nodeMetadataBytes, err := api.holder.Txf().IndexUsageDetails()
