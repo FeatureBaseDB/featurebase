@@ -975,11 +975,7 @@ func (api *API) calculateUsage() {
 	api.usageCache.mu.Lock()
 	defer api.usageCache.mu.Unlock()
 
-	// if api.usageCache.lastUpdated.After(time.Now().Add(time.Minute * time.Duration(api.usageCache.refreshInterval) * -1)) {
-	if time.Since(api.usageCache.lastUpdated) < api.usageCache.refreshInterval {
-		fmt.Printf("RefreshRate, too soon: time: %v, current time: %v \n", api.usageCache.lastUpdated, time.Now())
-		return
-	} else {
+	if time.Since(api.usageCache.lastUpdated) > api.usageCache.refreshInterval {
 		fmt.Printf("RefreshRate, expired: time: %v, current time: %v \n", api.usageCache.lastUpdated, time.Now())
 		api.usageCache.data = make(map[string]NodeUsage)
 
@@ -1022,10 +1018,7 @@ func (api *API) calculateUsage() {
 			LastUpdated: time.Now(),
 		}
 		api.usageCache.data[api.server.nodeID] = nodeUsage
-
 	}
-	api.usageCache.lastUpdated = time.Now()
-
 }
 
 // Periodically calculates disk usage
@@ -1037,6 +1030,7 @@ func (api *API) RefreshUsageCache(refresh time.Duration) {
 	for {
 		api.calculateUsage()
 		api.requestUsageOfNodes()
+		api.usageCache.lastUpdated = time.Now()
 		time.Sleep(api.usageCache.refreshInterval)
 	}
 }
