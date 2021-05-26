@@ -964,7 +964,7 @@ func (api *API) requestUsageOfNodes() {
 		}
 		nodeUsage, err := api.server.defaultClient.GetNodeUsage(context.Background(), &node.URI)
 		if err != nil {
-			errors.Wrapf(err, "collecting disk usage from %s", node.URI)
+			api.server.logger.Infof("couldn't collect disk usage from %s: %s", node.URI, err)
 		}
 		api.usageCache.data[node.ID] = nodeUsage[node.ID]
 	}
@@ -981,7 +981,7 @@ func (api *API) calculateUsage() {
 
 		indexDetails, nodeMetadataBytes, err := api.holder.Txf().IndexUsageDetails()
 		if err != nil {
-			errors.Wrap(err, "getting node usage")
+			api.server.logger.Infof("couldn't get index usage details: %s", err)
 		}
 		totalSize := nodeMetadataBytes
 		for _, s := range indexDetails {
