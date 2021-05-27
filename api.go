@@ -965,13 +965,18 @@ func (api *API) requestUsageOfNodes() {
 		if node.ID == api.server.nodeID {
 			continue
 		}
+
+		fmt.Printf("Node URI: %v\n", node.URI)
+		if node.URI.Scheme == "" || node.URI.Host == "" {
+			continue
+		}
 		nodeUsage, err := api.server.defaultClient.GetNodeUsage(context.Background(), &node.URI)
 		if err != nil {
 			api.server.logger.Infof("couldn't collect disk usage from %s: %s", node.URI, err)
 		}
 		api.usageCache.muRead.Lock()
-		defer api.usageCache.muRead.Unlock()
 		api.usageCache.data[node.ID] = nodeUsage[node.ID]
+		api.usageCache.muRead.Unlock()
 	}
 }
 
