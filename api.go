@@ -1051,7 +1051,7 @@ func (api *API) RefreshUsageCache(refresh time.Duration) {
 		data:            make(map[string]NodeUsage),
 		refreshInterval: refresh,
 	}
-	time.Sleep(time.Second * 5)
+	// time.Sleep(time.Second * 5)
 	for {
 		fmt.Println(1)
 		api.calculateUsage()

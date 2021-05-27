@@ -277,6 +277,7 @@ func (m *Command) Start() (err error) {
 		}
 	}
 
+	fmt.Println("STARTING REFRESH")
 	go m.API.RefreshUsageCache(time.Duration(m.Config.Usage.Interval))
 
 	_ = testhook.Opened(pilosa.NewAuditor(), m, nil)

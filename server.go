@@ -601,7 +601,6 @@ func (s *Server) Open() error {
 	// bring up the background tasks for the holder.
 	s.holder.SnapshotQueue = s.snapshotQueue
 	s.holder.Activate()
-
 	// if we joined existing cluster then broadcast "resize on add" message
 	if initState == disco.InitialClusterStateExisting {
 		if err := s.cluster.addNode(s.nodeID); err != nil {
@@ -617,6 +616,7 @@ func (s *Server) Open() error {
 	go func() { defer s.wg.Done(); s.monitorAntiEntropy() }()
 	go func() { defer s.wg.Done(); s.monitorRuntime() }()
 	go func() { defer s.wg.Done(); s.monitorDiagnostics() }()
+	fmt.Println("HOLDER LOADED")
 
 	toSend := func() []Message {
 		s.holder.startMsgsMu.Lock()
