@@ -503,6 +503,7 @@ func TestHandler_Endpoints(t *testing.T) {
 	})
 
 	t.Run("UI/usage", func(t *testing.T) {
+		time.Sleep(time.Second * 10)
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/ui/usage", nil))
 		if w.Code != gohttp.StatusOK {
