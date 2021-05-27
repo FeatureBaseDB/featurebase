@@ -528,6 +528,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		// }
 
 		for _, nodeUsage := range nodeUsages {
+			t.Logf("Len of Indexes: %+v\n", len(nodeUsage.Disk.IndexUsage))
 			numIndexes := len(nodeUsage.Disk.IndexUsage)
 			fmt.Printf("Node Usage: %+v\n", nodeUsage)
 			fmt.Printf("Disk Usage: %+v\n", nodeUsage.Disk)

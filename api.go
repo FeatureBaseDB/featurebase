@@ -949,10 +949,10 @@ func (api *API) Usage(ctx context.Context, remote bool) (map[string]NodeUsage, e
 	api.usageCache.muRead.Lock()
 	defer api.usageCache.muRead.Unlock()
 
-	// var t time.Time
-	// if api.usageCache.lastUpdated == t {
-	api.calculateUsage()
-	// }
+	var t time.Time
+	if api.usageCache.lastUpdated == t {
+		api.calculateUsage()
+	}
 
 	if !remote {
 		api.requestUsageOfNodes()
@@ -1051,6 +1051,7 @@ func (api *API) RefreshUsageCache(refresh time.Duration) {
 		data:            make(map[string]NodeUsage),
 		refreshInterval: refresh,
 	}
+	time.Sleep(time.Second * 5)
 	for {
 		fmt.Println(1)
 		api.calculateUsage()
