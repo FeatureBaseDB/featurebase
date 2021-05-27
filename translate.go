@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"sort"
 	"sync"
 
 	"github.com/pilosa/pilosa/v2/topology"
@@ -80,6 +81,9 @@ type TranslateStore interface { // TODO: refactor this interface; readonly shoul
 	// CreateKeys maps all keys to IDs, creating the IDs if they do not exist.
 	// If the translator is read-only, this will return an error.
 	CreateKeys(keys ...string) (map[string]uint64, error)
+
+	// Match finds IDs of strings matching the filter.
+	Match(filter func([]byte) bool) ([]uint64, error)
 
 	// Converts an integer ID to its associated string key.
 	TranslateID(id uint64) (string, error)
@@ -475,6 +479,23 @@ func (s *InMemTranslateStore) CreateKeys(keys ...string) (map[string]uint64, err
 	}
 
 	return result, nil
+}
+
+func (s *InMemTranslateStore) Match(filter func([]byte) bool) ([]uint64, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var matches []uint64
+	for key, id := range s.idsByKey {
+		if filter([]byte(key)) {
+			matches = append(matches, id)
+		}
+	}
+	sort.Slice(matches, func(i, j int) bool {
+		return matches[i] < matches[j]
+	})
+
+	return matches, nil
 }
 
 func (s *InMemTranslateStore) translateKey(key string, writable bool) (_ uint64, err error) {

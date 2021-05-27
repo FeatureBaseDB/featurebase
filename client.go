@@ -113,6 +113,8 @@ type InternalQueryClient interface {
 
 	CreateIndexKeysNode(ctx context.Context, uri *pnet.URI, index string, keys ...string) (map[string]uint64, error)
 	CreateFieldKeysNode(ctx context.Context, uri *pnet.URI, index string, field string, keys ...string) (map[string]uint64, error)
+
+	MatchFieldKeysNode(ctx context.Context, uri *pnet.URI, index string, field string, like string) ([]uint64, error)
 }
 
 type nopInternalQueryClient struct{}
@@ -146,6 +148,10 @@ func (n nopInternalQueryClient) CreateIndexKeysNode(ctx context.Context, uri *pn
 }
 
 func (n nopInternalQueryClient) CreateFieldKeysNode(ctx context.Context, uri *pnet.URI, index string, field string, keys ...string) (map[string]uint64, error) {
+	return nil, nil
+}
+
+func (n nopInternalQueryClient) MatchFieldKeysNode(ctx context.Context, uri *pnet.URI, index string, field string, like string) ([]uint64, error) {
 	return nil, nil
 }
 

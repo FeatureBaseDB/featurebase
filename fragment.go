@@ -3148,47 +3148,6 @@ func (f *fragment) minRowID(tx Tx) (uint64, bool, error) {
 	return min / ShardWidth, ok, err
 }
 
-// BitmapLikeFilter is a roaring.BitmapFilter which handles Like expressions.
-type BitmapLikeFilter struct {
-	roaring.BitmapRowFilterBase
-	plan       []filterStep
-	translator TranslateStore
-}
-
-var _ roaring.BitmapFilter = &BitmapLikeFilter{}
-
-func (b *BitmapLikeFilter) ConsiderKey(key roaring.FilterKey, n int32) roaring.FilterResult {
-	res, done := b.DetermineByKey(key)
-	if done {
-		return res
-	}
-	if n == 0 {
-		return key.RejectOne()
-	}
-	row := key.Row()
-	keyStr, err := b.translator.TranslateID(row)
-	if err != nil {
-		return b.SetResult(key, key.Fail(errors.Wrap(err, "translating key for row")))
-	}
-	if matchLike(keyStr, b.plan...) {
-		return b.SetResult(key, key.MatchRow())
-	}
-	return b.SetResult(key, key.RejectRow())
-}
-
-func (b *BitmapLikeFilter) ConsiderData(key roaring.FilterKey, data *roaring.Container) roaring.FilterResult {
-	b.FilterResult.Err = errors.New("like filter should not need to look at data")
-	return b.FilterResult
-}
-
-func NewBitmapLikeFilter(like string, translator TranslateStore) *BitmapLikeFilter {
-	return &BitmapLikeFilter{
-		BitmapRowFilterBase: *roaring.NewBitmapRowFilterBase(nil),
-		plan:                planLike(like),
-		translator:          translator,
-	}
-}
-
 // rows returns all rows starting from 'start'. Filters will be applied in
 // order. All filters must return true to include the row. Once a row is
 // included, further containers in that row will be skipped. So, for a row to be

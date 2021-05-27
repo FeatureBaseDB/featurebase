@@ -20,7 +20,6 @@ import (
 )
 
 func TestPlanLike(t *testing.T) {
-
 	cases := []struct {
 		name            string
 		like            string
@@ -40,7 +39,7 @@ func TestPlanLike(t *testing.T) {
 			plan: []filterStep{
 				{
 					kind: filterStepPrefix,
-					str:  "x",
+					str:  []byte("x"),
 				},
 			},
 			match:    []string{"x"},
@@ -63,7 +62,7 @@ func TestPlanLike(t *testing.T) {
 			plan: []filterStep{
 				{
 					kind: filterStepPrefix,
-					str:  "x",
+					str:  []byte("x"),
 				},
 				{
 					kind: filterStepMinLength,
@@ -79,7 +78,7 @@ func TestPlanLike(t *testing.T) {
 			plan: []filterStep{
 				{
 					kind: filterStepSuffix,
-					str:  "x",
+					str:  []byte("x"),
 				},
 			},
 			match:    []string{"x", "xx", "ax"},
@@ -91,11 +90,11 @@ func TestPlanLike(t *testing.T) {
 			plan: []filterStep{
 				{
 					kind: filterStepPrefix,
-					str:  "x",
+					str:  []byte("x"),
 				},
 				{
 					kind: filterStepSuffix,
-					str:  "y",
+					str:  []byte("y"),
 				},
 			},
 			match:    []string{"xy", "xzy", "xyzzy"},
@@ -107,15 +106,15 @@ func TestPlanLike(t *testing.T) {
 			plan: []filterStep{
 				{
 					kind: filterStepPrefix,
-					str:  "x",
+					str:  []byte("x"),
 				},
 				{
 					kind: filterStepSkipThrough,
-					str:  "y",
+					str:  []byte("y"),
 				},
 				{
 					kind: filterStepSuffix,
-					str:  "z",
+					str:  []byte("z"),
 				},
 			},
 			match:    []string{"xyz", "xzyzz", "x.y.z", "x.y.y..z"},
@@ -127,7 +126,7 @@ func TestPlanLike(t *testing.T) {
 			plan: []filterStep{
 				{
 					kind: filterStepPrefix,
-					str:  "a",
+					str:  []byte("a"),
 				},
 				{
 					kind: filterStepSkipN,
@@ -135,16 +134,16 @@ func TestPlanLike(t *testing.T) {
 				},
 				{
 					kind: filterStepPrefix,
-					str:  "b",
+					str:  []byte("b"),
 				},
 				{
 					kind: filterStepSkipThrough,
-					str:  "c",
+					str:  []byte("c"),
 					n:    2,
 				},
 				{
 					kind: filterStepSuffix,
-					str:  "d",
+					str:  []byte("d"),
 					n:    3,
 				},
 			},
@@ -181,7 +180,7 @@ func TestPlanLike(t *testing.T) {
 			plan: []filterStep{
 				{
 					kind: filterStepPrefix,
-					str:  "x",
+					str:  []byte("x"),
 				},
 				{
 					kind: filterStepSkipN,
@@ -189,7 +188,7 @@ func TestPlanLike(t *testing.T) {
 				},
 				{
 					kind: filterStepPrefix,
-					str:  "y",
+					str:  []byte("y"),
 				},
 			},
 			match:    []string{"x.y", "xay", "x y", "x⊕y"},
@@ -232,12 +231,12 @@ func TestPlanLike(t *testing.T) {
 				t.Parallel()
 
 				for _, m := range c.match {
-					if !matchLike(m, c.plan...) {
+					if !matchLike([]byte(m), c.plan...) {
 						t.Errorf("key %q was not matched", m)
 					}
 				}
 				for _, nm := range c.nonmatch {
-					if matchLike(nm, c.plan...) {
+					if matchLike([]byte(nm), c.plan...) {
 						t.Errorf("key %q was matched", nm)
 					}
 				}

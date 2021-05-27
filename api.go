@@ -2040,6 +2040,15 @@ func (api *API) CreateFieldKeys(ctx context.Context, index, field string, keys .
 	return api.cluster.createFieldKeys(ctx, f, keys...)
 }
 
+// MatchField finds the IDs of all field keys matching a filter.
+func (api *API) MatchField(ctx context.Context, index, field string, like string) ([]uint64, error) {
+	f := api.holder.Field(index, field)
+	if f == nil {
+		return nil, newNotFoundError(ErrFieldNotFound, field)
+	}
+	return api.cluster.matchField(ctx, f, like)
+}
+
 // PrimaryReplicaNodeURL returns the URL of the cluster's primary replica.
 func (api *API) PrimaryReplicaNodeURL() url.URL {
 	// Create a snapshot of the cluster to use for node/partition calculations.

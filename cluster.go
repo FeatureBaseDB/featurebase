@@ -1466,6 +1466,24 @@ func (c *cluster) createFieldKeys(ctx context.Context, field *Field, keys ...str
 	return translations, nil
 }
 
+func (c *cluster) matchField(ctx context.Context, field *Field, like string) ([]uint64, error) {
+	// The primary is the only node that can match field keys, since it is the only node with all of the keys.
+	primary := c.primaryNode()
+	if primary == nil {
+		return nil, errors.Errorf("matching field(%s/%s) like %q - cannot find primary node", field.Index(), field.Name(), like)
+	}
+	if c.Node.ID == primary.ID {
+		// The local copy is the authoritative copy.
+		plan := planLike(like)
+		return field.TranslateStore().Match(func(key []byte) bool {
+			return matchLike(key, plan...)
+		})
+	}
+
+	// Forward the request to the primary.
+	return c.InternalClient.MatchFieldKeysNode(ctx, &primary.URI, field.Index(), field.Name(), like)
+}
+
 func (c *cluster) translateFieldIDs(field *Field, ids map[uint64]struct{}) (map[uint64]string, error) {
 	idList := make([]uint64, len(ids))
 	{
