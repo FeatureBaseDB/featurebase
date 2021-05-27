@@ -722,6 +722,21 @@ func (api *API) ShardNodes(ctx context.Context, indexName string, shard uint64) 
 	return snap.ShardNodes(indexName, shard), nil
 }
 
+// PartitionNodes returns the node and all replicas which should contain a partition key data.
+func (api *API) PartitionNodes(ctx context.Context, partitionID int) ([]*topology.Node, error) {
+	span, _ := tracing.StartSpanFromContext(ctx, "API.PartitionNodes")
+	defer span.Finish()
+
+	if err := api.validate(apiPartitionNodes); err != nil {
+		return nil, errors.Wrap(err, "validating api method")
+	}
+
+	// Create a snapshot of the cluster to use for node/partition calculations.
+	snap := topology.NewClusterSnapshot(api.cluster.noder, api.cluster.Hasher, api.cluster.ReplicaN)
+
+	return snap.PartitionNodes(partitionID), nil
+}
+
 // FragmentBlockData is an endpoint for internal usage. It is not guaranteed to
 // return anything useful. Currently it returns protobuf encoded row and column
 // ids from a "block" which is a subdivision of a fragment.
@@ -2372,6 +2387,7 @@ const (
 	apiIDReserve
 	apiIDCommit
 	apiIDReset
+	apiPartitionNodes
 )
 
 var methodsCommon = map[apiMethod]struct{}{
@@ -2438,4 +2454,5 @@ var methodsNormal = map[apiMethod]struct{}{
 	apiIDReserve:            {},
 	apiIDCommit:             {},
 	apiIDReset:              {},
+	apiPartitionNodes:       {},
 }

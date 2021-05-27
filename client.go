@@ -59,6 +59,7 @@ type InternalClient interface {
 	PostSchema(ctx context.Context, uri *pnet.URI, s *Schema, remote bool) error
 	CreateIndex(ctx context.Context, index string, opt IndexOptions) error
 	FragmentNodes(ctx context.Context, index string, shard uint64) ([]*topology.Node, error)
+	PartitionNodes(ctx context.Context, partitionID int) ([]*topology.Node, error)
 	Nodes(ctx context.Context) ([]*topology.Node, error)
 	Query(ctx context.Context, index string, queryRequest *QueryRequest) (*QueryResponse, error)
 	Import(ctx context.Context, index, field string, shard uint64, bits []Bit, opts ...ImportOption) error
@@ -187,6 +188,9 @@ func (n nopInternalClient) CreateIndex(ctx context.Context, index string, opt In
 	return nil
 }
 func (n nopInternalClient) FragmentNodes(ctx context.Context, index string, shard uint64) ([]*topology.Node, error) {
+	return nil, nil
+}
+func (n nopInternalClient) PartitionNodes(ctx context.Context, partitionID int) ([]*topology.Node, error) {
 	return nil, nil
 }
 func (n nopInternalClient) Nodes(ctx context.Context) ([]*topology.Node, error) {

@@ -249,6 +249,7 @@ func (h *Handler) populateValidators() {
 	h.validators["GetFragmentBlocks"] = queryValidationSpecRequired("index", "field", "view", "shard")
 	h.validators["GetFragmentData"] = queryValidationSpecRequired("index", "field", "view", "shard")
 	h.validators["GetFragmentNodes"] = queryValidationSpecRequired("shard", "index")
+	h.validators["GetPartitionNodes"] = queryValidationSpecRequired("partition")
 	h.validators["GetNodes"] = queryValidationSpecRequired()
 	h.validators["GetShardMax"] = queryValidationSpecRequired()
 	h.validators["GetTransactionList"] = queryValidationSpecRequired()
@@ -419,6 +420,7 @@ func newRouter(handler *Handler) http.Handler {
 	router.HandleFunc("/internal/fragment/blocks", handler.handleGetFragmentBlocks).Methods("GET").Name("GetFragmentBlocks")
 	router.HandleFunc("/internal/fragment/data", handler.handleGetFragmentData).Methods("GET").Name("GetFragmentData")
 	router.HandleFunc("/internal/fragment/nodes", handler.handleGetFragmentNodes).Methods("GET").Name("GetFragmentNodes")
+	router.HandleFunc("/internal/partition/nodes", handler.handleGetPartitionNodes).Methods("GET").Name("GetPartitionNodes")
 	router.HandleFunc("/internal/translate/data", handler.handleGetTranslateData).Methods("GET").Name("GetTranslateData")
 	router.HandleFunc("/internal/translate/data", handler.handlePostTranslateData).Methods("POST").Name("PostTranslateData")
 	router.HandleFunc("/internal/translate/keys", handler.handlePostTranslateKeys).Methods("POST").Name("PostTranslateKeys")
@@ -1853,6 +1855,35 @@ func (h *Handler) handleGetFragmentNodes(w http.ResponseWriter, r *http.Request)
 
 	// Retrieve fragment owner nodes.
 	nodes, err := h.api.ShardNodes(r.Context(), index, shard)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Write to response.
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(nodes); err != nil {
+		h.logger.Errorf("json write error: %s", err)
+	}
+}
+
+// handleGetPartitionNodes handles /internal/partition/nodes requests.
+func (h *Handler) handleGetPartitionNodes(w http.ResponseWriter, r *http.Request) {
+	if !validHeaderAcceptJSON(r.Header) {
+		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
+		return
+	}
+	q := r.URL.Query()
+
+	// Read partition parameter.
+	partitionID, err := strconv.ParseInt(q.Get("partition"), 10, 64)
+	if err != nil {
+		http.Error(w, "shard should be an unsigned integer", http.StatusBadRequest)
+		return
+	}
+
+	// Retrieve fragment owner nodes.
+	nodes, err := h.api.PartitionNodes(r.Context(), int(partitionID))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
