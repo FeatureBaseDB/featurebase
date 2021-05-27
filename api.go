@@ -954,33 +954,37 @@ func (api *API) Usage(ctx context.Context, remote bool) (map[string]NodeUsage, e
 		api.calculateUsage()
 	}
 
-	if !remote {
-		api.requestUsageOfNodes(ctx)
-	}
+	// if !remote {
+	// 	api.requestUsageOfNodes(ctx)
+	// }
 
 	api.server.logger.Infof("disk usage results last updated: %v", api.usageCache.lastUpdated.Format(time.RFC1123))
 	return api.usageCache.data, nil
 }
 
 // Makes a ui/usage request for each node in cluster to calculates its usage and adds it to the cache
-func (api *API) requestUsageOfNodes(ctx context.Context) {
+func (api *API) requestUsageOfNodes() {
 	nodes := api.cluster.Nodes()
 	for _, node := range nodes {
 		if node.ID == api.server.nodeID {
 			continue
 		}
 
-		fmt.Printf("Node URI: %v\n", node.URI)
+		fmt.Printf("Server ID: %v, Node ID: %v, Node URI: %v\n", api.server.nodeID, node.ID, node.URI)
 		// if node.URI.Scheme == "" || node.URI.Host == "" {
 		// 	continue
 		// }
-		nodeUsage, err := api.server.defaultClient.GetNodeUsage(ctx, &node.URI)
+		nodeUsage, err := api.server.defaultClient.GetNodeUsage(context.Background(), &node.URI)
 		if err != nil {
 			api.server.logger.Infof("couldn't collect disk usage from %s: %s", node.URI, err)
 		}
-		api.usageCache.muRead.Lock()
+		fmt.Println("NU: 2")
+		// api.usageCache.muRead.Lock()
+		fmt.Println("NU: 3")
 		api.usageCache.data[node.ID] = nodeUsage[node.ID]
-		api.usageCache.muRead.Unlock()
+		fmt.Println("NU: 4")
+		// api.usageCache.muRead.Unlock()
+		fmt.Println("NU: 5")
 	}
 }
 
@@ -989,9 +993,9 @@ func (api *API) calculateUsage() {
 	api.usageCache.muWrite.Lock()
 	defer api.usageCache.muWrite.Unlock()
 
-	api.usageCache.muRead.Lock()
+	// api.usageCache.muRead.Lock()
 	lastUpdated := api.usageCache.lastUpdated
-	api.usageCache.muRead.Unlock()
+	// api.usageCache.muRead.Unlock()
 
 	if time.Since(lastUpdated) > api.usageCache.refreshInterval {
 		fmt.Printf("RefreshRate, expired: time: %v, current time: %v \n", api.usageCache.lastUpdated, time.Now())
@@ -1034,8 +1038,8 @@ func (api *API) calculateUsage() {
 			},
 			LastUpdated: time.Now(),
 		}
-		api.usageCache.muRead.Lock()
-		defer api.usageCache.muRead.Unlock()
+		// api.usageCache.muRead.Lock()
+		// defer api.usageCache.muRead.Unlock()
 		api.usageCache.data = make(map[string]NodeUsage)
 		api.usageCache.data[api.server.nodeID] = nodeUsage
 	}
@@ -1048,11 +1052,17 @@ func (api *API) RefreshUsageCache(refresh time.Duration) {
 		refreshInterval: refresh,
 	}
 	for {
+		fmt.Println(1)
 		api.calculateUsage()
-		// api.requestUsageOfNodes()
-		api.usageCache.muRead.Lock()
+		fmt.Println(2)
+		api.requestUsageOfNodes()
+		fmt.Println(3)
+		// api.usageCache.muRead.Lock()
+		fmt.Println(4)
 		api.usageCache.lastUpdated = time.Now()
-		api.usageCache.muRead.Unlock()
+		fmt.Println(5)
+		// api.usageCache.muRead.Unlock()
+		fmt.Println(6)
 		time.Sleep(api.usageCache.refreshInterval)
 	}
 }

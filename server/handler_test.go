@@ -509,16 +509,30 @@ func TestHandler_Endpoints(t *testing.T) {
 			fmt.Printf("%+v\n", w.Body)
 			t.Fatalf("unexpected status code: %d", w.Code)
 		}
+		t.Logf("Usage w body string: %+v\n", w.Body.String())
 		nodeUsages := make(map[string]pilosa.NodeUsage)
 		if err := json.Unmarshal(w.Body.Bytes(), &nodeUsages); err != nil {
 			t.Fatalf("unmarshal")
 		}
 
+		w2 := httptest.NewRecorder()
+		h.ServeHTTP(w2, test.MustNewHTTPRequest("GET", "/schema", nil))
+		if w2.Code != gohttp.StatusOK {
+			t.Fatalf("unexpected status code: %d", w2.Code)
+		}
+		schemaBody := w2.Body.String()
+		t.Fatalf("Schema: %+v\n", schemaBody)
+		if schemaBody != "{\"indexes\":[]}\n" {
+			t.Fatalf("unexpected empty schema: '%v'", schemaBody)
+		}
+
 		for _, nodeUsage := range nodeUsages {
 			numIndexes := len(nodeUsage.Disk.IndexUsage)
-			fmt.Printf("Node Usage: +%v\n", nodeUsage)
-			fmt.Printf("Disk Usage: +%v\n", nodeUsage.Disk)
-			fmt.Printf("Index Usage: +%v\n", nodeUsage.Disk.IndexUsage)
+			fmt.Printf("Node Usage: %+v\n", nodeUsage)
+			fmt.Printf("Disk Usage: %+v\n", nodeUsage.Disk)
+			for k, v := range nodeUsage.Disk.IndexUsage {
+				fmt.Printf("Index Usage: K: %+v V: %+v \n", k, v)
+			}
 			// if nodeUsage.Disk.TotalUse < 75000 || nodeUsage.Disk.TotalUse > 700000 {
 			if nodeUsage.Disk.TotalUse < 1 {
 				// Usage measurements are not consistent between machines, or
