@@ -502,56 +502,60 @@ func TestHandler_Endpoints(t *testing.T) {
 		}
 	})
 
-	// t.Run("UI/usage", func(t *testing.T) {
-	// 	// time.Sleep(time.Second * 10)
-	// 	w := httptest.NewRecorder()
-	// 	h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/ui/usage", nil))
-	// 	if w.Code != gohttp.StatusOK {
-	// 		fmt.Printf("%+v\n", w.Body)
-	// 		t.Fatalf("unexpected status code: %d", w.Code)
-	// 	}
-	// 	t.Logf("Usage w body string: %+v\n", w.Body.String())
-	// 	nodeUsages := make(map[string]pilosa.NodeUsage)
-	// 	if err := json.Unmarshal(w.Body.Bytes(), &nodeUsages); err != nil {
-	// 		t.Fatalf("unmarshal")
-	// 	}
+	t.Run("UI/usage", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/ui/usage", nil))
+		if w.Code != gohttp.StatusOK {
+			fmt.Printf("%+v\n", w.Body)
+			t.Fatalf("unexpected status code: %d", w.Code)
+		}
+		fmt.Printf("Cluster Size: %v\n", cluster.Len())
+		t.Logf("Usage w body string: %+v\n", w.Body.String())
+		nodeUsages := make(map[string]pilosa.NodeUsage)
+		if err := json.Unmarshal(w.Body.Bytes(), &nodeUsages); err != nil {
+			t.Fatalf("unmarshal")
+		}
 
-	// 	// w2 := httptest.NewRecorder()
-	// 	// h.ServeHTTP(w2, test.MustNewHTTPRequest("GET", "/schema", nil))
-	// 	// if w2.Code != gohttp.StatusOK {
-	// 	// 	t.Fatalf("unexpected status code: %d", w2.Code)
-	// 	// }
-	// 	// schemaBody := w2.Body.String()
-	// 	// t.Fatalf("Schema: %+v\n", schemaBody)
-	// 	// if schemaBody != "{\"indexes\":[]}\n" {
-	// 	// 	t.Fatalf("unexpected empty schema: '%v'", schemaBody)
-	// 	// }
+		// w2 := httptest.NewRecorder()
+		// h.ServeHTTP(w2, test.MustNewHTTPRequest("GET", "/schema", nil))
+		// if w2.Code != gohttp.StatusOK {
+		// 	t.Fatalf("unexpected status code: %d", w2.Code)
+		// }
+		// schemaBody := w2.Body.String()
+		// t.Fatalf("Schema: %+v\n", schemaBody)
+		// if schemaBody != "{\"indexes\":[]}\n" {
+		// 	t.Fatalf("unexpected empty schema: '%v'", schemaBody)
+		// }
 
-	// 	for _, nodeUsage := range nodeUsages {
-	// 		t.Logf("Len of Indexes: %+v\n", len(nodeUsage.Disk.IndexUsage))
-	// 		numIndexes := len(nodeUsage.Disk.IndexUsage)
-	// 		fmt.Printf("Node Usage: %+v\n", nodeUsage)
-	// 		fmt.Printf("Disk Usage: %+v\n", nodeUsage.Disk)
-	// 		for k, v := range nodeUsage.Disk.IndexUsage {
-	// 			fmt.Printf("Index Usage: K: %+v V: %+v \n", k, v)
-	// 		}
-	// 		// if nodeUsage.Disk.TotalUse < 75000 || nodeUsage.Disk.TotalUse > 700000 {
-	// 		if nodeUsage.Disk.TotalUse < 1 {
-	// 			// Usage measurements are not consistent between machines, or
-	// 			// over time, as features and implementations change, so checking
-	// 			// for a range of sizes may be most useful way to test the details of this.
-	// 			t.Fatalf("expected 75k < total < 500k, got %d", nodeUsage.Disk.TotalUse)
-	// 		}
-	// 		if numIndexes != 3 {
-	// 			t.Fatalf("wrong length index usage list: expected %d, got %d", 2, numIndexes)
-	// 		}
-	// 		numFields := len(nodeUsage.Disk.IndexUsage["i1"].Fields)
-	// 		if numFields != len(i1.Fields()) {
-	// 			t.Fatalf("wrong length field usage list: expected %d, got %d", len(i1.Fields()), numFields)
-	// 		}
-	// 	}
+		numNodes := len(nodeUsages)
+		fmt.Printf("num nodes: %+v\n", numNodes)
 
-	// })
+		for _, nodeUsage := range nodeUsages {
+			t.Logf("Len of Indexes: %+v\n", len(nodeUsage.Disk.IndexUsage))
+			numIndexes := len(nodeUsage.Disk.IndexUsage)
+			fmt.Printf("Node Usage: %+v\n", nodeUsage)
+			fmt.Printf("Disk Usage: %+v\n", nodeUsage.Disk)
+			for k, v := range nodeUsage.Disk.IndexUsage {
+				fmt.Printf("Index Usage: K: %+v V: %+v \n", k, v)
+			}
+			// if nodeUsage.Disk.TotalUse < 75000 || nodeUsage.Disk.TotalUse > 700000 {
+			if nodeUsage.Disk.TotalUse < 1 {
+				// Usage measurements are not consistent between machines, or
+				// over time, as features and implementations change, so checking
+				// for a range of sizes may be most useful way to test the details of this.
+				t.Fatalf("expected 75k < total < 500k, got %d", nodeUsage.Disk.TotalUse)
+			}
+			if numIndexes != 3 {
+				t.Fatalf("wrong length index usage list: expected %d, got %d", 2, numIndexes)
+			}
+			numFields := len(nodeUsage.Disk.IndexUsage["i1"].Fields)
+			if numFields != len(i1.Fields()) {
+				t.Fatalf("wrong length field usage list: expected %d, got %d", len(i1.Fields()), numFields)
+			}
+		}
+		t.Fatalf("end")
+
+	})
 
 	t.Run("UI/shard-distribution", func(t *testing.T) {
 		// This tests the response structure, not the cluster behavior.

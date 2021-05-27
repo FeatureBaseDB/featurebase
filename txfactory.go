@@ -584,6 +584,7 @@ func (f *TxFactory) IndexUsageDetails() (map[string]IndexUsage, uint64, error) {
 	}
 
 	idxs := f.holder.Indexes()
+	fmt.Printf("IndexUsageDetails: %+v\n", idxs)
 
 	qcx := f.NewQcx()
 	defer qcx.Abort()
