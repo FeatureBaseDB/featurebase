@@ -954,9 +954,9 @@ func (api *API) Usage(ctx context.Context, remote bool) (map[string]NodeUsage, e
 		api.calculateUsage()
 	}
 
-	// if !remote {
-	// 	api.requestUsageOfNodes(ctx)
-	// }
+	if !remote {
+		api.requestUsageOfNodes()
+	}
 
 	api.server.logger.Infof("disk usage results last updated: %v", api.usageCache.lastUpdated.Format(time.RFC1123))
 	return api.usageCache.data, nil
@@ -1055,14 +1055,8 @@ func (api *API) RefreshUsageCache(refresh time.Duration) {
 		fmt.Println(1)
 		api.calculateUsage()
 		fmt.Println(2)
-		api.requestUsageOfNodes()
-		fmt.Println(3)
-		// api.usageCache.muRead.Lock()
-		fmt.Println(4)
 		api.usageCache.lastUpdated = time.Now()
-		fmt.Println(5)
-		// api.usageCache.muRead.Unlock()
-		fmt.Println(6)
+		fmt.Println(3)
 		time.Sleep(api.usageCache.refreshInterval)
 	}
 }
