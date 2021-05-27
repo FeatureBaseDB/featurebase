@@ -954,12 +954,16 @@ func (api *API) Usage(ctx context.Context, remote bool) (map[string]NodeUsage, e
 		api.calculateUsage()
 	}
 
+	if !remote {
+		api.requestUsageOfNodes(ctx)
+	}
+
 	api.server.logger.Infof("disk usage results last updated: %v", api.usageCache.lastUpdated.Format(time.RFC1123))
 	return api.usageCache.data, nil
 }
 
 // Makes a ui/usage request for each node in cluster to calculates its usage and adds it to the cache
-func (api *API) requestUsageOfNodes() {
+func (api *API) requestUsageOfNodes(ctx context.Context) {
 	nodes := api.cluster.Nodes()
 	for _, node := range nodes {
 		if node.ID == api.server.nodeID {
@@ -967,10 +971,10 @@ func (api *API) requestUsageOfNodes() {
 		}
 
 		fmt.Printf("Node URI: %v\n", node.URI)
-		if node.URI.Scheme == "" || node.URI.Host == "" {
-			continue
-		}
-		nodeUsage, err := api.server.defaultClient.GetNodeUsage(context.Background(), &node.URI)
+		// if node.URI.Scheme == "" || node.URI.Host == "" {
+		// 	continue
+		// }
+		nodeUsage, err := api.server.defaultClient.GetNodeUsage(ctx, &node.URI)
 		if err != nil {
 			api.server.logger.Infof("couldn't collect disk usage from %s: %s", node.URI, err)
 		}
@@ -1045,8 +1049,10 @@ func (api *API) RefreshUsageCache(refresh time.Duration) {
 	}
 	for {
 		api.calculateUsage()
-		api.requestUsageOfNodes()
+		// api.requestUsageOfNodes()
+		api.usageCache.muRead.Lock()
 		api.usageCache.lastUpdated = time.Now()
+		api.usageCache.muRead.Unlock()
 		time.Sleep(api.usageCache.refreshInterval)
 	}
 }
