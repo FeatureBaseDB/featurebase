@@ -1079,7 +1079,7 @@ func (api *API) RefreshUsageCache(refresh time.Duration) {
 		refreshInterval: refresh,
 	}
 	fmt.Println("Loop: 0")
-	time.Sleep(time.Second * 2)
+	time.Sleep(time.Second * 5)
 	for {
 		fmt.Println("Loop: 1")
 		api.calculateUsage()
