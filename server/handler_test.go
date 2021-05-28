@@ -553,7 +553,6 @@ func TestHandler_Endpoints(t *testing.T) {
 				t.Fatalf("wrong length field usage list: expected %d, got %d", len(i1.Fields()), numFields)
 			}
 		}
-		t.Fatalf("end")
 
 	})
 
