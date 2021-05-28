@@ -28,11 +28,11 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/server"
 	"github.com/pilosa/pilosa/v2/topology"
+	"golang.org/x/sync/errgroup"
 )
 
 // RestoreCommand represents a command for restoring a backup to
@@ -158,42 +158,26 @@ func (cmd *RestoreCommand) Run(ctx context.Context) (err error) {
 			} else if len(nodes) == 0 {
 				return fmt.Errorf("no nodes available")
 			}
-			wg := new(sync.WaitGroup)
-			wg.Add(len(nodes))
-			errors := make(chan error)
-			finished := make(chan bool)
 
 			shardBytes, err := ioutil.ReadAll(tarReader) // this feels wrong but works for now
-
+			if err != nil {
+				return err
+			}
+			g, _ := errgroup.WithContext(ctx)
 			for _, node := range nodes {
-				go func() {
-					defer wg.Done()
+				node := node
+				g.Go(func() error {
 					client := &gohttp.Client{}
 					rd := bytes.NewReader(shardBytes)
 					logger.Printf("shard %v %v", shard, indexName)
 					url := node.URI.Path(fmt.Sprintf("/internal/restore/%v/%v", indexName, shard))
 					_, err = client.Post(url, "application/octet-stream", rd)
-					if err != nil {
-						errors <- err
-					}
-				}()
+					return err
+				})
 			}
-			go func() {
-				wg.Wait()
-				close(finished)
-			}()
-			var problems error
-			select {
-			case <-finished:
-				break
-			case err := <-errors:
-				logger.Printf("error sending %v", err)
-				problems = err
+			if err := g.Wait(); err != nil {
+				return err
 			}
-			if problems != nil {
-				return problems
-			}
-
 		case "translate":
 			partitionID, err := strconv.Atoi(record[3])
 			logger.Printf("column keys %v (%v)", indexName, partitionID)
@@ -201,40 +185,23 @@ func (cmd *RestoreCommand) Run(ctx context.Context) (err error) {
 				return err
 			}
 			partitionNodes, err := cmd.client.PartitionNodes(ctx, partitionID)
-			wg := new(sync.WaitGroup)
-			wg.Add(len(partitionNodes))
-			errors := make(chan error)
-			finished := make(chan bool)
-
+			if err != nil {
+				return err
+			}
 			shardBytes, err := ioutil.ReadAll(tarReader) // this feels wrong but works for now
 			if err != nil {
 				return err
 			}
-			for _, n := range partitionNodes {
-				node := n
-				go func() {
-					defer wg.Done()
+			g, _ := errgroup.WithContext(ctx)
+			for _, node := range partitionNodes {
+				node := node
+				g.Go(func() error {
 					rd := bytes.NewReader(shardBytes)
-					err = cmd.client.ImportIndexKeys(ctx, &node.URI, indexName, partitionID, false, rd)
-					if err != nil {
-						errors <- err
-					}
-				}()
+					return cmd.client.ImportIndexKeys(ctx, &node.URI, indexName, partitionID, false, rd)
+				})
 			}
-			go func() {
-				wg.Wait()
-				close(finished)
-			}()
-			var problems error
-			select {
-			case <-finished:
-				break
-			case err := <-errors:
-				logger.Printf("error sending %v", err)
-				problems = err
-			}
-			if problems != nil {
-				return problems
+			if err := g.Wait(); err != nil {
+				return err
 			}
 
 		case "attributes":
@@ -244,47 +211,21 @@ func (cmd *RestoreCommand) Run(ctx context.Context) (err error) {
 			switch action := record[4]; action {
 			case "translate":
 				logger.Printf("field keys %v %v", indexName, fieldName)
-				/*
-					err := cmd.client.ImportFieldKeys(ctx, &node.URI, indexName, fieldName, false, tarReader)
-					if err != nil {
-						return err
-					}
-				*/
 				//needs to go to all nodes
-				wg := new(sync.WaitGroup)
-				wg.Add(len(nodes))
-				errors := make(chan error)
-				finished := make(chan bool)
-
 				shardBytes, err := ioutil.ReadAll(tarReader) // this feels wrong but works for now
 				if err != nil {
 					return err
 				}
-				for _, n := range nodes {
-					node := n
-					go func() {
-						defer wg.Done()
+				g, _ := errgroup.WithContext(ctx)
+				for _, node := range nodes {
+					node := node
+					g.Go(func() error {
 						rd := bytes.NewReader(shardBytes)
-						err := cmd.client.ImportFieldKeys(ctx, &node.URI, indexName, fieldName, false, rd)
-						if err != nil {
-							errors <- err
-						}
-					}()
+						return cmd.client.ImportFieldKeys(ctx, &node.URI, indexName, fieldName, false, rd)
+					})
 				}
-				go func() {
-					wg.Wait()
-					close(finished)
-				}()
-				var problems error
-				select {
-				case <-finished:
-					break
-				case err := <-errors:
-					logger.Printf("error sending %v", err)
-					problems = err
-				}
-				if problems != nil {
-					return problems
+				if err := g.Wait(); err != nil {
+					return err
 				}
 			case "attributes":
 			//skip
