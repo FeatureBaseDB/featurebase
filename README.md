@@ -4,14 +4,8 @@
     </a>
 </p>
 
-[![CircleCI](https://circleci.com/gh/pilosa/pilosa/tree/master.svg?style=shield)](https://circleci.com/gh/pilosa/pilosa/tree/master)
-[![GoDoc](https://godoc.org/github.com/pilosa/pilosa?status.svg)](https://godoc.org/github.com/pilosa/pilosa)
-[![Go Report Card](https://goreportcard.com/badge/github.com/pilosa/pilosa)](https://goreportcard.com/report/github.com/pilosa/pilosa)
-[![license](https://img.shields.io/github/license/pilosa/pilosa.svg)](https://github.com/pilosa/pilosa/blob/master/LICENSE)
-[![CLA Assistant](https://cla-assistant.io/readme/badge/pilosa/pilosa)](https://cla-assistant.io/pilosa/pilosa)
-[![GitHub release](https://img.shields.io/github/release/pilosa/pilosa.svg)](https://github.com/pilosa/pilosa/releases)
 
-## An open source, distributed bitmap index.
+## Our private fork of [Pilosa](https://github.com/pilosa/pilosa), a distributed bitmap index
 - [Docs](#docs)
 - [Getting Started](#getting-started)
 - [Data Model](#data-model)
@@ -20,16 +14,15 @@
 - [Get Support](#get-support)
 - [Contributing](#contributing)
 
-Want to contribute? One of the easiest ways is to [tell us how you're using (or want to use) Pilosa](https://github.com/pilosa/pilosa/issues/1074). We learn from every discussion!
-
 ## Docs
 
-See our [Documentation](https://www.pilosa.com/docs/) for information about installing and working with Pilosa.
+See our [internal documentation](https://internal-docs.molecula.cloud), which includes all [external documentation](https://docs.molecula.cloud), plus many internal-only pages, listed under the "Internal" heading in the main navigation bar.
 
+The [documentation](https://www.pilosa.com/docs/) for the open source fork is also available, but is outdated for most technical details. Conceptual explanations and [technical blog posts](https://www.pilosa.com/blog/) may still be informative.
 
 ## Getting Started
 
-1.  [Install Pilosa](https://www.pilosa.com/docs/installation/).
+1.  [Install Pilosa](https://www.pilosa.com/docs/latest/installation/#build-from-source).
 
 Optionally, to include Lattice, the in-browser UI, follow the "Build from source" instructions, and run `make generate-statik` before `make install`. When you run a local Pilosa server on the default host, for example, you can access Lattice at [localhost:10101](http://localhost:10101).
 
@@ -45,7 +38,7 @@ Optionally, to include Lattice, the in-browser UI, follow the "Build from source
     curl localhost:10101/status
     ```
 
-3.  Follow along with the [Sample Project](https://www.pilosa.com/docs/getting-started/#sample-project) to get a better understanding of Pilosa's capabilities.
+3.  Follow along with the [Sample Project](https://internal-docs.molecula.cloud/tutorials/getting-started) to get a better understanding of Pilosa's capabilities.
 
 
 ## Data Model
@@ -55,27 +48,16 @@ Check out how the Pilosa [Data Model](https://www.pilosa.com/docs/data-model/) w
 
 ## Query Language
 
-You can interact with Pilosa directly in the console using the [Pilosa Query Language](https://www.pilosa.com/docs/query-language/) (PQL).
+You can interact with Pilosa directly in the console using the [Pilosa Query Language](https://internal-docs.molecula.cloud/explanations/pql-intro) (PQL).
 
 
 ## Client Libraries
 
-There are supported libraries for the following languages:
-- [Go](https://www.pilosa.com/docs/client-libraries/#go)
-- [Java](https://www.pilosa.com/docs/client-libraries/#java)
-- [Python](https://www.pilosa.com/docs/client-libraries/#python)
+Three client libraries were supported for the open source fork: [Go](https://www.pilosa.com/docs/client-libraries/#go), (https://www.pilosa.com/docs/client-libraries/#java), (https://www.pilosa.com/docs/client-libraries/#python). Of these, only the Go client has seen significant use and development in the private fork, and it has now been incorporated into this repository, in [the `client` directory](https://github.com/molecula/pilosa/tree/master/client)
 
 ## License
 
 Pilosa is licensed under the Apache License, Version 2.0.
 
-A copy of the license is located in [github.com/pilosa/pilosa/LICENSE](https://github.com/pilosa/pilosa/blob/master/LICENSE).
-More details about licensing are found in [github.com/pilosa/pilosa/NOTICE](https://github.com/pilosa/pilosa/blob/master/NOTICE).
-
-## Get Support
-
-There are [several channels](https://www.pilosa.com/community/#support) available for you to reach out to us for support.
-
-## Contributing
-
-Pilosa is an open source project. Please see our [Contributing Guide](CONTRIBUTING.md) for information about how to get involved.
+A copy of the license is located in [github.com/molecula/pilosa/LICENSE](https://github.com/pilosa/molecula/blob/master/LICENSE).
+More details about licensing are found in [github.com/molecula/pilosa/NOTICE](https://github.com/molecula/pilosa/blob/master/NOTICE).
