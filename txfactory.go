@@ -574,25 +574,16 @@ func (f *TxFactory) DumpAll() {
 // by index, field, fragments and keys.
 func (f *TxFactory) IndexUsageDetails() (map[string]IndexUsage, uint64, error) {
 	indexUsage := make(map[string]IndexUsage)
-
-	// for len(f.holder.Indexes()) == 0 {
-	// 	time.Sleep(time.Second)
-	// }
-
-	fmt.Printf("f.holder: %+v\n", f.holder)
 	holderPath, err := expandDirName(f.holder.path)
-	fmt.Printf("holderPath: %+v\n", holderPath)
 	if err != nil {
 		return indexUsage, 0, errors.Wrap(err, "expanding data directory")
 	}
 	indexesPath, err := expandDirName(f.holder.IndexesPath())
-	fmt.Printf("indexesPath: %+v\n", indexesPath)
 	if err != nil {
 		return indexUsage, 0, errors.Wrap(err, "expanding indexes directory")
 	}
 
 	idxs := f.holder.Indexes()
-	fmt.Printf("IndexUsageDetails - indexes: %+v\n", idxs)
 
 	qcx := f.NewQcx()
 	defer qcx.Abort()
