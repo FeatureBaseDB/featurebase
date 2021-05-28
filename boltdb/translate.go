@@ -299,6 +299,35 @@ func (s *TranslateStore) CreateKeys(keys ...string) (map[string]uint64, error) {
 	return result, nil
 }
 
+// Match finds the IDs of all keys matching a filter.
+func (s *TranslateStore) Match(filter func([]byte) bool) ([]uint64, error) {
+	var matches []uint64
+	err := s.db.View(func(tx *bolt.Tx) error {
+		// This uses the id bucket instead of the key bucket so that matches are produced in sorted order.
+		idBucket := tx.Bucket(bucketIDs)
+		if idBucket == nil {
+			return errors.Errorf(errFmtTranslateBucketNotFound, bucketIDs)
+		}
+
+		return idBucket.ForEach(func(id, key []byte) error {
+			if bytes.Equal(key, emptyKey) {
+				key = nil
+			}
+
+			if filter(key) {
+				matches = append(matches, btou64(id))
+			}
+
+			return nil
+		})
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return matches, nil
+}
+
 func (s *TranslateStore) translateKeys(keys []string, writable bool) ([]uint64, error) {
 	ids := make([]uint64, 0, len(keys))
 

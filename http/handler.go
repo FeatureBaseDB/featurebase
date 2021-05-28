@@ -363,7 +363,7 @@ func (h *Handler) collectStats(next http.Handler) http.Handler {
 
 // latticeRoutes lists the frontend routes that do not directly correspond to
 // backend routes, and require special handling.
-var latticeRoutes = []string{"/tables", "/query", "/querybuilder"}  // TODO somehow pull this from some metadata in the lattice directory
+var latticeRoutes = []string{"/tables", "/query", "/querybuilder"} // TODO somehow pull this from some metadata in the lattice directory
 
 // newRouter creates a new mux http router.
 func newRouter(handler *Handler) http.Handler {
@@ -435,6 +435,7 @@ func newRouter(handler *Handler) http.Handler {
 	router.HandleFunc("/internal/translate/field/{index}/{field}", handler.handlePostTranslateFieldDB).Methods("POST").Name("PostTranslateFieldDB")
 	router.HandleFunc("/internal/translate/field/{index}/{field}/keys/find", handler.handleFindFieldKeys).Methods("POST").Name("FindFieldKeys")
 	router.HandleFunc("/internal/translate/field/{index}/{field}/keys/create", handler.handleCreateFieldKeys).Methods("POST").Name("CreateFieldKeys")
+	router.HandleFunc("/internal/translate/field/{index}/{field}/keys/like", handler.handleMatchField).Methods("POST").Name("MatchFieldKeys")
 
 	router.HandleFunc("/internal/idalloc/reserve", handler.handleReserveIDs).Methods("POST").Name("ReserveIDs")
 	router.HandleFunc("/internal/idalloc/commit", handler.handleCommitIDs).Methods("POST").Name("CommitIDs")
@@ -2800,6 +2801,44 @@ func (h *Handler) handleCreateFieldKeys(w http.ResponseWriter, r *http.Request) 
 	}
 
 	err = json.NewEncoder(w).Encode(translations)
+	if err != nil {
+		http.Error(w, "encoding result", http.StatusBadRequest)
+		return
+	}
+}
+
+func (h *Handler) handleMatchField(w http.ResponseWriter, r *http.Request) {
+	// Verify output type.
+	if !validHeaderAcceptJSON(r.Header) {
+		http.Error(w, "Not acceptable", http.StatusNotAcceptable)
+		return
+	}
+
+	indexName, ok := mux.Vars(r)["index"]
+	if !ok {
+		http.Error(w, "index name is required", http.StatusBadRequest)
+		return
+	}
+
+	fieldName, ok := mux.Vars(r)["field"]
+	if !ok {
+		http.Error(w, "field name is required", http.StatusBadRequest)
+		return
+	}
+
+	bd, err := readBody(r)
+	if err != nil {
+		http.Error(w, "failed to read body", http.StatusBadRequest)
+		return
+	}
+
+	matches, err := h.api.MatchField(r.Context(), indexName, fieldName, string(bd))
+	if err != nil {
+		http.Error(w, "failed to match pattern", http.StatusInternalServerError)
+		return
+	}
+
+	err = json.NewEncoder(w).Encode(matches)
 	if err != nil {
 		http.Error(w, "encoding result", http.StatusBadRequest)
 		return

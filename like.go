@@ -15,6 +15,7 @@
 package pilosa
 
 import (
+	"bytes"
 	"strings"
 	"unicode/utf8"
 )
@@ -66,7 +67,7 @@ type filterStep struct {
 	kind filterStepKind
 
 	// str is the substring for a prefix/skipthrough/suffix step.
-	str string
+	str []byte
 
 	// n is the number of underscores in the step (if relevant).
 	n int
@@ -95,7 +96,7 @@ func planLike(like string) []filterStep {
 			// Generate a step to skip through the next token.
 			step = filterStep{
 				kind: filterStepSkipThrough,
-				str:  tokens[i+1],
+				str:  []byte(tokens[i+1]),
 				n:    underscores,
 			}
 			merged = true
@@ -115,7 +116,7 @@ func planLike(like string) []filterStep {
 			// Generate a step to process an exact match of the beginning of a string.
 			step = filterStep{
 				kind: filterStepPrefix,
-				str:  t,
+				str:  []byte(t),
 			}
 		}
 		steps = append(steps, step)
@@ -130,12 +131,12 @@ func planLike(like string) []filterStep {
 }
 
 // matchLike matches a string using a like plan.
-func matchLike(key string, like ...filterStep) bool {
+func matchLike(key []byte, like ...filterStep) bool {
 	for i, step := range like {
 		switch step.kind {
 		case filterStepPrefix:
 			// Match a prefix.
-			if !strings.HasPrefix(key, step.str) {
+			if !bytes.HasPrefix(key, step.str) {
 				return false
 			}
 			key = key[len(step.str):]
@@ -143,7 +144,7 @@ func matchLike(key string, like ...filterStep) bool {
 			// Skip some placeholders.
 			n := step.n
 			for j := 0; j < n; j++ {
-				_, len := utf8.DecodeRuneInString(key)
+				_, len := utf8.DecodeRune(key)
 				if len == 0 {
 					return false
 				}
@@ -155,7 +156,7 @@ func matchLike(key string, like ...filterStep) bool {
 			// Skip through placeholders.
 			var skipped int
 			for skipped < step.n {
-				j := strings.Index(key, step.str)
+				j := bytes.Index(key, step.str)
 				switch j {
 				case -1:
 					// There are no more matches.
@@ -164,7 +165,7 @@ func matchLike(key string, like ...filterStep) bool {
 					// Skip a single rune to ensure forward progress.
 					// This is somewhat inefficient since we have to search the string again next time.
 					// This will hopefully not have to be used very frequently.
-					_, len := utf8.DecodeRuneInString(key)
+					_, len := utf8.DecodeRune(key)
 					key = key[len:]
 					skipped += len
 				default:
@@ -182,7 +183,7 @@ func matchLike(key string, like ...filterStep) bool {
 			remaining := like[i+1:]
 			for {
 				// Find the next substring match.
-				j := strings.Index(key, step.str)
+				j := bytes.Index(key, step.str)
 				switch {
 				case j == -1:
 					// There are no more matches.
@@ -199,12 +200,12 @@ func matchLike(key string, like ...filterStep) bool {
 				}
 
 				// Skip the first rune of the substring so we do not rescan this substring match.
-				_, len := utf8.DecodeRuneInString(key)
+				_, len := utf8.DecodeRune(key)
 				key = key[len:]
 			}
 		case filterStepSuffix:
 			// Match a suffix.
-			if !strings.HasSuffix(key, step.str) {
+			if !bytes.HasSuffix(key, step.str) {
 				// Suffix not present.
 				return false
 			}
@@ -222,18 +223,13 @@ func matchLike(key string, like ...filterStep) bool {
 				return false
 			}
 
-			// Count the runes.
-			j := -1
-			for j = range key {
-			}
-
 			// Check if the string is long enough.
-			return j+1 >= step.n
+			return utf8.RuneCount(key) >= step.n
 		default:
 			panic("invalid step")
 		}
 	}
 
 	// If there is any unmatched data left, this is not a match.
-	return key == ""
+	return len(key) == 0
 }

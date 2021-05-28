@@ -27,6 +27,7 @@ import (
 	"path"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/pilosa/pilosa/v2"
@@ -1464,6 +1465,49 @@ func (c *InternalClient) CreateFieldKeysNode(ctx context.Context, uri *pnet.URI,
 	}
 
 	return transMap, nil
+}
+
+func (c *InternalClient) MatchFieldKeysNode(ctx context.Context, uri *pnet.URI, index string, field string, like string) (matches []uint64, err error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.MatchFieldKeysNode")
+	defer span.Finish()
+
+	// Create HTTP request.
+	u := uriPathToURL(uri, fmt.Sprintf("/internal/translate/field/%s/%s/keys/like", index, field))
+	req, err := http.NewRequest("POST", u.String(), strings.NewReader(like))
+	if err != nil {
+		return nil, errors.Wrap(err, "creating request")
+	}
+
+	// Apply headers.
+	req.Header.Set("Content-Length", strconv.Itoa(len(like)))
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+
+	// Send the request.
+	resp, err := c.executeRequest(req.WithContext(ctx))
+	if err != nil {
+		return nil, errors.Wrap(err, "executing request")
+	}
+	defer func() {
+		cerr := resp.Body.Close()
+		if cerr != nil && err == nil {
+			err = errors.Wrap(cerr, "closing response body")
+		}
+	}()
+
+	// Read the response body.
+	result, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, errors.Wrap(err, "reading response")
+	}
+
+	// Decode the translations.
+	err = json.Unmarshal(result, &matches)
+	if err != nil {
+		return nil, errors.Wrap(err, "json decoding")
+	}
+
+	return matches, nil
 }
 
 func (c *InternalClient) Transactions(ctx context.Context) (map[string]*pilosa.Transaction, error) {

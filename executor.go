@@ -2860,6 +2860,10 @@ func (e *executor) executeGroupBy(ctx context.Context, qcx *Qcx, index string, c
 		if err != nil {
 			return nil, errors.Wrap(err, "getting column")
 		}
+		_, hasLike, err := child.StringArg("like")
+		if err != nil {
+			return nil, errors.Wrap(err, "getting like")
+		}
 		fieldName, ok := child.Args["_field"].(string)
 		if !ok {
 			return nil, errors.Errorf("%s call must have field with valid (string) field name. Got %v of type %[2]T", child.Name, child.Args["_field"])
@@ -2873,7 +2877,7 @@ func (e *executor) executeGroupBy(ctx context.Context, qcx *Qcx, index string, c
 			bases[i] = f.bsiGroup(f.name).Base
 		}
 
-		if hasLimit || hasCol { // we need to perform this query cluster-wide ahead of executeGroupByShard
+		if hasLimit || hasCol || hasLike { // we need to perform this query cluster-wide ahead of executeGroupByShard
 			if idx, ok := child.Args["valueidx"].(int64); ok {
 				// The rows query was already completed on the initiating node.
 				childRows[i] = opt.EmbeddedData[idx].Columns()
@@ -3560,6 +3564,35 @@ func (e *executor) executeRows(ctx context.Context, qcx *Qcx, index string, c *p
 		return nil, err
 	}
 	results, _ := other.(RowIDs)
+
+	if !opt.Remote {
+		if like, hasLike, err := c.StringArg("like"); err != nil {
+			return nil, errors.Wrap(err, "getting like pattern")
+		} else if hasLike {
+			matches, err := e.Cluster.matchField(ctx, e.Holder.Field(index, fieldName), like)
+			if err != nil {
+				return nil, errors.Wrap(err, "matching like pattern")
+			}
+
+			i, j, k := 0, 0, 0
+			for i < len(results) && j < len(matches) {
+				x, y := results[i], matches[j]
+				switch {
+				case x < y:
+					i++
+				case y < x:
+					j++
+				default:
+					results[k] = x
+					i++
+					j++
+					k++
+				}
+			}
+			results = results[:k]
+		}
+	}
+
 	return results, nil
 }
 
@@ -3675,14 +3708,6 @@ func (e *executor) executeRowsShard(ctx context.Context, qcx *Qcx, index string,
 		limit = int(lim)
 	}
 
-	var likeErr chan error
-	if like, hasLike, err := c.StringArg("like"); err != nil {
-		return nil, errors.Wrap(err, "getting like pattern")
-	} else if hasLike {
-		likeErr = make(chan error, 1)
-		filters = append(filters, NewBitmapLikeFilter(like, f.TranslateStore()))
-	}
-
 	tx, finisher, err := qcx.GetTx(Txo{Write: !writable, Index: idx, Shard: shard})
 	if err != nil {
 		return nil, err
@@ -3700,11 +3725,6 @@ func (e *executor) executeRowsShard(ctx context.Context, qcx *Qcx, index string,
 		viewRows, err := frag.rows(ctx, tx, start, filters...)
 		if err != nil {
 			return nil, err
-		}
-		select {
-		case err = <-likeErr:
-			return nil, err
-		default:
 		}
 		rowIDs = rowIDs.merge(viewRows, limit)
 	}
