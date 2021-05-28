@@ -26,6 +26,7 @@ import (
 	"sync"
 	"syscall"
 	"text/tabwriter"
+	"time"
 
 	"github.com/pilosa/pilosa/v2/hash"
 	"github.com/pilosa/pilosa/v2/roaring"
@@ -574,6 +575,11 @@ func (f *TxFactory) DumpAll() {
 // by index, field, fragments and keys.
 func (f *TxFactory) IndexUsageDetails() (map[string]IndexUsage, uint64, error) {
 	indexUsage := make(map[string]IndexUsage)
+
+	for len(f.holder.Indexes()) == 0 {
+		time.Sleep(time.Second)
+	}
+
 	fmt.Printf("f.holder: %+v\n", f.holder)
 	holderPath, err := expandDirName(f.holder.path)
 	fmt.Printf("holderPath: %+v\n", holderPath)
