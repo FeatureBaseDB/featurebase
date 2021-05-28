@@ -1021,9 +1021,11 @@ func (api *API) calculateUsage() {
 		}
 		fmt.Printf("Calculate - Index Details: %+v\n", indexDetails)
 		totalSize := nodeMetadataBytes
+		fmt.Printf("totalSize: %+v\n", totalSize)
 		for _, s := range indexDetails {
 			totalSize += s.Total
 		}
+		fmt.Println("3")
 
 		// NOTE: these errors are ignored in api.Info(), but checked here
 		si := api.server.systemInfo
@@ -1031,15 +1033,18 @@ func (api *API) calculateUsage() {
 		if err != nil {
 			api.server.logger.Infof("couldn't read disk capacity: %s", err)
 		}
+		fmt.Println("4")
 
 		memoryCapacity, err := si.MemTotal()
 		if err != nil {
 			api.server.logger.Infof("couldn't read memory capacity: %s", err)
 		}
+		fmt.Println("5")
 		memoryUse, err := si.MemUsed()
 		if err != nil {
 			api.server.logger.Infof("couldn't read memory usage: %s", err)
 		}
+		fmt.Println("6")
 
 		// Insert into result.
 		nodeUsage := NodeUsage{
@@ -1054,9 +1059,11 @@ func (api *API) calculateUsage() {
 			},
 			LastUpdated: time.Now(),
 		}
+		fmt.Println("7")
 		// api.usageCache.muRead.Lock()
 		// defer api.usageCache.muRead.Unlock()
 		api.usageCache.data = make(map[string]NodeUsage)
+
 		fmt.Printf("Calculate - Node Usage: %+v\n", nodeUsage)
 		api.usageCache.data[api.server.nodeID] = nodeUsage
 		fmt.Printf("Calculate - NU from Map: %+v\n", api.usageCache.data[api.server.nodeID])
