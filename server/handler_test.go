@@ -508,18 +508,20 @@ func TestHandler_Endpoints(t *testing.T) {
 	// directory is already populated with indexes, this would not be the case. This test, therefore
 	// only checks capicity and total use and not details about indexes.
 	t.Run("UI/usage", func(t *testing.T) {
+		cmd.API.ResetUsageCache()
 		w := httptest.NewRecorder()
+		fmt.Println("Make Request")
 		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/ui/usage", nil))
 		if w.Code != gohttp.StatusOK {
 			fmt.Printf("%+v\n", w.Body)
 			t.Fatalf("unexpected status code: %d", w.Code)
 		}
-
 		nodeUsages := make(map[string]pilosa.NodeUsage)
 		if err := json.Unmarshal(w.Body.Bytes(), &nodeUsages); err != nil {
 			t.Fatalf("unmarshal")
 		}
 
+		fmt.Printf("body string %+v\n", w.Body.String())
 		for _, nodeUsage := range nodeUsages {
 			if nodeUsage.Disk.TotalUse < 1 {
 				t.Fatalf("expected some disk use, got %d", nodeUsage.Disk.TotalUse)
@@ -533,8 +535,15 @@ func TestHandler_Endpoints(t *testing.T) {
 			if nodeUsage.Memory.Capacity < 1 {
 				t.Fatalf("expected some memory capacity, got %d", nodeUsage.Memory.Capacity)
 			}
+			numIndexes := len(nodeUsage.Disk.IndexUsage)
+			if numIndexes != 3 {
+				t.Fatalf("wrong length index usage list: expected %d, got %d", 3, numIndexes)
+			}
+			numFields := len(nodeUsage.Disk.IndexUsage["i1"].Fields)
+			if numFields != len(i1.Fields()) {
+				t.Fatalf("wrong length field usage list: expected %d, got %d", len(i1.Fields()), numFields)
+			}
 		}
-
 	})
 
 	t.Run("UI/shard-distribution", func(t *testing.T) {
