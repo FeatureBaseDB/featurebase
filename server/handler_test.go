@@ -508,7 +508,9 @@ func TestHandler_Endpoints(t *testing.T) {
 	// directory is already populated with indexes, this would not be the case. This test, therefore
 	// only checks capicity and total use and not details about indexes.
 	t.Run("UI/usage", func(t *testing.T) {
-		cmd.API.ResetUsageCache()
+		if cmd.API.ResetUsageCache() != nil {
+			t.Fatal(err)
+		}
 		w := httptest.NewRecorder()
 		fmt.Println("Make Request")
 		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/ui/usage", nil))
