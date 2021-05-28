@@ -616,7 +616,6 @@ func (s *Server) Open() error {
 	go func() { defer s.wg.Done(); s.monitorAntiEntropy() }()
 	go func() { defer s.wg.Done(); s.monitorRuntime() }()
 	go func() { defer s.wg.Done(); s.monitorDiagnostics() }()
-	fmt.Println("HOLDER LOADED")
 
 	toSend := func() []Message {
 		s.holder.startMsgsMu.Lock()
