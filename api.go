@@ -902,6 +902,7 @@ type usageCache struct {
 	muWrite         sync.Mutex
 	muRead          sync.Mutex
 	refreshInterval time.Duration
+	resetTrigger    chan bool
 }
 
 // NodeUsage represents all usage measurements for one node.
@@ -946,7 +947,7 @@ type MemoryUsage struct {
 func (api *API) Usage(ctx context.Context, remote bool) (map[string]NodeUsage, error) {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.Usage")
 	defer span.Finish()
-
+	fmt.Println("Usage")
 	api.usageCache.muRead.Lock()
 	defer api.usageCache.muRead.Unlock()
 
@@ -965,6 +966,7 @@ func (api *API) Usage(ctx context.Context, remote bool) (map[string]NodeUsage, e
 
 // Makes a ui/usage request for each node in cluster to calculates its usage and adds it to the cache
 func (api *API) requestUsageOfNodes() {
+	fmt.Println("requestUsageOfNodes")
 	nodes := api.cluster.Nodes()
 	for _, node := range nodes {
 		if node.ID == api.server.nodeID {
@@ -990,6 +992,7 @@ func (api *API) calculateUsage() {
 
 	lastUpdated := api.usageCache.lastUpdated
 	if time.Since(lastUpdated) > api.usageCache.refreshInterval {
+		fmt.Println("calculate")
 		indexDetails, nodeMetadataBytes, err := api.holder.Txf().IndexUsageDetails()
 		if err != nil {
 			api.server.logger.Infof("couldn't get index usage details: %s", err)
@@ -1029,7 +1032,7 @@ func (api *API) calculateUsage() {
 			},
 			LastUpdated: lastUpdated,
 		}
-
+		fmt.Printf("node Usage: %+v\n", nodeUsage)
 		api.usageCache.data = make(map[string]NodeUsage)
 		api.usageCache.data[api.server.nodeID] = nodeUsage
 		api.usageCache.lastUpdated = lastUpdated
@@ -1038,15 +1041,33 @@ func (api *API) calculateUsage() {
 }
 
 // Periodically calculates disk usage
-func (api *API) RefreshUsageCache(refresh time.Duration) {
+func (api *API) RefreshUsageCache(refresh time.Duration, trigger chan bool) {
 	api.usageCache = &usageCache{
 		data:            make(map[string]NodeUsage),
 		refreshInterval: refresh,
+		resetTrigger:    trigger,
 	}
 	for {
 		api.calculateUsage()
-		time.Sleep(api.usageCache.refreshInterval)
+		select {
+		case <-trigger:
+			continue
+		case <-time.After(api.usageCache.refreshInterval):
+			continue
+		}
 	}
+}
+
+// Resets the lastUpdated time and awakens RefreshUsageCache()
+func (api *API) ResetUsageCache() error {
+	fmt.Println("Reset Cache")
+	if api.usageCache != nil {
+		api.usageCache.lastUpdated = time.Time{}
+	} else {
+		return errors.New("invalidating cache: cache not initialized")
+	}
+	api.usageCache.resetTrigger <- true
+	return nil
 }
 
 // RecalculateCaches forces all TopN caches to be updated.
