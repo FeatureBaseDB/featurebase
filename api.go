@@ -234,7 +234,6 @@ func (api *API) CreateIndex(ctx context.Context, indexName string, options Index
 		return nil, errors.Wrap(err, "creating index")
 	}
 
-	api.ResetUsageCache()
 	api.holder.Stats.Count(MetricCreateIndex, 1, 1.0)
 	return index, nil
 }
