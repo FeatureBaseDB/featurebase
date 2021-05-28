@@ -16,12 +16,14 @@ package ctl
 
 import (
 	"archive/tar"
+	"bytes"
 	"compress/gzip"
 	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	gohttp "net/http"
 	"os"
 	"strconv"
@@ -30,6 +32,7 @@ import (
 	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/server"
 	"github.com/pilosa/pilosa/v2/topology"
+	"golang.org/x/sync/errgroup"
 )
 
 // RestoreCommand represents a command for restoring a backup to
@@ -101,6 +104,7 @@ func (cmd *RestoreCommand) Run(ctx context.Context) (err error) {
 	if err != nil {
 		return err
 	}
+
 	var primary *topology.Node
 	for _, node := range nodes {
 		if node.IsPrimary {
@@ -109,10 +113,10 @@ func (cmd *RestoreCommand) Run(ctx context.Context) (err error) {
 		}
 
 	}
-	c := &gohttp.Client{}
 	if primary == nil {
 		return errors.New("no primary")
 	}
+	c := &gohttp.Client{}
 	for {
 		header, err := tarReader.Next()
 		if err == io.EOF {
@@ -144,15 +148,34 @@ func (cmd *RestoreCommand) Run(ctx context.Context) (err error) {
 		indexName := record[1]
 		switch record[2] {
 		case "shards":
-			shard, err := strconv.Atoi(record[3])
+			shard, err := strconv.ParseUint(record[3], 10, 64)
 			if err != nil {
 				return err
 			}
-			logger.Printf("shard %v %v", shard, indexName)
-			url := primary.URI.Path(fmt.Sprintf("/internal/restore/%v/%v", indexName, shard))
-			//TODO (twg) cluster aware client
-			_, err = c.Post(url, "application/octet-stream", tarReader)
+			nodes, err := cmd.client.FragmentNodes(ctx, indexName, shard)
 			if err != nil {
+				return fmt.Errorf("cannot determine fragment nodes: %w", err)
+			} else if len(nodes) == 0 {
+				return fmt.Errorf("no nodes available")
+			}
+
+			shardBytes, err := ioutil.ReadAll(tarReader) // this feels wrong but works for now
+			if err != nil {
+				return err
+			}
+			g, _ := errgroup.WithContext(ctx)
+			for _, node := range nodes {
+				node := node
+				g.Go(func() error {
+					client := &gohttp.Client{}
+					rd := bytes.NewReader(shardBytes)
+					logger.Printf("shard %v %v", shard, indexName)
+					url := node.URI.Path(fmt.Sprintf("/internal/restore/%v/%v", indexName, shard))
+					_, err = client.Post(url, "application/octet-stream", rd)
+					return err
+				})
+			}
+			if err := g.Wait(); err != nil {
 				return err
 			}
 		case "translate":
@@ -161,11 +184,26 @@ func (cmd *RestoreCommand) Run(ctx context.Context) (err error) {
 			if err != nil {
 				return err
 			}
-
-			err = cmd.client.ImportIndexKeys(ctx, &primary.URI, indexName, partitionID, false, tarReader)
+			partitionNodes, err := cmd.client.PartitionNodes(ctx, partitionID)
 			if err != nil {
 				return err
 			}
+			shardBytes, err := ioutil.ReadAll(tarReader) // this feels wrong but works for now
+			if err != nil {
+				return err
+			}
+			g, _ := errgroup.WithContext(ctx)
+			for _, node := range partitionNodes {
+				node := node
+				g.Go(func() error {
+					rd := bytes.NewReader(shardBytes)
+					return cmd.client.ImportIndexKeys(ctx, &node.URI, indexName, partitionID, false, rd)
+				})
+			}
+			if err := g.Wait(); err != nil {
+				return err
+			}
+
 		case "attributes":
 			//skip
 		case "fields":
@@ -173,8 +211,20 @@ func (cmd *RestoreCommand) Run(ctx context.Context) (err error) {
 			switch action := record[4]; action {
 			case "translate":
 				logger.Printf("field keys %v %v", indexName, fieldName)
-				err := cmd.client.ImportFieldKeys(ctx, &primary.URI, indexName, fieldName, false, tarReader)
+				//needs to go to all nodes
+				shardBytes, err := ioutil.ReadAll(tarReader) // this feels wrong but works for now
 				if err != nil {
+					return err
+				}
+				g, _ := errgroup.WithContext(ctx)
+				for _, node := range nodes {
+					node := node
+					g.Go(func() error {
+						rd := bytes.NewReader(shardBytes)
+						return cmd.client.ImportFieldKeys(ctx, &node.URI, indexName, fieldName, false, rd)
+					})
+				}
+				if err := g.Wait(); err != nil {
 					return err
 				}
 			case "attributes":

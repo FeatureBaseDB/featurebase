@@ -2157,3 +2157,34 @@ func (c *InternalClient) Status(ctx context.Context) (string, error) {
 	}
 	return rsp.State, nil
 }
+
+func (c *InternalClient) PartitionNodes(ctx context.Context, partitionID int) ([]*topology.Node, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.PartitionNodes")
+	defer span.Finish()
+
+	// Execute request against the host.
+	u := uriPathToURL(c.defaultURI, "/internal/partition/nodes")
+	u.RawQuery = (url.Values{"partition": {strconv.FormatInt(int64(partitionID), 10)}}).Encode()
+
+	// Build request.
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, errors.Wrap(err, "creating request")
+	}
+
+	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+	req.Header.Set("Accept", "application/json")
+
+	// Execute request.
+	resp, err := c.executeRequest(req.WithContext(ctx))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var a []*topology.Node
+	if err := json.NewDecoder(resp.Body).Decode(&a); err != nil {
+		return nil, fmt.Errorf("json decode: %s", err)
+	}
+	return a, nil
+}
