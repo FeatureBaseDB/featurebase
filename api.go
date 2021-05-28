@@ -986,10 +986,9 @@ func (api *API) requestUsageOfNodes() {
 func (api *API) calculateUsage() {
 	api.usageCache.muWrite.Lock()
 	defer api.usageCache.muWrite.Unlock()
-
+	api.server.wg.Add(1)
 	// api.usageCache.muRead.Lock()
 	lastUpdated := api.usageCache.lastUpdated
-	// lastUpdated := api.usageCache.data[api.server.nodeID].LastUpdated
 	// api.usageCache.muRead.Unlock()
 
 	if time.Since(lastUpdated) > api.usageCache.refreshInterval {
@@ -1018,6 +1017,7 @@ func (api *API) calculateUsage() {
 			api.server.logger.Infof("couldn't read memory usage: %s", err)
 		}
 
+		lastUpdated = time.Now()
 		// Insert into result.
 		nodeUsage := NodeUsage{
 			Disk: DiskUsage{
@@ -1029,15 +1029,14 @@ func (api *API) calculateUsage() {
 				Capacity: memoryCapacity,
 				TotalUse: memoryUse,
 			},
-			LastUpdated: time.Now(),
+			LastUpdated: lastUpdated,
 		}
-		// api.usageCache.muRead.Lock()
-		// defer api.usageCache.muRead.Unlock()
+
 		api.usageCache.data = make(map[string]NodeUsage)
-
 		api.usageCache.data[api.server.nodeID] = nodeUsage
-
+		api.usageCache.lastUpdated = lastUpdated
 	}
+	api.server.wg.Done()
 }
 
 // Periodically calculates disk usage
@@ -1048,7 +1047,6 @@ func (api *API) RefreshUsageCache(refresh time.Duration) {
 	}
 	for {
 		api.calculateUsage()
-		api.usageCache.lastUpdated = time.Now()
 		time.Sleep(api.usageCache.refreshInterval)
 	}
 }
