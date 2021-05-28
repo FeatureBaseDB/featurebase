@@ -234,6 +234,7 @@ func (api *API) CreateIndex(ctx context.Context, indexName string, options Index
 		return nil, errors.Wrap(err, "creating index")
 	}
 
+	api.ResetUsageCache()
 	api.holder.Stats.Count(MetricCreateIndex, 1, 1.0)
 	return index, nil
 }
@@ -978,9 +979,9 @@ func (api *API) requestUsageOfNodes() {
 			api.server.logger.Infof("couldn't collect disk usage from %s: %s", node.URI, err)
 		}
 
-		api.usageCache.muWrite.Lock()
+		api.usageCache.muRead.Lock()
 		api.usageCache.data[node.ID] = nodeUsage[node.ID]
-		api.usageCache.muWrite.Unlock()
+		api.usageCache.muRead.Unlock()
 	}
 }
 
@@ -988,7 +989,7 @@ func (api *API) requestUsageOfNodes() {
 func (api *API) calculateUsage() {
 	api.usageCache.muWrite.Lock()
 	defer api.usageCache.muWrite.Unlock()
-	api.server.wg.Add(1)
+	// api.server.wg.Add(1)
 
 	lastUpdated := api.usageCache.lastUpdated
 	if time.Since(lastUpdated) > api.usageCache.refreshInterval {
@@ -1032,12 +1033,13 @@ func (api *API) calculateUsage() {
 			},
 			LastUpdated: lastUpdated,
 		}
-		fmt.Printf("node Usage: %+v\n", nodeUsage)
+		api.usageCache.muRead.Lock()
 		api.usageCache.data = make(map[string]NodeUsage)
 		api.usageCache.data[api.server.nodeID] = nodeUsage
 		api.usageCache.lastUpdated = lastUpdated
+		api.usageCache.muRead.Unlock()
 	}
-	api.server.wg.Done()
+	// api.server.wg.Done()
 }
 
 // Periodically calculates disk usage
@@ -1062,7 +1064,9 @@ func (api *API) RefreshUsageCache(refresh time.Duration, trigger chan bool) {
 func (api *API) ResetUsageCache() error {
 	fmt.Println("Reset Cache")
 	if api.usageCache != nil {
+		api.usageCache.muRead.Lock()
 		api.usageCache.lastUpdated = time.Time{}
+		api.usageCache.muRead.Unlock()
 	} else {
 		return errors.New("invalidating cache: cache not initialized")
 	}
