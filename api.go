@@ -988,7 +988,7 @@ func (api *API) requestUsageOfNodes() {
 func (api *API) calculateUsage() {
 	api.usageCache.muWrite.Lock()
 	defer api.usageCache.muWrite.Unlock()
-	// api.server.wg.Add(1)
+	api.server.wg.Add(1)
 
 	lastUpdated := api.usageCache.lastUpdated
 	if time.Since(lastUpdated) > api.usageCache.refreshInterval {
@@ -1038,7 +1038,7 @@ func (api *API) calculateUsage() {
 		api.usageCache.lastUpdated = lastUpdated
 		api.usageCache.muRead.Unlock()
 	}
-	// api.server.wg.Done()
+	api.server.wg.Done()
 }
 
 // Periodically calculates disk usage
