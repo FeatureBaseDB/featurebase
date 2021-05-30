@@ -898,11 +898,12 @@ func (api *API) PrimaryNode() *topology.Node {
 // Cache of disk usage statistics
 type usageCache struct {
 	data            map[string]NodeUsage
-	lastUpdated     time.Time
-	muWrite         sync.Mutex
-	muRead          sync.Mutex
 	refreshInterval time.Duration
+	lastUpdated     time.Time
 	resetTrigger    chan bool
+
+	muCalculate sync.Mutex
+	muAssign    sync.Mutex
 }
 
 // NodeUsage represents all usage measurements for one node.
@@ -947,11 +948,10 @@ type MemoryUsage struct {
 func (api *API) Usage(ctx context.Context, remote bool) (map[string]NodeUsage, error) {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.Usage")
 	defer span.Finish()
-	fmt.Println("Usage")
 
-	api.usageCache.muRead.Lock()
+	api.usageCache.muAssign.Lock()
 	lastUpdated := api.usageCache.lastUpdated
-	api.usageCache.muRead.Unlock()
+	api.usageCache.muAssign.Unlock()
 
 	var t time.Time
 	if lastUpdated == t {
@@ -968,7 +968,6 @@ func (api *API) Usage(ctx context.Context, remote bool) (map[string]NodeUsage, e
 
 // Makes a ui/usage request for each node in cluster to calculates its usage and adds it to the cache
 func (api *API) requestUsageOfNodes() {
-	fmt.Println("requestUsageOfNodes")
 	nodes := api.cluster.Nodes()
 	for _, node := range nodes {
 		if node.ID == api.server.nodeID {
@@ -980,21 +979,20 @@ func (api *API) requestUsageOfNodes() {
 			api.server.logger.Infof("couldn't collect disk usage from %s: %s", node.URI, err)
 		}
 
-		api.usageCache.muRead.Lock()
+		api.usageCache.muAssign.Lock()
 		api.usageCache.data[node.ID] = nodeUsage[node.ID]
-		api.usageCache.muRead.Unlock()
+		api.usageCache.muAssign.Unlock()
 	}
 }
 
 // Calculates disk usage from scratch for each index and stores the results in the usage cache
 func (api *API) calculateUsage() {
-	api.usageCache.muWrite.Lock()
-	defer api.usageCache.muWrite.Unlock()
+	api.usageCache.muCalculate.Lock()
+	defer api.usageCache.muCalculate.Unlock()
 	api.server.wg.Add(1)
 
 	lastUpdated := api.usageCache.lastUpdated
 	if time.Since(lastUpdated) > api.usageCache.refreshInterval {
-		fmt.Println("calculate")
 		indexDetails, nodeMetadataBytes, err := api.holder.Txf().IndexUsageDetails()
 		if err != nil {
 			api.server.logger.Infof("couldn't get index usage details: %s", err)
@@ -1034,18 +1032,13 @@ func (api *API) calculateUsage() {
 			},
 			LastUpdated: lastUpdated,
 		}
-		fmt.Println("calculate - before read lock")
-		api.usageCache.muRead.Lock()
-		fmt.Println("calculate - after read lock")
+		api.usageCache.muAssign.Lock()
 		api.usageCache.data = make(map[string]NodeUsage)
 		api.usageCache.data[api.server.nodeID] = nodeUsage
 		api.usageCache.lastUpdated = lastUpdated
-		api.usageCache.muRead.Unlock()
-		fmt.Println("calculate - after read unlock")
+		api.usageCache.muAssign.Unlock()
 	}
-	fmt.Println("calculate - before wg done")
 	api.server.wg.Done()
-	fmt.Println("calculate - after wg done")
 }
 
 // Periodically calculates disk usage
@@ -1056,7 +1049,6 @@ func (api *API) RefreshUsageCache(refresh time.Duration, trigger chan bool) {
 		resetTrigger:    trigger,
 	}
 	for {
-		fmt.Println("Refresh Usage Cache - Loop")
 		api.calculateUsage()
 		select {
 		case <-trigger:
@@ -1069,11 +1061,10 @@ func (api *API) RefreshUsageCache(refresh time.Duration, trigger chan bool) {
 
 // Resets the lastUpdated time and awakens RefreshUsageCache()
 func (api *API) ResetUsageCache() error {
-	fmt.Println("Reset Cache")
 	if api.usageCache != nil {
-		api.usageCache.muRead.Lock()
+		api.usageCache.muAssign.Lock()
 		api.usageCache.lastUpdated = time.Time{}
-		api.usageCache.muRead.Unlock()
+		api.usageCache.muAssign.Unlock()
 	} else {
 		return errors.New("invalidating cache: cache not initialized")
 	}
