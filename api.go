@@ -948,11 +948,13 @@ func (api *API) Usage(ctx context.Context, remote bool) (map[string]NodeUsage, e
 	span, _ := tracing.StartSpanFromContext(ctx, "API.Usage")
 	defer span.Finish()
 	fmt.Println("Usage")
+
 	api.usageCache.muRead.Lock()
-	defer api.usageCache.muRead.Unlock()
+	lastUpdated := api.usageCache.lastUpdated
+	api.usageCache.muRead.Unlock()
 
 	var t time.Time
-	if api.usageCache.lastUpdated == t {
+	if lastUpdated == t {
 		api.calculateUsage()
 	}
 
@@ -1032,13 +1034,18 @@ func (api *API) calculateUsage() {
 			},
 			LastUpdated: lastUpdated,
 		}
+		fmt.Println("calculate - before read lock")
 		api.usageCache.muRead.Lock()
+		fmt.Println("calculate - after read lock")
 		api.usageCache.data = make(map[string]NodeUsage)
 		api.usageCache.data[api.server.nodeID] = nodeUsage
 		api.usageCache.lastUpdated = lastUpdated
 		api.usageCache.muRead.Unlock()
+		fmt.Println("calculate - after read unlock")
 	}
+	fmt.Println("calculate - before wg done")
 	api.server.wg.Done()
+	fmt.Println("calculate - after wg done")
 }
 
 // Periodically calculates disk usage
@@ -1049,6 +1056,7 @@ func (api *API) RefreshUsageCache(refresh time.Duration, trigger chan bool) {
 		resetTrigger:    trigger,
 	}
 	for {
+		fmt.Println("Refresh Usage Cache - Loop")
 		api.calculateUsage()
 		select {
 		case <-trigger:
