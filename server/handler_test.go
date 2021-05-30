@@ -512,7 +512,6 @@ func TestHandler_Endpoints(t *testing.T) {
 			t.Fatal(err)
 		}
 		w := httptest.NewRecorder()
-		fmt.Println("Make Request")
 		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/ui/usage", nil))
 		if w.Code != gohttp.StatusOK {
 			fmt.Printf("%+v\n", w.Body)
@@ -523,7 +522,6 @@ func TestHandler_Endpoints(t *testing.T) {
 			t.Fatalf("unmarshal")
 		}
 
-		fmt.Printf("body string %+v\n", w.Body.String())
 		for _, nodeUsage := range nodeUsages {
 			if nodeUsage.Disk.TotalUse < 1 {
 				t.Fatalf("expected some disk use, got %d", nodeUsage.Disk.TotalUse)
