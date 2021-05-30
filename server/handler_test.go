@@ -504,9 +504,8 @@ func TestHandler_Endpoints(t *testing.T) {
 
 	// UI/usage returns disk and memory usage from a precalculated cache.
 	// Since the cache calculates the cache on server startup, and tests create indexes thereafter
-	// the cache initially has 0 indexes when the test suite is ran. In live workloads, when a data
-	// directory is already populated with indexes, this would not be the case. This test, therefore
-	// only checks capicity and total use and not details about indexes.
+	// the cache initially has 0 indexes when the test suite is ran. Therefore, this test first
+	// resets the cache.
 	t.Run("UI/usage", func(t *testing.T) {
 		if cmd.API.ResetUsageCache() != nil {
 			t.Fatal(err)
@@ -514,7 +513,6 @@ func TestHandler_Endpoints(t *testing.T) {
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/ui/usage", nil))
 		if w.Code != gohttp.StatusOK {
-			fmt.Printf("%+v\n", w.Body)
 			t.Fatalf("unexpected status code: %d", w.Code)
 		}
 		nodeUsages := make(map[string]pilosa.NodeUsage)
