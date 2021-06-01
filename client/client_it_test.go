@@ -33,6 +33,7 @@ var (
 	testIndexWithKeys        *Index
 	testIndexWithKeysNoTrack *Index
 	testIndexAtomicRecord    *Index
+	testIndexKeyTranslation  *Index
 
 	testField            *Field
 	testFieldTimeQuantum *Field
@@ -52,6 +53,7 @@ func setup(t *testing.T, r *require.Assertions, cli *Client) {
 	)
 	testField = testIndex.Field("test-field")
 	testFieldTimeQuantum = testIndex.Field("test-field-timequantum", OptFieldTypeTime(TimeQuantumYear))
+	testIndexKeyTranslation = testSchema.Index("test-index-key-translation", OptIndexKeys(true))
 
 	testIndexAtomicRecord = testSchema.Index("test-index-atomic-record")
 	testFieldInt0 = testIndexAtomicRecord.Field("test-field-int0", OptFieldTypeInt(-1000, 1000))
@@ -693,24 +695,39 @@ func TestClientAgainstCluster(t *testing.T) {
 				setup(t, require, cli)
 				defer tearDown(t, require, cli)
 
-				testFieldTranslate := testIndex.Field("test-field-translate-rowkeys", OptFieldKeys(true))
+				testFieldTranslate := testIndexKeyTranslation.Field("test-field-translate", OptFieldKeys(true))
 				err := cli.EnsureField(testFieldTranslate)
 				require.NoError(err)
 
-				_, err = cli.Query(testIndex.BatchQuery(
-					testFieldTranslate.Set("key1", 10),
-					testFieldTranslate.Set("key2", 1000),
-				))
-				require.NoErrorf(err, "Set(key1, 10) Set(key2, 1000)")
+				trans, err := cli.CreateFieldKeys(testFieldTranslate, "key1", "key2")
+				require.NoErrorf(err, "CreateFieldKeys")
 
-				rowIDs, err := cli.TranslateRowKeys(testFieldTranslate, []string{"key1", "key2"})
-				require.NoErrorf(err, "TranslateRowKeys")
+				target := map[string]uint64{"key1": 1, "key2": 2}
+				require.Equalf(target, trans, "CreateFieldKeys")
 
-				target := []uint64{1, 2}
-				require.Equalf(target, rowIDs, "TranslateRowKeys")
+				trans, err = cli.FindFieldKeys(testFieldTranslate, "key1", "key2", "key3")
+				require.NoErrorf(err, "FindFieldKeys")
+
+				require.Equalf(target, trans, "FindFieldKeys")
 			})
 
 			t.Run("TranslateColKeys", func(t *testing.T) {
+				setup(t, require, cli)
+				defer tearDown(t, require, cli)
+
+				trans, err := cli.CreateIndexKeys(testIndexKeyTranslation, "key1", "key2")
+				require.NoErrorf(err, "CreateIndexKeys")
+
+				target := map[string]uint64{"key1": 65011713, "key2": 63963137}
+				require.Equalf(target, trans, "CreateIndexKeys")
+
+				trans, err = cli.FindIndexKeys(testIndexKeyTranslation, "key1", "key2", "key3")
+				require.NoErrorf(err, "FindIndexKeys")
+
+				require.Equalf(target, trans, "FindIndexKeys")
+			})
+
+			t.Run("Transactions", func(t *testing.T) {
 				trns, err := cli.StartTransaction("blah", time.Minute, false, time.Minute)
 				require.NoErrorf(err, "StartTransaction(blah)")
 				require.Equalf("blah", trns.ID, "TranslateColumnKeys ID")

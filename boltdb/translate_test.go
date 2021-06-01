@@ -30,71 +30,6 @@ import (
 
 //var vv = pilosa.VV
 
-func TestTranslateStore_TranslateKey(t *testing.T) {
-	s := MustOpenNewTranslateStore(t)
-	defer MustCloseTranslateStore(s)
-
-	// Ensure initial key translates to first ID for shard
-	id1, err := s.TranslateKey("foo", true)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Ensure next key autoincrements.
-	if id, err := s.TranslateKey("bar", true); err != nil {
-		t.Fatal(err)
-	} else if got, want := id, id1+1; got != want {
-		t.Fatalf("TranslateKey()=%d, want %d", got, want)
-	}
-
-	// Ensure retranslating existing key returns original ID.
-	if id, err := s.TranslateKey("foo", true); err != nil {
-		t.Fatal(err)
-	} else if got, want := id, id1; got != want {
-		t.Fatalf("TranslateKey()=%d, want %d", got, want)
-	}
-}
-
-func TestTranslateStore_TranslateKeys(t *testing.T) {
-	s := MustOpenNewTranslateStore(t)
-	defer MustCloseTranslateStore(s)
-
-	ids, err := s.TranslateKeys([]string{"abc", "abc"}, true)
-	if err != nil {
-		t.Fatal(err)
-	} else if got, want := ids[1], ids[0]; got != want {
-		t.Fatalf("TranslateKeys()[1]=%d, want %d", got, want)
-	}
-
-	// Ensure initial keys translate to incrementing IDs.
-	ids1, err := s.TranslateKeys([]string{"foo", "bar"}, true)
-	if err != nil {
-		t.Fatal(err)
-	} else if got, want := ids1[1], ids1[0]+1; got != want {
-		t.Fatalf("TranslateKeys()[1]=%d, want %d", got, want)
-	}
-
-	// Ensure retranslation returns original IDs.
-	if ids, err := s.TranslateKeys([]string{"foo", "bar"}, true); err != nil {
-		t.Fatal(err)
-	} else if got, want := ids[0], ids1[0]; got != want {
-		t.Fatalf("TranslateKeys()[0]=%d, want %d", got, want)
-	} else if got, want := ids[1], ids1[1]; got != want {
-		t.Fatalf("TranslateKeys()[1]=%d, want %d", got, want)
-	}
-
-	// Ensure retranslating with existing and non-existing keys returns correctly.
-	if ids, err := s.TranslateKeys([]string{"foo", "baz", "bar"}, true); err != nil {
-		t.Fatal(err)
-	} else if got, want := ids[0], ids1[0]; got != want {
-		t.Fatalf("TranslateKeys()[0]=%d, want %d", got, want)
-	} else if got, want := ids[1], ids1[0]+2; got != want {
-		t.Fatalf("TranslateKeys()[1]=%d, want %d", got, want)
-	} else if got, want := ids[2], ids1[1]; got != want {
-		t.Fatalf("TranslateKeys()[2]=%d, want %d", got, want)
-	}
-}
-
 func TestTranslateStore_CreateKeys(t *testing.T) {
 	s := MustOpenNewTranslateStore(t)
 	defer MustCloseTranslateStore(s)
@@ -135,106 +70,26 @@ func TestTranslateStore_CreateKeys(t *testing.T) {
 	}
 }
 
-func TestTranslateStore_ReadKey(t *testing.T) {
-	s := MustOpenNewTranslateStore(t)
-	defer MustCloseTranslateStore(s)
-
-	id, err := s.TranslateKey("foo", false)
-	if err != pilosa.ErrTranslatingKeyNotFound {
-		t.Fatal(err)
-	}
-	if id != 0 {
-		t.Fatalf("TranslateKey()=%d, want %d", id, 0)
-	}
-
-	s.SetReadOnly(true)
-	id, err = s.TranslateKey("foo", true)
-	if err == nil {
-		t.Fatalf("got error: %+v, want: 'translate store read only'", err)
-	}
-	if id != 0 {
-		t.Fatalf("TranslateKey()=%d, want %d", id, 0)
-	}
-	s.SetReadOnly(false)
-
-	// Ensure next key autoincrements.
-	if id, err = s.TranslateKey("foo", true); err != nil {
-		t.Fatal(err)
-	}
-	id1, err := s.TranslateKey("foo", false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if id1 != id {
-		t.Fatalf("TranslateKey()=%d, want %d", id1, id)
-	}
-}
-
-func TestTranslateStore_ReadKeys(t *testing.T) {
-	s := MustOpenNewTranslateStore(t)
-	defer MustCloseTranslateStore(s)
-
-	ids, err := s.TranslateKeys([]string{"foo", "bar", "baz", "baz", "bar", "foo"}, false)
-	if err != pilosa.ErrTranslatingKeyNotFound {
-		t.Fatal(err)
-	}
-	for _, id := range ids {
-		if id != 0 {
-			t.Fatalf("TranslateKeys()=%d, want %d", id, 0)
-		}
-	}
-
-	// Ensure next key autoincrements.
-	if ids, err = s.TranslateKeys([]string{"foo", "bar", "baz", "baz", "bar", "foo"}, true); err != nil {
-		t.Fatal(err)
-	}
-	ids1, err := s.TranslateKeys([]string{"foo", "bar", "baz", "baz", "bar", "foo"}, false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for i := range ids1 {
-		if ids1[i] != ids[i] {
-			t.Fatalf("TranslateKeys()=%d, want %d", ids1[i], ids[i])
-		}
-	}
-}
 func TestTranslateStore_TranslateID(t *testing.T) {
 	s := MustOpenNewTranslateStore(t)
 	defer MustCloseTranslateStore(s)
 
 	// Setup initial keys.
-	id1, err := s.TranslateKey("foo", true)
-	if err != nil {
-		t.Fatal(err)
-	}
-	id2, err := s.TranslateKey("bar", true)
-	if err != nil {
-		t.Fatal(err)
-	}
-	id3, err := s.TranslateKey("", true)
+	ids, err := s.CreateKeys("foo", "bar", "")
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Ensure IDs can be translated back to keys.
-	if key, err := s.TranslateID(id1); err != nil {
-		t.Fatal(err)
-	} else if got, want := key, "foo"; got != want {
-		t.Fatalf("TranslateID()=%s, want %s", got, want)
+	for key, id := range ids {
+		k, err := s.TranslateID(id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if k != key {
+			t.Fatalf("TranslateID()=%s, want %s", k, key)
+		}
 	}
-
-	if key, err := s.TranslateID(id2); err != nil {
-		t.Fatal(err)
-	} else if got, want := key, "bar"; got != want {
-		t.Fatalf("TranslateID()=%s, want %s", got, want)
-	}
-
-	if key, err := s.TranslateID(id3); err != nil {
-		t.Fatal(err)
-	} else if got, want := key, ""; got != want {
-		t.Fatalf("TranslateID()=%s, want %s", got, want)
-	}
-
 }
 
 func TestTranslateStore_TranslateIDs(t *testing.T) {
@@ -242,13 +97,13 @@ func TestTranslateStore_TranslateIDs(t *testing.T) {
 	defer MustCloseTranslateStore(s)
 
 	// Setup initial keys.
-	ids, err := s.TranslateKeys([]string{"foo", "bar"}, true)
+	ids, err := s.CreateKeys("foo", "bar")
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Ensure IDs can be translated back to keys.
-	if keys, err := s.TranslateIDs([]uint64{ids[0], ids[1], 1}); err != nil {
+	if keys, err := s.TranslateIDs([]uint64{ids["foo"], ids["bar"], 1}); err != nil {
 		t.Fatal(err)
 	} else if got, want := keys[0], "foo"; got != want {
 		t.Fatalf("TranslateIDs()[0]=%s, want %s", got, want)
@@ -299,7 +154,7 @@ func TestTranslateStore_FindKeys(t *testing.T) {
 			if c.data != nil {
 				// Load in key data.
 				keys := c.data
-				ids, err := s.TranslateKeys(keys, true)
+				ids, err := s.CreateKeys(keys...)
 				if err != nil {
 					t.Errorf("failed to import keys: %v", err)
 					return
@@ -308,10 +163,7 @@ func TestTranslateStore_FindKeys(t *testing.T) {
 					t.Errorf("mapped %d keys to %d ids", len(keys), len(ids))
 					return
 				}
-				naiveMap = make(map[string]uint64, len(keys))
-				for i, key := range keys {
-					naiveMap[key] = ids[i]
-				}
+				naiveMap = ids
 			}
 
 			// Compute expected lookup result.
@@ -344,11 +196,12 @@ func TestTranslateStore_MaxID(t *testing.T) {
 	// Generate a bunch of keys.
 	var lastk uint64
 	for i := 0; i < 1026; i++ {
-		k, err := s.TranslateKey(strconv.Itoa(i), true)
+		key := strconv.Itoa(i)
+		ids, err := s.CreateKeys(key)
 		if err != nil {
 			t.Fatalf("translating %d: %v", i, err)
 		}
-		lastk = k
+		lastk = ids[key]
 	}
 
 	// Verify the max ID.
@@ -367,7 +220,7 @@ func TestTranslateStore_EntryReader(t *testing.T) {
 		defer MustCloseTranslateStore(s)
 
 		// Create multiple new keys.
-		ids1, err := s.TranslateKeys([]string{"foo", "bar"}, true)
+		ids1, err := s.CreateKeys("foo", "bar")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -383,7 +236,7 @@ func TestTranslateStore_EntryReader(t *testing.T) {
 		// Read first entry.
 		if err := r.ReadEntry(&entry); err != nil {
 			t.Fatal(err)
-		} else if got, want := entry.ID, ids1[0]; got != want {
+		} else if got, want := entry.ID, ids1["foo"]; got != want {
 			t.Fatalf("ReadEntry() ID=%d, want %d", got, want)
 		} else if got, want := entry.Key, "foo"; got != want {
 			t.Fatalf("ReadEntry() Key=%s, want %s", got, want)
@@ -392,14 +245,14 @@ func TestTranslateStore_EntryReader(t *testing.T) {
 		// Read next entry.
 		if err := r.ReadEntry(&entry); err != nil {
 			t.Fatal(err)
-		} else if got, want := entry.ID, ids1[1]; got != want {
+		} else if got, want := entry.ID, ids1["bar"]; got != want {
 			t.Fatalf("ReadEntry() ID=%d, want %d", got, want)
 		} else if got, want := entry.Key, "bar"; got != want {
 			t.Fatalf("ReadEntry() Key=%s, want %s", got, want)
 		}
 
 		// Insert next key while reader is open.
-		id2, err := s.TranslateKey("baz", true)
+		ids2, err := s.CreateKeys("baz")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -407,7 +260,7 @@ func TestTranslateStore_EntryReader(t *testing.T) {
 		// Read newly created entry.
 		if err := r.ReadEntry(&entry); err != nil {
 			t.Fatal(err)
-		} else if got, want := entry.ID, id2; got != want {
+		} else if got, want := entry.ID, ids2["baz"]; got != want {
 			t.Fatalf("ReadEntry() ID=%d, want %d", got, want)
 		} else if got, want := entry.Key, "baz"; got != want {
 			t.Fatalf("ReadEntry() Key=%s, want %s", got, want)
@@ -439,11 +292,11 @@ func TestTranslateStore_EntryReader(t *testing.T) {
 		translateErr := make(chan error)
 		go func() {
 			time.Sleep(100 * time.Millisecond)
-			id, err := s.TranslateKey("foo", true)
+			ids, err := s.CreateKeys("foo")
 			if err != nil {
 				translateErr <- err
 			}
-			cache <- id
+			cache <- ids["foo"]
 		}()
 
 		var entry pilosa.TranslateEntry
@@ -560,7 +413,7 @@ func TestTranslateStore_ReadWrite(t *testing.T) {
 		}
 
 		// Populate the store with the keys in batch0.
-		batch0IDs, err := s.TranslateKeys(batch0, true)
+		batch0IDs, err := s.CreateKeys(batch0...)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -577,15 +430,18 @@ func TestTranslateStore_ReadWrite(t *testing.T) {
 		}
 
 		// Populate the store with the keys in batch1.
-		batch1IDs, err := s.TranslateKeys(batch1, true)
+		batch1IDs, err := s.CreateKeys(batch1...)
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		expIDs := []uint64{batch0IDs[50], batch1IDs[50]}
+		expIDs := map[string]uint64{
+			"key50":  batch0IDs["key50"],
+			"key150": batch1IDs["key150"],
+		}
 
 		// Check the IDs for a key from each batch.
-		if ids, err := s.TranslateKeys([]string{"key50", "key150"}, false); err != nil {
+		if ids, err := s.FindKeys("key50", "key150"); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(expIDs, ids) {
 			t.Fatalf("first expected ids: %v, but got: %v", expIDs, ids)
@@ -600,12 +456,12 @@ func TestTranslateStore_ReadWrite(t *testing.T) {
 
 		// This time, we expect the second key to be different because
 		// we overwrote the store, and then just set that key.
-		if ids, err := s.TranslateKeys([]string{"key50", "key150"}, true); err != nil {
+		if ids, err := s.CreateKeys("key50", "key150"); err != nil {
 			t.Fatal(err)
-		} else if ids[0] != expIDs[0] {
-			t.Fatalf("last expected ids[0]: %d, but got: %d", expIDs[0], ids[0])
-		} else if ids[1] == expIDs[1] {
-			t.Fatalf("last expected different ids[1]: %d, but got: %d", expIDs[1], ids[1])
+		} else if ids["key50"] != expIDs["key50"] {
+			t.Fatalf("last expected ids[key50]: %d, but got: %d", expIDs["key50"], ids["key50"])
+		} else if ids["key150"] == expIDs["key150"] {
+			t.Fatalf("last expected different ids[key150]: %d, but got: %d", expIDs["key150"], ids["key150"])
 		}
 	})
 }

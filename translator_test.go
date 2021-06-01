@@ -35,38 +35,13 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func TestInMemTranslateStore_TranslateKey(t *testing.T) {
-	s := pilosa.NewInMemTranslateStore("IDX", "FLD", 0, topology.DefaultPartitionN)
-
-	// Ensure initial key translates to ID 1.
-	if id, err := s.TranslateKey("foo", true); err != nil {
-		t.Fatal(err)
-	} else if got, want := id, uint64(1); got != want {
-		t.Fatalf("TranslateKey()=%d, want %d", got, want)
-	}
-
-	// Ensure next key autoincrements.
-	if id, err := s.TranslateKey("bar", true); err != nil {
-		t.Fatal(err)
-	} else if got, want := id, uint64(2); got != want {
-		t.Fatalf("TranslateKey()=%d, want %d", got, want)
-	}
-
-	// Ensure retranslating existing key returns original ID.
-	if id, err := s.TranslateKey("foo", true); err != nil {
-		t.Fatal(err)
-	} else if got, want := id, uint64(1); got != want {
-		t.Fatalf("TranslateKey()=%d, want %d", got, want)
-	}
-}
-
 func TestInMemTranslateStore_TranslateID(t *testing.T) {
 	s := pilosa.NewInMemTranslateStore("IDX", "FLD", 0, topology.DefaultPartitionN)
 
 	// Setup initial keys.
-	if _, err := s.TranslateKey("foo", true); err != nil {
+	if _, err := s.CreateKeys("foo"); err != nil {
 		t.Fatal(err)
-	} else if _, err := s.TranslateKey("bar", true); err != nil {
+	} else if _, err := s.CreateKeys("bar"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -313,30 +288,30 @@ func TestTranslation_KeyNotFound(t *testing.T) {
 func TestInMemTranslateStore_ReadKey(t *testing.T) {
 	s := pilosa.NewInMemTranslateStore("IDX", "FLD", 0, topology.DefaultPartitionN)
 
-	id, err := s.TranslateKey("foo", false)
-	if err != pilosa.ErrTranslatingKeyNotFound {
-		t.Fatal(err)
-	}
-	if got, want := id, uint64(0); got != want {
-		t.Fatalf("TranslateKey()=%d, want %d", got, want)
-	}
-
-	// Ensure next key autoincrements.
-	if id, err = s.TranslateKey("foo", true); err != nil {
-		t.Fatal(err)
-	}
-	if got, want := id, uint64(1); got != want {
-		t.Fatalf("TranslateKey()=%d, want %d", got, want)
-	}
-
-	id1, err := s.TranslateKey("foo", false)
+	ids, err := s.FindKeys("foo")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, want := id1, id; got != want || id == 0 {
+	if len(ids) != 0 {
+		t.Errorf("unexpected IDs: %v", ids)
+	}
+
+	// Ensure next key autoincrements.
+	ids, err = s.CreateKeys("foo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := ids["foo"], uint64(1); got != want {
 		t.Fatalf("TranslateKey()=%d, want %d", got, want)
 	}
 
+	ids, err = s.FindKeys("foo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := ids["foo"], uint64(1); got != want {
+		t.Fatalf("TranslateKey()=%d, want %d", got, want)
+	}
 }
 
 // Test key translation with multiple nodes.

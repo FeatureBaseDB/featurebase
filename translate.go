@@ -66,13 +66,6 @@ type TranslateStore interface { // TODO: refactor this interface; readonly shoul
 	ReadOnly() bool
 	SetReadOnly(v bool)
 
-	// Converts a string key to its autoincrementing integer ID value.
-	//
-	// Translated id must be associated with a shard in the store's partition
-	// unless partition is set to -1.
-	TranslateKey(key string, writable bool) (uint64, error)
-	TranslateKeys(key []string, writable bool) ([]uint64, error)
-
 	// FindKeys looks up the ID for each key.
 	// Keys are not created if they do not exist.
 	// Missing keys are not considered errors, so the length of the result may be less than that of the input.
@@ -407,29 +400,6 @@ func (s *InMemTranslateStore) SetReadOnly(v bool) {
 	s.readOnly = v
 }
 
-// TranslateKey converts a string key to an integer ID.
-// If key does not have an associated id then one is created.
-func (s *InMemTranslateStore) TranslateKey(key string, writable bool) (uint64, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.translateKey(key, writable)
-}
-
-// TranslateKeys converts a string key to an integer ID.
-// If key does not have an associated id then one is created.
-func (s *InMemTranslateStore) TranslateKeys(keys []string, writable bool) (_ []uint64, err error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	ids := make([]uint64, len(keys))
-	for i := range keys {
-		if ids[i], err = s.translateKey(keys[i], writable); err != nil {
-			return ids, err
-		}
-	}
-	return ids, nil
-}
-
 // FindKeys looks up the ID for each key.
 // Keys are not created if they do not exist.
 // Missing keys are not considered errors, so the length of the result may be less than that of the input.
@@ -496,29 +466,6 @@ func (s *InMemTranslateStore) Match(filter func([]byte) bool) ([]uint64, error) 
 	})
 
 	return matches, nil
-}
-
-func (s *InMemTranslateStore) translateKey(key string, writable bool) (_ uint64, err error) {
-	id := s.idsByKey[key]
-	if id != 0 {
-		// Return id if it has been added.
-		return id, nil
-	}
-	if s.readOnly {
-		return 0, ErrTranslatingKeyNotFound
-	}
-	if !writable {
-		return 0, ErrTranslatingKeyNotFound
-	}
-
-	// Generate a new id and update db.
-	if s.field == "" {
-		id = GenerateNextPartitionedID(s.index, s.maxID, s.partitionID, s.partitionN)
-	} else {
-		id = s.maxID + 1
-	}
-	s.set(id, key)
-	return id, nil
 }
 
 // TranslateID converts an integer ID to a string key.
