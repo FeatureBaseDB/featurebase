@@ -10,6 +10,7 @@ export const operators = {
   set: [
     { label: 'is', value: '=' },
     { label: 'is not', value: '!=' },
+    { label: 'like', value: 'like' },
     { label: 'CIDR', value: 'cidr' }
   ],
   timestamp: [
