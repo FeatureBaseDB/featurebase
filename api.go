@@ -1052,21 +1052,12 @@ func (api *API) RefreshUsageCache(refresh time.Duration, trigger chan bool) {
 	for {
 		select {
 		case <-trigger:
-			fmt.Println("Refresh Thread Resetting")
-			api.server.logger.Infof("Refresh Thread Resetting")
 			continue
 		case <-api.server.closing:
-			fmt.Println("Refresh Thread Closing")
-			api.server.logger.Infof("Refresh Thread Closing")
 			return
 		default:
-			fmt.Println("Refresh Thread Calculating")
-			api.server.logger.Infof("Refresh Thread Calculating")
 			api.calculateUsage()
 			time.Sleep(api.usageCache.refreshInterval)
-
-			// case <-time.After(api.usageCache.refreshInterval):
-			// 	continue
 		}
 	}
 }
