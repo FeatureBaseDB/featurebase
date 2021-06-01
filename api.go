@@ -990,6 +990,7 @@ func (api *API) calculateUsage() {
 	api.usageCache.muCalculate.Lock()
 	defer api.usageCache.muCalculate.Unlock()
 	api.server.wg.Add(1)
+	defer api.server.wg.Done()
 
 	lastUpdated := api.usageCache.lastUpdated
 	if time.Since(lastUpdated) > api.usageCache.refreshInterval {
@@ -1038,23 +1039,34 @@ func (api *API) calculateUsage() {
 		api.usageCache.lastUpdated = lastUpdated
 		api.usageCache.muAssign.Unlock()
 	}
-	api.server.wg.Done()
 }
 
 // Periodically calculates disk usage
 func (api *API) RefreshUsageCache(refresh time.Duration, trigger chan bool) {
+	defer close(trigger)
 	api.usageCache = &usageCache{
 		data:            make(map[string]NodeUsage),
 		refreshInterval: refresh,
 		resetTrigger:    trigger,
 	}
 	for {
-		api.calculateUsage()
 		select {
 		case <-trigger:
+			fmt.Println("Refresh Thread Resetting")
+			api.server.logger.Infof("Refresh Thread Resetting")
 			continue
-		case <-time.After(api.usageCache.refreshInterval):
-			continue
+		case <-api.server.closing:
+			fmt.Println("Refresh Thread Closing")
+			api.server.logger.Infof("Refresh Thread Closing")
+			return
+		default:
+			fmt.Println("Refresh Thread Calculating")
+			api.server.logger.Infof("Refresh Thread Calculating")
+			api.calculateUsage()
+			time.Sleep(api.usageCache.refreshInterval)
+
+			// case <-time.After(api.usageCache.refreshInterval):
+			// 	continue
 		}
 	}
 }
