@@ -572,7 +572,7 @@ func (f *TxFactory) DumpAll() {
 
 // IndexUsageDetails computes the sum of filesizes used by the node, broken down
 // by index, field, fragments and keys.
-func (f *TxFactory) IndexUsageDetails() (map[string]IndexUsage, uint64, error) {
+func (f *TxFactory) IndexUsageDetails(isClosing func() bool) (map[string]IndexUsage, uint64, error) {
 	indexUsage := make(map[string]IndexUsage)
 	holderPath, err := expandDirName(f.holder.path)
 	if err != nil {
@@ -612,6 +612,9 @@ func (f *TxFactory) IndexUsageDetails() (map[string]IndexUsage, uint64, error) {
 			fragmentUsage := uint64(0)
 
 			for _, shard := range fld.AvailableShards(true).Slice() {
+				if isClosing() {
+					return nil, 0, nil
+				}
 				if err := func() error {
 					tx, finisher, err := qcx.GetTx(Txo{Write: !writable, Index: idx, Shard: shard})
 					if err != nil {
