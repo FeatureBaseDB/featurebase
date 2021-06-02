@@ -30,7 +30,7 @@ import { ResultType } from 'App/Query/QueryContainer';
 import { RowCall } from './RowCall';
 import { SavedQueries } from './SavedQueries';
 import { Select } from 'shared/Select';
-import { stringifyRowData } from './utils';
+import { stringifyRowData } from './stringifyRowData';
 import css from './QueryBuilder.module.scss';
 
 type QueryBuilderProps = {
