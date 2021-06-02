@@ -994,10 +994,14 @@ func (api *API) calculateUsage() {
 
 	lastUpdated := api.usageCache.lastUpdated
 	if time.Since(lastUpdated) > api.usageCache.refreshInterval {
-		indexDetails, nodeMetadataBytes, err := api.holder.Txf().IndexUsageDetails()
+		indexDetails, nodeMetadataBytes, err := api.holder.Txf().IndexUsageDetails(api.isClosing)
 		if err != nil {
 			api.server.logger.Infof("couldn't get index usage details: %s", err)
 		}
+		if api.isClosing() {
+			return
+		}
+
 		totalSize := nodeMetadataBytes
 		for _, s := range indexDetails {
 			totalSize += s.Total
@@ -1042,7 +1046,8 @@ func (api *API) calculateUsage() {
 }
 
 // Periodically calculates disk usage
-func (api *API) RefreshUsageCache(refresh time.Duration, trigger chan bool) {
+func (api *API) RefreshUsageCache(refresh time.Duration) {
+	trigger := make(chan bool)
 	defer close(trigger)
 	api.usageCache = &usageCache{
 		data:            make(map[string]NodeUsage),
@@ -1073,6 +1078,16 @@ func (api *API) ResetUsageCache() error {
 	}
 	api.usageCache.resetTrigger <- true
 	return nil
+}
+
+// isClosing returns true if the server is shutting down.
+func (api *API) isClosing() bool {
+	select {
+	case <-api.server.closing:
+		return true
+	default:
+		return false
+	}
 }
 
 // RecalculateCaches forces all TopN caches to be updated.
