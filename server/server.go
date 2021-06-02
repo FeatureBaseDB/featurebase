@@ -277,8 +277,7 @@ func (m *Command) Start() (err error) {
 		}
 	}
 
-	trigger := make(chan bool)
-	go m.API.RefreshUsageCache(time.Duration(m.Config.Usage.Interval), trigger)
+	go m.API.RefreshUsageCache(time.Duration(m.Config.Usage.Interval))
 
 	_ = testhook.Opened(pilosa.NewAuditor(), m, nil)
 	close(m.Started)
