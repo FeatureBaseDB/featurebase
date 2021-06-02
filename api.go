@@ -59,7 +59,6 @@ type API struct {
 	importWorkerPoolSize int
 	importWork           chan importJob
 
-	// usageCache map[string]NodeUsage
 	usageCache *usageCache
 
 	Serializer Serializer
