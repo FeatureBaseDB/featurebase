@@ -1053,14 +1053,14 @@ func (api *API) RefreshUsageCache(refresh time.Duration) {
 		resetTrigger:    trigger,
 	}
 	for {
+		api.calculateUsage()
 		select {
 		case <-trigger:
 			continue
 		case <-api.server.closing:
 			return
-		default:
-			api.calculateUsage()
-			time.Sleep(api.usageCache.refreshInterval)
+		case <-time.After(api.usageCache.refreshInterval):
+			continue
 		}
 	}
 }
