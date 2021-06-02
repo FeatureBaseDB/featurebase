@@ -962,7 +962,6 @@ func (api *API) Usage(ctx context.Context, remote bool) (map[string]NodeUsage, e
 		api.requestUsageOfNodes()
 	}
 
-	api.server.logger.Infof("disk usage results last updated: %v", api.usageCache.lastUpdated.Format(time.RFC1123))
 	return api.usageCache.data, nil
 }
 
