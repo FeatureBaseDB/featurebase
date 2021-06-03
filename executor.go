@@ -1298,6 +1298,7 @@ func (e *executor) executePercentile(ctx context.Context, qcx *Qcx, index string
 		// compute average without integer overflow, then correct for division of
 		// odd numbers by 2
 		possibleNthVal := ((max / 2) + (min / 2)) + (((max % 2) + (min % 2)) / 2)
+		// possibleNthVal = (max + min) / 2
 		// get left count
 		rangeCall.Args[fieldName] = &pql.Condition{
 			Op:    pql.Token(pql.LT),
