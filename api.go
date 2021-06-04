@@ -275,6 +275,13 @@ func (api *API) DeleteIndex(ctx context.Context, indexName string) error {
 		api.server.logger.Errorf("problem sending DeleteIndex message: %s", err)
 		return errors.Wrap(err, "sending DeleteIndex message")
 	}
+	// Delete ids allocated for index if any present
+	snap := topology.NewClusterSnapshot(api.cluster.noder, api.cluster.Hasher, api.cluster.ReplicaN)
+	if snap.IsPrimaryFieldTranslationNode(api.NodeID()) {
+		if err := api.holder.ida.reset(indexName); err != nil {
+			return errors.Wrap(err, "deleting id allocation for index")
+		}
+	}
 	api.holder.Stats.Count(MetricDeleteIndex, 1, 1.0)
 	return nil
 }
