@@ -59,6 +59,8 @@ type API struct {
 	importWorkerPoolSize int
 	importWork           chan importJob
 
+	usageCache *usageCache
+
 	Serializer Serializer
 }
 
@@ -899,10 +901,22 @@ func (api *API) PrimaryNode() *topology.Node {
 	return snap.PrimaryFieldTranslationNode()
 }
 
+// Cache of disk usage statistics
+type usageCache struct {
+	data            map[string]NodeUsage
+	refreshInterval time.Duration
+	lastUpdated     time.Time
+	resetTrigger    chan bool
+
+	muCalculate sync.Mutex
+	muAssign    sync.Mutex
+}
+
 // NodeUsage represents all usage measurements for one node.
 type NodeUsage struct {
-	Disk   DiskUsage   `json:"diskUsage"`
-	Memory MemoryUsage `json:"memoryUsage"`
+	Disk        DiskUsage   `json:"diskUsage"`
+	Memory      MemoryUsage `json:"memoryUsage"`
+	LastUpdated time.Time   `json:"lastUpdated"`
 }
 
 // DiskUsage represents the storage space used on disk by one node.
@@ -936,67 +950,149 @@ type MemoryUsage struct {
 	TotalUse uint64 `json:"totalInUse"`
 }
 
-// Usage gets the resource usage per index, in a map[nodeID]NodeUsage
+// Returns disk usage from cache. Waits for calculation if cache is empty.
 func (api *API) Usage(ctx context.Context, remote bool) (map[string]NodeUsage, error) {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.Usage")
 	defer span.Finish()
 
-	nodeUsages := make(map[string]NodeUsage)
+	api.usageCache.muAssign.Lock()
+	lastUpdated := api.usageCache.lastUpdated
+	api.usageCache.muAssign.Unlock()
 
-	indexDetails, nodeMetadataBytes, err := api.holder.Txf().IndexUsageDetails()
-	if err != nil {
-		return nil, errors.Wrap(err, "getting node usage")
-	}
-	totalSize := nodeMetadataBytes
-	for _, s := range indexDetails {
-		totalSize += s.Total
+	var t time.Time
+	if lastUpdated == t {
+		api.calculateUsage()
 	}
 
-	// NOTE: these errors are ignored in api.Info(), but checked here
-	si := api.server.systemInfo
-	diskCapacity, err := si.DiskCapacity(api.holder.path)
-	if err != nil {
-		api.server.logger.Infof("couldn't read disk capacity: %s", err)
-	}
-
-	memoryCapacity, err := si.MemTotal()
-	if err != nil {
-		api.server.logger.Infof("couldn't read memory capacity: %s", err)
-	}
-	memoryUse, err := si.MemUsed()
-	if err != nil {
-		api.server.logger.Infof("couldn't read memory usage: %s", err)
-	}
-
-	// Insert into result.
-	nodeUsage := NodeUsage{
-		Disk: DiskUsage{
-			Capacity:   diskCapacity,
-			TotalUse:   totalSize,
-			IndexUsage: indexDetails,
-		},
-		Memory: MemoryUsage{
-			Capacity: memoryCapacity,
-			TotalUse: memoryUse,
-		},
-	}
-	nodeUsages[api.server.nodeID] = nodeUsage
-
-	// Collect usage from remote nodes
 	if !remote {
-		nodes := api.cluster.Nodes()
-		for _, node := range nodes {
-			if node.ID == api.server.nodeID {
-				continue
-			}
-			nodeUsage, err := api.server.defaultClient.GetNodeUsage(ctx, &node.URI)
-			if err != nil {
-				return nil, errors.Wrapf(err, "collecting disk usage from %s", node.URI)
-			}
-			nodeUsages[node.ID] = nodeUsage[node.ID]
+		api.requestUsageOfNodes()
+	}
+
+	return api.usageCache.data, nil
+}
+
+// Makes a ui/usage request for each node in cluster to calculates its usage and adds it to the cache
+func (api *API) requestUsageOfNodes() {
+	nodes := api.cluster.Nodes()
+	for _, node := range nodes {
+		if node.ID == api.server.nodeID {
+			continue
+		}
+
+		nodeUsage, err := api.server.defaultClient.GetNodeUsage(context.Background(), &node.URI)
+		if err != nil {
+			api.server.logger.Infof("couldn't collect disk usage from %s: %s", node.URI, err)
+		}
+
+		api.usageCache.muAssign.Lock()
+		api.usageCache.data[node.ID] = nodeUsage[node.ID]
+		api.usageCache.muAssign.Unlock()
+	}
+}
+
+// Calculates disk usage from scratch for each index and stores the results in the usage cache
+func (api *API) calculateUsage() {
+	api.usageCache.muCalculate.Lock()
+	defer api.usageCache.muCalculate.Unlock()
+	api.server.wg.Add(1)
+	defer api.server.wg.Done()
+
+	lastUpdated := api.usageCache.lastUpdated
+	if time.Since(lastUpdated) > api.usageCache.refreshInterval {
+		indexDetails, nodeMetadataBytes, err := api.holder.Txf().IndexUsageDetails(api.isClosing)
+		if err != nil {
+			api.server.logger.Infof("couldn't get index usage details: %s", err)
+		}
+		if api.isClosing() {
+			return
+		}
+
+		totalSize := nodeMetadataBytes
+		for _, s := range indexDetails {
+			totalSize += s.Total
+		}
+
+		// NOTE: these errors are ignored in api.Info(), but checked here
+		si := api.server.systemInfo
+		diskCapacity, err := si.DiskCapacity(api.holder.path)
+		if err != nil {
+			api.server.logger.Infof("couldn't read disk capacity: %s", err)
+		}
+
+		memoryCapacity, err := si.MemTotal()
+		if err != nil {
+			api.server.logger.Infof("couldn't read memory capacity: %s", err)
+		}
+		memoryUse, err := si.MemUsed()
+		if err != nil {
+			api.server.logger.Infof("couldn't read memory usage: %s", err)
+		}
+
+		lastUpdated = time.Now()
+		// Insert into result.
+		nodeUsage := NodeUsage{
+			Disk: DiskUsage{
+				Capacity:   diskCapacity,
+				TotalUse:   totalSize,
+				IndexUsage: indexDetails,
+			},
+			Memory: MemoryUsage{
+				Capacity: memoryCapacity,
+				TotalUse: memoryUse,
+			},
+			LastUpdated: lastUpdated,
+		}
+		api.usageCache.muAssign.Lock()
+		api.usageCache.data = make(map[string]NodeUsage)
+		api.usageCache.data[api.server.nodeID] = nodeUsage
+		api.usageCache.lastUpdated = lastUpdated
+		api.usageCache.muAssign.Unlock()
+	}
+}
+
+// Periodically calculates disk usage
+func (api *API) RefreshUsageCache(refresh time.Duration) {
+	trigger := make(chan bool)
+	defer close(trigger)
+	api.usageCache = &usageCache{
+		data:            make(map[string]NodeUsage),
+		refreshInterval: refresh,
+		resetTrigger:    trigger,
+	}
+	for {
+		api.calculateUsage()
+		select {
+		case <-trigger:
+			continue
+		case <-api.server.closing:
+			return
+		case <-time.After(api.usageCache.refreshInterval):
+			continue
 		}
 	}
-	return nodeUsages, nil
+}
+
+// Resets the lastUpdated time and awakens RefreshUsageCache()
+func (api *API) ResetUsageCache() error {
+	if api.usageCache != nil {
+		api.usageCache.muAssign.Lock()
+		api.usageCache.lastUpdated = time.Time{}
+		api.usageCache.muAssign.Unlock()
+	} else {
+		return errors.New("invalidating cache: cache not initialized")
+	}
+	api.usageCache.resetTrigger <- true
+	return nil
+}
+
+// isClosing returns true if the server is shutting down.
+func (api *API) isClosing() bool {
+	select {
+	case <-api.server.closing:
+		return true
+	default:
+		return false
+	}
 }
 
 // RecalculateCaches forces all TopN caches to be updated.

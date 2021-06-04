@@ -572,7 +572,7 @@ func (f *TxFactory) DumpAll() {
 
 // IndexUsageDetails computes the sum of filesizes used by the node, broken down
 // by index, field, fragments and keys.
-func (f *TxFactory) IndexUsageDetails() (map[string]IndexUsage, uint64, error) {
+func (f *TxFactory) IndexUsageDetails(isClosing func() bool) (map[string]IndexUsage, uint64, error) {
 	indexUsage := make(map[string]IndexUsage)
 	holderPath, err := expandDirName(f.holder.path)
 	if err != nil {
@@ -612,6 +612,9 @@ func (f *TxFactory) IndexUsageDetails() (map[string]IndexUsage, uint64, error) {
 			fragmentUsage := uint64(0)
 
 			for _, shard := range fld.AvailableShards(true).Slice() {
+				if isClosing() {
+					return nil, 0, nil
+				}
 				if err := func() error {
 					tx, finisher, err := qcx.GetTx(Txo{Write: !writable, Index: idx, Shard: shard})
 					if err != nil {
@@ -718,6 +721,8 @@ func (f *TxFactory) fieldUsage(indexPath string, fld *Field) (FieldUsage, error)
 	return fieldUsage, nil
 }
 
+// NOTE: Go 1.16 introduced a new Readdir() method that is supposed to be more performant.
+// Not yet upgraded b/c new method is not compatible with older versions of Go.
 func directoryUsage(fname string, recursive bool) (uint64, error) {
 	if !dirExists(fname) {
 		return 0, errors.Errorf("directory does not exist (%s)", fname)

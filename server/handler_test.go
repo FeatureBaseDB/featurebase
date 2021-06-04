@@ -502,11 +502,17 @@ func TestHandler_Endpoints(t *testing.T) {
 		}
 	})
 
+	// UI/usage returns disk and memory usage from a precalculated cache.
+	// Since the cache calculates the cache on server startup, and tests create indexes thereafter
+	// the cache initially has 0 indexes when the test suite is ran. Therefore, this test first
+	// resets the cache.
 	t.Run("UI/usage", func(t *testing.T) {
+		if cmd.API.ResetUsageCache() != nil {
+			t.Fatal(err)
+		}
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/ui/usage", nil))
 		if w.Code != gohttp.StatusOK {
-			fmt.Printf("%+v\n", w.Body)
 			t.Fatalf("unexpected status code: %d", w.Code)
 		}
 		nodeUsages := make(map[string]pilosa.NodeUsage)
@@ -515,22 +521,27 @@ func TestHandler_Endpoints(t *testing.T) {
 		}
 
 		for _, nodeUsage := range nodeUsages {
-			numIndexes := len(nodeUsage.Disk.IndexUsage)
-			if nodeUsage.Disk.TotalUse < 75000 || nodeUsage.Disk.TotalUse > 700000 {
-				// Usage measurements are not consistent between machines, or
-				// over time, as features and implementations change, so checking
-				// for a range of sizes may be most useful way to test the details of this.
-				t.Fatalf("expected 75k < total < 500k, got %d", nodeUsage.Disk.TotalUse)
+			if nodeUsage.Disk.TotalUse < 1 {
+				t.Fatalf("expected some disk use, got %d", nodeUsage.Disk.TotalUse)
 			}
+			if nodeUsage.Disk.Capacity < 1 {
+				t.Fatalf("expected some disk capacity, got %d", nodeUsage.Disk.Capacity)
+			}
+			if nodeUsage.Memory.TotalUse < 1 {
+				t.Fatalf("expected some memory use, got %d", nodeUsage.Memory.TotalUse)
+			}
+			if nodeUsage.Memory.Capacity < 1 {
+				t.Fatalf("expected some memory capacity, got %d", nodeUsage.Memory.Capacity)
+			}
+			numIndexes := len(nodeUsage.Disk.IndexUsage)
 			if numIndexes != 3 {
-				t.Fatalf("wrong length index usage list: expected %d, got %d", 2, numIndexes)
+				t.Fatalf("wrong length index usage list: expected %d, got %d", 3, numIndexes)
 			}
 			numFields := len(nodeUsage.Disk.IndexUsage["i1"].Fields)
 			if numFields != len(i1.Fields()) {
 				t.Fatalf("wrong length field usage list: expected %d, got %d", len(i1.Fields()), numFields)
 			}
 		}
-
 	})
 
 	t.Run("UI/shard-distribution", func(t *testing.T) {

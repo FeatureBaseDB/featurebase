@@ -601,7 +601,6 @@ func (s *Server) Open() error {
 	// bring up the background tasks for the holder.
 	s.holder.SnapshotQueue = s.snapshotQueue
 	s.holder.Activate()
-
 	// if we joined existing cluster then broadcast "resize on add" message
 	if initState == disco.InitialClusterStateExisting {
 		if err := s.cluster.addNode(s.nodeID); err != nil {
