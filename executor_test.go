@@ -6939,7 +6939,7 @@ func variousQueriesOnPercentiles(t *testing.T, c *test.Cluster) {
 		possibleNthVal := int64(0)
 		// bin search
 		for min < max {
-			possibleNthVal = (max + min) / 2
+			possibleNthVal = ((max / 2) + (min / 2)) + (((max % 2) + (min % 2)) / 2)
 			leftCount, rightCount := int64(0), int64(0)
 			for _, num := range nums {
 				if num < possibleNthVal {

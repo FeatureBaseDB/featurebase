@@ -104,10 +104,13 @@ export const QueryBuilder: FC<QueryBuilderProps> = ({
   useEffect(() => {
     setGroupByFilters(
       queriesList.filter(
-        (q) => q.table === selectedTable.name && q.operation === 'Extract'
+        (q) =>
+          q.table === selectedTable.name &&
+          q.operation === 'Extract' &&
+          q.rowCalls.length > 0
       )
     );
-  }, [selectedTable]);
+  }, [selectedTable, queriesList]);
 
   const getColumnsToShow = (cols?: { name: string; show: boolean }[]) => {
     let columns: string[] = [];
