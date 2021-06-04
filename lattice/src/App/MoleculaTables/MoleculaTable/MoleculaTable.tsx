@@ -203,7 +203,7 @@ export const MoleculaTable: FC<MoleculaTableProps> = ({
               .map((field) => {
                 const { name, options, cardinality } = field;
                 const { type, keys, bitDepth, ...rest } = options;
-                const showKeys = ['set', 'time'].includes(type);
+                const showKeys = ['set', 'time', 'mutex'].includes(type);
 
                 return (
                   <TableRow key={`field-${name}`} className={css.row}>

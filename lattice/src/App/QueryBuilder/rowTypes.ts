@@ -12,7 +12,8 @@ export type RowCallType = {
   field: string;
   rowOperator: string;
   value: string;
-  type: 'set' | 'int' | 'timestamp';
+  type: string;
+  keys: boolean;
 };
 
 export type RowsCallType = {

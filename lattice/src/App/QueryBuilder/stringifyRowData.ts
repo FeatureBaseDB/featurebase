@@ -8,7 +8,7 @@ export const stringifyRowData = (rowData: RowGrouping[], operator?: Operator) =>
     rowsMap.push([]);
     group.row.forEach((row) => {
       let rowString = '';
-      const { field, rowOperator, value, type } = row;
+      const { field, rowOperator, value, type, keys } = row;
       const isNegatory = rowOperator === '!=';
       const isUnion =
         ['=', '!='].includes(rowOperator) && value.split(',').length > 1;
@@ -16,7 +16,7 @@ export const stringifyRowData = (rowData: RowGrouping[], operator?: Operator) =>
       if (isUnion) {
         const values = value.split(',');
         const unionRows = values
-          .map((v) => `Row(${field}="${v.trim()}")`)
+          .map((v) => keys ? `Row(${field}="${v.trim()}")` : `Row(${field}=${v.trim()})`)
           .join(', ');
         rowString = `Union(${unionRows})`;
       } else if (rowOperator === 'cidr') {
@@ -36,7 +36,7 @@ export const stringifyRowData = (rowData: RowGrouping[], operator?: Operator) =>
           rowString = `UnionRows(Rows(field=${field}, like="%${value}%"))`;
         }
       } else {
-        rowString = ['set', 'timestamp'].includes(type)
+        rowString = keys || type === 'timestamp'
           ? `Row(${field}${operator}"${value}")`
           : `Row(${field}${operator}${value})`;
       }

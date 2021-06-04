@@ -40,9 +40,8 @@ export const RowCall: FC<RowCallProps> = ({
   onRemoveGroup
 }) => {
   const [operatorEl, setOperatorEl] = useState<null | HTMLElement>(null);
-  const [activeOperatorEl, setActiveOperatorEl] = useState<null | HTMLElement>(
-    null
-  );
+  const [activeOperatorEl, setActiveOperatorEl] =
+    useState<null | HTMLElement>(null);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [activeAnchor, setActiveAnchor] = useState<number>();
 
@@ -51,7 +50,8 @@ export const RowCall: FC<RowCallProps> = ({
       field: '',
       rowOperator: '=',
       value: '',
-      type: 'set'
+      type: 'set',
+      keys: true
     };
 
     if (op) {
@@ -106,7 +106,10 @@ export const RowCall: FC<RowCallProps> = ({
       </div>
 
       {rowData.map((row, idx) => {
-        const { field, rowOperator, value, type } = row;
+        const { field, rowOperator, value, keys } = row;
+        const type = ['set', 'time', 'mutex'].includes(row.type)
+          ? `${row.type}-${keys ? 'keys' : 'id'}`
+          : row.type;
         let isInvalidValue = !value;
         if (rowOperator === 'cidr') {
           try {
@@ -156,21 +159,24 @@ export const RowCall: FC<RowCallProps> = ({
                 options={fields.map((field) => {
                   return {
                     label: `${field.name} (${field.options.type})`,
-                    value: field.name,
-                    disabled:
-                      !Object.keys(operators).includes(field.options.type) ||
-                      (field.options.type === 'set' && !field.options.keys)
+                    value: field.name
                   };
                 })}
                 onChange={(value) => {
                   const updatedField = fields.find((f) => f.name === value);
                   const rowUpdate =
                     row.type === updatedField.options.type
-                      ? { ...row, field: value, value: row.value }
+                      ? {
+                          ...row,
+                          field: value,
+                          value: row.value,
+                          keys: updatedField.options.keys
+                        }
                       : {
                           field: value,
                           rowOperator: '=',
                           type: updatedField.options.type,
+                          keys: updatedField.options.keys,
                           value:
                             updatedField.options.type === 'timestamp'
                               ? moment.utc().format()
@@ -217,19 +223,7 @@ export const RowCall: FC<RowCallProps> = ({
                 </Menu>
               </div>
 
-              {['int', 'set'].includes(type) ? (
-                <TextField
-                  className={css.rowValue}
-                  variant="outlined"
-                  size="small"
-                  value={value}
-                  type={type === 'int' ? 'number' : 'text'}
-                  error={showErrors && isInvalidValue}
-                  onChange={(event) =>
-                    onRowUpdate(idx, { ...row, value: event.target.value })
-                  }
-                />
-              ) : type === 'timestamp' ? (
+              {type === 'timestamp' ? (
                 <MuiPickersUtilsProvider utils={MomentUtils}>
                   <DateTimePicker
                     variant="inline"
@@ -253,7 +247,19 @@ export const RowCall: FC<RowCallProps> = ({
                     fullWidth
                   />
                 </MuiPickersUtilsProvider>
-              ) : null}
+              ) : (
+                <TextField
+                  className={css.rowValue}
+                  variant="outlined"
+                  size="small"
+                  value={value}
+                  type={type === 'int' ? 'number' : 'text'}
+                  error={showErrors && isInvalidValue}
+                  onChange={(event) =>
+                    onRowUpdate(idx, { ...row, value: event.target.value })
+                  }
+                />
+              )}
 
               {rowData.length > 1 ? (
                 <CloseIcon
