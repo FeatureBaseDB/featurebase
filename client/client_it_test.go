@@ -713,16 +713,19 @@ func TestClientAgainstCluster(t *testing.T) {
 				setup(t, cli)
 				defer tearDown(t, cli)
 
-				trans, err := cli.CreateIndexKeys(testIndexKeyTranslation, "key1", "key2")
+				created, err := cli.CreateIndexKeys(testIndexKeyTranslation, "key1", "key2")
 				require.NoErrorf(t, err, "CreateIndexKeys")
+				if _, ok := created["key1"]; !ok {
+					t.Error("key1 missing")
+				}
+				if _, ok := created["key2"]; !ok {
+					t.Error("key2 missing")
+				}
 
-				target := map[string]uint64{"key1": 65011713, "key2": 63963137}
-				require.Equalf(t, target, trans, "CreateIndexKeys")
-
-				trans, err = cli.FindIndexKeys(testIndexKeyTranslation, "key1", "key2", "key3")
+				found, err := cli.FindIndexKeys(testIndexKeyTranslation, "key1", "key2", "key3")
 				require.NoErrorf(t, err, "FindIndexKeys")
 
-				require.Equalf(t, target, trans, "FindIndexKeys")
+				require.Equalf(t, created, found, "IndexKeys")
 			})
 
 			t.Run("Transactions", func(t *testing.T) {
