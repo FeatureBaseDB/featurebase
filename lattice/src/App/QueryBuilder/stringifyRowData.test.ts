@@ -103,7 +103,18 @@ describe('set types', () => {
     }])).toEqual({ error: false, query: 'Not(Union(Row(fieldName="one"), Row(fieldName="two")))' })
   });
 
-  it('stringifies like operator', () => {
+  it('stringifies like operator with a wildcard', () => {
+    expect(stringifyRowData([{
+      row: [{
+        "field": "fieldName",
+        "rowOperator": "like",
+        "value": "value%",
+        "type": "set"
+      }]
+    }])).toEqual({ error: false, query: 'UnionRows(Rows(field=fieldName, like="value%"))' })
+  });
+
+  it('stringifies like operator without a wildcard', () => {
     expect(stringifyRowData([{
       row: [{
         "field": "fieldName",

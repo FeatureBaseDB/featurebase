@@ -30,7 +30,11 @@ export const stringifyRowData = (rowData: RowGrouping[], operator?: Operator) =>
           return { error: true, query: error.message };
         }
       } else if (rowOperator === 'like') {
-        rowString = `UnionRows(Rows(field=${field}, like="%${value}%"))`;
+        if (value.includes('%')) {
+          rowString = `UnionRows(Rows(field=${field}, like="${value}"))`;
+        } else {
+          rowString = `UnionRows(Rows(field=${field}, like="%${value}%"))`;
+        }
       } else {
         rowString = ['set', 'timestamp'].includes(type)
           ? `Row(${field}${operator}"${value}")`
