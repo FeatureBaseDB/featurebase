@@ -13,7 +13,7 @@ import { ResultType } from 'App/Query/QueryContainer';
 import { queryPQL } from 'services/grpcServices';
 import { grpc } from '@improbable-eng/grpc-web';
 import { RowResponse } from 'proto/pilosa_pb';
-import { stringifyRowData } from './utils';
+import { stringifyRowData } from './stringifyRowData';
 import css from './QueryBuilderContainer.module.scss';
 
 let streamingResults: ResultType = {
