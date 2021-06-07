@@ -184,27 +184,6 @@ func (s *TranslateStore) Size() int64 {
 	return tx.Size()
 }
 
-// TranslateKey converts a string key to an integer ID.
-// If key does not have an associated id then one is created, unless writable is false,
-// then the function will return the error pilosa.ErrTranslatingKeyNotFound.
-func (s *TranslateStore) TranslateKey(key string, writable bool) (uint64, error) {
-	ids, err := s.translateKeys([]string{key}, writable)
-	if err != nil {
-		return 0, err
-	}
-	if len(ids) == 0 {
-		return 0, ErrTranslateKeyNotFound
-	}
-	return ids[0], nil
-}
-
-// TranslateKeys converts a slice of string keys to a slice of integer IDs.
-// If a key does not have an associated id then one is created, unless writable is false,
-// then the function will return the error pilosa.ErrTranslatingKeyNotFound.
-func (s *TranslateStore) TranslateKeys(keys []string, writable bool) ([]uint64, error) {
-	return s.translateKeys(keys, writable)
-}
-
 // FindKeys looks up the ID for each key.
 // Keys are not created if they do not exist.
 // Missing keys are not considered errors, so the length of the result may be less than that of the input.
@@ -326,90 +305,6 @@ func (s *TranslateStore) Match(filter func([]byte) bool) ([]uint64, error) {
 	}
 
 	return matches, nil
-}
-
-func (s *TranslateStore) translateKeys(keys []string, writable bool) ([]uint64, error) {
-	ids := make([]uint64, 0, len(keys))
-
-	if s.ReadOnly() || !writable {
-		found := 0
-		if err := s.db.View(func(tx *bolt.Tx) error {
-			bkt := tx.Bucket(bucketKeys)
-			if bkt == nil {
-				return errors.Errorf(errFmtTranslateBucketNotFound, bucketKeys)
-			}
-			for _, key := range keys {
-				if id, _ := findIDByKey(bkt, key); id != 0 {
-					ids = append(ids, id)
-					found++
-				}
-			}
-			return nil
-		}); err != nil {
-			return nil, err
-		}
-		if found == len(keys) {
-			return ids, nil
-		}
-		if s.ReadOnly() {
-			return ids, pilosa.ErrTranslateStoreReadOnly
-		}
-		if !writable {
-			return nil, pilosa.ErrTranslatingKeyNotFound
-		}
-		return nil, nil
-	}
-
-	// Find or create ids under write lock if any keys were not found.
-	written := false
-	idScratch := make([]byte, translateTransactionSize*8)
-	for len(keys) > 0 {
-		// boltdb performs badly if you write really large numbers of
-		// keys all at once...
-		if err := s.db.Update(func(tx *bolt.Tx) (err error) {
-			keyBucket := tx.Bucket(bucketKeys)
-			if keyBucket == nil {
-				return errors.Errorf(errFmtTranslateBucketNotFound, bucketKeys)
-			}
-			idBucket := tx.Bucket(bucketIDs)
-			if idBucket == nil {
-				return errors.Errorf(errFmtTranslateBucketNotFound, bucketIDs)
-			}
-			puts := 0
-			for idx, key := range keys {
-				id, boltKey := findIDByKey(keyBucket, key)
-				if id != 0 {
-					ids = append(ids, id)
-					continue
-				}
-				id = pilosa.GenerateNextPartitionedID(s.index, maxID(tx), s.partitionID, s.partitionN)
-				idBytes := idScratch[puts*8 : puts*8+8]
-				binary.BigEndian.PutUint64(idBytes, id)
-				puts++
-				if err := keyBucket.Put(boltKey, idBytes); err != nil {
-					return err
-				} else if err := idBucket.Put(idBytes, boltKey); err != nil {
-					return err
-				}
-				ids = append(ids, id)
-				written = true
-				if puts == translateTransactionSize {
-					keys = keys[idx+1:]
-					return nil
-				}
-			}
-			// this marks that we've processed the whole list.
-			keys = keys[len(keys):]
-			return nil
-		}); err != nil {
-			return nil, err
-		}
-	}
-
-	if written {
-		s.notifyWrite()
-	}
-	return ids, nil
 }
 
 // TranslateID converts an integer ID to a string key.

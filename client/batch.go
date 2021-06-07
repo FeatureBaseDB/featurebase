@@ -401,29 +401,6 @@ func (b *Batch) getRowTranslation(field, key string) (uint64, bool) {
 	return trans.id, ok
 }
 
-func (b *Batch) addRowTranslations(fieldName string, keys []string, ids []uint64) {
-	rowCache := b.rowTranslations[fieldName]
-	if rowCache == nil {
-		rowCache = make(map[string]agedTranslation)
-		b.rowTranslations[fieldName] = rowCache
-	}
-	for i, k := range keys {
-		rowCache[k] = agedTranslation{
-			id:       ids[i],
-			lastUsed: b.cycle,
-		}
-	}
-}
-
-func (b *Batch) addColTranslations(keys []string, ids []uint64) {
-	for i, k := range keys {
-		b.colTranslations[k] = agedTranslation{
-			id:       ids[i],
-			lastUsed: b.cycle,
-		}
-	}
-}
-
 // Add adds a record to the batch. Performance will be best if record
 // IDs are shard-sorted. That is, all records which belong to the same
 // Pilosa shard are added adjacent to each other. If the records are
@@ -773,196 +750,273 @@ func (b *Batch) Flush() error {
 }
 
 func (b *Batch) doTranslation() error {
-	keys := make([]string, 0)
+	eg := egpool.Group{PoolSize: 20}
 
-	// translate column keys if there are any
-
-	// TODO test. Also this implementation (using a set to de-dup
-	// keys) will likely have much worse performance than the previous
-	// one (two slices, one of keys one of ids) in the case that most
-	// of the keys are unique.
-	keySet := make(map[string]uint64)
-	for _, key := range b.toTranslateID {
-		if key != "" {
-			if _, ok := keySet[key]; ok {
+	// Translate the column keys.
+	eg.Go(func() error {
+		// Dedupliucate keys to translate.
+		dedup := make(map[string]struct{})
+		var keys []string
+		for _, key := range b.toTranslateID {
+			if key == "" {
 				continue
 			}
-			keys = append(keys, key)
-			keySet[key] = 0
-		}
-	}
 
-	if len(keys) > 0 {
+			if _, ok := dedup[key]; ok {
+				continue
+			}
+			dedup[key] = struct{}{}
+
+			keys = append(keys, key)
+		}
+		if len(keys) == 0 {
+			// There are no column keys to translate.
+			return nil
+		}
+
+		// Create the keys.
 		start := time.Now()
-		ids, err := b.translateColumnKeys(b.index, keys)
+		trans, err := b.createIndexKeys(b.index, keys...)
 		if err != nil {
 			return errors.Wrap(err, "translating col keys")
 		}
-		if len(ids) != len(keys) {
-			return errors.Errorf("requested IDs for %d column keys but got %d back", len(keys), len(ids))
+		if len(trans) != len(keys) {
+			return errors.Errorf("requested IDs for %d column keys but got %d back", len(keys), len(trans))
 		}
 		b.log.Debugf("translating %d column keys took %v", len(keys), time.Since(start))
-		b.addColTranslations(keys, ids)
-		for j, id := range ids {
-			keySet[keys[j]] = id
-		}
-		for index, ttkey := range b.toTranslateID {
-			if ttkey != "" {
-				b.ids[index] = keySet[ttkey]
+
+		// Apply keys to translation cache.
+		for key, id := range trans {
+			b.colTranslations[key] = agedTranslation{
+				id:       id,
+				lastUsed: b.cycle,
 			}
 		}
-	}
-	// translate row keys
+
+		// Translate remaining keys in batch.
+		for index, ttkey := range b.toTranslateID {
+			if ttkey == "" {
+				continue
+			}
+
+			b.ids[index] = trans[ttkey]
+		}
+
+		return nil
+	})
+
+	// Translate the row keys.
 	for i, tt := range b.toTranslate {
-		fieldName := b.header[i].Name()
-		keys = keys[:0]
-
-		// make a slice of keys
-		for k := range tt {
-			keys = append(keys, k)
-		}
-		// append keys to clear so we can translate them all in one
-		// request. ttEnd is the index where clearing starts which we
-		// use later on.
-		ttEnd := len(keys)
+		// Skip this if there are no keys to translate.
 		ttc := b.toTranslateClear[i]
-		for k := range ttc {
-			keys = append(keys, k)
-		}
-
-		if len(keys) == 0 {
+		if len(tt) == 0 && len(ttc) == 0 {
 			continue
 		}
 
-		// translate keys from Pilosa
-		start := time.Now()
-		ids, err := b.translateRowKeys(b.headerMap[fieldName], keys)
-		if err != nil {
-			return errors.Wrap(err, "translating row keys")
-		}
-		if len(ids) != len(keys) {
-			return errors.Errorf("requested IDs for %d row keys but got %d back", len(keys), len(ids))
-		}
-		b.log.Debugf("translating %d row keys for %s took %v", len(keys), fieldName, time.Since(start))
-		b.addRowTranslations(fieldName, keys, ids)
+		// Look up the associated field.
+		field := b.header[i]
+		fieldName := field.Name()
 
-		switch b.header[i].Opts().Type() {
-		case FieldTypeInt:
-			// handle foreign key int fields — fill out b.values instead of b.rows
-			for j := 0; j < ttEnd; j++ {
-				key := keys[j]
-				id := ids[j]
-				for _, recordIdx := range tt[key] {
-					b.values[fieldName][recordIdx] = int64(id)
-				}
-			}
-		case FieldTypeDecimal:
-			return errors.Errorf("unexpected field type for translation: decimal")
-		default:
-			// fill out missing IDs in local batch records with translated IDs
-			rows := b.rowIDs[i]
-			for j := 0; j < ttEnd; j++ {
-				key := keys[j]
-				id := ids[j]
-				for _, recordIdx := range tt[key] {
-					rows[recordIdx] = id
-				}
-			}
-			// fill out missing IDs in clear lists.
-			clearRows := b.clearRowIDs[i]
-			for j := ttEnd; j < len(keys); j++ {
-				key := keys[j]
-				id := ids[j]
-				for _, recordIdx := range ttc[key] {
-					clearRows[recordIdx] = id
-				}
-			}
+		// Fetch the translation cache.
+		rowCache := b.rowTranslations[fieldName]
+		if rowCache == nil {
+			rowCache = make(map[string]agedTranslation)
+			b.rowTranslations[fieldName] = rowCache
 		}
+
+		i, tt := i, tt
+		eg.Go(func() error {
+			// Collect the keys to translate.
+			keys := make([]string, 0, len(tt)+len(ttc))
+			for k := range tt {
+				keys = append(keys, k)
+			}
+			for k := range ttc {
+				keys = append(keys, k)
+			}
+
+			// Create the keys.
+			start := time.Now()
+			trans, err := b.createFieldKeys(field, keys...)
+			if err != nil {
+				return errors.Wrap(err, "translating field keys")
+			}
+			b.log.Debugf("translating %d field keys for %s took %v", len(trans), fieldName, time.Since(start))
+
+			// Apply keys to translation cache.
+			for key, id := range trans {
+				rowCache[key] = agedTranslation{
+					id:       id,
+					lastUsed: b.cycle,
+				}
+			}
+
+			switch ftype := field.Opts().Type(); ftype {
+			case FieldTypeSet, FieldTypeMutex:
+				// Fill out missing IDs in local batch records with translated IDs.
+				rows := b.rowIDs[i]
+				for key, idxs := range tt {
+					id, ok := trans[key]
+					if !ok {
+						return errors.Errorf("key translation missing: %q in field %q", key, fieldName)
+					}
+
+					for _, i := range idxs {
+						rows[i] = id
+					}
+				}
+
+				// Fill out missing IDs in clear lists.
+				clearRows := b.clearRowIDs[i]
+				for key, idxs := range ttc {
+					id, ok := trans[key]
+					if !ok {
+						return errors.Errorf("key translation missing: %q in field %q", key, fieldName)
+					}
+
+					for _, i := range idxs {
+						clearRows[i] = id
+					}
+				}
+
+			case FieldTypeInt:
+				// Handle foreign key int fields — fill out b.values instead of b.rows.
+				vals := b.values[fieldName]
+				for key, idxs := range tt {
+					id, ok := trans[key]
+					if !ok {
+						return errors.Errorf("key translation missing: %q in field %q", key, fieldName)
+					}
+
+					for _, i := range idxs {
+						vals[i] = int64(id)
+					}
+				}
+
+			default:
+				return errors.Errorf("unexpected field type for translation: %q", ftype)
+			}
+
+			return nil
+		})
 	}
 
 	for fieldName, tt := range b.toTranslateSets {
-		keys = keys[:0]
-
-		for k := range tt {
-			keys = append(keys, k)
-		}
-
-		if len(keys) == 0 {
+		// Skip this if there are no keys to translate.
+		if len(tt) == 0 {
 			continue
 		}
-		// translate keys from Pilosa
-		start := time.Now()
-		ids, err := b.translateRowKeys(b.headerMap[fieldName], keys)
-		if err != nil {
-			return errors.Wrap(err, "translating row keys (sets)")
+
+		// Look up the associated field.
+		field := b.headerMap[fieldName]
+
+		// Fetch the translation cache.
+		rowCache := b.rowTranslations[fieldName]
+		if rowCache == nil {
+			rowCache = make(map[string]agedTranslation)
+			b.rowTranslations[fieldName] = rowCache
 		}
-		if len(ids) != len(keys) {
-			return errors.Errorf("requested IDs for %d row (set) keys but got %d back", len(keys), len(ids))
-		}
-		b.log.Debugf("translating %d row keys(sets) for %s took %v", len(keys), fieldName, time.Since(start))
-		b.addRowTranslations(fieldName, keys, ids)
-		rowIDSets := b.rowIDSets[fieldName]
-		rowIDSets = rowIDSets[:cap(b.ids)]
-		b.rowIDSets[fieldName] = rowIDSets
-		for j, key := range keys {
-			rowID := ids[j]
-			for _, recordIdx := range tt[key] {
-				rowIDSets[recordIdx] = append(rowIDSets[recordIdx], rowID)
+
+		fieldName, tt := fieldName, tt
+		eg.Go(func() error {
+			// Collect the keys to translate.
+			keys := make([]string, 0, len(tt))
+			for k := range tt {
+				keys = append(keys, k)
 			}
-		}
+
+			// Create the keys.
+			start := time.Now()
+			trans, err := b.createFieldKeys(field, keys...)
+			if err != nil {
+				return errors.Wrap(err, "translating field keys")
+			}
+			b.log.Debugf("translating %d field keys for %s took %v", len(trans), fieldName, time.Since(start))
+
+			// Apply keys to translation cache.
+			for key, id := range trans {
+				rowCache[key] = agedTranslation{
+					id:       id,
+					lastUsed: b.cycle,
+				}
+			}
+
+			// Fill out missing IDs in local batch records with translated IDs.
+			rowIDSets := b.rowIDSets[fieldName]
+			for key, idxs := range tt {
+				id, ok := trans[key]
+				if !ok {
+					return errors.Errorf("key translation missing: %q in field %q", key, fieldName)
+				}
+
+				for _, i := range idxs {
+					rowIDSets[i] = append(rowIDSets[i], id)
+				}
+			}
+
+			return nil
+		})
 	}
 
-	return nil
+	return eg.Wait()
 }
 
-func (b *Batch) translateColumnKeys(index *Index, keys []string) ([]uint64, error) {
+func (b *Batch) createIndexKeys(index *Index, keys ...string) (map[string]uint64, error) {
 	batchSize := b.keyTranslateBatchSize
-	if batchSize <= 0 {
-		batchSize = len(keys)
+	if batchSize <= 0 || len(keys) <= batchSize {
+		return b.client.CreateIndexKeys(index, keys...)
 	}
 
-	ids := make([]uint64, 0, len(keys))
-	for i := 0; i < len(keys); i += batchSize {
-		keySlice := keys[i:]
+	results := make(map[string]uint64, len(keys))
+	for len(keys) > 0 {
+		keySlice := keys
 		if len(keySlice) > batchSize {
 			keySlice = keySlice[:batchSize]
 		}
 
-		idSlice, err := b.client.TranslateColumnKeys(b.index, keySlice)
+		trans, err := b.client.CreateIndexKeys(index, keySlice...)
 		if err != nil {
 			return nil, err
-		} else if len(idSlice) != len(keySlice) {
-			return nil, errors.Errorf("requested IDs slice for %d column keys but got %d back", len(keySlice), len(idSlice))
+		} else if len(trans) != len(keySlice) {
+			return nil, errors.Errorf("requested IDs for %d column keys but got %d back", len(keySlice), len(trans))
 		}
-		ids = append(ids, idSlice...)
+		for key, id := range trans {
+			results[key] = id
+		}
+
+		keys = keys[len(keySlice):]
 	}
 
-	return ids, nil
+	return results, nil
 }
 
-func (b *Batch) translateRowKeys(field *Field, keys []string) ([]uint64, error) {
+func (b *Batch) createFieldKeys(field *Field, keys ...string) (map[string]uint64, error) {
 	batchSize := b.keyTranslateBatchSize
-	if batchSize <= 0 {
-		batchSize = len(keys)
+	if batchSize <= 0 || len(keys) <= batchSize {
+		return b.client.CreateFieldKeys(field, keys...)
 	}
 
-	ids := make([]uint64, 0, len(keys))
-	for i := 0; i < len(keys); i += batchSize {
-		keySlice := keys[i:]
+	results := make(map[string]uint64, len(keys))
+	for len(keys) > 0 {
+		keySlice := keys
 		if len(keySlice) > batchSize {
 			keySlice = keySlice[:batchSize]
 		}
 
-		idSlice, err := b.client.TranslateRowKeys(field, keySlice)
+		trans, err := b.client.CreateFieldKeys(field, keySlice...)
 		if err != nil {
 			return nil, err
-		} else if len(idSlice) != len(keySlice) {
-			return nil, errors.Errorf("requested IDs slice for %d row keys but got %d back", len(keySlice), len(idSlice))
+		} else if len(trans) != len(keySlice) {
+			return nil, errors.Errorf("requested IDs for %d row keys but got %d back", len(keySlice), len(trans))
 		}
-		ids = append(ids, idSlice...)
+		for key, id := range trans {
+			results[key] = id
+		}
+
+		keys = keys[len(keySlice):]
 	}
 
-	return ids, nil
+	return results, nil
 }
 
 func (b *Batch) doImport(frags, clearFrags fragments) error {

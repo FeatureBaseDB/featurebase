@@ -1313,28 +1313,27 @@ func (c *cluster) unprotectedPrimaryReplicaNode() *topology.Node {
 	return cNodes[pos-1]
 }
 
-// translateFieldKeys is basically a wrapper around
-// field.TranslateStore().TranslateKey(key), but in
-// the case where the local node is not primary, then this method will forward the translation
-// request to the primary.
-func (c *cluster) translateFieldKeys(ctx context.Context, field *Field, keys []string, writable bool) (ids []uint64, err error) {
-	// Create a snapshot of the cluster to use for node/partition calculations.
-	snap := topology.NewClusterSnapshot(c.noder, c.Hasher, c.ReplicaN)
-
-	primary := snap.PrimaryFieldTranslationNode()
-	if primary == nil {
-		return nil, errors.Errorf("translating field(%s/%s) keys(%v) - cannot find primary node", field.Index(), field.Name(), keys)
-	}
-
-	if c.Node.ID == primary.ID {
-		ids, err = field.TranslateStore().TranslateKeys(keys, writable)
+// TODO: remove this when it is no longer used
+func (c *cluster) translateFieldKeys(ctx context.Context, field *Field, keys []string, writable bool) ([]uint64, error) {
+	var trans map[string]uint64
+	var err error
+	if writable {
+		trans, err = c.createFieldKeys(ctx, field, keys...)
 	} else {
-		// If it's writable, then forward the request to the primary.
-		ids, err = c.InternalClient.TranslateKeysNode(ctx, &primary.URI, field.Index(), field.Name(), keys, writable)
+		trans, err = c.findFieldKeys(ctx, field, keys...)
+	}
+	if err != nil {
+		return nil, err
 	}
 
-	if err != nil {
-		return nil, errors.Wrapf(err, "translating field(%s/%s) keys(%v)", field.Index(), field.Name(), keys)
+	ids := make([]uint64, len(keys))
+	for i, key := range keys {
+		id, ok := trans[key]
+		if !ok {
+			return nil, ErrTranslatingKeyNotFound
+		}
+
+		ids[i] = id
 	}
 
 	return ids, nil
@@ -1527,6 +1526,7 @@ func (c *cluster) translateFieldListIDs(field *Field, ids []uint64) (keys []stri
 	return keys, err
 }
 
+// TODO: remove this when it is no longer used
 func (c *cluster) translateIndexKey(ctx context.Context, indexName string, key string, writable bool) (uint64, error) {
 	keyMap, err := c.translateIndexKeySet(ctx, indexName, map[string]struct{}{key: struct{}{}}, writable)
 	if err != nil {
@@ -1535,90 +1535,52 @@ func (c *cluster) translateIndexKey(ctx context.Context, indexName string, key s
 	return keyMap[key], nil
 }
 
+// TODO: remove this when it is no longer used
 func (c *cluster) translateIndexKeys(ctx context.Context, indexName string, keys []string, writable bool) ([]uint64, error) {
-	keySet := make(map[string]struct{})
-	for _, key := range keys {
-		keySet[key] = struct{}{}
+	var trans map[string]uint64
+	var err error
+	if writable {
+		trans, err = c.createIndexKeys(ctx, indexName, keys...)
+	} else {
+		trans, err = c.findIndexKeys(ctx, indexName, keys...)
 	}
-
-	keyMap, err := c.translateIndexKeySet(ctx, indexName, keySet, writable)
 	if err != nil {
 		return nil, err
 	}
 
-	// make sure that ids line up with keys, but
-	// not appending, but assigning directly 1:1 into the slice.
 	ids := make([]uint64, len(keys))
-	for i, k := range keys {
-		id, ok := keyMap[k]
-		if !writable {
-			if !ok || id == 0 {
-				c.holder.Logger.Debugf("internal translateIndexKeys error: keyMap had no entry for k='%v', and was not writable", k)
-				return nil, ErrTranslatingKeyNotFound
-			}
+	for i, key := range keys {
+		id, ok := trans[key]
+		if !ok {
+			return nil, ErrTranslatingKeyNotFound
 		}
+
 		ids[i] = id
 	}
+
 	return ids, nil
 }
 
+// TODO: remove this when it is no longer used
 func (c *cluster) translateIndexKeySet(ctx context.Context, indexName string, keySet map[string]struct{}, writable bool) (map[string]uint64, error) {
-	keyMap := make(map[string]uint64)
-
-	idx := c.holder.Index(indexName)
-	if idx == nil {
-		return nil, ErrIndexNotFound
-	}
-
-	// Create a snapshot of the cluster to use for node/partition calculations.
-	snap := topology.NewClusterSnapshot(c.noder, c.Hasher, c.ReplicaN)
-
-	// Split keys by partition.
-	keysByPartition := make(map[int][]string, c.partitionN)
+	keys := make([]string, 0, len(keySet))
 	for key := range keySet {
-		partitionID := snap.KeyToKeyPartition(indexName, key)
-		keysByPartition[partitionID] = append(keysByPartition[partitionID], key)
+		keys = append(keys, key)
 	}
 
-	// Translate keys by partition.
-	var g errgroup.Group
-	var mu sync.Mutex
-	for partitionID := range keysByPartition {
-		partitionID := partitionID
-		keys := keysByPartition[partitionID]
-
-		g.Go(func() (err error) {
-			var ids []uint64
-
-			primary := snap.PrimaryPartitionNode(partitionID)
-			if primary == nil {
-				return errors.Errorf("translating index(%s) keys(%v) on partition(%d) - cannot find primary node", indexName, keys, partitionID)
-			}
-
-			if c.Node.ID == primary.ID {
-				ids, err = idx.TranslateStore(partitionID).TranslateKeys(keys, writable)
-			} else {
-				ids, err = c.InternalClient.TranslateKeysNode(ctx, &primary.URI, indexName, "", keys, writable)
-			}
-
-			if err != nil {
-				return errors.Wrapf(err, "translating index(%s) keys(%v) on partition(%d)", indexName, keys, partitionID)
-			}
-
-			mu.Lock()
-			for i, id := range ids {
-				if id != 0 {
-					keyMap[keys[i]] = id
-				}
-			}
-			mu.Unlock()
-			return nil
-		})
+	if writable {
+		return c.createIndexKeys(ctx, indexName, keys...)
 	}
-	if err := g.Wait(); err != nil {
+
+	trans, err := c.findIndexKeys(ctx, indexName, keys...)
+	if err != nil {
 		return nil, err
 	}
-	return keyMap, nil
+	if len(trans) != len(keys) {
+		return nil, ErrTranslatingKeyNotFound
+	}
+
+	return trans, nil
 }
 
 func (c *cluster) findIndexKeys(ctx context.Context, indexName string, keys ...string) (map[string]uint64, error) {

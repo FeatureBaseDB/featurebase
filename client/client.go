@@ -21,7 +21,6 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"hash/fnv"
 	"io"
 	"math/rand"
 	"net"
@@ -75,9 +74,6 @@ type Client struct {
 	shardNodes shardNodes
 	tick       *time.Ticker
 	done       chan struct{}
-
-	// TODO — remove this! Pilosa should have API which gives us the node->partition mapping
-	Hasher Hasher
 }
 
 func (c *Client) getURIsForShard(index string, shard uint64) ([]*pnet.URI, error) {
@@ -209,9 +205,6 @@ func newClientWithOptions(options *ClientOptions) *Client {
 		done:       make(chan struct{}),
 
 		nat: options.nat,
-
-		// TODO get rid of this. Pilosa should have api to expose node->partition mapping.
-		Hasher: &jmphasher{},
 	}
 
 	if options.tracer == nil {
@@ -1017,150 +1010,132 @@ func (c *Client) augmentHeaders(headers map[string]string) map[string]string {
 	return headers
 }
 
-func (c *Client) TranslateRowKeys(field *Field, keys []string) ([]uint64, error) {
-	req := &pb.TranslateKeysRequest{
-		Index: field.index.name,
-		Field: field.name,
-		Keys:  keys,
-	}
-	return c.translateKeys(req)
-}
+// FindFieldKeys looks up the IDs associated with specified keys in a field.
+// If a key does not exist, the result will not include it.
+func (c *Client) FindFieldKeys(field *Field, keys ...string) (map[string]uint64, error) {
+	path := fmt.Sprintf("/internal/translate/field/%s/%s/keys/find", field.index.name, field.name)
 
-func (c *Client) TranslateColumnKeys(index *Index, keys []string) ([]uint64, error) {
-	// If a manual server URI override has been provided, there's no
-	// point in partitioning the translation request on the client
-	// because every request is going to be sent to the manual URI.
-	if c.manualServerURI != nil {
-		req := &pb.TranslateKeysRequest{
-			Index: index.name,
-			Keys:  keys,
-		}
-		return c.translateKeys(req)
-	}
-
-	// Get the list of hosts from the server.
-	// TODO: it's not ideal to request the list of nodes from the server
-	// on every call to TranslateColumnKeys(), but if we cache that list
-	// on the client, we risk calculating the partition distribution based
-	// on a stale node list. This TODO is here to indicate that we may,
-	// in the future, want to remove the overhead of this status request.
-	status, err := c.Status()
+	reqData, err := json.Marshal(keys)
 	if err != nil {
-		return nil, errors.Wrap(err, "getting cluster status")
+		return nil, errors.Wrap(err, "marshalling request")
 	}
 
-	hosts := make([]pnet.URI, len(status.Nodes))
-	for i, node := range status.Nodes {
-		hosts[i] = node.URI.URI()
-	}
+	headers := c.augmentHeaders(map[string]string{
+		"Content-Type": "application/json",
+		"Accept":       "application/json",
+	})
 
-	keysByNode := make(map[pnet.URI][]string, len(hosts))
-	for _, key := range keys {
-		// TODO 256 is DefaultPartitionN in Pilosa. Eventually this will likely be an index configuration parameter.
-		partitionID := keyPartition(index.Name(), key, 256)
-		uri := c.partitionOwner(partitionID, hosts)
-		keysByNode[uri] = append(keysByNode[uri], key)
-	}
-
-	eg := errgroup.Group{}
-	idsByNode := make(map[pnet.URI][]uint64, len(keysByNode))
-	ibnLock := &sync.Mutex{}
-	for uri, keys := range keysByNode {
-		uri := uri
-		keys := keys
-		eg.Go(func() error {
-			req := &pb.TranslateKeysRequest{
-				Index: index.name,
-				Keys:  keys,
-			}
-			ids, err := c.translateKeys(req, uri)
-			if err != nil {
-				return errors.Wrapf(err, "translating column keys at %v", uri)
-			}
-			ibnLock.Lock()
-			idsByNode[uri] = ids
-			ibnLock.Unlock()
-			return nil
-		})
-	}
-	if err := eg.Wait(); err != nil {
-		return nil, err
-	}
-
-	finalIDs := make([]uint64, len(keys))
-	// put the ids back together into one slice
-	for uri, uriIds := range idsByNode {
-		uriKeys := keysByNode[uri]
-		kidx := 0
-		for i, key := range uriKeys {
-			for ; keys[kidx] != key; kidx++ {
-			}
-			finalIDs[kidx] = uriIds[i]
-			kidx++
-		}
-	}
-	return finalIDs, nil
-}
-
-func (c *Client) partitionOwner(partitionID int, hosts []pnet.URI) pnet.URI {
-	nodeIndex := c.Hasher.Hash(uint64(partitionID), len(hosts))
-	return hosts[nodeIndex]
-}
-
-// Hasher represents an interface to hash integers into buckets.
-type Hasher interface {
-	// Hashes the key into a number between [0,N).
-	Hash(key uint64, n int) int
-}
-
-// jmphasher represents an implementation of jmphash. Implements Hasher.
-type jmphasher struct{}
-
-// Hash returns the integer hash for the given key.
-func (h *jmphasher) Hash(key uint64, n int) int {
-	b, j := int64(-1), int64(0)
-	for j < int64(n) {
-		b = j
-		key = key*uint64(2862933555777941757) + 1
-		j = int64(float64(b+1) * (float64(int64(1)<<31) / float64((key>>33)+1)))
-	}
-	return int(b)
-}
-
-func keyPartition(index, key string, partitionN int) int {
-	// Hash the bytes and mod by partition count.
-	h := fnv.New64a()
-	_, _ = h.Write([]byte(index))
-	_, _ = h.Write([]byte(key))
-	return int(h.Sum64() % uint64(partitionN))
-}
-
-func (c *Client) translateKeys(req *pb.TranslateKeysRequest, uris ...pnet.URI) ([]uint64, error) {
-	if len(req.Keys) == 0 {
-		return []uint64{}, nil
-	}
-	reqData, err := proto.Marshal(req)
+	status, body, err := c.HTTPRequest(http.MethodPost, path, reqData, headers)
 	if err != nil {
-		return nil, errors.Wrap(err, "marshalling translate keys request")
+		return nil, errors.Wrap(err, "executing request")
+	}
+	if status != http.StatusOK {
+		return nil, errors.Errorf("find field keys request failed (status: %d): %q", status, string(body))
 	}
 
-	var respData []byte
-	if len(uris) == 0 {
-		if _, respData, err = c.httpRequest("POST", "/internal/translate/keys", reqData, defaultProtobufHeaders(), true); err != nil {
-			return nil, err
-		}
-	} else {
-		if _, respData, err = c.doRequest(&uris[0], "POST", "/internal/translate/keys", defaultProtobufHeaders(), reqData); err != nil {
-			return nil, errors.Wrapf(err, "reading response body of /internal/translate/keys request to %v", uris[0])
-		}
-	}
-
-	idsResp := &pb.TranslateKeysResponse{}
-	err = proto.Unmarshal(respData, idsResp)
+	var result map[string]uint64
+	err = json.Unmarshal(body, &result)
 	if err != nil {
-		return nil, errors.Wrap(err, "unmarshalling traslate keys response")
+		return nil, errors.Wrap(err, "unmarshalling response")
 	}
-	return idsResp.IDs, nil
+
+	return result, nil
+}
+
+// CreateFieldKeys looks up the IDs associated with specified keys in a field.
+// If a key does not exist, it will be created.
+func (c *Client) CreateFieldKeys(field *Field, keys ...string) (map[string]uint64, error) {
+	path := fmt.Sprintf("/internal/translate/field/%s/%s/keys/create", field.index.name, field.name)
+
+	reqData, err := json.Marshal(keys)
+	if err != nil {
+		return nil, errors.Wrap(err, "marshalling request")
+	}
+
+	headers := c.augmentHeaders(map[string]string{
+		"Content-Type": "application/json",
+		"Accept":       "application/json",
+	})
+
+	status, body, err := c.httpRequest(http.MethodPost, path, reqData, headers, field.options.foreignIndex == "")
+	if err != nil {
+		return nil, errors.Wrap(err, "executing request")
+	}
+	if status != http.StatusOK {
+		return nil, errors.Errorf("find field keys request failed (status: %d): %q", status, string(body))
+	}
+
+	var result map[string]uint64
+	err = json.Unmarshal(body, &result)
+	if err != nil {
+		return nil, errors.Wrap(err, "unmarshalling response")
+	}
+
+	return result, nil
+}
+
+// FindIndexKeys looks up the IDs associated with specified column keys in an index.
+// If a key does not exist, the result will not include it.
+func (c *Client) FindIndexKeys(idx *Index, keys ...string) (map[string]uint64, error) {
+	path := fmt.Sprintf("/internal/translate/index/%s/keys/find", idx.name)
+
+	reqData, err := json.Marshal(keys)
+	if err != nil {
+		return nil, errors.Wrap(err, "marshalling request")
+	}
+
+	headers := c.augmentHeaders(map[string]string{
+		"Content-Type": "application/json",
+		"Accept":       "application/json",
+	})
+
+	status, body, err := c.HTTPRequest(http.MethodPost, path, reqData, headers)
+	if err != nil {
+		return nil, errors.Wrap(err, "executing request")
+	}
+	if status != http.StatusOK {
+		return nil, errors.Errorf("find field keys request failed (status: %d): %q", status, string(body))
+	}
+
+	var result map[string]uint64
+	err = json.Unmarshal(body, &result)
+	if err != nil {
+		return nil, errors.Wrap(err, "unmarshalling response")
+	}
+
+	return result, nil
+}
+
+// CreateIndexKeys looks up the IDs associated with specified column keys in an index.
+// If a key does not exist, it will be created.
+func (c *Client) CreateIndexKeys(idx *Index, keys ...string) (map[string]uint64, error) {
+	path := fmt.Sprintf("/internal/translate/index/%s/keys/create", idx.name)
+
+	reqData, err := json.Marshal(keys)
+	if err != nil {
+		return nil, errors.Wrap(err, "marshalling request")
+	}
+
+	headers := c.augmentHeaders(map[string]string{
+		"Content-Type": "application/json",
+		"Accept":       "application/json",
+	})
+
+	status, body, err := c.HTTPRequest(http.MethodPost, path, reqData, headers)
+	if err != nil {
+		return nil, errors.Wrap(err, "executing request")
+	}
+	if status != http.StatusOK {
+		return nil, errors.Errorf("find field keys request failed (status: %d): %q", status, string(body))
+	}
+
+	var result map[string]uint64
+	err = json.Unmarshal(body, &result)
+	if err != nil {
+		return nil, errors.Wrap(err, "unmarshalling response")
+	}
+
+	return result, nil
 }
 
 type TransactionResponse struct {
