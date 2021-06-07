@@ -721,12 +721,17 @@ func (h *Holder) Open() error {
 	h.txf.blueGreenOnIfRunningBlueGreen()
 
 	if h.cfg.LookupDBDSN != "" {
-		h.Logger.Printf("connecting to lookup DB")
+		h.Logger.Printf("connecting to lookup database")
 
 		db, err := sql.Open("postgres", h.cfg.LookupDBDSN)
 		if err != nil {
 			return errors.Wrap(err, "connecting to lookup database")
 		}
+		if err := db.Ping(); err != nil {
+			return errors.Wrap(err, "pinging lookup database")
+		}
+
+		h.Logger.Printf("connection to lookup database succeeded, connection stats: %+v", db.Stats())
 
 		h.lookupDB = db
 	}
