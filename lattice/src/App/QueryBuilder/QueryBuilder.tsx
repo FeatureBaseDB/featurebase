@@ -147,7 +147,8 @@ export const QueryBuilder: FC<QueryBuilderProps> = ({
         field: '',
         rowOperator: '=',
         value: '',
-        type: 'set'
+        type: 'set',
+        keys: true
       }
     ];
 
