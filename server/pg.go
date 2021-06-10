@@ -367,6 +367,8 @@ func pgWriteRowser(w pg.QueryResultWriter, result pb.ToRowser) error {
 			case *pb.ColumnResponse_Uint64ArrayVal:
 				data, _ := json.Marshal(col.Uint64ArrayVal.Vals)
 				v = string(data)
+			case *pb.ColumnResponse_TimestampVal:
+				v = col.TimestampVal
 			default:
 				return errors.Errorf("unable to process value of type %T", col)
 			}
