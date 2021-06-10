@@ -903,10 +903,12 @@ func (api *API) PrimaryNode() *topology.Node {
 
 // Cache of disk usage statistics
 type usageCache struct {
-	data            map[string]NodeUsage
-	refreshInterval time.Duration
-	lastUpdated     time.Time
-	resetTrigger    chan bool
+	data             map[string]NodeUsage
+	refreshInterval  time.Duration
+	lastUpdated      time.Time
+	resetTrigger     chan bool
+	lastCalcDuration time.Duration
+	waitMultiplier   time.Duration
 
 	muCalculate sync.Mutex
 	muAssign    sync.Mutex
@@ -955,36 +957,22 @@ func (api *API) Usage(ctx context.Context, remote bool) (map[string]NodeUsage, e
 	span, _ := tracing.StartSpanFromContext(ctx, "API.Usage")
 	defer span.Finish()
 
-	api.usageCache.muAssign.Lock()
-	lastUpdated := api.usageCache.lastUpdated
-	cacheN := len(api.usageCache.data[api.server.nodeID].Disk.IndexUsage)
-	api.usageCache.muAssign.Unlock()
-	holderN := len(api.holder.Indexes())
-
-	// reset cache if server was started with no data, and data has subsequently been added
-	if cacheN == 0 && holderN > 0 {
+	if api.usageCache.lastCalcDuration < (time.Second * 5) {
 		err := api.ResetUsageCache()
 		if err != nil {
 			api.server.logger.Infof("data detected but could not recalculate cache: %s", err)
 		}
 	}
 
-	var t time.Time
-	if lastUpdated == t {
+	api.usageCache.muAssign.Lock()
+	lastUpdated := api.usageCache.lastUpdated
+	api.usageCache.muAssign.Unlock()
+	if lastUpdated == (time.Time{}) {
 		api.calculateUsage()
 	}
 
 	if !remote {
 		api.requestUsageOfNodes()
-	}
-
-	// triggers recalculation of cache in background, ahead of schedule, if number of indexes in
-	// cache differs from number of indexes in holder
-	if cacheN > 0 && cacheN != holderN {
-		err := api.ResetUsageCache()
-		if err != nil {
-			api.server.logger.Infof("resetting cache in background: %s", err)
-		}
 	}
 
 	return api.usageCache.data, nil
@@ -1077,12 +1065,16 @@ func (api *API) RefreshUsageCache(refresh time.Duration) {
 	trigger := make(chan bool)
 	defer close(trigger)
 	api.usageCache = &usageCache{
-		data:            make(map[string]NodeUsage),
-		refreshInterval: refresh,
-		resetTrigger:    trigger,
+		data:             make(map[string]NodeUsage),
+		refreshInterval:  refresh,
+		resetTrigger:     trigger,
+		lastCalcDuration: 0,
+		waitMultiplier:   time.Duration(5),
 	}
 	for {
+		start := time.Now()
 		api.calculateUsage()
+		api.setRefreshInterval(time.Since(start))
 		select {
 		case <-trigger:
 			continue
@@ -1092,6 +1084,17 @@ func (api *API) RefreshUsageCache(refresh time.Duration) {
 			continue
 		}
 	}
+}
+
+func (api *API) setRefreshInterval(dur time.Duration) {
+	refresh := dur * api.usageCache.waitMultiplier
+	if refresh < time.Hour {
+		refresh = time.Hour
+	}
+	api.usageCache.muAssign.Lock()
+	api.usageCache.refreshInterval = refresh
+	api.usageCache.lastCalcDuration = dur
+	api.usageCache.muAssign.Unlock()
 }
 
 // Resets the lastUpdated time and awakens RefreshUsageCache()
