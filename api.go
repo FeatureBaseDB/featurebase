@@ -1016,7 +1016,10 @@ func (api *API) calculateUsage() {
 	api.server.wg.Add(1)
 	defer api.server.wg.Done()
 
+	api.usageCache.muAssign.Lock()
 	lastUpdated := api.usageCache.lastUpdated
+	api.usageCache.muAssign.Unlock()
+
 	if time.Since(lastUpdated) > api.usageCache.refreshInterval {
 		indexDetails, nodeMetadataBytes, err := api.holder.Txf().IndexUsageDetails(api.isClosing)
 		if err != nil {
