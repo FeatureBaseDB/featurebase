@@ -852,7 +852,7 @@ func (b *Batch) doTranslation() error {
 			}
 
 			switch ftype := field.Opts().Type(); ftype {
-			case FieldTypeSet, FieldTypeMutex:
+			case FieldTypeSet, FieldTypeMutex, FieldTypeTime:
 				// Fill out missing IDs in local batch records with translated IDs.
 				rows := b.rowIDs[i]
 				for key, idxs := range tt {

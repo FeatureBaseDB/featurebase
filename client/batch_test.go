@@ -993,8 +993,10 @@ func TestBatchesStringIDs(t *testing.T) {
 	client := DefaultClient()
 	schema := NewSchema()
 	idx := schema.Index("gopilosatest-blah", OptIndexKeys(true))
-	fields := make([]*Field, 1)
+	fields := make([]*Field, 3)
 	fields[0] = idx.Field("zero", OptFieldKeys(true))
+	fields[1] = idx.Field("one", OptFieldTypeMutex(CacheTypeNone, 0), OptFieldKeys(true))
+	fields[2] = idx.Field("two", OptFieldTypeTime("YMDH"), OptFieldKeys(true))
 	err := client.SyncSchema(schema)
 	if err != nil {
 		t.Fatalf("syncing schema: %v", err)
@@ -1011,14 +1013,21 @@ func TestBatchesStringIDs(t *testing.T) {
 		t.Fatalf("getting new batch: %v", err)
 	}
 
-	r := Row{Values: make([]interface{}, 1)}
+	r := Row{Values: make([]interface{}, 3)}
+	r.Time.Set(time.Date(2019, time.January, 2, 15, 45, 0, 0, time.UTC))
 
 	for i := 0; i < 3; i++ {
 		r.ID = strconv.Itoa(i)
 		if i%2 == 0 {
 			r.Values[0] = "a"
+			r.Values[1] = "b"
+			r.Values[2] = "c"
+			r.Time.SetMonth("01")
 		} else {
 			r.Values[0] = "x"
+			r.Values[1] = "y"
+			r.Values[2] = "z"
+			r.Time.SetMonth("02")
 		}
 		err := b.Add(r)
 		if err != nil && err != ErrBatchNowFull {
@@ -1040,19 +1049,12 @@ func TestBatchesStringIDs(t *testing.T) {
 		t.Fatalf("translating: %v", err)
 	}
 
-	// the ids are based off what the strings hash to, and are at the
-	// very beginning of a few different shards. this could change if
-	// Pilosa's hashing algorithm changes.
-	if err := isPermutationOfInt(b.ids, []uint64{44040193, 45088769, 41943041}); err != nil {
-		t.Fatalf("wrong ids: %v. exp/got:\n%v\n%v", err, []uint64{44040193, 45088769, 41943041}, b.ids)
-	}
-
 	err = b.Import()
 	if err != nil {
 		t.Fatalf("importing: %v", err)
 	}
 
-	resp, err := client.Query(idx.BatchQuery(fields[0].Row("a"), fields[0].Row("x")))
+	resp, err := client.Query(idx.BatchQuery(fields[0].Row("a"), fields[0].Row("x"), fields[1].Row("b"), fields[1].Row("y"), fields[2].Row("c"), fields[2].Row("z")))
 	if err != nil {
 		t.Fatalf("querying: %v", err)
 	}
@@ -1060,10 +1062,10 @@ func TestBatchesStringIDs(t *testing.T) {
 	results := resp.Results()
 	for i, res := range results {
 		cols := res.Row().Keys
-		if i == 0 && !reflect.DeepEqual(cols, []string{"0", "2"}) && !reflect.DeepEqual(cols, []string{"2", "0"}) {
+		if i%2 == 0 && !reflect.DeepEqual(cols, []string{"0", "2"}) && !reflect.DeepEqual(cols, []string{"2", "0"}) {
 			t.Fatalf("unexpected columns: %v", cols)
 		}
-		if i == 1 && !reflect.DeepEqual(cols, []string{"1"}) {
+		if i%2 == 1 && !reflect.DeepEqual(cols, []string{"1"}) {
 			t.Fatalf("unexpected columns: %v", cols)
 		}
 	}
