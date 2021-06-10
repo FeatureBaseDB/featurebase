@@ -952,7 +952,7 @@ type MemoryUsage struct {
 	TotalUse uint64 `json:"totalInUse"`
 }
 
-// Returns disk usage from cache. Waits for calculation if cache is empty.
+// Returns disk usage from cache if cache is large. It will recalculate on the spot of the last cacluation was under 5 seconds.
 func (api *API) Usage(ctx context.Context, remote bool) (map[string]NodeUsage, error) {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.Usage")
 	defer span.Finish()
