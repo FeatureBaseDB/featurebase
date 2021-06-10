@@ -957,7 +957,17 @@ func (api *API) Usage(ctx context.Context, remote bool) (map[string]NodeUsage, e
 
 	api.usageCache.muAssign.Lock()
 	lastUpdated := api.usageCache.lastUpdated
+	cacheN := len(api.usageCache.data[api.server.nodeID].Disk.IndexUsage)
 	api.usageCache.muAssign.Unlock()
+	holderN := len(api.holder.Indexes())
+
+	// reset cache if server was started with no data, and data has subsequently been added
+	if cacheN == 0 && holderN > 0 {
+		err := api.ResetUsageCache()
+		if err != nil {
+			api.server.logger.Infof("data detected but could not recalculate cache: %s", err)
+		}
+	}
 
 	var t time.Time
 	if lastUpdated == t {
@@ -966,6 +976,15 @@ func (api *API) Usage(ctx context.Context, remote bool) (map[string]NodeUsage, e
 
 	if !remote {
 		api.requestUsageOfNodes()
+	}
+
+	// triggers recalculation of cache in background, ahead of schedule, if number of indexes in
+	// cache differs from number of indexes in holder
+	if cacheN > 0 && cacheN != holderN {
+		err := api.ResetUsageCache()
+		if err != nil {
+			api.server.logger.Infof("resetting cache in background: %s", err)
+		}
 	}
 
 	return api.usageCache.data, nil
