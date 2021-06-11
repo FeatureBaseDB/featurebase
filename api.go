@@ -952,7 +952,7 @@ type MemoryUsage struct {
 	TotalUse uint64 `json:"totalInUse"`
 }
 
-// Returns disk usage from cache if cache is large. It will recalculate on the spot of the last cacluation was under 5 seconds.
+// Returns disk usage from cache if cache is large. It will recalculate on the spot if the last cacluation was under 5 seconds.
 func (api *API) Usage(ctx context.Context, remote bool) (map[string]NodeUsage, error) {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.Usage")
 	defer span.Finish()
@@ -960,7 +960,7 @@ func (api *API) Usage(ctx context.Context, remote bool) (map[string]NodeUsage, e
 	if api.usageCache.lastCalcDuration < (time.Second * 5) {
 		err := api.ResetUsageCache()
 		if err != nil {
-			api.server.logger.Infof("data detected but could not recalculate cache: %s", err)
+			api.server.logger.Infof("could not reset cache: %s", err)
 		}
 	}
 
@@ -997,7 +997,7 @@ func (api *API) requestUsageOfNodes() {
 	}
 }
 
-// Calculates disk usage from scratch for each index and stores the results in the usage cache
+// Calculates disk usage from scratch if cache has expired for each index and stores the results in the usage cache
 func (api *API) calculateUsage() {
 	api.usageCache.muCalculate.Lock()
 	defer api.usageCache.muCalculate.Unlock()
@@ -1086,6 +1086,7 @@ func (api *API) RefreshUsageCache() {
 	}
 }
 
+// Refresh interval set in relation to how long the last calculation took.
 func (api *API) setRefreshInterval(dur time.Duration) {
 	refresh := dur * api.usageCache.waitMultiplier
 	if refresh < time.Hour {
