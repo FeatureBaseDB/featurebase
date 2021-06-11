@@ -225,6 +225,18 @@ describe('mutex (keys) types', () => {
     }])).toEqual({ error: false, query: 'Not(Union(Row(fieldName="one"), Row(fieldName="two")))' })
   });
 
+  it('stringifies like operator with a single-codepoint key', () => {
+    expect(stringifyRowData([{
+      row: [{
+        "field": "fieldName",
+        "rowOperator": "like",
+        "value": "_alue",
+        "type": "mutex",
+        "keys": true
+      }]
+    }])).toEqual({ error: false, query: 'UnionRows(Rows(field=fieldName, like="_alue"))' })
+  });
+
   it('stringifies like operator with a wildcard', () => {
     expect(stringifyRowData([{
       row: [{
@@ -237,7 +249,7 @@ describe('mutex (keys) types', () => {
     }])).toEqual({ error: false, query: 'UnionRows(Rows(field=fieldName, like="value%"))' })
   });
 
-  it('stringifies like operator without a wildcard', () => {
+  it('stringifies like operator without a single-codepoint key or wildcard', () => {
     expect(stringifyRowData([{
       row: [{
         "field": "fieldName",
@@ -374,6 +386,18 @@ describe('set (keys) types', () => {
     }])).toEqual({ error: false, query: 'Not(Union(Row(fieldName="one"), Row(fieldName="two")))' })
   });
 
+  it('stringifies like operator with a single-codepoint key', () => {
+    expect(stringifyRowData([{
+      row: [{
+        "field": "fieldName",
+        "rowOperator": "like",
+        "value": "_alue",
+        "type": "set",
+        "keys": true
+      }]
+    }])).toEqual({ error: false, query: 'UnionRows(Rows(field=fieldName, like="_alue"))' })
+  });
+
   it('stringifies like operator with a wildcard', () => {
     expect(stringifyRowData([{
       row: [{
@@ -386,7 +410,7 @@ describe('set (keys) types', () => {
     }])).toEqual({ error: false, query: 'UnionRows(Rows(field=fieldName, like="value%"))' })
   });
 
-  it('stringifies like operator without a wildcard', () => {
+  it('stringifies like operator without a single-codepoint key or wildcard', () => {
     expect(stringifyRowData([{
       row: [{
         "field": "fieldName",
@@ -488,6 +512,18 @@ describe('time (keys) types', () => {
     }])).toEqual({ error: false, query: 'Not(Row(fieldName="1234"))' })
   });
 
+  it('stringifies like operators with a single-codepoint key', () => {
+    expect(stringifyRowData([{
+      row: [{
+        "field": "fieldName",
+        "rowOperator": "like",
+        "value": "123_",
+        "type": "time",
+        "keys": true
+      }]
+    }])).toEqual({ error: false, query: 'UnionRows(Rows(field=fieldName, like="123_"))' })
+  });
+
   it('stringifies like operators with a wildcard', () => {
     expect(stringifyRowData([{
       row: [{
@@ -500,7 +536,7 @@ describe('time (keys) types', () => {
     }])).toEqual({ error: false, query: 'UnionRows(Rows(field=fieldName, like="%1234"))' })
   });
 
-  it('stringifies like operators without a wildcard', () => {
+  it('stringifies like operators without a single-codepoint key or wildcard', () => {
     expect(stringifyRowData([{
       row: [{
         "field": "fieldName",

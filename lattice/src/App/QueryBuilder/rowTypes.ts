@@ -13,7 +13,7 @@ export type RowCallType = {
   rowOperator: string;
   value: string;
   type: string;
-  keys: boolean;
+  keys?: boolean;
 };
 
 export type RowsCallType = {

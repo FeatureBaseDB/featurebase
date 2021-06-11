@@ -30,7 +30,7 @@ export const stringifyRowData = (rowData: RowGrouping[], operator?: Operator) =>
           return { error: true, query: error.message };
         }
       } else if (rowOperator === 'like') {
-        if (value.includes('%')) {
+        if (value.includes('%') || value.includes('_')) {
           rowString = `UnionRows(Rows(field=${field}, like="${value}"))`;
         } else {
           rowString = `UnionRows(Rows(field=${field}, like="%${value}%"))`;
