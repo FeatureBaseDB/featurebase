@@ -4,6 +4,7 @@ import Breadcrumbs from '@material-ui/core/Breadcrumbs';
 import classNames from 'classnames';
 import Fuse from 'fuse.js';
 import Highlighter from 'react-highlight-words';
+import isEmpty from 'lodash/isEmpty';
 import Link from '@material-ui/core/Link';
 import map from 'lodash/map';
 import OrderBy from 'lodash/orderBy';
@@ -40,7 +41,7 @@ export const MoleculaTable: FC<MoleculaTableProps> = ({
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
   useEffect(() => {
-    if (dataDistribution) {
+    if (dataDistribution && !dataDistribution.uncached) {
       const aggregatedFieldsData = Reduce(
         dataDistribution.fields,
         (result, value) => {
@@ -77,7 +78,7 @@ export const MoleculaTable: FC<MoleculaTableProps> = ({
         threshold: 0
       });
       const result = fuse.search(searchText);
-      
+
       let resultsArray: any[] = [];
       result.forEach((r: any) => {
         resultsArray.push({ ...r?.item, ...fieldsData[r?.item.name] });
@@ -251,7 +252,15 @@ export const MoleculaTable: FC<MoleculaTableProps> = ({
                     </TableCell>
                     <TableCell className={css.tableCell}>
                       <UsageBreakdown
-                        data={field}
+                        data={
+                          isEmpty(field)
+                            ? field
+                            : dataDistribution
+                            ? dataDistribution.uncached
+                              ? dataDistribution
+                              : field
+                            : field
+                        }
                         width={`${(field.total / maxFieldSize) * 150}px`}
                         showLabel={false}
                         usageValueSize="small"

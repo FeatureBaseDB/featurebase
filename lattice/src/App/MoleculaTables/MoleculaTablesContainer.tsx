@@ -25,7 +25,7 @@ export const MoleculaTablesContainer = () => {
           .then((res) => setTables(res.data.indexes))
           .catch((err) => console.log(err))
       );
-      
+
     pilosa.get.usage().then((res) => {
       const nodes = Object.keys(res.data);
       let data = {};
@@ -83,7 +83,11 @@ export const MoleculaTablesContainer = () => {
     <MoleculaTable
       table={selectedTable}
       dataDistribution={
-        dataDistribution ? dataDistribution[selectedTable.name] : undefined
+        dataDistribution
+          ? dataDistribution[selectedTable.name]
+            ? dataDistribution[selectedTable.name]
+            : { uncached: true }
+          : undefined
       }
     />
   ) : (

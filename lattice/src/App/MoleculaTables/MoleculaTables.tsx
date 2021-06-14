@@ -77,10 +77,14 @@ export const MoleculaTables: FC<MoleculaTablesProps> = ({
                   <div className={css.section}>
                     <UsageBreakdown
                       data={
-                        dataDistribution ? dataDistribution[name] : undefined
+                        dataDistribution
+                          ? dataDistribution[name]
+                            ? dataDistribution[name]
+                            : { uncached: true }
+                          : undefined
                       }
                       width={
-                        dataDistribution
+                        dataDistribution && dataDistribution[name]
                           ? `${(dataDistribution[name].total / maxSize) * 100}%`
                           : '0px'
                       }
