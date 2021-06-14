@@ -27,7 +27,7 @@ export const MoleculaTables: FC<MoleculaTablesProps> = ({
 }) => {
   const history = useHistory();
   const [sortedTables, setSortedTables] = useState<any>([]);
-  const lastUpdatedMoment = moment(lastUpdated).utc();
+  const lastUpdatedMoment = lastUpdated ? moment(lastUpdated).utc() : undefined;
 
   useEffect(() => {
     if (tables && dataDistribution) {
@@ -56,17 +56,38 @@ export const MoleculaTables: FC<MoleculaTablesProps> = ({
         <Typography variant="h5" color="textSecondary">
           Tables
         </Typography>
-        <div className={css.infoMessage}>
-          Disk usage last updated{' '}
-          <Tooltip
-            title={`${lastUpdatedMoment.format('M/D/YYYY hh:mm a')} UTC`}
-            placement="top"
-            arrow
-          >
-            <span className={css.relativeTime}>{lastUpdatedMoment.fromNow()}</span>
-          </Tooltip>
-          . Disk usage for new tables will be calculated at the next cache refresh.
-        </div>
+        {lastUpdatedMoment ? (
+          <div className={css.infoMessage}>
+            Disk usage last updated{' '}
+            <Tooltip
+              title={`${lastUpdatedMoment.format('M/D/YYYY hh:mm a')} UTC`}
+              placement="top"
+              arrow
+            >
+              <span className={css.infoTooltip}>
+                {lastUpdatedMoment.fromNow()}
+              </span>
+            </Tooltip>
+            . Disk usage for new tables will be calculated at the next{` `}
+            <Tooltip
+              title={
+                <Fragment>
+                  Disk and memory information shown here are read from a cache,
+                  the behavior of which can be controlled with the{` `}
+                  <code style={{ whiteSpace: 'nowrap' }}>
+                    --usage-duty-cycle
+                  </code>{' '}
+                  command line flag.
+                </Fragment>
+              }
+              placement="top"
+              arrow
+            >
+              <span className={css.infoTooltip}>cache refresh</span>
+            </Tooltip>
+            .
+          </div>
+        ) : null}
         <div className={css.actions}>
           <SortBy
             options={[

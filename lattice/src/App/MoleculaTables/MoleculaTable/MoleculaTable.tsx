@@ -43,7 +43,7 @@ export const MoleculaTable: FC<MoleculaTableProps> = ({
   const [maxFieldSize, setMaxFieldSize] = useState<number>(0);
   const [sort, setSort] = useState<string>('total');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
-  const lastUpdatedMoment = moment(lastUpdated).utc();
+  const lastUpdatedMoment = lastUpdated ? moment(lastUpdated).utc() : undefined;
 
   useEffect(() => {
     if (dataDistribution && !dataDistribution.uncached) {
@@ -131,23 +131,46 @@ export const MoleculaTable: FC<MoleculaTableProps> = ({
       <Typography variant="h5" color="textSecondary">
         {table.name}
       </Typography>
-      <div className={css.infoMessage}>
-        {dataDistribution && dataDistribution.uncached ? (
-          'Disk usage will be calculated at the next cache refresh.'
-        ) : (
-          <Fragment>
-            Disk usage last updated{' '}
-            <Tooltip
-              title={`${lastUpdatedMoment.format('M/D/YYYY hh:mm a')} UTC`}
-              placement="top"
-              arrow
-            >
-              <span className={css.relativeTime}>{lastUpdatedMoment.fromNow()}</span>
-            </Tooltip>
-            .
-          </Fragment>
-        )}
-      </div>
+      {lastUpdatedMoment ? (
+        <div className={css.infoMessage}>
+          {dataDistribution && dataDistribution.uncached ? (
+            <Fragment>
+              Disk usage will be calculated at the next{` `}
+              <Tooltip
+                title={
+                  <Fragment>
+                    Disk and memory information shown here are read from a
+                    cache, the behavior of which can be controlled with the{` `}
+                    <code style={{ whiteSpace: 'nowrap' }}>
+                      --usage-duty-cycle
+                    </code>{' '}
+                    command line flag.
+                  </Fragment>
+                }
+                placement="top"
+                arrow
+              >
+                <span className={css.infoTooltip}>cache refresh</span>
+              </Tooltip>
+              .
+            </Fragment>
+          ) : (
+            <Fragment>
+              Disk usage last updated{' '}
+              <Tooltip
+                title={`${lastUpdatedMoment.format('M/D/YYYY hh:mm a')} UTC`}
+                placement="top"
+                arrow
+              >
+                <span className={css.infoTooltip}>
+                  {lastUpdatedMoment.fromNow()}
+                </span>
+              </Tooltip>
+              .
+            </Fragment>
+          )}
+        </div>
+      ) : null}
       <div className={css.layout}>
         <div>
           <label className={css.label}>keys</label>
