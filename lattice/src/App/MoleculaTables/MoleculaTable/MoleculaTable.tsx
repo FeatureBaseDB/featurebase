@@ -133,7 +133,7 @@ export const MoleculaTable: FC<MoleculaTableProps> = ({
       </Typography>
       <div className={css.infoMessage}>
         {dataDistribution && dataDistribution.uncached ? (
-          'Disk usage will be calculated after the next cache refresh.'
+          'Disk usage will be calculated at the next cache refresh.'
         ) : (
           <Fragment>
             Disk usage last updated{' '}

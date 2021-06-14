@@ -65,7 +65,7 @@ export const MoleculaTables: FC<MoleculaTablesProps> = ({
           >
             <span className={css.relativeTime}>{lastUpdatedMoment.fromNow()}</span>
           </Tooltip>
-          . Disk usage for new tables will be calculated at the next refresh.
+          . Disk usage for new tables will be calculated at the next cache refresh.
         </div>
         <div className={css.actions}>
           <SortBy
