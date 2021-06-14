@@ -15,17 +15,14 @@
 package ctl
 
 import (
-	"archive/tar"
-	"bytes"
 	"context"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
-	"path"
 	"path/filepath"
-	"time"
 
 	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/http"
@@ -41,7 +38,10 @@ type BackupCommand struct { // nolint: maligned
 	Host string `json:"host"`
 
 	// Path to write the backup to.
-	OutputPath string
+	OutputDir string
+
+	// If true, skips file sync.
+	NoSync bool
 
 	// Reusable client.
 	client pilosa.InternalClient
@@ -59,21 +59,12 @@ func NewBackupCommand(stdin io.Reader, stdout, stderr io.Writer) *BackupCommand 
 	}
 }
 
-// TempPath returns the path to the temporary file to write the archive to.
-func (cmd *BackupCommand) TempPath() string {
-	dir, base := filepath.Split(cmd.OutputPath)
-	return filepath.Join(dir, "."+base)
-}
-
 // Run executes the main program execution.
 func (cmd *BackupCommand) Run(ctx context.Context) (err error) {
-	logger := cmd.Logger()
-
 	// Validate arguments.
-	if cmd.OutputPath == "" {
+	if cmd.OutputDir == "" {
 		return fmt.Errorf("-o flag required")
 	}
-	useStdout := cmd.OutputPath == "-"
 
 	// Parse TLS configuration for node-specific clients.
 	tls := cmd.TLSConfiguration()
@@ -95,46 +86,23 @@ func (cmd *BackupCommand) Run(ctx context.Context) (err error) {
 	}
 	schema := &pilosa.Schema{Indexes: indexes}
 
-	// Create output file in temporary location, or send to stdout if a dash is specified.
-	var w io.Writer
-	if useStdout {
-		w = os.Stdout
-	} else {
-		f, err := os.Create(cmd.OutputPath + ".tmp")
-		if err != nil {
-			return err
-		}
-		defer f.Close()
-		w = f
+	// Ensure output directory doesn't exist; then create output directory.
+	if _, err := os.Stat(cmd.OutputDir); !os.IsNotExist(err) {
+		return fmt.Errorf("output directory already exists")
+	} else if err := os.MkdirAll(cmd.OutputDir, 0777); err != nil {
+		return err
 	}
 
-	// Open a tar writer to the temporary file.
-	tw := tar.NewWriter(w)
-	defer tw.Close()
-
 	// Backup schema.
-	if err := cmd.backupSchema(ctx, tw, schema); err != nil {
+	if err := cmd.backupSchema(ctx, schema); err != nil {
 		return fmt.Errorf("cannot back up schema: %w", err)
-	} else if err := cmd.backupIDAllocData(ctx, tw); err != nil {
+	} else if err := cmd.backupIDAllocData(ctx); err != nil {
 		return fmt.Errorf("cannot back up id alloc data: %w", err)
 	}
 
 	// Backup data for each index.
 	for _, ii := range schema.Indexes {
-		if err := cmd.backupIndex(ctx, tw, ii); err != nil {
-			return err
-		}
-	}
-
-	// Close archive.
-	if err := tw.Close(); err != nil {
-		return err
-	}
-
-	// Move data file to final location.
-	if !useStdout {
-		logger.Printf("writing backup: %s", cmd.OutputPath)
-		if err := os.Rename(cmd.OutputPath+".tmp", cmd.OutputPath); err != nil {
+		if err := cmd.backupIndex(ctx, ii); err != nil {
 			return err
 		}
 	}
@@ -143,7 +111,7 @@ func (cmd *BackupCommand) Run(ctx context.Context) (err error) {
 }
 
 // backupSchema writes the schema to the archive.
-func (cmd *BackupCommand) backupSchema(ctx context.Context, tw *tar.Writer, schema *pilosa.Schema) error {
+func (cmd *BackupCommand) backupSchema(ctx context.Context, schema *pilosa.Schema) error {
 	logger := cmd.Logger()
 	logger.Printf("backing up schema")
 
@@ -152,22 +120,14 @@ func (cmd *BackupCommand) backupSchema(ctx context.Context, tw *tar.Writer, sche
 		return fmt.Errorf("marshaling schema: %w", err)
 	}
 
-	// Build header & copy data to archive.
-	if err = tw.WriteHeader(&tar.Header{
-		Name:    "schema",
-		Mode:    0666,
-		Size:    int64(len(buf)),
-		ModTime: time.Now(),
-	}); err != nil {
-		return err
-	} else if _, err := tw.Write(buf); err != nil {
-		return fmt.Errorf("copying schema to archive: %w", err)
+	if err := ioutil.WriteFile(filepath.Join(cmd.OutputDir, "schema"), buf, 0666); err != nil {
+		return fmt.Errorf("writing schema: %w", err)
 	}
 
 	return nil
 }
 
-func (cmd *BackupCommand) backupIDAllocData(ctx context.Context, tw *tar.Writer) error {
+func (cmd *BackupCommand) backupIDAllocData(ctx context.Context) error {
 	logger := cmd.Logger()
 	logger.Printf("backing up id alloc data")
 
@@ -177,29 +137,22 @@ func (cmd *BackupCommand) backupIDAllocData(ctx context.Context, tw *tar.Writer)
 	}
 	defer rc.Close()
 
-	// Read to buffer to determine size.
-	var buf bytes.Buffer
-	if _, err := buf.ReadFrom(rc); err != nil {
-		return fmt.Errorf("copying id alloc data to memory: %w", err)
-	}
-
-	// Build header & copy data to archive.
-	if err = tw.WriteHeader(&tar.Header{
-		Name:    "idalloc",
-		Mode:    0666,
-		Size:    int64(buf.Len()),
-		ModTime: time.Now(),
-	}); err != nil {
+	f, err := os.Create(filepath.Join(cmd.OutputDir, "idalloc"))
+	if err != nil {
 		return err
-	} else if _, err := io.Copy(tw, &buf); err != nil {
-		return fmt.Errorf("copying id alloc data to archive: %w", err)
 	}
+	defer f.Close()
 
-	return nil
+	if _, err := io.Copy(f, rc); err != nil {
+		return err
+	} else if err := cmd.syncFile(f); err != nil {
+		return err
+	}
+	return f.Close()
 }
 
 // backupIndex backs up all shards for a given index.
-func (cmd *BackupCommand) backupIndex(ctx context.Context, tw *tar.Writer, ii *pilosa.IndexInfo) error {
+func (cmd *BackupCommand) backupIndex(ctx context.Context, ii *pilosa.IndexInfo) error {
 	logger := cmd.Logger()
 	logger.Printf("backing up index: %q", ii.Name)
 
@@ -210,19 +163,19 @@ func (cmd *BackupCommand) backupIndex(ctx context.Context, tw *tar.Writer, ii *p
 
 	// Back up all bitmap data for the index.
 	for _, shard := range shards {
-		if err := cmd.backupShard(ctx, tw, ii.Name, shard); err != nil {
+		if err := cmd.backupShard(ctx, ii.Name, shard); err != nil {
 			return fmt.Errorf("cannot backup shard %d on index %q: %w", shard, ii.Name, err)
 		}
 	}
 
 	// Back up translation data after bitmap data so we ensure we can translate all data.
-	if err := cmd.backupIndexTranslateData(ctx, tw, ii.Name); err != nil {
+	if err := cmd.backupIndexTranslateData(ctx, ii.Name); err != nil {
 		return err
 	}
 
 	// Back up field translation data.
 	for _, fi := range ii.Fields {
-		if err := cmd.backupFieldTranslateData(ctx, tw, ii.Name, fi.Name); err != nil {
+		if err := cmd.backupFieldTranslateData(ctx, ii.Name, fi.Name); err != nil {
 			return fmt.Errorf("cannot backup field translation data for field %q on index %q: %w", fi.Name, ii.Name, err)
 		}
 	}
@@ -231,7 +184,7 @@ func (cmd *BackupCommand) backupIndex(ctx context.Context, tw *tar.Writer, ii *p
 }
 
 // backupShard backs up a single shard from a single index.
-func (cmd *BackupCommand) backupShard(ctx context.Context, tw *tar.Writer, indexName string, shard uint64) (err error) {
+func (cmd *BackupCommand) backupShard(ctx context.Context, indexName string, shard uint64) (err error) {
 	nodes, err := cmd.client.FragmentNodes(ctx, indexName, shard)
 	if err != nil {
 		return fmt.Errorf("cannot determine fragment nodes: %w", err)
@@ -240,7 +193,7 @@ func (cmd *BackupCommand) backupShard(ctx context.Context, tw *tar.Writer, index
 	}
 
 	for _, node := range nodes {
-		if e := cmd.backupShardNode(ctx, tw, indexName, shard, node); e == nil {
+		if e := cmd.backupShardNode(ctx, indexName, shard, node); e == nil {
 			return nil // backup ok, exit
 		} else if err == nil {
 			err = e // save first error, try next node
@@ -250,11 +203,9 @@ func (cmd *BackupCommand) backupShard(ctx context.Context, tw *tar.Writer, index
 }
 
 // backupShardNode backs up a single shard from a single index on a specific node.
-func (cmd *BackupCommand) backupShardNode(ctx context.Context, tw *tar.Writer, indexName string, shard uint64, node *topology.Node) error {
+func (cmd *BackupCommand) backupShardNode(ctx context.Context, indexName string, shard uint64, node *topology.Node) error {
 	logger := cmd.Logger()
 	logger.Printf("backing up shard: index=%q id=%d", indexName, shard)
-
-	filename := path.Join("indexes", indexName, "shards", fmt.Sprintf("%04d", shard))
 
 	client := http.NewInternalClientFromURI(&node.URI, http.GetHTTPClient(cmd.tlsConfig))
 	rc, err := client.ShardReader(ctx, indexName, shard)
@@ -263,40 +214,37 @@ func (cmd *BackupCommand) backupShardNode(ctx context.Context, tw *tar.Writer, i
 	}
 	defer rc.Close()
 
-	// Read to buffer to determine size.
-	// TODO: Provide size via the reader itself.
-	var buf bytes.Buffer
-	if _, err := buf.ReadFrom(rc); err != nil {
-		return fmt.Errorf("copying shard data to memory: %w", err)
-	}
-
-	// Build header & copy data to archive.
-	if err = tw.WriteHeader(&tar.Header{
-		Name:    filename,
-		Mode:    0666,
-		Size:    int64(buf.Len()),
-		ModTime: time.Now(),
-	}); err != nil {
+	filename := filepath.Join(cmd.OutputDir, "indexes", indexName, "shards", fmt.Sprintf("%04d", shard))
+	if err := os.MkdirAll(filepath.Dir(filename), 0777); err != nil {
 		return err
-	} else if _, err := io.Copy(tw, &buf); err != nil {
-		return fmt.Errorf("copying shard data to archive: %w", err)
 	}
 
-	return nil
+	f, err := os.Create(filename)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	if _, err := io.Copy(f, rc); err != nil {
+		return err
+	} else if err := cmd.syncFile(f); err != nil {
+		return err
+	}
+	return f.Close()
 }
 
-func (cmd *BackupCommand) backupIndexTranslateData(ctx context.Context, tw *tar.Writer, name string) error {
+func (cmd *BackupCommand) backupIndexTranslateData(ctx context.Context, name string) error {
 	// TODO: Fetch holder partition count.
 	partitionN := topology.DefaultPartitionN
 	for partitionID := 0; partitionID < partitionN; partitionID++ {
-		if err := cmd.backupIndexPartitionTranslateData(ctx, tw, name, partitionID); err != nil {
+		if err := cmd.backupIndexPartitionTranslateData(ctx, name, partitionID); err != nil {
 			return fmt.Errorf("cannot backup index translation data for partition %d on %q: %w", partitionID, name, err)
 		}
 	}
 	return nil
 }
 
-func (cmd *BackupCommand) backupIndexPartitionTranslateData(ctx context.Context, tw *tar.Writer, name string, partitionID int) error {
+func (cmd *BackupCommand) backupIndexPartitionTranslateData(ctx context.Context, name string, partitionID int) error {
 	logger := cmd.Logger()
 	logger.Printf("backing up index translation data: %s/%d", name, partitionID)
 
@@ -308,28 +256,26 @@ func (cmd *BackupCommand) backupIndexPartitionTranslateData(ctx context.Context,
 	}
 	defer rc.Close()
 
-	// Read to buffer to determine size.
-	var buf bytes.Buffer
-	if _, err := buf.ReadFrom(rc); err != nil {
-		return fmt.Errorf("copying translate data to memory: %w", err)
-	}
-
-	// Build header & copy data to archive.
-	if err = tw.WriteHeader(&tar.Header{
-		Name:    path.Join("indexes", name, "translate", fmt.Sprintf("%04d", partitionID)),
-		Mode:    0666,
-		Size:    int64(buf.Len()),
-		ModTime: time.Now(),
-	}); err != nil {
+	filename := filepath.Join(cmd.OutputDir, "indexes", name, "translate", fmt.Sprintf("%04d", partitionID))
+	if err := os.MkdirAll(filepath.Dir(filename), 0777); err != nil {
 		return err
-	} else if _, err := io.Copy(tw, &buf); err != nil {
-		return fmt.Errorf("copying translate data to archive: %w", err)
 	}
 
-	return nil
+	f, err := os.Create(filename)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	if _, err := io.Copy(f, rc); err != nil {
+		return err
+	} else if err := cmd.syncFile(f); err != nil {
+		return err
+	}
+	return f.Close()
 }
 
-func (cmd *BackupCommand) backupFieldTranslateData(ctx context.Context, tw *tar.Writer, indexName, fieldName string) error {
+func (cmd *BackupCommand) backupFieldTranslateData(ctx context.Context, indexName, fieldName string) error {
 	logger := cmd.Logger()
 	logger.Printf("backing up field translation data: %s/%s", indexName, fieldName)
 
@@ -341,24 +287,30 @@ func (cmd *BackupCommand) backupFieldTranslateData(ctx context.Context, tw *tar.
 	}
 	defer rc.Close()
 
-	// Read to buffer to determine size.
-	var buf bytes.Buffer
-	if _, err := buf.ReadFrom(rc); err != nil {
-		return fmt.Errorf("copying translate data to memory: %w", err)
+	filename := filepath.Join(cmd.OutputDir, "indexes", indexName, "fields", fieldName, "translate")
+	if err := os.MkdirAll(filepath.Dir(filename), 0777); err != nil {
+		return err
 	}
 
-	// Build header & copy data to archive.
-	if err = tw.WriteHeader(&tar.Header{
-		Name:    path.Join("indexes", indexName, "fields", fieldName, "translate"),
-		Mode:    0666,
-		Size:    int64(buf.Len()),
-		ModTime: time.Now(),
-	}); err != nil {
+	f, err := os.Create(filename)
+	if err != nil {
 		return err
-	} else if _, err := io.Copy(tw, &buf); err != nil {
-		return fmt.Errorf("copying translate data to archive: %w", err)
 	}
-	return nil
+	defer f.Close()
+
+	if _, err := io.Copy(f, rc); err != nil {
+		return err
+	} else if err := cmd.syncFile(f); err != nil {
+		return err
+	}
+	return f.Close()
+}
+
+func (cmd *BackupCommand) syncFile(f *os.File) error {
+	if cmd.NoSync {
+		return nil
+	}
+	return f.Sync()
 }
 
 func (cmd *BackupCommand) TLSHost() string { return cmd.Host }
