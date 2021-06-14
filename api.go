@@ -1060,7 +1060,7 @@ func (api *API) calculateUsage() {
 	}
 }
 
-// Periodically calculates disk usage
+// Periodically calculates disk/memory usage
 func (api *API) RefreshUsageCache(dutyCycle float64) {
 	trigger := make(chan bool)
 	defer close(trigger)
