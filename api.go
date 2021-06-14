@@ -908,7 +908,7 @@ type usageCache struct {
 	lastUpdated      time.Time
 	resetTrigger     chan bool
 	lastCalcDuration time.Duration
-	waitMultiplier   time.Duration
+	waitMultiplier   float64
 
 	muCalculate sync.Mutex
 	muAssign    sync.Mutex
@@ -1068,14 +1068,14 @@ func (api *API) RefreshUsageCache(dutyCycle float64) {
 	if dutyCycle <= 0 {
 		dutyCycle = 20
 	}
-	multiplier := int(math.Ceil(100/dutyCycle)) - 1
+	multiplier := 100 / dutyCycle
 
 	api.usageCache = &usageCache{
 		data:             make(map[string]NodeUsage),
 		refreshInterval:  time.Hour,
 		resetTrigger:     trigger,
 		lastCalcDuration: 0,
-		waitMultiplier:   time.Duration(multiplier),
+		waitMultiplier:   multiplier,
 	}
 	for {
 		start := time.Now()
@@ -1094,7 +1094,7 @@ func (api *API) RefreshUsageCache(dutyCycle float64) {
 
 // Refresh interval set in relation to how long the last calculation took.
 func (api *API) setRefreshInterval(dur time.Duration) {
-	refresh := dur * api.usageCache.waitMultiplier
+	refresh := time.Duration(float64(dur) * api.usageCache.waitMultiplier)
 	if refresh < time.Hour {
 		refresh = time.Hour
 	}
