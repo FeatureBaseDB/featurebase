@@ -224,6 +224,9 @@ type Config struct {
 
 	// LookupDBDSN is an external database to connect to for `ExternalLookup` queries.
 	LookupDBDSN string `toml:"lookup-db-dsn"`
+
+	// The percentage of time spent recalculating the disk and memory usage cache.
+	UsageDutyCycle float64 `toml:"usage-duty-cycle"`
 }
 
 // MustValidate checks that all ports in a Config are unique and not zero.
@@ -358,6 +361,9 @@ func NewConfig() *Config {
 	c.Etcd.ClientKeyFile = ""
 	c.Etcd.PeerCertFile = ""
 	c.Etcd.PeerKeyFile = ""
+
+	// Disk and Memory Usage
+	c.UsageDutyCycle = 20.0
 
 	return c
 }

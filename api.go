@@ -1061,15 +1061,21 @@ func (api *API) calculateUsage() {
 }
 
 // Periodically calculates disk usage
-func (api *API) RefreshUsageCache() {
+func (api *API) RefreshUsageCache(dutyCycle float64) {
 	trigger := make(chan bool)
 	defer close(trigger)
+
+	if dutyCycle <= 0 {
+		dutyCycle = 20
+	}
+	multiplier := int(math.Ceil(100/dutyCycle)) - 1
+
 	api.usageCache = &usageCache{
 		data:             make(map[string]NodeUsage),
 		refreshInterval:  time.Hour,
 		resetTrigger:     trigger,
 		lastCalcDuration: 0,
-		waitMultiplier:   time.Duration(5),
+		waitMultiplier:   time.Duration(multiplier),
 	}
 	for {
 		start := time.Now()
