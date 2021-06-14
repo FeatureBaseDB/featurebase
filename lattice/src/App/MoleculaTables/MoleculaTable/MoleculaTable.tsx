@@ -16,6 +16,7 @@ import TableCell from '@material-ui/core/TableCell';
 import TableHead from '@material-ui/core/TableHead';
 import TableRow from '@material-ui/core/TableRow';
 import TextField from '@material-ui/core/TextField';
+import Tooltip from '@material-ui/core/Tooltip';
 import Typography from '@material-ui/core/Typography';
 import { Block } from 'shared/Block';
 import { Pager } from 'shared/Pager';
@@ -42,6 +43,7 @@ export const MoleculaTable: FC<MoleculaTableProps> = ({
   const [maxFieldSize, setMaxFieldSize] = useState<number>(0);
   const [sort, setSort] = useState<string>('total');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  const lastUpdatedMoment = moment(lastUpdated).utc();
 
   useEffect(() => {
     if (dataDistribution && !dataDistribution.uncached) {
@@ -130,9 +132,21 @@ export const MoleculaTable: FC<MoleculaTableProps> = ({
         {table.name}
       </Typography>
       <div className={css.infoMessage}>
-        {dataDistribution && dataDistribution.uncached
-          ? 'Disk usage will be calculated after the next cache refresh.'
-          : `Disk usage last updated ${moment(lastUpdated).fromNow()}.`}
+        {dataDistribution && dataDistribution.uncached ? (
+          'Disk usage will be calculated after the next cache refresh.'
+        ) : (
+          <Fragment>
+            Disk usage last updated{' '}
+            <Tooltip
+              title={`${lastUpdatedMoment.format('M/D/YYYY hh:mm a')} UTC`}
+              placement="top"
+              arrow
+            >
+              <span className={css.relativeTime}>{lastUpdatedMoment.fromNow()}</span>
+            </Tooltip>
+            .
+          </Fragment>
+        )}
       </div>
       <div className={css.layout}>
         <div>

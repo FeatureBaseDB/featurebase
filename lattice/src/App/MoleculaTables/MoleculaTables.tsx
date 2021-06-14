@@ -4,6 +4,7 @@ import CardContent from '@material-ui/core/CardContent';
 import moment from 'moment';
 import OrderBy from 'lodash/orderBy';
 import Paper from '@material-ui/core/Paper';
+import Tooltip from '@material-ui/core/Tooltip';
 import Typography from '@material-ui/core/Typography';
 import { Block } from 'shared/Block';
 import { SortBy } from 'shared/SortBy';
@@ -26,6 +27,7 @@ export const MoleculaTables: FC<MoleculaTablesProps> = ({
 }) => {
   const history = useHistory();
   const [sortedTables, setSortedTables] = useState<any>([]);
+  const lastUpdatedMoment = moment(lastUpdated).utc();
 
   useEffect(() => {
     if (tables && dataDistribution) {
@@ -55,8 +57,15 @@ export const MoleculaTables: FC<MoleculaTablesProps> = ({
           Tables
         </Typography>
         <div className={css.infoMessage}>
-          Disk usage last updated {moment(lastUpdated).fromNow()}. Disk usage
-          for new tables will be calculated at the next refresh.
+          Disk usage last updated{' '}
+          <Tooltip
+            title={`${lastUpdatedMoment.format('M/D/YYYY hh:mm a')} UTC`}
+            placement="top"
+            arrow
+          >
+            <span className={css.relativeTime}>{lastUpdatedMoment.fromNow()}</span>
+          </Tooltip>
+          . Disk usage for new tables will be calculated at the next refresh.
         </div>
         <div className={css.actions}>
           <SortBy
