@@ -960,7 +960,7 @@ func (api *API) Usage(ctx context.Context, remote bool) (map[string]NodeUsage, e
 	if api.usageCache.lastCalcDuration < (time.Second * 5) {
 		err := api.ResetUsageCache()
 		if err != nil {
-			api.server.logger.Infof("could not reset cache: %s", err)
+			api.server.logger.Infof("could not reset usageCache: %s", err)
 		}
 	}
 
