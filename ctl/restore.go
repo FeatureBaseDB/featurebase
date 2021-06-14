@@ -15,17 +15,14 @@
 package ctl
 
 import (
-	"archive/tar"
-	"bytes"
-	"compress/gzip"
 	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
-	gohttp "net/http"
+	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -65,19 +62,6 @@ func (cmd *RestoreCommand) Run(ctx context.Context) (err error) {
 	if cmd.Path == "" {
 		return fmt.Errorf("-s flag required")
 	}
-	useStdin := cmd.Path == "-"
-
-	var f *os.File
-	// read from Stdin if path specified as -
-	if useStdin {
-		f = os.Stdin
-	} else {
-		f, err = os.Open(cmd.Path)
-		if err != nil {
-			return (err)
-		}
-		defer f.Close()
-	}
 
 	// Parse TLS configuration for node-specific clients.
 	tls := cmd.TLSConfiguration()
@@ -90,16 +74,7 @@ func (cmd *RestoreCommand) Run(ctx context.Context) (err error) {
 		return fmt.Errorf("creating client: %w", err)
 	}
 	cmd.client = client
-	var tarReader *tar.Reader
-	if strings.HasSuffix(cmd.Path, "gz") {
-		gzf, err := gzip.NewReader(f)
-		if err != nil {
-			return err
-		}
-		tarReader = tar.NewReader(gzf)
-	} else {
-		tarReader = tar.NewReader(f)
-	}
+
 	nodes, err := cmd.client.Nodes(ctx)
 	if err != nil {
 		return err
@@ -116,126 +91,21 @@ func (cmd *RestoreCommand) Run(ctx context.Context) (err error) {
 	if primary == nil {
 		return errors.New("no primary")
 	}
-	c := &gohttp.Client{}
-	for {
-		header, err := tarReader.Next()
-		if err == io.EOF {
-			break
-		}
-		record := strings.Split(header.Name, "/")
-		if len(record) == 1 {
-			switch record[0] {
-			case "schema":
-				logger.Printf("Load Schema")
-				url := primary.URI.Path("/schema")
-				_, err = c.Post(url, "application/json", tarReader)
-				if err != nil {
-					return err
-				}
-			case "idalloc":
-				logger.Printf("Load ids")
-				url := primary.URI.Path("/internal/idalloc/restore")
-				_, err = c.Post(url, "application/octet-stream", tarReader)
-				if err != nil {
-					return err
-				}
-			default:
-				return err
 
-			}
-			continue
-		}
-		indexName := record[1]
-		switch record[2] {
-		case "shards":
-			shard, err := strconv.ParseUint(record[3], 10, 64)
-			if err != nil {
-				return err
-			}
-			nodes, err := cmd.client.FragmentNodes(ctx, indexName, shard)
-			if err != nil {
-				return fmt.Errorf("cannot determine fragment nodes: %w", err)
-			} else if len(nodes) == 0 {
-				return fmt.Errorf("no nodes available")
-			}
-
-			shardBytes, err := ioutil.ReadAll(tarReader) // this feels wrong but works for now
-			if err != nil {
-				return err
-			}
-			g, _ := errgroup.WithContext(ctx)
-			for _, node := range nodes {
-				node := node
-				g.Go(func() error {
-					client := &gohttp.Client{}
-					rd := bytes.NewReader(shardBytes)
-					logger.Printf("shard %v %v", shard, indexName)
-					url := node.URI.Path(fmt.Sprintf("/internal/restore/%v/%v", indexName, shard))
-					_, err = client.Post(url, "application/octet-stream", rd)
-					return err
-				})
-			}
-			if err := g.Wait(); err != nil {
-				return err
-			}
-		case "translate":
-			partitionID, err := strconv.Atoi(record[3])
-			logger.Printf("column keys %v (%v)", indexName, partitionID)
-			if err != nil {
-				return err
-			}
-			partitionNodes, err := cmd.client.PartitionNodes(ctx, partitionID)
-			if err != nil {
-				return err
-			}
-			shardBytes, err := ioutil.ReadAll(tarReader) // this feels wrong but works for now
-			if err != nil {
-				return err
-			}
-			g, _ := errgroup.WithContext(ctx)
-			for _, node := range partitionNodes {
-				node := node
-				g.Go(func() error {
-					rd := bytes.NewReader(shardBytes)
-					return cmd.client.ImportIndexKeys(ctx, &node.URI, indexName, partitionID, false, rd)
-				})
-			}
-			if err := g.Wait(); err != nil {
-				return err
-			}
-
-		case "attributes":
-			//skip
-		case "fields":
-			fieldName := record[3]
-			switch action := record[4]; action {
-			case "translate":
-				logger.Printf("field keys %v %v", indexName, fieldName)
-				//needs to go to all nodes
-				shardBytes, err := ioutil.ReadAll(tarReader) // this feels wrong but works for now
-				if err != nil {
-					return err
-				}
-				g, _ := errgroup.WithContext(ctx)
-				for _, node := range nodes {
-					node := node
-					g.Go(func() error {
-						rd := bytes.NewReader(shardBytes)
-						return cmd.client.ImportFieldKeys(ctx, &node.URI, indexName, fieldName, false, rd)
-					})
-				}
-				if err := g.Wait(); err != nil {
-					return err
-				}
-			case "attributes":
-			//skip
-			default:
-				return fmt.Errorf("unknown restore action: %v", action)
-			}
-
-		}
-
+	if err := cmd.restoreSchema(ctx, primary); err != nil {
+		return fmt.Errorf("cannot restore schema: %w", err)
+	} else if err := cmd.restoreIDAlloc(ctx, primary); err != nil {
+		return fmt.Errorf("cannot restore idalloc: %w", err)
 	}
+
+	if err := cmd.restoreShards(ctx); err != nil {
+		return fmt.Errorf("cannot restore shards: %w", err)
+	} else if err := cmd.restoreIndexTranslation(ctx); err != nil {
+		return fmt.Errorf("cannot restore index translation: %w", err)
+	} else if err := cmd.restoreFieldTranslation(ctx, nodes); err != nil {
+		return fmt.Errorf("cannot restore field translation: %w", err)
+	}
+
 	/*	Fetch the cluster nodes from the target host.
 		For each index:
 		Upload the RBF snapshot for each shard to the nodes that own the shard.
@@ -245,6 +115,199 @@ func (cmd *RestoreCommand) Run(ctx context.Context) (err error) {
 
 	return nil
 }
+
+func (cmd *RestoreCommand) restoreSchema(ctx context.Context, primary *topology.Node) error {
+	f, err := os.Open(filepath.Join(cmd.Path, "schema"))
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	cmd.Logger().Printf("Load Schema")
+	url := primary.URI.Path("/schema")
+
+	var client http.Client
+	_, err = client.Post(url, "application/json", f)
+	return err
+}
+
+func (cmd *RestoreCommand) restoreIDAlloc(ctx context.Context, primary *topology.Node) error {
+	logger := cmd.Logger()
+
+	f, err := os.Open(filepath.Join(cmd.Path, "idalloc"))
+	if os.IsNotExist(err) {
+		logger.Printf("No idalloc, skipping")
+		return nil
+	} else if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	logger.Printf("Load idalloc")
+	url := primary.URI.Path("/internal/idalloc/restore")
+
+	var client http.Client
+	_, err = client.Post(url, "application/octet-stream", f)
+	return err
+}
+
+func (cmd *RestoreCommand) restoreShards(ctx context.Context) error {
+	logger := cmd.Logger()
+
+	filenames, err := filepath.Glob(filepath.Join(cmd.Path, "indexes", "*", "shards", "*"))
+	if err != nil {
+		return err
+	}
+
+	for _, filename := range filenames {
+		rel, err := filepath.Rel(cmd.Path, filename)
+		if err != nil {
+			return err
+		}
+
+		record := strings.Split(rel, string(os.PathSeparator))
+		indexName := record[1]
+
+		shard, err := strconv.ParseUint(record[3], 10, 64)
+		if err != nil {
+			continue
+		}
+
+		nodes, err := cmd.client.FragmentNodes(ctx, indexName, shard)
+		if err != nil {
+			return fmt.Errorf("cannot determine fragment nodes: %w", err)
+		} else if len(nodes) == 0 {
+			return fmt.Errorf("no nodes available")
+		}
+
+		g, ctx := errgroup.WithContext(ctx)
+		for _, node := range nodes {
+			node := node
+			g.Go(func() error {
+				logger.Printf("shard %v %v", shard, indexName)
+
+				f, err := os.Open(filename)
+				if err != nil {
+					return err
+				}
+				defer f.Close()
+
+				url := node.URI.Path(fmt.Sprintf("/internal/restore/%v/%v", indexName, shard))
+				req, err := http.NewRequest("POST", url, f)
+				if err != nil {
+					return err
+				}
+				req = req.WithContext(ctx)
+				req.Header.Set("Content-Type", "application/octet-stream")
+
+				var client http.Client
+				resp, err := client.Do(req)
+				if err != nil {
+					return err
+				} else if err := resp.Body.Close(); err != nil {
+					return err
+				} else if resp.StatusCode != http.StatusOK {
+					return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+				}
+				return nil
+			})
+		}
+		if err := g.Wait(); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (cmd *RestoreCommand) restoreIndexTranslation(ctx context.Context) error {
+	logger := cmd.Logger()
+
+	filenames, err := filepath.Glob(filepath.Join(cmd.Path, "indexes", "*", "translate", "*"))
+	if err != nil {
+		return err
+	}
+
+	for _, filename := range filenames {
+		rel, err := filepath.Rel(cmd.Path, filename)
+		if err != nil {
+			return err
+		}
+
+		record := strings.Split(rel, string(os.PathSeparator))
+		indexName := record[1]
+
+		partitionID, err := strconv.Atoi(record[3])
+		if err != nil {
+			return err
+		}
+		logger.Printf("column keys %v (%v)", indexName, partitionID)
+
+		nodes, err := cmd.client.PartitionNodes(ctx, partitionID)
+		if err != nil {
+			return err
+		}
+
+		g, ctx := errgroup.WithContext(ctx)
+		for _, node := range nodes {
+			node := node
+			g.Go(func() error {
+				f, err := os.Open(filename)
+				if err != nil {
+					return err
+				}
+				defer f.Close()
+
+				return cmd.client.ImportIndexKeys(ctx, &node.URI, indexName, partitionID, false, f)
+			})
+		}
+		if err := g.Wait(); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (cmd *RestoreCommand) restoreFieldTranslation(ctx context.Context, nodes []*topology.Node) error {
+	logger := cmd.Logger()
+
+	filenames, err := filepath.Glob(filepath.Join(cmd.Path, "indexes", "*", "fields", "*", "translate"))
+	if err != nil {
+		return err
+	}
+
+	for _, filename := range filenames {
+		rel, err := filepath.Rel(cmd.Path, filename)
+		if err != nil {
+			return err
+		}
+
+		record := strings.Split(rel, string(os.PathSeparator))
+		indexName, fieldName := record[1], record[3]
+
+		logger.Printf("field keys %v %v", indexName, fieldName)
+
+		g, ctx := errgroup.WithContext(ctx)
+		for _, node := range nodes {
+			node := node
+			g.Go(func() error {
+				f, err := os.Open(filename)
+				if err != nil {
+					return err
+				}
+				defer f.Close()
+
+				return cmd.client.ImportFieldKeys(ctx, &node.URI, indexName, fieldName, false, f)
+			})
+		}
+		if err := g.Wait(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (cmd *RestoreCommand) TLSHost() string { return cmd.Host }
 
 func (cmd *RestoreCommand) TLSConfiguration() server.TLSConfig { return cmd.TLS }
