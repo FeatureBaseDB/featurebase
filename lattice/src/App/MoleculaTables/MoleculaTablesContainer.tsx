@@ -14,6 +14,7 @@ export const MoleculaTablesContainer = () => {
   const [selectedTable, setSelectedTable] = useState<any>();
   const [dataDistribution, setDataDistribution] = useState<any>();
   const [maxSize, setMaxSize] = useState<number>(0);
+  const [lastUpdated, setLastUpdated] = useState<string>('');
 
   useEffectOnce(() => {
     pilosa.get
@@ -25,7 +26,7 @@ export const MoleculaTablesContainer = () => {
           .then((res) => setTables(res.data.indexes))
           .catch((err) => console.log(err))
       );
-      
+
     pilosa.get.usage().then((res) => {
       const nodes = Object.keys(res.data);
       let data = {};
@@ -54,6 +55,10 @@ export const MoleculaTablesContainer = () => {
             };
           }
         });
+
+        if(!lastUpdated) {
+          setLastUpdated(res.data[node].lastUpdated);
+        }
       });
 
       const sorted = OrderBy(data, ['total'], ['desc']);
@@ -83,13 +88,19 @@ export const MoleculaTablesContainer = () => {
     <MoleculaTable
       table={selectedTable}
       dataDistribution={
-        dataDistribution ? dataDistribution[selectedTable.name] : undefined
+        dataDistribution
+          ? dataDistribution[selectedTable.name]
+            ? dataDistribution[selectedTable.name]
+            : { uncached: true }
+          : undefined
       }
+      lastUpdated={lastUpdated}
     />
   ) : (
     <MoleculaTables
       tables={tables}
       dataDistribution={dataDistribution}
+      lastUpdated={lastUpdated}
       maxSize={maxSize}
     />
   );
