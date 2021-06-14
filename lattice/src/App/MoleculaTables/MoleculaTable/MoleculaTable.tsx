@@ -7,6 +7,7 @@ import Highlighter from 'react-highlight-words';
 import isEmpty from 'lodash/isEmpty';
 import Link from '@material-ui/core/Link';
 import map from 'lodash/map';
+import moment from 'moment';
 import OrderBy from 'lodash/orderBy';
 import Reduce from 'lodash/reduce';
 import Table from '@material-ui/core/Table';
@@ -24,11 +25,13 @@ import css from './MoleculaTable.module.scss';
 type MoleculaTableProps = {
   table: any;
   dataDistribution: any;
+  lastUpdated: string;
 };
 
 export const MoleculaTable: FC<MoleculaTableProps> = ({
   table,
-  dataDistribution
+  dataDistribution,
+  lastUpdated
 }) => {
   const [page, setPage] = useState<number>(1);
   const [resultsPerPage, setResultsPerPage] = useState<number>(10);
@@ -126,6 +129,11 @@ export const MoleculaTable: FC<MoleculaTableProps> = ({
       <Typography variant="h5" color="textSecondary">
         {table.name}
       </Typography>
+      <div className={css.infoMessage}>
+        {dataDistribution && dataDistribution.uncached
+          ? 'Disk usage will be calculated after the next cache refresh.'
+          : `Disk usage last updated ${moment(lastUpdated).fromNow()}.`}
+      </div>
       <div className={css.layout}>
         <div>
           <label className={css.label}>keys</label>

@@ -1,6 +1,7 @@
 import React, { FC, Fragment, useEffect, useState } from 'react';
 import Card from '@material-ui/core/Card';
 import CardContent from '@material-ui/core/CardContent';
+import moment from 'moment';
 import OrderBy from 'lodash/orderBy';
 import Paper from '@material-ui/core/Paper';
 import Typography from '@material-ui/core/Typography';
@@ -13,12 +14,14 @@ import css from './MoleculaTables.module.scss';
 type MoleculaTablesProps = {
   tables: any;
   dataDistribution: any;
+  lastUpdated: string;
   maxSize: number;
 };
 
 export const MoleculaTables: FC<MoleculaTablesProps> = ({
   tables,
   dataDistribution,
+  lastUpdated,
   maxSize
 }) => {
   const history = useHistory();
@@ -51,6 +54,10 @@ export const MoleculaTables: FC<MoleculaTablesProps> = ({
         <Typography variant="h5" color="textSecondary">
           Tables
         </Typography>
+        <div className={css.infoMessage}>
+          Disk usage last updated {moment(lastUpdated).fromNow()}. Disk usage
+          for new tables will be calculated at the next refresh.
+        </div>
         <div className={css.actions}>
           <SortBy
             options={[
