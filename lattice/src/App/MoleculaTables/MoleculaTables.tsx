@@ -1,8 +1,10 @@
 import React, { FC, Fragment, useEffect, useState } from 'react';
 import Card from '@material-ui/core/Card';
 import CardContent from '@material-ui/core/CardContent';
+import moment from 'moment';
 import OrderBy from 'lodash/orderBy';
 import Paper from '@material-ui/core/Paper';
+import Tooltip from '@material-ui/core/Tooltip';
 import Typography from '@material-ui/core/Typography';
 import { Block } from 'shared/Block';
 import { SortBy } from 'shared/SortBy';
@@ -13,16 +15,19 @@ import css from './MoleculaTables.module.scss';
 type MoleculaTablesProps = {
   tables: any;
   dataDistribution: any;
+  lastUpdated: string;
   maxSize: number;
 };
 
 export const MoleculaTables: FC<MoleculaTablesProps> = ({
   tables,
   dataDistribution,
+  lastUpdated,
   maxSize
 }) => {
   const history = useHistory();
   const [sortedTables, setSortedTables] = useState<any>([]);
+  const lastUpdatedMoment = lastUpdated ? moment(lastUpdated).utc() : undefined;
 
   useEffect(() => {
     if (tables && dataDistribution) {
@@ -51,6 +56,38 @@ export const MoleculaTables: FC<MoleculaTablesProps> = ({
         <Typography variant="h5" color="textSecondary">
           Tables
         </Typography>
+        {lastUpdatedMoment ? (
+          <div className={css.infoMessage}>
+            Disk usage last updated{' '}
+            <Tooltip
+              title={`${lastUpdatedMoment.format('M/D/YYYY hh:mm a')} UTC`}
+              placement="top"
+              arrow
+            >
+              <span className={css.infoTooltip}>
+                {lastUpdatedMoment.fromNow()}
+              </span>
+            </Tooltip>
+            . Disk usage for new tables will be calculated at the next{` `}
+            <Tooltip
+              title={
+                <Fragment>
+                  Disk and memory information shown here are read from a cache,
+                  the behavior of which can be controlled with the{` `}
+                  <code style={{ whiteSpace: 'nowrap' }}>
+                    --usage-duty-cycle
+                  </code>{' '}
+                  command line flag.
+                </Fragment>
+              }
+              placement="top"
+              arrow
+            >
+              <span className={css.infoTooltip}>cache refresh</span>
+            </Tooltip>
+            .
+          </div>
+        ) : null}
         <div className={css.actions}>
           <SortBy
             options={[
@@ -77,10 +114,14 @@ export const MoleculaTables: FC<MoleculaTablesProps> = ({
                   <div className={css.section}>
                     <UsageBreakdown
                       data={
-                        dataDistribution ? dataDistribution[name] : undefined
+                        dataDistribution
+                          ? dataDistribution[name]
+                            ? dataDistribution[name]
+                            : { uncached: true }
+                          : undefined
                       }
                       width={
-                        dataDistribution
+                        dataDistribution && dataDistribution[name]
                           ? `${(dataDistribution[name].total / maxSize) * 100}%`
                           : '0px'
                       }

@@ -69,3 +69,15 @@
 .pilosaError {
   padding: 8px 16px;
 }
+
+.infoMessage {
+  padding: 16px;
+  border: 1px solid rgba(var(--primary-rgb), 0.5);
+  background: rgba(var(--primary-rgb), 0.1);
+  border-radius: 4px;
+  margin: 4px 0 16px;
+
+  .infoTooltip {
+    border-bottom: 1px dashed rgba(var(--primary-rgb), 0.7);
+  }
+}

@@ -4,8 +4,10 @@ import Breadcrumbs from '@material-ui/core/Breadcrumbs';
 import classNames from 'classnames';
 import Fuse from 'fuse.js';
 import Highlighter from 'react-highlight-words';
+import isEmpty from 'lodash/isEmpty';
 import Link from '@material-ui/core/Link';
 import map from 'lodash/map';
+import moment from 'moment';
 import OrderBy from 'lodash/orderBy';
 import Reduce from 'lodash/reduce';
 import Table from '@material-ui/core/Table';
@@ -14,6 +16,7 @@ import TableCell from '@material-ui/core/TableCell';
 import TableHead from '@material-ui/core/TableHead';
 import TableRow from '@material-ui/core/TableRow';
 import TextField from '@material-ui/core/TextField';
+import Tooltip from '@material-ui/core/Tooltip';
 import Typography from '@material-ui/core/Typography';
 import { Block } from 'shared/Block';
 import { Pager } from 'shared/Pager';
@@ -23,11 +26,13 @@ import css from './MoleculaTable.module.scss';
 type MoleculaTableProps = {
   table: any;
   dataDistribution: any;
+  lastUpdated: string;
 };
 
 export const MoleculaTable: FC<MoleculaTableProps> = ({
   table,
-  dataDistribution
+  dataDistribution,
+  lastUpdated
 }) => {
   const [page, setPage] = useState<number>(1);
   const [resultsPerPage, setResultsPerPage] = useState<number>(10);
@@ -38,9 +43,10 @@ export const MoleculaTable: FC<MoleculaTableProps> = ({
   const [maxFieldSize, setMaxFieldSize] = useState<number>(0);
   const [sort, setSort] = useState<string>('total');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  const lastUpdatedMoment = lastUpdated ? moment(lastUpdated).utc() : undefined;
 
   useEffect(() => {
-    if (dataDistribution) {
+    if (dataDistribution && !dataDistribution.uncached) {
       const aggregatedFieldsData = Reduce(
         dataDistribution.fields,
         (result, value) => {
@@ -77,7 +83,7 @@ export const MoleculaTable: FC<MoleculaTableProps> = ({
         threshold: 0
       });
       const result = fuse.search(searchText);
-      
+
       let resultsArray: any[] = [];
       result.forEach((r: any) => {
         resultsArray.push({ ...r?.item, ...fieldsData[r?.item.name] });
@@ -125,6 +131,46 @@ export const MoleculaTable: FC<MoleculaTableProps> = ({
       <Typography variant="h5" color="textSecondary">
         {table.name}
       </Typography>
+      {lastUpdatedMoment ? (
+        <div className={css.infoMessage}>
+          {dataDistribution && dataDistribution.uncached ? (
+            <Fragment>
+              Disk usage will be calculated at the next{` `}
+              <Tooltip
+                title={
+                  <Fragment>
+                    Disk and memory information shown here are read from a
+                    cache, the behavior of which can be controlled with the{` `}
+                    <code style={{ whiteSpace: 'nowrap' }}>
+                      --usage-duty-cycle
+                    </code>{' '}
+                    command line flag.
+                  </Fragment>
+                }
+                placement="top"
+                arrow
+              >
+                <span className={css.infoTooltip}>cache refresh</span>
+              </Tooltip>
+              .
+            </Fragment>
+          ) : (
+            <Fragment>
+              Disk usage last updated{' '}
+              <Tooltip
+                title={`${lastUpdatedMoment.format('M/D/YYYY hh:mm a')} UTC`}
+                placement="top"
+                arrow
+              >
+                <span className={css.infoTooltip}>
+                  {lastUpdatedMoment.fromNow()}
+                </span>
+              </Tooltip>
+              .
+            </Fragment>
+          )}
+        </div>
+      ) : null}
       <div className={css.layout}>
         <div>
           <label className={css.label}>keys</label>
@@ -251,7 +297,15 @@ export const MoleculaTable: FC<MoleculaTableProps> = ({
                     </TableCell>
                     <TableCell className={css.tableCell}>
                       <UsageBreakdown
-                        data={field}
+                        data={
+                          isEmpty(field)
+                            ? field
+                            : dataDistribution
+                            ? dataDistribution.uncached
+                              ? dataDistribution
+                              : field
+                            : field
+                        }
                         width={`${(field.total / maxFieldSize) * 150}px`}
                         showLabel={false}
                         usageValueSize="small"

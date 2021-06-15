@@ -18,7 +18,15 @@ export const UsageBreakdown: FC<UsageBreakdownProps> = ({
   showLabel = true,
   usageValueSize = 'medium'
 }) => {
-  const { total, fieldKeysTotal, indexKeys, fragments, metadata, keys } = data;
+  const {
+    total,
+    fieldKeysTotal,
+    indexKeys,
+    fragments,
+    metadata,
+    keys,
+    uncached
+  } = data;
   const fieldKeysPercentage =
     fieldKeysTotal && total ? (fieldKeysTotal / total) * 100 : 0;
   const indexKeysPercentage = indexKeys ? (indexKeys / total) * 100 : 0;
@@ -160,6 +168,10 @@ export const UsageBreakdown: FC<UsageBreakdownProps> = ({
               ) : null}
             </div>
           </Fragment>
+        ) : uncached ? (
+          <Typography variant="caption" component="div">
+            Waiting...
+          </Typography>
         ) : (
           <Typography variant="caption" component="div">
             Calculating...
