@@ -1068,7 +1068,7 @@ func (api *API) RefreshUsageCache(dutyCycle float64) {
 	if dutyCycle <= 0 {
 		dutyCycle = 20
 	}
-	multiplier := 100 / dutyCycle
+	multiplier := 100 / dutyCycle - 1
 
 	api.usageCache = &usageCache{
 		data:             make(map[string]NodeUsage),
