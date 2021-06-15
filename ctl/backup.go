@@ -28,6 +28,7 @@ import (
 	"github.com/pilosa/pilosa/v2/http"
 	"github.com/pilosa/pilosa/v2/server"
 	"github.com/pilosa/pilosa/v2/topology"
+	"golang.org/x/sync/errgroup"
 )
 
 // BackupCommand represents a command for backing up a Pilosa node.
@@ -43,6 +44,9 @@ type BackupCommand struct { // nolint: maligned
 	// If true, skips file sync.
 	NoSync bool
 
+	// Number of concurrent backup goroutines running at a time.
+	Concurrency int
+
 	// Reusable client.
 	client pilosa.InternalClient
 
@@ -55,7 +59,8 @@ type BackupCommand struct { // nolint: maligned
 // NewBackupCommand returns a new instance of BackupCommand.
 func NewBackupCommand(stdin io.Reader, stdout, stderr io.Writer) *BackupCommand {
 	return &BackupCommand{
-		CmdIO: pilosa.NewCmdIO(stdin, stdout, stderr),
+		CmdIO:       pilosa.NewCmdIO(stdin, stdout, stderr),
+		Concurrency: 1,
 	}
 }
 
@@ -64,6 +69,8 @@ func (cmd *BackupCommand) Run(ctx context.Context) (err error) {
 	// Validate arguments.
 	if cmd.OutputDir == "" {
 		return fmt.Errorf("-o flag required")
+	} else if cmd.Concurrency <= 0 {
+		return fmt.Errorf("concurrency must be at least one")
 	}
 
 	// Parse TLS configuration for node-specific clients.
@@ -156,16 +163,8 @@ func (cmd *BackupCommand) backupIndex(ctx context.Context, ii *pilosa.IndexInfo)
 	logger := cmd.Logger()
 	logger.Printf("backing up index: %q", ii.Name)
 
-	shards, err := cmd.client.AvailableShards(ctx, ii.Name)
-	if err != nil {
-		return fmt.Errorf("cannot find available shards for index %q: %w", ii.Name, err)
-	}
-
-	// Back up all bitmap data for the index.
-	for _, shard := range shards {
-		if err := cmd.backupShard(ctx, ii.Name, shard); err != nil {
-			return fmt.Errorf("cannot backup shard %d on index %q: %w", shard, ii.Name, err)
-		}
+	if err := cmd.backupShards(ctx, ii); err != nil {
+		return err
 	}
 
 	// Back up translation data after bitmap data so we ensure we can translate all data.
@@ -181,6 +180,39 @@ func (cmd *BackupCommand) backupIndex(ctx context.Context, ii *pilosa.IndexInfo)
 	}
 
 	return nil
+}
+
+func (cmd *BackupCommand) backupShards(ctx context.Context, ii *pilosa.IndexInfo) error {
+	shards, err := cmd.client.AvailableShards(ctx, ii.Name)
+	if err != nil {
+		return fmt.Errorf("cannot find available shards for index %q: %w", ii.Name, err)
+	}
+
+	// Back up all bitmap data for the index.
+	ch := make(chan uint64, len(shards))
+	for _, shard := range shards {
+		ch <- shard
+	}
+	close(ch)
+
+	g, ctx := errgroup.WithContext(ctx)
+	for i := 0; i < cmd.Concurrency; i++ {
+		g.Go(func() error {
+			for {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case shard, ok := <-ch:
+					if !ok {
+						return nil
+					} else if err := cmd.backupShard(ctx, ii.Name, shard); err != nil {
+						return fmt.Errorf("cannot backup shard %d on index %q: %w", shard, ii.Name, err)
+					}
+				}
+			}
+		})
+	}
+	return g.Wait()
 }
 
 // backupShard backs up a single shard from a single index.
@@ -234,14 +266,33 @@ func (cmd *BackupCommand) backupShardNode(ctx context.Context, indexName string,
 }
 
 func (cmd *BackupCommand) backupIndexTranslateData(ctx context.Context, name string) error {
-	// TODO: Fetch holder partition count.
 	partitionN := topology.DefaultPartitionN
+
+	// Back up all bitmap data for the index.
+	ch := make(chan int, partitionN)
 	for partitionID := 0; partitionID < partitionN; partitionID++ {
-		if err := cmd.backupIndexPartitionTranslateData(ctx, name, partitionID); err != nil {
-			return fmt.Errorf("cannot backup index translation data for partition %d on %q: %w", partitionID, name, err)
-		}
+		ch <- partitionID
 	}
-	return nil
+	close(ch)
+
+	g, ctx := errgroup.WithContext(ctx)
+	for i := 0; i < cmd.Concurrency; i++ {
+		g.Go(func() error {
+			for {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case partitionID, ok := <-ch:
+					if !ok {
+						return nil
+					} else if err := cmd.backupIndexPartitionTranslateData(ctx, name, partitionID); err != nil {
+						return fmt.Errorf("cannot backup index translation data for partition %d on %q: %w", partitionID, name, err)
+					}
+				}
+			}
+		})
+	}
+	return g.Wait()
 }
 
 func (cmd *BackupCommand) backupIndexPartitionTranslateData(ctx context.Context, name string, partitionID int) error {

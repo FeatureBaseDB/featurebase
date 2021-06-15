@@ -38,6 +38,7 @@ Backs up a pilosa server to a local, tar-formatted snapshot file.
 	flags := ccmd.Flags()
 	flags.StringVarP(&cmd.OutputDir, "output", "o", "", "output dir to write to")
 	flags.BoolVar(&cmd.NoSync, "no-sync", false, "disable file sync")
+	flags.IntVar(&cmd.Concurrency, "concurrency", cmd.Concurrency, "number of concurrent backup goroutines")
 	flags.StringVar(&cmd.Host, "host", "localhost:10101", "host:port of Pilosa.")
 	ctl.SetTLSConfig(flags, "", &cmd.TLS.CertificatePath, &cmd.TLS.CertificateKeyPath, &cmd.TLS.CACertPath, &cmd.TLS.SkipVerify, &cmd.TLS.EnableClientVerification)
 	return ccmd
