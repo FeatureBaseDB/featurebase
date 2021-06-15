@@ -1060,7 +1060,9 @@ func (api *API) calculateUsage() {
 	}
 }
 
-// Periodically calculates disk/memory usage
+// Periodically calculates disk/memory usage in terms of the duty cycle. The duty cycle represents the percentage of
+// time that is spent recalculating this cache. It is specified relatively, rather than by a set interval, because
+// scans can take an unpredictably long time.
 func (api *API) RefreshUsageCache(dutyCycle float64) {
 	trigger := make(chan bool)
 	defer close(trigger)
@@ -1068,7 +1070,7 @@ func (api *API) RefreshUsageCache(dutyCycle float64) {
 	if dutyCycle <= 0 {
 		dutyCycle = 20
 	}
-	multiplier := 100 / dutyCycle - 1
+	multiplier := 100/dutyCycle - 1
 
 	api.usageCache = &usageCache{
 		data:             make(map[string]NodeUsage),
