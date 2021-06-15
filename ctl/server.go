@@ -111,6 +111,6 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 	flags.Uint32Var(&srv.Config.Postgres.MaxStartupSize, "postgres.max-startup-size", srv.Config.Postgres.MaxStartupSize, "Maximum acceptable size of a postgres startup packet, in bytes. (set 0 to disable)")
 	flags.Uint16Var(&srv.Config.Postgres.ConnectionLimit, "postgres.connection-limit", srv.Config.Postgres.ConnectionLimit, "Maximum number of simultaneous postgres connections to allow. (set 0 to disable)")
 
-	// Disk/Memory Usage refresh rate in minutes for ui/usage http endpoint
-	flags.DurationVar((*time.Duration)(&srv.Config.Usage.Interval), "usage-interval", time.Duration(srv.Config.Usage.Interval), "Number in minutes between recalculations of disk/memory usage cache")
+	// Disk and Memory usage cache for ui/usage endpoint
+	flags.Float64Var(&srv.Config.UsageDutyCycle, "usage-duty-cycle", srv.Config.UsageDutyCycle, "Sets the percentage of time that is spent recalculating the disk and memory usage cache. 100.0 for always-running, must be > 0.")
 }

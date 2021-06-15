@@ -225,10 +225,8 @@ type Config struct {
 	// LookupDBDSN is an external database to connect to for `ExternalLookup` queries.
 	LookupDBDSN string `toml:"lookup-db-dsn"`
 
-	// Disk Usage refresh interval for ui/usage http endpoint
-	Usage struct {
-		Interval toml.Duration `toml:"usage-interval"`
-	}
+	// The percentage of time spent recalculating the disk and memory usage cache.
+	UsageDutyCycle float64 `toml:"usage-duty-cycle"`
 }
 
 // MustValidate checks that all ports in a Config are unique and not zero.
@@ -364,7 +362,8 @@ func NewConfig() *Config {
 	c.Etcd.PeerCertFile = ""
 	c.Etcd.PeerKeyFile = ""
 
-	c.Usage.Interval = toml.Duration(6 * 60 * time.Minute) // 6 hours
+	// Disk and Memory Usage
+	c.UsageDutyCycle = 20.0
 
 	return c
 }

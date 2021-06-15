@@ -903,10 +903,12 @@ func (api *API) PrimaryNode() *topology.Node {
 
 // Cache of disk usage statistics
 type usageCache struct {
-	data            map[string]NodeUsage
-	refreshInterval time.Duration
-	lastUpdated     time.Time
-	resetTrigger    chan bool
+	data             map[string]NodeUsage
+	refreshInterval  time.Duration
+	lastUpdated      time.Time
+	resetTrigger     chan bool
+	lastCalcDuration time.Duration
+	waitMultiplier   float64
 
 	muCalculate sync.Mutex
 	muAssign    sync.Mutex
@@ -950,17 +952,22 @@ type MemoryUsage struct {
 	TotalUse uint64 `json:"totalInUse"`
 }
 
-// Returns disk usage from cache. Waits for calculation if cache is empty.
+// Returns disk usage from cache if cache is large. It will recalculate on the spot if the last cacluation was under 5 seconds.
 func (api *API) Usage(ctx context.Context, remote bool) (map[string]NodeUsage, error) {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.Usage")
 	defer span.Finish()
 
+	if api.usageCache.lastCalcDuration < (time.Second * 5) {
+		err := api.ResetUsageCache()
+		if err != nil {
+			api.server.logger.Infof("could not reset usageCache: %s", err)
+		}
+	}
+
 	api.usageCache.muAssign.Lock()
 	lastUpdated := api.usageCache.lastUpdated
 	api.usageCache.muAssign.Unlock()
-
-	var t time.Time
-	if lastUpdated == t {
+	if lastUpdated == (time.Time{}) {
 		api.calculateUsage()
 	}
 
@@ -990,14 +997,17 @@ func (api *API) requestUsageOfNodes() {
 	}
 }
 
-// Calculates disk usage from scratch for each index and stores the results in the usage cache
+// Calculates disk usage from scratch if cache has expired for each index and stores the results in the usage cache
 func (api *API) calculateUsage() {
 	api.usageCache.muCalculate.Lock()
 	defer api.usageCache.muCalculate.Unlock()
 	api.server.wg.Add(1)
 	defer api.server.wg.Done()
 
+	api.usageCache.muAssign.Lock()
 	lastUpdated := api.usageCache.lastUpdated
+	api.usageCache.muAssign.Unlock()
+
 	if time.Since(lastUpdated) > api.usageCache.refreshInterval {
 		indexDetails, nodeMetadataBytes, err := api.holder.Txf().IndexUsageDetails(api.isClosing)
 		if err != nil {
@@ -1050,17 +1060,29 @@ func (api *API) calculateUsage() {
 	}
 }
 
-// Periodically calculates disk usage
-func (api *API) RefreshUsageCache(refresh time.Duration) {
+// Periodically calculates disk/memory usage in terms of the duty cycle. The duty cycle represents the percentage of
+// time that is spent recalculating this cache. It is specified relatively, rather than by a set interval, because
+// scans can take an unpredictably long time.
+func (api *API) RefreshUsageCache(dutyCycle float64) {
 	trigger := make(chan bool)
 	defer close(trigger)
+
+	if dutyCycle <= 0 {
+		dutyCycle = 20
+	}
+	multiplier := 100/dutyCycle - 1
+
 	api.usageCache = &usageCache{
-		data:            make(map[string]NodeUsage),
-		refreshInterval: refresh,
-		resetTrigger:    trigger,
+		data:             make(map[string]NodeUsage),
+		refreshInterval:  time.Hour,
+		resetTrigger:     trigger,
+		lastCalcDuration: 0,
+		waitMultiplier:   multiplier,
 	}
 	for {
+		start := time.Now()
 		api.calculateUsage()
+		api.setRefreshInterval(time.Since(start))
 		select {
 		case <-trigger:
 			continue
@@ -1070,6 +1092,18 @@ func (api *API) RefreshUsageCache(refresh time.Duration) {
 			continue
 		}
 	}
+}
+
+// Refresh interval set in relation to how long the last calculation took.
+func (api *API) setRefreshInterval(dur time.Duration) {
+	refresh := time.Duration(float64(dur) * api.usageCache.waitMultiplier)
+	if refresh < time.Hour {
+		refresh = time.Hour
+	}
+	api.usageCache.muAssign.Lock()
+	api.usageCache.refreshInterval = refresh
+	api.usageCache.lastCalcDuration = dur
+	api.usageCache.muAssign.Unlock()
 }
 
 // Resets the lastUpdated time and awakens RefreshUsageCache()
