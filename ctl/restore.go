@@ -37,6 +37,8 @@ type RestoreCommand struct {
 	tlsConfig *tls.Config
 	Host      string
 
+	Concurrency int
+
 	// Filepath to the backup file.
 	Path string
 	// Reusable client.
@@ -50,7 +52,8 @@ type RestoreCommand struct {
 // NewRestoreCommand returns a new instance of RestoreCommand.
 func NewRestoreCommand(stdin io.Reader, stdout, stderr io.Writer) *RestoreCommand {
 	return &RestoreCommand{
-		CmdIO: pilosa.NewCmdIO(stdin, stdout, stderr),
+		CmdIO:       pilosa.NewCmdIO(stdin, stdout, stderr),
+		Concurrency: 1,
 	}
 }
 
@@ -61,6 +64,8 @@ func (cmd *RestoreCommand) Run(ctx context.Context) (err error) {
 	// Validate arguments.
 	if cmd.Path == "" {
 		return fmt.Errorf("-s flag required")
+	} else if cmd.Concurrency <= 0 {
+		return fmt.Errorf("concurrency must be at least one")
 	}
 
 	// Parse TLS configuration for node-specific clients.
@@ -152,156 +157,214 @@ func (cmd *RestoreCommand) restoreIDAlloc(ctx context.Context, primary *topology
 }
 
 func (cmd *RestoreCommand) restoreShards(ctx context.Context) error {
-	logger := cmd.Logger()
-
 	filenames, err := filepath.Glob(filepath.Join(cmd.Path, "indexes", "*", "shards", "*"))
 	if err != nil {
 		return err
 	}
 
+	ch := make(chan string, len(filenames))
 	for _, filename := range filenames {
-		rel, err := filepath.Rel(cmd.Path, filename)
-		if err != nil {
-			return err
-		}
+		ch <- filename
+	}
+	close(ch)
 
-		record := strings.Split(rel, string(os.PathSeparator))
-		indexName := record[1]
-
-		shard, err := strconv.ParseUint(record[3], 10, 64)
-		if err != nil {
-			continue
-		}
-
-		nodes, err := cmd.client.FragmentNodes(ctx, indexName, shard)
-		if err != nil {
-			return fmt.Errorf("cannot determine fragment nodes: %w", err)
-		} else if len(nodes) == 0 {
-			return fmt.Errorf("no nodes available")
-		}
-
-		g, ctx := errgroup.WithContext(ctx)
-		for _, node := range nodes {
-			node := node
-			g.Go(func() error {
-				logger.Printf("shard %v %v", shard, indexName)
-
-				f, err := os.Open(filename)
-				if err != nil {
-					return err
+	g, ctx := errgroup.WithContext(ctx)
+	for i := 0; i < cmd.Concurrency; i++ {
+		g.Go(func() error {
+			for {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case filename, ok := <-ch:
+					if !ok {
+						return nil
+					} else if err := cmd.restoreShard(ctx, filename); err != nil {
+						return err
+					}
 				}
-				defer f.Close()
+			}
+		})
+	}
+	return g.Wait()
+}
 
-				url := node.URI.Path(fmt.Sprintf("/internal/restore/%v/%v", indexName, shard))
-				req, err := http.NewRequest("POST", url, f)
-				if err != nil {
-					return err
-				}
-				req = req.WithContext(ctx)
-				req.Header.Set("Content-Type", "application/octet-stream")
+func (cmd *RestoreCommand) restoreShard(ctx context.Context, filename string) error {
+	logger := cmd.Logger()
 
-				var client http.Client
-				resp, err := client.Do(req)
-				if err != nil {
-					return err
-				} else if err := resp.Body.Close(); err != nil {
-					return err
-				} else if resp.StatusCode != http.StatusOK {
-					return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-				}
-				return nil
-			})
-		}
-		if err := g.Wait(); err != nil {
-			return err
-		}
+	rel, err := filepath.Rel(cmd.Path, filename)
+	if err != nil {
+		return err
 	}
 
+	// Parse filename.
+	record := strings.Split(rel, string(os.PathSeparator))
+	indexName := record[1]
+	shard, err := strconv.ParseUint(record[3], 10, 64)
+	if err != nil {
+		return nil // not a shard file
+	}
+
+	nodes, err := cmd.client.FragmentNodes(ctx, indexName, shard)
+	if err != nil {
+		return fmt.Errorf("cannot determine fragment nodes: %w", err)
+	} else if len(nodes) == 0 {
+		return fmt.Errorf("no nodes available")
+	}
+
+	for _, node := range nodes {
+		logger.Printf("shard %v %v", shard, indexName)
+
+		f, err := os.Open(filename)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+
+		url := node.URI.Path(fmt.Sprintf("/internal/restore/%v/%v", indexName, shard))
+		req, err := http.NewRequest("POST", url, f)
+		if err != nil {
+			return err
+		}
+		req = req.WithContext(ctx)
+		req.Header.Set("Content-Type", "application/octet-stream")
+
+		var client http.Client
+		resp, err := client.Do(req)
+		if err != nil {
+			return err
+		} else if err := resp.Body.Close(); err != nil {
+			return err
+		} else if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		}
+	}
 	return nil
 }
 
 func (cmd *RestoreCommand) restoreIndexTranslation(ctx context.Context) error {
-	logger := cmd.Logger()
-
 	filenames, err := filepath.Glob(filepath.Join(cmd.Path, "indexes", "*", "translate", "*"))
 	if err != nil {
 		return err
 	}
 
+	ch := make(chan string, len(filenames))
 	for _, filename := range filenames {
-		rel, err := filepath.Rel(cmd.Path, filename)
-		if err != nil {
-			return err
-		}
+		ch <- filename
+	}
+	close(ch)
 
-		record := strings.Split(rel, string(os.PathSeparator))
-		indexName := record[1]
-
-		partitionID, err := strconv.Atoi(record[3])
-		if err != nil {
-			return err
-		}
-		logger.Printf("column keys %v (%v)", indexName, partitionID)
-
-		nodes, err := cmd.client.PartitionNodes(ctx, partitionID)
-		if err != nil {
-			return err
-		}
-
-		g, ctx := errgroup.WithContext(ctx)
-		for _, node := range nodes {
-			node := node
-			g.Go(func() error {
-				f, err := os.Open(filename)
-				if err != nil {
-					return err
+	g, ctx := errgroup.WithContext(ctx)
+	for i := 0; i < cmd.Concurrency; i++ {
+		g.Go(func() error {
+			for {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case filename, ok := <-ch:
+					if !ok {
+						return nil
+					} else if err := cmd.restoreIndexTranslationFile(ctx, filename); err != nil {
+						return err
+					}
 				}
-				defer f.Close()
+			}
+		})
+	}
+	return g.Wait()
+}
 
-				return cmd.client.ImportIndexKeys(ctx, &node.URI, indexName, partitionID, false, f)
-			})
-		}
-		if err := g.Wait(); err != nil {
+func (cmd *RestoreCommand) restoreIndexTranslationFile(ctx context.Context, filename string) error {
+	logger := cmd.Logger()
+
+	rel, err := filepath.Rel(cmd.Path, filename)
+	if err != nil {
+		return err
+	}
+
+	record := strings.Split(rel, string(os.PathSeparator))
+	indexName := record[1]
+	partitionID, err := strconv.Atoi(record[3])
+	if err != nil {
+		return err
+	}
+	logger.Printf("column keys %v (%v)", indexName, partitionID)
+
+	nodes, err := cmd.client.PartitionNodes(ctx, partitionID)
+	if err != nil {
+		return err
+	}
+
+	for _, node := range nodes {
+		if err := func() error {
+			f, err := os.Open(filename)
+			if err != nil {
+				return err
+			}
+			defer f.Close()
+
+			return cmd.client.ImportIndexKeys(ctx, &node.URI, indexName, partitionID, false, f)
+		}(); err != nil {
 			return err
 		}
 	}
-
 	return nil
 }
 
 func (cmd *RestoreCommand) restoreFieldTranslation(ctx context.Context, nodes []*topology.Node) error {
-	logger := cmd.Logger()
-
 	filenames, err := filepath.Glob(filepath.Join(cmd.Path, "indexes", "*", "fields", "*", "translate"))
 	if err != nil {
 		return err
 	}
 
+	ch := make(chan string, len(filenames))
 	for _, filename := range filenames {
-		rel, err := filepath.Rel(cmd.Path, filename)
-		if err != nil {
-			return err
-		}
+		ch <- filename
+	}
+	close(ch)
 
-		record := strings.Split(rel, string(os.PathSeparator))
-		indexName, fieldName := record[1], record[3]
-
-		logger.Printf("field keys %v %v", indexName, fieldName)
-
-		g, ctx := errgroup.WithContext(ctx)
-		for _, node := range nodes {
-			node := node
-			g.Go(func() error {
-				f, err := os.Open(filename)
-				if err != nil {
-					return err
+	g, ctx := errgroup.WithContext(ctx)
+	for i := 0; i < cmd.Concurrency; i++ {
+		g.Go(func() error {
+			for {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case filename, ok := <-ch:
+					if !ok {
+						return nil
+					} else if err := cmd.restoreFieldTranslationFile(ctx, nodes, filename); err != nil {
+						return err
+					}
 				}
-				defer f.Close()
+			}
+		})
+	}
+	return g.Wait()
+}
 
-				return cmd.client.ImportFieldKeys(ctx, &node.URI, indexName, fieldName, false, f)
-			})
-		}
-		if err := g.Wait(); err != nil {
+func (cmd *RestoreCommand) restoreFieldTranslationFile(ctx context.Context, nodes []*topology.Node, filename string) error {
+	logger := cmd.Logger()
+
+	rel, err := filepath.Rel(cmd.Path, filename)
+	if err != nil {
+		return err
+	}
+
+	record := strings.Split(rel, string(os.PathSeparator))
+	indexName, fieldName := record[1], record[3]
+
+	logger.Printf("field keys %v %v", indexName, fieldName)
+
+	for _, node := range nodes {
+		if func() error {
+			f, err := os.Open(filename)
+			if err != nil {
+				return err
+			}
+			defer f.Close()
+
+			return cmd.client.ImportFieldKeys(ctx, &node.URI, indexName, fieldName, false, f)
+		}(); err != nil {
 			return err
 		}
 	}
