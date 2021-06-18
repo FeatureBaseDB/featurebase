@@ -454,6 +454,10 @@ export const QueryBuilder: FC<QueryBuilderProps> = ({
                   );
                   setRowCalls([]);
                   setOperator(undefined);
+                  setGroupByCall({
+                    primary: '',
+                    secondary: ''
+                  });
                 }}
               />
             </div>
@@ -557,12 +561,23 @@ export const QueryBuilder: FC<QueryBuilderProps> = ({
                   className={css.fieldSelector}
                   label="Primary Field"
                   value={groupByCall.primary}
-                  options={selectedTable.fields.map((field) => {
-                    return {
-                      label: `${field.name} (${field.options.type})`,
-                      value: field.name
-                    };
-                  })}
+                  options={selectedTable.fields
+                    .filter((f) =>
+                      [
+                        'set',
+                        'time',
+                        'mutex',
+                        'bool',
+                        'int',
+                        'timestamp'
+                      ].includes(f.options.type)
+                    )
+                    .map((field) => {
+                      return {
+                        label: `${field.name} (${field.options.type})`,
+                        value: field.name
+                      };
+                    })}
                   onChange={(value) =>
                     setGroupByCall({
                       ...groupByCall,
@@ -576,12 +591,23 @@ export const QueryBuilder: FC<QueryBuilderProps> = ({
                   label="Secondary Field (optional)"
                   value={groupByCall.secondary}
                   allowEmpty={true}
-                  options={selectedTable.fields.map((field) => {
-                    return {
-                      label: `${field.name} (${field.options.type})`,
-                      value: field.name
-                    };
-                  })}
+                  options={selectedTable.fields
+                    .filter((f) =>
+                      [
+                        'set',
+                        'time',
+                        'mutex',
+                        'bool',
+                        'int',
+                        'timestamp'
+                      ].includes(f.options.type)
+                    )
+                    .map((field) => {
+                      return {
+                        label: `${field.name} (${field.options.type})`,
+                        value: field.name
+                      };
+                    })}
                   onChange={(value) =>
                     setGroupByCall({
                       ...groupByCall,
