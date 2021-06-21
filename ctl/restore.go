@@ -356,7 +356,7 @@ func (cmd *RestoreCommand) restoreFieldTranslationFile(ctx context.Context, node
 	logger.Printf("field keys %v %v", indexName, fieldName)
 
 	for _, node := range nodes {
-		if func() error {
+		if err := func() error {
 			f, err := os.Open(filename)
 			if err != nil {
 				return err
