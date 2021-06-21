@@ -37,6 +37,7 @@ The Restore command will take a backup archive and restore it to a new, clean cl
 	flags := restoreCmd.Flags()
 	flags.StringVarP(&cmd.Path, "source", "s", "", "pilosa backup file; specify '-' to restore from stdin tar stream")
 	flags.StringVar(&cmd.Host, "host", "localhost:10101", "host:port of Pilosa.")
+	flags.IntVar(&cmd.Concurrency, "concurrency", 1, "number of concurrent uploads")
 	ctl.SetTLSConfig(
 		flags, "",
 		&cmd.TLS.CertificatePath,
