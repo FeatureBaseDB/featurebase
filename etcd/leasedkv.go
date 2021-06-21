@@ -30,8 +30,10 @@ import (
 // It will try to renew the lease at any cost after losing it.
 // It will recreate the previous existing value for the key again.
 type leasedKV struct {
-	e      *Etcd
-	cancel context.CancelFunc
+	e       *Etcd
+	cancel  context.CancelFunc
+	done    <-chan struct{}
+	leaseID clientv3.LeaseID
 
 	key        string
 	ttlSeconds int64
@@ -70,8 +72,8 @@ func (l *leasedKV) create(initValue string) (<-chan *clientv3.LeaseKeepAliveResp
 	if l.cancel != nil {
 		l.cancel()
 	}
-
 	l.cancel = cancel
+	l.done = ctx.Done()
 	var leaseResp *clientv3.LeaseGrantResponse
 
 	err := l.e.retryClient(func(cli *clientv3.Client) (err error) {
@@ -81,10 +83,11 @@ func (l *leasedKV) create(initValue string) (<-chan *clientv3.LeaseKeepAliveResp
 	if err != nil {
 		return nil, errors.Wrap(err, "creating a lease")
 	}
+	l.leaseID = leaseResp.ID
 
 	err = l.e.retryClient(func(cli *clientv3.Client) (err error) {
 		_, err = cli.Txn(ctx).
-			Then(clientv3.OpPut(l.key, initValue, clientv3.WithLease(leaseResp.ID))).
+			Then(clientv3.OpPut(l.key, initValue, clientv3.WithLease(l.leaseID))).
 			Commit()
 		return err
 	})
@@ -94,7 +97,7 @@ func (l *leasedKV) create(initValue string) (<-chan *clientv3.LeaseKeepAliveResp
 
 	var kaChan <-chan *clientv3.LeaseKeepAliveResponse
 	err = l.e.retryClient(func(cli *clientv3.Client) (err error) {
-		kaChan, err = cli.KeepAlive(ctx, leaseResp.ID)
+		kaChan, err = cli.KeepAlive(ctx, l.leaseID)
 		return err
 	})
 	if err != nil {
@@ -108,8 +111,11 @@ func (l *leasedKV) create(initValue string) (<-chan *clientv3.LeaseKeepAliveResp
 
 func (l *leasedKV) consumeLease(ch <-chan *clientv3.LeaseKeepAliveResponse) {
 	for {
-		_, ok := <-ch
-		if !ok {
+		select {
+		case _, ok := <-ch:
+			if ok {
+				continue
+			}
 			l.mu.Lock()
 
 			if l.stopped {
@@ -134,6 +140,9 @@ func (l *leasedKV) consumeLease(ch <-chan *clientv3.LeaseKeepAliveResponse) {
 			log.Printf("lease %q recreated after a problem", l.key)
 			l.mu.Unlock()
 			return
+		case <-l.done:
+			// don't recreate lease.
+			return
 		}
 	}
 }
@@ -143,12 +152,28 @@ func (l *leasedKV) consumeLease(ch <-chan *clientv3.LeaseKeepAliveResponse) {
 func (l *leasedKV) Stop() {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-
+	l.stopped = true
 	if l.cancel != nil {
 		l.cancel()
 	}
+	// low-effort attempt to cancel existing lease. if the cluster is
+	// shutting down, we don't want this to take long.
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	err := l.e.retryClient(func(cli *clientv3.Client) (err error) {
+		_, err = cli.Revoke(ctx, l.leaseID)
+		return err
+	})
+	// if retryClient succeeds, just to be thorough, we'll cancel that
+	// context.
+	cancel()
+	if err != nil {
+		// It turns out that this will almost always report a
+		// failure because since we're shutting things down,
+		// the cluster as a whole may not be able to process responses.
+		// So this is a low-interest message usually.
+		l.e.logger.Debugf("revoking lease during shutdown: %v", err)
+	}
 
-	l.stopped = true
 }
 
 // Set will change the specific value for this key.
