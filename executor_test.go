@@ -7026,6 +7026,11 @@ func variousQueriesOnPercentiles(t *testing.T, c *test.Cluster) {
 			query:       query,
 			csvVerifier: fmt.Sprintf("%d,1\n", expectedPercentile),
 		})
+		query2 := fmt.Sprintf(`Percentile(field=net_worth, filter=Row(val="foo"), nth=%d)`, nth)
+		tests = append(tests, testCase{
+			query:       query2,
+			csvVerifier: fmt.Sprintf("%d,1\n", expectedPercentile),
+		})
 	}
 
 	for i, tst := range tests {
