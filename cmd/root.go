@@ -63,6 +63,7 @@ at https://www.pilosa.com/docs/.
 	_ = rc.PersistentFlags().MarkHidden("dry-run")
 	rc.PersistentFlags().StringP("config", "c", "", "Configuration file to read from.")
 
+	rc.AddCommand(newChkSumCommand(stdin, stdout, stderr))
 	rc.AddCommand(newBackupCommand(stdin, stdout, stderr))
 	rc.AddCommand(newRestoreCommand(stdin, stdout, stderr))
 	rc.AddCommand(newCheckCommand(stdin, stdout, stderr))
