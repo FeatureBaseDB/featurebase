@@ -19,6 +19,7 @@ import (
 	"net"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/pilosa/pilosa/v2/etcd"
 	"github.com/pilosa/pilosa/v2/server"
@@ -101,14 +102,15 @@ func GetPortsGenConfigs(tb testing.TB, nodes []*Command) error {
 		config.BindGRPC = grpcUrl
 		config.GRPCListener = grpcListener
 		config.Etcd = etcd.Options{
-			Dir:           discoDir,
-			LClientURL:    clientURL,
-			AClientURL:    clientURL,
-			LPeerURL:      peerURL,
-			APeerURL:      peerURL,
-			HeartbeatTTL:  12,
-			LPeerSocket:   []*net.TCPListener{peerListener},
-			LClientSocket: []*net.TCPListener{clientListener},
+			Dir:              discoDir,
+			LClientURL:       clientURL,
+			AClientURL:       clientURL,
+			LPeerURL:         peerURL,
+			APeerURL:         peerURL,
+			HeartbeatTTL:     60,
+			LPeerSocket:      []*net.TCPListener{peerListener},
+			LClientSocket:    []*net.TCPListener{clientListener},
+			BootstrapTimeout: 50 * time.Millisecond,
 		}
 		peerUrls[i] = fmt.Sprintf("%s=%s", name, peerURL)
 	}
