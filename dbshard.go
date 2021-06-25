@@ -475,8 +475,10 @@ func (per *DBPerShard) DeleteIndex(index string) (err error) {
 			if err != nil {
 				return errors.Wrap(err, fmt.Sprintf("DBPerShard.DeleteIndex os.RemoveAll('%v')", path))
 			}
+			delete(per.index2shards[ty], index)
 		}
 	}
+
 	// allow the index to be created again anew.
 	delete(per.dbh.Index, index)
 
