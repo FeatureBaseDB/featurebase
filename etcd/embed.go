@@ -61,6 +61,8 @@ type Options struct {
 
 	LPeerSocket   []*net.TCPListener
 	LClientSocket []*net.TCPListener
+
+	BootstrapTimeout time.Duration
 }
 
 var (
@@ -224,6 +226,7 @@ func parseOptions(opt Options) *embed.Config {
 	cfg.Name = opt.Name
 	cfg.Dir = opt.Dir
 	cfg.InitialClusterToken = opt.ClusterName
+	cfg.BootstrapTimeout = opt.BootstrapTimeout
 	cfg.LCUrls = types.MustNewURLs([]string{opt.LClientURL})
 	if opt.AClientURL != "" {
 		cfg.ACUrls = types.MustNewURLs([]string{opt.AClientURL})

@@ -481,6 +481,7 @@ var callInfoByFunc = map[string]callInfo{
 		allowUnknown: false,
 		prototypes: map[string]interface{}{
 			"field":  "",
+			"_field": "",
 			"filter": nil,
 			"nth":    nil,
 		},

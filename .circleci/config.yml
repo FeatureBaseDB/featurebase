@@ -126,6 +126,8 @@ jobs:
       name: golang
       version: << parameters.golang_version >>
       resource_class: << parameters.resource_class >>
+    environment:
+      TMPDIR: /mnt/ramdisk
     steps:
       - checkout-plus
       - skip-if-root-unchanged
