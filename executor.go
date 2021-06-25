@@ -1239,10 +1239,10 @@ func (e *executor) executePercentile(ctx context.Context, qcx *Qcx, index string
 	}
 
 	// get field
-	if fieldArg := c.Args["field"]; fieldArg == "" {
+	fieldName, err := c.FirstStringArg("field", "_field")
+	if err != nil {
 		return ValCount{}, errors.New("Percentile(): field required")
 	}
-	fieldName, _, _ := c.StringArg("field")
 
 	// filter call for min & max
 	var filterCall *pql.Call
