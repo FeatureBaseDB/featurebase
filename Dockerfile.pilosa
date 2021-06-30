@@ -1,0 +1,38 @@
+ARG GO_VERSION=latest
+
+######################
+### Pilosa builder ###
+######################
+
+FROM golang:${GO_VERSION} as pilosa-builder
+ARG MAKE_FLAGS
+WORKDIR /pilosa
+
+COPY . ./
+
+RUN make build FLAGS="-o build/pilosa" ${MAKE_FLAGS}
+
+#####################
+### Pilosa runner ###
+#####################
+
+FROM alpine:3.13.2 as runner
+
+LABEL maintainer "dev@molecula.com"
+
+RUN apk add --no-cache curl jq
+
+COPY --from=pilosa-builder /pilosa/build/pilosa /
+
+COPY LICENSE /LICENSE
+COPY NOTICE /NOTICE
+
+EXPOSE 10101
+VOLUME /data
+
+ENV PILOSA_DATA_DIR /data
+ENV PILOSA_BIND 0.0.0.0:10101
+ENV PILOSA_BIND_GRPC 0.0.0.0:20101
+
+ENTRYPOINT ["/pilosa"]
+CMD ["server"]
