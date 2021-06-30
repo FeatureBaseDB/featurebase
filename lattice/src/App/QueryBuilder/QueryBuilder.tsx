@@ -382,6 +382,7 @@ export const QueryBuilder: FC<QueryBuilderProps> = ({
       primary: '',
       secondary: ''
     });
+    setSort([]);
     setFilter(undefined);
     onClear();
   };
@@ -853,6 +854,7 @@ export const QueryBuilder: FC<QueryBuilderProps> = ({
                   primary: '',
                   secondary: ''
                 });
+                setSort([]);
                 setFilter(undefined);
                 onClear();
               }}
