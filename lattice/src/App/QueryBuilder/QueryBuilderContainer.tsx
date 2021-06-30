@@ -13,6 +13,7 @@ import { ResultType } from 'App/Query/QueryContainer';
 import { queryPQL } from 'services/grpcServices';
 import { grpc } from '@improbable-eng/grpc-web';
 import { RowResponse } from 'proto/pilosa_pb';
+import { SortOption } from './GroupBySort';
 import { stringifyRowData } from './stringifyRowData';
 import css from './QueryBuilderContainer.module.scss';
 
@@ -160,6 +161,7 @@ export const QueryBuilderContainer = () => {
   const onRunGroupBy = (
     table: any,
     rowsData: RowsCallType,
+    sort: SortOption[],
     filter?: string
   ) => {
     streamingResults = {
@@ -174,11 +176,26 @@ export const QueryBuilderContainer = () => {
     };
     startTime = moment();
     setLoading(true);
+    let sortString = '';
+    let aggregateString = '';
+    if (sort.length > 0) {
+      sortString = sort[0].sortValue;
+      if (sort[0].sortValue.includes('sum')) {
+        aggregateString = `, aggregate=Sum(field=${sort[0].field})`;
+      }
+      if (sort.length > 1) {
+        sortString = `${sortString}, ${sort[1].sortValue}`;
+        if (sort[1].sortValue.includes('sum')) {
+          aggregateString = `, aggregate=Sum(field=${sort[1].field})`;
+        }
+      }
+      sortString = `, sort="${sortString}"`;
+    }
     const filterString =
       filter && filter.length > 0 ? `, filter=${filter}` : '';
     const query = rowsData.secondary
-      ? `GroupBy(Rows(${rowsData.primary}), Rows(${rowsData.secondary})${filterString})`
-      : `GroupBy(Rows(${rowsData.primary})${filterString})`;
+      ? `GroupBy(Rows(${rowsData.primary}), Rows(${rowsData.secondary})${filterString}${sortString}${aggregateString})`
+      : `GroupBy(Rows(${rowsData.primary})${filterString}${sortString}${aggregateString})`;
     streamingResults.query = query;
     queryPQL(table.name, query, handleQueryMessages, handleQueryEnd);
   };
