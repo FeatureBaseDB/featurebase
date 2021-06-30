@@ -123,6 +123,12 @@ func (cmd *BackupCommand) Run(ctx context.Context) (err error) {
 		}
 	}
 
+	// Wait for the OS to persist all directories.
+	err = cmd.syncDirectories(ctx)
+	if err != nil {
+		return fmt.Errorf("syncing directories: %w", err)
+	}
+
 	return nil
 }
 
@@ -376,3 +382,70 @@ func (cmd *BackupCommand) syncFile(f *os.File) error {
 func (cmd *BackupCommand) TLSHost() string { return cmd.Host }
 
 func (cmd *BackupCommand) TLSConfiguration() server.TLSConfig { return cmd.TLS }
+
+// syncDirectories fsyncs all directories required for the backup to be persisted to the filesystem.
+func (cmd *BackupCommand) syncDirectories(ctx context.Context) error {
+	if cmd.NoSync {
+		return nil
+	}
+
+	syncChan := make(chan string, cmd.Concurrency)
+	syncChan <- filepath.Dir(cmd.OutputDir)
+	g, ctx := errgroup.WithContext(ctx)
+	for i := 0; i < cmd.Concurrency; i++ {
+		g.Go(func() error {
+			for {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case path, ok := <-syncChan:
+					if !ok {
+						return nil
+					} else if err := cmd.syncDir(path); err != nil {
+						return fmt.Errorf("cannot sync directory %q: %w", path, err)
+					}
+				}
+			}
+		})
+	}
+
+	err := filepath.Walk(cmd.OutputDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if info.IsDir() {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case syncChan <- path:
+			}
+		}
+
+		return nil
+	})
+	close(syncChan)
+	if err != nil {
+		return fmt.Errorf("walking output directory tree: %w", err)
+	}
+
+	return g.Wait()
+}
+
+func (cmd *BackupCommand) syncDir(path string) error {
+	logger := cmd.Logger()
+	logger.Printf("syncing directory: %s", path)
+
+	f, err := os.Open(path)
+	if err != nil {
+		return fmt.Errorf("opening directory for sync: %w", err)
+	}
+	defer f.Close()
+
+	err = f.Sync()
+	if err != nil {
+		return fmt.Errorf("syncing directory: %w", err)
+	}
+
+	return f.Close()
+}
