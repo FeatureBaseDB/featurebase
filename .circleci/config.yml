@@ -281,6 +281,10 @@ workflows:
           context: molecula
           requires:
             - setup
+      - test-backup-restore:
+          context: molecula
+          requires:
+            - setup
       - cluster-tests:
           context: molecula
           requires:
