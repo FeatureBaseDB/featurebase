@@ -152,6 +152,8 @@ jobs:
           command: make test-external-lookup EXTERNAL_LOOKUP_DSN=postgresql://postgres:password@localhost/circle_test?sslmode=disable
           no_output_timeout: 30m
   test-backup-restore:
+    executor:
+      name: golang
     steps:
       - checkout-plus
       - skip-if-root-unchanged
