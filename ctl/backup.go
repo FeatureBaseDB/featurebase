@@ -109,7 +109,16 @@ func (cmd *BackupCommand) Run(ctx context.Context) (err error) {
 
 	// Backup data for each index.
 	for _, ii := range schema.Indexes {
-		if err := cmd.backupIndex(ctx, ii); err != nil {
+		if err := cmd.backupIndexData(ctx, ii); err != nil {
+			return err
+		}
+	}
+	// Backup translation data. This has to happen separately, because
+	// otherwise a field which uses foreign key translation can reasonably
+	// contain values which got created for the foreign index after we
+	// backed up that index.
+	for _, ii := range schema.Indexes {
+		if err := cmd.backupIndexTranslation(ctx, ii); err != nil {
 			return err
 		}
 	}
@@ -164,16 +173,13 @@ func (cmd *BackupCommand) backupIDAllocData(ctx context.Context) error {
 	return f.Close()
 }
 
-// backupIndex backs up all shards for a given index.
-func (cmd *BackupCommand) backupIndex(ctx context.Context, ii *pilosa.IndexInfo) error {
+// backupIndexTranslation backs up both field and index-wide key translation for
+// the given index. it has to run after the index's data has been backed up,
+// but also after the data for any index which might have a foreign-key
+// relation to this index has been backed up.
+func (cmd *BackupCommand) backupIndexTranslation(ctx context.Context, ii *pilosa.IndexInfo) error {
 	logger := cmd.Logger()
-	logger.Printf("backing up index: %q", ii.Name)
-
-	if err := cmd.backupShards(ctx, ii); err != nil {
-		return err
-	}
-
-	// Back up translation data after bitmap data so we ensure we can translate all data.
+	logger.Printf("backing up index translation: %q", ii.Name)
 	if err := cmd.backupIndexTranslateData(ctx, ii.Name); err != nil {
 		return err
 	}
@@ -188,7 +194,10 @@ func (cmd *BackupCommand) backupIndex(ctx context.Context, ii *pilosa.IndexInfo)
 	return nil
 }
 
-func (cmd *BackupCommand) backupShards(ctx context.Context, ii *pilosa.IndexInfo) error {
+// backupIndexData backs up all shard data for a given index.
+func (cmd *BackupCommand) backupIndexData(ctx context.Context, ii *pilosa.IndexInfo) error {
+	logger := cmd.Logger()
+	logger.Printf("backing up index data: %q", ii.Name)
 	shards, err := cmd.client.AvailableShards(ctx, ii.Name)
 	if err != nil {
 		return fmt.Errorf("cannot find available shards for index %q: %w", ii.Name, err)
