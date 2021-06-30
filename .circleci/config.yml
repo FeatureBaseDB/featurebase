@@ -158,6 +158,7 @@ jobs:
       - checkout-plus
       - skip-if-root-unchanged
       - setup_remote_docker
+      - run: echo -n $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
       - run: make backuptests-build 
       - run: make backuptests
   cluster-tests:
