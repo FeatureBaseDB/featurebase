@@ -62,6 +62,25 @@ services:
       PILOSA_STORAGE_BACKEND: ${PILOSA_STORAGE_BACKEND:-rbf}
     volumes:
     - data:/data
+  pilosax:
+    image: build/pilosa                                                                                                                                                     
+    build:                                                                                                                                                                 
+      context: .                                                                                                                                                           
+      dockerfile: Dockerfile.pilosa              
+    environment:
+      PILOSA_ADVERTISE: pilosax:10101
+      PILOSA_ADVERTISE_GRPC: pilosax:20101
+      PILOSA_CLUSTER_REPLICAS: 1
+      PILOSA_DATA_DIR: /data/pilosax
+      PILOSA_ETCD_ADVERTISE_CLIENT_ADDRESS: http://pilosax:10201
+      PILOSA_ETCD_ADVERTISE_PEER_ADDRESS: http://pilosax:10301
+      PILOSA_ETCD_INITIAL_CLUSTER: pilosax=http://pilosax:10301
+      PILOSA_ETCD_LISTEN_CLIENT_ADDRESS: http://0.0.0.0:10201
+      PILOSA_ETCD_LISTEN_PEER_ADDRESS: http://0.0.0.0:10301
+      PILOSA_NAME: pilosax
+      PILOSA_STORAGE_BACKEND: ${PILOSA_STORAGE_BACKEND:-rbf}
+    volumes:
+    - data:/data
   client1:
     image: tgruben/bash
     build:
