@@ -151,6 +151,16 @@ jobs:
       - run:
           command: make test-external-lookup EXTERNAL_LOOKUP_DSN=postgresql://postgres:password@localhost/circle_test?sslmode=disable
           no_output_timeout: 30m
+  test-backup-restore:
+    executor:
+      name: golang
+    steps:
+      - checkout-plus
+      - skip-if-root-unchanged
+      - setup_remote_docker
+      - run: echo -n $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
+      - run: make backuptests-build 
+      - run: make backuptests
   cluster-tests:
     executor:
       name: golang
@@ -271,6 +281,10 @@ workflows:
           requires:
             - setup
       - test-external-lookup:
+          context: molecula
+          requires:
+            - setup
+      - test-backup-restore:
           context: molecula
           requires:
             - setup
