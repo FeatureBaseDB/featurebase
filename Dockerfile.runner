@@ -13,8 +13,8 @@ COPY . ./
 RUN make build FLAGS="-o build/pilosa" ${MAKE_FLAGS}
 
 FROM moleculacorp/idk as idk
-RUN apk add --no-cache bash curl jq 
 LABEL maintainer "dev@molecula.com"
+RUN apt-get install -y bash curl jq 
 
 
 COPY --from=pilosa-builder /pilosa/build/pilosa /
