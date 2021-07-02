@@ -1067,9 +1067,6 @@ func (api *API) RefreshUsageCache(dutyCycle float64) {
 	trigger := make(chan bool)
 	defer close(trigger)
 
-	if dutyCycle <= 0 {
-		dutyCycle = 20
-	}
 	multiplier := 100/dutyCycle - 1
 
 	api.usageCache = &usageCache{
