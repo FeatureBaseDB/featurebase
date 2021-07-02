@@ -105,7 +105,7 @@ export const GroupBySort: FC<GroupBySortProps> = ({
             <Select
               className={css.fieldSelect}
               label="Field"
-              value={sort[0].field ? sort[0].field : ''}
+              value={sort[1].field ? sort[1].field : ''}
               options={fields}
               onChange={(value) => onUpdateSumField(false, value)}
               error={showErrors ? !sort[1].field : false}
