@@ -30,6 +30,7 @@ import { ResultType } from 'App/Query/QueryContainer';
 import { RowCall } from './RowCall';
 import { SavedQueries } from './SavedQueries';
 import { Select } from 'shared/Select';
+import { GroupBySort, SortOption } from './GroupBySort';
 import { stringifyRowData } from './stringifyRowData';
 import css from './QueryBuilder.module.scss';
 
@@ -47,7 +48,12 @@ type QueryBuilderProps = {
     columns: string[],
     operator?: Operator
   ) => void;
-  onRunGroupBy: (table: any, rowsData: RowsCallType, filter?: string) => void;
+  onRunGroupBy: (
+    table: any,
+    rowsData: RowsCallType,
+    sort: SortOption[],
+    filter?: string
+  ) => void;
   onExternalLookup: (table: string, columns: number[]) => void;
   onClear: () => void;
 };
@@ -95,6 +101,7 @@ export const QueryBuilder: FC<QueryBuilderProps> = ({
   );
   const [groupByFilters, setGroupByFilters] = useState<any[]>([]);
   const [filter, setFilter] = useState<string>();
+  const [sort, setSort] = useState<SortOption[]>([]);
   const colSizes = JSON.parse(
     localStorage.getItem('builderColSizes') || '[25, 75]'
   );
@@ -231,10 +238,25 @@ export const QueryBuilder: FC<QueryBuilderProps> = ({
 
   const onRunClick = () => {
     if (operation === 'GroupBy') {
-      const isInvalid = groupByCall.primary ? false : true;
+      let isInvalid = false;
+      if (!groupByCall.primary) {
+        isInvalid = true;
+      } else if (
+        sort.length > 0 &&
+        sort[0].sortValue.includes('sum') &&
+        !sort[0].field
+      ) {
+        isInvalid = true;
+      } else if (
+        sort.length > 1 &&
+        sort[1].sortValue.includes('sum') &&
+        !sort[1].field
+      ) {
+        isInvalid = true;
+      }
       setHasInvalid(isInvalid);
       if (!isInvalid) {
-        onRunGroupBy(selectedTable, groupByCall, filter);
+        onRunGroupBy(selectedTable, groupByCall, sort, filter);
       }
     } else {
       const { cleanRowCalls, isInvalid } = cleanupRows();
@@ -328,7 +350,7 @@ export const QueryBuilder: FC<QueryBuilderProps> = ({
 
     if (!isInvalid) {
       if (operation === 'GroupBy') {
-        onRunGroupBy(tableDetails, groupByCall, filter);
+        onRunGroupBy(tableDetails, groupByCall, sort, filter);
       } else {
         onQuery(tableDetails, operation, rowCalls, columns, operator);
       }
@@ -360,6 +382,7 @@ export const QueryBuilder: FC<QueryBuilderProps> = ({
       primary: '',
       secondary: ''
     });
+    setSort([]);
     setFilter(undefined);
     onClear();
   };
@@ -454,6 +477,10 @@ export const QueryBuilder: FC<QueryBuilderProps> = ({
                   );
                   setRowCalls([]);
                   setOperator(undefined);
+                  setGroupByCall({
+                    primary: '',
+                    secondary: ''
+                  });
                 }}
               />
             </div>
@@ -557,12 +584,23 @@ export const QueryBuilder: FC<QueryBuilderProps> = ({
                   className={css.fieldSelector}
                   label="Primary Field"
                   value={groupByCall.primary}
-                  options={selectedTable.fields.map((field) => {
-                    return {
-                      label: `${field.name} (${field.options.type})`,
-                      value: field.name
-                    };
-                  })}
+                  options={selectedTable.fields
+                    .filter((f) =>
+                      [
+                        'set',
+                        'time',
+                        'mutex',
+                        'bool',
+                        'int',
+                        'timestamp'
+                      ].includes(f.options.type)
+                    )
+                    .map((field) => {
+                      return {
+                        label: `${field.name} (${field.options.type})`,
+                        value: field.name
+                      };
+                    })}
                   onChange={(value) =>
                     setGroupByCall({
                       ...groupByCall,
@@ -576,12 +614,23 @@ export const QueryBuilder: FC<QueryBuilderProps> = ({
                   label="Secondary Field (optional)"
                   value={groupByCall.secondary}
                   allowEmpty={true}
-                  options={selectedTable.fields.map((field) => {
-                    return {
-                      label: `${field.name} (${field.options.type})`,
-                      value: field.name
-                    };
-                  })}
+                  options={selectedTable.fields
+                    .filter((f) =>
+                      [
+                        'set',
+                        'time',
+                        'mutex',
+                        'bool',
+                        'int',
+                        'timestamp'
+                      ].includes(f.options.type)
+                    )
+                    .map((field) => {
+                      return {
+                        label: `${field.name} (${field.options.type})`,
+                        value: field.name
+                      };
+                    })}
                   onChange={(value) =>
                     setGroupByCall({
                       ...groupByCall,
@@ -633,6 +682,22 @@ export const QueryBuilder: FC<QueryBuilderProps> = ({
                     for {selectedTable.name} with at least one field constraint.
                   </div>
                 )}
+
+                <div className={css.sortHeader}>
+                  <Typography variant="caption" color="textSecondary">
+                    Sort (optional)
+                  </Typography>
+                  <GroupBySort
+                    sort={sort}
+                    onUpdate={setSort}
+                    fields={selectedTable.fields
+                      .filter((field) => field.options.type === 'int')
+                      .map((field) => {
+                        return { label: field.name, value: field.name };
+                      })}
+                    showErrors={hasInvalid}
+                  />
+                </div>
               </div>
             ) : (
               <div className={css.newGroup}>
@@ -789,6 +854,7 @@ export const QueryBuilder: FC<QueryBuilderProps> = ({
                   primary: '',
                   secondary: ''
                 });
+                setSort([]);
                 setFilter(undefined);
                 onClear();
               }}
