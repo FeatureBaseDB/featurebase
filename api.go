@@ -1014,56 +1014,57 @@ func (api *API) calculateUsage() {
 	lastUpdated := api.usageCache.lastUpdated
 	api.usageCache.muAssign.Unlock()
 
-	if time.Since(lastUpdated) > api.usageCache.refreshInterval {
-		indexDetails, nodeMetadataBytes, err := api.holder.Txf().IndexUsageDetails(api.isClosing)
-		if err != nil {
-			api.server.logger.Infof("couldn't get index usage details: %s", err)
-		}
-		if api.isClosing() {
-			return
-		}
-
-		totalSize := nodeMetadataBytes
-		for _, s := range indexDetails {
-			totalSize += s.Total
-		}
-
-		// NOTE: these errors are ignored in api.Info(), but checked here
-		si := api.server.systemInfo
-		diskCapacity, err := si.DiskCapacity(api.holder.path)
-		if err != nil {
-			api.server.logger.Infof("couldn't read disk capacity: %s", err)
-		}
-
-		memoryCapacity, err := si.MemTotal()
-		if err != nil {
-			api.server.logger.Infof("couldn't read memory capacity: %s", err)
-		}
-		memoryUse, err := si.MemUsed()
-		if err != nil {
-			api.server.logger.Infof("couldn't read memory usage: %s", err)
-		}
-
-		lastUpdated = time.Now()
-		// Insert into result.
-		nodeUsage := NodeUsage{
-			Disk: DiskUsage{
-				Capacity:   diskCapacity,
-				TotalUse:   totalSize,
-				IndexUsage: indexDetails,
-			},
-			Memory: MemoryUsage{
-				Capacity: memoryCapacity,
-				TotalUse: memoryUse,
-			},
-			LastUpdated: lastUpdated,
-		}
-		api.usageCache.muAssign.Lock()
-		api.usageCache.data = make(map[string]NodeUsage)
-		api.usageCache.data[api.server.nodeID] = nodeUsage
-		api.usageCache.lastUpdated = lastUpdated
-		api.usageCache.muAssign.Unlock()
+	if time.Since(lastUpdated) <= api.usageCache.refreshInterval {
+		return
 	}
+	indexDetails, nodeMetadataBytes, err := api.holder.Txf().IndexUsageDetails(api.isClosing)
+	if err != nil {
+		api.server.logger.Infof("couldn't get index usage details: %s", err)
+	}
+	if api.isClosing() {
+		return
+	}
+
+	totalSize := nodeMetadataBytes
+	for _, s := range indexDetails {
+		totalSize += s.Total
+	}
+
+	// NOTE: these errors are ignored in api.Info(), but checked here
+	si := api.server.systemInfo
+	diskCapacity, err := si.DiskCapacity(api.holder.path)
+	if err != nil {
+		api.server.logger.Infof("couldn't read disk capacity: %s", err)
+	}
+
+	memoryCapacity, err := si.MemTotal()
+	if err != nil {
+		api.server.logger.Infof("couldn't read memory capacity: %s", err)
+	}
+	memoryUse, err := si.MemUsed()
+	if err != nil {
+		api.server.logger.Infof("couldn't read memory usage: %s", err)
+	}
+
+	lastUpdated = time.Now()
+	// Insert into result.
+	nodeUsage := NodeUsage{
+		Disk: DiskUsage{
+			Capacity:   diskCapacity,
+			TotalUse:   totalSize,
+			IndexUsage: indexDetails,
+		},
+		Memory: MemoryUsage{
+			Capacity: memoryCapacity,
+			TotalUse: memoryUse,
+		},
+		LastUpdated: lastUpdated,
+	}
+	api.usageCache.muAssign.Lock()
+	api.usageCache.data = make(map[string]NodeUsage)
+	api.usageCache.data[api.server.nodeID] = nodeUsage
+	api.usageCache.lastUpdated = lastUpdated
+	api.usageCache.muAssign.Unlock()
 }
 
 // Periodically calculates disk/memory usage in terms of the duty cycle. The duty cycle represents the percentage of
