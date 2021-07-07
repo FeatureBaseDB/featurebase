@@ -915,9 +915,8 @@ type usageCache struct {
 }
 
 var usageCacheMinDuration = 5 * time.Second // If usage takes less than this duration to calculate, don't use the cache.
-var usageCacheMinInterval = time.Hour     // Refresh interval is forced to be >= this duration.
-var usageCacheInitialInterval = time.Hour // Refresh interval starts with this duration.
-var usageCacheDebugSleep = 10 * time.Second
+var usageCacheMinInterval = time.Hour       // Refresh interval is forced to be >= this duration.
+var usageCacheInitialInterval = time.Hour   // Refresh interval starts with this duration.
 
 // NodeUsage represents all usage measurements for one node.
 type NodeUsage struct {
@@ -979,7 +978,6 @@ func (api *API) Usage(ctx context.Context, remote bool) (map[string]NodeUsage, e
 	if !remote {
 		api.requestUsageOfNodes()
 	}
-	time.Sleep(usageCacheDebugSleep)
 
 	return api.usageCache.data, nil
 }
@@ -1083,10 +1081,12 @@ func (api *API) RefreshUsageCache(dutyCycle float64) {
 		lastCalcDuration: 0,
 		waitMultiplier:   multiplier,
 	}
+	api.server.logger.Infof("monitoring resource usage with duty cycle %v%%\n", dutyCycle)
 	for {
 		start := time.Now()
 		api.calculateUsage()
 		api.setRefreshInterval(time.Since(start))
+		api.server.logger.Infof("updated resource usage cache at %v, took %v, next update in %v\n", api.usageCache.lastUpdated.Format(time.RFC3339), api.usageCache.lastCalcDuration, api.usageCache.refreshInterval)
 		select {
 		case <-trigger:
 			continue
