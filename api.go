@@ -914,6 +914,11 @@ type usageCache struct {
 	muAssign    sync.Mutex
 }
 
+var usageCacheMinDuration = 5 * time.Second // If usage takes less than this duration to calculate, don't use the cache.
+var usageCacheMinInterval = time.Hour     // Refresh interval is forced to be >= this duration.
+var usageCacheInitialInterval = time.Hour // Refresh interval starts with this duration.
+var usageCacheDebugSleep = 10 * time.Second
+
 // NodeUsage represents all usage measurements for one node.
 type NodeUsage struct {
 	Disk        DiskUsage   `json:"diskUsage"`
@@ -957,7 +962,7 @@ func (api *API) Usage(ctx context.Context, remote bool) (map[string]NodeUsage, e
 	span, _ := tracing.StartSpanFromContext(ctx, "API.Usage")
 	defer span.Finish()
 
-	if api.usageCache.lastCalcDuration < (time.Second * 5) {
+	if api.usageCache.lastCalcDuration < usageCacheMinDuration {
 		err := api.ResetUsageCache()
 		if err != nil {
 			api.server.logger.Infof("could not reset usageCache: %s", err)
@@ -974,6 +979,7 @@ func (api *API) Usage(ctx context.Context, remote bool) (map[string]NodeUsage, e
 	if !remote {
 		api.requestUsageOfNodes()
 	}
+	time.Sleep(usageCacheDebugSleep)
 
 	return api.usageCache.data, nil
 }
@@ -1071,7 +1077,7 @@ func (api *API) RefreshUsageCache(dutyCycle float64) {
 
 	api.usageCache = &usageCache{
 		data:             make(map[string]NodeUsage),
-		refreshInterval:  time.Hour,
+		refreshInterval:  usageCacheInitialInterval,
 		resetTrigger:     trigger,
 		lastCalcDuration: 0,
 		waitMultiplier:   multiplier,
@@ -1094,8 +1100,8 @@ func (api *API) RefreshUsageCache(dutyCycle float64) {
 // Refresh interval set in relation to how long the last calculation took.
 func (api *API) setRefreshInterval(dur time.Duration) {
 	refresh := time.Duration(float64(dur) * api.usageCache.waitMultiplier)
-	if refresh < time.Hour {
-		refresh = time.Hour
+	if refresh < usageCacheMinInterval {
+		refresh = usageCacheMinInterval
 	}
 	api.usageCache.muAssign.Lock()
 	api.usageCache.refreshInterval = refresh
