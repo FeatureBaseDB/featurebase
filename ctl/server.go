@@ -115,5 +115,5 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 	flags.Float64Var(&srv.Config.UsageDutyCycle, "usage-duty-cycle", srv.Config.UsageDutyCycle, "Sets the percentage of time that is spent recalculating the disk and memory usage cache. 100.0 for always-running, must be > 0.")
 
 	// Future flags.
-	flags.BoolVar(&srv.Config.Future.Rename, "future.rename", false, "present application name as FeatureBase")
+	flags.BoolVar(&srv.Config.Future.Rename, "future.rename", false, "Present application name as FeatureBase. Defaults to false, will default to true in an upcoming release.")
 }
