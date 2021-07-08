@@ -227,6 +227,14 @@ type Config struct {
 
 	// The percentage of time spent recalculating the disk and memory usage cache.
 	UsageDutyCycle float64 `toml:"usage-duty-cycle"`
+
+	// Future flags are used to represent features or functionality which is not
+	// yet the default behavior, but will be in a future release.
+	Future struct {
+		// Rename, if true, will outwardly present the name of the application
+		// as FeatureBase instead of Pilosa.
+		Rename bool `toml:"rename"`
+	} `toml:"future"`
 }
 
 // MustValidate checks that all ports in a Config are unique and not zero.
@@ -364,6 +372,9 @@ func NewConfig() *Config {
 
 	// Disk and Memory Usage
 	c.UsageDutyCycle = 20.0
+
+	// Future flags.
+	c.Future.Rename = false
 
 	return c
 }
