@@ -113,4 +113,7 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 
 	// Disk and Memory usage cache for ui/usage endpoint
 	flags.Float64Var(&srv.Config.UsageDutyCycle, "usage-duty-cycle", srv.Config.UsageDutyCycle, "Sets the percentage of time that is spent recalculating the disk and memory usage cache. 100.0 for always-running, must be > 0.")
+
+	// Future flags.
+	flags.BoolVar(&srv.Config.Future.Rename, "future.rename", false, "present application name as FeatureBase")
 }
