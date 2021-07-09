@@ -40,7 +40,7 @@ at https://www.pilosa.com/docs/.
 ` + pilosa.VersionInfo() + "\n",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			v := viper.New()
-			err := setAllConfig(v, cmd.Flags(), "PILOSA")
+			err := setAllConfig(v, cmd.Flags())
 			if err != nil {
 				return err
 			}
@@ -90,11 +90,17 @@ at https://www.pilosa.com/docs/.
 // setAllConfig looks for environment variables which are capitalized versions
 // of the flag names with dashes replaced by underscores, and prefixed with
 // envPrefix plus an underscore.
-func setAllConfig(v *viper.Viper, flags *pflag.FlagSet, envPrefix string) error { // nolint: unparam
+func setAllConfig(v *viper.Viper, flags *pflag.FlagSet) error { // nolint: unparam
 	// add cmd line flag def to viper
 	err := v.BindPFlags(flags)
 	if err != nil {
 		return err
+	}
+
+	envPrefix := "PILOSA"
+	rename := v.GetBool("future.rename")
+	if rename {
+		envPrefix = "FEATUREBASE"
 	}
 
 	// add env to viper
