@@ -56,5 +56,5 @@ func VersionInfo() string {
 	if TrialDeadline != "" {
 		suffix += " limited time trial ends on: " + TrialDeadline
 	}
-	return prefix + "Pilosa" + suffix
+	return prefix + "FeatureBase" + suffix
 }
