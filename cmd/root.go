@@ -35,9 +35,9 @@ func NewRootCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
 This binary contains Pilosa itself, as well as common
 tools for administering Pilosa, importing/exporting data,
 backing up, and more. Complete documentation is available
-at https://www.pilosa.com/docs/.
+at https://docs.molecula.cloud/.
 
-` + pilosa.VersionInfo() + "\n",
+` + pilosa.VersionInfo(false) + "\n",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			v := viper.New()
 			err := setAllConfig(v, cmd.Flags())

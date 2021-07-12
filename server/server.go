@@ -342,7 +342,7 @@ func (m *Command) SetupServer() error {
 		return errors.Wrap(err, "setting up logger")
 	}
 
-	m.logger.Infof("%s", pilosa.VersionInfo())
+	m.logger.Infof("%s", pilosa.VersionInfo(m.Config.Future.Rename))
 
 	handleTrialDeadline(m.logger)
 
