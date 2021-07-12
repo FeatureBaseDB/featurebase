@@ -1086,7 +1086,7 @@ func (api *API) RefreshUsageCache(dutyCycle float64) {
 		start := time.Now()
 		api.calculateUsage()
 		api.setRefreshInterval(time.Since(start))
-		api.server.logger.Infof("updated resource usage cache at %v, took %v, next update in %v\n", api.usageCache.lastUpdated.Format(time.RFC3339), api.usageCache.lastCalcDuration, api.usageCache.refreshInterval)
+		api.server.logger.Infof("updated resource usage cache at %v, took %v, next update in %v\n", api.usageCache.lastUpdated.Format(time.RFC3339), api.usageCache.lastCalcDuration.Truncate(time.Millisecond), api.usageCache.refreshInterval.Truncate(100*time.Millisecond))
 		select {
 		case <-trigger:
 			continue
