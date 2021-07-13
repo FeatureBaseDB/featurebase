@@ -26,7 +26,7 @@ var BuildTime string
 var GoVersion string = runtime.Version()
 var TrialDeadline string
 
-func VersionInfo() string {
+func VersionInfo(rename bool) string {
 	var prefix string
 	if Variant != "" {
 		prefix = Variant + " "
@@ -56,5 +56,9 @@ func VersionInfo() string {
 	if TrialDeadline != "" {
 		suffix += " limited time trial ends on: " + TrialDeadline
 	}
-	return prefix + "Pilosa" + suffix
+	productName := "Pilosa"
+	if rename {
+		productName = "FeatureBase"
+	}
+	return prefix + productName + suffix
 }
