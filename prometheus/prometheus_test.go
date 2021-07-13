@@ -47,7 +47,9 @@ func TestPrometheusClient_WithTags(t *testing.T) {
 
 func TestPrometheusClient_Methods(t *testing.T) {
 	// Create a new client.
-	c, err := pilosaPrometheus.NewPrometheusClient()
+	c, err := pilosaPrometheus.NewPrometheusClient(
+		pilosaPrometheus.OptClientNamespace("testns"),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,7 +66,7 @@ func TestPrometheusClient_Methods(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, metricName := range []string{"pilosa_ct", "pilosa_cc", "pilosa_gg", "pilosa_hh", "pilosa_tt"} {
+	for _, metricName := range []string{"testns_ct", "testns_cc", "testns_gg", "testns_hh", "testns_tt"} {
 		if metricExists(metricName, metricFams) {
 			continue
 		}

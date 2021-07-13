@@ -25,7 +25,7 @@ import (
 
 func TestStatsClient_WithTags(t *testing.T) {
 	// Create a new client.
-	c, err := statsd.NewStatsClient("localhost:19444")
+	c, err := statsd.NewStatsClient("localhost:19444", "testnamespace")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,7 +46,7 @@ func TestStatsClient_WithTags(t *testing.T) {
 
 func TestStatsClient_Methods(t *testing.T) {
 	// Create a new client.
-	c, err := statsd.NewStatsClient("localhost:19444")
+	c, err := statsd.NewStatsClient("localhost:19444", "testnamespace")
 	if err != nil {
 		t.Fatal(err)
 	}
