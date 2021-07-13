@@ -110,7 +110,13 @@ export const QueryContainer: FC<{}> = () => {
           setLoading(false);
         }
       } else {
-        querySQL(query, handleQueryMessages, handleQueryEnd);
+        let queryArr = query.split(' ');
+        queryArr.forEach((word, idx) => {
+          if (word.includes('-') && !word.includes('`')) {
+            queryArr[idx] = `\`${queryArr[idx]}\``;
+          }
+        });
+        querySQL(queryArr.join(' '), handleQueryMessages, handleQueryEnd);
       }
     }
   };
