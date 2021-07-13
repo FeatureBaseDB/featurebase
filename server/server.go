@@ -391,7 +391,7 @@ func (m *Command) SetupServer() error {
 		diagnosticsInterval = defaultDiagnosticsInterval
 	}
 
-	statsClient, err := newStatsClient(m.Config.Metric.Service, m.Config.Metric.Host)
+	statsClient, err := newStatsClient(m.Config.Metric.Service, m.Config.Metric.Host, m.Config.Namespace())
 	if err != nil {
 		return errors.Wrap(err, "new stats client")
 	}
@@ -611,14 +611,16 @@ func (m *Command) Close() error {
 }
 
 // newStatsClient creates a stats client from the config
-func newStatsClient(name string, host string) (stats.StatsClient, error) {
+func newStatsClient(name string, host string, namespace string) (stats.StatsClient, error) {
 	switch name {
 	case "expvar":
 		return stats.NewExpvarStatsClient(), nil
 	case "statsd":
-		return statsd.NewStatsClient(host)
+		return statsd.NewStatsClient(host, namespace)
 	case "prometheus":
-		return prometheus.NewPrometheusClient()
+		return prometheus.NewPrometheusClient(
+			prometheus.OptClientNamespace(namespace),
+		)
 	case "nop", "none":
 		return stats.NopStatsClient, nil
 	default:

@@ -27,9 +27,6 @@ import (
 // statsD defailt host is "127.0.0.1:8125"
 
 const (
-	// prefix is appended to each metric event name
-	prefix = "pilosa."
-
 	// bufferLen Stats lient buffer size.
 	bufferLen = 1024
 )
@@ -42,10 +39,13 @@ type statsClient struct {
 	client *statsd.Client
 	tags   []string
 	logger logger.Logger
+
+	// prefix is appended to each metric event name
+	prefix string
 }
 
 // NewStatsClient returns a new instance of StatsClient.
-func NewStatsClient(host string) (*statsClient, error) {
+func NewStatsClient(host string, namespace string) (*statsClient, error) {
 	c, err := statsd.NewBuffered(host, bufferLen)
 	if err != nil {
 		return nil, err
@@ -54,6 +54,7 @@ func NewStatsClient(host string) (*statsClient, error) {
 	return &statsClient{
 		client: c,
 		logger: logger.NopLogger,
+		prefix: namespace + ".",
 	}, nil
 }
 
@@ -81,7 +82,7 @@ func (c *statsClient) WithTags(tags ...string) stats.StatsClient {
 
 // Count tracks the number of times something occurs per second.
 func (c *statsClient) Count(name string, value int64, rate float64) {
-	if err := c.client.Count(prefix+name, value, c.tags, rate); err != nil {
+	if err := c.client.Count(c.prefix+name, value, c.tags, rate); err != nil {
 		c.logger.Errorf("statsd.StatsClient.Count error: %s", err)
 	}
 }
@@ -89,35 +90,35 @@ func (c *statsClient) Count(name string, value int64, rate float64) {
 // CountWithCustomTags tracks the number of times something occurs per second with custom tags.
 func (c *statsClient) CountWithCustomTags(name string, value int64, rate float64, t []string) {
 	tags := append(c.tags, t...)
-	if err := c.client.Count(prefix+name, value, tags, rate); err != nil {
+	if err := c.client.Count(c.prefix+name, value, tags, rate); err != nil {
 		c.logger.Errorf("statsd.StatsClient.Count error: %s", err)
 	}
 }
 
 // Gauge sets the value of a metric.
 func (c *statsClient) Gauge(name string, value float64, rate float64) {
-	if err := c.client.Gauge(prefix+name, value, c.tags, rate); err != nil {
+	if err := c.client.Gauge(c.prefix+name, value, c.tags, rate); err != nil {
 		c.logger.Errorf("statsd.StatsClient.Gauge error: %s", err)
 	}
 }
 
 // Histogram tracks statistical distribution of a metric.
 func (c *statsClient) Histogram(name string, value float64, rate float64) {
-	if err := c.client.Histogram(prefix+name, value, c.tags, rate); err != nil {
+	if err := c.client.Histogram(c.prefix+name, value, c.tags, rate); err != nil {
 		c.logger.Errorf("statsd.StatsClient.Histogram error: %s", err)
 	}
 }
 
 // Set tracks number of unique elements.
 func (c *statsClient) Set(name string, value string, rate float64) {
-	if err := c.client.Set(prefix+name, value, c.tags, rate); err != nil {
+	if err := c.client.Set(c.prefix+name, value, c.tags, rate); err != nil {
 		c.logger.Errorf("statsd.StatsClient.Set error: %s", err)
 	}
 }
 
 // Timing tracks timing information for a metric.
 func (c *statsClient) Timing(name string, value time.Duration, rate float64) {
-	if err := c.client.Timing(prefix+name, value, c.tags, rate); err != nil {
+	if err := c.client.Timing(c.prefix+name, value, c.tags, rate); err != nil {
 		c.logger.Errorf("statsd.StatsClient.Timing error: %s", err)
 	}
 }

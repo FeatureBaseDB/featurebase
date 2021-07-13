@@ -27,7 +27,7 @@ import (
 
 const (
 	// namespace is prepended to each metric event name with "_"
-	defaultNamespace = "pilosa"
+	defaultNamespace = "general"
 )
 
 // Ensure client implements interface.

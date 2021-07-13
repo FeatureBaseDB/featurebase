@@ -35,6 +35,9 @@ const (
 	defaultBindPort            = "10101"
 	defaultBindGRPCPort        = "20101"
 	defaultDiagnosticsInterval = 1 * time.Hour
+
+	namespacePilosa      = "pilosa"
+	namespaceFeaturebase = "featurebase"
 )
 
 // TLSConfig contains TLS configuration
@@ -235,6 +238,14 @@ type Config struct {
 		// as FeatureBase instead of Pilosa.
 		Rename bool `toml:"rename"`
 	} `toml:"future"`
+}
+
+// Namespace returns the namespace to use based on the Future flag.
+func (c *Config) Namespace() string {
+	if c.Future.Rename {
+		return namespaceFeaturebase
+	}
+	return namespacePilosa
 }
 
 // MustValidate checks that all ports in a Config are unique and not zero.
