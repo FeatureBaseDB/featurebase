@@ -112,8 +112,14 @@ export const QueryContainer: FC<{}> = () => {
       } else {
         let queryArr = query.split(' ');
         queryArr.forEach((word, idx) => {
-          if (word.includes('-') && !word.includes('`')) {
-            queryArr[idx] = `\`${queryArr[idx]}\``;
+          if (word.includes('-')) {
+            let wordArr = word.split('.');
+            wordArr.forEach((section, idx) => {
+              if(section.includes('-') && !word.includes('`')) {
+                wordArr[idx] = `\`${wordArr[idx]}\``;
+              }
+            })
+            queryArr[idx] = wordArr.join('.');
           }
         });
         querySQL(queryArr.join(' '), handleQueryMessages, handleQueryEnd);
