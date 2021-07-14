@@ -14,7 +14,7 @@ RUN cd /go/src/github.com/pilosa/pilosa \
 ADD https://github.com/alexei-led/pumba/releases/download/0.6.0/pumba_linux_amd64 /pumba
 RUN chmod +x /pumba
 
-RUN cp /go/bin/pilosa /pilosa
+RUN cp /go/bin/featurebase /featurebase
 
 COPY LICENSE /LICENSE
 COPY NOTICE /NOTICE
@@ -23,4 +23,4 @@ EXPOSE 10101
 VOLUME /data
 
 ENTRYPOINT ["bash", "-c"]
-CMD ["/pilosa", "server", "--data-dir", "/data", "--bind", "http://0.0.0.0:10101"]
+CMD ["/featurebase", "server", "--data-dir", "/data", "--bind", "http://0.0.0.0:10101"]

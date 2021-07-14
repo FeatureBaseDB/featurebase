@@ -30,14 +30,14 @@ import (
 var Server *server.Command
 var holder *server.Command
 
-// newHolderCmd creates a pilosa server for just long enough to open the
+// newHolderCmd creates a FeatureBase server for just long enough to open the
 // holder, then shuts it down again.
 func newHolderCmd(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
 	holder = server.NewCommand(stdin, stdout, stderr)
 	serveCmd := &cobra.Command{
 		Use:   "holder",
-		Short: "Load Pilosa.",
-		Long: `pilosa holder starts (and immediately stops) Pilosa.
+		Short: "Load FeatureBase.",
+		Long: `featurebase holder starts (and immediately stops) FeatureBase.
 
 It opens the data directory and loads it, then shuts down immediately.
 This is only useful for diagnostic use.
@@ -56,13 +56,13 @@ This is only useful for diagnostic use.
 	return serveCmd
 }
 
-// newServeCmd creates a pilosa server and runs it with command line flags.
+// newServeCmd creates a FeatureBase server and runs it with command line flags.
 func newServeCmd(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
 	Server = server.NewCommand(stdin, stdout, stderr)
 	serveCmd := &cobra.Command{
 		Use:   "server",
-		Short: "Run Pilosa.",
-		Long: `pilosa server runs Pilosa.
+		Short: "Run FeatureBase.",
+		Long: `featurebase server runs FeatureBase.
 
 It will load existing data from the configured
 directory and start listening for client connections

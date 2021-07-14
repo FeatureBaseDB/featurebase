@@ -23,7 +23,7 @@ func TestCheckHelp(t *testing.T) {
 	output, err := ExecNewRootCommand(t, "check", "--help")
 	if !strings.Contains(output, "Usage:") ||
 		!strings.Contains(output, "Flags:") ||
-		!strings.Contains(output, "pilosa check") || err != nil {
+		!strings.Contains(output, "featurebase check") || err != nil {
 		t.Fatalf("Command 'check --help' not working, err: '%v', output: '%s'", err, output)
 	}
 }
