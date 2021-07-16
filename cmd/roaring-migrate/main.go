@@ -1,3 +1,16 @@
+// Copyright 2017 Pilosa Corp.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 package main
 
 import (
@@ -23,8 +36,8 @@ func main() {
 	var dataDir, backupPath string
 	cmdMigrate := &cobra.Command{
 		Use:   "roaring-migrate",
-		Short: "TBD",
-		Long:  ` TBD`,
+		Short: "convert roaring pilosa backup to rbf",
+		Long:  `roaring-migrate uses the pilosa data-dir for each node, and produces a new backup that is able to be restored from utilizing the new pilosa restore tool.`,
 		//Args:  cobra.MinimumNArgs(2),
 		Run: func(cmd *cobra.Command, args []string) {
 			nodes := strings.Split(dataDir, ",")
@@ -40,10 +53,18 @@ func main() {
 	}
 	cmdMigrate.Flags().StringVarP(&dataDir, "dataDir", "d", "", "source directories for each node seperated by commas")
 	cmdMigrate.Flags().StringVarP(&backupPath, "backupDir", "b", "", "location of backup directory")
-	cmdMigrate.MarkFlagRequired("dataDir")
-	cmdMigrate.MarkFlagRequired("backupDir")
+	err := cmdMigrate.MarkFlagRequired("dataDir")
+	if err != nil {
+		fmt.Println("Error setting flag dataDir")
+		return
+	}
+	err = cmdMigrate.MarkFlagRequired("backupDir")
+	if err != nil {
+		fmt.Println("Error setting flag backupDir")
+		return
+	}
 
-	err := cmdMigrate.Execute()
+	err = cmdMigrate.Execute()
 	if err != nil {
 		fmt.Println("exec error", err)
 	}
@@ -109,6 +130,9 @@ func BuildSchema(dataDir string) ([]byte, error) {
 				index := t[1]
 				src := dataDir + pathX
 				content, err := ioutil.ReadFile(src)
+				if err != nil {
+					return err
+				}
 				fstat, err := os.Stat(src)
 				stat := fstat.Sys().(*syscall.Stat_t)
 				if err != nil {
@@ -186,11 +210,20 @@ func (d *rbfFile) Close() error {
 	if d.last != "" {
 		d.working.Close()
 		//if d.last exists only keep the biggest
-		os.MkdirAll(filepath.Dir(d.last), 0777)
+		err := os.MkdirAll(filepath.Dir(d.last), 0777)
+		if err != nil {
+			return err
+		}
 		// move the datafile backup shard
-		os.Rename(d.temp+"/data", d.last)
+		err = os.Rename(d.temp+"/data", d.last)
+		if err != nil {
+			return err
+		}
 		//cleanup the tempdirectory
-		os.RemoveAll(d.temp)
+		err = os.RemoveAll(d.temp)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -208,8 +241,11 @@ func copyFile(src, dest string) error {
 }
 
 func Migrate(dataDir, backupPath string) error {
-	os.MkdirAll(backupPath, 0777)
-	err := copyFile(dataDir+"/idalloc.db", backupPath+"idalloc")
+	err := os.MkdirAll(backupPath, 0777)
+	if err != nil {
+		return err
+	}
+	err = copyFile(dataDir+"/idalloc.db", backupPath+"idalloc")
 	if err != nil {
 		return err
 	}
@@ -318,7 +354,10 @@ func Migrate(dataDir, backupPath string) error {
 
 func writeIfBigger(dst string, content []byte) error {
 	if stats, err := os.Stat(dst); os.IsNotExist(err) {
-		os.MkdirAll(filepath.Dir(dst), 0777)
+		err = os.MkdirAll(filepath.Dir(dst), 0777)
+		if err != nil {
+			return err
+		}
 		return ioutil.WriteFile(dst, content, 0644)
 	} else {
 		if stats.Size() < int64(len(content)) {
@@ -335,12 +374,6 @@ func ignore(path string, items ...string) bool {
 		}
 	}
 	return false
-}
-
-func panicOnErr(err error) {
-	if err != nil {
-		panic(err)
-	}
 }
 
 func FetchIndexKeys(base string) []string {
