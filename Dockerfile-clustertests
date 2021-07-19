@@ -5,9 +5,9 @@ FROM golang:1.13
 
 LABEL maintainer "dev@pilosa.com"
 
-COPY . /go/src/github.com/pilosa/pilosa/
+COPY . /go/src/github.com/molecula/featurebase/
 
-RUN cd /go/src/github.com/pilosa/pilosa \
+RUN cd /go/src/github.com/molecula/featurebase \
     && make install FLAGS="-a -mod=vendor"
 
 # download pumba for fault injection
