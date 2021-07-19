@@ -23,7 +23,7 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/pilosa/pilosa/v2/topology"
+	"github.com/molecula/featurebase/v2/topology"
 	"github.com/pkg/errors"
 )
 

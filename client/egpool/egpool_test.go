@@ -18,7 +18,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/pilosa/pilosa/v2/client/egpool"
+	"github.com/molecula/featurebase/v2/client/egpool"
 )
 
 func TestEGPool(t *testing.T) {

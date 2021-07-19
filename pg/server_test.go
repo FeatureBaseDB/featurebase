@@ -28,9 +28,9 @@ import (
 	"time"
 
 	"github.com/lib/pq"
-	"github.com/pilosa/pilosa/v2/logger"
-	"github.com/pilosa/pilosa/v2/pg"
-	"github.com/pilosa/pilosa/v2/pg/pgtest"
+	"github.com/molecula/featurebase/v2/logger"
+	"github.com/molecula/featurebase/v2/pg"
+	"github.com/molecula/featurebase/v2/pg/pgtest"
 )
 
 // TestStartupTimeout tests that an incoming connection that does nothing times out and gets closed.

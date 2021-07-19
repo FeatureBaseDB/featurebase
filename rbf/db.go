@@ -24,8 +24,8 @@ import (
 	"syscall"
 
 	"github.com/benbjohnson/immutable"
-	rbfcfg "github.com/pilosa/pilosa/v2/rbf/cfg"
-	"github.com/pilosa/pilosa/v2/syswrap"
+	rbfcfg "github.com/molecula/featurebase/v2/rbf/cfg"
+	"github.com/molecula/featurebase/v2/syswrap"
 )
 
 var (

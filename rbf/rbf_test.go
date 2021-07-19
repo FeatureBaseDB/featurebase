@@ -24,9 +24,9 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/pilosa/pilosa/v2/rbf"
-	rbfcfg "github.com/pilosa/pilosa/v2/rbf/cfg"
-	"github.com/pilosa/pilosa/v2/testhook"
+	"github.com/molecula/featurebase/v2/rbf"
+	rbfcfg "github.com/molecula/featurebase/v2/rbf/cfg"
+	"github.com/molecula/featurebase/v2/testhook"
 )
 
 var quickCheckN *int = flag.Int("quickchecks", 10, "The number of iterations for each quickcheck")

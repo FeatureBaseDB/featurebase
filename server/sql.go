@@ -17,10 +17,10 @@ package server
 import (
 	"context"
 
-	"github.com/pilosa/pilosa/v2"
-	"github.com/pilosa/pilosa/v2/logger"
-	pb "github.com/pilosa/pilosa/v2/proto"
-	"github.com/pilosa/pilosa/v2/sql"
+	"github.com/molecula/featurebase/v2"
+	"github.com/molecula/featurebase/v2/logger"
+	pb "github.com/molecula/featurebase/v2/proto"
+	"github.com/molecula/featurebase/v2/sql"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"

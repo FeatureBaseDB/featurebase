@@ -20,10 +20,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pilosa/pilosa/v2/disco"
-	pnet "github.com/pilosa/pilosa/v2/net"
-	"github.com/pilosa/pilosa/v2/shardwidth"
-	"github.com/pilosa/pilosa/v2/test"
+	"github.com/molecula/featurebase/v2/disco"
+	pnet "github.com/molecula/featurebase/v2/net"
+	"github.com/molecula/featurebase/v2/shardwidth"
+	"github.com/molecula/featurebase/v2/test"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
@@ -212,7 +212,7 @@ func TestClientAgainstCluster(t *testing.T) {
 				_, err = cli.Query(qry)
 				require.NoErrorf(t, err, "BatchQuery")
 
-				// XXX: The following is required to make this test pass. See: https://github.com/pilosa/pilosa/issues/625
+				// XXX: The following is required to make this test pass. See: https://github.com/molecula/featurebase/issues/625
 				_, _, err = cli.HTTPRequest("POST", "/recalculate-caches", nil, nil)
 				require.NoErrorf(t, err, "POST /recalculate-caches")
 

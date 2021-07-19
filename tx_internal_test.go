@@ -19,7 +19,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/pilosa/pilosa/v2/roaring"
+	"github.com/molecula/featurebase/v2/roaring"
 )
 
 const countRangeMaxN = 8192

@@ -22,10 +22,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pilosa/pilosa/v2"
-	"github.com/pilosa/pilosa/v2/boltdb"
-	"github.com/pilosa/pilosa/v2/testhook"
-	"github.com/pilosa/pilosa/v2/topology"
+	"github.com/molecula/featurebase/v2"
+	"github.com/molecula/featurebase/v2/boltdb"
+	"github.com/molecula/featurebase/v2/testhook"
+	"github.com/molecula/featurebase/v2/topology"
 )
 
 //var vv = pilosa.VV

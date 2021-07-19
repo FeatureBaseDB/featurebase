@@ -19,7 +19,7 @@ import (
 	"reflect"
 	"testing"
 
-	pproto "github.com/pilosa/pilosa/v2/proto"
+	pproto "github.com/molecula/featurebase/v2/proto"
 	"github.com/pkg/errors"
 )
 

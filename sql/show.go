@@ -18,8 +18,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/pilosa/pilosa/v2"
-	pproto "github.com/pilosa/pilosa/v2/proto"
+	"github.com/molecula/featurebase/v2"
+	pproto "github.com/molecula/featurebase/v2/proto"
 	"github.com/pkg/errors"
 	"vitess.io/vitess/go/vt/sqlparser"
 )

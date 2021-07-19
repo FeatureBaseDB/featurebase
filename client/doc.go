@@ -24,7 +24,7 @@ Usage:
 
 	import (
 		"fmt"
-		"github.com/pilosa/pilosa/v2/client"
+		"github.com/molecula/featurebase/v2/client"
 	)
 
 	// Create a Client instance

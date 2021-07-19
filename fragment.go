@@ -40,17 +40,17 @@ import (
 
 	"github.com/cespare/xxhash"
 	"github.com/gogo/protobuf/proto"
-	"github.com/pilosa/pilosa/v2/logger"
-	pnet "github.com/pilosa/pilosa/v2/net"
-	"github.com/pilosa/pilosa/v2/pb"
-	"github.com/pilosa/pilosa/v2/pql"
-	"github.com/pilosa/pilosa/v2/roaring"
-	"github.com/pilosa/pilosa/v2/shardwidth"
-	"github.com/pilosa/pilosa/v2/stats"
-	"github.com/pilosa/pilosa/v2/testhook"
-	"github.com/pilosa/pilosa/v2/topology"
-	"github.com/pilosa/pilosa/v2/tracing"
-	. "github.com/pilosa/pilosa/v2/vprint" // nolint:staticcheck
+	"github.com/molecula/featurebase/v2/logger"
+	pnet "github.com/molecula/featurebase/v2/net"
+	"github.com/molecula/featurebase/v2/pb"
+	"github.com/molecula/featurebase/v2/pql"
+	"github.com/molecula/featurebase/v2/roaring"
+	"github.com/molecula/featurebase/v2/shardwidth"
+	"github.com/molecula/featurebase/v2/stats"
+	"github.com/molecula/featurebase/v2/testhook"
+	"github.com/molecula/featurebase/v2/topology"
+	"github.com/molecula/featurebase/v2/tracing"
+	. "github.com/molecula/featurebase/v2/vprint" // nolint:staticcheck
 	"github.com/pkg/errors"
 )
 

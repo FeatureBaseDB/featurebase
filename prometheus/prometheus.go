@@ -20,8 +20,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pilosa/pilosa/v2/logger"
-	"github.com/pilosa/pilosa/v2/stats"
+	"github.com/molecula/featurebase/v2/logger"
+	"github.com/molecula/featurebase/v2/stats"
 	"github.com/prometheus/client_golang/prometheus"
 )
 

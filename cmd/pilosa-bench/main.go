@@ -29,8 +29,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pilosa/pilosa/v2"
-	phttp "github.com/pilosa/pilosa/v2/http"
+	"github.com/molecula/featurebase/v2"
+	phttp "github.com/molecula/featurebase/v2/http"
 	"golang.org/x/sync/errgroup"
 )
 

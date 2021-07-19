@@ -21,12 +21,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pilosa/pilosa/v2"
-	"github.com/pilosa/pilosa/v2/logger"
-	"github.com/pilosa/pilosa/v2/pg"
-	"github.com/pilosa/pilosa/v2/pg/pgtest"
-	"github.com/pilosa/pilosa/v2/server"
-	"github.com/pilosa/pilosa/v2/test"
+	"github.com/molecula/featurebase/v2"
+	"github.com/molecula/featurebase/v2/logger"
+	"github.com/molecula/featurebase/v2/pg"
+	"github.com/molecula/featurebase/v2/pg/pgtest"
+	"github.com/molecula/featurebase/v2/server"
+	"github.com/molecula/featurebase/v2/test"
 )
 
 func TestPostgresHandler(t *testing.T) {

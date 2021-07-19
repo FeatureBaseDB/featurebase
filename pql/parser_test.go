@@ -19,8 +19,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pilosa/pilosa/v2/pql"
-	_ "github.com/pilosa/pilosa/v2/test"
+	"github.com/molecula/featurebase/v2/pql"
+	_ "github.com/molecula/featurebase/v2/test"
 )
 
 // Ensure the parser can parse PQL.

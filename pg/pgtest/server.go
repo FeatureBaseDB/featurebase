@@ -20,7 +20,7 @@ import (
 	"net"
 	"testing"
 
-	"github.com/pilosa/pilosa/v2/pg"
+	"github.com/molecula/featurebase/v2/pg"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )

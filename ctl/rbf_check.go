@@ -19,8 +19,8 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/pilosa/pilosa/v2"
-	"github.com/pilosa/pilosa/v2/rbf"
+	"github.com/molecula/featurebase/v2"
+	"github.com/molecula/featurebase/v2/rbf"
 )
 
 // RBFCheckCommand represents a command for running a consistency check on RBF.

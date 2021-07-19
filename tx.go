@@ -17,9 +17,9 @@ package pilosa
 import (
 	"io"
 
-	"github.com/pilosa/pilosa/v2/roaring"
-	txkey "github.com/pilosa/pilosa/v2/short_txkey"
-	//txkey "github.com/pilosa/pilosa/v2/txkey"
+	"github.com/molecula/featurebase/v2/roaring"
+	txkey "github.com/molecula/featurebase/v2/short_txkey"
+	//txkey "github.com/molecula/featurebase/v2/txkey"
 )
 
 // writable initializes Tx that update, use !writable for read-only.

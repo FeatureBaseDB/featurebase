@@ -17,9 +17,9 @@ package client
 import (
 	"time"
 
-	"github.com/pilosa/pilosa/v2/client/egpool"
-	"github.com/pilosa/pilosa/v2/logger"
-	"github.com/pilosa/pilosa/v2/roaring"
+	"github.com/molecula/featurebase/v2/client/egpool"
+	"github.com/molecula/featurebase/v2/logger"
+	"github.com/molecula/featurebase/v2/roaring"
 	"github.com/pkg/errors"
 )
 

@@ -20,7 +20,7 @@ import (
 	"sort"
 	"unsafe"
 
-	"github.com/pilosa/pilosa/v2/roaring"
+	"github.com/molecula/featurebase/v2/roaring"
 	"github.com/pkg/errors"
 )
 

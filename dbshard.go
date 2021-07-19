@@ -23,12 +23,12 @@ import (
 	"strings"
 	"sync"
 
-	rbfcfg "github.com/pilosa/pilosa/v2/rbf/cfg"
-	txkey "github.com/pilosa/pilosa/v2/short_txkey"
-	"github.com/pilosa/pilosa/v2/storage"
+	rbfcfg "github.com/molecula/featurebase/v2/rbf/cfg"
+	txkey "github.com/molecula/featurebase/v2/short_txkey"
+	"github.com/molecula/featurebase/v2/storage"
 	"github.com/pkg/errors"
 
-	. "github.com/pilosa/pilosa/v2/vprint" // nolint:staticcheck
+	. "github.com/molecula/featurebase/v2/vprint" // nolint:staticcheck
 )
 
 var _ = sort.Sort

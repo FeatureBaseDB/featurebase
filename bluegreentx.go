@@ -21,9 +21,9 @@ import (
 	"reflect"
 	"sync"
 
-	"github.com/pilosa/pilosa/v2/roaring"
-	txkey "github.com/pilosa/pilosa/v2/short_txkey"
-	. "github.com/pilosa/pilosa/v2/vprint"
+	"github.com/molecula/featurebase/v2/roaring"
+	txkey "github.com/molecula/featurebase/v2/short_txkey"
+	. "github.com/molecula/featurebase/v2/vprint"
 )
 
 // blueGreenTx runs two Tx together and notices differences in their output.

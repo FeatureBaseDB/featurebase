@@ -25,8 +25,8 @@ import (
 
 	"time"
 
-	"github.com/pilosa/pilosa/v2/cmd"
-	"github.com/pilosa/pilosa/v2/testhook"
+	"github.com/molecula/featurebase/v2/cmd"
+	"github.com/molecula/featurebase/v2/testhook"
 	"github.com/spf13/cobra"
 )
 

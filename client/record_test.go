@@ -20,7 +20,7 @@ package client_test
 import (
 	"testing"
 
-	"github.com/pilosa/pilosa/v2/client"
+	"github.com/molecula/featurebase/v2/client"
 )
 
 func TestColumnShard(t *testing.T) {

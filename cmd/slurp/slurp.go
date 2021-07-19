@@ -30,10 +30,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pilosa/pilosa/v2"
-	"github.com/pilosa/pilosa/v2/http"
-	pnet "github.com/pilosa/pilosa/v2/net"
-	. "github.com/pilosa/pilosa/v2/vprint" // nolint:staticcheck
+	"github.com/molecula/featurebase/v2"
+	"github.com/molecula/featurebase/v2/http"
+	pnet "github.com/molecula/featurebase/v2/net"
+	. "github.com/molecula/featurebase/v2/vprint" // nolint:staticcheck
 )
 
 // slurp: slurp is a load-tester for importing bulk data.

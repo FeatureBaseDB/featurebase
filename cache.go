@@ -23,9 +23,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pilosa/pilosa/v2/lru"
-	pb "github.com/pilosa/pilosa/v2/proto"
-	"github.com/pilosa/pilosa/v2/stats"
+	"github.com/molecula/featurebase/v2/lru"
+	pb "github.com/molecula/featurebase/v2/proto"
+	"github.com/molecula/featurebase/v2/stats"
 	"github.com/pkg/errors"
 )
 

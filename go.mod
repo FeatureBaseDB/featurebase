@@ -1,4 +1,4 @@
-module github.com/pilosa/pilosa/v2
+module github.com/molecula/featurebase/v2
 
 replace go.etcd.io/etcd => github.com/molecula/etcd v0.0.0-20210621160528-2cd93f1df0e7
 

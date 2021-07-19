@@ -21,7 +21,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pilosa/pilosa/v2/testhook"
+	"github.com/molecula/featurebase/v2/testhook"
 	bolt "go.etcd.io/bbolt"
 )
 

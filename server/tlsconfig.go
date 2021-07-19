@@ -54,7 +54,7 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/pilosa/pilosa/v2/logger"
+	"github.com/molecula/featurebase/v2/logger"
 	"github.com/pkg/errors"
 )
 

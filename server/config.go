@@ -24,10 +24,10 @@ import (
 	"strings"
 	"time"
 
-	petcd "github.com/pilosa/pilosa/v2/etcd"
-	rbfcfg "github.com/pilosa/pilosa/v2/rbf/cfg"
-	"github.com/pilosa/pilosa/v2/storage"
-	"github.com/pilosa/pilosa/v2/toml"
+	petcd "github.com/molecula/featurebase/v2/etcd"
+	rbfcfg "github.com/molecula/featurebase/v2/rbf/cfg"
+	"github.com/molecula/featurebase/v2/storage"
+	"github.com/molecula/featurebase/v2/toml"
 	"github.com/pkg/errors"
 )
 

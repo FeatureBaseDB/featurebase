@@ -21,9 +21,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pilosa/pilosa/v2/disco"
-	"github.com/pilosa/pilosa/v2/logger"
-	"github.com/pilosa/pilosa/v2/testhook"
+	"github.com/molecula/featurebase/v2/disco"
+	"github.com/molecula/featurebase/v2/logger"
+	"github.com/molecula/featurebase/v2/testhook"
 	"go.etcd.io/etcd/embed"
 	"go.etcd.io/etcd/etcdserver/api/v3client"
 )

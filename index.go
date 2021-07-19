@@ -24,11 +24,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pilosa/pilosa/v2/disco"
-	"github.com/pilosa/pilosa/v2/roaring"
-	"github.com/pilosa/pilosa/v2/stats"
-	"github.com/pilosa/pilosa/v2/testhook"
-	. "github.com/pilosa/pilosa/v2/vprint" // nolint:staticcheck
+	"github.com/molecula/featurebase/v2/disco"
+	"github.com/molecula/featurebase/v2/roaring"
+	"github.com/molecula/featurebase/v2/stats"
+	"github.com/molecula/featurebase/v2/testhook"
+	. "github.com/molecula/featurebase/v2/vprint" // nolint:staticcheck
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )

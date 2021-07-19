@@ -18,9 +18,9 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/pilosa/pilosa/v2/roaring"
-	txkey "github.com/pilosa/pilosa/v2/short_txkey"
-	. "github.com/pilosa/pilosa/v2/vprint"
+	"github.com/molecula/featurebase/v2/roaring"
+	txkey "github.com/molecula/featurebase/v2/short_txkey"
+	. "github.com/molecula/featurebase/v2/vprint"
 )
 
 // catcher is useful to report error locations with a

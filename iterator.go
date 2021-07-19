@@ -17,7 +17,7 @@ package pilosa
 import (
 	"fmt"
 
-	"github.com/pilosa/pilosa/v2/roaring"
+	"github.com/molecula/featurebase/v2/roaring"
 )
 
 // iterator is an interface for looping over row/column pairs.

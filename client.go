@@ -19,8 +19,8 @@ import (
 	"io"
 	"time"
 
-	pnet "github.com/pilosa/pilosa/v2/net"
-	"github.com/pilosa/pilosa/v2/topology"
+	pnet "github.com/molecula/featurebase/v2/net"
+	"github.com/molecula/featurebase/v2/topology"
 )
 
 // Bit represents the intersection of a row and a column. It can be specified by
@@ -48,7 +48,7 @@ type FieldValue struct {
 // While I understand that putting the entire Client behind an interface might require this many methods,
 // I don't want to let it go unquestioned.
 // Another note from Travis: I think we eventually want to unify `InternalClient` with
-// the `github.com/pilosa/pilosa/v2/client` client.
+// the `github.com/molecula/featurebase/v2/client` client.
 // Doing that may obviate the need to refactor this.
 type InternalClient interface {
 	InternalQueryClient

@@ -20,12 +20,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pilosa/pilosa/v2"
-	"github.com/pilosa/pilosa/v2/http"
-	"github.com/pilosa/pilosa/v2/server"
-	"github.com/pilosa/pilosa/v2/storage"
-	"github.com/pilosa/pilosa/v2/test"
-	. "github.com/pilosa/pilosa/v2/vprint" // nolint:staticcheck
+	"github.com/molecula/featurebase/v2"
+	"github.com/molecula/featurebase/v2/http"
+	"github.com/molecula/featurebase/v2/server"
+	"github.com/molecula/featurebase/v2/storage"
+	"github.com/molecula/featurebase/v2/test"
+	. "github.com/molecula/featurebase/v2/vprint" // nolint:staticcheck
 )
 
 func queryIRABit(m0api *pilosa.API, acctOwnerID uint64, iraField string, iraRowID uint64, index string) (bit bool) {

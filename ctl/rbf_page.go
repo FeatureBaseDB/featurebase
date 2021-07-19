@@ -19,8 +19,8 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/pilosa/pilosa/v2"
-	"github.com/pilosa/pilosa/v2/rbf"
+	"github.com/molecula/featurebase/v2"
+	"github.com/molecula/featurebase/v2/rbf"
 )
 
 // RBFPageCommand represents a command for printing data for a single RBF page.

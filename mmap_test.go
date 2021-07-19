@@ -20,8 +20,8 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/pilosa/pilosa/v2/logger"
-	"github.com/pilosa/pilosa/v2/syswrap"
+	"github.com/molecula/featurebase/v2/logger"
+	"github.com/molecula/featurebase/v2/syswrap"
 )
 
 type cv struct {

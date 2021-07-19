@@ -17,7 +17,7 @@ package pilosa
 import (
 	"testing"
 
-	. "github.com/pilosa/pilosa/v2/vprint" // nolint:staticcheck
+	. "github.com/molecula/featurebase/v2/vprint" // nolint:staticcheck
 )
 
 func TestRoaring_HasData(t *testing.T) {

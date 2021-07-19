@@ -13,7 +13,7 @@ BRANCH_ID := $(BRANCH)-$(GOOS)-$(GOARCH)
 BUILD_TIME := $(shell date -u +%FT%T%z)
 SHARD_WIDTH = 20
 COMMIT := $(shell git describe --exact-match >/dev/null 2>&1 || git rev-parse --short HEAD)
-LDFLAGS="-X github.com/pilosa/pilosa/v2.Version=$(VERSION) -X github.com/pilosa/pilosa/v2.BuildTime=$(BUILD_TIME) -X github.com/pilosa/pilosa/v2.Variant=$(VARIANT) -X github.com/pilosa/pilosa/v2.Commit=$(COMMIT) -X github.com/pilosa/pilosa/v2.TrialDeadline=$(TRIAL_DEADLINE)"
+LDFLAGS="-X github.com/molecula/featurebase/v2.Version=$(VERSION) -X github.com/molecula/featurebase/v2.BuildTime=$(BUILD_TIME) -X github.com/molecula/featurebase/v2.Variant=$(VARIANT) -X github.com/molecula/featurebase/v2.Commit=$(COMMIT) -X github.com/molecula/featurebase/v2.TrialDeadline=$(TRIAL_DEADLINE)"
 GO_VERSION=1.16.3
 DOCKER_BUILD= # set to 1 to use `docker-build` instead of `build` when creating a release
 BUILD_TAGS += shardwidth$(SHARD_WIDTH)
@@ -165,11 +165,11 @@ build-lattice:
 
 # `go generate` protocol buffers
 generate-protoc: require-protoc require-protoc-gen-gofast
-	$(GO) generate github.com/pilosa/pilosa/v2/pb
+	$(GO) generate github.com/molecula/featurebase/v2/pb
 
 # `go generate` statik assets (lattice UI)
 generate-statik: build-lattice require-statik
-	$(GO) generate github.com/pilosa/pilosa/v2/statik
+	$(GO) generate github.com/molecula/featurebase/v2/statik
 
 # `go generate` statik assets (lattice UI) in Docker
 generate-statik-docker: build-lattice
@@ -177,7 +177,7 @@ generate-statik-docker: build-lattice
 
 # `go generate` stringers
 generate-stringer:
-	$(GO) generate github.com/pilosa/pilosa/v2
+	$(GO) generate github.com/molecula/featurebase/v2
 
 generate-pql: require-peg
 	cd pql && peg -inline pql.peg && cd ..
@@ -188,7 +188,7 @@ generate-proto-grpc: require-protoc require-protoc-gen-go
 	# TODO: Modify above commands and remove the below mv if possible.
 	# See https://go-review.googlesource.com/c/protobuf/+/219298/ for info on --go-opt
 	# I couldn't get it to work during development - Cody
-	cp -r proto/github.com/pilosa/pilosa/v2/proto/ proto/
+	cp -r proto/github.com/molecula/featurebase/v2/proto/ proto/
 	rm -rf proto/github.com
 
 # `go generate` all needed packages

@@ -23,7 +23,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pilosa/pilosa/v2/client"
+	"github.com/molecula/featurebase/v2/client"
 )
 
 // Format is the format of the data in the CSV file.

@@ -23,8 +23,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pilosa/pilosa/v2/rbf"
-	"github.com/pilosa/pilosa/v2/roaring"
+	"github.com/molecula/featurebase/v2/rbf"
+	"github.com/molecula/featurebase/v2/roaring"
 )
 
 func TestCursor_FirstNext(t *testing.T) {

@@ -20,7 +20,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pilosa/pilosa/v2/pql"
+	"github.com/molecula/featurebase/v2/pql"
 )
 
 // Ensure call can be converted into a string.

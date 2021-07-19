@@ -34,13 +34,13 @@ import (
 
 	"github.com/golang/protobuf/proto" //nolint:staticcheck
 	"github.com/opentracing/opentracing-go"
-	"github.com/pilosa/pilosa/v2"
-	"github.com/pilosa/pilosa/v2/logger"
-	pnet "github.com/pilosa/pilosa/v2/net"
-	"github.com/pilosa/pilosa/v2/pb"
-	"github.com/pilosa/pilosa/v2/pql"
-	"github.com/pilosa/pilosa/v2/roaring"
-	"github.com/pilosa/pilosa/v2/stats"
+	"github.com/molecula/featurebase/v2"
+	"github.com/molecula/featurebase/v2/logger"
+	pnet "github.com/molecula/featurebase/v2/net"
+	"github.com/molecula/featurebase/v2/pb"
+	"github.com/molecula/featurebase/v2/pql"
+	"github.com/molecula/featurebase/v2/roaring"
+	"github.com/molecula/featurebase/v2/stats"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )

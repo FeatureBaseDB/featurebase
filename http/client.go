@@ -30,11 +30,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pilosa/pilosa/v2"
-	"github.com/pilosa/pilosa/v2/encoding/proto"
-	pnet "github.com/pilosa/pilosa/v2/net"
-	"github.com/pilosa/pilosa/v2/topology"
-	"github.com/pilosa/pilosa/v2/tracing"
+	"github.com/molecula/featurebase/v2"
+	"github.com/molecula/featurebase/v2/encoding/proto"
+	pnet "github.com/molecula/featurebase/v2/net"
+	"github.com/molecula/featurebase/v2/topology"
+	"github.com/molecula/featurebase/v2/tracing"
 	"github.com/pkg/errors"
 )
 

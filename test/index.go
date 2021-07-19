@@ -18,8 +18,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/pilosa/pilosa/v2"
-	"github.com/pilosa/pilosa/v2/testhook"
+	"github.com/molecula/featurebase/v2"
+	"github.com/molecula/featurebase/v2/testhook"
 )
 
 // Index represents a test wrapper for pilosa.Index.
