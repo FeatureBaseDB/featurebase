@@ -55,22 +55,25 @@ func main() {
 	err := cmdMigrate.MarkFlagRequired("data-dir")
 	if err != nil {
 		fmt.Println("Error setting flag data-dir")
+		os.Exit(1)
 		return
 	}
 	err = cmdMigrate.MarkFlagRequired("backup-dir")
 	if err != nil {
 		fmt.Println("Error setting flag backup-dir")
+		os.Exit(1)
 		return
 	}
 
 	err = cmdMigrate.Execute()
 	if err != nil {
 		fmt.Println("exec error", err)
+		os.Exit(1)
 	}
 }
 
 func FetchFragments(base string) []string {
-	var directory []string
+	var fragments []string
 
 	ff := func(pathX string, infoX os.FileInfo, errX error) error {
 
@@ -82,7 +85,7 @@ func FetchFragments(base string) []string {
 		pathX = pathX[len(base):]
 		if !infoX.IsDir() {
 			if strings.Contains(pathX, "fragment") && !strings.Contains(pathX, "cache") {
-				directory = append(directory, pathX)
+				fragments = append(fragments, pathX)
 			}
 		}
 		return nil
@@ -93,7 +96,7 @@ func FetchFragments(base string) []string {
 	if err != nil {
 		fmt.Printf("error walking the path %q: %v\n", base, err)
 	}
-	return directory
+	return fragments
 }
 
 type local struct {
@@ -214,7 +217,7 @@ func (d *rbfFile) Close() error {
 			return err
 		}
 		// move the datafile backup shard
-		err = os.Rename(d.temp+"/data", d.last)
+		err = os.Rename(filepath.Join(d.temp, "data"), d.last)
 		if err != nil {
 			return err
 		}
@@ -244,7 +247,7 @@ func Migrate(dataDir, backupPath string) error {
 	if err != nil {
 		return err
 	}
-	err = copyFile(dataDir+"/idalloc.db", backupPath+"idalloc")
+	err = copyFile(filepath.Join(dataDir, "idalloc.db"), filepath.Join(backupPath, "idalloc"))
 	if err != nil {
 		return err
 	}
@@ -253,7 +256,7 @@ func Migrate(dataDir, backupPath string) error {
 		return err
 	}
 
-	err = ioutil.WriteFile(backupPath+"/schema", schema, 0644)
+	err = ioutil.WriteFile(filepath.Join(backupPath, "schema"), schema, 0644)
 	if err != nil {
 		return err
 	}
@@ -286,7 +289,7 @@ func Migrate(dataDir, backupPath string) error {
 	clear := false
 	log := false
 	cache := &rbfFile{
-		temp: backupPath + "/_SCRATCH",
+		temp: filepath.Join(backupPath, "_SCRATCH"),
 	}
 	for _, filename := range raw {
 		index, field, view, shard := Extract(filename)
@@ -321,12 +324,13 @@ func Migrate(dataDir, backupPath string) error {
 	keys := FetchIndexKeys(dataDir)
 	for _, filename := range keys {
 		fmt.Println("index keys", filename)
-		content, err := ioutil.ReadFile(dataDir + filename)
+		content, err := ioutil.ReadFile(filepath.Join(dataDir, filename))
 		if err != nil {
 			return err
 		}
 		parts := strings.Split(filename, "/")
-		destFile := fmt.Sprintf("%v/indexes/%v/translate/%v", backupPath, parts[1], parts[3])
+		//destFile := fmt.Sprintf("%v/indexes/%v/translate/%v", backupPath, parts[1], parts[3])
+		destFile := filepath.Join(backupPath, "indexes", parts[1], "translaste", parts[3])
 		err = writeIfBigger(destFile, content)
 		if err != nil {
 			return err
@@ -342,7 +346,8 @@ func Migrate(dataDir, backupPath string) error {
 			return err
 		}
 		parts := strings.Split(filename, "/")
-		destFile := fmt.Sprintf("%v/indexes/%v/fields/%v/translate", backupPath, parts[1], parts[2])
+		//destFile := fmt.Sprintf("%v/indexes/%v/fields/%v/translate", backupPath, parts[1], parts[2])
+		destFile := filepath.Join(backupPath, "indexes", parts[1], "fields", parts[2], "translate")
 		err = writeIfBigger(destFile, content)
 		if err != nil {
 			return err
@@ -363,7 +368,7 @@ func writeIfBigger(dst string, content []byte) error {
 			return ioutil.WriteFile(dst, content, 0644)
 		}
 	}
-	return nil //simply skipp it
+	return nil //simply skip it
 }
 func ignore(path string, items ...string) bool {
 	f := filepath.Base(path)
