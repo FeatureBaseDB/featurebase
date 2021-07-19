@@ -31,7 +31,7 @@ func newInspectCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command
 
 	inspectCmd := &cobra.Command{
 		Use:   "inspect",
-		Short: "Get stats on a pilosa data file.",
+		Short: "Get stats on a FeatureBase data file.",
 		Long: `
 Inspects a data file and provides stats.
 `,

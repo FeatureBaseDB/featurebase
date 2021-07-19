@@ -17,7 +17,7 @@ services:
     networks:
       - pilosanet
     command:
-      - "/pilosa server --bind pilosa1:10101"
+      - "/featurebase server --bind pilosa1:10101"
   pilosa2:
     build:
       context: ../..
@@ -35,7 +35,7 @@ services:
     networks:
       - pilosanet
     command:
-      - "/pilosa server --bind pilosa2:10101"
+      - "/featurebase server --bind pilosa2:10101"
   pilosa3:
     build:
       context: ../..
@@ -53,7 +53,7 @@ services:
     networks:
       - pilosanet
     command:
-      - "/pilosa server --bind pilosa3:10101"
+      - "/featurebase server --bind pilosa3:10101"
   client1:
     build:
       context: .

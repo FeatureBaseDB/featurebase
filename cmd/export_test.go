@@ -25,7 +25,7 @@ func TestExportHelp(t *testing.T) {
 	output, err := ExecNewRootCommand(t, "export", "--help")
 	if !strings.Contains(output, "Usage:") ||
 		!strings.Contains(output, "Flags:") ||
-		!strings.Contains(output, "pilosa export") || err != nil {
+		!strings.Contains(output, "featurebase export") || err != nil {
 		t.Fatalf("Command 'export --help' not working, err: '%v', output: '%s'", err, output)
 	}
 }

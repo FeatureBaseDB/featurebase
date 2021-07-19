@@ -28,7 +28,7 @@ func TestImportHelp(t *testing.T) {
 	output, err := ExecNewRootCommand(t, "import", "--help")
 	if !strings.Contains(output, "Usage:") ||
 		!strings.Contains(output, "Flags:") ||
-		!strings.Contains(output, "pilosa import") || err != nil {
+		!strings.Contains(output, "featurebase import") || err != nil {
 		t.Fatalf("Command 'import --help' not working, err: '%v', output: '%s'", err, output)
 	}
 }

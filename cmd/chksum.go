@@ -26,9 +26,9 @@ func newChkSumCommand(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobr
 	cmd := ctl.NewChkSumCommand(stdin, stdout, stderr)
 	ccmd := &cobra.Command{
 		Use:   "chksum",
-		Short: "digital signature of pilosa data",
+		Short: "Digital signature of FeatureBase data",
 		Long: `
-			Generates a digital signature of all the data associated with a provided pilosa server
+			Generates a digital signature of all the data associated with a provided FeatureBase server
 			WARNING: could be slow if high cardinality fields exist
 `,
 		RunE: func(c *cobra.Command, args []string) error {
@@ -37,7 +37,7 @@ func newChkSumCommand(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobr
 	}
 
 	flags := ccmd.Flags()
-	flags.StringVar(&cmd.Host, "host", "localhost:10101", "host:port of Pilosa.")
+	flags.StringVar(&cmd.Host, "host", "localhost:10101", "host:port of FeatureBase.")
 	ctl.SetTLSConfig(flags, "", &cmd.TLS.CertificatePath, &cmd.TLS.CertificateKeyPath, &cmd.TLS.CACertPath, &cmd.TLS.SkipVerify, &cmd.TLS.EnableClientVerification)
 	return ccmd
 }

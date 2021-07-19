@@ -25,12 +25,12 @@ import (
 
 var Importer *ctl.ImportCommand
 
-// newImportCommand runs the Pilosa import subcommand for ingesting bulk data.
+// newImportCommand runs the FeatureBase import subcommand for ingesting bulk data.
 func newImportCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
 	Importer = ctl.NewImportCommand(stdin, stdout, stderr)
 	importCmd := &cobra.Command{
 		Use:   "import",
-		Short: "Bulk load data into pilosa.",
+		Short: "Bulk load data into FeatureBase.",
 		Long: `Bulk imports one or more CSV files to a host's index and field. The data
 of the CSV file are grouped by shard for the most efficient import.
 
@@ -48,8 +48,8 @@ omitted. If it is present then its format should be YYYY-MM-DDTHH:MM.
 	}
 
 	flags := importCmd.Flags()
-	flags.StringVarP(&Importer.Host, "host", "", "localhost:10101", "host:port of Pilosa.")
-	flags.StringVarP(&Importer.Index, "index", "i", "", "Pilosa index to import into.")
+	flags.StringVarP(&Importer.Host, "host", "", "localhost:10101", "host:port of FeatureBase.")
+	flags.StringVarP(&Importer.Index, "index", "i", "", "FeatureBase index to import into.")
 	flags.StringVarP(&Importer.Field, "field", "f", "", "Field to import into.")
 	flags.BoolVar(&Importer.IndexOptions.Keys, "index-keys", false, "Specify keys=true when creating an index")
 	flags.BoolVar(&Importer.FieldOptions.Keys, "field-keys", false, "Specify keys=true when creating a field")
