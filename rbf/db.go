@@ -274,6 +274,10 @@ func (db *DB) Close() (err error) {
 
 	// Close writer handler.
 	if db.file != nil {
+		err = db.file.Sync()
+		if err != nil {
+			return
+		}
 		if e := db.file.Close(); e != nil && err == nil {
 			err = e
 		}
