@@ -18,8 +18,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/pilosa/pilosa/v2/server"
-	"github.com/pilosa/pilosa/v2/storage"
+	"github.com/molecula/featurebase/v2/server"
+	"github.com/molecula/featurebase/v2/storage"
 	"github.com/spf13/cobra"
 )
 

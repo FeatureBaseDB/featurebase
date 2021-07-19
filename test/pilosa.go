@@ -26,12 +26,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pilosa/pilosa/v2"
-	"github.com/pilosa/pilosa/v2/disco"
-	"github.com/pilosa/pilosa/v2/encoding/proto"
-	"github.com/pilosa/pilosa/v2/http"
-	"github.com/pilosa/pilosa/v2/server"
-	"github.com/pilosa/pilosa/v2/testhook"
+	"github.com/molecula/featurebase/v2"
+	"github.com/molecula/featurebase/v2/disco"
+	"github.com/molecula/featurebase/v2/encoding/proto"
+	"github.com/molecula/featurebase/v2/http"
+	"github.com/molecula/featurebase/v2/server"
+	"github.com/molecula/featurebase/v2/testhook"
 )
 
 ////////////////////////////////////////////////////////////////////////////////////

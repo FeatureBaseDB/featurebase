@@ -21,7 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/pilosa/pilosa/v2/pb"
+	"github.com/molecula/featurebase/v2/pb"
 )
 
 // QueryResponse types.

@@ -22,8 +22,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pilosa/pilosa/v2/client"
-	"github.com/pilosa/pilosa/v2/client/csv"
+	"github.com/molecula/featurebase/v2/client"
+	"github.com/molecula/featurebase/v2/client/csv"
 )
 
 func TestCSVIterate(t *testing.T) {

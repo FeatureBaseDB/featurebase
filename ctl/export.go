@@ -19,8 +19,8 @@ import (
 	"io"
 	"os"
 
-	"github.com/pilosa/pilosa/v2"
-	"github.com/pilosa/pilosa/v2/server"
+	"github.com/molecula/featurebase/v2"
+	"github.com/molecula/featurebase/v2/server"
 	"github.com/pkg/errors"
 )
 

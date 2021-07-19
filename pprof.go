@@ -23,8 +23,8 @@ import (
 
 	_ "net/http/pprof" // Imported for its side-effect of registering pprof endpoints with the server.
 
-	"github.com/pilosa/pilosa/v2/storage"
-	. "github.com/pilosa/pilosa/v2/vprint" // nolint:staticcheck
+	"github.com/molecula/featurebase/v2/storage"
+	. "github.com/molecula/featurebase/v2/vprint" // nolint:staticcheck
 )
 
 // CPUProfileForDur (where "Dur" is short for "Duration"), is used for

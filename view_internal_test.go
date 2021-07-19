@@ -18,8 +18,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pilosa/pilosa/v2/testhook"
-	. "github.com/pilosa/pilosa/v2/vprint" // nolint:staticcheck
+	"github.com/molecula/featurebase/v2/testhook"
+	. "github.com/molecula/featurebase/v2/vprint" // nolint:staticcheck
 	"golang.org/x/sync/errgroup"
 )
 

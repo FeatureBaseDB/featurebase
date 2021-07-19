@@ -19,9 +19,9 @@ import (
 	"os"
 	"testing"
 
-	rbfcfg "github.com/pilosa/pilosa/v2/rbf/cfg"
-	"github.com/pilosa/pilosa/v2/roaring"
-	"github.com/pilosa/pilosa/v2/testhook"
+	rbfcfg "github.com/molecula/featurebase/v2/rbf/cfg"
+	"github.com/molecula/featurebase/v2/roaring"
+	"github.com/molecula/featurebase/v2/testhook"
 )
 
 // util_test adds reusable utilities for testing.

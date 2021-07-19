@@ -19,7 +19,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/pilosa/pilosa/v2"
+	"github.com/molecula/featurebase/v2"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"

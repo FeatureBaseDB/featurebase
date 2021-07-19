@@ -20,8 +20,8 @@ import (
 
 	"github.com/opentracing/opentracing-go"
 	"github.com/opentracing/opentracing-go/ext"
-	"github.com/pilosa/pilosa/v2/logger"
-	"github.com/pilosa/pilosa/v2/tracing"
+	"github.com/molecula/featurebase/v2/logger"
+	"github.com/molecula/featurebase/v2/tracing"
 )
 
 // Ensure type implements interface.

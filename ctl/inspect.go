@@ -32,9 +32,9 @@ import (
 	"unsafe"
 
 	"github.com/gogo/protobuf/proto"
-	"github.com/pilosa/pilosa/v2"
-	"github.com/pilosa/pilosa/v2/pb"
-	"github.com/pilosa/pilosa/v2/roaring"
+	"github.com/molecula/featurebase/v2"
+	"github.com/molecula/featurebase/v2/pb"
+	"github.com/molecula/featurebase/v2/roaring"
 	"github.com/pkg/errors"
 )
 

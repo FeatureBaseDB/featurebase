@@ -22,7 +22,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/pilosa/pilosa/v2/shardwidth"
+	"github.com/molecula/featurebase/v2/shardwidth"
 )
 
 // For each container key i from 1 to (shard width in containers), we

@@ -28,9 +28,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pilosa/pilosa/v2"
-	"github.com/pilosa/pilosa/v2/server"
-	"github.com/pilosa/pilosa/v2/test"
+	"github.com/molecula/featurebase/v2"
+	"github.com/molecula/featurebase/v2/server"
+	"github.com/molecula/featurebase/v2/test"
 )
 
 func Test_SynthLoad_ImportSchema(t *testing.T) {

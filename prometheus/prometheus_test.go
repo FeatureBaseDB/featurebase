@@ -19,7 +19,7 @@ import (
 	"testing"
 	"time"
 
-	pilosaPrometheus "github.com/pilosa/pilosa/v2/prometheus"
+	pilosaPrometheus "github.com/molecula/featurebase/v2/prometheus"
 	"github.com/prometheus/client_golang/prometheus"
 	io_prometheus_client "github.com/prometheus/client_model/go"
 )

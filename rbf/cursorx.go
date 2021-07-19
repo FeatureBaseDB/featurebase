@@ -21,8 +21,8 @@ import (
 	"os"
 	"unsafe"
 
-	"github.com/pilosa/pilosa/v2/roaring"
-	"github.com/pilosa/pilosa/v2/storage"
+	"github.com/molecula/featurebase/v2/roaring"
+	"github.com/molecula/featurebase/v2/storage"
 	"github.com/pkg/errors"
 )
 

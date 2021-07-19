@@ -23,10 +23,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pilosa/pilosa/v2/debugstats"
-	"github.com/pilosa/pilosa/v2/roaring"
-	txkey "github.com/pilosa/pilosa/v2/short_txkey"
-	. "github.com/pilosa/pilosa/v2/vprint" // nolint:staticcheck
+	"github.com/molecula/featurebase/v2/debugstats"
+	"github.com/molecula/featurebase/v2/roaring"
+	txkey "github.com/molecula/featurebase/v2/short_txkey"
+	. "github.com/molecula/featurebase/v2/vprint" // nolint:staticcheck
 )
 
 // statTx is useful to profile on a

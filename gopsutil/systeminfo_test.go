@@ -17,8 +17,8 @@ package gopsutil_test
 import (
 	"testing"
 
-	"github.com/pilosa/pilosa/v2"
-	"github.com/pilosa/pilosa/v2/gopsutil"
+	"github.com/molecula/featurebase/v2"
+	"github.com/molecula/featurebase/v2/gopsutil"
 )
 
 func TestSystemInfo(t *testing.T) {

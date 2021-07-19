@@ -20,8 +20,8 @@ import (
 	"io"
 
 	toml "github.com/pelletier/go-toml"
-	"github.com/pilosa/pilosa/v2"
-	"github.com/pilosa/pilosa/v2/server"
+	"github.com/molecula/featurebase/v2"
+	"github.com/molecula/featurebase/v2/server"
 )
 
 // ConfigCommand represents a command for printing a default config.

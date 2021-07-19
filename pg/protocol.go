@@ -29,7 +29,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pilosa/pilosa/v2/pg/message"
+	"github.com/molecula/featurebase/v2/pg/message"
 	"github.com/pkg/errors"
 )
 

@@ -18,7 +18,7 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/pilosa/pilosa/v2/testhook"
+	"github.com/molecula/featurebase/v2/testhook"
 )
 
 // These audit hooks are desireable during testing, but not in

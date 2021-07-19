@@ -24,7 +24,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/pilosa/pilosa/v2/pb"
+	"github.com/molecula/featurebase/v2/pb"
 )
 
 func TestNewRowResultFromInternal(t *testing.T) {

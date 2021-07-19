@@ -18,7 +18,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/pilosa/pilosa/v2"
+	"github.com/molecula/featurebase/v2"
 )
 
 // Ensure cache stays constrained to its configured size.

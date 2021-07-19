@@ -27,11 +27,11 @@ import (
 	"syscall"
 	"text/tabwriter"
 
-	"github.com/pilosa/pilosa/v2/hash"
-	"github.com/pilosa/pilosa/v2/roaring"
-	txkey "github.com/pilosa/pilosa/v2/short_txkey"
-	"github.com/pilosa/pilosa/v2/storage"
-	. "github.com/pilosa/pilosa/v2/vprint" // nolint:staticcheck
+	"github.com/molecula/featurebase/v2/hash"
+	"github.com/molecula/featurebase/v2/roaring"
+	txkey "github.com/molecula/featurebase/v2/short_txkey"
+	"github.com/molecula/featurebase/v2/storage"
+	. "github.com/molecula/featurebase/v2/vprint" // nolint:staticcheck
 	"github.com/pkg/errors"
 	"github.com/zeebo/blake3"
 )

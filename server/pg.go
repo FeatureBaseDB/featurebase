@@ -25,11 +25,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pilosa/pilosa/v2"
-	"github.com/pilosa/pilosa/v2/logger"
-	"github.com/pilosa/pilosa/v2/pg"
-	"github.com/pilosa/pilosa/v2/pql"
-	pb "github.com/pilosa/pilosa/v2/proto"
+	"github.com/molecula/featurebase/v2"
+	"github.com/molecula/featurebase/v2/logger"
+	"github.com/molecula/featurebase/v2/pg"
+	"github.com/molecula/featurebase/v2/pql"
+	pb "github.com/molecula/featurebase/v2/proto"
 
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"

@@ -19,7 +19,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pilosa/pilosa/v2/testhook"
+	"github.com/molecula/featurebase/v2/testhook"
 )
 
 // Ensure the file handle count is working

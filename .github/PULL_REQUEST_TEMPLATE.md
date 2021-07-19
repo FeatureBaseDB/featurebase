@@ -6,9 +6,9 @@ Fixes #
 
 ## Pull request checklist
 
-- [ ] I have read the [contributing guide](https://github.com/pilosa/pilosa/blob/master/CONTRIBUTING.md).
+- [ ] I have read the [contributing guide](https://github.com/molecula/featurebase/blob/master/CONTRIBUTING.md).
 - [ ] I have agreed to the [Contributor License Agreement](https://cla-assistant.io/pilosa/pilosa).
-- [ ] I have updated the [documentation](https://github.com/pilosa/pilosa/tree/master/docs).
+- [ ] I have updated the [documentation](https://github.com/molecula/docs).
 - [ ] I have resolved any merge conflicts.
 - [ ] I have included tests that cover my changes.
 - [ ] All new and existing tests pass.

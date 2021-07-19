@@ -22,7 +22,7 @@ import (
 
 	_ "net/http/pprof"
 
-	"github.com/pilosa/pilosa/v2/testhook"
+	"github.com/molecula/featurebase/v2/testhook"
 )
 
 func TestMain(m *testing.M) {

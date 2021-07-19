@@ -18,7 +18,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pilosa/pilosa/v2/cmd"
+	"github.com/molecula/featurebase/v2/cmd"
 )
 
 func TestExportHelp(t *testing.T) {

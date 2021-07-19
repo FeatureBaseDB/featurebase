@@ -19,9 +19,9 @@ import (
 	"net"
 	"testing"
 
-	"github.com/pilosa/pilosa/v2"
-	"github.com/pilosa/pilosa/v2/http"
-	"github.com/pilosa/pilosa/v2/test"
+	"github.com/molecula/featurebase/v2"
+	"github.com/molecula/featurebase/v2/http"
+	"github.com/molecula/featurebase/v2/test"
 )
 
 func TestHandlerOptions(t *testing.T) {

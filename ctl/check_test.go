@@ -23,7 +23,7 @@ import (
 
 	"context"
 
-	"github.com/pilosa/pilosa/v2/testhook"
+	"github.com/molecula/featurebase/v2/testhook"
 )
 
 func TestCheckCommand_RunCacheFile(t *testing.T) {

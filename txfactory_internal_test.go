@@ -21,7 +21,7 @@ import (
 	"testing"
 	"time"
 
-	. "github.com/pilosa/pilosa/v2/vprint" // nolint:staticcheck
+	. "github.com/molecula/featurebase/v2/vprint" // nolint:staticcheck
 )
 
 func Test_TxFactory_Qcx_query_context(t *testing.T) {

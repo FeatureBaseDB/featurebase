@@ -18,7 +18,7 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/pilosa/pilosa/v2/shardwidth"
+	"github.com/molecula/featurebase/v2/shardwidth"
 )
 
 func (b *Bitmap) String() (r string) {

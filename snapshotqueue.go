@@ -24,8 +24,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pilosa/pilosa/v2/logger"
-	"github.com/pilosa/pilosa/v2/testhook"
+	"github.com/molecula/featurebase/v2/logger"
+	"github.com/molecula/featurebase/v2/testhook"
 	"github.com/pkg/errors"
 )
 

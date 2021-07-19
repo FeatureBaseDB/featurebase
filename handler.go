@@ -18,7 +18,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/pilosa/pilosa/v2/tracing"
+	"github.com/molecula/featurebase/v2/tracing"
 	"github.com/pkg/errors"
 )
 

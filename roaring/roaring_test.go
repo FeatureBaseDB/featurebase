@@ -24,10 +24,10 @@ import (
 	"testing/quick"
 	"time"
 
-	"github.com/pilosa/pilosa/v2"
-	"github.com/pilosa/pilosa/v2/generator"
-	"github.com/pilosa/pilosa/v2/roaring"
-	_ "github.com/pilosa/pilosa/v2/test"
+	"github.com/molecula/featurebase/v2"
+	"github.com/molecula/featurebase/v2/generator"
+	"github.com/molecula/featurebase/v2/roaring"
+	_ "github.com/molecula/featurebase/v2/test"
 )
 
 func TestContainerCount(t *testing.T) {

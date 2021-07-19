@@ -17,7 +17,7 @@ package sql
 import (
 	"fmt"
 
-	"github.com/pilosa/pilosa/v2"
+	"github.com/molecula/featurebase/v2"
 	"github.com/pkg/errors"
 )
 

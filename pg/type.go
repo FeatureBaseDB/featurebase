@@ -14,7 +14,7 @@
 
 package pg
 
-import "github.com/pilosa/pilosa/v2/pg/message"
+import "github.com/molecula/featurebase/v2/pg/message"
 
 // Type represents a postgres type.
 type Type struct {

@@ -17,8 +17,8 @@ package topology
 import (
 	"fmt"
 
-	"github.com/pilosa/pilosa/v2/disco"
-	"github.com/pilosa/pilosa/v2/net"
+	"github.com/molecula/featurebase/v2/disco"
+	"github.com/molecula/featurebase/v2/net"
 )
 
 // Node represents a node in the cluster.

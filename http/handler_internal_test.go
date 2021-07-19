@@ -21,8 +21,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pilosa/pilosa/v2"
-	"github.com/pilosa/pilosa/v2/pql"
+	"github.com/molecula/featurebase/v2"
+	"github.com/molecula/featurebase/v2/pql"
 )
 
 // Test custom UnmarshalJSON for postIndexRequest object

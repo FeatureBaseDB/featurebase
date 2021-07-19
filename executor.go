@@ -31,14 +31,14 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/lib/pq"
-	"github.com/pilosa/pilosa/v2/disco"
-	"github.com/pilosa/pilosa/v2/pql"
-	"github.com/pilosa/pilosa/v2/proto"
-	"github.com/pilosa/pilosa/v2/roaring"
-	"github.com/pilosa/pilosa/v2/shardwidth"
-	"github.com/pilosa/pilosa/v2/testhook"
-	"github.com/pilosa/pilosa/v2/topology"
-	"github.com/pilosa/pilosa/v2/tracing"
+	"github.com/molecula/featurebase/v2/disco"
+	"github.com/molecula/featurebase/v2/pql"
+	"github.com/molecula/featurebase/v2/proto"
+	"github.com/molecula/featurebase/v2/roaring"
+	"github.com/molecula/featurebase/v2/shardwidth"
+	"github.com/molecula/featurebase/v2/testhook"
+	"github.com/molecula/featurebase/v2/topology"
+	"github.com/molecula/featurebase/v2/tracing"
 	"github.com/pkg/errors"
 )
 
@@ -645,7 +645,7 @@ func (e *executor) executeCall(ctx context.Context, qcx *Qcx, index string, c *p
 	}
 
 	// Fixes #2009
-	// See: https://github.com/pilosa/pilosa/issues/2009
+	// See: https://github.com/molecula/featurebase/issues/2009
 	// TODO: Remove at version 2.0
 	if e.detectRangeCall(c) {
 		e.Holder.Logger.Infof("DEPRECATED: Range() is deprecated, please use Row() instead.")

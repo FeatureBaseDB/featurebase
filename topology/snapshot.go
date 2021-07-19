@@ -18,8 +18,8 @@ import (
 	"encoding/binary"
 	"hash/fnv"
 
-	"github.com/pilosa/pilosa/v2/roaring"
-	"github.com/pilosa/pilosa/v2/shardwidth"
+	"github.com/molecula/featurebase/v2/roaring"
+	"github.com/molecula/featurebase/v2/shardwidth"
 )
 
 const (

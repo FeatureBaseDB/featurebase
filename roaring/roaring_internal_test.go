@@ -25,7 +25,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pilosa/pilosa/v2/generator"
+	"github.com/molecula/featurebase/v2/generator"
 	"github.com/pkg/errors"
 )
 

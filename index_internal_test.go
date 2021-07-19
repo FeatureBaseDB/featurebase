@@ -17,7 +17,7 @@ package pilosa
 import (
 	"testing"
 
-	"github.com/pilosa/pilosa/v2/testhook"
+	"github.com/molecula/featurebase/v2/testhook"
 )
 
 // mustOpenIndex returns a new, opened index at a temporary path. Panic on error.

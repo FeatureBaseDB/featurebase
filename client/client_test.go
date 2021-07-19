@@ -23,7 +23,7 @@ import (
 	"reflect"
 	"testing"
 
-	pnet "github.com/pilosa/pilosa/v2/net"
+	pnet "github.com/molecula/featurebase/v2/net"
 )
 
 func TestQueryWithError(t *testing.T) {

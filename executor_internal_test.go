@@ -22,8 +22,8 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/pilosa/pilosa/v2/pql"
-	"github.com/pilosa/pilosa/v2/testhook"
+	"github.com/molecula/featurebase/v2/pql"
+	"github.com/molecula/featurebase/v2/testhook"
 )
 
 func TestExecutor_TranslateRowsOnBool(t *testing.T) {

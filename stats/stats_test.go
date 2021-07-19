@@ -22,11 +22,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pilosa/pilosa/v2"
-	"github.com/pilosa/pilosa/v2/http"
-	"github.com/pilosa/pilosa/v2/logger"
-	"github.com/pilosa/pilosa/v2/stats"
-	"github.com/pilosa/pilosa/v2/test"
+	"github.com/molecula/featurebase/v2"
+	"github.com/molecula/featurebase/v2/http"
+	"github.com/molecula/featurebase/v2/logger"
+	"github.com/molecula/featurebase/v2/stats"
+	"github.com/molecula/featurebase/v2/test"
 )
 
 // TestMultiStatClient_Expvar run the multistat client with exp var

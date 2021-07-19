@@ -25,12 +25,12 @@ import (
 
 	//"time"
 
-	"github.com/pilosa/pilosa/v2/rbf/cfg"
-	"github.com/pilosa/pilosa/v2/roaring"
-	"github.com/pilosa/pilosa/v2/testhook"
+	"github.com/molecula/featurebase/v2/rbf/cfg"
+	"github.com/molecula/featurebase/v2/roaring"
+	"github.com/molecula/featurebase/v2/testhook"
 
-	txkey "github.com/pilosa/pilosa/v2/short_txkey"
-	. "github.com/pilosa/pilosa/v2/vprint" // nolint:staticcheck
+	txkey "github.com/molecula/featurebase/v2/short_txkey"
+	. "github.com/molecula/featurebase/v2/vprint" // nolint:staticcheck
 )
 
 func rbfName(index, field, view string, shard uint64) string {

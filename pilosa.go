@@ -19,9 +19,9 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/pilosa/pilosa/v2/disco"
-	pnet "github.com/pilosa/pilosa/v2/net"
-	"github.com/pilosa/pilosa/v2/storage"
+	"github.com/molecula/featurebase/v2/disco"
+	pnet "github.com/molecula/featurebase/v2/net"
+	"github.com/molecula/featurebase/v2/storage"
 	"github.com/pkg/errors"
 )
 

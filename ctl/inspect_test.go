@@ -22,7 +22,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pilosa/pilosa/v2/testhook"
+	"github.com/molecula/featurebase/v2/testhook"
 )
 
 func TestInspectCommand_Run(t *testing.T) {

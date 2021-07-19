@@ -18,8 +18,8 @@ import (
 	"io"
 	"strings"
 
-	txkey "github.com/pilosa/pilosa/v2/short_txkey"
-	. "github.com/pilosa/pilosa/v2/vprint"
+	txkey "github.com/molecula/featurebase/v2/short_txkey"
+	. "github.com/molecula/featurebase/v2/vprint"
 )
 
 func (tx *Tx) dumpAllPages(showLeaves bool) error {

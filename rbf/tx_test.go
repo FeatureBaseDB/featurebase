@@ -22,8 +22,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pilosa/pilosa/v2/rbf"
-	txkey "github.com/pilosa/pilosa/v2/short_txkey"
+	"github.com/molecula/featurebase/v2/rbf"
+	txkey "github.com/molecula/featurebase/v2/short_txkey"
 )
 
 func TestTx_CommitRollback(t *testing.T) {

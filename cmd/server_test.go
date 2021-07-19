@@ -20,10 +20,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pilosa/pilosa/v2/cmd"
-	_ "github.com/pilosa/pilosa/v2/test"
-	"github.com/pilosa/pilosa/v2/testhook"
-	"github.com/pilosa/pilosa/v2/toml"
+	"github.com/molecula/featurebase/v2/cmd"
+	_ "github.com/molecula/featurebase/v2/test"
+	"github.com/molecula/featurebase/v2/testhook"
+	"github.com/molecula/featurebase/v2/toml"
 	"github.com/pkg/errors"
 )
 

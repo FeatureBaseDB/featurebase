@@ -36,11 +36,11 @@ import (
 	"testing/quick"
 
 	"github.com/davecgh/go-spew/spew"
-	"github.com/pilosa/pilosa/v2/pql"
-	"github.com/pilosa/pilosa/v2/roaring"
-	"github.com/pilosa/pilosa/v2/storage"
-	"github.com/pilosa/pilosa/v2/testhook"
-	. "github.com/pilosa/pilosa/v2/vprint" // nolint:staticcheck
+	"github.com/molecula/featurebase/v2/pql"
+	"github.com/molecula/featurebase/v2/roaring"
+	"github.com/molecula/featurebase/v2/storage"
+	"github.com/molecula/featurebase/v2/testhook"
+	. "github.com/molecula/featurebase/v2/vprint" // nolint:staticcheck
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )

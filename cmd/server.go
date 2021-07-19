@@ -17,10 +17,10 @@ package cmd
 import (
 	"io"
 
-	"github.com/pilosa/pilosa/v2/ctl"
-	"github.com/pilosa/pilosa/v2/server"
-	"github.com/pilosa/pilosa/v2/tracing"
-	"github.com/pilosa/pilosa/v2/tracing/opentracing"
+	"github.com/molecula/featurebase/v2/ctl"
+	"github.com/molecula/featurebase/v2/server"
+	"github.com/molecula/featurebase/v2/tracing"
+	"github.com/molecula/featurebase/v2/tracing/opentracing"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	jaegercfg "github.com/uber/jaeger-client-go/config"

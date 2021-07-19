@@ -24,7 +24,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/pilosa/pilosa/v2/roaring"
+	"github.com/molecula/featurebase/v2/roaring"
 )
 
 var pattern = regexp.MustCompile(`^BenchmarkCtOps/([^/]+)/([^/]+)/([^-]+)-([0-9]+)\s*([0-9]+)\s*([0-9.]+) ns/op`)

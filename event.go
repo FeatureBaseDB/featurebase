@@ -14,7 +14,7 @@
 
 package pilosa
 
-import "github.com/pilosa/pilosa/v2/topology"
+import "github.com/molecula/featurebase/v2/topology"
 
 // NodeEventType are the types of node events.
 type NodeEventType int

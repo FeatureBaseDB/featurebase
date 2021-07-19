@@ -19,8 +19,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/pilosa/pilosa/v2/roaring"
-	. "github.com/pilosa/pilosa/v2/vprint" // nolint:staticcheck
+	"github.com/molecula/featurebase/v2/roaring"
+	. "github.com/molecula/featurebase/v2/vprint" // nolint:staticcheck
 )
 
 func getRoaringIter(bitsToSet ...uint64) roaring.RoaringIterator {

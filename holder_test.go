@@ -24,9 +24,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pilosa/pilosa/v2"
-	"github.com/pilosa/pilosa/v2/pql"
-	"github.com/pilosa/pilosa/v2/test"
+	"github.com/molecula/featurebase/v2"
+	"github.com/molecula/featurebase/v2/pql"
+	"github.com/molecula/featurebase/v2/test"
 	"github.com/pkg/errors"
 )
 

@@ -19,7 +19,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/pilosa/pilosa/v2"
+	"github.com/molecula/featurebase/v2"
 )
 
 // Ensure a row can be merged

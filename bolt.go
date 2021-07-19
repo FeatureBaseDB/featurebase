@@ -28,16 +28,16 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pilosa/pilosa/v2/hash"
-	"github.com/pilosa/pilosa/v2/roaring"
-	"github.com/pilosa/pilosa/v2/storage"
-	. "github.com/pilosa/pilosa/v2/vprint"
+	"github.com/molecula/featurebase/v2/hash"
+	"github.com/molecula/featurebase/v2/roaring"
+	"github.com/molecula/featurebase/v2/storage"
+	. "github.com/molecula/featurebase/v2/vprint"
 
 	// On Bolt only, we still use the long txkey, because
 	// this allows Max() to work readily.
 	//
-	"github.com/pilosa/pilosa/v2/short_txkey"
-	txkey "github.com/pilosa/pilosa/v2/txkey"
+	"github.com/molecula/featurebase/v2/short_txkey"
+	txkey "github.com/molecula/featurebase/v2/txkey"
 	"github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"
 )

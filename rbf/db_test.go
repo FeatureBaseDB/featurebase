@@ -26,8 +26,8 @@ import (
 
 	_ "net/http/pprof"
 
-	"github.com/pilosa/pilosa/v2/rbf"
-	rbfcfg "github.com/pilosa/pilosa/v2/rbf/cfg"
+	"github.com/molecula/featurebase/v2/rbf"
+	rbfcfg "github.com/molecula/featurebase/v2/rbf/cfg"
 	"golang.org/x/sync/errgroup"
 )
 

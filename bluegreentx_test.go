@@ -25,7 +25,7 @@ import (
 
 	cryrand "crypto/rand"
 
-	. "github.com/pilosa/pilosa/v2/vprint" // nolint:staticcheck
+	. "github.com/molecula/featurebase/v2/vprint" // nolint:staticcheck
 )
 
 var _ = context.Background

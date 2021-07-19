@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/pilosa/pilosa/v2/pg"
+	"github.com/molecula/featurebase/v2/pg"
 )
 
 // HandlerFunc implements a postgres query handler with a function.

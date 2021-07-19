@@ -18,7 +18,7 @@ import (
 	"context"
 	"io"
 
-	"github.com/pilosa/pilosa/v2/ctl"
+	"github.com/molecula/featurebase/v2/ctl"
 	"github.com/spf13/cobra"
 )
 

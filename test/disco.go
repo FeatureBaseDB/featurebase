@@ -21,9 +21,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pilosa/pilosa/v2/etcd"
-	"github.com/pilosa/pilosa/v2/server"
-	"github.com/pilosa/pilosa/v2/testhook"
+	"github.com/molecula/featurebase/v2/etcd"
+	"github.com/molecula/featurebase/v2/server"
+	"github.com/molecula/featurebase/v2/testhook"
 	"github.com/pkg/errors"
 )
 
