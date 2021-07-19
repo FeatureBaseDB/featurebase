@@ -914,6 +914,10 @@ type usageCache struct {
 	muAssign    sync.Mutex
 }
 
+var usageCacheMinDuration = 5 * time.Second // If usage takes less than this duration to calculate, don't use the cache.
+var usageCacheMinInterval = time.Hour       // Refresh interval is forced to be >= this duration.
+var usageCacheInitialInterval = time.Hour   // Refresh interval starts with this duration.
+
 // NodeUsage represents all usage measurements for one node.
 type NodeUsage struct {
 	Disk        DiskUsage   `json:"diskUsage"`
@@ -957,7 +961,7 @@ func (api *API) Usage(ctx context.Context, remote bool) (map[string]NodeUsage, e
 	span, _ := tracing.StartSpanFromContext(ctx, "API.Usage")
 	defer span.Finish()
 
-	if api.usageCache.lastCalcDuration < (time.Second * 5) {
+	if api.usageCache.lastCalcDuration < usageCacheMinDuration {
 		err := api.ResetUsageCache()
 		if err != nil {
 			api.server.logger.Infof("could not reset usageCache: %s", err)
@@ -1008,56 +1012,57 @@ func (api *API) calculateUsage() {
 	lastUpdated := api.usageCache.lastUpdated
 	api.usageCache.muAssign.Unlock()
 
-	if time.Since(lastUpdated) > api.usageCache.refreshInterval {
-		indexDetails, nodeMetadataBytes, err := api.holder.Txf().IndexUsageDetails(api.isClosing)
-		if err != nil {
-			api.server.logger.Infof("couldn't get index usage details: %s", err)
-		}
-		if api.isClosing() {
-			return
-		}
-
-		totalSize := nodeMetadataBytes
-		for _, s := range indexDetails {
-			totalSize += s.Total
-		}
-
-		// NOTE: these errors are ignored in api.Info(), but checked here
-		si := api.server.systemInfo
-		diskCapacity, err := si.DiskCapacity(api.holder.path)
-		if err != nil {
-			api.server.logger.Infof("couldn't read disk capacity: %s", err)
-		}
-
-		memoryCapacity, err := si.MemTotal()
-		if err != nil {
-			api.server.logger.Infof("couldn't read memory capacity: %s", err)
-		}
-		memoryUse, err := si.MemUsed()
-		if err != nil {
-			api.server.logger.Infof("couldn't read memory usage: %s", err)
-		}
-
-		lastUpdated = time.Now()
-		// Insert into result.
-		nodeUsage := NodeUsage{
-			Disk: DiskUsage{
-				Capacity:   diskCapacity,
-				TotalUse:   totalSize,
-				IndexUsage: indexDetails,
-			},
-			Memory: MemoryUsage{
-				Capacity: memoryCapacity,
-				TotalUse: memoryUse,
-			},
-			LastUpdated: lastUpdated,
-		}
-		api.usageCache.muAssign.Lock()
-		api.usageCache.data = make(map[string]NodeUsage)
-		api.usageCache.data[api.server.nodeID] = nodeUsage
-		api.usageCache.lastUpdated = lastUpdated
-		api.usageCache.muAssign.Unlock()
+	if time.Since(lastUpdated) <= api.usageCache.refreshInterval {
+		return
 	}
+	indexDetails, nodeMetadataBytes, err := api.holder.Txf().IndexUsageDetails(api.isClosing)
+	if err != nil {
+		api.server.logger.Infof("couldn't get index usage details: %s", err)
+	}
+	if api.isClosing() {
+		return
+	}
+
+	totalSize := nodeMetadataBytes
+	for _, s := range indexDetails {
+		totalSize += s.Total
+	}
+
+	// NOTE: these errors are ignored in api.Info(), but checked here
+	si := api.server.systemInfo
+	diskCapacity, err := si.DiskCapacity(api.holder.path)
+	if err != nil {
+		api.server.logger.Infof("couldn't read disk capacity: %s", err)
+	}
+
+	memoryCapacity, err := si.MemTotal()
+	if err != nil {
+		api.server.logger.Infof("couldn't read memory capacity: %s", err)
+	}
+	memoryUse, err := si.MemUsed()
+	if err != nil {
+		api.server.logger.Infof("couldn't read memory usage: %s", err)
+	}
+
+	lastUpdated = time.Now()
+	// Insert into result.
+	nodeUsage := NodeUsage{
+		Disk: DiskUsage{
+			Capacity:   diskCapacity,
+			TotalUse:   totalSize,
+			IndexUsage: indexDetails,
+		},
+		Memory: MemoryUsage{
+			Capacity: memoryCapacity,
+			TotalUse: memoryUse,
+		},
+		LastUpdated: lastUpdated,
+	}
+	api.usageCache.muAssign.Lock()
+	api.usageCache.data = make(map[string]NodeUsage)
+	api.usageCache.data[api.server.nodeID] = nodeUsage
+	api.usageCache.lastUpdated = lastUpdated
+	api.usageCache.muAssign.Unlock()
 }
 
 // Periodically calculates disk/memory usage in terms of the duty cycle. The duty cycle represents the percentage of
@@ -1067,22 +1072,21 @@ func (api *API) RefreshUsageCache(dutyCycle float64) {
 	trigger := make(chan bool)
 	defer close(trigger)
 
-	if dutyCycle <= 0 {
-		dutyCycle = 20
-	}
 	multiplier := 100/dutyCycle - 1
 
 	api.usageCache = &usageCache{
 		data:             make(map[string]NodeUsage),
-		refreshInterval:  time.Hour,
+		refreshInterval:  usageCacheInitialInterval,
 		resetTrigger:     trigger,
 		lastCalcDuration: 0,
 		waitMultiplier:   multiplier,
 	}
+	api.server.logger.Infof("monitoring resource usage with duty cycle %v%%\n", dutyCycle)
 	for {
 		start := time.Now()
 		api.calculateUsage()
 		api.setRefreshInterval(time.Since(start))
+		api.server.logger.Infof("updated resource usage cache at %v, took %v, next update in %v\n", api.usageCache.lastUpdated.Format(time.RFC3339), api.usageCache.lastCalcDuration.Truncate(time.Millisecond), api.usageCache.refreshInterval.Truncate(100*time.Millisecond))
 		select {
 		case <-trigger:
 			continue
@@ -1097,8 +1101,8 @@ func (api *API) RefreshUsageCache(dutyCycle float64) {
 // Refresh interval set in relation to how long the last calculation took.
 func (api *API) setRefreshInterval(dur time.Duration) {
 	refresh := time.Duration(float64(dur) * api.usageCache.waitMultiplier)
-	if refresh < time.Hour {
-		refresh = time.Hour
+	if refresh < usageCacheMinInterval {
+		refresh = usageCacheMinInterval
 	}
 	api.usageCache.muAssign.Lock()
 	api.usageCache.refreshInterval = refresh
