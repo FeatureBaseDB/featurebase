@@ -12,7 +12,7 @@ executors:
     docker:
       - image: circleci/golang:<< parameters.version >>
     resource_class: << parameters.resource_class >>
-    working_directory: /go/src/github.com/pilosa/pilosa
+    working_directory: /go/src/github.com/molecula/featurebase
 
 commands:
   add-github-auth:
