@@ -38,7 +38,6 @@ func main() {
 		Use:   "roaring-migrate",
 		Short: "convert roaring pilosa backup to rbf",
 		Long:  `roaring-migrate uses the pilosa data-dir for each node, and produces a new backup that is able to be restored from utilizing the new pilosa restore tool.`,
-		//Args:  cobra.MinimumNArgs(2),
 		Run: func(cmd *cobra.Command, args []string) {
 			nodes := strings.Split(dataDir, ",")
 			for _, nodePath := range nodes {
@@ -51,16 +50,16 @@ func main() {
 			}
 		},
 	}
-	cmdMigrate.Flags().StringVarP(&dataDir, "dataDir", "d", "", "source directories for each node seperated by commas")
-	cmdMigrate.Flags().StringVarP(&backupPath, "backupDir", "b", "", "location of backup directory")
-	err := cmdMigrate.MarkFlagRequired("dataDir")
+	cmdMigrate.Flags().StringVarP(&dataDir, "data-dir", "d", "", "source directories for each node seperated by commas")
+	cmdMigrate.Flags().StringVarP(&backupPath, "backup-dir", "b", "", "location of backup directory")
+	err := cmdMigrate.MarkFlagRequired("data-dir")
 	if err != nil {
-		fmt.Println("Error setting flag dataDir")
+		fmt.Println("Error setting flag data-dir")
 		return
 	}
-	err = cmdMigrate.MarkFlagRequired("backupDir")
+	err = cmdMigrate.MarkFlagRequired("backup-dir")
 	if err != nil {
-		fmt.Println("Error setting flag backupDir")
+		fmt.Println("Error setting flag backup-dir")
 		return
 	}
 
