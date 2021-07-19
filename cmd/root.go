@@ -27,17 +27,17 @@ import (
 
 func NewRootCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
 	rc := &cobra.Command{
-		Use: "pilosa",
+		Use: "featurebase",
 		// TODO: These short/long descriptions could use some updating.
-		Short: "Pilosa - A Distributed In-memory Binary Bitmap Index.",
-		Long: `Pilosa is a fast index to turbocharge your database.
+		Short: "FeatureBase is a feature extraction and storage technology that enables real-time analytics.",
+		Long: `FeatureBase is a feature extraction and storage technology that enables real-time analytics.
 
-This binary contains Pilosa itself, as well as common
-tools for administering Pilosa, importing/exporting data,
+This binary contains FeatureBase itself, as well as common
+tools for administering FeatureBase, importing/exporting data,
 backing up, and more. Complete documentation is available
 at https://docs.molecula.cloud/.
 
-` + pilosa.VersionInfo(false) + "\n",
+` + pilosa.VersionInfo(true) + "\n",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			v := viper.New()
 			err := setAllConfig(v, cmd.Flags())

@@ -96,14 +96,14 @@ cover-viz: cover
 
 # Compile Pilosa
 build:
-	$(GO) build -tags='$(BUILD_TAGS)' -ldflags $(LDFLAGS) $(FLAGS) ./cmd/pilosa
+	$(GO) build -tags='$(BUILD_TAGS)' -ldflags $(LDFLAGS) $(FLAGS) ./cmd/featurebase
 
 # Create a single release build under the build directory
 release-build:
-	$(MAKE) $(if $(DOCKER_BUILD),docker-)build FLAGS="-o build/pilosa-$(VERSION_ID)/pilosa"
-	cp NOTICE README.md LICENSE build/pilosa$(VERSION_ID)
-	tar -cvz -C build -f build/pilosa-$(VERSION_ID).tar.gz pilosa-$(VERSION_ID)/
-	@echo Created release build: build/pilosa-$(VERSION_ID).tar.gz
+	$(MAKE) $(if $(DOCKER_BUILD),docker-)build FLAGS="-o build/featurebase-$(VERSION_ID)/featurebase"
+	cp NOTICE README.md LICENSE build/featurebase$(VERSION_ID)
+	tar -cvz -C build -f build/featurebase-$(VERSION_ID).tar.gz featurebase-$(VERSION_ID)/
+	@echo Created release build: build/featurebase-$(VERSION_ID).tar.gz
 
 # Error out if there are untracked changes in Git
 check-clean:
@@ -153,7 +153,7 @@ backuptests: vendor
 
 # Install Pilosa
 install:
-	$(GO) install -tags='$(BUILD_TAGS)' -ldflags $(LDFLAGS) $(FLAGS) ./cmd/pilosa
+	$(GO) install -tags='$(BUILD_TAGS)' -ldflags $(LDFLAGS) $(FLAGS) ./cmd/featurebase
 
 install-bench:
 	$(GO) install -tags='$(BUILD_TAGS)' -ldflags $(LDFLAGS) $(FLAGS) ./cmd/pilosa-bench

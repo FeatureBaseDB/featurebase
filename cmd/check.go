@@ -30,7 +30,7 @@ func newCheckCommand(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra
 	checker = ctl.NewCheckCommand(stdin, stdout, stderr)
 	checkCmd := &cobra.Command{
 		Use:   "check <path> [path2]...",
-		Short: "Do a consistency check on a pilosa data file.",
+		Short: "Do a consistency check on a FeatureBase data file.",
 		Long: `
 Performs a consistency check on data files.
 `,
