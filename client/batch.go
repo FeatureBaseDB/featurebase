@@ -806,6 +806,14 @@ func (b *Batch) doTranslation() error {
 		return nil
 	})
 
+	// creating a lock up here for the rowCache(s) which we get
+	// below. Usually this isn't needed, but sometimes I think the
+	// same rowCache gets used repeatedly because the same field is in
+	// there multiple times, and that can lead to race
+	// conditions. Need to understand this better, but gonna see if
+	// this avoids the races.
+	rowCacheLock := &sync.Mutex{}
+
 	// Translate the row keys.
 	for i, tt := range b.toTranslate {
 		// Skip this if there are no keys to translate.
@@ -824,8 +832,6 @@ func (b *Batch) doTranslation() error {
 			rowCache = make(map[string]agedTranslation)
 			b.rowTranslations[fieldName] = rowCache
 		}
-		// create a lock since we're updating this concurrently below
-		rowCacheLock := &sync.Mutex{}
 
 		i, tt := i, tt
 		eg.Go(func() error {
@@ -921,8 +927,6 @@ func (b *Batch) doTranslation() error {
 			rowCache = make(map[string]agedTranslation)
 			b.rowTranslations[fieldName] = rowCache
 		}
-		// create a lock since we're updating this concurrently below
-		rowCacheLock := &sync.Mutex{}
 
 		fieldName, tt := fieldName, tt
 		eg.Go(func() error {
