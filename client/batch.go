@@ -15,6 +15,7 @@
 package client
 
 import (
+	"sync"
 	"time"
 
 	"github.com/molecula/featurebase/v2/client/egpool"
@@ -916,6 +917,8 @@ func (b *Batch) doTranslation() error {
 			rowCache = make(map[string]agedTranslation)
 			b.rowTranslations[fieldName] = rowCache
 		}
+		// create a lock since we're updating this concurrently below
+		rowCacheLock := &sync.Mutex{}
 
 		fieldName, tt := fieldName, tt
 		eg.Go(func() error {
@@ -934,12 +937,14 @@ func (b *Batch) doTranslation() error {
 			b.log.Debugf("translating %d field keys for %s took %v", len(trans), fieldName, time.Since(start))
 
 			// Apply keys to translation cache.
+			rowCacheLock.Lock()
 			for key, id := range trans {
 				rowCache[key] = agedTranslation{
 					id:       id,
 					lastUsed: b.cycle,
 				}
 			}
+			rowCacheLock.Unlock()
 
 			// Fill out missing IDs in local batch records with translated IDs.
 			rowIDSets := b.rowIDSets[fieldName]
