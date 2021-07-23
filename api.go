@@ -1607,14 +1607,12 @@ func (api *API) ImportWithTx(ctx context.Context, qcx *Qcx, req *ImportRequest, 
 		return errors.Wrap(err, "validating shard ownership")
 	}
 
-	// Convert timestamps to time.Time.
-	timestamps := make([]*time.Time, len(req.Timestamps))
-	for i, ts := range req.Timestamps {
-		if ts == 0 {
-			continue
+	var timestamps []int64
+	for _, v := range req.Timestamps {
+		if v != 0 {
+			timestamps = req.Timestamps
+			break
 		}
-		t := time.Unix(0, ts).UTC()
-		timestamps[i] = &t
 	}
 
 	// Import columnIDs into existence field.

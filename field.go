@@ -1437,7 +1437,7 @@ func (f *Field) Range(qcx *Qcx, name string, op pql.Token, predicate int64) (*Ro
 }
 
 // Import bulk imports data.
-func (f *Field) Import(qcx *Qcx, rowIDs, columnIDs []uint64, timestamps []*time.Time, opts ...ImportOption) (err0 error) {
+func (f *Field) Import(qcx *Qcx, rowIDs, columnIDs []uint64, timestamps []int64, opts ...ImportOption) (err0 error) {
 
 	// Set up import options.
 	options := &ImportOptions{}
@@ -1450,7 +1450,7 @@ func (f *Field) Import(qcx *Qcx, rowIDs, columnIDs []uint64, timestamps []*time.
 
 	// Determine quantum if timestamps are set.
 	q := f.TimeQuantum()
-	if hasTime(timestamps) {
+	if len(timestamps) > 0 {
 		if q == "" {
 			return errors.New("time quantum not set in field")
 		} else if options.Clear {
@@ -1470,16 +1470,15 @@ func (f *Field) Import(qcx *Qcx, rowIDs, columnIDs []uint64, timestamps []*time.
 			return errors.New("bool field imports only support values 0 and 1")
 		}
 
-		var timestamp *time.Time
-		if len(timestamps) > i {
-			timestamp = timestamps[i]
-		}
+		hasTime := len(timestamps) > i && timestamps[i] != 0
 
 		var standard []string
-		if timestamp == nil {
+		if !hasTime {
 			standard = []string{viewStandard}
 		} else {
-			standard = viewsByTime(viewStandard, *timestamp, q)
+			// Yes, we mean `0, ts`; ts is an int64 in UnixNano units,
+			// time.Unix takes seconds-and-nanoseconds.
+			standard = viewsByTime(viewStandard, time.Unix(0, timestamps[i]).UTC(), q)
 			if !f.options.NoStandardView {
 				// In order to match the logic of `SetBit()`, we want bits
 				// with timestamps to write to both time and standard views.
