@@ -910,6 +910,7 @@ type usageCache struct {
 	resetTrigger     chan bool
 	lastCalcDuration time.Duration
 	waitMultiplier   float64
+	disable          bool
 
 	muCalculate sync.Mutex
 	muAssign    sync.Mutex
@@ -961,6 +962,11 @@ type MemoryUsage struct {
 func (api *API) Usage(ctx context.Context, remote bool) (map[string]NodeUsage, error) {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.Usage")
 	defer span.Finish()
+
+	if api.usageCache.disable {
+		resp := make(map[string]NodeUsage)
+		return resp, nil
+	}
 
 	if api.usageCache.lastCalcDuration < usageCacheMinDuration {
 		err := api.ResetUsageCache()
@@ -1070,6 +1076,15 @@ func (api *API) calculateUsage() {
 // time that is spent recalculating this cache. It is specified relatively, rather than by a set interval, because
 // scans can take an unpredictably long time.
 func (api *API) RefreshUsageCache(dutyCycle float64) {
+
+	if dutyCycle == 0 {
+		api.server.logger.Warnf("usage-duty-cycle set to 0, usage cache and /ui/usage endpoint are disabled")
+		api.usageCache = &usageCache{
+			disable: true,
+		}
+		return
+	}
+
 	trigger := make(chan bool)
 	defer close(trigger)
 
