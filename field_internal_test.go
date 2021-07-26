@@ -494,7 +494,7 @@ func TestBSIGroup_importValue(t *testing.T) {
 			[]uint64{100},
 		},
 	} {
-		if err := f.importValue(qcx, tt.columnIDs, tt.values, options); err != nil {
+		if err := f.importValue(qcx, tt.columnIDs, tt.values, 0, options); err != nil {
 			t.Fatalf("test %d, importing values: %s", i, err.Error())
 		}
 		PanicOn(qcx.Finish())
@@ -514,7 +514,8 @@ func TestBSIGroup_importValue(t *testing.T) {
 func benchmarkFieldImportValues(b *testing.B, qcx *Qcx, bitDepth uint64, f *TestField, cfunc func(uint64) uint64) {
 	batches := makeBenchmarkImportValueData(b, bitDepth, cfunc)
 	for _, req := range batches {
-		err := f.importValue(qcx, req.ColumnIDs, req.Values, &ImportOptions{})
+		// NOTE: We assume everything's in Shard 0 for now.
+		err := f.importValue(qcx, req.ColumnIDs, req.Values, 0, &ImportOptions{})
 		if err != nil {
 			b.Fatalf("error importing values: %s", err)
 		}
@@ -591,7 +592,7 @@ func TestIntField_MinMaxForShard(t *testing.T) {
 		},
 	} {
 		t.Run(test.name+strconv.Itoa(i), func(t *testing.T) {
-			if err := f.importValue(qcx, test.columnIDs, test.values, options); err != nil {
+			if err := f.importValue(qcx, test.columnIDs, test.values, 0, options); err != nil {
 				t.Fatalf("test %d, importing values: %s", i, err.Error())
 			}
 			PanicOn(qcx.Finish())
@@ -751,7 +752,7 @@ func TestDecimalField_MinMaxForShard(t *testing.T) {
 		},
 	} {
 		t.Run(test.name+strconv.Itoa(i), func(t *testing.T) {
-			if err := f.importFloatValue(qcx, test.columnIDs, test.values, options); err != nil {
+			if err := f.importFloatValue(qcx, test.columnIDs, test.values, 0, options); err != nil {
 				t.Fatalf("test %d, importing values: %s", i, err.Error())
 			}
 
@@ -811,7 +812,7 @@ func TestBSIGroup_TxReopenDB(t *testing.T) {
 			[]uint64{100},
 		},
 	} {
-		if err := f.importValue(qcx, tt.columnIDs, tt.values, options); err != nil {
+		if err := f.importValue(qcx, tt.columnIDs, tt.values, 0, options); err != nil {
 			t.Fatalf("test %d, importing values: %s", i, err.Error())
 		}
 		PanicOn(qcx.Finish())

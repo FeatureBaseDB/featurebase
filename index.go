@@ -840,11 +840,6 @@ type IndexOptions struct {
 	TrackExistence bool `json:"trackExistence"`
 }
 
-type importKey struct {
-	View  string
-	Shard uint64
-}
-
 type importData struct {
 	RowIDs    []uint64
 	ColumnIDs []uint64

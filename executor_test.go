@@ -4131,10 +4131,17 @@ func TestExecutor_Execute_All(t *testing.T) {
 		req.ColumnIDs[bitCount-1] = uint64((3 * ShardWidth) + 2)
 
 		m0 := c.GetNode(0)
+		// the request gets altered by the Import operation now...
+		reqs, err := req.Clone().ShardSplit()
+		if err != nil {
+			t.Fatalf("splitting request into shards: %v", err)
+		}
 
 		qcx := m0.API.Txf().NewQcx()
-		if err := m0.API.Import(context.Background(), qcx, req); err != nil {
-			t.Fatal(err)
+		for _, r := range reqs {
+			if err := m0.API.Import(context.Background(), qcx, r); err != nil {
+				t.Fatal(err)
+			}
 		}
 		PanicOn(qcx.Finish())
 

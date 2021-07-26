@@ -1619,7 +1619,7 @@ func (api *API) ImportWithTx(ctx context.Context, qcx *Qcx, req *ImportRequest, 
 	// Note: req.Shard may not be the only shard imported into here,
 	// so don't expect it to be invariant.
 	if !options.Clear {
-		if err := importExistenceColumns(qcx, idx, req.ColumnIDs); err != nil {
+		if err := importExistenceColumns(qcx, idx, req.ColumnIDs, req.Shard); err != nil {
 			api.server.logger.Errorf("import existence error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
 			return err
 		}
@@ -1629,7 +1629,7 @@ func (api *API) ImportWithTx(ctx context.Context, qcx *Qcx, req *ImportRequest, 
 	}
 
 	// Import into fragment.
-	err = field.Import(qcx, req.RowIDs, req.ColumnIDs, timestamps, opts...)
+	err = field.Import(qcx, req.RowIDs, req.ColumnIDs, timestamps, req.Shard, opts...)
 	if err != nil {
 		api.server.logger.Errorf("import error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
 		return errors.Wrap(err, "importing")
@@ -1728,8 +1728,9 @@ func (api *API) ImportValueWithTx(ctx context.Context, qcx *Qcx, req *ImportValu
 	// if we're importing into a specific shard
 	if req.Shard != math.MaxUint64 {
 		// Check that column IDs match the stated shard.
-		if s1, s2 := req.ColumnIDs[0]/ShardWidth, req.ColumnIDs[len(req.ColumnIDs)-1]/ShardWidth; s1 != s2 && s2 != req.Shard {
-			return errors.Errorf("shard %d specified, but import spans shards %d to %d", req.Shard, s1, s2)
+		shard := req.ColumnIDs[0] / ShardWidth
+		if s2 := req.ColumnIDs[len(req.ColumnIDs)-1] / ShardWidth; (shard != s2) || (shard != req.Shard) {
+			return errors.Errorf("shard %d specified, but import spans shards %d to %d", req.Shard, shard, s2)
 		}
 		// Validate shard ownership. TODO - we should forward to the
 		// correct node rather than barfing here.
@@ -1738,7 +1739,7 @@ func (api *API) ImportValueWithTx(ctx context.Context, qcx *Qcx, req *ImportValu
 		}
 		// Import columnIDs into existence field.
 		if !options.Clear {
-			if err := importExistenceColumns(qcx, idx, req.ColumnIDs); err != nil {
+			if err := importExistenceColumns(qcx, idx, req.ColumnIDs, shard); err != nil {
 				api.server.logger.Errorf("import existence error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
 				return errors.Wrap(err, "importing existence columns")
 			}
@@ -1746,17 +1747,17 @@ func (api *API) ImportValueWithTx(ctx context.Context, qcx *Qcx, req *ImportValu
 
 		// Import into fragment.
 		if len(req.Values) > 0 {
-			err = field.importValue(qcx, req.ColumnIDs, req.Values, options)
+			err = field.importValue(qcx, req.ColumnIDs, req.Values, shard, options)
 			if err != nil {
 				api.server.logger.Errorf("import error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
 			}
 		} else if len(req.TimestampValues) > 0 {
-			err = field.importTimestampValue(qcx, req.ColumnIDs, req.TimestampValues, options)
+			err = field.importTimestampValue(qcx, req.ColumnIDs, req.TimestampValues, shard, options)
 			if err != nil {
 				api.server.logger.Errorf("import error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
 			}
 		} else if len(req.FloatValues) > 0 {
-			err = field.importFloatValue(qcx, req.ColumnIDs, req.FloatValues, options)
+			err = field.importFloatValue(qcx, req.ColumnIDs, req.FloatValues, shard, options)
 			if err != nil {
 				api.server.logger.Errorf("import error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
 			}
@@ -1814,14 +1815,20 @@ func (api *API) ImportValueWithTx(ctx context.Context, qcx *Qcx, req *ImportValu
 	return nil
 }
 
-func importExistenceColumns(qcx *Qcx, index *Index, columnIDs []uint64) error {
+func importExistenceColumns(qcx *Qcx, index *Index, columnIDs []uint64, shard uint64) error {
 	ef := index.existenceField()
 	if ef == nil {
 		return nil
 	}
 
 	existenceRowIDs := make([]uint64, len(columnIDs))
-	return ef.Import(qcx, existenceRowIDs, columnIDs, nil)
+	// If we don't gratuitously hand-duplicate things in field.Import,
+	// the fact that fragment.bulkImport rewrites its row and column
+	// lists can burn us if we don't make a copy before doing the
+	// existence field write.
+	columnCopy := make([]uint64, len(columnIDs))
+	copy(columnCopy, columnIDs)
+	return ef.Import(qcx, existenceRowIDs, columnCopy, nil, shard)
 }
 
 // ShardDistribution returns an object representing the distribution of shards

@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/molecula/featurebase/v2/shardwidth"
 	"github.com/molecula/featurebase/v2/tracing"
 	"github.com/pkg/errors"
 )
@@ -129,6 +130,41 @@ type ImportValueRequest struct {
 	scratch         []int // scratch space to allow us to get a stable sort in reasonable time
 }
 
+func (ivr *ImportValueRequest) Clone() *ImportValueRequest {
+	newIVR := &ImportValueRequest{}
+	if ivr == nil {
+		return newIVR
+	}
+	*newIVR = *ivr
+	// don't copy the internal scratch buffer
+	newIVR.scratch = nil
+	if len(ivr.ColumnIDs) > 0 {
+		newIVR.ColumnIDs = make([]uint64, len(ivr.ColumnIDs))
+		copy(newIVR.ColumnIDs, ivr.ColumnIDs)
+	}
+	if len(ivr.ColumnKeys) > 0 {
+		newIVR.ColumnKeys = make([]string, len(ivr.ColumnKeys))
+		copy(newIVR.ColumnKeys, ivr.ColumnKeys)
+	}
+	if len(ivr.Values) > 0 {
+		newIVR.Values = make([]int64, len(ivr.Values))
+		copy(newIVR.Values, ivr.Values)
+	}
+	if len(ivr.FloatValues) > 0 {
+		newIVR.FloatValues = make([]float64, len(ivr.FloatValues))
+		copy(newIVR.FloatValues, ivr.FloatValues)
+	}
+	if len(ivr.TimestampValues) > 0 {
+		newIVR.TimestampValues = make([]time.Time, len(ivr.TimestampValues))
+		copy(newIVR.TimestampValues, ivr.TimestampValues)
+	}
+	if len(ivr.StringValues) > 0 {
+		newIVR.StringValues = make([]string, len(ivr.StringValues))
+		copy(newIVR.StringValues, ivr.StringValues)
+	}
+	return newIVR
+}
+
 // AtomicRecord applies all its Ivr and Ivr atomically, in a Tx.
 // The top level Shard has to agree with Ivr[i].Shard and the Iv[i].Shard
 // for all i included (in Ivr and Ir). The same goes for the top level Index: all records
@@ -140,6 +176,19 @@ type AtomicRecord struct {
 
 	Ivr []*ImportValueRequest // BSI values
 	Ir  []*ImportRequest      // other field types, e.g. single bit
+}
+
+func (ar *AtomicRecord) Clone() *AtomicRecord {
+	newAR := &AtomicRecord{Index: ar.Index, Shard: ar.Shard}
+	newAR.Ivr = make([]*ImportValueRequest, len(ar.Ivr))
+	for i, vr := range ar.Ivr {
+		newAR.Ivr[i] = vr.Clone()
+	}
+	newAR.Ir = make([]*ImportRequest, len(ar.Ir))
+	for i, vr := range ar.Ir {
+		newAR.Ir[i] = vr.Clone()
+	}
+	return newAR
 }
 
 func (ivr *ImportValueRequest) Len() int { return len(ivr.ColumnIDs) }
@@ -223,6 +272,75 @@ type ImportRequest struct {
 	ColumnKeys     []string
 	Timestamps     []int64
 	Clear          bool
+}
+
+// Clone allows copying an import request. Normally you wouldn't, but
+// some import functions are destructive on their inputs, and if you
+// want to *re-use* an import request, you might need this. If you're
+// using this outside tx_test, something is probably wrong.
+func (ir *ImportRequest) Clone() *ImportRequest {
+	newIR := &ImportRequest{}
+	if ir == nil {
+		return newIR
+	}
+	*newIR = *ir
+	if ir.RowIDs != nil {
+		newIR.RowIDs = make([]uint64, len(ir.RowIDs))
+		copy(newIR.RowIDs, ir.RowIDs)
+	}
+	if ir.ColumnIDs != nil {
+		newIR.ColumnIDs = make([]uint64, len(ir.ColumnIDs))
+		copy(newIR.ColumnIDs, ir.ColumnIDs)
+	}
+	if ir.RowKeys != nil {
+		newIR.RowKeys = make([]string, len(ir.RowKeys))
+		copy(newIR.RowKeys, ir.RowKeys)
+	}
+	if ir.ColumnKeys != nil {
+		newIR.ColumnKeys = make([]string, len(ir.ColumnKeys))
+		copy(newIR.ColumnKeys, ir.ColumnKeys)
+	}
+	if ir.Timestamps != nil {
+		newIR.Timestamps = make([]int64, len(ir.Timestamps))
+		copy(newIR.Timestamps, ir.Timestamps)
+	}
+	return newIR
+}
+
+// ShardSplit splits the request into a slice of import requests. It requires
+// that the original request have all elements sorted, and already have
+// column IDs, not column keys.
+func (ir *ImportRequest) ShardSplit() ([]*ImportRequest, error) {
+	if ir == nil {
+		return nil, nil
+	}
+	// fix shard
+	if len(ir.ColumnIDs) < 2 {
+		ir.Shard = ir.ColumnIDs[0] >> shardwidth.Exponent
+		return []*ImportRequest{ir}, nil
+	}
+	shards, ends := shardwidth.FindShards(ir.ColumnIDs)
+	out := make([]*ImportRequest, len(shards))
+	prev := 0
+	for i, shard := range shards {
+		next := ends[i]
+		newIR := &ImportRequest{}
+		*newIR = *ir
+		newIR.ColumnIDs = ir.ColumnIDs[prev:next:next]
+		if ir.RowIDs != nil {
+			newIR.RowIDs = ir.RowIDs[prev:next:next]
+		}
+		if ir.RowKeys != nil {
+			newIR.RowKeys = ir.RowKeys[prev:next:next]
+		}
+		if ir.Timestamps != nil {
+			newIR.Timestamps = ir.Timestamps[prev:next:next]
+		}
+		newIR.Shard = shard
+		out[i] = newIR
+		prev = next
+	}
+	return out, nil
 }
 
 // ValidateWithTimestamp ensures that the payload of the request is valid.

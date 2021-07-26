@@ -203,7 +203,7 @@ func TestAPI_ImportAtomicRecord(t *testing.T) {
 
 	qcx = m0api.Txf().NewQcx()
 	//vv("just before the SECOND ImportAtomicRecord, qcx is %p, should NOT BE NIL", qcx)
-	err = m0api.ImportAtomicRecord(ctx, qcx, air, opt)
+	err = m0api.ImportAtomicRecord(ctx, qcx, air.Clone(), opt)
 	//err = m0api.ImportAtomicRecord(ctx, nil, air, opt)
 	if err != pilosa.ErrAborted {
 		PanicOn(fmt.Sprintf("expected ErrTxnAborted but got err='%#v'", err))
@@ -229,7 +229,7 @@ func TestAPI_ImportAtomicRecord(t *testing.T) {
 	// happy path with no power failure half-way through.
 
 	qcx = m0api.Txf().NewQcx()
-	err = m0api.ImportAtomicRecord(ctx, qcx, air)
+	err = m0api.ImportAtomicRecord(ctx, qcx, air.Clone())
 	PanicOn(err)
 	if err := qcx.Finish(); err != nil {
 		t.Fatal(err)
