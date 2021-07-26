@@ -20,7 +20,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/molecula/featurebase/v2"
+	pilosa "github.com/molecula/featurebase/v2"
 	"github.com/molecula/featurebase/v2/http"
 	"github.com/molecula/featurebase/v2/server"
 	"github.com/molecula/featurebase/v2/storage"
@@ -164,7 +164,12 @@ func TestAPI_ImportAtomicRecord(t *testing.T) {
 
 	//vv("BEFORE the first ImportAtomicRecord!")
 
-	if err := m0api.ImportAtomicRecord(ctx, nil, air); err != nil {
+	qcx := m0api.Txf().NewQcx()
+	if err := m0api.ImportAtomicRecord(ctx, qcx, air); err != nil {
+		qcx.Abort()
+		t.Fatal(err)
+	}
+	if err := qcx.Finish(); err != nil {
 		t.Fatal(err)
 	}
 
@@ -196,7 +201,7 @@ func TestAPI_ImportAtomicRecord(t *testing.T) {
 
 	air = createAIRUpdate(expectedBalEndingAcct0, expectedBalEndingAcct1)
 
-	qcx := m0api.Txf().NewQcx()
+	qcx = m0api.Txf().NewQcx()
 	//vv("just before the SECOND ImportAtomicRecord, qcx is %p, should NOT BE NIL", qcx)
 	err = m0api.ImportAtomicRecord(ctx, qcx, air, opt)
 	//err = m0api.ImportAtomicRecord(ctx, nil, air, opt)
@@ -223,9 +228,12 @@ func TestAPI_ImportAtomicRecord(t *testing.T) {
 
 	// happy path with no power failure half-way through.
 
-	err = m0api.ImportAtomicRecord(ctx, nil, air)
+	qcx = m0api.Txf().NewQcx()
+	err = m0api.ImportAtomicRecord(ctx, qcx, air)
 	PanicOn(err)
-
+	if err := qcx.Finish(); err != nil {
+		t.Fatal(err)
+	}
 	eb0, eb1 := queryBalances(m0api, acctOwnerID, fieldAcct0, fieldAcct1, index)
 
 	// should have been applied this time.
@@ -240,7 +248,11 @@ func TestAPI_ImportAtomicRecord(t *testing.T) {
 	air.Ivr[1].Clear = true
 	air.Ir[0].Clear = true
 
-	err = m0api.ImportAtomicRecord(ctx, nil, air)
+	qcx = m0api.Txf().NewQcx()
+	err = m0api.ImportAtomicRecord(ctx, qcx, air)
+	if err := qcx.Finish(); err != nil {
+		t.Fatal(err)
+	}
 	PanicOn(err)
 
 	eb0, eb1 = queryBalances(m0api, acctOwnerID, fieldAcct0, fieldAcct1, index)

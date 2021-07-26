@@ -23,7 +23,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/molecula/featurebase/v2"
+	pilosa "github.com/molecula/featurebase/v2"
 	"github.com/molecula/featurebase/v2/api/client"
 	"github.com/molecula/featurebase/v2/disco"
 	"github.com/molecula/featurebase/v2/logger"
@@ -213,32 +213,37 @@ func (c *Cluster) ImportBitsWithTimestamp(t testing.TB, index, field string, row
 				if com.API.Node().ID != node.ID {
 					continue
 				}
-				if len(timestamps) == 0 {
-					err := com.API.Import(context.Background(), nil, &pilosa.ImportRequest{
-						Index:     index,
-						Field:     field,
-						Shard:     shard,
-						RowIDs:    rowIDs,
-						ColumnIDs: colIDs,
-					})
-					if err != nil {
-						t.Fatalf("importing data: %v", err)
-					}
-				} else {
-					ts := byShardTs[shard]
-					err := com.API.Import(context.Background(), nil, &pilosa.ImportRequest{
-						Index:      index,
-						Field:      field,
-						Shard:      shard,
-						RowIDs:     rowIDs,
-						ColumnIDs:  colIDs,
-						Timestamps: ts,
-					})
-					if err != nil {
-						t.Fatalf("importing data: %v", err)
-					}
+				func() {
+					qcx := com.API.Txf().NewQcx()
+					defer qcx.Abort()
+					if len(timestamps) == 0 {
+						err := com.API.Import(context.Background(), qcx, &pilosa.ImportRequest{
+							Index:     index,
+							Field:     field,
+							Shard:     shard,
+							RowIDs:    rowIDs,
+							ColumnIDs: colIDs,
+						})
+						if err != nil {
+							t.Fatalf("importing data: %v", err)
+						}
+					} else {
+						ts := byShardTs[shard]
+						err := com.API.Import(context.Background(), qcx, &pilosa.ImportRequest{
+							Index:      index,
+							Field:      field,
+							Shard:      shard,
+							RowIDs:     rowIDs,
+							ColumnIDs:  colIDs,
+							Timestamps: ts,
+						})
+						if err != nil {
+							t.Fatalf("importing data: %v", err)
+						}
 
-				}
+					}
+				}()
+
 			}
 		}
 	}
@@ -262,7 +267,9 @@ func (c *Cluster) ImportKeyKey(t testing.TB, index, field string, valAndRecKeys 
 		importRequest.RowKeys[i] = vk[0]
 		importRequest.ColumnKeys[i] = vk[1]
 	}
-	err := c.GetPrimary().API.Import(context.Background(), nil, importRequest)
+	qcx := c.GetPrimary().API.Txf().NewQcx()
+	defer qcx.Abort()
+	err := c.GetPrimary().API.Import(context.Background(), qcx, importRequest)
 	if err != nil {
 		t.Fatalf("importing keykey data: %v", err)
 	}
@@ -292,7 +299,9 @@ func (c *Cluster) ImportTimeQuantumKey(t testing.TB, index, field string, entrie
 		importRequest.Timestamps[i] = entry.Ts
 
 	}
-	err := c.GetPrimary().API.Import(context.Background(), nil, importRequest)
+	qcx := c.GetPrimary().API.Txf().NewQcx()
+	defer qcx.Abort()
+	err := c.GetPrimary().API.Import(context.Background(), qcx, importRequest)
 	if err != nil {
 		t.Fatalf("importing keykey data: %v", err)
 	}
@@ -318,7 +327,9 @@ func (c *Cluster) ImportIntKey(t testing.TB, index, field string, pairs []IntKey
 		importRequest.Values[i] = pair.Val
 		importRequest.ColumnKeys[i] = pair.Key
 	}
-	if err := c.GetPrimary().API.ImportValue(context.Background(), nil, importRequest); err != nil {
+	qcx := c.GetPrimary().API.Txf().NewQcx()
+	defer qcx.Abort()
+	if err := c.GetPrimary().API.ImportValue(context.Background(), qcx, importRequest); err != nil {
 		t.Fatalf("importing IntKey data: %v", err)
 	}
 }
@@ -342,7 +353,9 @@ func (c *Cluster) ImportIntID(t testing.TB, index, field string, pairs []IntID) 
 		importRequest.Values[i] = pair.Val
 		importRequest.ColumnIDs[i] = pair.ID
 	}
-	if err := c.GetPrimary().API.ImportValue(context.Background(), nil, importRequest); err != nil {
+	qcx := c.GetPrimary().API.Txf().NewQcx()
+	defer qcx.Abort()
+	if err := c.GetPrimary().API.ImportValue(context.Background(), qcx, importRequest); err != nil {
 		t.Fatalf("importing IntID data: %v", err)
 	}
 }
@@ -367,7 +380,9 @@ func (c *Cluster) ImportIDKey(t testing.TB, index, field string, pairs []KeyID) 
 		importRequest.RowIDs[i] = pair.ID
 		importRequest.ColumnKeys[i] = pair.Key
 	}
-	err := c.GetPrimary().API.Import(context.Background(), nil, importRequest)
+	qcx := c.GetPrimary().API.Txf().NewQcx()
+	defer qcx.Abort()
+	err := c.GetPrimary().API.Import(context.Background(), qcx, importRequest)
 	if err != nil {
 		t.Fatalf("importing IDKey data: %v", err)
 	}

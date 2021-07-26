@@ -1430,16 +1430,6 @@ var ErrAborted = fmt.Errorf("error: update was aborted")
 
 func (api *API) ImportAtomicRecord(ctx context.Context, qcx *Qcx, req *AtomicRecord, opts ...ImportOption) error {
 
-	// this is because some of the tests pass nil qcx for convenience.
-	isLocalQcx := false
-	if qcx == nil {
-		isLocalQcx = true
-		qcx = api.Txf().NewQcx()
-		defer func() {
-			qcx.Abort()
-		}()
-	}
-
 	simPowerLoss := false
 	lossAfter := -1
 	var opt ImportOptions
@@ -1491,11 +1481,6 @@ func (api *API) ImportAtomicRecord(ctx context.Context, qcx *Qcx, req *AtomicRec
 			return errors.Wrap(err, "ImportAtomicRecord ImportWithTx")
 		}
 	}
-
-	// got to the end succesfully, so commit if we made the qcx
-	if isLocalQcx {
-		return qcx.Finish()
-	}
 	return nil
 }
 
@@ -1521,20 +1506,9 @@ func (api *API) Import(ctx context.Context, qcx *Qcx, req *ImportRequest, opts .
 	if req.Clear {
 		opts = addClearToImportOptions(opts)
 	}
-	isLocalQcx := false
-	if qcx == nil {
-		isLocalQcx = true
-		qcx = api.Txf().NewQcx()
-		defer func() {
-			qcx.Abort()
-		}()
-	}
 	err = api.ImportWithTx(ctx, qcx, req, opts...)
 	if err != nil {
 		return err
-	}
-	if isLocalQcx {
-		return qcx.Finish()
 	}
 	return nil
 }
@@ -1752,14 +1726,6 @@ func (api *API) ImportValueWithTx(ctx context.Context, qcx *Qcx, req *ImportValu
 		// don't keep that list around since we don't need it anymore
 		req.scratch = nil
 	}
-	isLocalQcx := false
-	if qcx == nil {
-		isLocalQcx = true
-		qcx = api.Txf().NewQcx()
-		defer func() {
-			qcx.Abort()
-		}()
-	}
 
 	// if we're importing into a specific shard
 	if req.Shard != math.MaxUint64 {
@@ -1846,9 +1812,6 @@ func (api *API) ImportValueWithTx(ctx context.Context, qcx *Qcx, req *ImportValu
 	err = eg.Wait()
 	if err != nil {
 		return err
-	}
-	if isLocalQcx {
-		return qcx.Finish()
 	}
 	return nil
 }
