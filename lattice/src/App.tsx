@@ -9,7 +9,7 @@ import { Nav } from 'shared/Nav';
 import { NotFound } from 'App/NotFound';
 import { MoleculaTablesContainer } from 'App/MoleculaTables';
 import { QueryContainer } from 'App/Query';
-import { QueryBuilderContainer } from 'App/QueryBuilder';
+import { QBuilderContainer } from 'App/QBuilder';
 import css from './App.module.scss';
 
 const App = () => {
@@ -45,7 +45,7 @@ const App = () => {
               <Route exact path="/" component={Home} />
               <Route path="/tables/:id?" component={MoleculaTablesContainer} />
               <Route exact path="/query" component={QueryContainer} />
-              <Route exact path="/querybuilder" component={QueryBuilderContainer} />
+              <Route exact path="/querybuilder" component={QBuilderContainer} />
               <Route component={NotFound} />
             </Switch>
           </div>

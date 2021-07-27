@@ -1,0 +1,52 @@
+.sharedConfig {
+  padding: 32px 32px 0;
+
+  .configSelector {
+    margin-bottom: 24px;
+  }
+}
+
+.textLink {
+  color: var(--primary);
+  font-size: 12px;
+
+  .icon {
+    margin-right: 4px;
+    vertical-align: text-top;
+  }
+
+  &:hover {
+    cursor: pointer;
+    text-decoration: underline;
+    color: var(--primary);
+  }
+}
+
+.builder {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+
+  .queryMetadata {
+    border-bottom: 1px solid var(--divider);
+    padding-bottom: 16px;
+    margin-bottom: 16px;
+  }
+}
+
+.config { 
+  padding: 24px 32px 0;
+  flex-grow: 1;
+}
+
+.builderActions {
+  padding: 16px 32px;
+  display: flex;
+  justify-content: space-between;
+
+  .mainActions {
+    display: grid;
+    grid-template-columns: auto auto;
+    grid-gap: 8px;
+  }
+}
