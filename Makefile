@@ -19,7 +19,7 @@ DOCKER_BUILD= # set to 1 to use `docker-build` instead of `build` when creating 
 BUILD_TAGS += shardwidth$(SHARD_WIDTH)
 TEST_TAGS = roaringparanoia
 define LICENSE_HASH_CODE
-    head -13 $1 | sed -e 's/Copyright 20[0-9][0-9]/Copyright 20XX/g' | shasum | cut -f 1 -d " "
+    head -13 $1 | sed -e 's/Copyright 20[0-9][0-9]/Copyright 20XX/' -e 's/Pilosa Corp\./Molecula Corp./' | shasum | cut -f 1 -d " "
 endef
 LICENSE_HASH=$(shell $(call LICENSE_HASH_CODE, pilosa.go))
 UNAME := $(shell uname -s)
