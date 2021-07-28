@@ -98,7 +98,7 @@ export const GroupByBuilder: FC<GroupByBuilderProps> = ({
       />
 
       <div className={css.filtersSection}>
-        <div className={css.filtersHeader}>
+        <div className={css.header}>
           <Typography variant="caption" color="textSecondary">
             Filter (optional)
             {filters.length > 0 && (
@@ -144,9 +144,17 @@ export const GroupByBuilder: FC<GroupByBuilderProps> = ({
       </div>
 
       <div className={css.sortSection}>
-        <Typography variant="caption" color="textSecondary">
-          Sort (optional)
-        </Typography>
+        <div className={css.header}>
+          <Typography variant="caption" color="textSecondary">
+            Sort (optional)
+          </Typography>
+          <span
+            className={css.textLink}
+            onClick={() => onChange({ ...query, sort: [] })}
+          >
+            Clear
+          </span>
+        </div>
         <GroupBySort
           sort={sort ? sort : []}
           onUpdate={(value) => {

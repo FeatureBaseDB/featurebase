@@ -20,7 +20,7 @@ export const GroupBySort: FC<GroupBySortProps> = ({
   showErrors,
   onUpdate
 }) => {
-  const hasPrimary = sort.length > 0;
+  const hasPrimary = sort.length > 0 && sort[0].sortValue;
   const primary = hasPrimary ? sort[0].sortValue.split(' ')[0] : '';
   const hasSecondary = sort.length > 1;
   const secondary = hasSecondary ? sort[1].sortValue.split(' ')[0] : '';
@@ -76,6 +76,7 @@ export const GroupBySort: FC<GroupBySortProps> = ({
           value={hasPrimary ? sort[0].sortValue : ''}
           options={sortOptions}
           onChange={(value) => onPrimaryChange(value)}
+          allowEmpty={true}
         />
 
         {primary.includes('sum') ? (
@@ -99,6 +100,7 @@ export const GroupBySort: FC<GroupBySortProps> = ({
               (option) => !option.value.includes(primary)
             )}
             onChange={(value) => onSecondaryChange(value)}
+            allowEmpty={true}
           />
 
           {secondary.includes('sum') ? (

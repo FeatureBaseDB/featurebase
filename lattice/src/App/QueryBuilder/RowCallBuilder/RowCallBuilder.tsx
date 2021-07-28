@@ -12,7 +12,6 @@ import {
 } from 'App/QueryBuilder/rowTypes';
 import { RowCall } from './RowCall';
 import css from './RowCallBuilder.module.scss';
-import { useEffect } from 'react';
 
 type RowCallBuilderProps = {
   rowCalls: RowGrouping[];
