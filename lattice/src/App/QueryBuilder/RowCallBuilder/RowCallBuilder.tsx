@@ -10,18 +10,15 @@ import {
   RowCallType,
   RowGrouping
 } from 'App/QueryBuilder/rowTypes';
-import { RowCall } from 'App/QueryBuilder/RowCall';
+import { RowCall } from './RowCall';
 import css from './RowCallBuilder.module.scss';
+import { useEffect } from 'react';
 
 type RowCallBuilderProps = {
   rowCalls: RowGrouping[];
   fields: any[];
   showInvalid: boolean;
-  onChange: (
-    rows: RowGrouping[],
-    operator?: Operator,
-    hasInvalid?: boolean
-  ) => void;
+  onChange: (rows: RowGrouping[], operator?: Operator) => void;
 };
 
 export const RowCallBuilder: FC<RowCallBuilderProps> = ({
@@ -34,7 +31,7 @@ export const RowCallBuilder: FC<RowCallBuilderProps> = ({
   const [operatorEl, setOperatorEl] = useState<null | HTMLElement>(null);
   const [operator, setOperator] = useState<Operator>();
 
-  const onNewGroup = () => {
+  const onNewGroup = (op?: Operator) => {
     const newRow: RowCallType[] = [
       {
         field: '',
@@ -45,19 +42,20 @@ export const RowCallBuilder: FC<RowCallBuilderProps> = ({
       }
     ];
 
-    onChange([...rowCalls, { row: newRow }]);
+    onChange([...rowCalls, { row: newRow }], op ? op : operator);
   };
 
   const onRemoveGroup = (groupIdx: number) => {
     if (groupIdx === 0) {
-      onChange(rowCalls.slice(1));
+      onChange(rowCalls.slice(1), operator);
     } else {
       const updatedRowCalls = [...rowCalls];
       updatedRowCalls.splice(groupIdx, 1);
-      onChange(updatedRowCalls);
+      onChange(updatedRowCalls, operator);
 
       if (updatedRowCalls.length < 1) {
         setOperator(undefined);
+        onChange(updatedRowCalls);
       }
     }
   };
@@ -65,7 +63,7 @@ export const RowCallBuilder: FC<RowCallBuilderProps> = ({
   const onUpdateRow = (
     groupIdx: number,
     newRowData?: RowCallType[],
-    operator?: Operator,
+    rowGroupOperator?: Operator,
     isNot?: boolean
   ) => {
     const updatedRowCalls = [...rowCalls];
@@ -77,14 +75,14 @@ export const RowCallBuilder: FC<RowCallBuilderProps> = ({
       };
       if (newRowData.length <= 1) {
         delete clone.operator;
-      } else if (operator) {
-        clone.operator = operator;
+      } else if (rowGroupOperator) {
+        clone.operator = rowGroupOperator;
       }
       updatedRowCalls.splice(groupIdx, 1, clone);
     } else {
       updatedRowCalls.splice(groupIdx, 1);
     }
-    onChange(updatedRowCalls);
+    onChange(updatedRowCalls, operator);
   };
 
   return (
@@ -167,7 +165,7 @@ export const RowCallBuilder: FC<RowCallBuilderProps> = ({
             key={`operator-${op}`}
             onClick={() => {
               setOperator(op);
-              onNewGroup();
+              onNewGroup(op);
               setNewOperatorEl(null);
             }}
           >

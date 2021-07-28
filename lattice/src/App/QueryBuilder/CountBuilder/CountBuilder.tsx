@@ -1,5 +1,6 @@
 import React, { FC } from 'react';
-import { RowCallBuilder } from 'App/QBuilder/RowCallBuilder';
+import { Operator, RowGrouping } from 'App/QueryBuilder/rowTypes';
+import { RowCallBuilder } from 'App/QueryBuilder/RowCallBuilder';
 
 type CountBuilderProps = {
   table: any;
@@ -22,12 +23,11 @@ export const CountBuilder: FC<CountBuilderProps> = ({
         rowCalls={rowCalls}
         fields={table.fields}
         showInvalid={showInvalid}
-        onChange={(rowCalls, operator, isInvalid) => {
+        onChange={(rowCalls: RowGrouping[], operator?: Operator) => {
           onChange({
             ...query,
             rowCalls,
-            operator,
-            isInvalid
+            operator
           });
         }}
       />

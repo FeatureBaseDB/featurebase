@@ -2,7 +2,8 @@ import React, { FC, useState } from 'react';
 import InfoIcon from '@material-ui/icons/Info';
 import Tooltip from '@material-ui/core/Tooltip';
 import { ColumnSelector } from 'App/QueryBuilder/ColumnSelector';
-import { RowCallBuilder } from 'App/QBuilder/RowCallBuilder';
+import { Operator, RowGrouping } from 'App/QueryBuilder/rowTypes';
+import { RowCallBuilder } from 'App/QueryBuilder/RowCallBuilder';
 import { useEffectOnce } from 'react-use';
 import css from './ExtractBuilder.module.scss';
 
@@ -78,12 +79,11 @@ export const ExtractBuilder: FC<ExtractBuilderProps> = ({
         rowCalls={rowCalls}
         fields={table.fields}
         showInvalid={showInvalid}
-        onChange={(rowCalls, operator, isInvalid) => {
+        onChange={(rowCalls: RowGrouping[], operator?: Operator) => {
           onChange({
             ...query,
             rowCalls,
-            operator,
-            isInvalid
+            operator
           });
         }}
       />

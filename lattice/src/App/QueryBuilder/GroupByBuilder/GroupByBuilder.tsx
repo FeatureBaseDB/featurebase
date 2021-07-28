@@ -5,7 +5,7 @@ import Typography from '@material-ui/core/Typography';
 import { GroupBySort } from 'App/QueryBuilder/GroupBySort';
 import { SavedQueries } from 'App/QueryBuilder/SavedQueries';
 import { Select } from 'shared/Select';
-import { stringifyRowData } from 'App/QueryBuilder/stringifyRowData';
+import { stringifyRowData } from 'App/QueryBuilder/utils';
 import css from './GroupByBuilder.module.scss';
 
 type GroupByBuilderProps = {
@@ -131,7 +131,7 @@ export const GroupByBuilder: FC<GroupByBuilderProps> = ({
               const { rowCalls, operator } = filters[queryIdx];
               const res = stringifyRowData(rowCalls, operator);
               if (!res.error) {
-                onChange({ ...query, filter: res.query });
+                onChange({ ...query, filter: res.queryString });
               }
             }}
           />

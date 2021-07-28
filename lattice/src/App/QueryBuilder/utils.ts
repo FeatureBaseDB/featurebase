@@ -1,4 +1,4 @@
-import { RowGrouping } from './rowTypes';
+import { Operator, RowGrouping } from './rowTypes';
 import { getIPRange } from 'get-ip-range';
 
 export const stringifyExtract = (query: any) => {
@@ -29,8 +29,9 @@ export const stringifyCount = (query: any) => {
   }
 }
 
-const stringifyRowData = (rowCalls, operator) => {
+export const stringifyRowData = (rowCalls: RowGrouping[], operator?: Operator) => {
   let queryString = '';
+  let error = false;
   if (rowCalls.length === 0) {
     queryString = 'All()';
   } else {
@@ -58,7 +59,7 @@ const stringifyRowData = (rowCalls, operator) => {
               .join(', ');
             rowString = `Union(${ipRows})`;
           } catch (error) {
-            return { error: true, query: error.message };
+            return { error: true, queryString: error.message };
           }
         } else if (rowOperator === 'like') {
           if (value.includes('%') || value.includes('_')) {
@@ -80,34 +81,36 @@ const stringifyRowData = (rowCalls, operator) => {
       });
     });
 
-    queryString = rowsMap
-      .map((group, idx) => {
-        let joined = '';
-        if (group.length > 1) {
-          joined = group.map((r) => r).join(', ');
-          const operator = rowCalls[idx].operator;
-          if (operator === 'and') {
-            joined = `Intersect(${joined})`;
-          } else if (operator === 'or') {
-            joined = `Union(${joined})`;
+    if (!error) {
+      queryString = rowsMap
+        .map((group, idx) => {
+          let joined = '';
+          if (group.length > 1) {
+            joined = group.map((r) => r).join(', ');
+            const operator = rowCalls[idx].operator;
+            if (operator === 'and') {
+              joined = `Intersect(${joined})`;
+            } else if (operator === 'or') {
+              joined = `Union(${joined})`;
+            }
+          } else {
+            joined = group[0];
           }
-        } else {
-          joined = group[0];
-        }
-        return rowCalls[idx].isNot ? `Not(${joined})` : joined;
-      })
-      .join(', ');
+          return rowCalls[idx].isNot ? `Not(${joined})` : joined;
+        })
+        .join(', ');
 
-    if (rowCalls.length > 1 && operator) {
-      if (operator === 'and') {
-        queryString = `Intersect(${queryString})`;
-      } else if (operator === 'or') {
-        queryString = `Union(${queryString})`;
+      if (rowCalls.length > 1 && operator) {
+        if (operator === 'and') {
+          queryString = `Intersect(${queryString})`;
+        } else if (operator === 'or') {
+          queryString = `Union(${queryString})`;
+        }
       }
     }
   }
 
-  return { error: false, queryString };
+  return { error, queryString };
 }
 
 export const stringifyGroupBy = (query: any) => {

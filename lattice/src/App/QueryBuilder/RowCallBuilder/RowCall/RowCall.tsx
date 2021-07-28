@@ -10,7 +10,7 @@ import TextField from '@material-ui/core/TextField';
 import Typography from '@material-ui/core/Typography';
 import { getIPRange } from 'get-ip-range';
 import { operators } from './helpers';
-import { groupOperators, Operator, RowCallType } from '../rowTypes';
+import { groupOperators, Operator, RowCallType } from 'App/QueryBuilder/rowTypes';
 import { Select } from 'shared/Select';
 import MomentUtils from '@date-io/moment';
 import { MuiPickersUtilsProvider, DateTimePicker } from '@material-ui/pickers';
