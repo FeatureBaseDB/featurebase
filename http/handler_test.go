@@ -16,11 +16,14 @@ package http_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"net"
+	gohttp "net/http"
 	"testing"
 
-	"github.com/molecula/featurebase/v2"
+	pilosa "github.com/molecula/featurebase/v2"
 	"github.com/molecula/featurebase/v2/http"
+	"github.com/molecula/featurebase/v2/server"
 	"github.com/molecula/featurebase/v2/test"
 )
 
@@ -78,5 +81,91 @@ func TestMarshalUnmarshalTransactionResponse(t *testing.T) {
 			}
 			test.CompareTransactions(t, tst.tr.Transaction, mytr.Transaction)
 		})
+	}
+}
+
+func TestIngestSchemaHandler(t *testing.T) {
+	c := test.MustRunCluster(t, 3,
+		[]server.CommandOption{
+			server.OptCommandServerOptions(pilosa.OptServerNodeID("node0"), pilosa.OptServerClusterHasher(&test.ModHasher{}))},
+		[]server.CommandOption{
+			server.OptCommandServerOptions(pilosa.OptServerNodeID("node1"), pilosa.OptServerClusterHasher(&test.ModHasher{}))},
+		[]server.CommandOption{
+			server.OptCommandServerOptions(pilosa.OptServerNodeID("node2"), pilosa.OptServerClusterHasher(&test.ModHasher{}))},
+	)
+	defer c.Close()
+
+	schema := `
+{
+   "index-name": "example",
+   "primary-key-type": "string",
+   "fields": [
+       {
+           "field-name": "idset",
+           "field-type": "id",
+           "field-options": {
+				"cache-type": "none"
+           }
+       },
+       {
+           "field-name": "id",
+           "field-type": "id",
+           "field-options": {
+               "enforce-mutual-exclusion": true
+           }
+       },
+       {
+           "field-name": "bool",
+           "field-type": "bool"
+       },
+       {
+           "field-name": "stringset",
+           "field-type": "string",
+           "field-options": {
+				"cache-type": "ranked",
+           		"cache-size": 100000
+           }
+       },
+       {
+           "field-name": "string",
+           "field-type": "string",
+           "field-options": {
+               "enforce-mutual-exclusion": true
+           }
+       },
+       {
+           "field-name": "int",
+           "field-type": "int"
+       },
+       {
+           "field-name": "decimal",
+           "field-type": "decimal",
+           "field-options": {
+               "scale": 2
+           }
+       },
+       {
+           "field-name": "timestamp",
+           "field-type": "timestamp",
+           "field-options": {
+               "epoch": "1996-12-19T16:39:57-08:00",
+               "unit": "µs"
+           }
+       },
+       {
+           "field-name": "quantum",
+           "field-type": "string",
+           "field-options": {
+               "time-quantum": "YMDH"
+           }
+       }
+   ]
+}
+`
+	m := c.GetPrimary()
+	schemaURL := fmt.Sprintf("%s/internal/schema", m.URL())
+	resp := test.Do(t, "POST", schemaURL, string(schema))
+	if resp.StatusCode != gohttp.StatusOK {
+		t.Errorf("invalid  status: %d, body=%s", resp.StatusCode, resp.Body)
 	}
 }

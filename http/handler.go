@@ -40,7 +40,7 @@ import (
 
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
-	"github.com/molecula/featurebase/v2"
+	pilosa "github.com/molecula/featurebase/v2"
 	"github.com/molecula/featurebase/v2/encoding/proto"
 	"github.com/molecula/featurebase/v2/logger"
 	"github.com/molecula/featurebase/v2/pql"
@@ -430,7 +430,8 @@ func newRouter(handler *Handler) http.Handler {
 	router.HandleFunc("/internal/index/{index}/shards", handler.handleGetIndexAvailableShards).Methods("GET").Name("GetIndexAvailableShards")
 	router.HandleFunc("/internal/nodes", handler.handleGetNodes).Methods("GET").Name("GetNodes")
 	router.HandleFunc("/internal/shards/max", handler.handleGetShardsMax).Methods("GET").Name("GetShardsMax") // TODO: deprecate, but it's being used by the client
-
+	router.HandleFunc("/internal/ingest/{index}", handler.handleIngestData).Methods("POST").Name("PostIngestData")
+	router.HandleFunc("/internal/schema", handler.handleIngestSchema).Methods("POST").Name("PostIngestSchema")
 	router.HandleFunc("/internal/translate/index/{index}/keys/find", handler.handleFindIndexKeys).Methods("POST").Name("FindIndexKeys")
 	router.HandleFunc("/internal/translate/index/{index}/keys/create", handler.handleCreateIndexKeys).Methods("POST").Name("CreateIndexKeys")
 	router.HandleFunc("/internal/translate/index/{index}/{partition}", handler.handlePostTranslateIndexDB).Methods("POST").Name("PostTranslateIndexDB")
@@ -580,6 +581,7 @@ func (r *successResponse) check(err error) (statusCode int) {
 	}
 
 	r.Success = false
+	fmt.Printf("err: %#v\n", err)
 	r.Error = &Error{Message: err.Error()}
 
 	return statusCode
@@ -1218,6 +1220,69 @@ func (h *Handler) handleGetPastQueries(w http.ResponseWriter, r *http.Request) {
 
 }
 
+func fieldOptionsToFunctionalOpts(opt fieldOptions) []pilosa.FieldOption {
+	// Convert json options into functional options.
+	var fos []pilosa.FieldOption
+	switch opt.Type {
+	case pilosa.FieldTypeSet:
+		fos = append(fos, pilosa.OptFieldTypeSet(*opt.CacheType, *opt.CacheSize))
+	case pilosa.FieldTypeInt:
+		if opt.Min == nil {
+			min := pql.NewDecimal(int64(math.MinInt64), 0)
+			opt.Min = &min
+		}
+		if opt.Max == nil {
+			max := pql.NewDecimal(int64(math.MaxInt64), 0)
+			opt.Max = &max
+		}
+		fos = append(fos, pilosa.OptFieldTypeInt(opt.Min.ToInt64(0), opt.Max.ToInt64(0)))
+	case pilosa.FieldTypeDecimal:
+		scale := int64(0)
+		if opt.Scale != nil {
+			scale = *opt.Scale
+		}
+		if opt.Min == nil {
+			min := pql.NewDecimal(int64(math.MinInt64), scale)
+			opt.Min = &min
+		}
+		if opt.Max == nil {
+			max := pql.NewDecimal(int64(math.MaxInt64), scale)
+			opt.Max = &max
+		}
+		var minmax []pql.Decimal
+		if opt.Min != nil {
+			minmax = []pql.Decimal{
+				*opt.Min,
+			}
+			if opt.Max != nil {
+				minmax = append(minmax, *opt.Max)
+			}
+		}
+		fos = append(fos, pilosa.OptFieldTypeDecimal(scale, minmax...))
+	case pilosa.FieldTypeTimestamp:
+		if opt.Epoch == nil {
+			epoch := pilosa.DefaultEpoch
+			opt.Epoch = &epoch
+		}
+		fos = append(fos, pilosa.OptFieldTypeTimestamp(opt.Epoch.UTC(), *opt.TimeUnit))
+	case pilosa.FieldTypeTime:
+		fos = append(fos, pilosa.OptFieldTypeTime(*opt.TimeQuantum, opt.NoStandardView))
+	case pilosa.FieldTypeMutex:
+		fos = append(fos, pilosa.OptFieldTypeMutex(*opt.CacheType, *opt.CacheSize))
+	case pilosa.FieldTypeBool:
+		fos = append(fos, pilosa.OptFieldTypeBool())
+	}
+	if opt.Keys != nil {
+		if *opt.Keys {
+			fos = append(fos, pilosa.OptFieldKeys())
+		}
+	}
+	if opt.ForeignIndex != nil {
+		fos = append(fos, pilosa.OptFieldForeignIndex(*opt.ForeignIndex))
+	}
+	return fos
+}
+
 // handlePostField handles POST /field request.
 func (h *Handler) handlePostField(w http.ResponseWriter, r *http.Request) {
 	if !validHeaderAcceptJSON(r.Header) {
@@ -1255,66 +1320,7 @@ func (h *Handler) handlePostField(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Convert json options into functional options.
-	var fos []pilosa.FieldOption
-	switch req.Options.Type {
-	case pilosa.FieldTypeSet:
-		fos = append(fos, pilosa.OptFieldTypeSet(*req.Options.CacheType, *req.Options.CacheSize))
-	case pilosa.FieldTypeInt:
-		if req.Options.Min == nil {
-			min := pql.NewDecimal(int64(math.MinInt64), 0)
-			req.Options.Min = &min
-		}
-		if req.Options.Max == nil {
-			max := pql.NewDecimal(int64(math.MaxInt64), 0)
-			req.Options.Max = &max
-		}
-		fos = append(fos, pilosa.OptFieldTypeInt(req.Options.Min.ToInt64(0), req.Options.Max.ToInt64(0)))
-	case pilosa.FieldTypeDecimal:
-		scale := int64(0)
-		if req.Options.Scale != nil {
-			scale = *req.Options.Scale
-		}
-		if req.Options.Min == nil {
-			min := pql.NewDecimal(int64(math.MinInt64), scale)
-			req.Options.Min = &min
-		}
-		if req.Options.Max == nil {
-			max := pql.NewDecimal(int64(math.MaxInt64), scale)
-			req.Options.Max = &max
-		}
-		var minmax []pql.Decimal
-		if req.Options.Min != nil {
-			minmax = []pql.Decimal{
-				*req.Options.Min,
-			}
-			if req.Options.Max != nil {
-				minmax = append(minmax, *req.Options.Max)
-			}
-		}
-		fos = append(fos, pilosa.OptFieldTypeDecimal(scale, minmax...))
-	case pilosa.FieldTypeTimestamp:
-		if req.Options.Epoch == nil {
-			epoch := pilosa.DefaultEpoch
-			req.Options.Epoch = &epoch
-		}
-		fos = append(fos, pilosa.OptFieldTypeTimestamp(req.Options.Epoch.UTC(), *req.Options.TimeUnit))
-	case pilosa.FieldTypeTime:
-		fos = append(fos, pilosa.OptFieldTypeTime(*req.Options.TimeQuantum, req.Options.NoStandardView))
-	case pilosa.FieldTypeMutex:
-		fos = append(fos, pilosa.OptFieldTypeMutex(*req.Options.CacheType, *req.Options.CacheSize))
-	case pilosa.FieldTypeBool:
-		fos = append(fos, pilosa.OptFieldTypeBool())
-	}
-	if req.Options.Keys != nil {
-		if *req.Options.Keys {
-			fos = append(fos, pilosa.OptFieldKeys())
-		}
-	}
-	if req.Options.ForeignIndex != nil {
-		fos = append(fos, pilosa.OptFieldForeignIndex(*req.Options.ForeignIndex))
-	}
-
+	fos := fieldOptionsToFunctionalOpts(req.Options)
 	field, err := h.api.CreateField(r.Context(), indexName, fieldName, fos...)
 	if _, ok := err.(pilosa.BadRequestError); ok {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -1328,6 +1334,183 @@ func (h *Handler) handlePostField(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	resp.write(w, err)
+}
+
+func (h *Handler) handleIngestData(w http.ResponseWriter, r *http.Request) {
+	if !validHeaderAcceptJSON(r.Header) {
+		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
+		return
+	}
+
+	indexName, ok := mux.Vars(r)["index"]
+	if !ok {
+		http.Error(w, "index name is required", http.StatusBadRequest)
+		return
+	}
+
+	qcx := h.api.Txf().NewQcx()
+	err := h.api.IngestOperations(r.Context(), qcx, indexName, r.Body)
+
+	resp := successResponse{h: h, Name: indexName}
+	resp.write(w, err)
+}
+
+type ingestSpec struct {
+	IndexName      string      `json:"index-name"`
+	IfNotExists    bool        `json:"if-not-exists"`
+	PrimaryKeyType string      `json:"primary-key-type"`
+	Fields         []fieldSpec `json:"fields"`
+}
+
+type fieldSpec struct {
+	FieldName    string          `json:"field-name"`
+	FieldType    string          `json:"field-type"`
+	FieldOptions fieldOptionSpec `json:"field-options"`
+}
+
+type fieldOptionSpec struct {
+	EnforceMutualExclusion bool       `json:"enforce-mutual-exclusion"`
+	CacheType              *string    `json:"cache-type"`
+	CacheSize              *uint32    `json:"cache-size"`
+	Scale                  *int64     `json:"scale"`
+	Epoch                  *time.Time `json:"epoch"`
+	Unit                   *string    `json:"unit"`
+	TimeQuantum            *string    `json:"time-quantum"`
+}
+
+func fieldSpecToFieldOption(fSpec fieldSpec) fieldOptions {
+	opt := fieldOptions{}
+	// map fSpec type name to pilosa type name
+
+	// a string field could be a string set, mutex or time quantum
+	if fSpec.FieldOptions.TimeQuantum != nil {
+		opt.Type = "time"
+	} else if fSpec.FieldOptions.EnforceMutualExclusion {
+		opt.Type = "mutex"
+	} else {
+		opt.Type = "set"
+	}
+
+	// for other field types, there's a one-to-one mapping
+	if fSpec.FieldType != "string" && fSpec.FieldType != "id" {
+		opt.Type = fSpec.FieldType
+	}
+
+	if fSpec.FieldType == "string" {
+		var keys bool = true
+		opt.Keys = &keys
+	}
+	opt.CacheType = fSpec.FieldOptions.CacheType
+	opt.CacheSize = fSpec.FieldOptions.CacheSize
+	opt.Scale = fSpec.FieldOptions.Scale
+	opt.Epoch = fSpec.FieldOptions.Epoch
+	opt.TimeUnit = fSpec.FieldOptions.Unit
+	if fSpec.FieldOptions.TimeQuantum != nil {
+		timeQuantumVal := pilosa.TimeQuantum(*fSpec.FieldOptions.TimeQuantum)
+		opt.TimeQuantum = &timeQuantumVal
+	}
+
+	return opt
+}
+
+func (h *Handler) handleIngestSchema(w http.ResponseWriter, r *http.Request) {
+	if !validHeaderAcceptJSON(r.Header) {
+		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
+		return
+	}
+
+	resp := successResponse{h: h}
+
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	schema := ingestSpec{}
+	err := dec.Decode(&schema)
+	if err != nil {
+		resp.write(w, err)
+		return
+	}
+
+	// create index
+	indexName := schema.IndexName
+	resp.Name = indexName
+	var useKeys bool
+	switch schema.PrimaryKeyType {
+	case "string":
+		useKeys = true
+	case "uint":
+		useKeys = false
+	default:
+		resp.write(w, errors.New("Invalid primary key type"))
+		return
+	}
+	req := postIndexRequest{
+		Options: pilosa.IndexOptions{
+			Keys:           useKeys,
+			TrackExistence: true,
+		},
+	}
+	index, err := h.api.CreateIndex(r.Context(), indexName, req.Options)
+	if index != nil {
+		resp.CreatedAt = index.CreatedAt()
+	}
+	if err != nil {
+		if _, ok := errors.Cause(err).(pilosa.ConflictError); ok {
+			if index, _ = h.api.Index(r.Context(), indexName); index != nil {
+				resp.CreatedAt = index.CreatedAt()
+			}
+			if schema.IfNotExists {
+				// if the user did intend to solely create an index if not exists i.e.
+				// by setting it to true, then we should return an "OK" status code
+				// if the index already exists. We might want to upsert the fields
+				// in future for the sake of better UX, but for the time being, let's
+				// stick to the expected behaviour in SQL dbs by simply ignoring the
+				// rest of the schema specification
+				resp.write(w, nil)
+			} else {
+				// user indicated that if index already exists and they attempt
+				// to create index with same name, then it should error out
+				resp.write(w, err)
+			}
+		} else {
+			resp.write(w, err)
+		}
+		return
+	}
+
+	// if any error occurs, rather than have a partially created index
+	// delete it entirely
+	var schemaErr error = nil
+	defer func() {
+		if schemaErr != nil {
+			_ = h.api.DeleteIndex(r.Context(), indexName)
+		}
+	}()
+
+	// create all the fields specified in the index
+	for _, fSpec := range schema.Fields {
+		opt := fieldSpecToFieldOption(fSpec)
+		schemaErr = opt.validate()
+		if schemaErr != nil {
+			resp.write(w, schemaErr)
+			return
+		}
+		fos := fieldOptionsToFunctionalOpts(opt)
+		_, schemaErr = h.api.CreateField(r.Context(), indexName, fSpec.FieldName, fos...)
+		if schemaErr != nil {
+			if _, ok := schemaErr.(pilosa.BadRequestError); ok {
+				http.Error(w, schemaErr.Error(), http.StatusBadRequest)
+			} else if _, ok = errors.Cause(schemaErr).(pilosa.ConflictError); ok {
+				// TODO how to handle conflict if field already created
+				// current approach is to error out
+				http.Error(w, schemaErr.Error(), http.StatusConflict)
+			} else {
+				http.Error(w, schemaErr.Error(), http.StatusBadRequest)
+			}
+			return
+		}
+	}
+
+	resp.write(w, nil)
 }
 
 type postFieldRequest struct {
