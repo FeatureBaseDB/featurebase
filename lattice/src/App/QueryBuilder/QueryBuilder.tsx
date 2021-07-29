@@ -125,7 +125,7 @@ export const QueryBuilder: FC<QueryBuilderProps> = ({
   const reset = () => {
     setQuery({
       table: selectedTable.name,
-      columns: selectedTable.fields.map(field => field.name),
+      columns: selectedTable.fields.map((field) => field.name),
       operation,
       isInvalid: false
     });
@@ -253,9 +253,15 @@ export const QueryBuilder: FC<QueryBuilderProps> = ({
             setSelectedTable(table);
             setShowInvalid(false);
             setQuery({
+              ...query,
               table: table.name,
               columns: table.fields.map((field) => field.name),
               operation: query.operation,
+              rowCalls: [],
+              operator: undefined,
+              groupByCall: undefined,
+              sort: undefined,
+              filter: undefined,
               isInvalid: false
             });
           }}
@@ -273,11 +279,27 @@ export const QueryBuilder: FC<QueryBuilderProps> = ({
           onChange={(value) => {
             setOperation(value);
             setShowInvalid(false);
-            setQuery({
-              table: selectedTable.name,
-              operation: value,
-              isInvalid: false
-            });
+            if (
+              ['Extract', 'Count'].includes(operation) &&
+              ['Extract', 'Count'].includes(value)
+            ) {
+              setQuery({
+                ...query,
+                operation: value
+              });
+            } else {
+              setQuery({
+                ...query,
+                operation: value,
+                columns: selectedTable.fields.map((field) => field.name),
+                rowCalls: [],
+                operator: undefined,
+                groupByCall: undefined,
+                sort: undefined,
+                filter: undefined,
+                isInvalid: false
+              });
+            }
           }}
         />
         <Divider />
