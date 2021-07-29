@@ -2091,13 +2091,14 @@ const (
 	TimeUnitSeconds      = "s"
 	TimeUnitMilliseconds = "ms"
 	TimeUnitMicroseconds = "µs"
+	TimeUnitUSeconds     = "us"
 	TimeUnitNanoseconds  = "ns"
 )
 
 // IsValidTimeUnit returns true if unit is valid.
 func IsValidTimeUnit(unit string) bool {
 	switch unit {
-	case TimeUnitSeconds, TimeUnitMilliseconds, TimeUnitMicroseconds, TimeUnitNanoseconds:
+	case TimeUnitSeconds, TimeUnitMilliseconds, TimeUnitMicroseconds, TimeUnitUSeconds, TimeUnitNanoseconds:
 		return true
 	default:
 		return false
@@ -2111,7 +2112,7 @@ func TimeUnitNanos(unit string) int64 {
 		return int64(time.Second)
 	case TimeUnitMilliseconds:
 		return int64(time.Millisecond)
-	case TimeUnitMicroseconds:
+	case TimeUnitMicroseconds, TimeUnitUSeconds:
 		return int64(time.Microsecond)
 	default:
 		return int64(time.Nanosecond)
