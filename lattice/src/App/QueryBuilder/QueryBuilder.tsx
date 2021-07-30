@@ -100,7 +100,10 @@ export const QueryBuilder: FC<QueryBuilderProps> = ({
         }
         break;
       case 'GroupBy':
-        queryString = stringifyGroupBy(query);
+        const groupBy = stringifyGroupBy(query);
+        if(!groupBy.error) {
+          queryString = groupBy.queryString;
+        }
         break;
       case 'Count':
         const cleanCountQuery = cleanRows();

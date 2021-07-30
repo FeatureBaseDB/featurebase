@@ -746,7 +746,7 @@ describe('Query types', () => {
       groupByCall: {
         primary: 'primary'
       }
-    })).toEqual('GroupBy(Rows(primary))');
+    })).toEqual({ error: false, queryString: 'GroupBy(Rows(primary))' });
   });
 
   it('stringifies GroupBy queries with secondary grouping', () => {
@@ -755,7 +755,7 @@ describe('Query types', () => {
         primary: 'primary',
         secondary: 'secondary'
       }
-    })).toEqual('GroupBy(Rows(primary), Rows(secondary))');
+    })).toEqual({ error: false, queryString: 'GroupBy(Rows(primary), Rows(secondary))' });
   });
 
   it('stringifies GroupBy queries with a filter', () => {
@@ -764,7 +764,7 @@ describe('Query types', () => {
         primary: 'primary'
       },
       filter: 'filterString'
-    })).toEqual('GroupBy(Rows(primary), filter=filterString)');
+    })).toEqual({ error: false, queryString: 'GroupBy(Rows(primary), filter=filterString)' });
   });
 
   it('stringifies GroupBy queries with a sort', () => {
@@ -773,7 +773,7 @@ describe('Query types', () => {
         primary: 'primary'
       },
       sort: [{ sortValue: 'count desc' }]
-    })).toEqual('GroupBy(Rows(primary), sort=\"count desc\")');
+    })).toEqual({ error: false, queryString: 'GroupBy(Rows(primary), sort=\"count desc\")' });
   });
 
   it('stringifies GroupBy queries with a secondary sum sort', () => {
@@ -783,9 +783,20 @@ describe('Query types', () => {
       },
       sort: [
         { sortValue: 'count desc' },
-        { sortValue: 'sum asc', field: 'field' }
+        { sortValue: 'sum asc', sum: 'field' }
       ]
-    })).toEqual('GroupBy(Rows(primary), sort=\"count desc, sum asc\", aggregate=Sum(field=field))');
+    })).toEqual({ error: false, queryString: 'GroupBy(Rows(primary), sort=\"count desc, sum asc\", aggregate=Sum(field=field))' });
+  });
+
+  it('stringifies GroupBy queries with an aggregate sort', () => {
+    expect(stringifyGroupBy({
+      groupByCall: {
+        primary: 'primary'
+      },
+      sort: [
+        { sortValue: 'aggregate asc', aggregate: 'field' }
+      ]
+    })).toEqual({ error: false, queryString: 'GroupBy(Rows(primary), sort=\"aggregate asc\", aggregate=Count(Distinct(field=field)))' });
   });
 
   it('stringifies GroupBy queries with a filter and sort', () => {
@@ -795,8 +806,30 @@ describe('Query types', () => {
       },
       filter: 'filterString',
       sort: [
-        { sortValue: 'sum asc', field: 'field' }
+        { sortValue: 'sum asc', sum: 'field' }
       ]
-    })).toEqual('GroupBy(Rows(primary), filter=filterString, sort=\"sum asc\", aggregate=Sum(field=field))');
+    })).toEqual({ error: false, queryString: 'GroupBy(Rows(primary), filter=filterString, sort=\"sum asc\", aggregate=Sum(field=field))' });
+  });
+
+  it('fails when stringifying a GroupBy query with sum sort when field is not set', () => {
+    expect(stringifyGroupBy({
+      groupByCall: {
+        primary: 'primary'
+      },
+      sort: [
+        { sortValue: 'sum desc' }
+      ]
+    })).toEqual({ error: true, queryString: 'GroupBy(Rows(primary), sort=\"sum desc\")' });
+  });
+
+  it('fails when stringifying a GroupBy query with aggregate sort when field is not set', () => {
+    expect(stringifyGroupBy({
+      groupByCall: {
+        primary: 'primary'
+      },
+      sort: [
+        { sortValue: 'aggregate asc' }
+      ]
+    })).toEqual({ error: true, queryString: 'GroupBy(Rows(primary), sort=\"aggregate asc\")' });
   });
 });

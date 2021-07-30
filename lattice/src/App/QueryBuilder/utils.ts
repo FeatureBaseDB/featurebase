@@ -116,22 +116,39 @@ export const stringifyRowData = (rowCalls: RowGrouping[], operator?: Operator) =
 export const stringifyGroupBy = (query: any) => {
   const { groupByCall, filter, sort } = query;
 
+  let isInvalid = false;
   let sortString = '';
   let aggregateString = '';
   if (sort?.length > 0) {
     sortString = sort[0].sortValue;
     if (sort[0].sortValue.includes('sum')) {
-      aggregateString = `, aggregate=Sum(field=${sort[0].sum})`;
-    } else if(sort[0].sortValue.includes('aggregate')) {
-      aggregateString = `, aggregate=Count(Distinct(field=${sort[0].aggregate}))`;
+      if (sort[0].sum) {
+        aggregateString = `, aggregate=Sum(field=${sort[0].sum})`;
+      } else {
+        isInvalid = true;
+      }
+    } else if (sort[0].sortValue.includes('aggregate')) {
+      if (sort[0].aggregate) {
+        aggregateString = `, aggregate=Count(Distinct(field=${sort[0].aggregate}))`;
+      } else {
+        isInvalid = true;
+      }
     }
 
     if (sort.length > 1) {
       sortString = `${sortString}, ${sort[1].sortValue}`;
       if (sort[1].sortValue.includes('sum')) {
-        aggregateString = `, aggregate=Sum(field=${sort[1].sum})`;
-      } else if(sort[1].sortValue.includes('aggregate')) {
-        aggregateString = `, aggregate=Count(Distinct(field=${sort[1].aggregate}))`;
+        if (sort[1].sum) {
+          aggregateString = `, aggregate=Sum(field=${sort[1].sum})`;
+        } else {
+          isInvalid = true;
+        }
+      } else if (sort[1].sortValue.includes('aggregate')) {
+        if (sort[1].aggregate) {
+          aggregateString = `, aggregate=Count(Distinct(field=${sort[1].aggregate}))`;
+        } else {
+          isInvalid = true;
+        }
       }
     }
     sortString = `, sort="${sortString}"`;
@@ -141,7 +158,7 @@ export const stringifyGroupBy = (query: any) => {
     ? `GroupBy(Rows(${groupByCall.primary}), Rows(${groupByCall.secondary})${filterString}${sortString}${aggregateString})`
     : `GroupBy(Rows(${groupByCall.primary})${filterString}${sortString}${aggregateString})`;
 
-  return queryString;
+  return { error: isInvalid, queryString };
 }
 
 export const cleanupRows = (rowCalls: RowGrouping[]) => {
