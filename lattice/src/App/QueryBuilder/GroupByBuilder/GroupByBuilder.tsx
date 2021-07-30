@@ -157,22 +157,18 @@ export const GroupByBuilder: FC<GroupByBuilderProps> = ({
         </div>
         <GroupBySort
           sort={sort ? sort : []}
-          onUpdate={(value) => {
+          onUpdate={(updatedSort) => {
             let isInvalid = false;
-            if (
-              value.length > 0 &&
-              value[0].sortValue.includes('sum') &&
-              !value[0].field
-            ) {
-              isInvalid = true;
-            } else if (
-              value.length > 1 &&
-              value[1].sortValue.includes('sum') &&
-              !value[1].field
-            ) {
-              isInvalid = true;
-            }
-            onChange({ ...query, sort: value, isInvalid });
+            updatedSort.forEach((s) => {
+              if (
+                ['sum', 'aggregate'].includes(s.sortValue) &&
+                !s.sum &&
+                !s.aggregate
+              ) {
+                isInvalid = true;
+              }
+            });
+            onChange({ ...query, sort: updatedSort, isInvalid });
           }}
           fields={table.fields
             .filter((field) => field.options.type === 'int')

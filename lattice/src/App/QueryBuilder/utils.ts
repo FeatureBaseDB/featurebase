@@ -121,12 +121,17 @@ export const stringifyGroupBy = (query: any) => {
   if (sort?.length > 0) {
     sortString = sort[0].sortValue;
     if (sort[0].sortValue.includes('sum')) {
-      aggregateString = `, aggregate=Sum(field=${sort[0].field})`;
+      aggregateString = `, aggregate=Sum(field=${sort[0].sum})`;
+    } else if(sort[0].sortValue.includes('aggregate')) {
+      aggregateString = `, aggregate=Count(Distinct(field=${sort[0].aggregate}))`;
     }
+
     if (sort.length > 1) {
       sortString = `${sortString}, ${sort[1].sortValue}`;
       if (sort[1].sortValue.includes('sum')) {
-        aggregateString = `, aggregate=Sum(field=${sort[1].field})`;
+        aggregateString = `, aggregate=Sum(field=${sort[1].sum})`;
+      } else if(sort[1].sortValue.includes('aggregate')) {
+        aggregateString = `, aggregate=Count(Distinct(field=${sort[1].aggregate}))`;
       }
     }
     sortString = `, sort="${sortString}"`;
