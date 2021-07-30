@@ -1394,6 +1394,7 @@ type ImportOptions struct {
 	Clear          bool
 	IgnoreKeyCheck bool
 	Presorted      bool
+	fullySorted    bool // format-aware sorting, internal use only please.
 
 	// test Tx atomicity if > 0
 	SimPowerLossAfter int
@@ -1423,6 +1424,13 @@ func OptImportOptionsIgnoreKeyCheck(b bool) ImportOption {
 func OptImportOptionsPresorted(b bool) ImportOption {
 	return func(o *ImportOptions) error {
 		o.Presorted = b
+		return nil
+	}
+}
+
+func optImportOptionsFullySorted(b bool) ImportOption {
+	return func(o *ImportOptions) error {
+		o.fullySorted = b
 		return nil
 	}
 }
@@ -1905,8 +1913,8 @@ func (api *API) IngestOperations(ctx context.Context, qcx *Qcx, indexName string
 func (api *API) applyOperations(ctx context.Context, qcx *Qcx, index *Index, shard uint64, fields map[string]*Field, ops []*ingest.Operation) error {
 	// For each operation, we may have a set of records/fields to clear, and then
 	// also a set of fields to set/remove specific bits in.
-	opts := &ImportOptions{Presorted: true, IgnoreKeyCheck: true}
-	funcOpts := []ImportOption{OptImportOptionsIgnoreKeyCheck(true), OptImportOptionsPresorted(true), OptImportOptionsClear(true)}
+	opts := &ImportOptions{Presorted: true, IgnoreKeyCheck: true, fullySorted: true}
+	funcOpts := []ImportOption{OptImportOptionsIgnoreKeyCheck(true), OptImportOptionsPresorted(true), optImportOptionsFullySorted(true), OptImportOptionsClear(true)}
 	for _, op := range ops {
 		// ClearRecordIDs should exist only for delete, clear, and write. For clear and write,
 		// we'll have a list of fields, for delete, it should be all the fields.
@@ -1957,9 +1965,9 @@ func (api *API) applyOperations(ctx context.Context, qcx *Qcx, index *Index, sha
 		opts.Clear = (op.OpType == ingest.OpRemove)
 		// reslice this rather than regenerating it. i'm so efficient.
 		if opts.Clear {
-			funcOpts = funcOpts[:3]
+			funcOpts = funcOpts[:4]
 		} else {
-			funcOpts = funcOpts[:2]
+			funcOpts = funcOpts[:3]
 		}
 		// for "set" and "write" ops, we'll be setting bits, for
 		// "remove" ops we'll be clearing them, and for "clear" ops

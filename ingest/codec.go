@@ -76,6 +76,7 @@ type jsonFieldCodec struct {
 	epoch     int64    // used only by Timestamp fields
 	scratch   []uint64 // reusable scratch space for sets of values
 	lookup    KeyLookupFunc
+	fieldType FieldType
 }
 
 // JSONCodec is a Codec which accepts a JSON map of record keys/ids to updated value maps.
@@ -103,7 +104,7 @@ func (codec *JSONCodec) AddTimeQuantumField(name string, lookup KeyLookupFunc) e
 	if lookup != nil {
 		fieldCodec.translate = (*FieldOperation).TranslateUnsigned
 	}
-	return codec.addField(name, fieldCodec, lookup)
+	return codec.addField(name, FieldTypeTimeQuantum, fieldCodec, lookup)
 }
 
 func (codec *JSONCodec) AddSetField(name string, lookup KeyLookupFunc) error {
@@ -112,7 +113,7 @@ func (codec *JSONCodec) AddSetField(name string, lookup KeyLookupFunc) error {
 	if lookup != nil {
 		fieldCodec.translate = (*FieldOperation).TranslateUnsigned
 	}
-	return codec.addField(name, fieldCodec, lookup)
+	return codec.addField(name, FieldTypeSet, fieldCodec, lookup)
 }
 
 func (codec *JSONCodec) AddIntField(name string, lookup KeyLookupFunc) error {
@@ -121,7 +122,7 @@ func (codec *JSONCodec) AddIntField(name string, lookup KeyLookupFunc) error {
 	if lookup != nil {
 		fieldCodec.translate = (*FieldOperation).TranslateSigned
 	}
-	return codec.addField(name, fieldCodec, lookup)
+	return codec.addField(name, FieldTypeInt, fieldCodec, lookup)
 }
 
 func (codec *JSONCodec) AddMutexField(name string, lookup KeyLookupFunc) error {
@@ -130,13 +131,13 @@ func (codec *JSONCodec) AddMutexField(name string, lookup KeyLookupFunc) error {
 	if lookup != nil {
 		fieldCodec.translate = (*FieldOperation).TranslateUnsigned
 	}
-	return codec.addField(name, fieldCodec, lookup)
+	return codec.addField(name, FieldTypeMutex, fieldCodec, lookup)
 }
 
 func (codec *JSONCodec) AddBoolField(name string) error {
 	fieldCodec := &jsonFieldCodec{}
 	fieldCodec.decode = fieldCodec.DecodeBoolValue
-	return codec.addField(name, fieldCodec, nil)
+	return codec.addField(name, FieldTypeBool, fieldCodec, nil)
 }
 
 // TimestampField is used to store seconds since unix epoch. The numeric values
@@ -146,7 +147,7 @@ func (codec *JSONCodec) AddBoolField(name string) error {
 func (codec *JSONCodec) AddTimestampField(name string, timeScale time.Duration, epoch int64) error {
 	fieldCodec := &jsonFieldCodec{scaleUnit: int64(timeScale), epoch: epoch}
 	fieldCodec.decode = fieldCodec.DecodeTimeValue
-	return codec.addField(name, fieldCodec, nil)
+	return codec.addField(name, FieldTypeTimeStamp, fieldCodec, nil)
 }
 
 // AddDecimalField adds a decimal field, which is stored as integer values
@@ -155,10 +156,10 @@ func (codec *JSONCodec) AddTimestampField(name string, timeScale time.Duration, 
 func (codec *JSONCodec) AddDecimalField(name string, decimalScale int64) error {
 	fieldCodec := &jsonFieldCodec{scaleUnit: int64(math.Pow10(int(decimalScale)))}
 	fieldCodec.decode = fieldCodec.DecodeDecimalValue
-	return codec.addField(name, fieldCodec, nil)
+	return codec.addField(name, FieldTypeDecimal, fieldCodec, nil)
 }
 
-func (codec *JSONCodec) addField(name string, fieldCodec *jsonFieldCodec, lookup KeyLookupFunc) error {
+func (codec *JSONCodec) addField(name string, fieldType FieldType, fieldCodec *jsonFieldCodec, lookup KeyLookupFunc) error {
 	if _, ok := codec.fields[name]; ok {
 		return fmt.Errorf("duplicate field %q", name)
 	}
@@ -166,6 +167,7 @@ func (codec *JSONCodec) addField(name string, fieldCodec *jsonFieldCodec, lookup
 		fieldCodec.valueKeys = NewStringTable()
 		fieldCodec.lookup = lookup
 	}
+	fieldCodec.fieldType = fieldType
 	codec.fields[name] = fieldCodec
 	return nil
 }
@@ -383,11 +385,16 @@ func (j *jsonFieldCodec) DecodeDecimalValue(recID uint64, dataType jsonparser.Va
 }
 
 func (codec *JSONCodec) ParseKeyedRecords(data []byte) (err error) {
+	seen := make(map[uint64]struct{})
 	return jsonparser.ObjectEach(data, func(key []byte, value []byte, dataType jsonparser.ValueType, offset int) error {
 		id, err := codec.recKeys.ID(key)
 		if err != nil {
 			return err
 		}
+		if _, ok := seen[id]; ok {
+			return fmt.Errorf("key %q duplicated in input", key)
+		}
+		seen[id] = struct{}{}
 		if codec.currentOp.OpType == OpWrite {
 			codec.currentOp.ClearRecordIDs = append(codec.currentOp.ClearRecordIDs, id)
 		}
@@ -463,6 +470,8 @@ func (codec *JSONCodec) ParseOperation(data []byte) (op *Operation, err error) {
 	return op, err
 }
 
+// Parse reads a request, but does not sort the results at all or divide
+// them into shards.
 func (codec *JSONCodec) Parse(r io.Reader) (req *Request, err error) {
 	data, err := ioutil.ReadAll(r)
 	if err != nil {
@@ -501,6 +510,7 @@ func (codec *JSONCodec) ParseBytes(data []byte) (req *Request, err error) {
 			return nil, fmt.Errorf("trying to find record key mapping: %w", err)
 		}
 	}
+	req = &Request{FieldTypes: make(map[string]FieldType, len(codec.fields))}
 	valueMaps := map[string]func(*FieldOperation) error{}
 	for name, fieldCodec := range codec.fields {
 		// make closure survive iteration
@@ -514,6 +524,7 @@ func (codec *JSONCodec) ParseBytes(data []byte) (req *Request, err error) {
 				return fieldCodec.translate(fo, fieldMap)
 			}
 		}
+		req.FieldTypes[name] = fieldCodec.fieldType
 	}
 	for _, op := range ops {
 		// For Clear and Write, we need to translate/sort our record ID
@@ -524,7 +535,6 @@ func (codec *JSONCodec) ParseBytes(data []byte) (req *Request, err error) {
 					return nil, fmt.Errorf("mapping record keys for clear op: %w", err)
 				}
 			}
-			op.Sort()
 		}
 		// For clear/delete, that's all we need to do; there's no meaningful fieldops under them.
 		if op.OpType == OpClear || op.OpType == OpDelete {
@@ -542,14 +552,14 @@ func (codec *JSONCodec) ParseBytes(data []byte) (req *Request, err error) {
 				}
 			}
 			// Sort by column keys, for now.
-			fieldOp.Sort()
 			// Write op will also want to clear every field we saw.
 			if op.OpType == OpWrite {
 				op.ClearFields = append(op.ClearFields, field)
 			}
 		}
 	}
-	return &Request{Ops: ops}, nil
+	req.Ops = ops
+	return req, nil
 }
 
 type errFieldNotFound struct {

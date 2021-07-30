@@ -16,7 +16,7 @@ package ingest
 
 import (
 	"fmt"
-	"sort"
+	"math/bits"
 
 	"github.com/molecula/featurebase/v2/shardwidth"
 )
@@ -39,6 +39,28 @@ var opNames = []string{
 	"clear",
 	"write",
 	"delete",
+}
+
+type FieldType string
+
+const (
+	FieldTypeSet         = "set"
+	FieldTypeInt         = "int"
+	FieldTypeTimeQuantum = "time"
+	FieldTypeTimeStamp   = "timestamp"
+	FieldTypeDecimal     = "decimal"
+	FieldTypeMutex       = "mutex"
+	FieldTypeBool        = "bool"
+)
+
+var fieldTypeSorts = map[FieldType]func(*FieldOperation){
+	FieldTypeSet:         (*FieldOperation).SortByValues,
+	FieldTypeInt:         (*FieldOperation).SortByRecords,
+	FieldTypeTimeQuantum: (*FieldOperation).SortByValues,
+	FieldTypeDecimal:     (*FieldOperation).SortByRecords,
+	FieldTypeMutex:       (*FieldOperation).SortByValues,
+	FieldTypeTimeStamp:   (*FieldOperation).SortByRecords,
+	FieldTypeBool:        (*FieldOperation).SortByValues,
 }
 
 func (o OpType) String() string {
@@ -92,69 +114,31 @@ type FieldOperation struct {
 	Signed []int64
 }
 
-var _ sort.Interface = &FieldOperation{}
-
-// We implement sort.Interface here so we don't have to write sort code.
-// This should probably be replaced by smarter sorting later if it's a
-// performance issue.
-func (f *FieldOperation) Len() int {
-	return len(f.RecordIDs)
-}
-
-func (f *FieldOperation) Less(i, j int) bool {
-	return f.RecordIDs[i] < f.RecordIDs[j]
-}
-
-func (f *FieldOperation) Swap(i, j int) {
-	f.RecordIDs[i], f.RecordIDs[j] = f.RecordIDs[j], f.RecordIDs[i]
-	if f.Values != nil {
-		f.Values[i], f.Values[j] = f.Values[j], f.Values[i]
-	}
-	if f.Signed != nil {
-		f.Signed[i], f.Signed[j] = f.Signed[j], f.Signed[i]
-	}
-}
-
-// Sort sorts the values by record ID. It is not a stable sort.
-func (f *FieldOperation) Sort() {
-	sort.Sort(f)
-}
-
-// Similarly, do this for Operation, which is used only in the Clear case.
-var _ sort.Interface = &Operation{}
-
-// We implement sort.Interface here so we don't have to write sort code.
-// This should probably be replaced by smarter sorting later if it's a
-// performance issue.
-func (o *Operation) Len() int {
-	return len(o.ClearRecordIDs)
-}
-
-func (o *Operation) Less(i, j int) bool {
-	return o.ClearRecordIDs[i] < o.ClearRecordIDs[j]
-}
-
-func (o *Operation) Swap(i, j int) {
-	o.ClearRecordIDs[i], o.ClearRecordIDs[j] = o.ClearRecordIDs[j], o.ClearRecordIDs[i]
-}
-
 // Sort sorts the values by record ID. It is not a stable sort.
 func (o *Operation) Sort() {
-	sort.Sort(o)
+	// I am aware that this is a crime, but it avoids rewriting
+	// the code and justifies FieldOperation handling the "only record
+	// IDs" case.
+	f := FieldOperation{RecordIDs: o.ClearRecordIDs}
+	f.SortByRecords()
 }
 
 type ShardedFieldOperation map[uint64]*FieldOperation
 
 // Shard() divides the FieldOperation's values up into corresponding chunks
-// based on the shards of record IDs. Record IDs should be sorted before this
-// happens.
+// based on the shards of record IDs. Does not further sort IDs within those
+// chunks.
 func (f *FieldOperation) Shard() ShardedFieldOperation {
 	if len(f.RecordIDs) == 0 {
 		return nil
 	}
+	return f.SortToShards()
+}
+
+// ShardInto puts the shards it finds into a target map.
+func (f *FieldOperation) ShardInto(target ShardedFieldOperation) {
 	shards, ends := shardwidth.FindShards(f.RecordIDs)
 	prev := 0
-	op := make(ShardedFieldOperation, len(shards))
 	for i, shard := range shards {
 		endIndex := ends[i]
 		subOp := &FieldOperation{RecordIDs: f.RecordIDs[prev:endIndex]}
@@ -164,10 +148,311 @@ func (f *FieldOperation) Shard() ShardedFieldOperation {
 		if len(f.Signed) > 0 {
 			subOp.Signed = f.Signed[prev:endIndex]
 		}
-		op[shard] = subOp
+		target[shard] = subOp
 		prev = endIndex
 	}
-	return op
+}
+
+func ShardIDs(ids []uint64) (out map[uint64][]uint64) {
+	shards, ends := shardwidth.FindShards(ids)
+	prev := 0
+	out = make(map[uint64][]uint64, len(shards))
+	for i, shard := range shards {
+		endIndex := ends[i]
+		out[shard] = ids[prev:endIndex]
+		prev = endIndex
+	}
+	return out
+}
+
+// SortToShards() uses a pseudo-radix-sort to divide inputs into
+// shards; the individual shards are not sorted.
+func (f *FieldOperation) SortToShards() ShardedFieldOperation {
+	if len(f.RecordIDs) == 0 {
+		return nil
+	}
+	diffMask := uint64(0)
+	prev := f.RecordIDs[0]
+	for _, r := range f.RecordIDs[1:] {
+		diffMask |= r ^ prev
+		prev = r
+	}
+	bitsRemaining := bits.Len64(diffMask)
+	if bitsRemaining <= shardwidth.Exponent {
+		return map[uint64]*FieldOperation{f.RecordIDs[0] >> shardwidth.Exponent: f}
+	}
+	output := make(ShardedFieldOperation)
+	sortToShardsInto(f, bitsRemaining-8, output)
+	return output
+}
+
+// sortToShardsInto puts the shards it finds into the given map, so that
+// as we split off buckets, they can be inserted into the same map.
+func sortToShardsInto(f *FieldOperation, shift int, into ShardedFieldOperation) {
+	if shift < shardwidth.Exponent {
+		shift = shardwidth.Exponent
+	}
+	nextShift := shift - 8
+	if nextShift < shardwidth.Exponent {
+		nextShift = shardwidth.Exponent
+	}
+	// count things that belong in each of the 256 buckets
+	var buckets [256]int
+	var starts [256]int
+
+	// compute the buckets ourselves
+	for _, r := range f.RecordIDs {
+		b := (r >> shift) & 0xFF
+		buckets[b]++
+	}
+	total := 0
+	// compute starting points of each bucket, converting the
+	// bucket counts into ends
+	for i := range buckets {
+		starts[i] = total
+		total += buckets[i]
+		buckets[i] = total
+	}
+	// starts[n] is the index of the first thing that should
+	// go in that bucket, buckets[n] is the index of the first
+	// thing that shouldn't
+	var bucketOp FieldOperation
+	for bucket, start := range starts {
+		end := buckets[bucket]
+		if end <= start {
+			continue
+		}
+		for j := start; j < end; j++ {
+			want := int((f.RecordIDs[j] >> shift) & 0xFF)
+			for want != bucket {
+				// move this to the beginning of the
+				// bucket it wants to be in, swapping
+				// the thing there here
+				dst := starts[want]
+				f.RecordIDs[j], f.RecordIDs[dst] = f.RecordIDs[dst], f.RecordIDs[j]
+				if f.Values != nil {
+					f.Values[j], f.Values[dst] = f.Values[dst], f.Values[j]
+				}
+				if f.Signed != nil {
+					f.Signed[j], f.Signed[dst] = f.Signed[dst], f.Signed[j]
+				}
+				starts[want]++
+				want = int((f.RecordIDs[j] >> shift) & 0xFF)
+			}
+		}
+		// If shift == shardwidth.Exponent, then this is a completed
+		// shard and can go into the sharded output. otherwise, we
+		// can subdivide it.
+		bucketOp.RecordIDs = f.RecordIDs[start:end]
+		if f.Values != nil {
+			bucketOp.Values = f.Values[start:end]
+		}
+		if f.Signed != nil {
+			bucketOp.Signed = f.Signed[start:end]
+		}
+		if shift == shardwidth.Exponent {
+			x := bucketOp
+			into[f.RecordIDs[start]>>shardwidth.Exponent] = &x
+		} else {
+			sortToShardsInto(&bucketOp, nextShift, into)
+		}
+	}
+}
+
+const shardMask = ((uint64(1) << shardwidth.Exponent) - 1)
+
+// SortByValues sorts the operation by values first, then by record
+// ID within each value. This is the best ordering for set/mutex fields,
+// where we'll want to generate positions in that order. For these
+// purposes, a time quantum or bool counts as a kind of a set.
+func (f *FieldOperation) SortByValues() {
+	keys := make([]uint64, len(f.RecordIDs))
+	for i, v := range f.RecordIDs {
+		keys[i] = (f.Values[i] << shardwidth.Exponent) | (v & shardMask)
+	}
+	f.SortByKeys(keys)
+}
+
+// SortByRecords sorts the operation by record ID, and not by value at
+// all. This makes the most sense for int fields and the like.
+func (f *FieldOperation) SortByRecords() {
+	f.SortByKeys(f.RecordIDs)
+}
+
+// SortByKeys reorganizes the record IDs and values of f according to the
+// corresponding members of keys.
+func (f *FieldOperation) SortByKeys(keys []uint64) {
+	if len(f.RecordIDs) < 2 {
+		return
+	}
+	diffMask := uint64(0)
+	prev := keys[0]
+	for _, r := range keys[1:] {
+		diffMask |= r ^ prev
+		prev = r
+	}
+	bitsRemaining := bits.Len64(diffMask)
+	sortPartialByKeys(f, keys, bitsRemaining-8)
+}
+
+// simpleSort sorts a FieldOperation by external keys, or record IDs. It's a
+// horribly naive bubble sort because N is small and a more complex algorithm
+// doesn't help as much as you'd hope. This beats using stdlib sort by about
+// a factor of two for those small N, for larger N we're using the radix sort
+// that calls this.
+func simpleSort(f *FieldOperation, keys []uint64) {
+	if keys != nil {
+		// sorting by record IDs
+		if f.Values != nil && f.Signed != nil {
+			for i := 1; i < len(keys); i++ {
+				for j := i; j > 0 && keys[j-1] > keys[j]; j-- {
+					keys[j-1], keys[j] = keys[j], keys[j-1]
+					f.RecordIDs[j-1], f.RecordIDs[j] = f.RecordIDs[j], f.RecordIDs[j-1]
+					f.Values[j-1], f.Values[j] = f.Values[j], f.Values[j-1]
+					f.Signed[j-1], f.Signed[j] = f.Signed[j], f.Signed[j-1]
+
+				}
+			}
+		} else if f.Values != nil {
+			for i := 1; i < len(keys); i++ {
+				for j := i; j > 0 && keys[j-1] > keys[j]; j-- {
+					keys[j-1], keys[j] = keys[j], keys[j-1]
+					f.RecordIDs[j-1], f.RecordIDs[j] = f.RecordIDs[j], f.RecordIDs[j-1]
+
+					f.Values[j-1], f.Values[j] = f.Values[j], f.Values[j-1]
+				}
+			}
+		} else if f.Signed != nil {
+			for i := 1; i < len(keys); i++ {
+				for j := i; j > 0 && keys[j-1] > keys[j]; j-- {
+					keys[j-1], keys[j] = keys[j], keys[j-1]
+					f.RecordIDs[j-1], f.RecordIDs[j] = f.RecordIDs[j], f.RecordIDs[j-1]
+					f.Signed[j-1], f.Signed[j] = f.Signed[j], f.Signed[j-1]
+				}
+			}
+		} else {
+			for i := 1; i < len(keys); i++ {
+				for j := i; j > 0 && keys[j-1] > keys[j]; j-- {
+					keys[j-1], keys[j] = keys[j], keys[j-1]
+					f.RecordIDs[j-1], f.RecordIDs[j] = f.RecordIDs[j], f.RecordIDs[j-1]
+				}
+			}
+		}
+	} else {
+		if f.Values != nil && f.Signed != nil {
+			for i := 1; i < len(f.RecordIDs); i++ {
+				for j := i; j > 0 && f.RecordIDs[j-1] > f.RecordIDs[j]; j-- {
+					f.RecordIDs[j-1], f.RecordIDs[j] = f.RecordIDs[j], f.RecordIDs[j-1]
+					f.Values[j-1], f.Values[j] = f.Values[j], f.Values[j-1]
+					f.Signed[j-1], f.Signed[j] = f.Signed[j], f.Signed[j-1]
+				}
+			}
+		} else if f.Values != nil {
+			for i := 1; i < len(f.RecordIDs); i++ {
+				for j := i; j > 0 && f.RecordIDs[j-1] > f.RecordIDs[j]; j-- {
+					f.RecordIDs[j-1], f.RecordIDs[j] = f.RecordIDs[j], f.RecordIDs[j-1]
+					f.Values[j-1], f.Values[j] = f.Values[j], f.Values[j-1]
+				}
+			}
+		} else if f.Signed != nil {
+			for i := 1; i < len(f.RecordIDs); i++ {
+				for j := i; j > 0 && f.RecordIDs[j-1] > f.RecordIDs[j]; j-- {
+					f.RecordIDs[j-1], f.RecordIDs[j] = f.RecordIDs[j], f.RecordIDs[j-1]
+					f.Signed[j-1], f.Signed[j] = f.Signed[j], f.Signed[j-1]
+				}
+			}
+		} else {
+			// why do we only have record IDs? I don't know
+			for i := 1; i < len(f.RecordIDs); i++ {
+				for j := i; j > 0 && f.RecordIDs[j-1] > f.RecordIDs[j]; j-- {
+					f.RecordIDs[j-1], f.RecordIDs[j] = f.RecordIDs[j], f.RecordIDs[j-1]
+				}
+			}
+		}
+	}
+}
+
+func sortPartialByKeys(f *FieldOperation, keys []uint64, shift int) {
+	if shift < 0 {
+		shift = 0
+	}
+	externalKeys := &f.RecordIDs[0] != &keys[0]
+	nextShift := shift - 8
+	if nextShift < 0 {
+		nextShift = 0
+	}
+	// count things that belong in each of the 256 buckets
+	var buckets [256]int
+	var starts [256]int
+	// compute the buckets ourselves
+	for _, r := range keys {
+		b := (r >> shift) & 0xFF
+		buckets[b]++
+	}
+	total := 0
+	// compute starting points of each bucket, converting the
+	// bucket counts into ends
+	for i := range buckets {
+		starts[i] = total
+		total += buckets[i]
+		buckets[i] = total
+	}
+	// starts[n] is the index of the first thing that should
+	// go in that bucket, buckets[n] is the index of the first
+	// thing that shouldn't
+	// var newbuckets [256]int
+	var bucketOp FieldOperation
+	for bucket, start := range starts {
+		end := buckets[bucket]
+		if end <= start {
+			continue
+		}
+		for j := start; j < end; j++ {
+			want := int((keys[j] >> shift) & 0xFF)
+			for want != bucket {
+				// move this to the beginning of the
+				// bucket it wants to be in, swapping
+				// the thing there here
+				dst := starts[want]
+				keys[j], keys[dst] = keys[dst], keys[j]
+				// we do this to allow you to just pass in the records as keys
+				if externalKeys {
+					f.RecordIDs[j], f.RecordIDs[dst] = f.RecordIDs[dst], f.RecordIDs[j]
+				}
+				if f.Values != nil {
+					f.Values[j], f.Values[dst] = f.Values[dst], f.Values[j]
+				}
+				if f.Signed != nil {
+					f.Signed[j], f.Signed[dst] = f.Signed[dst], f.Signed[j]
+				}
+				starts[want]++
+				want = int((keys[j] >> shift) & 0xFF)
+			}
+		}
+		// If shift == shardwidth.Exponent, then this is a completed
+		// shard and can go into the sharded output. otherwise, we
+		// can subdivide it.
+		if shift > 0 {
+			bucketOp.RecordIDs = f.RecordIDs[start:end]
+			if f.Values != nil {
+				bucketOp.Values = f.Values[start:end]
+			}
+			if f.Signed != nil {
+				bucketOp.Signed = f.Signed[start:end]
+			}
+			// if there's not very many, sort naively instead
+			if end-start > 32 {
+				sortPartialByKeys(&bucketOp, keys[start:end], nextShift)
+			} else {
+				// naive stdlib sort
+				if externalKeys {
+					simpleSort(&bucketOp, keys[start:end])
+				} else {
+					simpleSort(&bucketOp, nil)
+				}
+			}
+		}
+	}
 }
 
 // AddPair adds a record ID/value pair where the value is unsigned, as
@@ -248,13 +533,15 @@ type ShardOperations struct {
 // Request is a complete ingest request, which may be any combination
 // of operations, which may apply to multiple shards.
 type Request struct {
-	Ops []*Operation
+	FieldTypes map[string]FieldType
+	Ops        []*Operation
 }
 
 // ShardedRequest is an ingest request, split up into individual per-shard
 // operations.
 type ShardedRequest struct {
-	Ops map[uint64][]*Operation
+	FieldTypes map[string]FieldType
+	Ops        map[uint64][]*Operation
 }
 
 // Shard converts a request into the same request, only sharded.
@@ -280,7 +567,12 @@ func (r *Request) Shard() (*ShardedRequest, error) {
 		}
 		for field, fieldOp := range op.FieldOps {
 			sharded := fieldOp.Shard()
+			sorter := fieldTypeSorts[r.FieldTypes[field]]
+			if sorter == nil {
+				sorter = (*FieldOperation).SortByRecords
+			}
 			for shard, data := range sharded {
+				sorter(data)
 				shardOp, ok := shards[shard]
 				if !ok {
 					if op.OpType == OpWrite {

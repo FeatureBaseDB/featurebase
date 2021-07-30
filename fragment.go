@@ -2210,7 +2210,7 @@ func (f *fragment) bulkImport(tx Tx, rowIDs, columnIDs []uint64, options *Import
 	}
 
 	if f.mutexVector != nil && !options.Clear {
-		return f.bulkImportMutex(tx, rowIDs, columnIDs)
+		return f.bulkImportMutex(tx, rowIDs, columnIDs, options)
 	}
 	return f.bulkImportStandard(tx, rowIDs, columnIDs, options)
 }
@@ -2253,8 +2253,12 @@ func (f *fragment) bulkImportStandard(tx Tx, rowIDs, columnIDs []uint64, options
 	rowSet := make(map[uint64]struct{})
 	lastRowID := uint64(1 << 63)
 
+	// It's possible for the ingest API to have already sorted things in
+	// the row-first order we want for this import.
+	if !options.fullySorted {
+		sort.Sort(rowColumnSet{r: rowIDs, c: columnIDs})
+	}
 	// replace columnIDs with calculated positions to avoid allocation.
-	sort.Sort(rowColumnSet{r: rowIDs, c: columnIDs})
 	prevRow, prevCol := ^uint64(0), ^uint64(0)
 	next := 0
 	for i := 0; i < len(columnIDs); i++ {
@@ -2525,14 +2529,20 @@ func sliceDifference(original, remove []uint64) []uint64 {
 // mutex restrictions. Because the mutex requirements must be checked
 // against storage, this method must acquire a write lock on the fragment
 // during the entire process, and it handles every bit independently.
-func (f *fragment) bulkImportMutex(tx Tx, rowIDs, columnIDs []uint64) error {
+func (f *fragment) bulkImportMutex(tx Tx, rowIDs, columnIDs []uint64, options *ImportOptions) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
+	// if ingest promises that this is "fully sorted", then we have been
+	// promised that (1) there's no duplicate entries that need to be
+	// pruned, (2) the input is sorted by row IDs and then column IDs,
+	// meaning that we will generate positions in strictly sequential order.
+	if !options.fullySorted {
 	p := parallelSlices{cols: columnIDs, rows: rowIDs}
 	p.fullPrune()
 	columnIDs = p.cols
 	rowIDs = p.rows
+	}
 
 	// create a mask of columns we care about
 	columns := roaring.NewSliceBitmap(columnIDs...)
@@ -2551,6 +2561,10 @@ func (f *fragment) bulkImportMutex(tx Tx, rowIDs, columnIDs []uint64) error {
 		// positions are sorted by columns, but not by absolute
 		// position. we might want them sorted, though.
 		if pos < prev {
+			if options.fullySorted {
+				fmt.Printf("HELP! was promised fully sorted input, but previous position was %d, now generated %d\n",
+					prev, pos)
+			}
 			unsorted = true
 		}
 		prev = pos
