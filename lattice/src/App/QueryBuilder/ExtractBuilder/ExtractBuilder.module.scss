@@ -1,0 +1,21 @@
+.columnsSelector {
+  margin: 4px 14px 4px 0;
+  display: flex;
+  text-align: center;
+
+  .info {
+    margin-left: 4px;
+    fill: var(--text-secondary);
+  }
+}
+
+.textLink {
+  color: var(--primary);
+  font-size: 12px;
+
+  &:hover {
+    cursor: pointer;
+    text-decoration: underline;
+    color: var(--primary);
+  }
+}

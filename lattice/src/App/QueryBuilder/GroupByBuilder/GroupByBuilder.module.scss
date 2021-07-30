@@ -1,0 +1,32 @@
+.groupBy {
+  .fieldSelector {
+    margin-bottom: 16px;
+  }
+
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 8px;
+  }
+
+  .filtersInfo {
+    vertical-align: text-top;
+    margin-left: 4px;
+  }
+}
+
+.textLink {
+  color: var(--primary);
+  font-size: 12px;
+
+  &:hover {
+    cursor: pointer;
+    text-decoration: underline;
+    color: var(--primary);
+  }
+}
+
+.filtersSection {
+  margin-bottom: 16px;
+}

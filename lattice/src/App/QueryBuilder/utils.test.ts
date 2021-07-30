@@ -1,4 +1,9 @@
-import { stringifyRowData } from './stringifyRowData';
+import {
+  stringifyRowData,
+  stringifyExtract,
+  stringifyCount,
+  stringifyGroupBy
+} from './utils';
 
 describe('decimal types', () => {
   it('stringifies = operator', () => {
@@ -10,7 +15,7 @@ describe('decimal types', () => {
         "type": "decimal",
         "keys": undefined
       }]
-    }])).toEqual({ error: false, query: 'Row(fieldName=0)' })
+    }])).toEqual({ error: false, queryString: 'Row(fieldName=0)' })
   });
 
   it('stringifies != operator', () => {
@@ -22,7 +27,7 @@ describe('decimal types', () => {
         "type": "decimal",
         "keys": undefined
       }]
-    }])).toEqual({ error: false, query: 'Not(Row(fieldName=0))' })
+    }])).toEqual({ error: false, queryString: 'Not(Row(fieldName=0))' })
   });
 
   it('stringifies > operator', () => {
@@ -34,7 +39,7 @@ describe('decimal types', () => {
         "type": "decimal",
         "keys": undefined
       }]
-    }])).toEqual({ error: false, query: 'Row(fieldName>0)' })
+    }])).toEqual({ error: false, queryString: 'Row(fieldName>0)' })
   });
 
   it('stringifies >= operator', () => {
@@ -46,7 +51,7 @@ describe('decimal types', () => {
         "type": "decimal",
         "keys": undefined
       }]
-    }])).toEqual({ error: false, query: 'Row(fieldName>=0)' })
+    }])).toEqual({ error: false, queryString: 'Row(fieldName>=0)' })
   });
 
   it('stringifies negated operations', () => {
@@ -59,7 +64,7 @@ describe('decimal types', () => {
         "keys": undefined
       }],
       isNot: true
-    }])).toEqual({ error: false, query: 'Not(Row(fieldName>=0))' })
+    }])).toEqual({ error: false, queryString: 'Not(Row(fieldName>=0))' })
   });
 });
 
@@ -73,7 +78,7 @@ describe('int types', () => {
         "type": "int",
         "keys": undefined
       }]
-    }])).toEqual({ error: false, query: 'Row(fieldName=0)' })
+    }])).toEqual({ error: false, queryString: 'Row(fieldName=0)' })
   });
 
   it('stringifies != operator', () => {
@@ -85,7 +90,7 @@ describe('int types', () => {
         "type": "int",
         "keys": undefined
       }]
-    }])).toEqual({ error: false, query: 'Not(Row(fieldName=0))' })
+    }])).toEqual({ error: false, queryString: 'Not(Row(fieldName=0))' })
   });
 
   it('stringifies > operator', () => {
@@ -97,7 +102,7 @@ describe('int types', () => {
         "type": "int",
         "keys": undefined
       }]
-    }])).toEqual({ error: false, query: 'Row(fieldName>0)' })
+    }])).toEqual({ error: false, queryString: 'Row(fieldName>0)' })
   });
 
   it('stringifies >= operator', () => {
@@ -109,7 +114,7 @@ describe('int types', () => {
         "type": "int",
         "keys": undefined
       }]
-    }])).toEqual({ error: false, query: 'Row(fieldName>=0)' })
+    }])).toEqual({ error: false, queryString: 'Row(fieldName>=0)' })
   });
 
   it('stringifies negated operations', () => {
@@ -122,7 +127,7 @@ describe('int types', () => {
         "keys": undefined
       }],
       isNot: true
-    }])).toEqual({ error: false, query: 'Not(Row(fieldName>=0))' })
+    }])).toEqual({ error: false, queryString: 'Not(Row(fieldName>=0))' })
   });
 });
 
@@ -136,7 +141,7 @@ describe('mutex (id) types', () => {
         "type": "mutex",
         "keys": undefined
       }]
-    }])).toEqual({ error: false, query: 'Row(fieldName=1234)' })
+    }])).toEqual({ error: false, queryString: 'Row(fieldName=1234)' })
   });
 
   it('stringifies is operator for multiple values', () => {
@@ -148,7 +153,7 @@ describe('mutex (id) types', () => {
         "type": "mutex",
         "keys": undefined
       }]
-    }])).toEqual({ error: false, query: 'Union(Row(fieldName=1234), Row(fieldName=5678))' })
+    }])).toEqual({ error: false, queryString: 'Union(Row(fieldName=1234), Row(fieldName=5678))' })
   });
 
   it('stringifies is not operator', () => {
@@ -160,7 +165,7 @@ describe('mutex (id) types', () => {
         "type": "mutex",
         "keys": undefined
       }]
-    }])).toEqual({ error: false, query: 'Not(Row(fieldName=1234))' })
+    }])).toEqual({ error: false, queryString: 'Not(Row(fieldName=1234))' })
   });
 
   it('stringifies is not operator for multiple values', () => {
@@ -172,7 +177,7 @@ describe('mutex (id) types', () => {
         "type": "mutex",
         "keys": undefined
       }]
-    }])).toEqual({ error: false, query: 'Not(Union(Row(fieldName=1234), Row(fieldName=5678)))' })
+    }])).toEqual({ error: false, queryString: 'Not(Union(Row(fieldName=1234), Row(fieldName=5678)))' })
   });
 });
 
@@ -186,7 +191,7 @@ describe('mutex (keys) types', () => {
         "type": "mutex",
         "keys": true
       }]
-    }])).toEqual({ error: false, query: 'Row(fieldName="value")' })
+    }])).toEqual({ error: false, queryString: 'Row(fieldName="value")' })
   });
 
   it('stringifies is operator for multiple values', () => {
@@ -198,7 +203,7 @@ describe('mutex (keys) types', () => {
         "type": "mutex",
         "keys": true
       }]
-    }])).toEqual({ error: false, query: 'Union(Row(fieldName="one"), Row(fieldName="two"))' })
+    }])).toEqual({ error: false, queryString: 'Union(Row(fieldName="one"), Row(fieldName="two"))' })
   });
 
   it('stringifies is not operator', () => {
@@ -210,7 +215,7 @@ describe('mutex (keys) types', () => {
         "type": "mutex",
         "keys": true
       }]
-    }])).toEqual({ error: false, query: 'Not(Row(fieldName="value"))' })
+    }])).toEqual({ error: false, queryString: 'Not(Row(fieldName="value"))' })
   });
 
   it('stringifies is not operator for multiple values', () => {
@@ -222,7 +227,7 @@ describe('mutex (keys) types', () => {
         "type": "mutex",
         "keys": true
       }]
-    }])).toEqual({ error: false, query: 'Not(Union(Row(fieldName="one"), Row(fieldName="two")))' })
+    }])).toEqual({ error: false, queryString: 'Not(Union(Row(fieldName="one"), Row(fieldName="two")))' })
   });
 
   it('stringifies like operator with a single-codepoint key', () => {
@@ -234,7 +239,7 @@ describe('mutex (keys) types', () => {
         "type": "mutex",
         "keys": true
       }]
-    }])).toEqual({ error: false, query: 'UnionRows(Rows(field=fieldName, like="_alue"))' })
+    }])).toEqual({ error: false, queryString: 'UnionRows(Rows(field=fieldName, like="_alue"))' })
   });
 
   it('stringifies like operator with a wildcard', () => {
@@ -246,7 +251,7 @@ describe('mutex (keys) types', () => {
         "type": "mutex",
         "keys": true
       }]
-    }])).toEqual({ error: false, query: 'UnionRows(Rows(field=fieldName, like="value%"))' })
+    }])).toEqual({ error: false, queryString: 'UnionRows(Rows(field=fieldName, like="value%"))' })
   });
 
   it('stringifies like operator without a single-codepoint key or wildcard', () => {
@@ -258,7 +263,7 @@ describe('mutex (keys) types', () => {
         "type": "mutex",
         "keys": true
       }]
-    }])).toEqual({ error: false, query: 'UnionRows(Rows(field=fieldName, like="%value%"))' })
+    }])).toEqual({ error: false, queryString: 'UnionRows(Rows(field=fieldName, like="%value%"))' })
   });
 
   it('stringifies CIDR operator', () => {
@@ -270,7 +275,7 @@ describe('mutex (keys) types', () => {
         "type": "mutex",
         "keys": true
       }]
-    }])).toEqual({ error: false, query: 'Union(Row(fieldName="10.164.124.32"), Row(fieldName="10.164.124.33"), Row(fieldName="10.164.124.34"), Row(fieldName="10.164.124.35"))' })
+    }])).toEqual({ error: false, queryString: 'Union(Row(fieldName="10.164.124.32"), Row(fieldName="10.164.124.33"), Row(fieldName="10.164.124.34"), Row(fieldName="10.164.124.35"))' })
   });
 
   it('stringifies negated operations', () => {
@@ -283,7 +288,7 @@ describe('mutex (keys) types', () => {
         "keys": true
       }],
       isNot: true
-    }])).toEqual({ error: false, query: 'Not(UnionRows(Rows(field=fieldName, like="%value%")))' })
+    }])).toEqual({ error: false, queryString: 'Not(UnionRows(Rows(field=fieldName, like="%value%")))' })
   });
 });
 
@@ -297,7 +302,7 @@ describe('set (id) types', () => {
         "type": "set",
         "keys": undefined
       }]
-    }])).toEqual({ error: false, query: 'Row(fieldName=1234)' })
+    }])).toEqual({ error: false, queryString: 'Row(fieldName=1234)' })
   });
 
   it('stringifies is operator for multiple values', () => {
@@ -309,7 +314,7 @@ describe('set (id) types', () => {
         "type": "set",
         "keys": undefined
       }]
-    }])).toEqual({ error: false, query: 'Union(Row(fieldName=1234), Row(fieldName=5678))' })
+    }])).toEqual({ error: false, queryString: 'Union(Row(fieldName=1234), Row(fieldName=5678))' })
   });
 
   it('stringifies is not operator', () => {
@@ -321,7 +326,7 @@ describe('set (id) types', () => {
         "type": "set",
         "keys": undefined
       }]
-    }])).toEqual({ error: false, query: 'Not(Row(fieldName=1234))' })
+    }])).toEqual({ error: false, queryString: 'Not(Row(fieldName=1234))' })
   });
 
   it('stringifies is not operator for multiple values', () => {
@@ -333,7 +338,7 @@ describe('set (id) types', () => {
         "type": "set",
         "keys": undefined
       }]
-    }])).toEqual({ error: false, query: 'Not(Union(Row(fieldName=1234), Row(fieldName=5678)))' })
+    }])).toEqual({ error: false, queryString: 'Not(Union(Row(fieldName=1234), Row(fieldName=5678)))' })
   });
 });
 
@@ -347,7 +352,7 @@ describe('set (keys) types', () => {
         "type": "set",
         "keys": true
       }]
-    }])).toEqual({ error: false, query: 'Row(fieldName="value")' })
+    }])).toEqual({ error: false, queryString: 'Row(fieldName="value")' })
   });
 
   it('stringifies is operator for multiple values', () => {
@@ -359,7 +364,7 @@ describe('set (keys) types', () => {
         "type": "set",
         "keys": true
       }]
-    }])).toEqual({ error: false, query: 'Union(Row(fieldName="one"), Row(fieldName="two"))' })
+    }])).toEqual({ error: false, queryString: 'Union(Row(fieldName="one"), Row(fieldName="two"))' })
   });
 
   it('stringifies is not operator', () => {
@@ -371,7 +376,7 @@ describe('set (keys) types', () => {
         "type": "set",
         "keys": true
       }]
-    }])).toEqual({ error: false, query: 'Not(Row(fieldName="value"))' })
+    }])).toEqual({ error: false, queryString: 'Not(Row(fieldName="value"))' })
   });
 
   it('stringifies is not operator for multiple values', () => {
@@ -383,7 +388,7 @@ describe('set (keys) types', () => {
         "type": "set",
         "keys": true
       }]
-    }])).toEqual({ error: false, query: 'Not(Union(Row(fieldName="one"), Row(fieldName="two")))' })
+    }])).toEqual({ error: false, queryString: 'Not(Union(Row(fieldName="one"), Row(fieldName="two")))' })
   });
 
   it('stringifies like operator with a single-codepoint key', () => {
@@ -395,7 +400,7 @@ describe('set (keys) types', () => {
         "type": "set",
         "keys": true
       }]
-    }])).toEqual({ error: false, query: 'UnionRows(Rows(field=fieldName, like="_alue"))' })
+    }])).toEqual({ error: false, queryString: 'UnionRows(Rows(field=fieldName, like="_alue"))' })
   });
 
   it('stringifies like operator with a wildcard', () => {
@@ -407,7 +412,7 @@ describe('set (keys) types', () => {
         "type": "set",
         "keys": true
       }]
-    }])).toEqual({ error: false, query: 'UnionRows(Rows(field=fieldName, like="value%"))' })
+    }])).toEqual({ error: false, queryString: 'UnionRows(Rows(field=fieldName, like="value%"))' })
   });
 
   it('stringifies like operator without a single-codepoint key or wildcard', () => {
@@ -419,7 +424,7 @@ describe('set (keys) types', () => {
         "type": "set",
         "keys": true
       }]
-    }])).toEqual({ error: false, query: 'UnionRows(Rows(field=fieldName, like="%value%"))' })
+    }])).toEqual({ error: false, queryString: 'UnionRows(Rows(field=fieldName, like="%value%"))' })
   });
 
   it('stringifies CIDR operator', () => {
@@ -431,7 +436,7 @@ describe('set (keys) types', () => {
         "type": "set",
         "keys": true
       }]
-    }])).toEqual({ error: false, query: 'Union(Row(fieldName="10.164.124.32"), Row(fieldName="10.164.124.33"), Row(fieldName="10.164.124.34"), Row(fieldName="10.164.124.35"))' })
+    }])).toEqual({ error: false, queryString: 'Union(Row(fieldName="10.164.124.32"), Row(fieldName="10.164.124.33"), Row(fieldName="10.164.124.34"), Row(fieldName="10.164.124.35"))' })
   });
 
   it('stringifies negated operations', () => {
@@ -444,7 +449,7 @@ describe('set (keys) types', () => {
         "keys": true
       }],
       isNot: true
-    }])).toEqual({ error: false, query: 'Not(UnionRows(Rows(field=fieldName, like="%value%")))' })
+    }])).toEqual({ error: false, queryString: 'Not(UnionRows(Rows(field=fieldName, like="%value%")))' })
   });
 });
 
@@ -458,7 +463,7 @@ describe('time (ID) types', () => {
         "type": "time",
         "keys": undefined
       }]
-    }])).toEqual({ error: false, query: 'Row(fieldName=1234)' })
+    }])).toEqual({ error: false, queryString: 'Row(fieldName=1234)' })
   });
 
   it('stringifies is not operators', () => {
@@ -470,7 +475,7 @@ describe('time (ID) types', () => {
         "type": "time",
         "keys": undefined
       }]
-    }])).toEqual({ error: false, query: 'Not(Row(fieldName=1234))' })
+    }])).toEqual({ error: false, queryString: 'Not(Row(fieldName=1234))' })
   });
 
   it('stringifies negated operators', () => {
@@ -483,7 +488,7 @@ describe('time (ID) types', () => {
         "keys": undefined
       }],
       isNot: true
-    }])).toEqual({ error: false, query: 'Not(Row(fieldName=1234))' })
+    }])).toEqual({ error: false, queryString: 'Not(Row(fieldName=1234))' })
   });
 });
 
@@ -497,7 +502,7 @@ describe('time (keys) types', () => {
         "type": "time",
         "keys": true
       }]
-    }])).toEqual({ error: false, query: 'Row(fieldName="1234")' })
+    }])).toEqual({ error: false, queryString: 'Row(fieldName="1234")' })
   });
 
   it('stringifies is not operators', () => {
@@ -509,7 +514,7 @@ describe('time (keys) types', () => {
         "type": "time",
         "keys": true
       }]
-    }])).toEqual({ error: false, query: 'Not(Row(fieldName="1234"))' })
+    }])).toEqual({ error: false, queryString: 'Not(Row(fieldName="1234"))' })
   });
 
   it('stringifies like operators with a single-codepoint key', () => {
@@ -521,7 +526,7 @@ describe('time (keys) types', () => {
         "type": "time",
         "keys": true
       }]
-    }])).toEqual({ error: false, query: 'UnionRows(Rows(field=fieldName, like="123_"))' })
+    }])).toEqual({ error: false, queryString: 'UnionRows(Rows(field=fieldName, like="123_"))' })
   });
 
   it('stringifies like operators with a wildcard', () => {
@@ -533,7 +538,7 @@ describe('time (keys) types', () => {
         "type": "time",
         "keys": true
       }]
-    }])).toEqual({ error: false, query: 'UnionRows(Rows(field=fieldName, like="%1234"))' })
+    }])).toEqual({ error: false, queryString: 'UnionRows(Rows(field=fieldName, like="%1234"))' })
   });
 
   it('stringifies like operators without a single-codepoint key or wildcard', () => {
@@ -545,7 +550,7 @@ describe('time (keys) types', () => {
         "type": "time",
         "keys": true
       }]
-    }])).toEqual({ error: false, query: 'UnionRows(Rows(field=fieldName, like="%1234%"))' })
+    }])).toEqual({ error: false, queryString: 'UnionRows(Rows(field=fieldName, like="%1234%"))' })
   });
 
   it('stringifies negated operators', () => {
@@ -558,7 +563,7 @@ describe('time (keys) types', () => {
         "keys": true
       }],
       isNot: true
-    }])).toEqual({ error: false, query: 'Not(Row(fieldName="1234"))' })
+    }])).toEqual({ error: false, queryString: 'Not(Row(fieldName="1234"))' })
   });
 });
 
@@ -572,7 +577,7 @@ describe('timestamp types', () => {
         "type": "timestamp",
         "keys": undefined
       }],
-    }])).toEqual({ error: false, query: 'Row(fieldName="2021-06-04T12:00:00Z")' })
+    }])).toEqual({ error: false, queryString: 'Row(fieldName="2021-06-04T12:00:00Z")' })
   });
 
   it('stringifies is before operators', () => {
@@ -584,7 +589,7 @@ describe('timestamp types', () => {
         "type": "timestamp",
         "keys": undefined
       }],
-    }])).toEqual({ error: false, query: 'Row(fieldName<"2021-06-04T12:00:00Z")' })
+    }])).toEqual({ error: false, queryString: 'Row(fieldName<"2021-06-04T12:00:00Z")' })
   });
 
   it('stringifies is after operators', () => {
@@ -596,7 +601,7 @@ describe('timestamp types', () => {
         "type": "timestamp",
         "keys": undefined
       }],
-    }])).toEqual({ error: false, query: 'Row(fieldName>"2021-06-04T12:00:00Z")' })
+    }])).toEqual({ error: false, queryString: 'Row(fieldName>"2021-06-04T12:00:00Z")' })
   });
 
   it('stringifies negated operators', () => {
@@ -609,7 +614,7 @@ describe('timestamp types', () => {
         "keys": undefined
       }],
       isNot: true
-    }])).toEqual({ error: false, query: 'Not(Row(fieldName="2021-06-04T12:00:00Z"))' })
+    }])).toEqual({ error: false, queryString: 'Not(Row(fieldName="2021-06-04T12:00:00Z"))' })
   });
 });
 
@@ -630,7 +635,7 @@ describe('mixed types', () => {
         "keys": undefined
       }],
       operator: "and"
-    }])).toEqual({ error: false, query: 'Intersect(UnionRows(Rows(field=stringType, like="%value%")), Row(intType=0))' })
+    }])).toEqual({ error: false, queryString: 'Intersect(UnionRows(Rows(field=stringType, like="%value%")), Row(intType=0))' })
   });
 
   it('stringifies multiple or-ed rows', () => {
@@ -649,7 +654,7 @@ describe('mixed types', () => {
         "keys": undefined
       }],
       operator: "or"
-    }])).toEqual({ error: false, query: 'Union(UnionRows(Rows(field=stringType, like="%value%")), Row(intType=0))' })
+    }])).toEqual({ error: false, queryString: 'Union(UnionRows(Rows(field=stringType, like="%value%")), Row(intType=0))' })
   });
 
   it('stringifies negated multiple rows', () => {
@@ -669,6 +674,129 @@ describe('mixed types', () => {
       }],
       operator: "or",
       isNot: true
-    }])).toEqual({ error: false, query: 'Not(Union(UnionRows(Rows(field=stringType, like="%value%")), Row(intType=0)))' })
+    }])).toEqual({ error: false, queryString: 'Not(Union(UnionRows(Rows(field=stringType, like="%value%")), Row(intType=0)))' })
   });
 })
+
+describe('Query types', () => {
+  it('stringifies Extract queries', () => {
+    expect(stringifyExtract({
+      columns: ['one', 'two', 'three'],
+      rowCalls: [{
+        row: [{
+          "field": "stringType",
+          "rowOperator": "like",
+          "value": "value",
+          "type": "set",
+          "keys": true
+        }, {
+          "field": "stringType2",
+          "rowOperator": "is",
+          "value": "value2",
+          "type": "set",
+          "keys": true
+        }],
+        operator: 'or'
+      }, {
+        row: [{
+          "field": "intType",
+          "rowOperator": "=",
+          "value": "0",
+          "type": "int",
+          "keys": undefined
+        }]
+      }],
+      operator: "and"
+    })).toEqual({ error: false, queryString: 'Extract(Limit(Intersect(Union(UnionRows(Rows(field=stringType, like=\"%value%\")), Row(stringType2is\"value2\")), Row(intType=0)), limit=1000), Rows(one), Rows(two), Rows(three))', countQuery: 'Count(Intersect(Union(UnionRows(Rows(field=stringType, like=\"%value%\")), Row(stringType2is\"value2\")), Row(intType=0)))' })
+  });
+
+  it('stringifies Count queries', () => {
+    expect(stringifyCount({
+      columns: ['one', 'two', 'three'],
+      rowCalls: [{
+        row: [{
+          "field": "stringType",
+          "rowOperator": "like",
+          "value": "value",
+          "type": "set",
+          "keys": true
+        }, {
+          "field": "stringType2",
+          "rowOperator": "is",
+          "value": "value2",
+          "type": "set",
+          "keys": true
+        }],
+        operator: 'or'
+      }, {
+        row: [{
+          "field": "intType",
+          "rowOperator": "=",
+          "value": "0",
+          "type": "int",
+          "keys": undefined
+        }]
+      }],
+      operator: "and"
+    })).toEqual({ error: false, queryString: 'Count(Intersect(Union(UnionRows(Rows(field=stringType, like=\"%value%\")), Row(stringType2is\"value2\")), Row(intType=0)))' })
+  });
+
+  it('stringifies basic GroupBy queries', () => {
+    expect(stringifyGroupBy({
+      groupByCall: {
+        primary: 'primary'
+      }
+    })).toEqual('GroupBy(Rows(primary))');
+  });
+
+  it('stringifies GroupBy queries with secondary grouping', () => {
+    expect(stringifyGroupBy({
+      groupByCall: {
+        primary: 'primary',
+        secondary: 'secondary'
+      }
+    })).toEqual('GroupBy(Rows(primary), Rows(secondary))');
+  });
+
+  it('stringifies GroupBy queries with a filter', () => {
+    expect(stringifyGroupBy({
+      groupByCall: {
+        primary: 'primary'
+      },
+      filter: 'filterString'
+    })).toEqual('GroupBy(Rows(primary), filter=filterString)');
+  });
+
+  it('stringifies GroupBy queries with a sort', () => {
+    expect(stringifyGroupBy({
+      groupByCall: {
+        primary: 'primary'
+      },
+      sort: [{ sortValue: 'count desc' }]
+    })).toEqual('GroupBy(Rows(primary), sort=\"count desc\")');
+  });
+
+  it('stringifies GroupBy queries with a secondary sum sort', () => {
+    expect(stringifyGroupBy({
+      groupByCall: {
+        primary: 'primary'
+      },
+      sort: [
+        { sortValue: 'count desc' },
+        { sortValue: 'sum asc', field: 'field' }
+      ]
+    })).toEqual('GroupBy(Rows(primary), sort=\"count desc, sum asc\", aggregate=Sum(field=field))');
+  });
+
+  it('stringifies GroupBy queries with a filter and sort', () => {
+    expect(stringifyGroupBy({
+      groupByCall: {
+        primary: 'primary'
+      },
+      filter: 'filterString',
+      sort: [
+        { sortValue: 'sum asc', field: 'field' }
+      ]
+    })).toEqual('GroupBy(Rows(primary), filter=filterString, sort=\"sum asc\", aggregate=Sum(field=field))');
+  });
+});

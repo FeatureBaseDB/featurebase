@@ -1,20 +1,28 @@
 import React, { Fragment, useState } from 'react';
-import moment, { Moment } from 'moment';
 import Alert from '@material-ui/lab/Alert';
+import ArrowForwardIosIcon from '@material-ui/icons/ArrowForwardIos';
+import Button from '@material-ui/core/Button';
+import classNames from 'classnames';
+import CloseIcon from '@material-ui/icons/Close';
+import IconButton from '@material-ui/core/IconButton';
+import InfoIcon from '@material-ui/icons/Info';
+import moment, { Moment } from 'moment';
 import Paper from '@material-ui/core/Paper';
+import Split from 'react-split';
 import Snackbar from '@material-ui/core/Snackbar';
+import Tooltip from '@material-ui/core/Tooltip';
 import Typography from '@material-ui/core/Typography';
 import { Block } from 'shared/Block';
-import { Operator, RowGrouping, RowsCallType } from './rowTypes';
+import { formatDuration } from 'shared/utils/formatDuration';
+import { grpc } from '@improbable-eng/grpc-web';
 import { pilosa } from 'services/eventServices';
 import { QueryBuilder } from './QueryBuilder';
-import { useEffectOnce } from 'react-use';
-import { ResultType } from 'App/Query/QueryContainer';
 import { queryPQL } from 'services/grpcServices';
-import { grpc } from '@improbable-eng/grpc-web';
+import { QueryResults } from 'App/Query/QueryResults';
+import { ResultType } from 'App/Query/QueryContainer';
 import { RowResponse } from 'proto/pilosa_pb';
-import { SortOption } from './GroupBySort';
-import { stringifyRowData } from './stringifyRowData';
+import { SavedQueries } from 'App/QueryBuilder/SavedQueries';
+import { useEffectOnce } from 'react-use';
 import css from './QueryBuilderContainer.module.scss';
 
 let streamingResults: ResultType = {
@@ -30,13 +38,22 @@ let streamingResults: ResultType = {
 export const QueryBuilderContainer = () => {
   let startTime: Moment;
   let exportRows: any[] = [];
-  const [tables, setTables] = useState<any[]>();
+  const colSizes = JSON.parse(
+    localStorage.getItem('builderColSizes') || '[25, 75]'
+  );
+  const [queriesList, setQueriesList] = useState(
+    JSON.parse(localStorage.getItem('saved-queries') || '[]')
+  );
+
+  const [tables, setTables] = useState<any[]>([]);
+  const [showBuilder, setShowBuilder] = useState<boolean>(true);
   const [results, setResults] = useState<ResultType>();
   const [fullCount, setFullCount] = useState<number>();
   const [recordsCount, setRecordsCount] = useState<number>();
   const [errorResult, setErrorResult] = useState<ResultType>();
   const [error, setError] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
+  const [savedQuery, setSavedQuery] = useState<number>(-1);
 
   useEffectOnce(() => {
     pilosa.get.schema().then((res) => {
@@ -65,62 +82,6 @@ export const QueryBuilderContainer = () => {
       setResults(streamingResults);
     }
     setLoading(false);
-  };
-
-  const onRunQuery = (
-    table: any,
-    operation: string,
-    rowData: RowGrouping[],
-    columnsList: string[],
-    operator?: Operator
-  ) => {
-    streamingResults = {
-      query: '',
-      operation,
-      type: 'PQL',
-      headers: [],
-      rows: [],
-      index: table.name,
-      roundtrip: 0,
-      error: ''
-    };
-    startTime = moment();
-    setLoading(true);
-    let query: string = '';
-    if (rowData.length === 0) {
-      query = 'All()';
-    } else {
-      const res = stringifyRowData(rowData, operator);
-      if (res.error) {
-        streamingResults.error = res.query;
-      } else {
-        query = res.query;
-      }
-    }
-
-    if (operation !== 'Count') {
-      const countQuery = `Count(${query})`;
-      pilosa.post
-        .query(table.name, countQuery)
-        .then((res) => setFullCount(res.data.results[0]));
-
-      pilosa.post
-        .query(table.name, `Count(All())`)
-        .then((res) => setRecordsCount(res.data.results[0]));
-    } else {
-      setFullCount(undefined);
-    }
-
-    if (operation === 'Extract') {
-      const fields = columnsList.map((field) => `Rows(${field})`);
-      const allRows = fields.join(', ');
-      query = `${operation}(Limit(${query}, limit=1000), ${allRows})`;
-    } else {
-      query = `${operation}(${query})`;
-    }
-
-    streamingResults.query = query;
-    queryPQL(table.name, query, handleQueryMessages, handleQueryEnd);
   };
 
   const handleExternalLookup = (message: RowResponse) => {
@@ -158,46 +119,71 @@ export const QueryBuilderContainer = () => {
     }
   };
 
-  const onRunGroupBy = (
-    table: any,
-    rowsData: RowsCallType,
-    sort: SortOption[],
-    filter?: string
+  const onRunQuery = (
+    table: string,
+    operation: string,
+    query: string,
+    countQuery?: string
   ) => {
     streamingResults = {
-      query: '',
-      operation: 'GroupBy',
+      query,
+      operation,
       type: 'PQL',
       headers: [],
       rows: [],
-      index: table.name,
+      index: table,
       roundtrip: 0,
       error: ''
     };
     startTime = moment();
     setLoading(true);
-    let sortString = '';
-    let aggregateString = '';
-    if (sort.length > 0) {
-      sortString = sort[0].sortValue;
-      if (sort[0].sortValue.includes('sum')) {
-        aggregateString = `, aggregate=Sum(field=${sort[0].field})`;
+
+    if (operation !== 'Count') {
+      if (countQuery) {
+        pilosa.post.query(table, countQuery).then((res) => {
+          setFullCount(res.data.results[0]);
+        });
       }
-      if (sort.length > 1) {
-        sortString = `${sortString}, ${sort[1].sortValue}`;
-        if (sort[1].sortValue.includes('sum')) {
-          aggregateString = `, aggregate=Sum(field=${sort[1].field})`;
-        }
-      }
-      sortString = `, sort="${sortString}"`;
+
+      pilosa.post
+        .query(table, `Count(All())`)
+        .then((res) => setRecordsCount(res.data.results[0]));
+    } else {
+      setFullCount(undefined);
     }
-    const filterString =
-      filter && filter.length > 0 ? `, filter=${filter}` : '';
-    const query = rowsData.secondary
-      ? `GroupBy(Rows(${rowsData.primary}), Rows(${rowsData.secondary})${filterString}${sortString}${aggregateString})`
-      : `GroupBy(Rows(${rowsData.primary})${filterString}${sortString}${aggregateString})`;
-    streamingResults.query = query;
-    queryPQL(table.name, query, handleQueryMessages, handleQueryEnd);
+
+    queryPQL(table, query, handleQueryMessages, handleQueryEnd);
+  };
+
+  const onClear = () => {
+    setResults(undefined);
+    setFullCount(undefined);
+    setErrorResult(undefined);
+  };
+
+  const onRemoveQuery = (queryIdx: number) => {
+    let queries = [...queriesList];
+    queries.splice(queryIdx, 1);
+    localStorage.setItem('saved-queries', JSON.stringify(queries));
+    setQueriesList(queries);
+  };
+
+  const onSaveQuery = () => {
+    const updatedList = JSON.parse(
+      localStorage.getItem('saved-queries') || '[]'
+    );
+    if (savedQuery < 0) {
+      setSavedQuery(updatedList.length - 1);
+    }
+    setQueriesList(updatedList);
+  };
+
+  const onExportLogs = () => {
+    if (results) {
+      const columns = results.rows.map((row) => row[0].uint64val);
+      const table = results.index ? results.index : '';
+      onExternalLookup(table, columns);
+    }
   };
 
   const onExternalLookup = (table: string, columns: number[]) => {
@@ -206,40 +192,132 @@ export const QueryBuilderContainer = () => {
     queryPQL(table, query, handleExternalLookup, handleExternalLookupEnd);
   };
 
-  return tables && tables.length > 0 ? (
+  return (
     <Fragment>
-      <QueryBuilder
-        tables={tables}
-        results={results}
-        fullResultsCount={fullCount}
-        fullRecordsCount={recordsCount}
-        error={errorResult}
-        loading={loading}
-        onQuery={onRunQuery}
-        onRunGroupBy={onRunGroupBy}
-        onExternalLookup={onExternalLookup}
-        onClear={() => {
-          setResults(undefined);
-          setFullCount(undefined);
-          setErrorResult(undefined);
-        }}
-      />
-      <Snackbar open={!!error}>
-        <Alert severity="info" onClose={() => setError('')}>
-          {error}
-        </Alert>
-      </Snackbar>
+      {tables.length > 0 ? (
+        <Split
+          sizes={showBuilder ? colSizes : [0, 100]}
+          cursor="col-resize"
+          minSize={showBuilder ? 350 : 50}
+          onDragEnd={(sizes) =>
+            localStorage.setItem('builderColSizes', JSON.stringify(sizes))
+          }
+          gutter={(_index, direction) => {
+            const gutter = document.createElement('div');
+            gutter.className = `gutter gutter-${direction}`;
+            const dragbars = document.createElement('div');
+            dragbars.className = 'dragBar';
+            gutter.appendChild(dragbars);
+            return gutter;
+          }}
+          className={classNames(css.split, !showBuilder ? 'hide-gutter' : '')}
+        >
+          {showBuilder ? (
+            <div className={css.builderColumn}>
+              <div className={css.openClose}>
+                <IconButton onClick={() => setShowBuilder(false)} size="small">
+                  <CloseIcon />
+                </IconButton>
+              </div>
+              <QueryBuilder
+                tables={tables}
+                savedQuery={savedQuery}
+                onRun={onRunQuery}
+                onClear={onClear}
+                onExitEdit={() => setSavedQuery(-1)}
+                onSaveQuery={onSaveQuery}
+              />
+            </div>
+          ) : (
+            <div className={css.collapsedBuilder}>
+              <IconButton onClick={() => setShowBuilder(true)} size="small">
+                <ArrowForwardIosIcon />
+              </IconButton>
+            </div>
+          )}
+          <div className={css.results}>
+            <Block className={css.resultsBlock}>
+              <div className={css.resultsHeader}>
+                <Typography variant="h5" color="textSecondary">
+                  Results{' '}
+                </Typography>
+                {results?.query.includes('Extract(') ? (
+                  <div className={css.download}>
+                    <Tooltip
+                      className={css.downloadInfo}
+                      title="Download raw data from query results"
+                      placement="top"
+                      arrow
+                    >
+                      <InfoIcon fontSize="inherit" />
+                    </Tooltip>
+                    <Button onClick={onExportLogs}>Download</Button>
+                  </div>
+                ) : null}
+              </div>
+              {loading ? <div>Loading...</div> : null}
+              {results && !loading ? (
+                <Fragment>
+                  {fullCount && recordsCount ? (
+                    <div className={css.infoMessage}>
+                      {results.duration ? (
+                        <div>
+                          {recordsCount.toLocaleString()} records scanned in{' '}
+                          {formatDuration(results.duration, true)}.
+                        </div>
+                      ) : null}
+                      <div>
+                        Showing{' '}
+                        {fullCount > 1000 ? 'first 1,000 rows of' : 'all'}{' '}
+                        {fullCount.toLocaleString()} results.
+                      </div>
+                    </div>
+                  ) : null}
+                  <QueryResults results={results} />
+                  <div className={css.spacer} />
+                </Fragment>
+              ) : null}
+              {errorResult && !loading ? <div>{errorResult.error}</div> : null}
+              {!loading && !results && !error ? (
+                <Fragment>
+                  <Typography variant="caption" color="textSecondary">
+                    Build a query to see results
+                  </Typography>
+                  {queriesList.length > 0 ? (
+                    <div className={css.savedQueries}>
+                      <Typography variant="h5" color="textSecondary">
+                        Saved Queries
+                      </Typography>
+                      <SavedQueries
+                        queries={queriesList}
+                        tables={tables}
+                        onClickSaved={(queryIdx) => setSavedQuery(queryIdx)}
+                        onRemoveQuery={onRemoveQuery}
+                      />
+                    </div>
+                  ) : null}
+                </Fragment>
+              ) : null}
+            </Block>
+          </div>
+          <Snackbar open={!!error}>
+            <Alert severity="info" onClose={() => setError('')}>
+              {error}
+            </Alert>
+          </Snackbar>
+        </Split>
+      ) : (
+        <Block>
+          <Typography variant="h5" color="textSecondary">
+            Query Builder
+          </Typography>
+          <Paper className={css.noTables}>
+            <Typography variant="caption" color="textSecondary">
+              There are no tables to query.
+            </Typography>
+          </Paper>
+        </Block>
+      )}
     </Fragment>
-  ) : (
-    <Block>
-      <Typography variant="h5" color="textSecondary">
-        Query Builder
-      </Typography>
-      <Paper className={css.noTables}>
-        <Typography variant="caption" color="textSecondary">
-          There are no tables to query.
-        </Typography>
-      </Paper>
-    </Block>
   );
 };
