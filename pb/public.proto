@@ -122,6 +122,7 @@ message QueryRequest {
 	bool Remote = 5;
 	repeated Row EmbeddedData = 8;
 	bool PreTranslated = 9;
+	int64 MaxMemory = 10;
 }
 
 message QueryResponse {

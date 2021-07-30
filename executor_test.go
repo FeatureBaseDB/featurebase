@@ -4925,6 +4925,76 @@ func TestExecutor_Execute_Extract_Keyed(t *testing.T) {
 	}
 }
 
+func TestExecutor_Execute_MaxMemory(t *testing.T) {
+	c := test.MustRunCluster(t, 3)
+	defer c.Close()
+
+	c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "set")
+	c.ImportBits(t, "i", "set", [][2]uint64{
+		{0, 1},
+		{0, 2},
+		{3, 1},
+		{4, 1},
+		{4, 4 * ShardWidth},
+		{5, ShardWidth},
+	})
+	c.Query(t, "i", fmt.Sprintf("Clear(%d, set=5)", ShardWidth))
+
+	resp := c.GetPrimary().QueryAPI(t, &pilosa.QueryRequest{
+		Index:     "i",
+		Query:     `Extract(All(), Rows(set))`,
+		MaxMemory: 1000,
+	})
+	expect := []interface{}{
+		pilosa.ExtractedTable{
+			Fields: []pilosa.ExtractedTableField{
+				{
+					Name: "set",
+					Type: "[]uint64",
+				},
+			},
+			Columns: []pilosa.ExtractedTableColumn{
+				{
+					Column: pilosa.KeyOrID{ID: 1},
+					Rows: []interface{}{
+						[]uint64{
+							0,
+							3,
+							4,
+						},
+					},
+				},
+				{
+					Column: pilosa.KeyOrID{ID: 2},
+					Rows: []interface{}{
+						[]uint64{
+							0,
+						},
+					},
+				},
+				{
+					Column: pilosa.KeyOrID{ID: ShardWidth},
+					Rows: []interface{}{
+						[]uint64{},
+					},
+				},
+				{
+					Column: pilosa.KeyOrID{ID: 4 * ShardWidth},
+					Rows: []interface{}{
+						[]uint64{
+							4,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	if !reflect.DeepEqual(expect, resp.Results) {
+		t.Errorf("expected %v but got %v", expect, resp.Results)
+	}
+}
+
 func TestExecutor_Execute_Rows(t *testing.T) {
 	c := test.MustRunCluster(t, 3)
 	defer c.Close()

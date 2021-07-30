@@ -25,10 +25,9 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unsafe"
-
-	"golang.org/x/sync/errgroup"
 
 	"github.com/lib/pq"
 	"github.com/molecula/featurebase/v2/disco"
@@ -40,6 +39,7 @@ import (
 	"github.com/molecula/featurebase/v2/topology"
 	"github.com/molecula/featurebase/v2/tracing"
 	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
 )
 
 // defaultField is the field used if one is not specified.
@@ -75,6 +75,9 @@ type executor struct {
 	workersWG      sync.WaitGroup
 	workerPoolSize int
 	work           chan job
+
+	// Maximum per-request memory usage (Extract() only)
+	maxMemory int64
 }
 
 // executorOption is a functional option type for pilosa.Executor
@@ -90,6 +93,13 @@ func optExecutorInternalQueryClient(c InternalQueryClient) executorOption {
 func optExecutorWorkerPoolSize(size int) executorOption {
 	return func(e *executor) error {
 		e.workerPoolSize = size
+		return nil
+	}
+}
+
+func optExecutorMaxMemory(v int64) executorOption {
+	return func(e *executor) error {
+		e.maxMemory = v
 		return nil
 	}
 }
@@ -839,7 +849,7 @@ func (e *executor) executeIncludesColumnCall(ctx context.Context, qcx *Qcx, inde
 	}
 
 	// Execute calls in bulk on each remote node and merge.
-	mapFn := func(ctx context.Context, shard uint64) (_ interface{}, err error) {
+	mapFn := func(ctx context.Context, shard uint64, mopt *mapOptions) (_ interface{}, err error) {
 		return e.executeIncludesColumnCallShard(ctx, qcx, index, c, shard, col)
 	}
 
@@ -888,7 +898,7 @@ func (e *executor) executeFieldValueCall(ctx context.Context, qcx *Qcx, index st
 	shard := colID / ShardWidth
 
 	// Execute calls in bulk on each remote node and merge.
-	mapFn := func(ctx context.Context, shard uint64) (_ interface{}, err error) {
+	mapFn := func(ctx context.Context, shard uint64, mopt *mapOptions) (_ interface{}, err error) {
 		return e.executeFieldValueCallShard(ctx, qcx, field, colID, shard)
 	}
 
@@ -1053,7 +1063,7 @@ func (e *executor) executeSum(ctx context.Context, qcx *Qcx, index string, c *pq
 	}
 
 	// Execute calls in bulk on each remote node and merge.
-	mapFn := func(ctx context.Context, shard uint64) (_ interface{}, err error) {
+	mapFn := func(ctx context.Context, shard uint64, mopt *mapOptions) (_ interface{}, err error) {
 		return e.executeSumCountShard(ctx, qcx, index, c, nil, shard)
 	}
 
@@ -1106,7 +1116,7 @@ func (e *executor) executeDistinct(ctx context.Context, qcx *Qcx, index string, 
 	}
 
 	// Execute calls in bulk on each remote node and merge.
-	mapFn := func(ctx context.Context, shard uint64) (_ interface{}, err error) {
+	mapFn := func(ctx context.Context, shard uint64, mopt *mapOptions) (_ interface{}, err error) {
 		return e.executeDistinctShard(ctx, qcx, index, field, c, shard)
 	}
 
@@ -1157,7 +1167,7 @@ func (e *executor) executeMin(ctx context.Context, qcx *Qcx, index string, c *pq
 	}
 
 	// Execute calls in bulk on each remote node and merge.
-	mapFn := func(ctx context.Context, shard uint64) (_ interface{}, err error) {
+	mapFn := func(ctx context.Context, shard uint64, mopt *mapOptions) (_ interface{}, err error) {
 		return e.executeMinShard(ctx, qcx, index, c, shard)
 	}
 
@@ -1193,7 +1203,7 @@ func (e *executor) executeMax(ctx context.Context, qcx *Qcx, index string, c *pq
 	}
 
 	// Execute calls in bulk on each remote node and merge.
-	mapFn := func(ctx context.Context, shard uint64) (_ interface{}, err error) {
+	mapFn := func(ctx context.Context, shard uint64, mopt *mapOptions) (_ interface{}, err error) {
 		return e.executeMaxShard(ctx, qcx, index, c, shard)
 	}
 
@@ -1348,7 +1358,7 @@ func (e *executor) executeMinRow(ctx context.Context, qcx *Qcx, index string, c 
 	}
 
 	// Execute calls in bulk on each remote node and merge.
-	mapFn := func(ctx context.Context, shard uint64) (_ interface{}, err error) {
+	mapFn := func(ctx context.Context, shard uint64, mopt *mapOptions) (_ interface{}, err error) {
 		return e.executeMinRowShard(ctx, qcx, index, c, shard)
 	}
 
@@ -1387,7 +1397,7 @@ func (e *executor) executeMaxRow(ctx context.Context, qcx *Qcx, index string, c 
 	}
 
 	// Execute calls in bulk on each remote node and merge.
-	mapFn := func(ctx context.Context, shard uint64) (_ interface{}, err error) {
+	mapFn := func(ctx context.Context, shard uint64, mopt *mapOptions) (_ interface{}, err error) {
 		return e.executeMaxRowShard(ctx, qcx, index, c, shard)
 	}
 
@@ -1445,7 +1455,7 @@ func (e *executor) executeBitmapCall(ctx context.Context, qcx *Qcx, index string
 	}
 
 	// Execute calls in bulk on each remote node and merge.
-	mapFn := func(ctx context.Context, shard uint64) (_ interface{}, err error) {
+	mapFn := func(ctx context.Context, shard uint64, mopt *mapOptions) (_ interface{}, err error) {
 		return e.executeBitmapCallShard(ctx, qcx, index, c, shard)
 	}
 
@@ -1977,7 +1987,7 @@ func (e *executor) executeTopK(ctx context.Context, qcx *Qcx, index string, c *p
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeTopK")
 	defer span.Finish()
 
-	mapFn := func(ctx context.Context, shard uint64) (_ interface{}, err error) {
+	mapFn := func(ctx context.Context, shard uint64, mopt *mapOptions) (_ interface{}, err error) {
 		return e.executeTopKShard(ctx, qcx, index, c, shard)
 	}
 
@@ -2454,7 +2464,7 @@ func (e *executor) executeTopNShards(ctx context.Context, qcx *Qcx, index string
 	defer span.Finish()
 
 	// Execute calls in bulk on each remote node and merge.
-	mapFn := func(ctx context.Context, shard uint64) (_ interface{}, err error) {
+	mapFn := func(ctx context.Context, shard uint64, mopt *mapOptions) (_ interface{}, err error) {
 		return e.executeTopNShard(ctx, qcx, index, c, shard)
 	}
 
@@ -2906,7 +2916,7 @@ func (e *executor) executeGroupBy(ctx context.Context, qcx *Qcx, index string, c
 
 	ignoreLimit := sorter != nil
 	// Execute calls in bulk on each remote node and merge.
-	mapFn := func(ctx context.Context, shard uint64) (_ interface{}, err error) {
+	mapFn := func(ctx context.Context, shard uint64, mopt *mapOptions) (_ interface{}, err error) {
 		return e.executeGroupByShard(ctx, qcx, index, c, filter, shard, childRows, bases, ignoreLimit)
 	}
 
@@ -3541,7 +3551,7 @@ func (e *executor) executeRows(ctx context.Context, qcx *Qcx, index string, c *p
 	}
 
 	// Execute calls in bulk on each remote node and merge.
-	mapFn := func(ctx context.Context, shard uint64) (_ interface{}, err error) {
+	mapFn := func(ctx context.Context, shard uint64, mopt *mapOptions) (_ interface{}, err error) {
 		return e.executeRowsShard(ctx, qcx, index, fieldName, c, shard)
 	}
 
@@ -4153,6 +4163,11 @@ func (e *executor) executeExternalLookup(ctx context.Context, qcx *Qcx, index st
 }
 
 func (e *executor) executeExtract(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *execOptions) (ExtractedIDMatrix, error) {
+	// Defualt maximum memory, if not passed in.
+	if opt.MaxMemory == 0 {
+		opt.MaxMemory = e.maxMemory
+	}
+
 	// Extract the column filter call.
 	if len(c.Children) < 1 {
 		return ExtractedIDMatrix{}, errors.New("missing column filter in Extract")
@@ -4183,8 +4198,8 @@ func (e *executor) executeExtract(ctx context.Context, qcx *Qcx, index string, c
 	}
 
 	// Execute calls in bulk on each remote node and merge.
-	mapFn := func(ctx context.Context, shard uint64) (_ interface{}, err error) {
-		return e.executeExtractShard(ctx, qcx, index, fields, filter, shard)
+	mapFn := func(ctx context.Context, shard uint64, mopt *mapOptions) (_ interface{}, err error) {
+		return e.executeExtractShard(ctx, qcx, index, fields, filter, shard, mopt)
 	}
 
 	// Merge returned results at coordinating node.
@@ -4218,7 +4233,7 @@ func mergeBits(bits *Row, mask uint64, out map[uint64]uint64) {
 var trueRowFakeID = []uint64{1}
 var falseRowFakeID = []uint64{0}
 
-func (e *executor) executeExtractShard(ctx context.Context, qcx *Qcx, index string, fields []string, filter *pql.Call, shard uint64) (_ ExtractedIDMatrix, err0 error) {
+func (e *executor) executeExtractShard(ctx context.Context, qcx *Qcx, index string, fields []string, filter *pql.Call, shard uint64, mopt *mapOptions) (_ ExtractedIDMatrix, err0 error) {
 
 	// Execute filter.
 	colsBitmap, err := e.executeBitmapCallShard(ctx, qcx, index, filter, shard)
@@ -4399,10 +4414,14 @@ func (e *executor) executeExtractShard(ctx context.Context, qcx *Qcx, index stri
 
 	// Emit the final matrix.
 	// Like RowIDs, this is an internal type and will need to be converted.
-	return ExtractedIDMatrix{
+	matrix := ExtractedIDMatrix{
 		Fields:  fields,
 		Columns: m,
-	}, nil
+	}
+	if v := atomic.AddInt64(mopt.memoryAvailable, -calcResultMemory(matrix)); v < 0 {
+		return ExtractedIDMatrix{}, fmt.Errorf("result exceeds available memory")
+	}
+	return matrix, nil
 }
 
 func (e *executor) executeRowShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64) (_ *Row, err0 error) {
@@ -4993,7 +5012,7 @@ func (e *executor) executeCount(ctx context.Context, qcx *Qcx, index string, c *
 	}
 
 	// Execute calls in bulk on each remote node and merge.
-	mapFn := func(ctx context.Context, shard uint64) (_ interface{}, err error) {
+	mapFn := func(ctx context.Context, shard uint64, mopt *mapOptions) (_ interface{}, err error) {
 		row, err := e.executeBitmapCallShard(ctx, qcx, index, child, shard)
 		if err != nil {
 			return 0, err
@@ -5097,7 +5116,7 @@ func (e *executor) executeClearBitField(ctx context.Context, qcx *Qcx, index str
 		}
 
 		// Forward call to remote node otherwise.
-		res, err := e.remoteExec(ctx, node, index, &pql.Query{Calls: []*pql.Call{c}}, nil, nil)
+		res, err := e.remoteExec(ctx, node, index, &pql.Query{Calls: []*pql.Call{c}}, nil, nil, 0)
 		if err != nil {
 			return false, err
 		}
@@ -5130,7 +5149,7 @@ func (e *executor) executeClearRow(ctx context.Context, qcx *Qcx, index string, 
 	}
 
 	// Execute calls in bulk on each remote node and merge.
-	mapFn := func(ctx context.Context, shard uint64) (_ interface{}, err error) {
+	mapFn := func(ctx context.Context, shard uint64, mopt *mapOptions) (_ interface{}, err error) {
 		return e.executeClearRowShard(ctx, qcx, index, c, shard)
 	}
 
@@ -5225,7 +5244,7 @@ func (e *executor) executeSetRow(ctx context.Context, qcx *Qcx, indexName string
 	}
 
 	// Execute calls in bulk on each remote node and merge.
-	mapFn := func(ctx context.Context, shard uint64) (_ interface{}, err error) {
+	mapFn := func(ctx context.Context, shard uint64, mopt *mapOptions) (_ interface{}, err error) {
 		return e.executeSetRowShard(ctx, qcx, indexName, c, shard)
 	}
 
@@ -5457,7 +5476,7 @@ func (e *executor) executeSetBitField(ctx context.Context, qcx *Qcx, index strin
 		}
 
 		// Forward call to remote node otherwise.
-		res, err := e.remoteExec(ctx, node, index, &pql.Query{Calls: []*pql.Call{c}}, nil, nil)
+		res, err := e.remoteExec(ctx, node, index, &pql.Query{Calls: []*pql.Call{c}}, nil, nil, 0)
 		if err != nil {
 			return false, err
 		}
@@ -5504,7 +5523,7 @@ func (e *executor) executeSetValueField(ctx context.Context, qcx *Qcx, index str
 		}
 
 		// Forward call to remote node otherwise.
-		res, err := e.remoteExec(ctx, node, index, &pql.Query{Calls: []*pql.Call{c}}, nil, nil)
+		res, err := e.remoteExec(ctx, node, index, &pql.Query{Calls: []*pql.Call{c}}, nil, nil, 0)
 		if err != nil {
 			return false, err
 		}
@@ -5549,7 +5568,7 @@ func (e *executor) executeClearValueField(ctx context.Context, qcx *Qcx, index s
 		}
 
 		// Forward call to remote node otherwise.
-		res, err := e.remoteExec(ctx, node, index, &pql.Query{Calls: []*pql.Call{c}}, nil, nil)
+		res, err := e.remoteExec(ctx, node, index, &pql.Query{Calls: []*pql.Call{c}}, nil, nil, 0)
 		if err != nil {
 			return false, err
 		}
@@ -5559,7 +5578,7 @@ func (e *executor) executeClearValueField(ctx context.Context, qcx *Qcx, index s
 }
 
 // remoteExec executes a PQL query remotely for a set of shards on a node.
-func (e *executor) remoteExec(ctx context.Context, node *topology.Node, index string, q *pql.Query, shards []uint64, embed []*Row) (results []interface{}, err error) { // nolint: interfacer
+func (e *executor) remoteExec(ctx context.Context, node *topology.Node, index string, q *pql.Query, shards []uint64, embed []*Row, maxMemory int64) (results []interface{}, err error) { // nolint: interfacer
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeExec")
 	defer span.Finish()
 
@@ -5569,6 +5588,7 @@ func (e *executor) remoteExec(ctx context.Context, node *topology.Node, index st
 		Shards:       shards,
 		Remote:       true,
 		EmbeddedData: embed,
+		MaxMemory:    maxMemory,
 	}
 
 	resp, err := e.client.QueryNode(ctx, &node.URI, index, pbreq)
@@ -5744,7 +5764,7 @@ func makeEmbeddedDataForShards(allRows []*Row, shards []uint64) []*Row {
 	return newRows
 }
 
-func (e *executor) mapper(ctx context.Context, eg *errgroup.Group, ch chan mapResponse, nodes []*topology.Node, index string, shards []uint64, c *pql.Call, opt *execOptions, lastAttempt bool, mapFn mapFunc, reduceFn reduceFunc) error {
+func (e *executor) mapper(ctx context.Context, eg *errgroup.Group, ch chan mapResponse, nodes []*topology.Node, index string, shards []uint64, c *pql.Call, opt *execOptions, lastAttempt bool, mapFn mapFunc, reduceFn reduceFunc) (reterr error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.mapper")
 	defer span.Finish()
 
@@ -5756,26 +5776,47 @@ func (e *executor) mapper(ctx context.Context, eg *errgroup.Group, ch chan mapRe
 	done := ctx.Done()
 
 	// Execute each node in a separate goroutine.
+	var memoryUsed int64
+	var mu sync.Mutex
 	for n, nodeShards := range m {
 		n := n
 		nodeShards := nodeShards
 		eg.Go(func() error {
+			// Execute serially max memory is specified.
+			if opt.MaxMemory > 0 {
+				mu.Lock()
+				defer mu.Unlock()
+			}
+
 			resp := mapResponse{node: n, shards: nodeShards}
+
+			// Calculate remaining memory. This applies to Extract() only.
+			// Default to a high number if we are not tracking memory.
+			memoryAvailable := opt.MaxMemory - atomic.LoadInt64(&memoryUsed)
+			if opt.MaxMemory <= 0 {
+				memoryAvailable = math.MaxInt64
+			}
 
 			// Send local shards to mapper, otherwise remote exec.
 			if n.ID == e.Node.ID {
-				resp.result, resp.err = e.mapperLocal(ctx, nodeShards, mapFn, reduceFn)
+				resp.result, resp.err = e.mapperLocal(ctx, nodeShards, mapFn, reduceFn, memoryAvailable)
 			} else if !opt.Remote {
 				var embeddedRowsForNode []*Row
 				if opt.EmbeddedData != nil {
 					embeddedRowsForNode = makeEmbeddedDataForShards(opt.EmbeddedData, nodeShards)
 				}
-				results, err := e.remoteExec(ctx, n, index, &pql.Query{Calls: []*pql.Call{c}}, nodeShards, embeddedRowsForNode)
+				results, err := e.remoteExec(ctx, n, index, &pql.Query{Calls: []*pql.Call{c}}, nodeShards, embeddedRowsForNode, memoryAvailable)
 				if len(results) > 0 {
 					resp.result = results[0]
 				}
 				resp.err = err
 			}
+
+			// Track total memory used in response.
+			if v := atomic.AddInt64(&memoryUsed, calcResultMemory(resp.result)); opt.MaxMemory > 0 && v > opt.MaxMemory {
+				return fmt.Errorf("query result exceeded memory threshold")
+			}
+
 			// Return response to the channel.
 			select {
 			case <-done:
@@ -5801,15 +5842,42 @@ func (e *executor) mapper(ctx context.Context, eg *errgroup.Group, ch chan mapRe
 			}
 			return nil
 		})
+		if reterr != nil {
+			return reterr // exit early if error occurs when running serially
+		}
 	}
 	return nil
 }
 
+// calcResultMemory recursively computes the total memory used by v.
+func calcResultMemory(v interface{}) (n int64) {
+	switch v := v.(type) {
+	case string:
+	case ExtractedIDColumn:
+		n += 8 // ColumnID
+		for _, row := range v.Rows {
+			n += 24 + int64(len(row)*8) // slice header + data
+		}
+	case ExtractedIDMatrix:
+		n += 24 // slice size
+		for _, field := range v.Fields {
+			n += 16 + int64(len(field)) // string header + data
+		}
+
+		n += 24 // Columns slice
+		for _, col := range v.Columns {
+			n += calcResultMemory(col)
+		}
+	}
+	return n
+}
+
 type job struct {
-	shard      uint64
-	mapFn      mapFunc
-	ctx        context.Context
-	resultChan chan mapResponse
+	shard           uint64
+	mapFn           mapFunc
+	ctx             context.Context
+	memoryAvailable *int64 // shared, atomic value
+	resultChan      chan mapResponse
 }
 
 func worker(work chan job) {
@@ -5821,7 +5889,7 @@ func worker(work chan job) {
 			j.resultChan <- mapResponse{result: nil, err: err}
 			continue
 		}
-		result, err := j.mapFn(j.ctx, j.shard)
+		result, err := j.mapFn(j.ctx, j.shard, &mapOptions{memoryAvailable: j.memoryAvailable})
 		j.resultChan <- mapResponse{result: result, err: err}
 	}
 }
@@ -5829,7 +5897,7 @@ func worker(work chan job) {
 var errShutdown = errors.New("executor has shut down")
 
 // mapperLocal performs map & reduce entirely on the local node.
-func (e *executor) mapperLocal(ctx context.Context, shards []uint64, mapFn mapFunc, reduceFn reduceFunc) (_ interface{}, err error) {
+func (e *executor) mapperLocal(ctx context.Context, shards []uint64, mapFn mapFunc, reduceFn reduceFunc, memoryAvailable int64) (_ interface{}, err error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.mapperLocal")
 	defer span.Finish()
 	ctx, cancel := context.WithCancel(ctx)
@@ -5847,10 +5915,11 @@ func (e *executor) mapperLocal(ctx context.Context, shards []uint64, mapFn mapFu
 	expected := 0
 	for _, shard := range shards {
 		j := job{
-			shard:      shard,
-			mapFn:      mapFn,
-			ctx:        ctx,
-			resultChan: ch,
+			shard:           shard,
+			mapFn:           mapFn,
+			ctx:             ctx,
+			resultChan:      ch,
+			memoryAvailable: &memoryAvailable,
 		}
 		select {
 		case <-done:
@@ -7175,7 +7244,11 @@ func validateQueryContext(ctx context.Context) error {
 // errShardUnavailable is a marker error if no nodes are available.
 var errShardUnavailable = errors.New("shard unavailable")
 
-type mapFunc func(ctx context.Context, shard uint64) (_ interface{}, err error)
+type mapFunc func(ctx context.Context, shard uint64, mopt *mapOptions) (_ interface{}, err error)
+
+type mapOptions struct {
+	memoryAvailable *int64
+}
 
 type reduceFunc func(ctx context.Context, prev, v interface{}) interface{}
 
@@ -7193,6 +7266,7 @@ type execOptions struct {
 	Profile       bool
 	PreTranslated bool
 	EmbeddedData  []*Row
+	MaxMemory     int64
 }
 
 func needsShards(calls []*pql.Call) bool {
@@ -7983,7 +8057,7 @@ func (e *executor) executeDeleteRecords(ctx context.Context, qcx *Qcx, index str
 	}
 
 	// Execute calls in bulk on each remote node and merge.
-	mapFn := func(ctx context.Context, shard uint64) (_ interface{}, err error) {
+	mapFn := func(ctx context.Context, shard uint64, mopt *mapOptions) (_ interface{}, err error) {
 		return e.executeDeleteRecordFromShard(ctx, qcx, index, c, shard)
 	}
 

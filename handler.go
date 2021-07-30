@@ -51,6 +51,9 @@ type QueryRequest struct {
 	// Additional data associated with the query, in cases where there's
 	// row-style inputs for precomputed values.
 	EmbeddedData []*Row
+
+	// Limit on memory used by request (Extract() only)
+	MaxMemory int64
 }
 
 // QueryResponse represent a response from a processed query.

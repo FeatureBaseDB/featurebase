@@ -449,8 +449,16 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	}
 	s.holderConfig.AntiEntropyInterval = s.antiEntropyInterval
 
+	memTotal, err := s.systemInfo.MemTotal()
+	if err != nil {
+		return nil, errors.Wrap(err, "mem total")
+	}
+
 	// set up executor after server opts have been processed
-	executorOpts := []executorOption{optExecutorInternalQueryClient(s.defaultClient)}
+	executorOpts := []executorOption{
+		optExecutorInternalQueryClient(s.defaultClient),
+		optExecutorMaxMemory(int64(float64(memTotal) * .50)),
+	}
 	if s.executorPoolSize > 0 {
 		executorOpts = append(executorOpts, optExecutorWorkerPoolSize(s.executorPoolSize))
 	}

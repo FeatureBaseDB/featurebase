@@ -484,6 +484,7 @@ func (s Serializer) encodeQueryRequest(m *pilosa.QueryRequest) *pb.QueryRequest 
 		Remote:        m.Remote,
 		PreTranslated: m.PreTranslated,
 		EmbeddedData:  make([]*pb.Row, len(m.EmbeddedData)),
+		MaxMemory:     m.MaxMemory,
 	}
 	for i := range m.EmbeddedData {
 		r.EmbeddedData[i] = s.encodeRow(m.EmbeddedData[i])
@@ -1186,6 +1187,7 @@ func (s Serializer) decodeQueryRequest(pb *pb.QueryRequest, m *pilosa.QueryReque
 	m.Remote = pb.Remote
 	m.EmbeddedData = make([]*pilosa.Row, len(pb.EmbeddedData))
 	m.PreTranslated = pb.PreTranslated
+	m.MaxMemory = pb.MaxMemory
 	for i := range pb.EmbeddedData {
 		m.EmbeddedData[i] = s.decodeRow(pb.EmbeddedData[i])
 	}
