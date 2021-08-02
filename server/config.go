@@ -130,6 +130,9 @@ type Config struct {
 	// don't exhaust the goroutine limit.
 	ImportWorkerPoolSize int `toml:"-"`
 
+	// Limits the total amount of memory to be used by Extract() & SELECT queries.
+	MaxQueryMemory int64 `toml:"max-query-memory"`
+
 	Cluster struct {
 		ReplicaN int    `toml:"replicas"`
 		Name     string `toml:"name"`

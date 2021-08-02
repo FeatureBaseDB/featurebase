@@ -205,6 +205,10 @@ func (e *executor) Execute(ctx context.Context, index string, q *pql.Query, shar
 	if opt == nil {
 		opt = &execOptions{}
 	}
+	// Default maximum memory, if not passed in.
+	if opt.MaxMemory == 0 {
+		opt.MaxMemory = e.maxMemory
+	}
 
 	if opt.Profile {
 		var prof tracing.ProfiledSpan
@@ -235,7 +239,7 @@ func (e *executor) Execute(ctx context.Context, index string, q *pql.Query, shar
 	// No need to translate a remote call.
 	if !opt.Remote {
 		// only translateResults if this local node is the final destination. only string/column keys.
-		if err := e.translateResults(ctx, index, idx, q.Calls, results); err != nil {
+		if err := e.translateResults(ctx, index, idx, q.Calls, results, opt.MaxMemory); err != nil {
 			if errors.Cause(err) == ErrTranslatingKeyNotFound {
 				// No error - return empty result
 				resp.Results = make([]interface{}, len(q.Calls))
@@ -3956,7 +3960,7 @@ func (e *executor) executeExternalLookup(ctx context.Context, qcx *Qcx, index st
 	}
 
 	qr := []interface{}{rawArg}
-	err = e.translateResults(ctx, index, idx, c.Children, qr)
+	err = e.translateResults(ctx, index, idx, c.Children, qr, e.maxMemory)
 	if err != nil {
 		return ExtractedTable{}, errors.Wrap(err, "translating query result")
 	}
@@ -4163,11 +4167,6 @@ func (e *executor) executeExternalLookup(ctx context.Context, qcx *Qcx, index st
 }
 
 func (e *executor) executeExtract(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *execOptions) (ExtractedIDMatrix, error) {
-	// Defualt maximum memory, if not passed in.
-	if opt.MaxMemory == 0 {
-		opt.MaxMemory = e.maxMemory
-	}
-
 	// Extract the column filter call.
 	if len(c.Children) < 1 {
 		return ExtractedIDMatrix{}, errors.New("missing column filter in Extract")
@@ -5852,12 +5851,13 @@ func (e *executor) mapper(ctx context.Context, eg *errgroup.Group, ch chan mapRe
 // calcResultMemory recursively computes the total memory used by v.
 func calcResultMemory(v interface{}) (n int64) {
 	switch v := v.(type) {
-	case string:
 	case ExtractedIDColumn:
 		n += 8 // ColumnID
 		for _, row := range v.Rows {
 			n += 24 + int64(len(row)*8) // slice header + data
 		}
+		return n
+
 	case ExtractedIDMatrix:
 		n += 24 // slice size
 		for _, field := range v.Fields {
@@ -5868,8 +5868,34 @@ func calcResultMemory(v interface{}) (n int64) {
 		for _, col := range v.Columns {
 			n += calcResultMemory(col)
 		}
+		return n
+
+	case ExtractedTableColumn:
+		n += 8 + 16 + int64(len(v.Column.Key)) + 8 // KeyOrID
+		for _, row := range v.Rows {
+			n += 8 + calcResultMemory(row) // ptr + value size
+		}
+		return n
+
+	case string:
+		return 16 + int64(len(v))
+	case bool, int64, uint64:
+		return 8
+	case []string:
+		n += 24 // slice header
+		for i := range v {
+			n += 16 + int64(len(v[i]))
+		}
+		return n
+	case []uint64:
+		return 24 + int64(8*len(v)) // slice header + data size
+	case pql.Decimal:
+		return 16
+	case time.Time:
+		return 24
+	default:
+		return n
 	}
-	return n
 }
 
 type job struct {
@@ -6617,7 +6643,7 @@ func (e *executor) callZero(c *pql.Call) *pql.Call {
 	}
 }
 
-func (e *executor) translateResults(ctx context.Context, index string, idx *Index, calls []*pql.Call, results []interface{}) (err error) {
+func (e *executor) translateResults(ctx context.Context, index string, idx *Index, calls []*pql.Call, results []interface{}, memoryAvailable int64) (err error) {
 	span, _ := tracing.StartSpanFromContext(ctx, "Executor.translateResults")
 	defer span.Finish()
 
@@ -6636,7 +6662,7 @@ func (e *executor) translateResults(ctx context.Context, index string, idx *Inde
 	}
 
 	for i := range results {
-		results[i], err = e.translateResult(ctx, index, idx, calls[i], results[i], idMap)
+		results[i], err = e.translateResult(ctx, index, idx, calls[i], results[i], idMap, &memoryAvailable)
 		if err != nil {
 			return err
 		}
@@ -6758,7 +6784,7 @@ func (e *executor) preTranslateMatrixSet(mat ExtractedIDMatrix, fieldIdx uint, f
 	return e.Cluster.translateFieldIDs(field, ids)
 }
 
-func (e *executor) translateResult(ctx context.Context, index string, idx *Index, call *pql.Call, result interface{}, idSet map[uint64]string) (_ interface{}, err error) {
+func (e *executor) translateResult(ctx context.Context, index string, idx *Index, call *pql.Call, result interface{}, idSet map[uint64]string, memoryAvailable *int64) (_ interface{}, err error) {
 	switch result := result.(type) {
 	case *Row:
 		rowIdx, rowField, strategy, err := e.howToTranslate(idx, result)
@@ -7197,6 +7223,9 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 			cols[i] = ExtractedTableColumn{
 				Column: colTrans,
 				Rows:   data,
+			}
+			if *memoryAvailable -= calcResultMemory(cols[i]); *memoryAvailable < 0 {
+				return nil, fmt.Errorf("table exceeds available memory")
 			}
 		}
 

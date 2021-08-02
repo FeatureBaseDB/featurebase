@@ -40,7 +40,6 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	"github.com/pelletier/go-toml"
 	"github.com/molecula/featurebase/v2"
 	"github.com/molecula/featurebase/v2/boltdb"
 	"github.com/molecula/featurebase/v2/encoding/proto"
@@ -56,6 +55,7 @@ import (
 	"github.com/molecula/featurebase/v2/statsd"
 	"github.com/molecula/featurebase/v2/syswrap"
 	"github.com/molecula/featurebase/v2/testhook"
+	"github.com/pelletier/go-toml"
 	"github.com/pkg/errors"
 )
 
@@ -493,6 +493,7 @@ func (m *Command) SetupServer() error {
 		pilosa.OptServerStorageConfig(m.Config.Storage),
 		pilosa.OptServerRowcacheOn(m.Config.RowcacheOn),
 		pilosa.OptServerRBFConfig(m.Config.RBFConfig),
+		pilosa.OptServerMaxQueryMemory(m.Config.MaxQueryMemory),
 		pilosa.OptServerQueryHistoryLength(m.Config.QueryHistoryLength),
 		discoOpt,
 	}
