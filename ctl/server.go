@@ -39,6 +39,7 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 	flags.Uint64Var(&srv.Config.MaxFileCount, "max-file-count", srv.Config.MaxFileCount, "Soft limit on the maximum number of fragment files FeatureBase keeps open simultaneously.")
 	flags.DurationVar((*time.Duration)(&srv.Config.LongQueryTime), "long-query-time", time.Duration(srv.Config.LongQueryTime), "Duration that will trigger log and stat messages for slow queries. Zero to disable.")
 	flags.IntVar(&srv.Config.QueryHistoryLength, "query-history-length", srv.Config.QueryHistoryLength, "Number of queries to remember in history.")
+	flags.Int64Var(&srv.Config.MaxQueryMemory, "max-query-memory", srv.Config.MaxQueryMemory, "Maximum memory allowed per Extract() or SELECT query.")
 
 	// TLS
 	SetTLSConfig(flags, "", &srv.Config.TLS.CertificatePath, &srv.Config.TLS.CertificateKeyPath, &srv.Config.TLS.CACertPath, &srv.Config.TLS.SkipVerify, &srv.Config.TLS.EnableClientVerification)

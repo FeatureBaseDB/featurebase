@@ -91,6 +91,7 @@ type Server struct { // nolint: maligned
 	confirmDownSleep    time.Duration
 	confirmDownRetries  int
 	syncer              holderSyncer
+	maxQueryMemory      int64
 
 	translationSyncer      TranslationSyncer
 	resetTranslationSyncCh chan struct{}
@@ -368,6 +369,14 @@ func OptServerQueryHistoryLength(length int) ServerOption {
 	}
 }
 
+// OptServerMaxQueryMemory sets the memory used per Extract() and SELECT query.
+func OptServerMaxQueryMemory(v int64) ServerOption {
+	return func(s *Server) error {
+		s.maxQueryMemory = v
+		return nil
+	}
+}
+
 // OptServerDisCo is a functional option on Server
 // used to set the Distributed Consensus implementation.
 func OptServerDisCo(disCo disco.DisCo,
@@ -449,8 +458,22 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	}
 	s.holderConfig.AntiEntropyInterval = s.antiEntropyInterval
 
+	memTotal, err := s.systemInfo.MemTotal()
+	if err != nil {
+		return nil, errors.Wrap(err, "mem total")
+	}
+
+	// Default memory to 20% of total.
+	maxQueryMemory := s.maxQueryMemory
+	if maxQueryMemory == 0 {
+		maxQueryMemory = int64(float64(memTotal) * .20)
+	}
+
 	// set up executor after server opts have been processed
-	executorOpts := []executorOption{optExecutorInternalQueryClient(s.defaultClient)}
+	executorOpts := []executorOption{
+		optExecutorInternalQueryClient(s.defaultClient),
+		optExecutorMaxMemory(maxQueryMemory),
+	}
 	if s.executorPoolSize > 0 {
 		executorOpts = append(executorOpts, optExecutorWorkerPoolSize(s.executorPoolSize))
 	}
