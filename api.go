@@ -1863,7 +1863,7 @@ func (api *API) IngestOperations(ctx context.Context, qcx *Qcx, indexName string
 			}
 		case "time":
 			if err = codec.AddTimeQuantumField(field.name, lookup); err != nil {
-				return fmt.Errorf("adding time field to codec: %w", err)
+				return fmt.Errorf("adding time quantum field to codec: %w", err)
 			}
 		case "mutex":
 			if err = codec.AddMutexField(field.name, lookup); err != nil {
@@ -1871,20 +1871,20 @@ func (api *API) IngestOperations(ctx context.Context, qcx *Qcx, indexName string
 			}
 		case "bool":
 			if err = codec.AddBoolField(field.name); err != nil {
-				return fmt.Errorf("adding mutex field to codec: %w", err)
+				return fmt.Errorf("adding bool field to codec: %w", err)
 			}
 		case "int":
 			if err = codec.AddIntField(field.name, lookup); err != nil {
-				return fmt.Errorf("adding mutex field to codec: %w", err)
+				return fmt.Errorf("adding int field to codec: %w", err)
 			}
 		case "decimal":
 			if err = codec.AddDecimalField(field.name, field.options.Scale); err != nil {
-				return fmt.Errorf("adding mutex field to codec: %w", err)
+				return fmt.Errorf("adding decimal field to codec: %w", err)
 			}
 		case "timestamp":
 			nanos := TimeUnitNanos(field.options.TimeUnit)
 			if err = codec.AddTimestampField(field.name, time.Duration(nanos), field.options.Base); err != nil {
-				return fmt.Errorf("adding mutex field to codec: %w", err)
+				return fmt.Errorf("adding timestamp field to codec: %w", err)
 			}
 		default:
 			return fmt.Errorf("unhandled field type %q", field.Type())
@@ -1894,7 +1894,7 @@ func (api *API) IngestOperations(ctx context.Context, qcx *Qcx, indexName string
 	if err != nil {
 		return errors.Wrap(err, "parsing input data")
 	}
-	sharded, err := req.Shard()
+	sharded, err := req.ByShard()
 	if err != nil {
 		return errors.Wrap(err, "sharding input data")
 	}
@@ -1983,7 +1983,7 @@ func (api *API) applyOperations(ctx context.Context, qcx *Qcx, index *Index, sha
 				return errors.Wrap(err, "importing existence columns")
 			}
 			switch field.Type() {
-			case "set", "time", "mutex":
+			case "set", "time", "mutex", "bool":
 				err = field.Import(qcx, fieldOp.Values, fieldOp.RecordIDs, fieldOp.Signed, shard, funcOpts...)
 			case "int", "timestamp", "decimal":
 				err = field.importValue(qcx, fieldOp.RecordIDs, fieldOp.Signed, shard, opts)

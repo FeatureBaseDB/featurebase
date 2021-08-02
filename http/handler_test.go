@@ -99,6 +99,7 @@ func TestIngestSchemaHandler(t *testing.T) {
 {
    "index-name": "example",
    "primary-key-type": "string",
+   "index-action": "create",
    "fields": [
        {
            "field-name": "idset",

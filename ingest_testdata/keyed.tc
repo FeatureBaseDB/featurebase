@@ -1,0 +1,32 @@
+schema:
+{
+    "index-name": "examplekeys",
+    "index-action": "create",
+    "primary-key-type": "string",
+    "fields": [
+        {
+            "field-name": "set",
+            "field-type": "id",
+            "field-options": { "cache-type": "none" }
+        }
+    ]
+}
+ingest:
+[
+  {
+    "action": "set",
+    "records": {
+      "a": {
+        "set": [ 2 ],
+      },
+      "b": {
+        "set": 3,
+      }
+    }
+  }
+]
+queries:
+Row(set=2)
+["a"]
+Union(Row(set=3),Row(set=2))
+["a","b"]

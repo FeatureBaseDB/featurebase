@@ -17,10 +17,10 @@ package pilosa_test
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
 	"errors"
 	"fmt"
 	"math"
+	"math/rand"
 	"reflect"
 	"strings"
 	"testing"
@@ -511,17 +511,27 @@ func TestAPI_Ingest(t *testing.T) {
 	}
 }
 
-func BenchmarkIngest(b *testing.B) {
-	b.StopTimer()
+// ingestBenchmarkHelper makes it easier to exclude this from benchmark computations
+// and profiles.
+func ingestBenchmarkHelper() []byte {
 	buf := &bytes.Buffer{}
 	buf.WriteString(`[{"action": "write", "records": {`)
 	comma := ""
+	now := time.Now().Add(-3840000 * time.Second)
 	for i := 0; i < 1000000; i++ {
-		fmt.Fprintf(buf, `%s"%d": { "set": [%d, %d] }`, comma, i, i%2, (i%4)+2)
+		then := now.Add(time.Duration(rand.Int63n(1234567)) * time.Second)
+		fmt.Fprintf(buf, `%s"%d": { "set": [%d, %d], "int": %d, "tq": { "time": "%s", "values": %d } }`, comma, i, i%2, (i%4)+2, rand.Int63n(163840),
+			then.Format(time.RFC3339), rand.Int63n(25))
 		comma = ", "
 	}
 	buf.WriteString(`}}]`)
 	data := buf.Bytes()
+	return data
+}
+
+func BenchmarkIngest(b *testing.B) {
+	b.StopTimer()
+	data := ingestBenchmarkHelper()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	c := test.MustRunCluster(b, 1,
@@ -541,11 +551,21 @@ func BenchmarkIngest(b *testing.B) {
 
 	index := "ingest"
 	setField := "set"
+	intField := "int"
+	tqField := "tq"
 	_, err := coord.API.CreateIndex(ctx, index, pilosa.IndexOptions{Keys: false})
 	if err != nil {
 		b.Fatalf("creating index: %v", err)
 	}
 	_, err = coord.API.CreateField(ctx, index, setField, pilosa.OptFieldTypeSet("none", 0))
+	if err != nil {
+		b.Fatalf("creating field: %v", err)
+	}
+	_, err = coord.API.CreateField(ctx, index, intField, pilosa.OptFieldTypeInt(0, 163840))
+	if err != nil {
+		b.Fatalf("creating field: %v", err)
+	}
+	_, err = coord.API.CreateField(ctx, index, tqField, pilosa.OptFieldTypeTime("YMDH"))
 	if err != nil {
 		b.Fatalf("creating field: %v", err)
 	}

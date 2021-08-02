@@ -2538,10 +2538,10 @@ func (f *fragment) bulkImportMutex(tx Tx, rowIDs, columnIDs []uint64, options *I
 	// pruned, (2) the input is sorted by row IDs and then column IDs,
 	// meaning that we will generate positions in strictly sequential order.
 	if !options.fullySorted {
-	p := parallelSlices{cols: columnIDs, rows: rowIDs}
-	p.fullPrune()
-	columnIDs = p.cols
-	rowIDs = p.rows
+		p := parallelSlices{cols: columnIDs, rows: rowIDs}
+		p.fullPrune()
+		columnIDs = p.cols
+		rowIDs = p.rows
 	}
 
 	// create a mask of columns we care about

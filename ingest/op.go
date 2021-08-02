@@ -17,6 +17,7 @@ package ingest
 import (
 	"fmt"
 	"math/bits"
+	"sort"
 
 	"github.com/molecula/featurebase/v2/shardwidth"
 )
@@ -98,6 +99,53 @@ type Operation struct {
 	FieldOps       map[string]*FieldOperation
 }
 
+// Compare reports whether two operations seem to be the same.
+func (got *Operation) Compare(expected *Operation) error {
+	if got == nil && expected == nil {
+		return nil
+	}
+	if got == nil {
+		return fmt.Errorf("expected %q op, got nil", expected.OpType)
+	}
+	if expected == nil {
+		return fmt.Errorf("expected no op, got %q", got.OpType)
+	}
+	if got.OpType != expected.OpType {
+		return fmt.Errorf("operation type mismatch: expected %q, got %q", expected.OpType, got.OpType)
+	}
+	if len(got.ClearRecordIDs) != len(expected.ClearRecordIDs) {
+		return fmt.Errorf("clear record counts differ: expected %d, got %d", len(expected.ClearRecordIDs), len(got.ClearRecordIDs))
+	}
+	for i, v1 := range got.ClearRecordIDs {
+		v2 := expected.ClearRecordIDs[i]
+		if v1 != v2 {
+			return fmt.Errorf("clear record id %d differs: expected %d, got %d", i, v2, v1)
+		}
+	}
+	if len(got.ClearFields) != len(expected.ClearFields) {
+		return fmt.Errorf("clear field counts differ: expected %d (%q), got %d (%q)", len(expected.ClearFields), expected.ClearFields, len(got.ClearFields), got.ClearFields)
+	}
+	for i, v1 := range got.ClearFields {
+		v2 := expected.ClearFields[i]
+		if v1 != v2 {
+			return fmt.Errorf("clear field %d differs: expected %q, got %q", i, v2, v1)
+		}
+	}
+	for k, fo1 := range got.FieldOps {
+		fo2 := expected.FieldOps[k]
+		if err := fo1.Compare(fo2); err != nil {
+			return fmt.Errorf("field %q mismatch: %w", k, err)
+		}
+	}
+	for k := range expected.FieldOps {
+		_, ok := got.FieldOps[k]
+		if !ok {
+			return fmt.Errorf("expected op for field %q, but none found", k)
+		}
+	}
+	return nil
+}
+
 // FieldOperation is the specific set of changes to make to a given
 // field.
 //
@@ -114,21 +162,22 @@ type FieldOperation struct {
 	Signed []int64
 }
 
-// Sort sorts the values by record ID. It is not a stable sort.
+// Sort sorts the clear record IDs and field list.
 func (o *Operation) Sort() {
 	// I am aware that this is a crime, but it avoids rewriting
 	// the code and justifies FieldOperation handling the "only record
 	// IDs" case.
 	f := FieldOperation{RecordIDs: o.ClearRecordIDs}
 	f.SortByRecords()
+	sort.Strings(o.ClearFields)
 }
 
 type ShardedFieldOperation map[uint64]*FieldOperation
 
-// Shard() divides the FieldOperation's values up into corresponding chunks
+// ByShard() divides the FieldOperation's values up into corresponding chunks
 // based on the shards of record IDs. Does not further sort IDs within those
 // chunks.
-func (f *FieldOperation) Shard() ShardedFieldOperation {
+func (f *FieldOperation) ByShard() ShardedFieldOperation {
 	if len(f.RecordIDs) == 0 {
 		return nil
 	}
@@ -478,6 +527,57 @@ func (f *FieldOperation) AddStampedPair(rec uint64, value uint64, stamp int64) {
 	f.Signed = append(f.Signed, stamp)
 }
 
+// Compare returns a diagnostic if the field operations do not seem
+// equivalent.
+func (got *FieldOperation) Compare(expected *FieldOperation) error {
+	if got == nil {
+		if expected == nil {
+			return nil
+		}
+		if len(expected.RecordIDs) == 0 && len(expected.Values) == 0 && len(expected.Signed) == 0 {
+			return nil
+		}
+		return fmt.Errorf("expected field operation with %d records, got nil", len(expected.RecordIDs))
+	}
+	if expected == nil {
+		if got == nil {
+			return nil
+		}
+		if len(got.RecordIDs) == 0 && len(got.Values) == 0 && len(got.Signed) == 0 {
+			return nil
+		}
+		return fmt.Errorf("expected empty field operation, got %d records", len(got.RecordIDs))
+	}
+	if len(got.RecordIDs) != len(expected.RecordIDs) {
+		return fmt.Errorf("record counts differ: expected %d, got %d", len(expected.RecordIDs), len(got.RecordIDs))
+	}
+	for i, v1 := range got.RecordIDs {
+		v2 := expected.RecordIDs[i]
+		if v1 != v2 {
+			return fmt.Errorf("record id %d differs: expected %d, got %d", i, v2, v1)
+		}
+	}
+	if len(got.Values) != len(expected.Values) {
+		return fmt.Errorf("value counts differ: expected %d, got %d", len(expected.Values), len(got.Values))
+	}
+	for i, v1 := range got.Values {
+		v2 := expected.Values[i]
+		if v1 != v2 {
+			return fmt.Errorf("value %d differs: expected %d, got %d", i, v2, v1)
+		}
+	}
+	if len(got.Signed) != len(expected.Signed) {
+		return fmt.Errorf("signed value counts differ: expected %d, got %d", len(expected.Signed), len(got.Signed))
+	}
+	for i, v1 := range got.Signed {
+		v2 := expected.Signed[i]
+		if v1 != v2 {
+			return fmt.Errorf("signed value %d differs: expected %d, got %d", i, v2, v1)
+		}
+	}
+	return nil
+}
+
 func translateUnsignedSlice(target []uint64, mapping []uint64) (err error) {
 	oops := 0
 	for i, v := range target {
@@ -544,8 +644,8 @@ type ShardedRequest struct {
 	Ops        map[uint64][]*Operation
 }
 
-// Shard converts a request into the same request, only sharded.
-func (r *Request) Shard() (*ShardedRequest, error) {
+// ByShard converts a request into the same request, only sharded.
+func (r *Request) ByShard() (*ShardedRequest, error) {
 	if len(r.Ops) == 0 {
 		return &ShardedRequest{Ops: nil}, nil
 	}
@@ -566,7 +666,7 @@ func (r *Request) Shard() (*ShardedRequest, error) {
 			}
 		}
 		for field, fieldOp := range op.FieldOps {
-			sharded := fieldOp.Shard()
+			sharded := fieldOp.ByShard()
 			sorter := fieldTypeSorts[r.FieldTypes[field]]
 			if sorter == nil {
 				sorter = (*FieldOperation).SortByRecords

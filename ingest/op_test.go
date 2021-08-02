@@ -124,7 +124,7 @@ var opShardingTestCases = []opShardingTestCase{
 
 func TestOpSharding(t *testing.T) {
 	for _, c := range opShardingTestCases {
-		sharded, err := c.input.Shard()
+		sharded, err := c.input.ByShard()
 		if err != nil {
 			t.Errorf("sharding: unexpected error %v", err)
 		}

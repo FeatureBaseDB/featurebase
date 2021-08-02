@@ -363,7 +363,7 @@ func (j *jsonFieldCodec) DecodeTimeValue(recID uint64, dataType jsonparser.Value
 		if err != nil {
 			return fmt.Errorf("parsing numeric timestamp: %w", err)
 		}
-		j.currentOp.AddSignedPair(recID, i64-j.epoch)
+		j.currentOp.AddSignedPair(recID, i64)
 	}
 	return nil
 }
@@ -464,6 +464,9 @@ func (codec *JSONCodec) ParseOperation(data []byte) (op *Operation, err error) {
 		}
 		return nil
 	})
+	if err != nil {
+		return nil, err
+	}
 	if op.OpType == OpNone {
 		return nil, fmt.Errorf("action not specified")
 	}
@@ -480,6 +483,11 @@ func (codec *JSONCodec) Parse(r io.Reader) (req *Request, err error) {
 	return codec.ParseBytes(data)
 }
 
+// ParseBytes reads a request from a slice of bytes. We need to use a
+// byte slice because jsonparser's model is fundamentally built around
+// being able to random-access the slice and return slices of it, so
+// it can't really admit functional streaming. If we need streaming, the
+// streaming needs to be at a higher level.
 func (codec *JSONCodec) ParseBytes(data []byte) (req *Request, err error) {
 	var ops []*Operation
 	var lastErr error
@@ -541,6 +549,10 @@ func (codec *JSONCodec) ParseBytes(data []byte) (req *Request, err error) {
 			continue
 		}
 		for field, fieldOp := range op.FieldOps {
+			if len(fieldOp.RecordIDs) == 0 {
+				delete(op.FieldOps, field)
+				continue
+			}
 			if keyMap != nil {
 				if err = fieldOp.TranslateKeys(keyMap); err != nil {
 					return nil, fmt.Errorf("mapping record keys for op on %q: %w", field, err)

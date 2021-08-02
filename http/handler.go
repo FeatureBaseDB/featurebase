@@ -581,7 +581,6 @@ func (r *successResponse) check(err error) (statusCode int) {
 	}
 
 	r.Success = false
-	fmt.Printf("err: %#v\n", err)
 	r.Error = &Error{Message: err.Error()}
 
 	return statusCode
@@ -1357,7 +1356,8 @@ func (h *Handler) handleIngestData(w http.ResponseWriter, r *http.Request) {
 
 type ingestSpec struct {
 	IndexName      string      `json:"index-name"`
-	IfNotExists    bool        `json:"if-not-exists"`
+	IndexAction    string      `json:"index-action"`
+	FieldAction    string      `json:"field-action"`
 	PrimaryKeyType string      `json:"primary-key-type"`
 	Fields         []fieldSpec `json:"fields"`
 }
@@ -1413,6 +1413,155 @@ func fieldSpecToFieldOption(fSpec fieldSpec) fieldOptions {
 	return opt
 }
 
+// applyOneIngestSchema applies a single ingestSpec, which specifies operations on
+// a single index and possibly fields. If it is successful, it returns the name
+// of the index and an empty slice (if it created the index), or the name of the
+// index and a slice of the fields within that index that it created. If it
+// is unsuccessful, it tries to delete whatever it created.
+//
+// The intended idiom is that if the returned list of fields isn't empty, the index
+// already existed and only those fields need to be cleaned up in the event of
+// a later error, but if the list of fields is empty, the entire index was new,
+// and should be cleaned up, in which case there's no need to track or delete
+// the specific fields separately.
+func (h *Handler) applyOneIngestSchema(ctx context.Context, schema *ingestSpec) (index *pilosa.Index, returnedFields []string, err error) {
+	// create index
+	indexName := schema.IndexName
+	var createdFields []string
+	var useKeys bool
+	switch schema.PrimaryKeyType {
+	case "string":
+		useKeys = true
+	case "uint":
+		useKeys = false
+	default:
+		return nil, nil, fmt.Errorf("invalid primary key type %q", schema.PrimaryKeyType)
+	}
+	opts := pilosa.IndexOptions{
+		Keys:           useKeys,
+		TrackExistence: true,
+	}
+	createdIndex := false
+
+	// We check this up here because, if there's at least one field but we don't know what to do with
+	// it, we will necessarily fail, which means we'd delete the index anyway, so there's no point in
+	// trying to create it. We don't care about this if there's no fields specified.
+	if len(schema.Fields) > 0 {
+		switch schema.FieldAction {
+		case "create", "ensure", "require":
+			// do nothing
+		case "":
+			schema.FieldAction = schema.IndexAction
+		default:
+			return nil, nil, fmt.Errorf("invalid field-action %q, expecting create/ensure/require", schema.FieldAction)
+		}
+	}
+
+	switch schema.IndexAction {
+	case "ensure", "require":
+		index, err = h.api.Index(ctx, indexName)
+		if err != nil {
+			if _, ok := err.(pilosa.NotFoundError); !ok {
+				return nil, nil, fmt.Errorf("checking for existing index %q: %w", indexName, err)
+			} else {
+				err = nil
+			}
+		}
+		if index != nil {
+			existingOpts := index.Options()
+			if existingOpts != opts {
+				return nil, nil, fmt.Errorf("index %q options mismatch: schema %#v, existing %#v", indexName, opts, existingOpts)
+			}
+			break
+		}
+		if schema.IndexAction == "require" {
+			return nil, nil, fmt.Errorf("index %q does not exist", indexName)
+		}
+		fallthrough
+	case "create":
+		index, err = h.api.CreateIndex(ctx, indexName, opts)
+		if err != nil {
+			return nil, nil, err
+		}
+		createdIndex = true
+	default:
+		return nil, nil, fmt.Errorf("invalid index-action %q, need create/ensure/require", schema.IndexAction)
+	}
+
+	// Now we might have an index, so we need our cleanup code.
+	defer func() {
+		if err == nil {
+			return
+		}
+		if createdIndex {
+			err := h.api.DeleteIndex(ctx, indexName)
+			if err != nil {
+				h.logger.Printf("trying to undo failed index %q creation: %v", indexName, err)
+			}
+			return
+		}
+		for _, field := range createdFields {
+			err := h.api.DeleteField(ctx, indexName, field)
+			if err != nil {
+				h.logger.Printf("trying to undo failed field %q creation in index %q: %v", field, indexName, err)
+			}
+		}
+	}()
+
+	// create all the fields specified in the index
+	for _, fSpec := range schema.Fields {
+		fieldName := fSpec.FieldName
+		opt := fieldSpecToFieldOption(fSpec)
+		err = opt.validate()
+		if err != nil {
+			return nil, nil, err
+		}
+		switch schema.FieldAction {
+		case "ensure", "require":
+			field, schemaErr := h.api.Field(ctx, indexName, fieldName)
+			if schemaErr != nil {
+				// NotFoundError is fine
+				if _, ok := schemaErr.(pilosa.NotFoundError); !ok {
+					return nil, nil, fmt.Errorf("checking for existing field %q in %q: %w", fieldName, indexName, err)
+				}
+			}
+			if field != nil {
+				existing := field.Options()
+				if opt.Type != existing.Type {
+					return nil, nil, fmt.Errorf("existing field %q is %q, not %q", fieldName, existing.Type, opt.Type)
+				}
+				if ((opt.Keys != nil) && *opt.Keys) != existing.Keys {
+					if existing.Keys {
+						return nil, nil, fmt.Errorf("existing field %q in %q uses keys", fieldName, indexName)
+					} else {
+						return nil, nil, fmt.Errorf("existing field %q in %q doesn't use keys", fieldName, indexName)
+					}
+				}
+				// TODO: verify compatibility of other field opts, this is sorta hard
+				break
+			}
+			if schema.FieldAction == "require" {
+				return nil, nil, fmt.Errorf("field %q does not exist in %q", fieldName, indexName)
+			}
+			fallthrough
+		case "create":
+			fos := fieldOptionsToFunctionalOpts(opt)
+			_, err = h.api.CreateField(ctx, indexName, fieldName, fos...)
+			if err != nil {
+				return nil, nil, fmt.Errorf("creating field %q in %q: %v", fieldName, indexName, err)
+			}
+			createdFields = append(createdFields, fieldName)
+		}
+	}
+	// we don't report the fields back, so we can distinguish "created index"
+	// from "created fields within index"
+	if createdIndex {
+		createdFields = nil
+	}
+
+	return index, createdFields, nil
+}
+
 func (h *Handler) handleIngestSchema(w http.ResponseWriter, r *http.Request) {
 	if !validHeaderAcceptJSON(r.Header) {
 		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
@@ -1424,93 +1573,60 @@ func (h *Handler) handleIngestSchema(w http.ResponseWriter, r *http.Request) {
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
 	schema := ingestSpec{}
-	err := dec.Decode(&schema)
-	if err != nil {
-		resp.write(w, err)
-		return
-	}
-
-	// create index
-	indexName := schema.IndexName
-	resp.Name = indexName
-	var useKeys bool
-	switch schema.PrimaryKeyType {
-	case "string":
-		useKeys = true
-	case "uint":
-		useKeys = false
-	default:
-		resp.write(w, errors.New("Invalid primary key type"))
-		return
-	}
-	req := postIndexRequest{
-		Options: pilosa.IndexOptions{
-			Keys:           useKeys,
-			TrackExistence: true,
-		},
-	}
-	index, err := h.api.CreateIndex(r.Context(), indexName, req.Options)
-	if index != nil {
-		resp.CreatedAt = index.CreatedAt()
-	}
-	if err != nil {
-		if _, ok := errors.Cause(err).(pilosa.ConflictError); ok {
-			if index, _ = h.api.Index(r.Context(), indexName); index != nil {
-				resp.CreatedAt = index.CreatedAt()
-			}
-			if schema.IfNotExists {
-				// if the user did intend to solely create an index if not exists i.e.
-				// by setting it to true, then we should return an "OK" status code
-				// if the index already exists. We might want to upsert the fields
-				// in future for the sake of better UX, but for the time being, let's
-				// stick to the expected behaviour in SQL dbs by simply ignoring the
-				// rest of the schema specification
-				resp.write(w, nil)
-			} else {
-				// user indicated that if index already exists and they attempt
-				// to create index with same name, then it should error out
-				resp.write(w, err)
-			}
-		} else {
-			resp.write(w, err)
-		}
-		return
-	}
-
-	// if any error occurs, rather than have a partially created index
-	// delete it entirely
-	var schemaErr error = nil
+	// if a key in cleanupIndexes points to a 0-length slice, the
+	// entire index should be cleaned; otherwise, only the named
+	// fields within that index should be cleaned.
+	cleanupIndexes := map[string][]string{}
+	var schemaErr error
 	defer func() {
+		// we set schemaErr in any case where we need to do cleanup
 		if schemaErr != nil {
-			_ = h.api.DeleteIndex(r.Context(), indexName)
+			for index, fields := range cleanupIndexes {
+				if len(fields) == 0 {
+					err := h.api.DeleteIndex(r.Context(), index)
+					if err != nil {
+						h.logger.Printf("deleting index %q after schema err: %v", index, err)
+					}
+				} else {
+					for _, field := range fields {
+						err := h.api.DeleteField(r.Context(), index, field)
+						if err != nil {
+							h.logger.Printf("deleting field %q from index %q after schema err: %v", field, index, err)
+						}
+					}
+				}
+			}
 		}
 	}()
-
-	// create all the fields specified in the index
-	for _, fSpec := range schema.Fields {
-		opt := fieldSpecToFieldOption(fSpec)
-		schemaErr = opt.validate()
-		if schemaErr != nil {
-			resp.write(w, schemaErr)
+	for dec.More() {
+		err := dec.Decode(&schema)
+		if err != nil {
+			resp.write(w, err)
 			return
 		}
-		fos := fieldOptionsToFunctionalOpts(opt)
-		_, schemaErr = h.api.CreateField(r.Context(), indexName, fSpec.FieldName, fos...)
-		if schemaErr != nil {
-			if _, ok := schemaErr.(pilosa.BadRequestError); ok {
-				http.Error(w, schemaErr.Error(), http.StatusBadRequest)
-			} else if _, ok = errors.Cause(schemaErr).(pilosa.ConflictError); ok {
-				// TODO how to handle conflict if field already created
-				// current approach is to error out
-				http.Error(w, schemaErr.Error(), http.StatusConflict)
-			} else {
-				http.Error(w, schemaErr.Error(), http.StatusBadRequest)
-			}
+		index, fields, err := h.applyOneIngestSchema(r.Context(), &schema)
+		if err != nil {
+			// if a previous schema created things, clean them up...
+			schemaErr = err
+			resp.write(w, err)
 			return
 		}
+		// we only have one slot to report these, sorry.
+		resp.Name = index.Name()
+		resp.CreatedAt = index.CreatedAt()
+		cleanupIndexes[index.Name()] = fields
 	}
-
-	resp.write(w, nil)
+	// if we got here, we have a cleanupIndexes which we want to return,
+	// so we want to do that *instead* of the successResponse we'd be
+	// using otherwise (ironically, to indicate an error)
+	var mapBody []byte
+	var err error
+  if mapBody, err = json.Marshal(cleanupIndexes); err != nil {
+		resp.write(w, err)
+	}
+	if _, err = w.Write(mapBody); err != nil {
+		h.logger.Printf("error trying to write response: %v", err)
+	}
 }
 
 type postFieldRequest struct {
