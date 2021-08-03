@@ -30,8 +30,8 @@ export const GroupBySort: FC<GroupBySortProps> = ({
     { label: 'Count (asc)', value: 'count asc' },
     { label: 'Sum (desc)', value: 'sum desc' },
     { label: 'Sum (asc)', value: 'sum asc' },
-    { label: 'Aggregate (desc)', value: 'aggregate desc' },
-    { label: 'Aggregate (asc)', value: 'aggregate asc' }
+    { label: 'Cardinality (desc)', value: 'aggregate desc' },
+    { label: 'Cardinality (asc)', value: 'aggregate asc' }
   ];
 
   const onPrimaryChange = (value: string) => {
