@@ -4,7 +4,8 @@ import css from './GroupBySort.module.scss';
 
 export type SortOption = {
   sortValue: string;
-  field?: string;
+  sum?: string;
+  aggregate?: string;
 };
 
 type GroupBySortProps = {
@@ -28,25 +29,23 @@ export const GroupBySort: FC<GroupBySortProps> = ({
     { label: 'Count (desc)', value: 'count desc' },
     { label: 'Count (asc)', value: 'count asc' },
     { label: 'Sum (desc)', value: 'sum desc' },
-    { label: 'Sum (asc)', value: 'sum asc' }
+    { label: 'Sum (asc)', value: 'sum asc' },
+    { label: 'Cardinality (desc)', value: 'aggregate desc' },
+    { label: 'Cardinality (asc)', value: 'aggregate asc' }
   ];
 
   const onPrimaryChange = (value: string) => {
     const split = value.split(' ');
-    const isSum = split[0] === 'sum';
-    const fieldValue = hasPrimary ? sort[0].field : undefined;
 
     if (!hasSecondary) {
-      onUpdate([{ sortValue: value, field: isSum ? fieldValue : undefined }]);
-    } else if (hasSecondary && sort[1].sortValue.includes(split[0])) {
-      onUpdate([{ sortValue: value, field: isSum ? fieldValue : undefined }]);
+      onUpdate([{ sortValue: value }]);
+    } else if (sort[1].sortValue.includes(split[0])) {
+      onUpdate([{ sortValue: value }]);
     } else {
-      onUpdate([
-        { sortValue: value, field: isSum ? fieldValue : undefined },
-        sort[1]
-      ]);
+      onUpdate([{ sortValue: value }, sort[1]]);
     }
   };
+
   const onSecondaryChange = (value: string) => {
     let sortOp = { sortValue: value };
 
@@ -56,15 +55,31 @@ export const GroupBySort: FC<GroupBySortProps> = ({
     onUpdate([sort[0], sortOp]);
   };
 
-  const onUpdateSumField = (isPrimary: boolean, value: string) => {
+  const renderFieldSelect = (
+    sortFor: 'primary' | 'secondary',
+    sortType: 'sum' | 'aggregate'
+  ) => {
+    const sortIdx = sortFor === 'primary' ? 0 : 1;
+
+    return (
+      <Select
+        className={css.fieldSelect}
+        label="Field"
+        value={sort[sortIdx][sortType] ? sort[sortIdx][sortType] : ''}
+        options={fields}
+        onChange={(value) => onUpdateField(sortType, sortIdx, value)}
+        error={showErrors ? !sort[sortIdx][sortType] : false}
+      />
+    );
+  };
+
+  const onUpdateField = (
+    sortType: 'sum' | 'aggregate',
+    sortIdx: number,
+    value: string
+  ) => {
     let clone = [...sort];
-
-    if (isPrimary) {
-      clone[0].field = value;
-    } else {
-      clone[1].field = value;
-    }
-
+    clone[sortIdx][sortType] = value;
     onUpdate(clone);
   };
 
@@ -79,16 +94,11 @@ export const GroupBySort: FC<GroupBySortProps> = ({
           allowEmpty={true}
         />
 
-        {primary.includes('sum') ? (
-          <Select
-            className={css.fieldSelect}
-            label="Field"
-            value={sort[0].field ? sort[0].field : ''}
-            options={fields}
-            onChange={(value) => onUpdateSumField(true, value)}
-            error={showErrors ? !sort[0].field : false}
-          />
-        ) : null}
+        {primary.includes('sum')
+          ? renderFieldSelect('primary', 'sum')
+          : primary.includes('aggregate')
+          ? renderFieldSelect('primary', 'aggregate')
+          : null}
       </div>
 
       {hasPrimary ? (
@@ -103,16 +113,11 @@ export const GroupBySort: FC<GroupBySortProps> = ({
             allowEmpty={true}
           />
 
-          {secondary.includes('sum') ? (
-            <Select
-              className={css.fieldSelect}
-              label="Field"
-              value={sort[1].field ? sort[1].field : ''}
-              options={fields}
-              onChange={(value) => onUpdateSumField(false, value)}
-              error={showErrors ? !sort[1].field : false}
-            />
-          ) : null}
+          {secondary.includes('sum')
+            ? renderFieldSelect('secondary', 'sum')
+            : secondary.includes('aggregate')
+            ? renderFieldSelect('secondary', 'aggregate')
+            : null}
         </div>
       ) : null}
     </div>
