@@ -935,7 +935,7 @@ func (f *Field) RowTime(tx Tx, rowID uint64, time time.Time, quantum string) (*R
 	if !TimeQuantum(quantum).Valid() {
 		return nil, ErrInvalidTimeQuantum
 	}
-	viewname := viewsByTime(viewStandard, time, TimeQuantum(quantum[len(quantum)-1:]))[0]
+	viewname := viewByTimeUnit(viewStandard, time, rune(quantum[len(quantum)-1]))
 	view := f.view(viewname)
 	if view == nil {
 		return nil, errors.Errorf("view with quantum %v not found.", quantum)
@@ -1492,20 +1492,38 @@ func (f *Field) Import(qcx *Qcx, rowIDs, columnIDs []uint64, timestamps []int64,
 	fieldType := f.Type()
 
 	// Split import data by fragment.
-	views := make(map[string]int)
-	var allData []importData
-	see := func(name string, columnID uint64, rowID uint64) {
+	views := make(map[string]*importData)
+	var timeStringBuf []byte
+	var timeViews [][]byte
+	if len(q) > 0 {
+		// We're supporting time quantums, so we need to store bits in a
+		// number of views for every entry with a timestamp. We want to compute
+		// time quantum view names for whatever combination of YMDH views
+		// we have. But we don't want to allocate four strings per entry, or
+		// recompute and recreate the entire string. We know that only the
+		// YYYYMMDDHH part of the string changes over time.
+		timeStringBuf = make([]byte, len(viewStandard) + 11)
+		copy(timeStringBuf, []byte(viewStandard))
+		copy(timeStringBuf[len(viewStandard):], []byte("_YYYYMMDDHH"))
+		// Now we have a buffer that contains
+		// `standard_YYYYMMDDHH`. We also need storage space to hold several
+		// slice headers, one per entry in q. These will hold the view names
+		// corresponding to each letter in q.
+		timeViews = make([][]byte, len(q))
+	}
+	// This helper function records that a given column/row pair is relevant
+	// to a specific view. We use a map lookup for the strings, but do the
+	// actual operations using a slice so we're only writing each map entry
+	// once, not once on every update.
+	see := func(name []byte, columnID uint64, rowID uint64) {
 		var ok bool
-		var idx int
-		if idx, ok = views[name]; !ok {
-			allData = append(allData, importData{})
-			idx = len(allData)
-			views[name] = idx
+		var data *importData
+		if data, ok = views[string(name)]; !ok {
+			data = &importData{}
+			views[string(name)] = data
 		}
-		data := allData[idx]
 		data.RowIDs = append(data.RowIDs, rowID)
 		data.ColumnIDs = append(data.ColumnIDs, columnID)
-		allData[idx] = data
 	}
 	for i := range rowIDs {
 		rowID, columnID := rowIDs[i], columnIDs[i]
@@ -1520,13 +1538,15 @@ func (f *Field) Import(qcx *Qcx, rowIDs, columnIDs []uint64, timestamps []int64,
 		// attach bit to standard view unless we have a timestamp and
 		// have the NoStandardView option set
 		if !hasTime || !f.options.NoStandardView {
-			see(viewStandard, columnID, rowID)
+			see([]byte(viewStandard), columnID, rowID)
 		}
 		if hasTime {
-			// attach bit to all the views for this timestamp
-			views := viewsByTime(viewStandard, time.Unix(0, timestamps[i]).UTC(), q)
-			for _, view := range views {
-				see(view, columnID, rowID)
+			// attach bit to all the views for this timestamp. note that the
+			// `timeViews` slice gets resliced and reused by this process, so
+			// we don't have to allocate millions of tiny slices of slice headers.
+			timeViews = viewsByTimeInto(timeStringBuf, timeViews, time.Unix(0, timestamps[i]).UTC(), q)
+			for _, v := range timeViews {
+				see(v, columnID, rowID)
 			}
 		}
 	}
@@ -1536,8 +1556,7 @@ func (f *Field) Import(qcx *Qcx, rowIDs, columnIDs []uint64, timestamps []int64,
 	}
 	var err1 error
 	defer finisher(&err1)
-	for viewName, idx := range views {
-		data := allData[idx]
+	for viewName, data := range views {
 		view, err := f.createViewIfNotExists(viewName)
 		if err != nil {
 			return errors.Wrapf(err, "creating view %s", viewName)

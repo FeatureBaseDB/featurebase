@@ -83,6 +83,38 @@ func TestViewsByTime(t *testing.T) {
 	})
 }
 
+func TestViewsByTimeInto(t *testing.T) {
+	ts := time.Date(2000, time.January, 2, 3, 4, 5, 6, time.UTC)
+	s := []byte("F_YYYYMMDDHH")
+	var timeViews [][]byte
+
+	t.Run("YMDH", func(t *testing.T) {
+		a := viewsByTime("F", ts, mustParseTimeQuantum("YMDH"))
+		b := viewsByTimeInto(s, timeViews, ts, mustParseTimeQuantum("YMDH"))
+		if len(a) != len(b) {
+			t.Fatalf("mismatch: viewsByTime: %q, viewsByTimeInto: %q", a, b)
+		}
+		for i := range a {
+			if a[i] != string(b[i]) {
+				t.Fatalf("mismatch: viewsByTime: %q, viewsByTimeInto: %q", a, b)
+			}
+		}
+	})
+
+	t.Run("D", func(t *testing.T) {
+		a := viewsByTime("F", ts, mustParseTimeQuantum("D"))
+		b := viewsByTimeInto(s, timeViews, ts, mustParseTimeQuantum("D"))
+		if len(a) != len(b) {
+			t.Fatalf("mismatch: viewsByTime: %q, viewsByTimeInto: %q", a, b)
+		}
+		for i := range a {
+			if a[i] != string(b[i]) {
+				t.Fatalf("mismatch: viewsByTime: %q, viewsByTimeInto: %q", a, b)
+			}
+		}
+	})
+}
+
 // Ensure sets of fields can be returned for a given time range.
 func TestViewsByTimeRange(t *testing.T) {
 	t.Run("Y", func(t *testing.T) {
