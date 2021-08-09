@@ -164,7 +164,7 @@ func (db *DB) openWAL() (err error) {
 		return fmt.Errorf("open wal mmap file: %w", err)
 	} else if db.wal, err = syswrap.Mmap(int(f.Fd()), 0, int(db.cfg.MaxWALSize), syscall.PROT_READ, syscall.MAP_SHARED); err != nil {
 		f.Close()
-		return fmt.Errorf("open wal mmap file: %w", err)
+		return fmt.Errorf("map wal mmap file: %w", err)
 	} else if err := f.Close(); err != nil {
 		return fmt.Errorf("cannot close wal mmap file: %w", err)
 	}
