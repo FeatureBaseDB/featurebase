@@ -20,6 +20,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"syscall"
+	"strings"
 
 	"github.com/pkg/errors"
 )
@@ -56,6 +57,9 @@ func Mmap(fd int, offset int64, length int, prot int, flags int) (data []byte, e
 	data, err = syscall.Mmap(fd, offset, length, prot, flags)
 	if err != nil {
 		atomic.AddUint64(&mapCount, ^uint64(0)) // decrement
+		if strings.Contains(err.Error(), "cannot allocate memory") {
+			err = errors.New("mmap 'cannot allocate memory' — please see the troubleshooting how-to in the FeatureBase docs.")
+		}
 	}
 	return data, err
 }
