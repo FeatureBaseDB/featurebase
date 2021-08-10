@@ -35,6 +35,7 @@ import (
 	"time"
 
 	"github.com/molecula/featurebase/v2/disco"
+	"github.com/molecula/featurebase/v2/ingest"
 	"github.com/molecula/featurebase/v2/pql"
 	"github.com/molecula/featurebase/v2/roaring"
 	"github.com/molecula/featurebase/v2/stats"
@@ -1815,6 +1816,180 @@ func (api *API) ImportValueWithTx(ctx context.Context, qcx *Qcx, req *ImportValu
 	return nil
 }
 
+func (api *API) IngestOperations(ctx context.Context, qcx *Qcx, indexName string, stream io.Reader) error {
+	span, _ := tracing.StartSpanFromContext(ctx, "API.IngestOperations")
+	defer span.Finish()
+
+	if err := api.validate(apiIngestOperations); err != nil {
+		return errors.Wrap(err, "validating api method")
+	}
+
+	// Find the Index.
+	index := api.holder.Index(indexName)
+	if index == nil {
+		api.server.logger.Errorf("ingest: no such index %q", indexName)
+		return newNotFoundError(ErrIndexNotFound, indexName)
+	}
+	fields := index.Fields()
+	var lookup ingest.KeyLookupFunc
+	if index.Keys() {
+		lookup = func(keys ...string) (map[string]uint64, error) {
+			return api.cluster.createIndexKeys(ctx, indexName, keys...)
+		}
+	}
+	codec, err := ingest.NewJSONCodec(lookup)
+	if err != nil {
+		return errors.Wrap(err, "creating JSON codec")
+	}
+	knownFields := map[string]*Field{}
+	for _, field := range fields {
+		var lookup ingest.KeyLookupFunc
+		if field.usesKeys {
+			lookup = field.translateStore.CreateKeys
+		}
+		knownFields[field.name] = field
+		switch field.Type() {
+		case "set":
+			if err = codec.AddSetField(field.name, lookup); err != nil {
+				return fmt.Errorf("adding set field to codec: %w", err)
+			}
+		case "time":
+			if err = codec.AddTimeQuantumField(field.name, lookup); err != nil {
+				return fmt.Errorf("adding time field to codec: %w", err)
+			}
+		case "mutex":
+			if err = codec.AddMutexField(field.name, lookup); err != nil {
+				return fmt.Errorf("adding mutex field to codec: %w", err)
+			}
+		case "bool":
+			if err = codec.AddBoolField(field.name); err != nil {
+				return fmt.Errorf("adding mutex field to codec: %w", err)
+			}
+		case "int":
+			if err = codec.AddIntField(field.name, lookup); err != nil {
+				return fmt.Errorf("adding mutex field to codec: %w", err)
+			}
+		case "decimal":
+			if err = codec.AddDecimalField(field.name, field.options.Scale); err != nil {
+				return fmt.Errorf("adding mutex field to codec: %w", err)
+			}
+		case "timestamp":
+			nanos := TimeUnitNanos(field.options.TimeUnit)
+			if err = codec.AddTimestampField(field.name, time.Duration(nanos), field.options.Base); err != nil {
+				return fmt.Errorf("adding mutex field to codec: %w", err)
+			}
+		default:
+			return fmt.Errorf("unhandled field type %q", field.Type())
+		}
+	}
+	req, err := codec.Parse(stream)
+	if err != nil {
+		return errors.Wrap(err, "parsing input data")
+	}
+	sharded, err := req.Shard()
+	if err != nil {
+		return errors.Wrap(err, "sharding input data")
+	}
+	eg, ctx := errgroup.WithContext(ctx)
+	for shard, ops := range sharded.Ops {
+		// loop variable shadow capture is the go equivalent of man door hook hand
+		shard, ops := shard, ops
+		eg.Go(func() error {
+			return api.applyOperations(ctx, qcx, index, shard, knownFields, ops)
+		})
+	}
+	return eg.Wait()
+}
+
+// applyOperations applies a set of operations to one specific shard.
+func (api *API) applyOperations(ctx context.Context, qcx *Qcx, index *Index, shard uint64, fields map[string]*Field, ops []*ingest.Operation) error {
+	// For each operation, we may have a set of records/fields to clear, and then
+	// also a set of fields to set/remove specific bits in.
+	opts := &ImportOptions{Presorted: true, IgnoreKeyCheck: true}
+	funcOpts := []ImportOption{OptImportOptionsIgnoreKeyCheck(true), OptImportOptionsPresorted(true), OptImportOptionsClear(true)}
+	for _, op := range ops {
+		// ClearRecordIDs should exist only for delete, clear, and write. For clear and write,
+		// we'll have a list of fields, for delete, it should be all the fields.
+		if len(op.ClearRecordIDs) > 0 {
+			// anonymous func lets us defer a finisher from any of the inner error returns
+			err := func() (e0 error) {
+				// WARNING: Depends on GetTx being per-shard/index, not per-field.
+				tx, finisher, err := qcx.GetTx(Txo{Write: true, Index: index, Shard: shard})
+				if err != nil {
+					return fmt.Errorf("getting Tx: %w", err)
+				}
+				defer finisher(&e0)
+				// For a delete, we don't look at the fields the codec was defined with,
+				// We delete from the existence field unconditionally and other fields
+				// if we know they exist.
+				if op.OpType == ingest.OpDelete {
+					err = clearExistenceColumns(qcx, index, op.ClearRecordIDs, shard)
+					if err != nil {
+						return fmt.Errorf("clearing existence columns: %w", err)
+					}
+					for name, field := range fields {
+						if err = field.ClearBits(tx, shard, op.ClearRecordIDs...); err != nil {
+							return fmt.Errorf("clearing field %q: %w", name, err)
+						}
+					}
+					return nil
+				}
+				// clear things that we need to wipe out, whether it's because
+				// this is a Clear op, or because it's a write op that
+				// specifies clears for the fields it's going to write to.
+				if len(op.ClearFields) > 0 {
+					for _, fieldName := range op.ClearFields {
+						field, ok := fields[fieldName]
+						if !ok {
+							return fmt.Errorf("can't find a field named %q", fieldName)
+						}
+						if err = field.ClearBits(tx, shard, op.ClearRecordIDs...); err != nil {
+							return fmt.Errorf("clearing record IDs: %w", err)
+						}
+					}
+				}
+				return nil
+			}()
+			if err != nil {
+				return err
+			}
+		}
+		opts.Clear = (op.OpType == ingest.OpRemove)
+		// reslice this rather than regenerating it. i'm so efficient.
+		if opts.Clear {
+			funcOpts = funcOpts[:3]
+		} else {
+			funcOpts = funcOpts[:2]
+		}
+		// for "set" and "write" ops, we'll be setting bits, for
+		// "remove" ops we'll be clearing them, and for "clear" ops
+		// there shouldn't be anything here.
+		for fieldName, fieldOp := range op.FieldOps {
+			field, ok := fields[fieldName]
+			if !ok {
+				return fmt.Errorf("can't find a field named %q", fieldName)
+			}
+			var err error
+			err = importExistenceColumns(qcx, index, fieldOp.RecordIDs, shard)
+			if err != nil {
+				return errors.Wrap(err, "importing existence columns")
+			}
+			switch field.Type() {
+			case "set", "time", "mutex":
+				err = field.Import(qcx, fieldOp.Values, fieldOp.RecordIDs, fieldOp.Signed, shard, funcOpts...)
+			case "int", "timestamp", "decimal":
+				err = field.importValue(qcx, fieldOp.RecordIDs, fieldOp.Signed, shard, opts)
+			default:
+				err = fmt.Errorf("unhandled field type %q", field.Type())
+			}
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 func importExistenceColumns(qcx *Qcx, index *Index, columnIDs []uint64, shard uint64) error {
 	ef := index.existenceField()
 	if ef == nil {
@@ -1829,6 +2004,22 @@ func importExistenceColumns(qcx *Qcx, index *Index, columnIDs []uint64, shard ui
 	columnCopy := make([]uint64, len(columnIDs))
 	copy(columnCopy, columnIDs)
 	return ef.Import(qcx, existenceRowIDs, columnCopy, nil, shard)
+}
+
+func clearExistenceColumns(qcx *Qcx, index *Index, columnIDs []uint64, shard uint64) error {
+	ef := index.existenceField()
+	if ef == nil {
+		return nil
+	}
+
+	existenceRowIDs := make([]uint64, len(columnIDs))
+	// If we don't gratuitously hand-duplicate things in field.Import,
+	// the fact that fragment.bulkImport rewrites its row and column
+	// lists can burn us if we don't make a copy before doing the
+	// existence field write.
+	columnCopy := make([]uint64, len(columnIDs))
+	copy(columnCopy, columnIDs)
+	return ef.Import(qcx, existenceRowIDs, columnCopy, nil, shard, OptImportOptionsClear(true))
 }
 
 // ShardDistribution returns an object representing the distribution of shards
@@ -2513,6 +2704,7 @@ const (
 	apiIDCommit
 	apiIDReset
 	apiPartitionNodes
+	apiIngestOperations
 )
 
 var methodsCommon = map[apiMethod]struct{}{
@@ -2580,4 +2772,5 @@ var methodsNormal = map[apiMethod]struct{}{
 	apiIDCommit:             {},
 	apiIDReset:              {},
 	apiPartitionNodes:       {},
+	apiIngestOperations:     {},
 }

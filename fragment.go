@@ -1741,7 +1741,7 @@ func (f *fragment) pos(rowID, columnID uint64) (uint64, error) {
 	// Return an error if the column ID is out of the range of the fragment's shard.
 	minColumnID := f.shard * ShardWidth
 	if columnID < minColumnID || columnID >= minColumnID+ShardWidth {
-		return 0, errors.Errorf("column:%d out of bounds", columnID)
+		return 0, errors.Errorf("column:%d out of bounds for shard %d", columnID, f.shard)
 	}
 	return pos(rowID, columnID), nil
 }
@@ -2579,6 +2579,32 @@ func (f *fragment) bulkImportMutex(tx Tx, rowIDs, columnIDs []uint64) error {
 		toClear = sliceDifference(toClear, toSet)
 	}
 	return errors.Wrap(f.importPositions(tx, toSet, toClear, rowSet), "importing positions")
+}
+
+// ClearRecords deletes all bits for the given records. It's basically
+// the remove-only part of setting a mutex.
+func (f *fragment) ClearRecords(tx Tx, recordIDs []uint64) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	// create a mask of columns we care about
+	columns := roaring.NewSliceBitmap(recordIDs...)
+
+	// we now need to find existing rows for these bits.
+	rowSet := make(map[uint64]struct{})
+	var toClear []uint64
+	callback := func(pos uint64) error {
+		toClear = append(toClear, pos)
+		rowID := pos / ShardWidth
+		rowSet[rowID] = struct{}{}
+		return nil
+	}
+	findExisting := roaring.NewBitmapBitmapFilter(columns, callback)
+	err := tx.ApplyFilter(f.index(), f.field(), f.view(), f.shard, 0, findExisting)
+	if err != nil {
+		return errors.Wrap(err, "finding existing positions")
+	}
+	return errors.Wrap(f.importPositions(tx, nil, toClear, rowSet), "clearing records")
 }
 
 // importValue bulk imports a set of range-encoded values.

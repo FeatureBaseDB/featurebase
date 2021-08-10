@@ -200,6 +200,61 @@ func (c *InternalClient) Schema(ctx context.Context) ([]*pilosa.IndexInfo, error
 	}
 	return rsp.Indexes, nil
 }
+
+// IngestSchema uses the new schema ingest endpoint.
+func (c *InternalClient) IngestSchema(ctx context.Context, uri *pnet.URI, buf []byte) error {
+	if uri == nil {
+		uri = c.defaultURI
+	}
+	u := uri.Path("/internal/schema")
+	req, err := http.NewRequest("POST", u, bytes.NewReader(buf))
+	if err != nil {
+		return errors.Wrap(err, "creating request")
+	}
+
+	req.Header.Set("Content-Length", strconv.Itoa(len(buf)))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+
+	resp, err := c.executeRequest(req.WithContext(ctx))
+	if err != nil {
+		return errors.Wrap(err, "executing request")
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return errors.Errorf("unexpected status code: %s", resp.Status)
+	}
+	return nil
+}
+
+// IngestOperations uses the new ingest endpoint for ingest data
+func (c *InternalClient) IngestOperations(ctx context.Context, uri *pnet.URI, indexName string, buf []byte) error {
+	if uri == nil {
+		uri = c.defaultURI
+	}
+	u := uri.Path(fmt.Sprintf("/internal/ingest/%s", indexName))
+	req, err := http.NewRequest("POST", u, bytes.NewReader(buf))
+	if err != nil {
+		return errors.Wrap(err, "creating request")
+	}
+
+	req.Header.Set("Content-Length", strconv.Itoa(len(buf)))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+
+	resp, err := c.executeRequest(req.WithContext(ctx))
+	if err != nil {
+		return errors.Wrap(err, "executing request")
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return errors.Errorf("unexpected status code: %s", resp.Status)
+	}
+	return nil
+}
+
 func (c *InternalClient) PostSchema(ctx context.Context, uri *pnet.URI, s *pilosa.Schema, remote bool) error {
 	u := uri.Path(fmt.Sprintf("/schema?remote=%v", remote))
 	buf, err := json.Marshal(s)

@@ -1178,6 +1178,29 @@ func (f *Field) ClearBit(tx Tx, rowID, colID uint64) (changed bool, err error) {
 	return changed, nil
 }
 
+// ClearBits clears all bits corresponding to the given record IDs in standard
+// or BSI views. It does not delete bits from time quantum views.
+func (f *Field) ClearBits(tx Tx, shard uint64, recordIDs ...uint64) error {
+	bsig := f.bsiGroup(f.name)
+	var v *view
+	if bsig != nil {
+		// looks like we're a BSI field?
+		v = f.view(viewBSIGroupPrefix + f.name)
+	} else {
+		v = f.view(viewStandard)
+	}
+	// it's fine if we never actually created the view, that means the
+	// bits are all clear!
+	if v == nil {
+		return nil
+	}
+	frag := v.Fragment(shard)
+	if frag == nil {
+		return nil
+	}
+	return frag.ClearRecords(tx, recordIDs)
+}
+
 func groupCompare(a, b string, offset int) (lt, eq bool) {
 	if len(a) > offset {
 		a = a[:offset]
