@@ -5939,6 +5939,7 @@ func (e *executor) mapperLocal(ctx context.Context, shards []uint64, mapFn mapFu
 	ch := make(chan mapResponse, len(shards))
 
 	expected := 0
+	shardLoop:
 	for _, shard := range shards {
 		j := job{
 			shard:           shard,
@@ -5949,7 +5950,7 @@ func (e *executor) mapperLocal(ctx context.Context, shards []uint64, mapFn mapFu
 		}
 		select {
 		case <-done:
-			break
+			break shardLoop
 		case e.work <- j:
 			expected++
 		}
