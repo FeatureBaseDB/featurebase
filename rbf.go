@@ -542,7 +542,7 @@ func (w *RbfDBWrapper) DeleteField(index, field, fieldPath string) error {
 func (w *RbfDBWrapper) DeleteIndex(indexName string) error {
 
 	if strings.Contains(indexName, "'") {
-		return fmt.Errorf("error: bad indexName `%v` in RbfDBWrapper.DeleteIndex() call: indexName cannot contain apostrophes/single quotes.", indexName)
+		return fmt.Errorf("error: bad indexName `%v` in RbfDBWrapper.DeleteIndex() call: indexName cannot contain apostrophes/single quotes", indexName)
 	}
 	prefix := txkey.IndexOnlyPrefix(indexName)
 

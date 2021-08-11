@@ -257,16 +257,16 @@ func parsePartialTime(t string) (time.Time, error) {
 			// has minutes
 			minute, err = strconv.Atoi(subStrings[1])
 			if err != nil {
-				return -1, -1, errors.New("Invalid Time")
+				return -1, -1, errors.New("invalid time")
 			}
 			fallthrough
 		case 1:
 			hour, err = strconv.Atoi(subStrings[0])
 			if err != nil {
-				return -1, -1, errors.New("Invalid Time")
+				return -1, -1, errors.New("invalid time")
 			}
 		default:
-			return -1, -1, errors.New("Invalid Time")
+			return -1, -1, errors.New("invalid time")
 		}
 
 		return
@@ -282,7 +282,7 @@ func parsePartialTime(t string) (time.Time, error) {
 			return true
 		}
 		if len(subMatches) <= 1 {
-			return nil, errors.New("Invalid time")
+			return nil, errors.New("invalid time")
 		}
 		// ignore full match which is at index 0
 		subMatches = subMatches[1:] // ignore full match which is at index 0
@@ -295,7 +295,7 @@ func parsePartialTime(t string) (time.Time, error) {
 			} else {
 				// rest must be empty for date-time to be valid
 				if !restAreEmpty(subMatches[i:]) {
-					return nil, errors.New("Invalid date-time")
+					return nil, errors.New("invalid date-time")
 				}
 				break
 			}
