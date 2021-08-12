@@ -1346,6 +1346,11 @@ func (srv *Server) GetTransaction(ctx context.Context, id string, remote bool) (
 	return trns, nil
 }
 
+// Executor returns the executor attached to the server. For testing only.
+func (s *Server) Executor() *executor {
+	return s.executor
+}
+
 // countOpenFiles on operating systems that support lsof.
 func countOpenFiles() (int, error) {
 	switch runtime.GOOS {
