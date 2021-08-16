@@ -35,6 +35,7 @@ import (
 	pnet "github.com/molecula/featurebase/v2/net"
 	rbfcfg "github.com/molecula/featurebase/v2/rbf/cfg"
 	"github.com/molecula/featurebase/v2/roaring"
+	"github.com/molecula/featurebase/v2/sql2"
 	"github.com/molecula/featurebase/v2/stats"
 	"github.com/molecula/featurebase/v2/storage"
 	"github.com/molecula/featurebase/v2/topology"
@@ -1346,9 +1347,13 @@ func (srv *Server) GetTransaction(ctx context.Context, id string, remote bool) (
 	return trns, nil
 }
 
-// Executor returns the executor attached to the server. For testing only.
-func (s *Server) Executor() *executor {
-	return s.executor
+// PlanSQL parses and prepares a SQL statement.
+func (s *Server) PlanSQL(ctx context.Context, q string) (*Stmt, error) {
+	st, err := sql2.NewParser(strings.NewReader(q)).ParseStatement()
+	if err != nil {
+		return nil, err
+	}
+	return NewPlanner(s.executor).PlanStatement(ctx, st)
 }
 
 // countOpenFiles on operating systems that support lsof.

@@ -16,11 +16,9 @@ package pilosa_test
 
 import (
 	"context"
-	"strings"
 	"testing"
 
 	"github.com/molecula/featurebase/v2"
-	"github.com/molecula/featurebase/v2/sql2"
 	"github.com/molecula/featurebase/v2/test"
 )
 
@@ -51,13 +49,7 @@ func TestPlanner_Count(t *testing.T) {
 
 	// Parse SQL into AST.
 	q := `SELECT COUNT(*) AS "count" FROM i`
-	st, err := sql2.NewParser(strings.NewReader(q)).ParseStatement()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Generate a prepared statement with the execution plan.
-	stmt, err := pilosa.NewPlanner(c.GetNode(0).Server.Executor()).PlanStatement(context.Background(), st)
+	stmt, err := c.GetNode(0).Server.PlanSQL(context.Background(), q)
 	if err != nil {
 		t.Fatal(err)
 	}

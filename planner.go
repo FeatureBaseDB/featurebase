@@ -100,7 +100,7 @@ func (p *Planner) planAggregateSelectStatement(ctx context.Context, stmt *sql2.S
 }
 
 func (p *Planner) planNonAggregateSelectStatement(ctx context.Context, stmt *sql2.SelectStatement) (_ StmtNode, err error) {
-	panic("TODO: Implement non-aggregate SELECT")
+	return nil, fmt.Errorf("cannot plan non-aggregate SELECT query")
 }
 
 type Stmt struct {
