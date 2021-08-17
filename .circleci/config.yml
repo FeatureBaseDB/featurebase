@@ -131,7 +131,7 @@ jobs:
     steps:
       - checkout-plus
       - skip-if-root-unchanged
-      - run: sudo apt-get update
+      - run: sudo apt-get update --allow-releaseinfo-change -y
       - run: sudo apt-get install lsof
       - run:
           command: make << parameters.test_make_target >> SHARD_WIDTH=<< parameters.shard_width >> GOARCH=<< parameters.goarch >>
@@ -145,7 +145,7 @@ jobs:
     steps:
       - checkout-plus
       - skip-if-root-unchanged
-      - run: sudo apt-get update
+      - run: sudo apt-get update --allow-releaseinfo-change -y
       - run: sudo apt-get install postgresql-client
       - run: (for i in `seq 1 20`; do pg_isready -h localhost && exit 0 || sleep 1; done; exit 1)
       - run:
