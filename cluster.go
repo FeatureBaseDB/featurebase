@@ -1165,6 +1165,9 @@ func (c *cluster) followResizeInstruction(ctx context.Context, instr *ResizeInst
 		}
 	}
 
+	// fire off translation sync
+	_ = c.translationSyncer.Reset()
+
 	return nil
 }
 
@@ -1179,6 +1182,8 @@ func (c *cluster) resizeAbort() error {
 	if c.resizeCancel != nil {
 		c.resizeCancel()
 	}
+	// fire off translation sync
+	_ = c.translationSyncer.Reset()
 	return nil
 }
 

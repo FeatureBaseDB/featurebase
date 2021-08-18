@@ -1472,7 +1472,10 @@ type holderSyncer struct {
 	Cluster *cluster
 
 	// Translation sync handling.
-	readers []TranslateEntryReader
+	readers                     []TranslateEntryReader
+	readersMu                   sync.Mutex
+	pendingReaders              int
+	stopInitializeReplicationCh chan struct{}
 
 	syncers errgroup.Group
 
@@ -1596,6 +1599,23 @@ func (s *holderSyncer) syncFragment(index, field, view string, shard uint64) err
 
 // resetTranslationSync reinitializes streaming sync of translation data.
 func (s *holderSyncer) resetTranslationSync() error {
+	if s.stopInitializeReplicationCh == nil {
+		// suppose stopTranslationSync[S] holds the lock s.readersMu and tries
+		// to send a signal to s.stopInitializeRepliationCh. If
+		// s.stopInitializeReplicationCh is unbufferd and
+		// s.initializeReplication[I] is trying to acquire s.readersMu, this
+		// will result in a deadlock.
+		// Hence, the channel is buffered to prevent this scenario. Once
+		// [S] releases the lock, [I] will acquire it, however, the value
+		// of s.pendingReaders will be -1, at this point [I] should not
+		// attempt to add any more readers since those readers will be 'stale'
+		// [I] should also drain the channel to prevent the next invocation
+		// of [I] receiving a stop signal that was meant for the current one
+		// This is needlessly complicated and is the result of me running
+		// into various deadlocks while trying to fix handling of column
+		// key replication.
+		s.stopInitializeReplicationCh = make(chan struct{})
+	}
 	// Stop existing streams.
 	if err := s.stopTranslationSync(); err != nil {
 		return errors.Wrap(err, "stop translation sync")
@@ -1655,7 +1675,15 @@ func newActiveTranslationSyncer(ch chan struct{}) *activeTranslationSyncer {
 
 // Reset resets the server's translation syncer.
 func (a *activeTranslationSyncer) Reset() error {
-	a.ch <- struct{}{}
+	// just in case some other part of the code has fired
+	// off a translation sync and it hasn't been received yet
+	// therefore we don't want to block on send since a.ch is
+	// (for now) unbuffered. One translationSync is as good as
+	// another
+	select {
+	case a.ch <- struct{}{}:
+	default:
+	}
 	return nil
 }
 
@@ -1665,6 +1693,17 @@ func (a *activeTranslationSyncer) Reset() error {
 // to complete. This should be called before reconnecting to the cluster in case
 // of a cluster resize or schema change.
 func (s *holderSyncer) stopTranslationSync() error {
+	s.readersMu.Lock()
+	defer func() {
+		s.readers = nil // will be populated by initializeReplication
+		s.readersMu.Unlock()
+	}()
+	// send signal to stop initializing more readers
+	if s.pendingReaders > 0 {
+		s.pendingReaders = -1
+		close(s.stopInitializeReplicationCh)
+		s.stopInitializeReplicationCh = make(chan struct{})
+	}
 	var g errgroup.Group
 	for i := range s.readers {
 		rd := s.readers[i]
@@ -1724,7 +1763,6 @@ func (s *holderSyncer) setTranslateReadOnlyFlags(snap *topology.ClusterSnapshot)
 // replicate these from whichever node is primary for that partition).
 func (s *holderSyncer) initializeReplication(snap *topology.ClusterSnapshot) error {
 	nodeMaps := make(map[string]TranslateOffsetMap)
-
 	if snap.ReplicaN > 1 {
 		if err := s.populateIndexReplication(nodeMaps, snap); err != nil {
 			return err
@@ -1734,26 +1772,99 @@ func (s *holderSyncer) initializeReplication(snap *topology.ClusterSnapshot) err
 		return err
 	}
 
+	// filter out empty nodes
+	nodes := make(map[*topology.Node]bool)
 	for _, node := range snap.Nodes {
 		m := nodeMaps[node.ID]
-		if m.Empty() {
-			continue
+		if !m.Empty() {
+			nodes[node] = true
 		}
-
-		// Connect to remote node and begin streaming.
-		rd, err := s.Holder.OpenTranslateReader(context.Background(), node.URI.String(), m)
-		if err != nil {
-			return err
-		}
-		s.readers = append(s.readers, rd)
-
-		s.syncers.Go(func() error {
-			defer rd.Close()
-			s.readBothTranslateReader(rd, snap)
-			return nil
-		})
 	}
-	return nil
+
+	// connect to remote nodes and set up readers
+	readersCh := make(chan TranslateEntryReader, len(nodes))
+	ctx, cancelAddingMoreReaders := context.WithCancel(context.Background())
+	defer cancelAddingMoreReaders()
+	s.readersMu.Lock()
+	s.pendingReaders = len(nodes)
+	s.readersMu.Unlock()
+	go func() {
+		for {
+			for node := range nodes {
+				// check if ctx cancelled
+				// this means there was a signal sent to stop further init
+				// of readers
+				select {
+				case <-s.Closing:
+					return
+				case <-ctx.Done():
+					close(readersCh)
+					return
+				default:
+				}
+				// connect to remote node
+				m := nodeMaps[node.ID]
+				rd, err := s.Holder.OpenTranslateReader(context.Background(), node.URI.String(), m)
+				if err != nil {
+					continue
+				}
+				readersCh <- rd
+				delete(nodes, node)
+			}
+			if len(nodes) == 0 {
+				close(readersCh)
+				return
+			}
+			time.Sleep(10 * time.Second)
+
+		}
+	}()
+
+	for {
+		select {
+		case <-s.Closing:
+			cancelAddingMoreReaders()
+			return nil
+		case <-s.stopInitializeReplicationCh:
+			return nil
+		case rd, ok := <-readersCh:
+			// all translate readers have been launched, hence channel is
+			// closed
+			if !ok {
+				return nil
+			}
+			s.readersMu.Lock()
+			// [S] has been initiated and acquired the lock first
+			// at this point we should close the reader we've recieved rather
+			// than start replication on it.
+			// [S] should have already closed all the rest
+			// of the reads if they were still in action.
+			// we are also draining the channel since the signal for stopping
+			// further replication was meant for us
+			if s.pendingReaders == -1 {
+				rd.Close()
+				cancelAddingMoreReaders()
+			drain:
+				for {
+					select {
+					case <-s.stopInitializeReplicationCh:
+					default:
+						break drain
+					}
+				}
+				s.readersMu.Unlock()
+				return nil
+			}
+			s.pendingReaders--
+			s.readers = append(s.readers, rd)
+			s.syncers.Go(func() error {
+				defer rd.Close()
+				s.readBothTranslateReader(rd, snap)
+				return nil
+			})
+			s.readersMu.Unlock()
+		}
+	}
 }
 
 // populateFieldReplication populates a map from node IDs to TranslateOffsetMaps
