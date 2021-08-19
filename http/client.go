@@ -30,7 +30,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/molecula/featurebase/v2"
+	pilosa "github.com/molecula/featurebase/v2"
 	"github.com/molecula/featurebase/v2/encoding/proto"
 	pnet "github.com/molecula/featurebase/v2/net"
 	"github.com/molecula/featurebase/v2/topology"

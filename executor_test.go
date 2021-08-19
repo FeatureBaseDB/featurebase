@@ -492,7 +492,7 @@ func TestExecutor(t *testing.T) {
 			Set(6, f=1, 2001-01-01T00:00)
 			Set(7, f=1, 2002-01-01T02:00)
 			Set(8, f=1, %s)
-	
+
 			Set(2, f=1, 1999-12-30T00:00)
 			Set(2, f=1, 2002-02-01T00:00)
 			Set(2, f=10, 2001-01-01T00:00)`, nextDayExclusive.Format("2006-01-02T15:04"))
@@ -539,7 +539,7 @@ func TestExecutor(t *testing.T) {
 			Set("five", f=1, 2000-02-01T00:00)
 			Set("six", f=1, 2001-01-01T00:00)
 			Set("seven", f=1, 2002-01-01T02:00)
-	
+
 			Set("two", f=1, 1999-12-30T00:00)
 			Set("two", f=1, 2002-02-01T00:00)
 			Set("two", f=10, 2001-01-01T00:00)`
@@ -573,7 +573,7 @@ func TestExecutor(t *testing.T) {
 			Set(5, f="foo", 2000-02-01T00:00)
 			Set(6, f="foo", 2001-01-01T00:00)
 			Set(7, f="foo", 2002-01-01T02:00)
-	
+
 			Set(2, f="foo", 1999-12-30T00:00)
 			Set(2, f="foo", 2002-02-01T00:00)
 			Set(2, f="bar", 2001-01-01T00:00)`
@@ -608,7 +608,7 @@ func TestExecutor(t *testing.T) {
 			Set("five", f="foo", 2000-02-01T00:00)
 			Set("six", f="foo", 2001-01-01T00:00)
 			Set("seven", f="foo", 2002-01-01T02:00)
-	
+
 			Set("two", f="foo", 1999-12-30T00:00)
 			Set("two", f="foo", 2002-02-01T00:00)
 			Set("two", f="bar", 2001-01-01T00:00)`
@@ -643,7 +643,7 @@ func TestExecutor(t *testing.T) {
 			Set(5, f=1, 2000-02-01T00:00)
 			Set(6, f=1, 2001-01-01T00:00)
 			Set(7, f=1, 2002-01-01T02:00)
-	
+
 			Set(2, f=1, 1999-12-30T00:00)
 			Set(2, f=1, 2002-02-01T00:00)
 			Set(2, f=10, 2001-01-01T00:00)`
@@ -678,7 +678,7 @@ func TestExecutor(t *testing.T) {
 			Set(5, f=1, 2000-02-01T00:00)
 			Set(6, f=1, 2001-01-01T00:00)
 			Set(7, f=1, 2002-01-01T02:00)
-	
+
 			Set(2, f=1, 1999-12-30T00:00)
 			Set(2, f=1, 2002-02-01T00:00)
 			Set(2, f=10, 2001-01-01T00:00)`
@@ -724,7 +724,7 @@ func TestExecutor(t *testing.T) {
 			Set("five", f=1, 2000-02-01T00:00)
 			Set("six", f=1, 2001-01-01T00:00)
 			Set("seven", f=1, 2002-01-01T02:00)
-	
+
 			Set("two", f=1, 1999-12-30T00:00)
 			Set("two", f=1, 2002-02-01T00:00)
 			Set("two", f=10, 2001-01-01T00:00)`
@@ -758,7 +758,7 @@ func TestExecutor(t *testing.T) {
 			Set(5, f="foo", 2000-02-01T00:00)
 			Set(6, f="foo", 2001-01-01T00:00)
 			Set(7, f="foo", 2002-01-01T02:00)
-	
+
 			Set(2, f="foo", 1999-12-30T00:00)
 			Set(2, f="foo", 2002-02-01T00:00)
 			Set(2, f="bar", 2001-01-01T00:00)`
@@ -793,7 +793,7 @@ func TestExecutor(t *testing.T) {
 			Set("five", f="foo", 2000-02-01T00:00)
 			Set("six", f="foo", 2001-01-01T00:00)
 			Set("seven", f="foo", 2002-01-01T02:00)
-	
+
 			Set("two", f="foo", 1999-12-30T00:00)
 			Set("two", f="foo", 2002-02-01T00:00)
 			Set("two", f="bar", 2001-01-01T00:00)`
@@ -4131,10 +4131,17 @@ func TestExecutor_Execute_All(t *testing.T) {
 		req.ColumnIDs[bitCount-1] = uint64((3 * ShardWidth) + 2)
 
 		m0 := c.GetNode(0)
+		// the request gets altered by the Import operation now...
+		reqs, err := req.Clone().ShardSplit()
+		if err != nil {
+			t.Fatalf("splitting request into shards: %v", err)
+		}
 
 		qcx := m0.API.Txf().NewQcx()
-		if err := m0.API.Import(context.Background(), qcx, req); err != nil {
-			t.Fatal(err)
+		for _, r := range reqs {
+			if err := m0.API.Import(context.Background(), qcx, r); err != nil {
+				t.Fatal(err)
+			}
 		}
 		PanicOn(qcx.Finish())
 
@@ -5154,10 +5161,13 @@ func TestExecutor_GroupByStrings(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("importing: %v", err)
 	}
+	m0 := c.GetNode(0)
+	qcx := m0.API.Txf().NewQcx()
+	defer qcx.Abort()
 
 	var v1, v2, v3, v4, v5, v6, v7, v8, v9, v10 int64 = 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
 	var nv1, nv2, nv3, nv4 int64 = -1, -2, -3, -4
-	if err := c.GetNode(0).API.ImportValue(context.Background(), nil, &pilosa.ImportValueRequest{
+	if err := m0.API.ImportValue(context.Background(), qcx, &pilosa.ImportValueRequest{
 		Index:      "istring",
 		Field:      "v",
 		Shard:      0,
@@ -5167,7 +5177,7 @@ func TestExecutor_GroupByStrings(t *testing.T) {
 		t.Fatalf("importing: %v", err)
 	}
 
-	if err := c.GetNode(0).API.ImportValue(context.Background(), nil, &pilosa.ImportValueRequest{
+	if err := m0.API.ImportValue(context.Background(), qcx, &pilosa.ImportValueRequest{
 		Index:      "istring",
 		Field:      "vv",
 		Shard:      0,
@@ -5177,7 +5187,7 @@ func TestExecutor_GroupByStrings(t *testing.T) {
 		t.Fatalf("importing: %v", err)
 	}
 
-	if err := c.GetNode(0).API.ImportValue(context.Background(), nil, &pilosa.ImportValueRequest{
+	if err := m0.API.ImportValue(context.Background(), qcx, &pilosa.ImportValueRequest{
 		Index:      "istring",
 		Field:      "nv",
 		Shard:      0,

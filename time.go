@@ -89,15 +89,69 @@ func viewByTimeUnit(name string, t time.Time, unit rune) string {
 	}
 }
 
+// YYYYMMDDHH lengths. Note that this is a []int, not a map[byte]int, so
+// the lookups can be cheaper.
+var lengthsByQuantum = []int{
+	'Y': 4,
+	'M': 6,
+	'D': 8,
+	'H': 10,
+}
+
+// viewsByTimeInto computes the list of views for a given time. It expects
+// to be given an initial buffer of the form `name_YYYYMMDDHH`, and a slice
+// of []bytes. This allows us to reuse the buffer for all the sub-buffers,
+// and also to reuse the slice of slices, to eliminate all those allocations.
+// This might seem crazy, but even including the JSON parsing and all the
+// disk activity, the straightforward viewsByTime implementation was 25%
+// of runtime in an ingest test.
+func viewsByTimeInto(fullBuf []byte, into [][]byte, t time.Time, q TimeQuantum) [][]byte {
+	l := len(fullBuf) - 10
+	date := fullBuf[l : l+10]
+	y, m, d := t.Date()
+	h := t.Hour()
+	// Did you know that Sprintf, Printf, and other things like that all
+	// do allocations, and that doing allocations in a tight loop like this
+	// is stunningly expensive? viewsByTime was 25% of an ingest test's
+	// total CPU, not counting the garbage collector overhead. This is about
+	// 3%. No, I'm not totally sure that justifies it.
+	if y < 1000 {
+		ys := fmt.Sprintf("%04d", y)
+		copy(date[0:4], []byte(ys))
+	} else if y >= 10000 {
+		// This is probably a bad answer but there isn't really a
+		// good answer.
+		ys := fmt.Sprintf("%04d", y%1000)
+		copy(date[0:4], []byte(ys))
+	} else {
+		strconv.AppendInt(date[:0], int64(y), 10)
+	}
+	date[4] = '0' + byte(m/10)
+	date[5] = '0' + byte(m%10)
+	date[6] = '0' + byte(d/10)
+	date[7] = '0' + byte(d%10)
+	date[8] = '0' + byte(h/10)
+	date[9] = '0' + byte(h%10)
+	into = into[:0]
+	for _, unit := range q {
+		if int(unit) < len(lengthsByQuantum) && lengthsByQuantum[unit] != 0 {
+			into = append(into, fullBuf[:l+lengthsByQuantum[unit]])
+		}
+	}
+	return into
+}
+
 // viewsByTime returns a list of views for a given timestamp.
 func viewsByTime(name string, t time.Time, q TimeQuantum) []string { // nolint: unparam
+	y, m, d := t.Date()
+	h := t.Hour()
+	full := fmt.Sprintf("%s_%04d%02d%02d%02d", name, y, m, d, h)
+	l := len(name) + 1
 	a := make([]string, 0, len(q))
 	for _, unit := range q {
-		view := viewByTimeUnit(name, t, unit)
-		if view == "" {
-			continue
+		if int(unit) < len(lengthsByQuantum) && lengthsByQuantum[unit] != 0 {
+			a = append(a, full[:l+lengthsByQuantum[unit]])
 		}
-		a = append(a, view)
 	}
 	return a
 }
@@ -257,16 +311,16 @@ func parsePartialTime(t string) (time.Time, error) {
 			// has minutes
 			minute, err = strconv.Atoi(subStrings[1])
 			if err != nil {
-				return -1, -1, errors.New("Invalid Time")
+				return -1, -1, errors.New("invalid time")
 			}
 			fallthrough
 		case 1:
 			hour, err = strconv.Atoi(subStrings[0])
 			if err != nil {
-				return -1, -1, errors.New("Invalid Time")
+				return -1, -1, errors.New("invalid time")
 			}
 		default:
-			return -1, -1, errors.New("Invalid Time")
+			return -1, -1, errors.New("invalid time")
 		}
 
 		return
@@ -282,7 +336,7 @@ func parsePartialTime(t string) (time.Time, error) {
 			return true
 		}
 		if len(subMatches) <= 1 {
-			return nil, errors.New("Invalid time")
+			return nil, errors.New("invalid time")
 		}
 		// ignore full match which is at index 0
 		subMatches = subMatches[1:] // ignore full match which is at index 0
@@ -295,7 +349,7 @@ func parsePartialTime(t string) (time.Time, error) {
 			} else {
 				// rest must be empty for date-time to be valid
 				if !restAreEmpty(subMatches[i:]) {
-					return nil, errors.New("Invalid date-time")
+					return nil, errors.New("invalid date-time")
 				}
 				break
 			}

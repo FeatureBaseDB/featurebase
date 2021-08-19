@@ -482,10 +482,10 @@ func TestAPI_ClearFlagForImportAndImportValues(t *testing.T) {
 	}
 
 	qcx := m0api.Txf().NewQcx()
-	if err := m0api.Import(ctx, qcx, ir0); err != nil {
+	if err := m0api.Import(ctx, qcx, ir0.Clone()); err != nil {
 		t.Fatal(err)
 	}
-	if err := m0api.ImportValue(ctx, qcx, ivr0); err != nil {
+	if err := m0api.ImportValue(ctx, qcx, ivr0.Clone()); err != nil {
 		t.Fatal(err)
 	}
 	PanicOn(qcx.Finish())

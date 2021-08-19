@@ -1020,6 +1020,10 @@ func BenchmarkFragment_SetValue(b *testing.B) {
 	}
 }
 
+// makeBenchmarkImportValueData produces data that's supposed to be all within
+// the same shard; for fragment purposes, implicitly shard 0. This also gets
+// used by the field tests, but import requests are supposed to be per-shard,
+// so it's important that we generate values only within a given shard.
 func makeBenchmarkImportValueData(b *testing.B, bitDepth uint64, cfunc func(uint64) uint64) []ImportValueRequest {
 	b.StopTimer()
 	column := uint64(0)

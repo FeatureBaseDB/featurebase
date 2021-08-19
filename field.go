@@ -935,7 +935,7 @@ func (f *Field) RowTime(tx Tx, rowID uint64, time time.Time, quantum string) (*R
 	if !TimeQuantum(quantum).Valid() {
 		return nil, ErrInvalidTimeQuantum
 	}
-	viewname := viewsByTime(viewStandard, time, TimeQuantum(quantum[len(quantum)-1:]))[0]
+	viewname := viewByTimeUnit(viewStandard, time, rune(quantum[len(quantum)-1]))
 	view := f.view(viewname)
 	if view == nil {
 		return nil, errors.Errorf("view with quantum %v not found.", quantum)
@@ -1437,7 +1437,7 @@ func (f *Field) Range(qcx *Qcx, name string, op pql.Token, predicate int64) (*Ro
 }
 
 // Import bulk imports data.
-func (f *Field) Import(qcx *Qcx, rowIDs, columnIDs []uint64, timestamps []*time.Time, opts ...ImportOption) (err0 error) {
+func (f *Field) Import(qcx *Qcx, rowIDs, columnIDs []uint64, timestamps []int64, shard uint64, opts ...ImportOption) (err0 error) {
 
 	// Set up import options.
 	options := &ImportOptions{}
@@ -1450,18 +1450,81 @@ func (f *Field) Import(qcx *Qcx, rowIDs, columnIDs []uint64, timestamps []*time.
 
 	// Determine quantum if timestamps are set.
 	q := f.TimeQuantum()
-	if hasTime(timestamps) {
+	if len(timestamps) > 0 {
 		if q == "" {
 			return errors.New("time quantum not set in field")
 		} else if options.Clear {
 			return errors.New("import clear is not supported with timestamps")
 		}
+	} else {
+		// short path: if we don't have any timestamps, we only need
+		// to write to exactly one view, which is always viewStandard,
+		// and *every* bit goes into that view, and we already verified that
+		// everything is in the same shard, so we can skip most of this.
+		fieldType := f.Type()
+		if fieldType == FieldTypeBool {
+			for _, rowID := range rowIDs {
+				if rowID > 1 {
+					return errors.New("bool field imports only support values 0 and 1")
+				}
+			}
+		}
+		tx, finisher, err := qcx.GetTx(Txo{Write: true, Index: f.idx, Shard: shard})
+		if err != nil {
+			return errors.Wrap(err, "qcx.GetTx")
+		}
+		var err1 error
+		defer finisher(&err1)
+		view, err := f.createViewIfNotExists(viewStandard)
+		if err != nil {
+			return errors.Wrapf(err, "creating view %s", viewStandard)
+		}
+
+		frag, err := view.CreateFragmentIfNotExists(shard)
+		if err != nil {
+			return errors.Wrap(err, "creating fragment")
+		}
+
+		err1 = frag.bulkImport(tx, rowIDs, columnIDs, options)
+		return err1
 	}
 
 	fieldType := f.Type()
 
 	// Split import data by fragment.
-	dataByFragment := make(map[importKey]importData)
+	views := make(map[string]*importData)
+	var timeStringBuf []byte
+	var timeViews [][]byte
+	if len(q) > 0 {
+		// We're supporting time quantums, so we need to store bits in a
+		// number of views for every entry with a timestamp. We want to compute
+		// time quantum view names for whatever combination of YMDH views
+		// we have. But we don't want to allocate four strings per entry, or
+		// recompute and recreate the entire string. We know that only the
+		// YYYYMMDDHH part of the string changes over time.
+		timeStringBuf = make([]byte, len(viewStandard) + 11)
+		copy(timeStringBuf, []byte(viewStandard))
+		copy(timeStringBuf[len(viewStandard):], []byte("_YYYYMMDDHH"))
+		// Now we have a buffer that contains
+		// `standard_YYYYMMDDHH`. We also need storage space to hold several
+		// slice headers, one per entry in q. These will hold the view names
+		// corresponding to each letter in q.
+		timeViews = make([][]byte, len(q))
+	}
+	// This helper function records that a given column/row pair is relevant
+	// to a specific view. We use a map lookup for the strings, but do the
+	// actual operations using a slice so we're only writing each map entry
+	// once, not once on every update.
+	see := func(name []byte, columnID uint64, rowID uint64) {
+		var ok bool
+		var data *importData
+		if data, ok = views[string(name)]; !ok {
+			data = &importData{}
+			views[string(name)] = data
+		}
+		data.RowIDs = append(data.RowIDs, rowID)
+		data.ColumnIDs = append(data.ColumnIDs, columnID)
+	}
 	for i := range rowIDs {
 		rowID, columnID := rowIDs[i], columnIDs[i]
 
@@ -1470,56 +1533,44 @@ func (f *Field) Import(qcx *Qcx, rowIDs, columnIDs []uint64, timestamps []*time.
 			return errors.New("bool field imports only support values 0 and 1")
 		}
 
-		var timestamp *time.Time
-		if len(timestamps) > i {
-			timestamp = timestamps[i]
-		}
+		hasTime := len(timestamps) > i && timestamps[i] != 0
 
-		var standard []string
-		if timestamp == nil {
-			standard = []string{viewStandard}
-		} else {
-			standard = viewsByTime(viewStandard, *timestamp, q)
-			if !f.options.NoStandardView {
-				// In order to match the logic of `SetBit()`, we want bits
-				// with timestamps to write to both time and standard views.
-				standard = append(standard, viewStandard)
+		// attach bit to standard view unless we have a timestamp and
+		// have the NoStandardView option set
+		if !hasTime || !f.options.NoStandardView {
+			see([]byte(viewStandard), columnID, rowID)
+		}
+		if hasTime {
+			// attach bit to all the views for this timestamp. note that the
+			// `timeViews` slice gets resliced and reused by this process, so
+			// we don't have to allocate millions of tiny slices of slice headers.
+			timeViews = viewsByTimeInto(timeStringBuf, timeViews, time.Unix(0, timestamps[i]).UTC(), q)
+			for _, v := range timeViews {
+				see(v, columnID, rowID)
 			}
 		}
-
-		// Attach bit to each standard view.
-		for _, name := range standard {
-			key := importKey{View: name, Shard: columnID / ShardWidth}
-			data := dataByFragment[key]
-			data.RowIDs = append(data.RowIDs, rowID)
-			data.ColumnIDs = append(data.ColumnIDs, columnID)
-			dataByFragment[key] = data
-		}
 	}
-
-	// Import into each fragment.
-	for key, data := range dataByFragment {
-		view, err := f.createViewIfNotExists(key.View)
+	tx, finisher, err := qcx.GetTx(Txo{Write: true, Index: f.idx, Shard: shard})
+	if err != nil {
+		return errors.Wrap(err, "qcx.GetTx")
+	}
+	var err1 error
+	defer finisher(&err1)
+	for viewName, data := range views {
+		view, err := f.createViewIfNotExists(viewName)
 		if err != nil {
-			return errors.Wrap(err, "creating view")
+			return errors.Wrapf(err, "creating view %s", viewName)
 		}
 
-		frag, err := view.CreateFragmentIfNotExists(key.Shard)
+		frag, err := view.CreateFragmentIfNotExists(shard)
 		if err != nil {
 			return errors.Wrap(err, "creating fragment")
 		}
 
-		tx, finisher, err := qcx.GetTx(Txo{Write: true, Index: frag.idx, Fragment: frag, Shard: frag.shard})
-		if err != nil {
-			return errors.Wrap(err, "qcx.GetTx")
-		}
-
-		err1 := frag.bulkImport(tx, data.RowIDs, data.ColumnIDs, options)
+		err1 = frag.bulkImport(tx, data.RowIDs, data.ColumnIDs, options)
 		if err1 != nil {
-			finisher(&err1)
 			return err1
 		}
-		finisher(nil)
 	}
 	return nil
 }
@@ -1527,7 +1578,7 @@ func (f *Field) Import(qcx *Qcx, rowIDs, columnIDs []uint64, timestamps []*time.
 // importFloatValue imports floating point values. In current usage, this
 // should only ever be called with data for a single shard; the API calls
 // around this are splitting it up per shard.
-func (f *Field) importFloatValue(qcx *Qcx, columnIDs []uint64, values []float64, options *ImportOptions) error {
+func (f *Field) importFloatValue(qcx *Qcx, columnIDs []uint64, values []float64, shard uint64, options *ImportOptions) error {
 	// convert values to int64 values based on scale
 	ivalues := make([]int64, len(values))
 	bsig := f.bsiGroup(f.name)
@@ -1539,13 +1590,13 @@ func (f *Field) importFloatValue(qcx *Qcx, columnIDs []uint64, values []float64,
 		ivalues[i] = int64(fval * mult)
 	}
 	// then call importValue
-	return f.importValue(qcx, columnIDs, ivalues, options)
+	return f.importValue(qcx, columnIDs, ivalues, shard, options)
 }
 
 // importFloatValue imports timestamp values. In current usage, this
 // should only ever be called with data for a single shard; the API calls
 // around this are splitting it up per shard.
-func (f *Field) importTimestampValue(qcx *Qcx, columnIDs []uint64, values []time.Time, options *ImportOptions) error {
+func (f *Field) importTimestampValue(qcx *Qcx, columnIDs []uint64, values []time.Time, shard uint64, options *ImportOptions) error {
 	ivalues := make([]int64, len(values))
 	bsig := f.bsiGroup(f.name)
 	if bsig == nil {
@@ -1555,13 +1606,13 @@ func (f *Field) importTimestampValue(qcx *Qcx, columnIDs []uint64, values []time
 	for i, t := range values {
 		ivalues[i] = t.UnixNano() / TimeUnitNanos(f.options.TimeUnit)
 	}
-	return f.importValue(qcx, columnIDs, ivalues, options)
+	return f.importValue(qcx, columnIDs, ivalues, shard, options)
 }
 
 // importValue bulk imports range-encoded value data. This function should
 // only be called with data for a single shard; the API calls that wrap
 // this handle splitting the data up per-shard.
-func (f *Field) importValue(qcx *Qcx, columnIDs []uint64, values []int64, options *ImportOptions) (err0 error) {
+func (f *Field) importValue(qcx *Qcx, columnIDs []uint64, values []int64, shard uint64, options *ImportOptions) (err0 error) {
 	// no data to import
 	if len(columnIDs) == 0 {
 		return nil
@@ -1614,9 +1665,9 @@ func (f *Field) importValue(qcx *Qcx, columnIDs []uint64, values []int64, option
 	}
 	f.mu.Unlock()
 
-	// Since all data should be for the same shard, we can just compute
-	// this from the first value.
-	shard := columnIDs[0] / ShardWidth
+	if columnIDs[0]/ShardWidth != shard {
+		return fmt.Errorf("requested import for shard %d, got record ID for shard %d", shard, columnIDs[0]/ShardWidth)
+	}
 
 	view, err := f.createViewIfNotExists(viewName)
 	if err != nil {
@@ -2092,13 +2143,14 @@ const (
 	TimeUnitSeconds      = "s"
 	TimeUnitMilliseconds = "ms"
 	TimeUnitMicroseconds = "µs"
+	TimeUnitUSeconds     = "us"
 	TimeUnitNanoseconds  = "ns"
 )
 
 // IsValidTimeUnit returns true if unit is valid.
 func IsValidTimeUnit(unit string) bool {
 	switch unit {
-	case TimeUnitSeconds, TimeUnitMilliseconds, TimeUnitMicroseconds, TimeUnitNanoseconds:
+	case TimeUnitSeconds, TimeUnitMilliseconds, TimeUnitMicroseconds, TimeUnitUSeconds, TimeUnitNanoseconds:
 		return true
 	default:
 		return false
@@ -2112,7 +2164,7 @@ func TimeUnitNanos(unit string) int64 {
 		return int64(time.Second)
 	case TimeUnitMilliseconds:
 		return int64(time.Millisecond)
-	case TimeUnitMicroseconds:
+	case TimeUnitMicroseconds, TimeUnitUSeconds:
 		return int64(time.Microsecond)
 	default:
 		return int64(time.Nanosecond)

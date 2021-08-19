@@ -281,7 +281,7 @@ func (w *BoltWrapper) DeleteIndex(indexName string) error {
 	// index name in the key prefix, so we cannot allow indexNames
 	// themselves to contain apostrophies.
 	if strings.Contains(indexName, "/") {
-		return fmt.Errorf("error: bad indexName `%v` in BoltWrapper.DeleteIndex() call: indexName cannot contain '/'.", indexName)
+		return fmt.Errorf("error: bad indexName `%v` in BoltWrapper.DeleteIndex() call: indexName cannot contain '/'", indexName)
 	}
 	prefix := txkey.IndexOnlyPrefix(indexName)
 	return w.DeletePrefix(prefix)

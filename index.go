@@ -22,7 +22,6 @@ import (
 	"sort"
 	"strconv"
 	"sync"
-	"time"
 
 	"github.com/molecula/featurebase/v2/disco"
 	"github.com/molecula/featurebase/v2/roaring"
@@ -839,21 +838,6 @@ func (p indexInfoSlice) Less(i, j int) bool { return p[i].Name < p[j].Name }
 type IndexOptions struct {
 	Keys           bool `json:"keys"`
 	TrackExistence bool `json:"trackExistence"`
-}
-
-// hasTime returns true if a contains a non-nil time.
-func hasTime(a []*time.Time) bool {
-	for _, t := range a {
-		if t != nil {
-			return true
-		}
-	}
-	return false
-}
-
-type importKey struct {
-	View  string
-	Shard uint64
 }
 
 type importData struct {

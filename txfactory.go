@@ -1383,7 +1383,7 @@ func (f *TxFactory) greenHasData() (hasData bool, err error) {
 	case 2:
 		return f.dbPerShard.HasData(1)
 	}
-	err = fmt.Errorf("unsupported len(f.types): %v. Must be 1 or 2.", n)
+	err = fmt.Errorf("unsupported len(f.types): %v; must be 1 or 2", n)
 	PanicOn(err)
 	return
 }
@@ -1410,7 +1410,7 @@ func (f *TxFactory) green2blue(holder *Holder) (err0 error) {
 	greenSrc := f.types[1]
 
 	if blueDest == roaringTxn {
-		return fmt.Errorf("error: cannot migrate to 'roaring': not implemented.")
+		return fmt.Errorf("error: cannot migrate to 'roaring': not implemented")
 	}
 
 	idxs := holder.Indexes()
@@ -1427,13 +1427,13 @@ func (f *TxFactory) green2blue(holder *Holder) (err0 error) {
 		return errors.Wrap(err, "TxFactory.green2blue f.greenHasData()")
 	}
 	if !blueHasData && !greenHasData {
-		holder.Logger.Infof("no data in blue or green. No migration or verification to do.")
+		holder.Logger.Infof("no data in blue or green. No migration or verification to do")
 		return nil
 	}
 	// INVAR: blue has data.
 	if !greenHasData {
-		holder.Logger.Errorf("cannot migrate from green '%v' because it has no data in it.", greenSrc)
-		return fmt.Errorf("error: cannot migrate from green '%v' because it has no data in it.", greenSrc)
+		holder.Logger.Errorf("cannot migrate from green '%v' because it has no data in it", greenSrc)
+		return fmt.Errorf("error: cannot migrate from green '%v' because it has no data in it", greenSrc)
 	}
 
 	nGoro := runtime.NumCPU()
