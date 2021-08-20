@@ -34,7 +34,7 @@ type PastQueryStatus struct {
 	Node      string        `json:"nodeID"`
 	Index     string        `json:"index"`
 	Start     time.Time     `json:"start"`
-	Runtime   time.Duration `json:"runtime"`  // deprecated
+	Runtime   time.Duration `json:"runtime"` // deprecated
 	RuntimeNs time.Duration `json:"runtimeNanoseconds"`
 }
 

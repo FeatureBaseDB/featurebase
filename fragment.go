@@ -1741,7 +1741,7 @@ func (f *fragment) pos(rowID, columnID uint64) (uint64, error) {
 	// Return an error if the column ID is out of the range of the fragment's shard.
 	minColumnID := f.shard * ShardWidth
 	if columnID < minColumnID || columnID >= minColumnID+ShardWidth {
-		return 0, errors.Errorf("column:%d out of bounds", columnID)
+		return 0, errors.Errorf("column:%d out of bounds for shard %d", columnID, f.shard)
 	}
 	return pos(rowID, columnID), nil
 }
@@ -2210,7 +2210,7 @@ func (f *fragment) bulkImport(tx Tx, rowIDs, columnIDs []uint64, options *Import
 	}
 
 	if f.mutexVector != nil && !options.Clear {
-		return f.bulkImportMutex(tx, rowIDs, columnIDs)
+		return f.bulkImportMutex(tx, rowIDs, columnIDs, options)
 	}
 	return f.bulkImportStandard(tx, rowIDs, columnIDs, options)
 }
@@ -2253,8 +2253,12 @@ func (f *fragment) bulkImportStandard(tx Tx, rowIDs, columnIDs []uint64, options
 	rowSet := make(map[uint64]struct{})
 	lastRowID := uint64(1 << 63)
 
+	// It's possible for the ingest API to have already sorted things in
+	// the row-first order we want for this import.
+	if !options.fullySorted {
+		sort.Sort(rowColumnSet{r: rowIDs, c: columnIDs})
+	}
 	// replace columnIDs with calculated positions to avoid allocation.
-	sort.Sort(rowColumnSet{r: rowIDs, c: columnIDs})
 	prevRow, prevCol := ^uint64(0), ^uint64(0)
 	next := 0
 	for i := 0; i < len(columnIDs); i++ {
@@ -2525,14 +2529,20 @@ func sliceDifference(original, remove []uint64) []uint64 {
 // mutex restrictions. Because the mutex requirements must be checked
 // against storage, this method must acquire a write lock on the fragment
 // during the entire process, and it handles every bit independently.
-func (f *fragment) bulkImportMutex(tx Tx, rowIDs, columnIDs []uint64) error {
+func (f *fragment) bulkImportMutex(tx Tx, rowIDs, columnIDs []uint64, options *ImportOptions) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	p := parallelSlices{cols: columnIDs, rows: rowIDs}
-	p.fullPrune()
-	columnIDs = p.cols
-	rowIDs = p.rows
+	// if ingest promises that this is "fully sorted", then we have been
+	// promised that (1) there's no duplicate entries that need to be
+	// pruned, (2) the input is sorted by row IDs and then column IDs,
+	// meaning that we will generate positions in strictly sequential order.
+	if !options.fullySorted {
+		p := parallelSlices{cols: columnIDs, rows: rowIDs}
+		p.fullPrune()
+		columnIDs = p.cols
+		rowIDs = p.rows
+	}
 
 	// create a mask of columns we care about
 	columns := roaring.NewSliceBitmap(columnIDs...)
@@ -2551,6 +2561,10 @@ func (f *fragment) bulkImportMutex(tx Tx, rowIDs, columnIDs []uint64) error {
 		// positions are sorted by columns, but not by absolute
 		// position. we might want them sorted, though.
 		if pos < prev {
+			if options.fullySorted {
+				fmt.Printf("HELP! was promised fully sorted input, but previous position was %d, now generated %d\n",
+					prev, pos)
+			}
 			unsorted = true
 		}
 		prev = pos
@@ -2579,6 +2593,32 @@ func (f *fragment) bulkImportMutex(tx Tx, rowIDs, columnIDs []uint64) error {
 		toClear = sliceDifference(toClear, toSet)
 	}
 	return errors.Wrap(f.importPositions(tx, toSet, toClear, rowSet), "importing positions")
+}
+
+// ClearRecords deletes all bits for the given records. It's basically
+// the remove-only part of setting a mutex.
+func (f *fragment) ClearRecords(tx Tx, recordIDs []uint64) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	// create a mask of columns we care about
+	columns := roaring.NewSliceBitmap(recordIDs...)
+
+	// we now need to find existing rows for these bits.
+	rowSet := make(map[uint64]struct{})
+	var toClear []uint64
+	callback := func(pos uint64) error {
+		toClear = append(toClear, pos)
+		rowID := pos / ShardWidth
+		rowSet[rowID] = struct{}{}
+		return nil
+	}
+	findExisting := roaring.NewBitmapBitmapFilter(columns, callback)
+	err := tx.ApplyFilter(f.index(), f.field(), f.view(), f.shard, 0, findExisting)
+	if err != nil {
+		return errors.Wrap(err, "finding existing positions")
+	}
+	return errors.Wrap(f.importPositions(tx, nil, toClear, rowSet), "clearing records")
 }
 
 // importValue bulk imports a set of range-encoded values.

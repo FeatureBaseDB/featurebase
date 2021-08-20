@@ -200,6 +200,90 @@ func (c *InternalClient) Schema(ctx context.Context) ([]*pilosa.IndexInfo, error
 	}
 	return rsp.Indexes, nil
 }
+
+// IngestSchema uses the new schema ingest endpoint. It returns a
+// map from index names to fields created within them; note that if the
+// entire index was created, the list of fields is empty. The intended
+// usage is cleaning up after creating the indexes, so if you create the
+// index, you don't need to delete the fields, but if you created fields
+// within an existing index, you should delete those fields but not the
+// whole index.
+func (c *InternalClient) IngestSchema(ctx context.Context, uri *pnet.URI, buf []byte) (created map[string][]string, err error) {
+	if uri == nil {
+		uri = c.defaultURI
+	}
+	u := uri.Path("/internal/schema")
+	req, err := http.NewRequest("POST", u, bytes.NewReader(buf))
+	if err != nil {
+		return nil, errors.Wrap(err, "creating request")
+	}
+
+	req.Header.Set("Content-Length", strconv.Itoa(len(buf)))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+
+	resp, err := c.executeRequest(req.WithContext(ctx), giveRawResponse(true))
+	if err != nil {
+		return nil, errors.Wrap(err, "executing request")
+	}
+	defer resp.Body.Close()
+	buf, err = ioutil.ReadAll(resp.Body)
+	if resp.StatusCode != 200 {
+		if err != nil {
+			return nil, errors.Wrapf(err, "bad status '%s' and err reading body", resp.Status)
+		}
+		var msg string
+		// try to decode a JSON response
+		var sr successResponse
+		qr := &pilosa.QueryResponse{}
+		if err = json.Unmarshal(buf, &sr); err == nil {
+			msg = sr.Error.Error()
+		} else if err := c.serializer.Unmarshal(buf, qr); err == nil {
+			msg = qr.Err.Error()
+		} else {
+			msg = string(buf)
+		}
+		return nil, errors.Errorf("against %s %s: '%s'", req.URL.String(), resp.Status, msg)
+	}
+	// this is the err from ioutil.ReadAll, but in the case where resp.StatusCode
+	// was 2xx, so we don't have a bad status.
+	if err != nil {
+		return nil, errors.Wrapf(err, "error reading response body")
+	}
+	if err = json.Unmarshal(buf, &created); err != nil {
+		return nil, errors.Wrapf(err, "error interpreting response body")
+	}
+	return created, nil
+}
+
+// IngestOperations uses the new ingest endpoint for ingest data
+func (c *InternalClient) IngestOperations(ctx context.Context, uri *pnet.URI, indexName string, buf []byte) error {
+	if uri == nil {
+		uri = c.defaultURI
+	}
+	u := uri.Path(fmt.Sprintf("/internal/ingest/%s", indexName))
+	req, err := http.NewRequest("POST", u, bytes.NewReader(buf))
+	if err != nil {
+		return errors.Wrap(err, "creating request")
+	}
+
+	req.Header.Set("Content-Length", strconv.Itoa(len(buf)))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+
+	resp, err := c.executeRequest(req.WithContext(ctx))
+	if err != nil {
+		return errors.Wrap(err, "executing request")
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return errors.Errorf("unexpected status code: %s", resp.Status)
+	}
+	return nil
+}
+
 func (c *InternalClient) PostSchema(ctx context.Context, uri *pnet.URI, s *pilosa.Schema, remote bool) error {
 	u := uri.Path(fmt.Sprintf("/schema?remote=%v", remote))
 	buf, err := json.Marshal(s)

@@ -21,7 +21,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/molecula/featurebase/v2"
+	pilosa "github.com/molecula/featurebase/v2"
 	"github.com/molecula/featurebase/v2/pql"
 )
 

@@ -42,6 +42,13 @@ func (q TimeQuantum) HasDay() bool { return strings.ContainsRune(string(q), 'D')
 // HasHour returns true if the quantum contains a 'H' unit.
 func (q TimeQuantum) HasHour() bool { return strings.ContainsRune(string(q), 'H') }
 
+func (q TimeQuantum) Granularity() rune {
+	var g rune
+	for _, g = range q {
+	}
+	return g
+}
+
 // Valid returns true if q is a valid time quantum value.
 func (q TimeQuantum) Valid() bool {
 	switch q {

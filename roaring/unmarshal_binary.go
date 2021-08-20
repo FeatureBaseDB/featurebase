@@ -15,6 +15,7 @@
 package roaring
 
 import (
+	"bytes"
 	"errors"
 	"io"
 	"unsafe"
@@ -102,6 +103,16 @@ func (b *Bitmap) UnmarshalBinary(data []byte) (err error) {
 		lastValidOffset += int64(opSize)
 	}
 	return nil
+}
+
+func (b *Bitmap) MarshalBinary() ([]byte, error) {
+	var buf bytes.Buffer
+	_, err := b.WriteTo(&buf)
+	if err != nil {
+		return nil, err
+	}
+
+	return buf.Bytes(), nil
 }
 
 // InspectBinary reads a roaring bitmap, plus a possible ops log,
