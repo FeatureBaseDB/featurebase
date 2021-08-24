@@ -19,6 +19,7 @@ import (
 	"database/sql"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	"github.com/molecula/featurebase/v2/pql"
@@ -73,6 +74,12 @@ func (p *Planner) planAggregateSelectStatement(ctx context.Context, stmt *sql2.S
 		return nil, fmt.Errorf("unexpected source type in aggregate query: %T", source)
 	}
 
+	// Convert WHERE clause.
+	cond, err := p.planExprPQL(ctx, stmt, stmt.WhereExpr)
+	if err != nil {
+		return nil, err
+	}
+
 	// TODO: Support multiple aggregate calls.
 	if len(stmt.Columns) > 1 {
 		return nil, fmt.Errorf("only one call allowed in aggregate query")
@@ -91,7 +98,7 @@ func (p *Planner) planAggregateSelectStatement(ctx context.Context, stmt *sql2.S
 	callName := strings.ToUpper(sql2.IdentName(call.Name))
 	switch callName {
 	case "COUNT":
-		return NewCountNode(p.executor, sql2.IdentName(source.Name)), nil
+		return NewCountNode(p.executor, sql2.IdentName(source.Name), cond), nil
 	default:
 		return nil, fmt.Errorf("unsupported call in aggregate query: %T", callName)
 	}
@@ -101,6 +108,183 @@ func (p *Planner) planAggregateSelectStatement(ctx context.Context, stmt *sql2.S
 
 func (p *Planner) planNonAggregateSelectStatement(ctx context.Context, stmt *sql2.SelectStatement) (_ StmtNode, err error) {
 	return nil, fmt.Errorf("cannot plan non-aggregate SELECT query")
+}
+
+// planExprPQL returns a PQL call tree for a given expression.
+func (p *Planner) planExprPQL(ctx context.Context, stmt *sql2.SelectStatement, expr sql2.Expr) (_ *pql.Call, err error) {
+	if expr == nil {
+		return nil, nil
+	}
+
+	switch expr := expr.(type) {
+	case *sql2.BinaryExpr:
+		return p.planBinaryExprPQL(ctx, stmt, expr)
+	case *sql2.BindExpr:
+		return nil, fmt.Errorf("bind expressions are not supported")
+	case *sql2.BlobLit:
+		return nil, fmt.Errorf("blob literals are not supported")
+	case *sql2.BoolLit:
+		return nil, fmt.Errorf("boolean literals are not supported")
+	case *sql2.Call:
+		return nil, fmt.Errorf("call expressions are not supported")
+	case *sql2.CaseExpr:
+		return nil, fmt.Errorf("case expressions are not supported")
+	case *sql2.CastExpr:
+		return nil, fmt.Errorf("cast expressions are not supported")
+	case *sql2.Exists:
+		return nil, fmt.Errorf("exists expressions are not supported")
+	case *sql2.ExprList:
+		return nil, fmt.Errorf("expression lists are not supported")
+	case *sql2.Ident:
+		return nil, fmt.Errorf("identifiers are not supported")
+	case *sql2.NullLit:
+		return nil, fmt.Errorf("NULL expressions are not supported")
+	case *sql2.NumberLit:
+		return nil, fmt.Errorf("number expressions are not supported")
+	case *sql2.ParenExpr:
+		return p.planExprPQL(ctx, stmt, expr.X)
+	case *sql2.QualifiedRef:
+		return nil, fmt.Errorf("qualified references are not supported")
+	case *sql2.Raise:
+		return nil, fmt.Errorf("raise expressions are not supported")
+	case *sql2.Range:
+		return nil, fmt.Errorf("range expressions are not supported")
+	case *sql2.StringLit:
+		return nil, fmt.Errorf("string literals are not supported")
+	case *sql2.UnaryExpr:
+		return nil, fmt.Errorf("unary expressions are not supported")
+	default:
+		return nil, fmt.Errorf("unexpected SQL expression type: %T", expr)
+	}
+}
+
+func (p *Planner) planBinaryExprPQL(ctx context.Context, stmt *sql2.SelectStatement, expr *sql2.BinaryExpr) (_ *pql.Call, err error) {
+	switch op := expr.Op; op {
+	case sql2.AND, sql2.OR:
+		name := "Intersect"
+		if op == sql2.OR {
+			name = "Union"
+		}
+
+		x, err := p.planExprPQL(ctx, stmt, expr.X)
+		if err != nil {
+			return nil, err
+		}
+		y, err := p.planExprPQL(ctx, stmt, expr.Y)
+		if err != nil {
+			return nil, err
+		}
+
+		return &pql.Call{
+			Name:     name,
+			Children: []*pql.Call{x, y},
+		}, nil
+
+	case sql2.EQ, sql2.NE, sql2.LT, sql2.LE, sql2.GT, sql2.GE:
+		// Ensure field reference exists in binary expression.
+		x, y := expr.X, expr.Y
+		xIdent, xOk := x.(*sql2.Ident)
+		yIdent, yOk := y.(*sql2.Ident)
+		if xOk && yOk {
+			return nil, fmt.Errorf("cannot compare fields in a WHERE clause")
+		} else if !xOk && !yOk {
+			return nil, fmt.Errorf("expression must reference one field")
+		}
+
+		// Rewrite expression so field ref is LHS.
+		if !xOk && yOk {
+			xIdent, y = yIdent, x
+			switch op {
+			case sql2.LT:
+				op = sql2.GT
+			case sql2.LE:
+				op = sql2.GE
+			case sql2.GT:
+				op = sql2.LT
+			case sql2.GE:
+				op = sql2.LE
+			}
+		}
+
+		pqlValue, err := sqlToPQLValue(y)
+		if err != nil {
+			return nil, err
+		}
+
+		isBSI := true // TODO: Check field if it is a BSI field.
+		if !isBSI {
+			return &pql.Call{
+				Name: "Row",
+				Args: map[string]interface{}{
+					sql2.IdentName(xIdent): pqlValue,
+				},
+			}, nil
+		}
+
+		pqlOp, err := sqlToPQLOp(op)
+		if err != nil {
+			return nil, err
+		}
+		return &pql.Call{
+			Name: "Row",
+			Args: map[string]interface{}{
+				sql2.IdentName(xIdent): &pql.Condition{
+					Op:    pqlOp,
+					Value: pqlValue,
+				},
+			},
+		}, nil
+
+	case sql2.BITAND, sql2.BITOR, sql2.BITNOT, sql2.LSHIFT, sql2.RSHIFT:
+		return nil, fmt.Errorf("bitwise operators are not supported in WHERE clause")
+	case sql2.PLUS, sql2.MINUS, sql2.STAR, sql2.SLASH, sql2.REM: // +
+		return nil, fmt.Errorf("arithmetic operators are not supported in WHERE clause")
+	case sql2.CONCAT:
+		return nil, fmt.Errorf("concatenation operator is not supported in WHERE clause")
+	case sql2.IN, sql2.NOTIN:
+		return nil, fmt.Errorf("IN operator is not supported")
+	case sql2.BETWEEN, sql2.NOTBETWEEN:
+		return nil, fmt.Errorf("BETWEEN operator is not supported")
+	default:
+		return nil, fmt.Errorf("unexpected binary expression operator: %s", expr.Op)
+	}
+}
+
+// sqlToPQLOp converts a SQL2 operation token to PQL.
+func sqlToPQLOp(op sql2.Token) (pql.Token, error) {
+	switch op {
+	case sql2.EQ:
+		return pql.EQ, nil
+	case sql2.NE:
+		return pql.NEQ, nil
+	case sql2.LT:
+		return pql.LT, nil
+	case sql2.LE:
+		return pql.LTE, nil
+	case sql2.GT:
+		return pql.GT, nil
+	case sql2.GE:
+		return pql.GTE, nil
+	default:
+		return pql.ILLEGAL, fmt.Errorf("cannot convert SQL op %q to PQL", op)
+	}
+}
+
+// sqlToPQLValue converts a literal SQL2 expression node to a PQL Go value.
+func sqlToPQLValue(expr sql2.Expr) (interface{}, error) {
+	switch expr := expr.(type) {
+	case *sql2.StringLit:
+		return expr.Value, nil
+	case *sql2.NumberLit:
+		if expr.IsFloat() {
+			return strconv.ParseFloat(expr.Value, 64)
+		}
+		return strconv.ParseInt(expr.Value, 10, 64)
+	case *sql2.BoolLit:
+		return expr.Value, nil
+	default:
+		return nil, fmt.Errorf("cannot convert SQL expression %T to a literal value", expr)
+	}
 }
 
 type Stmt struct {
@@ -266,14 +450,19 @@ var _ StmtNode = (*CountNode)(nil)
 type CountNode struct {
 	executor  *executor
 	indexName string
+	cond      *pql.Call // conditional
 
 	row []interface{}
 }
 
-func NewCountNode(executor *executor, indexName string) *CountNode {
+func NewCountNode(executor *executor, indexName string, cond *pql.Call) *CountNode {
+	if cond == nil {
+		cond = &pql.Call{Name: "All"}
+	}
 	return &CountNode{
 		executor:  executor,
 		indexName: indexName,
+		cond:      cond,
 	}
 }
 
@@ -286,11 +475,14 @@ func (n *CountNode) Next(ctx context.Context) error {
 	if n.row != nil {
 		return io.EOF
 	}
-	result, err := n.executor.Execute(ctx, n.indexName, &pql.Query{
+
+	q := &pql.Query{
 		Calls: []*pql.Call{
-			{Name: "Count", Children: []*pql.Call{{Name: "All"}}},
+			{Name: "Count", Children: []*pql.Call{n.cond}},
 		},
-	}, nil, nil)
+	}
+
+	result, err := n.executor.Execute(ctx, n.indexName, q, nil, nil)
 	if err != nil {
 		return err
 	}

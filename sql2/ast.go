@@ -1330,6 +1330,13 @@ type NumberLit struct {
 // IsAggregate returns false.
 func (expr *NumberLit) IsAggregate() bool { return false }
 
+// IsFloat returns true if literal contains a dot or 'e'.
+func (expr *NumberLit) IsFloat() bool {
+	return strings.Contains(expr.Value, ".") ||
+		strings.Contains(expr.Value, "e") ||
+		strings.Contains(expr.Value, "E")
+}
+
 // Clone returns a deep copy of lit.
 func (lit *NumberLit) Clone() *NumberLit {
 	if lit == nil {
