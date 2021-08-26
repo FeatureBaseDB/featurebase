@@ -5939,7 +5939,7 @@ func (e *executor) mapperLocal(ctx context.Context, shards []uint64, mapFn mapFu
 	ch := make(chan mapResponse, len(shards))
 
 	expected := 0
-	shardLoop:
+shardLoop:
 	for _, shard := range shards {
 		j := job{
 			shard:           shard,
