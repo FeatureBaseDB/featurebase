@@ -4493,10 +4493,13 @@ func intersectionCallbackArrayArray(a, b *Container, fn func(uint16)) {
 	if (na << 2) < nb {
 		for _, va := range ca {
 			for cb[0] < va {
-				if len(cb) > 8 && cb[0] < va {
+				// try to skip ahead a bit faster
+				for len(cb) > 7 && cb[7] < va {
 					cb = cb[8:]
 				}
-				cb = cb[1:]
+				for len(cb) > 0 && cb[0] < va {
+					cb = cb[1:]
+				}
 				if len(cb) == 0 {
 					return
 				}
@@ -4585,7 +4588,7 @@ func intersectionCallbackBitmapRun(a, b *Container, fn func(uint16)) {
 	}
 }
 
-func intersectionCallbackArrayBitmap(a, b *Container, fn func(uint16)) (n int32) {
+func intersectionCallbackArrayBitmap(a, b *Container, fn func(uint16)) {
 	statsHit("intersectionCount/ArrayBitmap")
 	bitmap := b.bitmap()
 	ln := len(bitmap)
@@ -4595,9 +4598,10 @@ func intersectionCallbackArrayBitmap(a, b *Container, fn func(uint16)) (n int32)
 			break
 		}
 		off := val % 64
-		n += int32(bitmap[i]>>off) & 1
+		if (bitmap[i]>>off) & 1 != 0 {
+			fn(val)
+		}
 	}
-	return n
 }
 
 func intersectionCallbackBitmapBitmap(a, b *Container, fn func(uint16)) {
