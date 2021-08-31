@@ -347,5 +347,51 @@ func TestFilterWithRows(t *testing.T) {
 			}
 		})
 	}
+}
 
+func TestMutexDupFilter(t *testing.T) {
+	tests := []struct{
+		pairs [][2]uint64
+		expect map[uint64][]uint64
+	}{
+		{
+			pairs: [][2]uint64{{0, 0}, {1, 0}, {0, 1}},
+			expect: map[uint64][]uint64{0: {0, 1}},
+		},
+		{
+			pairs: [][2]uint64{{0, 0}, {1, 0}, {0, 1}, {0, 2}},
+			expect: map[uint64][]uint64{0: {0, 1, 2}},
+		},
+	}
+	for num, test := range tests {
+		t.Run(fmt.Sprintf("case%d", num), func(t *testing.T) {
+			b := NewSliceBitmap()
+			for _, p := range test.pairs {
+				v := (p[1] << shardwidth.Exponent) | p[0]
+				b.DirectAdd(v)
+			}
+			dup := NewBitmapMutexDupFilter(0)
+			iter, _ := b.Containers.Iterator(0)
+			err := ApplyFilterToIterator(dup, iter)
+			if err != nil {
+				t.Fatalf("applying filter: %v", err)
+			}
+			expected := test.expect
+			got := dup.Report()
+			if len(expected) != len(got) {
+				t.Fatalf("expected %d entries in duplicate map, got %d", len(expected), len(got))
+			}
+			for k, v := range expected {
+				gv := got[k]
+				if len(v) != len(gv) {
+					t.Fatalf("for id %d, expected %d (len %d), got %d (len %d)", k, v, len(v), gv, len(gv))
+				}
+				for j := range v {
+					if gv[j] != v[j] {
+						t.Fatalf("for id %d, expected %d, got %d", k, v[j], gv[j])
+					}
+				}
+			}
+		})
+	}
 }
