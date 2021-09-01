@@ -2188,6 +2188,138 @@ func (api *API) TranslateFieldDB(ctx context.Context, indexName, fieldName strin
 	_, err := store.ReadFrom(rd)
 	return err
 }
+func (api *API) mutexCheckThisNode(ctx context.Context, qcx *Qcx, indexName string, fieldName string) (map[uint64]map[uint64][]uint64, error) {
+	index := api.holder.Index(indexName)
+	if index == nil {
+		return nil, newNotFoundError(ErrIndexNotFound, indexName)
+	}
+	field := index.Field(fieldName)
+	if field == nil {
+		return nil, newNotFoundError(ErrFieldNotFound, fieldName)
+	}
+	return field.MutexCheck(ctx, qcx)
+}
+
+// mergeMutexCollisions adds collisions to an existing map if they aren't already
+// present. It modifies dst.
+func mergeMutexCollisions(dst, src map[uint64][]uint64) {
+	for k, v := range src {
+		if len(v) == 0 {
+			continue
+		}
+		existing := dst[k]
+		if len(existing) == 0 {
+			dst[k] = v
+			continue
+		}
+		// existing and v are both non-empty lists of collisions for this key.
+		// but if replication is working, both nodes should have the SAME list
+		// of collisions, so it's probably worth special-casing that check:
+		if len(existing) == len(v) {
+			different := false
+			for i := range existing {
+				if v[i] != existing[i] {
+					different = true
+					break
+				}
+			}
+			// yay, we can just ignore this
+			if !different {
+				continue
+			}
+		}
+		// combine...
+		existing = append(existing, v...)
+		// sort...
+		sort.Slice(existing, func(i, j int) bool {
+			return existing[i] < existing[j]
+		})
+		// dedup.
+		n := 0
+		prev := existing[0]
+		for i := 0; i < len(existing); i++ {
+			if existing[i] != prev {
+				existing[n] = existing[i]
+				n++
+			}
+			prev = existing[i]
+		}
+		dst[k] = existing[:n]
+	}
+}
+
+// MutexCheck checks for collisions in a given mutex field. The response is
+// a map[shard]map[column]values.
+func (api *API) MutexCheck(ctx context.Context, qcx *Qcx, indexName string, fieldName string, remote bool) (map[uint64]map[uint64][]uint64, error) {
+	if err := api.validate(apiMutexCheck); err != nil {
+		return nil, errors.Wrap(err, "validating api method")
+	}
+	// short path: if this is an internal remote request, only try to solve the
+	// question for these shards.
+	if remote {
+		out, err := api.mutexCheckThisNode(ctx, qcx, indexName, fieldName)
+		return out, err
+	}
+	var nodes []*Node
+	if !remote {
+		nodes = Nodes(api.cluster.nodes).Clone()
+	} else {
+		nodes = []*Node{api.cluster.nodeByID(api.server.nodeID)}
+	}
+
+	/*
+		// request data from other nodes as well
+		snap := topology.NewClusterSnapshot(api.cluster.noder, api.cluster.Hasher, api.cluster.ReplicaN)
+	*/
+	eg, _ := errgroup.WithContext(ctx)
+	myID := api.server.nodeID
+	results := make([]map[uint64]map[uint64][]uint64, len(nodes))
+	for i, node := range nodes {
+		i := i // loop variable shadowing is a war crime
+		if node.ID != myID {
+			node := node // loop variable shadowing again
+			eg.Go(func() (err error) {
+				results[i], err = api.server.defaultClient.MutexCheck(ctx, &node.URI, indexName, fieldName)
+				return err
+			})
+		} else {
+			eg.Go(func() (err error) {
+				results[i], err = api.mutexCheckThisNode(ctx, qcx, indexName, fieldName)
+				return err
+			})
+		}
+	}
+	err := eg.Wait()
+	if err != nil {
+		return nil, err
+	}
+	var out map[uint64]map[uint64][]uint64
+	for _, nodeResults := range results {
+		if len(nodeResults) == 0 {
+			continue
+		}
+		if out == nil {
+			out = nodeResults
+			continue
+		}
+		for k, v := range nodeResults {
+			if len(v) == 0 {
+				continue
+			}
+			existing := out[k]
+			// results from two nodes. might be normal with replication.
+			if len(existing) == 0 {
+				out[k] = v
+				continue
+			}
+			// we have two maps for this shard. whee.
+			mergeMutexCollisions(existing, v)
+			// we don't store it back into out[k] because it was already
+			// a non-empty map, so stores to it update it. yay?
+		}
+	}
+	return out, nil
+}
 
 type serverInfo struct {
 	ShardWidth       uint64 `json:"shardWidth"`
@@ -2249,11 +2381,13 @@ const (
 	apiIDReserve
 	apiIDCommit
 	apiIDReset
+	apiMutexCheck //Backported from 1681 Caution
 )
 
 var methodsCommon = map[apiMethod]struct{}{
 	apiClusterMessage: {},
 	apiSetCoordinator: {},
+	apiMutexCheck:     {},
 }
 
 var methodsResizing = map[apiMethod]struct{}{
