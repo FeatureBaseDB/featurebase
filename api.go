@@ -2179,15 +2179,6 @@ func (api *API) TranslateIndexDB(ctx context.Context, indexName string, partitio
 	_, err := store.ReadFrom(rd)
 	return err
 }
-
-// TranslateFieldDB is an internal function to load the field keys database
-func (api *API) TranslateFieldDB(ctx context.Context, indexName, fieldName string, rd io.Reader) error {
-	idx := api.holder.Index(indexName)
-	field := idx.Field(fieldName)
-	store := field.TranslateStore()
-	_, err := store.ReadFrom(rd)
-	return err
-}
 func (api *API) mutexCheckThisNode(ctx context.Context, qcx *Qcx, indexName string, fieldName string) (map[uint64]map[uint64][]uint64, error) {
 	index := api.holder.Index(indexName)
 	if index == nil {
@@ -2200,82 +2191,86 @@ func (api *API) mutexCheckThisNode(ctx context.Context, qcx *Qcx, indexName stri
 	return field.MutexCheck(ctx, qcx)
 }
 
-// mergeMutexCollisions adds collisions to an existing map if they aren't already
-// present. It modifies dst.
-func mergeMutexCollisions(dst, src map[uint64][]uint64) {
-	for k, v := range src {
-		if len(v) == 0 {
-			continue
+// mergeIDLists merges a list of numeric IDs into another list, removing
+// duplicates.
+func mergeIDLists(dst []uint64, src []uint64) []uint64 {
+	dst = append(dst, src...)
+	sort.Slice(dst, func(i, j int) bool {
+		return dst[i] < dst[j]
+	})
+	// dedup.
+	n := 0
+	prev := dst[0]
+	for i := 0; i < len(dst); i++ {
+		if dst[i] != prev {
+			dst[n] = dst[i]
+			n++
 		}
-		existing := dst[k]
-		if len(existing) == 0 {
-			dst[k] = v
-			continue
-		}
-		// existing and v are both non-empty lists of collisions for this key.
-		// but if replication is working, both nodes should have the SAME list
-		// of collisions, so it's probably worth special-casing that check:
-		if len(existing) == len(v) {
-			different := false
-			for i := range existing {
-				if v[i] != existing[i] {
-					different = true
-					break
-				}
-			}
-			// yay, we can just ignore this
-			if !different {
-				continue
-			}
-		}
-		// combine...
-		existing = append(existing, v...)
-		// sort...
-		sort.Slice(existing, func(i, j int) bool {
-			return existing[i] < existing[j]
-		})
-		// dedup.
-		n := 0
-		prev := existing[0]
-		for i := 0; i < len(existing); i++ {
-			if existing[i] != prev {
-				existing[n] = existing[i]
-				n++
-			}
-			prev = existing[i]
-		}
-		dst[k] = existing[:n]
+		prev = dst[i]
 	}
+	return dst
 }
 
-// MutexCheck checks for collisions in a given mutex field. The response is
-// a map[shard]map[column]values.
-func (api *API) MutexCheck(ctx context.Context, qcx *Qcx, indexName string, fieldName string, remote bool) (map[uint64]map[uint64][]uint64, error) {
+// mergeKeyLists merges a list of string IDs into another list, removing
+// duplicates.
+func mergeKeyLists(dst []string, src []string) []string {
+	dst = append(dst, src...)
+	sort.Slice(dst, func(i, j int) bool {
+		return dst[i] < dst[j]
+	})
+	// dedup.
+	n := 0
+	prev := dst[0]
+	for i := 0; i < len(dst); i++ {
+		if dst[i] != prev {
+			dst[n] = dst[i]
+			n++
+		}
+		prev = dst[i]
+	}
+	return dst
+}
+
+// MutexCheckNode checks for collisions in a given mutex field. The response is
+// a map[shard]map[column]values, not translated.
+func (api *API) MutexCheckNode(ctx context.Context, qcx *Qcx, indexName string, fieldName string) (map[uint64]map[uint64][]uint64, error) {
 	if err := api.validate(apiMutexCheck); err != nil {
 		return nil, errors.Wrap(err, "validating api method")
 	}
-	// short path: if this is an internal remote request, only try to solve the
-	// question for these shards.
-	if remote {
-		out, err := api.mutexCheckThisNode(ctx, qcx, indexName, fieldName)
-		return out, err
-	}
-	var nodes []*Node
-	if !remote {
-		nodes = Nodes(api.cluster.nodes).Clone()
-	} else {
-		nodes = []*Node{api.cluster.nodeByID(api.server.nodeID)}
-	}
+	return api.mutexCheckThisNode(ctx, qcx, indexName, fieldName)
+}
 
-	/*
-		// request data from other nodes as well
-		snap := topology.NewClusterSnapshot(api.cluster.noder, api.cluster.Hasher, api.cluster.ReplicaN)
-	*/
+// MutexCheck checks a named field for mutex violations, returning a
+// map of record IDs to values for records that have multiple values in the
+// field. The return will be one of:
+//     map[uint64][]uint64 // unkeyed index, unkeyed field
+//     map[uint64][]string // unkeyed index, keyed field
+//     map[string][]uint64 // keyed index, unkeyed field
+//     map[string][]string // keyed index, keyed field
+func (api *API) MutexCheck(ctx context.Context, qcx *Qcx, indexName string, fieldName string) (result interface{}, err error) {
+	if err = api.validate(apiMutexCheck); err != nil {
+		return nil, errors.Wrap(err, "validating api method")
+	}
+	index, err := api.Index(ctx, indexName)
+	if err != nil {
+		return nil, err
+	}
+	field, err := api.Field(ctx, indexName, fieldName)
+	if err != nil {
+		return nil, err
+	}
+	if field.Type() != FieldTypeMutex {
+		return nil, errors.New("can only check mutex state for mutex fields")
+	}
+	nodes := Nodes(api.cluster.nodes).Clone()
 	eg, _ := errgroup.WithContext(ctx)
-	myID := api.server.nodeID
+
 	results := make([]map[uint64]map[uint64][]uint64, len(nodes))
+	myID := api.Node().ID
+	//	vprint.VV("MyID %#v\n", myID)
 	for i, node := range nodes {
 		i := i // loop variable shadowing is a war crime
+		//		vprint.VV("Compare %#v with %v", node.ID, myID)
 		if node.ID != myID {
 			node := node // loop variable shadowing again
 			eg.Go(func() (err error) {
@@ -2289,36 +2284,166 @@ func (api *API) MutexCheck(ctx context.Context, qcx *Qcx, indexName string, fiel
 			})
 		}
 	}
-	err := eg.Wait()
+	err = eg.Wait()
 	if err != nil {
 		return nil, err
 	}
-	var out map[uint64]map[uint64][]uint64
+	// We now have a series of maps from shards to maps of record IDs to
+	// values. But wait! Either the field, or the index, might be using keys,
+	// and want those translated. So we have to translate those.
+	useIndexKeys := index.Keys()
+	useFieldKeys := field.Keys()
+	var indexKeys = map[uint64]string{}
+	var fieldKeys = map[uint64]string{}
+	var indexIDs []uint64
+	var fieldIDs []uint64
+	// build translation tables, if we need them
+	untranslated := "untranslated"
+	// We don't know which of four map types we want to be working with,
+	// but what we can do is make a function which works with that map type
+	// given the raw integer values, and is a closure with an already-created
+	// map which has already been stashed in `result`. Because maps are
+	// reference-y, this should actually work.
+	var process func(uint64, []uint64)
+	if useIndexKeys || useFieldKeys {
+		for _, nodeResults := range results {
+			for _, shardResults := range nodeResults {
+				for record, values := range shardResults {
+					if useIndexKeys {
+						if _, ok := indexKeys[record]; !ok {
+							indexKeys[record] = untranslated
+							indexIDs = append(indexIDs, record)
+						}
+					}
+					if useFieldKeys {
+						for _, value := range values {
+							if _, ok := fieldKeys[value]; !ok {
+								fieldKeys[value] = untranslated
+								fieldIDs = append(fieldIDs, value)
+							}
+						}
+					}
+				}
+			}
+		}
+		// we now have lists of the keys, so...
+		if useIndexKeys {
+			indexKeyList, err := api.cluster.translateIndexIDs(ctx, indexName, indexIDs)
+			if err != nil {
+				return nil, errors.Wrap(err, "translating index keys")
+			}
+			if len(indexKeyList) != len(indexIDs) {
+				return nil, fmt.Errorf("translating %d record IDs, got %d keys", len(indexIDs), len(indexKeyList))
+			}
+			for i := range indexIDs {
+				indexKeys[indexIDs[i]] = indexKeyList[i]
+			}
+		}
+		if useFieldKeys {
+			fieldKeyList, err := api.cluster.translateFieldListIDs(field, fieldIDs)
+			if err != nil {
+				return nil, errors.Wrap(err, "translating index keys")
+			}
+			if len(fieldKeyList) != len(fieldIDs) {
+				return nil, fmt.Errorf("translating %d IDs, got %d keys", len(indexIDs), len(fieldKeyList))
+			}
+			for i := range fieldIDs {
+				fieldKeys[fieldIDs[i]] = fieldKeyList[i]
+			}
+		}
+
+	}
+	// define the process functions. separated from above code just to make
+	// it easier to follow/compare them.
+	if useIndexKeys {
+		if useFieldKeys {
+			outMap := make(map[string][]string)
+			var valueKeys []string
+			result = outMap
+			process = func(recordID uint64, valueIDs []uint64) {
+				valueKeys = valueKeys[:0]
+				for _, id := range valueIDs {
+					valueKeys = append(valueKeys, fieldKeys[id])
+				}
+				record := indexKeys[recordID]
+				if existing, ok := outMap[record]; ok {
+					outMap[record] = mergeKeyLists(existing, valueKeys)
+				} else {
+					// The append is so we can reuse this buffer safely,
+					// which matters if there's replication, because many
+					// cases won't need to copy the buffer, they'll just
+					// copy individual things from it.
+					outMap[record] = append([]string{}, valueKeys...)
+				}
+			}
+		} else {
+			outMap := make(map[string][]uint64)
+			result = outMap
+			process = func(recordID uint64, values []uint64) {
+				record := indexKeys[recordID]
+				if existing, ok := outMap[record]; ok {
+					outMap[record] = mergeIDLists(existing, values)
+				} else {
+					outMap[record] = values
+				}
+			}
+		}
+	} else {
+		if useFieldKeys {
+			outMap := make(map[uint64][]string)
+			var valueKeys []string
+			result = outMap
+			process = func(record uint64, valueIDs []uint64) {
+				valueKeys = valueKeys[:0]
+				for _, id := range valueIDs {
+					valueKeys = append(valueKeys, fieldKeys[id])
+				}
+				if existing, ok := outMap[record]; ok {
+					outMap[record] = mergeKeyLists(existing, valueKeys)
+				} else {
+					// The append is so we can reuse this buffer safely,
+					// which matters if there's replication, because many
+					// cases won't need to copy the buffer, they'll just
+					// copy individual things from it.
+					outMap[record] = append([]string{}, valueKeys...)
+				}
+			}
+		} else {
+			outMap := make(map[uint64][]uint64)
+			result = outMap
+			process = func(record uint64, values []uint64) {
+				if existing, ok := outMap[record]; ok {
+					outMap[record] = mergeIDLists(existing, values)
+				} else {
+					outMap[record] = values
+				}
+			}
+		}
+	}
+
 	for _, nodeResults := range results {
 		if len(nodeResults) == 0 {
 			continue
 		}
-		if out == nil {
-			out = nodeResults
-			continue
-		}
-		for k, v := range nodeResults {
+		for _, v := range nodeResults {
 			if len(v) == 0 {
 				continue
 			}
-			existing := out[k]
-			// results from two nodes. might be normal with replication.
-			if len(existing) == 0 {
-				out[k] = v
-				continue
+			for record, values := range v {
+				process(record, values)
 			}
-			// we have two maps for this shard. whee.
-			mergeMutexCollisions(existing, v)
-			// we don't store it back into out[k] because it was already
-			// a non-empty map, so stores to it update it. yay?
 		}
 	}
-	return out, nil
+	return result, nil
+}
+
+// TranslateFieldDB is an internal function to load the field keys database
+func (api *API) TranslateFieldDB(ctx context.Context, indexName, fieldName string, rd io.Reader) error {
+	idx := api.holder.Index(indexName)
+	field := idx.Field(fieldName)
+	store := field.TranslateStore()
+	_, err := store.ReadFrom(rd)
+	return err
 }
 
 type serverInfo struct {

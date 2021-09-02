@@ -939,7 +939,7 @@ func CorruptAMutex(tb testing.TB, field *Field, qcx *Qcx) {
 			}
 			// set a bonus bit, bypassing the mutex handling
 			frag.mu.Lock()
-			_, err = frag.unprotectedSetBit(tx, 3, frag.shard<<shardwidth.Exponent)
+			_, err = frag.unprotectedSetBit(tx, 3, (frag.shard<<shardwidth.Exponent)+1)
 			frag.mu.Unlock()
 			if err != nil {
 				tb.Fatalf("setting bit: %v", err)

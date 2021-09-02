@@ -74,6 +74,8 @@ github.com/glycerine/goconvey v0.0.0-20190410193231-58a59202ab31 h1:gclg6gY70GLy
 github.com/glycerine/goconvey v0.0.0-20190410193231-58a59202ab31/go.mod h1:Ogl1Tioa0aV7gstGFO7KhffUsb9M4ydbEbbxpcEDc24=
 github.com/glycerine/idem v0.0.0-20190127113923-7a8083893311 h1:AAXH0ZvYIHHqU06ASy0H2tYAkAGrQlZvEy2QZrrtt4E=
 github.com/glycerine/idem v0.0.0-20190127113923-7a8083893311/go.mod h1:B72P/ZM99sNiCmaQJflpmMAF5LsDzStpLdWzn0+Vr2Y=
+github.com/glycerine/vprint v0.0.0-20200730000117-76cea49a68ea h1:Uiuhuh77mImdrAMjPfw2V8tWw4AF6r9dxbNkECo23SA=
+github.com/glycerine/vprint v0.0.0-20200730000117-76cea49a68ea/go.mod h1:q7RHAiHHxYrXtGEkX14OuACg+cHODdKnVvTgpBnOzHk=
 github.com/go-gl/glfw v0.0.0-20190409004039-e6da0acd62b1/go.mod h1:vR7hzQXu2zJy9AVAgeJqvqgH9Q5CA+iKCZ2gyEVpxRU=
 github.com/go-gl/glfw/v3.3/glfw v0.0.0-20200222043503-6f7a984d4dc4/go.mod h1:tQ2UAYgL5IevRw8kRxooKSPJfGvJ9fJQFa0TUsXzTg8=
 github.com/go-kit/kit v0.8.0/go.mod h1:xBxKIO96dXMWWy0MnWVtmwkA9/13aqxPnvrjFYMA2as=

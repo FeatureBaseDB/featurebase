@@ -2492,7 +2492,7 @@ func (h *Handler) handleGetMutexCheck(w http.ResponseWriter, r *http.Request) {
 	indexName, fieldName := mux.Vars(r)["index"], mux.Vars(r)["field"]
 	qcx := h.api.Txf().NewQcx()
 	defer qcx.Abort()
-	out, err := h.api.MutexCheck(r.Context(), qcx, indexName, fieldName, false)
+	out, err := h.api.MutexCheck(r.Context(), qcx, indexName, fieldName)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -2518,7 +2518,7 @@ func (h *Handler) handleInternalGetMutexCheck(w http.ResponseWriter, r *http.Req
 	indexName, fieldName := mux.Vars(r)["index"], mux.Vars(r)["field"]
 	qcx := h.api.Txf().NewQcx()
 	defer qcx.Abort()
-	out, err := h.api.MutexCheck(r.Context(), qcx, indexName, fieldName, true)
+	out, err := h.api.MutexCheckNode(r.Context(), qcx, indexName, fieldName)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
