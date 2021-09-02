@@ -27,6 +27,7 @@ import (
 
 	"github.com/pilosa/pilosa/v2/pql"
 	"github.com/pilosa/pilosa/v2/roaring"
+	"github.com/pilosa/pilosa/v2/shardwidth"
 	"github.com/pilosa/pilosa/v2/testhook"
 )
 
@@ -921,4 +922,28 @@ func TestBSIGroup_TxReopenDB(t *testing.T) {
 
 	// the test: can we re-open a BSI fragment under Tx store
 	_ = f.Reopen()
+}
+
+func CorruptAMutex(tb testing.TB, field *Field, qcx *Qcx) {
+	v := field.view(viewStandard)
+	if v == nil {
+		tb.Fatalf("creating view failed")
+	}
+	frags := v.allFragments()
+	for _, frag := range frags {
+		func() {
+			tx, finisher, err := qcx.GetTx(Txo{Write: true, Index: field.idx, Shard: frag.shard})
+			defer finisher(&err)
+			if err != nil {
+				tb.Fatalf("getting tx: %v", err)
+			}
+			// set a bonus bit, bypassing the mutex handling
+			frag.mu.Lock()
+			_, err = frag.unprotectedSetBit(tx, 3, (frag.shard<<shardwidth.Exponent)+1)
+			frag.mu.Unlock()
+			if err != nil {
+				tb.Fatalf("setting bit: %v", err)
+			}
+		}()
+	}
 }

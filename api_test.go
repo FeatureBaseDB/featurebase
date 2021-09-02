@@ -28,6 +28,7 @@ import (
 	"github.com/pilosa/pilosa/v2/boltdb"
 	"github.com/pilosa/pilosa/v2/http"
 	"github.com/pilosa/pilosa/v2/server"
+	"github.com/pilosa/pilosa/v2/shardwidth"
 	"github.com/pilosa/pilosa/v2/test"
 )
 
@@ -620,5 +621,319 @@ func TestAPI_ClearFlagForImportAndImportValues(t *testing.T) {
 	bal = queryAcct(m0api, acctOwnerID, fieldAcct0, index)
 	if bal != 0 {
 		panic(fmt.Sprintf("expected %v, observed %v starting acct0 balance", acct0bal, 0))
+	}
+}
+
+type mutexCheckIndex struct {
+	index     *pilosa.Index
+	indexName string
+	createdAt int64
+	fields    map[bool]mutexCheckField
+}
+
+type mutexCheckField struct {
+	fieldName string
+	field     *pilosa.Field
+	createdAt int64
+}
+
+func TestAPI_MutexCheck(t *testing.T) {
+	c := test.MustRunCluster(t, 3)
+	defer c.Close()
+
+	m0 := c.GetNode(0)
+	nodesByID := make(map[string]*test.Command, 3)
+	qcxsByID := make(map[string]*pilosa.Qcx, 3)
+	for i := 0; i < 3; i++ {
+		node := c.GetNode(i)
+		id := node.API.Node().ID
+		nodesByID[id] = node
+	}
+
+	indexes := make(map[bool]mutexCheckIndex)
+
+	ctx := context.Background()
+	for _, keyedIndex := range []bool{false, true} {
+		indexName := fmt.Sprintf("i%t", keyedIndex)
+		index, err := m0.API.CreateIndex(ctx, indexName, pilosa.IndexOptions{Keys: keyedIndex, TrackExistence: true})
+		if err != nil {
+			t.Fatalf("creating index: %v", err)
+		}
+		if index.CreatedAt() == 0 {
+			t.Fatal("index createdAt is empty")
+		}
+		indexData := mutexCheckIndex{indexName: indexName, index: index, fields: make(map[bool]mutexCheckField), createdAt: index.CreatedAt()}
+		for _, keyedField := range []bool{false, true} {
+			fieldName := fmt.Sprintf("f%t", keyedField)
+			var field *pilosa.Field
+			if keyedField {
+				field, err = m0.API.CreateField(ctx, indexName, fieldName, pilosa.OptFieldTypeMutex(pilosa.CacheTypeNone, 0), pilosa.OptFieldKeys())
+			} else {
+				field, err = m0.API.CreateField(ctx, indexName, fieldName, pilosa.OptFieldTypeMutex(pilosa.CacheTypeNone, 0))
+			}
+			if err != nil {
+				t.Fatalf("creating field: %v", err)
+			}
+			if field.CreatedAt() == 0 {
+				t.Fatal("field createdAt is empty")
+			}
+			indexData.fields[keyedField] = mutexCheckField{fieldName: fieldName, field: field, createdAt: field.CreatedAt()}
+		}
+		indexes[keyedIndex] = indexData
+	}
+
+	rowIDs := []uint64{0, 1, 2, 3}
+	colIDs := []uint64{0, 1, 2, 3}
+	rowKeysBase := []string{"v0", "v1", "v2", "v3"}
+	colKeysBase := []string{"c0", "c1", "c2", "c3"}
+
+	const nShards = 10
+
+	// now, try the same thing for each combination of keyed/unkeyed. we
+	// share code between keyed/unkeyed fields, but for indexes, the logic
+	// is fundamentally different because we can't know shards in advance.
+	indexData := indexes[false]
+	for keyedField, fieldData := range indexData.fields {
+		fmt.Println("running:", indexData.indexName, fieldData.fieldName)
+		t.Run(fmt.Sprintf("%s-%s", indexData.indexName, fieldData.fieldName), func(t *testing.T) {
+			for id, node := range nodesByID {
+				qcxsByID[id] = node.API.Txf().NewQcx()
+			}
+			for shard := uint64(0); shard < nShards; shard++ {
+				// restore row/col ID values which can get altered by imports
+				for i := range rowIDs {
+					rowIDs[i] = uint64(i)
+					colIDs[i] = (shard << shardwidth.Exponent) + uint64(i) + (shard % 4)
+				}
+				req := &pilosa.ImportRequest{
+					Index:          indexData.indexName,
+					IndexCreatedAt: indexData.createdAt,
+					Field:          fieldData.fieldName,
+					FieldCreatedAt: fieldData.createdAt,
+					Shard:          shard,
+					ColumnIDs:      colIDs,
+				}
+				if keyedField {
+					req.RowKeys = rowKeysBase
+				} else {
+					req.RowIDs = rowIDs
+				}
+				nodesForShard, err := m0.API.ShardNodes(ctx, indexData.indexName, shard)
+				if err != nil {
+					t.Fatalf("obtaining shard list: %v", err)
+				}
+				if len(nodesForShard) < 1 {
+					t.Fatalf("no nodes for shard %d", shard)
+				}
+				node := nodesByID[nodesForShard[0].ID]
+				if err := node.API.Import(ctx, qcxsByID[nodesForShard[0].ID], req); err != nil {
+					t.Fatalf("importing data: %v", err)
+				}
+			}
+			// and then we break the mutex and close the Qcxs
+			for id, node := range nodesByID {
+				field, err := node.API.Field(ctx, indexData.indexName, fieldData.fieldName)
+				if err != nil {
+					t.Fatalf("requesting field %s from node %s: %v", fieldData.fieldName, id, err)
+				}
+				pilosa.CorruptAMutex(t, field, qcxsByID[id])
+				err = qcxsByID[id].Finish()
+				if err != nil {
+					t.Fatalf("closing out transaction on node %s: %v", id, err)
+				}
+			}
+			qcx := m0.API.Txf().NewQcx()
+			defer qcx.Abort()
+
+			results, err := m0.API.MutexCheck(ctx, qcx, indexData.indexName, fieldData.fieldName)
+			if err != nil {
+				t.Fatalf("checking mutexes: %v", err)
+			}
+			// first two shards of each group of 4 should have a collision in
+			// position 1
+			expected := map[uint64]bool{
+				(0 << shardwidth.Exponent) + 1: true,
+				(1 << shardwidth.Exponent) + 1: true,
+				(4 << shardwidth.Exponent) + 1: true,
+				(5 << shardwidth.Exponent) + 1: true,
+				(8 << shardwidth.Exponent) + 1: true,
+				(9 << shardwidth.Exponent) + 1: true,
+			}
+			if keyedField {
+				mapped, ok := results.(map[uint64][]string)
+				if !ok {
+					t.Fatalf("expected map[uint64][]string, got %T", results)
+				}
+				seen := 0
+				for k, v := range mapped {
+					seen++
+					if !expected[k] {
+						t.Fatalf("expected all collisions to be 1 shards (s %% 4 in [0,1]), got %d", k)
+					}
+					if len(v) != 2 {
+						t.Fatalf("expected exactly two collisions")
+					}
+				}
+				if seen != len(expected) {
+					t.Fatalf("expected exactly %d records to have collisions", len(expected))
+				}
+			} else {
+				mapped, ok := results.(map[uint64][]uint64)
+				if !ok {
+					t.Fatalf("expected map[uint64][]uint64, got %T", results)
+				}
+				seen := 0
+				for k, v := range mapped {
+					seen++
+					if !expected[k] {
+						t.Fatalf("expected all collisions to be 1 shards (s %% 4 in [0,1]), got %d", k)
+					}
+					if len(v) != 2 {
+						t.Fatalf("expected exactly two collisions")
+					}
+				}
+				if seen != len(expected) {
+					t.Fatalf("expected exactly %d records to have collisions", len(expected))
+				}
+			}
+		})
+	}
+	indexData = indexes[true]
+	for keyedField, fieldData := range indexData.fields {
+		t.Run(fmt.Sprintf("%s-%s", indexData.indexName, fieldData.fieldName), func(t *testing.T) {
+			for id, node := range nodesByID {
+				qcxsByID[id] = node.API.Txf().NewQcx()
+			}
+			req := &pilosa.ImportRequest{
+				Index:          indexData.indexName,
+				IndexCreatedAt: indexData.createdAt,
+				Field:          fieldData.fieldName,
+				FieldCreatedAt: fieldData.createdAt,
+				Shard:          0, // ignored when using keys
+			}
+			rowKeys := make([]string, 0, len(rowKeysBase)*nShards)
+			colKeys := make([]string, 0, len(rowKeysBase)*nShards)
+			rowIDs = rowIDs[:0]
+			for shard := uint64(0); shard < nShards; shard++ {
+				for i := range rowKeysBase {
+					colKeys = append(colKeys, fmt.Sprintf("s%d-%s", shard, colKeysBase[i]))
+					if keyedField {
+						rowKeys = append(rowKeys, rowKeysBase[i])
+					} else {
+						rowIDs = append(rowIDs, uint64(i))
+					}
+				}
+			}
+			req.ColumnKeys = colKeys
+			if keyedField {
+				req.RowKeys = rowKeys
+			} else {
+				req.RowIDs = rowIDs
+			}
+			var id string
+			var node *test.Command
+			for id, node = range nodesByID {
+				break
+			}
+			if err := node.API.Import(ctx, qcxsByID[id], req); err != nil {
+				t.Fatalf("importing data: %v", err)
+			}
+			expected, err := node.API.FindIndexKeys(ctx, indexData.indexName, colKeys...)
+			if err != nil {
+				t.Fatalf("looking up index keys: %v", err)
+			}
+			for key, id := range expected {
+				// CorruptAMutex should only corrupt things in position 1 of their
+				// shards...
+				if id%(1<<shardwidth.Exponent) != 1 {
+					delete(expected, key)
+				}
+			}
+			if keyedField {
+				fieldValues, err := node.API.FindFieldKeys(ctx, indexData.indexName, fieldData.fieldName, rowKeys...)
+				if err != nil {
+					t.Fatalf("looking up field keys: %v", err)
+				}
+				// Figure out which key got the value 3, delete any records
+				// which would have had that key, because they won't be
+				// conflicts.
+				for key, value := range fieldValues {
+					if value == 3 {
+						for offset, baseKey := range rowKeysBase {
+							if baseKey == key {
+								for i := offset; i < len(rowKeys); i += len(rowKeysBase) {
+									delete(expected, colKeys[i])
+								}
+							}
+						}
+					}
+				}
+			} else {
+				// we set rowKeys to 0-1-2-... for rowKeysBase items, which
+				// tells us which keys we expect to be 3 already.
+				for i := 3; i < len(rowIDs); i += len(rowKeysBase) {
+					delete(expected, colKeys[i])
+				}
+			}
+			// and then we break the mutex and close the Qcxs
+			for id, node := range nodesByID {
+				field, err := node.API.Field(ctx, indexData.indexName, fieldData.fieldName)
+				if err != nil {
+					t.Fatalf("requesting field %s from node %s: %v", fieldData.fieldName, id, err)
+				}
+				pilosa.CorruptAMutex(t, field, qcxsByID[id])
+				err = qcxsByID[id].Finish()
+				if err != nil {
+					t.Fatalf("closing out transaction on node %s: %v", id, err)
+				}
+			}
+			qcx := m0.API.Txf().NewQcx()
+			defer qcx.Abort()
+
+			results, err := m0.API.MutexCheck(ctx, qcx, indexData.indexName, fieldData.fieldName)
+			if err != nil {
+				t.Fatalf("checking mutexes: %v", err)
+			}
+			if keyedField {
+				// this just sorta comes out this way with our hashing; these are
+				// the things which were in position 1 of their shards, and did
+				// not have a value which happens to map to 3.
+				mapped, ok := results.(map[string][]string)
+				if !ok {
+					t.Fatalf("expected map[string][]string, got %T", results)
+				}
+				seen := 0
+				for k, v := range mapped {
+					seen++
+					if _, ok := expected[k]; !ok {
+						t.Fatalf("unexpected collision on key %q", k)
+					}
+					if len(v) != 2 {
+						t.Fatalf("expected exactly two collisions")
+					}
+				}
+				if seen != len(expected) {
+					t.Fatalf("expected exactly %d records to have collisions, got %d", len(expected), seen)
+				}
+			} else {
+				mapped, ok := results.(map[string][]uint64)
+				if !ok {
+					t.Fatalf("expected map[string][]uint64, got %T", results)
+				}
+				seen := 0
+				for k, v := range mapped {
+					seen++
+					if _, ok := expected[k]; !ok {
+						t.Fatalf("unexpected collision on key %q", k)
+					}
+					if len(v) != 2 {
+						t.Fatalf("expected exactly two collisions")
+					}
+				}
+				if seen != len(expected) {
+					t.Fatalf("expected exactly %d records to have collisions, got %d", len(expected), seen)
+				}
+			}
+		})
 	}
 }

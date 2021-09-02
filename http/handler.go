@@ -386,6 +386,7 @@ func newRouter(handler *Handler) http.Handler {
 	router.HandleFunc("/index/{index}/field/{field}", handler.handlePostField).Methods("POST").Name("PostField")
 	router.HandleFunc("/index/{index}/field/{field}", handler.handleDeleteField).Methods("DELETE").Name("DeleteField")
 	router.HandleFunc("/index/{index}/field/{field}/import", handler.handlePostImport).Methods("POST").Name("PostImport")
+	router.HandleFunc("/index/{index}/field/{field}/mutex-check", handler.handleGetMutexCheck).Methods("GET").Name("GetMutexCheck")
 	router.HandleFunc("/index/{index}/field/{field}/import-roaring/{shard}", handler.handlePostImportRoaring).Methods("POST").Name("PostImportRoaring")
 	router.HandleFunc("/index/{index}/query", handler.handlePostQuery).Methods("POST").Name("PostQuery")
 	router.HandleFunc("/info", handler.handleGetInfo).Methods("GET").Name("GetInfo")
@@ -422,6 +423,7 @@ func newRouter(handler *Handler) http.Handler {
 	router.HandleFunc("/internal/translate/data", handler.handlePostTranslateData).Methods("POST").Name("PostTranslateData")
 	router.HandleFunc("/internal/translate/keys", handler.handlePostTranslateKeys).Methods("POST").Name("PostTranslateKeys")
 	router.HandleFunc("/internal/translate/ids", handler.handlePostTranslateIDs).Methods("POST").Name("PostTranslateIDs")
+	router.HandleFunc("/internal/index/{index}/field/{field}/mutex-check", handler.handleInternalGetMutexCheck).Methods("GET").Name("InternalGetMutexCheck")
 	router.HandleFunc("/internal/index/{index}/field/{field}/attr/diff", handler.handlePostFieldAttrDiff).Methods("POST").Name("PostFieldAttrDiff")
 	router.HandleFunc("/internal/index/{index}/field/{field}/remote-available-shards/{shardID}", handler.handleDeleteRemoteAvailableShard).Methods("DELETE")
 	router.HandleFunc("/internal/nodes", handler.handleGetNodes).Methods("GET").Name("GetNodes")
@@ -2476,6 +2478,58 @@ func (h *Handler) handlePostImportColumnAttrs(w http.ResponseWriter, r *http.Req
 	_, err = w.Write(importOk)
 	if err != nil {
 		h.logger.Printf("writing import-column-attrs response: %v", err)
+	}
+}
+
+// handleGetMutexCheck handles /mutex-check requests.
+func (h *Handler) handleGetMutexCheck(w http.ResponseWriter, r *http.Request) {
+	if !validHeaderAcceptJSON(r.Header) {
+		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
+		return
+	}
+	// Get index and field type to determine how to handle the
+	// import data.
+	indexName, fieldName := mux.Vars(r)["index"], mux.Vars(r)["field"]
+	qcx := h.api.Txf().NewQcx()
+	defer qcx.Abort()
+	out, err := h.api.MutexCheck(r.Context(), qcx, indexName, fieldName)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	outBytes, err := json.Marshal(out)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("marshalling response: %v", err), http.StatusInternalServerError)
+	}
+	_, err = w.Write(outBytes)
+	if err != nil {
+		h.logger.Printf("writing mutex-check response: %v", err)
+	}
+}
+
+// handleInternalGetMutexCheck handles internal (non-forwarding )/mutex-check requests.
+func (h *Handler) handleInternalGetMutexCheck(w http.ResponseWriter, r *http.Request) {
+	if !validHeaderAcceptJSON(r.Header) {
+		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
+		return
+	}
+	// Get index and field type to determine how to handle the
+	// import data.
+	indexName, fieldName := mux.Vars(r)["index"], mux.Vars(r)["field"]
+	qcx := h.api.Txf().NewQcx()
+	defer qcx.Abort()
+	out, err := h.api.MutexCheckNode(r.Context(), qcx, indexName, fieldName)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	outBytes, err := json.Marshal(out)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("marshalling response: %v", err), http.StatusInternalServerError)
+	}
+	_, err = w.Write(outBytes)
+	if err != nil {
+		h.logger.Printf("writing mutex-check response: %v", err)
 	}
 }
 

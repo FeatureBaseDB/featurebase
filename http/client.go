@@ -133,6 +133,34 @@ func (c *InternalClient) Schema(ctx context.Context) ([]*pilosa.IndexInfo, error
 	return rsp.Indexes, nil
 }
 
+// MutexCheck uses the mutex-check endpoint to request mutex collision data
+// from a single node.
+func (c *InternalClient) MutexCheck(ctx context.Context, uri *pilosa.URI, indexName string, fieldName string) (map[uint64]map[uint64][]uint64, error) {
+	if uri == nil {
+		uri = c.defaultURI
+	}
+	u := uri.Path(fmt.Sprintf("/internal/index/%s/field/%s/mutex-check", indexName, fieldName))
+	req, err := http.NewRequest("GET", u, nil)
+	if err != nil {
+		return nil, errors.Wrap(err, "creating request")
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+
+	resp, err := c.executeRequest(req.WithContext(ctx))
+	if err != nil {
+		return nil, errors.Wrap(err, "executing request")
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, errors.Errorf("unexpected status code: %s", resp.Status)
+	}
+	var out map[uint64]map[uint64][]uint64
+	dec := json.NewDecoder(resp.Body)
+	err = dec.Decode(&out)
+	return out, err
+}
+
 func (c *InternalClient) PostSchema(ctx context.Context, uri *pilosa.URI, s *pilosa.Schema, remote bool) error {
 	u := uri.Path(fmt.Sprintf("/schema?remote=%v", remote))
 	buf, err := json.Marshal(s)

@@ -67,7 +67,7 @@ jobs:
       name: golang
     steps:
       - run: '[[ -n $CIRCLE_PULL_REQUEST ]] || circleci step halt || true' # Skip if this is not a pull request
-      - run: curl https://moleculacorp:$GITHUB_PERSONAL_ACCESS_TOKEN@api.github.com/repos/molecula/pilosa/pulls/$(basename $CIRCLE_PULL_REQUEST) | jq "[.labels[] | .name | startswith(\"changelog\")] | any" -e
+      - run: curl https://moleculacorp:$GITHUB_PERSONAL_ACCESS_TOKEN@api.github.com/repos/molecula/featurebase/pulls/$(basename $CIRCLE_PULL_REQUEST) | jq "[.labels[] | .name | startswith(\"changelog\")] | any" -e
   test-build-arm:
     executor:
       name: golang
