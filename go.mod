@@ -14,7 +14,6 @@ require (
 	github.com/fsnotify/fsnotify v1.4.9 // indirect
 	github.com/glycerine/goconvey v0.0.0-20190410193231-58a59202ab31 // indirect
 	github.com/glycerine/idem v0.0.0-20190127113923-7a8083893311
-	github.com/glycerine/vprint v0.0.0-20200730000117-76cea49a68ea // indirect
 	github.com/gogo/protobuf v1.2.1
 	github.com/golang/protobuf v1.4.2
 	github.com/google/go-cmp v0.5.2
@@ -56,7 +55,7 @@ require (
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 	google.golang.org/grpc v1.28.0
 	gopkg.in/check.v1 v1.0.0-20200227125254-8fa46927fb4f // indirect
-	gopkg.in/yaml.v2 v2.3.0 // indirect
+	gopkg.in/yaml.v2 v2.3.0
 	modernc.org/mathutil v1.0.0
 	modernc.org/strutil v1.0.0
 	vitess.io/vitess v3.0.0-rc.3.0.20190602171040-12bfde34629c+incompatible
