@@ -33,14 +33,14 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto" //nolint:staticcheck
-	"github.com/opentracing/opentracing-go"
-	"github.com/molecula/featurebase/v2"
+	pilosa "github.com/molecula/featurebase/v2"
 	"github.com/molecula/featurebase/v2/logger"
 	pnet "github.com/molecula/featurebase/v2/net"
 	"github.com/molecula/featurebase/v2/pb"
 	"github.com/molecula/featurebase/v2/pql"
 	"github.com/molecula/featurebase/v2/roaring"
 	"github.com/molecula/featurebase/v2/stats"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -777,6 +777,34 @@ func (c *Client) readSchema() ([]SchemaIndex, error) {
 		return nil, errors.Wrap(err, "unmarshaling /schema data")
 	}
 	return schemaInfo.Indexes, nil
+}
+
+func (c *Client) IngestSchema(reqBody map[string]interface{}) (body []byte, err error) {
+	data, err := json.Marshal(reqBody)
+	if err != nil {
+		return data, errors.Wrap(err, " error building Schema body to Ingest")
+	}
+	return c.IngestRequest("/internal/schema", data)
+}
+
+func (c *Client) IngestData(index string, reqBody []map[string]interface{}) (body []byte, err error) {
+	data, err := json.Marshal(reqBody)
+	if err != nil {
+		return data, errors.Wrap(err, " error building request body to Ingest")
+	}
+	return c.IngestRequest("/internal/ingest/"+index, data)
+}
+
+func (c *Client) IngestRequest(Uri string, data []byte) (body []byte, err error) {
+	var header = make(map[string]string)
+	header["Content-Type"] = "application/json"
+	header["Accept"] = "application/json"
+	header["User-Agent"] = "pilosa/" + pilosa.Version
+	_, body, err = c.HTTPRequest("POST", Uri, data, header)
+	if err != nil {
+		return nil, errors.Wrap(err, "requesting "+Uri)
+	}
+	return body, err
 }
 
 func (c *Client) shardsMax() (map[string]uint64, error) {
