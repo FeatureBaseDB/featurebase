@@ -27,9 +27,42 @@ import (
 
 	"github.com/molecula/featurebase/v2/pql"
 	"github.com/molecula/featurebase/v2/roaring"
+	"github.com/molecula/featurebase/v2/shardwidth"
 	"github.com/molecula/featurebase/v2/testhook"
 	. "github.com/molecula/featurebase/v2/vprint" // nolint:staticcheck
 )
+
+// CorruptAMutex breaks a mutex in order to test the mutex-corruption stuff.
+// Note the horrible crime here: This is an exported function which exists only
+// in test builds. This is so that external tests, which aren't inside this
+// package, can call this exported function, and thus get access to functionality
+// that would otherwise not be available to them.
+//
+// This always sets row 3 in column 0 of each shard it finds. Populate the
+// field with existing shards first.
+func CorruptAMutex(tb testing.TB, field *Field, qcx *Qcx) {
+	v := field.view(viewStandard)
+	if v == nil {
+		tb.Fatalf("creating view failed")
+	}
+	frags := v.allFragments()
+	for _, frag := range frags {
+		func() {
+			tx, finisher, err := qcx.GetTx(Txo{Write: true, Index: field.idx, Shard: frag.shard})
+			defer finisher(&err)
+			if err != nil {
+				tb.Fatalf("getting tx: %v", err)
+			}
+			// set a bonus bit, bypassing the mutex handling
+			frag.mu.Lock()
+			_, err = frag.unprotectedSetBit(tx, 3, (frag.shard<<shardwidth.Exponent)+1)
+			frag.mu.Unlock()
+			if err != nil {
+				tb.Fatalf("setting bit: %v", err)
+			}
+		}()
+	}
+}
 
 // Ensure a bsiGroup can adjust to its baseValue.
 func TestBSIGroup_BaseValue(t *testing.T) {

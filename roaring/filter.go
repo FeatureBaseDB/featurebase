@@ -755,6 +755,75 @@ func NewBitmapRangeFilter(min, max FilterKey, keyCallback func(FilterKey, int32)
 	return &BitmapRangeFilter{min: min, max: max, kcb: keyCallback, dcb: dataCallback}
 }
 
+// BitmapMutexDupFilter is a filter which identifies cases where the same
+// position has a bit set in more than one row.
+//
+// We keep a slice of the first value seen for every row, with ^0 as the
+// default; when that's already set, things get appended to the entries in
+// the map. At the end, for each entry in the map, we also add its first
+// value to it. Thus, the map holds all the entries, but we're only using
+// the map in the (hopefully rarer) cases where there's duplicate values.
+//
+// The slice is local-coordinates (first column 0), but the map is global
+// coordinates (first column is whatever base was).
+type BitmapMutexDupFilter struct {
+	base  uint64              // the offset of 0 for this, used to accommodate shard offsets
+	extra map[uint64][]uint64 // extra values observed
+	first []uint64            // first values observed
+}
+
+var _ BitmapFilter = &BitmapMutexDupFilter{}
+
+func NewBitmapMutexDupFilter(base uint64) *BitmapMutexDupFilter {
+	filter := &BitmapMutexDupFilter{
+		base:  base,
+		extra: map[uint64][]uint64{},
+		first: make([]uint64, 1<<shardwidth.Exponent),
+	}
+	for i := range filter.first {
+		filter.first[i] = ^uint64(0)
+	}
+	return filter
+}
+
+func (b *BitmapMutexDupFilter) ConsiderKey(key FilterKey, n int32) FilterResult {
+	if n > 0 {
+		return key.NeedData()
+	}
+	return key.RejectOne()
+}
+
+func (b *BitmapMutexDupFilter) ConsiderData(key FilterKey, data *Container) FilterResult {
+	value, basePos := uint64(key)>>rowExponent, uint64(key&keyMask)<<16
+	containerCallback(data, func(u uint16) {
+		pos := basePos + uint64(u)
+		if b.first[pos] != ^uint64(0) {
+			b.extra[pos+b.base] = append(b.extra[pos+b.base], value)
+		} else {
+			b.first[pos] = value
+		}
+	})
+	return key.MatchOne()
+}
+
+// Report returns the set of duplicate values identified.
+func (b *BitmapMutexDupFilter) Report() map[uint64][]uint64 {
+	// copy values into extra, and remove them from first, so calling
+	// Report() again won't cause double-appends.
+	for k, v := range b.extra {
+		kpos := k % (1 << shardwidth.Exponent)
+		if b.first[kpos] != ^uint64(0) {
+			v = append(v, 0)
+			// prepend so the lowest value goes at the beginning
+			copy(v[1:], v[:])
+			v[0] = b.first[kpos]
+			b.first[kpos] = ^uint64(0)
+			b.extra[k] = v
+		}
+	}
+	return b.extra
+}
+
 // ApplyFilterToIterator is a simplistic implementation that applies a bitmap
 // filter to a ContainerIterator, returning an error if it encounters an error.
 //

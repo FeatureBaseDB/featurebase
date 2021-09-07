@@ -80,6 +80,7 @@ type InternalClient interface {
 	RetrieveTranslatePartitionFromURI(ctx context.Context, index string, partition int, uri pnet.URI) (io.ReadCloser, error)
 	ImportRoaring(ctx context.Context, uri *pnet.URI, index, field string, shard uint64, remote bool, req *ImportRoaringRequest) error
 	ShardReader(ctx context.Context, index string, shard uint64) (io.ReadCloser, error)
+	MutexCheck(ctx context.Context, uri *pnet.URI, index string, field string) (map[uint64]map[uint64][]uint64, error)
 
 	IDAllocDataReader(ctx context.Context) (io.ReadCloser, error)
 	IndexTranslateDataReader(ctx context.Context, index string, partitionID int) (io.ReadCloser, error)
@@ -211,6 +212,10 @@ func (n nopInternalClient) ImportValue2(ctx context.Context, req *ImportValueReq
 
 func (n nopInternalClient) ImportRoaring(ctx context.Context, uri *pnet.URI, index, field string, shard uint64, remote bool, req *ImportRoaringRequest) error {
 	return nil
+}
+
+func (n nopInternalClient) MutexCheck(ctx context.Context, uri *pnet.URI, index, field string) (map[uint64]map[uint64][]uint64, error) {
+	return nil, nil
 }
 
 func (n nopInternalClient) ShardReader(ctx context.Context, index string, shard uint64) (io.ReadCloser, error) {

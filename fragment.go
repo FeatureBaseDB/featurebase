@@ -599,6 +599,17 @@ func (f *fragment) closeStorage() error {
 	return nil
 }
 
+// mutexCheck checks for any entries in fragment which violate the mutex
+// property of having only one value set for a given column ID.
+func (f *fragment) mutexCheck(tx Tx) (map[uint64][]uint64, error) {
+	dup := roaring.NewBitmapMutexDupFilter(f.shard << shardwidth.Exponent)
+	err := tx.ApplyFilter(f.index(), f.field(), f.view(), f.shard, 0, dup)
+	if err != nil {
+		return nil, err
+	}
+	return dup.Report(), nil
+}
+
 // row returns a row by ID.
 func (f *fragment) row(tx Tx, rowID uint64) (*Row, error) {
 	f.mu.Lock()

@@ -442,6 +442,50 @@ func (v *view) row(txOrig Tx, rowID uint64) (*Row, error) {
 
 }
 
+// mutexCheck checks all available fragments for duplicate values. The return
+// is map[column]map[shard][]values for collisions only.
+func (v *view) mutexCheck(ctx context.Context, qcx *Qcx) (map[uint64]map[uint64][]uint64, error) {
+	// We don't need the context, we just want the context-awareness on the error groups.
+	// It would be nice if the inner functions could use this too...
+	eg, _ := errgroup.WithContext(ctx)
+	throttle := make(chan struct{}, runtime.NumCPU())
+	frags := v.allFragments()
+	results := make([]map[uint64][]uint64, len(frags))
+	for i, frag := range frags {
+		// local copies for the goroutine to use
+		i, frag := i, frag
+		eg.Go(func() error {
+			// limit simultaneous parallel goroutines associated with this
+			throttle <- struct{}{}
+			defer func() {
+				<-throttle
+			}()
+			tx, finisher, err := qcx.GetTx(Txo{Index: v.idx, Shard: frag.shard})
+			if err != nil {
+				return err
+			}
+			defer finisher(&err)
+			results[i], err = frag.mutexCheck(tx)
+			if err != nil {
+				return err
+			}
+			return nil
+		})
+	}
+	err := eg.Wait()
+	if err != nil {
+		return nil, err
+	}
+	out := map[uint64]map[uint64][]uint64{}
+	for i, result := range results {
+		if len(result) == 0 {
+			continue
+		}
+		out[frags[i].shard] = result
+	}
+	return out, nil
+}
+
 // setBit sets a bit within the view.
 func (v *view) setBit(txOrig Tx, rowID, columnID uint64) (changed bool, err error) {
 	shard := columnID / ShardWidth
