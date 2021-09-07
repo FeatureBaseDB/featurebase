@@ -272,7 +272,7 @@ workflows:
             - setup
           matrix:
             parameters:
-              test_make_target: ["test-race", "test-txstore-rbf_bolt"]
+              test_make_target: ["test-race"]
       - test:
           name: test-shardwidth-22
           context: molecula

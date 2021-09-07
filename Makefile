@@ -341,6 +341,9 @@ install-gometalinter:
 test-txstore-rbf:
 	PILOSA_STORAGE_BACKEND=rbf $(MAKE) testv-race
 
+# WARNING: This feature is no longer being tested regularly in CI. The test is
+# very slow and very expensive, and we're not sure it actually provides useful
+# information now.
 test-txstore-rbf_bolt:
 	PILOSA_STORAGE_BACKEND=rbf_bolt $(MAKE) testv-race
 
