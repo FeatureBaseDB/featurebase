@@ -5543,6 +5543,7 @@ func requireMutexSampleData(tb testing.TB) {
 // a few mutex tests want common largeish pools of mutex data
 type mutexSampleData struct {
 	name           string
+	rng            mutexSampleRange
 	colIDs, rowIDs [3][]uint64
 }
 
@@ -5597,7 +5598,7 @@ func newMutexSampleRange(density int8, rows uint8) mutexSampleRange {
 	return mutexSampleRange((int16(density) << 8) | int16(rows))
 }
 
-var sampleMutexData = map[mutexSampleRange]*mutexSampleData{}
+var sampleMutexData = map[string]*mutexSampleData{}
 
 type mutexDensity struct {
 	name    string
@@ -5658,7 +5659,7 @@ func prepareMutexSampleData(tb testing.TB) {
 
 			colIDs := make([]uint64, mutexSampleDataSize)
 			rowIDs := make([]uint64, mutexSampleDataSize)
-			data := &mutexSampleData{name: d.name + "/" + s.name}
+			data := &mutexSampleData{name: d.name + "/" + s.name, rng: rng}
 			prev := uint64(0)
 			generated := 0
 			for idx := 0; int(prev) < len(data.colIDs); idx++ {
@@ -5682,42 +5683,75 @@ func prepareMutexSampleData(tb testing.TB) {
 				colIDs[idx] = col % ShardWidth
 				rowIDs[idx] = row
 			}
-			sampleMutexData[rng] = data
+			sampleMutexData[data.name] = data
 		}
 	}
+	d := mutexSampleData{
+		name: "extra",
+		rowIDs: [3][]uint64{
+			{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1},
+			{1},
+			{2},
+		},
+		colIDs: [3][]uint64{
+			{0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 1, 3, 5, 7, 8, 11, 13, 15, 17, 19, 21, 23},
+			{29},
+			{33},
+		},
+		rng: 2,
+	}
+	for i := 0; i < 16; i++ {
+		if (i % 16) != 4 {
+			d.colIDs[0][i] += 65536
+		}
+	}
+	sampleMutexData[d.name] = &d
 }
 
 var importBatchSizes = []int{40, 80, 240, 2048}
 
 func TestImportMutexSampleData(t *testing.T) {
 	requireMutexSampleData(t)
-	var scratchCols []uint64
-	var scratchRows []uint64
-	for rng, data := range sampleMutexData {
-		scratchCols, scratchRows = data.scratchSpace(0, scratchCols, scratchRows)
+	var scratchCols [3][]uint64
+	var scratchRows [3][]uint64
+	for _, data := range sampleMutexData {
+		for i := range scratchRows {
+			scratchCols[i], scratchRows[i] = data.scratchSpace(i, scratchCols[i], scratchRows[i])
+		}
+		seen := make(map[uint64]struct{})
 		t.Run(data.name, func(t *testing.T) {
 			batchSize := 16384
 			f, _, tx := mustOpenMutexFragment(t, "i", "f", viewStandard, 0, "")
 			defer f.Clean(t)
 			// Set import.
 			var err error
-			for i := 0; i < len(scratchCols); i += batchSize {
-				max := i + batchSize
-				if len(scratchCols) < max {
-					max = len(scratchCols)
+
+			for i := 0; i < len(scratchCols); i++ {
+				cols := scratchCols[i]
+				rows := scratchRows[i]
+				for _, v := range cols {
+					seen[v] = struct{}{}
 				}
-				err = f.bulkImport(tx, scratchRows[i:max:max], scratchCols[i:max:max], &ImportOptions{})
-				if err != nil {
-					t.Fatalf("bulk importing ids [%d:%d]: %v", i, max, err)
+
+				for j := 0; j < len(cols); j += batchSize {
+					max := j + batchSize
+					if len(cols) < max {
+						max = len(cols)
+					}
+					err = f.bulkImport(tx, rows[j:max:max], cols[j:max:max], &ImportOptions{})
+					if err != nil {
+						t.Fatalf("bulk importing ids [%d/3] [%d:%d]: %v", i+1, j, max, err)
+					}
 				}
-			}
-			count := uint64(0)
-			for k := uint32(0); k < rng.rows(); k++ {
-				count += f.mustRow(tx, uint64(k)).Count()
-			}
-			if int(count) != len(data.colIDs[0]) {
-				t.Fatalf("for %d rows, %d density: expected %d results, got %d",
-					rng.rows(), rng.density(), len(data.colIDs[0]), count)
+				count := uint64(0)
+				for k := uint32(0); k < data.rng.rows(); k++ {
+					c := f.mustRow(tx, uint64(k)).Count()
+					count += c
+				}
+				if int(count) != len(seen) {
+					t.Fatalf("for %d rows, %d density, import %d/3: expected %d results, got %d",
+						data.rng.rows(), data.rng.density(), i+1, len(seen), count)
+				}
 			}
 		})
 	}
