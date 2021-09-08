@@ -2208,7 +2208,7 @@ func mergeIDLists(dst []uint64, src []uint64) []uint64 {
 		}
 		prev = dst[i]
 	}
-	return dst
+	return dst[:n]
 }
 
 // mergeKeyLists merges a list of string IDs into another list, removing
@@ -2228,7 +2228,7 @@ func mergeKeyLists(dst []string, src []string) []string {
 		}
 		prev = dst[i]
 	}
-	return dst
+	return dst[:n]
 }
 
 // MutexCheckNode checks for collisions in a given mutex field. The response is
