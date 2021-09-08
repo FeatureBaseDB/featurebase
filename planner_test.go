@@ -16,8 +16,10 @@ package pilosa_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/molecula/featurebase/v2"
 	"github.com/molecula/featurebase/v2/test"
 )
@@ -165,4 +167,135 @@ func TestPlanner_Count(t *testing.T) {
 			}
 		})
 	})
+}
+
+func TestPlanner_Select(t *testing.T) {
+	c := test.MustRunCluster(t, 1)
+	defer c.Close()
+
+	i0, err := c.GetHolder(0).CreateIndex("i0", pilosa.IndexOptions{TrackExistence: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer i0.Close()
+
+	if _, err := i0.CreateField("a", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
+		t.Fatal(err)
+	} else if _, err := i0.CreateField("b", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
+		t.Fatal(err)
+	}
+
+	i1, err := c.GetHolder(0).CreateIndex("i1", pilosa.IndexOptions{TrackExistence: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer i1.Close()
+
+	if _, err := i1.CreateField("x", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
+		t.Fatal(err)
+	} else if _, err := i1.CreateField("y", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
+		t.Fatal(err)
+	}
+
+	// Populate with data.
+	if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{
+		Index: "i0",
+		Query: `
+			Set(1, a=10)
+			Set(1, b=100)
+			Set(2, a=20)
+			Set(2, b=200)
+	`}); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("UnqualifiedColumns", func(t *testing.T) {
+		results := mustQueryRows(t, c.GetNode(0).Server, `SELECT _id, a, b FROM i0`)
+		if diff := cmp.Diff(results, [][]interface{}{
+			{int64(1), int64(10), int64(100)},
+			{int64(2), int64(20), int64(200)},
+		}); diff != "" {
+			t.Fatal(diff)
+		}
+	})
+
+	t.Run("QualifiedColumns", func(t *testing.T) {
+		results := mustQueryRows(t, c.GetNode(0).Server, `SELECT i0._id, i0.a, i0.b FROM i0`)
+		if diff := cmp.Diff(results, [][]interface{}{
+			{int64(1), int64(10), int64(100)},
+			{int64(2), int64(20), int64(200)},
+		}); diff != "" {
+			t.Fatal(diff)
+		}
+	})
+
+	t.Run("UnqualifiedStar", func(t *testing.T) {
+		results := mustQueryRows(t, c.GetNode(0).Server, `SELECT * FROM i0`)
+		if diff := cmp.Diff(results, [][]interface{}{
+			{int64(1), int64(10), int64(100)},
+			{int64(2), int64(20), int64(200)},
+		}); diff != "" {
+			t.Fatal(diff)
+		}
+	})
+
+	t.Run("QualifiedStar", func(t *testing.T) {
+		results := mustQueryRows(t, c.GetNode(0).Server, `SELECT i0.* FROM i0`)
+		if diff := cmp.Diff(results, [][]interface{}{
+			{int64(1), int64(10), int64(100)},
+			{int64(2), int64(20), int64(200)},
+		}); diff != "" {
+			t.Fatal(diff)
+		}
+	})
+
+	t.Run("ErrFieldNotFound", func(t *testing.T) {
+		stmt, err := c.GetNode(0).Server.PlanSQL(context.Background(), `SELECT xyz FROM i0`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer stmt.Close()
+
+		var xyz interface{}
+		if err := stmt.QueryRowContext(context.Background()).Scan(&xyz); err == nil || !strings.Contains(err.Error(), `xyz: field not found`) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+}
+
+func mustQueryRows(tb testing.TB, svr *pilosa.Server, q string) [][]interface{} {
+	tb.Helper()
+
+	stmt, err := svr.PlanSQL(context.Background(), q)
+	if err != nil {
+		tb.Fatal(err)
+	}
+	defer stmt.Close()
+
+	rows, err := stmt.QueryContext(context.Background())
+	if err != nil {
+		tb.Fatal(err)
+	}
+
+	results := make([][]interface{}, 0)
+	for rows.Next() {
+		result := make([]interface{}, len(rows.Columns()))
+
+		// Create list of scan destination pointers.
+		dsts := make([]interface{}, len(result))
+		for i := range result {
+			dsts[i] = &result[i]
+		}
+
+		if err := rows.Scan(dsts...); err != nil {
+			tb.Fatal(err)
+		}
+
+		results = append(results, result)
+	}
+	if err := rows.Err(); err != nil {
+		tb.Fatal(err)
+	}
+
+	return results
 }

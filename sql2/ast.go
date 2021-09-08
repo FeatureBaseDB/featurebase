@@ -3053,6 +3053,23 @@ type ResultColumn struct {
 	Alias *Ident // alias name
 }
 
+// Name returns the column name. Uses the alias, if specified.
+// Otherwise returns a generated name.
+func (c *ResultColumn) Name() string {
+	if c.Alias != nil {
+		return IdentName(c.Alias)
+	}
+
+	switch expr := c.Expr.(type) {
+	case *Ident:
+		return IdentName(expr)
+	case *QualifiedRef:
+		return expr.String()
+	default:
+		return ""
+	}
+}
+
 // IsAggregate returns true if column contains an aggregate function expression.
 func (c *ResultColumn) IsAggregate() bool {
 	if c.Star.IsValid() {
