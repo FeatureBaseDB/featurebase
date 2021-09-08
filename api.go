@@ -2831,6 +2831,10 @@ func (api *API) MutexCheck(ctx context.Context, qcx *Qcx, indexName string, fiel
 				}
 			}
 		}
+		// if context is done, return early.
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		untranslatedKeys := 0
 		// Obtain translation tables for the keys.
 		if useIndexKeys {
@@ -2848,6 +2852,10 @@ func (api *API) MutexCheck(ctx context.Context, qcx *Qcx, indexName string, fiel
 					untranslatedKeys++
 				}
 			}
+		}
+		// if context is done, return early.
+		if err := ctx.Err(); err != nil {
+			return nil, err
 		}
 		if useFieldKeys {
 			fieldKeyList, err := api.cluster.translateFieldListIDs(field, fieldIDs)
@@ -2870,6 +2878,11 @@ func (api *API) MutexCheck(ctx context.Context, qcx *Qcx, indexName string, fiel
 		}
 	}
 
+	// if context is done, return early.
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
 	// define the process functions. separated from above code just to make
 	// it easier to follow/compare them.
 	if useIndexKeys {
@@ -2879,7 +2892,9 @@ func (api *API) MutexCheck(ctx context.Context, qcx *Qcx, indexName string, fiel
 			// unlike a map, the slice won't get updated-in-place, so we have
 			// to assign to result after we're done
 			defer func() {
-				result = outStrings
+				if err == nil {
+					result = outStrings
+				}
 			}()
 			process = func(recordID uint64, valueIDs []uint64) bool {
 				if _, ok := outMap[recordID]; ok {
@@ -2930,7 +2945,9 @@ func (api *API) MutexCheck(ctx context.Context, qcx *Qcx, indexName string, fiel
 			// unlike a map, the slice won't get updated-in-place, so we have
 			// to assign to result after we're done
 			defer func() {
-				result = outIDs
+				if err == nil {
+					result = outIDs
+				}
 			}()
 			process = func(recordID uint64, valueIDs []uint64) bool {
 				if _, ok := outMap[recordID]; ok {
@@ -2982,18 +2999,30 @@ processing:
 		if len(nodeResults) == 0 {
 			continue
 		}
+		// if context is done, return early.
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		for _, v := range nodeResults {
 			if len(v) == 0 {
 				continue
 			}
+			counter := 0
 			for record, values := range v {
+				counter++
 				if process(record, values) {
 					break processing
+				}
+				// every 65k items or so, check the context for done-ness
+				if counter%(1<<16) == 0 {
+					if err := ctx.Err(); err != nil {
+						return nil, err
+					}
 				}
 			}
 		}
 	}
-	return result, nil
+	return result, ctx.Err()
 }
 
 type serverInfo struct {

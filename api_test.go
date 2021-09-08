@@ -1138,9 +1138,6 @@ func TestAPI_MutexCheck(t *testing.T) {
 				t.Fatalf("checking mutexes: %v", err)
 			}
 			if keyedField {
-				// this just sorta comes out this way with our hashing; these are
-				// the things which were in position 1 of their shards, and did
-				// not have a value which happens to map to 3.
 				mapped, ok := results.(map[string][]string)
 				if !ok {
 					t.Fatalf("expected map[string][]string, got %T", results)
@@ -1182,9 +1179,6 @@ func TestAPI_MutexCheck(t *testing.T) {
 			if err != nil {
 				t.Fatalf("checking mutexes: %v", err)
 			}
-			// this just sorta comes out this way with our hashing; these are
-			// the things which were in position 1 of their shards, and did
-			// not have a value which happens to map to 3.
 			mapped, ok := results.([]string)
 			if !ok {
 				t.Fatalf("expected []string, got %T", results)
