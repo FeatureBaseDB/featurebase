@@ -767,18 +767,29 @@ func NewBitmapRangeFilter(min, max FilterKey, keyCallback func(FilterKey, int32)
 // The slice is local-coordinates (first column 0), but the map is global
 // coordinates (first column is whatever base was).
 type BitmapMutexDupFilter struct {
-	base  uint64              // the offset of 0 for this, used to accommodate shard offsets
-	extra map[uint64][]uint64 // extra values observed
-	first []uint64            // first values observed
+	base    uint64              // the offset of 0 for this, used to accommodate shard offsets
+	extra   map[uint64][]uint64 // extra values observed
+	first   []uint64            // first values observed
+	details bool
+	limit   int
+	done    bool      // if we have a limit, and we've hit it...
+	highKey FilterKey // ... we can stop after this many containers.
 }
 
 var _ BitmapFilter = &BitmapMutexDupFilter{}
 
-func NewBitmapMutexDupFilter(base uint64) *BitmapMutexDupFilter {
+func NewBitmapMutexDupFilter(base uint64, details bool, limit int) *BitmapMutexDupFilter {
 	filter := &BitmapMutexDupFilter{
-		base:  base,
-		extra: map[uint64][]uint64{},
-		first: make([]uint64, 1<<shardwidth.Exponent),
+		base:    base,
+		extra:   map[uint64][]uint64{},
+		first:   make([]uint64, 1<<shardwidth.Exponent),
+		details: details,
+		limit:   limit,
+	}
+	if filter.limit == 0 {
+		// A limit of 0 is not a limit; set limit higher than possible number of
+		// values we could have.
+		filter.limit = 2 << shardwidth.Exponent
 	}
 	for i := range filter.first {
 		filter.first[i] = ^uint64(0)
@@ -798,27 +809,52 @@ func (b *BitmapMutexDupFilter) ConsiderData(key FilterKey, data *Container) Filt
 	containerCallback(data, func(u uint16) {
 		pos := basePos + uint64(u)
 		if b.first[pos] != ^uint64(0) {
-			b.extra[pos+b.base] = append(b.extra[pos+b.base], value)
+			if b.details {
+				b.extra[pos+b.base] = append(b.extra[pos+b.base], value)
+			} else {
+				// no details, just annotate that it exists
+				b.extra[pos+b.base] = []uint64{}
+			}
 		} else {
 			b.first[pos] = value
 		}
 	})
+	if len(b.extra) >= b.limit {
+		if !b.done {
+			// we note which container we found the last value we needed in.
+			// We may still go over the limit, but we won't look at any *more*
+			// containers in this row.
+			//
+			// We can't just abort early because the records we already found
+			// could have more values.
+			b.done = true
+			b.highKey = key & keyMask
+			return key.RejectRow()
+		}
+		if (key & keyMask) >= b.highKey {
+			return key.RejectRow()
+		}
+	}
 	return key.MatchOne()
 }
 
 // Report returns the set of duplicate values identified.
 func (b *BitmapMutexDupFilter) Report() map[uint64][]uint64 {
 	// copy values into extra, and remove them from first, so calling
-	// Report() again won't cause double-appends.
-	for k, v := range b.extra {
-		kpos := k % (1 << shardwidth.Exponent)
-		if b.first[kpos] != ^uint64(0) {
-			v = append(v, 0)
-			// prepend so the lowest value goes at the beginning
-			copy(v[1:], v[:])
-			v[0] = b.first[kpos]
-			b.first[kpos] = ^uint64(0)
-			b.extra[k] = v
+	// Report() again won't cause double-appends. We only have to do
+	// this if we've been asked for details; otherwise the list of
+	// known positions is sufficient.
+	if b.details {
+		for k, v := range b.extra {
+			kpos := k % (1 << shardwidth.Exponent)
+			if b.first[kpos] != ^uint64(0) {
+				v = append(v, 0)
+				// prepend so the lowest value goes at the beginning
+				copy(v[1:], v[:])
+				v[0] = b.first[kpos]
+				b.first[kpos] = ^uint64(0)
+				b.extra[k] = v
+			}
 		}
 	}
 	return b.extra

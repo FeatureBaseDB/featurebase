@@ -601,8 +601,8 @@ func (f *fragment) closeStorage() error {
 
 // mutexCheck checks for any entries in fragment which violate the mutex
 // property of having only one value set for a given column ID.
-func (f *fragment) mutexCheck(tx Tx) (map[uint64][]uint64, error) {
-	dup := roaring.NewBitmapMutexDupFilter(f.shard << shardwidth.Exponent)
+func (f *fragment) mutexCheck(tx Tx, details bool, limit int) (map[uint64][]uint64, error) {
+	dup := roaring.NewBitmapMutexDupFilter(f.shard<<shardwidth.Exponent, details, limit)
 	err := tx.ApplyFilter(f.index(), f.field(), f.view(), f.shard, 0, dup)
 	if err != nil {
 		return nil, err

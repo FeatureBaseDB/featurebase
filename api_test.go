@@ -966,10 +966,6 @@ func TestAPI_MutexCheck(t *testing.T) {
 			qcx := m0.API.Txf().NewQcx()
 			defer qcx.Abort()
 
-			results, err := m0.API.MutexCheck(ctx, qcx, indexData.indexName, fieldData.fieldName)
-			if err != nil {
-				t.Fatalf("checking mutexes: %v", err)
-			}
 			// first two shards of each group of 4 should have a collision in
 			// position 1
 			expected := map[uint64]bool{
@@ -980,6 +976,12 @@ func TestAPI_MutexCheck(t *testing.T) {
 				(8 << shardwidth.Exponent) + 1: true,
 				(9 << shardwidth.Exponent) + 1: true,
 			}
+
+			results, err := m0.API.MutexCheck(ctx, qcx, indexData.indexName, fieldData.fieldName, true, 0)
+			if err != nil {
+				t.Fatalf("checking mutexes: %v", err)
+			}
+
 			if keyedField {
 				mapped, ok := results.(map[uint64][]string)
 				if !ok {
@@ -1014,8 +1016,28 @@ func TestAPI_MutexCheck(t *testing.T) {
 					}
 				}
 				if seen != len(expected) {
-					t.Fatalf("expected exactly %d records to have collisions", len(expected))
+					t.Fatalf("expected exactly %d records to have collisions, got %d", len(expected), seen)
 				}
+			}
+
+			// and let's try with no details and a limit of 3...
+			results, err = m0.API.MutexCheck(ctx, qcx, indexData.indexName, fieldData.fieldName, false, 3)
+			if err != nil {
+				t.Fatalf("checking mutexes: %v", err)
+			}
+			mapped, ok := results.([]uint64)
+			if !ok {
+				t.Fatalf("expected []uint64, got %T", results)
+			}
+			seen := 0
+			for _, k := range mapped {
+				seen++
+				if !expected[k] {
+					t.Fatalf("expected all collisions to be position 1 in shards (s %% 4 in [0,1]), got %d", k)
+				}
+			}
+			if seen != 3 {
+				t.Fatalf("expected results limited to 3, got %d", seen)
 			}
 		})
 	}
@@ -1111,7 +1133,7 @@ func TestAPI_MutexCheck(t *testing.T) {
 			qcx := m0.API.Txf().NewQcx()
 			defer qcx.Abort()
 
-			results, err := m0.API.MutexCheck(ctx, qcx, indexData.indexName, fieldData.fieldName)
+			results, err := m0.API.MutexCheck(ctx, qcx, indexData.indexName, fieldData.fieldName, true, 0)
 			if err != nil {
 				t.Fatalf("checking mutexes: %v", err)
 			}
@@ -1154,6 +1176,28 @@ func TestAPI_MutexCheck(t *testing.T) {
 				if seen != len(expected) {
 					t.Fatalf("expected exactly %d records to have collisions, got %d", len(expected), seen)
 				}
+			}
+
+			results, err = m0.API.MutexCheck(ctx, qcx, indexData.indexName, fieldData.fieldName, false, 3)
+			if err != nil {
+				t.Fatalf("checking mutexes: %v", err)
+			}
+			// this just sorta comes out this way with our hashing; these are
+			// the things which were in position 1 of their shards, and did
+			// not have a value which happens to map to 3.
+			mapped, ok := results.([]string)
+			if !ok {
+				t.Fatalf("expected []string, got %T", results)
+			}
+			seen := 0
+			for _, k := range mapped {
+				seen++
+				if _, ok := expected[k]; !ok {
+					t.Fatalf("unexpected collision on key %q", k)
+				}
+			}
+			if seen != 3 {
+				t.Fatalf("expected results limited to 3, got %d", len(expected))
 			}
 		})
 	}
