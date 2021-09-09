@@ -12,7 +12,7 @@ BUILD_TIME := $(shell date -u +%FT%T%z)
 SHARD_WIDTH = 20
 COMMIT := $(shell git describe --exact-match >/dev/null 2>&1 || git rev-parse --short HEAD)
 LDFLAGS="-X github.com/pilosa/pilosa/v2.Version=$(VERSION) -X github.com/pilosa/pilosa/v2.BuildTime=$(BUILD_TIME) -X github.com/pilosa/pilosa/v2.Variant=$(VARIANT) -X github.com/pilosa/pilosa/v2.Commit=$(COMMIT) -X github.com/pilosa/pilosa/v2.LatticeCommit=$(LATTICE_COMMIT)"
-GO_VERSION=1.14.10
+GO_VERSION=1.16.7
 RELEASE ?= 0
 RELEASE_ENABLED = $(subst 0,,$(RELEASE))
 BUILD_TAGS += $(if $(RELEASE_ENABLED),release)
@@ -204,6 +204,11 @@ docker-tag-push: vendor
 	docker tag "pilosa:$(VERSION)" $(DOCKER_TARGET)
 	docker push $(DOCKER_TARGET)
 	@echo Pushed docker image: $(DOCKER_TARGET)
+
+docker-release: check-clean generate-statik
+	$(MAKE) docker-build GOOS=linux GOARCH=amd64
+	$(MAKE) docker-build GOOS=darwin GOARCH=amd64
+	$(MAKE) docker-build GOOS=darwin GOARCH=arm64
 
 # Compile Pilosa inside Docker container
 docker-build: vendor
