@@ -2653,7 +2653,7 @@ func (api *API) RestoreShard(ctx context.Context, indexName string, shard uint64
 	return nil
 }
 
-func (api *API) mutexCheckThisNode(ctx context.Context, qcx *Qcx, indexName string, fieldName string) (map[uint64]map[uint64][]uint64, error) {
+func (api *API) mutexCheckThisNode(ctx context.Context, qcx *Qcx, indexName string, fieldName string, details bool, limit int) (map[uint64]map[uint64][]uint64, error) {
 	index := api.holder.Index(indexName)
 	if index == nil {
 		return nil, newNotFoundError(ErrIndexNotFound, indexName)
@@ -2662,7 +2662,26 @@ func (api *API) mutexCheckThisNode(ctx context.Context, qcx *Qcx, indexName stri
 	if field == nil {
 		return nil, newNotFoundError(ErrFieldNotFound, fieldName)
 	}
-	return field.MutexCheck(ctx, qcx)
+	results, err := field.MutexCheck(ctx, qcx, details, limit)
+	if err != nil {
+		return nil, err
+	}
+	if limit != 0 && len(results) > limit {
+		toDel := len(results) - limit
+		// yes, Go allows you to delete keys you've already seen while
+		// iterating a map. The spec says that if a value not-yet-reached
+		// is deleted during iteration, it may or may not appear; this
+		// carries the implication that deleting things during map iteration
+		// is safe.
+		for k := range results {
+			delete(results, k)
+			toDel--
+			if toDel == 0 {
+				break
+			}
+		}
+	}
+	return results, err
 }
 
 // mergeIDLists merges a list of numeric IDs into another list, removing
@@ -2707,21 +2726,25 @@ func mergeKeyLists(dst []string, src []string) []string {
 
 // MutexCheckNode checks for collisions in a given mutex field. The response is
 // a map[shard]map[column]values, not translated.
-func (api *API) MutexCheckNode(ctx context.Context, qcx *Qcx, indexName string, fieldName string) (map[uint64]map[uint64][]uint64, error) {
+func (api *API) MutexCheckNode(ctx context.Context, qcx *Qcx, indexName string, fieldName string, details bool, limit int) (map[uint64]map[uint64][]uint64, error) {
 	if err := api.validate(apiMutexCheck); err != nil {
 		return nil, errors.Wrap(err, "validating api method")
 	}
-	return api.mutexCheckThisNode(ctx, qcx, indexName, fieldName)
+	return api.mutexCheckThisNode(ctx, qcx, indexName, fieldName, details, limit)
 }
 
 // MutexCheck checks a named field for mutex violations, returning a
 // map of record IDs to values for records that have multiple values in the
 // field. The return will be one of:
+//     details true:
 //     map[uint64][]uint64 // unkeyed index, unkeyed field
 //     map[uint64][]string // unkeyed index, keyed field
 //     map[string][]uint64 // keyed index, unkeyed field
 //     map[string][]string // keyed index, keyed field
-func (api *API) MutexCheck(ctx context.Context, qcx *Qcx, indexName string, fieldName string) (result interface{}, err error) {
+//     details false:
+//     []uint64            // unkeyed index
+//     []string            // keyed index
+func (api *API) MutexCheck(ctx context.Context, qcx *Qcx, indexName string, fieldName string, details bool, limit int) (result interface{}, err error) {
 	if err = api.validate(apiMutexCheck); err != nil {
 		return nil, errors.Wrap(err, "validating api method")
 	}
@@ -2746,12 +2769,12 @@ func (api *API) MutexCheck(ctx context.Context, qcx *Qcx, indexName string, fiel
 		if node.ID != myID {
 			node := node // loop variable shadowing again
 			eg.Go(func() (err error) {
-				results[i], err = api.server.defaultClient.MutexCheck(ctx, &node.URI, indexName, fieldName)
+				results[i], err = api.server.defaultClient.MutexCheck(ctx, &node.URI, indexName, fieldName, details, limit)
 				return err
 			})
 		} else {
 			eg.Go(func() (err error) {
-				results[i], err = api.mutexCheckThisNode(ctx, qcx, indexName, fieldName)
+				results[i], err = api.mutexCheckThisNode(ctx, qcx, indexName, fieldName, details, limit)
 				return err
 			})
 		}
@@ -2760,12 +2783,18 @@ func (api *API) MutexCheck(ctx context.Context, qcx *Qcx, indexName string, fiel
 	if err != nil {
 		return nil, err
 	}
+	// Set this arbitrarily large so we don't have to be hand-checking for 0
+	// throughout.
+	if limit == 0 {
+		limit = math.MaxInt32
+	}
 	// We now have a series of maps from shards to maps of record IDs to
 	// values. But wait! Either the field, or the index, might be using keys,
 	// and want those translated. So we have to translate those. We'll create
 	// some tables.
 	useIndexKeys := index.Keys()
-	useFieldKeys := field.Keys()
+	// If we're not doing details, we won't translate field keys even if we could.
+	useFieldKeys := field.Keys() && details
 	var indexKeys = map[uint64]string{}
 	var fieldKeys = map[uint64]string{}
 	var indexIDs []uint64
@@ -2778,8 +2807,9 @@ func (api *API) MutexCheck(ctx context.Context, qcx *Qcx, indexName string, fiel
 	// but what we can do is make a function which works with that map type
 	// given the raw integer values, and is a closure with an already-created
 	// map which has already been stashed in `result`. Because maps are
-	// reference-y, this should actually work.
-	var process func(uint64, []uint64)
+	// reference-y, this should actually work. This function returns true if
+	// it's hit the limit for length of results.
+	var process func(uint64, []uint64) bool
 	if useIndexKeys || useFieldKeys {
 		for _, nodeResults := range results {
 			for _, shardResults := range nodeResults {
@@ -2801,6 +2831,10 @@ func (api *API) MutexCheck(ctx context.Context, qcx *Qcx, indexName string, fiel
 				}
 			}
 		}
+		// if context is done, return early.
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		untranslatedKeys := 0
 		// Obtain translation tables for the keys.
 		if useIndexKeys {
@@ -2818,6 +2852,10 @@ func (api *API) MutexCheck(ctx context.Context, qcx *Qcx, indexName string, fiel
 					untranslatedKeys++
 				}
 			}
+		}
+		// if context is done, return early.
+		if err := ctx.Err(); err != nil {
+			return nil, err
 		}
 		if useFieldKeys {
 			fieldKeyList, err := api.cluster.translateFieldListIDs(field, fieldIDs)
@@ -2840,14 +2878,37 @@ func (api *API) MutexCheck(ctx context.Context, qcx *Qcx, indexName string, fiel
 		}
 	}
 
+	// if context is done, return early.
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
 	// define the process functions. separated from above code just to make
 	// it easier to follow/compare them.
 	if useIndexKeys {
-		if useFieldKeys {
+		if !details {
+			outMap := make(map[uint64]struct{})
+			outStrings := []string{}
+			// unlike a map, the slice won't get updated-in-place, so we have
+			// to assign to result after we're done
+			defer func() {
+				if err == nil {
+					result = outStrings
+				}
+			}()
+			process = func(recordID uint64, valueIDs []uint64) bool {
+				if _, ok := outMap[recordID]; ok {
+					return len(outMap) >= limit
+				}
+				outMap[recordID] = struct{}{}
+				outStrings = append(outStrings, indexKeys[recordID])
+				return len(outMap) >= limit
+			}
+		} else if useFieldKeys {
 			outMap := make(map[string][]string)
 			var valueKeys []string
 			result = outMap
-			process = func(recordID uint64, valueIDs []uint64) {
+			process = func(recordID uint64, valueIDs []uint64) bool {
 				valueKeys = valueKeys[:0]
 				for _, id := range valueIDs {
 					valueKeys = append(valueKeys, fieldKeys[id])
@@ -2855,32 +2916,52 @@ func (api *API) MutexCheck(ctx context.Context, qcx *Qcx, indexName string, fiel
 				record := indexKeys[recordID]
 				if existing, ok := outMap[record]; ok {
 					outMap[record] = mergeKeyLists(existing, valueKeys)
-				} else {
+				} else if len(outMap) < limit {
 					// The append is so we can reuse this buffer safely,
 					// which matters if there's replication, because many
 					// cases won't need to copy the buffer, they'll just
 					// copy individual things from it.
 					outMap[record] = append([]string{}, valueKeys...)
 				}
+				return len(outMap) >= limit
 			}
 		} else {
 			outMap := make(map[string][]uint64)
 			result = outMap
-			process = func(recordID uint64, values []uint64) {
+			process = func(recordID uint64, values []uint64) bool {
 				record := indexKeys[recordID]
 				if existing, ok := outMap[record]; ok {
 					outMap[record] = mergeIDLists(existing, values)
-				} else {
+				} else if len(outMap) < limit {
 					outMap[record] = values
 				}
+				return len(outMap) >= limit
 			}
 		}
 	} else {
-		if useFieldKeys {
+		if !details {
+			outMap := make(map[uint64]struct{})
+			outIDs := []uint64{}
+			// unlike a map, the slice won't get updated-in-place, so we have
+			// to assign to result after we're done
+			defer func() {
+				if err == nil {
+					result = outIDs
+				}
+			}()
+			process = func(recordID uint64, valueIDs []uint64) bool {
+				if _, ok := outMap[recordID]; ok {
+					return len(outMap) >= limit
+				}
+				outMap[recordID] = struct{}{}
+				outIDs = append(outIDs, recordID)
+				return len(outMap) >= limit
+			}
+		} else if useFieldKeys {
 			outMap := make(map[uint64][]string)
 			var valueKeys []string
 			result = outMap
-			process = func(record uint64, valueIDs []uint64) {
+			process = func(record uint64, valueIDs []uint64) bool {
 				valueKeys = valueKeys[:0]
 				for _, id := range valueIDs {
 					valueKeys = append(valueKeys, fieldKeys[id])
@@ -2894,34 +2975,54 @@ func (api *API) MutexCheck(ctx context.Context, qcx *Qcx, indexName string, fiel
 					// copy individual things from it.
 					outMap[record] = append([]string{}, valueKeys...)
 				}
+				return len(outMap) >= limit
 			}
 		} else {
 			outMap := make(map[uint64][]uint64)
 			result = outMap
-			process = func(record uint64, values []uint64) {
+			process = func(record uint64, values []uint64) bool {
 				if existing, ok := outMap[record]; ok {
 					outMap[record] = mergeIDLists(existing, values)
 				} else {
 					outMap[record] = values
 				}
+				return len(outMap) >= limit
 			}
 		}
 	}
 
+	// if you specify a limit, and you have *different* errors on different
+	// nodes, we will not check all of the nodes. otherwise there's no practical
+	// way to get the primary benefit of specifying a limit.
+processing:
 	for _, nodeResults := range results {
 		if len(nodeResults) == 0 {
 			continue
+		}
+		// if context is done, return early.
+		if err := ctx.Err(); err != nil {
+			return nil, err
 		}
 		for _, v := range nodeResults {
 			if len(v) == 0 {
 				continue
 			}
+			counter := 0
 			for record, values := range v {
-				process(record, values)
+				counter++
+				if process(record, values) {
+					break processing
+				}
+				// every 65k items or so, check the context for done-ness
+				if counter%(1<<16) == 0 {
+					if err := ctx.Err(); err != nil {
+						return nil, err
+					}
+				}
 			}
 		}
 	}
-	return result, nil
+	return result, ctx.Err()
 }
 
 type serverInfo struct {

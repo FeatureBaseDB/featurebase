@@ -350,16 +350,16 @@ func TestFilterWithRows(t *testing.T) {
 }
 
 func TestMutexDupFilter(t *testing.T) {
-	tests := []struct{
-		pairs [][2]uint64
+	tests := []struct {
+		pairs  [][2]uint64
 		expect map[uint64][]uint64
 	}{
 		{
-			pairs: [][2]uint64{{0, 0}, {1, 0}, {0, 1}},
+			pairs:  [][2]uint64{{0, 0}, {1, 0}, {0, 1}},
 			expect: map[uint64][]uint64{0: {0, 1}},
 		},
 		{
-			pairs: [][2]uint64{{0, 0}, {1, 0}, {0, 1}, {0, 2}},
+			pairs:  [][2]uint64{{0, 0}, {1, 0}, {0, 1}, {0, 2}},
 			expect: map[uint64][]uint64{0: {0, 1, 2}},
 		},
 	}
@@ -370,7 +370,7 @@ func TestMutexDupFilter(t *testing.T) {
 				v := (p[1] << shardwidth.Exponent) | p[0]
 				b.DirectAdd(v)
 			}
-			dup := NewBitmapMutexDupFilter(0)
+			dup := NewBitmapMutexDupFilter(0, true, 9)
 			iter, _ := b.Containers.Iterator(0)
 			err := ApplyFilterToIterator(dup, iter)
 			if err != nil {

@@ -1094,7 +1094,7 @@ func (f *Field) Row(tx Tx, rowID uint64) (*Row, error) {
 
 // mutexCheck performs a sanity-check on the available fragments for a
 // field. The return is map[column]map[shard][]values for collisions only.
-func (f *Field) MutexCheck(ctx context.Context, qcx *Qcx) (map[uint64]map[uint64][]uint64, error) {
+func (f *Field) MutexCheck(ctx context.Context, qcx *Qcx, details bool, limit int) (map[uint64]map[uint64][]uint64, error) {
 	if f.Type() != FieldTypeMutex {
 		return nil, errors.New("mutex check only valid for mutex fields")
 	}
@@ -1106,7 +1106,7 @@ func (f *Field) MutexCheck(ctx context.Context, qcx *Qcx) (map[uint64]map[uint64
 		// so it has no bits set, so it has no extra bits set.
 		return nil, nil
 	}
-	return standard.mutexCheck(ctx, qcx)
+	return standard.mutexCheck(ctx, qcx, details, limit)
 }
 
 // SetBit sets a bit on a view within the field.
