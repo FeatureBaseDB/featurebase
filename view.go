@@ -17,6 +17,7 @@ package pilosa
 import (
 	"context"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -449,7 +450,8 @@ func (v *view) row(txOrig Tx, rowID uint64) (*Row, error) {
 
 // mutexCheck checks all available fragments for duplicate values. The return
 // is map[column]map[shard][]values for collisions only.
-func (v *view) mutexCheck(ctx context.Context, qcx *Qcx) (map[uint64]map[uint64][]uint64, error) {
+func (v *view) mutexCheck(ctx context.Context, qcx *Qcx, details bool, limit int) (map[uint64]map[uint64][]uint64, error) {
+
 	// We don't need the context, we just want the context-awareness on the error groups.
 	// It would be nice if the inner functions could use this too...
 	eg, _ := errgroup.WithContext(ctx)
@@ -470,7 +472,8 @@ func (v *view) mutexCheck(ctx context.Context, qcx *Qcx) (map[uint64]map[uint64]
 				return err
 			}
 			defer finisher(&err)
-			results[i], err = frag.mutexCheck(tx)
+			results[i], err = frag.mutexCheck(tx, details, limit)
+
 			if err != nil {
 				return err
 			}
@@ -482,11 +485,23 @@ func (v *view) mutexCheck(ctx context.Context, qcx *Qcx) (map[uint64]map[uint64]
 		return nil, err
 	}
 	out := map[uint64]map[uint64][]uint64{}
+	// We would use MaxInt here, but it's new with go 1.17. In practice if
+	// you have 2 billion duplicates you're sorta screwed anyway.
+	if limit == 0 {
+		limit = math.MaxInt32
+	}
+	count := 0
 	for i, result := range results {
 		if len(result) == 0 {
 			continue
 		}
 		out[frags[i].shard] = result
+		count += len(result)
+		// if we have enough, stop
+		if count > limit {
+			break
+		}
+
 	}
 	return out, nil
 }

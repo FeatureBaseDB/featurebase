@@ -2490,9 +2490,21 @@ func (h *Handler) handleGetMutexCheck(w http.ResponseWriter, r *http.Request) {
 	// Get index and field type to determine how to handle the
 	// import data.
 	indexName, fieldName := mux.Vars(r)["index"], mux.Vars(r)["field"]
+	q := r.URL.Query()
+	limit := 0
+	details := q.Get("details") == "true"
+	limitStr := q.Get("limit")
+	if limitStr != "" {
+		var err error
+		limit, err = strconv.Atoi(limitStr)
+		if err != nil {
+			http.Error(w, "limit must be numeric", http.StatusBadRequest)
+		}
+	}
+
 	qcx := h.api.Txf().NewQcx()
 	defer qcx.Abort()
-	out, err := h.api.MutexCheck(r.Context(), qcx, indexName, fieldName)
+	out, err := h.api.MutexCheck(r.Context(), qcx, indexName, fieldName, details, limit)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -2516,9 +2528,21 @@ func (h *Handler) handleInternalGetMutexCheck(w http.ResponseWriter, r *http.Req
 	// Get index and field type to determine how to handle the
 	// import data.
 	indexName, fieldName := mux.Vars(r)["index"], mux.Vars(r)["field"]
+	q := r.URL.Query()
+	limit := 0
+	details := q.Get("details") == "true"
+	limitStr := q.Get("limit")
+	if limitStr != "" {
+		var err error
+		limit, err = strconv.Atoi(limitStr)
+		if err != nil {
+			http.Error(w, "limit must be numeric", http.StatusBadRequest)
+		}
+	}
 	qcx := h.api.Txf().NewQcx()
 	defer qcx.Abort()
-	out, err := h.api.MutexCheckNode(r.Context(), qcx, indexName, fieldName)
+	out, err := h.api.MutexCheckNode(r.Context(), qcx, indexName, fieldName, details, limit)
+
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

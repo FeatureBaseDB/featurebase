@@ -85,7 +85,7 @@ type InternalClient interface {
 	GetNodeUsage(ctx context.Context, uri *URI) (map[string]NodeUsage, error)
 	GetPastQueries(ctx context.Context, uri *URI) ([]PastQueryStatus, error)
 
-	MutexCheck(ctx context.Context, uri *URI, index string, field string) (map[uint64]map[uint64][]uint64, error)
+	MutexCheck(ctx context.Context, uri *URI, index string, field string, details bool, limit int) (map[uint64]map[uint64][]uint64, error)
 }
 
 //===============
@@ -254,6 +254,6 @@ func (n nopInternalClient) GetPastQueries(ctx context.Context, uri *URI) ([]Past
 	return nil, nil
 }
 
-func (n nopInternalClient) MutexCheck(ctx context.Context, uri *URI, index, field string) (map[uint64]map[uint64][]uint64, error) {
+func (n nopInternalClient) MutexCheck(ctx context.Context, uri *URI, index, field string, details bool, limit int) (map[uint64]map[uint64][]uint64, error) {
 	return nil, nil
 }

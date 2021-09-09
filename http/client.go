@@ -135,11 +135,14 @@ func (c *InternalClient) Schema(ctx context.Context) ([]*pilosa.IndexInfo, error
 
 // MutexCheck uses the mutex-check endpoint to request mutex collision data
 // from a single node.
-func (c *InternalClient) MutexCheck(ctx context.Context, uri *pilosa.URI, indexName string, fieldName string) (map[uint64]map[uint64][]uint64, error) {
+func (c *InternalClient) MutexCheck(ctx context.Context, uri *pilosa.URI, indexName string, fieldName string, details bool, limit int) (map[uint64]map[uint64][]uint64, error) {
+
 	if uri == nil {
 		uri = c.defaultURI
 	}
-	u := uri.Path(fmt.Sprintf("/internal/index/%s/field/%s/mutex-check", indexName, fieldName))
+	// This is not actually a "Path", but reworking this to support queries
+	// is messier than I have resources to pursue just now.
+	u := uri.Path(fmt.Sprintf("/internal/index/%s/field/%s/mutex-check?details=%t&limit=%d", indexName, fieldName, details, limit))
 	req, err := http.NewRequest("GET", u, nil)
 	if err != nil {
 		return nil, errors.Wrap(err, "creating request")
