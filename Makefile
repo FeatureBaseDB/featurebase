@@ -210,7 +210,6 @@ docker-tag-push: vendor
 docker-release: check-clean lattice
 	$(MAKE) docker-build GOOS=linux GOARCH=amd64
 	$(MAKE) docker-build GOOS=darwin GOARCH=amd64
-	$(MAKE) docker-build GOOS=darwin GOARCH=arm64
 
 # Compile Pilosa inside Docker container
 docker-build: vendor
