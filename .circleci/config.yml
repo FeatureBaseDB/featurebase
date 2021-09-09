@@ -226,7 +226,7 @@ workflows:
             - setup
           matrix:
             parameters:
-              golang_version: ["1.14.12", "1.15.5"]
+              golang_version: ["1.16.7"]
       - test:
           name: << matrix.test_make_target >>
           resource_class: xlarge
@@ -235,7 +235,7 @@ workflows:
             - setup
           matrix:
             parameters:
-              test_make_target: ["test-race", "test-txstore-rbf", "test-txstore-rbf_bolt"]
+              test_make_target: ["test-race"]
       - test:
           name: test-shardwidth-22
           shard_width: "22"
