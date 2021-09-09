@@ -206,6 +206,7 @@ generate: generate-protoc generate-statik generate-stringer generate-pql
 # Create release using Docker
 docker-release:
 	$(MAKE) docker-build GOOS=linux GOARCH=amd64
+	$(MAKE) docker-build GOOS-linux GOARCH=arm64
 	$(MAKE) docker-build GOOS=darwin GOARCH=amd64
 	$(MAKE) docker-build GOOS=darwin GOARCH=arm64
 
