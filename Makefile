@@ -205,7 +205,7 @@ docker-tag-push: vendor
 	docker push $(DOCKER_TARGET)
 	@echo Pushed docker image: $(DOCKER_TARGET)
 
-docker-release: check-clean generate-statik
+docker-release: check-clean lattice require-statik
 	$(MAKE) docker-build GOOS=linux GOARCH=amd64
 	$(MAKE) docker-build GOOS=darwin GOARCH=amd64
 	$(MAKE) docker-build GOOS=darwin GOARCH=arm64
