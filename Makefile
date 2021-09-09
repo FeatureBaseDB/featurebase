@@ -196,7 +196,9 @@ generate: generate-protoc generate-statik generate-stringer generate-pql
 
 # Create Docker image from Dockerfile
 docker: vendor
-	docker build --build-arg BUILD_FLAGS="${FLAGS}" -t "pilosa:$(VERSION)" .
+	docker build \
+	    --build-arg GO_VERSION=$(GO_VERSION) \
+	    --tag pilosa:$(VERSION) .
 	@echo Created docker image: pilosa:$(VERSION)
 
 # Tag and push a Docker image
