@@ -212,7 +212,16 @@ docker-release: check-clean generate-statik
 
 # Compile Pilosa inside Docker container
 docker-build: vendor
-	docker run --rm -v $(PWD):/go/src/$(CLONE_URL) -w /go/src/$(CLONE_URL) -e GOOS=$(GOOS) -e GOARCH=$(GOARCH) golang:$(GO_VERSION) make build FLAGS="$(FLAGS) -mod=vendor" RELEASE=$(RELEASE)
+	docker build \
+	    --build-arg GO_VERSION=$(GO_VERSION) \
+	    --build-arg MAKE_FLAGS="GOOS=$(GOOS) GOARCH=$(GOARCH)" \
+	    --target pilosa-builder \
+	    --tag pilosa:build .
+	docker create --name pilosa-build pilosa:build
+	mkdir -p build/pilosa-$(VERSION_ID)
+	docker cp pilosa-build:/pilosa/build/. ./build/pilosa-$(VERSION_ID)
+	docker rm pilosa-build
+	tar -cvz -C build -f build/pilosa-$(VERSION_ID).tar.gz pilosa-$(VERSION_ID)/
 
 # Install diagnostic pilosa-keydump tool. Allows viewing the keys in a transaction-engine directory.
 pilosa-keydump:
