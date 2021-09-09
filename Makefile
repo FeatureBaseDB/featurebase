@@ -116,6 +116,7 @@ release: check-clean generate-statik-docker
 	$(MAKE) release-build GOOS=darwin GOARCH=amd64
 	$(MAKE) release-build GOOS=darwin GOARCH=arm64
 	$(MAKE) release-build GOOS=linux GOARCH=amd64
+	$(MAKE) release-build GOOS=linux GOARCH=arm64
 
 # Create release build tarballs for all supported platforms. Same as `release`, but without embedded Lattice UI.
 release-sans-ui: check-clean
@@ -123,6 +124,7 @@ release-sans-ui: check-clean
 	$(MAKE) release-build GOOS=darwin GOARCH=amd64
 	$(MAKE) release-build GOOS=darwin GOARCH=arm64
 	$(MAKE) release-build GOOS=linux GOARCH=amd64
+	$(MAKE) release-build GOOS=linux GOARCH=arm64
 
 # try (e.g.) internal/clustertests/docker-compose-replication2.yml
 DOCKER_COMPOSE=internal/clustertests/docker-compose.yml
