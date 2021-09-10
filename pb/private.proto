@@ -235,3 +235,24 @@ message ResizeNodeMessage {
 	string NodeID = 1;
 	string Action = 2;
 }
+
+message FieldOperation {
+    repeated uint64 RecordIDs = 1;
+	repeated uint64 Values = 2;
+	repeated int64 Signed = 3;
+}
+
+message ShardIngestOperation {
+	string OpType = 1;
+	repeated uint64 ClearRecordIDs = 2;
+	repeated string ClearFields = 3;
+	map <string, FieldOperation> FieldOps = 4;
+}
+
+message ShardIngestOperations {
+	repeated ShardIngestOperation Ops = 1;
+}
+
+message ShardedIngestRequest {
+    map <uint64, ShardIngestOperations> Ops = 1;
+}

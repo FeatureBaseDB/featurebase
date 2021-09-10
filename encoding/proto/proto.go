@@ -978,6 +978,9 @@ func (s Serializer) encodeShardIngestOperation(op *ingest.Operation) *pb.ShardIn
 		FieldOps:       make(map[string]*pb.FieldOperation, len(op.FieldOps)),
 	}
 	for k, v := range op.FieldOps {
+		if v == nil {
+			continue
+		}
 		out.FieldOps[k] = &pb.FieldOperation{
 			RecordIDs: v.RecordIDs,
 			Values:    v.Values,
