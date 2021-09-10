@@ -7,6 +7,9 @@ ARG GO_VERSION=latest
 FROM moleculacorp/nodejs:latest as lattice-builder
 WORKDIR /lattice
 
+COPY lattice/package.json ./
+COPY lattice/yarn.lock ./
+
 RUN yarn install
 
 COPY lattice ./

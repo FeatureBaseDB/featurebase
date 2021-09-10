@@ -195,7 +195,7 @@ generate-proto-grpc: require-protoc require-protoc-gen-go
 generate: generate-protoc generate-statik generate-stringer generate-pql
 
 # Create Docker image from Dockerfile
-docker: vendor
+docker: vendor lattice
 	docker build \
 	    --build-arg GO_VERSION=$(GO_VERSION) \
 	    --tag pilosa:$(VERSION) .
