@@ -42,6 +42,7 @@ import (
 	"github.com/gorilla/mux"
 	pilosa "github.com/molecula/featurebase/v2"
 	"github.com/molecula/featurebase/v2/encoding/proto"
+	"github.com/molecula/featurebase/v2/ingest"
 	"github.com/molecula/featurebase/v2/logger"
 	"github.com/molecula/featurebase/v2/pql"
 	"github.com/molecula/featurebase/v2/rbf"
@@ -432,7 +433,9 @@ func newRouter(handler *Handler) http.Handler {
 	router.HandleFunc("/internal/index/{index}/shards", handler.handleGetIndexAvailableShards).Methods("GET").Name("GetIndexAvailableShards")
 	router.HandleFunc("/internal/nodes", handler.handleGetNodes).Methods("GET").Name("GetNodes")
 	router.HandleFunc("/internal/shards/max", handler.handleGetShardsMax).Methods("GET").Name("GetShardsMax") // TODO: deprecate, but it's being used by the client
-	router.HandleFunc("/internal/ingest/{index}", handler.handleIngestData).Methods("POST").Name("PostIngestData")
+	router.HandleFunc("/internal/ingest/{index}", handler.handlePostIngestData).Methods("POST").Name("PostIngestData")
+	router.HandleFunc("/internal/ingest/{index}/node", handler.handlePostIngestNode).Methods("POST").Name("PostIngestNode")
+
 	router.HandleFunc("/internal/schema", handler.handleIngestSchema).Methods("POST").Name("PostIngestSchema")
 	router.HandleFunc("/internal/translate/index/{index}/keys/find", handler.handleFindIndexKeys).Methods("POST").Name("FindIndexKeys")
 	router.HandleFunc("/internal/translate/index/{index}/keys/create", handler.handleCreateIndexKeys).Methods("POST").Name("CreateIndexKeys")
@@ -1337,7 +1340,9 @@ func (h *Handler) handlePostField(w http.ResponseWriter, r *http.Request) {
 	resp.write(w, err)
 }
 
-func (h *Handler) handleIngestData(w http.ResponseWriter, r *http.Request) {
+// handlePostIngestData handles JSON ingest data that may need key
+// translation, for the entire cluster.
+func (h *Handler) handlePostIngestData(w http.ResponseWriter, r *http.Request) {
 	if !validHeaderAcceptJSON(r.Header) {
 		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
 		return
@@ -1351,6 +1356,14 @@ func (h *Handler) handleIngestData(w http.ResponseWriter, r *http.Request) {
 
 	qcx := h.api.Txf().NewQcx()
 	err := h.api.IngestOperations(r.Context(), qcx, indexName, r.Body)
+	if err == nil {
+		err = qcx.Finish()
+		if err != nil {
+			http.Error(w, fmt.Sprintf("ingesting: %v", err), http.StatusInternalServerError)
+		}
+	} else {
+		qcx.Abort()
+	}
 
 	resp := successResponse{h: h, Name: indexName}
 	resp.write(w, err)
@@ -2905,6 +2918,52 @@ func (h *Handler) handlePostImportRoaring(w http.ResponseWriter, r *http.Request
 	if err != nil {
 		h.logger.Errorf("writing import-roaring response: %v", err)
 		return
+	}
+}
+
+// handlePostIngestNode is the internal endpoint taking already-translated
+// ingest operations, sorted by shard, for a single node.
+func (h *Handler) handlePostIngestNode(w http.ResponseWriter, r *http.Request) {
+	// Verify that request is only communicating over protobufs.
+	if error, code := validateProtobufHeader(r); error != "" {
+		http.Error(w, error, code)
+		return
+	}
+
+	ctx := r.Context()
+
+	// Read entire body.
+	span, _ := tracing.StartSpanFromContext(ctx, "ioutil.ReadAll-Body")
+	body, err := readBody(r)
+	span.LogKV("bodySize", len(body))
+	span.Finish()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	req := &ingest.ShardedRequest{}
+	span, _ = tracing.StartSpanFromContext(ctx, "Unmarshal")
+	err = proto.DefaultSerializer.Unmarshal(body, req)
+	span.Finish()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	urlVars := mux.Vars(r)
+	indexName := urlVars["index"]
+
+	qcx := h.api.Txf().NewQcx()
+	err = h.api.IngestNodeOperations(r.Context(), qcx, indexName, req)
+	if err == nil {
+		err = qcx.Finish()
+		if err != nil {
+			http.Error(w, fmt.Sprintf("ingesting: %v", err), http.StatusInternalServerError)
+		}
+	} else {
+		http.Error(w, fmt.Sprintf("ingesting: %v", err), http.StatusInternalServerError)
+		qcx.Abort()
 	}
 }
 

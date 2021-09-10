@@ -15,6 +15,7 @@
 package ingest
 
 import (
+	"errors"
 	"fmt"
 	"math/bits"
 	"sort"
@@ -92,14 +93,22 @@ func ParseOpType(s string) (OpType, error) {
 // record IDs and fields, a Set or Remove will have only FieldOps,
 // and a Write will have both -- populating the record IDs and fields
 // from the fieldops.
+//
+// When we parse an operation, we assign each op a sequential ID
+// within the overall request. We keep these IDs associated with ops
+// when splitting them up across shards, so we can reverse this even
+// if some shards don't get some ops.
 type Operation struct {
 	OpType         OpType
+	Seq            int // sequence position within a chain of ops
 	ClearRecordIDs []uint64
 	ClearFields    []string
 	FieldOps       map[string]*FieldOperation
 }
 
-// Compare reports whether two operations seem to be the same.
+// Compare reports whether two Operations seem to be the same. While
+// a FieldOperation can be "empty" and compare-equal-to a nil FieldOperation,
+// no Operation is considered empty even if it has no FieldOps.
 func (got *Operation) Compare(expected *Operation) error {
 	if got == nil && expected == nil {
 		return nil
@@ -122,26 +131,38 @@ func (got *Operation) Compare(expected *Operation) error {
 			return fmt.Errorf("clear record id %d differs: expected %d, got %d", i, v2, v1)
 		}
 	}
-	if len(got.ClearFields) != len(expected.ClearFields) {
-		return fmt.Errorf("clear field counts differ: expected %d (%q), got %d (%q)", len(expected.ClearFields), expected.ClearFields, len(got.ClearFields), got.ClearFields)
+	// don't assume consistent ordering for the fields, because they're
+	// coming out in arbitrary hash order
+	seenFields := make(map[string]struct{}, len(expected.ClearFields))
+	for _, v1 := range expected.ClearFields {
+		seenFields[v1] = struct{}{}
 	}
-	for i, v1 := range got.ClearFields {
-		v2 := expected.ClearFields[i]
-		if v1 != v2 {
-			return fmt.Errorf("clear field %d differs: expected %q, got %q", i, v2, v1)
+	for _, v2 := range got.ClearFields {
+		if _, ok := seenFields[v2]; !ok {
+			return fmt.Errorf("field %q cleared unexpectedly", v2)
 		}
+		delete(seenFields, v2)
 	}
+	for v1 := range seenFields {
+		return fmt.Errorf("field %q should be cleared but wasn't", v1)
+	}
+	// We check compare even if the op we find on one side is nil, so
+	// a round-trip test will consider a missing op and an empty op to
+	// be interchangeable.
 	for k, fo1 := range got.FieldOps {
 		fo2 := expected.FieldOps[k]
 		if err := fo1.Compare(fo2); err != nil {
 			return fmt.Errorf("field %q mismatch: %w", k, err)
 		}
 	}
-	for k := range expected.FieldOps {
-		_, ok := got.FieldOps[k]
-		if !ok {
-			return fmt.Errorf("expected op for field %q, but none found", k)
+	for k, fo2 := range expected.FieldOps {
+		fo1 := got.FieldOps[k]
+		if err := fo1.Compare(fo2); err != nil {
+			return fmt.Errorf("field %q mismatch: %w", k, err)
 		}
+	}
+	if expected.Seq != got.Seq {
+		return fmt.Errorf("sequence mismatch: expected %d, got %d", expected.Seq, got.Seq)
 	}
 	return nil
 }
@@ -172,6 +193,40 @@ func (o *Operation) Sort() {
 	sort.Strings(o.ClearFields)
 }
 
+// clone makes a duplicate of the operation without shared storage
+func (o *Operation) clone() *Operation {
+	o2 := &Operation{
+		OpType:         o.OpType,
+		Seq:            o.Seq,
+		ClearRecordIDs: append([]uint64{}, o.ClearRecordIDs...),
+		ClearFields:    append([]string{}, o.ClearFields...),
+		FieldOps:       make(map[string]*FieldOperation, len(o.FieldOps)),
+	}
+	for k, v := range o.FieldOps {
+		o2.FieldOps[k] = v.clone()
+	}
+	return o2
+}
+
+// merge merges the fieldops of the provided operation into this operation.
+func (o *Operation) merge(o2 *Operation) {
+	o.ClearRecordIDs = append(o.ClearRecordIDs, o2.ClearRecordIDs...)
+	o.ClearFields = append(o.ClearFields, o2.ClearFields...)
+	for f, op := range o2.FieldOps {
+		dst := o.FieldOps[f]
+		if dst == nil {
+			o.FieldOps[f] = op
+			continue
+		}
+		// otherwise append any contents. dst is a pointer-to, so this
+		// updates the thing the map points to, we don't have to write back
+		// into the map.
+		dst.RecordIDs = append(dst.RecordIDs, op.RecordIDs...)
+		dst.Values = append(dst.Values, op.Values...)
+		dst.Signed = append(dst.Signed, op.Signed...)
+	}
+}
+
 type ShardedFieldOperation map[uint64]*FieldOperation
 
 // ByShard() divides the FieldOperation's values up into corresponding chunks
@@ -184,22 +239,14 @@ func (f *FieldOperation) ByShard() ShardedFieldOperation {
 	return f.SortToShards()
 }
 
-// ShardInto puts the shards it finds into a target map.
-func (f *FieldOperation) ShardInto(target ShardedFieldOperation) {
-	shards, ends := shardwidth.FindShards(f.RecordIDs)
-	prev := 0
-	for i, shard := range shards {
-		endIndex := ends[i]
-		subOp := &FieldOperation{RecordIDs: f.RecordIDs[prev:endIndex]}
-		if len(f.Values) > 0 {
-			subOp.Values = f.Values[prev:endIndex]
-		}
-		if len(f.Signed) > 0 {
-			subOp.Signed = f.Signed[prev:endIndex]
-		}
-		target[shard] = subOp
-		prev = endIndex
+// clone makes a duplicate of the operation without shared storage
+func (f *FieldOperation) clone() *FieldOperation {
+	f2 := &FieldOperation{
+		RecordIDs: append([]uint64{}, f.RecordIDs...),
+		Values:    append([]uint64{}, f.Values...),
+		Signed:    append([]int64{}, f.Signed...),
 	}
+	return f2
 }
 
 func ShardIDs(ids []uint64) (out map[uint64][]uint64) {
@@ -349,10 +396,22 @@ func (f *FieldOperation) SortByKeys(keys []uint64) {
 // doesn't help as much as you'd hope. This beats using stdlib sort by about
 // a factor of two for those small N, for larger N we're using the radix sort
 // that calls this.
+//
+// External keys exist only when we are sorting by value, which is to say,
+// when we're using row-oriented formats (set, mutex, time quantum).
+// For int/decimal/timestamp fields, we're sorting by record only.
+// So, if keys is the same as f.RecordIDs, we're looking at an int field
+// or equivalent, so Signed exists and Values doesn't exist.
+// Otherwise, we might be looking at a time quantum field (both exist)
+// or set/mutex (only Values exist).
 func simpleSort(f *FieldOperation, keys []uint64) {
-	if keys != nil {
+	// keys might actually just point to record IDs, in which case, we don't
+	// want to shuffle the corresponding RecordIDs too, because that would just
+	// reverse our swaps. If they're different, we actually need to swap them
+	// both.
+	if &keys[0] != &f.RecordIDs[0] {
 		// sorting by record IDs
-		if f.Values != nil && f.Signed != nil {
+		if f.Values != nil && f.Signed != nil { // time quantum field
 			for i := 1; i < len(keys); i++ {
 				for j := i; j > 0 && keys[j-1] > keys[j]; j-- {
 					keys[j-1], keys[j] = keys[j], keys[j-1]
@@ -362,7 +421,7 @@ func simpleSort(f *FieldOperation, keys []uint64) {
 
 				}
 			}
-		} else if f.Values != nil {
+		} else if f.Values != nil { // set/mutex/bool
 			for i := 1; i < len(keys); i++ {
 				for j := i; j > 0 && keys[j-1] > keys[j]; j-- {
 					keys[j-1], keys[j] = keys[j], keys[j-1]
@@ -371,7 +430,7 @@ func simpleSort(f *FieldOperation, keys []uint64) {
 					f.Values[j-1], f.Values[j] = f.Values[j], f.Values[j-1]
 				}
 			}
-		} else if f.Signed != nil {
+		} else if f.Signed != nil { // can't-happen, we think
 			for i := 1; i < len(keys); i++ {
 				for j := i; j > 0 && keys[j-1] > keys[j]; j-- {
 					keys[j-1], keys[j] = keys[j], keys[j-1]
@@ -379,7 +438,7 @@ func simpleSort(f *FieldOperation, keys []uint64) {
 					f.Signed[j-1], f.Signed[j] = f.Signed[j], f.Signed[j-1]
 				}
 			}
-		} else {
+		} else { // can't-happen, we think
 			for i := 1; i < len(keys); i++ {
 				for j := i; j > 0 && keys[j-1] > keys[j]; j-- {
 					keys[j-1], keys[j] = keys[j], keys[j-1]
@@ -388,7 +447,14 @@ func simpleSort(f *FieldOperation, keys []uint64) {
 			}
 		}
 	} else {
-		if f.Values != nil && f.Signed != nil {
+		if f.Values == nil && f.Signed != nil {
+			for i := 1; i < len(f.RecordIDs); i++ {
+				for j := i; j > 0 && f.RecordIDs[j-1] > f.RecordIDs[j]; j-- {
+					f.RecordIDs[j-1], f.RecordIDs[j] = f.RecordIDs[j], f.RecordIDs[j-1]
+					f.Signed[j-1], f.Signed[j] = f.Signed[j], f.Signed[j-1]
+				}
+			}
+		} else if f.Values != nil && f.Signed != nil { // can't happen, we think
 			for i := 1; i < len(f.RecordIDs); i++ {
 				for j := i; j > 0 && f.RecordIDs[j-1] > f.RecordIDs[j]; j-- {
 					f.RecordIDs[j-1], f.RecordIDs[j] = f.RecordIDs[j], f.RecordIDs[j-1]
@@ -396,22 +462,14 @@ func simpleSort(f *FieldOperation, keys []uint64) {
 					f.Signed[j-1], f.Signed[j] = f.Signed[j], f.Signed[j-1]
 				}
 			}
-		} else if f.Values != nil {
+		} else if f.Values != nil { // only happens during testing
 			for i := 1; i < len(f.RecordIDs); i++ {
 				for j := i; j > 0 && f.RecordIDs[j-1] > f.RecordIDs[j]; j-- {
 					f.RecordIDs[j-1], f.RecordIDs[j] = f.RecordIDs[j], f.RecordIDs[j-1]
 					f.Values[j-1], f.Values[j] = f.Values[j], f.Values[j-1]
 				}
 			}
-		} else if f.Signed != nil {
-			for i := 1; i < len(f.RecordIDs); i++ {
-				for j := i; j > 0 && f.RecordIDs[j-1] > f.RecordIDs[j]; j-- {
-					f.RecordIDs[j-1], f.RecordIDs[j] = f.RecordIDs[j], f.RecordIDs[j-1]
-					f.Signed[j-1], f.Signed[j] = f.Signed[j], f.Signed[j-1]
-				}
-			}
-		} else {
-			// why do we only have record IDs? I don't know
+		} else { // should definitely not happen
 			for i := 1; i < len(f.RecordIDs); i++ {
 				for j := i; j > 0 && f.RecordIDs[j-1] > f.RecordIDs[j]; j-- {
 					f.RecordIDs[j-1], f.RecordIDs[j] = f.RecordIDs[j], f.RecordIDs[j-1]
@@ -493,12 +551,7 @@ func sortPartialByKeys(f *FieldOperation, keys []uint64, shift int) {
 			if end-start > 32 {
 				sortPartialByKeys(&bucketOp, keys[start:end], nextShift)
 			} else {
-				// naive stdlib sort
-				if externalKeys {
-					simpleSort(&bucketOp, keys[start:end])
-				} else {
-					simpleSort(&bucketOp, nil)
-				}
+				simpleSort(&bucketOp, keys[start:end])
 			}
 		}
 	}
@@ -534,16 +587,15 @@ func (got *FieldOperation) Compare(expected *FieldOperation) error {
 		if expected == nil {
 			return nil
 		}
-		if len(expected.RecordIDs) == 0 && len(expected.Values) == 0 && len(expected.Signed) == 0 {
+		// We don't worry about non-empty Values or Signed here, because in theory
+		// RecordIDs are the Source of Truth as to what's in the op.
+		if len(expected.RecordIDs) == 0 {
 			return nil
 		}
 		return fmt.Errorf("expected field operation with %d records, got nil", len(expected.RecordIDs))
 	}
 	if expected == nil {
-		if got == nil {
-			return nil
-		}
-		if len(got.RecordIDs) == 0 && len(got.Values) == 0 && len(got.Signed) == 0 {
+		if len(got.RecordIDs) == 0 {
 			return nil
 		}
 		return fmt.Errorf("expected empty field operation, got %d records", len(got.RecordIDs))
@@ -578,52 +630,6 @@ func (got *FieldOperation) Compare(expected *FieldOperation) error {
 	return nil
 }
 
-func translateUnsignedSlice(target []uint64, mapping []uint64) (err error) {
-	oops := 0
-	for i, v := range target {
-		if v >= uint64(len(mapping)) {
-			oops++
-		} else {
-			target[i] = mapping[v]
-		}
-	}
-	if oops > 0 {
-		return fmt.Errorf("encountered %d out-of-range keys when applying translation mapping", oops)
-	}
-	return nil
-}
-
-// TranslateUnsigned translates keys according to the provided mapping. This
-// is used for sets, mutexes, and time quantums.
-func (op *FieldOperation) TranslateKeys(mapping []uint64) error {
-	return translateUnsignedSlice(op.RecordIDs, mapping)
-}
-
-// TranslateUnsigned translates values according to the provided mapping. This
-// is used for sets, mutexes, and time quantums.
-func (op *FieldOperation) TranslateUnsigned(mapping []uint64) error {
-	return translateUnsignedSlice(op.Values, mapping)
-}
-
-// TranslateSigned translates signed values according to the provided mapping.
-// If we're using this, it's because we're in an integer-type field, which
-// admits using keys for fields, so all key values are actually non-negative,
-// but the field's type still requires values be expressed as signed ints.
-func (op *FieldOperation) TranslateSigned(mapping []uint64) error {
-	oops := 0
-	for i, v := range op.Signed {
-		if v >= int64(len(mapping)) {
-			oops++
-		} else {
-			op.Signed[i] = int64(mapping[v])
-		}
-	}
-	if oops > 0 {
-		return fmt.Errorf("encountered %d out-of-range signed values when applying translation mapping", oops)
-	}
-	return nil
-}
-
 // ShardOperations is a set of Operations associated with a specific shard.
 type ShardOperations struct {
 	Shard uint64
@@ -633,19 +639,17 @@ type ShardOperations struct {
 // Request is a complete ingest request, which may be any combination
 // of operations, which may apply to multiple shards.
 type Request struct {
-	FieldTypes map[string]FieldType
-	Ops        []*Operation
+	Ops []*Operation
 }
 
 // ShardedRequest is an ingest request, split up into individual per-shard
 // operations.
 type ShardedRequest struct {
-	FieldTypes map[string]FieldType
-	Ops        map[uint64][]*Operation
+	Ops map[uint64][]*Operation
 }
 
 // ByShard converts a request into the same request, only sharded.
-func (r *Request) ByShard() (*ShardedRequest, error) {
+func (r *Request) ByShard(fields map[string]FieldType) (*ShardedRequest, error) {
 	if len(r.Ops) == 0 {
 		return &ShardedRequest{Ops: nil}, nil
 	}
@@ -662,12 +666,12 @@ func (r *Request) ByShard() (*ShardedRequest, error) {
 		if op.OpType == OpClear || op.OpType == OpWrite || op.OpType == OpDelete {
 			sharded := ShardIDs(op.ClearRecordIDs)
 			for shard, data := range sharded {
-				shards[shard] = &Operation{OpType: op.OpType, ClearRecordIDs: data, ClearFields: op.ClearFields, FieldOps: map[string]*FieldOperation{}}
+				shards[shard] = &Operation{OpType: op.OpType, Seq: op.Seq, ClearRecordIDs: data, ClearFields: op.ClearFields, FieldOps: map[string]*FieldOperation{}}
 			}
 		}
 		for field, fieldOp := range op.FieldOps {
 			sharded := fieldOp.ByShard()
-			sorter := fieldTypeSorts[r.FieldTypes[field]]
+			sorter := fieldTypeSorts[fields[field]]
 			if sorter == nil {
 				sorter = (*FieldOperation).SortByRecords
 			}
@@ -678,7 +682,7 @@ func (r *Request) ByShard() (*ShardedRequest, error) {
 					if op.OpType == OpWrite {
 						return nil, fmt.Errorf("write operation has field operation data (%d items) for shard %d, but no clear data", len(data.RecordIDs), shard)
 					}
-					shardOp = &Operation{OpType: op.OpType}
+					shardOp = &Operation{OpType: op.OpType, Seq: op.Seq}
 					shards[shard] = shardOp
 					shardOp.FieldOps = map[string]*FieldOperation{field: data}
 				} else {
@@ -697,18 +701,139 @@ func (r *Request) ByShard() (*ShardedRequest, error) {
 	return &ShardedRequest{Ops: req}, nil
 }
 
+// merge combines the components of a sharded request back into a single
+// unsharded request, processing shards in numerical order.
+func (s *ShardedRequest) Merge() *Request {
+	req := &Request{}
+	if s == nil || len(s.Ops) == 0 {
+		return req
+	}
+	shards := make([]uint64, 0, len(s.Ops))
+	for shard := range s.Ops {
+		shards = append(shards, shard)
+	}
+	sort.Slice(shards, func(i, j int) bool { return shards[i] < shards[j] })
+	for _, shard := range shards {
+		ops := s.Ops[shard]
+		for _, op := range ops {
+			var _ *Operation
+			if op.Seq >= len(req.Ops) {
+				// Pad out with nil *Operations to the required length
+				req.Ops = append(req.Ops, make([]*Operation, op.Seq+1-len(req.Ops))...)
+			}
+			if req.Ops[op.Seq] == nil {
+				req.Ops[op.Seq] = op.clone()
+				continue
+			}
+			req.Ops[op.Seq].merge(op)
+		}
+	}
+	return req
+}
+
 func (r *Request) Dump(logf func(string, ...interface{})) {
 	logf("req: %#v", r)
 	for _, op := range r.Ops {
 		logf("op: %#v", op)
 		if len(op.ClearRecordIDs) > 0 {
-			logf("  clearRecordIDs: %d", op.ClearRecordIDs)
+			if len(op.ClearRecordIDs) > 8 {
+				logf("  clearRecordIDs: %d...+%d", op.ClearRecordIDs[:8], len(op.ClearRecordIDs)-8)
+			} else {
+				logf("  clearRecordIDs: %d", op.ClearRecordIDs)
+			}
 		}
 		if len(op.ClearFields) > 0 {
-			logf("  clearFields: %s", op.ClearFields)
+			if len(op.ClearFields) > 8 {
+				logf("  clearFields: %s...+%d", op.ClearFields[:8], len(op.ClearFields)-8)
+			} else {
+				logf("  clearFields: %s", op.ClearFields)
+			}
 		}
 		for field, fieldOp := range op.FieldOps {
-			logf("  field %q: %#v", field, fieldOp)
+			if fieldOp != nil {
+				logf("  field %q: op (%d/%d/%d)", field, len(fieldOp.RecordIDs), len(fieldOp.Values), len(fieldOp.Signed))
+				if len(fieldOp.RecordIDs) > 0 {
+					if len(fieldOp.RecordIDs) > 8 {
+						logf("    records %d...+%d", fieldOp.RecordIDs[:8], len(fieldOp.RecordIDs)-8)
+					} else {
+						logf("    records %d", fieldOp.RecordIDs)
+					}
+				}
+			} else {
+				logf("  field %q: nil op", field)
+			}
 		}
 	}
+}
+
+func (r *Request) Compare(other *Request) error {
+	if other == nil {
+		if r != nil && len(r.Ops) != 0 {
+			return errors.New("non-empty sharded request can't equal empty/nil sharded request")
+		}
+		// empty and nil are allowed
+		return nil
+	}
+	if r == nil {
+		if other != nil && len(other.Ops) != 0 {
+			return errors.New("non-empty sharded request can't equal empty/nil sharded request")
+		}
+		// empty and nil are allowed
+		return nil
+	}
+	ops := r.Ops
+	ops2 := other.Ops
+	if len(ops2) != len(ops) {
+		return fmt.Errorf("expected %d ops, got %d", len(ops), len(ops2))
+	}
+	for i, op := range ops {
+		if err := op.Compare(ops2[i]); err != nil {
+			return fmt.Errorf("op %d: %v", i, err)
+		}
+	}
+	return nil
+}
+
+// Compare checks whether two ShardedRequest objects represent the same
+// data. Empty shards shouldn't have entries in the map in the first place,
+// so we don't accept a nil or 0-length slice of ops as equal to the
+// shard key not existing, but we do accept nil or empty requests as
+// equal to each other.
+func (s *ShardedRequest) Compare(other *ShardedRequest) error {
+	if other == nil {
+		if s != nil && len(s.Ops) != 0 {
+			return errors.New("non-empty sharded request can't equal empty/nil sharded request")
+		}
+		// empty and nil are allowed
+		return nil
+	}
+	if s == nil {
+		if other != nil && len(other.Ops) != 0 {
+			return errors.New("non-empty sharded request can't equal empty/nil sharded request")
+		}
+		// empty and nil are allowed
+		return nil
+	}
+	for shard, ops := range s.Ops {
+		ops2, ok := other.Ops[shard]
+		if !ok {
+			return fmt.Errorf("shard %d missing in other", shard)
+		}
+		if len(ops2) != len(ops) {
+			return fmt.Errorf("shard %d: expected %d ops, got %d", shard, len(ops), len(ops2))
+		}
+		for i, op := range ops {
+			if err := op.Compare(ops2[i]); err != nil {
+				return fmt.Errorf("shard %d, op %d: %v", shard, i, err)
+			}
+		}
+	}
+	if len(other.Ops) != len(s.Ops) {
+		for shard := range other.Ops {
+			if _, ok := s.Ops[shard]; !ok {
+				return fmt.Errorf("shard %d missing in self", shard)
+			}
+		}
+	}
+	return nil
 }

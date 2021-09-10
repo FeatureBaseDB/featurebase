@@ -16,7 +16,6 @@ package ingest_test
 
 import (
 	"math/rand"
-	"reflect"
 	"testing"
 
 	"github.com/molecula/featurebase/v2/ingest"
@@ -25,14 +24,14 @@ import (
 
 type opShardingTestCase struct {
 	name   string
-	input  ingest.Request
+	input  *ingest.Request
 	output *ingest.ShardedRequest
 }
 
 var opShardingTestCases = []opShardingTestCase{
 	{
 		name: "sample",
-		input: ingest.Request{
+		input: &ingest.Request{
 			Ops: []*ingest.Operation{
 				{
 					OpType: ingest.OpSet,
@@ -56,6 +55,7 @@ var opShardingTestCases = []opShardingTestCase{
 				},
 				{
 					OpType: ingest.OpRemove,
+					Seq:    1,
 					FieldOps: map[string]*ingest.FieldOperation{
 						"shard0-2": {
 							RecordIDs: []uint64{1, 2<<shardwidth.Exponent + 1},
@@ -82,6 +82,7 @@ var opShardingTestCases = []opShardingTestCase{
 					},
 					{
 						OpType: ingest.OpRemove,
+						Seq:    1,
 						FieldOps: map[string]*ingest.FieldOperation{
 							"shard0-2": {
 								RecordIDs: []uint64{1},
@@ -110,6 +111,7 @@ var opShardingTestCases = []opShardingTestCase{
 				2: {
 					{
 						OpType: ingest.OpRemove,
+						Seq:    1,
 						FieldOps: map[string]*ingest.FieldOperation{
 							"shard0-2": {
 								RecordIDs: []uint64{2<<shardwidth.Exponent + 1},
@@ -122,15 +124,115 @@ var opShardingTestCases = []opShardingTestCase{
 	},
 }
 
-func TestOpSharding(t *testing.T) {
+func TestOpShardingSmall(t *testing.T) {
+	codec, _ := ingest.NewJSONCodec(nil)
+	_ = codec.AddIntField("shard0", nil)
+	_ = codec.AddIntField("shard1", nil)
+	_ = codec.AddIntField("shard0-1", nil)
+	_ = codec.AddIntField("shard0-2", nil)
+
+	fieldTypes := codec.FieldTypes()
 	for _, c := range opShardingTestCases {
-		sharded, err := c.input.ByShard()
+		sharded, err := c.input.ByShard(fieldTypes)
 		if err != nil {
 			t.Errorf("sharding: unexpected error %v", err)
 		}
-		if !reflect.DeepEqual(sharded, c.output) {
-			t.Fatalf("%s: expected %#v, got %#v", c.name, c.output, sharded)
+		if err := sharded.Compare(c.output); err != nil {
+			t.Fatalf("%s: shard: %v", c.name, err)
 		}
+		merged := sharded.Merge()
+		if err := c.input.Compare(merged); err != nil {
+			t.Fatalf("%s: merge: %v", c.name, err)
+		}
+	}
+}
+
+func TestOpShardingLarge(t *testing.T) {
+	codec, err := ingest.NewJSONCodec(nil)
+	if err != nil {
+		t.Fatalf("creating codec: %v", err)
+	}
+	_ = codec.AddSetField("set", nil)
+	_ = codec.AddTimeQuantumField("tq", nil)
+	_ = codec.AddIntField("int", nil)
+
+	// and now we populate encodeTests[1] with a larger pool of data
+	// if this isn't large enough, the scattering across shards means
+	// we coincidentally end up with the time quantum field not getting
+	// tested on simpleSort.
+	const dataSize = 120000
+	shardCount := uint64(300) // shards we want to target
+	passes := uint64(0)
+	recordIDs := make([]uint64, dataSize)
+	values := make([]uint64, dataSize)
+	timeStamps := make([]int64, dataSize)
+	signedValues := make([]int64, dataSize)
+	for i := uint64(0); i < dataSize; i++ {
+		if (i % shardCount) == 0 {
+			passes++
+		}
+		recordIDs[i] = ((i % shardCount) << shardwidth.Exponent) + passes
+		values[i] = (i % 4)
+		timeStamps[i] = int64(1234567890e9 + (i * 100e9))
+		signedValues[i] = (int64(i) % 16) // no negative values because they won't work with keys
+	}
+	op := &ingest.Operation{
+		OpType:   ingest.OpSet,
+		FieldOps: map[string]*ingest.FieldOperation{},
+	}
+	req := &ingest.Request{
+		Ops: []*ingest.Operation{op},
+	}
+	op.FieldOps["tq"] = &ingest.FieldOperation{
+		RecordIDs: append([]uint64{}, recordIDs...),
+		Values:    append([]uint64{}, values...),
+		Signed:    timeStamps,
+	}
+	op.FieldOps["int"] = &ingest.FieldOperation{
+		RecordIDs: recordIDs,
+		Signed:    signedValues,
+	}
+	// for sets, we want to shuffle things into fewer shards, and ensure
+	// non-duplication of values within each record, but also have lots
+	// of duplication of record IDs in the low shards
+	recordIDs = make([]uint64, dataSize)
+	values = make([]uint64, dataSize)
+	valuesPerRecord := uint64(5)
+	recordsPerShard := dataSize / valuesPerRecord / 30
+	if recordsPerShard < 1 {
+		recordsPerShard = 1
+	}
+	shard := uint64(0)
+	nextID := uint64(0)
+	nextValue := uint64(0)
+	for i := uint64(0); i < dataSize; i++ {
+		recordIDs[i] = nextID
+		values[i] = nextValue + (i % valuesPerRecord)
+		nextValue++
+		if nextValue == valuesPerRecord {
+			nextValue = 0
+			nextID++
+			if nextID%(1<<shardwidth.Exponent) == recordsPerShard {
+				shard++
+				nextID = (shard << shardwidth.Exponent)
+				if valuesPerRecord > 1 {
+					valuesPerRecord--
+				}
+			}
+		}
+	}
+	op.FieldOps["set"] = &ingest.FieldOperation{
+		RecordIDs: recordIDs,
+		Values:    values,
+	}
+	fieldTypes := codec.FieldTypes()
+	sharded, err := req.ByShard(fieldTypes)
+	if err != nil {
+		t.Errorf("sharding: unexpected error %v", err)
+	}
+	merged := sharded.Merge()
+	if err := req.Compare(merged); err != nil {
+		t.Fatalf("merge comparison: %v", err)
 	}
 }
 

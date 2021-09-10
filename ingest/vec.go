@@ -19,8 +19,6 @@ import (
 	"reflect"
 	"strconv"
 	"unsafe"
-
-	"github.com/pkg/errors"
 )
 
 // StringTable is a mapping of strings to temporary IDs.
@@ -85,11 +83,8 @@ func (tbl *StringTable) IntID(in []byte) (int64, error) {
 // integers and a translation function from strings to "real" keys, yields
 // a translation/lookup slice. If it cannot translate all the keys, it
 // returns an error.
-//
-// The lookup function corresponds to the FindKeys/CreateKeys methods of
-// featurebase translators, by an AMAZING coincidence.
-func MapForStringTable(tbl *StringTable, lookup func(...string) (map[string]uint64, error)) ([]uint64, error) {
-	lookedUp, err := lookup(tbl.names...)
+func (tbl *StringTable) MakeIDMap(keys KeyTranslator) ([]uint64, error) {
+	lookedUp, err := keys.TranslateKeys(tbl.names...)
 	if err != nil {
 		return nil, err
 	}
@@ -103,22 +98,38 @@ func MapForStringTable(tbl *StringTable, lookup func(...string) (map[string]uint
 	return out, nil
 }
 
-// TimeFormatForUnit returns the time transfer format (between the update encoder and the update applier) with appropriate resolution for a quantum unit.
-func TimeFormatForUnit(unit rune) string {
-	switch unit {
-	case 'Y':
-		return "2006"
-	case 'M':
-		return "200601"
-	case 'D':
-		return "20060102"
-	case 'H':
-		return "2006010203"
-	default:
-		panic(errors.Errorf("invalid quantum unit: %q", unit))
+// translateSigned replaces values from 0 to len(mapping)-1 with the
+// elements of mapping. It yields an error if any values aren't
+// mapped.
+func translateSigned(mapping []uint64, values []int64) error {
+	oops := 0
+	for i, v := range values {
+		if v >= int64(len(mapping)) {
+			oops++
+		} else {
+			values[i] = int64(mapping[v])
+		}
 	}
+	if oops > 0 {
+		return fmt.Errorf("encountered %d out-of-range signed values when applying translation mapping", oops)
+	}
+	return nil
 }
 
-// TODO: bool
-
-// TODO: timestamp (just sugar on top of IntVector)
+// translateUnsigned replaces values from 0 to len(mapping)-1 with the
+// elements of mapping. It yields an error if any values aren't
+// mapped.
+func translateUnsigned(mapping []uint64, values []uint64) error {
+	oops := 0
+	for i, v := range values {
+		if v >= uint64(len(mapping)) {
+			oops++
+		} else {
+			values[i] = mapping[v]
+		}
+	}
+	if oops > 0 {
+		return fmt.Errorf("encountered %d out-of-range signed values when applying translation mapping", oops)
+	}
+	return nil
+}

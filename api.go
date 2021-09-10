@@ -1826,6 +1826,37 @@ func (api *API) ImportValueWithTx(ctx context.Context, qcx *Qcx, req *ImportValu
 	return nil
 }
 
+// helper function: do the apply stuff for a known index with known fields
+func (api *API) ingestNodeOperationsForFields(ctx context.Context, qcx *Qcx, index *Index, knownFields map[string]*Field, req *ingest.ShardedRequest) error {
+	eg, ctx := errgroup.WithContext(ctx)
+	for shard, ops := range req.Ops {
+		// loop variable shadow capture is the go equivalent of man door hook hand
+		shard, ops := shard, ops
+		eg.Go(func() error {
+			return api.applyOperations(ctx, qcx, index, shard, knownFields, ops)
+		})
+	}
+	return eg.Wait()
+}
+
+// IngestNodeOperations handles protobuf-formatted data which does not need
+// key translation and is applicable to this specific node.
+func (api *API) IngestNodeOperations(ctx context.Context, qcx *Qcx, indexName string, req *ingest.ShardedRequest) error {
+	index := api.holder.Index(indexName)
+	if index == nil {
+		api.server.logger.Errorf("ingest: no such index %q", indexName)
+		return newNotFoundError(ErrIndexNotFound, indexName)
+	}
+	fields := index.Fields()
+	knownFields := map[string]*Field{}
+	for _, field := range fields {
+		knownFields[field.name] = field
+	}
+	return api.ingestNodeOperationsForFields(ctx, qcx, index, knownFields, req)
+}
+
+// IngestOperations handles JSON-formatted data which may need key translation
+// and may be for any or all nodes.
 func (api *API) IngestOperations(ctx context.Context, qcx *Qcx, indexName string, stream io.Reader) error {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.IngestOperations")
 	defer span.Finish()
@@ -1841,34 +1872,32 @@ func (api *API) IngestOperations(ctx context.Context, qcx *Qcx, indexName string
 		return newNotFoundError(ErrIndexNotFound, indexName)
 	}
 	fields := index.Fields()
-	var lookup ingest.KeyLookupFunc
+	var indexKeys ingest.KeyTranslator
 	if index.Keys() {
-		lookup = func(keys ...string) (map[string]uint64, error) {
-			return api.cluster.createIndexKeys(ctx, indexName, keys...)
-		}
+		indexKeys = newIngestKeyTranslatorFromCluster(ctx, api.cluster, indexName)
 	}
-	codec, err := ingest.NewJSONCodec(lookup)
+	codec, err := ingest.NewJSONCodec(indexKeys)
 	if err != nil {
 		return errors.Wrap(err, "creating JSON codec")
 	}
 	knownFields := map[string]*Field{}
 	for _, field := range fields {
-		var lookup ingest.KeyLookupFunc
+		var keys ingest.KeyTranslator
 		if field.usesKeys {
-			lookup = field.translateStore.CreateKeys
+			keys = newIngestKeyTranslatorFromStore(field.translateStore)
 		}
 		knownFields[field.name] = field
 		switch field.Type() {
 		case "set":
-			if err = codec.AddSetField(field.name, lookup); err != nil {
+			if err = codec.AddSetField(field.name, keys); err != nil {
 				return fmt.Errorf("adding set field to codec: %w", err)
 			}
 		case "time":
-			if err = codec.AddTimeQuantumField(field.name, lookup); err != nil {
+			if err = codec.AddTimeQuantumField(field.name, keys); err != nil {
 				return fmt.Errorf("adding time quantum field to codec: %w", err)
 			}
 		case "mutex":
-			if err = codec.AddMutexField(field.name, lookup); err != nil {
+			if err = codec.AddMutexField(field.name, keys); err != nil {
 				return fmt.Errorf("adding mutex field to codec: %w", err)
 			}
 		case "bool":
@@ -1876,7 +1905,7 @@ func (api *API) IngestOperations(ctx context.Context, qcx *Qcx, indexName string
 				return fmt.Errorf("adding bool field to codec: %w", err)
 			}
 		case "int":
-			if err = codec.AddIntField(field.name, lookup); err != nil {
+			if err = codec.AddIntField(field.name, keys); err != nil {
 				return fmt.Errorf("adding int field to codec: %w", err)
 			}
 		case "decimal":
@@ -1896,17 +1925,44 @@ func (api *API) IngestOperations(ctx context.Context, qcx *Qcx, indexName string
 	if err != nil {
 		return errors.Wrap(err, "parsing input data")
 	}
-	sharded, err := req.ByShard()
+	sharded, err := codec.RequestByShard(req)
 	if err != nil {
 		return errors.Wrap(err, "sharding input data")
 	}
-	eg, ctx := errgroup.WithContext(ctx)
+	// now that we have this, let's assign the shards to nodes
+	snap := topology.NewClusterSnapshot(api.cluster.noder, api.cluster.Hasher, api.cluster.ReplicaN)
+	// oh hey an easy case: we're presumably the only node
+	if len(snap.Nodes) == 1 {
+		return api.ingestNodeOperationsForFields(ctx, qcx, index, knownFields, sharded)
+	}
+	// split up by fields in some way
+	byNode := make(map[string]*ingest.ShardedRequest)
 	for shard, ops := range sharded.Ops {
-		// loop variable shadow capture is the go equivalent of man door hook hand
-		shard, ops := shard, ops
-		eg.Go(func() error {
-			return api.applyOperations(ctx, qcx, index, shard, knownFields, ops)
-		})
+		nodes := snap.ShardNodes(indexName, shard)
+		forThisShard := byNode[nodes[0].ID]
+		if forThisShard == nil {
+			byNode[nodes[0].ID] = &ingest.ShardedRequest{Ops: map[uint64][]*ingest.Operation{shard: ops}}
+			continue
+		}
+		forThisShard.Ops[shard] = ops
+	}
+	eg, ctx := errgroup.WithContext(ctx)
+	for _, node := range snap.Nodes {
+		node := node
+		sharded := byNode[node.ID]
+		// Sometimes, there's nothing for a specific node.
+		if sharded == nil {
+			continue
+		}
+		if node.ID == api.NodeID() {
+			eg.Go(func() error {
+				return api.ingestNodeOperationsForFields(ctx, qcx, index, knownFields, sharded)
+			})
+		} else {
+			eg.Go(func() error {
+				return api.server.defaultClient.IngestNodeOperations(ctx, &node.URI, indexName, sharded)
+			})
+		}
 	}
 	return eg.Wait()
 }
@@ -3090,6 +3146,7 @@ const (
 	apiIDReset
 	apiPartitionNodes
 	apiIngestOperations
+	apiIngestNodeOperations
 	apiMutexCheck
 )
 
@@ -3159,5 +3216,6 @@ var methodsNormal = map[apiMethod]struct{}{
 	apiIDReset:              {},
 	apiPartitionNodes:       {},
 	apiIngestOperations:     {},
+	apiIngestNodeOperations: {},
 	apiMutexCheck:           {},
 }
