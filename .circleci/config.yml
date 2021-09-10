@@ -5,7 +5,7 @@ executors:
     parameters:
       version:
         type: string
-        default: "1.15.5"
+        default: "1.16.7"
       resource_class:
         type: string
         default: medium
@@ -84,7 +84,7 @@ jobs:
         default: medium
       golang_version:
         type: string
-        default: "1.15.5"
+        default: "1.16.7"
       shard_width:
         type: string
         default: "20"
@@ -253,7 +253,7 @@ workflows:
           requires:
             - linter
             - check-license-headers
-            - test-golang-1.15.5
+            - test-golang-1.16.7
       - release:
           context: molecula
           requires:
