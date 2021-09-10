@@ -12,7 +12,7 @@ BUILD_TIME := $(shell date -u +%FT%T%z)
 SHARD_WIDTH = 20
 COMMIT := $(shell git describe --exact-match >/dev/null 2>&1 || git rev-parse --short HEAD)
 LDFLAGS="-X github.com/pilosa/pilosa/v2.Version=$(VERSION) -X github.com/pilosa/pilosa/v2.BuildTime=$(BUILD_TIME) -X github.com/pilosa/pilosa/v2.Variant=$(VARIANT) -X github.com/pilosa/pilosa/v2.Commit=$(COMMIT) -X github.com/pilosa/pilosa/v2.LatticeCommit=$(LATTICE_COMMIT)"
-GO_VERSION=1.14.10
+GO_VERSION=1.16.7
 RELEASE ?= 0
 RELEASE_ENABLED = $(subst 0,,$(RELEASE))
 BUILD_TAGS += $(if $(RELEASE_ENABLED),release)
@@ -195,8 +195,10 @@ generate-proto-grpc: require-protoc require-protoc-gen-go
 generate: generate-protoc generate-statik generate-stringer generate-pql
 
 # Create Docker image from Dockerfile
-docker: vendor
-	docker build --build-arg BUILD_FLAGS="${FLAGS}" -t "pilosa:$(VERSION)" .
+docker: vendor lattice
+	docker build \
+	    --build-arg GO_VERSION=$(GO_VERSION) \
+	    --tag pilosa:$(VERSION) .
 	@echo Created docker image: pilosa:$(VERSION)
 
 # Tag and push a Docker image
@@ -205,9 +207,22 @@ docker-tag-push: vendor
 	docker push $(DOCKER_TARGET)
 	@echo Pushed docker image: $(DOCKER_TARGET)
 
+docker-release: check-clean lattice
+	$(MAKE) docker-build GOOS=linux GOARCH=amd64
+	$(MAKE) docker-build GOOS=darwin GOARCH=amd64
+
 # Compile Pilosa inside Docker container
 docker-build: vendor
-	docker run --rm -v $(PWD):/go/src/$(CLONE_URL) -w /go/src/$(CLONE_URL) -e GOOS=$(GOOS) -e GOARCH=$(GOARCH) golang:$(GO_VERSION) make build FLAGS="$(FLAGS) -mod=vendor" RELEASE=$(RELEASE)
+	docker build \
+	    --build-arg GO_VERSION=$(GO_VERSION) \
+	    --build-arg MAKE_FLAGS="GOOS=$(GOOS) GOARCH=$(GOARCH)" \
+	    --target pilosa-builder \
+	    --tag pilosa:build .
+	docker create --name pilosa-build pilosa:build
+	mkdir -p build/pilosa-$(VERSION_ID)
+	docker cp pilosa-build:/pilosa/build/. ./build/pilosa-$(VERSION_ID)
+	docker rm pilosa-build
+	tar -cvz -C build -f build/pilosa-$(VERSION_ID).tar.gz pilosa-$(VERSION_ID)/
 
 # Install diagnostic pilosa-keydump tool. Allows viewing the keys in a transaction-engine directory.
 pilosa-keydump:

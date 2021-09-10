@@ -1,1 +1,6 @@
-lattice
+lattice/.git
+lattice/node_modules
+lattice/build
+statik/statik.go
+build
+

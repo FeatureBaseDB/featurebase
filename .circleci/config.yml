@@ -5,7 +5,7 @@ executors:
     parameters:
       version:
         type: string
-        default: "1.15.5"
+        default: "1.16.7"
       resource_class:
         type: string
         default: medium
@@ -84,7 +84,7 @@ jobs:
         default: medium
       golang_version:
         type: string
-        default: "1.15.5"
+        default: "1.16.7"
       shard_width:
         type: string
         default: "20"
@@ -132,12 +132,23 @@ jobs:
       - checkout-plus
       - attach_workspace:
           at: .
-      - run: make release
+      - setup_remote_docker:
+          version: 19.03.13 # see https://support.circleci.com/hc/en-us/articles/360050934711
+      - run: echo -n $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
+      - run: make docker-release
       - store_artifacts:
           path: build
       - persist_to_workspace:
           root: .
           paths: build
+  publish_release:
+    executor:
+      name: golang
+    steps:
+      - attach_workspace:
+          at: .
+      - run: go get github.com/tcnksm/ghr
+      - run: ghr -t ${GITHUB_PERSONAL_ACCESS_TOKEN} -u ${CIRCLE_PROJECT_USERNAME} -r ${CIRCLE_PROJECT_REPONAME} -c ${CIRCLE_SHA1} -delete ${CIRCLE_TAG} ./build/
   prerelease-upload:
     docker:
       - image: circleci/python:2.7-jessie
@@ -152,7 +163,9 @@ jobs:
       name: golang
     steps:
       - checkout-plus
-      - setup_remote_docker
+      - setup_remote_docker:
+          version: 19.03.13 # see https://support.circleci.com/hc/en-us/articles/360050934711
+      - run: echo -n $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
       - run: make docker
       - run: docker run pilosa:$(git describe --tags) help
   dockerhub-upload-unstable:
@@ -160,7 +173,9 @@ jobs:
       name: golang
     steps:
       - checkout-plus
-      - setup_remote_docker
+      - setup_remote_docker:
+          version: 19.03.13 # see https://support.circleci.com/hc/en-us/articles/360050934711
+      - run: echo -n $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
       - run: make docker
       - run: docker run pilosa:$(git describe --tags) help
       - run: docker login -u $DOCKER_USER -p $DOCKER_PASS
@@ -170,7 +185,9 @@ jobs:
       name: golang
     steps:
       - checkout-plus
-      - setup_remote_docker
+      - setup_remote_docker:
+          version: 19.03.13 # see https://support.circleci.com/hc/en-us/articles/360050934711
+      - run: echo -n $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
       - run: make docker
       - run: docker run pilosa:$(git describe --tags) help
       - run: docker login -u $DOCKER_USER -p $DOCKER_PASS
@@ -209,7 +226,7 @@ workflows:
             - setup
           matrix:
             parameters:
-              golang_version: ["1.14.12", "1.15.5"]
+              golang_version: ["1.16.7"]
       - test:
           name: << matrix.test_make_target >>
           resource_class: xlarge
@@ -218,7 +235,7 @@ workflows:
             - setup
           matrix:
             parameters:
-              test_make_target: ["test-race", "test-txstore-rbf", "test-txstore-rbf_bolt"]
+              test_make_target: ["test-race"]
       - test:
           name: test-shardwidth-22
           shard_width: "22"
@@ -236,7 +253,23 @@ workflows:
           requires:
             - linter
             - check-license-headers
-            - test-golang-1.15.5
+            - test-golang-1.16.7
+      - release:
+          context: molecula
+          requires:
+            - setup
+          filters:
+            tags:
+              only: /^v.*/
+      - publish_release:
+          context: molecula
+          requires:
+            - release
+          filters:
+            tags:
+              only: /^v.*/
+            branches:
+              ignore: /.*/
       - dockerhub-upload-unstable:
           context: molecula
           requires:

@@ -1,19 +1,47 @@
-FROM golang:1.14.10 as builder
+ARG GO_VERSION=latest
 
-ARG BUILD_FLAGS
+#######################
+### Lattice builder ###
+#######################
+
+FROM moleculacorp/nodejs:latest as lattice-builder
+WORKDIR /lattice
+
+COPY lattice/package.json ./
+COPY lattice/yarn.lock ./
+
+RUN yarn install
+
+COPY lattice ./
+RUN yarn build
+
+######################
+### Pilosa builder ###
+######################
+
+FROM golang:${GO_VERSION} as pilosa-builder
 ARG MAKE_FLAGS
+WORKDIR /pilosa
 
-COPY . pilosa
+RUN go get github.com/rakyll/statik
 
-RUN cd pilosa && make install FLAGS="-a -mod=vendor ${BUILD_FLAGS}" ${MAKE_FLAGS}
+COPY . ./
+COPY --from=lattice-builder /lattice/build /lattice
+RUN /go/bin/statik -src=/lattice -dest=/pilosa
 
-FROM alpine:3.12.1
+RUN make build FLAGS="-o build/pilosa" ${MAKE_FLAGS}
 
-LABEL maintainer "dev@pilosa.com"
+#####################
+### Pilosa runner ###
+#####################
+
+FROM alpine:3.13.2 as runner
+
+LABEL maintainer "dev@molecula.com"
 
 RUN apk add --no-cache curl jq
 
-COPY --from=builder /go/bin/pilosa /pilosa
+COPY --from=pilosa-builder /pilosa/build/pilosa /
 
 COPY LICENSE /LICENSE
 COPY NOTICE /NOTICE
