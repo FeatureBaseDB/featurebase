@@ -273,12 +273,12 @@ const (
 )
 
 type Portal struct {
-	Name         string
-	Writer       *message.WireWriter
-	commands     []message.Message
-	Encoder      *message.Encoder
-	mapper       *sql.Mapper
-	results      []Result
+	Name     string
+	Writer   *message.WireWriter
+	commands []message.Message
+	Encoder  *message.Encoder
+	mapper   *sql.Mapper
+	//results      []Result
 	sql          string
 	pgspecial    PgType
 	pid          int32
@@ -491,7 +491,11 @@ func (p *Portal) Execute() (shouldTerminate bool, queryReady bool) {
 		// need to return something so that the id can be queried
 		//need to return  SELECT pid as id, query as stmt, EXTRACT(seconds from query_start - NOW()) as elapsed_time          FROM pg_stat_activity
 		//seems like we need a map of pids to querys
-		p.server.dumpPortalsTo(p)
+		err := p.server.dumpPortalsTo(p)
+		if err != nil {
+			return
+		}
+
 	case pgTerminate:
 		//note just have 1 lock that blocks all who try to count the activities
 		vprint.VV("removing the block ")
@@ -577,7 +581,12 @@ func (p *Portal) Execute() (shouldTerminate bool, queryReady bool) {
 func (p *Portal) Sync() {
 	for _, m := range p.commands {
 		vprint.VV("Sending: '%v'", m.Type)
-		p.Writer.WriteMessage(m)
+		err := p.Writer.WriteMessage(m)
+		if err != nil {
+			//TODO (twg) need to change signature to return error
+			vprint.VV("error %v", err)
+			return
+		}
 	}
 	p.Writer.Flush()
 	p.Reset()

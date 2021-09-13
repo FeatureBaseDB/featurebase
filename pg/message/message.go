@@ -172,11 +172,13 @@ func (e *Encoder) i32(i int32) error {
 	return err
 }
 
+/* removed for linter now
 func (e *Encoder) u32(i uint32) error {
 	binary.BigEndian.PutUint32(e.scratch[:], i)
 	_, err := e.buf.Write(e.scratch[:])
 	return err
 }
+*/
 
 // ReadyForQuery encodes a "ready for query" message.
 func (e *Encoder) ReadyForQuery(status TransactionStatus) (Message, error) {
