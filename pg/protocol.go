@@ -30,7 +30,10 @@ import (
 	"time"
 
 	"github.com/molecula/featurebase/v2/pg/message"
+	"github.com/molecula/featurebase/v2/sql"
+	"github.com/molecula/featurebase/v2/vprint"
 	"github.com/pkg/errors"
+	"vitess.io/vitess/go/vt/sqlparser"
 )
 
 // Protocol is a Postgres protocol version.
@@ -48,6 +51,9 @@ const (
 
 	// ProtocolSupported is the main protocol version supported by this package.
 	ProtocolSupported Protocol = ProtocolPostgres30
+
+	// PgServerVersion is the latest version of postgres that we claim to support.
+	PgServerVersion = "13.0.0"
 )
 
 // Major returns the major revision of the protocol.
@@ -170,6 +176,7 @@ startup:
 		// Reject the unsecured connection.
 		return errors.Errorf("client at %s attempted to initiate an unsecured postgres conenction", conn.RemoteAddr())
 	}
+	vprint.VV("TProcotcol: %v", proto)
 
 	switch proto {
 	case ProtocolCancel:
@@ -209,6 +216,7 @@ func parseParams(data []byte) (map[string]string, error) {
 
 // handleCancel handles cancel request connections.
 func (s *Server) handleCancel(ctx context.Context, conn net.Conn, data []byte) error {
+	vprint.VV("handle cancel")
 	if len(data) != 8 {
 		return errors.New("malformed cancellation packet")
 	}
@@ -220,6 +228,7 @@ func (s *Server) handleCancel(ctx context.Context, conn net.Conn, data []byte) e
 	pid := int32(binary.BigEndian.Uint32(data[:4]))
 	key := int32(binary.BigEndian.Uint32(data[4:]))
 
+	vprint.VV("cancel pid:%v key:%v", pid, key)
 	err := s.CancellationManager.Cancel(CancellationToken{PID: pid, Key: key})
 	switch err {
 	case nil:
@@ -231,6 +240,370 @@ func (s *Server) handleCancel(ctx context.Context, conn net.Conn, data []byte) e
 		return err
 	}
 
+	return nil
+}
+func (s *Server) SendParameterStatus(w *message.WireWriter, param, value string, encoder *message.Encoder) error {
+	msg, err := encoder.ParameterStatus(param, value)
+	if err != nil {
+		return err
+	}
+	err = w.WriteMessage(msg)
+	if err != nil {
+		return errors.Wrap(err, "sending parameter status")
+	}
+	return nil
+}
+
+type Result struct {
+}
+type PgType byte
+
+const (
+	pgNotPg          PgType = 'x'
+	pgBackendPid     PgType = 'a'
+	pgVersion        PgType = 'b'
+	pgCountType      PgType = 'c'
+	pgQueryTime      PgType = 'd'
+	pgTerminate      PgType = 'e'
+	pgEmpty          PgType = 'f'
+	pgSetApplication PgType = 'g'
+	pgSelect1        PgType = 'h'
+	pgSchema         PgType = 'i'
+	pgBegin          PgType = 'j'
+)
+
+type Portal struct {
+	Name         string
+	Writer       *message.WireWriter
+	commands     []message.Message
+	Encoder      *message.Encoder
+	mapper       *sql.Mapper
+	results      []Result
+	sql          string
+	pgspecial    PgType
+	pid          int32
+	queryStart   time.Time
+	server       *Server
+	cancelNotify <-chan struct{}
+}
+
+func (p *Portal) Reset() {
+	vprint.VV("Portal Reset")
+	p.Name = ""
+	p.sql = ""
+	p.pgspecial = pgNotPg
+	p.commands = p.commands[:0]
+}
+
+func (p *Portal) Bind() {
+	p.Add(message.BindComplete)
+}
+func (p *Portal) Parse(data []byte) {
+	p.queryStart = time.Now()
+	b := bytes.Trim(data, "\x00")
+	vprint.VV("PARSE RAW: (%v) (%d)", string(b), len(b))
+	if strings.Contains(string(b), "EXTRACT") {
+		// had to add this hack because the vitis parser doesn't handle...
+		/*
+		  	SELECT pid as id,
+		   	 query as stmt,
+		     EXTRACT(seconds from query_start - NOW()) as elapsed_time
+		     FROM pg_stat_activity
+		     WHERE usename='docker'`
+		*/
+		p.pgspecial = pgQueryTime
+		p.Name = "SELECT"
+		p.sql = string(b)
+		p.Add(message.ParseOK)
+		return
+	}
+
+	if len(b) > 2 {
+
+		query, err := p.mapper.MapSQL(string(b))
+		if err != nil {
+			vprint.VV("Parse Err: '%v'", err)
+		} else {
+
+			vprint.VV("TODD Query: %#v", query.SQL)
+			if strings.Contains(strings.ToLower(query.SQL), "select 1") {
+				vprint.VV("SQL1")
+				p.pgspecial = pgSelect1
+				p.Name = "SELECT"
+			} else {
+				switch query.SQLType {
+				case sql.SQLTypeSet:
+					p.Name = "SET"
+					set := query.Statement.(*sqlparser.Set)
+					for _, item := range set.Exprs {
+						vprint.VV("SET name=(%v) ", item.Name)
+						if item.Name.String() == "application_name" {
+							vprint.VV("SET expr=(%#v) ", item.Expr)
+							switch val := item.Expr.(type) {
+							case *sqlparser.SQLVal:
+								vprint.VV("getting %v (%v)", val.Type, string(val.Val))
+								p.pgspecial = pgSetApplication
+							}
+						}
+					}
+				case sql.SQLTypeSelect:
+					p.Name = "SELECT"
+					p.pgspecial = pgNotPg
+					stmt := query.Statement.(*sqlparser.Select)
+					for _, item := range stmt.SelectExprs {
+						switch expr := item.(type) {
+						case *sqlparser.AliasedExpr:
+							switch colExpr := expr.Expr.(type) {
+							case *sqlparser.FuncExpr:
+								funcName := strings.ToLower(colExpr.Name.String())
+								switch funcName {
+								case "pg_backend_pid":
+									//SELECT pg_backend_pid()
+									p.pgspecial = pgBackendPid
+									//p.encoder.RowDescription() //TODO(twg) move to the right spt
+								case "pg_terminate_backend":
+									//need the arg 100
+									//select pg_terminate_backend(100)
+									vprint.VV("terminate %#v", colExpr.Exprs)
+									//colExpr.Exprs[0]
+									p.pgspecial = pgTerminate
+								case "version":
+									//SELECT VERSION() AS version
+									p.pgspecial = pgVersion
+								}
+								//need to return  the pid from the cancelation object
+								//add row description object
+								//add data row for item
+							}
+						}
+
+					}
+					for _, item := range stmt.From {
+						switch from := item.(type) {
+						case *sqlparser.AliasedTableExpr:
+							tableName := from.Expr.(sqlparser.TableName).ToViewName().Name.String()
+							vprint.VV("looking at (%v)", tableName)
+							switch tableName {
+							case "pg_type":
+								p.pgspecial = pgCountType
+							case "pg_stat_activity":
+								p.pgspecial = pgQueryTime
+							case "tables":
+								p.pgspecial = pgSchema
+							}
+						}
+					}
+					p.sql = string(b)
+				case sql.SQLTypeBegin:
+					p.pgspecial = pgBegin
+					//				panic("TODO")
+					// ingnore for now
+				case sql.SQLTypeShow:
+					p.Name = "SHOW"
+					p.pgspecial = pgNotPg
+					p.sql = string(b)
+				}
+			}
+		}
+		// TODO (twg) hack parsing for short term
+		//	parts := strings.Split(strings.TrimSuffix(string(data), "\x00"), " ")
+		//	p.Name = parts[0][1:] //TODO (twg) major hack
+		vprint.VV("PG SET:(%v)", p.pgspecial)
+	} else {
+		vprint.VV("SETTING EMPTY")
+		p.pgspecial = pgEmpty
+	}
+	p.Add(message.ParseOK)
+}
+func (p *Portal) Describe() {
+	/*
+		if p.pgspecial != pgNotPg {
+			//do custom handling for setup
+		}
+		if len(p.results) == 0 {
+			p.Add(&message.NoData)
+			p.Add(&message.EmptyQueryResponse)
+			return
+		}
+	*/
+
+}
+func (p *Portal) Execute() (shouldTerminate bool, queryReady bool) {
+	queryReady = true
+	vprint.VV("port.Execute: (%v) q=(%v)", p.pgspecial, p.sql)
+	switch p.pgspecial {
+	case pgBackendPid:
+		rowDescription, err := p.Encoder.EncodeColumn("pg_backend_pid", int32(23), 4)
+		if err != nil {
+			panic(err)
+		}
+		p.Add(rowDescription)
+		pid := fmt.Sprintf("%v", p.pid)
+		dataRow, _ := p.Encoder.TextRow(pid)
+		p.Add(dataRow)
+		//needs data row with cancel token
+	case pgVersion:
+		rowDescription, err := p.Encoder.EncodeColumn("version", int32(25), -1)
+		if err != nil {
+			panic(err)
+		}
+		p.Add(rowDescription)
+		dataRow, _ := p.Encoder.TextRow("PostgresSQL 13.0 (molecula)")
+		p.Add(dataRow)
+	case pgSelect1:
+		rowDescription, err := p.Encoder.EncodeColumn("?column?", int32(23), 4)
+		if err != nil {
+			panic(err)
+		}
+		p.Add(rowDescription)
+		dataRow, _ := p.Encoder.TextRow("1")
+		p.Add(dataRow)
+	case pgCountType:
+		//need to block
+		vprint.VV("blocking til terminated")
+		<-p.server.lookerChannel
+		vprint.VV("Released")
+		//now need to send ParseComplete,BindComplete,RowDescription,Error(Terminate)
+		//TODO(twg) handle the error
+		rowDescription, err := p.Encoder.EncodeColumn("count", int32(20), 8)
+		if err != nil {
+			panic(err)
+		}
+		p.Add(rowDescription)
+		errorResponse, _ := p.Encoder.Error(
+			message.NoticeField{
+				Type: message.NoticeFieldSeverity,
+				Data: "FATAL",
+			},
+			message.NoticeField{
+				Type: message.NoticeFieldMessage,
+				Data: "terminating connection due to administrator command",
+			},
+			message.NoticeField{
+				Type: message.NoticeFieldCode,
+				Data: "57P01",
+			},
+		)
+		p.Add(errorResponse)
+		p.Sync() //send and Reset
+		return true, queryReady
+	case pgQueryTime:
+		// need to return something so that the id can be queried
+		//need to return  SELECT pid as id, query as stmt, EXTRACT(seconds from query_start - NOW()) as elapsed_time          FROM pg_stat_activity
+		//seems like we need a map of pids to querys
+		p.server.dumpPortalsTo(p)
+	case pgTerminate:
+		//note just have 1 lock that blocks all who try to count the activities
+		vprint.VV("removing the block ")
+		//TODO (twg) lock this
+		close(p.server.lookerChannel)                //release all the other blockers and allow them to terminate
+		p.server.lookerChannel = make(chan struct{}) //create a new one just in case
+		// i think it needs to return boolean true
+		rowDescription, err := p.Encoder.EncodeColumn("pg_terminate_backend", int32(16), 1)
+		if err != nil {
+			panic(err)
+		}
+		p.Add(rowDescription)
+		dataRow, _ := p.Encoder.TextRow("t")
+		p.Add(dataRow)
+		commandComplete, _ := p.Encoder.CommandComplete("SELECT 1")
+		p.Add(commandComplete)
+		p.Sync()
+		return false, queryReady
+	case pgEmpty:
+		p.Add(message.NoData)
+		p.Add(message.EmptyQueryResponse)
+		p.Sync()
+		queryReady = true
+		return false, queryReady
+	case pgSetApplication:
+		//needs to add/send status
+		msg, err := p.Encoder.ParameterStatus("application_name", "PostgreSQL JDBC Driver") //TODO (twg) should be saved from parse
+		if err != nil {
+			return
+		}
+		p.Add(msg)
+	case pgSchema:
+		//need to add the descrition for the 3 fields
+		//	---[Field 01]---  name='table_schema'  type=19  type_len=64  type_mod=4294967295  relid=13276  attnum=2  format=0
+		// ---[Field 02]---  name='table_name'  type=19  type_len=64  type_mod=4294967295  relid=13276  attnum=3  format=0
+		parts := []message.SimpleColumn{
+			{
+				Name:    "table_schema",
+				Typeid:  int32(19),
+				Typelen: 64,
+			},
+			{
+				Name:    "table_name",
+				Typeid:  int32(19),
+				Typelen: 64,
+			},
+		}
+		rowDescription, err := p.Encoder.EncodeColumns(parts...)
+		if err != nil { //TODO (twg) shadowing err
+			return
+		}
+		p.Add(rowDescription)
+		err = p.HandleSchema()
+		if err != nil {
+			return
+		}
+		vprint.VV("SHOULd make schema")
+
+	case pgNotPg:
+		vprint.VV("GOOOO>(%v)", p.sql)
+		query := SimpleQuery(p.sql)
+		err := p.server.handleQuery(p, query, p.cancelNotify)
+		if err != nil {
+			return
+		}
+
+	case pgBegin:
+		vprint.VV("BEGIN")
+		p.Name = "BEGIN"
+	}
+
+	//maybe add in the number of items in select clause
+	if len(p.Name) > 0 { //only send command complete for those that have names
+		vprint.VV("EXECING NAME: '%v'", p.Name)
+		message, _ := p.Encoder.CommandComplete(p.Name)
+		vprint.VV("AFTER")
+		p.Add(message)
+	}
+	return
+}
+
+// handleStandard handles a connection in the standard postgres wire protocol.
+func (p *Portal) Sync() {
+	for _, m := range p.commands {
+		vprint.VV("Sending: '%v'", m.Type)
+		p.Writer.WriteMessage(m)
+	}
+	p.Writer.Flush()
+	p.Reset()
+}
+func (p *Portal) Add(m message.Message) {
+	cp := message.Message{Type: m.Type, Data: make([]byte, len(m.Data))}
+	copy(cp.Data, m.Data)
+	p.commands = append(p.commands, cp)
+}
+
+func (p *Portal) DumpComands() {
+
+	for _, m := range p.commands {
+		m.Dump("DUMPING:")
+	}
+}
+func (p *Portal) HandleSchema() error {
+	return p.server.QueryHandler.HandleSchema(context.Background(), p)
+}
+
+//implement the QueryResultWriterqueryResultR
+func (p *Portal) WriteMessage(m message.Message) error {
+	p.Add(m)
+	return nil
+}
+func (p *Portal) Flush() error {
 	return nil
 }
 
@@ -255,7 +628,7 @@ func (s *Server) handleStandard(ctx context.Context, proto Protocol, conn net.Co
 	if err != nil {
 		return errors.Wrap(err, "parsing parameters")
 	}
-
+	fmt.Printf("postgres connection params\n%#v\n", params) //TODO (twg) remove
 	if user, ok := params["user"]; ok {
 		// Log the connection.
 		s.Logger.Debugf("new postgres connection from user %q at %v", user, conn.RemoteAddr())
@@ -322,8 +695,57 @@ func (s *Server) handleStandard(ctx context.Context, proto Protocol, conn net.Co
 	if err != nil {
 		return errors.Wrap(err, "sending authentication confirmation")
 	}
+	err = s.SendParameterStatus(w, "application_name", "", &encoder)
+	if err != nil {
+		return errors.Wrap(err, "sending parameter status server version")
+	}
+	err = s.SendParameterStatus(w, "client_encoding", "UTF8", &encoder)
+	if err != nil {
+		return errors.Wrap(err, "sending parameter status server version")
+	}
+	err = s.SendParameterStatus(w, "DateStyle", "ISO, MDY", &encoder)
+	if err != nil {
+		return errors.Wrap(err, "sending parameter status server version")
+	}
+	err = s.SendParameterStatus(w, "integer_datetimes", "on", &encoder)
+	if err != nil {
+		return errors.Wrap(err, "sending parameter status server version")
+	}
+	err = s.SendParameterStatus(w, "IntervalStyle", "postgres", &encoder)
+	if err != nil {
+		return errors.Wrap(err, "sending parameter status server version")
+	}
+	err = s.SendParameterStatus(w, "is_superuser", "on", &encoder)
+	if err != nil {
+		return errors.Wrap(err, "sending parameter status server version")
+	}
+	err = s.SendParameterStatus(w, "server_encoding", "UTF8", &encoder)
+	if err != nil {
+		return errors.Wrap(err, "sending parameter status server version")
+	}
+	err = s.SendParameterStatus(w, "server_version", PgServerVersion, &encoder)
+	if err != nil {
+		return errors.Wrap(err, "sending parameter status server version")
+	}
+	/*
+		-PARAMETER STATUS name='TimeZone', value='GMT'
+	*/
+	err = s.SendParameterStatus(w, "session_authorization", "docker", &encoder) //TODO(twg) figure out valid values here
+	if err != nil {
+		return errors.Wrap(err, "sending parameter status server version")
+	}
+	err = s.SendParameterStatus(w, "standard_conforming_strings", "on", &encoder) //TODO(twg) figure out valid values here
+	if err != nil {
+		return errors.Wrap(err, "sending parameter status server version")
+	}
+	err = s.SendParameterStatus(w, "TimeZone", "GMT", &encoder) //TODO(twg) figure out valid values here
+	if err != nil {
+		return errors.Wrap(err, "sending parameter status server version")
+	}
 
+	vprint.VV("CancellationManger: %v", s.CancellationManager)
 	var cancelNotify <-chan struct{}
+	var pid int32
 	if s.CancellationManager != nil {
 		notify, cancel, token, err := s.CancellationManager.Token()
 		if err != nil {
@@ -332,6 +754,7 @@ func (s *Server) handleStandard(ctx context.Context, proto Protocol, conn net.Co
 		defer cancel()
 
 		msg, err := encoder.BackendKeyData(token.PID, token.Key)
+		pid = token.PID
 		if err != nil {
 			return errors.Wrap(err, "encoding cancellation key data")
 		}
@@ -343,11 +766,25 @@ func (s *Server) handleStandard(ctx context.Context, proto Protocol, conn net.Co
 	}
 
 	var queryReady bool
+	portal := &Portal{
+		Writer:       w,
+		Encoder:      &encoder,
+		commands:     make([]message.Message, 0),
+		mapper:       sql.NewMapper(),
+		pid:          pid,
+		server:       s,
+		cancelNotify: cancelNotify,
+	}
+	s.addPortal(portal)
+	defer s.removePortal(portal)
+	//mapper.Logger = logger
 	for {
 		if !queryReady {
 			// Indicate that we are ready for a query.
 			// TODO: provide a valid transaction state.
-			msg, err := encoder.ReadyForQuery(message.TransactionStatusActive)
+			//msg, err := encoder.ReadyForQuery(message.TransactionStatusActive)
+			portal.sql = ""
+			msg, err := encoder.ReadyForQuery(message.TransactionStatusIdle)
 			if err != nil {
 				return errors.Wrap(err, "sending query ready status")
 			}
@@ -373,10 +810,12 @@ func (s *Server) handleStandard(ctx context.Context, proto Protocol, conn net.Co
 				// However, it seems that no clients completely follow the spec, so we shouldn't rely on anything that isn't entirely straightforward.
 				s.Logger.Debugf("postgres client sent additional data without waiting for completion")
 			}
+			queryReady = true
 		}
 
 		// Read the next packet.
 		msg, err := r.ReadMessage()
+		msg.Dump("start-") // TODO(twg) remove
 		if err != nil {
 			if err == errPreempted {
 				// The server is shutting down.
@@ -406,6 +845,26 @@ func (s *Server) handleStandard(ctx context.Context, proto Protocol, conn net.Co
 			// We are done.
 			return w.Flush()
 
+		case message.TypeParse:
+			fmt.Println("Type Parse", strings.Trim(string(msg.Data), "\x00"))
+			portal.Parse(msg.Data)
+		case message.TypeBind:
+			fmt.Println("Type Bind", strings.Trim(string(msg.Data), "\x00"))
+			//TODO(twg) apply values to bindings in the future
+			// Parse the query message (a null-terminated string).
+			portal.Bind()
+		case message.TypeExecute:
+			fmt.Println("Type Execute", strings.Trim(string(msg.Data), "\x00"))
+			//term, qr := portal.Execute()
+			term, qr := portal.Execute()
+			if term {
+				return w.Flush()
+			}
+			queryReady = qr
+		case message.TypeSync:
+			fmt.Println("Type Sync", strings.Trim(string(msg.Data), "\x00"))
+			portal.Sync()
+			queryReady = false
 		case message.TypeSimpleQuery:
 			// Execute a simple query.
 
@@ -419,10 +878,23 @@ func (s *Server) handleStandard(ctx context.Context, proto Protocol, conn net.Co
 			if err != nil {
 				return err
 			}
-
+			label := "N/A"
+			switch msg.Data[0] {
+			case 'S': //prepared statement
+				label = "prepared statement"
+			case 'P': //portal
+				label = "portal"
+			}
+			vprint.VV("describe %v:'%v'", label, msg.Data[1:])
+		case message.TypeDescribe:
+			//TODO (twg) major hack alet
+			portal.Describe()
+		case message.TypeClose:
+			return w.Flush()
 		default:
 			// The message is not supported yet.
 			// Send an error.
+			vprint.VV("unrecognized postgres packet %v", msg)
 			s.Logger.Errorf("unrecognized postgres packet %v", msg)
 			msg, err = encoder.Error(
 				message.NoticeField{
@@ -451,6 +923,71 @@ func (s *Server) handleStandard(ctx context.Context, proto Protocol, conn net.Co
 			}
 		}
 	}
+}
+func (s *Server) addPortal(p *Portal) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.portals = append(s.portals, p)
+}
+func (s *Server) removePortal(p *Portal) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i, portal := range s.portals {
+		if portal.pid == p.pid {
+			//remove i
+			s.portals = append(s.portals[:i], s.portals[i+1:]...)
+			return
+		}
+
+	}
+
+}
+func (s *Server) dumpPortalsTo(p *Portal) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	//need to add the descrition for the 3 fields
+	//	<-:-ROW DESCRIPTION: num_fields=3
+	//---[Field 01]---  name='id'  type=23  type_len=4  type_mod=4294967295  relid=12250  attnum=3  format=0
+	//---[Field 02]---  name='stmt'  type=25  type_len=65535  type_mod=4294967295  relid=12250  attnum=20  format=0  -
+	//--[Field 03]---  name='elapsed_time'  type=701  type_len=8  type_mod=4294967295  relid=0  attnum=0  format=0
+	parts := []message.SimpleColumn{
+		{
+			Name:    "id",
+			Typeid:  int32(23),
+			Typelen: 4,
+		},
+		{
+			Name:    "stmt",
+			Typeid:  int32(25),
+			Typelen: -1,
+		},
+		{
+			Name:    "elapsed_time",
+			Typeid:  int32(701),
+			Typelen: 8,
+		},
+	}
+	rowDescription, err := p.Encoder.EncodeColumns(parts...)
+	if err != nil {
+		return err
+	}
+	p.Add(rowDescription)
+
+	for _, portal := range s.portals {
+		vprint.VV("port: %v (%v) %v", portal.pid, portal.sql, time.Since(portal.queryStart))
+		dataRow, err := p.Encoder.TextRow(
+			fmt.Sprintf("%v", portal.pid),
+			portal.sql,
+			fmt.Sprintf("%v", time.Since(portal.queryStart).Seconds()))
+		if err != nil {
+			return err
+		}
+		//if sql == "" need to put in a null record
+		//need to add the dararow
+		//also need to figure out null types
+		p.Add(dataRow)
+	}
+	return nil
 }
 
 // handleQuery processes a single query on a connection.

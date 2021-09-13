@@ -25,7 +25,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/molecula/featurebase/v2"
+	pilosa "github.com/molecula/featurebase/v2"
 	"github.com/molecula/featurebase/v2/logger"
 	"github.com/molecula/featurebase/v2/pg"
 	"github.com/molecula/featurebase/v2/pql"
@@ -67,9 +67,9 @@ func NewPostgresServer(api *pilosa.API, logger logger.Logger, tls *tls.Config) *
 
 // NewPostgresHandler creates a postgres query handler wrapping the pilosa API.
 func NewPostgresHandler(api *pilosa.API, logger logger.Logger) pg.QueryHandler {
-	return &queryDecodeHandler{
-		child: &pilosaQueryHandler{
-			api:    api,
+	return &QueryDecodeHandler{
+		Child: &PilosaQueryHandler{
+			Api:    api,
 			logger: logger,
 		},
 	}
@@ -107,6 +107,10 @@ func (s *PostgresServer) Close() error {
 	return s.eg.Wait()
 }
 
+func (s *PostgresServer) GetAPI() *pilosa.API {
+	return s.api
+}
+
 type pgPQLQuery struct {
 	index string
 	query string
@@ -135,8 +139,8 @@ func pgDecodePQL(str string) (q pg.Query, err error) {
 	}, nil
 }
 
-type pilosaQueryHandler struct {
-	api    *pilosa.API
+type PilosaQueryHandler struct {
+	Api    *pilosa.API
 	logger logger.Logger
 }
 
@@ -449,10 +453,10 @@ func pgWriteResult(w pg.QueryResultWriter, result interface{}) error {
 	}
 }
 
-func (pqh *pilosaQueryHandler) HandleQuery(ctx context.Context, w pg.QueryResultWriter, q pg.Query) error {
+func (pqh *PilosaQueryHandler) HandleQuery(ctx context.Context, w pg.QueryResultWriter, q pg.Query) error {
 	switch q := q.(type) {
 	case pgPQLQuery:
-		resp, err := pqh.api.Query(ctx, &pilosa.QueryRequest{
+		resp, err := pqh.Api.Query(ctx, &pilosa.QueryRequest{
 			Index: q.index,
 			Query: q.query,
 		})
@@ -465,7 +469,7 @@ func (pqh *pilosaQueryHandler) HandleQuery(ctx context.Context, w pg.QueryResult
 		return errors.Wrap(pgWriteResult(w, resp.Results[0]), "writing query result")
 
 	case pg.SimpleQuery:
-		resp, err := execSQL(ctx, pqh.api, pqh.logger, string(q))
+		resp, err := execSQL(ctx, pqh.Api, pqh.logger, string(q))
 		if err != nil {
 			return errors.Wrap(err, "executing query")
 		}
@@ -476,11 +480,11 @@ func (pqh *pilosaQueryHandler) HandleQuery(ctx context.Context, w pg.QueryResult
 	}
 }
 
-type queryDecodeHandler struct {
-	child pg.QueryHandler
+type QueryDecodeHandler struct {
+	Child pg.QueryHandler
 }
 
-func (qdh *queryDecodeHandler) HandleQuery(ctx context.Context, w pg.QueryResultWriter, q pg.Query) error {
+func (qdh *QueryDecodeHandler) HandleQuery(ctx context.Context, w pg.QueryResultWriter, q pg.Query) error {
 	switch qv := q.(type) {
 	case pg.SimpleQuery:
 		if strings.HasPrefix(string(qv), "[") {
@@ -492,5 +496,24 @@ func (qdh *queryDecodeHandler) HandleQuery(ctx context.Context, w pg.QueryResult
 		}
 	}
 
-	return qdh.child.HandleQuery(ctx, w, q)
+	return qdh.Child.HandleQuery(ctx, w, q)
+}
+
+func (pqh *PilosaQueryHandler) HandleSchema(ctx context.Context, portal *pg.Portal) error {
+	schema, err := pqh.Api.Schema(context.Background(), false)
+	if err != nil {
+		return err
+	}
+	for _, ii := range schema {
+		dataRow, err := portal.Encoder.TextRow("featurebase", ii.Name)
+		if err != nil {
+			return err
+		}
+		portal.Add(dataRow)
+	}
+	return nil
+}
+
+func (qdh *QueryDecodeHandler) HandleSchema(ctx context.Context, portal *pg.Portal) error {
+	return qdh.Child.HandleSchema(ctx, portal)
 }

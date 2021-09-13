@@ -18,6 +18,7 @@ import (
 	"bufio"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 )
 
@@ -92,6 +93,7 @@ type WireWriter struct {
 
 // WriteMessage writes a message onto the wire.
 func (w *WireWriter) WriteMessage(message Message) error {
+	fmt.Printf("SendToClient %c (%d)\n", message.Type, len(message.Data))
 	if uint(len(message.Data))+4 >= 1<<31 {
 		return ErrMessageTooBig
 	}
