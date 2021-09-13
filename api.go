@@ -2219,9 +2219,9 @@ func mergeIDLists(dst []uint64, src []uint64) []uint64 {
 		return dst[i] < dst[j]
 	})
 	// dedup.
-	n := 0
+	n := 1
 	prev := dst[0]
-	for i := 0; i < len(dst); i++ {
+	for i := 1; i < len(dst); i++ {
 		if dst[i] != prev {
 			dst[n] = dst[i]
 			n++
@@ -2239,9 +2239,9 @@ func mergeKeyLists(dst []string, src []string) []string {
 		return dst[i] < dst[j]
 	})
 	// dedup.
-	n := 0
+	n := 1
 	prev := dst[0]
-	for i := 0; i < len(dst); i++ {
+	for i := 1; i < len(dst); i++ {
 		if dst[i] != prev {
 			dst[n] = dst[i]
 			n++
