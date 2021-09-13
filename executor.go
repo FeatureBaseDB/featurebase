@@ -1825,10 +1825,14 @@ func (e *executor) executeSumCountShard(ctx context.Context, qcx *Qcx, index str
 	if err != nil {
 		return ValCount{}, errors.Wrap(err, "computing sum")
 	}
-	return ValCount{
+	out := ValCount{
 		Val:   int64(vsum) + (int64(vcount) * bsig.Base),
 		Count: int64(vcount),
-	}, nil
+	}
+	if field.Type() == FieldTypeDecimal {
+		out.FloatVal = float64(int64(vsum)+(int64(vcount)*bsig.Base)) / math.Pow(10, float64(bsig.Scale))
+	}
+	return out, nil
 }
 
 // executeMinShard calculates the min for bsiGroups on a shard.
@@ -3044,6 +3048,13 @@ func (e *executor) executeGroupBy(ctx context.Context, qcx *Qcx, index string, c
 			aggType = "aggregate"
 		}
 	}
+	for _, res := range results {
+		if res.DecimalAgg != 0 && aggType == "sum" {
+			aggType = "decimalSum"
+			break
+		}
+	}
+
 	return NewGroupCounts(aggType, results...), nil
 }
 
@@ -3132,9 +3143,10 @@ func (fr FieldRow) String() string {
 type aggregateType int
 
 const (
-	nilAggregate      aggregateType = 0
-	sumAggregate      aggregateType = 1
-	distinctAggregate aggregateType = 2
+	nilAggregate        aggregateType = 0
+	sumAggregate        aggregateType = 1
+	distinctAggregate   aggregateType = 2
+	decimalSumAggregate aggregateType = 3
 )
 
 // GroupCounts is a list of GroupCount.
@@ -3152,6 +3164,8 @@ func (g *GroupCounts) AggregateColumn() string {
 		return "sum"
 	case distinctAggregate:
 		return "aggregate"
+	case decimalSumAggregate:
+		return "decimalSum"
 	default:
 		return ""
 	}
@@ -3176,6 +3190,8 @@ func NewGroupCounts(agg string, groups ...GroupCount) *GroupCounts {
 		aggType = sumAggregate
 	case "aggregate":
 		aggType = distinctAggregate
+	case "decimalSum":
+		aggType = decimalSumAggregate
 	case "":
 		aggType = nilAggregate
 	default:
@@ -3246,42 +3262,57 @@ func (g *GroupCounts) MarshalJSON() ([]byte, error) {
 	if len(groups) == 0 {
 		return []byte("[]"), nil
 	}
+
 	switch g.aggregateType {
 	case sumAggregate:
 		counts = *(*[]groupCountSum)(unsafe.Pointer(&groups))
 	case distinctAggregate:
 		counts = *(*[]groupCountAggregate)(unsafe.Pointer(&groups))
+	case decimalSumAggregate:
+		counts = *(*[]groupCountDecimalSum)(unsafe.Pointer(&groups))
 	}
 	return json.Marshal(counts)
 }
 
 // GroupCount represents a result item for a group by query.
 type GroupCount struct {
-	Group []FieldRow `json:"group"`
-	Count uint64     `json:"count"`
-	Agg   int64      `json:"-"`
+	Group      []FieldRow `json:"group"`
+	Count      uint64     `json:"count"`
+	Agg        int64      `json:"-"`
+	DecimalAgg float64    `json:"-"`
 }
 
 type groupCountSum struct {
-	Group []FieldRow `json:"group"`
-	Count uint64     `json:"count"`
-	Agg   int64      `json:"sum"`
+	Group      []FieldRow `json:"group"`
+	Count      uint64     `json:"count"`
+	Agg        int64      `json:"sum"`
+	DecimalAgg float64    `json:"-"`
 }
 
 type groupCountAggregate struct {
-	Group []FieldRow `json:"group"`
-	Count uint64     `json:"count"`
-	Agg   int64      `json:"aggregate"`
+	Group      []FieldRow `json:"group"`
+	Count      uint64     `json:"count"`
+	Agg        int64      `json:"aggregate"`
+	DecimalAgg float64    `json:"-"`
+}
+
+type groupCountDecimalSum struct {
+	Group      []FieldRow `json:"group"`
+	Count      uint64     `json:"count"`
+	Agg        int64      `json:"-"`
+	DecimalAgg float64    `json:"sum"`
 }
 
 var _ GroupCount = GroupCount(groupCountSum{})
 var _ GroupCount = GroupCount(groupCountAggregate{})
+var _ GroupCount = GroupCount(groupCountDecimalSum{})
 
 func (g *GroupCount) Clone() (r *GroupCount) {
 	r = &GroupCount{
-		Group: make([]FieldRow, len(g.Group)),
-		Count: g.Count,
-		Agg:   g.Agg,
+		Group:      make([]FieldRow, len(g.Group)),
+		Count:      g.Count,
+		Agg:        g.Agg,
+		DecimalAgg: g.DecimalAgg,
 	}
 	for i := range g.Group {
 		r.Group[i] = *(g.Group[i].Clone())
@@ -3306,6 +3337,7 @@ func mergeGroupCounts(a, b []GroupCount, limit int) []GroupCount {
 		case 0:
 			a[i].Count += b[j].Count
 			a[i].Agg += b[j].Agg
+			a[i].DecimalAgg += b[j].DecimalAgg
 			ret = append(ret, a[i])
 			i++
 			j++
@@ -7939,6 +7971,7 @@ func (gbi *groupByIterator) Next(ctx context.Context) (ret GroupCount, done bool
 				}
 				ret.Count = uint64(result.Count)
 				ret.Agg = result.Val
+				ret.DecimalAgg = result.FloatVal
 			}
 		}
 		if ret.Count == 0 {
