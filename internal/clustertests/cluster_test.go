@@ -21,7 +21,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/molecula/featurebase/v2"
+	pilosa "github.com/molecula/featurebase/v2"
 	"github.com/molecula/featurebase/v2/disco"
 	picli "github.com/molecula/featurebase/v2/http"
 )
