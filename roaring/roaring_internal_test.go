@@ -4636,3 +4636,15 @@ func TestContainer_unionInPlace_ArrayUnionRun(t *testing.T) {
 		}
 	}
 }
+
+func TestIntersectionCallback(t *testing.T) {
+	var hits []uint16
+	cb := func(u uint16) {
+		hits = append(hits, u)
+	}
+	bm := []uint64{0, 5, 0}
+	bitmapCallbackRange(bm, 64, 69, cb)
+	if len(hits) != 2 || hits[0] != 64 || hits[1] != 66 {
+		t.Fatalf("expected 64, 66, got %d", hits)
+	}
+}
