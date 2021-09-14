@@ -137,6 +137,13 @@ clustertests: vendor
 	docker-compose -f $(DOCKER_COMPOSE) up --exit-code-from=client1
 
 
+DOCKER_COMPOSE_INDEX_KEY_REPLICATION=internal/clustertests/docker-compose-index-key-replication.yml
+# Check clustertests target for more info
+clustertests-index-key-replication: vendor
+	docker-compose -f $(DOCKER_COMPOSE_INDEX_KEY_REPLICATION) down
+	docker-compose -f $(DOCKER_COMPOSE_INDEX_KEY_REPLICATION) build client1
+	docker-compose -f $(DOCKER_COMPOSE_INDEX_KEY_REPLICATION) up --exit-code-from=client1
+
 # Like clustertests, but rebuilds all images.
 clustertests-build: vendor
 	docker-compose -f $(DOCKER_COMPOSE) down -v

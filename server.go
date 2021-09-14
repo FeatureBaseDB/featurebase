@@ -437,7 +437,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		confirmDownRetries: defaultConfirmDownRetries,
 		confirmDownSleep:   defaultConfirmDownSleep,
 
-		resetTranslationSyncCh: make(chan struct{}),
+		resetTranslationSyncCh: make(chan struct{}, 1),
 
 		logger: logger.NopLogger,
 	}
@@ -569,11 +569,6 @@ func (s *Server) Open() error {
 		log.Println(errors.Wrap(err, "logging startup"))
 	}
 
-	// Start background process listening for translation
-	// sync resets.
-	s.wg.Add(1)
-	go func() { defer s.wg.Done(); s.monitorResetTranslationSync() }()
-
 	// Start DisCo.
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
@@ -611,6 +606,12 @@ func (s *Server) Open() error {
 	s.syncer.Cluster = s.cluster
 	s.syncer.Closing = s.closing
 	s.syncer.Stats = s.holder.Stats.WithTags("component:HolderSyncer")
+
+	// Start background process listening for translation
+	// sync resets.
+	s.wg.Add(1)
+	go func() { defer s.wg.Done(); s.monitorResetTranslationSync() }()
+	go func() { _ = s.translationSyncer.Reset() }()
 
 	// Open holder.
 	func() {
