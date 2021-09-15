@@ -4565,7 +4565,7 @@ func intersectionCallbackArrayRun(a, b *Container, fn func(uint16)) {
 }
 
 func intersectionCallbackRunRun(a, b *Container, fn func(uint16)) {
-	statsHit("intersectionCount/RunRun")
+	statsHit("intersectionCallback/RunRun")
 	ra, rb := a.runs(), b.runs()
 	na, nb := len(ra), len(rb)
 	for i, j := 0, 0; i < na && j < nb; {
@@ -4605,14 +4605,14 @@ func intersectionCallbackRunRun(a, b *Container, fn func(uint16)) {
 }
 
 func intersectionCallbackBitmapRun(a, b *Container, fn func(uint16)) {
-	statsHit("intersectionCount/BitmapRun")
+	statsHit("intersectionCallback/BitmapRun")
 	for _, iv := range b.runs() {
 		bitmapCallbackRange(a.bitmap(), int32(iv.Start), int32(iv.Last)+1, fn)
 	}
 }
 
 func intersectionCallbackArrayBitmap(a, b *Container, fn func(uint16)) {
-	statsHit("intersectionCount/ArrayBitmap")
+	statsHit("intersectionCallback/ArrayBitmap")
 	bitmap := b.bitmap()
 	ln := len(bitmap)
 	for _, val := range a.array() {
@@ -4628,7 +4628,7 @@ func intersectionCallbackArrayBitmap(a, b *Container, fn func(uint16)) {
 }
 
 func intersectionCallbackBitmapBitmap(a, b *Container, fn func(uint16)) {
-	statsHit("intersectionCount/BitmapBitmap")
+	statsHit("intersectionCallback/BitmapBitmap")
 	ab, bb := a.bitmap(), b.bitmap()
 	for i := range ab {
 		w := ab[i] & bb[i]
