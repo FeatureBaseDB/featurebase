@@ -2952,6 +2952,7 @@ func ArrayCountRange(array []uint16, start, end int32) (n int32) {
 	return n
 }
 
+// BitmapCountRange counts bits set in [start,end).
 func BitmapCountRange(bitmap []uint64, start, end int32) int32 {
 	if roaringParanoia {
 		if start > end {
@@ -2988,15 +2989,16 @@ func BitmapCountRange(bitmap []uint64, start, end int32) int32 {
 }
 
 func callbackBits(w uint64, base uint16, fn func(uint16)) {
-	bit := uint16(0)
 	for w != 0 {
-		trail := bits.TrailingZeros64(w)
-		bit += uint16(trail)
-		w >>= (trail + 1)
-		fn(base + bit)
+		trail := uint16(bits.TrailingZeros64(w))
+		fn(base + trail)
+		base += trail + 1
+		w >>= trail + 1
 	}
 }
 
+// bitmapCallbackRange calls the provided function for every bit set in
+// bitmap in the range [start,end).
 func bitmapCallbackRange(bitmap []uint64, start, end int32, fn func(uint16)) {
 	if roaringParanoia {
 		if start > end {
@@ -3006,11 +3008,30 @@ func bitmapCallbackRange(bitmap []uint64, start, end int32, fn func(uint16)) {
 	i, j := start/64, end/64
 	// Special case when start and end fall in the same word.
 	if i == j {
-		offi, offj := uint(start%64), uint(64-end%64)
-		w := (bitmap[i] >> offi) << (offj + offi)
+		// So, we want to know the offsets. For instance, if start and end
+		// are 65 and 69, we might want i=1, offi=1, j=1, offj=5. Then we
+		// compute masks from offi (masking out 0x1, or (1<<offi)-1), and
+		// offj (masking out everything *but* (1<<offj)-1).
+		//
+		// But we can also use "x >> offi << offi" to trim the lowest offi
+		// bits, and "x << (64-offj) >> (64-offj)" to trim all but the
+		// lowest offj bits.
+		//
+		// We can then simplify slightly further: we use the inverted value
+		// as offj, and compute (w << offi) >> (offi + offj) << offi.
+		//
+		// But wait, you ask. What if offi+offj is too large! Well, then
+		// start and end were in the wrong order. We have 0 <= i <= j < 64.
+		// If x+i > 64, then x > (64-i). Thus, if (64-j)+i > 64, it
+		// follows that (64-j) > (64-i). So they'd have been in the wrong order.
+		// In which case, we correctly yield a value of (0 << offi), or 0,
+		// because nothing is between them.
+		offi, offj := uint(start%64), uint(64-(end%64))
+		w := (bitmap[i] << offj) >> (offi + offj) << offi
 		if w != 0 {
 			callbackBits(w, uint16(i)*64, fn)
 		}
+		return
 	}
 
 	// Count partial starting word.
@@ -4447,7 +4468,7 @@ func intersectionCallbackArrayArray(a, b *Container, fn func(uint16)) {
 	}
 	if (na << 2) < nb {
 		for _, va := range ca {
-			for cb[0] < va {
+			if cb[0] < va {
 				// try to skip ahead a bit faster
 				for len(cb) > 7 && cb[7] < va {
 					cb = cb[8:]
@@ -4485,13 +4506,15 @@ func intersectionCallbackArrayRun(a, b *Container, fn func(uint16)) {
 	na, nb := len(array), len(runs)
 	for i, j := 0, 0; i < na && j < nb; {
 		va, vb := array[i], runs[j]
-		if va < vb.Start {
-			i++
-		} else if va >= vb.Start && va <= vb.Last {
-			i++
-			fn(va)
-		} else if va > vb.Last {
+		if va > vb.Last {
 			j++
+			continue
+		}
+		// If we got here, va is either before or in the current run,
+		// so we're definitely done with this member of the array.
+		i++
+		if va >= vb.Start {
+			fn(va)
 		}
 	}
 }

@@ -22,6 +22,7 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"reflect"
 	"sync"
 
 	"github.com/pilosa/pilosa/v2"
@@ -33,8 +34,12 @@ func GetOpenTranslateReaderFunc(client *http.Client) pilosa.OpenTranslateReaderF
 }
 
 func GetOpenTranslateReaderWithLockerFunc(client *http.Client, locker sync.Locker) pilosa.OpenTranslateReaderFunc {
+	lockType := reflect.TypeOf(locker)
+	if lockType.Kind() == reflect.Ptr {
+		lockType = lockType.Elem()
+	}
 	return func(ctx context.Context, nodeURL string, offsets pilosa.TranslateOffsetMap) (pilosa.TranslateEntryReader, error) {
-		return openTranslateReader(ctx, nodeURL, offsets, client, locker)
+		return openTranslateReader(ctx, nodeURL, offsets, client, reflect.New(lockType).Interface().(sync.Locker))
 	}
 }
 
