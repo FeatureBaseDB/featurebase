@@ -4621,7 +4621,7 @@ func intersectionCallbackArrayBitmap(a, b *Container, fn func(uint16)) {
 			break
 		}
 		off := val % 64
-		if (bitmap[i]>>off) & 1 != 0 {
+		if (bitmap[i]>>off)&1 != 0 {
 			fn(val)
 		}
 	}
