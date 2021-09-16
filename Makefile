@@ -229,8 +229,8 @@ docker-image: vendor
 	docker build \
 	    --build-arg GO_VERSION=$(GO_VERSION) \
 	    --build-arg MAKE_FLAGS="TRIAL_DEADLINE=$(TRIAL_DEADLINE)" \
-	    --tag pilosa:$(VERSION) .
-	@echo Created docker image: pilosa:$(VERSION)
+	    --tag featurebase:$(VERSION) .
+	@echo Created docker image: featurebase:$(VERSION)
 
 # Create docker image (alias)
 docker: docker-image # alias
