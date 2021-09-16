@@ -237,7 +237,7 @@ docker: docker-image # alias
 
 # Tag and push a Docker image
 docker-tag-push: vendor
-	docker tag "pilosa:$(VERSION)" $(DOCKER_TARGET)
+	docker tag "featurebase:$(VERSION)" $(DOCKER_TARGET)
 	docker push $(DOCKER_TARGET)
 	@echo Pushed docker image: $(DOCKER_TARGET)
 
