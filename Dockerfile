@@ -28,7 +28,7 @@ COPY . ./
 COPY --from=lattice-builder /lattice/build /lattice
 RUN /go/bin/statik -src=/lattice -dest=/pilosa
 
-RUN make build FLAGS="-o build/pilosa" ${MAKE_FLAGS}
+RUN make build FLAGS="-o build/featurebase" ${MAKE_FLAGS}
 
 #####################
 ### Pilosa runner ###
@@ -40,7 +40,7 @@ LABEL maintainer "dev@molecula.com"
 
 RUN apk add --no-cache curl jq
 
-COPY --from=pilosa-builder /pilosa/build/pilosa /
+COPY --from=pilosa-builder /pilosa/build/featurebase /
 
 COPY LICENSE /LICENSE
 COPY NOTICE /NOTICE

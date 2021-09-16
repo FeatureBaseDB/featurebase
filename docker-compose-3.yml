@@ -1,7 +1,7 @@
 version: "3"
 services:
   pilosa0:
-    image: build/pilosa                                                                                                                                                     
+    image: build/featurebase                                                                                                                                                     
     build:                                                                                                                                                                 
       context: .                                                                                                                                                           
       dockerfile: Dockerfile.pilosa              
@@ -25,7 +25,7 @@ services:
       timeout: 5s
       retries: 5
   pilosa1:
-    image: build/pilosa                                                                                                                                                     
+    image: build/featurebase                                                                                                                                                     
     build:                                                                                                                                                                 
       context: .                                                                                                                                                           
       dockerfile: Dockerfile.pilosa              
@@ -44,7 +44,7 @@ services:
     volumes:
     - data:/data
   pilosa2:
-    image: build/pilosa                                                                                                                                                     
+    image: build/featurebase                                                                                                                                                     
     build:                                                                                                                                                                 
       context: .                                                                                                                                                           
       dockerfile: Dockerfile.pilosa              
@@ -63,7 +63,7 @@ services:
     volumes:
     - data:/data
   pilosax:
-    image: build/pilosa                                                                                                                                                     
+    image: build/featurebase                                                                                                                                                     
     build:                                                                                                                                                                 
       context: .                                                                                                                                                           
       dockerfile: Dockerfile.pilosa              

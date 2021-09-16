@@ -216,13 +216,13 @@ docker-build: vendor
 	    --build-arg GO_VERSION=$(GO_VERSION) \
 	    --build-arg MAKE_FLAGS="TRIAL_DEADLINE=$(TRIAL_DEADLINE) GOOS=$(GOOS) GOARCH=$(GOARCH)" \
 	    --target pilosa-builder \
-	    --tag pilosa:build .
-	docker create --name pilosa-build pilosa:build
-	mkdir -p build/pilosa-$(VERSION_ID)
-	docker cp pilosa-build:/pilosa/build/. ./build/pilosa-$(VERSION_ID)
-	cp NOTICE LICENSE ./build/pilosa-$(VERSION_ID)
-	docker rm pilosa-build
-	tar -cvz -C build -f build/pilosa-$(VERSION_ID).tar.gz pilosa-$(VERSION_ID)/
+	    --tag featurebase:build .
+	docker create --name featurebase-build featurebase:build
+	mkdir -p build/featurebase-$(VERSION_ID)
+	docker cp featurebase-build:/pilosa/build/. ./build/featurebase-$(VERSION_ID)
+	cp NOTICE LICENSE ./build/featurebase-$(VERSION_ID)
+	docker rm featurebase-build
+	tar -cvz -C build -f build/featurebase-$(VERSION_ID).tar.gz featurebase-$(VERSION_ID)/
 
 # Create Docker image from Dockerfile
 docker-image: vendor
