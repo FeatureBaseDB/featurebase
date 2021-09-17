@@ -29,6 +29,7 @@ require (
 	github.com/molecula/apophenia v0.0.0-20190827192002-68b7a14a478b
 	github.com/opentracing/opentracing-go v1.1.0
 	github.com/pelletier/go-toml v1.4.0
+	github.com/pilosa/pilosa/v2 v2.0.0-alpha.1
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.0.0
 	github.com/prometheus/client_model v0.1.0
@@ -54,7 +55,7 @@ require (
 	golang.org/x/sys v0.0.0-20210510120138-977fb7262007 // indirect
 	golang.org/x/text v0.3.5 // indirect
 	google.golang.org/grpc v1.28.0
-	gopkg.in/yaml.v2 v2.3.0
+	gopkg.in/yaml.v2 v2.3.0 // indirect
 	modernc.org/mathutil v1.0.0
 	modernc.org/strutil v1.0.0
 	sigs.k8s.io/yaml v1.2.0 // indirect
