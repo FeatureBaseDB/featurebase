@@ -28,6 +28,8 @@ import (
 	pilosa "github.com/molecula/featurebase/v2"
 	"github.com/molecula/featurebase/v2/logger"
 	"github.com/molecula/featurebase/v2/pg"
+
+	//"github.com/molecula/featurebase/v2/pg"
 	"github.com/molecula/featurebase/v2/pql"
 	pb "github.com/molecula/featurebase/v2/proto"
 
@@ -326,6 +328,69 @@ func pgWriteGroupCount(w pg.QueryResultWriter, counts *pilosa.GroupCounts) error
 	return nil
 }
 
+func pgWriteStmtRows(w pg.QueryResultWriter, rows *pilosa.StmtRows) error {
+	//TODO(twg) writeHeader
+	columns := rows.Columns()
+	//TODO (twg) types:=rows.Types()
+	headers := make([]pg.ColumnInfo, len(columns))
+	for i, column := range columns {
+		headers[i] = pg.ColumnInfo{
+			Name: column,
+			Type: pg.TypeCharoid, //TODO(twg) types[i]
+		}
+	}
+	err := w.WriteHeader(headers...)
+	if err != nil {
+		return err
+	}
+	//TODO(twg) writeColumns
+	data := make([]string, len(headers))
+	for rows.Next() {
+		result := make([]interface{}, len(rows.Columns()))
+		// Create list of scan destination pointers.
+		dsts := make([]interface{}, len(result))
+		for i := range result {
+			dsts[i] = &result[i]
+		}
+
+		if err := rows.Scan(dsts...); err != nil {
+			return err
+		}
+		//TODO(twg) conversion should be happening in Scan as described in https://pkg.go.dev/database/sql
+		// ....
+		// Scan also converts between string and numeric types, as long as no information
+		// would be lost. While Scan stringifies all numbers scanned from numeric database columns into *string,
+		// scans into numeric types are checked for overflow. For example, a float64 with value 300 or a string
+		// with value "300" can scan into a uint16, but not into a uint8, though float64(255) or "255" can scan
+		// into a uint8. One exception is that scans of some float64 numbers to strings may lose information when stringifying.
+		// In general, scan floating point columns into *float64.
+		// ...
+		for i, col := range dsts {
+			var v string
+			switch col := col.(type) {
+			case nil:
+				v = "null"
+				//
+				//v = strconv.FormatUint(col.Uint64Val, 10)
+			default:
+				return errors.Errorf("unable to process value of type %T", col)
+			}
+
+			data[i] = v
+		}
+
+		err = w.WriteRowText(data...)
+		if err != nil {
+			return err
+		}
+
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	return nil
+}
+
 func pgWriteRowser(w pg.QueryResultWriter, result pb.ToRowser) error {
 	var data []string
 	return result.ToRows(func(row *pb.RowResponse) error {
@@ -399,6 +464,8 @@ func pgWriteResult(w pg.QueryResultWriter, result interface{}) error {
 		return pgWriteGroupCount(w, result)
 	case pb.ToRowser: // we should avoid protobuf where we can...
 		return pgWriteRowser(w, result)
+	case *pilosa.StmtRows: // we should avoid protobuf where we can...
+		return pgWriteStmtRows(w, result)
 	case uint64:
 		err := w.WriteHeader(pg.ColumnInfo{
 			Name: "count",
@@ -469,11 +536,26 @@ func (pqh *PilosaQueryHandler) HandleQuery(ctx context.Context, w pg.QueryResult
 		return errors.Wrap(pgWriteResult(w, resp.Results[0]), "writing query result")
 
 	case pg.SimpleQuery:
-		resp, err := execSQL(ctx, pqh.Api, pqh.logger, string(q))
-		if err != nil {
-			return errors.Wrap(err, "executing query")
+		sql2 := false
+		if sql2 {
+			stmt, err := pqh.Api.Plan(ctx, string(q))
+			if err != nil {
+				return err
+			}
+			resp, err := stmt.QueryContext(ctx)
+			if err != nil {
+				return err
+			}
+			return errors.Wrap(pgWriteResult(w, resp), "writing sql2 query result")
+			//version 2.0
+		} else {
+			//version 1.0
+			resp, err := execSQL(ctx, pqh.Api, pqh.logger, string(q))
+			if err != nil {
+				return errors.Wrap(err, "executing query")
+			}
+			return errors.Wrap(pgWriteResult(w, resp), "writing query result")
 		}
-		return errors.Wrap(pgWriteResult(w, resp), "writing query result")
 
 	default:
 		return errors.Errorf("query type %T not yet supported (query: %s)", q, q)
