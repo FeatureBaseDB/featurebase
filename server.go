@@ -39,6 +39,7 @@ import (
 	"github.com/molecula/featurebase/v2/stats"
 	"github.com/molecula/featurebase/v2/storage"
 	"github.com/molecula/featurebase/v2/topology"
+	"github.com/molecula/featurebase/v2/vprint"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 
@@ -1354,6 +1355,7 @@ func (s *Server) PlanSQL(ctx context.Context, q string) (*Stmt, error) {
 	if err != nil {
 		return nil, err
 	}
+	vprint.VV("PLanning SQL: (%v)", q)
 	return NewPlanner(s.executor).PlanStatement(ctx, st)
 }
 

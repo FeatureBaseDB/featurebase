@@ -28,6 +28,7 @@ import (
 	pilosa "github.com/molecula/featurebase/v2"
 	"github.com/molecula/featurebase/v2/logger"
 	"github.com/molecula/featurebase/v2/pg"
+	"github.com/molecula/featurebase/v2/vprint"
 
 	//"github.com/molecula/featurebase/v2/pg"
 	"github.com/molecula/featurebase/v2/pql"
@@ -330,22 +331,32 @@ func pgWriteGroupCount(w pg.QueryResultWriter, counts *pilosa.GroupCounts) error
 
 func pgWriteStmtRows(w pg.QueryResultWriter, rows *pilosa.StmtRows) error {
 	//TODO(twg) writeHeader
-	columns := rows.Columns()
-	//TODO (twg) types:=rows.Types()
-	headers := make([]pg.ColumnInfo, len(columns))
-	for i, column := range columns {
-		headers[i] = pg.ColumnInfo{
-			Name: column,
-			Type: pg.TypeCharoid, //TODO(twg) types[i]
-		}
-	}
-	err := w.WriteHeader(headers...)
-	if err != nil {
-		return err
-	}
 	//TODO(twg) writeColumns
-	data := make([]string, len(headers))
+	first := true
+	var data []string
+	var err error
 	for rows.Next() {
+		if first {
+			columns := rows.Columns()
+			vprint.VV("ROW=> %#v", rows.Row())
+			//TODO (twg) types:=rows.Types()
+			headers := make([]pg.ColumnInfo, len(columns))
+			vprint.VV("got columns %v", columns)
+			for i, column := range columns {
+				headers[i] = pg.ColumnInfo{
+					Name: column,
+					Type: pg.TypeCharoid, //TODO(twg) types[i]
+				}
+			}
+			err := w.WriteHeader(headers...)
+			if err != nil {
+				return err
+			}
+
+			data = make([]string, len(headers))
+			first = false
+		}
+		vprint.VV("got row")
 		result := make([]interface{}, len(rows.Columns()))
 		// Create list of scan destination pointers.
 		dsts := make([]interface{}, len(result))
@@ -372,6 +383,8 @@ func pgWriteStmtRows(w pg.QueryResultWriter, rows *pilosa.StmtRows) error {
 				v = "null"
 				//
 				//v = strconv.FormatUint(col.Uint64Val, 10)
+			case *interface{}:
+				v = fmt.Sprintf("%v", *col)
 			default:
 				return errors.Errorf("unable to process value of type %T", col)
 			}
@@ -536,7 +549,7 @@ func (pqh *PilosaQueryHandler) HandleQuery(ctx context.Context, w pg.QueryResult
 		return errors.Wrap(pgWriteResult(w, resp.Results[0]), "writing query result")
 
 	case pg.SimpleQuery:
-		sql2 := false
+		sql2 := true
 		if sql2 {
 			stmt, err := pqh.Api.Plan(ctx, string(q))
 			if err != nil {

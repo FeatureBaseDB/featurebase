@@ -23,6 +23,7 @@ import (
 
 	"github.com/molecula/featurebase/v2/pql"
 	"github.com/molecula/featurebase/v2/sql2"
+	"github.com/molecula/featurebase/v2/vprint"
 )
 
 type Planner struct {
@@ -643,6 +644,10 @@ func (rs *StmtRows) Err() error {
 
 func (rs *StmtRows) Columns() []*StmtColumn {
 	return rs.node.Columns()
+}
+
+func (rs *StmtRows) Row() int64 {
+	return rs.node.Row()[0].(int64)
 }
 
 func (rs *StmtRows) Next() bool {
