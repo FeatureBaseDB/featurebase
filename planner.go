@@ -80,27 +80,87 @@ func (p *Planner) planAggregateSelectStatement(ctx context.Context, stmt *sql2.S
 		return nil, err
 	}
 
-	// TODO: Support multiple aggregate calls.
-	if len(stmt.Columns) > 1 {
-		return nil, fmt.Errorf("only one call allowed in aggregate query")
+	// Extract calls and grouped expressions from column list.
+	// TODO: Recursively traverse all expression trees.
+	var calls []*sql2.Call
+	var aliases []string
+	// var groupByCols []*sql2.Ident // TODO: Convert to QualifiedRef
+	for _, c := range stmt.Columns {
+		aliases = append(aliases, c.Name())
+
+		switch c := c.Expr.(type) {
+		case *sql2.Call:
+			calls = append(calls, c)
+		case *sql2.Ident:
+			// groupByCols = append(groupByCols, c)
+		default:
+			return nil, fmt.Errorf("unsupported expression type in aggregate query: %T", c)
+		}
 	}
 
-	// Extract aggregate call.
-	col := stmt.Columns[0]
-	var call *sql2.Call
-	switch expr := col.Expr.(type) {
-	case *sql2.Call:
-		call = expr
-	default:
-		return nil, fmt.Errorf("unsupported expression in aggregate query: %T", expr)
+	// TODO: Support multiple calls per query.
+	if len(calls) > 1 {
+		return nil, fmt.Errorf("only one aggregate call allowed")
 	}
 
-	callName := strings.ToUpper(sql2.IdentName(call.Name))
+	// Extract column names in GROUP BY clause.
+	var groupByColNames []string
+	for _, expr := range stmt.GroupByExprs {
+		switch expr := expr.(type) {
+		case *sql2.Ident:
+			groupByColNames = append(groupByColNames, expr.Name)
+		default:
+			return nil, fmt.Errorf("unsupported expression type in GROUP BY clause: %T", expr)
+		}
+	}
+
+	// Extract aggregate call and build execution node.
+	callName := strings.ToUpper(sql2.IdentName(calls[0].Name))
 	switch callName {
 	case "COUNT":
-		return NewCountNode(p.executor, indexName, col.Name(), cond), nil
+		if len(groupByColNames) == 0 {
+			return NewCountNode(p.executor, indexName, aliases[0], cond), nil
+		}
+
+		var aggregate *pql.Call
+		if calls[0].Distinct.IsValid() {
+			if len(calls[0].Args) != 1 {
+				return nil, fmt.Errorf("distinct count must have exactly one field specified")
+			}
+			field, ok := calls[0].Args[0].(*sql2.Ident)
+			if !ok {
+				return nil, fmt.Errorf("distinct count argument must be a field name")
+			}
+
+			aggregate = &pql.Call{
+				Name: "Count",
+				Children: []*pql.Call{{
+					Name: "Distinct",
+					Args: map[string]interface{}{"field": field.Name},
+				}},
+			}
+		}
+
+		return NewGroupByNode(p.executor, indexName, groupByColNames, aliases, aggregate, cond), nil
+
+	case "SUM":
+		if len(calls[0].Args) != 1 {
+			return nil, fmt.Errorf("sum must have exactly one field specified")
+		}
+		field, ok := calls[0].Args[0].(*sql2.Ident)
+		if !ok {
+			return nil, fmt.Errorf("sum argument must be a field name")
+		}
+
+		aggregate := &pql.Call{
+			Name: "Sum",
+			Args: map[string]interface{}{"field": field.Name},
+		}
+
+		return NewGroupByNode(p.executor, indexName, groupByColNames, aliases, aggregate, cond), nil
+
 	default:
-		return nil, fmt.Errorf("unsupported call in aggregate query: %T", callName)
+		return nil, fmt.Errorf("unsupported call in aggregate query: %s", callName)
 	}
 
 	// TODO: Support HAVING
@@ -699,3 +759,106 @@ func (n *CountNode) Next(ctx context.Context) error {
 }
 
 func (n *CountNode) Row() []interface{} { return n.row }
+
+// GroupByNode executes an aggregate with a GROUP BY against a FeatureBase index.
+type GroupByNode struct {
+	executor  *executor
+	indexName string
+	columns   []string
+	aliases   []string
+	aggregate *pql.Call
+	cond      *pql.Call
+
+	result *GroupCounts
+	index  int
+
+	row []interface{}
+}
+
+func NewGroupByNode(executor *executor, indexName string, columns, aliases []string, aggregate, cond *pql.Call) *GroupByNode {
+	return &GroupByNode{
+		executor:  executor,
+		indexName: indexName,
+		columns:   columns,
+		aliases:   aliases,
+		aggregate: aggregate,
+		cond:      cond,
+		row:       make([]interface{}, len(columns)+1),
+	}
+}
+
+func (n *GroupByNode) Columns() []string {
+	return append([]string{"_aggregate"}, n.columns...)
+}
+
+func (n *GroupByNode) First(ctx context.Context) error {
+	n.result = nil
+	return nil
+}
+
+func (n *GroupByNode) Next(ctx context.Context) (err error) {
+	// Fetch resultset if it doesn't exist yet.
+	if n.result == nil {
+		if n.result, err = n.fetch(ctx); err != nil {
+			return err
+		}
+	}
+
+	// Exit if no more rows exist.
+	if n.index >= len(n.result.groups) {
+		return sql.ErrNoRows
+	}
+
+	// Copy results into current row.
+	group := n.result.groups[n.index]
+	n.index++
+
+	if n.aggregate != nil {
+		n.row[0] = int64(group.Agg)
+	} else {
+		n.row[0] = int64(group.Count)
+	}
+
+	for i, g := range group.Group {
+		if g.Value != nil {
+			n.row[i+1] = *g.Value
+		} else if g.RowKey != "" {
+			n.row[i+1] = g.RowKey
+		} else {
+			n.row[i+1] = int64(g.RowID)
+		}
+	}
+
+	return nil
+}
+
+// fetch executes a call to compute the PQL results.
+func (n *GroupByNode) fetch(ctx context.Context) (*GroupCounts, error) {
+	call := &pql.Call{
+		Name: "GroupBy",
+		Args: map[string]interface{}{},
+	}
+
+	// Choose fields to group by.
+	for _, col := range n.columns {
+		call.Children = append(call.Children, &pql.Call{
+			Name: "Rows", Args: map[string]interface{}{"_field": col},
+		})
+	}
+
+	// Apply filter & aggregate, if set.
+	if n.aggregate != nil {
+		call.Args["aggregate"] = n.aggregate
+	}
+	if n.cond != nil {
+		call.Args["filter"] = n.cond
+	}
+
+	result, err := n.executor.Execute(ctx, n.indexName, &pql.Query{Calls: []*pql.Call{call}}, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	return result.Results[0].(*GroupCounts), nil
+}
+
+func (n *GroupByNode) Row() []interface{} { return n.row }

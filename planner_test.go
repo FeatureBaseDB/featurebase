@@ -263,6 +263,74 @@ func TestPlanner_Select(t *testing.T) {
 	})
 }
 
+func TestPlanner_GroupBy(t *testing.T) {
+	c := test.MustRunCluster(t, 1)
+	defer c.Close()
+
+	i0, err := c.GetHolder(0).CreateIndex("i0", pilosa.IndexOptions{TrackExistence: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer i0.Close()
+
+	if _, err := i0.CreateField("x"); err != nil {
+		t.Fatal(err)
+	} else if _, err := i0.CreateField("y", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
+		t.Fatal(err)
+	} else if _, err := i0.CreateField("z", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
+		t.Fatal(err)
+	}
+
+	// Populate with data.
+	if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{
+		Index: "i0",
+		Query: `
+			Set(1, x=10)
+			Set(1, x=20)
+			Set(1, y=100)
+			Set(1, z=500)
+
+			Set(2, x=10)
+			Set(2, y=200)
+			Set(2, z=500)
+
+			Set(3, x=20)
+			Set(3, z=600)
+	`}); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("Count", func(t *testing.T) {
+		results := mustQueryRows(t, c.GetNode(0).Server, `SELECT COUNT(*), x FROM i0 GROUP BY x`)
+		if diff := cmp.Diff([][]interface{}{
+			{int64(2), int64(10)},
+			{int64(2), int64(20)},
+		}, results); diff != "" {
+			t.Fatal(diff)
+		}
+	})
+
+	t.Run("DistinctCount", func(t *testing.T) {
+		results := mustQueryRows(t, c.GetNode(0).Server, `SELECT COUNT(DISTINCT z), x FROM i0 GROUP BY x`)
+		if diff := cmp.Diff([][]interface{}{
+			{int64(1), int64(10)},
+			{int64(2), int64(20)},
+		}, results); diff != "" {
+			t.Fatal(diff)
+		}
+	})
+
+	t.Run("Sum", func(t *testing.T) {
+		results := mustQueryRows(t, c.GetNode(0).Server, `SELECT sum(y), x FROM i0 GROUP BY x`)
+		if diff := cmp.Diff([][]interface{}{
+			{int64(300), int64(10)},
+			{int64(100), int64(20)},
+		}, results); diff != "" {
+			t.Fatal(diff)
+		}
+	})
+}
+
 func mustQueryRows(tb testing.TB, svr *pilosa.Server, q string) [][]interface{} {
 	tb.Helper()
 
