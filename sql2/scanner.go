@@ -104,6 +104,11 @@ func (s *Scanner) Scan() (pos Pos, token Token, lit string) {
 		case '+':
 			return pos, PLUS, "+"
 		case '-':
+			if s.peek() == '-' {
+				s.read()
+				s.skipComment()
+				continue
+			}
 			return pos, MINUS, "-"
 		case '*':
 			return pos, STAR, "*"
@@ -114,6 +119,13 @@ func (s *Scanner) Scan() (pos Pos, token Token, lit string) {
 		default:
 			return pos, ILLEGAL, string(ch)
 		}
+	}
+}
+
+// skipComment reads all characters until the end of the line or EOF.
+func (s *Scanner) skipComment() {
+	for ch := s.peek(); ch != '\n' && ch != -1; ch = s.peek() {
+		s.read()
 	}
 }
 
