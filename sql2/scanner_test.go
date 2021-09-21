@@ -38,6 +38,9 @@ func TestScanner_Scan(t *testing.T) {
 		t.Run("StartingX", func(t *testing.T) {
 			AssertScan(t, `xyz`, sql.IDENT, `xyz`)
 		})
+		t.Run("WithComment", func(t *testing.T) {
+			AssertScan(t, "-- this is a comment\n\n-- more comments\nfoo", sql.IDENT, `foo`)
+		})
 	})
 
 	t.Run("KEYWORD", func(t *testing.T) {
