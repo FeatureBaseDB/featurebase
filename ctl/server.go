@@ -111,6 +111,7 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 	flags.DurationVar((*time.Duration)(&srv.Config.Postgres.WriteTimeout), "postgres.write-timeout", time.Duration(srv.Config.Postgres.WriteTimeout), "Timeout for writes on a postgres connection. (set 0 to disable)")
 	flags.Uint32Var(&srv.Config.Postgres.MaxStartupSize, "postgres.max-startup-size", srv.Config.Postgres.MaxStartupSize, "Maximum acceptable size of a postgres startup packet, in bytes. (set 0 to disable)")
 	flags.Uint16Var(&srv.Config.Postgres.ConnectionLimit, "postgres.connection-limit", srv.Config.Postgres.ConnectionLimit, "Maximum number of simultaneous postgres connections to allow. (set 0 to disable)")
+	flags.Uint16Var(&srv.Config.Postgres.SqlVersion, "postgres.sql-version", srv.Config.Postgres.SqlVersion, "Molecula Sql Handling Version (default 1)")
 
 	// Disk and Memory usage cache for ui/usage endpoint
 	flags.Float64Var(&srv.Config.UsageDutyCycle, "usage-duty-cycle", srv.Config.UsageDutyCycle, "Sets the percentage of time that is spent recalculating the disk and memory usage cache. 100.0 for always-running, 0 disables the cache and the /ui/usage endpoint.")

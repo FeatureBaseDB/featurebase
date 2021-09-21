@@ -1043,7 +1043,7 @@ func (s *Server) handleQuery(w message.Writer, query Query, cancelNotify <-chan 
 		te:  s.TypeEngine,
 		tag: "SELECT",
 	}
-
+	vprint.VV("handle Query: (%v)", query)
 	// Dispatch the query handler.
 	qerr := s.QueryHandler.HandleQuery(ctx, qwriter, query)
 	if qerr != nil {

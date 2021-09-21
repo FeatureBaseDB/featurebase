@@ -46,14 +46,20 @@ type PostgresServer struct {
 	s      pg.Server
 	stop   context.CancelFunc
 }
+type SqlVersion uint16
+
+const (
+	SqlV1 SqlVersion = 0
+	SqlV2 SqlVersion = 2
+)
 
 // NewPostgresServer creates a postgres server.
-func NewPostgresServer(api *pilosa.API, logger logger.Logger, tls *tls.Config) *PostgresServer {
+func NewPostgresServer(api *pilosa.API, logger logger.Logger, tls *tls.Config, sqlVersion SqlVersion) *PostgresServer {
 	return &PostgresServer{
 		api:    api,
 		logger: logger,
 		s: pg.Server{
-			QueryHandler:   NewPostgresHandler(api, logger),
+			QueryHandler:   NewPostgresHandler(api, logger, sqlVersion),
 			TypeEngine:     pg.PrimitiveTypeEngine{},
 			StartupTimeout: 5 * time.Second,
 			ReadTimeout:    10 * time.Second,
@@ -69,11 +75,12 @@ func NewPostgresServer(api *pilosa.API, logger logger.Logger, tls *tls.Config) *
 }
 
 // NewPostgresHandler creates a postgres query handler wrapping the pilosa API.
-func NewPostgresHandler(api *pilosa.API, logger logger.Logger) pg.QueryHandler {
+func NewPostgresHandler(api *pilosa.API, logger logger.Logger, sqlVersion SqlVersion) pg.QueryHandler {
 	return &QueryDecodeHandler{
 		Child: &PilosaQueryHandler{
-			Api:    api,
-			logger: logger,
+			Api:        api,
+			logger:     logger,
+			sqlVersion: sqlVersion,
 		},
 	}
 }
@@ -143,8 +150,9 @@ func pgDecodePQL(str string) (q pg.Query, err error) {
 }
 
 type PilosaQueryHandler struct {
-	Api    *pilosa.API
-	logger logger.Logger
+	Api        *pilosa.API
+	logger     logger.Logger
+	sqlVersion SqlVersion
 }
 
 func pgWriteRow(w pg.QueryResultWriter, row *pilosa.Row) error {
@@ -549,9 +557,9 @@ func (pqh *PilosaQueryHandler) HandleQuery(ctx context.Context, w pg.QueryResult
 		return errors.Wrap(pgWriteResult(w, resp.Results[0]), "writing query result")
 
 	case pg.SimpleQuery:
-		sql2 := true
-		if sql2 {
+		if pqh.sqlVersion == SqlV2 {
 			stmt, err := pqh.Api.Plan(ctx, string(q))
+			vprint.VV("SQL2Plan: (%v) (%v)", string(q), err)
 			if err != nil {
 				return err
 			}
