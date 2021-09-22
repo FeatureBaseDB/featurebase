@@ -258,8 +258,10 @@ type Result struct {
 }
 type PgType byte
 
+// Constants used to indicated query interception
+// Only pgPassOn is allowed to be processed in Featurebase query handling
 const (
-	pgNotPg          PgType = 'x'
+	pgPassOn         PgType = 'x'
 	pgBackendPid     PgType = 'a'
 	pgVersion        PgType = 'b'
 	pgCountType      PgType = 'c'
@@ -291,7 +293,7 @@ func (p *Portal) Reset() {
 	vprint.VV("Portal Reset")
 	p.Name = ""
 	p.sql = ""
-	p.pgspecial = pgNotPg
+	p.pgspecial = pgPassOn
 	p.commands = p.commands[:0]
 }
 
@@ -335,6 +337,7 @@ func (p *Portal) Parse(data []byte) {
 				case sql.SQLTypeSet:
 					p.Name = "SET"
 					set := query.Statement.(*sqlparser.Set)
+					p.pgspecial = 0
 					for _, item := range set.Exprs {
 						vprint.VV("SET name=(%v) ", item.Name)
 						if item.Name.String() == "application_name" {
@@ -348,7 +351,7 @@ func (p *Portal) Parse(data []byte) {
 					}
 				case sql.SQLTypeSelect:
 					p.Name = "SELECT"
-					p.pgspecial = pgNotPg
+					p.pgspecial = pgPassOn
 					stmt := query.Statement.(*sqlparser.Select)
 					for _, item := range stmt.SelectExprs {
 						switch expr := item.(type) {
@@ -360,12 +363,9 @@ func (p *Portal) Parse(data []byte) {
 								case "pg_backend_pid":
 									//SELECT pg_backend_pid()
 									p.pgspecial = pgBackendPid
-									//p.encoder.RowDescription() //TODO(twg) move to the right spt
 								case "pg_terminate_backend":
-									//need the arg 100
 									//select pg_terminate_backend(100)
 									vprint.VV("terminate %#v", colExpr.Exprs)
-									//colExpr.Exprs[0]
 									p.pgspecial = pgTerminate
 								case "version":
 									//SELECT VERSION() AS version
@@ -395,20 +395,15 @@ func (p *Portal) Parse(data []byte) {
 					}
 					p.sql = string(b)
 				case sql.SQLTypeBegin:
+					// Ignore BEGIN
 					p.pgspecial = pgBegin
-					//				panic("TODO")
-					// ingnore for now
 				case sql.SQLTypeShow:
 					p.Name = "SHOW"
-					p.pgspecial = pgNotPg
+					p.pgspecial = pgPassOn
 					p.sql = string(b)
 				}
 			}
 		}
-		// TODO (twg) hack parsing for short term
-		//	parts := strings.Split(strings.TrimSuffix(string(data), "\x00"), " ")
-		//	p.Name = parts[0][1:] //TODO (twg) major hack
-		vprint.VV("PG SET:(%v)", p.pgspecial)
 	} else {
 		vprint.VV("SETTING EMPTY")
 		p.pgspecial = pgEmpty
@@ -428,14 +423,15 @@ func (p *Portal) Describe() {
 	*/
 
 }
-func (p *Portal) Execute() (shouldTerminate bool, queryReady bool) {
+func (p *Portal) Execute() (shouldTerminate bool, queryReady bool, err error) {
 	queryReady = true
 	vprint.VV("port.Execute: (%v) q=(%v)", p.pgspecial, p.sql)
 	switch p.pgspecial {
 	case pgBackendPid:
-		rowDescription, err := p.Encoder.EncodeColumn("pg_backend_pid", int32(23), 4)
-		if err != nil {
-			panic(err)
+		rowDescription, e := p.Encoder.EncodeColumn("pg_backend_pid", int32(23), 4)
+		if e != nil {
+			err = e
+			return
 		}
 		p.Add(rowDescription)
 		pid := fmt.Sprintf("%v", p.pid)
@@ -443,31 +439,30 @@ func (p *Portal) Execute() (shouldTerminate bool, queryReady bool) {
 		p.Add(dataRow)
 		//needs data row with cancel token
 	case pgVersion:
-		rowDescription, err := p.Encoder.EncodeColumn("version", int32(25), -1)
-		if err != nil {
-			panic(err)
+		rowDescription, e := p.Encoder.EncodeColumn("version", int32(25), -1)
+		if e != nil {
+			err = e
+			return
 		}
 		p.Add(rowDescription)
 		dataRow, _ := p.Encoder.TextRow("PostgresSQL 13.0 (molecula)")
 		p.Add(dataRow)
 	case pgSelect1:
-		rowDescription, err := p.Encoder.EncodeColumn("?column?", int32(23), 4)
-		if err != nil {
-			panic(err)
+		rowDescription, e := p.Encoder.EncodeColumn("?column?", int32(23), 4)
+		if e != nil {
+			err = e
+			return
 		}
 		p.Add(rowDescription)
 		dataRow, _ := p.Encoder.TextRow("1")
 		p.Add(dataRow)
 	case pgCountType:
 		//need to block
-		vprint.VV("blocking til terminated")
 		<-p.server.lookerChannel
-		vprint.VV("Released")
-		//now need to send ParseComplete,BindComplete,RowDescription,Error(Terminate)
-		//TODO(twg) handle the error
-		rowDescription, err := p.Encoder.EncodeColumn("count", int32(20), 8)
+		rowDescription, e := p.Encoder.EncodeColumn("count", int32(20), 8)
 		if err != nil {
-			panic(err)
+			err = e
+			return
 		}
 		p.Add(rowDescription)
 		errorResponse, _ := p.Encoder.Error(
@@ -485,52 +480,68 @@ func (p *Portal) Execute() (shouldTerminate bool, queryReady bool) {
 			},
 		)
 		p.Add(errorResponse)
-		p.Sync() //send and Reset
-		return true, queryReady
+		e = p.Sync() //send and Reset
+
+		if e != nil {
+			err = e
+			return
+		}
+		return true, queryReady, nil
 	case pgQueryTime:
 		// need to return something so that the id can be queried
 		//need to return  SELECT pid as id, query as stmt, EXTRACT(seconds from query_start - NOW()) as elapsed_time          FROM pg_stat_activity
 		//seems like we need a map of pids to querys
-		err := p.server.dumpPortalsTo(p)
-		if err != nil {
+		e := p.server.dumpPortalsTo(p)
+		if e != nil {
+			err = e
 			return
 		}
 
 	case pgTerminate:
 		//note just have 1 lock that blocks all who try to count the activities
-		vprint.VV("removing the block ")
 		//TODO (twg) lock this
 		close(p.server.lookerChannel)                //release all the other blockers and allow them to terminate
 		p.server.lookerChannel = make(chan struct{}) //create a new one just in case
 		// i think it needs to return boolean true
-		rowDescription, err := p.Encoder.EncodeColumn("pg_terminate_backend", int32(16), 1)
-		if err != nil {
-			panic(err)
+		rowDescription, e := p.Encoder.EncodeColumn("pg_terminate_backend", int32(16), 1)
+		if e != nil {
+			err = e
+			return
 		}
 		p.Add(rowDescription)
 		dataRow, _ := p.Encoder.TextRow("t")
 		p.Add(dataRow)
-		commandComplete, _ := p.Encoder.CommandComplete("SELECT 1")
+		commandComplete, e := p.Encoder.CommandComplete("SELECT 1")
+		if e != nil {
+			err = e
+			return
+		}
 		p.Add(commandComplete)
-		p.Sync()
-		return false, queryReady
+		e = p.Sync()
+		if e != nil {
+			err = e
+			return
+		}
+		return false, queryReady, nil
 	case pgEmpty:
 		p.Add(message.NoData)
 		p.Add(message.EmptyQueryResponse)
-		p.Sync()
+		e := p.Sync()
+		if e != nil {
+			err = e
+			return
+		}
 		queryReady = true
-		return false, queryReady
+		return false, queryReady, nil
 	case pgSetApplication:
 		//needs to add/send status
-		msg, err := p.Encoder.ParameterStatus("application_name", "PostgreSQL JDBC Driver") //TODO (twg) should be saved from parse
-		if err != nil {
+		msg, e := p.Encoder.ParameterStatus("application_name", "PostgreSQL JDBC Driver")
+		if e != nil {
+			err = e
 			return
 		}
 		p.Add(msg)
 	case pgSchema:
-		//need to add the descrition for the 3 fields
-		//	---[Field 01]---  name='table_schema'  type=19  type_len=64  type_mod=4294967295  relid=13276  attnum=2  format=0
-		// ---[Field 02]---  name='table_name'  type=19  type_len=64  type_mod=4294967295  relid=13276  attnum=3  format=0
 		parts := []message.SimpleColumn{
 			{
 				Name:    "table_schema",
@@ -543,27 +554,28 @@ func (p *Portal) Execute() (shouldTerminate bool, queryReady bool) {
 				Typelen: 64,
 			},
 		}
-		rowDescription, err := p.Encoder.EncodeColumns(parts...)
-		if err != nil { //TODO (twg) shadowing err
+		rowDescription, e := p.Encoder.EncodeColumns(parts...)
+		if e != nil {
+			err = e
 			return
 		}
 		p.Add(rowDescription)
-		err = p.HandleSchema()
-		if err != nil {
+		e = p.HandleSchema()
+		if e != nil {
+			err = e
 			return
 		}
-		vprint.VV("SHOULd make schema")
 
-	case pgNotPg:
-		vprint.VV("GOOOO>(%v)", p.sql)
+	case pgPassOn:
 		query := SimpleQuery(p.sql)
-		err := p.server.handleQuery(p, query, p.cancelNotify)
-		if err != nil {
+		e := p.server.handleQuery(p, query, p.cancelNotify)
+		if e != nil {
+			err = e
 			return
 		}
+		return
 
 	case pgBegin:
-		vprint.VV("BEGIN")
 		p.Name = "BEGIN"
 	}
 
@@ -571,25 +583,23 @@ func (p *Portal) Execute() (shouldTerminate bool, queryReady bool) {
 	if len(p.Name) > 0 { //only send command complete for those that have names
 		vprint.VV("EXECING NAME: '%v'", p.Name)
 		message, _ := p.Encoder.CommandComplete(p.Name)
-		vprint.VV("AFTER")
 		p.Add(message)
 	}
 	return
 }
 
 // handleStandard handles a connection in the standard postgres wire protocol.
-func (p *Portal) Sync() {
+func (p *Portal) Sync() error {
 	for _, m := range p.commands {
 		vprint.VV("Sending: '%v'", m.Type)
 		err := p.Writer.WriteMessage(m)
 		if err != nil {
-			//TODO (twg) need to change signature to return error
-			vprint.VV("error %v", err)
-			return
+			return err
 		}
 	}
 	p.Writer.Flush()
 	p.Reset()
+	return nil
 }
 func (p *Portal) Add(m message.Message) {
 	cp := message.Message{Type: m.Type, Data: make([]byte, len(m.Data))}
@@ -607,7 +617,6 @@ func (p *Portal) HandleSchema() error {
 	return p.server.QueryHandler.HandleSchema(context.Background(), p)
 }
 
-//implement the QueryResultWriterqueryResultR
 func (p *Portal) WriteMessage(m message.Message) error {
 	p.Add(m)
 	return nil
@@ -637,7 +646,7 @@ func (s *Server) handleStandard(ctx context.Context, proto Protocol, conn net.Co
 	if err != nil {
 		return errors.Wrap(err, "parsing parameters")
 	}
-	fmt.Printf("postgres connection params\n%#v\n", params) //TODO (twg) remove
+	vprint.VV("postgres connection params\n%#v\n", params) //TODO (twg) remove
 	if user, ok := params["user"]; ok {
 		// Log the connection.
 		s.Logger.Debugf("new postgres connection from user %q at %v", user, conn.RemoteAddr())
@@ -647,7 +656,6 @@ func (s *Server) handleStandard(ctx context.Context, proto Protocol, conn net.Co
 	}
 
 	// Set up message input and output.
-
 	// Set up a reader that will preempt the connection when the context is canceled.
 	ir := idleReader{
 		conn:    conn,
@@ -790,8 +798,6 @@ func (s *Server) handleStandard(ctx context.Context, proto Protocol, conn net.Co
 	for {
 		if !queryReady {
 			// Indicate that we are ready for a query.
-			// TODO: provide a valid transaction state.
-			//msg, err := encoder.ReadyForQuery(message.TransactionStatusActive)
 			portal.sql = ""
 			msg, err := encoder.ReadyForQuery(message.TransactionStatusIdle)
 			if err != nil {
@@ -855,31 +861,30 @@ func (s *Server) handleStandard(ctx context.Context, proto Protocol, conn net.Co
 			return w.Flush()
 
 		case message.TypeParse:
-			fmt.Println("Type Parse", strings.Trim(string(msg.Data), "\x00"))
+			vprint.VV("Type Parse (%v)", strings.Trim(string(msg.Data), "\x00"))
 			portal.Parse(msg.Data)
 		case message.TypeBind:
-			fmt.Println("Type Bind", strings.Trim(string(msg.Data), "\x00"))
-			//TODO(twg) apply values to bindings in the future
-			// Parse the query message (a null-terminated string).
+			vprint.VV("Type Bind (%v)", strings.Trim(string(msg.Data), "\x00"))
 			portal.Bind()
 		case message.TypeExecute:
-			fmt.Println("Type Execute", strings.Trim(string(msg.Data), "\x00"))
-			//term, qr := portal.Execute()
-			term, qr := portal.Execute()
+			vprint.VV("Type Execute (%v)", strings.Trim(string(msg.Data), "\x00"))
+			term, qr, err := portal.Execute()
+			if err != nil {
+				return err
+			}
 			if term {
 				return w.Flush()
 			}
 			queryReady = qr
 		case message.TypeSync:
-			fmt.Println("Type Sync", strings.Trim(string(msg.Data), "\x00"))
-			portal.Sync()
+			vprint.VV("Type Sync", strings.Trim(string(msg.Data), "\x00"))
+			err := portal.Sync()
+			if err != nil {
+				return err
+			}
 			queryReady = false
 		case message.TypeSimpleQuery:
-			// Execute a simple query.
-
 			queryReady = false
-
-			// Parse the query message (a null-terminated string).
 			query := SimpleQuery(strings.TrimSuffix(string(msg.Data), "\x00"))
 
 			// Execute the query.
@@ -887,16 +892,7 @@ func (s *Server) handleStandard(ctx context.Context, proto Protocol, conn net.Co
 			if err != nil {
 				return err
 			}
-			label := "N/A"
-			switch msg.Data[0] {
-			case 'S': //prepared statement
-				label = "prepared statement"
-			case 'P': //portal
-				label = "portal"
-			}
-			vprint.VV("describe %v:'%v'", label, msg.Data[1:])
 		case message.TypeDescribe:
-			//TODO (twg) major hack alet
 			portal.Describe()
 		case message.TypeClose:
 			return w.Flush()
