@@ -301,11 +301,13 @@ func (p *Portal) Reset() {
 func (p *Portal) Bind() {
 	p.Add(message.BindComplete)
 }
+
+var lookPQL = regexp.MustCompile(`\[.*\].*\)\z`)
+
 func (p *Portal) Parse(data []byte) {
 	p.queryStart = time.Now()
 	queryStr := string(bytes.Trim(data, "\x00"))
 	vprint.VV("PARSE RAW: (%v) (%d)", queryStr, len(queryStr))
-	lookPQL := regexp.MustCompile("\\[.*\\].*\\)\\z")
 	foundPQL := lookPQL.FindStringSubmatch(queryStr)
 	if len(foundPQL) > 0 {
 
