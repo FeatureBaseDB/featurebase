@@ -35,7 +35,7 @@ commands:
       - checkout
       - restore-mod-cache
   skip-if-root-unchanged:
-    description: "skips the parent job if the PR includes no changes to pilosa"
+    description: "skips the parent job if the PR includes no changes to featurebase"
     steps:
       - run: |
           ROOT_CHANGED_FILES="$(git diff --name-only HEAD $(git merge-base master HEAD) | grep -v '^lattice/')" || true
@@ -202,7 +202,7 @@ jobs:
           version: 19.03.13 # see https://support.circleci.com/hc/en-us/articles/360050934711
       - run: echo -n $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
       - run: make docker GO_VERSION=1.15.8
-      - run: docker run pilosa:$(git describe --tags) help
+      - run: docker run featurebase:$(git describe --tags) help
   dockerhub-upload-unstable:
     executor:
       name: golang
@@ -212,8 +212,8 @@ jobs:
           version: 19.03.13 # see https://support.circleci.com/hc/en-us/articles/360050934711
       - run: echo -n $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
       - run: make docker
-      - run: docker run pilosa:$(git describe --tags) help
-      - run: make docker-tag-push DOCKER_TARGET=moleculacorp/pilosa:<< pipeline.git.branch >>
+      - run: docker run featurebase:$(git describe --tags) help
+      - run: make docker-tag-push DOCKER_TARGET=moleculacorp/featurebase:<< pipeline.git.branch >>
   dockerhub-upload-stable:
     executor:
       name: golang
@@ -223,9 +223,9 @@ jobs:
           version: 19.03.13 # see https://support.circleci.com/hc/en-us/articles/360050934711
       - run: echo -n $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
       - run: make docker
-      - run: docker run pilosa:$(git describe --tags) help
-      - run: make docker-tag-push DOCKER_TARGET=moleculacorp/pilosa:<< pipeline.git.tag >>
-      - run: make docker-tag-push DOCKER_TARGET=moleculacorp/pilosa:latest
+      - run: docker run featurebase:$(git describe --tags) help
+      - run: make docker-tag-push DOCKER_TARGET=moleculacorp/featurebase:<< pipeline.git.tag >>
+      - run: make docker-tag-push DOCKER_TARGET=moleculacorp/featurebase:latest
 
 workflows:
   build:

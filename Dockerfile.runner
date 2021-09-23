@@ -10,7 +10,7 @@ WORKDIR /pilosa
 
 COPY . ./
 
-RUN make build FLAGS="-o build/pilosa" ${MAKE_FLAGS}
+RUN make build FLAGS="-o build/featurebase" ${MAKE_FLAGS}
 
 FROM moleculacorp/idk as idk
 LABEL maintainer "dev@molecula.com"
@@ -18,6 +18,6 @@ RUN apt-get update -y
 RUN apt-get install -y bash curl jq
 
 
-COPY --from=pilosa-builder /pilosa/build/pilosa /
+COPY --from=pilosa-builder /pilosa/build/featurebase /
 COPY testBackupRestore.sh /
 CMD ["bash","/testBackupRestore.sh"]

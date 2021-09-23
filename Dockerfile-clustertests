@@ -1,7 +1,7 @@
 # This Dockerfile is used for cluster testing - it produces a much larger image
 # and includes all of Go as well as some utilities.
 
-FROM golang:1.13
+FROM golang:1.16
 
 LABEL maintainer "dev@pilosa.com"
 
