@@ -302,9 +302,16 @@ func (p *Portal) Bind() {
 }
 func (p *Portal) Parse(data []byte) {
 	p.queryStart = time.Now()
-	b := bytes.Trim(data, "\x00")
-	vprint.VV("PARSE RAW: (%v) (%d)", string(b), len(b))
-	if strings.Contains(string(b), "EXTRACT") {
+	queryStr := string(bytes.Trim(data, "\x00"))
+	vprint.VV("PARSE RAW: (%v) (%d)", queryStr, len(queryStr))
+	if strings.HasPrefix(queryStr, "[") {
+		p.sql = queryStr
+		p.Name = "PQL"
+		p.pgspecial = pgPassOn
+		p.Add(message.ParseOK)
+		return
+	}
+	if strings.Contains(queryStr, "EXTRACT") {
 		// had to add this hack because the vitis parser doesn't handle...
 		/*
 		  	SELECT pid as id,
@@ -315,14 +322,14 @@ func (p *Portal) Parse(data []byte) {
 		*/
 		p.pgspecial = pgQueryTime
 		p.Name = "SELECT"
-		p.sql = string(b)
+		p.sql = queryStr
 		p.Add(message.ParseOK)
 		return
 	}
 
-	if len(b) > 2 {
+	if len(queryStr) > 2 {
 
-		query, err := p.mapper.MapSQL(string(b))
+		query, err := p.mapper.MapSQL(queryStr)
 		if err != nil {
 			vprint.VV("Parse Err: '%v'", err)
 		} else {
@@ -393,14 +400,14 @@ func (p *Portal) Parse(data []byte) {
 							}
 						}
 					}
-					p.sql = string(b)
+					p.sql = queryStr
 				case sql.SQLTypeBegin:
 					// Ignore BEGIN
 					p.pgspecial = pgBegin
 				case sql.SQLTypeShow:
 					p.Name = "SHOW"
 					p.pgspecial = pgPassOn
-					p.sql = string(b)
+					p.sql = queryStr
 				}
 			}
 		}
