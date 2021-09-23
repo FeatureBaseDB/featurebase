@@ -25,6 +25,7 @@ import (
 	"io"
 	"io/ioutil"
 	"net"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -304,8 +305,11 @@ func (p *Portal) Parse(data []byte) {
 	p.queryStart = time.Now()
 	queryStr := string(bytes.Trim(data, "\x00"))
 	vprint.VV("PARSE RAW: (%v) (%d)", queryStr, len(queryStr))
-	if strings.HasPrefix(queryStr, "[") {
-		p.sql = queryStr
+	lookPQL := regexp.MustCompile("\\[.*\\].*\\)\\z")
+	foundPQL := lookPQL.FindStringSubmatch(queryStr)
+	if len(foundPQL) > 0 {
+
+		p.sql = foundPQL[0]
 		p.Name = "PQL"
 		p.pgspecial = pgPassOn
 		p.Add(message.ParseOK)
