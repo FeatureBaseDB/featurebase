@@ -42,6 +42,10 @@ func (p *Planner) PlanStatement(ctx context.Context, stmt sql2.Statement) (*Stmt
 }
 
 func (p *Planner) planStatement(ctx context.Context, stmt sql2.Statement) (StmtNode, error) {
+	if err := p.checkStatement(stmt); err != nil {
+		return nil, err
+	}
+
 	switch stmt := stmt.(type) {
 	case *sql2.SelectStatement:
 		return p.planSelectStatement(ctx, stmt)
@@ -58,21 +62,10 @@ func (p *Planner) planSelectStatement(ctx context.Context, stmt *sql2.SelectStat
 }
 
 func (p *Planner) planAggregateSelectStatement(ctx context.Context, stmt *sql2.SelectStatement) (_ StmtNode, err error) {
-	// Extract table name from source.
-	var source *sql2.QualifiedTableName
-	switch src := stmt.Source.(type) {
-	case *sql2.JoinClause:
-		return nil, fmt.Errorf("cannot use JOIN in aggregate query")
-	case *sql2.ParenSource:
-		return nil, fmt.Errorf("cannot use parenthesized source in aggregate query")
-	case *sql2.QualifiedTableName:
-		source = src
-	case *sql2.SelectStatement:
-		return nil, fmt.Errorf("cannot use sub-select in aggregate query")
-	default:
-		return nil, fmt.Errorf("unexpected source type in aggregate query: %T", source)
+	indexName, err := statementTableName(stmt)
+	if err != nil {
+		return nil, err
 	}
-	indexName := sql2.IdentName(source.Name)
 
 	// Convert WHERE clause.
 	cond, err := p.planExprPQL(ctx, stmt, stmt.WhereExpr)
@@ -83,16 +76,18 @@ func (p *Planner) planAggregateSelectStatement(ctx context.Context, stmt *sql2.S
 	// Extract calls and grouped expressions from column list.
 	// TODO: Recursively traverse all expression trees.
 	var calls []*sql2.Call
-	var aliases []string
-	// var groupByCols []*sql2.Ident // TODO: Convert to QualifiedRef
+	var columns []*StmtColumn
 	for _, c := range stmt.Columns {
-		aliases = append(aliases, c.Name())
+		columns = append(columns, &StmtColumn{
+			Name: c.Name(),
+			Type: sql2.ExprDataType(c.Expr),
+		})
 
 		switch c := c.Expr.(type) {
 		case *sql2.Call:
 			calls = append(calls, c)
-		case *sql2.Ident:
-			// groupByCols = append(groupByCols, c)
+		case *sql2.QualifiedRef:
+			// allowed
 		default:
 			return nil, fmt.Errorf("unsupported expression type in aggregate query: %T", c)
 		}
@@ -107,8 +102,8 @@ func (p *Planner) planAggregateSelectStatement(ctx context.Context, stmt *sql2.S
 	var groupByColNames []string
 	for _, expr := range stmt.GroupByExprs {
 		switch expr := expr.(type) {
-		case *sql2.Ident:
-			groupByColNames = append(groupByColNames, expr.Name)
+		case *sql2.QualifiedRef:
+			groupByColNames = append(groupByColNames, expr.Column.Name)
 		default:
 			return nil, fmt.Errorf("unsupported expression type in GROUP BY clause: %T", expr)
 		}
@@ -119,7 +114,7 @@ func (p *Planner) planAggregateSelectStatement(ctx context.Context, stmt *sql2.S
 	switch callName {
 	case "COUNT":
 		if len(groupByColNames) == 0 {
-			return NewCountNode(p.executor, indexName, aliases[0], cond), nil
+			return NewCountNode(p.executor, indexName, columns[0], cond), nil
 		}
 
 		var aggregate *pql.Call
@@ -127,7 +122,7 @@ func (p *Planner) planAggregateSelectStatement(ctx context.Context, stmt *sql2.S
 			if len(calls[0].Args) != 1 {
 				return nil, fmt.Errorf("distinct count must have exactly one field specified")
 			}
-			field, ok := calls[0].Args[0].(*sql2.Ident)
+			ref, ok := calls[0].Args[0].(*sql2.QualifiedRef)
 			if !ok {
 				return nil, fmt.Errorf("distinct count argument must be a field name")
 			}
@@ -136,28 +131,28 @@ func (p *Planner) planAggregateSelectStatement(ctx context.Context, stmt *sql2.S
 				Name: "Count",
 				Children: []*pql.Call{{
 					Name: "Distinct",
-					Args: map[string]interface{}{"field": field.Name},
+					Args: map[string]interface{}{"field": ref.Column.Name},
 				}},
 			}
 		}
 
-		return NewGroupByNode(p.executor, indexName, groupByColNames, aliases, aggregate, cond), nil
+		return NewGroupByNode(p.executor, indexName, groupByColNames, columns, aggregate, cond), nil
 
 	case "SUM":
 		if len(calls[0].Args) != 1 {
 			return nil, fmt.Errorf("sum must have exactly one field specified")
 		}
-		field, ok := calls[0].Args[0].(*sql2.Ident)
+		ref, ok := calls[0].Args[0].(*sql2.QualifiedRef)
 		if !ok {
 			return nil, fmt.Errorf("sum argument must be a field name")
 		}
 
 		aggregate := &pql.Call{
 			Name: "Sum",
-			Args: map[string]interface{}{"field": field.Name},
+			Args: map[string]interface{}{"field": ref.Column.Name},
 		}
 
-		return NewGroupByNode(p.executor, indexName, groupByColNames, aliases, aggregate, cond), nil
+		return NewGroupByNode(p.executor, indexName, groupByColNames, columns, aggregate, cond), nil
 
 	default:
 		return nil, fmt.Errorf("unsupported call in aggregate query: %s", callName)
@@ -167,21 +162,10 @@ func (p *Planner) planAggregateSelectStatement(ctx context.Context, stmt *sql2.S
 }
 
 func (p *Planner) planNonAggregateSelectStatement(ctx context.Context, stmt *sql2.SelectStatement) (_ StmtNode, err error) {
-	// Extract table name from source.
-	var source *sql2.QualifiedTableName
-	switch src := stmt.Source.(type) {
-	case *sql2.JoinClause:
-		return nil, fmt.Errorf("cannot use JOIN in non-aggregate query")
-	case *sql2.ParenSource:
-		return nil, fmt.Errorf("cannot use parenthesized source in non-aggregate query")
-	case *sql2.QualifiedTableName:
-		source = src
-	case *sql2.SelectStatement:
-		return nil, fmt.Errorf("cannot use sub-select in non-aggregate query")
-	default:
-		return nil, fmt.Errorf("unexpected source type in non-aggregate query: %T", source)
+	indexName, err := statementTableName(stmt)
+	if err != nil {
+		return nil, err
 	}
-	indexName := sql2.IdentName(source.Name)
 
 	// Lookup index.
 	idx := p.executor.Holder.Index(indexName)
@@ -196,57 +180,24 @@ func (p *Planner) planNonAggregateSelectStatement(ctx context.Context, stmt *sql
 	}
 
 	// Build column list.
-	var columnNames, columnAliases []string
+	var srcs []string
+	var columns []*StmtColumn
 	for _, col := range stmt.Columns {
-		// Unqualified wildcard.
-		if col.Star.IsValid() {
-			columnNames = append(columnNames, "_id")
-			columnAliases = append(columnAliases, "_id")
-
-			for _, field := range idx.Fields() {
-				if field.Name() == "_exists" {
-					continue
-				}
-				columnNames = append(columnNames, field.Name())
-				columnAliases = append(columnAliases, field.Name())
-			}
-			continue
-		}
-
 		// Handle expressions and qualified references.
 		switch expr := col.Expr.(type) {
-		case *sql2.Ident:
-			columnNames = append(columnNames, expr.Name)
-			columnAliases = append(columnAliases, col.Name())
-
 		case *sql2.QualifiedRef:
-			if tbl := sql2.IdentName(expr.Table); tbl != "" && tbl != source.TableName() {
-				return nil, fmt.Errorf("no such table: %q", tbl)
-			}
-
-			if expr.Star.IsValid() {
-				columnNames = append(columnNames, "_id")
-				columnAliases = append(columnAliases, "_id")
-
-				for _, field := range idx.Fields() {
-					if field.Name() == "_exists" {
-						continue
-					}
-					columnNames = append(columnNames, field.Name())
-					columnAliases = append(columnAliases, field.Name())
-				}
-
-			} else {
-				columnNames = append(columnNames, sql2.IdentName(expr.Column))
-				columnAliases = append(columnAliases, sql2.IdentName(expr.Column))
-			}
+			srcs = append(srcs, sql2.IdentName(expr.Column))
+			columns = append(columns, &StmtColumn{
+				Name: sql2.IdentName(expr.Column),
+				Type: sql2.ExprDataType(col.Expr),
+			})
 
 		default:
 			return nil, fmt.Errorf("unsupported column expression: %T", expr)
 		}
 	}
 
-	return NewExtractNode(p.executor, indexName, columnNames, columnAliases, cond), nil
+	return NewExtractNode(p.executor, indexName, srcs, columns, cond), nil
 }
 
 // planExprPQL returns a PQL call tree for a given expression.
@@ -322,8 +273,8 @@ func (p *Planner) planBinaryExprPQL(ctx context.Context, stmt *sql2.SelectStatem
 	case sql2.EQ, sql2.NE, sql2.LT, sql2.LE, sql2.GT, sql2.GE:
 		// Ensure field reference exists in binary expression.
 		x, y := expr.X, expr.Y
-		xIdent, xOk := x.(*sql2.Ident)
-		yIdent, yOk := y.(*sql2.Ident)
+		xRef, xOk := x.(*sql2.QualifiedRef)
+		yRef, yOk := y.(*sql2.QualifiedRef)
 		if xOk && yOk {
 			return nil, fmt.Errorf("cannot compare fields in a WHERE clause")
 		} else if !xOk && !yOk {
@@ -332,7 +283,7 @@ func (p *Planner) planBinaryExprPQL(ctx context.Context, stmt *sql2.SelectStatem
 
 		// Rewrite expression so field ref is LHS.
 		if !xOk && yOk {
-			xIdent, y = yIdent, x
+			xRef, y = yRef, x
 			switch op {
 			case sql2.LT:
 				op = sql2.GT
@@ -355,7 +306,7 @@ func (p *Planner) planBinaryExprPQL(ctx context.Context, stmt *sql2.SelectStatem
 			return &pql.Call{
 				Name: "Row",
 				Args: map[string]interface{}{
-					sql2.IdentName(xIdent): pqlValue,
+					sql2.IdentName(xRef.Column): pqlValue,
 				},
 			}, nil
 		}
@@ -367,7 +318,7 @@ func (p *Planner) planBinaryExprPQL(ctx context.Context, stmt *sql2.SelectStatem
 		return &pql.Call{
 			Name: "Row",
 			Args: map[string]interface{}{
-				sql2.IdentName(xIdent): &pql.Condition{
+				sql2.IdentName(xRef.Column): &pql.Condition{
 					Op:    pqlOp,
 					Value: pqlValue,
 				},
@@ -426,6 +377,221 @@ func sqlToPQLValue(expr sql2.Expr) (interface{}, error) {
 	}
 }
 
+func (p *Planner) checkStatement(stmt sql2.Statement) error {
+	switch stmt := stmt.(type) {
+	case *sql2.SelectStatement:
+		return p.checkSelectStatement(stmt)
+	default:
+		return nil
+	}
+}
+
+func (p *Planner) checkSelectStatement(stmt *sql2.SelectStatement) error {
+	indexName, err := statementTableName(stmt)
+	if err != nil {
+		return err
+	}
+
+	// Look up index.
+	idx := p.executor.Holder.Index(indexName)
+	if idx == nil {
+		return newNotFoundError(ErrIndexNotFound, indexName)
+	}
+
+	// Replace wildcards with column references.
+	columns := make([]*sql2.ResultColumn, 0, len(stmt.Columns))
+	for _, col := range stmt.Columns {
+		// Unqualified wildcard.
+		isWildcard := col.Star.IsValid()
+		if ref, ok := col.Expr.(*sql2.QualifiedRef); ok && ref.Star.IsValid() {
+			if ref.Table.Name != indexName {
+				return fmt.Errorf("no such table: %q", ref.Table.Name)
+			}
+			isWildcard = true
+		}
+
+		// Simply add column as-is if it is not a wildcard.
+		if !isWildcard {
+			columns = append(columns, col)
+			continue
+		}
+
+		// Add identifier field first.
+		columns = append(columns, &sql2.ResultColumn{
+			Expr: &sql2.QualifiedRef{
+				Table:  &sql2.Ident{Name: idx.Name()},
+				Column: &sql2.Ident{Name: "_id"},
+			},
+		})
+
+		// Then add all fields besides the existence bit.
+		for _, field := range idx.Fields() {
+			if field.Name() == "_exists" {
+				continue
+			}
+			columns = append(columns, &sql2.ResultColumn{
+				Expr: &sql2.QualifiedRef{
+					Table:  &sql2.Ident{Name: idx.Name()},
+					Column: &sql2.Ident{Name: field.Name()},
+				},
+			})
+		}
+	}
+	stmt.Columns = columns
+
+	// Type check expressions in statement.
+	for _, col := range stmt.Columns {
+		if err := p.checkExpr(&col.Expr, stmt); err != nil {
+			return err
+		}
+	}
+
+	if err := p.checkExpr(&stmt.WhereExpr, stmt); err != nil {
+		return err
+	}
+
+	for i := range stmt.GroupByExprs {
+		if err := p.checkExpr(&stmt.GroupByExprs[i], stmt); err != nil {
+			return err
+		}
+	}
+
+	if err := p.checkExpr(&stmt.HavingExpr, stmt); err != nil {
+		return err
+	}
+
+	for _, term := range stmt.OrderingTerms {
+		if err := p.checkExpr(&term.X, stmt); err != nil {
+			return err
+		}
+	}
+
+	if err := p.checkExpr(&stmt.LimitExpr, stmt); err != nil {
+		return err
+	}
+
+	if err := p.checkExpr(&stmt.OffsetExpr, stmt); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (p *Planner) checkExpr(expr *sql2.Expr, stmt sql2.Statement) error {
+	if e, err := sql2.Walk(&sqlExprTypeChecker{
+		holder: p.executor.Holder,
+		stmt:   stmt,
+	}, *expr); err != nil {
+		return err
+	} else if e != nil {
+		*expr = e.(sql2.Expr)
+	} else {
+		*expr = nil
+	}
+	return nil
+}
+
+// sqlExprTypeChecker recursively performs type checking within an expression.
+// Called by sqlTypeChecker. Implements sql2.Visitor.
+type sqlExprTypeChecker struct {
+	holder *Holder
+	stmt   sql2.Statement // scope
+}
+
+var _ sql2.Visitor = (*sqlExprTypeChecker)(nil)
+
+func (v *sqlExprTypeChecker) Visit(node sql2.Node) (_ sql2.Visitor, _ sql2.Node, err error) {
+	switch n := node.(type) {
+	case *sql2.Call:
+		for i := range n.Args {
+			if err := v.checkExpr(&n.Args[i]); err != nil {
+				return nil, nil, err
+			}
+		}
+		return nil, node, nil // skip
+	case *sql2.Ident:
+		if node, err = v.visitIdent(n); err != nil {
+			return nil, nil, err
+		}
+		return nil, node, nil
+	case *sql2.QualifiedRef:
+		if node, err = v.visitQualifiedRef(n); err != nil {
+			return nil, nil, err
+		}
+		return nil, node, nil
+	default:
+		return v, node, nil
+	}
+}
+
+func (v *sqlExprTypeChecker) visitIdent(ident *sql2.Ident) (sql2.Node, error) {
+	indexName, err := statementTableName(v.stmt)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert to a table qualified reference and validate through ref visit function.
+	return v.visitQualifiedRef(&sql2.QualifiedRef{
+		Table:  &sql2.Ident{Name: indexName},
+		Column: &sql2.Ident{Name: ident.Name},
+	})
+}
+
+func (v *sqlExprTypeChecker) visitQualifiedRef(ref *sql2.QualifiedRef) (sql2.Node, error) {
+	idx := v.holder.Index(ref.Table.Name)
+	if idx == nil {
+		return nil, newNotFoundError(ErrIndexNotFound, ref.Table.Name)
+	}
+
+	switch name := ref.Column.Name; name {
+	case "_id":
+		ref.DataType = sql2.DataTypeInt
+	default:
+		field := idx.Field(ref.Column.Name)
+		if field == nil {
+			return nil, newNotFoundError(ErrFieldNotFound, ref.Column.Name)
+		}
+		ref.DataType = fieldSQLDataType(field)
+	}
+
+	return ref, nil
+}
+
+func (v *sqlExprTypeChecker) checkExpr(node *sql2.Expr) error {
+	if expr, err := sql2.Walk(&sqlExprTypeChecker{
+		holder: v.holder,
+		stmt:   v.stmt,
+	}, *node); err != nil {
+		return err
+	} else if expr != nil {
+		*node = expr.(sql2.Expr)
+	} else {
+		*node = nil
+	}
+	return nil
+}
+
+func (v *sqlExprTypeChecker) VisitEnd(node sql2.Node) (sql2.Node, error) { return node, nil }
+
+func fieldSQLDataType(f *Field) string {
+	if f.Keys() {
+		return sql2.DataTypeText
+	}
+
+	switch f.Type() {
+	case FieldTypeInt, FieldTypeMutex, FieldTypeSet:
+		return sql2.DataTypeInt
+	case FieldTypeBool:
+		return sql2.DataTypeBool
+	case FieldTypeDecimal:
+		return sql2.DataTypeDecimal
+	case FieldTypeTime, FieldTypeTimestamp:
+		return sql2.DataTypeTimestamp
+	default:
+		return ""
+	}
+}
+
 type Stmt struct {
 	node StmtNode
 }
@@ -473,7 +639,7 @@ func (rs *StmtRows) Err() error {
 	return nil
 }
 
-func (rs *StmtRows) Columns() []string {
+func (rs *StmtRows) Columns() []*StmtColumn {
 	return rs.node.Columns()
 }
 
@@ -574,6 +740,11 @@ func (r *StmtRow) Err() error {
 	return r.err
 }
 
+type StmtColumn struct {
+	Name string
+	Type string
+}
+
 type StmtNode interface {
 	// Initializes the node to its start.
 	First(ctx context.Context) error
@@ -585,7 +756,7 @@ type StmtNode interface {
 	Row() []interface{}
 
 	// Returns column definitions for the node.
-	Columns() []string
+	Columns() []*StmtColumn
 
 	// Returns a reference to the value register for a named column.
 	// Lookup(table, column string) (interface{}, error)
@@ -597,39 +768,38 @@ var _ StmtNode = (*ExtractNode)(nil)
 type ExtractNode struct {
 	executor  *executor
 	indexName string
-	columns   []string
-	aliases   []string
+	srcs      []string
+	columns   []*StmtColumn
 	cond      *pql.Call
 
 	result []ExtractedTableColumn
 	row    []interface{}
 }
 
-func NewExtractNode(executor *executor, indexName string, columns, aliases []string, cond *pql.Call) *ExtractNode {
+func NewExtractNode(executor *executor, indexName string, srcs []string, columns []*StmtColumn, cond *pql.Call) *ExtractNode {
 	if cond == nil {
 		cond = &pql.Call{Name: "All"}
 	}
 
 	// Ensure ID column is always the first column.
-	if len(columns) > 0 && columns[0] != "_id" {
-		columns = append([]string{"_id"}, columns...)
-		aliases = append([]string{"_id"}, aliases...)
+	// TODO(benbjohnson): Don't require id first.
+	if len(srcs) > 0 && srcs[0] != "_id" {
+		srcs = append([]string{"_id"}, srcs...)
+		columns = append([]*StmtColumn{{Name: "_id", Type: sql2.DataTypeInt}}, columns...)
 	}
-
-	// TODO: Move "_id" column to the first position if it is specified later on in column list.
 
 	return &ExtractNode{
 		executor:  executor,
 		indexName: indexName,
-		columns:   columns, // source column names
-		aliases:   aliases, // external column alias
+		srcs:      srcs,    // source column names
+		columns:   columns, // external column alias
 		cond:      cond,
-		row:       make([]interface{}, len(columns)),
+		row:       make([]interface{}, len(srcs)),
 	}
 }
 
-func (n *ExtractNode) Columns() []string {
-	return n.aliases
+func (n *ExtractNode) Columns() []*StmtColumn {
+	return n.columns
 }
 
 func (n *ExtractNode) First(ctx context.Context) error {
@@ -674,11 +844,11 @@ func (n *ExtractNode) init(ctx context.Context) error {
 	// Generate PQL query with all specified rows.
 	// Skip first column as it is the ID column.
 	call := &pql.Call{Name: "Extract", Children: []*pql.Call{n.cond}}
-	for _, column := range n.columns[1:] {
+	for _, src := range n.srcs[1:] {
 		call.Children = append(call.Children,
 			&pql.Call{
 				Name: "Rows",
-				Args: map[string]interface{}{"field": column},
+				Args: map[string]interface{}{"field": src},
 			},
 		)
 	}
@@ -709,28 +879,28 @@ var _ StmtNode = (*CountNode)(nil)
 
 // CountNode executes a COUNT(*) against a FeatureBase index and returns a single row.
 type CountNode struct {
-	executor   *executor
-	indexName  string
-	columnName string
-	cond       *pql.Call // conditional
+	executor  *executor
+	indexName string
+	column    *StmtColumn
+	cond      *pql.Call // conditional
 
 	row []interface{}
 }
 
-func NewCountNode(executor *executor, indexName string, columnName string, cond *pql.Call) *CountNode {
+func NewCountNode(executor *executor, indexName string, column *StmtColumn, cond *pql.Call) *CountNode {
 	if cond == nil {
 		cond = &pql.Call{Name: "All"}
 	}
 	return &CountNode{
-		executor:   executor,
-		indexName:  indexName,
-		columnName: columnName,
-		cond:       cond,
+		executor:  executor,
+		indexName: indexName,
+		column:    column,
+		cond:      cond,
 	}
 }
 
-func (n *CountNode) Columns() []string {
-	return []string{n.columnName}
+func (n *CountNode) Columns() []*StmtColumn {
+	return []*StmtColumn{n.column}
 }
 
 func (n *CountNode) First(ctx context.Context) error {
@@ -764,8 +934,8 @@ func (n *CountNode) Row() []interface{} { return n.row }
 type GroupByNode struct {
 	executor  *executor
 	indexName string
-	columns   []string
-	aliases   []string
+	srcs      []string
+	columns   []*StmtColumn
 	aggregate *pql.Call
 	cond      *pql.Call
 
@@ -775,20 +945,20 @@ type GroupByNode struct {
 	row []interface{}
 }
 
-func NewGroupByNode(executor *executor, indexName string, columns, aliases []string, aggregate, cond *pql.Call) *GroupByNode {
+func NewGroupByNode(executor *executor, indexName string, srcs []string, columns []*StmtColumn, aggregate, cond *pql.Call) *GroupByNode {
 	return &GroupByNode{
 		executor:  executor,
 		indexName: indexName,
+		srcs:      srcs,
 		columns:   columns,
-		aliases:   aliases,
 		aggregate: aggregate,
 		cond:      cond,
-		row:       make([]interface{}, len(columns)+1),
+		row:       make([]interface{}, len(srcs)+1),
 	}
 }
 
-func (n *GroupByNode) Columns() []string {
-	return append([]string{"_aggregate"}, n.columns...)
+func (n *GroupByNode) Columns() []*StmtColumn {
+	return n.columns
 }
 
 func (n *GroupByNode) First(ctx context.Context) error {
@@ -840,9 +1010,9 @@ func (n *GroupByNode) fetch(ctx context.Context) (*GroupCounts, error) {
 	}
 
 	// Choose fields to group by.
-	for _, col := range n.columns {
+	for _, src := range n.srcs {
 		call.Children = append(call.Children, &pql.Call{
-			Name: "Rows", Args: map[string]interface{}{"_field": col},
+			Name: "Rows", Args: map[string]interface{}{"_field": src},
 		})
 	}
 
@@ -862,3 +1032,30 @@ func (n *GroupByNode) fetch(ctx context.Context) (*GroupCounts, error) {
 }
 
 func (n *GroupByNode) Row() []interface{} { return n.row }
+
+// statementTableName returns the table name for a single table SELECT statement.
+//
+// NOTE: This function is only temporary until we support more source types.
+func statementTableName(stmt sql2.Statement) (string, error) {
+	switch stmt := stmt.(type) {
+	case *sql2.SelectStatement:
+		return sourceTableName(stmt.Source)
+	default:
+		return "", fmt.Errorf("statement not currently supported")
+	}
+}
+
+func sourceTableName(source sql2.Source) (string, error) {
+	switch source := source.(type) {
+	case *sql2.JoinClause:
+		return "", fmt.Errorf("joins are not currently supported")
+	case *sql2.ParenSource:
+		return "", fmt.Errorf("parenthesized source is not currently supported")
+	case *sql2.QualifiedTableName:
+		return sql2.IdentName(source.Name), nil
+	case *sql2.SelectStatement:
+		return "", fmt.Errorf("sub-selects are not currently supported")
+	default:
+		return "", fmt.Errorf("unexpected source type: %T", source)
+	}
+}

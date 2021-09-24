@@ -210,54 +210,80 @@ func TestPlanner_Select(t *testing.T) {
 	}
 
 	t.Run("UnqualifiedColumns", func(t *testing.T) {
-		results := mustQueryRows(t, c.GetNode(0).Server, `SELECT _id, a, b FROM i0`)
-		if diff := cmp.Diff(results, [][]interface{}{
+		results, columns := mustQueryRows(t, c.GetNode(0).Server, `SELECT _id, a, b FROM i0`)
+		if diff := cmp.Diff([][]interface{}{
 			{int64(1), int64(10), int64(100)},
 			{int64(2), int64(20), int64(200)},
-		}); diff != "" {
+		}, results); diff != "" {
+			t.Fatal(diff)
+		}
+
+		if diff := cmp.Diff([]*pilosa.StmtColumn{
+			{Name: "_id", Type: "INT"},
+			{Name: "a", Type: "INT"},
+			{Name: "b", Type: "INT"},
+		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
 	})
 
 	t.Run("QualifiedColumns", func(t *testing.T) {
-		results := mustQueryRows(t, c.GetNode(0).Server, `SELECT i0._id, i0.a, i0.b FROM i0`)
-		if diff := cmp.Diff(results, [][]interface{}{
+		results, columns := mustQueryRows(t, c.GetNode(0).Server, `SELECT i0._id, i0.a, i0.b FROM i0`)
+		if diff := cmp.Diff([][]interface{}{
 			{int64(1), int64(10), int64(100)},
 			{int64(2), int64(20), int64(200)},
-		}); diff != "" {
+		}, results); diff != "" {
+			t.Fatal(diff)
+		}
+
+		if diff := cmp.Diff([]*pilosa.StmtColumn{
+			{Name: "_id", Type: "INT"},
+			{Name: "a", Type: "INT"},
+			{Name: "b", Type: "INT"},
+		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
 	})
 
 	t.Run("UnqualifiedStar", func(t *testing.T) {
-		results := mustQueryRows(t, c.GetNode(0).Server, `SELECT * FROM i0`)
-		if diff := cmp.Diff(results, [][]interface{}{
+		results, columns := mustQueryRows(t, c.GetNode(0).Server, `SELECT * FROM i0`)
+		if diff := cmp.Diff([][]interface{}{
 			{int64(1), int64(10), int64(100)},
 			{int64(2), int64(20), int64(200)},
-		}); diff != "" {
+		}, results); diff != "" {
+			t.Fatal(diff)
+		}
+
+		if diff := cmp.Diff([]*pilosa.StmtColumn{
+			{Name: "_id", Type: "INT"},
+			{Name: "a", Type: "INT"},
+			{Name: "b", Type: "INT"},
+		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
 	})
 
 	t.Run("QualifiedStar", func(t *testing.T) {
-		results := mustQueryRows(t, c.GetNode(0).Server, `SELECT i0.* FROM i0`)
-		if diff := cmp.Diff(results, [][]interface{}{
+		results, columns := mustQueryRows(t, c.GetNode(0).Server, `SELECT i0.* FROM i0`)
+		if diff := cmp.Diff([][]interface{}{
 			{int64(1), int64(10), int64(100)},
 			{int64(2), int64(20), int64(200)},
-		}); diff != "" {
+		}, results); diff != "" {
+			t.Fatal(diff)
+		}
+
+		if diff := cmp.Diff([]*pilosa.StmtColumn{
+			{Name: "_id", Type: "INT"},
+			{Name: "a", Type: "INT"},
+			{Name: "b", Type: "INT"},
+		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
 	})
 
 	t.Run("ErrFieldNotFound", func(t *testing.T) {
-		stmt, err := c.GetNode(0).Server.PlanSQL(context.Background(), `SELECT xyz FROM i0`)
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer stmt.Close()
-
-		var xyz interface{}
-		if err := stmt.QueryRowContext(context.Background()).Scan(&xyz); err == nil || !strings.Contains(err.Error(), `xyz: field not found`) {
+		_, err := c.GetNode(0).Server.PlanSQL(context.Background(), `SELECT xyz FROM i0`)
+		if err == nil || !strings.Contains(err.Error(), `xyz: field not found`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -301,37 +327,58 @@ func TestPlanner_GroupBy(t *testing.T) {
 	}
 
 	t.Run("Count", func(t *testing.T) {
-		results := mustQueryRows(t, c.GetNode(0).Server, `SELECT COUNT(*), x FROM i0 GROUP BY x`)
+		results, columns := mustQueryRows(t, c.GetNode(0).Server, `SELECT COUNT(*), x FROM i0 GROUP BY x`)
 		if diff := cmp.Diff([][]interface{}{
 			{int64(2), int64(10)},
 			{int64(2), int64(20)},
 		}, results); diff != "" {
 			t.Fatal(diff)
 		}
+
+		if diff := cmp.Diff([]*pilosa.StmtColumn{
+			{Name: "count", Type: "INT"},
+			{Name: "x", Type: "INT"},
+		}, columns); diff != "" {
+			t.Fatal(diff)
+		}
 	})
 
 	t.Run("DistinctCount", func(t *testing.T) {
-		results := mustQueryRows(t, c.GetNode(0).Server, `SELECT COUNT(DISTINCT z), x FROM i0 GROUP BY x`)
+		results, columns := mustQueryRows(t, c.GetNode(0).Server, `SELECT COUNT(DISTINCT z), x FROM i0 GROUP BY x`)
 		if diff := cmp.Diff([][]interface{}{
 			{int64(1), int64(10)},
 			{int64(2), int64(20)},
 		}, results); diff != "" {
 			t.Fatal(diff)
 		}
+
+		if diff := cmp.Diff([]*pilosa.StmtColumn{
+			{Name: "count", Type: "INT"},
+			{Name: "x", Type: "INT"},
+		}, columns); diff != "" {
+			t.Fatal(diff)
+		}
 	})
 
 	t.Run("Sum", func(t *testing.T) {
-		results := mustQueryRows(t, c.GetNode(0).Server, `SELECT sum(y), x FROM i0 GROUP BY x`)
+		results, columns := mustQueryRows(t, c.GetNode(0).Server, `SELECT sum(y), x FROM i0 GROUP BY x`)
 		if diff := cmp.Diff([][]interface{}{
 			{int64(300), int64(10)},
 			{int64(100), int64(20)},
 		}, results); diff != "" {
 			t.Fatal(diff)
 		}
+
+		if diff := cmp.Diff([]*pilosa.StmtColumn{
+			{Name: "sum", Type: "INT"},
+			{Name: "x", Type: "INT"},
+		}, columns); diff != "" {
+			t.Fatal(diff)
+		}
 	})
 }
 
-func mustQueryRows(tb testing.TB, svr *pilosa.Server, q string) [][]interface{} {
+func mustQueryRows(tb testing.TB, svr *pilosa.Server, q string) (results [][]interface{}, columns []*pilosa.StmtColumn) {
 	tb.Helper()
 
 	stmt, err := svr.PlanSQL(context.Background(), q)
@@ -345,7 +392,7 @@ func mustQueryRows(tb testing.TB, svr *pilosa.Server, q string) [][]interface{} 
 		tb.Fatal(err)
 	}
 
-	results := make([][]interface{}, 0)
+	results = make([][]interface{}, 0)
 	for rows.Next() {
 		result := make([]interface{}, len(rows.Columns()))
 
@@ -365,5 +412,5 @@ func mustQueryRows(tb testing.TB, svr *pilosa.Server, q string) [][]interface{} 
 		tb.Fatal(err)
 	}
 
-	return results
+	return results, rows.Columns()
 }

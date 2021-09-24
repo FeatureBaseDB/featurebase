@@ -194,6 +194,26 @@ func StatementSource(stmt Statement) Source {
 	}
 }
 
+// Data types
+const (
+	DataTypeBool      = "BOOL"
+	DataTypeDecimal   = "DECIMAL"
+	DataTypeInt       = "INT"
+	DataTypeSet       = "SET"
+	DataTypeText      = "TEXT"
+	DataTypeTimestamp = "TIMESTAMP"
+)
+
+// IsDataTypeValid returns true if typ is a valid data type.
+func IsDataTypeValid(typ string) bool {
+	switch typ {
+	case DataTypeBool, DataTypeInt, DataTypeDecimal, DataTypeText:
+		return true
+	default:
+		return false
+	}
+}
+
 type Expr interface {
 	Node
 	expr()
@@ -277,6 +297,49 @@ func cloneExprs(a []Expr) []Expr {
 		other[i] = CloneExpr(a[i])
 	}
 	return other
+}
+
+// ExprDataType returns the data type for an expression.
+func ExprDataType(expr Expr) string {
+	if expr == nil {
+		return ""
+	}
+
+	switch expr := expr.(type) {
+	// Simple type assertions
+	case *BindExpr, *ExprList, *Ident, *NullLit, *Raise:
+		return ""
+	case *BlobLit, *StringLit:
+		return DataTypeText
+	case *BoolLit, *Exists, *Range:
+		return DataTypeBool
+	case *NumberLit:
+		return DataTypeInt
+
+	// Complex type assertions
+	case *BinaryExpr:
+		return ExprDataType(expr.X)
+	case *Call:
+		return DataTypeInt // TODO: May be different for some aggregations
+	case *CaseExpr:
+		if len(expr.Blocks) > 0 {
+			return ExprDataType(expr.Blocks[0].Body)
+		} else if expr.ElseExpr != nil {
+			return ExprDataType(expr.ElseExpr)
+		}
+		return ""
+	case *CastExpr:
+		return "" // TODO: Inspect expr.Type.Name
+	case *ParenExpr:
+		return ExprDataType(expr.X)
+	case *QualifiedRef:
+		return expr.DataType
+	case *UnaryExpr:
+		return ExprDataType(expr.X)
+
+	default:
+		panic(fmt.Sprintf("invalid expr type: %T", expr))
+	}
 }
 
 // ExprString returns the string representation of expr.
@@ -1811,6 +1874,9 @@ type QualifiedRef struct {
 	Dot    Pos    // position of dot
 	Star   Pos    // position of * (result column only)
 	Column *Ident // column name
+
+	// Set by the planner; not at parse-time
+	DataType string
 }
 
 // IsAggregate returns false.
@@ -3061,10 +3127,12 @@ func (c *ResultColumn) Name() string {
 	}
 
 	switch expr := c.Expr.(type) {
+	case *Call:
+		return strings.ToLower(IdentName(expr.Name))
 	case *Ident:
 		return IdentName(expr)
 	case *QualifiedRef:
-		return expr.String()
+		return IdentName(expr.Column)
 	default:
 		return ""
 	}

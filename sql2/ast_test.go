@@ -1143,14 +1143,14 @@ func AssertNodeStringerPanic(tb testing.TB, node sql.Node, msg string) {
 func StripPos(root sql.Node) sql.Node {
 	zero := reflect.ValueOf(sql.Pos{})
 
-	_ = sql.Walk(sql.VisitFunc(func(node sql.Node) error {
+	_, _ = sql.Walk(sql.VisitFunc(func(node sql.Node) (sql.Node, error) {
 		value := reflect.Indirect(reflect.ValueOf(node))
 		for i := 0; i < value.NumField(); i++ {
 			if field := value.Field(i); field.Type() == zero.Type() {
 				field.Set(zero)
 			}
 		}
-		return nil
+		return node, nil
 	}), root)
 	return root
 }
