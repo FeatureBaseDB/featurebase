@@ -32,7 +32,6 @@ import (
 
 	"github.com/molecula/featurebase/v2/pg/message"
 	"github.com/molecula/featurebase/v2/sql"
-	"github.com/molecula/featurebase/v2/vprint"
 	"github.com/pkg/errors"
 	"vitess.io/vitess/go/vt/sqlparser"
 )
@@ -177,7 +176,6 @@ startup:
 		// Reject the unsecured connection.
 		return errors.Errorf("client at %s attempted to initiate an unsecured postgres conenction", conn.RemoteAddr())
 	}
-	vprint.VV("TProcotcol: %v", proto)
 
 	switch proto {
 	case ProtocolCancel:
@@ -217,7 +215,6 @@ func parseParams(data []byte) (map[string]string, error) {
 
 // handleCancel handles cancel request connections.
 func (s *Server) handleCancel(ctx context.Context, conn net.Conn, data []byte) error {
-	vprint.VV("handle cancel")
 	if len(data) != 8 {
 		return errors.New("malformed cancellation packet")
 	}
@@ -229,7 +226,6 @@ func (s *Server) handleCancel(ctx context.Context, conn net.Conn, data []byte) e
 	pid := int32(binary.BigEndian.Uint32(data[:4]))
 	key := int32(binary.BigEndian.Uint32(data[4:]))
 
-	vprint.VV("cancel pid:%v key:%v", pid, key)
 	err := s.CancellationManager.Cancel(CancellationToken{PID: pid, Key: key})
 	switch err {
 	case nil:
@@ -291,7 +287,6 @@ type Portal struct {
 }
 
 func (p *Portal) Reset() {
-	vprint.VV("Portal Reset")
 	p.Name = ""
 	p.sql = ""
 	p.pgspecial = pgPassOn
@@ -307,7 +302,6 @@ var lookPQL = regexp.MustCompile(`\[.*\].*\)\z`)
 func (p *Portal) Parse(data []byte) {
 	p.queryStart = time.Now()
 	queryStr := string(bytes.Trim(data, "\x00"))
-	vprint.VV("PARSE RAW: (%v) (%d)", queryStr, len(queryStr))
 	foundPQL := lookPQL.FindStringSubmatch(queryStr)
 	if len(foundPQL) > 0 {
 
@@ -337,12 +331,10 @@ func (p *Portal) Parse(data []byte) {
 
 		query, err := p.mapper.MapSQL(queryStr)
 		if err != nil {
-			vprint.VV("Parse Err: '%v'", err)
+			return
 		} else {
 
-			vprint.VV("TODD Query: %#v", query.SQL)
 			if strings.Contains(strings.ToLower(query.SQL), "select 1") {
-				vprint.VV("SQL1")
 				p.pgspecial = pgSelect1
 				p.Name = "SELECT"
 			} else {
@@ -352,12 +344,9 @@ func (p *Portal) Parse(data []byte) {
 					set := query.Statement.(*sqlparser.Set)
 					p.pgspecial = 0
 					for _, item := range set.Exprs {
-						vprint.VV("SET name=(%v) ", item.Name)
 						if item.Name.String() == "application_name" {
-							vprint.VV("SET expr=(%#v) ", item.Expr)
-							switch val := item.Expr.(type) {
+							switch item.Expr.(type) {
 							case *sqlparser.SQLVal:
-								vprint.VV("getting %v (%v)", val.Type, string(val.Val))
 								p.pgspecial = pgSetApplication
 							}
 						}
@@ -378,7 +367,6 @@ func (p *Portal) Parse(data []byte) {
 									p.pgspecial = pgBackendPid
 								case "pg_terminate_backend":
 									//select pg_terminate_backend(100)
-									vprint.VV("terminate %#v", colExpr.Exprs)
 									p.pgspecial = pgTerminate
 								case "version":
 									//SELECT VERSION() AS version
@@ -395,7 +383,6 @@ func (p *Portal) Parse(data []byte) {
 						switch from := item.(type) {
 						case *sqlparser.AliasedTableExpr:
 							tableName := from.Expr.(sqlparser.TableName).ToViewName().Name.String()
-							vprint.VV("looking at (%v)", tableName)
 							switch tableName {
 							case "pg_type":
 								p.pgspecial = pgCountType
@@ -418,7 +405,6 @@ func (p *Portal) Parse(data []byte) {
 			}
 		}
 	} else {
-		vprint.VV("SETTING EMPTY")
 		p.pgspecial = pgEmpty
 	}
 	p.Add(message.ParseOK)
@@ -438,7 +424,6 @@ func (p *Portal) Describe() {
 }
 func (p *Portal) Execute() (shouldTerminate bool, queryReady bool, err error) {
 	queryReady = true
-	vprint.VV("port.Execute: (%v) q=(%v)", p.pgspecial, p.sql)
 	switch p.pgspecial {
 	case pgBackendPid:
 		rowDescription, e := p.Encoder.EncodeColumn("pg_backend_pid", int32(23), 4)
@@ -594,7 +579,6 @@ func (p *Portal) Execute() (shouldTerminate bool, queryReady bool, err error) {
 
 	//maybe add in the number of items in select clause
 	if len(p.Name) > 0 { //only send command complete for those that have names
-		vprint.VV("EXECING NAME: '%v'", p.Name)
 		message, _ := p.Encoder.CommandComplete(p.Name)
 		p.Add(message)
 	}
@@ -604,7 +588,6 @@ func (p *Portal) Execute() (shouldTerminate bool, queryReady bool, err error) {
 // handleStandard handles a connection in the standard postgres wire protocol.
 func (p *Portal) Sync() error {
 	for _, m := range p.commands {
-		vprint.VV("Sending: '%v'", m.Type)
 		err := p.Writer.WriteMessage(m)
 		if err != nil {
 			return err
@@ -659,7 +642,6 @@ func (s *Server) handleStandard(ctx context.Context, proto Protocol, conn net.Co
 	if err != nil {
 		return errors.Wrap(err, "parsing parameters")
 	}
-	vprint.VV("postgres connection params\n%#v\n", params) //TODO (twg) remove
 	if user, ok := params["user"]; ok {
 		// Log the connection.
 		s.Logger.Debugf("new postgres connection from user %q at %v", user, conn.RemoteAddr())
@@ -773,7 +755,6 @@ func (s *Server) handleStandard(ctx context.Context, proto Protocol, conn net.Co
 		return errors.Wrap(err, "sending parameter status server version")
 	}
 
-	vprint.VV("CancellationManger: %v", s.CancellationManager)
 	var cancelNotify <-chan struct{}
 	var pid int32
 	if s.CancellationManager != nil {
@@ -874,13 +855,10 @@ func (s *Server) handleStandard(ctx context.Context, proto Protocol, conn net.Co
 			return w.Flush()
 
 		case message.TypeParse:
-			vprint.VV("Type Parse (%v)", strings.Trim(string(msg.Data), "\x00"))
 			portal.Parse(msg.Data)
 		case message.TypeBind:
-			vprint.VV("Type Bind (%v)", strings.Trim(string(msg.Data), "\x00"))
 			portal.Bind()
 		case message.TypeExecute:
-			vprint.VV("Type Execute (%v)", strings.Trim(string(msg.Data), "\x00"))
 			term, qr, err := portal.Execute()
 			if err != nil {
 				return err
@@ -890,7 +868,6 @@ func (s *Server) handleStandard(ctx context.Context, proto Protocol, conn net.Co
 			}
 			queryReady = qr
 		case message.TypeSync:
-			vprint.VV("Type Sync", strings.Trim(string(msg.Data), "\x00"))
 			err := portal.Sync()
 			if err != nil {
 				return err
@@ -912,7 +889,6 @@ func (s *Server) handleStandard(ctx context.Context, proto Protocol, conn net.Co
 		default:
 			// The message is not supported yet.
 			// Send an error.
-			vprint.VV("unrecognized postgres packet %v", msg)
 			s.Logger.Errorf("unrecognized postgres packet %v", msg)
 			msg, err = encoder.Error(
 				message.NoticeField{
@@ -992,7 +968,6 @@ func (s *Server) dumpPortalsTo(p *Portal) error {
 	p.Add(rowDescription)
 
 	for _, portal := range s.portals {
-		vprint.VV("port: %v (%v) %v", portal.pid, portal.sql, time.Since(portal.queryStart))
 		dataRow, err := p.Encoder.TextRow(
 			fmt.Sprintf("%v", portal.pid),
 			portal.sql,
@@ -1052,7 +1027,6 @@ func (s *Server) handleQuery(w message.Writer, query Query, cancelNotify <-chan 
 		te:  s.TypeEngine,
 		tag: "SELECT",
 	}
-	vprint.VV("handle Query: (%v)", query)
 	// Dispatch the query handler.
 	qerr := s.QueryHandler.HandleQuery(ctx, qwriter, query)
 	if qerr != nil {
