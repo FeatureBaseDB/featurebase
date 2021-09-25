@@ -77,19 +77,21 @@ func (p *Planner) planAggregateSelectStatement(ctx context.Context, stmt *sql2.S
 	// TODO: Recursively traverse all expression trees.
 	var calls []*sql2.Call
 	var columns []*StmtColumn
+	var resultCols []string
 	for _, c := range stmt.Columns {
 		columns = append(columns, &StmtColumn{
 			Name: c.Name(),
 			Type: sql2.ExprDataType(c.Expr),
 		})
 
-		switch c := c.Expr.(type) {
+		switch expr := c.Expr.(type) {
 		case *sql2.Call:
-			calls = append(calls, c)
+			calls = append(calls, expr)
+			resultCols = append(resultCols, "_aggregate")
 		case *sql2.QualifiedRef:
-			// allowed
+			resultCols = append(resultCols, expr.Column.Name)
 		default:
-			return nil, fmt.Errorf("unsupported expression type in aggregate query: %T", c)
+			return nil, fmt.Errorf("unsupported expression type in aggregate query: %T", expr)
 		}
 	}
 
@@ -99,11 +101,11 @@ func (p *Planner) planAggregateSelectStatement(ctx context.Context, stmt *sql2.S
 	}
 
 	// Extract column names in GROUP BY clause.
-	var groupByColNames []string
+	var groupByCols []string
 	for _, expr := range stmt.GroupByExprs {
 		switch expr := expr.(type) {
 		case *sql2.QualifiedRef:
-			groupByColNames = append(groupByColNames, expr.Column.Name)
+			groupByCols = append(groupByCols, expr.Column.Name)
 		default:
 			return nil, fmt.Errorf("unsupported expression type in GROUP BY clause: %T", expr)
 		}
@@ -113,7 +115,7 @@ func (p *Planner) planAggregateSelectStatement(ctx context.Context, stmt *sql2.S
 	callName := strings.ToUpper(sql2.IdentName(calls[0].Name))
 	switch callName {
 	case "COUNT":
-		if len(groupByColNames) == 0 {
+		if len(groupByCols) == 0 {
 			return NewCountNode(p.executor, indexName, columns[0], cond), nil
 		}
 
@@ -136,7 +138,7 @@ func (p *Planner) planAggregateSelectStatement(ctx context.Context, stmt *sql2.S
 			}
 		}
 
-		return NewGroupByNode(p.executor, indexName, groupByColNames, columns, aggregate, cond), nil
+		return NewGroupByNode(p.executor, indexName, resultCols, groupByCols, columns, aggregate, cond), nil
 
 	case "SUM":
 		if len(calls[0].Args) != 1 {
@@ -152,7 +154,7 @@ func (p *Planner) planAggregateSelectStatement(ctx context.Context, stmt *sql2.S
 			Args: map[string]interface{}{"field": ref.Column.Name},
 		}
 
-		return NewGroupByNode(p.executor, indexName, groupByColNames, columns, aggregate, cond), nil
+		return NewGroupByNode(p.executor, indexName, resultCols, groupByCols, columns, aggregate, cond), nil
 
 	default:
 		return nil, fmt.Errorf("unsupported call in aggregate query: %s", callName)
@@ -770,6 +772,7 @@ type ExtractNode struct {
 	indexName string
 	srcs      []string
 	columns   []*StmtColumn
+	mapping   []int // map of output column indices to source column indices
 	cond      *pql.Call
 
 	result []ExtractedTableColumn
@@ -781,18 +784,26 @@ func NewExtractNode(executor *executor, indexName string, srcs []string, columns
 		cond = &pql.Call{Name: "All"}
 	}
 
-	// Ensure ID column is always the first column.
-	// TODO(benbjohnson): Don't require id first.
-	if len(srcs) > 0 && srcs[0] != "_id" {
-		srcs = append([]string{"_id"}, srcs...)
-		columns = append([]*StmtColumn{{Name: "_id", Type: sql2.DataTypeInt}}, columns...)
+	// Determine mapping between result elements & columns.
+	// We'll exclude "_id" from the source columns here as well.
+	mapping := make([]int, len(columns))
+	srcs2 := make([]string, 0, len(srcs))
+	for i := range mapping {
+		if srcs[i] == "_id" {
+			mapping[i] = -1
+			continue
+		}
+
+		mapping[i] = len(srcs2)
+		srcs2 = append(srcs2, srcs[i])
 	}
 
 	return &ExtractNode{
 		executor:  executor,
 		indexName: indexName,
-		srcs:      srcs,    // source column names
+		srcs:      srcs2,   // source column names (excluding "id")
 		columns:   columns, // external column alias
+		mapping:   mapping,
 		cond:      cond,
 		row:       make([]interface{}, len(srcs)),
 	}
@@ -808,10 +819,12 @@ func (n *ExtractNode) First(ctx context.Context) error {
 }
 
 func (n *ExtractNode) Next(ctx context.Context) error {
+	// Fetch results if we haven't yet.
 	if err := n.init(ctx); err != nil {
 		return err
 	}
 
+	// Exit if no result rows remain.
 	if len(n.result) == 0 {
 		for i := range n.row {
 			n.row[i] = nil
@@ -819,18 +832,25 @@ func (n *ExtractNode) Next(ctx context.Context) error {
 		return sql.ErrNoRows
 	}
 
-	// Copy ID value to current row.
-	result := n.result[0]
-	if result.Column.Keyed {
-		n.row[0] = result.Column.Key
-	} else {
-		n.row[0] = int64(result.Column.ID)
+	// Map result elements to row elements.
+	for i, index := range n.mapping {
+		result := n.result[0]
+
+		// Map row array element to position in result row.
+		if index >= 0 {
+			n.row[i] = result.Rows[index]
+			continue
+		}
+
+		// Otherwise use ID for value.
+		if result.Column.Keyed {
+			n.row[i] = result.Column.Key
+		} else {
+			n.row[i] = int64(result.Column.ID)
+		}
 	}
 
-	// Copy values to current row.
-	for i, v := range result.Rows {
-		n.row[i+1] = v
-	}
+	// Move to next result element.
 	n.result = n.result[1:]
 
 	return nil
@@ -844,7 +864,7 @@ func (n *ExtractNode) init(ctx context.Context) error {
 	// Generate PQL query with all specified rows.
 	// Skip first column as it is the ID column.
 	call := &pql.Call{Name: "Extract", Children: []*pql.Call{n.cond}}
-	for _, src := range n.srcs[1:] {
+	for _, src := range n.srcs {
 		call.Children = append(call.Children,
 			&pql.Call{
 				Name: "Rows",
@@ -932,12 +952,13 @@ func (n *CountNode) Row() []interface{} { return n.row }
 
 // GroupByNode executes an aggregate with a GROUP BY against a FeatureBase index.
 type GroupByNode struct {
-	executor  *executor
-	indexName string
-	srcs      []string
-	columns   []*StmtColumn
-	aggregate *pql.Call
-	cond      *pql.Call
+	executor    *executor
+	indexName   string
+	groupByCols []string
+	columns     []*StmtColumn
+	mapping     []int
+	aggregate   *pql.Call
+	cond        *pql.Call
 
 	result *GroupCounts
 	index  int
@@ -945,15 +966,27 @@ type GroupByNode struct {
 	row []interface{}
 }
 
-func NewGroupByNode(executor *executor, indexName string, srcs []string, columns []*StmtColumn, aggregate, cond *pql.Call) *GroupByNode {
+func NewGroupByNode(executor *executor, indexName string, resultCols, groupByCols []string, columns []*StmtColumn, aggregate, cond *pql.Call) *GroupByNode {
+	// Map result columns to output columns.
+	mapping := make([]int, len(columns))
+	for i := range mapping {
+		if resultCols[i] == "_aggregate" {
+			mapping[i] = -1
+			continue
+		}
+
+		mapping[i] = stringSliceIndex(groupByCols, resultCols[i])
+	}
+
 	return &GroupByNode{
-		executor:  executor,
-		indexName: indexName,
-		srcs:      srcs,
-		columns:   columns,
-		aggregate: aggregate,
-		cond:      cond,
-		row:       make([]interface{}, len(srcs)+1),
+		executor:    executor,
+		indexName:   indexName,
+		groupByCols: groupByCols,
+		columns:     columns,
+		mapping:     mapping,
+		aggregate:   aggregate,
+		cond:        cond,
+		row:         make([]interface{}, len(columns)),
 	}
 }
 
@@ -983,19 +1016,25 @@ func (n *GroupByNode) Next(ctx context.Context) (err error) {
 	group := n.result.groups[n.index]
 	n.index++
 
-	if n.aggregate != nil {
-		n.row[0] = int64(group.Agg)
-	} else {
-		n.row[0] = int64(group.Count)
-	}
+	for i, index := range n.mapping {
+		// Assign aggregate to unmapped column.
+		if index == -1 {
+			if n.aggregate != nil {
+				n.row[i] = int64(group.Agg)
+			} else {
+				n.row[i] = int64(group.Count)
+			}
+			continue
+		}
 
-	for i, g := range group.Group {
+		// Otherwise map from group value to result column index.
+		g := group.Group[index]
 		if g.Value != nil {
-			n.row[i+1] = *g.Value
+			n.row[i] = *g.Value
 		} else if g.RowKey != "" {
-			n.row[i+1] = g.RowKey
+			n.row[i] = g.RowKey
 		} else {
-			n.row[i+1] = int64(g.RowID)
+			n.row[i] = int64(g.RowID)
 		}
 	}
 
@@ -1010,9 +1049,9 @@ func (n *GroupByNode) fetch(ctx context.Context) (*GroupCounts, error) {
 	}
 
 	// Choose fields to group by.
-	for _, src := range n.srcs {
+	for _, name := range n.groupByCols {
 		call.Children = append(call.Children, &pql.Call{
-			Name: "Rows", Args: map[string]interface{}{"_field": src},
+			Name: "Rows", Args: map[string]interface{}{"_field": name},
 		})
 	}
 
@@ -1058,4 +1097,14 @@ func sourceTableName(source sql2.Source) (string, error) {
 	default:
 		return "", fmt.Errorf("unexpected source type: %T", source)
 	}
+}
+
+// stringSliceIndex returns position of v in a. Returns -1 if not found.
+func stringSliceIndex(a []string, v string) int {
+	for i := range a {
+		if a[i] == v {
+			return i
+		}
+	}
+	return -1
 }

@@ -210,18 +210,18 @@ func TestPlanner_Select(t *testing.T) {
 	}
 
 	t.Run("UnqualifiedColumns", func(t *testing.T) {
-		results, columns := mustQueryRows(t, c.GetNode(0).Server, `SELECT _id, a, b FROM i0`)
+		results, columns := mustQueryRows(t, c.GetNode(0).Server, `SELECT a, b, _id FROM i0`)
 		if diff := cmp.Diff([][]interface{}{
-			{int64(1), int64(10), int64(100)},
-			{int64(2), int64(20), int64(200)},
+			{int64(10), int64(100), int64(1)},
+			{int64(20), int64(200), int64(2)},
 		}, results); diff != "" {
 			t.Fatal(diff)
 		}
 
 		if diff := cmp.Diff([]*pilosa.StmtColumn{
-			{Name: "_id", Type: "INT"},
 			{Name: "a", Type: "INT"},
 			{Name: "b", Type: "INT"},
+			{Name: "_id", Type: "INT"},
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
@@ -274,6 +274,23 @@ func TestPlanner_Select(t *testing.T) {
 
 		if diff := cmp.Diff([]*pilosa.StmtColumn{
 			{Name: "_id", Type: "INT"},
+			{Name: "a", Type: "INT"},
+			{Name: "b", Type: "INT"},
+		}, columns); diff != "" {
+			t.Fatal(diff)
+		}
+	})
+
+	t.Run("NoIdentifier", func(t *testing.T) {
+		results, columns := mustQueryRows(t, c.GetNode(0).Server, `SELECT a, b FROM i0`)
+		if diff := cmp.Diff([][]interface{}{
+			{int64(10), int64(100)},
+			{int64(20), int64(200)},
+		}, results); diff != "" {
+			t.Fatal(diff)
+		}
+
+		if diff := cmp.Diff([]*pilosa.StmtColumn{
 			{Name: "a", Type: "INT"},
 			{Name: "b", Type: "INT"},
 		}, columns); diff != "" {
@@ -372,6 +389,39 @@ func TestPlanner_GroupBy(t *testing.T) {
 		if diff := cmp.Diff([]*pilosa.StmtColumn{
 			{Name: "sum", Type: "INT"},
 			{Name: "x", Type: "INT"},
+		}, columns); diff != "" {
+			t.Fatal(diff)
+		}
+	})
+
+	t.Run("ReorderColumns", func(t *testing.T) {
+		results, columns := mustQueryRows(t, c.GetNode(0).Server, `SELECT x, COUNT(*) FROM i0 GROUP BY x`)
+		if diff := cmp.Diff([][]interface{}{
+			{int64(10), int64(2)},
+			{int64(20), int64(2)},
+		}, results); diff != "" {
+			t.Fatal(diff)
+		}
+
+		if diff := cmp.Diff([]*pilosa.StmtColumn{
+			{Name: "x", Type: "INT"},
+			{Name: "count", Type: "INT"},
+		}, columns); diff != "" {
+			t.Fatal(diff)
+		}
+	})
+
+	t.Run("NoResultColumn", func(t *testing.T) {
+		results, columns := mustQueryRows(t, c.GetNode(0).Server, `SELECT COUNT(*) FROM i0 GROUP BY x`)
+		if diff := cmp.Diff([][]interface{}{
+			{int64(2)},
+			{int64(2)},
+		}, results); diff != "" {
+			t.Fatal(diff)
+		}
+
+		if diff := cmp.Diff([]*pilosa.StmtColumn{
+			{Name: "count", Type: "INT"},
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
