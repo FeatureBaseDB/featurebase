@@ -28,7 +28,6 @@ import (
 	pilosa "github.com/molecula/featurebase/v2"
 	"github.com/molecula/featurebase/v2/logger"
 	"github.com/molecula/featurebase/v2/pg"
-	"github.com/molecula/featurebase/v2/vprint"
 
 	//"github.com/molecula/featurebase/v2/pg"
 	"github.com/molecula/featurebase/v2/pql"
@@ -346,13 +345,11 @@ func pgWriteStmtRows(w pg.QueryResultWriter, rows *pilosa.StmtRows) error {
 	for rows.Next() {
 		if first {
 			columns := rows.Columns()
-			vprint.VV("ROW=> %#v", rows.Row())
 			//TODO (twg) types:=rows.Types()
 			headers := make([]pg.ColumnInfo, len(columns))
-			vprint.VV("got columns %v", columns)
 			for i, column := range columns {
 				headers[i] = pg.ColumnInfo{
-					Name: column,
+					Name: column.Name,
 					Type: pg.TypeCharoid, //TODO(twg) types[i]
 				}
 			}
@@ -364,7 +361,6 @@ func pgWriteStmtRows(w pg.QueryResultWriter, rows *pilosa.StmtRows) error {
 			data = make([]string, len(headers))
 			first = false
 		}
-		vprint.VV("got row")
 		result := make([]interface{}, len(rows.Columns()))
 		// Create list of scan destination pointers.
 		dsts := make([]interface{}, len(result))
@@ -559,7 +555,6 @@ func (pqh *PilosaQueryHandler) HandleQuery(ctx context.Context, w pg.QueryResult
 	case pg.SimpleQuery:
 		if pqh.sqlVersion == SqlV2 {
 			stmt, err := pqh.Api.Plan(ctx, string(q))
-			vprint.VV("SQL2Plan: (%v) (%v)", string(q), err)
 			if err != nil {
 				return err
 			}
