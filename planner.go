@@ -23,7 +23,6 @@ import (
 
 	"github.com/molecula/featurebase/v2/pql"
 	"github.com/molecula/featurebase/v2/sql2"
-	"github.com/molecula/featurebase/v2/vprint"
 )
 
 type Planner struct {
