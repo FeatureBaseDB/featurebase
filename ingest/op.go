@@ -703,7 +703,7 @@ func (r *Request) ByShard(fields map[string]FieldType) (*ShardedRequest, error) 
 
 // merge combines the components of a sharded request back into a single
 // unsharded request, processing shards in numerical order.
-func (s *ShardedRequest) Merge() *Request {
+func (s *ShardedRequest) merge() *Request {
 	req := &Request{}
 	if s == nil || len(s.Ops) == 0 {
 		return req

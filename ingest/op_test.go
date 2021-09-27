@@ -12,30 +12,29 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package ingest_test
+package ingest
 
 import (
 	"math/rand"
 	"testing"
 
-	"github.com/molecula/featurebase/v2/ingest"
 	"github.com/molecula/featurebase/v2/shardwidth"
 )
 
 type opShardingTestCase struct {
 	name   string
-	input  *ingest.Request
-	output *ingest.ShardedRequest
+	input  *Request
+	output *ShardedRequest
 }
 
 var opShardingTestCases = []opShardingTestCase{
 	{
 		name: "sample",
-		input: &ingest.Request{
-			Ops: []*ingest.Operation{
+		input: &Request{
+			Ops: []*Operation{
 				{
-					OpType: ingest.OpSet,
-					FieldOps: map[string]*ingest.FieldOperation{
+					OpType: OpSet,
+					FieldOps: map[string]*FieldOperation{
 						"shard0": {
 							RecordIDs: []uint64{0, 1},
 						},
@@ -54,9 +53,9 @@ var opShardingTestCases = []opShardingTestCase{
 					},
 				},
 				{
-					OpType: ingest.OpRemove,
+					OpType: OpRemove,
 					Seq:    1,
-					FieldOps: map[string]*ingest.FieldOperation{
+					FieldOps: map[string]*FieldOperation{
 						"shard0-2": {
 							RecordIDs: []uint64{1, 2<<shardwidth.Exponent + 1},
 						},
@@ -64,12 +63,12 @@ var opShardingTestCases = []opShardingTestCase{
 				},
 			},
 		},
-		output: &ingest.ShardedRequest{
-			Ops: map[uint64][]*ingest.Operation{
+		output: &ShardedRequest{
+			Ops: map[uint64][]*Operation{
 				0: {
 					{
-						OpType: ingest.OpSet,
-						FieldOps: map[string]*ingest.FieldOperation{
+						OpType: OpSet,
+						FieldOps: map[string]*FieldOperation{
 							"shard0": {
 								RecordIDs: []uint64{0, 1},
 							},
@@ -81,9 +80,9 @@ var opShardingTestCases = []opShardingTestCase{
 						},
 					},
 					{
-						OpType: ingest.OpRemove,
+						OpType: OpRemove,
 						Seq:    1,
-						FieldOps: map[string]*ingest.FieldOperation{
+						FieldOps: map[string]*FieldOperation{
 							"shard0-2": {
 								RecordIDs: []uint64{1},
 							},
@@ -92,8 +91,8 @@ var opShardingTestCases = []opShardingTestCase{
 				},
 				1: {
 					{
-						OpType: ingest.OpSet,
-						FieldOps: map[string]*ingest.FieldOperation{
+						OpType: OpSet,
+						FieldOps: map[string]*FieldOperation{
 							"shard0-1": {
 								RecordIDs: []uint64{
 									1 << shardwidth.Exponent,
@@ -110,9 +109,9 @@ var opShardingTestCases = []opShardingTestCase{
 				},
 				2: {
 					{
-						OpType: ingest.OpRemove,
+						OpType: OpRemove,
 						Seq:    1,
-						FieldOps: map[string]*ingest.FieldOperation{
+						FieldOps: map[string]*FieldOperation{
 							"shard0-2": {
 								RecordIDs: []uint64{2<<shardwidth.Exponent + 1},
 							},
@@ -125,7 +124,7 @@ var opShardingTestCases = []opShardingTestCase{
 }
 
 func TestOpShardingSmall(t *testing.T) {
-	codec, _ := ingest.NewJSONCodec(nil)
+	codec, _ := NewJSONCodec(nil)
 	_ = codec.AddIntField("shard0", nil)
 	_ = codec.AddIntField("shard1", nil)
 	_ = codec.AddIntField("shard0-1", nil)
@@ -140,7 +139,7 @@ func TestOpShardingSmall(t *testing.T) {
 		if err := sharded.Compare(c.output); err != nil {
 			t.Fatalf("%s: shard: %v", c.name, err)
 		}
-		merged := sharded.Merge()
+		merged := sharded.merge()
 		if err := c.input.Compare(merged); err != nil {
 			t.Fatalf("%s: merge: %v", c.name, err)
 		}
@@ -148,7 +147,7 @@ func TestOpShardingSmall(t *testing.T) {
 }
 
 func TestOpShardingLarge(t *testing.T) {
-	codec, err := ingest.NewJSONCodec(nil)
+	codec, err := NewJSONCodec(nil)
 	if err != nil {
 		t.Fatalf("creating codec: %v", err)
 	}
@@ -176,19 +175,19 @@ func TestOpShardingLarge(t *testing.T) {
 		timeStamps[i] = int64(1234567890e9 + (i * 100e9))
 		signedValues[i] = (int64(i) % 16) // no negative values because they won't work with keys
 	}
-	op := &ingest.Operation{
-		OpType:   ingest.OpSet,
-		FieldOps: map[string]*ingest.FieldOperation{},
+	op := &Operation{
+		OpType:   OpSet,
+		FieldOps: map[string]*FieldOperation{},
 	}
-	req := &ingest.Request{
-		Ops: []*ingest.Operation{op},
+	req := &Request{
+		Ops: []*Operation{op},
 	}
-	op.FieldOps["tq"] = &ingest.FieldOperation{
+	op.FieldOps["tq"] = &FieldOperation{
 		RecordIDs: append([]uint64{}, recordIDs...),
 		Values:    append([]uint64{}, values...),
 		Signed:    timeStamps,
 	}
-	op.FieldOps["int"] = &ingest.FieldOperation{
+	op.FieldOps["int"] = &FieldOperation{
 		RecordIDs: recordIDs,
 		Signed:    signedValues,
 	}
@@ -221,7 +220,7 @@ func TestOpShardingLarge(t *testing.T) {
 			}
 		}
 	}
-	op.FieldOps["set"] = &ingest.FieldOperation{
+	op.FieldOps["set"] = &FieldOperation{
 		RecordIDs: recordIDs,
 		Values:    values,
 	}
@@ -230,7 +229,7 @@ func TestOpShardingLarge(t *testing.T) {
 	if err != nil {
 		t.Errorf("sharding: unexpected error %v", err)
 	}
-	merged := sharded.Merge()
+	merged := sharded.merge()
 	if err := req.Compare(merged); err != nil {
 		t.Fatalf("merge comparison: %v", err)
 	}
@@ -241,7 +240,7 @@ func TestFancySharding(t *testing.T) {
 	const recordCount = 5000
 	grr := rand.New(rand.NewSource(0))
 	for i := 0; i < 100; i++ {
-		f := &ingest.FieldOperation{RecordIDs: make([]uint64, recordCount), Values: make([]uint64, recordCount)}
+		f := &FieldOperation{RecordIDs: make([]uint64, recordCount), Values: make([]uint64, recordCount)}
 		shards := make([]int, shardLimit)
 		for j := range f.RecordIDs {
 			v := uint64(grr.Int63n(shardLimit << shardwidth.Exponent))
