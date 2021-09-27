@@ -432,7 +432,8 @@ func (p *Portal) Execute() (shouldTerminate bool, queryReady bool, err error) {
 			return
 		}
 		p.Add(rowDescription)
-		dataRow, _ := p.Encoder.TextRow("PostgresSQL 13.0 (molecula)")
+		mesg := fmt.Sprintf("PostgresSQL 13.0 (molecula.%v)", p.server.QueryHandler.Version())
+		dataRow, _ := p.Encoder.TextRow(mesg)
 		p.Add(dataRow)
 	case pgSelect1:
 		rowDescription, e := p.Encoder.EncodeColumn("?column?", int32(23), 4)
