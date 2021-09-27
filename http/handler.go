@@ -1360,6 +1360,7 @@ func (h *Handler) handlePostIngestData(w http.ResponseWriter, r *http.Request) {
 		err = qcx.Finish()
 		if err != nil {
 			http.Error(w, fmt.Sprintf("ingesting: %v", err), http.StatusInternalServerError)
+			return
 		}
 	} else {
 		qcx.Abort()
