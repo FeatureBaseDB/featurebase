@@ -200,6 +200,9 @@ type Config struct {
 		// Setting this to 0 disables the limit.
 		// This mostly exists because other DBs seem to have it.
 		ConnectionLimit uint16 `toml:"max-connections"`
+		// SqlVersion is which type of sqlhandling to be applied.
+		// The constant SqlV2 can be used to try the new experimental Molecula SQL handling
+		SqlVersion uint16 `toml:"sql-version"`
 	} `toml:"postgres"`
 
 	// Storage.Backend determines which Tx implementation the holder/Index will

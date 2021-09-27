@@ -645,6 +645,11 @@ func (rs *StmtRows) Columns() []*StmtColumn {
 	return rs.node.Columns()
 }
 
+	/*
+func (rs *StmtRows) Row() int64 {
+	return rs.node.Row()[0].(int64)
+}
+	*/
 func (rs *StmtRows) Next() bool {
 	if rs.err != nil {
 		return false

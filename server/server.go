@@ -40,7 +40,7 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	"github.com/molecula/featurebase/v2"
+	pilosa "github.com/molecula/featurebase/v2"
 	"github.com/molecula/featurebase/v2/boltdb"
 	"github.com/molecula/featurebase/v2/encoding/proto"
 	petcd "github.com/molecula/featurebase/v2/etcd"
@@ -265,7 +265,7 @@ func (m *Command) Start() (err error) {
 			}
 			tlsConf = conf
 		}
-		m.pgserver = NewPostgresServer(m.API, m.logger, tlsConf)
+		m.pgserver = NewPostgresServer(m.API, m.logger, tlsConf, SqlVersion(m.Config.Postgres.SqlVersion))
 		m.pgserver.s.StartupTimeout = time.Duration(m.Config.Postgres.StartupTimeout)
 		m.pgserver.s.ReadTimeout = time.Duration(m.Config.Postgres.ReadTimeout)
 		m.pgserver.s.WriteTimeout = time.Duration(m.Config.Postgres.WriteTimeout)

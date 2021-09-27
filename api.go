@@ -36,6 +36,8 @@ import (
 
 	"github.com/molecula/featurebase/v2/disco"
 	"github.com/molecula/featurebase/v2/ingest"
+
+	//"github.com/molecula/featurebase/v2/pg"
 	"github.com/molecula/featurebase/v2/pql"
 	"github.com/molecula/featurebase/v2/roaring"
 	"github.com/molecula/featurebase/v2/stats"
@@ -3023,6 +3025,9 @@ processing:
 		}
 	}
 	return result, ctx.Err()
+}
+func (api *API) Plan(ctx context.Context, q string) (*Stmt, error) {
+	return api.server.PlanSQL(ctx, q)
 }
 
 type serverInfo struct {
