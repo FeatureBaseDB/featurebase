@@ -1826,11 +1826,18 @@ func (api *API) ImportValueWithTx(ctx context.Context, qcx *Qcx, req *ImportValu
 	return nil
 }
 
-// helper function: do the apply stuff for a known index with known fields
+// ingestNodeOperationsForFields does the actual work of applying operations
+// to a given index with a map of known fields and an already-parsed
+// ShardedRequest. This is used locally on the node that first receives
+// the request, after it does the parsing, and on other nodes because the
+// format they get is already that rather than JSON, so it's the common
+// path *after* key translation and sorting into shards.
 func (api *API) ingestNodeOperationsForFields(ctx context.Context, qcx *Qcx, index *Index, knownFields map[string]*Field, req *ingest.ShardedRequest) error {
 	eg, ctx := errgroup.WithContext(ctx)
 	for shard, ops := range req.Ops {
-		// loop variable shadow capture is the go equivalent of man door hook hand
+		// create new local copies of these values so the goroutine uses these
+		// copies, and doesn't read the actual loop variables, which are being
+		// changed by the loop.
 		shard, ops := shard, ops
 		eg.Go(func() error {
 			return api.applyOperations(ctx, qcx, index, shard, knownFields, ops)
