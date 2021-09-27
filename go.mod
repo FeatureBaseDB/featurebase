@@ -54,7 +54,7 @@ require (
 	golang.org/x/sys v0.0.0-20210510120138-977fb7262007 // indirect
 	golang.org/x/text v0.3.5 // indirect
 	google.golang.org/grpc v1.28.0
-	gopkg.in/yaml.v2 v2.3.0
+	gopkg.in/yaml.v2 v2.3.0 // indirect
 	modernc.org/mathutil v1.0.0
 	modernc.org/strutil v1.0.0
 	sigs.k8s.io/yaml v1.2.0 // indirect
