@@ -1567,8 +1567,7 @@ func (c *cluster) translateIndexKeys(ctx context.Context, indexName string, keys
 	return ids, nil
 }
 
-// This implements ingest's key translator interface on a cluster/index
-// pair.
+// This implements ingest's key translator interface on a cluster/index pair.
 type clusterKeyTranslator struct {
 	ctx       context.Context // we're created within a request context and need to pass that to cluster ops
 	c         *cluster

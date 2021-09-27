@@ -958,9 +958,6 @@ func (s Serializer) encodeShardedIngestRequest(req *ingest.ShardedRequest) *pb.S
 
 func (s Serializer) encodeShardIngestOperations(ops []*ingest.Operation) *pb.ShardIngestOperations {
 	out := &pb.ShardIngestOperations{}
-	if len(ops) == 0 {
-		return out
-	}
 	for _, op := range ops {
 		if op == nil {
 			continue
