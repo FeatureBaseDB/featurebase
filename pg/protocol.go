@@ -272,12 +272,11 @@ const (
 )
 
 type Portal struct {
-	Name     string
-	Writer   *message.WireWriter
-	commands []message.Message
-	Encoder  *message.Encoder
-	mapper   *sql.Mapper
-	//results      []Result
+	Name         string
+	Writer       *message.WireWriter
+	commands     []message.Message
+	Encoder      *message.Encoder
+	mapper       *sql.Mapper
 	sql          string
 	pgspecial    PgType
 	pid          int32
@@ -332,76 +331,75 @@ func (p *Portal) Parse(data []byte) {
 		query, err := p.mapper.MapSQL(queryStr)
 		if err != nil {
 			return
+		}
+
+		if strings.Contains(strings.ToLower(query.SQL), "select 1") {
+			p.pgspecial = pgSelect1
+			p.Name = "SELECT"
 		} else {
-
-			if strings.Contains(strings.ToLower(query.SQL), "select 1") {
-				p.pgspecial = pgSelect1
-				p.Name = "SELECT"
-			} else {
-				switch query.SQLType {
-				case sql.SQLTypeSet:
-					p.Name = "SET"
-					set := query.Statement.(*sqlparser.Set)
-					p.pgspecial = 0
-					for _, item := range set.Exprs {
-						if item.Name.String() == "application_name" {
-							switch item.Expr.(type) {
-							case *sqlparser.SQLVal:
-								p.pgspecial = pgSetApplication
-							}
+			switch query.SQLType {
+			case sql.SQLTypeSet:
+				p.Name = "SET"
+				set := query.Statement.(*sqlparser.Set)
+				p.pgspecial = 0
+				for _, item := range set.Exprs {
+					if item.Name.String() == "application_name" {
+						switch item.Expr.(type) {
+						case *sqlparser.SQLVal:
+							p.pgspecial = pgSetApplication
 						}
 					}
-				case sql.SQLTypeSelect:
-					p.Name = "SELECT"
-					p.pgspecial = pgPassOn
-					stmt := query.Statement.(*sqlparser.Select)
-					for _, item := range stmt.SelectExprs {
-						switch expr := item.(type) {
-						case *sqlparser.AliasedExpr:
-							switch colExpr := expr.Expr.(type) {
-							case *sqlparser.FuncExpr:
-								funcName := strings.ToLower(colExpr.Name.String())
-								switch funcName {
-								case "pg_backend_pid":
-									//SELECT pg_backend_pid()
-									p.pgspecial = pgBackendPid
-								case "pg_terminate_backend":
-									//select pg_terminate_backend(100)
-									p.pgspecial = pgTerminate
-								case "version":
-									//SELECT VERSION() AS version
-									p.pgspecial = pgVersion
-								}
-								//need to return  the pid from the cancelation object
-								//add row description object
-								//add data row for item
-							}
-						}
-
-					}
-					for _, item := range stmt.From {
-						switch from := item.(type) {
-						case *sqlparser.AliasedTableExpr:
-							tableName := from.Expr.(sqlparser.TableName).ToViewName().Name.String()
-							switch tableName {
-							case "pg_type":
-								p.pgspecial = pgCountType
-							case "pg_stat_activity":
-								p.pgspecial = pgQueryTime
-							case "tables":
-								p.pgspecial = pgSchema
-							}
-						}
-					}
-					p.sql = queryStr
-				case sql.SQLTypeBegin:
-					// Ignore BEGIN
-					p.pgspecial = pgBegin
-				case sql.SQLTypeShow:
-					p.Name = "SHOW"
-					p.pgspecial = pgPassOn
-					p.sql = queryStr
 				}
+			case sql.SQLTypeSelect:
+				p.Name = "SELECT"
+				p.pgspecial = pgPassOn
+				stmt := query.Statement.(*sqlparser.Select)
+				for _, item := range stmt.SelectExprs {
+					switch expr := item.(type) {
+					case *sqlparser.AliasedExpr:
+						switch colExpr := expr.Expr.(type) {
+						case *sqlparser.FuncExpr:
+							funcName := strings.ToLower(colExpr.Name.String())
+							switch funcName {
+							case "pg_backend_pid":
+								//SELECT pg_backend_pid()
+								p.pgspecial = pgBackendPid
+							case "pg_terminate_backend":
+								//select pg_terminate_backend(100)
+								p.pgspecial = pgTerminate
+							case "version":
+								//SELECT VERSION() AS version
+								p.pgspecial = pgVersion
+							}
+							//need to return  the pid from the cancelation object
+							//add row description object
+							//add data row for item
+						}
+					}
+
+				}
+				for _, item := range stmt.From {
+					switch from := item.(type) {
+					case *sqlparser.AliasedTableExpr:
+						tableName := from.Expr.(sqlparser.TableName).ToViewName().Name.String()
+						switch tableName {
+						case "pg_type":
+							p.pgspecial = pgCountType
+						case "pg_stat_activity":
+							p.pgspecial = pgQueryTime
+						case "tables":
+							p.pgspecial = pgSchema
+						}
+					}
+				}
+				p.sql = queryStr
+			case sql.SQLTypeBegin:
+				// Ignore BEGIN
+				p.pgspecial = pgBegin
+			case sql.SQLTypeShow:
+				p.Name = "SHOW"
+				p.pgspecial = pgPassOn
+				p.sql = queryStr
 			}
 		}
 	} else {
@@ -410,18 +408,9 @@ func (p *Portal) Parse(data []byte) {
 	p.Add(message.ParseOK)
 }
 func (p *Portal) Describe() {
-	/*
-		if p.pgspecial != pgNotPg {
-			//do custom handling for setup
-		}
-		if len(p.results) == 0 {
-			p.Add(&message.NoData)
-			p.Add(&message.EmptyQueryResponse)
-			return
-		}
-	*/
-
+	// Placeholder should we need to handle the Decribe request
 }
+
 func (p *Portal) Execute() (shouldTerminate bool, queryReady bool, err error) {
 	queryReady = true
 	switch p.pgspecial {
@@ -824,7 +813,6 @@ func (s *Server) handleStandard(ctx context.Context, proto Protocol, conn net.Co
 
 		// Read the next packet.
 		msg, err := r.ReadMessage()
-		msg.Dump("start-") // TODO(twg) remove
 		if err != nil {
 			if err == errPreempted {
 				// The server is shutting down.

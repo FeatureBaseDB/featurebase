@@ -30,7 +30,7 @@ const (
 	// TypeReadyForQuery is a message used to indicate that the server is ready for another query.
 	TypeReadyForQuery Type = 'Z'
 
-	// TypeCommandComplete is a message used to indicate that a query has completed. Backend
+	// TypeCommandComplete is a Backend message used to indicate that a query has completed.
 	TypeCommandComplete Type = 'C'
 
 	// TypeClos is a message used to indicate that a query has completed. Frontend
@@ -60,8 +60,8 @@ const (
 	TypeBind         Type = 'B'
 	TypeBindComplete Type = '2'
 
-	TypeExecute            Type = 'E' // Frontend TODO(TWG)
-	TypeError              Type = 'E' // Backend   SOMETHING NOT RIGHT HERE
+	TypeExecute            Type = 'E' // Frontend
+	TypeError              Type = 'E' // Backend
 	TypeSync               Type = 'S' // Frontend
 	TypeParameterStatus    Type = 'S' // Backend
 	TypeDescribe           Type = 'D' // Frontend
