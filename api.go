@@ -1942,16 +1942,25 @@ func (api *API) IngestOperations(ctx context.Context, qcx *Qcx, indexName string
 	if len(snap.Nodes) == 1 {
 		return api.ingestNodeOperationsForFields(ctx, qcx, index, knownFields, sharded)
 	}
-	// split up by fields in some way
+	// Created new ShardedRequest objects for every node, giving each of them
+	// all the shards that apply to them.
 	byNode := make(map[string]*ingest.ShardedRequest)
 	for shard, ops := range sharded.Ops {
 		nodes := snap.ShardNodes(indexName, shard)
-		forThisShard := byNode[nodes[0].ID]
-		if forThisShard == nil {
-			byNode[nodes[0].ID] = &ingest.ShardedRequest{Ops: map[uint64][]*ingest.Operation{shard: ops}}
-			continue
+		for _, node := range nodes {
+			forThisShard := byNode[node.ID]
+			if forThisShard == nil {
+				// Create new ShardedRequest for the target node, with its op map
+				// mapping this shard to the ops for this shard.
+				byNode[node.ID] = &ingest.ShardedRequest{Ops: map[uint64][]*ingest.Operation{shard: ops}}
+				continue
+			}
+			// Add this shard to the existing ShardedRequest's Ops map. Note that
+			// we don't have to worry about overwrites; we can't have seen this
+			// shard before, because we're in a range loop on a map where the shard
+			// is the key.
+			forThisShard.Ops[shard] = ops
 		}
-		forThisShard.Ops[shard] = ops
 	}
 	eg, ctx := errgroup.WithContext(ctx)
 	for _, node := range snap.Nodes {
