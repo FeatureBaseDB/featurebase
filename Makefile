@@ -3,6 +3,10 @@
 CLONE_URL=github.com/pilosa/pilosa
 MOD_VERSION=v2
 VERSION := $(shell git describe --tags 2> /dev/null || echo unknown)
+MAJOR_VERSION=$(shell cut -d '.' -f1 <<<$(VERSION) | cut -d 'v' -f2)
+MAJOR_VERSION_INCREMENT=$(shell echo `expr $(MAJOR_VERSION) + 1`)
+MINOR_VERSION=$(shell cut -d'.' -f2-3 <<<$(VERSION))
+RELEASE_VERSION=$(shell echo v$(MAJOR_VERSION_INCREMENT).$(MINOR_VERSION))
 VARIANT = Molecula
 GO=go
 GOOS=$(shell $(GO) env GOOS)
@@ -13,7 +17,7 @@ BRANCH_ID := $(BRANCH)-$(GOOS)-$(GOARCH)
 BUILD_TIME := $(shell date -u +%FT%T%z)
 SHARD_WIDTH = 20
 COMMIT := $(shell git describe --exact-match >/dev/null 2>&1 || git rev-parse --short HEAD)
-LDFLAGS="-X github.com/molecula/featurebase/v2.Version=$(VERSION) -X github.com/molecula/featurebase/v2.BuildTime=$(BUILD_TIME) -X github.com/molecula/featurebase/v2.Variant=$(VARIANT) -X github.com/molecula/featurebase/v2.Commit=$(COMMIT) -X github.com/molecula/featurebase/v2.TrialDeadline=$(TRIAL_DEADLINE)"
+LDFLAGS="-X github.com/molecula/featurebase/v2.Version=$(RELEASE_VERSION) -X github.com/molecula/featurebase/v2.BuildTime=$(BUILD_TIME) -X github.com/molecula/featurebase/v2.Variant=$(VARIANT) -X github.com/molecula/featurebase/v2.Commit=$(COMMIT) -X github.com/molecula/featurebase/v2.TrialDeadline=$(TRIAL_DEADLINE)"
 GO_VERSION=1.16.3
 DOCKER_BUILD= # set to 1 to use `docker-build` instead of `build` when creating a release
 BUILD_TAGS += shardwidth$(SHARD_WIDTH)
