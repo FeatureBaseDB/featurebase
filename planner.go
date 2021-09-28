@@ -645,11 +645,12 @@ func (rs *StmtRows) Columns() []*StmtColumn {
 	return rs.node.Columns()
 }
 
-	/*
+/*
 func (rs *StmtRows) Row() int64 {
 	return rs.node.Row()[0].(int64)
 }
-	*/
+*/
+
 func (rs *StmtRows) Next() bool {
 	if rs.err != nil {
 		return false
@@ -696,6 +697,15 @@ func (rs *StmtRows) Scan(dst ...interface{}) error {
 
 		// Copy row value to scan destination.
 		switch v := row[i].(type) {
+		case bool:
+			switch p := dst[i].(type) {
+			case *bool:
+				*p = v
+			case *interface{}:
+				*p = v
+			default:
+				return fmt.Errorf("cannot scan %T value into %T destination at index %d", v, p, i)
+			}
 		case int64:
 			switch p := dst[i].(type) {
 			case *int:
@@ -708,6 +718,48 @@ func (rs *StmtRows) Scan(dst ...interface{}) error {
 				*p = uint64(v)
 			case *interface{}:
 				*p = v
+			default:
+				return fmt.Errorf("cannot scan %T value into %T destination at index %d", v, p, i)
+			}
+		case uint64:
+			switch p := dst[i].(type) {
+			case *int:
+				*p = int(v)
+			case *int64:
+				*p = int64(v)
+			case *uint:
+				*p = uint(v)
+			case *uint64:
+				*p = uint64(v)
+			case *interface{}:
+				*p = v
+			default:
+				return fmt.Errorf("cannot scan %T value into %T destination at index %d", v, p, i)
+			}
+		case []uint64:
+			switch p := dst[i].(type) {
+			case *[]uint64:
+				*p = []uint64(v)
+			case *interface{}:
+				*p = joinUint64Slice(v)
+			default:
+				return fmt.Errorf("cannot scan %T value into %T destination at index %d", v, p, i)
+			}
+		case string:
+			switch p := dst[i].(type) {
+			case *string:
+				*p = v
+			case *interface{}:
+				*p = v
+			default:
+				return fmt.Errorf("cannot scan %T value into %T destination at index %d", v, p, i)
+			}
+		case []string:
+			switch p := dst[i].(type) {
+			case *[]string:
+				*p = []string(v)
+			case *interface{}:
+				*p = strings.Join(v, ",")
 			default:
 				return fmt.Errorf("cannot scan %T value into %T destination at index %d", v, p, i)
 			}
@@ -1112,4 +1164,16 @@ func stringSliceIndex(a []string, v string) int {
 		}
 	}
 	return -1
+}
+
+func joinUint64Slice(a []uint64) string {
+	b := []byte("[")
+	for i, v := range a {
+		b = strconv.AppendUint(b, v, 10)
+		if i < len(a)-1 {
+			b = append(b, ',')
+		}
+	}
+	b = append(b, ']')
+	return string(b)
 }
