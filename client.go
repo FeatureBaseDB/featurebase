@@ -19,6 +19,7 @@ import (
 	"io"
 	"time"
 
+	"github.com/molecula/featurebase/v2/ingest"
 	pnet "github.com/molecula/featurebase/v2/net"
 	"github.com/molecula/featurebase/v2/topology"
 )
@@ -81,6 +82,7 @@ type InternalClient interface {
 	ImportRoaring(ctx context.Context, uri *pnet.URI, index, field string, shard uint64, remote bool, req *ImportRoaringRequest) error
 	ShardReader(ctx context.Context, index string, shard uint64) (io.ReadCloser, error)
 	MutexCheck(ctx context.Context, uri *pnet.URI, index string, field string, details bool, limit int) (map[uint64]map[uint64][]uint64, error)
+	IngestNodeOperations(ctx context.Context, uri *pnet.URI, indexName string, ireq *ingest.ShardedRequest) error
 
 	IDAllocDataReader(ctx context.Context) (io.ReadCloser, error)
 	IndexTranslateDataReader(ctx context.Context, index string, partitionID int) (io.ReadCloser, error)
@@ -216,6 +218,10 @@ func (n nopInternalClient) ImportRoaring(ctx context.Context, uri *pnet.URI, ind
 
 func (n nopInternalClient) MutexCheck(ctx context.Context, uri *pnet.URI, index, field string, details bool, limit int) (map[uint64]map[uint64][]uint64, error) {
 	return nil, nil
+}
+
+func (n nopInternalClient) IngestNodeOperations(ctx context.Context, uri *pnet.URI, indexName string, ireq *ingest.ShardedRequest) error {
+	return nil
 }
 
 func (n nopInternalClient) ShardReader(ctx context.Context, index string, shard uint64) (io.ReadCloser, error) {

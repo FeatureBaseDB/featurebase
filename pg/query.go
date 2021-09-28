@@ -61,6 +61,7 @@ type QueryHandler interface {
 	// HandleQuery executes a query and writes the results back.
 	HandleQuery(context.Context, QueryResultWriter, Query) error
 	HandleSchema(context.Context, *Portal) error
+	Version() string
 }
 
 // queryResultWriter implements QueryResultWrtiter over postgres wire protocol.

@@ -596,7 +596,16 @@ func (qdh *QueryDecodeHandler) HandleQuery(ctx context.Context, w pg.QueryResult
 
 	return qdh.Child.HandleQuery(ctx, w, q)
 }
+func (qdh *QueryDecodeHandler) Version() string {
+	return qdh.Child.Version()
+}
 
+func (pqh *PilosaQueryHandler) Version() string {
+	if pqh.sqlVersion > 0 {
+		return "v2"
+	}
+	return "v1"
+}
 func (pqh *PilosaQueryHandler) HandleSchema(ctx context.Context, portal *pg.Portal) error {
 	schema, err := pqh.Api.Schema(context.Background(), false)
 	if err != nil {
