@@ -24,7 +24,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/molecula/featurebase/v2"
+	pilosa "github.com/molecula/featurebase/v2"
 	"github.com/molecula/featurebase/v2/rbf"
 	"github.com/molecula/featurebase/v2/rbf/cfg"
 	"github.com/molecula/featurebase/v2/roaring"
@@ -148,7 +148,7 @@ func BuildSchema(dataDir string) ([]byte, error) {
 					l = &local{
 						Name:      index,
 						Fields:    make([]*pilosa.FieldInfo, 0),
-						CreatedAt: uint64(stat.Ctim.Nano()),
+						CreatedAt: uint64(CTimeNano(stat)),
 						Options:   *io,
 					}
 					//index options
@@ -158,7 +158,7 @@ func BuildSchema(dataDir string) ([]byte, error) {
 
 				field := t[2]
 				if field != "_exists" {
-					fi, err := pilosa.UnmarshalFieldOptions(field, stat.Ctim.Nano(), content)
+					fi, err := pilosa.UnmarshalFieldOptions(field, CTimeNano(stat), content)
 					if err != nil {
 						return err
 					}
