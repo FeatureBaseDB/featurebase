@@ -32,6 +32,7 @@ import (
 
 	"github.com/molecula/featurebase/v2/pg/message"
 	"github.com/molecula/featurebase/v2/sql"
+	"github.com/molecula/featurebase/v2/vprint"
 	"github.com/pkg/errors"
 	"vitess.io/vitess/go/vt/sqlparser"
 )
@@ -269,6 +270,7 @@ const (
 	pgSelect1        PgType = 'h'
 	pgSchema         PgType = 'i'
 	pgBegin          PgType = 'j'
+	pgTypeLen        PgType = 'k'
 )
 
 type Portal struct {
@@ -297,6 +299,8 @@ func (p *Portal) Bind() {
 }
 
 var lookPQL = regexp.MustCompile(`\[.*\].*\)\z`)
+
+const POSTGRESLENSQL = `SELECT t.typlen FROM pg_catalog.pg_type t, pg_catalog.pg_namespace n WHERE t.typnamespace=n.oid AND t.typname='name' AND n.nspname='pg_catalog'`
 
 func (p *Portal) Parse(data []byte) {
 	p.queryStart = time.Now()
@@ -335,6 +339,10 @@ func (p *Portal) Parse(data []byte) {
 
 		if strings.Contains(strings.ToLower(query.SQL), "select 1") {
 			p.pgspecial = pgSelect1
+			p.Name = "SELECT"
+		} else if strings.Contains(queryStr, POSTGRESLENSQL) {
+			vprint.VV("YELLOWFIN Len")
+			p.pgspecial = pgTypeLen
 			p.Name = "SELECT"
 		} else {
 			switch query.SQLType {
@@ -565,6 +573,16 @@ func (p *Portal) Execute() (shouldTerminate bool, queryReady bool, err error) {
 
 	case pgBegin:
 		p.Name = "BEGIN"
+	case pgTypeLen:
+		rowDescription, e := p.Encoder.EncodeColumn("typelen", int32(21), 2)
+		if e != nil {
+			err = e
+			return
+		}
+		p.Add(rowDescription)
+		mesg := "64"
+		dataRow, _ := p.Encoder.TextRow(mesg)
+		p.Add(dataRow)
 	}
 
 	//maybe add in the number of items in select clause
