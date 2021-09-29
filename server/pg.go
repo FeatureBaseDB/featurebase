@@ -418,6 +418,14 @@ func pgWriteStmtRows(w pg.QueryResultWriter, rows *pilosa.StmtRows) error {
 	}
 	return nil
 }
+func getPgTypeFromColumnInfo(sql2type string) pg.Type {
+	ret := pg.TypeCharoid
+	switch sql2type {
+	case sql2.DataTypeInt:
+		ret = pg.TypeINT4OID
+	}
+	return ret
+}
 
 func pgWriteRowser(w pg.QueryResultWriter, result pb.ToRowser) error {
 	var data []string
@@ -427,7 +435,8 @@ func pgWriteRowser(w pg.QueryResultWriter, result pb.ToRowser) error {
 			for i, h := range row.Headers {
 				headers[i] = pg.ColumnInfo{
 					Name: h.Name,
-					Type: pg.TypeCharoid,
+					Type: pg.TypeCharoid, // TODO(twg) this needs to be updated with type
+					// information so it works from psql client
 				}
 			}
 			err := w.WriteHeader(headers...)
