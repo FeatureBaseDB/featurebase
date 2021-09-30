@@ -331,7 +331,7 @@ func (p *Portal) Parse(data []byte) {
 	}
 
 	if len(queryStr) > 2 {
-
+		vprint.VV("SQL=[%v]", queryStr)
 		query, err := p.mapper.MapSQL(queryStr)
 		if err != nil {
 			return
@@ -574,6 +574,7 @@ func (p *Portal) Execute() (shouldTerminate bool, queryReady bool, err error) {
 	case pgBegin:
 		p.Name = "BEGIN"
 	case pgTypeLen:
+		vprint.VV("adding typelen message")
 		rowDescription, e := p.Encoder.EncodeColumn("typelen", int32(21), 2)
 		if e != nil {
 			err = e

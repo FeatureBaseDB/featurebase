@@ -56,7 +56,7 @@ func NewDefaultConfig() *Config {
 		MaxWALSize:           DefaultMaxWALSize,
 		MinWALCheckpointSize: DefaultMinWALCheckpointSize,
 		MaxWALCheckpointSize: DefaultMaxWALCheckpointSize,
-		FsyncEnabled:         true,
+		FsyncEnabled:         false,
 
 		// CI passed with 20. 50 was too big for CI, even on X-large instances.
 		// For now we default to 0, which means use sync.Pool.
