@@ -1,6 +1,7 @@
 module github.com/molecula/featurebase/v2
 
 replace go.etcd.io/etcd => github.com/molecula/etcd v0.0.0-20210930172242-ad94b354f72c
+replace go.etcd.io/bbolt => github.com/seebs/bbolt v0.0.0-20210930181431-2ea708af0554
 
 require (
 	github.com/CAFxX/gcnotifier v0.0.0-20190112062741-224a280d589d
