@@ -393,7 +393,7 @@ func MustNewTranslateStore(tb testing.TB) *boltdb.TranslateStore {
 		panic(err)
 	}
 
-	s := boltdb.NewTranslateStore("I", "F", 0, topology.DefaultPartitionN)
+	s := boltdb.NewTranslateStore("I", "F", 0, topology.DefaultPartitionN, false)
 	s.Path = f.Name()
 	return s
 }

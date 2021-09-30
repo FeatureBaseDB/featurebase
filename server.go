@@ -339,6 +339,9 @@ func OptServerOpenTranslateReader(fn OpenTranslateReaderFunc) ServerOption {
 func OptServerStorageConfig(cfg *storage.Config) ServerOption {
 	return func(s *Server) error {
 		s.holderConfig.StorageConfig = cfg
+		// For historical reasons, RBF's config can ignore the storage config
+		// in some cases.
+		s.holderConfig.RBFConfig.FsyncEnabled = s.holderConfig.StorageConfig.FsyncEnabled
 		return nil
 	}
 }

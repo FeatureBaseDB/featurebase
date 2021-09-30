@@ -135,8 +135,12 @@ func (r *boltRegistrar) OpenDBWrapper(path string, doAllocZero bool, cfg *storag
 	if !DirExists(path) {
 		PanicOn(os.MkdirAll(dir, 0755))
 	}
+	fsyncEnabled := true
+	if cfg != nil {
+		fsyncEnabled = cfg.FsyncEnabled
+	}
 
-	db, err := bolt.Open(path, 0666, &bolt.Options{Timeout: 5 * time.Second, InitialMmapSize: TxInitialMmapSize})
+	db, err := bolt.Open(path, 0666, &bolt.Options{Timeout: 5 * time.Second, InitialMmapSize: TxInitialMmapSize, NoSync: !fsyncEnabled})
 	if err != nil {
 		return nil, errors.Wrapf(err, fmt.Sprintf("open bolt path '%v'", path))
 	}
@@ -187,6 +191,7 @@ func (r *boltRegistrar) OpenDBWrapper(path string, doAllocZero bool, cfg *storag
 		openTx:      make(map[*BoltTx]bool),
 
 		DeleteEmptyContainer: true,
+		fsyncEnabled:         cfg.FsyncEnabled,
 	}
 	r.unprotectedRegister(w)
 
@@ -226,7 +231,7 @@ func (w *BoltWrapper) CloseDB() error {
 func (w *BoltWrapper) OpenDB() error {
 	w.muDb.Lock()
 	defer w.muDb.Unlock()
-	db, err := bolt.Open(w.path, 0666, &bolt.Options{Timeout: 5 * time.Second, InitialMmapSize: TxInitialMmapSize})
+	db, err := bolt.Open(w.path, 0666, &bolt.Options{Timeout: 5 * time.Second, InitialMmapSize: TxInitialMmapSize, NoSync: !w.fsyncEnabled})
 	if err != nil {
 		return err
 	}
@@ -315,6 +320,7 @@ type BoltWrapper struct {
 	doAllocZero bool
 
 	DeleteEmptyContainer bool
+	fsyncEnabled         bool // for tracking whether our initial config wanted fsync on
 
 	openTx map[*BoltTx]bool
 }

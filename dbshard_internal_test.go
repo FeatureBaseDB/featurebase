@@ -330,6 +330,7 @@ func Test_DBPerShard_GetFieldView2Shards_map_from_RBF(t *testing.T) {
 
 	cfg := mustHolderConfig()
 	cfg.StorageConfig.Backend = "rbf"
+	cfg.StorageConfig.FsyncEnabled = false
 	holder := NewHolder(tmpdir, cfg)
 	defer holder.Close()
 

@@ -197,7 +197,7 @@ TranslatorSummary{
 }
 
 // OpenTranslateStoreFunc represents a function for instantiating and opening a TranslateStore.
-type OpenTranslateStoreFunc func(path, index, field string, partitionID, partitionN int) (TranslateStore, error)
+type OpenTranslateStoreFunc func(path, index, field string, partitionID, partitionN int, fsyncEnabled bool) (TranslateStore, error)
 
 // GenerateNextPartitionedID returns the next ID within the same partition.
 func GenerateNextPartitionedID(index string, prev uint64, partitionID, partitionN int) uint64 {
@@ -407,7 +407,7 @@ var _ OpenTranslateStoreFunc = OpenInMemTranslateStore
 
 // OpenInMemTranslateStore returns a new instance of InMemTranslateStore.
 // Implements OpenTranslateStoreFunc.
-func OpenInMemTranslateStore(rawurl, index, field string, partitionID, partitionN int) (TranslateStore, error) {
+func OpenInMemTranslateStore(rawurl, index, field string, partitionID, partitionN int, fsyncEnabled bool) (TranslateStore, error) {
 	return NewInMemTranslateStore(index, field, partitionID, partitionN), nil
 }
 
