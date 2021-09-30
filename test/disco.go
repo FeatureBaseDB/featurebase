@@ -111,6 +111,7 @@ func GetPortsGenConfigs(tb testing.TB, nodes []*Command) error {
 			LPeerSocket:      []*net.TCPListener{peerListener},
 			LClientSocket:    []*net.TCPListener{clientListener},
 			BootstrapTimeout: 50 * time.Millisecond,
+			UnsafeNoFsync:    true,
 		}
 		peerUrls[i] = fmt.Sprintf("%s=%s", name, peerURL)
 	}
@@ -144,14 +145,16 @@ func GenPortsConfig(tb testing.TB, ports []Ports) []*server.Config {
 			BindGRPC:     fmt.Sprintf(":%d", ports[i].Grpc),
 			GRPCListener: ports[i].LsnG,
 			Etcd: etcd.Options{
-				Dir:           discoDir,
-				LClientURL:    lClientURL,
-				AClientURL:    lClientURL,
-				LPeerURL:      lPeerURL,
-				APeerURL:      lPeerURL,
-				HeartbeatTTL:  5,
-				LPeerSocket:   []*net.TCPListener{lsnP},
-				LClientSocket: []*net.TCPListener{lsnC},
+				Dir:              discoDir,
+				LClientURL:       lClientURL,
+				AClientURL:       lClientURL,
+				LPeerURL:         lPeerURL,
+				APeerURL:         lPeerURL,
+				HeartbeatTTL:     5,
+				LPeerSocket:      []*net.TCPListener{lsnP},
+				LClientSocket:    []*net.TCPListener{lsnC},
+				BootstrapTimeout: 50 * time.Millisecond,
+				UnsafeNoFsync:    true,
 			},
 		}
 		cfgs[i].Cluster.Name = clusterName

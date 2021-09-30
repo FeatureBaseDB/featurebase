@@ -63,6 +63,7 @@ type Options struct {
 	LClientSocket []*net.TCPListener
 
 	BootstrapTimeout time.Duration
+	UnsafeNoFsync    bool `toml:"no-fsync"`
 }
 
 var (
@@ -228,6 +229,7 @@ func parseOptions(opt Options) *embed.Config {
 	cfg.InitialClusterToken = opt.ClusterName
 	cfg.BootstrapTimeout = opt.BootstrapTimeout
 	cfg.LCUrls = types.MustNewURLs([]string{opt.LClientURL})
+	cfg.UnsafeNoFsync = opt.UnsafeNoFsync
 	if opt.AClientURL != "" {
 		cfg.ACUrls = types.MustNewURLs([]string{opt.AClientURL})
 	} else {
