@@ -286,10 +286,6 @@ func (f *fragment) Open() error {
 		// Fill cache with rows persisted to disk.
 		f.holder.Logger.Debugf("open cache for index/field/view/fragment: %s/%s/%s/%d", f.index(), f.field(), f.view(), f.shard)
 		if err := f.openCache(); err != nil {
-			e2 := f.closeStorage()
-			if e2 != nil {
-				return errors.Wrapf(err, "closing storage: %v, after opening cache", e2)
-			}
 			return errors.Wrap(err, "opening cache")
 		}
 
