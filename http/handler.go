@@ -527,7 +527,7 @@ func newStatikHandler(h *Handler) statikHandler {
 
 func (s statikHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if strings.HasPrefix(r.UserAgent(), "curl") {
-		msg := "Welcome. Pilosa v" + s.handler.api.Version() + " is running. Visit https://www.pilosa.com/docs/ for more information."
+		msg := "Welcome. FeatureBase v" + s.handler.api.Version() + " is running. Visit https://docs.molecula.cloud for more information."
 		if s.statikFS != nil {
 			msg += " Try the Web UI by visiting this URL in your browser."
 		}

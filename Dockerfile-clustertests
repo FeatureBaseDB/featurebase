@@ -14,6 +14,10 @@ RUN cd /go/src/github.com/molecula/featurebase \
 ADD https://github.com/alexei-led/pumba/releases/download/0.6.0/pumba_linux_amd64 /pumba
 RUN chmod +x /pumba
 
+# add docker client to pause/unpause nodes
+RUN apt update
+RUN apt install -y docker.io 
+
 RUN cp /go/bin/featurebase /featurebase
 
 COPY LICENSE /LICENSE

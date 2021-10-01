@@ -4750,25 +4750,25 @@ func (e *executor) executeIntersectShard(ctx context.Context, qcx *Qcx, index st
 }
 
 // executeUnionShard executes a union() call for a local shard.
-func (e *executor) executeUnionShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64) (_ *Row, err error) {
+func (e *executor) executeUnionShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64) (out *Row, err error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeUnionShard")
 	defer span.Finish()
 
-	other := NewRow()
+	if len(c.Children) == 0 {
+		return NewRow(), nil
+	}
+	if len(c.Children) == 1 {
+		return e.executeBitmapCallShard(ctx, qcx, index, c.Children[0], shard)
+	}
+	// we have at least two, so...
+	rows := make([]*Row, len(c.Children))
 	for i, input := range c.Children {
-		row, err := e.executeBitmapCallShard(ctx, qcx, index, input, shard)
+		rows[i], err = e.executeBitmapCallShard(ctx, qcx, index, input, shard)
 		if err != nil {
 			return nil, err
 		}
-
-		if i == 0 {
-			other = row
-		} else {
-			other = other.Union(row)
-		}
 	}
-	other.invalidateCount()
-	return other, nil
+	return rows[0].Union(rows[1:]...), nil
 }
 
 // executeXorShard executes a xor() call for a local shard.
