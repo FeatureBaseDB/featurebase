@@ -53,18 +53,20 @@ func (k IDAllocKey) String() string {
 }
 
 type idAllocator struct {
-	db *bolt.DB
+	db           *bolt.DB
+	fsyncEnabled bool
 }
 
-type OpenIDAllocatorFunc func(path string) (*idAllocator, error) // whyyyyyyyyy
+type OpenIDAllocatorFunc func(path string, enableFsync bool) (*idAllocator, error) // whyyyyyyyyy
 
-func OpenIDAllocator(path string) (*idAllocator, error) {
-	db, err := bolt.Open(path, 0666, &bolt.Options{Timeout: 1 * time.Second})
+func OpenIDAllocator(path string, enableFsync bool) (*idAllocator, error) {
+	db, err := bolt.Open(path, 0666, &bolt.Options{Timeout: 1 * time.Second, NoSync: !enableFsync})
 	if err != nil {
 		return nil, err
 	}
-	return &idAllocator{db}, nil
+	return &idAllocator{db: db, fsyncEnabled: enableFsync}, nil
 }
+
 func (ida *idAllocator) Replace(reader io.Reader) error {
 	newFile := ida.db.Path() + ".bak"
 	liveFile := ida.db.Path()
@@ -92,7 +94,7 @@ func (ida *idAllocator) Replace(reader io.Reader) error {
 	} else {
 		_ = os.Remove(liveFile + ".sav")
 	}
-	db, err := bolt.Open(liveFile, 0666, &bolt.Options{Timeout: 1 * time.Second})
+	db, err := bolt.Open(liveFile, 0666, &bolt.Options{Timeout: 1 * time.Second, NoSync: !ida.fsyncEnabled})
 	ida.db = db
 	return err
 }

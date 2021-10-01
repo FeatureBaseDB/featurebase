@@ -109,7 +109,7 @@ type Holder struct {
 	OpenTransactionStore OpenTransactionStoreFunc
 
 	// Func to open the ID allocator.
-	OpenIDAllocator func(string) (*idAllocator, error)
+	OpenIDAllocator func(string, bool) (*idAllocator, error)
 
 	// transactionManager
 	transactionManager *TransactionManager
@@ -241,7 +241,7 @@ func DefaultHolderConfig() *HolderConfig {
 		OpenTranslateStore:   OpenInMemTranslateStore,
 		OpenTranslateReader:  nil,
 		OpenTransactionStore: OpenInMemTransactionStore,
-		OpenIDAllocator:      func(string) (*idAllocator, error) { return &idAllocator{}, nil },
+		OpenIDAllocator:      func(string, bool) (*idAllocator, error) { return &idAllocator{}, nil },
 		TranslationSyncer:    NopTranslationSyncer,
 		Serializer:           GobSerializer,
 		Schemator:            disco.InMemSchemator,
@@ -623,7 +623,7 @@ func (h *Holder) Open() error {
 	h.transactionManager.Log = h.Logger
 
 	// Open ID allocator.
-	h.ida, err = h.OpenIDAllocator(filepath.Join(h.path, "idalloc.db"))
+	h.ida, err = h.OpenIDAllocator(filepath.Join(h.path, "idalloc.db"), h.cfg.StorageConfig.FsyncEnabled)
 	if err != nil {
 		return errors.Wrap(err, "opening ID allocator")
 	}

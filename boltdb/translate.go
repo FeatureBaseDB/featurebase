@@ -55,8 +55,8 @@ const (
 )
 
 // OpenTranslateStore opens and initializes a boltdb translation store.
-func OpenTranslateStore(path, index, field string, partitionID, partitionN int) (pilosa.TranslateStore, error) {
-	s := NewTranslateStore(index, field, partitionID, partitionN)
+func OpenTranslateStore(path, index, field string, partitionID, partitionN int, fsyncEnabled bool) (pilosa.TranslateStore, error) {
+	s := NewTranslateStore(index, field, partitionID, partitionN, fsyncEnabled)
 	s.Path = path
 	if err := s.Open(); err != nil {
 		return nil, err
@@ -88,22 +88,24 @@ type TranslateStore struct {
 	once    sync.Once
 	closing chan struct{}
 
-	readOnly    bool
-	writeNotify chan struct{}
+	readOnly     bool
+	fsyncEnabled bool
+	writeNotify  chan struct{}
 
 	// File path to database file.
 	Path string
 }
 
 // NewTranslateStore returns a new instance of TranslateStore.
-func NewTranslateStore(index, field string, partitionID, partitionN int) *TranslateStore {
+func NewTranslateStore(index, field string, partitionID, partitionN int, fsyncEnabled bool) *TranslateStore {
 	return &TranslateStore{
-		index:       index,
-		field:       field,
-		partitionID: partitionID,
-		partitionN:  partitionN,
-		closing:     make(chan struct{}),
-		writeNotify: make(chan struct{}),
+		index:        index,
+		field:        field,
+		partitionID:  partitionID,
+		partitionN:   partitionN,
+		closing:      make(chan struct{}),
+		writeNotify:  make(chan struct{}),
+		fsyncEnabled: fsyncEnabled,
 	}
 }
 
@@ -120,7 +122,7 @@ func (s *TranslateStore) Open() (err error) {
 
 	if err := os.MkdirAll(filepath.Dir(s.Path), 0777); err != nil {
 		return errors.Wrapf(err, "mkdir %s", filepath.Dir(s.Path))
-	} else if s.db, err = bolt.Open(s.Path, 0666, &bolt.Options{Timeout: 1 * time.Second}); err != nil {
+	} else if s.db, err = bolt.Open(s.Path, 0666, &bolt.Options{Timeout: 1 * time.Second, NoSync: !s.fsyncEnabled}); err != nil {
 		return errors.Wrapf(err, "open file: %s", err)
 	}
 

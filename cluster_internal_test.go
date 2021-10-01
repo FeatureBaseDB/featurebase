@@ -155,7 +155,10 @@ func newIndexWithTempPath(tb testing.TB, name string) *Index {
 	if err != nil {
 		panic(err)
 	}
-	h := NewHolder(path, nil)
+	cfg := DefaultHolderConfig()
+	cfg.StorageConfig.FsyncEnabled = false
+	cfg.RBFConfig.FsyncEnabled = false
+	h := NewHolder(path, cfg)
 	PanicOn(h.Open())
 	index, err := h.CreateIndex(name, IndexOptions{})
 	testhook.Cleanup(tb, func() {

@@ -3166,7 +3166,7 @@ func BenchmarkImportIntoLargeFragment(b *testing.B) {
 		origF.Close()
 		fi.Close()
 
-		h := NewHolder(fi.Name(), nil)
+		h := NewHolder(fi.Name(), mustHolderConfig())
 		PanicOn(h.Open())
 		idx, err := h.CreateIndex("i", IndexOptions{})
 		PanicOn(err)
@@ -5146,7 +5146,7 @@ func TestImportClearRestart(t *testing.T) {
 
 				PanicOn(tx2.Commit())
 
-				h3 := NewHolder(filepath.Dir(f2.path()), nil)
+				h3 := NewHolder(filepath.Dir(f2.path()), mustHolderConfig())
 				testhook.Cleanup(t, func() {
 					h3.Close()
 				})

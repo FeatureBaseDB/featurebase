@@ -28,7 +28,7 @@ import (
 
 func TestExecutor_TranslateRowsOnBool(t *testing.T) {
 	path, _ := testhook.TempDirInDir(t, *TempDir, "pilosa-executor-")
-	holder := NewHolder(path, nil)
+	holder := NewHolder(path, mustHolderConfig())
 	defer holder.Close()
 
 	e := &executor{

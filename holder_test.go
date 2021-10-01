@@ -25,10 +25,25 @@ import (
 	"time"
 
 	"github.com/molecula/featurebase/v2"
+	"github.com/molecula/featurebase/v2/disco"
 	"github.com/molecula/featurebase/v2/pql"
 	"github.com/molecula/featurebase/v2/test"
 	"github.com/pkg/errors"
 )
+
+// mustHolderConfig provides a default test-friendly holder config.
+func mustHolderConfig() *pilosa.HolderConfig {
+	cfg := pilosa.DefaultHolderConfig()
+	if backend := pilosa.CurrentBackend(); backend != "" {
+		_ = pilosa.MustBackendToTxtype(backend)
+		cfg.StorageConfig.Backend = backend
+	}
+	cfg.StorageConfig.FsyncEnabled = false
+	cfg.RBFConfig.FsyncEnabled = false
+	cfg.Schemator = disco.InMemSchemator
+	cfg.Sharder = disco.InMemSharder
+	return cfg
+}
 
 func TestHolder_Open(t *testing.T) {
 	t.Run("ErrIndexPermission", func(t *testing.T) {
@@ -283,7 +298,7 @@ func TestHolder_HasData(t *testing.T) {
 		// Note that we are intentionally not using test.NewHolder,
 		// because we want to create a Holder object with an invalid path,
 		// rather than creating a valid holder with a temporary path.
-		h := pilosa.NewHolder("bad-path", nil)
+		h := pilosa.NewHolder("bad-path", mustHolderConfig())
 
 		if ok, err := h.HasData(); ok || err != nil {
 			t.Fatal("expected HasData to return false, no err, but", ok, err)

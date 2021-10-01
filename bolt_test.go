@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/molecula/featurebase/v2/roaring"
+	"github.com/molecula/featurebase/v2/storage"
 	. "github.com/molecula/featurebase/v2/vprint" // nolint:staticcheck
 )
 
@@ -88,7 +89,7 @@ func mustOpenEmptyBoltWrapper(path string) (w *BoltWrapper, cleaner func()) {
 	var err error
 	fn := path
 	PanicOn(os.RemoveAll(fn))
-	ww, err := globalBoltReg.OpenDBWrapper(fn, DetectMemAccessPastTx, nil)
+	ww, err := globalBoltReg.OpenDBWrapper(fn, DetectMemAccessPastTx, &storage.Config{FsyncEnabled: false})
 	PanicOn(err)
 	w = ww.(*BoltWrapper)
 

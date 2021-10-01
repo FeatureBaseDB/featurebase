@@ -117,7 +117,7 @@ func NewTestClusterWithReplication(tb testing.TB, nNodes, nReplicas, partitionN 
 	}
 
 	// holder
-	h := NewHolder(path, nil)
+	h := NewHolder(path, mustHolderConfig())
 
 	// cluster
 	availableShardFileFlushDuration.Set(100 * time.Millisecond)

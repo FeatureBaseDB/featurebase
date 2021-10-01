@@ -6882,7 +6882,7 @@ func TestMissingKeyRegression(t *testing.T) {
 	c := test.MustRunCluster(t, 1, []server.CommandOption{server.OptCommandServerOptions(
 		pilosa.OptServerStorageConfig(&storage.Config{
 			Backend:      "roaring",
-			FsyncEnabled: true,
+			FsyncEnabled: false,
 		}))})
 	defer c.Close()
 

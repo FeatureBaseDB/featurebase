@@ -274,7 +274,7 @@ func (db *DB) Close() (err error) {
 
 	// Close writer handler.
 	if db.file != nil {
-		err = db.file.Sync()
+		err = db.fsync(db.file)
 		if err != nil {
 			return
 		}

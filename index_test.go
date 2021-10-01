@@ -261,7 +261,7 @@ func TestIndex_InvalidName(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	index, err := pilosa.NewIndex(pilosa.NewHolder(path, nil), path, "ABC")
+	index, err := pilosa.NewIndex(pilosa.NewHolder(path, mustHolderConfig()), path, "ABC")
 	if err == nil {
 		t.Fatalf("should have gotten an error on index name with caps")
 	}

@@ -86,6 +86,7 @@ func makeHolder(tb testing.TB, backend string) (*Holder, string, error) {
 	cfg := mustHolderConfig()
 	if backend != "" {
 		cfg.StorageConfig.Backend = backend
+		cfg.StorageConfig.FsyncEnabled = false
 	}
 	h := NewHolder(path, cfg)
 	return h, path, h.Open()
@@ -265,6 +266,8 @@ func mustHolderConfig() *HolderConfig {
 		_ = MustBackendToTxtype(backend)
 		cfg.StorageConfig.Backend = backend
 	}
+	cfg.StorageConfig.FsyncEnabled = false
+	cfg.RBFConfig.FsyncEnabled = false
 	cfg.Schemator = disco.InMemSchemator
 	cfg.Sharder = disco.InMemSharder
 	return cfg
