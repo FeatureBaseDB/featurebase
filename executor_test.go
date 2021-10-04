@@ -3843,7 +3843,6 @@ func TestExecutor_Execute_Existence(t *testing.T) {
 		hldr2 := c.GetHolder(0)
 		index2 := hldr2.Index("i")
 		_ = index2
-		//index2.Dump("after reopen")
 
 		if res, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Not(Row(f=10))`}); err != nil {
 			t.Fatal(err)

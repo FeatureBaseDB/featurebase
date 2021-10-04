@@ -16,8 +16,6 @@ require (
 	github.com/desertbit/timer v0.0.0-20180107155436-c41aec40b27f // indirect
 	github.com/dustin/go-humanize v1.0.0 // indirect
 	github.com/fsnotify/fsnotify v1.4.9 // indirect
-	github.com/glycerine/goconvey v0.0.0-20190410193231-58a59202ab31 // indirect
-	github.com/glycerine/idem v0.0.0-20190127113923-7a8083893311
 	github.com/go-test/deep v1.0.7
 	github.com/gogo/protobuf v1.3.2
 	github.com/golang/protobuf v1.3.3

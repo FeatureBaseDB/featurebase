@@ -15,9 +15,6 @@
 package pilosa
 
 import (
-	"fmt"
-	"io"
-
 	"github.com/molecula/featurebase/v2/roaring"
 	txkey "github.com/molecula/featurebase/v2/short_txkey"
 	. "github.com/molecula/featurebase/v2/vprint"
@@ -42,40 +39,18 @@ func init() {
 
 var _ Tx = (*catcherTx)(nil)
 
-func (c *catcherTx) IncrementOpN(index, field, view string, shard uint64, changedN int) {
-	c.b.IncrementOpN(index, field, view, shard, changedN)
-}
-
 func (c *catcherTx) NewTxIterator(index, field, view string, shard uint64) *roaring.Iterator {
 	return c.b.NewTxIterator(index, field, view, shard)
 }
 
-func (c *catcherTx) ImportRoaringBits(index, field, view string, shard uint64, rit roaring.RoaringIterator, clear bool, log bool, rowSize uint64, data []byte) (changed int, rowSet map[uint64]int, err error) {
+func (c *catcherTx) ImportRoaringBits(index, field, view string, shard uint64, rit roaring.RoaringIterator, clear bool, log bool, rowSize uint64) (changed int, rowSet map[uint64]int, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			AlwaysPrintf("see ImportRoaringBits() PanicOn '%v' at '%v'", r, Stack())
 			PanicOn(r)
 		}
 	}()
-	return c.b.ImportRoaringBits(index, field, view, shard, rit, clear, log, rowSize, data)
-}
-
-func (c *catcherTx) Dump(short bool, shard uint64) {
-	c.b.Dump(short, shard)
-}
-
-func (c *catcherTx) Readonly() bool {
-	defer func() {
-		if r := recover(); r != nil {
-			AlwaysPrintf("see Readonly() PanicOn '%v' at '%v'", r, Stack())
-			PanicOn(r)
-		}
-	}()
-	return c.b.Readonly()
-}
-
-func (tx *catcherTx) Pointer() string {
-	return fmt.Sprintf("%p", tx)
+	return c.b.ImportRoaringBits(index, field, view, shard, rit, clear, log, rowSize)
 }
 
 func (c *catcherTx) Rollback() {
@@ -141,14 +116,6 @@ func (c *catcherTx) RemoveContainer(index, field, view string, shard uint64, key
 		}
 	}()
 	return c.b.RemoveContainer(index, field, view, shard, key)
-}
-
-func (c *catcherTx) UseRowCache() bool {
-	return c.b.UseRowCache()
-}
-
-func (c *catcherTx) IsDone() bool {
-	return c.b.IsDone()
 }
 
 func (c *catcherTx) Add(index, field, view string, shard uint64, a ...uint64) (changeCount int, err error) {
@@ -250,17 +217,6 @@ func (c *catcherTx) Min(index, field, view string, shard uint64) (uint64, bool, 
 	return c.b.Min(index, field, view, shard)
 }
 
-func (c *catcherTx) UnionInPlace(index, field, view string, shard uint64, others ...*roaring.Bitmap) error {
-
-	defer func() {
-		if r := recover(); r != nil {
-			AlwaysPrintf("see UnionInPlace() PanicOn '%v' at '%v'", r, Stack())
-			PanicOn(r)
-		}
-	}()
-	return c.b.UnionInPlace(index, field, view, shard, others...)
-}
-
 func (c *catcherTx) CountRange(index, field, view string, shard uint64, start, end uint64) (n uint64, err error) {
 
 	defer func() {
@@ -283,31 +239,8 @@ func (c *catcherTx) OffsetRange(index, field, view string, shard, offset, start,
 	return c.b.OffsetRange(index, field, view, shard, offset, start, end)
 }
 
-func (c *catcherTx) RoaringBitmapReader(index, field, view string, shard uint64, fragmentPathForRoaring string) (r io.ReadCloser, sz int64, err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			AlwaysPrintf("see RoaringBitmapReader() PanicOn '%v' at '%v'", r, Stack())
-			PanicOn(r)
-		}
-	}()
-	return c.b.RoaringBitmapReader(index, field, view, shard, fragmentPathForRoaring)
-}
-
 func (c *catcherTx) Type() string {
 	return c.b.Type()
-}
-
-func (c *catcherTx) Group() *TxGroup {
-	return c.b.Group()
-}
-
-func (c *catcherTx) Options() Txo {
-	return c.b.Options()
-}
-
-// Sn retreives the serial number of the Tx.
-func (c *catcherTx) Sn() int64 {
-	return c.b.Sn()
 }
 
 func (c *catcherTx) ApplyFilter(index, field, view string, shard uint64, ckey uint64, filter roaring.BitmapFilter) (err error) {

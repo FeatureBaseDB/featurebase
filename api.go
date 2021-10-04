@@ -1510,9 +1510,7 @@ func addClearToImportOptions(opts []ImportOption) []ImportOption {
 	return append(opts, OptImportOptionsClear(true))
 }
 
-// Import avoids re-writing a bajillion tests to be transaction-aware by allowing a nil pQcx.
-// It is convenient for some tests, particularly those in loops, to pass a nil qcx and
-// treat the Import as having been commited when we return without error. We make it so.
+// Import does the top-level importing.
 func (api *API) Import(ctx context.Context, qcx *Qcx, req *ImportRequest, opts ...ImportOption) (err error) {
 	if req.Clear {
 		opts = addClearToImportOptions(opts)
@@ -1648,8 +1646,8 @@ func (api *API) ImportWithTx(ctx context.Context, qcx *Qcx, req *ImportRequest, 
 	return errors.Wrap(err, "committing")
 }
 
-// ImportValue avoids re-writing a bajillion tests by allowing a nil pQcx.
-// Then we will commit before returning.
+// ImportValue is a wrapper around the common code in ImportValueWithTx, which
+// currently just translates req.Clear into a clear ImportOption.
 func (api *API) ImportValue(ctx context.Context, qcx *Qcx, req *ImportValueRequest, opts ...ImportOption) error {
 	if req.Clear {
 		opts = addClearToImportOptions(opts)
@@ -2654,9 +2652,7 @@ func (api *API) RestoreShard(ctx context.Context, indexName string, shard uint64
 	if err != nil {
 		return err
 	}
-	//need to find the path to the db
-	//will not work on blue green
-	db := dbs.W[0]
+	db := dbs.W
 	finalPath := db.Path() + "/data"
 	tempPath := finalPath + ".tmp"
 	o, err := os.OpenFile(tempPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)

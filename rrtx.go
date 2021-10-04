@@ -15,9 +15,7 @@
 package pilosa
 
 import (
-	"bytes"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -49,25 +47,8 @@ type RoaringTx struct {
 	w *RoaringWrapper
 }
 
-func (tx *RoaringTx) IsDone() (done bool) {
-	tx.mu.Lock()
-	done = tx.done
-	tx.mu.Unlock()
-	return
-}
-
 func (tx *RoaringTx) Type() string {
 	return RoaringTxn
-}
-
-func (tx *RoaringTx) Dump(short bool, shard uint64) {
-	o := tx.o
-	o.Shard = shard
-	fmt.Printf("%v\n", tx.Index.StringifiedRoaringKeys(short, false, o))
-}
-
-func (tx *RoaringTx) UseRowCache() bool {
-	return storage.EnableRowCache()
 }
 
 // based on view.openFragments()
@@ -112,10 +93,6 @@ func roaringMapOfShards(optionalViewPath string) (shardMap map[uint64]bool, err 
 	return
 }
 
-func (tx *RoaringTx) Pointer() string {
-	return fmt.Sprintf("%p", tx)
-}
-
 // NewTxIterator returns a *roaring.Iterator that MUST have Close() called on it BEFORE
 // the transaction Commits or Rollsback.
 func (tx *RoaringTx) NewTxIterator(index, field, view string, shard uint64) *roaring.Iterator {
@@ -127,31 +104,14 @@ func (tx *RoaringTx) NewTxIterator(index, field, view string, shard uint64) *roa
 // ImportRoaringBits return values changed and rowSet will be inaccurate if
 // the data []byte is supplied. This mimics the traditional roaring-per-file
 // and should be faster.
-func (tx *RoaringTx) ImportRoaringBits(index, field, view string, shard uint64, rit roaring.RoaringIterator, clear bool, log bool, rowSize uint64, data []byte) (changed int, rowSet map[uint64]int, err error) {
+func (tx *RoaringTx) ImportRoaringBits(index, field, view string, shard uint64, rit roaring.RoaringIterator, clear bool, log bool, rowSize uint64) (changed int, rowSet map[uint64]int, err error) {
 	f, err := tx.getFragment(index, field, view, shard)
 	if err != nil {
 		return 0, nil, err
 	}
-	if len(data) > 0 {
-		// changed and rowSet are ignored anyway when len(data) > 0;
-		// when we are called from fragment.fillFragmentFromArchive()
-		// which is the only place the data []byte is supplied.
-		// blueGreenTx also turns off the checks in this case.
-		return 0, nil, f.readStorageFromArchive(bytes.NewBuffer(data))
-	}
 
 	changed, rowSet, err = f.storage.ImportRoaringRawIterator(rit, clear, true, rowSize)
 	return
-}
-
-func (tx *RoaringTx) Readonly() bool {
-	return !tx.write
-}
-
-func (tx *RoaringTx) IncrementOpN(index, field, view string, shard uint64, changedN int) {
-	frag, err := tx.getFragment(index, field, view, shard)
-	PanicOn(err)
-	frag.incrementOpN(changedN)
 }
 
 func (c *RoaringTx) ApplyFilter(index, field, view string, shard uint64, ckey uint64, filter roaring.BitmapFilter) (err error) {
@@ -279,15 +239,6 @@ func (tx *RoaringTx) Min(index, field, view string, shard uint64) (uint64, bool,
 	return v, ok, nil
 }
 
-func (tx *RoaringTx) UnionInPlace(index, field, view string, shard uint64, others ...*roaring.Bitmap) error {
-	b, err := tx.bitmap(index, field, view, shard)
-	if err != nil {
-		return err
-	}
-	b.UnionInPlace(others...)
-	return nil
-}
-
 func (tx *RoaringTx) CountRange(index, field, view string, shard uint64, start, end uint64) (uint64, error) {
 	b, err := tx.bitmap(index, field, view, shard)
 	if err != nil {
@@ -379,33 +330,6 @@ func (tx *RoaringTx) bitmap(index, field, view string, shard uint64) (*roaring.B
 		return nil, errors.Wrap(err, "getFragment")
 	}
 	return frag.storage, nil
-}
-
-func (tx *RoaringTx) RoaringBitmapReader(index, field, view string, shard uint64, fragmentPathForRoaring string) (r io.ReadCloser, sz int64, err error) {
-	file, err := os.Open(fragmentPathForRoaring) // open the fragment file
-	if err != nil {
-		return nil, -1, err
-	}
-	fi, err := file.Stat()
-	if err != nil {
-		return nil, -1, errors.Wrap(err, "statting")
-	}
-	sz = fi.Size()
-	r = file
-	return
-}
-
-func (tx *RoaringTx) Group() *TxGroup {
-	return tx.o.Group
-}
-
-func (tx *RoaringTx) Options() Txo {
-	return tx.o
-}
-
-// Sn retreives the serial number of the Tx.
-func (tx *RoaringTx) Sn() int64 {
-	return tx.sn
 }
 
 func roaringGetFieldView2Shards(idx *Index) (vs *FieldView2Shards, err error) {
@@ -651,16 +575,10 @@ func (w *RoaringWrapper) CleanupTx(tx Tx) {
 		return
 	}
 	r.done = true
-
-	r.o.dbs.Cleanup(tx) // release the read/write lock.
 }
 
 func (w *RoaringWrapper) OpenListString() (r string) {
 	return "RoaringWrapper.OpenListString() not yet implemented"
-}
-
-func (w *RoaringWrapper) OpenSnList() (slc []int64) {
-	return nil
 }
 
 func (w *RoaringWrapper) CloseDB() error {
@@ -721,21 +639,12 @@ func (w *RoaringWrapper) IsClosed() (closed bool) {
 	return
 }
 
-func (w *RoaringWrapper) DeleteDBPath(dbs *DBShard) (err error) {
-	//vv("RoaringWrapper.DeleteDBPath called on dbs = '%#v'", dbs)
-	path := dbs.pathForType(roaringTxn)
-	return os.RemoveAll(path)
-}
-
 func (w *RoaringWrapper) DeleteField(index, field, fieldPath string) error {
 	//vv("RoaringWrapper.DeleteField(index = '%v', field = '%v', fieldPath = '%v'", index, field, fieldPath)
 
 	// match txn sn count vs lmdb/etc.
 	atomic.AddInt64(&globalNextTxSnRoaring, 1)
 
-	// under blue-green bolt_roaring, the directory will not be found, b/c bolt will have
-	// already done the os.RemoveAll().	BUT, RemoveAll returns nil error in this case. Docs:
-	// "If the path does not exist, RemoveAll returns nil (no error)"
 	err := os.RemoveAll(fieldPath)
 	if err != nil {
 		return errors.Wrap(err, "removing directory")

@@ -2434,13 +2434,13 @@ func (b *Bitmap) writeOp(op *op) error {
 
 // Iterator returns a new iterator for the bitmap.
 func (b *Bitmap) Iterator() *Iterator {
-	itr := NewIterator(&BitmapIteratorFinder{b})
+	itr := &Iterator{bitmap: b}
 	itr.Seek(0)
 	return itr
 }
 
 func (b *Bitmap) IteratorAt(start uint64) *Iterator {
-	itr := NewIterator(&BitmapIteratorFinder{b})
+	itr := &Iterator{bitmap: b}
 	itr.Seek(start)
 	return itr
 }
@@ -2701,37 +2701,18 @@ type BitmapInfo struct {
 	From, To       uintptr         // if set, indicates the address range used when unpacking
 }
 
-type IteratorFinder interface {
-	FindIterator(uint64) (ContainerIterator, bool)
-	Close()
-}
-type BitmapIteratorFinder struct {
-	bitmap *Bitmap
-}
-
-func (bif *BitmapIteratorFinder) FindIterator(seek uint64) (ContainerIterator, bool) {
-	return bif.bitmap.Containers.Iterator(seek)
-}
-func (bif *BitmapIteratorFinder) Close() {}
-
 // Iterator represents an iterator over a Bitmap.
 type Iterator struct {
-	finder IteratorFinder
+	bitmap *Bitmap
 	citer  ContainerIterator
 	key    uint64
 	c      *Container
 	j, k   int32 // i: container; j: array index, bit index, or run index; k: offset within the run
 }
 
-// NewIterator requires f as an IteratorFinder, it will
-// crash if f is nil.
-func NewIterator(f IteratorFinder) *Iterator {
-	return &Iterator{finder: f}
-}
-
-func (itr *Iterator) Close() {
-	itr.finder.Close()
-}
+// This exists because we used to support a backend which needed it, and I
+// don't want to re-experience the joy of figuring out where close calls are needed.
+func (itr *Iterator) Close() {}
 
 // Seek moves to the first value equal to or greater than `seek`.
 func (itr *Iterator) Seek(seek uint64) {
@@ -2740,7 +2721,7 @@ func (itr *Iterator) Seek(seek uint64) {
 	itr.k = -1
 
 	// Move to the correct container.
-	itr.citer, _ = itr.finder.FindIterator(highbits(seek))
+	itr.citer, _ = itr.bitmap.Containers.Iterator(highbits(seek))
 	if !itr.citer.Next() {
 		itr.c = nil
 		return // eof
@@ -7535,10 +7516,6 @@ func (c *Container) UnionInPlace(other *Container) (r *Container) {
 
 func (c *Container) Difference(other *Container) *Container {
 	return difference(c, other)
-}
-
-func NewSliceContainers() *sliceContainers {
-	return newSliceContainers()
 }
 
 // Slice returns an array of the values in the container as uint16.

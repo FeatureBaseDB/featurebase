@@ -31,6 +31,6 @@ func SetRowCacheOn(on bool) {
 	}
 }
 
-func EnableRowCache() bool {
+func RowCacheEnabled() bool {
 	return atomic.LoadInt64(&enableRowcache) == 1
 }

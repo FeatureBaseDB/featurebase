@@ -16,14 +16,12 @@ package rbf_test
 
 import (
 	"fmt"
-	"math"
 	"math/rand"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/molecula/featurebase/v2/rbf"
-	txkey "github.com/molecula/featurebase/v2/short_txkey"
 )
 
 func TestTx_CommitRollback(t *testing.T) {
@@ -496,29 +494,6 @@ func BenchmarkTx_Contains(b *testing.B) {
 	}
 }
 
-func TestTx_Dump(t *testing.T) {
-	db := MustOpenDB(t)
-	defer MustCloseDB(t, db)
-	tx := MustBegin(t, db, true)
-	defer tx.Rollback()
-
-	index, field, view, shard := "i", "f", "v", uint64(15)
-
-	nm := rbfName(index, field, view, shard)
-
-	if err := tx.CreateBitmap(nm); err != nil {
-		t.Fatal(err)
-	} else if _, err := tx.Add(nm, 0x00000001, 0x00000002, 0x00010003, 0x00030004); err != nil {
-		t.Fatal(err)
-	}
-
-	// test that we don't crash, and get *something* back
-	s := tx.DumpString(true, math.MaxUint64)
-	if s == "" {
-		panic("should have had 3 containers!")
-	}
-}
-
 func TestTx_CreateBitmap(t *testing.T) {
 	t.Run("Bulk", func(t *testing.T) {
 		db := MustOpenDB(t)
@@ -541,8 +516,4 @@ func TestTx_CreateBitmap(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
-}
-
-func rbfName(index, field, view string, shard uint64) string {
-	return string(txkey.Prefix(index, field, view, shard))
 }

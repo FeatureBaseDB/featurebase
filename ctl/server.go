@@ -94,7 +94,7 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 	// over-ride.
 	// TODO: the comment above was carried over from the PILOSA_TXSRC flag, but
 	// we should confirm that this still applies.
-	flags.StringVar(&srv.Config.Storage.Backend, "storage.backend", storage.DefaultBackend, fmt.Sprintf("transaction/storage to use: one of roaring, rbf, bolt, or a blue-green setup: rbf_roaring, roaring_rbf, bolt_roaring, roaring_bolt, bolt_rbf, etc. The default is: %v. The env var PILOSA_STORAGE_BACKEND is over-ridden by --storage.backend option on the command line.", storage.DefaultBackend))
+	flags.StringVar(&srv.Config.Storage.Backend, "storage.backend", storage.DefaultBackend, fmt.Sprintf("transaction/storage to use: one of roaring or rbf. The default is: %v. The env var PILOSA_STORAGE_BACKEND is over-ridden by --storage.backend option on the command line.", storage.DefaultBackend))
 	flags.BoolVar(&srv.Config.Storage.FsyncEnabled, "storage.fsync", true, "enable fsync fully safe flush-to-disk")
 
 	// RowcacheOn

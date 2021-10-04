@@ -310,7 +310,7 @@ func Migrate(dataDir, backupPath string) error {
 			return err
 		}
 		key := string(txkey.Prefix(index, field, view, shard))
-		_, _, err = tx.ImportRoaringBits(key, itr, clear, log, rowSize, nil)
+		_, _, err = tx.ImportRoaringBits(key, itr, clear, log, rowSize)
 		if err != nil {
 			tx.Rollback()
 			return err

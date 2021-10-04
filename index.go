@@ -27,7 +27,6 @@ import (
 	"github.com/molecula/featurebase/v2/roaring"
 	"github.com/molecula/featurebase/v2/stats"
 	"github.com/molecula/featurebase/v2/testhook"
-	. "github.com/molecula/featurebase/v2/vprint" // nolint:staticcheck
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -464,7 +463,6 @@ func (i *Index) Close() error {
 
 // make it clear what the Index.AvailableShards() calls are trying to obtain.
 const includeRemote = false
-const localOnly = true
 
 // AvailableShards returns a bitmap of all shards with data in the index.
 func (i *Index) AvailableShards(localOnly bool) *roaring.Bitmap {
@@ -851,14 +849,6 @@ type importData struct {
 // FormatQualifiedIndexName generates a qualified name for the index to be used with Tx operations.
 func FormatQualifiedIndexName(index string) string {
 	return fmt.Sprintf("%s\x00", index)
-}
-
-// Dump prints to stdout the contents of the roaring Containers
-// stored in idx. Mostly for debugging.
-func (i *Index) Dump(label string) {
-	fileline := FileLine(2)
-	fmt.Printf("\n%v Dump: %v\n\n", fileline, label)
-	i.holder.txf.dbPerShard.DumpAll()
 }
 
 func (i *Index) Txf() *TxFactory {

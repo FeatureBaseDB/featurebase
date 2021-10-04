@@ -15,15 +15,12 @@
 package pilosa
 
 import (
-	"bytes"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math"
 	"os"
 	"strings"
 	"sync"
-	"sync/atomic"
 
 	"github.com/molecula/featurebase/v2/rbf"
 	rbfcfg "github.com/molecula/featurebase/v2/rbf/cfg"
@@ -76,8 +73,6 @@ func (w *RbfDBWrapper) CleanupTx(tx Tx) {
 	w.muDb.Lock()
 
 	delete(w.openTx, r)
-	//vv("rbf CleanupTx gid %v about to call r.o.dbs.Cleanup(tx.Sn=%v)", curGID(), tx.Sn())
-	r.o.dbs.Cleanup(tx) // release the read/write lock.
 
 	w.muDb.Unlock()
 }
@@ -186,18 +181,10 @@ type RBFTx struct {
 	initialIndex string
 	tx           *rbf.Tx
 	o            Txo
-	sn           int64 // serial number
 	Db           *RbfDBWrapper
 
 	done bool
 	mu   sync.Mutex // protect done as it changes state
-}
-
-func (tx *RBFTx) IsDone() (done bool) {
-	tx.mu.Lock()
-	done = tx.done
-	tx.mu.Unlock()
-	return
 }
 
 func (tx *RBFTx) DBPath() string {
@@ -210,17 +197,13 @@ func (tx *RBFTx) Type() string {
 
 func (tx *RBFTx) Rollback() {
 	tx.tx.Rollback()
-
-	// must happen after actual rollback
 	tx.Db.CleanupTx(tx)
 }
 
 func (tx *RBFTx) Commit() (err error) {
 	err = tx.tx.Commit()
-
-	// must happen after actual commit
 	tx.Db.CleanupTx(tx)
-	return
+	return err
 }
 
 func (tx *RBFTx) RoaringBitmap(index, field, view string, shard uint64) (*roaring.Bitmap, error) {
@@ -412,10 +395,6 @@ func (tx *RBFTx) Min(index, field, view string, shard uint64) (uint64, bool, err
 	return tx.tx.Min(rbfName(index, field, view, shard))
 }
 
-func (tx *RBFTx) UnionInPlace(index, field, view string, shard uint64, others ...*roaring.Bitmap) error {
-	return tx.tx.UnionInPlace(rbfName(index, field, view, shard), others...)
-}
-
 // CountRange returns the count of hot bits in the start, end range on the fragment.
 // roaring.countRange counts the number of bits set between [start, end).
 func (tx *RBFTx) CountRange(index, field, view string, shard uint64, start, end uint64) (n uint64, err error) {
@@ -426,63 +405,14 @@ func (tx *RBFTx) OffsetRange(index, field, view string, shard uint64, offset, st
 	return tx.tx.OffsetRange(rbfName(index, field, view, shard), offset, start, end)
 }
 
-func (tx *RBFTx) IncrementOpN(index, field, view string, shard uint64, changedN int) {}
-
-func (tx *RBFTx) ImportRoaringBits(index, field, view string, shard uint64, rit roaring.RoaringIterator, clear bool, log bool, rowSize uint64, data []byte) (changed int, rowSet map[uint64]int, err error) {
-	return tx.tx.ImportRoaringBits(rbfName(index, field, view, shard), rit, clear, log, rowSize, data)
-}
-
-func (tx *RBFTx) RoaringBitmapReader(index, field, view string, shard uint64, fragmentPathForRoaring string) (r io.ReadCloser, sz int64, err error) {
-
-	rbm, err := tx.RoaringBitmap(index, field, view, shard)
-	if err != nil {
-		return nil, -1, errors.Wrap(err, "RoaringBitmapReader RoaringBitmap")
-	}
-	var buf bytes.Buffer
-	sz, err = rbm.WriteTo(&buf)
-	if err != nil {
-		return nil, -1, errors.Wrap(err, "RoaringBitmapReader rbm.WriteTo(buf)")
-	}
-	return ioutil.NopCloser(&buf), sz, err
+func (tx *RBFTx) ImportRoaringBits(index, field, view string, shard uint64, rit roaring.RoaringIterator, clear bool, log bool, rowSize uint64) (changed int, rowSet map[uint64]int, err error) {
+	return tx.tx.ImportRoaringBits(rbfName(index, field, view, shard), rit, clear, log, rowSize)
 }
 
 func (tx *RBFTx) NewTxIterator(index, field, view string, shard uint64) *roaring.Iterator {
 	b, err := tx.RoaringBitmap(index, field, view, shard)
 	PanicOn(err)
 	return b.Iterator()
-}
-
-func (tx *RBFTx) Pointer() string {
-	return fmt.Sprintf("%p", tx)
-}
-
-func (tx *RBFTx) Dump(short bool, shard uint64) {
-	tx.tx.Dump(short, shard)
-}
-
-// Readonly is true if the transaction is not read-and-write, but only doing reads.
-func (tx *RBFTx) Readonly() bool {
-	return !tx.tx.Writable()
-}
-
-func (tx *RBFTx) Group() *TxGroup {
-	return tx.o.Group
-}
-
-func (tx *RBFTx) Options() Txo {
-	return tx.o
-}
-
-func (tx *RBFTx) Sn() int64 {
-	return tx.sn
-}
-
-func (tx *RBFTx) UseRowCache() bool {
-	// since RFB returns memory mapped data, we can't use
-	// the rowCache without first making a copy.
-	// So we only use the rowCache if the copy is
-	// enabled.
-	return storage.EnableRowCache()
 }
 
 func (tx *RBFTx) ApplyFilter(index, field, view string, shard uint64, ckey uint64, filter roaring.BitmapFilter) (err error) {
@@ -591,20 +521,16 @@ func (w *RbfDBWrapper) OpenDB() error {
 	return nil
 }
 
-var globalNextTxSnRBFTx int64
-
 func (w *RbfDBWrapper) NewTx(write bool, initialIndex string, o Txo) (_ Tx, err error) {
 	tx, err := w.db.Begin(write)
 	if err != nil {
 		return nil, err
 	}
-	sn := atomic.AddInt64(&globalNextTxSnRBFTx, 1)
 
 	rtx := &RBFTx{
 		tx:           tx,
 		initialIndex: initialIndex,
 		o:            o,
-		sn:           sn,
 		Db:           w,
 	}
 
@@ -629,20 +555,6 @@ func (w *RbfDBWrapper) DeleteFragment(index, field, view string, shard uint64, f
 	return tx.Commit()
 }
 
-func (w *RbfDBWrapper) DeleteDBPath(dbs *DBShard) error {
-	path := dbs.pathForType(rbfTxn)
-	return os.RemoveAll(path)
-}
-
 func (w *RbfDBWrapper) OpenListString() (r string) {
 	return "rbf OpenListString not implemented yet"
-}
-
-func (w *RbfDBWrapper) OpenSnList() (slc []int64) {
-	w.muDb.Lock()
-	for v := range w.openTx {
-		slc = append(slc, v.sn)
-	}
-	w.muDb.Unlock()
-	return
 }

@@ -142,19 +142,6 @@ func TestClusterResize_EmptyNodes(t *testing.T) {
 
 // Ensure that adding a node correctly resizes the cluster.
 func TestClusterResize_AddNode(t *testing.T) {
-	// Why are we skipping this test under blue-green with Roaring?
-	//
-	// We see red test: during resize during importRoaringBits
-	// PILOSA_STORAGE_BACKEND=rbf_roaring go test -v  -tags=' shardwidth20'  "-gcflags=all=-d=checkptr=0" -run TestClusterResize_AddNode/"ContinuousShards"
-	// green:
-	// PILOSA_STORAGE_BACKEND=roaring_rbf go test -v  -tags=' shardwidth20'  "-gcflags=all=-d=checkptr=0" -run TestClusterResize_AddNode/"ContinuousShards"
-	//
-	// but rbf_badger and badger_rbf are both green (use the same data values for containers).
-	//
-	// Conclude: roaring reads a different size of data []byte in (due to ops log) bits vs others (RBF, badger), so
-	// we can't do blue-green with roaring on this test.
-	skipTestUnderBlueGreenWithRoaring(t)
-
 	t.Run("NoData", func(t *testing.T) {
 		clus := test.MustRunCluster(t, 3)
 		defer clus.Close()
@@ -344,8 +331,6 @@ func TestClusterResize_AddNode(t *testing.T) {
 
 // Ensure that adding a node correctly resizes the cluster.
 func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
-	skipTestUnderBlueGreenWithRoaring(t)
-
 	t.Run("WithIndex", func(t *testing.T) {
 		c := test.MustRunCluster(t, 3)
 		defer c.Close()
@@ -628,14 +613,5 @@ func TestClusterMutualTLS(t *testing.T) {
 		t.Fatal(err)
 	} else if err := client0.CreateField(context.Background(), "i", "f"); err != nil {
 		t.Fatal(err)
-	}
-}
-
-func skipTestUnderBlueGreenWithRoaring(t *testing.T) {
-	src := pilosa.CurrentBackend()
-	if strings.Contains(src, "_") {
-		if strings.Contains(src, "roaring") {
-			t.Skip("skip for roaring blue-green")
-		}
 	}
 }
