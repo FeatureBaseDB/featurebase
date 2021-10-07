@@ -351,6 +351,119 @@ func ExprString(expr Expr) string {
 	return expr.String()
 }
 
+// ExprTableName returns the name of the table referenced in an expression.
+// Returns ok as false if more than one table referenced. Returns a blank string
+// if no tables are referenced.
+func ExprTableName(expr Expr) (table string, ok bool) {
+	switch expr := expr.(type) {
+	case *BindExpr, *BlobLit, *BoolLit, *Ident, *NullLit, *NumberLit, *StringLit:
+		return "", true
+
+	case *BinaryExpr:
+		x, ok := ExprTableName(expr.X)
+		if !ok {
+			return "", false
+		}
+
+		y, ok := ExprTableName(expr.Y)
+		if !ok {
+			return "", false
+		}
+
+		if x == "" {
+			return y, true
+		} else if y == "" {
+			return x, true
+		} else if x == y {
+			return x, true
+		}
+		return "", false
+
+	case *Call:
+		for _, arg := range expr.Args {
+			tbl, ok := ExprTableName(arg)
+			if !ok || (table != "" && tbl != table) {
+				return "", false
+			}
+			table = tbl
+		}
+		return table, true
+
+	case *CaseExpr:
+		tbl, ok := ExprTableName(expr.Operand)
+		if !ok || (table != "" && tbl != table) {
+			return "", false
+		}
+		table = tbl
+
+		tbl, ok = ExprTableName(expr.ElseExpr)
+		if !ok || (table != "" && tbl != table) {
+			return "", false
+		}
+		table = tbl
+
+		for _, blk := range expr.Blocks {
+			tbl, ok := ExprTableName(blk.Condition)
+			if !ok || (table != "" && tbl != table) {
+				return "", false
+			}
+			table = tbl
+
+			tbl, ok = ExprTableName(blk.Body)
+			if !ok || (table != "" && tbl != table) {
+				return "", false
+			}
+			table = tbl
+		}
+		return table, true
+
+	case *CastExpr:
+		return ExprTableName(expr.X)
+
+	case *Exists:
+		return "", false // TODO
+
+	case *ExprList:
+		for _, e := range expr.Exprs {
+			tbl, ok := ExprTableName(e)
+			if !ok || (table != "" && tbl != table) {
+				return "", false
+			}
+			table = tbl
+		}
+		return table, true
+
+	case *ParenExpr:
+		return ExprTableName(expr.X)
+
+	case *QualifiedRef:
+		return expr.Table.Name, true
+
+	case *Raise:
+		return "", true
+
+	case *Range:
+		tbl, ok := ExprTableName(expr.X)
+		if !ok || (table != "" && tbl != table) {
+			return "", false
+		}
+		table = tbl
+
+		tbl, ok = ExprTableName(expr.Y)
+		if !ok || (table != "" && tbl != table) {
+			return "", false
+		}
+		table = tbl
+		return table, true
+
+	case *UnaryExpr:
+		return ExprTableName(expr.X)
+
+	default:
+		return "", false
+	}
+}
+
 // SplitExprTree splits apart expr so it is a list of all AND joined expressions.
 // For example, the expression "A AND B AND (C OR (D AND E))" would be split into
 // a list of "A", "B", "C OR (D AND E)".
@@ -2998,6 +3111,23 @@ func (s *SelectStatement) IsAggregate() bool {
 			return true
 		}
 	}
+	return false
+}
+
+// HasWildcard returns true any result column contains a wildcard (STAR).
+func (s *SelectStatement) HasWildcard() bool {
+	for _, col := range s.Columns {
+		// Unqualified wildcard.
+		if col.Star.IsValid() {
+			return true
+		}
+
+		// Table-qualified wildcard.
+		if ref, ok := col.Expr.(*QualifiedRef); ok && ref.Star.IsValid() {
+			return true
+		}
+	}
+
 	return false
 }
 

@@ -62,6 +62,11 @@ func (p *Planner) planSelectStatement(ctx context.Context, stmt *sql2.SelectStat
 }
 
 func (p *Planner) planAggregateSelectStatement(ctx context.Context, stmt *sql2.SelectStatement) (_ StmtNode, err error) {
+	// Handle specific case of a two-table INNER JOIN with a COUNT().
+	if _, ok := stmt.Source.(*sql2.JoinClause); ok {
+		return p.planAggregateCountJoin(ctx, stmt)
+	}
+
 	indexName, err := statementTableName(stmt)
 	if err != nil {
 		return nil, err
@@ -116,7 +121,13 @@ func (p *Planner) planAggregateSelectStatement(ctx context.Context, stmt *sql2.S
 	switch callName {
 	case "COUNT":
 		if len(groupByCols) == 0 {
-			return NewCountNode(p.executor, indexName, columns[0], cond), nil
+			if cond == nil {
+				cond = &pql.Call{Name: "All"}
+			}
+			return NewCountNode(p.executor, indexName, columns[0], &pql.Call{
+				Name:     "Count",
+				Children: []*pql.Call{cond},
+			}), nil
 		}
 
 		var aggregate *pql.Call
@@ -161,6 +172,156 @@ func (p *Planner) planAggregateSelectStatement(ctx context.Context, stmt *sql2.S
 	}
 
 	// TODO: Support HAVING
+}
+
+func (p *Planner) planAggregateCountJoin(ctx context.Context, stmt *sql2.SelectStatement) (_ StmtNode, err error) {
+	// Ensure we have an INNER JOIN.
+	join := stmt.Source.(*sql2.JoinClause) // caller checked
+	if !join.Operator.Inner.IsValid() {
+		return nil, fmt.Errorf("only inner joins are currently supported")
+	}
+
+	// Determine the two tables we are joining.
+	tbl0, ok := join.X.(*sql2.QualifiedTableName)
+	if !ok {
+		return nil, fmt.Errorf("left side of join must be a table")
+	}
+	tbl1, ok := join.Y.(*sql2.QualifiedTableName)
+	if !ok {
+		return nil, fmt.Errorf("left side of join must be a table")
+	}
+
+	// Ensure INNER JOIN has an "ON" constraint.
+	if join.Constraint == nil {
+		return nil, fmt.Errorf("joins must have an ON constraint")
+	}
+	cons, ok := join.Constraint.(*sql2.OnConstraint)
+	if !ok {
+		return nil, fmt.Errorf("joins only support an ON constraint")
+	}
+
+	// Determine the joined columns.
+	cx, ok := cons.X.(*sql2.BinaryExpr)
+	if !ok {
+		return nil, fmt.Errorf("join must use a binary expression")
+	} else if cx.Op != sql2.EQ {
+		return nil, fmt.Errorf("join must use an equality expression")
+	}
+
+	// Extract join columns & validate that they reference known tables and join on "_id".
+	x, ok := cx.X.(*sql2.QualifiedRef)
+	if !ok {
+		return nil, fmt.Errorf("left-hand side of join expression must be a table-qualified column")
+	} else if x.Table.Name != tbl0.TableName() && x.Table.Name != tbl1.TableName() {
+		return nil, fmt.Errorf("no such table: %q", x.Table.Name)
+	}
+
+	y, ok := cx.Y.(*sql2.QualifiedRef)
+	if !ok {
+		return nil, fmt.Errorf("right-hand side of join expression must be a table-qualified column")
+	} else if y.Table.Name != tbl0.TableName() && y.Table.Name != tbl1.TableName() {
+		return nil, fmt.Errorf("no such table: %q", y.Table.Name)
+	}
+
+	if x.Column.Name != "_id" && y.Column.Name != "_id" {
+		return nil, fmt.Errorf("must join table on _id column")
+	} else if x.Column.Name == "_id" && y.Column.Name == "_id" {
+		return nil, fmt.Errorf("cannot join _id field of two tables")
+	}
+
+	// Move ID column to LHS.
+	if x.Column.Name != "_id" {
+		x, y = y, x
+	}
+
+	// Move parent table to LHS.
+	if x.Table.Name != tbl0.TableName() {
+		tbl0, tbl1 = tbl1, tbl0
+	}
+
+	// Ensure column expression is a single COUNT.
+	if len(stmt.Columns) != 1 {
+		return nil, fmt.Errorf("only COUNT() is supported on joined tables")
+	}
+	expr, ok := stmt.Columns[0].Expr.(*sql2.Call)
+	if !ok || strings.ToUpper(expr.Name.Name) != "COUNT" {
+		return nil, fmt.Errorf("only COUNT() is supported on joined tables")
+	}
+
+	// Extract WHERE clause and separate by parent/child tables.
+	var cond0, cond1 sql2.Expr
+	for _, cond := range sql2.SplitExprTree(stmt.WhereExpr) {
+		tblName, ok := sql2.ExprTableName(cond)
+		if !ok {
+			return nil, fmt.Errorf("cannot filter across multiple tables in an expression")
+		} else if tblName == "" {
+			return nil, fmt.Errorf("expression must reference a table name")
+		} else if tblName != tbl0.TableName() && tblName != tbl1.TableName() {
+			return nil, fmt.Errorf("no such table: %q", tblName)
+		}
+
+		// Match to parent table.
+		if tblName == tbl0.TableName() {
+			if cond0 == nil {
+				cond0 = cond
+			} else {
+				cond0 = &sql2.BinaryExpr{X: cond0, Op: sql2.AND, Y: cond}
+			}
+			continue
+		}
+
+		// Match to child table.
+		if cond1 == nil {
+			cond1 = cond
+		}
+		cond1 = &sql2.BinaryExpr{X: cond1, Op: sql2.AND, Y: cond}
+	}
+
+	// Convert conditions to PQL.
+	pqlCond0, err := p.planExprPQL(ctx, stmt, cond0)
+	if err != nil {
+		return nil, err
+	} else if pqlCond0 == nil {
+		pqlCond0 = &pql.Call{Name: "All"}
+	}
+
+	pqlCond1, err := p.planExprPQL(ctx, stmt, cond1)
+	if err != nil {
+		return nil, err
+	} else if pqlCond1 == nil {
+		pqlCond1 = &pql.Call{
+			Name: "Row",
+			Args: map[string]interface{}{y.Column.Name: &pql.Condition{
+				Op: pql.NEQ,
+			}},
+		}
+	}
+
+	return NewCountNode(p.executor, tbl0.Name.Name,
+		&StmtColumn{
+			Name: stmt.Columns[0].Name(),
+			Type: sql2.DataTypeInt,
+		},
+		&pql.Call{
+			Name: "Count",
+			Children: []*pql.Call{{
+				Name: "Intersect",
+				Children: []*pql.Call{
+					pqlCond0,
+					{
+						Name: "Distinct",
+						Children: []*pql.Call{
+							pqlCond1,
+						},
+						Args: map[string]interface{}{
+							"index": tbl1.Name.Name,
+							"field": y.Column.Name,
+						},
+					},
+				},
+			}},
+		},
+	), nil
 }
 
 func (p *Planner) planNonAggregateSelectStatement(ctx context.Context, stmt *sql2.SelectStatement) (_ StmtNode, err error) {
@@ -389,6 +550,53 @@ func (p *Planner) checkStatement(stmt sql2.Statement) error {
 }
 
 func (p *Planner) checkSelectStatement(stmt *sql2.SelectStatement) error {
+	if err := p.expandSelectStatementWildcards(stmt); err != nil {
+		return err
+	}
+
+	// Type check expressions in statement.
+	for _, col := range stmt.Columns {
+		if err := p.checkExpr(&col.Expr, stmt); err != nil {
+			return err
+		}
+	}
+
+	if err := p.checkExpr(&stmt.WhereExpr, stmt); err != nil {
+		return err
+	}
+
+	for i := range stmt.GroupByExprs {
+		if err := p.checkExpr(&stmt.GroupByExprs[i], stmt); err != nil {
+			return err
+		}
+	}
+
+	if err := p.checkExpr(&stmt.HavingExpr, stmt); err != nil {
+		return err
+	}
+
+	for _, term := range stmt.OrderingTerms {
+		if err := p.checkExpr(&term.X, stmt); err != nil {
+			return err
+		}
+	}
+
+	if err := p.checkExpr(&stmt.LimitExpr, stmt); err != nil {
+		return err
+	}
+
+	if err := p.checkExpr(&stmt.OffsetExpr, stmt); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (p *Planner) expandSelectStatementWildcards(stmt *sql2.SelectStatement) error {
+	if !stmt.HasWildcard() {
+		return nil
+	}
+
 	indexName, err := statementTableName(stmt)
 	if err != nil {
 		return err
@@ -441,44 +649,8 @@ func (p *Planner) checkSelectStatement(stmt *sql2.SelectStatement) error {
 	}
 	stmt.Columns = columns
 
-	// Type check expressions in statement.
-	for _, col := range stmt.Columns {
-		if err := p.checkExpr(&col.Expr, stmt); err != nil {
-			return err
-		}
-	}
-
-	if err := p.checkExpr(&stmt.WhereExpr, stmt); err != nil {
-		return err
-	}
-
-	for i := range stmt.GroupByExprs {
-		if err := p.checkExpr(&stmt.GroupByExprs[i], stmt); err != nil {
-			return err
-		}
-	}
-
-	if err := p.checkExpr(&stmt.HavingExpr, stmt); err != nil {
-		return err
-	}
-
-	for _, term := range stmt.OrderingTerms {
-		if err := p.checkExpr(&term.X, stmt); err != nil {
-			return err
-		}
-	}
-
-	if err := p.checkExpr(&stmt.LimitExpr, stmt); err != nil {
-		return err
-	}
-
-	if err := p.checkExpr(&stmt.OffsetExpr, stmt); err != nil {
-		return err
-	}
-
 	return nil
 }
-
 func (p *Planner) checkExpr(expr *sql2.Expr, stmt sql2.Statement) error {
 	if e, err := sql2.Walk(&sqlExprTypeChecker{
 		holder: p.executor.Holder,
@@ -959,20 +1131,17 @@ type CountNode struct {
 	executor  *executor
 	indexName string
 	column    *StmtColumn
-	cond      *pql.Call // conditional
+	call      *pql.Call
 
 	row []interface{}
 }
 
-func NewCountNode(executor *executor, indexName string, column *StmtColumn, cond *pql.Call) *CountNode {
-	if cond == nil {
-		cond = &pql.Call{Name: "All"}
-	}
+func NewCountNode(executor *executor, indexName string, column *StmtColumn, call *pql.Call) *CountNode {
 	return &CountNode{
 		executor:  executor,
 		indexName: indexName,
 		column:    column,
-		cond:      cond,
+		call:      call,
 	}
 }
 
@@ -990,13 +1159,7 @@ func (n *CountNode) Next(ctx context.Context) error {
 		return sql.ErrNoRows
 	}
 
-	q := &pql.Query{
-		Calls: []*pql.Call{
-			{Name: "Count", Children: []*pql.Call{n.cond}},
-		},
-	}
-
-	result, err := n.executor.Execute(ctx, n.indexName, q, nil, nil)
+	result, err := n.executor.Execute(ctx, n.indexName, &pql.Query{Calls: []*pql.Call{n.call}}, nil, nil)
 	if err != nil {
 		return err
 	}
