@@ -428,6 +428,89 @@ func TestPlanner_GroupBy(t *testing.T) {
 	})
 }
 
+func TestPlanner_InnerJoin(t *testing.T) {
+	c := test.MustRunCluster(t, 1)
+	defer c.Close()
+
+	i0, err := c.GetHolder(0).CreateIndex("i0", pilosa.IndexOptions{TrackExistence: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer i0.Close()
+
+	if _, err := i0.CreateField("a", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
+		t.Fatal(err)
+	}
+
+	i1, err := c.GetHolder(0).CreateIndex("i1", pilosa.IndexOptions{TrackExistence: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer i1.Close()
+
+	if _, err := i1.CreateField("parentid", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
+		t.Fatal(err)
+	} else if _, err := i1.CreateField("x", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
+		t.Fatal(err)
+	}
+
+	// Populate with data.
+	if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{
+		Index: "i0",
+		Query: `
+			Set(1, a=10)
+			Set(2, a=20)
+			Set(3, a=30)
+	`}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{
+		Index: "i1",
+		Query: `
+			Set(1, parentid=1)
+			Set(1, x=100)
+			
+			Set(2, parentid=1)
+			Set(2, x=200)
+			
+			Set(3, parentid=2)
+			Set(3, x=300)
+	`}); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("Count", func(t *testing.T) {
+		results, columns := mustQueryRows(t, c.GetNode(0).Server, `SELECT COUNT(*) FROM i0 INNER JOIN i1 ON i0._id = i1.parentid`)
+		if diff := cmp.Diff([][]interface{}{
+			{int64(2)},
+		}, results); diff != "" {
+			t.Fatal(diff)
+		}
+
+		if diff := cmp.Diff([]*pilosa.StmtColumn{
+			{Name: "count", Type: "INT"},
+		}, columns); diff != "" {
+			t.Fatal(diff)
+		}
+	})
+
+	t.Run("CountWithParentCondition", func(t *testing.T) {
+		results, columns := mustQueryRows(t, c.GetNode(0).Server, `SELECT COUNT(*) FROM i0 INNER JOIN i1 ON i0._id = i1.parentid WHERE i0.a = 10`)
+		if diff := cmp.Diff([][]interface{}{
+			{int64(1)},
+		}, results); diff != "" {
+			t.Fatal(diff)
+		}
+
+		if diff := cmp.Diff([]*pilosa.StmtColumn{
+			{Name: "count", Type: "INT"},
+		}, columns); diff != "" {
+			t.Fatal(diff)
+		}
+	})
+}
+
 func mustQueryRows(tb testing.TB, svr *pilosa.Server, q string) (results [][]interface{}, columns []*pilosa.StmtColumn) {
 	tb.Helper()
 
