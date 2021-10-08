@@ -17,6 +17,7 @@ package ctl
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -26,9 +27,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/molecula/featurebase/v2"
+	pilosa "github.com/molecula/featurebase/v2"
 	"github.com/molecula/featurebase/v2/server"
 	"github.com/molecula/featurebase/v2/topology"
+	"github.com/molecula/featurebase/v2/vprint"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -102,7 +104,6 @@ func (cmd *RestoreCommand) Run(ctx context.Context) (err error) {
 	} else if err := cmd.restoreIDAlloc(ctx, primary); err != nil {
 		return fmt.Errorf("cannot restore idalloc: %w", err)
 	}
-
 	if err := cmd.restoreShards(ctx); err != nil {
 		return fmt.Errorf("cannot restore shards: %w", err)
 	} else if err := cmd.restoreIndexTranslation(ctx); err != nil {
@@ -128,11 +129,46 @@ func (cmd *RestoreCommand) restoreSchema(ctx context.Context, primary *topology.
 	}
 	defer f.Close()
 
-	cmd.Logger().Printf("Load Schema")
-	url := primary.URI.Path("/schema")
-
-	var client http.Client
-	_, err = client.Post(url, "application/json", f)
+	existingSchema, err := cmd.client.Schema(ctx)
+	if len(existingSchema) == 0 {
+		cmd.Logger().Printf("Load Schema")
+		url := primary.URI.Path("/schema")
+		var client http.Client
+		_, err = client.Post(url, "application/json", f)
+	} else {
+		schema := &pilosa.Schema{}
+		if err := json.NewDecoder(f).Decode(schema); err != nil {
+			if err != nil {
+				return err
+			}
+		}
+		exists := func(indexName string) bool {
+			for _, i := range existingSchema {
+				if i.Name == indexName {
+					return true
+				}
+			}
+			return false
+		}
+		//NOTE SHOULD ONLY BE ONE
+		for _, index := range schema.Indexes {
+			if exists(index.Name) {
+				return errors.New(fmt.Sprintf("Index Exists %v", index.Name))
+			}
+			vprint.VV("Create INDEX %v", index.Name)
+			err = cmd.client.CreateIndex(ctx, index.Name, index.Options)
+			if err != nil {
+				return err
+			}
+			for _, field := range index.Fields {
+				vprint.VV("Create Field %v", field.Name)
+				err = cmd.client.CreateFieldWithOptions(ctx, index.Name, field.Name, field.Options)
+				if err != nil {
+					return err
+				}
+			}
+		}
+	}
 	return err
 }
 
