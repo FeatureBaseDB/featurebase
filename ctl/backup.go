@@ -24,7 +24,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/molecula/featurebase/v2"
+	pilosa "github.com/molecula/featurebase/v2"
 	"github.com/molecula/featurebase/v2/http"
 	"github.com/molecula/featurebase/v2/server"
 	"github.com/molecula/featurebase/v2/topology"
@@ -37,6 +37,9 @@ type BackupCommand struct { // nolint: maligned
 
 	// Destination host and port.
 	Host string `json:"host"`
+
+	// Optional Index filter
+	Index string `json:"index"`
 
 	// Path to write the backup to.
 	OutputDir string
@@ -91,6 +94,19 @@ func (cmd *BackupCommand) Run(ctx context.Context) (err error) {
 	if err != nil {
 		return fmt.Errorf("getting schema: %w", err)
 	}
+	if cmd.Index != "" {
+		for _, idx := range indexes {
+			if idx.Name == cmd.Index {
+				indexes = make([]*pilosa.IndexInfo, 0)
+				indexes = append(indexes, idx)
+				break
+			}
+		}
+		if len(indexes) <= 0 {
+			return fmt.Errorf("Index not found to back up")
+		}
+	}
+
 	schema := &pilosa.Schema{Indexes: indexes}
 
 	// Ensure output directory doesn't exist; then create output directory.
