@@ -249,7 +249,7 @@ func (i *Index) open(idx *disco.Index) (err error) {
 			partitionID := partitionID
 
 			g.Go(func() error {
-				store, err := i.OpenTranslateStore(i.TranslateStorePath(partitionID), i.name, "", partitionID, i.holder.partitionN)
+				store, err := i.OpenTranslateStore(i.TranslateStorePath(partitionID), i.name, "", partitionID, i.holder.partitionN, i.holder.cfg.StorageConfig.FsyncEnabled)
 				if err != nil {
 					return errors.Wrapf(err, "opening index translate store: partition=%d", partitionID)
 				}

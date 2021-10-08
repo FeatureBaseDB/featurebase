@@ -38,7 +38,10 @@ func NewHolder(tb testing.TB) *Holder {
 		panic(err)
 	}
 
-	h := &Holder{Holder: pilosa.NewHolder(path, nil)}
+	cfg := pilosa.DefaultHolderConfig()
+	cfg.StorageConfig.FsyncEnabled = false
+	cfg.RBFConfig.FsyncEnabled = false
+	h := &Holder{Holder: pilosa.NewHolder(path, cfg)}
 
 	return h
 }

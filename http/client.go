@@ -32,6 +32,7 @@ import (
 
 	pilosa "github.com/molecula/featurebase/v2"
 	"github.com/molecula/featurebase/v2/encoding/proto"
+	"github.com/molecula/featurebase/v2/ingest"
 	pnet "github.com/molecula/featurebase/v2/net"
 	"github.com/molecula/featurebase/v2/topology"
 	"github.com/molecula/featurebase/v2/tracing"
@@ -271,6 +272,38 @@ func (c *InternalClient) IngestOperations(ctx context.Context, uri *pnet.URI, in
 	req.Header.Set("Content-Length", strconv.Itoa(len(buf)))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+
+	resp, err := c.executeRequest(req.WithContext(ctx))
+	if err != nil {
+		return errors.Wrap(err, "executing request")
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return errors.Errorf("unexpected status code: %s", resp.Status)
+	}
+	return nil
+}
+
+// IngestNodeOperations uses the internal/protobuf ingest endpoint for ingest data
+func (c *InternalClient) IngestNodeOperations(ctx context.Context, uri *pnet.URI, indexName string, ireq *ingest.ShardedRequest) error {
+	if uri == nil {
+		uri = c.defaultURI
+	}
+	u := uri.Path(fmt.Sprintf("/internal/ingest/%s/node", indexName))
+
+	buf, err := c.serializer.Marshal(ireq)
+	if err != nil {
+		return errors.Wrap(err, "marshalling")
+	}
+	req, err := http.NewRequest("POST", u, bytes.NewReader(buf))
+	if err != nil {
+		return errors.Wrap(err, "creating request")
+	}
+
+	req.Header.Set("Content-Length", strconv.Itoa(len(buf)))
+	req.Header.Set("Content-Type", "application/x-protobuf")
+	req.Header.Set("Accept", "application/x-protobuf")
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
 
 	resp, err := c.executeRequest(req.WithContext(ctx))

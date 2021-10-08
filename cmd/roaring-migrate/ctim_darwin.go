@@ -1,4 +1,4 @@
-// Copyright 2021 Molecula Corp.
+// Copyright 2017 Pilosa Corp.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,4 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package ingest
+// +build darwin
+
+package main
+
+import (
+	"syscall"
+)
+
+func CTimeNano(stat *syscall.Stat_t) int64 {
+	NANOS := int64(1e9) // number of nanosecs in 1 sec
+	ts := stat.Ctimespec
+	return ts.Sec*NANOS + ts.Nsec
+}

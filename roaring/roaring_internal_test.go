@@ -4636,3 +4636,103 @@ func TestContainer_unionInPlace_ArrayUnionRun(t *testing.T) {
 		}
 	}
 }
+
+func TestContainerCallback(t *testing.T) {
+	containers, err := InitContainerArchetypes()
+	if err != nil {
+		t.Fatalf("creating containers: %v", err)
+	}
+	got := make([]uint16, 65536)
+	hit := func(u uint16) {
+		got = append(got, u)
+	}
+	var expected []uint16
+	// complain() wraps up some pretty-printing logic for this,
+	// but note also the closure trapping expected/got so we can
+	// just refer to them without passing them in.
+	complain := func(t *testing.T, msg string, args ...interface{}) {
+		l1 := len(expected)
+		l2 := len(got)
+		dotdot1 := ""
+		dotdot2 := ""
+		if l1 > 8 {
+			expected = expected[:8]
+			dotdot1 = "..."
+		}
+		if l2 > 8 {
+			got = got[:8]
+			dotdot2 = "..."
+		}
+		t.Fatalf("%s: expected %d%s, got %d%s", fmt.Sprintf(msg, args...), expected, dotdot1, got, dotdot2)
+	}
+	for t1, ci := range containers {
+		t.Run(ContainerArchetypeNames[t1], func(t *testing.T) {
+			for _, c1 := range ci {
+				got = got[:0]
+				expected = c1.Slice()
+				containerCallback(c1, hit)
+				if len(got) != len(expected) {
+					complain(t, "wrong length (%d vs %d)", len(expected), len(got))
+				}
+				for i := range got {
+					if got[i] != expected[i] {
+						complain(t, "element %d differs: expected %d, got %d", i, expected[i], got[i])
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestIntersectionCallback(t *testing.T) {
+	containers, err := InitContainerArchetypes()
+	if err != nil {
+		t.Fatalf("creating containers: %v", err)
+	}
+	got := make([]uint16, 65536)
+	hit := func(u uint16) {
+		got = append(got, u)
+	}
+	var expected []uint16
+	// complain() wraps up some pretty-printing logic for this,
+	// but note also the closure trapping expected/got so we can
+	// just refer to them without passing them in.
+	complain := func(t *testing.T, msg string, args ...interface{}) {
+		l1 := len(expected)
+		l2 := len(got)
+		dotdot1 := ""
+		dotdot2 := ""
+		if l1 > 8 {
+			expected = expected[:8]
+			dotdot1 = "..."
+		}
+		if l2 > 8 {
+			got = got[:8]
+			dotdot2 = "..."
+		}
+		t.Fatalf("%s: expected %d%s, got %d%s", fmt.Sprintf(msg, args...), expected, dotdot1, got, dotdot2)
+	}
+	for t1, ci := range containers {
+		for t2, cj := range containers {
+			t.Run(fmt.Sprintf("%s-%s", ContainerArchetypeNames[t1], ContainerArchetypeNames[t2]), func(t *testing.T) {
+				for _, c1 := range ci {
+					for _, c2 := range cj {
+						got = got[:0]
+						expectedContainer := intersect(c1, c2)
+						expected = expectedContainer.Slice()
+						intersectionCallback(c1, c2, hit)
+						if len(got) != len(expected) {
+							complain(t, "wrong length (%d vs %d)", len(expected), len(got))
+						}
+						for i := range got {
+							if got[i] != expected[i] {
+								complain(t, "element %d differs: expected %d, got %d", i, expected[i], got[i])
+							}
+						}
+					}
+				}
+
+			})
+		}
+	}
+}

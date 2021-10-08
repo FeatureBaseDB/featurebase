@@ -300,8 +300,8 @@ func (v *view) Fragment(shard uint64) *fragment {
 
 // allFragments returns a list of all fragments in the view.
 func (v *view) allFragments() []*fragment {
-	v.mu.Lock()
-	defer v.mu.Unlock()
+	v.mu.RLock()
+	defer v.mu.RUnlock()
 
 	other := make([]*fragment, 0, len(v.fragments))
 	for _, fragment := range v.fragments {

@@ -159,7 +159,7 @@ func TestField_NameRestriction(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	field, err := pilosa.NewField(pilosa.NewHolder(path, nil), path, "i", ".meta", pilosa.OptFieldTypeDefault())
+	field, err := pilosa.NewField(pilosa.NewHolder(path, mustHolderConfig()), path, "i", ".meta", pilosa.OptFieldTypeDefault())
 	if field != nil {
 		t.Fatalf("unexpected field name %s", err)
 	}
@@ -192,13 +192,13 @@ func TestField_NameValidation(t *testing.T) {
 		panic(err)
 	}
 	for _, name := range validFieldNames {
-		_, err := pilosa.NewField(pilosa.NewHolder(path, nil), path, "i", name, pilosa.OptFieldTypeDefault())
+		_, err := pilosa.NewField(pilosa.NewHolder(path, mustHolderConfig()), path, "i", name, pilosa.OptFieldTypeDefault())
 		if err != nil {
 			t.Fatalf("unexpected field name: %s %s", name, err)
 		}
 	}
 	for _, name := range invalidFieldNames {
-		_, err := pilosa.NewField(pilosa.NewHolder(path, nil), path, "i", name, pilosa.OptFieldTypeDefault())
+		_, err := pilosa.NewField(pilosa.NewHolder(path, mustHolderConfig()), path, "i", name, pilosa.OptFieldTypeDefault())
 		if err == nil {
 			t.Fatalf("expected error on field name: %s", name)
 		}

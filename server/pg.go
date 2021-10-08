@@ -25,9 +25,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/molecula/featurebase/v2"
+	pilosa "github.com/molecula/featurebase/v2"
 	"github.com/molecula/featurebase/v2/logger"
 	"github.com/molecula/featurebase/v2/pg"
+
+	//"github.com/molecula/featurebase/v2/pg"
 	"github.com/molecula/featurebase/v2/pql"
 	pb "github.com/molecula/featurebase/v2/proto"
 
@@ -43,14 +45,20 @@ type PostgresServer struct {
 	s      pg.Server
 	stop   context.CancelFunc
 }
+type SqlVersion uint16
+
+const (
+	SqlV1 SqlVersion = 0
+	SqlV2 SqlVersion = 2
+)
 
 // NewPostgresServer creates a postgres server.
-func NewPostgresServer(api *pilosa.API, logger logger.Logger, tls *tls.Config) *PostgresServer {
+func NewPostgresServer(api *pilosa.API, logger logger.Logger, tls *tls.Config, sqlVersion SqlVersion) *PostgresServer {
 	return &PostgresServer{
 		api:    api,
 		logger: logger,
 		s: pg.Server{
-			QueryHandler:   NewPostgresHandler(api, logger),
+			QueryHandler:   NewPostgresHandler(api, logger, sqlVersion),
 			TypeEngine:     pg.PrimitiveTypeEngine{},
 			StartupTimeout: 5 * time.Second,
 			ReadTimeout:    10 * time.Second,
@@ -66,11 +74,12 @@ func NewPostgresServer(api *pilosa.API, logger logger.Logger, tls *tls.Config) *
 }
 
 // NewPostgresHandler creates a postgres query handler wrapping the pilosa API.
-func NewPostgresHandler(api *pilosa.API, logger logger.Logger) pg.QueryHandler {
-	return &queryDecodeHandler{
-		child: &pilosaQueryHandler{
-			api:    api,
-			logger: logger,
+func NewPostgresHandler(api *pilosa.API, logger logger.Logger, sqlVersion SqlVersion) pg.QueryHandler {
+	return &QueryDecodeHandler{
+		Child: &PilosaQueryHandler{
+			Api:        api,
+			logger:     logger,
+			sqlVersion: sqlVersion,
 		},
 	}
 }
@@ -107,6 +116,10 @@ func (s *PostgresServer) Close() error {
 	return s.eg.Wait()
 }
 
+func (s *PostgresServer) GetAPI() *pilosa.API {
+	return s.api
+}
+
 type pgPQLQuery struct {
 	index string
 	query string
@@ -135,9 +148,10 @@ func pgDecodePQL(str string) (q pg.Query, err error) {
 	}, nil
 }
 
-type pilosaQueryHandler struct {
-	api    *pilosa.API
-	logger logger.Logger
+type PilosaQueryHandler struct {
+	Api        *pilosa.API
+	logger     logger.Logger
+	sqlVersion SqlVersion
 }
 
 func pgWriteRow(w pg.QueryResultWriter, row *pilosa.Row) error {
@@ -322,6 +336,78 @@ func pgWriteGroupCount(w pg.QueryResultWriter, counts *pilosa.GroupCounts) error
 	return nil
 }
 
+func pgWriteStmtRows(w pg.QueryResultWriter, rows *pilosa.StmtRows) error {
+	//TODO(twg) writeHeader
+	//TODO(twg) writeColumns
+	first := true
+	var data []string
+	var err error
+	for rows.Next() {
+		if first {
+			columns := rows.Columns()
+			//TODO (twg) types:=rows.Types()
+			headers := make([]pg.ColumnInfo, len(columns))
+			for i, column := range columns {
+				headers[i] = pg.ColumnInfo{
+					Name: column.Name,
+					Type: pg.TypeCharoid, //TODO(twg) types[i]
+				}
+			}
+			err := w.WriteHeader(headers...)
+			if err != nil {
+				return err
+			}
+
+			data = make([]string, len(headers))
+			first = false
+		}
+		result := make([]interface{}, len(rows.Columns()))
+		// Create list of scan destination pointers.
+		dsts := make([]interface{}, len(result))
+		for i := range result {
+			dsts[i] = &result[i]
+		}
+
+		if err := rows.Scan(dsts...); err != nil {
+			return err
+		}
+		//TODO(twg) conversion should be happening in Scan as described in https://pkg.go.dev/database/sql
+		// ....
+		// Scan also converts between string and numeric types, as long as no information
+		// would be lost. While Scan stringifies all numbers scanned from numeric database columns into *string,
+		// scans into numeric types are checked for overflow. For example, a float64 with value 300 or a string
+		// with value "300" can scan into a uint16, but not into a uint8, though float64(255) or "255" can scan
+		// into a uint8. One exception is that scans of some float64 numbers to strings may lose information when stringifying.
+		// In general, scan floating point columns into *float64.
+		// ...
+		for i, col := range dsts {
+			var v string
+			switch col := col.(type) {
+			case nil:
+				v = "null"
+				//
+				//v = strconv.FormatUint(col.Uint64Val, 10)
+			case *interface{}:
+				v = fmt.Sprintf("%v", *col)
+			default:
+				return errors.Errorf("unable to process value of type %T", col)
+			}
+
+			data[i] = v
+		}
+
+		err = w.WriteRowText(data...)
+		if err != nil {
+			return err
+		}
+
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	return nil
+}
+
 func pgWriteRowser(w pg.QueryResultWriter, result pb.ToRowser) error {
 	var data []string
 	return result.ToRows(func(row *pb.RowResponse) error {
@@ -395,6 +481,8 @@ func pgWriteResult(w pg.QueryResultWriter, result interface{}) error {
 		return pgWriteGroupCount(w, result)
 	case pb.ToRowser: // we should avoid protobuf where we can...
 		return pgWriteRowser(w, result)
+	case *pilosa.StmtRows: // we should avoid protobuf where we can...
+		return pgWriteStmtRows(w, result)
 	case uint64:
 		err := w.WriteHeader(pg.ColumnInfo{
 			Name: "count",
@@ -449,10 +537,10 @@ func pgWriteResult(w pg.QueryResultWriter, result interface{}) error {
 	}
 }
 
-func (pqh *pilosaQueryHandler) HandleQuery(ctx context.Context, w pg.QueryResultWriter, q pg.Query) error {
+func (pqh *PilosaQueryHandler) HandleQuery(ctx context.Context, w pg.QueryResultWriter, q pg.Query) error {
 	switch q := q.(type) {
 	case pgPQLQuery:
-		resp, err := pqh.api.Query(ctx, &pilosa.QueryRequest{
+		resp, err := pqh.Api.Query(ctx, &pilosa.QueryRequest{
 			Index: q.index,
 			Query: q.query,
 		})
@@ -465,22 +553,36 @@ func (pqh *pilosaQueryHandler) HandleQuery(ctx context.Context, w pg.QueryResult
 		return errors.Wrap(pgWriteResult(w, resp.Results[0]), "writing query result")
 
 	case pg.SimpleQuery:
-		resp, err := execSQL(ctx, pqh.api, pqh.logger, string(q))
-		if err != nil {
-			return errors.Wrap(err, "executing query")
+		if pqh.sqlVersion == SqlV2 {
+			stmt, err := pqh.Api.Plan(ctx, string(q))
+			if err != nil {
+				return err
+			}
+			resp, err := stmt.QueryContext(ctx)
+			if err != nil {
+				return err
+			}
+			return errors.Wrap(pgWriteResult(w, resp), "writing sql2 query result")
+			//version 2.0
+		} else {
+			//version 1.0
+			resp, err := execSQL(ctx, pqh.Api, pqh.logger, string(q))
+			if err != nil {
+				return errors.Wrap(err, "executing query")
+			}
+			return errors.Wrap(pgWriteResult(w, resp), "writing query result")
 		}
-		return errors.Wrap(pgWriteResult(w, resp), "writing query result")
 
 	default:
 		return errors.Errorf("query type %T not yet supported (query: %s)", q, q)
 	}
 }
 
-type queryDecodeHandler struct {
-	child pg.QueryHandler
+type QueryDecodeHandler struct {
+	Child pg.QueryHandler
 }
 
-func (qdh *queryDecodeHandler) HandleQuery(ctx context.Context, w pg.QueryResultWriter, q pg.Query) error {
+func (qdh *QueryDecodeHandler) HandleQuery(ctx context.Context, w pg.QueryResultWriter, q pg.Query) error {
 	switch qv := q.(type) {
 	case pg.SimpleQuery:
 		if strings.HasPrefix(string(qv), "[") {
@@ -492,5 +594,33 @@ func (qdh *queryDecodeHandler) HandleQuery(ctx context.Context, w pg.QueryResult
 		}
 	}
 
-	return qdh.child.HandleQuery(ctx, w, q)
+	return qdh.Child.HandleQuery(ctx, w, q)
+}
+func (qdh *QueryDecodeHandler) Version() string {
+	return qdh.Child.Version()
+}
+
+func (pqh *PilosaQueryHandler) Version() string {
+	if pqh.sqlVersion > 0 {
+		return "v2"
+	}
+	return "v1"
+}
+func (pqh *PilosaQueryHandler) HandleSchema(ctx context.Context, portal *pg.Portal) error {
+	schema, err := pqh.Api.Schema(context.Background(), false)
+	if err != nil {
+		return err
+	}
+	for _, ii := range schema {
+		dataRow, err := portal.Encoder.TextRow("featurebase", ii.Name)
+		if err != nil {
+			return err
+		}
+		portal.Add(dataRow)
+	}
+	return nil
+}
+
+func (qdh *QueryDecodeHandler) HandleSchema(ctx context.Context, portal *pg.Portal) error {
+	return qdh.Child.HandleSchema(ctx, portal)
 }

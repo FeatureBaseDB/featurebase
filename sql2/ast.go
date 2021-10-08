@@ -194,6 +194,26 @@ func StatementSource(stmt Statement) Source {
 	}
 }
 
+// Data types
+const (
+	DataTypeBool      = "BOOL"
+	DataTypeDecimal   = "DECIMAL"
+	DataTypeInt       = "INT"
+	DataTypeSet       = "SET"
+	DataTypeText      = "TEXT"
+	DataTypeTimestamp = "TIMESTAMP"
+)
+
+// IsDataTypeValid returns true if typ is a valid data type.
+func IsDataTypeValid(typ string) bool {
+	switch typ {
+	case DataTypeBool, DataTypeInt, DataTypeDecimal, DataTypeText:
+		return true
+	default:
+		return false
+	}
+}
+
 type Expr interface {
 	Node
 	expr()
@@ -279,6 +299,49 @@ func cloneExprs(a []Expr) []Expr {
 	return other
 }
 
+// ExprDataType returns the data type for an expression.
+func ExprDataType(expr Expr) string {
+	if expr == nil {
+		return ""
+	}
+
+	switch expr := expr.(type) {
+	// Simple type assertions
+	case *BindExpr, *ExprList, *Ident, *NullLit, *Raise:
+		return ""
+	case *BlobLit, *StringLit:
+		return DataTypeText
+	case *BoolLit, *Exists, *Range:
+		return DataTypeBool
+	case *NumberLit:
+		return DataTypeInt
+
+	// Complex type assertions
+	case *BinaryExpr:
+		return ExprDataType(expr.X)
+	case *Call:
+		return DataTypeInt // TODO: May be different for some aggregations
+	case *CaseExpr:
+		if len(expr.Blocks) > 0 {
+			return ExprDataType(expr.Blocks[0].Body)
+		} else if expr.ElseExpr != nil {
+			return ExprDataType(expr.ElseExpr)
+		}
+		return ""
+	case *CastExpr:
+		return "" // TODO: Inspect expr.Type.Name
+	case *ParenExpr:
+		return ExprDataType(expr.X)
+	case *QualifiedRef:
+		return expr.DataType
+	case *UnaryExpr:
+		return ExprDataType(expr.X)
+
+	default:
+		panic(fmt.Sprintf("invalid expr type: %T", expr))
+	}
+}
+
 // ExprString returns the string representation of expr.
 // Returns a blank string if expr is nil.
 func ExprString(expr Expr) string {
@@ -286,6 +349,119 @@ func ExprString(expr Expr) string {
 		return ""
 	}
 	return expr.String()
+}
+
+// ExprTableName returns the name of the table referenced in an expression.
+// Returns ok as false if more than one table referenced. Returns a blank string
+// if no tables are referenced.
+func ExprTableName(expr Expr) (table string, ok bool) {
+	switch expr := expr.(type) {
+	case *BindExpr, *BlobLit, *BoolLit, *Ident, *NullLit, *NumberLit, *StringLit:
+		return "", true
+
+	case *BinaryExpr:
+		x, ok := ExprTableName(expr.X)
+		if !ok {
+			return "", false
+		}
+
+		y, ok := ExprTableName(expr.Y)
+		if !ok {
+			return "", false
+		}
+
+		if x == "" {
+			return y, true
+		} else if y == "" {
+			return x, true
+		} else if x == y {
+			return x, true
+		}
+		return "", false
+
+	case *Call:
+		for _, arg := range expr.Args {
+			tbl, ok := ExprTableName(arg)
+			if !ok || (table != "" && tbl != table) {
+				return "", false
+			}
+			table = tbl
+		}
+		return table, true
+
+	case *CaseExpr:
+		tbl, ok := ExprTableName(expr.Operand)
+		if !ok || (table != "" && tbl != table) {
+			return "", false
+		}
+		table = tbl
+
+		tbl, ok = ExprTableName(expr.ElseExpr)
+		if !ok || (table != "" && tbl != table) {
+			return "", false
+		}
+		table = tbl
+
+		for _, blk := range expr.Blocks {
+			tbl, ok := ExprTableName(blk.Condition)
+			if !ok || (table != "" && tbl != table) {
+				return "", false
+			}
+			table = tbl
+
+			tbl, ok = ExprTableName(blk.Body)
+			if !ok || (table != "" && tbl != table) {
+				return "", false
+			}
+			table = tbl
+		}
+		return table, true
+
+	case *CastExpr:
+		return ExprTableName(expr.X)
+
+	case *Exists:
+		return "", false // TODO
+
+	case *ExprList:
+		for _, e := range expr.Exprs {
+			tbl, ok := ExprTableName(e)
+			if !ok || (table != "" && tbl != table) {
+				return "", false
+			}
+			table = tbl
+		}
+		return table, true
+
+	case *ParenExpr:
+		return ExprTableName(expr.X)
+
+	case *QualifiedRef:
+		return expr.Table.Name, true
+
+	case *Raise:
+		return "", true
+
+	case *Range:
+		tbl, ok := ExprTableName(expr.X)
+		if !ok || (table != "" && tbl != table) {
+			return "", false
+		}
+		table = tbl
+
+		tbl, ok = ExprTableName(expr.Y)
+		if !ok || (table != "" && tbl != table) {
+			return "", false
+		}
+		table = tbl
+		return table, true
+
+	case *UnaryExpr:
+		return ExprTableName(expr.X)
+
+	default:
+		return "", false
+	}
 }
 
 // SplitExprTree splits apart expr so it is a list of all AND joined expressions.
@@ -1811,6 +1987,9 @@ type QualifiedRef struct {
 	Dot    Pos    // position of dot
 	Star   Pos    // position of * (result column only)
 	Column *Ident // column name
+
+	// Set by the planner; not at parse-time
+	DataType string
 }
 
 // IsAggregate returns false.
@@ -2935,6 +3114,23 @@ func (s *SelectStatement) IsAggregate() bool {
 	return false
 }
 
+// HasWildcard returns true any result column contains a wildcard (STAR).
+func (s *SelectStatement) HasWildcard() bool {
+	for _, col := range s.Columns {
+		// Unqualified wildcard.
+		if col.Star.IsValid() {
+			return true
+		}
+
+		// Table-qualified wildcard.
+		if ref, ok := col.Expr.(*QualifiedRef); ok && ref.Star.IsValid() {
+			return true
+		}
+	}
+
+	return false
+}
+
 // String returns the string representation of the statement.
 func (s *SelectStatement) String() string {
 	var buf bytes.Buffer
@@ -3061,10 +3257,12 @@ func (c *ResultColumn) Name() string {
 	}
 
 	switch expr := c.Expr.(type) {
+	case *Call:
+		return strings.ToLower(IdentName(expr.Name))
 	case *Ident:
 		return IdentName(expr)
 	case *QualifiedRef:
-		return expr.String()
+		return IdentName(expr.Column)
 	default:
 		return ""
 	}

@@ -25,6 +25,8 @@ import (
 const (
 	SQLTypeSelect = "select"
 	SQLTypeShow   = "show"
+	SQLTypeSet    = "set"
+	SQLTypeBegin  = "begin"
 	SQLTypeEmpty  = ""
 )
 
@@ -101,6 +103,10 @@ func (m *Mapper) MapSQL(sql string) (*MappedSQL, error) {
 		}
 	case *sqlparser.Show:
 		sqlType = SQLTypeShow
+	case *sqlparser.Set:
+		sqlType = SQLTypeSet
+	case *sqlparser.Begin:
+		sqlType = SQLTypeBegin
 	}
 
 	return &MappedSQL{

@@ -33,7 +33,10 @@ func newIndex(tb testing.TB) *Index {
 	if err != nil {
 		panic(err)
 	}
-	h := pilosa.NewHolder(path, pilosa.DefaultHolderConfig())
+	cfg := pilosa.DefaultHolderConfig()
+	cfg.StorageConfig.FsyncEnabled = false
+	cfg.RBFConfig.FsyncEnabled = false
+	h := pilosa.NewHolder(path, cfg)
 	testhook.Cleanup(tb, func() {
 		h.Close()
 	})

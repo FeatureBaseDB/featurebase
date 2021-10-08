@@ -35,7 +35,7 @@ func mustOpenView(tb testing.TB, index, field, name string) *view {
 		CacheSize: DefaultCacheSize,
 	}
 
-	h := NewHolder(path, nil)
+	h := NewHolder(path, mustHolderConfig())
 	// h needs an *Index so we can call h.Index() and get Index.Txf, in TestView_DeleteFragment
 
 	cim := &CreateIndexMessage{

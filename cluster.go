@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/molecula/featurebase/v2/disco"
+	"github.com/molecula/featurebase/v2/ingest"
 	"github.com/molecula/featurebase/v2/logger"
 	"github.com/molecula/featurebase/v2/roaring"
 	"github.com/molecula/featurebase/v2/topology"
@@ -1165,6 +1166,9 @@ func (c *cluster) followResizeInstruction(ctx context.Context, instr *ResizeInst
 		}
 	}
 
+	// fire off translation sync
+	_ = c.translationSyncer.Reset()
+
 	return nil
 }
 
@@ -1179,6 +1183,8 @@ func (c *cluster) resizeAbort() error {
 	if c.resizeCancel != nil {
 		c.resizeCancel()
 	}
+	// fire off translation sync
+	_ = c.translationSyncer.Reset()
 	return nil
 }
 
@@ -1559,6 +1565,38 @@ func (c *cluster) translateIndexKeys(ctx context.Context, indexName string, keys
 	}
 
 	return ids, nil
+}
+
+// This implements ingest's key translator interface on a cluster/index pair.
+type clusterKeyTranslator struct {
+	ctx       context.Context // we're created within a request context and need to pass that to cluster ops
+	c         *cluster
+	indexName string
+}
+
+var _ ingest.KeyTranslator = &clusterKeyTranslator{}
+
+func (i clusterKeyTranslator) TranslateKeys(keys ...string) (map[string]uint64, error) {
+	return i.c.createIndexKeys(i.ctx, i.indexName, keys...)
+}
+
+func (i clusterKeyTranslator) TranslateIDs(ids ...uint64) (map[uint64]string, error) {
+	keys, err := i.c.translateIndexIDs(i.ctx, i.indexName, ids)
+	if err != nil {
+		return nil, err
+	}
+	if len(keys) != len(ids) {
+		return nil, fmt.Errorf("translating %d id(s), got %d key(s)", len(ids), len(keys))
+	}
+	out := make(map[uint64]string, len(keys))
+	for i, id := range ids {
+		out[id] = keys[i]
+	}
+	return out, nil
+}
+
+func newIngestKeyTranslatorFromCluster(ctx context.Context, c *cluster, indexName string) *clusterKeyTranslator {
+	return &clusterKeyTranslator{ctx: ctx, c: c, indexName: indexName}
 }
 
 // TODO: remove this when it is no longer used

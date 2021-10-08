@@ -116,6 +116,7 @@ release: check-clean generate-statik-docker
 	$(MAKE) release-build GOOS=darwin GOARCH=amd64
 	$(MAKE) release-build GOOS=darwin GOARCH=arm64
 	$(MAKE) release-build GOOS=linux GOARCH=amd64
+	$(MAKE) release-build GOOS=linux GOARCH=arm64
 
 # Create release build tarballs for all supported platforms. Same as `release`, but without embedded Lattice UI.
 release-sans-ui: check-clean
@@ -123,6 +124,7 @@ release-sans-ui: check-clean
 	$(MAKE) release-build GOOS=darwin GOARCH=amd64
 	$(MAKE) release-build GOOS=darwin GOARCH=arm64
 	$(MAKE) release-build GOOS=linux GOARCH=amd64
+	$(MAKE) release-build GOOS=linux GOARCH=arm64
 
 # try (e.g.) internal/clustertests/docker-compose-replication2.yml
 DOCKER_COMPOSE=internal/clustertests/docker-compose.yml
@@ -133,9 +135,8 @@ DOCKER_COMPOSE=internal/clustertests/docker-compose.yml
 # pilosa image.
 clustertests: vendor
 	docker-compose -f $(DOCKER_COMPOSE) down
-	docker-compose -f $(DOCKER_COMPOSE) build client1
+	docker-compose -f $(DOCKER_COMPOSE) build
 	docker-compose -f $(DOCKER_COMPOSE) up --exit-code-from=client1
-
 
 # Like clustertests, but rebuilds all images.
 clustertests-build: vendor
@@ -197,6 +198,7 @@ generate: generate-protoc generate-statik generate-stringer generate-pql
 # Create release using Docker
 docker-release:
 	$(MAKE) docker-build GOOS=linux GOARCH=amd64
+	$(MAKE) docker-build GOOS=linux GOARCH=arm64
 	$(MAKE) docker-build GOOS=darwin GOARCH=amd64
 	$(MAKE) docker-build GOOS=darwin GOARCH=arm64
 
@@ -206,28 +208,28 @@ docker-build: vendor
 	    --build-arg GO_VERSION=$(GO_VERSION) \
 	    --build-arg MAKE_FLAGS="TRIAL_DEADLINE=$(TRIAL_DEADLINE) GOOS=$(GOOS) GOARCH=$(GOARCH)" \
 	    --target pilosa-builder \
-	    --tag pilosa:build .
-	docker create --name pilosa-build pilosa:build
-	mkdir -p build/pilosa-$(VERSION_ID)
-	docker cp pilosa-build:/pilosa/build/. ./build/pilosa-$(VERSION_ID)
-	cp NOTICE LICENSE ./build/pilosa-$(VERSION_ID)
-	docker rm pilosa-build
-	tar -cvz -C build -f build/pilosa-$(VERSION_ID).tar.gz pilosa-$(VERSION_ID)/
+	    --tag featurebase:build .
+	docker create --name featurebase-build featurebase:build
+	mkdir -p build/featurebase-$(VERSION_ID)
+	docker cp featurebase-build:/pilosa/build/. ./build/featurebase-$(VERSION_ID)
+	cp NOTICE LICENSE ./build/featurebase-$(VERSION_ID)
+	docker rm featurebase-build
+	tar -cvz -C build -f build/featurebase-$(VERSION_ID).tar.gz featurebase-$(VERSION_ID)/
 
 # Create Docker image from Dockerfile
 docker-image: vendor
 	docker build \
 	    --build-arg GO_VERSION=$(GO_VERSION) \
 	    --build-arg MAKE_FLAGS="TRIAL_DEADLINE=$(TRIAL_DEADLINE)" \
-	    --tag pilosa:$(VERSION) .
-	@echo Created docker image: pilosa:$(VERSION)
+	    --tag featurebase:$(VERSION) .
+	@echo Created docker image: featurebase:$(VERSION)
 
 # Create docker image (alias)
 docker: docker-image # alias
 
 # Tag and push a Docker image
 docker-tag-push: vendor
-	docker tag "pilosa:$(VERSION)" $(DOCKER_TARGET)
+	docker tag "featurebase:$(VERSION)" $(DOCKER_TARGET)
 	docker push $(DOCKER_TARGET)
 	@echo Pushed docker image: $(DOCKER_TARGET)
 

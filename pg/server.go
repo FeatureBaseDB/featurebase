@@ -59,6 +59,9 @@ type Server struct {
 	// CancellationManager is the cancellation manager to use.
 	// If this is not set, no cancellations will be applied.
 	CancellationManager CancellationManager
+	lookerChannel       chan struct{}
+	mu                  sync.Mutex
+	portals             []*Portal
 }
 
 // ServeConn serves a single connection.
@@ -79,6 +82,8 @@ func (s *Server) Serve(ctx context.Context, l net.Listener) (err error) {
 			err = cerr
 		}
 	}(ctx)
+	// TODO (twg) added for looker
+	s.lookerChannel = make(chan struct{})
 
 	// Wait for the listener to be closed and all connections to shut down.
 	var wg sync.WaitGroup

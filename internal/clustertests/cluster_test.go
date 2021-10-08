@@ -21,7 +21,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/molecula/featurebase/v2"
+	pilosa "github.com/molecula/featurebase/v2"
 	"github.com/molecula/featurebase/v2/disco"
 	picli "github.com/molecula/featurebase/v2/http"
 )
@@ -115,7 +115,7 @@ func waitForStatus(t *testing.T, stator func(context.Context) (string, error), s
 		if err != nil {
 			t.Logf("Status (try %d/%d): %v (retrying in %s)", i, n, err, sleep.String())
 		} else {
-			t.Logf("Status (try %d/%d): %s (retrying in %s)", i, n, s, sleep.String())
+			t.Logf("Status (try %d/%d): curr: %s, expect: %s (retrying in %s)", i, n, s, status, sleep.String())
 		}
 		if s == status {
 			return

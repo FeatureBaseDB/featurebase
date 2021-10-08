@@ -26,9 +26,7 @@ import (
 	"testing"
 
 	pilosa "github.com/molecula/featurebase/v2"
-	"github.com/molecula/featurebase/v2/http"
 	"github.com/molecula/featurebase/v2/ingest"
-	"github.com/molecula/featurebase/v2/server"
 	"github.com/molecula/featurebase/v2/test"
 	"github.com/pkg/errors"
 )
@@ -448,14 +446,7 @@ func TestIngestTestcases(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	c := test.MustRunCluster(t, 1,
-		[]server.CommandOption{
-			server.OptCommandServerOptions(
-				pilosa.OptServerNodeID("node0"),
-				pilosa.OptServerClusterHasher(&offsetModHasher{}),
-				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
-			)},
-	)
+	c := test.MustRunCluster(t, 3)
 	defer c.Close()
 
 	coord := c.GetPrimary()

@@ -648,7 +648,7 @@ func (f *Field) writeAvailableShards() {
 func (f *Field) applyTranslateStore() error {
 	// Instantiate & open translation store.
 	var err error
-	f.translateStore, err = f.OpenTranslateStore(f.TranslateStorePath(), f.index, f.name, -1, -1)
+	f.translateStore, err = f.OpenTranslateStore(f.TranslateStorePath(), f.index, f.name, -1, -1, f.holder.cfg.StorageConfig.FsyncEnabled)
 	if err != nil {
 		return errors.Wrap(err, "opening field translate store")
 	}
@@ -1098,9 +1098,15 @@ func (f *Field) MutexCheck(ctx context.Context, qcx *Qcx, details bool, limit in
 	if f.Type() != FieldTypeMutex {
 		return nil, errors.New("mutex check only valid for mutex fields")
 	}
+
+	// Rather than deferring the unlock, we grab the standard view
+	// from the field's viewMap and unlock immediately. This avoids
+	// holding the rlock for a potentially long time which blocks any
+	// write lock, and pending write locks block other read locks.
 	f.mu.RLock()
-	defer f.mu.RUnlock()
 	standard := f.viewMap[viewStandard]
+	f.mu.RUnlock()
+
 	if standard == nil {
 		// no standard view present means we've never needed to create it,
 		// so it has no bits set, so it has no extra bits set.

@@ -17,6 +17,7 @@ package message
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 )
 
 // Type is a byte indicating the type of a Postgres message.
@@ -29,11 +30,11 @@ const (
 	// TypeReadyForQuery is a message used to indicate that the server is ready for another query.
 	TypeReadyForQuery Type = 'Z'
 
-	// TypeCommandComplete is a message used to indicate that a query has completed.
+	// TypeCommandComplete is a Backend message used to indicate that a query has completed.
 	TypeCommandComplete Type = 'C'
 
-	// TypeError is an error message.
-	TypeError Type = 'E'
+	// TypeClos is a message used to indicate that a query has completed. Frontend
+	TypeClose Type = 'C'
 
 	// TypeRowDescription is a message indicating the column types of the result rows from a query.
 	TypeRowDescription Type = 'T'
@@ -52,6 +53,20 @@ const (
 
 	// TypeBackendKeyData contains a cancellation key for the client to use later.
 	TypeBackendKeyData Type = 'K'
+
+	TypeParse         Type = 'P'
+	TypeParseComplete Type = '1'
+
+	TypeBind         Type = 'B'
+	TypeBindComplete Type = '2'
+
+	TypeExecute            Type = 'E' // Frontend
+	TypeError              Type = 'E' // Backend
+	TypeSync               Type = 'S' // Frontend
+	TypeParameterStatus    Type = 'S' // Backend
+	TypeDescribe           Type = 'D' // Frontend
+	TypeNoData             Type = 'n' // backend
+	TypeEmptyQueryResponse Type = 'I' // backend
 )
 
 // AuthenticationOK is a message indicating that authentication has completed.
@@ -59,12 +74,71 @@ var AuthenticationOK = Message{
 	Type: TypeAuthentication,
 	Data: []byte{0, 0, 0, 0},
 }
+var ParseOK = Message{
+	Type: TypeParseComplete,
+	Data: []byte{},
+}
+var BindComplete = Message{
+	Type: TypeBindComplete,
+	Data: []byte{},
+}
+var NoData = Message{
+	Type: TypeNoData,
+	Data: []byte{},
+}
+var EmptyQueryResponse = Message{
+	Type: TypeEmptyQueryResponse,
+	Data: []byte{},
+}
 
 // Message is a Postgres message value.
 type Message struct {
 	Type Type
 	Data []byte
 }
+
+//debug tools
+func viewString(b []byte) string {
+	r := []rune(string(b))
+	for i := range r {
+		if r[i] < 32 || r[i] > 126 {
+			r[i] = '.'
+		}
+	}
+	return string(r)
+}
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+func (m *Message) Dump(prefix string) {
+	n := len(m.Data)
+	rowcount := 0
+	stop := (n / 8) * 8
+	k := 0
+	fmt.Printf("\n %s type: '%c'\n", prefix, m.Type)
+	for i := 0; i <= stop; i += 8 {
+		k++
+		if i+8 < n {
+			rowcount = 8
+		} else {
+			rowcount = min(k*8, n) % 8
+		}
+
+		fmt.Printf("pos %02d  hex:  ", i)
+		for j := 0; j < rowcount; j++ {
+			fmt.Printf("%02x  ", m.Data[i+j])
+		}
+		for j := rowcount; j < 8; j++ {
+			fmt.Printf("    ")
+		}
+		fmt.Printf("  '%s'\n", viewString(m.Data[i:(i+rowcount)]))
+	}
+}
+
+//endTools
 
 // TransactionStatus is the current transaction state.
 type TransactionStatus byte
@@ -97,6 +171,14 @@ func (e *Encoder) i32(i int32) error {
 	_, err := e.buf.Write(e.scratch[:])
 	return err
 }
+
+/* removed for linter now
+func (e *Encoder) u32(i uint32) error {
+	binary.BigEndian.PutUint32(e.scratch[:], i)
+	_, err := e.buf.Write(e.scratch[:])
+	return err
+}
+*/
 
 // ReadyForQuery encodes a "ready for query" message.
 func (e *Encoder) ReadyForQuery(status TransactionStatus) (Message, error) {
@@ -149,6 +231,9 @@ const (
 
 	// NoticeFieldHint is a suggestion of how to address the issue.
 	NoticeFieldHint NoticeFieldType = 'H'
+
+	// NoticeFieldHint the SQLSTATE code for the error (see Appendix A). Not localizable. Always present.
+	NoticeFieldCode NoticeFieldType = 'C'
 )
 
 // NoticeField is a field in an error or notice.
@@ -362,6 +447,98 @@ func (e *Encoder) BackendKeyData(pid, key int32) (Message, error) {
 
 	return Message{
 		Type: TypeBackendKeyData,
+		Data: e.buf.Bytes(),
+	}, nil
+}
+
+func (e *Encoder) ParameterStatus(param, value string) (Message, error) {
+	e.buf.Reset()
+	//param + NULL + value+ NULL
+	_, err := e.buf.WriteString(param)
+	if err != nil {
+		return Message{}, err
+	}
+	err = e.buf.WriteByte(0)
+	if err != nil {
+		return Message{}, err
+	}
+	_, err = e.buf.WriteString(value)
+	if err != nil {
+		return Message{}, err
+	}
+	err = e.buf.WriteByte(0)
+	if err != nil {
+		return Message{}, err
+	}
+	return Message{
+		Type: TypeParameterStatus,
+		Data: e.buf.Bytes(),
+	}, nil
+}
+
+type SimpleColumn struct {
+	Name    string
+	Typeid  int32
+	Typelen int16
+}
+
+func (e *Encoder) EncodeColumn(name string, typeid int32, typelen int16) (Message, error) {
+	return e.EncodeColumns(SimpleColumn{
+		Name:    name,
+		Typeid:  typeid,
+		Typelen: typelen,
+	})
+}
+func (e *Encoder) EncodeColumns(cols ...SimpleColumn) (Message, error) {
+
+	e.buf.Reset()
+	err := e.i16(int16(len(cols))) // number of columns in result
+	if err != nil {
+		return Message{}, nil
+	}
+	for _, col := range cols {
+
+		_, err = e.buf.WriteString(col.Name) // column name
+		if err != nil {
+			return Message{}, err
+		}
+		err = e.buf.WriteByte(0) //null terminate
+		if err != nil {
+			return Message{}, err
+		}
+
+		err = e.i32(0) //tabel id
+		if err != nil {
+			return Message{}, err
+		}
+
+		err = e.i16(0) //field id(attnum)
+		if err != nil {
+			return Message{}, err
+		}
+
+		err = e.i32(col.Typeid) //type_id
+		if err != nil {
+			return Message{}, err
+		}
+
+		err = e.i16(col.Typelen) //type_len
+		if err != nil {
+			return Message{}, err
+		}
+
+		err = e.i32(-1) //type_mod
+		if err != nil {
+			return Message{}, err
+		}
+
+		err = e.i16(0) //format  0 text 1 binary
+		if err != nil {
+			return Message{}, err
+		}
+	}
+	return Message{
+		Type: TypeRowDescription,
 		Data: e.buf.Bytes(),
 	}, nil
 }

@@ -23,6 +23,7 @@ import (
 	"sort"
 	"sync"
 
+	"github.com/molecula/featurebase/v2/ingest"
 	"github.com/molecula/featurebase/v2/topology"
 	"github.com/pkg/errors"
 )
@@ -98,6 +99,39 @@ type TranslateStore interface { // TODO: refactor this interface; readonly shoul
 	ReadFrom(io.Reader) (int64, error)
 }
 
+// This implements ingest's key translator interface, which differs
+// slightly because we want to be able to do fast lookups on arbitrary
+// IDs which are not necessarily contiguous small values, so the []string
+// from TranslateIDs isn't a good fit.
+type ingestKeyTranslator struct {
+	store TranslateStore
+}
+
+var _ ingest.KeyTranslator = &ingestKeyTranslator{}
+
+func (i ingestKeyTranslator) TranslateKeys(keys ...string) (map[string]uint64, error) {
+	return i.store.CreateKeys(keys...)
+}
+
+func (i ingestKeyTranslator) TranslateIDs(ids ...uint64) (map[uint64]string, error) {
+	keys, err := i.store.TranslateIDs(ids)
+	if err != nil {
+		return nil, err
+	}
+	if len(keys) != len(ids) {
+		return nil, fmt.Errorf("translating %d id(s), got %d key(s)", len(ids), len(keys))
+	}
+	out := make(map[uint64]string, len(keys))
+	for i, id := range ids {
+		out[id] = keys[i]
+	}
+	return out, nil
+}
+
+func newIngestKeyTranslatorFromStore(s TranslateStore) *ingestKeyTranslator {
+	return &ingestKeyTranslator{store: s}
+}
+
 // TranslatorSummary is returned, for example from the boltdb string key translators,
 // by calling ComputeTranslatorSummary(). Non-boltdb mocks, etc no-op that method.
 type TranslatorSummary struct {
@@ -163,7 +197,7 @@ TranslatorSummary{
 }
 
 // OpenTranslateStoreFunc represents a function for instantiating and opening a TranslateStore.
-type OpenTranslateStoreFunc func(path, index, field string, partitionID, partitionN int) (TranslateStore, error)
+type OpenTranslateStoreFunc func(path, index, field string, partitionID, partitionN int, fsyncEnabled bool) (TranslateStore, error)
 
 // GenerateNextPartitionedID returns the next ID within the same partition.
 func GenerateNextPartitionedID(index string, prev uint64, partitionID, partitionN int) uint64 {
@@ -373,7 +407,7 @@ var _ OpenTranslateStoreFunc = OpenInMemTranslateStore
 
 // OpenInMemTranslateStore returns a new instance of InMemTranslateStore.
 // Implements OpenTranslateStoreFunc.
-func OpenInMemTranslateStore(rawurl, index, field string, partitionID, partitionN int) (TranslateStore, error) {
+func OpenInMemTranslateStore(rawurl, index, field string, partitionID, partitionN int, fsyncEnabled bool) (TranslateStore, error) {
 	return NewInMemTranslateStore(index, field, partitionID, partitionN), nil
 }
 

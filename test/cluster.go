@@ -607,7 +607,7 @@ func prependTestServerOpts(opts []server.CommandOption) []server.CommandOption {
 			pilosa.OptServerNodeDownRetries(5, 100*time.Millisecond),
 			pilosa.OptServerStorageConfig(&storage.Config{
 				Backend:      pilosa.CurrentBackendOrDefault(),
-				FsyncEnabled: true,
+				FsyncEnabled: false,
 			}),
 		),
 	}

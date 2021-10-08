@@ -30,6 +30,12 @@ type HandlerFunc func(context.Context, pg.QueryResultWriter, pg.Query) error
 func (h HandlerFunc) HandleQuery(ctx context.Context, w pg.QueryResultWriter, q pg.Query) error {
 	return h(ctx, w, q)
 }
+func (h HandlerFunc) HandleSchema(ctx context.Context, portal *pg.Portal) error {
+	return nil
+}
+func (h HandlerFunc) Version() string {
+	return "testv1"
+}
 
 var _ pg.QueryHandler = HandlerFunc(nil)
 

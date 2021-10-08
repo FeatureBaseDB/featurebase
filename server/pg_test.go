@@ -21,7 +21,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/molecula/featurebase/v2"
+	pilosa "github.com/molecula/featurebase/v2"
 	"github.com/molecula/featurebase/v2/logger"
 	"github.com/molecula/featurebase/v2/pg"
 	"github.com/molecula/featurebase/v2/pg/pgtest"
@@ -33,7 +33,7 @@ func TestPostgresHandler(t *testing.T) {
 	m := test.RunCommand(t)
 	defer m.Close()
 
-	pgh := server.NewPostgresHandler(m.API, logger.NewLogfLogger(t))
+	pgh := server.NewPostgresHandler(m.API, logger.NewLogfLogger(t), server.SqlV1)
 
 	m.MustCreateIndex(t, "i", pilosa.IndexOptions{TrackExistence: true})
 	m.MustCreateField(t, "i", "set")

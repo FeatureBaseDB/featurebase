@@ -38,7 +38,7 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"github.com/molecula/featurebase/v2"
+	pilosa "github.com/molecula/featurebase/v2"
 	"github.com/molecula/featurebase/v2/boltdb"
 	"github.com/molecula/featurebase/v2/disco"
 	"github.com/molecula/featurebase/v2/http"
@@ -5151,6 +5151,8 @@ func TestExecutor_GroupByStrings(t *testing.T) {
 	c.CreateField(t, "istring", pilosa.IndexOptions{Keys: true}, "v", pilosa.OptFieldTypeInt(0, 1000))
 	c.CreateField(t, "istring", pilosa.IndexOptions{Keys: true}, "vv", pilosa.OptFieldTypeInt(0, 1000))
 	c.CreateField(t, "istring", pilosa.IndexOptions{Keys: true}, "nv", pilosa.OptFieldTypeInt(-1000, 1000))
+	c.CreateField(t, "istring", pilosa.IndexOptions{Keys: true}, "dv", pilosa.OptFieldTypeDecimal(2))
+	c.CreateField(t, "istring", pilosa.IndexOptions{Keys: true}, "ndv", pilosa.OptFieldTypeDecimal(1))
 
 	if err := c.GetNode(0).API.Import(context.Background(), nil, &pilosa.ImportRequest{
 		Index:      "istring",
@@ -5167,6 +5169,8 @@ func TestExecutor_GroupByStrings(t *testing.T) {
 
 	var v1, v2, v3, v4, v5, v6, v7, v8, v9, v10 int64 = 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
 	var nv1, nv2, nv3, nv4 int64 = -1, -2, -3, -4
+	var dv1, dv2, dv3, dv4, dv5, dv6, dv7, dv8, dv9, dv10 int64 = 111, 222, 333, 444, 555, 666, 777, 888, 999, 1000
+	var ndv1, ndv2, ndv3, ndv4, ndv5, ndv6, ndv7, ndv8, ndv9, ndv10 int64 = -111, -222, -333, -444, -555, -666, -777, -888, -999, -1000
 	if err := m0.API.ImportValue(context.Background(), qcx, &pilosa.ImportValueRequest{
 		Index:      "istring",
 		Field:      "v",
@@ -5197,6 +5201,26 @@ func TestExecutor_GroupByStrings(t *testing.T) {
 		t.Fatalf("importing: %v", err)
 	}
 
+	if err := m0.API.ImportValue(context.Background(), qcx, &pilosa.ImportValueRequest{
+		Index:      "istring",
+		Field:      "dv",
+		Shard:      0,
+		ColumnKeys: []string{"c1", "c2", "c3", "c4", "c5", "c6", "c7", "c8", "c9", "c10"},
+		Values:     []int64{dv1, dv2, dv3, dv4, dv5, dv6, dv7, dv8, dv9, dv10},
+	}); err != nil {
+		t.Fatalf("importing: %v", err)
+	}
+
+	if err := m0.API.ImportValue(context.Background(), qcx, &pilosa.ImportValueRequest{
+		Index:      "istring",
+		Field:      "ndv",
+		Shard:      0,
+		ColumnKeys: []string{"c1", "c2", "c3", "c4", "c5", "c6", "c7", "c8", "c9", "c10"},
+		Values:     []int64{ndv1, ndv2, ndv3, ndv4, ndv5, ndv6, ndv7, ndv8, ndv9, ndv10},
+	}); err != nil {
+		t.Fatalf("importing: %v", err)
+	}
+
 	tests := []struct {
 		query    string
 		expected []pilosa.GroupCount
@@ -5219,6 +5243,20 @@ func TestExecutor_GroupByStrings(t *testing.T) {
 			expected: []pilosa.GroupCount{
 				{Group: []pilosa.FieldRow{{Field: "generals", RowID: 1, RowKey: "r1"}}, Count: 5, Agg: 25},
 				{Group: []pilosa.FieldRow{{Field: "generals", RowID: 2, RowKey: "r2"}}, Count: 5, Agg: 30},
+			},
+		},
+		{
+			query: "GroupBy(Rows(generals), aggregate=Sum(field=dv))",
+			expected: []pilosa.GroupCount{
+				{Group: []pilosa.FieldRow{{Field: "generals", RowID: 1, RowKey: "r1"}}, Count: 5, Agg: 2775, DecimalAgg: 27.75},
+				{Group: []pilosa.FieldRow{{Field: "generals", RowID: 2, RowKey: "r2"}}, Count: 5, Agg: 3220, DecimalAgg: 32.20},
+			},
+		},
+		{
+			query: "GroupBy(Rows(generals), aggregate=Sum(field=ndv))",
+			expected: []pilosa.GroupCount{
+				{Group: []pilosa.FieldRow{{Field: "generals", RowID: 1, RowKey: "r1"}}, Count: 5, Agg: -2775, DecimalAgg: -277.5},
+				{Group: []pilosa.FieldRow{{Field: "generals", RowID: 2, RowKey: "r2"}}, Count: 5, Agg: -3220, DecimalAgg: -322.0},
 			},
 		},
 		{
@@ -6844,7 +6882,7 @@ func TestMissingKeyRegression(t *testing.T) {
 	c := test.MustRunCluster(t, 1, []server.CommandOption{server.OptCommandServerOptions(
 		pilosa.OptServerStorageConfig(&storage.Config{
 			Backend:      "roaring",
-			FsyncEnabled: true,
+			FsyncEnabled: false,
 		}))})
 	defer c.Close()
 

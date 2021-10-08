@@ -860,7 +860,13 @@ type mutexCheckField struct {
 }
 
 func TestAPI_MutexCheck(t *testing.T) {
-	c := test.MustRunCluster(t, 3)
+	c := test.MustNewCluster(t, 3)
+	for _, c := range c.Nodes {
+		c.Config.Cluster.ReplicaN = 2
+	}
+	if err := c.Start(); err != nil {
+		t.Fatalf("starting cluster: %v", err)
+	}
 	defer c.Close()
 
 	m0 := c.GetNode(0)

@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/molecula/featurebase/v2/storage"
 	"github.com/molecula/featurebase/v2/testhook"
 )
 
@@ -45,8 +46,9 @@ func TestMonitorAntiEntropyZero(t *testing.T) {
 	if err != nil {
 		t.Fatalf("getting temp dir: %v", err)
 	}
+	cfg := &storage.Config{FsyncEnabled: false, Backend: storage.DefaultBackend}
 	s, err := NewServer(OptServerDataDir(td),
-		OptServerAntiEntropyInterval(0))
+		OptServerAntiEntropyInterval(0), OptServerStorageConfig(cfg))
 	if err != nil {
 		t.Fatalf("making new server: %v", err)
 	}
