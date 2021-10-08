@@ -1,0 +1,18 @@
+image: golang:1.16.3-stretch
+
+stages:
+  - test
+
+format:
+  stage: test
+  script:
+    - echo "Testing code formatting..."
+    - go fmt 
+  allow_failure: true
+  
+run-tests:
+  stage: test
+  script:
+    - echo "Running unit tests..."
+    - go test
+  allow_failure: true
