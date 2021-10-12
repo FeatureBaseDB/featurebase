@@ -1277,7 +1277,7 @@ func (b *Batch) importValueData() error {
 					start := time.Now()
 					err := b.client.DoImportValues(b.index.Name(), shard, path, data)
 					b.log.Debugf("imp-vals %s,shard:%d,data:%d %v", field, shard, len(data), time.Since(start))
-					return errors.Wrapf(err, "importing values for %s", field)
+					return errors.Wrapf(err, "importing values for field = %s", field)
 				})
 				startIdx = i
 				curShard = recordID / shardWidth
@@ -1350,7 +1350,7 @@ func (b *Batch) importMutexData() error {
 					start := time.Now()
 					err := b.client.DoImport(b.index.Name(), shard, path, data)
 					b.log.Debugf("imp-mux %s,shard:%d,data:%d %v", field.Name(), shard, len(data), time.Since(start))
-					return errors.Wrapf(err, "importing values for %s", field)
+					return errors.Wrapf(err, "importing values for field = %s", field)
 				})
 				startIdx = i
 				curShard = recordID / shardWidth
