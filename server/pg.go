@@ -28,6 +28,7 @@ import (
 	pilosa "github.com/molecula/featurebase/v2"
 	"github.com/molecula/featurebase/v2/logger"
 	"github.com/molecula/featurebase/v2/pg"
+	"github.com/molecula/featurebase/v2/sql2"
 
 	//"github.com/molecula/featurebase/v2/pg"
 	"github.com/molecula/featurebase/v2/pql"
@@ -336,6 +337,15 @@ func pgWriteGroupCount(w pg.QueryResultWriter, counts *pilosa.GroupCounts) error
 	return nil
 }
 
+// TODO(twg) move this to a better area
+func getPgType(sql2type string) pg.Type {
+	ret := pg.TypeCharoid
+	switch sql2type {
+	case sql2.DataTypeInt:
+		ret = pg.TypeINT4OID
+	}
+	return ret
+}
 func pgWriteStmtRows(w pg.QueryResultWriter, rows *pilosa.StmtRows) error {
 	//TODO(twg) writeHeader
 	//TODO(twg) writeColumns
@@ -348,9 +358,10 @@ func pgWriteStmtRows(w pg.QueryResultWriter, rows *pilosa.StmtRows) error {
 			//TODO (twg) types:=rows.Types()
 			headers := make([]pg.ColumnInfo, len(columns))
 			for i, column := range columns {
+				pgType := getPgType(column.Type)
 				headers[i] = pg.ColumnInfo{
 					Name: column.Name,
-					Type: pg.TypeCharoid, //TODO(twg) types[i]
+					Type: pgType,
 				}
 			}
 			err := w.WriteHeader(headers...)
@@ -407,6 +418,17 @@ func pgWriteStmtRows(w pg.QueryResultWriter, rows *pilosa.StmtRows) error {
 	}
 	return nil
 }
+func getPgTypeFromColumnInfo(sql2type string) pg.Type {
+	switch sql2type {
+	case sql2.DataTypeInt:
+		return pg.TypeINT4OID
+	default:
+		return pg.TypeCharoid
+
+	}
+}
+
+var _ = getPgTypeFromColumnInfo //make linter happy for this function will be needed in future
 
 func pgWriteRowser(w pg.QueryResultWriter, result pb.ToRowser) error {
 	var data []string
@@ -416,7 +438,8 @@ func pgWriteRowser(w pg.QueryResultWriter, result pb.ToRowser) error {
 			for i, h := range row.Headers {
 				headers[i] = pg.ColumnInfo{
 					Name: h.Name,
-					Type: pg.TypeCharoid,
+					Type: pg.TypeCharoid, // TODO(twg) this needs to be updated with type
+					// information so it works from psql client
 				}
 			}
 			err := w.WriteHeader(headers...)
@@ -481,7 +504,7 @@ func pgWriteResult(w pg.QueryResultWriter, result interface{}) error {
 		return pgWriteGroupCount(w, result)
 	case pb.ToRowser: // we should avoid protobuf where we can...
 		return pgWriteRowser(w, result)
-	case *pilosa.StmtRows: // we should avoid protobuf where we can...
+	case *pilosa.StmtRows:
 		return pgWriteStmtRows(w, result)
 	case uint64:
 		err := w.WriteHeader(pg.ColumnInfo{
