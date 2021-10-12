@@ -427,6 +427,8 @@ func getPgTypeFromColumnInfo(sql2type string) pg.Type {
 	return ret
 }
 
+var _ = getPgTypeFromColumnInfo //make linter happy for this function will be needed in future
+
 func pgWriteRowser(w pg.QueryResultWriter, result pb.ToRowser) error {
 	var data []string
 	return result.ToRows(func(row *pb.RowResponse) error {
