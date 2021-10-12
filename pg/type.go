@@ -32,15 +32,6 @@ var TypeINT4OID = Type{Id: 23, Typelen: 4}
 var TypeTEXTOID = Type{Id: 25, Typelen: -1}
 var TypeFLOAT8OID = Type{Id: 701, Typelen: 8}
 
-// TypeData is a type containing raw postgres wire type information.
-/*
-type TypeData struct {
-	TypeID       int32
-	TypeLen      int16
-	TypeModifier int32
-}
-*/
-
 // TypeEngine is a system for managing types.
 // This is necessary for compound types like arrays which need ID generation.
 type TypeEngine interface {
@@ -71,7 +62,6 @@ func (pte PrimitiveTypeEngine) TranslateType(t Type) (message.ColumnDescription,
 	case TypeFLOAT8OID:
 		TypeID = TypeFLOAT8OID.Id
 		TypeLen = TypeFLOAT8OID.Typelen
-	//case
 	default: // treat like TypeCharoid:
 		TypeID = TypeCharoid.Id
 		TypeLen = TypeCharoid.Typelen

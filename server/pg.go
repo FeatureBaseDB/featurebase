@@ -419,12 +419,13 @@ func pgWriteStmtRows(w pg.QueryResultWriter, rows *pilosa.StmtRows) error {
 	return nil
 }
 func getPgTypeFromColumnInfo(sql2type string) pg.Type {
-	ret := pg.TypeCharoid
 	switch sql2type {
 	case sql2.DataTypeInt:
-		ret = pg.TypeINT4OID
+		return pg.TypeINT4OID
+	default:
+		return pg.TypeCharoid
+
 	}
-	return ret
 }
 
 var _ = getPgTypeFromColumnInfo //make linter happy for this function will be needed in future
