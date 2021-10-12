@@ -32,7 +32,6 @@ import (
 
 	"github.com/molecula/featurebase/v2/pg/message"
 	"github.com/molecula/featurebase/v2/sql"
-	"github.com/molecula/featurebase/v2/vprint"
 	"github.com/pkg/errors"
 	"vitess.io/vitess/go/vt/sqlparser"
 )
@@ -331,7 +330,6 @@ func (p *Portal) Parse(data []byte) {
 	}
 
 	if len(queryStr) > 2 {
-		vprint.VV("SQL=[%v]", queryStr)
 		query, err := p.mapper.MapSQL(queryStr)
 		if err != nil {
 			return
@@ -341,7 +339,6 @@ func (p *Portal) Parse(data []byte) {
 			p.pgspecial = pgSelect1
 			p.Name = "SELECT"
 		} else if strings.Contains(queryStr, POSTGRESLENSQL) {
-			vprint.VV("YELLOWFIN Len")
 			p.pgspecial = pgTypeLen
 			p.Name = "SELECT"
 		} else {
@@ -574,7 +571,6 @@ func (p *Portal) Execute() (shouldTerminate bool, queryReady bool, err error) {
 	case pgBegin:
 		p.Name = "BEGIN"
 	case pgTypeLen:
-		vprint.VV("adding typelen message")
 		rowDescription, e := p.Encoder.EncodeColumn("typelen", int32(21), 2)
 		if e != nil {
 			err = e
