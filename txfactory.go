@@ -31,6 +31,7 @@ import (
 	"github.com/molecula/featurebase/v2/roaring"
 	txkey "github.com/molecula/featurebase/v2/short_txkey"
 	"github.com/molecula/featurebase/v2/storage"
+	"github.com/molecula/featurebase/v2/testhook"
 	. "github.com/molecula/featurebase/v2/vprint" // nolint:staticcheck
 	"github.com/pkg/errors"
 	"github.com/zeebo/blake3"
@@ -147,6 +148,11 @@ func (q *Qcx) Finish() (err error) {
 		}
 	}
 	err2 := q.Grp.FinishGroup()
+	// drop the old group so we aren't holding references to all those Tx
+	q.Grp = q.Txf.NewTxGroup()
+	if !q.done {
+		_ = testhook.Closed(q.Txf.holder.Auditor, q, nil)
+	}
 	q.done = true
 
 	if err != nil {
@@ -164,7 +170,11 @@ func (q *Qcx) Abort() {
 		(*q.RequiredForAtomicWriteTx).Rollback()
 	}
 	q.Grp.AbortGroup()
-
+	// drop the old group so we aren't holding references to all those Tx
+	q.Grp = q.Txf.NewTxGroup()
+	if !q.done {
+		_ = testhook.Closed(q.Txf.holder.Auditor, q, nil)
+	}
 	q.done = true
 }
 
@@ -197,6 +207,7 @@ func (f *TxFactory) NewQcx() (qcx *Qcx) {
 	if f.typeOfTx == "roaring" {
 		qcx.isRoaring = true
 	}
+	_ = testhook.Opened(f.holder.Auditor, qcx, nil)
 	return
 }
 
