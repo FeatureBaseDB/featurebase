@@ -15,10 +15,15 @@
 package pilosa_test
 
 import (
+	"context"
+	"fmt"
+	"math/rand"
 	"reflect"
 	"testing"
+	"time"
 
-	"github.com/molecula/featurebase/v2"
+	pilosa "github.com/molecula/featurebase/v2"
+	"github.com/molecula/featurebase/v2/disco"
 	"github.com/molecula/featurebase/v2/pql"
 	"github.com/molecula/featurebase/v2/test"
 	"github.com/molecula/featurebase/v2/testhook"
@@ -274,4 +279,69 @@ func isNotFoundError(err error) bool {
 	root := errors.Cause(err)
 	_, ok := root.(pilosa.NotFoundError)
 	return ok
+}
+
+func TestIndex_RecreateFieldOnRestart(t *testing.T) {
+	c := test.MustRunCluster(t, 1)
+	defer c.Close()
+
+	// create index
+	indexName := fmt.Sprintf("idx_%d", rand.Uint64())
+	holder := c.GetHolder(0)
+	index, err := holder.CreateIndex(indexName, pilosa.IndexOptions{
+		Keys: false,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer index.Close()
+
+	// // create field
+	fieldName := fmt.Sprintf("field_%d", rand.Uint64())
+	_, err = c.GetNode(0).API.CreateField(context.Background(), indexName, fieldName,
+		pilosa.OptFieldTypeDefault())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// set value
+	_, err = c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{
+		Index: indexName,
+		Query: fmt.Sprintf(`Set(1, %s=1)`, fieldName),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// restart node
+	node := c.GetNode(0)
+	if err := node.Reopen(); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.AwaitState(disco.ClusterStateNormal, 10*time.Second); err != nil {
+		t.Fatalf("restarting cluster: %v", err)
+	}
+
+	// delete field
+	err = c.GetNode(0).API.DeleteField(context.Background(), indexName, fieldName)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// recreate field
+	errCh := make(chan error)
+	go func() {
+		_, err := c.GetNode(0).API.CreateField(context.Background(), indexName,
+			fieldName, pilosa.OptFieldTypeDefault())
+		errCh <- err
+	}()
+	select {
+	case <-time.After(10 * time.Second):
+		t.Fatalf("recreating field took too long")
+	case <-errCh:
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
 }
