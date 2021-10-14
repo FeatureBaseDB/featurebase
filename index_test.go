@@ -342,6 +342,13 @@ func TestIndex_RecreateFieldOnRestart(t *testing.T) {
 	}()
 	select {
 	case <-time.After(10 * time.Second):
+		// We have to use os.Exit here instead of t.Fatal or panic since
+		// on panic, deferred statements are still ran. Given that
+		// we have deferred cluster.Close(), it deadlocks on the same
+		// issue this test is, well, is testing on.
+		// With os.Exit, the process exits at that point without running the
+		// deferred actions. This is more of a work-around fix to make the
+		// test meaningful on timeout.
 		t.Logf("recreating field took too long")
 		os.Exit(1)
 	case err := <-errCh:
