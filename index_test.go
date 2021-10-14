@@ -15,10 +15,16 @@
 package pilosa_test
 
 import (
+	"context"
+	"fmt"
+	"math/rand"
+	"os"
 	"reflect"
 	"testing"
+	"time"
 
-	"github.com/molecula/featurebase/v2"
+	pilosa "github.com/molecula/featurebase/v2"
+	"github.com/molecula/featurebase/v2/disco"
 	"github.com/molecula/featurebase/v2/pql"
 	"github.com/molecula/featurebase/v2/test"
 	"github.com/molecula/featurebase/v2/testhook"
@@ -274,4 +280,81 @@ func isNotFoundError(err error) bool {
 	root := errors.Cause(err)
 	_, ok := root.(pilosa.NotFoundError)
 	return ok
+}
+
+// Ensure that after node/cluster restart, deleting and recreating a field
+// does not cause a deadlock
+// This is a regression test after a customer experienced the same deadlock.
+// For details, check out https://molecula.atlassian.net/browse/CORE-919
+func TestIndex_RecreateFieldOnRestart(t *testing.T) {
+	c := test.MustRunCluster(t, 1)
+	defer c.Close()
+
+	// create index
+	indexName := fmt.Sprintf("idx_%d", rand.Uint64())
+	holder := c.GetHolder(0)
+	index, err := holder.CreateIndex(indexName, pilosa.IndexOptions{
+		Keys: false,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer index.Close()
+
+	// create field
+	fieldName := fmt.Sprintf("field_%d", rand.Uint64())
+	_, err = c.GetNode(0).API.CreateField(context.Background(), indexName, fieldName,
+		pilosa.OptFieldTypeDefault())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// set value
+	_, err = c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{
+		Index: indexName,
+		Query: fmt.Sprintf(`Set(1, %s=1)`, fieldName),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// restart node
+	node := c.GetNode(0)
+	if err := node.Reopen(); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.AwaitState(disco.ClusterStateNormal, 10*time.Second); err != nil {
+		t.Fatalf("restarting cluster: %v", err)
+	}
+
+	// delete field
+	err = c.GetNode(0).API.DeleteField(context.Background(), indexName, fieldName)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// recreate field
+	errCh := make(chan error)
+	go func() {
+		_, err := c.GetNode(0).API.CreateField(context.Background(), indexName,
+			fieldName, pilosa.OptFieldTypeDefault())
+		errCh <- err
+	}()
+	select {
+	case <-time.After(10 * time.Second):
+		// We have to use os.Exit here instead of t.Fatal or panic since
+		// on panic, deferred statements are still ran. Given that
+		// we have deferred cluster.Close(), it deadlocks on the same
+		// issue this test is, well, is testing on.
+		// With os.Exit, the process exits at that point without running the
+		// deferred actions. This is more of a work-around fix to make the
+		// test meaningful on timeout.
+		t.Logf("recreating field took too long")
+		os.Exit(1)
+	case err := <-errCh:
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
 }
