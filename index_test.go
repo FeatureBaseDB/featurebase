@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"os"
 	"reflect"
 	"testing"
 	"time"
@@ -281,6 +282,10 @@ func isNotFoundError(err error) bool {
 	return ok
 }
 
+// Ensure that after node/cluster restart, deleting and recreating a field
+// does not cause a deadlock
+// This is a regression test after a customer experienced the same deadlock.
+// For details, check out https://molecula.atlassian.net/browse/CORE-919
 func TestIndex_RecreateFieldOnRestart(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
@@ -296,7 +301,7 @@ func TestIndex_RecreateFieldOnRestart(t *testing.T) {
 	}
 	defer index.Close()
 
-	// // create field
+	// create field
 	fieldName := fmt.Sprintf("field_%d", rand.Uint64())
 	_, err = c.GetNode(0).API.CreateField(context.Background(), indexName, fieldName,
 		pilosa.OptFieldTypeDefault())
@@ -337,8 +342,9 @@ func TestIndex_RecreateFieldOnRestart(t *testing.T) {
 	}()
 	select {
 	case <-time.After(10 * time.Second):
-		t.Fatalf("recreating field took too long")
-	case <-errCh:
+		t.Logf("recreating field took too long")
+		os.Exit(1)
+	case err := <-errCh:
 		if err != nil {
 			t.Fatal(err)
 		}

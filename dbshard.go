@@ -1228,6 +1228,10 @@ func (vs *FieldView2Shards) String() (r string) {
 	return
 }
 
+func (vs *FieldView2Shards) removeField(name string) {
+	delete(vs.m, name)
+}
+
 // Note: cannot call this during migration, because
 // it only ever returns the green shards if we are in blue-green.
 func (per *DBPerShard) GetFieldView2ShardsMapForIndex(idx *Index) (vs *FieldView2Shards, err error) {
