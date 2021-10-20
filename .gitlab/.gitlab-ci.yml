@@ -138,6 +138,6 @@ build container fb:
       --build-arg GO_VERSION=$(GO_VERSION)
       --tag featurebase:$(VERSION) .
     - docker push "$CI_REGISTRY_IMAGE${tag}"
-    - @echo Created docker image: featurebase:$(VERSION)
+    - echo Created docker image: featurebase:$(VERSION)
 
 
