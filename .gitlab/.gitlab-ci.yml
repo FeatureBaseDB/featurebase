@@ -130,13 +130,9 @@ build for darwin arm64:
 build container fb:
   image: docker:stable
   stage: build
-  services:
-    - docker:dind
-  variables:
-    DOCKER_HOST: tcp://docker:2375/
-    DOCKER_DRIVER: overlay2
+  tags:
+    - shell
   before_script:
-    - docker login -u gitlab-ci-token -p $CI_JOB_TOKEN $CI_REGISTRY
     - docker info
   script:
     - tag=$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA
