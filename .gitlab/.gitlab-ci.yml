@@ -4,7 +4,7 @@ include:
   - template: Security/Dependency-Scanning.gitlab-ci.yml
 
 variables:
-  GO_VERSION: 1.16.3
+  GOVERSION: 1.16.3
 
 stages:
   - test
@@ -133,16 +133,9 @@ build container fb:
   services:
     - docker:dind
   script:
-      - |
-      if [[ "$CI_COMMIT_BRANCH" == "$CI_DEFAULT_BRANCH" ]]; then
-        tag=""
-        echo "Running on default branch '$CI_DEFAULT_BRANCH': tag = 'latest'"
-      else
-        tag=":$CI_COMMIT_REF_SLUG"
-        echo "Running on branch '$CI_COMMIT_BRANCH': tag = $tag"
-      fi
-    - docker build --build-arg GO_VERSION=$GO_VERSION -t "$CI_REGISTRY_IMAGE${tag}" .
-    - docker push "$CI_REGISTRY_IMAGE${tag}"
-    - echo 'Created docker image featurebase:test'
+    - tag = "'$CI_REGISTRY_IMAGE':'$CI_COMMIT_SHORT_SHA'"
+    - docker build --build-arg GO_VERSION=$GOVERSION -t "$tag" .
+    - docker push "$tag"
+    - echo "Created docker featurebase image with tag '$tag'"
 
 
