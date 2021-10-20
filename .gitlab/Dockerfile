@@ -9,7 +9,7 @@ COPY LICENSE /LICENSE
 COPY NOTICE /NOTICE
 ARG SHORT_SHA
 
-COPY .cloudbuild/featurebase_linux_amd64 /
+COPY .gitlab/featurebase_linux_amd64 /
 
 RUN mv /featurebase_linux_amd64 /featurebase
 RUN chmod ugo+x /featurebase
