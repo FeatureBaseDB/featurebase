@@ -133,9 +133,7 @@ build container fb:
   services:
     - docker:dind
   script:
-    - docker build 
-      --build-arg GO_VERSION=$(GO_VERSION)
-      --tag featurebase:$(VERSION) .
+    - docker build --build-arg GO_VERSION=$(GO_VERSION) --tag featurebase:$(VERSION) .
     - docker push "$CI_REGISTRY_IMAGE${tag}"
     - echo Created docker image: featurebase:$(VERSION)
 
