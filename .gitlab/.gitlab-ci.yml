@@ -138,7 +138,7 @@ build container fb:
     - docker info
   script:
     - tag=$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA
-    - docker build --build-arg GO_VERSION=$GOVERSION -t $tag .gitlab/Dockerfile
+    - docker build --build-arg GO_VERSION=$GOVERSION -t $tag .gitlab/Dockerfile .
     - docker push $tag
     - echo Created docker featurebase image with tag "$tag"
 
