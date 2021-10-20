@@ -130,6 +130,8 @@ build for darwin arm64:
 build container fb:
   image: docker:stable
   stage: build
+  needs:
+    - "build for linux arm64"
   tags:
     - shell
   before_script:
