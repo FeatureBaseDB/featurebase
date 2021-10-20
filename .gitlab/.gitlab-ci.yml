@@ -10,73 +10,73 @@ stages:
   # - test
   - build
 
-install lattice:
-  stage: test
-  image: node:14
-  script:
-    - echo "Installing lattice dependencies..."
-    - cd lattice
-    - yarn install
+# install lattice:
+#   stage: test
+#   image: node:14
+#   script:
+#     - echo "Installing lattice dependencies..."
+#     - cd lattice
+#     - yarn install
 
-build lattice:
-  stage: test
-  image: node:14
-  variables:
-    CI: "true"
-  script:
-    - echo "Building lattice..."
-    - cd lattice
-    - yarn build
-    - tar -czvf lattice.tar.gz lattice/build
-  artifacts:
-    paths:
-      - lattice/lattice.tar.gz
-  needs:
-    - job: install lattice
-  allow_failure: true
+# build lattice:
+#   stage: test
+#   image: node:14
+#   variables:
+#     CI: "true"
+#   script:
+#     - echo "Building lattice..."
+#     - cd lattice
+#     - yarn build
+#     - tar -czvf lattice.tar.gz lattice/build
+#   artifacts:
+#     paths:
+#       - lattice/lattice.tar.gz
+#   needs:
+#     - job: install lattice
+#   allow_failure: true
 
-run go tests:
-  stage: test
-  image: golang:1.16.9
-  script:
-    - echo "Running featurebase unit tests..."
-    - go test -covermode=atomic -coverprofile=coverage.out
-  artifacts:
-    paths:
-      - coverage.out
+# run go tests:
+#   stage: test
+#   image: golang:1.16.9
+#   script:
+#     - echo "Running featurebase unit tests..."
+#     - go test -covermode=atomic -coverprofile=coverage.out
+#   artifacts:
+#     paths:
+#       - coverage.out
 
-run go tests with output:
-  stage: test
-  image: golang:1.16.9
-  script:
-    - echo "Running featurebase unit tests to capture JSON output..."
-    - go test -json > test-report.out
-  artifacts:
-    paths:
-      - test-report.out
+# run go tests with output:
+#   stage: test
+#   image: golang:1.16.9
+#   script:
+#     - echo "Running featurebase unit tests to capture JSON output..."
+#     - go test -json > test-report.out
+#   artifacts:
+#     paths:
+#       - test-report.out
 
-generate coverage html:
-  stage: test
-  image: golang:1.16.9
-  script:
-    - echo "Generating coverage HTML.."
-    - go tool cover -html coverage.out -o coverage.html
-  artifacts:
-    paths:
-      - coverage.html
-  needs:
-    - job: run go tests
+# generate coverage html:
+#   stage: test
+#   image: golang:1.16.9
+#   script:
+#     - echo "Generating coverage HTML.."
+#     - go tool cover -html coverage.out -o coverage.html
+#   artifacts:
+#     paths:
+#       - coverage.html
+#   needs:
+#     - job: run go tests
 
-upload to sonarcloud:
-  stage: test
-  image: sonarsource/sonar-scanner-cli:4.6
-  variables:
-    SONAR_TOKEN: $SONAR_TOKEN
-  script:
-    - sonar-scanner -Dsonar.projectKey=molecula_featurebase -Dsonar.organization=molecula -Dsonar.sources=. -Dsonar.host.url=https://sonarcloud.io -Dsonar.go.coverage.reportPaths=coverage.out -Dsonar.go.tests.reportPaths=test-report.out
-  needs:
-    - job: run go tests
-    - job: run go tests with output
+# upload to sonarcloud:
+#   stage: test
+#   image: sonarsource/sonar-scanner-cli:4.6
+#   variables:
+#     SONAR_TOKEN: $SONAR_TOKEN
+#   script:
+#     - sonar-scanner -Dsonar.projectKey=molecula_featurebase -Dsonar.organization=molecula -Dsonar.sources=. -Dsonar.host.url=https://sonarcloud.io -Dsonar.go.coverage.reportPaths=coverage.out -Dsonar.go.tests.reportPaths=test-report.out
+#   needs:
+#     - job: run go tests
+#     - job: run go tests with output
     
 build for linux amd64:
   stage: build
