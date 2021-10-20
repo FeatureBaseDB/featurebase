@@ -133,9 +133,9 @@ build container fb:
   services:
     - docker:dind
   script:
-    - tag = "'$CI_REGISTRY_IMAGE':'$CI_COMMIT_SHORT_SHA'"
-    - docker build --build-arg GO_VERSION=$GOVERSION -t "$tag" .
-    - docker push "$tag"
-    - echo "Created docker featurebase image with tag '$tag'"
+    - tag=$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA
+    - docker build --build-arg GO_VERSION=$GOVERSION -t $tag .
+    - docker push $tag
+    - echo Created docker featurebase image with tag "$tag"
 
 
