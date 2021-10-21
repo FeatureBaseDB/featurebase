@@ -722,8 +722,10 @@ func (s *Server) Open() error {
 
 			if now := time.Now(); now.Sub(prevMsg) > time.Second {
 				progressRatio := float64(i+1) / float64(len(toSend))
-				remainingRatio := 1 - progressRatio
-				timeRemaining := time.Duration(float64(now.Sub(prevMsg)) * (remainingRatio / progressRatio))
+				numSentMessages := len(toSend) - (i + 1)
+				messagesLeft := len(toSend) - numSentMessages
+				avgTimePerMessage := float64(now.Sub(start)) / float64(numSentMessages)
+				timeRemaining := time.Duration(avgTimePerMessage * float64(messagesLeft))
 				s.logger.Printf("synced %d/%d messages (%.2f%% complete; %s remaining)", i+1, len(toSend), 100*progressRatio, timeRemaining)
 				prevMsg = now
 			}
