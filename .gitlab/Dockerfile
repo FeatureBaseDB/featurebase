@@ -6,16 +6,11 @@ LABEL org.opencontainers.image.authors="dev@molecula.com"
 WORKDIR /featurebase
 
 RUN apk add --no-cache curl jq
-RUN pwd
-RUN ls .
 
 COPY LICENSE .
 COPY NOTICE .
 COPY featurebase_linux_amd64 .
 
-ARG SHORT_SHA
-
-# RUN mv /featurebase_linux_amd64 /featurebase
 RUN chmod ugo+x .
 EXPOSE 10101
 VOLUME /data
