@@ -135,7 +135,8 @@ build container fb:
   tags:
     - shell
   before_script:
-    - cat $DOCKER_DEPLOY_TOKEN | docker login -u $DOCKER_DEPLOY_USER --password-stdin $CI_REGISTRY_IMAGE
+    # - cat $DOCKER_DEPLOY_TOKEN | docker login -u $DOCKER_DEPLOY_USER --password-stdin $CI_REGISTRY_IMAGE
+    - docker login -u $DOCKER_DEPLOY_USER -p $DOCKER_DEPLOY_TOKEN $CI_REGISTRY_IMAGE
   script:
     # - mv featurebase_linux_amd64 .gitlab/
     - tag=$CI_REGISTRY_IMAGE/server:$CI_COMMIT_BRANCH-$CI_COMMIT_SHORT_SHA
