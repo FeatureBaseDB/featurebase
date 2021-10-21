@@ -126,7 +126,7 @@ build for linux amd64:
 #     paths:
 #       - featurebase_darwin_arm64
 
-# Build a Docker image with CI/CD and push to the GitLab registry.
+# Build a FB Docker image with CI/CD and push to the GitLab registry.
 build container fb:
   image: docker:stable
   stage: build
@@ -135,11 +135,9 @@ build container fb:
   tags:
     - shell
   before_script:
-    # - cat $DOCKER_DEPLOY_TOKEN | docker login -u $DOCKER_DEPLOY_USER --password-stdin $CI_REGISTRY_IMAGE
     - docker login -u $DOCKER_DEPLOY_USER -p $DOCKER_DEPLOY_TOKEN $CI_REGISTRY_IMAGE
-  script:
-    # - mv featurebase_linux_amd64 .gitlab/
-    - tag=$CI_REGISTRY_IMAGE/server:$CI_COMMIT_REF_SLUG_$CI_COMMIT_SHORT_SHA
+  script:    
+    - tag=$CI_REGISTRY_IMAGE/server:$CI_COMMIT_REF_SLUG/$CI_COMMIT_SHORT_SHA
     - docker build --build-arg GO_VERSION=$GOVERSION -t $tag -f .gitlab/Dockerfile .
     - docker push $tag
     - echo Created docker featurebase image with tag "$tag"
