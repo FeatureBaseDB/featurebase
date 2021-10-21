@@ -3,18 +3,20 @@ FROM alpine:3.14.2
 LABEL maintainer "dev@molecula.com"
 LABEL org.opencontainers.image.authors="dev@molecula.com"
 
+WORKDIR /featurebase
+
 RUN apk add --no-cache curl jq
 RUN pwd
 RUN ls .
 
-COPY LICENSE /LICENSE
-COPY NOTICE /NOTICE
+COPY LICENSE .
+COPY NOTICE .
+COPY .gitlab/featurebase_linux_amd64 .
+
 ARG SHORT_SHA
 
-COPY featurebase_linux_amd64 /
-
-RUN mv /featurebase_linux_amd64 /featurebase
-RUN chmod ugo+x /featurebase
+# RUN mv /featurebase_linux_amd64 /featurebase
+RUN chmod ugo+x .
 EXPOSE 10101
 VOLUME /data
 
