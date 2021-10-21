@@ -134,19 +134,11 @@ build container fb:
     - "build for linux amd64"
   tags:
     - shell
-  # variables:
-  #   - DOCKER_DEPLOY_USER: $DOCKER_DEPLOY_USER
-  #   - DOCKER_DEPLOY_TOKEN: $DOCKER_DEPLOY_TOKEN
   before_script:
-    - docker login -u $DOCKER_DEPLOY_USER -p $DOCKER_DEPLOY_TOKEN registry.gitlab.com/molecula/featurebase
+    - cat $DOCKER_DEPLOY_TOKEN | docker login -u $DOCKER_DEPLOY_USER --password-stdin $CI_REGISTRY_IMAGE
   script:
-    - pwd
-    - mv featurebase_linux_amd64 .gitlab/
-    - echo LIST ROOT DIR
-    - ls . 
-    - echo LIST .gitlab
-    - ls .gitlab/
-    - tag=$CI_REGISTRY_IMAGE/featurebase:$CI_COMMIT_SHORT_SHA
+    # - mv featurebase_linux_amd64 .gitlab/
+    - tag=$CI_REGISTRY_IMAGE/server:$CI_COMMIT_BRANCH-$CI_COMMIT_SHORT_SHA
     - docker build --build-arg GO_VERSION=$GOVERSION -t $tag -f .gitlab/Dockerfile .
     - docker push $tag
     - echo Created docker featurebase image with tag "$tag"

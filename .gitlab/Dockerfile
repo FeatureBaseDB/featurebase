@@ -11,7 +11,7 @@ RUN ls .
 
 COPY LICENSE .
 COPY NOTICE .
-COPY .gitlab/featurebase_linux_amd64 .
+COPY featurebase_linux_amd64 .
 
 ARG SHORT_SHA
 
