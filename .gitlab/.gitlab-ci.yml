@@ -134,8 +134,11 @@ build container fb:
     - "build for linux amd64"
   tags:
     - shell
+  # variables:
+  #   - DOCKER_DEPLOY_USER: $DOCKER_DEPLOY_USER
+  #   - DOCKER_DEPLOY_TOKEN: $DOCKER_DEPLOY_TOKEN
   before_script:
-    - docker info
+    - docker login -u $DOCKER_DEPLOY_USER -p $DOCKER_DEPLOY_TOKEN registry.gitlab.com/molecula/featurebase
   script:
     - pwd
     - mv featurebase_linux_amd64 .gitlab/
