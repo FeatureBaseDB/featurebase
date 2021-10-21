@@ -135,9 +135,10 @@ build container fb:
   tags:
     - shell
   before_script:
-    - docker login -u $DOCKER_DEPLOY_USER -p $DOCKER_DEPLOY_TOKEN $CI_REGISTRY_IMAGE
+    # - docker login -u $DOCKER_DEPLOY_USER -p $DOCKER_DEPLOY_TOKEN $CI_REGISTRY_IMAGE
+    - echo "${DOCKER_DEPLOY_TOKEN}" | docker login -u ${DOCKER_DEPLOY_USER} --password-stdin ${CI_REGISTRY}
   script:    
-    - tag=$CI_REGISTRY_IMAGE/server:$CI_COMMIT_REF_SLUG/$CI_COMMIT_SHORT_SHA
+    - tag=$CI_REGISTRY_IMAGE/server:$CI_COMMIT_REF_SLUG$CI_COMMIT_SHORT_SHA
     - docker build --build-arg GO_VERSION=$GOVERSION -t $tag -f .gitlab/Dockerfile .
     - docker push $tag
     - echo Created docker featurebase image with tag "$tag"
