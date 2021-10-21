@@ -4,6 +4,8 @@ LABEL maintainer "dev@molecula.com"
 LABEL org.opencontainers.image.authors="dev@molecula.com"
 
 RUN apk add --no-cache curl jq
+RUN pwd
+RUN ls .
 
 COPY LICENSE /LICENSE
 COPY NOTICE /NOTICE
