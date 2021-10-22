@@ -25,6 +25,7 @@ import (
 	"sort"
 	"strings"
 	"syscall"
+	"time"
 	"unsafe"
 
 	"github.com/molecula/featurebase/v2/roaring"
@@ -342,4 +343,12 @@ func roaringFragmentHasData(path string, index, field, view string, shard uint64
 	}
 
 	return
+}
+
+// EstTimeLeft returns the estimated remaining time to iterate through some items
+// given a start time, the current time, the iteration, and the number of items
+func EstTimeLeft(start time.Time, now time.Time, i uint, total uint) time.Duration {
+	msgsLeft := total - (i + 1)
+	avgMsgTime := float64(now.Sub(start)) / float64(i+1)
+	return time.Duration(avgMsgTime * float64(msgsLeft))
 }
