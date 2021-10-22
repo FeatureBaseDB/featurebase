@@ -722,8 +722,8 @@ func (s *Server) Open() error {
 			}
 
 			if now := time.Now(); now.Sub(prevMsg) > time.Second {
-				pctDone := (float64(i+1) / float64(numMsgs)) * 100
-				s.logger.Printf("synced %d/%d messages (%.2f%% complete; %s remaining)", i+1, numMsgs, pctDone, EstTimeLeft(start, now, uint(i), numMsgs))
+				estimate, pctDone := GetLoopProgress(start, now, uint(i), numMsgs)
+				s.logger.Printf("synced %d/%d messages (%.2f%% complete; %s remaining)", i+1, numMsgs, pctDone, estimate)
 				prevMsg = now
 			}
 		}

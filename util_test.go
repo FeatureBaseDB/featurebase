@@ -21,7 +21,7 @@ import (
 	"time"
 )
 
-func TestEstTimeLeft(t *testing.T) {
+func TestGetLoopProgress(t *testing.T) {
 	cases := []struct {
 		start time.Time
 		now   time.Time
@@ -64,10 +64,14 @@ func TestEstTimeLeft(t *testing.T) {
 		// we expect that it will be the avg time per message times
 		// the number of remaining messages
 		expected := time.Duration((float64(c.now.Sub(c.start)) / float64(c.i+1)) * float64(c.total-(c.i+1)))
+		expectedPct := 100 * (float64(c.i+1) / float64(c.total))
 
-		timeLeft := EstTimeLeft(c.start, c.now, c.i, c.total)
+		timeLeft, pctDone := GetLoopProgress(c.start, c.now, c.i, c.total)
 		if timeLeft != expected {
 			t.Errorf("Time left was incorrect, expected: %d, but got: %d", expected, timeLeft)
+		}
+		if pctDone != expectedPct {
+			t.Errorf("Percentage done was incorrect, expected: %f, but got: %f", expectedPct, pctDone)
 		}
 	}
 }
