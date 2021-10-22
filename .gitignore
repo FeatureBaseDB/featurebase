@@ -11,3 +11,4 @@ release-pilosa-fsck.*.*.tar.gz
 pilosa
 *.dot
 .idea/
+.*.swp
