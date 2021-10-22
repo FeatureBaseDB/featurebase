@@ -348,9 +348,9 @@ func roaringFragmentHasData(path string, index, field, view string, shard uint64
 // GetLoopProgress returns the estimated remaining time to iterate through some items
 // as well as the loop completion percentage with the following parameters:
 // the start time, the current time, the iteration, and the number of items
-func GetLoopProgress(start time.Time, now time.Time, i uint, total uint) (time.Duration, float64) {
-	msgsLeft := total - (i + 1)
-	avgMsgTime := float64(now.Sub(start)) / float64(i+1)
-	pctDone := (float64(i+1) / float64(total)) * 100
-	return time.Duration(avgMsgTime * float64(msgsLeft)), pctDone
+func GetLoopProgress(start time.Time, now time.Time, iteration uint, total uint) (remaining time.Duration, pctDone float64) {
+	itemsLeft := total - (iteration + 1)
+	avgItemTime := float64(now.Sub(start)) / float64(iteration+1)
+	pctDone = (float64(iteration+1) / float64(total)) * 100
+	return time.Duration(avgItemTime * float64(itemsLeft)), pctDone
 }
