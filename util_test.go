@@ -15,6 +15,7 @@
 package pilosa
 
 // util_test.go has unit tests for utility functions from util.go
+//
 
 import (
 	"testing"
