@@ -22,7 +22,6 @@ import (
 
 	"github.com/molecula/featurebase/v2/disco"
 	"github.com/molecula/featurebase/v2/testhook"
-	. "github.com/molecula/featurebase/v2/vprint" // nolint:staticcheck
 )
 
 var _ = fmt.Printf
@@ -107,73 +106,6 @@ func testSetBit(t *testing.T, h *Holder, index, field string, rowID, columnID ui
 	if err != nil {
 		t.Fatalf("setting bit: %v", err)
 	}
-}
-
-func testMustHaveBit(t *testing.T, h *Holder, index, field string, rowID, columnID uint64) {
-
-	//shard := columnID / ShardWidth
-
-	// hmm... if its a new holder, meta data isn't there, so ask for it.
-	idx, err := h.CreateIndexIfNotExists(index, IndexOptions{})
-	PanicOn(err)
-
-	f := idx.Field(field)
-	if f == nil {
-		t.Fatalf("no such field '%v'", field)
-	}
-
-	row, err := f.Row(nil, rowID)
-	if err != nil {
-		t.Fatalf("error getting field.Row(rowID=%v): %v", rowID, err)
-	}
-
-	cols := row.Columns()
-	if len(cols) == 0 {
-		t.Fatalf("error getting field.Row().Columns(): empty columns, colID %v bit was not hot", columnID)
-	}
-
-	for _, c := range cols {
-		if c == columnID {
-			return // ok, found it.
-		}
-	}
-	t.Fatalf("error getting field.Row().Columns(): colID %v bit was not hot", columnID)
-}
-
-func testMustNotHaveBit(t *testing.T, h *Holder, index, field string, rowID, columnID uint64) {
-	if testHasBit(t, h, index, field, rowID, columnID) {
-		t.Fatalf("error, expected no bit but this bit was hot: index='%v', field='%v', rowID='%v', columnID='%v'", index, field, rowID, columnID)
-	}
-}
-
-func testHasBit(t *testing.T, h *Holder, index, field string, rowID, columnID uint64) bool {
-
-	idx := h.Index(index)
-	if idx == nil {
-		return false // not even an index by this name. Obviously no hot bits either.
-	}
-
-	f := idx.Field(field)
-	if f == nil {
-		return false
-	}
-
-	row, err := f.Row(nil, rowID)
-	if err != nil {
-		return false
-	}
-
-	cols := row.Columns()
-	if len(cols) == 0 {
-		return false
-	}
-
-	for _, c := range cols {
-		if c == columnID {
-			return true // ok, found it.
-		}
-	}
-	return false
 }
 
 func TestHolderOperatorProcess(t *testing.T) {

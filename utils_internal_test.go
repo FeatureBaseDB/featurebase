@@ -15,46 +15,16 @@
 package pilosa
 
 import (
-	"bytes"
 	"fmt"
 	"testing"
 	"time"
 
 	pnet "github.com/molecula/featurebase/v2/net"
-	"github.com/molecula/featurebase/v2/roaring"
 	"github.com/molecula/featurebase/v2/testhook"
 	"github.com/molecula/featurebase/v2/topology"
-	. "github.com/molecula/featurebase/v2/vprint" // nolint:staticcheck
 )
 
 // utilities used by tests
-
-// mustAddR is a helper for calling roaring.Container.Add() in tests to
-// keep the linter happy that we are checking the error.
-func mustAddR(changed bool, err error) {
-	PanicOn(err)
-}
-
-// mustRemove is a helper for calling Tx.Remove() in tests to
-// keep the linter happy that we are checking the error.
-func mustRemove(changeCount int, err error) {
-	PanicOn(err)
-}
-
-func getTestBitmapAsRawRoaring(bitsToSet ...uint64) []byte {
-	b := roaring.NewBitmap()
-	changed := b.DirectAddN(bitsToSet...)
-	n := len(bitsToSet)
-	if changed != n {
-		panic(fmt.Sprintf("changed=%v but bitsToSet len = %v", changed, n))
-	}
-	buf := bytes.NewBuffer(make([]byte, 0, 100000))
-	_, err := b.WriteTo(buf)
-	if err != nil {
-		panic(err)
-	}
-	return buf.Bytes()
-}
 
 // NewTestCluster returns a cluster with n nodes and uses a mod-based hasher.
 func NewTestCluster(tb testing.TB, n int) *cluster {

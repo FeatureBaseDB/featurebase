@@ -84,7 +84,7 @@ func Test_DBPerShard_GetShardsForIndex_LocalOnly(t *testing.T) {
 		v2s.addViewShardSet(txkey.FieldView{Field: field, View: "standard"}, stdShardSet)
 	}
 
-	for _, src := range []string{"roaring", "bolt", "rbf"} {
+	for _, src := range []string{"roaring", "rbf"} {
 		cfg := mustHolderConfig()
 		cfg.StorageConfig.Backend = src
 		holder := NewHolder(tmpdir, cfg)
@@ -145,7 +145,7 @@ func Test_DBPerShard_GetShardsForIndex_LocalOnly(t *testing.T) {
 				tx.Rollback()
 			}
 		} else {
-			// non-roaring: rbf, bolt
+			// non-roaring: rbf
 
 			for _, shard := range []uint64{93, 223, 221, 215, 219, 217} {
 				tx := idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Shard: shard})
@@ -192,14 +192,6 @@ rick/fields/_exists/views/standard/fragments/93
 rick/fields/_exists/views/standard/fragments/219
 rick/fields/_exists/views/standard/fragments/223
 `,
-	"bolt": `
-rick/backends/backend-boltdb/shard.0093-bolt/bolt.db
-rick/backends/backend-boltdb/shard.0215-bolt/bolt.db
-rick/backends/backend-boltdb/shard.0217-bolt/bolt.db
-rick/backends/backend-boltdb/shard.0219-bolt/bolt.db
-rick/backends/backend-boltdb/shard.0221-bolt/bolt.db
-rick/backends/backend-boltdb/shard.0223-bolt/bolt.db
-`,
 	"rbf": `
 rick/backends/backend-rbf/shard.0093-rbf
 rick/backends/backend-rbf/shard.0215-rbf
@@ -225,7 +217,7 @@ func makeSampleRoaringDir(t *testing.T, root, index, backend string, minBytes in
 		}
 		var shard uint64
 		switch backend {
-		case "bolt", "rbf":
+		case "rbf":
 			shard = shards[i]
 
 			idx = helperCreateDBShard(h, index, shard)
@@ -266,15 +258,7 @@ func helperCreateDBShard(h *Holder, index string, shard uint64) *Index {
 }
 
 // keep the ocd linter happy
-var _ = makeBolttestDB
 var _ = makeRBFtestDB
-
-func makeBolttestDB(path string, h *Holder, shard uint64) {
-	i := uint64(1)
-	w, _ := mustOpenEmptyBoltWrapper(path)
-	BoltMustSetBitvalue(w, "index", "field", "view", shard, i)
-	w.Close()
-}
 
 func makeRBFtestDB(path string, h *Holder, shard uint64) {
 	i := uint64(1)

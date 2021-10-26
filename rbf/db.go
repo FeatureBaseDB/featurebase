@@ -319,7 +319,7 @@ func (db *DB) Close() (err error) {
 // least a single hot bit inside the db
 // in order to return hasAnyRecords true.
 //
-// HasData is used by backend migration and blue/green checks.
+// HasData is used by backend migration.
 //
 // If there is a disk error we return (false, error), so always
 // check the error before deciding if hasAnyRecords is valid.

@@ -334,8 +334,8 @@ func OptServerOpenTranslateReader(fn OpenTranslateReaderFunc) ServerOption {
 }
 
 // OptServerStorageConfig is a functional option on Server used to specify the
-// transactional-storage backend to use, resulting in RoaringTx, RbfTx,
-// BadgerTx, or a blueGreen* Tx being used for all Tx interface calls.
+// transactional-storage backend to use, resulting in RoaringTx or RbfTx
+// being used for all Tx interface calls.
 func OptServerStorageConfig(cfg *storage.Config) ServerOption {
 	return func(s *Server) error {
 		s.holderConfig.StorageConfig = cfg
