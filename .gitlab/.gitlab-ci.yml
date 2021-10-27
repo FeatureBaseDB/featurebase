@@ -64,6 +64,24 @@ generate coverage html:
   needs:
     - job: run go tests
 
+install goci:
+  stage: build
+  image: golang:1.16.9
+  script:
+    - echo "Installing golangci-lint"
+    - GO111MODULE=off  go get github.com/golangci/golangci-lint/cmd/golangci-lint
+  artifacts:
+    paths:
+      - /go/bin/golangci-lint
+
+run goci:
+  stage: test
+  image: golang:1.16.9
+  script:
+    - echo "Running golangci-lint"
+  needs:
+    - job: install goci
+
 upload to sonarcloud:
   stage: test
   image: sonarsource/sonar-scanner-cli:4.6

@@ -1,3 +1,39 @@
 run:
+  #skip the protobuf generated files
+  skip-dirs:
+    - pb
+    - proto
   skip-files:
     - pql/pql.peg.go
+linters-settings:
+  gofmt:
+    simplify: true
+  govet:
+    # report about shadowed variables
+    check-shadowing: true
+
+    # settings per analyzer
+    settings:
+      printf: # analyzer name, run `go tool vet help` to see all analyzers
+        funcs: # run `go tool vet help printf` to see available settings for `printf` analyzer
+          - (github.com/golangci/golangci-lint/pkg/logutils.Log).Infof
+          - (github.com/golangci/golangci-lint/pkg/logutils.Log).Warnf
+          - (github.com/golangci/golangci-lint/pkg/logutils.Log).Errorf
+          - (github.com/golangci/golangci-lint/pkg/logutils.Log).Fatalf
+
+    # enable or disable analyzers by name
+    # run `go tool vet help` to see all analyzers
+    enable:
+      - atomicalign
+    enable-all: false
+    disable:
+      - shadow
+    disable-all: false
+
+  staticcheck:
+    # Select the Go version to target. The default is '1.13'.
+    go: "1.16"
+    # https://staticcheck.io/docs/options#checks
+    checks: [ "all" ]
+
+
