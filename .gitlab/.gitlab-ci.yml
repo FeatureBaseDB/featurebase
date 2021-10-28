@@ -71,6 +71,9 @@ run jest tests:
     - npm install
     - npm test -- --coverage --testResultsProcessor=jest-sonar-reporter
     - sonar-scanner
+  artifacts:
+    paths:
+      - coverage/lcov.info
 
 upload to sonarcloud:
   stage: test
