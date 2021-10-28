@@ -64,16 +64,25 @@ generate coverage html:
   needs:
     - job: run go tests
 
+run jest tests:
+  stage: test
+  image: sonarsource/sonar-scanner-cli:latest
+  script:
+    - npm install
+    - npm test -- --coverage --testResultsProcessor=jest-sonar-reporter
+    - sonar-scanner
+
 upload to sonarcloud:
   stage: test
   image: sonarsource/sonar-scanner-cli:4.6
   variables:
     SONAR_TOKEN: $SONAR_TOKEN
   script:
-    - sonar-scanner -Dsonar.projectKey=molecula_featurebase -Dsonar.organization=molecula -Dsonar.sources=. -Dsonar.host.url=https://sonarcloud.io -Dsonar.go.coverage.reportPaths=coverage.out -Dsonar.go.tests.reportPaths=test-report.out
+    - sonar-scanner -Dsonar.projectKey=molecula_featurebase -Dsonar.organization=molecula -Dsonar.sources=. -Dsonar.host.url=https://sonarcloud.io -Dsonar.go.coverage.reportPaths=coverage.out -Dsonar.go.tests.reportPaths=test-report.out -Dsonar.testExecutionReportPaths=test-report.xml
   needs:
     - job: run go tests
     - job: run go tests with output
+    - job: run jest tests 
     
 build for linux amd64:
   stage: build
