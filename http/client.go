@@ -46,9 +46,13 @@ type InternalClient struct {
 
 	// The client to use for HTTP communication.
 	httpClient *http.Client
+	// the local node's API, used for operations that we can short-circuit that way
+	api *pilosa.API
 }
 
 // NewInternalClient returns a new instance of InternalClient to connect to host.
+// If api is non-nil, the client uses it for some same-host operations instead
+// of going through http.
 func NewInternalClient(host string, remoteClient *http.Client) (*InternalClient, error) {
 	if host == "" {
 		return nil, pilosa.ErrHostRequired
@@ -542,104 +546,12 @@ func (c *InternalClient) QueryNode(ctx context.Context, uri *pnet.URI, index str
 	return qresp, nil
 }
 
-// Import bulk imports bits for a single shard to a host.
-func (c *InternalClient) Import(ctx context.Context, index, field string, shard uint64, bits []pilosa.Bit, opts ...pilosa.ImportOption) error {
-	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.Import")
-	defer span.Finish()
-
-	if index == "" {
-		return pilosa.ErrIndexRequired
-	} else if field == "" {
-		return pilosa.ErrFieldRequired
-	}
-
-	// Set up import options.
-	options := &pilosa.ImportOptions{}
-	for _, opt := range opts {
-		err := opt(options)
-		if err != nil {
-			return errors.Wrap(err, "applying option")
-		}
-	}
-
-	buf, err := c.marshalImportPayload(index, field, shard, bits)
-	if err != nil {
-		return fmt.Errorf("Error Creating Payload: %s", err)
-	}
-
-	// Retrieve a list of nodes that own the shard.
-	nodes, err := c.FragmentNodes(ctx, index, shard)
-	if err != nil {
-		return fmt.Errorf("shard nodes: %s", err)
-	}
-
-	// Import to each node.
-	for _, node := range nodes {
-		if err := c.importNode(ctx, node, index, field, buf, options); err != nil {
-			return fmt.Errorf("import node: host=%s, err=%s", node.URI, err)
-		}
-	}
-
-	return nil
-}
-
 func getPrimaryNode(nodes []*topology.Node) *topology.Node {
 	for _, node := range nodes {
 		if node.IsPrimary {
 			return node
 		}
 	}
-	return nil
-}
-
-// ImportK bulk imports bits specified by string keys to a host.
-func (c *InternalClient) ImportK(ctx context.Context, index, field string, bits []pilosa.Bit, opts ...pilosa.ImportOption) error {
-	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.ImportK")
-	defer span.Finish()
-
-	if index == "" {
-		return pilosa.ErrIndexRequired
-	} else if field == "" {
-		return pilosa.ErrFieldRequired
-	}
-
-	// Set up import options.
-	options := &pilosa.ImportOptions{}
-	for _, opt := range opts {
-		err := opt(options)
-		if err != nil {
-			return errors.Wrap(err, "applying option")
-		}
-	}
-
-	buf, err := c.marshalImportPayload(index, field, 0, bits)
-	if err != nil {
-		return fmt.Errorf("Error Creating Payload: %s", err)
-	}
-
-	// Get the primary node; all bits are sent to the
-	// primary translate store (i.e. primary).
-	// TODO... is that right^^?
-	// RESPONSE: It looks like in ctl/import.go, we could change the
-	// logic in ImportCommand.importBits() to only use ImportK
-	// when useRowKeys = true. It's no longer necessary to
-	// send column key translations to the primary (although
-	// it should still work). As far as I know, the only thing
-	// that uses ImportK is the pilosa import sub-command.
-	nodes, err := c.Nodes(ctx)
-	if err != nil {
-		return fmt.Errorf("getting nodes: %s", err)
-	}
-	coord := getPrimaryNode(nodes)
-	if coord == nil {
-		return fmt.Errorf("could not find the primary node")
-	}
-
-	// Import to node.
-	if err := c.importNode(ctx, coord, index, field, buf, options); err != nil {
-		return fmt.Errorf("import node: host=%s, err=%s", coord.URI, err)
-	}
-
 	return nil
 }
 
@@ -668,32 +580,6 @@ func (c *InternalClient) EnsureFieldWithOptions(ctx context.Context, indexName s
 		return nil
 	}
 	return err
-}
-
-// marshalImportPayload marshalls the import parameters into a protobuf byte slice.
-func (c *InternalClient) marshalImportPayload(index, field string, shard uint64, bits []pilosa.Bit) ([]byte, error) {
-	// Separate row and column IDs to reduce allocations.
-	rowIDs := Bits(bits).RowIDs()
-	rowKeys := Bits(bits).RowKeys()
-	columnIDs := Bits(bits).ColumnIDs()
-	columnKeys := Bits(bits).ColumnKeys()
-	timestamps := Bits(bits).Timestamps()
-
-	// Marshal data to protobuf.
-	buf, err := c.serializer.Marshal(&pilosa.ImportRequest{
-		Index:      index,
-		Field:      field,
-		Shard:      shard,
-		RowIDs:     rowIDs,
-		RowKeys:    rowKeys,
-		ColumnIDs:  columnIDs,
-		ColumnKeys: columnKeys,
-		Timestamps: timestamps,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("marshal import request: %s", err)
-	}
-	return buf, nil
 }
 
 // importNode sends a pre-marshaled import request to a node.
@@ -747,134 +633,210 @@ func (c *InternalClient) importNode(ctx context.Context, node *topology.Node, in
 	return nil
 }
 
-// ImportValue bulk imports field values for a single shard to a host.
-func (c *InternalClient) ImportValue(ctx context.Context, index, field string, shard uint64, vals []pilosa.FieldValue, opts ...pilosa.ImportOption) error {
-	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.ImportValue")
+// Import imports values using an ImportRequest, whether or not it's keyed.
+// It may modify the contents of req.
+//
+// If a request comes in with Shard -1, it will be sent to only one node,
+// which will translate if necessary, split into shards, and loop back
+// through this for each sub-request. If a request uses record keys,
+// it will be set to use shard = -1 unconditionally, because we know
+// that it has to be translated and possibly reshuffled. Value keys
+// don't override the shard.
+//
+// If we get a non-nil qcx, and have an associated API, we'll use that API
+// directly for the local shard.
+func (c *InternalClient) Import(ctx context.Context, qcx *pilosa.Qcx, req *pilosa.ImportRequest, options *pilosa.ImportOptions) error {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.Import")
 	defer span.Finish()
 
-	if index == "" {
-		return pilosa.ErrIndexRequired
-	} else if field == "" {
-		return pilosa.ErrFieldRequired
+	if req.ColumnKeys != nil {
+		req.Shard = ^uint64(0)
 	}
-
-	// Set up import options.
-	options := &pilosa.ImportOptions{}
-	for _, opt := range opts {
-		err := opt(options)
-		if err != nil {
-			return errors.Wrap(err, "applying option")
+	// If we don't actually know what shards we're sending to, and we have
+	// a local API, we can short-circuit: We just send this request to the
+	// local API, which will break it out and call its defaultClient for
+	// the data for individual shards.
+	var nodes []*topology.Node
+	var err error
+	if req.Shard == ^uint64(0) {
+		if qcx != nil && c.api != nil {
+			err = c.api.ImportWithTx(ctx, qcx, req, options)
+			// Note that Wrap(nil, ...) is still nil.
+			return errors.Wrap(err, "local import")
 		}
 	}
-
-	buf, err := c.marshalImportValuePayload(index, field, shard, vals)
-	if err != nil {
-		return fmt.Errorf("Error Creating Payload: %s", err)
-	}
-
-	// Retrieve a list of nodes that own the shard.
-	nodes, err := c.FragmentNodes(ctx, index, shard)
-	if err != nil {
-		return fmt.Errorf("shard nodes: %s", err)
-	}
-
-	// Import to each node.
-	for _, node := range nodes {
-		if err := c.importNode(ctx, node, index, field, buf, options); err != nil {
-			return fmt.Errorf("import node: host=%s, err=%s", node.URI, err)
-		}
-	}
-
-	return nil
-}
-
-// ImportValue2 is a simplified ImportValue method which just uses the
-// ImportValueRequest instead of splitting up ImportValue and
-// ImportValueK... it also supports importing float values. The idea
-// being that (assuming it works) this will become the default (and be
-// renamed) for 2.0, and we can deprecate the other methods.
-func (c *InternalClient) ImportValue2(ctx context.Context, req *pilosa.ImportValueRequest, options *pilosa.ImportOptions) error {
-	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.NewImportValue")
-	defer span.Finish()
-
-	buf, err := c.serializer.Marshal(req)
-	if err != nil {
-		return errors.Errorf("marshal import request: %s", err)
-	}
-
-	// Retrieve a list of nodes that own the shard.
-	nodes, err := c.FragmentNodes(ctx, req.Index, req.Shard)
+	nodes, err = c.FragmentNodes(ctx, req.Index, req.Shard)
 	if err != nil {
 		return errors.Errorf("shard nodes: %s", err)
 	}
+	// "us" is a usable local node if any, "them" is every node that we need
+	// to process which isn't that node. We start out with us == nil and
+	// them = the whole set of nodes.
+	var us *topology.Node
+	var them []*topology.Node = nodes
 
-	// Import to each node.
-	for _, node := range nodes {
-		if err := c.importNode(ctx, node, req.Index, req.Field, buf, options); err != nil {
-			return errors.Errorf("import node: host=%s, err=%s", node.URI, err)
+	// If we have an API, we know what node we are. Even if we don't have
+	// a Qcx, we still care, because looping back to the local node will
+	// be faster than going to another node.
+	if c.api != nil {
+		myID := c.api.NodeID()
+		for i, node := range nodes {
+			if myID == node.ID {
+				// swap our node into the first position
+				nodes[i], nodes[0] = nodes[0], nodes[i]
+				// If we have a qcx, we'll treat our node even MORE
+				// specially.
+				if qcx != nil {
+					us, them = nodes[0], nodes[1:]
+				}
+				break
+			}
+		}
+	}
+
+	// If we had a valid API and Qcx, and shard was ^0, we'd have handled
+	// it previously. So if we get here, we don't have both a Qcx and an API,
+	// but we might have an API, in which case we'll have shuffled our node
+	// into the first position. Otherwise we're just taking whatever the first
+	// node is.
+	if req.Shard == ^uint64(0) {
+		them = them[:1]
+	}
+
+	// We handle remote nodes first, for two distinct reasons. One is that
+	// the local API ImportWithTx is allowed to modify its inputs, and if we
+	// ran that before serializing, we'd get corrupt data serialized.
+	// The other is that if we were to hold a write lock that started with
+	// that import and ended when we hit the end of our Qcx, we wouldn't want
+	// to hold it during all our requests to the remote nodes.
+	if len(them) > 0 {
+		buf, err := c.serializer.Marshal(req)
+		if err != nil {
+			return errors.Errorf("marshal import request: %s", err)
+		}
+		// We process remote nodes first so we won't be actually holding our
+		// write lock yet, in theory. This doesn't actually matter yet, but is
+		// helpful for future planned refactoring.
+		for _, node := range them {
+			if err = c.importNode(ctx, node, req.Index, req.Field, buf, options); err != nil {
+				return errors.Wrap(err, "remote import")
+			}
+		}
+	}
+
+	// Write to the local node if we have one.
+	if us != nil {
+		// WARNING: ImportWithTx can alter its inputs. However, we can
+		// only ever do this once, and if we're going to need a marshalled
+		// form, we already made it.
+		if err = c.api.ImportWithTx(ctx, qcx, req, options); err != nil {
+			return errors.Wrap(err, "local import")
 		}
 	}
 	return nil
 }
 
-// ImportValueK bulk imports keyed field values to a host.
-func (c *InternalClient) ImportValueK(ctx context.Context, index, field string, vals []pilosa.FieldValue, opts ...pilosa.ImportOption) error {
-	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.ImportValueK")
+// ImportValue imports values using an ImportValueRequest, whether or not it's
+// keyed. It may modify the contents of req.
+//
+// If a request comes in with Shard -1, it will be sent to only one node,
+// which will translate if necessary, split into shards, and loop back
+// through this for each sub-request. If a request uses record keys,
+// it will be set to use shard = -1 unconditionally, because we know
+// that it has to be translated and possibly reshuffled. Value keys
+// don't override the shard.
+//
+// If we get a non-nil qcx, and have an associated API, we'll use that API
+// directly for the local shard.
+func (c *InternalClient) ImportValue(ctx context.Context, qcx *pilosa.Qcx, req *pilosa.ImportValueRequest, options *pilosa.ImportOptions) error {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.ImportValue")
 	defer span.Finish()
 
-	buf, err := c.marshalImportValuePayload(index, field, 0, vals)
-	if err != nil {
-		return fmt.Errorf("Error Creating Payload: %s", err)
+	if req.ColumnKeys != nil {
+		req.Shard = ^uint64(0)
 	}
+	// If we don't actually know what shards we're sending to, and we have
+	// a local API, we can short-circuit: We just send this request to the
+	// local API, which will break it out and call its defaultClient for
+	// the data for individual shards.
+	var nodes []*topology.Node
+	var err error
+	if req.Shard == ^uint64(0) {
+		if qcx != nil && c.api != nil {
+			err = c.api.ImportValueWithTx(ctx, qcx, req, options)
+			// Note that Wrap(nil, ...) is still nil.
+			return errors.Wrap(err, "local import")
+		}
+	}
+	nodes, err = c.FragmentNodes(ctx, req.Index, req.Shard)
+	if err != nil {
+		return errors.Errorf("shard nodes: %s", err)
+	}
+	// "us" is a usable local node if any, "them" is every node that we need
+	// to process which isn't that node. We start out with us == nil and
+	// them = the whole set of nodes.
+	var us *topology.Node
+	var them []*topology.Node = nodes
 
-	// Set up import options.
-	options := &pilosa.ImportOptions{}
-	for _, opt := range opts {
-		err := opt(options)
-		if err != nil {
-			return errors.Wrap(err, "applying option")
+	// If we have an API, we know what node we are. Even if we don't have
+	// a Qcx, we still care, because looping back to the local node will
+	// be faster than going to another node.
+	if c.api != nil {
+		myID := c.api.NodeID()
+		for i, node := range nodes {
+			if myID == node.ID {
+				// swap our node into the first position
+				nodes[i], nodes[0] = nodes[0], nodes[i]
+				// If we have a qcx, we'll treat our node even MORE
+				// specially.
+				if qcx != nil {
+					us, them = nodes[0], nodes[1:]
+				}
+				break
+			}
 		}
 	}
 
-	// Get the primary node; all bits are sent to the
-	// primary translate store.
-	nodes, err := c.Nodes(ctx)
-	if err != nil {
-		return fmt.Errorf("getting nodes: %s", err)
-	}
-	coord := getPrimaryNode(nodes)
-	if coord == nil {
-		return fmt.Errorf("could not find the primary node")
+	// If we had a valid API and Qcx, and shard was ^0, we'd have handled
+	// it previously. So if we get here, we don't have both a Qcx and an API,
+	// but we might have an API, in which case we'll have shuffled our node
+	// into the first position. Otherwise we're just taking whatever the first
+	// node is.
+	if req.Shard == ^uint64(0) {
+		them = them[:1]
 	}
 
-	// Import to node.
-	if err := c.importNode(ctx, coord, index, field, buf, options); err != nil {
-		return fmt.Errorf("import node: host=%s, err=%s", coord.URI, err)
+	// We handle remote nodes first, for two distinct reasons. One is that
+	// the local API ImportWithTx is allowed to modify its inputs, and if we
+	// ran that before serializing, we'd get corrupt data serialized.
+	// The other is that if we were to hold a write lock that started with
+	// that import and ended when we hit the end of our Qcx, we wouldn't want
+	// to hold it during all our requests to the remote nodes.
+	if len(them) > 0 {
+		buf, err := c.serializer.Marshal(req)
+		if err != nil {
+			return errors.Errorf("marshal import request: %s", err)
+		}
+		// We process remote nodes first so we won't be actually holding our
+		// write lock yet, in theory. This doesn't actually matter yet, but is
+		// helpful for future planned refactoring.
+		for _, node := range them {
+			if err = c.importNode(ctx, node, req.Index, req.Field, buf, options); err != nil {
+				return errors.Wrap(err, "remote import")
+			}
+		}
 	}
 
+	// Write to the local node if we have one.
+	if us != nil {
+		// WARNING: ImportWithTx can alter its inputs. However, we can
+		// only ever do this once, and if we're going to need a marshalled
+		// form, we already made it.
+		if err = c.api.ImportValueWithTx(ctx, qcx, req, options); err != nil {
+			return errors.Wrap(err, "local import")
+		}
+	}
 	return nil
-}
-
-// marshalImportValuePayload marshalls the import parameters into a protobuf byte slice.
-func (c *InternalClient) marshalImportValuePayload(index, field string, shard uint64, vals []pilosa.FieldValue) ([]byte, error) {
-	// Separate row and column IDs to reduce allocations.
-	columnIDs := FieldValues(vals).ColumnIDs()
-	columnKeys := FieldValues(vals).ColumnKeys()
-	values := FieldValues(vals).Values()
-
-	// Marshal data to protobuf.
-	buf, err := c.serializer.Marshal(&pilosa.ImportValueRequest{
-		Index:      index,
-		Field:      field,
-		Shard:      shard,
-		ColumnIDs:  columnIDs,
-		ColumnKeys: columnKeys,
-		Values:     values,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("marshal import request: %s", err)
-	}
-	return buf, nil
 }
 
 // ImportRoaring does fast import of raw bits in roaring format (pilosa or
@@ -2335,4 +2297,8 @@ func (c *InternalClient) PartitionNodes(ctx context.Context, partitionID int) ([
 		return nil, fmt.Errorf("json decode: %s", err)
 	}
 	return a, nil
+}
+
+func (c *InternalClient) SetInternalAPI(api *pilosa.API) {
+	c.api = api
 }

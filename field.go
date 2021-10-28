@@ -1483,17 +1483,7 @@ func (f *Field) Range(qcx *Qcx, name string, op pql.Token, predicate int64) (*Ro
 }
 
 // Import bulk imports data.
-func (f *Field) Import(qcx *Qcx, rowIDs, columnIDs []uint64, timestamps []int64, shard uint64, opts ...ImportOption) (err0 error) {
-
-	// Set up import options.
-	options := &ImportOptions{}
-	for _, opt := range opts {
-		err := opt(options)
-		if err != nil {
-			return errors.Wrap(err, "applying option")
-		}
-	}
-
+func (f *Field) Import(qcx *Qcx, rowIDs, columnIDs []uint64, timestamps []int64, shard uint64, options *ImportOptions) (err0 error) {
 	// Determine quantum if timestamps are set.
 	q := f.TimeQuantum()
 	if len(timestamps) > 0 {

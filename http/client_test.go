@@ -202,7 +202,6 @@ func TestClient_Export(t *testing.T) {
 	cmd.MustCreateField(t, "unkeyed", "unkeyedf", pilosa.OptFieldTypeSet(pilosa.CacheTypeRanked, 1000))
 
 	c := MustNewClient(host, http.GetHTTPClient(nil))
-
 	data := []pilosa.Bit{
 		{RowID: 1, ColumnID: 100, RowKey: "row1", ColumnKey: "col100"},
 		{RowID: 1, ColumnID: 101, RowKey: "row1", ColumnKey: "col101"},
@@ -367,49 +366,155 @@ func TestClient_Export(t *testing.T) {
 
 // Ensure client can bulk import data.
 func TestClient_Import(t *testing.T) {
-	cluster := test.MustRunCluster(t, 1)
+	// Need a cluster to verify hitting multiple nodes
+	cluster := test.MustRunCluster(t, 3)
 	defer cluster.Close()
 	cmd := cluster.GetNode(0)
 	host := cmd.URL()
-	holder := cmd.Server.Holder()
-	hldr := test.Holder{Holder: holder}
+	api := cmd.API
 
-	// Load bitmap into cache to ensure cache gets updated.
-	hldr.SetBit("i", "f", 1, 0) // set a bit so the view gets created.
-	hldr.Row("i", "f", 0)
+	cmd.MustCreateIndex(t, "keyed", pilosa.IndexOptions{Keys: true})
+	cmd.MustCreateIndex(t, "unkeyed", pilosa.IndexOptions{Keys: false})
 
-	// Send import request.
+	cmd.MustCreateField(t, "keyed", "keyedf", pilosa.OptFieldTypeSet(pilosa.CacheTypeNone, 0), pilosa.OptFieldKeys())
+	cmd.MustCreateField(t, "keyed", "unkeyedf", pilosa.OptFieldTypeSet(pilosa.CacheTypeNone, 0))
+	cmd.MustCreateField(t, "unkeyed", "keyedf", pilosa.OptFieldTypeSet(pilosa.CacheTypeNone, 0), pilosa.OptFieldKeys())
+	cmd.MustCreateField(t, "unkeyed", "unkeyedf", pilosa.OptFieldTypeSet(pilosa.CacheTypeNone, 0))
+
+	indexes := map[bool]string{true: "keyed", false: "unkeyed"}
+	fields := map[bool]string{true: "keyedf", false: "unkeyedf"}
+
+	recKeys := []string{"rec-a", "rec-b", "rec-c"}
+	valueKeys := []string{"val-a", "val-b", "val-c"}
+	recIDs := []uint64{0, 3, 7}
+	valueIDs := []uint64{0, 3, 7}
+
 	c := MustNewClient(host, http.GetHTTPClient(nil))
-	if err := c.Import(context.Background(), "i", "f", 0, []pilosa.Bit{
-		{RowID: 0, ColumnID: 1},
-		{RowID: 0, ColumnID: 5},
-		{RowID: 200, ColumnID: 6},
-	}); err != nil {
-		t.Fatal(err)
+	// set API to point at the local node
+	c.SetInternalAPI(cmd.API)
+
+	checkResults := func(results pilosa.QueryResponse, keyed bool, maxN int) {
+		for i, r := range results.Results {
+			row, ok := r.(*pilosa.Row)
+			if !ok {
+				t.Fatalf("expected row, got %T", r)
+			}
+			if i >= maxN {
+				// we cleared these, so they should be empty
+				if keyed {
+					vals := row.Keys
+					if len(vals) != 0 {
+						t.Fatalf("expected empty row, got %d result(s) back, first result %q",
+							len(vals), vals[0])
+					}
+				} else {
+					vals := row.Columns()
+					if len(vals) != 0 {
+						t.Fatalf("expected empty row, got %d result(s) back, first result %d",
+							len(vals), vals[0])
+					}
+				}
+				return
+			}
+			if keyed {
+				vals := row.Keys
+				if len(vals) != 1 {
+					t.Fatalf("expected one result, didn't get it")
+				}
+				if vals[0] != recKeys[i] {
+					t.Fatalf("expected %q, got %q", recKeys[i], vals[0])
+				}
+			} else {
+				vals := row.Columns()
+				if len(vals) != 1 {
+					t.Fatalf("expected one result, didn't get it")
+				}
+				if vals[0] != recIDs[i] {
+					t.Fatalf("expected %d, got %d", recIDs[i], vals[0])
+				}
+			}
+		}
 	}
 
-	// Verify data.
-	if a := hldr.Row("i", "f", 0).Columns(); !reflect.DeepEqual(a, []uint64{1, 5}) {
-		t.Fatalf("unexpected columns: %+v", a)
-	}
-	if a := hldr.Row("i", "f", 200).Columns(); !reflect.DeepEqual(a, []uint64{6}) {
-		t.Fatalf("unexpected columns: %+v", a)
-	}
+	for keyed, indexName := range indexes {
+		for _, fieldName := range fields {
+			req := pilosa.ImportRequest{
+				Index: indexName,
+				Field: fieldName,
+			}
+			if indexName == "keyed" {
+				req.ColumnKeys = recKeys
+				req.Shard = ^uint64(0)
+			} else {
+				req.ColumnIDs = recIDs
+				req.Shard = 0
+			}
+			if fieldName == "keyedf" {
+				req.RowKeys = valueKeys
+			} else {
+				req.RowIDs = valueIDs
+			}
+			// clone request because some imports will modify their input parameters
+			if err := c.Import(context.Background(), nil, req.Clone(), &pilosa.ImportOptions{}); err != nil {
+				t.Fatalf("%s/%s: %v",
+					indexName, fieldName, err)
+			}
 
-	// Clear some data.
-	if err := c.Import(context.Background(), "i", "f", 0, []pilosa.Bit{
-		{RowID: 0, ColumnID: 5},
-		{RowID: 200, ColumnID: 6},
-	}, pilosa.OptImportOptionsClear(true)); err != nil {
-		t.Fatal(err)
-	}
+			// Now do a query to see whether it worked...
+			var pql string
+			if fieldName == "keyedf" {
+				pql = `Row(keyedf="val-a") Row(keyedf="val-b") Row(keyedf="val-c")`
+			} else {
+				pql = `Row(unkeyedf=0) Row(unkeyedf=3) Row(unkeyedf=7)`
+			}
+			results, err := api.Query(context.Background(), &pilosa.QueryRequest{Index: indexName, Query: pql})
+			if err != nil {
+				t.Fatal(err)
+			}
+			checkResults(results, keyed, 3)
 
-	// Verify data.
-	if a := hldr.Row("i", "f", 0).Columns(); !reflect.DeepEqual(a, []uint64{1}) {
-		t.Fatalf("unexpected columns: %+v", a)
-	}
-	if a := hldr.Row("i", "f", 200).Columns(); !reflect.DeepEqual(a, []uint64{}) {
-		t.Fatalf("unexpected columns: %+v", a)
+			// Now clear a bit...
+			req = pilosa.ImportRequest{
+				Index: indexName,
+				Field: fieldName,
+			}
+			if indexName == "keyed" {
+				req.ColumnKeys = recKeys[2:]
+				req.Shard = ^uint64(0)
+			} else {
+				req.ColumnIDs = recIDs[2:]
+				req.Shard = 0
+			}
+			if fieldName == "keyedf" {
+				req.RowKeys = valueKeys[2:]
+			} else {
+				req.RowIDs = valueIDs[2:]
+			}
+			// do a clear. also, do the clear with a Qcx.
+			func() {
+				// inner function so the deferred abort isn't delayed a lot
+				qcx := api.Txf().NewQcx()
+				defer qcx.Abort()
+				if err := c.Import(context.Background(), qcx, req.Clone(), &pilosa.ImportOptions{Clear: true}); err != nil {
+					t.Fatalf("%s/%s: %v",
+						indexName, fieldName, err)
+				}
+				if err := qcx.Finish(); err != nil {
+					t.Fatalf("committing write: %v", err)
+				}
+			}()
+			// Now do a query to see whether it worked...
+			if fieldName == "keyedf" {
+				pql = `Row(keyedf="val-a") Row(keyedf="val-b") Row(keyedf="val-c")`
+			} else {
+				pql = `Row(unkeyedf=0) Row(unkeyedf=3) Row(unkeyedf=7)`
+			}
+			results, err = api.Query(context.Background(), &pilosa.QueryRequest{Index: indexName, Query: pql})
+			if err != nil {
+				t.Fatal(err)
+			}
+			checkResults(results, keyed, 2)
+		}
 	}
 }
 
@@ -547,15 +652,17 @@ func TestClient_ImportRoaring_MultiView(t *testing.T) {
 	}
 	defer cluster.Close()
 
-	_, err = cluster.GetNode(0).API.CreateIndex(context.Background(), "i", pilosa.IndexOptions{})
+	api := cluster.GetNode(0).API
+
+	_, err = api.CreateIndex(context.Background(), "i", pilosa.IndexOptions{})
 	if err != nil {
 		t.Fatalf("creating index: %v", err)
 	}
-	_, err = cluster.GetNode(0).API.CreateField(context.Background(), "i", "f", pilosa.OptFieldTypeSet(pilosa.CacheTypeRanked, 100))
+	_, err = api.CreateField(context.Background(), "i", "f", pilosa.OptFieldTypeSet(pilosa.CacheTypeRanked, 100))
 	if err != nil {
 		t.Fatalf("creating field: %v", err)
 	}
-	_, err = cluster.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: "Set(0, f=1)"})
+	_, err = api.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: "Set(0, f=1)"})
 	if err != nil {
 		t.Fatalf("querying: %v", err)
 	}
@@ -588,16 +695,21 @@ func TestClient_ImportKeys(t *testing.T) {
 
 		// Send import request.
 		c := MustNewClient(host, http.GetHTTPClient(nil))
+		baseReq := &pilosa.ImportRequest{
+			Index:      "keyed",
+			Field:      "keyedf",
+			ColumnKeys: []string{"eve", "alice", "bob", "eve", "alice", "eve"},
+			ColumnIDs:  []uint64{1, 2, 3, 1, 2, 1},
+			RowKeys:    []string{"green", "green", "green", "blue", "blue", "purple"},
+			RowIDs:     []uint64{1, 1, 1, 2, 2, 3},
+		}
 
 		t.Run("Import keyed,keyed", func(t *testing.T) {
-			if err := c.Import(context.Background(), "keyed", "keyedf", 0, []pilosa.Bit{
-				{RowKey: "green", ColumnKey: "eve"},
-				{RowKey: "green", ColumnKey: "alice"},
-				{RowKey: "green", ColumnKey: "bob"},
-				{RowKey: "blue", ColumnKey: "eve"},
-				{RowKey: "blue", ColumnKey: "alice"},
-				{RowKey: "purple", ColumnKey: "eve"},
-			}); err != nil {
+			req := baseReq.Clone()
+			req.Index = "keyed"
+			req.Field = "keyedf"
+			req.ColumnIDs, req.RowIDs = nil, nil
+			if err := c.Import(context.Background(), nil, req, &pilosa.ImportOptions{}); err != nil {
 				t.Fatal(err)
 			}
 			resp := cmd.QueryAPI(t, &pilosa.QueryRequest{
@@ -616,14 +728,11 @@ func TestClient_ImportKeys(t *testing.T) {
 		})
 
 		t.Run("Import keyed,unkeyedf", func(t *testing.T) {
-			if err := c.Import(context.Background(), "keyed", "unkeyedf", 0, []pilosa.Bit{
-				{RowID: 1, ColumnKey: "eve"},
-				{RowID: 1, ColumnKey: "alice"},
-				{RowID: 1, ColumnKey: "bob"},
-				{RowID: 2, ColumnKey: "eve"},
-				{RowID: 2, ColumnKey: "alice"},
-				{RowID: 3, ColumnKey: "eve"},
-			}); err != nil {
+			req := baseReq.Clone()
+			req.Index = "keyed"
+			req.Field = "unkeyedf"
+			req.ColumnIDs, req.RowKeys = nil, nil
+			if err := c.Import(context.Background(), nil, req, &pilosa.ImportOptions{}); err != nil {
 				t.Fatal(err)
 			}
 			resp := cmd.QueryAPI(t, &pilosa.QueryRequest{
@@ -642,14 +751,11 @@ func TestClient_ImportKeys(t *testing.T) {
 		})
 
 		t.Run("Import unkeyed,keyed", func(t *testing.T) {
-			if err := c.Import(context.Background(), "unkeyed", "keyedf", 0, []pilosa.Bit{
-				{RowKey: "green", ColumnID: 1},
-				{RowKey: "green", ColumnID: 2},
-				{RowKey: "green", ColumnID: 3},
-				{RowKey: "blue", ColumnID: 1},
-				{RowKey: "blue", ColumnID: 2},
-				{RowKey: "purple", ColumnID: 1},
-			}); err != nil {
+			req := baseReq.Clone()
+			req.Index = "unkeyed"
+			req.Field = "keyedf"
+			req.ColumnKeys, req.RowIDs = nil, nil
+			if err := c.Import(context.Background(), nil, req, &pilosa.ImportOptions{}); err != nil {
 				t.Fatal(err)
 			}
 			resp := cmd.QueryAPI(t, &pilosa.QueryRequest{
@@ -686,14 +792,13 @@ func TestClient_ImportKeys(t *testing.T) {
 
 		// Import to node0.
 		t.Run("Import node0", func(t *testing.T) {
-			if err := c0.ImportK(context.Background(), "keyed", "keyedf0", []pilosa.Bit{
-				{RowKey: "green", ColumnKey: "eve"},
-				{RowKey: "green", ColumnKey: "alice"},
-				{RowKey: "green", ColumnKey: "bob"},
-				{RowKey: "blue", ColumnKey: "eve"},
-				{RowKey: "blue", ColumnKey: "alice"},
-				{RowKey: "purple", ColumnKey: "eve"},
-			}); err != nil {
+			req := &pilosa.ImportRequest{
+				Index:      "keyed",
+				Field:      "keyedf0",
+				ColumnKeys: []string{"eve", "alice", "bob", "eve", "alice", "eve"},
+				RowKeys:    []string{"green", "green", "green", "blue", "blue", "purple"},
+			}
+			if err := c0.Import(context.Background(), nil, req, &pilosa.ImportOptions{}); err != nil {
 				t.Fatal(err)
 			}
 			resp := cmd0.QueryAPI(t, &pilosa.QueryRequest{
@@ -713,14 +818,13 @@ func TestClient_ImportKeys(t *testing.T) {
 
 		// Import to node1 (ensure import is routed to primary for translation).
 		t.Run("Import node1", func(t *testing.T) {
-			if err := c1.ImportK(context.Background(), "keyed", "keyedf1", []pilosa.Bit{
-				{RowKey: "green", ColumnKey: "eve"},
-				{RowKey: "green", ColumnKey: "alice"},
-				{RowKey: "green", ColumnKey: "bob"},
-				{RowKey: "blue", ColumnKey: "eve"},
-				{RowKey: "blue", ColumnKey: "alice"},
-				{RowKey: "purple", ColumnKey: "eve"},
-			}); err != nil {
+			req := &pilosa.ImportRequest{
+				Index:      "keyed",
+				Field:      "keyedf1",
+				ColumnKeys: []string{"eve", "alice", "bob", "eve", "alice", "eve"},
+				RowKeys:    []string{"green", "green", "green", "blue", "blue", "purple"},
+			}
+			if err := c1.Import(context.Background(), nil, req, &pilosa.ImportOptions{}); err != nil {
 				t.Fatal(err)
 			}
 
@@ -762,11 +866,13 @@ func TestClient_ImportKeys(t *testing.T) {
 
 		// Send import request.
 		c := MustNewClient(host, http.GetHTTPClient(nil))
-		if err := c.ImportValue(context.Background(), "i", "f", 0, []pilosa.FieldValue{
-			{ColumnKey: "col1", Value: -10},
-			{ColumnKey: "col2", Value: 20},
-			{ColumnKey: "col3", Value: 40},
-		}); err != nil {
+		req := &pilosa.ImportValueRequest{
+			Index:      "i",
+			Field:      "f",
+			ColumnKeys: []string{"col1", "col2", "col3"},
+			Values:     []int64{-10, 20, 40},
+		}
+		if err := c.ImportValue(context.Background(), nil, req, &pilosa.ImportOptions{}); err != nil {
 			t.Fatal(err)
 		}
 
@@ -786,9 +892,13 @@ func TestClient_ImportKeys(t *testing.T) {
 		}
 
 		// Clear data.
-		if err := c.ImportValue(context.Background(), "i", "f", 0, []pilosa.FieldValue{
-			{ColumnKey: "col2", Value: 20},
-		}, pilosa.OptImportOptionsClear(true)); err != nil {
+		req = &pilosa.ImportValueRequest{
+			Index:      "i",
+			Field:      "f",
+			ColumnKeys: []string{"col2"},
+			Values:     []int64{20},
+		}
+		if err := c.ImportValue(context.Background(), nil, req, &pilosa.ImportOptions{Clear: true}); err != nil {
 			t.Fatal(err)
 		}
 
@@ -835,9 +945,13 @@ func TestClient_ImportIDs(t *testing.T) {
 
 		// Send import request.
 		c := MustNewClient(host, http.GetHTTPClient(nil))
-		if err := c.ImportValue(context.Background(), idxName, fldName, 0, []pilosa.FieldValue{
-			{ColumnID: 2, Value: 1},
-		}); err != nil {
+		req := &pilosa.ImportValueRequest{
+			Index:     idxName,
+			Field:     fldName,
+			ColumnIDs: []uint64{2},
+			Values:    []int64{1},
+		}
+		if err := c.ImportValue(context.Background(), nil, req, &pilosa.ImportOptions{}); err != nil {
 			t.Fatal(err)
 		}
 
@@ -857,9 +971,13 @@ func TestClient_ImportIDs(t *testing.T) {
 		}
 
 		// Send import request.
-		if err := c.ImportValue(context.Background(), idxName, fldName, 0, []pilosa.FieldValue{
-			{ColumnID: 1000, Value: 1},
-		}); err != nil {
+		req = &pilosa.ImportValueRequest{
+			Index:     idxName,
+			Field:     fldName,
+			ColumnIDs: []uint64{1000},
+			Values:    []int64{1},
+		}
+		if err := c.ImportValue(context.Background(), nil, req, &pilosa.ImportOptions{}); err != nil {
 			t.Fatal(err)
 		}
 
@@ -895,11 +1013,13 @@ func TestClient_ImportValue(t *testing.T) {
 
 	// Send import request.
 	c := MustNewClient(host, http.GetHTTPClient(nil))
-	if err := c.ImportValue(context.Background(), "i", "f", 0, []pilosa.FieldValue{
-		{ColumnID: 1, Value: -10},
-		{ColumnID: 2, Value: 20},
-		{ColumnID: 3, Value: 40},
-	}); err != nil {
+	req := &pilosa.ImportValueRequest{
+		Index:     "i",
+		Field:     "f",
+		ColumnIDs: []uint64{1, 2, 3},
+		Values:    []int64{-10, 20, 40},
+	}
+	if err := c.ImportValue(context.Background(), nil, req, &pilosa.ImportOptions{}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -922,10 +1042,13 @@ func TestClient_ImportValue(t *testing.T) {
 	}
 
 	// Send import request.
-	if err := c.ImportValue(context.Background(), "i", "f", 0, []pilosa.FieldValue{
-		{ColumnID: 1, Value: -10},
-		{ColumnID: 3, Value: 40},
-	}, pilosa.OptImportOptionsClear(true)); err != nil {
+	req = &pilosa.ImportValueRequest{
+		Index:     "i",
+		Field:     "f",
+		ColumnIDs: []uint64{1, 3},
+		Values:    []int64{-10, 40},
+	}
+	if err := c.ImportValue(context.Background(), nil, req, &pilosa.ImportOptions{Clear: true}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -969,11 +1092,13 @@ func TestClient_ImportExistence(t *testing.T) {
 
 		// Send import request.
 		c := MustNewClient(host, http.GetHTTPClient(nil))
-		if err := c.Import(context.Background(), idxName, fldName, 0, []pilosa.Bit{
-			{RowID: 0, ColumnID: 1},
-			{RowID: 0, ColumnID: 5},
-			{RowID: 200, ColumnID: 6},
-		}); err != nil {
+		req := &pilosa.ImportRequest{
+			Index:     "iset",
+			Field:     "fset",
+			ColumnIDs: []uint64{1, 5, 6},
+			RowIDs:    []uint64{0, 0, 200},
+		}
+		if err := c.Import(context.Background(), nil, req, &pilosa.ImportOptions{}); err != nil {
 			t.Fatal(err)
 		}
 
@@ -1003,11 +1128,13 @@ func TestClient_ImportExistence(t *testing.T) {
 
 		// Send import request.
 		c := MustNewClient(host, http.GetHTTPClient(nil))
-		if err := c.ImportValue(context.Background(), idxName, fldName, 0, []pilosa.FieldValue{
-			{ColumnID: 1, Value: -10},
-			{ColumnID: 2, Value: 20},
-			{ColumnID: 3, Value: 40},
-		}); err != nil {
+		req := &pilosa.ImportValueRequest{
+			Index:     "iint",
+			Field:     "fint",
+			ColumnIDs: []uint64{1, 2, 3},
+			Values:    []int64{-10, 20, 40},
+		}
+		if err := c.ImportValue(context.Background(), nil, req, &pilosa.ImportOptions{}); err != nil {
 			t.Fatal(err)
 		}
 
@@ -1087,7 +1214,7 @@ func TestClient_CreateDecimalField(t *testing.T) {
 		t.Fatalf("expected Scale 1, got: %+v", fld.Options())
 	}
 
-	err = c.ImportValue2(context.Background(), &pilosa.ImportValueRequest{Index: index, Field: field, ColumnIDs: []uint64{1, 2, 3}, Shard: 0, FloatValues: []float64{1.1, 2.2, 3.3}}, &pilosa.ImportOptions{})
+	err = c.ImportValue(context.Background(), nil, &pilosa.ImportValueRequest{Index: index, Field: field, ColumnIDs: []uint64{1, 2, 3}, Shard: 0, FloatValues: []float64{1.1, 2.2, 3.3}}, &pilosa.ImportOptions{})
 	if err != nil {
 		t.Fatalf("importing float values: %v", err)
 	}

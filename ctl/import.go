@@ -19,15 +19,12 @@ import (
 	"encoding/csv"
 	"fmt"
 	"io"
-	"log"
 	"math"
 	"os"
-	"sort"
 	"strconv"
 	"time"
 
 	"github.com/molecula/featurebase/v2"
-	"github.com/molecula/featurebase/v2/http"
 	"github.com/molecula/featurebase/v2/pql"
 	"github.com/molecula/featurebase/v2/server"
 	"github.com/pkg/errors"
@@ -175,8 +172,6 @@ func (cmd *ImportCommand) importPath(ctx context.Context, fieldType string, useC
 
 // bufferBits buffers slices of bits to be imported as a batch.
 func (cmd *ImportCommand) bufferBits(ctx context.Context, useColumnKeys, useRowKeys bool, path string) error {
-	a := make([]pilosa.Bit, 0, cmd.BufferSize)
-
 	var r *csv.Reader
 
 	if path != "-" {
@@ -195,6 +190,13 @@ func (cmd *ImportCommand) bufferBits(ctx context.Context, useColumnKeys, useRowK
 
 	r.FieldsPerRecord = -1
 	rnum := 0
+	req := &pilosa.ImportRequest{
+		Index: cmd.Index,
+		Field: cmd.Field,
+		Shard: ^uint64(0),
+	}
+	batchRecs := 0 // records in this batch
+	lastTime := 0  // last record that had a timestamp
 	for {
 		rnum++
 
@@ -213,25 +215,28 @@ func (cmd *ImportCommand) bufferBits(ctx context.Context, useColumnKeys, useRowK
 			return fmt.Errorf("bad column count on row %d: col=%d", rnum, len(record))
 		}
 
-		var bit pilosa.Bit
-
 		// Parse row id.
 		if useRowKeys {
-			bit.RowKey = record[0]
+			req.RowKeys = append(req.RowKeys, record[0])
 		} else {
-			if bit.RowID, err = strconv.ParseUint(record[0], 10, 64); err != nil {
+			var id uint64
+			if id, err = strconv.ParseUint(record[0], 10, 64); err != nil {
 				return fmt.Errorf("invalid row id on row %d: %q", rnum, record[0])
 			}
+			req.RowIDs = append(req.RowIDs, id)
 		}
 
 		// Parse column id.
 		if useColumnKeys {
-			bit.ColumnKey = record[1]
+			req.ColumnKeys = append(req.ColumnKeys, record[1])
 		} else {
-			if bit.ColumnID, err = strconv.ParseUint(record[1], 10, 64); err != nil {
+			var id uint64
+			if id, err = strconv.ParseUint(record[1], 10, 64); err != nil {
 				return fmt.Errorf("invalid column id on row %d: %q", rnum, record[1])
 			}
+			req.ColumnIDs = append(req.ColumnIDs, id)
 		}
+		batchRecs++
 
 		// Parse time, if exists.
 		if len(record) > 2 && record[2] != "" {
@@ -239,54 +244,46 @@ func (cmd *ImportCommand) bufferBits(ctx context.Context, useColumnKeys, useRowK
 			if err != nil {
 				return fmt.Errorf("invalid timestamp on row %d: %q", rnum, record[2])
 			}
-			bit.Timestamp = t.UnixNano()
+			if lastTime < batchRecs {
+				req.Timestamps = append(req.Timestamps, make([]int64, batchRecs-lastTime)...)
+			}
+			req.Timestamps = append(req.Timestamps, t.UnixNano())
+			lastTime = batchRecs
 		}
 
-		a = append(a, bit)
-
 		// If we've reached the buffer size then import bits.
-		if len(a) == cmd.BufferSize {
-			if err := cmd.importBits(ctx, useColumnKeys, useRowKeys, a); err != nil {
+		if batchRecs == cmd.BufferSize {
+			// pad timestamps out with 0s
+			if lastTime > 0 && lastTime < batchRecs {
+				req.Timestamps = append(req.Timestamps, make([]int64, batchRecs-lastTime)...)
+			}
+			if err := cmd.importBits(ctx, req); err != nil {
 				return err
 			}
-			a = a[:0]
+			req.ColumnIDs = req.ColumnIDs[:0]
+			req.RowIDs = req.RowIDs[:0]
+			req.ColumnKeys = req.ColumnKeys[:0]
+			req.RowKeys = req.RowKeys[:0]
+			req.Timestamps = req.Timestamps[:0]
+			lastTime = 0
+			batchRecs = 0
 		}
 	}
 
 	// If there are still bits in the buffer then flush them.
-	return cmd.importBits(ctx, useColumnKeys, useRowKeys, a)
+	if batchRecs == 0 {
+		return nil
+	}
+	if lastTime > 0 && lastTime < batchRecs {
+		req.Timestamps = append(req.Timestamps, make([]int64, batchRecs-lastTime)...)
+	}
+	return cmd.importBits(ctx, req)
 }
 
 // importBits sends batches of bits to the server.
-func (cmd *ImportCommand) importBits(ctx context.Context, useColumnKeys, useRowKeys bool, bits []pilosa.Bit) error {
-	logger := log.New(cmd.Stderr, "", log.LstdFlags)
-
-	// If keys are used, all bits are sent to the primary translate store.
-	if useColumnKeys || useRowKeys {
-		logger.Printf("importing keys: n=%d", len(bits))
-		if err := cmd.client.ImportK(ctx, cmd.Index, cmd.Field, bits, pilosa.OptImportOptionsClear(cmd.Clear)); err != nil {
-			return errors.Wrap(err, "importing keys")
-		}
-		return nil
-	}
-
-	// Group bits by shard.
-	logger.Printf("grouping %d bits", len(bits))
-	bitsByShard := http.Bits(bits).GroupByShard()
-
-	// Parse path into bits.
-	for shard, chunk := range bitsByShard {
-		if cmd.Sort {
-			sort.Sort(http.BitsByPos(chunk))
-		}
-
-		logger.Printf("importing shard: %d, n=%d", shard, len(chunk))
-		if err := cmd.client.Import(ctx, cmd.Index, cmd.Field, shard, chunk, pilosa.OptImportOptionsClear(cmd.Clear)); err != nil {
-			return errors.Wrap(err, "importing")
-		}
-	}
-
-	return nil
+func (cmd *ImportCommand) importBits(ctx context.Context, req *pilosa.ImportRequest) error {
+	req.Shard = ^uint64(0)
+	return cmd.client.Import(ctx, nil, req, &pilosa.ImportOptions{Clear: cmd.Clear})
 }
 
 // bufferValues buffers slices of record identifiers and values to be imported as a batch.
@@ -360,7 +357,7 @@ func (cmd *ImportCommand) bufferValues(ctx context.Context, useColumnKeys, parse
 
 		// If we've reached the buffer size then import the batch.
 		if len(req.ColumnKeys) == cmd.BufferSize || len(req.ColumnIDs) == cmd.BufferSize {
-			if err := cmd.client.ImportValue2(ctx, req, &pilosa.ImportOptions{}); err != nil {
+			if err := cmd.client.ImportValue(ctx, nil, req, &pilosa.ImportOptions{Clear: cmd.Clear}); err != nil {
 				return errors.Wrap(err, "importing values")
 			}
 			req.ColumnIDs = req.ColumnIDs[:0]
@@ -371,7 +368,7 @@ func (cmd *ImportCommand) bufferValues(ctx context.Context, useColumnKeys, parse
 	}
 
 	// If there are still values in the buffer then flush them.
-	return errors.Wrap(cmd.client.ImportValue2(ctx, req, &pilosa.ImportOptions{}), "importing values")
+	return errors.Wrap(cmd.client.ImportValue(ctx, nil, req, &pilosa.ImportOptions{Clear: cmd.Clear}), "importing values")
 }
 
 func (cmd *ImportCommand) TLSHost() string {

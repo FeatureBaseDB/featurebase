@@ -1454,13 +1454,6 @@ func OptImportOptionsPresorted(b bool) ImportOption {
 	}
 }
 
-func optImportOptionsFullySorted(b bool) ImportOption {
-	return func(o *ImportOptions) error {
-		o.fullySorted = b
-		return nil
-	}
-}
-
 var ErrAborted = fmt.Errorf("error: update was aborted")
 
 func (api *API) ImportAtomicRecord(ctx context.Context, qcx *Qcx, req *AtomicRecord, opts ...ImportOption) error {
@@ -1491,14 +1484,20 @@ func (api *API) ImportAtomicRecord(ctx context.Context, qcx *Qcx, req *AtomicRec
 	qcx.StartAtomicWriteTx(Txo{Write: writable, Index: idx, Shard: req.Shard})
 	tot := 0
 
+	options, err := setUpImportOptions(opts...)
+	if err != nil {
+		return errors.Wrap(err, "setting up import options")
+	}
+
 	// BSIs (Values)
 	for _, ivr := range req.Ivr {
 		tot++
 		if simPowerLoss && tot > lossAfter {
 			return ErrAborted
 		}
-		opts0 := append(opts, OptImportOptionsClear(ivr.Clear))
-		err := api.ImportValueWithTx(ctx, qcx, ivr, opts0...)
+		subOpts := *options
+		subOpts.Clear = ivr.Clear
+		err = api.ImportValueWithTx(ctx, qcx, ivr, &subOpts)
 		if err != nil {
 			return errors.Wrap(err, "ImportAtomicRecord ImportValueWithTx")
 		}
@@ -1510,8 +1509,9 @@ func (api *API) ImportAtomicRecord(ctx context.Context, qcx *Qcx, req *AtomicRec
 		if simPowerLoss && tot > lossAfter {
 			return ErrAborted
 		}
-		opts0 := append(opts, OptImportOptionsClear(ir.Clear))
-		err := api.ImportWithTx(ctx, qcx, ir, opts0...)
+		subOpts := *options
+		subOpts.Clear = ir.Clear
+		err := api.ImportWithTx(ctx, qcx, ir, &subOpts)
 		if err != nil {
 			return errors.Wrap(err, "ImportAtomicRecord ImportWithTx")
 		}
@@ -1539,7 +1539,12 @@ func (api *API) Import(ctx context.Context, qcx *Qcx, req *ImportRequest, opts .
 	if req.Clear {
 		opts = addClearToImportOptions(opts)
 	}
-	err = api.ImportWithTx(ctx, qcx, req, opts...)
+	// Set up import options.
+	options, err := setUpImportOptions(opts...)
+	if err != nil {
+		return errors.Wrap(err, "setting up import options")
+	}
+	err = api.ImportWithTx(ctx, qcx, req, options)
 	if err != nil {
 		return err
 	}
@@ -1547,7 +1552,7 @@ func (api *API) Import(ctx context.Context, qcx *Qcx, req *ImportRequest, opts .
 }
 
 // ImportWithTx bulk imports data into a particular index,field,shard.
-func (api *API) ImportWithTx(ctx context.Context, qcx *Qcx, req *ImportRequest, opts ...ImportOption) error {
+func (api *API) ImportWithTx(ctx context.Context, qcx *Qcx, req *ImportRequest, options *ImportOptions) error {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.Import")
 	defer span.Finish()
 
@@ -1564,11 +1569,6 @@ func (api *API) ImportWithTx(ctx context.Context, qcx *Qcx, req *ImportRequest, 
 		return errors.Wrap(err, "validating import value request")
 	}
 
-	// Set up import options.
-	options, err := setUpImportOptions(opts...)
-	if err != nil {
-		return errors.Wrap(err, "setting up import options")
-	}
 	span.LogKV(
 		"index", req.Index,
 		"field", req.Field)
@@ -1586,6 +1586,8 @@ func (api *API) ImportWithTx(ctx context.Context, qcx *Qcx, req *ImportRequest, 
 			if req.RowIDs, err = api.cluster.translateFieldKeys(ctx, field, req.RowKeys, true); err != nil {
 				return errors.Wrapf(err, "translating field keys")
 			}
+		} else if len(req.RowKeys) != 0 {
+			return errors.New("value keys cannot be used because field uses integer IDs")
 		}
 
 		// Translate column keys.
@@ -1597,43 +1599,35 @@ func (api *API) ImportWithTx(ctx context.Context, qcx *Qcx, req *ImportRequest, 
 			if req.ColumnIDs, err = api.cluster.translateIndexKeys(ctx, req.Index, req.ColumnKeys, true); err != nil {
 				return errors.Wrap(err, "translating columns")
 			}
-		}
-
-		// For translated data, map the columnIDs to shards. If
-		// this node does not own the shard, forward to the node that does.
-		if idx.Keys() || field.Keys() {
-			m := make(map[uint64][]Bit)
-
-			for i, colID := range req.ColumnIDs {
-				shard := colID / ShardWidth
-				if _, ok := m[shard]; !ok {
-					m[shard] = make([]Bit, 0)
-				}
-				bit := Bit{
-					RowID:    req.RowIDs[i],
-					ColumnID: colID,
-				}
-				if len(req.Timestamps) > 0 {
-					bit.Timestamp = req.Timestamps[i]
-				}
-				m[shard] = append(m[shard], bit)
-			}
-
-			// Signal to the receiving nodes to ignore checking for key translation.
-			opts = append(opts, OptImportOptionsIgnoreKeyCheck(true))
-
-			var eg errgroup.Group
-			for shard, bits := range m {
-				// TODO: if local node owns this shard we don't need to go through the client
-				shard := shard
-				bits := bits
-				eg.Go(func() error {
-					return api.server.defaultClient.Import(ctx, req.Index, req.Field, shard, bits, opts...)
-				})
-			}
-			return eg.Wait()
+			// mark this request as having an unknown shard, meaning it will
+			// be sorted and served out to multiple nodes.
+			req.Shard = ^uint64(0)
+		} else if len(req.ColumnKeys) != 0 {
+			return errors.New("record keys cannot be used because field uses integer IDs")
 		}
 	}
+
+	// if you specify a shard of ^0, we try to split this out. If we did any
+	// key translation, we set it to ^0 already above.
+	if req.Shard == ^uint64(0) {
+		reqs := req.SortToShards()
+
+		// Signal to the receiving nodes to ignore checking for key translation.
+		options.IgnoreKeyCheck = true
+
+		var eg errgroup.Group
+		for _, subReq := range reqs {
+			// TODO: if local node owns this shard we don't need to go through the client
+			subReq := subReq
+			eg.Go(func() error {
+				return api.server.defaultClient.Import(ctx, qcx, subReq, options)
+			})
+		}
+		return eg.Wait()
+	}
+
+	// otherwise, this has to be a shard that we have, and everything has
+	// to be for that shard.
 
 	// Validate shard ownership.
 	if err := api.validateShardOwnership(req.Index, req.Shard); err != nil {
@@ -1649,8 +1643,6 @@ func (api *API) ImportWithTx(ctx context.Context, qcx *Qcx, req *ImportRequest, 
 	}
 
 	// Import columnIDs into existence field.
-	// Note: req.Shard may not be the only shard imported into here,
-	// so don't expect it to be invariant.
 	if !options.Clear {
 		if err := importExistenceColumns(qcx, idx, req.ColumnIDs, req.Shard); err != nil {
 			api.server.logger.Errorf("import existence error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
@@ -1662,7 +1654,7 @@ func (api *API) ImportWithTx(ctx context.Context, qcx *Qcx, req *ImportRequest, 
 	}
 
 	// Import into fragment.
-	err = field.Import(qcx, req.RowIDs, req.ColumnIDs, timestamps, req.Shard, opts...)
+	err = field.Import(qcx, req.RowIDs, req.ColumnIDs, timestamps, req.Shard, options)
 	if err != nil {
 		api.server.logger.Errorf("import error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
 		return errors.Wrap(err, "importing")
@@ -1676,11 +1668,16 @@ func (api *API) ImportValue(ctx context.Context, qcx *Qcx, req *ImportValueReque
 	if req.Clear {
 		opts = addClearToImportOptions(opts)
 	}
-	return api.ImportValueWithTx(ctx, qcx, req, opts...)
+	// Set up import options.
+	options, err := setUpImportOptions(opts...)
+	if err != nil {
+		return errors.Wrap(err, "setting up import options")
+	}
+	return api.ImportValueWithTx(ctx, qcx, req, options)
 }
 
 // ImportValueWithTx bulk imports values into a particular field.
-func (api *API) ImportValueWithTx(ctx context.Context, qcx *Qcx, req *ImportValueRequest, opts ...ImportOption) (err0 error) {
+func (api *API) ImportValueWithTx(ctx context.Context, qcx *Qcx, req *ImportValueRequest, options *ImportOptions) (err0 error) {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.ImportValue")
 	defer span.Finish()
 
@@ -1704,12 +1701,6 @@ func (api *API) ImportValueWithTx(ctx context.Context, qcx *Qcx, req *ImportValu
 
 	if err := req.ValidateWithTimestamp(idx.CreatedAt(), field.CreatedAt()); err != nil {
 		return errors.Wrap(err, "validating import value request")
-	}
-
-	// Set up import options.
-	options, err := setUpImportOptions(opts...)
-	if err != nil {
-		return errors.Wrap(err, "setting up import options")
 	}
 
 	idx, field, err = api.indexField(req.Index, req.Field, req.Shard)
@@ -1826,7 +1817,7 @@ func (api *API) ImportValueWithTx(ctx context.Context, qcx *Qcx, req *ImportValu
 			}
 
 			eg.Go(func() error {
-				return api.server.defaultClient.ImportValue2(ctx, subreq, options)
+				return api.server.defaultClient.ImportValue(ctx, qcx, subreq, options)
 			})
 			start = i
 			shard = colID / ShardWidth
@@ -1847,7 +1838,7 @@ func (api *API) ImportValueWithTx(ctx context.Context, qcx *Qcx, req *ImportValu
 		// TODO we should elevate the logic for figuring out which
 		// node(s) to send to into API instead of having those details
 		// in the client implementation.
-		return api.server.defaultClient.ImportValue2(ctx, subreq, options)
+		return api.server.defaultClient.ImportValue(ctx, qcx, subreq, options)
 	})
 	err = eg.Wait()
 	if err != nil {
@@ -2018,7 +2009,6 @@ func (api *API) applyOperations(ctx context.Context, qcx *Qcx, index *Index, sha
 	// For each operation, we may have a set of records/fields to clear, and then
 	// also a set of fields to set/remove specific bits in.
 	opts := &ImportOptions{Presorted: true, IgnoreKeyCheck: true, fullySorted: true}
-	funcOpts := []ImportOption{OptImportOptionsIgnoreKeyCheck(true), OptImportOptionsPresorted(true), optImportOptionsFullySorted(true), OptImportOptionsClear(true)}
 	for _, op := range ops {
 		// ClearRecordIDs should exist only for delete, clear, and write. For clear and write,
 		// we'll have a list of fields, for delete, it should be all the fields.
@@ -2067,12 +2057,6 @@ func (api *API) applyOperations(ctx context.Context, qcx *Qcx, index *Index, sha
 			}
 		}
 		opts.Clear = (op.OpType == ingest.OpRemove)
-		// reslice this rather than regenerating it. i'm so efficient.
-		if opts.Clear {
-			funcOpts = funcOpts[:4]
-		} else {
-			funcOpts = funcOpts[:3]
-		}
 		// for "set" and "write" ops, we'll be setting bits, for
 		// "remove" ops we'll be clearing them, and for "clear" ops
 		// there shouldn't be anything here.
@@ -2088,7 +2072,7 @@ func (api *API) applyOperations(ctx context.Context, qcx *Qcx, index *Index, sha
 			}
 			switch field.Type() {
 			case "set", "time", "mutex", "bool":
-				err = field.Import(qcx, fieldOp.Values, fieldOp.RecordIDs, fieldOp.Signed, shard, funcOpts...)
+				err = field.Import(qcx, fieldOp.Values, fieldOp.RecordIDs, fieldOp.Signed, shard, opts)
 			case "int", "timestamp", "decimal":
 				err = field.importValue(qcx, fieldOp.RecordIDs, fieldOp.Signed, shard, opts)
 			default:
@@ -2115,7 +2099,8 @@ func importExistenceColumns(qcx *Qcx, index *Index, columnIDs []uint64, shard ui
 	// existence field write.
 	columnCopy := make([]uint64, len(columnIDs))
 	copy(columnCopy, columnIDs)
-	return ef.Import(qcx, existenceRowIDs, columnCopy, nil, shard)
+	options := ImportOptions{}
+	return ef.Import(qcx, existenceRowIDs, columnCopy, nil, shard, &options)
 }
 
 func clearExistenceColumns(qcx *Qcx, index *Index, columnIDs []uint64, shard uint64) error {
@@ -2131,7 +2116,8 @@ func clearExistenceColumns(qcx *Qcx, index *Index, columnIDs []uint64, shard uin
 	// existence field write.
 	columnCopy := make([]uint64, len(columnIDs))
 	copy(columnCopy, columnIDs)
-	return ef.Import(qcx, existenceRowIDs, columnCopy, nil, shard, OptImportOptionsClear(true))
+	options := ImportOptions{Clear: true}
+	return ef.Import(qcx, existenceRowIDs, columnCopy, nil, shard, &options)
 }
 
 // ShardDistribution returns an object representing the distribution of shards
