@@ -3,9 +3,33 @@ include:
   - template: Security/License-Scanning.gitlab-ci.yml
   - template: Security/Dependency-Scanning.gitlab-ci.yml
 
+.go-cache:
+    variables:
+        GOPATH: $CI_PROJECT_DIR/.go
+    cache:
+      paths:
+        - .go/pkg/mod/
+
 stages:
+  - lint
   - test
   - build
+
+before_script:
+  - echo "before_script"
+  - git version
+  - go env -w GOPRIVATE=github.com/molecula
+  - mkdir -p .go
+  - go version
+  - go env -w GO111MODULE=on
+
+golangci-lint:
+  image: golangci/golangci-lint:v1.39.0
+  stage: lint
+  extends: .go-cache
+  allow_failure: false
+  script:
+    - golangci-lint run -v
 
 install lattice:
   stage: test
@@ -35,6 +59,7 @@ build lattice:
 run go tests:
   stage: test
   image: golang:1.16.9
+  extends: .go-cache
   script:
     - echo "Running featurebase unit tests..."
     - go test -covermode=atomic -coverprofile=coverage.out
@@ -64,24 +89,6 @@ generate coverage html:
   needs:
     - job: run go tests
 
-install goci:
-  stage: build
-  image: golang:1.16.9
-  script:
-    - echo "Installing golangci-lint"
-    - GO111MODULE=off  go get github.com/golangci/golangci-lint/cmd/golangci-lint
-  artifacts:
-    paths:
-      - /go/bin/golangci-lint
-
-run goci:
-  stage: test
-  image: golang:1.16.9
-  script:
-    - echo "Running golangci-lint"
-  needs:
-    - job: install goci
-
 upload to sonarcloud:
   stage: test
   image: sonarsource/sonar-scanner-cli:4.6
@@ -96,6 +103,7 @@ upload to sonarcloud:
 build for linux amd64:
   stage: build
   image: registry.gitlab.com/molecula/featurebase/builder:0.0.3
+  extends: .go-cache
   variables:
     GOOS: "linux"
     GOARCH: "amd64"
@@ -108,6 +116,7 @@ build for linux amd64:
 build for linux arm64:
   stage: build
   image: registry.gitlab.com/molecula/featurebase/builder:0.0.3
+  extends: .go-cache
   variables:
     GOOS: "linux"
     GOARCH: "arm64"
@@ -120,6 +129,7 @@ build for linux arm64:
 build for darwin amd64:
   stage: build
   image: registry.gitlab.com/molecula/featurebase/builder:0.0.3
+  extends: .go-cache
   variables:
     GOOS: "darwin"
     GOARCH: "amd64"
@@ -132,6 +142,7 @@ build for darwin amd64:
 build for darwin arm64:
   stage: build
   image: registry.gitlab.com/molecula/featurebase/builder:0.0.3
+  extends: .go-cache
   variables:
     GOOS: "darwin"
     GOARCH: "arm64"
