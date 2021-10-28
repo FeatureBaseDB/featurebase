@@ -522,7 +522,7 @@ func (c *InternalClient) QueryNode(ctx context.Context, uri *pnet.URI, index str
 	// Execute request against the host.
 	resp, err := c.executeRequest(req.WithContext(ctx))
 	if err != nil {
-		return nil, errors.Wrapf(err, "'%s', shards %v", queryRequest.Query, pilosa.ShardSlice(queryRequest.Shards))
+		return nil, errors.Wrapf(err, "'%s'", queryRequest.Query)
 	}
 	defer resp.Body.Close()
 
