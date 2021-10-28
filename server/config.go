@@ -237,6 +237,9 @@ type Config struct {
 		// as FeatureBase instead of Pilosa.
 		Rename bool `toml:"rename"`
 	} `toml:"future"`
+
+	// Toggles /schema/details endpoint. If off, it returns empty.
+	SchemaDetailsOn bool `toml:"schema-details-on"`
 }
 
 // Namespace returns the namespace to use based on the Future flag.
@@ -385,6 +388,9 @@ func NewConfig() *Config {
 
 	// Future flags.
 	c.Future.Rename = false
+
+	// Schema Details Toggle
+	c.SchemaDetailsOn = true
 
 	return c
 }

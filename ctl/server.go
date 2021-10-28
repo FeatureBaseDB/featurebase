@@ -118,4 +118,7 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 
 	// Future flags.
 	flags.BoolVar(&srv.Config.Future.Rename, "future.rename", false, "Present application name as FeatureBase. Defaults to false, will default to true in an upcoming release.")
+
+	// Toggle /schema/details endpoint.
+	flags.BoolVar(&srv.Config.SchemaDetailsOn, "schema-details-on", true, "Disable /schema/details endpoint")
 }

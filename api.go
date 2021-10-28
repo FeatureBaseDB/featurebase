@@ -62,7 +62,8 @@ type API struct {
 	importWorkerPoolSize int
 	importWork           chan importJob
 
-	usageCache *usageCache
+	usageCache      *usageCache
+	schemaDetailsOn bool
 
 	Serializer Serializer
 }
@@ -80,6 +81,14 @@ func OptAPIServer(s *Server) apiOption {
 		a.holder = s.holder
 		a.cluster = s.cluster
 		a.Serializer = s.serializer
+		return nil
+	}
+}
+
+// Used to configure API option: schemaDetailsOn
+func OptAPISchemaDetailsOn(isOn bool) apiOption {
+	return func(a *API) error {
+		a.schemaDetailsOn = isOn
 		return nil
 	}
 }
@@ -1237,13 +1246,17 @@ func (api *API) Schema(ctx context.Context, withViews bool) ([]*IndexInfo, error
 }
 
 // SchemaDetails returns information about each index in Pilosa including which
-// fields they contain, and additional field information such as cardinality
+// fields they contain. Additional field information such as cardinality unless
+// turned off via the schemaDetailsOn cli option.
 func (api *API) SchemaDetails(ctx context.Context) ([]*IndexInfo, error) {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.Schema")
 	defer span.Finish()
 	schema, err := api.holder.Schema()
 	if err != nil {
 		return nil, errors.Wrap(err, "getting schema")
+	}
+	if !api.schemaDetailsOn {
+		return schema, nil
 	}
 	for _, index := range schema {
 		for _, field := range index.Fields {
