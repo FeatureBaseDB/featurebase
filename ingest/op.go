@@ -243,8 +243,8 @@ func (f *FieldOperation) ByShard() ShardedFieldOperation {
 func (f *FieldOperation) clone() *FieldOperation {
 	f2 := &FieldOperation{
 		RecordIDs: append([]uint64{}, f.RecordIDs...),
-		Values:    append([]uint64{}, f.Values...),
-		Signed:    append([]int64{}, f.Signed...),
+		Values:    append(([]uint64)(nil), f.Values...),
+		Signed:    append(([]int64)(nil), f.Signed...),
 	}
 	return f2
 }
