@@ -58,7 +58,7 @@ export const stringifyRowData = (rowCalls: RowGrouping[], operator?: Operator) =
               .map((ip) => `Row(${field}="${ip}")`)
               .join(', ');
             rowString = `Union(${ipRows})`;
-          } catch (error) {
+          } catch (error: any) {
             return { error: true, queryString: error.message };
           }
         } else if (rowOperator === 'like') {
