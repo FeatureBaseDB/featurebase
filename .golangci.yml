@@ -1,6 +1,5 @@
 run:
   #skip the protobuf generated files
-  timeout: 3m
   skip-dirs-use-default: true
   skip-dirs:
     - pb
