@@ -30,7 +30,7 @@ golangci-lint:
   allow_failure: false
   script:
     - echo "Checking for issues in new code"
-    - golangci-lint run -v --new-from-rev=HEAD~1 
+    - golangci-lint run -v 
 
 install lattice:
   stage: test
