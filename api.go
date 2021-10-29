@@ -127,6 +127,17 @@ func NewAPI(opts ...apiOption) (*API, error) {
 	return api, nil
 }
 
+// Setter for API options.
+func (api *API) SetAPIOpetions(opts ...apiOption) error {
+	for _, opt := range opts {
+		err := opt(api)
+		if err != nil {
+			return errors.Wrap(err, "applying option")
+		}
+	}
+	return nil
+}
+
 // validAPIMethods specifies the api methods that are valid for each
 // cluster state.
 var validAPIMethods = map[disco.ClusterState]map[apiMethod]struct{}{
