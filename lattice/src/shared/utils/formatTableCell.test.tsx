@@ -1,8 +1,7 @@
-import { formatTableCell } from './formatTableCell';
+import { formatTableCell } from "./formatTableCell";
 import React from "react";
 import { render, unmountComponentAtNode } from "react-dom";
 import { act } from "react-dom/test-utils";
-
 
 let container = null;
 beforeEach(() => {
@@ -19,8 +18,8 @@ afterEach(() => {
 });
 
 it("it renders strings in quotes", () => {
-  let row = {thing:"quoted string!"};
-  let col = {name: "thing", datatype: "[]string"};
+  let row = { thing: "quoted string!" };
+  let col = { name: "thing", datatype: "[]string" };
 
   act(() => {
     render(formatTableCell(row, col), container);
@@ -29,8 +28,8 @@ it("it renders strings in quotes", () => {
 });
 
 it("renders objects as stringified", () => {
-  let row = {thing:{val:"quoted string!"}};
-  let col = {name: "thing", datatype: "object"};
+  let row = { thing: { val: "quoted string!" } };
+  let col = { name: "thing", datatype: "object" };
 
   act(() => {
     render(formatTableCell(row, col), container);
@@ -41,13 +40,11 @@ it("renders objects as stringified", () => {
 });
 
 it("it puts timestamps in MM/DD/YYYY hh:mm:ss a format", () => {
-  let row = {thing:1635452050094};
-  let col = {name: "thing", datatype: "timestamp"};
+  let row = { thing: 1635452050094 };
+  let col = { name: "thing", datatype: "timestamp" };
 
   act(() => {
     render(formatTableCell(row, col), container);
   });
   expect(container.textContent).toBe("10/28/2021 08:14:10 pm");
 });
-
-
