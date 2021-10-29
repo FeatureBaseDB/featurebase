@@ -15,13 +15,13 @@ stages:
   - test
   - build
 
-before_script:
-  - echo "before_script"
-  - git version
-  - go env -w GOPRIVATE=github.com/molecula
-  - mkdir -p .go
-  - go version
-  - go env -w GO111MODULE=on
+    #before_script:
+    #- echo "before_script"
+    #- git version
+    #- go env -w GOPRIVATE=github.com/molecula
+    #- mkdir -p .go
+    #- go version
+    #- go env -w GO111MODULE=on
 
 golangci-lint:
   image: golangci/golangci-lint:v1.39.0
