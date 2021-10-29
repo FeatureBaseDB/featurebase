@@ -37,7 +37,7 @@ require (
 	github.com/remyoudompheng/bigfft v0.0.0-20190728182440-6a916e37a237 // indirect
 	github.com/rs/cors v1.7.0 // indirect
 	github.com/satori/go.uuid v1.2.0
-	github.com/shirou/gopsutil/v3 v3.20.11
+	github.com/shirou/gopsutil/v3 v3.21.9
 	github.com/spf13/cobra v1.1.1
 	github.com/spf13/pflag v1.0.5
 	github.com/spf13/viper v1.7.1
@@ -51,7 +51,6 @@ require (
 	golang.org/x/mod v0.4.2
 	golang.org/x/net v0.0.0-20210405180319-a5a99cb37ef4 // indirect
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
-	golang.org/x/sys v0.0.0-20210510120138-977fb7262007 // indirect
 	golang.org/x/text v0.3.5 // indirect
 	google.golang.org/grpc v1.28.0
 	gopkg.in/yaml.v2 v2.3.0 // indirect
