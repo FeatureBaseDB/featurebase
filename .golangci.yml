@@ -1,11 +1,18 @@
 run:
   #skip the protobuf generated files
+  timeout: 3m
   skip-dirs-use-default: true
   skip-dirs:
     - pb
     - proto
   skip-files:
     - pql/pql.peg.go
+linters:
+  enable:
+    - govet
+    - gofmt
+  enable-all: false
+  disable-all: true
 linters-settings:
   gofmt:
     simplify: true
@@ -34,9 +41,9 @@ linters-settings:
 
 
 issues:
+  exclude-use-default: false
   max-per-linter: 0
   max-same: 0
-  exclude-use-default: false
   exclude:
     -  'declaration of "(err|ctx)" shadows declaration at'
     -  'typecheck'
