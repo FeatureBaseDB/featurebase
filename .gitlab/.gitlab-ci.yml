@@ -29,7 +29,8 @@ golangci-lint:
   extends: .go-cache
   allow_failure: false
   script:
-    - golangci-lint run -v
+    - echo "Checking for issues in new code"
+    - golangci-lint run -v --new-from-rev=HEAD~1 
 
 install lattice:
   stage: test
