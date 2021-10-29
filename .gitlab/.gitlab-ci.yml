@@ -32,6 +32,21 @@ build lattice:
     - job: install lattice
   allow_failure: true
 
+run jest tests:
+  stage: test
+  image: node:14
+  variables:
+    CI: "true"
+  script:
+    - echo "Testing lattice..."
+    - cd lattice
+    - npm test -- --coverage --testResultsProcessor=jest-sonar-reporter
+  artifacts:
+    paths:
+      - lattice/coverage/lcov.info
+  needs:
+    - job: install lattice
+
 run go tests:
   stage: test
   image: golang:1.16.9
@@ -63,18 +78,6 @@ generate coverage html:
       - coverage.html
   needs:
     - job: run go tests
-
-run jest tests:
-  stage: test
-  image: sonarsource/sonar-scanner-cli:latest
-  script:
-    - cd lattice
-    - npm install
-    - npm test -- --coverage --testResultsProcessor=jest-sonar-reporter
-    - sonar-scanner
-  artifacts:
-    paths:
-      - lattice/coverage/lcov.info
 
 upload to sonarcloud:
   stage: test
