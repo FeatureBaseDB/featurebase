@@ -66,14 +66,15 @@ generate coverage html:
 
 run jest tests:
   stage: test
-  image: sonarsource/sonar-scanner-cli:latest
+  image: sonarsource/sonar-scanner-cli:4.6
   script:
+    - cd lattice
     - npm install
     - npm test -- --coverage --testResultsProcessor=jest-sonar-reporter
     - sonar-scanner
   artifacts:
     paths:
-      - coverage/lcov.info
+      - lattice/coverage/lcov.info
 
 upload to sonarcloud:
   stage: test
