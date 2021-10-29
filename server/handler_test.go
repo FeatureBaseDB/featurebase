@@ -32,7 +32,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/molecula/featurebase/v2"
+	pilosa "github.com/molecula/featurebase/v2"
 	"github.com/molecula/featurebase/v2/boltdb"
 	"github.com/molecula/featurebase/v2/encoding/proto"
 	"github.com/molecula/featurebase/v2/http"
@@ -1104,7 +1104,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		clus := test.MustRunCluster(t, 1, []server.CommandOption{test.OptAllowedOrigins([]string{"http://test/"})})
 		defer clus.Close()
 		w = httptest.NewRecorder()
-		h := clus.GetNode(0).Handler.(*http.Handler).Handler
+		h = clus.GetNode(0).Handler.(*http.Handler).Handler
 		h.ServeHTTP(w, req)
 		result = w.Result()
 

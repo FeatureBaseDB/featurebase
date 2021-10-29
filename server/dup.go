@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//go:build darwin || (linux && !arm64)
 // +build darwin linux,!arm64
 
 package server

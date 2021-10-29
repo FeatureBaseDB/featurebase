@@ -398,8 +398,8 @@ func (p PairField) ToRows(callback func(*pb.RowResponse) error) error {
 				{Name: "count", Datatype: "uint64"},
 			},
 			Columns: []*pb.ColumnResponse{
-				&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_StringVal{StringVal: p.Pair.Key}},
-				&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: p.Pair.Count}},
+				{ColumnVal: &pb.ColumnResponse_StringVal{StringVal: p.Pair.Key}},
+				{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: p.Pair.Count}},
 			},
 		})
 	} else {
@@ -409,8 +409,8 @@ func (p PairField) ToRows(callback func(*pb.RowResponse) error) error {
 				{Name: "count", Datatype: "uint64"},
 			},
 			Columns: []*pb.ColumnResponse{
-				&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: p.Pair.ID}},
-				&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: p.Pair.Count}},
+				{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: p.Pair.ID}},
+				{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: p.Pair.Count}},
 			},
 		})
 	}
@@ -540,8 +540,8 @@ func (p *PairsField) ToRows(callback func(*pb.RowResponse) error) error {
 			if err := callback(&pb.RowResponse{
 				Headers: ci,
 				Columns: []*pb.ColumnResponse{
-					&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_StringVal{StringVal: pair.Key}},
-					&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: uint64(pair.Count)}},
+					{ColumnVal: &pb.ColumnResponse_StringVal{StringVal: pair.Key}},
+					{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: uint64(pair.Count)}},
 				}}); err != nil {
 				return errors.Wrap(err, "calling callback")
 			}
@@ -549,8 +549,8 @@ func (p *PairsField) ToRows(callback func(*pb.RowResponse) error) error {
 			if err := callback(&pb.RowResponse{
 				Headers: ci,
 				Columns: []*pb.ColumnResponse{
-					&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: uint64(pair.ID)}},
-					&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: uint64(pair.Count)}},
+					{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: uint64(pair.ID)}},
+					{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: uint64(pair.Count)}},
 				}}); err != nil {
 				return errors.Wrap(err, "calling callback")
 			}

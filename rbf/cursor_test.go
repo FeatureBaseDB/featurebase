@@ -558,10 +558,12 @@ func TestCursor_RLETesting(t *testing.T) {
 		}
 
 		want := []uint16{0}
-		if got, want := c.Values(), want; !reflect.DeepEqual(got, want) {
+		got := c.Values()
+		if !reflect.DeepEqual(got, want) {
 			t.Fatalf("Values()=%#v, want %#v", got, want)
-		} else if got, want := c.Key(), uint64(1); !reflect.DeepEqual(got, want) {
-			t.Fatalf("Key()=%#v, want %#v", got, want)
+		}
+		if g, w := c.Key(), uint64(1); !reflect.DeepEqual(g, w) {
+			t.Fatalf("Key()=%#v, want %#v", g, w)
 		}
 	})
 }
@@ -1140,7 +1142,7 @@ func TestForEachRange(t *testing.T) {
 	}
 
 	rb.Put(0, roaring.NewContainerBitmap(n, bits))
-	crun := roaring.NewContainerRun([]roaring.Interval16{roaring.Interval16{Start: 0, Last: 1<<16 - 1}})
+	crun := roaring.NewContainerRun([]roaring.Interval16{{Start: 0, Last: 1<<16 - 1}})
 	rb.Put(1, crun)
 	rb.Put(2, roaring.NewContainerArray([]uint16{1, 1024, 1<<16 - 1}))
 

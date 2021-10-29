@@ -5375,7 +5375,7 @@ func TestFragmentConcurrentReadWrite(t *testing.T) {
 	eg := &errgroup.Group{}
 	eg.Go(func() error {
 
-		tx := idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f, Shard: f.shard})
+		ltx := idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f, Shard: f.shard})
 
 		for i := uint64(0); i < 1000; i++ {
 			_, err := f.setBit(tx, i%4, i)
@@ -5383,7 +5383,7 @@ func TestFragmentConcurrentReadWrite(t *testing.T) {
 				return errors.Wrap(err, "setting bit")
 			}
 		}
-		PanicOn(tx.Commit())
+		PanicOn(ltx.Commit())
 		return nil
 	})
 

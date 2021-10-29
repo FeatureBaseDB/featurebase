@@ -15,7 +15,7 @@
 package pilosa
 
 import (
-"github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 	"github.com/molecula/featurebase/v2/pb"
 	"github.com/molecula/featurebase/v2/pql"
 )

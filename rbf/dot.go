@@ -78,8 +78,8 @@ func dumpdot(tx *Tx, pgno uint32, parent string, writer io.Writer) {
 			for _, record := range records {
 				root := fmt.Sprintf("root%d", record.Pgno)
 				fmt.Fprintf(writer, "%s[label=\"ROOT(%d)| %s\"]\n%s->%s\n", root, record.Pgno, record.Name, rr, root)
-				parent := fmt.Sprintf("root%d", record.Pgno)
-				dumpdot(tx, record.Pgno, parent, writer)
+				p := fmt.Sprintf("root%d", record.Pgno)
+				dumpdot(tx, record.Pgno, p, writer)
 
 			}
 		}

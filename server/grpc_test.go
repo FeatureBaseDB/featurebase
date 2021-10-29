@@ -141,21 +141,21 @@ func TestGRPC(t *testing.T) {
 			// []GroupCount (uint64)
 			{
 				pilosa.NewGroupCounts("", []pilosa.GroupCount{
-					pilosa.GroupCount{
+					{
 						Group: []pilosa.FieldRow{
 							{Field: "a", RowID: 10},
 							{Field: "b", RowID: 11},
 						},
 						Count: 123,
 					},
-					pilosa.GroupCount{
+					{
 						Group: []pilosa.FieldRow{
 							{Field: "a", RowID: 10},
 							{Field: "b", RowID: 12},
 						},
 						Count: 456,
 					},
-					pilosa.GroupCount{
+					{
 						Group: []pilosa.FieldRow{
 							{Field: "va", Value: &va},
 							{Field: "vb", Value: &vb},
@@ -177,7 +177,7 @@ func TestGRPC(t *testing.T) {
 			// []GroupCount (string) + sum
 			{
 				pilosa.NewGroupCounts("sum", []pilosa.GroupCount{
-					pilosa.GroupCount{
+					{
 						Group: []pilosa.FieldRow{
 							{Field: "a", RowKey: "ten"},
 							{Field: "b", RowKey: "eleven"},
