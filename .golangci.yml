@@ -1,5 +1,7 @@
 run:
   #skip the protobuf generated files
+  deadline: 5m
+  timeout: 5m
   skip-dirs-use-default: true
   skip-dirs:
     - pb
@@ -57,5 +59,6 @@ issues:
       - gofmt
       text: "File is not `gofmt`-ed with `-s`"
   exclude:
-    -  'declaration of "(err|ctx)" shadows declaration at'
-    -  'typecheck'
+    - 'declaration of "(err|ctx)" shadows declaration at'
+    - 'Error return value of .(.*\.Help|.*\.MarkFlagRequired|(os\.)?std(out|err)\..*|.*Close|.*Flush|os\.Remove(All)?|.*printf?|os\.(Un)?Setenv). is not checked'
+
