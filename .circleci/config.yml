@@ -70,6 +70,14 @@ jobs:
       - checkout-plus
       - skip-if-root-unchanged
       - run: make check-license-headers
+  linter:
+    executor:
+      name: golang
+    steps:
+      - checkout-plus
+      - skip-if-root-unchanged
+      - run: curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sudo sh -s -- -b /usr/local/bin v1.31.0
+      - run: make golangci-lint
   go-mod-tidy:
     executor:
       name: golang
@@ -227,6 +235,10 @@ workflows:
           filters:
             tags:
               only: /^v.*/
+      - linter:
+          context: molecula
+          requires:
+            - setup
       - check-license-headers:
           context: molecula
           requires:
