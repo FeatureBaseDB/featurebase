@@ -7,8 +7,9 @@ include:
     variables:
         GOPATH: $CI_PROJECT_DIR/.go
     cache:
-      paths:
-        - .go/pkg/mod/
+      - key: $CI_COMMIT_REF_SLUG
+        paths:
+          - .go/pkg/mod/
 
 stages:
   - lint
