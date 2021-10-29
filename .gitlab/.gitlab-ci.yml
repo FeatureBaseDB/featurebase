@@ -66,7 +66,7 @@ generate coverage html:
 
 run jest tests:
   stage: test
-  image: sonarsource/sonar-scanner-cli:4.6
+  image: sonarsource/sonar-scanner-cli:latest
   script:
     - cd lattice
     - npm install
