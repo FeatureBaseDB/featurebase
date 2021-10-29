@@ -21,11 +21,9 @@ afterEach(() => {
 it("it renders strings in quotes", () => {
   let row = {thing:"quoted string!"};
   let col = {name: "thing", datatype: "[]string"};
-    // this is just so we can actually test it, the value doesn't matter that much 
-  let css = {preFormat: "preFormat"};
 
   act(() => {
-    render(formatTableCell(row, col, css), container);
+    render(formatTableCell(row, col), container);
   });
   expect(container.textContent).toBe('"quoted string!"');
 });
@@ -33,11 +31,9 @@ it("it renders strings in quotes", () => {
 it("renders objects as stringified", () => {
   let row = {thing:{val:"quoted string!"}};
   let col = {name: "thing", datatype: "object"};
-    // this is just so we can actually test it, the value doesn't matter that much 
-  let css = {preFormat: "preFormat"};
 
   act(() => {
-    render(formatTableCell(row, col, css), container);
+    render(formatTableCell(row, col), container);
   });
   expect(container.textContent).toBe(`{
   "val": "quoted string!"
@@ -47,11 +43,9 @@ it("renders objects as stringified", () => {
 it("it puts timestamps in MM/DD/YYYY hh:mm:ss a format", () => {
   let row = {thing:1635452050094};
   let col = {name: "thing", datatype: "timestamp"};
-    // this is just so we can actually test it, the value doesn't matter that much 
-  let css = {preFormat: "preFormat"};
 
   act(() => {
-    render(formatTableCell(row, col, css), container);
+    render(formatTableCell(row, col), container);
   });
   expect(container.textContent).toBe("10/28/2021 08:14:10 pm");
 });

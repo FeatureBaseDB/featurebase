@@ -1,5 +1,6 @@
 import moment from 'moment';
-export const formatTableCell = (row: any, col: any, css: any) => {
+import css from '../DataTable/DataTable.module.scss';
+export const formatTableCell = (row: any, col: any) => {
      if (typeof row[col.name] === 'object') {
         return (
       <pre className={css.preFormat}>

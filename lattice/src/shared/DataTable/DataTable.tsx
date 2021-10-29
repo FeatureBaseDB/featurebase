@@ -1,7 +1,6 @@
 import React, { FC, Fragment, useEffect, useRef, useState } from 'react';
 import ArrowDropDownIcon from '@material-ui/icons/ArrowDropDown';
 import classNames from 'classnames';
-import moment from 'moment';
 import OrderBy from 'lodash/orderBy';
 import Table from '@material-ui/core/Table';
 import TableBody from '@material-ui/core/TableBody';
@@ -120,7 +119,7 @@ export const DataTable: FC<TableProps> = ({
                         key={`table-cell-${rowIdx}-${colIdx}`}
                         className={css.tableCell}
                       >
-                        {formatTableCell(row, col, css)}
+                        {formatTableCell(row, col)}
                             </TableCell>
                     ))}
                     {autoWidth ? <TableCell className={css.fillWidth} /> : null}
