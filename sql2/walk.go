@@ -229,7 +229,7 @@ func walk(v Visitor, node Node) (_ Node, err error) {
 			if src, err := walk(v, n.Source); err != nil {
 				return node, err
 			} else if src != nil {
-				n.Source = n.Source.(Source)
+				n.Source = n.Source
 			} else {
 				n.Source = nil
 			}

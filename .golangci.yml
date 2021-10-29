@@ -1,5 +1,6 @@
 run:
   #skip the protobuf generated files
+  skip-dirs-use-default: true
   skip-dirs:
     - pb
     - proto
@@ -11,6 +12,7 @@ linters-settings:
   govet:
     # report about shadowed variables
     check-shadowing: true
+
 
     # settings per analyzer
     settings:
@@ -30,10 +32,11 @@ linters-settings:
       - shadow
     disable-all: false
 
-  staticcheck:
-    # Select the Go version to target. The default is '1.13'.
-    go: "1.16"
-    # https://staticcheck.io/docs/options#checks
-    checks: [ "all" ]
 
-
+issues:
+  max-per-linter: 0
+  max-same: 0
+  exclude-use-default: false
+  exclude:
+    -  'declaration of "(err|ctx)" shadows declaration at'
+    -  'typecheck'
