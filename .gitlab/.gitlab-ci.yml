@@ -40,12 +40,11 @@ run jest tests:
   script:
     - echo "Testing lattice..."
     - cd lattice
+    - npm install --force
     - npm test -- --coverage --testResultsProcessor=jest-sonar-reporter
   artifacts:
     paths:
       - lattice/coverage/lcov.info
-  needs:
-    - job: install lattice
 
 run go tests:
   stage: test
