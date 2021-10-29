@@ -13,6 +13,15 @@ linters:
     - gofmt
   enable-all: false
   disable-all: true
+
+output:
+  # colored-line-number|line-number|json|tab|checkstyle|code-climate, default is "colored-line-number"
+  format: tab
+  # print lines of code with issue, default is true
+  print-issued-lines: true
+  # print linter name in the end of issue text, default is true
+  print-linter-name: true
+
 linters-settings:
   gofmt:
     simplify: true
@@ -44,6 +53,10 @@ issues:
   exclude-use-default: false
   max-per-linter: 0
   max-same: 0
+  exclude-rules:
+    - linters:
+      - gofmt
+      text: "File is not `gofmt`-ed with `-s`"
   exclude:
     -  'declaration of "(err|ctx)" shadows declaration at'
     -  'typecheck'
