@@ -17,9 +17,9 @@ package pilosa_test
 import (
 	"fmt"
 	"net"
-	"net/http"
 	"testing"
 
+	"net/http"
 	_ "net/http/pprof"
 
 	"github.com/molecula/featurebase/v2/testhook"

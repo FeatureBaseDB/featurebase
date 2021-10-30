@@ -5378,7 +5378,7 @@ func TestFragmentConcurrentReadWrite(t *testing.T) {
 		ltx := idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f, Shard: f.shard})
 
 		for i := uint64(0); i < 1000; i++ {
-			_, err := f.setBit(tx, i%4, i)
+			_, err := f.setBit(ltx, i%4, i)
 			if err != nil {
 				return errors.Wrap(err, "setting bit")
 			}
@@ -5388,12 +5388,12 @@ func TestFragmentConcurrentReadWrite(t *testing.T) {
 	})
 
 	// need read-only Tx so as not to block on the writer finishing above.
-	tx = idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: f.shard})
-	defer tx.Rollback()
+	tx1 := idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: f.shard})
+	defer tx1.Rollback()
 
 	acc := uint64(0)
 	for i := uint64(0); i < 100; i++ {
-		r := f.mustRow(tx, i%4)
+		r := f.mustRow(tx1, i%4)
 		acc += r.Count()
 	}
 	if err := eg.Wait(); err != nil {
