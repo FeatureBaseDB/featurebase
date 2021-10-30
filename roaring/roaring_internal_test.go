@@ -4737,3 +4737,61 @@ func TestIntersectionCallback(t *testing.T) {
 		}
 	}
 }
+func TestVariousBitmap(t *testing.T) {
+	b := NewBitmap(1, 2, 3)
+
+	c, e := b.Add(8)
+	if e != nil {
+		t.Fatal("add:", e)
+	}
+	if c == false {
+		t.Fatal("add: should have changed")
+	}
+	c, _ = b.Add(8)
+	if c == true {
+
+		t.Fatal("add: should not changed")
+	}
+	z, _ := b.AddN(9)
+	if z != 1 {
+		t.Fatal("add: should changed 1")
+	}
+	z, _ = b.RemoveN(9)
+	if z != 1 {
+		t.Fatal("add: should changed 1")
+	}
+	if b.Contains(100) {
+		t.Fatal("should not contain 100")
+	}
+	if !b.Any() {
+		t.Fatal("should have bits ")
+	}
+	if b.Size() == 0 {
+		t.Fatal("should have storage")
+	}
+	if b.Count() == 0 {
+		t.Fatal("should have bits")
+	}
+	if b.Max() == 0 {
+		t.Fatal("should max >0")
+	}
+	if m, e := b.Min(); !(m == 1 && e) {
+		t.Fatal("min should be 1 and containers exist")
+	}
+	b = nil
+	x := b.Clone()
+	if x != nil {
+
+		t.Fatal("nil clone should be nil")
+	}
+	n := b.Freeze()
+	if n != nil {
+
+		t.Fatal("nil freeze should be nil")
+	}
+	r, _ := b.AddN()
+	if r != 0 {
+
+		t.Fatal("nil AddN should be 0")
+	}
+}
