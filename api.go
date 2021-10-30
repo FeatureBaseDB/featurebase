@@ -128,12 +128,9 @@ func NewAPI(opts ...apiOption) (*API, error) {
 }
 
 // Setter for API options.
-func (api *API) SetAPIOpetions(opts ...apiOption) error {
+func (api *API) SetAPIOptions(opts ...apiOption) error {
 	for _, opt := range opts {
-		err := opt(api)
-		if err != nil {
-			return errors.Wrap(err, "applying option")
-		}
+		opt(api)
 	}
 	return nil
 }

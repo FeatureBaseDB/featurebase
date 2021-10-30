@@ -345,8 +345,8 @@ func TestHandler_Endpoints(t *testing.T) {
 	})
 
 	t.Run("SchemaDetailsOff", func(t *testing.T) {
-		cmd.API.SetAPIOpetions(pilosa.OptAPISchemaDetailsOn(false))
-		defer cmd.API.SetAPIOpetions(pilosa.OptAPISchemaDetailsOn(true))
+		cmd.API.SetAPIOptions(pilosa.OptAPISchemaDetailsOn(false))
+		defer cmd.API.SetAPIOptions(pilosa.OptAPISchemaDetailsOn(true))
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/schema/details", nil))
 		if w.Code != gohttp.StatusOK {

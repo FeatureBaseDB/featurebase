@@ -26,7 +26,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/molecula/featurebase/v2"
+	pilosa "github.com/molecula/featurebase/v2"
 	"github.com/molecula/featurebase/v2/boltdb"
 	"github.com/molecula/featurebase/v2/http"
 	"github.com/molecula/featurebase/v2/server"
@@ -844,6 +844,13 @@ func TestAPI_IDAlloc(t *testing.T) {
 			t.Fatalf("resetting ID alloc: %v", err)
 		}
 	})
+}
+
+func TestAPI_SetAPIOptions(t *testing.T) {
+	cluster := test.MustRunCluster(t, 1)
+	defer cluster.Close()
+	cmd := cluster.GetNode(0)
+	cmd.API.SetAPIOptions(pilosa.OptAPISchemaDetailsOn(false))
 }
 
 type mutexCheckIndex struct {
