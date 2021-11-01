@@ -11,13 +11,12 @@ export const formatTableCell = (row: any, col: any) => {
     if (col.datatype === "[]string") {
       return <span>{'"' + row[col.name] + '"'}</span>;
     }
-    return (
-      <span>
-        {col.datatype === "timestamp" && row[col.name]
-          ? moment.utc(row[col.name]).format("MM/DD/YYYY hh:mm:ss a")
-          : row[col.name].toLocaleString()}
-      </span>
-    );
+    if (col.datatype === "timestamp" && row[col.name]) {
+      return (
+        <span>{moment.utc(row[col.name]).format("MM/DD/YYYY hh:mm:ss a")}</span>
+      );
+    }
+    return <span>{row[col.name].toLocaleString()}</span>;
   }
   return null;
 };
