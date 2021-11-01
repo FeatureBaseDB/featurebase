@@ -93,18 +93,6 @@ run go tests with output:
     paths:
       - test-report.out
 
-generate coverage html:
-  stage: test
-  image: golang:1.16.9
-  script:
-    - echo "Generating coverage HTML.."
-    - go tool cover -html coverage.out -o coverage.html
-  artifacts:
-    paths:
-      - coverage.html
-  needs:
-    - job: run go tests
-
 upload to sonarcloud:
   stage: test
   image: sonarsource/sonar-scanner-cli:4.6
