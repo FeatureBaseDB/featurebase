@@ -62,7 +62,8 @@ type API struct {
 	importWorkerPoolSize int
 	importWork           chan importJob
 
-	usageCache *usageCache
+	usageCache      *usageCache
+	schemaDetailsOn bool
 
 	Serializer Serializer
 }
@@ -80,6 +81,14 @@ func OptAPIServer(s *Server) apiOption {
 		a.holder = s.holder
 		a.cluster = s.cluster
 		a.Serializer = s.serializer
+		return nil
+	}
+}
+
+// Used to configure API option: schemaDetailsOn
+func OptAPISchemaDetailsOn(isOn bool) apiOption {
+	return func(a *API) error {
+		a.schemaDetailsOn = isOn
 		return nil
 	}
 }
@@ -116,6 +125,17 @@ func NewAPI(opts ...apiOption) (*API, error) {
 	api.tracker = newQueryTracker(api.server.queryHistoryLength)
 
 	return api, nil
+}
+
+// Setter for API options.
+func (api *API) SetAPIOptions(opts ...apiOption) error {
+	for _, opt := range opts {
+		err := opt(api)
+		if err != nil {
+			return errors.Wrap(err, "setting API option")
+		}
+	}
+	return nil
 }
 
 // validAPIMethods specifies the api methods that are valid for each
@@ -1237,13 +1257,17 @@ func (api *API) Schema(ctx context.Context, withViews bool) ([]*IndexInfo, error
 }
 
 // SchemaDetails returns information about each index in Pilosa including which
-// fields they contain, and additional field information such as cardinality
+// fields they contain. Additional field information such as cardinality unless
+// turned off via the schemaDetailsOn cli option.
 func (api *API) SchemaDetails(ctx context.Context) ([]*IndexInfo, error) {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.Schema")
 	defer span.Finish()
 	schema, err := api.holder.Schema()
 	if err != nil {
 		return nil, errors.Wrap(err, "getting schema")
+	}
+	if !api.schemaDetailsOn {
+		return schema, nil
 	}
 	for _, index := range schema {
 		for _, field := range index.Fields {
@@ -1510,9 +1534,7 @@ func addClearToImportOptions(opts []ImportOption) []ImportOption {
 	return append(opts, OptImportOptionsClear(true))
 }
 
-// Import avoids re-writing a bajillion tests to be transaction-aware by allowing a nil pQcx.
-// It is convenient for some tests, particularly those in loops, to pass a nil qcx and
-// treat the Import as having been commited when we return without error. We make it so.
+// Import does the top-level importing.
 func (api *API) Import(ctx context.Context, qcx *Qcx, req *ImportRequest, opts ...ImportOption) (err error) {
 	if req.Clear {
 		opts = addClearToImportOptions(opts)
@@ -1648,8 +1670,8 @@ func (api *API) ImportWithTx(ctx context.Context, qcx *Qcx, req *ImportRequest, 
 	return errors.Wrap(err, "committing")
 }
 
-// ImportValue avoids re-writing a bajillion tests by allowing a nil pQcx.
-// Then we will commit before returning.
+// ImportValue is a wrapper around the common code in ImportValueWithTx, which
+// currently just translates req.Clear into a clear ImportOption.
 func (api *API) ImportValue(ctx context.Context, qcx *Qcx, req *ImportValueRequest, opts ...ImportOption) error {
 	if req.Clear {
 		opts = addClearToImportOptions(opts)
@@ -2654,9 +2676,7 @@ func (api *API) RestoreShard(ctx context.Context, indexName string, shard uint64
 	if err != nil {
 		return err
 	}
-	//need to find the path to the db
-	//will not work on blue green
-	db := dbs.W[0]
+	db := dbs.W
 	finalPath := db.Path() + "/data"
 	tempPath := finalPath + ".tmp"
 	o, err := os.OpenFile(tempPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)

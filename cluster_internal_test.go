@@ -17,7 +17,6 @@ package pilosa
 import (
 	"fmt"
 	"math/rand"
-	"net"
 	"reflect"
 	"strings"
 	"testing"
@@ -30,56 +29,7 @@ import (
 	"github.com/molecula/featurebase/v2/testhook"
 	"github.com/molecula/featurebase/v2/topology"
 	. "github.com/molecula/featurebase/v2/vprint" // nolint:staticcheck
-	"github.com/pkg/errors"
 )
-
-// GlobalPortMap avoids many races and port conflicts when setting
-// up ports for test clusters. Used for tests only.
-var globalPortMap *GlobalPortMapper
-
-func init() {
-	globalPortMap = NewGlobalPortMapper(300)
-}
-
-// GlobalPortMapper maintains a pool of available ports by
-// holding them open until GetPort() is called.
-type GlobalPortMapper struct {
-	availPorts map[int]net.Listener
-}
-
-// reserve n ports
-func NewGlobalPortMapper(n int) (pm *GlobalPortMapper) {
-
-	pm = &GlobalPortMapper{
-		availPorts: make(map[int]net.Listener),
-	}
-	for i := 0; i < n; i++ {
-		lsn, err := net.Listen("tcp", ":0")
-		if err != nil {
-			panic(errors.Wrap(err, "trying to listen on ephemeral port"))
-		}
-		r := lsn.Addr()
-		port := r.(*net.TCPAddr).Port
-		pm.availPorts[port] = lsn
-	}
-	return
-}
-
-func (pm *GlobalPortMapper) GetPort() (port int, err error) {
-	for port, lsn := range pm.availPorts {
-		lsn.Close()
-		return port, nil
-	}
-	return -1, fmt.Errorf("no more ports available")
-}
-
-func (pm *GlobalPortMapper) MustGetPort() int {
-	port, err := pm.GetPort()
-	if err != nil {
-		panic(err)
-	}
-	return port
-}
 
 // Ensure that fragCombos creates the correct fragment mapping.
 func TestFragCombos(t *testing.T) {

@@ -334,8 +334,8 @@ func OptServerOpenTranslateReader(fn OpenTranslateReaderFunc) ServerOption {
 }
 
 // OptServerStorageConfig is a functional option on Server used to specify the
-// transactional-storage backend to use, resulting in RoaringTx, RbfTx,
-// BadgerTx, or a blueGreen* Tx being used for all Tx interface calls.
+// transactional-storage backend to use, resulting in RoaringTx or RbfTx
+// being used for all Tx interface calls.
 func OptServerStorageConfig(cfg *storage.Config) ServerOption {
 	return func(s *Server) error {
 		s.holderConfig.StorageConfig = cfg
@@ -703,6 +703,7 @@ func (s *Server) Open() error {
 
 		start := time.Now()
 		prevMsg := start
+		numMsgs := uint(len(toSend))
 		s.logger.Printf("start initial cluster state sync")
 		for i := range toSend {
 			for {
@@ -721,10 +722,8 @@ func (s *Server) Open() error {
 			}
 
 			if now := time.Now(); now.Sub(prevMsg) > time.Second {
-				progressRatio := float64(i+1) / float64(len(toSend))
-				remainingRatio := 1 - progressRatio
-				timeRemaining := time.Duration(float64(now.Sub(prevMsg)) * (remainingRatio / progressRatio))
-				s.logger.Printf("synced %d/%d messages (%.2f%% complete; %s remaining)", i+1, len(toSend), 100*progressRatio, timeRemaining)
+				estimate, pctDone := GetLoopProgress(start, now, uint(i), numMsgs)
+				s.logger.Printf("synced %d/%d messages (%.2f%% complete; %s remaining)", i+1, numMsgs, pctDone, estimate)
 				prevMsg = now
 			}
 		}

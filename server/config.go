@@ -207,15 +207,8 @@ type Config struct {
 
 	// Storage.Backend determines which Tx implementation the holder/Index will
 	// use; one of the available transactional-storage engines. Choices are
-	// listed in the string constants below. Should be one of "roaring","bolt",
-	// "rbf", "bolt_roaring", "roaring_bolt", "rbf_roaring", "roaring_rbf",
-	// "bolt_rbf", "rbf_bolt", or any later addition. The engines with _
-	// underscore indicate use of a blueGreenTx with a comparison of values back
-	// from each Tx method, and a panic if they differ. This is an effective
-	// test for consistency. If "rbf_roaring" is specified, then the roaring
-	// values are the ones actually returned from the blueGreenTx. If
-	// "roaring_rbf" is chosen, then the RBF values are the ones actually
-	// returned from the blueGreenTx.
+	// listed in the string constants below. Should be one of "roaring" or
+	// "rbf".
 	Storage *storage.Config `toml:"storage"`
 
 	// RowcacheOn, if true, turns on the row cache for all storage backends.
@@ -244,6 +237,9 @@ type Config struct {
 		// as FeatureBase instead of Pilosa.
 		Rename bool `toml:"rename"`
 	} `toml:"future"`
+
+	// Toggles /schema/details endpoint. If off, it returns empty.
+	SchemaDetailsOn bool `toml:"schema-details-on"`
 }
 
 // Namespace returns the namespace to use based on the Future flag.
@@ -392,6 +388,9 @@ func NewConfig() *Config {
 
 	// Future flags.
 	c.Future.Rename = false
+
+	// Schema Details Toggle
+	c.SchemaDetailsOn = true
 
 	return c
 }

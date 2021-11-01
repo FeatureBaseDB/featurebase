@@ -47,6 +47,7 @@ import (
 	"github.com/molecula/featurebase/v2/roaring"
 	"github.com/molecula/featurebase/v2/shardwidth"
 	"github.com/molecula/featurebase/v2/stats"
+	"github.com/molecula/featurebase/v2/storage"
 	"github.com/molecula/featurebase/v2/testhook"
 	"github.com/molecula/featurebase/v2/topology"
 	"github.com/molecula/featurebase/v2/tracing"
@@ -74,9 +75,6 @@ const (
 
 	// snapshotExt is the file extension used for an in-process snapshot.
 	snapshotExt = ".snapshotting"
-
-	// copyExt is the file extension used for the temp file used while copying.
-	copyExt = ".copying"
 
 	// cacheExt is the file extension for persisted cache ids.
 	cacheExt = ".cache"
@@ -441,7 +439,7 @@ func (f *fragment) inspectStorage(data []byte, file *os.File, newGen generation,
 // (remapping an existing bitmap to match a new backing store).
 func (f *fragment) openStorage(unmarshalData bool) error {
 
-	useRowCache := f.idx.Txf().UseRowCache()
+	useRowCache := storage.RowCacheEnabled()
 	if !f.idx.NeedsSnapshot() {
 		f.gen = &NopGeneration{}
 		if useRowCache {
@@ -626,7 +624,7 @@ func (f *fragment) mustRow(tx Tx, rowID uint64) *Row {
 // (updating the cache).
 func (f *fragment) unprotectedRow(tx Tx, rowID uint64) (*Row, error) {
 
-	useRowCache := tx.UseRowCache()
+	useRowCache := storage.RowCacheEnabled()
 	if useRowCache {
 		if f.rowCache == nil {
 			f.rowCache = newSimpleCache()
@@ -699,7 +697,7 @@ func (f *fragment) setBit(tx Tx, rowID, columnID uint64) (changed bool, err erro
 		if tx.Type() == RoaringTxn {
 			return changed, errors.New("internal error: f.gen was nil and tx.Type is RoaringTxn - should never happen under roaring b/c storage should be open")
 		}
-		// else blue green or transactional backend. Just do it.
+		// else transactional backend. Just do it.
 		err = doSetFunc()
 	}
 	return changed, err
@@ -744,7 +742,7 @@ func (f *fragment) unprotectedSetBit(tx Tx, rowID, columnID uint64) (changed boo
 	delete(f.checksums, int(rowID/HashBlockSize))
 
 	// Increment number of operations until snapshot is required.
-	tx.IncrementOpN(f.index(), f.field(), f.view(), f.shard, 1)
+	f.incrementOpN(1)
 
 	// If we're using a cache, update it. Otherwise skip the
 	// possibly-expensive count operation.
@@ -757,7 +755,7 @@ func (f *fragment) unprotectedSetBit(tx Tx, rowID, columnID uint64) (changed boo
 	}
 	// Drop the rowCache entry; it's wrong, and we don't want to force
 	// a new copy if no one's reading it.
-	if tx.UseRowCache() && f.rowCache != nil {
+	if storage.RowCacheEnabled() && f.rowCache != nil {
 		f.rowCache.Add(rowID, nil)
 	}
 
@@ -809,7 +807,7 @@ func (f *fragment) unprotectedClearBit(tx Tx, rowID, columnID uint64) (changed b
 	delete(f.checksums, int(rowID/HashBlockSize))
 
 	// Increment number of operations until snapshot is required.
-	tx.IncrementOpN(f.index(), f.field(), f.view(), f.shard, 1)
+	f.incrementOpN(1)
 
 	// If we're using a cache, update it. Otherwise skip the
 	// possibly-expensive count operation.
@@ -822,7 +820,7 @@ func (f *fragment) unprotectedClearBit(tx Tx, rowID, columnID uint64) (changed b
 	}
 	// Drop the rowCache entry; it's wrong, and we don't want to force
 	// a new copy if no one's reading it.
-	if tx.UseRowCache() && f.rowCache != nil {
+	if storage.RowCacheEnabled() && f.rowCache != nil {
 		f.rowCache.Add(rowID, nil)
 	}
 
@@ -891,7 +889,7 @@ func (f *fragment) unprotectedSetRow(tx Tx, row *Row, rowID uint64) (changed boo
 	}
 
 	// invalidate rowCache for this row.
-	if tx.UseRowCache() && f.rowCache != nil {
+	if storage.RowCacheEnabled() && f.rowCache != nil {
 		f.rowCache.Add(rowID, nil)
 	}
 
@@ -942,7 +940,7 @@ func (f *fragment) unprotectedClearRow(tx Tx, rowID uint64) (changed bool, err e
 
 	// Clear the row in cache.
 	f.cache.Add(rowID, 0)
-	if tx.UseRowCache() && f.rowCache != nil {
+	if storage.RowCacheEnabled() && f.rowCache != nil {
 		f.rowCache.Add(rowID, nil)
 	}
 
@@ -2426,7 +2424,7 @@ func (f *fragment) importPositions(tx Tx, set, clear []uint64, rowSet map[uint64
 	if f.storage != nil {
 		wp = &f.storage.OpWriter
 	}
-	useRowCache := tx.UseRowCache()
+	useRowCache := storage.RowCacheEnabled()
 
 	doFunc := func() error {
 		if len(set) > 0 {
@@ -2438,7 +2436,7 @@ func (f *fragment) importPositions(tx Tx, set, clear []uint64, rowSet map[uint64
 				return errors.Wrap(err, "adding positions")
 			}
 			f.stats.Count(MetricImportedN, int64(changedN), 1)
-			tx.IncrementOpN(f.index(), f.field(), f.view(), f.shard, changedN)
+			f.incrementOpN(changedN)
 		}
 
 		if len(clear) > 0 {
@@ -2448,7 +2446,7 @@ func (f *fragment) importPositions(tx Tx, set, clear []uint64, rowSet map[uint64
 				return errors.Wrap(err, "clearing positions")
 			}
 			f.stats.Count(MetricClearedN, int64(changedN), 1)
-			tx.IncrementOpN(f.index(), f.field(), f.view(), f.shard, changedN)
+			f.incrementOpN(changedN)
 		}
 
 		// Update cache counts for all affected rows.
@@ -2735,7 +2733,7 @@ func (f *fragment) unprotectedImportRoaring(ctx context.Context, tx Tx, data []b
 	rowSize := uint64(1 << shardVsContainerExponent)
 	span, ctx := tracing.StartSpanFromContext(ctx, "importRoaring.ImportRoaringBits")
 
-	useRowCache := tx.UseRowCache()
+	useRowCache := storage.RowCacheEnabled()
 	var changed int
 	var rowSet map[uint64]int
 	var wp *io.Writer
@@ -2749,7 +2747,7 @@ func (f *fragment) unprotectedImportRoaring(ctx context.Context, tx Tx, data []b
 			return err
 		}
 
-		changed, rowSet, err = tx.ImportRoaringBits(f.index(), f.field(), f.view(), f.shard, rit, clear, true, rowSize, nil)
+		changed, rowSet, err = tx.ImportRoaringBits(f.index(), f.field(), f.view(), f.shard, rit, clear, true, rowSize)
 		return err
 	})
 
@@ -2789,7 +2787,7 @@ func (f *fragment) unprotectedImportRoaring(ctx context.Context, tx Tx, data []b
 
 	span, _ = tracing.StartSpanFromContext(ctx, "importRoaring.incrementOpN")
 
-	tx.IncrementOpN(f.index(), f.field(), f.view(), f.shard, changed)
+	f.incrementOpN(changed)
 
 	span.Finish()
 	return nil
@@ -2813,6 +2811,10 @@ func (f *fragment) importRoaringOverwrite(ctx context.Context, tx Tx, data []byt
 // If the count exceeds the maximum allowed then a snapshot is performed.
 func (f *fragment) incrementOpN(changed int) {
 	if changed <= 0 {
+		return
+	}
+	// don't count opN or ops if our index doesn't want snapshots
+	if !f.idx.NeedsSnapshot() {
 		return
 	}
 	f.opN += changed
@@ -3015,11 +3017,15 @@ func (f *fragment) writeStorageToArchive(tw *tar.Writer) error {
 
 	tx := f.idx.holder.txf.NewTx(Txo{Write: !writable, Index: f.idx, Shard: f.shard})
 	defer tx.Rollback()
-	file, sz, err := tx.RoaringBitmapReader(f.index(), f.field(), f.view(), f.shard, f.path())
+	rbm, err := tx.RoaringBitmap(f.index(), f.field(), f.view(), f.shard)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "RoaringBitmapReader RoaringBitmap")
 	}
-	defer file.Close()
+	var buf bytes.Buffer
+	sz, err := rbm.WriteTo(&buf)
+	if err != nil {
+		return errors.Wrap(err, "RoaringBitmapReader rbm.WriteTo(buf)")
+	}
 
 	// Write archive header.
 	if err := tw.WriteHeader(&tar.Header{
@@ -3033,7 +3039,7 @@ func (f *fragment) writeStorageToArchive(tw *tar.Writer) error {
 
 	// Copy the file up to the last known size.
 	// This is done outside the lock because the storage format is append-only.
-	if _, err := io.CopyN(tw, file, sz); err != nil {
+	if _, err := io.CopyN(tw, &buf, sz); err != nil {
 		return errors.Wrap(err, "copying")
 	}
 	return nil
@@ -3086,8 +3092,7 @@ func (f *fragment) ReadFrom(r io.Reader) (n int64, err error) {
 		// Process file based on file name.
 		switch hdr.Name {
 		case "data":
-			idx := f.holder.Index(f.index())
-			tx := idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f, Shard: f.shard})
+			tx := f.holder.txf.NewTx(Txo{Write: writable, Index: f.idx, Fragment: f, Shard: f.shard})
 			defer tx.Rollback()
 			if err := f.fillFragmentFromArchive(tx, tr); err != nil {
 				return 0, errors.Wrap(err, "reading storage")
@@ -3131,45 +3136,11 @@ func (f *fragment) fillFragmentFromArchive(tx Tx, r io.Reader) error {
 	if err != nil {
 		return errors.Wrap(err, "fillFragmentFromArchive NewRoaringIterator")
 	}
-	changed, rowSet, err := tx.ImportRoaringBits(f.index(), f.field(), f.view(), f.shard, itr, clear, log, rowSize, data)
+	changed, rowSet, err := tx.ImportRoaringBits(f.index(), f.field(), f.view(), f.shard, itr, clear, log, rowSize)
 	_, _ = changed, rowSet
 	if err != nil {
 		return errors.Wrap(err, "fillFragmentFromArchive ImportRoaringBits")
 	}
-	return nil
-}
-
-func (f *fragment) readStorageFromArchive(r io.Reader) error {
-
-	// Create a temporary file to copy into.
-	path := f.path() + copyExt
-	file, err := os.Create(path)
-	if err != nil {
-		return errors.Wrap(err, "creating directory")
-	}
-	defer file.Close()
-
-	// Copy reader into temporary path.
-	if _, err = io.Copy(file, r); err != nil {
-		return errors.Wrap(err, "copying")
-	}
-
-	// TODO(jea): isn't this next Rename a file handle leak?
-	// try closing first
-	if err := f.closeStorage(); err != nil {
-		return errors.Wrap(err, "closeStorage-prior-to-Rename-and-openStorage")
-	}
-
-	// Move snapshot to data file location.
-	if err := os.Rename(path, f.path()); err != nil {
-		return errors.Wrap(err, "renaming")
-	}
-
-	// Reopen storage.
-	if err := f.openStorage(true); err != nil {
-		return errors.Wrap(err, "opening")
-	}
-
 	return nil
 }
 
@@ -3369,7 +3340,7 @@ func (f *fragment) intRowIterator(tx Tx, wrap bool, filters ...roaring.BitmapFil
 	// accumulator [column ID] -> [int value]
 	acc := make(map[uint64]int64)
 
-	if tx.UseRowCache() {
+	if storage.RowCacheEnabled() {
 		// needs a write lock since it will update the f.rowCache
 		f.mu.Lock()
 		defer f.mu.Unlock()

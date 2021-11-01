@@ -16,7 +16,6 @@ package pilosa
 
 import (
 	"fmt"
-	"io"
 	"math"
 	"runtime"
 	"sort"
@@ -151,8 +150,7 @@ type kall int
 
 // constants for kall argument to callStats.add()
 const (
-	kIncrementOpN kall = iota
-	kNewTxIterator
+	kNewTxIterator kall = iota
 	kImportRoaringBits
 	kRollback
 	kCommit
@@ -169,23 +167,14 @@ const (
 	kCount
 	kMax
 	kMin
-	kUnionInPlace
 	kCountRange
 	kOffsetRange
-	kRoaringBitmapReader
-	kSliceOfShards
 	kLast // mark the end, always keep this last. The following aren't tracked atm:
 	kType
-	kDump
-	kReadonly
-	kPointer
-	kUseRowCache
 )
 
 func (k kall) String() string {
 	switch k {
-	case kIncrementOpN:
-		return "kIncrementOpN"
 	case kNewTxIterator:
 		return "kNewTxIterator"
 	case kImportRoaringBits:
@@ -220,61 +209,20 @@ func (k kall) String() string {
 		return "kMax"
 	case kMin:
 		return "kMin"
-	case kUnionInPlace:
-		return "kUnionInPlace"
 	case kCountRange:
 		return "kCountRange"
 	case kOffsetRange:
 		return "kOffsetRange"
-	case kRoaringBitmapReader:
-		return "kRoaringBitmapReader"
-	case kSliceOfShards:
-		return "kSliceOfShards"
 	case kLast:
 		return "kLast"
 	case kType:
 		return "kType"
-	case kDump:
-		return "kDump"
-	case kReadonly:
-		return "kReadonly"
-	case kPointer:
-		return "kPointer"
-	case kUseRowCache:
-		return "kUseRowCache"
 	}
 	PanicOn(fmt.Sprintf("unknown kall '%v'", int(k)))
 	return ""
 }
 
-var _ = newStatTx // happy linter
-var _ = kPointer
-var _ = kUseRowCache
-var _ = kType
-var _ = kDump
-var _ = kReadonly
-
 var _ Tx = (*statTx)(nil)
-
-func (c *statTx) Group() *TxGroup {
-	return c.b.Group()
-}
-
-func (c *statTx) Options() Txo {
-	return c.b.Options()
-}
-
-//IncrementOpN
-func (c *statTx) IncrementOpN(index, field, view string, shard uint64, changedN int) {
-	me := kIncrementOpN
-
-	t0 := time.Now()
-	defer func() {
-		c.stats.add(me, time.Since(t0))
-	}()
-
-	c.b.IncrementOpN(index, field, view, shard, changedN)
-}
 
 func (c *statTx) NewTxIterator(index, field, view string, shard uint64) *roaring.Iterator {
 	me := kNewTxIterator
@@ -286,7 +234,7 @@ func (c *statTx) NewTxIterator(index, field, view string, shard uint64) *roaring
 	return c.b.NewTxIterator(index, field, view, shard)
 }
 
-func (c *statTx) ImportRoaringBits(index, field, view string, shard uint64, rit roaring.RoaringIterator, clear bool, log bool, rowSize uint64, data []byte) (changed int, rowSet map[uint64]int, err error) {
+func (c *statTx) ImportRoaringBits(index, field, view string, shard uint64, rit roaring.RoaringIterator, clear bool, log bool, rowSize uint64) (changed int, rowSet map[uint64]int, err error) {
 	me := kImportRoaringBits
 
 	t0 := time.Now()
@@ -299,25 +247,7 @@ func (c *statTx) ImportRoaringBits(index, field, view string, shard uint64, rit 
 			PanicOn(r)
 		}
 	}()
-	return c.b.ImportRoaringBits(index, field, view, shard, rit, clear, log, rowSize, data)
-}
-
-func (c *statTx) Dump(short bool, shard uint64) {
-	c.b.Dump(short, shard)
-}
-
-func (c *statTx) Readonly() bool {
-	defer func() {
-		if r := recover(); r != nil {
-			AlwaysPrintf("see Readonly() PanicOn '%v' at '%v'", r, Stack())
-			PanicOn(r)
-		}
-	}()
-	return c.b.Readonly()
-}
-
-func (tx *statTx) Pointer() string {
-	return fmt.Sprintf("%p", tx)
+	return c.b.ImportRoaringBits(index, field, view, shard, rit, clear, log, rowSize)
 }
 
 func (c *statTx) Rollback() {
@@ -419,14 +349,6 @@ func (c *statTx) RemoveContainer(index, field, view string, shard uint64, key ui
 		}
 	}()
 	return c.b.RemoveContainer(index, field, view, shard, key)
-}
-
-func (c *statTx) UseRowCache() bool {
-	return c.b.UseRowCache()
-}
-
-func (c *statTx) IsDone() (done bool) {
-	return c.b.IsDone()
 }
 
 func (c *statTx) Add(index, field, view string, shard uint64, a ...uint64) (changeCount int, err error) {
@@ -586,23 +508,6 @@ func (c *statTx) Min(index, field, view string, shard uint64) (uint64, bool, err
 	return c.b.Min(index, field, view, shard)
 }
 
-func (c *statTx) UnionInPlace(index, field, view string, shard uint64, others ...*roaring.Bitmap) error {
-	me := kUnionInPlace
-
-	t0 := time.Now()
-	defer func() {
-		c.stats.add(me, time.Since(t0))
-	}()
-
-	defer func() {
-		if r := recover(); r != nil {
-			AlwaysPrintf("see UnionInPlace() PanicOn '%v' at '%v'", r, Stack())
-			PanicOn(r)
-		}
-	}()
-	return c.b.UnionInPlace(index, field, view, shard, others...)
-}
-
 func (c *statTx) CountRange(index, field, view string, shard uint64, start, end uint64) (n uint64, err error) {
 	me := kCountRange
 
@@ -636,30 +541,8 @@ func (c *statTx) OffsetRange(index, field, view string, shard, offset, start, en
 	return c.b.OffsetRange(index, field, view, shard, offset, start, end)
 }
 
-func (c *statTx) RoaringBitmapReader(index, field, view string, shard uint64, fragmentPathForRoaring string) (r io.ReadCloser, sz int64, err error) {
-	me := kRoaringBitmapReader
-
-	t0 := time.Now()
-	defer func() {
-		c.stats.add(me, time.Since(t0))
-	}()
-
-	defer func() {
-		if r := recover(); r != nil {
-			AlwaysPrintf("see RoaringBitmapReader() PanicOn '%v' at '%v'", r, Stack())
-			PanicOn(r)
-		}
-	}()
-	return c.b.RoaringBitmapReader(index, field, view, shard, fragmentPathForRoaring)
-}
-
 func (c *statTx) Type() string {
 	return c.b.Type()
-}
-
-// Sn retreives the serial number of the Tx.
-func (c *statTx) Sn() int64 {
-	return c.b.Sn()
 }
 
 func (c *statTx) GetSortedFieldViewList(idx *Index, shard uint64) (fvs []txkey.FieldView, err error) {
