@@ -1,7 +1,6 @@
 import React, { FC, Fragment, useEffect, useRef, useState } from 'react';
 import ArrowDropDownIcon from '@material-ui/icons/ArrowDropDown';
 import classNames from 'classnames';
-import moment from 'moment';
 import OrderBy from 'lodash/orderBy';
 import Table from '@material-ui/core/Table';
 import TableBody from '@material-ui/core/TableBody';
@@ -12,6 +11,7 @@ import TableRow from '@material-ui/core/TableRow';
 import Typography from '@material-ui/core/Typography';
 import { ColumnInfo } from 'proto/pilosa_pb';
 import { Pager } from 'shared/Pager';
+import { formatTableCell } from 'shared/utils/formatTableCell';
 import css from './DataTable.module.scss';
 
 type TableProps = {
@@ -70,6 +70,8 @@ export const DataTable: FC<TableProps> = ({
     }
   };
 
+
+
   return (
     <Fragment>
       <div ref={resultsRef} />
@@ -117,20 +119,8 @@ export const DataTable: FC<TableProps> = ({
                         key={`table-cell-${rowIdx}-${colIdx}`}
                         className={css.tableCell}
                       >
-                        {typeof row[col.name] === 'object' ? (
-                          <pre className={css.preFormat}>
-                            {JSON.stringify(row[col.name], null, 2)}
-                          </pre>
-                        ) : row[col.name] !== undefined ? (
-                          <span>
-                            {col.datatype === 'timestamp' && row[col.name]
-                              ? moment
-                                  .utc(row[col.name])
-                                  .format('MM/DD/YYYY hh:mm:ss a')
-                              : row[col.name].toLocaleString()}
-                          </span>
-                        ) : null}
-                      </TableCell>
+                        {formatTableCell(row, col)}
+                            </TableCell>
                     ))}
                     {autoWidth ? <TableCell className={css.fillWidth} /> : null}
                   </TableRow>
