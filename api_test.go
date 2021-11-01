@@ -850,7 +850,10 @@ func TestAPI_SchemaDetailsOff(t *testing.T) {
 	cluster := test.MustRunCluster(t, 2)
 	defer cluster.Close()
 	cmd := cluster.GetNode(0)
-	cmd.API.SetAPIOptions(pilosa.OptAPISchemaDetailsOn(false))
+	err := cmd.API.SetAPIOptions(pilosa.OptAPISchemaDetailsOn(false))
+	if err != nil {
+		t.Fatalf("could not toggle schema details to off: %v", err)
+	}
 	schema, err := cmd.API.SchemaDetails(context.Background())
 	if err != nil {
 		t.Fatalf("getting schema: %v", err)

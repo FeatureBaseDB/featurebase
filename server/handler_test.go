@@ -345,8 +345,11 @@ func TestHandler_Endpoints(t *testing.T) {
 	})
 
 	t.Run("SchemaDetailsOff", func(t *testing.T) {
-		cmd.API.SetAPIOptions(pilosa.OptAPISchemaDetailsOn(false))
-		defer cmd.API.SetAPIOptions(pilosa.OptAPISchemaDetailsOn(true))
+		err := cmd.API.SetAPIOptions(pilosa.OptAPISchemaDetailsOn(false))
+		if err != nil {
+			t.Fatalf("setting schema details option")
+		}
+
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/schema/details", nil))
 		if w.Code != gohttp.StatusOK {
@@ -357,14 +360,19 @@ func TestHandler_Endpoints(t *testing.T) {
 		if err := json.Unmarshal(w.Body.Bytes(),
 			&bodySchema); err != nil {
 			t.Fatalf("unexpected unmarshalling error: %v", err)
-		}
 
+		}
 		for _, i := range bodySchema.Indexes {
 			for _, f := range i.Fields {
 				if f.Cardinality != nil {
 					t.Fatalf("expected nil cardinality, got: %v", *f.Cardinality)
 				}
 			}
+		}
+
+		err = cmd.API.SetAPIOptions(pilosa.OptAPISchemaDetailsOn(true))
+		if err != nil {
+			t.Fatalf("could not toggle schema details to on: %v", err)
 		}
 	})
 
