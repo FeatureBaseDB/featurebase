@@ -4,7 +4,7 @@ include:
   - template: Security/Dependency-Scanning.gitlab-ci.yml
 
 variables:
-  GOVERSION: "1.16.3"
+  GOVERSION: "1.16.9"
 
 stages:
   - test
