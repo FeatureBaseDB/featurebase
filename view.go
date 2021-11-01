@@ -158,26 +158,28 @@ func (v *view) openWithShardSet(ss *shardSet) error {
 	if nGoro < 4 {
 		nGoro = 4
 	}
-	pj := newParallelJobs(nGoro)
+	var eg errgroup.Group
+	throttle := make(chan struct{}, nGoro)
+
 	for i := range frags {
 		// create a new variable frag on each time through
 		// the loop (instead of i, frag := range frags)
 		// so that the closure run on the
 		// goroutine has its own variable.
 		frag := frags[i]
-		accepted := pj.run(func(worker int) error {
+		throttle <- struct{}{}
+		eg.Go(func() error {
+			defer func() {
+				<-throttle
+			}()
 			if err := frag.Open(); err != nil {
 				return fmt.Errorf("open fragment: shard=%d, err=%s", frag.shard, err)
 			}
 			return nil
 		})
-		if !accepted {
-			// have error/shutting down the pj, so stop
-			break
-		}
 	}
 
-	err := pj.waitForFinish()
+	err := eg.Wait()
 	if err != nil {
 		return err
 	}

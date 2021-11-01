@@ -23,7 +23,6 @@ import (
 	"sync"
 
 	"github.com/benbjohnson/immutable"
-	"github.com/molecula/featurebase/v2/hash"
 	"github.com/molecula/featurebase/v2/roaring"
 	txkey "github.com/molecula/featurebase/v2/short_txkey"
 	. "github.com/molecula/featurebase/v2/vprint"
@@ -1299,27 +1298,6 @@ func (tx *Tx) Min(name string) (uint64, bool, error) {
 	return uint64((cell.Key << 16) | uint64(cell.firstValue(tx))), true, nil
 }
 
-func (tx *Tx) UnionInPlace(name string, others ...*roaring.Bitmap) error {
-	rbm, err := tx.RoaringBitmap(name)
-	PanicOn(err)
-
-	rbm.UnionInPlace(others...)
-	// iterate over the containers that changed within rbm, and write them back to disk.
-
-	it, found := rbm.Containers.Iterator(0)
-	_ = found // don't care about the value of found, because first containerKey might be > 0
-
-	for it.Next() {
-		containerKey, rc := it.Value()
-
-		// TODO: only write the changed ones back, as optimization?
-		//       Compare to ImportRoaringBits.
-		err := tx.PutContainer(name, containerKey, rc)
-		PanicOn(err)
-	}
-	return nil
-}
-
 // roaring.countRange counts the number of bits set between [start, end).
 func (tx *Tx) CountRange(name string, start, end uint64) (uint64, error) {
 	tx.mu.RLock()
@@ -1538,130 +1516,7 @@ func (si *emptyContainerIterator) Value() (uint64, *roaring.Container) {
 	return 0, nil
 }
 
-func (tx *Tx) Dump(short bool, shard uint64) {
-	fmt.Println(tx.DumpString(short, shard))
-}
-func (tx *Tx) DumpString(short bool, shard uint64) (r string) {
-
-	r = "allkeys:[\n"
-
-	// grab root records, for a list of bitmaps.
-	records, err := tx.RootRecords()
-	PanicOn(err)
-	n := 0
-
-	for itr := records.Iterator(); !itr.Done(); {
-		name, _ := itr.Next()
-
-		c, err := tx.cursor(name.(string))
-		PanicOn(err)
-		defer c.Close()
-
-		err = c.First() // First will rewind to beginning.
-		if err == io.EOF {
-			r += "<empty bitmap>"
-			n++
-			continue
-		}
-		PanicOn(err)
-		for {
-			err := c.Next()
-			if err == io.EOF {
-				break
-			}
-			PanicOn(err)
-
-			elem := &c.stack.elems[c.stack.top]
-			leafPage, _, err := c.tx.readPage(elem.pgno)
-			PanicOn(err)
-			cell := readLeafCell(leafPage, elem.index)
-
-			ckey := cell.Key
-			ct := toContainer(cell, tx)
-
-			s := stringOfCkeyCt(ckey, ct, name.(string), short, true)
-			r += s
-			n++
-		}
-	}
-	if n == 0 {
-		return ""
-	}
-	// note that we can have a bitmap present, but it can be empty
-	r += "]\n   all-in-blake3:" + hash.Blake3sum16([]byte(r)) + "\n"
-
-	return "rbf-" + r
-}
-
-func containerToBytes(ct *roaring.Container) []byte {
-
-	ty := roaring.ContainerType(ct)
-	switch ty {
-	case roaring.ContainerNil:
-		PanicOn("nil container")
-	case roaring.ContainerArray:
-		return fromArray16(roaring.AsArray(ct))
-	case roaring.ContainerBitmap:
-		return fromArray64(roaring.AsBitmap(ct))
-	case roaring.ContainerRun:
-		return fromInterval16(roaring.AsRuns(ct))
-	}
-	PanicOn(fmt.Sprintf("unknown container type '%v'", int(ty)))
-	return nil
-}
-
-func bitmapAsString(rbm *roaring.Bitmap) (r string) {
-	r = "c("
-	slc := rbm.Slice()
-	width := 0
-	s := ""
-	for _, v := range slc {
-		if width == 0 {
-			s = fmt.Sprintf("%v", v)
-		} else {
-			s = fmt.Sprintf(", %v", v)
-		}
-		width += len(s)
-		r += s
-		if width > 70 {
-			r += ",\n"
-			width = 0
-		}
-	}
-	if width == 0 && len(r) > 2 {
-		r = r[:len(r)-2]
-	}
-	return r + ")"
-}
-
-func stringOfCkeyCt(ckey uint64, ct *roaring.Container, rrName string, short, showHash bool) (s string) {
-
-	hsh := ""
-	if showHash {
-		by := containerToBytes(ct)
-		hsh = hash.Blake3sum16(by)
-	}
-
-	cts := roaring.NewSliceContainers()
-	cts.Put(ckey, ct)
-	rbm := &roaring.Bitmap{Containers: cts}
-	srbm := bitmapAsString(rbm)
-
-	var pre string
-	if len(rrName) > 0 {
-		pre = txkey.PrefixToString([]byte(rrName))
-	}
-	bkey := pre + fmt.Sprintf("ckey@%020d", ckey)
-
-	s = fmt.Sprintf("%v -> %v (%v hot)\n", bkey, hsh, ct.N())
-
-	if !short {
-		s += "          ......." + srbm + "\n"
-	}
-	return
-}
-
-func (tx *Tx) ImportRoaringBits(name string, itr roaring.RoaringIterator, clear bool, log bool, rowSize uint64, data []byte) (changed int, rowSet map[uint64]int, err error) {
+func (tx *Tx) ImportRoaringBits(name string, itr roaring.RoaringIterator, clear bool, log bool, rowSize uint64) (changed int, rowSet map[uint64]int, err error) {
 
 	// begin write boilerplate
 	if tx.db == nil {

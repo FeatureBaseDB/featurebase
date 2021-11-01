@@ -206,6 +206,13 @@ func (db *DB) checkpoint() error {
 		return nil // skip if transactions open
 	}
 
+	// Check if there are any WAL pages, if not do nothing as
+	// checkpointing and calling fsync can be very expensive even if
+	// there are no writes.
+	if db.walPageN == 0 {
+		return nil
+	}
+
 	for i := 0; i < db.walPageN; i++ {
 		page, err := db.readWALPageAt(i)
 		if err != nil {
@@ -245,7 +252,7 @@ func (db *DB) checkpoint() error {
 	db.walPageN = 0
 	db.pageMap = NewPageMap()
 
-	// Notify halted tranactions that the WAL has been checkpointed.
+	// Notify halted transactions that the WAL has been checkpointed.
 	db.haltCond.Broadcast()
 
 	return nil
@@ -319,7 +326,7 @@ func (db *DB) Close() (err error) {
 // least a single hot bit inside the db
 // in order to return hasAnyRecords true.
 //
-// HasData is used by backend migration and blue/green checks.
+// HasData is used by backend migration.
 //
 // If there is a disk error we return (false, error), so always
 // check the error before deciding if hasAnyRecords is valid.

@@ -183,7 +183,6 @@ func TestFragment_RowcacheMap(t *testing.T) {
 
 // Ensure a fragment can clear a row.
 func TestFragment_ClearRow(t *testing.T) {
-	NotBlueGreenTest(t)
 	f, idx, tx := mustOpenFragment(t, "i", "f", viewStandard, 0, "")
 	_ = idx
 	defer f.Clean(t)
@@ -215,7 +214,6 @@ func TestFragment_ClearRow(t *testing.T) {
 
 // Ensure a fragment can set a row.
 func TestFragment_SetRow(t *testing.T) {
-	NotBlueGreenTest(t)
 	f, idx, tx := mustOpenFragment(t, "i", "f", viewStandard, 7, "")
 	_ = idx
 	defer f.Clean(t)
@@ -1728,7 +1726,7 @@ func roaringOnlyBenchmark(b *testing.B) {
 
 // Ensure a fragment can be copied to another fragment.
 func TestFragment_WriteTo_ReadFrom(t *testing.T) {
-	roaringOnlyTest(t)
+	// roaringOnlyTest(t)
 
 	f0, _, tx := mustOpenFragment(t, "i", "f", viewStandard, 0, "")
 	defer f0.Clean(t)
@@ -1740,6 +1738,10 @@ func TestFragment_WriteTo_ReadFrom(t *testing.T) {
 		t.Fatal(err)
 	} else if _, err := f0.clearBit(tx, 1000, 1); err != nil {
 		t.Fatal(err)
+	}
+	err := tx.Commit()
+	if err != nil {
+		t.Fatalf("committing write: %v", err)
 	}
 
 	// Verify cache is populated.
@@ -1755,7 +1757,9 @@ func TestFragment_WriteTo_ReadFrom(t *testing.T) {
 	}
 
 	// Read into another fragment.
-	f1, _, tx := mustOpenFragment(t, "i", "f", viewStandard, 0, "")
+	f1, idx, tx := mustOpenFragment(t, "i", "f", viewStandard, 0, "")
+	tx.Rollback()
+
 	defer f1.Clean(t)
 
 	if rn, err := f1.ReadFrom(&buf); err != nil { // eventually calls fragment.fillFragmentFromArchive
@@ -1763,6 +1767,8 @@ func TestFragment_WriteTo_ReadFrom(t *testing.T) {
 	} else if wn != rn {
 		t.Fatalf("read/write byte count mismatch: wn=%d, rn=%d", wn, rn)
 	}
+	// make a read-only Tx after ReadFrom has committed.
+	tx = idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f1, Shard: f1.shard})
 
 	// Verify cache is in other fragment.
 	if n := f1.cache.Len(); n != 1 {
@@ -3049,7 +3055,7 @@ func BenchmarkImportRoaringUpdate(b *testing.B) {
 						// to generate an op log and/or snapshot.
 						itr, err := roaring.NewRoaringIterator(data)
 						PanicOn(err)
-						_, _, err = tx.ImportRoaringBits(f.index(), f.field(), f.view(), f.shard, itr, false, false, 0, nil)
+						_, _, err = tx.ImportRoaringBits(f.index(), f.field(), f.view(), f.shard, itr, false, false, 0)
 						if err != nil {
 							b.Errorf("import error: %v", err)
 						}
@@ -5215,15 +5221,13 @@ func TestImportValueConcurrent(t *testing.T) {
 	// we will be making a new Tx each time, so we can rollback the default provided one.
 	tx.Rollback()
 
-	types := idx.holder.txf.TxTypes()
-	for _, ty := range types {
-		switch ty {
-		case roaringTxn:
-			t.Skip(fmt.Sprintf("skipping TestImportValueConcurrent under " +
-				"blueGreenTx because the lack of transactional consistency " +
-				"from Roaring-per-file will create false comparison " +
-				"failures."))
-		}
+	ty := idx.holder.txf.TxTyp()
+	switch ty {
+	case roaringTxn:
+		t.Skip(fmt.Sprintf("skipping TestImportValueConcurrent under " +
+			"roaring because the lack of transactional consistency " +
+			"from Roaring-per-file will create false comparison " +
+			"failures."))
 	}
 
 	eg := &errgroup.Group{}
@@ -5364,11 +5368,6 @@ func TestImportValueRowCache(t *testing.T) {
 // do we see races/corruption around concurrent read/write.
 // especially on writes to the row cache.
 func TestFragmentConcurrentReadWrite(t *testing.T) {
-	// actual transaction backends, there won't be any
-	// data, and in particular, the blue-green tests will
-	// note this and fire a false-positive.
-	NotBlueGreenTest(t)
-
 	f, idx, tx := mustOpenFragment(t, "i", "f", viewStandard, 0, CacheTypeRanked)
 	defer f.Clean(t)
 	tx.Rollback()
@@ -5525,12 +5524,6 @@ func TestFragment_Bug_Q2DoubleDelete(t *testing.T) {
 	res = f.mustRow(tx, 1).Columns()
 	if len(res) != 0 {
 		t.Fatalf("expected nothing got %v", res)
-	}
-}
-
-func NotBlueGreenTest(t *testing.T) {
-	if strings.Contains(CurrentBackend(), "_") {
-		t.Skip("skip under blue green")
 	}
 }
 

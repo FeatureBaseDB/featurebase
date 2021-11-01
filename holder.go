@@ -302,7 +302,6 @@ func NewHolder(path string, cfg *HolderConfig) *Holder {
 	txf, err := NewTxFactory(cfg.StorageConfig.Backend, h.IndexesPath(), h)
 	PanicOn(err)
 	h.txf = txf
-	h.txf.blueGreenOffIfRunningBlueGreen()
 
 	_ = testhook.Created(h.Auditor, h, nil)
 	return h
@@ -605,8 +604,6 @@ func (h *Holder) Open() error {
 		h.txf = txf
 	}
 
-	h.txf.blueGreenOffIfRunningBlueGreen()
-
 	// Reset closing in case Holder is being reopened.
 	h.closing = make(chan struct{})
 
@@ -713,13 +710,6 @@ func (h *Holder) Open() error {
 		return errors.Wrap(err, "Holder.Open h.txf.Open()")
 	}
 
-	// under blue_green, we must sync blue from green before we turn on checking.
-	if err := h.txf.green2blue(h); err != nil {
-		return errors.Wrap(err, "Holder.Open h.txf.green2blue(h)")
-	}
-
-	h.txf.blueGreenOnIfRunningBlueGreen()
-
 	if h.cfg.LookupDBDSN != "" {
 		h.Logger.Printf("connecting to lookup database")
 
@@ -813,9 +803,6 @@ func (h *Holder) Close() error {
 
 	if globalUseStatTx {
 		fmt.Printf("%v\n", globalCallStats.report())
-	}
-	if h.txf != nil && h.txf.blueGreenReg != nil {
-		h.txf.blueGreenReg.Close()
 	}
 
 	h.Stats.Close()
@@ -2129,12 +2116,6 @@ func (h *Holder) addIndex(idx *Index) {
 	h.imu.Lock()
 	h.indexes[idx.name] = idx
 	h.imu.Unlock()
-}
-
-func (h *Holder) DumpAllShards() {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-	h.txf.dbPerShard.DumpAll()
 }
 
 func (h *Holder) Txf() *TxFactory {

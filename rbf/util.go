@@ -15,12 +15,15 @@ package rbf
 
 import (
 	"fmt"
-	"io"
 	"strings"
 
 	txkey "github.com/molecula/featurebase/v2/short_txkey"
 	. "github.com/molecula/featurebase/v2/vprint"
 )
+
+// we don't currently use dumpAllPages but it's tricky enough to get right
+// that it's probably worth keeping as a debugging tool.
+var _ = (*Tx).dumpAllPages
 
 func (tx *Tx) dumpAllPages(showLeaves bool) error {
 
@@ -211,56 +214,6 @@ func prefixToString(s string) (ret string) {
 		}
 	}()
 	return txkey.PrefixToString([]byte(s))
-}
-
-func (c *Cursor) dump() {
-	fmt.Printf("\n Cursor %p has bitmaps:\n%v\n", c, c.debugStringBitmaps())
-}
-
-var _ = (&Cursor{}).dump
-var _ = (&Cursor{}).debugStringBitmaps
-
-func (c_orig *Cursor) debugStringBitmaps() (r string) {
-
-	// work with a totally new Cursor, so we don't impact our current cursor
-	// so any test using the cursor isn't disturbed.
-	c2 := Cursor{tx: c_orig.tx}
-	c2.stack.elems[0] = c_orig.stack.elems[0]
-	err := c2.First()
-	if err != nil {
-		if err == io.EOF {
-			// ok, can be empty
-			return "<empty cursor/tx>"
-		} else {
-			panic(err)
-		}
-	}
-	n := 0
-	for {
-		err := c2.Next()
-		if err == io.EOF {
-			break
-		}
-		PanicOn(err)
-
-		//instead of cell := c2.cell()
-		elem := &c2.stack.elems[c2.stack.top]
-		leafPage, _, err := c2.tx.readPage(elem.pgno)
-		PanicOn(err)
-		cell := readLeafCell(leafPage, elem.index)
-
-		ckey := cell.Key
-		ct := toContainer(cell, c2.tx)
-		const short = true
-		s := stringOfCkeyCt(ckey, ct, "", short, true)
-		r += s
-		n++
-	}
-
-	if n == 0 {
-		return ""
-	}
-	return
 }
 
 ///////////////// happy linter
