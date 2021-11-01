@@ -78,7 +78,7 @@ run go tests:
   extends: .go-cache
   script:
     - echo "Running featurebase unit tests..."
-    - go test -covermode=atomic -coverpkg=./... -coverprofile=coverage.out ./...
+    - go test -covermode=atomic -coverpkg=.../molecula/featurebase/v2/... -coverprofile=coverage.out 
   artifacts:
     paths:
       - coverage.out
