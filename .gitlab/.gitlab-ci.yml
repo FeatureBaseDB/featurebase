@@ -32,6 +32,20 @@ build lattice:
     - job: install lattice
   allow_failure: true
 
+run jest tests:
+  stage: test
+  image: node:14
+  variables:
+    CI: "true"
+  script:
+    - echo "Testing lattice..."
+    - cd lattice
+    - npm install --force
+    - npm test -- --coverage --testResultsProcessor=jest-sonar-reporter
+  artifacts:
+    paths:
+      - lattice/coverage/lcov.info
+
 run go tests:
   stage: test
   image: golang:1.16.9
@@ -70,10 +84,11 @@ upload to sonarcloud:
   variables:
     SONAR_TOKEN: $SONAR_TOKEN
   script:
-    - sonar-scanner -Dsonar.projectKey=molecula_featurebase -Dsonar.organization=molecula -Dsonar.sources=. -Dsonar.host.url=https://sonarcloud.io -Dsonar.go.coverage.reportPaths=coverage.out -Dsonar.go.tests.reportPaths=test-report.out
+    - sonar-scanner -Dsonar.projectKey=molecula_featurebase -Dsonar.organization=molecula -Dsonar.sources=. -Dsonar.host.url=https://sonarcloud.io -Dsonar.go.coverage.reportPaths=coverage.out -Dsonar.go.tests.reportPaths=test-report.out  -Dsonar.javascript.lcov.reportPaths=lattice/coverage/lcov.info
   needs:
     - job: run go tests
     - job: run go tests with output
+    - job: run jest tests 
     
 build for linux amd64:
   stage: build
