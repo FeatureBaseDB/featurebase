@@ -2721,6 +2721,9 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 		qcx := h.api.Txf().NewQcx()
 		defer qcx.Abort()
 
+		if isImportRequestEmpty(req) {
+			return
+		}
 		if err := h.api.ImportValue(r.Context(), qcx, req, opts...); err != nil {
 			switch errors.Cause(err) {
 			case pilosa.ErrClusterDoesNotOwnShard, pilosa.ErrPreconditionFailed:
@@ -3462,4 +3465,9 @@ func (h *Handler) handlePostRestore(w http.ResponseWriter, r *http.Request) {
 	w.Header().Add("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("OK")) //nolint:errcheck
+}
+
+func isImportRequestEmpty(req *pilosa.ImportValueRequest) bool {
+	totalData := len(req.Values) + len(req.FloatValues) + len(req.TimestampValues) + len(req.StringValues)
+	return totalData == 0
 }
