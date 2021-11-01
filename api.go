@@ -1760,6 +1760,9 @@ func (api *API) ImportValueWithTx(ctx context.Context, qcx *Qcx, req *ImportValu
 
 	// if we're importing into a specific shard
 	if req.Shard != math.MaxUint64 {
+		if len(req.ColumnIDs) == 0 {
+			return errors.Wrap(err, "calculating shard, no columns in request")
+		}
 		// Check that column IDs match the stated shard.
 		shard := req.ColumnIDs[0] / ShardWidth
 		if s2 := req.ColumnIDs[len(req.ColumnIDs)-1] / ShardWidth; (shard != s2) || (shard != req.Shard) {
@@ -1798,7 +1801,9 @@ func (api *API) ImportValueWithTx(ctx context.Context, qcx *Qcx, req *ImportValu
 		return errors.Wrap(err, "importing value")
 
 	} // end if req.Shard != math.MaxUint64
-
+	if len(req.ColumnIDs) == 0 {
+		return errors.Wrap(err, "calculating shard, no columns in request")
+	}
 	options.IgnoreKeyCheck = true
 	start := 0
 	shard := req.ColumnIDs[0] / ShardWidth

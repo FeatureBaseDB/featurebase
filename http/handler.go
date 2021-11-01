@@ -2721,6 +2721,10 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 		qcx := h.api.Txf().NewQcx()
 		defer qcx.Abort()
 
+		if len(req.Values) == 0 {
+			return
+		}
+
 		if err := h.api.ImportValue(r.Context(), qcx, req, opts...); err != nil {
 			switch errors.Cause(err) {
 			case pilosa.ErrClusterDoesNotOwnShard, pilosa.ErrPreconditionFailed:
