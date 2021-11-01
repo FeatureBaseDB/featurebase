@@ -32,7 +32,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/molecula/featurebase/v2"
+	pilosa "github.com/molecula/featurebase/v2"
 	"github.com/molecula/featurebase/v2/boltdb"
 	"github.com/molecula/featurebase/v2/encoding/proto"
 	"github.com/molecula/featurebase/v2/http"
@@ -341,6 +341,38 @@ func TestHandler_Endpoints(t *testing.T) {
 
 		if !reflect.DeepEqual(targetSchema, bodySchema) {
 			t.Fatalf("target: %+v\nbody: %+v\n", targetSchema, bodySchema)
+		}
+	})
+
+	t.Run("SchemaDetailsOff", func(t *testing.T) {
+		err := cmd.API.SetAPIOptions(pilosa.OptAPISchemaDetailsOn(false))
+		if err != nil {
+			t.Fatalf("setting schema details option")
+		}
+
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/schema/details", nil))
+		if w.Code != gohttp.StatusOK {
+			t.Fatalf("unexpected status code: %d", w.Code)
+		}
+
+		var bodySchema pilosa.Schema
+		if err := json.Unmarshal(w.Body.Bytes(),
+			&bodySchema); err != nil {
+			t.Fatalf("unexpected unmarshalling error: %v", err)
+
+		}
+		for _, i := range bodySchema.Indexes {
+			for _, f := range i.Fields {
+				if f.Cardinality != nil {
+					t.Fatalf("expected nil cardinality, got: %v", *f.Cardinality)
+				}
+			}
+		}
+
+		err = cmd.API.SetAPIOptions(pilosa.OptAPISchemaDetailsOn(true))
+		if err != nil {
+			t.Fatalf("could not toggle schema details to on: %v", err)
 		}
 	})
 

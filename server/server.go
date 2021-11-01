@@ -511,6 +511,7 @@ func (m *Command) SetupServer() error {
 	m.API, err = pilosa.NewAPI(
 		pilosa.OptAPIServer(m.Server),
 		pilosa.OptAPIImportWorkerPoolSize(m.Config.ImportWorkerPoolSize),
+		pilosa.OptAPISchemaDetailsOn(m.Config.SchemaDetailsOn),
 	)
 	if err != nil {
 		return errors.Wrap(err, "new api")
