@@ -34,6 +34,29 @@ func (iv Interval16) String() string {
 	return fmt.Sprintf("[%d, %d]", iv.Start, iv.Last)
 }
 
+func GetRoaringIter(bitsToSet ...uint64) RoaringIterator {
+
+	b := NewBitmap()
+	changed := b.DirectAddN(bitsToSet...)
+	n := len(bitsToSet)
+	if changed != n {
+		e := fmt.Sprintf("changed=%v but bitsToSet len = %v", changed, n)
+		panic(e)
+	}
+	buf := bytes.NewBuffer(make([]byte, 0, 100000))
+	_, er := b.WriteTo(buf)
+	if er != nil {
+		if er != nil {
+			panic(er)
+		}
+	}
+	itr, err := NewRoaringIterator(buf.Bytes())
+	if err != nil {
+		panic(err)
+	}
+	return itr
+}
+
 func TestRunAppendInterval(t *testing.T) {
 	a := NewContainerRun(nil)
 	tests := []struct {
@@ -4737,8 +4760,28 @@ func TestIntersectionCallback(t *testing.T) {
 		}
 	}
 }
+func TestImportBitmap(t *testing.T) {
+	b := NewBitmap()
+	i := GetRoaringIter(1, 3, 5)
+
+	changed, _, err := b.ImportRoaringRawIterator(i, false, true, 16)
+	if err != nil {
+		t.Fatal("no error should happen changed")
+	}
+	if changed != 3 {
+		t.Fatal("Should have changed")
+	}
+	i = GetRoaringIter(1, 3, 5)
+	changed, _, err = b.ImportRoaringRawIterator(i, true, true, 16)
+	if err != nil {
+		t.Fatal("no error should happen changed")
+	}
+	if changed != 3 {
+		t.Fatalf("Should have changed %v", changed)
+	}
+}
 func TestVariousBitmap(t *testing.T) {
-	b := NewBitmap(1, 2, 3)
+	b := NewBitmap(3)
 
 	c, e := b.Add(8)
 	if e != nil {
