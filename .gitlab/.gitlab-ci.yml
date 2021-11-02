@@ -143,7 +143,7 @@ init terraform:
   stage: deploy
   image: registry.gitlab.com/gitlab-org/terraform-images/stable:latest
   before_script:
-    - cd .terraform
+    - cd molecular-terraform
   script:
     - gitlab-terraform init
   cache:
@@ -154,7 +154,7 @@ validate terraform:
   stage: deploy
   image: registry.gitlab.com/gitlab-org/terraform-images/stable:latest
   before_script:
-    - cd .terraform
+    - cd molecular-terraform
   script:
     - gitlab-terraform validate  
   needs:
@@ -167,7 +167,7 @@ plan terraform:
   stage: deploy
   image: registry.gitlab.com/gitlab-org/terraform-images/stable:latest
   before_script:
-    - cd .terraform
+    - cd molecular-terraform
   script:
     - gitlab-terraform plan -out=plan.tfplan
   needs:
@@ -183,7 +183,7 @@ apply terraform:
   stage: deploy
   image: registry.gitlab.com/gitlab-org/terraform-images/stable:latest
   before_script:
-    - cd .terraform
+    - cd molecular-terraform
   script:
     - gitlab-terraform apply -input=false plan.tfplan
   needs:
