@@ -49,8 +49,8 @@ require (
 	go.etcd.io/etcd v0.0.0-20201125193152-8a03d2e9614b
 	golang.org/x/exp v0.0.0-20201008143054-e3b2a7f2fdc7
 	golang.org/x/mod v0.4.2
+	golang.org/x/net v0.0.0-20210805182204-aaa1db679c0d // indirect
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
-	golang.org/x/tools v0.1.7 // indirect
 	google.golang.org/grpc v1.28.0
 	gopkg.in/yaml.v2 v2.3.0 // indirect
 	modernc.org/mathutil v1.0.0
