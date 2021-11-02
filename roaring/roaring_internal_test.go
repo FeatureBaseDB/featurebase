@@ -4818,8 +4818,8 @@ func TestVariousBitmap(t *testing.T) {
 	if b.Max() == 0 {
 		t.Fatal("should max >0")
 	}
-	if m, e := b.Min(); !(m == 1 && e) {
-		t.Fatal("min should be 1 and containers exist")
+	if m, e := b.Min(); !(m == 3 && e) {
+		t.Fatal("min should be 3 and containers exist", m, e)
 	}
 	b = nil
 	x := b.Clone()

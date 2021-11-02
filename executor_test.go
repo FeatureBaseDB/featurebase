@@ -8184,3 +8184,40 @@ func TestExternalLookup(t *testing.T) {
 		}
 	})
 }
+func TestToRows(t *testing.T) {
+	ids := &pilosa.RowIdentifiers{
+		Rows: []uint64{1, 2, 3},
+	}
+	c := ids.Clone()
+	if c == nil {
+		t.Fatal("Shouldn't be nil ")
+	}
+	e := ids.ToRows(func(*proto.RowResponse) error {
+		return nil
+	})
+	if e != nil {
+		t.Fatal("Shouldn't be err ", e)
+	}
+
+	keys := &pilosa.RowIdentifiers{
+		Keys: []string{"a", "b"},
+	}
+	c = keys.Clone()
+	if c == nil {
+		t.Fatal("Shouldn't be nil ")
+	}
+	e = keys.ToRows(func(*proto.RowResponse) error {
+		return nil
+	})
+	if e != nil {
+		t.Fatal("Shouldn't be err ", e)
+	}
+	v := &pilosa.ValCount{
+		TimestampVal: time.Now(),
+		Count:        1,
+	}
+	x := v.Clone()
+	if x == nil {
+		t.Fatal("Shouldn't be nil ")
+	}
+}
