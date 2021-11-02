@@ -2722,6 +2722,9 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 		defer qcx.Abort()
 
 		if isImportRequestEmpty(req) {
+			if len(req.ColumnIDs) > 0 || len(req.ColumnKeys) > 0 {
+				http.Error(w, "columns provided but no values", http.StatusBadRequest)
+			}
 			return
 		}
 		if err := h.api.ImportValue(r.Context(), qcx, req, opts...); err != nil {
