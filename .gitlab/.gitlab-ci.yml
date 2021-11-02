@@ -3,7 +3,6 @@ include:
   - template: Security/License-Scanning.gitlab-ci.yml
   - template: Security/Dependency-Scanning.gitlab-ci.yml
   
-
 stages:
   - test
   - build
@@ -147,6 +146,9 @@ init terraform:
     - cd .terraform
   script:
     - gitlab-terraform init
+  cache:
+    paths:
+      - .terraform
 
 validate terraform:
   stage: deploy
@@ -157,6 +159,9 @@ validate terraform:
     - gitlab-terraform validate  
   needs:
     - job: init terraform
+  cache:
+    paths:
+      - .terraform
 
 plan terraform:
   stage: deploy
@@ -164,9 +169,15 @@ plan terraform:
   before_script:
     - cd .terraform
   script:
-    - gitlab-terraform plan  
+    - gitlab-terraform plan -out=plan.tfplan
   needs:
     - job: validate terraform
+  cache:
+    paths:
+      - .terraform
+  artifacts:
+    paths:
+      - plan.tfplan
 
 apply terraform:
   stage: deploy
@@ -174,6 +185,9 @@ apply terraform:
   before_script:
     - cd .terraform
   script:
-    - gitlab-terraform apply  
+    - gitlab-terraform apply -input=false plan.tfplan
   needs:
     - job: plan terraform
+  cache:
+    paths:
+      - .terraform
