@@ -143,6 +143,7 @@ init terraform:
   stage: deploy
   image: registry.gitlab.com/gitlab-org/terraform-images/stable:latest
   before_script:
+    - rm -rf .terraform
     - cd molecular-terraform
   script:
     - gitlab-terraform init
@@ -185,7 +186,7 @@ apply terraform:
   before_script:
     - cd molecular-terraform
   script:
-    - gitlab-terraform apply -input=false plan.tfplan
+    - gitlab-terraform apply 
   needs:
     - job: plan terraform
   cache:
