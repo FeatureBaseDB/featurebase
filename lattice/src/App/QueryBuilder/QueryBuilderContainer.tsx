@@ -1,48 +1,49 @@
-import React, { Fragment, useState } from 'react';
-import Alert from '@material-ui/lab/Alert';
-import ArrowForwardIosIcon from '@material-ui/icons/ArrowForwardIos';
-import Button from '@material-ui/core/Button';
-import classNames from 'classnames';
-import CloseIcon from '@material-ui/icons/Close';
-import IconButton from '@material-ui/core/IconButton';
-import InfoIcon from '@material-ui/icons/Info';
-import moment, { Moment } from 'moment';
-import Paper from '@material-ui/core/Paper';
-import Split from 'react-split';
-import Snackbar from '@material-ui/core/Snackbar';
-import Tooltip from '@material-ui/core/Tooltip';
-import Typography from '@material-ui/core/Typography';
-import { Block } from 'shared/Block';
-import { formatDuration } from 'shared/utils/formatDuration';
-import { grpc } from '@improbable-eng/grpc-web';
-import { pilosa } from 'services/eventServices';
-import { QueryBuilder } from './QueryBuilder';
-import { queryPQL } from 'services/grpcServices';
-import { QueryResults } from 'App/Query/QueryResults';
-import { ResultType } from 'App/Query/QueryContainer';
-import { RowResponse } from 'proto/pilosa_pb';
-import { SavedQueries } from 'App/QueryBuilder/SavedQueries';
-import { useEffectOnce } from 'react-use';
-import css from './QueryBuilderContainer.module.scss';
+import React, { Fragment, useState } from "react";
+import Alert from "@material-ui/lab/Alert";
+import ArrowForwardIosIcon from "@material-ui/icons/ArrowForwardIos";
+import Button from "@material-ui/core/Button";
+import classNames from "classnames";
+import CloseIcon from "@material-ui/icons/Close";
+import IconButton from "@material-ui/core/IconButton";
+import InfoIcon from "@material-ui/icons/Info";
+import moment, { Moment } from "moment";
+import Paper from "@material-ui/core/Paper";
+import Split from "react-split";
+import Snackbar from "@material-ui/core/Snackbar";
+import Tooltip from "@material-ui/core/Tooltip";
+import Typography from "@material-ui/core/Typography";
+import { Block } from "shared/Block";
+import { formatDuration } from "shared/utils/formatDuration";
+import { grpc } from "@improbable-eng/grpc-web";
+import { pilosa } from "services/eventServices";
+import { QueryBuilder } from "./QueryBuilder";
+import { queryPQL } from "services/grpcServices";
+import { QueryResults } from "App/Query/QueryResults";
+import { ResultType } from "App/Query/QueryContainer";
+import { RowResponse } from "proto/pilosa_pb";
+import { SavedQueries } from "App/QueryBuilder/SavedQueries";
+import { useEffectOnce } from "react-use";
+import css from "./QueryBuilderContainer.module.scss";
 
 let streamingResults: ResultType = {
-  query: '',
-  operation: '',
-  type: 'PQL',
+  query: "",
+  operation: "",
+  type: "PQL",
   headers: [],
   rows: [],
   roundtrip: 0,
-  error: ''
+  error: "",
+  totalMessageCount: 0,
 };
 
 export const QueryBuilderContainer = () => {
   let startTime: Moment;
   let exportRows: any[] = [];
   const colSizes = JSON.parse(
-    localStorage.getItem('builderColSizes') || '[25, 75]'
+    localStorage.getItem("builderColSizes") || "[25, 75]"
   );
   const [queriesList, setQueriesList] = useState(
-    JSON.parse(localStorage.getItem('saved-queries') || '[]')
+    JSON.parse(localStorage.getItem("saved-queries") || "[]")
   );
 
   const [tables, setTables] = useState<any[]>([]);
@@ -51,7 +52,7 @@ export const QueryBuilderContainer = () => {
   const [fullCount, setFullCount] = useState<number>();
   const [recordsCount, setRecordsCount] = useState<number>();
   const [errorResult, setErrorResult] = useState<ResultType>();
-  const [error, setError] = useState<string>('');
+  const [error, setError] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(false);
   const [savedQuery, setSavedQuery] = useState<number>(-1);
 
@@ -77,7 +78,7 @@ export const QueryBuilderContainer = () => {
     } else {
       streamingResults.roundtrip = moment
         .duration(moment().diff(startTime))
-        .as('milliseconds');
+        .as("milliseconds");
       setErrorResult(undefined);
       setResults(streamingResults);
     }
@@ -89,12 +90,12 @@ export const QueryBuilderContainer = () => {
     let rowStr: string[] = [];
     if (exportRows.length === 0) {
       const headers = response.headersList.map((header) => header.name);
-      exportRows.push(headers.join('\t'));
+      exportRows.push(headers.join("\t"));
     }
     response.headersList.forEach((header, idx) =>
       rowStr.push(response.columnsList[idx][`${header.datatype}val`])
     );
-    exportRows.push(rowStr.join('\t'));
+    exportRows.push(rowStr.join("\t"));
   };
 
   const handleExternalLookupEnd = (
@@ -104,12 +105,12 @@ export const QueryBuilderContainer = () => {
     if (status !== grpc.Code.OK) {
       setError(statusMessage);
     } else if (exportRows.length === 0) {
-      setError('No record attributes for current query.');
+      setError("No record attributes for current query.");
     } else {
       const dateTime = moment().unix();
-      const element = document.createElement('a');
-      const file = new Blob([exportRows.join('\n')], {
-        type: 'text/plain;charset=utf-8'
+      const element = document.createElement("a");
+      const file = new Blob([exportRows.join("\n")], {
+        type: "text/plain;charset=utf-8",
       });
       element.href = URL.createObjectURL(file);
       element.download = `molecula-${results?.index}-${dateTime}.csv`;
@@ -128,17 +129,18 @@ export const QueryBuilderContainer = () => {
     streamingResults = {
       query,
       operation,
-      type: 'PQL',
+      type: "PQL",
       headers: [],
       rows: [],
       index: table,
       roundtrip: 0,
-      error: ''
+      error: "",
+      totalMessageCount: 0,
     };
     startTime = moment();
     setLoading(true);
 
-    if (operation !== 'Count') {
+    if (operation !== "Count") {
       if (countQuery) {
         pilosa.post.query(table, countQuery).then((res) => {
           setFullCount(res.data.results[0]);
@@ -164,13 +166,13 @@ export const QueryBuilderContainer = () => {
   const onRemoveQuery = (queryIdx: number) => {
     let queries = [...queriesList];
     queries.splice(queryIdx, 1);
-    localStorage.setItem('saved-queries', JSON.stringify(queries));
+    localStorage.setItem("saved-queries", JSON.stringify(queries));
     setQueriesList(queries);
   };
 
   const onSaveQuery = () => {
     const updatedList = JSON.parse(
-      localStorage.getItem('saved-queries') || '[]'
+      localStorage.getItem("saved-queries") || "[]"
     );
     if (savedQuery < 0) {
       setSavedQuery(updatedList.length - 1);
@@ -181,7 +183,7 @@ export const QueryBuilderContainer = () => {
   const onExportLogs = () => {
     if (results) {
       const columns = results.rows.map((row) => row[0].uint64val);
-      const table = results.index ? results.index : '';
+      const table = results.index ? results.index : "";
       onExternalLookup(table, columns);
     }
   };
@@ -200,17 +202,17 @@ export const QueryBuilderContainer = () => {
           cursor="col-resize"
           minSize={showBuilder ? 350 : 50}
           onDragEnd={(sizes) =>
-            localStorage.setItem('builderColSizes', JSON.stringify(sizes))
+            localStorage.setItem("builderColSizes", JSON.stringify(sizes))
           }
           gutter={(_index, direction) => {
-            const gutter = document.createElement('div');
+            const gutter = document.createElement("div");
             gutter.className = `gutter gutter-${direction}`;
-            const dragbars = document.createElement('div');
-            dragbars.className = 'dragBar';
+            const dragbars = document.createElement("div");
+            dragbars.className = "dragBar";
             gutter.appendChild(dragbars);
             return gutter;
           }}
-          className={classNames(css.split, !showBuilder ? 'hide-gutter' : '')}
+          className={classNames(css.split, !showBuilder ? "hide-gutter" : "")}
         >
           {showBuilder ? (
             <div className={css.builderColumn}>
@@ -239,9 +241,9 @@ export const QueryBuilderContainer = () => {
             <Block className={css.resultsBlock}>
               <div className={css.resultsHeader}>
                 <Typography variant="h5" color="textSecondary">
-                  Results{' '}
+                  Results{" "}
                 </Typography>
-                {results?.query.includes('Extract(') ? (
+                {results?.query.includes("Extract(") ? (
                   <div className={css.download}>
                     <Tooltip
                       className={css.downloadInfo}
@@ -262,13 +264,13 @@ export const QueryBuilderContainer = () => {
                     <div className={css.infoMessage}>
                       {results.duration ? (
                         <div>
-                          {recordsCount.toLocaleString()} records scanned in{' '}
+                          {recordsCount.toLocaleString()} records scanned in{" "}
                           {formatDuration(results.duration, true)}.
                         </div>
                       ) : null}
                       <div>
-                        Showing{' '}
-                        {fullCount > 1000 ? 'first 1,000 rows of' : 'all'}{' '}
+                        Showing{" "}
+                        {fullCount > 1000 ? "first 1,000 rows of" : "all"}{" "}
                         {fullCount.toLocaleString()} results.
                       </div>
                     </div>
@@ -301,7 +303,7 @@ export const QueryBuilderContainer = () => {
             </Block>
           </div>
           <Snackbar open={!!error}>
-            <Alert severity="info" onClose={() => setError('')}>
+            <Alert severity="info" onClose={() => setError("")}>
               {error}
             </Alert>
           </Snackbar>
