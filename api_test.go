@@ -251,6 +251,43 @@ func TestAPI_ImportValue(t *testing.T) {
 		}
 	})
 
+	t.Run("ValIntEmpty", func(t *testing.T) {
+		ctx := context.Background()
+		index := "valintempty"
+		field := "f"
+
+		_, err := coord.API.CreateIndex(ctx, index, pilosa.IndexOptions{Keys: true})
+		if err != nil {
+			t.Fatalf("creating index: %v", err)
+		}
+		_, err = coord.API.CreateField(ctx, index, field, pilosa.OptFieldTypeInt(math.MinInt64, math.MaxInt64))
+		if err != nil {
+			t.Fatalf("creating field: %v", err)
+		}
+
+		// Column keys are sharded so their order is not guaranteed.
+		colKeys := []string{"col2", "col1", "col3"}
+
+		// Import without data, verify that it succeeds
+		req := &pilosa.ImportValueRequest{
+			Index: index,
+			Field: field,
+		}
+		qcx1 := coord.API.Txf().NewQcx()
+		if err := coord.API.ImportValue(ctx, qcx1, req); err != nil {
+			t.Fatal(err)
+		}
+		PanicOn(qcx1.Finish())
+
+		// Import without data but with columnkeys, verify that it errors
+		req.ColumnKeys = colKeys
+		qcx2 := coord.API.Txf().NewQcx()
+		if err := coord.API.ImportValue(ctx, qcx2, req); err == nil {
+			t.Fatal("expected error but succeeded")
+		}
+		PanicOn(qcx2.Finish())
+	})
+
 	t.Run("ValDecimalField", func(t *testing.T) {
 		ctx := context.Background()
 		index := "valdec"
