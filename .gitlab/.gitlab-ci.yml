@@ -151,6 +151,8 @@ init terraform:
 validate terraform:
   stage: deploy
   image: registry.gitlab.com/gitlab-org/terraform-images/stable:latest
+  before_script:
+    - cd .terraform
   script:
     - gitlab-terraform validate  
   needs:
@@ -159,6 +161,8 @@ validate terraform:
 plan terraform:
   stage: deploy
   image: registry.gitlab.com/gitlab-org/terraform-images/stable:latest
+  before_script:
+    - cd .terraform
   script:
     - gitlab-terraform plan  
   needs:
@@ -167,6 +171,8 @@ plan terraform:
 apply terraform:
   stage: deploy
   image: registry.gitlab.com/gitlab-org/terraform-images/stable:latest
+  before_script:
+    - cd .terraform
   script:
     - gitlab-terraform apply  
   needs:
