@@ -2,10 +2,12 @@ include:
   - template: Security/SAST.gitlab-ci.yml
   - template: Security/License-Scanning.gitlab-ci.yml
   - template: Security/Dependency-Scanning.gitlab-ci.yml
+  
 
 stages:
   - test
   - build
+  - deploy
 
 install lattice:
   stage: test
@@ -137,3 +139,35 @@ build for darwin arm64:
   artifacts:
     paths:
       - featurebase_darwin_arm64
+
+init terraform:
+  stage: deploy
+  image: registry.gitlab.com/gitlab-org/terraform-images/stable:latest
+  before_script:
+    - cd .terraform
+  script:
+    - gitlab-terraform init
+
+validate terraform:
+  stage: deploy
+  image: registry.gitlab.com/gitlab-org/terraform-images/stable:latest
+  script:
+    - gitlab-terraform validate  
+  needs:
+    - job: init terraform
+
+plan terraform:
+  stage: deploy
+  image: registry.gitlab.com/gitlab-org/terraform-images/stable:latest
+  script:
+    - gitlab-terraform plan  
+  needs:
+    - job: validate terraform
+
+apply terraform:
+  stage: deploy
+  image: registry.gitlab.com/gitlab-org/terraform-images/stable:latest
+  script:
+    - gitlab-terraform apply  
+  needs:
+    - job: plan terraform
