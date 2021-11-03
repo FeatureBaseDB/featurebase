@@ -71,9 +71,7 @@ export const Pager: FC<PagerProps> = ({
                 title={
                   "This query has " +
                   totalResultsCount +
-                  " results. Due to browser memory limitations, you will only be able to view " +
-                  1000 +
-                  " of them."
+                  " results. Due to browser memory limitations, you will only be able to view the first 1000."
                 }
               >
                 <ErrorOutlineIcon fontSize="small" color="error" />
