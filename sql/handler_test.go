@@ -35,6 +35,7 @@ func TestHandler(t *testing.T) {
 	_, err = handler.Handle(context.Background(), query)
 	if err.Error() != "mapping select: handling: nowhere: index not found" {
 		//expecting it to fail with index not found
+		//can be more elaborate later
 		t.Fatal(err)
 	}
 
