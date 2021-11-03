@@ -19,9 +19,9 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/pelletier/go-toml"
 	"github.com/molecula/featurebase/v2"
 	"github.com/molecula/featurebase/v2/server"
+	"github.com/pelletier/go-toml"
 	"github.com/pkg/errors"
 )
 

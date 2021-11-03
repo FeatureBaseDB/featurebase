@@ -19,7 +19,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/molecula/featurebase/v2"
+	pilosa "github.com/molecula/featurebase/v2"
 	"github.com/molecula/featurebase/v2/pql"
 	pproto "github.com/molecula/featurebase/v2/proto"
 	"github.com/pkg/errors"
@@ -56,8 +56,8 @@ func (s *SelectHandler) Handle(ctx context.Context, mapped *MappedSQL) (pproto.T
 
 func (s *SelectHandler) mapSelect(ctx context.Context, selectStmt *sqlparser.Select, qm QueryMask) (*MappingResult, error) {
 	// Get the handler for this query mask.
-	handler := s.router.handler(qm)
-	if handler == nil {
+	hndlr := s.router.handler(qm)
+	if hndlr == nil {
 		return nil, ErrUnsupportedQuery
 	}
 	indexFunc := func(indexName string) *pilosa.Index {
@@ -68,7 +68,7 @@ func (s *SelectHandler) mapSelect(ctx context.Context, selectStmt *sqlparser.Sel
 		return idx
 	}
 
-	mr, err := handler.Apply(selectStmt, qm, indexFunc)
+	mr, err := hndlr.Apply(selectStmt, qm, indexFunc)
 	if err != nil {
 		return nil, errors.Wrap(err, "handling")
 	}

@@ -18,6 +18,7 @@ import (
 	"io"
 	"math/bits"
 	"math/rand"
+	"os"
 	"reflect"
 	"sort"
 	"strings"
@@ -558,10 +559,12 @@ func TestCursor_RLETesting(t *testing.T) {
 		}
 
 		want := []uint16{0}
-		if got, want := c.Values(), want; !reflect.DeepEqual(got, want) {
+		got := c.Values()
+		if !reflect.DeepEqual(got, want) {
 			t.Fatalf("Values()=%#v, want %#v", got, want)
-		} else if got, want := c.Key(), uint64(1); !reflect.DeepEqual(got, want) {
-			t.Fatalf("Key()=%#v, want %#v", got, want)
+		}
+		if g, w := c.Key(), uint64(1); !reflect.DeepEqual(g, w) {
+			t.Fatalf("Key()=%#v, want %#v", g, w)
 		}
 	})
 }
@@ -845,6 +848,25 @@ func (e *EasyWalker) String() string {
 	return e.path.String()
 }
 
+func TestDumpDot(t *testing.T) {
+	db := MustOpenDB(t)
+	defer MustCloseDB(t, db)
+	tx := MustBegin(t, db, true)
+	defer tx.Rollback()
+	if err := tx.CreateBitmap("x"); err != nil {
+		t.Fatal(err)
+	}
+	c, err := tx.Cursor("x")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = c.Add(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rbf.Dumpdot(tx, 0, " ", os.Stdout)
+}
 func TestCursor_UpdateBranchCells(t *testing.T) {
 	db := MustOpenDB(t)
 	defer MustCloseDB(t, db)
@@ -962,6 +984,9 @@ func TestCursor_SplitBranchCells(t *testing.T) {
 		t.Fatalf("Expecting RBLL (a branch split) got %v", after.String())
 
 	}
+	//
+	c, _ := tx.Cursor("x") //added just for dot code coverage
+	c.Dump("ignore for coverage")
 
 }
 
@@ -1140,7 +1165,7 @@ func TestForEachRange(t *testing.T) {
 	}
 
 	rb.Put(0, roaring.NewContainerBitmap(n, bits))
-	crun := roaring.NewContainerRun([]roaring.Interval16{roaring.Interval16{Start: 0, Last: 1<<16 - 1}})
+	crun := roaring.NewContainerRun([]roaring.Interval16{{Start: 0, Last: 1<<16 - 1}})
 	rb.Put(1, crun)
 	rb.Put(2, roaring.NewContainerArray([]uint16{1, 1024, 1<<16 - 1}))
 

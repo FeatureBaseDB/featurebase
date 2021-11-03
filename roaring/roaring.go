@@ -2402,13 +2402,13 @@ func (b *Bitmap) ImportRoaringRawIterator(itr RoaringIterator, clear bool, log b
 	}
 	err = nil
 	if log && changed > 0 {
-		op := op{opN: changed, roaring: itr.Data()}
+		o := op{opN: changed, roaring: itr.Data()}
 		if clear {
-			op.typ = opTypeRemoveRoaring
+			o.typ = opTypeRemoveRoaring
 		} else {
-			op.typ = opTypeAddRoaring
+			o.typ = opTypeAddRoaring
 		}
-		err = b.writeOp(&op)
+		err = b.writeOp(&o)
 	}
 	return changed, rowSet, err
 }
@@ -4559,26 +4559,26 @@ func intersectionCallbackRunRun(a, b *Container, fn func(uint16)) {
 			j++
 		} else if va.Last > vb.Last && va.Start >= vb.Start {
 			// |--vb-|-|-va--|
-			for i := int(va.Start); i <= int(vb.Last); i++ {
-				fn(uint16(i))
+			for z := int(va.Start); z <= int(vb.Last); z++ {
+				fn(uint16(z))
 			}
 			j++
 		} else if va.Last > vb.Last && va.Start < vb.Start {
 			// |--va|--vb--|--|
-			for i := int(vb.Start); i <= int(vb.Last); i++ {
-				fn(uint16(i))
+			for z := int(vb.Start); z <= int(vb.Last); z++ {
+				fn(uint16(z))
 			}
 			j++
 		} else if va.Last <= vb.Last && va.Start >= vb.Start {
 			// |--vb|--va--|--|
-			for i := int(va.Start); i <= int(va.Last); i++ {
-				fn(uint16(i))
+			for z := int(va.Start); z <= int(va.Last); z++ {
+				fn(uint16(z))
 			}
 			i++
 		} else if va.Last <= vb.Last && va.Start < vb.Start {
 			// |--va-|-|-vb--|
-			for i := int(vb.Start); i <= int(va.Last); i++ {
-				fn(uint16(i))
+			for z := int(vb.Start); z <= int(va.Last); z++ {
+				fn(uint16(z))
 			}
 			i++
 		}

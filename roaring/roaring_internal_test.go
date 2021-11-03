@@ -34,6 +34,29 @@ func (iv Interval16) String() string {
 	return fmt.Sprintf("[%d, %d]", iv.Start, iv.Last)
 }
 
+func GetRoaringIter(bitsToSet ...uint64) RoaringIterator {
+
+	b := NewBitmap()
+	changed := b.DirectAddN(bitsToSet...)
+	n := len(bitsToSet)
+	if changed != n {
+		e := fmt.Sprintf("changed=%v but bitsToSet len = %v", changed, n)
+		panic(e)
+	}
+	buf := bytes.NewBuffer(make([]byte, 0, 100000))
+	_, er := b.WriteTo(buf)
+	if er != nil {
+		if er != nil {
+			panic(er)
+		}
+	}
+	itr, err := NewRoaringIterator(buf.Bytes())
+	if err != nil {
+		panic(err)
+	}
+	return itr
+}
+
 func TestRunAppendInterval(t *testing.T) {
 	a := NewContainerRun(nil)
 	tests := []struct {
@@ -99,9 +122,10 @@ func TestContainerRunAdd(t *testing.T) {
 		{0, []Interval16{{Start: 0, Last: 4}, {Start: 6, Last: 7}, {Start: 10, Last: 10}}},
 		{8, []Interval16{{Start: 0, Last: 4}, {Start: 6, Last: 8}, {Start: 10, Last: 10}}},
 	}
+	var changed bool
 	for _, test := range tests {
 		c.setMapped(true)
-		c, changed := c.add(test.op)
+		c, changed = c.add(test.op)
 		if !changed {
 			t.Fatalf("result of adding new bit should be true: %v", c.runs())
 		}
@@ -731,65 +755,65 @@ func TestUnionInterval16InPlace(t *testing.T) {
 	}{
 		{
 			name:      "firstBitUnset lastBitSet",
-			a:         []Interval16{Interval16{1, 10}},
-			b:         []Interval16{Interval16{10, 10}},
-			expected:  []Interval16{Interval16{1, 10}},
+			a:         []Interval16{{1, 10}},
+			b:         []Interval16{{10, 10}},
+			expected:  []Interval16{{1, 10}},
 			expectedN: 10,
 		},
 		{
 			name:      "single overlap",
-			a:         []Interval16{Interval16{1, 10}, Interval16{21, 28}},
-			b:         []Interval16{Interval16{8, 12}},
-			expected:  []Interval16{Interval16{1, 12}, Interval16{21, 28}},
+			a:         []Interval16{{1, 10}, {21, 28}},
+			b:         []Interval16{{8, 12}},
+			expected:  []Interval16{{1, 12}, {21, 28}},
 			expectedN: 20,
 		},
 		{
 			name:      "nested intervals",
-			a:         []Interval16{Interval16{3, 13}, Interval16{17, 20}},
-			b:         []Interval16{Interval16{1, 4}, Interval16{6, 7}, Interval16{8, 9}, Interval16{10, 11}, Interval16{14, 17}},
-			expected:  []Interval16{Interval16{1, 20}},
+			a:         []Interval16{{3, 13}, {17, 20}},
+			b:         []Interval16{{1, 4}, {6, 7}, {8, 9}, {10, 11}, {14, 17}},
+			expected:  []Interval16{{1, 20}},
 			expectedN: 20,
 		},
 		{
 			name:      "no overlap",
-			a:         []Interval16{Interval16{3, 4}, Interval16{7, 8}},
-			b:         []Interval16{Interval16{1, 2}, Interval16{5, 6}, Interval16{9, 10}},
-			expected:  []Interval16{Interval16{1, 10}},
+			a:         []Interval16{{3, 4}, {7, 8}},
+			b:         []Interval16{{1, 2}, {5, 6}, {9, 10}},
+			expected:  []Interval16{{1, 10}},
 			expectedN: 10,
 		},
 		{
 			name:      "b in a",
-			a:         []Interval16{Interval16{1, 10}},
-			b:         []Interval16{Interval16{5, 7}},
-			expected:  []Interval16{Interval16{1, 10}},
+			a:         []Interval16{{1, 10}},
+			b:         []Interval16{{5, 7}},
+			expected:  []Interval16{{1, 10}},
 			expectedN: 10,
 		},
 		{
 			name:      "a eq b",
-			a:         []Interval16{Interval16{1, 10}},
-			b:         []Interval16{Interval16{1, 10}},
-			expected:  []Interval16{Interval16{1, 10}},
+			a:         []Interval16{{1, 10}},
+			b:         []Interval16{{1, 10}},
+			expected:  []Interval16{{1, 10}},
 			expectedN: 10,
 		},
 		{
 			name:      "a in b",
-			a:         []Interval16{Interval16{5, 7}},
-			b:         []Interval16{Interval16{1, 10}},
-			expected:  []Interval16{Interval16{1, 10}},
+			a:         []Interval16{{5, 7}},
+			b:         []Interval16{{1, 10}},
+			expected:  []Interval16{{1, 10}},
 			expectedN: 10,
 		},
 		{
 			name:      "a ahead b",
-			a:         []Interval16{Interval16{1, 2}, Interval16{3, 4}, Interval16{5, 7}},
-			b:         []Interval16{Interval16{10, 11}, Interval16{12, 13}, Interval16{14, 15}},
-			expected:  []Interval16{Interval16{1, 7}, Interval16{10, 15}},
+			a:         []Interval16{{1, 2}, {3, 4}, {5, 7}},
+			b:         []Interval16{{10, 11}, {12, 13}, {14, 15}},
+			expected:  []Interval16{{1, 7}, {10, 15}},
 			expectedN: 13,
 		},
 		{
 			name:      "b ahead a",
-			a:         []Interval16{Interval16{10, 11}, Interval16{12, 13}, Interval16{14, 15}},
-			b:         []Interval16{Interval16{1, 2}, Interval16{3, 4}, Interval16{5, 7}},
-			expected:  []Interval16{Interval16{1, 7}, Interval16{10, 15}},
+			a:         []Interval16{{10, 11}, {12, 13}, {14, 15}},
+			b:         []Interval16{{1, 2}, {3, 4}, {5, 7}},
+			expected:  []Interval16{{1, 7}, {10, 15}},
 			expectedN: 13,
 		},
 		{
@@ -802,78 +826,78 @@ func TestUnionInterval16InPlace(t *testing.T) {
 		{
 			name:      "empty a",
 			a:         []Interval16{},
-			b:         []Interval16{Interval16{1, 2}, Interval16{3, 4}, Interval16{5, 7}},
-			expected:  []Interval16{Interval16{1, 7}},
+			b:         []Interval16{{1, 2}, {3, 4}, {5, 7}},
+			expected:  []Interval16{{1, 7}},
 			expectedN: 7,
 		},
 		{
 			name:      "empty b",
-			a:         []Interval16{Interval16{1, 2}, Interval16{3, 4}, Interval16{5, 7}},
+			a:         []Interval16{{1, 2}, {3, 4}, {5, 7}},
 			b:         []Interval16{},
-			expected:  []Interval16{Interval16{1, 7}},
+			expected:  []Interval16{{1, 7}},
 			expectedN: 7,
 		},
 		{
 			name:      "single a",
-			a:         []Interval16{Interval16{1, 2}},
+			a:         []Interval16{{1, 2}},
 			b:         []Interval16{},
-			expected:  []Interval16{Interval16{1, 2}},
+			expected:  []Interval16{{1, 2}},
 			expectedN: 2,
 		},
 		{
 			name:      "single b",
 			a:         []Interval16{},
-			b:         []Interval16{Interval16{1, 2}},
-			expected:  []Interval16{Interval16{1, 2}},
+			b:         []Interval16{{1, 2}},
+			expected:  []Interval16{{1, 2}},
 			expectedN: 2,
 		},
 		{
 			name:      "single a single b",
-			a:         []Interval16{Interval16{3, 4}},
-			b:         []Interval16{Interval16{1, 2}},
-			expected:  []Interval16{Interval16{1, 4}},
+			a:         []Interval16{{3, 4}},
+			b:         []Interval16{{1, 2}},
+			expected:  []Interval16{{1, 4}},
 			expectedN: 4,
 		},
 		{
 			name:      "oddBitsSet lastBitUnset",
-			a:         []Interval16{Interval16{1, 1}, Interval16{3, 3}, Interval16{5, 5}},
-			b:         []Interval16{Interval16{0, 4}},
-			expected:  []Interval16{Interval16{0, 5}},
+			a:         []Interval16{{1, 1}, {3, 3}, {5, 5}},
+			b:         []Interval16{{0, 4}},
+			expected:  []Interval16{{0, 5}},
 			expectedN: 6,
 		},
 		{
 			name:      "all bits",
-			a:         []Interval16{Interval16{1, 1}, Interval16{3, 3}, Interval16{5, 5}},
-			b:         []Interval16{Interval16{0, 0}, Interval16{2, 2}, Interval16{4, 4}},
-			expected:  []Interval16{Interval16{0, 5}},
+			a:         []Interval16{{1, 1}, {3, 3}, {5, 5}},
+			b:         []Interval16{{0, 0}, {2, 2}, {4, 4}},
+			expected:  []Interval16{{0, 5}},
 			expectedN: 6,
 		},
 		{
 			name:      "short a long b",
-			a:         []Interval16{Interval16{5, 5}, Interval16{7, 7}, Interval16{9, 10}, Interval16{12, 12}, Interval16{15, 17}, Interval16{19, 20}},
-			b:         []Interval16{Interval16{1, 10}, Interval16{12, 12}, Interval16{14, 18}},
-			expected:  []Interval16{Interval16{1, 10}, Interval16{12, 12}, Interval16{14, 20}},
+			a:         []Interval16{{5, 5}, {7, 7}, {9, 10}, {12, 12}, {15, 17}, {19, 20}},
+			b:         []Interval16{{1, 10}, {12, 12}, {14, 18}},
+			expected:  []Interval16{{1, 10}, {12, 12}, {14, 20}},
 			expectedN: 18,
 		},
 		{
 			name:      "common endings",
-			a:         []Interval16{Interval16{1, 5}, Interval16{15, 20}, Interval16{25, 35}},
-			b:         []Interval16{Interval16{1, 10}, Interval16{15, 20}, Interval16{30, 35}},
-			expected:  []Interval16{Interval16{1, 10}, Interval16{15, 20}, Interval16{25, 35}},
+			a:         []Interval16{{1, 5}, {15, 20}, {25, 35}},
+			b:         []Interval16{{1, 10}, {15, 20}, {30, 35}},
+			expected:  []Interval16{{1, 10}, {15, 20}, {25, 35}},
 			expectedN: 27,
 		},
 		{
 			name:      "common endings and overlap",
-			a:         []Interval16{Interval16{1, 5}, Interval16{10, 15}},
-			b:         []Interval16{Interval16{5, 10}, Interval16{12, 17}},
-			expected:  []Interval16{Interval16{1, 17}},
+			a:         []Interval16{{1, 5}, {10, 15}},
+			b:         []Interval16{{5, 10}, {12, 17}},
+			expected:  []Interval16{{1, 17}},
 			expectedN: 17,
 		},
 		{
 			name:      "no common endings and overlap",
-			a:         []Interval16{Interval16{5, 10}, Interval16{12, 17}},
-			b:         []Interval16{Interval16{0, 11}, Interval16{15, 20}},
-			expected:  []Interval16{Interval16{0, 20}},
+			a:         []Interval16{{5, 10}, {12, 17}},
+			b:         []Interval16{{0, 11}, {15, 20}},
+			expected:  []Interval16{{0, 20}},
 			expectedN: 21,
 		},
 	}
@@ -4734,5 +4758,83 @@ func TestIntersectionCallback(t *testing.T) {
 
 			})
 		}
+	}
+}
+func TestImportBitmap(t *testing.T) {
+	b := NewBitmap()
+	i := GetRoaringIter(1, 3, 5)
+
+	changed, _, err := b.ImportRoaringRawIterator(i, false, true, 16)
+	if err != nil {
+		t.Fatal("no error should happen changed")
+	}
+	if changed != 3 {
+		t.Fatal("Should have changed")
+	}
+	i = GetRoaringIter(1, 3, 5)
+	changed, _, err = b.ImportRoaringRawIterator(i, true, true, 16)
+	if err != nil {
+		t.Fatal("no error should happen changed")
+	}
+	if changed != 3 {
+		t.Fatalf("Should have changed %v", changed)
+	}
+}
+func TestVariousBitmap(t *testing.T) {
+	b := NewBitmap(3)
+
+	c, e := b.Add(8)
+	if e != nil {
+		t.Fatal("add:", e)
+	}
+	if c == false {
+		t.Fatal("add: should have changed")
+	}
+	c, _ = b.Add(8)
+	if c == true {
+
+		t.Fatal("add: should not changed")
+	}
+	z, _ := b.AddN(9)
+	if z != 1 {
+		t.Fatal("add: should changed 1")
+	}
+	z, _ = b.RemoveN(9)
+	if z != 1 {
+		t.Fatal("add: should changed 1")
+	}
+	if b.Contains(100) {
+		t.Fatal("should not contain 100")
+	}
+	if !b.Any() {
+		t.Fatal("should have bits ")
+	}
+	if b.Size() == 0 {
+		t.Fatal("should have storage")
+	}
+	if b.Count() == 0 {
+		t.Fatal("should have bits")
+	}
+	if b.Max() == 0 {
+		t.Fatal("should max >0")
+	}
+	if m, e := b.Min(); !(m == 3 && e) {
+		t.Fatal("min should be 3 and containers exist", m, e)
+	}
+	b = nil
+	x := b.Clone()
+	if x != nil {
+
+		t.Fatal("nil clone should be nil")
+	}
+	n := b.Freeze()
+	if n != nil {
+
+		t.Fatal("nil freeze should be nil")
+	}
+	r, _ := b.AddN()
+	if r != 0 {
+
+		t.Fatal("nil AddN should be 0")
 	}
 }

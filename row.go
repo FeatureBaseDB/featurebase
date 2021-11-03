@@ -146,7 +146,7 @@ func (r *Row) ToRows(callback func(*pb.RowResponse) error) error {
 			if err := callback(&pb.RowResponse{
 				Headers: ci,
 				Columns: []*pb.ColumnResponse{
-					&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_StringVal{StringVal: x}},
+					{ColumnVal: &pb.ColumnResponse_StringVal{StringVal: x}},
 				}}); err != nil {
 				return errors.Wrap(err, "calling callback")
 			}
@@ -161,7 +161,7 @@ func (r *Row) ToRows(callback func(*pb.RowResponse) error) error {
 			if err := callback(&pb.RowResponse{
 				Headers: ci,
 				Columns: []*pb.ColumnResponse{
-					&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: x}},
+					{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: x}},
 				}}); err != nil {
 				return errors.Wrap(err, "calling callback")
 			}
@@ -308,7 +308,7 @@ func (r *Row) Union(others ...*Row) *Row {
 			}
 		}
 		nextSegs = nextSegs[:0]
-		toProcess := toProcess[:0]
+		toProcess = toProcess[:0]
 		for _, segs := range segments {
 			if segs[0].shard == shard {
 				toProcess = append(toProcess, &segs[0])
