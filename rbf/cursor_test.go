@@ -18,6 +18,7 @@ import (
 	"io"
 	"math/bits"
 	"math/rand"
+	"os"
 	"reflect"
 	"sort"
 	"strings"
@@ -847,6 +848,25 @@ func (e *EasyWalker) String() string {
 	return e.path.String()
 }
 
+func TestDumpDot(t *testing.T) {
+	db := MustOpenDB(t)
+	defer MustCloseDB(t, db)
+	tx := MustBegin(t, db, true)
+	defer tx.Rollback()
+	if err := tx.CreateBitmap("x"); err != nil {
+		t.Fatal(err)
+	}
+	c, err := tx.Cursor("x")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = c.Add(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rbf.Dumpdot(tx, 0, " ", os.Stdout)
+}
 func TestCursor_UpdateBranchCells(t *testing.T) {
 	db := MustOpenDB(t)
 	defer MustCloseDB(t, db)
@@ -964,6 +984,9 @@ func TestCursor_SplitBranchCells(t *testing.T) {
 		t.Fatalf("Expecting RBLL (a branch split) got %v", after.String())
 
 	}
+	//
+	c, _ := tx.Cursor("x") //added just for dot code coverage
+	c.Dump("ignore for coverage")
 
 }
 

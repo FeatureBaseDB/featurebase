@@ -10,6 +10,8 @@ include:
       - key: $CI_COMMIT_REF_SLUG
         paths:
           - .go/pkg/mod/
+variables:
+  GOVERSION: "1.16.9"
 
 stages:
   - lint
@@ -156,3 +158,19 @@ build for darwin arm64:
   artifacts:
     paths:
       - featurebase_darwin_arm64
+
+# Build a FB Docker image with CI/CD and push to the GitLab registry.
+build container fb:
+  image: docker:stable
+  stage: build
+  needs:
+    - "build for linux amd64"
+  tags:
+    - shell
+  before_script:    
+    - echo "${DOCKER_DEPLOY_TOKEN}" | docker login -u ${DOCKER_DEPLOY_USER} --password-stdin ${CI_REGISTRY}
+  script:    
+    - tag=${CI_REGISTRY_IMAGE}/server:${CI_COMMIT_REF_SLUG}
+    - docker build --build-arg GO_VERSION=$GOVERSION -t $tag -f .gitlab/Dockerfile .
+    - docker push $tag
+    - echo Created docker featurebase image with tag "$tag"

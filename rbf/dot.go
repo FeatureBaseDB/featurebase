@@ -60,8 +60,8 @@ func dotCell(b []byte, parent string, writer io.Writer) {
 	}
 }
 
-// dumpdot recursively writes the tree representation starting from a given page to STDERR.
-func dumpdot(tx *Tx, pgno uint32, parent string, writer io.Writer) {
+// Dumpdot recursively writes the tree representation starting from a given page to STDERR.
+func Dumpdot(tx *Tx, pgno uint32, parent string, writer io.Writer) {
 	page, _, err := tx.readPage(pgno)
 	if err != nil {
 		panic(err)
@@ -79,7 +79,7 @@ func dumpdot(tx *Tx, pgno uint32, parent string, writer io.Writer) {
 				root := fmt.Sprintf("root%d", record.Pgno)
 				fmt.Fprintf(writer, "%s[label=\"ROOT(%d)| %s\"]\n%s->%s\n", root, record.Pgno, record.Name, rr, root)
 				p := fmt.Sprintf("root%d", record.Pgno)
-				dumpdot(tx, record.Pgno, p, writer)
+				Dumpdot(tx, record.Pgno, p, writer)
 
 			}
 		}
@@ -96,7 +96,7 @@ func dumpdot(tx *Tx, pgno uint32, parent string, writer io.Writer) {
 		for i, n := 0, readCellN(page); i < n; i++ {
 			cell := readBranchCell(page, i)
 			if cell.Flags&uint32(ContainerTypeBitmap) == 0 { // leaf/branch child page
-				dumpdot(tx, cell.ChildPgno, p, writer)
+				Dumpdot(tx, cell.ChildPgno, p, writer)
 			} else {
 				b := fmt.Sprintf("bm%d", cell.ChildPgno)
 				fmt.Fprintf(writer, "%s[label=\"BITMAP(%d) key=%d \"]\n %s -> %s\n", b, cell.ChildPgno, cell.LeftKey, p, b)

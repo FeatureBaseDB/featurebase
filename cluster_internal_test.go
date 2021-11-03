@@ -15,6 +15,7 @@
 package pilosa
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"reflect"
@@ -624,4 +625,15 @@ func TestAE(t *testing.T) {
 			t.Fatalf("abort should not have blocked this long")
 		}
 	})
+}
+
+func TestTranslateIndexKey(t *testing.T) {
+	c := newCluster()
+	node0 := &topology.Node{ID: "node0"}
+	c.addNodeBasicSorted(node0)
+	c.holder = newHolderWithTempPath(t, "rbf")
+	_, e := c.translateIndexKey(context.Background(), "i", "a", false)
+	if e == nil {
+		t.Fatal("expecting error")
+	}
 }
