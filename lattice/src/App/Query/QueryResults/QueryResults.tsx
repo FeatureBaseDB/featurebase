@@ -136,35 +136,20 @@ export const QueryResults: FC<QueryResultsProps> = ({
           </div>
         </div>
         {!collapsibleQuery || showQuery ? (
-          <div>
-            <code className={css.queryString}>{queryString}</code>
-
-            {results.totalMessageCount > 1000 ? (
-              <Tooltip
-                title={
-                  "This query has " +
-                  results.totalMessageCount +
-                  " results, but you will only be able to view " +
-                  1000 +
-                  " of them."
-                }
-              >
-                <Typography
-                  color="textSecondary"
-                  variant="caption"
-                  component="div"
-                >
-                  NOTE
-                </Typography>
-              </Tooltip>
-            ) : null}
-          </div>
+          <code style={{ display: "inline" }} className={css.queryString}>
+            {queryString}
+          </code>
         ) : null}
       </div>
       {results.operation === "GroupBy" && results.rows.length <= 50 ? (
         <GroupByChart results={results} />
       ) : (
-        <DataTable headers={headers} data={data} autoWidth={true} />
+        <DataTable
+          headers={headers}
+          data={data}
+          autoWidth={true}
+          totalResultsCount={results.totalMessageCount}
+        />
       )}
     </Fragment>
   );

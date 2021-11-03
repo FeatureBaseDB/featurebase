@@ -1,9 +1,11 @@
-import React, { FC } from 'react';
-import classNames from 'classnames';
-import Pagination from '@material-ui/lab/Pagination';
-import Pluralize from 'react-pluralize';
-import { Select } from 'shared/Select';
-import css from './Pager.module.scss';
+import React, { FC } from "react";
+import ErrorOutlineIcon from "@material-ui/icons/ErrorOutline";
+import Tooltip from "@material-ui/core/Tooltip";
+import classNames from "classnames";
+import Pagination from "@material-ui/lab/Pagination";
+import Pluralize from "react-pluralize";
+import { Select } from "shared/Select";
+import css from "./Pager.module.scss";
 
 type PagerProps = {
   page: number;
@@ -13,6 +15,7 @@ type PagerProps = {
   className?: any;
   onChangePage: (page: number) => void;
   onChangePerPage?: (rowsPerPage: number) => void;
+  totalResultsCount?: number;
 };
 
 export const Pager: FC<PagerProps> = ({
@@ -22,7 +25,8 @@ export const Pager: FC<PagerProps> = ({
   showTotal = true,
   className,
   onChangePage,
-  onChangePerPage
+  onChangePerPage,
+  totalResultsCount = 0,
 }) => {
   const numPages = Math.ceil(totalItems / rowsPerPage);
   const startResults = (page - 1) * rowsPerPage + 1;
@@ -43,9 +47,9 @@ export const Pager: FC<PagerProps> = ({
               label="Per Page"
               value={rowsPerPage}
               options={[
-                { label: '10', value: '10' },
-                { label: '25', value: '25' },
-                { label: '50', value: '50' }
+                { label: "10", value: "10" },
+                { label: "25", value: "25" },
+                { label: "50", value: "50" },
               ]}
               onChange={(value) => onChangePerPage(Number(value))}
               fullWidth
@@ -58,6 +62,21 @@ export const Pager: FC<PagerProps> = ({
           Showing {startResults} - {endResults} of{` `}
           <Pluralize singular="result" count={totalItems} />
         </div>
+      )}
+      {totalResultsCount > 1000 && (
+        <span style={{ display: "inline" }}>
+          <Tooltip
+            title={
+              "This query has " +
+              totalResultsCount +
+              " results. Due to browser memory limitations, you will only be able to view " +
+              1000 +
+              " of them."
+            }
+          >
+            <ErrorOutlineIcon fontSize="small" color="error" />
+          </Tooltip>
+        </span>
       )}
     </div>
   );

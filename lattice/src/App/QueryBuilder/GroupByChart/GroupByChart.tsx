@@ -43,9 +43,6 @@ export const GroupByChart: FC<GroupByChartType> = ({ results }) => {
 
   return (
     <div style={{ height: "80%" }}>
-      This query has {results.totalMessageCount} total results. Due to browser
-      memory limitations, you will only be able to see {results.rows.length}{" "}
-      results.
       <ResponsiveBar
         data={data}
         keys={uniqueKeys.length > 0 ? uniqueKeys : undefined}
