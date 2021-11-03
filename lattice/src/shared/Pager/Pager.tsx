@@ -59,24 +59,30 @@ export const Pager: FC<PagerProps> = ({
       </div>
       {showTotal && (
         <div className={css.total}>
+          {totalResultsCount > 1000 && (
+            <span
+              style={{
+                display: "inline",
+                verticalAlign: "middle",
+                marginRight: ".5em",
+              }}
+            >
+              <Tooltip
+                title={
+                  "This query has " +
+                  totalResultsCount +
+                  " results. Due to browser memory limitations, you will only be able to view " +
+                  1000 +
+                  " of them."
+                }
+              >
+                <ErrorOutlineIcon fontSize="small" color="error" />
+              </Tooltip>
+            </span>
+          )}
           Showing {startResults} - {endResults} of{` `}
           <Pluralize singular="result" count={totalItems} />
         </div>
-      )}
-      {totalResultsCount > 1000 && (
-        <span style={{ display: "inline" }}>
-          <Tooltip
-            title={
-              "This query has " +
-              totalResultsCount +
-              " results. Due to browser memory limitations, you will only be able to view " +
-              1000 +
-              " of them."
-            }
-          >
-            <ErrorOutlineIcon fontSize="small" color="error" />
-          </Tooltip>
-        </span>
       )}
     </div>
   );
