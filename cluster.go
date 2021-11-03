@@ -1534,7 +1534,7 @@ func (c *cluster) translateFieldListIDs(field *Field, ids []uint64) (keys []stri
 
 // TODO: remove this when it is no longer used
 func (c *cluster) translateIndexKey(ctx context.Context, indexName string, key string, writable bool) (uint64, error) {
-	keyMap, err := c.translateIndexKeySet(ctx, indexName, map[string]struct{}{key: struct{}{}}, writable)
+	keyMap, err := c.translateIndexKeySet(ctx, indexName, map[string]struct{}{key: {}}, writable)
 	if err != nil {
 		return 0, err
 	}

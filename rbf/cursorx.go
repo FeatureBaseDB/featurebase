@@ -106,7 +106,7 @@ func (c *Cursor) Dump(name string) {
 	fmt.Fprintf(bufStdout, "rankdir=\"LR\"\n")
 
 	fmt.Fprintf(bufStdout, "node [shape=record height=.1]\n")
-	dumpdot(c.tx, 0, " ", bufStdout)
+	Dumpdot(c.tx, 0, " ", bufStdout)
 	fmt.Fprintf(bufStdout, "\n}")
 	bufStdout.Flush()
 }

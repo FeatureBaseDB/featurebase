@@ -26,7 +26,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/molecula/featurebase/v2"
+	pilosa "github.com/molecula/featurebase/v2"
 	"github.com/molecula/featurebase/v2/pql"
 	"github.com/pkg/errors"
 )
@@ -122,15 +122,15 @@ func TestORM(t *testing.T) {
 	})
 
 	t.Run("NewIndexOptions", func(t *testing.T) {
-		schema := NewSchema()
+		schemal := NewSchema()
 		// test the defaults
-		index := schema.Index("index-default-options")
+		index := schemal.Index("index-default-options")
 		target := `{"options":{}}`
 		if target != index.options.String() {
 			t.Fatalf("%s != %s", target, index.options.String())
 		}
 
-		index = schema.Index("index-keys", OptIndexKeys(true))
+		index = schemal.Index("index-keys", OptIndexKeys(true))
 		if true != index.Opts().Keys() {
 			t.Fatalf("index keys %v != %v", true, index.Opts().Keys())
 		}
@@ -139,7 +139,7 @@ func TestORM(t *testing.T) {
 			t.Fatalf("%s != %s", target, index.options.String())
 		}
 
-		index = schema.Index("index-trackexistence", OptIndexTrackExistence(false))
+		index = schemal.Index("index-trackexistence", OptIndexTrackExistence(false))
 		if false != index.Opts().TrackExistence() {
 			t.Fatalf("index trackExistene %v != %v", true, index.Opts().TrackExistence())
 		}

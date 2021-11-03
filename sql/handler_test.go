@@ -11,33 +11,32 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
-package pilosa_test
+package sql_test
 
 import (
-	"fmt"
-	"net"
+	"context"
 	"testing"
 
-	"net/http"
-	_ "net/http/pprof"
-
-	"github.com/molecula/featurebase/v2/testhook"
+	"github.com/molecula/featurebase/v2/sql"
+	"github.com/molecula/featurebase/v2/test"
 )
 
-func TestMain(m *testing.M) {
-	l, err := net.Listen("tcp", ":0")
+func TestHandler(t *testing.T) {
+	cluster := test.MustRunCluster(t, 1)
+	defer cluster.Close()
+	api := cluster.GetNode(0).API
+	queryStr := "select * from nowhere"
+	mapper := sql.NewMapper()
+	query, err := mapper.MapSQL(queryStr)
 	if err != nil {
-		panic(err)
+		t.Fatal("failed to map SQL")
 	}
-	port := l.Addr().(*net.TCPAddr).Port
-	fmt.Printf("pilosa/ TestMain: online stack-traces: curl http://localhost:%v/debug/pprof/goroutine?debug=2\n", port)
-	go func() {
-		err := http.Serve(l, nil)
-		if err != nil {
-			panic(err)
-		}
-	}()
-	testhook.RunTestsWithHooks(m)
+	handler := sql.NewSelectHandler(api)
+	_, err = handler.Handle(context.Background(), query)
+	if err.Error() != "mapping select: handling: nowhere: index not found" {
+		//expecting it to fail with index not found
+		//can be more elaborate later
+		t.Fatal(err)
+	}
 
 }

@@ -2620,7 +2620,7 @@ func (r RowIdentifiers) ToRows(callback func(*proto.RowResponse) error) error {
 			if err := callback(&proto.RowResponse{
 				Headers: ci,
 				Columns: []*proto.ColumnResponse{
-					&proto.ColumnResponse{ColumnVal: &proto.ColumnResponse_StringVal{StringVal: key}},
+					{ColumnVal: &proto.ColumnResponse_StringVal{StringVal: key}},
 				}}); err != nil {
 				return errors.Wrap(err, "calling callback")
 			}
@@ -2632,7 +2632,7 @@ func (r RowIdentifiers) ToRows(callback func(*proto.RowResponse) error) error {
 			if err := callback(&proto.RowResponse{
 				Headers: ci,
 				Columns: []*proto.ColumnResponse{
-					&proto.ColumnResponse{ColumnVal: &proto.ColumnResponse_Uint64Val{Uint64Val: uint64(id)}},
+					{ColumnVal: &proto.ColumnResponse_Uint64Val{Uint64Val: uint64(id)}},
 				}}); err != nil {
 				return errors.Wrap(err, "calling callback")
 			}
@@ -7362,7 +7362,7 @@ func (s SignedRow) ToRows(callback func(*proto.RowResponse) error) error {
 			if err := callback(&proto.RowResponse{
 				Headers: ci,
 				Columns: []*proto.ColumnResponse{
-					&proto.ColumnResponse{ColumnVal: &proto.ColumnResponse_Int64Val{Int64Val: val}},
+					{ColumnVal: &proto.ColumnResponse_Int64Val{Int64Val: val}},
 				},
 			}); err != nil {
 				return errors.Wrap(err, "calling callback")
@@ -7380,7 +7380,7 @@ func (s SignedRow) ToRows(callback func(*proto.RowResponse) error) error {
 			if err := callback(&proto.RowResponse{
 				Headers: ci,
 				Columns: []*proto.ColumnResponse{
-					&proto.ColumnResponse{ColumnVal: &proto.ColumnResponse_Int64Val{Int64Val: val}},
+					{ColumnVal: &proto.ColumnResponse_Int64Val{Int64Val: val}},
 				},
 			}); err != nil {
 				return errors.Wrap(err, "calling callback")
@@ -7480,8 +7480,8 @@ func (v ValCount) ToRows(callback func(*proto.RowResponse) error) error {
 		if err := callback(&proto.RowResponse{
 			Headers: ci,
 			Columns: []*proto.ColumnResponse{
-				&proto.ColumnResponse{ColumnVal: &proto.ColumnResponse_DecimalVal{DecimalVal: &proto.Decimal{Value: v.DecimalVal.Value, Scale: v.DecimalVal.Scale}}},
-				&proto.ColumnResponse{ColumnVal: &proto.ColumnResponse_Int64Val{Int64Val: v.Count}},
+				{ColumnVal: &proto.ColumnResponse_DecimalVal{DecimalVal: &proto.Decimal{Value: v.DecimalVal.Value, Scale: v.DecimalVal.Scale}}},
+				{ColumnVal: &proto.ColumnResponse_Int64Val{Int64Val: v.Count}},
 			}}); err != nil {
 			return errors.Wrap(err, "calling callback")
 		}
@@ -7493,8 +7493,8 @@ func (v ValCount) ToRows(callback func(*proto.RowResponse) error) error {
 		if err := callback(&proto.RowResponse{
 			Headers: ci,
 			Columns: []*proto.ColumnResponse{
-				&proto.ColumnResponse{ColumnVal: &proto.ColumnResponse_Float64Val{Float64Val: v.FloatVal}},
-				&proto.ColumnResponse{ColumnVal: &proto.ColumnResponse_Int64Val{Int64Val: v.Count}},
+				{ColumnVal: &proto.ColumnResponse_Float64Val{Float64Val: v.FloatVal}},
+				{ColumnVal: &proto.ColumnResponse_Int64Val{Int64Val: v.Count}},
 			}}); err != nil {
 			return errors.Wrap(err, "calling callback")
 		}
@@ -7506,8 +7506,8 @@ func (v ValCount) ToRows(callback func(*proto.RowResponse) error) error {
 		if err := callback(&proto.RowResponse{
 			Headers: ci,
 			Columns: []*proto.ColumnResponse{
-				&proto.ColumnResponse{ColumnVal: &proto.ColumnResponse_StringVal{StringVal: v.TimestampVal.Format(time.RFC3339Nano)}},
-				&proto.ColumnResponse{ColumnVal: &proto.ColumnResponse_Int64Val{Int64Val: v.Count}},
+				{ColumnVal: &proto.ColumnResponse_StringVal{StringVal: v.TimestampVal.Format(time.RFC3339Nano)}},
+				{ColumnVal: &proto.ColumnResponse_Int64Val{Int64Val: v.Count}},
 			}}); err != nil {
 			return errors.Wrap(err, "calling callback")
 		}
@@ -7519,8 +7519,8 @@ func (v ValCount) ToRows(callback func(*proto.RowResponse) error) error {
 		if err := callback(&proto.RowResponse{
 			Headers: ci,
 			Columns: []*proto.ColumnResponse{
-				&proto.ColumnResponse{ColumnVal: &proto.ColumnResponse_Int64Val{Int64Val: v.Val}},
-				&proto.ColumnResponse{ColumnVal: &proto.ColumnResponse_Int64Val{Int64Val: v.Count}},
+				{ColumnVal: &proto.ColumnResponse_Int64Val{Int64Val: v.Val}},
+				{ColumnVal: &proto.ColumnResponse_Int64Val{Int64Val: v.Count}},
 			}}); err != nil {
 			return errors.Wrap(err, "calling callback")
 		}
