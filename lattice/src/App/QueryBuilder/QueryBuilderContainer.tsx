@@ -32,7 +32,8 @@ let streamingResults: ResultType = {
   headers: [],
   rows: [],
   roundtrip: 0,
-  error: ''
+  error: '',
+  totalMessageCount: 0,
 };
 
 export const QueryBuilderContainer = () => {
@@ -109,7 +110,7 @@ export const QueryBuilderContainer = () => {
       const dateTime = moment().unix();
       const element = document.createElement('a');
       const file = new Blob([exportRows.join('\n')], {
-        type: 'text/plain;charset=utf-8'
+        type: 'text/plain;charset=utf-8',
       });
       element.href = URL.createObjectURL(file);
       element.download = `molecula-${results?.index}-${dateTime}.csv`;
@@ -133,7 +134,8 @@ export const QueryBuilderContainer = () => {
       rows: [],
       index: table,
       roundtrip: 0,
-      error: ''
+      error: '',
+      totalMessageCount: 0,
     };
     startTime = moment();
     setLoading(true);

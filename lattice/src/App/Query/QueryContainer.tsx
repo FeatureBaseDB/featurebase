@@ -18,6 +18,7 @@ export type ResultType = {
   roundtrip: number;
   index?: string;
   error: string;
+  totalMessageCount: number;
 };
 
 let streamingResults: ResultType = {
@@ -27,11 +28,15 @@ let streamingResults: ResultType = {
   headers: [],
   rows: [],
   roundtrip: 0,
-  error: ''
+  error: '',
+  totalMessageCount: 0,
 };
 
 export const QueryContainer: FC<{}> = () => {
   let startTime: Moment;
+
+  const MAX_MESSAGES = 1000; // same limit as in query builder
+
   const [indexes, setIndexes] = useState<any>();
   const [results, setResults] = useState<ResultType[]>([]);
   const [errorResult, setErrorResult] = useState<ResultType>();
@@ -44,12 +49,15 @@ export const QueryContainer: FC<{}> = () => {
   });
 
   const handleQueryMessages = (message: RowResponse) => {
-    const response = message.toObject();
-    if (response.headersList.length > 0) {
-      streamingResults.headers = response.headersList;
-      streamingResults.duration = response.duration;
+    if (streamingResults.totalMessageCount < MAX_MESSAGES) {
+      const response = message.toObject();
+      if (response.headersList.length > 0) {
+        streamingResults.headers = response.headersList;
+        streamingResults.duration = response.duration;
+      }
+      streamingResults.rows.push(response.columnsList);
     }
-    streamingResults.rows.push(response.columnsList);
+    streamingResults.totalMessageCount += 1;
   };
 
   const handleQueryEnd = (status: grpc.Code, statusMessage: string) => {
@@ -91,7 +99,8 @@ export const QueryContainer: FC<{}> = () => {
       rows: [],
       index,
       roundtrip: 0,
-      error: ''
+      error: '',
+      totalMessageCount: 0,
     };
     startTime = moment();
     if (query) {
@@ -115,10 +124,10 @@ export const QueryContainer: FC<{}> = () => {
           if (word.includes('-')) {
             let wordArr = word.split('.');
             wordArr.forEach((section, idx) => {
-              if(section.includes('-') && !word.includes('`')) {
+              if (section.includes('-') && !word.includes('`')) {
                 wordArr[idx] = `\`${wordArr[idx]}\``;
               }
-            })
+            });
             queryArr[idx] = wordArr.join('.');
           }
         });
