@@ -149,8 +149,8 @@ deploy ec2 instance:
     SUBNET_ID: ""
     SSH_KEY: ""
     PUBLIC_IP: ""
-    AWS_ACCESS_KEY_ID: $AWS_CLOUD_DEV_KEY
-    AWS_SECRET_ACCESS_KEY: $AWS_CLOUD_DEV_SECRET
+    AWS_ACCESS_KEY_ID: $AWS_ACCESS_KEY_ID
+    AWS_SECRET_ACCESS_KEY: $AWS_SECRET_ACCESS_KEY
     PROFILE: "default"
   before_script:
     - aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
