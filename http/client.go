@@ -633,6 +633,109 @@ func (c *InternalClient) importNode(ctx context.Context, node *topology.Node, in
 	return nil
 }
 
+// importHelper is an experiment to see whether SonarCloud's code duplication
+// complaints make sense to address in this context, given the impracticality
+// of refactoring ImportRequest/ImportValueRequest right now. The process
+// function exists because we would use either api.ImportValueWithTx or
+// api.ImportWithTx, passing it the actual underlying-type of req, but doing
+// that in here with a type switch seems messy. Similarly, index/field/shard
+// exist because we can't access those members of the two slightly different
+// structs.
+func (c *InternalClient) importHelper(ctx context.Context, req pilosa.Message, process func() error, index string, field string, shard uint64, options *pilosa.ImportOptions) error {
+	// If we don't actually know what shards we're sending to, and we have
+	// a local API and a qcx, we'll have a process function that uses the local
+	// API. Otherwise, even if we have an API
+	var nodes []*topology.Node
+	var err error
+	if shard != ^uint64(0) {
+		// we need a list of nodes specific to this shard.
+		nodes, err = c.FragmentNodes(ctx, index, shard)
+		if err != nil {
+			return errors.Errorf("shard nodes: %s", err)
+		}
+	} else {
+		// We don't know what shard to use, any shard is fine, local host
+		// is better if available.
+		if process != nil {
+			// skip the HTTP round-trip if we can.
+			err = process()
+			// Note that Wrap(nil, ...) is still nil.
+			return errors.Wrap(err, "local import")
+		}
+		// get the complete list of nodes, so if we have an API, we can
+		// pick our local node and probably avoid actually sending the http
+		// request over the wire, even though we still have to go through
+		// the http interface.
+		nodes, err = c.Nodes(ctx)
+	}
+
+	// "us" is a usable local node if any, "them" is every node that we need
+	// to process which isn't that node. We start out with us == nil and
+	// them = the whole set of nodes.
+	var us *topology.Node
+	var them []*topology.Node = nodes
+
+	// If we have an API, we know what node we are. Even if we don't have
+	// a Qcx, we still care, because looping back to the local node will
+	// be faster than going to another node.
+	if c.api != nil {
+		myID := c.api.NodeID()
+		for i, node := range nodes {
+			if myID == node.ID {
+				// swap our node into the first position
+				nodes[i], nodes[0] = nodes[0], nodes[i]
+				// If we have a qcx, we'll treat our node even MORE
+				// specially.
+				if process != nil {
+					us, them = nodes[0], nodes[1:]
+				}
+				break
+			}
+		}
+	}
+
+	// If we had a valid API and Qcx, and shard was ^0, we'd have handled
+	// it previously. So if we get here, we don't have both a Qcx and an API,
+	// but we might have an API, in which case we'll have shuffled our node
+	// into the first position. Otherwise we're just taking whatever the first
+	// node is.
+	if shard == ^uint64(0) {
+		them = them[:1]
+	}
+
+	// We handle remote nodes first, for two distinct reasons. One is that
+	// the local API ImportWithTx is allowed to modify its inputs, and if we
+	// ran that before serializing, we'd get corrupt data serialized.
+	// The other is that if we were to hold a write lock that started with
+	// that import and ended when we hit the end of our Qcx, we wouldn't want
+	// to hold it during all our requests to the remote nodes.
+	if len(them) > 0 {
+		buf, err := c.serializer.Marshal(req)
+		if err != nil {
+			return errors.Errorf("marshal import request: %s", err)
+		}
+		// We process remote nodes first so we won't be actually holding our
+		// write lock yet, in theory. This doesn't actually matter yet, but is
+		// helpful for future planned refactoring.
+		for _, node := range them {
+			if err = c.importNode(ctx, node, index, field, buf, options); err != nil {
+				return errors.Wrap(err, "remote import")
+			}
+		}
+	}
+
+	// Write to the local node if we have one.
+	if us != nil {
+		// WARNING: ImportWithTx can alter its inputs. However, we can
+		// only ever do this once, and if we're going to need a marshalled
+		// form, we already made it.
+		if err = process(); err != nil {
+			return errors.Wrap(err, "local import after remote imports")
+		}
+	}
+	return nil
+}
+
 // Import imports values using an ImportRequest, whether or not it's keyed.
 // It may modify the contents of req.
 //
@@ -652,88 +755,13 @@ func (c *InternalClient) Import(ctx context.Context, qcx *pilosa.Qcx, req *pilos
 	if req.ColumnKeys != nil {
 		req.Shard = ^uint64(0)
 	}
-	// If we don't actually know what shards we're sending to, and we have
-	// a local API, we can short-circuit: We just send this request to the
-	// local API, which will break it out and call its defaultClient for
-	// the data for individual shards.
-	var nodes []*topology.Node
-	var err error
-	if req.Shard == ^uint64(0) {
-		if qcx != nil && c.api != nil {
-			err = c.api.ImportWithTx(ctx, qcx, req, options)
-			// Note that Wrap(nil, ...) is still nil.
-			return errors.Wrap(err, "local import")
+	var process func() error
+	if c.api != nil && qcx != nil {
+		process = func() error {
+			return c.api.ImportWithTx(ctx, qcx, req, options)
 		}
 	}
-	nodes, err = c.FragmentNodes(ctx, req.Index, req.Shard)
-	if err != nil {
-		return errors.Errorf("shard nodes: %s", err)
-	}
-	// "us" is a usable local node if any, "them" is every node that we need
-	// to process which isn't that node. We start out with us == nil and
-	// them = the whole set of nodes.
-	var us *topology.Node
-	var them []*topology.Node = nodes
-
-	// If we have an API, we know what node we are. Even if we don't have
-	// a Qcx, we still care, because looping back to the local node will
-	// be faster than going to another node.
-	if c.api != nil {
-		myID := c.api.NodeID()
-		for i, node := range nodes {
-			if myID == node.ID {
-				// swap our node into the first position
-				nodes[i], nodes[0] = nodes[0], nodes[i]
-				// If we have a qcx, we'll treat our node even MORE
-				// specially.
-				if qcx != nil {
-					us, them = nodes[0], nodes[1:]
-				}
-				break
-			}
-		}
-	}
-
-	// If we had a valid API and Qcx, and shard was ^0, we'd have handled
-	// it previously. So if we get here, we don't have both a Qcx and an API,
-	// but we might have an API, in which case we'll have shuffled our node
-	// into the first position. Otherwise we're just taking whatever the first
-	// node is.
-	if req.Shard == ^uint64(0) {
-		them = them[:1]
-	}
-
-	// We handle remote nodes first, for two distinct reasons. One is that
-	// the local API ImportWithTx is allowed to modify its inputs, and if we
-	// ran that before serializing, we'd get corrupt data serialized.
-	// The other is that if we were to hold a write lock that started with
-	// that import and ended when we hit the end of our Qcx, we wouldn't want
-	// to hold it during all our requests to the remote nodes.
-	if len(them) > 0 {
-		buf, err := c.serializer.Marshal(req)
-		if err != nil {
-			return errors.Errorf("marshal import request: %s", err)
-		}
-		// We process remote nodes first so we won't be actually holding our
-		// write lock yet, in theory. This doesn't actually matter yet, but is
-		// helpful for future planned refactoring.
-		for _, node := range them {
-			if err = c.importNode(ctx, node, req.Index, req.Field, buf, options); err != nil {
-				return errors.Wrap(err, "remote import")
-			}
-		}
-	}
-
-	// Write to the local node if we have one.
-	if us != nil {
-		// WARNING: ImportWithTx can alter its inputs. However, we can
-		// only ever do this once, and if we're going to need a marshalled
-		// form, we already made it.
-		if err = c.api.ImportWithTx(ctx, qcx, req, options); err != nil {
-			return errors.Wrap(err, "local import")
-		}
-	}
-	return nil
+	return c.importHelper(ctx, req, process, req.Index, req.Field, req.Shard, options)
 }
 
 // ImportValue imports values using an ImportValueRequest, whether or not it's
@@ -749,94 +777,19 @@ func (c *InternalClient) Import(ctx context.Context, qcx *pilosa.Qcx, req *pilos
 // If we get a non-nil qcx, and have an associated API, we'll use that API
 // directly for the local shard.
 func (c *InternalClient) ImportValue(ctx context.Context, qcx *pilosa.Qcx, req *pilosa.ImportValueRequest, options *pilosa.ImportOptions) error {
-	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.ImportValue")
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.Import")
 	defer span.Finish()
 
 	if req.ColumnKeys != nil {
 		req.Shard = ^uint64(0)
 	}
-	// If we don't actually know what shards we're sending to, and we have
-	// a local API, we can short-circuit: We just send this request to the
-	// local API, which will break it out and call its defaultClient for
-	// the data for individual shards.
-	var nodes []*topology.Node
-	var err error
-	if req.Shard == ^uint64(0) {
-		if qcx != nil && c.api != nil {
-			err = c.api.ImportValueWithTx(ctx, qcx, req, options)
-			// Note that Wrap(nil, ...) is still nil.
-			return errors.Wrap(err, "local import")
+	var process func() error
+	if c.api != nil && qcx != nil {
+		process = func() error {
+			return c.api.ImportValueWithTx(ctx, qcx, req, options)
 		}
 	}
-	nodes, err = c.FragmentNodes(ctx, req.Index, req.Shard)
-	if err != nil {
-		return errors.Errorf("shard nodes: %s", err)
-	}
-	// "us" is a usable local node if any, "them" is every node that we need
-	// to process which isn't that node. We start out with us == nil and
-	// them = the whole set of nodes.
-	var us *topology.Node
-	var them []*topology.Node = nodes
-
-	// If we have an API, we know what node we are. Even if we don't have
-	// a Qcx, we still care, because looping back to the local node will
-	// be faster than going to another node.
-	if c.api != nil {
-		myID := c.api.NodeID()
-		for i, node := range nodes {
-			if myID == node.ID {
-				// swap our node into the first position
-				nodes[i], nodes[0] = nodes[0], nodes[i]
-				// If we have a qcx, we'll treat our node even MORE
-				// specially.
-				if qcx != nil {
-					us, them = nodes[0], nodes[1:]
-				}
-				break
-			}
-		}
-	}
-
-	// If we had a valid API and Qcx, and shard was ^0, we'd have handled
-	// it previously. So if we get here, we don't have both a Qcx and an API,
-	// but we might have an API, in which case we'll have shuffled our node
-	// into the first position. Otherwise we're just taking whatever the first
-	// node is.
-	if req.Shard == ^uint64(0) {
-		them = them[:1]
-	}
-
-	// We handle remote nodes first, for two distinct reasons. One is that
-	// the local API ImportWithTx is allowed to modify its inputs, and if we
-	// ran that before serializing, we'd get corrupt data serialized.
-	// The other is that if we were to hold a write lock that started with
-	// that import and ended when we hit the end of our Qcx, we wouldn't want
-	// to hold it during all our requests to the remote nodes.
-	if len(them) > 0 {
-		buf, err := c.serializer.Marshal(req)
-		if err != nil {
-			return errors.Errorf("marshal import request: %s", err)
-		}
-		// We process remote nodes first so we won't be actually holding our
-		// write lock yet, in theory. This doesn't actually matter yet, but is
-		// helpful for future planned refactoring.
-		for _, node := range them {
-			if err = c.importNode(ctx, node, req.Index, req.Field, buf, options); err != nil {
-				return errors.Wrap(err, "remote import")
-			}
-		}
-	}
-
-	// Write to the local node if we have one.
-	if us != nil {
-		// WARNING: ImportWithTx can alter its inputs. However, we can
-		// only ever do this once, and if we're going to need a marshalled
-		// form, we already made it.
-		if err = c.api.ImportValueWithTx(ctx, qcx, req, options); err != nil {
-			return errors.Wrap(err, "local import")
-		}
-	}
-	return nil
+	return c.importHelper(ctx, req, process, req.Index, req.Field, req.Shard, options)
 }
 
 // ImportRoaring does fast import of raw bits in roaring format (pilosa or
