@@ -158,6 +158,7 @@ deploy ec2 instance:
     - aws configure set region "us-east-2"
     - aws configure set aws_profile $PROFILE
     - PROFILE=$(aws configure list-profiles)
+    - aws sts get-caller-identity --profile $PROFILE
   script:
     - AMI=$(aws ssm get-parameters --names /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-ebs --query 'Parameters[0].[Value]' --output text --profile $PROFILE)
 
