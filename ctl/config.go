@@ -19,9 +19,9 @@ import (
 	"fmt"
 	"io"
 
-	toml "github.com/pelletier/go-toml"
 	"github.com/molecula/featurebase/v2"
 	"github.com/molecula/featurebase/v2/server"
+	toml "github.com/pelletier/go-toml"
 )
 
 // ConfigCommand represents a command for printing a default config.

@@ -1326,7 +1326,7 @@ func (h *Handler) handlePostField(w http.ResponseWriter, r *http.Request) {
 
 	fos := fieldOptionsToFunctionalOpts(req.Options)
 	field, err := h.api.CreateField(r.Context(), indexName, fieldName, fos...)
-	if _, ok := err.(pilosa.BadRequestError); ok {
+	if _, ok = err.(pilosa.BadRequestError); ok {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}

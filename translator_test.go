@@ -24,7 +24,7 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/molecula/featurebase/v2"
+	pilosa "github.com/molecula/featurebase/v2"
 	"github.com/molecula/featurebase/v2/boltdb"
 	"github.com/molecula/featurebase/v2/http"
 	"github.com/molecula/featurebase/v2/mock"
@@ -550,9 +550,9 @@ func TestTranslation_Cluster_CreateFind(t *testing.T) {
 			var g errgroup.Group
 			defer g.Wait() //nolint:errcheck
 			for i, n := range c.Nodes {
-				i, api := i, n.API
+				x, api := i, n.API
 				g.Go(func() (err error) {
-					defer func() { err = errors.Wrapf(err, "translating on node %d", i) }()
+					defer func() { err = errors.Wrapf(err, "translating on node %d", x) }()
 					localTranslations, err := api.FindIndexKeys(ctx, "i", keyList...)
 					if err != nil {
 						return errors.Wrap(err, "finding translations")
@@ -567,9 +567,9 @@ func TestTranslation_Cluster_CreateFind(t *testing.T) {
 
 			// Check that re-invoking create returns the original translations.
 			for i, n := range c.Nodes {
-				i, api := i, n.API
+				x, api := i, n.API
 				g.Go(func() (err error) {
-					defer func() { err = errors.Wrapf(err, "translating on node %d", i) }()
+					defer func() { err = errors.Wrapf(err, "translating on node %d", x) }()
 					localTranslations, err := api.CreateIndexKeys(ctx, "i", keyList...)
 					if err != nil {
 						return errors.Wrap(err, "finding translations")
@@ -636,9 +636,9 @@ func TestTranslation_Cluster_CreateFind(t *testing.T) {
 			var g errgroup.Group
 			defer g.Wait() //nolint:errcheck
 			for i, n := range c.Nodes {
-				i, api := i, n.API
+				x, api := i, n.API
 				g.Go(func() (err error) {
-					defer func() { err = errors.Wrapf(err, "translating on node %d", i) }()
+					defer func() { err = errors.Wrapf(err, "translating on node %d", x) }()
 					localTranslations, err := api.FindFieldKeys(ctx, "i", "f", keyList...)
 					if err != nil {
 						return errors.Wrap(err, "finding translations")
@@ -653,9 +653,9 @@ func TestTranslation_Cluster_CreateFind(t *testing.T) {
 
 			// Check that re-invoking create returns the original translations.
 			for i, n := range c.Nodes {
-				i, api := i, n.API
+				x, api := i, n.API
 				g.Go(func() (err error) {
-					defer func() { err = errors.Wrapf(err, "translating on node %d", i) }()
+					defer func() { err = errors.Wrapf(err, "translating on node %d", x) }()
 					localTranslations, err := api.CreateFieldKeys(ctx, "i", "f", keyList...)
 					if err != nil {
 						return errors.Wrap(err, "finding translations")

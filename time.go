@@ -288,7 +288,7 @@ func parseTime(t interface{}) (time.Time, error) {
 		if calcTime, err = time.Parse(TimeFormat, v); err != nil {
 			// if the default parsing fails, check if user tried to
 			// supply partial time eg year and month
-			calcTime, err := parsePartialTime(v)
+			calcTime, err = parsePartialTime(v)
 			return calcTime, err
 		}
 	case int64:

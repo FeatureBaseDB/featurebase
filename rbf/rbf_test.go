@@ -39,7 +39,7 @@ func TestReadWriteRootRecord(t *testing.T) {
 		// Write records.
 		if remaining, err := rbf.WriteRootRecord(buf, &rbf.RootRecord{Pgno: 10, Name: "foo"}); err != nil {
 			t.Fatal(err)
-		} else if remaining, err := rbf.WriteRootRecord(remaining, &rbf.RootRecord{Pgno: 11, Name: "bar"}); err != nil {
+		} else if remaining, err = rbf.WriteRootRecord(remaining, &rbf.RootRecord{Pgno: 11, Name: "bar"}); err != nil {
 			t.Fatal(err)
 		} else if _, err := rbf.WriteRootRecord(remaining, &rbf.RootRecord{Pgno: 12, Name: "baz"}); err != io.ErrShortBuffer {
 			t.Fatalf("unexpected error: %#v", err) // buffer too short
@@ -50,7 +50,7 @@ func TestReadWriteRootRecord(t *testing.T) {
 			t.Fatal(err)
 		} else if got, want := *rec, (rbf.RootRecord{Pgno: 10, Name: "foo"}); got != want {
 			t.Fatalf("ReadRootRecord=%#v, want %#v", got, want)
-		} else if rec, remaining, err := rbf.ReadRootRecord(remaining); err != nil {
+		} else if rec, remaining, err = rbf.ReadRootRecord(remaining); err != nil {
 			t.Fatal(err)
 		} else if got, want := *rec, (rbf.RootRecord{Pgno: 11, Name: "bar"}); got != want {
 			t.Fatalf("ReadRootRecord=%#v, want %#v", got, want)
