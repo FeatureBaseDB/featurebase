@@ -15,6 +15,7 @@ require (
 	github.com/davecgh/go-spew v1.1.1
 	github.com/desertbit/timer v0.0.0-20180107155436-c41aec40b27f // indirect
 	github.com/dustin/go-humanize v1.0.0 // indirect
+	github.com/felixge/fgprof v0.9.1
 	github.com/fsnotify/fsnotify v1.4.9 // indirect
 	github.com/go-test/deep v1.0.7
 	github.com/gogo/protobuf v1.3.2
