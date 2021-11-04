@@ -1688,6 +1688,15 @@ func (api *API) ImportValueWithTx(ctx context.Context, qcx *Qcx, req *ImportValu
 		return errors.Wrap(err, "validating api method")
 	}
 
+	numCols := len(req.ColumnIDs) + len(req.ColumnKeys)
+	numVals := len(req.Values) + len(req.FloatValues) + len(req.TimestampValues) + len(req.StringValues)
+	if numCols != numVals {
+		return errors.New(fmt.Sprintf("number of columns (%v) and number of values (%v) do not match", numCols, numVals))
+	}
+	if numCols == 0 {
+		return nil
+	}
+
 	idx, field, err := api.indexField(req.Index, req.Field, req.Shard)
 	if err != nil {
 		return errors.Wrap(err, fmt.Sprintf("getting index '%v' and field '%v'; shard=%v", req.Index, req.Field, req.Shard))
