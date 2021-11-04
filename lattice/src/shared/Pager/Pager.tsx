@@ -1,11 +1,11 @@
-import React, { FC } from "react";
-import ErrorOutlineIcon from "@material-ui/icons/ErrorOutline";
-import Tooltip from "@material-ui/core/Tooltip";
-import classNames from "classnames";
-import Pagination from "@material-ui/lab/Pagination";
-import Pluralize from "react-pluralize";
-import { Select } from "shared/Select";
-import css from "./Pager.module.scss";
+import React, { FC } from 'react';
+import ErrorOutlineIcon from '@material-ui/icons/ErrorOutline';
+import Tooltip from '@material-ui/core/Tooltip';
+import classNames from 'classnames';
+import Pagination from '@material-ui/lab/Pagination';
+import Pluralize from 'react-pluralize';
+import { Select } from 'shared/Select';
+import css from './Pager.module.scss';
 
 type PagerProps = {
   page: number;
@@ -47,9 +47,9 @@ export const Pager: FC<PagerProps> = ({
               label="Per Page"
               value={rowsPerPage}
               options={[
-                { label: "10", value: "10" },
-                { label: "25", value: "25" },
-                { label: "50", value: "50" },
+                { label: '10', value: '10' },
+                { label: '25', value: '25' },
+                { label: '50', value: '50' },
               ]}
               onChange={(value) => onChangePerPage(Number(value))}
               fullWidth
@@ -62,16 +62,16 @@ export const Pager: FC<PagerProps> = ({
           {totalResultsCount > 1000 && (
             <span
               style={{
-                display: "inline",
-                verticalAlign: "middle",
-                marginRight: ".5em",
+                display: 'inline',
+                verticalAlign: 'middle',
+                marginRight: '.5em',
               }}
             >
               <Tooltip
                 title={
-                  "This query has " +
+                  'This query has ' +
                   totalResultsCount +
-                  " results. Due to browser memory limitations, you will only be able to view the first 1000."
+                  ' results. Due to browser memory limitations, you will only be able to view the first 1000.'
                 }
               >
                 <ErrorOutlineIcon fontSize="small" color="error" />

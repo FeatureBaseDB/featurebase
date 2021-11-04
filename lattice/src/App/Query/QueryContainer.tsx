@@ -1,17 +1,17 @@
-import React, { FC, useState } from "react";
-import moment, { Moment } from "moment";
-import uniqBy from "lodash/uniqBy";
-import { Query } from "./Query";
-import { pilosa } from "services/eventServices";
-import { useEffectOnce } from "react-use";
-import { grpc } from "@improbable-eng/grpc-web";
-import { queryPQL, querySQL } from "services/grpcServices";
-import { ColumnInfo, ColumnResponse, RowResponse } from "proto/pilosa_pb";
+import React, { FC, useState } from 'react';
+import moment, { Moment } from 'moment';
+import uniqBy from 'lodash/uniqBy';
+import { Query } from './Query';
+import { pilosa } from 'services/eventServices';
+import { useEffectOnce } from 'react-use';
+import { grpc } from '@improbable-eng/grpc-web';
+import { queryPQL, querySQL } from 'services/grpcServices';
+import { ColumnInfo, ColumnResponse, RowResponse } from 'proto/pilosa_pb';
 
 export type ResultType = {
   query: string;
   operation: string;
-  type: "PQL" | "SQL";
+  type: 'PQL' | 'SQL';
   headers: ColumnInfo.AsObject[];
   rows: ColumnResponse.AsObject[][];
   duration?: number;
@@ -22,13 +22,13 @@ export type ResultType = {
 };
 
 let streamingResults: ResultType = {
-  query: "",
-  operation: "",
-  type: "SQL",
+  query: '',
+  operation: '',
+  type: 'SQL',
   headers: [],
   rows: [],
   roundtrip: 0,
-  error: "",
+  error: '',
   totalMessageCount: 0,
 };
 
@@ -66,72 +66,72 @@ export const QueryContainer: FC<{}> = () => {
       setErrorResult(streamingResults);
     } else {
       let recentQueries = JSON.parse(
-        localStorage.getItem("recent-queries") || "[]"
+        localStorage.getItem('recent-queries') || '[]'
       );
-      const lastQuery = localStorage.getItem("last-query");
+      const lastQuery = localStorage.getItem('last-query');
       recentQueries.unshift(lastQuery);
       recentQueries = uniqBy(recentQueries);
 
       if (recentQueries.length > 10) {
         localStorage.setItem(
-          "recent-queries",
+          'recent-queries',
           JSON.stringify(recentQueries.slice(0, 9))
         );
       } else {
-        localStorage.setItem("recent-queries", JSON.stringify(recentQueries));
+        localStorage.setItem('recent-queries', JSON.stringify(recentQueries));
       }
 
       streamingResults.roundtrip = moment
         .duration(moment().diff(startTime))
-        .as("milliseconds");
+        .as('milliseconds');
       setErrorResult(undefined);
       setResults([streamingResults, ...results]);
     }
     setLoading(false);
   };
 
-  const onQuery = (query: string, type: "PQL" | "SQL", index?: string) => {
+  const onQuery = (query: string, type: 'PQL' | 'SQL', index?: string) => {
     streamingResults = {
       query,
-      operation: "",
+      operation: '',
       type,
       headers: [],
       rows: [],
       index,
       roundtrip: 0,
-      error: "",
+      error: '',
       totalMessageCount: 0,
     };
     startTime = moment();
     if (query) {
       setLoading(true);
       localStorage.setItem(
-        "last-query",
-        type === "PQL" ? `[${index}]${query}` : query
+        'last-query',
+        type === 'PQL' ? `[${index}]${query}` : query
       );
 
-      if (type === "PQL") {
+      if (type === 'PQL') {
         if (index) {
           queryPQL(index, query, handleQueryMessages, handleQueryEnd);
         } else {
-          streamingResults.error = "missing index";
+          streamingResults.error = 'missing index';
           setErrorResult(streamingResults);
           setLoading(false);
         }
       } else {
-        let queryArr = query.split(" ");
+        let queryArr = query.split(' ');
         queryArr.forEach((word, idx) => {
-          if (word.includes("-")) {
-            let wordArr = word.split(".");
+          if (word.includes('-')) {
+            let wordArr = word.split('.');
             wordArr.forEach((section, idx) => {
-              if (section.includes("-") && !word.includes("`")) {
+              if (section.includes('-') && !word.includes('`')) {
                 wordArr[idx] = `\`${wordArr[idx]}\``;
               }
             });
-            queryArr[idx] = wordArr.join(".");
+            queryArr[idx] = wordArr.join('.');
           }
         });
-        querySQL(queryArr.join(" "), handleQueryMessages, handleQueryEnd);
+        querySQL(queryArr.join(' '), handleQueryMessages, handleQueryEnd);
       }
     }
   };

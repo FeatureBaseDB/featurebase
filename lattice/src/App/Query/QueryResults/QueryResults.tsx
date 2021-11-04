@@ -1,15 +1,15 @@
-import React, { FC, Fragment, useState } from "react";
-import CloseIcon from "@material-ui/icons/Close";
-import copy from "copy-to-clipboard";
-import FileCopySharpIcon from "@material-ui/icons/FileCopySharp";
-import IconButton from "@material-ui/core/IconButton";
-import Tooltip from "@material-ui/core/Tooltip";
-import Typography from "@material-ui/core/Typography";
-import { DataTable } from "shared/DataTable";
-import { formatDuration } from "shared/utils/formatDuration";
-import { GroupByChart } from "App/QueryBuilder/GroupByChart";
-import { ResultType } from "../QueryContainer";
-import css from "./QueryResults.module.scss";
+import React, { FC, Fragment, useState } from 'react';
+import CloseIcon from '@material-ui/icons/Close';
+import copy from 'copy-to-clipboard';
+import FileCopySharpIcon from '@material-ui/icons/FileCopySharp';
+import IconButton from '@material-ui/core/IconButton';
+import Tooltip from '@material-ui/core/Tooltip';
+import Typography from '@material-ui/core/Typography';
+import { DataTable } from 'shared/DataTable';
+import { formatDuration } from 'shared/utils/formatDuration';
+import { GroupByChart } from 'App/QueryBuilder/GroupByChart';
+import { ResultType } from '../QueryContainer';
+import css from './QueryResults.module.scss';
 
 type QueryResultsProps = {
   collapsibleQuery?: boolean;
@@ -23,9 +23,9 @@ export const QueryResults: FC<QueryResultsProps> = ({
   onRemoveResult,
 }) => {
   const [showQuery, setShowQuery] = useState<boolean>(false);
-  const [copyTooltip, setCopyTooltip] = useState<string>("Copy Query");
+  const [copyTooltip, setCopyTooltip] = useState<string>('Copy Query');
   const queryString =
-    results.type === "PQL"
+    results.type === 'PQL'
       ? `[${results.index}]${results.query}`
       : results.query;
 
@@ -34,10 +34,10 @@ export const QueryResults: FC<QueryResultsProps> = ({
     let rowData = {};
     row.forEach((col, colIdx) => {
       const header = headers[colIdx];
-      if (header.datatype.includes("[]")) {
+      if (header.datatype.includes('[]')) {
         const dataTypeVal = `${header.datatype.slice(2)}arrayval`;
-        rowData[header.name] = col[dataTypeVal].valsList.join(", ");
-      } else if (header.datatype === "decimal") {
+        rowData[header.name] = col[dataTypeVal].valsList.join(', ');
+      } else if (header.datatype === 'decimal') {
         const decimalVal = col[`${header.datatype}val`];
         if (decimalVal) {
           const { value, scale } = decimalVal;
@@ -55,9 +55,9 @@ export const QueryResults: FC<QueryResultsProps> = ({
 
   const onCopyQuery = () => {
     copy(queryString);
-    setCopyTooltip("Copied!");
+    setCopyTooltip('Copied!');
     setTimeout(() => {
-      setCopyTooltip("Copy Query");
+      setCopyTooltip('Copy Query');
     }, 1500);
   };
 
@@ -75,7 +75,7 @@ export const QueryResults: FC<QueryResultsProps> = ({
                 onClick={() => setShowQuery(!showQuery)}
                 className={css.link}
               >
-                {showQuery ? "Hide" : "Show"} Query
+                {showQuery ? 'Hide' : 'Show'} Query
               </span>
             )}
             <Tooltip title={copyTooltip} placement="top" arrow>
@@ -136,12 +136,12 @@ export const QueryResults: FC<QueryResultsProps> = ({
           </div>
         </div>
         {!collapsibleQuery || showQuery ? (
-          <code style={{ display: "inline" }} className={css.queryString}>
+          <code style={{ display: 'inline' }} className={css.queryString}>
             {queryString}
           </code>
         ) : null}
       </div>
-      {results.operation === "GroupBy" && results.rows.length <= 50 ? (
+      {results.operation === 'GroupBy' && results.rows.length <= 50 ? (
         <GroupByChart results={results} />
       ) : (
         <DataTable

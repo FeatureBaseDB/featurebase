@@ -1,9 +1,9 @@
-import React, { FC } from "react";
-import groupBy from "lodash/groupBy";
-import { ResponsiveBar } from "@nivo/bar";
-import { ResultType } from "../../Query";
-import { schemeTableau10 } from "d3-scale-chromatic";
-import { useTheme } from "@material-ui/core/styles";
+import React, { FC } from 'react';
+import groupBy from 'lodash/groupBy';
+import { ResponsiveBar } from '@nivo/bar';
+import { ResultType } from '../../Query';
+import { schemeTableau10 } from 'd3-scale-chromatic';
+import { useTheme } from '@material-ui/core/styles';
 
 type GroupByChartType = {
   results: ResultType;
@@ -11,7 +11,7 @@ type GroupByChartType = {
 
 export const GroupByChart: FC<GroupByChartType> = ({ results }) => {
   const theme = useTheme();
-  const isDark = theme.palette.type === "dark";
+  const isDark = theme.palette.type === 'dark';
   const { headers, rows } = results;
   let uniqueKeys: string[] = [];
   const grouped = groupBy(rows, (row) => row[0].stringval);
@@ -42,30 +42,30 @@ export const GroupByChart: FC<GroupByChartType> = ({ results }) => {
   });
 
   return (
-    <div style={{ height: "80%" }}>
+    <div style={{ height: '80%' }}>
       <ResponsiveBar
         data={data}
         keys={uniqueKeys.length > 0 ? uniqueKeys : undefined}
         indexBy={headers[0].name}
         margin={{ top: 50, right: 130, bottom: 100, left: 60 }}
         padding={0.3}
-        valueScale={{ type: "linear" }}
-        indexScale={{ type: "band", round: true }}
+        valueScale={{ type: 'linear' }}
+        indexScale={{ type: 'band', round: true }}
         colors={schemeTableau10}
         enableLabel={false}
         theme={
           isDark
             ? {
-                textColor: "var(--text-secondary)",
+                textColor: 'var(--text-secondary)',
                 axis: {
-                  domain: { line: { stroke: "rgba(255, 255, 255, 0.1)" } },
+                  domain: { line: { stroke: 'rgba(255, 255, 255, 0.1)' } },
                 },
-                grid: { line: { stroke: "rgba(255, 255, 255, 0.1)" } },
-                tooltip: { container: { background: "#1c2022" } },
+                grid: { line: { stroke: 'rgba(255, 255, 255, 0.1)' } },
+                tooltip: { container: { background: '#1c2022' } },
               }
             : {
                 axis: {
-                  domain: { line: { stroke: "#dddddd" } },
+                  domain: { line: { stroke: '#dddddd' } },
                 },
               }
         }
@@ -75,15 +75,15 @@ export const GroupByChart: FC<GroupByChartType> = ({ results }) => {
           tickPadding: 5,
           tickRotation: -40,
           legend: headers[0].name,
-          legendPosition: "middle",
+          legendPosition: 'middle',
           legendOffset: 80,
         }}
         axisLeft={{
           tickSize: 5,
           tickPadding: 5,
           tickRotation: 0,
-          legend: "count",
-          legendPosition: "middle",
+          legend: 'count',
+          legendPosition: 'middle',
           legendOffset: -40,
         }}
         tooltip={({ id, value, color }) => (
@@ -93,25 +93,25 @@ export const GroupByChart: FC<GroupByChartType> = ({ results }) => {
         )}
         labelSkipWidth={12}
         labelSkipHeight={12}
-        labelTextColor={{ from: "color", modifiers: [["darker", 1.6]] }}
+        labelTextColor={{ from: 'color', modifiers: [['darker', 1.6]] }}
         legends={[
           {
-            dataFrom: "keys",
-            anchor: "bottom-right",
-            direction: "column",
+            dataFrom: 'keys',
+            anchor: 'bottom-right',
+            direction: 'column',
             justify: false,
             translateX: 120,
             translateY: 0,
             itemsSpacing: 2,
             itemWidth: 120,
             itemHeight: 20,
-            itemDirection: "left-to-right",
+            itemDirection: 'left-to-right',
             itemOpacity: 0.85,
-            symbolShape: "circle",
+            symbolShape: 'circle',
             symbolSize: 20,
             effects: [
               {
-                on: "hover",
+                on: 'hover',
                 style: {
                   itemOpacity: 1,
                 },
