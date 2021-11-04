@@ -260,6 +260,7 @@ func TestAPI_ImportValue(t *testing.T) {
 
 		// Column keys are sharded so their order is not guaranteed.
 		colKeys := []string{"col2", "col1", "col3"}
+		values := []int64{1, 2, 3, 4}
 
 		// Import without data, verify that it succeeds
 		req := &pilosa.ImportValueRequest{
@@ -267,6 +268,9 @@ func TestAPI_ImportValue(t *testing.T) {
 			Field: field,
 		}
 		qcx1 := coord.API.Txf().NewQcx()
+		defer qcx1.Abort()
+
+		// Import with empty request, should succeed
 		if err := coord.API.ImportValue(ctx, qcx1, req); err != nil {
 			t.Fatal(err)
 		}
@@ -279,6 +283,23 @@ func TestAPI_ImportValue(t *testing.T) {
 			t.Fatal("expected error but succeeded")
 		}
 		PanicOn(qcx2.Finish())
+
+		// Import with mismatch column and value lengths
+		req.Values = values
+		qcx3 := coord.API.Txf().NewQcx()
+		if err := coord.API.ImportValue(ctx, qcx3, req); err == nil {
+			t.Fatal("expected error but succeeded")
+		}
+		PanicOn(qcx3.Finish())
+
+		// Import with data but no columns
+		req.ColumnKeys = make([]string, 0)
+		qcx4 := coord.API.Txf().NewQcx()
+		if err := coord.API.ImportValue(ctx, qcx4, req); err == nil {
+			t.Fatal("expected error but succeeded")
+		}
+		PanicOn(qcx4.Finish())
+
 	})
 
 	t.Run("ValDecimalField", func(t *testing.T) {
