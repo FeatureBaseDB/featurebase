@@ -136,9 +136,7 @@ export const QueryResults: FC<QueryResultsProps> = ({
           </div>
         </div>
         {!collapsibleQuery || showQuery ? (
-          <code style={{ display: 'inline' }} className={css.queryString}>
-            {queryString}
-          </code>
+          <code className={css.queryString}>{queryString}</code>
         ) : null}
       </div>
       {results.operation === 'GroupBy' && results.rows.length <= 50 ? (

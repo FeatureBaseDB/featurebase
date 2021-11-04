@@ -60,13 +60,7 @@ export const Pager: FC<PagerProps> = ({
       {showTotal && (
         <div className={css.total}>
           {totalResultsCount > 1000 && (
-            <span
-              style={{
-                display: 'inline',
-                verticalAlign: 'middle',
-                marginRight: '.5em',
-              }}
-            >
+            <span className={css.tooMany}>
               <Tooltip
                 title={
                   'This query has ' +
