@@ -151,18 +151,19 @@ deploy ec2 instance:
     PUBLIC_IP: ""
     AWS_ACCESS_KEY_ID: $AWS_ACCESS_KEY_ID
     AWS_SECRET_ACCESS_KEY: $AWS_SECRET_ACCESS_KEY
+    AWS_PROFILE: ""
   before_script:
     - aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
     - aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
     - aws configure set region "us-east-2"
-    - export AWS_PROFILE=gitlab-cicd
+    - AWS_PROFILE=$(aws configure list-profiles)
   script:
-    - AMI=$(aws ssm get-parameters --names /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-ebs --query 'Parameters[0].[Value]' --output text --profile gitlab-cicd)
+    - AMI=$(aws ssm get-parameters --names /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-ebs --query 'Parameters[0].[Value]' --output text --profile $AWS_PROFILE)
 
-    - SECURITY_GROUP=$(aws ec2 describe-security-groups --filter Name=vpc-id,Values=vpc-03a4ba3d5b7c8f978 --query 'SecurityGroups[*].[GroupId]' --output text --profile gitlab-cicd)
+    - SECURITY_GROUP=$(aws ec2 describe-security-groups --filter Name=vpc-id,Values=vpc-03a4ba3d5b7c8f978 --query 'SecurityGroups[*].[GroupId]' --output text --profile $AWS_PROFILE)
 
-    - SUBNET_ID=$(aws ec2 describe-subnets --filters 'Name=vpc-id,Values=vpc-03a4ba3d5b7c8f978' 'Name=availability-zone,Values=us-east-2a' --query 'Subnets[0].SubnetId' --output text --profile gitlab-cicd)
+    - SUBNET_ID=$(aws ec2 describe-subnets --filters 'Name=vpc-id,Values=vpc-03a4ba3d5b7c8f978' 'Name=availability-zone,Values=us-east-2a' --query 'Subnets[0].SubnetId' --output text --profile $AWS_PROFILE)
 
     - aws ec2 run-instances --image-id $AMI --count 1 --instance-type $INSTANCE --security-group-ids $SECURITY_GROUP --subnet-id $SUBNET_ID —user-data file://.gitlab/server.yml 
 
-    - PUBLIC_IP=$(aws ec2 describe-instances --filters 'Name=tag:Name, Values=Single_Node_Deployment' 'Name=instance-state-name, Values=running' --query 'Reservations[*].Instances[*].PublicIpAddress' --output text --profile gitlab-cicd)
+    - PUBLIC_IP=$(aws ec2 describe-instances --filters 'Name=tag:Name, Values=Single_Node_Deployment' 'Name=instance-state-name, Values=running' --query 'Reservations[*].Instances[*].PublicIpAddress' --output text --profile $AWS_PROFILE)
