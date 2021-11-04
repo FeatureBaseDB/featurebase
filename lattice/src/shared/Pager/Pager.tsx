@@ -1,4 +1,6 @@
 import React, { FC } from 'react';
+import ErrorOutlineIcon from '@material-ui/icons/ErrorOutline';
+import Tooltip from '@material-ui/core/Tooltip';
 import classNames from 'classnames';
 import Pagination from '@material-ui/lab/Pagination';
 import Pluralize from 'react-pluralize';
@@ -13,6 +15,7 @@ type PagerProps = {
   className?: any;
   onChangePage: (page: number) => void;
   onChangePerPage?: (rowsPerPage: number) => void;
+  totalResultsCount?: number;
 };
 
 export const Pager: FC<PagerProps> = ({
@@ -22,7 +25,8 @@ export const Pager: FC<PagerProps> = ({
   showTotal = true,
   className,
   onChangePage,
-  onChangePerPage
+  onChangePerPage,
+  totalResultsCount = 0,
 }) => {
   const numPages = Math.ceil(totalItems / rowsPerPage);
   const startResults = (page - 1) * rowsPerPage + 1;
@@ -45,7 +49,7 @@ export const Pager: FC<PagerProps> = ({
               options={[
                 { label: '10', value: '10' },
                 { label: '25', value: '25' },
-                { label: '50', value: '50' }
+                { label: '50', value: '50' },
               ]}
               onChange={(value) => onChangePerPage(Number(value))}
               fullWidth
@@ -55,6 +59,19 @@ export const Pager: FC<PagerProps> = ({
       </div>
       {showTotal && (
         <div className={css.total}>
+          {totalResultsCount > 1000 && (
+            <span className={css.tooMany}>
+              <Tooltip
+                title={
+                  'This query has ' +
+                  totalResultsCount +
+                  ' results. Due to browser memory limitations, you will only be able to view the first 1000.'
+                }
+              >
+                <ErrorOutlineIcon fontSize="small" color="error" />
+              </Tooltip>
+            </span>
+          )}
           Showing {startResults} - {endResults} of{` `}
           <Pluralize singular="result" count={totalItems} />
         </div>

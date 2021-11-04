@@ -1136,8 +1136,8 @@ func TestHandler_Endpoints(t *testing.T) {
 		clus := test.MustRunCluster(t, 1, []server.CommandOption{test.OptAllowedOrigins([]string{"http://test/"})})
 		defer clus.Close()
 		w = httptest.NewRecorder()
-		h := clus.GetNode(0).Handler.(*http.Handler).Handler
-		h.ServeHTTP(w, req)
+		h1 := clus.GetNode(0).Handler.(*http.Handler).Handler
+		h1.ServeHTTP(w, req)
 		result = w.Result()
 
 		if result.StatusCode != 200 {

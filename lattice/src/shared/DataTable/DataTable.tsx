@@ -19,13 +19,15 @@ type TableProps = {
   data: any[];
   loading?: boolean;
   autoWidth?: boolean;
+  totalResultsCount: number;
 };
 
 export const DataTable: FC<TableProps> = ({
   headers,
   data,
   loading = false,
-  autoWidth = false
+  autoWidth = false,
+  totalResultsCount,
 }) => {
   const [sortedData, setSortedData] = useState<any[]>(data);
   const [sort, setSort] = useState<string>(headers[0]?.name);
@@ -55,7 +57,7 @@ export const DataTable: FC<TableProps> = ({
       if (resultsRef.current) {
         resultsRef.current.scrollIntoView({
           behavior: 'smooth',
-          block: 'start'
+          block: 'start',
         });
       }
     }, 0);
@@ -69,8 +71,6 @@ export const DataTable: FC<TableProps> = ({
       setSortDir('asc');
     }
   };
-
-
 
   return (
     <Fragment>
@@ -86,14 +86,14 @@ export const DataTable: FC<TableProps> = ({
                 >
                   <span
                     className={classNames(css.sortable, {
-                      [css.currentSort]: sort === col.name
+                      [css.currentSort]: sort === col.name,
                     })}
                     onClick={() => onSortClick(col.name)}
                   >
                     {col.name}
                     <ArrowDropDownIcon
                       className={classNames(css.sortArrow, {
-                        [css.asc]: sortDir === 'asc'
+                        [css.asc]: sortDir === 'asc',
                       })}
                     />
                   </span>
@@ -120,7 +120,7 @@ export const DataTable: FC<TableProps> = ({
                         className={css.tableCell}
                       >
                         {formatTableCell(row, col)}
-                            </TableCell>
+                      </TableCell>
                     ))}
                     {autoWidth ? <TableCell className={css.fillWidth} /> : null}
                   </TableRow>
@@ -148,7 +148,6 @@ export const DataTable: FC<TableProps> = ({
           </TableBody>
         </Table>
       </div>
-
       <Pager
         className={css.pagination}
         page={page}
@@ -157,6 +156,7 @@ export const DataTable: FC<TableProps> = ({
         showTotal={true}
         onChangePage={onChangePage}
         onChangePerPage={onChangePerPage}
+        totalResultsCount={totalResultsCount}
       />
     </Fragment>
   );

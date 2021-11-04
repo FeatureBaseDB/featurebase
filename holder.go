@@ -2082,7 +2082,7 @@ func (h *Holder) Process(ctx context.Context, op HolderOperator) (err error) {
 				if !recurse {
 					continue
 				}
-				fragNums := fragNums[:0]
+				fragNums = fragNums[:0]
 				view.mu.Lock()
 				for fragNum := range view.fragments {
 					fragNums = append(fragNums, fragNum)

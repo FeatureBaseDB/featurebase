@@ -20,7 +20,7 @@ type QueryResultsProps = {
 export const QueryResults: FC<QueryResultsProps> = ({
   collapsibleQuery = true,
   results,
-  onRemoveResult
+  onRemoveResult,
 }) => {
   const [showQuery, setShowQuery] = useState<boolean>(false);
   const [copyTooltip, setCopyTooltip] = useState<string>('Copy Query');
@@ -142,7 +142,12 @@ export const QueryResults: FC<QueryResultsProps> = ({
       {results.operation === 'GroupBy' && results.rows.length <= 50 ? (
         <GroupByChart results={results} />
       ) : (
-        <DataTable headers={headers} data={data} autoWidth={true} />
+        <DataTable
+          headers={headers}
+          data={data}
+          autoWidth={true}
+          totalResultsCount={results.totalMessageCount}
+        />
       )}
     </Fragment>
   );

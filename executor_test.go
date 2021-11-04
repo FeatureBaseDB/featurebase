@@ -8184,3 +8184,113 @@ func TestExternalLookup(t *testing.T) {
 		}
 	})
 }
+func TestToRows(t *testing.T) {
+	ids := &pilosa.RowIdentifiers{
+		Rows: []uint64{1, 2, 3},
+	}
+	c := ids.Clone()
+	if c == nil {
+		t.Fatal("Shouldn't be nil ")
+	}
+	e := ids.ToRows(func(*proto.RowResponse) error {
+		return nil
+	})
+	if e != nil {
+		t.Fatal("Shouldn't be err ", e)
+	}
+
+	keys := &pilosa.RowIdentifiers{
+		Keys: []string{"a", "b"},
+	}
+	c = keys.Clone()
+	if c == nil {
+		t.Fatal("Shouldn't be nil ")
+	}
+	e = keys.ToRows(func(*proto.RowResponse) error {
+		return nil
+	})
+	if e != nil {
+		t.Fatal("Shouldn't be err ", e)
+	}
+	v := &pilosa.ValCount{
+		TimestampVal: time.Now(),
+		Count:        1,
+	}
+	x := v.Clone()
+	if x == nil {
+		t.Fatal("Shouldn't be nil ")
+	}
+	e = v.ToRows(func(*proto.RowResponse) error {
+		return nil
+	})
+	if e != nil {
+		t.Fatal("Shouldn't be err ", e)
+	}
+	v.DecimalVal = &pql.Decimal{Value: 1, Scale: 1}
+	e = v.ToRows(func(*proto.RowResponse) error {
+		return nil
+	})
+	if e != nil {
+		t.Fatal("Shouldn't be err ", e)
+	}
+	v.DecimalVal = nil
+	v.FloatVal = 3.0
+	e = v.ToRows(func(*proto.RowResponse) error {
+		return nil
+	})
+	if e != nil {
+		t.Fatal("Shouldn't be err ", e)
+	}
+
+	pfi := &pilosa.PairField{
+		Pair:  pilosa.Pair{ID: 1, Count: 1},
+		Field: "f",
+	}
+	z := pfi.Clone()
+	if z.Pair.ID != pfi.Pair.ID {
+		t.Fatal("Should be equal ", z, pfi)
+	}
+	e = pfi.ToRows(func(*proto.RowResponse) error {
+		return nil
+	})
+	if e != nil {
+		t.Fatal("Shouldn't be err ", e)
+	}
+	pfk := &pilosa.PairField{
+		Pair:  pilosa.Pair{Key: "a", Count: 1},
+		Field: "f",
+	}
+	o := pfk.Clone()
+	if o.Pair.Key != pfk.Pair.Key {
+		t.Fatal("Should be equal ")
+	}
+	e = pfk.ToRows(func(*proto.RowResponse) error {
+		return nil
+	})
+	if e != nil {
+		t.Fatal("Shouldn't be err ", e)
+	}
+	pfs := &pilosa.PairsField{
+		Pairs: []pilosa.Pair{{ID: 1, Count: 1}},
+		Field: "f",
+	}
+	f := pfs.Clone()
+	if f.Pairs[0].ID != pfs.Pairs[0].ID {
+		t.Fatal("Should be equal ")
+	}
+	e = pfs.ToRows(func(*proto.RowResponse) error {
+		return nil
+	})
+	if e != nil {
+		t.Fatal("Shouldn't be err ", e)
+	}
+
+	r4 := server.ResultUint64(1)
+	e = r4.ToRows(func(*proto.RowResponse) error {
+		return nil
+	})
+	if e != nil {
+		t.Fatal("Shouldn't be err ", e)
+	}
+
+}
