@@ -23,7 +23,7 @@ export const GroupByChart: FC<GroupByChartType> = ({ results }) => {
         groupData = {
           ...groupData,
           [headers[0].name]: row[0][`${headers[0].datatype}val`],
-          [secondaryValue]: row[2][`${headers[2].datatype}val`]
+          [secondaryValue]: row[2][`${headers[2].datatype}val`],
         };
 
         if (!uniqueKeys.includes(secondaryValue.toString())) {
@@ -33,7 +33,7 @@ export const GroupByChart: FC<GroupByChartType> = ({ results }) => {
         groupData = {
           ...groupData,
           [headers[0].name]: row[0][`${headers[0].datatype}val`],
-          value: secondaryValue
+          value: secondaryValue,
         };
       }
     });
@@ -58,15 +58,15 @@ export const GroupByChart: FC<GroupByChartType> = ({ results }) => {
             ? {
                 textColor: 'var(--text-secondary)',
                 axis: {
-                  domain: { line: { stroke: 'rgba(255, 255, 255, 0.1)' } }
+                  domain: { line: { stroke: 'rgba(255, 255, 255, 0.1)' } },
                 },
                 grid: { line: { stroke: 'rgba(255, 255, 255, 0.1)' } },
-                tooltip: { container: { background: '#1c2022' } }
+                tooltip: { container: { background: '#1c2022' } },
               }
             : {
                 axis: {
-                  domain: { line: { stroke: '#dddddd' } }
-                }
+                  domain: { line: { stroke: '#dddddd' } },
+                },
               }
         }
         groupMode="grouped"
@@ -76,7 +76,7 @@ export const GroupByChart: FC<GroupByChartType> = ({ results }) => {
           tickRotation: -40,
           legend: headers[0].name,
           legendPosition: 'middle',
-          legendOffset: 80
+          legendOffset: 80,
         }}
         axisLeft={{
           tickSize: 5,
@@ -84,7 +84,7 @@ export const GroupByChart: FC<GroupByChartType> = ({ results }) => {
           tickRotation: 0,
           legend: 'count',
           legendPosition: 'middle',
-          legendOffset: -40
+          legendOffset: -40,
         }}
         tooltip={({ id, value, color }) => (
           <strong style={{ color }}>
@@ -113,11 +113,11 @@ export const GroupByChart: FC<GroupByChartType> = ({ results }) => {
               {
                 on: 'hover',
                 style: {
-                  itemOpacity: 1
-                }
-              }
-            ]
-          }
+                  itemOpacity: 1,
+                },
+              },
+            ],
+          },
         ]}
         animate={true}
         motionStiffness={90}
