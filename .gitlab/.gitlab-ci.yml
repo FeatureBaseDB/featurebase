@@ -151,12 +151,12 @@ deploy ec2 instance:
     PUBLIC_IP: ""
     AWS_ACCESS_KEY_ID: $AWS_ACCESS_KEY_ID
     AWS_SECRET_ACCESS_KEY: $AWS_SECRET_ACCESS_KEY
-    AWS_PROFILE: ""
+    AWS_PROFILE: "AWS-PROFILE"
   before_script:
     - aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
     - aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
     - aws configure set region "us-east-2"
-    - AWS_PROFILE=$(aws configure list-profiles)
+    - aws configure --profile $AWS_PROFILE
   script:
     - AMI=$(aws ssm get-parameters --names /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-ebs --query 'Parameters[0].[Value]' --output text --profile $AWS_PROFILE)
 
