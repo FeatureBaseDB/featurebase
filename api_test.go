@@ -254,16 +254,9 @@ func TestAPI_ImportValue(t *testing.T) {
 	t.Run("ValIntEmpty", func(t *testing.T) {
 		ctx := context.Background()
 		index := "valintempty"
-		field := "f"
-
-		_, err := coord.API.CreateIndex(ctx, index, pilosa.IndexOptions{Keys: true})
-		if err != nil {
-			t.Fatalf("creating index: %v", err)
-		}
-		_, err = coord.API.CreateField(ctx, index, field, pilosa.OptFieldTypeInt(math.MinInt64, math.MaxInt64))
-		if err != nil {
-			t.Fatalf("creating field: %v", err)
-		}
+		field := "fld"
+		createIndexForTest(index, coord, t)
+		createFieldForTest(index, field, coord, t)
 
 		// Column keys are sharded so their order is not guaranteed.
 		colKeys := []string{"col2", "col1", "col3"}
@@ -1260,5 +1253,21 @@ func TestAPI_MutexCheck(t *testing.T) {
 				t.Fatalf("expected results limited to 3, got %d", len(expected))
 			}
 		})
+	}
+}
+
+func createIndexForTest(index string, coord *test.Command, t *testing.T) {
+	ctx := context.Background()
+	_, err := coord.API.CreateIndex(ctx, index, pilosa.IndexOptions{Keys: true})
+	if err != nil {
+		t.Fatalf("creating index: %v", err)
+	}
+}
+
+func createFieldForTest(index string, field string, coord *test.Command, t *testing.T) {
+	ctx := context.Background()
+	_, err := coord.API.CreateField(ctx, index, field, pilosa.OptFieldTypeInt(math.MinInt64, math.MaxInt64))
+	if err != nil {
+		t.Fatalf("creating field: %v", err)
 	}
 }
