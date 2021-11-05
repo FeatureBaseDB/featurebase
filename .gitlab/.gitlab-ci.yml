@@ -209,4 +209,4 @@ deploy node for linux arm64:
     - PUBLIC_IP=$(aws ec2 describe-instances --filters 'Name=tag:Name, Values=Single_Node_Deployment' 'Name=instance-state-name, Values=running' --query 'Reservations[*].Instances[*].PublicIpAddress' --output text --profile $PROFILE)
     - echo $PUBLIC_IP
     - echo "scp test" > test.txt
-    - scp -o StrictHostKeyChecking=no -i gitlab-featurebase-dev test.txt ec2-user@$PUBLIC_IP
+    - scp -o StrictHostKeyChecking=no -i gitlab-featurebase-dev test.txt ec2-user@$PUBLIC_IP:.
