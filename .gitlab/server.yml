@@ -1,5 +1,8 @@
 #cloud-config
+repo_update: true
+repo_upgrade: all
+
 runcmd:
-  - sudo yum update 
-  - sudo yum install postgresql14
-  - sudo yum install golang1.16
+  - yum update 
+  - yum install postgresql
+  - yum install golang
