@@ -18,10 +18,10 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/opentracing/opentracing-go"
-	"github.com/opentracing/opentracing-go/ext"
 	"github.com/molecula/featurebase/v2/logger"
 	"github.com/molecula/featurebase/v2/tracing"
+	"github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go/ext"
 )
 
 // Ensure type implements interface.

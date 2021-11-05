@@ -254,25 +254,25 @@ func (tx *RBFTx) addOrRemove(index, field, view string, shard uint64, remove boo
 			if rc.N() == 0 {
 				return 0, nil
 			}
-			rc, chng := rc.Remove(lo)
+			rc1, chng := rc.Remove(lo)
 			if !chng {
 				return 0, nil
 			}
-			if rc.N() == 0 {
+			if rc1.N() == 0 {
 				err = tx.tx.RemoveContainer(name, hi)
 			} else {
-				err = tx.tx.PutContainer(name, hi, rc)
+				err = tx.tx.PutContainer(name, hi, rc1)
 			}
 			if err != nil {
 				return 0, err
 			}
 			return 1, nil
 		} else {
-			rc, chng := rc.Add(lo)
+			rc2, chng := rc.Add(lo)
 			if !chng {
 				return 0, nil
 			}
-			err = tx.tx.PutContainer(name, hi, rc)
+			err = tx.tx.PutContainer(name, hi, rc2)
 			if err != nil {
 				return 0, err
 			}

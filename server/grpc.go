@@ -471,7 +471,7 @@ func (r ResultUint64) ToRows(callback func(*pb.RowResponse) error) error {
 	return callback(&pb.RowResponse{
 		Headers: []*pb.ColumnInfo{{Name: "count", Datatype: "uint64"}},
 		Columns: []*pb.ColumnResponse{
-			&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: uint64(r)}},
+			{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: uint64(r)}},
 		}})
 }
 
@@ -490,7 +490,7 @@ func (r ResultBool) ToRows(callback func(*pb.RowResponse) error) error {
 	return callback(&pb.RowResponse{
 		Headers: []*pb.ColumnInfo{{Name: "result", Datatype: "bool"}},
 		Columns: []*pb.ColumnResponse{
-			&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_BoolVal{BoolVal: bool(r)}},
+			{ColumnVal: &pb.ColumnResponse_BoolVal{BoolVal: bool(r)}},
 		}})
 }
 
@@ -714,7 +714,7 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 			rowResp := &pb.RowResponse{
 				Headers: ci,
 				Columns: []*pb.ColumnResponse{
-					&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: col}},
+					{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: col}},
 				},
 			}
 			ci = nil // only include headers with the first row
@@ -1029,7 +1029,7 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 			rowResp := &pb.RowResponse{
 				Headers: ci,
 				Columns: []*pb.ColumnResponse{
-					&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_StringVal{StringVal: col}},
+					{ColumnVal: &pb.ColumnResponse_StringVal{StringVal: col}},
 				},
 			}
 			ci = nil // only include headers with the first row

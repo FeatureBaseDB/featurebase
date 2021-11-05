@@ -17,10 +17,10 @@
 package syswrap
 
 import (
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
-	"strings"
 
 	"github.com/pkg/errors"
 )

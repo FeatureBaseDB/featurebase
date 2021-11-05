@@ -672,9 +672,9 @@ func (b *Batch) Import() error {
 		return errors.Wrap(err, "starting transaction")
 	}
 	defer func() {
-		trns, err := b.client.FinishTransaction(trns.ID)
+		trnsl, err := b.client.FinishTransaction(trns.ID)
 		if err != nil {
-			b.log.Errorf("error finishing transaction: %v. trns: %+v", err, trns)
+			b.log.Errorf("error finishing transaction: %v. trns: %+v", err, trnsl)
 		}
 		b.client.Stats.Timing(MetricBatchImportDurationSeconds, time.Since(start), 1.0)
 	}()
@@ -729,9 +729,9 @@ func (b *Batch) Flush() error {
 		return errors.Wrap(err, "starting transaction")
 	}
 	defer func() {
-		trns, err := b.client.FinishTransaction(trns.ID)
+		trnsl, err := b.client.FinishTransaction(trns.ID)
 		if err != nil {
-			b.log.Errorf("error finishing transaction: %v. trns: %+v", err, trns)
+			b.log.Errorf("error finishing transaction: %v. trns: %+v", err, trnsl)
 		}
 		b.client.Stats.Timing(MetricBatchFlushDurationSeconds, time.Since(start), 1.0)
 	}()
@@ -1053,17 +1053,17 @@ func (b *Batch) doImport(frags, clearFrags fragments) error {
 		eg.Go(func() error {
 			clearViewMap := clearFrags.GetViewMap(shard, field)
 			if len(clearViewMap) > 0 {
-				start := time.Now()
+				startx := time.Now()
 				err := b.client.ImportRoaringBitmap(b.index.Field(field), shard, clearViewMap, true)
 				if err != nil {
 					return errors.Wrapf(err, "import clearing clearing data for %s", field)
 				}
-				b.log.Debugf("imp-roar-clr %s,shard:%d,views:%d %v", field, shard, len(clearViewMap), time.Since(start))
+				b.log.Debugf("imp-roar-clr %s,shard:%d,views:%d %v", field, shard, len(clearViewMap), time.Since(startx))
 			}
 
-			start := time.Now()
+			starty := time.Now()
 			err := b.client.ImportRoaringBitmap(b.index.Field(field), shard, viewMap, false)
-			b.log.Debugf("imp-roar     %s,shard:%d,views:%d %v", field, shard, len(clearViewMap), time.Since(start))
+			b.log.Debugf("imp-roar     %s,shard:%d,views:%d %v", field, shard, len(clearViewMap), time.Since(starty))
 			return errors.Wrapf(err, "importing data for %s", field)
 		})
 	}

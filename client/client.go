@@ -180,8 +180,8 @@ func newClientWithCluster(cluster *Cluster, options *ClientOptions) *Client {
 func newClientWithURI(uri *pnet.URI, options *ClientOptions) *Client {
 	client := newClientWithOptions(options)
 	if options.manualServerAddress {
-		fragmentNode := newFragmentNodeFromURI(uri)
-		client.manualFragmentNode = &fragmentNode
+		fNode := newFragmentNodeFromURI(uri)
+		client.manualFragmentNode = &fNode
 		client.manualServerURI = uri
 		client.cluster = NewClusterWithHost()
 	}

@@ -961,9 +961,9 @@ func (f *fragment) unprotectedClearBlock(tx Tx, block int) (changed bool, err er
 	err = f.gen.Transaction(wp, func() error {
 		var rowChanged bool
 		for rowID := uint64(firstRow); rowID < firstRow+HashBlockSize; rowID++ {
-			if changed, err := f.unprotectedClearRow(tx, rowID); err != nil {
+			if chang, err := f.unprotectedClearRow(tx, rowID); err != nil {
 				return errors.Wrapf(err, "clearing row: %d", rowID)
-			} else if changed {
+			} else if chang {
 				rowChanged = true
 			}
 		}
