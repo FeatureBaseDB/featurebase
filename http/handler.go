@@ -38,6 +38,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/felixge/fgprof"
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	pilosa "github.com/molecula/featurebase/v2"
@@ -373,6 +374,7 @@ func newRouter(handler *Handler) http.Handler {
 	router.HandleFunc("/cluster/resize/abort", handler.handlePostClusterResizeAbort).Methods("POST").Name("PostClusterResizeAbort")
 	router.HandleFunc("/cluster/resize/remove-node", handler.handlePostClusterResizeRemoveNode).Methods("POST").Name("PostClusterResizeRemoveNode")
 	router.PathPrefix("/debug/pprof/").Handler(http.DefaultServeMux).Methods("GET")
+	router.PathPrefix("/debug/fgprof").Handler(fgprof.Handler()).Methods("GET")
 	router.Handle("/debug/vars", expvar.Handler()).Methods("GET")
 	router.Handle("/metrics", promhttp.Handler())
 	router.HandleFunc("/metrics.json", handler.handleGetMetricsJSON).Methods("GET").Name("GetMetricsJSON")
