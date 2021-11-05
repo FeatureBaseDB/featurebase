@@ -44,6 +44,9 @@ clean:
 vendor: go.mod
 	$(GO) mod vendor
 
+version:
+	@echo $(VERSION)
+
 # Run test suite
 test:
 	$(GO) test ./... -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) -v
@@ -125,6 +128,11 @@ release-sans-ui: check-clean
 	$(MAKE) release-build GOOS=darwin GOARCH=arm64
 	$(MAKE) release-build GOOS=linux GOARCH=amd64
 	$(MAKE) release-build GOOS=linux GOARCH=arm64
+
+package:
+	go build -o featurebase ./cmd/featurebase
+	nfpm package --packager deb --target featurebase_$(VERSION_ID).deb
+	nfpm package --packager rpm --target featurebase_$(VERSION_ID).rpm
 
 # try (e.g.) internal/clustertests/docker-compose-replication2.yml
 DOCKER_COMPOSE=internal/clustertests/docker-compose.yml

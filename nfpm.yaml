@@ -1,0 +1,15 @@
+name: "featurebase"
+arch: "${GOARCH}"
+platform: "${GOOS}"
+version: "${VERSION}"
+section: "default"
+priority: "extra"
+maintainer: "Molecula Corp. <info@molecula.com>"
+description: "FeatureBase is a feature extraction and storage technology that enables real-time analytics."
+vendor: "Molecula"
+homepage: "https://molecula.com"
+contents:
+  - src: ./featurebase
+    dst: /usr/local/bin/featurebase
+  - dst: /etc/featurebase.conf
+    type: ghost
