@@ -153,7 +153,7 @@ func (cmd *RestoreCommand) restoreSchema(ctx context.Context, primary *topology.
 		//NOTE SHOULD ONLY BE ONE
 		for _, index := range schema.Indexes {
 			if exists(index.Name) {
-				return fmt.Errorf("Index Exists %v", index.Name)
+				return fmt.Errorf("index Exists %v", index.Name)
 			}
 			logger.Printf("Create INDEX %v", index.Name)
 			err = cmd.client.CreateIndex(ctx, index.Name, index.Options)

@@ -25,7 +25,7 @@ import (
 	"github.com/molecula/featurebase/v2/debugstats"
 	"github.com/molecula/featurebase/v2/roaring"
 	txkey "github.com/molecula/featurebase/v2/short_txkey"
-	. "github.com/molecula/featurebase/v2/vprint" // nolint:staticcheck
+	"github.com/molecula/featurebase/v2/vprint"
 )
 
 // statTx is useful to profile on a
@@ -218,7 +218,7 @@ func (k kall) String() string {
 	case kType:
 		return "kType"
 	}
-	PanicOn(fmt.Sprintf("unknown kall '%v'", int(k)))
+	vprint.PanicOn(fmt.Sprintf("unknown kall '%v'", int(k)))
 	return ""
 }
 
@@ -243,8 +243,8 @@ func (c *statTx) ImportRoaringBits(index, field, view string, shard uint64, rit 
 	}()
 	defer func() {
 		if r := recover(); r != nil {
-			AlwaysPrintf("see ImportRoaringBits() PanicOn '%v' at '%v'", r, Stack())
-			PanicOn(r)
+			vprint.AlwaysPrintf("see ImportRoaringBits() PanicOn '%v' at '%v'", r, vprint.Stack())
+			vprint.PanicOn(r)
 		}
 	}()
 	return c.b.ImportRoaringBits(index, field, view, shard, rit, clear, log, rowSize)
@@ -259,8 +259,8 @@ func (c *statTx) Rollback() {
 	}()
 	defer func() {
 		if r := recover(); r != nil {
-			AlwaysPrintf("see Rollback() PanicOn '%v' at '%v'", r, Stack())
-			PanicOn(r)
+			vprint.AlwaysPrintf("see Rollback() PanicOn '%v' at '%v'", r, vprint.Stack())
+			vprint.PanicOn(r)
 		}
 	}()
 	c.b.Rollback()
@@ -276,8 +276,8 @@ func (c *statTx) Commit() error {
 
 	defer func() {
 		if r := recover(); r != nil {
-			AlwaysPrintf("see Commit() PanicOn '%v' at '%v'", r, Stack())
-			PanicOn(r)
+			vprint.AlwaysPrintf("see Commit() PanicOn '%v' at '%v'", r, vprint.Stack())
+			vprint.PanicOn(r)
 		}
 	}()
 	return c.b.Commit()
@@ -293,8 +293,8 @@ func (c *statTx) RoaringBitmap(index, field, view string, shard uint64) (*roarin
 
 	defer func() {
 		if r := recover(); r != nil {
-			AlwaysPrintf("see RoaringBitmap() PanicOn '%v' at '%v'", r, Stack())
-			PanicOn(r)
+			vprint.AlwaysPrintf("see RoaringBitmap() PanicOn '%v' at '%v'", r, vprint.Stack())
+			vprint.PanicOn(r)
 		}
 	}()
 	return c.b.RoaringBitmap(index, field, view, shard)
@@ -310,8 +310,8 @@ func (c *statTx) Container(index, field, view string, shard uint64, key uint64) 
 
 	defer func() {
 		if r := recover(); r != nil {
-			AlwaysPrintf("see Container() PanicOn '%v' at '%v'", r, Stack())
-			PanicOn(r)
+			vprint.AlwaysPrintf("see Container() PanicOn '%v' at '%v'", r, vprint.Stack())
+			vprint.PanicOn(r)
 		}
 	}()
 	return c.b.Container(index, field, view, shard, key)
@@ -327,8 +327,8 @@ func (c *statTx) PutContainer(index, field, view string, shard uint64, key uint6
 
 	defer func() {
 		if r := recover(); r != nil {
-			AlwaysPrintf("see PutContainer() PanicOn '%v' at '%v'", r, Stack())
-			PanicOn(r)
+			vprint.AlwaysPrintf("see PutContainer() PanicOn '%v' at '%v'", r, vprint.Stack())
+			vprint.PanicOn(r)
 		}
 	}()
 	return c.b.PutContainer(index, field, view, shard, key, rc)
@@ -344,8 +344,8 @@ func (c *statTx) RemoveContainer(index, field, view string, shard uint64, key ui
 
 	defer func() {
 		if r := recover(); r != nil {
-			AlwaysPrintf("see RemoveContainer() PanicOn '%v' at '%v'", r, Stack())
-			PanicOn(r)
+			vprint.AlwaysPrintf("see RemoveContainer() PanicOn '%v' at '%v'", r, vprint.Stack())
+			vprint.PanicOn(r)
 		}
 	}()
 	return c.b.RemoveContainer(index, field, view, shard, key)
@@ -361,8 +361,8 @@ func (c *statTx) Add(index, field, view string, shard uint64, a ...uint64) (chan
 
 	defer func() {
 		if r := recover(); r != nil {
-			AlwaysPrintf("see Add() PanicOn '%v' at '%v'", r, Stack())
-			PanicOn(r)
+			vprint.AlwaysPrintf("see Add() PanicOn '%v' at '%v'", r, vprint.Stack())
+			vprint.PanicOn(r)
 		}
 	}()
 	return c.b.Add(index, field, view, shard, a...)
@@ -378,8 +378,8 @@ func (c *statTx) Remove(index, field, view string, shard uint64, a ...uint64) (c
 
 	defer func() {
 		if r := recover(); r != nil {
-			AlwaysPrintf("see Remove() PanicOn '%v' at '%v'", r, Stack())
-			PanicOn(r)
+			vprint.AlwaysPrintf("see Remove() PanicOn '%v' at '%v'", r, vprint.Stack())
+			vprint.PanicOn(r)
 		}
 	}()
 	return c.b.Remove(index, field, view, shard, a...)
@@ -395,8 +395,8 @@ func (c *statTx) Contains(index, field, view string, shard uint64, key uint64) (
 
 	defer func() {
 		if r := recover(); r != nil {
-			AlwaysPrintf("see Contains() PanicOn '%v' at '%v'", r, Stack())
-			PanicOn(r)
+			vprint.AlwaysPrintf("see Contains() PanicOn '%v' at '%v'", r, vprint.Stack())
+			vprint.PanicOn(r)
 		}
 	}()
 	return c.b.Contains(index, field, view, shard, key)
@@ -412,8 +412,8 @@ func (c *statTx) ContainerIterator(index, field, view string, shard uint64, firs
 
 	defer func() {
 		if r := recover(); r != nil {
-			AlwaysPrintf("see ContainerIterator() PanicOn '%v' at '%v'", r, Stack())
-			PanicOn(r)
+			vprint.AlwaysPrintf("see ContainerIterator() PanicOn '%v' at '%v'", r, vprint.Stack())
+			vprint.PanicOn(r)
 		}
 	}()
 	return c.b.ContainerIterator(index, field, view, shard, firstRoaringContainerKey)
@@ -433,8 +433,8 @@ func (c *statTx) ForEach(index, field, view string, shard uint64, fn func(i uint
 
 	defer func() {
 		if r := recover(); r != nil {
-			AlwaysPrintf("see ForEach() PanicOn '%v' at '%v'", r, Stack())
-			PanicOn(r)
+			vprint.AlwaysPrintf("see ForEach() PanicOn '%v' at '%v'", r, vprint.Stack())
+			vprint.PanicOn(r)
 		}
 	}()
 	return c.b.ForEach(index, field, view, shard, fn)
@@ -450,8 +450,8 @@ func (c *statTx) ForEachRange(index, field, view string, shard uint64, start, en
 
 	defer func() {
 		if r := recover(); r != nil {
-			AlwaysPrintf("see ForEachRange() PanicOn '%v' at '%v'", r, Stack())
-			PanicOn(r)
+			vprint.AlwaysPrintf("see ForEachRange() PanicOn '%v' at '%v'", r, vprint.Stack())
+			vprint.PanicOn(r)
 		}
 	}()
 	return c.b.ForEachRange(index, field, view, shard, start, end, fn)
@@ -467,8 +467,8 @@ func (c *statTx) Count(index, field, view string, shard uint64) (uint64, error) 
 
 	defer func() {
 		if r := recover(); r != nil {
-			AlwaysPrintf("see Count() PanicOn '%v' at '%v'", r, Stack())
-			PanicOn(r)
+			vprint.AlwaysPrintf("see Count() PanicOn '%v' at '%v'", r, vprint.Stack())
+			vprint.PanicOn(r)
 		}
 	}()
 	return c.b.Count(index, field, view, shard)
@@ -484,8 +484,8 @@ func (c *statTx) Max(index, field, view string, shard uint64) (uint64, error) {
 
 	defer func() {
 		if r := recover(); r != nil {
-			AlwaysPrintf("see Max() PanicOn '%v' at '%v'", r, Stack())
-			PanicOn(r)
+			vprint.AlwaysPrintf("see Max() PanicOn '%v' at '%v'", r, vprint.Stack())
+			vprint.PanicOn(r)
 		}
 	}()
 	return c.b.Max(index, field, view, shard)
@@ -501,8 +501,8 @@ func (c *statTx) Min(index, field, view string, shard uint64) (uint64, bool, err
 
 	defer func() {
 		if r := recover(); r != nil {
-			AlwaysPrintf("see Min() PanicOn '%v' at '%v'", r, Stack())
-			PanicOn(r)
+			vprint.AlwaysPrintf("see Min() PanicOn '%v' at '%v'", r, vprint.Stack())
+			vprint.PanicOn(r)
 		}
 	}()
 	return c.b.Min(index, field, view, shard)
@@ -518,8 +518,8 @@ func (c *statTx) CountRange(index, field, view string, shard uint64, start, end 
 
 	defer func() {
 		if r := recover(); r != nil {
-			AlwaysPrintf("see CountRange() PanicOn '%v' at '%v'", r, Stack())
-			PanicOn(r)
+			vprint.AlwaysPrintf("see CountRange() PanicOn '%v' at '%v'", r, vprint.Stack())
+			vprint.PanicOn(r)
 		}
 	}()
 	return c.b.CountRange(index, field, view, shard, start, end)
@@ -534,8 +534,8 @@ func (c *statTx) OffsetRange(index, field, view string, shard, offset, start, en
 
 	defer func() {
 		if r := recover(); r != nil {
-			AlwaysPrintf("see OffsetRange() PanicOn '%v' at '%v'", r, Stack())
-			PanicOn(r)
+			vprint.AlwaysPrintf("see OffsetRange() PanicOn '%v' at '%v'", r, vprint.Stack())
+			vprint.PanicOn(r)
 		}
 	}()
 	return c.b.OffsetRange(index, field, view, shard, offset, start, end)

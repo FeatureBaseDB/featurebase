@@ -28,7 +28,7 @@ import (
 	txkey "github.com/molecula/featurebase/v2/short_txkey"
 	"github.com/molecula/featurebase/v2/storage"
 
-	. "github.com/molecula/featurebase/v2/vprint" // nolint:staticcheck
+	"github.com/molecula/featurebase/v2/vprint"
 	"github.com/pkg/errors"
 )
 
@@ -411,7 +411,7 @@ func (tx *RBFTx) ImportRoaringBits(index, field, view string, shard uint64, rit 
 
 func (tx *RBFTx) NewTxIterator(index, field, view string, shard uint64) *roaring.Iterator {
 	b, err := tx.RoaringBitmap(index, field, view, shard)
-	PanicOn(err)
+	vprint.PanicOn(err)
 	return b.Iterator()
 }
 

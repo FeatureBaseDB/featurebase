@@ -19,10 +19,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/molecula/featurebase/v2"
+	pilosa "github.com/molecula/featurebase/v2"
 	"github.com/molecula/featurebase/v2/pql"
 	"github.com/molecula/featurebase/v2/testhook"
-	. "github.com/molecula/featurebase/v2/vprint" // nolint:staticcheck
+	"github.com/molecula/featurebase/v2/vprint"
 	"github.com/pkg/errors"
 )
 
@@ -155,7 +155,7 @@ func (h *Holder) SetBitTime(index, field string, rowID, columnID uint64, t *time
 	if err != nil {
 		panic(err)
 	}
-	PanicOn(tx.Commit())
+	vprint.PanicOn(tx.Commit())
 }
 
 // ClearBit clears a bit on the given field.
@@ -174,7 +174,7 @@ func (h *Holder) ClearBit(index, field string, rowID, columnID uint64) {
 	if err != nil {
 		panic(err)
 	}
-	PanicOn(tx.Commit())
+	vprint.PanicOn(tx.Commit())
 }
 
 // MustSetBits sets columns on a row. Panic on error.

@@ -28,7 +28,7 @@ import (
 	"github.com/molecula/featurebase/v2/storage"
 	"github.com/pkg/errors"
 
-	. "github.com/molecula/featurebase/v2/vprint" // nolint:staticcheck
+	"github.com/molecula/featurebase/v2/vprint"
 )
 
 var _ = sort.Sort
@@ -279,7 +279,7 @@ func (per *DBPerShard) LoadExistingDBs() (err error) {
 
 func (txf *TxFactory) NewDBPerShard(typ txtype, holderDir string, holder *Holder) (d *DBPerShard) {
 	if holder.cfg == nil || holder.cfg.RBFConfig == nil || holder.cfg.StorageConfig == nil {
-		PanicOn("must have holder.cfg.RBFConfig and holder.cfg.StorageConfig set here")
+		vprint.PanicOn("must have holder.cfg.RBFConfig and holder.cfg.StorageConfig set here")
 	}
 
 	hasRoaring := false
@@ -422,7 +422,7 @@ func (per *DBPerShard) unprotectedGetDBShard(index string, shard uint64, idx *In
 	if dbs != nil && dbs.closed {
 		// roaring txn are nil/fake anyway. Don't freak out.
 		if per.typ != roaringTxn {
-			PanicOn(fmt.Sprintf("cannot retain closed dbs across holder ReOpen dbs='%p'; per.typ='%v'", dbs, per.typ))
+			vprint.PanicOn(fmt.Sprintf("cannot retain closed dbs across holder ReOpen dbs='%p'; per.typ='%v'", dbs, per.typ))
 		}
 	}
 	if !ok {
@@ -449,11 +449,11 @@ func (per *DBPerShard) unprotectedGetDBShard(index string, shard uint64, idx *In
 			registry = globalRbfDBReg
 			registry.(*rbfDBRegistrar).SetRBFConfig(per.RBFConfig)
 		default:
-			PanicOn(fmt.Sprintf("unknown txtyp: '%v'", dbs.typ))
+			vprint.PanicOn(fmt.Sprintf("unknown txtyp: '%v'", dbs.typ))
 		}
 		path := dbs.pathForType(dbs.typ)
 		w, err := registry.OpenDBWrapper(path, DetectMemAccessPastTx, per.StorageConfig)
-		PanicOn(err)
+		vprint.PanicOn(err)
 		h := idx.Holder()
 		w.SetHolder(h)
 		dbs.Open = true
@@ -470,7 +470,7 @@ func (per *DBPerShard) Close() (err error) {
 	for _, dbi := range per.dbh.Index {
 		for _, dbs := range dbi.Shard {
 			err = dbs.Close()
-			PanicOn(err)
+			vprint.PanicOn(err)
 		}
 	}
 	return
@@ -546,7 +546,7 @@ func (per *DBPerShard) TypedDBPerShardGetShardsForIndex(ty txtype, idx *Index, r
 	ignoreEmpty := false
 	includeRoot := true
 	dbf, err := listDirUnderDir(path, includeRoot, ignoreEmpty)
-	PanicOn(err)
+	vprint.PanicOn(err)
 
 	for _, nm := range dbf {
 		base := filepath.Base(nm)
@@ -561,7 +561,7 @@ func (per *DBPerShard) TypedDBPerShardGetShardsForIndex(ty txtype, idx *Index, r
 		// Parse filename into integer.
 		shard, err := strconv.ParseUint(base[lenOfShardPrefix:], 10, 64)
 		if err != nil {
-			PanicOn(err)
+			vprint.PanicOn(err)
 			continue
 		}
 

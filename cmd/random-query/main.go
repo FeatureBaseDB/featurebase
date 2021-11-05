@@ -26,10 +26,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/molecula/featurebase/v2"
+	pilosa "github.com/molecula/featurebase/v2"
 	"github.com/molecula/featurebase/v2/http"
 	"github.com/molecula/featurebase/v2/pql"
-	. "github.com/molecula/featurebase/v2/vprint" // nolint:staticcheck
+	"github.com/molecula/featurebase/v2/vprint"
 )
 
 // RandomQueryConfig
@@ -168,9 +168,9 @@ func (cfg *RandomQueryConfig) Run() (err error) {
 		dur := time.Since(t0)
 		if dur > 0 {
 			qps := 1e9 * float64(totalQ) / float64(dur)
-			AlwaysPrintf("totalQueries run: %v   elapsed: %v   qps: %0.02f", totalQ, dur, qps)
+			vprint.AlwaysPrintf("totalQueries run: %v   elapsed: %v   qps: %0.02f", totalQ, dur, qps)
 		} else {
-			AlwaysPrintf("totalQueries run: %v   elapsed: %v   qps: N/A", totalQ, dur)
+			vprint.AlwaysPrintf("totalQueries run: %v   elapsed: %v   qps: N/A", totalQ, dur)
 		}
 	}
 	defer report()
@@ -211,7 +211,7 @@ NewSetup:
 		index := indexes[cfg.Rnd.Intn(len(indexes))]
 
 		pql, err := cfg.GenQuery(index)
-		PanicOn(err)
+		vprint.PanicOn(err)
 
 		if cfg.Verbose {
 			fmt.Printf("pql = '%v'\n", pql)
@@ -220,7 +220,7 @@ NewSetup:
 		// Query node0.
 		res, err := cli.Query(ctx, index, &pilosa.QueryRequest{Index: index, Query: pql})
 		if err != nil {
-			AlwaysPrintf("QUERY FAILED! queries before this=%v; err = '%v', pql='%v'", loops, err, pql)
+			vprint.AlwaysPrintf("QUERY FAILED! queries before this=%v; err = '%v', pql='%v'", loops, err, pql)
 			return err
 		}
 		if cfg.VeryVerbose {
@@ -356,7 +356,7 @@ func (cfg *RandomQueryConfig) Setup(api API) (err error) {
 				pql := fmt.Sprintf("Rows(%v)", fld.Name)
 
 				res, err := api.Query(ctx, ii.Name, &pilosa.QueryRequest{Index: ii.Name, Query: pql})
-				PanicOn(err)
+				vprint.PanicOn(err)
 				if cfg.VeryVerbose {
 					fmt.Printf("success on pql = '%v'; res='%v'\n", pql, res.Results[0])
 				}
@@ -379,7 +379,7 @@ func (cfg *RandomQueryConfig) Setup(api API) (err error) {
 			case "decimal":
 				cfg.AddIntField(ii.Name, fld.Name, fld.Options.Min, fld.Options.Max, fld.Options.Scale, fld.Options.Type == "decimal")
 			default:
-				AlwaysPrintf("ignoring field %q: unhandled type %q\n", fld.Name, fld.Options.Type)
+				vprint.AlwaysPrintf("ignoring field %q: unhandled type %q\n", fld.Name, fld.Options.Type)
 			}
 		}
 	}
@@ -412,7 +412,7 @@ func (cfg *RandomQueryConfig) AddIntField(index, field string, min, max pql.Deci
 		cfg.IndexMap[index] = f
 	}
 	if min.Scale != scale || max.Scale != scale {
-		PanicOn(fmt.Sprintf("scale error; min scale %d, max scale %d, field scale %d, assumed they'd be equal",
+		vprint.PanicOn(fmt.Sprintf("scale error; min scale %d, max scale %d, field scale %d, assumed they'd be equal",
 			min.Scale, max.Scale, scale))
 	}
 

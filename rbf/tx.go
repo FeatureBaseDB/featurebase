@@ -25,7 +25,7 @@ import (
 	"github.com/benbjohnson/immutable"
 	"github.com/molecula/featurebase/v2/roaring"
 	txkey "github.com/molecula/featurebase/v2/short_txkey"
-	. "github.com/molecula/featurebase/v2/vprint"
+	"github.com/molecula/featurebase/v2/vprint"
 )
 
 var _ = txkey.ToString
@@ -134,7 +134,7 @@ func (tx *Tx) Rollback() {
 	// Disconnect transaction from DB.
 	tx.db.mu.Lock()
 	defer tx.db.mu.Unlock()
-	PanicOn(tx.db.removeTx(tx))
+	vprint.PanicOn(tx.db.removeTx(tx))
 }
 
 // Root returns the root page number for a bitmap. Returns 0 if the bitmap does not exist.
@@ -918,7 +918,7 @@ func (tx *Tx) allocatePgno() (uint32, error) {
 		if changed, err := c.Remove(uint64(pgno)); err != nil {
 			return 0, err
 		} else if !changed {
-			PanicOn(fmt.Sprintf("tx.Tx.allocatePgno(): double alloc: %d", pgno))
+			vprint.PanicOn(fmt.Sprintf("tx.Tx.allocatePgno(): double alloc: %d", pgno))
 		}
 		return pgno, nil
 	}
@@ -959,7 +959,7 @@ func (tx *Tx) freePgno(pgno uint32) error {
 	if changed, err := c.Add(uint64(pgno)); err != nil {
 		return err
 	} else if !changed {
-		PanicOn(fmt.Sprintf("rbf.Tx.freePgno(): double free: %d", pgno))
+		vprint.PanicOn(fmt.Sprintf("rbf.Tx.freePgno(): double free: %d", pgno))
 	}
 	return nil
 }
@@ -1199,7 +1199,7 @@ func (tx *Tx) ForEachRange(name string, start, end uint64, fn func(uint64) error
 				}
 			}
 		default:
-			PanicOn(fmt.Sprintf("invalid container type: %d", cell.Type))
+			vprint.PanicOn(fmt.Sprintf("invalid container type: %d", cell.Type))
 		}
 	}
 }
@@ -1375,11 +1375,11 @@ func (tx *Tx) CountRange(name string, start, end uint64) (uint64, error) {
 
 func (tx *Tx) OffsetRange(name string, offset, start, endx uint64) (*roaring.Bitmap, error) {
 	if lowbits(offset) != 0 {
-		PanicOn("offset must not contain low bits")
+		vprint.PanicOn("offset must not contain low bits")
 	} else if lowbits(start) != 0 {
-		PanicOn("range start must not contain low bits")
+		vprint.PanicOn("range start must not contain low bits")
 	} else if lowbits(endx) != 0 {
-		PanicOn("range endx must not contain low bits")
+		vprint.PanicOn("range endx must not contain low bits")
 	}
 
 	tx.mu.RLock()
@@ -1512,7 +1512,7 @@ func (si *emptyContainerIterator) Next() bool {
 	return false
 }
 func (si *emptyContainerIterator) Value() (uint64, *roaring.Container) {
-	PanicOn("emptyContainerIterator never has any Values")
+	vprint.PanicOn("emptyContainerIterator never has any Values")
 	return 0, nil
 }
 
@@ -1644,7 +1644,7 @@ func (tx *Tx) ImportRoaringBits(name string, itr roaring.RoaringIterator, clear 
 
 				err = tx.putContainerWithCursor(cur, itrKey, newC)
 				if err != nil {
-					PanicOn(err)
+					vprint.PanicOn(err)
 					return
 				}
 				continue
@@ -1786,7 +1786,7 @@ func (tx *Tx) Pages(pgnos []uint32) ([]Page, error) {
 			pages = append(pages, &FreePage{FreePageInfo: info})
 
 		default:
-			PanicOn(fmt.Sprintf("invalid page info type %T", info))
+			vprint.PanicOn(fmt.Sprintf("invalid page info type %T", info))
 		}
 	}
 
@@ -1906,7 +1906,7 @@ func (tx *Tx) walkPageInfo(infos []PageInfo, root uint32, name string) error {
 				Tree:   name,
 			}
 		default:
-			PanicOn(fmt.Sprintf("unexpected page type %d for page %d", typ, pgno))
+			vprint.PanicOn(fmt.Sprintf("unexpected page type %d for page %d", typ, pgno))
 		}
 
 		return nil

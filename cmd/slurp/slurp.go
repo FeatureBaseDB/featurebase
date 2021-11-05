@@ -30,10 +30,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/molecula/featurebase/v2"
+	pilosa "github.com/molecula/featurebase/v2"
 	"github.com/molecula/featurebase/v2/http"
 	pnet "github.com/molecula/featurebase/v2/net"
-	. "github.com/molecula/featurebase/v2/vprint" // nolint:staticcheck
+	"github.com/molecula/featurebase/v2/vprint"
 )
 
 // slurp: slurp is a load-tester for importing bulk data.
@@ -60,7 +60,7 @@ func (r *stateMachine) NewHeader(h *tar.Header, tr *tar.Reader) error {
 		field := parts[2]
 		view := parts[4]
 		shard, err := strconv.ParseUint(parts[6], 10, 64)
-		PanicOn(err)
+		vprint.PanicOn(err)
 		if index != r.lastIndex || field != r.lastField || shard != r.lastShard {
 			err := r.Upload()
 			if err != nil {
@@ -84,7 +84,7 @@ func (r *stateMachine) NewHeader(h *tar.Header, tr *tar.Reader) error {
 			if err != nil {
 				return err
 			}
-			VV("Finished import %v", time.Since(r.start))
+			vprint.VV("Finished import %v", time.Since(r.start))
 
 			if r.profile != "" {
 				stopProfile(r.host, r.profile)
@@ -104,21 +104,21 @@ func (r *stateMachine) NewHeader(h *tar.Header, tr *tar.Reader) error {
 			}
 
 			byteData, err := ioutil.ReadAll(tr)
-			PanicOn(err)
+			vprint.PanicOn(err)
 			br := bytes.NewReader(byteData)
 			err = r.client.ImportFieldKeys(context.Background(), uri, index, fieldName, false, br)
 			if err != nil {
 				return err
 			}
 		default:
-			VV("%v", h.Name)
+			vprint.VV("%v", h.Name)
 			index := parts[1]
 			partition, err := strconv.ParseUint(v, 10, 64)
 			if err != nil {
 				return err
 			}
 			byteData, err := ioutil.ReadAll(tr)
-			PanicOn(err)
+			vprint.PanicOn(err)
 
 			br := bytes.NewReader(byteData)
 			err = r.client.ImportIndexKeys(context.Background(), uri, index, int(partition), false, br)
@@ -176,10 +176,10 @@ func UploadTar(srcFile string, client *http.InternalClient, profile, host string
 			break
 		}
 		if err != nil {
-			PanicOn(err)
+			vprint.PanicOn(err)
 		}
 		err = runner.NewHeader(header, tarReader)
-		PanicOn(err)
+		vprint.PanicOn(err)
 	}
 	return nil
 }
@@ -194,7 +194,7 @@ func main() {
 	flag.Parse()
 
 	uri, err := pnet.NewURIFromAddress(host)
-	PanicOn(err)
+	vprint.PanicOn(err)
 	globURI = uri
 
 	h := &gohttp.Client{}
@@ -202,12 +202,12 @@ func main() {
 		startProfile(host)
 	}
 	c, err := http.NewInternalClient(host, h)
-	PanicOn(err)
+	vprint.PanicOn(err)
 
 	t0 := time.Now()
 	println("uploading", tarSrcPath)
-	PanicOn(UploadTar(tarSrcPath, c, profile, host))
-	VV("total elapsed '%v'", time.Since(t0))
+	vprint.PanicOn(UploadTar(tarSrcPath, c, profile, host))
+	vprint.VV("total elapsed '%v'", time.Since(t0))
 }
 
 func startProfile(host string) {
@@ -248,10 +248,10 @@ func stopProfile(host, outfile string) {
 	}
 
 	fd, err := os.Create(outfile)
-	PanicOn(err)
+	vprint.PanicOn(err)
 	defer fd.Close()
 	_, err = io.Copy(fd, resp.Body)
-	PanicOn(err)
+	vprint.PanicOn(err)
 
 }
 

@@ -667,6 +667,9 @@ func (c *InternalClient) importHelper(ctx context.Context, req pilosa.Message, p
 		// request over the wire, even though we still have to go through
 		// the http interface.
 		nodes, err = c.Nodes(ctx)
+		if err != nil {
+			return errors.Wrap(err, "getting nodes")
+		}
 	}
 
 	// "us" is a usable local node if any, "them" is every node that we need

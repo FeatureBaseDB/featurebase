@@ -36,7 +36,7 @@ import (
 	"github.com/molecula/featurebase/v2/storage"
 	"github.com/molecula/featurebase/v2/testhook"
 	"github.com/molecula/featurebase/v2/topology"
-	. "github.com/molecula/featurebase/v2/vprint" // nolint:staticcheck
+	"github.com/molecula/featurebase/v2/vprint"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -300,7 +300,7 @@ func NewHolder(path string, cfg *HolderConfig) *Holder {
 	storage.SetRowCacheOn(cfg.RowcacheOn)
 
 	txf, err := NewTxFactory(cfg.StorageConfig.Backend, h.IndexesPath(), h)
-	PanicOn(err)
+	vprint.PanicOn(err)
 	h.txf = txf
 
 	_ = testhook.Created(h.Auditor, h, nil)

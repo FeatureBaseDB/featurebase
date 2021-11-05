@@ -82,16 +82,6 @@ func (c *Cache) Get(key Key) (value interface{}, ok bool) {
 	return nil, false
 }
 
-// remove removes the provided key from the cache.
-func (c *Cache) remove(key Key) { // nolint: staticcheck,unused
-	if c.cache == nil {
-		return
-	}
-	if ele, hit := c.cache[key]; hit {
-		c.removeElement(ele)
-	}
-}
-
 // removeOldest removes the oldest item from the cache.
 func (c *Cache) removeOldest() {
 	if c.cache == nil {
@@ -118,16 +108,4 @@ func (c *Cache) Len() int {
 		return 0
 	}
 	return c.ll.Len()
-}
-
-// clear purges all stored items from the cache.
-func (c *Cache) clear() { // nolint: staticcheck,unused
-	if c.OnEvicted != nil {
-		for _, e := range c.cache {
-			kv := e.Value.(*entry)
-			c.OnEvicted(kv.key, kv.value)
-		}
-	}
-	c.ll = nil
-	c.cache = nil
 }
