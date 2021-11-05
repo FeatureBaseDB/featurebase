@@ -196,8 +196,9 @@ deploy node for linux arm64:
     - aws configure set aws_profile $PROFILE
     - 'which ssh-agent || ( apt-get update -y && apt-get install openssh-client -y )'
     - eval `ssh-agent -s`
-    - mkdir -p /root/.ssh
-    - chmod 700 /root/.ssh
+    - ssh-add <(echo "$SSH_PRIVATE_KEY")
+    - mkdir -p ~/.ssh
+    - '[[ -f /.dockerenv ]] && echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config'
     - echo $AWS_SSH_PRIVATE_KEY > gitlab-featurebase-dev
   script:
     - AMI=$(aws ssm get-parameters --names /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-ebs --query 'Parameters[0].[Value]' --output text --profile $PROFILE)
@@ -207,4 +208,4 @@ deploy node for linux arm64:
     - PUBLIC_IP=$(aws ec2 describe-instances --filters 'Name=tag:Name, Values=Single_Node_Deployment' 'Name=instance-state-name, Values=running' --query 'Reservations[*].Instances[*].PublicIpAddress' --output text --profile $PROFILE)
     - echo $PUBLIC_IP
     - echo "scp test" > test.txt
-    - scp test.txt ec2-user@$PUBLIC_IP
+    - scp -i gitlab-featurebase-dev test.txt ec2-user@$PUBLIC_IP
