@@ -212,8 +212,8 @@ deploy node for linux amd64:
     - echo $INSTANCE_ID > linux-amd64-instance.txt
     - echo $INSTANCE_ID
     - scp -o StrictHostKeyChecking=no -i gitlab-featurebase-dev featurebase_linux_amd64 ec2-user@$PUBLIC_IP:.
-  dependencies:
-    jobs: build for linux amd64
+  needs:
+    job: build for linux amd64
   artifacts:
     paths:
       - linux-amd64-instance.txt
