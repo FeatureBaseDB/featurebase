@@ -177,7 +177,7 @@ build container fb:
     - echo Created docker featurebase image with tag "$tag"
 
 deploy node for linux arm64:
-  stage: integration
+  stage: lint
   image: registry.gitlab.com/gitlab-org/cloud-deploy/aws-base:latest
   variables:
     AMI: ""
@@ -206,6 +206,5 @@ deploy node for linux arm64:
     - aws ec2 run-instances --image-id $AMI --instance-type $INSTANCE --security-group-ids $SECURITY_GROUP --subnet-id $SUBNET_ID --key-name gitlab-featurebase-dev --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=Single_Node_Deployment}]' --profile $PROFILE
     - PUBLIC_IP=$(aws ec2 describe-instances --filters 'Name=tag:Name, Values=Single_Node_Deployment' 'Name=instance-state-name, Values=running' --query 'Reservations[*].Instances[*].PublicIpAddress' --output text --profile $PROFILE)
     - echo $PUBLIC_IP
-    - scp featurebase_linux_amd64 ec2-user@$PUBLIC_IP
-  dependencies:
-    - build for linux arm64
+    - echo "scp test" > test.txt
+    - scp test.txt ec2-user@$PUBLIC_IP
