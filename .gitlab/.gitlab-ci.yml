@@ -205,7 +205,8 @@ deploy node for linux arm64:
     - SECURITY_GROUP=$(aws ec2 describe-security-groups --filter Name=vpc-id,Values=vpc-03a4ba3d5b7c8f978 --query 'SecurityGroups[*].[GroupId]' --output text --profile $PROFILE)
     - SUBNET_ID=$(aws ec2 describe-subnets --filters 'Name=vpc-id,Values=vpc-03a4ba3d5b7c8f978' 'Name=availability-zone,Values=us-east-2a' --query 'Subnets[0].SubnetId' --output text --profile $PROFILE)
     - aws ec2 run-instances --image-id $AMI --instance-type $INSTANCE --security-group-ids $SECURITY_GROUP --subnet-id $SUBNET_ID --key-name gitlab-featurebase-dev --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=Single_Node_Deployment}]' --profile $PROFILE
+    - sleep 30
     - PUBLIC_IP=$(aws ec2 describe-instances --filters 'Name=tag:Name, Values=Single_Node_Deployment' 'Name=instance-state-name, Values=running' --query 'Reservations[*].Instances[*].PublicIpAddress' --output text --profile $PROFILE)
     - echo $PUBLIC_IP
     - echo "scp test" > test.txt
-    - scp -i gitlab-featurebase-dev test.txt ec2-user@$PUBLIC_IP
+    - scp -o StrictHostKeyChecking=no -i gitlab-featurebase-dev test.txt ec2-user@$PUBLIC_IP
