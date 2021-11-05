@@ -194,12 +194,12 @@ deploy node for linux arm64:
     - aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
     - aws configure set region "us-east-2"
     - aws configure set aws_profile $PROFILE
+    - echo $AWS_SSH_PRIVATE_KEY > gitlab-featurebase-dev
     - 'which ssh-agent || ( apt-get update -y && apt-get install openssh-client -y )'
     - eval `ssh-agent -s`
-    - echo "$AWS_SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+    - echo gitlab-featurebase-dev | tr -d '\r' | ssh-add -
     - mkdir -p ~/.ssh
     - '[[ -f /.dockerenv ]] && echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config'
-    - echo $AWS_SSH_PRIVATE_KEY > gitlab-featurebase-dev
   script:
     - AMI=$(aws ssm get-parameters --names /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-ebs --query 'Parameters[0].[Value]' --output text --profile $PROFILE)
     - SECURITY_GROUP=$(aws ec2 describe-security-groups --filter Name=vpc-id,Values=vpc-03a4ba3d5b7c8f978 --query 'SecurityGroups[*].[GroupId]' --output text --profile $PROFILE)
