@@ -279,6 +279,7 @@ func TestAPI_ImportValue(t *testing.T) {
 		// Import without data but with columnkeys, verify that it errors
 		req.ColumnKeys = colKeys
 		qcx2 := coord.API.Txf().NewQcx()
+		defer qcx2.Abort()
 		if err := coord.API.ImportValue(ctx, qcx2, req); err == nil {
 			t.Fatal("expected error but succeeded")
 		}
@@ -287,6 +288,7 @@ func TestAPI_ImportValue(t *testing.T) {
 		// Import with mismatch column and value lengths
 		req.Values = values
 		qcx3 := coord.API.Txf().NewQcx()
+		defer qcx3.Abort()
 		if err := coord.API.ImportValue(ctx, qcx3, req); err == nil {
 			t.Fatal("expected error but succeeded")
 		}
@@ -295,6 +297,7 @@ func TestAPI_ImportValue(t *testing.T) {
 		// Import with data but no columns
 		req.ColumnKeys = make([]string, 0)
 		qcx4 := coord.API.Txf().NewQcx()
+		defer qcx4.Abort()
 		if err := coord.API.ImportValue(ctx, qcx4, req); err == nil {
 			t.Fatal("expected error but succeeded")
 		}
