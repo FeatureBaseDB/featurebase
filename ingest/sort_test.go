@@ -14,6 +14,53 @@
 
 package ingest
 
+import (
+	"testing"
+)
+
+const sampleSize = 1000000
+
+var sampleSortingData = createSampleFieldData()
+
+func createSampleFieldData() *FieldOperation {
+	fo := &FieldOperation{}
+	fo.RecordIDs = make([]uint64, sampleSize)
+	fo.Values = make([]uint64, sampleSize)
+	fo.Signed = make([]int64, sampleSize)
+	for i := range fo.RecordIDs {
+		fo.RecordIDs[i] = (uint64(i) * 63 * 3456789) % 50000000
+		fo.Values[i] = (uint64(i) * 6) % 8
+		fo.Signed[i] = ((int64(i) * 17) % 15) - 8
+	}
+	return fo
+}
+
+func benchmarkOneSort(b *testing.B, fo *FieldOperation) {
+	for i := 0; i < b.N; i++ {
+		b.StopTimer()
+		sortable := fo.clone()
+		b.StartTimer()
+		_ = sortable.SortToShards()
+	}
+}
+
+func BenchmarkSortFieldOp(b *testing.B) {
+	b.Run("full", func(b *testing.B) {
+		f2 := *sampleSortingData
+		benchmarkOneSort(b, &f2)
+	})
+	b.Run("nosign", func(b *testing.B) {
+		f2 := *sampleSortingData
+		f2.Signed = nil
+		benchmarkOneSort(b, &f2)
+	})
+	b.Run("signonly", func(b *testing.B) {
+		f2 := *sampleSortingData
+		f2.Values = nil
+		benchmarkOneSort(b, &f2)
+	})
+}
+
 // func BenchmarkSort64(b *testing.B) {
 // 	gen := func(n, width uint64) func() []uint64 {
 // 		var data []uint64

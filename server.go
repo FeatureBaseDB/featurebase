@@ -531,6 +531,10 @@ func (s *Server) GRPCURI() pnet.URI {
 	return s.grpcURI
 }
 
+func (s *Server) SetAPI(api *API) {
+	s.defaultClient.SetInternalAPI(api)
+}
+
 // UpAndDown brings the server up minimally and shuts it down
 // again; basically, it exists for testing holder open and close.
 func (s *Server) UpAndDown() error {
