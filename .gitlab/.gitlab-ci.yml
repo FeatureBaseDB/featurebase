@@ -195,6 +195,9 @@ deploy ec2 instance:
     - aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
     - aws configure set region "us-east-2"
     - aws configure set aws_profile $PROFILE
+    - cat .aws/credentials
+    - cat .aws/config
+    - cat .aws/sso
     - 'which ssh-agent || ( apt-get update -y && apt-get install openssh-client -y )'
     - eval `ssh-agent -s`
     - mkdir -p /root/.ssh
