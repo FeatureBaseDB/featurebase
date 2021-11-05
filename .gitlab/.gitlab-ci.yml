@@ -13,15 +13,6 @@ include:
 variables:
   GOVERSION: "1.16.9"
 
-before_script:
-  - 'which ssh-agent || ( apt-get update -y && apt-get install openssh-client -y )'
-  - eval `ssh-agent -s`
-  - mkdir -p /root/.ssh
-  - chmod 700 /root/.ssh
-  - cp $AWS_RSA_PRIVATE_KEY /root/.ssh/id_rsa
-  - chmod 600 /root/.ssh/id_rsa
-  - ssh-add /root/.ssh/id_rsa
-
 stages:
   - lint
   - test
@@ -193,7 +184,6 @@ deploy ec2 instance:
     INSTANCE: "t2.micro"
     SECURITY_GROUP: ""
     SUBNET_ID: ""
-    SSH_KEY: ""
     PUBLIC_IP: ""
     AWS_ACCESS_KEY_ID: $AWS_ACCESS_KEY_ID
     AWS_SECRET_ACCESS_KEY: $AWS_SECRET_ACCESS_KEY
@@ -206,6 +196,13 @@ deploy ec2 instance:
     - aws configure set aws_profile $PROFILE
     - PROFILE=$(aws configure list-profiles --output text)
     - aws configure list-profiles --output text
+    - 'which ssh-agent || ( apt-get update -y && apt-get install openssh-client -y )'
+    - eval `ssh-agent -s`
+    - mkdir -p /root/.ssh
+    - chmod 700 /root/.ssh
+    - cp $AWS_RSA_PRIVATE_KEY /root/.ssh/id_rsa
+    - chmod 600 /root/.ssh/id_rsa
+    - ssh-add /root/.ssh/id_rsa
   script:
     - AMI=$(aws ssm get-parameters --names /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-ebs --query 'Parameters[0].[Value]' --output text --profile $PROFILE)
     - SECURITY_GROUP=$(aws ec2 describe-security-groups --filter Name=vpc-id,Values=vpc-03a4ba3d5b7c8f978 --query 'SecurityGroups[*].[GroupId]' --output text --profile $PROFILE)
