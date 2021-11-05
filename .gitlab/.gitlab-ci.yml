@@ -197,8 +197,8 @@ deploy node for linux arm64:
     - echo $AWS_SSH_PRIVATE_KEY > gitlab-featurebase-dev
     - 'which ssh-agent || ( apt-get update -y && apt-get install openssh-client -y )'
     - eval `ssh-agent -s`
-    - echo gitlab-featurebase-dev | tr -d '\r' | ssh-add -
     - mkdir -p ~/.ssh
+    - chmod 700 /root/.ssh
     - '[[ -f /.dockerenv ]] && echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config'
   script:
     - AMI=$(aws ssm get-parameters --names /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-ebs --query 'Parameters[0].[Value]' --output text --profile $PROFILE)
