@@ -8,10 +8,10 @@ yum install golang -y # latest verion in ec2 is 1.15.14
 yum install postgresql -y
 
 # Configure host system  
-# N=200000
-# sysctl -w vm.max_map_count=N
-# echo N > /proc/sys/vm/max_map_count
-ulimit -n -S 200000
+cat /proc/sys/fs/file-max
+sysctl -w fs.file-max=262144
+sysctl -p
+cat /proc/sys/fs/file-max
 
 # # install go 1.16.9
 # curl -O https://dl.google.com/go/go1.16.9.linux-amd64.tar.gz
