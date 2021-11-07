@@ -194,13 +194,12 @@ deploy node for linux amd64:
     - aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
     - aws configure set region "us-east-2"
     - aws configure set aws_profile $PROFILE
-    - echo $AWS_SSH_PRIVATE_KEY > gitlab-featurebase-dev
+    - echo $AWS_SSH_PRIVATE_KEY > gitlab-featurebase-dev.pem
     - chmod 400 gitlab-featurebase-dev
     - 'which ssh-agent || ( apt-get update -y && apt-get install openssh-client -y )'
     - eval `ssh-agent -s`
     - mkdir -p ~/.ssh
     - chmod 700 /root/.ssh
-    - chmod 600 /root/.ssh/authorized_keys
     - '[[ -f /.dockerenv ]] && echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config'
   script:
     - AMI=$(aws ssm get-parameters --names /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-ebs --query 'Parameters[0].[Value]' --output text --profile $PROFILE)
@@ -213,7 +212,7 @@ deploy node for linux amd64:
     - INSTANCE_ID=$(aws ec2 describe-instances --filters 'Name=tag:Name, Values=linux-amd64-node' 'Name=instance-state-name, Values=running' --query 'Reservations[*].Instances[*].InstanceId' --output text --profile $PROFILE)
     - echo $INSTANCE_ID > linux-amd64-instance.txt
     - echo $INSTANCE_ID
-    - scp -o StrictHostKeyChecking=no -i gitlab-featurebase-dev featurebase_linux_amd64 ec2-user@$PUBLIC_IP:.
+    - scp -o StrictHostKeyChecking=no -i gitlab-featurebase-dev.pem featurebase_linux_amd64 ec2-user@$PUBLIC_IP:.
   needs:
     job: build for linux amd64
   artifacts:
