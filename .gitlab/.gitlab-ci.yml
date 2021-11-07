@@ -195,7 +195,7 @@ deploy node for linux amd64:
     - aws configure set region "us-east-2"
     - aws configure set aws_profile $PROFILE
     - echo $AWS_SSH_PRIVATE_KEY > gitlab-featurebase-dev.pem
-    - chmod 400 gitlab-featurebase-dev
+    - chmod 400 gitlab-featurebase-dev.pem
     - 'which ssh-agent || ( apt-get update -y && apt-get install openssh-client -y )'
     - eval `ssh-agent -s`
     - mkdir -p ~/.ssh
