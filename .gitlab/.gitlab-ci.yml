@@ -200,6 +200,7 @@ deploy node for linux amd64:
     - eval `ssh-agent -s`
     - mkdir -p ~/.ssh
     - chmod 700 /root/.ssh
+    - chmod 600 /root/.ssh/authorized_keys
     - '[[ -f /.dockerenv ]] && echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config'
   script:
     - AMI=$(aws ssm get-parameters --names /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-ebs --query 'Parameters[0].[Value]' --output text --profile $PROFILE)
