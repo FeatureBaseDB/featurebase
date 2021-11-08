@@ -210,15 +210,11 @@ deploy node for linux amd64:
     - PUBLIC_IP=$(aws ec2 describe-instances --filters 'Name=tag:Name, Values=linux-amd64-node' 'Name=instance-state-name, Values=running' --query 'Reservations[*].Instances[*].PublicIpAddress' --output text --profile $PROFILE)
     - echo $PUBLIC_IP
     - INSTANCE_ID=$(aws ec2 describe-instances --filters 'Name=tag:Name, Values=linux-amd64-node' 'Name=instance-state-name, Values=running' --query 'Reservations[*].Instances[*].InstanceId' --output text --profile $PROFILE)
-    - echo $INSTANCE_ID > linux-amd64-instance.txt
     - echo $INSTANCE_ID
     - scp  -o StrictHostKeyChecking=no -i gitlab-featurebase-dev.pem featurebase_linux_amd64 ec2-user@$PUBLIC_IP:.
     - scp  -o StrictHostKeyChecking=no -i gitlab-featurebase-dev.pem .gitlab/featurebase.conf .gitlab/featurebase.service ec2-user@$PUBLIC_IP:.
   needs:
     job: build for linux amd64
-  artifacts:
-    paths:
-      - linux-amd64-instance.txt
 
 run featurebase in linux amd64 node:
   stage: lint
@@ -242,6 +238,7 @@ terminate node for linux amd64:
     - aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
     - aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
     - aws configure set region "us-east-2"
+    - echo $INSTANCE_ID
   script:
     - aws ec2 terminate-instances --instance-ids $INSTANCE_ID
   needs:
