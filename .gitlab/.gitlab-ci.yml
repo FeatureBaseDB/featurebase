@@ -176,11 +176,6 @@ build container fb:
     - docker push $tag
     - echo Created docker featurebase image with tag "$tag"
 
-before_script:
-  - aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
-  - aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
-  - aws configure set region "us-east-2"
-
 deploy node for linux amd64:
   stage: lint
   image: registry.gitlab.com/gitlab-org/cloud-deploy/aws-base:latest
@@ -193,6 +188,9 @@ deploy node for linux amd64:
     PROFILE: "default"
     AWS_SSH_PRIVATE_KEY: $AWS_SSH_PRIVATE_KEY
   before_script:
+    - aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
+    - aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
+    - aws configure set region "us-east-2"
     - aws configure set aws_profile $PROFILE
     - echo $AWS_SSH_PRIVATE_KEY > gitlab-featurebase-dev.pem
     - chmod 400 gitlab-featurebase-dev.pem
@@ -228,6 +226,9 @@ run featurebase in linux amd64 node:
   variables:
     INSTANCE_ID: ""
   before_script:
+    - aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
+    - aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
+    - aws configure set region "us-east-2"
     - INSTANCE_ID=$(cat linux-amd64-instance.txt)
   script:
     - aws ssm send-command --document-name "AWS-RunShellScript" --targets InstanceIds=$INSTANCE_ID --cli-input-json file://.gitlab/configureFeatureBase.json
@@ -241,6 +242,9 @@ terminate node for linux amd64:
   variables:
     INSTANCE_ID: ""
   before_script:
+    - aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
+    - aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
+    - aws configure set region "us-east-2"
     - INSTANCE_ID=$(cat linux-amd64-instance.txt)
   script:
     - aws ec2 terminate-instances --instance-ids $INSTANCE_ID
