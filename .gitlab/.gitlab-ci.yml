@@ -225,7 +225,7 @@ terminate node for linux amd64:
   stage: lint
   image: registry.gitlab.com/gitlab-org/cloud-deploy/aws-base:latest
   variables:
-    INSTANCE_ID
+    INSTANCE_ID: ""
   before_script:
     - INSTANCE_ID=$(cat linux-amd64-instance.txt)
   script:
