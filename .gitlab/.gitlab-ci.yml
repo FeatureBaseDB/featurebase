@@ -12,7 +12,6 @@ include:
           - .go/pkg/mod/
 variables:
   GOVERSION: "1.16.9"
-  INSTANCE_ID: ""
 
 stages:
   - lint
@@ -215,7 +214,7 @@ deploy node for linux amd64:
     - scp  -o StrictHostKeyChecking=no -i gitlab-featurebase-dev.pem .gitlab/featurebase.conf .gitlab/featurebase.service ec2-user@$PUBLIC_IP:.
     - aws ec2 associate-iam-instance-profile --instance-id $INSTANCE_ID --iam-instance-profile Name=featurebase-dev-ssm
   needs:
-    job: build for linux amd64
+    - job: build for linux amd64
   artifacts:
     paths:
       - linux-amd64-instance.txt
@@ -237,10 +236,7 @@ run featurebase in linux amd64 node:
     - aws ssm send-command --document-name "AWS-RunShellScript" --instance-ids $INSTANCE_ID --cli-input-json file://.gitlab/configureFeatureBase.json --profile $PROFILE --region us-east-2
     - sleep 120
   needs:
-    job: deploy node for linux amd64
-  artifacts:
-    paths:
-      - linux-amd64-instance.txt
+    - job: deploy node for linux amd64
 
 terminate node for linux amd64:
   stage: integration
@@ -256,4 +252,5 @@ terminate node for linux amd64:
   script:
     - aws ec2 terminate-instances --instance-ids $INSTANCE_ID
   needs:
-    job: run featurebase in linux amd64 node
+    - job: deploy node for linux amd64
+    - job: run featurebase in linux amd64 node
