@@ -238,6 +238,9 @@ run featurebase in linux amd64 node:
     - sleep 120
   needs:
     job: deploy node for linux amd64
+  artifacts:
+    paths:
+      - linux-amd64-instance.txt
 
 terminate node for linux amd64:
   stage: integration
@@ -253,5 +256,4 @@ terminate node for linux amd64:
   script:
     - aws ec2 terminate-instances --instance-ids $INSTANCE_ID
   needs:
-    job: deploy node for linux amd64
     job: run featurebase in linux amd64 node
