@@ -213,6 +213,7 @@ deploy node for linux amd64:
     - echo $INSTANCE_ID > linux-amd64-instance.txt
     - scp  -o StrictHostKeyChecking=no -i gitlab-featurebase-dev.pem featurebase_linux_amd64 ec2-user@$PUBLIC_IP:.
     - scp  -o StrictHostKeyChecking=no -i gitlab-featurebase-dev.pem .gitlab/featurebase.conf .gitlab/featurebase.service ec2-user@$PUBLIC_IP:.
+    - aws ec2 associate-iam-instance-profile --instance-id $INSTANCE_ID --iam-instance-profile Name=featurebase-dev-ssm
   needs:
     job: build for linux amd64
   artifacts:
@@ -228,9 +229,10 @@ run featurebase in linux amd64 node:
     - aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
     - aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
     - aws configure set region "us-east-2"
-    - INSTANCE_ID=$(echo "$(<linux-amd64-instance.txt)")
+    - aws configure set aws_profile $PROFILE
+    - INSTANCE_ID=$(cat linux-amd64-instance.txt)
   script:
-    - aws ssm send-command --document-name "AWS-RunShellScript" --instance-ids $INSTANCE_ID --cli-input-json file://.gitlab/configureFeatureBase.json
+    - aws ssm send-command --document-name "AWS-RunShellScript" --instance-ids $INSTANCE_ID --cli-input-json file://.gitlab/configureFeatureBase.json --profile $PROFILE
     - sleep 120
   needs:
     job:
@@ -245,7 +247,7 @@ terminate node for linux amd64:
     - aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
     - aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
     - aws configure set region "us-east-2"
-    - INSTANCE_ID=$(echo "$(<linux-amd64-instance.txt)")
+    - INSTANCE_ID=$(cat linux-amd64-instance.txt)
     - echo $INSTANCE_ID
   script:
     - aws ec2 terminate-instances --instance-ids $INSTANCE_ID

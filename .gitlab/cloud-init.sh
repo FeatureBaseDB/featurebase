@@ -20,3 +20,7 @@ chown -R root:root ./go
 mv go /usr/local
 echo "export PATH=/usr/local/bin:/usr/bin:/usr/local/sbin:/usr/sbin:/home/ec2-user/.local/bin:/home/ec2-user/bin:/usr/local/go/bin" | tee -a /etc/profile > /dev/null
 source /etc/profile
+
+# install aws session manager pluggin
+curl "https://s3.amazonaws.com/session-manager-downloads/plugin/latest/linux_64bit/session-manager-plugin.rpm" -o "session-manager-plugin.rpm"
+yum install -y session-manager-plugin.rpm
