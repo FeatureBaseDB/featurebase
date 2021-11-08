@@ -234,6 +234,7 @@ run featurebase in linux amd64 node:
     - aws configure set aws_profile $PROFILE
     - INSTANCE_ID=$(cat linux-amd64-instance.txt)
   script:
+    - sleep 60
     - aws ssm send-command --document-name "AWS-RunShellScript" --instance-ids $INSTANCE_ID --cli-input-json file://.gitlab/configureFeatureBase.json --profile $PROFILE --region us-east-2
     - sleep 120
   needs:
