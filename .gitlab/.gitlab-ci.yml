@@ -214,6 +214,7 @@ deploy node for linux amd64:
     - scp  -o StrictHostKeyChecking=no -i gitlab-featurebase-dev.pem featurebase_linux_amd64 ec2-user@$PUBLIC_IP:.
     - scp  -o StrictHostKeyChecking=no -i gitlab-featurebase-dev.pem .gitlab/featurebase.conf .gitlab/featurebase.service ec2-user@$PUBLIC_IP:.
     - aws ec2 associate-iam-instance-profile --instance-id $INSTANCE_ID --iam-instance-profile Name=featurebase-dev-ssm
+    - sleep 120
   needs:
     job: build for linux amd64
   artifacts:
