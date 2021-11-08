@@ -223,12 +223,11 @@ deploy node for linux amd64:
 run featurebase in linux amd64 node:
   stage: lint
   image: registry.gitlab.com/gitlab-org/cloud-deploy/aws-base:latest
-  variables:
-    INSTANCE_ID: ""
   before_script:
     - aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
     - aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
     - aws configure set region "us-east-2"
+    - echo $INSTANCE_ID
   script:
     - aws ssm send-command --document-name "AWS-RunShellScript" --targets "Key=InstanceIds,Values=$INSTANCE_ID" --cli-input-json file://.gitlab/configureFeatureBase.json
     - sleep 120
@@ -239,13 +238,10 @@ run featurebase in linux amd64 node:
 terminate node for linux amd64:
   stage: lint
   image: registry.gitlab.com/gitlab-org/cloud-deploy/aws-base:latest
-  variables:
-    INSTANCE_ID: ""
   before_script:
     - aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
     - aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
     - aws configure set region "us-east-2"
-    - INSTANCE_ID=$(cat linux-amd64-instance.txt)
   script:
     - aws ec2 terminate-instances --instance-ids $INSTANCE_ID
   needs:
