@@ -231,7 +231,7 @@ run featurebase in linux amd64 node:
     - INSTANCE_ID=$(echo "$(<linux-amd64-instance.txt)")
     - echo $INSTANCE_ID
   script:
-    - aws ssm send-command --document-name "AWS-RunShellScript" --targets "Key=InstanceIds,Values=$INSTANCE_ID" --cli-input-json file://.gitlab/configureFeatureBase.json
+    - aws ssm send-command --document-name "AWS-RunShellScript" --targets "Key=InstanceIds,Values=${INSTANCE_ID[0][0]}" --cli-input-json file://.gitlab/configureFeatureBase.json
     - sleep 120
   needs:
     job:
