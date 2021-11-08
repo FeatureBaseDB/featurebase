@@ -67,6 +67,7 @@ func TestMain_Set_Quick(t *testing.T) {
 
 			// Create client.
 			client, err := http.NewInternalClient(m.API.Node().URI.HostPort(), http.GetHTTPClient(nil))
+			client.SetInternalAPI(m.API)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -831,6 +832,7 @@ func TestQueryingWithQuotesAndStuff(t *testing.T) {
 	defer m.Close()
 
 	client, err := http.NewInternalClient(m.API.Node().URI.HostPort(), http.GetHTTPClient(nil))
+	client.SetInternalAPI(m.API)
 	if err != nil {
 		t.Fatal(err)
 	}

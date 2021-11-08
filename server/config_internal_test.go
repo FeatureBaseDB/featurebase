@@ -35,7 +35,10 @@ func TestConfig_validateAddrs(t *testing.T) {
 	}
 	hostAddr, err := lookupAddr(context.Background(), net.DefaultResolver, hostname)
 	if err != nil {
-		t.Fatal(err)
+		if !strings.HasSuffix(hostname, ".local") {
+			t.Fatal(err)
+		}
+		hostAddr = outboundAddr
 	}
 	if strings.Contains(hostAddr, ":") {
 		hostAddr = "[" + hostAddr + "]"
@@ -164,7 +167,10 @@ func TestConfig_validateAddrsGRPC(t *testing.T) {
 	}
 	hostAddr, err := lookupAddr(context.Background(), net.DefaultResolver, hostname)
 	if err != nil {
-		t.Fatal(err)
+		if !strings.HasSuffix(hostname, ".local") {
+			t.Fatal(err)
+		}
+		hostAddr = outboundAddr
 	}
 	if strings.Contains(hostAddr, ":") {
 		hostAddr = "[" + hostAddr + "]"

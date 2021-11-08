@@ -160,6 +160,21 @@ build for darwin arm64:
     paths:
       - featurebase_darwin_arm64
 
+package for linux amd64:
+  stage: build
+  image: registry.gitlab.com/molecula/featurebase/builder:0.0.3
+  variables:
+    GOOS: "linux"
+    GOARCH: "amd64"
+  script:
+    - echo 'deb [trusted=yes] https://repo.goreleaser.com/apt/ /' | tee /etc/apt/sources.list.d/goreleaser.list
+    - apt update && apt install nfpm
+    - make package
+  artifacts:
+    paths:
+      - "*.deb"
+      - "*.rpm"
+
 # Build a FB Docker image with CI/CD and push to the GitLab registry.
 build container fb:
   image: docker:stable
