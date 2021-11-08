@@ -12,6 +12,7 @@ include:
           - .go/pkg/mod/
 variables:
   GOVERSION: "1.16.9"
+  INSTANCE_ID: ""
 
 stages:
   - lint
@@ -228,8 +229,6 @@ run featurebase in linux amd64 node:
     - aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
     - aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
     - aws configure set region "us-east-2"
-    - INSTANCE_ID=$(cat linux-amd64-instance.txt)
-    - echo $INSTANCE_ID
   script:
     - aws ssm send-command --document-name "AWS-RunShellScript" --targets "Key=InstanceIds,Values=$INSTANCE_ID" --cli-input-json file://.gitlab/configureFeatureBase.json
     - sleep 120

@@ -18,5 +18,5 @@ curl -O https://dl.google.com/go/go1.16.9.linux-amd64.tar.gz
 tar xvf go1.16.9.linux-amd64.tar.gz
 chown -R root:root ./go
 mv go /usr/local
-echo "export PATH=/usr/local/bin:/usr/bin:/usr/local/sbin:/usr/sbin:/home/ec2-user/.local/bin:/home/ec2-user/bin:/usr/local/go/bin" | tee -a /etc/profile.d > /dev/null
-source /etc/profile.d
+echo "export PATH=/usr/local/bin:/usr/bin:/usr/local/sbin:/usr/sbin:/home/ec2-user/.local/bin:/home/ec2-user/bin:/usr/local/go/bin" | tee -a /etc/profile > /dev/null
+source /etc/profile
