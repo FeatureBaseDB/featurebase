@@ -232,7 +232,7 @@ deploy node for linux amd64:
     - sleep 240 # needed to allow enough time for the ssm to take into effect before the next command can get called
     - aws ssm send-command --document-name "AWS-RunShellScript" --instance-ids $INSTANCE_ID --cli-input-json file://.gitlab/configureFeatureBase.json --profile $PROFILE --region us-east-2
     - sleep 120 
-    needs:
+  needs:
     - job: build for linux amd64
   artifacts:
     paths:
