@@ -214,7 +214,6 @@ deploy node for linux amd64:
     - scp  -o StrictHostKeyChecking=no -i gitlab-featurebase-dev.pem featurebase_linux_amd64 ec2-user@$PUBLIC_IP:.
     - scp  -o StrictHostKeyChecking=no -i gitlab-featurebase-dev.pem .gitlab/featurebase.conf .gitlab/featurebase.service ec2-user@$PUBLIC_IP:.
     - aws ec2 associate-iam-instance-profile --instance-id $INSTANCE_ID --iam-instance-profile Name=featurebase-dev-ssm
-    - sleep 120
   needs:
     job: build for linux amd64
   artifacts:
@@ -234,7 +233,7 @@ run featurebase in linux amd64 node:
     - aws configure set aws_profile $PROFILE
     - INSTANCE_ID=$(cat linux-amd64-instance.txt)
   script:
-    - sleep 60
+    - sleep 240 # needed to allow enough time for the ssm to take into effect before the next command can get called
     - aws ssm send-command --document-name "AWS-RunShellScript" --instance-ids $INSTANCE_ID --cli-input-json file://.gitlab/configureFeatureBase.json --profile $PROFILE --region us-east-2
     - sleep 120
   needs:
