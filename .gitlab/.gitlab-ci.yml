@@ -220,7 +220,7 @@ deploy node for linux amd64:
       - linux-amd64-instance.txt
 
 run featurebase in linux amd64 node:
-  stage: lint
+  stage: integration
   image: registry.gitlab.com/gitlab-org/cloud-deploy/aws-base:latest
   variables:
     INSTANCE_ID: ""
