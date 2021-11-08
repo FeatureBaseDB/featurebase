@@ -176,6 +176,11 @@ build container fb:
     - docker push $tag
     - echo Created docker featurebase image with tag "$tag"
 
+before_script:
+  - aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
+  - aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
+  - aws configure set region "us-east-2"
+
 deploy node for linux amd64:
   stage: lint
   image: registry.gitlab.com/gitlab-org/cloud-deploy/aws-base:latest
@@ -185,14 +190,9 @@ deploy node for linux amd64:
     SECURITY_GROUP: ""
     SUBNET_ID: ""
     PUBLIC_IP: ""
-    AWS_ACCESS_KEY_ID: $AWS_ACCESS_KEY_ID
-    AWS_SECRET_ACCESS_KEY: $AWS_SECRET_ACCESS_KEY
     PROFILE: "default"
     AWS_SSH_PRIVATE_KEY: $AWS_SSH_PRIVATE_KEY
   before_script:
-    - aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
-    - aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
-    - aws configure set region "us-east-2"
     - aws configure set aws_profile $PROFILE
     - echo $AWS_SSH_PRIVATE_KEY > gitlab-featurebase-dev.pem
     - chmod 400 gitlab-featurebase-dev.pem
@@ -214,6 +214,7 @@ deploy node for linux amd64:
     - echo $INSTANCE_ID > linux-amd64-instance.txt
     - echo $INSTANCE_ID
     - scp -i gitlab-featurebase-dev.pem featurebase_linux_amd64 ec2-user@$PUBLIC_IP:.
+    - scp -i gitlab-featurebase-dev.pem .gitlab/featurebase.conf .gitlab/featurebase.service ec2-user@$PUBLIC_IP:.
     - sleep 120
   needs:
     job: build for linux amd64
@@ -221,17 +222,27 @@ deploy node for linux amd64:
     paths:
       - linux-amd64-instance.txt
 
+run featurebase in linux amd64 node:
+  stage: lint
+  image:
+  variables:
+    INSTANCE_ID: ""
+  before_script:
+    - INSTANCE_ID=$(cat linux-amd64-instance.txt)
+  script:
+    - aws ssm send-command --document-name "AWS-RunShellScript" --targets InstanceIds=$INSTANCE_ID --cli-input-json file://.gitlab/configureFeatureBase.json
+  needs:
+    job:
+      deploy node for linux amd64
+
 terminate node for linux amd64:
   stage: lint
   image: registry.gitlab.com/gitlab-org/cloud-deploy/aws-base:latest
   variables:
     INSTANCE_ID: ""
   before_script:
-    - aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
-    - aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
-    - aws configure set region "us-east-2"
     - INSTANCE_ID=$(cat linux-amd64-instance.txt)
   script:
     - aws ec2 terminate-instances --instance-ids $INSTANCE_ID
   needs:
-    job: deploy node for linux amd64
+    job: run featurebase in linux amd64 node
