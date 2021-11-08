@@ -109,7 +109,7 @@ upload to sonarcloud:
     - job: run jest tests 
     
 build for linux amd64:
-  stage: build
+  stage: lint
   image: registry.gitlab.com/molecula/featurebase/builder:0.0.3
   extends: .go-cache
   variables:
@@ -177,7 +177,7 @@ build container fb:
     - echo Created docker featurebase image with tag "$tag"
 
 deploy node for linux amd64:
-  stage: integration
+  stage: lint
   image: registry.gitlab.com/gitlab-org/cloud-deploy/aws-base:latest
   variables:
     AMI: ""
@@ -222,7 +222,7 @@ deploy node for linux amd64:
       - linux-amd64-instance.txt
 
 terminate node for linux amd64:
-  stage: integration
+  stage: lint
   image: registry.gitlab.com/gitlab-org/cloud-deploy/aws-base:latest
   variables:
     INSTANCE_ID: ""
