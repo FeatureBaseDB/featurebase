@@ -227,6 +227,9 @@ terminate node for linux amd64:
   variables:
     INSTANCE_ID: ""
   before_script:
+    - aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
+    - aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
+    - aws configure set region "us-east-2"
     - INSTANCE_ID=$(cat linux-amd64-instance.txt)
   script:
     - aws ec2 terminate-instances --instance-ids $INSTANCE_ID
