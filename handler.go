@@ -18,7 +18,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/molecula/featurebase/v2/shardwidth"
+	"github.com/molecula/featurebase/v2/ingest"
 	"github.com/molecula/featurebase/v2/tracing"
 	"github.com/pkg/errors"
 )
@@ -307,40 +307,31 @@ func (ir *ImportRequest) Clone() *ImportRequest {
 	return newIR
 }
 
-// ShardSplit splits the request into a slice of import requests. It requires
-// that the original request have all elements sorted, and already have
-// column IDs, not column keys.
-func (ir *ImportRequest) ShardSplit() ([]*ImportRequest, error) {
-	if ir == nil {
-		return nil, nil
+// SortToShards takes an import request which has been translated, but may
+// not be sorted, and turns it into a map from shard IDs to individual import
+// requests. We don't sort the entries within each shard because the correct
+// sorting depends on the field type and we don't want to deal with that
+// here.
+func (ir *ImportRequest) SortToShards() map[uint64]*ImportRequest {
+	// cheat: use ingest
+	fo := ingest.FieldOperation{
+		RecordIDs: ir.ColumnIDs,
+		Values:    ir.RowIDs,
+		Signed:    ir.Timestamps,
 	}
-	// fix shard
-	if len(ir.ColumnIDs) < 2 {
-		ir.Shard = ir.ColumnIDs[0] >> shardwidth.Exponent
-		return []*ImportRequest{ir}, nil
+	sharded := fo.SortToShards()
+	output := make(map[uint64]*ImportRequest, len(sharded))
+	for shard, shardOp := range sharded {
+		shardReq := *ir
+		shardReq.ColumnKeys = nil
+		shardReq.RowKeys = nil
+		shardReq.Shard = shard
+		shardReq.ColumnIDs = shardOp.RecordIDs
+		shardReq.RowIDs = shardOp.Values
+		shardReq.Timestamps = shardOp.Signed
+		output[shard] = &shardReq
 	}
-	shards, ends := shardwidth.FindShards(ir.ColumnIDs)
-	out := make([]*ImportRequest, len(shards))
-	prev := 0
-	for i, shard := range shards {
-		next := ends[i]
-		newIR := &ImportRequest{}
-		*newIR = *ir
-		newIR.ColumnIDs = ir.ColumnIDs[prev:next:next]
-		if ir.RowIDs != nil {
-			newIR.RowIDs = ir.RowIDs[prev:next:next]
-		}
-		if ir.RowKeys != nil {
-			newIR.RowKeys = ir.RowKeys[prev:next:next]
-		}
-		if ir.Timestamps != nil {
-			newIR.Timestamps = ir.Timestamps[prev:next:next]
-		}
-		newIR.Shard = shard
-		out[i] = newIR
-		prev = next
-	}
-	return out, nil
+	return output
 }
 
 // ValidateWithTimestamp ensures that the payload of the request is valid.

@@ -22,6 +22,7 @@ import (
 	"math"
 	"math/rand"
 	"reflect"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -64,55 +65,53 @@ func TestAPI_Import(t *testing.T) {
 	m0 := c.GetNode(0)
 	m1 := c.GetNode(1)
 
-	t.Run("RowIDColumnKey", func(t *testing.T) {
-		ctx := context.Background()
-		indexName := "rick"
-		fieldName := "f"
+	indexNames := map[bool]string{false: "i", true: "ki"}
+	fieldNames := map[bool]string{false: "f", true: "kf"}
 
-		index, err := m0.API.CreateIndex(ctx, indexName, pilosa.IndexOptions{Keys: true, TrackExistence: true})
+	ctx := context.Background()
+	for ik, indexName := range indexNames {
+		_, err := m0.API.CreateIndex(ctx, indexName, pilosa.IndexOptions{Keys: ik, TrackExistence: true})
 		if err != nil {
 			t.Fatalf("creating index: %v", err)
 		}
-		if index.CreatedAt() == 0 {
-			t.Fatal("index createdAt is empty")
+		for fk, fieldName := range fieldNames {
+			if fk {
+				_, err = m0.API.CreateField(ctx, indexName, fieldName, pilosa.OptFieldTypeSet(pilosa.DefaultCacheType, 100), pilosa.OptFieldKeys())
+			} else {
+				_, err = m0.API.CreateField(ctx, indexName, fieldName, pilosa.OptFieldTypeSet(pilosa.DefaultCacheType, 100))
+
+			}
+			if err != nil {
+				t.Fatalf("creating field: %v", err)
+			}
 		}
+	}
 
-		field, err := m0.API.CreateField(ctx, indexName, fieldName, pilosa.OptFieldTypeSet(pilosa.DefaultCacheType, 100))
-		if err != nil {
-			t.Fatalf("creating field: %v", err)
-		}
-		if field.CreatedAt() == 0 {
-			t.Fatal("field createdAt is empty")
-		}
+	N := 10
 
-		rowID := uint64(1)
-		timestamp := int64(0)
+	// Keys are sharded so ordering is not guaranteed.
+	colKeys := make([]string, N)
+	rowKeys := make([]string, N)
+	rowIDs := make([]uint64, N)
+	colIDs := make([]uint64, N)
+	for i := range colKeys {
+		colKeys[i] = fmt.Sprintf("col%d", i)
+		rowKeys[i] = fmt.Sprintf("row%d", i)
+		colIDs[i] = (uint64(i) + 1) * 3
+		rowIDs[i] = 1
+	}
+	sort.Strings(colKeys)
+	sort.Strings(rowKeys)
 
-		// Generate some keyed records.
-		rowIDs := []uint64{}
-		timestamps := []int64{}
-		N := 10
-		for i := 1; i <= N; i++ {
-			rowIDs = append(rowIDs, rowID)
-			timestamps = append(timestamps, timestamp)
-		}
-
-		// Keys are sharded so ordering is not guaranteed.
-		colKeys := []string{"col10", "col8", "col9", "col6", "col7", "col4", "col5", "col2", "col3", "col1"}
-
-		colKeys = colKeys[:N]
-
+	t.Run("RowIDColumnKey", func(t *testing.T) {
 		// Import data with keys to the primary and verify that it gets
 		// translated and forwarded to the owner of shard 0 (node1; because of offsetModHasher)
 		req := &pilosa.ImportRequest{
-			Index:          indexName,
-			IndexCreatedAt: index.CreatedAt(),
-			Field:          fieldName,
-			FieldCreatedAt: field.CreatedAt(),
-			Shard:          0, // import is all on shard 0, why are we making lots of other shards? b/c this is not a restriction.
-			RowIDs:         rowIDs,
-			ColumnKeys:     colKeys,
-			Timestamps:     timestamps,
+			Index:      indexNames[true],
+			Field:      fieldNames[false],
+			Shard:      0, // inaccurate, but keys override it
+			RowIDs:     rowIDs,
+			ColumnKeys: colKeys,
 		}
 
 		qcx := m0.API.Txf().NewQcx()
@@ -122,25 +121,86 @@ func TestAPI_Import(t *testing.T) {
 		}
 		PanicOn(qcx.Finish())
 
-		pql := fmt.Sprintf("Row(%s=%d)", fieldName, rowID)
+		pql := fmt.Sprintf("Row(%s=%d)", fieldNames[false], rowIDs[0])
 
 		// Query node0.
-		if res, err := m0.API.Query(ctx, &pilosa.QueryRequest{Index: indexName, Query: pql}); err != nil {
+		var keys []string
+		if res, err := m0.API.Query(ctx, &pilosa.QueryRequest{Index: indexNames[true], Query: pql}); err != nil {
 			t.Fatal(err)
-		} else if keys := res.Results[0].(*pilosa.Row).Keys; !reflect.DeepEqual(keys, colKeys) {
+		} else {
+			keys = res.Results[0].(*pilosa.Row).Keys
+		}
+		sort.Strings(keys)
+		if !reflect.DeepEqual(keys, colKeys) {
 			t.Fatalf("expected colKeys='%#v'; observed column keys: %#v", colKeys, keys)
 		}
 
 		// Query node1.
 		if err := test.RetryUntil(5*time.Second, func() error {
-			if res, err := m1.API.Query(ctx, &pilosa.QueryRequest{Index: indexName, Query: pql}); err != nil {
+			if res, err := m1.API.Query(ctx, &pilosa.QueryRequest{Index: indexNames[true], Query: pql}); err != nil {
 				return err
-			} else if keys := res.Results[0].(*pilosa.Row).Keys; !reflect.DeepEqual(keys, colKeys) {
+			} else {
+				keys = res.Results[0].(*pilosa.Row).Keys
+
+			}
+			sort.Strings(keys)
+			if !reflect.DeepEqual(keys, colKeys) {
 				return fmt.Errorf("unexpected column keys: %#v", keys)
 			}
 			return nil
 		}); err != nil {
 			t.Fatal(err)
+		}
+	})
+	t.Run("ExpectedErrors", func(t *testing.T) {
+		ctx := context.Background()
+		for ik, indexName := range indexNames {
+			for fk, fieldName := range fieldNames {
+				req := pilosa.ImportRequest{
+					Index: indexName,
+					Field: fieldName,
+					Shard: 0,
+				}
+				for rik := range indexNames {
+					if rik {
+						req.ColumnKeys = colKeys
+						req.ColumnIDs = nil
+					} else {
+						req.ColumnKeys = nil
+						req.ColumnIDs = colIDs
+					}
+					for rfk := range fieldNames {
+						if rfk {
+							req.RowKeys = rowKeys
+							req.RowIDs = nil
+						} else {
+							req.RowKeys = nil
+							req.RowIDs = rowIDs
+						}
+						err := func() error {
+							qcx := m0.API.Txf().NewQcx()
+							defer qcx.Abort()
+							err := m0.API.Import(ctx, qcx, req.Clone())
+							e2 := qcx.Finish()
+							if e2 != nil {
+								t.Fatalf("unexpected error committing: %v", e2)
+							}
+							return err
+						}()
+						if err != nil {
+							if rfk == fk && rik == ik {
+								t.Errorf("unexpected error: schema keys %t/%t, req keys %t/%t: %v",
+									ik, fk, rik, rfk, err)
+							}
+						} else {
+							if rfk != fk || rik != ik {
+								t.Errorf("unexpected no error: schema keys %t/%t, req keys %t/%t, req %#v",
+									ik, fk, rik, rfk, req)
+							}
+						}
+					}
+				}
+			}
 		}
 	})
 
@@ -221,6 +281,7 @@ func TestAPI_ImportValue(t *testing.T) {
 			Field:      field,
 			ColumnKeys: colKeys,
 			Values:     values,
+			Shard:      0, // inaccurate but keys override it
 		}
 
 		qcx := coord.API.Txf().NewQcx()
@@ -249,6 +310,60 @@ func TestAPI_ImportValue(t *testing.T) {
 		}); err != nil {
 			t.Fatal(err)
 		}
+	})
+
+	t.Run("ValIntEmpty", func(t *testing.T) {
+		ctx := context.Background()
+		index := "valintempty"
+		field := "fld"
+		createIndexForTest(index, coord, t)
+		createFieldForTest(index, field, coord, t)
+
+		// Column keys are sharded so their order is not guaranteed.
+		colKeys := []string{"col2", "col1", "col3"}
+		values := []int64{1, 2, 3, 4}
+
+		// Import without data, verify that it succeeds
+		req := &pilosa.ImportValueRequest{
+			Index: index,
+			Field: field,
+		}
+		qcx1 := coord.API.Txf().NewQcx()
+		defer qcx1.Abort()
+
+		// Import with empty request, should succeed
+		if err := coord.API.ImportValue(ctx, qcx1, req); err != nil {
+			t.Fatal(err)
+		}
+		PanicOn(qcx1.Finish())
+
+		// Import without data but with columnkeys, verify that it errors
+		req.ColumnKeys = colKeys
+		qcx2 := coord.API.Txf().NewQcx()
+		defer qcx2.Abort()
+		if err := coord.API.ImportValue(ctx, qcx2, req); err == nil {
+			t.Fatal("expected error but succeeded")
+		}
+		PanicOn(qcx2.Finish())
+
+		// Import with mismatch column and value lengths
+		req.Values = values
+		qcx3 := coord.API.Txf().NewQcx()
+		defer qcx3.Abort()
+		if err := coord.API.ImportValue(ctx, qcx3, req); err == nil {
+			t.Fatal("expected error but succeeded")
+		}
+		PanicOn(qcx3.Finish())
+
+		// Import with data but no columns
+		req.ColumnKeys = make([]string, 0)
+		qcx4 := coord.API.Txf().NewQcx()
+		defer qcx4.Abort()
+		if err := coord.API.ImportValue(ctx, qcx4, req); err == nil {
+			t.Fatal("expected error but succeeded")
+		}
+		PanicOn(qcx4.Finish())
+
 	})
 
 	t.Run("ValDecimalField", func(t *testing.T) {
@@ -1223,5 +1338,21 @@ func TestAPI_MutexCheck(t *testing.T) {
 				t.Fatalf("expected results limited to 3, got %d", len(expected))
 			}
 		})
+	}
+}
+
+func createIndexForTest(index string, coord *test.Command, t *testing.T) {
+	ctx := context.Background()
+	_, err := coord.API.CreateIndex(ctx, index, pilosa.IndexOptions{Keys: true})
+	if err != nil {
+		t.Fatalf("creating index: %v", err)
+	}
+}
+
+func createFieldForTest(index string, field string, coord *test.Command, t *testing.T) {
+	ctx := context.Background()
+	_, err := coord.API.CreateField(ctx, index, field, pilosa.OptFieldTypeInt(math.MinInt64, math.MaxInt64))
+	if err != nil {
+		t.Fatalf("creating field: %v", err)
 	}
 }

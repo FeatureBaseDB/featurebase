@@ -53,13 +53,19 @@ func TestClusterStuff(t *testing.T) {
 			t.Fatalf("creating field: %v", err)
 		}
 
-		data := make([]pilosa.Bit, 10)
+		req := &pilosa.ImportRequest{
+			Index: "testidx",
+			Field: "testf",
+		}
+		req.ColumnIDs = make([]uint64, 10)
+		req.RowIDs = make([]uint64, 10)
+
 		for i := 0; i < 1000; i++ {
-			data[i%10].RowID = 0
-			data[i%10].ColumnID = uint64((i/10)*pilosa.ShardWidth + i%10)
-			shard := uint64(i / 10)
+			req.RowIDs[i%10] = 0
+			req.ColumnIDs[i%10] = uint64((i/10)*pilosa.ShardWidth + i%10)
+			req.Shard = uint64(i / 10)
 			if i%10 == 9 {
-				err = cli1.Import(context.Background(), "testidx", "testf", shard, data)
+				err = cli1.Import(context.Background(), nil, req, &pilosa.ImportOptions{})
 				if err != nil {
 					t.Fatalf("importing: %v", err)
 				}

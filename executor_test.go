@@ -4131,13 +4131,11 @@ func TestExecutor_Execute_All(t *testing.T) {
 
 		m0 := c.GetNode(0)
 		// the request gets altered by the Import operation now...
-		reqs, err := req.Clone().ShardSplit()
-		if err != nil {
-			t.Fatalf("splitting request into shards: %v", err)
-		}
-
+		reqs := req.Clone().SortToShards()
 		qcx := m0.API.Txf().NewQcx()
 		for _, r := range reqs {
+			// we can ignore the key (which is the shard) because each req
+			// also got its internal key set.
 			if err := m0.API.Import(context.Background(), qcx, r); err != nil {
 				t.Fatal(err)
 			}

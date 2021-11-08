@@ -516,6 +516,8 @@ func (m *Command) SetupServer() error {
 	if err != nil {
 		return errors.Wrap(err, "new api")
 	}
+	// Tell server about its new API, which its client will need.
+	m.Server.SetAPI(m.API)
 
 	m.grpcServer, err = NewGRPCServer(
 		OptGRPCServerAPI(m.API),

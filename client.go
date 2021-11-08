@@ -63,14 +63,11 @@ type InternalClient interface {
 	PartitionNodes(ctx context.Context, partitionID int) ([]*topology.Node, error)
 	Nodes(ctx context.Context) ([]*topology.Node, error)
 	Query(ctx context.Context, index string, queryRequest *QueryRequest) (*QueryResponse, error)
-	Import(ctx context.Context, index, field string, shard uint64, bits []Bit, opts ...ImportOption) error
-	ImportK(ctx context.Context, index, field string, bits []Bit, opts ...ImportOption) error
+	Import(ctx context.Context, qcx *Qcx, req *ImportRequest, options *ImportOptions) error
 	EnsureIndex(ctx context.Context, name string, options IndexOptions) error
 	EnsureField(ctx context.Context, indexName string, fieldName string) error
 	EnsureFieldWithOptions(ctx context.Context, index, field string, opt FieldOptions) error
-	ImportValue(ctx context.Context, index, field string, shard uint64, vals []FieldValue, opts ...ImportOption) error
-	ImportValueK(ctx context.Context, index, field string, vals []FieldValue, opts ...ImportOption) error
-	ImportValue2(ctx context.Context, req *ImportValueRequest, options *ImportOptions) error
+	ImportValue(ctx context.Context, qcx *Qcx, req *ImportValueRequest, options *ImportOptions) error
 	ExportCSV(ctx context.Context, index, field string, shard uint64, w io.Writer) error
 	CreateField(ctx context.Context, index, field string) error
 	CreateFieldWithOptions(ctx context.Context, index, field string, opt FieldOptions) error
@@ -98,6 +95,10 @@ type InternalClient interface {
 
 	ImportFieldKeys(ctx context.Context, uri *pnet.URI, index, field string, remote bool, rddbdata io.Reader) error
 	ImportIndexKeys(ctx context.Context, uri *pnet.URI, index string, partitionID int, remote bool, rddbdata io.Reader) error
+
+	// SetInternalAPI tells the client the API it should use for internal/loopback ops
+	// where applicable.
+	SetInternalAPI(api *API)
 }
 
 //===============
@@ -202,13 +203,10 @@ func (n nopInternalClient) Nodes(ctx context.Context) ([]*topology.Node, error) 
 func (n nopInternalClient) Query(ctx context.Context, index string, queryRequest *QueryRequest) (*QueryResponse, error) {
 	return nil, nil
 }
-func (n nopInternalClient) Import(ctx context.Context, index, field string, shard uint64, bits []Bit, opts ...ImportOption) error {
+func (n nopInternalClient) Import(ctx context.Context, qcx *Qcx, req *ImportRequest, options *ImportOptions) error {
 	return nil
 }
-func (n nopInternalClient) ImportK(ctx context.Context, index, field string, bits []Bit, opts ...ImportOption) error {
-	return nil
-}
-func (n nopInternalClient) ImportValue2(ctx context.Context, req *ImportValueRequest, options *ImportOptions) error {
+func (n nopInternalClient) ImportValue(ctx context.Context, qcx *Qcx, req *ImportValueRequest, options *ImportOptions) error {
 	return nil
 }
 
@@ -247,12 +245,6 @@ func (n nopInternalClient) EnsureField(ctx context.Context, indexName string, fi
 	return nil
 }
 func (n nopInternalClient) EnsureFieldWithOptions(ctx context.Context, index, field string, opt FieldOptions) error {
-	return nil
-}
-func (n nopInternalClient) ImportValue(ctx context.Context, index, field string, shard uint64, vals []FieldValue, opts ...ImportOption) error {
-	return nil
-}
-func (n nopInternalClient) ImportValueK(ctx context.Context, index, field string, vals []FieldValue, opts ...ImportOption) error {
 	return nil
 }
 func (n nopInternalClient) ExportCSV(ctx context.Context, index, field string, shard uint64, w io.Writer) error {
@@ -304,4 +296,7 @@ func (c nopInternalClient) ImportFieldKeys(ctx context.Context, uri *pnet.URI, i
 
 func (c nopInternalClient) ImportIndexKeys(ctx context.Context, uri *pnet.URI, index string, partitionID int, remote bool, rddbdata io.Reader) error {
 	return nil
+}
+
+func (c nopInternalClient) SetInternalAPI(api *API) {
 }
