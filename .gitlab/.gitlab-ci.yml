@@ -213,7 +213,6 @@ deploy node for linux amd64:
     - echo $INSTANCE_ID
     - scp -i gitlab-featurebase-dev.pem featurebase_linux_amd64 ec2-user@$PUBLIC_IP:.
     - scp -i gitlab-featurebase-dev.pem .gitlab/featurebase.conf .gitlab/featurebase.service ec2-user@$PUBLIC_IP:.
-    - sleep 120
   needs:
     job: build for linux amd64
   artifacts:
@@ -222,7 +221,7 @@ deploy node for linux amd64:
 
 run featurebase in linux amd64 node:
   stage: lint
-  image:
+  image: registry.gitlab.com/gitlab-org/cloud-deploy/aws-base:latest
   variables:
     INSTANCE_ID: ""
   before_script:
@@ -232,6 +231,7 @@ run featurebase in linux amd64 node:
     - INSTANCE_ID=$(cat linux-amd64-instance.txt)
   script:
     - aws ssm send-command --document-name "AWS-RunShellScript" --targets InstanceIds=$INSTANCE_ID --cli-input-json file://.gitlab/configureFeatureBase.json
+    - sleep 120
   needs:
     job:
       deploy node for linux amd64
