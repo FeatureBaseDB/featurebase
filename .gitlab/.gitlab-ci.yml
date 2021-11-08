@@ -197,7 +197,7 @@ deploy node for linux amd64:
   image: registry.gitlab.com/gitlab-org/cloud-deploy/aws-base:latest
   variables:
     AMI: ""
-    INSTANCE: "t2.micro"
+    INSTANCE: "t3a.large"
     SECURITY_GROUP: ""
     SUBNET_ID: ""
     PUBLIC_IP: ""
