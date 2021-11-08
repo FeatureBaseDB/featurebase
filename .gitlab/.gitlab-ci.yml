@@ -214,8 +214,21 @@ deploy node for linux amd64:
     - echo $INSTANCE_ID > linux-amd64-instance.txt
     - echo $INSTANCE_ID
     - scp -i gitlab-featurebase-dev.pem featurebase_linux_amd64 ec2-user@$PUBLIC_IP:.
+    - sleep 120
   needs:
     job: build for linux amd64
   artifacts:
     paths:
       - linux-amd64-instance.txt
+
+terminate node for linux amd64:
+  stage: lint
+  image: registry.gitlab.com/gitlab-org/cloud-deploy/aws-base:latest
+  variables:
+    INSTANCE_ID
+  before_script:
+    - INSTANCE_ID=$(cat linux-amd64-instance.txt)
+  script:
+    - aws ec2 terminate-instances --instance-ids $INSTANCE_ID
+  needs:
+    job: deploy node for linux amd64
