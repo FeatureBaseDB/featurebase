@@ -199,6 +199,7 @@ deploy node for linux amd64:
     - 'which ssh-agent || ( apt-get update -y && apt-get install openssh-client -y )'
     - eval `ssh-agent -s`
     - mkdir -p ~/.ssh
+    - echo "$AWS_SSH_PRIVATE_KEY" | ssh-add -
     - chmod 700 /root/.ssh
     - '[[ -f /.dockerenv ]] && echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config'
   script:
@@ -212,7 +213,7 @@ deploy node for linux amd64:
     - INSTANCE_ID=$(aws ec2 describe-instances --filters 'Name=tag:Name, Values=linux-amd64-node' 'Name=instance-state-name, Values=running' --query 'Reservations[*].Instances[*].InstanceId' --output text --profile $PROFILE)
     - echo $INSTANCE_ID > linux-amd64-instance.txt
     - echo $INSTANCE_ID
-    - scp -o StrictHostKeyChecking=no -i gitlab-featurebase-dev.pem featurebase_linux_amd64 ec2-user@$PUBLIC_IP:.
+    - scp -i gitlab-featurebase-dev.pem featurebase_linux_amd64 ec2-user@$PUBLIC_IP:.
   needs:
     job: build for linux amd64
   artifacts:
