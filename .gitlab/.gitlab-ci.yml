@@ -110,7 +110,7 @@ upload to sonarcloud:
     - job: run jest tests 
     
 build for linux amd64:
-  stage: lint
+  stage: build
   image: registry.gitlab.com/molecula/featurebase/builder:0.0.3
   extends: .go-cache
   variables:
@@ -178,7 +178,7 @@ build container fb:
     - echo Created docker featurebase image with tag "$tag"
 
 deploy node for linux amd64:
-  stage: lint
+  stage: integration
   image: registry.gitlab.com/gitlab-org/cloud-deploy/aws-base:latest
   variables:
     AMI: ""
@@ -237,11 +237,10 @@ run featurebase in linux amd64 node:
     - aws ssm send-command --document-name "AWS-RunShellScript" --instance-ids $INSTANCE_ID --cli-input-json file://.gitlab/configureFeatureBase.json --profile $PROFILE --region us-east-2
     - sleep 120
   needs:
-    job:
-      deploy node for linux amd64
+    job: deploy node for linux amd64
 
 terminate node for linux amd64:
-  stage: lint
+  stage: integration
   image: registry.gitlab.com/gitlab-org/cloud-deploy/aws-base:latest
   variables:
     INSTANCE_ID: ""
@@ -254,4 +253,5 @@ terminate node for linux amd64:
   script:
     - aws ec2 terminate-instances --instance-ids $INSTANCE_ID
   needs:
+    job: deploy node for linux amd64
     job: run featurebase in linux amd64 node
