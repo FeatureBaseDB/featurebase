@@ -211,8 +211,8 @@ deploy node for linux amd64:
     - INSTANCE_ID=$(aws ec2 describe-instances --filters 'Name=tag:Name, Values=linux-amd64-node' 'Name=instance-state-name, Values=running' --query 'Reservations[*].Instances[*].InstanceId' --output text --profile $PROFILE)
     - echo $INSTANCE_ID > linux-amd64-instance.txt
     - echo $INSTANCE_ID
-    - scp -i gitlab-featurebase-dev.pem featurebase_linux_amd64 ec2-user@$PUBLIC_IP:.
-    - scp -i gitlab-featurebase-dev.pem .gitlab/featurebase.conf .gitlab/featurebase.service ec2-user@$PUBLIC_IP:.
+    - scp  -o StrictHostKeyChecking=no -i gitlab-featurebase-dev.pem featurebase_linux_amd64 ec2-user@$PUBLIC_IP:.
+    - scp  -o StrictHostKeyChecking=no -i gitlab-featurebase-dev.pem .gitlab/featurebase.conf .gitlab/featurebase.service ec2-user@$PUBLIC_IP:.
   needs:
     job: build for linux amd64
   artifacts:
