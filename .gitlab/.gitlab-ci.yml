@@ -101,13 +101,16 @@ upload to sonarcloud:
     
 build for linux amd64:
   stage: build
-  image: registry.gitlab.com/molecula/featurebase/builder:0.0.3
+  image: golang:1.16.10
   extends: .go-cache
   variables:
     GOOS: "linux"
     GOARCH: "amd64"
   script:
-    - go build -o featurebase_linux_amd64 ./cmd/featurebase
+    - go get github.com/rakyll/statik
+    - tar -xzvf lattice.tar.gz 
+    - /go/bin/statik -src=./lattice -dest=.
+    - make build FLAGS="-o featurebase_linux_amd64"
   artifacts:
     paths:
       - featurebase_linux_amd64
@@ -120,7 +123,10 @@ build for linux arm64:
     GOOS: "linux"
     GOARCH: "arm64"
   script:
-    - go build -o featurebase_linux_arm64 ./cmd/featurebase
+    - go get github.com/rakyll/statik
+    - tar -xzvf lattice.tar.gz 
+    - /go/bin/statik -src=./lattice -dest=.
+    - make build FLAGS="-o featurebase_linux_arm64"
   artifacts:
     paths:
       - featurebase_linux_arm64
@@ -133,7 +139,10 @@ build for darwin amd64:
     GOOS: "darwin"
     GOARCH: "amd64"
   script:
-    - go build -o featurebase_darwin_amd64 ./cmd/featurebase
+    - go get github.com/rakyll/statik
+    - tar -xzvf lattice.tar.gz 
+    - /go/bin/statik -src=./lattice -dest=.
+    - make build FLAGS="-o featurebase_darwin_amd64"
   artifacts:
     paths:
       - featurebase_darwin_amd64
@@ -146,7 +155,10 @@ build for darwin arm64:
     GOOS: "darwin"
     GOARCH: "arm64"
   script:
-    - go build -o featurebase_darwin_arm64 ./cmd/featurebase
+    - go get github.com/rakyll/statik
+    - tar -xzvf lattice.tar.gz 
+    - /go/bin/statik -src=./lattice -dest=.
+    - make build FLAGS="-o featurebase_darwin_arm64"
   artifacts:
     paths:
       - featurebase_darwin_arm64
