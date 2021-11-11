@@ -108,7 +108,7 @@ build for linux amd64:
     GOARCH: "amd64"
   script:
     - go get github.com/rakyll/statik
-    - tar -xzvf lattice.tar.gz 
+    - tar -xvf lattice.tar.gz 
     - /go/bin/statik -src=lattice
     - make build FLAGS="-o featurebase_linux_amd64"
   artifacts:
@@ -124,7 +124,7 @@ build for linux arm64:
     GOARCH: "arm64"
   script:
     - go get github.com/rakyll/statik
-    - tar -xzvf lattice.tar.gz 
+    - tar -xvf lattice.tar.gz 
     - /go/bin/statik -src=lattice
     - make build FLAGS="-o featurebase_linux_arm64"
   artifacts:
@@ -140,7 +140,7 @@ build for darwin amd64:
     GOARCH: "amd64"
   script:
     - go get github.com/rakyll/statik
-    - tar -xzvf lattice.tar.gz 
+    - tar -xvf lattice.tar.gz 
     - /go/bin/statik -src=lattice
     - make build FLAGS="-o featurebase_darwin_amd64"
   artifacts:
@@ -156,7 +156,7 @@ build for darwin arm64:
     GOARCH: "arm64"
   script:
     - go get github.com/rakyll/statik
-    - tar -xzvf lattice.tar.gz 
+    - tar -xvf lattice.tar.gz 
     - /go/bin/statik -src=lattice
     - make build FLAGS="-o featurebase_darwin_arm64"
   artifacts:
