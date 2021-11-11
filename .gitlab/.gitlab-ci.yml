@@ -40,7 +40,7 @@ build lattice:
   stage: test
   image: node:14
   variables:
-    CI: "true"
+    CI: "false"
   script:
     - echo "Building lattice..."
     - cd lattice
