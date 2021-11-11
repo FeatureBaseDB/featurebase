@@ -14,7 +14,7 @@ BUILD_TIME := $(shell date -u +%FT%T%z)
 SHARD_WIDTH = 20
 COMMIT := $(shell git describe --exact-match >/dev/null 2>&1 || git rev-parse --short HEAD)
 LDFLAGS="-X github.com/molecula/featurebase/v2.Version=$(VERSION) -X github.com/molecula/featurebase/v2.BuildTime=$(BUILD_TIME) -X github.com/molecula/featurebase/v2.Variant=$(VARIANT) -X github.com/molecula/featurebase/v2.Commit=$(COMMIT) -X github.com/molecula/featurebase/v2.TrialDeadline=$(TRIAL_DEADLINE)"
-GO_VERSION=1.16.3
+GO_VERSION=1.16.10
 DOCKER_BUILD= # set to 1 to use `docker-build` instead of `build` when creating a release
 BUILD_TAGS += shardwidth$(SHARD_WIDTH)
 TEST_TAGS = roaringparanoia
