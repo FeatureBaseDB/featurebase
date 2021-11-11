@@ -68,7 +68,7 @@ run jest tests:
 
 run go tests:
   stage: test
-  image: golang:1.16.9
+  image: golang:1.16.10
   extends: .go-cache
   script:
     - echo "Running featurebase unit tests..."
@@ -79,7 +79,7 @@ run go tests:
 
 run go tests with output:
   stage: test
-  image: golang:1.16.9
+  image: golang:1.16.10
   script:
     - echo "Running featurebase unit tests to capture JSON output..."
     - go test -json > test-report.out
@@ -108,6 +108,7 @@ build for linux amd64:
     GOARCH: "amd64"
   script:
     - go get github.com/rakyll/statik
+    - go install github.com/rakyll/statik@latest
     - tar -xvf lattice.tar.gz 
     - /go/bin/statik -src=lattice
     - make build FLAGS="-o featurebase_linux_amd64"
@@ -124,6 +125,7 @@ build for linux arm64:
     GOARCH: "arm64"
   script:
     - go get github.com/rakyll/statik
+    - go install github.com/rakyll/statik@latest
     - tar -xvf lattice.tar.gz 
     - /go/bin/statik -src=lattice
     - make build FLAGS="-o featurebase_linux_arm64"
@@ -140,6 +142,7 @@ build for darwin amd64:
     GOARCH: "amd64"
   script:
     - go get github.com/rakyll/statik
+    - go install github.com/rakyll/statik@latest
     - tar -xvf lattice.tar.gz 
     - /go/bin/statik -src=lattice
     - make build FLAGS="-o featurebase_darwin_amd64"
@@ -156,6 +159,7 @@ build for darwin arm64:
     GOARCH: "arm64"
   script:
     - go get github.com/rakyll/statik
+    - go install github.com/rakyll/statik@latest
     - tar -xvf lattice.tar.gz 
     - /go/bin/statik -src=lattice
     - make build FLAGS="-o featurebase_darwin_arm64"
