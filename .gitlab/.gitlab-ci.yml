@@ -46,11 +46,11 @@ build lattice:
     - cd lattice
     - yarn install
     - yarn build
+    - cd ../
     - tar -czvf lattice.tar.gz lattice/build
   artifacts:
     paths:
-      - lattice/lattice.tar.gz
-  allow_failure: true
+      - lattice.tar.gz
 
 run jest tests:
   stage: test
