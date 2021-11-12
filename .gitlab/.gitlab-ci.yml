@@ -141,12 +141,10 @@ build for darwin amd64:
     GOOS: "darwin"
     GOARCH: "amd64"
   script:
+    - rm -r lattice
     - tar -xvf lattice.tar.gz 
-    - ls
     - go get github.com/rakyll/statik
     - go install github.com/rakyll/statik@latest
-    - ls -al /go
-    - which statik
     - ls -al /go/bin
     - /go/bin/statik -src=lattice
     - make build FLAGS="-o featurebase_darwin_amd64"
