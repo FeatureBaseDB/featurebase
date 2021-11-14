@@ -143,9 +143,8 @@ build for darwin amd64:
   script:
     - rm -r lattice
     - tar -xvf lattice.tar.gz 
-    - sudo go get github.com/rakyll/statik 
-    - /go/bin/statik -h
-    - /go/bin/statik -src=lattice
+    - go get github.com/rakyll/statik 
+    - ~/go/bin/statik -src=lattice
     - make build FLAGS="-o featurebase_darwin_amd64"
   artifacts:
     paths:
