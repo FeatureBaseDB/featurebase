@@ -137,18 +137,12 @@ build for darwin amd64:
   stage: build
   image: registry.gitlab.com/molecula/featurebase/builder:0.0.3
   extends: .go-cache
-  variables:
-    GOOS: "darwin"
-    GOARCH: "amd64"
-    GOBIN: "/go/bin"
   script:
-    - mkdir -p $GOBIN
     - rm -r lattice
     - tar -xvf lattice.tar.gz 
     - go get -v -u github.com/rakyll/statik 
-    - go install -v github.com/rakyll/statik@latest
     - $GOBIN/statik -src=lattice
-    - make build FLAGS="-o featurebase_darwin_amd64"
+    - GOOS="darwin" GOARCH="amd64" make build FLAGS="-o featurebase_darwin_amd64"
   artifacts:
     paths:
       - featurebase_darwin_amd64
