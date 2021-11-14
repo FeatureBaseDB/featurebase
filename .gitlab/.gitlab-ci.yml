@@ -140,7 +140,7 @@ build for darwin amd64:
   variables:
     GOOS: "darwin"
     GOARCH: "amd64"
-    GOPATH: "/go/"
+    GOPATH: "/go"
   script:
     - mkdir -p ~/go/bin
     - rm -r lattice
