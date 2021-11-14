@@ -140,14 +140,14 @@ build for darwin amd64:
   variables:
     GOOS: "darwin"
     GOARCH: "amd64"
-    GOPATH: "/go"
+    GOBIN: "/go/bin"
   script:
-    - mkdir -p $GOPATH
+    - mkdir -p $GOBIN
     - rm -r lattice
     - tar -xvf lattice.tar.gz 
     - go get -v -u github.com/rakyll/statik 
-    - go install github.com/rakyll/statik@latest
-    - $GOPATH/bin/statik -src=lattice
+    - go install -v github.com/rakyll/statik@latest
+    - $GOBIN/statik -src=lattice
     - make build FLAGS="-o featurebase_darwin_amd64"
   artifacts:
     paths:
