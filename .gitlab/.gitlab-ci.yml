@@ -142,10 +142,10 @@ build for darwin amd64:
     GOARCH: "amd64"
     GOPATH: "/go"
   script:
-    - mkdir -p ~/go/bin
+    - mkdir -p $GOPATH
     - rm -r lattice
     - tar -xvf lattice.tar.gz 
-    - go get github.com/rakyll/statik 
+    - go get -v -u github.com/rakyll/statik 
     - $GOPATH/bin/statik -src=lattice
     - make build FLAGS="-o featurebase_darwin_amd64"
   artifacts:
