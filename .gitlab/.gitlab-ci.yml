@@ -136,7 +136,6 @@ build for linux arm64:
 build for darwin amd64:
   stage: build
   image: registry.gitlab.com/molecula/featurebase/builder:0.0.3
-  extends: .go-cache
   script:
     - rm -r lattice
     - tar -xvf lattice.tar.gz 
