@@ -3064,10 +3064,11 @@ func applyLimitAndOffsetToGroupByResult(c *pql.Call, results []GroupCount) ([]Gr
 
 // FieldRow is used to distinguish rows in a group by result.
 type FieldRow struct {
-	Field  string `json:"field"`
-	RowID  uint64 `json:"rowID"`
-	RowKey string `json:"rowKey,omitempty"`
-	Value  *int64 `json:"value,omitempty"`
+	Field        string        `json:"field"`
+	RowID        uint64        `json:"rowID"`
+	RowKey       string        `json:"rowKey,omitempty"`
+	Value        *int64        `json:"value,omitempty"`
+	FieldOptions *FieldOptions `json:"-"`
 }
 
 func (fr *FieldRow) Clone() (clone *FieldRow) {
@@ -3080,6 +3081,11 @@ func (fr *FieldRow) Clone() (clone *FieldRow) {
 		// deep copy, for safety.
 		v := *fr.Value
 		clone.Value = &v
+	}
+	if fr.FieldOptions != nil {
+		// deep copy, for Extra Safety
+		v := *fr.FieldOptions
+		clone.FieldOptions = &v
 	}
 	return
 }
@@ -7738,6 +7744,8 @@ func newGroupByIterator(executor *executor, qcx *Qcx, rowIDs []RowIDs, children 
 			return nil, newNotFoundError(ErrFieldNotFound, fieldName)
 		}
 		gbi.fields[i].Field = fieldName
+		options := field.Options()
+		gbi.fields[i].FieldOptions = &options
 
 		switch field.Type() {
 		case FieldTypeSet, FieldTypeMutex, FieldTypeBool:
@@ -7971,7 +7979,6 @@ func (gbi *groupByIterator) Next(ctx context.Context) (ret GroupCount, done bool
 	ret.Group = make([]FieldRow, len(gbi.rows))
 	copy(ret.Group, gbi.fields)
 	for i, r := range gbi.rows {
-
 		ret.Group[i].RowID = r.id
 		ret.Group[i].Value = r.value
 	}

@@ -331,7 +331,11 @@ func pgWriteGroupCount(w pg.QueryResultWriter, counts *pilosa.GroupCounts) error
 			var v string
 			switch {
 			case g.Value != nil:
-				v = strconv.FormatInt(*g.Value, 10)
+				if g.FieldOptions.Type == pilosa.FieldTypeTimestamp {
+					v = time.Unix(0, (int64(*g.Value)+int64(g.FieldOptions.Base))*pilosa.TimeUnitNanos(g.FieldOptions.TimeUnit)).UTC().Format(time.RFC3339Nano)
+				} else {
+					v = strconv.FormatInt(*g.Value, 10)
+				}
 			case g.RowKey != "":
 				v = g.RowKey
 			default:
