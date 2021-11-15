@@ -322,6 +322,8 @@ func (e *executor) safeCopy(resp QueryResponse) (out QueryResponse) {
 				safe[i] = v.Clone()
 			}
 			out.Results = append(out.Results, safe)
+		case DistinctTimestamp:
+			out.Results = append(out.Results, x)
 		default:
 			panic(fmt.Sprintf("handle %T here", v))
 		}
@@ -1498,6 +1500,7 @@ func (e *executor) executeDistinctShard(ctx context.Context, qcx *Qcx, index str
 	if field == nil {
 		return nil, ErrFieldNotFound
 	}
+
 	bsig := field.bsiGroup(fieldName)
 	if bsig == nil {
 		result = &Row{
@@ -1534,7 +1537,23 @@ func (e *executor) executeDistinctShard(ctx context.Context, qcx *Qcx, index str
 	if bsig == nil {
 		return executeDistinctShardSet(ctx, qcx, idx, fieldName, shard, filterBitmap)
 	}
+	if field.Options().Type == FieldTypeTimestamp {
+		r, err := executeDistinctShardBSI(ctx, qcx, idx, fieldName, shard, bsig, filterBitmap)
+		if err != nil {
+			return nil, err
+		}
+		results := make([]string, len(r.Pos.Columns()))
+		for i, val := range r.Pos.Columns() {
+			results[i] = time.Unix(0, (int64(val)+int64(bsig.Base))*TimeUnitNanos(field.options.TimeUnit)).UTC().Format(time.RFC3339Nano)
+		}
+		return DistinctTimestamp{Name: fieldName, Values: results}, nil
+	}
 	return executeDistinctShardBSI(ctx, qcx, idx, fieldName, shard, bsig, filterBitmap)
+}
+
+type DistinctTimestamp struct {
+	Values []string
+	Name   string
 }
 
 func executeDistinctShardSet(ctx context.Context, qcx *Qcx, idx *Index, fieldName string, shard uint64, filterBitmap *roaring.Bitmap) (result *Row, err0 error) {

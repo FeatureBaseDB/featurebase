@@ -155,6 +155,24 @@ type PilosaQueryHandler struct {
 	sqlVersion SqlVersion
 }
 
+func pgWriteDistinctTimestamp(w pg.QueryResultWriter, val pilosa.DistinctTimestamp) error {
+	err := w.WriteHeader(pg.ColumnInfo{
+		Name: val.Name,
+		Type: pg.TypeCharoid,
+	})
+	if err != nil {
+		return errors.Wrap(err, "writing result header")
+	}
+
+	for _, k := range val.Values {
+		err = w.WriteRowText(k)
+		if err != nil {
+			return errors.Wrap(err, "writing key")
+		}
+	}
+	return nil
+}
+
 func pgWriteRow(w pg.QueryResultWriter, row *pilosa.Row) error {
 	err := w.WriteHeader(pg.ColumnInfo{
 		Name: "_id",
@@ -551,7 +569,8 @@ func pgWriteResult(w pg.QueryResultWriter, result interface{}) error {
 		}
 
 		return nil
-
+	case pilosa.DistinctTimestamp:
+		return pgWriteDistinctTimestamp(w, result)
 	case nil:
 		return nil
 
