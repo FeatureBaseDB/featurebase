@@ -42,16 +42,13 @@ build lattice:
   variables:
     CI: "false"
   script:
-    - # install and build lattice
     - cd lattice
     - yarn install
     - yarn build
-    - # move the build dir out and rename 
     - mv build ../
     - cd ../
     - rm -r lattice
     - mv build lattice
-    - # zip it up 
     - tar -czvf lattice.tar.gz lattice
   artifacts:
     paths:
