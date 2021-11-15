@@ -243,6 +243,9 @@ func copyFile(src, dest string) error {
 }
 
 func Migrate(dataDir, backupPath string) error {
+	if strings.HasSuffix(dataDir, "/") {
+		dataDir = dataDir[:len(dataDir)-1]
+	}
 	err := os.MkdirAll(backupPath, 0777)
 	if err != nil {
 		return err
