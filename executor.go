@@ -254,7 +254,7 @@ func (e *executor) Execute(ctx context.Context, index string, q *pql.Query, shar
 		}
 	}
 	// Must copy out of Tx data before Commiting, because it will become invalid afterwards.
-	respSafeNoTxData := e.safeCopy(resp)
+	respSafeNoTxData := safeCopy(resp)
 
 	// Commit transactions if writing; else let the defer grp.Abort do the rollbacks.
 	if needWriteTxn {
@@ -267,7 +267,7 @@ func (e *executor) Execute(ctx context.Context, index string, q *pql.Query, shar
 
 // safeCopy copies everything in resp that has Bitmap material,
 // to avoid anything coming from the mmap-ed Tx storage.
-func (e *executor) safeCopy(resp QueryResponse) (out QueryResponse) {
+func safeCopy(resp QueryResponse) (out QueryResponse) {
 	out = QueryResponse{
 		Err:     resp.Err,     //  error
 		Profile: resp.Profile, //  *tracing.Profile
@@ -322,6 +322,8 @@ func (e *executor) safeCopy(resp QueryResponse) (out QueryResponse) {
 				safe[i] = v.Clone()
 			}
 			out.Results = append(out.Results, safe)
+		case DistinctTimestamp:
+			out.Results = append(out.Results, x)
 		default:
 			panic(fmt.Sprintf("handle %T here", v))
 		}
@@ -1498,6 +1500,7 @@ func (e *executor) executeDistinctShard(ctx context.Context, qcx *Qcx, index str
 	if field == nil {
 		return nil, ErrFieldNotFound
 	}
+
 	bsig := field.bsiGroup(fieldName)
 	if bsig == nil {
 		result = &Row{
@@ -1534,7 +1537,23 @@ func (e *executor) executeDistinctShard(ctx context.Context, qcx *Qcx, index str
 	if bsig == nil {
 		return executeDistinctShardSet(ctx, qcx, idx, fieldName, shard, filterBitmap)
 	}
+	if field.Options().Type == FieldTypeTimestamp {
+		r, err := executeDistinctShardBSI(ctx, qcx, idx, fieldName, shard, bsig, filterBitmap)
+		if err != nil {
+			return nil, err
+		}
+		results := make([]string, len(r.Pos.Columns()))
+		for i, val := range r.Pos.Columns() {
+			results[i] = FormatTimestampNano(int64(val), bsig.Base, field.options.TimeUnit)
+		}
+		return DistinctTimestamp{Name: fieldName, Values: results}, nil
+	}
 	return executeDistinctShardBSI(ctx, qcx, idx, fieldName, shard, bsig, filterBitmap)
+}
+
+type DistinctTimestamp struct {
+	Values []string
+	Name   string
 }
 
 func executeDistinctShardSet(ctx context.Context, qcx *Qcx, idx *Index, fieldName string, shard uint64, filterBitmap *roaring.Bitmap) (result *Row, err0 error) {
@@ -3045,10 +3064,11 @@ func applyLimitAndOffsetToGroupByResult(c *pql.Call, results []GroupCount) ([]Gr
 
 // FieldRow is used to distinguish rows in a group by result.
 type FieldRow struct {
-	Field  string `json:"field"`
-	RowID  uint64 `json:"rowID"`
-	RowKey string `json:"rowKey,omitempty"`
-	Value  *int64 `json:"value,omitempty"`
+	Field        string        `json:"field"`
+	RowID        uint64        `json:"rowID"`
+	RowKey       string        `json:"rowKey,omitempty"`
+	Value        *int64        `json:"value,omitempty"`
+	FieldOptions *FieldOptions `json:"-"`
 }
 
 func (fr *FieldRow) Clone() (clone *FieldRow) {
@@ -3061,6 +3081,11 @@ func (fr *FieldRow) Clone() (clone *FieldRow) {
 		// deep copy, for safety.
 		v := *fr.Value
 		clone.Value = &v
+	}
+	if fr.FieldOptions != nil {
+		// deep copy, for Extra Safety
+		v := *fr.FieldOptions
+		clone.FieldOptions = &v
 	}
 	return
 }
@@ -7719,6 +7744,8 @@ func newGroupByIterator(executor *executor, qcx *Qcx, rowIDs []RowIDs, children 
 			return nil, newNotFoundError(ErrFieldNotFound, fieldName)
 		}
 		gbi.fields[i].Field = fieldName
+		options := field.Options()
+		gbi.fields[i].FieldOptions = &options
 
 		switch field.Type() {
 		case FieldTypeSet, FieldTypeMutex, FieldTypeBool:
@@ -7952,7 +7979,6 @@ func (gbi *groupByIterator) Next(ctx context.Context) (ret GroupCount, done bool
 	ret.Group = make([]FieldRow, len(gbi.rows))
 	copy(ret.Group, gbi.fields)
 	for i, r := range gbi.rows {
-
 		ret.Group[i].RowID = r.id
 		ret.Group[i].Value = r.value
 	}

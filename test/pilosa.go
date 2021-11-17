@@ -26,7 +26,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/molecula/featurebase/v2"
+	pilosa "github.com/molecula/featurebase/v2"
 	"github.com/molecula/featurebase/v2/disco"
 	"github.com/molecula/featurebase/v2/encoding/proto"
 	"github.com/molecula/featurebase/v2/http"
@@ -313,7 +313,27 @@ func CheckGroupBy(t *testing.T, expected, results []pilosa.GroupCount) {
 		t.Fatalf("number of groupings mismatch:\n got:%+v\nwant:%+v\n", results, expected)
 	}
 	for i, result := range results {
-		if !reflect.DeepEqual(expected[i], result) {
+		// have to check each field Row individually because FieldOptions is getting set
+		for j := range expected[i].Group {
+			// Field:"ppa", RowID:0x3, RowKey:"", Value:(*int64)(nil), FieldOptions:
+			if !reflect.DeepEqual(expected[i].Group[j].Field, result.Group[j].Field) {
+				t.Fatalf("unexpected result at %d: \n got:%+v\nwant:%+v\n", i, result, expected[i])
+			}
+			if !reflect.DeepEqual(expected[i].Group[j].RowKey, result.Group[j].RowKey) {
+				t.Fatalf("unexpected result at %d: \n got:%+v\nwant:%+v\n", i, result, expected[i])
+			}
+			if !reflect.DeepEqual(expected[i].Group[j].Value, result.Group[j].Value) {
+				t.Fatalf("unexpected result at %d: \n got:%+v\nwant:%+v\n", i, result, expected[i])
+			}
+		}
+
+		if !reflect.DeepEqual(expected[i].Count, result.Count) {
+			t.Fatalf("unexpected result at %d: \n got:%+v\nwant:%+v\n", i, result, expected[i])
+		}
+		if !reflect.DeepEqual(expected[i].Agg, result.Agg) {
+			t.Fatalf("unexpected result at %d: \n got:%+v\nwant:%+v\n", i, result, expected[i])
+		}
+		if !reflect.DeepEqual(expected[i].DecimalAgg, result.DecimalAgg) {
 			t.Fatalf("unexpected result at %d: \n got:%+v\nwant:%+v\n", i, result, expected[i])
 		}
 	}

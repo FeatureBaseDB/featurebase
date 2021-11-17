@@ -115,12 +115,19 @@ func roaringFragmentHasData(path string, index, field, view string, shard uint64
 	return
 }
 
-// GetLoopProgress returns the estimated remaining time to iterate through some items
-// as well as the loop completion percentage with the following parameters:
+// GetLoopProgress returns the estimated remaining time to iterate through some
+// items as well as the loop completion percentage with the following
+// parameters:
 // the start time, the current time, the iteration, and the number of items
 func GetLoopProgress(start time.Time, now time.Time, iteration uint, total uint) (remaining time.Duration, pctDone float64) {
 	itemsLeft := total - (iteration + 1)
 	avgItemTime := float64(now.Sub(start)) / float64(iteration+1)
 	pctDone = (float64(iteration+1) / float64(total)) * 100
 	return time.Duration(avgItemTime * float64(itemsLeft)), pctDone
+}
+
+// FormatTimestampNano returns the string representation of a timestamp given:
+// an epoch value, base, and time unit
+func FormatTimestampNano(value, base int64, timeUnit string) string {
+	return time.Unix(0, (value+base)*TimeUnitNanos(timeUnit)).UTC().Format(time.RFC3339Nano)
 }

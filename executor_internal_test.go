@@ -475,3 +475,15 @@ func TestGetSorter(t *testing.T) {
 		})
 	}
 }
+
+func TestExecutorSafeCopyDistinctTimestamp(t *testing.T) {
+	result := DistinctTimestamp{Values: []string{"test", "test"}, Name: "test"}
+	results := make([]interface{}, 1)
+	results[0] = result
+
+	response := QueryResponse{Results: results, Err: nil, Profile: nil}
+	copied := safeCopy(response)
+	if !reflect.DeepEqual(copied.Results, response.Results) {
+		t.Fatalf("Did not copy results. got %+v, want %+v", copied.Results, response.Results)
+	}
+}
