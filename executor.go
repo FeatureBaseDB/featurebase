@@ -254,7 +254,7 @@ func (e *executor) Execute(ctx context.Context, index string, q *pql.Query, shar
 		}
 	}
 	// Must copy out of Tx data before Commiting, because it will become invalid afterwards.
-	respSafeNoTxData := e.safeCopy(resp)
+	respSafeNoTxData := safeCopy(resp)
 
 	// Commit transactions if writing; else let the defer grp.Abort do the rollbacks.
 	if needWriteTxn {
@@ -267,7 +267,7 @@ func (e *executor) Execute(ctx context.Context, index string, q *pql.Query, shar
 
 // safeCopy copies everything in resp that has Bitmap material,
 // to avoid anything coming from the mmap-ed Tx storage.
-func (e *executor) safeCopy(resp QueryResponse) (out QueryResponse) {
+func safeCopy(resp QueryResponse) (out QueryResponse) {
 	out = QueryResponse{
 		Err:     resp.Err,     //  error
 		Profile: resp.Profile, //  *tracing.Profile
