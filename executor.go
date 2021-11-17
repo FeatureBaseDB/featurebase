@@ -1544,7 +1544,7 @@ func (e *executor) executeDistinctShard(ctx context.Context, qcx *Qcx, index str
 		}
 		results := make([]string, len(r.Pos.Columns()))
 		for i, val := range r.Pos.Columns() {
-			results[i] = time.Unix(0, (int64(val)+int64(bsig.Base))*TimeUnitNanos(field.options.TimeUnit)).UTC().Format(time.RFC3339Nano)
+			results[i] = FormatTimeStampNano(int64(val), bsig.Base, field.options.TimeUnit)
 		}
 		return DistinctTimestamp{Name: fieldName, Values: results}, nil
 	}
