@@ -531,6 +531,14 @@ func TestClusteringNodesReplica1(t *testing.T) {
 	}
 }
 
+func TestUpAndDown(t *testing.T) {
+	c := test.NewCommandNode(t)
+	err := c.UpAndDown()
+	if err != nil {
+		t.Fatalf("server up-and-down: %v", err)
+	}
+}
+
 func TestClusteringNodesReplica2(t *testing.T) {
 	// Because this test shuts down 2 nodes, it needs to start as a 5-node
 	// cluster in order to retain enough available nodes for raft leader

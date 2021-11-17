@@ -293,6 +293,7 @@ func (m *Command) UpAndDown() (err error) {
 	if err != nil {
 		return errors.Wrap(err, "setting up server")
 	}
+	m.logger.Infof("bringing server up and shutting it down immediately")
 
 	go func() {
 		err := m.Handler.Serve()
@@ -306,7 +307,7 @@ func (m *Command) UpAndDown() (err error) {
 		return errors.Wrap(err, "bringing server up and down")
 	}
 
-	m.logger.Errorf("brought up and shut down again")
+	m.logger.Infof("teardown complete")
 
 	return nil
 }
