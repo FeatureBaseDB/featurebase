@@ -226,7 +226,7 @@ func countryField() {
 
 func generateDate() string {
 	// generates a random date in format YYYY-MM-DDT00:00
-	// does not include leap days or populata the hour/minute time
+	// does not include leap days or populate the hour/minute time
 	year := strconv.Itoa(rand.Intn(20) + 2002) //year range 2002-2021
 	month := rand.Intn(12) + 1
 	day := rand.Intn(30) + 1
