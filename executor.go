@@ -1157,6 +1157,7 @@ func (e *executor) executeMin(ctx context.Context, qcx *Qcx, index string, c *pq
 	if other.Count == 0 {
 		return ValCount{}, nil
 	}
+
 	return other, nil
 }
 
@@ -7575,8 +7576,11 @@ func (vc *ValCount) smaller(other ValCount) ValCount {
 		extra += other.Count
 	}
 	return ValCount{
-		Val:   vc.Val,
-		Count: vc.Count + extra,
+		Val:          vc.Val,
+		Count:        vc.Count + extra,
+		DecimalVal:   vc.DecimalVal,
+		FloatVal:     vc.FloatVal,
+		TimestampVal: vc.TimestampVal,
 	}
 }
 
@@ -7626,9 +7630,13 @@ func (vc *ValCount) larger(other ValCount) ValCount {
 		extra += other.Count
 	}
 	return ValCount{
-		Val:   vc.Val,
-		Count: vc.Count + extra,
+		Val:          vc.Val,
+		Count:        vc.Count + extra,
+		DecimalVal:   vc.DecimalVal,
+		FloatVal:     vc.FloatVal,
+		TimestampVal: vc.TimestampVal,
 	}
+
 }
 
 func (vc *ValCount) decimalLarger(other ValCount) ValCount {
