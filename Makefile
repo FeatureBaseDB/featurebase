@@ -104,9 +104,18 @@ build:
 # Create a single release build under the build directory
 release-build:
 	$(MAKE) $(if $(DOCKER_BUILD),docker-)build FLAGS="-o build/featurebase-$(VERSION_ID)/featurebase"
-	cp NOTICE README.md LICENSE build/featurebase$(VERSION_ID)
+	cp NOTICE install/featurebase.conf install/featurebase*.service build/featurebase-$(VERSION_ID)
 	tar -cvz -C build -f build/featurebase-$(VERSION_ID).tar.gz featurebase-$(VERSION_ID)/
 	@echo Created release build: build/featurebase-$(VERSION_ID).tar.gz
+
+test-release-build: docker-build
+	mv build/featurebase-$(VERSION_ID).tar.gz install/
+	cd install && docker build -t featurebase:test_installation \
+		-f test_installation.Dockerfile \
+		--build-arg release_tarball=featurebase-$(VERSION_ID).tar.gz .
+	mv install/featurebase-$(VERSION_ID).tar.gz build/
+	docker run -it -v /sys/fs/cgroup:/sys/fs/cgroup:ro \
+		featurebase:test_installation
 
 # Error out if there are untracked changes in Git
 check-clean:
@@ -220,7 +229,7 @@ docker-build: vendor
 	docker create --name featurebase-build featurebase:build
 	mkdir -p build/featurebase-$(VERSION_ID)
 	docker cp featurebase-build:/pilosa/build/. ./build/featurebase-$(VERSION_ID)
-	cp NOTICE LICENSE ./build/featurebase-$(VERSION_ID)
+	cp NOTICE install/featurebase.conf install/featurebase*.service ./build/featurebase-$(VERSION_ID)
 	docker rm featurebase-build
 	tar -cvz -C build -f build/featurebase-$(VERSION_ID).tar.gz featurebase-$(VERSION_ID)/
 
