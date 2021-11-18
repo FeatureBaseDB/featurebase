@@ -1,0 +1,12 @@
+[Unit]
+Description="Service for FeatureBase"
+
+[Service]
+RestartSec=30
+Restart=on-failure
+EnvironmentFile=
+User=molecula
+ExecStart=/usr/local/bin/featurebase server -c /etc/featurebase.conf
+
+[Install]
+WantedBy=multi-user.target
