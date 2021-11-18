@@ -221,7 +221,7 @@ deploy node for linux amd64:
     - echo "$AWS_SSH_PRIVATE_KEY" | ssh-add -
     - chmod 700 /root/.ssh
     - '[[ -f /.dockerenv ]] && echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config'
-    - apt install jq
+    - apt update && apt -y install jq
   script:
     - AMI=$(aws ssm get-parameters --names /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-ebs --query 'Parameters[0].[Value]' --output text --profile $PROFILE)
     - SECURITY_GROUP=$(aws ec2 describe-security-groups --filters Name=vpc-id,Values=vpc-03a4ba3d5b7c8f978 Name=group-name,Values=default --query 'SecurityGroups[*].[GroupId]' --output text --profile $PROFILE)
