@@ -18,34 +18,47 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"math"
 	"math/rand"
 	nethttp "net/http"
+
 	"os"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/molecula/featurebase/v2"
+	"github.com/gogo/protobuf/proto"
+	pilosa "github.com/molecula/featurebase/v2"
+	"github.com/molecula/featurebase/v2/client"
 	"github.com/molecula/featurebase/v2/http"
+	"github.com/molecula/featurebase/v2/pb"
 	"github.com/molecula/featurebase/v2/pql"
+	"github.com/molecula/featurebase/v2/vprint"
 	. "github.com/molecula/featurebase/v2/vprint" // nolint:staticcheck
+	"github.com/pkg/errors"
+	vegeta "github.com/tsenart/vegeta/v12/lib"
 )
 
 // RandomQueryConfig
 type RandomQueryConfig struct {
 
 	// user facing flags
-	HostPort    string    // -hostport
-	TreeDepth   int       // -d
-	QueryCount  int       // -n
-	Verbose     bool      // -v
-	VeryVerbose bool      // -V
+	HostPort    string // -hostport
+	TreeDepth   int    // -d
+	QueryCount  int    // -n
+	Verbose     bool   // -v
+	NumRuns     int
 	TimeFromArg string    // --time.from
 	TimeToArg   string    // --time.to
 	TimeFrom    time.Time // parsed time
 	TimeTo      time.Time // parsed time
 	TimeRange   int64     // hours between parsed times
+	Index       string
+	QPS         int
+	SrcFile     string
+	Duration    time.Duration
+	Target      vegeta.Target
 
 	IndexMap map[string]*Features
 
@@ -93,12 +106,16 @@ var defaultStartTime = defaultEndTime.Add(-5 * 365 * 24 * time.Hour)
 // call DefineFlags before myflags.Parse()
 func (cfg *RandomQueryConfig) DefineFlags(fs *flag.FlagSet) {
 	fs.StringVar(&cfg.HostPort, "hostport", "localhost:10101", "host:port of pilosa to run random queries on.")
-	fs.IntVar(&cfg.TreeDepth, "d", 4, "depth of random queries to generate.")
-	fs.IntVar(&cfg.QueryCount, "n", 100, "number of random queries to generate. Set to 0 for inifinite queries.")
+	fs.IntVar(&cfg.TreeDepth, "max-nesting-depth", 1, "depth of random queries to generate.")
+	fs.IntVar(&cfg.QueryCount, "queries-per-request", 1, "number of random queries to generate")
+	fs.IntVar(&cfg.NumRuns, "number-reports", 1, "number of reports generate ")
+	fs.DurationVar(&cfg.Duration, "metrics-period", 10*time.Second, "size of time window on metrics reporting, default 10s")
+	fs.StringVar(&cfg.Index, "index", "i", "index to run queries against")
+	fs.IntVar(&cfg.QPS, "qps", 10, "number of currernt requests per sec to simulate, default  10")
 	fs.BoolVar(&cfg.Verbose, "v", false, "show queries as they are generated")
-	fs.BoolVar(&cfg.VeryVerbose, "V", false, "show query results")
 	fs.StringVar(&cfg.TimeFromArg, "time.from", defaultStartTime.Format(time.RFC3339), "starting time for time fields (format: 2006-01-02T15:04:05Z07:00)")
 	fs.StringVar(&cfg.TimeToArg, "time.to", defaultEndTime.Format(time.RFC3339), "starting time for time fields (format: 2006-01-02T15:04:05Z07:00)")
+	fs.StringVar(&cfg.SrcFile, "query-file", "", "use pql contained in this file for query batch instead of generating")
 }
 
 // call c.ValidateConfig() after myflags.Parse()
@@ -144,7 +161,6 @@ func main() {
 		fmt.Fprintf(os.Stderr, "%s error: %s\n", ProgramName, err)
 		os.Exit(1)
 	}
-
 	err = cfg.Run()
 
 	if err != nil {
@@ -159,76 +175,24 @@ func (cfg *RandomQueryConfig) Run() (err error) {
 	if err != nil {
 		return err
 	}
-	ctx := context.Background()
-	totalQ := 0
-	loops := 0
-	t0 := time.Now()
-
-	report := func() {
-		dur := time.Since(t0)
-		if dur > 0 {
-			qps := 1e9 * float64(totalQ) / float64(dur)
-			AlwaysPrintf("totalQueries run: %v   elapsed: %v   qps: %0.02f", totalQ, dur, qps)
-		} else {
-			AlwaysPrintf("totalQueries run: %v   elapsed: %v   qps: N/A", totalQ, dur)
-		}
-	}
-	defer report()
-
-NewSetup:
 	err = cfg.Setup(cli)
 	if err != nil {
 		return err
 	}
+	rate := vegeta.Rate{Freq: cfg.QPS, Per: time.Second}
+	duration := cfg.Duration
+	targeter := vegeta.NewStaticTargeter(cfg.Target)
+	attacker := vegeta.NewAttacker()
 
-	if len(cfg.IndexMap) == 0 {
-		return fmt.Errorf("no rows to query")
-	}
-
-	var indexes []string
-	for index := range cfg.IndexMap {
-		indexes = append(indexes, index)
-	}
-
-	for j := 0; ; j++ {
-		if cfg.QueryCount > 0 {
-			if j >= cfg.QueryCount {
-				break
-			}
-		} else {
-			// else keep doing queries forever...
-			if loops > 0 && loops%500 == 0 {
-				// ...but account for any new data arrived by getting
-				// the schema and rows again every so often.
-				loops++
-				goto NewSetup
-			}
+	for i := 0; i < cfg.NumRuns; i++ {
+		vprint.VV("================")
+		var metrics vegeta.Metrics
+		for res := range attacker.Attack(targeter, rate, duration, "Big Bang!") {
+			metrics.Add(res)
 		}
-		if totalQ > 0 && totalQ%100 == 0 {
-			report()
-		}
-
-		index := indexes[cfg.Rnd.Intn(len(indexes))]
-
-		pql, err := cfg.GenQuery(index)
-		PanicOn(err)
-
-		if cfg.Verbose {
-			fmt.Printf("pql = '%v'\n", pql)
-		}
-
-		// Query node0.
-		res, err := cli.Query(ctx, index, &pilosa.QueryRequest{Index: index, Query: pql})
-		if err != nil {
-			AlwaysPrintf("QUERY FAILED! queries before this=%v; err = '%v', pql='%v'", loops, err, pql)
-			return err
-		}
-		if cfg.VeryVerbose {
-			fmt.Printf("success on pql = '%v'; res='%v'\n", pql, res.Results[0])
-		}
-		totalQ++
-		loops++
-
+		metrics.Close()
+		rpt := vegeta.NewTextReporter(&metrics)
+		rpt(os.Stdout)
 	}
 
 	return nil
@@ -238,6 +202,7 @@ type Features struct {
 	Slc           []IndexFieldRow
 	Ranges        []IndexFieldRange
 	Distinctables []IndexFieldRange
+	Stores        []IndexFieldRow
 	SlcWeight     int
 	RangeWeight   int
 }
@@ -283,7 +248,7 @@ func (fea *IndexFieldRow) Query(cfg *RandomQueryConfig) *Tree {
 			endTime.Format(pilosaTimeFmt))
 	}
 	if fea.IsRowKey {
-		return &Tree{S: fmt.Sprintf("Row(%v='%v'%s)", fea.Field, fea.RowKey, fromTo)}
+		return &Tree{S: fmt.Sprintf(`Row(%v="%v"%s)`, fea.Field, fea.RowKey, fromTo)}
 	}
 	return &Tree{S: fmt.Sprintf("Row(%v=%v%s)", fea.Field, fea.RowID, fromTo)}
 }
@@ -341,6 +306,9 @@ func (i *IndexFieldRange) Query(cfg *RandomQueryConfig) *Tree {
 // and spits back a PQL query
 //
 func (cfg *RandomQueryConfig) Setup(api API) (err error) {
+	if cfg.SrcFile != "" {
+		return cfg.buildPayload()
+	}
 	ctx := context.Background()
 	cfg.Info, err = api.Schema(ctx)
 	if err != nil {
@@ -348,58 +316,114 @@ func (cfg *RandomQueryConfig) Setup(api API) (err error) {
 	}
 	foundIntField := false
 	for i, ii := range cfg.Info {
-		_ = i
-		for k, fld := range ii.Fields {
-			_ = k
-			switch fld.Options.Type {
-			case "set", "mutex", "time":
-				pql := fmt.Sprintf("Rows(%v)", fld.Name)
+		if ii.Name == cfg.Index {
 
-				res, err := api.Query(ctx, ii.Name, &pilosa.QueryRequest{Index: ii.Name, Query: pql})
-				PanicOn(err)
-				if cfg.VeryVerbose {
-					fmt.Printf("success on pql = '%v'; res='%v'\n", pql, res.Results[0])
-				}
-				// if the option is set to use RowKeys, then must get the Keys instead of the Rows from the RowIdentifiers.
-				// e.g.
-				// success on pql = 'Rows(aba)'; res='&pilosa.RowIdentifiers{Rows:[]uint64(nil), Keys:[]string{"aba1", "aba2"}
-				// success on pql = 'Rows(f)'; res='pilosa.RowIdentifiers{Rows:[]uint64{0x1}, Keys:[]string(nil), field:"f"}'
+			_ = i
+			for k, fld := range ii.Fields {
+				_ = k
+				switch fld.Options.Type {
+				case "set", "mutex", "time":
+					pql := fmt.Sprintf("Rows(%v)", fld.Name)
 
-				switch x := res.Results[0].(type) {
-				case *pilosa.RowIdentifiers:
-					// internalClient gets this
-					cfg.AddResponse(ii.Name, fld.Name, x, fld.Options.Type == "time")
-				case pilosa.RowIdentifiers:
-					// test gets this
-					cfg.AddResponse(ii.Name, fld.Name, &x, fld.Options.Type == "time")
+					res, err := api.Query(ctx, ii.Name, &pilosa.QueryRequest{Index: ii.Name, Query: pql})
+					PanicOn(err)
+					switch x := res.Results[0].(type) {
+					case *pilosa.RowIdentifiers:
+						cfg.AddResponse(ii.Name, fld.Name, x, fld.Options.Type == "time", fld.Options.Type == "set")
+					case pilosa.RowIdentifiers:
+						cfg.AddResponse(ii.Name, fld.Name, &x, fld.Options.Type == "time", fld.Options.Type == "set")
+					}
+				case "int":
+					foundIntField = true
+					fallthrough
+				case "decimal":
+					cfg.AddIntField(ii.Name, fld.Name, fld.Options.Min, fld.Options.Max, fld.Options.Scale, fld.Options.Type == "decimal")
+				default:
+					AlwaysPrintf("ignoring field %q: unhandled type %q\n", fld.Name, fld.Options.Type)
 				}
-			case "int":
-				foundIntField = true
-				fallthrough // I bet you thought you'd never see this used
-			case "decimal":
-				cfg.AddIntField(ii.Name, fld.Name, fld.Options.Min, fld.Options.Max, fld.Options.Scale, fld.Options.Type == "decimal")
-			default:
-				AlwaysPrintf("ignoring field %q: unhandled type %q\n", fld.Name, fld.Options.Type)
 			}
 		}
 	}
-
 	cfg.BitmapFunc = []string{"Union", "Intersect", "Xor", "Not", "Difference"}
 	if foundIntField {
 		cfg.BitmapFunc = append(cfg.BitmapFunc, "Distinct")
 	}
 	seed := int64(42)
 	cfg.Rnd = rand.New(rand.NewSource(seed))
-
-	return nil
+	return cfg.buildPayload()
 }
 
-func (cfg *RandomQueryConfig) AddResponse(index, field string, x *pilosa.RowIdentifiers, hasTime bool) {
+func (cfg *RandomQueryConfig) buildPayload() error {
+	var request strings.Builder
+	if cfg.SrcFile != "" {
+		b, err := ioutil.ReadFile(cfg.SrcFile) // just pass the file name
+		if err != nil {
+			return err
+		}
+		request.WriteString(string(b))
+	} else {
+
+		for i := 0; i < cfg.QueryCount; i++ {
+			pql, err := cfg.GenQuery(cfg.Index)
+			if err != nil {
+				return err
+			}
+			request.WriteString(pql)
+		}
+	}
+	//TODO (twg) tls support
+	path := fmt.Sprintf("http://%s/index/%s/query", cfg.HostPort, cfg.Index)
+	header := nethttp.Header{
+		"Content-Type": []string{"application/x-protobuf"},
+		"Accept":       []string{"application/x-protobuf"},
+		"PQL-Version":  []string{client.PQLVersion},
+	}
+
+	req := &pb.QueryRequest{
+		Query: request.String(),
+	}
+	vprint.VV("%v", request.String())
+	payload, err := proto.Marshal(req)
+	if err != nil {
+		return errors.Wrap(err, "marshaling request to protobuf")
+	}
+	cfg.Target = vegeta.Target{
+		Method: "POST",
+		URL:    path,
+		Body:   payload,
+		Header: header,
+	}
+	return nil
+}
+func (cfg *RandomQueryConfig) AddResponse(index, field string, x *pilosa.RowIdentifiers, hasTime bool, isSet bool) {
+	storeID := uint64(0)
 	for _, rowID := range x.Rows {
 		cfg.AddFeature(index, field, rowID, "", false, hasTime)
+		storeID = rowID
 	}
+	storeKey := ""
 	for _, rowKey := range x.Keys {
 		cfg.AddFeature(index, field, 0, rowKey, true, hasTime)
+		storeKey = rowKey
+	}
+	idx := cfg.IndexMap[index]
+	if isSet {
+		if storeID > 0 {
+			idx.Stores = append(idx.Stores, IndexFieldRow{
+				Index: index,
+				Field: field,
+				RowID: storeID + 1,
+			})
+		}
+		if storeKey != "" {
+			idx.Stores = append(idx.Stores, IndexFieldRow{
+				Index:    index,
+				Field:    field,
+				RowKey:   storeKey + "_1",
+				IsRowKey: true,
+			})
+
+		}
 	}
 }
 
@@ -411,10 +435,12 @@ func (cfg *RandomQueryConfig) AddIntField(index, field string, min, max pql.Deci
 		f = &Features{}
 		cfg.IndexMap[index] = f
 	}
-	if min.Scale != scale || max.Scale != scale {
-		PanicOn(fmt.Sprintf("scale error; min scale %d, max scale %d, field scale %d, assumed they'd be equal",
-			min.Scale, max.Scale, scale))
-	}
+	/*	if min.Scale != scale || max.Scale != scale {
+
+			PanicOn(fmt.Sprintf("scale error; %v:%v min scale %d, max scale %d, field scale %d, assumed they'd be equal",
+				index, field, min.Scale, max.Scale, scale))
+		}
+	*/
 
 	effectiveRange := uint64(max.Value) - uint64(min.Value) + 1
 	// if you have INT64_MAX and INT64_MIN, effectiveRange is 1<<64, which
@@ -449,11 +475,32 @@ func (cfg *RandomQueryConfig) AddIntField(index, field string, min, max pql.Deci
 }
 
 func (cfg *RandomQueryConfig) GenQuery(index string) (pql string, err error) {
-
 	tree := cfg.GenTree(index, cfg.TreeDepth)
 	pql = tree.ToPQL()
 
-	// avoid using too much bandwidth, just count the final bitmap.
+	dice := cfg.Rnd.Intn(9)
+	if dice == 3 { // 1 in 9 of getting a store
+		idx := cfg.IndexMap[index]
+		if len(idx.Stores) > 0 {
+			i := cfg.Rnd.Intn(len(idx.Stores))
+			fr := idx.Stores[i]
+			var key string
+			if fr.IsRowKey {
+				key = fmt.Sprintf(`%v="%v"`, fr.Field, fr.RowKey)
+				c := strings.LastIndex(fr.RowKey, "_")
+				n, err := strconv.Atoi(fr.RowKey[c+1:])
+				PanicOn(err)
+				n += 1
+				fr.RowKey = fmt.Sprintf("%v%v", fr.RowKey[:c+1], n)
+			} else {
+				key = fmt.Sprintf("%v=%v", fr.Field, fr.RowID)
+				fr.RowID = fr.RowID + 1
+			}
+			idx.Stores[i] = fr
+			pql = fmt.Sprintf("Store(%v,%v)Count(Row(%v))", pql, key, key)
+			return
+		}
+	}
 	pql = fmt.Sprintf("Count(%v)", pql)
 	return
 }
@@ -522,7 +569,6 @@ func (cfg *RandomQueryConfig) GenTree(index string, depth int) (tr *Tree) {
 }
 
 func (tr *Tree) ToPQL() (s string) {
-
 	if len(tr.Chd) == 0 {
 		// leaf
 		return tr.S
