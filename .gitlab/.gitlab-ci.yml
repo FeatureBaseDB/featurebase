@@ -221,16 +221,17 @@ deploy node for linux amd64:
     - echo "$AWS_SSH_PRIVATE_KEY" | ssh-add -
     - chmod 700 /root/.ssh
     - '[[ -f /.dockerenv ]] && echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config'
+    - apt install jq
   script:
     - AMI=$(aws ssm get-parameters --names /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-ebs --query 'Parameters[0].[Value]' --output text --profile $PROFILE)
     - SECURITY_GROUP=$(aws ec2 describe-security-groups --filters Name=vpc-id,Values=vpc-03a4ba3d5b7c8f978 Name=group-name,Values=default --query 'SecurityGroups[*].[GroupId]' --output text --profile $PROFILE)
     - SUBNET_ID=$(aws ec2 describe-subnets --filters 'Name=vpc-id,Values=vpc-03a4ba3d5b7c8f978' 'Name=availability-zone,Values=us-east-2a' --query 'Subnets[0].SubnetId' --output text --profile $PROFILE)
-    - aws ec2 run-instances --image-id $AMI --instance-type $INSTANCE --security-group-ids $SECURITY_GROUP --subnet-id $SUBNET_ID --key-name gitlab-featurebase-dev --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=linux-amd64-node}]' --profile $PROFILE --user-data file://.gitlab/cloud-init.sh --iam-instance-profile Name=featurebase-dev-ssm
-    - sleep 120 # Need to wait for the EC2 instance to launch and run the initialization commands passed through user-data
-    - PUBLIC_IP=$(aws ec2 describe-instances --filters 'Name=tag:Name, Values=linux-amd64-node' 'Name=instance-state-name, Values=running' --query 'Reservations[*].Instances[*].PublicIpAddress' --output text --profile $PROFILE)
-    - echo $PUBLIC_IP
-    - INSTANCE_ID=$(aws ec2 describe-instances --filters 'Name=tag:Name, Values=linux-amd64-node' 'Name=instance-state-name, Values=running' --query 'Reservations[*].Instances[*].InstanceId' --output text --profile $PROFILE)
+    - aws ec2 run-instances --image-id $AMI --instance-type $INSTANCE --security-group-ids $SECURITY_GROUP --subnet-id $SUBNET_ID --key-name gitlab-featurebase-dev --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=linux-amd64-node}]' --profile $PROFILE --user-data file://.gitlab/cloud-init.sh --iam-instance-profile Name=featurebase-dev-ssm > config.json
+    - INSTANCE_ID=$(jq '.Instances | .[] |.InstanceId' config.json) 
     - echo $INSTANCE_ID > linux-amd64-instance.txt
+    - sleep 120 # Need to wait for the EC2 instance to launch and run the initialization commands passed through user-data
+    - PUBLIC_IP=$(aws ec2 describe-instances --instance-ids $INSTANCE_ID --filters 'Name=instance-state-name, Values=running' --query 'Reservations[*].Instances[*].PublicIpAddress' --output text --profile $PROFILE)
+    - echo $PUBLIC_IP
     - scp  -o StrictHostKeyChecking=no -i gitlab-featurebase-dev.pem featurebase_linux_amd64 ec2-user@$PUBLIC_IP:.
     - scp  -o StrictHostKeyChecking=no -i gitlab-featurebase-dev.pem .gitlab/featurebase.conf .gitlab/featurebase.service ec2-user@$PUBLIC_IP:.
     - aws ssm send-command --document-name "AWS-RunShellScript" --instance-ids $INSTANCE_ID --cli-input-json file://.gitlab/configureFeatureBase.json --profile $PROFILE --region us-east-2
