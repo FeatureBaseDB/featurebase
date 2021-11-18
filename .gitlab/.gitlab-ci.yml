@@ -233,7 +233,7 @@ deploy node for linux amd64:
     - PUBLIC_IP=$(aws ec2 describe-instances --instance-ids $INSTANCE_ID --filters 'Name=instance-state-name, Values=running' --query 'Reservations[*].Instances[*].PublicIpAddress' --output text --profile $PROFILE)
     - echo $PUBLIC_IP
     - scp  -o StrictHostKeyChecking=no -i gitlab-featurebase-dev.pem featurebase_linux_amd64 ec2-user@$PUBLIC_IP:.
-    - scp  -o StrictHostKeyChecking=no -i gitlab-featurebase-dev.pem ./qa/scripts/featurebase.conf ./qa/scripts/featurebase.service ec3-user@$PUBLIC_IP:.
+    - scp  -o StrictHostKeyChecking=no -i gitlab-featurebase-dev.pem ./qa/scripts/featurebase.conf ./qa/scripts/featurebase.service ec2-user@$PUBLIC_IP:.
     - aws ssm send-command --document-name "AWS-RunShellScript" --instance-ids $INSTANCE_ID --cli-input-json file://./qa/scripts/configureFeatureBase.json --profile $PROFILE --region us-east-2
   needs:
     - job: build for linux amd64
