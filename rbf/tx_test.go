@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/molecula/featurebase/v2/rbf"
+	"github.com/molecula/featurebase/v2/roaring"
 )
 
 func TestTx_CommitRollback(t *testing.T) {
@@ -219,6 +220,95 @@ func TestTx_DeleteBitmap(t *testing.T) {
 	}
 }
 
+// deallocateTree had a bug which caused a page to be marked neither free
+// nor in-use.
+func TestTx_DeallocateTree(t *testing.T) {
+	db := MustOpenDB(t)
+	defer MustCloseDB(t, db)
+	tx := MustBegin(t, db, true)
+	defer tx.Rollback()
+	var err error
+
+	// Create bitmap & add value.
+	if err = tx.CreateBitmap("x"); err != nil {
+		t.Fatal(err)
+	}
+	const N = 315
+	slots := make([]uint64, N)
+	for i := range slots {
+		slots[i] = uint64(i) << 20
+	}
+	if _, err = tx.Add("x", slots...); err != nil {
+		t.Fatal(err)
+	}
+	if err = tx.Check(); err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	if err = tx.DeleteBitmap("x"); err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := tx.Contains("x", 0); err != nil {
+		t.Fatal(err)
+	} else if ok {
+		t.Fatal("expected no value in recreated bitmap")
+	}
+	if err = tx.Check(); err != nil {
+		t.Fatalf("check: %v", err)
+	}
+}
+
+func TestTx_RecreateBitmap(t *testing.T) {
+	db := MustOpenDB(t)
+	defer MustCloseDB(t, db)
+	tx := MustBegin(t, db, true)
+	defer tx.Rollback()
+
+	// Create bitmap & add value.
+	if err := tx.CreateBitmap("x"); err != nil {
+		t.Fatal(err)
+	}
+	const N = 825000
+	slots := make([]uint64, N)
+	for i := range slots {
+		slots[i] = uint64(i) << 20
+	}
+	if _, err := tx.Add("x", slots...); err != nil {
+		t.Fatal(err)
+	}
+	err := tx.Commit()
+	if err != nil {
+		t.Fatal(err)
+	}
+	tx = MustBegin(t, db, true)
+	defer tx.Rollback()
+	// Delete bitmap, verifying that it's gone.
+	if err := tx.DeleteBitmap("x"); err != nil {
+		t.Fatal(err)
+	} else {
+		if ok, err := tx.Contains("x", 0); err != nil {
+			t.Fatal(err)
+		} else if ok {
+			t.Fatal("expected no value in recreated bitmap")
+		}
+	}
+	err = tx.Commit()
+	if err != nil {
+		t.Fatal(err)
+	}
+	tx = MustBegin(t, db, true)
+	defer tx.Rollback()
+	if err := tx.CreateBitmap("x"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Add("x", slots...); err != nil {
+		t.Fatal(err)
+	}
+	err = tx.Commit()
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestTx_RenameBitmap(t *testing.T) {
 	db := MustOpenDB(t)
 	defer MustCloseDB(t, db)
@@ -277,6 +367,83 @@ func TestTx_Add_Quick(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestTx_DeallocateToFreeList(t *testing.T) {
+	db := MustOpenDB(t)
+	defer MustCloseDB(t, db)
+	tx := MustBegin(t, db, true)
+	defer tx.Rollback()
+	var err error
+
+	// Create bitmap & add value.
+	if err = tx.CreateBitmap("x"); err != nil {
+		t.Fatal(err)
+	}
+	if err = tx.CreateBitmap("y"); err != nil {
+		t.Fatal(err)
+	}
+	const N = 12274831
+	slots := make([]uint64, N)
+	for i := range slots {
+		slots[i] = uint64(i) << 10
+	}
+	bm := roaring.NewBitmap(slots...)
+	if _, err = tx.AddRoaring("x", bm); err != nil {
+		t.Fatal(err)
+	}
+	if err = tx.Check(); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 500; i++ {
+		if _, err := tx.Add("y", uint64(i)<<16); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err = tx.Check(); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.DeleteBitmap("y"); err != nil {
+		t.Fatal(err)
+	}
+	if err = tx.Check(); err != nil {
+		t.Fatal(err)
+	}
+	if err = tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	tx = MustBegin(t, db, true)
+	defer tx.Rollback()
+	// Delete bitmap, verifying that it's gone.
+	if err := tx.DeleteBitmap("x"); err != nil {
+		t.Fatal(err)
+	} else {
+		if ok, err := tx.Contains("x", 0); err != nil {
+			t.Fatal(err)
+		} else if ok {
+			t.Fatal("expected no value in recreated bitmap")
+		}
+	}
+	if err = tx.Check(); err != nil {
+		t.Fatal(err)
+	}
+	if err = tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	tx = MustBegin(t, db, true)
+	defer tx.Rollback()
+	if err := tx.CreateBitmap("x"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.AddRoaring("x", bm); err != nil {
+		t.Fatal(err)
+	}
+	if err = tx.Check(); err != nil {
+		t.Fatal(err)
+	}
+	if err = tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestTx_AddRemove_Quick(t *testing.T) {
