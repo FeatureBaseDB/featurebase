@@ -337,8 +337,11 @@ func TestDB_MultiTx(t *testing.T) {
 	}
 }
 
+// premake pool of random values
+const randPool = (1 << 18)
+
 // benchmarkOneCheckpoint
-func benchmarkOneCheckpoint(b *testing.B) {
+func benchmarkOneCheckpoint(b *testing.B, randInts []int) {
 	cfg := rbfcfg.NewDefaultConfig()
 	// extremely low to force checkpointing
 	cfg.MinWALCheckpointSize = rbf.PageSize * 16
@@ -350,7 +353,8 @@ func benchmarkOneCheckpoint(b *testing.B) {
 	// Run multiple readers in separate goroutines.
 	ctx, cancel := context.WithCancel(context.Background())
 	g, ctx := errgroup.WithContext(ctx)
-	for i := 0; i < 4; i++ {
+	for i := 0; i < 8; i++ {
+		i := i
 		g.Go(func() error {
 			for {
 				if ctx.Err() != nil {
@@ -362,10 +366,11 @@ func benchmarkOneCheckpoint(b *testing.B) {
 					}
 					defer tx.Rollback()
 
-					// time.Sleep(time.Duration(rand.Intn(int(3 * time.Millisecond))))
+					time.Sleep(time.Duration(rand.Intn(int(3 * time.Millisecond))))
 
-					for i := 0; i < rand.Intn(1000); i++ {
-						v := rand.Intn(1 << 20)
+					times := rand.Intn(1000) + 1
+					for j := 0; j < times; j++ {
+						v := randInts[((i<<10)+j)%(randPool-1)]
 						if _, err := tx.Contains("x", uint64(v)); err != nil {
 							return err
 						}
@@ -374,13 +379,13 @@ func benchmarkOneCheckpoint(b *testing.B) {
 				}(); err != nil {
 					return err
 				}
-
 				// time.Sleep(time.Duration(rand.Intn(int(3 * time.Millisecond))))
 			}
 		})
 	}
 
 	// Continuously set/clear bits while readers are executing.
+	next := 0
 	for i := 0; i < 1000; i++ {
 		func() {
 			tx, err := db.Begin(true)
@@ -389,14 +394,22 @@ func benchmarkOneCheckpoint(b *testing.B) {
 			}
 			defer tx.Rollback()
 
-			for j := 0; j < rand.Intn(100); j++ {
-				v := rand.Intn(1 << 20)
-				if _, err := tx.Add("x", uint64(v)); err != nil {
-					b.Fatal(err)
+			times := rand.Intn(100)
+			for j := 0; j < times; j++ {
+				v := randInts[next]
+				next = (next + 1) % (randPool - 1)
+				if j&7 == 0 {
+					// some removes but they're less frequent
+					if _, err := tx.Remove("x", uint64(v)); err != nil {
+						b.Fatal(err)
+					}
+				} else {
+					if _, err := tx.Add("x", uint64(v)); err != nil {
+						b.Fatal(err)
+					}
 				}
 
 			}
-
 			if err := tx.Commit(); err != nil {
 				b.Fatal(err)
 			}
@@ -416,9 +429,24 @@ func BenchmarkDbCheckpoint(b *testing.B) {
 		b.Fatalf("creating log file: %v", err)
 	}
 	done := fgprof.Start(out, fgprof.FormatPprof)
-	for i := 0; i < b.N; i++ {
-		benchmarkOneCheckpoint(b)
+	b.StopTimer()
+	// premake these because otherwise it's >5% of CPU in the reads
+	randInts := make([]int, randPool)
+	for i := range randInts {
+		v1, v2 := rand.Intn(1<<24), rand.Intn(1<<24)
+		// minimum gives us a skewed distribution which makes lower values more
+		// likely than higher values, so we get a mix of container types
+		if v1 < v2 {
+			randInts[i] = v1
+		} else {
+			randInts[i] = v2
+		}
 	}
+	b.StartTimer()
+	for i := 0; i < b.N; i++ {
+		benchmarkOneCheckpoint(b, randInts)
+	}
+	b.StopTimer()
 	done()
 }
 
