@@ -24,6 +24,8 @@ import (
 	"math/rand"
 	"os"
 	"strconv"
+
+	"github.com/pkg/errors"
 )
 
 var countryList [246]string = [...]string{"ABW", "AFG", "AGO", "AIA", "ALA", "ALB", "AND", "ANT", "ARE", "ARG",
@@ -48,7 +50,7 @@ const totalRecords int = 200000000
 
 func main() {
 	err0 := ageField()
-	if err0 != nil {
+	if err0 == nil {
 		fmt.Printf("unable to generate age field: %v", err0)
 	}
 
@@ -78,9 +80,9 @@ func main() {
 }
 
 func ageField() error {
-	csvFile, err := os.Create("age.csv")
-	if err != nil {
-		return err
+	csvFile, err0 := os.Create("age.csv")
+	if err0 != nil {
+		return errors.Wrap(err0, "unable to create age.csv")
 	}
 
 	writer := bufio.NewWriter(csvFile)
@@ -89,13 +91,14 @@ func ageField() error {
 		if rand.Intn(100) <= 20 {
 			_, err := writer.WriteString(strconv.Itoa(i) + "," + strconv.Itoa(rand.Intn(88)+13) + "\n")
 			if err != nil {
-				return err
+				return errors.Wrap(err, "unable to write to age.csv")
 			}
 
 			if rand.Intn(10) == 1 {
 				_, err := writer.WriteString(strconv.Itoa(i) + "," + strconv.Itoa(rand.Intn(88)+13) + "\n")
 				if err != nil {
-					return err
+					return errors.Wrap(err, "unable to write to age.csv")
+
 				}
 			}
 
@@ -103,20 +106,20 @@ func ageField() error {
 	}
 	err1 := writer.Flush()
 	if err1 != nil {
-		return err1
+		return errors.Wrap(err1, "unable to flush writer")
 	}
 
 	err2 := csvFile.Close()
 	if err2 != nil {
-		return err2
+		return errors.Wrap(err2, "unable to close age.csv")
 	}
 	return nil
 }
 
 func ipField() error {
-	csvFile, err := os.Create("ip.csv")
-	if err != nil {
-		return err
+	csvFile, err0 := os.Create("ip.csv")
+	if err0 != nil {
+		return errors.Wrap(err0, "unable to create ip.csv")
 	}
 
 	writer := bufio.NewWriter(csvFile)
@@ -124,34 +127,34 @@ func ipField() error {
 	for i := 0; i < totalRecords; i++ {
 		_, err := writer.WriteString(strconv.Itoa(i) + "," + fmt.Sprint(rand.Int31()) + "\n")
 		if err != nil {
-			return err
+			return errors.Wrap(err, "unable to write to ip.csv")
 		}
 
 		if rand.Intn(10) == 1 {
 			_, err := writer.WriteString(strconv.Itoa(i) + "," + fmt.Sprint(rand.Int31()) + "\n")
 			if err != nil {
-				return err
+				return errors.Wrap(err, "unable to write to ip.csv")
 			}
 		}
 	}
 
 	err1 := writer.Flush()
 	if err1 != nil {
-		return err1
+		return errors.Wrap(err1, "unable to flush writer")
 	}
 
 	err2 := csvFile.Close()
 	if err2 != nil {
-		return err2
+		return errors.Wrap(err2, "unable to close ip.csv")
 	}
 	return nil
 
 }
 
 func arbIdField() error {
-	csvFile, err := os.Create("identifier.csv")
-	if err != nil {
-		return err
+	csvFile, err0 := os.Create("identifier.csv")
+	if err0 != nil {
+		return errors.Wrap(err0, "unable to create identifier.csv")
 	}
 
 	writer := bufio.NewWriter(csvFile)
@@ -159,34 +162,34 @@ func arbIdField() error {
 	for i := 0; i < totalRecords; i++ {
 		_, err := writer.WriteString(strconv.Itoa(i) + "," + fmt.Sprint(rand.Int63()) + "\n")
 		if err != nil {
-			return err
+			return errors.Wrap(err, "unable to write to identifier.csv")
 		}
 
 		if rand.Intn(10) == 1 {
 			_, err := writer.WriteString(strconv.Itoa(i) + "," + fmt.Sprint(rand.Int63()) + "\n")
 			if err != nil {
-				return err
+				return errors.Wrap(err, "unable to write to identifier.csv")
 			}
 		}
 	}
 
 	err1 := writer.Flush()
 	if err1 != nil {
-		return err1
+		return errors.Wrap(err1, "unable to flush writer")
 	}
 
 	err2 := csvFile.Close()
 	if err2 != nil {
-		return err2
+		return errors.Wrap(err2, "unable to close identifier.csv")
 	}
 	return nil
 
 }
 
 func timeField() error {
-	csvFile, err := os.Create("time.csv")
-	if err != nil {
-		return err
+	csvFile, err0 := os.Create("time.csv")
+	if err0 != nil {
+		return errors.Wrap(err0, "unable to create time.csv")
 	}
 
 	writer := bufio.NewWriter(csvFile)
@@ -206,14 +209,14 @@ func timeField() error {
 
 		_, err := writer.WriteString(urlString + "," + strconv.Itoa(i) + "," + date + "\n")
 		if err != nil {
-			return err
+			return errors.Wrap(err, "unable to write to time.csv")
 		}
 
 		if rand.Intn(5) == 1 {
 			date = generateDate()
 			_, err := writer.WriteString(urlString + "," + strconv.Itoa(i) + "," + date + "\n")
 			if err != nil {
-				return err
+				return errors.Wrap(err, "unable to write to time.csv")
 			}
 		}
 
@@ -223,28 +226,28 @@ func timeField() error {
 			date = generateDate()
 			_, err := writer.WriteString(urlString + "," + strconv.Itoa(i) + "," + date + "\n")
 			if err != nil {
-				return err
+				return errors.Wrap(err, "unable to write to time.csv")
 			}
 		}
 
 	}
 	err1 := writer.Flush()
 	if err1 != nil {
-		return err1
+		return errors.Wrap(err1, "unable to flush writer")
 	}
 
 	err2 := csvFile.Close()
 	if err2 != nil {
-		return err2
+		return errors.Wrap(err2, "unable to close time.csv")
 	}
 	return nil
 
 }
 
 func optInField() error {
-	csvFile, err := os.Create("optin.csv")
-	if err != nil {
-		return err
+	csvFile, err0 := os.Create("optin.csv")
+	if err0 != nil {
+		return errors.Wrap(err0, "unable to create optin.csv")
 	}
 
 	writer := bufio.NewWriter(csvFile)
@@ -261,7 +264,7 @@ func optInField() error {
 
 		_, err := writer.WriteString(optString + "," + strconv.Itoa(i) + "\n")
 		if err != nil {
-			return err
+			return errors.Wrap(err, "unable to write to optin.csv")
 		}
 
 		if rand.Intn(10) == 1 {
@@ -269,13 +272,13 @@ func optInField() error {
 				optString = "1"
 				_, err := writer.WriteString(optString + "," + strconv.Itoa(i) + "\n")
 				if err != nil {
-					return err
+					return errors.Wrap(err, "unable to write to optin.csv")
 				}
 			} else {
 				optString = "0"
 				_, err := writer.WriteString(optString + "," + strconv.Itoa(i) + "\n")
 				if err != nil {
-					return err
+					return errors.Wrap(err, "unable to write to optin.csv")
 				}
 			}
 		}
@@ -283,21 +286,21 @@ func optInField() error {
 
 	err1 := writer.Flush()
 	if err1 != nil {
-		return err1
+		return errors.Wrap(err1, "unable to flush writer")
 	}
 
 	err2 := csvFile.Close()
 	if err2 != nil {
-		return err2
+		return errors.Wrap(err2, "unable to close optin.csv")
 	}
 	return nil
 
 }
 
 func countryField() error {
-	csvFile, err := os.Create("country.csv")
-	if err != nil {
-		return err
+	csvFile, err0 := os.Create("country.csv")
+	if err0 != nil {
+		return errors.Wrap(err0, "unable to create country.csv")
 	}
 
 	writer := bufio.NewWriter(csvFile)
@@ -316,7 +319,7 @@ func countryField() error {
 			country := countryList[value]
 			_, err := writer.WriteString(country + "," + strconv.Itoa(i) + "\n")
 			if err != nil {
-				return err
+				return errors.Wrap(err, "unable to write to country.csv")
 			}
 
 			if rand.Intn(10) == 1 {
@@ -324,7 +327,7 @@ func countryField() error {
 				country = countryList[value]
 				_, err := writer.WriteString(country + "," + strconv.Itoa(i) + "\n")
 				if err != nil {
-					return err
+					return errors.Wrap(err, "unable to write to country.csv")
 				}
 			}
 		}
@@ -333,12 +336,12 @@ func countryField() error {
 
 	err1 := writer.Flush()
 	if err1 != nil {
-		return err1
+		return errors.Wrap(err1, "unable to flush writer")
 	}
 
 	err2 := csvFile.Close()
 	if err2 != nil {
-		return err2
+		return errors.Wrap(err2, "unable to close country.csv")
 	}
 	return nil
 
