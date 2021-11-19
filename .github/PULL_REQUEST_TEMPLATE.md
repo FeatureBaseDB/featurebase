@@ -6,13 +6,10 @@ Fixes #
 
 ## Pull request checklist
 
-- [ ] I have read the [contributing guide](https://github.com/molecula/featurebase/blob/master/CONTRIBUTING.md).
-- [ ] I have agreed to the [Contributor License Agreement](https://cla-assistant.io/pilosa/pilosa).
 - [ ] I have updated the [documentation](https://github.com/molecula/docs).
 - [ ] I have resolved any merge conflicts.
 - [ ] I have included tests that cover my changes.
 - [ ] All new and existing tests pass.
-- [ ] Make sure PR title conforms to convention in CHANGELOG.md.
 - [ ] Add appropriate changelog label to PR (if applicable).
 
 ## Code review checklist
@@ -24,5 +21,4 @@ This is the checklist that the reviewer will follow while reviewing your pull re
 - [ ] Check that tests have been written and that they cover the new functionality.
 - [ ] Run tests and ensure they pass.
 - [ ] Build and run the code, performing any applicable integration testing.
-- [ ] Make sure PR title conforms to convention in CHANGELOG.md.
 - [ ] Make sure PR is tagged with appropriate changelog label.
