@@ -640,12 +640,12 @@ func (db *DB) removeTx(tx *Tx) error {
 		// We are doing this function with the db lock held, which means
 		// we're *not* releasing the db lock, even though we're returning.
 		// This is a weird special case, and probably a bad idea.
-		// go func() {
-		defer db.mu.Unlock()
-		if err := db.checkpoint(); err != nil {
-			db.logger.Errorf("async checkpoint: %v", err)
-		}
-		// }()
+		go func() {
+			defer db.mu.Unlock()
+			if err := db.checkpoint(); err != nil {
+				db.logger.Errorf("async checkpoint: %v", err)
+			}
+		}()
 	} else {
 		db.mu.Unlock()
 	}
