@@ -42,22 +42,23 @@ import (
 
 // RandomQueryConfig
 type RandomQueryConfig struct {
-	HostPort    string
-	TreeDepth   int
-	QueryCount  int
-	Verbose     bool
-	NumRuns     int
-	TimeFromArg string
-	TimeToArg   string
-	TimeFrom    time.Time
-	TimeTo      time.Time
-	TimeRange   int64
-	Index       string
-	QPM         int
-	Seed        int
-	SrcFile     string
-	Duration    time.Duration
-	Target      vegeta.Target
+	HostPort     string
+	TreeDepth    int
+	QueryCount   int
+	Verbose      bool
+	GenerateOnly bool
+	NumRuns      int
+	TimeFromArg  string
+	TimeToArg    string
+	TimeFrom     time.Time
+	TimeTo       time.Time
+	TimeRange    int64
+	Index        string
+	QPM          int
+	Seed         int
+	SrcFile      string
+	Duration     time.Duration
+	Target       vegeta.Target
 
 	IndexMap map[string]*Features
 
@@ -441,13 +442,6 @@ func (cfg *RandomQueryConfig) AddIntField(index, field string, min, max pql.Deci
 		f = &Features{}
 		cfg.IndexMap[index] = f
 	}
-	vprint.VV("Add: %s %v %v %v", field, min, max, scale)
-	/*	if min.Scale != scale || max.Scale != scale {
-
-			PanicOn(fmt.Sprintf("scale error; %v:%v min scale %d, max scale %d, field scale %d, assumed they'd be equal",
-				index, field, min.Scale, max.Scale, scale))
-		}
-	*/
 
 	effectiveRange := uint64(max.Value) - uint64(min.Value) + 1
 	// if you have INT64_MAX and INT64_MIN, effectiveRange is 1<<64, which
