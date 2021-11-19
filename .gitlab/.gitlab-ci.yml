@@ -229,7 +229,7 @@ deploy node for linux amd64:
     - aws ec2 run-instances --image-id $AMI --instance-type $INSTANCE --security-group-ids $SECURITY_GROUP --subnet-id $SUBNET_ID --key-name gitlab-featurebase-dev --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=linux-amd64-node}]' --profile $PROFILE --user-data file://.gitlab/cloud-init.sh --iam-instance-profile Name=featurebase-dev-ssm > config.json
     - INSTANCE_ID=$(jq '.Instances | .[] |.InstanceId' config.json | tr -d '"') 
     - echo $INSTANCE_ID > linux-amd64-instance.txt
-    - while [ -z "$IP" ]; do IP=$(aws ec2 describe-instances --instance-ids $INSTANCE_ID --filters 'Name=instance-state-name, Values=running' --query 'Reservations[*].Instances[*].PublicIpAddress' --output text --profile $PROFILE); sleep 5; done
+    - for i in {0..24}; do IP=$(aws ec2 describe-instances --instance-ids $INSTANCE_ID --filters 'Name=instance-state-name, Values=running' --query 'Reservations[*].Instances[*].PublicIpAddress' --output text --profile $PROFILE); if [ -n "$IP" ]; then break; fi; sleep 5; done
     - scp  -o StrictHostKeyChecking=no -i gitlab-featurebase-dev.pem featurebase_linux_amd64 .gitlab/featurebase.conf .gitlab/featurebase.service ec2-user@$IP:.
     - aws ssm send-command --document-name "AWS-RunShellScript" --instance-ids $INSTANCE_ID --cli-input-json file://.gitlab/configureFeatureBase.json --profile $PROFILE --region us-east-2
   needs:
