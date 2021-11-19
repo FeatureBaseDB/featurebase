@@ -55,7 +55,7 @@ type RandomQueryConfig struct {
 	TimeTo      time.Time // parsed time
 	TimeRange   int64     // hours between parsed times
 	Index       string
-	QPS         int
+	QPM         int
 	SrcFile     string
 	Duration    time.Duration
 	Target      vegeta.Target
@@ -111,7 +111,7 @@ func (cfg *RandomQueryConfig) DefineFlags(fs *flag.FlagSet) {
 	fs.IntVar(&cfg.NumRuns, "number-reports", 1, "number of reports generate ")
 	fs.DurationVar(&cfg.Duration, "metrics-period", 10*time.Second, "size of time window on metrics reporting, default 10s")
 	fs.StringVar(&cfg.Index, "index", "i", "index to run queries against")
-	fs.IntVar(&cfg.QPS, "qps", 10, "number of currernt requests per sec to simulate, default  10")
+	fs.IntVar(&cfg.QPM, "qps", 10, "number of currernt requests per minute to simulate, default  10")
 	fs.BoolVar(&cfg.Verbose, "v", false, "show queries as they are generated")
 	fs.StringVar(&cfg.TimeFromArg, "time.from", defaultStartTime.Format(time.RFC3339), "starting time for time fields (format: 2006-01-02T15:04:05Z07:00)")
 	fs.StringVar(&cfg.TimeToArg, "time.to", defaultEndTime.Format(time.RFC3339), "starting time for time fields (format: 2006-01-02T15:04:05Z07:00)")
@@ -179,7 +179,7 @@ func (cfg *RandomQueryConfig) Run() (err error) {
 	if err != nil {
 		return err
 	}
-	rate := vegeta.Rate{Freq: cfg.QPS, Per: time.Second}
+	rate := vegeta.Rate{Freq: cfg.QPM, Per: time.Second}
 	duration := cfg.Duration
 	targeter := vegeta.NewStaticTargeter(cfg.Target)
 	attacker := vegeta.NewAttacker()
