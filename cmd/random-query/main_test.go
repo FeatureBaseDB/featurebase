@@ -20,7 +20,7 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/molecula/featurebase/v2"
+	pilosa "github.com/molecula/featurebase/v2"
 	"github.com/molecula/featurebase/v2/boltdb"
 	"github.com/molecula/featurebase/v2/http"
 	"github.com/molecula/featurebase/v2/server"
@@ -65,8 +65,8 @@ func Test_RandomQuery(t *testing.T) {
 
 	ctx := context.Background()
 
-	indexes := []string{"rick", "morty"}
-	fieldName := []string{"f", "flying_car"}
+	indexes := []string{"rick"}
+	fieldName := []string{"f"}
 	idx := make([]*pilosa.Index, len(indexes))
 	field := make([]*pilosa.Field, len(indexes))
 
@@ -144,7 +144,7 @@ func Test_RandomQuery(t *testing.T) {
 		//qcx.Reset()
 	}
 	// end of setup.
-
+	cfg.Index = indexes[0]
 	PanicOn(cfg.Setup(wrapApiToInternalClient(nodes[0].API)))
 
 	for j := 0; j < 4; j++ {

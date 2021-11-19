@@ -7,7 +7,6 @@ WORKDIR /featurebase
 
 RUN apk add --no-cache curl jq
 
-COPY LICENSE .
 COPY NOTICE .
 COPY featurebase_linux_amd64 .
 
