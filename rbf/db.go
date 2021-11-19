@@ -49,6 +49,8 @@ type DB struct {
 	rwmu     sync.Mutex   // mutex for restricting single writer
 	haltCond *sync.Cond   // condition for resuming txs after checkpoint
 
+	isDead error // this database died in an unrecoverable way, error out opens
+
 	// Path represents the path to the database file.
 	Path string
 }
@@ -247,7 +249,7 @@ func (db *DB) methodicalWALPageN(pageN int) (lastMeta int, err error) {
 
 // checkpoint moves all WAL pages to the main DB file.
 // Must be called by a write transaction while under db.mu lock.
-func (db *DB) checkpoint() error {
+func (db *DB) checkpoint() (err error) {
 	if !db.opened {
 		return nil
 	} else if len(db.txs) > 0 {
@@ -260,21 +262,31 @@ func (db *DB) checkpoint() error {
 	if db.walPageN == 0 {
 		return nil
 	}
+	// wake up things waiting on haltCond when we're done, even if we fail.
+	// Otherwise, we deadlock with them all stuck waiting on that forever.
+	defer func() {
+		if err != nil && db.isDead == nil {
+			db.isDead = err
+		}
+		db.haltCond.Broadcast()
+	}()
+	var page []byte
 	// We might have either a *PageMap or just the file. If we have the file,
 	// building the PageMap is fairly expensive because it's fancy and immutable.
 	// If we have the PageMap *or* some other map, that's two different things
 	// to iterate. If we have the PageMap, building a map from it is relatively
 	// cheap, so we'll do it that way.
 	pages := make(map[uint32]int)
+
 	if db.pageMap.size == 0 {
 		// you'd think we're done, but actually this PROBABLY means that
 		// this is initial startup, and we haven't read the file yet. We scan
 		// the file for pages, because it turns out most of them probably
 		// got overwritten.
 		for i := 0; i < db.walPageN; i++ {
-			page, err := db.readWALPageAt(i)
+			page, err = db.readWALPageAt(i)
 			if err != nil {
-				return err
+				return fmt.Errorf("reading WAL page %d: %w", i, err)
 			}
 
 			// Determine page number. Meta pages are always on zero & bitmap
@@ -283,8 +295,12 @@ func (db *DB) checkpoint() error {
 			var pgno uint32
 			if IsBitmapHeader(page) {
 				pgno = readPageNo(page)
-				if page, err = db.readWALPageAt(i + 1); err != nil {
-					return err
+				if i+1 < db.walPageN {
+					if page, err = db.readWALPageAt(i + 1); err != nil {
+						return err
+					}
+				} else {
+					return fmt.Errorf("last page of WAL file (%d) is bitmap header", i)
 				}
 				i++ // bitmaps in WAL are two pages
 			} else if !IsMetaPage(page) {
@@ -294,41 +310,37 @@ func (db *DB) checkpoint() error {
 			pages[pgno] = i
 		}
 	} else {
+		walBase := db.baseWALID()
 		itr := db.pageMap.Iterator()
 		itr.First()
 		for k, v, ok := itr.Next(); ok; k, v, ok = itr.Next() {
-			pages[k] = int(v)
+			pages[k] = int(v - walBase - 1)
 		}
 	}
 
 	// fmt.Printf("checkpoint: walPageN %d, PageMap size %d\n", db.walPageN, db.pageMap.size)
 	for pgno, walID := range pages {
-		page, err := db.readWALPageAt(walID)
+		page, err = db.readWALPageAt(walID)
 		if err != nil {
-			return err
+			return fmt.Errorf("reading page %d [page number %d]: %v", walID, pgno, err)
 		}
 		// Write data to the data file.
-		if err := db.writeDBPage(pgno, page); err != nil {
-			return err
+		if err = db.writeDBPage(pgno, page); err != nil {
+			return fmt.Errorf("writing page %d: %v", pgno, err)
 		}
 	}
-
 	// Ensure database file is synced and then truncate the WAL file.
-	if err := db.fsync(db.file); err != nil {
+	if err = db.fsync(db.file); err != nil {
 		return fmt.Errorf("db file sync: %w", err)
-	} else if err := db.walFile.Truncate(0); err != nil {
+	} else if err = db.walFile.Truncate(0); err != nil {
 		return fmt.Errorf("truncate wal file: %w", err)
-	} else if err := db.fsync(db.walFile); err != nil {
+	} else if err = db.fsync(db.walFile); err != nil {
 		return fmt.Errorf("wal file sync: %w", err)
-	} else if _, err := db.walFile.Seek(0, io.SeekStart); err != nil {
+	} else if _, err = db.walFile.Seek(0, io.SeekStart); err != nil {
 		return fmt.Errorf("seek wal file: %w", err)
 	}
 	db.walPageN = 0
 	db.pageMap = NewPageMap()
-
-	// Notify halted transactions that the WAL has been checkpointed.
-	db.haltCond.Broadcast()
-
 	return nil
 }
 
@@ -537,9 +549,21 @@ func (db *DB) Begin(writable bool) (_ *Tx, err error) {
 		cleanup()
 		return nil, ErrClosed
 	}
+	if db.isDead != nil {
+		err := db.isDead
+		cleanup()
+		db.mu.Unlock()
+		return nil, err
+	}
 
 	// Wait for WAL size to be below threshold.
 	for int64(db.walPageN*PageSize) > db.cfg.MaxWALCheckpointSize {
+		if db.isDead != nil {
+			err := db.isDead
+			cleanup()
+			db.mu.Unlock()
+			return nil, err
+		}
 		db.haltCond.Wait()
 	}
 
@@ -616,14 +640,14 @@ func (db *DB) removeTx(tx *Tx) error {
 		// We are doing this function with the db lock held, which means
 		// we're *not* releasing the db lock, even though we're returning.
 		// This is a weird special case, and probably a bad idea.
-		go func() {
-			defer db.mu.Unlock()
-			if err := db.checkpoint(); err != nil {
-				db.logger.Errorf("async checkpoint: %w", err)
-			}
-		}()
-	} else {
+		// go func() {
 		defer db.mu.Unlock()
+		if err := db.checkpoint(); err != nil {
+			db.logger.Errorf("async checkpoint: %v", err)
+		}
+		// }()
+	} else {
+		db.mu.Unlock()
 	}
 
 	return nil
