@@ -63,13 +63,6 @@ jobs:
       - checkout-plus
       - run: go mod download
       - save-mod-cache
-  check-license-headers:
-    executor:
-      name: golang
-    steps:
-      - checkout-plus
-      - skip-if-root-unchanged
-      - run: make check-license-headers
   linter:
     executor:
       name: golang
@@ -236,10 +229,6 @@ workflows:
             tags:
               only: /^v.*/
       - linter:
-          context: molecula
-          requires:
-            - setup
-      - check-license-headers:
           context: molecula
           requires:
             - setup
