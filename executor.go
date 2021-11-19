@@ -7635,7 +7635,6 @@ func (vc *ValCount) larger(other ValCount) ValCount {
 		FloatVal:     vc.FloatVal,
 		TimestampVal: vc.TimestampVal,
 	}
-
 }
 
 func (vc *ValCount) decimalLarger(other ValCount) ValCount {
