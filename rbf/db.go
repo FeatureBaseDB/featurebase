@@ -11,6 +11,7 @@ import (
 	"syscall"
 
 	"github.com/benbjohnson/immutable"
+	"github.com/molecula/featurebase/v2/logger"
 	rbfcfg "github.com/molecula/featurebase/v2/rbf/cfg"
 	"github.com/molecula/featurebase/v2/syswrap"
 )
@@ -38,6 +39,7 @@ type DB struct {
 	pageMap     *PageMap             // pgno-to-WALID mapping
 	txs         map[*Tx]struct{}     // active transactions
 	opened      bool                 // true if open
+	logger      logger.Logger        // for diagnostics from async things
 
 	wal      []byte   // wal mmap
 	walFile  *os.File // wal file descriptor
@@ -62,6 +64,11 @@ func NewDB(path string, cfg *rbfcfg.Config) *DB {
 		txs:     make(map[*Tx]struct{}),
 		pageMap: NewPageMap(),
 		Path:    path,
+		logger:  cfg.Logger,
+	}
+	if db.logger == nil {
+		// default to writing to stdout if not told otherwise
+		db.logger = logger.NewStandardLogger(os.Stderr)
 	}
 	db.haltCond = sync.NewCond(&db.mu)
 
@@ -134,7 +141,7 @@ func (db *DB) Open() (err error) {
 	if err := db.openWAL(); err != nil {
 		return fmt.Errorf("wal open: %w", err)
 	} else if err := db.checkpoint(); err != nil {
-		return fmt.Errorf("checkpoint: %w", err)
+		return fmt.Errorf("startup checkpoint: %w", err)
 	}
 
 	return nil
@@ -158,10 +165,12 @@ func (db *DB) openWAL() (err error) {
 
 	// Determine the number of whole pages in the WAL.
 	var pageN int
+	var fileSize int64
 	if fi, err := db.walFile.Stat(); err != nil {
 		return fmt.Errorf("wal stat: %w", err)
 	} else {
-		pageN = int(fi.Size() / PageSize)
+		fileSize = fi.Size()
+		pageN = int(fileSize / PageSize)
 	}
 
 	// Read backwards through the WAL to find the last valid meta page.
@@ -169,19 +178,71 @@ func (db *DB) openWAL() (err error) {
 		if page, err := db.readWALPageAt(pageN - 1); err != nil {
 			return err
 		} else if IsMetaPage(page) {
+			// We now face a challenge. Probably this is a meta page.
+			// But consider a sequence of pages written which gets
+			// interrupted right before the meta page is written.
+			// If the last page is a bitmap page, it could LOOK LIKE a meta
+			// page. So we have to check the page before it. If that page
+			// is a bitmap header, then actually this is a bitmap page, right?
+			// If that page doesn't exist, of course, we're fine, except
+			// for the philosophical question of why we wrote a meta page
+			// when no pages had changed.
+			if pageN > 1 {
+				if page, err = db.readWALPageAt(pageN - 2); err != nil {
+					return err
+				}
+				if IsBitmapHeader(page) {
+					// But wait!
+					// What if this *is* a meta page, and the page before it is
+					// actually a *bitmap page* that looks like a bitmap header? And
+					// so on.
+					//
+					// Rather than try to resolve this, in this insanely unlikely
+					// situation, we read from the beginning which allows us to
+					// always know what we're seeing, because every bitmap page
+					// comes *after* a bitmap header page, and thus, we know when
+					// we might be seeing one.
+					pageN, err = db.methodicalWALPageN(pageN)
+					if err != nil {
+						return err
+					}
+				}
+			}
 			break
 		}
 	}
-
-	// Truncate WAL to the last valid meta page.
-	if err := db.walFile.Truncate(int64(pageN * PageSize)); err != nil {
-		return fmt.Errorf("wal truncate: %w", err)
-	} else if _, err := db.walFile.Seek(int64(pageN*PageSize), io.SeekStart); err != nil {
+	if fileSize != int64(pageN*PageSize) {
+		if err := db.walFile.Truncate(int64(pageN * PageSize)); err != nil {
+			return fmt.Errorf("wal truncate: %w", err)
+		}
+	}
+	if _, err := db.walFile.Seek(int64(pageN*PageSize), io.SeekStart); err != nil {
 		return fmt.Errorf("wal seek: %w", err)
 	}
 	db.walPageN = pageN
 
 	return nil
+}
+
+// methodicalWALPageN tries to determine the last meta page in a very reliable
+// but slow way. This handles the theoretical but hard to imagine creating
+// edge case where we have a bitmap page which happens to look like a meta
+// page, and the write got interrupted before the meta page got written.
+func (db *DB) methodicalWALPageN(pageN int) (lastMeta int, err error) {
+	for i := 0; i < pageN; i++ {
+		var page []byte
+		if page, err = db.readWALPageAt(i); err != nil {
+			return -1, err
+		}
+		switch {
+		case IsMetaPage(page):
+			lastMeta = i
+		case IsBitmapHeader(page):
+			// skip the bitmap page, which we can't usefully evaluate
+			i++
+		}
+	}
+	return lastMeta, nil
 }
 
 // checkpoint moves all WAL pages to the main DB file.
@@ -199,28 +260,53 @@ func (db *DB) checkpoint() error {
 	if db.walPageN == 0 {
 		return nil
 	}
+	// We might have either a *PageMap or just the file. If we have the file,
+	// building the PageMap is fairly expensive because it's fancy and immutable.
+	// If we have the PageMap *or* some other map, that's two different things
+	// to iterate. If we have the PageMap, building a map from it is relatively
+	// cheap, so we'll do it that way.
+	pages := make(map[uint32]int)
+	if db.pageMap.size == 0 {
+		// you'd think we're done, but actually this PROBABLY means that
+		// this is initial startup, and we haven't read the file yet. We scan
+		// the file for pages, because it turns out most of them probably
+		// got overwritten.
+		for i := 0; i < db.walPageN; i++ {
+			page, err := db.readWALPageAt(i)
+			if err != nil {
+				return err
+			}
+
+			// Determine page number. Meta pages are always on zero & bitmap
+			// headers specify the page number of the next page in the WAL.
+			// All other pages have their page number in the page data.
+			var pgno uint32
+			if IsBitmapHeader(page) {
+				pgno = readPageNo(page)
+				if page, err = db.readWALPageAt(i + 1); err != nil {
+					return err
+				}
+				i++ // bitmaps in WAL are two pages
+			} else if !IsMetaPage(page) {
+				pgno = readPageNo(page)
+			}
+			// record where in the file we have this page
+			pages[pgno] = i
+		}
+	} else {
+		itr := db.pageMap.Iterator()
+		itr.First()
+		for k, v, ok := itr.Next(); ok; k, v, ok = itr.Next() {
+			pages[k] = int(v)
+		}
+	}
 
 	// fmt.Printf("checkpoint: walPageN %d, PageMap size %d\n", db.walPageN, db.pageMap.size)
-	for i := 0; i < db.walPageN; i++ {
-		page, err := db.readWALPageAt(i)
+	for pgno, walID := range pages {
+		page, err := db.readWALPageAt(walID)
 		if err != nil {
 			return err
 		}
-
-		// Determine page number. Meta pages are always on zero & bitmap
-		// headers specify the page number of the next page in the WAL.
-		// All other pages have their page number in the page data.
-		var pgno uint32
-		if IsBitmapHeader(page) {
-			pgno = readPageNo(page)
-			if page, err = db.readWALPageAt(i + 1); err != nil {
-				return err
-			}
-			i++ // bitmaps in WAL are two pages
-		} else if !IsMetaPage(page) {
-			pgno = readPageNo(page)
-		}
-
 		// Write data to the data file.
 		if err := db.writeDBPage(pgno, page); err != nil {
 			return err
@@ -509,23 +595,35 @@ func (db *DB) Begin(writable bool) (_ *Tx, err error) {
 // running new tx.
 func (db *DB) removeTx(tx *Tx) error {
 	db.mu.Lock()
-	defer db.mu.Unlock()
-	// Release writer lock if tx is writable.
+	// release the write lock. we have to do this for now. some day we won't,
+	// and will want to hold it, but right now we can't be sure we can get it.
 	if tx.writable {
 		tx.db.rwmu.Unlock()
 	}
-
+	// remove ourselves from the list of transactions the db is keeping.
 	delete(tx.db.txs, tx)
 
 	// Disassociate from db.
 	tx.db = nil
 
-	// Write pages from WAL to DB.
-	// TODO(bbj): Move this to an async goroutine.
+	// Write pages from WAL to DB. As of this instant, we are the ONLY
+	// transaction, which means that no transaction has an older version
+	// of the PageMap than we do, and if we're a write, Commit() already
+	// updated the page map to our page map. So, if we *can* checkpoint,
+	// the checkpoint gets spawned asynchronously. We could block writes,
+	// except doing so will deadlock in a weird way.
 	if len(db.txs) == 0 && db.walSize() > db.cfg.MinWALCheckpointSize {
-		if err := db.checkpoint(); err != nil {
-			return fmt.Errorf("checkpoint: %w", err)
-		}
+		// We are doing this function with the db lock held, which means
+		// we're *not* releasing the db lock, even though we're returning.
+		// This is a weird special case, and probably a bad idea.
+		go func() {
+			defer db.mu.Unlock()
+			if err := db.checkpoint(); err != nil {
+				db.logger.Errorf("async checkpoint: %w", err)
+			}
+		}()
+	} else {
+		defer db.mu.Unlock()
 	}
 
 	return nil
