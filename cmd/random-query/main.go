@@ -42,18 +42,16 @@ import (
 
 // RandomQueryConfig
 type RandomQueryConfig struct {
-
-	// user facing flags
-	HostPort    string // -hostport
-	TreeDepth   int    // -d
-	QueryCount  int    // -n
-	Verbose     bool   // -v
+	HostPort    string
+	TreeDepth   int
+	QueryCount  int
+	Verbose     bool
 	NumRuns     int
-	TimeFromArg string    // --time.from
-	TimeToArg   string    // --time.to
-	TimeFrom    time.Time // parsed time
-	TimeTo      time.Time // parsed time
-	TimeRange   int64     // hours between parsed times
+	TimeFromArg string
+	TimeToArg   string
+	TimeFrom    time.Time
+	TimeTo      time.Time
+	TimeRange   int64
 	Index       string
 	QPM         int
 	Seed        int
@@ -110,10 +108,10 @@ func (cfg *RandomQueryConfig) DefineFlags(fs *flag.FlagSet) {
 	fs.IntVar(&cfg.TreeDepth, "max-nesting-depth", 1, "depth of random queries to generate.")
 	fs.IntVar(&cfg.QueryCount, "queries-per-request", 1, "number of random queries to generate")
 	fs.IntVar(&cfg.NumRuns, "number-reports", 1, "number of reports generate ")
-	fs.IntVar(&cfg.Seed, "seed", int(time.Now().Unix()), "RNG seed, defaults to currentime")
+	fs.IntVar(&cfg.Seed, "seed", int(time.Now().Unix()), "RNG seed, defaults to current time")
 	fs.DurationVar(&cfg.Duration, "metrics-period", 10*time.Second, "size of time window on metrics reporting, default 10s")
 	fs.StringVar(&cfg.Index, "index", "i", "index to run queries against")
-	fs.IntVar(&cfg.QPM, "qpm", 10, "number of current requests per minute to simulate, default  10")
+	fs.IntVar(&cfg.QPM, "qpm", 10, "number of current requests per minute to simulate, default 10")
 	fs.BoolVar(&cfg.Verbose, "v", false, "show queries as they are generated")
 	fs.StringVar(&cfg.TimeFromArg, "time.from", defaultStartTime.Format(time.RFC3339), "starting time for time fields (format: 2006-01-02T15:04:05Z07:00)")
 	fs.StringVar(&cfg.TimeToArg, "time.to", defaultEndTime.Format(time.RFC3339), "starting time for time fields (format: 2006-01-02T15:04:05Z07:00)")
@@ -141,6 +139,9 @@ func (c *RandomQueryConfig) ValidateConfig() error {
 	if c.TimeRange < 1 {
 		return fmt.Errorf("time.to (%s) should be at least one hour after time.from (%s)",
 			c.TimeToArg, c.TimeFromArg)
+	}
+	if c.QPM <= 0 {
+		return fmt.Errorf("-qpm must be positive")
 	}
 	return nil
 }
