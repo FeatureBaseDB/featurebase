@@ -113,7 +113,7 @@ func (cfg *RandomQueryConfig) DefineFlags(fs *flag.FlagSet) {
 	fs.IntVar(&cfg.Seed, "seed", 0, "RNG seed")
 	fs.DurationVar(&cfg.Duration, "metrics-period", 10*time.Second, "size of time window on metrics reporting, default 10s")
 	fs.StringVar(&cfg.Index, "index", "i", "index to run queries against")
-	fs.IntVar(&cfg.QPM, "qpm", 10, "number of currernt requests per minute to simulate, default  10")
+	fs.IntVar(&cfg.QPM, "qpm", 10, "number of current requests per minute to simulate, default  10")
 	fs.BoolVar(&cfg.Verbose, "v", false, "show queries as they are generated")
 	fs.StringVar(&cfg.TimeFromArg, "time.from", defaultStartTime.Format(time.RFC3339), "starting time for time fields (format: 2006-01-02T15:04:05Z07:00)")
 	fs.StringVar(&cfg.TimeToArg, "time.to", defaultEndTime.Format(time.RFC3339), "starting time for time fields (format: 2006-01-02T15:04:05Z07:00)")
@@ -317,9 +317,10 @@ func (cfg *RandomQueryConfig) Setup(api API) (err error) {
 		return err
 	}
 	foundIntField := false
+	any := false
 	for i, ii := range cfg.Info {
 		if ii.Name == cfg.Index {
-
+			any = true
 			_ = i
 			for k, fld := range ii.Fields {
 				_ = k
@@ -345,6 +346,9 @@ func (cfg *RandomQueryConfig) Setup(api API) (err error) {
 				}
 			}
 		}
+	}
+	if !any {
+		return errors.New(fmt.Sprintf("index %v not found", cfg.Index))
 	}
 	cfg.BitmapFunc = []string{"Union", "Intersect", "Xor", "Not", "Difference"}
 	if foundIntField {
