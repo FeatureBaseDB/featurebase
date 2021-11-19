@@ -61,14 +61,23 @@ func ageField() {
 	if err != nil {
 		log.Fatalf("failed to create file %s", err)
 	}
+
 	writer := bufio.NewWriter(csvFile)
 
 	for i := 0; i < totalRecords; i++ {
 		if rand.Intn(100) <= 20 {
-			writer.WriteString(strconv.Itoa(i) + "," + strconv.Itoa(rand.Intn(88)+13) + "\n")
-			if rand.Intn(10) == 1 {
-				writer.WriteString(strconv.Itoa(i) + "," + strconv.Itoa(rand.Intn(88)+13) + "\n")
+			_, err := writer.WriteString(strconv.Itoa(i) + "," + strconv.Itoa(rand.Intn(88)+13) + "\n")
+			if err != nil {
+				log.Fatalf("failed to write to age.csv %s", err)
 			}
+
+			if rand.Intn(10) == 1 {
+				_, err := writer.WriteString(strconv.Itoa(i) + "," + strconv.Itoa(rand.Intn(88)+13) + "\n")
+				if err != nil {
+					log.Fatalf("failed to write to age.csv %s", err)
+				}
+			}
+
 		}
 	}
 	writer.Flush()
@@ -81,12 +90,20 @@ func ipField() {
 	if err != nil {
 		log.Fatalf("failed to create file %s", err)
 	}
+
 	writer := bufio.NewWriter(csvFile)
 
 	for i := 0; i < totalRecords; i++ {
-		writer.WriteString(strconv.Itoa(i) + "," + fmt.Sprint(rand.Int31()) + "\n")
+		_, err := writer.WriteString(strconv.Itoa(i) + "," + fmt.Sprint(rand.Int31()) + "\n")
+		if err != nil {
+			log.Fatalf("failed to write to ip.csv %s", err)
+		}
+
 		if rand.Intn(10) == 1 {
-			writer.WriteString(strconv.Itoa(i) + "," + fmt.Sprint(rand.Int31()) + "\n")
+			_, err := writer.WriteString(strconv.Itoa(i) + "," + fmt.Sprint(rand.Int31()) + "\n")
+			if err != nil {
+				log.Fatalf("failed to write to ip.csv %s", err)
+			}
 		}
 	}
 
@@ -100,12 +117,20 @@ func arbIdField() {
 	if err != nil {
 		log.Fatalf("failed to create file %s", err)
 	}
+
 	writer := bufio.NewWriter(csvFile)
 
 	for i := 0; i < totalRecords; i++ {
-		writer.WriteString(strconv.Itoa(i) + "," + fmt.Sprint(rand.Int63()) + "\n")
+		_, err := writer.WriteString(strconv.Itoa(i) + "," + fmt.Sprint(rand.Int63()) + "\n")
+		if err != nil {
+			log.Fatalf("failed to write to identifier.csv %s", err)
+		}
+
 		if rand.Intn(10) == 1 {
-			writer.WriteString(strconv.Itoa(i) + "," + fmt.Sprint(rand.Int63()) + "\n")
+			_, err := writer.WriteString(strconv.Itoa(i) + "," + fmt.Sprint(rand.Int63()) + "\n")
+			if err != nil {
+				log.Fatalf("failed to write to identifier.csv %s", err)
+			}
 		}
 	}
 
@@ -119,6 +144,7 @@ func timeField() {
 	if err != nil {
 		log.Fatalf("failed to create file %s", err)
 	}
+
 	writer := bufio.NewWriter(csvFile)
 
 	r := rand.New(rand.NewSource(rand.Int63()))
@@ -134,18 +160,27 @@ func timeField() {
 
 		date := generateDate()
 
-		writer.WriteString(urlString + "," + strconv.Itoa(i) + "," + date + "\n")
+		_, err := writer.WriteString(urlString + "," + strconv.Itoa(i) + "," + date + "\n")
+		if err != nil {
+			log.Fatalf("failed to write to time.csv %s", err)
+		}
 
 		if rand.Intn(5) == 1 {
 			date = generateDate()
-			writer.WriteString(urlString + "," + strconv.Itoa(i) + "," + date + "\n")
+			_, err := writer.WriteString(urlString + "," + strconv.Itoa(i) + "," + date + "\n")
+			if err != nil {
+				log.Fatalf("failed to write to time.csv %s", err)
+			}
 		}
 
 		if rand.Intn(10) == 1 {
 			value := distro.Uint64()
 			urlString = "https://www.test.com/" + strconv.FormatUint(value, 10)
 			date = generateDate()
-			writer.WriteString(urlString + "," + strconv.Itoa(i) + "," + date + "\n")
+			_, err := writer.WriteString(urlString + "," + strconv.Itoa(i) + "," + date + "\n")
+			if err != nil {
+				log.Fatalf("failed to write to time.csv %s", err)
+			}
 		}
 
 	}
@@ -160,6 +195,7 @@ func optInField() {
 	if err != nil {
 		log.Fatalf("failed to create file %s", err)
 	}
+
 	writer := bufio.NewWriter(csvFile)
 
 	var optString string
@@ -172,14 +208,24 @@ func optInField() {
 			optString = "0"
 		}
 
-		writer.WriteString(optString + "," + strconv.Itoa(i) + "\n")
+		_, err := writer.WriteString(optString + "," + strconv.Itoa(i) + "\n")
+		if err != nil {
+			log.Fatalf("failed to write to optin.csv %s", err)
+		}
+
 		if rand.Intn(10) == 1 {
 			if optString == "0" {
 				optString = "1"
-				writer.WriteString(optString + "," + strconv.Itoa(i) + "\n")
+				_, err := writer.WriteString(optString + "," + strconv.Itoa(i) + "\n")
+				if err != nil {
+					log.Fatalf("failed to write to optin.csv %s", err)
+				}
 			} else {
 				optString = "0"
-				writer.WriteString(optString + "," + strconv.Itoa(i) + "\n")
+				_, err := writer.WriteString(optString + "," + strconv.Itoa(i) + "\n")
+				if err != nil {
+					log.Fatalf("failed to write to optin.csv %s", err)
+				}
 			}
 		}
 	}
@@ -194,6 +240,7 @@ func countryField() {
 	if err != nil {
 		log.Fatalf("failed to create file %s", err)
 	}
+
 	writer := bufio.NewWriter(csvFile)
 
 	//populate countries
@@ -208,12 +255,18 @@ func countryField() {
 		if rand.Intn(2) == 1 {
 			value := distro.Uint64()
 			country := countryList[value]
-			writer.WriteString(country + "," + strconv.Itoa(i) + "\n")
+			_, err := writer.WriteString(country + "," + strconv.Itoa(i) + "\n")
+			if err != nil {
+				log.Fatalf("failed to write to country.csv %s", err)
+			}
 
 			if rand.Intn(10) == 1 {
 				value = distro.Uint64()
 				country = countryList[value]
-				writer.WriteString(country + "," + strconv.Itoa(i) + "\n")
+				_, err := writer.WriteString(country + "," + strconv.Itoa(i) + "\n")
+				if err != nil {
+					log.Fatalf("failed to write to country.csv %s", err)
+				}
 			}
 		}
 
