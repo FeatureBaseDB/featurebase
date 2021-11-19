@@ -1157,7 +1157,6 @@ func (e *executor) executeMin(ctx context.Context, qcx *Qcx, index string, c *pq
 	if other.Count == 0 {
 		return ValCount{}, nil
 	}
-
 	return other, nil
 }
 
