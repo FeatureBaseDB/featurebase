@@ -503,8 +503,13 @@ func (db *DB) Begin(writable bool) (_ *Tx, err error) {
 	return tx, nil
 }
 
-// removeTx removes an active transaction from the database.
+// removeTx removes an active transaction from the database. it obtains
+// the db lock, and currently drops it, but will later possibly be leaving
+// it retained by an asynchronous op that wants to happen before we start
+// running new tx.
 func (db *DB) removeTx(tx *Tx) error {
+	db.mu.Lock()
+	defer db.mu.Unlock()
 	// Release writer lock if tx is writable.
 	if tx.writable {
 		tx.db.rwmu.Unlock()
