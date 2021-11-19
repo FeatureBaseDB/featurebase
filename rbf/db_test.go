@@ -13,6 +13,7 @@ import (
 
 	_ "net/http/pprof"
 
+	"github.com/felixge/fgprof"
 	"github.com/molecula/featurebase/v2/rbf"
 	rbfcfg "github.com/molecula/featurebase/v2/rbf/cfg"
 	"golang.org/x/sync/errgroup"
@@ -334,6 +335,91 @@ func TestDB_MultiTx(t *testing.T) {
 	if err := g.Wait(); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// benchmarkOneCheckpoint
+func benchmarkOneCheckpoint(b *testing.B) {
+	cfg := rbfcfg.NewDefaultConfig()
+	// extremely low to force checkpointing
+	cfg.MinWALCheckpointSize = rbf.PageSize * 16
+	cfg.MaxWALCheckpointSize = rbf.PageSize * 64
+	var _ rbfcfg.Config
+	db := MustOpenDB(b, cfg)
+	defer MustCloseDB(b, db)
+
+	// Run multiple readers in separate goroutines.
+	ctx, cancel := context.WithCancel(context.Background())
+	g, ctx := errgroup.WithContext(ctx)
+	for i := 0; i < 4; i++ {
+		g.Go(func() error {
+			for {
+				if ctx.Err() != nil {
+					return nil // cancelled, return no error
+				} else if err := func() error {
+					tx, err := db.Begin(false)
+					if err != nil {
+						return err
+					}
+					defer tx.Rollback()
+
+					// time.Sleep(time.Duration(rand.Intn(int(3 * time.Millisecond))))
+
+					for i := 0; i < rand.Intn(1000); i++ {
+						v := rand.Intn(1 << 20)
+						if _, err := tx.Contains("x", uint64(v)); err != nil {
+							return err
+						}
+					}
+					return nil
+				}(); err != nil {
+					return err
+				}
+
+				// time.Sleep(time.Duration(rand.Intn(int(3 * time.Millisecond))))
+			}
+		})
+	}
+
+	// Continuously set/clear bits while readers are executing.
+	for i := 0; i < 1000; i++ {
+		func() {
+			tx, err := db.Begin(true)
+			if err != nil {
+				b.Fatal(err)
+			}
+			defer tx.Rollback()
+
+			for j := 0; j < rand.Intn(100); j++ {
+				v := rand.Intn(1 << 20)
+				if _, err := tx.Add("x", uint64(v)); err != nil {
+					b.Fatal(err)
+				}
+
+			}
+
+			if err := tx.Commit(); err != nil {
+				b.Fatal(err)
+			}
+		}()
+	}
+
+	// Stop readers & wait.
+	cancel()
+	if err := g.Wait(); err != nil {
+		b.Fatal(err)
+	}
+}
+
+func BenchmarkDbCheckpoint(b *testing.B) {
+	out, err := os.Create("cp.out")
+	if err != nil {
+		b.Fatalf("creating log file: %v", err)
+	}
+	done := fgprof.Start(out, fgprof.FormatPprof)
+	for i := 0; i < b.N; i++ {
+		benchmarkOneCheckpoint(b)
+	}
+	done()
 }
 
 // better diagnosis of deadlocks/hung situations versus just really slow "Quick" tests.

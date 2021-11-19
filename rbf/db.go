@@ -200,6 +200,7 @@ func (db *DB) checkpoint() error {
 		return nil
 	}
 
+	// fmt.Printf("checkpoint: walPageN %d, PageMap size %d\n", db.walPageN, db.pageMap.size)
 	for i := 0; i < db.walPageN; i++ {
 		page, err := db.readWALPageAt(i)
 		if err != nil {
