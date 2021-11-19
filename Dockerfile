@@ -42,7 +42,6 @@ RUN apk add --no-cache curl jq
 
 COPY --from=pilosa-builder /pilosa/build/featurebase /
 
-COPY LICENSE /LICENSE
 COPY NOTICE /NOTICE
 
 EXPOSE 10101

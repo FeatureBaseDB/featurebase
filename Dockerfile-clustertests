@@ -20,7 +20,6 @@ RUN apt install -y docker.io
 
 RUN cp /go/bin/featurebase /featurebase
 
-COPY LICENSE /LICENSE
 COPY NOTICE /NOTICE
 
 EXPOSE 10101

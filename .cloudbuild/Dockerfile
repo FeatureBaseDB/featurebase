@@ -5,7 +5,6 @@ LABEL org.opencontainers.image.authors="dev@molecula.com"
 
 RUN apk add --no-cache curl jq
 
-COPY LICENSE /LICENSE
 COPY NOTICE /NOTICE
 ARG SHORT_SHA
 

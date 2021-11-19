@@ -18,10 +18,6 @@ GO_VERSION=1.16.10
 DOCKER_BUILD= # set to 1 to use `docker-build` instead of `build` when creating a release
 BUILD_TAGS += shardwidth$(SHARD_WIDTH)
 TEST_TAGS = roaringparanoia
-define LICENSE_HASH_CODE
-    head -13 $1 | sed -e 's/Copyright 20[0-9][0-9]/Copyright 20XX/' -e 's/Pilosa Corp\./Molecula Corp./' | shasum | cut -f 1 -d " "
-endef
-LICENSE_HASH=$(shell $(call LICENSE_HASH_CODE, pilosa.go))
 UNAME := $(shell uname -s)
 ifeq ($(UNAME), Darwin)
     IS_MACOS:=1
@@ -312,12 +308,6 @@ gometalinter: require-gometalinter vendor
 	    --exclude "^internal/.*\.pb\.go" \
 	    --exclude "^pql/pql.peg.go" \
 	    ./...
-
-# Verify that all Go files have license header
-check-license-headers: SHELL:=/bin/bash
-check-license-headers:
-	@! find . -path ./vendor -prune -o -name '*.go' -print | grep -v -F -f license.exceptions | while read fn;\
-	    do [[ `$(call LICENSE_HASH_CODE, $$fn)` == $(LICENSE_HASH) ]] || echo $$fn; done | grep '.'
 
 ######################
 # Build dependencies #
