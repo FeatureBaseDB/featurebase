@@ -110,7 +110,7 @@ func (cfg *RandomQueryConfig) DefineFlags(fs *flag.FlagSet) {
 	fs.IntVar(&cfg.TreeDepth, "max-nesting-depth", 1, "depth of random queries to generate.")
 	fs.IntVar(&cfg.QueryCount, "queries-per-request", 1, "number of random queries to generate")
 	fs.IntVar(&cfg.NumRuns, "number-reports", 1, "number of reports generate ")
-	fs.IntVar(&cfg.Seed, "seed", 0, "RNG seed")
+	fs.IntVar(&cfg.Seed, "seed", int(time.Now().Unix()), "RNG seed, defaults to currentime")
 	fs.DurationVar(&cfg.Duration, "metrics-period", 10*time.Second, "size of time window on metrics reporting, default 10s")
 	fs.StringVar(&cfg.Index, "index", "i", "index to run queries against")
 	fs.IntVar(&cfg.QPM, "qpm", 10, "number of current requests per minute to simulate, default  10")
@@ -440,6 +440,7 @@ func (cfg *RandomQueryConfig) AddIntField(index, field string, min, max pql.Deci
 		f = &Features{}
 		cfg.IndexMap[index] = f
 	}
+	vprint.VV("Add: %s %v %v %v", field, min, max, scale)
 	/*	if min.Scale != scale || max.Scale != scale {
 
 			PanicOn(fmt.Sprintf("scale error; %v:%v min scale %d, max scale %d, field scale %d, assumed they'd be equal",
