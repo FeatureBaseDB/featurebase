@@ -114,6 +114,7 @@ func (cfg *RandomQueryConfig) DefineFlags(fs *flag.FlagSet) {
 	fs.StringVar(&cfg.Index, "index", "i", "index to run queries against")
 	fs.IntVar(&cfg.QPM, "qpm", 10, "number of current requests per minute to simulate, default 10")
 	fs.BoolVar(&cfg.Verbose, "v", false, "show queries as they are generated")
+	fs.BoolVar(&cfg.GenerateOnly, "generate-only", false, "only generate do not run package")
 	fs.StringVar(&cfg.TimeFromArg, "time.from", defaultStartTime.Format(time.RFC3339), "starting time for time fields (format: 2006-01-02T15:04:05Z07:00)")
 	fs.StringVar(&cfg.TimeToArg, "time.to", defaultEndTime.Format(time.RFC3339), "starting time for time fields (format: 2006-01-02T15:04:05Z07:00)")
 	fs.StringVar(&cfg.SrcFile, "query-file", "", "use pql contained in this file for query batch instead of generating")
@@ -390,6 +391,10 @@ func (cfg *RandomQueryConfig) buildPayload() error {
 		Query: request.String(),
 	}
 	vprint.VV("%v", request.String())
+	if cfg.GenerateOnly {
+		// just output the PQL and exit
+		os.Exit(0)
+	}
 	payload, err := proto.Marshal(req)
 	if err != nil {
 		return errors.Wrap(err, "marshaling request to protobuf")
