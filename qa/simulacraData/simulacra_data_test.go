@@ -66,29 +66,3 @@ func TestGenerateDate(t *testing.T) {
 		fmt.Printf("error generating date")
 	}
 }
-
-// func TestReadAge(t *testing.T) {
-// 	csvfile, err := os.Open("age.csv")
-// 	if err != nil {
-// 		fmt.Printf("%v", err)
-// 	}
-
-// 	r := csv.NewReader(csvfile)
-// 	records, err := r.ReadAll()
-// 	if err != nil {
-// 		fmt.Printf("%v", err)
-// 	}
-
-// 	for i := 0; i < len(records); i++ {
-
-// 		age, err := strconv.Atoi(records[i][1])
-// 		if err != nil {
-// 			fmt.Printf("%v", err)
-// 		}
-
-// 		if age > 100 || age < 13 {
-// 			fmt.Printf("age outside of allowed range")
-// 		}
-// 		fmt.Println(age)
-// 	}
-// }
