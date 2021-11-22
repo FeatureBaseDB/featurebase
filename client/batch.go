@@ -342,6 +342,10 @@ func (qt *QuantizedTime) SetHour(hour string) {
 	copy(qt.ymdh[8:10], hour)
 }
 
+func (qt *QuantizedTime) Time() (time.Time, error) {
+	return time.Parse("2006010215", string(qt.ymdh[:]))
+}
+
 // Reset sets the time to the zero value which generates no time views.
 func (qt *QuantizedTime) Reset() {
 	for i := range qt.ymdh {
