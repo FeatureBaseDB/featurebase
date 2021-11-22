@@ -255,6 +255,7 @@ initiate featurebase linux amd64 in node:
     - scp  -o StrictHostKeyChecking=no -i gitlab-featurebase-dev.pem featurebase_linux_amd64 .gitlab/featurebase.conf .gitlab/featurebase.service ec2-user@$IP:.
     - aws ssm send-command --document-name "AWS-RunShellScript" --instance-ids $INSTANCE_ID --cli-input-json file://.gitlab/configureFeatureBase.json --profile $PROFILE --region us-east-2
   needs:
+    - job: build for linux amd64
     - job: deploy node for linux amd64
 
 # terminate EC2 instance  
