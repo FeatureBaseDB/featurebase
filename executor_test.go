@@ -8292,3 +8292,43 @@ func TestToRows(t *testing.T) {
 	}
 
 }
+
+// TestMinMaxTimestampVariableNode tests Min() and Max() queries on
+// timestamp values on a clusters of varying size.
+func TestMinMaxTimestampVariableNode(t *testing.T) {
+	for i := 1; i < 4; i++ {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			// separate function so we can defer closing the cluster
+			// and so it looks prettier
+			MinMaxTimestampNodeTester(t, i)
+		})
+	}
+}
+
+// MinMaxTimestampNodeTester tests Min() and Max() queries on
+// timestamp values on a cluster with `numNodes` nodes.
+// fails if the min or max values are not correct
+func MinMaxTimestampNodeTester(t *testing.T, numNodes int) {
+	index := "test_index"
+	field := "ts"
+	c := test.MustRunCluster(t, numNodes)
+	defer c.Close()
+
+	// create an index and timestamp field
+	c.CreateField(t, index, pilosa.IndexOptions{}, field, pilosa.OptFieldTypeTimestamp(time.Unix(0, 0), "s"))
+
+	// add some data
+	expected := "2010-01-02T12:32:00Z"
+	c.Query(t, index, "Set(10, ts=\""+expected+"\")")
+
+	// run a query on the cluster
+	min := c.Query(t, index, "Min("+field+")").Results[0].(pilosa.ValCount).TimestampVal.Format(time.RFC3339Nano)
+	if min != expected {
+		t.Fatalf("incorrect min timestamp val. expected: %v, got %v\n", expected, min)
+	}
+
+	max := c.Query(t, index, "Max("+field+")").Results[0].(pilosa.ValCount).TimestampVal.Format(time.RFC3339Nano)
+	if max != expected {
+		t.Fatalf("incorrect max timestamp val. expected: %v, got %v\n", expected, min)
+	}
+}

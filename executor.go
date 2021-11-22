@@ -7575,8 +7575,11 @@ func (vc *ValCount) smaller(other ValCount) ValCount {
 		extra += other.Count
 	}
 	return ValCount{
-		Val:   vc.Val,
-		Count: vc.Count + extra,
+		Val:          vc.Val,
+		Count:        vc.Count + extra,
+		DecimalVal:   vc.DecimalVal,
+		FloatVal:     vc.FloatVal,
+		TimestampVal: vc.TimestampVal,
 	}
 }
 
@@ -7626,8 +7629,11 @@ func (vc *ValCount) larger(other ValCount) ValCount {
 		extra += other.Count
 	}
 	return ValCount{
-		Val:   vc.Val,
-		Count: vc.Count + extra,
+		Val:          vc.Val,
+		Count:        vc.Count + extra,
+		DecimalVal:   vc.DecimalVal,
+		FloatVal:     vc.FloatVal,
+		TimestampVal: vc.TimestampVal,
 	}
 }
 
