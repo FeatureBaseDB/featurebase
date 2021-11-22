@@ -51,37 +51,32 @@ var countryList [246]string = [...]string{"ABW", "AFG", "AGO", "AIA", "ALA", "AL
 const totalRecords int = 200000000
 
 func main() {
-	err0 := ageField()
-	if err0 == nil {
-		log.Fatalf("unable to generate age field: %v", err0)
+	if err := GenerateAgeField(totalRecords); err != nil {
+		log.Fatalf("unable to generate age field: %v", err)
 	}
 
-	err1 := ipField()
-	if err1 != nil {
-		log.Fatalf("unable to generate IPfield: %v", err1)
+	if err := GenerateIPField(totalRecords); err != nil {
+		log.Fatalf("unable to generate IP field: %v", err)
 	}
 
-	err2 := arbIdField()
-	if err2 != nil {
-		log.Fatalf("unable to generate indentifier field: %v", err2)
+	if err := GenerateArbIdField(totalRecords); err != nil {
+		log.Fatalf("unable to generate indentifier field: %v", err)
 	}
 
-	err3 := optInField()
-	if err3 != nil {
-		log.Fatalf("unable to generate opt in field: %v", err3)
-	}
-	err4 := countryField()
-	if err4 != nil {
-		log.Fatalf("unable to generate country field: %v", err4)
+	if err := GenerateOptInField(totalRecords); err != nil {
+		log.Fatalf("unable to generate opt in field: %v", err)
 	}
 
-	err5 := timeField()
-	if err5 != nil {
-		log.Fatalf("unable to generate time field: %v", err5)
+	if err := GenerateCountryField(totalRecords); err != nil {
+		log.Fatalf("unable to generate country field: %v", err)
+	}
+
+	if err := GenerateTimeField(totalRecords); err != nil {
+		log.Fatalf("unable to generate time field: %v", err)
 	}
 }
 
-func ageField() error {
+func GenerateAgeField(requestedRecords int) error {
 	csvFile, err0 := os.Create("age.csv")
 	if err0 != nil {
 		return errors.Wrap(err0, "unable to create age.csv")
@@ -89,7 +84,7 @@ func ageField() error {
 
 	writer := bufio.NewWriter(csvFile)
 
-	for i := 0; i < totalRecords; i++ {
+	for i := 0; i < requestedRecords; i++ {
 		if rand.Intn(100) <= 20 {
 			_, err := writer.WriteString(strconv.Itoa(i) + "," + strconv.Itoa(rand.Intn(88)+13) + "\n")
 			if err != nil {
@@ -118,7 +113,7 @@ func ageField() error {
 	return nil
 }
 
-func ipField() error {
+func GenerateIPField(requestedRecords int) error {
 	csvFile, err0 := os.Create("ip.csv")
 	if err0 != nil {
 		return errors.Wrap(err0, "unable to create ip.csv")
@@ -126,7 +121,7 @@ func ipField() error {
 
 	writer := bufio.NewWriter(csvFile)
 
-	for i := 0; i < totalRecords; i++ {
+	for i := 0; i < requestedRecords; i++ {
 		_, err := writer.WriteString(strconv.Itoa(i) + "," + fmt.Sprint(rand.Int31()) + "\n")
 		if err != nil {
 			return errors.Wrap(err, "unable to write to ip.csv")
@@ -153,7 +148,7 @@ func ipField() error {
 
 }
 
-func arbIdField() error {
+func GenerateArbIdField(requestedRecords int) error {
 	csvFile, err0 := os.Create("identifier.csv")
 	if err0 != nil {
 		return errors.Wrap(err0, "unable to create identifier.csv")
@@ -161,7 +156,7 @@ func arbIdField() error {
 
 	writer := bufio.NewWriter(csvFile)
 
-	for i := 0; i < totalRecords; i++ {
+	for i := 0; i < requestedRecords; i++ {
 		_, err := writer.WriteString(strconv.Itoa(i) + "," + fmt.Sprint(rand.Int63()) + "\n")
 		if err != nil {
 			return errors.Wrap(err, "unable to write to identifier.csv")
@@ -188,7 +183,7 @@ func arbIdField() error {
 
 }
 
-func timeField() error {
+func GenerateTimeField(requestedRecords int) error {
 	csvFile, err0 := os.Create("time.csv")
 	if err0 != nil {
 		return errors.Wrap(err0, "unable to create time.csv")
@@ -203,7 +198,7 @@ func timeField() error {
 
 	distro := rand.NewZipf(r, s, v, imax)
 
-	for i := 0; i < totalRecords; i++ {
+	for i := 0; i < requestedRecords; i++ {
 		value := distro.Uint64()
 		urlString := "https://www.test.com/" + strconv.FormatUint(value, 10)
 
@@ -246,7 +241,7 @@ func timeField() error {
 
 }
 
-func optInField() error {
+func GenerateOptInField(requestedRecords int) error {
 	csvFile, err0 := os.Create("optin.csv")
 	if err0 != nil {
 		return errors.Wrap(err0, "unable to create optin.csv")
@@ -256,7 +251,7 @@ func optInField() error {
 
 	var optString string
 
-	for i := 0; i < totalRecords; i++ {
+	for i := 0; i < requestedRecords; i++ {
 
 		if rand.Intn(20) == 1 {
 			optString = "1"
@@ -299,7 +294,7 @@ func optInField() error {
 
 }
 
-func countryField() error {
+func GenerateCountryField(requestedRecords int) error {
 	csvFile, err0 := os.Create("country.csv")
 	if err0 != nil {
 		return errors.Wrap(err0, "unable to create country.csv")
@@ -315,7 +310,7 @@ func countryField() error {
 
 	distro := rand.NewZipf(r, s, v, imax)
 
-	for i := 0; i < totalRecords; i++ {
+	for i := 0; i < requestedRecords; i++ {
 		if rand.Intn(2) == 1 {
 			value := distro.Uint64()
 			country := countryList[value]

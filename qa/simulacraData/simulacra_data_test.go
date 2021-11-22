@@ -17,43 +17,45 @@ import (
 	"testing"
 )
 
+const testRecords int = 1000
+
 func TestAge(t *testing.T) {
-	err := ageField()
+	err := GenerateAgeField(testRecords)
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
 }
 
 func TestIP(t *testing.T) {
-	err := ipField()
+	err := GenerateIPField(testRecords)
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
 }
 
 func TestIndentifer(t *testing.T) {
-	err := arbIdField()
+	err := GenerateArbIdField(testRecords)
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
 }
 
 func TestOptIn(t *testing.T) {
-	err := optInField()
+	err := GenerateOptInField(testRecords)
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
 }
 
 func TestCountry(t *testing.T) {
-	err := countryField()
+	err := GenerateCountryField(testRecords)
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
 }
 
 func TestTime(t *testing.T) {
-	err := timeField()
+	err := GenerateTimeField(testRecords)
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
