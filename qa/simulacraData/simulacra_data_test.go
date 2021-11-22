@@ -14,55 +14,54 @@
 package main
 
 import (
-	"fmt"
 	"testing"
 )
 
 func TestAge(t *testing.T) {
 	err := ageField()
 	if err != nil {
-		fmt.Printf("%v", err)
+		t.Fatalf("%v", err)
 	}
 }
 
 func TestIP(t *testing.T) {
 	err := ipField()
 	if err != nil {
-		fmt.Printf("%v", err)
+		t.Fatalf("%v", err)
 	}
 }
 
 func TestIndentifer(t *testing.T) {
 	err := arbIdField()
 	if err != nil {
-		fmt.Printf("%v", err)
+		t.Fatalf("%v", err)
 	}
 }
 
 func TestOptIn(t *testing.T) {
 	err := optInField()
 	if err != nil {
-		fmt.Printf("%v", err)
+		t.Fatalf("%v", err)
 	}
 }
 
 func TestCountry(t *testing.T) {
 	err := countryField()
 	if err != nil {
-		fmt.Printf("%v", err)
+		t.Fatalf("%v", err)
 	}
 }
 
 func TestTime(t *testing.T) {
 	err := timeField()
 	if err != nil {
-		fmt.Printf("%v", err)
+		t.Fatalf("%v", err)
 	}
 }
 
 func TestGenerateDate(t *testing.T) {
 	testDate := generateDate()
 	if testDate == "" {
-		fmt.Printf("error generating date")
+		t.Fatalf("error generating date")
 	}
 }

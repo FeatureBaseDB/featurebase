@@ -25,6 +25,7 @@ import (
 	"math/rand"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/pkg/errors"
 )
@@ -349,28 +350,13 @@ func countryField() error {
 }
 
 func generateDate() string {
-	// generates a random date in format YYYY-MM-DDT00:00
-	// does not include leap days or populate the hour/minute time
-	year := strconv.Itoa(rand.Intn(20) + 2002) // year range 2002-2021
-	month := rand.Intn(12) + 1
-	day := rand.Intn(30) + 1
+	// Nov 22, 2021 = 1637616960
+	// twenty years =  631138520
+	// date min 	= 1006478440
+	date := rand.Int63n(631138520) + 1006478440
 
-	if month == 2 && day >= 29 {
-		day = 28
-	}
-	if month == 4 && day == 31 {
-		day = 30
-	}
-	if month == 6 && day == 31 {
-		day = 30
-	}
-	if month == 11 && day == 31 {
-		day = 30
-	}
-
-	monthFix := fmt.Sprintf("%02d", month)
-	dayFix := fmt.Sprintf("%02d", day)
-	YMDstring := year + "-" + monthFix + "-" + dayFix + "T00:00"
+	t := time.Unix(date, 0)
+	YMDstring := t.Format("2006-01-02T15:04")
 
 	return YMDstring
 }
