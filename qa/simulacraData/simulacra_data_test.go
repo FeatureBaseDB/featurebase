@@ -1,0 +1,94 @@
+// Copyright 2017 Pilosa Corp.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+package main
+
+import (
+	"fmt"
+	"testing"
+)
+
+func TestAge(t *testing.T) {
+	err := ageField()
+	if err != nil {
+		fmt.Printf("%v", err)
+	}
+}
+
+func TestIP(t *testing.T) {
+	err := ipField()
+	if err != nil {
+		fmt.Printf("%v", err)
+	}
+}
+
+func TestIndentifer(t *testing.T) {
+	err := arbIdField()
+	if err != nil {
+		fmt.Printf("%v", err)
+	}
+}
+
+func TestOptIn(t *testing.T) {
+	err := optInField()
+	if err != nil {
+		fmt.Printf("%v", err)
+	}
+}
+
+func TestCountry(t *testing.T) {
+	err := countryField()
+	if err != nil {
+		fmt.Printf("%v", err)
+	}
+}
+
+func TestTime(t *testing.T) {
+	err := timeField()
+	if err != nil {
+		fmt.Printf("%v", err)
+	}
+}
+
+func TestGenerateDate(t *testing.T) {
+	testDate := generateDate()
+	if testDate == "" {
+		fmt.Printf("error generating date")
+	}
+}
+
+// func TestReadAge(t *testing.T) {
+// 	csvfile, err := os.Open("age.csv")
+// 	if err != nil {
+// 		fmt.Printf("%v", err)
+// 	}
+
+// 	r := csv.NewReader(csvfile)
+// 	records, err := r.ReadAll()
+// 	if err != nil {
+// 		fmt.Printf("%v", err)
+// 	}
+
+// 	for i := 0; i < len(records); i++ {
+
+// 		age, err := strconv.Atoi(records[i][1])
+// 		if err != nil {
+// 			fmt.Printf("%v", err)
+// 		}
+
+// 		if age > 100 || age < 13 {
+// 			fmt.Printf("age outside of allowed range")
+// 		}
+// 		fmt.Println(age)
+// 	}
+// }
