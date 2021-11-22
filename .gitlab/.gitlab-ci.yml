@@ -232,8 +232,8 @@ deploy node for linux amd64:
     - for i in {0..24}; do IP=$(aws ec2 describe-instances --instance-ids $INSTANCE_ID --filters 'Name=instance-state-name, Values=running' --query 'Reservations[*].Instances[*].PublicIpAddress' --output text --profile $PROFILE); if [ -n "$IP" ]; then break; fi; sleep 5; done
     - scp  -o StrictHostKeyChecking=no -i gitlab-featurebase-dev.pem featurebase_linux_amd64 .gitlab/featurebase.conf .gitlab/featurebase.service ec2-user@$IP:.
     - aws ssm send-command --document-name "AWS-RunShellScript" --instance-ids $INSTANCE_ID --cli-input-json file://.gitlab/configureFeatureBase.json --profile $PROFILE --region us-east-2
-  needs:
-    - job: build for linux amd64
+  # needs:
+  #   - job: build for linux amd64
   artifacts:
     paths:
       - linux-amd64-instance.txt
