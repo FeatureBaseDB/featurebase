@@ -109,6 +109,7 @@ message ValCount {
 	int64 Count = 2;
 	double FloatVal = 3;
 	Decimal DecimalVal = 4;
+    string TimestampVal = 5;
 }
 
 message Decimal {
