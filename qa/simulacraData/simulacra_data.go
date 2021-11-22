@@ -21,6 +21,7 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"log"
 	"math/rand"
 	"os"
 	"strconv"
@@ -51,31 +52,31 @@ const totalRecords int = 200000000
 func main() {
 	err0 := ageField()
 	if err0 == nil {
-		fmt.Printf("unable to generate age field: %v", err0)
+		log.Fatalf("unable to generate age field: %v", err0)
 	}
 
 	err1 := ipField()
 	if err1 != nil {
-		fmt.Printf("unable to generate IPfield: %v", err1)
+		log.Fatalf("unable to generate IPfield: %v", err1)
 	}
 
 	err2 := arbIdField()
 	if err2 != nil {
-		fmt.Printf("unable to generate indentifier field: %v", err2)
+		log.Fatalf("unable to generate indentifier field: %v", err2)
 	}
 
 	err3 := optInField()
 	if err3 != nil {
-		fmt.Printf("unable to generate opt in field: %v", err3)
+		log.Fatalf("unable to generate opt in field: %v", err3)
 	}
 	err4 := countryField()
 	if err4 != nil {
-		fmt.Printf("unable to generate country field: %v", err4)
+		log.Fatalf("unable to generate country field: %v", err4)
 	}
 
 	err5 := timeField()
 	if err5 != nil {
-		fmt.Printf("unable to generate time field: %v", err5)
+		log.Fatalf("unable to generate time field: %v", err5)
 	}
 }
 
