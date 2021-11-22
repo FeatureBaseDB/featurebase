@@ -8309,7 +8309,6 @@ func TestMinMaxTimestampVariableNode(t *testing.T) {
 // timestamp values on a cluster with `numNodes` nodes.
 // fails if the min or max values are not correct
 func MinMaxTimestampNodeTester(t *testing.T, numNodes int) {
-	t.Helper()
 	index := "test_index"
 	field := "ts"
 	c := test.MustRunCluster(t, numNodes)
