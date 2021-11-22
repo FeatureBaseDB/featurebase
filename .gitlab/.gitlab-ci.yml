@@ -237,6 +237,7 @@ deploy node for linux amd64:
   artifacts:
     paths:
       - linux-amd64-instance.txt
+  allow_failure: true
 
 terminate node for linux amd64:
   stage: integration
@@ -253,3 +254,4 @@ terminate node for linux amd64:
     - aws ec2 terminate-instances --instance-ids $INSTANCE_ID
   needs:
     - job: deploy node for linux amd64
+  
