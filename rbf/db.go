@@ -28,6 +28,17 @@ var cursorSyncPool = &sync.Pool{
 	},
 }
 
+// txWaiter is a representation of "i need to wait for txs to complete".
+// it is created with a function, and will run that function, with the db
+// lock held, at some point after every Tx that was open when it was created
+// has closed. WARNING: A txWaiter may hold db.rwmu.
+type txWaiter struct {
+	mu        sync.Mutex
+	cond      *sync.Cond
+	waitingOn map[*Tx]struct{}
+	callback  func()
+}
+
 // DB options like 	MaxSize, FsyncEnabled, DoAllocZero
 // can be set before calling DB.Open().
 type DB struct {
@@ -48,6 +59,8 @@ type DB struct {
 	mu       sync.RWMutex // general mutex
 	rwmu     sync.Mutex   // mutex for restricting single writer
 	haltCond *sync.Cond   // condition for resuming txs after checkpoint
+
+	txWaiters []*txWaiter // things waiting for Txs to close
 
 	isDead error // this database died in an unrecoverable way, error out opens
 
@@ -142,8 +155,12 @@ func (db *DB) Open() (err error) {
 	// Open write-ahead log & checkpoint to the end since no transactions are open.
 	if err := db.openWAL(); err != nil {
 		return fmt.Errorf("wal open: %w", err)
-	} else if err := db.checkpoint(); err != nil {
-		return fmt.Errorf("startup checkpoint: %w", err)
+	} else {
+		// checkpoint wants to hold the rwmu lock.
+		db.rwmu.Lock()
+		if err := db.checkpoint(); err != nil {
+			return fmt.Errorf("startup checkpoint: %w", err)
+		}
 	}
 
 	return nil
@@ -247,9 +264,18 @@ func (db *DB) methodicalWALPageN(pageN int) (lastMeta int, err error) {
 	return lastMeta, nil
 }
 
-// checkpoint moves all WAL pages to the main DB file.
-// Must be called by a write transaction while under db.mu lock.
+// checkpoint moves all WAL pages to the main DB file. Must be called
+// while holding both db.mu and db.rwmu. Should release db.rwmu, but not
+// db.mu.
 func (db *DB) checkpoint() (err error) {
+	// if we don't spin off a possible async waiter, we should release the
+	// write lock, if we do, that will release it.
+	releaseLock := true
+	defer func() {
+		if releaseLock {
+			db.rwmu.Unlock()
+		}
+	}()
 	if !db.opened {
 		return nil
 	} else if len(db.txs) > 0 {
@@ -332,15 +358,26 @@ func (db *DB) checkpoint() (err error) {
 	// Ensure database file is synced and then truncate the WAL file.
 	if err = db.fsync(db.file); err != nil {
 		return fmt.Errorf("db file sync: %w", err)
-	} else if err = db.walFile.Truncate(0); err != nil {
-		return fmt.Errorf("truncate wal file: %w", err)
-	} else if err = db.fsync(db.walFile); err != nil {
-		return fmt.Errorf("wal file sync: %w", err)
-	} else if _, err = db.walFile.Seek(0, io.SeekStart); err != nil {
-		return fmt.Errorf("seek wal file: %w", err)
 	}
-	db.walPageN = 0
-	db.pageMap = NewPageMap()
+	// now we've updated the file. There are existing transactions that are still
+	// using the WAL, though. So we wait for them to terminate before we unlock
+	// the rwmu and update the metadata about the WAL.
+	releaseLock = false
+	// fmt.Printf("checkpoint mostly done, waiting for Tx cleanup...\n")
+	db.afterCurrentTx(func() {
+		// fmt.Printf("truncating WAL\n")
+		defer db.rwmu.Unlock()
+		if err = db.walFile.Truncate(0); err != nil {
+			db.logger.Errorf("truncate wal file: %w", err)
+		} else if err = db.fsync(db.walFile); err != nil {
+			db.logger.Errorf("wal file sync: %w", err)
+		} else if _, err = db.walFile.Seek(0, io.SeekStart); err != nil {
+			db.logger.Errorf("seek wal file: %w", err)
+		}
+		db.walPageN = 0
+		db.pageMap = NewPageMap()
+		// fmt.Printf("checkpoint actually done\n")
+	})
 	return nil
 }
 
@@ -613,43 +650,101 @@ func (db *DB) Begin(writable bool) (_ *Tx, err error) {
 	return tx, nil
 }
 
+// afterCurrentTx produces runs the provided callback, with the db lock
+// held, after all current Tx terminate. It should be called with the db
+// lock held.
+func (db *DB) afterCurrentTx(callback func()) {
+	if len(db.txs) == 0 {
+		callback()
+		return
+	}
+	txw := &txWaiter{}
+	txw.cond = sync.NewCond(&txw.mu)
+	txw.callback = callback
+	txw.waitingOn = make(map[*Tx]struct{}, len(db.txs))
+	for k := range db.txs {
+		txw.waitingOn[k] = struct{}{}
+	}
+	db.txWaiters = append(db.txWaiters, txw)
+	txw.mu.Lock()
+	go func() {
+		for len(txw.waitingOn) > 0 {
+			// fmt.Printf("afterCurrentTx: %d left\n", len(txw.waitingOn))
+			txw.cond.Wait()
+		}
+		// fmt.Printf("afterCurrentTx: locking db\n")
+		db.mu.Lock()
+		defer db.mu.Unlock()
+		// remove us from the db's list
+		for i, v := range db.txWaiters {
+			if v == txw {
+				// remove us from the list
+				copy(db.txWaiters[i:], db.txWaiters[i+1:])
+				db.txWaiters = db.txWaiters[:len(db.txWaiters)-1]
+				break
+			}
+		}
+		// fmt.Printf("afterCurrentTx: running callback\n")
+		txw.callback()
+	}()
+	return
+}
+
 // removeTx removes an active transaction from the database. it obtains
 // the db lock, and currently drops it, but will later possibly be leaving
 // it retained by an asynchronous op that wants to happen before we start
 // running new tx.
 func (db *DB) removeTx(tx *Tx) error {
 	db.mu.Lock()
-	// release the write lock. we have to do this for now. some day we won't,
-	// and will want to hold it, but right now we can't be sure we can get it.
+	defer db.mu.Unlock()
+	// We might want to trigger a checkpoint. Only for writable
+	// transactions, and only when either there's nothing else open or we
+	// really need to.
+	checkpoint := false
 	if tx.writable {
-		tx.db.rwmu.Unlock()
+		walSize := db.walSize()
+		if walSize > db.cfg.MinWALCheckpointSize {
+			// Might be a good time for a checkpoint. We'll do a checkpoint
+			// if we're the only transaction, or if we have to.
+			if len(db.txs) == 1 || walSize > db.cfg.MaxWALCheckpointSize {
+				checkpoint = true
+			}
+		}
+		// During checkpointing, we'll be preventing writes, but allowing reads.
+		if !checkpoint {
+			tx.db.rwmu.Unlock()
+		}
 	}
 	// remove ourselves from the list of transactions the db is keeping.
 	delete(tx.db.txs, tx)
+	for _, txw := range tx.db.txWaiters {
+		delete(txw.waitingOn, tx)
+		// let it know we're done. we've still got db.mu.lock, so it won't
+		// happen just yet, but it'll be able to continue.
+		if len(txw.waitingOn) == 0 {
+			txw.cond.Broadcast()
+		}
+	}
 
 	// Disassociate from db.
 	tx.db = nil
 
-	// Write pages from WAL to DB. As of this instant, we are the ONLY
-	// transaction, which means that no transaction has an older version
-	// of the PageMap than we do, and if we're a write, Commit() already
-	// updated the page map to our page map. So, if we *can* checkpoint,
-	// the checkpoint gets spawned asynchronously. We could block writes,
-	// except doing so will deadlock in a weird way.
-	if len(db.txs) == 0 && db.walSize() > db.cfg.MinWALCheckpointSize {
-		// We are doing this function with the db lock held, which means
-		// we're *not* releasing the db lock, even though we're returning.
-		// This is a weird special case, and probably a bad idea.
-		go func() {
-			defer db.mu.Unlock()
+	if checkpoint {
+		// We need to run a checkpoint. This can be semi-asynchronous.
+		// It needs to wait until every existing transaction has finished,
+		// because every existing transaction could want to look up pages
+		// which are in the database before our operations, but which should
+		// now be in the WAL. We want them to use the WAL instead.
+		// fmt.Printf("possibly-async checkpoint...\n")
+		db.afterCurrentTx(func() {
+			// We still hold db.rwmu here. checkpoint unlocks it when it's
+			// ready.
+			// fmt.Printf("checkpoint starting\n")
 			if err := db.checkpoint(); err != nil {
 				db.logger.Errorf("async checkpoint: %v", err)
 			}
-		}()
-	} else {
-		db.mu.Unlock()
+		})
 	}
-
 	return nil
 }
 
