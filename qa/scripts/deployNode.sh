@@ -49,6 +49,7 @@ REGION="us-east-2"
 # launch instance, save instance Id and run cloud-init to set up node env
 deploy_node
 if [ $? > 0 ]; then 
+    echo "Error: " >&2
     exit 1
 fi
 
@@ -57,7 +58,9 @@ fi
 initialize_featurebase
 if [ $? > 0 ]; then 
     terminate_node
+    echo "Error: " >&2
     exit 1
 else 
     terminate_node
+    exit 0
 fi
