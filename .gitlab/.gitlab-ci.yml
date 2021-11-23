@@ -12,13 +12,13 @@ include:
           - .go/pkg/mod/
 variables:
   GOVERSION: "1.16.9"
-  INSTANCE_ID_FILE: ./linux-amd64-instance.txt
 
 stages:
+  - integration
   - lint
   - test
   - build
-  - integration
+  
 
     #before_script:
     #- echo "before_script"
@@ -115,7 +115,7 @@ upload to sonarcloud:
     - job: run jest tests 
     
 build for linux amd64:
-  stage: build
+  stage: integration
   image: golang:1.16.10
   script:
     - rm -r lattice
@@ -201,79 +201,5 @@ build container fb:
 deploy node for linux amd64:
   stage: integration
   image: registry.gitlab.com/gitlab-org/cloud-deploy/aws-base:latest
-  variables:
-    AMI: ""
-    INSTANCE: "t3a.large"
-    SECURITY_GROUP: ""
-    SUBNET_ID: ""
-    PROFILE: "default"
-    AWS_SSH_PRIVATE_KEY: $AWS_SSH_PRIVATE_KEY
-  before_script:
-    - aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
-    - aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
-    - aws configure set region "us-east-2"
-    - aws configure set aws_profile $PROFILE
-    - echo $AWS_SSH_PRIVATE_KEY > gitlab-featurebase-dev.pem
-    - chmod 400 gitlab-featurebase-dev.pem
   script:
-    - AMI=$(aws ssm get-parameters --names /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-ebs --query 'Parameters[0].[Value]' --output text --profile $PROFILE)
-    - SECURITY_GROUP=$(aws ec2 describe-security-groups --filters Name=vpc-id,Values=vpc-03a4ba3d5b7c8f978 Name=group-name,Values=default --query 'SecurityGroups[*].[GroupId]' --output text --profile $PROFILE)
-    - SUBNET_ID=$(aws ec2 describe-subnets --filters 'Name=vpc-id,Values=vpc-03a4ba3d5b7c8f978' 'Name=availability-zone,Values=us-east-2a' --query 'Subnets[0].SubnetId' --output text --profile $PROFILE)
-    - aws ec2 run-instances --image-id $AMI --instance-type $INSTANCE --security-group-ids $SECURITY_GROUP --subnet-id $SUBNET_ID --key-name gitlab-featurebase-dev --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=linux-amd64-node}]' --profile $PROFILE --user-data file://./qa/scripts/cloud-init.sh --iam-instance-profile Name=featurebase-dev-ssm > config.json
-    - INSTANCE_ID=$(jq '.Instances | .[] |.InstanceId' config.json | tr -d '"') 
-    - echo $INSTANCE_ID > $INSTANCE_ID_FILE
-  needs:
-    - job: build for linux amd64
-  artifacts:
-    paths:
-      - $INSTANCE_ID_FILE
-  needs:
-    - job: build for linux amd64
-
-# scp featurebase binary, config and service file, and configure featurebase 
-initiate featurebase linux amd64 in node:
-  stage: integration
-  image: registry.gitlab.com/gitlab-org/cloud-deploy/aws-base:latest
-  variables:
-    IP: ""
-    PROFILE: "default"
-    AWS_SSH_PRIVATE_KEY: $AWS_SSH_PRIVATE_KEY
-    INSTANCE_ID: ""
-  before_script:
-    - aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
-    - aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
-    - aws configure set region "us-east-2"
-    - aws configure set aws_profile $PROFILE
-    - echo $AWS_SSH_PRIVATE_KEY > gitlab-featurebase-dev.pem
-    - chmod 400 gitlab-featurebase-dev.pem
-    - 'which ssh-agent || ( apt-get update -y && apt-get install openssh-client -y )'
-    - eval `ssh-agent -s`
-    - mkdir -p ~/.ssh
-    - echo "$AWS_SSH_PRIVATE_KEY" | ssh-add -
-    - chmod 700 /root/.ssh
-    - '[[ -f /.dockerenv ]] && echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config'
-    - INSTANCE_ID=$(cat $INSTANCE_ID_FILE)
-  script:
-    - for i in {0..24}; do IP=$(aws ec2 describe-instances --instance-ids $INSTANCE_ID --filters 'Name=instance-state-name, Values=running' --query 'Reservations[*].Instances[*].PublicIpAddress' --output text --profile $PROFILE); if [ -n "$IP" ]; then break; fi; sleep 5; done
-    - scp  -o StrictHostKeyChecking=no -i gitlab-featurebase-dev.pem featurebase_linux_amd64 ./qa/scripts/featurebase.conf ./qa/scripts/featurebase.service ec2-user@$IP:.
-    - aws ssm send-command --document-name "AWS-RunShellScript" --instance-ids $INSTANCE_ID --cli-input-json file://./qa/scripts/configureFeatureBase.json --profile $PROFILE --region us-east-2
-  needs:
-    - job: build for linux amd64
-    - job: deploy node for linux amd64
-
-# terminate EC2 instance  
-terminate node for linux amd64:
-  stage: integration
-  image: registry.gitlab.com/gitlab-org/cloud-deploy/aws-base:latest
-  variables:
-    INSTANCE_ID: ""
-  before_script:
-    - aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
-    - aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
-    - aws configure set region "us-east-2"
-    - INSTANCE_ID=$(cat $INSTANCE_ID_FILE)
-  script:
-    - aws ec2 terminate-instances --instance-ids $INSTANCE_ID
-  needs:
-    - job: initiate featurebase linux amd64 in node
-  when: always 
+    - ./qa/scripts/deployNode.sh
