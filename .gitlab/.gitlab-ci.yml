@@ -200,5 +200,8 @@ build container fb:
 deploy node for linux amd64:
   stage: lint
   image: registry.gitlab.com/gitlab-org/cloud-deploy/aws-base:latest
+  before_script:
+    - apt update && apt -y install jq
+    - 'which ssh-agent || ( apt-get update -y && apt-get install openssh-client -y )'
   script:
     - ./qa/scripts/deployNode.sh $AWS_ACCESS_KEY_ID $AWS_SECRET_ACCESS_KEY $AWS_SSH_PRIVATE_KEY
