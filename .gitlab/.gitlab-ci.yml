@@ -196,7 +196,7 @@ build container fb:
     - docker push $tag
     - echo Created docker featurebase image with tag "$tag"
 
-# deploy EC2 instance and save instance ID
+# deploy EC2 instance and save instance ID to a text file
 deploy node for linux amd64:
   stage: integration
   image: registry.gitlab.com/gitlab-org/cloud-deploy/aws-base:latest
