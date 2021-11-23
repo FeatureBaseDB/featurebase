@@ -221,12 +221,6 @@ deploy node for linux amd64:
     - aws ec2 run-instances --image-id $AMI --instance-type $INSTANCE --security-group-ids $SECURITY_GROUP --subnet-id $SUBNET_ID --key-name gitlab-featurebase-dev --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=linux-amd64-node}]' --profile $PROFILE --user-data file://./qa/scripts/cloud-init.sh --iam-instance-profile Name=featurebase-dev-ssm > config.json
     - INSTANCE_ID=$(jq '.Instances | .[] |.InstanceId' config.json | tr -d '"') 
     - echo $INSTANCE_ID > linux-amd64-instance.txt
-    - sleep 120 # Need to wait for the EC2 instance to launch and run the initialization commands passed through user-data
-    - PUBLIC_IP=$(aws ec2 describe-instances --instance-ids $INSTANCE_ID --filters 'Name=instance-state-name, Values=running' --query 'Reservations[*].Instances[*].PublicIpAddress' --output text --profile $PROFILE)
-    - echo $PUBLIC_IP
-    - scp  -o StrictHostKeyChecking=no -i gitlab-featurebase-dev.pem featurebase_linux_amd64 ec2-user@$PUBLIC_IP:.
-    - scp  -o StrictHostKeyChecking=no -i gitlab-featurebase-dev.pem ./qa/scripts/featurebase.conf ./qa/scripts/featurebase.service ec2-user@$PUBLIC_IP:.
-    - aws ssm send-command --document-name "AWS-RunShellScript" --instance-ids $INSTANCE_ID --cli-input-json file://./qa/scripts/configureFeatureBase.json --profile $PROFILE --region us-east-2
   needs:
     - job: build for linux amd64
   artifacts:
@@ -260,8 +254,8 @@ initiate featurebase linux amd64 in node:
     - INSTANCE_ID=$(cat linux-amd64-instance.txt)
   script:
     - for i in {0..24}; do IP=$(aws ec2 describe-instances --instance-ids $INSTANCE_ID --filters 'Name=instance-state-name, Values=running' --query 'Reservations[*].Instances[*].PublicIpAddress' --output text --profile $PROFILE); if [ -n "$IP" ]; then break; fi; sleep 5; done
-    - scp  -o StrictHostKeyChecking=no -i gitlab-featurebase-dev.pem featurebase_linux_amd64 .gitlab/featurebase.conf .gitlab/featurebase.service ec2-user@$IP:.
-    - aws ssm send-command --document-name "AWS-RunShellScript" --instance-ids $INSTANCE_ID --cli-input-json file://.gitlab/configureFeatureBase.json --profile $PROFILE --region us-east-2
+    - scp  -o StrictHostKeyChecking=no -i gitlab-featurebase-dev.pem featurebase_linux_amd64 ./qa/scripts/featurebase.conf ./qa/scripts/featurebase.service ec2-user@$IP:.
+    - aws ssm send-command --document-name "AWS-RunShellScript" --instance-ids $INSTANCE_ID --cli-input-json file://./qa/scripts/configureFeatureBase.json --profile $PROFILE --region us-east-2
   needs:
     - job: build for linux amd64
     - job: deploy node for linux amd64
