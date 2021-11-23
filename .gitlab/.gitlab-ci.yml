@@ -14,11 +14,10 @@ variables:
   GOVERSION: "1.16.9"
 
 stages:
-  - integration
   - lint
   - test
   - build
-  
+  - integration
 
     #before_script:
     #- echo "before_script"
@@ -115,7 +114,7 @@ upload to sonarcloud:
     - job: run jest tests 
     
 build for linux amd64:
-  stage: integration
+  stage: lint
   image: golang:1.16.10
   script:
     - rm -r lattice
@@ -199,7 +198,7 @@ build container fb:
 
 # deploy EC2 instance and save instance ID to a text file
 deploy node for linux amd64:
-  stage: integration
+  stage: lint
   image: registry.gitlab.com/gitlab-org/cloud-deploy/aws-base:latest
   script:
     - ./qa/scripts/deployNode.sh
