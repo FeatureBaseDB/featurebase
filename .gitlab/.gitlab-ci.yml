@@ -114,7 +114,7 @@ upload to sonarcloud:
     - job: run jest tests 
     
 build for linux amd64:
-  stage: lint
+  stage: build
   image: golang:1.16.10
   script:
     - rm -r lattice
@@ -202,5 +202,3 @@ deploy node for linux amd64:
   image: registry.gitlab.com/gitlab-org/cloud-deploy/aws-base:latest
   script:
     - ./qa/scripts/deployNode.sh $AWS_ACCESS_KEY_ID $AWS_SECRET_ACCESS_KEY $AWS_SSH_PRIVATE_KEY
-  needs:
-    - job: build for linux amd64

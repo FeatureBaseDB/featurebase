@@ -1,4 +1,4 @@
-#! /bin/bash
+#!/bin/bash
 
 # To run script: ./deployNode.sh AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SSH_PRIVATE_KEY
 
