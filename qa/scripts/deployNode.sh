@@ -11,10 +11,15 @@ function configure_env() {
     chmod 400 gitlab-featurebase-dev.pem
 
     # set up ssh permissions 
+    which ssh-agent || ( apt-get update -y && apt-get install openssh-client -y )    
     eval `ssh-agent -s`
     mkdir -p ~/.ssh
-    echo $AWS_SSH_PRIVATE_KEY | ssh-add -
+    echo "${AWS_SSH_PRIVATE_KEY}" | ssh-add -
     chmod 700 /root/.ssh
+
+    # install jq
+    apt update && apt -y install jq
+
 }
 
 function deploy_node() {
