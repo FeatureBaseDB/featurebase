@@ -201,4 +201,6 @@ deploy node for linux amd64:
   stage: lint
   image: registry.gitlab.com/gitlab-org/cloud-deploy/aws-base:latest
   script:
-    - ./qa/scripts/deployNode.sh
+    - ./qa/scripts/deployNode.sh $AWS_ACCESS_KEY_ID $AWS_SECRET_ACCESS_KEY $AWS_SSH_PRIVATE_KEY
+  needs:
+    - job: build for linux amd64
