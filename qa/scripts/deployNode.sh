@@ -11,6 +11,7 @@ function deploy_node() {
     # launch EC2 instance and get instance ID
     aws ec2 run-instances --image-id $AMI --instance-type $INSTANCE --security-group-ids $SECURITY_GROUP --subnet-id $SUBNET_ID --key-name gitlab-featurebase-dev --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=linux-amd64-node}]' --profile $PROFILE --user-data file://./qa/scripts/cloud-init.sh --iam-instance-profile Name=featurebase-dev-ssm > config.json
     INSTANCE_ID=$(jq '.Instances | .[] |.InstanceId' config.json | tr -d '"') 
+    echo "Instance ID: " $INSTANCE_ID
 }
 
 function initialize_featurebase() {
@@ -24,6 +25,7 @@ function initialize_featurebase() {
 
         sleep 5
     done
+    echo "IP: " $IP
 
     # copy featurebase binary and files to ec2 instance
     scp  -o StrictHostKeyChecking=no -i gitlab-featurebase-dev.pem featurebase_linux_amd64 ./qa/scripts/featurebase.conf ./qa/scripts/featurebase.service ec2-user@$IP:.
@@ -49,7 +51,7 @@ REGION="us-east-2"
 # launch instance, save instance Id and run cloud-init to set up node env
 deploy_node
 if [ $? > 0 ]; then 
-    echo "Error: " >&2
+    echo "Error: " 1>&2
     exit 1
 fi
 
@@ -57,8 +59,8 @@ fi
 # set up featurebase config in node 
 initialize_featurebase
 if [ $? > 0 ]; then 
-    terminate_node
     echo "Error: " 1>&2
+    terminate_node
     exit 1
 else 
     terminate_node
