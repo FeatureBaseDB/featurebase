@@ -16,6 +16,7 @@ function deploy_node() {
 
 function initialize_featurebase() {
     # get IP for node 
+    IP=""
     for i in {0..24}
     do 
         IP=$(aws ec2 describe-instances --instance-ids $INSTANCE_ID --filters 'Name=instance-state-name, Values=running' --query 'Reservations[*].Instances[*].PublicIpAddress' --output text --profile $PROFILE)
