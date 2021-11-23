@@ -219,5 +219,5 @@ deploy node for linux amd64:
     - apt update && apt -y install jq
   script:
     - ./qa/scripts/deployNode.sh $PROFILE
-  needs:
-    - job: build for linux amd64
+  # needs:
+  #   - job: build for linux amd64
