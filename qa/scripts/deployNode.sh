@@ -53,6 +53,8 @@ shift
 AWS_SSH_PRIVATE_KEY=$1
 shift 
 
+echo $AWS_ACCESS_KEY_ID, $AWS_ACCESS_KEY_ID, $AWS_SSH_PRIVATE_KEY
+
 # set some variables 
 PROFILE="default"
 INSTANCE="t3a.large"
@@ -61,23 +63,23 @@ REGION="us-east-2"
 # set up environment variables for aws, ssh
 # and install needed packages 
 configure_env
-if [ $? > 0 ]; then 
-    exit 1
-fi
+# if [ $? > 0 ]; then 
+#     exit 1
+# fi
 
 # get AMI, security group and subnet for EC2 instance,
 # launch instance, save instance Id and run cloud-init to set up node env
 deploy_node
-if [ $? > 0 ]; then 
-    exit 1
-fi
+# if [ $? > 0 ]; then 
+#     exit 1
+# fi
 
 # Get IP for instance, scp featurebase binary, config and service files;
 # set up featurebase config in node 
 initialize_featurebase
-if [ $? > 0 ]; then 
-    terminate_node
-    exit 1
-else 
-    terminate_node
-fi
+# if [ $? > 0 ]; then 
+#     terminate_node
+#     exit 1
+# else 
+terminate_node
+# fi
