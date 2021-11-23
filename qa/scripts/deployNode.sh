@@ -58,7 +58,7 @@ fi
 initialize_featurebase
 if [ $? > 0 ]; then 
     terminate_node
-    echo "Error: " >&2
+    echo "Error: " 1>&2
     exit 1
 else 
     terminate_node
