@@ -1,13 +1,6 @@
 #!/bin/bash
 
-# To run script: ./deployNode.sh AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SSH_PRIVATE_KEY
-
-function configure_env() {
-    aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
-    aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
-    aws configure set region $REGION
-    aws configure set aws_profile $PROFILE
-}
+# To run script: ./deployNode.sh $PROFILE
 
 function deploy_node() {
     # get AMI, security group and subnet ID 
@@ -43,29 +36,14 @@ function terminate_node() {
     aws ec2 terminate-instances --instance-ids $INSTANCE_ID
 }
 
-# Pass variables to shell script 
-AWS_ACCESS_KEY_ID=$1
-shift
+# Pass variables to shell script
 
-AWS_SECRET_ACCESS_KEY=$1
-shift
-
-AWS_SSH_PRIVATE_KEY=$1
+PROFILE=$1
 shift 
 
-echo $AWS_ACCESS_KEY_ID, $AWS_ACCESS_KEY_ID, $AWS_SSH_PRIVATE_KEY
-
 # set some variables 
-PROFILE="default"
 INSTANCE="t3a.large"
 REGION="us-east-2"
-
-# set up environment variables for aws, ssh
-# and install needed packages 
-configure_env
-# if [ $? > 0 ]; then 
-#     exit 1
-# fi
 
 # get AMI, security group and subnet for EC2 instance,
 # launch instance, save instance Id and run cloud-init to set up node env
