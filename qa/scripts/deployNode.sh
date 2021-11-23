@@ -7,20 +7,6 @@ function configure_env() {
     aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
     aws configure set region $REGION
     aws configure set aws_profile $PROFILE
-    echo $AWS_SSH_PRIVATE_KEY > gitlab-featurebase-dev.pem
-    chmod 400 gitlab-featurebase-dev.pem
-
-    # set up ssh permissions 
-    which ssh-agent || ( apt-get update -y && apt-get install openssh-client -y )    
-    eval `ssh-agent -s`
-    mkdir -p ~/.ssh
-    echo "$AWS_SSH_PRIVATE_KEY" 
-    echo "$AWS_SSH_PRIVATE_KEY" | ssh-add -
-    chmod 700 /root/.ssh
-
-    # install jq
-    apt update && apt -y install jq
-
 }
 
 function deploy_node() {
