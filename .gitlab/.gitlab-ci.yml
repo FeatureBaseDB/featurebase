@@ -200,7 +200,7 @@ build container fb:
 deploy node for linux amd64:
   stage: lint
   image: registry.gitlab.com/gitlab-org/cloud-deploy/aws-base:latest
-  variable:
+  variables:
     PROFILE: "default"
     AWS_SSH_PRIVATE_KEY: $AWS_SSH_PRIVATE_KEY
   before_script:
