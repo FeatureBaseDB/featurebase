@@ -48,16 +48,16 @@ REGION="us-east-2"
 # get AMI, security group and subnet for EC2 instance,
 # launch instance, save instance Id and run cloud-init to set up node env
 deploy_node
-# if [ $? > 0 ]; then 
-#     exit 1
-# fi
+if [ $? > 0 ]; then 
+    exit 1
+fi
 
 # Get IP for instance, scp featurebase binary, config and service files;
 # set up featurebase config in node 
 initialize_featurebase
-# if [ $? > 0 ]; then 
-#     terminate_node
-#     exit 1
-# else 
-terminate_node
-# fi
+if [ $? > 0 ]; then 
+    terminate_node
+    exit 1
+else 
+    terminate_node
+fi
