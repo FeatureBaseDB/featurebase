@@ -43,7 +43,6 @@ function initialize_featurebase() {
 
         sleep 5
     done
-    }
 
     # copy featurebase binary and files to ec2 instance
     scp  -o StrictHostKeyChecking=no -i gitlab-featurebase-dev.pem featurebase_linux_amd64 ./qa/scripts/featurebase.conf ./qa/scripts/featurebase.service ec2-user@$IP:.
