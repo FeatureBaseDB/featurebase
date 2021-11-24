@@ -10,13 +10,12 @@ function deploy_node() {
 
     # launch EC2 instance and get instance ID
     aws ec2 run-instances --image-id $AMI --instance-type $INSTANCE --security-group-ids $SECURITY_GROUP --subnet-id $SUBNET_ID --key-name gitlab-featurebase-dev --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=linux-amd64-node}]' --profile $PROFILE --user-data file://./qa/scripts/cloud-init.sh --iam-instance-profile Name=featurebase-dev-ssm > config.json
-    INSTANCE_ID=$(jq '.Instances | .[] |.InstanceId' config.json | tr -d '"') 
+    INSTANCE_ID=$(jq '.Instances | .[0] |.InstanceId' config.json | tr -d '"') 
     echo "Instance ID: " $INSTANCE_ID
 }
 
 function initialize_featurebase() {
     # get IP for node 
-    IP=""
     for i in {0..24}
     do 
         IP=$(aws ec2 describe-instances --instance-ids $INSTANCE_ID --filters 'Name=instance-state-name, Values=running' --query 'Reservations[*].Instances[*].PublicIpAddress' --output text --profile $PROFILE)
@@ -26,7 +25,8 @@ function initialize_featurebase() {
 
         sleep 5
     done
-    echo "IP: " $IP
+    
+    sleep 60 # to allow enough time for node to be ready for use
 
     # copy featurebase binary and files to ec2 instance
     scp  -o StrictHostKeyChecking=no -i gitlab-featurebase-dev.pem featurebase_linux_amd64 ./qa/scripts/featurebase.conf ./qa/scripts/featurebase.service ec2-user@$IP:.
@@ -51,16 +51,14 @@ REGION="us-east-2"
 # get AMI, security group and subnet for EC2 instance,
 # launch instance, save instance Id and run cloud-init to set up node env
 deploy_node
-if [ $? > 0 ]; then 
-    echo "Error: " 1>&2
+if [[ $? > 0 ]]; then 
     exit 1
 fi
 
 # Get IP for instance, scp featurebase binary, config and service files;
 # set up featurebase config in node 
 initialize_featurebase
-if [ $? > 0 ]; then 
-    echo "Error: " 1>&2
+if [[ $? > 0 ]]; then 
     terminate_node
     exit 1
 else 
