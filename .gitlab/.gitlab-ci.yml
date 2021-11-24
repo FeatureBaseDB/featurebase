@@ -198,7 +198,7 @@ build container fb:
 
 # deploy EC2 instance and save instance ID to a text file
 deploy node for linux amd64:
-  stage: lint
+  stage: integration
   image: registry.gitlab.com/gitlab-org/cloud-deploy/aws-base:latest
   variables:
     PROFILE: "default"
@@ -219,5 +219,5 @@ deploy node for linux amd64:
     - apt update && apt -y install jq
   script:
     - ./qa/scripts/deployNode.sh $PROFILE
-  # needs:
-  #   - job: build for linux amd64
+  needs:
+    - job: build for linux amd64
