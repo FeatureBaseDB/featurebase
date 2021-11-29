@@ -240,6 +240,24 @@ type Config struct {
 
 	// Toggles /schema/details endpoint. If off, it returns empty.
 	SchemaDetailsOn bool `toml:"schema-details-on"`
+
+	// Enable AuthZ/AuthN
+	Auth struct {
+		// Enable AuthZ/AuthN for featurebase server
+		Enable bool `toml:"enable"`
+
+		// Base URL for identity provider
+		IdentityProviderURL string `toml:"identity-provider-url"`
+
+		// Authorize URL
+		AuthorizeURL string `toml:"authorize-url"`
+
+		// User info URL
+		UserInfoURL string `toml:"user-info-url"`
+
+		// Application/Client ID
+		ClientId string `toml:"client-id"`
+	} `toml:"auth"`
 }
 
 // Namespace returns the namespace to use based on the Future flag.
@@ -391,6 +409,13 @@ func NewConfig() *Config {
 
 	// Schema Details Toggle
 	c.SchemaDetailsOn = true
+
+	// AuthZ/AuthN disabled by default
+	c.Auth.Enable = false
+	c.Auth.IdentityProviderURL = ""
+	c.Auth.AuthorizeURL = ""
+	c.Auth.UserInfoURL = ""
+	c.Auth.ClientId = ""
 
 	return c
 }
