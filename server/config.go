@@ -411,11 +411,12 @@ func NewConfig() *Config {
 	c.SchemaDetailsOn = true
 
 	// AuthZ/AuthN disabled by default
+	// default identity provider is azure active directory
 	c.Auth.Enable = false
-	c.Auth.IdentityProviderURL = ""
-	c.Auth.AuthorizeURL = ""
-	c.Auth.UserInfoURL = ""
-	c.Auth.ClientId = ""
+	c.Auth.IdentityProviderURL = "http://holder-identity-provider"
+	c.Auth.AuthorizeURL = "http://holder-authorize-url"
+	c.Auth.UserInfoURL = "http://holder-user-info-url"
+	c.Auth.ClientId = "http://holder-client-id"
 
 	return c
 }

@@ -234,6 +234,14 @@ func (m *Command) Start() (err error) {
 		return errors.Wrap(err, "setting resource limits")
 	}
 
+	if m.Config.Auth.Enable == true {
+		// check authentication for user
+		resp := authenticateUser(m.Config.Auth)
+		if resp == false {
+			log.Fatalf("Authentication failed: Unable to access to featurebase server")
+		}
+	}
+
 	// Initialize server.
 	if err = m.Server.Open(); err != nil {
 		return errors.Wrap(err, "opening server")
