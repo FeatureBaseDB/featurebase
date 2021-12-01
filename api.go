@@ -2643,7 +2643,13 @@ func (api *API) RestoreIDAlloc(r io.Reader) error {
 // rd is a boltdb file.
 func (api *API) TranslateIndexDB(ctx context.Context, indexName string, partitionID int, rd io.Reader) error {
 	idx := api.holder.Index(indexName)
+	if idx == nil {
+		return fmt.Errorf("index %q not found", indexName)
+	}
 	store := idx.TranslateStore(partitionID)
+	if store == nil {
+		return fmt.Errorf("index %q has no translate store", indexName)
+	}
 	_, err := store.ReadFrom(rd)
 	return err
 }
@@ -2651,8 +2657,23 @@ func (api *API) TranslateIndexDB(ctx context.Context, indexName string, partitio
 // TranslateFieldDB is an internal function to load the field keys database
 func (api *API) TranslateFieldDB(ctx context.Context, indexName, fieldName string, rd io.Reader) error {
 	idx := api.holder.Index(indexName)
+	if idx == nil {
+		return fmt.Errorf("index %q not found", indexName)
+	}
 	field := idx.Field(fieldName)
+	if field == nil {
+		// Older versions used to accidentally provide an empty translation
+		// data file for a nonexistent field called "_keys". To make migration
+		// easier, we politely ignore that.
+		if fieldName == "_keys" {
+			return nil
+		}
+		return fmt.Errorf("field %q/%q not found", indexName, fieldName)
+	}
 	store := field.TranslateStore()
+	if store == nil {
+		return fmt.Errorf("field %q/%q has no translate store", indexName, fieldName)
+	}
 	_, err := store.ReadFrom(rd)
 	return err
 }
