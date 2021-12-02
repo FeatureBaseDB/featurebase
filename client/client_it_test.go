@@ -592,7 +592,6 @@ func TestClientAgainstCluster(t *testing.T) {
 				target := []uint64{100}
 				require.Equalf(t, target, resp.Result().Row().Columns, "Row Result Columns")
 			})
-
 			t.Run("StoreQuery", func(t *testing.T) {
 				schema := NewSchema()
 				testIndexStore := schema.Index("test-index-store")

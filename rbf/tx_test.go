@@ -684,3 +684,102 @@ func TestTx_CreateBitmap(t *testing.T) {
 		}
 	})
 }
+
+func TestTx_DeleteBitmapsWithPrefix(t *testing.T) {
+	db := MustOpenDB(t)
+	defer MustCloseDB(t, db)
+	prefix := "abc"
+	bitmapSize := 10000
+	//	var err error
+	// create a interleaved set up array and bitmap containers
+
+	bits := make([]uint64, bitmapSize)
+	x := uint64(1)
+	for i := 0; i < len(bits); i++ {
+		bits[i] = x
+		x = x + 2
+	}
+	ifError := func(err error) {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	checkInfos := func() {
+		tx := MustBegin(t, db, false)
+		defer tx.Rollback()
+		infos, err := tx.PageInfos()
+		ifError(err)
+		for pgno, info := range infos {
+			switch info := info.(type) {
+			case *rbf.MetaPageInfo:
+				fmt.Printf("%-8d ", pgno)
+				fmt.Printf("%-10s ", "meta")
+				fmt.Printf("pageN=%d,walid=%d,rootrec=%d,freelist=%d\n", info.PageN, info.WALID, info.RootRecordPageNo, info.FreelistPageNo)
+
+			case *rbf.RootRecordPageInfo:
+				fmt.Printf("%-8d ", pgno)
+				fmt.Printf("%-10s ", "rootrec")
+				fmt.Printf("next=%d\n", info.Next)
+
+			case *rbf.LeafPageInfo:
+				fmt.Printf("%-8d ", pgno)
+				fmt.Printf("%-10s ", "leaf")
+				fmt.Printf("flags=x%x,celln=%d\n", info.Flags, info.CellN)
+
+			case *rbf.BranchPageInfo:
+				fmt.Printf("%-8d ", pgno)
+				fmt.Printf("%-10s ", "branch")
+				fmt.Printf("flags=x%x,celln=%d\n", info.Flags, info.CellN)
+
+			case *rbf.BitmapPageInfo:
+				fmt.Printf("%-8d ", pgno)
+				fmt.Printf("%-10s ", "bitmap")
+				fmt.Printf("-\n")
+
+			case *rbf.FreePageInfo:
+				fmt.Printf("%-8d ", pgno)
+				fmt.Printf("%-10s ", "free")
+				fmt.Printf("-\n")
+
+			default:
+				t.Fatal(fmt.Sprintf("unexpected page info type %T", info))
+			}
+		}
+
+	}
+	populate := func() {
+		tx := MustBegin(t, db, true)
+		defer tx.Rollback()
+		for i := uint64(0); i < 16; i++ {
+			bm := roaring.NewBitmap()
+			if i%3 == 0 {
+				bm.Put(i, roaring.NewContainerBitmap(6144, bits))
+				if _, err := tx.AddRoaring(prefix, bm); err != nil {
+					panic(err)
+				}
+			} else {
+				bm.Put(i, roaring.NewContainerArray([]uint16{2, 4, 5, 7}))
+				if _, err := tx.AddRoaring(prefix, bm); err != nil {
+					panic(err)
+				}
+
+			}
+		}
+		ifError(tx.Commit())
+	}
+
+	checkInfos()
+	populate()
+	checkInfos()
+	ifError(db.Check())
+
+	tx := MustBegin(t, db, true)
+	tx.DeleteBitmapsWithPrefix(prefix)
+	ifError(tx.Commit())
+	ifError(db.Check())
+	checkInfos()
+	populate()
+	ifError(db.Check())
+	checkInfos()
+
+}

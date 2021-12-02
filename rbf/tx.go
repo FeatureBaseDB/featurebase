@@ -333,7 +333,6 @@ func (tx *Tx) DeleteBitmapsWithPrefix(prefix string) error {
 		if !strings.HasPrefix(name.(string), prefix) {
 			continue
 		}
-
 		// Deallocate all pages in the tree.
 		if err := tx.deallocateTree(pgno.(uint32)); err != nil {
 			return err
@@ -1065,6 +1064,13 @@ func (tx *Tx) deallocateTree(pgno uint32) error {
 		return tx.freePgno(pgno)
 
 	case PageTypeLeaf:
+		for i, n := 0, readCellN(page); i < n; i++ {
+			if cell := readLeafCell(page, i); cell.Type == ContainerTypeBitmapPtr {
+				if err := tx.freePgno(toPgno(cell.Data)); err != nil {
+					return err
+				}
+			}
+		}
 		return tx.freePgno(pgno)
 	default:
 		return fmt.Errorf("rbf.Tx.deallocateTree(): invalid page type: pgno=%d type=%d", pgno, typ)
