@@ -124,8 +124,10 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 
 	// OAuth2.0 identity provider configuration
 	flags.BoolVar(&srv.Config.Auth.Enable, "auth.enable", false, "Enable AuthN/AuthZ of featurebase, disabled by default.")
-	flags.StringVar(&srv.Config.Auth.IdentityProviderURL, "auth.identity-provider-url", srv.Config.Auth.IdentityProviderURL, "Base URL for identity provider.")
-	flags.StringVar(&srv.Config.Auth.AuthorizeURL, "auth.authorize-url", srv.Config.Auth.AuthorizeURL, "Base URL for authorize.")
-	flags.StringVar(&srv.Config.Auth.UserInfoURL, "auth.user-info-url", srv.Config.Auth.UserInfoURL, "Base URL for user info.")
-	flags.StringVar(&srv.Config.Auth.ClientId, "auth.client-id", srv.Config.Auth.ClientId, "Application/Client ID")
+	flags.StringVar(&srv.Config.Auth.ClientId, "auth.client-id", srv.Config.Auth.ClientId, "Identity Provider's Application/Client ID.")
+	flags.StringVar(&srv.Config.Auth.ClientSecret, "auth.client-secret", srv.Config.Auth.ClientSecret, "Identity Provider's Application/Client Secret.")
+	flags.StringVar(&srv.Config.Auth.AuthorizeURL, "auth.authorize-url", srv.Config.Auth.AuthorizeURL, "Identity Provider's Authorize URL.")
+	flags.StringVar(&srv.Config.Auth.TokenURL, "auth.token-url", srv.Config.Auth.TokenURL, "Identity Provider's Token URL for identity provider.")
+	flags.StringVar(&srv.Config.Auth.GroupEndpointURL, "auth.group-endpoint-url", srv.Config.Auth.GroupEndpointURL, "Identity Provider's Group endpoint URL.")
+
 }

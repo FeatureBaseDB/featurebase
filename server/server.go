@@ -41,6 +41,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	pilosa "github.com/molecula/featurebase/v2"
+	"github.com/molecula/featurebase/v2/auth"
 	"github.com/molecula/featurebase/v2/boltdb"
 	"github.com/molecula/featurebase/v2/encoding/proto"
 	petcd "github.com/molecula/featurebase/v2/etcd"
@@ -235,11 +236,8 @@ func (m *Command) Start() (err error) {
 	}
 
 	if m.Config.Auth.Enable == true {
-		// check authentication for user
-		resp := authenticateUser(m.Config.Auth)
-		if resp == false {
-			log.Fatalf("Authentication failed: Unable to access to featurebase server")
-		}
+		m.Config.MustValidateAuth()
+		auth.OptAuth(m.Config.Auth.ClientId, m.Config.Auth.ClientSecret, m.Config.Auth.AuthorizeURL, m.Config.Auth.TokenURL, m.Config.Auth.GroupEndpointURL)
 	}
 
 	// Initialize server.

@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"net/url"
 	"runtime"
 	"strconv"
 	"strings"
@@ -246,17 +247,20 @@ type Config struct {
 		// Enable AuthZ/AuthN for featurebase server
 		Enable bool `toml:"enable"`
 
-		// Base URL for identity provider
-		IdentityProviderURL string `toml:"identity-provider-url"`
+		// Application/Client ID
+		ClientId string `toml:"client-id"`
+
+		// Client Secret
+		ClientSecret string `toml:"client-secret"`
 
 		// Authorize URL
 		AuthorizeURL string `toml:"authorize-url"`
 
-		// User info URL
-		UserInfoURL string `toml:"user-info-url"`
+		// Token URL
+		TokenURL string `toml:"token-url"`
 
-		// Application/Client ID
-		ClientId string `toml:"client-id"`
+		// Group Endpoint URL
+		GroupEndpointURL string `toml:"group-endpoint-url"`
 	} `toml:"auth"`
 }
 
@@ -291,6 +295,7 @@ func (c *Config) validate() error {
 		"Etcd.ClusterURL", c.Etcd.ClusterURL,
 		"Postgres.Bind", c.Postgres.Bind,
 	}
+
 	ports := make(map[int]bool)
 	n := len(hostPort)
 	for i := 0; i < n; i += 2 {
@@ -411,12 +416,7 @@ func NewConfig() *Config {
 	c.SchemaDetailsOn = true
 
 	// AuthZ/AuthN disabled by default
-	// default identity provider is azure active directory
 	c.Auth.Enable = false
-	c.Auth.IdentityProviderURL = "http://holder-identity-provider"
-	c.Auth.AuthorizeURL = "http://holder-authorize-url"
-	c.Auth.UserInfoURL = "http://holder-user-info-url"
-	c.Auth.ClientId = "http://holder-client-id"
 
 	return c
 }
@@ -627,4 +627,38 @@ func lookupAddr(ctx context.Context, resolver *net.Resolver, host string) (strin
 
 	// No IPv4 address, return the first resolved address instead.
 	return addrs[0].String(), nil
+}
+
+func (c *Config) ValidateAuth() error {
+	authURL := []string{
+		"ClientId", c.Auth.ClientId,
+		"ClientSecret", c.Auth.ClientSecret,
+		"AuthorizeURL", c.Auth.AuthorizeURL,
+		"TokenURL", c.Auth.TokenURL,
+		"GroupEndpointURL", c.Auth.GroupEndpointURL,
+	}
+
+	n := len(authURL)
+	for i := 0; i < n; i += 2 {
+		name := authURL[i]
+		value := authURL[i+1]
+		if strings.Contains(name, "URL") {
+			_, err := url.ParseRequestURI(value)
+			if err != nil {
+				return fmt.Errorf("Invalid URL for auth config %s: %s", name, err)
+			}
+		} else {
+			if value == "" {
+				return fmt.Errorf("Empty string for auth config %s", name)
+			}
+		}
+	}
+	return nil
+}
+
+func (c *Config) MustValidateAuth() {
+	err := c.ValidateAuth()
+	if err != nil {
+		panic(err)
+	}
 }

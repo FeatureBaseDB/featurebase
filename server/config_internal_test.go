@@ -288,3 +288,86 @@ func TestConfig_validateAddrsGRPC(t *testing.T) {
 		})
 	}
 }
+
+type params struct {
+	enable           bool
+	clientId         string
+	clientSecret     string
+	authorizeURL     string
+	tokenURL         string
+	groupEndpointURL string
+}
+
+func TestConfig_validateAuth(t *testing.T) {
+	tests := []struct {
+		expErr   string
+		input    params
+		expected params
+	}{
+		{"Empty string for auth config ClientId",
+			params{true, "", "", "", "", ""},
+			params{true, "clientidstring", "clientSecret", "https://url.com/", "https://url.com/", "https://url.com/"},
+		},
+		{"Empty string for auth config ClientSecret",
+			params{true, "clientid", "", "", "", ""},
+			params{true, "clientidstring", "clientSecret", "https://url.com/", "https://url.com/", "https://url.com/"},
+		},
+		{"Empty string for auth config ClientId",
+			params{true, "", "clientSecret", "", "", ""},
+			params{true, "clientidstring", "clientSecret", "https://url.com/", "https://url.com/", "https://url.com/"},
+		},
+		{"Invalid URL for auth config AuthorizeURL",
+			params{true, "client", "secret", "", "", ""},
+			params{true, "clientidstring", "clientSecret", "https://url.com/", "https://url.com/", "https://url.com/"},
+		},
+		{"Invalid URL for auth config TokenURL",
+			params{true, "client", "secret", "https://url.com/", "", ""},
+			params{true, "clientidstring", "clientSecret", "https://url.com/", "https://url.com/", "https://url.com/"},
+		},
+		{"Invalid URL for auth config GroupEndpointURL",
+			params{true, "client", "secret", "https://url.com/", "https://url.com/", ""},
+			params{true, "clientidstring", "clientSecret", "https://url.com/", "https://url.com/", "https://url.com/"},
+		},
+		{"Invalid URL for auth config AuthorizeURL",
+			params{true, "client", "secret", "string", "https://url.com/", "https://url.com/"},
+			params{true, "clientidstring", "clientSecret", "https://url.com/", "https://url.com/", "https://url.com/"},
+		},
+		{"Invalid URL for auth config TokenURL",
+			params{true, "client", "secret", "https://url.com/", "not-a-url", ""},
+			params{true, "clientidstring", "clientSecret", "https://url.com/", "https://url.com/", "https://url.com/"},
+		},
+		{"Invalid URL for auth config GroupEndpointURL",
+			params{true, "client", "secret", "https://url.com/", "https://url.com/", "not-valid-url"},
+			params{true, "clientidstring", "clientSecret", "https://url.com/", "https://url.com/", "https://url.com/"},
+		},
+		{"",
+			params{true, "client", "secret", "https://url.com/", "https://url.com/", "https://url.com/"},
+			params{true, "clientidstring", "clientSecret", "https://url.com/", "https://url.com/", "https://url.com/"},
+		},
+	}
+
+	for i, test := range tests {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			c := NewConfig()
+			c.Auth.Enable = test.input.enable
+			c.Auth.ClientId = test.input.clientId
+			c.Auth.ClientSecret = test.input.clientSecret
+			c.Auth.AuthorizeURL = test.input.authorizeURL
+			c.Auth.TokenURL = test.input.tokenURL
+			c.Auth.GroupEndpointURL = test.input.groupEndpointURL
+
+			err := c.ValidateAuth()
+
+			if err != nil && test.expErr == "" {
+				t.Fatal(err)
+			} else if err == nil && test.expErr != "" {
+				t.Fatalf("expected error string to contain %s, but got no error", test.expErr)
+			} else if err != nil && test.expErr != "" {
+				if !strings.Contains(err.Error(), test.expErr) {
+					t.Fatalf("expected error string to contain %s, but got %s", test.expErr, err.Error())
+				}
+				return
+			}
+		})
+	}
+}
