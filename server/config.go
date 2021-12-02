@@ -630,7 +630,7 @@ func lookupAddr(ctx context.Context, resolver *net.Resolver, host string) (strin
 }
 
 func (c *Config) ValidateAuth() error {
-	authURL := []string{
+	authConfig := []string{
 		"ClientId", c.Auth.ClientId,
 		"ClientSecret", c.Auth.ClientSecret,
 		"AuthorizeURL", c.Auth.AuthorizeURL,
@@ -638,10 +638,10 @@ func (c *Config) ValidateAuth() error {
 		"GroupEndpointURL", c.Auth.GroupEndpointURL,
 	}
 
-	n := len(authURL)
+	n := len(authConfig)
 	for i := 0; i < n; i += 2 {
-		name := authURL[i]
-		value := authURL[i+1]
+		name := authConfig[i]
+		value := authConfig[i+1]
 		if strings.Contains(name, "URL") {
 			_, err := url.ParseRequestURI(value)
 			if err != nil {
