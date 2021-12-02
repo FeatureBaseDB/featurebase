@@ -309,41 +309,22 @@ func TestConfig_validateAuth(t *testing.T) {
 	validClientSecret := "clientSecret"
 	notValidURL := "not-a-url"
 	emptyString := ""
+	enable := true
 
 	tests := []struct {
 		expErr string
 		input  params
 	}{
-		{errorMesgClientID,
-			params{true, emptyString, emptyString, emptyString, emptyString, emptyString},
-		},
-		{errorMesgClientSecret,
-			params{true, validClientID, emptyString, emptyString, emptyString, emptyString},
-		},
-		{errorMesgClientID,
-			params{true, emptyString, validClientSecret, emptyString, emptyString, emptyString},
-		},
-		{errorMesgAuthURL,
-			params{true, validClientID, validClientSecret, emptyString, emptyString, emptyString},
-		},
-		{errorMesgTokenURL,
-			params{true, validClientID, validClientSecret, validTestURL, emptyString, emptyString},
-		},
-		{errorMesgGroupEndpointURL,
-			params{true, validClientID, validClientSecret, validTestURL, validTestURL, emptyString},
-		},
-		{errorMesgAuthURL,
-			params{true, validClientID, validClientSecret, notValidURL, validTestURL, validTestURL},
-		},
-		{errorMesgTokenURL,
-			params{true, validClientID, validClientSecret, validTestURL, notValidURL, emptyString},
-		},
-		{errorMesgGroupEndpointURL,
-			params{true, validClientID, validClientSecret, validTestURL, validTestURL, notValidURL},
-		},
-		{emptyString,
-			params{true, validClientID, validClientSecret, validTestURL, validTestURL, validTestURL},
-		},
+		{errorMesgClientID, params{enable, emptyString, emptyString, emptyString, emptyString, emptyString}},
+		{errorMesgClientSecret, params{enable, validClientID, emptyString, emptyString, emptyString, emptyString}},
+		{errorMesgClientID, params{enable, emptyString, validClientSecret, emptyString, emptyString, emptyString}},
+		{errorMesgAuthURL, params{enable, validClientID, validClientSecret, emptyString, emptyString, emptyString}},
+		{errorMesgTokenURL, params{enable, validClientID, validClientSecret, validTestURL, emptyString, emptyString}},
+		{errorMesgGroupEndpointURL, params{enable, validClientID, validClientSecret, validTestURL, validTestURL, emptyString}},
+		{errorMesgAuthURL, params{enable, validClientID, validClientSecret, notValidURL, validTestURL, validTestURL}},
+		{errorMesgTokenURL, params{enable, validClientID, validClientSecret, validTestURL, notValidURL, emptyString}},
+		{errorMesgGroupEndpointURL, params{enable, validClientID, validClientSecret, validTestURL, validTestURL, notValidURL}},
+		{emptyString, params{enable, validClientID, validClientSecret, validTestURL, validTestURL, validTestURL}},
 	}
 
 	for i, test := range tests {
