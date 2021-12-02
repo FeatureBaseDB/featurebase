@@ -627,26 +627,23 @@ func lookupAddr(ctx context.Context, resolver *net.Resolver, host string) (strin
 }
 
 func (c *Config) ValidateAuth() error {
-	authConfig := []string{
-		"ClientId", c.Auth.ClientId,
-		"ClientSecret", c.Auth.ClientSecret,
-		"AuthorizeURL", c.Auth.AuthorizeURL,
-		"TokenURL", c.Auth.TokenURL,
-		"GroupEndpointURL", c.Auth.GroupEndpointURL,
+	authConfig := map[string]string{
+		"ClientId":         c.Auth.ClientId,
+		"ClientSecret":     c.Auth.ClientSecret,
+		"AuthorizeURL":     c.Auth.AuthorizeURL,
+		"TokenURL":         c.Auth.TokenURL,
+		"GroupEndpointURL": c.Auth.GroupEndpointURL,
 	}
 
-	n := len(authConfig)
-	for i := 0; i < n; i += 2 {
-		name := authConfig[i]
-		value := authConfig[i+1]
+	for name, value := range authConfig {
+		if value == "" {
+			return fmt.Errorf("Empty string for auth config %s", name)
+		}
+
 		if strings.Contains(name, "URL") {
 			_, err := url.ParseRequestURI(value)
 			if err != nil {
 				return fmt.Errorf("Invalid URL for auth config %s: %s", name, err)
-			}
-		} else {
-			if value == "" {
-				return fmt.Errorf("Empty string for auth config %s", name)
 			}
 		}
 	}
@@ -654,8 +651,7 @@ func (c *Config) ValidateAuth() error {
 }
 
 func (c *Config) MustValidateAuth() {
-	err := c.ValidateAuth()
-	if err != nil {
+	if err := c.ValidateAuth(); err != nil {
 		panic(err)
 	}
 }
