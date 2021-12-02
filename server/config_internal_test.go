@@ -311,48 +311,37 @@ func TestConfig_validateAuth(t *testing.T) {
 	emptyString := ""
 
 	tests := []struct {
-		expErr   string
-		input    params
-		expected params
+		expErr string
+		input  params
 	}{
 		{errorMesgClientID,
 			params{true, emptyString, emptyString, emptyString, emptyString, emptyString},
-			params{true, validClientID, validClientSecret, validTestURL, validTestURL, validTestURL},
 		},
 		{errorMesgClientSecret,
 			params{true, validClientID, emptyString, emptyString, emptyString, emptyString},
-			params{true, validClientID, validClientSecret, validTestURL, validTestURL, validTestURL},
 		},
 		{errorMesgClientID,
 			params{true, emptyString, validClientSecret, emptyString, emptyString, emptyString},
-			params{true, validClientID, validClientSecret, validTestURL, validTestURL, validTestURL},
 		},
 		{errorMesgAuthURL,
 			params{true, validClientID, validClientSecret, emptyString, emptyString, emptyString},
-			params{true, validClientID, validClientSecret, validTestURL, validTestURL, validTestURL},
 		},
 		{errorMesgTokenURL,
 			params{true, validClientID, validClientSecret, validTestURL, emptyString, emptyString},
-			params{true, validClientID, validClientSecret, validTestURL, validTestURL, validTestURL},
 		},
 		{errorMesgGroupEndpointURL,
 			params{true, validClientID, validClientSecret, validTestURL, validTestURL, emptyString},
-			params{true, validClientID, validClientSecret, validTestURL, validTestURL, validTestURL},
 		},
 		{errorMesgAuthURL,
 			params{true, validClientID, validClientSecret, notValidURL, validTestURL, validTestURL},
-			params{true, validClientID, validClientSecret, validTestURL, validTestURL, validTestURL},
 		},
 		{errorMesgTokenURL,
 			params{true, validClientID, validClientSecret, validTestURL, notValidURL, emptyString},
-			params{true, validClientID, validClientSecret, validTestURL, validTestURL, validTestURL},
 		},
 		{errorMesgGroupEndpointURL,
 			params{true, validClientID, validClientSecret, validTestURL, validTestURL, notValidURL},
-			params{true, validClientID, validClientSecret, validTestURL, validTestURL, validTestURL},
 		},
 		{emptyString,
-			params{true, validClientID, validClientSecret, validTestURL, validTestURL, validTestURL},
 			params{true, validClientID, validClientSecret, validTestURL, validTestURL, validTestURL},
 		},
 	}
