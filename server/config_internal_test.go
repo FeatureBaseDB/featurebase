@@ -308,6 +308,7 @@ func TestConfig_validateAuth(t *testing.T) {
 	validClientID := "clientid"
 	validClientSecret := "clientSecret"
 	notValidURL := "not-a-url"
+	emptyString := ""
 
 	tests := []struct {
 		expErr   string
@@ -315,27 +316,27 @@ func TestConfig_validateAuth(t *testing.T) {
 		expected params
 	}{
 		{errorMesgClientID,
-			params{true, "", "", "", "", ""},
+			params{true, emptyString, emptyString, emptyString, emptyString, emptyString},
 			params{true, validClientID, validClientSecret, validTestURL, validTestURL, validTestURL},
 		},
 		{errorMesgClientSecret,
-			params{true, validClientID, "", "", "", ""},
+			params{true, validClientID, emptyString, emptyString, emptyString, emptyString},
 			params{true, validClientID, validClientSecret, validTestURL, validTestURL, validTestURL},
 		},
 		{errorMesgClientID,
-			params{true, "", validClientSecret, "", "", ""},
+			params{true, emptyString, validClientSecret, emptyString, emptyString, emptyString},
 			params{true, validClientID, validClientSecret, validTestURL, validTestURL, validTestURL},
 		},
 		{errorMesgAuthURL,
-			params{true, validClientID, validClientSecret, "", "", ""},
+			params{true, validClientID, validClientSecret, emptyString, emptyString, emptyString},
 			params{true, validClientID, validClientSecret, validTestURL, validTestURL, validTestURL},
 		},
 		{errorMesgTokenURL,
-			params{true, validClientID, validClientSecret, validTestURL, "", ""},
+			params{true, validClientID, validClientSecret, validTestURL, emptyString, emptyString},
 			params{true, validClientID, validClientSecret, validTestURL, validTestURL, validTestURL},
 		},
 		{errorMesgGroupEndpointURL,
-			params{true, validClientID, validClientSecret, validTestURL, validTestURL, ""},
+			params{true, validClientID, validClientSecret, validTestURL, validTestURL, emptyString},
 			params{true, validClientID, validClientSecret, validTestURL, validTestURL, validTestURL},
 		},
 		{errorMesgAuthURL,
@@ -343,14 +344,14 @@ func TestConfig_validateAuth(t *testing.T) {
 			params{true, validClientID, validClientSecret, validTestURL, validTestURL, validTestURL},
 		},
 		{errorMesgTokenURL,
-			params{true, validClientID, validClientSecret, validTestURL, notValidURL, ""},
+			params{true, validClientID, validClientSecret, validTestURL, notValidURL, emptyString},
 			params{true, validClientID, validClientSecret, validTestURL, validTestURL, validTestURL},
 		},
 		{errorMesgGroupEndpointURL,
 			params{true, validClientID, validClientSecret, validTestURL, validTestURL, notValidURL},
 			params{true, validClientID, validClientSecret, validTestURL, validTestURL, validTestURL},
 		},
-		{"",
+		{emptyString,
 			params{true, validClientID, validClientSecret, validTestURL, validTestURL, validTestURL},
 			params{true, validClientID, validClientSecret, validTestURL, validTestURL, validTestURL},
 		},
