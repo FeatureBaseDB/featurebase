@@ -22,26 +22,14 @@ type AUTH struct {
 	GroupEndpointURL string
 }
 
-// func (c *config) Init(ClientId, ClientSecret, AuthorizeURL, TokenURL, GroupEndpointURL string) {
-// 	c.ClientId = ClientId
-// 	c.ClientSecret = ClientSecret
-// 	c.AuthorizeURL = AuthorizeURL
-// 	c.TokenURL = TokenURL
-// 	c.GroupEndpointURL = GroupEndpointURL
-// }
-
-// apiOption is a functional option type for pilosa.API
-type authOption func(*AUTH) error
-
-func OptAuth(ClientId, ClientSecret, AuthorizeURL, TokenURL, GroupEndpointURL string) authOption {
-	return func(a *AUTH) error {
-		a.ClientId = ClientId
-		a.ClientSecret = ClientSecret
-		a.AuthorizeURL = AuthorizeURL
-		a.TokenURL = TokenURL
-		a.GroupEndpointURL = GroupEndpointURL
-		return nil
+func NewAuth(ClientId, ClientSecret, AuthorizeURL, TokenURL, GroupEndpointURL string) AUTH {
+	a := AUTH{
+		ClientId:         ClientId,
+		ClientSecret:     ClientSecret,
+		AuthorizeURL:     AuthorizeURL,
+		TokenURL:         TokenURL,
+		GroupEndpointURL: GroupEndpointURL,
 	}
-}
 
-// redirectURL
+	return a
+}

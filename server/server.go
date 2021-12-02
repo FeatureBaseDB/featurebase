@@ -56,6 +56,7 @@ import (
 	"github.com/molecula/featurebase/v2/statsd"
 	"github.com/molecula/featurebase/v2/syswrap"
 	"github.com/molecula/featurebase/v2/testhook"
+	"github.com/molecula/featurebase/v2/vprint"
 	"github.com/pelletier/go-toml"
 	"github.com/pkg/errors"
 )
@@ -237,7 +238,9 @@ func (m *Command) Start() (err error) {
 
 	if m.Config.Auth.Enable == true {
 		m.Config.MustValidateAuth()
-		auth.OptAuth(m.Config.Auth.ClientId, m.Config.Auth.ClientSecret, m.Config.Auth.AuthorizeURL, m.Config.Auth.TokenURL, m.Config.Auth.GroupEndpointURL)
+		authArgs := auth.NewAuth(m.Config.Auth.ClientId, m.Config.Auth.ClientSecret, m.Config.Auth.AuthorizeURL, m.Config.Auth.TokenURL, m.Config.Auth.GroupEndpointURL)
+		vprint.VV("Auth: %v", authArgs)
+		// print statement is so that binary compiles, and golang doesn't complaint about declared but unused var
 	}
 
 	// Initialize server.

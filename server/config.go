@@ -415,9 +415,6 @@ func NewConfig() *Config {
 	// Schema Details Toggle
 	c.SchemaDetailsOn = true
 
-	// AuthZ/AuthN disabled by default
-	c.Auth.Enable = false
-
 	return c
 }
 
