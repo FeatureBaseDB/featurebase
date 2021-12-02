@@ -299,50 +299,60 @@ type params struct {
 }
 
 func TestConfig_validateAuth(t *testing.T) {
+	errorMesgClientID := "Empty string for auth config ClientId"
+	errorMesgClientSecret := "Empty string for auth config ClientSecret"
+	errorMesgAuthURL := "Invalid URL for auth config AuthorizeURL"
+	errorMesgTokenURL := "Invalid URL for auth config TokenURL"
+	errorMesgGroupEndpointURL := "Invalid URL for auth config GroupEndpointURL"
+	validTestURL := "https://url.com/"
+	validClientID := "clientid"
+	validClientSecret := "clientSecret"
+	notValidURL := "not-a-url"
+
 	tests := []struct {
 		expErr   string
 		input    params
 		expected params
 	}{
-		{"Empty string for auth config ClientId",
+		{errorMesgClientID,
 			params{true, "", "", "", "", ""},
-			params{true, "clientidstring", "clientSecret", "https://url.com/", "https://url.com/", "https://url.com/"},
+			params{true, validClientID, validClientSecret, validTestURL, validTestURL, validTestURL},
 		},
-		{"Empty string for auth config ClientSecret",
-			params{true, "clientid", "", "", "", ""},
-			params{true, "clientidstring", "clientSecret", "https://url.com/", "https://url.com/", "https://url.com/"},
+		{errorMesgClientSecret,
+			params{true, validClientID, "", "", "", ""},
+			params{true, validClientID, validClientSecret, validTestURL, validTestURL, validTestURL},
 		},
-		{"Empty string for auth config ClientId",
-			params{true, "", "clientSecret", "", "", ""},
-			params{true, "clientidstring", "clientSecret", "https://url.com/", "https://url.com/", "https://url.com/"},
+		{errorMesgClientID,
+			params{true, "", validClientSecret, "", "", ""},
+			params{true, validClientID, validClientSecret, validTestURL, validTestURL, validTestURL},
 		},
-		{"Invalid URL for auth config AuthorizeURL",
-			params{true, "client", "secret", "", "", ""},
-			params{true, "clientidstring", "clientSecret", "https://url.com/", "https://url.com/", "https://url.com/"},
+		{errorMesgAuthURL,
+			params{true, validClientID, validClientSecret, "", "", ""},
+			params{true, validClientID, validClientSecret, validTestURL, validTestURL, validTestURL},
 		},
-		{"Invalid URL for auth config TokenURL",
-			params{true, "client", "secret", "https://url.com/", "", ""},
-			params{true, "clientidstring", "clientSecret", "https://url.com/", "https://url.com/", "https://url.com/"},
+		{errorMesgTokenURL,
+			params{true, validClientID, validClientSecret, validTestURL, "", ""},
+			params{true, validClientID, validClientSecret, validTestURL, validTestURL, validTestURL},
 		},
-		{"Invalid URL for auth config GroupEndpointURL",
-			params{true, "client", "secret", "https://url.com/", "https://url.com/", ""},
-			params{true, "clientidstring", "clientSecret", "https://url.com/", "https://url.com/", "https://url.com/"},
+		{errorMesgGroupEndpointURL,
+			params{true, validClientID, validClientSecret, validTestURL, validTestURL, ""},
+			params{true, validClientID, validClientSecret, validTestURL, validTestURL, validTestURL},
 		},
-		{"Invalid URL for auth config AuthorizeURL",
-			params{true, "client", "secret", "string", "https://url.com/", "https://url.com/"},
-			params{true, "clientidstring", "clientSecret", "https://url.com/", "https://url.com/", "https://url.com/"},
+		{errorMesgAuthURL,
+			params{true, validClientID, validClientSecret, notValidURL, validTestURL, validTestURL},
+			params{true, validClientID, validClientSecret, validTestURL, validTestURL, validTestURL},
 		},
-		{"Invalid URL for auth config TokenURL",
-			params{true, "client", "secret", "https://url.com/", "not-a-url", ""},
-			params{true, "clientidstring", "clientSecret", "https://url.com/", "https://url.com/", "https://url.com/"},
+		{errorMesgTokenURL,
+			params{true, validClientID, validClientSecret, validTestURL, notValidURL, ""},
+			params{true, validClientID, validClientSecret, validTestURL, validTestURL, validTestURL},
 		},
-		{"Invalid URL for auth config GroupEndpointURL",
-			params{true, "client", "secret", "https://url.com/", "https://url.com/", "not-valid-url"},
-			params{true, "clientidstring", "clientSecret", "https://url.com/", "https://url.com/", "https://url.com/"},
+		{errorMesgGroupEndpointURL,
+			params{true, validClientID, validClientSecret, validTestURL, validTestURL, notValidURL},
+			params{true, validClientID, validClientSecret, validTestURL, validTestURL, validTestURL},
 		},
 		{"",
-			params{true, "client", "secret", "https://url.com/", "https://url.com/", "https://url.com/"},
-			params{true, "clientidstring", "clientSecret", "https://url.com/", "https://url.com/", "https://url.com/"},
+			params{true, validClientID, validClientSecret, validTestURL, validTestURL, validTestURL},
+			params{true, validClientID, validClientSecret, validTestURL, validTestURL, validTestURL},
 		},
 	}
 
