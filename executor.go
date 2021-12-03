@@ -2098,7 +2098,7 @@ func (e *executor) executeTopKShard(ctx context.Context, qcx *Qcx, index string,
 			return e.executeTopKShardTime(ctx, tx, filterBitmap, index, fieldName, shard, fromTime, toTime)
 		}
 		fallthrough
-	case FieldTypeSet:
+	case FieldTypeSet, FieldTypeMutex:
 		return e.executeTopKShardSet(ctx, tx, filterBitmap, index, fieldName, shard)
 	default:
 		return nil, errors.Errorf("field type %q is not yet supported by TopK", ftype)
