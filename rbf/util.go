@@ -18,7 +18,7 @@ import (
 	"strings"
 
 	txkey "github.com/molecula/featurebase/v2/short_txkey"
-	. "github.com/molecula/featurebase/v2/vprint"
+	"github.com/molecula/featurebase/v2/vprint"
 )
 
 // we don't currently use dumpAllPages but it's tricky enough to get right
@@ -60,9 +60,9 @@ func (tx *Tx) dumpAllPages(showLeaves bool) error {
 			fmt.Printf("next=%d\n", info.Next)
 
 			page, _, err := tx.readPage(uint32(pgno))
-			PanicOn(err)
+			vprint.PanicOn(err)
 			rootRecords, err := readRootRecords(page)
-			PanicOn(err)
+			vprint.PanicOn(err)
 			for k, rr := range rootRecords {
 				fmt.Printf("  [%02v] Name:'%v'  pgno:%v\n", k, prefixToString(rr.Name), rr.Pgno)
 			}
@@ -77,7 +77,7 @@ func (tx *Tx) dumpAllPages(showLeaves bool) error {
 			fmt.Printf("flags=x%x,celln=%d\n", info.Flags, info.CellN)
 
 			page, _, err := tx.readPage(uint32(pgno))
-			PanicOn(err)
+			vprint.PanicOn(err)
 
 			var leafCells [PageSize / 8]leafCell
 			cells := readLeafCells(page, leafCells[:])
@@ -92,7 +92,7 @@ func (tx *Tx) dumpAllPages(showLeaves bool) error {
 			fmt.Printf("flags=x%x,celln=%d\n", info.Flags, info.CellN)
 
 			page, _, err := tx.readPage(uint32(pgno))
-			PanicOn(err)
+			vprint.PanicOn(err)
 
 			cells := readBranchCells(page)
 			for i, cell := range cells {

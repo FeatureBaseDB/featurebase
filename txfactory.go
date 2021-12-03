@@ -24,7 +24,7 @@ import (
 	"sync"
 
 	"github.com/molecula/featurebase/v2/testhook"
-	. "github.com/molecula/featurebase/v2/vprint" // nolint:staticcheck
+	"github.com/molecula/featurebase/v2/vprint"
 	"github.com/pkg/errors"
 )
 
@@ -174,7 +174,7 @@ func (q *Qcx) Reset() {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	if !q.done {
-		PanicOn("must call Qcx.Abort() or Qcx.Finish() before calling Reset().")
+		vprint.PanicOn("must call Qcx.Abort() or Qcx.Finish() before calling Reset().")
 	}
 	q.unprotected_reset()
 }
@@ -272,16 +272,16 @@ func (qcx *Qcx) GetTx(o Txo) (tx Tx, finisher func(perr *error), err error) {
 		// verify that shard and index match!
 		ro := qcx.RequiredTxo
 		if o.Shard != ro.Shard {
-			PanicOn(fmt.Sprintf("shard mismatch: o.Shard = %v while qcx.RequiredTxo.Shard = %v", o.Shard, ro.Shard))
+			vprint.PanicOn(fmt.Sprintf("shard mismatch: o.Shard = %v while qcx.RequiredTxo.Shard = %v", o.Shard, ro.Shard))
 		}
 		if o.Index == nil {
-			PanicOn("o.Index annot be nil")
+			vprint.PanicOn("o.Index annot be nil")
 		}
 		if ro.Index == nil {
-			PanicOn("ro.Index annot be nil")
+			vprint.PanicOn("ro.Index annot be nil")
 		}
 		if o.Index.name != ro.Index.name {
-			PanicOn(fmt.Sprintf("index mismatch: o.Index = %v while qcx.RequiredTxo.Index = %v", o.Index.name, ro.Index.name))
+			vprint.PanicOn(fmt.Sprintf("index mismatch: o.Index = %v while qcx.RequiredTxo.Index = %v", o.Index.name, ro.Index.name))
 		}
 		return *qcx.RequiredForAtomicWriteTx, NoopFinisher, nil
 	}
@@ -312,7 +312,7 @@ func (qcx *Qcx) GetTx(o Txo) (tx Tx, finisher func(perr *error), err error) {
 			// so defer finisher(nil) means always Commit writes, ignoring
 			// the enclosing functions return status.
 			if perr == nil || *perr == nil {
-				PanicOn(tx.Commit())
+				vprint.PanicOn(tx.Commit())
 			} else {
 				tx.Rollback()
 			}
@@ -331,7 +331,7 @@ func (qcx *Qcx) GetTx(o Txo) (tx Tx, finisher func(perr *error), err error) {
 // to this shard/index will re-use it.
 func (qcx *Qcx) StartAtomicWriteTx(o Txo) {
 	if !o.Write {
-		PanicOn("must have o.Write true")
+		vprint.PanicOn("must have o.Write true")
 	}
 	qcx.mu.Lock()
 	defer qcx.mu.Unlock()
@@ -349,16 +349,16 @@ func (qcx *Qcx) StartAtomicWriteTx(o Txo) {
 	// verify that shard and index match!
 	ro := qcx.RequiredTxo
 	if o.Shard != ro.Shard {
-		PanicOn(fmt.Sprintf("shard mismatch: o.Shard = %v while qcx.RequiredTxo.Shard = %v", o.Shard, ro.Shard))
+		vprint.PanicOn(fmt.Sprintf("shard mismatch: o.Shard = %v while qcx.RequiredTxo.Shard = %v", o.Shard, ro.Shard))
 	}
 	if o.Index == nil {
-		PanicOn("o.Index annot be nil")
+		vprint.PanicOn("o.Index annot be nil")
 	}
 	if ro.Index == nil {
-		PanicOn("ro.Index annot be nil")
+		vprint.PanicOn("ro.Index annot be nil")
 	}
 	if o.Index.name != ro.Index.name {
-		PanicOn(fmt.Sprintf("index mismatch: o.Index = %v while qcx.RequiredTxo.Index = %v", o.Index.name, ro.Index.name))
+		vprint.PanicOn(fmt.Sprintf("index mismatch: o.Index = %v while qcx.RequiredTxo.Index = %v", o.Index.name, ro.Index.name))
 	}
 }
 
@@ -401,7 +401,7 @@ func (ty txtype) DirectoryName() string {
 	case rbfTxn:
 		return "rbf"
 	}
-	PanicOn(fmt.Sprintf("unkown txtype %v", int(ty)))
+	vprint.PanicOn(fmt.Sprintf("unkown txtype %v", int(ty)))
 	return ""
 }
 
@@ -714,7 +714,7 @@ type grpkey struct {
 
 func mustHaveIndexShard(o *Txo) {
 	if o.Index == nil || o.Index.name == "" {
-		PanicOn("index must be set on Txo")
+		vprint.PanicOn("index must be set on Txo")
 	}
 }
 
@@ -754,10 +754,10 @@ func (g *TxGroup) AddTx(tx Tx, o Txo) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if g.finished {
-		PanicOn("in TxGroup.Finish(): TxGroup already finished")
+		vprint.PanicOn("in TxGroup.Finish(): TxGroup already finished")
 	}
 	if NilInside(tx) {
-		PanicOn("Cannot add nil Tx to TxGroup")
+		vprint.PanicOn("Cannot add nil Tx to TxGroup")
 	}
 
 	g.reads = append(g.reads, tx)
@@ -765,7 +765,7 @@ func (g *TxGroup) AddTx(tx Tx, o Txo) {
 	key := grpkey{index: o.Index.name, shard: o.Shard}
 	prior, ok := g.all[key]
 	if ok {
-		PanicOn(fmt.Sprintf("already have Tx in group for this, we should have re-used it! prior is '%v'; tx='%v'", prior, tx))
+		vprint.PanicOn(fmt.Sprintf("already have Tx in group for this, we should have re-used it! prior is '%v'; tx='%v'", prior, tx))
 	}
 	g.all[key] = tx
 }
@@ -777,7 +777,7 @@ func (g *TxGroup) FinishGroup() (err error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if g.finished {
-		PanicOn("in TxGroup.Finish(): TxGroup already finished")
+		vprint.PanicOn("in TxGroup.Finish(): TxGroup already finished")
 	}
 	g.finished = true
 	for _, r := range g.reads {
@@ -817,27 +817,27 @@ func (f *TxFactory) NewTx(o Txo) (txn Tx) {
 
 	if o.Fragment != nil {
 		if o.Fragment.index() != indexName {
-			PanicOn(fmt.Sprintf("inconsistent NewTx request: o.Fragment.index='%v' but indexName='%v'", o.Fragment.index(), indexName))
+			vprint.PanicOn(fmt.Sprintf("inconsistent NewTx request: o.Fragment.index='%v' but indexName='%v'", o.Fragment.index(), indexName))
 		}
 		if o.Fragment.shard != o.Shard {
-			PanicOn(fmt.Sprintf("inconsistent NewTx request: o.Fragment.shard='%v' but o.Shard='%v'", o.Fragment.shard, o.Shard))
+			vprint.PanicOn(fmt.Sprintf("inconsistent NewTx request: o.Fragment.shard='%v' but o.Shard='%v'", o.Fragment.shard, o.Shard))
 		}
 	}
 
 	// look up in the collection of open databases, and get our
 	// per-shard database. Opens a new one if needed.
 	dbs, err := f.dbPerShard.GetDBShard(indexName, o.Shard, o.Index)
-	PanicOn(err)
+	vprint.PanicOn(err)
 
 	if dbs.Shard != o.Shard {
-		PanicOn(fmt.Sprintf("asked for o.Shard=%v but got dbs.Shard=%v", int(o.Shard), int(dbs.Shard)))
+		vprint.PanicOn(fmt.Sprintf("asked for o.Shard=%v but got dbs.Shard=%v", int(o.Shard), int(dbs.Shard)))
 	}
 	//vv("got dbs='%p' for o.Index='%v'; shard='%v'; dbs.typ='%#v'; dbs.W='%#v'", dbs, o.Index.name, o.Shard, dbs.typ, dbs.W)
 	o.dbs = dbs
 
 	tx, err := dbs.NewTx(o.Write, indexName, o)
 	if err != nil {
-		PanicOn(errors.Wrap(err, "dbs.NewTx transaction errored"))
+		vprint.PanicOn(errors.Wrap(err, "dbs.NewTx transaction errored"))
 	}
 	return tx
 }
@@ -852,7 +852,7 @@ func (ty txtype) String() string {
 	case rbfTxn:
 		return "rbf"
 	}
-	PanicOn(fmt.Sprintf("unhandled ty '%v' in txtype.String()", int(ty)))
+	vprint.PanicOn(fmt.Sprintf("unhandled ty '%v' in txtype.String()", int(ty)))
 	return ""
 }
 
@@ -905,7 +905,7 @@ func listFilesUnderDir(root string, includeRoot bool, requiredSuffix string, ign
 			// ignore
 		} else {
 			if info == nil {
-				PanicOn(fmt.Sprintf("info was nil for path = '%v'", path))
+				vprint.PanicOn(fmt.Sprintf("info was nil for path = '%v'", path))
 			}
 			if info.IsDir() {
 				// skip directories.

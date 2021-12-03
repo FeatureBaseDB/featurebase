@@ -51,7 +51,7 @@ import (
 	"github.com/molecula/featurebase/v2/testhook"
 	"github.com/molecula/featurebase/v2/topology"
 	"github.com/molecula/featurebase/v2/tracing"
-	. "github.com/molecula/featurebase/v2/vprint" // nolint:staticcheck
+	"github.com/molecula/featurebase/v2/vprint"
 	"github.com/pkg/errors"
 )
 
@@ -204,7 +204,7 @@ func newFragment(holder *Holder, spec fragSpec, shard uint64, flags byte) *fragm
 	idx := holder.Index(spec.index.name)
 
 	if idx == nil {
-		PanicOn(fmt.Sprintf("got nil idx back for '%v' from holder!", spec.index))
+		vprint.PanicOn(fmt.Sprintf("got nil idx back for '%v' from holder!", spec.index))
 	}
 
 	f := &fragment{
@@ -615,7 +615,7 @@ func (f *fragment) row(tx Tx, rowID uint64) (*Row, error) {
 func (f *fragment) mustRow(tx Tx, rowID uint64) *Row {
 	row, err := f.row(tx, rowID)
 	if err != nil {
-		PanicOn(err)
+		vprint.PanicOn(err)
 	}
 	return row
 }
@@ -1072,7 +1072,7 @@ func (f *fragment) setValueBase(txOrig Tx, columnID uint64, bitDepth uint64, val
 		tx = f.idx.holder.txf.NewTx(Txo{Write: writable, Index: f.idx, Fragment: f, Shard: f.shard})
 		defer func() {
 			if err == nil {
-				PanicOn(tx.Commit())
+				vprint.PanicOn(tx.Commit())
 			} else {
 				tx.Rollback()
 			}
@@ -1975,7 +1975,7 @@ func (f *fragment) Blocks() ([]FragmentBlock, error) {
 	idx := f.holder.Index(f.index())
 	if idx == nil {
 		err := fmt.Errorf("index() was nil in fragment.Blocks(): f.index()='%v'", f.index())
-		PanicOn(err)
+		vprint.PanicOn(err)
 		return nil, err
 	}
 	tx := idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: f.shard})
@@ -2350,7 +2350,7 @@ func (p *parallelSlices) fullPrune() {
 		return
 	}
 	if len(p.rows) != len(p.cols) {
-		PanicOn("parallelSlices must have same length for rows and columns")
+		vprint.PanicOn("parallelSlices must have same length for rows and columns")
 	}
 	unsorted := p.prune()
 	if unsorted {

@@ -28,7 +28,7 @@ import (
 	txkey "github.com/molecula/featurebase/v2/short_txkey"
 	"github.com/molecula/featurebase/v2/storage"
 
-	. "github.com/molecula/featurebase/v2/vprint" // nolint:staticcheck
+	"github.com/molecula/featurebase/v2/vprint"
 	"github.com/pkg/errors"
 )
 
@@ -97,7 +97,7 @@ func roaringMapOfShards(optionalViewPath string) (shardMap map[uint64]bool, err 
 // the transaction Commits or Rollsback.
 func (tx *RoaringTx) NewTxIterator(index, field, view string, shard uint64) *roaring.Iterator {
 	b, err := tx.bitmap(index, field, view, shard)
-	PanicOn(err)
+	vprint.PanicOn(err)
 	return b.Iterator()
 }
 

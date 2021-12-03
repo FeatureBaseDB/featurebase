@@ -20,16 +20,15 @@ import (
 	"context"
 	"time"
 
-	//"fmt"
 	"fmt"
 	"io"
 	"io/ioutil"
 	gohttp "net/http"
 
-	"github.com/molecula/featurebase/v2"
+	pilosa "github.com/molecula/featurebase/v2"
 	"github.com/molecula/featurebase/v2/http"
 	pnet "github.com/molecula/featurebase/v2/net"
-	. "github.com/molecula/featurebase/v2/vprint" // nolint:staticcheck
+	"github.com/molecula/featurebase/v2/vprint"
 
 	"os"
 	"strconv"
@@ -38,7 +37,6 @@ import (
 
 func UploadTar(srcFile string, client *http.InternalClient) error {
 	t0 := time.Now()
-
 	f, err := os.Open(srcFile)
 	if err != nil {
 		return (err)
@@ -65,7 +63,7 @@ func UploadTar(srcFile string, client *http.InternalClient) error {
 		header, err := tarReader.Next()
 		if err == io.EOF {
 			if header != nil {
-				PanicOn("header should not be nil on err io.EOF")
+				vprint.PanicOn("header should not be nil on err io.EOF")
 			}
 			//submit any stuff we have left
 			if len(viewData) > 0 {
@@ -75,13 +73,13 @@ func UploadTar(srcFile string, client *http.InternalClient) error {
 				//	Submit(lastIndex, lastField, lastShard, request)
 				uri := GetImportRoaringURI(lastIndex, lastShard)
 				err := client.ImportRoaring(context.Background(), uri, lastIndex, lastField, lastShard, false, request)
-				PanicOn(err)
+				vprint.PanicOn(err)
 			}
 			return nil
 		}
 		n++
 		if n%500 == 0 {
-			VV("n = %v, progress, elapsed '%v'", n, time.Since(t0))
+			vprint.VV("n = %v, progress, elapsed '%v'", n, time.Since(t0))
 		}
 		parts := strings.Split(header.Name, "/")
 		//vv("parts = '%#v'", parts)
@@ -100,7 +98,7 @@ func UploadTar(srcFile string, client *http.InternalClient) error {
 				}
 				//vv("about to submit lastIndex='%v' lastShard='%v'", lastIndex, lastShard)
 				uri := GetImportRoaringURI(lastIndex, lastShard)
-				PanicOn(client.ImportRoaring(context.Background(), uri, lastIndex, lastField, lastShard, false, request))
+				vprint.PanicOn(client.ImportRoaring(context.Background(), uri, lastIndex, lastField, lastShard, false, request))
 				viewData = make(map[string][]byte)
 				//vv("done with submit lastIndex='%v' lastShard='%v'; took='%v'", lastIndex, lastShard, time.Since(t0))
 
@@ -111,7 +109,7 @@ func UploadTar(srcFile string, client *http.InternalClient) error {
 			return err
 		}
 		if _, already := viewData[view]; already {
-			PanicOn(fmt.Sprintf("view '%v' already present!", view))
+			vprint.PanicOn(fmt.Sprintf("view '%v' already present!", view))
 		}
 		viewData[view] = roaringData
 		lastIndex = index
@@ -130,12 +128,12 @@ func main() {
 	host := "127.0.0.1:10101"
 	h := &gohttp.Client{}
 	c, err := http.NewInternalClient(host, h)
-	PanicOn(err)
+	vprint.PanicOn(err)
 
 	tarSrcPath := "q2.tar.gz"
 	t0 := time.Now()
-	PanicOn(UploadTar(tarSrcPath, c))
-	VV("total elapsed '%v'", time.Since(t0))
+	vprint.PanicOn(UploadTar(tarSrcPath, c))
+	vprint.VV("total elapsed '%v'", time.Since(t0))
 }
 
 var globURI *pnet.URI
@@ -143,7 +141,7 @@ var globURI *pnet.URI
 func init() {
 	var err error
 	globURI, err = pnet.NewURIFromHostPort("127.0.0.1", 10101)
-	PanicOn(err)
+	vprint.PanicOn(err)
 }
 
 // get correct node to go to.

@@ -56,7 +56,7 @@ func ColumnUnmarshallerWithTimestamp(format Format, timestampFormat string) Reco
 		column := client.Column{}
 		parts := strings.Split(text, ",")
 		if len(parts) < 2 {
-			return nil, errors.New("Invalid CSV line")
+			return nil, errors.New("invalid CSV line")
 		}
 
 		hasRowKey := format == RowKeyColumnID || format == RowKeyColumnKey
@@ -67,7 +67,7 @@ func ColumnUnmarshallerWithTimestamp(format Format, timestampFormat string) Reco
 		} else {
 			column.RowID, err = strconv.ParseUint(parts[0], 10, 64)
 			if err != nil {
-				return nil, errors.New("Invalid row ID")
+				return nil, errors.New("invalid row ID")
 			}
 		}
 
@@ -76,7 +76,7 @@ func ColumnUnmarshallerWithTimestamp(format Format, timestampFormat string) Reco
 		} else {
 			column.ColumnID, err = strconv.ParseUint(parts[1], 10, 64)
 			if err != nil {
-				return nil, errors.New("Invalid column ID")
+				return nil, errors.New("invalid column ID")
 			}
 		}
 
@@ -166,17 +166,17 @@ func FieldValueUnmarshaller(format Format) RecordUnmarshaller {
 	return func(text string) (client.Record, error) {
 		parts := strings.Split(text, ",")
 		if len(parts) < 2 {
-			return nil, errors.New("Invalid CSV")
+			return nil, errors.New("invalid CSV")
 		}
 		value, err := strconv.ParseInt(parts[1], 10, 64)
 		if err != nil {
-			return nil, errors.New("Invalid value")
+			return nil, errors.New("invalid value")
 		}
 		switch format {
 		case ColumnID:
 			columnID, err := strconv.ParseUint(parts[0], 10, 64)
 			if err != nil {
-				return nil, errors.New("Invalid column ID at line: %d")
+				return nil, errors.New("invalid column ID at line: %d")
 			}
 			return client.FieldValue{
 				ColumnID: uint64(columnID),
@@ -188,7 +188,7 @@ func FieldValueUnmarshaller(format Format) RecordUnmarshaller {
 				Value:     value,
 			}, nil
 		default:
-			return nil, fmt.Errorf("Invalid format: %d", format)
+			return nil, fmt.Errorf("invalid format: %d", format)
 		}
 	}
 }

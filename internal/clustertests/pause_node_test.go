@@ -31,7 +31,6 @@ import (
 	boltdb "github.com/molecula/featurebase/v2/boltdb"
 	"github.com/molecula/featurebase/v2/disco"
 	"github.com/molecula/featurebase/v2/http"
-	picli "github.com/molecula/featurebase/v2/http"
 	"github.com/molecula/featurebase/v2/net"
 	"github.com/molecula/featurebase/v2/topology"
 	"github.com/pkg/errors"
@@ -81,7 +80,7 @@ func getAddress(node string) string {
 func getClients(addrs []string) ([]*http.InternalClient, error) {
 	clients := make([]*http.InternalClient, 0, len(addrs))
 	for _, addr := range addrs {
-		c, err := picli.NewInternalClient(addr, picli.GetHTTPClient(nil))
+		c, err := http.NewInternalClient(addr, http.GetHTTPClient(nil))
 		if err != nil {
 			return nil, err
 		}
@@ -102,7 +101,7 @@ func getURIsFromAddresses(addrs []string) ([]*net.URI, error) {
 	return uris, nil
 }
 
-func readIndexTranslateData(ctx context.Context, client *picli.InternalClient, dirPath, index string, partition int) error {
+func readIndexTranslateData(ctx context.Context, client *http.InternalClient, dirPath, index string, partition int) error {
 	// read translateStore contents from endpoint
 	r, err := client.IndexTranslateDataReader(ctx, index, partition)
 	if err != nil {
@@ -186,7 +185,7 @@ var errOpRetriable = errors.New("If operation failed on this error, it can be re
 func verifyNodeHasGivenKeys(ctx context.Context, node, index, dirPath string, keys []string) error {
 	// get client that's connected to node
 	address := getAddress(node)
-	client, err := picli.NewInternalClient(address, picli.GetHTTPClient(nil))
+	client, err := http.NewInternalClient(address, http.GetHTTPClient(nil))
 	if err != nil {
 		return err
 	}

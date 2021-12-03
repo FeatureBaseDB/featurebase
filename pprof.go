@@ -24,7 +24,7 @@ import (
 	_ "net/http/pprof" // Imported for its side-effect of registering pprof endpoints with the server.
 
 	"github.com/molecula/featurebase/v2/storage"
-	. "github.com/molecula/featurebase/v2/vprint" // nolint:staticcheck
+	"github.com/molecula/featurebase/v2/vprint"
 )
 
 // CPUProfileForDur (where "Dur" is short for "Duration"), is used for
@@ -38,18 +38,18 @@ func CPUProfileForDur(dur time.Duration, outpath string) {
 	}
 	path := outpath + "." + backend
 	f, err := os.Create(path)
-	PanicOn(err)
+	vprint.PanicOn(err)
 
 	if dur == 0 {
 		dur = time.Minute
 	}
-	AlwaysPrintf("starting cpu profile for dur '%v', output to '%v'", dur, path)
+	vprint.AlwaysPrintf("starting cpu profile for dur '%v', output to '%v'", dur, path)
 	_ = pprof.StartCPUProfile(f)
 	go func() {
 		<-time.After(dur)
 		pprof.StopCPUProfile()
 		f.Close()
-		AlwaysPrintf("stopping cpu profile after dur '%v', output: '%v'", dur, path)
+		vprint.AlwaysPrintf("stopping cpu profile after dur '%v', output: '%v'", dur, path)
 	}()
 }
 
@@ -64,20 +64,20 @@ func MemProfileForDur(dur time.Duration, outpath string) {
 	}
 	path := outpath + "." + backend
 	f, err := os.Create(path)
-	PanicOn(err)
+	vprint.PanicOn(err)
 
 	if dur == 0 {
 		dur = time.Minute
 	}
-	AlwaysPrintf("will write memory profile after dur '%v', output to '%v'", dur, path)
+	vprint.AlwaysPrintf("will write memory profile after dur '%v', output to '%v'", dur, path)
 	go func() {
 		<-time.After(dur)
 		runtime.GC() // get up-to-date statistics
 		if err := pprof.WriteHeapProfile(f); err != nil {
-			PanicOn(fmt.Sprintf("could not write memory profile: %v", err))
+			vprint.PanicOn(fmt.Sprintf("could not write memory profile: %v", err))
 		}
 		f.Close()
-		AlwaysPrintf("wrote memory profile after dur '%v', output: '%v'", dur, path)
+		vprint.AlwaysPrintf("wrote memory profile after dur '%v', output: '%v'", dur, path)
 	}()
 }
 
@@ -92,7 +92,7 @@ var _ = pprofProfile{}
 func newPprof() (pp *pprofProfile) {
 	pp = &pprofProfile{}
 	f, err := os.Create("cpu.manual.pprof")
-	PanicOn(err)
+	vprint.PanicOn(err)
 	pp.fdCpu = f
 
 	_ = pprof.StartCPUProfile(pp.fdCpu)
@@ -105,11 +105,11 @@ func (pp *pprofProfile) Close() {
 	pp.fdCpu.Close()
 
 	f, err := os.Create("mem.manual.pprof")
-	PanicOn(err)
+	vprint.PanicOn(err)
 
 	runtime.GC() // get up-to-date statistics
 	if err := pprof.WriteHeapProfile(f); err != nil {
-		PanicOn(fmt.Sprintf("could not write memory profile: %v", err))
+		vprint.PanicOn(fmt.Sprintf("could not write memory profile: %v", err))
 	}
 	f.Close()
 }
