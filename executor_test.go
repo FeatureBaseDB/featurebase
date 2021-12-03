@@ -1719,6 +1719,36 @@ func TestExecutor_Execute_TopK_Set(t *testing.T) {
 	}
 }
 
+func TestExecutor_Execute_TopK_Mutex(t *testing.T) {
+	c := test.MustRunCluster(t, 3)
+	defer c.Close()
+
+	// Load some test data into a mutex field.
+	c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "f", pilosa.OptFieldTypeMutex(pilosa.CacheTypeRanked, 10))
+	c.ImportBits(t, "i", "f", [][2]uint64{
+		{0, 0},
+		{0, ShardWidth + 2},
+		{10, 2},
+		{10, ShardWidth},
+		{10, 2 * ShardWidth},
+		{10, ShardWidth + 1},
+		{20, ShardWidth},
+	})
+
+	// Execute query.
+	if result, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `TopK(f, k=2)`}); err != nil {
+		t.Fatal(err)
+	} else if !reflect.DeepEqual(result.Results, []interface{}{&pilosa.PairsField{
+		Pairs: []pilosa.Pair{
+			{ID: 10, Count: 3},
+			{ID: 0, Count: 2},
+		},
+		Field: "f",
+	}}) {
+		t.Fatalf("unexpected result: %s", spew.Sdump(result))
+	}
+}
+
 func TestExecutor_Execute_TopK_Time(t *testing.T) {
 	c := test.MustRunCluster(t, 3)
 	defer c.Close()
