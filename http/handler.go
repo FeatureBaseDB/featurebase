@@ -3091,7 +3091,7 @@ func (h *Handler) handlePostTranslateIndexDB(w http.ResponseWriter, r *http.Requ
 	resp.write(w, err)
 }
 
-func (h *Handler) handleFindIndexKeys(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) handleFindOrCreateKeys(w http.ResponseWriter, r *http.Request, requireField bool, create bool) {
 	// Verify input and output types
 	if r.Header.Get("Content-Type") != "application/json" {
 		http.Error(w, "Unsupported media type", http.StatusUnsupportedMediaType)
@@ -3101,178 +3101,76 @@ func (h *Handler) handleFindIndexKeys(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Not acceptable", http.StatusNotAcceptable)
 		return
 	}
-
-	indexName, ok := mux.Vars(r)["index"]
-	if !ok {
-		http.Error(w, "index name is required", http.StatusBadRequest)
-		return
-	}
-
-	bd, err := readBody(r)
-	if err != nil {
-		http.Error(w, "failed to read body", http.StatusBadRequest)
-		return
-	}
-
+	var indexName, fieldName string
 	var keys []string
-	err = json.Unmarshal(bd, &keys)
-	if err != nil {
-		http.Error(w, "failed to decode request", http.StatusBadRequest)
-		return
-	}
+	err := func() error {
+		var ok bool
+		indexName, ok = mux.Vars(r)["index"]
+		if !ok {
+			return errors.New("index name is required")
+		}
 
-	translations, err := h.api.FindIndexKeys(r.Context(), indexName, keys...)
-	if err != nil {
-		http.Error(w, "translating keys", http.StatusBadRequest)
-		return
-	}
+		if requireField {
+			fieldName, ok = mux.Vars(r)["field"]
+			if !ok {
+				return errors.New("field name is required")
+			}
+		}
 
-	err = json.NewEncoder(w).Encode(translations)
+		bd, err := readBody(r)
+		if err != nil {
+			return fmt.Errorf("failed to read body: %v", err)
+		}
+
+		err = json.Unmarshal(bd, &keys)
+		if err != nil {
+			return fmt.Errorf("failed to decode request: %v", err)
+		}
+		return nil
+	}()
 	if err != nil {
-		http.Error(w, "encoding result", http.StatusBadRequest)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+	}
+	var translations map[string]uint64
+	switch {
+	case requireField && create:
+		translations, err = h.api.CreateFieldKeys(r.Context(), indexName, fieldName, keys...)
+	case requireField && !create:
+		translations, err = h.api.FindFieldKeys(r.Context(), indexName, fieldName, keys...)
+	case !requireField && create:
+		translations, err = h.api.CreateIndexKeys(r.Context(), indexName, keys...)
+	case !requireField && !create:
+		translations, err = h.api.FindIndexKeys(r.Context(), indexName, keys...)
+
+	}
+	if err != nil {
+		http.Error(w, fmt.Sprintf("translating keys: %v", err), http.StatusInternalServerError)
 		return
 	}
+	data, err := json.Marshal(translations)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("encoding response: %v", err), http.StatusInternalServerError)
+	}
+	_, err = w.Write(data)
+	if err != nil {
+		h.logger.Printf("writing CreateFieldKeys response: %v", err)
+	}
+}
+
+func (h *Handler) handleFindIndexKeys(w http.ResponseWriter, r *http.Request) {
+	h.handleFindOrCreateKeys(w, r, false, false)
 }
 
 func (h *Handler) handleFindFieldKeys(w http.ResponseWriter, r *http.Request) {
-	// Verify input and output types
-	if r.Header.Get("Content-Type") != "application/json" {
-		http.Error(w, "Unsupported media type", http.StatusUnsupportedMediaType)
-		return
-	}
-	if !validHeaderAcceptJSON(r.Header) {
-		http.Error(w, "Not acceptable", http.StatusNotAcceptable)
-		return
-	}
-
-	indexName, ok := mux.Vars(r)["index"]
-	if !ok {
-		http.Error(w, "index name is required", http.StatusBadRequest)
-		return
-	}
-
-	fieldName, ok := mux.Vars(r)["field"]
-	if !ok {
-		http.Error(w, "field name is required", http.StatusBadRequest)
-		return
-	}
-
-	bd, err := readBody(r)
-	if err != nil {
-		http.Error(w, "failed to read body", http.StatusBadRequest)
-		return
-	}
-
-	var keys []string
-	err = json.Unmarshal(bd, &keys)
-	if err != nil {
-		http.Error(w, "failed to decode request", http.StatusBadRequest)
-		return
-	}
-
-	translations, err := h.api.FindFieldKeys(r.Context(), indexName, fieldName, keys...)
-	if err != nil {
-		http.Error(w, "translating keys", http.StatusBadRequest)
-		return
-	}
-
-	err = json.NewEncoder(w).Encode(translations)
-	if err != nil {
-		http.Error(w, "encoding result", http.StatusBadRequest)
-		return
-	}
+	h.handleFindOrCreateKeys(w, r, true, false)
 }
 
 func (h *Handler) handleCreateIndexKeys(w http.ResponseWriter, r *http.Request) {
-	// Verify input and output types
-	if r.Header.Get("Content-Type") != "application/json" {
-		http.Error(w, "Unsupported media type", http.StatusUnsupportedMediaType)
-		return
-	}
-	if !validHeaderAcceptJSON(r.Header) {
-		http.Error(w, "Not acceptable", http.StatusNotAcceptable)
-		return
-	}
-
-	indexName, ok := mux.Vars(r)["index"]
-	if !ok {
-		http.Error(w, "index name is required", http.StatusBadRequest)
-		return
-	}
-
-	bd, err := readBody(r)
-	if err != nil {
-		http.Error(w, "failed to read body", http.StatusBadRequest)
-		return
-	}
-
-	var keys []string
-	err = json.Unmarshal(bd, &keys)
-	if err != nil {
-		http.Error(w, "failed to decode request", http.StatusBadRequest)
-		return
-	}
-
-	translations, err := h.api.CreateIndexKeys(r.Context(), indexName, keys...)
-	if err != nil {
-		http.Error(w, "translating keys", http.StatusBadRequest)
-		return
-	}
-
-	err = json.NewEncoder(w).Encode(translations)
-	if err != nil {
-		http.Error(w, "encoding result", http.StatusBadRequest)
-		return
-	}
+	h.handleFindOrCreateKeys(w, r, false, true)
 }
 
 func (h *Handler) handleCreateFieldKeys(w http.ResponseWriter, r *http.Request) {
-	// Verify input and output types
-	if r.Header.Get("Content-Type") != "application/json" {
-		http.Error(w, "Unsupported media type", http.StatusUnsupportedMediaType)
-		return
-	}
-	if !validHeaderAcceptJSON(r.Header) {
-		http.Error(w, "Not acceptable", http.StatusNotAcceptable)
-		return
-	}
-
-	indexName, ok := mux.Vars(r)["index"]
-	if !ok {
-		http.Error(w, "index name is required", http.StatusBadRequest)
-		return
-	}
-
-	fieldName, ok := mux.Vars(r)["field"]
-	if !ok {
-		http.Error(w, "field name is required", http.StatusBadRequest)
-		return
-	}
-
-	bd, err := readBody(r)
-	if err != nil {
-		http.Error(w, "failed to read body", http.StatusBadRequest)
-		return
-	}
-
-	var keys []string
-	err = json.Unmarshal(bd, &keys)
-	if err != nil {
-		http.Error(w, "failed to decode request", http.StatusBadRequest)
-		return
-	}
-
-	translations, err := h.api.CreateFieldKeys(r.Context(), indexName, fieldName, keys...)
-	if err != nil {
-		http.Error(w, "translating keys", http.StatusBadRequest)
-		return
-	}
-
-	err = json.NewEncoder(w).Encode(translations)
-	if err != nil {
-		http.Error(w, "encoding result", http.StatusBadRequest)
-		return
-	}
+	h.handleFindOrCreateKeys(w, r, true, true)
 }
 
 func (h *Handler) handleMatchField(w http.ResponseWriter, r *http.Request) {
