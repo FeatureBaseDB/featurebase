@@ -234,6 +234,10 @@ func (m *Command) Start() (err error) {
 		return errors.Wrap(err, "setting resource limits")
 	}
 
+	if m.Config.Auth.Enable == true {
+		m.Config.MustValidateAuth()
+	}
+
 	// Initialize server.
 	if err = m.Server.Open(); err != nil {
 		return errors.Wrap(err, "opening server")

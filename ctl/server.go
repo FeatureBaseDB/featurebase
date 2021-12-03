@@ -121,4 +121,14 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 
 	// Toggle /schema/details endpoint.
 	flags.BoolVar(&srv.Config.SchemaDetailsOn, "schema-details-on", true, "Disable /schema/details endpoint")
+
+	// OAuth2.0 identity provider configuration
+	flags.BoolVar(&srv.Config.Auth.Enable, "auth.enable", false, "Enable AuthN/AuthZ of featurebase, disabled by default.")
+	flags.StringVar(&srv.Config.Auth.ClientId, "auth.client-id", srv.Config.Auth.ClientId, "Identity Provider's Application/Client ID.")
+	flags.StringVar(&srv.Config.Auth.ClientSecret, "auth.client-secret", srv.Config.Auth.ClientSecret, "Identity Provider's Client Secret.")
+	flags.StringVar(&srv.Config.Auth.AuthorizeURL, "auth.authorize-url", srv.Config.Auth.AuthorizeURL, "Identity Provider's Authorize URL.")
+	flags.StringVar(&srv.Config.Auth.TokenURL, "auth.token-url", srv.Config.Auth.TokenURL, "Identity Provider's Token URL.")
+	flags.StringVar(&srv.Config.Auth.GroupEndpointURL, "auth.group-endpoint-url", srv.Config.Auth.GroupEndpointURL, "Identity Provider's Group endpoint URL.")
+	flags.StringVar(&srv.Config.Auth.ScopeURL, "auth.scope-url", srv.Config.Auth.ScopeURL, "Identity Provider's Scope URL.")
+
 }

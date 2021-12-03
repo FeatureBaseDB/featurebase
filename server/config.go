@@ -19,11 +19,13 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"net/url"
 	"runtime"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/molecula/featurebase/v2/auth"
 	petcd "github.com/molecula/featurebase/v2/etcd"
 	rbfcfg "github.com/molecula/featurebase/v2/rbf/cfg"
 	"github.com/molecula/featurebase/v2/storage"
@@ -240,6 +242,9 @@ type Config struct {
 
 	// Toggles /schema/details endpoint. If off, it returns empty.
 	SchemaDetailsOn bool `toml:"schema-details-on"`
+
+	// Enable AuthZ/AuthN
+	Auth auth.Auth `toml:"auth"`
 }
 
 // Namespace returns the namespace to use based on the Future flag.
@@ -273,6 +278,7 @@ func (c *Config) validate() error {
 		"Etcd.ClusterURL", c.Etcd.ClusterURL,
 		"Postgres.Bind", c.Postgres.Bind,
 	}
+
 	ports := make(map[int]bool)
 	n := len(hostPort)
 	for i := 0; i < n; i += 2 {
@@ -601,4 +607,47 @@ func lookupAddr(ctx context.Context, resolver *net.Resolver, host string) (strin
 
 	// No IPv4 address, return the first resolved address instead.
 	return addrs[0].String(), nil
+}
+
+func (c *Config) ValidateAuth() ([]error, error) {
+	if !c.Auth.Enable {
+		return []error{}, nil
+	}
+	authConfig := map[string]string{
+		"ClientId":         c.Auth.ClientId,
+		"ClientSecret":     c.Auth.ClientSecret,
+		"AuthorizeURL":     c.Auth.AuthorizeURL,
+		"TokenURL":         c.Auth.TokenURL,
+		"GroupEndpointURL": c.Auth.GroupEndpointURL,
+		"ScopeURL":         c.Auth.ScopeURL,
+	}
+
+	errors := make([]error, 0)
+	for name, value := range authConfig {
+		if value == "" {
+			errors = append(errors, fmt.Errorf("Empty string for auth config %s", name))
+			continue
+		}
+
+		if strings.Contains(name, "URL") {
+			_, err := url.ParseRequestURI(value)
+			if err != nil {
+				errors = append(errors, fmt.Errorf("Invalid URL for auth config %s: %s", name, err))
+				continue
+			}
+		}
+	}
+	if len(errors) > 0 {
+		return errors, fmt.Errorf("there were errors validating config")
+	}
+	return errors, nil
+}
+
+func (c *Config) MustValidateAuth() {
+	if errors, err := c.ValidateAuth(); err != nil {
+		for _, e := range errors {
+			log.Println(e)
+		}
+		log.Fatal(err)
+	}
 }
