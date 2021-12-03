@@ -538,25 +538,17 @@ func (s *Server) SetAPI(api *API) {
 // UpAndDown brings the server up minimally and shuts it down
 // again; basically, it exists for testing holder open and close.
 func (s *Server) UpAndDown() error {
-	s.logger.Infof("open server. PID %v", os.Getpid())
-
 	// Log startup
 	err := s.holder.logStartup()
 	if err != nil {
 		log.Println(errors.Wrap(err, "logging startup"))
 	}
-
-	// Open holder.
-	if err := s.holder.Open(); err != nil {
-		return errors.Wrap(err, "opening Holder")
+	s.logger.Infof("open server. PID %v", os.Getpid())
+	if err = s.Open(); err != nil {
+		return errors.Wrap(err, "starting server")
 	}
-
-	errh := s.holder.Close()
-	if errh != nil {
-		return errors.Wrap(errh, "closing holder")
-	}
-
-	return nil
+	err = s.Close()
+	return errors.Wrap(err, "shutting down server")
 }
 
 // Open opens and initializes the server.

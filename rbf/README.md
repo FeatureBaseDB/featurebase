@@ -93,12 +93,12 @@ The leaf page contains a series of cells with the header of:
 	[8] highbits
 	[4] flag
 	[4] child count
-	[*] array or RLE data
+	[*] array or RLE data or Handle (a pageno) to Bitmap Data
 
 
-### Bitmap page
+### Bitmap Data page
 
-The data for the bitmap page takes up the entire 8KB.
+The data for the bitmap data page takes up the entire 8KB.
 
 
 ## Proof of Concept Notes

@@ -21,6 +21,7 @@ import (
 	"reflect"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/molecula/featurebase/v2/pql"
 	"github.com/molecula/featurebase/v2/testhook"
@@ -301,6 +302,20 @@ func TestValCountComparisons(t *testing.T) {
 			expLarger:  ValCount{FloatVal: 10.7, Count: 3},
 			expSmaller: ValCount{FloatVal: 10.7, Count: 3},
 		},
+		{
+			name:       "timestampEquality",
+			vc:         ValCount{Val: -17782800, TimestampVal: time.Unix(0, -17782800*int64(time.Second)), Count: 1},
+			other:      ValCount{Val: -17782800, TimestampVal: time.Unix(0, -17782800*int64(time.Second)), Count: 1},
+			expLarger:  ValCount{Val: -17782800, TimestampVal: time.Unix(0, -17782800*int64(time.Second)), Count: 2},
+			expSmaller: ValCount{Val: -17782800, TimestampVal: time.Unix(0, -17782800*int64(time.Second)), Count: 2},
+		},
+		{
+			name:       "timestamp",
+			vc:         ValCount{Val: -17782800, TimestampVal: time.Unix(0, -17782800*int64(time.Second)), Count: 1},
+			other:      ValCount{Val: 1587399600, TimestampVal: time.Unix(0, 1587399600*int64(time.Second)), Count: 1},
+			expLarger:  ValCount{Val: 1587399600, TimestampVal: time.Unix(0, 1587399600*int64(time.Second)), Count: 1},
+			expSmaller: ValCount{Val: -17782800, TimestampVal: time.Unix(0, -17782800*int64(time.Second)), Count: 1},
+		},
 	}
 
 	for i, test := range tests {
@@ -473,5 +488,17 @@ func TestGetSorter(t *testing.T) {
 			}
 
 		})
+	}
+}
+
+func TestExecutorSafeCopyDistinctTimestamp(t *testing.T) {
+	result := DistinctTimestamp{Values: []string{"test", "test"}, Name: "test"}
+	results := make([]interface{}, 1)
+	results[0] = result
+
+	response := QueryResponse{Results: results, Err: nil, Profile: nil}
+	copied := safeCopy(response)
+	if !reflect.DeepEqual(copied.Results, response.Results) {
+		t.Fatalf("Did not copy results. got %+v, want %+v", copied.Results, response.Results)
 	}
 }

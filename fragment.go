@@ -2485,7 +2485,7 @@ func (f *fragment) importPositions(tx Tx, set, clear []uint64, rowSet map[uint64
 		err = doFunc()
 	}
 
-	if err != nil {
+	if err != nil && f.storage != nil {
 		// we got an error. it's possible that the error indicates that something went wrong.
 		mappedIn, mappedOut, unmappedIn, errs, e2 := f.storage.SanityCheckMapping(f.currdata.from, f.currdata.to)
 		if errs != 0 {

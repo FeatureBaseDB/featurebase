@@ -19,7 +19,7 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/proto"
-	"github.com/molecula/featurebase/v2"
+	pilosa "github.com/molecula/featurebase/v2"
 	"github.com/molecula/featurebase/v2/disco"
 	"github.com/molecula/featurebase/v2/ingest"
 	pnet "github.com/molecula/featurebase/v2/net"
@@ -1637,11 +1637,17 @@ func (s Serializer) decodePairField(pb *pb.PairField) pilosa.PairField {
 }
 
 func (s Serializer) decodeValCount(pb *pb.ValCount) pilosa.ValCount {
+	var t time.Time
+	t, err := time.Parse(time.RFC3339Nano, pb.TimestampVal)
+	if err != nil {
+		t = time.Time{}
+	}
 	return pilosa.ValCount{
-		Val:        pb.Val,
-		FloatVal:   pb.FloatVal,
-		DecimalVal: s.decodeDecimalStruct(pb.DecimalVal),
-		Count:      pb.Count,
+		Val:          pb.Val,
+		FloatVal:     pb.FloatVal,
+		DecimalVal:   s.decodeDecimalStruct(pb.DecimalVal),
+		TimestampVal: t,
+		Count:        pb.Count,
 	}
 }
 
@@ -1849,10 +1855,11 @@ func (s Serializer) encodePairField(p pilosa.PairField) *pb.PairField {
 
 func (s Serializer) encodeValCount(vc pilosa.ValCount) *pb.ValCount {
 	return &pb.ValCount{
-		Val:        vc.Val,
-		FloatVal:   vc.FloatVal,
-		DecimalVal: s.encodeDecimal(vc.DecimalVal),
-		Count:      vc.Count,
+		Val:          vc.Val,
+		FloatVal:     vc.FloatVal,
+		DecimalVal:   s.encodeDecimal(vc.DecimalVal),
+		Count:        vc.Count,
+		TimestampVal: vc.TimestampVal.Format(time.RFC3339Nano),
 	}
 }
 

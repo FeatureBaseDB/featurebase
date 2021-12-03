@@ -56,6 +56,27 @@ type Tx struct {
 	// behavior where an existing container has all its bits cleared
 	// but still sticks around in the database.
 	DeleteEmptyContainer bool
+
+	// It is possible for a modification of the free list to cause a page to
+	// be allocated or deallocated, which would modify the free list.
+	//
+	// For the case where pages need to be allocated during free list
+	// changes, we can trivially just allocate new pages and not use the
+	// free list. That's the simple case...
+	modifyingFreelist bool
+	// But removals can't be deferred/not-done like that. If a free list
+	// change causes us to deallocate a page (such as if we're *allocating*
+	// a page, which causes it to be *removed* from the free list), we really
+	// do need to record that, but if we try to do it during the update
+	// process, things could go horribly wrong. So, we have a transient list
+	// of page numbers which have been deallocated, but it happened *during*
+	// the modification of the free list. The top-level modification then
+	// processes them on its way out, using a defer. During the processing
+	// of this list, we *still* have the flag set, and we make a new list
+	// while processing the list, so if somehow a pending add to the list
+	// manages to trigger a *deallocation* (which I don't think should be
+	// happening), we'll process that one after the current list is processed.
+	pendingFreelistAdds []uint32
 }
 
 func (tx *Tx) DBPath() string {
@@ -312,7 +333,6 @@ func (tx *Tx) DeleteBitmapsWithPrefix(prefix string) error {
 		if !strings.HasPrefix(name.(string), prefix) {
 			continue
 		}
-
 		// Deallocate all pages in the tree.
 		if err := tx.deallocateTree(pgno.(uint32)); err != nil {
 			return err
@@ -903,16 +923,67 @@ func (tx *Tx) walkTree(pgno, parent uint32, fn func(pgno, parent, typ uint32) er
 	}
 }
 
+// freelistCleanup handles things which we need to add to the free list,
+// because they became free during the process of modifying the free list.
+// It also marks us as done modifying the free list. Expected usage is that
+// you set modifyingFreelist to true, then defer this.
+//
+// if you are modifying the free list, we can't further change the free
+// list during that modification. for page allocations, we can just skip
+// the free list check. for deallocations, though, we do need to mark them
+// as freed at some point. so, if we're modifying the free list when
+// a new freePgno happens, we stash the new pages in here, then apply
+// them afterwards. so far as i know, this can actually only happen
+// during an allocate, when we're removing entries from the free list, and
+// the add path doesn't ever trigger it. so, when we remove entries from
+// the free list, it's possible that doing so frees up pages that were
+// part of the free list, and we then add them. but we don't have to worry
+// about that removing things from the free list, because the add logic
+// already just uses new pages rather than trying to use the free list
+// when it knows the free list is involved.
+func (tx *Tx) freelistCleanup(outErr *error) {
+	defer func() {
+		// no matter what, we're done with this after this, but we still
+		// want it set *while* we do this so nothing we do will have side
+		// effects that collide with what we're doing.
+		tx.modifyingFreelist = false
+	}()
+	if len(tx.pendingFreelistAdds) == 0 {
+		return
+	}
+	c := Cursor{tx: tx}
+	c.stack.elems[0] = stackElem{pgno: readMetaFreelistPageNo(tx.meta[:])}
+	for len(tx.pendingFreelistAdds) > 0 {
+		var pass []uint32
+		pass, tx.pendingFreelistAdds = tx.pendingFreelistAdds, nil
+		for _, pgno := range pass {
+			if changed, err := c.Add(uint64(pgno)); err != nil {
+				if outErr != nil && *outErr == nil {
+					*outErr = err
+				}
+				return
+			} else if !changed {
+				vprint.PanicOn(fmt.Sprintf("rbf.Tx.freePgno(): double free: %d", tx.pendingFreelistAdds))
+			}
+		}
+	}
+}
+
 // allocatePgno returns a page number for a new available page. This page may be
 // pulled from the free list or, if no free pages are available, it will be
 // created by extending the file size.
-func (tx *Tx) allocatePgno() (uint32, error) {
+func (tx *Tx) allocatePgno() (_ uint32, outErr error) {
+	if tx.modifyingFreelist {
+		return tx.allocateNewPgno(), nil
+	}
 	// Attempt to find page in freelist.
 	pgno, err := tx.nextFreelistPageNo()
 
 	if err != nil {
 		return 0, err
 	} else if pgno != 0 {
+		tx.modifyingFreelist = true
+		defer tx.freelistCleanup(&outErr)
 		c := Cursor{tx: tx}
 		c.stack.elems[0] = stackElem{pgno: readMetaFreelistPageNo(tx.meta[:])}
 		if changed, err := c.Remove(uint64(pgno)); err != nil {
@@ -922,11 +993,16 @@ func (tx *Tx) allocatePgno() (uint32, error) {
 		}
 		return pgno, nil
 	}
+	// no freelist pages, fall back
+	return tx.allocateNewPgno(), nil
+}
 
+// allocateNewPgno requests a new page unconditionally, ignoring the free list.
+func (tx *Tx) allocateNewPgno() uint32 {
 	// Increment the total page count by one and return the last page.
-	pgno = readMetaPageN(tx.meta[:])
+	pgno := readMetaPageN(tx.meta[:])
 	writeMetaPageN(tx.meta[:], pgno+1)
-	return pgno, nil
+	return pgno
 }
 
 func (tx *Tx) nextFreelistPageNo() (uint32, error) {
@@ -952,10 +1028,16 @@ func (tx *Tx) nextFreelistPageNo() (uint32, error) {
 }
 
 // deallocate releases a page number to the freelist.
-func (tx *Tx) freePgno(pgno uint32) error {
+func (tx *Tx) freePgno(pgno uint32) (outErr error) {
+	if tx.modifyingFreelist {
+		tx.pendingFreelistAdds = append(tx.pendingFreelistAdds, pgno)
+		return nil
+	}
 	c := Cursor{tx: tx}
 	c.stack.elems[0] = stackElem{pgno: readMetaFreelistPageNo(tx.meta[:])}
 
+	tx.modifyingFreelist = true
+	defer tx.freelistCleanup(&outErr)
 	if changed, err := c.Add(uint64(pgno)); err != nil {
 		return err
 	} else if !changed {
@@ -979,9 +1061,16 @@ func (tx *Tx) deallocateTree(pgno uint32) error {
 				return err
 			}
 		}
-		return nil
+		return tx.freePgno(pgno)
 
 	case PageTypeLeaf:
+		for i, n := 0, readCellN(page); i < n; i++ {
+			if cell := readLeafCell(page, i); cell.Type == ContainerTypeBitmapPtr {
+				if err := tx.freePgno(toPgno(cell.Data)); err != nil {
+					return err
+				}
+			}
+		}
 		return tx.freePgno(pgno)
 	default:
 		return fmt.Errorf("rbf.Tx.deallocateTree(): invalid page type: pgno=%d type=%d", pgno, typ)

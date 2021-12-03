@@ -63,13 +63,6 @@ jobs:
       - checkout-plus
       - run: go mod download
       - save-mod-cache
-  check-license-headers:
-    executor:
-      name: golang
-    steps:
-      - checkout-plus
-      - skip-if-root-unchanged
-      - run: make check-license-headers
   linter:
     executor:
       name: golang
@@ -239,10 +232,6 @@ workflows:
           context: molecula
           requires:
             - setup
-      - check-license-headers:
-          context: molecula
-          requires:
-            - setup
       - go-mod-tidy:
           context: molecula
           requires:
@@ -263,7 +252,7 @@ workflows:
             - setup
           matrix:
             parameters:
-              golang_version: ["1.14.15", "1.15.8", "1.16.3"]
+              golang_version: ["1.15.8", "1.16.10"]
       - test:
           name: << matrix.test_make_target >>
           resource_class: xlarge

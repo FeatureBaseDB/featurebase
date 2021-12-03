@@ -14,14 +14,10 @@ BUILD_TIME := $(shell date -u +%FT%T%z)
 SHARD_WIDTH = 20
 COMMIT := $(shell git describe --exact-match >/dev/null 2>&1 || git rev-parse --short HEAD)
 LDFLAGS="-X github.com/molecula/featurebase/v2.Version=$(VERSION) -X github.com/molecula/featurebase/v2.BuildTime=$(BUILD_TIME) -X github.com/molecula/featurebase/v2.Variant=$(VARIANT) -X github.com/molecula/featurebase/v2.Commit=$(COMMIT) -X github.com/molecula/featurebase/v2.TrialDeadline=$(TRIAL_DEADLINE)"
-GO_VERSION=1.16.3
+GO_VERSION=1.16.10
 DOCKER_BUILD= # set to 1 to use `docker-build` instead of `build` when creating a release
 BUILD_TAGS += shardwidth$(SHARD_WIDTH)
 TEST_TAGS = roaringparanoia
-define LICENSE_HASH_CODE
-    head -13 $1 | sed -e 's/Copyright 20[0-9][0-9]/Copyright 20XX/' -e 's/Pilosa Corp\./Molecula Corp./' | shasum | cut -f 1 -d " "
-endef
-LICENSE_HASH=$(shell $(call LICENSE_HASH_CODE, pilosa.go))
 UNAME := $(shell uname -s)
 ifeq ($(UNAME), Darwin)
     IS_MACOS:=1
@@ -104,9 +100,18 @@ build:
 # Create a single release build under the build directory
 release-build:
 	$(MAKE) $(if $(DOCKER_BUILD),docker-)build FLAGS="-o build/featurebase-$(VERSION_ID)/featurebase"
-	cp NOTICE README.md LICENSE build/featurebase$(VERSION_ID)
+	cp NOTICE install/featurebase.conf install/featurebase*.service build/featurebase-$(VERSION_ID)
 	tar -cvz -C build -f build/featurebase-$(VERSION_ID).tar.gz featurebase-$(VERSION_ID)/
 	@echo Created release build: build/featurebase-$(VERSION_ID).tar.gz
+
+test-release-build: docker-build
+	mv build/featurebase-$(VERSION_ID).tar.gz install/
+	cd install && docker build -t featurebase:test_installation \
+		-f test_installation.Dockerfile \
+		--build-arg release_tarball=featurebase-$(VERSION_ID).tar.gz .
+	mv install/featurebase-$(VERSION_ID).tar.gz build/
+	docker run -it -v /sys/fs/cgroup:/sys/fs/cgroup:ro \
+		featurebase:test_installation
 
 # Error out if there are untracked changes in Git
 check-clean:
@@ -220,7 +225,7 @@ docker-build: vendor
 	docker create --name featurebase-build featurebase:build
 	mkdir -p build/featurebase-$(VERSION_ID)
 	docker cp featurebase-build:/pilosa/build/. ./build/featurebase-$(VERSION_ID)
-	cp NOTICE LICENSE ./build/featurebase-$(VERSION_ID)
+	cp NOTICE install/featurebase.conf install/featurebase*.service ./build/featurebase-$(VERSION_ID)
 	docker rm featurebase-build
 	tar -cvz -C build -f build/featurebase-$(VERSION_ID).tar.gz featurebase-$(VERSION_ID)/
 
@@ -303,12 +308,6 @@ gometalinter: require-gometalinter vendor
 	    --exclude "^internal/.*\.pb\.go" \
 	    --exclude "^pql/pql.peg.go" \
 	    ./...
-
-# Verify that all Go files have license header
-check-license-headers: SHELL:=/bin/bash
-check-license-headers:
-	@! find . -path ./vendor -prune -o -name '*.go' -print | grep -v -F -f license.exceptions | while read fn;\
-	    do [[ `$(call LICENSE_HASH_CODE, $$fn)` == $(LICENSE_HASH) ]] || echo $$fn; done | grep '.'
 
 ######################
 # Build dependencies #
