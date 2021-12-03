@@ -610,6 +610,9 @@ func lookupAddr(ctx context.Context, resolver *net.Resolver, host string) (strin
 }
 
 func (c *Config) ValidateAuth() ([]error, error) {
+        if !c.Auth.Enable {
+               return []error{}, nil
+        }
 	authConfig := map[string]string{
 		"ClientId":         c.Auth.ClientId,
 		"ClientSecret":     c.Auth.ClientSecret,
