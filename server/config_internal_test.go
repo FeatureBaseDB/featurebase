@@ -462,14 +462,7 @@ func TestConfig_validateAuth(t *testing.T) {
 		},
 		{
 			// Auth disabled, all configs are set to empty string
-			[]string{
-				errorMesgEmpty,
-				errorMesgEmpty,
-				errorMesgEmpty,
-				errorMesgEmpty,
-				errorMesgEmpty,
-				errorMesgEmpty,
-			},
+			[]string{},
 			auth.Auth{
 				Enable:           disable,
 				ClientId:         emptyString,
