@@ -616,6 +616,7 @@ func (c *Config) ValidateAuth() ([]error, error) {
 		"AuthorizeURL":     c.Auth.AuthorizeURL,
 		"TokenURL":         c.Auth.TokenURL,
 		"GroupEndpointURL": c.Auth.GroupEndpointURL,
+		"ScopeURL":         c.Auth.ScopeURL,
 	}
 
 	errors := make([]error, 0)

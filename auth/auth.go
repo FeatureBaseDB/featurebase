@@ -32,4 +32,7 @@ type Auth struct {
 
 	// Group Endpoint URL
 	GroupEndpointURL string `toml:"group-endpoint-url"`
+
+	// Scope URL
+	ScopeURL string `toml:"scope-url"`
 }

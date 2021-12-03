@@ -315,6 +315,7 @@ func TestConfig_validateAuth(t *testing.T) {
 				errorMesgEmpty,
 				errorMesgEmpty,
 				errorMesgEmpty,
+				errorMesgEmpty,
 			},
 			auth.Auth{
 				Enable:           enable,
@@ -323,6 +324,45 @@ func TestConfig_validateAuth(t *testing.T) {
 				AuthorizeURL:     emptyString,
 				TokenURL:         emptyString,
 				GroupEndpointURL: emptyString,
+				ScopeURL:         emptyString,
+			},
+		},
+		{
+			// Auth enabled, some configs are set to empty string
+			[]string{
+				errorMesgEmpty,
+				errorMesgEmpty,
+				errorMesgEmpty,
+				errorMesgEmpty,
+				errorMesgEmpty,
+			},
+			auth.Auth{
+				Enable:           enable,
+				ClientId:         validClientID,
+				ClientSecret:     emptyString,
+				AuthorizeURL:     emptyString,
+				TokenURL:         emptyString,
+				GroupEndpointURL: emptyString,
+				ScopeURL:         emptyString,
+			},
+		},
+		{
+			// Auth enabled, some configs are set to empty string
+			[]string{
+				errorMesgEmpty,
+				errorMesgEmpty,
+				errorMesgEmpty,
+				errorMesgEmpty,
+				errorMesgEmpty,
+			},
+			auth.Auth{
+				Enable:           enable,
+				ClientId:         emptyString,
+				ClientSecret:     validClientSecret,
+				AuthorizeURL:     emptyString,
+				TokenURL:         emptyString,
+				GroupEndpointURL: emptyString,
+				ScopeURL:         emptyString,
 			},
 		},
 		{
@@ -336,48 +376,17 @@ func TestConfig_validateAuth(t *testing.T) {
 			auth.Auth{
 				Enable:           enable,
 				ClientId:         validClientID,
-				ClientSecret:     emptyString,
-				AuthorizeURL:     emptyString,
-				TokenURL:         emptyString,
-				GroupEndpointURL: emptyString,
-			},
-		},
-		{
-			// Auth enabled, some configs are set to empty string
-			[]string{
-				errorMesgEmpty,
-				errorMesgEmpty,
-				errorMesgEmpty,
-				errorMesgEmpty,
-			},
-			auth.Auth{
-				Enable:           enable,
-				ClientId:         emptyString,
 				ClientSecret:     validClientSecret,
 				AuthorizeURL:     emptyString,
 				TokenURL:         emptyString,
 				GroupEndpointURL: emptyString,
+				ScopeURL:         emptyString,
 			},
 		},
 		{
 			// Auth enabled, some configs are set to empty string
 			[]string{
 				errorMesgEmpty,
-				errorMesgEmpty,
-				errorMesgEmpty,
-			},
-			auth.Auth{
-				Enable:           enable,
-				ClientId:         validClientID,
-				ClientSecret:     validClientSecret,
-				AuthorizeURL:     emptyString,
-				TokenURL:         emptyString,
-				GroupEndpointURL: emptyString,
-			},
-		},
-		{
-			// Auth enabled, some configs are set to empty string
-			[]string{
 				errorMesgEmpty,
 				errorMesgEmpty,
 			},
@@ -388,11 +397,13 @@ func TestConfig_validateAuth(t *testing.T) {
 				AuthorizeURL:     validTestURL,
 				TokenURL:         emptyString,
 				GroupEndpointURL: emptyString,
+				ScopeURL:         emptyString,
 			},
 		},
 		{
 			// Auth enabled, some configs are set to empty string
 			[]string{
+				errorMesgEmpty,
 				errorMesgEmpty,
 			},
 			auth.Auth{
@@ -402,10 +413,11 @@ func TestConfig_validateAuth(t *testing.T) {
 				AuthorizeURL:     validTestURL,
 				TokenURL:         validTestURL,
 				GroupEndpointURL: emptyString,
+				ScopeURL:         emptyString,
 			},
 		},
 		{
-			// Auth enabled,
+			// Auth enabled, some strings are set to invalid URL
 			[]string{
 				errorMesgURL,
 			},
@@ -416,9 +428,11 @@ func TestConfig_validateAuth(t *testing.T) {
 				AuthorizeURL:     notValidURL,
 				TokenURL:         validTestURL,
 				GroupEndpointURL: validTestURL,
+				ScopeURL:         validTestURL,
 			},
 		},
 		{
+			// Auth enabled, some strings are set to invalid URL
 			[]string{
 				errorMesgURL,
 				errorMesgURL,
@@ -430,23 +444,11 @@ func TestConfig_validateAuth(t *testing.T) {
 				AuthorizeURL:     validTestURL,
 				TokenURL:         notValidURL,
 				GroupEndpointURL: notValidURL,
+				ScopeURL:         validTestURL,
 			},
 		},
 		{
-			[]string{
-				errorMesgEmpty,
-				errorMesgURL,
-			},
-			auth.Auth{
-				Enable:           enable,
-				ClientId:         validClientID,
-				ClientSecret:     emptyString,
-				AuthorizeURL:     validTestURL,
-				TokenURL:         validTestURL,
-				GroupEndpointURL: notValidURL,
-			},
-		},
-		{
+			// Auth enabled, all configs are set properly
 			[]string{},
 			auth.Auth{
 				Enable:           enable,
@@ -455,10 +457,13 @@ func TestConfig_validateAuth(t *testing.T) {
 				AuthorizeURL:     validTestURL,
 				TokenURL:         validTestURL,
 				GroupEndpointURL: validTestURL,
+				ScopeURL:         validTestURL,
 			},
 		},
 		{
+			// Auth disabled, all configs are set to empty string
 			[]string{
+				errorMesgEmpty,
 				errorMesgEmpty,
 				errorMesgEmpty,
 				errorMesgEmpty,
@@ -472,6 +477,7 @@ func TestConfig_validateAuth(t *testing.T) {
 				AuthorizeURL:     emptyString,
 				TokenURL:         emptyString,
 				GroupEndpointURL: emptyString,
+				ScopeURL:         emptyString,
 			},
 		},
 	}
