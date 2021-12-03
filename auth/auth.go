@@ -14,22 +14,22 @@
 
 package auth
 
-type AUTH struct {
-	ClientId         string
-	ClientSecret     string
-	AuthorizeURL     string
-	TokenURL         string
-	GroupEndpointURL string
-}
+type Auth struct {
+	// Enable AuthZ/AuthN for featurebase server
+	Enable bool `toml:"enable"`
 
-func NewAuth(ClientId, ClientSecret, AuthorizeURL, TokenURL, GroupEndpointURL string) AUTH {
-	a := AUTH{
-		ClientId:         ClientId,
-		ClientSecret:     ClientSecret,
-		AuthorizeURL:     AuthorizeURL,
-		TokenURL:         TokenURL,
-		GroupEndpointURL: GroupEndpointURL,
-	}
+	// Application/Client ID
+	ClientId string `toml:"client-id"`
 
-	return a
+	// Client Secret
+	ClientSecret string `toml:"client-secret"`
+
+	// Authorize URL
+	AuthorizeURL string `toml:"authorize-url"`
+
+	// Token URL
+	TokenURL string `toml:"token-url"`
+
+	// Group Endpoint URL
+	GroupEndpointURL string `toml:"group-endpoint-url"`
 }

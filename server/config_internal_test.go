@@ -21,6 +21,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/molecula/featurebase/v2/auth"
 )
 
 type addrs struct{ bind, advertise string }
@@ -289,15 +291,6 @@ func TestConfig_validateAddrsGRPC(t *testing.T) {
 	}
 }
 
-type params struct {
-	enable           bool
-	clientId         string
-	clientSecret     string
-	authorizeURL     string
-	tokenURL         string
-	groupEndpointURL string
-}
-
 func TestConfig_validateAuth(t *testing.T) {
 	errorMesgEmpty := "Empty string"
 	errorMesgURL := "Invalid URL"
@@ -310,43 +303,200 @@ func TestConfig_validateAuth(t *testing.T) {
 	disable := false
 
 	tests := []struct {
-		expErr string
-		input  params
+		expErrs []string
+		input   auth.Auth
 	}{
-		{errorMesgEmpty, params{enable, emptyString, emptyString, emptyString, emptyString, emptyString}},
-		{errorMesgEmpty, params{enable, validClientID, emptyString, emptyString, emptyString, emptyString}},
-		{errorMesgEmpty, params{enable, emptyString, validClientSecret, emptyString, emptyString, emptyString}},
-		{errorMesgEmpty, params{enable, validClientID, validClientSecret, emptyString, emptyString, emptyString}},
-		{errorMesgEmpty, params{enable, validClientID, validClientSecret, validTestURL, emptyString, emptyString}},
-		{errorMesgEmpty, params{enable, validClientID, validClientSecret, validTestURL, validTestURL, emptyString}},
-		{errorMesgURL, params{enable, validClientID, validClientSecret, notValidURL, validTestURL, validTestURL}},
-		{errorMesgURL, params{enable, validClientID, validClientSecret, validTestURL, notValidURL, emptyString}},
-		{errorMesgURL, params{enable, validClientID, validClientSecret, validTestURL, validTestURL, notValidURL}},
-		{emptyString, params{enable, validClientID, validClientSecret, validTestURL, validTestURL, validTestURL}},
-		{errorMesgEmpty, params{disable, emptyString, emptyString, emptyString, emptyString, emptyString}},
+
+		{
+			// Auth enabled, all configs are set to empty string
+			[]string{
+				errorMesgEmpty,
+				errorMesgEmpty,
+				errorMesgEmpty,
+				errorMesgEmpty,
+				errorMesgEmpty,
+			},
+			auth.Auth{
+				Enable:           enable,
+				ClientId:         emptyString,
+				ClientSecret:     emptyString,
+				AuthorizeURL:     emptyString,
+				TokenURL:         emptyString,
+				GroupEndpointURL: emptyString,
+			},
+		},
+		{
+			// Auth enabled, some configs are set to empty string
+			[]string{
+				errorMesgEmpty,
+				errorMesgEmpty,
+				errorMesgEmpty,
+				errorMesgEmpty,
+			},
+			auth.Auth{
+				Enable:           enable,
+				ClientId:         validClientID,
+				ClientSecret:     emptyString,
+				AuthorizeURL:     emptyString,
+				TokenURL:         emptyString,
+				GroupEndpointURL: emptyString,
+			},
+		},
+		{
+			// Auth enabled, some configs are set to empty string
+			[]string{
+				errorMesgEmpty,
+				errorMesgEmpty,
+				errorMesgEmpty,
+				errorMesgEmpty,
+			},
+			auth.Auth{
+				Enable:           enable,
+				ClientId:         emptyString,
+				ClientSecret:     validClientSecret,
+				AuthorizeURL:     emptyString,
+				TokenURL:         emptyString,
+				GroupEndpointURL: emptyString,
+			},
+		},
+		{
+			// Auth enabled, some configs are set to empty string
+			[]string{
+				errorMesgEmpty,
+				errorMesgEmpty,
+				errorMesgEmpty,
+			},
+			auth.Auth{
+				Enable:           enable,
+				ClientId:         validClientID,
+				ClientSecret:     validClientSecret,
+				AuthorizeURL:     emptyString,
+				TokenURL:         emptyString,
+				GroupEndpointURL: emptyString,
+			},
+		},
+		{
+			// Auth enabled, some configs are set to empty string
+			[]string{
+				errorMesgEmpty,
+				errorMesgEmpty,
+			},
+			auth.Auth{
+				Enable:           enable,
+				ClientId:         validClientID,
+				ClientSecret:     validClientSecret,
+				AuthorizeURL:     validTestURL,
+				TokenURL:         emptyString,
+				GroupEndpointURL: emptyString,
+			},
+		},
+		{
+			// Auth enabled, some configs are set to empty string
+			[]string{
+				errorMesgEmpty,
+			},
+			auth.Auth{
+				Enable:           enable,
+				ClientId:         validClientID,
+				ClientSecret:     validClientSecret,
+				AuthorizeURL:     validTestURL,
+				TokenURL:         validTestURL,
+				GroupEndpointURL: emptyString,
+			},
+		},
+		{
+			// Auth enabled,
+			[]string{
+				errorMesgURL,
+			},
+			auth.Auth{
+				Enable:           enable,
+				ClientId:         validClientID,
+				ClientSecret:     validClientSecret,
+				AuthorizeURL:     notValidURL,
+				TokenURL:         validTestURL,
+				GroupEndpointURL: validTestURL,
+			},
+		},
+		{
+			[]string{
+				errorMesgURL,
+				errorMesgURL,
+			},
+			auth.Auth{
+				Enable:           enable,
+				ClientId:         validClientID,
+				ClientSecret:     validClientSecret,
+				AuthorizeURL:     validTestURL,
+				TokenURL:         notValidURL,
+				GroupEndpointURL: notValidURL,
+			},
+		},
+		{
+			[]string{
+				errorMesgEmpty,
+				errorMesgURL,
+			},
+			auth.Auth{
+				Enable:           enable,
+				ClientId:         validClientID,
+				ClientSecret:     emptyString,
+				AuthorizeURL:     validTestURL,
+				TokenURL:         validTestURL,
+				GroupEndpointURL: notValidURL,
+			},
+		},
+		{
+			[]string{},
+			auth.Auth{
+				Enable:           enable,
+				ClientId:         validClientID,
+				ClientSecret:     validClientSecret,
+				AuthorizeURL:     validTestURL,
+				TokenURL:         validTestURL,
+				GroupEndpointURL: validTestURL,
+			},
+		},
+		{
+			[]string{
+				errorMesgEmpty,
+				errorMesgEmpty,
+				errorMesgEmpty,
+				errorMesgEmpty,
+				errorMesgEmpty,
+			},
+			auth.Auth{
+				Enable:           disable,
+				ClientId:         emptyString,
+				ClientSecret:     emptyString,
+				AuthorizeURL:     emptyString,
+				TokenURL:         emptyString,
+				GroupEndpointURL: emptyString,
+			},
+		},
 	}
 
 	for i, test := range tests {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
 			c := NewConfig()
-			c.Auth.Enable = test.input.enable
-			c.Auth.ClientId = test.input.clientId
-			c.Auth.ClientSecret = test.input.clientSecret
-			c.Auth.AuthorizeURL = test.input.authorizeURL
-			c.Auth.TokenURL = test.input.tokenURL
-			c.Auth.GroupEndpointURL = test.input.groupEndpointURL
+			c.Auth = test.input
 
-			err := c.ValidateAuth()
-
-			if err != nil && test.expErr == "" {
-				t.Fatal(err)
-			} else if err == nil && test.expErr != "" {
-				t.Fatalf("expected error string to contain %s, but got no error", test.expErr)
-			} else if err != nil && test.expErr != "" {
-				if !strings.Contains(err.Error(), test.expErr) {
-					t.Fatalf("expected error string to contain %s, but got %s", test.expErr, err.Error())
+			errors, err := c.ValidateAuth()
+			if len(test.expErrs) > 0 {
+				if err == nil {
+					t.Fatal("expected errors, but none were found")
 				}
-				return
+			}
+
+			if len(errors) != len(test.expErrs) {
+				fmt.Printf("%+v\n", errors)
+				t.Fatalf("expected %v errors but got %v", len(test.expErrs), len(errors))
+			}
+
+			for i, e := range errors {
+				if !strings.Contains(e.Error(), test.expErrs[i]) {
+					t.Errorf("expected error to contain %s, but got %s", test.expErrs[i], e.Error())
+				}
 			}
 		})
 	}
