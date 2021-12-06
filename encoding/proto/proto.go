@@ -560,6 +560,9 @@ func (s Serializer) encodeQueryResponse(m *pilosa.QueryResponse) *pb.QueryRespon
 		case []*pilosa.Row:
 			resp.Results[i].Type = queryResultTypeRowMatrix
 			resp.Results[i].RowMatrix = s.encodeRowMatrix(result)
+		case pilosa.DistinctTimestamp:
+			resp.Results[i].Type = queryResultTypeDistinctTimestamp
+			resp.Results[i].DistinctTimestamp = s.encodeDistinctTimestamp(result)
 		case nil:
 			resp.Results[i].Type = queryResultTypeNil
 		default:
@@ -1380,6 +1383,13 @@ func (s Serializer) decodeRowMatrix(pb *pb.RowMatrix) []*pilosa.Row {
 	return rows
 }
 
+func (s Serializer) decodeDistinctTimestamp(pb *pb.DistinctTimestamp) pilosa.DistinctTimestamp {
+	return pilosa.DistinctTimestamp{
+		Values: pb.Values,
+		Name:   pb.Name,
+	}
+}
+
 func decodeTransaction(pb *pb.Transaction, trns *pilosa.Transaction) {
 	trns.ID = pb.ID
 	trns.Active = pb.Active
@@ -1407,6 +1417,7 @@ const (
 	queryResultTypeSignedRow
 	queryResultTypeExtractedIDMatrix
 	queryResultTypeExtractedTable
+	queryResultTypeDistinctTimestamp
 )
 
 func (s Serializer) decodeQueryResult(pb *pb.QueryResult) interface{} {
@@ -1443,6 +1454,8 @@ func (s Serializer) decodeQueryResult(pb *pb.QueryResult) interface{} {
 		return s.decodeExtractedTable(pb.ExtractedTable)
 	case queryResultTypeRowMatrix:
 		return s.decodeRowMatrix(pb.RowMatrix)
+	case queryResultTypeDistinctTimestamp:
+		return s.decodeDistinctTimestamp(pb.DistinctTimestamp)
 	}
 	panic(fmt.Sprintf("unknown type: %d", pb.Type))
 }
@@ -1691,6 +1704,13 @@ func (s Serializer) encodeRowIdentifiers(r pilosa.RowIdentifiers) *pb.RowIdentif
 	return &pb.RowIdentifiers{
 		Rows: r.Rows,
 		Keys: r.Keys,
+	}
+}
+
+func (s Serializer) encodeDistinctTimestamp(d pilosa.DistinctTimestamp) *pb.DistinctTimestamp {
+	return &pb.DistinctTimestamp{
+		Values: d.Values,
+		Name:   d.Name,
 	}
 }
 
