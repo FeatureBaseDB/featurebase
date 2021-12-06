@@ -6756,11 +6756,9 @@ func TestExecutor_Execute_CountDistinct(t *testing.T) {
 	})
 }
 
-func TestExecutor_Execute_CountDistinctTimestamp(t *testing.T) {
+func variousQueriesCountDistinctTimestamp(t *testing.T, c *test.Cluster) {
 	index := "test_index"
 	field := "ts"
-	c := test.MustRunCluster(t, 1)
-	defer c.Close()
 
 	// create an index and timestamp field
 	c.CreateField(t, index, pilosa.IndexOptions{}, field, pilosa.OptFieldTypeTimestamp(time.Unix(0, 0), "s"))
@@ -6773,7 +6771,7 @@ func TestExecutor_Execute_CountDistinctTimestamp(t *testing.T) {
 
 	// query the Count of Distinct vals in field ts
 	count := c.Query(t, index, "Count(Distinct(field=ts))").Results[0]
-	if count != len(data) {
+	if count != uint64(len(data)) {
 		t.Fatalf("expected %v got %v", len(data), count)
 	}
 
@@ -7035,10 +7033,10 @@ func TestVariousQueries(t *testing.T) {
 		t.Run(fmt.Sprintf("%d-node", clusterSize), func(t *testing.T) {
 			c := test.MustRunCluster(t, clusterSize)
 			defer c.Close()
-
 			variousQueries(t, c)
 			variousQueriesOnTimeFields(t, c)
 			variousQueriesOnPercentiles(t, c)
+			variousQueriesCountDistinctTimestamp(t, c)
 		})
 	}
 }
