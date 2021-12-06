@@ -14,6 +14,8 @@
 
 package testhook
 
+//TODO: Check() and FinalCheck() should return error as the last argument
+
 import (
 	"fmt"
 	"reflect"

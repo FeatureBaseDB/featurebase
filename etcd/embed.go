@@ -555,7 +555,7 @@ func (e *Etcd) deleteNodeData(key []byte, revision int64) error {
 		e.knownNodes[peerID].resizeState = ""
 		e.nodeStatesDirty = true
 	default:
-		return fmt.Errorf("node watch: invalid prefix %q\n", prefix)
+		return fmt.Errorf("node watch: invalid prefix %q", prefix)
 	}
 	return nil
 }
@@ -586,7 +586,7 @@ func (e *Etcd) putNodeData(key []byte, value []byte, revision int64) (err error)
 		var newNode topology.Node
 		err := json.Unmarshal(value, &newNode)
 		if err != nil {
-			return fmt.Errorf("json unmarshal of node metadata: %v\n", err)
+			return fmt.Errorf("json unmarshal of node metadata: %v", err)
 		}
 		e.knownNodes[peerID].topologyNode = &newNode
 		// This saves us one remake of the node later, probably.
@@ -599,7 +599,7 @@ func (e *Etcd) putNodeData(key []byte, value []byte, revision int64) (err error)
 		e.knownNodes[peerID].resizeState = string(value)
 		e.nodeStatesDirty = true
 	default:
-		return fmt.Errorf("node watch: invalid prefix %q\n", prefix)
+		return fmt.Errorf("node watch: invalid prefix %q", prefix)
 	}
 	return nil
 }

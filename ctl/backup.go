@@ -103,7 +103,7 @@ func (cmd *BackupCommand) Run(ctx context.Context) (err error) {
 			}
 		}
 		if len(indexes) <= 0 {
-			return fmt.Errorf("Index not found to back up")
+			return fmt.Errorf("index not found to back up")
 		}
 	}
 

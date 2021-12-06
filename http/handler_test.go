@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"net"
 	gohttp "net/http"
+	"strings"
 	"testing"
 
 	pilosa "github.com/molecula/featurebase/v2"
@@ -167,6 +168,115 @@ func TestIngestSchemaHandler(t *testing.T) {
 	schemaURL := fmt.Sprintf("%s/internal/schema", m.URL())
 	resp := test.Do(t, "POST", schemaURL, string(schema))
 	if resp.StatusCode != gohttp.StatusOK {
-		t.Errorf("invalid  status: %d, body=%s", resp.StatusCode, resp.Body)
+		t.Errorf("invalid status: %d, body=%s", resp.StatusCode, resp.Body)
+	}
+	// now, try again, expecting a failure:
+	resp = test.Do(t, "POST", schemaURL, string(schema))
+	if resp.StatusCode != gohttp.StatusConflict {
+		t.Errorf("invalid status: expected 409, got %d, body=%s", resp.StatusCode, resp.Body)
+	}
+}
+
+func TestTranslationHandlers(t *testing.T) {
+	// reusable data for the tests
+	nameBytes, err := json.Marshal([]string{"a", "b", "c"})
+	if err != nil {
+		t.Fatalf("marshalling json: %v", err)
+	}
+	names := string(nameBytes)
+
+	c := test.MustRunCluster(t, 1)
+	defer c.Close()
+
+	schema := `
+{
+   "index-name": "example",
+   "primary-key-type": "string",
+   "index-action": "create",
+   "fields": [
+       {
+           "field-name": "stringset",
+           "field-type": "string",
+           "field-options": {
+				"cache-type": "ranked",
+           		"cache-size": 100000
+           }
+       }
+   ]
+}
+`
+	m := c.GetPrimary()
+	schemaURL := fmt.Sprintf("%s/internal/schema", m.URL())
+	resp := test.Do(t, "POST", schemaURL, string(schema))
+	if resp.StatusCode != gohttp.StatusOK {
+		t.Errorf("invalid status: %d, body=%s", resp.StatusCode, resp.Body)
+	}
+	baseURLs := []string{
+		fmt.Sprintf("%s/internal/translate/index/example/", m.URL()),
+		fmt.Sprintf("%s/internal/translate/field/example/stringset/", m.URL()),
+		fmt.Sprintf("%s/internal/translate/field/example/nonexistent/", m.URL()),
+	}
+	for _, url := range baseURLs {
+		expectFailure := strings.HasSuffix(url, "/nonexistent/")
+		createURL := url + "keys/create"
+		findURL := url + "keys/find"
+		var results map[string]uint64
+
+		if expectFailure {
+			resp := test.Do(t, "POST", findURL, names)
+			if resp.StatusCode != gohttp.StatusInternalServerError {
+				t.Fatalf("invalid status: %d, body=%s", resp.StatusCode, resp.Body)
+			}
+			resp = test.Do(t, "POST", createURL, names)
+			if resp.StatusCode != gohttp.StatusInternalServerError {
+				t.Fatalf("invalid status: %d, body=%s", resp.StatusCode, resp.Body)
+			}
+			continue
+		}
+
+		// try to find them when they don't exist
+		resp := test.Do(t, "POST", findURL, names)
+		if resp.StatusCode != gohttp.StatusOK {
+			t.Fatalf("invalid status: %d, body=%s", resp.StatusCode, resp.Body)
+		}
+		err := json.Unmarshal([]byte(resp.Body), &results)
+		if err != nil {
+			t.Fatalf("unmarshalling result: %v", err)
+		}
+		if len(results) != 0 {
+			t.Fatalf("finding keys before any were set: expected no results, got %d (%q)", len(results), results)
+		}
+
+		// try to create them, but malformed, so we expect an error
+		resp = test.Do(t, "POST", createURL, names[:6])
+		if resp.StatusCode != gohttp.StatusBadRequest {
+			t.Fatalf("invalid status: expected 400, got %d, body=%s", resp.StatusCode, resp.Body)
+		}
+
+		// try to create them
+		resp = test.Do(t, "POST", createURL, names)
+		if resp.StatusCode != gohttp.StatusOK {
+			t.Fatalf("invalid status: %d, body=%s", resp.StatusCode, resp.Body)
+		}
+		err = json.Unmarshal([]byte(resp.Body), &results)
+		if err != nil {
+			t.Fatalf("unmarshalling result: %v", err)
+		}
+		if len(results) != 3 {
+			t.Fatalf("finding keys before any were set: expected 3 results, got %d (%q)", len(results), results)
+		}
+
+		// try to find them now that they exist
+		resp = test.Do(t, "POST", findURL, names)
+		if resp.StatusCode != gohttp.StatusOK {
+			t.Fatalf("invalid status: %d, body=%s", resp.StatusCode, resp.Body)
+		}
+		err = json.Unmarshal([]byte(resp.Body), &results)
+		if err != nil {
+			t.Fatalf("unmarshalling result: %v", err)
+		}
+		if len(results) != 3 {
+			t.Fatalf("finding keys before any were set: expected 3 results, got %d (%q)", len(results), results)
+		}
 	}
 }

@@ -35,7 +35,6 @@ import (
 	"github.com/molecula/featurebase/v2/pb"
 	"github.com/molecula/featurebase/v2/pql"
 	"github.com/molecula/featurebase/v2/vprint"
-	. "github.com/molecula/featurebase/v2/vprint" // nolint:staticcheck
 	"github.com/pkg/errors"
 	vegeta "github.com/tsenart/vegeta/v12/lib"
 )
@@ -332,7 +331,7 @@ func (cfg *RandomQueryConfig) Setup(api API) (err error) {
 					pql := fmt.Sprintf("Rows(%v)", fld.Name)
 
 					res, err := api.Query(ctx, ii.Name, &pilosa.QueryRequest{Index: ii.Name, Query: pql})
-					PanicOn(err)
+					vprint.PanicOn(err)
 					switch x := res.Results[0].(type) {
 					case *pilosa.RowIdentifiers:
 						cfg.AddResponse(ii.Name, fld.Name, x, fld.Options.Type == "time", fld.Options.Type == "set")
@@ -345,7 +344,7 @@ func (cfg *RandomQueryConfig) Setup(api API) (err error) {
 				case "decimal":
 					cfg.AddIntField(ii.Name, fld.Name, fld.Options.Min, fld.Options.Max, fld.Options.Scale, fld.Options.Type == "decimal")
 				default:
-					AlwaysPrintf("ignoring field %q: unhandled type %q\n", fld.Name, fld.Options.Type)
+					vprint.AlwaysPrintf("ignoring field %q: unhandled type %q\n", fld.Name, fld.Options.Type)
 				}
 			}
 		}
@@ -495,7 +494,7 @@ func (cfg *RandomQueryConfig) GenQuery(index string) (pql string, err error) {
 				key = fmt.Sprintf(`%v="%v"`, fr.Field, fr.RowKey)
 				c := strings.LastIndex(fr.RowKey, "_")
 				n, err := strconv.Atoi(fr.RowKey[c+1:])
-				PanicOn(err)
+				vprint.PanicOn(err)
 				n += 1
 				fr.RowKey = fmt.Sprintf("%v%v", fr.RowKey[:c+1], n)
 			} else {

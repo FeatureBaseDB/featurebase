@@ -586,7 +586,7 @@ func (c *Call) CheckCallInfo() error {
 			case string, int64:
 				continue
 			default:
-				return fmt.Errorf("'%s': arg '%s' needed a string or integer value, got %T.",
+				return fmt.Errorf("'%s': arg '%s' needed a string or integer value, got %T",
 					c.String(), k, v)
 			}
 		}

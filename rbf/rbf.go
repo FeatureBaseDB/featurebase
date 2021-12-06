@@ -30,7 +30,7 @@ import (
 	"github.com/benbjohnson/immutable"
 	"github.com/molecula/featurebase/v2/roaring"
 	"github.com/molecula/featurebase/v2/shardwidth"
-	. "github.com/molecula/featurebase/v2/vprint"
+	"github.com/molecula/featurebase/v2/vprint"
 )
 
 const (
@@ -356,7 +356,7 @@ func (c *leafCell) Bitmap(tx *Tx) []uint64 {
 		_, bm, _ := tx.leafCellBitmap(toPgno(c.Data))
 		return bm
 	default:
-		PanicOn(fmt.Errorf("invalid container type: %d", c.Type))
+		vprint.PanicOn(fmt.Errorf("invalid container type: %d", c.Type))
 	}
 	return nil
 }
@@ -383,7 +383,7 @@ func (c *leafCell) Values(tx *Tx) []uint16 {
 	case ContainerTypeNone:
 		return []uint16{}
 	default:
-		PanicOn(fmt.Errorf("invalid container type: %d", c.Type))
+		vprint.PanicOn(fmt.Errorf("invalid container type: %d", c.Type))
 	}
 	return nil
 }
@@ -411,7 +411,7 @@ func (c *leafCell) firstValue(tx *Tx) uint16 {
 		return r[0].Start
 	case ContainerTypeBitmapPtr:
 		_, slc, err := tx.leafCellBitmap(toPgno(c.Data))
-		PanicOn(err)
+		vprint.PanicOn(err)
 		for i, v := range slc {
 			for j := uint(0); j < 64; j++ {
 				if v&(1<<j) != 0 {
@@ -419,9 +419,9 @@ func (c *leafCell) firstValue(tx *Tx) uint16 {
 				}
 			}
 		}
-		PanicOn(fmt.Errorf("rbf.leafCell.firstValue(): no values set in bitmap container: key=%d", c.Key))
+		vprint.PanicOn(fmt.Errorf("rbf.leafCell.firstValue(): no values set in bitmap container: key=%d", c.Key))
 	default:
-		PanicOn(fmt.Errorf("invalid container type: %d", c.Type))
+		vprint.PanicOn(fmt.Errorf("invalid container type: %d", c.Type))
 	}
 
 	return 0
@@ -436,7 +436,7 @@ func (c *leafCell) lastValueFromBitmap(a []uint64) uint16 {
 			}
 		}
 	}
-	PanicOn(fmt.Errorf("rbf.leafCell.lastValueFromBitmap(): no values set in bitmap container: key=%d", c.Key))
+	vprint.PanicOn(fmt.Errorf("rbf.leafCell.lastValueFromBitmap(): no values set in bitmap container: key=%d", c.Key))
 	return 0
 }
 
@@ -456,10 +456,10 @@ func (c *leafCell) lastValue(tx *Tx) uint16 {
 
 	case ContainerTypeBitmapPtr:
 		_, a, err := tx.leafCellBitmap(toPgno(c.Data))
-		PanicOn(err)
+		vprint.PanicOn(err)
 		return c.lastValueFromBitmap(a)
 	default:
-		PanicOn(fmt.Errorf("invalid container type: %d", c.Type))
+		vprint.PanicOn(fmt.Errorf("invalid container type: %d", c.Type))
 	}
 	return 0
 }
@@ -483,10 +483,10 @@ func (c *leafCell) countRange(tx *Tx, start, end int32) (n int) {
 		return int(roaring.BitmapCountRange(toArray64(c.Data), start, end))
 	case ContainerTypeBitmapPtr:
 		_, a, err := tx.leafCellBitmap(toPgno(c.Data))
-		PanicOn(err)
+		vprint.PanicOn(err)
 		return int(roaring.BitmapCountRange(a, start, end))
 	default:
-		PanicOn(fmt.Errorf("invalid container type: %d", c.Type))
+		vprint.PanicOn(fmt.Errorf("invalid container type: %d", c.Type))
 	}
 	return
 }
@@ -567,7 +567,7 @@ func readLeafCellBytesAtOffset(page []byte, offset int) []byte {
 	case ContainerTypeBitmapPtr:
 		return buf[:leafCellHeaderSize+4]
 	default:
-		PanicOn(fmt.Errorf("invalid cell type: %d", typ))
+		vprint.PanicOn(fmt.Errorf("invalid cell type: %d", typ))
 	}
 	return nil
 }
@@ -723,13 +723,13 @@ func Walk(tx *Tx, pgno uint32, v func(uint32, []*RootRecord)) {
 	for pgno := readMetaRootRecordPageNo(tx.meta[:]); pgno != 0; {
 		page, _, err := tx.readPage(pgno)
 		if err != nil {
-			PanicOn(err)
+			vprint.PanicOn(err)
 		}
 
 		// Read all records on the page.
 		a, err := readRootRecords(page)
 		if err != nil {
-			PanicOn(err)
+			vprint.PanicOn(err)
 		}
 		v(pgno, a)
 		// Read next overflow page number.
@@ -739,7 +739,7 @@ func Walk(tx *Tx, pgno uint32, v func(uint32, []*RootRecord)) {
 
 func assert(condition bool) {
 	if !condition {
-		PanicOn(fmt.Errorf("assertion failed"))
+		vprint.PanicOn(fmt.Errorf("assertion failed"))
 	}
 }
 

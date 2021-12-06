@@ -1688,34 +1688,63 @@ func TestExecutor_Execute_SetValue(t *testing.T) {
 
 }
 
-func TestExecutor_Execute_TopK_Set(t *testing.T) {
-	c := test.MustRunCluster(t, 3)
-	defer c.Close()
-
-	// Load some test data into a set field.
-	c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "f")
-	c.ImportBits(t, "i", "f", [][2]uint64{
+func TestExecutor_ExecuteTopK(t *testing.T) {
+	baseBits := [][2]uint64{
 		{0, 0},
-		{0, 1},
 		{0, ShardWidth + 2},
 		{10, 2},
 		{10, ShardWidth},
 		{10, 2 * ShardWidth},
 		{10, ShardWidth + 1},
 		{20, ShardWidth},
-	})
-
-	// Execute query.
-	if result, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `TopK(f, k=2)`}); err != nil {
-		t.Fatal(err)
-	} else if !reflect.DeepEqual(result.Results, []interface{}{&pilosa.PairsField{
-		Pairs: []pilosa.Pair{
-			{ID: 10, Count: 4},
-			{ID: 0, Count: 3},
+	}
+	tests := []struct {
+		fieldName    string
+		fieldOptions []pilosa.FieldOption
+		bits         [][2]uint64
+		query        string
+		result       []pilosa.Pair
+	}{
+		{
+			fieldName: "f",
+			bits:      append(baseBits, [2]uint64{0, 1}),
+			query:     "TopK(f, k=2)",
+			result: []pilosa.Pair{
+				{ID: 10, Count: 4},
+				{ID: 0, Count: 3},
+			},
 		},
-		Field: "f",
-	}}) {
-		t.Fatalf("unexpected result: %s", spew.Sdump(result))
+		{
+			fieldName:    "fmutex",
+			fieldOptions: []pilosa.FieldOption{pilosa.OptFieldTypeMutex(pilosa.CacheTypeRanked, 10)},
+			bits:         baseBits,
+			query:        "TopK(f, k=2)",
+			result: []pilosa.Pair{
+				{ID: 10, Count: 3},
+				{ID: 0, Count: 2},
+			},
+		},
+	}
+	c := test.MustRunCluster(t, 3)
+	defer c.Close()
+
+	for _, tst := range tests {
+		t.Run(tst.fieldName, func(t *testing.T) {
+			pilosa.OptFieldTypeMutex(pilosa.CacheTypeRanked, 10)
+			c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, tst.fieldName)
+			c.ImportBits(t, "i", tst.fieldName, tst.bits)
+			if result, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: tst.query}); err != nil {
+				t.Fatal(err)
+			} else if !reflect.DeepEqual(result.Results, []interface{}{&pilosa.PairsField{
+				Pairs: []pilosa.Pair{
+					{ID: 10, Count: 4},
+					{ID: 0, Count: 3},
+				},
+				Field: "f",
+			}}) {
+				t.Fatalf("unexpected result: %s", spew.Sdump(result))
+			}
+		})
 	}
 }
 
