@@ -168,3 +168,22 @@ func TestEncodeDecodeDistinctTimestamp(t *testing.T) {
 		t.Errorf("failed to encode DistinctTimestamp. expected %v got %v", &pbTime, encoded)
 	}
 }
+
+func TestDecodeQueryResult(t *testing.T) {
+	t.Run("DistinctTimestamp", func(t *testing.T) {
+		pbTime := pb.DistinctTimestamp{
+			Values: []string{"this", "is", "fake", "timestamp", "values"},
+			Name:   "pbtime",
+		}
+		piloTime := pilosa.DistinctTimestamp{
+			Values: []string{"this", "is", "fake", "timestamp", "values"},
+			Name:   "pbtime",
+		}
+		q := &pb.QueryResult{Type: queryResultTypeDistinctTimestamp, DistinctTimestamp: &pbTime}
+		s := Serializer{}
+		decoded := s.decodeQueryResult(q)
+		if !reflect.DeepEqual(decoded, piloTime) {
+			t.Errorf("failed to decode DistinctTimestamp. expected %v got %v", piloTime, decoded)
+		}
+	})
+}
