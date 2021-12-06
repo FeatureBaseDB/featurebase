@@ -6756,6 +6756,29 @@ func TestExecutor_Execute_CountDistinct(t *testing.T) {
 	})
 }
 
+func TestExecutor_Execute_CountDistinctTimestamp(t *testing.T) {
+	index := "test_index"
+	field := "ts"
+	c := test.MustRunCluster(t, 1)
+	defer c.Close()
+
+	// create an index and timestamp field
+	c.CreateField(t, index, pilosa.IndexOptions{}, field, pilosa.OptFieldTypeTimestamp(time.Unix(0, 0), "s"))
+
+	// add some data
+	data := []string{"2010-01-02T12:32:00Z", "2010-04-20T12:32:00Z", "2011-04-20T12:32:00Z"}
+	for i, datum := range data {
+		c.Query(t, index, fmt.Sprintf("Set(%d, ts=\"%s\")", i+10, datum))
+	}
+
+	// query the Count of Distinct vals in field ts
+	count := c.Query(t, index, "Count(Distinct(field=ts))").Results[0]
+	if count != len(data) {
+		t.Fatalf("expected %v got %v", len(data), count)
+	}
+
+}
+
 // Ensure that a top-level, bare distinct on multiple nodes
 // is handled correctly.
 func TestExecutor_BareDistinct(t *testing.T) {
