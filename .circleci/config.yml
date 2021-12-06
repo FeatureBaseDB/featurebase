@@ -292,8 +292,6 @@ workflows:
           filters:
             tags:
               only: /^v.*/
-            branches:
-              only: master
       - publish_release:
           context: molecula
           requires:
