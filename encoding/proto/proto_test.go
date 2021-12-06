@@ -19,8 +19,9 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/molecula/featurebase/v2"
+	pilosa "github.com/molecula/featurebase/v2"
 	"github.com/molecula/featurebase/v2/ingest"
+	"github.com/molecula/featurebase/v2/pb"
 )
 
 func testOneRoundTrip(t *testing.T, s pilosa.Serializer, obj pilosa.Message, expectedMarshalErr error, expectedUnmarshalErr error, expectedMismatchErr error) {
@@ -145,5 +146,25 @@ func TestIngestRoundTrip(t *testing.T) {
 	for _, tc := range shardedIngestRequestTestcases {
 		t.Logf("next case")
 		testOneRoundTrip(t, DefaultSerializer, tc.req, nil, nil, tc.err)
+	}
+}
+
+func TestEncodeDecodeDistinctTimestamp(t *testing.T) {
+	s := Serializer{}
+	pbTime := pb.DistinctTimestamp{
+		Values: []string{"this", "is", "fake", "timestamp", "values"},
+		Name:   "pbtime",
+	}
+	piloTime := pilosa.DistinctTimestamp{
+		Values: []string{"this", "is", "fake", "timestamp", "values"},
+		Name:   "pbtime",
+	}
+	decoded := s.decodeDistinctTimestamp(&pbTime)
+	if !reflect.DeepEqual(decoded, piloTime) {
+		t.Errorf("failed to decode DistinctTimestamp. expected %v got %v", piloTime, decoded)
+	}
+	encoded := s.encodeDistinctTimestamp(piloTime)
+	if !reflect.DeepEqual(encoded, &pbTime) {
+		t.Errorf("failed to encode DistinctTimestamp. expected %v got %v", &pbTime, encoded)
 	}
 }
