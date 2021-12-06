@@ -625,14 +625,14 @@ func (c *Config) ValidateAuth() ([]error, error) {
 	errors := make([]error, 0)
 	for name, value := range authConfig {
 		if value == "" {
-			errors = append(errors, fmt.Errorf("Empty string for auth config %s", name))
+			errors = append(errors, fmt.Errorf("empty string for auth config %s", name))
 			continue
 		}
 
 		if strings.Contains(name, "URL") {
 			_, err := url.ParseRequestURI(value)
 			if err != nil {
-				errors = append(errors, fmt.Errorf("Invalid URL for auth config %s: %s", name, err))
+				errors = append(errors, fmt.Errorf("invalid URL for auth config %s: %s", name, err))
 				continue
 			}
 		}

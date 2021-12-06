@@ -31,16 +31,12 @@ type TestQueryResultWriter struct {
 }
 
 func (t *TestQueryResultWriter) WriteHeader(headers ...pg.ColumnInfo) error {
-	for _, header := range headers {
-		t.Header = append(t.Header, header)
-	}
+	t.Header = append(t.Header, headers...)
 	return nil
 }
 
 func (t *TestQueryResultWriter) WriteRowText(rowTexts ...string) error {
-	for _, rowText := range rowTexts {
-		t.RowText = append(t.RowText, rowText)
-	}
+	t.RowText = append(t.RowText, rowTexts...)
 	return nil
 }
 
