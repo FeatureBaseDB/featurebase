@@ -1,6 +1,7 @@
 package client
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -94,22 +95,39 @@ func TestIngestAPIBatchAdd(t *testing.T) {
 			Values: []interface{}{uint64(2), "bkey", "ckey"},
 			Time:   qt,
 		})
-		if err != nil {
-			t.Fatalf("adding row to batch: %v", err)
+
+		checkResult := func(batch *ingestAPIBatch, id string, err error) {
+			if err != nil {
+				t.Fatalf("adding row to batch: %v", err)
+			}
+
+			if batch.recordsK[id]["a"] != uint64(2) {
+				t.Fatalf("unexpected batch.records: %+v", batch.recordsK)
+			}
+			if batch.recordsK[id]["b"] != "bkey" {
+				t.Fatalf("unexpected batch.records: %+v", batch.recordsK)
+			}
+			if batch.recordsK[id]["c"].(map[string]interface{})["time"] != "2007-01-01T15:00:00Z" {
+				t.Fatalf("unexpected batch.records: %+v", batch.recordsK)
+			}
+			if batch.recordsK[id]["c"].(map[string]interface{})["values"] != "ckey" {
+				t.Fatalf("unexpected batch.records: %+v", batch.recordsK)
+			}
+		}
+		checkResult(batch, "1", err)
+
+		// test wrong type row ID
+		if err := batch.Add(Row{ID: 64.5}); !strings.Contains(err.Error(), "unsupported rowID") {
+			t.Fatalf("unexpected error w/ floating point rowID: %v", err)
 		}
 
-		if batch.recordsK["1"]["a"] != uint64(2) {
-			t.Fatalf("unexpected batch.records: %+v", batch.recordsK)
-		}
-		if batch.recordsK["1"]["b"] != "bkey" {
-			t.Fatalf("unexpected batch.records: %+v", batch.recordsK)
-		}
-		if batch.recordsK["1"]["c"].(map[string]interface{})["time"] != "2007-01-01T15:00:00Z" {
-			t.Fatalf("unexpected batch.records: %+v", batch.recordsK)
-		}
-		if batch.recordsK["1"]["c"].(map[string]interface{})["values"] != "ckey" {
-			t.Fatalf("unexpected batch.records: %+v", batch.recordsK)
-		}
+		// test that byte slice ID works same as string
+		err = batch.Add(Row{
+			ID:     []byte("2"),
+			Values: []interface{}{uint64(2), "bkey", "ckey"},
+			Time:   qt,
+		})
+		checkResult(batch, "2", err)
 
 	})
 }
@@ -227,6 +245,15 @@ func TestIngestAPIBatch(t *testing.T) {
 		Time:   *qt0,
 	}); err != nil {
 		t.Fatalf("adding row: %v", err)
+	}
+
+	// test nil value case
+	if err := batch.Add(Row{
+		ID:     uint64(8),
+		Values: []interface{}{nil, nil, nil, nil, nil, nil, nil},
+		Time:   QuantizedTime{},
+	}); err != nil {
+		t.Fatalf("error adding all nil batch which should affect nothing: %v", err)
 	}
 
 	if err := batch.Import(); err != nil {

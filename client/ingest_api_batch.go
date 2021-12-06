@@ -50,7 +50,6 @@ func (b *ingestAPIBatch) Add(row Row) error {
 	for i, val := range row.Values {
 		field := b.fields[i]
 		// val can be string, uint64, int64, []string, []uint64, nil
-		// TODO how are null values handled by ingest API? cc @seebs. seems like not well... just don't include a key if null
 		// TODO timestamp field might need special handling
 		// TODO check that the Row.Clears field is only used for packed bools, and then issue a warning/error (in IDK) if the ingest API mode is used in conjunction w/ packed bools.
 		if val == nil {
@@ -94,7 +93,6 @@ func (b *ingestAPIBatch) Add(row Row) error {
 }
 
 func (b *ingestAPIBatch) Import() error {
-	// TODO
 	if b.keyed {
 		return b.importKeyed()
 	}
