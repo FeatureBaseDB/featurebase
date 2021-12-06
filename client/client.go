@@ -808,7 +808,6 @@ func (c *Client) shardsMax() (map[string]uint64, error) {
 }
 
 // HTTPRequest sends an HTTP request to the Pilosa server (used by idk)
-// nolint: deadcode
 func (c *Client) HTTPRequest(method string, path string, data []byte, headers map[string]string) (status int, body []byte, err error) {
 	span := c.tracer.StartSpan("Client.HTTPRequest")
 

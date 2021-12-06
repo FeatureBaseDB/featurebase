@@ -8,7 +8,7 @@ import (
 	"io"
 
 	"github.com/cespare/xxhash"
-	"github.com/molecula/featurebase/v2"
+	pilosa "github.com/molecula/featurebase/v2"
 	"github.com/molecula/featurebase/v2/server"
 )
 
@@ -61,12 +61,12 @@ func (cmd *ChkSumCommand) Run(ctx context.Context) (err error) {
 	h := xxhash.New()
 
 	for _, ii := range schema.Indexes {
-		qa := &pilosa.QueryRequest{Index: ii.Name, Query: "Count(All())"}
+		qa := &pilosa.QueryRequest{Index: ii.Name, Query: "All()"}
 		rs, err := client.Query(ctx, ii.Name, qa)
 		if err != nil {
 			return err
 		}
-		all := rs.Results[0].(uint64)
+		all := rs.Results[0]
 		as := fmt.Sprintf("all=%v", all)
 		_, _ = h.Write([]byte(as))
 

@@ -286,7 +286,6 @@ func (cmd *BackupCommand) backupShardNode(ctx context.Context, indexName string,
 func (cmd *BackupCommand) backupIndexTranslateData(ctx context.Context, name string) error {
 	partitionN := topology.DefaultPartitionN
 
-	// Back up all bitmap data for the index.
 	ch := make(chan int, partitionN)
 	for partitionID := 0; partitionID < partitionN; partitionID++ {
 		ch <- partitionID
