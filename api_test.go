@@ -1356,3 +1356,72 @@ func createFieldForTest(index string, field string, coord *test.Command, t *test
 		t.Fatalf("creating field: %v", err)
 	}
 }
+
+func TestVariousApiTranslateCalls(t *testing.T) {
+	for i := 1; i < 8; i += 3 {
+		m := test.MustRunCluster(t, i)
+		defer m.Close()
+		node := m.GetNode(0)
+		api := node.API
+		// this should never actually get used because we're testing for errors here
+		r := strings.NewReader("")
+		// test index
+		idx, err := api.Holder().CreateIndex("index", pilosa.IndexOptions{})
+		if err != nil {
+			t.Fatalf("%v: could not create test index", err)
+		}
+		_, err = idx.CreateFieldIfNotExistsWithOptions("field", &pilosa.FieldOptions{Keys: false})
+		t.Run("translateIndexDbOnNilIndex",
+			func(t *testing.T) {
+				err := api.TranslateIndexDB(context.Background(), "nonExistentIndex", 0, r)
+				expected := fmt.Errorf("index %q not found", "nonExistentIndex")
+				if !reflect.DeepEqual(err, expected) {
+					t.Fatalf("expected '%#v', got '%#v'", expected, err)
+				}
+			})
+
+		t.Run("translateIndexDbOnNilTranslateStore",
+			func(t *testing.T) {
+				err := api.TranslateIndexDB(context.Background(), "index", 0, r)
+				expected := fmt.Errorf("index %q has no translate store", "index")
+				if !reflect.DeepEqual(err, expected) {
+					t.Fatalf("expected '%#v', got '%#v'", expected, err)
+				}
+			})
+
+		t.Run("translateFieldDbOnNilIndex",
+			func(t *testing.T) {
+				err := api.TranslateFieldDB(context.Background(), "nonExistentIndex", "field", r)
+				expected := fmt.Errorf("index %q not found", "nonExistentIndex")
+				if !reflect.DeepEqual(err, expected) {
+					t.Fatalf("expected '%#v', got '%#v'", expected, err)
+				}
+			})
+
+		t.Run("translateFieldDbOnNilField",
+			func(t *testing.T) {
+				err := api.TranslateFieldDB(context.Background(), "index", "nonExistentField", r)
+				expected := fmt.Errorf("field %q/%q not found", "index", "nonExistentField")
+				if !reflect.DeepEqual(err, expected) {
+					t.Fatalf("expected '%#v', got '%#v'", expected, err)
+				}
+			})
+
+		t.Run("translateFieldDbNilField_keys",
+			func(t *testing.T) {
+				err := api.TranslateFieldDB(context.Background(), "index", "_keys", r)
+				if err != nil {
+					t.Fatalf("expected 'nil', got '%#v'", err)
+				}
+			})
+
+		t.Run("translateFieldDbOnNilTranslateStore",
+			func(t *testing.T) {
+				err := api.TranslateFieldDB(context.Background(), "index", "field", r)
+				expected := fmt.Errorf("field %q/%q has no translate store", "index", "field")
+				if !reflect.DeepEqual(err, expected) {
+					t.Fatalf("expected '%#v', got '%#v'", expected, err)
+				}
+			})
+	}
+}
