@@ -18,7 +18,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// BackupCommand represents a command for backing up a Pilosa node.
+// BackupCommand represents a command for backing up a FeatureBase node.
 type BackupCommand struct { // nolint: maligned
 	tlsConfig *tls.Config
 

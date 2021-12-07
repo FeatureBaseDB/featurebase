@@ -1884,7 +1884,7 @@ func applyDefaultOptions(o *FieldOptions) FieldOptions {
 // are included.
 func (o *FieldOptions) MarshalJSON() ([]byte, error) {
 	switch o.Type {
-	case FieldTypeSet:
+	case FieldTypeSet, "":
 		return json.Marshal(struct {
 			Type      string `json:"type"`
 			CacheType string `json:"cacheType"`
@@ -1975,7 +1975,7 @@ func (o *FieldOptions) MarshalJSON() ([]byte, error) {
 			o.Type,
 		})
 	}
-	return nil, errors.New("invalid field type")
+	return nil, errors.Errorf("invalid field type: '%s'", o.Type)
 }
 
 // MinTimestamp returns the minimum value for a timestamp field.
