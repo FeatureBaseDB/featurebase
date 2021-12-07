@@ -92,7 +92,7 @@ func (cmd *ChkSumCommand) Run(ctx context.Context) (err error) {
 				}
 				for _, item := range res.Results {
 					rowids := item.(*pilosa.RowIdentifiers)
-					//either rowids or keys
+					// either rowids or keys
 					for _, row := range rowids.Keys {
 						countPql := fmt.Sprintf(`Count(Row(%v="%v"))`, field.Name, row)
 						qr := &pilosa.QueryRequest{Index: ii.Name, Query: countPql}
@@ -121,7 +121,7 @@ func (cmd *ChkSumCommand) Run(ctx context.Context) (err error) {
 			}
 
 		}
-		fmt.Printf("hash:%x\n", h.Sum(nil))
+		fmt.Fprintf(cmd.Stdout, "hash:%x\n", h.Sum(nil))
 	}
 
 	return nil

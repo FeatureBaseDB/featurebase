@@ -7040,6 +7040,35 @@ func backupTest(t *testing.T, c *test.Cluster) {
 	// putting this here is to take advantage of already-existing
 	// clusters and data.
 
+	sum := chkSumCluster(t, c)
+
+	backupDir := backupCluster(t, c)
+
+	cnew := test.MustRunCluster(t, 3) // this way we test 1->3 3->3 7->3
+	defer cnew.Close()
+
+	restoreCluster(t, backupDir, cnew)
+
+	sumNew := chkSumCluster(t, cnew)
+
+	if sum != sumNew {
+		t.Fatalf("old/new checksum mismatch, old:\n%s\nnew:\n:%s", sum, sumNew)
+	}
+}
+
+func chkSumCluster(t *testing.T, c *test.Cluster) string {
+	buf := &bytes.Buffer{}
+
+	chkSum := ctl.NewChkSumCommand(nil, buf, buf)
+	chkSum.Host = c.Nodes[len(c.Nodes)-1].URL()
+	if err := chkSum.Run(context.Background()); err != nil {
+		t.Fatalf("running checksum: %v", err)
+	}
+
+	return buf.String()
+}
+
+func backupCluster(t *testing.T, c *test.Cluster) (backupDir string) {
 	td, err := testhook.TempDir(t, "backupTest")
 	if err != nil {
 		t.Fatalf("can't even get a temp dir, what a ripoff: %v", err)
@@ -7055,6 +7084,18 @@ func backupTest(t *testing.T, c *test.Cluster) {
 	if err := backupCommand.Run(context.Background()); err != nil {
 		t.Log(buf.String())
 		t.Fatalf("running backup: %v", err)
+	}
+	return td
+}
+
+func restoreCluster(t *testing.T, backupDir string, c *test.Cluster) {
+	buf := &bytes.Buffer{}
+
+	restore := ctl.NewRestoreCommand(nil, buf, buf)
+	restore.Host = c.Nodes[len(c.Nodes)-1].URL()
+	restore.Path = backupDir
+	if err := restore.Run(context.Background()); err != nil {
+		t.Fatalf("restoring: %v", err)
 	}
 }
 
