@@ -2343,7 +2343,10 @@ func (api *API) GetTranslateEntryReader(ctx context.Context, offsets TranslateOf
 			if field == nil {
 				return nil, newNotFoundError(ErrFieldNotFound, fieldName)
 			}
-
+			store := field.TranslateStore()
+			if store == nil {
+				return nil, ErrTranslateStoreNotFound
+			}
 			r, err := field.TranslateStore().EntryReader(ctx, uint64(offset))
 			if err != nil {
 				return nil, errors.Wrap(err, "field translate reader")
