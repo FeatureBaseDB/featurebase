@@ -6749,7 +6749,7 @@ func variousQueriesCountDistinctTimestamp(t *testing.T, c *test.Cluster) {
 	field := "ts"
 
 	// create an index and timestamp field
-	c.CreateField(t, index, pilosa.IndexOptions{}, field, pilosa.OptFieldTypeTimestamp(time.Unix(0, 0), "s"))
+	c.CreateField(t, index, pilosa.IndexOptions{TrackExistence: true}, field, pilosa.OptFieldTypeTimestamp(time.Unix(0, 0), "s"))
 
 	// add some data
 	data := []string{"2010-01-02T12:32:00Z", "2010-04-20T12:32:00Z", "2011-04-20T12:32:00Z"}
@@ -7024,17 +7024,18 @@ func TestVariousQueries(t *testing.T) {
 
 			// put a variety of data into the cluster
 			populateTestData(t, c)
-			backupTest(t, c)
+			backupTest(t, c, usersIndex)
 
 			variousQueries(t, c)
 			variousQueriesOnTimeFields(t, c)
 			variousQueriesOnPercentiles(t, c)
 			variousQueriesCountDistinctTimestamp(t, c)
+			backupTest(t, c, "") // test backup/restore of all indexes
 		})
 	}
 }
 
-func backupTest(t *testing.T, c *test.Cluster) {
+func backupTest(t *testing.T, c *test.Cluster, index string) {
 	// should this really be in executor? No. But all these
 	// integration-y query tests probably shouldn't be either. My goal
 	// putting this here is to take advantage of already-existing
@@ -7042,7 +7043,7 @@ func backupTest(t *testing.T, c *test.Cluster) {
 
 	sum := chkSumCluster(t, c)
 
-	backupDir := backupCluster(t, c)
+	backupDir := backupCluster(t, c, index)
 
 	cnew := test.MustRunCluster(t, 3) // this way we test 1->3 3->3 7->3
 	defer cnew.Close()
@@ -7068,7 +7069,7 @@ func chkSumCluster(t *testing.T, c *test.Cluster) string {
 	return buf.String()
 }
 
-func backupCluster(t *testing.T, c *test.Cluster) (backupDir string) {
+func backupCluster(t *testing.T, c *test.Cluster, index string) (backupDir string) {
 	td, err := testhook.TempDir(t, "backupTest")
 	if err != nil {
 		t.Fatalf("can't even get a temp dir, what a ripoff: %v", err)
@@ -7078,7 +7079,7 @@ func backupCluster(t *testing.T, c *test.Cluster) (backupDir string) {
 	buf := &bytes.Buffer{}
 	backupCommand := ctl.NewBackupCommand(nil, buf, buf)
 	backupCommand.Host = c.Nodes[len(c.Nodes)-1].URL() // don't pick node 0 so we don't always get primary (better code coverage)
-	backupCommand.Index = usersIndex
+	backupCommand.Index = index
 	backupCommand.OutputDir = td
 
 	if err := backupCommand.Run(context.Background()); err != nil {
@@ -8430,7 +8431,7 @@ func MinMaxTimestampNodeTester(t *testing.T, numNodes int) {
 	defer c.Close()
 
 	// create an index and timestamp field
-	c.CreateField(t, index, pilosa.IndexOptions{}, field, pilosa.OptFieldTypeTimestamp(time.Unix(0, 0), "s"))
+	c.CreateField(t, index, pilosa.IndexOptions{TrackExistence: true}, field, pilosa.OptFieldTypeTimestamp(time.Unix(0, 0), "s"))
 
 	// add some data
 	expected := "2010-01-02T12:32:00Z"
