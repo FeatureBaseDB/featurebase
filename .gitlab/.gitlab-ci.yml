@@ -74,7 +74,8 @@ run go tests:
   extends: .go-cache
   script:
     - echo "Running featurebase unit tests..."
-    - ./cover-everything.sh 
+    - PKG_LIST=$(go list ./... | grep -v internal/clustertests | paste -s -d, -)
+    - go test -coverprofile=coverage.out -covermode=atomic -coverpkg=${PKG_LIST} ./...
   artifacts:
     paths:
       - coverage.out
@@ -85,7 +86,8 @@ run go tests future:
   extends: .go-cache
   script:
     - echo "Running featurebase unit tests..."
-    - ./cover-everything.sh 
+    - PKG_LIST=$(go list ./... | grep -v internal/clustertests | paste -s -d, -)
+    - go test -coverprofile=coverage.out -covermode=atomic -coverpkg=${PKG_LIST} ./...
   artifacts:
     paths:
       - coverage.out
