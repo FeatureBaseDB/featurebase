@@ -183,12 +183,17 @@ func (cmd *BackupCommand) backupIDAllocData(ctx context.Context) error {
 func (cmd *BackupCommand) backupIndexTranslation(ctx context.Context, ii *pilosa.IndexInfo) error {
 	logger := cmd.Logger()
 	logger.Printf("backing up index translation: %q", ii.Name)
-	if err := cmd.backupIndexTranslateData(ctx, ii.Name); err != nil {
-		return err
+	if ii.Options.Keys {
+		if err := cmd.backupIndexTranslateData(ctx, ii.Name); err != nil {
+			return err
+		}
 	}
 
 	// Back up field translation data.
 	for _, fi := range ii.Fields {
+		if !fi.Options.Keys {
+			continue
+		}
 		if err := cmd.backupFieldTranslateData(ctx, ii.Name, fi.Name); err != nil {
 			return fmt.Errorf("cannot backup field translation data for field %q on index %q: %w", fi.Name, ii.Name, err)
 		}
@@ -346,9 +351,7 @@ func (cmd *BackupCommand) backupFieldTranslateData(ctx context.Context, indexNam
 	logger.Printf("backing up field translation data: %s/%s", indexName, fieldName)
 
 	rc, err := cmd.client.FieldTranslateDataReader(ctx, indexName, fieldName)
-	if err == pilosa.ErrTranslateStoreNotFound {
-		return nil
-	} else if err != nil {
+	if err != nil {
 		return fmt.Errorf("fetching translate data reader: %w", err)
 	}
 	defer rc.Close()

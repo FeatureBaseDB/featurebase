@@ -66,9 +66,14 @@ func (cmd *ChkSumCommand) Run(ctx context.Context) (err error) {
 		if err != nil {
 			return err
 		}
-		all := rs.Results[0]
-		as := fmt.Sprintf("all=%v", all)
-		_, _ = h.Write([]byte(as))
+
+		all := rs.Results[0].(*pilosa.Row)
+		if len(all.Keys) > 0 {
+			allString := fmt.Sprintf("%v", all.Keys)
+			_, _ = h.Write([]byte(allString))
+		} else {
+			_, _ = h.Write(all.Roaring())
+		}
 
 		for _, field := range ii.Fields {
 			switch field.Options.Type {

@@ -7053,7 +7053,7 @@ func backupTest(t *testing.T, c *test.Cluster, index string) {
 	sumNew := chkSumCluster(t, cnew)
 
 	if sum != sumNew {
-		t.Fatalf("old/new checksum mismatch, old:\n%s\nnew:\n:%s", sum, sumNew)
+		t.Fatalf("old/new checksum mismatch, old:\n%s\nnew:\n%s", sum, sumNew)
 	}
 }
 
