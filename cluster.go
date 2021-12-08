@@ -1480,6 +1480,10 @@ func (c *cluster) matchField(ctx context.Context, field *Field, like string) ([]
 	if c.Node.ID == primary.ID {
 		// The local copy is the authoritative copy.
 		plan := planLike(like)
+		store := field.TranslateStore()
+		if store == nil {
+			return nil, ErrTranslateStoreNotFound
+		}
 		return field.TranslateStore().Match(func(key []byte) bool {
 			return matchLike(key, plan...)
 		})
@@ -1521,6 +1525,10 @@ func (c *cluster) translateFieldListIDs(field *Field, ids []uint64) (keys []stri
 	}
 
 	if c.Node.ID == primary.ID {
+		store := field.TranslateStore()
+		if store == nil {
+			return nil, ErrTranslateStoreNotFound
+		}
 		keys, err = field.TranslateStore().TranslateIDs(ids)
 	} else {
 		keys, err = c.InternalClient.TranslateIDsNode(context.Background(), &primary.URI, field.Index(), field.Name(), ids)
