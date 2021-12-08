@@ -234,7 +234,7 @@ func (m *Command) Start() (err error) {
 		return errors.Wrap(err, "setting resource limits")
 	}
 
-	if m.Config.Auth.Enable == true {
+	if m.Config.Auth.Enable {
 		m.Config.MustValidateAuth()
 	}
 

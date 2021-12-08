@@ -5027,6 +5027,8 @@ func (e *executor) executeCount(ctx context.Context, qcx *Qcx, index string, c *
 			return row.Count(), nil
 		case SignedRow:
 			return row.Pos.Count() + row.Neg.Count(), nil
+		case DistinctTimestamp:
+			return uint64(len(row.Values)), nil
 		default:
 			return 0, errors.Errorf("cannot count result of type %T from call %q", row, child.String())
 		}
