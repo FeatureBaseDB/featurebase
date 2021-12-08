@@ -317,9 +317,7 @@ func (cmd *BackupCommand) backupIndexPartitionTranslateData(ctx context.Context,
 	logger.Printf("backing up index translation data: %s/%d", name, partitionID)
 
 	rc, err := cmd.client.IndexTranslateDataReader(ctx, name, partitionID)
-	if err == pilosa.ErrTranslateStoreNotFound {
-		return nil
-	} else if err != nil {
+	if err != nil {
 		return fmt.Errorf("fetching translate data reader: %w", err)
 	}
 	defer rc.Close()
