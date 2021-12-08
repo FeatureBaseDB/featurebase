@@ -996,7 +996,10 @@ func (api *API) Usage(ctx context.Context, remote bool) (map[string]NodeUsage, e
 		return resp, nil
 	}
 
-	if api.usageCache.lastCalcDuration < usageCacheMinDuration {
+	api.usageCache.muAssign.Lock()
+	lastCalc := api.usageCache.lastCalcDuration
+	api.usageCache.muAssign.Unlock()
+	if lastCalc < usageCacheMinDuration {
 		err := api.ResetUsageCache()
 		if err != nil {
 			api.server.logger.Infof("could not reset usageCache: %s", err)
