@@ -568,6 +568,8 @@ func (s *InMemTranslateStore) WriteTo(w io.Writer) (int64, error) {
 // don't expect to use InMemTranslateStore much, it's mostly there to
 // avoid disk load during testing.
 func (s *InMemTranslateStore) ReadFrom(r io.Reader) (count int64, err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	var bytes []byte
 	bytes, err = ioutil.ReadAll(r)
 	count = int64(len(bytes))
