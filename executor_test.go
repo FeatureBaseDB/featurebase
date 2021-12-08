@@ -7016,7 +7016,7 @@ func TestMissingKeyRegression(t *testing.T) {
 // (single and multi-node clusters, different endpoints for the
 // queries (HTTP, GRPC, Postgres), etc.).
 func TestVariousQueries(t *testing.T) {
-	for _, clusterSize := range []int{1, 3, 7} {
+	for _, clusterSize := range []int{1, 3, 5} {
 		clusterSize := clusterSize
 		t.Run(fmt.Sprintf("%d-node", clusterSize), func(t *testing.T) {
 			c := test.MustRunCluster(t, clusterSize)
@@ -7045,7 +7045,7 @@ func backupTest(t *testing.T, c *test.Cluster, index string) {
 
 	backupDir := backupCluster(t, c, index)
 
-	cnew := test.MustRunCluster(t, 3) // this way we test 1->3 3->3 7->3
+	cnew := test.MustRunCluster(t, 3) // this way we test 1->3 3->3 5->3
 	defer cnew.Close()
 
 	restoreCluster(t, backupDir, cnew)
