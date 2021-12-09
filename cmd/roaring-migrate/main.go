@@ -331,8 +331,7 @@ func Migrate(dataDir, backupPath string) error {
 			return err
 		}
 		parts := strings.Split(filename, "/")
-		//destFile := fmt.Sprintf("%v/indexes/%v/translate/%v", backupPath, parts[1], parts[3])
-		destFile := filepath.Join(backupPath, "indexes", parts[1], "translaste", parts[3])
+		destFile := filepath.Join(backupPath, "indexes", parts[1], "translate", parts[3])
 		err = writeIfBigger(destFile, content)
 		if err != nil {
 			return err
@@ -348,7 +347,6 @@ func Migrate(dataDir, backupPath string) error {
 			return err
 		}
 		parts := strings.Split(filename, "/")
-		//destFile := fmt.Sprintf("%v/indexes/%v/fields/%v/translate", backupPath, parts[1], parts[2])
 		destFile := filepath.Join(backupPath, "indexes", parts[1], "fields", parts[2], "translate")
 		err = writeIfBigger(destFile, content)
 		if err != nil {
