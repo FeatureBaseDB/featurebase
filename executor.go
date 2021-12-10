@@ -537,6 +537,11 @@ func (e *executor) execute(ctx context.Context, qcx *Qcx, index string, q *pql.Q
 			return nil, err
 		}
 
+		if vc, ok := v.(ValCount); ok {
+			vc.cleanup()
+			v = vc
+		}
+
 		results = append(results, v)
 		// Some Calls can have significant data associated with them
 		// that gets generated during processing, such as Precomputed
@@ -545,6 +550,22 @@ func (e *executor) execute(ctx context.Context, qcx *Qcx, index string, q *pql.Q
 		e.dumpPrecomputedCalls(ctx, q.Calls[i])
 	}
 	return results, nil
+}
+
+// cleanup removes the integer value (Val) from the ValCount if one of
+// the other fields is in use.
+//
+// ValCounts are normally holding data which is stored as a BSI
+// (integer) under the hood. Sometimes it's convenient to be able to
+// compare the underlying integer values rather than their
+// interpretation as decimal, timestamp, etc, so the lower level
+// functions may return both integer and the interpreted value, but we
+// don't want to pass that all the way back to the client, so we
+// remove it here.
+func (vc *ValCount) cleanup() {
+	if vc.Val != 0 && (vc.FloatVal != 0 || !vc.TimestampVal.IsZero() || vc.DecimalVal != nil) {
+		vc.Val = 0
+	}
 }
 
 // preprocessQuery expands any calls that need preprocessing.
@@ -1211,6 +1232,10 @@ func (e *executor) executePercentile(ctx context.Context, qcx *Qcx, index string
 	if err != nil {
 		return ValCount{}, errors.New("Percentile(): field required")
 	}
+	field := e.Holder.Field(index, fieldName)
+	if field == nil {
+		return ValCount{}, ErrFieldNotFound
+	}
 
 	// filter call for min & max
 	var filterCall *pql.Call
@@ -1231,7 +1256,7 @@ func (e *executor) executePercentile(ctx context.Context, qcx *Qcx, index string
 		return ValCount{}, errors.Wrap(err, "executing Min call for Percentile")
 	}
 	if nthFloat == 0.0 {
-		return ValCount{Val: minVal.Val, Count: minVal.Count}, nil
+		return minVal, nil
 	}
 
 	// get max
@@ -1298,11 +1323,11 @@ func (e *executor) executePercentile(ctx context.Context, qcx *Qcx, index string
 		} else if leftCountWeighted < rightCount {
 			min = possibleNthVal + 1
 		} else {
-			return ValCount{Val: possibleNthVal, Count: 1}, nil
+			return field.valCountize(possibleNthVal, 1, nil)
 		}
 	}
 
-	return ValCount{Val: min, Count: 1}, nil
+	return field.valCountize(min, 1, nil)
 
 }
 
@@ -8057,6 +8082,8 @@ func getScaledInt(f *Field, v interface{}) (int64, error) {
 		switch tv := v.(type) {
 		case time.Time:
 			value = tv.UnixNano() / TimeUnitNanos(f.options.TimeUnit)
+		case int64:
+			value = tv
 		default:
 			return 0, errors.Errorf("unexpected timestamp value type %T, val %v", tv, tv)
 		}
