@@ -155,15 +155,6 @@ clustertests: vendor
 clustertests-build: vendor
 	docker-compose -f $(DOCKER_COMPOSE) down -v
 	docker-compose -f $(DOCKER_COMPOSE) up --exit-code-from=client1 --build
-# Test Cluster backup and restore
-backuptests-build: vendor
-	docker-compose -f docker-compose-3.yml down
-	docker-compose -f docker-compose-3.yml build 
-
-backuptests: vendor
-	docker-compose -f docker-compose-3.yml down -v
-	docker-compose -f docker-compose-3.yml up --exit-code-from=client1  --abort-on-container-exit
-
 
 # Install Pilosa
 install:

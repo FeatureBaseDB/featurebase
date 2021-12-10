@@ -2326,6 +2326,12 @@ func (h *Handler) handleGetTranslateData(w http.ResponseWriter, r *http.Request)
 
 	// Retrieve partition data from holder.
 	p, err := h.api.TranslateData(r.Context(), q.Get("index"), int(partition))
+	if redir, ok := err.(pilosa.RedirectError); ok {
+		newURL := *r.URL
+		newURL.Host = redir.HostPort
+		http.Redirect(w, r, newURL.String(), http.StatusSeeOther)
+		return
+	}
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return

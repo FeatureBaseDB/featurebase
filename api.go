@@ -834,6 +834,15 @@ func (api *API) FragmentData(ctx context.Context, indexName, fieldName, viewName
 	return f, nil
 }
 
+type RedirectError struct {
+	HostPort string
+	error    string
+}
+
+func (r RedirectError) Error() string {
+	return r.error
+}
+
 // TranslateData returns all translation data in the specified partition.
 func (api *API) TranslateData(ctx context.Context, indexName string, partition int) (io.WriterTo, error) {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.TranslateData")
@@ -847,6 +856,15 @@ func (api *API) TranslateData(ctx context.Context, indexName string, partition i
 	idx := api.holder.Index(indexName)
 	if idx == nil {
 		return nil, newNotFoundError(ErrIndexNotFound, indexName)
+	}
+
+	snap := topology.NewClusterSnapshot(api.cluster.noder, api.cluster.Hasher, api.cluster.ReplicaN)
+	nodes := snap.PartitionNodes(partition)
+	if nodes[0].ID != api.server.NodeID() {
+		return nil, RedirectError{
+			HostPort: nodes[0].URI.HostPort(),
+			error:    fmt.Sprintf("can't translate data, this node(%s) does not partition %d", api.server.uri, partition),
+		}
 	}
 
 	// Retrieve translatestore from holder.
@@ -978,7 +996,10 @@ func (api *API) Usage(ctx context.Context, remote bool) (map[string]NodeUsage, e
 		return resp, nil
 	}
 
-	if api.usageCache.lastCalcDuration < usageCacheMinDuration {
+	api.usageCache.muAssign.Lock()
+	lastCalc := api.usageCache.lastCalcDuration
+	api.usageCache.muAssign.Unlock()
+	if lastCalc < usageCacheMinDuration {
 		err := api.ResetUsageCache()
 		if err != nil {
 			api.server.logger.Infof("could not reset usageCache: %s", err)
