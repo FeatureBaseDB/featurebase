@@ -1,3 +1,4 @@
+// Copyright 2021 Molecula Corp. All rights reserved.
 package cfg
 
 // DefaultMaxSize is the default mmap size and therefore the maximum allowed

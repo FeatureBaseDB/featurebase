@@ -1,3 +1,4 @@
+// Copyright 2021 Molecula Corp. All rights reserved.
 // Package ingest provides tooling for accepting record-oriented data updates
 // and converting them to data that can be efficiently merged into stored
 // data. Nia's original description:

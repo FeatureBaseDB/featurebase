@@ -1,3 +1,4 @@
+// Copyright 2021 Molecula Corp. All rights reserved.
 /*
 This is the entrypoint for the Pilosa binary.
 */

@@ -1,3 +1,4 @@
+// Copyright 2021 Molecula Corp. All rights reserved.
 //go:build darwin || (linux && !arm64)
 // +build darwin linux,!arm64
 

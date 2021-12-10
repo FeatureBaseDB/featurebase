@@ -1,3 +1,4 @@
+// Copyright 2021 Molecula Corp. All rights reserved.
 // Package syswrap wraps syscalls (just mmap right now) in order to impose a
 // global in-process limit on the maximum number of active mmaps.
 package syswrap

@@ -1,3 +1,4 @@
+// Copyright 2021 Molecula Corp. All rights reserved.
 /*
 Package cmd contains all the pilosa subcommand definitions (1 per file).
 

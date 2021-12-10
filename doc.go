@@ -1,3 +1,4 @@
+// Copyright 2021 Molecula Corp. All rights reserved.
 /*
 
 Package pilosa implements the core of the Pilosa distributed bitmap index. It

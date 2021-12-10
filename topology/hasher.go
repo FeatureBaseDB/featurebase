@@ -1,3 +1,4 @@
+// Copyright 2021 Molecula Corp. All rights reserved.
 package topology
 
 // Hasher represents an interface to hash integers into buckets.

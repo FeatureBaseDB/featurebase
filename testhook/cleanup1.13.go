@@ -1,3 +1,4 @@
+// Copyright 2021 Molecula Corp. All rights reserved.
 //go:build !go1.14
 // +build !go1.14
 

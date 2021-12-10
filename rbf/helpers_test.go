@@ -1,3 +1,4 @@
+// Copyright 2021 Molecula Corp. All rights reserved.
 // Package rbf implements the roaring b-tree file format.
 package rbf_test
 

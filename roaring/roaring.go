@@ -1,3 +1,4 @@
+// Copyright 2021 Molecula Corp. All rights reserved.
 // Package roaring implements roaring bitmaps with support for incremental changes.
 package roaring
 

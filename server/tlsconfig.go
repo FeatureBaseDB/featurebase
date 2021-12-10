@@ -1,3 +1,4 @@
+// Copyright 2021 Molecula Corp. All rights reserved.
 //
 // This file contains source code from bridge
 // (https://github.com/robustirc/bridge); which is governed by the following

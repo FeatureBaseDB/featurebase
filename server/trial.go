@@ -1,3 +1,4 @@
+// Copyright 2021 Molecula Corp. All rights reserved.
 //
 // Package server contains the `pilosa server` subcommand which runs Pilosa
 // itself. The purpose of this package is to define an easily tested Command
