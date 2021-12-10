@@ -620,6 +620,7 @@ func (c *Config) ValidateAuth() ([]error, error) {
 		"TokenURL":         c.Auth.TokenURL,
 		"GroupEndpointURL": c.Auth.GroupEndpointURL,
 		"ScopeURL":         c.Auth.ScopeURL,
+		"PermissionsFile":  c.Auth.PermissionsFile,
 	}
 
 	errors := make([]error, 0)
@@ -634,6 +635,15 @@ func (c *Config) ValidateAuth() ([]error, error) {
 			if err != nil {
 				errors = append(errors, fmt.Errorf("Invalid URL for auth config %s: %s", name, err))
 				continue
+			}
+		}
+
+		if strings.Contains(name, "File") {
+			yamlData := auth.ReadPermissionsFile(value)
+			var p auth.GroupPermissions
+			p.CreatePermissionsStruct(yamlData)
+			if len(p.Permissions) == 0 {
+				errors = append(errors, fmt.Errorf("No group permissions found in permissions file: %s", value))
 			}
 		}
 	}
