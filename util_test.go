@@ -1,3 +1,4 @@
+// Copyright 2021 Molecula Corp. All rights reserved.
 package pilosa
 
 // util_test.go has unit tests for utility functions from util.go

@@ -1,3 +1,4 @@
+// Copyright 2021 Molecula Corp. All rights reserved.
 package client
 
 import "github.com/pkg/errors"

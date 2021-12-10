@@ -1,3 +1,4 @@
+// Copyright 2021 Molecula Corp. All rights reserved.
 // Package txkey consolidates in one place the use of keys to index into our
 // various storage/txn back-ends. Databases LMDB and rbfDB both use it,
 // so that debug Dumps are comparable.

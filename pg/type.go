@@ -1,3 +1,4 @@
+// Copyright 2021 Molecula Corp. All rights reserved.
 package pg
 
 import "github.com/molecula/featurebase/v2/pg/message"

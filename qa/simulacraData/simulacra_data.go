@@ -1,3 +1,4 @@
+// Copyright 2021 Molecula Corp. All rights reserved.
 // PURPOSE: Generate data for Samsung unique workflow/use case, as described in Jira Ticket FB-971
 // INPUT: none
 // OUTPUT: 6 csv files, containing approx 1 billion lines of data associated to 200 million unique records (approx 28BGB of data)

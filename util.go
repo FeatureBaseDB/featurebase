@@ -1,3 +1,4 @@
+// Copyright 2021 Molecula Corp. All rights reserved.
 package pilosa
 
 // util.go: a place for generic, reusable utilities.

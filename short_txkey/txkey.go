@@ -1,3 +1,4 @@
+// Copyright 2021 Molecula Corp. All rights reserved.
 // Package txkey consolidates in one place the use of keys to index into our
 // various storage/txn back-ends. The short_txkey version omits the
 // index and shard, since these are implicitly part of our database-per-shard

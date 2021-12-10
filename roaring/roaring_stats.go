@@ -1,3 +1,4 @@
+// Copyright 2021 Molecula Corp. All rights reserved.
 //go:build roaringstats
 // +build roaringstats
 

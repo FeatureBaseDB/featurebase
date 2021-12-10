@@ -1,3 +1,4 @@
+// Copyright 2021 Molecula Corp. All rights reserved.
 package testhook
 
 //TODO: Check() and FinalCheck() should return error as the last argument
