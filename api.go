@@ -1,17 +1,4 @@
-// Copyright 2017 Pilosa Corp.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
+// Copyright 2021 Molecula Corp. All rights reserved.
 //go:generate stringer -type=apiMethod
 
 package pilosa
@@ -847,6 +834,15 @@ func (api *API) FragmentData(ctx context.Context, indexName, fieldName, viewName
 	return f, nil
 }
 
+type RedirectError struct {
+	HostPort string
+	error    string
+}
+
+func (r RedirectError) Error() string {
+	return r.error
+}
+
 // TranslateData returns all translation data in the specified partition.
 func (api *API) TranslateData(ctx context.Context, indexName string, partition int) (io.WriterTo, error) {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.TranslateData")
@@ -860,6 +856,15 @@ func (api *API) TranslateData(ctx context.Context, indexName string, partition i
 	idx := api.holder.Index(indexName)
 	if idx == nil {
 		return nil, newNotFoundError(ErrIndexNotFound, indexName)
+	}
+
+	snap := topology.NewClusterSnapshot(api.cluster.noder, api.cluster.Hasher, api.cluster.ReplicaN)
+	nodes := snap.PartitionNodes(partition)
+	if nodes[0].ID != api.server.NodeID() {
+		return nil, RedirectError{
+			HostPort: nodes[0].URI.HostPort(),
+			error:    fmt.Sprintf("can't translate data, this node(%s) does not partition %d", api.server.uri, partition),
+		}
 	}
 
 	// Retrieve translatestore from holder.
@@ -991,7 +996,10 @@ func (api *API) Usage(ctx context.Context, remote bool) (map[string]NodeUsage, e
 		return resp, nil
 	}
 
-	if api.usageCache.lastCalcDuration < usageCacheMinDuration {
+	api.usageCache.muAssign.Lock()
+	lastCalc := api.usageCache.lastCalcDuration
+	api.usageCache.muAssign.Unlock()
+	if lastCalc < usageCacheMinDuration {
 		err := api.ResetUsageCache()
 		if err != nil {
 			api.server.logger.Infof("could not reset usageCache: %s", err)
@@ -2343,7 +2351,10 @@ func (api *API) GetTranslateEntryReader(ctx context.Context, offsets TranslateOf
 			if field == nil {
 				return nil, newNotFoundError(ErrFieldNotFound, fieldName)
 			}
-
+			store := field.TranslateStore()
+			if store == nil {
+				return nil, ErrTranslateStoreNotFound
+			}
 			r, err := field.TranslateStore().EntryReader(ctx, uint64(offset))
 			if err != nil {
 				return nil, errors.Wrap(err, "field translate reader")
@@ -2643,7 +2654,13 @@ func (api *API) RestoreIDAlloc(r io.Reader) error {
 // rd is a boltdb file.
 func (api *API) TranslateIndexDB(ctx context.Context, indexName string, partitionID int, rd io.Reader) error {
 	idx := api.holder.Index(indexName)
+	if idx == nil {
+		return fmt.Errorf("index %q not found", indexName)
+	}
 	store := idx.TranslateStore(partitionID)
+	if store == nil {
+		return fmt.Errorf("index %q has no translate store", indexName)
+	}
 	_, err := store.ReadFrom(rd)
 	return err
 }
@@ -2651,8 +2668,23 @@ func (api *API) TranslateIndexDB(ctx context.Context, indexName string, partitio
 // TranslateFieldDB is an internal function to load the field keys database
 func (api *API) TranslateFieldDB(ctx context.Context, indexName, fieldName string, rd io.Reader) error {
 	idx := api.holder.Index(indexName)
+	if idx == nil {
+		return fmt.Errorf("index %q not found", indexName)
+	}
 	field := idx.Field(fieldName)
+	if field == nil {
+		// Older versions used to accidentally provide an empty translation
+		// data file for a nonexistent field called "_keys". To make migration
+		// easier, we politely ignore that.
+		if fieldName == "_keys" {
+			return nil
+		}
+		return fmt.Errorf("field %q/%q not found", indexName, fieldName)
+	}
 	store := field.TranslateStore()
+	if store == nil {
+		return fmt.Errorf("field %q/%q has no translate store", indexName, fieldName)
+	}
 	_, err := store.ReadFrom(rd)
 	return err
 }

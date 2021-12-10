@@ -1,17 +1,4 @@
-// Copyright 2017 Pilosa Corp.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
+// Copyright 2021 Molecula Corp. All rights reserved.
 package proto
 
 import (
@@ -560,6 +547,9 @@ func (s Serializer) encodeQueryResponse(m *pilosa.QueryResponse) *pb.QueryRespon
 		case []*pilosa.Row:
 			resp.Results[i].Type = queryResultTypeRowMatrix
 			resp.Results[i].RowMatrix = s.encodeRowMatrix(result)
+		case pilosa.DistinctTimestamp:
+			resp.Results[i].Type = queryResultTypeDistinctTimestamp
+			resp.Results[i].DistinctTimestamp = s.encodeDistinctTimestamp(result)
 		case nil:
 			resp.Results[i].Type = queryResultTypeNil
 		default:
@@ -1380,6 +1370,13 @@ func (s Serializer) decodeRowMatrix(pb *pb.RowMatrix) []*pilosa.Row {
 	return rows
 }
 
+func (s Serializer) decodeDistinctTimestamp(pb *pb.DistinctTimestamp) pilosa.DistinctTimestamp {
+	return pilosa.DistinctTimestamp{
+		Values: pb.Values,
+		Name:   pb.Name,
+	}
+}
+
 func decodeTransaction(pb *pb.Transaction, trns *pilosa.Transaction) {
 	trns.ID = pb.ID
 	trns.Active = pb.Active
@@ -1407,6 +1404,7 @@ const (
 	queryResultTypeSignedRow
 	queryResultTypeExtractedIDMatrix
 	queryResultTypeExtractedTable
+	queryResultTypeDistinctTimestamp
 )
 
 func (s Serializer) decodeQueryResult(pb *pb.QueryResult) interface{} {
@@ -1443,6 +1441,8 @@ func (s Serializer) decodeQueryResult(pb *pb.QueryResult) interface{} {
 		return s.decodeExtractedTable(pb.ExtractedTable)
 	case queryResultTypeRowMatrix:
 		return s.decodeRowMatrix(pb.RowMatrix)
+	case queryResultTypeDistinctTimestamp:
+		return s.decodeDistinctTimestamp(pb.DistinctTimestamp)
 	}
 	panic(fmt.Sprintf("unknown type: %d", pb.Type))
 }
@@ -1691,6 +1691,13 @@ func (s Serializer) encodeRowIdentifiers(r pilosa.RowIdentifiers) *pb.RowIdentif
 	return &pb.RowIdentifiers{
 		Rows: r.Rows,
 		Keys: r.Keys,
+	}
+}
+
+func (s Serializer) encodeDistinctTimestamp(d pilosa.DistinctTimestamp) *pb.DistinctTimestamp {
+	return &pb.DistinctTimestamp{
+		Values: d.Values,
+		Name:   d.Name,
 	}
 }
 

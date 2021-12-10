@@ -1,17 +1,4 @@
-// Copyright 2017 Pilosa Corp.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
+// Copyright 2021 Molecula Corp. All rights reserved.
 // package ctl contains all pilosa subcommands other than 'server'. These are
 // generally administration, testing, and debugging tools.
 package client
@@ -782,7 +769,7 @@ func (c *Client) readSchema() ([]SchemaIndex, error) {
 func (c *Client) IngestSchema(reqBody map[string]interface{}) (body []byte, err error) {
 	data, err := json.Marshal(reqBody)
 	if err != nil {
-		return data, errors.Wrap(err, " error building Schema body to Ingest")
+		return data, errors.Wrap(err, "error building Schema body to Ingest")
 	}
 	return c.IngestRequest("/internal/schema", data)
 }
@@ -790,19 +777,19 @@ func (c *Client) IngestSchema(reqBody map[string]interface{}) (body []byte, err 
 func (c *Client) IngestData(index string, reqBody []map[string]interface{}) (body []byte, err error) {
 	data, err := json.Marshal(reqBody)
 	if err != nil {
-		return data, errors.Wrap(err, " error building request body to Ingest")
+		return data, errors.Wrap(err, "error building request body to Ingest")
 	}
 	return c.IngestRequest("/internal/ingest/"+index, data)
 }
 
-func (c *Client) IngestRequest(Uri string, data []byte) (body []byte, err error) {
+func (c *Client) IngestRequest(uri string, data []byte) (body []byte, err error) {
 	var header = make(map[string]string)
 	header["Content-Type"] = "application/json"
 	header["Accept"] = "application/json"
 	header["User-Agent"] = "pilosa/" + pilosa.Version
-	_, body, err = c.HTTPRequest("POST", Uri, data, header)
+	status, body, err := c.HTTPRequest("POST", uri, data, header)
 	if err != nil {
-		return nil, errors.Wrap(err, "requesting "+Uri)
+		return nil, errors.Wrapf(err, "requesting %s status: %d", uri, status)
 	}
 	return body, err
 }
@@ -821,7 +808,6 @@ func (c *Client) shardsMax() (map[string]uint64, error) {
 }
 
 // HTTPRequest sends an HTTP request to the Pilosa server (used by idk)
-// nolint: deadcode
 func (c *Client) HTTPRequest(method string, path string, data []byte, headers map[string]string) (status int, body []byte, err error) {
 	span := c.tracer.StartSpan("Client.HTTPRequest")
 

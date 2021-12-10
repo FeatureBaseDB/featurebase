@@ -1,16 +1,4 @@
-// Copyright 2017 Pilosa Corp.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Copyright 2021 Molecula Corp. All rights reserved.
 package main
 
 import (
@@ -243,9 +231,8 @@ func copyFile(src, dest string) error {
 }
 
 func Migrate(dataDir, backupPath string) error {
-	if strings.HasSuffix(dataDir, "/") {
-		dataDir = dataDir[:len(dataDir)-1]
-	}
+	dataDir = strings.TrimSuffix(dataDir, "/")
+
 	err := os.MkdirAll(backupPath, 0777)
 	if err != nil {
 		return err
@@ -332,8 +319,7 @@ func Migrate(dataDir, backupPath string) error {
 			return err
 		}
 		parts := strings.Split(filename, "/")
-		//destFile := fmt.Sprintf("%v/indexes/%v/translate/%v", backupPath, parts[1], parts[3])
-		destFile := filepath.Join(backupPath, "indexes", parts[1], "translaste", parts[3])
+		destFile := filepath.Join(backupPath, "indexes", parts[1], "translate", parts[3])
 		err = writeIfBigger(destFile, content)
 		if err != nil {
 			return err
@@ -349,7 +335,6 @@ func Migrate(dataDir, backupPath string) error {
 			return err
 		}
 		parts := strings.Split(filename, "/")
-		//destFile := fmt.Sprintf("%v/indexes/%v/fields/%v/translate", backupPath, parts[1], parts[2])
 		destFile := filepath.Join(backupPath, "indexes", parts[1], "fields", parts[2], "translate")
 		err = writeIfBigger(destFile, content)
 		if err != nil {

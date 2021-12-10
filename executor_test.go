@@ -1,17 +1,4 @@
-// Copyright 2017 Pilosa Corp.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
+// Copyright 2021 Molecula Corp. All rights reserved.
 package pilosa_test
 
 import (
@@ -40,6 +27,7 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	pilosa "github.com/molecula/featurebase/v2"
 	"github.com/molecula/featurebase/v2/boltdb"
+	"github.com/molecula/featurebase/v2/ctl"
 	"github.com/molecula/featurebase/v2/disco"
 	"github.com/molecula/featurebase/v2/http"
 	"github.com/molecula/featurebase/v2/pql"
@@ -6756,6 +6744,27 @@ func TestExecutor_Execute_CountDistinct(t *testing.T) {
 	})
 }
 
+func variousQueriesCountDistinctTimestamp(t *testing.T, c *test.Cluster) {
+	index := "test_index"
+	field := "ts"
+
+	// create an index and timestamp field
+	c.CreateField(t, index, pilosa.IndexOptions{TrackExistence: true}, field, pilosa.OptFieldTypeTimestamp(time.Unix(0, 0), "s"))
+
+	// add some data
+	data := []string{"2010-01-02T12:32:00Z", "2010-04-20T12:32:00Z", "2011-04-20T12:32:00Z"}
+	for i, datum := range data {
+		c.Query(t, index, fmt.Sprintf("Set(%d, ts=\"%s\")", i+10, datum))
+	}
+
+	// query the Count of Distinct vals in field ts
+	count := c.Query(t, index, "Count(Distinct(field=ts))").Results[0]
+	if count != uint64(len(data)) {
+		t.Fatalf("expected %v got %v", len(data), count)
+	}
+
+}
+
 // Ensure that a top-level, bare distinct on multiple nodes
 // is handled correctly.
 func TestExecutor_BareDistinct(t *testing.T) {
@@ -7007,16 +7016,87 @@ func TestMissingKeyRegression(t *testing.T) {
 // (single and multi-node clusters, different endpoints for the
 // queries (HTTP, GRPC, Postgres), etc.).
 func TestVariousQueries(t *testing.T) {
-	for _, clusterSize := range []int{1, 3, 4, 7} {
+	for _, clusterSize := range []int{1, 3, 5} {
 		clusterSize := clusterSize
 		t.Run(fmt.Sprintf("%d-node", clusterSize), func(t *testing.T) {
 			c := test.MustRunCluster(t, clusterSize)
 			defer c.Close()
 
+			// put a variety of data into the cluster
+			populateTestData(t, c)
+			backupTest(t, c, usersIndex)
+
 			variousQueries(t, c)
 			variousQueriesOnTimeFields(t, c)
 			variousQueriesOnPercentiles(t, c)
+			variousQueriesCountDistinctTimestamp(t, c)
+			backupTest(t, c, "") // test backup/restore of all indexes
 		})
+	}
+}
+
+func backupTest(t *testing.T, c *test.Cluster, index string) {
+	// should this really be in executor? No. But all these
+	// integration-y query tests probably shouldn't be either. My goal
+	// putting this here is to take advantage of already-existing
+	// clusters and data.
+
+	sum := chkSumCluster(t, c)
+
+	backupDir := backupCluster(t, c, index)
+
+	cnew := test.MustRunCluster(t, 3) // this way we test 1->3 3->3 5->3
+	defer cnew.Close()
+
+	restoreCluster(t, backupDir, cnew)
+
+	sumNew := chkSumCluster(t, cnew)
+
+	if sum != sumNew {
+		t.Fatalf("old/new checksum mismatch, old:\n%s\nnew:\n%s", sum, sumNew)
+	}
+}
+
+func chkSumCluster(t *testing.T, c *test.Cluster) string {
+	buf := &bytes.Buffer{}
+
+	chkSum := ctl.NewChkSumCommand(nil, buf, buf)
+	chkSum.Host = c.Nodes[len(c.Nodes)-1].URL()
+	if err := chkSum.Run(context.Background()); err != nil {
+		t.Fatalf("running checksum: %v", err)
+	}
+
+	return buf.String()
+}
+
+func backupCluster(t *testing.T, c *test.Cluster, index string) (backupDir string) {
+	td, err := testhook.TempDir(t, "backupTest")
+	if err != nil {
+		t.Fatalf("can't even get a temp dir, what a ripoff: %v", err)
+	}
+	td = td + "/backupTest"
+
+	buf := &bytes.Buffer{}
+	backupCommand := ctl.NewBackupCommand(nil, buf, buf)
+	backupCommand.Host = c.Nodes[len(c.Nodes)-1].URL() // don't pick node 0 so we don't always get primary (better code coverage)
+	backupCommand.Index = index
+	backupCommand.OutputDir = td
+
+	if err := backupCommand.Run(context.Background()); err != nil {
+		t.Log(buf.String())
+		t.Fatalf("running backup: %v", err)
+	}
+	return td
+}
+
+func restoreCluster(t *testing.T, backupDir string, c *test.Cluster) {
+	buf := &bytes.Buffer{}
+
+	restore := ctl.NewRestoreCommand(nil, buf, buf)
+	restore.Host = c.Nodes[len(c.Nodes)-1].URL()
+	restore.Path = backupDir
+	if err := restore.Run(context.Background()); err != nil {
+		t.Fatalf("restoring: %v", err)
 	}
 }
 
@@ -7324,10 +7404,12 @@ func variousQueriesOnTimeFields(t *testing.T, c *test.Cluster) {
 	}
 }
 
-func variousQueries(t *testing.T, c *test.Cluster) {
+var usersIndex = "users"
+
+func populateTestData(t *testing.T, c *test.Cluster) {
 	// Create and populate "likenums" similar to "likes", but without keys on the field.
-	c.CreateField(t, "users", pilosa.IndexOptions{Keys: true, TrackExistence: true}, "likenums")
-	c.ImportIDKey(t, "users", "likenums", []test.KeyID{
+	c.CreateField(t, usersIndex, pilosa.IndexOptions{Keys: true, TrackExistence: true}, "likenums")
+	c.ImportIDKey(t, usersIndex, "likenums", []test.KeyID{
 		{ID: 1, Key: "userA"},
 		{ID: 2, Key: "userB"},
 		{ID: 3, Key: "userC"},
@@ -7345,8 +7427,8 @@ func variousQueries(t *testing.T, c *test.Cluster) {
 	})
 
 	// Create and populate "likes" field.
-	c.CreateField(t, "users", pilosa.IndexOptions{Keys: true, TrackExistence: true}, "likes", pilosa.OptFieldKeys())
-	c.ImportKeyKey(t, "users", "likes", [][2]string{
+	c.CreateField(t, usersIndex, pilosa.IndexOptions{Keys: true, TrackExistence: true}, "likes", pilosa.OptFieldKeys())
+	c.ImportKeyKey(t, usersIndex, "likes", [][2]string{
 		{"molecula", "userA"},
 		{"pilosa", "userB"},
 		{"pangolin", "userC"},
@@ -7362,8 +7444,8 @@ func variousQueries(t *testing.T, c *test.Cluster) {
 	})
 
 	// Create and populate "dinner" field.
-	c.CreateField(t, "users", pilosa.IndexOptions{Keys: true, TrackExistence: true}, "dinner", pilosa.OptFieldKeys())
-	c.ImportKeyKey(t, "users", "dinner", [][2]string{
+	c.CreateField(t, usersIndex, pilosa.IndexOptions{Keys: true, TrackExistence: true}, "dinner", pilosa.OptFieldKeys())
+	c.ImportKeyKey(t, usersIndex, "dinner", [][2]string{
 		{"leftovers", "userB"},
 		{"pizza", "userA"},
 		{"pizza", "userB"},
@@ -7373,11 +7455,11 @@ func variousQueries(t *testing.T, c *test.Cluster) {
 	})
 
 	// Create and populate "places_visited" time field.
-	c.CreateField(t, "users", pilosa.IndexOptions{Keys: true, TrackExistence: true}, "places_visited", pilosa.OptFieldKeys(), pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YM")))
+	c.CreateField(t, usersIndex, pilosa.IndexOptions{Keys: true, TrackExistence: true}, "places_visited", pilosa.OptFieldKeys(), pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YM")))
 	ts2019Jan01 := int64(1546300800) * 1e+9 // 2019 January 1st 0:00:00
 	ts2019Aug01 := int64(1564617600) * 1e+9 // 2019 August  1st 0:00:00
 	ts2020Jan01 := int64(1577836800) * 1e+9 // 2020 January 1st 0:00:00
-	c.ImportTimeQuantumKey(t, "users", "places_visited", []test.TimeQuantumKey{
+	c.ImportTimeQuantumKey(t, usersIndex, "places_visited", []test.TimeQuantumKey{
 		// 2019 January: nairobi, paris, austin, toronto
 		{RowKey: "nairobi", ColKey: "userB", Ts: ts2019Jan01},
 		{RowKey: "paris", ColKey: "userC", Ts: ts2019Jan01},
@@ -7397,8 +7479,8 @@ func variousQueries(t *testing.T, c *test.Cluster) {
 	})
 
 	// Create and populate "affinity" int field with negative, positive, zero and null values.
-	c.CreateField(t, "users", pilosa.IndexOptions{Keys: true, TrackExistence: true}, "affinity", pilosa.OptFieldTypeInt(-1000, 1000))
-	c.ImportIntKey(t, "users", "affinity", []test.IntKey{
+	c.CreateField(t, usersIndex, pilosa.IndexOptions{Keys: true, TrackExistence: true}, "affinity", pilosa.OptFieldTypeInt(-1000, 1000))
+	c.ImportIntKey(t, usersIndex, "affinity", []test.IntKey{
 		{Val: 10, Key: "userA"},
 		{Val: -10, Key: "userB"},
 		{Val: 5, Key: "userC"},
@@ -7407,8 +7489,8 @@ func variousQueries(t *testing.T, c *test.Cluster) {
 	})
 
 	// Create and populate "net_worth" int field with positive values.
-	c.CreateField(t, "users", pilosa.IndexOptions{Keys: true, TrackExistence: true}, "net_worth", pilosa.OptFieldTypeInt(-100000000, 100000000))
-	c.ImportIntKey(t, "users", "net_worth", []test.IntKey{
+	c.CreateField(t, usersIndex, pilosa.IndexOptions{Keys: true, TrackExistence: true}, "net_worth", pilosa.OptFieldTypeInt(-100000000, 100000000))
+	c.ImportIntKey(t, usersIndex, "net_worth", []test.IntKey{
 		{Val: 1, Key: "userA"},
 		{Val: 10, Key: "userB"},
 		{Val: 100, Key: "userC"},
@@ -7417,8 +7499,8 @@ func variousQueries(t *testing.T, c *test.Cluster) {
 		{Val: 100000, Key: "userF"},
 	})
 
-	c.CreateField(t, "users", pilosa.IndexOptions{Keys: true, TrackExistence: true}, "zip_code", pilosa.OptFieldTypeInt(0, 100000))
-	c.ImportIntKey(t, "users", "zip_code", []test.IntKey{
+	c.CreateField(t, usersIndex, pilosa.IndexOptions{Keys: true, TrackExistence: true}, "zip_code", pilosa.OptFieldTypeInt(0, 100000))
+	c.ImportIntKey(t, usersIndex, "zip_code", []test.IntKey{
 		{Val: 78739, Key: "userA"},
 		{Val: 78739, Key: "userB"},
 		{Val: 19707, Key: "userC"},
@@ -7426,7 +7508,12 @@ func variousQueries(t *testing.T, c *test.Cluster) {
 		{Val: 86753, Key: "userE"},
 		{Val: 78739, Key: "userG"},
 	})
+}
 
+func variousQueries(t *testing.T, c *test.Cluster) {
+	// NOTE: this relies on populateTestData being called first
+
+	// define and run a bunch of tests
 	tests := []struct {
 		query       string
 		qrVerifier  func(t *testing.T, resp pilosa.QueryResponse)
@@ -7773,8 +7860,8 @@ leftovers,1
 
 	for i, tst := range tests {
 		t.Run(fmt.Sprintf("%d-%s", i, tst.query), func(t *testing.T) {
-			resp := c.Query(t, "users", tst.query)
-			tr := c.QueryGRPC(t, "users", tst.query)
+			resp := c.Query(t, usersIndex, tst.query)
+			tr := c.QueryGRPC(t, usersIndex, tst.query)
 			if tst.qrVerifier != nil {
 				tst.qrVerifier(t, resp)
 			}
@@ -8344,7 +8431,7 @@ func MinMaxTimestampNodeTester(t *testing.T, numNodes int) {
 	defer c.Close()
 
 	// create an index and timestamp field
-	c.CreateField(t, index, pilosa.IndexOptions{}, field, pilosa.OptFieldTypeTimestamp(time.Unix(0, 0), "s"))
+	c.CreateField(t, index, pilosa.IndexOptions{TrackExistence: true}, field, pilosa.OptFieldTypeTimestamp(time.Unix(0, 0), "s"))
 
 	// add some data
 	expected := "2010-01-02T12:32:00Z"

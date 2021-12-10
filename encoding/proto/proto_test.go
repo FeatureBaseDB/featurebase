@@ -1,17 +1,4 @@
-// Copyright 2021 Molecula Corp.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
+// Copyright 2021 Molecula Corp. All rights reserved.
 package proto
 
 import (
@@ -19,8 +6,9 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/molecula/featurebase/v2"
+	pilosa "github.com/molecula/featurebase/v2"
 	"github.com/molecula/featurebase/v2/ingest"
+	"github.com/molecula/featurebase/v2/pb"
 )
 
 func testOneRoundTrip(t *testing.T, s pilosa.Serializer, obj pilosa.Message, expectedMarshalErr error, expectedUnmarshalErr error, expectedMismatchErr error) {
@@ -146,4 +134,43 @@ func TestIngestRoundTrip(t *testing.T) {
 		t.Logf("next case")
 		testOneRoundTrip(t, DefaultSerializer, tc.req, nil, nil, tc.err)
 	}
+}
+
+func TestEncodeDecodeDistinctTimestamp(t *testing.T) {
+	s := Serializer{}
+	pbTime := pb.DistinctTimestamp{
+		Values: []string{"this", "is", "fake", "timestamp", "values"},
+		Name:   "pbtime",
+	}
+	piloTime := pilosa.DistinctTimestamp{
+		Values: []string{"this", "is", "fake", "timestamp", "values"},
+		Name:   "pbtime",
+	}
+	decoded := s.decodeDistinctTimestamp(&pbTime)
+	if !reflect.DeepEqual(decoded, piloTime) {
+		t.Errorf("failed to decode DistinctTimestamp. expected %v got %v", piloTime, decoded)
+	}
+	encoded := s.encodeDistinctTimestamp(piloTime)
+	if !reflect.DeepEqual(encoded, &pbTime) {
+		t.Errorf("failed to encode DistinctTimestamp. expected %v got %v", &pbTime, encoded)
+	}
+}
+
+func TestDecodeQueryResult(t *testing.T) {
+	t.Run("DistinctTimestamp", func(t *testing.T) {
+		pbTime := pb.DistinctTimestamp{
+			Values: []string{"this", "is", "fake", "timestamp", "values"},
+			Name:   "pbtime",
+		}
+		piloTime := pilosa.DistinctTimestamp{
+			Values: []string{"this", "is", "fake", "timestamp", "values"},
+			Name:   "pbtime",
+		}
+		q := &pb.QueryResult{Type: queryResultTypeDistinctTimestamp, DistinctTimestamp: &pbTime}
+		s := Serializer{}
+		decoded := s.decodeQueryResult(q)
+		if !reflect.DeepEqual(decoded, piloTime) {
+			t.Errorf("failed to decode DistinctTimestamp. expected %v got %v", piloTime, decoded)
+		}
+	})
 }

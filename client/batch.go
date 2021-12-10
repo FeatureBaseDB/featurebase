@@ -1,17 +1,4 @@
-// Copyright 2017 Pilosa Corp.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
+// Copyright 2021 Molecula Corp. All rights reserved.
 package client
 
 import (
@@ -340,6 +327,10 @@ func (qt *QuantizedTime) SetDay(day string) {
 // day untouched.
 func (qt *QuantizedTime) SetHour(hour string) {
 	copy(qt.ymdh[8:10], hour)
+}
+
+func (qt *QuantizedTime) Time() (time.Time, error) {
+	return time.Parse("2006010215", string(qt.ymdh[:]))
 }
 
 // Reset sets the time to the zero value which generates no time views.

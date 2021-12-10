@@ -1,17 +1,4 @@
-// Copyright 2017 Pilosa Corp.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
+// Copyright 2021 Molecula Corp. All rights reserved.
 package pilosa
 
 import (
@@ -1480,6 +1467,10 @@ func (c *cluster) matchField(ctx context.Context, field *Field, like string) ([]
 	if c.Node.ID == primary.ID {
 		// The local copy is the authoritative copy.
 		plan := planLike(like)
+		store := field.TranslateStore()
+		if store == nil {
+			return nil, ErrTranslateStoreNotFound
+		}
 		return field.TranslateStore().Match(func(key []byte) bool {
 			return matchLike(key, plan...)
 		})
@@ -1521,6 +1512,10 @@ func (c *cluster) translateFieldListIDs(field *Field, ids []uint64) (keys []stri
 	}
 
 	if c.Node.ID == primary.ID {
+		store := field.TranslateStore()
+		if store == nil {
+			return nil, ErrTranslateStoreNotFound
+		}
 		keys, err = field.TranslateStore().TranslateIDs(ids)
 	} else {
 		keys, err = c.InternalClient.TranslateIDsNode(context.Background(), &primary.URI, field.Index(), field.Name(), ids)

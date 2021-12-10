@@ -1,17 +1,4 @@
-// Copyright 2017 Pilosa Corp.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
+// Copyright 2021 Molecula Corp. All rights reserved.
 package server
 
 import (
@@ -626,14 +613,14 @@ func (c *Config) ValidateAuth() ([]error, error) {
 	errors := make([]error, 0)
 	for name, value := range authConfig {
 		if value == "" {
-			errors = append(errors, fmt.Errorf("Empty string for auth config %s", name))
+			errors = append(errors, fmt.Errorf("empty string for auth config %s", name))
 			continue
 		}
 
 		if strings.Contains(name, "URL") {
 			_, err := url.ParseRequestURI(value)
 			if err != nil {
-				errors = append(errors, fmt.Errorf("Invalid URL for auth config %s: %s", name, err))
+				errors = append(errors, fmt.Errorf("invalid URL for auth config %s: %s", name, err))
 				continue
 			}
 		}

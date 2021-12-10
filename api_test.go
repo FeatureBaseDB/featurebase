@@ -1,17 +1,4 @@
-// Copyright 2017 Pilosa Corp.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
+// Copyright 2021 Molecula Corp. All rights reserved.
 package pilosa_test
 
 import (
@@ -1354,5 +1341,77 @@ func createFieldForTest(index string, field string, coord *test.Command, t *test
 	_, err := coord.API.CreateField(ctx, index, field, pilosa.OptFieldTypeInt(math.MinInt64, math.MaxInt64))
 	if err != nil {
 		t.Fatalf("creating field: %v", err)
+	}
+}
+
+func TestVariousApiTranslateCalls(t *testing.T) {
+	for i := 1; i < 8; i += 3 {
+		m := test.MustRunCluster(t, i)
+		defer m.Close()
+		node := m.GetNode(0)
+		api := node.API
+		// this should never actually get used because we're testing for errors here
+		r := strings.NewReader("")
+		// test index
+		idx, err := api.Holder().CreateIndex("index", pilosa.IndexOptions{})
+		if err != nil {
+			t.Fatalf("%v: could not create test index", err)
+		}
+		_, err = idx.CreateFieldIfNotExistsWithOptions("field", &pilosa.FieldOptions{Keys: false})
+		t.Run("translateIndexDbOnNilIndex",
+			func(t *testing.T) {
+				err := api.TranslateIndexDB(context.Background(), "nonExistentIndex", 0, r)
+				expected := fmt.Errorf("index %q not found", "nonExistentIndex")
+				if !reflect.DeepEqual(err, expected) {
+					t.Fatalf("expected '%#v', got '%#v'", expected, err)
+				}
+			})
+
+		t.Run("translateIndexDbOnNilTranslateStore",
+			func(t *testing.T) {
+				err := api.TranslateIndexDB(context.Background(), "index", 0, r)
+				expected := fmt.Errorf("index %q has no translate store", "index")
+				if !reflect.DeepEqual(err, expected) {
+					t.Fatalf("expected '%#v', got '%#v'", expected, err)
+				}
+			})
+
+		t.Run("translateFieldDbOnNilIndex",
+			func(t *testing.T) {
+				err := api.TranslateFieldDB(context.Background(), "nonExistentIndex", "field", r)
+				expected := fmt.Errorf("index %q not found", "nonExistentIndex")
+				if !reflect.DeepEqual(err, expected) {
+					t.Fatalf("expected '%#v', got '%#v'", expected, err)
+				}
+			})
+
+		t.Run("translateFieldDbOnNilField",
+			func(t *testing.T) {
+				err := api.TranslateFieldDB(context.Background(), "index", "nonExistentField", r)
+				expected := fmt.Errorf("field %q/%q not found", "index", "nonExistentField")
+				if !reflect.DeepEqual(err, expected) {
+					t.Fatalf("expected '%#v', got '%#v'", expected, err)
+				}
+			})
+
+		t.Run("translateFieldDbNilField_keys",
+			func(t *testing.T) {
+				err := api.TranslateFieldDB(context.Background(), "index", "_keys", r)
+				if err != nil {
+					t.Fatalf("expected 'nil', got '%#v'", err)
+				}
+			})
+		/*
+		   TODO: this test will break, bc currently all fields create translate
+		   stores, which is a bug, but one that we will eventually fix. when we do, this
+		   test might come in handy t.Run("translateFieldDbOnNilTranslateStore",
+		   func(t *testing.T) {
+		       err := api.TranslateFieldDB(context.Background(), "index", "field", r)
+		       expected := fmt.Errorf("field %q/%q has no translate store", "index", "field")
+		       if !reflect.DeepEqual(err, expected) {
+		           t.Fatalf("expected '%#v', got '%#v'", expected, err)
+		       }
+		   })
+		*/
 	}
 }

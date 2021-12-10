@@ -1,17 +1,4 @@
-// Copyright 2017 Pilosa Corp.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
+// Copyright 2021 Molecula Corp. All rights reserved.
 package ctl
 
 import (
@@ -21,7 +8,7 @@ import (
 	"io"
 
 	"github.com/cespare/xxhash"
-	"github.com/molecula/featurebase/v2"
+	pilosa "github.com/molecula/featurebase/v2"
 	"github.com/molecula/featurebase/v2/server"
 )
 
@@ -74,14 +61,19 @@ func (cmd *ChkSumCommand) Run(ctx context.Context) (err error) {
 	h := xxhash.New()
 
 	for _, ii := range schema.Indexes {
-		qa := &pilosa.QueryRequest{Index: ii.Name, Query: "Count(All())"}
+		qa := &pilosa.QueryRequest{Index: ii.Name, Query: "All()"}
 		rs, err := client.Query(ctx, ii.Name, qa)
 		if err != nil {
 			return err
 		}
-		all := rs.Results[0].(uint64)
-		as := fmt.Sprintf("all=%v", all)
-		_, _ = h.Write([]byte(as))
+
+		all := rs.Results[0].(*pilosa.Row)
+		if len(all.Keys) > 0 {
+			allString := fmt.Sprintf("%v", all.Keys)
+			_, _ = h.Write([]byte(allString))
+		} else {
+			_, _ = h.Write(all.Roaring())
+		}
 
 		for _, field := range ii.Fields {
 			switch field.Options.Type {
@@ -105,7 +97,7 @@ func (cmd *ChkSumCommand) Run(ctx context.Context) (err error) {
 				}
 				for _, item := range res.Results {
 					rowids := item.(*pilosa.RowIdentifiers)
-					//either rowids or keys
+					// either rowids or keys
 					for _, row := range rowids.Keys {
 						countPql := fmt.Sprintf(`Count(Row(%v="%v"))`, field.Name, row)
 						qr := &pilosa.QueryRequest{Index: ii.Name, Query: countPql}
@@ -134,7 +126,7 @@ func (cmd *ChkSumCommand) Run(ctx context.Context) (err error) {
 			}
 
 		}
-		fmt.Printf("hash:%x\n", h.Sum(nil))
+		fmt.Fprintf(cmd.Stdout, "hash:%x\n", h.Sum(nil))
 	}
 
 	return nil
