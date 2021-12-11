@@ -2,16 +2,17 @@
 package auth
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/golang-jwt/jwt"
-
-	"github.com/gorilla/context"
 	"github.com/gorilla/securecookie"
+	"github.com/molecula/featurebase/v2/logger"
 	"github.com/pkg/errors"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/microsoft"
@@ -41,6 +42,7 @@ type Auth struct {
 }
 
 var (
+	log           = logger.NewStandardLogger(os.Stderr)
 	cookieName    = "molecula-session"
 	refreshWithin = time.Second * time.Duration(15)
 	hashKey       = securecookie.GenerateRandomKey(32)
@@ -49,7 +51,8 @@ var (
 	tenantID      = "4a137d66-d161-4ae4-b1e6-07e9920874b8"
 	groupEndpoint = "https://graph.microsoft.com/v1.0/me/transitiveMemberOf/microsoft.graph.group?$count=true"
 	OauthConfig   = &oauth2.Config{
-		RedirectURL:  "http://localhost:8001/redirect",
+		// TODO: MAKE REDIRECT URL DYNAMIC
+		RedirectURL:  "http://localhost:10101/redirect",
 		ClientID:     "e9088663-eb08-41d7-8f65-efb5f54bbb71",
 		ClientSecret: "***REMOVED***",
 		Scopes:       []string{"https://graph.microsoft.com/.default", "offline_access"},
@@ -73,22 +76,7 @@ type Group struct {
 	Name string `json:"displayName"`
 }
 
-func readCookie(r *http.Request) (*CookieValue, error) {
-	cookie, err := r.Cookie(cookieName)
-	if err != nil {
-		return nil, errors.Wrap(err, "cookie not found")
-	}
-
-	var value CookieValue
-	err = secure.Decode(cookieName, cookie.Value, &value)
-	if err != nil {
-		return nil, errors.Wrap(err, "decoding cookie")
-	}
-
-	return &value, nil
-}
-
-func Authorize(w http.ResponseWriter, r *http.Request) []Group {
+func Authenticate(w http.ResponseWriter, r *http.Request) []Group {
 	cookie, err := readCookie(r)
 	if err != nil {
 		//add logging
@@ -106,46 +94,20 @@ func Authorize(w http.ResponseWriter, r *http.Request) []Group {
 
 }
 
-func home(w http.ResponseWriter, r *http.Request) {
-	cookie, err := readCookie(r)
-	if err != nil {
-		fmt.Println(errors.Wrap(err, "retrieving cookie"))
-		html := `<html>
-		<body>
-		<p> you are not logged in so: </p>
-		<a href="/login">Log In</a>
-		</body>
-		</html>`
-		fmt.Fprintf(w, html)
-		return
-	}
-	fmt.Printf("GET TIME 1 %v\n\n", cookie.Token.Expiry)
-	if cookie.Token.Expiry.Before(time.Now().Add(refreshWithin)) {
-		fmt.Println("time almost expired, attempting to refresh token")
-		err = cookie.refreshToken(w)
-
-		if err != nil {
-			http.Redirect(w, r, "/login", http.StatusTemporaryRedirect)
-		}
-	}
-	html := `<html>
-			<body>
-				<p> you are logged in! </p>
-			</body>
-			</html>`
-	fmt.Fprintf(w, html)
-}
-
-func login(w http.ResponseWriter, r *http.Request) {
+func Login(w http.ResponseWriter, r *http.Request) {
+	log.Infof("/login")
 	authUrl := OauthConfig.AuthCodeURL(OauthConfig.Endpoint.AuthURL)
+	log.Infof("AUTHURL: %v\n\n", authUrl)
 	http.Redirect(w, r, authUrl, http.StatusTemporaryRedirect)
 }
 
 // Gets user information from IdP and sets a secure cookie
-func redirect(w http.ResponseWriter, r *http.Request) {
+func Redirect(w http.ResponseWriter, r *http.Request) {
+	log.Infof("/redirect")
 	code := r.FormValue("code")
-	fmt.Printf("CODE %v\n\n", code)
+	log.Infof("CODE %v\n\n", code)
 	token, err := getToken(code)
+	log.Infof("TOKEN %v\n\n", token)
 	if err != nil {
 		errors.Wrap(err, "getting token")
 		http.Redirect(w, r, "/login", http.StatusTemporaryRedirect)
@@ -154,11 +116,11 @@ func redirect(w http.ResponseWriter, r *http.Request) {
 
 	cv := newCookieValue(token)
 	cv.setCookie(w)
-	http.Redirect(w, r, "/home", http.StatusTemporaryRedirect)
+	http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
 }
 
 func getToken(code string) (*oauth2.Token, error) {
-	token, err := OauthConfig.Exchange(oauth2.NoContext, code)
+	token, err := OauthConfig.Exchange(context.Background(), code)
 	if err != nil {
 		return nil, errors.Wrap(err, "exchanging auth code for token")
 	}
@@ -212,6 +174,21 @@ func getGroupMembership(token *oauth2.Token) (Groups, error) {
 	return groups, nil
 }
 
+func readCookie(r *http.Request) (*CookieValue, error) {
+	cookie, err := r.Cookie(cookieName)
+	if err != nil {
+		return nil, errors.Wrap(err, "cookie not found")
+	}
+
+	var value CookieValue
+	err = secure.Decode(cookieName, cookie.Value, &value)
+	if err != nil {
+		return nil, errors.Wrap(err, "decoding cookie")
+	}
+
+	return &value, nil
+}
+
 func (cookie *CookieValue) setCookie(w http.ResponseWriter) error {
 	encoded, err := secure.Encode(cookieName, cookie)
 	if err != nil {
@@ -232,7 +209,7 @@ func (cookie *CookieValue) setCookie(w http.ResponseWriter) error {
 
 func (cookie *CookieValue) refreshToken(w http.ResponseWriter) error {
 	fmt.Println("REFRESHING TOKEN")
-	tokenSource := OauthConfig.TokenSource(oauth2.NoContext, cookie.Token)
+	tokenSource := OauthConfig.TokenSource(context.Background(), cookie.Token)
 	newToken, err := tokenSource.Token()
 	if err != nil {
 		return errors.Wrap(err, "refreshing token")
@@ -247,11 +224,4 @@ func (cookie *CookieValue) refreshToken(w http.ResponseWriter) error {
 	}
 
 	return nil
-}
-
-func main() {
-	http.HandleFunc("/", home)
-	http.HandleFunc("/login", login)
-	http.HandleFunc("/redirect", redirect)
-	fmt.Println(http.ListenAndServe(":8001", context.ClearHandler(http.DefaultServeMux)))
 }

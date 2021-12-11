@@ -29,6 +29,7 @@ import (
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	pilosa "github.com/molecula/featurebase/v2"
+	"github.com/molecula/featurebase/v2/auth"
 	"github.com/molecula/featurebase/v2/encoding/proto"
 	"github.com/molecula/featurebase/v2/ingest"
 	"github.com/molecula/featurebase/v2/logger"
@@ -446,6 +447,10 @@ func newRouter(handler *Handler) http.Handler {
 	// could be long or short.
 	router.HandleFunc("/cpu-profile/start", handler.handleCPUProfileStart).Methods("GET").Name("CPUProfileStart")
 	router.HandleFunc("/cpu-profile/stop", handler.handleCPUProfileStop).Methods("GET").Name("CPUProfileStop")
+
+	router.HandleFunc("/login", handler.handleLogin).Methods("GET").Name("Login")
+	router.HandleFunc("/redirect", handler.handleRedirect).Methods("GET").Name("Redirect")
+	router.HandleFunc("/auth", handler.handleCheckAuthentication).Methods("GET").Name("CheckAuthentication")
 
 	// Endpoints to support lattice UI embedded via statik.
 	// The messiness here reflects the fact that assets live in a nontrivial
@@ -3349,4 +3354,25 @@ func (h *Handler) handlePostRestore(w http.ResponseWriter, r *http.Request) {
 	w.Header().Add("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("OK")) //nolint:errcheck
+}
+
+func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
+	auth.Login(w, r)
+}
+
+func (h *Handler) handleRedirect(w http.ResponseWriter, r *http.Request) {
+	auth.Redirect(w, r)
+}
+
+func (h *Handler) handleCheckAuthentication(w http.ResponseWriter, r *http.Request) {
+	groups := auth.Authenticate(w, r)
+	if groups == nil {
+		w.Header().Add("Content-Type", "text/plain")
+		w.WriteHeader(http.StatusForbidden)
+		return
+	}
+	w.Header().Add("Content-Type", "text/plain")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("OK")) //nolint:errcheck
+
 }
