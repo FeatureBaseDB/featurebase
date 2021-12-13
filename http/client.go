@@ -1751,26 +1751,22 @@ func (c *InternalClient) doWithRetry(req *http.Request) (*http.Response, error) 
 	// start timer after first request, so if retryPeriod > 0 we
 	// pretty much always do at least one retry
 	start := time.Now()
-	for ; ; resp, err = c.httpClient.Do(req) {
-		if err != nil || resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			if time.Since(start) > c.retryPeriod {
-				break
-			}
-			if err != nil {
-				c.log.Printf("retrying request due to error: '%v'", err)
-			} else {
-				if bod, readErr := ioutil.ReadAll(resp.Body); readErr != nil {
-					c.log.Printf("retrying request due to status: %d, error reading body: '%v', body: '%s'", resp.StatusCode, readErr, bod)
-				} else {
-					c.log.Printf("retrying request due to status: %d, body: '%s'", resp.StatusCode, bod)
-				}
-			}
-
-			time.Sleep(sleepDuration)
-			sleepDuration *= 2
-		} else {
+	for ; err != nil || resp.StatusCode < 200 || resp.StatusCode >= 300; resp, err = c.httpClient.Do(req) {
+		if time.Since(start) > c.retryPeriod {
 			break
 		}
+		if err != nil {
+			c.log.Printf("retrying request due to error: '%v'", err)
+		} else {
+			if bod, readErr := ioutil.ReadAll(resp.Body); readErr != nil {
+				c.log.Printf("retrying request due to status: %d, error reading body: '%v', body: '%s'", resp.StatusCode, readErr, bod)
+			} else {
+				c.log.Printf("retrying request due to status: %d, body: '%s'", resp.StatusCode, bod)
+			}
+		}
+
+		time.Sleep(sleepDuration)
+		sleepDuration *= 2
 	}
 	return resp, err
 }
