@@ -14,6 +14,9 @@ export const pilosa = {
     status() {
       return api.get('/status');
     },
+    login() {
+      return api.get('/login');
+    },
     info() {
       return api.get('/info');
     },
