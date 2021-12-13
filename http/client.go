@@ -11,6 +11,7 @@ import (
 	"math/rand"
 	"net/http"
 	"net/url"
+	"os"
 	"path"
 	"sort"
 	"strconv"
@@ -20,6 +21,7 @@ import (
 	pilosa "github.com/molecula/featurebase/v2"
 	"github.com/molecula/featurebase/v2/encoding/proto"
 	"github.com/molecula/featurebase/v2/ingest"
+	"github.com/molecula/featurebase/v2/logger"
 	pnet "github.com/molecula/featurebase/v2/net"
 	"github.com/molecula/featurebase/v2/topology"
 	"github.com/molecula/featurebase/v2/tracing"
@@ -31,6 +33,10 @@ type InternalClient struct {
 	defaultURI *pnet.URI
 	serializer pilosa.Serializer
 
+	log logger.Logger
+
+	retryPeriod time.Duration
+
 	// The client to use for HTTP communication.
 	httpClient *http.Client
 	// the local node's API, used for operations that we can short-circuit that way
@@ -40,7 +46,7 @@ type InternalClient struct {
 // NewInternalClient returns a new instance of InternalClient to connect to host.
 // If api is non-nil, the client uses it for some same-host operations instead
 // of going through http.
-func NewInternalClient(host string, remoteClient *http.Client) (*InternalClient, error) {
+func NewInternalClient(host string, remoteClient *http.Client, opts ...InternalClientOption) (*InternalClient, error) {
 	if host == "" {
 		return nil, pilosa.ErrHostRequired
 	}
@@ -50,16 +56,38 @@ func NewInternalClient(host string, remoteClient *http.Client) (*InternalClient,
 		return nil, errors.Wrap(err, "getting URI")
 	}
 
-	client := NewInternalClientFromURI(uri, remoteClient)
+	client := NewInternalClientFromURI(uri, remoteClient, opts...)
 	return client, nil
 }
 
-func NewInternalClientFromURI(defaultURI *pnet.URI, remoteClient *http.Client) *InternalClient {
-	return &InternalClient{
+type InternalClientOption func(c *InternalClient)
+
+// WithClientRetryPeriod is the max amount of total time the client will
+// retry failed requests using exponential backoff.
+func WithClientRetryPeriod(period time.Duration) InternalClientOption {
+	return func(c *InternalClient) {
+		c.retryPeriod = period
+	}
+}
+
+func WithClientLogger(log logger.Logger) InternalClientOption {
+	return func(c *InternalClient) {
+		c.log = log
+	}
+}
+
+func NewInternalClientFromURI(defaultURI *pnet.URI, remoteClient *http.Client, opts ...InternalClientOption) *InternalClient {
+	ic := &InternalClient{
 		defaultURI: defaultURI,
 		serializer: proto.Serializer{},
 		httpClient: remoteClient,
+		log:        logger.NewStandardLogger(os.Stderr),
 	}
+
+	for _, opt := range opts {
+		opt(ic)
+	}
+	return ic
 }
 
 // MaxShardByIndex returns the number of shards on a server by index.
@@ -1717,6 +1745,36 @@ func giveRawResponse(b bool) executeRequestOption {
 	}
 }
 
+func (c *InternalClient) doWithRetry(req *http.Request) (*http.Response, error) {
+	sleepDuration := time.Second
+	resp, err := c.httpClient.Do(req)
+	// start timer after first request, so if retryPeriod > 0 we
+	// pretty much always do at least one retry
+	start := time.Now()
+	for ; ; resp, err = c.httpClient.Do(req) {
+		if err != nil || resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			if time.Since(start) > c.retryPeriod {
+				break
+			}
+			if err != nil {
+				c.log.Printf("retrying request due to error: '%v'", err)
+			} else {
+				if bod, readErr := ioutil.ReadAll(resp.Body); readErr != nil {
+					c.log.Printf("retrying request due to status: %d, error reading body: '%v', body: '%s'", resp.StatusCode, readErr, bod)
+				} else {
+					c.log.Printf("retrying request due to status: %d, body: '%s'", resp.StatusCode, bod)
+				}
+			}
+
+			time.Sleep(sleepDuration)
+			sleepDuration *= 2
+		} else {
+			break
+		}
+	}
+	return resp, err
+}
+
 // executeRequest executes the given request and checks the Response. For
 // responses with non-2XX status, the body is read and closed, and an error is
 // returned. If the error is nil, the caller must ensure that the response body
@@ -1729,7 +1787,7 @@ func (c *InternalClient) executeRequest(req *http.Request, opts ...executeReques
 
 	tracing.GlobalTracer.InjectHTTPHeaders(req)
 	req.Close = false
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.doWithRetry(req)
 	if err != nil {
 		if resp != nil {
 			resp.Body.Close()

@@ -10,6 +10,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"time"
 
 	pilosa "github.com/molecula/featurebase/v2"
 	"github.com/molecula/featurebase/v2/http"
@@ -37,6 +38,9 @@ type BackupCommand struct { // nolint: maligned
 	// Number of concurrent backup goroutines running at a time.
 	Concurrency int
 
+	// Amount of time after first failed request to continue retrying.
+	RetryPeriod time.Duration `json:"retry-period"`
+
 	// Reusable client.
 	client pilosa.InternalClient
 
@@ -51,6 +55,7 @@ func NewBackupCommand(stdin io.Reader, stdout, stderr io.Writer) *BackupCommand 
 	return &BackupCommand{
 		CmdIO:       pilosa.NewCmdIO(stdin, stdout, stderr),
 		Concurrency: 1,
+		RetryPeriod: time.Minute,
 	}
 }
 
@@ -70,7 +75,7 @@ func (cmd *BackupCommand) Run(ctx context.Context) (err error) {
 	}
 
 	// Create a client to the server.
-	client, err := commandClient(cmd)
+	client, err := commandClient(cmd, http.WithClientRetryPeriod(cmd.RetryPeriod))
 	if err != nil {
 		return fmt.Errorf("creating client: %w", err)
 	}
@@ -262,7 +267,7 @@ func (cmd *BackupCommand) backupShardNode(ctx context.Context, indexName string,
 	logger := cmd.Logger()
 	logger.Printf("backing up shard: index=%q id=%d", indexName, shard)
 
-	client := http.NewInternalClientFromURI(&node.URI, http.GetHTTPClient(cmd.tlsConfig))
+	client := http.NewInternalClientFromURI(&node.URI, http.GetHTTPClient(cmd.tlsConfig), http.WithClientRetryPeriod(cmd.RetryPeriod))
 	rc, err := client.ShardReader(ctx, indexName, shard)
 	if err != nil {
 		return fmt.Errorf("fetching shard reader: %w", err)
