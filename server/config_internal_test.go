@@ -279,12 +279,15 @@ func TestConfig_validateAddrsGRPC(t *testing.T) {
 }
 
 func TestConfig_validateAuth(t *testing.T) {
-	errorMesgEmpty := "empty string"
-	errorMesgURL := "invalid URL"
+	errorMesgEmpty := "Empty string"
+	errorMesgURL := "Invalid URL"
+	errorMesgPermissions := "Invalid file extension"
 	validTestURL := "https://url.com/"
 	validClientID := "clientid"
 	validClientSecret := "clientSecret"
-	notValidURL := "not-a-url"
+	validFilename := "permissions.yaml"
+	invalidFilename := "permissions.txt"
+	invalidURL := "not-a-url"
 	emptyString := ""
 	enable := true
 	disable := false
@@ -303,6 +306,7 @@ func TestConfig_validateAuth(t *testing.T) {
 				errorMesgEmpty,
 				errorMesgEmpty,
 				errorMesgEmpty,
+				errorMesgEmpty,
 			},
 			auth.Auth{
 				Enable:           enable,
@@ -312,11 +316,13 @@ func TestConfig_validateAuth(t *testing.T) {
 				TokenURL:         emptyString,
 				GroupEndpointURL: emptyString,
 				ScopeURL:         emptyString,
+				PermissionsFile:  emptyString,
 			},
 		},
 		{
 			// Auth enabled, some configs are set to empty string
 			[]string{
+				errorMesgEmpty,
 				errorMesgEmpty,
 				errorMesgEmpty,
 				errorMesgEmpty,
@@ -331,11 +337,13 @@ func TestConfig_validateAuth(t *testing.T) {
 				TokenURL:         emptyString,
 				GroupEndpointURL: emptyString,
 				ScopeURL:         emptyString,
+				PermissionsFile:  emptyString,
 			},
 		},
 		{
 			// Auth enabled, some configs are set to empty string
 			[]string{
+				errorMesgEmpty,
 				errorMesgEmpty,
 				errorMesgEmpty,
 				errorMesgEmpty,
@@ -350,11 +358,13 @@ func TestConfig_validateAuth(t *testing.T) {
 				TokenURL:         emptyString,
 				GroupEndpointURL: emptyString,
 				ScopeURL:         emptyString,
+				PermissionsFile:  emptyString,
 			},
 		},
 		{
 			// Auth enabled, some configs are set to empty string
 			[]string{
+				errorMesgEmpty,
 				errorMesgEmpty,
 				errorMesgEmpty,
 				errorMesgEmpty,
@@ -368,11 +378,13 @@ func TestConfig_validateAuth(t *testing.T) {
 				TokenURL:         emptyString,
 				GroupEndpointURL: emptyString,
 				ScopeURL:         emptyString,
+				PermissionsFile:  emptyString,
 			},
 		},
 		{
 			// Auth enabled, some configs are set to empty string
 			[]string{
+				errorMesgEmpty,
 				errorMesgEmpty,
 				errorMesgEmpty,
 				errorMesgEmpty,
@@ -385,11 +397,13 @@ func TestConfig_validateAuth(t *testing.T) {
 				TokenURL:         emptyString,
 				GroupEndpointURL: emptyString,
 				ScopeURL:         emptyString,
+				PermissionsFile:  emptyString,
 			},
 		},
 		{
 			// Auth enabled, some configs are set to empty string
 			[]string{
+				errorMesgEmpty,
 				errorMesgEmpty,
 				errorMesgEmpty,
 			},
@@ -401,6 +415,7 @@ func TestConfig_validateAuth(t *testing.T) {
 				TokenURL:         validTestURL,
 				GroupEndpointURL: emptyString,
 				ScopeURL:         emptyString,
+				PermissionsFile:  emptyString,
 			},
 		},
 		{
@@ -412,10 +427,11 @@ func TestConfig_validateAuth(t *testing.T) {
 				Enable:           enable,
 				ClientId:         validClientID,
 				ClientSecret:     validClientSecret,
-				AuthorizeURL:     notValidURL,
+				AuthorizeURL:     invalidURL,
 				TokenURL:         validTestURL,
 				GroupEndpointURL: validTestURL,
 				ScopeURL:         validTestURL,
+				PermissionsFile:  validFilename,
 			},
 		},
 		{
@@ -429,9 +445,26 @@ func TestConfig_validateAuth(t *testing.T) {
 				ClientId:         validClientID,
 				ClientSecret:     validClientSecret,
 				AuthorizeURL:     validTestURL,
-				TokenURL:         notValidURL,
-				GroupEndpointURL: notValidURL,
+				TokenURL:         invalidURL,
+				GroupEndpointURL: invalidURL,
 				ScopeURL:         validTestURL,
+				PermissionsFile:  validFilename,
+			},
+		},
+		{
+			// Auth enabled, permissions file is set to invalid string
+			[]string{
+				errorMesgPermissions,
+			},
+			auth.Auth{
+				Enable:           enable,
+				ClientId:         validClientID,
+				ClientSecret:     validClientSecret,
+				AuthorizeURL:     validTestURL,
+				TokenURL:         validTestURL,
+				GroupEndpointURL: validTestURL,
+				ScopeURL:         validTestURL,
+				PermissionsFile:  invalidFilename,
 			},
 		},
 		{
@@ -445,6 +478,7 @@ func TestConfig_validateAuth(t *testing.T) {
 				TokenURL:         validTestURL,
 				GroupEndpointURL: validTestURL,
 				ScopeURL:         validTestURL,
+				PermissionsFile:  validFilename,
 			},
 		},
 		{
@@ -458,6 +492,7 @@ func TestConfig_validateAuth(t *testing.T) {
 				TokenURL:         emptyString,
 				GroupEndpointURL: emptyString,
 				ScopeURL:         emptyString,
+				PermissionsFile:  emptyString,
 			},
 		},
 	}

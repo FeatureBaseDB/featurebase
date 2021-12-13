@@ -7,6 +7,7 @@ import (
 	"log"
 	"net"
 	"net/url"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -613,37 +614,51 @@ func (c *Config) ValidateAuth() ([]error, error) {
 	errors := make([]error, 0)
 	for name, value := range authConfig {
 		if value == "" {
-			errors = append(errors, fmt.Errorf("empty string for auth config %s", name))
+			errors = append(errors, fmt.Errorf("Empty string for auth config %s", name))
 			continue
 		}
 
 		if strings.Contains(name, "URL") {
 			_, err := url.ParseRequestURI(value)
 			if err != nil {
-				errors = append(errors, fmt.Errorf("invalid URL for auth config %s: %s", name, err))
+				errors = append(errors, fmt.Errorf("Invalid URL for auth config %s: %s", name, err))
 				continue
 			}
 		}
 
 		if strings.Contains(name, "File") {
-			yamlData := auth.ReadPermissionsFile(value)
-			var p auth.GroupPermissions
-			p.CreatePermissionsStruct(yamlData)
-			if len(p.Permissions) == 0 {
-				errors = append(errors, fmt.Errorf("No group permissions found in permissions file: %s", value))
+			fileExt := filepath.Ext(value)
+			if (fileExt != ".yaml") && (fileExt != ".yml") {
+				errors = append(errors, fmt.Errorf("Invalid file extension for auth config %s: %s", name, value))
+				continue
 			}
 		}
 	}
+
 	if len(errors) > 0 {
-		return errors, fmt.Errorf("there were errors validating config")
+		return errors, fmt.Errorf("There were errors validating config")
 	}
 	return errors, nil
 }
 
+func (c *Config) ValidatePermissions() (err error) {
+
+	yamlData := auth.ReadPermissionsFile(c.Auth.PermissionsFile)
+	var p auth.GroupPermissions
+	p.CreatePermissionsStruct(yamlData)
+	if len(p.Permissions) == 0 {
+		return fmt.Errorf("No group permissions found in permissions file: %s", c.Auth.PermissionsFile)
+	}
+	return nil
+}
+
 func (c *Config) MustValidateAuth() {
 	if errors, err := c.ValidateAuth(); err != nil {
-		for _, e := range errors {
-			log.Println(e)
+		for _, e1 := range errors {
+			log.Println(e1)
+		}
+		if e2 := c.ValidatePermissions(); e2 != nil {
+			log.Println(e2)
 		}
 		log.Fatal(err)
 	}
