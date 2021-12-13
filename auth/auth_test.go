@@ -22,19 +22,6 @@ import (
 	"github.com/molecula/featurebase/v2/auth"
 )
 
-func createStruct(inputs [][]string) (permissions auth.GroupPermissions) {
-	var sliceStruct []auth.Permissions
-	for _, i := range inputs {
-		groupId := i[0]
-		index := i[1]
-		permission := i[2]
-		p := auth.Permissions{groupId, index, permission}
-		sliceStruct = append(sliceStruct, p)
-	}
-	permissions = auth.GroupPermissions{Permissions: sliceStruct}
-	return permissions
-}
-
 func TestAuth_CreatePermissionsStruct(t *testing.T) {
 	var singleInput = []byte(`group_permissions:
   - group:
@@ -58,21 +45,22 @@ func TestAuth_CreatePermissionsStruct(t *testing.T) {
     index: "test"
     permission: "admin"`)
 
-	var slice1 [][]string
-	var slice2 [][]string
-	var slice3 [][]string
-	var subslice1 []string
-	var subslice2 []string
-	var subslice3 []string
-	subslice1 = append(subslice1, "dca35310-ecda-4f23-86cd-876aee55906b", "test", "read")
-	subslice2 = append(subslice2, "", "", "")
-	subslice3 = append(subslice3, "dca35310-ecda-4f23-86cd-876aee559900", "test", "admin")
-	slice1 = append(slice1, subslice1)
-	slice2 = append(slice2, subslice2)
-	slice3 = append(slice3, subslice1, subslice3)
-	singleStruct := createStruct(slice1)
-	emptyStruct := createStruct(slice2)
-	multiStruct := createStruct(slice3)
+	singleStruct := auth.GroupPermissions{
+		Permissions: []auth.Permissions{
+			{"dca35310-ecda-4f23-86cd-876aee55906b", "test", "read"},
+		},
+	}
+	emptyStruct := auth.GroupPermissions{
+		Permissions: []auth.Permissions{
+			{"", "", ""},
+		},
+	}
+	multiStruct := auth.GroupPermissions{
+		Permissions: []auth.Permissions{
+			{"dca35310-ecda-4f23-86cd-876aee55906b", "test", "read"},
+			{"dca35310-ecda-4f23-86cd-876aee559900", "test", "admin"},
+		},
+	}
 
 	tests := []struct {
 		input  []byte
@@ -89,7 +77,7 @@ func TestAuth_CreatePermissionsStruct(t *testing.T) {
 			p.CreatePermissionsStruct(test.input)
 
 			if !reflect.DeepEqual(p, test.output) {
-				t.Fatalf("Expected output %s, but got %s", test.output, p)
+				t.Fatalf("expected output %s, but got %s", test.output, p)
 			}
 		},
 		)
@@ -162,14 +150,14 @@ func TestAuth_ResolvePermissions(t *testing.T) {
 			createGroupMaps(groupsList1),
 			[]string{"test"},
 			"",
-			"User is NOT allowed access to FeatureBase",
+			"user is NOT allowed access to FeatureBase",
 		},
 		{
 			permissions1,
 			createGroupMaps(groupsList2),
 			[]string{"test1"},
 			"",
-			"User is not allowed access to index",
+			"user is not allowed access to index",
 		},
 		{
 			permissions1,
@@ -204,7 +192,7 @@ func TestAuth_ResolvePermissions(t *testing.T) {
 			createGroupMaps(groupsList2),
 			[]string{"test"},
 			"",
-			"No permissions found",
+			"no permissions found",
 		},
 	}
 
@@ -217,12 +205,12 @@ func TestAuth_ResolvePermissions(t *testing.T) {
 			p1, err := p.ResolvePermissions(test.groups, test.index)
 
 			if p1 != test.userAccess {
-				t.Errorf("Expected permission to be %s, but got %s", test.userAccess, p1)
+				t.Errorf("expected permission to be %s, but got %s", test.userAccess, p1)
 			}
 
 			if err != nil {
 				if !strings.Contains(err.Error(), test.err) {
-					t.Errorf("Expected error to contain %s, but got %s", test.err, err.Error())
+					t.Errorf("expected error to contain %s, but got %s", test.err, err.Error())
 				}
 			}
 

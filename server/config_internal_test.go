@@ -279,9 +279,9 @@ func TestConfig_validateAddrsGRPC(t *testing.T) {
 }
 
 func TestConfig_validateAuth(t *testing.T) {
-	errorMesgEmpty := "Empty string"
-	errorMesgURL := "Invalid URL"
-	errorMesgPermissions := "Invalid file extension"
+	errorMesgEmpty := "empty string"
+	errorMesgURL := "invalid URL"
+	errorMesgPermissions := "invalid file extension"
 	validTestURL := "https://url.com/"
 	validClientID := "clientid"
 	validClientSecret := "clientSecret"

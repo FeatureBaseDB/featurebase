@@ -56,9 +56,9 @@ func ReadPermissionsFile(filePath string) (yamlData []byte) {
 }
 
 func (p *GroupPermissions) CreatePermissionsStruct(data []byte) {
-	err := yaml.Unmarshal([]byte(data), &p)
+	err := yaml.Unmarshal([]byte(data), p)
 	if err != nil {
-		log.Fatalf("Error %s", err)
+		log.Fatalf("error %s", err)
 	}
 }
 
@@ -87,7 +87,7 @@ func (p *GroupPermissions) ResolvePermissions(groups []map[string]string, index 
 	}
 
 	if len(groupMatch) == 0 {
-		return "", fmt.Errorf("User is NOT allowed access to FeatureBase")
+		return "", fmt.Errorf("user is NOT allowed access to FeatureBase")
 	}
 
 	// check that user's groups have access to the index user want to access
@@ -102,16 +102,15 @@ func (p *GroupPermissions) ResolvePermissions(groups []map[string]string, index 
 		}
 	}
 
-	// check that user has access to every index
-	indexCount := 0
-	for _, value := range indexCheck {
-		if value {
-			indexCount += 1
+	// check which index user does NOT have access to, and return in error mesg
+	if len(indexCheck) != len(index) {
+		var indexNotFound []string
+		for _, idx := range index {
+			if !indexCheck[idx] {
+				indexNotFound = append(indexNotFound, idx)
+			}
 		}
-	}
-
-	if indexCount != len(index) {
-		return "", fmt.Errorf("User is not allowed access to index: %s", index)
+		return "", fmt.Errorf("user is not allowed access to index: %s", indexNotFound)
 	}
 
 	// check permissions for index user has access to
@@ -122,18 +121,16 @@ func (p *GroupPermissions) ResolvePermissions(groups []map[string]string, index 
 	}
 
 	for _, g := range indexMatch {
-		if !allPermissions[g.Permission] {
-			allPermissions[g.Permission] = true
-		}
+		allPermissions[g.Permission] = true
 	}
 
 	if allPermissions["admin"] {
-		return "admin", error(nil)
+		return "admin", nil
 	} else if allPermissions["write"] {
-		return "write", error(nil)
+		return "write", nil
 	} else if allPermissions["read"] {
-		return "read", error(nil)
+		return "read", nil
 	} else {
-		return "", fmt.Errorf("No permissions found")
+		return "", fmt.Errorf("no permissions found")
 	}
 }
