@@ -73,7 +73,7 @@ directory. See [github.com/pilosa/pilosa/NOTICE](https://github.com/pilosa/pilos
 
 ## Get Support
 
-There are [several channels](https://www.pilosa.com/community/#support) available for you to reach out to us for support.
+There are [several channels](https://www.pilosa.com/community/#support) available for you to reach out to us for support. The Slack channel (#pilosa in the [Golang](https://invite.slack.golangbridge.org/) team) is the most active.
 
 ## Contributing
 
