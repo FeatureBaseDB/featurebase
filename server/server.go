@@ -29,6 +29,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	pilosa "github.com/molecula/featurebase/v2"
+	"github.com/molecula/featurebase/v2/auth"
 	"github.com/molecula/featurebase/v2/boltdb"
 	"github.com/molecula/featurebase/v2/encoding/proto"
 	petcd "github.com/molecula/featurebase/v2/etcd"
@@ -81,6 +82,8 @@ type Command struct {
 	pgserver     *PostgresServer
 
 	serverOptions []pilosa.ServerOption
+
+	auth *auth.Auth
 }
 
 type CommandOption func(c *Command) error
@@ -220,10 +223,6 @@ func (m *Command) Start() (err error) {
 	err = m.setupResourceLimits()
 	if err != nil {
 		return errors.Wrap(err, "setting resource limits")
-	}
-
-	if m.Config.Auth.Enable {
-		m.Config.MustValidateAuth()
 	}
 
 	// Initialize server.
@@ -523,6 +522,15 @@ func (m *Command) SetupServer() error {
 		return errors.Wrap(err, "new grpc server")
 	}
 
+	if m.Config.Auth.Enable {
+		m.Config.MustValidateAuth()
+		ac := m.Config.Auth
+		scopes := []string{"https://graph.microsoft.com/.default", "offline_access"}
+		m.auth, _ = auth.NewAuth(m.logger, m.listenURI.String(), scopes, ac.AuthorizeURL, ac.TokenURL, ac.GroupEndpointURL, ac.ClientId, ac.ClientSecret, ac.HashKey, ac.BlockKey)
+
+	}
+
+	m.logger.Infof("Before Handler %+v", m.auth)
 	m.Handler, err = http.NewHandler(
 		http.OptHandlerAllowedOrigins(m.Config.Handler.AllowedOrigins),
 		http.OptHandlerAPI(m.API),
@@ -531,6 +539,7 @@ func (m *Command) SetupServer() error {
 		http.OptHandlerListener(m.ln, m.Config.Advertise),
 		http.OptHandlerCloseTimeout(m.closeTimeout),
 		http.OptHandlerMiddleware(m.grpcServer.middleware(m.Config.Handler.AllowedOrigins)),
+		http.OptHandlerAuth(m.auth),
 	)
 	return errors.Wrap(err, "new handler")
 }
