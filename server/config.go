@@ -12,7 +12,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/molecula/featurebase/v2/auth"
 	petcd "github.com/molecula/featurebase/v2/etcd"
 	rbfcfg "github.com/molecula/featurebase/v2/rbf/cfg"
 	"github.com/molecula/featurebase/v2/storage"
@@ -230,8 +229,34 @@ type Config struct {
 	// Toggles /schema/details endpoint. If off, it returns empty.
 	SchemaDetailsOn bool `toml:"schema-details-on"`
 
-	// Enable AuthZ/AuthN
-	Auth auth.Auth `toml:"auth"`
+	Auth struct {
+		// Enable AuthZ/AuthN for featurebase server
+		Enable bool `toml:"enable"`
+
+		// Application/Client ID
+		ClientId string `toml:"client-id"`
+
+		// Client Secret
+		ClientSecret string `toml:"client-secret"`
+
+		// Authorize URL
+		AuthorizeURL string `toml:"authorize-url"`
+
+		// Token URL
+		TokenURL string `toml:"token-url"`
+
+		// Group Endpoint URL
+		GroupEndpointURL string `toml:"group-endpoint-url"`
+
+		// Scope URL
+		ScopeURL string `toml:"scope-url"`
+
+		// Hash Key
+		HashKey string `toml:"hash-key"`
+
+		// Block Key
+		BlockKey string `toml:"block-key"`
+	}
 }
 
 // Namespace returns the namespace to use based on the Future flag.
@@ -607,6 +632,8 @@ func (c *Config) ValidateAuth() ([]error, error) {
 		"TokenURL":         c.Auth.TokenURL,
 		"GroupEndpointURL": c.Auth.GroupEndpointURL,
 		"ScopeURL":         c.Auth.ScopeURL,
+		"HashKey":          c.Auth.HashKey,
+		"BlockKey":         c.Auth.BlockKey,
 	}
 
 	errors := make([]error, 0)
