@@ -68,6 +68,8 @@ type Handler struct {
 	middleware []func(http.Handler) http.Handler
 
 	pprofCPUProfileBuffer *bytes.Buffer
+
+	auth *auth.Auth
 }
 
 // externalPrefixFlag denotes endpoints that are intended to be exposed to clients.
@@ -110,6 +112,13 @@ func OptHandlerAllowedOrigins(origins []string) handlerOption {
 func OptHandlerAPI(api *pilosa.API) handlerOption {
 	return func(h *Handler) error {
 		h.api = api
+		return nil
+	}
+}
+
+func OptHandlerAuth(auth *auth.Auth) handlerOption {
+	return func(h *Handler) error {
+		h.auth = auth
 		return nil
 	}
 }
@@ -3357,15 +3366,22 @@ func (h *Handler) handlePostRestore(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
-	auth.Login(w, r)
+	h.logger.Infof("Handle Login Begin")
+	h.logger.Infof("Handler: %+v", h)
+	tst := h.auth
+	_ = tst
+	h.logger.Infof("Accessing Auth")
+
+	h.auth.Login(w, r)
+	h.logger.Infof("Handle Login End")
 }
 
 func (h *Handler) handleRedirect(w http.ResponseWriter, r *http.Request) {
-	auth.Redirect(w, r)
+	h.auth.Redirect(w, r)
 }
 
 func (h *Handler) handleCheckAuthentication(w http.ResponseWriter, r *http.Request) {
-	groups := auth.Authenticate(w, r)
+	groups := h.auth.Authenticate(w, r)
 	if groups == nil {
 		w.Header().Add("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusForbidden)
