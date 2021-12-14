@@ -3,6 +3,7 @@ package auth
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -10,31 +11,57 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt"
+	"github.com/gorilla/securecookie"
+	"github.com/molecula/featurebase/v2/logger"
 	"github.com/pkg/errors"
 	"golang.org/x/oauth2"
 )
 
 type Auth struct {
-	// Enable AuthZ/AuthN for featurebase server
-	Enable bool `toml:"enable"`
+	logger        logger.Logger
+	cookieName    string
+	refreshWithin time.Duration
+	hashKey       []byte
+	blockKey      []byte
+	secure        *securecookie.SecureCookie
+	groupEndpoint string
+	oAuthConfig   *oauth2.Config
+}
 
-	// Application/Client ID
-	ClientId string `toml:"client-id"`
+func NewAuth(logger logger.Logger, url string, scopes []string, authUrl, tokenUrl, groupEndpoint, clientID, clientSecret, hashKey, blockKey string) (*Auth, error) {
+	auth := &Auth{
+		logger:        logger,
+		cookieName:    "molecula-chip",
+		refreshWithin: time.Second * time.Duration(15),
+		groupEndpoint: groupEndpoint,
+		oAuthConfig: &oauth2.Config{
+			RedirectURL:  fmt.Sprintf("%s/redirect", url),
+			ClientID:     clientID,
+			ClientSecret: clientSecret,
+			Scopes:       scopes,
+			Endpoint: oauth2.Endpoint{
+				AuthURL:  authUrl,
+				TokenURL: tokenUrl,
+			},
+		},
+	}
+	data, err := decodeHex(hashKey)
+	if err != nil {
+		return nil, errors.Wrap(err, "decoding hash key")
+	}
+	auth.hashKey = data
 
-	// Client Secret
-	ClientSecret string `toml:"client-secret"`
+	data, err = decodeHex(blockKey)
+	if err != nil {
+		return nil, errors.Wrap(err, "decoding block key")
+	}
+	auth.blockKey = data
 
-	// Authorize URL
-	AuthorizeURL string `toml:"authorize-url"`
+	auth.secure = securecookie.New(auth.hashKey, auth.blockKey)
 
-	// Token URL
-	TokenURL string `toml:"token-url"`
+	auth.logger.Infof("AUTH: %+v", auth)
 
-	// Group Endpoint URL
-	GroupEndpointURL string `toml:"group-endpoint-url"`
-
-	// Scope URL
-	ScopeURL string `toml:"scope-url"`
+	return auth, nil
 }
 
 type CookieValue struct {
@@ -53,15 +80,15 @@ type Group struct {
 	Name string `json:"displayName"`
 }
 
-func Authenticate(w http.ResponseWriter, r *http.Request) []Group {
-	cookie, err := readCookie(r)
+func (a *Auth) Authenticate(w http.ResponseWriter, r *http.Request) []Group {
+	cookie, err := a.readCookie(r)
 	if err != nil {
 		//add logging
 		http.Redirect(w, r, "/login", http.StatusTemporaryRedirect)
 		return nil
 	}
-	if cookie.Token.Expiry.Before(time.Now().Add(refreshWithin)) {
-		err = cookie.refreshToken(w)
+	if cookie.Token.Expiry.Before(time.Now().Add(a.refreshWithin)) {
+		err = a.refreshToken(w, cookie)
 		if err != nil {
 			http.Redirect(w, r, "/login", http.StatusTemporaryRedirect)
 			return nil
@@ -71,47 +98,46 @@ func Authenticate(w http.ResponseWriter, r *http.Request) []Group {
 
 }
 
-func Login(w http.ResponseWriter, r *http.Request) {
-	log.Infof("/login")
-	authUrl := OauthConfig.AuthCodeURL(OauthConfig.Endpoint.AuthURL)
-	log.Infof("AUTHURL: %v\n\n", authUrl)
+func (a *Auth) Login(w http.ResponseWriter, r *http.Request) {
+	a.logger.Infof("/login")
+	authUrl := a.oAuthConfig.AuthCodeURL(a.oAuthConfig.Endpoint.AuthURL)
+	a.logger.Infof("AUTHURL: %v\n\n", authUrl)
 	http.Redirect(w, r, authUrl, http.StatusTemporaryRedirect)
 }
 
-// Gets user information from IdP and sets a secure cookie
-func Redirect(w http.ResponseWriter, r *http.Request) {
-	log.Infof("/redirect")
+// Gets user information from dP and sets a secure cookie
+func (a *Auth) Redirect(w http.ResponseWriter, r *http.Request) {
 	code := r.FormValue("code")
-	log.Infof("CODE %v\n\n", code)
-	token, err := getToken(code)
-	log.Infof("TOKEN %v\n\n", token)
+	a.logger.Infof("CODE %v\n\n", code)
+	token, err := a.getToken(code)
+	a.logger.Infof("TOKEN %v\n\n", token)
 	if err != nil {
 		errors.Wrap(err, "getting token")
 		http.Redirect(w, r, "/login", http.StatusTemporaryRedirect)
 	}
 	fmt.Printf("TOKEN %v\n\n", token)
 
-	cv := newCookieValue(token)
-	cv.setCookie(w)
+	cv := a.newCookieValue(token)
+	a.setCookie(w, cv)
 	http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
 }
 
-func getToken(code string) (*oauth2.Token, error) {
-	token, err := OauthConfig.Exchange(context.Background(), code)
+func (a *Auth) getToken(code string) (*oauth2.Token, error) {
+	token, err := a.oAuthConfig.Exchange(context.Background(), code)
 	if err != nil {
 		return nil, errors.Wrap(err, "exchanging auth code for token")
 	}
 	return token, nil
 }
 
-func newCookieValue(token *oauth2.Token) *CookieValue {
+func (a *Auth) newCookieValue(token *oauth2.Token) *CookieValue {
 	accessParsed, err := jwt.Parse(token.AccessToken, nil)
 	if token == nil {
 		fmt.Println(errors.Wrap(err, "parsing jwt claims from access tokens"))
 	}
 	claims := accessParsed.Claims.(jwt.MapClaims)
 
-	groups, err := getGroupMembership(token)
+	groups, err := a.getGroupMembership(token)
 	if err != nil {
 		fmt.Println(errors.Wrap(err, "getting group memebership"))
 	}
@@ -127,10 +153,10 @@ func newCookieValue(token *oauth2.Token) *CookieValue {
 	}
 }
 
-func getGroupMembership(token *oauth2.Token) (Groups, error) {
+func (a *Auth) getGroupMembership(token *oauth2.Token) (Groups, error) {
 	var groups Groups
 	var bearer = fmt.Sprintf("Bearer %s", token.AccessToken)
-	req, err := http.NewRequest("GET", groupEndpoint, nil)
+	req, err := http.NewRequest("GET", a.groupEndpoint, nil)
 	req.Header.Add("Authorization", bearer)
 	client := &http.Client{}
 	response, err := client.Do(req)
@@ -151,14 +177,14 @@ func getGroupMembership(token *oauth2.Token) (Groups, error) {
 	return groups, nil
 }
 
-func readCookie(r *http.Request) (*CookieValue, error) {
-	cookie, err := r.Cookie(cookieName)
+func (a *Auth) readCookie(r *http.Request) (*CookieValue, error) {
+	cookie, err := r.Cookie(a.cookieName)
 	if err != nil {
 		return nil, errors.Wrap(err, "cookie not found")
 	}
 
 	var value CookieValue
-	err = secure.Decode(cookieName, cookie.Value, &value)
+	err = a.secure.Decode(a.cookieName, cookie.Value, &value)
 	if err != nil {
 		return nil, errors.Wrap(err, "decoding cookie")
 	}
@@ -166,14 +192,14 @@ func readCookie(r *http.Request) (*CookieValue, error) {
 	return &value, nil
 }
 
-func (cookie *CookieValue) setCookie(w http.ResponseWriter) error {
-	encoded, err := secure.Encode(cookieName, cookie)
+func (a *Auth) setCookie(w http.ResponseWriter, cookie *CookieValue) error {
+	encoded, err := a.secure.Encode(a.cookieName, cookie)
 	if err != nil {
 		return errors.Wrap(err, "encoding CookieValue")
 
 	}
 	newCookie := &http.Cookie{
-		Name:     cookieName,
+		Name:     a.cookieName,
 		Value:    encoded,
 		Path:     "/",
 		Secure:   true,
@@ -184,9 +210,9 @@ func (cookie *CookieValue) setCookie(w http.ResponseWriter) error {
 	return nil
 }
 
-func (cookie *CookieValue) refreshToken(w http.ResponseWriter) error {
+func (a *Auth) refreshToken(w http.ResponseWriter, cookie *CookieValue) error {
 	fmt.Println("REFRESHING TOKEN")
-	tokenSource := OauthConfig.TokenSource(context.Background(), cookie.Token)
+	tokenSource := a.oAuthConfig.TokenSource(context.Background(), cookie.Token)
 	newToken, err := tokenSource.Token()
 	if err != nil {
 		return errors.Wrap(err, "refreshing token")
@@ -195,10 +221,21 @@ func (cookie *CookieValue) refreshToken(w http.ResponseWriter) error {
 	fmt.Printf("Refreshed AT: %v\n\n", newToken.AccessToken)
 
 	if newToken.Expiry != cookie.Token.Expiry {
-		cv := newCookieValue(newToken)
-		cv.setCookie(w)
+		cv := a.newCookieValue(newToken)
+		a.setCookie(w, cv)
 		fmt.Println("refreshed access token")
 	}
 
 	return nil
+}
+
+func decodeHex(hexstr string) ([]byte, error) {
+	data, err := hex.DecodeString(hexstr)
+	if err != nil {
+		return nil, errors.Wrap(err, "decoding hex string to byte slice")
+	}
+	if len(data) != 32 {
+		return nil, errors.Wrap(err, "invalid key length")
+	}
+	return data, nil
 }
