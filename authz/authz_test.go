@@ -87,7 +87,7 @@ func TestAuth_ReadPermissionsFile(t *testing.T) {
 	}
 }
 
-func TestAuth_ResolvePermissions(t *testing.T) {
+func TestAuth_GetPermissions(t *testing.T) {
 	// initializes different example of permissions file in yaml
 	var permissions1 = `group_permissions:
   - group:
