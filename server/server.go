@@ -29,7 +29,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	pilosa "github.com/molecula/featurebase/v2"
-	"github.com/molecula/featurebase/v2/auth"
+	auth "github.com/molecula/featurebase/v2/authenticate"
 	"github.com/molecula/featurebase/v2/boltdb"
 	"github.com/molecula/featurebase/v2/encoding/proto"
 	petcd "github.com/molecula/featurebase/v2/etcd"
@@ -525,9 +525,7 @@ func (m *Command) SetupServer() error {
 	if m.Config.Auth.Enable {
 		m.Config.MustValidateAuth()
 		ac := m.Config.Auth
-		scopes := []string{"https://graph.microsoft.com/.default", "offline_access"}
-		m.auth, _ = auth.NewAuth(m.logger, m.listenURI.String(), scopes, ac.AuthorizeURL, ac.TokenURL, ac.GroupEndpointURL, ac.ClientId, ac.ClientSecret, ac.HashKey, ac.BlockKey)
-
+		m.auth, _ = auth.NewAuth(m.logger, m.listenURI.String(), ac.Scopes, ac.AuthorizeURL, ac.TokenURL, ac.GroupEndpointURL, ac.ClientId, ac.ClientSecret, ac.HashKey, ac.BlockKey)
 	}
 
 	m.logger.Infof("Before Handler %+v", m.auth)
