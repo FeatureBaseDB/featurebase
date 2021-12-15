@@ -363,7 +363,7 @@ func (h *Handler) collectStats(next http.Handler) http.Handler {
 
 // latticeRoutes lists the frontend routes that do not directly correspond to
 // backend routes, and require special handling.
-var latticeRoutes = []string{"/tables", "/query", "/querybuilder"} // TODO somehow pull this from some metadata in the lattice directory
+var latticeRoutes = []string{"/tables", "/query", "/querybuilder", "/login"} // TODO somehow pull this from some metadata in the lattice directory
 
 // newRouter creates a new mux http router.
 func newRouter(handler *Handler) http.Handler {

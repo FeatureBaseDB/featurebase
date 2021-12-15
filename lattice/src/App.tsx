@@ -11,6 +11,7 @@ import { MoleculaTablesContainer } from 'App/MoleculaTables';
 import { QueryContainer } from 'App/Query';
 import { QueryBuilderContainer } from 'App/QueryBuilder';
 import css from './App.module.scss';
+import Login from 'App/Login/Login';
 
 const App = () => {
   const [theme, setTheme] = useState<string>(
@@ -46,6 +47,7 @@ const App = () => {
               <Route path="/tables/:id?" component={MoleculaTablesContainer} />
               <Route exact path="/query" component={QueryContainer} />
               <Route exact path="/querybuilder" component={QueryBuilderContainer} />
+              <Route exact path="/login" component={Login} />
               <Route component={NotFound} />
             </Switch>
           </div>
