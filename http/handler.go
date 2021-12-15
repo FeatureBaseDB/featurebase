@@ -3368,6 +3368,10 @@ func (h *Handler) handlePostRestore(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
+	if h.auth == nil {
+		http.Error(w, fmt.Sprintf("Trying to login but authentication is off."), http.StatusBadRequest)
+		return
+	}
 	h.logger.Infof("Handle Login Begin")
 	h.logger.Infof("Handler: %+v", h)
 	tst := h.auth
@@ -3379,10 +3383,18 @@ func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleRedirect(w http.ResponseWriter, r *http.Request) {
+	if h.auth == nil {
+		http.Error(w, fmt.Sprintf("Authentication is off."), http.StatusBadRequest)
+		return
+	}
 	h.auth.Redirect(w, r)
 }
 
 func (h *Handler) handleCheckAuthentication(w http.ResponseWriter, r *http.Request) {
+	if h.auth == nil {
+		http.Error(w, fmt.Sprintf("Trying to authenticate but authentication is off."), http.StatusBadRequest)
+		return
+	}
 	groups := h.auth.Authenticate(w, r)
 	if groups == nil {
 		w.Header().Add("Content-Type", "text/plain")
@@ -3396,11 +3408,19 @@ func (h *Handler) handleCheckAuthentication(w http.ResponseWriter, r *http.Reque
 }
 
 func (h *Handler) handleUserInfo(w http.ResponseWriter, r *http.Request) {
+	if h.auth == nil {
+		http.Error(w, fmt.Sprintf("Authentication is off."), http.StatusBadRequest)
+		return
+	}
 	if err := json.NewEncoder(w).Encode(h.auth.GetUserInfo(r)); err != nil {
 		h.logger.Errorf("writing user info: %s", err)
 	}
 }
 
 func (h *Handler) handleLogout(w http.ResponseWriter, r *http.Request) {
+	if h.auth == nil {
+		http.Error(w, fmt.Sprintf("Trying to log out but authentication is off."), http.StatusBadRequest)
+		return
+	}
 	h.auth.Logout(w, r)
 }
