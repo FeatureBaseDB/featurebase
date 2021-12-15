@@ -249,7 +249,7 @@ type Config struct {
 		GroupEndpointURL string `toml:"group-endpoint-url"`
 
 		// Scope URL
-		ScopeURL string `toml:"scope-url"`
+		Scopes []string `toml:"scopes"`
 
 		// Hash Key
 		HashKey string `toml:"hash-key"`
@@ -631,7 +631,6 @@ func (c *Config) ValidateAuth() ([]error, error) {
 		"AuthorizeURL":     c.Auth.AuthorizeURL,
 		"TokenURL":         c.Auth.TokenURL,
 		"GroupEndpointURL": c.Auth.GroupEndpointURL,
-		"ScopeURL":         c.Auth.ScopeURL,
 		"HashKey":          c.Auth.HashKey,
 		"BlockKey":         c.Auth.BlockKey,
 	}
@@ -650,6 +649,9 @@ func (c *Config) ValidateAuth() ([]error, error) {
 				continue
 			}
 		}
+	}
+	if len(c.Auth.Scopes) == 0 {
+		errors = append(errors, fmt.Errorf("must provide scope for authentication with IdP"))
 	}
 	if len(errors) > 0 {
 		return errors, fmt.Errorf("there were errors validating config")
