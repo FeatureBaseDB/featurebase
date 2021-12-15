@@ -2768,6 +2768,14 @@ func (api *API) RestoreShard(ctx context.Context, indexName string, shard uint64
 		if err != nil {
 			return err
 		}
+		bd, err := view.bitDepth([]uint64{shard})
+		if err != nil {
+			return err
+		}
+		err = fld.cacheBitDepth(bd)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
