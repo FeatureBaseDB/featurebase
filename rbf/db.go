@@ -444,15 +444,10 @@ func (db *DB) Begin(writable bool) (_ *Tx, err error) {
 	}
 
 	db.mu.Lock()
-	// note: We cannot defer db.mu.Unlock() here because
-	// we call tx.Rollback() before if db.readMetaPage
-	// returns an error, and thus we will deadlock against
-	// ourselves when the Rollback tries to acquire the db.mu.
-	// This is why db.mu.Unlock() is done manually below.
+	defer db.mu.Unlock()
 
 	if !db.opened {
 		cleanup()
-		db.mu.Unlock()
 		return nil, ErrClosed
 	}
 
@@ -470,6 +465,11 @@ func (db *DB) Begin(writable bool) (_ *Tx, err error) {
 
 		DeleteEmptyContainer: true,
 	}
+	defer func() {
+		if err != nil {
+			tx.rollback(true)
+		}
+	}()
 
 	if writable {
 		tx.dirtyPages = make(map[uint32][]byte)
@@ -480,10 +480,6 @@ func (db *DB) Begin(writable bool) (_ *Tx, err error) {
 	// This page is only written at the end of a dirty transaction.
 	page, err := db.readMetaPage()
 	if err != nil {
-		// we will deadlock in tx.Rollback()
-		// on db.mu.Lock unless we manually db.mu.Unlock first.
-		db.mu.Unlock()
-		tx.Rollback()
 		return nil, err
 	}
 	copy(tx.meta[:], page)
@@ -499,13 +495,10 @@ func (db *DB) Begin(writable bool) (_ *Tx, err error) {
 	// this avoids recomputing the cache if there are no write txs for a while.
 	if db.rootRecords == nil {
 		if db.rootRecords, err = tx.RootRecords(); err != nil {
-			db.mu.Unlock()
-			tx.Rollback()
 			return nil, err
 		}
 	}
 
-	db.mu.Unlock()
 	return tx, nil
 }
 
