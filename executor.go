@@ -4493,7 +4493,11 @@ func (e *executor) executeRowShard(ctx context.Context, qcx *Qcx, index string, 
 			return nil, err
 		}
 		defer finisher(&err0)
-		return frag.row(tx, rowID)
+		row, err := frag.row(tx, rowID)
+		if qcx.write && err == nil {
+			row = row.Clone()
+		}
+		return row, err
 	}
 
 	// If no quantum exists then return an empty bitmap.
@@ -4532,15 +4536,21 @@ func (e *executor) executeRowShard(ctx context.Context, qcx *Qcx, index string, 
 	if len(rows) == 0 {
 		return &Row{}, nil
 	} else if len(rows) == 1 {
+		if qcx.write {
+			return rows[0].Clone(), nil
+		}
 		return rows[0], nil
 	}
 	row := rows[0].Union(rows[1:]...)
+	if qcx.write {
+		row = row.Clone()
+	}
 	return row, nil
 
 }
 
 // executeRowBSIGroupShard executes a range(bsiGroup) call for a local shard.
-func (e *executor) executeRowBSIGroupShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64) (_ *Row, err0 error) {
+func (e *executor) executeRowBSIGroupShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64) (cloneable *Row, err0 error) {
 	span, _ := tracing.StartSpanFromContext(ctx, "Executor.executeRowBSIGroupShard")
 	defer span.Finish()
 
@@ -4572,6 +4582,11 @@ func (e *executor) executeRowBSIGroupShard(ctx context.Context, qcx *Qcx, index 
 		return nil, err
 	}
 	defer finisher(&err0)
+	defer func() {
+		if qcx.write && cloneable != nil {
+			cloneable = cloneable.Clone()
+		}
+	}()
 
 	// EQ null           _exists - frag.NotNull()
 	// NEQ null          frag.NotNull()
@@ -4821,6 +4836,9 @@ func (e *executor) executeNotShard(ctx context.Context, qcx *Qcx, index string, 
 	} else {
 		if existenceRow, err = existenceFrag.row(tx, 0); err != nil {
 			return nil, err
+		}
+		if qcx.write {
+			existenceRow = existenceRow.Clone()
 		}
 	}
 	// the finishers returned by a write tx, which we might be in if there's
