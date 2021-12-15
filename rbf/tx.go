@@ -126,7 +126,9 @@ func (tx *Tx) Commit() error {
 	return tx.db.removeTx(tx)
 }
 
-func (tx *Tx) Rollback() {
+func (tx *Tx) Rollback() { tx.rollback(false) }
+
+func (tx *Tx) rollback(hasDBLock bool) {
 	tx.mu.Lock()
 	defer tx.mu.Unlock()
 
@@ -141,8 +143,10 @@ func (tx *Tx) Rollback() {
 	}
 
 	// Disconnect transaction from DB.
-	tx.db.mu.Lock()
-	defer tx.db.mu.Unlock()
+	if !hasDBLock {
+		tx.db.mu.Lock()
+		defer tx.db.mu.Unlock()
+	}
 	vprint.PanicOn(tx.db.removeTx(tx))
 }
 
