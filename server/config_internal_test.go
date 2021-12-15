@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/molecula/featurebase/v2/auth"
+	"github.com/molecula/featurebase/v2/authz"
 )
 
 type addrs struct{ bind, advertise string }
@@ -294,7 +294,7 @@ func TestConfig_validateAuth(t *testing.T) {
 
 	tests := []struct {
 		expErrs []string
-		input   auth.Auth
+		input   authz.Auth
 	}{
 
 		{
@@ -308,7 +308,7 @@ func TestConfig_validateAuth(t *testing.T) {
 				errorMesgEmpty,
 				errorMesgEmpty,
 			},
-			auth.Auth{
+			authz.Auth{
 				Enable:           enable,
 				ClientId:         emptyString,
 				ClientSecret:     emptyString,
@@ -329,7 +329,7 @@ func TestConfig_validateAuth(t *testing.T) {
 				errorMesgEmpty,
 				errorMesgEmpty,
 			},
-			auth.Auth{
+			authz.Auth{
 				Enable:           enable,
 				ClientId:         validClientID,
 				ClientSecret:     emptyString,
@@ -350,7 +350,7 @@ func TestConfig_validateAuth(t *testing.T) {
 				errorMesgEmpty,
 				errorMesgEmpty,
 			},
-			auth.Auth{
+			authz.Auth{
 				Enable:           enable,
 				ClientId:         emptyString,
 				ClientSecret:     validClientSecret,
@@ -370,7 +370,7 @@ func TestConfig_validateAuth(t *testing.T) {
 				errorMesgEmpty,
 				errorMesgEmpty,
 			},
-			auth.Auth{
+			authz.Auth{
 				Enable:           enable,
 				ClientId:         validClientID,
 				ClientSecret:     validClientSecret,
@@ -389,7 +389,7 @@ func TestConfig_validateAuth(t *testing.T) {
 				errorMesgEmpty,
 				errorMesgEmpty,
 			},
-			auth.Auth{
+			authz.Auth{
 				Enable:           enable,
 				ClientId:         validClientID,
 				ClientSecret:     validClientSecret,
@@ -407,7 +407,7 @@ func TestConfig_validateAuth(t *testing.T) {
 				errorMesgEmpty,
 				errorMesgEmpty,
 			},
-			auth.Auth{
+			authz.Auth{
 				Enable:           enable,
 				ClientId:         validClientID,
 				ClientSecret:     validClientSecret,
@@ -423,7 +423,7 @@ func TestConfig_validateAuth(t *testing.T) {
 			[]string{
 				errorMesgURL,
 			},
-			auth.Auth{
+			authz.Auth{
 				Enable:           enable,
 				ClientId:         validClientID,
 				ClientSecret:     validClientSecret,
@@ -440,7 +440,7 @@ func TestConfig_validateAuth(t *testing.T) {
 				errorMesgURL,
 				errorMesgURL,
 			},
-			auth.Auth{
+			authz.Auth{
 				Enable:           enable,
 				ClientId:         validClientID,
 				ClientSecret:     validClientSecret,
@@ -456,7 +456,7 @@ func TestConfig_validateAuth(t *testing.T) {
 			[]string{
 				errorMesgPermissions,
 			},
-			auth.Auth{
+			authz.Auth{
 				Enable:           enable,
 				ClientId:         validClientID,
 				ClientSecret:     validClientSecret,
@@ -470,7 +470,7 @@ func TestConfig_validateAuth(t *testing.T) {
 		{
 			// Auth enabled, all configs are set properly
 			[]string{},
-			auth.Auth{
+			authz.Auth{
 				Enable:           enable,
 				ClientId:         validClientID,
 				ClientSecret:     validClientSecret,
@@ -484,7 +484,7 @@ func TestConfig_validateAuth(t *testing.T) {
 		{
 			// Auth disabled, all configs are set to empty string
 			[]string{},
-			auth.Auth{
+			authz.Auth{
 				Enable:           disable,
 				ClientId:         emptyString,
 				ClientSecret:     emptyString,

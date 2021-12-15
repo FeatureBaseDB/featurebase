@@ -11,7 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package auth_test
+package authz_test
 
 import (
 	"fmt"
@@ -19,23 +19,23 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/molecula/featurebase/v2/auth"
+	"github.com/molecula/featurebase/v2/authz"
 )
 
-func TestAuth_CreatePermissionsStruct(t *testing.T) {
-	var singleInput = []byte(`group_permissions:
+func TestAuth_ReadPermissionsFile(t *testing.T) {
+	var singleInput = `group_permissions:
   - group:
     groupId: "dca35310-ecda-4f23-86cd-876aee55906b"
     index: "test"
-    permission: "read"`)
+    permission: "read"`
 
-	var emptyInput = []byte(`group_permissions:
+	var emptyInput = `group_permissions:
   - group:
     groupId: ""
     index: ""
-    permission: ""`)
+    permission: ""`
 
-	var multiInput = []byte(`group_permissions:
+	var multiInput = `group_permissions:
   - group:
     groupId: "dca35310-ecda-4f23-86cd-876aee55906b"
     index: "test"
@@ -43,28 +43,28 @@ func TestAuth_CreatePermissionsStruct(t *testing.T) {
   - group:
     groupId: "dca35310-ecda-4f23-86cd-876aee559900"
     index: "test"
-    permission: "admin"`)
+    permission: "admin"`
 
-	singleStruct := auth.GroupPermissions{
-		Permissions: []auth.Permissions{
+	singleStruct := authz.GroupPermissions{
+		Permissions: []authz.Permissions{
 			{"dca35310-ecda-4f23-86cd-876aee55906b", "test", "read"},
 		},
 	}
-	emptyStruct := auth.GroupPermissions{
-		Permissions: []auth.Permissions{
+	emptyStruct := authz.GroupPermissions{
+		Permissions: []authz.Permissions{
 			{"", "", ""},
 		},
 	}
-	multiStruct := auth.GroupPermissions{
-		Permissions: []auth.Permissions{
+	multiStruct := authz.GroupPermissions{
+		Permissions: []authz.Permissions{
 			{"dca35310-ecda-4f23-86cd-876aee55906b", "test", "read"},
 			{"dca35310-ecda-4f23-86cd-876aee559900", "test", "admin"},
 		},
 	}
 
 	tests := []struct {
-		input  []byte
-		output auth.GroupPermissions
+		input  string
+		output authz.GroupPermissions
 	}{
 		{singleInput, singleStruct},
 		{emptyInput, emptyStruct},
@@ -73,8 +73,11 @@ func TestAuth_CreatePermissionsStruct(t *testing.T) {
 
 	for i, test := range tests {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
-			var p auth.GroupPermissions
-			p.CreatePermissionsStruct(test.input)
+			permFile := strings.NewReader(test.input)
+			var p authz.GroupPermissions
+			if err := p.ReadPermissionsFile(permFile); err != nil {
+				t.Fatalf("readPermissionsFile error: %s", err)
+			}
 
 			if !reflect.DeepEqual(p, test.output) {
 				t.Fatalf("expected output %s, but got %s", test.output, p)
@@ -84,26 +87,15 @@ func TestAuth_CreatePermissionsStruct(t *testing.T) {
 	}
 }
 
-func createGroupMaps(groups []string) []map[string]string {
-
-	var group1 []map[string]string
-	for _, i := range groups {
-		map1 := map[string]string{}
-		map1["id"] = i
-		group1 = append(group1, map1)
-	}
-	return group1
-}
-
 func TestAuth_ResolvePermissions(t *testing.T) {
 	// initializes different example of permissions file in yaml
-	var permissions1 = []byte(`group_permissions:
+	var permissions1 = `group_permissions:
   - group:
     groupId: "dca35310-ecda-4f23-86cd-876aee55906b"
     index: "test"
-    permission: "read"`)
+    permission: "read"`
 
-	var permissions2 = []byte(`group_permissions:
+	var permissions2 = `group_permissions:
   - group:
     groupId: "dca35310-ecda-4f23-86cd-876aee559900"
     index: "test"
@@ -111,9 +103,9 @@ func TestAuth_ResolvePermissions(t *testing.T) {
   - group:
     groupId: "dca35310-ecda-4f23-86cd-876aee559900"
     index: "test"
-    permission: "write"`)
+    permission: "write"`
 
-	var permissions3 = []byte(`group_permissions:
+	var permissions3 = `group_permissions:
   - group:
     groupId: "dca35310-ecda-4f23-86cd-876aee559900"
     index: "test"
@@ -121,9 +113,9 @@ func TestAuth_ResolvePermissions(t *testing.T) {
   - group:
     groupId: "dca35310-ecda-4f23-86cd-876aee559900"
     index: "test"
-    permission: "admin"`)
+    permission: "admin"`
 
-	var permissions4 = []byte(`group_permissions:
+	var permissions4 = `group_permissions:
   - group:
     groupId: "dca35310-ecda-4f23-86cd-876aee55906b"
     index: "test"
@@ -131,65 +123,68 @@ func TestAuth_ResolvePermissions(t *testing.T) {
   - group:
     groupId: "dca35310-ecda-4f23-86cd-876aee559900"
     index: "test"
-    permission: "admin"`)
+    permission: "admin"`
 
 	// initializes groups that are returned from identity provider
-	groupsList1 := []string{}
-	groupsList2 := []string{"dca35310-ecda-4f23-86cd-876aee55906b"}
-	groupsList3 := []string{"dca35310-ecda-4f23-86cd-876aee55906b", "dca35310-ecda-4f23-86cd-876aee559900"}
+	groupsList1 := []authz.Group{}
+	groupsList2 := []authz.Group{{"dca35310-ecda-4f23-86cd-876aee55906b", "name"}}
+	groupsList3 := []authz.Group{
+		{"dca35310-ecda-4f23-86cd-876aee55906b", "name"},
+		{"dca35310-ecda-4f23-86cd-876aee559900", "name"},
+	}
 
 	tests := []struct {
-		permissions []byte
-		groups      []map[string]string
-		index       []string
-		userAccess  string
-		err         string
+		yamlData   string
+		groups     []authz.Group
+		index      []string
+		userAccess string
+		err        string
 	}{
 		{
 			permissions1,
-			createGroupMaps(groupsList1),
+			groupsList1,
 			[]string{"test"},
 			"",
-			"user is NOT allowed access to FeatureBase",
+			"NOT allowed access to FeatureBase",
 		},
 		{
 			permissions1,
-			createGroupMaps(groupsList2),
+			groupsList2,
 			[]string{"test1"},
 			"",
-			"user is not allowed access to index",
+			"NOT allowed access to index",
 		},
 		{
 			permissions1,
-			createGroupMaps(groupsList2),
+			groupsList2,
 			[]string{"test"},
 			"read",
 			"",
 		},
 		{
 			permissions2,
-			createGroupMaps(groupsList3),
+			groupsList3,
 			[]string{"test"},
 			"write",
 			"",
 		},
 		{
 			permissions3,
-			createGroupMaps(groupsList3),
+			groupsList3,
 			[]string{"test"},
 			"admin",
 			"",
 		},
 		{
 			permissions2,
-			createGroupMaps(groupsList3),
+			groupsList3,
 			[]string{"test"},
 			"write",
 			"",
 		},
 		{
 			permissions4,
-			createGroupMaps(groupsList2),
+			groupsList2,
 			[]string{"test"},
 			"",
 			"no permissions found",
@@ -199,10 +194,11 @@ func TestAuth_ResolvePermissions(t *testing.T) {
 	for i, test := range tests {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
 
-			var p auth.GroupPermissions
-			p.CreatePermissionsStruct(test.permissions)
+			permFile := strings.NewReader(test.yamlData)
+			var p authz.GroupPermissions
+			p.ReadPermissionsFile(permFile)
 
-			p1, err := p.ResolvePermissions(test.groups, test.index)
+			p1, err := p.GetPermissions(test.groups, test.index)
 
 			if p1 != test.userAccess {
 				t.Errorf("expected permission to be %s, but got %s", test.userAccess, p1)

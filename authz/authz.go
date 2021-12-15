@@ -1,11 +1,23 @@
-// Copyright 2021 Molecula Corp. All rights reserved.
-package auth
+// Copyright 2017 Pilosa Corp.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package authz
 
 import (
 	"fmt"
+	"io"
 	"io/ioutil"
-	"log"
-	"path/filepath"
 
 	"gopkg.in/yaml.v2"
 )
@@ -46,48 +58,39 @@ type Permissions struct {
 	Permission string `yaml:"permission"`
 }
 
-func ReadPermissionsFile(filePath string) (yamlData []byte) {
-	filePathAbs, _ := filepath.Abs(filePath)
-	yamlData, err := ioutil.ReadFile(filePathAbs)
+type Group struct {
+	ID   string `json:"id"`
+	Name string `json:"displayName"`
+}
+
+func (p *GroupPermissions) ReadPermissionsFile(permsFile io.Reader) (err error) {
+	permsData, err := ioutil.ReadAll(permsFile)
 	if err != nil {
-		panic(err)
+		return fmt.Errorf("reading permissions failed with error: %s", err)
 	}
-	return yamlData
-}
 
-func (p *GroupPermissions) CreatePermissionsStruct(data []byte) {
-	err := yaml.Unmarshal([]byte(data), p)
+	err = yaml.Unmarshal(permsData, p)
 	if err != nil {
-		log.Fatalf("error %s", err)
+		return fmt.Errorf("unmarshalling permissions failed with error: %s", err)
 	}
+
+	return nil
 }
 
-func GetPermissions(Auth *Auth, groups []map[string]string, index []string) (permission string, err error) {
-	// read yaml permissions file
-	yamlData := ReadPermissionsFile(Auth.PermissionsFile)
-
-	// get group permissions
-	var p GroupPermissions
-	p.CreatePermissionsStruct(yamlData)
-
-	// check permissions for all groups and index, and return most permissive
-	return p.ResolvePermissions(groups, index)
-}
-
-func (p *GroupPermissions) ResolvePermissions(groups []map[string]string, index []string) (permission string, err error) {
+func (p *GroupPermissions) GetPermissions(groups []Group, index []string) (permission string, err error) {
 
 	// get union of groups the user is part of obtained from identity provider and groups in permissions file
 	var groupMatch []Permissions
 	for _, group := range groups {
 		for i := range p.Permissions {
-			if group["id"] == p.Permissions[i].GroupId {
+			if group.ID == p.Permissions[i].GroupId {
 				groupMatch = append(groupMatch, p.Permissions[i])
 			}
 		}
 	}
 
 	if len(groupMatch) == 0 {
-		return "", fmt.Errorf("user is NOT allowed access to FeatureBase")
+		return "", fmt.Errorf("the user's groups %s are NOT allowed access to FeatureBase", groups)
 	}
 
 	// check that user's groups have access to the index user want to access
@@ -110,7 +113,7 @@ func (p *GroupPermissions) ResolvePermissions(groups []map[string]string, index 
 				indexNotFound = append(indexNotFound, idx)
 			}
 		}
-		return "", fmt.Errorf("user is not allowed access to index: %s", indexNotFound)
+		return "", fmt.Errorf("user is NOT allowed access to index: %s", indexNotFound)
 	}
 
 	// check permissions for index user has access to

@@ -7,13 +7,14 @@ import (
 	"log"
 	"net"
 	"net/url"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/molecula/featurebase/v2/auth"
+	"github.com/molecula/featurebase/v2/authz"
 	petcd "github.com/molecula/featurebase/v2/etcd"
 	rbfcfg "github.com/molecula/featurebase/v2/rbf/cfg"
 	"github.com/molecula/featurebase/v2/storage"
@@ -232,7 +233,7 @@ type Config struct {
 	SchemaDetailsOn bool `toml:"schema-details-on"`
 
 	// Enable AuthZ/AuthN
-	Auth auth.Auth `toml:"auth"`
+	Auth authz.Auth `toml:"auth"`
 }
 
 // Namespace returns the namespace to use based on the Future flag.
@@ -642,13 +643,22 @@ func (c *Config) ValidateAuth() ([]error, error) {
 }
 
 func (c *Config) ValidatePermissions() (err error) {
+	permsFile, err := os.Open(c.Auth.PermissionsFile)
+	if err != nil {
+		return err
+	}
 
-	yamlData := auth.ReadPermissionsFile(c.Auth.PermissionsFile)
-	var p auth.GroupPermissions
-	p.CreatePermissionsStruct(yamlData)
+	var p *authz.GroupPermissions
+	if err := p.ReadPermissionsFile(permsFile); err != nil {
+		return err
+	}
+
 	if len(p.Permissions) == 0 {
 		return fmt.Errorf("no group permissions found in permissions file: %s", c.Auth.PermissionsFile)
 	}
+
+	defer permsFile.Close()
+
 	return nil
 }
 

@@ -29,6 +29,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	pilosa "github.com/molecula/featurebase/v2"
+	"github.com/molecula/featurebase/v2/authz"
 	"github.com/molecula/featurebase/v2/boltdb"
 	"github.com/molecula/featurebase/v2/encoding/proto"
 	petcd "github.com/molecula/featurebase/v2/etcd"
@@ -224,6 +225,19 @@ func (m *Command) Start() (err error) {
 
 	if m.Config.Auth.Enable {
 		m.Config.MustValidateAuth()
+
+		// Read permissions file
+		permsFile, err := os.Open(m.Config.Auth.PermissionsFile)
+		if err != nil {
+			return err
+		}
+
+		var p authz.GroupPermissions
+		if err := p.ReadPermissionsFile(permsFile); err != nil {
+			return err
+		}
+
+		defer permsFile.Close()
 	}
 
 	// Initialize server.
