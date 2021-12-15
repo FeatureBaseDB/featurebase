@@ -8,7 +8,9 @@ VPC=${VPC:-vpc-0582f594d7d2ca2d4}
 INSTANCE_ID=""
 
 function log() {
-    printf "$@" >&2
+    fmt=$1
+    shift
+    printf "$fmt\n" "$@" >&2
 }
 
 function terminate() {
@@ -40,7 +42,7 @@ function prep_binary() {
     GOOS=linux GOARCH=amd64 make build && mv featurebase featurebase_linux_amd64
 }
 
-function check_existing() {
+function check_running() {
     existing_states=$(doAws ec2 describe-instances --query 'Reservations[*].Instances[*].State.Name' --output text)
     log "instance states: %s" "$existing_states"
     case " $existing_states " in
@@ -111,7 +113,15 @@ function initialize_featurebase() {
         return 1
     fi
 
-    doSsh bash ./setup.sh || return 1
+    # execute script to configure featurebase on the EC2 node
+    aws ssm send-command --document-name "AWS-RunShellScript" --instance-ids $INSTANCE_ID --parameters commands="sudo ./setup.sh" --profile $PROFILE --region $REGION
+    if [[ $? > 0 ]]; then
+        echo "aws cli session manager send-command failed"
+        terminate_node
+        exit 1
+    fi
+
+    # doSsh bash ./setup.sh || return 1
     doSsh bash ./regression.sh || return 1
     doSsh bash ./perf.sh || return 1
 }
