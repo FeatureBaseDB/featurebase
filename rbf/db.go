@@ -33,8 +33,7 @@ var cursorSyncPool = &sync.Pool{
 // lock held, at some point after every Tx that was open when it was created
 // has closed. WARNING: A txWaiter may hold db.rwmu.
 type txWaiter struct {
-	mu        sync.Mutex
-	cond      *sync.Cond
+	ready     chan struct{}
 	waitingOn map[*Tx]struct{}
 	callback  func()
 }
@@ -660,19 +659,15 @@ func (db *DB) afterCurrentTx(callback func()) {
 		return
 	}
 	txw := &txWaiter{}
-	txw.cond = sync.NewCond(&txw.mu)
+	txw.ready = make(chan struct{})
 	txw.callback = callback
 	txw.waitingOn = make(map[*Tx]struct{}, len(db.txs))
 	for k := range db.txs {
 		txw.waitingOn[k] = struct{}{}
 	}
 	db.txWaiters = append(db.txWaiters, txw)
-	txw.mu.Lock()
 	go func() {
-		for len(txw.waitingOn) > 0 {
-			// fmt.Printf("afterCurrentTx: %d left\n", len(txw.waitingOn))
-			txw.cond.Wait()
-		}
+		<-txw.ready
 		// fmt.Printf("afterCurrentTx: locking db\n")
 		db.mu.Lock()
 		defer db.mu.Unlock()
@@ -712,16 +707,14 @@ func (db *DB) removeTx(tx *Tx) error {
 		// in practice this probably never matters, but theoretically the
 		// goroutine that's waiting on the condition variable may
 		// not have performed its first test on len(txw.waitingOn) yet.
-		txw.mu.Lock()
 		delete(txw.waitingOn, tx)
-		txw.mu.Unlock()
 		// let it know we're done. we've still got db.mu.lock, so it won't
 		// happen just yet, but it'll be able to continue.
 		if len(txw.waitingOn) == 0 {
 			// remove us from the db's list
 			copy(db.txWaiters[i:], db.txWaiters[i+1:])
 			db.txWaiters = db.txWaiters[:len(db.txWaiters)-1]
-			txw.cond.Broadcast()
+			close(txw.ready)
 			// decrement i so we don't skip an entry we just copied in to [i]
 			i--
 		}
