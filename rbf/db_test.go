@@ -291,7 +291,8 @@ func TestDB_MultiTx(t *testing.T) {
 
 					time.Sleep(time.Duration(rand.Intn(100)) * time.Millisecond)
 
-					for i := 0; i < rand.Intn(1000); i++ {
+					n := rand.Intn(500) + 500
+					for i := 0; i < n; i++ {
 						v := rand.Intn(1 << 20)
 						if _, err := tx.Contains("x", uint64(v)); err != nil {
 							return err
@@ -316,7 +317,8 @@ func TestDB_MultiTx(t *testing.T) {
 			}
 			defer tx.Rollback()
 
-			for j := 0; j < rand.Intn(100); j++ {
+			n := rand.Intn(90) + 10
+			for j := 0; j < n; j++ {
 				v := rand.Intn(1 << 20)
 				if _, err := tx.Add("x", uint64(v)); err != nil {
 					t.Fatal(err)

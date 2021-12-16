@@ -278,8 +278,6 @@ func (db *DB) checkpoint() (err error) {
 	}()
 	if !db.opened {
 		return nil
-	} else if len(db.txs) > 0 {
-		return nil // skip if transactions open
 	}
 
 	// Check if there are any WAL pages, if not do nothing as
@@ -364,6 +362,8 @@ func (db *DB) checkpoint() (err error) {
 	// the rwmu and update the metadata about the WAL.
 	releaseLock = false
 	// fmt.Printf("checkpoint mostly done, waiting for Tx cleanup...\n")
+	db.walPageN = 0
+	db.pageMap = NewPageMap()
 	db.afterCurrentTx(func() {
 		// fmt.Printf("truncating WAL\n")
 		defer db.rwmu.Unlock()
@@ -374,8 +374,6 @@ func (db *DB) checkpoint() (err error) {
 		} else if _, err = db.walFile.Seek(0, io.SeekStart); err != nil {
 			db.logger.Errorf("seek wal file: %w", err)
 		}
-		db.walPageN = 0
-		db.pageMap = NewPageMap()
 		// fmt.Printf("checkpoint actually done\n")
 	})
 	return nil
@@ -589,19 +587,22 @@ func (db *DB) Begin(writable bool) (_ *Tx, err error) {
 	if db.isDead != nil {
 		err := db.isDead
 		cleanup()
-		db.mu.Unlock()
 		return nil, err
 	}
 
-	// Wait for WAL size to be below threshold.
-	for int64(db.walPageN*PageSize) > db.cfg.MaxWALCheckpointSize {
-		if db.isDead != nil {
-			err := db.isDead
-			cleanup()
-			db.mu.Unlock()
-			return nil, err
+	// Wait for WAL size to be below threshold, if we're going to write.
+	// Reads don't care.
+	if writable {
+		for int64(db.walPageN*PageSize) > db.cfg.MaxWALCheckpointSize {
+			if db.isDead != nil {
+				err := db.isDead
+				cleanup()
+				return nil, err
+			}
+			// This implicitly releases db.mu.Lock and comes back with it
+			// held again.
+			db.haltCond.Wait()
 		}
-		db.haltCond.Wait()
 	}
 
 	tx := &Tx{
@@ -775,6 +776,9 @@ func (db *DB) baseWALID() int64 {
 
 // readWALPageByID reads a WAL page by WAL ID.
 func (db *DB) readWALPageByID(id int64) ([]byte, error) {
+	if id == db.baseWALID() {
+		fmt.Printf("id %d oops\n", id)
+	}
 	return db.readWALPageAt(int(id - db.baseWALID() - 1))
 }
 
