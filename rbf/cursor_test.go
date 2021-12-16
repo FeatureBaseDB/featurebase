@@ -973,8 +973,8 @@ func TestCursor_SplitBranchCells(t *testing.T) {
 	}
 	//
 	c, _ := tx.Cursor("x") //added just for dot code coverage
-	c.Dump("ignore for coverage")
-
+	c.Dump("test.dump")
+	os.Remove("test.dump")
 }
 
 func TestCursor_RemoveCells(t *testing.T) {

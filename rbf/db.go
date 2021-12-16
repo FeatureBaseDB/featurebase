@@ -695,8 +695,6 @@ func (db *DB) afterCurrentTx(callback func()) {
 // it retained by an asynchronous op that wants to happen before we start
 // running new tx.
 func (db *DB) removeTx(tx *Tx) error {
-	db.mu.Lock()
-	defer db.mu.Unlock()
 	// We might want to trigger a checkpoint. Only for writable
 	// transactions, and only when either there's nothing else open or we
 	// really need to.
