@@ -676,15 +676,6 @@ func (db *DB) afterCurrentTx(callback func()) {
 		// fmt.Printf("afterCurrentTx: locking db\n")
 		db.mu.Lock()
 		defer db.mu.Unlock()
-		// remove us from the db's list
-		for i, v := range db.txWaiters {
-			if v == txw {
-				// remove us from the list
-				copy(db.txWaiters[i:], db.txWaiters[i+1:])
-				db.txWaiters = db.txWaiters[:len(db.txWaiters)-1]
-				break
-			}
-		}
 		// fmt.Printf("afterCurrentTx: running callback\n")
 		txw.callback()
 	}()
@@ -716,12 +707,23 @@ func (db *DB) removeTx(tx *Tx) error {
 	}
 	// remove ourselves from the list of transactions the db is keeping.
 	delete(tx.db.txs, tx)
-	for _, txw := range tx.db.txWaiters {
+	for i := 0; i < len(tx.db.txWaiters); i++ {
+		txw := tx.db.txWaiters[i]
+		// in practice this probably never matters, but theoretically the
+		// goroutine that's waiting on the condition variable may
+		// not have performed its first test on len(txw.waitingOn) yet.
+		txw.mu.Lock()
 		delete(txw.waitingOn, tx)
+		txw.mu.Unlock()
 		// let it know we're done. we've still got db.mu.lock, so it won't
 		// happen just yet, but it'll be able to continue.
 		if len(txw.waitingOn) == 0 {
+			// remove us from the db's list
+			copy(db.txWaiters[i:], db.txWaiters[i+1:])
+			db.txWaiters = db.txWaiters[:len(db.txWaiters)-1]
 			txw.cond.Broadcast()
+			// decrement i so we don't skip an entry we just copied in to [i]
+			i--
 		}
 	}
 
