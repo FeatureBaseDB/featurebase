@@ -16,6 +16,7 @@ package authz_test
 import (
 	"fmt"
 	"reflect"
+	"sort"
 	"strings"
 	"testing"
 
@@ -227,7 +228,7 @@ func TestAuth_GetAuthorizedIndexList(t *testing.T) {
 		"dca35310-ecda-4f23-86cd-876aee55906b": {
 			"test1": "admin",
 			"test2": "read",
-			"test3": "read",
+			"test3": "write",
 		},
 	}}
 
@@ -239,7 +240,7 @@ func TestAuth_GetAuthorizedIndexList(t *testing.T) {
 		{
 			group,
 			"read",
-			[]string{"test2", "test3"},
+			[]string{"test1", "test2", "test3"},
 		},
 		{
 			group,
@@ -249,7 +250,7 @@ func TestAuth_GetAuthorizedIndexList(t *testing.T) {
 		{
 			group,
 			"write",
-			nil,
+			[]string{"test1", "test3"},
 		},
 	}
 
@@ -257,6 +258,7 @@ func TestAuth_GetAuthorizedIndexList(t *testing.T) {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
 
 			indexList := p.GetAuthorizedIndexList(test.groups, test.permission)
+			sort.Strings(indexList)
 
 			if !reflect.DeepEqual(indexList, test.output) {
 				t.Errorf("expected %s, but got %s", test.output, indexList)

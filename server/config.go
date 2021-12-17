@@ -601,7 +601,7 @@ func lookupAddr(ctx context.Context, resolver *net.Resolver, host string) (strin
 
 func (c *Config) ValidateAuth() (errors []error) {
 	if !c.Auth.Enable {
-		return errors
+		return
 	}
 	authConfig := map[string]string{
 		"ClientId":         c.Auth.ClientId,
@@ -626,11 +626,7 @@ func (c *Config) ValidateAuth() (errors []error) {
 			}
 		}
 	}
-
-	if len(errors) > 0 {
-		return errors
-	}
-	return nil
+	return errors
 }
 
 func (c *Config) ValidatePermissions(permsFile io.Reader) (errors []error) {
@@ -667,11 +663,7 @@ func (c *Config) ValidatePermissions(permsFile io.Reader) (errors []error) {
 			}
 		}
 	}
-	if len(errors) > 0 {
-		return errors
-	}
-
-	return nil
+	return errors
 }
 
 func (c *Config) ValidatePermissionsFile() (err error) {
@@ -684,7 +676,7 @@ func (c *Config) ValidatePermissionsFile() (err error) {
 	if (fileExt != ".yaml") && (fileExt != ".yml") {
 		return fmt.Errorf("invalid file extension for auth config permissions file: %s", c.Auth.PermissionsFile)
 	}
-	return nil
+	return
 }
 
 func (c *Config) MustValidateAuth() {

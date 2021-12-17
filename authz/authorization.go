@@ -70,7 +70,7 @@ func (p *GroupPermissions) ReadPermissionsFile(permsFile io.Reader) (err error) 
 		return fmt.Errorf("unmarshalling permissions failed with error: %s", err)
 	}
 
-	return nil
+	return
 }
 
 func (p *GroupPermissions) GetPermissions(groups []Group, index string) (permission string, errors error) {
@@ -91,7 +91,7 @@ func (p *GroupPermissions) GetPermissions(groups []Group, index string) (permiss
 			if perm, ok := p.Permissions[group.GroupID][index]; ok {
 				allPermissions[perm] = true
 			} else {
-				return "", fmt.Errorf("User %s does not have permission to index %s", group.UserID, index)
+				return "", fmt.Errorf("user %s does not have permission to index %s", group.UserID, index)
 			}
 		} else {
 			groupsDenied = append(groupsDenied, group.GroupID)
@@ -132,6 +132,10 @@ func (p *GroupPermissions) GetAuthorizedIndexList(groups []Group, desiredPermiss
 		if _, ok := p.Permissions[group.GroupID]; ok {
 			for index, permission := range p.Permissions[group.GroupID] {
 				if permission == desiredPermission {
+					indexList = append(indexList, index)
+				} else if permission == "admin" {
+					indexList = append(indexList, index)
+				} else if permission == "write" && desiredPermission == "read" {
 					indexList = append(indexList, index)
 				}
 			}
