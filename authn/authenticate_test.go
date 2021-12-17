@@ -67,7 +67,6 @@ func TestAuth(t *testing.T) {
 		}
 
 	})
-
 	// t.Run("Logout", func(t *testing.T) {
 	// 	r := httptest.NewRequest(gohttp.MethodGet, "/login", nil)
 	// 	w := httptest.NewRecorder()
@@ -98,5 +97,25 @@ func TestAuth(t *testing.T) {
 	// 	}
 
 	// })
+
+	t.Run("Logout", func(t *testing.T) {
+		r := httptest.NewRequest(gohttp.MethodGet, "/login", nil)
+		w := httptest.NewRecorder()
+		a.Logout(w, r)
+	})
+	t.Run("Authenticate", func(t *testing.T) {
+		r := httptest.NewRequest(gohttp.MethodGet, "/login", nil)
+		w := httptest.NewRecorder()
+		a.Authenticate(w, r)
+	})
+	t.Run("Redirect", func(t *testing.T) {
+		r := httptest.NewRequest(gohttp.MethodGet, "/login", nil)
+		w := httptest.NewRecorder()
+		a.Redirect(w, r)
+	})
+	t.Run("GetUserInfo", func(t *testing.T) {
+		r := httptest.NewRequest(gohttp.MethodGet, "/login", nil)
+		a.GetUserInfo(r)
+	})
 
 }

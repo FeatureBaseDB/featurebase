@@ -134,11 +134,14 @@ func (a *Auth) Redirect(w http.ResponseWriter, r *http.Request) {
 	token, err := a.getToken(code)
 	if err != nil {
 		errors.Wrap(err, "getting token")
-		http.Redirect(w, r, "/login", http.StatusTemporaryRedirect)
+		http.Redirect(w, r, "/login", http.StatusUnauthorized)
 	}
-	fmt.Printf("TOKEN %v\n\n", token)
 
-	cv := a.newCookieValue(token)
+	cv, err := a.newCookieValue(token)
+	if err != nil {
+		http.Error(w, "authenticating", http.StatusBadRequest)
+	}
+
 	a.setCookie(w, cv)
 	http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
 }
@@ -164,7 +167,10 @@ func (a *Auth) getToken(code string) (*oauth2.Token, error) {
 	return token, nil
 }
 
-func (a *Auth) newCookieValue(token *oauth2.Token) *CookieValue {
+func (a *Auth) newCookieValue(token *oauth2.Token) (*CookieValue, error) {
+	if token == nil {
+		return nil, errors.New("baking cookie due to nil token")
+	}
 	accessParsed, err := jwt.Parse(token.AccessToken, nil)
 	if token == nil {
 		fmt.Println(errors.Wrap(err, "parsing jwt claims from access tokens"))
@@ -175,7 +181,7 @@ func (a *Auth) newCookieValue(token *oauth2.Token) *CookieValue {
 	if err != nil {
 		fmt.Println(errors.Wrap(err, "getting group memebership"))
 	}
-	// not needed anymore, and makes the encoded cookie too large
+	// not needed at this point in the logic and makes the encoded cookie too large
 	token.AccessToken = ""
 	// mannually setting expiry for testing ... REMOVE
 	token.Expiry = time.Now().Add(time.Second * time.Duration(30))
@@ -184,7 +190,7 @@ func (a *Auth) newCookieValue(token *oauth2.Token) *CookieValue {
 		UserName:        claims["name"].(string),
 		GroupMembership: groups.Groups,
 		Token:           token,
-	}
+	}, nil
 }
 
 func (a *Auth) getGroupMembership(token *oauth2.Token) (Groups, error) {
@@ -258,7 +264,11 @@ func (a *Auth) refreshToken(w http.ResponseWriter, cookie *CookieValue) error {
 	fmt.Printf("Refreshed AT: %v\n\n", newToken.AccessToken)
 
 	if newToken.Expiry != cookie.Token.Expiry {
-		cv := a.newCookieValue(newToken)
+		cv, err := a.newCookieValue(newToken)
+		if err != nil {
+			errors.New("setting cookie")
+		}
+
 		a.setCookie(w, cv)
 		fmt.Println("refreshed access token")
 	}
