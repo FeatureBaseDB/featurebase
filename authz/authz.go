@@ -49,27 +49,23 @@ type Auth struct {
 }
 
 type GroupPermissions struct {
-	Permissions []Permissions `yaml:"group_permissions"`
-}
-
-type Permissions struct {
-	GroupId    string `yaml:"groupId"`
-	Index      string `yaml:"index"`
-	Permission string `yaml:"permission"`
+	Permissions map[string]map[string]string
 }
 
 type Group struct {
-	ID   string `json:"id"`
-	Name string `json:"displayName"`
+	UserID    string
+	GroupID   string `json:"id"`
+	GroupName string `json:"displayName"`
 }
 
 func (p *GroupPermissions) ReadPermissionsFile(permsFile io.Reader) (err error) {
 	permsData, err := ioutil.ReadAll(permsFile)
+
 	if err != nil {
 		return fmt.Errorf("reading permissions failed with error: %s", err)
 	}
 
-	err = yaml.Unmarshal(permsData, p)
+	err = yaml.UnmarshalStrict(permsData, &p.Permissions)
 	if err != nil {
 		return fmt.Errorf("unmarshalling permissions failed with error: %s", err)
 	}
@@ -77,54 +73,33 @@ func (p *GroupPermissions) ReadPermissionsFile(permsFile io.Reader) (err error) 
 	return nil
 }
 
-func (p *GroupPermissions) GetPermissions(groups []Group, index []string) (permission string, err error) {
+func (p *GroupPermissions) GetPermissions(groups []Group, index string) (permission string, errors error) {
 
-	// get union of groups the user is part of obtained from identity provider and groups in permissions file
-	var groupMatch []Permissions
-	for _, group := range groups {
-		for i := range p.Permissions {
-			if group.ID == p.Permissions[i].GroupId {
-				groupMatch = append(groupMatch, p.Permissions[i])
-			}
-		}
-	}
-
-	if len(groupMatch) == 0 {
-		return "", fmt.Errorf("the user's groups %s are NOT allowed access to FeatureBase", groups)
-	}
-
-	// check that user's groups have access to the index user want to access
-	var indexMatch []Permissions
-	indexCheck := map[string]bool{}
-	for _, g := range groupMatch {
-		for _, idx := range index {
-			if idx == g.Index {
-				indexMatch = append(indexMatch, g)
-				indexCheck[idx] = true
-			}
-		}
-	}
-
-	// check which index user does NOT have access to, and return in error mesg
-	if len(indexCheck) != len(index) {
-		var indexNotFound []string
-		for _, idx := range index {
-			if !indexCheck[idx] {
-				indexNotFound = append(indexNotFound, idx)
-			}
-		}
-		return "", fmt.Errorf("user is NOT allowed access to index: %s", indexNotFound)
-	}
-
-	// check permissions for index user has access to
 	allPermissions := map[string]bool{
 		"admin": false,
 		"write": false,
 		"read":  false,
 	}
 
-	for _, g := range indexMatch {
-		allPermissions[g.Permission] = true
+	if len(groups) == 0 {
+		return "", fmt.Errorf("user is not part of any groups in identity provider")
+	}
+
+	var groupsDenied []string
+	for _, group := range groups {
+		if _, ok := p.Permissions[group.GroupID]; ok {
+			if perm, ok := p.Permissions[group.GroupID][index]; ok {
+				allPermissions[perm] = true
+			} else {
+				return "", fmt.Errorf("User %s is NOT allowed access to index %s", group.UserID, index)
+			}
+		} else {
+			groupsDenied = append(groupsDenied, group.GroupID)
+		}
+	}
+
+	if len(groupsDenied) == len(groups) {
+		return "", fmt.Errorf("group(s) %s are NOT allowed access to FeatureBase", groupsDenied)
 	}
 
 	if allPermissions["admin"] {

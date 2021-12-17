@@ -226,18 +226,17 @@ func (m *Command) Start() (err error) {
 	if m.Config.Auth.Enable {
 		m.Config.MustValidateAuth()
 
-		// Read permissions file
 		permsFile, err := os.Open(m.Config.Auth.PermissionsFile)
 		if err != nil {
 			return err
 		}
 
+		defer permsFile.Close()
+
 		var p authz.GroupPermissions
-		if err := p.ReadPermissionsFile(permsFile); err != nil {
+		if err = p.ReadPermissionsFile(permsFile); err != nil {
 			return err
 		}
-
-		defer permsFile.Close()
 	}
 
 	// Initialize server.

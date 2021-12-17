@@ -4,6 +4,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/url"
@@ -598,9 +599,9 @@ func lookupAddr(ctx context.Context, resolver *net.Resolver, host string) (strin
 	return addrs[0].String(), nil
 }
 
-func (c *Config) ValidateAuth() ([]error, error) {
+func (c *Config) ValidateAuth() (errors []error) {
 	if !c.Auth.Enable {
-		return []error{}, nil
+		return errors
 	}
 	authConfig := map[string]string{
 		"ClientId":         c.Auth.ClientId,
@@ -609,10 +610,8 @@ func (c *Config) ValidateAuth() ([]error, error) {
 		"TokenURL":         c.Auth.TokenURL,
 		"GroupEndpointURL": c.Auth.GroupEndpointURL,
 		"ScopeURL":         c.Auth.ScopeURL,
-		"PermissionsFile":  c.Auth.PermissionsFile,
 	}
 
-	errors := make([]error, 0)
 	for name, value := range authConfig {
 		if value == "" {
 			errors = append(errors, fmt.Errorf("empty string for auth config %s", name))
@@ -626,50 +625,99 @@ func (c *Config) ValidateAuth() ([]error, error) {
 				continue
 			}
 		}
+	}
 
-		if strings.Contains(name, "File") {
-			fileExt := filepath.Ext(value)
-			if (fileExt != ".yaml") && (fileExt != ".yml") {
-				errors = append(errors, fmt.Errorf("invalid file extension for auth config %s: %s", name, value))
+	if len(errors) > 0 {
+		return errors
+	}
+	return nil
+}
+
+func (c *Config) ValidatePermissions(permsFile io.Reader) (errors []error) {
+
+	var p authz.GroupPermissions
+	if err := p.ReadPermissionsFile(permsFile); err != nil {
+		return append(errors, err)
+	}
+
+	if len(p.Permissions) == 0 {
+		return append(errors, fmt.Errorf("no group permissions found in permissions file: %s", c.Auth.PermissionsFile))
+	}
+
+	for groupId, indexPerm := range p.Permissions {
+		if groupId == "" {
+			errors = append(errors, fmt.Errorf("empty string for group id in permissions file %s", c.Auth.PermissionsFile))
+			continue
+		}
+
+		for index, perm := range indexPerm {
+			if index == "" {
+				errors = append(errors, fmt.Errorf("empty string for index for group id %s in permissions file %s ", groupId, c.Auth.PermissionsFile))
+				continue
+			}
+
+			if perm == "" {
+				errors = append(errors, fmt.Errorf("empty string for permission for group id %s and index %s in permissions file %s", groupId, index, c.Auth.PermissionsFile))
+				continue
+			}
+
+			if !((perm == "admin") || (perm == "write") || (perm == "read")) {
+				errors = append(errors, fmt.Errorf("not a valid permission %s for group id %s and index %s in permissions file %s", perm, groupId, index, c.Auth.PermissionsFile))
 				continue
 			}
 		}
 	}
-
 	if len(errors) > 0 {
-		return errors, fmt.Errorf("there were errors validating config")
+		return errors
 	}
-	return errors, nil
-}
-
-func (c *Config) ValidatePermissions() (err error) {
-	permsFile, err := os.Open(c.Auth.PermissionsFile)
-	if err != nil {
-		return err
-	}
-
-	var p *authz.GroupPermissions
-	if err := p.ReadPermissionsFile(permsFile); err != nil {
-		return err
-	}
-
-	if len(p.Permissions) == 0 {
-		return fmt.Errorf("no group permissions found in permissions file: %s", c.Auth.PermissionsFile)
-	}
-
-	defer permsFile.Close()
 
 	return nil
 }
 
+func (c *Config) ValidatePermissionsFile() (err error) {
+
+	if c.Auth.PermissionsFile == "" {
+		return fmt.Errorf("empty string for auth config permissions file")
+	}
+
+	fileExt := filepath.Ext(c.Auth.PermissionsFile)
+	if (fileExt != ".yaml") && (fileExt != ".yml") {
+		return fmt.Errorf("invalid file extension for auth config permissions file: %s", c.Auth.PermissionsFile)
+	}
+	return nil
+}
+
 func (c *Config) MustValidateAuth() {
-	if errors, err := c.ValidateAuth(); err != nil {
-		for _, e1 := range errors {
-			log.Println(e1)
+
+	errorsAuth := c.ValidateAuth()
+	if len(errorsAuth) > 0 {
+		for _, e := range errorsAuth {
+			log.Println(e)
 		}
-		if e2 := c.ValidatePermissions(); e2 != nil {
-			log.Println(e2)
+	}
+
+	var errorsPerm []error
+	errorsPermFile := c.ValidatePermissionsFile()
+	if errorsPermFile == nil {
+		permsFile, err := os.Open(c.Auth.PermissionsFile)
+		if err != nil {
+			log.Println(err)
 		}
-		log.Fatal(err)
+
+		defer permsFile.Close()
+
+		errorsPerm = c.ValidatePermissions(permsFile)
+		if len(errorsPerm) > 0 {
+			for _, e := range errorsPerm {
+				log.Println(e)
+			}
+		}
+
+	} else {
+		log.Println(errorsPermFile)
+	}
+
+	if len(errorsAuth) > 0 || len(errorsPerm) > 0 || errorsPermFile != nil {
+		log.Fatal(fmt.Errorf("there were errors validating authN/authZ config and/or permissions"))
 	}
 }
