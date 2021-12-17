@@ -229,34 +229,23 @@ type Config struct {
 	// Toggles /schema/details endpoint. If off, it returns empty.
 	SchemaDetailsOn bool `toml:"schema-details-on"`
 
-	Auth struct {
-		// Enable AuthZ/AuthN for featurebase server
-		Enable bool `toml:"enable"`
+	Auth Auth
+}
 
-		// Application/Client ID
-		ClientId string `toml:"client-id"`
+type Auth struct {
+	// Enable AuthZ/AuthN for featurebase server
+	Enable bool `toml:"enable"`
 
-		// Client Secret
-		ClientSecret string `toml:"client-secret"`
+	// Application/Client ID
+	ClientId string `toml:"client-id"`
 
-		// Authorize URL
-		AuthorizeURL string `toml:"authorize-url"`
-
-		// Token URL
-		TokenURL string `toml:"token-url"`
-
-		// Group Endpoint URL
-		GroupEndpointURL string `toml:"group-endpoint-url"`
-
-		// Scope URL
-		Scopes []string `toml:"scopes"`
-
-		// Hash Key
-		HashKey string `toml:"hash-key"`
-
-		// Block Key
-		BlockKey string `toml:"block-key"`
-	}
+	ClientSecret     string   `toml:"client-secret"`
+	AuthorizeURL     string   `toml:"authorize-url"`
+	TokenURL         string   `toml:"token-url"`
+	GroupEndpointURL string   `toml:"group-endpoint-url"`
+	Scopes           []string `toml:"scopes"`
+	HashKey          string   `toml:"hash-key"`
+	BlockKey         string   `toml:"block-key"`
 }
 
 // Namespace returns the namespace to use based on the Future flag.

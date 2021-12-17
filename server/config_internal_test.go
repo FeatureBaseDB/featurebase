@@ -8,8 +8,6 @@ import (
 	"os"
 	"strings"
 	"testing"
-
-	"github.com/molecula/featurebase/v2/auth"
 )
 
 type addrs struct{ bind, advertise string }
@@ -286,12 +284,15 @@ func TestConfig_validateAuth(t *testing.T) {
 	validClientSecret := "clientSecret"
 	notValidURL := "not-a-url"
 	emptyString := ""
+	validStringSlice := []string{"https://graph.microsoft.com/.default", "offline_access"}
+	var emptySlice []string
+
 	enable := true
 	disable := false
 
 	tests := []struct {
 		expErrs []string
-		input   auth.Auth
+		input   Auth
 	}{
 
 		{
@@ -304,14 +305,14 @@ func TestConfig_validateAuth(t *testing.T) {
 				errorMesgEmpty,
 				errorMesgEmpty,
 			},
-			auth.Auth{
+			Auth{
 				Enable:           enable,
 				ClientId:         emptyString,
 				ClientSecret:     emptyString,
 				AuthorizeURL:     emptyString,
 				TokenURL:         emptyString,
 				GroupEndpointURL: emptyString,
-				ScopeURL:         emptyString,
+				Scopes:           emptySlice,
 			},
 		},
 		{
@@ -323,14 +324,14 @@ func TestConfig_validateAuth(t *testing.T) {
 				errorMesgEmpty,
 				errorMesgEmpty,
 			},
-			auth.Auth{
+			Auth{
 				Enable:           enable,
 				ClientId:         validClientID,
 				ClientSecret:     emptyString,
 				AuthorizeURL:     emptyString,
 				TokenURL:         emptyString,
 				GroupEndpointURL: emptyString,
-				ScopeURL:         emptyString,
+				Scopes:           emptySlice,
 			},
 		},
 		{
@@ -342,14 +343,14 @@ func TestConfig_validateAuth(t *testing.T) {
 				errorMesgEmpty,
 				errorMesgEmpty,
 			},
-			auth.Auth{
+			Auth{
 				Enable:           enable,
 				ClientId:         emptyString,
 				ClientSecret:     validClientSecret,
 				AuthorizeURL:     emptyString,
 				TokenURL:         emptyString,
 				GroupEndpointURL: emptyString,
-				ScopeURL:         emptyString,
+				Scopes:           emptySlice,
 			},
 		},
 		{
@@ -360,14 +361,14 @@ func TestConfig_validateAuth(t *testing.T) {
 				errorMesgEmpty,
 				errorMesgEmpty,
 			},
-			auth.Auth{
+			Auth{
 				Enable:           enable,
 				ClientId:         validClientID,
 				ClientSecret:     validClientSecret,
 				AuthorizeURL:     emptyString,
 				TokenURL:         emptyString,
 				GroupEndpointURL: emptyString,
-				ScopeURL:         emptyString,
+				Scopes:           emptySlice,
 			},
 		},
 		{
@@ -377,14 +378,14 @@ func TestConfig_validateAuth(t *testing.T) {
 				errorMesgEmpty,
 				errorMesgEmpty,
 			},
-			auth.Auth{
+			Auth{
 				Enable:           enable,
 				ClientId:         validClientID,
 				ClientSecret:     validClientSecret,
 				AuthorizeURL:     validTestURL,
 				TokenURL:         emptyString,
 				GroupEndpointURL: emptyString,
-				ScopeURL:         emptyString,
+				Scopes:           emptySlice,
 			},
 		},
 		{
@@ -393,14 +394,14 @@ func TestConfig_validateAuth(t *testing.T) {
 				errorMesgEmpty,
 				errorMesgEmpty,
 			},
-			auth.Auth{
+			Auth{
 				Enable:           enable,
 				ClientId:         validClientID,
 				ClientSecret:     validClientSecret,
 				AuthorizeURL:     validTestURL,
 				TokenURL:         validTestURL,
 				GroupEndpointURL: emptyString,
-				ScopeURL:         emptyString,
+				Scopes:           emptySlice,
 			},
 		},
 		{
@@ -408,14 +409,14 @@ func TestConfig_validateAuth(t *testing.T) {
 			[]string{
 				errorMesgURL,
 			},
-			auth.Auth{
+			Auth{
 				Enable:           enable,
 				ClientId:         validClientID,
 				ClientSecret:     validClientSecret,
 				AuthorizeURL:     notValidURL,
 				TokenURL:         validTestURL,
 				GroupEndpointURL: validTestURL,
-				ScopeURL:         validTestURL,
+				Scopes:           validStringSlice,
 			},
 		},
 		{
@@ -424,40 +425,40 @@ func TestConfig_validateAuth(t *testing.T) {
 				errorMesgURL,
 				errorMesgURL,
 			},
-			auth.Auth{
+			Auth{
 				Enable:           enable,
 				ClientId:         validClientID,
 				ClientSecret:     validClientSecret,
 				AuthorizeURL:     validTestURL,
 				TokenURL:         notValidURL,
 				GroupEndpointURL: notValidURL,
-				ScopeURL:         validTestURL,
+				Scopes:           validStringSlice,
 			},
 		},
 		{
 			// Auth enabled, all configs are set properly
 			[]string{},
-			auth.Auth{
+			Auth{
 				Enable:           enable,
 				ClientId:         validClientID,
 				ClientSecret:     validClientSecret,
 				AuthorizeURL:     validTestURL,
 				TokenURL:         validTestURL,
 				GroupEndpointURL: validTestURL,
-				ScopeURL:         validTestURL,
+				Scopes:           validStringSlice,
 			},
 		},
 		{
 			// Auth disabled, all configs are set to empty string
 			[]string{},
-			auth.Auth{
+			Auth{
 				Enable:           disable,
 				ClientId:         emptyString,
 				ClientSecret:     emptyString,
 				AuthorizeURL:     emptyString,
 				TokenURL:         emptyString,
 				GroupEndpointURL: emptyString,
-				ScopeURL:         emptyString,
+				Scopes:           validStringSlice,
 			},
 		},
 	}
