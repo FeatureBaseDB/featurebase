@@ -108,11 +108,11 @@ func TestAuth(t *testing.T) {
 		w := httptest.NewRecorder()
 		a.Authenticate(w, r)
 	})
-	t.Run("Redirect", func(t *testing.T) {
-		r := httptest.NewRequest(gohttp.MethodGet, "/login", nil)
-		w := httptest.NewRecorder()
-		a.Redirect(w, r)
-	})
+	// t.Run("Redirect", func(t *testing.T) {
+	// 	r := httptest.NewRequest(gohttp.MethodGet, "/login", nil)
+	// 	w := httptest.NewRecorder()
+	// 	a.Redirect(w, r)
+	// })
 	t.Run("GetUserInfo", func(t *testing.T) {
 		r := httptest.NewRequest(gohttp.MethodGet, "/login", nil)
 		a.GetUserInfo(r)
