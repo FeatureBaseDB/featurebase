@@ -237,6 +237,37 @@ func (m *Command) Start() (err error) {
 		if err = p.ReadPermissionsFile(permsFile); err != nil {
 			return err
 		}
+
+		groups := []authz.Group{
+			{
+				UserID:    "user-id",
+				GroupID:   "dca35310-ecda-4f23-86cd-876aee55906b",
+				GroupName: "group-name",
+			},
+			// {
+			// 	UserID:    "user-id",
+			// 	GroupID:   "dca35310-ecda-4f23-86cd-876aee559900",
+			// 	GroupName: "group-name",
+			// },
+		}
+
+		index := "test"
+
+		perm, err := p.GetPermissions(groups, index)
+		fmt.Printf("\nuser has %s access to index %s\n", perm, index)
+		if err != nil {
+			fmt.Printf("\np: %s, err: %s\n", perm, err.Error())
+		}
+
+		adminAccess := p.IsAdmin(groups)
+		fmt.Printf("\nAdminAccess: %t\n", adminAccess)
+
+		accessList := []string{"read", "write", "admin"}
+		for _, a := range accessList {
+			indexList := p.GetAuthorizedIndexList(groups, a)
+			fmt.Printf("\nPermission requested: %s, Index List: %s\n", a, indexList)
+		}
+
 	}
 
 	// Initialize server.

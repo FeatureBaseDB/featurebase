@@ -91,7 +91,7 @@ func (p *GroupPermissions) GetPermissions(groups []Group, index string) (permiss
 			if perm, ok := p.Permissions[group.GroupID][index]; ok {
 				allPermissions[perm] = true
 			} else {
-				return "", fmt.Errorf("User %s is NOT allowed access to index %s", group.UserID, index)
+				return "", fmt.Errorf("User %s does not have permission to index %s", group.UserID, index)
 			}
 		} else {
 			groupsDenied = append(groupsDenied, group.GroupID)
@@ -99,7 +99,7 @@ func (p *GroupPermissions) GetPermissions(groups []Group, index string) (permiss
 	}
 
 	if len(groupsDenied) == len(groups) {
-		return "", fmt.Errorf("group(s) %s are NOT allowed access to FeatureBase", groupsDenied)
+		return "", fmt.Errorf("group(s) %s does not have permission to FeatureBase", groupsDenied)
 	}
 
 	if allPermissions["admin"] {
@@ -111,4 +111,31 @@ func (p *GroupPermissions) GetPermissions(groups []Group, index string) (permiss
 	} else {
 		return "", fmt.Errorf("no permissions found")
 	}
+}
+
+func (p *GroupPermissions) IsAdmin(groups []Group) bool {
+	for _, group := range groups {
+		if _, ok := p.Permissions[group.GroupID]; ok {
+			for _, permission := range p.Permissions[group.GroupID] {
+				if permission == "admin" {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+func (p *GroupPermissions) GetAuthorizedIndexList(groups []Group, desiredPermission string) (indexList []string) {
+
+	for _, group := range groups {
+		if _, ok := p.Permissions[group.GroupID]; ok {
+			for index, permission := range p.Permissions[group.GroupID] {
+				if permission == desiredPermission {
+					indexList = append(indexList, index)
+				}
+			}
+		}
+	}
+	return indexList
 }

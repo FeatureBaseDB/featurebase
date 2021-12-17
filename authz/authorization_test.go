@@ -23,6 +23,7 @@ import (
 )
 
 func TestAuth_ReadPermissionsFile(t *testing.T) {
+
 	singleInput := `"dca35310-ecda-4f23-86cd-876aee55906b":
   "test": "read"`
 
@@ -67,6 +68,7 @@ func TestAuth_ReadPermissionsFile(t *testing.T) {
 }
 
 func TestAuth_GetPermissions(t *testing.T) {
+
 	// initializes different example of permissions file in yaml
 	permissions1 := `"dca35310-ecda-4f23-86cd-876aee55906b":
   "test": "read"`
@@ -112,14 +114,14 @@ func TestAuth_GetPermissions(t *testing.T) {
 			groupsList3,
 			"test1",
 			"",
-			"NOT allowed access to index",
+			"does not have permission to index",
 		},
 		{
 			permissions2,
 			groupsList2,
 			"test",
 			"",
-			"NOT allowed access to FeatureBase",
+			"does not have permission to FeatureBase",
 		},
 		{
 			permissions1,
@@ -175,4 +177,91 @@ func TestAuth_GetPermissions(t *testing.T) {
 
 		})
 	}
+}
+
+func TestAuth_IsAdmin(t *testing.T) {
+
+	group := []authz.Group{
+		{"user-is", "dca35310-ecda-4f23-86cd-876aee55906b", "group-name"},
+	}
+
+	groupPermissions1 := map[string]map[string]string{
+		"dca35310-ecda-4f23-86cd-876aee55906b": {"test": "admin"},
+	}
+
+	groupPermissions2 := map[string]map[string]string{
+		"dca35310-ecda-4f23-86cd-876aee55906b": {"test": "read"},
+	}
+
+	tests := []struct {
+		groups           []authz.Group
+		groupPermissions map[string]map[string]string
+		output           bool
+	}{
+		{
+			group, groupPermissions1, true,
+		},
+		{
+			group, groupPermissions2, false,
+		},
+	}
+
+	for i, test := range tests {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			p := authz.GroupPermissions{test.groupPermissions}
+			resp := p.IsAdmin(test.groups)
+			if resp != test.output {
+				t.Errorf("expected %t, but got %t", test.output, resp)
+			}
+		})
+	}
+}
+
+func TestAuth_GetAuthorizedIndexList(t *testing.T) {
+
+	group := []authz.Group{
+		{"user-is", "dca35310-ecda-4f23-86cd-876aee55906b", "group-name"},
+	}
+
+	p := authz.GroupPermissions{map[string]map[string]string{
+		"dca35310-ecda-4f23-86cd-876aee55906b": {
+			"test1": "admin",
+			"test2": "read",
+			"test3": "read",
+		},
+	}}
+
+	tests := []struct {
+		groups     []authz.Group
+		permission string
+		output     []string
+	}{
+		{
+			group,
+			"read",
+			[]string{"test2", "test3"},
+		},
+		{
+			group,
+			"admin",
+			[]string{"test1"},
+		},
+		{
+			group,
+			"write",
+			nil,
+		},
+	}
+
+	for i, test := range tests {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+
+			indexList := p.GetAuthorizedIndexList(test.groups, test.permission)
+
+			if !reflect.DeepEqual(indexList, test.output) {
+				t.Errorf("expected %s, but got %s", test.output, indexList)
+			}
+		})
+	}
+
 }
