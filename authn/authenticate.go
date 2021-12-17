@@ -1,5 +1,5 @@
 // Copyright 2021 Molecula Corp. All rights reserved.
-package authenticate
+package authn
 
 import (
 	"context"
@@ -80,9 +80,9 @@ type Groups struct {
 }
 
 type Group struct {
-	UserID string
-	ID     string `json:"id"`
-	Name   string `json:"displayName"`
+	UserID    string
+	GroupID   string `json:"id"`
+	GroupName string `json:"displayName"`
 }
 
 type UserInfo struct {
@@ -93,15 +93,17 @@ type UserInfo struct {
 func (a *Auth) Authenticate(w http.ResponseWriter, r *http.Request) []Group {
 	cookie, err := a.readCookie(r)
 	if err != nil {
-		//add logging
 		http.Redirect(w, r, "/signin", http.StatusTemporaryRedirect)
 		return nil
 	}
 	if cookie.Token.Expiry.Before(time.Now().Add(a.refreshWithin)) {
 		err = a.refreshToken(w, cookie)
 		if err != nil {
-			http.Redirect(w, r, "/signin", http.StatusTemporaryRedirect)
-			return nil
+			//log error
+			if cookie.Token.Expiry.Before(time.Now()) {
+				http.Redirect(w, r, "/signin", http.StatusTemporaryRedirect)
+				return nil
+			}
 		}
 	}
 	return cookie.GroupMembership
@@ -244,6 +246,9 @@ func (a *Auth) setCookie(w http.ResponseWriter, cookie *CookieValue) error {
 
 func (a *Auth) refreshToken(w http.ResponseWriter, cookie *CookieValue) error {
 	fmt.Println("REFRESHING TOKEN")
+	if cookie.Token.RefreshToken == "" {
+		return errors.New("no refresh token found, check auth scopes to see if refresh tokens are being provided by your IdP.")
+	}
 	tokenSource := a.oAuthConfig.TokenSource(context.Background(), cookie.Token)
 	newToken, err := tokenSource.Token()
 	if err != nil {
