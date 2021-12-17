@@ -85,7 +85,7 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 	flags.BoolVar(&srv.Config.Storage.FsyncEnabled, "storage.fsync", true, "enable fsync fully safe flush-to-disk")
 
 	// RowcacheOn
-	flags.BoolVar((&srv.Config.RowcacheOn), "rowcache-on", srv.Config.RowcacheOn, "turn on the rowcache for all backends (may speed some queries)")
+	flags.BoolVar((&srv.Config.RowcacheOn), "rowcache-on", srv.Config.RowcacheOn, "Do not use, permanently disabled. Flag exists for backwards compatibility and will be removed.")
 
 	// RBF specific flags. See pilosa/rbf/cfg/cfg.go for definitions.
 	srv.Config.RBFConfig.DefineFlags(flags)
