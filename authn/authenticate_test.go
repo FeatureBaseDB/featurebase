@@ -18,13 +18,13 @@ func TestAuth(t *testing.T) {
 	settings := server.Config{}
 	settings.Auth.Enable = true
 	settings.Auth.ClientId = "e9088663-eb08-41d7-8f65-efb5f54bbb71"
-	settings.Auth.ClientSecret = "asdf~asdf-asdf"
+	settings.Auth.ClientSecret = "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF"
 	settings.Auth.AuthorizeURL = "https://login.microsoftonline.com/4a137d66-d161-4ae4-b1e6-07e9920874b8/oauth2/v2.0/authorize"
 	settings.Auth.TokenURL = "https://login.microsoftonline.com/4a137d66-d161-4ae4-b1e6-07e9920874b8/oauth2/v2.0/token"
 	settings.Auth.GroupEndpointURL = "https://graph.microsoft.com/v1.0/me/transitiveMemberOf/microsoft.graph.group?$count=true"
 	settings.Auth.Scopes = []string{"https://graph.microsoft.com/.default", "offline_access"}
-	settings.Auth.HashKey = "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijkl"
-	settings.Auth.BlockKey = "abcdefghijklmnopqrstuvwxyz1073c0abb7b6abbfb0f5f4ef3629527ff88428"
+	settings.Auth.HashKey = "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF"
+	settings.Auth.BlockKey = "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF"
 
 	a, err := authn.NewAuth(
 		logger.NewStandardLogger(os.Stdout),
@@ -34,9 +34,9 @@ func TestAuth(t *testing.T) {
 		"https://login.microsoftonline.com/4a137d66-d161-4ae4-b1e6-07e9920874b8/oauth2/v2.0/token",
 		"https://graph.microsoft.com/v1.0/me/transitiveMemberOf/microsoft.graph.group?$count=true",
 		"e9088663-eb08-41d7-8f65-efb5f54bbb71",
-		"asdf~asdf-asdf",
-		"abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijkl",
-		"abcdefghijklmnopqrstuvwxyz1073c0abb7b6abbfb0f5f4ef3629527ff88428",
+		"DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF",
+		"DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF",
+		"DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF",
 	)
 	if err != nil {
 		t.Errorf("building auth object%s", err)
