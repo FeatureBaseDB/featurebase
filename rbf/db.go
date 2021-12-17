@@ -51,9 +51,10 @@ type DB struct {
 	opened      bool                 // true if open
 	logger      logger.Logger        // for diagnostics from async things
 
-	wal      []byte   // wal mmap
-	walFile  *os.File // wal file descriptor
-	walPageN int      // wal page count
+	wal       []byte   // wal mmap
+	walFile   *os.File // wal file descriptor
+	walPageN  int      // wal page count
+	baseWALID int64    // WAL ID of first page
 
 	mu       sync.RWMutex // general mutex
 	rwmu     sync.Mutex   // mutex for restricting single writer
@@ -238,6 +239,7 @@ func (db *DB) openWAL() (err error) {
 		return fmt.Errorf("wal seek: %w", err)
 	}
 	db.walPageN = pageN
+	db.baseWALID = readMetaWALID(db.data)
 
 	return nil
 }
@@ -293,79 +295,92 @@ func (db *DB) checkpoint() (err error) {
 		}
 		db.haltCond.Broadcast()
 	}()
-	var page []byte
-	// We might have either a *PageMap or just the file. If we have the file,
-	// building the PageMap is fairly expensive because it's fancy and immutable.
-	// If we have the PageMap *or* some other map, that's two different things
-	// to iterate. If we have the PageMap, building a map from it is relatively
-	// cheap, so we'll do it that way.
-	pages := make(map[uint32]int)
 
-	if db.pageMap.size == 0 {
-		// you'd think we're done, but actually this PROBABLY means that
-		// this is initial startup, and we haven't read the file yet. We scan
-		// the file for pages, because it turns out most of them probably
-		// got overwritten.
-		for i := 0; i < db.walPageN; i++ {
-			page, err = db.readWALPageAt(i)
-			if err != nil {
-				return fmt.Errorf("reading WAL page %d: %w", i, err)
-			}
+	// Copy the pages from the WAL back to the database outside of the lock.
+	if err := func() error {
+		db.mu.Unlock() // This is intentionally reversed so run w/o lock
+		defer db.mu.Lock()
 
-			// Determine page number. Meta pages are always on zero & bitmap
-			// headers specify the page number of the next page in the WAL.
-			// All other pages have their page number in the page data.
-			var pgno uint32
-			if IsBitmapHeader(page) {
-				pgno = readPageNo(page)
-				if i+1 < db.walPageN {
-					if page, err = db.readWALPageAt(i + 1); err != nil {
-						return err
-					}
-				} else {
-					return fmt.Errorf("last page of WAL file (%d) is bitmap header", i)
+		var page []byte
+		// We might have either a *PageMap or just the file. If we have the file,
+		// building the PageMap is fairly expensive because it's fancy and immutable.
+		// If we have the PageMap *or* some other map, that's two different things
+		// to iterate. If we have the PageMap, building a map from it is relatively
+		// cheap, so we'll do it that way.
+		pages := make(map[uint32]int)
+
+		if db.pageMap.size == 0 {
+			// you'd think we're done, but actually this PROBABLY means that
+			// this is initial startup, and we haven't read the file yet. We scan
+			// the file for pages, because it turns out most of them probably
+			// got overwritten.
+			for i := 0; i < db.walPageN; i++ {
+				page, err = db.readWALPageAt(i)
+				if err != nil {
+					return fmt.Errorf("reading WAL page %d: %w", i, err)
 				}
-				i++ // bitmaps in WAL are two pages
-			} else if !IsMetaPage(page) {
-				pgno = readPageNo(page)
+
+				// Determine page number. Meta pages are always on zero & bitmap
+				// headers specify the page number of the next page in the WAL.
+				// All other pages have their page number in the page data.
+				var pgno uint32
+				if IsBitmapHeader(page) {
+					pgno = readPageNo(page)
+					if i+1 < db.walPageN {
+						if page, err = db.readWALPageAt(i + 1); err != nil {
+							return err
+						}
+					} else {
+						return fmt.Errorf("last page of WAL file (%d) is bitmap header", i)
+					}
+					i++ // bitmaps in WAL are two pages
+				} else if !IsMetaPage(page) {
+					pgno = readPageNo(page)
+				}
+				// record where in the file we have this page
+				pages[pgno] = i
 			}
-			// record where in the file we have this page
-			pages[pgno] = i
+		} else {
+			itr := db.pageMap.Iterator()
+			itr.First()
+			for k, v, ok := itr.Next(); ok; k, v, ok = itr.Next() {
+				pages[k] = int(v - db.baseWALID - 1)
+			}
 		}
-	} else {
-		walBase := db.baseWALID()
-		itr := db.pageMap.Iterator()
-		itr.First()
-		for k, v, ok := itr.Next(); ok; k, v, ok = itr.Next() {
-			pages[k] = int(v - walBase - 1)
+
+		// fmt.Printf("checkpoint: walPageN %d, PageMap size %d\n", db.walPageN, db.pageMap.size)
+		for pgno, walID := range pages {
+			page, err = db.readWALPageAt(walID)
+			if err != nil {
+				return fmt.Errorf("reading page %d [page number %d]: %v", walID, pgno, err)
+			}
+
+			// Write data to the data file.
+			if err = db.writeDBPage(pgno, page); err != nil {
+				return fmt.Errorf("writing page %d: %v", pgno, err)
+			}
 		}
+
+		// Ensure database file is synced and then truncate the WAL file.
+		if err = db.fsync(db.file); err != nil {
+			return fmt.Errorf("db file sync: %w", err)
+		}
+
+		return nil
+	}(); err != nil {
+		return err
 	}
 
-	// fmt.Printf("checkpoint: walPageN %d, PageMap size %d\n", db.walPageN, db.pageMap.size)
-	for pgno, walID := range pages {
-		page, err = db.readWALPageAt(walID)
-		if err != nil {
-			return fmt.Errorf("reading page %d [page number %d]: %v", walID, pgno, err)
-		}
-		// Write data to the data file.
-		if err = db.writeDBPage(pgno, page); err != nil {
-			return fmt.Errorf("writing page %d: %v", pgno, err)
-		}
-	}
-	// Ensure database file is synced and then truncate the WAL file.
-	if err = db.fsync(db.file); err != nil {
-		return fmt.Errorf("db file sync: %w", err)
-	}
 	// now we've updated the file. There are existing transactions that are still
 	// using the WAL, though. So we wait for them to terminate before we unlock
 	// the rwmu and update the metadata about the WAL.
 	releaseLock = false
-	// fmt.Printf("checkpoint mostly done, waiting for Tx cleanup...\n")
 	db.walPageN = 0
 	db.pageMap = NewPageMap()
+
 	db.afterCurrentTx(func() {
-		// fmt.Printf("truncating WAL\n")
 		defer db.rwmu.Unlock()
+
 		if err = db.walFile.Truncate(0); err != nil {
 			db.logger.Errorf("truncate wal file: %w", err)
 		} else if err = db.fsync(db.walFile); err != nil {
@@ -373,8 +388,10 @@ func (db *DB) checkpoint() (err error) {
 		} else if _, err = db.walFile.Seek(0, io.SeekStart); err != nil {
 			db.logger.Errorf("seek wal file: %w", err)
 		}
-		// fmt.Printf("checkpoint actually done\n")
+
+		db.baseWALID = readMetaWALID(db.data)
 	})
+
 	return nil
 }
 
@@ -764,17 +781,9 @@ func (db *DB) readDBPage(pgno uint32) ([]byte, error) {
 	return db.data[offset : offset+PageSize], nil
 }
 
-// baseWALID returns the WAL ID stored in the database file meta page.
-func (db *DB) baseWALID() int64 {
-	return readMetaWALID(db.data)
-}
-
 // readWALPageByID reads a WAL page by WAL ID.
 func (db *DB) readWALPageByID(id int64) ([]byte, error) {
-	if id == db.baseWALID() {
-		fmt.Printf("id %d oops\n", id)
-	}
-	return db.readWALPageAt(int(id - db.baseWALID() - 1))
+	return db.readWALPageAt(int(id - db.baseWALID - 1))
 }
 
 // readWALPageAt reads the i-th page in the WAL file.
