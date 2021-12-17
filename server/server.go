@@ -29,7 +29,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	pilosa "github.com/molecula/featurebase/v2"
-	auth "github.com/molecula/featurebase/v2/authenticate"
+	"github.com/molecula/featurebase/v2/authn"
 	"github.com/molecula/featurebase/v2/boltdb"
 	"github.com/molecula/featurebase/v2/encoding/proto"
 	petcd "github.com/molecula/featurebase/v2/etcd"
@@ -83,7 +83,7 @@ type Command struct {
 
 	serverOptions []pilosa.ServerOption
 
-	auth *auth.Auth
+	auth *authn.Auth
 }
 
 type CommandOption func(c *Command) error
@@ -525,7 +525,11 @@ func (m *Command) SetupServer() error {
 	if m.Config.Auth.Enable {
 		m.Config.MustValidateAuth()
 		ac := m.Config.Auth
-		m.auth, _ = auth.NewAuth(m.logger, m.listenURI.String(), ac.Scopes, ac.AuthorizeURL, ac.TokenURL, ac.GroupEndpointURL, ac.ClientId, ac.ClientSecret, ac.HashKey, ac.BlockKey)
+		m.auth, err = authn.NewAuth(m.logger, m.listenURI.String(), ac.Scopes, ac.AuthorizeURL, ac.TokenURL, ac.GroupEndpointURL, ac.ClientId, ac.ClientSecret, ac.HashKey, ac.BlockKey)
+		if err != nil {
+			return errors.Wrap(err, "instantiating authN object")
+		}
+
 	}
 
 	m.logger.Infof("Before Handler %+v", m.auth)
