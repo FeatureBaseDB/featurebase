@@ -279,12 +279,14 @@ func TestConfig_validateAddrsGRPC(t *testing.T) {
 func TestConfig_validateAuth(t *testing.T) {
 	errorMesgEmpty := "empty string"
 	errorMesgURL := "invalid URL"
+	errorMesgScope := "must provide scope"
 	validTestURL := "https://url.com/"
 	validClientID := "clientid"
 	validClientSecret := "clientSecret"
 	notValidURL := "not-a-url"
 	emptyString := ""
 	validStringSlice := []string{"https://graph.microsoft.com/.default", "offline_access"}
+	validString := "asdfqwer1234asdfzxcv"
 	var emptySlice []string
 
 	enable := true
@@ -304,6 +306,8 @@ func TestConfig_validateAuth(t *testing.T) {
 				errorMesgEmpty,
 				errorMesgEmpty,
 				errorMesgEmpty,
+				errorMesgEmpty,
+				errorMesgScope,
 			},
 			Auth{
 				Enable:           enable,
@@ -313,6 +317,8 @@ func TestConfig_validateAuth(t *testing.T) {
 				TokenURL:         emptyString,
 				GroupEndpointURL: emptyString,
 				Scopes:           emptySlice,
+				HashKey:          emptyString,
+				BlockKey:         emptyString,
 			},
 		},
 		{
@@ -323,6 +329,8 @@ func TestConfig_validateAuth(t *testing.T) {
 				errorMesgEmpty,
 				errorMesgEmpty,
 				errorMesgEmpty,
+				errorMesgEmpty,
+				errorMesgScope,
 			},
 			Auth{
 				Enable:           enable,
@@ -332,6 +340,8 @@ func TestConfig_validateAuth(t *testing.T) {
 				TokenURL:         emptyString,
 				GroupEndpointURL: emptyString,
 				Scopes:           emptySlice,
+				HashKey:          emptyString,
+				BlockKey:         emptyString,
 			},
 		},
 		{
@@ -342,6 +352,8 @@ func TestConfig_validateAuth(t *testing.T) {
 				errorMesgEmpty,
 				errorMesgEmpty,
 				errorMesgEmpty,
+				errorMesgEmpty,
+				errorMesgScope,
 			},
 			Auth{
 				Enable:           enable,
@@ -351,6 +363,8 @@ func TestConfig_validateAuth(t *testing.T) {
 				TokenURL:         emptyString,
 				GroupEndpointURL: emptyString,
 				Scopes:           emptySlice,
+				HashKey:          emptyString,
+				BlockKey:         emptyString,
 			},
 		},
 		{
@@ -360,6 +374,8 @@ func TestConfig_validateAuth(t *testing.T) {
 				errorMesgEmpty,
 				errorMesgEmpty,
 				errorMesgEmpty,
+				errorMesgEmpty,
+				errorMesgScope,
 			},
 			Auth{
 				Enable:           enable,
@@ -369,6 +385,8 @@ func TestConfig_validateAuth(t *testing.T) {
 				TokenURL:         emptyString,
 				GroupEndpointURL: emptyString,
 				Scopes:           emptySlice,
+				HashKey:          emptyString,
+				BlockKey:         emptyString,
 			},
 		},
 		{
@@ -377,6 +395,8 @@ func TestConfig_validateAuth(t *testing.T) {
 				errorMesgEmpty,
 				errorMesgEmpty,
 				errorMesgEmpty,
+				errorMesgEmpty,
+				errorMesgScope,
 			},
 			Auth{
 				Enable:           enable,
@@ -386,6 +406,8 @@ func TestConfig_validateAuth(t *testing.T) {
 				TokenURL:         emptyString,
 				GroupEndpointURL: emptyString,
 				Scopes:           emptySlice,
+				HashKey:          emptyString,
+				BlockKey:         emptyString,
 			},
 		},
 		{
@@ -393,6 +415,8 @@ func TestConfig_validateAuth(t *testing.T) {
 			[]string{
 				errorMesgEmpty,
 				errorMesgEmpty,
+				errorMesgEmpty,
+				errorMesgScope,
 			},
 			Auth{
 				Enable:           enable,
@@ -402,11 +426,15 @@ func TestConfig_validateAuth(t *testing.T) {
 				TokenURL:         validTestURL,
 				GroupEndpointURL: emptyString,
 				Scopes:           emptySlice,
+				HashKey:          emptyString,
+				BlockKey:         emptyString,
 			},
 		},
 		{
 			// Auth enabled, some strings are set to invalid URL
 			[]string{
+				errorMesgEmpty,
+				errorMesgEmpty,
 				errorMesgURL,
 			},
 			Auth{
@@ -417,6 +445,8 @@ func TestConfig_validateAuth(t *testing.T) {
 				TokenURL:         validTestURL,
 				GroupEndpointURL: validTestURL,
 				Scopes:           validStringSlice,
+				HashKey:          emptyString,
+				BlockKey:         emptyString,
 			},
 		},
 		{
@@ -424,6 +454,7 @@ func TestConfig_validateAuth(t *testing.T) {
 			[]string{
 				errorMesgURL,
 				errorMesgURL,
+				errorMesgEmpty,
 			},
 			Auth{
 				Enable:           enable,
@@ -433,6 +464,8 @@ func TestConfig_validateAuth(t *testing.T) {
 				TokenURL:         notValidURL,
 				GroupEndpointURL: notValidURL,
 				Scopes:           validStringSlice,
+				HashKey:          emptyString,
+				BlockKey:         validString,
 			},
 		},
 		{
@@ -446,19 +479,23 @@ func TestConfig_validateAuth(t *testing.T) {
 				TokenURL:         validTestURL,
 				GroupEndpointURL: validTestURL,
 				Scopes:           validStringSlice,
+				HashKey:          validString,
+				BlockKey:         validString,
 			},
 		},
 		{
-			// Auth disabled, all configs are set to empty string
+			// Auth disabled, all configs are set to valid values
 			[]string{},
 			Auth{
 				Enable:           disable,
-				ClientId:         emptyString,
-				ClientSecret:     emptyString,
-				AuthorizeURL:     emptyString,
-				TokenURL:         emptyString,
-				GroupEndpointURL: emptyString,
+				ClientId:         validString,
+				ClientSecret:     validString,
+				AuthorizeURL:     validString,
+				TokenURL:         validString,
+				GroupEndpointURL: validString,
 				Scopes:           validStringSlice,
+				HashKey:          validString,
+				BlockKey:         validString,
 			},
 		},
 	}
