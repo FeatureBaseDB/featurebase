@@ -380,6 +380,9 @@ func (db *DB) checkpoint() (err error) {
 
 	db.afterCurrentTx(func() {
 		defer db.rwmu.Unlock()
+		db.baseWALID = readMetaWALID(db.data)
+		db.mu.Unlock()
+		defer db.mu.Lock()
 
 		if err = db.walFile.Truncate(0); err != nil {
 			db.logger.Errorf("truncate wal file: %w", err)
@@ -389,7 +392,6 @@ func (db *DB) checkpoint() (err error) {
 			db.logger.Errorf("seek wal file: %w", err)
 		}
 
-		db.baseWALID = readMetaWALID(db.data)
 	})
 
 	return nil

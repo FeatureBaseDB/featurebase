@@ -102,8 +102,6 @@ func (tx *Tx) Commit() error {
 
 	// If any pages have been written, ensure we write a new meta page with
 	// the commit flag to mark the end of the transaction.
-	tx.db.mu.Lock()
-	defer tx.db.mu.Unlock()
 	if tx.dirty() {
 		if err := tx.flush(); err != nil {
 			return err
@@ -120,11 +118,15 @@ func (tx *Tx) Commit() error {
 		// the lock, because we need removeTx to grab the lock to
 		// work, but if it wants to checkpoint, it wants to be able to return
 		// to us here and still be holding the lock.
+		tx.db.mu.Lock()
 		tx.db.rootRecords = tx.rootRecords
 		tx.db.pageMap = tx.pageMap
 		tx.db.walPageN = tx.walPageN
+		tx.db.mu.Unlock()
 	}
 
+	tx.db.mu.Lock()
+	defer tx.db.mu.Unlock()
 	// Disconnect transaction from DB.
 	return tx.db.removeTx(tx)
 }
