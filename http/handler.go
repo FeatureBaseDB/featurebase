@@ -3395,8 +3395,8 @@ func (h *Handler) handleCheckAuthentication(w http.ResponseWriter, r *http.Reque
 		http.Error(w, "Trying to authenticate but authentication is off.", http.StatusBadRequest)
 		return
 	}
-	groups := h.auth.Authenticate(w, r)
-	if groups == nil {
+	groups, err := h.auth.Authenticate(w, r)
+	if groups == nil || err != nil {
 		w.Header().Add("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusForbidden)
 		return

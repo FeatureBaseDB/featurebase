@@ -90,11 +90,11 @@ type UserInfo struct {
 	UserName string `json:"username"`
 }
 
-func (a *Auth) Authenticate(w http.ResponseWriter, r *http.Request) []Group {
+func (a *Auth) Authenticate(w http.ResponseWriter, r *http.Request) ([]Group, error) {
 	cookie, err := a.readCookie(r)
 	if err != nil {
 		http.Redirect(w, r, "/signin", http.StatusTemporaryRedirect)
-		return nil
+		return nil, err
 	}
 	if cookie.Token.Expiry.Before(time.Now().Add(a.refreshWithin)) {
 		err = a.refreshToken(w, cookie)
@@ -102,11 +102,14 @@ func (a *Auth) Authenticate(w http.ResponseWriter, r *http.Request) []Group {
 			//log error
 			if cookie.Token.Expiry.Before(time.Now()) {
 				http.Redirect(w, r, "/signin", http.StatusTemporaryRedirect)
-				return nil
+				return nil, err
 			}
 		}
 	}
-	return cookie.GroupMembership
+	if len(cookie.GroupMembership) == 0 {
+		return nil, errors.New("user is not part of any groups in identity provider")
+	}
+	return cookie.GroupMembership, nil
 
 }
 
