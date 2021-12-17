@@ -18,13 +18,13 @@ const writable = true
 //
 // Within the fragment, the ckey or container-key is the uint64 that specifies
 // the high 48-bits of the roaring.Bitmap 64-bit space.
-// The ckey is used to retreive a specific roaring.Container that
-// is either a run, array, or raw-bitmap. The roaring.Container is the
+// The ckey is used to retrieve a specific roaring.Container that
+// is either a run, array, or raw bitmap. The roaring.Container is the
 // low 16-bits of the roaring.Bitmap space. Its size is at most
 // 8KB (2^16 bits / (8 bits / byte) == 8192 bytes).
 //
 // The grain of the transaction is guaranteed to be at least at the shard
-// within one index. Therefore updates to the any of the fields within
+// within one index. Therefore updates to any of the fields within
 // the same shard will be atomically visible only once the transaction commits.
 // Reads from another, concurrently open, transaction will not see updates
 // that have not been committed.
@@ -34,7 +34,7 @@ type Tx interface {
 	// Tx types at the top of txfactory.go
 	Type() string
 
-	// Rollback must be called the end of read-only transactions. Either
+	// Rollback must be called at the end of read-only transactions. Either
 	// Rollback or Commit must be called at the end of writable transactions.
 	// It is safe to call Rollback multiple times, but it must be
 	// called at least once to release resources. Any Rollback after
@@ -50,10 +50,10 @@ type Tx interface {
 	// Commit makes the updates in the Tx visible to subsequent transactions.
 	Commit() error
 
-	// NewTxIterator returns it, a *roaring.Iterator whose it.Next() will
+	// NewTxIterator returns a *roaring.Iterator whose Next() method will
 	// successively return each uint64 stored in the conceptual roaring.Bitmap
 	// for the specified fragment.
-	NewTxIterator(index, field, view string, shard uint64) (it *roaring.Iterator)
+	NewTxIterator(index, field, view string, shard uint64) *roaring.Iterator
 
 	// ContainerIterator loops over the containers in the conceptual
 	// roaring.Bitmap for the specified fragment.
@@ -75,20 +75,21 @@ type Tx interface {
 	// must copy it into some other memory.
 	ApplyFilter(index, field, view string, shard uint64, ckey uint64, filter roaring.BitmapFilter) (err error)
 
-	// RoaringBitmap retreives the roaring.Bitmap for the entire shard.
+	// RoaringBitmap retrieves the roaring.Bitmap for the entire shard.
 	RoaringBitmap(index, field, view string, shard uint64) (*roaring.Bitmap, error)
 
 	// Container returns the roaring.Container for the given ckey
-	// (container-key or highbits), in the chosen fragment.
+	// (container-key or highbits) in the chosen fragment.
 	Container(index, field, view string, shard uint64, ckey uint64) (*roaring.Container, error)
 
-	// PutContainer stores c under the given ckey (container-key), in the specified fragment.
+	// PutContainer stores c under the given ckey (container-key) in the specified fragment.
 	PutContainer(index, field, view string, shard uint64, ckey uint64, c *roaring.Container) error
 
-	// RemoveContainer deletes the roaring.Container under the given ckey (container-key),
+	// RemoveContainer deletes the roaring.Container under the given ckey (container-key)
 	// in the specified fragment.
 	RemoveContainer(index, field, view string, shard uint64, ckey uint64) error
 
+	// Add adds the 'a' values to the Bitmap for the fragment.
 	Add(index, field, view string, shard uint64, a ...uint64) (changeCount int, err error)
 
 	// Remove removes the 'a' values from the Bitmap for the fragment.
@@ -97,25 +98,46 @@ type Tx interface {
 	// Contains tests if the uint64 v is stored in the fragment's Bitmap.
 	Contains(index, field, view string, shard uint64, v uint64) (exists bool, err error)
 
-	// ForEach
+	// ForEach calls function `fn` on every value (bit set) in the Bitmap for
+	// the fragment.
 	ForEach(index, field, view string, shard uint64, fn func(i uint64) error) error
 
-	// ForEachRange
+	// ForEachRange calls function `fn` on every value (bit set) in the Bitmap for
+	// the fragment, limited to the [start, end) range.
 	ForEachRange(index, field, view string, shard uint64, start, end uint64, fn func(uint64) error) error
 
-	// Count
+	// Count returns the count of hot bits on the fragment.
 	Count(index, field, view string, shard uint64) (uint64, error)
 
-	// Max
+	// Max returns the maximum value set in the Bitmap for the fragment.
 	Max(index, field, view string, shard uint64) (uint64, error)
 
-	// Min
+	// Min returns the minimum value set in the Bitmap for the fragment.
 	Min(index, field, view string, shard uint64) (uint64, bool, error)
 
-	// CountRange
+	// CountRange returns the count of hot bits in the [start, end) range on the
+	// fragment.
 	CountRange(index, field, view string, shard uint64, start, end uint64) (uint64, error)
 
-	// OffsetRange
+	// OffsetRange returns a *roaring.Bitmap containing the portion of the Bitmap for the fragment
+	// which is specified by a combination of (offset, [start, end)).
+	//
+	// start  - The value at which to start reading. This must be the zero value
+	//          of a container; i.e. [0, 65536, ...]
+	// end    - The value at which to end reading. This must be the zero value
+	//          of a container; i.e. [0, 65536, ...]
+	// offset - The number of positions to shift the resulting bitmap. This must
+	//          be the zero value of a container; i.e. [0, 65536, ...]
+	//
+	// For example, if (index, field, view, shard) represents the following bitmap:
+	// [1, 2, 3, 65536, 65539]
+	//
+	// then the following results are achieved based on (offset, start, end):
+	// (0, 0, 131072)          => [1, 2, 3, 65536, 65539]
+	// (0, 65536, 131072)      => [0, 3]
+	// (65536, 65536, 131072)  => [65536, 65539]
+	// (262144, 65536, 131072) => [262144, 262147]
+	//
 	OffsetRange(index, field, view string, shard uint64, offset, start, end uint64) (*roaring.Bitmap, error)
 
 	// ImportRoaringBits does efficient bulk import using rit, a roaring.RoaringIterator.
