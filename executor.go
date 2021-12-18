@@ -51,6 +51,9 @@ type executor struct {
 	Node    *topology.Node
 	Cluster *cluster
 
+	// how many jobs the work queue has seen
+	workCounter uint64
+
 	// Client used for remote requests.
 	client InternalQueryClient
 
@@ -128,13 +131,45 @@ func newExecutor(opts ...executorOption) *executor {
 	e.work = make(chan job, e.workerPoolSize)
 	_ = testhook.Opened(NewAuditor(), e, nil)
 	for i := 0; i < e.workerPoolSize; i++ {
-		e.workersWG.Add(1)
-		go func() {
-			defer e.workersWG.Done()
-			worker(e.work)
-		}()
+		e.addWorker()
 	}
+	go func() {
+		// background task: every so often, check to see whether we have
+		// work in the queue but none has been taken for a while. if so, we
+		// need more workers.
+		prev := atomic.LoadUint64(&e.workCounter)
+		periodic := time.NewTicker(50 * time.Millisecond)
+		defer periodic.Stop()
+		running := true
+		for running {
+			<-periodic.C
+			func() {
+				e.workMu.Lock()
+				defer e.workMu.Unlock()
+				if e.shutdown {
+					running = false
+					return
+				}
+				if len(e.work) == 0 {
+					return
+				}
+				next := atomic.LoadUint64(&e.workCounter)
+				if next == prev {
+					e.addWorker()
+					prev = next
+				}
+			}()
+		}
+	}()
 	return e
+}
+
+func (e *executor) addWorker() {
+	e.workersWG.Add(1)
+	go func() {
+		defer e.workersWG.Done()
+		e.worker(e.work)
+	}()
 }
 
 func (e *executor) Close() error {
@@ -5935,8 +5970,9 @@ type job struct {
 	resultChan      chan mapResponse
 }
 
-func worker(work chan job) {
+func (e *executor) worker(work chan job) {
 	for j := range work {
+		atomic.AddUint64(&e.workCounter, 1)
 		// Skip out early if the context is done, but still send
 		// an ack so mapperLocal can be sure we aren't about to
 		// work on something it sent us.
