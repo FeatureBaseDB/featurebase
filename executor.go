@@ -162,8 +162,8 @@ func newExecutor(opts ...executorOption) *executor {
 							// somehow between our test above and now the work
 							// queue FILLED UP and we stoically accept this
 						}
+						idle = 0
 					}
-					idle = 0
 					return
 				}
 				next := atomic.LoadUint64(&e.workCounter)
