@@ -169,8 +169,8 @@ func newExecutor(opts ...executorOption) *executor {
 				next := atomic.LoadUint64(&e.workCounter)
 				if next == prev {
 					e.addWorker()
-					prev = next
 				}
+				prev = next
 			}()
 		}
 	}()
