@@ -146,8 +146,8 @@ func newExecutor(opts ...executorOption) *executor {
 		for running {
 			<-periodic.C
 			func() {
-				e.workMu.Lock()
-				defer e.workMu.Unlock()
+				e.workMu.RLock()
+				defer e.workMu.RUnlock()
 				if e.shutdown {
 					running = false
 					return
