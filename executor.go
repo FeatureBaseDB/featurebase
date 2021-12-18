@@ -64,6 +64,7 @@ type executor struct {
 	workMu         sync.RWMutex
 	workersWG      sync.WaitGroup
 	workerPoolSize int
+	currentWorkers int
 	work           chan job
 
 	// Maximum per-request memory usage (Extract() only)
@@ -141,6 +142,7 @@ func newExecutor(opts ...executorOption) *executor {
 		periodic := time.NewTicker(50 * time.Millisecond)
 		defer periodic.Stop()
 		running := true
+		idle := 0
 		for running {
 			<-periodic.C
 			func() {
@@ -151,6 +153,17 @@ func newExecutor(opts ...executorOption) *executor {
 					return
 				}
 				if len(e.work) == 0 {
+					idle++
+					if idle > 10 && e.currentWorkers > (e.workerPoolSize*2) {
+						select {
+						case e.work <- job{idleHands: true}:
+							// we closed an excess worker
+						default:
+							// somehow between our test above and now the work
+							// queue FILLED UP and we stoically accept this
+						}
+					}
+					idle = 0
 					return
 				}
 				next := atomic.LoadUint64(&e.workCounter)
@@ -166,9 +179,11 @@ func newExecutor(opts ...executorOption) *executor {
 
 func (e *executor) addWorker() {
 	e.workersWG.Add(1)
+	e.currentWorkers++
 	go func() {
 		defer e.workersWG.Done()
 		e.worker(e.work)
+		e.currentWorkers--
 	}()
 }
 
@@ -5968,11 +5983,15 @@ type job struct {
 	ctx             context.Context
 	memoryAvailable *int64 // shared, atomic value
 	resultChan      chan mapResponse
+	idleHands       bool
 }
 
 func (e *executor) worker(work chan job) {
 	for j := range work {
 		atomic.AddUint64(&e.workCounter, 1)
+		if j.idleHands {
+			return
+		}
 		// Skip out early if the context is done, but still send
 		// an ack so mapperLocal can be sure we aren't about to
 		// work on something it sent us.
