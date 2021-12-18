@@ -11,6 +11,7 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/molecula/featurebase/v2/logger"
 	"github.com/molecula/featurebase/v2/rbf"
 	rbfcfg "github.com/molecula/featurebase/v2/rbf/cfg"
 	"github.com/molecula/featurebase/v2/testhook"
@@ -65,6 +66,13 @@ func NewDB(tb testing.TB, cfg ...*rbfcfg.Config) *rbf.DB {
 // MustOpenDB returns a db opened on a temporary file. On error, fail test.
 func MustOpenDB(tb testing.TB, cfg ...*rbfcfg.Config) *rbf.DB {
 	tb.Helper()
+	if len(cfg) == 0 || cfg[0] == nil {
+		newconf := rbfcfg.NewDefaultConfig()
+		newconf.Logger = logger.NewLogfLogger(tb)
+		cfg = []*rbfcfg.Config{newconf}
+	} else if cfg[0].Logger == nil {
+		cfg[0].Logger = logger.NewLogfLogger(tb)
+	}
 	db := NewDB(tb, cfg...)
 	if err := db.Open(); err != nil {
 		tb.Fatal(err)

@@ -109,20 +109,25 @@ func (tx *Tx) Commit() error {
 		// future plan: after checkpoint is moved to background
 		// or not every removeTx, then we can move the
 		// tx.db.rootRecords = tx.rootRecords into removeTx().
-
+		//
+		// ... or maybe not: let's do that part here, and then removeTx
+		// may or may not start a checkpoint, possibly asynchronously.
+		//
 		// avoid race detector firing on a write race here
-		// vs the read of rootRecords at db.Begin()
+		// vs the read of rootRecords at db.Begin(), then release
+		// the lock, because we need removeTx to grab the lock to
+		// work, but if it wants to checkpoint, it wants to be able to return
+		// to us here and still be holding the lock.
 		tx.db.mu.Lock()
-		defer tx.db.mu.Unlock()
 		tx.db.rootRecords = tx.rootRecords
 		tx.db.pageMap = tx.pageMap
 		tx.db.walPageN = tx.walPageN
-		return tx.db.removeTx(tx)
+		tx.db.mu.Unlock()
 	}
 
-	// Disconnect transaction from DB.
 	tx.db.mu.Lock()
 	defer tx.db.mu.Unlock()
+	// Disconnect transaction from DB.
 	return tx.db.removeTx(tx)
 }
 
