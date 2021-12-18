@@ -64,7 +64,7 @@ type executor struct {
 	workMu         sync.RWMutex
 	workersWG      sync.WaitGroup
 	workerPoolSize int
-	currentWorkers int
+	currentWorkers int64
 	work           chan job
 
 	// Maximum per-request memory usage (Extract() only)
@@ -154,7 +154,7 @@ func newExecutor(opts ...executorOption) *executor {
 				}
 				if len(e.work) == 0 {
 					idle++
-					if idle > 10 && e.currentWorkers > (e.workerPoolSize*2) {
+					if idle > 10 && atomic.LoadInt64(&e.currentWorkers) > int64(e.workerPoolSize*2) {
 						select {
 						case e.work <- job{idleHands: true}:
 							// we closed an excess worker
@@ -179,11 +179,11 @@ func newExecutor(opts ...executorOption) *executor {
 
 func (e *executor) addWorker() {
 	e.workersWG.Add(1)
-	e.currentWorkers++
+	atomic.AddInt64(&e.currentWorkers, 1)
 	go func() {
 		defer e.workersWG.Done()
 		e.worker(e.work)
-		e.currentWorkers--
+		atomic.AddInt64(&e.currentWorkers, -1)
 	}()
 }
 
