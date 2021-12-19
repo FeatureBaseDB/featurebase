@@ -386,17 +386,29 @@ func TestConfig_validateAuth(t *testing.T) {
 func TestConfig_validatePermissions(t *testing.T) {
 	permissions0 := ``
 
-	permissions1 := `"":
-  "test": "read"`
+	permissions1 := `user-groups:
+  "":
+    "test": "read"
+admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 
-	permissions2 := `"dca35310-ecda-4f23-86cd-876aee559900":
-  "": "write"`
+	permissions2 := `user-groups:
+  "dca35310-ecda-4f23-86cd-876aee559900":
+    "": "write"
+admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 
-	permissions3 := `"dca35310-ecda-4f23-86cd-876aee559900":
-  "test": ""`
+	permissions3 := `user-groups:
+  "dca35310-ecda-4f23-86cd-876aee559900":
+    "test": ""
+admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 
-	permissions4 := `"dca35310-ecda-4f23-86cd-876aee559900":
-  "test": "readwrite"`
+	permissions4 := `user-groups:
+  "dca35310-ecda-4f23-86cd-876aee559900":
+    "test": "readwrite"
+admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
+
+	permissions5 := `user-groups:
+  "dca35310-ecda-4f23-86cd-876aee559900":
+    "test": "read"`
 
 	tests := []struct {
 		err   string
@@ -421,6 +433,10 @@ func TestConfig_validatePermissions(t *testing.T) {
 		{
 			"not a valid permission",
 			permissions4,
+		},
+		{
+			"empty string for admin in permissions file",
+			permissions5,
 		},
 	}
 

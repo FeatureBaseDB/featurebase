@@ -49,7 +49,8 @@ type Auth struct {
 }
 
 type GroupPermissions struct {
-	Permissions map[string]map[string]string
+	Permissions map[string]map[string]string `yaml:"user-groups"`
+	Admin       string                       `yaml:"admin"`
 }
 
 type Group struct {
@@ -65,7 +66,7 @@ func (p *GroupPermissions) ReadPermissionsFile(permsFile io.Reader) (err error) 
 		return fmt.Errorf("reading permissions failed with error: %s", err)
 	}
 
-	err = yaml.UnmarshalStrict(permsData, &p.Permissions)
+	err = yaml.UnmarshalStrict(permsData, &p)
 	if err != nil {
 		return fmt.Errorf("unmarshalling permissions failed with error: %s", err)
 	}
@@ -75,8 +76,11 @@ func (p *GroupPermissions) ReadPermissionsFile(permsFile io.Reader) (err error) 
 
 func (p *GroupPermissions) GetPermissions(groups []Group, index string) (permission string, errors error) {
 
+	if admin := p.IsAdmin(groups); admin {
+		return "admin", nil
+	}
+
 	allPermissions := map[string]bool{
-		"admin": false,
 		"write": false,
 		"read":  false,
 	}
@@ -102,9 +106,7 @@ func (p *GroupPermissions) GetPermissions(groups []Group, index string) (permiss
 		return "", fmt.Errorf("group(s) %s does not have permission to FeatureBase", groupsDenied)
 	}
 
-	if allPermissions["admin"] {
-		return "admin", nil
-	} else if allPermissions["write"] {
+	if allPermissions["write"] {
 		return "write", nil
 	} else if allPermissions["read"] {
 		return "read", nil
@@ -115,25 +117,28 @@ func (p *GroupPermissions) GetPermissions(groups []Group, index string) (permiss
 
 func (p *GroupPermissions) IsAdmin(groups []Group) bool {
 	for _, group := range groups {
-		if _, ok := p.Permissions[group.GroupID]; ok {
-			for _, permission := range p.Permissions[group.GroupID] {
-				if permission == "admin" {
-					return true
-				}
-			}
+		if p.Admin == group.GroupID {
+			return true
 		}
 	}
 	return false
 }
 
 func (p *GroupPermissions) GetAuthorizedIndexList(groups []Group, desiredPermission string) (indexList []string) {
+	// if user is admin, find all indexes in permissions file and return them
+	if admin := p.IsAdmin(groups); admin {
+		for groupId := range p.Permissions {
+			for index := range p.Permissions[groupId] {
+				indexList = append(indexList, index)
+			}
+		}
+		return indexList
+	}
 
 	for _, group := range groups {
 		if _, ok := p.Permissions[group.GroupID]; ok {
 			for index, permission := range p.Permissions[group.GroupID] {
 				if permission == desiredPermission {
-					indexList = append(indexList, index)
-				} else if permission == "admin" {
 					indexList = append(indexList, index)
 				} else if permission == "write" && desiredPermission == "read" {
 					indexList = append(indexList, index)

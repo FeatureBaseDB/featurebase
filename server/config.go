@@ -657,12 +657,17 @@ func (c *Config) ValidatePermissions(permsFile io.Reader) (errors []error) {
 				continue
 			}
 
-			if !((perm == "admin") || (perm == "write") || (perm == "read")) {
-				errors = append(errors, fmt.Errorf("not a valid permission %s for group id %s and index %s in permissions file %s", perm, groupId, index, c.Auth.PermissionsFile))
+			if !((perm == "write") || (perm == "read")) {
+				errors = append(errors, fmt.Errorf("not a valid permission %s for group id %s and index %s in permissions file %s; expected permissions are read or write", perm, groupId, index, c.Auth.PermissionsFile))
 				continue
 			}
 		}
 	}
+
+	if p.Admin == "" {
+		errors = append(errors, fmt.Errorf("empty string for admin in permissions file: %s", c.Auth.PermissionsFile))
+	}
+
 	return errors
 }
 

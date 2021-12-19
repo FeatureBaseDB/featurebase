@@ -25,29 +25,39 @@ import (
 
 func TestAuth_ReadPermissionsFile(t *testing.T) {
 
-	singleInput := `"dca35310-ecda-4f23-86cd-876aee55906b":
-  "test": "read"`
+	singleInput := `user-groups:
+  "dca35310-ecda-4f23-86cd-876aee55906b":
+    "test": "read"
+admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 
-	multiInput := `"dca35310-ecda-4f23-86cd-876aee55906b":
-  "test": "read"
-"dca35310-ecda-4f23-86cd-876aee559900":
-  "test": "admin"`
+	multiInput := `user-groups:
+  "dca35310-ecda-4f23-86cd-876aee55906b":
+    "test": "read"
+    "test2": "write"
+  "dca35310-ecda-4f23-86cd-876aee559900":
+    "test": "write"
+admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 
-	singleStruct := map[string]map[string]string{
-		"dca35310-ecda-4f23-86cd-876aee55906b": {"test": "read"},
+	singlePermission := authz.GroupPermissions{
+		Permissions: map[string]map[string]string{
+			"dca35310-ecda-4f23-86cd-876aee55906b": {"test": "read"},
+		},
+		Admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe",
 	}
 
-	multiStruct := map[string]map[string]string{
-		"dca35310-ecda-4f23-86cd-876aee55906b": {"test": "read"},
-		"dca35310-ecda-4f23-86cd-876aee559900": {"test": "admin"},
+	multiPermission := authz.GroupPermissions{
+		Permissions: map[string]map[string]string{
+			"dca35310-ecda-4f23-86cd-876aee55906b": {"test": "read", "test2": "write"},
+			"dca35310-ecda-4f23-86cd-876aee559900": {"test": "write"}},
+		Admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe",
 	}
 
 	tests := []struct {
 		input  string
-		output map[string]map[string]string
+		output authz.GroupPermissions
 	}{
-		{singleInput, singleStruct},
-		{multiInput, multiStruct},
+		{singleInput, singlePermission},
+		{multiInput, multiPermission},
 	}
 
 	for i, test := range tests {
@@ -60,8 +70,8 @@ func TestAuth_ReadPermissionsFile(t *testing.T) {
 				t.Fatalf("readPermissionsFile error: %s", err)
 			}
 
-			if !reflect.DeepEqual(p.Permissions, test.output) {
-				t.Fatalf("expected output %s, but got %s", test.output, p.Permissions)
+			if !reflect.DeepEqual(p, test.output) {
+				t.Fatalf("expected output %s, but got %s", test.output, p)
 			}
 		},
 		)
@@ -71,20 +81,28 @@ func TestAuth_ReadPermissionsFile(t *testing.T) {
 func TestAuth_GetPermissions(t *testing.T) {
 
 	// initializes different example of permissions file in yaml
-	permissions1 := `"dca35310-ecda-4f23-86cd-876aee55906b":
-  "test": "read"`
+	permissions1 := `"user-groups":
+  "dca35310-ecda-4f23-86cd-876aee55906b":
+    "test": "read"
+admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 
-	permissions2 := `"dca35310-ecda-4f23-86cd-876aee559900":
-  "test": "write"`
+	permissions2 := `"user-groups":
+  "dca35310-ecda-4f23-86cd-876aee559900":
+    "test": "write"
+admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 
-	permissions3 := `"dca35310-ecda-4f23-86cd-876aee55906b":
-  "test": "write"
-  "test2": "read"
-"dca35310-ecda-4f23-86cd-876aee559900":
-  "test": "admin"`
+	permissions3 := `"user-groups":
+  "dca35310-ecda-4f23-86cd-876aee55906b":
+    "test": "write"
+    "test2": "read"
+  "dca35310-ecda-4f23-86cd-876aee559900":
+    "test": "read"
+admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 
-	permissions4 := `"dca35310-ecda-4f23-86cd-876aee559900":
-  "test": ""`
+	permissions4 := `"user-groups":
+  "dca35310-ecda-4f23-86cd-876aee559900":
+    "test": ""
+admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 
 	// initializes groups that are returned from identity provider
 	groupName := "name"
@@ -95,6 +113,7 @@ func TestAuth_GetPermissions(t *testing.T) {
 		{userId, "dca35310-ecda-4f23-86cd-876aee55906b", groupName},
 		{userId, "dca35310-ecda-4f23-86cd-876aee559900", groupName},
 	}
+	groupsList4 := []authz.Group{{userId, "ac97c9e2-346b-42a2-b6da-18bcb61a32fe", groupName}}
 
 	tests := []struct {
 		yamlData   string
@@ -140,7 +159,7 @@ func TestAuth_GetPermissions(t *testing.T) {
 		},
 		{
 			permissions3,
-			groupsList3,
+			groupsList4,
 			"test",
 			"admin",
 			"",
@@ -182,34 +201,37 @@ func TestAuth_GetPermissions(t *testing.T) {
 
 func TestAuth_IsAdmin(t *testing.T) {
 
-	group := []authz.Group{
-		{"user-is", "dca35310-ecda-4f23-86cd-876aee55906b", "group-name"},
+	group1 := []authz.Group{
+		{"admin-user-id", "ac97c9e2-346b-42a2-b6da-18bcb61a32fe", "admin-group"},
 	}
 
-	groupPermissions1 := map[string]map[string]string{
-		"dca35310-ecda-4f23-86cd-876aee55906b": {"test": "admin"},
+	group2 := []authz.Group{
+		{"user-id", "dca35310-ecda-4f23-86cd-876aee55906b", "group-name"},
 	}
 
-	groupPermissions2 := map[string]map[string]string{
-		"dca35310-ecda-4f23-86cd-876aee55906b": {"test": "read"},
+	groupPermissions := authz.GroupPermissions{
+		Permissions: map[string]map[string]string{
+			"dca35310-ecda-4f23-86cd-876aee55906b": {"test": "write"},
+		},
+		Admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe",
 	}
 
 	tests := []struct {
 		groups           []authz.Group
-		groupPermissions map[string]map[string]string
+		groupPermissions authz.GroupPermissions
 		output           bool
 	}{
 		{
-			group, groupPermissions1, true,
+			group1, groupPermissions, true,
 		},
 		{
-			group, groupPermissions2, false,
+			group2, groupPermissions, false,
 		},
 	}
 
 	for i, test := range tests {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
-			p := authz.GroupPermissions{test.groupPermissions}
+			p := test.groupPermissions
 			resp := p.IsAdmin(test.groups)
 			if resp != test.output {
 				t.Errorf("expected %t, but got %t", test.output, resp)
@@ -220,17 +242,30 @@ func TestAuth_IsAdmin(t *testing.T) {
 
 func TestAuth_GetAuthorizedIndexList(t *testing.T) {
 
-	group := []authz.Group{
-		{"user-is", "dca35310-ecda-4f23-86cd-876aee55906b", "group-name"},
+	group1 := []authz.Group{
+		{"user-id", "dca35310-ecda-4f23-86cd-876aee55906b", "group-name"},
 	}
 
-	p := authz.GroupPermissions{map[string]map[string]string{
-		"dca35310-ecda-4f23-86cd-876aee55906b": {
-			"test1": "admin",
-			"test2": "read",
-			"test3": "write",
+	group2 := []authz.Group{
+		{"admin-user-id", "ac97c9e2-346b-42a2-b6da-18bcb61a32fe", "admin-group"},
+	}
+
+	group3 := []authz.Group{
+		{"user-id", "dca35310-ecda-4f23-86cd-876aee559900", "group-name"},
+	}
+
+	p := authz.GroupPermissions{
+		Permissions: map[string]map[string]string{
+			"dca35310-ecda-4f23-86cd-876aee55906b": {
+				"test1": "read",
+				"test2": "write",
+			},
+			"dca35310-ecda-4f23-86cd-876aee559900": {
+				"test3": "read",
+			},
 		},
-	}}
+		Admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe",
+	}
 
 	tests := []struct {
 		groups     []authz.Group
@@ -238,19 +273,29 @@ func TestAuth_GetAuthorizedIndexList(t *testing.T) {
 		output     []string
 	}{
 		{
-			group,
+			group1,
+			"read",
+			[]string{"test1", "test2"},
+		},
+		{
+			group1,
+			"write",
+			[]string{"test2"},
+		},
+		{
+			group3,
+			"write",
+			nil,
+		},
+		{
+			group2,
 			"read",
 			[]string{"test1", "test2", "test3"},
 		},
 		{
-			group,
-			"admin",
-			[]string{"test1"},
-		},
-		{
-			group,
+			group2,
 			"write",
-			[]string{"test1", "test3"},
+			[]string{"test1", "test2", "test3"},
 		},
 	}
 
