@@ -203,9 +203,9 @@ type Config struct {
 	// "rbf".
 	Storage *storage.Config `toml:"storage"`
 
-	// RowcacheOn, if true, turns on the row cache for all storage backends.
-	// The default is now off because it makes rbf queries faster and uses
-	// much less memory.
+	// RowcacheOn permanently disabled. No longer useful w/ RBF. Left
+	// for backward compatibility but will be removed in a future
+	// version.
 	RowcacheOn bool `toml:"rowcache-on"`
 
 	// RBFConfig defines all externally configurable RBF flags.

@@ -495,7 +495,7 @@ func (m *Command) SetupServer() error {
 		pilosa.OptServerClusterName(m.Config.Cluster.Name),
 		pilosa.OptServerSerializer(proto.Serializer{}),
 		pilosa.OptServerStorageConfig(m.Config.Storage),
-		pilosa.OptServerRowcacheOn(m.Config.RowcacheOn),
+		pilosa.OptServerRowcacheOn(false),
 		pilosa.OptServerRBFConfig(m.Config.RBFConfig),
 		pilosa.OptServerMaxQueryMemory(m.Config.MaxQueryMemory),
 		pilosa.OptServerQueryHistoryLength(m.Config.QueryHistoryLength),
