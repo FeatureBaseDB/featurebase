@@ -131,13 +131,14 @@ func (a *Auth) Redirect(w http.ResponseWriter, r *http.Request) {
 	code := r.FormValue("code")
 	token, err := a.getToken(code)
 	if err != nil {
-		errors.Wrap(err, "getting token")
-		http.Redirect(w, r, "/login", http.StatusUnauthorized)
+		http.Error(w, "Bad Request: 400", http.StatusBadRequest)
+		return
 	}
 
 	cv, err := a.newCookieValue(token)
-	if err != nil {
-		http.Error(w, "authenticating", http.StatusBadRequest)
+	if err != nil || cv == nil {
+		http.Error(w, "Bad Request: 400", http.StatusBadRequest)
+		return
 	}
 
 	a.setCookie(w, cv)
@@ -181,8 +182,6 @@ func (a *Auth) newCookieValue(token *oauth2.Token) (*CookieValue, error) {
 	}
 	// not needed at this point in the logic and makes the encoded cookie too large
 	token.AccessToken = ""
-	// mannually setting expiry for testing ... REMOVE
-	token.Expiry = time.Now().Add(time.Second * time.Duration(30))
 	return &CookieValue{
 		UserID:          claims["oid"].(string),
 		UserName:        claims["name"].(string),

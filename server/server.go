@@ -532,7 +532,6 @@ func (m *Command) SetupServer() error {
 
 	}
 
-	m.logger.Infof("Before Handler %+v", m.auth)
 	m.Handler, err = http.NewHandler(
 		http.OptHandlerAllowedOrigins(m.Config.Handler.AllowedOrigins),
 		http.OptHandlerAPI(m.API),
