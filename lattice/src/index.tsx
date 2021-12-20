@@ -1,15 +1,19 @@
-import React from 'react';
-import ReactDOM from 'react-dom';
-import App from './App';
-import { BrowserRouter as Router, Route } from 'react-router-dom';
-import * as serviceWorker from './serviceWorker';
 import './index.scss';
 
+import React from 'react';
+import ReactDOM from 'react-dom';
+import { ProvideAuth } from 'services/useAuth';
+
+import App from './App';
+import * as serviceWorker from './serviceWorker';
+
 ReactDOM.render(
-  <Router>
-    <Route path="/" component={App} />
-  </Router>,
-  document.getElementById('root')
+  <React.StrictMode>
+    <ProvideAuth>
+      <App />
+    </ProvideAuth>
+  </React.StrictMode>,
+  document.getElementById("root")
 );
 
 // If you want your app to work offline and load faster, you can change

@@ -51,13 +51,6 @@ export const Nav = () => {
             </Typography>
           </ListItem>
         </NavLink>
-        <NavLink to="/login" activeClassName={css.activeNavLink}>
-          <ListItem className={css.navLink} button>
-            <Typography variant="subtitle2" color={textColor}>
-              Login
-            </Typography>
-          </ListItem>
-        </NavLink>
       </List>
     </div>
   );
