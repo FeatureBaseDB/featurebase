@@ -218,6 +218,8 @@ func newFragment(holder *Holder, spec fragSpec, shard uint64, flags byte) *fragm
 func (f *fragment) cachePath() string { return f.path() + cacheExt }
 
 func (f *fragment) bitDepth() (uint64, error) {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
 	tx, err := f.holder.BeginTx(false, f.idx, f.shard)
 	if err != nil {
 		return 0, errors.Wrapf(err, "beginning new tx(false, %s, %d)", f.index(), f.shard)
