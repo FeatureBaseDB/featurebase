@@ -3369,7 +3369,9 @@ func (h *Handler) handlePostRestore(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if h.auth == nil {
-		http.Error(w, "Trying to login but authentication is off.", http.StatusBadRequest)
+		w.Header().Add("Content-Type", "text/plain")
+		w.WriteHeader(http.StatusNoContent)
+		w.Write([]byte("Auth Off")) //nolint:errcheck
 		return
 	}
 
@@ -3378,15 +3380,23 @@ func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) handleRedirect(w http.ResponseWriter, r *http.Request) {
 	if h.auth == nil {
-		http.Error(w, "Authentication is off.", http.StatusBadRequest)
+		w.Header().Add("Content-Type", "text/plain")
+		w.WriteHeader(http.StatusNoContent)
+		w.Write([]byte("Auth Off")) //nolint:errcheck
 		return
 	}
 	h.auth.Redirect(w, r)
 }
 
 func (h *Handler) handleCheckAuthentication(w http.ResponseWriter, r *http.Request) {
+	if !validHeaderAcceptJSON(r.Header) {
+		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
+		return
+	}
 	if h.auth == nil {
-		http.Error(w, "Trying to authenticate but authentication is off.", http.StatusBadRequest)
+		w.Header().Add("Content-Type", "text/plain")
+		w.WriteHeader(http.StatusNoContent)
+		w.Write([]byte("Auth Off")) //nolint:errcheck
 		return
 	}
 	groups, err := h.auth.Authenticate(w, r)
@@ -3402,8 +3412,14 @@ func (h *Handler) handleCheckAuthentication(w http.ResponseWriter, r *http.Reque
 }
 
 func (h *Handler) handleUserInfo(w http.ResponseWriter, r *http.Request) {
+	if !validHeaderAcceptJSON(r.Header) {
+		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
+		return
+	}
 	if h.auth == nil {
-		http.Error(w, "Authentication is off.", http.StatusBadRequest)
+		w.Header().Add("Content-Type", "text/plain")
+		w.WriteHeader(http.StatusNoContent)
+		w.Write([]byte("Auth Off")) //nolint:errcheck
 		return
 	}
 	if err := json.NewEncoder(w).Encode(h.auth.GetUserInfo(r)); err != nil {
@@ -3413,7 +3429,9 @@ func (h *Handler) handleUserInfo(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) handleLogout(w http.ResponseWriter, r *http.Request) {
 	if h.auth == nil {
-		http.Error(w, "Trying to log out but authentication is off.", http.StatusBadRequest)
+		w.Header().Add("Content-Type", "text/plain")
+		w.WriteHeader(http.StatusNoContent)
+		w.Write([]byte("Auth Off")) //nolint:errcheck
 		return
 	}
 	h.auth.Logout(w, r)
