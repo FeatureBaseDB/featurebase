@@ -25,6 +25,7 @@ The Restore command will take a backup archive and restore it to a new, clean cl
 	flags.StringVarP(&cmd.Path, "source", "s", "", "backup file; specify '-' to restore from stdin tar stream")
 	flags.StringVar(&cmd.Host, "host", "localhost:10101", "host:port of FeatureBase.")
 	flags.IntVar(&cmd.Concurrency, "concurrency", 1, "number of concurrent uploads")
+	flags.DurationVar(&cmd.RetryPeriod, "retry-period", cmd.RetryPeriod, "Length of time after HTTP request failure to continue retrying request.")
 	ctl.SetTLSConfig(
 		flags, "",
 		&cmd.TLS.CertificatePath,

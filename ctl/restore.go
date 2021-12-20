@@ -13,8 +13,12 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
+
+	"github.com/hashicorp/go-retryablehttp"
 
 	pilosa "github.com/molecula/featurebase/v2"
+	fb_http "github.com/molecula/featurebase/v2/http"
 	"github.com/molecula/featurebase/v2/server"
 	"github.com/molecula/featurebase/v2/topology"
 	"golang.org/x/sync/errgroup"
@@ -29,6 +33,10 @@ type RestoreCommand struct {
 
 	// Filepath to the backup file.
 	Path string
+
+	// Amount of time after first failed request to continue retrying.
+	RetryPeriod time.Duration `json:"retry-period"`
+
 	// Reusable client.
 	client pilosa.InternalClient
 
@@ -62,7 +70,7 @@ func (cmd *RestoreCommand) Run(ctx context.Context) (err error) {
 		return fmt.Errorf("parsing tls config: %w", err)
 	}
 	// Create a client to the server.
-	client, err := commandClient(cmd)
+	client, err := commandClient(cmd, fb_http.WithClientRetryPeriod(cmd.RetryPeriod))
 	if err != nil {
 		return fmt.Errorf("creating client: %w", err)
 	}
@@ -119,7 +127,8 @@ func (cmd *RestoreCommand) restoreSchema(ctx context.Context, primary *topology.
 	if len(existingSchema) == 0 {
 		cmd.Logger().Printf("Load Schema")
 		url := primary.URI.Path("/schema")
-		var client http.Client
+		client := retryablehttp.NewClient()
+		client.RetryWaitMax = cmd.RetryPeriod
 		_, err = client.Post(url, "application/json", f)
 	} else {
 		schema := &pilosa.Schema{}
@@ -174,7 +183,8 @@ func (cmd *RestoreCommand) restoreIDAlloc(ctx context.Context, primary *topology
 	logger.Printf("Load idalloc")
 	url := primary.URI.Path("/internal/idalloc/restore")
 
-	var client http.Client
+	client := retryablehttp.NewClient()
+	client.RetryWaitMax = cmd.RetryPeriod
 	_, err = client.Post(url, "application/octet-stream", f)
 	return err
 }
@@ -244,14 +254,15 @@ func (cmd *RestoreCommand) restoreShard(ctx context.Context, filename string) er
 		defer f.Close()
 
 		url := node.URI.Path(fmt.Sprintf("/internal/restore/%v/%v", indexName, shard))
-		req, err := http.NewRequest("POST", url, f)
+		req, err := retryablehttp.NewRequest("POST", url, f)
 		if err != nil {
 			return err
 		}
 		req = req.WithContext(ctx)
 		req.Header.Set("Content-Type", "application/octet-stream")
 
-		var client http.Client
+		client := retryablehttp.NewClient()
+		client.RetryWaitMax = cmd.RetryPeriod
 		resp, err := client.Do(req)
 		if err != nil {
 			return err
