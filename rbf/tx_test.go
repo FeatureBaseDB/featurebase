@@ -2,8 +2,11 @@
 package rbf_test
 
 import (
+	"encoding/binary"
 	"fmt"
 	"math/rand"
+	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -815,4 +818,84 @@ func TestTx_DeleteBitmapsWithPrefix(t *testing.T) {
 	ifError(db.Check())
 	checkInfos()
 
+}
+
+func TestTx_Check(t *testing.T) {
+	t.Run("EmptyBranchPage", func(t *testing.T) {
+		t.Parallel()
+
+		db := MustOpenDB(t)
+		defer MustCloseDBNoCheck(t, db)
+		tx := MustBegin(t, db, true)
+		defer tx.Rollback()
+
+		if err := tx.CreateBitmap("x"); err != nil {
+			t.Fatal(err)
+		}
+
+		// Insert enough array containers to split page.
+		for i := 0; i < 1000; i++ {
+			if _, err := tx.Add("x", uint64(i<<16)); err != nil {
+				t.Fatalf("Add(%d) err=%q", i<<16, err)
+			}
+		}
+
+		// Read page types for all pages.
+		infos, err := tx.PageInfos()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Commit & checkpoint to flush to the data file.
+		if err := tx.Commit(); err != nil {
+			t.Fatal(err)
+		} else if err := db.Checkpoint(); err != nil {
+			t.Fatal(err)
+		}
+
+		// Corrupt first branch page found by zeroing out the cell count.
+		var pgno uint32
+		for _, info := range infos {
+			if info, ok := info.(*rbf.BranchPageInfo); ok {
+				pgno = info.Pgno
+				page := mustReadPage(t, db.DataPath(), pgno)
+				binary.BigEndian.PutUint16(page[8:10], 0) // zero cell count
+				mustWritePage(t, db.DataPath(), pgno, page)
+				break
+			}
+		}
+
+		// Verify that check now returns an error.
+		if err := db.Check(); err == nil || !strings.Contains(err.Error(), fmt.Sprintf("branch page %d is empty", pgno)) {
+			t.Fatalf("unexpected error: %#v", err)
+		}
+	})
+}
+
+func mustReadPage(tb testing.TB, path string, pgno uint32) []byte {
+	tb.Helper()
+	f, err := os.Open(path)
+	if err != nil {
+		tb.Fatal(err)
+	}
+	defer f.Close()
+
+	buf := make([]byte, rbf.PageSize)
+	if _, err := f.ReadAt(buf, int64(pgno)*rbf.PageSize); err != nil {
+		tb.Fatal(err)
+	}
+	return buf
+}
+
+func mustWritePage(tb testing.TB, path string, pgno uint32, buf []byte) {
+	tb.Helper()
+	f, err := os.OpenFile(path, os.O_WRONLY, 0666)
+	if err != nil {
+		tb.Fatal(err)
+	}
+	defer f.Close()
+
+	if _, err := f.WriteAt(buf, int64(pgno)*rbf.PageSize); err != nil {
+		tb.Fatal(err)
+	}
 }

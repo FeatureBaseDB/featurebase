@@ -741,6 +741,27 @@ func (tx *Tx) Check() error {
 	return nil
 }
 
+func (tx *Tx) checkPage(pgno, parent, typ uint32) error {
+	switch typ {
+	case PageTypeBranch:
+		return tx.checkBranchPage(pgno, parent, typ)
+	default:
+		return nil
+	}
+}
+
+func (tx *Tx) checkBranchPage(pgno, parent, typ uint32) error {
+	page, _, err := tx.readPage(pgno)
+	if err != nil {
+		return err
+	}
+
+	if readCellN(page) == 0 {
+		return fmt.Errorf("branch page %d is empty", pgno)
+	}
+	return nil
+}
+
 // checkPageAllocations ensures that all pages are either in-use or on the freelist.
 func (tx *Tx) checkPageAllocations() error {
 	freePageSet, err := tx.freePageSet()
@@ -830,7 +851,7 @@ func (tx *Tx) inusePageSet() (map[uint32]struct{}, error) {
 	// Traverse freelist and mark pages as in-use.
 	if err := tx.walkTree(readMetaFreelistPageNo(tx.meta[:]), 0, func(pgno, parent, typ uint32) error {
 		m[pgno] = struct{}{}
-		return nil
+		return tx.checkPage(pgno, parent, typ)
 	}); err != nil {
 		return m, err
 	}
@@ -846,7 +867,8 @@ func (tx *Tx) inusePageSet() (map[uint32]struct{}, error) {
 
 		if err := tx.walkTree(pgno.(uint32), 0, func(pgno, parent, typ uint32) error {
 			m[pgno] = struct{}{}
-			return nil
+
+			return tx.checkPage(pgno, parent, typ)
 		}); err != nil {
 			return m, err
 		}
