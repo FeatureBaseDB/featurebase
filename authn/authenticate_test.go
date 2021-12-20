@@ -29,14 +29,14 @@ func TestAuth(t *testing.T) {
 	a, err := authn.NewAuth(
 		logger.NewStandardLogger(os.Stdout),
 		"http://localhost:10101/",
-		[]string{"https://graph.microsoft.com/.default", "offline_access"},
-		"https://login.microsoftonline.com/4a137d66-d161-4ae4-b1e6-07e9920874b8/oauth2/v2.0/authorize",
-		"https://login.microsoftonline.com/4a137d66-d161-4ae4-b1e6-07e9920874b8/oauth2/v2.0/token",
-		"https://graph.microsoft.com/v1.0/me/transitiveMemberOf/microsoft.graph.group?$count=true",
-		"e9088663-eb08-41d7-8f65-efb5f54bbb71",
-		"DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF",
-		"DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF",
-		"DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF",
+		settings.Auth.Scopes,
+		settings.Auth.AuthorizeURL,
+		settings.Auth.TokenURL,
+		settings.Auth.GroupEndpointURL,
+		settings.Auth.ClientId,
+		settings.Auth.ClientSecret,
+		settings.Auth.HashKey,
+		settings.Auth.BlockKey,
 	)
 	if err != nil {
 		t.Errorf("building auth object%s", err)
