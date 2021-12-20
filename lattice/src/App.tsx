@@ -1,11 +1,11 @@
-import Login from 'App/AuthFlow/Login';
-import Main from 'Main';
 import { BrowserRouter, Route, Switch } from 'react-router-dom';
+import { MuiThemeProvider } from '@material-ui/core/styles';
+
+import Main from 'Main';
+import Login from 'App/AuthFlow/Login';
 import { useAuth } from 'services/useAuth';
 import PrivateRoute from 'shared/PrivateRoute/PrivateRoute';
 import { lightTheme } from 'theme/';
-
-import { MuiThemeProvider } from '@material-ui/core/styles';
 
 const App = () => {
   const auth = useAuth();
