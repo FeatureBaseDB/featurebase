@@ -56,26 +56,26 @@ function useProvideAuth() {
     pilosa.get
       .auth()
       .then((res) => {
-        // User is authenticated
-        if (res.data === "OK") {
-          setAuthOn(true);
-          setIsAuthenticated(true);
-
-          // get userinfo
-          userinfo();
-        }
-        // Auth is off
-        else if (
+        if (res.status === 204) {
+          // Authentication is off
           res.data.startsWith(
             "Trying to authenticate but authentication is off"
-          )
-        ) {
+          );
           setAuthOn(false);
-        }
-        // User not authenticated
-        else {
+        } else {
+          // Turn on Authentication 
           setAuthOn(true);
-          setIsAuthenticated(false);
+
+          if (res.data === "OK") {
+            // User is authenticated
+            setIsAuthenticated(true);
+
+            // get userinfo
+            userinfo();
+          } else {
+            // User not authenticated
+            setIsAuthenticated(false);
+          }
         }
       })
       .finally(() => {
