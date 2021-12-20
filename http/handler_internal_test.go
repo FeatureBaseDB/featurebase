@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	gohttp "net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"reflect"
 	"strings"
@@ -263,27 +264,10 @@ func TestAuth(t *testing.T) {
 		if err != nil {
 			t.Errorf("expected no errors reading response, got: %+v", err)
 		}
-		fmt.Printf("%d", strings.Index(string(data), AuthorizeURL))
 
 		if strings.Index(string(data), AuthorizeURL) != 9 {
 			t.Errorf("incorrect redirect url: expected: %s, got: %s", AuthorizeURL, string(data))
 		}
-	})
-	t.Run("Login-BadCookie", func(t *testing.T) {
-		r := httptest.NewRequest(gohttp.MethodGet, "/login", nil)
-		w := httptest.NewRecorder()
-		// cookie, err := secure.Encode("molecula-chip", validCV)
-		if err != nil {
-			t.Error("encoding cookie")
-		}
-
-		// r.AddCookie(cookie)
-
-		//login w/o cookie
-		h.handleLogin(w, r)
-
-		//login with cookie
-
 	})
 
 	t.Run("Logout", func(t *testing.T) {
@@ -293,18 +277,48 @@ func TestAuth(t *testing.T) {
 
 		h.handleLogout(w, r)
 
-		fmt.Println()
+		if w.Result().Cookies()[0].Value != "" {
+			t.Errorf("expected cookie to be cleared, got: %+v", w.Result().Cookies()[0].Value)
+		}
+	})
 
-		//logout with cookie
-		//logout without cookie
+	t.Run("Redirect-NoAuthCode", func(t *testing.T) {
+		r := httptest.NewRequest(gohttp.MethodGet, "/redirect", nil)
+		w := httptest.NewRecorder()
+
+		h.handleRedirect(w, r)
+
+		if w.Result().StatusCode != 400 {
+			t.Errorf("expected http code 400, got: %+v", w.Result().StatusCode)
+		}
 
 	})
 
-	t.Run("Authenticate", func(t *testing.T) {
-		r := httptest.NewRequest(gohttp.MethodGet, "/authenticate", nil)
+	t.Run("Redirect-SomeAuthCode", func(t *testing.T) {
+		r := httptest.NewRequest(gohttp.MethodGet, "/redirect", nil)
 		w := httptest.NewRecorder()
 
+		r.Form = url.Values{}
+		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		r.Form.Add("code", "junk")
+
+		h.handleRedirect(w, r)
+
+		if w.Result().StatusCode != 400 {
+			t.Errorf("expected http code 400, got: %+v", w.Result().StatusCode)
+		}
+
+	})
+	t.Run("Authenticate-Cookie", func(t *testing.T) {
+		r := httptest.NewRequest(gohttp.MethodGet, "/authenticate", nil)
+		w := httptest.NewRecorder()
+		r.AddCookie(validCookie)
+
+		fmt.Printf("r %+v \n\n", r)
+
 		h.handleCheckAuthentication(w, r)
+
+		fmt.Printf("w %+v \n\n", w)
 
 		//auth with cookie
 		//auth w/o cookie
@@ -317,8 +331,48 @@ func TestAuth(t *testing.T) {
 
 		h.handleUserInfo(w, r)
 
-		//user info with cookie
-		//user info w/o cookie
+		data, err := readResponse(w)
+		if err != nil {
+			t.Errorf("expected no errors reading response, got: %+v", err)
+		}
+
+		uinfo := authn.UserInfo{}
+
+		err = json.Unmarshal(data, &uinfo)
+		if err != nil {
+			t.Errorf("unmarshalling userinfo")
+		}
+
+		if uinfo.UserID != "" && uinfo.UserName != "" {
+
+			t.Errorf("expected http code 400, got: %+v", uinfo)
+		}
+
+	})
+
+	t.Run("GetUserInfo", func(t *testing.T) {
+		r := httptest.NewRequest(gohttp.MethodGet, "/userinfo", nil)
+		w := httptest.NewRecorder()
+		r.AddCookie(validCookie)
+
+		h.handleUserInfo(w, r)
+
+		data, err := readResponse(w)
+		if err != nil {
+			t.Errorf("expected no errors reading response, got: %+v", err)
+		}
+
+		uinfo := authn.UserInfo{}
+
+		err = json.Unmarshal(data, &uinfo)
+		if err != nil {
+			t.Errorf("unmarshalling userinfo")
+		}
+
+		if uinfo.UserID != "snowstorm" && uinfo.UserName != "J.M.W. Turner" {
+
+			t.Errorf("expected http code 400, got: %+v", uinfo)
+		}
 
 	})
 
