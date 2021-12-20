@@ -1,8 +1,8 @@
 /* tslint:disable */
-import { createTheme } from '@material-ui/core/styles';
+import { createMuiTheme } from '@material-ui/core/styles';
 import { baseTheme } from 'theme/';
 
-export const darkTheme = createTheme({
+export const darkTheme = createMuiTheme({
   ...baseTheme,
   palette: {
     background: {
