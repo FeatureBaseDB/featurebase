@@ -1745,13 +1745,33 @@ func giveRawResponse(b bool) executeRequestOption {
 	}
 }
 
+type nopCloser struct {
+	*bytes.Reader
+}
+
+func (n nopCloser) Close() error {
+	return nil
+}
+
 func (c *InternalClient) doWithRetry(req *http.Request) (*http.Response, error) {
 	sleepDuration := time.Second
+	newBody := nopCloser{}
+	if req.Body != nil {
+		bod, err := ioutil.ReadAll(req.Body)
+		if err != nil {
+			return nil, errors.Wrap(err, "reading body")
+		}
+		newBody.Reader = bytes.NewReader(bod)
+		req.Body = newBody
+	}
 	resp, err := c.httpClient.Do(req)
 	// start timer after first request, so if retryPeriod > 0 we
 	// pretty much always do at least one retry
 	start := time.Now()
 	for ; err != nil || resp.StatusCode < 200 || resp.StatusCode >= 300; resp, err = c.httpClient.Do(req) {
+		if newBody.Reader != nil {
+			newBody.Seek(0, io.SeekStart)
+		}
 		if time.Since(start) > c.retryPeriod {
 			break
 		}
