@@ -30,6 +30,7 @@ import (
 
 	pilosa "github.com/molecula/featurebase/v2"
 	"github.com/molecula/featurebase/v2/authn"
+	"github.com/molecula/featurebase/v2/authz"
 	"github.com/molecula/featurebase/v2/boltdb"
 	"github.com/molecula/featurebase/v2/encoding/proto"
 	petcd "github.com/molecula/featurebase/v2/etcd"
@@ -481,7 +482,7 @@ func (m *Command) SetupServer() error {
 		pilosa.OptServerClusterName(m.Config.Cluster.Name),
 		pilosa.OptServerSerializer(proto.Serializer{}),
 		pilosa.OptServerStorageConfig(m.Config.Storage),
-		pilosa.OptServerRowcacheOn(m.Config.RowcacheOn),
+		pilosa.OptServerRowcacheOn(false),
 		pilosa.OptServerRBFConfig(m.Config.RBFConfig),
 		pilosa.OptServerMaxQueryMemory(m.Config.MaxQueryMemory),
 		pilosa.OptServerQueryHistoryLength(m.Config.QueryHistoryLength),
@@ -524,12 +525,22 @@ func (m *Command) SetupServer() error {
 
 	if m.Config.Auth.Enable {
 		m.Config.MustValidateAuth()
+		permsFile, err := os.Open(m.Config.Auth.PermissionsFile)
+		if err != nil {
+			return err
+		}
+		defer permsFile.Close()
+
+		var p authz.GroupPermissions
+		if err = p.ReadPermissionsFile(permsFile); err != nil {
+			return err
+		}
+    
 		ac := m.Config.Auth
 		m.auth, err = authn.NewAuth(m.logger, m.listenURI.String(), ac.Scopes, ac.AuthorizeURL, ac.TokenURL, ac.GroupEndpointURL, ac.LogoutURL, ac.ClientId, ac.ClientSecret, ac.HashKey, ac.BlockKey)
 		if err != nil {
 			return errors.Wrap(err, "instantiating authN object")
 		}
-
 	}
 
 	m.Handler, err = http.NewHandler(

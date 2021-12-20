@@ -8,7 +8,7 @@ import (
 	"io"
 
 	"github.com/cespare/xxhash"
-	"github.com/molecula/featurebase/v2"
+	pilosa "github.com/molecula/featurebase/v2"
 	"github.com/molecula/featurebase/v2/server"
 )
 
@@ -61,14 +61,19 @@ func (cmd *ChkSumCommand) Run(ctx context.Context) (err error) {
 	h := xxhash.New()
 
 	for _, ii := range schema.Indexes {
-		qa := &pilosa.QueryRequest{Index: ii.Name, Query: "Count(All())"}
+		qa := &pilosa.QueryRequest{Index: ii.Name, Query: "All()"}
 		rs, err := client.Query(ctx, ii.Name, qa)
 		if err != nil {
 			return err
 		}
-		all := rs.Results[0].(uint64)
-		as := fmt.Sprintf("all=%v", all)
-		_, _ = h.Write([]byte(as))
+
+		all := rs.Results[0].(*pilosa.Row)
+		if len(all.Keys) > 0 {
+			allString := fmt.Sprintf("%v", all.Keys)
+			_, _ = h.Write([]byte(allString))
+		} else {
+			_, _ = h.Write(all.Roaring())
+		}
 
 		for _, field := range ii.Fields {
 			switch field.Options.Type {
@@ -92,7 +97,7 @@ func (cmd *ChkSumCommand) Run(ctx context.Context) (err error) {
 				}
 				for _, item := range res.Results {
 					rowids := item.(*pilosa.RowIdentifiers)
-					//either rowids or keys
+					// either rowids or keys
 					for _, row := range rowids.Keys {
 						countPql := fmt.Sprintf(`Count(Row(%v="%v"))`, field.Name, row)
 						qr := &pilosa.QueryRequest{Index: ii.Name, Query: countPql}
@@ -121,7 +126,7 @@ func (cmd *ChkSumCommand) Run(ctx context.Context) (err error) {
 			}
 
 		}
-		fmt.Printf("hash:%x\n", h.Sum(nil))
+		fmt.Fprintf(cmd.Stdout, "hash:%x\n", h.Sum(nil))
 	}
 
 	return nil

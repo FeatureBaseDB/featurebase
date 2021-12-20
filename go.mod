@@ -57,7 +57,7 @@ require (
 	golang.org/x/oauth2 v0.0.0-20190604053449-0f29369cfe45
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	google.golang.org/grpc v1.28.0
-	gopkg.in/yaml.v2 v2.3.0 // indirect
+	gopkg.in/yaml.v2 v2.3.0
 	modernc.org/mathutil v1.0.0
 	modernc.org/strutil v1.0.0
 	sigs.k8s.io/yaml v1.2.0 // indirect

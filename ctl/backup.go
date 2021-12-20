@@ -18,7 +18,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// BackupCommand represents a command for backing up a Pilosa node.
+// BackupCommand represents a command for backing up a FeatureBase node.
 type BackupCommand struct { // nolint: maligned
 	tlsConfig *tls.Config
 
@@ -183,12 +183,17 @@ func (cmd *BackupCommand) backupIDAllocData(ctx context.Context) error {
 func (cmd *BackupCommand) backupIndexTranslation(ctx context.Context, ii *pilosa.IndexInfo) error {
 	logger := cmd.Logger()
 	logger.Printf("backing up index translation: %q", ii.Name)
-	if err := cmd.backupIndexTranslateData(ctx, ii.Name); err != nil {
-		return err
+	if ii.Options.Keys {
+		if err := cmd.backupIndexTranslateData(ctx, ii.Name); err != nil {
+			return err
+		}
 	}
 
 	// Back up field translation data.
 	for _, fi := range ii.Fields {
+		if !fi.Options.Keys {
+			continue
+		}
 		if err := cmd.backupFieldTranslateData(ctx, ii.Name, fi.Name); err != nil {
 			return fmt.Errorf("cannot backup field translation data for field %q on index %q: %w", fi.Name, ii.Name, err)
 		}
@@ -286,7 +291,6 @@ func (cmd *BackupCommand) backupShardNode(ctx context.Context, indexName string,
 func (cmd *BackupCommand) backupIndexTranslateData(ctx context.Context, name string) error {
 	partitionN := topology.DefaultPartitionN
 
-	// Back up all bitmap data for the index.
 	ch := make(chan int, partitionN)
 	for partitionID := 0; partitionID < partitionN; partitionID++ {
 		ch <- partitionID
@@ -318,9 +322,7 @@ func (cmd *BackupCommand) backupIndexPartitionTranslateData(ctx context.Context,
 	logger.Printf("backing up index translation data: %s/%d", name, partitionID)
 
 	rc, err := cmd.client.IndexTranslateDataReader(ctx, name, partitionID)
-	if err == pilosa.ErrTranslateStoreNotFound {
-		return nil
-	} else if err != nil {
+	if err != nil {
 		return fmt.Errorf("fetching translate data reader: %w", err)
 	}
 	defer rc.Close()
@@ -349,9 +351,7 @@ func (cmd *BackupCommand) backupFieldTranslateData(ctx context.Context, indexNam
 	logger.Printf("backing up field translation data: %s/%s", indexName, fieldName)
 
 	rc, err := cmd.client.FieldTranslateDataReader(ctx, indexName, fieldName)
-	if err == pilosa.ErrTranslateStoreNotFound {
-		return nil
-	} else if err != nil {
+	if err != nil {
 		return fmt.Errorf("fetching translate data reader: %w", err)
 	}
 	defer rc.Close()
