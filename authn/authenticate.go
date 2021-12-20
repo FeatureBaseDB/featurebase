@@ -30,13 +30,13 @@ type Auth struct {
 	oAuthConfig    *oauth2.Config
 }
 
-func NewAuth(logger logger.Logger, url string, scopes []string, authUrl, tokenUrl, groupEndpoint, clientID, clientSecret, hashKey, blockKey string) (*Auth, error) {
+func NewAuth(logger logger.Logger, url string, scopes []string, authUrl, tokenUrl, groupEndpoint, logout, clientID, clientSecret, hashKey, blockKey string) (*Auth, error) {
 	auth := &Auth{
 		logger:         logger,
 		cookieName:     "molecula-chip",
 		refreshWithin:  time.Minute * time.Duration(15),
 		groupEndpoint:  groupEndpoint,
-		logoutEndpoint: "https://login.microsoftonline.com/common/oauth2/v2.0/logout",
+		logoutEndpoint: logout,
 		fbURL:          url,
 		oAuthConfig: &oauth2.Config{
 			RedirectURL:  fmt.Sprintf("%s/redirect", url),
@@ -172,13 +172,13 @@ func (a *Auth) newCookieValue(token *oauth2.Token) (*CookieValue, error) {
 	}
 	accessParsed, err := jwt.Parse(token.AccessToken, nil)
 	if token == nil {
-		fmt.Println(errors.Wrap(err, "parsing jwt claims from access tokens"))
+		a.logger.Errorf("parsing jwt claims from access tokens:  %v", err)
 	}
 	claims := accessParsed.Claims.(jwt.MapClaims)
 
 	groups, err := a.getGroupMembership(token)
 	if err != nil {
-		fmt.Println(errors.Wrap(err, "getting group memebership"))
+		a.logger.Errorf("getting group memebership %v", err)
 	}
 	// not needed at this point in the logic and makes the encoded cookie too large
 	token.AccessToken = ""
@@ -194,6 +194,10 @@ func (a *Auth) getGroupMembership(token *oauth2.Token) (Groups, error) {
 	var groups Groups
 	var bearer = fmt.Sprintf("Bearer %s", token.AccessToken)
 	req, err := http.NewRequest("GET", a.groupEndpoint, nil)
+	if err != nil {
+		return groups, errors.Wrap(err, "creating new request to group endpoint")
+	}
+
 	req.Header.Add("Authorization", bearer)
 	client := &http.Client{}
 	response, err := client.Do(req)
@@ -248,7 +252,6 @@ func (a *Auth) setCookie(w http.ResponseWriter, cookie *CookieValue) error {
 }
 
 func (a *Auth) refreshToken(w http.ResponseWriter, cookie *CookieValue) error {
-	fmt.Println("REFRESHING TOKEN")
 	if cookie.Token.RefreshToken == "" {
 		return errors.New("no refresh token found, check auth scopes to see if refresh tokens are being provided by your IdP.")
 	}
@@ -258,8 +261,6 @@ func (a *Auth) refreshToken(w http.ResponseWriter, cookie *CookieValue) error {
 		return errors.Wrap(err, "refreshing token")
 	}
 
-	fmt.Printf("Refreshed AT: %v\n\n", newToken.AccessToken)
-
 	if newToken.Expiry != cookie.Token.Expiry {
 		cv, err := a.newCookieValue(newToken)
 		if err != nil {
@@ -267,7 +268,6 @@ func (a *Auth) refreshToken(w http.ResponseWriter, cookie *CookieValue) error {
 		}
 
 		a.setCookie(w, cv)
-		fmt.Println("refreshed access token")
 	}
 
 	return nil

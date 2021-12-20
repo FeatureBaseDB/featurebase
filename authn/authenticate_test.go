@@ -22,6 +22,7 @@ func TestAuth(t *testing.T) {
 	settings.Auth.AuthorizeURL = "https://login.microsoftonline.com/4a137d66-d161-4ae4-b1e6-07e9920874b8/oauth2/v2.0/authorize"
 	settings.Auth.TokenURL = "https://login.microsoftonline.com/4a137d66-d161-4ae4-b1e6-07e9920874b8/oauth2/v2.0/token"
 	settings.Auth.GroupEndpointURL = "https://graph.microsoft.com/v1.0/me/transitiveMemberOf/microsoft.graph.group?$count=true"
+	settings.Auth.LogoutURL = "https://login.microsoftonline.com/common/oauth2/v2.0/logout"
 	settings.Auth.Scopes = []string{"https://graph.microsoft.com/.default", "offline_access"}
 	settings.Auth.HashKey = "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF"
 	settings.Auth.BlockKey = "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF"
@@ -33,6 +34,7 @@ func TestAuth(t *testing.T) {
 		settings.Auth.AuthorizeURL,
 		settings.Auth.TokenURL,
 		settings.Auth.GroupEndpointURL,
+		settings.Auth.LogoutURL,
 		settings.Auth.ClientId,
 		settings.Auth.ClientSecret,
 		settings.Auth.HashKey,

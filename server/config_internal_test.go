@@ -308,6 +308,7 @@ func TestConfig_validateAuth(t *testing.T) {
 				errorMesgEmpty,
 				errorMesgEmpty,
 				errorMesgEmpty,
+				errorMesgEmpty,
 				errorMesgScope,
 			},
 			Auth{
@@ -317,6 +318,7 @@ func TestConfig_validateAuth(t *testing.T) {
 				AuthorizeURL:     emptyString,
 				TokenURL:         emptyString,
 				GroupEndpointURL: emptyString,
+				LogoutURL:        emptyString,
 				Scopes:           emptySlice,
 				HashKey:          emptyString,
 				BlockKey:         emptyString,
@@ -325,6 +327,7 @@ func TestConfig_validateAuth(t *testing.T) {
 		{
 			// Auth enabled, some configs are set to empty string
 			[]string{
+				errorMesgEmpty,
 				errorMesgEmpty,
 				errorMesgEmpty,
 				errorMesgEmpty,
@@ -340,6 +343,7 @@ func TestConfig_validateAuth(t *testing.T) {
 				AuthorizeURL:     emptyString,
 				TokenURL:         emptyString,
 				GroupEndpointURL: emptyString,
+				LogoutURL:        emptyString,
 				Scopes:           emptySlice,
 				HashKey:          emptyString,
 				BlockKey:         emptyString,
@@ -348,6 +352,7 @@ func TestConfig_validateAuth(t *testing.T) {
 		{
 			// Auth enabled, some configs are set to empty string
 			[]string{
+				errorMesgEmpty,
 				errorMesgEmpty,
 				errorMesgEmpty,
 				errorMesgEmpty,
@@ -363,6 +368,7 @@ func TestConfig_validateAuth(t *testing.T) {
 				AuthorizeURL:     emptyString,
 				TokenURL:         emptyString,
 				GroupEndpointURL: emptyString,
+				LogoutURL:        emptyString,
 				Scopes:           emptySlice,
 				HashKey:          emptyString,
 				BlockKey:         emptyString,
@@ -376,6 +382,7 @@ func TestConfig_validateAuth(t *testing.T) {
 				errorMesgEmpty,
 				errorMesgEmpty,
 				errorMesgEmpty,
+				errorMesgURL,
 				errorMesgScope,
 			},
 			Auth{
@@ -385,6 +392,7 @@ func TestConfig_validateAuth(t *testing.T) {
 				AuthorizeURL:     emptyString,
 				TokenURL:         emptyString,
 				GroupEndpointURL: emptyString,
+				LogoutURL:        notValidURL,
 				Scopes:           emptySlice,
 				HashKey:          emptyString,
 				BlockKey:         emptyString,
@@ -393,6 +401,7 @@ func TestConfig_validateAuth(t *testing.T) {
 		{
 			// Auth enabled, some configs are set to empty string
 			[]string{
+				errorMesgEmpty,
 				errorMesgEmpty,
 				errorMesgEmpty,
 				errorMesgEmpty,
@@ -406,6 +415,7 @@ func TestConfig_validateAuth(t *testing.T) {
 				AuthorizeURL:     validTestURL,
 				TokenURL:         emptyString,
 				GroupEndpointURL: emptyString,
+				LogoutURL:        emptyString,
 				Scopes:           emptySlice,
 				HashKey:          emptyString,
 				BlockKey:         emptyString,
@@ -426,6 +436,7 @@ func TestConfig_validateAuth(t *testing.T) {
 				AuthorizeURL:     validTestURL,
 				TokenURL:         validTestURL,
 				GroupEndpointURL: emptyString,
+				LogoutURL:        validTestURL,
 				Scopes:           emptySlice,
 				HashKey:          emptyString,
 				BlockKey:         emptyString,
@@ -437,6 +448,7 @@ func TestConfig_validateAuth(t *testing.T) {
 				errorMesgEmpty,
 				errorMesgEmpty,
 				errorMesgURL,
+				errorMesgURL,
 			},
 			Auth{
 				Enable:           enable,
@@ -445,6 +457,7 @@ func TestConfig_validateAuth(t *testing.T) {
 				AuthorizeURL:     notValidURL,
 				TokenURL:         validTestURL,
 				GroupEndpointURL: validTestURL,
+				LogoutURL:        notValidURL,
 				Scopes:           validStringSlice,
 				HashKey:          emptyString,
 				BlockKey:         emptyString,
@@ -453,6 +466,7 @@ func TestConfig_validateAuth(t *testing.T) {
 		{
 			// Auth enabled, some strings are set to invalid URL
 			[]string{
+				errorMesgURL,
 				errorMesgURL,
 				errorMesgURL,
 				errorMesgEmpty,
@@ -464,6 +478,7 @@ func TestConfig_validateAuth(t *testing.T) {
 				AuthorizeURL:     validTestURL,
 				TokenURL:         notValidURL,
 				GroupEndpointURL: notValidURL,
+				LogoutURL:        notValidURL,
 				Scopes:           validStringSlice,
 				HashKey:          emptyString,
 				BlockKey:         validKey,
@@ -479,21 +494,23 @@ func TestConfig_validateAuth(t *testing.T) {
 				AuthorizeURL:     validTestURL,
 				TokenURL:         validTestURL,
 				GroupEndpointURL: validTestURL,
+				LogoutURL:        validTestURL,
 				Scopes:           validStringSlice,
 				HashKey:          validKey,
 				BlockKey:         validKey,
 			},
 		},
 		{
-			// Auth disabled, all configs are set to valid values
+			// Auth disabled, all configs are set to some values
 			[]string{},
 			Auth{
 				Enable:           disable,
 				ClientId:         validString,
 				ClientSecret:     validString,
 				AuthorizeURL:     validString,
-				TokenURL:         validString,
-				GroupEndpointURL: validString,
+				TokenURL:         validTestURL,
+				GroupEndpointURL: validTestURL,
+				LogoutURL:        validTestURL,
 				Scopes:           validStringSlice,
 				HashKey:          validKey,
 				BlockKey:         validKey,

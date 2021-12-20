@@ -178,25 +178,43 @@ func TestFieldOptionValidation(t *testing.T) {
 	}
 }
 
+func readResponse(w *httptest.ResponseRecorder) ([]byte, error) {
+	res := w.Result()
+	defer res.Body.Close()
+	return ioutil.ReadAll(res.Body)
+}
+
 func TestAuth(t *testing.T) {
+	var (
+		ClientId         = "e9088663-eb08-41d7-8f65-efb5f54bbb71"
+		ClientSecret     = "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF"
+		AuthorizeURL     = "https://login.microsoftonline.com/4a137d66-d161-4ae4-b1e6-07e9920874b8/oauth2/v2.0/authorize"
+		TokenURL         = "https://login.microsoftonline.com/4a137d66-d161-4ae4-b1e6-07e9920874b8/oauth2/v2.0/token"
+		GroupEndpointURL = "https://graph.microsoft.com/v1.0/me/transitiveMemberOf/microsoft.graph.group?$count=true"
+		LogoutURL        = "https://login.microsoftonline.com/common/oauth2/v2.0/logout"
+		Scopes           = []string{"https://graph.microsoft.com/.default", "offline_access"}
+		HashKey          = "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF"
+		BlockKey         = "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF"
+	)
+
 	hashKey, _ := hex.DecodeString("DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF")
 	blockKey, _ := hex.DecodeString("DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF")
 
 	a, err := authn.NewAuth(
 		logger.NewStandardLogger(os.Stdout),
 		"http://localhost:10101/",
-		[]string{"https://graph.microsoft.com/.default", "offline_access"},
-		"https://login.microsoftonline.com/4a137d66-d161-4ae4-b1e6-07e9920874b8/oauth2/v2.0/authorize",
-		"https://login.microsoftonline.com/4a137d66-d161-4ae4-b1e6-07e9920874b8/oauth2/v2.0/token",
-		"https://graph.microsoft.com/v1.0/me/transitiveMemberOf/microsoft.graph.group?$count=true",
-		"e9088663-eb08-41d7-8f65-efb5f54bbb71",
-		"DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF",
-		"DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF",
-		"DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF",
+		Scopes,
+		AuthorizeURL,
+		TokenURL,
+		GroupEndpointURL,
+		LogoutURL,
+		ClientId,
+		ClientSecret,
+		HashKey,
+		BlockKey,
 	)
-
 	if err != nil {
-		t.Errorf("building auth object %s", err)
+		t.Errorf("building auth object%s", err)
 	}
 
 	h := Handler{
@@ -235,30 +253,21 @@ func TestAuth(t *testing.T) {
 		Expires:  validToken.Expiry,
 	}
 
-	t.Run("Login-Cookie", func(t *testing.T) {
+	t.Run("Login", func(t *testing.T) {
 		r := httptest.NewRequest(gohttp.MethodGet, "/login", nil)
 		w := httptest.NewRecorder()
-
-		h.handleLogin(w, r)
-
-	})
-	t.Run("Login-NoCookie", func(t *testing.T) {
-		r := httptest.NewRequest(gohttp.MethodGet, "/login", nil)
-		w := httptest.NewRecorder()
-		r.AddCookie(validCookie)
 
 		//login w/o cookie
 		h.handleLogin(w, r)
-		res := w.Result()
-		defer res.Body.Close()
-		data, err := ioutil.ReadAll(res.Body)
+		data, err := readResponse(w)
 		if err != nil {
 			t.Errorf("expected no errors reading response, got: %+v", err)
 		}
-		fmt.Printf("%s", data)
+		fmt.Printf("%d", strings.Index(string(data), AuthorizeURL))
 
-		//login with cookie
-
+		if strings.Index(string(data), AuthorizeURL) != 9 {
+			t.Errorf("incorrect redirect url: expected: %s, got: %s", AuthorizeURL, string(data))
+		}
 	})
 	t.Run("Login-BadCookie", func(t *testing.T) {
 		r := httptest.NewRequest(gohttp.MethodGet, "/login", nil)
@@ -280,8 +289,11 @@ func TestAuth(t *testing.T) {
 	t.Run("Logout", func(t *testing.T) {
 		r := httptest.NewRequest(gohttp.MethodGet, "/logout", nil)
 		w := httptest.NewRecorder()
+		r.AddCookie(validCookie)
 
 		h.handleLogout(w, r)
+
+		fmt.Println()
 
 		//logout with cookie
 		//logout without cookie

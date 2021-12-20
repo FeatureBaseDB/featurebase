@@ -116,6 +116,7 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 	flags.StringVar(&srv.Config.Auth.AuthorizeURL, "auth.authorize-url", srv.Config.Auth.AuthorizeURL, "Identity Provider's Authorize URL.")
 	flags.StringVar(&srv.Config.Auth.TokenURL, "auth.token-url", srv.Config.Auth.TokenURL, "Identity Provider's Token URL.")
 	flags.StringVar(&srv.Config.Auth.GroupEndpointURL, "auth.group-endpoint-url", srv.Config.Auth.GroupEndpointURL, "Identity Provider's Group endpoint URL.")
+	flags.StringVar(&srv.Config.Auth.LogoutURL, "auth.logout-url", srv.Config.Auth.LogoutURL, "Identity Provider's Logout URL.")
 	flags.StringSliceVar(&srv.Config.Auth.Scopes, "auth.scopes", srv.Config.Auth.Scopes, "Comma separated list of scopes obtained from IdP")
 	flags.StringVar(&srv.Config.Auth.HashKey, "auth.hash-key", srv.Config.Auth.HashKey, "First Secret for Auth.")
 	flags.StringVar(&srv.Config.Auth.BlockKey, "auth.block-key", srv.Config.Auth.BlockKey, "Second Secret for Auth.")

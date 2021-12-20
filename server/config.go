@@ -243,6 +243,7 @@ type Auth struct {
 	AuthorizeURL     string   `toml:"authorize-url"`
 	TokenURL         string   `toml:"token-url"`
 	GroupEndpointURL string   `toml:"group-endpoint-url"`
+	LogoutURL        string   `toml:"logout-url"`
 	Scopes           []string `toml:"scopes"`
 	HashKey          string   `toml:"hash-key"`
 	BlockKey         string   `toml:"block-key"`
@@ -620,6 +621,7 @@ func (c *Config) ValidateAuth() ([]error, error) {
 		"AuthorizeURL":     c.Auth.AuthorizeURL,
 		"TokenURL":         c.Auth.TokenURL,
 		"GroupEndpointURL": c.Auth.GroupEndpointURL,
+		"LogoutURL":        c.Auth.LogoutURL,
 		"HashKey":          c.Auth.HashKey,
 		"BlockKey":         c.Auth.BlockKey,
 	}

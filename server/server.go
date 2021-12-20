@@ -525,7 +525,7 @@ func (m *Command) SetupServer() error {
 	if m.Config.Auth.Enable {
 		m.Config.MustValidateAuth()
 		ac := m.Config.Auth
-		m.auth, err = authn.NewAuth(m.logger, m.listenURI.String(), ac.Scopes, ac.AuthorizeURL, ac.TokenURL, ac.GroupEndpointURL, ac.ClientId, ac.ClientSecret, ac.HashKey, ac.BlockKey)
+		m.auth, err = authn.NewAuth(m.logger, m.listenURI.String(), ac.Scopes, ac.AuthorizeURL, ac.TokenURL, ac.GroupEndpointURL, ac.LogoutURL, ac.ClientId, ac.ClientSecret, ac.HashKey, ac.BlockKey)
 		if err != nil {
 			return errors.Wrap(err, "instantiating authN object")
 		}
