@@ -265,6 +265,14 @@ func (db *DB) methodicalWALPageN(pageN int) (lastMeta int, err error) {
 	return lastMeta, nil
 }
 
+// Checkpoint performs a manual checkpoint. This is not necessary except for tests.
+func (db *DB) Checkpoint() error {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	db.rwmu.Lock()
+	return db.checkpoint()
+}
+
 // checkpoint moves all WAL pages to the main DB file. Must be called
 // while holding both db.mu and db.rwmu. Should release db.rwmu, but not
 // db.mu.
