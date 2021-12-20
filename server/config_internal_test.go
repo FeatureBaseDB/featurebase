@@ -283,6 +283,7 @@ func TestConfig_validateAuth(t *testing.T) {
 	validTestURL := "https://url.com/"
 	validClientID := "clientid"
 	validClientSecret := "clientSecret"
+	validKey := "3db6665be8b860af422155acf2346d4fcb46678fca42e60d934abe0b7ce43600"
 	notValidURL := "not-a-url"
 	emptyString := ""
 	validStringSlice := []string{"https://graph.microsoft.com/.default", "offline_access"}
@@ -465,7 +466,7 @@ func TestConfig_validateAuth(t *testing.T) {
 				GroupEndpointURL: notValidURL,
 				Scopes:           validStringSlice,
 				HashKey:          emptyString,
-				BlockKey:         validString,
+				BlockKey:         validKey,
 			},
 		},
 		{
@@ -479,8 +480,8 @@ func TestConfig_validateAuth(t *testing.T) {
 				TokenURL:         validTestURL,
 				GroupEndpointURL: validTestURL,
 				Scopes:           validStringSlice,
-				HashKey:          validString,
-				BlockKey:         validString,
+				HashKey:          validKey,
+				BlockKey:         validKey,
 			},
 		},
 		{
@@ -494,8 +495,8 @@ func TestConfig_validateAuth(t *testing.T) {
 				TokenURL:         validString,
 				GroupEndpointURL: validString,
 				Scopes:           validStringSlice,
-				HashKey:          validString,
-				BlockKey:         validString,
+				HashKey:          validKey,
+				BlockKey:         validKey,
 			},
 		},
 	}

@@ -633,7 +633,7 @@ func (c *Config) ValidateAuth() ([]error, error) {
 
 		if name == "HashKey" || name == "BlockKey" {
 			if len(value) != 64 {
-				errors = append(errors, fmt.Errorf("invalid key length for %s", name))
+				errors = append(errors, fmt.Errorf("invalid key length for %s. exp %d, got %d", name, 64, len(value)))
 			}
 		}
 
