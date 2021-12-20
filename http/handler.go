@@ -3372,14 +3372,8 @@ func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Trying to login but authentication is off.", http.StatusBadRequest)
 		return
 	}
-	h.logger.Infof("Handle Login Begin")
-	h.logger.Infof("Handler: %+v", h)
-	tst := h.auth
-	_ = tst
-	h.logger.Infof("Accessing Auth")
 
 	h.auth.Login(w, r)
-	h.logger.Infof("Handle Login End")
 }
 
 func (h *Handler) handleRedirect(w http.ResponseWriter, r *http.Request) {

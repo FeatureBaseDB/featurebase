@@ -3,18 +3,24 @@ package http
 
 import (
 	"bytes"
+	"encoding/hex"
 	"encoding/json"
+	"fmt"
+	"io/ioutil"
 	gohttp "net/http"
 	"net/http/httptest"
 	"os"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/gorilla/securecookie"
 	pilosa "github.com/molecula/featurebase/v2"
 	"github.com/molecula/featurebase/v2/authn"
 	"github.com/molecula/featurebase/v2/logger"
 	"github.com/molecula/featurebase/v2/pql"
+	"golang.org/x/oauth2"
 )
 
 // Test custom UnmarshalJSON for postIndexRequest object
@@ -173,6 +179,9 @@ func TestFieldOptionValidation(t *testing.T) {
 }
 
 func TestAuth(t *testing.T) {
+	hashKey, _ := hex.DecodeString("DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF")
+	blockKey, _ := hex.DecodeString("DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF")
+
 	a, err := authn.NewAuth(
 		logger.NewStandardLogger(os.Stdout),
 		"http://localhost:10101/",
@@ -185,6 +194,7 @@ func TestAuth(t *testing.T) {
 		"DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF",
 		"DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF",
 	)
+
 	if err != nil {
 		t.Errorf("building auth object %s", err)
 	}
@@ -193,11 +203,77 @@ func TestAuth(t *testing.T) {
 		auth: a,
 	}
 
-	t.Run("Login", func(t *testing.T) {
+	validToken := oauth2.Token{
+		TokenType:    "Bearer",
+		RefreshToken: "abcdef",
+		Expiry:       time.Now().Add(time.Hour),
+	}
+
+	// emptyToken := oauth2.Token{}
+
+	grp := authn.Group{
+		UserID:    "snowstorm",
+		GroupID:   "abcd123-A",
+		GroupName: "Romantic Painters",
+	}
+
+	validCV := authn.CookieValue{
+		UserID:          "snowstorm",
+		UserName:        "J.M.W. Turner",
+		GroupMembership: []authn.Group{grp},
+		Token:           &validToken,
+	}
+
+	secure := securecookie.New(hashKey, blockKey)
+	validEncodedCV, _ := secure.Encode("molecula-chip", validCV)
+	validCookie := &gohttp.Cookie{
+		Name:     "molecula-chip",
+		Value:    validEncodedCV,
+		Path:     "/",
+		Secure:   true,
+		HttpOnly: true,
+		Expires:  validToken.Expiry,
+	}
+
+	t.Run("Login-Cookie", func(t *testing.T) {
 		r := httptest.NewRequest(gohttp.MethodGet, "/login", nil)
 		w := httptest.NewRecorder()
 
 		h.handleLogin(w, r)
+
+	})
+	t.Run("Login-NoCookie", func(t *testing.T) {
+		r := httptest.NewRequest(gohttp.MethodGet, "/login", nil)
+		w := httptest.NewRecorder()
+		r.AddCookie(validCookie)
+
+		//login w/o cookie
+		h.handleLogin(w, r)
+		res := w.Result()
+		defer res.Body.Close()
+		data, err := ioutil.ReadAll(res.Body)
+		if err != nil {
+			t.Errorf("expected no errors reading response, got: %+v", err)
+		}
+		fmt.Printf("%s", data)
+
+		//login with cookie
+
+	})
+	t.Run("Login-BadCookie", func(t *testing.T) {
+		r := httptest.NewRequest(gohttp.MethodGet, "/login", nil)
+		w := httptest.NewRecorder()
+		// cookie, err := secure.Encode("molecula-chip", validCV)
+		if err != nil {
+			t.Error("encoding cookie")
+		}
+
+		// r.AddCookie(cookie)
+
+		//login w/o cookie
+		h.handleLogin(w, r)
+
+		//login with cookie
 
 	})
 
@@ -207,6 +283,9 @@ func TestAuth(t *testing.T) {
 
 		h.handleLogout(w, r)
 
+		//logout with cookie
+		//logout without cookie
+
 	})
 
 	t.Run("Authenticate", func(t *testing.T) {
@@ -215,6 +294,9 @@ func TestAuth(t *testing.T) {
 
 		h.handleCheckAuthentication(w, r)
 
+		//auth with cookie
+		//auth w/o cookie
+
 	})
 
 	t.Run("GetUserInfo", func(t *testing.T) {
@@ -222,6 +304,9 @@ func TestAuth(t *testing.T) {
 		w := httptest.NewRecorder()
 
 		h.handleUserInfo(w, r)
+
+		//user info with cookie
+		//user info w/o cookie
 
 	})
 
