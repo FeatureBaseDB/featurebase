@@ -4,11 +4,16 @@ package http
 import (
 	"bytes"
 	"encoding/json"
+	gohttp "net/http"
+	"net/http/httptest"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
 
 	pilosa "github.com/molecula/featurebase/v2"
+	"github.com/molecula/featurebase/v2/authn"
+	"github.com/molecula/featurebase/v2/logger"
 	"github.com/molecula/featurebase/v2/pql"
 )
 
@@ -165,4 +170,59 @@ func TestFieldOptionValidation(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestAuth(t *testing.T) {
+	a, err := authn.NewAuth(
+		logger.NewStandardLogger(os.Stdout),
+		"http://localhost:10101/",
+		[]string{"https://graph.microsoft.com/.default", "offline_access"},
+		"https://login.microsoftonline.com/4a137d66-d161-4ae4-b1e6-07e9920874b8/oauth2/v2.0/authorize",
+		"https://login.microsoftonline.com/4a137d66-d161-4ae4-b1e6-07e9920874b8/oauth2/v2.0/token",
+		"https://graph.microsoft.com/v1.0/me/transitiveMemberOf/microsoft.graph.group?$count=true",
+		"e9088663-eb08-41d7-8f65-efb5f54bbb71",
+		"DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF",
+		"DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF",
+		"DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF",
+	)
+	if err != nil {
+		t.Errorf("building auth object %s", err)
+	}
+
+	h := Handler{
+		auth: a,
+	}
+
+	t.Run("Login", func(t *testing.T) {
+		r := httptest.NewRequest(gohttp.MethodGet, "/login", nil)
+		w := httptest.NewRecorder()
+
+		h.handleLogin(w, r)
+
+	})
+
+	t.Run("Logout", func(t *testing.T) {
+		r := httptest.NewRequest(gohttp.MethodGet, "/logout", nil)
+		w := httptest.NewRecorder()
+
+		h.handleLogout(w, r)
+
+	})
+
+	t.Run("Authenticate", func(t *testing.T) {
+		r := httptest.NewRequest(gohttp.MethodGet, "/authenticate", nil)
+		w := httptest.NewRecorder()
+
+		h.handleCheckAuthentication(w, r)
+
+	})
+
+	t.Run("GetUserInfo", func(t *testing.T) {
+		r := httptest.NewRequest(gohttp.MethodGet, "/userinfo", nil)
+		w := httptest.NewRecorder()
+
+		h.handleUserInfo(w, r)
+
+	})
+
 }
