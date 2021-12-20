@@ -58,9 +58,6 @@ function useProvideAuth() {
       .then((res) => {
         if (res.status === 204) {
           // Authentication is off
-          res.data.startsWith(
-            "Trying to authenticate but authentication is off"
-          );
           setAuthOn(false);
         } else {
           // Turn on Authentication 
