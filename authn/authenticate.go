@@ -34,7 +34,7 @@ func NewAuth(logger logger.Logger, url string, scopes []string, authUrl, tokenUr
 	auth := &Auth{
 		logger:         logger,
 		cookieName:     "molecula-chip",
-		refreshWithin:  time.Second * time.Duration(15),
+		refreshWithin:  time.Minute * time.Duration(15),
 		groupEndpoint:  groupEndpoint,
 		logoutEndpoint: "https://login.microsoftonline.com/common/oauth2/v2.0/logout",
 		fbURL:          url,
@@ -49,21 +49,16 @@ func NewAuth(logger logger.Logger, url string, scopes []string, authUrl, tokenUr
 			},
 		},
 	}
-	data, err := decodeHex(hashKey)
-	if err != nil {
+	var err error
+	if auth.hashKey, err = decodeHex(hashKey); err != nil {
 		return nil, errors.Wrap(err, "decoding hash key")
 	}
-	auth.hashKey = data
 
-	data, err = decodeHex(blockKey)
-	if err != nil {
+	if auth.blockKey, err = decodeHex(blockKey); err != nil {
 		return nil, errors.Wrap(err, "decoding block key")
 	}
-	auth.blockKey = data
 
 	auth.secure = securecookie.New(auth.hashKey, auth.blockKey)
-
-	auth.logger.Infof("AUTH: %+v", auth)
 
 	return auth, nil
 }

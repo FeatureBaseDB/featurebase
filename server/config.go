@@ -631,6 +631,12 @@ func (c *Config) ValidateAuth() ([]error, error) {
 			continue
 		}
 
+		if name == "HashKey" || name == "BlockKey" {
+			if len(value) != 32 {
+				errors = append(errors, fmt.Errorf("invalid key length for %s", name))
+			}
+		}
+
 		if strings.Contains(name, "URL") {
 			_, err := url.ParseRequestURI(value)
 			if err != nil {
@@ -640,7 +646,7 @@ func (c *Config) ValidateAuth() ([]error, error) {
 		}
 	}
 	if len(c.Auth.Scopes) == 0 {
-		errors = append(errors, fmt.Errorf("must provide scope for authentication with IdP"))
+		errors = append(errors, fmt.Errorf("must provide scope for authentication with IdP - for access and refresh token"))
 	}
 	if len(errors) > 0 {
 		return errors, fmt.Errorf("there were errors validating config")

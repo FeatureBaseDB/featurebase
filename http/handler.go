@@ -363,7 +363,7 @@ func (h *Handler) collectStats(next http.Handler) http.Handler {
 
 // latticeRoutes lists the frontend routes that do not directly correspond to
 // backend routes, and require special handling.
-var latticeRoutes = []string{"/tables", "/query", "/querybuilder", "/login"} // TODO somehow pull this from some metadata in the lattice directory
+var latticeRoutes = []string{"/tables", "/query", "/querybuilder", "/signin"} // TODO somehow pull this from some metadata in the lattice directory
 
 // newRouter creates a new mux http router.
 func newRouter(handler *Handler) http.Handler {
@@ -458,7 +458,7 @@ func newRouter(handler *Handler) http.Handler {
 	router.HandleFunc("/cpu-profile/stop", handler.handleCPUProfileStop).Methods("GET").Name("CPUProfileStop")
 
 	router.HandleFunc("/login", handler.handleLogin).Methods("GET").Name("Login")
-	router.HandleFunc("/logout", handler.handleLogout).Methods("GET").Name("Login")
+	router.HandleFunc("/logout", handler.handleLogout).Methods("GET").Name("Logout")
 	router.HandleFunc("/redirect", handler.handleRedirect).Methods("GET").Name("Redirect")
 	router.HandleFunc("/auth", handler.handleCheckAuthentication).Methods("GET").Name("CheckAuthentication")
 	router.HandleFunc("/userinfo", handler.handleUserInfo).Methods("GET").Name("UserInfo")
