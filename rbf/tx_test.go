@@ -436,6 +436,52 @@ func TestTx_DeallocateToFreeList(t *testing.T) {
 	}
 }
 
+func TestTx_Remove(t *testing.T) {
+	t.Parallel()
+
+	db := MustOpenDB(t)
+	defer MustCloseDB(t, db)
+
+	tx := MustBegin(t, db, true)
+	defer tx.Rollback()
+
+	if err := tx.CreateBitmap("x"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Insert large array values.
+	var values []uint64
+	for i := 0; i < 1000; i++ {
+		for j := 0; j < rbf.ArrayMaxSize; j++ {
+			v := uint64((i << 16) + j)
+			values = append(values, v)
+
+			if _, err := tx.Add("x", v); err != nil {
+				t.Fatalf("Add(%d) err=%q", v, err)
+			}
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	tx = MustBegin(t, db, true)
+	defer tx.Rollback()
+
+	// Remove all array values.
+	for _, i := range rand.Perm(len(values)) {
+		v := values[i]
+		if _, err := tx.Remove("x", v); err != nil {
+			t.Fatalf("Remove(%d) err=%q", v, err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestTx_AddRemove_Quick(t *testing.T) {
 	if testing.Short() {
 		t.Skip("-short enabled, skipping")
