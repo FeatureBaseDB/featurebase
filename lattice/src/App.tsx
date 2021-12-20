@@ -16,7 +16,7 @@ const App = () => {
         <div></div>
       ) : (
         <MuiThemeProvider theme={lightTheme}>
-          {auth.authOn ? (
+          {auth.isAuthOn ? (
             <Switch>
               <Route
                 exact

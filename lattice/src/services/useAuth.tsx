@@ -29,7 +29,7 @@ function useProvideAuth() {
   const [user, setUser] = useState<IUser | undefined>(undefined);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [authOn, setAuthOn] = useState<boolean>(true);
+  const [isAuthOn, setIsAuthOn] = useState<boolean>(true);
 
   const userinfo = () => {
     pilosa.get.userinfo().then((userinfoRes) => {
@@ -58,10 +58,10 @@ function useProvideAuth() {
       .then((res) => {
         if (res.status === 204) {
           // Authentication is off
-          setAuthOn(false);
+          setIsAuthOn(false);
         } else {
           // Turn on Authentication 
-          setAuthOn(true);
+          setIsAuthOn(true);
 
           if (res.data === "OK") {
             // User is authenticated
@@ -83,8 +83,8 @@ function useProvideAuth() {
   return {
     isAuthenticated,
     isLoading,
+    isAuthOn,
     user,
-    authOn,
     userinfo,
     signin,
     signout,
