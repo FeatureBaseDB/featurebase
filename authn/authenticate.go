@@ -120,6 +120,7 @@ func (a *Auth) Logout(w http.ResponseWriter, r *http.Request) {
 		Path:     "/",
 		Secure:   true,
 		HttpOnly: true,
+		SameSite: http.SameSiteStrictMode,
 	}
 	http.SetCookie(w, newCookie)
 	redirect := fmt.Sprintf("%s?post_logout_redirect_uri=%s/", a.logoutEndpoint, a.fbURL)
@@ -245,6 +246,7 @@ func (a *Auth) setCookie(w http.ResponseWriter, cookie *CookieValue) error {
 		Path:     "/",
 		Secure:   true,
 		HttpOnly: true,
+		SameSite: http.SameSiteStrictMode,
 		Expires:  cookie.Token.Expiry,
 	}
 	http.SetCookie(w, newCookie)
