@@ -15,7 +15,6 @@ import (
 	"strings"
 	"time"
 
-
 	"github.com/molecula/featurebase/v2/authz"
 	petcd "github.com/molecula/featurebase/v2/etcd"
 	rbfcfg "github.com/molecula/featurebase/v2/rbf/cfg"
@@ -234,15 +233,14 @@ type Config struct {
 	// Toggles /schema/details endpoint. If off, it returns empty.
 	SchemaDetailsOn bool `toml:"schema-details-on"`
 
-
 	Auth Auth
 }
 
 type Auth struct {
 	// Enable AuthZ/AuthN for featurebase server
 	Enable bool `toml:"enable"`
-  
-	ClientId string `toml:"client-id"`
+
+	ClientId         string   `toml:"client-id"`
 	ClientSecret     string   `toml:"client-secret"`
 	AuthorizeURL     string   `toml:"authorize-url"`
 	TokenURL         string   `toml:"token-url"`
@@ -251,8 +249,7 @@ type Auth struct {
 	Scopes           []string `toml:"scopes"`
 	HashKey          string   `toml:"hash-key"`
 	BlockKey         string   `toml:"block-key"`
-  PermissionsFile string `toml:"permissions"`
-	Auth authz.Auth `toml:"auth"`
+	PermissionsFile  string   `toml:"permissions"`
 }
 
 // Namespace returns the namespace to use based on the Future flag.

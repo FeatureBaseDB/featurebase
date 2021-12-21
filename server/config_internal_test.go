@@ -8,7 +8,6 @@ import (
 	"os"
 	"strings"
 	"testing"
-	"github.com/molecula/featurebase/v2/authz"
 )
 
 type addrs struct{ bind, advertise string }
@@ -281,7 +280,7 @@ func TestConfig_validateAuth(t *testing.T) {
 	errorMesgEmpty := "empty string"
 	errorMesgURL := "invalid URL"
 	errorMesgScope := "must provide scope"
-  errorMesgKey := "invalid key length"
+	errorMesgKey := "invalid key length"
 	validTestURL := "https://url.com/"
 	validClientID := "clientid"
 	validClientSecret := "clientSecret"
@@ -366,8 +365,8 @@ func TestConfig_validateAuth(t *testing.T) {
 		{
 			// Auth enabled, all configs are set properly except scope
 			[]string{
-        errorMesgScope,
-      },
+				errorMesgScope,
+			},
 			Auth{
 				Enable:           enable,
 				ClientId:         validClientID,
@@ -433,9 +432,9 @@ func TestConfig_validateAuth(t *testing.T) {
 			}
 
 			for i, e := range errors {
-			 	if !strings.Contains(e.Error(), test.expErrs[i]) {
-			 		t.Errorf("expected error to contain %s, but got %s", test.expErrs[i], e.Error())
-			 	}
+				if !strings.Contains(e.Error(), test.expErrs[i]) {
+					t.Errorf("expected error to contain %s, but got %s", test.expErrs[i], e.Error())
+				}
 			}
 		})
 	}
