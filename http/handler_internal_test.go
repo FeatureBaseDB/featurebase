@@ -186,6 +186,8 @@ func readResponse(w *httptest.ResponseRecorder) ([]byte, error) {
 }
 
 func TestAuth(t *testing.T) {
+	type evaluate func(w *httptest.ResponseRecorder, data []byte)
+	type endpoint func(w gohttp.ResponseWriter, r *gohttp.Request)
 	var (
 		ClientId         = "e9088663-eb08-41d7-8f65-efb5f54bbb71"
 		ClientSecret     = "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF"
@@ -222,6 +224,8 @@ func TestAuth(t *testing.T) {
 		auth: a,
 	}
 
+	hOff := Handler{}
+
 	validToken := oauth2.Token{
 		TokenType:    "Bearer",
 		RefreshToken: "abcdef",
@@ -253,77 +257,280 @@ func TestAuth(t *testing.T) {
 		HttpOnly: true,
 		Expires:  validToken.Expiry,
 	}
+	expiredCookie := &gohttp.Cookie{
+		Name:     "molecula-chip",
+		Value:    validEncodedCV,
+		Path:     "/",
+		Secure:   true,
+		HttpOnly: true,
+		Expires:  time.Now().Add(time.Minute * -1),
+	}
+	emptyCookie := &gohttp.Cookie{
+		Name:     "molecula-chip",
+		Value:    "",
+		Path:     "/",
+		Secure:   true,
+		HttpOnly: true,
+		Expires:  validToken.Expiry,
+	}
+	unEncodedCookie := &gohttp.Cookie{
+		Name:     "molecula-chip",
+		Value:    "The quick brown fox",
+		Path:     "/",
+		Secure:   true,
+		HttpOnly: true,
+		Expires:  validToken.Expiry,
+	}
 
-	t.Run("Login", func(t *testing.T) {
-		r := httptest.NewRequest(gohttp.MethodGet, "/login", nil)
-		w := httptest.NewRecorder()
+	tests := []struct {
+		name    string
+		path    string
+		kind    string
+		cookie  *gohttp.Cookie
+		handler endpoint
+		fn      evaluate
+	}{
+		{
+			name:    "Login",
+			path:    "/login",
+			kind:    "type1",
+			cookie:  validCookie,
+			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) { h.handleLogin(w, r) },
+			fn: func(w *httptest.ResponseRecorder, data []byte) {
+				if strings.Index(string(data), AuthorizeURL) != 9 {
+					t.Errorf("incorrect redirect url: expected: %s, got: %s", AuthorizeURL, string(data))
+				}
+			},
+		},
+		{
+			name:    "Logout",
+			path:    "/logout",
+			kind:    "type1",
+			cookie:  validCookie,
+			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) { h.handleLogout(w, r) },
+			fn: func(w *httptest.ResponseRecorder, data []byte) {
+				if w.Result().Cookies()[0].Value != "" {
+					t.Errorf("expected cookie to be cleared, got: %+v", w.Result().Cookies()[0].Value)
+				}
+			},
+		},
+		{
+			name:    "Authenticate-Groups",
+			path:    "/auth",
+			kind:    "type1",
+			cookie:  validCookie,
+			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) { h.handleCheckAuthentication(w, r) },
+			fn: func(w *httptest.ResponseRecorder, data []byte) {
+				fmt.Printf("w %+v \n\n", w)
+			},
+		},
+		{
+			name:    "Authenticate-NoGroups",
+			path:    "/auth",
+			kind:    "type1",
+			cookie:  validCookie,
+			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) { h.handleCheckAuthentication(w, r) },
+			fn: func(w *httptest.ResponseRecorder, data []byte) {
+				fmt.Printf("w %+v \n\n", w)
+			},
+		},
+		{
+			name:    "Authenticate-BadCookie",
+			path:    "/auth",
+			kind:    "type1",
+			cookie:  unEncodedCookie,
+			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) { h.handleCheckAuthentication(w, r) },
+			fn: func(w *httptest.ResponseRecorder, data []byte) {
+				fmt.Printf("w %+v \n\n", w)
+			},
+		},
+		{
+			name:    "Authenticate-Expired",
+			path:    "/auth",
+			kind:    "type1",
+			cookie:  expiredCookie,
+			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) { h.handleCheckAuthentication(w, r) },
+			fn: func(w *httptest.ResponseRecorder, data []byte) {
+				fmt.Printf("w %+v \n\n", w)
+			},
+		},
+		{
+			name:    "Authenticate-NoCookie",
+			path:    "/auth",
+			kind:    "type1",
+			cookie:  emptyCookie,
+			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) { h.handleCheckAuthentication(w, r) },
+			fn: func(w *httptest.ResponseRecorder, data []byte) {
+				fmt.Printf("w %+v \n\n", w)
+			},
+		},
+		{
+			name:    "UserInfo",
+			path:    "/userinfo",
+			kind:    "type1",
+			cookie:  validCookie,
+			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) { h.handleUserInfo(w, r) },
+			fn: func(w *httptest.ResponseRecorder, data []byte) {
+				uinfo := authn.UserInfo{}
+				err = json.Unmarshal(data, &uinfo)
+				if err != nil {
+					t.Errorf("unmarshalling userinfo")
+				}
+				if uinfo.UserID != "snowstorm" && uinfo.UserName != "J.M.W. Turner" {
+					t.Errorf("expected http code 400, got: %+v", uinfo)
+				}
+			},
+		},
+		{
+			name:    "UserInfo-NoCookie",
+			path:    "/userinfo",
+			kind:    "type1",
+			cookie:  emptyCookie,
+			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) { h.handleUserInfo(w, r) },
+			fn: func(w *httptest.ResponseRecorder, data []byte) {
+				uinfo := authn.UserInfo{}
+				err = json.Unmarshal(data, &uinfo)
+				if err != nil {
+					t.Errorf("unmarshalling userinfo")
+				}
+				if uinfo.UserID != "" && uinfo.UserName != "" {
+					t.Errorf("expected http code 400, got: %+v", uinfo)
+				}
+			},
+		},
 
-		//login w/o cookie
-		h.handleLogin(w, r)
-		data, err := readResponse(w)
-		if err != nil {
-			t.Errorf("expected no errors reading response, got: %+v", err)
+		{
+			name:    "Redirect-NoAuthCode",
+			path:    "/redirect",
+			kind:    "type1",
+			cookie:  validCookie,
+			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) { h.handleRedirect(w, r) },
+			fn: func(w *httptest.ResponseRecorder, data []byte) {
+				if strings.Index(string(data), AuthorizeURL) != 9 {
+					if w.Result().StatusCode != 400 {
+						t.Errorf("expected http code 400, got: %+v", w.Result().StatusCode)
+					}
+				}
+			},
+		},
+		{
+			name:    "Redirect-SomeAuthCode",
+			path:    "/redirect",
+			kind:    "type2",
+			cookie:  validCookie,
+			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) { h.handleRedirect(w, r) },
+			fn: func(w *httptest.ResponseRecorder, data []byte) {
+				if strings.Index(string(data), AuthorizeURL) != 9 {
+					if w.Result().StatusCode != 400 {
+						t.Errorf("expected http code 400, got: %+v", w.Result().StatusCode)
+					}
+				}
+			},
+		},
+		{
+			name:    "Login-AuthOff",
+			path:    "/login",
+			kind:    "type1",
+			cookie:  validCookie,
+			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) { hOff.handleLogin(w, r) },
+			fn: func(w *httptest.ResponseRecorder, data []byte) {
+				if strings.Index(string(data), AuthorizeURL) != 9 {
+					if w.Result().StatusCode != 204 {
+						t.Errorf("expected http code 204, got: %+v", w.Result().StatusCode)
+					}
+				}
+			},
+		},
+		{
+			name:    "Logout-AuthOff",
+			path:    "/logout",
+			kind:    "type1",
+			cookie:  validCookie,
+			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) { hOff.handleLogout(w, r) },
+			fn: func(w *httptest.ResponseRecorder, data []byte) {
+				if strings.Index(string(data), AuthorizeURL) != 9 {
+					if w.Result().StatusCode != 204 {
+						t.Errorf("expected http code 204, got: %+v", w.Result().StatusCode)
+					}
+				}
+			},
+		},
+		{
+			name:    "UserInfo-AuthOff",
+			path:    "/userinfo",
+			kind:    "type1",
+			cookie:  validCookie,
+			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) { hOff.handleUserInfo(w, r) },
+			fn: func(w *httptest.ResponseRecorder, data []byte) {
+				if strings.Index(string(data), AuthorizeURL) != 9 {
+					if w.Result().StatusCode != 204 {
+						t.Errorf("expected http code 204, got: %+v", w.Result().StatusCode)
+					}
+				}
+			},
+		},
+		{
+			name:    "Authenticate-AuthOff",
+			path:    "/auth",
+			kind:    "type1",
+			cookie:  validCookie,
+			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) { hOff.handleCheckAuthentication(w, r) },
+			fn: func(w *httptest.ResponseRecorder, data []byte) {
+				if strings.Index(string(data), AuthorizeURL) != 9 {
+					if w.Result().StatusCode != 204 {
+						t.Errorf("expected http code 204, got: %+v", w.Result().StatusCode)
+					}
+				}
+			},
+		},
+		{
+			name:    "Redirect-AuthOff",
+			path:    "/redirect",
+			kind:    "type1",
+			cookie:  validCookie,
+			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) { hOff.handleRedirect(w, r) },
+			fn: func(w *httptest.ResponseRecorder, data []byte) {
+				if strings.Index(string(data), AuthorizeURL) != 9 {
+					if w.Result().StatusCode != 204 {
+						t.Errorf("expected http code 204, got: %+v", w.Result().StatusCode)
+					}
+				}
+			},
+		},
+	}
+
+	for _, test := range tests {
+		switch test.kind {
+		case "type1":
+			t.Run(test.name, func(t *testing.T) {
+				r := httptest.NewRequest(gohttp.MethodGet, test.path, nil)
+				w := httptest.NewRecorder()
+				r.AddCookie(test.cookie)
+				test.handler(w, r)
+				data, err := readResponse(w)
+				if err != nil {
+					t.Errorf("expected no errors reading response, got: %+v", err)
+				}
+				test.fn(w, data)
+			})
+		case "type2":
+			r := httptest.NewRequest(gohttp.MethodGet, test.path, nil)
+			w := httptest.NewRecorder()
+			r.Form = url.Values{}
+			r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			r.Form.Add("code", "junk")
+
+			test.handler(w, r)
+			data, err := readResponse(w)
+			if err != nil {
+				t.Errorf("expected no errors reading response, got: %+v", err)
+			}
+
+			test.fn(w, data)
+
 		}
 
-		if strings.Index(string(data), AuthorizeURL) != 9 {
-			t.Errorf("incorrect redirect url: expected: %s, got: %s", AuthorizeURL, string(data))
-		}
-	})
-
-	t.Run("Logout", func(t *testing.T) {
-		r := httptest.NewRequest(gohttp.MethodGet, "/logout", nil)
-		w := httptest.NewRecorder()
-		r.AddCookie(validCookie)
-
-		h.handleLogout(w, r)
-
-		if w.Result().Cookies()[0].Value != "" {
-			t.Errorf("expected cookie to be cleared, got: %+v", w.Result().Cookies()[0].Value)
-		}
-	})
-
-	t.Run("Redirect-NoAuthCode", func(t *testing.T) {
-		r := httptest.NewRequest(gohttp.MethodGet, "/redirect", nil)
-		w := httptest.NewRecorder()
-
-		h.handleRedirect(w, r)
-
-		if w.Result().StatusCode != 400 {
-			t.Errorf("expected http code 400, got: %+v", w.Result().StatusCode)
-		}
-
-	})
-
-	t.Run("Redirect-SomeAuthCode", func(t *testing.T) {
-		r := httptest.NewRequest(gohttp.MethodGet, "/redirect", nil)
-		w := httptest.NewRecorder()
-
-		r.Form = url.Values{}
-		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-		r.Form.Add("code", "junk")
-
-		h.handleRedirect(w, r)
-
-		if w.Result().StatusCode != 400 {
-			t.Errorf("expected http code 400, got: %+v", w.Result().StatusCode)
-		}
-
-	})
-	t.Run("Authenticate-Cookie", func(t *testing.T) {
-		r := httptest.NewRequest(gohttp.MethodGet, "/authenticate", nil)
-		w := httptest.NewRecorder()
-		r.AddCookie(validCookie)
-
-		fmt.Printf("r %+v \n\n", r)
-
-		h.handleCheckAuthentication(w, r)
-
-		fmt.Printf("w %+v \n\n", w)
-
-		//auth with cookie
-		//auth w/o cookie
-
-	})
+	}
 
 	t.Run("GetUserInfo", func(t *testing.T) {
 		r := httptest.NewRequest(gohttp.MethodGet, "/userinfo", nil)
@@ -344,32 +551,6 @@ func TestAuth(t *testing.T) {
 		}
 
 		if uinfo.UserID != "" && uinfo.UserName != "" {
-
-			t.Errorf("expected http code 400, got: %+v", uinfo)
-		}
-
-	})
-
-	t.Run("GetUserInfo", func(t *testing.T) {
-		r := httptest.NewRequest(gohttp.MethodGet, "/userinfo", nil)
-		w := httptest.NewRecorder()
-		r.AddCookie(validCookie)
-
-		h.handleUserInfo(w, r)
-
-		data, err := readResponse(w)
-		if err != nil {
-			t.Errorf("expected no errors reading response, got: %+v", err)
-		}
-
-		uinfo := authn.UserInfo{}
-
-		err = json.Unmarshal(data, &uinfo)
-		if err != nil {
-			t.Errorf("unmarshalling userinfo")
-		}
-
-		if uinfo.UserID != "snowstorm" && uinfo.UserName != "J.M.W. Turner" {
 
 			t.Errorf("expected http code 400, got: %+v", uinfo)
 		}

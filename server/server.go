@@ -535,7 +535,7 @@ func (m *Command) SetupServer() error {
 		if err = p.ReadPermissionsFile(permsFile); err != nil {
 			return err
 		}
-    
+
 		ac := m.Config.Auth
 		m.auth, err = authn.NewAuth(m.logger, m.listenURI.String(), ac.Scopes, ac.AuthorizeURL, ac.TokenURL, ac.GroupEndpointURL, ac.LogoutURL, ac.ClientId, ac.ClientSecret, ac.HashKey, ac.BlockKey)
 		if err != nil {
