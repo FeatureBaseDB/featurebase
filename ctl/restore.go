@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -21,6 +20,7 @@ import (
 	fb_http "github.com/molecula/featurebase/v2/http"
 	"github.com/molecula/featurebase/v2/server"
 	"github.com/molecula/featurebase/v2/topology"
+	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -37,6 +37,9 @@ type RestoreCommand struct {
 	// Amount of time after first failed request to continue retrying.
 	RetryPeriod time.Duration `json:"retry-period"`
 
+	// Host:port on which to listen for pprof.
+	Pprof string `json:"pprof"`
+
 	// Reusable client.
 	client pilosa.InternalClient
 
@@ -51,12 +54,18 @@ func NewRestoreCommand(stdin io.Reader, stdout, stderr io.Writer) *RestoreComman
 		CmdIO:       pilosa.NewCmdIO(stdin, stdout, stderr),
 		RetryPeriod: time.Second * 30,
 		Concurrency: 1,
+		Pprof:       "localhost:43809",
 	}
 }
 
 // Run executes the restore.
 func (cmd *RestoreCommand) Run(ctx context.Context) (err error) {
 	logger := cmd.Logger()
+	close, err := startProfilingServer(cmd.Pprof, logger)
+	if err != nil {
+		return errors.Wrap(err, "starting profiling server")
+	}
+	defer close()
 
 	// Validate arguments.
 	if cmd.Path == "" {

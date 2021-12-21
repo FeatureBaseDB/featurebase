@@ -29,6 +29,7 @@ Backs up a FeatureBase server to a local, tar-formatted snapshot file.
 	flags.StringVar(&cmd.Host, "host", "localhost:10101", "The address (host:port) of FeatureBase (HTTP).")
 	flags.StringVar(&cmd.Index, "index", "", "Index to backup, default backs up all indexes. ")
 	flags.DurationVar(&cmd.RetryPeriod, "retry-period", cmd.RetryPeriod, "Length of time after HTTP request failure to continue retrying request.")
+	flags.StringVar(&cmd.Pprof, "pprof", cmd.Pprof, "host:port to listen for profiling requests at /debug/pprof and /debug/fgprof.")
 	ctl.SetTLSConfig(flags, "", &cmd.TLS.CertificatePath, &cmd.TLS.CertificateKeyPath, &cmd.TLS.CACertPath, &cmd.TLS.SkipVerify, &cmd.TLS.EnableClientVerification)
 	return ccmd
 }

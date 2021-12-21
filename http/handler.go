@@ -3348,7 +3348,7 @@ func (h *Handler) handlePostRestore(w http.ResponseWriter, r *http.Request) {
 	//validate shard for this node
 	err = h.api.RestoreShard(ctx, indexName, shard, r.Body)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("failed to restore shared %v %v err:%v", indexName, shard, err), http.StatusBadRequest)
+		http.Error(w, fmt.Sprintf("failed to restore shard %v %v err:%v", indexName, shard, err), http.StatusBadRequest)
 		return
 	}
 
