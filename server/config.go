@@ -81,6 +81,9 @@ type Config struct {
 	// LogPath configures where Pilosa will write logs.
 	LogPath string `toml:"log-path"`
 
+	// QueryLogPath, security logs
+	QueryLogPath string `toml:"query-log-path"`
+
 	// Verbose toggles verbose logging which can be useful for debugging.
 	Verbose bool `toml:"verbose"`
 

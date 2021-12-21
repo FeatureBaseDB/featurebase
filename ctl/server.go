@@ -21,6 +21,7 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 	flags.StringVar(&srv.Config.AdvertiseGRPC, "advertise-grpc", srv.Config.AdvertiseGRPC, "Address to advertise externally for gRPC.")
 	flags.IntVar(&srv.Config.MaxWritesPerRequest, "max-writes-per-request", srv.Config.MaxWritesPerRequest, "Number of write commands per request.")
 	flags.StringVar(&srv.Config.LogPath, "log-path", srv.Config.LogPath, "Log path")
+	flags.StringVar(&srv.Config.QueryLogPath , "query-log-path", srv.Config.QueryLogPath, "Path to save user queries")
 	flags.BoolVar(&srv.Config.Verbose, "verbose", srv.Config.Verbose, "Enable verbose logging")
 	flags.Uint64Var(&srv.Config.MaxMapCount, "max-map-count", srv.Config.MaxMapCount, "Limits the maximum number of active mmaps. FeatureBase will fall back to reading files once this is exhausted. Set below your system's vm.max_map_count.")
 	flags.Uint64Var(&srv.Config.MaxFileCount, "max-file-count", srv.Config.MaxFileCount, "Soft limit on the maximum number of fragment files FeatureBase keeps open simultaneously.")

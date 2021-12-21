@@ -51,6 +51,8 @@ type Handler struct {
 
 	logger logger.Logger
 
+	querylogger logger.Logger
+
 	// Keeps the query argument validators for each handler
 	validators map[string]*queryValidationSpec
 
@@ -123,6 +125,13 @@ func OptHandlerFileSystem(fs pilosa.FileSystem) handlerOption {
 func OptHandlerLogger(logger logger.Logger) handlerOption {
 	return func(h *Handler) error {
 		h.logger = logger
+		return nil
+	}
+}
+
+func OptHandlerQueryLogger(logger logger.Logger) handlerOption {
+	return func(h *Handler) error {
+		h.querylogger = logger
 		return nil
 	}
 }

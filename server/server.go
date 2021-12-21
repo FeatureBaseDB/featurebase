@@ -68,7 +68,9 @@ type Command struct {
 	done chan struct{}
 
 	logOutput io.Writer
+	querylogOutput io.Writer
 	logger    loggerLogger
+	querylogger loggerLogger
 
 	Handler      pilosa.Handler
 	grpcServer   *grpcServer
@@ -334,6 +336,10 @@ func (m *Command) SetupServer() error {
 	if err != nil {
 		return errors.Wrap(err, "setting up logger")
 	}
+	err = m.setupQueryLogger()
+	if err != nil {
+		return errors.Wrap(err, "setting up querylogger")
+	}
 
 	m.logger.Infof("%s", pilosa.VersionInfo(m.Config.Future.Rename))
 
@@ -473,6 +479,7 @@ func (m *Command) SetupServer() error {
 		pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderWithLockerFunc(c, &sync.Mutex{})),
 		pilosa.OptServerOpenIDAllocator(pilosa.OpenIDAllocator),
 		pilosa.OptServerLogger(m.logger),
+		pilosa.OptServerQueryLogger(m.querylogger),
 		pilosa.OptServerSystemInfo(gopsutil.NewSystemInfo()),
 		pilosa.OptServerGCNotifier(gcnotify.NewActiveGCNotifier()),
 		pilosa.OptServerStatsClient(statsClient),
@@ -527,6 +534,7 @@ func (m *Command) SetupServer() error {
 		http.OptHandlerAllowedOrigins(m.Config.Handler.AllowedOrigins),
 		http.OptHandlerAPI(m.API),
 		http.OptHandlerLogger(m.logger),
+		http.OptHandlerQueryLogger(m.querylogger),
 		http.OptHandlerFileSystem(&statik.FileSystem{}),
 		http.OptHandlerListener(m.ln, m.Config.Advertise),
 		http.OptHandlerCloseTimeout(m.closeTimeout),
@@ -573,6 +581,40 @@ func (m *Command) setupLogger() error {
 			}
 		}()
 	}
+	return nil
+}
+
+func (m *Command) setupQueryLogger() error {
+	var f *logger.FileWriter
+	var err error
+
+	if m.Config.QueryLogPath == "" {
+		f, err = logger.NewFileWriterMode( "queries/query.log", 600)
+		if err != nil {
+			return errors.Wrap(err, "opening file")
+		}
+	} else {
+		f, err = logger.NewFileWriterMode(m.Config.QueryLogPath , 600)
+		if err != nil {
+			return errors.Wrap(err, "opening file")
+		}
+	}
+	m.querylogOutput = f
+
+	m.querylogger = logger.NewStandardLogger(m.querylogOutput)
+
+		sighup := make(chan os.Signal, 1)
+		signal.Notify(sighup, syscall.SIGHUP)
+		go func() {
+			for {
+				// reopen log file on SIGHUP
+				<-sighup
+				err = f.Reopen()
+				if err != nil {
+					m.querylogger.Infof("reopen: %s\n", err.Error())
+				}
+			}
+		}()
 	return nil
 }
 
