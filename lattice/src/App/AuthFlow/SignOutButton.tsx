@@ -11,9 +11,9 @@ const SignOutButton: React.FC<Props> = ({ children }) => {
   };
 
   return (
-      <Button variant="contained" color="secondary" onClick={signoutOnClick}>
-        Sign out
-      </Button>
+    <Button variant="contained" color="secondary" onClick={signoutOnClick}>
+      Sign out
+    </Button>
   );
 };
 

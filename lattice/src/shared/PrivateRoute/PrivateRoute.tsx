@@ -1,4 +1,5 @@
 import { Redirect, Route } from 'react-router-dom';
+
 import { useAuth } from 'services/useAuth';
 
 function PrivateRoute({ component: Component, ...rest }) {
