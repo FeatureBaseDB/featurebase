@@ -6,7 +6,7 @@ import { ReactComponent as MLogo } from 'assets/m-bug-alt.svg';
 import css from './AuthFlow.module.scss';
 import SignInButton from './SignInButton';
 
-function Login(props) {
+function Signin(props) {
   const renderLoginForm = () => (
     <Card>
       <CardHeader
@@ -29,4 +29,4 @@ function Login(props) {
     </div>
   );
 }
-export default Login;
+export default Signin;

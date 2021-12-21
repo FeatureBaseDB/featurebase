@@ -44,16 +44,9 @@ const Main = () => {
             <div className={css.mainContent}>
               <Switch>
                 <Route exact path="/" component={Home} />
-                <Route
-                  path="/tables/:id?"
-                  component={MoleculaTablesContainer}
-                />
+                <Route path="/tables/:id?" component={MoleculaTablesContainer}/>
                 <Route exact path="/query" component={QueryContainer} />
-                <Route
-                  exact
-                  path="/querybuilder"
-                  component={QueryBuilderContainer}
-                />
+                <Route exact path="/querybuilder" component={QueryBuilderContainer}/>
                 <Route component={NotFound} />
               </Switch>
             </div>

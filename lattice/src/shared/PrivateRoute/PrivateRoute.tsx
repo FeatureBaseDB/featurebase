@@ -8,12 +8,11 @@ function PrivateRoute({ component: Component, ...rest }) {
     <Route
       {...rest}
       render={(props) => {
-        // If the user is authed render the component
         if (auth.isAuthenticated) {
-          // if (true) {
+          // If the user is authenticated, render the component
           return <Component {...rest} {...props} />;
         } else {
-          // If they are not then we need to redirect to a public page
+          // If the user is not authenticated, redirect to sign in page
           return (
             <Redirect
               to={{
