@@ -4,7 +4,7 @@ package clustertest
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+	"net/http"
 	"os"
 	"os/exec"
 	"testing"
@@ -104,10 +104,7 @@ func TestClusterStuff(t *testing.T) {
 			t.Fatalf("sending stop command: %v", err)
 		}
 		var backupCmd *exec.Cmd
-		tmpdir, err := ioutil.TempDir("", "")
-		if err != nil {
-			t.Fatalf("getting tmp dir: %v", err)
-		}
+		tmpdir := t.TempDir()
 		if backupCmd, err = startCmd(
 			"featurebase", "backup", "--host=pilosa1:10101", fmt.Sprintf("--output=%s", tmpdir+"/backuptest")); err != nil {
 			t.Fatalf("sending backup command: %v", err)
@@ -119,6 +116,34 @@ func TestClusterStuff(t *testing.T) {
 
 		if err = backupCmd.Wait(); err != nil {
 			t.Fatalf("waiting on backup to finish: %v", err)
+		}
+
+		fmt.Println("STARTING RESTORE")
+
+		client := http.Client{}
+		if req, err := http.NewRequest(http.MethodDelete, "http://pilosa1:10101/index/testidx", nil); err != nil {
+			t.Fatalf("getting req: %v", err)
+		} else if resp, err := client.Do(req); err != nil {
+			t.Fatalf("doing request: %v", err)
+		} else if resp.StatusCode >= 400 {
+			t.Fatalf("bad response: %v", resp)
+		}
+
+		var restoreCmd *exec.Cmd
+		if restoreCmd, err = startCmd("featurebase", "restore", "-s", tmpdir+"/backuptest", "--host", "pilosa1:10101"); err != nil {
+			t.Fatalf("starting restore: %v", err)
+		}
+		time.Sleep(time.Millisecond * 50)
+		if err = sendCmd("docker", "stop", "clustertests_pilosa2_1"); err != nil {
+			t.Fatalf("sending stop command: %v", err)
+		}
+
+		time.Sleep(time.Second * 10)
+		if err = sendCmd("docker", "start", "clustertests_pilosa2_1"); err != nil {
+			t.Fatalf("sending stop command: %v", err)
+		}
+		if err := restoreCmd.Wait(); err != nil {
+			t.Fatalf("restore failed: %v", err)
 		}
 
 		// now do backup with all nodes down and too short a timeout

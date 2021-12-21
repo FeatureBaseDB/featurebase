@@ -49,6 +49,7 @@ type RestoreCommand struct {
 func NewRestoreCommand(stdin io.Reader, stdout, stderr io.Writer) *RestoreCommand {
 	return &RestoreCommand{
 		CmdIO:       pilosa.NewCmdIO(stdin, stdout, stderr),
+		RetryPeriod: time.Second * 30,
 		Concurrency: 1,
 	}
 }
@@ -168,6 +169,13 @@ func (cmd *RestoreCommand) restoreSchema(ctx context.Context, primary *topology.
 	return err
 }
 
+func RetryWith400(ctx context.Context, resp *http.Response, err error) (bool, error) {
+	if resp != nil && resp.StatusCode > 400 { // we have some dumb status codes
+		return true, nil
+	}
+	return retryablehttp.DefaultRetryPolicy(ctx, resp, err)
+}
+
 func (cmd *RestoreCommand) restoreIDAlloc(ctx context.Context, primary *topology.Node) error {
 	logger := cmd.Logger()
 
@@ -185,6 +193,7 @@ func (cmd *RestoreCommand) restoreIDAlloc(ctx context.Context, primary *topology
 
 	client := retryablehttp.NewClient()
 	client.RetryWaitMax = cmd.RetryPeriod
+	client.CheckRetry = RetryWith400
 	_, err = client.Post(url, "application/octet-stream", f)
 	return err
 }
@@ -263,6 +272,7 @@ func (cmd *RestoreCommand) restoreShard(ctx context.Context, filename string) er
 
 		client := retryablehttp.NewClient()
 		client.RetryWaitMax = cmd.RetryPeriod
+		client.CheckRetry = RetryWith400
 		resp, err := client.Do(req)
 		if err != nil {
 			return err
