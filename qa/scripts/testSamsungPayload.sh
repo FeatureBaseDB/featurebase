@@ -8,7 +8,7 @@ CSV_DIR_PATH=/data
 
 
 # To run:
-# ./ingestWorkload.sh {Local host & port for featurebase} {initialize flag}
+# ./testSamsungPayload.sh {Local host & port for featurebase} {initialize flag}
 
 function delete_field {
     if (($INITIALIZE == 0));
