@@ -109,12 +109,15 @@ admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 	groupName := "name"
 	userId := "user-id"
 	groupsList1 := []authn.Group{}
-	groupsList2 := []authn.Group{{userId, "fake-group", groupName}}
+	groupsList2 := []authn.Group{{
+		UserID:    userId,
+		GroupID:   "fake-group",
+		GroupName: groupName}}
 	groupsList3 := []authn.Group{
-		{userId, "dca35310-ecda-4f23-86cd-876aee55906b", groupName},
-		{userId, "dca35310-ecda-4f23-86cd-876aee559900", groupName},
+		{UserID: userId, GroupID: "dca35310-ecda-4f23-86cd-876aee55906b", GroupName: groupName},
+		{UserID: userId, GroupID: "dca35310-ecda-4f23-86cd-876aee559900", GroupName: groupName},
 	}
-	groupsList4 := []authn.Group{{userId, "ac97c9e2-346b-42a2-b6da-18bcb61a32fe", groupName}}
+	groupsList4 := []authn.Group{{UserID: userId, GroupID: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe", GroupName: groupName}}
 
 	tests := []struct {
 		yamlData   string
@@ -203,11 +206,11 @@ admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 func TestAuth_IsAdmin(t *testing.T) {
 
 	group1 := []authn.Group{
-		{"admin-user-id", "ac97c9e2-346b-42a2-b6da-18bcb61a32fe", "admin-group"},
+		{UserID: "admin-user-id", GroupID: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe", GroupName: "admin-group"},
 	}
 
 	group2 := []authn.Group{
-		{"user-id", "dca35310-ecda-4f23-86cd-876aee55906b", "group-name"},
+		{UserID: "user-id", GroupID: "dca35310-ecda-4f23-86cd-876aee55906b", GroupName: "group-name"},
 	}
 
 	groupPermissions := authz.GroupPermissions{
@@ -244,15 +247,15 @@ func TestAuth_IsAdmin(t *testing.T) {
 func TestAuth_GetAuthorizedIndexList(t *testing.T) {
 
 	group1 := []authn.Group{
-		{"user-id", "dca35310-ecda-4f23-86cd-876aee55906b", "group-name"},
+		{UserID: "user-id", GroupID: "dca35310-ecda-4f23-86cd-876aee55906b", GroupName: "group-name"},
 	}
 
 	group2 := []authn.Group{
-		{"admin-user-id", "ac97c9e2-346b-42a2-b6da-18bcb61a32fe", "admin-group"},
+		{UserID: "admin-user-id", GroupID: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe", GroupName: "admin-group"},
 	}
 
 	group3 := []authn.Group{
-		{"user-id", "dca35310-ecda-4f23-86cd-876aee559900", "group-name"},
+		{UserID: "user-id", GroupID: "dca35310-ecda-4f23-86cd-876aee559900", GroupName: "group-name"},
 	}
 
 	p := authz.GroupPermissions{
