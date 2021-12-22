@@ -51,11 +51,6 @@ func TestAuth(t *testing.T) {
 		AccessToken:  "aasdf",
 		Expiry:       time.Now().Add(time.Hour),
 	}
-	// expiredToken := oauth2.Token{
-	// 	TokenType:    "Bearer",
-	// 	RefreshToken: "abcdef",
-	// 	Expiry:       time.Now(),
-	// }
 	grp := Group{
 		UserID:    "snowstorm",
 		GroupID:   "abcd123-A",
@@ -68,77 +63,6 @@ func TestAuth(t *testing.T) {
 		Token:           &tokenAT,
 	}
 
-	// t.Run("Login", func(t *testing.T) {
-
-	// 	r := httptest.NewRequest(gohttp.MethodGet, "/login", nil)
-	// 	w := httptest.NewRecorder()
-	// 	a.Login(w, r)
-	// 	res := w.Result()
-	// 	defer res.Body.Close()
-	// 	data, err := ioutil.ReadAll(res.Body)
-	// 	if err != nil {
-	// 		t.Errorf("expected no errors reading response, got: %+v", err)
-	// 	}
-
-	// 	// redir := "http://localhost:10101/"
-
-	// 	// redirecturl := fmt.Sprintf("%s?client_id=%s&redirect_uri=%s&response_type=%s&scope=%s+%s&state=%s", settings.Auth.AuthorizeURL, settings.Auth.ClientId, redir, "code", settings.Auth.Scopes[0], settings.Auth.Scopes[1], settings.Auth.AuthorizeURL)
-
-	// 	if res.Status != "307 Temporary Redirect" {
-	// 		t.Errorf("expected status code 307 Temporary Redirect, got: %v", err)
-	// 	}
-
-	// 	if !strings.Contains(string(data), settings.Auth.AuthorizeURL) {
-	// 		t.Errorf("expected url: %v, %v", settings.Auth.AuthorizeURL, string(data))
-	// 	}
-
-	// })
-	// t.Run("Logout", func(t *testing.T) {
-	// 	r := httptest.NewRequest(gohttp.MethodGet, "/login", nil)
-	// 	w := httptest.NewRecorder()
-	// 	newCookie := &gohttp.Cookie{
-	// 		Name:     "brood",
-	// 		Value:    "lacrimosa",
-	// 		Path:     "/",
-	// 		Secure:   true,
-	// 		HttpOnly: true,
-	// 		Expires:  time.Now().Add(8000),
-	// 	}
-	// 	gohttp.SetCookie(w, newCookie)
-
-	// 	a.Login(w, r)
-	// 	res := w.Result()
-	// 	defer res.Body.Close()
-	// 	data, err := ioutil.ReadAll(res.Body)
-	// 	if err != nil {
-	// 		t.Errorf("expected no errors reading response, got: %+v", err)
-	// 	}
-
-	// 	if res.Status != "307 Temporary Redirect" {
-	// 		t.Errorf("expected status code 307 Temporary Redirect, got: %v", err)
-	// 	}
-
-	// 	if !strings.Contains(string(data), settings.Auth.AuthorizeURL) {
-	// 		t.Errorf("expected url: %v, %v", settings.Auth.AuthorizeURL, string(data))
-	// 	}
-
-	// })
-
-	// t.Run("Logout", func(t *testing.T) {
-	// 	r := httptest.NewRequest(gohttp.MethodGet, "/logout", nil)
-	// 	w := httptest.NewRecorder()
-	// 	a.Logout(w, r)
-	// })
-	// t.Run("Authenticate", func(t *testing.T) {
-	// 	r := httptest.NewRequest(gohttp.MethodGet, "/authenticate", nil)
-	// 	w := httptest.NewRecorder()
-	// 	a.Authenticate(w, r)
-	// })
-	// // t.Run("Redirect", func(t *testing.T) {
-	// // 	r := httptest.NewRequest(gohttp.MethodGet, "/login", nil)
-	// // 	w := httptest.NewRecorder()
-	// // 	a.Redirect(w, r)
-	// // })
 	t.Run("SetCookie", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		err := a.setCookie(w, &validCV)
