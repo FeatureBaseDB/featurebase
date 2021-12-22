@@ -1,5 +1,4 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { useHistory } from 'react-router-dom';
 
 import { pilosa } from './eventServices';
 
@@ -25,7 +24,6 @@ export interface IUser {
 
 // Provider hook that creates auth object and handles state
 function useProvideAuth() {
-  const history = useHistory();
   const [user, setUser] = useState<IUser | undefined>(undefined);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -41,13 +39,6 @@ function useProvideAuth() {
     });
   };
 
-  const signin = () => {
-    history.push(`/login`);
-  };
-
-  const signout = () => {
-    history.push("/logout");
-  };
   // Subscribe to user on mount
   // Because this sets state in the callback it will cause any ...
   // ... component that utilizes this hook to re-render with the ...
@@ -86,7 +77,5 @@ function useProvideAuth() {
     isAuthOn,
     user,
     userinfo,
-    signin,
-    signout,
   };
 }
