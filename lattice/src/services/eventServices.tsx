@@ -5,48 +5,48 @@ import { baseURL } from './baseURL';
 const api = axios.create({
   baseURL,
   headers: {
-    "Content-Type": "application/x-www-form-urlencoded",
-    Accept: "application/json",
+    'Content-Type': 'application/x-www-form-urlencoded',
+    Accept: 'application/json',
   },
 });
 
 export const pilosa = {
   get: {
     status() {
-      return api.get("/status");
+      return api.get('/status');
     },
     auth() {
-      return api.get("/auth");
+      return api.get('/auth');
     },
     userinfo() {
-      return api.get("/userinfo");
+      return api.get('/userinfo');
     },
     info() {
-      return api.get("/info");
+      return api.get('/info');
     },
     version() {
-      return api.get("/version");
+      return api.get('/version');
     },
     transactions() {
-      return api.get("/ui/transaction");
+      return api.get('/ui/transaction');
     },
     transaction(id) {
       return api.get(`/transaction/${id}`);
     },
     schema() {
-      return api.get("/schema");
+      return api.get('/schema');
     },
     schemaDetails() {
-      return api.get("/schema/details");
+      return api.get('/schema/details');
     },
     metrics() {
-      return api.get("/metrics.json");
+      return api.get('/metrics.json');
     },
     usage() {
-      return api.get("/ui/usage");
+      return api.get('/ui/usage');
     },
     queryHistory() {
-      return api.get("/query-history");
+      return api.get('/query-history');
     },
   },
   post: {

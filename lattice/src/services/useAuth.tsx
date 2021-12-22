@@ -51,10 +51,10 @@ function useProvideAuth() {
           // Authentication is off
           setIsAuthOn(false);
         } else {
-          // Turn on Authentication 
+          // Turn on Authentication
           setIsAuthOn(true);
 
-          if (res.data === "OK") {
+          if (res.data === 'OK') {
             // User is authenticated
             setIsAuthenticated(true);
 

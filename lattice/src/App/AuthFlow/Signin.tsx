@@ -9,9 +9,7 @@ import SignInButton from './SignInButton';
 function Signin(props) {
   const renderLoginForm = () => (
     <Card>
-      <CardHeader
-        subheader={"Sign in to continue"}
-      />
+      <CardHeader subheader={'Sign in to continue'} />
       <CardContent>
         <SignInButton />
       </CardContent>
