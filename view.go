@@ -619,7 +619,9 @@ func (v *view) bitDepth(shards []uint64) (uint64, error) {
 	var maxBitDepth uint64
 
 	for _, shard := range shards {
+		v.mu.RLock()
 		frag, ok := v.fragments[shard]
+		v.mu.RUnlock()
 		if !ok || frag == nil {
 			continue
 		}

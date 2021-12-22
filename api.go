@@ -2753,8 +2753,8 @@ func (api *API) RestoreShard(ctx context.Context, indexName string, shard uint64
 
 	for _, flv := range flvs {
 		fld := idx.field(flv.Field)
-		view, ok := fld.viewMap[flv.View]
-		if !ok {
+		view := fld.view(flv.View)
+		if view == nil {
 			view, err = fld.createViewIfNotExists(flv.View)
 			if err != nil {
 				return err

@@ -29,6 +29,8 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	pilosa "github.com/molecula/featurebase/v2"
+	"github.com/molecula/featurebase/v2/authn"
+	"github.com/molecula/featurebase/v2/authz"
 	"github.com/molecula/featurebase/v2/boltdb"
 	"github.com/molecula/featurebase/v2/encoding/proto"
 	petcd "github.com/molecula/featurebase/v2/etcd"
@@ -83,6 +85,8 @@ type Command struct {
 	pgserver     *PostgresServer
 
 	serverOptions []pilosa.ServerOption
+
+	auth *authn.Auth
 }
 
 type CommandOption func(c *Command) error
@@ -222,10 +226,6 @@ func (m *Command) Start() (err error) {
 	err = m.setupResourceLimits()
 	if err != nil {
 		return errors.Wrap(err, "setting resource limits")
-	}
-
-	if m.Config.Auth.Enable {
-		m.Config.MustValidateAuth()
 	}
 
 	// Initialize server.
@@ -489,7 +489,7 @@ func (m *Command) SetupServer() error {
 		pilosa.OptServerClusterName(m.Config.Cluster.Name),
 		pilosa.OptServerSerializer(proto.Serializer{}),
 		pilosa.OptServerStorageConfig(m.Config.Storage),
-		pilosa.OptServerRowcacheOn(m.Config.RowcacheOn),
+		pilosa.OptServerRowcacheOn(false),
 		pilosa.OptServerRBFConfig(m.Config.RBFConfig),
 		pilosa.OptServerMaxQueryMemory(m.Config.MaxQueryMemory),
 		pilosa.OptServerQueryHistoryLength(m.Config.QueryHistoryLength),
@@ -530,6 +530,26 @@ func (m *Command) SetupServer() error {
 		return errors.Wrap(err, "new grpc server")
 	}
 
+	if m.Config.Auth.Enable {
+		m.Config.MustValidateAuth()
+		permsFile, err := os.Open(m.Config.Auth.PermissionsFile)
+		if err != nil {
+			return err
+		}
+		defer permsFile.Close()
+
+		var p authz.GroupPermissions
+		if err = p.ReadPermissionsFile(permsFile); err != nil {
+			return err
+		}
+
+		ac := m.Config.Auth
+		m.auth, err = authn.NewAuth(m.logger, m.listenURI.String(), ac.Scopes, ac.AuthorizeURL, ac.TokenURL, ac.GroupEndpointURL, ac.LogoutURL, ac.ClientId, ac.ClientSecret, ac.HashKey, ac.BlockKey)
+		if err != nil {
+			return errors.Wrap(err, "instantiating authN object")
+		}
+	}
+
 	m.Handler, err = http.NewHandler(
 		http.OptHandlerAllowedOrigins(m.Config.Handler.AllowedOrigins),
 		http.OptHandlerAPI(m.API),
@@ -539,6 +559,7 @@ func (m *Command) SetupServer() error {
 		http.OptHandlerListener(m.ln, m.Config.Advertise),
 		http.OptHandlerCloseTimeout(m.closeTimeout),
 		http.OptHandlerMiddleware(m.grpcServer.middleware(m.Config.Handler.AllowedOrigins)),
+		http.OptHandlerAuth(m.auth),
 	)
 	return errors.Wrap(err, "new handler")
 }

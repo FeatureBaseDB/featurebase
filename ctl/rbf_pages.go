@@ -69,9 +69,9 @@ func (cmd *RBFPagesCommand) Run(ctx context.Context) error {
 
 	// Print one line for each page.
 	for pgno, info := range infos {
+		fmt.Fprintf(cmd.Stdout, "%-8d ", pgno)
 		switch info := info.(type) {
 		case *rbf.MetaPageInfo:
-			fmt.Fprintf(cmd.Stdout, "%-8d ", pgno)
 			fmt.Fprintf(cmd.Stdout, "%-10s ", "meta")
 			if cmd.WithTree {
 				fmt.Fprintf(cmd.Stdout, "%-30q ", "")
@@ -79,7 +79,6 @@ func (cmd *RBFPagesCommand) Run(ctx context.Context) error {
 			fmt.Fprintf(cmd.Stdout, "pageN=%d,walid=%d,rootrec=%d,freelist=%d\n", info.PageN, info.WALID, info.RootRecordPageNo, info.FreelistPageNo)
 
 		case *rbf.RootRecordPageInfo:
-			fmt.Fprintf(cmd.Stdout, "%-8d ", pgno)
 			fmt.Fprintf(cmd.Stdout, "%-10s ", "rootrec")
 			if cmd.WithTree {
 				fmt.Fprintf(cmd.Stdout, "%-30q ", "")
@@ -87,7 +86,6 @@ func (cmd *RBFPagesCommand) Run(ctx context.Context) error {
 			fmt.Fprintf(cmd.Stdout, "next=%d\n", info.Next)
 
 		case *rbf.LeafPageInfo:
-			fmt.Fprintf(cmd.Stdout, "%-8d ", pgno)
 			fmt.Fprintf(cmd.Stdout, "%-10s ", "leaf")
 			if cmd.WithTree {
 				fmt.Fprintf(cmd.Stdout, "%-30q ", prefixToString(info.Tree))
@@ -95,7 +93,6 @@ func (cmd *RBFPagesCommand) Run(ctx context.Context) error {
 			fmt.Fprintf(cmd.Stdout, "flags=x%x,celln=%d\n", info.Flags, info.CellN)
 
 		case *rbf.BranchPageInfo:
-			fmt.Fprintf(cmd.Stdout, "%-8d ", pgno)
 			fmt.Fprintf(cmd.Stdout, "%-10s ", "branch")
 			if cmd.WithTree {
 				fmt.Fprintf(cmd.Stdout, "%-30q ", prefixToString(info.Tree))
@@ -103,7 +100,6 @@ func (cmd *RBFPagesCommand) Run(ctx context.Context) error {
 			fmt.Fprintf(cmd.Stdout, "flags=x%x,celln=%d\n", info.Flags, info.CellN)
 
 		case *rbf.BitmapPageInfo:
-			fmt.Fprintf(cmd.Stdout, "%-8d ", pgno)
 			fmt.Fprintf(cmd.Stdout, "%-10s ", "bitmap")
 			if cmd.WithTree {
 				fmt.Fprintf(cmd.Stdout, "%-30q ", prefixToString(info.Tree))
@@ -111,7 +107,6 @@ func (cmd *RBFPagesCommand) Run(ctx context.Context) error {
 			fmt.Fprintf(cmd.Stdout, "-\n")
 
 		case *rbf.FreePageInfo:
-			fmt.Fprintf(cmd.Stdout, "%-8d ", pgno)
 			fmt.Fprintf(cmd.Stdout, "%-10s ", "free")
 			if cmd.WithTree {
 				fmt.Fprintf(cmd.Stdout, "%-30q ", "")
@@ -119,7 +114,7 @@ func (cmd *RBFPagesCommand) Run(ctx context.Context) error {
 			fmt.Fprintf(cmd.Stdout, "-\n")
 
 		default:
-			panic(fmt.Sprintf("unexpected page info type %T", info))
+			fmt.Fprintf(cmd.Stdout, "unknown [%T]\n", info)
 		}
 	}
 

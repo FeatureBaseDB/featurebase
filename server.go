@@ -484,7 +484,6 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	}
 	s.holder = NewHolder(path, s.holderConfig)
 	s.holder.Stats.SetLogger(s.logger)
-	s.holder.Logger.Infof("RowCacheOn: %v", s.holderConfig.RowcacheOn)
 	cwd, err := os.Getwd()
 	if err != nil {
 		return nil, err

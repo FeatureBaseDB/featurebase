@@ -242,10 +242,15 @@ func (qcx *Qcx) GetTx(o Txo) (tx Tx, finisher func(perr *error), err error) {
 	}
 
 	// qcx.write reflects the top executor determination
-	// if a write will be done at the end, so we upgrade
-	// the "local" read Tx to be writes, so that they
-	// don't deadlock against themselves.
-	o.Write = o.Write || qcx.write
+	// if a write will be happen at some point, in which case, to avoid
+	// locking problems with multi-shard things, we (probably incorrectly)
+	// treat every Tx as its own individual separate Tx.
+	//
+	// But we still want to open non-write transactions individually, we
+	// just can't recycle them (because write operations will come in and
+	// we want them to work and commit right away so we're not holding a write
+	// lock for long).
+	writeLogic := o.Write || qcx.write
 
 	// In general, we make ALL write transactions local, and never reuse them
 	// below. Previously this was to help lmdb.
@@ -273,7 +278,7 @@ func (qcx *Qcx) GetTx(o Txo) (tx Tx, finisher func(perr *error), err error) {
 		return *qcx.RequiredForAtomicWriteTx, NoopFinisher, nil
 	}
 
-	if !o.Write && qcx.Grp != nil {
+	if !writeLogic && qcx.Grp != nil {
 		// read, with a group in place.
 		finisher = func(perr *error) {} // finisher is a returned value
 

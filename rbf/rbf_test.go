@@ -11,6 +11,7 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/molecula/featurebase/v2/logger"
 	"github.com/molecula/featurebase/v2/rbf"
 	rbfcfg "github.com/molecula/featurebase/v2/rbf/cfg"
 	"github.com/molecula/featurebase/v2/testhook"
@@ -65,6 +66,13 @@ func NewDB(tb testing.TB, cfg ...*rbfcfg.Config) *rbf.DB {
 // MustOpenDB returns a db opened on a temporary file. On error, fail test.
 func MustOpenDB(tb testing.TB, cfg ...*rbfcfg.Config) *rbf.DB {
 	tb.Helper()
+	if len(cfg) == 0 || cfg[0] == nil {
+		newconf := rbfcfg.NewDefaultConfig()
+		newconf.Logger = logger.NewLogfLogger(tb)
+		cfg = []*rbfcfg.Config{newconf}
+	} else if cfg[0].Logger == nil {
+		cfg[0].Logger = logger.NewLogfLogger(tb)
+	}
 	db := NewDB(tb, cfg...)
 	if err := db.Open(); err != nil {
 		tb.Fatal(err)
@@ -78,7 +86,14 @@ func MustCloseDB(tb testing.TB, db *rbf.DB) {
 	tb.Helper()
 	if err := db.Check(); err != nil && err != rbf.ErrClosed {
 		tb.Fatal(err)
-	} else if n := db.TxN(); n != 0 {
+	}
+	MustCloseDBNoCheck(tb, db)
+}
+
+// MustCloseDBNoCheck closes db. On error, fail test.
+func MustCloseDBNoCheck(tb testing.TB, db *rbf.DB) {
+	tb.Helper()
+	if n := db.TxN(); n != 0 {
 		tb.Fatalf("db still has %d active transactions; must closed before closing db", n)
 	} else if err := db.Close(); err != nil && err != rbf.ErrClosed {
 		tb.Fatal(err)

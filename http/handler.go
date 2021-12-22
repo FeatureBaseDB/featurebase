@@ -29,6 +29,7 @@ import (
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	pilosa "github.com/molecula/featurebase/v2"
+	"github.com/molecula/featurebase/v2/authn"
 	"github.com/molecula/featurebase/v2/encoding/proto"
 	"github.com/molecula/featurebase/v2/ingest"
 	"github.com/molecula/featurebase/v2/logger"
@@ -69,6 +70,8 @@ type Handler struct {
 	middleware []func(http.Handler) http.Handler
 
 	pprofCPUProfileBuffer *bytes.Buffer
+
+	auth *authn.Auth
 }
 
 // externalPrefixFlag denotes endpoints that are intended to be exposed to clients.
@@ -111,6 +114,13 @@ func OptHandlerAllowedOrigins(origins []string) handlerOption {
 func OptHandlerAPI(api *pilosa.API) handlerOption {
 	return func(h *Handler) error {
 		h.api = api
+		return nil
+	}
+}
+
+func OptHandlerAuth(auth *authn.Auth) handlerOption {
+	return func(h *Handler) error {
+		h.auth = auth
 		return nil
 	}
 }
@@ -362,7 +372,7 @@ func (h *Handler) collectStats(next http.Handler) http.Handler {
 
 // latticeRoutes lists the frontend routes that do not directly correspond to
 // backend routes, and require special handling.
-var latticeRoutes = []string{"/tables", "/query", "/querybuilder"} // TODO somehow pull this from some metadata in the lattice directory
+var latticeRoutes = []string{"/tables", "/query", "/querybuilder", "/signin"} // TODO somehow pull this from some metadata in the lattice directory
 
 // newRouter creates a new mux http router.
 func newRouter(handler *Handler) http.Handler {
@@ -455,6 +465,12 @@ func newRouter(handler *Handler) http.Handler {
 	// could be long or short.
 	router.HandleFunc("/cpu-profile/start", handler.handleCPUProfileStart).Methods("GET").Name("CPUProfileStart")
 	router.HandleFunc("/cpu-profile/stop", handler.handleCPUProfileStop).Methods("GET").Name("CPUProfileStop")
+
+	router.HandleFunc("/login", handler.handleLogin).Methods("GET").Name("Login")
+	router.HandleFunc("/logout", handler.handleLogout).Methods("GET").Name("Logout")
+	router.HandleFunc("/redirect", handler.handleRedirect).Methods("GET").Name("Redirect")
+	router.HandleFunc("/auth", handler.handleCheckAuthentication).Methods("GET").Name("CheckAuthentication")
+	router.HandleFunc("/userinfo", handler.handleUserInfo).Methods("GET").Name("UserInfo")
 
 	// Endpoints to support lattice UI embedded via statik.
 	// The messiness here reflects the fact that assets live in a nontrivial
@@ -3364,4 +3380,74 @@ func (h *Handler) handlePostRestore(w http.ResponseWriter, r *http.Request) {
 	w.Header().Add("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("OK")) //nolint:errcheck
+}
+
+func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
+	if h.auth == nil {
+		w.Header().Add("Content-Type", "text/plain")
+		w.WriteHeader(http.StatusNoContent)
+		w.Write([]byte("Auth Off")) //nolint:errcheck
+		return
+	}
+
+	h.auth.Login(w, r)
+}
+
+func (h *Handler) handleRedirect(w http.ResponseWriter, r *http.Request) {
+	if h.auth == nil {
+		w.Header().Add("Content-Type", "text/plain")
+		w.WriteHeader(http.StatusNoContent)
+		w.Write([]byte("Auth Off")) //nolint:errcheck
+		return
+	}
+	h.auth.Redirect(w, r)
+}
+
+func (h *Handler) handleCheckAuthentication(w http.ResponseWriter, r *http.Request) {
+	if !validHeaderAcceptJSON(r.Header) {
+		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
+		return
+	}
+	if h.auth == nil {
+		w.Header().Add("Content-Type", "text/plain")
+		w.WriteHeader(http.StatusNoContent)
+		w.Write([]byte("Auth Off")) //nolint:errcheck
+		return
+	}
+	groups, err := h.auth.Authenticate(w, r)
+	if groups == nil || err != nil {
+		w.Header().Add("Content-Type", "text/plain")
+		w.WriteHeader(http.StatusForbidden)
+		return
+	}
+	w.Header().Add("Content-Type", "text/plain")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("OK")) //nolint:errcheck
+
+}
+
+func (h *Handler) handleUserInfo(w http.ResponseWriter, r *http.Request) {
+	if !validHeaderAcceptJSON(r.Header) {
+		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
+		return
+	}
+	if h.auth == nil {
+		w.Header().Add("Content-Type", "text/plain")
+		w.WriteHeader(http.StatusNoContent)
+		w.Write([]byte("Auth Off")) //nolint:errcheck
+		return
+	}
+	if err := json.NewEncoder(w).Encode(h.auth.GetUserInfo(w, r)); err != nil {
+		h.logger.Errorf("writing user info: %s", err)
+	}
+}
+
+func (h *Handler) handleLogout(w http.ResponseWriter, r *http.Request) {
+	if h.auth == nil {
+		w.Header().Add("Content-Type", "text/plain")
+		w.WriteHeader(http.StatusNoContent)
+		w.Write([]byte("Auth Off")) //nolint:errcheck
+		return
+	}
+	h.auth.Logout(w, r)
 }

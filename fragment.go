@@ -218,6 +218,8 @@ func newFragment(holder *Holder, spec fragSpec, shard uint64, flags byte) *fragm
 func (f *fragment) cachePath() string { return f.path() + cacheExt }
 
 func (f *fragment) bitDepth() (uint64, error) {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
 	tx, err := f.holder.BeginTx(false, f.idx, f.shard)
 	if err != nil {
 		return 0, errors.Wrapf(err, "beginning new tx(false, %s, %d)", f.index(), f.shard)
@@ -593,8 +595,8 @@ func (f *fragment) mutexCheck(tx Tx, details bool, limit int) (map[uint64][]uint
 
 // row returns a row by ID.
 func (f *fragment) row(tx Tx, rowID uint64) (*Row, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
+	f.mu.RLock()
+	defer f.mu.RUnlock()
 	return f.unprotectedRow(tx, rowID)
 }
 
@@ -937,9 +939,12 @@ func (f *fragment) unprotectedClearRow(tx Tx, rowID uint64) (changed bool, err e
 	return changed, nil
 }
 
-// unprotectedClearBlock clears all rows for a given block.
+// clearBlock clears all rows for a given block.
 // This updates both the on-disk storage and the in-cache bitmap.
-func (f *fragment) unprotectedClearBlock(tx Tx, block int) (changed bool, err error) {
+func (f *fragment) clearBlock(tx Tx, block int) (changed bool, err error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
 	firstRow := uint64(block * HashBlockSize)
 	var wp *io.Writer
 	if f.storage != nil {
@@ -2708,20 +2713,24 @@ func (f *fragment) importValue(tx Tx, columnIDs []uint64, values []int64, bitDep
 func (f *fragment) importRoaring(ctx context.Context, tx Tx, data []byte, clear bool) error {
 	span, ctx := tracing.StartSpanFromContext(ctx, "fragment.importRoaring")
 	defer span.Finish()
-	span, ctx = tracing.StartSpanFromContext(ctx, "importRoaring.AcquireFragmentLock")
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	span.Finish()
 
-	return f.unprotectedImportRoaring(ctx, tx, data, clear)
+	rowSet, updateCache, err := f.doImportRoaring(ctx, tx, data, clear)
+	if err != nil {
+		return errors.Wrap(err, "doImportRoaring")
+	}
+	if updateCache {
+		return f.updateCachePostImport(ctx, rowSet)
+	}
+	return nil
 }
 
-func (f *fragment) unprotectedImportRoaring(ctx context.Context, tx Tx, data []byte, clear bool) error {
+func (f *fragment) doImportRoaring(ctx context.Context, tx Tx, data []byte, clear bool) (map[uint64]int, bool, error) {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
 	rowSize := uint64(1 << shardVsContainerExponent)
 	span, ctx := tracing.StartSpanFromContext(ctx, "importRoaring.ImportRoaringBits")
+	defer span.Finish()
 
-	useRowCache := storage.RowCacheEnabled()
-	var changed int
 	var rowSet map[uint64]int
 	var wp *io.Writer
 	if f.storage != nil {
@@ -2734,37 +2743,37 @@ func (f *fragment) unprotectedImportRoaring(ctx context.Context, tx Tx, data []b
 			return err
 		}
 
-		changed, rowSet, err = tx.ImportRoaringBits(f.index(), f.field(), f.view(), f.shard, rit, clear, true, rowSize)
+		_, rowSet, err = tx.ImportRoaringBits(f.index(), f.field(), f.view(), f.shard, rit, clear, true, rowSize)
 		return err
 	})
 
-	span.Finish()
 	if err != nil {
-		return err
+		return nil, false, err
 	}
 
 	updateCache := f.CacheType != CacheTypeNone
+	return rowSet, updateCache, err
+}
+
+func (f *fragment) updateCachePostImport(ctx context.Context, rowSet map[uint64]int) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	anyChanged := false
 
 	for rowID, changes := range rowSet {
 		if changes == 0 {
 			continue
 		}
-		if useRowCache && f.rowCache != nil {
-			f.rowCache.Add(rowID, nil)
-		}
-		if updateCache {
-			anyChanged = true
-			if changes < 0 {
-				absChanges := uint64(-1 * changes)
-				if absChanges <= f.cache.Get(rowID) {
-					f.cache.BulkAdd(rowID, f.cache.Get(rowID)-absChanges)
-				} else {
-					f.cache.BulkAdd(rowID, 0)
-				}
+		anyChanged = true
+		if changes < 0 {
+			absChanges := uint64(-1 * changes)
+			if absChanges <= f.cache.Get(rowID) {
+				f.cache.BulkAdd(rowID, f.cache.Get(rowID)-absChanges)
 			} else {
-				f.cache.BulkAdd(rowID, f.cache.Get(rowID)+uint64(changes))
+				f.cache.BulkAdd(rowID, 0)
 			}
+		} else {
+			f.cache.BulkAdd(rowID, f.cache.Get(rowID)+uint64(changes))
 		}
 	}
 	// we only set this if we need to update the cache
@@ -2772,26 +2781,18 @@ func (f *fragment) unprotectedImportRoaring(ctx context.Context, tx Tx, data []b
 		f.cache.Invalidate()
 	}
 
-	span, _ = tracing.StartSpanFromContext(ctx, "importRoaring.incrementOpN")
-
-	f.incrementOpN(changed)
-
-	span.Finish()
 	return nil
 }
 
 // importRoaringOverwrite overwrites the specified block with the provided data.
 func (f *fragment) importRoaringOverwrite(ctx context.Context, tx Tx, data []byte, block int) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
 	// Clear the existing data from fragment block.
-	if _, err := f.unprotectedClearBlock(tx, block); err != nil {
+	if _, err := f.clearBlock(tx, block); err != nil {
 		return errors.Wrapf(err, "clearing block: %d", block)
 	}
 
 	// Union the new block data with the fragment data.
-	return f.unprotectedImportRoaring(ctx, tx, data, false)
+	return f.importRoaring(ctx, tx, data, false)
 }
 
 // incrementOpN increase the operation count by one.
