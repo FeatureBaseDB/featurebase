@@ -66,11 +66,12 @@ type InternalClientOption func(c *InternalClient)
 // retry failed requests using exponential backoff.
 func WithClientRetryPeriod(waitMax time.Duration) InternalClientOption {
 	return func(c *InternalClient) {
-		c.retryableClient = &retryablehttp.Client{
-			HTTPClient:   c.httpClient,
-			RetryWaitMax: waitMax,
-			CheckRetry:   retryWith400Policy,
-		}
+		fmt.Println("client w/ retry policy", waitMax)
+		rc := retryablehttp.NewClient()
+		rc.HTTPClient = c.httpClient
+		rc.RetryWaitMax = waitMax
+		rc.CheckRetry = retryWith400Policy
+		c.retryableClient = rc
 	}
 }
 
@@ -108,10 +109,11 @@ func NewInternalClientFromURI(defaultURI *pnet.URI, remoteClient *http.Client, o
 	}
 
 	if ic.retryableClient == nil {
-		ic.retryableClient = &retryablehttp.Client{
-			HTTPClient: ic.httpClient,
-			CheckRetry: noRetryPolicy,
-		}
+		fmt.Println("no retry policy")
+		rc := retryablehttp.NewClient()
+		rc.HTTPClient = ic.httpClient
+		rc.CheckRetry = noRetryPolicy
+		ic.retryableClient = rc
 	}
 	return ic
 }
