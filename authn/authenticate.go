@@ -175,7 +175,7 @@ func (a *Auth) newCookieValue(token *oauth2.Token) (*CookieValue, error) {
 
 	groups, err := a.getGroupMembership(token)
 	if err != nil {
-		return nil, errors.Wrap(err, "getting group memebership")
+		return nil, errors.Wrap(err, "getting group membership")
 	}
 	// not needed at this point in the logic and makes the encoded cookie too large
 	token.AccessToken = ""

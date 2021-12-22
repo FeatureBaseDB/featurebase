@@ -177,14 +177,14 @@ func TestAuth(t *testing.T) {
 			t.Errorf("expected error decoding block key got: %v", err)
 		}
 	})
-	t.Run("NewCookieValue", func(t *testing.T) {
+	t.Run("NewCookieValue-BadAccessToken", func(t *testing.T) {
 		_, err := a.newCookieValue(&tokenAT)
 		if err == nil || !strings.Contains(err.Error(), "jwt claims") {
 			t.Errorf("expected failure regarding jwt claims, got: %v", err)
 		}
 
 	})
-	t.Run("NewCookieValue-1", func(t *testing.T) {
+	t.Run("CookieValue-NoAccessToken", func(t *testing.T) {
 		_, err := a.newCookieValue(&tokenNoAT)
 		if err == nil || !strings.Contains(err.Error(), "access token") {
 			t.Errorf("expected failure regarding access token, got: %v", err)

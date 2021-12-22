@@ -184,7 +184,7 @@ func readResponse(w *httptest.ResponseRecorder) ([]byte, error) {
 	return ioutil.ReadAll(res.Body)
 }
 
-func TestAuth(t *testing.T) {
+func TestHandlerAuth(t *testing.T) {
 	type evaluate func(w *httptest.ResponseRecorder, data []byte)
 	type endpoint func(w gohttp.ResponseWriter, r *gohttp.Request)
 	var (
