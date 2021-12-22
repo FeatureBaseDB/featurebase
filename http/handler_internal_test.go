@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	gohttp "net/http"
 	"net/http/httptest"
@@ -226,13 +225,17 @@ func TestAuth(t *testing.T) {
 
 	hOff := Handler{}
 
-	validToken := oauth2.Token{
+	token := oauth2.Token{
 		TokenType:    "Bearer",
 		RefreshToken: "abcdef",
 		Expiry:       time.Now().Add(time.Hour),
 	}
 
-	// emptyToken := oauth2.Token{}
+	expiredToken := oauth2.Token{
+		TokenType:    "Bearer",
+		RefreshToken: "abcdef",
+		Expiry:       time.Now(),
+	}
 
 	grp := authn.Group{
 		UserID:    "snowstorm",
@@ -244,22 +247,46 @@ func TestAuth(t *testing.T) {
 		UserID:          "snowstorm",
 		UserName:        "J.M.W. Turner",
 		GroupMembership: []authn.Group{grp},
-		Token:           &validToken,
+		Token:           &token,
+	}
+
+	emptyCV := authn.CookieValue{
+		UserID:          "narcissus",
+		UserName:        "Caravaggio",
+		GroupMembership: []authn.Group{},
+		Token:           &token,
+	}
+	expiredCV := authn.CookieValue{
+		UserID:          "narcissus",
+		UserName:        "Caravaggio",
+		GroupMembership: []authn.Group{},
+		Token:           &expiredToken,
 	}
 
 	secure := securecookie.New(hashKey, blockKey)
 	validEncodedCV, _ := secure.Encode("molecula-chip", validCV)
+	noGroupEncodedCV, _ := secure.Encode("molecula-chip", emptyCV)
+	expiredEncodedCV, _ := secure.Encode("molecula-chip", expiredCV)
+
 	validCookie := &gohttp.Cookie{
 		Name:     "molecula-chip",
 		Value:    validEncodedCV,
 		Path:     "/",
 		Secure:   true,
 		HttpOnly: true,
-		Expires:  validToken.Expiry,
+		Expires:  token.Expiry,
+	}
+	noGroupCookie := &gohttp.Cookie{
+		Name:     "molecula-chip",
+		Value:    noGroupEncodedCV,
+		Path:     "/",
+		Secure:   true,
+		HttpOnly: true,
+		Expires:  token.Expiry,
 	}
 	expiredCookie := &gohttp.Cookie{
 		Name:     "molecula-chip",
-		Value:    validEncodedCV,
+		Value:    expiredEncodedCV,
 		Path:     "/",
 		Secure:   true,
 		HttpOnly: true,
@@ -271,7 +298,7 @@ func TestAuth(t *testing.T) {
 		Path:     "/",
 		Secure:   true,
 		HttpOnly: true,
-		Expires:  validToken.Expiry,
+		Expires:  token.Expiry,
 	}
 	unEncodedCookie := &gohttp.Cookie{
 		Name:     "molecula-chip",
@@ -279,7 +306,7 @@ func TestAuth(t *testing.T) {
 		Path:     "/",
 		Secure:   true,
 		HttpOnly: true,
-		Expires:  validToken.Expiry,
+		Expires:  token.Expiry,
 	}
 
 	tests := []struct {
@@ -321,27 +348,35 @@ func TestAuth(t *testing.T) {
 			cookie:  validCookie,
 			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) { h.handleCheckAuthentication(w, r) },
 			fn: func(w *httptest.ResponseRecorder, data []byte) {
-				fmt.Printf("w %+v \n\n", w)
+				if w.Result().StatusCode != 200 {
+					t.Errorf("expected http code 200, got: %+v", w.Result().StatusCode)
+				}
 			},
 		},
 		{
 			name:    "Authenticate-NoGroups",
 			path:    "/auth",
 			kind:    "type1",
-			cookie:  validCookie,
+			cookie:  noGroupCookie,
 			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) { h.handleCheckAuthentication(w, r) },
 			fn: func(w *httptest.ResponseRecorder, data []byte) {
-				fmt.Printf("w %+v \n\n", w)
+				// status forbidden
+				if w.Result().StatusCode != 403 {
+					t.Errorf("expected http code 403, got: %+v", w.Result().StatusCode)
+				}
 			},
 		},
 		{
-			name:    "Authenticate-BadCookie",
+			name:    "Authenticate-MalformedCookie",
 			path:    "/auth",
 			kind:    "type1",
 			cookie:  unEncodedCookie,
 			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) { h.handleCheckAuthentication(w, r) },
 			fn: func(w *httptest.ResponseRecorder, data []byte) {
-				fmt.Printf("w %+v \n\n", w)
+				// redirect to signin
+				if w.Result().StatusCode != 307 {
+					t.Errorf("expected http code 307, got: %+v", w.Result().StatusCode)
+				}
 			},
 		},
 		{
@@ -351,7 +386,10 @@ func TestAuth(t *testing.T) {
 			cookie:  expiredCookie,
 			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) { h.handleCheckAuthentication(w, r) },
 			fn: func(w *httptest.ResponseRecorder, data []byte) {
-				fmt.Printf("w %+v \n\n", w)
+				// redirect to signin
+				if w.Result().StatusCode != 307 {
+					t.Errorf("expected http code 307, got: %+v", w.Result().StatusCode)
+				}
 			},
 		},
 		{
@@ -361,7 +399,10 @@ func TestAuth(t *testing.T) {
 			cookie:  emptyCookie,
 			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) { h.handleCheckAuthentication(w, r) },
 			fn: func(w *httptest.ResponseRecorder, data []byte) {
-				fmt.Printf("w %+v \n\n", w)
+				// redirect to signin
+				if w.Result().StatusCode != 307 {
+					t.Errorf("expected http code 307, got: %+v", w.Result().StatusCode)
+				}
 			},
 		},
 		{
@@ -514,47 +555,24 @@ func TestAuth(t *testing.T) {
 				test.fn(w, data)
 			})
 		case "type2":
-			r := httptest.NewRequest(gohttp.MethodGet, test.path, nil)
-			w := httptest.NewRecorder()
-			r.Form = url.Values{}
-			r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-			r.Form.Add("code", "junk")
+			t.Run(test.name, func(t *testing.T) {
+				r := httptest.NewRequest(gohttp.MethodGet, test.path, nil)
+				w := httptest.NewRecorder()
+				r.Form = url.Values{}
+				r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+				r.Form.Add("code", "junk")
 
-			test.handler(w, r)
-			data, err := readResponse(w)
-			if err != nil {
-				t.Errorf("expected no errors reading response, got: %+v", err)
-			}
+				test.handler(w, r)
+				data, err := readResponse(w)
+				if err != nil {
+					t.Errorf("expected no errors reading response, got: %+v", err)
+				}
 
-			test.fn(w, data)
+				test.fn(w, data)
 
+			})
 		}
 
 	}
-
-	t.Run("GetUserInfo", func(t *testing.T) {
-		r := httptest.NewRequest(gohttp.MethodGet, "/userinfo", nil)
-		w := httptest.NewRecorder()
-
-		h.handleUserInfo(w, r)
-
-		data, err := readResponse(w)
-		if err != nil {
-			t.Errorf("expected no errors reading response, got: %+v", err)
-		}
-
-		uinfo := authn.UserInfo{}
-
-		err = json.Unmarshal(data, &uinfo)
-		if err != nil {
-			t.Errorf("unmarshalling userinfo")
-		}
-
-		if uinfo.UserID != "" && uinfo.UserName != "" {
-
-			t.Errorf("expected http code 400, got: %+v", uinfo)
-		}
-
-	})
 
 }

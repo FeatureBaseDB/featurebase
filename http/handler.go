@@ -3428,7 +3428,7 @@ func (h *Handler) handleUserInfo(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("Auth Off")) //nolint:errcheck
 		return
 	}
-	if err := json.NewEncoder(w).Encode(h.auth.GetUserInfo(r)); err != nil {
+	if err := json.NewEncoder(w).Encode(h.auth.GetUserInfo(w, r)); err != nil {
 		h.logger.Errorf("writing user info: %s", err)
 	}
 }

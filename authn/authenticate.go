@@ -86,7 +86,7 @@ type UserInfo struct {
 }
 
 func (a *Auth) Authenticate(w http.ResponseWriter, r *http.Request) ([]Group, error) {
-	cookie, err := a.readCookie(r)
+	cookie, err := a.readCookie(w, r)
 	if err != nil {
 		http.Redirect(w, r, "/signin", http.StatusTemporaryRedirect)
 		return nil, err
@@ -94,7 +94,7 @@ func (a *Auth) Authenticate(w http.ResponseWriter, r *http.Request) ([]Group, er
 	if cookie.Token.Expiry.Before(time.Now().Add(a.refreshWithin)) {
 		err = a.refreshToken(w, cookie)
 		if err != nil {
-			//log error
+			a.logger.Errorf("refreshing access token: ", err)
 			if cookie.Token.Expiry.Before(time.Now()) {
 				http.Redirect(w, r, "/signin", http.StatusTemporaryRedirect)
 				return nil, err
@@ -114,14 +114,7 @@ func (a *Auth) Login(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *Auth) Logout(w http.ResponseWriter, r *http.Request) {
-	newCookie := &http.Cookie{
-		Name:     a.cookieName,
-		Value:    "",
-		Path:     "/",
-		Secure:   true,
-		HttpOnly: true,
-		SameSite: http.SameSiteStrictMode,
-	}
+	newCookie := a.getEmptyCookie()
 	http.SetCookie(w, newCookie)
 	redirect := fmt.Sprintf("%s?post_logout_redirect_uri=%s/", a.logoutEndpoint, a.fbURL)
 	http.Redirect(w, r, redirect, http.StatusTemporaryRedirect)
@@ -146,9 +139,9 @@ func (a *Auth) Redirect(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
 }
 
-func (a *Auth) GetUserInfo(r *http.Request) *UserInfo {
+func (a *Auth) GetUserInfo(w http.ResponseWriter, r *http.Request) *UserInfo {
 	var resp UserInfo
-	cookie, err := a.readCookie(r)
+	cookie, err := a.readCookie(w, r)
 	if err != nil {
 		//add logging
 		return &resp
@@ -171,15 +164,18 @@ func (a *Auth) newCookieValue(token *oauth2.Token) (*CookieValue, error) {
 	if token == nil {
 		return nil, errors.New("baking cookie due to nil token")
 	}
+	if token.AccessToken == "" {
+		return nil, errors.New("no access token provided")
+	}
 	accessParsed, err := jwt.Parse(token.AccessToken, nil)
-	if token == nil {
-		a.logger.Errorf("parsing jwt claims from access tokens:  %v", err)
+	if accessParsed == nil || accessParsed.Claims == nil {
+		return nil, errors.Wrap(err, "parsing jwt claims from access tokens")
 	}
 	claims := accessParsed.Claims.(jwt.MapClaims)
 
 	groups, err := a.getGroupMembership(token)
 	if err != nil {
-		a.logger.Errorf("getting group memebership %v", err)
+		return nil, errors.Wrap(err, "getting group memebership")
 	}
 	// not needed at this point in the logic and makes the encoded cookie too large
 	token.AccessToken = ""
@@ -219,7 +215,7 @@ func (a *Auth) getGroupMembership(token *oauth2.Token) (Groups, error) {
 	return groups, nil
 }
 
-func (a *Auth) readCookie(r *http.Request) (*CookieValue, error) {
+func (a *Auth) readCookie(w http.ResponseWriter, r *http.Request) (*CookieValue, error) {
 	cookie, err := r.Cookie(a.cookieName)
 	if err != nil {
 		return nil, errors.Wrap(err, "cookie not found")
@@ -228,6 +224,8 @@ func (a *Auth) readCookie(r *http.Request) (*CookieValue, error) {
 	var value CookieValue
 	err = a.secure.Decode(a.cookieName, cookie.Value, &value)
 	if err != nil {
+		newCookie := a.getEmptyCookie()
+		http.SetCookie(w, newCookie)
 		return nil, errors.Wrap(err, "decoding cookie")
 	}
 
@@ -266,7 +264,7 @@ func (a *Auth) refreshToken(w http.ResponseWriter, cookie *CookieValue) error {
 	if newToken.Expiry != cookie.Token.Expiry {
 		cv, err := a.newCookieValue(newToken)
 		if err != nil {
-			errors.New("setting cookie")
+			errors.Wrap(err, "setting cookie")
 		}
 
 		a.setCookie(w, cv)
@@ -284,4 +282,15 @@ func decodeHex(hexstr string) ([]byte, error) {
 		return nil, errors.Wrap(err, "invalid key length")
 	}
 	return data, nil
+}
+
+func (a *Auth) getEmptyCookie() *http.Cookie {
+	return &http.Cookie{
+		Name:     a.cookieName,
+		Value:    "",
+		Path:     "/",
+		Secure:   true,
+		HttpOnly: true,
+		SameSite: http.SameSiteStrictMode,
+	}
 }
