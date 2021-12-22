@@ -1,5 +1,5 @@
-import React from "react";
-import { Button } from "@material-ui/core";
+import React from 'react';
+import { Button } from '@material-ui/core';
 
 interface Props {
   children?: React.ReactNode;
@@ -7,7 +7,7 @@ interface Props {
 
 const SignOutButton: React.FC<Props> = ({ children }) => {
   const signoutOnClick = (e) => {
-    window.location.href = "/logout";
+    window.location.href = '/logout';
   };
 
   return (

@@ -1,5 +1,5 @@
-import React from "react";
-import { Button } from "@material-ui/core";
+import React from 'react';
+import { Button } from '@material-ui/core';
 
 interface Props {
   children?: React.ReactNode;
@@ -7,7 +7,7 @@ interface Props {
 
 const SignInButton: React.FC<Props> = ({ children }) => {
   const signinOnClick = (e) => {
-    window.location.href = "/login";
+    window.location.href = '/login';
   };
 
   return (
