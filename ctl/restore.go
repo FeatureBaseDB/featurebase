@@ -178,7 +178,7 @@ func (cmd *RestoreCommand) restoreSchema(ctx context.Context, primary *topology.
 	return err
 }
 
-func RetryWith400(ctx context.Context, resp *http.Response, err error) (bool, error) {
+func retryWith400(ctx context.Context, resp *http.Response, err error) (bool, error) {
 	if resp != nil && resp.StatusCode > 400 { // we have some dumb status codes
 		return true, nil
 	}
@@ -202,7 +202,7 @@ func (cmd *RestoreCommand) restoreIDAlloc(ctx context.Context, primary *topology
 
 	client := retryablehttp.NewClient()
 	client.RetryWaitMax = cmd.RetryPeriod
-	client.CheckRetry = RetryWith400
+	client.CheckRetry = retryWith400
 	_, err = client.Post(url, "application/octet-stream", f)
 	return err
 }
@@ -281,7 +281,7 @@ func (cmd *RestoreCommand) restoreShard(ctx context.Context, filename string) er
 
 		client := retryablehttp.NewClient()
 		client.RetryWaitMax = cmd.RetryPeriod
-		client.CheckRetry = RetryWith400
+		client.CheckRetry = retryWith400
 		resp, err := client.Do(req)
 		if err != nil {
 			return err
@@ -349,13 +349,11 @@ func (cmd *RestoreCommand) restoreIndexTranslationFile(ctx context.Context, file
 
 	for _, node := range nodes {
 		if err := func() error {
-			f, err := os.Open(filename)
-			if err != nil {
-				return err
+			readerFunc := func() (io.Reader, error) {
+				return os.Open(filename) // gets used as an HTTP request body and closed by http library
 			}
-			defer f.Close()
 
-			return cmd.client.ImportIndexKeys(ctx, &node.URI, indexName, partitionID, false, f)
+			return cmd.client.ImportIndexKeys(ctx, &node.URI, indexName, partitionID, false, readerFunc)
 		}(); err != nil {
 			return err
 		}
@@ -410,13 +408,11 @@ func (cmd *RestoreCommand) restoreFieldTranslationFile(ctx context.Context, node
 
 	for _, node := range nodes {
 		if err := func() error {
-			f, err := os.Open(filename)
-			if err != nil {
-				return err
+			readerFunc := func() (io.Reader, error) {
+				return os.Open(filename)
 			}
-			defer f.Close()
 
-			return cmd.client.ImportFieldKeys(ctx, &node.URI, indexName, fieldName, false, f)
+			return cmd.client.ImportFieldKeys(ctx, &node.URI, indexName, fieldName, false, readerFunc)
 		}(); err != nil {
 			return err
 		}
