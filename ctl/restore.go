@@ -179,7 +179,7 @@ func (cmd *RestoreCommand) restoreSchema(ctx context.Context, primary *topology.
 }
 
 func retryWith400(ctx context.Context, resp *http.Response, err error) (bool, error) {
-	if resp != nil && resp.StatusCode > 400 { // we have some dumb status codes
+	if resp != nil && resp.StatusCode >= 400 { // we have some dumb status codes
 		return true, nil
 	}
 	return retryablehttp.DefaultRetryPolicy(ctx, resp, err)

@@ -90,7 +90,7 @@ func noRetryPolicy(ctx context.Context, resp *http.Response, err error) (bool, e
 // therefore useless to retry, but we have some incorrect status codes.
 // TODO: fix the incorrect status codes so we can get rid of this.
 func retryWith400Policy(ctx context.Context, resp *http.Response, err error) (bool, error) {
-	if resp != nil && resp.StatusCode > 400 {
+	if resp != nil && resp.StatusCode >= 400 {
 		return true, nil
 	}
 	return retryablehttp.DefaultRetryPolicy(ctx, resp, err)
