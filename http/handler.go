@@ -518,6 +518,20 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.Handler.ServeHTTP(w, r)
 }
 
+// func (h *Handler)checkAuthorization(w http.ResponseWriter, r *http.Request, index string, neededPermission string) (bool, error){
+// 	groups, err := h.auth.Authenticate(w, r)
+// 	if err != nil {
+// 		return false, errors.Wrap(err, "authenticating")
+// 	}
+
+// 	for group := range groups{
+// 		// is this group admin?
+// 		// what kind of permissions do they have for this index?
+
+// 	}
+
+// }
+
 // statikHandler implements the http.Handler interface, and responds to
 // requests for static assets with the appropriate file contents embedded
 // in a statik filesystem.
