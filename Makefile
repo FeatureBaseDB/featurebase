@@ -149,12 +149,10 @@ DOCKER_COMPOSE=internal/clustertests/docker-compose.yml
 clustertests: vendor
 	docker-compose -f $(DOCKER_COMPOSE) down
 	docker-compose -f $(DOCKER_COMPOSE) build
-	docker-compose -f $(DOCKER_COMPOSE) up --exit-code-from=client1
+	docker-compose -f $(DOCKER_COMPOSE) up -d pilosa1 pilosa2 pilosa3
+	docker-compose -f $(DOCKER_COMPOSE) run client1
+	docker-compose -f $(DOCKER_COMPOSE) down
 
-# Like clustertests, but rebuilds all images.
-clustertests-build: vendor
-	docker-compose -f $(DOCKER_COMPOSE) down -v
-	docker-compose -f $(DOCKER_COMPOSE) up --exit-code-from=client1 --build
 
 # Install Pilosa
 install:

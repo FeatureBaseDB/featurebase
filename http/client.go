@@ -11,15 +11,18 @@ import (
 	"math/rand"
 	"net/http"
 	"net/url"
+	"os"
 	"path"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/hashicorp/go-retryablehttp"
 	pilosa "github.com/molecula/featurebase/v2"
 	"github.com/molecula/featurebase/v2/encoding/proto"
 	"github.com/molecula/featurebase/v2/ingest"
+	"github.com/molecula/featurebase/v2/logger"
 	pnet "github.com/molecula/featurebase/v2/net"
 	"github.com/molecula/featurebase/v2/topology"
 	"github.com/molecula/featurebase/v2/tracing"
@@ -31,8 +34,11 @@ type InternalClient struct {
 	defaultURI *pnet.URI
 	serializer pilosa.Serializer
 
+	log logger.Logger
+
 	// The client to use for HTTP communication.
-	httpClient *http.Client
+	httpClient      *http.Client
+	retryableClient *retryablehttp.Client
 	// the local node's API, used for operations that we can short-circuit that way
 	api *pilosa.API
 }
@@ -40,7 +46,7 @@ type InternalClient struct {
 // NewInternalClient returns a new instance of InternalClient to connect to host.
 // If api is non-nil, the client uses it for some same-host operations instead
 // of going through http.
-func NewInternalClient(host string, remoteClient *http.Client) (*InternalClient, error) {
+func NewInternalClient(host string, remoteClient *http.Client, opts ...InternalClientOption) (*InternalClient, error) {
 	if host == "" {
 		return nil, pilosa.ErrHostRequired
 	}
@@ -50,16 +56,66 @@ func NewInternalClient(host string, remoteClient *http.Client) (*InternalClient,
 		return nil, errors.Wrap(err, "getting URI")
 	}
 
-	client := NewInternalClientFromURI(uri, remoteClient)
+	client := NewInternalClientFromURI(uri, remoteClient, opts...)
 	return client, nil
 }
 
-func NewInternalClientFromURI(defaultURI *pnet.URI, remoteClient *http.Client) *InternalClient {
-	return &InternalClient{
+type InternalClientOption func(c *InternalClient)
+
+// WithClientRetryPeriod is the max amount of total time the client will
+// retry failed requests using exponential backoff.
+func WithClientRetryPeriod(waitMax time.Duration) InternalClientOption {
+	return func(c *InternalClient) {
+		fmt.Println("client w/ retry policy", waitMax)
+		rc := retryablehttp.NewClient()
+		rc.HTTPClient = c.httpClient
+		rc.RetryWaitMax = waitMax
+		rc.CheckRetry = retryWith400Policy
+		c.retryableClient = rc
+	}
+}
+
+func WithClientLogger(log logger.Logger) InternalClientOption {
+	return func(c *InternalClient) {
+		c.log = log
+	}
+}
+
+func noRetryPolicy(ctx context.Context, resp *http.Response, err error) (bool, error) {
+	return false, nil
+}
+
+// retryWith400Policy wraps retryablehttp's default retry policy to
+// also retry on 4XX errors which *should* be client errors and
+// therefore useless to retry, but we have some incorrect status codes.
+// TODO: fix the incorrect status codes so we can get rid of this.
+func retryWith400Policy(ctx context.Context, resp *http.Response, err error) (bool, error) {
+	if resp != nil && resp.StatusCode >= 400 {
+		return true, nil
+	}
+	return retryablehttp.DefaultRetryPolicy(ctx, resp, err)
+}
+
+func NewInternalClientFromURI(defaultURI *pnet.URI, remoteClient *http.Client, opts ...InternalClientOption) *InternalClient {
+	ic := &InternalClient{
 		defaultURI: defaultURI,
 		serializer: proto.Serializer{},
 		httpClient: remoteClient,
+		log:        logger.NewStandardLogger(os.Stderr),
 	}
+
+	for _, opt := range opts {
+		opt(ic)
+	}
+
+	if ic.retryableClient == nil {
+		fmt.Println("no retry policy")
+		rc := retryablehttp.NewClient()
+		rc.HTTPClient = ic.httpClient
+		rc.CheckRetry = noRetryPolicy
+		ic.retryableClient = rc
+	}
+	return ic
 }
 
 // MaxShardByIndex returns the number of shards on a server by index.
@@ -1717,19 +1773,36 @@ func giveRawResponse(b bool) executeRequestOption {
 	}
 }
 
+type nopCloser struct {
+	*bytes.Reader
+}
+
+func (n nopCloser) Close() error {
+	return nil
+}
+
 // executeRequest executes the given request and checks the Response. For
 // responses with non-2XX status, the body is read and closed, and an error is
 // returned. If the error is nil, the caller must ensure that the response body
 // is closed.
 func (c *InternalClient) executeRequest(req *http.Request, opts ...executeRequestOption) (*http.Response, error) {
+	return c.executeRetryableRequest(&retryablehttp.Request{Request: req}, opts...)
+}
+
+func (c *InternalClient) executeRetryableRequest(req *retryablehttp.Request, opts ...executeRequestOption) (*http.Response, error) {
+	tracing.GlobalTracer.InjectHTTPHeaders(req.Request)
+	req.Close = false
 	eo := &executeOpts{}
 	for _, opt := range opts {
 		opt(eo)
 	}
 
-	tracing.GlobalTracer.InjectHTTPHeaders(req)
-	req.Close = false
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.retryableClient.Do(req)
+
+	return c.handleResponse(req.Request, eo, resp, err)
+}
+
+func (c *InternalClient) handleResponse(req *http.Request, eo *executeOpts, resp *http.Response, err error) (*http.Response, error) {
 	if err != nil {
 		if resp != nil {
 			resp.Body.Close()
@@ -2009,7 +2082,7 @@ func (c *InternalClient) RetrieveTranslatePartitionFromURI(ctx context.Context, 
 
 	return resp.Body, nil
 }
-func (c *InternalClient) ImportIndexKeys(ctx context.Context, uri *pnet.URI, index string, partitionID int, remote bool, rddbdata io.Reader) error {
+func (c *InternalClient) ImportIndexKeys(ctx context.Context, uri *pnet.URI, index string, partitionID int, remote bool, readerFunc func() (io.Reader, error)) error {
 	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.ImportIndexKeys")
 	defer span.Finish()
 
@@ -2026,14 +2099,14 @@ func (c *InternalClient) ImportIndexKeys(ctx context.Context, uri *pnet.URI, ind
 	url := fmt.Sprintf("%s/internal/translate/index/%s/%d", uri, index, partitionID)
 
 	// Generate HTTP request.
-	httpReq, err := http.NewRequest("POST", url, rddbdata)
+	httpReq, err := retryablehttp.NewRequest("POST", url, readerFunc)
 	if err != nil {
 		return errors.Wrap(err, "creating request")
 	}
 	httpReq.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
 
 	// Execute request against the host.
-	resp, err := c.executeRequest(httpReq.WithContext(ctx))
+	resp, err := c.executeRetryableRequest(httpReq.WithContext(ctx))
 	if err != nil {
 		return err
 	}
@@ -2041,7 +2114,7 @@ func (c *InternalClient) ImportIndexKeys(ctx context.Context, uri *pnet.URI, ind
 	return nil
 }
 
-func (c *InternalClient) ImportFieldKeys(ctx context.Context, uri *pnet.URI, index, field string, remote bool, rddbdata io.Reader) error {
+func (c *InternalClient) ImportFieldKeys(ctx context.Context, uri *pnet.URI, index, field string, remote bool, readerFunc func() (io.Reader, error)) error {
 	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.ImportFieldKeys")
 	defer span.Finish()
 
@@ -2058,14 +2131,14 @@ func (c *InternalClient) ImportFieldKeys(ctx context.Context, uri *pnet.URI, ind
 	url := fmt.Sprintf("%s/internal/translate/field/%s/%s", uri, index, field)
 
 	// Generate HTTP request.
-	httpReq, err := http.NewRequest("POST", url, rddbdata)
+	httpReq, err := retryablehttp.NewRequest("POST", url, readerFunc)
 	if err != nil {
 		return errors.Wrap(err, "creating request")
 	}
 	httpReq.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
 
 	// Execute request against the host.
-	resp, err := c.executeRequest(httpReq.WithContext(ctx))
+	resp, err := c.executeRetryableRequest(httpReq.WithContext(ctx))
 	if err != nil {
 		return err
 	}

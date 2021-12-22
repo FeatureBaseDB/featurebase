@@ -23,11 +23,16 @@ import (
 	"github.com/pkg/errors"
 )
 
-func sendCmd(cmd string, args ...string) error {
+func startCmd(cmd string, args ...string) (*exec.Cmd, error) {
 	pcmd := exec.Command(cmd, args...)
 	pcmd.Stdout = os.Stdout
 	pcmd.Stderr = os.Stderr
 	err := pcmd.Start()
+	return pcmd, err
+}
+
+func sendCmd(cmd string, args ...string) error {
+	pcmd, err := startCmd(cmd, args...)
 	if err != nil {
 		return errors.Wrap(err, "starting cmd")
 	}

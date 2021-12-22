@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,10 +12,15 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
+
+	"github.com/hashicorp/go-retryablehttp"
 
 	pilosa "github.com/molecula/featurebase/v2"
+	fb_http "github.com/molecula/featurebase/v2/http"
 	"github.com/molecula/featurebase/v2/server"
 	"github.com/molecula/featurebase/v2/topology"
+	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -29,6 +33,13 @@ type RestoreCommand struct {
 
 	// Filepath to the backup file.
 	Path string
+
+	// Amount of time after first failed request to continue retrying.
+	RetryPeriod time.Duration `json:"retry-period"`
+
+	// Host:port on which to listen for pprof.
+	Pprof string `json:"pprof"`
+
 	// Reusable client.
 	client pilosa.InternalClient
 
@@ -41,13 +52,20 @@ type RestoreCommand struct {
 func NewRestoreCommand(stdin io.Reader, stdout, stderr io.Writer) *RestoreCommand {
 	return &RestoreCommand{
 		CmdIO:       pilosa.NewCmdIO(stdin, stdout, stderr),
+		RetryPeriod: time.Second * 30,
 		Concurrency: 1,
+		Pprof:       "localhost:43809",
 	}
 }
 
 // Run executes the restore.
 func (cmd *RestoreCommand) Run(ctx context.Context) (err error) {
 	logger := cmd.Logger()
+	close, err := startProfilingServer(cmd.Pprof, logger)
+	if err != nil {
+		return errors.Wrap(err, "starting profiling server")
+	}
+	defer close()
 
 	// Validate arguments.
 	if cmd.Path == "" {
@@ -62,7 +80,7 @@ func (cmd *RestoreCommand) Run(ctx context.Context) (err error) {
 		return fmt.Errorf("parsing tls config: %w", err)
 	}
 	// Create a client to the server.
-	client, err := commandClient(cmd)
+	client, err := commandClient(cmd, fb_http.WithClientRetryPeriod(cmd.RetryPeriod))
 	if err != nil {
 		return fmt.Errorf("creating client: %w", err)
 	}
@@ -119,7 +137,8 @@ func (cmd *RestoreCommand) restoreSchema(ctx context.Context, primary *topology.
 	if len(existingSchema) == 0 {
 		cmd.Logger().Printf("Load Schema")
 		url := primary.URI.Path("/schema")
-		var client http.Client
+		client := retryablehttp.NewClient()
+		client.RetryWaitMax = cmd.RetryPeriod
 		_, err = client.Post(url, "application/json", f)
 	} else {
 		schema := &pilosa.Schema{}
@@ -159,6 +178,13 @@ func (cmd *RestoreCommand) restoreSchema(ctx context.Context, primary *topology.
 	return err
 }
 
+func retryWith400(ctx context.Context, resp *http.Response, err error) (bool, error) {
+	if resp != nil && resp.StatusCode >= 400 { // we have some dumb status codes
+		return true, nil
+	}
+	return retryablehttp.DefaultRetryPolicy(ctx, resp, err)
+}
+
 func (cmd *RestoreCommand) restoreIDAlloc(ctx context.Context, primary *topology.Node) error {
 	logger := cmd.Logger()
 
@@ -174,7 +200,9 @@ func (cmd *RestoreCommand) restoreIDAlloc(ctx context.Context, primary *topology
 	logger.Printf("Load idalloc")
 	url := primary.URI.Path("/internal/idalloc/restore")
 
-	var client http.Client
+	client := retryablehttp.NewClient()
+	client.RetryWaitMax = cmd.RetryPeriod
+	client.CheckRetry = retryWith400
 	_, err = client.Post(url, "application/octet-stream", f)
 	return err
 }
@@ -244,14 +272,16 @@ func (cmd *RestoreCommand) restoreShard(ctx context.Context, filename string) er
 		defer f.Close()
 
 		url := node.URI.Path(fmt.Sprintf("/internal/restore/%v/%v", indexName, shard))
-		req, err := http.NewRequest("POST", url, f)
+		req, err := retryablehttp.NewRequest("POST", url, f)
 		if err != nil {
 			return err
 		}
 		req = req.WithContext(ctx)
 		req.Header.Set("Content-Type", "application/octet-stream")
 
-		var client http.Client
+		client := retryablehttp.NewClient()
+		client.RetryWaitMax = cmd.RetryPeriod
+		client.CheckRetry = retryWith400
 		resp, err := client.Do(req)
 		if err != nil {
 			return err
@@ -319,13 +349,11 @@ func (cmd *RestoreCommand) restoreIndexTranslationFile(ctx context.Context, file
 
 	for _, node := range nodes {
 		if err := func() error {
-			f, err := os.Open(filename)
-			if err != nil {
-				return err
+			readerFunc := func() (io.Reader, error) {
+				return os.Open(filename) // gets used as an HTTP request body and closed by http library
 			}
-			defer f.Close()
 
-			return cmd.client.ImportIndexKeys(ctx, &node.URI, indexName, partitionID, false, f)
+			return cmd.client.ImportIndexKeys(ctx, &node.URI, indexName, partitionID, false, readerFunc)
 		}(); err != nil {
 			return err
 		}
@@ -380,13 +408,11 @@ func (cmd *RestoreCommand) restoreFieldTranslationFile(ctx context.Context, node
 
 	for _, node := range nodes {
 		if err := func() error {
-			f, err := os.Open(filename)
-			if err != nil {
-				return err
+			readerFunc := func() (io.Reader, error) {
+				return os.Open(filename)
 			}
-			defer f.Close()
 
-			return cmd.client.ImportFieldKeys(ctx, &node.URI, indexName, fieldName, false, f)
+			return cmd.client.ImportFieldKeys(ctx, &node.URI, indexName, fieldName, false, readerFunc)
 		}(); err != nil {
 			return err
 		}
