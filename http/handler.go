@@ -411,7 +411,7 @@ func newRouter(handler *Handler) http.Handler {
 	router.HandleFunc("/index/{index}/field/{field}/mutex-check", handler.handleGetMutexCheck).Methods("GET").Name("GetMutexCheck")
 	router.HandleFunc("/index/{index}/field/{field}/import-roaring/{shard}", handler.handlePostImportRoaring).Methods("POST").Name("PostImportRoaring")
 	router.HandleFunc("/index/{index}/query", handler.handlePostQuery).Methods("POST").Name("PostQuery")
-	router.HandleFunc("/info", handler.handleGetInfo).Methods("GET").Name("GetInfo")
+	router.HandleFunc("/info", handler.mwAuth(handler.handleGetInfo, authz.Admin)).Methods("GET").Name("GetInfo")
 	router.HandleFunc("/recalculate-caches", handler.handleRecalculateCaches).Methods("POST").Name("RecalculateCaches")
 	router.HandleFunc("/schema", handler.handleGetSchema).Methods("GET").Name("GetSchema")
 	router.HandleFunc("/schema/details", handler.handleGetSchemaDetails).Methods("GET").Name("GetSchemaDetails")
@@ -528,35 +528,71 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.Handler.ServeHTTP(w, r)
 }
 
-// func (h *Handler) isAuthenticated(w http.ResponseWriter, r *http.Request) bool {
+func (h *Handler) mwAuth(handler http.HandlerFunc, perm authz.Permission) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if h.auth != nil {
 
-// }
+			groups, err := h.auth.Authenticate(w, r)
+			if err != nil {
+				http.Error(w, errors.Wrap(err, "authenticating").Error(), http.StatusBadRequest)
+				return
+			}
 
-func (h *Handler) isAuthorized(w http.ResponseWriter, r *http.Request, req *pilosa.QueryRequest, index, desiredPermission, endpoint string) bool {
-	if h.auth == nil {
-		return true
-	}
-	groups, err := h.auth.Authenticate(w, r)
-	if err != nil {
-		http.Error(w, errors.Wrap(err, "authenticating").Error(), http.StatusBadRequest)
-		return false
-	}
+			indexName, ok := mux.Vars(r)["index"]
+			if !ok {
+				indexName = ""
+			}
 
-	p, err := h.permissions.GetPermissions(groups, index)
-	uinfo := h.auth.GetUserInfo(w, r)
-	var query string
-	if req != nil {
-		query = fmt.Sprintf("%s%s", req.Query, req.SQLQuery)
-	}
-	h.querylogger.Infof("User ID: %s, User Name: %s, Endpoint: %s, Index: %s, Query: %s, Err: %v", uinfo.UserID, uinfo.UserName, endpoint, index, query, err)
-	if err != nil || !authz.IsComparable(p, desiredPermission) {
-		w.Header().Add("Content-Type", "text/plain")
-		w.WriteHeader(http.StatusForbidden)
-		return false
-	}
+			p, err := h.permissions.GetPermissions(groups, indexName)
+			uinfo := h.auth.GetUserInfo(w, r)
 
-	return true
+			//get query string if applicable
+			var query string
+			// qreq := r.Context().Value(contextKeyQueryRequest)
+			// req, ok := qreq.(*pilosa.QueryRequest)
+			// if !ok {
+			// 	query = fmt.Sprintf("%s%s", req.Query, req.SQLQuery)
+			// }
+
+			h.querylogger.Infof("User ID: %s, User Name: %s, Endpoint: %s, Index: %s, Query: %s, Err: %v", uinfo.UserID, uinfo.UserName, r.URL.Path, indexName, query, err)
+			if err != nil || !authz.IsComparable(p, perm.String()) {
+				w.Header().Add("Content-Type", "text/plain")
+				w.WriteHeader(http.StatusForbidden)
+				return
+			}
+		}
+		handler.ServeHTTP(w, r)
+
+	}
 }
+
+// TODO: DELETE
+
+// func (h *Handler) isAuthorized(w http.ResponseWriter, r *http.Request, req *pilosa.QueryRequest, index, desiredPermission, endpoint string) bool {
+// 	if h.auth == nil {
+// 		return true
+// 	}
+// 	groups, err := h.auth.Authenticate(w, r)
+// 	if err != nil {
+// 		http.Error(w, errors.Wrap(err, "authenticating").Error(), http.StatusBadRequest)
+// 		return false
+// 	}
+
+// 	p, err := h.permissions.GetPermissions(groups, index)
+// 	uinfo := h.auth.GetUserInfo(w, r)
+// 	var query string
+// 	if req != nil {
+// 		query = fmt.Sprintf("%s%s", req.Query, req.SQLQuery)
+// 	}
+// 	h.querylogger.Infof("User ID: %s, User Name: %s, Endpoint: %s, Index: %s, Query: %s, Err: %v", uinfo.UserID, uinfo.UserName, endpoint, index, query, err)
+// 	if err != nil || !authz.IsComparable(p, desiredPermission) {
+// 		w.Header().Add("Content-Type", "text/plain")
+// 		w.WriteHeader(http.StatusForbidden)
+// 		return false
+// 	}
+
+// 	return true
+// }
 
 // statikHandler implements the http.Handler interface, and responds to
 // requests for static assets with the appropriate file contents embedded
@@ -846,9 +882,9 @@ func (h *Handler) handleGetStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleGetInfo(w http.ResponseWriter, r *http.Request) {
-	if !h.isAuthorized(w, r, nil, "--", authz.Admin.String(), r.URL.Path) {
-		return
-	}
+	// if !h.isAuthorized(w, r, nil, "--", authz.Admin.String(), r.URL.Path) {
+	// 	return
+	// }
 
 	if !validHeaderAcceptJSON(r.Header) {
 		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
@@ -891,9 +927,9 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 	qerr := r.Context().Value(contextKeyQueryError)
 	req, ok := qreq.(*pilosa.QueryRequest)
 
-	if !h.isAuthorized(w, r, req, req.Index, authz.Admin.String(), r.URL.Path) {
-		return
-	}
+	// if !h.isAuthorized(w, r, req, req.Index, authz.Admin.String(), r.URL.Path) {
+	// 	return
+	// }
 
 	if DoPerQueryProfiling {
 		backend := pilosa.CurrentBackend()
@@ -2465,9 +2501,9 @@ func (h *Handler) handlePostClusterResizeRemoveNode(w http.ResponseWriter, r *ht
 		return
 	}
 
-	if !h.isAuthorized(w, r, nil, "--", authz.Admin.String(), r.URL.Path) {
-		return
-	}
+	// if !h.isAuthorized(w, r, nil, "--", authz.Admin.String(), r.URL.Path) {
+	// 	return
+	// }
 	// Decode request.
 	var req removeNodeRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
@@ -2505,9 +2541,9 @@ type removeNodeResponse struct {
 
 // handlePostClusterResizeAbort handles POST /cluster/resize/abort request.
 func (h *Handler) handlePostClusterResizeAbort(w http.ResponseWriter, r *http.Request) {
-	if !h.isAuthorized(w, r, nil, "--", authz.Admin.String(), r.URL.Path) {
-		return
-	}
+	// if !h.isAuthorized(w, r, nil, "--", authz.Admin.String(), r.URL.Path) {
+	// 	return
+	// }
 
 	if !validHeaderAcceptJSON(r.Header) {
 		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
