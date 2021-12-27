@@ -84,9 +84,6 @@ type Config struct {
 	// LogPath configures where Pilosa will write logs.
 	LogPath string `toml:"log-path"`
 
-	// QueryLogPath, security logs
-	QueryLogPath string `toml:"query-log-path"`
-
 	// Verbose toggles verbose logging which can be useful for debugging.
 	Verbose bool `toml:"verbose"`
 
@@ -253,6 +250,7 @@ type Auth struct {
 	HashKey          string   `toml:"hash-key"`
 	BlockKey         string   `toml:"block-key"`
 	PermissionsFile  string   `toml:"permissions"`
+	QueryLogPath     string   `toml:"query-log-path"`
 }
 
 // Namespace returns the namespace to use based on the Future flag.

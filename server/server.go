@@ -69,10 +69,10 @@ type Command struct {
 	// done will be closed when Command.Close() is called
 	done chan struct{}
 
-	logOutput io.Writer
+	logOutput      io.Writer
 	querylogOutput io.Writer
-	logger    loggerLogger
-	querylogger loggerLogger
+	logger         loggerLogger
+	querylogger    loggerLogger
 
 	Handler      pilosa.Handler
 	grpcServer   *grpcServer
@@ -336,10 +336,6 @@ func (m *Command) SetupServer() error {
 	if err != nil {
 		return errors.Wrap(err, "setting up logger")
 	}
-	err = m.setupQueryLogger()
-	if err != nil {
-		return errors.Wrap(err, "setting up querylogger")
-	}
 
 	m.logger.Infof("%s", pilosa.VersionInfo(m.Config.Future.Rename))
 
@@ -530,6 +526,7 @@ func (m *Command) SetupServer() error {
 		return errors.Wrap(err, "new grpc server")
 	}
 
+	var p authz.GroupPermissions
 	if m.Config.Auth.Enable {
 		m.Config.MustValidateAuth()
 		permsFile, err := os.Open(m.Config.Auth.PermissionsFile)
@@ -538,7 +535,6 @@ func (m *Command) SetupServer() error {
 		}
 		defer permsFile.Close()
 
-		var p authz.GroupPermissions
 		if err = p.ReadPermissionsFile(permsFile); err != nil {
 			return err
 		}
@@ -547,6 +543,11 @@ func (m *Command) SetupServer() error {
 		m.auth, err = authn.NewAuth(m.logger, m.listenURI.String(), ac.Scopes, ac.AuthorizeURL, ac.TokenURL, ac.GroupEndpointURL, ac.LogoutURL, ac.ClientId, ac.ClientSecret, ac.HashKey, ac.BlockKey)
 		if err != nil {
 			return errors.Wrap(err, "instantiating authN object")
+		}
+
+		err = m.setupQueryLogger()
+		if err != nil {
+			return errors.Wrap(err, "setting up querylogger")
 		}
 	}
 
@@ -559,7 +560,8 @@ func (m *Command) SetupServer() error {
 		http.OptHandlerListener(m.ln, m.Config.Advertise),
 		http.OptHandlerCloseTimeout(m.closeTimeout),
 		http.OptHandlerMiddleware(m.grpcServer.middleware(m.Config.Handler.AllowedOrigins)),
-		http.OptHandlerAuth(m.auth),
+		http.OptHandlerAuthN(m.auth),
+		http.OptHandlerAuthZ(&p),
 	)
 	return errors.Wrap(err, "new handler")
 }
@@ -609,13 +611,13 @@ func (m *Command) setupQueryLogger() error {
 	var f *logger.FileWriter
 	var err error
 
-	if m.Config.QueryLogPath == "" {
-		f, err = logger.NewFileWriterMode( "queries/query.log", 600)
+	if m.Config.Auth.QueryLogPath == "" {
+		f, err = logger.NewFileWriterMode("queries/query.log", 600)
 		if err != nil {
 			return errors.Wrap(err, "opening file")
 		}
 	} else {
-		f, err = logger.NewFileWriterMode(m.Config.QueryLogPath , 600)
+		f, err = logger.NewFileWriterMode(m.Config.Auth.QueryLogPath, 600)
 		if err != nil {
 			return errors.Wrap(err, "opening file")
 		}
@@ -624,18 +626,18 @@ func (m *Command) setupQueryLogger() error {
 
 	m.querylogger = logger.NewStandardLogger(m.querylogOutput)
 
-		sighup := make(chan os.Signal, 1)
-		signal.Notify(sighup, syscall.SIGHUP)
-		go func() {
-			for {
-				// reopen log file on SIGHUP
-				<-sighup
-				err = f.Reopen()
-				if err != nil {
-					m.querylogger.Infof("reopen: %s\n", err.Error())
-				}
+	sighup := make(chan os.Signal, 1)
+	signal.Notify(sighup, syscall.SIGHUP)
+	go func() {
+		for {
+			// reopen log file on SIGHUP
+			<-sighup
+			err = f.Reopen()
+			if err != nil {
+				m.querylogger.Infof("reopen: %s\n", err.Error())
 			}
-		}()
+		}
+	}()
 	return nil
 }
 
