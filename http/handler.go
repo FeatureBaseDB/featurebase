@@ -30,6 +30,7 @@ import (
 	"github.com/gorilla/mux"
 	pilosa "github.com/molecula/featurebase/v2"
 	"github.com/molecula/featurebase/v2/authn"
+	"github.com/molecula/featurebase/v2/authz"
 	"github.com/molecula/featurebase/v2/encoding/proto"
 	"github.com/molecula/featurebase/v2/ingest"
 	"github.com/molecula/featurebase/v2/logger"
@@ -72,6 +73,8 @@ type Handler struct {
 	pprofCPUProfileBuffer *bytes.Buffer
 
 	auth *authn.Auth
+
+	permissions *authz.GroupPermissions
 }
 
 // externalPrefixFlag denotes endpoints that are intended to be exposed to clients.
@@ -118,9 +121,16 @@ func OptHandlerAPI(api *pilosa.API) handlerOption {
 	}
 }
 
-func OptHandlerAuth(auth *authn.Auth) handlerOption {
+func OptHandlerAuthN(authn *authn.Auth) handlerOption {
 	return func(h *Handler) error {
-		h.auth = auth
+		h.auth = authn
+		return nil
+	}
+}
+
+func OptHandlerAuthZ(gp *authz.GroupPermissions) handlerOption {
+	return func(h *Handler) error {
+		h.permissions = gp
 		return nil
 	}
 }
@@ -518,19 +528,35 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.Handler.ServeHTTP(w, r)
 }
 
-// func (h *Handler)checkAuthorization(w http.ResponseWriter, r *http.Request, index string, neededPermission string) (bool, error){
-// 	groups, err := h.auth.Authenticate(w, r)
-// 	if err != nil {
-// 		return false, errors.Wrap(err, "authenticating")
-// 	}
-
-// 	for group := range groups{
-// 		// is this group admin?
-// 		// what kind of permissions do they have for this index?
-
-// 	}
+// func (h *Handler) isAuthenticated(w http.ResponseWriter, r *http.Request) bool {
 
 // }
+
+func (h *Handler) isAuthorized(w http.ResponseWriter, r *http.Request, req *pilosa.QueryRequest, index, desiredPermission, endpoint string) bool {
+	if h.auth == nil {
+		return true
+	}
+	groups, err := h.auth.Authenticate(w, r)
+	if err != nil {
+		http.Error(w, errors.Wrap(err, "authenticating").Error(), http.StatusBadRequest)
+		return false
+	}
+
+	p, err := h.permissions.GetPermissions(groups, index)
+	uinfo := h.auth.GetUserInfo(w, r)
+	var query string
+	if req != nil {
+		query = fmt.Sprintf("%s%s", req.Query, req.SQLQuery)
+	}
+	h.querylogger.Infof("User ID: %s, User Name: %s, Endpoint: %s, Index: %s, Query: %s, Err: %v", uinfo.UserID, uinfo.UserName, endpoint, index, query, err)
+	if err != nil || !authz.IsComparable(p, desiredPermission) {
+		w.Header().Add("Content-Type", "text/plain")
+		w.WriteHeader(http.StatusForbidden)
+		return false
+	}
+
+	return true
+}
 
 // statikHandler implements the http.Handler interface, and responds to
 // requests for static assets with the appropriate file contents embedded
@@ -820,6 +846,10 @@ func (h *Handler) handleGetStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleGetInfo(w http.ResponseWriter, r *http.Request) {
+	if !h.isAuthorized(w, r, nil, "--", authz.Admin.String(), r.URL.Path) {
+		return
+	}
+
 	if !validHeaderAcceptJSON(r.Header) {
 		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
 		return
@@ -860,6 +890,10 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 	qreq := r.Context().Value(contextKeyQueryRequest)
 	qerr := r.Context().Value(contextKeyQueryError)
 	req, ok := qreq.(*pilosa.QueryRequest)
+
+	if !h.isAuthorized(w, r, req, req.Index, authz.Admin.String(), r.URL.Path) {
+		return
+	}
 
 	if DoPerQueryProfiling {
 		backend := pilosa.CurrentBackend()
@@ -2430,6 +2464,10 @@ func (h *Handler) handlePostClusterResizeRemoveNode(w http.ResponseWriter, r *ht
 		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
 		return
 	}
+
+	if !h.isAuthorized(w, r, nil, "--", authz.Admin.String(), r.URL.Path) {
+		return
+	}
 	// Decode request.
 	var req removeNodeRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
@@ -2467,6 +2505,10 @@ type removeNodeResponse struct {
 
 // handlePostClusterResizeAbort handles POST /cluster/resize/abort request.
 func (h *Handler) handlePostClusterResizeAbort(w http.ResponseWriter, r *http.Request) {
+	if !h.isAuthorized(w, r, nil, "--", authz.Admin.String(), r.URL.Path) {
+		return
+	}
+
 	if !validHeaderAcceptJSON(r.Header) {
 		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
 		return

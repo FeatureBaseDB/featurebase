@@ -29,6 +29,15 @@ type GroupPermissions struct {
 	Admin       string                       `yaml:"admin"`
 }
 
+type Permission int64
+
+const (
+	None Permission = iota
+	Read
+	Write
+	Admin
+)
+
 func (p *GroupPermissions) ReadPermissionsFile(permsFile io.Reader) (err error) {
 	permsData, err := ioutil.ReadAll(permsFile)
 
@@ -117,4 +126,34 @@ func (p *GroupPermissions) GetAuthorizedIndexList(groups []authn.Group, desiredP
 		}
 	}
 	return indexList
+}
+
+func IsComparable(from, to string) bool {
+	switch from {
+	case "admin":
+		return true
+	case "write":
+		if to == "write" || to == "read" {
+			return true
+		}
+	case "read":
+		if to == "read" {
+			return true
+		}
+	}
+	return false
+}
+
+func (p Permission) String() string {
+	switch p {
+	case Read:
+		return "read"
+	case Write:
+		return "write"
+	case Admin:
+		return "admin"
+	case None:
+		return "none"
+	}
+	return "unknown"
 }
