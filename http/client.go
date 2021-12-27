@@ -109,7 +109,6 @@ func NewInternalClientFromURI(defaultURI *pnet.URI, remoteClient *http.Client, o
 	}
 
 	if ic.retryableClient == nil {
-		fmt.Println("no retry policy")
 		rc := retryablehttp.NewClient()
 		rc.HTTPClient = ic.httpClient
 		rc.CheckRetry = noRetryPolicy
