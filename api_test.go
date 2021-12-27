@@ -1415,3 +1415,25 @@ func TestVariousApiTranslateCalls(t *testing.T) {
 		*/
 	}
 }
+
+func TestAPI_RBFDebugInfo(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	c := test.MustRunCluster(t, 1,
+		[]server.CommandOption{
+			server.OptCommandServerOptions(
+				pilosa.OptServerNodeID("node0"),
+				pilosa.OptServerClusterHasher(&offsetModHasher{}),
+				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+			)},
+	)
+	defer c.Close()
+
+	coord := c.GetPrimary()
+
+	if _, err := coord.API.CreateIndex(ctx, "i", pilosa.IndexOptions{}); err != nil {
+		t.Fatal(err)
+	} else if infos := coord.API.RBFDebugInfo(); infos == nil {
+		t.Fatal("expected info")
+	}
+}

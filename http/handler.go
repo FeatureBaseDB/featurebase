@@ -441,6 +441,9 @@ func newRouter(handler *Handler) http.Handler {
 	router.HandleFunc("/internal/idalloc/data", handler.handleIDAllocData).Methods("GET").Name("IDAllocData")
 
 	router.HandleFunc("/internal/restore/{index}/{shardID}", handler.handlePostRestore).Methods("POST").Name("Restore")
+
+	router.HandleFunc("/internal/debug/rbf", handler.handleGetInternalDebugRBFJSON).Methods("GET").Name("GetInternalDebugRBFJSON")
+
 	// endpoints for collecting cpu profiles from a chosen begin point to
 	// when the client wants to stop. Used for profiling imports that
 	// could be long or short.
@@ -2062,6 +2065,18 @@ func validateProtobufHeader(r *http.Request) (error string, code int) {
 		return "Not acceptable", http.StatusNotAcceptable
 	}
 	return
+}
+
+// handleGetInternalDebugRBFJSON handles /internal/debug/rbf requests.
+func (h *Handler) handleGetInternalDebugRBFJSON(w http.ResponseWriter, r *http.Request) {
+	buf, err := json.MarshalIndent(h.api.RBFDebugInfo(), "", "  ")
+	if err != nil {
+		http.Error(w, "marshal json: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(buf)
 }
 
 // handleGetMetricsJSON handles /metrics.json requests, translating text metrics results to more consumable JSON.

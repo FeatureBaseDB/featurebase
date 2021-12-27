@@ -7,6 +7,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime/debug"
+	"sort"
 	"sync"
 	"syscall"
 
@@ -637,6 +639,7 @@ func (db *DB) Begin(writable bool) (_ *Tx, err error) {
 		pageMap:     db.pageMap,
 		walPageN:    db.walPageN,
 		writable:    writable,
+		stack:       debug.Stack(), // DEBUG
 
 		DeleteEmptyContainer: true,
 	}
@@ -813,6 +816,20 @@ func (db *DB) getCursor(tx *Tx) *Cursor {
 	c := cursorSyncPool.Get().(*Cursor)
 	c.tx = tx
 	return c
+}
+
+func (db *DB) DebugInfo() *DebugInfo {
+	info := &DebugInfo{Path: db.Path}
+	for tx := range db.txs {
+		info.Txs = append(info.Txs, tx.DebugInfo())
+	}
+	sort.Slice(info.Txs, func(i, j int) bool { return info.Txs[i].Ptr < info.Txs[j].Ptr })
+	return info
+}
+
+type DebugInfo struct {
+	Path string         `json:"path"`
+	Txs  []*TxDebugInfo `json:"txs"`
 }
 
 // Shared pool for in-memory database pages.

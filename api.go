@@ -23,6 +23,7 @@ import (
 
 	"github.com/molecula/featurebase/v2/disco"
 	"github.com/molecula/featurebase/v2/ingest"
+	"github.com/molecula/featurebase/v2/rbf"
 
 	//"github.com/molecula/featurebase/v2/pg"
 	"github.com/molecula/featurebase/v2/pql"
@@ -3154,6 +3155,21 @@ processing:
 }
 func (api *API) Plan(ctx context.Context, q string) (*Stmt, error) {
 	return api.server.PlanSQL(ctx, q)
+}
+
+func (api *API) RBFDebugInfo() map[string]*rbf.DebugInfo {
+	infos := make(map[string]*rbf.DebugInfo)
+
+	for key, dbShard := range api.holder.Txf().dbPerShard.Flatmap {
+		wrapper, ok := dbShard.W.(*RbfDBWrapper)
+		if !ok {
+			continue
+		}
+
+		skey := fmt.Sprintf("%s/%d", key.index, key.shard)
+		infos[skey] = wrapper.db.DebugInfo()
+	}
+	return infos
 }
 
 type serverInfo struct {
