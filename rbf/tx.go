@@ -65,6 +65,9 @@ type Tx struct {
 	// manages to trigger a *deallocation* (which I don't think should be
 	// happening), we'll process that one after the current list is processed.
 	pendingFreelistAdds []uint32
+
+	// DEBUG
+	stack []byte
 }
 
 func (tx *Tx) DBPath() string {
@@ -2040,6 +2043,20 @@ func (tx *Tx) GetSortedFieldViewList() (fvs []txkey.FieldView, _ error) {
 		fvs = append(fvs, fv)
 	}
 	return
+}
+
+func (tx *Tx) DebugInfo() *TxDebugInfo {
+	return &TxDebugInfo{
+		Ptr:      fmt.Sprintf("%p", tx),
+		Writable: tx.writable,
+		Stack:    string(tx.stack),
+	}
+}
+
+type TxDebugInfo struct {
+	Ptr      string `json:"ptr"`
+	Writable bool   `json:"writable"`
+	Stack    string `json:"stack,omitempty"`
 }
 
 // SnapshotReader returns a reader that provides a snapshot for the current database state.
