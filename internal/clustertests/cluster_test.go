@@ -153,7 +153,7 @@ func TestClusterStuff(t *testing.T) {
 			t.Fatalf("sending stop command: %v", err)
 		}
 		if backupCmd, err = startCmd(
-			"featurebase", "backup", "--host=pilosa1:10101", fmt.Sprintf("--output=%s", tmpdir+"/backuptest2"), "--retry-period=0.5s"); err != nil {
+			"featurebase", "backup", "--host=pilosa1:10101", fmt.Sprintf("--output=%s", tmpdir+"/backuptest2"), "--retry-period=50ms"); err != nil {
 			t.Fatalf("sending second backup command: %v", err)
 		}
 		time.Sleep(time.Millisecond * 5) // want the backup to get started, then fail
