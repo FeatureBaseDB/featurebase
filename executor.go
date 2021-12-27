@@ -179,11 +179,18 @@ func newExecutor(opts ...executorOption) *executor {
 
 func (e *executor) addWorker() {
 	e.workersWG.Add(1)
-	atomic.AddInt64(&e.currentWorkers, 1)
+	n := atomic.AddInt64(&e.currentWorkers, 1)
+	if e.Holder != nil {
+		e.Holder.Stats.Gauge("worker_total", float64(n), 0)
+	}
+
 	go func() {
 		defer e.workersWG.Done()
 		e.worker(e.work)
-		atomic.AddInt64(&e.currentWorkers, -1)
+		n := atomic.AddInt64(&e.currentWorkers, -1)
+		if e.Holder != nil {
+			e.Holder.Stats.Gauge("worker_total", float64(n), 0)
+		}
 	}()
 }
 
@@ -202,6 +209,14 @@ func (e *executor) Close() error {
 	close(e.work)
 	e.workersWG.Wait()
 	return nil
+}
+
+// InitStats initializes stats counters. Must be called after Holder set.
+func (e *executor) InitStats() {
+	if e.Holder != nil {
+		e.Holder.Stats.Count("job_total", 0, 0)
+		e.Holder.Stats.Gauge("worker_total", float64(atomic.LoadInt64(&e.currentWorkers)), 0)
+	}
 }
 
 // Execute executes a PQL query.
@@ -5989,6 +6004,7 @@ type job struct {
 func (e *executor) worker(work chan job) {
 	for j := range work {
 		atomic.AddUint64(&e.workCounter, 1)
+		e.Holder.Stats.Count("job_total", 1, 0)
 		if j.idleHands {
 			return
 		}
