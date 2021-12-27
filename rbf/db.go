@@ -682,7 +682,7 @@ func (db *DB) Begin(writable bool) (_ *Tx, err error) {
 	return tx, nil
 }
 
-// afterCurrentTx produces runs the provided callback, with the db lock
+// afterCurrentTx runs the provided callback, with the db lock
 // held, after all current Tx terminate. It should be called with the db
 // lock held.
 func (db *DB) afterCurrentTx(callback func()) {
