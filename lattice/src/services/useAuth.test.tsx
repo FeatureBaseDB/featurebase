@@ -4,6 +4,7 @@ import ReactDOM from 'react-dom';
 
 import { ProvideAuth, useAuth } from 'services/useAuth';
 import { pilosa } from './eventServices';
+
 jest.mock('./eventServices');
 
 const AUTHENTICATED = 'Authenticated';
@@ -26,7 +27,7 @@ beforeEach(() => {
   jest.clearAllMocks();
 });
 
-test('useAuth - expect authenticated', async () => {
+test('test useAuth - expect authenticated', async () => {
   const mockResponse: AxiosResponse<any> = {
     status: 200,
     data: 'OK',
