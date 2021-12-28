@@ -576,34 +576,6 @@ func (h *Handler) mwAuth(handler http.HandlerFunc, perm authz.Permission) http.H
 	}
 }
 
-// TODO: DELETE
-
-// func (h *Handler) isAuthorized(w http.ResponseWriter, r *http.Request, req *pilosa.QueryRequest, index, desiredPermission, endpoint string) bool {
-// 	if h.auth == nil {
-// 		return true
-// 	}
-// 	groups, err := h.auth.Authenticate(w, r)
-// 	if err != nil {
-// 		http.Error(w, errors.Wrap(err, "authenticating").Error(), http.StatusBadRequest)
-// 		return false
-// 	}
-
-// 	p, err := h.permissions.GetPermissions(groups, index)
-// 	uinfo := h.auth.GetUserInfo(w, r)
-// 	var query string
-// 	if req != nil {
-// 		query = fmt.Sprintf("%s%s", req.Query, req.SQLQuery)
-// 	}
-// 	h.querylogger.Infof("User ID: %s, User Name: %s, Endpoint: %s, Index: %s, Query: %s, Err: %v", uinfo.UserID, uinfo.UserName, endpoint, index, query, err)
-// 	if err != nil || !authz.IsComparable(p, desiredPermission) {
-// 		w.Header().Add("Content-Type", "text/plain")
-// 		w.WriteHeader(http.StatusForbidden)
-// 		return false
-// 	}
-
-// 	return true
-// }
-
 // statikHandler implements the http.Handler interface, and responds to
 // requests for static assets with the appropriate file contents embedded
 // in a statik filesystem.
@@ -892,9 +864,6 @@ func (h *Handler) handleGetStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleGetInfo(w http.ResponseWriter, r *http.Request) {
-	// if !h.isAuthorized(w, r, nil, "--", authz.Admin.String(), r.URL.Path) {
-	// 	return
-	// }
 
 	if !validHeaderAcceptJSON(r.Header) {
 		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
@@ -2511,9 +2480,6 @@ func (h *Handler) handlePostClusterResizeRemoveNode(w http.ResponseWriter, r *ht
 		return
 	}
 
-	// if !h.isAuthorized(w, r, nil, "--", authz.Admin.String(), r.URL.Path) {
-	// 	return
-	// }
 	// Decode request.
 	var req removeNodeRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
@@ -2551,9 +2517,6 @@ type removeNodeResponse struct {
 
 // handlePostClusterResizeAbort handles POST /cluster/resize/abort request.
 func (h *Handler) handlePostClusterResizeAbort(w http.ResponseWriter, r *http.Request) {
-	// if !h.isAuthorized(w, r, nil, "--", authz.Admin.String(), r.URL.Path) {
-	// 	return
-	// }
 
 	if !validHeaderAcceptJSON(r.Header) {
 		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
