@@ -506,6 +506,10 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	s.holder.schemator = s.schemator
 	s.holder.sharder = s.sharder
 	s.holder.serializer = s.serializer
+
+	// Initial stats must be invoked after the executor obtains reference to the holder.
+	s.executor.InitStats()
+
 	return s, nil
 }
 
