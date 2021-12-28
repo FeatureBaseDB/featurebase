@@ -283,6 +283,7 @@ type contextKeyQuery int
 const (
 	contextKeyQueryRequest contextKeyQuery = iota
 	contextKeyQueryError
+	contextKeyGroupMembership
 )
 
 // addQueryContext puts the results of handler.readQueryRequest into the Context for use by
@@ -547,6 +548,7 @@ func (h *Handler) mwAuth(handler http.HandlerFunc, perm authz.Permission) http.H
 			}
 
 			p, err := h.permissions.GetPermissions(groups, indexName)
+			//check error
 			uinfo := h.auth.GetUserInfo(w, r)
 
 			//get query string if applicable
@@ -563,13 +565,17 @@ func (h *Handler) mwAuth(handler http.HandlerFunc, perm authz.Permission) http.H
 					perm = authz.Write
 				}
 			}
-
-			h.querylogger.Infof("User ID: %s, User Name: %s, Endpoint: %s, Index: %s, Query: %s, Err: %v", uinfo.UserID, uinfo.UserName, r.URL.Path, indexName, queryString, err)
+			if perm != authz.Admin {
+				h.querylogger.Infof("User ID: %s, User Name: %s, Endpoint: %s, Index: %s, Query: %s, Err: %v", uinfo.UserID, uinfo.UserName, r.URL.Path, indexName, queryString, err)
+			}
 			if err != nil || !authz.IsComparable(p, perm.String()) {
 				w.Header().Add("Content-Type", "text/plain")
 				w.WriteHeader(http.StatusForbidden)
 				return
 			}
+
+			ctx := context.WithValue(r.Context(), contextKeyGroupMembership, groups)
+			handler.ServeHTTP(w, r.WithContext(ctx))
 		}
 		handler.ServeHTTP(w, r)
 
@@ -744,6 +750,15 @@ func headerAcceptRoaringRow(header http.Header) bool {
 	return false
 }
 
+//WIP
+func (h *Handler) filterResponse(schema []*pilosa.IndexInfo, g []authn.Group) {
+	// if h.auth != nil{
+	// 	indexes := h.permissions.GetAuthorizedIndexList(g, authz.Read.String())
+
+	// }
+
+}
+
 // handleGetSchema handles GET /schema requests.
 func (h *Handler) handleGetSchema(w http.ResponseWriter, r *http.Request) {
 	if !validHeaderAcceptJSON(r.Header) {
@@ -759,6 +774,9 @@ func (h *Handler) handleGetSchema(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		h.logger.Printf("getting schema error: %s", err)
 	}
+
+	groups := r.Context().Value(contextKeyGroupMembership)
+	h.filterResponse(schema, groups.([]authn.Group))
 
 	if err := json.NewEncoder(w).Encode(pilosa.Schema{Indexes: schema}); err != nil {
 		h.logger.Errorf("write schema response error: %s", err)
