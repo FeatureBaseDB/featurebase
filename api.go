@@ -131,9 +131,16 @@ func (api *API) SetAPIOptions(opts ...apiOption) error {
 var validAPIMethods = map[disco.ClusterState]map[apiMethod]struct{}{
 	disco.ClusterStateStarting: methodsCommon,
 	disco.ClusterStateNormal:   appendMap(methodsCommon, methodsNormal),
-	disco.ClusterStateDegraded: appendMap(methodsCommon, methodsDegraded),
+	// Ideally, this would be just `appendMap(methodsCommon, methodsDegraded)`,
+	// but in an attempt to reduce the influence that state (determined by etcd)
+	// has on a node under load, this is set to effectively allow all requests
+	// in a DEGRADED state.
+	disco.ClusterStateDegraded: appendMap(methodsCommon, methodsNormal),
 	disco.ClusterStateResizing: appendMap(methodsCommon, methodsResizing),
-	disco.ClusterStateDown:     methodsCommon,
+	// Ideally, this would be just `methodsCommon`, but in an attempt to reduce
+	// the influence that state (determined by etcd) has on a node under load,
+	// this is set to effectively allow all requests in a DOWN state.
+	disco.ClusterStateDown: appendMap(methodsCommon, methodsNormal),
 }
 
 func appendMap(a, b map[apiMethod]struct{}) map[apiMethod]struct{} {
