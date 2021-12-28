@@ -149,15 +149,15 @@ func TestClusterStuff(t *testing.T) {
 		// now do backup with all nodes down and too short a timeout
 		// so it fails. Has be to be all 3 because the cluster has
 		// replicas=3 and the backup command will retry on replicas.
-		if err = sendCmd("docker", "stop", "clustertests_pilosa2_1"); err != nil {
-			t.Fatalf("sending stop command: %v", err)
-		}
 		if backupCmd, err = startCmd(
-			"featurebase", "backup", "--host=pilosa1:10101", fmt.Sprintf("--output=%s", tmpdir+"/backuptest2"), "--retry-period=0.5s"); err != nil {
+			"featurebase", "backup", "--host=pilosa1:10101", fmt.Sprintf("--output=%s", tmpdir+"/backuptest2"), "--retry-period=200ms"); err != nil {
 			t.Fatalf("sending second backup command: %v", err)
 		}
-		time.Sleep(time.Millisecond * 5) // want the backup to get started, then fail
+		time.Sleep(time.Millisecond * 10) // want the backup to get started, then fail
 		if err = sendCmd("docker", "stop", "clustertests_pilosa1_1"); err != nil {
+			t.Fatalf("sending stop command: %v", err)
+		}
+		if err = sendCmd("docker", "stop", "clustertests_pilosa2_1"); err != nil {
 			t.Fatalf("sending stop command: %v", err)
 		}
 		if err = sendCmd("docker", "stop", "clustertests_pilosa3_1"); err != nil {
@@ -165,6 +165,7 @@ func TestClusterStuff(t *testing.T) {
 		}
 
 		time.Sleep(time.Second * 5)
+
 		if err = sendCmd("docker", "start", "clustertests_pilosa1_1"); err != nil {
 			t.Fatalf("sending start command: %v", err)
 		}

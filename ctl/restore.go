@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -137,8 +138,7 @@ func (cmd *RestoreCommand) restoreSchema(ctx context.Context, primary *topology.
 	if len(existingSchema) == 0 {
 		cmd.Logger().Printf("Load Schema")
 		url := primary.URI.Path("/schema")
-		client := retryablehttp.NewClient()
-		client.RetryWaitMax = cmd.RetryPeriod
+		client := cmd.newClient()
 		_, err = client.Post(url, "application/json", f)
 	} else {
 		schema := &pilosa.Schema{}
@@ -185,6 +185,27 @@ func retryWith400(ctx context.Context, resp *http.Response, err error) (bool, er
 	return retryablehttp.DefaultRetryPolicy(ctx, resp, err)
 }
 
+// This logic is taken from featurebase/http/client.go If this logic
+// is not the same as what's there, that could be a problem. Ideally
+// all network calls from restore would go through the client and this
+// would not longer be needed.
+func (cmd *RestoreCommand) newClient() *retryablehttp.Client {
+	min := time.Millisecond * 100
+
+	// do some math to figure out how many attempts we need to get our
+	// total sleep time close to the period
+	attempts := math.Log2(float64(cmd.RetryPeriod)) - math.Log2(float64(min))
+	attempts += 0.3 // mmmm, fudge
+	if attempts < 1 {
+		attempts = 1
+	}
+	client := retryablehttp.NewClient()
+	client.RetryWaitMin = min
+	client.RetryMax = int(attempts)
+	client.CheckRetry = retryWith400
+	return client
+}
+
 func (cmd *RestoreCommand) restoreIDAlloc(ctx context.Context, primary *topology.Node) error {
 	logger := cmd.Logger()
 
@@ -200,9 +221,7 @@ func (cmd *RestoreCommand) restoreIDAlloc(ctx context.Context, primary *topology
 	logger.Printf("Load idalloc")
 	url := primary.URI.Path("/internal/idalloc/restore")
 
-	client := retryablehttp.NewClient()
-	client.RetryWaitMax = cmd.RetryPeriod
-	client.CheckRetry = retryWith400
+	client := cmd.newClient()
 	_, err = client.Post(url, "application/octet-stream", f)
 	return err
 }
@@ -279,9 +298,7 @@ func (cmd *RestoreCommand) restoreShard(ctx context.Context, filename string) er
 		req = req.WithContext(ctx)
 		req.Header.Set("Content-Type", "application/octet-stream")
 
-		client := retryablehttp.NewClient()
-		client.RetryWaitMax = cmd.RetryPeriod
-		client.CheckRetry = retryWith400
+		client := cmd.newClient()
 		resp, err := client.Do(req)
 		if err != nil {
 			return err
