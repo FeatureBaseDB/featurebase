@@ -2593,14 +2593,17 @@ func (s queryValidationSpec) validate(query url.Values) error {
 	return nil
 }
 
-func GetHTTPClient(t *tls.Config) *http.Client {
+type ClientOption func(client *http.Client, dialer *net.Dialer) *http.Client
+
+func GetHTTPClient(t *tls.Config, opts ...ClientOption) *http.Client {
+	dialer := &net.Dialer{
+		Timeout:   30 * time.Second,
+		KeepAlive: 30 * time.Second,
+		DualStack: true,
+	}
 	transport := &http.Transport{
-		Proxy: http.ProxyFromEnvironment,
-		DialContext: (&net.Dialer{
-			Timeout:   30 * time.Second,
-			KeepAlive: 30 * time.Second,
-			DualStack: true,
-		}).DialContext,
+		Proxy:                 http.ProxyFromEnvironment,
+		DialContext:           dialer.DialContext,
 		MaxIdleConns:          1000,
 		MaxIdleConnsPerHost:   200,
 		IdleConnTimeout:       90 * time.Second,
@@ -2610,7 +2613,12 @@ func GetHTTPClient(t *tls.Config) *http.Client {
 	if t != nil {
 		transport.TLSClientConfig = t
 	}
-	return &http.Client{Transport: transport}
+
+	client := &http.Client{Transport: transport}
+	for _, opt := range opts {
+		client = opt(client, dialer)
+	}
+	return client
 }
 
 // handlePostImportAtomicRecord handles /import-atomic-record requests

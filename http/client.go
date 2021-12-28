@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math"
 	"math/rand"
 	"net/http"
 	"net/url"
@@ -64,11 +65,22 @@ type InternalClientOption func(c *InternalClient)
 
 // WithClientRetryPeriod is the max amount of total time the client will
 // retry failed requests using exponential backoff.
-func WithClientRetryPeriod(waitMax time.Duration) InternalClientOption {
+func WithClientRetryPeriod(period time.Duration) InternalClientOption {
+	min := time.Millisecond * 100
+
+	// do some math to figure out how many attempts we need to get our
+	// total sleep time close to the period
+	attempts := math.Log2(float64(period)) - math.Log2(float64(min))
+	attempts += 0.3 // mmmm, fudge
+	if attempts < 1 {
+		attempts = 1
+	}
+	fmt.Println("attempts: ", int(attempts))
 	return func(c *InternalClient) {
 		rc := retryablehttp.NewClient()
 		rc.HTTPClient = c.httpClient
-		rc.RetryWaitMax = waitMax
+		rc.RetryWaitMin = min
+		rc.RetryMax = int(attempts)
 		rc.CheckRetry = retryWith400Policy
 		c.retryableClient = rc
 	}
