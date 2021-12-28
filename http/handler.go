@@ -410,7 +410,7 @@ func newRouter(handler *Handler) http.Handler {
 	router.HandleFunc("/index/{index}/field/{field}/import", handler.handlePostImport).Methods("POST").Name("PostImport")
 	router.HandleFunc("/index/{index}/field/{field}/mutex-check", handler.handleGetMutexCheck).Methods("GET").Name("GetMutexCheck")
 	router.HandleFunc("/index/{index}/field/{field}/import-roaring/{shard}", handler.handlePostImportRoaring).Methods("POST").Name("PostImportRoaring")
-	router.HandleFunc("/index/{index}/query", handler.handlePostQuery).Methods("POST").Name("PostQuery")
+	router.HandleFunc("/index/{index}/query", handler.mwAuth(handler.handlePostQuery, authz.Read)).Methods("POST").Name("PostQuery")
 	router.HandleFunc("/info", handler.mwAuth(handler.handleGetInfo, authz.Admin)).Methods("GET").Name("GetInfo")
 	router.HandleFunc("/recalculate-caches", handler.handleRecalculateCaches).Methods("POST").Name("RecalculateCaches")
 	router.HandleFunc("/schema", handler.handleGetSchema).Methods("GET").Name("GetSchema")
@@ -547,14 +547,21 @@ func (h *Handler) mwAuth(handler http.HandlerFunc, perm authz.Permission) http.H
 			uinfo := h.auth.GetUserInfo(w, r)
 
 			//get query string if applicable
-			var query string
-			// qreq := r.Context().Value(contextKeyQueryRequest)
-			// req, ok := qreq.(*pilosa.QueryRequest)
-			// if !ok {
-			// 	query = fmt.Sprintf("%s%s", req.Query, req.SQLQuery)
-			// }
+			queryRequest := r.Context().Value(contextKeyQueryRequest)
 
-			h.querylogger.Infof("User ID: %s, User Name: %s, Endpoint: %s, Index: %s, Query: %s, Err: %v", uinfo.UserID, uinfo.UserName, r.URL.Path, indexName, query, err)
+			var queryString string
+			if req, ok := queryRequest.(*pilosa.QueryRequest); ok {
+				queryString = req.Query
+			}
+			writeWords := []string{"store", "set", "clear", "clearrow"}
+			q := strings.ToLower(queryString)
+			for _, w := range writeWords {
+				if strings.Contains(q, w) {
+					perm = authz.Write
+				}
+			}
+
+			h.querylogger.Infof("User ID: %s, User Name: %s, Endpoint: %s, Index: %s, Query: %s, Err: %v", uinfo.UserID, uinfo.UserName, r.URL.Path, indexName, queryString, err)
 			if err != nil || !authz.IsComparable(p, perm.String()) {
 				w.Header().Add("Content-Type", "text/plain")
 				w.WriteHeader(http.StatusForbidden)
