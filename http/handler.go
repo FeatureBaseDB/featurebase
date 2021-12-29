@@ -568,7 +568,7 @@ func (h *Handler) mwAuth(handler http.HandlerFunc, perm authz.Permission) http.H
 			if perm != authz.Admin {
 				h.querylogger.Infof("User ID: %s, User Name: %s, Endpoint: %s, Index: %s, Query: %s, Err: %v", uinfo.UserID, uinfo.UserName, r.URL.Path, indexName, queryString, err)
 			}
-			if err != nil || !authz.IsComparable(p, perm.String()) {
+			if err != nil || !p.Satisfies(perm.String()) {
 				w.Header().Add("Content-Type", "text/plain")
 				w.WriteHeader(http.StatusForbidden)
 				return
