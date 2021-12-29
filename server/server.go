@@ -541,6 +541,15 @@ func (m *Command) SetupServer() error {
 		if err != nil {
 			return errors.Wrap(err, "instantiating authN object")
 		}
+
+		// disable postgres binding if auth is enabled
+		m.Config.Postgres.Bind = ""
+
+		// TLS must be enabled if auth is
+		if m.Config.TLS.CertificatePath == "" || m.Config.TLS.CertificateKeyPath == "" || m.Config.TLS.CACertPath == "" {
+			return fmt.Errorf("transport layer security (TLS) is not configured properly. TLS is required when AuthN/Z is enabled, current configuration: %v", m.Config.TLS)
+		}
+
 	}
 
 	m.Handler, err = http.NewHandler(
