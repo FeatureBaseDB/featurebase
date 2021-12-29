@@ -40,16 +40,16 @@ admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 
 	singlePermission := authz.GroupPermissions{
-		Permissions: map[string]map[string]string{
-			"dca35310-ecda-4f23-86cd-876aee55906b": {"test": "read"},
+		Permissions: map[string]map[string]authz.Permission{
+			"dca35310-ecda-4f23-86cd-876aee55906b": {"test": authz.Read},
 		},
 		Admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe",
 	}
 
 	multiPermission := authz.GroupPermissions{
-		Permissions: map[string]map[string]string{
-			"dca35310-ecda-4f23-86cd-876aee55906b": {"test": "read", "test2": "write"},
-			"dca35310-ecda-4f23-86cd-876aee559900": {"test": "write"}},
+		Permissions: map[string]map[string]authz.Permission{
+			"dca35310-ecda-4f23-86cd-876aee55906b": {"test": authz.Read, "test2": authz.Write},
+			"dca35310-ecda-4f23-86cd-876aee559900": {"test": authz.Write}},
 		Admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe",
 	}
 
@@ -123,56 +123,56 @@ admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 		yamlData   string
 		groups     []authn.Group
 		index      string
-		userAccess string
+		userAccess authz.Permission
 		err        string
 	}{
 		{
 			permissions1,
 			groupsList1,
 			"test",
-			"",
+			authz.None,
 			"user is not part of any groups in identity provider",
 		},
 		{
 			permissions1,
 			groupsList3,
 			"test1",
-			"",
+			authz.None,
 			"does not have permission to index",
 		},
 		{
 			permissions2,
 			groupsList2,
 			"test",
-			"",
+			authz.None,
 			"does not have permission to FeatureBase",
 		},
 		{
 			permissions1,
 			groupsList3,
 			"test",
-			"read",
+			authz.Read,
 			"",
 		},
 		{
 			permissions2,
 			groupsList3,
 			"test",
-			"write",
+			authz.Write,
 			"",
 		},
 		{
 			permissions3,
 			groupsList4,
 			"test",
-			"admin",
+			authz.Admin,
 			"",
 		},
 		{
 			permissions4,
 			groupsList3,
 			"test",
-			"",
+			authz.None,
 			"no permissions found",
 		},
 	}
@@ -214,8 +214,8 @@ func TestAuth_IsAdmin(t *testing.T) {
 	}
 
 	groupPermissions := authz.GroupPermissions{
-		Permissions: map[string]map[string]string{
-			"dca35310-ecda-4f23-86cd-876aee55906b": {"test": "write"},
+		Permissions: map[string]map[string]authz.Permission{
+			"dca35310-ecda-4f23-86cd-876aee55906b": {"test": authz.Write},
 		},
 		Admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe",
 	}
@@ -259,13 +259,13 @@ func TestAuth_GetAuthorizedIndexList(t *testing.T) {
 	}
 
 	p := authz.GroupPermissions{
-		Permissions: map[string]map[string]string{
+		Permissions: map[string]map[string]authz.Permission{
 			"dca35310-ecda-4f23-86cd-876aee55906b": {
-				"test1": "read",
-				"test2": "write",
+				"test1": authz.Read,
+				"test2": authz.Write,
 			},
 			"dca35310-ecda-4f23-86cd-876aee559900": {
-				"test3": "read",
+				"test3": authz.Read,
 			},
 		},
 		Admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe",
@@ -273,32 +273,32 @@ func TestAuth_GetAuthorizedIndexList(t *testing.T) {
 
 	tests := []struct {
 		groups     []authn.Group
-		permission string
+		permission authz.Permission
 		output     []string
 	}{
 		{
 			group1,
-			"read",
+			authz.Read,
 			[]string{"test1", "test2"},
 		},
 		{
 			group1,
-			"write",
+			authz.Write,
 			[]string{"test2"},
 		},
 		{
 			group3,
-			"write",
+			authz.Write,
 			nil,
 		},
 		{
 			group2,
-			"read",
+			authz.Read,
 			[]string{"test1", "test2", "test3"},
 		},
 		{
 			group2,
-			"write",
+			authz.Write,
 			[]string{"test1", "test2", "test3"},
 		},
 	}

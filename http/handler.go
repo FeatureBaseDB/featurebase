@@ -587,7 +587,7 @@ func (h *Handler) chkAuthZ(handler http.HandlerFunc, perm authz.Permission) http
 			if r.Method == "POST" {
 				h.querylogger.Infof("User ID: %s, User Name: %s, Endpoint: %s, Index: %s, Query: %s, Err: %v", uinfo.UserID, uinfo.UserName, r.URL.Path, indexName, queryString, err)
 			}
-			if err != nil || !authz.IsComparable(p, perm.String()) {
+			if err != nil || !p.Satisfies(perm.String()) {
 				w.Header().Add("Content-Type", "text/plain")
 				w.WriteHeader(http.StatusForbidden)
 				return

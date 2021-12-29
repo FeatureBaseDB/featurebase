@@ -25,18 +25,33 @@ import (
 )
 
 type GroupPermissions struct {
-	Permissions map[string]map[string]string `yaml:"user-groups"`
-	Admin       string                       `yaml:"admin"`
+	Permissions map[string]map[string]Permission `yaml:"user-groups"`
+	Admin       string                           `yaml:"admin"`
 }
 
-type Permission int64
+type Permission string
 
 const (
-	None Permission = iota
-	Read
-	Write
-	Admin
+	None  Permission = ""
+	Read  Permission = "read"
+	Write Permission = "write"
+	Admin Permission = "admin"
 )
+
+// Satisfies returns whether `p` satisfies the permissions required by `b`
+func (p Permission) Satisfies(b Permission) bool {
+	switch p {
+	case "":
+		return b == ""
+	case "read":
+		return b == "" || b == "read"
+	case "write":
+		return b == "" || b == "read" || b == "write"
+	case "admin":
+		return b == "" || b == "read" || b == "write" || b == "admin"
+	}
+	return false
+}
 
 func (p *GroupPermissions) ReadPermissionsFile(permsFile io.Reader) (err error) {
 	permsData, err := ioutil.ReadAll(permsFile)
@@ -53,19 +68,18 @@ func (p *GroupPermissions) ReadPermissionsFile(permsFile io.Reader) (err error) 
 	return
 }
 
-func (p *GroupPermissions) GetPermissions(groups []authn.Group, index string) (permission string, errors error) {
-
+func (p *GroupPermissions) GetPermissions(groups []authn.Group, index string) (permission Permission, errors error) {
 	if admin := p.IsAdmin(groups); admin {
-		return "admin", nil
+		return Admin, nil
 	}
 
-	allPermissions := map[string]bool{
-		"write": false,
-		"read":  false,
+	allPermissions := map[Permission]bool{
+		Write: false,
+		Read:  false,
 	}
 
 	if len(groups) == 0 {
-		return "", fmt.Errorf("user is not part of any groups in identity provider")
+		return None, fmt.Errorf("user is not part of any groups in identity provider")
 	}
 
 	var groupsDenied []string
@@ -74,7 +88,7 @@ func (p *GroupPermissions) GetPermissions(groups []authn.Group, index string) (p
 			if perm, ok := p.Permissions[group.GroupID][index]; ok {
 				allPermissions[perm] = true
 			} else {
-				return "", fmt.Errorf("user %s does not have permission to index %s", group.UserID, index)
+				return None, fmt.Errorf("user %s does not have permission to index %s", group.UserID, index)
 			}
 		} else {
 			groupsDenied = append(groupsDenied, group.GroupID)
@@ -82,15 +96,15 @@ func (p *GroupPermissions) GetPermissions(groups []authn.Group, index string) (p
 	}
 
 	if len(groupsDenied) == len(groups) {
-		return "", fmt.Errorf("group(s) %s does not have permission to FeatureBase", groupsDenied)
+		return None, fmt.Errorf("group(s) %s does not have permission to FeatureBase", groupsDenied)
 	}
 
-	if allPermissions["write"] {
-		return "write", nil
-	} else if allPermissions["read"] {
-		return "read", nil
+	if allPermissions[Write] {
+		return Write, nil
+	} else if allPermissions[Read] {
+		return Read, nil
 	} else {
-		return "", fmt.Errorf("no permissions found")
+		return None, fmt.Errorf("no permissions found")
 	}
 }
 
@@ -103,7 +117,7 @@ func (p *GroupPermissions) IsAdmin(groups []authn.Group) bool {
 	return false
 }
 
-func (p *GroupPermissions) GetAuthorizedIndexList(groups []authn.Group, desiredPermission string) (indexList []string) {
+func (p *GroupPermissions) GetAuthorizedIndexList(groups []authn.Group, desiredPermission Permission) (indexList []string) {
 	// if user is admin, find all indexes in permissions file and return them
 	if admin := p.IsAdmin(groups); admin {
 		for groupId := range p.Permissions {
@@ -117,43 +131,11 @@ func (p *GroupPermissions) GetAuthorizedIndexList(groups []authn.Group, desiredP
 	for _, group := range groups {
 		if _, ok := p.Permissions[group.GroupID]; ok {
 			for index, permission := range p.Permissions[group.GroupID] {
-				if permission == desiredPermission {
-					indexList = append(indexList, index)
-				} else if permission == "write" && desiredPermission == "read" {
+				if permission >= desiredPermission {
 					indexList = append(indexList, index)
 				}
 			}
 		}
 	}
 	return indexList
-}
-
-func IsComparable(from, to string) bool {
-	switch from {
-	case "admin":
-		return true
-	case "write":
-		if to == "write" || to == "read" {
-			return true
-		}
-	case "read":
-		if to == "read" {
-			return true
-		}
-	}
-	return false
-}
-
-func (p Permission) String() string {
-	switch p {
-	case Read:
-		return "read"
-	case Write:
-		return "write"
-	case Admin:
-		return "admin"
-	case None:
-		return "none"
-	}
-	return "unknown"
 }
