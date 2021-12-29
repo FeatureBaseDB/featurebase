@@ -548,7 +548,8 @@ func (h *Handler) mwAuth(handler http.HandlerFunc, perm authz.Permission) http.H
 			}
 
 			p, err := h.permissions.GetPermissions(groups, indexName)
-			//check error
+			// err is being checked later, after logging
+
 			uinfo := h.auth.GetUserInfo(w, r)
 
 			//get query string if applicable
@@ -565,7 +566,10 @@ func (h *Handler) mwAuth(handler http.HandlerFunc, perm authz.Permission) http.H
 					perm = authz.Write
 				}
 			}
-			if perm != authz.Admin {
+
+			queryString = strings.Replace(queryString, "\n", "", -1)
+
+			if r.Method == "POST" {
 				h.querylogger.Infof("User ID: %s, User Name: %s, Endpoint: %s, Index: %s, Query: %s, Err: %v", uinfo.UserID, uinfo.UserName, r.URL.Path, indexName, queryString, err)
 			}
 			if err != nil || !p.Satisfies(perm.String()) {
@@ -751,13 +755,19 @@ func headerAcceptRoaringRow(header http.Header) bool {
 }
 
 //WIP
-func (h *Handler) filterResponse(schema []*pilosa.IndexInfo, g []authn.Group) {
-	// if h.auth != nil{
-	// 	indexes := h.permissions.GetAuthorizedIndexList(g, authz.Read.String())
+// func (h *Handler) filterResponse(r *http.Request, schema []*pilosa.IndexInfo) {
+// 	if h.auth != nil {
+// 		groups := r.Context().Value(contextKeyGroupMembership)
 
-	// }
+// 		// indexes := h.permissions.GetAuthorizedIndexList(g, authz.Read.String())
+// 		for _, s := range schema {
+// 			h.querylogger.Infof(s.Name)
 
-}
+// 		}
+
+// 	}
+
+// }
 
 // handleGetSchema handles GET /schema requests.
 func (h *Handler) handleGetSchema(w http.ResponseWriter, r *http.Request) {
@@ -776,7 +786,8 @@ func (h *Handler) handleGetSchema(w http.ResponseWriter, r *http.Request) {
 	}
 
 	groups := r.Context().Value(contextKeyGroupMembership)
-	h.filterResponse(schema, groups.([]authn.Group))
+	h.querylogger.Infof("groups: %+v", groups)
+	// h.filterResponse(r, schema)
 
 	if err := json.NewEncoder(w).Encode(pilosa.Schema{Indexes: schema}); err != nil {
 		h.logger.Errorf("write schema response error: %s", err)
