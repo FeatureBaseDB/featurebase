@@ -388,8 +388,8 @@ var latticeRoutes = []string{"/tables", "/query", "/querybuilder", "/signin"} //
 // newRouter creates a new mux http router.
 func newRouter(handler *Handler) http.Handler {
 	router := mux.NewRouter()
-	router.HandleFunc("/cluster/resize/abort", handler.mwAuth(handler.handlePostClusterResizeAbort, authz.Admin)).Methods("POST").Name("PostClusterResizeAbort")
-	router.HandleFunc("/cluster/resize/remove-node", handler.mwAuth(handler.handlePostClusterResizeRemoveNode, authz.Admin)).Methods("POST").Name("PostClusterResizeRemoveNode")
+	router.HandleFunc("/cluster/resize/abort", handler.chkAuthZ(handler.handlePostClusterResizeAbort, authz.Admin)).Methods("POST").Name("PostClusterResizeAbort")
+	router.HandleFunc("/cluster/resize/remove-node", handler.chkAuthZ(handler.handlePostClusterResizeRemoveNode, authz.Admin)).Methods("POST").Name("PostClusterResizeRemoveNode")
 
 	// TODO: figure out how to protect these if needed
 	router.PathPrefix("/debug/pprof/").Handler(http.DefaultServeMux).Methods("GET")
@@ -397,88 +397,88 @@ func newRouter(handler *Handler) http.Handler {
 	router.Handle("/debug/vars", expvar.Handler()).Methods("GET")
 	router.Handle("/metrics", promhttp.Handler())
 
-	router.HandleFunc("/metrics.json", handler.mwAuth(handler.handleGetMetricsJSON, authz.Admin)).Methods("GET").Name("GetMetricsJSON")
-	router.HandleFunc("/export", handler.mwAuth(handler.handleGetExport, authz.Read)).Methods("GET").Name("GetExport")
-	router.HandleFunc("/import-atomic-record", handler.mwAuth(handler.handlePostImportAtomicRecord, authz.Admin)).Methods("POST").Name("PostImportAtomicRecord")
-	router.HandleFunc("/index", handler.mwAuth(handler.handleGetIndexes, authz.Read)).Methods("GET").Name("GetIndexes")
-	router.HandleFunc("/index", handler.mwAuth(handler.handlePostIndex, authz.Admin)).Methods("POST").Name("PostIndex")
-	router.HandleFunc("/index/", handler.mwAuth(handler.handlePostIndex, authz.Admin)).Methods("POST").Name("PostIndex")
-	router.HandleFunc("/index/{index}", handler.mwAuth(handler.handleGetIndex, authz.Read)).Methods("GET").Name("GetIndex")
-	router.HandleFunc("/index/{index}", handler.mwAuth(handler.handlePostIndex, authz.Admin)).Methods("POST").Name("PostIndex")
-	router.HandleFunc("/index/{index}", handler.mwAuth(handler.handleDeleteIndex, authz.Admin)).Methods("DELETE").Name("DeleteIndex")
-	//router.HandleFunc("/index/{index}/field", handler.mwAuth(handler.handleGetFields, authz.Read)).Methods("GET") // Not implemented.
-	router.HandleFunc("/index/{index}/field", handler.mwAuth(handler.handlePostField, authz.Write)).Methods("POST").Name("PostField")
-	router.HandleFunc("/index/{index}/field/", handler.mwAuth(handler.handlePostField, authz.Write)).Methods("POST").Name("PostField")
-	router.HandleFunc("/index/{index}/field/{field}", handler.mwAuth(handler.handlePostField, authz.Write)).Methods("POST").Name("PostField")
-	router.HandleFunc("/index/{index}/field/{field}", handler.mwAuth(handler.handleDeleteField, authz.Write)).Methods("DELETE").Name("DeleteField")
-	router.HandleFunc("/index/{index}/field/{field}/import", handler.mwAuth(handler.handlePostImport, authz.Read)).Methods("POST").Name("PostImport")
-	router.HandleFunc("/index/{index}/field/{field}/mutex-check", handler.mwAuth(handler.handleGetMutexCheck, authz.Read)).Methods("GET").Name("GetMutexCheck")
-	router.HandleFunc("/index/{index}/field/{field}/import-roaring/{shard}", handler.mwAuth(handler.handlePostImportRoaring, authz.Read)).Methods("POST").Name("PostImportRoaring")
-	router.HandleFunc("/index/{index}/query", handler.mwAuth(handler.handlePostQuery, authz.Read)).Methods("POST").Name("PostQuery")
-	router.HandleFunc("/info", handler.mwAuth(handler.handleGetInfo, authz.Admin)).Methods("GET").Name("GetInfo")
-	router.HandleFunc("/recalculate-caches", handler.mwAuth(handler.handleRecalculateCaches, authz.Admin)).Methods("POST").Name("RecalculateCaches")
-	router.HandleFunc("/schema", handler.mwAuth(handler.handleGetSchema, authz.Read)).Methods("GET").Name("GetSchema")
-	router.HandleFunc("/schema/details", handler.mwAuth(handler.handleGetSchemaDetails, authz.Read)).Methods("GET").Name("GetSchemaDetails")
-	router.HandleFunc("/schema", handler.mwAuth(handler.handlePostSchema, authz.Admin)).Methods("POST").Name("PostSchema")
-	router.HandleFunc("/status", handler.mwAuth(handler.handleGetStatus, authz.Read)).Methods("GET").Name("GetStatus")
-	router.HandleFunc("/transaction", handler.mwAuth(handler.handlePostTransaction, authz.Read)).Methods("POST").Name("PostTransaction")
-	router.HandleFunc("/transaction/", handler.mwAuth(handler.handlePostTransaction, authz.Read)).Methods("POST").Name("PostTransaction")
-	router.HandleFunc("/transaction/{id}", handler.mwAuth(handler.handleGetTransaction, authz.Read)).Methods("GET").Name("GetTransaction")
-	router.HandleFunc("/transaction/{id}", handler.mwAuth(handler.handlePostTransaction, authz.Read)).Methods("POST").Name("PostTransaction")
-	router.HandleFunc("/transaction/{id}/finish", handler.mwAuth(handler.handlePostFinishTransaction, authz.Read)).Methods("POST").Name("PostFinishTransaction")
-	router.HandleFunc("/transactions", handler.mwAuth(handler.handleGetTransactions, authz.Read)).Methods("GET").Name("GetTransactions")
-	router.HandleFunc("/queries", handler.mwAuth(handler.handleGetActiveQueries, authz.Read)).Methods("GET").Name("GetActiveQueries")
-	router.HandleFunc("/query-history", handler.mwAuth(handler.handleGetPastQueries, authz.Read)).Methods("GET").Name("GetPastQueries")
-	router.HandleFunc("/version", handler.mwAuth(handler.handleGetVersion, authz.Read)).Methods("GET").Name("GetVersion")
+	router.HandleFunc("/metrics.json", handler.chkAuthZ(handler.handleGetMetricsJSON, authz.Admin)).Methods("GET").Name("GetMetricsJSON")
+	router.HandleFunc("/export", handler.chkAuthZ(handler.handleGetExport, authz.Read)).Methods("GET").Name("GetExport")
+	router.HandleFunc("/import-atomic-record", handler.chkAuthZ(handler.handlePostImportAtomicRecord, authz.Admin)).Methods("POST").Name("PostImportAtomicRecord")
+	router.HandleFunc("/index", handler.chkAuthZ(handler.handleGetIndexes, authz.Read)).Methods("GET").Name("GetIndexes")
+	router.HandleFunc("/index", handler.chkAuthZ(handler.handlePostIndex, authz.Admin)).Methods("POST").Name("PostIndex")
+	router.HandleFunc("/index/", handler.chkAuthZ(handler.handlePostIndex, authz.Admin)).Methods("POST").Name("PostIndex")
+	router.HandleFunc("/index/{index}", handler.chkAuthZ(handler.handleGetIndex, authz.Read)).Methods("GET").Name("GetIndex")
+	router.HandleFunc("/index/{index}", handler.chkAuthZ(handler.handlePostIndex, authz.Admin)).Methods("POST").Name("PostIndex")
+	router.HandleFunc("/index/{index}", handler.chkAuthZ(handler.handleDeleteIndex, authz.Admin)).Methods("DELETE").Name("DeleteIndex")
+	//router.HandleFunc("/index/{index}/field", handler.chkAuthZ(handler.handleGetFields, authz.Read)).Methods("GET") // Not implemented.
+	router.HandleFunc("/index/{index}/field", handler.chkAuthZ(handler.handlePostField, authz.Write)).Methods("POST").Name("PostField")
+	router.HandleFunc("/index/{index}/field/", handler.chkAuthZ(handler.handlePostField, authz.Write)).Methods("POST").Name("PostField")
+	router.HandleFunc("/index/{index}/field/{field}", handler.chkAuthZ(handler.handlePostField, authz.Write)).Methods("POST").Name("PostField")
+	router.HandleFunc("/index/{index}/field/{field}", handler.chkAuthZ(handler.handleDeleteField, authz.Write)).Methods("DELETE").Name("DeleteField")
+	router.HandleFunc("/index/{index}/field/{field}/import", handler.chkAuthZ(handler.handlePostImport, authz.Read)).Methods("POST").Name("PostImport")
+	router.HandleFunc("/index/{index}/field/{field}/mutex-check", handler.chkAuthZ(handler.handleGetMutexCheck, authz.Read)).Methods("GET").Name("GetMutexCheck")
+	router.HandleFunc("/index/{index}/field/{field}/import-roaring/{shard}", handler.chkAuthZ(handler.handlePostImportRoaring, authz.Read)).Methods("POST").Name("PostImportRoaring")
+	router.HandleFunc("/index/{index}/query", handler.chkAuthZ(handler.handlePostQuery, authz.Read)).Methods("POST").Name("PostQuery")
+	router.HandleFunc("/info", handler.chkAuthZ(handler.handleGetInfo, authz.Admin)).Methods("GET").Name("GetInfo")
+	router.HandleFunc("/recalculate-caches", handler.chkAuthZ(handler.handleRecalculateCaches, authz.Admin)).Methods("POST").Name("RecalculateCaches")
+	router.HandleFunc("/schema", handler.chkAuthZ(handler.handleGetSchema, authz.Read)).Methods("GET").Name("GetSchema")
+	router.HandleFunc("/schema/details", handler.chkAuthZ(handler.handleGetSchemaDetails, authz.Read)).Methods("GET").Name("GetSchemaDetails")
+	router.HandleFunc("/schema", handler.chkAuthZ(handler.handlePostSchema, authz.Admin)).Methods("POST").Name("PostSchema")
+	router.HandleFunc("/status", handler.chkAuthZ(handler.handleGetStatus, authz.Read)).Methods("GET").Name("GetStatus")
+	router.HandleFunc("/transaction", handler.chkAuthZ(handler.handlePostTransaction, authz.Read)).Methods("POST").Name("PostTransaction")
+	router.HandleFunc("/transaction/", handler.chkAuthZ(handler.handlePostTransaction, authz.Read)).Methods("POST").Name("PostTransaction")
+	router.HandleFunc("/transaction/{id}", handler.chkAuthZ(handler.handleGetTransaction, authz.Read)).Methods("GET").Name("GetTransaction")
+	router.HandleFunc("/transaction/{id}", handler.chkAuthZ(handler.handlePostTransaction, authz.Read)).Methods("POST").Name("PostTransaction")
+	router.HandleFunc("/transaction/{id}/finish", handler.chkAuthZ(handler.handlePostFinishTransaction, authz.Read)).Methods("POST").Name("PostFinishTransaction")
+	router.HandleFunc("/transactions", handler.chkAuthZ(handler.handleGetTransactions, authz.Read)).Methods("GET").Name("GetTransactions")
+	router.HandleFunc("/queries", handler.chkAuthZ(handler.handleGetActiveQueries, authz.Read)).Methods("GET").Name("GetActiveQueries")
+	router.HandleFunc("/query-history", handler.chkAuthZ(handler.handleGetPastQueries, authz.Read)).Methods("GET").Name("GetPastQueries")
+	router.HandleFunc("/version", handler.chkAuthZ(handler.handleGetVersion, authz.Read)).Methods("GET").Name("GetVersion")
 
 	// /ui endpoints are for UI use; they may change at any time.
-	router.HandleFunc("/ui/usage", handler.mwAuth(handler.handleGetUsage, authz.Read)).Methods("GET").Name("GetUsage")
-	router.HandleFunc("/ui/transaction", handler.mwAuth(handler.handleGetTransactionList, authz.Read)).Methods("GET").Name("GetTransactionList")
-	router.HandleFunc("/ui/transaction/", handler.mwAuth(handler.handleGetTransactionList, authz.Read)).Methods("GET").Name("GetTransactionList")
-	router.HandleFunc("/ui/shard-distribution", handler.mwAuth(handler.handleGetShardDistribution, authz.Read)).Methods("GET").Name("GetShardDistribution")
+	router.HandleFunc("/ui/usage", handler.chkAuthZ(handler.handleGetUsage, authz.Read)).Methods("GET").Name("GetUsage")
+	router.HandleFunc("/ui/transaction", handler.chkAuthZ(handler.handleGetTransactionList, authz.Read)).Methods("GET").Name("GetTransactionList")
+	router.HandleFunc("/ui/transaction/", handler.chkAuthZ(handler.handleGetTransactionList, authz.Read)).Methods("GET").Name("GetTransactionList")
+	router.HandleFunc("/ui/shard-distribution", handler.chkAuthZ(handler.handleGetShardDistribution, authz.Read)).Methods("GET").Name("GetShardDistribution")
 
 	// /internal endpoints are for internal use only; they may change at any time.
 	// DO NOT rely on these for external applications!
-	router.HandleFunc("/internal/cluster/message", handler.mwAuth(handler.handlePostClusterMessage, authz.Admin)).Methods("POST").Name("PostClusterMessage")
-	router.HandleFunc("/internal/fragment/block/data", handler.mwAuth(handler.handleGetFragmentBlockData, authz.Admin)).Methods("GET").Name("GetFragmentBlockData")
-	router.HandleFunc("/internal/fragment/blocks", handler.mwAuth(handler.handleGetFragmentBlocks, authz.Admin)).Methods("GET").Name("GetFragmentBlocks")
-	router.HandleFunc("/internal/fragment/data", handler.mwAuth(handler.handleGetFragmentData, authz.Admin)).Methods("GET").Name("GetFragmentData")
-	router.HandleFunc("/internal/fragment/nodes", handler.mwAuth(handler.handleGetFragmentNodes, authz.Admin)).Methods("GET").Name("GetFragmentNodes")
-	router.HandleFunc("/internal/partition/nodes", handler.mwAuth(handler.handleGetPartitionNodes, authz.Admin)).Methods("GET").Name("GetPartitionNodes")
-	router.HandleFunc("/internal/translate/data", handler.mwAuth(handler.handleGetTranslateData, authz.Admin)).Methods("GET").Name("GetTranslateData")
-	router.HandleFunc("/internal/translate/data", handler.mwAuth(handler.handlePostTranslateData, authz.Admin)).Methods("POST").Name("PostTranslateData")
-	router.HandleFunc("/internal/translate/keys", handler.mwAuth(handler.handlePostTranslateKeys, authz.Admin)).Methods("POST").Name("PostTranslateKeys")
-	router.HandleFunc("/internal/translate/ids", handler.mwAuth(handler.handlePostTranslateIDs, authz.Admin)).Methods("POST").Name("PostTranslateIDs")
-	router.HandleFunc("/internal/index/{index}/field/{field}/mutex-check", handler.mwAuth(handler.handleInternalGetMutexCheck, authz.Admin)).Methods("GET").Name("InternalGetMutexCheck")
-	router.HandleFunc("/internal/index/{index}/field/{field}/remote-available-shards/{shardID}", handler.mwAuth(handler.handleDeleteRemoteAvailableShard, authz.Admin)).Methods("DELETE")
-	router.HandleFunc("/internal/index/{index}/shard/{shard}/snapshot", handler.mwAuth(handler.handleGetIndexShardSnapshot, authz.Admin)).Methods("GET").Name("GetIndexShardSnapshot")
-	router.HandleFunc("/internal/index/{index}/shards", handler.mwAuth(handler.handleGetIndexAvailableShards, authz.Admin)).Methods("GET").Name("GetIndexAvailableShards")
-	router.HandleFunc("/internal/nodes", handler.mwAuth(handler.handleGetNodes, authz.Admin)).Methods("GET").Name("GetNodes")
-	router.HandleFunc("/internal/shards/max", handler.mwAuth(handler.handleGetShardsMax, authz.Admin)).Methods("GET").Name("GetShardsMax") // TODO: deprecate, but it's being used by the client
-	router.HandleFunc("/internal/ingest/{index}", handler.mwAuth(handler.handlePostIngestData, authz.Admin)).Methods("POST").Name("PostIngestData")
-	router.HandleFunc("/internal/ingest/{index}/node", handler.mwAuth(handler.handlePostIngestNode, authz.Admin)).Methods("POST").Name("PostIngestNode")
+	router.HandleFunc("/internal/cluster/message", handler.chkAuthN(handler.handlePostClusterMessage)).Methods("POST").Name("PostClusterMessage")
+	router.HandleFunc("/internal/fragment/block/data", handler.chkAuthN(handler.handleGetFragmentBlockData)).Methods("GET").Name("GetFragmentBlockData")
+	router.HandleFunc("/internal/fragment/blocks", handler.chkAuthN(handler.handleGetFragmentBlocks)).Methods("GET").Name("GetFragmentBlocks")
+	router.HandleFunc("/internal/fragment/data", handler.chkAuthN(handler.handleGetFragmentData)).Methods("GET").Name("GetFragmentData")
+	router.HandleFunc("/internal/fragment/nodes", handler.chkAuthN(handler.handleGetFragmentNodes)).Methods("GET").Name("GetFragmentNodes")
+	router.HandleFunc("/internal/partition/nodes", handler.chkAuthN(handler.handleGetPartitionNodes)).Methods("GET").Name("GetPartitionNodes")
+	router.HandleFunc("/internal/translate/data", handler.chkAuthN(handler.handleGetTranslateData)).Methods("GET").Name("GetTranslateData")
+	router.HandleFunc("/internal/translate/data", handler.chkAuthN(handler.handlePostTranslateData)).Methods("POST").Name("PostTranslateData")
+	router.HandleFunc("/internal/translate/keys", handler.chkAuthN(handler.handlePostTranslateKeys)).Methods("POST").Name("PostTranslateKeys")
+	router.HandleFunc("/internal/translate/ids", handler.chkAuthN(handler.handlePostTranslateIDs)).Methods("POST").Name("PostTranslateIDs")
+	router.HandleFunc("/internal/index/{index}/field/{field}/mutex-check", handler.chkAuthN(handler.handleInternalGetMutexCheck)).Methods("GET").Name("InternalGetMutexCheck")
+	router.HandleFunc("/internal/index/{index}/field/{field}/remote-available-shards/{shardID}", handler.chkAuthN(handler.handleDeleteRemoteAvailableShard)).Methods("DELETE")
+	router.HandleFunc("/internal/index/{index}/shard/{shard}/snapshot", handler.chkAuthN(handler.handleGetIndexShardSnapshot)).Methods("GET").Name("GetIndexShardSnapshot")
+	router.HandleFunc("/internal/index/{index}/shards", handler.chkAuthN(handler.handleGetIndexAvailableShards)).Methods("GET").Name("GetIndexAvailableShards")
+	router.HandleFunc("/internal/nodes", handler.chkAuthN(handler.handleGetNodes)).Methods("GET").Name("GetNodes")
+	router.HandleFunc("/internal/shards/max", handler.chkAuthN(handler.handleGetShardsMax)).Methods("GET").Name("GetShardsMax") // TODO: deprecate, but it's being used by the client
+	router.HandleFunc("/internal/ingest/{index}", handler.chkAuthN(handler.handlePostIngestData)).Methods("POST").Name("PostIngestData")
+	router.HandleFunc("/internal/ingest/{index}/node", handler.chkAuthN(handler.handlePostIngestNode)).Methods("POST").Name("PostIngestNode")
 
-	router.HandleFunc("/internal/schema", handler.mwAuth(handler.handleIngestSchema, authz.Admin)).Methods("POST").Name("PostIngestSchema")
-	router.HandleFunc("/internal/translate/index/{index}/keys/find", handler.mwAuth(handler.handleFindIndexKeys, authz.Admin)).Methods("POST").Name("FindIndexKeys")
-	router.HandleFunc("/internal/translate/index/{index}/keys/create", handler.mwAuth(handler.handleCreateIndexKeys, authz.Admin)).Methods("POST").Name("CreateIndexKeys")
-	router.HandleFunc("/internal/translate/index/{index}/{partition}", handler.mwAuth(handler.handlePostTranslateIndexDB, authz.Admin)).Methods("POST").Name("PostTranslateIndexDB")
-	router.HandleFunc("/internal/translate/field/{index}/{field}", handler.mwAuth(handler.handlePostTranslateFieldDB, authz.Admin)).Methods("POST").Name("PostTranslateFieldDB")
-	router.HandleFunc("/internal/translate/field/{index}/{field}/keys/find", handler.mwAuth(handler.handleFindFieldKeys, authz.Admin)).Methods("POST").Name("FindFieldKeys")
-	router.HandleFunc("/internal/translate/field/{index}/{field}/keys/create", handler.mwAuth(handler.handleCreateFieldKeys, authz.Admin)).Methods("POST").Name("CreateFieldKeys")
-	router.HandleFunc("/internal/translate/field/{index}/{field}/keys/like", handler.mwAuth(handler.handleMatchField, authz.Admin)).Methods("POST").Name("MatchFieldKeys")
+	router.HandleFunc("/internal/schema", handler.chkAuthN(handler.handleIngestSchema)).Methods("POST").Name("PostIngestSchema")
+	router.HandleFunc("/internal/translate/index/{index}/keys/find", handler.chkAuthN(handler.handleFindIndexKeys)).Methods("POST").Name("FindIndexKeys")
+	router.HandleFunc("/internal/translate/index/{index}/keys/create", handler.chkAuthN(handler.handleCreateIndexKeys)).Methods("POST").Name("CreateIndexKeys")
+	router.HandleFunc("/internal/translate/index/{index}/{partition}", handler.chkAuthN(handler.handlePostTranslateIndexDB)).Methods("POST").Name("PostTranslateIndexDB")
+	router.HandleFunc("/internal/translate/field/{index}/{field}", handler.chkAuthN(handler.handlePostTranslateFieldDB)).Methods("POST").Name("PostTranslateFieldDB")
+	router.HandleFunc("/internal/translate/field/{index}/{field}/keys/find", handler.chkAuthN(handler.handleFindFieldKeys)).Methods("POST").Name("FindFieldKeys")
+	router.HandleFunc("/internal/translate/field/{index}/{field}/keys/create", handler.chkAuthN(handler.handleCreateFieldKeys)).Methods("POST").Name("CreateFieldKeys")
+	router.HandleFunc("/internal/translate/field/{index}/{field}/keys/like", handler.chkAuthN(handler.handleMatchField)).Methods("POST").Name("MatchFieldKeys")
 
-	router.HandleFunc("/internal/idalloc/reserve", handler.mwAuth(handler.handleReserveIDs, authz.Admin)).Methods("POST").Name("ReserveIDs")
-	router.HandleFunc("/internal/idalloc/commit", handler.mwAuth(handler.handleCommitIDs, authz.Admin)).Methods("POST").Name("CommitIDs")
-	router.HandleFunc("/internal/idalloc/restore", handler.mwAuth(handler.handleRestoreIDAlloc, authz.Admin)).Methods("POST").Name("RestoreIDAllocData")
-	router.HandleFunc("/internal/idalloc/reset/{index}", handler.mwAuth(handler.handleResetIDAlloc, authz.Admin)).Methods("POST").Name("ResetIDAlloc")
-	router.HandleFunc("/internal/idalloc/data", handler.mwAuth(handler.handleIDAllocData, authz.Admin)).Methods("GET").Name("IDAllocData")
+	router.HandleFunc("/internal/idalloc/reserve", handler.chkAuthN(handler.handleReserveIDs)).Methods("POST").Name("ReserveIDs")
+	router.HandleFunc("/internal/idalloc/commit", handler.chkAuthN(handler.handleCommitIDs)).Methods("POST").Name("CommitIDs")
+	router.HandleFunc("/internal/idalloc/restore", handler.chkAuthN(handler.handleRestoreIDAlloc)).Methods("POST").Name("RestoreIDAllocData")
+	router.HandleFunc("/internal/idalloc/reset/{index}", handler.chkAuthN(handler.handleResetIDAlloc)).Methods("POST").Name("ResetIDAlloc")
+	router.HandleFunc("/internal/idalloc/data", handler.chkAuthN(handler.handleIDAllocData)).Methods("GET").Name("IDAllocData")
 
-	router.HandleFunc("/internal/restore/{index}/{shardID}", handler.mwAuth(handler.handlePostRestore, authz.Admin)).Methods("POST").Name("Restore")
+	router.HandleFunc("/internal/restore/{index}/{shardID}", handler.chkAuthN(handler.handlePostRestore)).Methods("POST").Name("Restore")
 	// endpoints for collecting cpu profiles from a chosen begin point to
 	// when the client wants to stop. Used for profiling imports that
 	// could be long or short.
-	router.HandleFunc("/cpu-profile/start", handler.mwAuth(handler.handleCPUProfileStart, authz.Admin)).Methods("GET").Name("CPUProfileStart")
-	router.HandleFunc("/cpu-profile/stop", handler.mwAuth(handler.handleCPUProfileStop, authz.Admin)).Methods("GET").Name("CPUProfileStop")
+	router.HandleFunc("/cpu-profile/start", handler.chkAuthZ(handler.handleCPUProfileStart, authz.Admin)).Methods("GET").Name("CPUProfileStart")
+	router.HandleFunc("/cpu-profile/stop", handler.chkAuthZ(handler.handleCPUProfileStop, authz.Admin)).Methods("GET").Name("CPUProfileStop")
 
 	router.HandleFunc("/login", handler.handleLogin).Methods("GET").Name("Login")
 	router.HandleFunc("/logout", handler.handleLogout).Methods("GET").Name("Logout")
@@ -532,7 +532,22 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.Handler.ServeHTTP(w, r)
 }
 
-func (h *Handler) mwAuth(handler http.HandlerFunc, perm authz.Permission) http.HandlerFunc {
+func (h *Handler) chkAuthN(handler http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if h.auth != nil {
+			_, err := h.auth.Authenticate(w, r)
+			if err != nil {
+				http.Error(w, errors.Wrap(err, "authenticating").Error(), http.StatusBadRequest)
+				return
+			}
+		} else {
+			handler.ServeHTTP(w, r)
+		}
+
+	}
+}
+
+func (h *Handler) chkAuthZ(handler http.HandlerFunc, perm authz.Permission) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if h.auth != nil {
 
@@ -580,8 +595,9 @@ func (h *Handler) mwAuth(handler http.HandlerFunc, perm authz.Permission) http.H
 
 			ctx := context.WithValue(r.Context(), contextKeyGroupMembership, groups)
 			handler.ServeHTTP(w, r.WithContext(ctx))
+		} else {
+			handler.ServeHTTP(w, r)
 		}
-		handler.ServeHTTP(w, r)
 
 	}
 }
@@ -754,20 +770,30 @@ func headerAcceptRoaringRow(header http.Header) bool {
 	return false
 }
 
-//WIP
-// func (h *Handler) filterResponse(r *http.Request, schema []*pilosa.IndexInfo) {
-// 	if h.auth != nil {
-// 		groups := r.Context().Value(contextKeyGroupMembership)
+func (h *Handler) filterResponse(w http.ResponseWriter, r *http.Request, schema []*pilosa.IndexInfo) []*pilosa.IndexInfo {
+	if h.auth != nil {
+		g := r.Context().Value(contextKeyGroupMembership)
+		if g == nil {
+			w.Header().Add("Content-Type", "text/plain")
+			w.WriteHeader(http.StatusForbidden)
+			return nil
+		}
+		indexes := h.permissions.GetAuthorizedIndexList(g.([]authn.Group), authz.Read.String())
+		var new []*pilosa.IndexInfo
+		for _, s := range schema {
+			for _, index := range indexes {
+				if s.Name == index {
+					new = append(new, s)
+				}
+			}
 
-// 		// indexes := h.permissions.GetAuthorizedIndexList(g, authz.Read.String())
-// 		for _, s := range schema {
-// 			h.querylogger.Infof(s.Name)
+		}
+		return new
 
-// 		}
+	}
+	return schema
 
-// 	}
-
-// }
+}
 
 // handleGetSchema handles GET /schema requests.
 func (h *Handler) handleGetSchema(w http.ResponseWriter, r *http.Request) {
@@ -785,9 +811,7 @@ func (h *Handler) handleGetSchema(w http.ResponseWriter, r *http.Request) {
 		h.logger.Printf("getting schema error: %s", err)
 	}
 
-	groups := r.Context().Value(contextKeyGroupMembership)
-	h.querylogger.Infof("groups: %+v", groups)
-	// h.filterResponse(r, schema)
+	schema = h.filterResponse(w, r, schema)
 
 	if err := json.NewEncoder(w).Encode(pilosa.Schema{Indexes: schema}); err != nil {
 		h.logger.Errorf("write schema response error: %s", err)
@@ -807,6 +831,7 @@ func (h *Handler) handleGetSchemaDetails(w http.ResponseWriter, r *http.Request)
 		h.logger.Printf("error getting detailed schema: %s", err)
 		return
 	}
+	schema = h.filterResponse(w, r, schema)
 	if err := json.NewEncoder(w).Encode(pilosa.Schema{Indexes: schema}); err != nil {
 		h.logger.Printf("write schema response error: %s", err)
 	}
