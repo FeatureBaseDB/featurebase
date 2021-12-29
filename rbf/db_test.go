@@ -339,6 +339,21 @@ func TestDB_MultiTx(t *testing.T) {
 	}
 }
 
+func TestDB_DebugInfo(t *testing.T) {
+	db := MustOpenDB(t)
+	defer MustCloseDB(t, db)
+
+	tx := MustBegin(t, db, true)
+	defer tx.Rollback()
+
+	info := db.DebugInfo()
+	if got, want := info.Path, db.Path; got != want {
+		t.Fatalf("Path=%q, want %q", got, want)
+	} else if got, want := len(info.Txs), 1; got != want {
+		t.Fatalf("len(Txs)=%d, want %d", got, want)
+	}
+}
+
 // premake pool of random values
 const randPool = (1 << 18)
 

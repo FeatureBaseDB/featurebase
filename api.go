@@ -23,6 +23,7 @@ import (
 
 	"github.com/molecula/featurebase/v2/disco"
 	"github.com/molecula/featurebase/v2/ingest"
+	"github.com/molecula/featurebase/v2/rbf"
 
 	//"github.com/molecula/featurebase/v2/pg"
 	"github.com/molecula/featurebase/v2/pql"
@@ -130,9 +131,16 @@ func (api *API) SetAPIOptions(opts ...apiOption) error {
 var validAPIMethods = map[disco.ClusterState]map[apiMethod]struct{}{
 	disco.ClusterStateStarting: methodsCommon,
 	disco.ClusterStateNormal:   appendMap(methodsCommon, methodsNormal),
-	disco.ClusterStateDegraded: appendMap(methodsCommon, methodsDegraded),
+	// Ideally, this would be just `appendMap(methodsCommon, methodsDegraded)`,
+	// but in an attempt to reduce the influence that state (determined by etcd)
+	// has on a node under load, this is set to effectively allow all requests
+	// in a DEGRADED state.
+	disco.ClusterStateDegraded: appendMap(methodsCommon, methodsNormal),
 	disco.ClusterStateResizing: appendMap(methodsCommon, methodsResizing),
-	disco.ClusterStateDown:     methodsCommon,
+	// Ideally, this would be just `methodsCommon`, but in an attempt to reduce
+	// the influence that state (determined by etcd) has on a node under load,
+	// this is set to effectively allow all requests in a DOWN state.
+	disco.ClusterStateDown: appendMap(methodsCommon, methodsNormal),
 }
 
 func appendMap(a, b map[apiMethod]struct{}) map[apiMethod]struct{} {
@@ -3154,6 +3162,21 @@ processing:
 }
 func (api *API) Plan(ctx context.Context, q string) (*Stmt, error) {
 	return api.server.PlanSQL(ctx, q)
+}
+
+func (api *API) RBFDebugInfo() map[string]*rbf.DebugInfo {
+	infos := make(map[string]*rbf.DebugInfo)
+
+	for key, dbShard := range api.holder.Txf().dbPerShard.Flatmap {
+		wrapper, ok := dbShard.W.(*RbfDBWrapper)
+		if !ok {
+			continue
+		}
+
+		skey := fmt.Sprintf("%s/%d", key.index, key.shard)
+		infos[skey] = wrapper.db.DebugInfo()
+	}
+	return infos
 }
 
 type serverInfo struct {
