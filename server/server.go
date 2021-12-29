@@ -549,6 +549,9 @@ func (m *Command) SetupServer() error {
 		if err != nil {
 			return errors.Wrap(err, "setting up querylogger")
 		}
+
+		m.querylogger.Infof("Group with admin level access: %v", p.Admin)
+		m.querylogger.Infof("Permissions: %+v", p.Permissions)
 	}
 
 	m.Handler, err = http.NewHandler(
