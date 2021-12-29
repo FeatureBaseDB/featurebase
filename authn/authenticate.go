@@ -93,8 +93,7 @@ type UserInfo struct {
 // Authenticate redirects the user to sign in. If the cookie is within the
 // refresh window of expiring, the cookie is refreshed, and the updated group
 // membership is returned.
-func (a *Auth) Authenticate(w http.ResponseWriter, r *http.Request) ([]Group,
-	error) {
+func (a *Auth) Authenticate(w http.ResponseWriter, r *http.Request) ([]Group, error) {
 	cookie, err := a.readCookie(w, r)
 	if err != nil {
 		http.Redirect(w, r, "/signin", http.StatusTemporaryRedirect)
