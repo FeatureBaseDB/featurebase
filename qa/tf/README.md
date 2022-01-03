@@ -1,6 +1,6 @@
-# Deploy testing environments with this one wierd trick
+# Deploy testing environments with this one weird trick!
 
-This directiory contains Terraform to deploy test environments both ad-hoc and as part of CI/CD pipelines.
+This directory contains Terraform to deploy test environments both ad-hoc and as part of CI/CD pipelines.
 
 The .modules contains the guts of the operation, the things you probably want are in the other directories, each with a README.
 
