@@ -5,7 +5,7 @@ You can do `terraform plan` -> `terraform apply` to spin up a cluster, `terrafor
 ## Other prerequisites:
 Please read these carefully.
 
-Be in the `tf` directory (e.g., when you try to run a `terraform` command, the output of `pwd` should be `.../molecula/featurebase/qa/tf`)
+Be in the `tf` directory (e.g., when you try to run a `terraform` command, the output of `pwd` should be `.../featurebase/qa/tf`)
 
 Currently, the path to the terraform module is using a local reference, i.e., in `main.tf`, the source line is assuming that you have `molecula-terraform` project installed locally, such that the `molecular-terraform` project and `featurebase` have the same parent directory (e.g., `...A/featurebase/qa/tf` and `...A/molecular-terraform/aws/.modules/featurebase-cluster` should both be valid paths).
 
