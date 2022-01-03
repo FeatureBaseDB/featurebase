@@ -54,17 +54,30 @@ func NewDB(tb testing.TB, cfg ...*rbfcfg.Config) *rbf.DB {
 	if err != nil {
 		panic(err)
 	}
+	return NewDBAt(tb, path, cfg...)
+}
 
+// NewDBAt returns a new instance of DB with a given path.
+func NewDBAt(tb testing.TB, path string, cfg ...*rbfcfg.Config) *rbf.DB {
 	var cfg0 *rbfcfg.Config
 	if len(cfg) > 0 {
 		cfg0 = cfg[0]
 	}
-	db := rbf.NewDB(path, cfg0)
-	return db
+	return rbf.NewDB(path, cfg0)
 }
 
 // MustOpenDB returns a db opened on a temporary file. On error, fail test.
 func MustOpenDB(tb testing.TB, cfg ...*rbfcfg.Config) *rbf.DB {
+	tb.Helper()
+	path, err := testhook.TempDir(tb, "rbfdb")
+	if err != nil {
+		panic(err)
+	}
+	return MustOpenDBAt(tb, path, cfg...)
+}
+
+// MustOpenDBAt returns a db opened on an existing file. On error, fail test.
+func MustOpenDBAt(tb testing.TB, path string, cfg ...*rbfcfg.Config) *rbf.DB {
 	tb.Helper()
 	if len(cfg) == 0 || cfg[0] == nil {
 		newconf := rbfcfg.NewDefaultConfig()
@@ -73,7 +86,7 @@ func MustOpenDB(tb testing.TB, cfg ...*rbfcfg.Config) *rbf.DB {
 	} else if cfg[0].Logger == nil {
 		cfg[0].Logger = logger.NewLogfLogger(tb)
 	}
-	db := NewDB(tb, cfg...)
+	db := NewDBAt(tb, path, cfg...)
 	if err := db.Open(); err != nil {
 		tb.Fatal(err)
 	}

@@ -1,0 +1,30 @@
+{
+  "data_node_ips": {
+    "sensitive": false,
+    "type": [
+      "tuple",
+      [
+        "string",
+        "string",
+        "string"
+      ]
+    ],
+    "value": [
+      "10.0.1.144",
+      "10.0.2.108",
+      "10.0.3.178"
+    ]
+  },
+  "ingest_ips": {
+    "sensitive": false,
+    "type": [
+      "tuple",
+      [
+        "string"
+      ]
+    ],
+    "value": [
+      "3.145.104.76"
+    ]
+  }
+}

@@ -932,6 +932,10 @@ func (c *Cursor) First() error {
 		case PageTypeBranch:
 			elem.index = 0
 
+			if n := readCellN(buf); elem.index >= n { // branch cell index must less than cell count
+				return fmt.Errorf("branch cell index out of range: pgno=%d i=%d n=%d", elem.pgno, elem.index, n)
+			}
+
 			// Read cell pgno into the next stack level.
 			cell := readBranchCell(buf, elem.index)
 
