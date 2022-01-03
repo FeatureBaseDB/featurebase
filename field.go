@@ -1426,7 +1426,7 @@ func (f *Field) MinForShard(tx Tx, shard uint64, filter *Row) (ValCount, error) 
 	return f.valCountize(min, cnt, bsig)
 }
 
-// valCountize takes the "raw" min value and count we get from the
+// valCountize takes the "raw" value and count we get from the
 // fragment and calculates the cooked values for this field
 // (timestamping, decimaling, or just adding in the base). It always
 // includes the int64 "Val\" value to make comparisons easier in the
