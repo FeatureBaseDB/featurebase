@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -868,6 +869,36 @@ func TestTx_Check(t *testing.T) {
 		// Verify that check now returns an error.
 		if err := db.Check(); err == nil || !strings.Contains(err.Error(), fmt.Sprintf("branch page %d is empty", pgno)) {
 			t.Fatalf("unexpected error: %#v", err)
+		}
+	})
+
+	t.Run("ErrBadFreelist", func(t *testing.T) {
+		t.Parallel()
+
+		db := MustOpenDBAt(t, filepath.Join("testdata", "check", "bad-freelist"))
+		defer db.Close()
+		tx := MustBegin(t, db, false)
+		defer tx.Rollback()
+
+		if err, ok := tx.Check().(rbf.ErrorList); !ok {
+			t.Fatal("expected error list")
+		} else if s := err.FullError(); !strings.Contains(s, `branch cell index out of range: pgno=2 i=0 n=0`) {
+			t.Fatalf("unexpected error:\n%s", s)
+		}
+	})
+
+	t.Run("ErrBadBitmap", func(t *testing.T) {
+		t.Parallel()
+
+		db := MustOpenDBAt(t, filepath.Join("testdata", "check", "bad-bitmap"))
+		defer db.Close()
+		tx := MustBegin(t, db, false)
+		defer tx.Rollback()
+
+		if err, ok := tx.Check().(rbf.ErrorList); !ok {
+			t.Fatal("expected error list")
+		} else if s := err.FullError(); !strings.Contains(s, `cannot read page: pgno=65537 parent=3 err=rbf: page read out of bounds: pgno=65537 max=3`) {
+			t.Fatalf("unexpected error:\n%s", s)
 		}
 	})
 }
