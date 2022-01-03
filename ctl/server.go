@@ -45,7 +45,7 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 
 	// Etcd
 	// Etcd.Name used Config.Name for its value.
-	// Etcd.Dir defaults to a directory under the pilosa data directory.
+	flags.StringVar(&srv.Config.Etcd.Dir, "etcd.dir", srv.Config.Etcd.Dir, "Directory to store etcd data files. If not provided, a directory will be created under the main data-dir directory.")
 	// Etcd.ClusterName uses Cluster.Name for its value
 	flags.StringVar(&srv.Config.Etcd.LClientURL, "etcd.listen-client-address", srv.Config.Etcd.LClientURL, "Listen client address.")
 	flags.StringVar(&srv.Config.Etcd.AClientURL, "etcd.advertise-client-address", srv.Config.Etcd.AClientURL, "Advertise client address. If not provided, uses the listen client address.")

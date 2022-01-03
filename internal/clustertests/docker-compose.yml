@@ -9,6 +9,7 @@ services:
       - "33455:10101"
     environment:
       - PILOSA_NAME=pilosa1
+      - PILOSA_ETCD_DIR=/root/.etcd
       - PILOSA_ETCD_LISTEN_CLIENT_ADDRESS=http://0.0.0.0:10201
       - PILOSA_ETCD_ADVERTISE_CLIENT_ADDRESS=http://pilosa1:10201
       - PILOSA_ETCD_LISTEN_PEER_ADDRESS=http://0.0.0.0:10301
@@ -28,6 +29,7 @@ services:
       - "33456:10101"
     environment:
       - PILOSA_NAME=pilosa2
+      - PILOSA_ETCD_DIR=/root/.etcd
       - PILOSA_ETCD_LISTEN_CLIENT_ADDRESS=http://0.0.0.0:10201
       - PILOSA_ETCD_ADVERTISE_CLIENT_ADDRESS=http://pilosa2:10201
       - PILOSA_ETCD_LISTEN_PEER_ADDRESS=http://0.0.0.0:10301
@@ -47,6 +49,7 @@ services:
       - "33457:10101"
     environment:
       - PILOSA_NAME=pilosa3
+      - PILOSA_ETCD_DIR=/root/.etcd
       - PILOSA_ETCD_LISTEN_CLIENT_ADDRESS=http://0.0.0.0:10201
       - PILOSA_ETCD_ADVERTISE_CLIENT_ADDRESS=http://pilosa3:10201
       - PILOSA_ETCD_LISTEN_PEER_ADDRESS=http://0.0.0.0:10301

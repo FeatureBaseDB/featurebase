@@ -13,6 +13,7 @@ include:
 variables:
   GOVERSION: "1.16.10"
 
+
 stages:
   - lint
   - test
