@@ -182,6 +182,23 @@ func TestBSIGroup_BaseValue(t *testing.T) {
 	})
 }
 
+func TestField_ValCountize(t *testing.T) {
+	f := OpenField(t, OptFieldTypeDefault())
+	defer f.Close()
+	// check that you get an empty val count and err
+	// BSIGroupNotFound on nil bsig from
+	// f.bsiGroup(f.name)
+	f.bsiGroups = []*bsiGroup{}
+	v, err := f.valCountize(42, 42, nil)
+	if !reflect.DeepEqual(v, ValCount{}) {
+		t.Errorf("expected %v, got %v", ValCount{}, v)
+	}
+	if err != ErrBSIGroupNotFound {
+		t.Errorf("expected %v, got %v", ErrBSIGroupNotFound, err)
+	}
+
+}
+
 // Ensure field can open and retrieve a view.
 func TestField_DeleteView(t *testing.T) {
 	f := OpenField(t, OptFieldTypeDefault())
