@@ -284,7 +284,12 @@ const (
 	contextKeyQueryRequest contextKeyQuery = iota
 	contextKeyQueryError
 	contextKeyGroupMembership
+	contextKeyPermission
 )
+
+func GetContextKeyPermission() contextKeyQuery {
+	return contextKeyPermission
+}
 
 // addQueryContext puts the results of handler.readQueryRequest into the Context for use by
 // both other middleware and any handlers.
@@ -550,23 +555,15 @@ func (h *Handler) chkAuthN(handler http.HandlerFunc) http.HandlerFunc {
 func (h *Handler) chkAuthZ(handler http.HandlerFunc, perm authz.Permission) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if h.auth != nil {
-			fmt.Println("a")
 			groups, err := h.auth.Authenticate(w, r)
 			if err != nil {
 				http.Error(w, errors.Wrap(err, "authenticating").Error(), http.StatusBadRequest)
 				return
 			}
 
-			indexName, ok := mux.Vars(r)["index"]
-			if !ok {
-				indexName = ""
-			}
-
 			if h.permissions == nil {
 				panic("authentication is turned on without authorization permissions set")
 			}
-			p, err := h.permissions.GetPermissions(groups, indexName)
-			// err is being checked later, after logging
 
 			uinfo := h.auth.GetUserInfo(w, r)
 
@@ -577,29 +574,32 @@ func (h *Handler) chkAuthZ(handler http.HandlerFunc, perm authz.Permission) http
 			if req, ok := queryRequest.(*pilosa.QueryRequest); ok {
 				queryString = req.Query
 			}
-			writeWords := []string{"store", "set", "clear", "clearrow"}
-			q := strings.ToLower(queryString)
-			for _, w := range writeWords {
-				if strings.Contains(q, w) {
-					perm = authz.Write
-				}
+
+			q, _ := pql.ParseString(fmt.Sprintf(queryString))
+			if q.WriteCallN() > 0 {
+				perm = authz.Write
 			}
 
 			queryString = strings.Replace(queryString, "\n", "", -1)
 
 			if r.Method == "POST" {
-				h.querylogger.Infof("User ID: %s, User Name: %s, Endpoint: %s, Index: %s, Query: %s, Err: %v", uinfo.UserID, uinfo.UserName, r.URL.Path, indexName, queryString, err)
-			}
-			if err != nil || !p.Satisfies(perm) {
-				w.Header().Add("Content-Type", "text/plain")
-				w.WriteHeader(http.StatusForbidden)
-				return
+				h.querylogger.Infof("User ID: %s, User Name: %s, Endpoint: %s, Index: %s, Query: %s, Err: %v", uinfo.UserID, uinfo.UserName, r.URL.Path, "indexName", queryString, err)
 			}
 
 			ctx := context.WithValue(r.Context(), contextKeyGroupMembership, groups)
+			indexName, ok := mux.Vars(r)["index"]
+			if ok {
+				p, err := h.permissions.GetPermissions(groups, indexName)
+				ctx = context.WithValue(r.Context(), contextKeyPermission, p)
+				if err != nil || !p.Satisfies(perm) {
+					w.Header().Add("Content-Type", "text/plain")
+					w.WriteHeader(http.StatusForbidden)
+					return
+				}
+			}
+
 			handler.ServeHTTP(w, r.WithContext(ctx))
 		} else {
-			fmt.Println("z")
 			handler.ServeHTTP(w, r)
 		}
 
@@ -960,7 +960,6 @@ var DoPerQueryProfiling = false
 // handlePostQuery handles /query requests.
 func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 	// Read previouly parsed request from context
-	fmt.Println("hi")
 	qreq := r.Context().Value(contextKeyQueryRequest)
 	qerr := r.Context().Value(contextKeyQueryError)
 	req, ok := qreq.(*pilosa.QueryRequest)

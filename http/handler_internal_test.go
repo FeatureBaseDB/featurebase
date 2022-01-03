@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	gohttp "net/http"
 	"net/http/httptest"
@@ -19,6 +18,7 @@ import (
 	"github.com/gorilla/securecookie"
 	pilosa "github.com/molecula/featurebase/v2"
 	"github.com/molecula/featurebase/v2/authn"
+	"github.com/stretchr/testify/assert"
 
 	"github.com/molecula/featurebase/v2/authz"
 	"github.com/molecula/featurebase/v2/logger"
@@ -596,6 +596,22 @@ admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 			kind:   "middleware",
 			cookie: expiredCookie,
 			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) {
+				f := h.chkAuthN(h.handlePostQuery)
+				f(w, r)
+			},
+			fn: func(w *httptest.ResponseRecorder, data []byte) {
+				if w.Result().StatusCode != 307 {
+					t.Errorf("expected http code 307, got: %+v", w.Result().StatusCode)
+				}
+
+			},
+		},
+		{
+			name:   "MW-ExpiredAuth2",
+			path:   "/index/{index}/query",
+			kind:   "middleware",
+			cookie: expiredCookie,
+			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) {
 				f := h.chkAuthZ(h.handlePostQuery, authz.Admin)
 				f(w, r)
 			},
@@ -605,6 +621,18 @@ admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 				}
 
 			},
+		},
+		{
+			name:   "MW-NoPermissions",
+			path:   "/index/{index}/query",
+			kind:   "middleware",
+			cookie: validCookie,
+			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) {
+				h := h
+				f := h.chkAuthZ(h.handlePostQuery, authz.Write)
+				assert.Panics(t, func() { f(w, r) }, "expected panic")
+			},
+			fn: func(w *httptest.ResponseRecorder, data []byte) {},
 		},
 		{
 			name:   "MW-NoIndexNoAdmin",
@@ -619,7 +647,6 @@ admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 					t.Errorf("Error: %s", err)
 				}
 				h.permissions = &p
-				fmt.Printf("%+v\n", h)
 				f := h.chkAuthZ(h.handlePostQuery, authz.Write)
 				f(w, r)
 			},
@@ -674,7 +701,6 @@ admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 				}
 
 				test.handler(w, r)
-				fmt.Println("hey")
 				data, err := readResponse(w)
 				if err != nil {
 					t.Errorf("expected no errors reading response, got: %+v", err)
