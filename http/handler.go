@@ -550,7 +550,7 @@ func (h *Handler) chkAuthN(handler http.HandlerFunc) http.HandlerFunc {
 func (h *Handler) chkAuthZ(handler http.HandlerFunc, perm authz.Permission) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if h.auth != nil {
-
+			fmt.Println("a")
 			groups, err := h.auth.Authenticate(w, r)
 			if err != nil {
 				http.Error(w, errors.Wrap(err, "authenticating").Error(), http.StatusBadRequest)
@@ -562,6 +562,9 @@ func (h *Handler) chkAuthZ(handler http.HandlerFunc, perm authz.Permission) http
 				indexName = ""
 			}
 
+			if h.permissions == nil {
+				panic("authentication is turned on without authorization permissions set")
+			}
 			p, err := h.permissions.GetPermissions(groups, indexName)
 			// err is being checked later, after logging
 
@@ -587,7 +590,7 @@ func (h *Handler) chkAuthZ(handler http.HandlerFunc, perm authz.Permission) http
 			if r.Method == "POST" {
 				h.querylogger.Infof("User ID: %s, User Name: %s, Endpoint: %s, Index: %s, Query: %s, Err: %v", uinfo.UserID, uinfo.UserName, r.URL.Path, indexName, queryString, err)
 			}
-			if err != nil || !p.Satisfies(perm.String()) {
+			if err != nil || !p.Satisfies(perm) {
 				w.Header().Add("Content-Type", "text/plain")
 				w.WriteHeader(http.StatusForbidden)
 				return
@@ -596,6 +599,7 @@ func (h *Handler) chkAuthZ(handler http.HandlerFunc, perm authz.Permission) http
 			ctx := context.WithValue(r.Context(), contextKeyGroupMembership, groups)
 			handler.ServeHTTP(w, r.WithContext(ctx))
 		} else {
+			fmt.Println("z")
 			handler.ServeHTTP(w, r)
 		}
 
@@ -778,7 +782,7 @@ func (h *Handler) filterResponse(w http.ResponseWriter, r *http.Request, schema 
 			w.WriteHeader(http.StatusForbidden)
 			return nil
 		}
-		indexes := h.permissions.GetAuthorizedIndexList(g.([]authn.Group), authz.Read.String())
+		indexes := h.permissions.GetAuthorizedIndexList(g.([]authn.Group), authz.Read)
 		var new []*pilosa.IndexInfo
 		for _, s := range schema {
 			for _, index := range indexes {
@@ -956,6 +960,7 @@ var DoPerQueryProfiling = false
 // handlePostQuery handles /query requests.
 func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 	// Read previouly parsed request from context
+	fmt.Println("hi")
 	qreq := r.Context().Value(contextKeyQueryRequest)
 	qerr := r.Context().Value(contextKeyQueryError)
 	req, ok := qreq.(*pilosa.QueryRequest)

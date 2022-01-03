@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	gohttp "net/http"
 	"net/http/httptest"
@@ -18,6 +19,8 @@ import (
 	"github.com/gorilla/securecookie"
 	pilosa "github.com/molecula/featurebase/v2"
 	"github.com/molecula/featurebase/v2/authn"
+
+	"github.com/molecula/featurebase/v2/authz"
 	"github.com/molecula/featurebase/v2/logger"
 	"github.com/molecula/featurebase/v2/pql"
 	"golang.org/x/oauth2"
@@ -184,7 +187,7 @@ func readResponse(w *httptest.ResponseRecorder) ([]byte, error) {
 	return ioutil.ReadAll(res.Body)
 }
 
-func TestHandlerAuth(t *testing.T) {
+func TestAuthentication(t *testing.T) {
 	type evaluate func(w *httptest.ResponseRecorder, data []byte)
 	type endpoint func(w gohttp.ResponseWriter, r *gohttp.Request)
 	var (
@@ -259,7 +262,7 @@ func TestHandlerAuth(t *testing.T) {
 	expiredCV := authn.CookieValue{
 		UserID:          "narcissus",
 		UserName:        "Caravaggio",
-		GroupMembership: []authn.Group{},
+		GroupMembership: []authn.Group{grp},
 		Token:           &expiredToken,
 	}
 
@@ -309,13 +312,37 @@ func TestHandlerAuth(t *testing.T) {
 		Expires:  token.Expiry,
 	}
 
+	// permissions1 := `"user-groups":
+	//   "dca35310-ecda-4f23-86cd-876aee55906b":
+	//     "test": "read"
+	// admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
+
+	permissions2 := `"user-groups":
+  "dca35310-ecda-4f23-86cd-876aee559900":
+    "test": "write"
+admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
+
+	// 	permissions3 := `"user-groups":
+	//   "dca35310-ecda-4f23-86cd-876aee55906b":
+	//     "test": "write"
+	//     "test2": "read"
+	//   "dca35310-ecda-4f23-86cd-876aee559900":
+	//     "test": "read"
+	// admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
+
+	// 	permissions4 := `"user-groups":
+	//   "dca35310-ecda-4f23-86cd-876aee559900":
+	//     "test": ""
+	// admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
+
 	tests := []struct {
-		name    string
-		path    string
-		kind    string
-		cookie  *gohttp.Cookie
-		handler endpoint
-		fn      evaluate
+		name     string
+		path     string
+		kind     string
+		yamlData string
+		cookie   *gohttp.Cookie
+		handler  endpoint
+		fn       evaluate
 	}{
 		{
 			name:    "Login",
@@ -538,6 +565,71 @@ func TestHandlerAuth(t *testing.T) {
 				}
 			},
 		},
+		//Tests:
+		//  auth off
+		//. bad authentication cookie
+		//. no index name
+		//. no permissions
+		//  not authorized
+		//  authorized w/o query string
+		//  authorized w/ query
+		//.     test handlePostQuery
+		//      test handleGetSchema
+		{
+			name:   "MW-AuthOff",
+			path:   "/index/{index}/query",
+			kind:   "middleware",
+			cookie: validCookie,
+			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) {
+				f := hOff.chkAuthZ(hOff.handlePostQuery, authz.Admin)
+				f(w, r)
+			},
+			fn: func(w *httptest.ResponseRecorder, data []byte) {
+				if w.Result().StatusCode != 400 {
+					t.Errorf("expected http code 400, got: %+v", w.Result().StatusCode)
+				}
+			},
+		},
+		{
+			name:   "MW-ExpiredAuth",
+			path:   "/index/{index}/query",
+			kind:   "middleware",
+			cookie: expiredCookie,
+			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) {
+				f := h.chkAuthZ(h.handlePostQuery, authz.Admin)
+				f(w, r)
+			},
+			fn: func(w *httptest.ResponseRecorder, data []byte) {
+				if w.Result().StatusCode != 307 {
+					t.Errorf("expected http code 307, got: %+v", w.Result().StatusCode)
+				}
+
+			},
+		},
+		{
+			name:   "MW-NoIndexNoAdmin",
+			path:   "/index/{index}/query",
+			kind:   "middleware",
+			cookie: validCookie,
+			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) {
+				h := h
+				permFile := strings.NewReader(permissions2)
+				var p authz.GroupPermissions
+				if err := p.ReadPermissionsFile(permFile); err != nil {
+					t.Errorf("Error: %s", err)
+				}
+				h.permissions = &p
+				fmt.Printf("%+v\n", h)
+				f := h.chkAuthZ(h.handlePostQuery, authz.Write)
+				f(w, r)
+			},
+			fn: func(w *httptest.ResponseRecorder, data []byte) {
+				if w.Result().StatusCode != 403 {
+					t.Errorf("expected http code 403, got: %+v", w.Result().StatusCode)
+				}
+
+			},
+		},
 	}
 
 	for _, test := range tests {
@@ -546,7 +638,9 @@ func TestHandlerAuth(t *testing.T) {
 			t.Run(test.name, func(t *testing.T) {
 				r := httptest.NewRequest(gohttp.MethodGet, test.path, nil)
 				w := httptest.NewRecorder()
-				r.AddCookie(test.cookie)
+				if test.cookie != nil {
+					r.AddCookie(test.cookie)
+				}
 				test.handler(w, r)
 				data, err := readResponse(w)
 				if err != nil {
@@ -570,6 +664,23 @@ func TestHandlerAuth(t *testing.T) {
 
 				test.fn(w, data)
 
+			})
+		case "middleware":
+			t.Run(test.name, func(t *testing.T) {
+				r := httptest.NewRequest(gohttp.MethodGet, test.path, nil)
+				w := httptest.NewRecorder()
+				if test.cookie != nil {
+					r.AddCookie(test.cookie)
+				}
+
+				test.handler(w, r)
+				fmt.Println("hey")
+				data, err := readResponse(w)
+				if err != nil {
+					t.Errorf("expected no errors reading response, got: %+v", err)
+				}
+
+				test.fn(w, data)
 			})
 		}
 
