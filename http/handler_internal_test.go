@@ -565,16 +565,6 @@ admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 				}
 			},
 		},
-		//Tests:
-		//  auth off
-		//. bad authentication cookie
-		//. no index name
-		//. no permissions
-		//  not authorized
-		//  authorized w/o query string
-		//  authorized w/ query
-		//.     test handlePostQuery
-		//      test handleGetSchema
 		{
 			name:   "MW-AuthOff",
 			path:   "/index/{index}/query",

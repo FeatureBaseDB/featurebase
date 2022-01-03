@@ -38,6 +38,7 @@ import (
 	"github.com/molecula/featurebase/v2/rbf"
 	"github.com/molecula/featurebase/v2/topology"
 	"github.com/molecula/featurebase/v2/tracing"
+	"github.com/molecula/featurebase/v2/vprint"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	dto "github.com/prometheus/client_model/go"
@@ -554,6 +555,7 @@ func (h *Handler) chkAuthN(handler http.HandlerFunc) http.HandlerFunc {
 
 func (h *Handler) chkAuthZ(handler http.HandlerFunc, perm authz.Permission) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		lperm := perm
 		if h.auth != nil {
 			groups, err := h.auth.Authenticate(w, r)
 			if err != nil {
@@ -568,16 +570,20 @@ func (h *Handler) chkAuthZ(handler http.HandlerFunc, perm authz.Permission) http
 			uinfo := h.auth.GetUserInfo(w, r)
 
 			//get query string if applicable
-			queryRequest := r.Context().Value(contextKeyQueryRequest)
 
 			var queryString string
+			queryRequest := r.Context().Value(contextKeyQueryRequest)
 			if req, ok := queryRequest.(*pilosa.QueryRequest); ok {
 				queryString = req.Query
-			}
 
-			q, _ := pql.ParseString(fmt.Sprintf(queryString))
-			if q.WriteCallN() > 0 {
-				perm = authz.Write
+				q, err := pql.ParseString(queryString)
+				if err != nil {
+					http.Error(w, errors.Wrap(err, "parsing query string").Error(), http.StatusBadRequest)
+					return
+				}
+				if q.WriteCallN() > 0 {
+					lperm = authz.Write
+				}
 			}
 
 			queryString = strings.Replace(queryString, "\n", "", -1)
@@ -590,8 +596,9 @@ func (h *Handler) chkAuthZ(handler http.HandlerFunc, perm authz.Permission) http
 			indexName, ok := mux.Vars(r)["index"]
 			if ok {
 				p, err := h.permissions.GetPermissions(groups, indexName)
+				vprint.VV("p: %+v,perm: %+v,indexName: %+v", p, lperm, indexName)
 				ctx = context.WithValue(r.Context(), contextKeyPermission, p)
-				if err != nil || !p.Satisfies(perm) {
+				if err != nil || !p.Satisfies(lperm) {
 					w.Header().Add("Content-Type", "text/plain")
 					w.WriteHeader(http.StatusForbidden)
 					return
