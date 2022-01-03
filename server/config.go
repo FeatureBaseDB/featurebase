@@ -4,15 +4,18 @@ package server
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/url"
+	"os"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/molecula/featurebase/v2/auth"
+	"github.com/molecula/featurebase/v2/authz"
 	petcd "github.com/molecula/featurebase/v2/etcd"
 	rbfcfg "github.com/molecula/featurebase/v2/rbf/cfg"
 	"github.com/molecula/featurebase/v2/storage"
@@ -200,9 +203,9 @@ type Config struct {
 	// "rbf".
 	Storage *storage.Config `toml:"storage"`
 
-	// RowcacheOn, if true, turns on the row cache for all storage backends.
-	// The default is now off because it makes rbf queries faster and uses
-	// much less memory.
+	// RowcacheOn permanently disabled. No longer useful w/ RBF. Left
+	// for backward compatibility but will be removed in a future
+	// version.
 	RowcacheOn bool `toml:"rowcache-on"`
 
 	// RBFConfig defines all externally configurable RBF flags.
@@ -231,7 +234,7 @@ type Config struct {
 	SchemaDetailsOn bool `toml:"schema-details-on"`
 
 	// Enable AuthZ/AuthN
-	Auth auth.Auth `toml:"auth"`
+	Auth authz.Auth `toml:"auth"`
 }
 
 // Namespace returns the namespace to use based on the Future flag.
@@ -596,9 +599,9 @@ func lookupAddr(ctx context.Context, resolver *net.Resolver, host string) (strin
 	return addrs[0].String(), nil
 }
 
-func (c *Config) ValidateAuth() ([]error, error) {
+func (c *Config) ValidateAuth() (errors []error) {
 	if !c.Auth.Enable {
-		return []error{}, nil
+		return
 	}
 	authConfig := map[string]string{
 		"ClientId":         c.Auth.ClientId,
@@ -609,7 +612,6 @@ func (c *Config) ValidateAuth() ([]error, error) {
 		"ScopeURL":         c.Auth.ScopeURL,
 	}
 
-	errors := make([]error, 0)
 	for name, value := range authConfig {
 		if value == "" {
 			errors = append(errors, fmt.Errorf("empty string for auth config %s", name))
@@ -624,17 +626,95 @@ func (c *Config) ValidateAuth() ([]error, error) {
 			}
 		}
 	}
-	if len(errors) > 0 {
-		return errors, fmt.Errorf("there were errors validating config")
+	return errors
+}
+
+func (c *Config) ValidatePermissions(permsFile io.Reader) (errors []error) {
+
+	var p authz.GroupPermissions
+	if err := p.ReadPermissionsFile(permsFile); err != nil {
+		return append(errors, err)
 	}
-	return errors, nil
+
+	if len(p.Permissions) == 0 {
+		return append(errors, fmt.Errorf("no group permissions found in permissions file: %s", c.Auth.PermissionsFile))
+	}
+
+	for groupId, indexPerm := range p.Permissions {
+		if groupId == "" {
+			errors = append(errors, fmt.Errorf("empty string for group id in permissions file %s", c.Auth.PermissionsFile))
+			continue
+		}
+
+		for index, perm := range indexPerm {
+			if index == "" {
+				errors = append(errors, fmt.Errorf("empty string for index for group id %s in permissions file %s ", groupId, c.Auth.PermissionsFile))
+				continue
+			}
+
+			if perm == "" {
+				errors = append(errors, fmt.Errorf("empty string for permission for group id %s and index %s in permissions file %s", groupId, index, c.Auth.PermissionsFile))
+				continue
+			}
+
+			if !((perm == "write") || (perm == "read")) {
+				errors = append(errors, fmt.Errorf("not a valid permission %s for group id %s and index %s in permissions file %s; expected permissions are read or write", perm, groupId, index, c.Auth.PermissionsFile))
+				continue
+			}
+		}
+	}
+
+	if p.Admin == "" {
+		errors = append(errors, fmt.Errorf("empty string for admin in permissions file: %s", c.Auth.PermissionsFile))
+	}
+
+	return errors
+}
+
+func (c *Config) ValidatePermissionsFile() (err error) {
+
+	if c.Auth.PermissionsFile == "" {
+		return fmt.Errorf("empty string for auth config permissions file")
+	}
+
+	fileExt := filepath.Ext(c.Auth.PermissionsFile)
+	if (fileExt != ".yaml") && (fileExt != ".yml") {
+		return fmt.Errorf("invalid file extension for auth config permissions file: %s", c.Auth.PermissionsFile)
+	}
+	return
 }
 
 func (c *Config) MustValidateAuth() {
-	if errors, err := c.ValidateAuth(); err != nil {
-		for _, e := range errors {
+
+	errorsAuth := c.ValidateAuth()
+	if len(errorsAuth) > 0 {
+		for _, e := range errorsAuth {
 			log.Println(e)
 		}
-		log.Fatal(err)
+	}
+
+	var errorsPerm []error
+	errorsPermFile := c.ValidatePermissionsFile()
+	if errorsPermFile == nil {
+		permsFile, err := os.Open(c.Auth.PermissionsFile)
+		if err != nil {
+			log.Println(err)
+		}
+
+		defer permsFile.Close()
+
+		errorsPerm = c.ValidatePermissions(permsFile)
+		if len(errorsPerm) > 0 {
+			for _, e := range errorsPerm {
+				log.Println(e)
+			}
+		}
+
+	} else {
+		log.Println(errorsPermFile)
+	}
+
+	if len(errorsAuth) > 0 || len(errorsPerm) > 0 || errorsPermFile != nil {
+		log.Fatal(fmt.Errorf("there were errors validating authN/authZ config and/or permissions"))
 	}
 }

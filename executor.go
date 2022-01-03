@@ -51,6 +51,9 @@ type executor struct {
 	Node    *topology.Node
 	Cluster *cluster
 
+	// how many jobs the work queue has seen
+	workCounter uint64
+
 	// Client used for remote requests.
 	client InternalQueryClient
 
@@ -61,6 +64,7 @@ type executor struct {
 	workMu         sync.RWMutex
 	workersWG      sync.WaitGroup
 	workerPoolSize int
+	currentWorkers int64
 	work           chan job
 
 	// Maximum per-request memory usage (Extract() only)
@@ -128,13 +132,66 @@ func newExecutor(opts ...executorOption) *executor {
 	e.work = make(chan job, e.workerPoolSize)
 	_ = testhook.Opened(NewAuditor(), e, nil)
 	for i := 0; i < e.workerPoolSize; i++ {
-		e.workersWG.Add(1)
-		go func() {
-			defer e.workersWG.Done()
-			worker(e.work)
-		}()
+		e.addWorker()
 	}
+	go func() {
+		// background task: every so often, check to see whether we have
+		// work in the queue but none has been taken for a while. if so, we
+		// need more workers.
+		prev := atomic.LoadUint64(&e.workCounter)
+		periodic := time.NewTicker(50 * time.Millisecond)
+		defer periodic.Stop()
+		running := true
+		idle := 0
+		for running {
+			<-periodic.C
+			func() {
+				e.workMu.RLock()
+				defer e.workMu.RUnlock()
+				if e.shutdown {
+					running = false
+					return
+				}
+				if len(e.work) == 0 {
+					idle++
+					if idle > 10 && atomic.LoadInt64(&e.currentWorkers) > int64(e.workerPoolSize*2) {
+						select {
+						case e.work <- job{idleHands: true}:
+							// we closed an excess worker
+						default:
+							// somehow between our test above and now the work
+							// queue FILLED UP and we stoically accept this
+						}
+						idle = 0
+					}
+					return
+				}
+				next := atomic.LoadUint64(&e.workCounter)
+				if next == prev {
+					e.addWorker()
+				}
+				prev = next
+			}()
+		}
+	}()
 	return e
+}
+
+func (e *executor) addWorker() {
+	e.workersWG.Add(1)
+	n := atomic.AddInt64(&e.currentWorkers, 1)
+	if e.Holder != nil {
+		e.Holder.Stats.Gauge("worker_total", float64(n), 0)
+	}
+
+	go func() {
+		defer e.workersWG.Done()
+		e.worker(e.work)
+		n := atomic.AddInt64(&e.currentWorkers, -1)
+		if e.Holder != nil {
+			e.Holder.Stats.Gauge("worker_total", float64(n), 0)
+		}
+	}()
 }
 
 func (e *executor) Close() error {
@@ -152,6 +209,14 @@ func (e *executor) Close() error {
 	close(e.work)
 	e.workersWG.Wait()
 	return nil
+}
+
+// InitStats initializes stats counters. Must be called after Holder set.
+func (e *executor) InitStats() {
+	if e.Holder != nil {
+		e.Holder.Stats.Count("job_total", 0, 0)
+		e.Holder.Stats.Gauge("worker_total", float64(atomic.LoadInt64(&e.currentWorkers)), 0)
+	}
 }
 
 // Execute executes a PQL query.
@@ -4518,7 +4583,11 @@ func (e *executor) executeRowShard(ctx context.Context, qcx *Qcx, index string, 
 			return nil, err
 		}
 		defer finisher(&err0)
-		return frag.row(tx, rowID)
+		row, err := frag.row(tx, rowID)
+		if qcx.write && err == nil {
+			row = row.Clone()
+		}
+		return row, err
 	}
 
 	// If no quantum exists then return an empty bitmap.
@@ -4557,15 +4626,21 @@ func (e *executor) executeRowShard(ctx context.Context, qcx *Qcx, index string, 
 	if len(rows) == 0 {
 		return &Row{}, nil
 	} else if len(rows) == 1 {
+		if qcx.write {
+			return rows[0].Clone(), nil
+		}
 		return rows[0], nil
 	}
 	row := rows[0].Union(rows[1:]...)
+	if qcx.write {
+		row = row.Clone()
+	}
 	return row, nil
 
 }
 
 // executeRowBSIGroupShard executes a range(bsiGroup) call for a local shard.
-func (e *executor) executeRowBSIGroupShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64) (_ *Row, err0 error) {
+func (e *executor) executeRowBSIGroupShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64) (cloneable *Row, err0 error) {
 	span, _ := tracing.StartSpanFromContext(ctx, "Executor.executeRowBSIGroupShard")
 	defer span.Finish()
 
@@ -4597,6 +4672,11 @@ func (e *executor) executeRowBSIGroupShard(ctx context.Context, qcx *Qcx, index 
 		return nil, err
 	}
 	defer finisher(&err0)
+	defer func() {
+		if qcx.write && cloneable != nil {
+			cloneable = cloneable.Clone()
+		}
+	}()
 
 	// EQ null           _exists - frag.NotNull()
 	// NEQ null          frag.NotNull()
@@ -4846,6 +4926,9 @@ func (e *executor) executeNotShard(ctx context.Context, qcx *Qcx, index string, 
 	} else {
 		if existenceRow, err = existenceFrag.row(tx, 0); err != nil {
 			return nil, err
+		}
+		if qcx.write {
+			existenceRow = existenceRow.Clone()
 		}
 	}
 	// the finishers returned by a write tx, which we might be in if there's
@@ -5940,10 +6023,16 @@ type job struct {
 	ctx             context.Context
 	memoryAvailable *int64 // shared, atomic value
 	resultChan      chan mapResponse
+	idleHands       bool
 }
 
-func worker(work chan job) {
+func (e *executor) worker(work chan job) {
 	for j := range work {
+		atomic.AddUint64(&e.workCounter, 1)
+		e.Holder.Stats.Count("job_total", 1, 0)
+		if j.idleHands {
+			return
+		}
 		// Skip out early if the context is done, but still send
 		// an ack so mapperLocal can be sure we aren't about to
 		// work on something it sent us.

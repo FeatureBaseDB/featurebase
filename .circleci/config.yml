@@ -151,7 +151,7 @@ jobs:
       - checkout-plus
       - skip-if-root-unchanged
       - setup_remote_docker
-      - run: make clustertests-build
+      - run: make clustertests
   release:
     executor:
       name: golang

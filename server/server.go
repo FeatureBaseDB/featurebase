@@ -29,6 +29,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	pilosa "github.com/molecula/featurebase/v2"
+	"github.com/molecula/featurebase/v2/authz"
 	"github.com/molecula/featurebase/v2/boltdb"
 	"github.com/molecula/featurebase/v2/encoding/proto"
 	petcd "github.com/molecula/featurebase/v2/etcd"
@@ -224,6 +225,18 @@ func (m *Command) Start() (err error) {
 
 	if m.Config.Auth.Enable {
 		m.Config.MustValidateAuth()
+
+		permsFile, err := os.Open(m.Config.Auth.PermissionsFile)
+		if err != nil {
+			return err
+		}
+
+		defer permsFile.Close()
+
+		var p authz.GroupPermissions
+		if err = p.ReadPermissionsFile(permsFile); err != nil {
+			return err
+		}
 	}
 
 	// Initialize server.
@@ -482,7 +495,7 @@ func (m *Command) SetupServer() error {
 		pilosa.OptServerClusterName(m.Config.Cluster.Name),
 		pilosa.OptServerSerializer(proto.Serializer{}),
 		pilosa.OptServerStorageConfig(m.Config.Storage),
-		pilosa.OptServerRowcacheOn(m.Config.RowcacheOn),
+		pilosa.OptServerRowcacheOn(false),
 		pilosa.OptServerRBFConfig(m.Config.RBFConfig),
 		pilosa.OptServerMaxQueryMemory(m.Config.MaxQueryMemory),
 		pilosa.OptServerQueryHistoryLength(m.Config.QueryHistoryLength),

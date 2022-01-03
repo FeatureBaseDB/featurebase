@@ -45,7 +45,7 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 
 	// Etcd
 	// Etcd.Name used Config.Name for its value.
-	// Etcd.Dir defaults to a directory under the pilosa data directory.
+	flags.StringVar(&srv.Config.Etcd.Dir, "etcd.dir", srv.Config.Etcd.Dir, "Directory to store etcd data files. If not provided, a directory will be created under the main data-dir directory.")
 	// Etcd.ClusterName uses Cluster.Name for its value
 	flags.StringVar(&srv.Config.Etcd.LClientURL, "etcd.listen-client-address", srv.Config.Etcd.LClientURL, "Listen client address.")
 	flags.StringVar(&srv.Config.Etcd.AClientURL, "etcd.advertise-client-address", srv.Config.Etcd.AClientURL, "Advertise client address. If not provided, uses the listen client address.")
@@ -85,7 +85,7 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 	flags.BoolVar(&srv.Config.Storage.FsyncEnabled, "storage.fsync", true, "enable fsync fully safe flush-to-disk")
 
 	// RowcacheOn
-	flags.BoolVar((&srv.Config.RowcacheOn), "rowcache-on", srv.Config.RowcacheOn, "turn on the rowcache for all backends (may speed some queries)")
+	flags.BoolVar((&srv.Config.RowcacheOn), "rowcache-on", srv.Config.RowcacheOn, "Do not use, permanently disabled. Flag exists for backwards compatibility and will be removed.")
 
 	// RBF specific flags. See pilosa/rbf/cfg/cfg.go for definitions.
 	srv.Config.RBFConfig.DefineFlags(flags)
@@ -117,5 +117,5 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 	flags.StringVar(&srv.Config.Auth.TokenURL, "auth.token-url", srv.Config.Auth.TokenURL, "Identity Provider's Token URL.")
 	flags.StringVar(&srv.Config.Auth.GroupEndpointURL, "auth.group-endpoint-url", srv.Config.Auth.GroupEndpointURL, "Identity Provider's Group endpoint URL.")
 	flags.StringVar(&srv.Config.Auth.ScopeURL, "auth.scope-url", srv.Config.Auth.ScopeURL, "Identity Provider's Scope URL.")
-
+	flags.StringVar(&srv.Config.Auth.PermissionsFile, "auth.permissions", srv.Config.Auth.PermissionsFile, "Permissions' file with group authorization.")
 }

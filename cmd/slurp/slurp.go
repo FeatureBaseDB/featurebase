@@ -92,8 +92,10 @@ func (r *stateMachine) NewHeader(h *tar.Header, tr *tar.Reader) error {
 
 			byteData, err := ioutil.ReadAll(tr)
 			vprint.PanicOn(err)
-			br := bytes.NewReader(byteData)
-			err = r.client.ImportFieldKeys(context.Background(), uri, index, fieldName, false, br)
+			readerFunc := func() (io.Reader, error) {
+				return bytes.NewReader(byteData), nil
+			}
+			err = r.client.ImportFieldKeys(context.Background(), uri, index, fieldName, false, readerFunc)
 			if err != nil {
 				return err
 			}
@@ -106,9 +108,11 @@ func (r *stateMachine) NewHeader(h *tar.Header, tr *tar.Reader) error {
 			}
 			byteData, err := ioutil.ReadAll(tr)
 			vprint.PanicOn(err)
+			readerFunc := func() (io.Reader, error) {
+				return bytes.NewReader(byteData), nil
+			}
 
-			br := bytes.NewReader(byteData)
-			err = r.client.ImportIndexKeys(context.Background(), uri, index, int(partition), false, br)
+			err = r.client.ImportIndexKeys(context.Background(), uri, index, int(partition), false, readerFunc)
 			if err != nil {
 				return err
 			}

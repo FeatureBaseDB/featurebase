@@ -65,6 +65,9 @@ type Tx struct {
 	// manages to trigger a *deallocation* (which I don't think should be
 	// happening), we'll process that one after the current list is processed.
 	pendingFreelistAdds []uint32
+
+	// DEBUG
+	stack []byte
 }
 
 func (tx *Tx) DBPath() string {
@@ -109,24 +112,31 @@ func (tx *Tx) Commit() error {
 		// future plan: after checkpoint is moved to background
 		// or not every removeTx, then we can move the
 		// tx.db.rootRecords = tx.rootRecords into removeTx().
-
+		//
+		// ... or maybe not: let's do that part here, and then removeTx
+		// may or may not start a checkpoint, possibly asynchronously.
+		//
 		// avoid race detector firing on a write race here
-		// vs the read of rootRecords at db.Begin()
+		// vs the read of rootRecords at db.Begin(), then release
+		// the lock, because we need removeTx to grab the lock to
+		// work, but if it wants to checkpoint, it wants to be able to return
+		// to us here and still be holding the lock.
 		tx.db.mu.Lock()
-		defer tx.db.mu.Unlock()
 		tx.db.rootRecords = tx.rootRecords
 		tx.db.pageMap = tx.pageMap
 		tx.db.walPageN = tx.walPageN
-		return tx.db.removeTx(tx)
+		tx.db.mu.Unlock()
 	}
 
-	// Disconnect transaction from DB.
 	tx.db.mu.Lock()
 	defer tx.db.mu.Unlock()
+	// Disconnect transaction from DB.
 	return tx.db.removeTx(tx)
 }
 
-func (tx *Tx) Rollback() {
+func (tx *Tx) Rollback() { tx.rollback(false) }
+
+func (tx *Tx) rollback(hasDBLock bool) {
 	tx.mu.Lock()
 	defer tx.mu.Unlock()
 
@@ -141,8 +151,10 @@ func (tx *Tx) Rollback() {
 	}
 
 	// Disconnect transaction from DB.
-	tx.db.mu.Lock()
-	defer tx.db.mu.Unlock()
+	if !hasDBLock {
+		tx.db.mu.Lock()
+		defer tx.db.mu.Unlock()
+	}
 	vprint.PanicOn(tx.db.removeTx(tx))
 }
 
@@ -732,6 +744,27 @@ func (tx *Tx) Check() error {
 	return nil
 }
 
+func (tx *Tx) checkPage(pgno, parent, typ uint32) error {
+	switch typ {
+	case PageTypeBranch:
+		return tx.checkBranchPage(pgno, parent, typ)
+	default:
+		return nil
+	}
+}
+
+func (tx *Tx) checkBranchPage(pgno, parent, typ uint32) error {
+	page, _, err := tx.readPage(pgno)
+	if err != nil {
+		return err
+	}
+
+	if readCellN(page) == 0 {
+		return fmt.Errorf("branch page %d is empty", pgno)
+	}
+	return nil
+}
+
 // checkPageAllocations ensures that all pages are either in-use or on the freelist.
 func (tx *Tx) checkPageAllocations() error {
 	freePageSet, err := tx.freePageSet()
@@ -821,7 +854,7 @@ func (tx *Tx) inusePageSet() (map[uint32]struct{}, error) {
 	// Traverse freelist and mark pages as in-use.
 	if err := tx.walkTree(readMetaFreelistPageNo(tx.meta[:]), 0, func(pgno, parent, typ uint32) error {
 		m[pgno] = struct{}{}
-		return nil
+		return tx.checkPage(pgno, parent, typ)
 	}); err != nil {
 		return m, err
 	}
@@ -837,7 +870,8 @@ func (tx *Tx) inusePageSet() (map[uint32]struct{}, error) {
 
 		if err := tx.walkTree(pgno.(uint32), 0, func(pgno, parent, typ uint32) error {
 			m[pgno] = struct{}{}
-			return nil
+
+			return tx.checkPage(pgno, parent, typ)
 		}); err != nil {
 			return m, err
 		}
@@ -2009,6 +2043,20 @@ func (tx *Tx) GetSortedFieldViewList() (fvs []txkey.FieldView, _ error) {
 		fvs = append(fvs, fv)
 	}
 	return
+}
+
+func (tx *Tx) DebugInfo() *TxDebugInfo {
+	return &TxDebugInfo{
+		Ptr:      fmt.Sprintf("%p", tx),
+		Writable: tx.writable,
+		Stack:    string(tx.stack),
+	}
+}
+
+type TxDebugInfo struct {
+	Ptr      string `json:"ptr"`
+	Writable bool   `json:"writable"`
+	Stack    string `json:"stack,omitempty"`
 }
 
 // SnapshotReader returns a reader that provides a snapshot for the current database state.

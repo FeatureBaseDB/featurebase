@@ -705,8 +705,11 @@ func (f *Field) cacheBitDepth(bd uint64) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	f.options.BitDepth = bd
-	if bsig != nil {
+	if f.options.BitDepth < bd {
+		f.options.BitDepth = bd
+	}
+
+	if bsig != nil && bsig.BitDepth < bd {
 		bsig.BitDepth = bd
 	}
 

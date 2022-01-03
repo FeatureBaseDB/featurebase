@@ -13,6 +13,7 @@ import (
 
 	_ "net/http/pprof"
 
+	"github.com/felixge/fgprof"
 	"github.com/molecula/featurebase/v2/rbf"
 	rbfcfg "github.com/molecula/featurebase/v2/rbf/cfg"
 	"golang.org/x/sync/errgroup"
@@ -290,7 +291,8 @@ func TestDB_MultiTx(t *testing.T) {
 
 					time.Sleep(time.Duration(rand.Intn(100)) * time.Millisecond)
 
-					for i := 0; i < rand.Intn(1000); i++ {
+					n := rand.Intn(500) + 500
+					for i := 0; i < n; i++ {
 						v := rand.Intn(1 << 20)
 						if _, err := tx.Contains("x", uint64(v)); err != nil {
 							return err
@@ -315,7 +317,8 @@ func TestDB_MultiTx(t *testing.T) {
 			}
 			defer tx.Rollback()
 
-			for j := 0; j < rand.Intn(100); j++ {
+			n := rand.Intn(90) + 10
+			for j := 0; j < n; j++ {
 				v := rand.Intn(1 << 20)
 				if _, err := tx.Add("x", uint64(v)); err != nil {
 					t.Fatal(err)
@@ -334,6 +337,134 @@ func TestDB_MultiTx(t *testing.T) {
 	if err := g.Wait(); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func TestDB_DebugInfo(t *testing.T) {
+	db := MustOpenDB(t)
+	defer MustCloseDB(t, db)
+
+	tx := MustBegin(t, db, true)
+	defer tx.Rollback()
+
+	info := db.DebugInfo()
+	if got, want := info.Path, db.Path; got != want {
+		t.Fatalf("Path=%q, want %q", got, want)
+	} else if got, want := len(info.Txs), 1; got != want {
+		t.Fatalf("len(Txs)=%d, want %d", got, want)
+	}
+}
+
+// premake pool of random values
+const randPool = (1 << 18)
+
+// benchmarkOneCheckpoint
+func benchmarkOneCheckpoint(b *testing.B, randInts []int) {
+	cfg := rbfcfg.NewDefaultConfig()
+	// extremely low to force checkpointing
+	cfg.MinWALCheckpointSize = rbf.PageSize * 16
+	cfg.MaxWALCheckpointSize = rbf.PageSize * 64
+	var _ rbfcfg.Config
+	db := MustOpenDB(b, cfg)
+	defer MustCloseDB(b, db)
+
+	// Run multiple readers in separate goroutines.
+	ctx, cancel := context.WithCancel(context.Background())
+	g, ctx := errgroup.WithContext(ctx)
+	for i := 0; i < 8; i++ {
+		i := i
+		g.Go(func() error {
+			for {
+				if ctx.Err() != nil {
+					return nil // cancelled, return no error
+				} else if err := func() error {
+					tx, err := db.Begin(false)
+					if err != nil {
+						return err
+					}
+					defer tx.Rollback()
+
+					time.Sleep(time.Duration(rand.Intn(int(3 * time.Millisecond))))
+
+					times := rand.Intn(1000) + 1
+					for j := 0; j < times; j++ {
+						v := randInts[((i<<10)+j)%(randPool-1)]
+						if _, err := tx.Contains("x", uint64(v)); err != nil {
+							return err
+						}
+					}
+					return nil
+				}(); err != nil {
+					return err
+				}
+				// time.Sleep(time.Duration(rand.Intn(int(3 * time.Millisecond))))
+			}
+		})
+	}
+
+	// Continuously set/clear bits while readers are executing.
+	next := 0
+	for i := 0; i < 1000; i++ {
+		func() {
+			tx, err := db.Begin(true)
+			if err != nil {
+				b.Fatal(err)
+			}
+			defer tx.Rollback()
+
+			times := rand.Intn(100)
+			for j := 0; j < times; j++ {
+				v := randInts[next]
+				next = (next + 1) % (randPool - 1)
+				if j&7 == 0 {
+					// some removes but they're less frequent
+					if _, err := tx.Remove("x", uint64(v)); err != nil {
+						b.Fatal(err)
+					}
+				} else {
+					if _, err := tx.Add("x", uint64(v)); err != nil {
+						b.Fatal(err)
+					}
+				}
+
+			}
+			if err := tx.Commit(); err != nil {
+				b.Fatal(err)
+			}
+		}()
+	}
+
+	// Stop readers & wait.
+	cancel()
+	if err := g.Wait(); err != nil {
+		b.Fatal(err)
+	}
+}
+
+func BenchmarkDbCheckpoint(b *testing.B) {
+	out, err := os.Create("cp.out")
+	if err != nil {
+		b.Fatalf("creating log file: %v", err)
+	}
+	done := fgprof.Start(out, fgprof.FormatPprof)
+	b.StopTimer()
+	// premake these because otherwise it's >5% of CPU in the reads
+	randInts := make([]int, randPool)
+	for i := range randInts {
+		v1, v2 := rand.Intn(1<<24), rand.Intn(1<<24)
+		// minimum gives us a skewed distribution which makes lower values more
+		// likely than higher values, so we get a mix of container types
+		if v1 < v2 {
+			randInts[i] = v1
+		} else {
+			randInts[i] = v2
+		}
+	}
+	b.StartTimer()
+	for i := 0; i < b.N; i++ {
+		benchmarkOneCheckpoint(b, randInts)
+	}
+	b.StopTimer()
+	done()
 }
 
 // better diagnosis of deadlocks/hung situations versus just really slow "Quick" tests.

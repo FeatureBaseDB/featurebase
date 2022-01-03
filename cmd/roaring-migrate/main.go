@@ -273,21 +273,19 @@ func Migrate(dataDir, backupPath string) error {
 	})
 	//raw is now sorted by shard
 
-	// need index/field/shard
-	// make rbf file in backup
-	rowSize := uint64(0) //?
-	clear := false
-	log := false
 	cache := &rbfFile{
 		temp: filepath.Join(backupPath, "_SCRATCH"),
 	}
+	bm := roaring.NewSliceBitmap()
 	for _, filename := range raw {
 		index, field, view, shard := Extract(filename)
+
 		content, err := ioutil.ReadFile(dataDir + filename)
 		if err != nil {
 			return err
 		}
-		itr, err := roaring.NewRoaringIterator(content)
+		err = bm.UnmarshalBinary(content)
+
 		if err != nil {
 			return err
 		}
@@ -300,10 +298,13 @@ func Migrate(dataDir, backupPath string) error {
 			return err
 		}
 		key := string(txkey.Prefix(index, field, view, shard))
-		_, _, err = tx.ImportRoaringBits(key, itr, clear, log, rowSize)
-		if err != nil {
-			tx.Rollback()
-			return err
+		itr, ok := bm.Containers.Iterator(0)
+		if ok {
+			for itr.Next() {
+				k, v := itr.Value()
+				tx.PutContainer(key, k, v)
+
+			}
 		}
 		err = tx.Commit()
 		if err != nil {

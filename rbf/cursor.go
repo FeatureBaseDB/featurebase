@@ -774,6 +774,25 @@ func (c *Cursor) deleteBranchCell(stackIndex int, key uint64) (err error) {
 	cells[len(cells)-1] = branchCell{}
 	cells = cells[:len(cells)-1]
 
+	// Branches are not allowed to have zero element so we must remove the page
+	// or, in the case of the root page, convert to a leaf page.
+	if len(cells) == 0 {
+		// If this is the root page, convert to leaf page.
+		if stackIndex == 0 {
+			var buf [PageSize]byte
+			writePageNo(buf[:], elem.pgno)
+			writeFlags(buf[:], PageTypeLeaf)
+			writeCellN(buf[:], len(cells))
+			return c.tx.writePage(buf[:])
+		}
+
+		// If this is a non-root page, free and remove from parent.
+		if err := c.tx.freePgno(elem.pgno); err != nil {
+			return err
+		}
+		return c.deleteBranchCell(stackIndex-1, oldPageKey)
+	}
+
 	// If the root only has one node, replace it with its child.
 	if stackIndex == 0 && len(cells) == 1 {
 		target, _, err := c.tx.readPage(cells[0].ChildPgno)
@@ -802,6 +821,9 @@ func (c *Cursor) deleteBranchCell(stackIndex int, key uint64) (err error) {
 		writeBranchCell(buf[:], j, offset, cell)
 		offset += align8(branchCellSize)
 	}
+
+	assert(readCellN(buf[:]) > 0) // must have at least one cell
+
 	if err := c.tx.writePage(buf[:]); err != nil {
 		return err
 	}

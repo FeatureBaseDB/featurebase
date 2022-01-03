@@ -25,6 +25,7 @@ require (
 	github.com/gopherjs/gopherjs v0.0.0-20200217142428-fce0ec30dd00 // indirect
 	github.com/gorilla/handlers v1.3.0
 	github.com/gorilla/mux v1.7.0
+	github.com/hashicorp/go-retryablehttp v0.7.0
 	github.com/improbable-eng/grpc-web v0.13.0
 	github.com/lib/pq v1.8.0
 	github.com/molecula/apophenia v0.0.0-20190827192002-68b7a14a478b
@@ -54,7 +55,7 @@ require (
 	golang.org/x/net v0.0.0-20210805182204-aaa1db679c0d // indirect
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	google.golang.org/grpc v1.28.0
-	gopkg.in/yaml.v2 v2.3.0 // indirect
+	gopkg.in/yaml.v2 v2.3.0
 	modernc.org/mathutil v1.0.0
 	modernc.org/strutil v1.0.0
 	sigs.k8s.io/yaml v1.2.0 // indirect

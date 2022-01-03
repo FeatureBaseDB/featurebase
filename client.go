@@ -80,8 +80,14 @@ type InternalClient interface {
 	GetNodeUsage(ctx context.Context, uri *pnet.URI) (map[string]NodeUsage, error)
 	GetPastQueries(ctx context.Context, uri *pnet.URI) ([]PastQueryStatus, error)
 
-	ImportFieldKeys(ctx context.Context, uri *pnet.URI, index, field string, remote bool, rddbdata io.Reader) error
-	ImportIndexKeys(ctx context.Context, uri *pnet.URI, index string, partitionID int, remote bool, rddbdata io.Reader) error
+	// ImportFieldKeys and ImportIndexKeys are mainly used when
+	// restoring a backup. They take a readerFunc which returns a
+	// reader rather than taking an io.Reader directly to allow for
+	// efficient retries (rather than reading the entire request body
+	// into a buffer and reusing it). Reader returned from the func
+	// must be properly closed by the implementation.
+	ImportFieldKeys(ctx context.Context, uri *pnet.URI, index, field string, remote bool, readerFunc func() (io.Reader, error)) error
+	ImportIndexKeys(ctx context.Context, uri *pnet.URI, index string, partitionID int, remote bool, readerFunc func() (io.Reader, error)) error
 
 	// SetInternalAPI tells the client the API it should use for internal/loopback ops
 	// where applicable.
@@ -277,11 +283,11 @@ func (n nopInternalClient) GetNodeUsage(ctx context.Context, uri *pnet.URI) (map
 func (n nopInternalClient) GetPastQueries(ctx context.Context, uri *pnet.URI) ([]PastQueryStatus, error) {
 	return nil, nil
 }
-func (c nopInternalClient) ImportFieldKeys(ctx context.Context, uri *pnet.URI, index, field string, remote bool, rddbdata io.Reader) error {
+func (c nopInternalClient) ImportFieldKeys(ctx context.Context, uri *pnet.URI, index, field string, remote bool, readerFunc func() (io.Reader, error)) error {
 	return nil
 }
 
-func (c nopInternalClient) ImportIndexKeys(ctx context.Context, uri *pnet.URI, index string, partitionID int, remote bool, rddbdata io.Reader) error {
+func (c nopInternalClient) ImportIndexKeys(ctx context.Context, uri *pnet.URI, index string, partitionID int, remote bool, readerFunc func() (io.Reader, error)) error {
 	return nil
 }
 
