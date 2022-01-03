@@ -1429,7 +1429,7 @@ func (f *Field) MinForShard(tx Tx, shard uint64, filter *Row) (ValCount, error) 
 // includes the int64 "Val\" value to make comparisons easier in the
 // executor (at time of writing, Percentile takes advantage of this,
 // but we might be able to simplify logic in other places as well).
-func (f *Field) valCountize(min int64, cnt uint64, bsig *bsiGroup) (ValCount, error) {
+func (f *Field) valCountize(val int64, cnt uint64, bsig *bsiGroup) (ValCount, error) {
 	if bsig == nil {
 		bsig = f.bsiGroup(f.name)
 		if bsig == nil {
@@ -1440,12 +1440,12 @@ func (f *Field) valCountize(min int64, cnt uint64, bsig *bsiGroup) (ValCount, er
 	valCount := ValCount{Count: int64(cnt)}
 
 	if f.Options().Type == FieldTypeDecimal {
-		dec := pql.NewDecimal(min+bsig.Base, bsig.Scale)
+		dec := pql.NewDecimal(val+bsig.Base, bsig.Scale)
 		valCount.DecimalVal = &dec
 	} else if f.Options().Type == FieldTypeTimestamp {
-		valCount.TimestampVal = time.Unix(0, (min+bsig.Base)*TimeUnitNanos(f.options.TimeUnit)).UTC()
+		valCount.TimestampVal = time.Unix(0, (val+bsig.Base)*TimeUnitNanos(f.options.TimeUnit)).UTC()
 	}
-	valCount.Val = min + bsig.Base
+	valCount.Val = val + bsig.Base
 	return valCount, nil
 }
 
