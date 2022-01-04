@@ -489,3 +489,18 @@ func TestExecutorSafeCopyDistinctTimestamp(t *testing.T) {
 		t.Fatalf("Did not copy results. got %+v, want %+v", copied.Results, response.Results)
 	}
 }
+
+func TestGetScaledInt(t *testing.T) {
+	f := OpenField(t, OptFieldTypeTimestamp(time.Now(), "ms"))
+	defer f.Close()
+	// check that fields with type timestamp return the int64 passed in to getScaledInt with nil err
+	v := time.Now().Unix()
+	res, err := getScaledInt(f.Field, v)
+	if err != nil {
+		t.Errorf("got error %v, expected nil", err)
+	}
+	if !reflect.DeepEqual(res, v) {
+		t.Errorf("expected %v, got %v", v, res)
+	}
+
+}

@@ -1388,18 +1388,7 @@ func (f *Field) MaxForShard(tx Tx, shard uint64, filter *Row) (ValCount, error) 
 		return ValCount{}, errors.Wrap(err, "calling fragment.max")
 	}
 
-	valCount := ValCount{Count: int64(cnt)}
-
-	if f.Options().Type == FieldTypeDecimal {
-		dec := pql.NewDecimal(max+bsig.Base, bsig.Scale)
-		valCount.DecimalVal = &dec
-	} else if f.Options().Type == FieldTypeTimestamp {
-		valCount.TimestampVal = time.Unix(0, (max+bsig.Base)*TimeUnitNanos(f.options.TimeUnit)).UTC()
-	} else {
-		valCount.Val = max + bsig.Base
-	}
-
-	return valCount, nil
+	return f.valCountize(max, cnt, bsig)
 }
 
 // MinForShard returns the minimum value which appears in this shard
@@ -1434,17 +1423,32 @@ func (f *Field) MinForShard(tx Tx, shard uint64, filter *Row) (ValCount, error) 
 		return ValCount{}, errors.Wrap(err, "calling fragment.min")
 	}
 
+	return f.valCountize(min, cnt, bsig)
+}
+
+// valCountize takes the "raw" value and count we get from the
+// fragment and calculates the cooked values for this field
+// (timestamping, decimaling, or just adding in the base). It always
+// includes the int64 "Val\" value to make comparisons easier in the
+// executor (at time of writing, Percentile takes advantage of this,
+// but we might be able to simplify logic in other places as well).
+func (f *Field) valCountize(val int64, cnt uint64, bsig *bsiGroup) (ValCount, error) {
+	if bsig == nil {
+		bsig = f.bsiGroup(f.name)
+		if bsig == nil {
+			return ValCount{}, ErrBSIGroupNotFound
+		}
+
+	}
 	valCount := ValCount{Count: int64(cnt)}
 
 	if f.Options().Type == FieldTypeDecimal {
-		dec := pql.NewDecimal(min+bsig.Base, bsig.Scale)
+		dec := pql.NewDecimal(val+bsig.Base, bsig.Scale)
 		valCount.DecimalVal = &dec
 	} else if f.Options().Type == FieldTypeTimestamp {
-		valCount.TimestampVal = time.Unix(0, (min+bsig.Base)*TimeUnitNanos(f.options.TimeUnit)).UTC()
-	} else {
-		valCount.Val = min + bsig.Base
+		valCount.TimestampVal = time.Unix(0, (val+bsig.Base)*TimeUnitNanos(f.options.TimeUnit)).UTC()
 	}
-
+	valCount.Val = val + bsig.Base
 	return valCount, nil
 }
 

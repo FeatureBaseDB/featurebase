@@ -49,7 +49,16 @@ func (cmd *RBFPagesCommand) Run(ctx context.Context) error {
 	// Iterate over each page and grab info.
 	infos, err := tx.PageInfos()
 	if err != nil {
-		return err
+		fmt.Fprintln(cmd.Stdout, "ERRORS:")
+		switch err := err.(type) {
+		case rbf.ErrorList:
+			for i := range err {
+				fmt.Fprintln(cmd.Stdout, err[i])
+			}
+		default:
+			fmt.Fprintln(cmd.Stdout, err)
+		}
+		fmt.Fprintln(cmd.Stdout, "")
 	}
 
 	// Write header.

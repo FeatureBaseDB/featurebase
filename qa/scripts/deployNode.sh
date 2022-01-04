@@ -2,6 +2,9 @@
 
 # To run script: ./deployNode.sh $PROFILE
 
+# default to the VPC initially created
+VPC=${VPC:-vpc-0582f594d7d2ca2d4}
+
 function deploy_node() {
     # get AMI, security group and subnet ID 
     AMI=$(aws ssm get-parameters --names /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-ebs --query 'Parameters[0].[Value]' --output text --profile $PROFILE)
@@ -10,13 +13,13 @@ function deploy_node() {
         exit 1
     fi
 
-    SECURITY_GROUP=$(aws ec2 describe-security-groups --filters Name=vpc-id,Values=vpc-03a4ba3d5b7c8f978 Name=group-name,Values=default --query 'SecurityGroups[*].[GroupId]' --output text --profile $PROFILE)
+    SECURITY_GROUP=$(aws ec2 describe-security-groups --filters "Name=vpc-id,Values=$VPC" Name=group-name,Values=default --query 'SecurityGroups[*].[GroupId]' --output text --profile $PROFILE)
     if [[ $? > 0 ]]; then 
         echo "aws session manager failed to find security group"
         exit 1
     fi
     
-    SUBNET_ID=$(aws ec2 describe-subnets --filters 'Name=vpc-id,Values=vpc-03a4ba3d5b7c8f978' 'Name=availability-zone,Values=us-east-2a' --query 'Subnets[0].SubnetId' --output text --profile $PROFILE)
+    SUBNET_ID=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values=$VPC" 'Name=availability-zone,Values=us-east-2a' --query 'Subnets[0].SubnetId' --output text --profile $PROFILE)
     if [[ $? > 0 ]]; then 
         echo "aws session manager failed to find subnet ID"
         exit 1

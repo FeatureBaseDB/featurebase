@@ -26,7 +26,7 @@ func NewRBFCheckCommand(stdin io.Reader, stdout, stderr io.Writer) *RBFCheckComm
 	}
 }
 
-// Run executes the export.
+// Run executes a consistency check of an RBF database.
 func (cmd *RBFCheckCommand) Run(ctx context.Context) error {
 	// Open database.
 	db := rbf.NewDB(cmd.Path, nil)
@@ -37,7 +37,15 @@ func (cmd *RBFCheckCommand) Run(ctx context.Context) error {
 
 	// Run check on the database.
 	if err := db.Check(); err != nil {
-		return err
+		switch err := err.(type) {
+		case rbf.ErrorList:
+			for i := range err {
+				fmt.Fprintln(cmd.Stdout, err[i])
+			}
+		default:
+			fmt.Fprintln(cmd.Stdout, err)
+		}
+		return fmt.Errorf("check failed")
 	}
 
 	// If successful, print a success message.

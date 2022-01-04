@@ -1,305 +1,305 @@
-version: 2.1
+# version: 2.1
 
-executors:
-  golang:
-    parameters:
-      version:
-        type: string
-        default: "1.15.8"
-      resource_class:
-        type: string
-        default: medium
-    docker:
-      - image: circleci/golang:<< parameters.version >>
-    resource_class: << parameters.resource_class >>
-    working_directory: /go/src/github.com/molecula/featurebase
+# executors:
+#   golang:
+#     parameters:
+#       version:
+#         type: string
+#         default: "1.15.8"
+#       resource_class:
+#         type: string
+#         default: medium
+#     docker:
+#       - image: circleci/golang:<< parameters.version >>
+#     resource_class: << parameters.resource_class >>
+#     working_directory: /go/src/github.com/molecula/featurebase
 
-commands:
-  add-github-auth:
-    steps:
-      - run: git config --global url."https://${GITHUB_USER}:${GITHUB_PERSONAL_ACCESS_TOKEN}@github.com/".insteadOf "https://github.com/"
-      - run: git config --global url."https://${GITHUB_USER}:${GITHUB_PERSONAL_ACCESS_TOKEN}@github.com/".insteadOf "git@github.com:"
-  restore-mod-cache:
-    steps:
-      - restore_cache:
-          key: mod-cache-{{ checksum "go.sum" }}
-  save-mod-cache:
-    steps:
-      - save_cache:
-          key: mod-cache-{{ checksum "go.sum" }}
-          paths:
-            - /go/pkg/mod/
-  checkout-plus:
-    steps:
-      - add-github-auth
-      - checkout
-      - restore-mod-cache
-  skip-if-root-unchanged:
-    description: "skips the parent job if the PR includes no changes to featurebase"
-    steps:
-      - run: |
-          ROOT_CHANGED_FILES="$(git diff --name-only HEAD $(git merge-base master HEAD) | grep -v '^lattice/')" || true
-          echo "ROOT_CHANGED_FILES = $ROOT_CHANGED_FILES"
-          if [ -z "$ROOT_CHANGED_FILES" ] ; then
-            echo "halting step"
-            circleci step halt
-          fi
-  skip-if-lattice-unchanged:
-    description: "skips the parent job if the PR includes no changes to lattice"
-    steps:
-      - run: |
-          LATTICE_CHANGED_FILES="$(git diff --name-only HEAD $(git merge-base master HEAD) | grep '^lattice/')" || true
-          echo "LATTICE_CHANGED_FILES = $LATTICE_CHANGED_FILES"
-          if [ -z "$LATTICE_CHANGED_FILES" ] ; then
-            echo "halting step"
-            circleci step halt
-          fi
+# commands:
+#   add-github-auth:
+#     steps:
+#       - run: git config --global url."https://${GITHUB_USER}:${GITHUB_PERSONAL_ACCESS_TOKEN}@github.com/".insteadOf "https://github.com/"
+#       - run: git config --global url."https://${GITHUB_USER}:${GITHUB_PERSONAL_ACCESS_TOKEN}@github.com/".insteadOf "git@github.com:"
+#   restore-mod-cache:
+#     steps:
+#       - restore_cache:
+#           key: mod-cache-{{ checksum "go.sum" }}
+#   save-mod-cache:
+#     steps:
+#       - save_cache:
+#           key: mod-cache-{{ checksum "go.sum" }}
+#           paths:
+#             - /go/pkg/mod/
+#   checkout-plus:
+#     steps:
+#       - add-github-auth
+#       - checkout
+#       - restore-mod-cache
+#   skip-if-root-unchanged:
+#     description: "skips the parent job if the PR includes no changes to featurebase"
+#     steps:
+#       - run: |
+#           ROOT_CHANGED_FILES="$(git diff --name-only HEAD $(git merge-base master HEAD) | grep -v '^lattice/')" || true
+#           echo "ROOT_CHANGED_FILES = $ROOT_CHANGED_FILES"
+#           if [ -z "$ROOT_CHANGED_FILES" ] ; then
+#             echo "halting step"
+#             circleci step halt
+#           fi
+#   skip-if-lattice-unchanged:
+#     description: "skips the parent job if the PR includes no changes to lattice"
+#     steps:
+#       - run: |
+#           LATTICE_CHANGED_FILES="$(git diff --name-only HEAD $(git merge-base master HEAD) | grep '^lattice/')" || true
+#           echo "LATTICE_CHANGED_FILES = $LATTICE_CHANGED_FILES"
+#           if [ -z "$LATTICE_CHANGED_FILES" ] ; then
+#             echo "halting step"
+#             circleci step halt
+#           fi
 
-jobs:
-  setup:
-    executor:
-      name: golang
-    steps:
-      - checkout-plus
-      - run: go mod download
-      - save-mod-cache
-  linter:
-    executor:
-      name: golang
-    steps:
-      - checkout-plus
-      - skip-if-root-unchanged
-      - run: curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sudo sh -s -- -b /usr/local/bin v1.31.0
-      - run: make golangci-lint
-  go-mod-tidy:
-    executor:
-      name: golang
-    steps:
-      - checkout-plus
-      - skip-if-root-unchanged
-      - run: go mod tidy
-      - run: git diff --exit-code -- go.mod go.sum
-  check-changelog-label:
-    executor:
-      name: golang
-    steps:
-      - run: '[[ -n $CIRCLE_PULL_REQUEST ]] || circleci step halt || true' # Skip if this is not a pull request
-      - run: curl https://$GITHUB_USER:$GITHUB_PERSONAL_ACCESS_TOKEN@api.github.com/repos/molecula/featurebase/pulls/$(basename $CIRCLE_PULL_REQUEST) | jq "[.labels[] | .name | startswith(\"changelog\")] | any" -e
-  test-build-arm:
-    executor:
-      name: golang
-    steps:
-      - checkout-plus
-      - skip-if-root-unchanged
-      - run: make build GOOS=linux GOARCH=arm GOARM=5
-      - run: make build GOOS=linux GOARCH=arm GOARM=6
-      - run: make build GOOS=linux GOARCH=arm GOARM=7
-      - run: make build GOOS=linux GOARCH=arm64
-  test:
-    parameters:
-      resource_class:
-        type: string
-        default: medium
-      golang_version:
-        type: string
-        default: "1.15.8"
-      shard_width:
-        type: string
-        default: "20"
-      test_make_target:
-        type: string
-        default: "test"
-      test_flags:
-        type: string
-        default: ""
-      goarch:
-        type: string
-        default: amd64
-    executor:
-      name: golang
-      version: << parameters.golang_version >>
-      resource_class: << parameters.resource_class >>
-    environment:
-      TMPDIR: /mnt/ramdisk
-    steps:
-      - checkout-plus
-      - skip-if-root-unchanged
-      - run: sudo apt-get update --allow-releaseinfo-change -y
-      - run: sudo apt-get install lsof
-      - run:
-          command: make << parameters.test_make_target >> SHARD_WIDTH=<< parameters.shard_width >> GOARCH=<< parameters.goarch >>
-          no_output_timeout: 30m
-  test-external-lookup:
-    docker:
-      - image: circleci/golang:1.15.8
-      - image: circleci/postgres:13.2-ram
-        environment:
-          POSTGRES_PASSWORD=password
-    steps:
-      - checkout-plus
-      - skip-if-root-unchanged
-      - run: sudo apt-get update --allow-releaseinfo-change -y
-      - run: sudo apt-get install postgresql-client
-      - run: (for i in `seq 1 20`; do pg_isready -h localhost && exit 0 || sleep 1; done; exit 1)
-      - run:
-          command: make test-external-lookup EXTERNAL_LOOKUP_DSN=postgresql://postgres:password@localhost/circle_test?sslmode=disable
-          no_output_timeout: 30m
-  cluster-tests:
-    executor:
-      name: golang
-    steps:
-      - checkout-plus
-      - skip-if-root-unchanged
-      - setup_remote_docker
-      - run: make clustertests-build
-  release:
-    executor:
-      name: golang
-    steps:
-      - checkout-plus
-      - attach_workspace:
-          at: .
-      - setup_remote_docker:
-          version: 19.03.13 # see https://support.circleci.com/hc/en-us/articles/360050934711
-      - run: echo -n $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
-      - run: make docker-release
-      - store_artifacts:
-          path: build
-      - persist_to_workspace:
-          root: .
-          paths: build
-  publish_release:
-    executor:
-      name: golang
-    steps:
-      - attach_workspace:
-          at: .
-      - run: go get github.com/tcnksm/ghr
-      - run: ghr -t ${GITHUB_PERSONAL_ACCESS_TOKEN} -u ${CIRCLE_PROJECT_USERNAME} -r ${CIRCLE_PROJECT_REPONAME} -c ${CIRCLE_SHA1} -delete ${CIRCLE_TAG} ./build/
-  docker-build:
-    executor:
-      name: golang
-    steps:
-      - checkout-plus
-      - setup_remote_docker:
-          version: 19.03.13 # see https://support.circleci.com/hc/en-us/articles/360050934711
-      - run: echo -n $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
-      - run: make docker GO_VERSION=1.15.8
-      - run: docker run featurebase:$(git describe --tags) help
-  dockerhub-upload-unstable:
-    executor:
-      name: golang
-    steps:
-      - checkout-plus
-      - setup_remote_docker:
-          version: 19.03.13 # see https://support.circleci.com/hc/en-us/articles/360050934711
-      - run: echo -n $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
-      - run: make docker
-      - run: docker run featurebase:$(git describe --tags) help
-      - run: make docker-tag-push DOCKER_TARGET=moleculacorp/featurebase:<< pipeline.git.branch >>
-  dockerhub-upload-stable:
-    executor:
-      name: golang
-    steps:
-      - checkout-plus
-      - setup_remote_docker:
-          version: 19.03.13 # see https://support.circleci.com/hc/en-us/articles/360050934711
-      - run: echo -n $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
-      - run: make docker
-      - run: docker run featurebase:$(git describe --tags) help
-      - run: make docker-tag-push DOCKER_TARGET=moleculacorp/featurebase:<< pipeline.git.tag >>
-      - run: make docker-tag-push DOCKER_TARGET=moleculacorp/featurebase:latest
+# jobs:
+#   setup:
+#     executor:
+#       name: golang
+#     steps:
+#       - checkout-plus
+#       - run: go mod download
+#       - save-mod-cache
+#   linter:
+#     executor:
+#       name: golang
+#     steps:
+#       - checkout-plus
+#       - skip-if-root-unchanged
+#       - run: curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sudo sh -s -- -b /usr/local/bin v1.31.0
+#       - run: make golangci-lint
+#   go-mod-tidy:
+#     executor:
+#       name: golang
+#     steps:
+#       - checkout-plus
+#       - skip-if-root-unchanged
+#       - run: go mod tidy
+#       - run: git diff --exit-code -- go.mod go.sum
+#   check-changelog-label:
+#     executor:
+#       name: golang
+#     steps:
+#       - run: '[[ -n $CIRCLE_PULL_REQUEST ]] || circleci step halt || true' # Skip if this is not a pull request
+#       - run: curl https://$GITHUB_USER:$GITHUB_PERSONAL_ACCESS_TOKEN@api.github.com/repos/molecula/featurebase/pulls/$(basename $CIRCLE_PULL_REQUEST) | jq "[.labels[] | .name | startswith(\"changelog\")] | any" -e
+#   test-build-arm:
+#     executor:
+#       name: golang
+#     steps:
+#       - checkout-plus
+#       - skip-if-root-unchanged
+#       - run: make build GOOS=linux GOARCH=arm GOARM=5
+#       - run: make build GOOS=linux GOARCH=arm GOARM=6
+#       - run: make build GOOS=linux GOARCH=arm GOARM=7
+#       - run: make build GOOS=linux GOARCH=arm64
+#   test:
+#     parameters:
+#       resource_class:
+#         type: string
+#         default: medium
+#       golang_version:
+#         type: string
+#         default: "1.15.8"
+#       shard_width:
+#         type: string
+#         default: "20"
+#       test_make_target:
+#         type: string
+#         default: "test"
+#       test_flags:
+#         type: string
+#         default: ""
+#       goarch:
+#         type: string
+#         default: amd64
+#     executor:
+#       name: golang
+#       version: << parameters.golang_version >>
+#       resource_class: << parameters.resource_class >>
+#     environment:
+#       TMPDIR: /mnt/ramdisk
+#     steps:
+#       - checkout-plus
+#       - skip-if-root-unchanged
+#       - run: sudo apt-get update --allow-releaseinfo-change -y
+#       - run: sudo apt-get install lsof
+#       - run:
+#           command: make << parameters.test_make_target >> SHARD_WIDTH=<< parameters.shard_width >> GOARCH=<< parameters.goarch >>
+#           no_output_timeout: 30m
+#   test-external-lookup:
+#     docker:
+#       - image: circleci/golang:1.15.8
+#       - image: circleci/postgres:13.2-ram
+#         environment:
+#           POSTGRES_PASSWORD=password
+#     steps:
+#       - checkout-plus
+#       - skip-if-root-unchanged
+#       - run: sudo apt-get update --allow-releaseinfo-change -y
+#       - run: sudo apt-get install postgresql-client
+#       - run: (for i in `seq 1 20`; do pg_isready -h localhost && exit 0 || sleep 1; done; exit 1)
+#       - run:
+#           command: make test-external-lookup EXTERNAL_LOOKUP_DSN=postgresql://postgres:password@localhost/circle_test?sslmode=disable
+#           no_output_timeout: 30m
+#   cluster-tests:
+#     executor:
+#       name: golang
+#     steps:
+#       - checkout-plus
+#       - skip-if-root-unchanged
+#       - setup_remote_docker
+#       - run: make clustertests
+#   release:
+#     executor:
+#       name: golang
+#     steps:
+#       - checkout-plus
+#       - attach_workspace:
+#           at: .
+#       - setup_remote_docker:
+#           version: 19.03.13 # see https://support.circleci.com/hc/en-us/articles/360050934711
+#       - run: echo -n $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
+#       - run: make docker-release
+#       - store_artifacts:
+#           path: build
+#       - persist_to_workspace:
+#           root: .
+#           paths: build
+#   publish_release:
+#     executor:
+#       name: golang
+#     steps:
+#       - attach_workspace:
+#           at: .
+#       - run: go get github.com/tcnksm/ghr
+#       - run: ghr -t ${GITHUB_PERSONAL_ACCESS_TOKEN} -u ${CIRCLE_PROJECT_USERNAME} -r ${CIRCLE_PROJECT_REPONAME} -c ${CIRCLE_SHA1} -delete ${CIRCLE_TAG} ./build/
+#   docker-build:
+#     executor:
+#       name: golang
+#     steps:
+#       - checkout-plus
+#       - setup_remote_docker:
+#           version: 19.03.13 # see https://support.circleci.com/hc/en-us/articles/360050934711
+#       - run: echo -n $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
+#       - run: make docker GO_VERSION=1.15.8
+#       - run: docker run featurebase:$(git describe --tags) help
+#   dockerhub-upload-unstable:
+#     executor:
+#       name: golang
+#     steps:
+#       - checkout-plus
+#       - setup_remote_docker:
+#           version: 19.03.13 # see https://support.circleci.com/hc/en-us/articles/360050934711
+#       - run: echo -n $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
+#       - run: make docker
+#       - run: docker run featurebase:$(git describe --tags) help
+#       - run: make docker-tag-push DOCKER_TARGET=moleculacorp/featurebase:<< pipeline.git.branch >>
+#   dockerhub-upload-stable:
+#     executor:
+#       name: golang
+#     steps:
+#       - checkout-plus
+#       - setup_remote_docker:
+#           version: 19.03.13 # see https://support.circleci.com/hc/en-us/articles/360050934711
+#       - run: echo -n $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
+#       - run: make docker
+#       - run: docker run featurebase:$(git describe --tags) help
+#       - run: make docker-tag-push DOCKER_TARGET=moleculacorp/featurebase:<< pipeline.git.tag >>
+#       - run: make docker-tag-push DOCKER_TARGET=moleculacorp/featurebase:latest
 
-workflows:
-  build:
-    jobs:
-      - setup:
-          context: molecula
-          filters:
-            tags:
-              only: /^v.*/
-      - linter:
-          context: molecula
-          requires:
-            - setup
-      - go-mod-tidy:
-          context: molecula
-          requires:
-            - setup
-      - check-changelog-label:
-          context: molecula
-          requires:
-            - setup
-      - test-build-arm:
-          context: molecula
-          requires:
-            - setup
-      - test:
-          name: test-golang-<< matrix.golang_version >>
-          resource_class: large
-          context: molecula
-          requires:
-            - setup
-          matrix:
-            parameters:
-              golang_version: ["1.15.8", "1.16.10"]
-      - test:
-          name: << matrix.test_make_target >>
-          resource_class: xlarge
-          context: molecula
-          requires:
-            - setup
-          matrix:
-            parameters:
-              test_make_target: ["test-race"]
-      - test:
-          name: test-shardwidth-22
-          context: molecula
-          shard_width: "22"
-          resource_class: large
-          requires:
-            - setup
-      - test-external-lookup:
-          context: molecula
-          requires:
-            - setup
-      - cluster-tests:
-          context: molecula
-          requires:
-            - setup
-      - docker-build:
-          context: molecula
-          requires:
-            - setup
-      - release:
-          context: molecula
-          requires:
-            - setup
-          filters:
-            tags:
-              only: /^v.*/
-      - publish_release:
-          context: molecula
-          requires:
-            - release
-          filters:
-            tags:
-              only: /^v.*/
-            branches:
-              ignore: /.*/
-      - dockerhub-upload-unstable:
-          context: molecula
-          requires:
-            - setup
-          filters:
-            branches:
-              only: master
-      - dockerhub-upload-stable:
-          context: molecula
-          requires:
-            - setup
-          filters:
-            tags:
-              only: /^v.*/
-            branches:
-              ignore: /.*/
+# workflows:
+#   build:
+#     jobs:
+#       - setup:
+#           context: molecula
+#           filters:
+#             tags:
+#               only: /^v.*/
+#       - linter:
+#           context: molecula
+#           requires:
+#             - setup
+#       - go-mod-tidy:
+#           context: molecula
+#           requires:
+#             - setup
+#       - check-changelog-label:
+#           context: molecula
+#           requires:
+#             - setup
+#       - test-build-arm:
+#           context: molecula
+#           requires:
+#             - setup
+#       - test:
+#           name: test-golang-<< matrix.golang_version >>
+#           resource_class: large
+#           context: molecula
+#           requires:
+#             - setup
+#           matrix:
+#             parameters:
+#               golang_version: ["1.15.8", "1.16.10"]
+#       - test:
+#           name: << matrix.test_make_target >>
+#           resource_class: xlarge
+#           context: molecula
+#           requires:
+#             - setup
+#           matrix:
+#             parameters:
+#               test_make_target: ["test-race"]
+#       - test:
+#           name: test-shardwidth-22
+#           context: molecula
+#           shard_width: "22"
+#           resource_class: large
+#           requires:
+#             - setup
+#       - test-external-lookup:
+#           context: molecula
+#           requires:
+#             - setup
+#       - cluster-tests:
+#           context: molecula
+#           requires:
+#             - setup
+#       - docker-build:
+#           context: molecula
+#           requires:
+#             - setup
+#       - release:
+#           context: molecula
+#           requires:
+#             - setup
+#           filters:
+#             tags:
+#               only: /^v.*/
+#       - publish_release:
+#           context: molecula
+#           requires:
+#             - release
+#           filters:
+#             tags:
+#               only: /^v.*/
+#             branches:
+#               ignore: /.*/
+#       - dockerhub-upload-unstable:
+#           context: molecula
+#           requires:
+#             - setup
+#           filters:
+#             branches:
+#               only: master
+#       - dockerhub-upload-stable:
+#           context: molecula
+#           requires:
+#             - setup
+#           filters:
+#             tags:
+#               only: /^v.*/
+#             branches:
+#               ignore: /.*/

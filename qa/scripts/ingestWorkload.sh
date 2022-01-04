@@ -1,7 +1,14 @@
 #!/usr/bin/env bash
 
+# path for featurebase binary
+FEATUREBASE_PATH=/usr/local/bin
+
+# path for directory with csv directory files for all fields to be ingested 
+CSV_DIR_PATH=/data
+
+
 # To run:
-# ./ingestWorkload.sh {Path for featurebase binary} {Local host & port for featurebase} {Path for directory with csv files} {initialize flag}
+# ./ingestWorkload.sh {Local host & port for featurebase} {initialize flag}
 
 function delete_field {
     if (($INITIALIZE == 0));
@@ -30,17 +37,9 @@ function ingest_set_field {
     $FEATUREBASE_PATH/featurebase import --host $HOST -i $INDEX -f $FIELD $CSV_FILE 
 }
 
-# path for featurebase binary
-FEATUREBASE_PATH=$1
-shift
-
 # featurebase host & port
 HOST=$1
 shift
-
-# path for directory with csv directory files for all fields to be ingested 
-CSV_DIR_PATH=$1
-shift 
 
 # intialize flag - 0:disabled, 1:enabled - creates the index and fields for testing
 INITIALIZE=$1

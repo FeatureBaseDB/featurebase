@@ -552,6 +552,15 @@ func (m *Command) SetupServer() error {
 
 		m.querylogger.Infof("Group with admin level access: %v", p.Admin)
 		m.querylogger.Infof("Permissions: %+v", p.Permissions)
+
+		// disable postgres binding if auth is enabled
+		m.Config.Postgres.Bind = ""
+
+		// TLS must be enabled if auth is
+		if m.Config.TLS.CertificatePath == "" || m.Config.TLS.CertificateKeyPath == "" || m.Config.TLS.CACertPath == "" {
+			return fmt.Errorf("transport layer security (TLS) is not configured properly. TLS is required when AuthN/Z is enabled, current configuration: %v", m.Config.TLS)
+		}
+
 	}
 
 	m.Handler, err = http.NewHandler(
