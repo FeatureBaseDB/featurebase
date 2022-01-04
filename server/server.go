@@ -632,11 +632,8 @@ func (m *Command) setupQueryLogger() error {
 	sighup := make(chan os.Signal, 1)
 	signal.Notify(sighup, syscall.SIGHUP)
 	go func() {
-		for {
-			// reopen log file on SIGHUP
-			<-sighup
-			err = f.Reopen()
-			if err != nil {
+		for range sighup {
+			if err := f.Reopen(); err != nil {
 				m.querylogger.Infof("reopen: %s\n", err.Error())
 			}
 		}

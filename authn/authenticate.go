@@ -34,7 +34,7 @@ func NewAuth(logger logger.Logger, url string, scopes []string, authUrl, tokenUr
 	auth := &Auth{
 		logger:         logger,
 		cookieName:     "molecula-chip",
-		refreshWithin:  time.Minute * time.Duration(15),
+		refreshWithin:  15 * time.Minute,
 		groupEndpoint:  groupEndpoint,
 		logoutEndpoint: logout,
 		fbURL:          url,
