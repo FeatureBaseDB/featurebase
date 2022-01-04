@@ -24,8 +24,6 @@ stages:
 golangci-lint:
   image: golangci/golangci-lint:v1.39.0
   stage: lint
-  except:
-    - schedules
   extends: .go-cache
   allow_failure: false
   rules:
@@ -36,8 +34,6 @@ golangci-lint:
 
 build lattice:
   stage: test
-  except:
-    - schedules
   image: node:14
   variables:
     CI: "false"
@@ -58,8 +54,6 @@ build lattice:
 
 run jest tests:
   stage: test
-  except:
-    - schedules
   image: node:14
   variables:
     CI: "true"
@@ -76,8 +70,6 @@ run jest tests:
 
 run go tests:
   stage: test
-  except:
-    - schedules
   image: golang:$GOVERSION
   extends: .go-cache
   rules:
@@ -92,8 +84,6 @@ run go tests:
 
 run go tests future:
   stage: test
-  except:
-    - schedules
   image: golang:1.17.3
   extends: .go-cache
   rules:
@@ -109,8 +99,6 @@ run go tests future:
 
 run go tests with output:
   stage: test
-  except:
-    - schedules
   image: golang:$GOVERSION
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push"'
@@ -123,8 +111,6 @@ run go tests with output:
 
 upload to sonarcloud:
   stage: test
-  except:
-    - schedules
   image: sonarsource/sonar-scanner-cli:4.6
   variables:
     SONAR_TOKEN: $SONAR_TOKEN
@@ -139,8 +125,6 @@ upload to sonarcloud:
     
 build for linux amd64:
   stage: build
-  except:
-    - schedules
   image: golang:$GOVERSION
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push"'
@@ -156,8 +140,6 @@ build for linux amd64:
 
 build for linux arm64:
   stage: build
-  except:
-    - schedules
   image: golang:$GOVERSION
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push"'
@@ -173,8 +155,6 @@ build for linux arm64:
 
 build for darwin amd64:
   stage: build
-  except:
-    - schedules
   image: golang:$GOVERSION
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push"'
@@ -190,8 +170,6 @@ build for darwin amd64:
 
 build for darwin arm64:
   stage: build
-  except:
-    - schedules
   image: golang:$GOVERSION
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push"'
@@ -208,8 +186,6 @@ build for darwin arm64:
 package for linux amd64:
   stage: build
   image: golang:$GOVERSION
-  except:
-    - schedules
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push"'
   variables:
@@ -228,8 +204,6 @@ package for linux amd64:
 build container fb:
   image: docker:stable
   stage: build
-  except:
-    - schedules
   needs:
     - "build for linux amd64"
   tags:
@@ -248,8 +222,6 @@ build container fb:
 # diabling for now - will come back and refactor POK
 # deploy node for linux amd64:
 #  stage: integration
-#  except:
-#    - schedules
 #  image: registry.gitlab.com/gitlab-org/cloud-deploy/aws-base:latest
 #  variables:
 #    PROFILE: "default"
@@ -284,11 +256,9 @@ gauntlet:
     AWS_SSH_PRIVATE_KEY: $AWS_FBCI_SSH_KEY
     AWS_ACCESS_KEY_ID: $AWS_FBCI_ACCESS_KEY_ID
     AWS_SECRET_ACCESS_KEY: $AWS_FBCI_SECRET_ACCESS_KEY
-#  rules:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule" || '$CI_PIPELINE_SOURCE == "web"'
 #    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
-  only:
-    - schedules
-    - web
   before_script:
     - apt-get update && apt-get install -y gnupg software-properties-common curl git
     - curl -fsSL https://apt.releases.hashicorp.com/gpg | apt-key add -
