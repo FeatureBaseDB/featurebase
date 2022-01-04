@@ -312,28 +312,10 @@ func TestAuthentication(t *testing.T) {
 		Expires:  token.Expiry,
 	}
 
-	// permissions1 := `"user-groups":
-	//   "dca35310-ecda-4f23-86cd-876aee55906b":
-	//     "test": "read"
-	// admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
-
-	permissions2 := `"user-groups":
+	permissions1 := `"user-groups":
   "dca35310-ecda-4f23-86cd-876aee559900":
     "test": "write"
 admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
-
-	// 	permissions3 := `"user-groups":
-	//   "dca35310-ecda-4f23-86cd-876aee55906b":
-	//     "test": "write"
-	//     "test2": "read"
-	//   "dca35310-ecda-4f23-86cd-876aee559900":
-	//     "test": "read"
-	// admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
-
-	// 	permissions4 := `"user-groups":
-	//   "dca35310-ecda-4f23-86cd-876aee559900":
-	//     "test": ""
-	// admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 
 	tests := []struct {
 		name     string
@@ -631,7 +613,7 @@ admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 			cookie: validCookie,
 			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) {
 				h := h
-				permFile := strings.NewReader(permissions2)
+				permFile := strings.NewReader(permissions1)
 				var p authz.GroupPermissions
 				if err := p.ReadPermissionsFile(permFile); err != nil {
 					t.Errorf("Error: %s", err)
@@ -641,8 +623,8 @@ admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 				f(w, r)
 			},
 			fn: func(w *httptest.ResponseRecorder, data []byte) {
-				if w.Result().StatusCode != 403 {
-					t.Errorf("expected http code 403, got: %+v", w.Result().StatusCode)
+				if w.Result().StatusCode != 400 {
+					t.Errorf("expected http code 400, got: %+v", w.Result().StatusCode)
 				}
 
 			},

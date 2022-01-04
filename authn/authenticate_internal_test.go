@@ -67,20 +67,20 @@ func TestAuth(t *testing.T) {
 		w := httptest.NewRecorder()
 		err := a.setCookie(w, &validCV)
 		if err != nil {
-			t.Errorf("expected no errors, got: %v", err)
+			t.Fatalf("expected no errors, got: %v", err)
 		}
 
 		if w.Result().Cookies()[0].Value == "" {
-			t.Errorf("expected some value, got: %+v", w.Result().Cookies()[0].Value)
+			t.Fatalf("expected some value, got: %+v", w.Result().Cookies()[0].Value)
 		}
 		if w.Result().Cookies()[0].Path != "/" {
-			t.Errorf("expected path to be /, got: %+v", w.Result().Cookies()[0].Path)
+			t.Fatalf("expected path to be /, got: %+v", w.Result().Cookies()[0].Path)
 		}
 	})
 	t.Run("GetEmptyCookie", func(t *testing.T) {
 		c := a.getEmptyCookie()
 		if c.Value != "" {
-			t.Errorf("expected empty cookie, got: %+v", c.Value)
+			t.Fatalf("expected empty cookie, got: %+v", c.Value)
 		}
 	})
 	t.Run("KeyLength", func(t *testing.T) {
@@ -98,20 +98,20 @@ func TestAuth(t *testing.T) {
 			ShortKey,
 		)
 		if err == nil || !strings.Contains(err.Error(), "decoding block key") {
-			t.Errorf("expected error decoding block key got: %v", err)
+			t.Fatalf("expected error decoding block key got: %v", err)
 		}
 	})
 	t.Run("NewCookieValue-BadAccessToken", func(t *testing.T) {
 		_, err := a.newCookieValue(&tokenAT)
 		if err == nil || !strings.Contains(err.Error(), "jwt claims") {
-			t.Errorf("expected failure regarding jwt claims, got: %v", err)
+			t.Fatalf("expected failure regarding jwt claims, got: %v", err)
 		}
 
 	})
 	t.Run("CookieValue-NoAccessToken", func(t *testing.T) {
 		_, err := a.newCookieValue(&tokenNoAT)
 		if err == nil || !strings.Contains(err.Error(), "access token") {
-			t.Errorf("expected failure regarding access token, got: %v", err)
+			t.Fatalf("expected failure regarding access token, got: %v", err)
 		}
 	})
 

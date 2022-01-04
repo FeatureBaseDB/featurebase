@@ -38,7 +38,6 @@ import (
 	"github.com/molecula/featurebase/v2/rbf"
 	"github.com/molecula/featurebase/v2/topology"
 	"github.com/molecula/featurebase/v2/tracing"
-	"github.com/molecula/featurebase/v2/vprint"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	dto "github.com/prometheus/client_model/go"
@@ -541,15 +540,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) chkAuthN(handler http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if h.auth != nil {
-			_, err := h.auth.Authenticate(w, r)
-			if err != nil {
+			if _, err := h.auth.Authenticate(w, r); err != nil {
 				http.Error(w, errors.Wrap(err, "authenticating").Error(), http.StatusBadRequest)
 				return
 			}
-		} else {
-			handler.ServeHTTP(w, r)
 		}
-
+		handler.ServeHTTP(w, r)
 	}
 }
 
@@ -564,12 +560,11 @@ func (h *Handler) chkAuthZ(handler http.HandlerFunc, perm authz.Permission) http
 			}
 
 			if h.permissions == nil {
-				panic("authentication is turned on without authorization permissions set")
+				h.logger.Errorf("authentication is turned on without authorization permissions set")
+				http.Error(w, errors.New("authorizing").Error(), http.StatusInternalServerError)
 			}
 
 			uinfo := h.auth.GetUserInfo(w, r)
-
-			//get query string if applicable
 
 			var queryString string
 			queryRequest := r.Context().Value(contextKeyQueryRequest)
@@ -596,7 +591,6 @@ func (h *Handler) chkAuthZ(handler http.HandlerFunc, perm authz.Permission) http
 			indexName, ok := mux.Vars(r)["index"]
 			if ok {
 				p, err := h.permissions.GetPermissions(groups, indexName)
-				vprint.VV("p: %+v,perm: %+v,indexName: %+v", p, lperm, indexName)
 				ctx = context.WithValue(r.Context(), contextKeyPermission, p)
 				if err != nil || !p.Satisfies(lperm) {
 					w.Header().Add("Content-Type", "text/plain")
@@ -785,8 +779,7 @@ func (h *Handler) filterResponse(w http.ResponseWriter, r *http.Request, schema 
 	if h.auth != nil {
 		g := r.Context().Value(contextKeyGroupMembership)
 		if g == nil {
-			w.Header().Add("Content-Type", "text/plain")
-			w.WriteHeader(http.StatusForbidden)
+			http.Error(w, "not authorized", http.StatusForbidden)
 			return nil
 		}
 		indexes := h.permissions.GetAuthorizedIndexList(g.([]authn.Group), authz.Read)
@@ -970,10 +963,6 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 	qreq := r.Context().Value(contextKeyQueryRequest)
 	qerr := r.Context().Value(contextKeyQueryError)
 	req, ok := qreq.(*pilosa.QueryRequest)
-
-	// if !h.isAuthorized(w, r, req, req.Index, authz.Admin.String(), r.URL.Path) {
-	// 	return
-	// }
 
 	if DoPerQueryProfiling {
 		backend := pilosa.CurrentBackend()
@@ -3514,9 +3503,7 @@ func (h *Handler) handlePostRestore(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if h.auth == nil {
-		w.Header().Add("Content-Type", "text/plain")
-		w.WriteHeader(http.StatusNoContent)
-		w.Write([]byte("Auth Off")) //nolint:errcheck
+		http.Error(w, "Auth Off", http.StatusNoContent)
 		return
 	}
 
@@ -3539,9 +3526,7 @@ func (h *Handler) handleCheckAuthentication(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	if h.auth == nil {
-		w.Header().Add("Content-Type", "text/plain")
-		w.WriteHeader(http.StatusNoContent)
-		w.Write([]byte("Auth Off")) //nolint:errcheck
+		http.Error(w, "Auth Off", http.StatusNoContent)
 		return
 	}
 	groups, err := h.auth.Authenticate(w, r)
@@ -3562,9 +3547,7 @@ func (h *Handler) handleUserInfo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if h.auth == nil {
-		w.Header().Add("Content-Type", "text/plain")
-		w.WriteHeader(http.StatusNoContent)
-		w.Write([]byte("Auth Off")) //nolint:errcheck
+		http.Error(w, "Auth Off", http.StatusNoContent)
 		return
 	}
 	if err := json.NewEncoder(w).Encode(h.auth.GetUserInfo(w, r)); err != nil {
@@ -3574,9 +3557,7 @@ func (h *Handler) handleUserInfo(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) handleLogout(w http.ResponseWriter, r *http.Request) {
 	if h.auth == nil {
-		w.Header().Add("Content-Type", "text/plain")
-		w.WriteHeader(http.StatusNoContent)
-		w.Write([]byte("Auth Off")) //nolint:errcheck
+		http.Error(w, "Auth Off", http.StatusNoContent)
 		return
 	}
 	h.auth.Logout(w, r)
