@@ -19,44 +19,14 @@ import (
 	"io"
 	"io/ioutil"
 
+	"github.com/molecula/featurebase/v2/authn"
+
 	"gopkg.in/yaml.v2"
 )
-
-type Auth struct {
-	// Enable AuthZ/AuthN for featurebase server
-	Enable bool `toml:"enable"`
-
-	// Application/Client ID
-	ClientId string `toml:"client-id"`
-
-	// Client Secret
-	ClientSecret string `toml:"client-secret"`
-
-	// Authorize URL
-	AuthorizeURL string `toml:"authorize-url"`
-
-	// Token URL
-	TokenURL string `toml:"token-url"`
-
-	// Group Endpoint URL
-	GroupEndpointURL string `toml:"group-endpoint-url"`
-
-	// Scope URL
-	ScopeURL string `toml:"scope-url"`
-
-	// Permissions file for groups
-	PermissionsFile string `toml:"permissions"`
-}
 
 type GroupPermissions struct {
 	Permissions map[string]map[string]string `yaml:"user-groups"`
 	Admin       string                       `yaml:"admin"`
-}
-
-type Group struct {
-	UserID    string
-	GroupID   string `json:"id"`
-	GroupName string `json:"displayName"`
 }
 
 func (p *GroupPermissions) ReadPermissionsFile(permsFile io.Reader) (err error) {
@@ -74,7 +44,7 @@ func (p *GroupPermissions) ReadPermissionsFile(permsFile io.Reader) (err error) 
 	return
 }
 
-func (p *GroupPermissions) GetPermissions(groups []Group, index string) (permission string, errors error) {
+func (p *GroupPermissions) GetPermissions(groups []authn.Group, index string) (permission string, errors error) {
 
 	if admin := p.IsAdmin(groups); admin {
 		return "admin", nil
@@ -115,7 +85,7 @@ func (p *GroupPermissions) GetPermissions(groups []Group, index string) (permiss
 	}
 }
 
-func (p *GroupPermissions) IsAdmin(groups []Group) bool {
+func (p *GroupPermissions) IsAdmin(groups []authn.Group) bool {
 	for _, group := range groups {
 		if p.Admin == group.GroupID {
 			return true
@@ -124,7 +94,7 @@ func (p *GroupPermissions) IsAdmin(groups []Group) bool {
 	return false
 }
 
-func (p *GroupPermissions) GetAuthorizedIndexList(groups []Group, desiredPermission string) (indexList []string) {
+func (p *GroupPermissions) GetAuthorizedIndexList(groups []authn.Group, desiredPermission string) (indexList []string) {
 	// if user is admin, find all indexes in permissions file and return them
 	if admin := p.IsAdmin(groups); admin {
 		for groupId := range p.Permissions {

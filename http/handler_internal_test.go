@@ -3,13 +3,24 @@ package http
 
 import (
 	"bytes"
+	"encoding/hex"
 	"encoding/json"
+	"io/ioutil"
+	gohttp "net/http"
+	"net/http/httptest"
+	"net/url"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/gorilla/securecookie"
 	pilosa "github.com/molecula/featurebase/v2"
+	"github.com/molecula/featurebase/v2/authn"
+	"github.com/molecula/featurebase/v2/logger"
 	"github.com/molecula/featurebase/v2/pql"
+	"golang.org/x/oauth2"
 )
 
 // Test custom UnmarshalJSON for postIndexRequest object
@@ -165,4 +176,403 @@ func TestFieldOptionValidation(t *testing.T) {
 			}
 		}
 	}
+}
+
+func readResponse(w *httptest.ResponseRecorder) ([]byte, error) {
+	res := w.Result()
+	defer res.Body.Close()
+	return ioutil.ReadAll(res.Body)
+}
+
+func TestHandlerAuth(t *testing.T) {
+	type evaluate func(w *httptest.ResponseRecorder, data []byte)
+	type endpoint func(w gohttp.ResponseWriter, r *gohttp.Request)
+	var (
+		ClientId         = "e9088663-eb08-41d7-8f65-efb5f54bbb71"
+		ClientSecret     = "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF"
+		AuthorizeURL     = "https://login.microsoftonline.com/4a137d66-d161-4ae4-b1e6-07e9920874b8/oauth2/v2.0/authorize"
+		TokenURL         = "https://login.microsoftonline.com/4a137d66-d161-4ae4-b1e6-07e9920874b8/oauth2/v2.0/token"
+		GroupEndpointURL = "https://graph.microsoft.com/v1.0/me/transitiveMemberOf/microsoft.graph.group?$count=true"
+		LogoutURL        = "https://login.microsoftonline.com/common/oauth2/v2.0/logout"
+		Scopes           = []string{"https://graph.microsoft.com/.default", "offline_access"}
+		HashKey          = "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF"
+		BlockKey         = "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF"
+	)
+
+	hashKey, _ := hex.DecodeString("DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF")
+	blockKey, _ := hex.DecodeString("DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF")
+
+	a, err := authn.NewAuth(
+		logger.NewStandardLogger(os.Stdout),
+		"http://localhost:10101/",
+		Scopes,
+		AuthorizeURL,
+		TokenURL,
+		GroupEndpointURL,
+		LogoutURL,
+		ClientId,
+		ClientSecret,
+		HashKey,
+		BlockKey,
+	)
+	if err != nil {
+		t.Errorf("building auth object%s", err)
+	}
+
+	h := Handler{
+		auth: a,
+	}
+
+	hOff := Handler{}
+
+	token := oauth2.Token{
+		TokenType:    "Bearer",
+		RefreshToken: "abcdef",
+		Expiry:       time.Now().Add(time.Hour),
+	}
+
+	expiredToken := oauth2.Token{
+		TokenType:    "Bearer",
+		RefreshToken: "abcdef",
+		Expiry:       time.Now(),
+	}
+
+	grp := authn.Group{
+		UserID:    "snowstorm",
+		GroupID:   "abcd123-A",
+		GroupName: "Romantic Painters",
+	}
+
+	validCV := authn.CookieValue{
+		UserID:          "snowstorm",
+		UserName:        "J.M.W. Turner",
+		GroupMembership: []authn.Group{grp},
+		Token:           &token,
+	}
+
+	emptyCV := authn.CookieValue{
+		UserID:          "narcissus",
+		UserName:        "Caravaggio",
+		GroupMembership: []authn.Group{},
+		Token:           &token,
+	}
+	expiredCV := authn.CookieValue{
+		UserID:          "narcissus",
+		UserName:        "Caravaggio",
+		GroupMembership: []authn.Group{},
+		Token:           &expiredToken,
+	}
+
+	secure := securecookie.New(hashKey, blockKey)
+	validEncodedCV, _ := secure.Encode("molecula-chip", validCV)
+	noGroupEncodedCV, _ := secure.Encode("molecula-chip", emptyCV)
+	expiredEncodedCV, _ := secure.Encode("molecula-chip", expiredCV)
+
+	validCookie := &gohttp.Cookie{
+		Name:     "molecula-chip",
+		Value:    validEncodedCV,
+		Path:     "/",
+		Secure:   true,
+		HttpOnly: true,
+		Expires:  token.Expiry,
+	}
+	noGroupCookie := &gohttp.Cookie{
+		Name:     "molecula-chip",
+		Value:    noGroupEncodedCV,
+		Path:     "/",
+		Secure:   true,
+		HttpOnly: true,
+		Expires:  token.Expiry,
+	}
+	expiredCookie := &gohttp.Cookie{
+		Name:     "molecula-chip",
+		Value:    expiredEncodedCV,
+		Path:     "/",
+		Secure:   true,
+		HttpOnly: true,
+		Expires:  time.Now().Add(time.Minute * -1),
+	}
+	emptyCookie := &gohttp.Cookie{
+		Name:     "molecula-chip",
+		Value:    "",
+		Path:     "/",
+		Secure:   true,
+		HttpOnly: true,
+		Expires:  token.Expiry,
+	}
+	unEncodedCookie := &gohttp.Cookie{
+		Name:     "molecula-chip",
+		Value:    "The quick brown fox",
+		Path:     "/",
+		Secure:   true,
+		HttpOnly: true,
+		Expires:  token.Expiry,
+	}
+
+	tests := []struct {
+		name    string
+		path    string
+		kind    string
+		cookie  *gohttp.Cookie
+		handler endpoint
+		fn      evaluate
+	}{
+		{
+			name:    "Login",
+			path:    "/login",
+			kind:    "type1",
+			cookie:  validCookie,
+			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) { h.handleLogin(w, r) },
+			fn: func(w *httptest.ResponseRecorder, data []byte) {
+				if strings.Index(string(data), AuthorizeURL) != 9 {
+					t.Errorf("incorrect redirect url: expected: %s, got: %s", AuthorizeURL, string(data))
+				}
+			},
+		},
+		{
+			name:    "Logout",
+			path:    "/logout",
+			kind:    "type1",
+			cookie:  validCookie,
+			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) { h.handleLogout(w, r) },
+			fn: func(w *httptest.ResponseRecorder, data []byte) {
+				if w.Result().Cookies()[0].Value != "" {
+					t.Errorf("expected cookie to be cleared, got: %+v", w.Result().Cookies()[0].Value)
+				}
+			},
+		},
+		{
+			name:    "Authenticate-Groups",
+			path:    "/auth",
+			kind:    "type1",
+			cookie:  validCookie,
+			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) { h.handleCheckAuthentication(w, r) },
+			fn: func(w *httptest.ResponseRecorder, data []byte) {
+				if w.Result().StatusCode != 200 {
+					t.Errorf("expected http code 200, got: %+v", w.Result().StatusCode)
+				}
+			},
+		},
+		{
+			name:    "Authenticate-NoGroups",
+			path:    "/auth",
+			kind:    "type1",
+			cookie:  noGroupCookie,
+			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) { h.handleCheckAuthentication(w, r) },
+			fn: func(w *httptest.ResponseRecorder, data []byte) {
+				// status forbidden
+				if w.Result().StatusCode != 403 {
+					t.Errorf("expected http code 403, got: %+v", w.Result().StatusCode)
+				}
+			},
+		},
+		{
+			name:    "Authenticate-MalformedCookie",
+			path:    "/auth",
+			kind:    "type1",
+			cookie:  unEncodedCookie,
+			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) { h.handleCheckAuthentication(w, r) },
+			fn: func(w *httptest.ResponseRecorder, data []byte) {
+				// redirect to signin
+				if w.Result().StatusCode != 307 {
+					t.Errorf("expected http code 307, got: %+v", w.Result().StatusCode)
+				}
+			},
+		},
+		{
+			name:    "Authenticate-Expired",
+			path:    "/auth",
+			kind:    "type1",
+			cookie:  expiredCookie,
+			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) { h.handleCheckAuthentication(w, r) },
+			fn: func(w *httptest.ResponseRecorder, data []byte) {
+				// redirect to signin
+				if w.Result().StatusCode != 307 {
+					t.Errorf("expected http code 307, got: %+v", w.Result().StatusCode)
+				}
+			},
+		},
+		{
+			name:    "Authenticate-NoCookie",
+			path:    "/auth",
+			kind:    "type1",
+			cookie:  emptyCookie,
+			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) { h.handleCheckAuthentication(w, r) },
+			fn: func(w *httptest.ResponseRecorder, data []byte) {
+				// redirect to signin
+				if w.Result().StatusCode != 307 {
+					t.Errorf("expected http code 307, got: %+v", w.Result().StatusCode)
+				}
+			},
+		},
+		{
+			name:    "UserInfo",
+			path:    "/userinfo",
+			kind:    "type1",
+			cookie:  validCookie,
+			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) { h.handleUserInfo(w, r) },
+			fn: func(w *httptest.ResponseRecorder, data []byte) {
+				uinfo := authn.UserInfo{}
+				err = json.Unmarshal(data, &uinfo)
+				if err != nil {
+					t.Errorf("unmarshalling userinfo")
+				}
+				if uinfo.UserID != "snowstorm" && uinfo.UserName != "J.M.W. Turner" {
+					t.Errorf("expected http code 400, got: %+v", uinfo)
+				}
+			},
+		},
+		{
+			name:    "UserInfo-NoCookie",
+			path:    "/userinfo",
+			kind:    "type1",
+			cookie:  emptyCookie,
+			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) { h.handleUserInfo(w, r) },
+			fn: func(w *httptest.ResponseRecorder, data []byte) {
+				uinfo := authn.UserInfo{}
+				err = json.Unmarshal(data, &uinfo)
+				if err != nil {
+					t.Errorf("unmarshalling userinfo")
+				}
+				if uinfo.UserID != "" && uinfo.UserName != "" {
+					t.Errorf("expected http code 400, got: %+v", uinfo)
+				}
+			},
+		},
+
+		{
+			name:    "Redirect-NoAuthCode",
+			path:    "/redirect",
+			kind:    "type1",
+			cookie:  validCookie,
+			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) { h.handleRedirect(w, r) },
+			fn: func(w *httptest.ResponseRecorder, data []byte) {
+				if strings.Index(string(data), AuthorizeURL) != 9 {
+					if w.Result().StatusCode != 400 {
+						t.Errorf("expected http code 400, got: %+v", w.Result().StatusCode)
+					}
+				}
+			},
+		},
+		{
+			name:    "Redirect-SomeAuthCode",
+			path:    "/redirect",
+			kind:    "type2",
+			cookie:  validCookie,
+			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) { h.handleRedirect(w, r) },
+			fn: func(w *httptest.ResponseRecorder, data []byte) {
+				if strings.Index(string(data), AuthorizeURL) != 9 {
+					if w.Result().StatusCode != 400 {
+						t.Errorf("expected http code 400, got: %+v", w.Result().StatusCode)
+					}
+				}
+			},
+		},
+		{
+			name:    "Login-AuthOff",
+			path:    "/login",
+			kind:    "type1",
+			cookie:  validCookie,
+			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) { hOff.handleLogin(w, r) },
+			fn: func(w *httptest.ResponseRecorder, data []byte) {
+				if strings.Index(string(data), AuthorizeURL) != 9 {
+					if w.Result().StatusCode != 204 {
+						t.Errorf("expected http code 204, got: %+v", w.Result().StatusCode)
+					}
+				}
+			},
+		},
+		{
+			name:    "Logout-AuthOff",
+			path:    "/logout",
+			kind:    "type1",
+			cookie:  validCookie,
+			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) { hOff.handleLogout(w, r) },
+			fn: func(w *httptest.ResponseRecorder, data []byte) {
+				if strings.Index(string(data), AuthorizeURL) != 9 {
+					if w.Result().StatusCode != 204 {
+						t.Errorf("expected http code 204, got: %+v", w.Result().StatusCode)
+					}
+				}
+			},
+		},
+		{
+			name:    "UserInfo-AuthOff",
+			path:    "/userinfo",
+			kind:    "type1",
+			cookie:  validCookie,
+			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) { hOff.handleUserInfo(w, r) },
+			fn: func(w *httptest.ResponseRecorder, data []byte) {
+				if strings.Index(string(data), AuthorizeURL) != 9 {
+					if w.Result().StatusCode != 204 {
+						t.Errorf("expected http code 204, got: %+v", w.Result().StatusCode)
+					}
+				}
+			},
+		},
+		{
+			name:    "Authenticate-AuthOff",
+			path:    "/auth",
+			kind:    "type1",
+			cookie:  validCookie,
+			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) { hOff.handleCheckAuthentication(w, r) },
+			fn: func(w *httptest.ResponseRecorder, data []byte) {
+				if strings.Index(string(data), AuthorizeURL) != 9 {
+					if w.Result().StatusCode != 204 {
+						t.Errorf("expected http code 204, got: %+v", w.Result().StatusCode)
+					}
+				}
+			},
+		},
+		{
+			name:    "Redirect-AuthOff",
+			path:    "/redirect",
+			kind:    "type1",
+			cookie:  validCookie,
+			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) { hOff.handleRedirect(w, r) },
+			fn: func(w *httptest.ResponseRecorder, data []byte) {
+				if strings.Index(string(data), AuthorizeURL) != 9 {
+					if w.Result().StatusCode != 204 {
+						t.Errorf("expected http code 204, got: %+v", w.Result().StatusCode)
+					}
+				}
+			},
+		},
+	}
+
+	for _, test := range tests {
+		switch test.kind {
+		case "type1":
+			t.Run(test.name, func(t *testing.T) {
+				r := httptest.NewRequest(gohttp.MethodGet, test.path, nil)
+				w := httptest.NewRecorder()
+				r.AddCookie(test.cookie)
+				test.handler(w, r)
+				data, err := readResponse(w)
+				if err != nil {
+					t.Errorf("expected no errors reading response, got: %+v", err)
+				}
+				test.fn(w, data)
+			})
+		case "type2":
+			t.Run(test.name, func(t *testing.T) {
+				r := httptest.NewRequest(gohttp.MethodGet, test.path, nil)
+				w := httptest.NewRecorder()
+				r.Form = url.Values{}
+				r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+				r.Form.Add("code", "junk")
+
+				test.handler(w, r)
+				data, err := readResponse(w)
+				if err != nil {
+					t.Errorf("expected no errors reading response, got: %+v", err)
+				}
+
+				test.fn(w, data)
+
+			})
+		}
+
+	}
+
 }

@@ -20,6 +20,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/molecula/featurebase/v2/authn"
 	"github.com/molecula/featurebase/v2/authz"
 )
 
@@ -107,17 +108,20 @@ admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 	// initializes groups that are returned from identity provider
 	groupName := "name"
 	userId := "user-id"
-	groupsList1 := []authz.Group{}
-	groupsList2 := []authz.Group{{userId, "fake-group", groupName}}
-	groupsList3 := []authz.Group{
-		{userId, "dca35310-ecda-4f23-86cd-876aee55906b", groupName},
-		{userId, "dca35310-ecda-4f23-86cd-876aee559900", groupName},
+	groupsList1 := []authn.Group{}
+	groupsList2 := []authn.Group{{
+		UserID:    userId,
+		GroupID:   "fake-group",
+		GroupName: groupName}}
+	groupsList3 := []authn.Group{
+		{UserID: userId, GroupID: "dca35310-ecda-4f23-86cd-876aee55906b", GroupName: groupName},
+		{UserID: userId, GroupID: "dca35310-ecda-4f23-86cd-876aee559900", GroupName: groupName},
 	}
-	groupsList4 := []authz.Group{{userId, "ac97c9e2-346b-42a2-b6da-18bcb61a32fe", groupName}}
+	groupsList4 := []authn.Group{{UserID: userId, GroupID: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe", GroupName: groupName}}
 
 	tests := []struct {
 		yamlData   string
-		groups     []authz.Group
+		groups     []authn.Group
 		index      string
 		userAccess string
 		err        string
@@ -201,12 +205,12 @@ admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 
 func TestAuth_IsAdmin(t *testing.T) {
 
-	group1 := []authz.Group{
-		{"admin-user-id", "ac97c9e2-346b-42a2-b6da-18bcb61a32fe", "admin-group"},
+	group1 := []authn.Group{
+		{UserID: "admin-user-id", GroupID: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe", GroupName: "admin-group"},
 	}
 
-	group2 := []authz.Group{
-		{"user-id", "dca35310-ecda-4f23-86cd-876aee55906b", "group-name"},
+	group2 := []authn.Group{
+		{UserID: "user-id", GroupID: "dca35310-ecda-4f23-86cd-876aee55906b", GroupName: "group-name"},
 	}
 
 	groupPermissions := authz.GroupPermissions{
@@ -217,7 +221,7 @@ func TestAuth_IsAdmin(t *testing.T) {
 	}
 
 	tests := []struct {
-		groups           []authz.Group
+		groups           []authn.Group
 		groupPermissions authz.GroupPermissions
 		output           bool
 	}{
@@ -242,16 +246,16 @@ func TestAuth_IsAdmin(t *testing.T) {
 
 func TestAuth_GetAuthorizedIndexList(t *testing.T) {
 
-	group1 := []authz.Group{
-		{"user-id", "dca35310-ecda-4f23-86cd-876aee55906b", "group-name"},
+	group1 := []authn.Group{
+		{UserID: "user-id", GroupID: "dca35310-ecda-4f23-86cd-876aee55906b", GroupName: "group-name"},
 	}
 
-	group2 := []authz.Group{
-		{"admin-user-id", "ac97c9e2-346b-42a2-b6da-18bcb61a32fe", "admin-group"},
+	group2 := []authn.Group{
+		{UserID: "admin-user-id", GroupID: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe", GroupName: "admin-group"},
 	}
 
-	group3 := []authz.Group{
-		{"user-id", "dca35310-ecda-4f23-86cd-876aee559900", "group-name"},
+	group3 := []authn.Group{
+		{UserID: "user-id", GroupID: "dca35310-ecda-4f23-86cd-876aee559900", GroupName: "group-name"},
 	}
 
 	p := authz.GroupPermissions{
@@ -268,7 +272,7 @@ func TestAuth_GetAuthorizedIndexList(t *testing.T) {
 	}
 
 	tests := []struct {
-		groups     []authz.Group
+		groups     []authn.Group
 		permission string
 		output     []string
 	}{

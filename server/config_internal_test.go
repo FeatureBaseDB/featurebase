@@ -8,8 +8,6 @@ import (
 	"os"
 	"strings"
 	"testing"
-
-	"github.com/molecula/featurebase/v2/authz"
 )
 
 type addrs struct{ bind, advertise string }
@@ -281,19 +279,25 @@ func TestConfig_validateAddrsGRPC(t *testing.T) {
 func TestConfig_validateAuth(t *testing.T) {
 	errorMesgEmpty := "empty string"
 	errorMesgURL := "invalid URL"
+	errorMesgScope := "must provide scope"
+	errorMesgKey := "invalid key length"
 	validTestURL := "https://url.com/"
 	validClientID := "clientid"
 	validClientSecret := "clientSecret"
+	validKey := "3db6665be8b860af422155acf2346d4fcb46678fca42e60d934abe0b7ce43600"
 	invalidURL := "not-a-url"
 	emptyString := ""
+	validStringSlice := []string{"https://graph.microsoft.com/.default", "offline_access"}
+	validString := "asdfqwer1234asdfzxcv"
+	var emptySlice []string
+
 	enable := true
 	disable := false
 
 	tests := []struct {
 		expErrs []string
-		input   authz.Auth
+		input   Auth
 	}{
-
 		{
 			// Auth enabled, all configs are set to empty string
 			[]string{
@@ -303,56 +307,109 @@ func TestConfig_validateAuth(t *testing.T) {
 				errorMesgEmpty,
 				errorMesgEmpty,
 				errorMesgEmpty,
+				errorMesgEmpty,
+				errorMesgEmpty,
 			},
-			authz.Auth{
+			Auth{
 				Enable:           enable,
 				ClientId:         emptyString,
 				ClientSecret:     emptyString,
 				AuthorizeURL:     emptyString,
 				TokenURL:         emptyString,
 				GroupEndpointURL: emptyString,
-				ScopeURL:         emptyString,
+				LogoutURL:        emptyString,
+				Scopes:           validStringSlice,
+				HashKey:          emptyString,
+				BlockKey:         emptyString,
 			},
 		},
 		{
-			// Auth enabled, some strings are set to invalid URL
+			// Auth enabled, keys are invalid length
 			[]string{
-				errorMesgURL,
+				errorMesgKey,
+				errorMesgKey,
 			},
-			authz.Auth{
-				Enable:           enable,
-				ClientId:         validClientID,
-				ClientSecret:     validClientSecret,
-				AuthorizeURL:     invalidURL,
-				TokenURL:         validTestURL,
-				GroupEndpointURL: validTestURL,
-				ScopeURL:         validTestURL,
-			},
-		},
-		{
-			// Auth enabled, all configs are set properly
-			[]string{},
-			authz.Auth{
+			Auth{
 				Enable:           enable,
 				ClientId:         validClientID,
 				ClientSecret:     validClientSecret,
 				AuthorizeURL:     validTestURL,
 				TokenURL:         validTestURL,
 				GroupEndpointURL: validTestURL,
-				ScopeURL:         validTestURL,
+				LogoutURL:        validTestURL,
+				Scopes:           validStringSlice,
+				HashKey:          validString,
+				BlockKey:         validString,
 			},
 		},
 		{
-			// Auth disabled, all configs are set to empty string
+			// Auth enabled, some URLs are set to invalid URL
+			[]string{
+				errorMesgURL,
+				errorMesgURL,
+				errorMesgURL,
+			},
+			Auth{
+				Enable:           enable,
+				ClientId:         validClientID,
+				ClientSecret:     validClientSecret,
+				AuthorizeURL:     validTestURL,
+				TokenURL:         invalidURL,
+				GroupEndpointURL: invalidURL,
+				LogoutURL:        invalidURL,
+				Scopes:           validStringSlice,
+				HashKey:          validKey,
+				BlockKey:         validKey,
+			},
+		},
+		{
+			// Auth enabled, all configs are set properly except scope
+			[]string{
+				errorMesgScope,
+			},
+			Auth{
+				Enable:           enable,
+				ClientId:         validClientID,
+				ClientSecret:     validClientSecret,
+				AuthorizeURL:     validTestURL,
+				TokenURL:         validTestURL,
+				GroupEndpointURL: validTestURL,
+				LogoutURL:        validTestURL,
+				Scopes:           emptySlice,
+				HashKey:          validKey,
+				BlockKey:         validKey,
+			},
+		},
+		{
+			// Auth enabled, all configs are set properly
 			[]string{},
-			authz.Auth{
+			Auth{
+				Enable:           enable,
+				ClientId:         validClientID,
+				ClientSecret:     validClientSecret,
+				AuthorizeURL:     validTestURL,
+				TokenURL:         validTestURL,
+				GroupEndpointURL: validTestURL,
+				LogoutURL:        validTestURL,
+				Scopes:           validStringSlice,
+				HashKey:          validKey,
+				BlockKey:         validKey,
+			},
+		},
+		{
+			// Auth disabled, some configs are set to values
+			[]string{},
+			Auth{
 				Enable:           disable,
 				ClientId:         emptyString,
-				ClientSecret:     emptyString,
+				ClientSecret:     validString,
 				AuthorizeURL:     emptyString,
 				TokenURL:         emptyString,
-				GroupEndpointURL: emptyString,
-				ScopeURL:         emptyString,
+				GroupEndpointURL: invalidURL,
+				LogoutURL:        validTestURL,
+				Scopes:           validStringSlice,
+				HashKey:          validKey,
+				BlockKey:         emptyString,
 			},
 		},
 	}

@@ -233,8 +233,23 @@ type Config struct {
 	// Toggles /schema/details endpoint. If off, it returns empty.
 	SchemaDetailsOn bool `toml:"schema-details-on"`
 
-	// Enable AuthZ/AuthN
-	Auth authz.Auth `toml:"auth"`
+	Auth Auth
+}
+
+type Auth struct {
+	// Enable AuthZ/AuthN for featurebase server
+	Enable bool `toml:"enable"`
+
+	ClientId         string   `toml:"client-id"`
+	ClientSecret     string   `toml:"client-secret"`
+	AuthorizeURL     string   `toml:"authorize-url"`
+	TokenURL         string   `toml:"token-url"`
+	GroupEndpointURL string   `toml:"group-endpoint-url"`
+	LogoutURL        string   `toml:"logout-url"`
+	Scopes           []string `toml:"scopes"`
+	HashKey          string   `toml:"hash-key"`
+	BlockKey         string   `toml:"block-key"`
+	PermissionsFile  string   `toml:"permissions"`
 }
 
 // Namespace returns the namespace to use based on the Future flag.
@@ -609,13 +624,21 @@ func (c *Config) ValidateAuth() (errors []error) {
 		"AuthorizeURL":     c.Auth.AuthorizeURL,
 		"TokenURL":         c.Auth.TokenURL,
 		"GroupEndpointURL": c.Auth.GroupEndpointURL,
-		"ScopeURL":         c.Auth.ScopeURL,
+		"LogoutURL":        c.Auth.LogoutURL,
+		"HashKey":          c.Auth.HashKey,
+		"BlockKey":         c.Auth.BlockKey,
 	}
 
 	for name, value := range authConfig {
 		if value == "" {
 			errors = append(errors, fmt.Errorf("empty string for auth config %s", name))
 			continue
+		}
+
+		if name == "HashKey" || name == "BlockKey" {
+			if len(value) != 64 {
+				errors = append(errors, fmt.Errorf("invalid key length for %s. exp %d, got %d", name, 64, len(value)))
+			}
 		}
 
 		if strings.Contains(name, "URL") {
@@ -626,6 +649,11 @@ func (c *Config) ValidateAuth() (errors []error) {
 			}
 		}
 	}
+
+	if len(c.Auth.Scopes) == 0 {
+		errors = append(errors, fmt.Errorf("must provide scope for authentication with IdP - for access and refresh token"))
+	}
+
 	return errors
 }
 
@@ -666,6 +694,7 @@ func (c *Config) ValidatePermissions(permsFile io.Reader) (errors []error) {
 
 	if p.Admin == "" {
 		errors = append(errors, fmt.Errorf("empty string for admin in permissions file: %s", c.Auth.PermissionsFile))
+
 	}
 
 	return errors

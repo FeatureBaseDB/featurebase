@@ -19,12 +19,14 @@ require (
 	github.com/fsnotify/fsnotify v1.4.9 // indirect
 	github.com/go-test/deep v1.0.7
 	github.com/gogo/protobuf v1.3.2
+	github.com/golang-jwt/jwt v3.2.2+incompatible
 	github.com/golang/protobuf v1.3.3
 	github.com/google/go-cmp v0.5.5
 	github.com/google/uuid v1.1.4 // indirect
 	github.com/gopherjs/gopherjs v0.0.0-20200217142428-fce0ec30dd00 // indirect
 	github.com/gorilla/handlers v1.3.0
 	github.com/gorilla/mux v1.7.0
+	github.com/gorilla/securecookie v1.1.1
 	github.com/hashicorp/go-retryablehttp v0.7.0
 	github.com/improbable-eng/grpc-web v0.13.0
 	github.com/lib/pq v1.8.0
@@ -53,6 +55,7 @@ require (
 	golang.org/x/exp v0.0.0-20201008143054-e3b2a7f2fdc7
 	golang.org/x/mod v0.4.2
 	golang.org/x/net v0.0.0-20210805182204-aaa1db679c0d // indirect
+	golang.org/x/oauth2 v0.0.0-20190604053449-0f29369cfe45
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	google.golang.org/grpc v1.28.0
 	gopkg.in/yaml.v2 v2.3.0

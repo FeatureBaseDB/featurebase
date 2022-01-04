@@ -1,18 +1,25 @@
 import axios from 'axios';
+
 import { baseURL } from './baseURL';
 
 const api = axios.create({
   baseURL,
   headers: {
     'Content-Type': 'application/x-www-form-urlencoded',
-    Accept: 'application/json'
-  }
+    Accept: 'application/json',
+  },
 });
 
 export const pilosa = {
   get: {
     status() {
       return api.get('/status');
+    },
+    auth() {
+      return api.get('/auth');
+    },
+    userinfo() {
+      return api.get('/userinfo');
     },
     info() {
       return api.get('/info');
@@ -40,7 +47,7 @@ export const pilosa = {
     },
     queryHistory() {
       return api.get('/query-history');
-    }
+    },
   },
   post: {
     finishTransaction(id) {
@@ -48,6 +55,6 @@ export const pilosa = {
     },
     query(index, query) {
       return api.post(`/index/${index}/query`, query);
-    }
-  }
+    },
+  },
 };
