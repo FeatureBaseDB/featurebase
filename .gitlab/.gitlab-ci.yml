@@ -219,32 +219,33 @@ build container fb:
     - echo Created docker featurebase image with tag "$tag"
 
 # deploy EC2 instance, configure and run featurebase 
-deploy node for linux amd64:
- stage: integration
- image: registry.gitlab.com/gitlab-org/cloud-deploy/aws-base:latest
- variables:
-   PROFILE: "service-terraform"
-   AWS_SSH_PRIVATE_KEY: $AWS_FBCI_SSH_KEY 
- rules:
-   - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
- before_script:
-   - aws configure set aws_access_key_id $AWS_FBCI_ACCESS_KEY_ID
-   - aws configure set aws_secret_access_key $AWS_FBCI_SECRET_ACCESS_KEY
-   - aws configure set region "us-east-2"
-   - aws configure set aws_profile $PROFILE
-   - echo $AWS_FBCI_SSH_KEY > gitlab-featurebase-ci.pem
-   - chmod 400 gitlab-featurebase-ci.pem
-   - 'which ssh-agent || ( apt-get update -y && apt-get install openssh-client -y )'
-   - eval `ssh-agent -s`
-   - mkdir -p ~/.ssh 
-   - echo "$AWS_FBCI_SSH_KEY" | ssh-add -
-   - chmod 700 /root/.ssh
-   - '[[ -f /.dockerenv ]] && echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config'
-   - apt update && apt -y install jq
- script:
-   - ./qa/scripts/deployNode.sh $PROFILE
- needs:
-   - job: build for linux amd64
+# diabling for now - will come back and refactor POK
+# deploy node for linux amd64:
+#  stage: integration
+#  image: registry.gitlab.com/gitlab-org/cloud-deploy/aws-base:latest
+#  variables:
+#    PROFILE: "default"
+#    AWS_SSH_PRIVATE_KEY: $AWS_FBCI_SSH_KEY 
+#  rules:
+#    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+#  before_script:
+#    - aws configure set aws_access_key_id $AWS_FBCI_ACCESS_KEY_ID
+#    - aws configure set aws_secret_access_key $AWS_FBCI_SECRET_ACCESS_KEY
+#    - aws configure set region "us-east-2"
+#    - aws configure set aws_profile $PROFILE
+#    - echo $AWS_FBCI_SSH_KEY > gitlab-featurebase-ci.pem
+#    - chmod 400 gitlab-featurebase-ci.pem
+#    - 'which ssh-agent || ( apt-get update -y && apt-get install openssh-client -y )'
+#    - eval `ssh-agent -s`
+#    - mkdir -p ~/.ssh 
+#    - echo "$AWS_FBCI_SSH_KEY" | ssh-add -
+#    - chmod 700 /root/.ssh
+#    - '[[ -f /.dockerenv ]] && echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config'
+#    - apt update && apt -y install jq
+#  script:
+#    - ./qa/scripts/deployNode.sh $PROFILE
+#  needs:
+#    - job: build for linux amd64
 
 gauntlet:
   stage: gauntlet
