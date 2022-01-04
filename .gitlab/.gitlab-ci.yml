@@ -257,7 +257,7 @@ gauntlet:
     AWS_ACCESS_KEY_ID: $AWS_FBCI_ACCESS_KEY_ID
     AWS_SECRET_ACCESS_KEY: $AWS_FBCI_SECRET_ACCESS_KEY
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "schedule" || '$CI_PIPELINE_SOURCE == "web"'
+    - if: '$CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
 #    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
   before_script:
     - apt-get update && apt-get install -y gnupg software-properties-common curl git
