@@ -258,7 +258,7 @@ gauntlet:
     AWS_SECRET_ACCESS_KEY: $AWS_FBCI_SECRET_ACCESS_KEY
   # TODO: For now, run always
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "schedule" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
   before_script:
     - apt-get update && apt-get install -y gnupg software-properties-common curl git
     - curl -fsSL https://apt.releases.hashicorp.com/gpg | apt-key add -
