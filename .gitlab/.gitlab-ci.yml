@@ -232,12 +232,12 @@ deploy node for linux amd64:
    - aws configure set aws_secret_access_key $AWS_FBCI_SECRET_ACCESS_KEY
    - aws configure set region "us-east-2"
    - aws configure set aws_profile $PROFILE
-   - echo $AWS_SSH_PRIVATE_KEY > gitlab-featurebase-dev.pem
+   - echo $AWS_FBCI_SSH_KEY > gitlab-featurebase-ci.pem
    - chmod 400 gitlab-featurebase-ci.pem
    - 'which ssh-agent || ( apt-get update -y && apt-get install openssh-client -y )'
    - eval `ssh-agent -s`
    - mkdir -p ~/.ssh 
-   - echo "$AWS_SSH_PRIVATE_KEY" | ssh-add -
+   - echo "$AWS_FBCI_SSH_KEY" | ssh-add -
    - chmod 700 /root/.ssh
    - '[[ -f /.dockerenv ]] && echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config'
    - apt update && apt -y install jq
