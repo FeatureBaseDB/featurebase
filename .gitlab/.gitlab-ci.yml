@@ -223,8 +223,8 @@ deploy node for linux amd64:
  stage: integration
  image: registry.gitlab.com/gitlab-org/cloud-deploy/aws-base:latest
  variables:
-   PROFILE: "default"
-   AWS_SSH_PRIVATE_KEY: $AWS_SSH_PRIVATE_KEY
+   PROFILE: "service-terraform"
+   AWS_SSH_PRIVATE_KEY: $AWS_FBCI_SSH_KEY 
  rules:
    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
  before_script:
@@ -233,7 +233,7 @@ deploy node for linux amd64:
    - aws configure set region "us-east-2"
    - aws configure set aws_profile $PROFILE
    - echo $AWS_SSH_PRIVATE_KEY > gitlab-featurebase-dev.pem
-   - chmod 400 gitlab-featurebase-dev.pem
+   - chmod 400 gitlab-featurebase-ci.pem
    - 'which ssh-agent || ( apt-get update -y && apt-get install openssh-client -y )'
    - eval `ssh-agent -s`
    - mkdir -p ~/.ssh 
