@@ -82,6 +82,11 @@ type Group struct {
 	GroupName string `json:"displayName"`
 }
 
+// Groups holds a slice of Group informations for marshalling from Json
+type Groups struct {
+	Groups []Group `json:"value"`
+}
+
 // UserInfo holds user information for an authenticated user
 type UserInfo struct {
 	UserID   string `json:"userid"`
@@ -203,7 +208,7 @@ func (a *Auth) newCookieValue(token *oauth2.Token) (*CookieValue, error) {
 	return &CookieValue{
 		UserID:          claims["oid"].(string),
 		UserName:        claims["name"].(string),
-		GroupMembership: groups,
+		GroupMembership: groups.Groups,
 		Token:           token,
 	}, nil
 }
