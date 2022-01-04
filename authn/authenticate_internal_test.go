@@ -71,11 +71,13 @@ func TestAuth(t *testing.T) {
 		}
 
 		if w.Result().Cookies()[0].Value == "" {
-			t.Fatalf("expected some value, got: %+v", w.Result().Cookies()[0].Value)
+			t.Errorf("expected something, got empty string")
 		}
-		if w.Result().Cookies()[0].Path != "/" {
-			t.Fatalf("expected path to be /, got: %+v", w.Result().Cookies()[0].Path)
+
+		if got, want := w.Result().Cookies()[0].Path, "/"; got != want {
+			t.Fatalf("path=%s, want %s", got, want)
 		}
+
 	})
 	t.Run("GetEmptyCookie", func(t *testing.T) {
 		c := a.getEmptyCookie()
