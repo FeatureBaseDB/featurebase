@@ -246,20 +246,20 @@ func TestAuthentication(t *testing.T) {
 		GroupName: "Romantic Painters",
 	}
 
-	validCV := authn.CookieValue{
+	validCV := authn.AuthContext{
 		UserID:          "snowstorm",
 		UserName:        "J.M.W. Turner",
 		GroupMembership: []authn.Group{grp},
 		Token:           &token,
 	}
 
-	emptyCV := authn.CookieValue{
+	emptyCV := authn.AuthContext{
 		UserID:          "narcissus",
 		UserName:        "Caravaggio",
 		GroupMembership: []authn.Group{},
 		Token:           &token,
 	}
-	expiredCV := authn.CookieValue{
+	expiredCV := authn.AuthContext{
 		UserID:          "narcissus",
 		UserName:        "Caravaggio",
 		GroupMembership: []authn.Group{grp},

@@ -67,8 +67,8 @@ func NewAuth(logger logger.Logger, url string, scopes []string, authURL, tokenUR
 	return auth, nil
 }
 
-// CookieValue holds the value of an authenticated user's cookie
-type CookieValue struct {
+// AuthContext holds the value of an authenticated user's cookie
+type AuthContext struct {
 	UserID          string
 	UserName        string
 	GroupMembership []Group
@@ -145,7 +145,7 @@ func (a *Auth) Redirect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cv, err := a.newCookieValue(token)
+	cv, err := a.newAuthContext(token)
 	if err != nil || cv == nil {
 		a.logger.Warnf("creating cookie: %+v", err)
 		http.Error(w, "Bad Request: 400", http.StatusBadRequest)
@@ -180,8 +180,8 @@ func (a *Auth) getToken(r *http.Request, code string) (*oauth2.Token, error) {
 	return token, nil
 }
 
-// newCookieValue parses a jwt `token` and returns relevant information in a cookie value struct
-func (a *Auth) newCookieValue(token *oauth2.Token) (*CookieValue, error) {
+// newAuthContext parses a jwt `token` and returns relevant information in a cookie value struct
+func (a *Auth) newAuthContext(token *oauth2.Token) (*AuthContext, error) {
 	if token == nil {
 		return nil, errors.New("baking cookie due to nil token")
 	}
@@ -205,7 +205,7 @@ func (a *Auth) newCookieValue(token *oauth2.Token) (*CookieValue, error) {
 	}
 	// not needed at this point in the logic and makes the encoded cookie too large
 	token.AccessToken = ""
-	return &CookieValue{
+	return &AuthContext{
 		UserID:          claims["oid"].(string),
 		UserName:        claims["name"].(string),
 		GroupMembership: groups.Groups,
@@ -242,13 +242,13 @@ func (a *Auth) getGroupMembership(token *oauth2.Token) (Groups, error) {
 }
 
 // readCookie decodes an encrypted and signed cookie and returns the contained info
-func (a *Auth) readCookie(w http.ResponseWriter, r *http.Request) (*CookieValue, error) {
+func (a *Auth) readCookie(w http.ResponseWriter, r *http.Request) (*AuthContext, error) {
 	cookie, err := r.Cookie(a.cookieName)
 	if err != nil {
 		return nil, errors.Wrap(err, "cookie not found")
 	}
 
-	var value CookieValue
+	var value AuthContext
 	err = a.secure.Decode(a.cookieName, cookie.Value, &value)
 	if err != nil {
 		http.SetCookie(w, a.getEmptyCookie())
@@ -258,10 +258,10 @@ func (a *Auth) readCookie(w http.ResponseWriter, r *http.Request) (*CookieValue,
 	return &value, nil
 }
 
-func (a *Auth) setCookie(w http.ResponseWriter, cookie *CookieValue) error {
+func (a *Auth) setCookie(w http.ResponseWriter, cookie *AuthContext) error {
 	encoded, err := a.secure.Encode(a.cookieName, cookie)
 	if err != nil {
-		return errors.Wrap(err, "encoding CookieValue")
+		return errors.Wrap(err, "encoding AuthContext")
 
 	}
 	http.SetCookie(w, &http.Cookie{
@@ -276,7 +276,7 @@ func (a *Auth) setCookie(w http.ResponseWriter, cookie *CookieValue) error {
 	return nil
 }
 
-func (a *Auth) refreshToken(w http.ResponseWriter, cookie *CookieValue) error {
+func (a *Auth) refreshToken(w http.ResponseWriter, cookie *AuthContext) error {
 	if cookie.Token.RefreshToken == "" {
 		return errors.New("no refresh token found, check auth scopes to see if refresh tokens are being provided by your IdP")
 	}
@@ -287,7 +287,7 @@ func (a *Auth) refreshToken(w http.ResponseWriter, cookie *CookieValue) error {
 	}
 
 	if newToken.Expiry != cookie.Token.Expiry {
-		cv, err := a.newCookieValue(newToken)
+		cv, err := a.newAuthContext(newToken)
 		if err != nil {
 			return errors.Wrap(err, "creating cookie value from token")
 		}

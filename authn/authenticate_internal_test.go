@@ -56,7 +56,7 @@ func TestAuth(t *testing.T) {
 		GroupID:   "abcd123-A",
 		GroupName: "Romantic Painters",
 	}
-	validCV := CookieValue{
+	validCV := AuthContext{
 		UserID:          "snowstorm",
 		UserName:        "J.M.W. Turner",
 		GroupMembership: []Group{grp},
@@ -103,15 +103,15 @@ func TestAuth(t *testing.T) {
 			t.Fatalf("expected error decoding block key got: %v", err)
 		}
 	})
-	t.Run("NewCookieValue-BadAccessToken", func(t *testing.T) {
-		_, err := a.newCookieValue(&tokenAT)
+	t.Run("NewAuthContext-BadAccessToken", func(t *testing.T) {
+		_, err := a.newAuthContext(&tokenAT)
 		if err == nil || !strings.Contains(err.Error(), "jwt claims") {
 			t.Fatalf("expected failure regarding jwt claims, got: %v", err)
 		}
 
 	})
-	t.Run("CookieValue-NoAccessToken", func(t *testing.T) {
-		_, err := a.newCookieValue(&tokenNoAT)
+	t.Run("AuthContext-NoAccessToken", func(t *testing.T) {
+		_, err := a.newAuthContext(&tokenNoAT)
 		if err == nil || !strings.Contains(err.Error(), "access token") {
 			t.Fatalf("expected failure regarding access token, got: %v", err)
 		}
