@@ -9,14 +9,14 @@ echo "Running terraform init..."
 terraform init -input=false
 echo "Running terraform apply..."
 terraform apply -input=false -auto-approve
-terraform output -json > samsung-gauntlet.json
+terraform output -json > outputs.json
 popd
 
 # get the bastion host
-BASTION=$(cat ./qa/tf/gauntlet/samsung/samsung-gauntlet.json | jq -r '[.ingest_ips][0]["value"][0]')
+BASTION=$(cat ./qa/tf/gauntlet/samsung/outputs.json | jq -r '[.ingest_ips][0]["value"][0]')
 echo "using bastion ${BASTION}"
 
-NODE=$(cat ./qa/tf/gauntlet/samsung/samsung-gauntlet.json | jq -r '[.data_node_ips][0]["value"][0]')
+NODE=$(cat ./qa/tf/gauntlet/samsung/outputs.json | jq -r '[.data_node_ips][0]["value"][0]')
 echo "using node ${NODE}"
 
 # remember that the nodes will take at least 2 mins to be up and going and finish cloud-init

@@ -20,7 +20,7 @@ echo "Running smoke test..."
 ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem -o "StrictHostKeyChecking no" ec2-user@${BASTION} " pushd /data; pytest --junitxml=report.xml; popd" 
 if (( $? != 0 )) 
 then 
-    echo "Unable to run smoketest"
+    echo "Unable to run smoke test"
     exit 1
 fi
 
