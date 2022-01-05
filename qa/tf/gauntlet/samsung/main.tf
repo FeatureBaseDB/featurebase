@@ -10,4 +10,5 @@ module "samsung-cluster" {
     fb_ingest_disk_iops = 10000
     fb_ingest_node_count = 1
     gitlab_token = var.gitlab_token
+    branch = var.branch
 }

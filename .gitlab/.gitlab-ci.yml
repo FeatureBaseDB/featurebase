@@ -13,7 +13,6 @@ include:
 variables:
   GOVERSION: "1.16.10"
 
-
 stages:
   - lint
   - test
@@ -27,7 +26,7 @@ golangci-lint:
   extends: .go-cache
   allow_failure: false
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "push"'
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
     - echo "Checking for issues in new code"
     - golangci-lint run -v 
@@ -38,7 +37,7 @@ build lattice:
   variables:
     CI: "false"
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "push"'
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
     - cd lattice
     - yarn install
@@ -58,7 +57,7 @@ run jest tests:
   variables:
     CI: "true"
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "push"'
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
     - echo "Testing lattice..."
     - cd lattice
@@ -73,7 +72,7 @@ run go tests:
   image: golang:$GOVERSION
   extends: .go-cache
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "push"'
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
     - echo "Running featurebase unit tests..."
     - PKG_LIST=$(go list ./... | grep -v internal/clustertests | paste -s -d, -)
@@ -87,7 +86,7 @@ run go tests future:
   image: golang:1.17.3
   extends: .go-cache
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "push"'
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
     - echo "Running featurebase unit tests..."
     - PKG_LIST=$(go list ./... | grep -v internal/clustertests | paste -s -d, -)
@@ -96,12 +95,11 @@ run go tests future:
     paths:
       - coverage.out
 
-
 run go tests with output:
   stage: test
   image: golang:$GOVERSION
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "push"'
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
     - echo "Running featurebase unit tests to capture JSON output..."
     - go test -json > test-report.out
@@ -115,7 +113,7 @@ upload to sonarcloud:
   variables:
     SONAR_TOKEN: $SONAR_TOKEN
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "push"'
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
     - sonar-scanner -Dsonar.projectKey=molecula_featurebase -Dsonar.organization=molecula -Dsonar.sources=. -Dsonar.host.url=https://sonarcloud.io -Dsonar.go.coverage.reportPaths=coverage.out -Dsonar.go.tests.reportPaths=test-report.out  -Dsonar.javascript.lcov.reportPaths=lattice/coverage/lcov.info
   needs:
@@ -127,7 +125,7 @@ build for linux amd64:
   stage: build
   image: golang:$GOVERSION
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "push"'
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
     - rm -r lattice
     - tar -xvf lattice.tar.gz 
@@ -142,7 +140,7 @@ build for linux arm64:
   stage: build
   image: golang:$GOVERSION
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "push"'
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
     - rm -r lattice
     - tar -xvf lattice.tar.gz 
@@ -157,7 +155,7 @@ build for darwin amd64:
   stage: build
   image: golang:$GOVERSION
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "push"'
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
     - rm -r lattice
     - tar -xvf lattice.tar.gz 
@@ -172,7 +170,7 @@ build for darwin arm64:
   stage: build
   image: golang:$GOVERSION
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "push"'
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
     - rm -r lattice
     - tar -xvf lattice.tar.gz 
@@ -187,7 +185,7 @@ package for linux amd64:
   stage: build
   image: golang:$GOVERSION
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "push"'
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   variables:
     GOOS: "linux"
     GOARCH: "amd64"
@@ -209,7 +207,7 @@ build container fb:
   tags:
     - shell
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "push"'
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   before_script:    
     - echo "${DOCKER_DEPLOY_TOKEN}" | docker login -u ${DOCKER_DEPLOY_USER} --password-stdin ${CI_REGISTRY}
   script:    
@@ -218,46 +216,18 @@ build container fb:
     - docker push $tag
     - echo Created docker featurebase image with tag "$tag"
 
-# deploy EC2 instance, configure and run featurebase 
-# diabling for now - will come back and refactor POK
-# deploy node for linux amd64:
-#  stage: integration
-#  image: registry.gitlab.com/gitlab-org/cloud-deploy/aws-base:latest
-#  variables:
-#    PROFILE: "default"
-#    AWS_SSH_PRIVATE_KEY: $AWS_FBCI_SSH_KEY 
-#  rules:
-#    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
-#  before_script:
-#    - aws configure set aws_access_key_id $AWS_FBCI_ACCESS_KEY_ID
-#    - aws configure set aws_secret_access_key $AWS_FBCI_SECRET_ACCESS_KEY
-#    - aws configure set region "us-east-2"
-#    - aws configure set aws_profile $PROFILE
-#    - echo $AWS_FBCI_SSH_KEY > gitlab-featurebase-ci.pem
-#    - chmod 400 gitlab-featurebase-ci.pem
-#    - 'which ssh-agent || ( apt-get update -y && apt-get install openssh-client -y )'
-#    - eval `ssh-agent -s`
-#    - mkdir -p ~/.ssh 
-#    - echo "$AWS_FBCI_SSH_KEY" | ssh-add -
-#    - chmod 700 /root/.ssh
-#    - '[[ -f /.dockerenv ]] && echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config'
-#    - apt update && apt -y install jq
-#  script:
-#    - ./qa/scripts/deployNode.sh $PROFILE
-#  needs:
-#    - job: build for linux amd64
-
-gauntlet:
-  stage: gauntlet
-  timeout: 4h
+smoke test:
+  stage: integration
   image: registry.gitlab.com/gitlab-org/cloud-deploy/aws-base:latest
   variables:
-    PROFILE: "default"
+    PROFILE: "service-terraform"
     AWS_SSH_PRIVATE_KEY: $AWS_FBCI_SSH_KEY
     AWS_ACCESS_KEY_ID: $AWS_FBCI_ACCESS_KEY_ID
     AWS_SECRET_ACCESS_KEY: $AWS_FBCI_SECRET_ACCESS_KEY
+    TF_VAR_cluster_prefix: ""
+    TF_VAR_branch: ""
   rules:
-    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")'
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   before_script:
     - apt-get update && apt-get install -y gnupg software-properties-common curl git
     - curl -fsSL https://apt.releases.hashicorp.com/gpg | apt-key add -
@@ -281,6 +251,65 @@ gauntlet:
     - wget https://go.dev/dl/go1.17.5.linux-amd64.tar.gz
     - tar -C /usr/local -xzf go1.17.5.linux-amd64.tar.gz
     - export PATH=$PATH:/usr/local/go/bin
+    - TF_VAR_cluster_prefix="smoke-$(openssl rand -base64 12 | tr -d /=+ | cut -c -16)"
+    - echo "Cluster Prefix --> $TF_VAR_cluster_prefix"
+    - TF_VAR_branch=$CI_COMMIT_BRANCH
+    - echo "Branch --> $TF_VAR_branch"
+  script:
+    - ./qa/scripts/setupSmokeTest.sh
+    - ./qa/scripts/testSmokeTest.sh
+  after_script:
+    - ./qa/scripts/teardownSmokeTest.sh
+  needs:
+    - job: build for linux arm64
+  artifacts:
+    when: always
+    paths:
+      - report.xml
+    reports:
+      junit: report.xml
+
+gauntlet:
+  stage: gauntlet
+  timeout: 4h
+  image: registry.gitlab.com/gitlab-org/cloud-deploy/aws-base:latest
+  variables:
+    PROFILE: "default"
+    AWS_SSH_PRIVATE_KEY: $AWS_FBCI_SSH_KEY
+    AWS_ACCESS_KEY_ID: $AWS_FBCI_ACCESS_KEY_ID
+    AWS_SECRET_ACCESS_KEY: $AWS_FBCI_SECRET_ACCESS_KEY
+    TF_VAR_cluster_prefix: ""
+    TF_VAR_branch: ""
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    - if: '$CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
+  before_script:
+    - apt-get update && apt-get install -y gnupg software-properties-common curl git
+    - curl -fsSL https://apt.releases.hashicorp.com/gpg | apt-key add -
+    - apt-add-repository "deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
+    - apt-get update && apt-get install terraform
+    - aws configure set aws_access_key_id $AWS_FBCI_ACCESS_KEY_ID
+    - aws configure set aws_secret_access_key $AWS_FBCI_SECRET_ACCESS_KEY
+    - aws configure set region "us-east-2"
+    - aws configure set aws_profile $PROFILE
+    - echo $AWS_FBCI_SSH_KEY > gitlab-featurebase-ci.pem
+    - chmod 400 gitlab-featurebase-ci.pem
+    - 'which ssh-agent || ( apt-get update -y && apt-get install openssh-client -y )'
+    - eval $(ssh-agent -s)
+    - mkdir -p ~/.ssh
+    - echo $AWS_FBCI_SSH_KEY > /root/.ssh/gitlab-featurebase-ci.pem
+    - chmod 400 /root/.ssh/gitlab-featurebase-ci.pem
+    - echo "$AWS_FBCI_SSH_KEY" | ssh-add -
+    - chmod 700 /root/.ssh
+    - '[[ -f /.dockerenv ]] && echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config'
+    - apt update && apt -y install jq wget
+    - wget https://go.dev/dl/go1.17.5.linux-amd64.tar.gz
+    - tar -C /usr/local -xzf go1.17.5.linux-amd64.tar.gz
+    - export PATH=$PATH:/usr/local/go/bin
+    - TF_VAR_cluster_prefix="smoke-$(openssl rand -base64 12 | tr -d /=+ | cut -c -16)"
+    - echo "Cluster Prefix --> $TF_VAR_cluster_prefix"
+    - TF_VAR_branch=$CI_COMMIT_BRANCH
+    - echo "Branch --> $TF_VAR_branch"
   script:
     - ./qa/scripts/setupSamsungGauntlet.sh
     - ./qa/scripts/testSamsungGauntlet.sh
