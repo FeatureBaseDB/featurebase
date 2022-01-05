@@ -18,3 +18,4 @@ pilosa
 launch.json
 .terraform.lock.hcl
 __pycache__/
+report.xml

@@ -62,5 +62,11 @@ sudo mount /dev/nvme1n1 /data
 
 sudo chown -R ec2-user /data
 
+echo "Installing pytest"
+pip3 install -U pytest
+pip3 install -U requests
+
+echo "Done."
+
 
 

@@ -29,7 +29,7 @@ do
     break
     echo "Cluster is up after $${i} tries." 
   fi
-  sleep 20
+  sleep 10
 done
 
 
