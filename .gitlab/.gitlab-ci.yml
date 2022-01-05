@@ -252,6 +252,7 @@ smoke test:
     - tar -C /usr/local -xzf go1.17.5.linux-amd64.tar.gz
     - export PATH=$PATH:/usr/local/go/bin
     - TF_VAR_cluster_prefix="smoke-$(openssl rand -base64 12 | tr -d /=+ | cut -c -16)"
+    - echo "Cluster Prefix --> $TF_VAR_cluster_prefix"
   script:
     - ./qa/scripts/setupSmokeTest.sh
     - ./qa/scripts/testSmokeTest.sh
