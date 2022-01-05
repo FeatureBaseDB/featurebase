@@ -561,7 +561,8 @@ func (h *Handler) chkAuthZ(handler http.HandlerFunc, perm authz.Permission) http
 
 			if h.permissions == nil {
 				h.logger.Errorf("authentication is turned on without authorization permissions set")
-				http.Error(w, errors.New("authorizing").Error(), http.StatusInternalServerError)
+				http.Error(w, "authorizing", http.StatusInternalServerError)
+				return
 			}
 
 			uinfo := h.auth.GetUserInfo(w, r)
@@ -779,7 +780,7 @@ func (h *Handler) filterResponse(w http.ResponseWriter, r *http.Request, schema 
 	if h.auth != nil {
 		g := r.Context().Value(contextKeyGroupMembership)
 		if g == nil {
-			http.Error(w, "not authorized", http.StatusForbidden)
+			http.Error(w, "Forbidden", http.StatusForbidden)
 			return nil
 		}
 		indexes := h.permissions.GetAuthorizedIndexList(g.([]authn.Group), authz.Read)
@@ -3503,7 +3504,7 @@ func (h *Handler) handlePostRestore(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if h.auth == nil {
-		http.Error(w, "Auth Off", http.StatusNoContent)
+		http.Error(w, "", http.StatusNoContent)
 		return
 	}
 
@@ -3514,7 +3515,7 @@ func (h *Handler) handleRedirect(w http.ResponseWriter, r *http.Request) {
 	if h.auth == nil {
 		w.Header().Add("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusNoContent)
-		w.Write([]byte("Auth Off")) //nolint:errcheck
+		w.Write([]byte("")) //nolint:errcheck
 		return
 	}
 	h.auth.Redirect(w, r)
@@ -3526,7 +3527,7 @@ func (h *Handler) handleCheckAuthentication(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	if h.auth == nil {
-		http.Error(w, "Auth Off", http.StatusNoContent)
+		http.Error(w, "", http.StatusNoContent)
 		return
 	}
 	groups, err := h.auth.Authenticate(w, r)
@@ -3547,7 +3548,7 @@ func (h *Handler) handleUserInfo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if h.auth == nil {
-		http.Error(w, "Auth Off", http.StatusNoContent)
+		http.Error(w, "", http.StatusNoContent)
 		return
 	}
 	if err := json.NewEncoder(w).Encode(h.auth.GetUserInfo(w, r)); err != nil {
@@ -3557,7 +3558,7 @@ func (h *Handler) handleUserInfo(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) handleLogout(w http.ResponseWriter, r *http.Request) {
 	if h.auth == nil {
-		http.Error(w, "Auth Off", http.StatusNoContent)
+		http.Error(w, "", http.StatusNoContent)
 		return
 	}
 	h.auth.Logout(w, r)
