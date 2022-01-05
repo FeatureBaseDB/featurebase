@@ -262,6 +262,12 @@ smoke test:
     - ./qa/scripts/teardownSmokeTest.sh
   needs:
     - job: build for linux arm64
+  artifacts:
+    when: always
+    paths:
+      - report.xml
+    reports:
+      junit: report.xml
 
 gauntlet:
   stage: gauntlet
@@ -275,9 +281,8 @@ gauntlet:
     TF_VAR_cluster_prefix: ""
     TF_VAR_branch: ""
   rules:
-#    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
-#    - if: '$CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
-    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    - if: '$CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   before_script:
     - apt-get update && apt-get install -y gnupg software-properties-common curl git
     - curl -fsSL https://apt.releases.hashicorp.com/gpg | apt-key add -
@@ -307,6 +312,6 @@ gauntlet:
     - echo "Branch --> $TF_VAR_branch"
   script:
     - ./qa/scripts/setupSamsungGauntlet.sh
-#    - ./qa/scripts/testSamsungGauntlet.sh
+    - ./qa/scripts/testSamsungGauntlet.sh
   after_script:
     - ./qa/scripts/teardownSamsungGauntlet.sh
