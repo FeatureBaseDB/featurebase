@@ -23,7 +23,7 @@ echo "using node ${NODE}"
 echo "Waiting for cluster to become available..."
 for i in {0..24}
 do
-  ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem -o "StrictHostKeyChecking no" ec2-user@${BASTION} "curl -s http://${NODE}:10101/status" 
+  ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem -o ConnectTimeout=10 -o StrictHostKeyChecking=no ec2-user@${BASTION} "curl -s http://${NODE}:10101/status" 
   if [ $? -eq 0 ]
   then
     break
@@ -35,7 +35,7 @@ done
 
 # verify featurebase running
 echo "Verifying featurebase cluster running..."
-ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem -o "StrictHostKeyChecking no" ec2-user@${BASTION} "curl -s http://${NODE}:10101/status" 
+ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem -o StrictHostKeyChecking=no ec2-user@${BASTION} "curl -s http://${NODE}:10101/status" 
 if (( $? != 0 )) 
 then 
     echo "Featurebase cluster not running"
