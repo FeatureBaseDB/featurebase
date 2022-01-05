@@ -17,3 +17,8 @@ variable "cluster_prefix" {
   type        = string
   description = "This is a identifier that will be prefixed to created resources"
 }
+
+variable "branch" {
+  type        = string
+  description = "The branch we are on"
+}

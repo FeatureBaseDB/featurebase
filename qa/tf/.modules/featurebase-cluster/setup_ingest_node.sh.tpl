@@ -48,7 +48,7 @@ get_aws_instance_id
 wait_on_all_ingest_ips
 
 echo "Getting featurebase binary..."
-curl --header "PRIVATE-TOKEN: ${gitlab_token}" -o "/home/ec2-user/featurebase_linux_arm64" https://gitlab.com/api/v4/projects/molecula%2Ffeaturebase/jobs/artifacts/master/raw/featurebase_linux_arm64?job=build%20for%20linux%20arm64
+curl --fail --header "PRIVATE-TOKEN: ${gitlab_token}" -o "/home/ec2-user/featurebase_linux_arm64" https://gitlab.com/api/v4/projects/molecula%2Ffeaturebase/jobs/artifacts/${branch}/raw/featurebase_linux_arm64?job=build%20for%20linux%20arm64
 chown ec2-user:ec2-user "/home/ec2-user/featurebase_linux_arm64"
 chmod ugo+x "/home/ec2-user/featurebase_linux_arm64"
 
