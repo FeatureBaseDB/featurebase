@@ -91,3 +91,8 @@ variable "gitlab_token" {
   description = "Gitlab API token"
   type        = string
 }
+
+variable "branch" {
+  description = "The branch we are on"
+  type        = string
+}

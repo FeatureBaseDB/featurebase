@@ -1,10 +1,10 @@
 #!/bin/bash
 
 # get the bastion host
-BASTION=$(cat ./qa/tf/gauntlet/samsung/samsung-gauntlet.json | jq -r '[.ingest_ips][0]["value"][0]')
+BASTION=$(cat ./qa/tf/gauntlet/samsung/outputs.json | jq -r '[.ingest_ips][0]["value"][0]')
 echo "using bastion ${BASTION}"
 
-NODE=$(cat ./qa/tf/gauntlet/samsung/samsung-gauntlet.json | jq -r '[.data_node_ips][0]["value"][0]')
+NODE=$(cat ./qa/tf/gauntlet/samsung/outputs.json | jq -r '[.data_node_ips][0]["value"][0]')
 echo "using node ${NODE}"
 
 # generate csv files
