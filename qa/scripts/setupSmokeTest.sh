@@ -21,17 +21,8 @@ echo "using node ${NODE}"
 
 # remember that the nodes will take at least 2 mins to be up and going and finish cloud-init
 echo "Waiting for cluster to become available..."
-for i in {0..24}
-do
-  ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem -o ConnectTimeout=10 -o StrictHostKeyChecking=no ec2-user@${BASTION} "curl -s http://${NODE}:10101/status" 
-  if [ $? -eq 0 ]
-  then
-    break
-    echo "Cluster is up after $${i} tries." 
-  fi
-  sleep 10
-done
-
+# jaffee - I do wanna do a loop here, but I give up, and am running home to sleep... -POK
+sleep 150
 
 # verify featurebase running
 echo "Verifying featurebase cluster running..."
