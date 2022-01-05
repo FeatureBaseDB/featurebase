@@ -1,4 +1,6 @@
 // Copyright 2021 Molecula Corp. All rights reserved.
+
+// Package authn handles authentication
 package authn
 
 import (
@@ -31,8 +33,8 @@ type Auth struct {
 	oAuthConfig    *oauth2.Config
 }
 
-// NewAuth is a constructor that returns a new auth object
-func NewAuth(logger logger.Logger, url string, scopes []string, authUrl, tokenUrl, groupEndpoint, logout, clientID, clientSecret, hashKey, blockKey string) (*Auth, error) {
+// NewAuth instantiates and returns a new Auth struct
+func NewAuth(logger logger.Logger, url string, scopes []string, authURL, tokenURL, groupEndpoint, logout, clientID, clientSecret, hashKey, blockKey string) (*Auth, error) {
 	auth := &Auth{
 		logger:         logger,
 		cookieName:     "molecula-chip",
@@ -46,8 +48,8 @@ func NewAuth(logger logger.Logger, url string, scopes []string, authUrl, tokenUr
 			ClientSecret: clientSecret,
 			Scopes:       scopes,
 			Endpoint: oauth2.Endpoint{
-				AuthURL:  authUrl,
-				TokenURL: tokenUrl,
+				AuthURL:  authURL,
+				TokenURL: tokenURL,
 			},
 		},
 	}
@@ -65,30 +67,37 @@ func NewAuth(logger logger.Logger, url string, scopes []string, authUrl, tokenUr
 	return auth, nil
 }
 
-type CookieValue struct {
+// AuthContext holds the value of an authenticated user's cookie
+type AuthContext struct {
 	UserID          string
 	UserName        string
 	GroupMembership []Group
 	Token           *oauth2.Token
 }
 
-type Groups struct {
-	Groups []Group `json:"value"`
-}
-
+// Group holds group information for an authenticated user
 type Group struct {
 	UserID    string
 	GroupID   string `json:"id"`
 	GroupName string `json:"displayName"`
 }
 
+// Groups holds a slice of Group informations for marshalling from Json
+type Groups struct {
+	Groups []Group `json:"value"`
+}
+
+// UserInfo holds user information for an authenticated user
 type UserInfo struct {
 	UserID   string `json:"userid"`
 	UserName string `json:"username"`
 }
 
-// Authenticate reads and validates a cookie, redirects if invalid or missing, otherwise returns
-// the group membership information stored in the cookie.
+// Authenticate reads the authentication cookie from a request, returning the
+// user's group memberships on success. If the cookie is not present or has expired,
+// Authenticate redirects the user to sign in. If the cookie is within the
+// refresh window of expiring, the cookie is refreshed, and the updated group
+// membership is returned.
 func (a *Auth) Authenticate(w http.ResponseWriter, r *http.Request) ([]Group, error) {
 	cookie, err := a.readCookie(w, r)
 	if err != nil {
@@ -112,10 +121,10 @@ func (a *Auth) Authenticate(w http.ResponseWriter, r *http.Request) ([]Group, er
 
 }
 
-// Login redirects user to the IdP authorize endpoint for auth code
+// Login redirects a user to login to their configured oAuth authorize endpoint
 func (a *Auth) Login(w http.ResponseWriter, r *http.Request) {
-	authUrl := a.oAuthConfig.AuthCodeURL(a.oAuthConfig.Endpoint.AuthURL)
-	http.Redirect(w, r, authUrl, http.StatusTemporaryRedirect)
+	authURL := a.oAuthConfig.AuthCodeURL(a.oAuthConfig.Endpoint.AuthURL)
+	http.Redirect(w, r, authURL, http.StatusTemporaryRedirect)
 }
 
 // Logout clears out user cookie and redirects user to IdP's logout endpoint
@@ -125,7 +134,8 @@ func (a *Auth) Logout(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, redirect, http.StatusTemporaryRedirect)
 }
 
-// Redirect gets user information from IdP and sets a secure cookie
+// Redirect handles the oAuth /redirect endpoint. It gets user information from
+// the identity provider and sets a secure cookie holding the user information.
 func (a *Auth) Redirect(w http.ResponseWriter, r *http.Request) {
 	code := r.FormValue("code")
 	token, err := a.getToken(r, code)
@@ -135,7 +145,7 @@ func (a *Auth) Redirect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cv, err := a.newCookieValue(token)
+	cv, err := a.newAuthContext(token)
 	if err != nil || cv == nil {
 		a.logger.Warnf("creating cookie: %+v", err)
 		http.Error(w, "Bad Request: 400", http.StatusBadRequest)
@@ -154,11 +164,11 @@ func (a *Auth) GetUserInfo(w http.ResponseWriter, r *http.Request) *UserInfo {
 		a.logger.Warnf("was not able to read cookie for req: %+v", r)
 		return &resp
 	}
+
 	return &UserInfo{
 		UserID:   cookie.UserID,
 		UserName: cookie.UserName,
 	}
-
 }
 
 // getToken exhanges authorization code for an oAuth2 token
@@ -170,8 +180,8 @@ func (a *Auth) getToken(r *http.Request, code string) (*oauth2.Token, error) {
 	return token, nil
 }
 
-// newCookieValue parses a jwt `token` and returns relevant information in a cookie value struct
-func (a *Auth) newCookieValue(token *oauth2.Token) (*CookieValue, error) {
+// newAuthContext parses a jwt `token` and returns relevant information in a cookie value struct
+func (a *Auth) newAuthContext(token *oauth2.Token) (*AuthContext, error) {
 	if token == nil {
 		return nil, errors.New("baking cookie due to nil token")
 	}
@@ -195,7 +205,7 @@ func (a *Auth) newCookieValue(token *oauth2.Token) (*CookieValue, error) {
 	}
 	// not needed at this point in the logic and makes the encoded cookie too large
 	token.AccessToken = ""
-	return &CookieValue{
+	return &AuthContext{
 		UserID:          claims["oid"].(string),
 		UserName:        claims["name"].(string),
 		GroupMembership: groups.Groups,
@@ -206,6 +216,7 @@ func (a *Auth) newCookieValue(token *oauth2.Token) (*CookieValue, error) {
 // getGroupMembership uses a oauth2 token to retrieve group membership information from IdP
 func (a *Auth) getGroupMembership(token *oauth2.Token) (Groups, error) {
 	var groups Groups
+
 	req, err := http.NewRequest("GET", a.groupEndpoint, nil)
 	if err != nil {
 		return groups, errors.Wrap(err, "creating new request to group endpoint")
@@ -231,13 +242,13 @@ func (a *Auth) getGroupMembership(token *oauth2.Token) (Groups, error) {
 }
 
 // readCookie decodes an encrypted and signed cookie and returns the contained info
-func (a *Auth) readCookie(w http.ResponseWriter, r *http.Request) (*CookieValue, error) {
+func (a *Auth) readCookie(w http.ResponseWriter, r *http.Request) (*AuthContext, error) {
 	cookie, err := r.Cookie(a.cookieName)
 	if err != nil {
 		return nil, errors.Wrap(err, "cookie not found")
 	}
 
-	var value CookieValue
+	var value AuthContext
 	err = a.secure.Decode(a.cookieName, cookie.Value, &value)
 	if err != nil {
 		http.SetCookie(w, a.getEmptyCookie())
@@ -247,10 +258,10 @@ func (a *Auth) readCookie(w http.ResponseWriter, r *http.Request) (*CookieValue,
 	return &value, nil
 }
 
-func (a *Auth) setCookie(w http.ResponseWriter, cookie *CookieValue) error {
+func (a *Auth) setCookie(w http.ResponseWriter, cookie *AuthContext) error {
 	encoded, err := a.secure.Encode(a.cookieName, cookie)
 	if err != nil {
-		return errors.Wrap(err, "encoding CookieValue")
+		return errors.Wrap(err, "encoding AuthContext")
 
 	}
 	http.SetCookie(w, &http.Cookie{
@@ -265,9 +276,9 @@ func (a *Auth) setCookie(w http.ResponseWriter, cookie *CookieValue) error {
 	return nil
 }
 
-func (a *Auth) refreshToken(w http.ResponseWriter, cookie *CookieValue) error {
+func (a *Auth) refreshToken(w http.ResponseWriter, cookie *AuthContext) error {
 	if cookie.Token.RefreshToken == "" {
-		return errors.New("no refresh token found, check auth scopes to see if refresh tokens are being provided by your IdP.")
+		return errors.New("no refresh token found, check auth scopes to see if refresh tokens are being provided by your IdP")
 	}
 	tokenSource := a.oAuthConfig.TokenSource(context.Background(), cookie.Token)
 	newToken, err := tokenSource.Token()
@@ -276,7 +287,7 @@ func (a *Auth) refreshToken(w http.ResponseWriter, cookie *CookieValue) error {
 	}
 
 	if newToken.Expiry != cookie.Token.Expiry {
-		cv, err := a.newCookieValue(newToken)
+		cv, err := a.newAuthContext(newToken)
 		if err != nil {
 			return errors.Wrap(err, "creating cookie value from token")
 		}
@@ -307,4 +318,5 @@ func (a *Auth) getEmptyCookie() *http.Cookie {
 		HttpOnly: true,
 		SameSite: http.SameSiteStrictMode,
 	}
+
 }

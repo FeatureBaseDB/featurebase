@@ -2,6 +2,11 @@
 package ctl
 
 import (
+	"net"
+	"time"
+
+	gohttp "net/http"
+
 	"github.com/molecula/featurebase/v2/http"
 	"github.com/molecula/featurebase/v2/logger"
 	"github.com/molecula/featurebase/v2/server"
@@ -25,14 +30,22 @@ func SetTLSConfig(flags *pflag.FlagSet, prefix string, certificatePath *string, 
 	flags.BoolVarP(enableClientVerification, prefix+"tls.enable-client-verification", "", false, "Enable TLS certificate client verification for incoming connections")
 }
 
+// default dial timeout is 30s for some reason which makes testing
+// failures/retries really awkward. I don't think we need it that
+// high, so I set it to 1s here... let's see what happens.
+func clientOptions(client *gohttp.Client, dialer *net.Dialer) *gohttp.Client {
+	dialer.Timeout = time.Second * 1
+	return client
+}
+
 // commandClient returns a pilosa.InternalHTTPClient for the command
-func commandClient(cmd CommandWithTLSSupport) (*http.InternalClient, error) {
+func commandClient(cmd CommandWithTLSSupport, opts ...http.InternalClientOption) (*http.InternalClient, error) {
 	tls := cmd.TLSConfiguration()
 	tlsConfig, err := server.GetTLSConfig(&tls, cmd.Logger())
 	if err != nil {
 		return nil, errors.Wrap(err, "getting tls config")
 	}
-	client, err := http.NewInternalClient(cmd.TLSHost(), http.GetHTTPClient(tlsConfig))
+	client, err := http.NewInternalClient(cmd.TLSHost(), http.GetHTTPClient(tlsConfig, clientOptions), opts...)
 	if err != nil {
 		return nil, errors.Wrap(err, "getting internal client")
 	}

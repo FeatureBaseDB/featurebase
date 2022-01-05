@@ -479,6 +479,9 @@ func newRouter(handler *Handler) http.Handler {
 	router.HandleFunc("/internal/idalloc/data", handler.chkAuthN(handler.handleIDAllocData)).Methods("GET").Name("IDAllocData")
 
 	router.HandleFunc("/internal/restore/{index}/{shardID}", handler.chkAuthN(handler.handlePostRestore)).Methods("POST").Name("Restore")
+
+	router.HandleFunc("/internal/debug/rbf", handler.chkAuthN(handler.handleGetInternalDebugRBFJSON)).Methods("GET").Name("GetInternalDebugRBFJSON")
+
 	// endpoints for collecting cpu profiles from a chosen begin point to
 	// when the client wants to stop. Used for profiling imports that
 	// could be long or short.
@@ -2207,6 +2210,18 @@ func validateProtobufHeader(r *http.Request) (error string, code int) {
 	return
 }
 
+// handleGetInternalDebugRBFJSON handles /internal/debug/rbf requests.
+func (h *Handler) handleGetInternalDebugRBFJSON(w http.ResponseWriter, r *http.Request) {
+	buf, err := json.MarshalIndent(h.api.RBFDebugInfo(), "", "  ")
+	if err != nil {
+		http.Error(w, "marshal json: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(buf)
+}
+
 // handleGetMetricsJSON handles /metrics.json requests, translating text metrics results to more consumable JSON.
 func (h *Handler) handleGetMetricsJSON(w http.ResponseWriter, r *http.Request) {
 	if !validHeaderAcceptJSON(r.Header) {
@@ -2723,14 +2738,17 @@ func (s queryValidationSpec) validate(query url.Values) error {
 	return nil
 }
 
-func GetHTTPClient(t *tls.Config) *http.Client {
+type ClientOption func(client *http.Client, dialer *net.Dialer) *http.Client
+
+func GetHTTPClient(t *tls.Config, opts ...ClientOption) *http.Client {
+	dialer := &net.Dialer{
+		Timeout:   30 * time.Second,
+		KeepAlive: 30 * time.Second,
+		DualStack: true,
+	}
 	transport := &http.Transport{
-		Proxy: http.ProxyFromEnvironment,
-		DialContext: (&net.Dialer{
-			Timeout:   30 * time.Second,
-			KeepAlive: 30 * time.Second,
-			DualStack: true,
-		}).DialContext,
+		Proxy:                 http.ProxyFromEnvironment,
+		DialContext:           dialer.DialContext,
 		MaxIdleConns:          1000,
 		MaxIdleConnsPerHost:   200,
 		IdleConnTimeout:       90 * time.Second,
@@ -2740,7 +2758,12 @@ func GetHTTPClient(t *tls.Config) *http.Client {
 	if t != nil {
 		transport.TLSClientConfig = t
 	}
-	return &http.Client{Transport: transport}
+
+	client := &http.Client{Transport: transport}
+	for _, opt := range opts {
+		client = opt(client, dialer)
+	}
+	return client
 }
 
 // handlePostImportAtomicRecord handles /import-atomic-record requests
@@ -3493,7 +3516,7 @@ func (h *Handler) handlePostRestore(w http.ResponseWriter, r *http.Request) {
 	//validate shard for this node
 	err = h.api.RestoreShard(ctx, indexName, shard, r.Body)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("failed to restore shared %v %v err:%v", indexName, shard, err), http.StatusBadRequest)
+		http.Error(w, fmt.Sprintf("failed to restore shard %v %v err:%v", indexName, shard, err), http.StatusBadRequest)
 		return
 	}
 
