@@ -3536,9 +3536,7 @@ func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) handleRedirect(w http.ResponseWriter, r *http.Request) {
 	if h.auth == nil {
-		w.Header().Add("Content-Type", "text/plain")
-		w.WriteHeader(http.StatusNoContent)
-		w.Write([]byte("")) //nolint:errcheck
+		http.Error(w, "", http.StatusNoContent)
 		return
 	}
 	h.auth.Redirect(w, r)
