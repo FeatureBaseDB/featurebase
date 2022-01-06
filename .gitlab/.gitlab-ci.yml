@@ -262,6 +262,7 @@ smoke test:
     - ./qa/scripts/teardownSmokeTest.sh
   needs:
     - job: build for linux arm64
+  allow_failure: true
   artifacts:
     when: always
     paths:

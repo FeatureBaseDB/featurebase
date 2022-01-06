@@ -557,7 +557,7 @@ func (m *Command) SetupServer() error {
 		m.Config.Postgres.Bind = ""
 
 		// TLS must be enabled if auth is
-		if m.Config.TLS.CertificatePath == "" || m.Config.TLS.CertificateKeyPath == "" || m.Config.TLS.CACertPath == "" {
+		if m.Config.TLS.CertificatePath == "" || m.Config.TLS.CertificateKeyPath == "" {
 			return fmt.Errorf("transport layer security (TLS) is not configured properly. TLS is required when AuthN/Z is enabled, current configuration: %v", m.Config.TLS)
 		}
 
