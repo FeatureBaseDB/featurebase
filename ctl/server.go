@@ -121,5 +121,6 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 	flags.StringVar(&srv.Config.Auth.HashKey, "auth.hash-key", srv.Config.Auth.HashKey, "First Secret for Auth.")
 	flags.StringVar(&srv.Config.Auth.BlockKey, "auth.block-key", srv.Config.Auth.BlockKey, "Second Secret for Auth.")
 	flags.StringVar(&srv.Config.Auth.PermissionsFile, "auth.permissions", srv.Config.Auth.PermissionsFile, "Permissions' file with group authorization.")
+	flags.StringVar(&srv.Config.Auth.QueryLogPath, "auth.query-log-path", srv.Config.Auth.QueryLogPath, "Path to log user queries")
 
 }

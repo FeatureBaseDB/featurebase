@@ -56,7 +56,7 @@ func TestAuth(t *testing.T) {
 		GroupID:   "abcd123-A",
 		GroupName: "Romantic Painters",
 	}
-	validCV := CookieValue{
+	validCV := AuthContext{
 		UserID:          "snowstorm",
 		UserName:        "J.M.W. Turner",
 		GroupMembership: []Group{grp},
@@ -67,20 +67,22 @@ func TestAuth(t *testing.T) {
 		w := httptest.NewRecorder()
 		err := a.setCookie(w, &validCV)
 		if err != nil {
-			t.Errorf("expected no errors, got: %v", err)
+			t.Fatalf("expected no errors, got: %v", err)
 		}
 
 		if w.Result().Cookies()[0].Value == "" {
-			t.Errorf("expected some value, got: %+v", w.Result().Cookies()[0].Value)
+			t.Errorf("expected something, got empty string")
 		}
-		if w.Result().Cookies()[0].Path != "/" {
-			t.Errorf("expected path to be /, got: %+v", w.Result().Cookies()[0].Path)
+
+		if got, want := w.Result().Cookies()[0].Path, "/"; got != want {
+			t.Fatalf("path=%s, want %s", got, want)
 		}
+
 	})
 	t.Run("GetEmptyCookie", func(t *testing.T) {
 		c := a.getEmptyCookie()
 		if c.Value != "" {
-			t.Errorf("expected empty cookie, got: %+v", c.Value)
+			t.Fatalf("expected empty cookie, got: %+v", c.Value)
 		}
 	})
 	t.Run("KeyLength", func(t *testing.T) {
@@ -98,20 +100,20 @@ func TestAuth(t *testing.T) {
 			ShortKey,
 		)
 		if err == nil || !strings.Contains(err.Error(), "decoding block key") {
-			t.Errorf("expected error decoding block key got: %v", err)
+			t.Fatalf("expected error decoding block key got: %v", err)
 		}
 	})
-	t.Run("NewCookieValue-BadAccessToken", func(t *testing.T) {
-		_, err := a.newCookieValue(&tokenAT)
+	t.Run("NewAuthContext-BadAccessToken", func(t *testing.T) {
+		_, err := a.newAuthContext(&tokenAT)
 		if err == nil || !strings.Contains(err.Error(), "jwt claims") {
-			t.Errorf("expected failure regarding jwt claims, got: %v", err)
+			t.Fatalf("expected failure regarding jwt claims, got: %v", err)
 		}
 
 	})
-	t.Run("CookieValue-NoAccessToken", func(t *testing.T) {
-		_, err := a.newCookieValue(&tokenNoAT)
+	t.Run("AuthContext-NoAccessToken", func(t *testing.T) {
+		_, err := a.newAuthContext(&tokenNoAT)
 		if err == nil || !strings.Contains(err.Error(), "access token") {
-			t.Errorf("expected failure regarding access token, got: %v", err)
+			t.Fatalf("expected failure regarding access token, got: %v", err)
 		}
 	})
 
