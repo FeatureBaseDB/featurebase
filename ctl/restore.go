@@ -19,6 +19,7 @@ import (
 
 	pilosa "github.com/molecula/featurebase/v2"
 	fb_http "github.com/molecula/featurebase/v2/http"
+	"github.com/molecula/featurebase/v2/logger"
 	"github.com/molecula/featurebase/v2/server"
 	"github.com/molecula/featurebase/v2/topology"
 	"github.com/pkg/errors"
@@ -203,6 +204,8 @@ func (cmd *RestoreCommand) newClient() *retryablehttp.Client {
 	client.RetryWaitMin = min
 	client.RetryMax = int(attempts)
 	client.CheckRetry = retryWith400
+	client.Logger = logger.NopLogger
+
 	return client
 }
 

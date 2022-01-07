@@ -82,7 +82,9 @@ func WithClientRetryPeriod(period time.Duration) InternalClientOption {
 		rc.RetryWaitMin = min
 		rc.RetryMax = int(attempts)
 		rc.CheckRetry = retryWith400Policy
+		rc.Logger = logger.NopLogger
 		c.retryableClient = rc
+
 	}
 }
 
@@ -123,6 +125,7 @@ func NewInternalClientFromURI(defaultURI *pnet.URI, remoteClient *http.Client, o
 		rc := retryablehttp.NewClient()
 		rc.HTTPClient = ic.httpClient
 		rc.CheckRetry = noRetryPolicy
+		rc.Logger = logger.NopLogger
 		ic.retryableClient = rc
 	}
 	return ic
