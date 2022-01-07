@@ -1,2 +1,3 @@
 region  = "us-east-2"
-profile = "service-terraform"
+profile = "terraform_fbci"
+branch = "cicd-smoketest"
