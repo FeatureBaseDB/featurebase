@@ -24,7 +24,7 @@ resource "aws_instance" "fb_cluster_nodes" {
   key_name               = aws_key_pair.gitlab-featurebase-ci.key_name
   vpc_security_group_ids = [aws_security_group.featurebase.id]
   monitoring             = true
-  subnet_id              = var.subnet != "" ? var.subnet : module.vpc.private_subnets[count.index % length(module.vpc.private_subnets)]
+  subnet_id              = var.subnet != "" ? var.subnet : var.vpc_private_subnets[count.index % length(var.vpc_private_subnets)]
   availability_zone      = var.zone != "" ? var.zone : var.azs[count.index % length(var.azs)]
   iam_instance_profile   = "${aws_iam_instance_profile.fb_cluster_node_profile.name}"
 
@@ -57,7 +57,7 @@ resource "aws_instance" "fb_ingest" {
   instance_type               = var.fb_ingest_type
   associate_public_ip_address = true
   monitoring                  = true
-  subnet_id                   = var.subnet != "" ? var.subnet : module.vpc.public_subnets[count.index % length(module.vpc.public_subnets)]
+  subnet_id                   = var.subnet != "" ? var.subnet : var.vpc_public_subnets[count.index % length(var.vpc_public_subnets)]
   availability_zone           = var.zone != "" ? var.zone : var.azs[count.index % length(var.azs)]
   iam_instance_profile        = "${aws_iam_instance_profile.fb_cluster_node_profile.name}"
 
@@ -83,30 +83,37 @@ resource "aws_instance" "fb_ingest" {
 }
 
 resource "aws_key_pair" "gitlab-featurebase-ci" {
-  key_name   = "gitlab-featurebase-ci"
+  key_name   = "${var.cluster_prefix}-gitlab-ci"
   public_key = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC91hhpVHNonAG7ku2ugpxEskf9KHeyHJPQJT26OHrMUw7R+T5A8TjqSzTau07sXQ/E9SO3ebV8SJ5PqeaQOnQB8VEvVNK0DjQH7ppvNg1Rfs42FZT9ttzTMvOjsSbK3vZTHXdoKQEdC9NxBwSkFIRGQojK1HUOq9xGrw31fA1OjSwlpLcbx7yyg18lcqW6UOptnVR8U9Yy9qQ5jZF1HtkQ6L9J+gv4o1UyNAUK2bopeGiXpBc3PQ/CFaFT2h/aqLBP66qAHsHVyAFD3PIRtplC5EHa8jXDgLacEls0uF7Q3kRPxvzcuo4g4VkOn1rDy9qH3vd2hT3aKVnM73FIDUiL"
 }
 
 resource "aws_security_group" "featurebase" {
-  name        = "allow_featurebase"
+  name        = "${var.cluster_prefix}-allow_featurebase"
   description = "Allow featurebase inbound traffic"
-  vpc_id      = module.vpc.vpc_id
+  vpc_id      = var.vpc_id
 
   ingress {
-    description = "TLS from Internal"
-    from_port   = 10101
-    to_port     = 10101
-    protocol    = "tcp"
-    cidr_blocks = [module.vpc.vpc_cidr_block]
+    description = "icmp from Anywhere"
+    from_port   = -1
+    to_port     = -1
+    protocol    = "icmp"
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   ingress {
+    description = "HTTP from Internal"
+    from_port   = 10101
+    to_port     = 10101
+    protocol    = "tcp"
+    cidr_blocks = ["10.0.0.0/8", "172.31.0.0/16"]
+  }
 
+  ingress {
     description = "GRPC from Internal"
     from_port   = 20101
     to_port     = 20101
     protocol    = "tcp"
-    cidr_blocks = [module.vpc.vpc_cidr_block]
+    cidr_blocks = ["10.0.0.0/8", "172.31.0.0/16"]
   }
 
   ingress {
@@ -114,7 +121,7 @@ resource "aws_security_group" "featurebase" {
     from_port   = 55432
     to_port     = 55432
     protocol    = "tcp"
-    cidr_blocks = [module.vpc.vpc_cidr_block]
+    cidr_blocks = ["10.0.0.0/8", "172.31.0.0/16"]
   }
 
   ingress {
@@ -122,7 +129,7 @@ resource "aws_security_group" "featurebase" {
     from_port   = 10301
     to_port     = 10301
     protocol    = "tcp"
-    cidr_blocks = [module.vpc.vpc_cidr_block]
+    cidr_blocks = [var.vpc_cidr_block]
   }
 
   ingress {
@@ -130,7 +137,7 @@ resource "aws_security_group" "featurebase" {
     from_port   = 10401
     to_port     = 10401
     protocol    = "tcp"
-    cidr_blocks = [module.vpc.vpc_cidr_block]
+    cidr_blocks = [var.vpc_cidr_block]
   }
 
   ingress {
@@ -156,9 +163,17 @@ resource "aws_security_group" "featurebase" {
 }
 
 resource "aws_security_group" "ingest" {
-  name        = "allow_ingest"
+  name        = "${var.cluster_prefix}-allow_ingest"
   description = "Allow ingest inbound traffic"
-  vpc_id      = module.vpc.vpc_id
+  vpc_id      = var.vpc_id
+
+  ingress {
+    description = "icmp from Anywhere"
+    from_port   = -1
+    to_port     = -1
+    protocol    = "icmp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
 
   ingress {
     from_port        = 10101
@@ -191,12 +206,12 @@ resource "aws_security_group" "ingest" {
 }
 
 resource "aws_iam_instance_profile" "fb_cluster_node_profile" {
-  name = "fb_cluster_node_profile"
+  name = "${var.cluster_prefix}-fb_cluster_node_profile"
   role = aws_iam_role.fb_cluster_node_role.name
 }
 
 resource "aws_iam_role" "fb_cluster_node_role" {
-  name = "fb_cluster_node"
+  name = "${var.cluster_prefix}-fb_cluster_node"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"

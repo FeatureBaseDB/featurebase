@@ -96,3 +96,23 @@ variable "branch" {
   description = "The branch we are on"
   type        = string
 }
+
+variable "vpc_id" {
+  description = "The VPC in which we will build the cluster"
+  type        = string
+}
+
+variable "vpc_cidr_block" {
+  description = "A delicious crisp cider associated with the VPC in which we will build the cluster"
+  type        = string
+}
+
+variable "vpc_public_subnets" {
+  description = "A public net underneath in the VPC in which we will build the cluster"
+  type        = list(string)
+}
+
+variable "vpc_private_subnets" {
+  description = "A private net underneath in the VPC in which we will build the cluster"
+  type        = list(string)
+}

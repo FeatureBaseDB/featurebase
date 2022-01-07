@@ -7,5 +7,5 @@ output "data_node_ips" {
 }
 
 output "vpc_id" {
-    value = module.vpc.vpc_id
+    value = var.vpc_id
 }
