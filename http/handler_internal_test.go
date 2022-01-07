@@ -18,6 +18,9 @@ import (
 	"github.com/gorilla/securecookie"
 	pilosa "github.com/molecula/featurebase/v2"
 	"github.com/molecula/featurebase/v2/authn"
+	"github.com/stretchr/testify/assert"
+
+	"github.com/molecula/featurebase/v2/authz"
 	"github.com/molecula/featurebase/v2/logger"
 	"github.com/molecula/featurebase/v2/pql"
 	"golang.org/x/oauth2"
@@ -184,7 +187,7 @@ func readResponse(w *httptest.ResponseRecorder) ([]byte, error) {
 	return ioutil.ReadAll(res.Body)
 }
 
-func TestHandlerAuth(t *testing.T) {
+func TestAuthentication(t *testing.T) {
 	type evaluate func(w *httptest.ResponseRecorder, data []byte)
 	type endpoint func(w gohttp.ResponseWriter, r *gohttp.Request)
 	var (
@@ -243,23 +246,23 @@ func TestHandlerAuth(t *testing.T) {
 		GroupName: "Romantic Painters",
 	}
 
-	validCV := authn.CookieValue{
+	validCV := authn.AuthContext{
 		UserID:          "snowstorm",
 		UserName:        "J.M.W. Turner",
 		GroupMembership: []authn.Group{grp},
 		Token:           &token,
 	}
 
-	emptyCV := authn.CookieValue{
+	emptyCV := authn.AuthContext{
 		UserID:          "narcissus",
 		UserName:        "Caravaggio",
 		GroupMembership: []authn.Group{},
 		Token:           &token,
 	}
-	expiredCV := authn.CookieValue{
+	expiredCV := authn.AuthContext{
 		UserID:          "narcissus",
 		UserName:        "Caravaggio",
-		GroupMembership: []authn.Group{},
+		GroupMembership: []authn.Group{grp},
 		Token:           &expiredToken,
 	}
 
@@ -309,13 +312,19 @@ func TestHandlerAuth(t *testing.T) {
 		Expires:  token.Expiry,
 	}
 
+	permissions1 := `"user-groups":
+  "dca35310-ecda-4f23-86cd-876aee559900":
+    "test": "write"
+admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
+
 	tests := []struct {
-		name    string
-		path    string
-		kind    string
-		cookie  *gohttp.Cookie
-		handler endpoint
-		fn      evaluate
+		name     string
+		path     string
+		kind     string
+		yamlData string
+		cookie   *gohttp.Cookie
+		handler  endpoint
+		fn       evaluate
 	}{
 		{
 			name:    "Login",
@@ -538,6 +547,88 @@ func TestHandlerAuth(t *testing.T) {
 				}
 			},
 		},
+		{
+			name:   "MW-AuthOff",
+			path:   "/index/{index}/query",
+			kind:   "middleware",
+			cookie: validCookie,
+			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) {
+				f := hOff.chkAuthZ(hOff.handlePostQuery, authz.Admin)
+				f(w, r)
+			},
+			fn: func(w *httptest.ResponseRecorder, data []byte) {
+				if w.Result().StatusCode != 400 {
+					t.Errorf("expected http code 400, got: %+v", w.Result().StatusCode)
+				}
+			},
+		},
+		{
+			name:   "MW-ExpiredAuth",
+			path:   "/index/{index}/query",
+			kind:   "middleware",
+			cookie: expiredCookie,
+			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) {
+				f := h.chkAuthN(h.handlePostQuery)
+				f(w, r)
+			},
+			fn: func(w *httptest.ResponseRecorder, data []byte) {
+				if w.Result().StatusCode != 307 {
+					t.Errorf("expected http code 307, got: %+v", w.Result().StatusCode)
+				}
+
+			},
+		},
+		{
+			name:   "MW-ExpiredAuth2",
+			path:   "/index/{index}/query",
+			kind:   "middleware",
+			cookie: expiredCookie,
+			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) {
+				f := h.chkAuthZ(h.handlePostQuery, authz.Admin)
+				f(w, r)
+			},
+			fn: func(w *httptest.ResponseRecorder, data []byte) {
+				if w.Result().StatusCode != 307 {
+					t.Errorf("expected http code 307, got: %+v", w.Result().StatusCode)
+				}
+
+			},
+		},
+		{
+			name:   "MW-NoPermissions",
+			path:   "/index/{index}/query",
+			kind:   "middleware",
+			cookie: validCookie,
+			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) {
+				h := h
+				f := h.chkAuthZ(h.handlePostQuery, authz.Write)
+				assert.Panics(t, func() { f(w, r) }, "expected panic")
+			},
+			fn: func(w *httptest.ResponseRecorder, data []byte) {},
+		},
+		{
+			name:   "MW-NoIndexNoAdmin",
+			path:   "/index/{index}/query",
+			kind:   "middleware",
+			cookie: validCookie,
+			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) {
+				h := h
+				permFile := strings.NewReader(permissions1)
+				var p authz.GroupPermissions
+				if err := p.ReadPermissionsFile(permFile); err != nil {
+					t.Errorf("Error: %s", err)
+				}
+				h.permissions = &p
+				f := h.chkAuthZ(h.handlePostQuery, authz.Write)
+				f(w, r)
+			},
+			fn: func(w *httptest.ResponseRecorder, data []byte) {
+				if w.Result().StatusCode != 400 {
+					t.Errorf("expected http code 400, got: %+v", w.Result().StatusCode)
+				}
+
+			},
+		},
 	}
 
 	for _, test := range tests {
@@ -546,7 +637,9 @@ func TestHandlerAuth(t *testing.T) {
 			t.Run(test.name, func(t *testing.T) {
 				r := httptest.NewRequest(gohttp.MethodGet, test.path, nil)
 				w := httptest.NewRecorder()
-				r.AddCookie(test.cookie)
+				if test.cookie != nil {
+					r.AddCookie(test.cookie)
+				}
 				test.handler(w, r)
 				data, err := readResponse(w)
 				if err != nil {
@@ -570,6 +663,22 @@ func TestHandlerAuth(t *testing.T) {
 
 				test.fn(w, data)
 
+			})
+		case "middleware":
+			t.Run(test.name, func(t *testing.T) {
+				r := httptest.NewRequest(gohttp.MethodGet, test.path, nil)
+				w := httptest.NewRecorder()
+				if test.cookie != nil {
+					r.AddCookie(test.cookie)
+				}
+
+				test.handler(w, r)
+				data, err := readResponse(w)
+				if err != nil {
+					t.Errorf("expected no errors reading response, got: %+v", err)
+				}
+
+				test.fn(w, data)
 			})
 		}
 

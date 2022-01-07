@@ -69,8 +69,10 @@ type Command struct {
 	// done will be closed when Command.Close() is called
 	done chan struct{}
 
-	logOutput io.Writer
-	logger    loggerLogger
+	logOutput      io.Writer
+	querylogOutput io.Writer
+	logger         loggerLogger
+	querylogger    loggerLogger
 
 	Handler      pilosa.Handler
 	grpcServer   *grpcServer
@@ -473,6 +475,7 @@ func (m *Command) SetupServer() error {
 		pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderWithLockerFunc(c, &sync.Mutex{})),
 		pilosa.OptServerOpenIDAllocator(pilosa.OpenIDAllocator),
 		pilosa.OptServerLogger(m.logger),
+		pilosa.OptServerQueryLogger(m.querylogger),
 		pilosa.OptServerSystemInfo(gopsutil.NewSystemInfo()),
 		pilosa.OptServerGCNotifier(gcnotify.NewActiveGCNotifier()),
 		pilosa.OptServerStatsClient(statsClient),
@@ -523,6 +526,7 @@ func (m *Command) SetupServer() error {
 		return errors.Wrap(err, "new grpc server")
 	}
 
+	var p authz.GroupPermissions
 	if m.Config.Auth.Enable {
 		m.Config.MustValidateAuth()
 		permsFile, err := os.Open(m.Config.Auth.PermissionsFile)
@@ -531,7 +535,6 @@ func (m *Command) SetupServer() error {
 		}
 		defer permsFile.Close()
 
-		var p authz.GroupPermissions
 		if err = p.ReadPermissionsFile(permsFile); err != nil {
 			return err
 		}
@@ -542,11 +545,19 @@ func (m *Command) SetupServer() error {
 			return errors.Wrap(err, "instantiating authN object")
 		}
 
+		err = m.setupQueryLogger()
+		if err != nil {
+			return errors.Wrap(err, "setting up querylogger")
+		}
+
+		m.querylogger.Infof("Group with admin level access: %v", p.Admin)
+		m.querylogger.Infof("Permissions: %+v", p.Permissions)
+
 		// disable postgres binding if auth is enabled
 		m.Config.Postgres.Bind = ""
 
 		// TLS must be enabled if auth is
-		if m.Config.TLS.CertificatePath == "" || m.Config.TLS.CertificateKeyPath == "" || m.Config.TLS.CACertPath == "" {
+		if m.Config.TLS.CertificatePath == "" || m.Config.TLS.CertificateKeyPath == "" {
 			return fmt.Errorf("transport layer security (TLS) is not configured properly. TLS is required when AuthN/Z is enabled, current configuration: %v", m.Config.TLS)
 		}
 
@@ -556,11 +567,13 @@ func (m *Command) SetupServer() error {
 		http.OptHandlerAllowedOrigins(m.Config.Handler.AllowedOrigins),
 		http.OptHandlerAPI(m.API),
 		http.OptHandlerLogger(m.logger),
+		http.OptHandlerQueryLogger(m.querylogger),
 		http.OptHandlerFileSystem(&statik.FileSystem{}),
 		http.OptHandlerListener(m.ln, m.Config.Advertise),
 		http.OptHandlerCloseTimeout(m.closeTimeout),
 		http.OptHandlerMiddleware(m.grpcServer.middleware(m.Config.Handler.AllowedOrigins)),
-		http.OptHandlerAuth(m.auth),
+		http.OptHandlerAuthN(m.auth),
+		http.OptHandlerAuthZ(&p),
 	)
 	return errors.Wrap(err, "new handler")
 }
@@ -603,6 +616,37 @@ func (m *Command) setupLogger() error {
 			}
 		}()
 	}
+	return nil
+}
+
+func (m *Command) setupQueryLogger() error {
+	var f *logger.FileWriter
+	var err error
+
+	if m.Config.Auth.QueryLogPath == "" {
+		f, err = logger.NewFileWriterMode("queries/query.log", 0600)
+		if err != nil {
+			return errors.Wrap(err, "opening file")
+		}
+	} else {
+		f, err = logger.NewFileWriterMode(m.Config.Auth.QueryLogPath, 0600)
+		if err != nil {
+			return errors.Wrap(err, "opening file")
+		}
+	}
+	m.querylogOutput = f
+
+	m.querylogger = logger.NewStandardLogger(m.querylogOutput)
+
+	sighup := make(chan os.Signal, 1)
+	signal.Notify(sighup, syscall.SIGHUP)
+	go func() {
+		for range sighup {
+			if err := f.Reopen(); err != nil {
+				m.querylogger.Infof("reopen: %s\n", err.Error())
+			}
+		}
+	}()
 	return nil
 }
 

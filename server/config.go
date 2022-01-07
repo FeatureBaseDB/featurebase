@@ -250,6 +250,7 @@ type Auth struct {
 	HashKey          string   `toml:"hash-key"`
 	BlockKey         string   `toml:"block-key"`
 	PermissionsFile  string   `toml:"permissions"`
+	QueryLogPath     string   `toml:"query-log-path"`
 }
 
 // Namespace returns the namespace to use based on the Future flag.
