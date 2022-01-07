@@ -69,6 +69,8 @@ type DB struct {
 
 	// Path represents the path to the database file.
 	Path string
+
+	freelistCursor Cursor // cursor to reuse for freelist operations
 }
 
 // NewDB returns a new instance of DB.
@@ -808,6 +810,11 @@ func (db *DB) readMetaPage() ([]byte, error) {
 	return db.readDBPage(0)
 }
 
+// getCursor returns a cursor which has not been zeroed. The only thing
+// a caller should need to do is set c.stack's top correctly (it should be
+// 0, and the [0] elem should be the root page to start on).
+//
+// TODO: Should this do anything about c.buffered?
 func (db *DB) getCursor(tx *Tx) *Cursor {
 	c := cursorSyncPool.Get().(*Cursor)
 	c.tx = tx
@@ -826,6 +833,22 @@ func (db *DB) DebugInfo() *DebugInfo {
 type DebugInfo struct {
 	Path string         `json:"path"`
 	Txs  []*TxDebugInfo `json:"txs"`
+}
+
+// when we want a cursor to access a free list, we are always doing this in
+// a context specific to a write transaction, of which any DB can only have
+// one at a time, and the operations modifying the free list don't recurse,
+// because that would corrupt the list (see tx.freelistCleanup for the hairy
+// details), which means that there is only ever one cursor being used for the
+// free list, but also we use that cursor very often, and if we have to allocate
+// it or zero it we end up with a lot of excess allocations and zeroing.
+func (db *DB) getFreelistCursor(tx *Tx) *Cursor {
+	c := &db.freelistCursor
+	c.tx = tx
+	c.stack.elems[0] = stackElem{pgno: readMetaFreelistPageNo(tx.meta[:])}
+	c.stack.top = 0
+	c.buffered = false
+	return c
 }
 
 // Shared pool for in-memory database pages.
