@@ -2,6 +2,7 @@
 package client
 
 import (
+	"sort"
 	"sync"
 	"time"
 
@@ -20,7 +21,9 @@ const (
 // order. Could be worth sorting everything after translation (as an
 // option?). Instead of sorting all simultaneously, it might be faster
 // (more cache friendly) to sort ids and save the swap ops to apply to
-// everything else that needs to be sorted.
+// everything else that needs to be sorted. Note: we're already doing
+// some sorting in importValueData and importMutexData, so if we
+// implement it at the top level, remember to remove it there.
 
 // TODO support clearing values? nil values in records are ignored,
 // but perhaps we could have a special type indicating that a bit or
@@ -1216,6 +1219,22 @@ func (b *Batch) makeFragments(frags, clearFrags fragments) (fragments, fragments
 	return frags, clearFrags, nil
 }
 
+type valsByIDsSortable struct {
+	ids  []uint64
+	vals []int64
+	// shard width so we can compare by shard instead of ID
+	width uint64
+}
+
+func (v *valsByIDsSortable) Len() int { return len(v.ids) }
+
+// comparing on shard rather than ID was twice as fast in informal tests
+func (v *valsByIDsSortable) Less(i, j int) bool { return v.ids[i]/v.width < v.ids[j]/v.width }
+func (v *valsByIDsSortable) Swap(i, j int) {
+	v.ids[i], v.ids[j] = v.ids[j], v.ids[i]
+	v.vals[i], v.vals[j] = v.vals[j], v.vals[i]
+}
+
 // importValueData imports data for int fields.
 func (b *Batch) importValueData() error {
 	shardWidth := b.index.ShardWidth()
@@ -1246,6 +1265,12 @@ func (b *Batch) importValueData() error {
 		if len(ids) == 0 {
 			continue // TODO test this "all nil" case
 		}
+
+		sc := &valsByIDsSortable{ids: ids, vals: bvalues, width: shardWidth}
+		if !sort.IsSorted(sc) {
+			sort.Sort(sc)
+		}
+
 		curShard := ids[0] / shardWidth
 		startIdx := 0
 		for i := 1; i <= len(ids); i++ {
@@ -1285,6 +1310,22 @@ func (b *Batch) importValueData() error {
 	return errors.Wrap(err, "importing value data")
 }
 
+type rowsByIDsSortable struct {
+	ids  []uint64
+	rows []uint64
+	// shard width so we can compare by shard instead of ID
+	width uint64
+}
+
+func (v *rowsByIDsSortable) Len() int { return len(v.ids) }
+
+// comparing on shard rather than ID was twice as fast in informal tests
+func (v *rowsByIDsSortable) Less(i, j int) bool { return v.ids[i]/v.width < v.ids[j]/v.width }
+func (v *rowsByIDsSortable) Swap(i, j int) {
+	v.ids[i], v.ids[j] = v.ids[j], v.ids[i]
+	v.rows[i], v.rows[j] = v.rows[j], v.rows[i]
+}
+
 // TODO this should work for bools as well - just need to support them
 // at batch creation time and when calling Add, I think.
 func (b *Batch) importMutexData() error {
@@ -1319,6 +1360,12 @@ func (b *Batch) importMutexData() error {
 		if len(ids) == 0 {
 			continue
 		}
+
+		sc := &rowsByIDsSortable{ids: ids, rows: rowIDs, width: shardWidth}
+		if !sort.IsSorted(sc) {
+			sort.Sort(sc)
+		}
+
 		curShard := ids[0] / shardWidth
 		startIdx := 0
 		for i := 1; i <= len(ids); i++ {
