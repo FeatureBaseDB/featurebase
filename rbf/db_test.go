@@ -3,6 +3,7 @@ package rbf_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/rand"
 	"net"
@@ -43,6 +44,35 @@ func TestDB_WAL(t *testing.T) {
 			t.Fatal(err)
 		} else if err := tx.CreateBitmap("y"); err != rbf.ErrTxTooLarge {
 			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("ErrTxTooLargeWithBitmap", func(t *testing.T) {
+		config := rbfcfg.NewDefaultConfig()
+		config.MaxWALSize = 5 * rbf.PageSize
+
+		db := MustOpenDB(t, config)
+		defer MustCloseDB(t, db)
+
+		tx := MustBegin(t, db, true)
+		defer tx.Rollback()
+
+		if err := tx.CreateBitmap("x"); err != nil {
+			t.Fatal(err)
+		}
+
+		// Fill array until it has the maximum number of elements.
+		for i := uint64(0); i < rbf.ArrayMaxSize; i++ {
+			if _, err := tx.Add("x", i); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		// Issuing one more item to a full array should convert it to a bitmap
+		// page and cause the write to return "tx too large". Previous to the
+		// FB-828 fix, this would write past the mmap size so it was inaccessible.
+		if _, err := tx.Add("x", rbf.ArrayMaxSize); err == nil || !errors.Is(err, rbf.ErrTxTooLarge) {
+			t.Fatalf("unexpected error: %#v", err)
 		}
 	})
 

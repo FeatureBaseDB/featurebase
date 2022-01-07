@@ -1163,7 +1163,8 @@ func (tx *Tx) writeBitmapPage(pgno uint32, page []byte) error {
 }
 
 func (tx *Tx) checkTxSize() error {
-	if (tx.walPageN+tx.dirtyN())*PageSize >= len(tx.db.wal) {
+	pageN := tx.walPageN + len(tx.dirtyPages) + (len(tx.dirtyBitmapPages) * 2)
+	if pageN*PageSize >= len(tx.db.wal) {
 		return ErrTxTooLarge
 	}
 	return nil
