@@ -7,3 +7,8 @@ output "data_node_ips" {
   description = "List of data node IPs"
   value = module.ci-cluster.data_node_ips
 }
+
+output "vpc_id" {
+  description = "ID of the VPC"
+  value = module.ci-cluster.vpc_id
+}
