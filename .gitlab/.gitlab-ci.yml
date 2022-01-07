@@ -226,6 +226,10 @@ smoke test:
     AWS_SECRET_ACCESS_KEY: $AWS_FBCI_SECRET_ACCESS_KEY
     TF_VAR_cluster_prefix: ""
     TF_VAR_branch: ""
+  tags:
+    - aws
+    - docker
+    - fbsmoke
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   before_script:
