@@ -624,12 +624,12 @@ func (m *Command) setupQueryLogger() error {
 	var err error
 
 	if m.Config.Auth.QueryLogPath == "" {
-		f, err = logger.NewFileWriterMode("queries/query.log", 600)
+		f, err = logger.NewFileWriterMode("queries/query.log", 0600)
 		if err != nil {
 			return errors.Wrap(err, "opening file")
 		}
 	} else {
-		f, err = logger.NewFileWriterMode(m.Config.Auth.QueryLogPath, 600)
+		f, err = logger.NewFileWriterMode(m.Config.Auth.QueryLogPath, 0600)
 		if err != nil {
 			return errors.Wrap(err, "opening file")
 		}
