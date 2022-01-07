@@ -5,3 +5,7 @@ output "ingest_ips" {
 output "data_node_ips" {
     value = aws_instance.fb_cluster_nodes.*.private_ip
 }
+
+output "vpc_id" {
+    value = module.vpc.vpc_id
+}

@@ -12,3 +12,10 @@ module "samsung-cluster" {
     gitlab_token = var.gitlab_token
     branch = var.branch
 }
+
+resource "aws_vpc_peering_connection" "gauntlet-to-vpn" {
+  peer_vpc_id   = aws_vpc.bar.id
+  vpc_id        = module.samsung-cluster.vpc_id
+  peer_vpc_id   = "vpc-0cb7cf76f2079aa0e"
+  auto_accept = true
+}
