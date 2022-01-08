@@ -9,8 +9,6 @@ module "samsung-cluster" {
     fb_ingest_type = "m6g.large"
     fb_ingest_disk_iops = 10000
     fb_ingest_node_count = 1
-    gitlab_token = var.gitlab_token
-    branch = var.branch
     vpc_id = "vpc-05a26a122f961dc2b"
     vpc_cidr_block = "10.0.0.0/16"
     vpc_public_subnets = ["subnet-066b4b922b54e51a2","subnet-037b8884269a69025","subnet-08482631514426210",]

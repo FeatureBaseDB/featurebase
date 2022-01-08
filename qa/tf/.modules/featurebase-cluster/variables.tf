@@ -87,15 +87,6 @@ variable "profile" {
   type        = string
 }
 
-variable "gitlab_token" {
-  description = "Gitlab API token"
-  type        = string
-}
-
-variable "branch" {
-  description = "The branch we are on"
-  type        = string
-}
 
 variable "vpc_id" {
   description = "The VPC in which we will build the cluster"

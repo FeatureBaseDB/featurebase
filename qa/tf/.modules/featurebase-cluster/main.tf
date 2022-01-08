@@ -46,7 +46,6 @@ resource "aws_instance" "fb_cluster_nodes" {
     Role   = "cluster_node"
   }
 
-  user_data = base64encode(templatefile("${path.module}/setup_cluster_node.sh.tpl", { gitlab_token = var.gitlab_token, branch = var.branch, cluster_prefix = var.cluster_prefix, node_count = var.fb_data_node_count, fb_cluster_replica_count = var.fb_cluster_replica_count, region = var.region }))
 }
 
 resource "aws_instance" "fb_ingest" {
@@ -79,7 +78,6 @@ resource "aws_instance" "fb_ingest" {
     Role   = "ingest_node"
   }
 
-  user_data = base64encode(templatefile("${path.module}/setup_ingest_node.sh.tpl", { gitlab_token = var.gitlab_token, branch = var.branch, cluster_prefix = var.cluster_prefix, node_count = var.fb_ingest_node_count, this_node = count.index, region = var.region }))
 }
 
 resource "aws_key_pair" "gitlab-featurebase-ci" {
