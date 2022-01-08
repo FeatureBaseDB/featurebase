@@ -1,14 +1,25 @@
 #!/bin/bash
 
-# get the bastion host
-BASTION=$(cat ./qa/tf/ci/smoketest/outputs.json | jq -r '[.ingest_ips][0]["value"][0]')
-echo "using bastion ${BASTION}"
+# requires TF_VAR_gitlab_token env var to be set
+if [ -z ${TF_VAR_gitlab_token+x} ]; then echo "TF_VAR_gitlab_token is unset"; else echo "TF_VAR_gitlab_token is set to '$TF_VAR_gitlab_token'"; fi
 
-NODE=$(cat ./qa/tf/ci/smoketest/outputs.json | jq -r '[.data_node_ips][0]["value"][0]')
-echo "using node ${NODE}"
+# requires TF_VAR_branch env var to be set
+if [ -z ${TF_VAR_branch+x} ]; then echo "TF_VAR_branch is unset"; else echo "TF_VAR_branch is set to '$TF_VAR_branch'"; fi
+
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+source $SCRIPT_DIR/utilCluster.sh
+
+# get the first ingest host
+INGESTNODE0=$(cat ./qa/tf/ci/smoketest/outputs.json | jq -r '[.ingest_ips][0]["value"][0]')
+echo "using INGESTNODE0 ${INGESTNODE0}"
+
+# get the first data host
+DATANODE0=$(cat ./qa/tf/ci/smoketest/outputs.json | jq -r '[.data_node_ips][0]["value"][0]')
+echo "using DATANODE0 ${DATANODE0}"
+
 
 echo "Copying tests to remote"
-scp -r -i ~/.ssh/gitlab-featurebase-ci.pem ./qa/testcases/smoketest/*.py ec2-user@${BASTION}:/data
+scp -r -i ~/.ssh/gitlab-featurebase-ci.pem ./qa/testcases/smoketest/*.py ec2-user@${INGESTNODE0}:/data
 if (( $? != 0 )) 
 then 
     echo "Copy failed"
@@ -17,7 +28,7 @@ fi
 
 # run smoke test
 echo "Running smoke test..."
-ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem -o "StrictHostKeyChecking no" ec2-user@${BASTION} " pushd /data; pytest --junitxml=report.xml; popd" 
+ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem -o "StrictHostKeyChecking no" ec2-user@${INGESTNODE0} "pushd /data; ~/.local/bin/pytest --junitxml=report.xml; popd" 
 if (( $? != 0 )) 
 then 
     echo "Unable to run smoke test"
@@ -25,7 +36,7 @@ then
 fi
 
 echo "Copying test report to local"
-scp -r -i ~/.ssh/gitlab-featurebase-ci.pem ec2-user@${BASTION}:/data/report.xml report.xml
+scp -r -i ~/.ssh/gitlab-featurebase-ci.pem ec2-user@${INGESTNODE0}:/data/report.xml report.xml
 if (( $? != 0 )) 
 then 
     echo "Copy failed"
