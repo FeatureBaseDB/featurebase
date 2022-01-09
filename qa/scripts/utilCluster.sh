@@ -218,26 +218,6 @@ generateInitialClusterString() {
 }
 
 setupClusterNodes() {
-    DEPLOYED_CLUSTER_PREFIX=$(cat ./qa/tf/ci/smoketest/outputs.json | jq -r '[.cluster_prefix][0]["value"]')
-    echo "Using DEPLOYED_CLUSTER_PREFIX: ${DEPLOYED_CLUSTER_PREFIX}"
-
-    DEPLOYED_CLUSTER_REPLICA_COUNT=$(cat ./qa/tf/ci/smoketest/outputs.json | jq -r '[.fb_cluster_replica_count][0]["value"]')
-    echo "Using DEPLOYED_CLUSTER_REPLICA_COUNT: ${DEPLOYED_CLUSTDEPLOYED_CLUSTER_REPLICA_COUNTER_PREFIX}"
-
-    DEPLOYED_DATA_IPS=$(cat ./qa/tf/ci/smoketest/outputs.json | jq -r '[.data_node_ips][0]["value"][]')
-    echo "DEPLOYED_DATA_IPS: {"
-    echo "${DEPLOYED_DATA_IPS}"
-    echo "}"
-
-    DEPLOYED_DATA_IPS_LEN=`echo "$DEPLOYED_DATA_IPS" | wc -l`
-
-    DEPLOYED_INGEST_IPS=$(cat ./qa/tf/ci/smoketest/outputs.json | jq -r '[.ingest_ips][0]["value"][]')
-    echo "DEPLOYED_INGEST_IPS: {"
-    echo "${DEPLOYED_INGEST_IPS}"
-    echo "}"
-
-    DEPLOYED_INGEST_IPS_LEN=`echo "$DEPLOYED_INGEST_IPS" | wc -l`
-
 
     #data nodes
     generateInitialClusterString

@@ -1,6 +1,6 @@
 module "samsung-cluster" {
     source = "../../.modules/featurebase-cluster"
-    cluster_prefix = "samsung-gauntlet"
+    cluster_prefix = var.cluster_prefix
     region = var.region
     profile = var.profile
     fb_data_node_type = "m6g.xlarge"
