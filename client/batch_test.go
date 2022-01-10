@@ -23,13 +23,26 @@ func NewTestClient(t *testing.T, c *test.Cluster) *Client {
 	return client
 }
 
-func TestStringSliceCombos(t *testing.T) {
+func TestAgainstCluster(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
 	client := NewTestClient(t, c)
 
+	t.Run("string-slice-combos", func(t *testing.T) { testStringSliceCombos(t, c, client) })
+	t.Run("import-batch-ints", func(t *testing.T) { testImportBatchInts(t, c, client) })
+	t.Run("import-batch-sorting", func(t *testing.T) { testImportBatchSorting(t, c, client) })
+	t.Run("test-trim-null", func(t *testing.T) { testTrimNull(t, c, client) })
+	t.Run("test-string-slice-empty-and-nil", func(t *testing.T) { testStringSliceEmptyAndNil(t, c, client) })
+	t.Run("test-string-slice", func(t *testing.T) { testStringSlice(t, c, client) })
+	t.Run("test-single-clear-batch-regression", func(t *testing.T) { testSingleClearBatchRegression(t, c, client) })
+	t.Run("test-batches", func(t *testing.T) { testBatches(t, c, client) })
+	t.Run("batches-strings-ids", func(t *testing.T) { testBatchesStringIDs(t, c, client) })
+	t.Run("test-batch-staleness", func(t *testing.T) { testBatchStaleness(t, c, client) })
+}
+
+func testStringSliceCombos(t *testing.T, c *test.Cluster, client *Client) {
 	schema := NewSchema()
-	idx := schema.Index("test-string-slicecombos")
+	idx := schema.Index("test-string-slice-combos")
 	fields := make([]*Field, 1)
 	fields[0] = idx.Field("a1", OptFieldKeys(true), OptFieldTypeSet(CacheTypeRanked, 100))
 	err := client.SyncSchema(schema)
@@ -164,13 +177,9 @@ func ingestRecords(records []Row, batch *Batch) error {
 	return nil
 }
 
-func TestImportBatchInts(t *testing.T) {
-	c := test.MustRunCluster(t, 1)
-	defer c.Close()
-	client := NewTestClient(t, c)
-
+func testImportBatchInts(t *testing.T, c *test.Cluster, client *Client) {
 	schema := NewSchema()
-	idx := schema.Index("gopilosatest-blah")
+	idx := schema.Index("test-import-batch-ints")
 	field := idx.Field("anint", OptFieldTypeInt())
 	err := client.SyncSchema(schema)
 	if err != nil {
@@ -227,13 +236,9 @@ func TestImportBatchInts(t *testing.T) {
 	}
 }
 
-func TestImportBatchSorting(t *testing.T) {
-	c := test.MustRunCluster(t, 1)
-	defer c.Close()
-	client := NewTestClient(t, c)
-
+func testImportBatchSorting(t *testing.T, c *test.Cluster, client *Client) {
 	schema := NewSchema()
-	idx := schema.Index("gopilosatest-blah")
+	idx := schema.Index("test-import-batch-sorting")
 	field := idx.Field("anint", OptFieldTypeInt())
 	field2 := idx.Field("amutex", OptFieldTypeMutex(CacheTypeNone, 0))
 	err := client.SyncSchema(schema)
@@ -281,13 +286,9 @@ func TestImportBatchSorting(t *testing.T) {
 	}
 }
 
-func TestTrimNull(t *testing.T) {
-	c := test.MustRunCluster(t, 1)
-	defer c.Close()
-	client := NewTestClient(t, c)
-
+func testTrimNull(t *testing.T, c *test.Cluster, client *Client) {
 	schema := NewSchema()
-	idx := schema.Index("gopilosatest-null")
+	idx := schema.Index("test-trim-null")
 	field := idx.Field("empty", OptFieldTypeInt())
 	err := client.SyncSchema(schema)
 	if err != nil {
@@ -371,11 +372,7 @@ func TestTrimNull(t *testing.T) {
 
 }
 
-func TestStringSliceEmptyAndNil(t *testing.T) {
-	c := test.MustRunCluster(t, 1)
-	defer c.Close()
-	client := NewTestClient(t, c)
-
+func testStringSliceEmptyAndNil(t *testing.T, c *test.Cluster, client *Client) {
 	schema := NewSchema()
 	idx := schema.Index("test-string-slice-nil")
 	fields := make([]*Field, 1)
@@ -472,11 +469,7 @@ func TestStringSliceEmptyAndNil(t *testing.T) {
 
 }
 
-func TestStringSlice(t *testing.T) {
-	c := test.MustRunCluster(t, 1)
-	defer c.Close()
-	client := NewTestClient(t, c)
-
+func testStringSlice(t *testing.T, c *test.Cluster, client *Client) {
 	schema := NewSchema()
 	idx := schema.Index("test-string-slice")
 	fields := make([]*Field, 1)
@@ -591,13 +584,9 @@ func TestStringSlice(t *testing.T) {
 	}
 }
 
-func TestSingleClearBatchRegression(t *testing.T) {
-	c := test.MustRunCluster(t, 1)
-	defer c.Close()
-	client := NewTestClient(t, c)
-
+func testSingleClearBatchRegression(t *testing.T, c *test.Cluster, client *Client) {
 	schema := NewSchema()
-	idx := schema.Index("gopilosatest-blah")
+	idx := schema.Index("test-single-clear-batch-regression")
 	numFields := 1
 	fields := make([]*Field, numFields)
 	fields[0] = idx.Field("zero", OptFieldKeys(true))
@@ -646,13 +635,9 @@ func TestSingleClearBatchRegression(t *testing.T) {
 
 }
 
-func TestBatches(t *testing.T) {
-	c := test.MustRunCluster(t, 1)
-	defer c.Close()
-	client := NewTestClient(t, c)
-
+func testBatches(t *testing.T, c *test.Cluster, client *Client) {
 	schema := NewSchema()
-	idx := schema.Index("gopilosatest-blah")
+	idx := schema.Index("test-batches")
 	numFields := 5
 	fields := make([]*Field, numFields)
 	fields[0] = idx.Field("zero", OptFieldKeys(true))
@@ -1063,13 +1048,9 @@ func TestBatches(t *testing.T) {
 	// TODO test importing across multiple shards
 }
 
-func TestBatchesStringIDs(t *testing.T) {
-	c := test.MustRunCluster(t, 1)
-	defer c.Close()
-	client := NewTestClient(t, c)
-
+func testBatchesStringIDs(t *testing.T, c *test.Cluster, client *Client) {
 	schema := NewSchema()
-	idx := schema.Index("gopilosatest-blah", OptIndexKeys(true))
+	idx := schema.Index("batches-strings-ids", OptIndexKeys(true))
 	fields := make([]*Field, 3)
 	fields[0] = idx.Field("zero", OptFieldKeys(true))
 	fields[1] = idx.Field("one", OptFieldTypeMutex(CacheTypeNone, 0), OptFieldKeys(true))
@@ -1352,13 +1333,9 @@ func TestQuantizedTime(t *testing.T) {
 
 }
 
-func TestBatchStaleness(t *testing.T) {
-	c := test.MustRunCluster(t, 1)
-	defer c.Close()
-	client := NewTestClient(t, c)
-
+func testBatchStaleness(t *testing.T, c *test.Cluster, client *Client) {
 	schema := NewSchema()
-	idx := schema.Index("gopilosatest-blah")
+	idx := schema.Index("test-batch-staleness")
 	field := idx.Field("anint", OptFieldTypeInt())
 	err := client.SyncSchema(schema)
 	if err != nil {

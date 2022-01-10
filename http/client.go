@@ -75,7 +75,7 @@ func WithClientRetryPeriod(period time.Duration) InternalClientOption {
 	if attempts < 1 {
 		attempts = 1
 	}
-	fmt.Println("attempts: ", int(attempts))
+
 	return func(c *InternalClient) {
 		rc := retryablehttp.NewClient()
 		rc.HTTPClient = c.httpClient
@@ -84,7 +84,6 @@ func WithClientRetryPeriod(period time.Duration) InternalClientOption {
 		rc.CheckRetry = retryWith400Policy
 		rc.Logger = logger.NopLogger
 		c.retryableClient = rc
-
 	}
 }
 
