@@ -12,7 +12,6 @@ if [ -z ${TF_VAR_branch+x} ]; then echo "TF_VAR_branch is unset"; else echo "TF_
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 source $SCRIPT_DIR/utilCluster.sh
 
-
 pushd ./qa/tf/gauntlet/samsung
 echo "Running terraform init..."
 terraform init -input=false
@@ -59,7 +58,7 @@ do
         echo "Cluster is up after ${i} tries." 
         break
     fi
-    sleep 10s
+    sleep 10
 done
 
 ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem -o StrictHostKeyChecking=no -o ConnectTimeout=10 ec2-user@${DATANODE0} "pwd"

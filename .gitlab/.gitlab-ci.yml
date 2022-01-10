@@ -277,6 +277,7 @@ smoke test:
 
 gauntlet:
   stage: gauntlet
+  timeout: 4h
   image: registry.gitlab.com/gitlab-org/cloud-deploy/aws-base:latest
   variables:
     PROFILE: "service-terraform"
