@@ -504,3 +504,44 @@ func TestGetScaledInt(t *testing.T) {
 	}
 
 }
+
+func TestDistinctTimestampUnion(t *testing.T) {
+	cases := []struct {
+		name     string
+		a        DistinctTimestamp
+		b        DistinctTimestamp
+		expected DistinctTimestamp
+	}{
+		{
+			name:     "empty other",
+			a:        DistinctTimestamp{Name: "a", Values: []string{"a", "b", "c"}},
+			b:        DistinctTimestamp{Name: "a", Values: []string{}},
+			expected: DistinctTimestamp{Name: "a", Values: []string{"a", "b", "c"}},
+		},
+		{
+			name:     "one more in other",
+			a:        DistinctTimestamp{Name: "a", Values: []string{"a", "b", "c"}},
+			b:        DistinctTimestamp{Name: "a", Values: []string{"a", "b", "c", "d"}},
+			expected: DistinctTimestamp{Name: "a", Values: []string{"a", "b", "c", "d"}},
+		},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			res := test.a.Union(test.b)
+			allThere := true
+			for _, val := range res.Values {
+				here := false
+				for _, expected := range test.expected.Values {
+					if val == expected {
+						here = true
+						break
+					}
+				}
+				allThere = allThere && here
+			}
+			if !allThere {
+				t.Errorf("expected %v, got %v", test.expected, res)
+			}
+		})
+	}
+}
