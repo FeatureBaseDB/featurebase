@@ -39,5 +39,11 @@ then
     exit 1
 fi
 
-echo "Smoke test complete"
-exit $SMOKETESTRESULT
+if (( $SMOKETESTRESULT != 0 )) 
+then 
+    echo "Smoke test complete with test failures"
+else
+    echo "Smoke test complete"
+fi
+
+exit $SMOKETESTRESULT 
