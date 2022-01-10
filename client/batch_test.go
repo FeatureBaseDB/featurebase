@@ -1,21 +1,33 @@
 // Copyright 2021 Molecula Corp. All rights reserved.
-//go:build integration
-// +build integration
 
 package client
 
 import (
+	"math/rand"
 	"reflect"
 	"sort"
 	"strconv"
 	"testing"
 	"time"
 
+	"github.com/molecula/featurebase/v2/test"
+
 	"github.com/pkg/errors"
 )
 
+func NewTestClient(t *testing.T, c *test.Cluster) *Client {
+	client, err := NewClient(c.Nodes[0].URL())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return client
+}
+
 func TestStringSliceCombos(t *testing.T) {
-	client := DefaultClient()
+	c := test.MustRunCluster(t, 1)
+	defer c.Close()
+	client := NewTestClient(t, c)
+
 	schema := NewSchema()
 	idx := schema.Index("test-string-slicecombos")
 	fields := make([]*Field, 1)
@@ -153,7 +165,10 @@ func ingestRecords(records []Row, batch *Batch) error {
 }
 
 func TestImportBatchInts(t *testing.T) {
-	client := DefaultClient()
+	c := test.MustRunCluster(t, 1)
+	defer c.Close()
+	client := NewTestClient(t, c)
+
 	schema := NewSchema()
 	idx := schema.Index("gopilosatest-blah")
 	field := idx.Field("anint", OptFieldTypeInt())
@@ -212,8 +227,65 @@ func TestImportBatchInts(t *testing.T) {
 	}
 }
 
+func TestImportBatchSorting(t *testing.T) {
+	c := test.MustRunCluster(t, 1)
+	defer c.Close()
+	client := NewTestClient(t, c)
+
+	schema := NewSchema()
+	idx := schema.Index("gopilosatest-blah")
+	field := idx.Field("anint", OptFieldTypeInt())
+	field2 := idx.Field("amutex", OptFieldTypeMutex(CacheTypeNone, 0))
+	err := client.SyncSchema(schema)
+	if err != nil {
+		t.Fatalf("syncing schema: %v", err)
+	}
+
+	b, err := NewBatch(client, 100, idx, []*Field{field, field2})
+	if err != nil {
+		t.Fatalf("getting batch: %v", err)
+	}
+
+	r := Row{Values: make([]interface{}, 2)}
+
+	rnd := rand.New(rand.NewSource(7))
+
+	// generate 100 records randomly spread/ordered across multiple
+	// shards to test sorting on int/mutex fields
+	for i := 0; i < 100; i++ {
+		id := rnd.Intn(10_000_000)
+		r.ID = uint64(id)
+		r.Values[0] = int64(id)
+		r.Values[1] = uint64(id)
+		err := b.Add(r)
+		if err != nil && err != ErrBatchNowFull {
+			t.Fatalf("adding to batch: %v", err)
+		}
+	}
+	err = b.Import()
+	if err != nil {
+		t.Fatalf("importing: %v", err)
+	}
+
+	err = b.Import()
+	if err != nil {
+		t.Fatalf("second import: %v", err)
+	}
+
+	resp, err := client.Query(idx.RawQuery("Count(All())"))
+	if err != nil {
+		t.Fatalf("querying: %v", err)
+	}
+	if res := resp.Results()[0]; res.Count() != 100 {
+		t.Fatalf("unexpected result: %+v", res)
+	}
+}
+
 func TestTrimNull(t *testing.T) {
-	client := DefaultClient()
+	c := test.MustRunCluster(t, 1)
+	defer c.Close()
+	client := NewTestClient(t, c)
+
 	schema := NewSchema()
 	idx := schema.Index("gopilosatest-null")
 	field := idx.Field("empty", OptFieldTypeInt())
@@ -300,7 +372,10 @@ func TestTrimNull(t *testing.T) {
 }
 
 func TestStringSliceEmptyAndNil(t *testing.T) {
-	client := DefaultClient()
+	c := test.MustRunCluster(t, 1)
+	defer c.Close()
+	client := NewTestClient(t, c)
+
 	schema := NewSchema()
 	idx := schema.Index("test-string-slice-nil")
 	fields := make([]*Field, 1)
@@ -398,7 +473,10 @@ func TestStringSliceEmptyAndNil(t *testing.T) {
 }
 
 func TestStringSlice(t *testing.T) {
-	client := DefaultClient()
+	c := test.MustRunCluster(t, 1)
+	defer c.Close()
+	client := NewTestClient(t, c)
+
 	schema := NewSchema()
 	idx := schema.Index("test-string-slice")
 	fields := make([]*Field, 1)
@@ -514,7 +592,10 @@ func TestStringSlice(t *testing.T) {
 }
 
 func TestSingleClearBatchRegression(t *testing.T) {
-	client := DefaultClient()
+	c := test.MustRunCluster(t, 1)
+	defer c.Close()
+	client := NewTestClient(t, c)
+
 	schema := NewSchema()
 	idx := schema.Index("gopilosatest-blah")
 	numFields := 1
@@ -566,7 +647,10 @@ func TestSingleClearBatchRegression(t *testing.T) {
 }
 
 func TestBatches(t *testing.T) {
-	client := DefaultClient()
+	c := test.MustRunCluster(t, 1)
+	defer c.Close()
+	client := NewTestClient(t, c)
+
 	schema := NewSchema()
 	idx := schema.Index("gopilosatest-blah")
 	numFields := 5
@@ -978,7 +1062,10 @@ func TestBatches(t *testing.T) {
 }
 
 func TestBatchesStringIDs(t *testing.T) {
-	client := DefaultClient()
+	c := test.MustRunCluster(t, 1)
+	defer c.Close()
+	client := NewTestClient(t, c)
+
 	schema := NewSchema()
 	idx := schema.Index("gopilosatest-blah", OptIndexKeys(true))
 	fields := make([]*Field, 3)
@@ -1264,7 +1351,10 @@ func TestQuantizedTime(t *testing.T) {
 }
 
 func TestBatchStaleness(t *testing.T) {
-	client := DefaultClient()
+	c := test.MustRunCluster(t, 1)
+	defer c.Close()
+	client := NewTestClient(t, c)
+
 	schema := NewSchema()
 	idx := schema.Index("gopilosatest-blah")
 	field := idx.Field("anint", OptFieldTypeInt())
