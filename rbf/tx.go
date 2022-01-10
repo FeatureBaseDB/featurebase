@@ -236,7 +236,7 @@ func (tx *Tx) createBitmap(name string) error {
 	}
 
 	// Write root page.
-	page := make([]byte, PageSize)
+	page := allocPage()
 	writePageNo(page, pgno)
 	writeFlags(page, PageTypeLeaf)
 	writeCellN(page, 0)
@@ -449,7 +449,7 @@ func (tx *Tx) writeRootRecordPages(records *immutable.SortedMap) (err error) {
 	// Write new root record pages.
 	for itr := records.Iterator(); !itr.Done(); {
 		// Initialize page & write as many records as will fit.
-		page := make([]byte, PageSize)
+		page := allocPage()
 		writePageNo(page, pgno)
 		writeFlags(page, PageTypeRootRecord)
 
@@ -1800,9 +1800,16 @@ func (tx *Tx) flush() error {
 	}
 
 	// Write bitmap headers & pages to WAL.
+	//
+	// We need to write a bitmap header before each such page. We only allocate
+	// one header, and we reuse it, because each write is flushing it out to
+	// disk, and it doesn't get stored in-memory.
+	var hdr []byte
+	if len(tx.dirtyBitmapPages) > 0 {
+		hdr = allocPage()
+	}
 	for _, pgno := range dirtyPageMapKeys(tx.dirtyBitmapPages) {
 		// Write header page.
-		hdr := make([]byte, PageSize)
 		writePageNo(hdr[:], pgno)
 		writeFlags(hdr[:], PageTypeBitmapHeader)
 		if _, err := tx.writeToWAL(w, hdr); err != nil {
