@@ -290,8 +290,7 @@ smoke test:
     - docker
     - fbsmoke
    rules:
-#     - if: '$CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
-     - if: '$CI_PIPELINE_SOURCE == "push"'
+     - if: '$CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
      - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
    before_script:
      - apt-get update && apt-get install -y gnupg software-properties-common curl git
