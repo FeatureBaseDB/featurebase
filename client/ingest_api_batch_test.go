@@ -269,37 +269,37 @@ func TestIngestAPIBatch(t *testing.T) {
 	if resp, err := cli.Query(NewPQLBaseQuery("Row(bint==-2)", &Index{name: "test-1", options: &IndexOptions{}}, nil)); err != nil {
 		t.Fatalf("querying: %v", err)
 	} else if len(resp.Result().Row().Columns) != 1 || resp.Result().Row().Columns[0] != uint64(7) {
-		t.Fatalf("unexpected Row(asr=a) result: %+v", resp.Result().Row().Columns)
+		t.Fatalf("unexpected Row(bint==-2) result: %+v", resp.Result().Row().Columns)
 	}
 
 	if resp, err := cli.Query(NewPQLBaseQuery("Row(cid=9)", &Index{name: "test-1", options: &IndexOptions{}}, nil)); err != nil {
 		t.Fatalf("querying: %v", err)
 	} else if len(resp.Result().Row().Columns) != 1 || resp.Result().Row().Columns[0] != uint64(7) {
-		t.Fatalf("unexpected Row(asr=a) result: %+v", resp.Result().Row().Columns)
+		t.Fatalf("unexpected Row(cid=9) result: %+v", resp.Result().Row().Columns)
 	}
 
 	if resp, err := cli.Query(NewPQLBaseQuery("Row(dtimestamp=='2010-10-18T02:07:03Z')", &Index{name: "test-1", options: &IndexOptions{}}, nil)); err != nil {
 		t.Fatalf("querying: %v", err)
 	} else if len(resp.Result().Row().Columns) != 1 || resp.Result().Row().Columns[0] != uint64(7) {
-		t.Fatalf("unexpected Row(asr=a) result: %+v", resp.Result().Row().Columns)
+		t.Fatalf("unexpected Row(dtimestamp=='2010-10-18T02:07:03Z') result: %+v", resp.Result().Row().Columns)
 	}
 
 	if resp, err := cli.Query(NewPQLBaseQuery("Row(etime=e, from='2010-01-01', to='2010-01-02')", &Index{name: "test-1", options: &IndexOptions{}}, nil)); err != nil {
 		t.Fatalf("querying: %v", err)
 	} else if len(resp.Result().Row().Columns) != 1 || resp.Result().Row().Columns[0] != uint64(7) {
-		t.Fatalf("unexpected Row(asr=a) result: %+v", resp.Result().Row().Columns)
+		t.Fatalf("unexpected Row(etime=e, from='2010-01-01', to='2010-01-02') result: %+v", resp.Result().Row().Columns)
 	}
 
 	if resp, err := cli.Query(NewPQLBaseQuery("Row(fdecimal==1.234)", &Index{name: "test-1", options: &IndexOptions{}}, nil)); err != nil {
 		t.Fatalf("querying: %v", err)
 	} else if len(resp.Result().Row().Columns) != 1 || resp.Result().Row().Columns[0] != uint64(7) {
-		t.Fatalf("unexpected Row(asr=a) result: %+v", resp.Result().Row().Columns)
+		t.Fatalf("unexpected Row(fdecimal==1.234) result: %+v", resp.Result().Row().Columns)
 	}
 
 	if resp, err := cli.Query(NewPQLBaseQuery("Row(gbool=true)", &Index{name: "test-1", options: &IndexOptions{}}, nil)); err != nil {
 		t.Fatalf("querying: %v", err)
 	} else if len(resp.Result().Row().Columns) != 1 || resp.Result().Row().Columns[0] != uint64(7) {
-		t.Fatalf("unexpected Row(asr=a) result: %+v", resp.Result().Row().Columns)
+		t.Fatalf("unexpected Row(gbool=true) result: %+v", resp.Result().Row().Columns)
 	}
 
 }

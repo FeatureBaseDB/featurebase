@@ -90,21 +90,10 @@ run go tests future:
   script:
     - echo "Running featurebase unit tests..."
     - PKG_LIST=$(go list ./... | grep -v internal/clustertests | paste -s -d, -)
-    - go test -coverprofile=coverage.out -covermode=atomic -coverpkg=${PKG_LIST} ./...
+    - go test -json -coverprofile=coverage.out -covermode=atomic -coverpkg=${PKG_LIST} ./... | tee test-report.out
   artifacts:
     paths:
       - coverage.out
-
-run go tests with output:
-  stage: test
-  image: golang:$GOVERSION
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
-  script:
-    - echo "Running featurebase unit tests to capture JSON output..."
-    - go test -json > test-report.out
-  artifacts:
-    paths:
       - test-report.out
 
 upload to sonarcloud:
@@ -118,7 +107,6 @@ upload to sonarcloud:
     - sonar-scanner -Dsonar.projectKey=molecula_featurebase -Dsonar.organization=molecula -Dsonar.sources=. -Dsonar.host.url=https://sonarcloud.io -Dsonar.go.coverage.reportPaths=coverage.out -Dsonar.go.tests.reportPaths=test-report.out  -Dsonar.javascript.lcov.reportPaths=lattice/coverage/lcov.info
   needs:
     - job: run go tests
-    - job: run go tests with output
     - job: run jest tests 
     
 build for linux amd64:
