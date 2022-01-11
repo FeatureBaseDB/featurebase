@@ -6752,9 +6752,10 @@ func variousQueriesCountDistinctTimestamp(t *testing.T, c *test.Cluster) {
 	c.CreateField(t, index, pilosa.IndexOptions{TrackExistence: true}, field, pilosa.OptFieldTypeTimestamp(time.Unix(0, 0), "s"))
 
 	// add some data
-	data := []string{"2010-01-02T12:32:00Z", "2010-04-20T12:32:00Z", "2011-04-20T12:32:00Z"}
+	data := []string{"2010-01-02T12:32:00Z", "2010-04-20T12:32:00Z", "2011-04-20T12:59:00Z", "2011-04-20T12:40:00Z", "2011-04-20T12:32:00Z"}
+
 	for i, datum := range data {
-		c.Query(t, index, fmt.Sprintf("Set(%d, ts=\"%s\")", i+10, datum))
+		c.Query(t, index, fmt.Sprintf("Set(%d, ts=\"%s\")", i*(1<<20), datum))
 	}
 
 	// query the Count of Distinct vals in field ts
