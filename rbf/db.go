@@ -358,7 +358,6 @@ func (db *DB) checkpoint() (err error) {
 			}
 		}
 
-		// fmt.Printf("checkpoint: walPageN %d, PageMap size %d\n", db.walPageN, db.pageMap.size)
 		for pgno, walID := range pages {
 			page, err = db.readWALPageAt(walID)
 			if err != nil {
@@ -698,10 +697,8 @@ func (db *DB) afterCurrentTx(callback func()) {
 	db.txWaiters = append(db.txWaiters, txw)
 	go func() {
 		<-txw.ready
-		// fmt.Printf("afterCurrentTx: locking db\n")
 		db.mu.Lock()
 		defer db.mu.Unlock()
-		// fmt.Printf("afterCurrentTx: running callback\n")
 		txw.callback()
 	}()
 	return
@@ -759,11 +756,9 @@ func (db *DB) removeTx(tx *Tx) error {
 		// because every existing transaction could want to look up pages
 		// which are in the database before our operations, but which should
 		// now be in the WAL. We want them to use the WAL instead.
-		// fmt.Printf("possibly-async checkpoint...\n")
 		db.afterCurrentTx(func() {
 			// We still hold db.rwmu here. checkpoint unlocks it when it's
 			// ready.
-			// fmt.Printf("checkpoint starting\n")
 			if err := db.checkpoint(); err != nil {
 				db.logger.Errorf("async checkpoint: %v", err)
 			}
