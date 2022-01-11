@@ -1181,6 +1181,8 @@ func (e *executor) executeDistinct(ctx context.Context, qcx *Qcx, index string, 
 			return other.Union(v.(*Row))
 		case nil:
 			return v
+		case DistinctTimestamp:
+			return other.Union(v.(DistinctTimestamp))
 		default:
 			return errors.Errorf("unexpected return type from executeDistinctShard: %+v %T", other, other)
 		}
@@ -1631,6 +1633,22 @@ func (e *executor) executeDistinctShard(ctx context.Context, qcx *Qcx, index str
 type DistinctTimestamp struct {
 	Values []string
 	Name   string
+}
+
+// Union returns the union of the values of `d` and `other`
+func (d *DistinctTimestamp) Union(other DistinctTimestamp) DistinctTimestamp {
+	both := map[string]string{}
+	for _, val := range d.Values {
+		both[val] = val
+	}
+	for _, val := range other.Values {
+		both[val] = val
+	}
+	vals := []string{}
+	for key := range both {
+		vals = append(vals, key)
+	}
+	return DistinctTimestamp{Name: d.Name, Values: vals}
 }
 
 func executeDistinctShardSet(ctx context.Context, qcx *Qcx, idx *Index, fieldName string, shard uint64, filterBitmap *roaring.Bitmap) (result *Row, err0 error) {
