@@ -3,6 +3,9 @@
 // INPUT: none
 // OUTPUT: 6 csv files, containing approx 1 billion lines of data associated to 200 million unique records (approx 28BGB of data)
 
+// this code is not shipped to customers
+// @@com.molecula.sonarcloud.ignore
+
 package main
 
 import (
