@@ -38,29 +38,41 @@ var countryList [246]string = [...]string{"ABW", "AFG", "AGO", "AIA", "ALA", "AL
 const totalRecords int = 200000000
 
 func main() {
+	log.Println("generating age field...")
 	if err := GenerateAgeField(totalRecords); err != nil {
 		log.Fatalf("unable to generate age field: %v", err)
 	}
+	log.Println("generating age field done.")
 
+	log.Println("generating ip field...")
 	if err := GenerateIPField(totalRecords); err != nil {
 		log.Fatalf("unable to generate IP field: %v", err)
 	}
+	log.Println("generating ip field done.")
 
+	log.Println("generating identifier field...")
 	if err := GenerateArbIdField(totalRecords); err != nil {
 		log.Fatalf("unable to generate indentifier field: %v", err)
 	}
+	log.Println("generating identifier field done.")
 
+	log.Println("generating opt in field...")
 	if err := GenerateOptInField(totalRecords); err != nil {
 		log.Fatalf("unable to generate opt in field: %v", err)
 	}
+	log.Println("generating opt in field done.")
 
+	log.Println("generating country field...")
 	if err := GenerateCountryField(totalRecords); err != nil {
 		log.Fatalf("unable to generate country field: %v", err)
 	}
+	log.Println("generating country field done.")
 
+	log.Println("generating time field...")
 	if err := GenerateTimeField(totalRecords); err != nil {
 		log.Fatalf("unable to generate time field: %v", err)
 	}
+	log.Println("generating time field done.")
 }
 
 func GenerateAgeField(requestedRecords int) error {
@@ -85,7 +97,9 @@ func GenerateAgeField(requestedRecords int) error {
 
 				}
 			}
-
+		}
+		if i%2000000 == 0 {
+			log.Printf("generating age field (%d)", i)
 		}
 	}
 	err1 := writer.Flush()
@@ -119,6 +133,9 @@ func GenerateIPField(requestedRecords int) error {
 			if err != nil {
 				return errors.Wrap(err, "unable to write to ip.csv")
 			}
+		}
+		if i%2000000 == 0 {
+			log.Printf("generating ip field (%d)", i)
 		}
 	}
 
@@ -154,6 +171,9 @@ func GenerateArbIdField(requestedRecords int) error {
 			if err != nil {
 				return errors.Wrap(err, "unable to write to identifier.csv")
 			}
+		}
+		if i%2000000 == 0 {
+			log.Printf("generating identifier field (%d)", i)
 		}
 	}
 
@@ -213,7 +233,9 @@ func GenerateTimeField(requestedRecords int) error {
 				return errors.Wrap(err, "unable to write to time.csv")
 			}
 		}
-
+		if i%2000000 == 0 {
+			log.Printf("generating time field (%d)", i)
+		}
 	}
 	err1 := writer.Flush()
 	if err1 != nil {
@@ -266,6 +288,9 @@ func GenerateOptInField(requestedRecords int) error {
 				}
 			}
 		}
+		if i%2000000 == 0 {
+			log.Printf("generating opt in field (%d)", i)
+		}
 	}
 
 	err1 := writer.Flush()
@@ -315,7 +340,9 @@ func GenerateCountryField(requestedRecords int) error {
 				}
 			}
 		}
-
+		if i%2000000 == 0 {
+			log.Printf("generating country field (%d)", i)
+		}
 	}
 
 	err1 := writer.Flush()
