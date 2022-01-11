@@ -34,7 +34,6 @@ import (
 	"github.com/molecula/featurebase/v2/roaring"
 	"github.com/molecula/featurebase/v2/shardwidth"
 	"github.com/molecula/featurebase/v2/stats"
-	"github.com/molecula/featurebase/v2/storage"
 	"github.com/molecula/featurebase/v2/testhook"
 	"github.com/molecula/featurebase/v2/topology"
 	"github.com/molecula/featurebase/v2/tracing"
@@ -162,9 +161,6 @@ type fragment struct {
 	cache cache
 
 	CacheSize uint32
-
-	// Cache containing full rows (not just counts).
-	rowCache *simpleCache
 
 	// Cached checksums for each block.
 	checksums map[int][]byte
@@ -427,13 +423,8 @@ func (f *fragment) inspectStorage(data []byte, file *os.File, newGen generation,
 // logic is now mostly in importStorage (reading in a bitmap) and applyStorage
 // (remapping an existing bitmap to match a new backing store).
 func (f *fragment) openStorage(unmarshalData bool) error {
-
-	useRowCache := storage.RowCacheEnabled()
 	if !f.idx.NeedsSnapshot() {
 		f.gen = &NopGeneration{}
-		if useRowCache {
-			f.rowCache = newSimpleCache()
-		}
 		f.currdata = struct{ from, to uintptr }{}
 		f.prevdata = f.currdata
 		return nil // openStorage becomes a noop under RBF, Badger, etc.
@@ -447,9 +438,7 @@ func (f *fragment) openStorage(unmarshalData bool) error {
 		// unmarshal this data in order to have any.
 		unmarshalData = true
 	}
-	if useRowCache {
-		f.rowCache = newSimpleCache()
-	}
+
 	var storageOp func([]byte, *os.File, generation, bool) (bool, error)
 	if f.holder.Opts.Inspect {
 		// note that this will unmarshal even if we already have
@@ -612,23 +601,9 @@ func (f *fragment) mustRow(tx Tx, rowID uint64) *Row {
 // unprotectedRow returns a row from the row cache if available or from storage
 // (updating the cache).
 func (f *fragment) unprotectedRow(tx Tx, rowID uint64) (*Row, error) {
-
-	useRowCache := storage.RowCacheEnabled()
-	if useRowCache {
-		if f.rowCache == nil {
-			f.rowCache = newSimpleCache()
-		}
-		r, ok := f.rowCache.Fetch(rowID)
-		if ok && r != nil {
-			return r, nil
-		}
-	}
 	row, err := f.rowFromStorage(tx, rowID)
 	if err != nil {
 		return nil, err
-	}
-	if useRowCache {
-		f.rowCache.Add(rowID, row)
 	}
 	return row, nil
 }
@@ -742,11 +717,6 @@ func (f *fragment) unprotectedSetBit(tx Tx, rowID, columnID uint64) (changed boo
 		}
 		f.cache.Add(rowID, n)
 	}
-	// Drop the rowCache entry; it's wrong, and we don't want to force
-	// a new copy if no one's reading it.
-	if storage.RowCacheEnabled() && f.rowCache != nil {
-		f.rowCache.Add(rowID, nil)
-	}
 
 	f.stats.Count(MetricSetBit, 1, 1.0)
 
@@ -806,11 +776,6 @@ func (f *fragment) unprotectedClearBit(tx Tx, rowID, columnID uint64) (changed b
 			return changed, err
 		}
 		f.cache.Add(rowID, n)
-	}
-	// Drop the rowCache entry; it's wrong, and we don't want to force
-	// a new copy if no one's reading it.
-	if storage.RowCacheEnabled() && f.rowCache != nil {
-		f.rowCache.Add(rowID, nil)
 	}
 
 	f.stats.Count(MetricClearBit, 1, 1.0)
@@ -877,11 +842,6 @@ func (f *fragment) unprotectedSetRow(tx Tx, row *Row, rowID uint64) (changed boo
 		}
 	}
 
-	// invalidate rowCache for this row.
-	if storage.RowCacheEnabled() && f.rowCache != nil {
-		f.rowCache.Add(rowID, nil)
-	}
-
 	// Snapshot storage.
 	f.holder.SnapshotQueue.Enqueue(f)
 	f.stats.Count("setRow", 1, 1.0)
@@ -929,9 +889,6 @@ func (f *fragment) unprotectedClearRow(tx Tx, rowID uint64) (changed bool, err e
 
 	// Clear the row in cache.
 	f.cache.Add(rowID, 0)
-	if storage.RowCacheEnabled() && f.rowCache != nil {
-		f.rowCache.Add(rowID, nil)
-	}
 
 	// Snapshot storage.
 	f.holder.SnapshotQueue.Enqueue(f)
@@ -2416,7 +2373,6 @@ func (f *fragment) importPositions(tx Tx, set, clear []uint64, rowSet map[uint64
 	if f.storage != nil {
 		wp = &f.storage.OpWriter
 	}
-	useRowCache := storage.RowCacheEnabled()
 
 	doFunc := func() error {
 		if len(set) > 0 {
@@ -2456,9 +2412,6 @@ func (f *fragment) importPositions(tx Tx, set, clear []uint64, rowSet map[uint64
 				}
 
 				f.cache.BulkAdd(rowID, n)
-			}
-			if useRowCache && f.rowCache != nil {
-				f.rowCache.Add(rowID, nil)
 			}
 		}
 
@@ -3328,14 +3281,8 @@ func (f *fragment) intRowIterator(tx Tx, wrap bool, filters ...roaring.BitmapFil
 	// accumulator [column ID] -> [int value]
 	acc := make(map[uint64]int64)
 
-	if storage.RowCacheEnabled() {
-		// needs a write lock since it will update the f.rowCache
-		f.mu.Lock()
-		defer f.mu.Unlock()
-	} else {
-		f.mu.RLock()
-		defer f.mu.RUnlock()
-	}
+	f.mu.RLock()
+	defer f.mu.RUnlock()
 	callback := func(rid uint64) error {
 		// skip exist(0) and sign(1) rows
 		if rid == bsiExistsBit || rid == bsiSignBit {

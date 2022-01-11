@@ -341,15 +341,6 @@ func OptServerStorageConfig(cfg *storage.Config) ServerOption {
 	}
 }
 
-// OptServerRowcacheOn is a functional option on Server
-// used to turn on the row cache.
-func OptServerRowcacheOn(rowcacheOn bool) ServerOption {
-	return func(s *Server) error {
-		s.holderConfig.RowcacheOn = rowcacheOn
-		return nil
-	}
-}
-
 // OptServerRBFConfig conveys the RBF flags to the Holder.
 func OptServerRBFConfig(cfg *rbfcfg.Config) ServerOption {
 	return func(s *Server) error {

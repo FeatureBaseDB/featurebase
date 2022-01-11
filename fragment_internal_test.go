@@ -115,59 +115,6 @@ func TestFragment_ClearBit(t *testing.T) {
 	}
 }
 
-/* We suspect this test is no longer valid under the new Tx
-   framework in which we always copy mmap-ed rows before
-   returning them. So we will comment it out for now.
-   If someone knows any reason for this to stick around,
-   let us know; we couldn't figure out how to adapt
-   to do a meaningful test under Tx. - jaten / tgruben
-
-// What about rowcache timing.
-func TestFragment_RowcacheMap(t *testing.T) {
-	var done int64
-	f, _, tx := mustOpenFragment(t, "i", "f", viewStandard, 0, "")
-
-	// Under -race, this test turns out to take a fairly long time
-	// to run with larger OpN, because we write 50,000 bits to
-	// the bitmap, and everything is being race-detected, and we don't
-	// actually need that many to get the result we care about.
-	f.MaxOpN = 2000
-	defer f.Clean(t) // failing here with     TestFragment_RowcacheMap: fragment_internal_test.go:2859: fragment /var/folders/2x/hm9gp5ys3k9gmm5f_vzm_6wc0000gn/T/pilosa-fragment-001943331: unmarshalled bitmap different: differing containers for key 0: <run container, N=10131, len 2000x interval> vs <run container, N=12000, len 2000x interval>
-
-	ch := make(chan struct{})
-
-	for i := 0; i < f.MaxOpN; i++ {
-		_, _ = f.setBit(tx, 0, uint64(i*32))
-	}
-	// force snapshot so we get a mmapped row...
-	_ = f.Snapshot()
-	row := f.mustRow(tx, 0)
-	tx.Commit(0)
-	segment := row.Segments()[0]
-	bitmap := segment.data
-
-	// request information from the frozen bitmap we got back
-	go func() {
-		for atomic.LoadInt64(&done) == 0 {
-			for i := 0; i < f.MaxOpN; i++ {
-				_ = bitmap.Contains(uint64(i * 32))
-			}
-		}
-		close(ch)
-	}()
-
-	// modify the original bitmap, until it causes a snapshot, which
-	// then invalidates the other map...
-	for j := 0; j < 5; j++ {
-		for i := 0; i < f.MaxOpN; i++ {
-			_, _ = f.setBit(tx, 0, uint64(i*32+j+1))
-		}
-	}
-	atomic.StoreInt64(&done, 1)
-	<-ch
-}
-*/
-
 // Ensure a fragment can clear a row.
 func TestFragment_ClearRow(t *testing.T) {
 	f, idx, tx := mustOpenFragment(t, "i", "f", viewStandard, 0, "")
