@@ -42,7 +42,7 @@ func (b *Bitmap) AsContainerMatrixString() (r string) {
 	const rowWidthInContainerCount = 1 << (shardwidth.Exponent - 16) // - 16 because roaring.Container always holds 2^16 bits.
 
 	sw := uint64(1 << shardwidth.Exponent)
-	//fmt.Printf("sw = %v, shardwidth.Exponent = %v, rowWidthInContainerCount=%v\n", sw, shardwidth.Exponent, rowWidthInContainerCount)
+
 	maxrow := uint64(math.Ceil(float64(max) / float64(sw)))
 	if max == 0 {
 		maxrow++
