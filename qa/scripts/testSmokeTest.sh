@@ -28,12 +28,8 @@ fi
 
 # run smoke test
 echo "Running smoke test..."
-ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem -o "StrictHostKeyChecking no" ec2-user@${INGESTNODE0} "pushd /data; ~/.local/bin/pytest --junitxml=report.xml; popd" 
-if (( $? != 0 )) 
-then 
-    echo "Unable to run smoke test"
-    exit 1
-fi
+ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem -o "StrictHostKeyChecking no" ec2-user@${INGESTNODE0} "cd /data; ~/.local/bin/pytest --junitxml=report.xml" 
+SMOKETESTRESULT=$?
 
 echo "Copying test report to local"
 scp -r -i ~/.ssh/gitlab-featurebase-ci.pem ec2-user@${INGESTNODE0}:/data/report.xml report.xml
@@ -43,4 +39,11 @@ then
     exit 1
 fi
 
-echo "Smoke test complete"
+if (( $SMOKETESTRESULT != 0 )) 
+then 
+    echo "Smoke test complete with test failures"
+else
+    echo "Smoke test complete"
+fi
+
+exit $SMOKETESTRESULT 

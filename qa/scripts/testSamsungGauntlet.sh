@@ -1,44 +1,57 @@
 #!/bin/bash
 
-# get the bastion host
-BASTION=$(cat ./qa/tf/gauntlet/samsung/outputs.json | jq -r '[.ingest_ips][0]["value"][0]')
-echo "using bastion ${BASTION}"
+# get the first ingest host
+INGESTNODE0=$(cat ./qa/tf/gauntlet/samsung/outputs.json | jq -r '[.ingest_ips][0]["value"][0]')
+echo "using INGESTNODE0 ${INGESTNODE0}"
 
-NODE=$(cat ./qa/tf/gauntlet/samsung/outputs.json | jq -r '[.data_node_ips][0]["value"][0]')
-echo "using node ${NODE}"
+# get the first data host
+DATANODE0=$(cat ./qa/tf/gauntlet/samsung/outputs.json | jq -r '[.data_node_ips][0]["value"][0]')
+echo "using DATANODE0 ${DATANODE0}"
 
 # generate csv files
+echo "Building simulacraData..."
 GOOS=linux GOARCH=arm64 go build ./qa/simulacraData/...
-scp -i ~/.ssh/gitlab-featurebase-ci.pem simulacraData ec2-user@${BASTION}:/data
+if (( $? != 0 )) 
+then 
+    echo "Build failed"
+    exit 1
+fi
+echo "Copying simulacraData..."
+scp -i ~/.ssh/gitlab-featurebase-ci.pem simulacraData ec2-user@${INGESTNODE0}:/data
 if (( $? != 0 )) 
 then 
     echo "Copy failed"
     exit 1
 fi
 
-ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem ec2-user@${BASTION} "cd /data && /data/simulacraData" 
+echo "Running simulacraData..."
+ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem ec2-user@${INGESTNODE0} "cd /data && /data/simulacraData" 
 if (( $? != 0 )) 
 then 
     echo "Making big files failed"
     exit 1
 fi
+echo "Running simulacraData done."
 
 # ingest these files the way that samsung does it
-scp -i ~/.ssh/gitlab-featurebase-ci.pem ./qa/scripts/testSamsungPayload.sh ec2-user@${BASTION}:
+echo "Copying testSamsungPayload.sh..."
+scp -i ~/.ssh/gitlab-featurebase-ci.pem ./qa/scripts/testSamsungPayload.sh ec2-user@${INGESTNODE0}:
 if (( $? != 0 )) 
 then 
-    echo "Copy ingest script failed"
+    echo "Copying testSamsungPayload.sh failed"
     exit 1
 fi
 
-ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem ec2-user@${BASTION} "./testSamsungPayload.sh http://${NODE}:10101 1" 
+echo "Running (1) testSamsungPayload.sh..."
+ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem ec2-user@${INGESTNODE0} "./testSamsungPayload.sh http://${DATANODE0}:10101 1" 
 if (( $? != 0 )) 
 then 
     echo "Running 1 testSamsungPayload.sh failed"
     exit 1
 fi
 
-ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem ec2-user@${BASTION} "./testSamsungPayload.sh http://${NODE}:10101 0" 
+echo "Running (0) testSamsungPayload.sh..."
+ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem ec2-user@${INGESTNODE0} "./testSamsungPayload.sh http://${DATANODE0}:10101 0" 
 if (( $? != 0 )) 
 then 
     echo "Running 0 testSamsungPayload.sh failed"
@@ -46,3 +59,6 @@ then
 fi
 
 # query workload that runs
+
+
+echo "Done."

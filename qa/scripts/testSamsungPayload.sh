@@ -6,7 +6,6 @@ FEATUREBASE_PATH=/usr/local/bin
 # path for directory with csv directory files for all fields to be ingested 
 CSV_DIR_PATH=/data
 
-
 # To run:
 # ./testSamsungPayload.sh {Local host & port for featurebase} {initialize flag}
 

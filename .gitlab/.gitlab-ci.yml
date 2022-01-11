@@ -219,7 +219,7 @@ smoke test:
     - docker
     - fbsmoke
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
+    - if: '$CI_PIPELINE_SOURCE == "push"'
   before_script:
     - apt-get update && apt-get install -y gnupg software-properties-common curl git
     - curl -fsSL https://apt.releases.hashicorp.com/gpg | apt-key add -
@@ -262,49 +262,55 @@ smoke test:
     reports:
       junit: report.xml
 
-# gauntlet:
-#   stage: gauntlet
-#   timeout: 4h
-#   image: registry.gitlab.com/gitlab-org/cloud-deploy/aws-base:latest
-#   variables:
-#     PROFILE: "default"
-#     AWS_SSH_PRIVATE_KEY: $AWS_FBCI_SSH_KEY
-#     AWS_ACCESS_KEY_ID: $AWS_FBCI_ACCESS_KEY_ID
-#     AWS_SECRET_ACCESS_KEY: $AWS_FBCI_SECRET_ACCESS_KEY
-#     TF_VAR_cluster_prefix: ""
-#     TF_VAR_branch: ""
-#   rules:
-#     - if: '$CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
-#     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
-#   before_script:
-#     - apt-get update && apt-get install -y gnupg software-properties-common curl git
-#     - curl -fsSL https://apt.releases.hashicorp.com/gpg | apt-key add -
-#     - apt-add-repository "deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
-#     - apt-get update && apt-get install terraform
-#     - aws configure set aws_access_key_id $AWS_FBCI_ACCESS_KEY_ID
-#     - aws configure set aws_secret_access_key $AWS_FBCI_SECRET_ACCESS_KEY
-#     - aws configure set region "us-east-2"
-#     - aws configure set aws_profile $PROFILE
-#     - echo $AWS_FBCI_SSH_KEY > gitlab-featurebase-ci.pem
-#     - chmod 400 gitlab-featurebase-ci.pem
-#     - 'which ssh-agent || ( apt-get update -y && apt-get install openssh-client -y )'
-#     - eval $(ssh-agent -s)
-#     - mkdir -p ~/.ssh
-#     - echo $AWS_FBCI_SSH_KEY > /root/.ssh/gitlab-featurebase-ci.pem
-#     - chmod 400 /root/.ssh/gitlab-featurebase-ci.pem
-#     - echo "$AWS_FBCI_SSH_KEY" | ssh-add -
-#     - chmod 700 /root/.ssh
-#     - '[[ -f /.dockerenv ]] && echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config'
-#     - apt update && apt -y install jq wget
-#     - wget https://go.dev/dl/go1.17.5.linux-amd64.tar.gz
-#     - tar -C /usr/local -xzf go1.17.5.linux-amd64.tar.gz
-#     - export PATH=$PATH:/usr/local/go/bin
-#     - TF_VAR_cluster_prefix="smoke-$(openssl rand -base64 12 | tr -d /=+ | cut -c -16)"
-#     - echo "Cluster Prefix --> $TF_VAR_cluster_prefix"
-#     - TF_VAR_branch=$CI_COMMIT_BRANCH
-#     - echo "Branch --> $TF_VAR_branch"
-#   script:
-#     - ./qa/scripts/setupSamsungGauntlet.sh
-#     - ./qa/scripts/testSamsungGauntlet.sh
-#   after_script:
-#     - ./qa/scripts/teardownSamsungGauntlet.sh
+
+gauntlet:
+  stage: gauntlet
+  timeout: 4h
+  image: registry.gitlab.com/gitlab-org/cloud-deploy/aws-base:latest
+  variables:
+    PROFILE: "service-terraform"
+    AWS_SSH_PRIVATE_KEY: $AWS_FBCI_SSH_KEY
+    AWS_ACCESS_KEY_ID: $AWS_FBCI_ACCESS_KEY_ID
+    AWS_SECRET_ACCESS_KEY: $AWS_FBCI_SECRET_ACCESS_KEY
+    TF_VAR_cluster_prefix: ""
+    TF_VAR_branch: ""
+  tags:
+    - aws
+    - docker
+    - fbsmoke
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+  before_script:
+    - apt-get update && apt-get install -y gnupg software-properties-common curl git
+    - curl -fsSL https://apt.releases.hashicorp.com/gpg | apt-key add -
+    - apt-add-repository "deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
+    - apt-get update && apt-get install terraform
+    - aws configure set aws_access_key_id $AWS_FBCI_ACCESS_KEY_ID
+    - aws configure set aws_secret_access_key $AWS_FBCI_SECRET_ACCESS_KEY
+    - aws configure set region "us-east-2"
+    - aws configure set aws_profile $PROFILE
+    - echo $AWS_FBCI_SSH_KEY > gitlab-featurebase-ci.pem
+    - chmod 400 gitlab-featurebase-ci.pem
+    - 'which ssh-agent || ( apt-get update -y && apt-get install openssh-client -y )'
+    - eval $(ssh-agent -s)
+    - mkdir -p ~/.ssh
+    - echo $AWS_FBCI_SSH_KEY > /root/.ssh/gitlab-featurebase-ci.pem
+    - chmod 400 /root/.ssh/gitlab-featurebase-ci.pem
+    - echo "$AWS_FBCI_SSH_KEY" | ssh-add -
+    - chmod 700 /root/.ssh
+    - '[[ -f /.dockerenv ]] && echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config'
+    - apt update && apt -y install jq wget
+    - wget https://go.dev/dl/go1.17.5.linux-amd64.tar.gz
+    - tar -C /usr/local -xzf go1.17.5.linux-amd64.tar.gz
+    - export PATH=$PATH:/usr/local/go/bin
+    - TF_VAR_cluster_prefix="gauntlet-$(openssl rand -base64 12 | tr -d /=+ | cut -c -16)"
+    - echo "Cluster Prefix --> $TF_VAR_cluster_prefix"
+    - TF_VAR_branch=$CI_COMMIT_BRANCH
+    - echo "Branch --> $TF_VAR_branch"
+  script:
+    - ./qa/scripts/setupSamsungGauntlet.sh
+    - ./qa/scripts/testSamsungGauntlet.sh
+  after_script:
+    - ./qa/scripts/teardownSamsungGauntlet.sh
+  
