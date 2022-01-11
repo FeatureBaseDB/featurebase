@@ -84,9 +84,6 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 	flags.StringVar(&srv.Config.Storage.Backend, "storage.backend", storage.DefaultBackend, fmt.Sprintf("transaction/storage to use: one of roaring or rbf. The default is: %v. The env var PILOSA_STORAGE_BACKEND is over-ridden by --storage.backend option on the command line.", storage.DefaultBackend))
 	flags.BoolVar(&srv.Config.Storage.FsyncEnabled, "storage.fsync", true, "enable fsync fully safe flush-to-disk")
 
-	// RowcacheOn
-	flags.BoolVar((&srv.Config.RowcacheOn), "rowcache-on", srv.Config.RowcacheOn, "Do not use, permanently disabled. Flag exists for backwards compatibility and will be removed.")
-
 	// RBF specific flags. See pilosa/rbf/cfg/cfg.go for definitions.
 	srv.Config.RBFConfig.DefineFlags(flags)
 
