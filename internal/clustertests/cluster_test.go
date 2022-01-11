@@ -118,8 +118,6 @@ func TestClusterStuff(t *testing.T) {
 			t.Fatalf("waiting on backup to finish: %v", err)
 		}
 
-		fmt.Println("STARTING RESTORE")
-
 		client := http.Client{}
 		if req, err := http.NewRequest(http.MethodDelete, "http://pilosa1:10101/index/testidx", nil); err != nil {
 			t.Fatalf("getting req: %v", err)

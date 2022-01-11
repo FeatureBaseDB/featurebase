@@ -1122,7 +1122,6 @@ func (tx *Tx) deallocateTree(pgno uint32) error {
 
 func (tx *Tx) readPage(pgno uint32) (_ []byte, isHeap bool, err error) {
 	// Meta page is always cached on the transaction.
-	//fmt.Printf("readPage %d\n", pgno)
 	if pgno == 0 {
 		return tx.meta[:], false, nil
 	}
