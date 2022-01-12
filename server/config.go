@@ -203,11 +203,6 @@ type Config struct {
 	// "rbf".
 	Storage *storage.Config `toml:"storage"`
 
-	// RowcacheOn permanently disabled. No longer useful w/ RBF. Left
-	// for backward compatibility but will be removed in a future
-	// version.
-	RowcacheOn bool `toml:"rowcache-on"`
-
 	// RBFConfig defines all externally configurable RBF flags.
 	RBFConfig *rbfcfg.Config `toml:"rbf"`
 
