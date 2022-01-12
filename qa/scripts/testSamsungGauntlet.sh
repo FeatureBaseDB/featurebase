@@ -43,7 +43,7 @@ then
 fi
 
 echo "Running (1) testSamsungPayload.sh..."
-ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem ec2-user@${INGESTNODE0} "./testSamsungPayload.sh http://${DATANODE0}:10101 1" 
+ssh -T -A -i ~/.ssh/gitlab-featurebase-ci.pem -o ServerAliveInterval=30 ec2-user@${INGESTNODE0} "./testSamsungPayload.sh http://${DATANODE0}:10101 1" 
 if (( $? != 0 )) 
 then 
     echo "Running 1 testSamsungPayload.sh failed"
@@ -51,7 +51,7 @@ then
 fi
 
 echo "Running (0) testSamsungPayload.sh..."
-ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem ec2-user@${INGESTNODE0} "./testSamsungPayload.sh http://${DATANODE0}:10101 0" 
+ssh -T -A -i ~/.ssh/gitlab-featurebase-ci.pem -o ServerAliveInterval=30 ec2-user@${INGESTNODE0} "./testSamsungPayload.sh http://${DATANODE0}:10101 0" 
 if (( $? != 0 )) 
 then 
     echo "Running 0 testSamsungPayload.sh failed"
