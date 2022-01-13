@@ -17,6 +17,10 @@ echo "using INGESTNODE0 ${INGESTNODE0}"
 DATANODE0=$(cat ./qa/tf/ci/smoketest/outputs.json | jq -r '[.data_node_ips][0]["value"][0]')
 echo "using DATANODE0 ${DATANODE0}"
 
+echo "Writing config.py file..."
+cat << EOT > .qa/scripts/testcases/smoketest/config.py
+datanode0="${DATANODE0}"
+EOT
 
 echo "Copying tests to remote"
 scp -r -i ~/.ssh/gitlab-featurebase-ci.pem ./qa/testcases/smoketest/*.py ec2-user@${INGESTNODE0}:/data
