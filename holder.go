@@ -149,9 +149,6 @@ type HolderOpts struct {
 	// StorageBackend controls the tx/storage engine we instatiate. Set by
 	// server.go OptServerStorageConfig
 	StorageBackend string
-
-	// RowcacheOn, if true, turns on the row cache for all storage backends.
-	RowcacheOn bool
 }
 
 func (h *Holder) StartTransaction(ctx context.Context, id string, timeout time.Duration, exclusive bool) (*Transaction, error) {
@@ -213,7 +210,6 @@ type HolderConfig struct {
 	CacheFlushInterval   time.Duration
 	StatsClient          stats.StatsClient
 	Logger               logger.Logger
-	RowcacheOn           bool
 
 	StorageConfig       *storage.Config
 	RBFConfig           *rbfcfg.Config
@@ -273,7 +269,7 @@ func NewHolder(path string, cfg *HolderConfig) *Holder {
 		sharder:              cfg.Sharder,
 		schemator:            cfg.Schemator,
 		Logger:               cfg.Logger,
-		Opts:                 HolderOpts{StorageBackend: cfg.StorageConfig.Backend, RowcacheOn: cfg.RowcacheOn},
+		Opts:                 HolderOpts{StorageBackend: cfg.StorageConfig.Backend},
 
 		SnapshotQueue: defaultSnapshotQueue,
 
@@ -283,8 +279,6 @@ func NewHolder(path string, cfg *HolderConfig) *Holder {
 
 		indexes: make(map[string]*Index),
 	}
-
-	storage.SetRowCacheOn(cfg.RowcacheOn)
 
 	txf, err := NewTxFactory(cfg.StorageConfig.Backend, h.IndexesPath(), h)
 	vprint.PanicOn(err)

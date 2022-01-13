@@ -83,6 +83,12 @@ resource "aws_instance" "fb_ingest" {
 resource "aws_key_pair" "gitlab-featurebase-ci" {
   key_name   = "${var.cluster_prefix}-gitlab-ci"
   public_key = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC91hhpVHNonAG7ku2ugpxEskf9KHeyHJPQJT26OHrMUw7R+T5A8TjqSzTau07sXQ/E9SO3ebV8SJ5PqeaQOnQB8VEvVNK0DjQH7ppvNg1Rfs42FZT9ttzTMvOjsSbK3vZTHXdoKQEdC9NxBwSkFIRGQojK1HUOq9xGrw31fA1OjSwlpLcbx7yyg18lcqW6UOptnVR8U9Yy9qQ5jZF1HtkQ6L9J+gv4o1UyNAUK2bopeGiXpBc3PQ/CFaFT2h/aqLBP66qAHsHVyAFD3PIRtplC5EHa8jXDgLacEls0uF7Q3kRPxvzcuo4g4VkOn1rDy9qH3vd2hT3aKVnM73FIDUiL"
+  
+  tags = {
+    Prefix = "${var.cluster_prefix}"
+    Name   = "${var.cluster_prefix}-gitlab-featurebase-ci"
+    Role   = "ssh_keypair"
+  }
 }
 
 resource "aws_security_group" "featurebase" {
@@ -156,7 +162,9 @@ resource "aws_security_group" "featurebase" {
   }
 
   tags = {
-    Name = "allow_featurebase"
+    Prefix = "${var.cluster_prefix}"
+    Name   = "${var.cluster_prefix}-allow_featurebase"
+    Role   = "allow_featurebase"
   }
 }
 
@@ -199,13 +207,21 @@ resource "aws_security_group" "ingest" {
   }
 
   tags = {
-    Name = "allow_ingest"
+    Prefix = "${var.cluster_prefix}"
+    Name   = "${var.cluster_prefix}-allow_ingest"
+    Role   = "allow_ingest"
   }
 }
 
 resource "aws_iam_instance_profile" "fb_cluster_node_profile" {
   name = "${var.cluster_prefix}-fb_cluster_node_profile"
   role = aws_iam_role.fb_cluster_node_role.name
+
+  tags = {
+    Prefix = "${var.cluster_prefix}"
+    Name   = "${var.cluster_prefix}-fb_cluster_node_profile"
+    Role   = "fb_cluster_node_profile"
+  }
 }
 
 resource "aws_iam_role" "fb_cluster_node_role" {
@@ -239,4 +255,9 @@ resource "aws_iam_role" "fb_cluster_node_role" {
     })
   }
 
+  tags = {
+    Prefix = "${var.cluster_prefix}"
+    Name   = "${var.cluster_prefix}-fb_cluster_node_role"
+    Role   = "fb_cluster_node_role"
+  }
 }

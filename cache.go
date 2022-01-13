@@ -567,37 +567,6 @@ func (p uint64Slice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 func (p uint64Slice) Len() int           { return len(p) }
 func (p uint64Slice) Less(i, j int) bool { return p[i] < p[j] }
 
-// simpleCache implements a bitmap Rowcache.
-// it is meant to be a short-lived cache for cases where writes are continuing to access
-// the same row within a short time frame (i.e. good for write-heavy loads)
-// A read-heavy use case would cause the cache to get bigger, potentially causing the
-// node to run out of memory.
-type simpleCache struct {
-	cache map[uint64]*Row
-}
-
-// Fetch retrieves the bitmap at the id in the cache.
-func (s *simpleCache) Fetch(id uint64) (*Row, bool) {
-	m, ok := s.cache[id]
-	return m, ok
-}
-
-func newSimpleCache() *simpleCache {
-	return &simpleCache{
-		cache: make(map[uint64]*Row),
-	}
-}
-
-// Add adds the bitmap to the cache, keyed on the id. A nil row means
-// deleting the row from the cache.
-func (s *simpleCache) Add(id uint64, b *Row) {
-	if b != nil {
-		s.cache[id] = b
-	} else {
-		delete(s.cache, id)
-	}
-}
-
 // nopCache represents a no-op Cache implementation.
 type nopCache struct {
 	stats stats.StatsClient
