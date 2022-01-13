@@ -183,27 +183,56 @@ func (e *Etcd) Close() error {
 // the client object, then call things on that object. This should error
 // out sanely instead of panicing if we close the client while something
 // is running on it.
+//
+// New feature: retryClient can also retry on errTimeout.
+const etcdRetryTimes = 3
+
 func (e *Etcd) retryClient(fn func(cli *clientv3.Client) error) (err error) {
 	e.cliMu.Lock()
 	cli := e.cli
 	e.cliMu.Unlock()
-	if err = fn(cli); err == nil || err.Error() != etcdLeaderChanged {
-		// either it's nil or it's an error we don't try to handle here
-		return err
+	for tries := 0; tries < etcdRetryTimes; tries++ {
+		start := time.Now()
+		err = fn(cli)
+		switch err {
+		case etcdserver.ErrLeaderChanged:
+			// we can't do much with an error from closing e.cli at this point, so
+			// we try again.
+			e.cliMu.Lock()
+			if cli != e.cli {
+				cli = e.cli
+				e.cliMu.Unlock()
+				// someone else already reopened. retry.
+				continue
+			}
+			_ = cli.Close()
+			cli = v3client.New(e.e.Server)
+			e.cli = cli
+			e.cliMu.Unlock()
+			break
+		case etcdserver.ErrTimeout:
+			// sporadic timeouts are concerning but not necessarily fatal
+			// and can usually be retried.
+			elapsed := time.Since(start)
+			retrying := ""
+			if tries < etcdRetryTimes {
+				retrying = fmt.Sprintf(" (retrying, n=%d)", tries)
+			}
+			e.logger.Warnf("timeout (%v elapsed) on etcd query%s", elapsed, retrying)
+			// Sleep just a touch longer to give things a time to
+			// stabilize. We're mostly relying on the fact that this is a
+			// timeout to give us a reasonable backoff period and keep us
+			// from spamming these.
+			time.Sleep(100 * time.Millisecond)
+			break
+		default:
+			// nil, or an error we don't know about
+			return err
+		}
 	}
-	// we can't do much with an error from closing e.cli at this point, so
-	// we try again.
-	e.cliMu.Lock()
-	if cli != e.cli {
-		cli = e.cli
-		e.cliMu.Unlock()
-		return fn(cli)
-	}
-	_ = cli.Close()
-	cli = v3client.New(e.e.Server)
-	e.cli = cli
-	e.cliMu.Unlock()
-	return fn(cli)
+	// if we got here, we got a total of three of some combination of
+	// ErrTimeout or ErrLeaderChanged, and we're giving up.
+	return err
 }
 
 func parseOptions(opt Options) *embed.Config {
