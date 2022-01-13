@@ -54,7 +54,7 @@ function useProvideAuth() {
           // Turn on Authentication
           setIsAuthOn(true);
 
-          if (res.data === 'OK') {
+          if (res.status === 200) {
             // User is authenticated
             setIsAuthenticated(true);
 

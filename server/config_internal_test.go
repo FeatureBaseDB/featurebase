@@ -319,15 +319,14 @@ func TestConfig_validateAuth(t *testing.T) {
 				GroupEndpointURL: emptyString,
 				LogoutURL:        emptyString,
 				Scopes:           validStringSlice,
-				HashKey:          emptyString,
-				BlockKey:         emptyString,
+				SecretKey:        emptyString,
 			},
 		},
 		{
 			// Auth enabled, keys are invalid length
 			[]string{
 				errorMesgKey,
-				errorMesgKey,
+				errorMesgEmpty,
 			},
 			Auth{
 				Enable:           enable,
@@ -338,8 +337,7 @@ func TestConfig_validateAuth(t *testing.T) {
 				GroupEndpointURL: validTestURL,
 				LogoutURL:        validTestURL,
 				Scopes:           validStringSlice,
-				HashKey:          validString,
-				BlockKey:         validString,
+				SecretKey:        validString,
 			},
 		},
 		{
@@ -358,8 +356,8 @@ func TestConfig_validateAuth(t *testing.T) {
 				GroupEndpointURL: invalidURL,
 				LogoutURL:        invalidURL,
 				Scopes:           validStringSlice,
-				HashKey:          validKey,
-				BlockKey:         validKey,
+				SecretKey:        validKey,
+				QueryLogPath:     "thisnisfasdfPAth",
 			},
 		},
 		{
@@ -376,8 +374,8 @@ func TestConfig_validateAuth(t *testing.T) {
 				GroupEndpointURL: validTestURL,
 				LogoutURL:        validTestURL,
 				Scopes:           emptySlice,
-				HashKey:          validKey,
-				BlockKey:         validKey,
+				SecretKey:        validKey,
+				QueryLogPath:     "thisaisdf aPath",
 			},
 		},
 		{
@@ -392,8 +390,8 @@ func TestConfig_validateAuth(t *testing.T) {
 				GroupEndpointURL: validTestURL,
 				LogoutURL:        validTestURL,
 				Scopes:           validStringSlice,
-				HashKey:          validKey,
-				BlockKey:         validKey,
+				SecretKey:        validKey,
+				QueryLogPath:     "thisIsAPAth",
 			},
 		},
 		{
@@ -408,8 +406,7 @@ func TestConfig_validateAuth(t *testing.T) {
 				GroupEndpointURL: invalidURL,
 				LogoutURL:        validTestURL,
 				Scopes:           validStringSlice,
-				HashKey:          validKey,
-				BlockKey:         emptyString,
+				SecretKey:        emptyString,
 			},
 		},
 	}

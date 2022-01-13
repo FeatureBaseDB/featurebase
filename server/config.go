@@ -242,8 +242,7 @@ type Auth struct {
 	GroupEndpointURL string   `toml:"group-endpoint-url"`
 	LogoutURL        string   `toml:"logout-url"`
 	Scopes           []string `toml:"scopes"`
-	HashKey          string   `toml:"hash-key"`
-	BlockKey         string   `toml:"block-key"`
+	SecretKey        string   `toml:"secret-key"`
 	PermissionsFile  string   `toml:"permissions"`
 	QueryLogPath     string   `toml:"query-log-path"`
 }
@@ -614,24 +613,29 @@ func (c *Config) ValidateAuth() (errors []error) {
 	if !c.Auth.Enable {
 		return
 	}
-	authConfig := map[string]string{
-		"ClientId":         c.Auth.ClientId,
-		"ClientSecret":     c.Auth.ClientSecret,
-		"AuthorizeURL":     c.Auth.AuthorizeURL,
-		"TokenURL":         c.Auth.TokenURL,
-		"GroupEndpointURL": c.Auth.GroupEndpointURL,
-		"LogoutURL":        c.Auth.LogoutURL,
-		"HashKey":          c.Auth.HashKey,
-		"BlockKey":         c.Auth.BlockKey,
+	authConfig := []struct {
+		name string
+		val  string
+	}{
+		{name: "ClientId", val: c.Auth.ClientId},
+		{name: "ClientSecret", val: c.Auth.ClientSecret},
+		{name: "AuthorizeURL", val: c.Auth.AuthorizeURL},
+		{name: "TokenURL", val: c.Auth.TokenURL},
+		{name: "GroupEndpointURL", val: c.Auth.GroupEndpointURL},
+		{name: "LogoutURL", val: c.Auth.LogoutURL},
+		{name: "SecretKey", val: c.Auth.SecretKey},
+		{name: "QueryLogPath", val: c.Auth.QueryLogPath},
 	}
 
-	for name, value := range authConfig {
+	for _, configOpt := range authConfig {
+		name := configOpt.name
+		value := configOpt.val
 		if value == "" {
 			errors = append(errors, fmt.Errorf("empty string for auth config %s", name))
 			continue
 		}
 
-		if name == "HashKey" || name == "BlockKey" {
+		if name == "SecretKey" {
 			if len(value) != 64 {
 				errors = append(errors, fmt.Errorf("invalid key length for %s. exp %d, got %d", name, 64, len(value)))
 			}
