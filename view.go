@@ -40,6 +40,7 @@ type view struct {
 
 	holder *Holder
 	idx    *Index
+	fld    *Field
 
 	fieldType string
 	cacheType string
@@ -363,7 +364,7 @@ func (v *view) notifyIfNewShard(shard uint64) {
 }
 
 func (v *view) newFragment(shard uint64) *fragment {
-	fld := v.idx.Field(v.field)
+	fld := v.fld
 	spec := fragSpec{
 		index: v.idx,
 		field: fld,
