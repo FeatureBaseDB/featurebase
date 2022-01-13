@@ -18,7 +18,7 @@ DATANODE0=$(cat ./qa/tf/ci/smoketest/outputs.json | jq -r '[.data_node_ips][0]["
 echo "using DATANODE0 ${DATANODE0}"
 
 echo "Writing config.py file..."
-cat << EOT > .qa/scripts/testcases/smoketest/config.py
+cat << EOT > ./qa/scripts/testcases/smoketest/config.py
 datanode0="${DATANODE0}"
 EOT
 
