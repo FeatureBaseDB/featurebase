@@ -21,6 +21,7 @@ import (
 
 	"github.com/hashicorp/go-retryablehttp"
 	pilosa "github.com/molecula/featurebase/v2"
+	"github.com/molecula/featurebase/v2/authn"
 	"github.com/molecula/featurebase/v2/encoding/proto"
 	"github.com/molecula/featurebase/v2/ingest"
 	"github.com/molecula/featurebase/v2/logger"
@@ -42,6 +43,9 @@ type InternalClient struct {
 	retryableClient *retryablehttp.Client
 	// the local node's API, used for operations that we can short-circuit that way
 	api *pilosa.API
+
+	// secret Key for auth across nodes
+	secretKey string
 }
 
 // NewInternalClient returns a new instance of InternalClient to connect to host.
@@ -62,6 +66,14 @@ func NewInternalClient(host string, remoteClient *http.Client, opts ...InternalC
 }
 
 type InternalClientOption func(c *InternalClient)
+
+// WithSecretKey adds the secretKey used for inter-node communication when auth
+// is enabled
+func WithSecretKey(secretKey string) InternalClientOption {
+	return func(c *InternalClient) {
+		c.secretKey = secretKey
+	}
+}
 
 // WithClientRetryPeriod is the max amount of total time the client will
 // retry failed requests using exponential backoff.
@@ -570,6 +582,12 @@ func (c *InternalClient) QueryNode(ctx context.Context, uri *pnet.URI, index str
 	req, err := http.NewRequest("POST", u, bytes.NewReader(buf))
 	if err != nil {
 		return nil, errors.Wrap(err, "creating request")
+	}
+
+	uinfo := ctx.Value("userinfo")
+	if uinfo != nil {
+		token := uinfo.(*authn.UserInfo).Token
+		req.Header.Set("Authorization", token)
 	}
 
 	req.Header.Set("Content-Length", strconv.Itoa(len(buf)))
@@ -1206,10 +1224,14 @@ func (c *InternalClient) SendMessage(ctx context.Context, uri *pnet.URI, msg []b
 	if err != nil {
 		return errors.Wrap(err, "making new request")
 	}
+
 	req.Header.Set("Content-Type", "application/x-protobuf")
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Connection", "keep-alive")
+	if c.secretKey != "" {
+		req.Header.Set("X-Feature-Key", c.secretKey)
+	}
 
 	// Execute request.
 	resp, err := c.executeRequest(req.WithContext(ctx))

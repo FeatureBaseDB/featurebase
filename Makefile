@@ -311,7 +311,7 @@ require-%:
 install-build-deps: install-protoc-gen-gofast install-protoc install-statik install-stringer install-peg
 
 install-statik:
-	go get -u github.com/rakyll/statik
+	go install github.com/rakyll/statik@latest
 
 install-stringer:
 	GO111MODULE=off $(GO) get -u golang.org/x/tools/cmd/stringer

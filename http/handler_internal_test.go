@@ -15,15 +15,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gorilla/securecookie"
+	"github.com/golang-jwt/jwt"
 	pilosa "github.com/molecula/featurebase/v2"
 	"github.com/molecula/featurebase/v2/authn"
-	"github.com/stretchr/testify/assert"
+	"golang.org/x/oauth2"
 
 	"github.com/molecula/featurebase/v2/authz"
 	"github.com/molecula/featurebase/v2/logger"
 	"github.com/molecula/featurebase/v2/pql"
-	"golang.org/x/oauth2"
 )
 
 // Test custom UnmarshalJSON for postIndexRequest object
@@ -198,12 +197,10 @@ func TestAuthentication(t *testing.T) {
 		GroupEndpointURL = "https://graph.microsoft.com/v1.0/me/transitiveMemberOf/microsoft.graph.group?$count=true"
 		LogoutURL        = "https://login.microsoftonline.com/common/oauth2/v2.0/logout"
 		Scopes           = []string{"https://graph.microsoft.com/.default", "offline_access"}
-		HashKey          = "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF"
-		BlockKey         = "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF"
+		SecretKey        = "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF"
 	)
 
-	hashKey, _ := hex.DecodeString("DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF")
-	blockKey, _ := hex.DecodeString("DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF")
+	secretKey, _ := hex.DecodeString("DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF")
 
 	a, err := authn.NewAuth(
 		logger.NewStandardLogger(os.Stdout),
@@ -215,97 +212,56 @@ func TestAuthentication(t *testing.T) {
 		LogoutURL,
 		ClientId,
 		ClientSecret,
-		HashKey,
-		BlockKey,
+		SecretKey,
 	)
 	if err != nil {
 		t.Errorf("building auth object%s", err)
 	}
 
 	h := Handler{
-		auth: a,
+		logger:      logger.NewStandardLogger(os.Stdout),
+		querylogger: logger.NewStandardLogger(os.Stdout),
+		auth:        a,
 	}
 
 	hOff := Handler{}
 
+	// make a valid token
+	tkn := jwt.New(jwt.SigningMethodHS256)
+	claims := tkn.Claims.(jwt.MapClaims)
+	groupString, _ := authn.ToGob64([]authn.Group{{GroupID: "thing", GroupName: "whatever"}})
+	claims["molecula-idp-groups"] = groupString
+	claims["oid"] = "42"
+	claims["name"] = "todd"
+	validToken, err := tkn.SignedString([]byte(secretKey))
+	if err != nil {
+		panic(err)
+	}
+	validToken = "Bearer " + validToken
+
 	token := oauth2.Token{
 		TokenType:    "Bearer",
+		AccessToken:  "asdf",
 		RefreshToken: "abcdef",
 		Expiry:       time.Now().Add(time.Hour),
 	}
 
-	expiredToken := oauth2.Token{
-		TokenType:    "Bearer",
-		RefreshToken: "abcdef",
-		Expiry:       time.Now(),
+	// make an expired token
+	expiredTkn := jwt.New(jwt.SigningMethodHS256)
+	expiredClaims := expiredTkn.Claims.(jwt.MapClaims)
+	expiredClaims["molecula-idp-groups"] = groupString
+	expiredClaims["oid"] = "42"
+	expiredClaims["name"] = "todd"
+	expiredClaims["exp"] = "1"
+	expiredToken, err := expiredTkn.SignedString([]byte(secretKey))
+	if err != nil {
+		panic(err)
 	}
-
-	grp := authn.Group{
-		UserID:    "snowstorm",
-		GroupID:   "abcd123-A",
-		GroupName: "Romantic Painters",
-	}
-
-	validCV := authn.AuthContext{
-		UserID:          "snowstorm",
-		UserName:        "J.M.W. Turner",
-		GroupMembership: []authn.Group{grp},
-		Token:           &token,
-	}
-
-	emptyCV := authn.AuthContext{
-		UserID:          "narcissus",
-		UserName:        "Caravaggio",
-		GroupMembership: []authn.Group{},
-		Token:           &token,
-	}
-	expiredCV := authn.AuthContext{
-		UserID:          "narcissus",
-		UserName:        "Caravaggio",
-		GroupMembership: []authn.Group{grp},
-		Token:           &expiredToken,
-	}
-
-	secure := securecookie.New(hashKey, blockKey)
-	validEncodedCV, _ := secure.Encode("molecula-chip", validCV)
-	noGroupEncodedCV, _ := secure.Encode("molecula-chip", emptyCV)
-	expiredEncodedCV, _ := secure.Encode("molecula-chip", expiredCV)
+	expiredToken = "Bearer " + expiredToken
 
 	validCookie := &gohttp.Cookie{
 		Name:     "molecula-chip",
-		Value:    validEncodedCV,
-		Path:     "/",
-		Secure:   true,
-		HttpOnly: true,
-		Expires:  token.Expiry,
-	}
-	noGroupCookie := &gohttp.Cookie{
-		Name:     "molecula-chip",
-		Value:    noGroupEncodedCV,
-		Path:     "/",
-		Secure:   true,
-		HttpOnly: true,
-		Expires:  token.Expiry,
-	}
-	expiredCookie := &gohttp.Cookie{
-		Name:     "molecula-chip",
-		Value:    expiredEncodedCV,
-		Path:     "/",
-		Secure:   true,
-		HttpOnly: true,
-		Expires:  time.Now().Add(time.Minute * -1),
-	}
-	emptyCookie := &gohttp.Cookie{
-		Name:     "molecula-chip",
-		Value:    "",
-		Path:     "/",
-		Secure:   true,
-		HttpOnly: true,
-		Expires:  token.Expiry,
-	}
-	unEncodedCookie := &gohttp.Cookie{
-		Name:     "molecula-chip",
-		Value:    "The quick brown fox",
+		Value:    token.AccessToken,
 		Path:     "/",
 		Secure:   true,
 		HttpOnly: true,
@@ -321,7 +277,9 @@ admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 		name     string
 		path     string
 		kind     string
+		method   string
 		yamlData string
+		token    string
 		cookie   *gohttp.Cookie
 		handler  endpoint
 		fn       evaluate
@@ -331,7 +289,7 @@ admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 			path:    "/login",
 			kind:    "type1",
 			cookie:  validCookie,
-			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) { h.handleLogin(w, r) },
+			handler: h.handleLogin,
 			fn: func(w *httptest.ResponseRecorder, data []byte) {
 				if strings.Index(string(data), AuthorizeURL) != 9 {
 					t.Errorf("incorrect redirect url: expected: %s, got: %s", AuthorizeURL, string(data))
@@ -343,7 +301,7 @@ admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 			path:    "/logout",
 			kind:    "type1",
 			cookie:  validCookie,
-			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) { h.handleLogout(w, r) },
+			handler: h.handleLogout,
 			fn: func(w *httptest.ResponseRecorder, data []byte) {
 				if w.Result().Cookies()[0].Value != "" {
 					t.Errorf("expected cookie to be cleared, got: %+v", w.Result().Cookies()[0].Value)
@@ -351,82 +309,69 @@ admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 			},
 		},
 		{
-			name:    "Authenticate-Groups",
+			name:    "Authenticate-ValidToken",
 			path:    "/auth",
-			kind:    "type1",
-			cookie:  validCookie,
-			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) { h.handleCheckAuthentication(w, r) },
+			kind:    "bearer",
+			token:   validToken,
+			handler: h.handleCheckAuthentication,
 			fn: func(w *httptest.ResponseRecorder, data []byte) {
 				if w.Result().StatusCode != 200 {
-					t.Errorf("expected http code 200, got: %+v", w.Result().StatusCode)
+					body, _ := readResponse(w)
+					t.Errorf("expected http code 200, got: %+v with body: %+v", w.Result().StatusCode, body)
 				}
 			},
 		},
 		{
-			name:    "Authenticate-NoGroups",
+			name:    "Authenticate-NoToken",
 			path:    "/auth",
 			kind:    "type1",
-			cookie:  noGroupCookie,
-			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) { h.handleCheckAuthentication(w, r) },
+			handler: h.handleCheckAuthentication,
 			fn: func(w *httptest.ResponseRecorder, data []byte) {
-				// status forbidden
-				if w.Result().StatusCode != 403 {
+				// not token at all == status forbidden
+				if w.Result().StatusCode != 401 {
+					t.Errorf("expected http code 401, got: %+v", w.Result().StatusCode)
+				}
+			},
+		},
+		{
+			name:    "Authenticate-InvalidToken",
+			path:    "/auth",
+			kind:    "type1",
+			token:   "this isn't a real token",
+			handler: h.handleCheckAuthentication,
+			fn: func(w *httptest.ResponseRecorder, data []byte) {
+				// no valid token in header == Unauthorized
+				if w.Result().StatusCode != gohttp.StatusUnauthorized {
+					t.Errorf("expected http code 401, got: %+v", w.Result().StatusCode)
+				}
+			},
+		},
+		{
+			name:    "Authenticate-ExpiredToken",
+			path:    "/auth",
+			kind:    "type1",
+			token:   expiredToken,
+			handler: h.handleCheckAuthentication,
+			fn: func(w *httptest.ResponseRecorder, data []byte) {
+				// expired token == unauthorized
+				if w.Result().StatusCode != 401 {
 					t.Errorf("expected http code 403, got: %+v", w.Result().StatusCode)
-				}
-			},
-		},
-		{
-			name:    "Authenticate-MalformedCookie",
-			path:    "/auth",
-			kind:    "type1",
-			cookie:  unEncodedCookie,
-			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) { h.handleCheckAuthentication(w, r) },
-			fn: func(w *httptest.ResponseRecorder, data []byte) {
-				// redirect to signin
-				if w.Result().StatusCode != 307 {
-					t.Errorf("expected http code 307, got: %+v", w.Result().StatusCode)
-				}
-			},
-		},
-		{
-			name:    "Authenticate-Expired",
-			path:    "/auth",
-			kind:    "type1",
-			cookie:  expiredCookie,
-			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) { h.handleCheckAuthentication(w, r) },
-			fn: func(w *httptest.ResponseRecorder, data []byte) {
-				// redirect to signin
-				if w.Result().StatusCode != 307 {
-					t.Errorf("expected http code 307, got: %+v", w.Result().StatusCode)
-				}
-			},
-		},
-		{
-			name:    "Authenticate-NoCookie",
-			path:    "/auth",
-			kind:    "type1",
-			cookie:  emptyCookie,
-			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) { h.handleCheckAuthentication(w, r) },
-			fn: func(w *httptest.ResponseRecorder, data []byte) {
-				// redirect to signin
-				if w.Result().StatusCode != 307 {
-					t.Errorf("expected http code 307, got: %+v", w.Result().StatusCode)
 				}
 			},
 		},
 		{
 			name:    "UserInfo",
 			path:    "/userinfo",
-			kind:    "type1",
-			cookie:  validCookie,
-			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) { h.handleUserInfo(w, r) },
+			kind:    "bearer",
+			token:   validToken,
+			handler: h.handleUserInfo,
 			fn: func(w *httptest.ResponseRecorder, data []byte) {
 				uinfo := authn.UserInfo{}
 				err = json.Unmarshal(data, &uinfo)
 				if err != nil {
 					t.Errorf("unmarshalling userinfo")
 				}
-				if uinfo.UserID != "snowstorm" && uinfo.UserName != "J.M.W. Turner" {
+				if uinfo.UserID != "42" && uinfo.UserName != "todd" {
 					t.Errorf("expected http code 400, got: %+v", uinfo)
 				}
 			},
@@ -434,27 +379,21 @@ admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 		{
 			name:    "UserInfo-NoCookie",
 			path:    "/userinfo",
-			kind:    "type1",
-			cookie:  emptyCookie,
-			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) { h.handleUserInfo(w, r) },
+			kind:    "bearer",
+			token:   "",
+			handler: h.handleUserInfo,
 			fn: func(w *httptest.ResponseRecorder, data []byte) {
-				uinfo := authn.UserInfo{}
-				err = json.Unmarshal(data, &uinfo)
-				if err != nil {
-					t.Errorf("unmarshalling userinfo")
-				}
-				if uinfo.UserID != "" && uinfo.UserName != "" {
-					t.Errorf("expected http code 400, got: %+v", uinfo)
+				if got := w.Result().StatusCode; got != gohttp.StatusForbidden {
+					t.Errorf("expected 403, got %v", got)
 				}
 			},
 		},
-
 		{
 			name:    "Redirect-NoAuthCode",
 			path:    "/redirect",
 			kind:    "type1",
 			cookie:  validCookie,
-			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) { h.handleRedirect(w, r) },
+			handler: h.handleRedirect,
 			fn: func(w *httptest.ResponseRecorder, data []byte) {
 				if strings.Index(string(data), AuthorizeURL) != 9 {
 					if w.Result().StatusCode != 400 {
@@ -468,7 +407,7 @@ admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 			path:    "/redirect",
 			kind:    "type2",
 			cookie:  validCookie,
-			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) { h.handleRedirect(w, r) },
+			handler: h.handleRedirect,
 			fn: func(w *httptest.ResponseRecorder, data []byte) {
 				if strings.Index(string(data), AuthorizeURL) != 9 {
 					if w.Result().StatusCode != 400 {
@@ -482,7 +421,7 @@ admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 			path:    "/login",
 			kind:    "type1",
 			cookie:  validCookie,
-			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) { hOff.handleLogin(w, r) },
+			handler: hOff.handleLogin,
 			fn: func(w *httptest.ResponseRecorder, data []byte) {
 				if strings.Index(string(data), AuthorizeURL) != 9 {
 					if w.Result().StatusCode != 204 {
@@ -496,7 +435,7 @@ admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 			path:    "/logout",
 			kind:    "type1",
 			cookie:  validCookie,
-			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) { hOff.handleLogout(w, r) },
+			handler: hOff.handleLogout,
 			fn: func(w *httptest.ResponseRecorder, data []byte) {
 				if strings.Index(string(data), AuthorizeURL) != 9 {
 					if w.Result().StatusCode != 204 {
@@ -510,7 +449,7 @@ admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 			path:    "/userinfo",
 			kind:    "type1",
 			cookie:  validCookie,
-			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) { hOff.handleUserInfo(w, r) },
+			handler: hOff.handleUserInfo,
 			fn: func(w *httptest.ResponseRecorder, data []byte) {
 				if strings.Index(string(data), AuthorizeURL) != 9 {
 					if w.Result().StatusCode != 204 {
@@ -524,7 +463,7 @@ admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 			path:    "/auth",
 			kind:    "type1",
 			cookie:  validCookie,
-			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) { hOff.handleCheckAuthentication(w, r) },
+			handler: hOff.handleCheckAuthentication,
 			fn: func(w *httptest.ResponseRecorder, data []byte) {
 				if strings.Index(string(data), AuthorizeURL) != 9 {
 					if w.Result().StatusCode != 204 {
@@ -538,7 +477,7 @@ admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 			path:    "/redirect",
 			kind:    "type1",
 			cookie:  validCookie,
-			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) { hOff.handleRedirect(w, r) },
+			handler: hOff.handleRedirect,
 			fn: func(w *httptest.ResponseRecorder, data []byte) {
 				if strings.Index(string(data), AuthorizeURL) != 9 {
 					if w.Result().StatusCode != 204 {
@@ -563,59 +502,57 @@ admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 			},
 		},
 		{
-			name:   "MW-ExpiredAuth",
-			path:   "/index/{index}/query",
-			kind:   "middleware",
-			cookie: expiredCookie,
+			// this tests that there are no permissions read in even though
+			// auth is turned on, so we get a 500
+			name:   "MW-CreateIndexGood",
+			path:   "/index/abcd",
+			kind:   "bearer",
+			method: gohttp.MethodPost,
+			token:  validToken,
 			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) {
-				f := h.chkAuthN(h.handlePostQuery)
+				h := h
+				var p authz.GroupPermissions
+				if err := p.ReadPermissionsFile(strings.NewReader(permissions1)); err != nil {
+					t.Errorf("Error: %s", err)
+				}
+				h.permissions = &p
+
+				f := h.chkAuthZ(h.handlePostIndex, authz.Admin)
 				f(w, r)
 			},
 			fn: func(w *httptest.ResponseRecorder, data []byte) {
-				if w.Result().StatusCode != 307 {
-					t.Errorf("expected http code 307, got: %+v", w.Result().StatusCode)
+				if got, want := w.Result().StatusCode, gohttp.StatusForbidden; got != want {
+					t.Errorf("expected %v, got %v", want, got)
 				}
-
 			},
 		},
 		{
-			name:   "MW-ExpiredAuth2",
-			path:   "/index/{index}/query",
-			kind:   "middleware",
-			cookie: expiredCookie,
-			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) {
-				f := h.chkAuthZ(h.handlePostQuery, authz.Admin)
-				f(w, r)
-			},
-			fn: func(w *httptest.ResponseRecorder, data []byte) {
-				if w.Result().StatusCode != 307 {
-					t.Errorf("expected http code 307, got: %+v", w.Result().StatusCode)
-				}
-
-			},
-		},
-		{
-			name:   "MW-NoPermissions",
-			path:   "/index/{index}/query",
-			kind:   "middleware",
-			cookie: validCookie,
+			// this tests that there are no permissions read in even though
+			// auth is turned on, so we get a 500
+			name:  "MW-NoPermissions",
+			path:  "/index/{index}/query",
+			kind:  "bearer",
+			token: validToken,
 			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) {
 				h := h
 				f := h.chkAuthZ(h.handlePostQuery, authz.Write)
-				assert.Panics(t, func() { f(w, r) }, "expected panic")
+				f(w, r)
 			},
-			fn: func(w *httptest.ResponseRecorder, data []byte) {},
+			fn: func(w *httptest.ResponseRecorder, data []byte) {
+				if got, want := w.Result().StatusCode, gohttp.StatusInternalServerError; got != want {
+					t.Errorf("expected %v, got %v", want, got)
+				}
+			},
 		},
 		{
-			name:   "MW-NoIndexNoAdmin",
-			path:   "/index/{index}/query",
-			kind:   "middleware",
-			cookie: validCookie,
+			name:  "MW-NoQuery",
+			path:  "/index/{index}/query",
+			kind:  "bearer",
+			token: validToken,
 			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) {
 				h := h
-				permFile := strings.NewReader(permissions1)
 				var p authz.GroupPermissions
-				if err := p.ReadPermissionsFile(permFile); err != nil {
+				if err := p.ReadPermissionsFile(strings.NewReader(permissions1)); err != nil {
 					t.Errorf("Error: %s", err)
 				}
 				h.permissions = &p
@@ -623,17 +560,16 @@ admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 				f(w, r)
 			},
 			fn: func(w *httptest.ResponseRecorder, data []byte) {
-				if w.Result().StatusCode != 400 {
-					t.Errorf("expected http code 400, got: %+v", w.Result().StatusCode)
+				if got, want := w.Result().StatusCode, gohttp.StatusBadRequest; got != want {
+					t.Errorf("expected %v, got: %+v", want, got)
 				}
-
 			},
 		},
 	}
 
 	for _, test := range tests {
 		switch test.kind {
-		case "type1":
+		case "type1", "middleware":
 			t.Run(test.name, func(t *testing.T) {
 				r := httptest.NewRequest(gohttp.MethodGet, test.path, nil)
 				w := httptest.NewRecorder()
@@ -664,20 +600,21 @@ admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 				test.fn(w, data)
 
 			})
-		case "middleware":
+		case "bearer":
 			t.Run(test.name, func(t *testing.T) {
-				r := httptest.NewRequest(gohttp.MethodGet, test.path, nil)
-				w := httptest.NewRecorder()
-				if test.cookie != nil {
-					r.AddCookie(test.cookie)
+				if test.method == "" {
+					test.method = gohttp.MethodGet
 				}
-
+				r := httptest.NewRequest(test.method, test.path, nil)
+				w := httptest.NewRecorder()
+				if test.token != "" {
+					r.Header.Add("Authorization", test.token)
+				}
 				test.handler(w, r)
 				data, err := readResponse(w)
 				if err != nil {
 					t.Errorf("expected no errors reading response, got: %+v", err)
 				}
-
 				test.fn(w, data)
 			})
 		}

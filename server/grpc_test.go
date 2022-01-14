@@ -3,13 +3,21 @@ package server_test
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
+	"io"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
-	"github.com/molecula/featurebase/v2"
+	"github.com/golang-jwt/jwt"
+	pilosa "github.com/molecula/featurebase/v2"
+	"github.com/molecula/featurebase/v2/authn"
+	"github.com/molecula/featurebase/v2/authz"
 	"github.com/molecula/featurebase/v2/pql"
 	pb "github.com/molecula/featurebase/v2/proto"
 	"github.com/molecula/featurebase/v2/server"
@@ -385,7 +393,7 @@ func TestQueryPQL(t *testing.T) {
 	m.MustCreateField(t, i.Name(), "f", pilosa.OptFieldKeys())
 	gh := server.NewGRPCHandler(m.API)
 
-	mock := &mockPilosa_QuerySQLServer{}
+	mock := &mockPilosa_QuerySQLServer{ctx: context.Background()}
 
 	err := gh.QueryPQL(&pb.QueryPQLRequest{
 		Index: i.Name(),
@@ -941,7 +949,7 @@ func TestQuerySQL(t *testing.T) {
 			if strings.HasPrefix(test.sql, "drop table") {
 				t.Skip("drop statements can only run once")
 			}
-			mock := &mockPilosa_QuerySQLServer{}
+			mock := &mockPilosa_QuerySQLServer{ctx: context.Background()}
 			err := gh.QuerySQL(&pb.QuerySQLRequest{Sql: test.sql}, mock)
 			if err != nil {
 				t.Fatalf("sql: %s, error: %v", test.sql, err)
@@ -968,7 +976,6 @@ func TestQuerySQLUnaryWithError(t *testing.T) {
 	ctx := grpc.NewContextWithServerTransportStream(context.Background(), stream)
 	gh, tearDownFunc := setUpTestQuerySQLUnary(ctx, t)
 	defer tearDownFunc()
-
 	tests := []struct {
 		sql string
 		err error
@@ -1005,6 +1012,157 @@ func TestQuerySQLUnaryWithError(t *testing.T) {
 			}
 		})
 	}
+	permissions := `
+"user-groups":
+  "dca35310-ecda-4f23-86cd-876aee55906b":
+    "grouper": "read"
+  "dca35310-ecda-4f23-86cd-876aee55906f":
+    "grouper": "write"
+admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
+
+	permFile := writeTestFile(t, "permissions.yaml", permissions)
+	auth := server.Auth{
+		Enable:           true,
+		ClientId:         "e9088663-eb08-41d7-8f65-efb5f54bbb71",
+		ClientSecret:     "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF",
+		AuthorizeURL:     "https://login.microsoftonline.com/4a137d66-d161-4ae4-b1e6-07e9920874b8/oauth2/v2.0/authorize",
+		TokenURL:         "https://login.microsoftonline.com/4a137d66-d161-4ae4-b1e6-07e9920874b8/oauth2/v2.0/token",
+		GroupEndpointURL: "https://graph.microsoft.com/v1.0/me/transitiveMemberOf/microsoft.graph.group?$count=true",
+		LogoutURL:        "https://login.microsoftonline.com/common/oauth2/v2.0/logout",
+		Scopes:           []string{"https://graph.microsoft.com/.default", "offline_access"},
+		SecretKey:        "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF",
+		PermissionsFile:  permFile,
+	}
+	var p authz.GroupPermissions
+	permsFile, err := os.Open(permFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer permsFile.Close()
+
+	if err = p.ReadPermissionsFile(permsFile); err != nil {
+		t.Fatal(err)
+	}
+	gh = gh.WithPerms(&p)
+	makeUser := func(groups []authn.Group, name string) *authn.UserInfo {
+		// make a valid token
+		tkn := jwt.New(jwt.SigningMethodHS256)
+		claims := tkn.Claims.(jwt.MapClaims)
+		groupString, _ := authn.ToGob64(groups)
+		claims["molecula-idp-groups"] = groupString
+		claims["oid"] = "42"
+		claims["name"] = name
+		secretKey, _ := hex.DecodeString(auth.SecretKey)
+
+		validToken, err := tkn.SignedString(secretKey)
+		if err != nil {
+			panic(err)
+		}
+		validToken = "Bearer " + validToken
+
+		adminUser := &authn.UserInfo{
+			UserID:   "fake" + name,
+			UserName: name,
+			Groups:   groups,
+			Token:    validToken,
+			Expiry:   time.Time{},
+		}
+		return adminUser
+	}
+
+	user := makeUser([]authn.Group{{GroupID: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe", GroupName: "adminGroup"}}, "admin")
+	adminCtx := context.WithValue(
+		ctx,
+		"userinfo",
+		user,
+	)
+	readuser := makeUser([]authn.Group{{GroupID: "dca35310-ecda-4f23-86cd-876aee55906b", GroupName: "readers"}}, "admin")
+	readCtx := context.WithValue(
+		ctx,
+		"userinfo",
+		readuser,
+	)
+	writeuser := makeUser([]authn.Group{{GroupID: "dca35310-ecda-4f23-86cd-876aee55906f", GroupName: "writers"}}, "admin")
+	writeCtx := context.WithValue(
+		ctx,
+		"userinfo",
+		writeuser,
+	)
+
+	sql := "select * from grouper"
+	t.Run("test-auth-with-admin-sqlUnary", func(t *testing.T) {
+		_, err := gh.QuerySQLUnary(adminCtx, &pb.QuerySQLRequest{Sql: sql})
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+	t.Run("test-auth-with-read-sqlUnary", func(t *testing.T) {
+		_, err := gh.QuerySQLUnary(readCtx, &pb.QuerySQLRequest{Sql: sql})
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+	t.Run("test-admin-auth-sql", func(t *testing.T) {
+		mock := &mockPilosa_QuerySQLServer{ctx: adminCtx}
+
+		err := gh.QuerySQL(&pb.QuerySQLRequest{Sql: sql}, mock)
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+	t.Run("test-admin-auth-get-index", func(t *testing.T) {
+		_, err := gh.GetIndex(adminCtx, &pb.GetIndexRequest{Name: "grouper"})
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+	t.Run("test-admin-auth-get-indexes", func(t *testing.T) {
+
+		_, err := gh.GetIndexes(adminCtx, &pb.GetIndexesRequest{})
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+	t.Run("test-admin-auth-pql", func(t *testing.T) {
+		_, err := gh.QueryPQLUnary(adminCtx, &pb.QueryPQLRequest{
+			Index: "grouper",
+			Pql:   `Set(0, color="red")`,
+		})
+		if err != nil {
+			// Unary query should work
+			t.Fatal(err)
+		}
+	})
+	t.Run("test-write-with-read-auth-pql", func(t *testing.T) {
+		_, err := gh.QueryPQLUnary(readCtx, &pb.QueryPQLRequest{
+			Index: "grouper",
+			Pql:   `Set(0, color="red")`,
+		})
+		if err == nil {
+			//should not be able to write
+			t.Fatal(err)
+		}
+	})
+	t.Run("test-write-with-write-auth-pql", func(t *testing.T) {
+		_, err := gh.QueryPQLUnary(writeCtx, &pb.QueryPQLRequest{
+			Index: "grouper",
+			Pql:   `Set(0, color="red")`,
+		})
+		if err != nil {
+			//should be able to write
+			t.Fatal(err)
+		}
+	})
+	t.Run("test-write-with-admin-auth-pql", func(t *testing.T) {
+		_, err := gh.QueryPQLUnary(adminCtx, &pb.QueryPQLRequest{
+			Index: "grouper",
+			Pql:   `Set(0, color="green")`,
+		})
+		if err != nil {
+			//should be able to write
+			t.Fatal(err)
+		}
+	})
 }
 
 func TestCRUDIndexes(t *testing.T) {
@@ -1014,7 +1172,6 @@ func TestCRUDIndexes(t *testing.T) {
 	stream := &MockServerTransportStream{}
 	ctx := grpc.NewContextWithServerTransportStream(context.Background(), stream)
 	gh := server.NewGRPCHandler(m.API)
-
 	t.Run("CreateIndex", func(t *testing.T) {
 		// Try CreateIndex for testindex1
 		_, err := gh.CreateIndex(ctx, &pb.CreateIndexRequest{Name: "testindex1", Keys: true})
@@ -1448,6 +1605,7 @@ func (stream *MockServerTransportStream) ClearMD() {
 
 type mockPilosa_QuerySQLServer struct {
 	MockServerTransportStream
+	ctx context.Context
 	pb.Pilosa_QuerySQLServer
 	Results []*pb.RowResponse
 }
@@ -1470,9 +1628,19 @@ func (m *mockPilosa_QuerySQLServer) SetTrailer(md metadata.MD) {
 }
 
 func (m *mockPilosa_QuerySQLServer) Context() context.Context {
-	return context.Background()
+	return m.ctx
 }
 
 func (m *mockPilosa_QuerySQLServer) clearResults() {
 	m.Results = m.Results[:0]
+}
+func writeTestFile(t *testing.T, filename, content string) string {
+	fname := filepath.Join(t.TempDir(), filename)
+	f, err := os.Create(fname)
+	if err != nil {
+		panic(filename)
+	}
+	io.WriteString(f, content)
+	defer f.Close()
+	return fname
 }

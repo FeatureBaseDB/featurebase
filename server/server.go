@@ -85,8 +85,7 @@ type Command struct {
 	pgserver     *PostgresServer
 
 	serverOptions []pilosa.ServerOption
-
-	auth *authn.Auth
+	auth          *authn.Auth
 }
 
 type CommandOption func(c *Command) error
@@ -110,6 +109,8 @@ func OptCommandConfig(config *Config) CommandOption {
 		defer c.Config.MustValidate()
 		if c.Config != nil {
 			c.Config.Etcd = config.Etcd
+			c.Config.Auth = config.Auth
+			c.Config.TLS = config.TLS
 			return nil
 		}
 		c.Config = config
@@ -481,7 +482,6 @@ func (m *Command) SetupServer() error {
 		pilosa.OptServerStatsClient(statsClient),
 		pilosa.OptServerURI(advertiseURI),
 		pilosa.OptServerGRPCURI(advertiseGRPCURI),
-		pilosa.OptServerInternalClient(http.NewInternalClientFromURI(uri, c)),
 		pilosa.OptServerClusterName(m.Config.Cluster.Name),
 		pilosa.OptServerSerializer(proto.Serializer{}),
 		pilosa.OptServerStorageConfig(m.Config.Storage),
@@ -496,6 +496,12 @@ func (m *Command) SetupServer() error {
 	}
 
 	serverOptions = append(serverOptions, m.serverOptions...)
+
+	if m.Config.Auth.Enable {
+		serverOptions = append(serverOptions, pilosa.OptServerInternalClient(http.NewInternalClientFromURI(uri, c, http.WithSecretKey(m.Config.Auth.SecretKey))))
+	} else {
+		serverOptions = append(serverOptions, pilosa.OptServerInternalClient(http.NewInternalClientFromURI(uri, c)))
+	}
 
 	m.Server, err = pilosa.NewServer(serverOptions...)
 
@@ -514,13 +520,6 @@ func (m *Command) SetupServer() error {
 	// Tell server about its new API, which its client will need.
 	m.Server.SetAPI(m.API)
 
-	m.grpcServer, err = NewGRPCServer(
-		OptGRPCServerAPI(m.API),
-		OptGRPCServerListener(m.grpcLn),
-		OptGRPCServerTLSConfig(m.tlsConfig),
-		OptGRPCServerLogger(m.logger),
-		OptGRPCServerStats(statsClient),
-	)
 	if err != nil {
 		return errors.Wrap(err, "new grpc server")
 	}
@@ -539,7 +538,7 @@ func (m *Command) SetupServer() error {
 		}
 
 		ac := m.Config.Auth
-		m.auth, err = authn.NewAuth(m.logger, m.listenURI.String(), ac.Scopes, ac.AuthorizeURL, ac.TokenURL, ac.GroupEndpointURL, ac.LogoutURL, ac.ClientId, ac.ClientSecret, ac.HashKey, ac.BlockKey)
+		m.auth, err = authn.NewAuth(m.logger, m.listenURI.String(), ac.Scopes, ac.AuthorizeURL, ac.TokenURL, ac.GroupEndpointURL, ac.LogoutURL, ac.ClientId, ac.ClientSecret, ac.SecretKey)
 		if err != nil {
 			return errors.Wrap(err, "instantiating authN object")
 		}
@@ -561,6 +560,16 @@ func (m *Command) SetupServer() error {
 		}
 
 	}
+
+	m.grpcServer, err = NewGRPCServer(
+		OptGRPCServerAPI(m.API),
+		OptGRPCServerListener(m.grpcLn),
+		OptGRPCServerTLSConfig(m.tlsConfig),
+		OptGRPCServerLogger(m.logger),
+		OptGRPCServerStats(statsClient),
+		OptGRPCServerAuth(m.auth),
+		OptGRPCServerPerm(&p),
+	)
 
 	m.Handler, err = http.NewHandler(
 		http.OptHandlerAllowedOrigins(m.Config.Handler.AllowedOrigins),

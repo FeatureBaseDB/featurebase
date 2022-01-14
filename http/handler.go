@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"encoding/hex"
 	"encoding/json"
 	"expvar"
 	"fmt"
@@ -416,9 +417,9 @@ func newRouter(handler *Handler) http.Handler {
 	router.HandleFunc("/index/{index}/field/", handler.chkAuthZ(handler.handlePostField, authz.Write)).Methods("POST").Name("PostField")
 	router.HandleFunc("/index/{index}/field/{field}", handler.chkAuthZ(handler.handlePostField, authz.Write)).Methods("POST").Name("PostField")
 	router.HandleFunc("/index/{index}/field/{field}", handler.chkAuthZ(handler.handleDeleteField, authz.Write)).Methods("DELETE").Name("DeleteField")
-	router.HandleFunc("/index/{index}/field/{field}/import", handler.chkAuthZ(handler.handlePostImport, authz.Read)).Methods("POST").Name("PostImport")
+	router.HandleFunc("/index/{index}/field/{field}/import", handler.chkAuthZ(handler.handlePostImport, authz.Write)).Methods("POST").Name("PostImport")
 	router.HandleFunc("/index/{index}/field/{field}/mutex-check", handler.chkAuthZ(handler.handleGetMutexCheck, authz.Read)).Methods("GET").Name("GetMutexCheck")
-	router.HandleFunc("/index/{index}/field/{field}/import-roaring/{shard}", handler.chkAuthZ(handler.handlePostImportRoaring, authz.Read)).Methods("POST").Name("PostImportRoaring")
+	router.HandleFunc("/index/{index}/field/{field}/import-roaring/{shard}", handler.chkAuthZ(handler.handlePostImportRoaring, authz.Write)).Methods("POST").Name("PostImportRoaring")
 	router.HandleFunc("/index/{index}/query", handler.chkAuthZ(handler.handlePostQuery, authz.Read)).Methods("POST").Name("PostQuery")
 	router.HandleFunc("/info", handler.chkAuthZ(handler.handleGetInfo, authz.Admin)).Methods("GET").Name("GetInfo")
 	router.HandleFunc("/recalculate-caches", handler.chkAuthZ(handler.handleRecalculateCaches, authz.Admin)).Methods("POST").Name("RecalculateCaches")
@@ -444,14 +445,18 @@ func newRouter(handler *Handler) http.Handler {
 
 	// /internal endpoints are for internal use only; they may change at any time.
 	// DO NOT rely on these for external applications!
-	router.HandleFunc("/internal/cluster/message", handler.chkAuthN(handler.handlePostClusterMessage)).Methods("POST").Name("PostClusterMessage")
+
+	// Truly used internally by featurebease
+	router.HandleFunc("/internal/cluster/message", handler.chkInternal(handler.handlePostClusterMessage)).Methods("POST").Name("PostClusterMessage")
+	router.HandleFunc("/internal/translate/data", handler.chkInternal(handler.handleGetTranslateData)).Methods("GET").Name("GetTranslateData")
+	router.HandleFunc("/internal/translate/data", handler.chkInternal(handler.handlePostTranslateData)).Methods("POST").Name("PostTranslateData")
+
+	// other ones
 	router.HandleFunc("/internal/fragment/block/data", handler.chkAuthN(handler.handleGetFragmentBlockData)).Methods("GET").Name("GetFragmentBlockData")
 	router.HandleFunc("/internal/fragment/blocks", handler.chkAuthN(handler.handleGetFragmentBlocks)).Methods("GET").Name("GetFragmentBlocks")
 	router.HandleFunc("/internal/fragment/data", handler.chkAuthN(handler.handleGetFragmentData)).Methods("GET").Name("GetFragmentData")
 	router.HandleFunc("/internal/fragment/nodes", handler.chkAuthN(handler.handleGetFragmentNodes)).Methods("GET").Name("GetFragmentNodes")
 	router.HandleFunc("/internal/partition/nodes", handler.chkAuthN(handler.handleGetPartitionNodes)).Methods("GET").Name("GetPartitionNodes")
-	router.HandleFunc("/internal/translate/data", handler.chkAuthN(handler.handleGetTranslateData)).Methods("GET").Name("GetTranslateData")
-	router.HandleFunc("/internal/translate/data", handler.chkAuthN(handler.handlePostTranslateData)).Methods("POST").Name("PostTranslateData")
 	router.HandleFunc("/internal/translate/keys", handler.chkAuthN(handler.handlePostTranslateKeys)).Methods("POST").Name("PostTranslateKeys")
 	router.HandleFunc("/internal/translate/ids", handler.chkAuthN(handler.handlePostTranslateIDs)).Methods("POST").Name("PostTranslateIDs")
 	router.HandleFunc("/internal/index/{index}/field/{field}/mutex-check", handler.chkAuthN(handler.handleInternalGetMutexCheck)).Methods("GET").Name("InternalGetMutexCheck")
@@ -540,11 +545,25 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.Handler.ServeHTTP(w, r)
 }
 
+func (h *Handler) chkInternal(handler http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if h.auth != nil {
+			secret, ok := r.Header["X-Feature-Key"]
+			decodedString, err := hex.DecodeString(secret[0])
+			if err != nil || !ok || !bytes.Equal(decodedString, h.auth.SecretKey()) {
+				http.Error(w, errors.Wrap(err, "internal secret key validation failed").Error(), http.StatusUnauthorized)
+				return
+			}
+		}
+		handler.ServeHTTP(w, r)
+	}
+}
+
 func (h *Handler) chkAuthN(handler http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if h.auth != nil {
-			if _, err := h.auth.Authenticate(w, r); err != nil {
-				http.Error(w, errors.Wrap(err, "authenticating").Error(), http.StatusBadRequest)
+			if _, err := h.auth.Authenticate(getToken(r)); err != nil {
+				http.Error(w, errors.Wrap(err, "authenticating").Error(), http.StatusUnauthorized)
 				return
 			}
 		}
@@ -556,9 +575,9 @@ func (h *Handler) chkAuthZ(handler http.HandlerFunc, perm authz.Permission) http
 	return func(w http.ResponseWriter, r *http.Request) {
 		lperm := perm
 		if h.auth != nil {
-			groups, err := h.auth.Authenticate(w, r)
+			uinfo, err := h.auth.Authenticate(getToken(r))
 			if err != nil {
-				http.Error(w, errors.Wrap(err, "authenticating").Error(), http.StatusBadRequest)
+				http.Error(w, errors.Wrap(err, "authenticating").Error(), http.StatusForbidden)
 				return
 			}
 
@@ -568,7 +587,16 @@ func (h *Handler) chkAuthZ(handler http.HandlerFunc, perm authz.Permission) http
 				return
 			}
 
-			uinfo := h.auth.GetUserInfo(w, r)
+			ctx := context.WithValue(r.Context(), contextKeyGroupMembership, uinfo.Groups)
+
+			if h.permissions.IsAdmin(uinfo.Groups) {
+				ctx = context.WithValue(ctx, contextKeyPermission, authz.Admin)
+				handler.ServeHTTP(w, r.WithContext(ctx))
+				return
+			} else if lperm == authz.Admin {
+				http.Error(w, "Insufficient permissions: user does not have admin permission", http.StatusForbidden)
+				return
+			}
 
 			var queryString string
 			queryRequest := r.Context().Value(contextKeyQueryRequest)
@@ -591,14 +619,18 @@ func (h *Handler) chkAuthZ(handler http.HandlerFunc, perm authz.Permission) http
 				h.querylogger.Infof("User ID: %s, User Name: %s, Endpoint: %s, Index: %s, Query: %s, Err: %v", uinfo.UserID, uinfo.UserName, r.URL.Path, "indexName", queryString, err)
 			}
 
-			ctx := context.WithValue(r.Context(), contextKeyGroupMembership, groups)
 			indexName, ok := mux.Vars(r)["index"]
 			if ok {
-				p, err := h.permissions.GetPermissions(groups, indexName)
-				ctx = context.WithValue(r.Context(), contextKeyPermission, p)
-				if err != nil || !p.Satisfies(lperm) {
+				p, err := h.permissions.GetPermissions(uinfo, indexName)
+				ctx = context.WithValue(ctx, contextKeyPermission, p)
+				if err != nil {
 					w.Header().Add("Content-Type", "text/plain")
-					w.WriteHeader(http.StatusForbidden)
+					http.Error(w, errors.Wrap(err, "Insufficient Permissions").Error(), http.StatusForbidden)
+					return
+				}
+				if !p.Satisfies(lperm) {
+					w.Header().Add("Content-Type", "text/plain")
+					http.Error(w, fmt.Sprintf("Insufficient permissions: user has %s permissions, but request requires %s permission", p, lperm), http.StatusForbidden)
 					return
 				}
 			}
@@ -3551,10 +3583,11 @@ func (h *Handler) handleCheckAuthentication(w http.ResponseWriter, r *http.Reque
 		http.Error(w, "", http.StatusNoContent)
 		return
 	}
-	groups, err := h.auth.Authenticate(w, r)
-	if groups == nil || err != nil {
+	uinfo, err := h.auth.Authenticate(getToken(r))
+
+	if uinfo == nil || err != nil {
 		w.Header().Add("Content-Type", "text/plain")
-		w.WriteHeader(http.StatusForbidden)
+		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
 	w.Header().Add("Content-Type", "text/plain")
@@ -3572,7 +3605,14 @@ func (h *Handler) handleUserInfo(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "", http.StatusNoContent)
 		return
 	}
-	if err := json.NewEncoder(w).Encode(h.auth.GetUserInfo(w, r)); err != nil {
+	uinfo, err := h.auth.Authenticate(getToken(r))
+	if err != nil {
+		h.logger.Errorf("error authenticating: %v", err)
+		http.Error(w, err.Error(), http.StatusForbidden)
+		return
+	}
+
+	if err := json.NewEncoder(w).Encode(uinfo); err != nil {
 		h.logger.Errorf("writing user info: %s", err)
 	}
 }
@@ -3583,4 +3623,21 @@ func (h *Handler) handleLogout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.auth.Logout(w, r)
+}
+
+// getToken gets the access token from the request, returning empty string on
+// error
+func getToken(r *http.Request) string {
+	if token, ok := r.Header["Authorization"]; ok && len(token) > 0 {
+		parts := strings.Split(token[0], "Bearer ")
+		if len(parts) != 2 {
+			return ""
+		}
+		return parts[1]
+	}
+	cookie, err := r.Cookie("molecula-chip")
+	if err != nil {
+		return ""
+	}
+	return cookie.Value
 }
