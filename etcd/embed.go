@@ -227,12 +227,12 @@ func (e *Etcd) retryClient(fn func(cli *clientv3.Client) error) (err error) {
 			break
 		default:
 			// nil, or an error we don't know about
-			return err
+			return errors.Wrap(err, "non-retryable error")
 		}
 	}
 	// if we got here, we got a total of three of some combination of
 	// ErrTimeout or ErrLeaderChanged, and we're giving up.
-	return err
+	return errors.Wrap(err, "exhausted all retries")
 }
 
 func parseOptions(opt Options) *embed.Config {
