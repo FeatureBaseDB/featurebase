@@ -1032,6 +1032,7 @@ func (f *Field) createViewIfNotExistsBase(cvm *CreateViewMessage) (*view, bool, 
 func (f *Field) newView(path, name string) *view {
 	view := newView(f.holder, path, f.index, f.name, name, f.options)
 	view.idx = f.idx
+	view.fld = f
 	view.stats = f.Stats
 	view.broadcaster = f.broadcaster
 	return view
