@@ -188,7 +188,6 @@ package for linux amd64:
 
 # Build a FB Docker image with CI/CD and push to the GitLab registry.
 build container fb:
-  image: docker:stable
   stage: build
   needs:
     - "build for linux amd64"
@@ -203,6 +202,23 @@ build container fb:
     - docker build --build-arg GO_VERSION=$GOVERSION -t $tag -f .gitlab/Dockerfile .
     - docker push $tag
     - echo Created docker featurebase image with tag "$tag"
+
+
+# clustertests doesn't run in docker, and requires several things to be set up on the runner to work:
+# 1. Install Go, make sure it's on the path
+# 2. Make sure "make" is installed
+# 3. make sure docker/docker-compose is installed
+# 4. make sure the git config is done `git config --global --add url."ssh://git@github.com/".insteadOf "https://github.com/"`
+# 5. Add deploy key github.com/molecula/featurebase/settings/keys and add public key in .ssh folder of gitlab-runner user
+clustertests:
+  stage: integration
+  tags:
+    - shell
+    - gcp # this is to restrict to the GCP runner we set up manually, once all our runners are set up properly we can remove this.
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
+  script:
+    - make clustertests
 
 smoke test:
   stage: integration
