@@ -970,7 +970,7 @@ func TestQuerySQL(t *testing.T) {
 	}
 }
 
-func TestQuerySQLUnaryWithError(t *testing.T) {
+func TestQuerySQLWithError(t *testing.T) {
 
 	stream := &MockServerTransportStream{}
 	ctx := grpc.NewContextWithServerTransportStream(context.Background(), stream)
@@ -1060,14 +1060,13 @@ admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 		}
 		validToken = "Bearer " + validToken
 
-		adminUser := &authn.UserInfo{
+		return &authn.UserInfo{
 			UserID:   "fake" + name,
 			UserName: name,
 			Groups:   groups,
 			Token:    validToken,
 			Expiry:   time.Time{},
 		}
-		return adminUser
 	}
 
 	user := makeUser([]authn.Group{{GroupID: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe", GroupName: "adminGroup"}}, "admin")
@@ -1076,7 +1075,7 @@ admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 		"userinfo",
 		user,
 	)
-	readuser := makeUser([]authn.Group{{GroupID: "dca35310-ecda-4f23-86cd-876aee55906b", GroupName: "readers"}}, "admin")
+	readuser := makeUser([]authn.Group{{GroupID: "dca35310-ecda-4f23-86cd-876aee55906b", GroupName: "readers"}}, "reader")
 	readCtx := context.WithValue(
 		ctx,
 		"userinfo",
@@ -1110,6 +1109,16 @@ admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 			t.Fatal(err)
 		}
 	})
+
+	t.Run("test-admin-auth-sql-show", func(t *testing.T) {
+		mock := &mockPilosa_QuerySQLServer{ctx: adminCtx}
+
+		err := gh.QuerySQL(&pb.QuerySQLRequest{Sql: "show tables"}, mock)
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+
 	t.Run("test-admin-auth-get-index", func(t *testing.T) {
 		_, err := gh.GetIndex(adminCtx, &pb.GetIndexRequest{Name: "grouper"})
 		if err != nil {
@@ -1140,6 +1149,23 @@ admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 		})
 		if err == nil {
 			//should not be able to write
+			t.Fatal(err)
+		}
+	})
+	t.Run("test-show-tables-unary", func(t *testing.T) {
+		response, err := gh.QuerySQLUnary(readCtx, &pb.QuerySQLRequest{
+			Sql: "show tables",
+		})
+
+		if err != nil && len(response.Rows) != 1 {
+			t.Fatal(err)
+		}
+	})
+	t.Run("test-show-tables-unary-admin", func(t *testing.T) {
+		response, err := gh.QuerySQLUnary(adminCtx, &pb.QuerySQLRequest{
+			Sql: "show tables",
+		})
+		if err != nil && len(response.Rows) != 3 {
 			t.Fatal(err)
 		}
 	})

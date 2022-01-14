@@ -5,9 +5,11 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/molecula/featurebase/v2"
+	pilosa "github.com/molecula/featurebase/v2"
 	pproto "github.com/molecula/featurebase/v2/proto"
 	"github.com/pkg/errors"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"vitess.io/vitess/go/vt/sqlparser"
 )
 
@@ -46,16 +48,32 @@ func (s *ShowHandler) execShowTables(ctx context.Context, showStmt *sqlparser.Sh
 		return nil, errors.Wrap(err, "getting schema")
 	}
 
-	result := make(pproto.ConstRowser, len(indexInfo))
-	for i, ii := range indexInfo {
-		result[i] = pproto.RowResponse{
+	allowed, ok := ctx.Value("indices").([]string)
+
+	result := make(pproto.ConstRowser, 0)
+	for _, ii := range indexInfo {
+		if ok {
+			// if authorization is turned on, allowed will be a list
+			// so we have to check if the index is in the allowed list
+			found := false
+			for _, idx := range allowed {
+				if ii.Name == idx {
+					found = true
+					break
+				}
+			}
+			if !found {
+				continue
+			}
+		}
+		result = append(result, pproto.RowResponse{
 			Headers: []*pproto.ColumnInfo{
 				{Name: "Table", Datatype: "string"},
 			},
 			Columns: []*pproto.ColumnResponse{
 				{ColumnVal: &pproto.ColumnResponse_StringVal{StringVal: ii.Name}},
 			},
-		}
+		})
 	}
 
 	// Sort the result.
@@ -64,6 +82,19 @@ func (s *ShowHandler) execShowTables(ctx context.Context, showStmt *sqlparser.Sh
 
 func (s *ShowHandler) execShowFields(ctx context.Context, showStmt *sqlparser.Show) (pproto.ToRowser, error) {
 	indexName := showStmt.OnTable.ToViewName().Name.String()
+	allowed, ok := ctx.Value("indices").([]string)
+	if ok {
+		found := false
+		for _, idx := range allowed {
+			if idx == indexName {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return nil, status.Error(codes.PermissionDenied, "insufficient permissions to access requested tables")
+		}
+	}
 	index, err := s.api.Index(ctx, indexName)
 	if err != nil {
 		return nil, errors.Wrap(err, "getting schema")

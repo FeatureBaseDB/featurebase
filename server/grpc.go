@@ -166,15 +166,17 @@ func (h *GRPCHandler) QuerySQL(req *pb.QuerySQLRequest, stream pb.Pilosa_QuerySQ
 		if err != nil {
 			return errors.Wrap(err, "parsing SQL")
 		}
+		allowed := h.perms.GetAuthorizedIndexList(uinfo.(*authn.UserInfo).Groups, authz.Read)
 		if !h.perms.IsAdmin(uinfo.(*authn.UserInfo).Groups) {
-			if !isAllowed(parsed.Tables, h.perms.GetAuthorizedIndexList(uinfo.(*authn.UserInfo).Groups, authz.Read)) {
+			if !isAllowed(parsed.Tables, allowed) {
 				return status.Error(codes.PermissionDenied, "insufficient permissions to access requested tables")
 			}
+			ctx = context.WithValue(ctx, "indices", allowed)
 		}
 	}
 
 	start := time.Now()
-	results, err := h.execSQL(stream.Context(), req.Sql)
+	results, err := h.execSQL(ctx, req.Sql)
 	duration := time.Since(start)
 	if err != nil {
 		return err
@@ -208,6 +210,10 @@ func (h *GRPCHandler) QuerySQL(req *pb.QuerySQLRequest, stream pb.Pilosa_QuerySQ
 // https://github.com/molecula/pilosa/pull/644
 func (h *GRPCHandler) QuerySQLUnary(ctx context.Context, req *pb.QuerySQLRequest) (*pb.TableResponse, error) {
 	start := time.Now()
+	uinfo := ctx.Value("userinfo")
+	if uinfo != nil && !h.perms.IsAdmin(uinfo.(*authn.UserInfo).Groups) {
+		ctx = context.WithValue(ctx, "indices", h.perms.GetAuthorizedIndexList(uinfo.(*authn.UserInfo).Groups, authz.Read))
+	}
 	results, err := h.execSQL(ctx, req.Sql)
 	if err != nil {
 		return nil, err
