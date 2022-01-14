@@ -4,17 +4,23 @@ package pilosa_test
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"math/rand"
+	"os"
+	"path/filepath"
 	"reflect"
 	"sort"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/golang-jwt/jwt"
 	pilosa "github.com/molecula/featurebase/v2"
+	"github.com/molecula/featurebase/v2/authn"
 	"github.com/molecula/featurebase/v2/boltdb"
 	"github.com/molecula/featurebase/v2/http"
 	"github.com/molecula/featurebase/v2/server"
@@ -1436,4 +1442,216 @@ func TestAPI_RBFDebugInfo(t *testing.T) {
 	} else if infos := coord.API.RBFDebugInfo(); infos == nil {
 		t.Fatal("expected info")
 	}
+}
+
+// makeUser makes an authnUserInfo from groups and a name and a secret key
+func makeUser(t *testing.T, groups []authn.Group, name, secret string) *authn.UserInfo {
+	tkn := jwt.New(jwt.SigningMethodHS256)
+	claims := tkn.Claims.(jwt.MapClaims)
+	groupString, err := authn.ToGob64(groups)
+	if err != nil {
+		t.Fatalf("gobbing groups %v", err)
+	}
+	claims["molecula-idp-groups"] = groupString
+	claims["oid"] = "42"
+	claims["name"] = name
+	secretKey, _ := hex.DecodeString(secret)
+
+	validToken, err := tkn.SignedString(secretKey)
+	if err != nil {
+		t.Fatalf("signing string %v", err)
+	}
+	validToken = "Bearer " + validToken
+
+	return &authn.UserInfo{
+		UserID:   "fake" + name,
+		UserName: name,
+		Groups:   groups,
+		Token:    validToken,
+		Expiry:   time.Time{},
+	}
+}
+
+func TestAuth_MultiNode(t *testing.T) {
+
+	// create permissions file
+	permissions := `
+"user-groups":
+  "dca35310-ecda-4f23-86cd-876aee55906b":
+    "test": "read"
+  "dca35310-ecda-4f23-86cd-876aee55906f":
+    "test": "write"
+admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
+
+	// authentication on
+	auth := server.Auth{
+		Enable:           true,
+		ClientId:         "e9088663-eb08-41d7-8f65-efb5f54bbb71",
+		ClientSecret:     "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF",
+		AuthorizeURL:     "https://login.microsoftonline.com/4a137d66-d161-4ae4-b1e6-07e9920874b8/oauth2/v2.0/authorize",
+		TokenURL:         "https://login.microsoftonline.com/4a137d66-d161-4ae4-b1e6-07e9920874b8/oauth2/v2.0/token",
+		GroupEndpointURL: "https://graph.microsoft.com/v1.0/me/transitiveMemberOf/microsoft.graph.group?$count=true",
+		LogoutURL:        "https://login.microsoftonline.com/common/oauth2/v2.0/logout",
+		Scopes:           []string{"https://graph.microsoft.com/.default", "offline_access"},
+		SecretKey:        "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF",
+		PermissionsFile:  writeTestFile(t, "permissions.yaml", permissions),
+		QueryLogPath:     writeTestFile(t, "queryLog.log", ""),
+	}
+
+	config := server.NewConfig()
+	config.Auth = auth
+
+	// set up TLS certificates
+	localhostCert := `-----BEGIN CERTIFICATE-----
+MIICEzCCAXygAwIBAgIQMIMChMLGrR+QvmQvpwAU6zANBgkqhkiG9w0BAQsFADAS
+MRAwDgYDVQQKEwdBY21lIENvMCAXDTcwMDEwMTAwMDAwMFoYDzIwODQwMTI5MTYw
+MDAwWjASMRAwDgYDVQQKEwdBY21lIENvMIGfMA0GCSqGSIb3DQEBAQUAA4GNADCB
+iQKBgQDuLnQAI3mDgey3VBzWnB2L39JUU4txjeVE6myuDqkM/uGlfjb9SjY1bIw4
+iA5sBBZzHi3z0h1YV8QPuxEbi4nW91IJm2gsvvZhIrCHS3l6afab4pZBl2+XsDul
+rKBxKKtD1rGxlG4LjncdabFn9gvLZad2bSysqz/qTAUStTvqJQIDAQABo2gwZjAO
+BgNVHQ8BAf8EBAMCAqQwEwYDVR0lBAwwCgYIKwYBBQUHAwEwDwYDVR0TAQH/BAUw
+AwEB/zAuBgNVHREEJzAlggtleGFtcGxlLmNvbYcEfwAAAYcQAAAAAAAAAAAAAAAA
+AAAAATANBgkqhkiG9w0BAQsFAAOBgQCEcetwO59EWk7WiJsG4x8SY+UIAA+flUI9
+tyC4lNhbcF2Idq9greZwbYCqTTTr2XiRNSMLCOjKyI7ukPoPjo16ocHj+P3vZGfs
+h1fIw3cSS2OolhloGw/XM6RWPWtPAlGykKLciQrBru5NAPvCMsb/I1DAceTiotQM
+fblo6RBxUQ==
+-----END CERTIFICATE-----`
+
+	localhostKey := `-----BEGIN RSA PRIVATE KEY-----
+MIICXgIBAAKBgQDuLnQAI3mDgey3VBzWnB2L39JUU4txjeVE6myuDqkM/uGlfjb9
+SjY1bIw4iA5sBBZzHi3z0h1YV8QPuxEbi4nW91IJm2gsvvZhIrCHS3l6afab4pZB
+l2+XsDulrKBxKKtD1rGxlG4LjncdabFn9gvLZad2bSysqz/qTAUStTvqJQIDAQAB
+AoGAGRzwwir7XvBOAy5tM/uV6e+Zf6anZzus1s1Y1ClbjbE6HXbnWWF/wbZGOpet
+3Zm4vD6MXc7jpTLryzTQIvVdfQbRc6+MUVeLKwZatTXtdZrhu+Jk7hx0nTPy8Jcb
+uJqFk541aEw+mMogY/xEcfbWd6IOkp+4xqjlFLBEDytgbIECQQDvH/E6nk+hgN4H
+qzzVtxxr397vWrjrIgPbJpQvBsafG7b0dA4AFjwVbFLmQcj2PprIMmPcQrooz8vp
+jy4SHEg1AkEA/v13/5M47K9vCxmb8QeD/asydfsgS5TeuNi8DoUBEmiSJwma7FXY
+fFUtxuvL7XvjwjN5B30pNEbc6Iuyt7y4MQJBAIt21su4b3sjXNueLKH85Q+phy2U
+fQtuUE9txblTu14q3N7gHRZB4ZMhFYyDy8CKrN2cPg/Fvyt0Xlp/DoCzjA0CQQDU
+y2ptGsuSmgUtWj3NM9xuwYPm+Z/F84K6+ARYiZ6PYj013sovGKUFfYAqVXVlxtIX
+qyUBnu3X9ps8ZfjLZO7BAkEAlT4R5Yl6cGhaJQYZHOde3JEMhNRcVFMO8dJDaFeo
+f9Oeos0UUothgiDktdQHxdNEwLjQf7lJJBzV+5OtwswCWA==
+-----END RSA PRIVATE KEY-----`
+
+	config.TLS.CertificateKeyPath = writeTestFile(t, "certKey.pem", localhostKey)
+	config.TLS.CertificatePath = writeTestFile(t, "cert.pem", localhostCert)
+
+	c := test.MustRunCluster(t, 3,
+		[]server.CommandOption{
+			server.OptCommandServerOptions(
+				pilosa.OptServerNodeID("node0"),
+				pilosa.OptServerClusterHasher(&test.ModHasher{}),
+			),
+			server.OptCommandConfig(config),
+		},
+		[]server.CommandOption{
+			server.OptCommandServerOptions(
+				pilosa.OptServerNodeID("node1"),
+				pilosa.OptServerClusterHasher(&test.ModHasher{}),
+			),
+			server.OptCommandConfig(config),
+		},
+		[]server.CommandOption{
+			server.OptCommandServerOptions(
+				pilosa.OptServerNodeID("node2"),
+				pilosa.OptServerClusterHasher(&test.ModHasher{}),
+			),
+			server.OptCommandConfig(config),
+		},
+	)
+	defer c.Close()
+
+	adminCtx := context.WithValue(
+		context.Background(),
+		"userinfo",
+		makeUser(t, []authn.Group{{GroupID: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe", GroupName: "adminGroup"}}, "admin", config.Auth.SecretKey),
+	)
+	readCtx := context.WithValue(
+		context.Background(),
+		"userinfo",
+		makeUser(t, []authn.Group{{GroupID: "dca35310-ecda-4f23-86cd-876aee55906b", GroupName: "readGroup"}}, "reader", config.Auth.SecretKey),
+	)
+	writeCtx := context.WithValue(
+		context.Background(),
+		"userinfo",
+		makeUser(t, []authn.Group{{GroupID: "dca35310-ecda-4f23-86cd-876aee55906f", GroupName: "writeGroup"}}, "writer", config.Auth.SecretKey),
+	)
+
+	primaryAPI := c.GetPrimary().API
+
+	// needs internal/cluster/message
+	indexName := "test"
+	_, err := primaryAPI.CreateIndex(adminCtx, indexName, pilosa.IndexOptions{})
+	if err != nil {
+		t.Fatalf("creating index: %v", err)
+	}
+	// needs internal/translate/data
+	fieldName := "f"
+	_, err = primaryAPI.CreateField(adminCtx, indexName, fieldName, pilosa.OptFieldTypeSet(pilosa.DefaultCacheType, 100))
+	if err != nil {
+		t.Fatalf("creating field: %v", err)
+	}
+
+	_, err = primaryAPI.Query(readCtx, &pilosa.QueryRequest{
+		Index: indexName,
+		Query: fmt.Sprintf(`Set(1, %s=1)`, fieldName),
+	})
+	if err == nil {
+		t.Fatalf("readCtx should not be able to set bits")
+	}
+
+	_, err = primaryAPI.Query(writeCtx, &pilosa.QueryRequest{
+		Index: indexName,
+		Query: fmt.Sprintf(`Set(1, %s=1)`, fieldName),
+	})
+	if err != nil {
+		t.Fatalf("writeCtx should be able to set bits: %v", err)
+	}
+
+	_, err = primaryAPI.Query(adminCtx, &pilosa.QueryRequest{
+		Index: indexName,
+		Query: fmt.Sprintf(`Set(1, %s=1)`, fieldName),
+	})
+	if err != nil {
+		t.Fatalf("adminCtx should be able to set bits: %v", err)
+	}
+
+	_, err = primaryAPI.Query(readCtx, &pilosa.QueryRequest{
+		Index: indexName,
+		Query: fmt.Sprintf(`Count(Row(%s=1))`, fieldName),
+	})
+	if err != nil {
+		t.Fatalf("readCtx should be able read: %v", err)
+	}
+
+	_, err = primaryAPI.Query(writeCtx, &pilosa.QueryRequest{
+		Index: indexName,
+		Query: fmt.Sprintf(`Count(Row(%s=1))`, fieldName),
+	})
+	if err != nil {
+		t.Fatalf("writeCtx should be able read: %v", err)
+	}
+
+	_, err = primaryAPI.Query(adminCtx, &pilosa.QueryRequest{
+		Index: indexName,
+		Query: fmt.Sprintf(`Count(Row(%s=1))`, fieldName),
+	})
+	if err != nil {
+		t.Fatalf("adminCtx should be able read: %v", err)
+	}
+}
+
+func writeTestFile(t *testing.T, filename, content string) string {
+	t.Helper()
+	fname := filepath.Join(t.TempDir(), filename)
+	f, err := os.Create(fname)
+	if err != nil {
+		t.Fatalf("could not create file %v with err %v", filename, err)
+	}
+	_, err = io.WriteString(f, content)
+	if err != nil {
+		t.Fatalf("could not write string %v", err)
+	}
+	defer f.Close()
+	return fname
 }

@@ -51,7 +51,7 @@ test('test useAuth - expect authenticated', async () => {
 
 test('test useAuth - expect not authed', async () => {
   const mockResponse: AxiosResponse<any> = {
-    status: 200,
+    status: 401,
     data: '',
     statusText: '',
     headers: {},

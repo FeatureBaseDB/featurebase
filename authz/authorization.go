@@ -68,7 +68,8 @@ func (p *GroupPermissions) ReadPermissionsFile(permsFile io.Reader) (err error) 
 	return
 }
 
-func (p *GroupPermissions) GetPermissions(groups []authn.Group, index string) (permission Permission, errors error) {
+func (p *GroupPermissions) GetPermissions(user *authn.UserInfo, index string) (permission Permission, errors error) {
+	groups := user.Groups
 	if admin := p.IsAdmin(groups); admin {
 		return Admin, nil
 	}
@@ -88,7 +89,7 @@ func (p *GroupPermissions) GetPermissions(groups []authn.Group, index string) (p
 			if perm, ok := p.Permissions[group.GroupID][index]; ok {
 				allPermissions[perm] = true
 			} else {
-				return None, fmt.Errorf("user %s does not have permission to index %s", group.UserID, index)
+				return None, fmt.Errorf("user %s does not have permission to index %s", user.UserID, index)
 			}
 		} else {
 			groupsDenied = append(groupsDenied, group.GroupID)

@@ -13,10 +13,14 @@ import (
 	"time"
 
 	"github.com/improbable-eng/grpc-web/go/grpcweb"
-	"github.com/molecula/featurebase/v2"
+	pilosa "github.com/molecula/featurebase/v2"
+	"github.com/molecula/featurebase/v2/authn"
+	"github.com/molecula/featurebase/v2/authz"
 	"github.com/molecula/featurebase/v2/logger"
+	"github.com/molecula/featurebase/v2/pql"
 	pb "github.com/molecula/featurebase/v2/proto"
 	vdsm_pb "github.com/molecula/featurebase/v2/proto/vdsm"
+	"github.com/molecula/featurebase/v2/sql"
 	"github.com/molecula/featurebase/v2/stats"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
@@ -30,6 +34,7 @@ import (
 // GRPCHandler contains methods which handle the various gRPC requests.
 type GRPCHandler struct {
 	api               *pilosa.API
+	perms             *authz.GroupPermissions
 	logger            logger.Logger
 	stats             stats.StatsClient
 	inspectDeprecated sync.Once
@@ -46,6 +51,11 @@ func (h *GRPCHandler) WithLogger(logger logger.Logger) *GRPCHandler {
 
 func (h *GRPCHandler) WithStats(stats stats.StatsClient) *GRPCHandler {
 	h.stats = stats
+	return h
+}
+
+func (h *GRPCHandler) WithPerms(perms *authz.GroupPermissions) *GRPCHandler {
+	h.perms = perms
 	return h
 }
 
@@ -126,15 +136,49 @@ func (h *GRPCHandler) execSQL(ctx context.Context, queryStr string) (pb.ToRowser
 	return execSQL(ctx, h.api, h.logger, queryStr)
 }
 
+func isAllowed(requested []string, allowed []string) bool {
+	if len(allowed) == 0 {
+		return false
+	}
+
+	for _, r := range requested {
+		in := false
+		for _, a := range allowed {
+			if a == r {
+				in = true
+			}
+		}
+		if !in {
+			return false
+		}
+	}
+	return true
+}
+
 // QuerySQL handles the SQL request and sends RowResponses to the stream.
 func (h *GRPCHandler) QuerySQL(req *pb.QuerySQLRequest, stream pb.Pilosa_QuerySQLServer) error {
+	ctx := stream.Context()
+	uinfo := ctx.Value("userinfo")
+	if uinfo != nil {
+		// authz
+		m := sql.NewMapper()
+		parsed, err := m.MapSQL(req.Sql)
+		if err != nil {
+			return errors.Wrap(err, "parsing SQL")
+		}
+		if !h.perms.IsAdmin(uinfo.(*authn.UserInfo).Groups) {
+			if !isAllowed(parsed.Tables, h.perms.GetAuthorizedIndexList(uinfo.(*authn.UserInfo).Groups, authz.Read)) {
+				return status.Error(codes.PermissionDenied, "insufficient permissions to access requested tables")
+			}
+		}
+	}
+
 	start := time.Now()
 	results, err := h.execSQL(stream.Context(), req.Sql)
 	duration := time.Since(start)
 	if err != nil {
 		return err
 	}
-
 	err = stream.SendHeader(metadata.New(map[string]string{
 		"duration": strconv.Itoa(int(duration)),
 	}))
@@ -198,6 +242,23 @@ func (h *GRPCHandler) QueryPQL(req *pb.QueryPQLRequest, stream pb.Pilosa_QueryPQ
 		Query: req.Pql,
 	}
 
+	ctx := stream.Context()
+	uinfo := ctx.Value("userinfo")
+	if uinfo != nil {
+		lperm := authz.Read
+		q, err := pql.ParseString(req.Pql)
+		if err != nil {
+			return status.Error(codes.InvalidArgument, err.Error())
+		}
+		if q.WriteCallN() > 0 {
+			lperm = authz.Write
+		}
+		if !h.perms.IsAdmin(uinfo.(*authn.UserInfo).Groups) {
+			if !isAllowed([]string{req.Index}, h.perms.GetAuthorizedIndexList(uinfo.(*authn.UserInfo).Groups, lperm)) {
+				return status.Error(codes.PermissionDenied, "insufficient permissions to access requested indexes")
+			}
+		}
+	}
 	t := time.Now()
 	resp, err := h.api.Query(stream.Context(), &query)
 	durQuery := time.Since(t)
@@ -246,6 +307,22 @@ func (h *GRPCHandler) QueryPQLUnary(ctx context.Context, req *pb.QueryPQLRequest
 		Index: req.Index,
 		Query: req.Pql,
 	}
+	uinfo := ctx.Value("userinfo")
+	if uinfo != nil {
+		lperm := authz.Read
+		q, err := pql.ParseString(req.Pql)
+		if err != nil {
+			return nil, status.Error(codes.InvalidArgument, err.Error())
+		}
+		if q.WriteCallN() > 0 {
+			lperm = authz.Write
+		}
+		if !h.perms.IsAdmin(uinfo.(*authn.UserInfo).Groups) {
+			if !isAllowed([]string{req.Index}, h.perms.GetAuthorizedIndexList(uinfo.(*authn.UserInfo).Groups, lperm)) {
+				return nil, status.Error(codes.PermissionDenied, fmt.Sprintf("insufficient permissions for %v", req.Index))
+			}
+		}
+	}
 
 	t := time.Now()
 	resp, err := h.api.Query(ctx, &query)
@@ -291,6 +368,12 @@ func (h *GRPCHandler) QueryPQLUnary(ctx context.Context, req *pb.QueryPQLRequest
 
 // CreateIndex creates a new Index
 func (h *GRPCHandler) CreateIndex(ctx context.Context, req *pb.CreateIndexRequest) (*pb.CreateIndexResponse, error) {
+	uinfo := ctx.Value("userinfo")
+	if uinfo != nil {
+		if !h.perms.IsAdmin(uinfo.(*authn.UserInfo).Groups) {
+			return nil, status.Error(codes.PermissionDenied, "must be admin to create index")
+		}
+	}
 	// Always enable TrackExistence for gRPC-created indexes
 	opts := pilosa.IndexOptions{Keys: req.Keys, TrackExistence: true}
 	_, err := h.api.CreateIndex(ctx, req.Name, opts)
@@ -302,6 +385,20 @@ func (h *GRPCHandler) CreateIndex(ctx context.Context, req *pb.CreateIndexReques
 
 // GetIndex returns a single Index given a name
 func (h *GRPCHandler) GetIndex(ctx context.Context, req *pb.GetIndexRequest) (*pb.GetIndexResponse, error) {
+	uinfo := ctx.Value("userinfo")
+	if uinfo != nil {
+		pp, ok := uinfo.(*authn.UserInfo)
+		if !ok {
+			return nil, status.Error(codes.InvalidArgument, "malformed auth header")
+		}
+		p, err := h.perms.GetPermissions(pp, req.Name)
+		if err != nil {
+			return nil, err
+		}
+		if !p.Satisfies(authz.Read) {
+			return nil, status.Error(codes.PermissionDenied, fmt.Sprintf("permission denied for index %v", req.Name))
+		}
+	}
 	schema, err := h.api.Schema(ctx, false)
 	if err != nil {
 		return nil, errToStatusError(err)
@@ -317,20 +414,44 @@ func (h *GRPCHandler) GetIndex(ctx context.Context, req *pb.GetIndexRequest) (*p
 
 // GetIndexes returns a list of all Indexes
 func (h *GRPCHandler) GetIndexes(ctx context.Context, req *pb.GetIndexesRequest) (*pb.GetIndexesResponse, error) {
+	uinfo := ctx.Value("userinfo")
+	var pp *authn.UserInfo
+	if uinfo != nil {
+		var ok bool
+		pp, ok = uinfo.(*authn.UserInfo)
+		if !ok {
+			return nil, status.Error(codes.InvalidArgument, "malformed auth header")
+		}
+	}
 	schema, err := h.api.Schema(ctx, false)
 	if err != nil {
 		return nil, errToStatusError(err)
 	}
 
 	indexes := make([]*pb.Index, len(schema))
-	for i, index := range schema {
-		indexes[i] = &pb.Index{Name: index.Name}
+	i := 0
+	for _, index := range schema {
+		if pp != nil {
+			if p, err := h.perms.GetPermissions(pp, index.Name); err == nil && p.Satisfies(authz.Read) {
+				indexes[i] = &pb.Index{Name: index.Name}
+				i += 1
+			}
+		} else {
+			indexes[i] = &pb.Index{Name: index.Name}
+			i += 1
+		}
 	}
 	return &pb.GetIndexesResponse{Indexes: indexes}, nil
 }
 
 // DeleteIndex deletes an Index
 func (h *GRPCHandler) DeleteIndex(ctx context.Context, req *pb.DeleteIndexRequest) (*pb.DeleteIndexResponse, error) {
+	uinfo := ctx.Value("userinfo")
+	if uinfo != nil {
+		if !h.perms.IsAdmin(uinfo.(*authn.UserInfo).Groups) {
+			return nil, status.Error(codes.PermissionDenied, "must be admin to delete index")
+		}
+	}
 	err := h.api.DeleteIndex(ctx, req.Name)
 	if err != nil {
 		return nil, errToStatusError(err)
@@ -1301,6 +1422,8 @@ type grpcServer struct {
 	grpcServer *grpc.Server
 	ln         net.Listener
 	tlsConfig  *tls.Config
+	auth       *authn.Auth
+	perms      *authz.GroupPermissions
 
 	logger logger.Logger
 	stats  stats.StatsClient
@@ -1339,6 +1462,20 @@ func OptGRPCServerLogger(logger logger.Logger) grpcServerOption {
 func OptGRPCServerStats(stats stats.StatsClient) grpcServerOption {
 	return func(s *grpcServer) error {
 		s.stats = stats
+		return nil
+	}
+}
+
+func OptGRPCServerAuth(authn *authn.Auth) grpcServerOption {
+	return func(s *grpcServer) error {
+		s.auth = authn
+		return nil
+	}
+}
+
+func OptGRPCServerPerm(gp *authz.GroupPermissions) grpcServerOption {
+	return func(s *grpcServer) error {
+		s.perms = gp
 		return nil
 	}
 }
@@ -1398,10 +1535,37 @@ func NewGRPCServer(opts ...grpcServerOption) (*grpcServer, error) {
 		creds := credentials.NewTLS(server.tlsConfig)
 		gopts = append(gopts, grpc.Creds(creds))
 	}
+	//if auth enabled
+	if server.auth != nil {
+		gopts = append(gopts, grpc.UnaryInterceptor(
+			func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+				ctx, err := Valid(ctx, server.auth)
+				if err != nil {
+					return nil, err
+				}
+				return handler(ctx, req)
+			},
+		))
+		gopts = append(gopts, grpc.StreamInterceptor(
+			func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+				ctx, err := Valid(ss.Context(), server.auth)
+				if err != nil {
+					return err
+				}
+				return handler(srv, newWrappedStream(ss, ctx))
+			},
+		))
+	}
 
 	// create grpc server
 	server.grpcServer = grpc.NewServer(gopts...)
 	grpcHandler := NewGRPCHandler(server.api).WithLogger(server.logger).WithStats(server.stats)
+
+	// add server permissions if we've got 'em
+	if server.perms != nil {
+		grpcHandler.perms = server.perms
+	}
+
 	pb.RegisterPilosaServer(server.grpcServer, grpcHandler)
 	vdsm_pb.RegisterMoleculaServer(server.grpcServer, NewVDSMGRPCHandler(grpcHandler, server.api).WithLogger(server.logger).WithStats(server.stats))
 
@@ -1409,4 +1573,59 @@ func NewGRPCServer(opts ...grpcServerOption) (*grpcServer, error) {
 	reflection.Register(server.grpcServer)
 
 	return server, nil
+}
+
+// wrappedStream wraps around the embedded grpc.ServerStream, and intercepts the RecvMsg and
+// SendMsg method call.
+type wrappedStream struct {
+	grpc.ServerStream
+	uiContext context.Context
+}
+
+func (w *wrappedStream) Context() context.Context {
+	return w.uiContext
+}
+func (w *wrappedStream) RecvMsg(m interface{}) error {
+	return w.ServerStream.RecvMsg(m)
+}
+
+func (w *wrappedStream) SendMsg(m interface{}) error {
+	return w.ServerStream.SendMsg(m)
+}
+
+func newWrappedStream(s grpc.ServerStream, ctx context.Context) grpc.ServerStream {
+	return &wrappedStream{s, ctx}
+}
+
+func Valid(ctx context.Context, auth *authn.Auth) (context.Context, error) {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return ctx, status.Errorf(codes.InvalidArgument, "missing metadata")
+	}
+	authorization, ok := md["authorization"]
+
+	if !ok {
+		c, ok := md["cookie"]
+		if !ok {
+			return ctx, status.Errorf(codes.InvalidArgument, "missing authorization token")
+		}
+		cookies := strings.Split(c[0], "; ")
+		for _, cookie := range cookies {
+			if strings.HasPrefix(cookie, "molecula-chip") {
+				authorization = strings.Split(cookie, "molecula-chip=")[1:]
+			}
+		}
+		if len(authorization) == 0 {
+			return ctx, status.Errorf(codes.InvalidArgument, "missing authorization token")
+
+		}
+	}
+
+	token := strings.TrimPrefix(authorization[0], "Bearer ")
+	userinfo, err := auth.Authenticate(token)
+	if err != nil {
+		return ctx, status.Errorf(codes.Unauthenticated, err.Error())
+	}
+
+	return context.WithValue(ctx, "userinfo", userinfo), nil
 }

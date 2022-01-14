@@ -107,17 +107,15 @@ admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 
 	// initializes groups that are returned from identity provider
 	groupName := "name"
-	userId := "user-id"
 	groupsList1 := []authn.Group{}
 	groupsList2 := []authn.Group{{
-		UserID:    userId,
 		GroupID:   "fake-group",
 		GroupName: groupName}}
 	groupsList3 := []authn.Group{
-		{UserID: userId, GroupID: "dca35310-ecda-4f23-86cd-876aee55906b", GroupName: groupName},
-		{UserID: userId, GroupID: "dca35310-ecda-4f23-86cd-876aee559900", GroupName: groupName},
+		{GroupID: "dca35310-ecda-4f23-86cd-876aee55906b", GroupName: groupName},
+		{GroupID: "dca35310-ecda-4f23-86cd-876aee559900", GroupName: groupName},
 	}
-	groupsList4 := []authn.Group{{UserID: userId, GroupID: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe", GroupName: groupName}}
+	groupsList4 := []authn.Group{{GroupID: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe", GroupName: groupName}}
 
 	tests := []struct {
 		yamlData   string
@@ -187,7 +185,7 @@ admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 				t.Errorf("Error: %s", err)
 			}
 
-			p1, err := p.GetPermissions(test.groups, test.index)
+			p1, err := p.GetPermissions(&authn.UserInfo{Groups: test.groups}, test.index)
 
 			if p1 != test.userAccess {
 				t.Errorf("expected permission to be %s, but got %s", test.userAccess, p1)
@@ -206,11 +204,11 @@ admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 func TestAuth_IsAdmin(t *testing.T) {
 
 	group1 := []authn.Group{
-		{UserID: "admin-user-id", GroupID: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe", GroupName: "admin-group"},
+		{GroupID: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe", GroupName: "admin-group"},
 	}
 
 	group2 := []authn.Group{
-		{UserID: "user-id", GroupID: "dca35310-ecda-4f23-86cd-876aee55906b", GroupName: "group-name"},
+		{GroupID: "dca35310-ecda-4f23-86cd-876aee55906b", GroupName: "group-name"},
 	}
 
 	groupPermissions := authz.GroupPermissions{
@@ -247,15 +245,15 @@ func TestAuth_IsAdmin(t *testing.T) {
 func TestAuth_GetAuthorizedIndexList(t *testing.T) {
 
 	group1 := []authn.Group{
-		{UserID: "user-id", GroupID: "dca35310-ecda-4f23-86cd-876aee55906b", GroupName: "group-name"},
+		{GroupID: "dca35310-ecda-4f23-86cd-876aee55906b", GroupName: "group-name"},
 	}
 
 	group2 := []authn.Group{
-		{UserID: "admin-user-id", GroupID: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe", GroupName: "admin-group"},
+		{GroupID: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe", GroupName: "admin-group"},
 	}
 
 	group3 := []authn.Group{
-		{UserID: "user-id", GroupID: "dca35310-ecda-4f23-86cd-876aee559900", GroupName: "group-name"},
+		{GroupID: "dca35310-ecda-4f23-86cd-876aee559900", GroupName: "group-name"},
 	}
 
 	p := authz.GroupPermissions{
