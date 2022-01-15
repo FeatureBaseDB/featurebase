@@ -67,7 +67,7 @@ type Server struct { // nolint: maligned
 	systemInfo    SystemInfo
 	gcNotifier    GCNotifier
 	logger        logger.Logger
-	querylogger   logger.Logger
+	queryLogger   logger.Logger
 	snapshotQueue SnapshotQueue
 
 	nodeID              string
@@ -115,7 +115,7 @@ func OptServerLogger(l logger.Logger) ServerOption {
 
 func OptServerQueryLogger(l logger.Logger) ServerOption {
 	return func(s *Server) error {
-		s.querylogger = l
+		s.queryLogger = l
 		return nil
 	}
 }
