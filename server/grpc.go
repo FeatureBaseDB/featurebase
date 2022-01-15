@@ -1624,8 +1624,8 @@ func Valid(ctx context.Context, method string, auth *authn.Auth, req interface{}
 
 	authorization, ok := md["authorization"]
 	if !ok {
-		c, ok := md["cookie"]
-		if !ok {
+		c, there := md["cookie"]
+		if !there {
 			return ctx, status.Errorf(codes.InvalidArgument, "missing authorization token")
 		}
 		cookies := strings.Split(c[0], "; ")
