@@ -27,6 +27,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/reflection"
 	"google.golang.org/grpc/status"
 )
@@ -36,6 +37,7 @@ type GRPCHandler struct {
 	api               *pilosa.API
 	perms             *authz.GroupPermissions
 	logger            logger.Logger
+	queryLogger       logger.Logger
 	stats             stats.StatsClient
 	inspectDeprecated sync.Once
 }
@@ -56,6 +58,11 @@ func (h *GRPCHandler) WithStats(stats stats.StatsClient) *GRPCHandler {
 
 func (h *GRPCHandler) WithPerms(perms *authz.GroupPermissions) *GRPCHandler {
 	h.perms = perms
+	return h
+}
+
+func (h *GRPCHandler) WithQueryLogger(logger logger.Logger) *GRPCHandler {
+	h.queryLogger = logger
 	return h
 }
 
@@ -166,6 +173,7 @@ func (h *GRPCHandler) QuerySQL(req *pb.QuerySQLRequest, stream pb.Pilosa_QuerySQ
 		if err != nil {
 			return errors.Wrap(err, "parsing SQL")
 		}
+
 		allowed := h.perms.GetAuthorizedIndexList(uinfo.(*authn.UserInfo).Groups, authz.Read)
 		if !h.perms.IsAdmin(uinfo.(*authn.UserInfo).Groups) {
 			if !isAllowed(parsed.Tables, allowed) {
@@ -1431,8 +1439,9 @@ type grpcServer struct {
 	auth       *authn.Auth
 	perms      *authz.GroupPermissions
 
-	logger logger.Logger
-	stats  stats.StatsClient
+	logger      logger.Logger
+	queryLogger logger.Logger
+	stats       stats.StatsClient
 }
 
 type grpcServerOption func(s *grpcServer) error
@@ -1482,6 +1491,13 @@ func OptGRPCServerAuth(authn *authn.Auth) grpcServerOption {
 func OptGRPCServerPerm(gp *authz.GroupPermissions) grpcServerOption {
 	return func(s *grpcServer) error {
 		s.perms = gp
+		return nil
+	}
+}
+
+func OptGRPCServerQueryLogger(logger logger.Logger) grpcServerOption {
+	return func(s *grpcServer) error {
+		s.queryLogger = logger
 		return nil
 	}
 }
@@ -1545,7 +1561,7 @@ func NewGRPCServer(opts ...grpcServerOption) (*grpcServer, error) {
 	if server.auth != nil {
 		gopts = append(gopts, grpc.UnaryInterceptor(
 			func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-				ctx, err := Valid(ctx, server.auth)
+				ctx, err := Valid(ctx, info.FullMethod, server.auth, req, server.queryLogger)
 				if err != nil {
 					return nil, err
 				}
@@ -1554,18 +1570,18 @@ func NewGRPCServer(opts ...grpcServerOption) (*grpcServer, error) {
 		))
 		gopts = append(gopts, grpc.StreamInterceptor(
 			func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
-				ctx, err := Valid(ss.Context(), server.auth)
+				ctx, err := Valid(ss.Context(), info.FullMethod, server.auth, srv, server.queryLogger)
 				if err != nil {
 					return err
 				}
-				return handler(srv, newWrappedStream(ss, ctx))
+				return handler(srv, &wrappedStream{ss, ctx})
 			},
 		))
 	}
 
 	// create grpc server
 	server.grpcServer = grpc.NewServer(gopts...)
-	grpcHandler := NewGRPCHandler(server.api).WithLogger(server.logger).WithStats(server.stats)
+	grpcHandler := NewGRPCHandler(server.api).WithLogger(server.logger).WithStats(server.stats).WithQueryLogger(server.queryLogger)
 
 	// add server permissions if we've got 'em
 	if server.perms != nil {
@@ -1591,6 +1607,7 @@ type wrappedStream struct {
 func (w *wrappedStream) Context() context.Context {
 	return w.uiContext
 }
+
 func (w *wrappedStream) RecvMsg(m interface{}) error {
 	return w.ServerStream.RecvMsg(m)
 }
@@ -1599,17 +1616,13 @@ func (w *wrappedStream) SendMsg(m interface{}) error {
 	return w.ServerStream.SendMsg(m)
 }
 
-func newWrappedStream(s grpc.ServerStream, ctx context.Context) grpc.ServerStream {
-	return &wrappedStream{s, ctx}
-}
-
-func Valid(ctx context.Context, auth *authn.Auth) (context.Context, error) {
+func Valid(ctx context.Context, method string, auth *authn.Auth, req interface{}, logger logger.Logger) (context.Context, error) {
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
 		return ctx, status.Errorf(codes.InvalidArgument, "missing metadata")
 	}
-	authorization, ok := md["authorization"]
 
+	authorization, ok := md["authorization"]
 	if !ok {
 		c, ok := md["cookie"]
 		if !ok {
@@ -1619,19 +1632,30 @@ func Valid(ctx context.Context, auth *authn.Auth) (context.Context, error) {
 		for _, cookie := range cookies {
 			if strings.HasPrefix(cookie, "molecula-chip") {
 				authorization = strings.Split(cookie, "molecula-chip=")[1:]
+				break
 			}
 		}
-		if len(authorization) == 0 {
-			return ctx, status.Errorf(codes.InvalidArgument, "missing authorization token")
-
-		}
+	}
+	if len(authorization) == 0 {
+		return ctx, status.Errorf(codes.InvalidArgument, "missing authorization token")
 	}
 
 	token := strings.TrimPrefix(authorization[0], "Bearer ")
-	userinfo, err := auth.Authenticate(token)
+	uinfo, err := auth.Authenticate(token)
 	if err != nil {
 		return ctx, status.Errorf(codes.Unauthenticated, err.Error())
 	}
 
-	return context.WithValue(ctx, "userinfo", userinfo), nil
+	p, ok := peer.FromContext(ctx)
+	ip := ""
+	if ok {
+		ip = p.Addr.String()
+	}
+	ua, ok := md["user-agent"]
+	if !ok {
+		ua = []string{""}
+	}
+	logger.Infof("GRPC: %v, %v, %v, %v, %v, %v", ip, ua, method, uinfo.UserID, uinfo.UserName, req)
+
+	return context.WithValue(ctx, "userinfo", uinfo), nil
 }

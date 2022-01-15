@@ -54,7 +54,7 @@ type Handler struct {
 
 	logger logger.Logger
 
-	querylogger logger.Logger
+	queryLogger logger.Logger
 
 	// Keeps the query argument validators for each handler
 	validators map[string]*queryValidationSpec
@@ -152,7 +152,7 @@ func OptHandlerLogger(logger logger.Logger) handlerOption {
 
 func OptHandlerQueryLogger(logger logger.Logger) handlerOption {
 	return func(h *Handler) error {
-		h.querylogger = logger
+		h.queryLogger = logger
 		return nil
 	}
 }
@@ -285,12 +285,7 @@ const (
 	contextKeyQueryRequest contextKeyQuery = iota
 	contextKeyQueryError
 	contextKeyGroupMembership
-	contextKeyPermission
 )
-
-func GetContextKeyPermission() contextKeyQuery {
-	return contextKeyPermission
-}
 
 // addQueryContext puts the results of handler.readQueryRequest into the Context for use by
 // both other middleware and any handlers.
@@ -573,80 +568,110 @@ func (h *Handler) chkAuthN(handler http.HandlerFunc) http.HandlerFunc {
 
 func (h *Handler) chkAuthZ(handler http.HandlerFunc, perm authz.Permission) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		lperm := perm
-		if h.auth != nil {
-			uinfo, err := h.auth.Authenticate(getToken(r))
-			if err != nil {
-				http.Error(w, errors.Wrap(err, "authenticating").Error(), http.StatusForbidden)
-				return
-			}
-
-			if h.permissions == nil {
-				h.logger.Errorf("authentication is turned on without authorization permissions set")
-				http.Error(w, "authorizing", http.StatusInternalServerError)
-				return
-			}
-
-			ctx := context.WithValue(r.Context(), contextKeyGroupMembership, uinfo.Groups)
-
-			if h.permissions.IsAdmin(uinfo.Groups) {
-				ctx = context.WithValue(ctx, contextKeyPermission, authz.Admin)
-				handler.ServeHTTP(w, r.WithContext(ctx))
-				return
-			} else if lperm == authz.Admin {
-				http.Error(w, "Insufficient permissions: user does not have admin permission", http.StatusForbidden)
-				return
-			}
-
-			var queryString string
-			queryRequest := r.Context().Value(contextKeyQueryRequest)
-			if req, ok := queryRequest.(*pilosa.QueryRequest); ok {
-				queryString = req.Query
-
-				q, err := pql.ParseString(queryString)
-				if err != nil {
-					http.Error(w, errors.Wrap(err, "parsing query string").Error(), http.StatusBadRequest)
-					return
-				}
-				if q.WriteCallN() > 0 {
-					lperm = authz.Write
-				}
-			}
-
-			queryString = strings.Replace(queryString, "\n", "", -1)
-
-			if r.Method == "POST" {
-				h.querylogger.Infof("User ID: %s, User Name: %s, Endpoint: %s, Index: %s, Query: %s, Err: %v", uinfo.UserID, uinfo.UserName, r.URL.Path, "indexName", queryString, err)
-			}
-
-			ctx = context.WithValue(r.Context(), contextKeyGroupMembership, uinfo.Groups)
-			indexName, ok := mux.Vars(r)["index"]
-
-			if !ok {
-				indexName = r.URL.Query().Get("index")
-			}
-
-			if indexName != "" {
-				p, err := h.permissions.GetPermissions(uinfo, indexName)
-				ctx = context.WithValue(r.Context(), contextKeyPermission, p)
-				if err != nil {
-					w.Header().Add("Content-Type", "text/plain")
-					http.Error(w, errors.Wrap(err, "Insufficient Permissions").Error(), http.StatusForbidden)
-					return
-				}
-				if !p.Satisfies(lperm) {
-					w.Header().Add("Content-Type", "text/plain")
-					http.Error(w, fmt.Sprintf("Insufficient permissions: user has %s permissions, but request requires %s permission", p, lperm), http.StatusForbidden)
-					return
-				}
-			}
-
-			handler.ServeHTTP(w, r.WithContext(ctx))
-		} else {
+		// if auth isn't turned on, just serve the request
+		if h.auth == nil {
 			handler.ServeHTTP(w, r)
+			return
 		}
 
+		// make a copy of the requested permissions
+		lperm := perm
+
+		// check if the user is authenticated
+		uinfo, err := h.auth.Authenticate(getToken(r))
+		if err != nil {
+			http.Error(w, errors.Wrap(err, "authenticating").Error(), http.StatusForbidden)
+			return
+		}
+
+		// put the user's groups in the context
+		ctx := context.WithValue(r.Context(), contextKeyGroupMembership, uinfo.Groups)
+
+		// unlikely h.permissions will be nil, but we'll check to be safe
+		if h.permissions == nil {
+			h.logger.Errorf("authentication is turned on without authorization permissions set")
+			http.Error(w, "authorizing", http.StatusInternalServerError)
+			return
+		}
+
+		// figure out what the user is querying for
+		queryString := ""
+		queryRequest := r.Context().Value(contextKeyQueryRequest)
+		if req, ok := queryRequest.(*pilosa.QueryRequest); ok {
+			queryString = req.Query
+
+			q, err := pql.ParseString(queryString)
+			if err != nil {
+				http.Error(w, errors.Wrap(err, "parsing query string").Error(), http.StatusBadRequest)
+				return
+			}
+
+			// if there are write calls, and the needed perms don't already
+			// satisfy write permissions, then make them write permissions
+			if q.WriteCallN() > 0 && !lperm.Satisfies(authz.Write) {
+				lperm = authz.Write
+			}
+		}
+		// make the query string pretty
+		queryString = strings.Replace(queryString, "\n", "", -1)
+
+		// figure out if we should log this query
+		toLog := true
+		for _, ep := range []string{"/status", "/metrics", "/info", "/internal"} {
+			if strings.HasPrefix(r.URL.Path, ep) {
+				toLog = false
+				break
+			}
+		}
+		if toLog {
+			h.queryLogger.Infof("%v, %v, %v, %v, %v, %v", GetIP(r), r.UserAgent(), r.URL.Path, uinfo.UserID, uinfo.UserName, queryString)
+		}
+
+		// if they're an admin, they can do whatever they want
+		if h.permissions.IsAdmin(uinfo.Groups) {
+			handler.ServeHTTP(w, r.WithContext(ctx))
+			return
+		} else if lperm == authz.Admin {
+			// if they're not an admin, and they need to be, we can just
+			// error right here
+			http.Error(w, "Insufficient permissions: user does not have admin permission", http.StatusForbidden)
+			return
+		}
+
+		// try to get the index name
+		indexName, ok := mux.Vars(r)["index"]
+		if !ok {
+			indexName = r.URL.Query().Get("index")
+		}
+
+		// if we have an index name, then we check the user permissions
+		// against that index
+		if indexName != "" {
+			p, err := h.permissions.GetPermissions(uinfo, indexName)
+			if err != nil {
+				w.Header().Add("Content-Type", "text/plain")
+				http.Error(w, errors.Wrap(err, "Insufficient Permissions").Error(), http.StatusForbidden)
+				return
+			}
+
+			// if they're not permitted to access this index, error
+			if !p.Satisfies(lperm) {
+				w.Header().Add("Content-Type", "text/plain")
+				http.Error(w, "Insufficient permissions", http.StatusForbidden)
+				return
+			}
+		}
+		handler.ServeHTTP(w, r.WithContext(ctx))
+
 	}
+}
+
+func GetIP(r *http.Request) string {
+	forwarded := r.Header.Get("X-FORWARDED-FOR")
+	if forwarded != "" {
+		return forwarded
+	}
+	return r.RemoteAddr
 }
 
 // statikHandler implements the http.Handler interface, and responds to

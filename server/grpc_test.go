@@ -18,6 +18,7 @@ import (
 	pilosa "github.com/molecula/featurebase/v2"
 	"github.com/molecula/featurebase/v2/authn"
 	"github.com/molecula/featurebase/v2/authz"
+	"github.com/molecula/featurebase/v2/logger"
 	"github.com/molecula/featurebase/v2/pql"
 	pb "github.com/molecula/featurebase/v2/proto"
 	"github.com/molecula/featurebase/v2/server"
@@ -1375,8 +1376,7 @@ func setUpTestQuerySQLUnary(ctx context.Context, t *testing.T) (gh *server.GRPCH
 	t.Helper()
 
 	m := test.RunCommand(t)
-	gh = server.NewGRPCHandler(m.API)
-
+	gh = server.NewGRPCHandler(m.API).WithQueryLogger(logger.NewStandardLogger(os.Stdout))
 	// grouper
 	grouper := m.MustCreateIndex(t, "grouper", pilosa.IndexOptions{Keys: false, TrackExistence: true})
 	m.MustCreateField(t, grouper.Name(), "color", pilosa.OptFieldKeys())

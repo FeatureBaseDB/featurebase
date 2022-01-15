@@ -220,7 +220,7 @@ func TestAuthentication(t *testing.T) {
 
 	h := Handler{
 		logger:      logger.NewStandardLogger(os.Stdout),
-		querylogger: logger.NewStandardLogger(os.Stdout),
+		queryLogger: logger.NewStandardLogger(os.Stdout),
 		auth:        a,
 	}
 
