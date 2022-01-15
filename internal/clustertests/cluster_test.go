@@ -4,6 +4,7 @@ package clustertest
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -124,7 +125,11 @@ func TestClusterStuff(t *testing.T) {
 		} else if resp, err := client.Do(req); err != nil {
 			t.Fatalf("doing request: %v", err)
 		} else if resp.StatusCode >= 400 {
-			t.Fatalf("bad response: %v", resp)
+			bod, readErr := io.ReadAll(resp.Body)
+			if readErr != nil {
+				t.Logf("reading error body: %v", readErr)
+			}
+			t.Fatalf("deleting index: code=%d, body=%s", resp.StatusCode, bod)
 		}
 
 		var restoreCmd *exec.Cmd
