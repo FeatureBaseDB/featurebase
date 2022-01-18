@@ -1658,12 +1658,11 @@ func Valid(ctx context.Context, method string, auth *authn.Auth, req interface{}
 
 	switch r := req.(type) {
 	case *pb.QueryPQLRequest:
-		logger.Infof("GRPC: %v, %v, %v, %v, %v, %+v", ip, ua, method, uinfo.UserID, uinfo.UserName, r)
+		logger.Infof("GRPC: %v, %v, %v, %v, %v, %s", ip, ua, method, uinfo.UserID, uinfo.UserName, r.Pql)
 	case *pb.QuerySQLRequest:
-		logger.Infof("GRPC: %v, %v, %v, %v, %v, %+v", ip, ua, method, uinfo.UserID, uinfo.UserName, r)
+		logger.Infof("GRPC: %v, %v, %v, %v, %v, %s", ip, ua, method, uinfo.UserID, uinfo.UserName, r.Sql)
 	default:
-		logger.Infof("GRPC: %v, %v, %v, %v, %v, %v", ip, ua, method, uinfo.UserID, uinfo.UserName)
-
+		logger.Infof("GRPC: %v, %v, %v, %v, %v", ip, ua, method, uinfo.UserID, uinfo.UserName)
 	}
 
 	return context.WithValue(ctx, "userinfo", uinfo), nil
