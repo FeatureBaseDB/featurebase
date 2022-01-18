@@ -196,7 +196,8 @@ export const QueryBuilderContainer = () => {
 
   return (
     <Fragment>
-      {tables.length > 0 ? (
+      {/* check if tables is not null AND tables.length > 0 */}
+      {(tables && tables.length > 0) ? (
         <Split
           sizes={showBuilder ? colSizes : [0, 100]}
           cursor="col-resize"
