@@ -30,6 +30,7 @@ import (
 	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/reflection"
 	"google.golang.org/grpc/status"
+	"vitess.io/vitess/go/vt/sqlparser"
 )
 
 // GRPCHandler contains methods which handle the various gRPC requests.
@@ -174,7 +175,13 @@ func (h *GRPCHandler) QuerySQL(req *pb.QuerySQLRequest, stream pb.Pilosa_QuerySQ
 			return errors.Wrap(err, "parsing SQL")
 		}
 
-		allowed := h.perms.GetAuthorizedIndexList(uinfo.(*authn.UserInfo).Groups, authz.Read)
+		perm := authz.Read
+		switch parsed.Statement.(type) {
+		case *sqlparser.DDL: // currently only used for DropTable
+			perm = authz.Admin
+		}
+
+		allowed := h.perms.GetAuthorizedIndexList(uinfo.(*authn.UserInfo).Groups, perm)
 		if !h.perms.IsAdmin(uinfo.(*authn.UserInfo).Groups) {
 			if !isAllowed(parsed.Tables, allowed) {
 				return status.Error(codes.PermissionDenied, "insufficient permissions to access requested tables")
@@ -219,9 +226,29 @@ func (h *GRPCHandler) QuerySQL(req *pb.QuerySQLRequest, stream pb.Pilosa_QuerySQ
 func (h *GRPCHandler) QuerySQLUnary(ctx context.Context, req *pb.QuerySQLRequest) (*pb.TableResponse, error) {
 	start := time.Now()
 	uinfo := ctx.Value("userinfo")
-	if uinfo != nil && !h.perms.IsAdmin(uinfo.(*authn.UserInfo).Groups) {
-		ctx = context.WithValue(ctx, "indices", h.perms.GetAuthorizedIndexList(uinfo.(*authn.UserInfo).Groups, authz.Read))
+	if uinfo != nil {
+		// authz
+		m := sql.NewMapper()
+		parsed, err := m.MapSQL(req.Sql)
+		if err != nil {
+			return nil, errors.Wrap(err, "parsing SQL")
+		}
+
+		perm := authz.Read
+		switch parsed.Statement.(type) {
+		case *sqlparser.DDL: // currently only used for DropTable
+			perm = authz.Admin
+		}
+
+		allowed := h.perms.GetAuthorizedIndexList(uinfo.(*authn.UserInfo).Groups, perm)
+		if !h.perms.IsAdmin(uinfo.(*authn.UserInfo).Groups) {
+			if !isAllowed(parsed.Tables, allowed) {
+				return nil, status.Error(codes.PermissionDenied, "insufficient permissions to access requested tables")
+			}
+			ctx = context.WithValue(ctx, "indices", allowed)
+		}
 	}
+
 	results, err := h.execSQL(ctx, req.Sql)
 	if err != nil {
 		return nil, err
