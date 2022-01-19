@@ -187,6 +187,23 @@ package for linux amd64:
       - "*.deb"
       - "*.rpm"
 
+package for linux arm64:
+  stage: build
+  image: golang:$GOVERSION
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
+  variables:
+    GOOS: "linux"
+    GOARCH: "arm64"
+  script:
+    - echo 'deb [trusted=yes] https://repo.goreleaser.com/apt/ /' | tee /etc/apt/sources.list.d/goreleaser.list
+    - apt update && apt install nfpm
+    - make package
+  artifacts:
+    paths:
+      - "*.deb"
+      - "*.rpm"
+
 build amd container fb:
   stage: build
   needs:
