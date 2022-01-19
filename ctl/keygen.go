@@ -10,7 +10,7 @@ import (
 	pilosa "github.com/molecula/featurebase/v2"
 )
 
-// Keygen represents a command for generating a crytographic key.
+// Keygen represents a command for generating a cryptographic key.
 type KeygenCommand struct {
 	CmdIO     *pilosa.CmdIO
 	KeyLength int
