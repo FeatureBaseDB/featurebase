@@ -70,9 +70,9 @@ type Command struct {
 	done chan struct{}
 
 	logOutput      io.Writer
-	querylogOutput io.Writer
+	queryLogOutput io.Writer
 	logger         loggerLogger
-	querylogger    loggerLogger
+	queryLogger    loggerLogger
 
 	Handler      pilosa.Handler
 	grpcServer   *grpcServer
@@ -476,7 +476,7 @@ func (m *Command) SetupServer() error {
 		pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderWithLockerFunc(c, &sync.Mutex{})),
 		pilosa.OptServerOpenIDAllocator(pilosa.OpenIDAllocator),
 		pilosa.OptServerLogger(m.logger),
-		pilosa.OptServerQueryLogger(m.querylogger),
+		pilosa.OptServerQueryLogger(m.queryLogger),
 		pilosa.OptServerSystemInfo(gopsutil.NewSystemInfo()),
 		pilosa.OptServerGCNotifier(gcnotify.NewActiveGCNotifier()),
 		pilosa.OptServerStatsClient(statsClient),
@@ -545,11 +545,12 @@ func (m *Command) SetupServer() error {
 
 		err = m.setupQueryLogger()
 		if err != nil {
-			return errors.Wrap(err, "setting up querylogger")
+			return errors.Wrap(err, "setting up queryLogger")
 		}
 
-		m.querylogger.Infof("Group with admin level access: %v", p.Admin)
-		m.querylogger.Infof("Permissions: %+v", p.Permissions)
+		m.queryLogger.Infof("Featurebase Server Started")
+		m.queryLogger.Infof("Group with admin level access: %v", p.Admin)
+		m.queryLogger.Infof("Permissions: %+v", p.Permissions)
 
 		// disable postgres binding if auth is enabled
 		m.Config.Postgres.Bind = ""
@@ -569,13 +570,14 @@ func (m *Command) SetupServer() error {
 		OptGRPCServerStats(statsClient),
 		OptGRPCServerAuth(m.auth),
 		OptGRPCServerPerm(&p),
+		OptGRPCServerQueryLogger(m.queryLogger),
 	)
 
 	m.Handler, err = http.NewHandler(
 		http.OptHandlerAllowedOrigins(m.Config.Handler.AllowedOrigins),
 		http.OptHandlerAPI(m.API),
 		http.OptHandlerLogger(m.logger),
-		http.OptHandlerQueryLogger(m.querylogger),
+		http.OptHandlerQueryLogger(m.queryLogger),
 		http.OptHandlerFileSystem(&statik.FileSystem{}),
 		http.OptHandlerListener(m.ln, m.Config.Advertise),
 		http.OptHandlerCloseTimeout(m.closeTimeout),
@@ -642,16 +644,16 @@ func (m *Command) setupQueryLogger() error {
 			return errors.Wrap(err, "opening file")
 		}
 	}
-	m.querylogOutput = f
+	m.queryLogOutput = f
 
-	m.querylogger = logger.NewStandardLogger(m.querylogOutput)
+	m.queryLogger = logger.NewStandardLogger(m.queryLogOutput)
 
 	sighup := make(chan os.Signal, 1)
 	signal.Notify(sighup, syscall.SIGHUP)
 	go func() {
 		for range sighup {
 			if err := f.Reopen(); err != nil {
-				m.querylogger.Infof("reopen: %s\n", err.Error())
+				m.queryLogger.Infof("reopen: %s\n", err.Error())
 			}
 		}
 	}()

@@ -36,7 +36,7 @@ import (
 const PQLVersion = "1.0"
 
 // DefaultShardWidth is used if an index doesn't have it defined.
-const DefaultShardWidth = 1 << 20
+const DefaultShardWidth = pilosa.ShardWidth
 
 const maxHosts = 10
 
