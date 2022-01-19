@@ -843,6 +843,8 @@ func TestQuerySQL(t *testing.T) {
 					{"Table", "string"},
 				},
 				rows: []row{
+					{[]columnResponse{"another_one"}},
+					{[]columnResponse{"deletable_index"}},
 					{[]columnResponse{"delete_me"}},
 					{[]columnResponse{"grouper"}},
 					{[]columnResponse{"joiner"}},
@@ -881,6 +883,9 @@ func TestQuerySQL(t *testing.T) {
 					{"Table", "string"},
 				},
 				rows: []row{
+					{[]columnResponse{"another_one"}},
+					{[]columnResponse{"deletable_index"}},
+
 					{[]columnResponse{"grouper"}},
 					{[]columnResponse{"joiner"}},
 				},
