@@ -127,7 +127,7 @@ executeGeneralNodeConfigCommands() {
     
 
     # TODO handle different archs
-    echo "Getting featurebase binary..."
+    echo "Getting featurebase binary (https://gitlab.com/api/v4/projects/molecula%2Ffeaturebase/jobs/artifacts/${TF_VAR_branch}/raw/featurebase_linux_arm64?job=build%20for%20linux%20arm64)..."
     ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem -o StrictHostKeyChecking=no ec2-user@${NODEIP} "curl --fail --header 'PRIVATE-TOKEN: ${TF_VAR_gitlab_token}' -o /home/ec2-user/featurebase_linux_arm64 https://gitlab.com/api/v4/projects/molecula%2Ffeaturebase/jobs/artifacts/${TF_VAR_branch}/raw/featurebase_linux_arm64?job=build%20for%20linux%20arm64"
     if (( $? != 0 )) 
     then 
