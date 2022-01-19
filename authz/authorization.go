@@ -120,7 +120,7 @@ func (p *GroupPermissions) IsAdmin(groups []authn.Group) bool {
 
 func (p *GroupPermissions) GetAuthorizedIndexList(groups []authn.Group, desiredPermission Permission) (indexList []string) {
 	// if user is admin, find all indexes in permissions file and return them
-	if admin := p.IsAdmin(groups); admin {
+	if p.IsAdmin(groups) {
 		for groupId := range p.Permissions {
 			for index := range p.Permissions[groupId] {
 				indexList = append(indexList, index)
@@ -132,7 +132,7 @@ func (p *GroupPermissions) GetAuthorizedIndexList(groups []authn.Group, desiredP
 	for _, group := range groups {
 		if _, ok := p.Permissions[group.GroupID]; ok {
 			for index, permission := range p.Permissions[group.GroupID] {
-				if permission >= desiredPermission {
+				if permission.Satisfies(desiredPermission) {
 					indexList = append(indexList, index)
 				}
 			}
