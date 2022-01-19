@@ -8,7 +8,7 @@ WORKDIR /featurebase
 RUN apk add --no-cache curl jq
 
 COPY NOTICE .
-COPY featurebase_linux_amd64 .
+COPY featurebase_linux_${ARCH} .
 
 RUN chmod ugo+x .
 EXPOSE 10101
