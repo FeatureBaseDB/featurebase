@@ -210,6 +210,13 @@ func (e *Etcd) retryClient(fn func(cli *clientv3.Client) error) (err error) {
 			e.cli = cli
 			e.cliMu.Unlock()
 			break
+		default:
+			msg := err.Error()
+			if !strings.HasPrefix(msg, "etcdserver: request timed out") {
+				// not a known error, also not a wrapped timeout
+				return errors.Wrap(err, "non-retryable error")
+			}
+			fallthrough // treat this as being like a timeout error
 		case etcdserver.ErrTimeout, etcdserver.ErrTimeoutDueToLeaderFail, etcdserver.ErrTimeoutDueToConnectionLost, etcdserver.ErrTimeoutLeaderTransfer:
 			// sporadic timeouts are concerning but not necessarily fatal
 			// and can usually be retried.
@@ -225,9 +232,6 @@ func (e *Etcd) retryClient(fn func(cli *clientv3.Client) error) (err error) {
 			// from spamming these.
 			time.Sleep(100 * time.Millisecond)
 			break
-		default:
-			// nil, or an error we don't know about
-			return errors.Wrap(err, "non-retryable error")
 		}
 	}
 	// if we got here, we got a total of three of some combination of
