@@ -3,12 +3,14 @@ FROM alpine:3.14.2
 LABEL maintainer "dev@molecula.com"
 LABEL org.opencontainers.image.authors="dev@molecula.com"
 
+ARG ARCH
+
 WORKDIR /featurebase
 
 RUN apk add --no-cache curl jq
 
 COPY NOTICE .
-COPY featurebase_linux_${ARCH} .
+COPY featurebase_linux_$ARCH .
 
 RUN chmod ugo+x .
 EXPOSE 10101
