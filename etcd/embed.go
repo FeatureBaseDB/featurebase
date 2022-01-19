@@ -210,6 +210,8 @@ func (e *Etcd) retryClient(fn func(cli *clientv3.Client) error) (err error) {
 			e.cli = cli
 			e.cliMu.Unlock()
 			break
+		case nil:
+			return nil
 		default:
 			msg := err.Error()
 			if !strings.HasPrefix(msg, "etcdserver: request timed out") {
