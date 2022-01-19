@@ -210,7 +210,7 @@ func (e *Etcd) retryClient(fn func(cli *clientv3.Client) error) (err error) {
 			e.cli = cli
 			e.cliMu.Unlock()
 			break
-		case etcdserver.ErrTimeout:
+		case etcdserver.ErrTimeout, etcdserver.ErrTimeoutDueToLeaderFail, etcdserver.ErrTimeoutDueToConnectionLost, etcdserver.ErrTimeoutLeaderTransfer:
 			// sporadic timeouts are concerning but not necessarily fatal
 			// and can usually be retried.
 			elapsed := time.Since(start)
