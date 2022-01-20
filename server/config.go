@@ -240,6 +240,7 @@ type Auth struct {
 	AuthorizeURL     string   `toml:"authorize-url"`
 	TokenURL         string   `toml:"token-url"`
 	GroupEndpointURL string   `toml:"group-endpoint-url"`
+	RedirectBaseURL  string   `toml:"redirect-base-url"`
 	LogoutURL        string   `toml:"logout-url"`
 	Scopes           []string `toml:"scopes"`
 	SecretKey        string   `toml:"secret-key"`
@@ -622,6 +623,7 @@ func (c *Config) ValidateAuth() (errors []error) {
 		{name: "AuthorizeURL", val: c.Auth.AuthorizeURL},
 		{name: "TokenURL", val: c.Auth.TokenURL},
 		{name: "GroupEndpointURL", val: c.Auth.GroupEndpointURL},
+		{name: "RedirectBaseURL", val: c.Auth.RedirectBaseURL},
 		{name: "LogoutURL", val: c.Auth.LogoutURL},
 		{name: "SecretKey", val: c.Auth.SecretKey},
 		{name: "QueryLogPath", val: c.Auth.QueryLogPath},
