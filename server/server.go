@@ -538,7 +538,7 @@ func (m *Command) SetupServer() error {
 		}
 
 		ac := m.Config.Auth
-		m.auth, err = authn.NewAuth(m.logger, m.listenURI.String(), ac.Scopes, ac.AuthorizeURL, ac.TokenURL, ac.GroupEndpointURL, ac.LogoutURL, ac.ClientId, ac.ClientSecret, ac.SecretKey)
+		m.auth, err = authn.NewAuth(m.logger, ac.RedirectBaseURL, ac.Scopes, ac.AuthorizeURL, ac.TokenURL, ac.GroupEndpointURL, ac.LogoutURL, ac.ClientId, ac.ClientSecret, ac.SecretKey)
 		if err != nil {
 			return errors.Wrap(err, "instantiating authN object")
 		}
