@@ -30,6 +30,7 @@ import (
 	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/reflection"
 	"google.golang.org/grpc/status"
+	"vitess.io/vitess/go/vt/sqlparser"
 )
 
 // GRPCHandler contains methods which handle the various gRPC requests.
@@ -174,8 +175,14 @@ func (h *GRPCHandler) QuerySQL(req *pb.QuerySQLRequest, stream pb.Pilosa_QuerySQ
 			return errors.Wrap(err, "parsing SQL")
 		}
 
-		allowed := h.perms.GetAuthorizedIndexList(uinfo.Groups, authz.Read)
-		if !h.perms.IsAdmin(uinfo.Groups) {
+		perm := authz.Read
+		switch parsed.Statement.(type) {
+		case *sqlparser.DDL: // currently only used for DropTable
+			perm = authz.Admin
+		}
+
+		allowed := h.perms.GetAuthorizedIndexList(uinfo.Groups, perm)
+		if !h.perms.IsAdmin(uinfo.(*authn.UserInfo).Groups) {
 			if !isAllowed(parsed.Tables, allowed) {
 				return status.Error(codes.PermissionDenied, "insufficient permissions to access requested tables")
 			}
@@ -220,9 +227,29 @@ func (h *GRPCHandler) QuerySQL(req *pb.QuerySQLRequest, stream pb.Pilosa_QuerySQ
 func (h *GRPCHandler) QuerySQLUnary(ctx context.Context, req *pb.QuerySQLRequest) (*pb.TableResponse, error) {
 	start := time.Now()
 	uinfo := ctx.Value("userinfo")
-	if uinfo != nil && !h.perms.IsAdmin(uinfo.(*authn.UserInfo).Groups) {
-		ctx = context.WithValue(ctx, "indices", h.perms.GetAuthorizedIndexList(uinfo.(*authn.UserInfo).Groups, authz.Read))
+	if uinfo != nil {
+		// authz
+		m := sql.NewMapper()
+		parsed, err := m.MapSQL(req.Sql)
+		if err != nil {
+			return nil, errors.Wrap(err, "parsing SQL")
+		}
+
+		perm := authz.Read
+		switch parsed.Statement.(type) {
+		case *sqlparser.DDL: // currently only used for DropTable
+			perm = authz.Admin
+		}
+
+		allowed := h.perms.GetAuthorizedIndexList(uinfo.(*authn.UserInfo).Groups, perm)
+		if !h.perms.IsAdmin(uinfo.(*authn.UserInfo).Groups) {
+			if !isAllowed(parsed.Tables, allowed) {
+				return nil, status.Error(codes.PermissionDenied, "insufficient permissions to access requested tables")
+			}
+			ctx = context.WithValue(ctx, "indices", allowed)
+		}
 	}
+
 	results, err := h.execSQL(ctx, req.Sql)
 	if err != nil {
 		return nil, err
@@ -431,10 +458,10 @@ func (h *GRPCHandler) GetIndex(ctx context.Context, req *pb.GetIndexRequest) (*p
 // GetIndexes returns a list of all Indexes
 func (h *GRPCHandler) GetIndexes(ctx context.Context, req *pb.GetIndexesRequest) (*pb.GetIndexesResponse, error) {
 	uinfo := ctx.Value("userinfo")
-	var pp *authn.UserInfo
+	var userInfo *authn.UserInfo
 	if uinfo != nil {
 		var ok bool
-		pp, ok = uinfo.(*authn.UserInfo)
+		userInfo, ok = uinfo.(*authn.UserInfo)
 		if !ok {
 			return nil, status.Error(codes.InvalidArgument, "malformed auth header")
 		}
@@ -444,17 +471,14 @@ func (h *GRPCHandler) GetIndexes(ctx context.Context, req *pb.GetIndexesRequest)
 		return nil, errToStatusError(err)
 	}
 
-	indexes := make([]*pb.Index, len(schema))
-	i := 0
+	indexes := make([]*pb.Index, 0)
 	for _, index := range schema {
-		if pp != nil {
-			if p, err := h.perms.GetPermissions(pp, index.Name); err == nil && p.Satisfies(authz.Read) {
-				indexes[i] = &pb.Index{Name: index.Name}
-				i += 1
+		if userInfo != nil {
+			if p, err := h.perms.GetPermissions(userInfo, index.Name); err == nil && p.Satisfies(authz.Read) {
+				indexes = append(indexes, &pb.Index{Name: index.Name})
 			}
 		} else {
-			indexes[i] = &pb.Index{Name: index.Name}
-			i += 1
+			indexes = append(indexes, &pb.Index{Name: index.Name})
 		}
 	}
 	return &pb.GetIndexesResponse{Indexes: indexes}, nil
