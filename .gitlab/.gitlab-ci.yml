@@ -77,6 +77,8 @@ run go tests:
   script:
     - echo "Running featurebase unit tests..."
     - go test ./...
+  tags:
+    - aws
 
 run go tests race:
   stage: test
@@ -87,6 +89,8 @@ run go tests race:
   script:
     - echo "Running featurebase race tests..."
     - go test -race -timeout=30m ./...
+  tags:
+    - aws
 
 run go tests shardwidth22:
   stage: test
@@ -97,7 +101,9 @@ run go tests shardwidth22:
   script:
     - echo "Running featurebase race tests..."
     - go test -tags=shardwidth22 ./...
-    
+  tags:
+    - aws
+
 # we do coverage reporting from the future tests because the json
 # output is very difficult to human-read. The alternative would be to
 # run the regular tests twice and also run the future tests.
@@ -115,6 +121,8 @@ run go tests future:
     paths:
       - coverage.out
       - test-report.out
+  tags:
+    - aws
 
 upload to sonarcloud:
   stage: test
