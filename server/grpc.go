@@ -456,10 +456,10 @@ func (h *GRPCHandler) GetIndex(ctx context.Context, req *pb.GetIndexRequest) (*p
 // GetIndexes returns a list of all Indexes
 func (h *GRPCHandler) GetIndexes(ctx context.Context, req *pb.GetIndexesRequest) (*pb.GetIndexesResponse, error) {
 	uinfo := ctx.Value("userinfo")
-	var pp *authn.UserInfo
+	var userInfo *authn.UserInfo
 	if uinfo != nil {
 		var ok bool
-		pp, ok = uinfo.(*authn.UserInfo)
+		userInfo, ok = uinfo.(*authn.UserInfo)
 		if !ok {
 			return nil, status.Error(codes.InvalidArgument, "malformed auth header")
 		}
@@ -469,17 +469,14 @@ func (h *GRPCHandler) GetIndexes(ctx context.Context, req *pb.GetIndexesRequest)
 		return nil, errToStatusError(err)
 	}
 
-	indexes := make([]*pb.Index, len(schema))
-	i := 0
+	indexes := make([]*pb.Index, 0)
 	for _, index := range schema {
-		if pp != nil {
-			if p, err := h.perms.GetPermissions(pp, index.Name); err == nil && p.Satisfies(authz.Read) {
-				indexes[i] = &pb.Index{Name: index.Name}
-				i += 1
+		if userInfo != nil {
+			if p, err := h.perms.GetPermissions(userInfo, index.Name); err == nil && p.Satisfies(authz.Read) {
+				indexes = append(indexes, &pb.Index{Name: index.Name})
 			}
 		} else {
-			indexes[i] = &pb.Index{Name: index.Name}
-			i += 1
+			indexes = append(indexes, &pb.Index{Name: index.Name})
 		}
 	}
 	return &pb.GetIndexesResponse{Indexes: indexes}, nil
