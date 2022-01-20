@@ -1491,6 +1491,7 @@ admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 		AuthorizeURL:     "https://login.microsoftonline.com/4a137d66-d161-4ae4-b1e6-07e9920874b8/oauth2/v2.0/authorize",
 		TokenURL:         "https://login.microsoftonline.com/4a137d66-d161-4ae4-b1e6-07e9920874b8/oauth2/v2.0/token",
 		GroupEndpointURL: "https://graph.microsoft.com/v1.0/me/transitiveMemberOf/microsoft.graph.group?$count=true",
+		RedirectBaseURL:  "https://localhost:10101",
 		LogoutURL:        "https://login.microsoftonline.com/common/oauth2/v2.0/logout",
 		Scopes:           []string{"https://graph.microsoft.com/.default", "offline_access"},
 		SecretKey:        "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF",
