@@ -339,7 +339,7 @@ func TestDB_MultiTx(t *testing.T) {
 	}
 
 	// Continuously set/clear bits while readers are executing.
-	for i := 0; i < 1000; i++ {
+	for i := 0; i < 100; i++ {
 		func() {
 			tx, err := db.Begin(true)
 			if err != nil {

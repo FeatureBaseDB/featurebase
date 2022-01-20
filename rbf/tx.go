@@ -236,7 +236,7 @@ func (tx *Tx) createBitmap(name string) error {
 	}
 
 	// Write root page.
-	page := make([]byte, PageSize)
+	page := allocPage()
 	writePageNo(page, pgno)
 	writeFlags(page, PageTypeLeaf)
 	writeCellN(page, 0)
@@ -449,7 +449,7 @@ func (tx *Tx) writeRootRecordPages(records *immutable.SortedMap) (err error) {
 	// Write new root record pages.
 	for itr := records.Iterator(); !itr.Done(); {
 		// Initialize page & write as many records as will fit.
-		page := make([]byte, PageSize)
+		page := allocPage()
 		writePageNo(page, pgno)
 		writeFlags(page, PageTypeRootRecord)
 
@@ -984,6 +984,10 @@ func (tx *Tx) walkTree(pgno, parent uint32, fn func(pgno, parent, typ uint32, er
 // about that removing things from the free list, because the add logic
 // already just uses new pages rather than trying to use the free list
 // when it knows the free list is involved.
+//
+// Because this is expected to be used in a defer, instead of returning an
+// error, it will set the error it got the address of to a new error if it
+// encounters one and there wasn't one already.
 func (tx *Tx) freelistCleanup(outErr *error) {
 	defer func() {
 		// no matter what, we're done with this after this, but we still
@@ -994,8 +998,7 @@ func (tx *Tx) freelistCleanup(outErr *error) {
 	if len(tx.pendingFreelistAdds) == 0 {
 		return
 	}
-	c := Cursor{tx: tx}
-	c.stack.elems[0] = stackElem{pgno: readMetaFreelistPageNo(tx.meta[:])}
+	c := tx.db.getFreelistCursor(tx)
 	for len(tx.pendingFreelistAdds) > 0 {
 		var pass []uint32
 		pass, tx.pendingFreelistAdds = tx.pendingFreelistAdds, nil
@@ -1006,7 +1009,7 @@ func (tx *Tx) freelistCleanup(outErr *error) {
 				}
 				return
 			} else if !changed {
-				vprint.PanicOn(fmt.Sprintf("rbf.Tx.freePgno(): double free: %d", tx.pendingFreelistAdds))
+				vprint.PanicOn(fmt.Sprintf("rbf.Tx.freelistCleanup(): double free: %d", pass))
 			}
 		}
 	}
@@ -1015,44 +1018,25 @@ func (tx *Tx) freelistCleanup(outErr *error) {
 // allocatePgno returns a page number for a new available page. This page may be
 // pulled from the free list or, if no free pages are available, it will be
 // created by extending the file size.
+//
+// allocatePgno uses the freelist cursor (a shared db-wide thing), and sets
+// the "modifyingFreelist" flag while it's running. If for some reason a
+// modification to the freelist would require a new allocation or free,
+// allocations always just create a new page, and frees are processed later
+// by a separate call through a deferred tx.freelistCleanup().
 func (tx *Tx) allocatePgno() (_ uint32, outErr error) {
 	if tx.modifyingFreelist {
 		return tx.allocateNewPgno(), nil
 	}
-	// Attempt to find page in freelist.
-	pgno, err := tx.nextFreelistPageNo()
-
-	if err != nil {
-		return 0, err
-	} else if pgno != 0 {
-		tx.modifyingFreelist = true
-		defer tx.freelistCleanup(&outErr)
-		c := Cursor{tx: tx}
-		c.stack.elems[0] = stackElem{pgno: readMetaFreelistPageNo(tx.meta[:])}
-		if changed, err := c.Remove(uint64(pgno)); err != nil {
-			return 0, err
-		} else if !changed {
-			vprint.PanicOn(fmt.Sprintf("tx.Tx.allocatePgno(): double alloc: %d", pgno))
-		}
-		return pgno, nil
-	}
-	// no freelist pages, fall back
-	return tx.allocateNewPgno(), nil
-}
-
-// allocateNewPgno requests a new page unconditionally, ignoring the free list.
-func (tx *Tx) allocateNewPgno() uint32 {
-	// Increment the total page count by one and return the last page.
-	pgno := readMetaPageN(tx.meta[:])
-	writeMetaPageN(tx.meta[:], pgno+1)
-	return pgno
-}
-
-func (tx *Tx) nextFreelistPageNo() (uint32, error) {
-	c := Cursor{tx: tx}
-	c.stack.elems[0] = stackElem{pgno: readMetaFreelistPageNo(tx.meta[:])}
+	// this serves as a precaution against double-use of the freelist cursor
+	// used database-wide. we don't have actual synchronization here because
+	// only one write Tx should exist at once and it's not safe to use its
+	// write-capable ops concurrently anyway.
+	tx.modifyingFreelist = true
+	defer tx.freelistCleanup(&outErr)
+	c := tx.db.getFreelistCursor(tx)
 	if err := c.First(); err == io.EOF {
-		return 0, nil
+		return tx.allocateNewPgno(), nil
 	} else if err != nil {
 		return 0, err
 	}
@@ -1067,7 +1051,21 @@ func (tx *Tx) nextFreelistPageNo() (uint32, error) {
 	v := cell.firstValue(tx)
 
 	pgno := uint32((cell.Key << 16) | uint64(v))
+
+	if changed, err := c.Remove(uint64(pgno)); err != nil {
+		return 0, err
+	} else if !changed {
+		vprint.PanicOn(fmt.Sprintf("tx.Tx.allocatePgno(): double alloc: %d", pgno))
+	}
 	return pgno, nil
+}
+
+// allocateNewPgno requests a new page unconditionally, ignoring the free list.
+func (tx *Tx) allocateNewPgno() uint32 {
+	// Increment the total page count by one and return the last page.
+	pgno := readMetaPageN(tx.meta[:])
+	writeMetaPageN(tx.meta[:], pgno+1)
+	return pgno
 }
 
 // deallocate releases a page number to the freelist.
@@ -1076,8 +1074,7 @@ func (tx *Tx) freePgno(pgno uint32) (outErr error) {
 		tx.pendingFreelistAdds = append(tx.pendingFreelistAdds, pgno)
 		return nil
 	}
-	c := Cursor{tx: tx}
-	c.stack.elems[0] = stackElem{pgno: readMetaFreelistPageNo(tx.meta[:])}
+	c := tx.db.getFreelistCursor(tx)
 
 	tx.modifyingFreelist = true
 	defer tx.freelistCleanup(&outErr)
@@ -1800,9 +1797,16 @@ func (tx *Tx) flush() error {
 	}
 
 	// Write bitmap headers & pages to WAL.
+	//
+	// We need to write a bitmap header before each such page. We only allocate
+	// one header, and we reuse it, because each write is flushing it out to
+	// disk, and it doesn't get stored in-memory.
+	var hdr []byte
+	if len(tx.dirtyBitmapPages) > 0 {
+		hdr = allocPage()
+	}
 	for _, pgno := range dirtyPageMapKeys(tx.dirtyBitmapPages) {
 		// Write header page.
-		hdr := make([]byte, PageSize)
 		writePageNo(hdr[:], pgno)
 		writeFlags(hdr[:], PageTypeBitmapHeader)
 		if _, err := tx.writeToWAL(w, hdr); err != nil {
