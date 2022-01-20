@@ -182,7 +182,7 @@ func (h *GRPCHandler) QuerySQL(req *pb.QuerySQLRequest, stream pb.Pilosa_QuerySQ
 		}
 
 		allowed := h.perms.GetAuthorizedIndexList(uinfo.Groups, perm)
-		if !h.perms.IsAdmin(uinfo.(*authn.UserInfo).Groups) {
+		if !h.perms.IsAdmin(uinfo.Groups) {
 			if !isAllowed(parsed.Tables, allowed) {
 				return status.Error(codes.PermissionDenied, "insufficient permissions to access requested tables")
 			}
