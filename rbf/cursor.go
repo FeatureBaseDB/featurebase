@@ -526,7 +526,7 @@ func (c *Cursor) putLeafCellFast(in leafCell, isInsert bool) (err error) {
 	}
 
 	// Write page header.
-	dst := allocPage() // make([]byte, PageSize)
+	dst := allocPage()
 	writePageNo(dst, readPageNo(src))
 	writeFlags(dst, PageTypeLeaf)
 	writeCellN(dst, dstCellN)
@@ -616,7 +616,7 @@ func (c *Cursor) deleteLeafCell(key uint64) (err error) {
 	cells = cells[:len(cells)-1]
 
 	// Write cells to page.
-	buf := make([]byte, PageSize)
+	buf := allocPage()
 	writePageNo(buf[:], elem.pgno)
 	writeFlags(buf[:], PageTypeLeaf)
 	writeCellN(buf[:], len(cells))
@@ -800,7 +800,7 @@ func (c *Cursor) deleteBranchCell(stackIndex int, key uint64) (err error) {
 			return err
 		}
 
-		buf := make([]byte, PageSize)
+		buf := allocPage()
 		copy(buf, target)
 		writePageNo(buf[:], elem.pgno)
 
