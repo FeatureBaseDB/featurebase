@@ -3,7 +3,7 @@ package gcnotify
 
 import (
 	"github.com/CAFxX/gcnotifier"
-	"github.com/molecula/featurebase/v2"
+	"github.com/molecula/featurebase/v3"
 )
 
 // Ensure ActiveGCNotifier implements interface.

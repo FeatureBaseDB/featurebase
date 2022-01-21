@@ -11,7 +11,7 @@ Usage:
 
 	import (
 		"fmt"
-		"github.com/molecula/featurebase/v2/client"
+		"github.com/molecula/featurebase/v3/client"
 	)
 
 	// Create a Client instance

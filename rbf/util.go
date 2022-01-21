@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	txkey "github.com/molecula/featurebase/v2/short_txkey"
-	"github.com/molecula/featurebase/v2/vprint"
+	txkey "github.com/molecula/featurebase/v3/short_txkey"
+	"github.com/molecula/featurebase/v3/vprint"
 )
 
 // we don't currently use dumpAllPages but it's tricky enough to get right

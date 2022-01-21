@@ -7,8 +7,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/molecula/featurebase/v2/disco"
-	"github.com/molecula/featurebase/v2/testhook"
+	"github.com/molecula/featurebase/v3/disco"
+	"github.com/molecula/featurebase/v3/testhook"
 )
 
 var _ = fmt.Printf

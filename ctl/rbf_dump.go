@@ -8,8 +8,8 @@ import (
 	"io"
 	"strings"
 
-	"github.com/molecula/featurebase/v2"
-	"github.com/molecula/featurebase/v2/rbf"
+	"github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/rbf"
 )
 
 // RBFDumpCommand represents a command for dumping raw data for an RBF page.

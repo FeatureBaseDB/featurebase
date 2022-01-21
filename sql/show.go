@@ -5,8 +5,8 @@ import (
 	"context"
 	"fmt"
 
-	pilosa "github.com/molecula/featurebase/v2"
-	pproto "github.com/molecula/featurebase/v2/proto"
+	pilosa "github.com/molecula/featurebase/v3"
+	pproto "github.com/molecula/featurebase/v3/proto"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"

@@ -20,14 +20,14 @@ import (
 	"time"
 
 	"github.com/hashicorp/go-retryablehttp"
-	pilosa "github.com/molecula/featurebase/v2"
-	"github.com/molecula/featurebase/v2/authn"
-	"github.com/molecula/featurebase/v2/encoding/proto"
-	"github.com/molecula/featurebase/v2/ingest"
-	"github.com/molecula/featurebase/v2/logger"
-	pnet "github.com/molecula/featurebase/v2/net"
-	"github.com/molecula/featurebase/v2/topology"
-	"github.com/molecula/featurebase/v2/tracing"
+	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/authn"
+	"github.com/molecula/featurebase/v3/encoding/proto"
+	"github.com/molecula/featurebase/v3/ingest"
+	"github.com/molecula/featurebase/v3/logger"
+	pnet "github.com/molecula/featurebase/v3/net"
+	"github.com/molecula/featurebase/v3/topology"
+	"github.com/molecula/featurebase/v3/tracing"
 	"github.com/pkg/errors"
 )
 

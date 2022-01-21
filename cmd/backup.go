@@ -5,7 +5,7 @@ import (
 	"context"
 	"io"
 
-	"github.com/molecula/featurebase/v2/ctl"
+	"github.com/molecula/featurebase/v3/ctl"
 	"github.com/spf13/cobra"
 )
 

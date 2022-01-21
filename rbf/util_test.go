@@ -7,9 +7,9 @@ import (
 	"os"
 	"testing"
 
-	rbfcfg "github.com/molecula/featurebase/v2/rbf/cfg"
-	"github.com/molecula/featurebase/v2/roaring"
-	"github.com/molecula/featurebase/v2/testhook"
+	rbfcfg "github.com/molecula/featurebase/v3/rbf/cfg"
+	"github.com/molecula/featurebase/v3/roaring"
+	"github.com/molecula/featurebase/v3/testhook"
 )
 
 // util_test adds reusable utilities for testing.

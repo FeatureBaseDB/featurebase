@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/molecula/featurebase/v2"
-	"github.com/molecula/featurebase/v2/server"
+	"github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/server"
 	toml "github.com/pelletier/go-toml"
 )
 

@@ -9,7 +9,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/molecula/featurebase/v2/roaring"
+	"github.com/molecula/featurebase/v3/roaring"
 	"github.com/pkg/errors"
 )
 

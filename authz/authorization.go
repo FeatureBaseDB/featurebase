@@ -19,7 +19,7 @@ import (
 	"io"
 	"io/ioutil"
 
-	"github.com/molecula/featurebase/v2/authn"
+	"github.com/molecula/featurebase/v3/authn"
 
 	"gopkg.in/yaml.v2"
 )

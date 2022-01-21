@@ -11,9 +11,9 @@ import (
 	"sync"
 
 	"github.com/benbjohnson/immutable"
-	"github.com/molecula/featurebase/v2/roaring"
-	txkey "github.com/molecula/featurebase/v2/short_txkey"
-	"github.com/molecula/featurebase/v2/vprint"
+	"github.com/molecula/featurebase/v3/roaring"
+	txkey "github.com/molecula/featurebase/v3/short_txkey"
+	"github.com/molecula/featurebase/v3/vprint"
 )
 
 var _ = txkey.ToString

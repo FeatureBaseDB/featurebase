@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/molecula/featurebase/v2/logger"
+	"github.com/molecula/featurebase/v3/logger"
 )
 
 // Expvar global expvar map.

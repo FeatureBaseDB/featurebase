@@ -8,7 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/molecula/featurebase/v2/ctl"
+	"github.com/molecula/featurebase/v3/ctl"
 )
 
 var checker *ctl.CheckCommand

@@ -12,11 +12,11 @@ import (
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
-	pnet "github.com/molecula/featurebase/v2/net"
-	"github.com/molecula/featurebase/v2/roaring"
-	"github.com/molecula/featurebase/v2/testhook"
-	"github.com/molecula/featurebase/v2/topology"
-	. "github.com/molecula/featurebase/v2/vprint" // nolint:staticcheck
+	pnet "github.com/molecula/featurebase/v3/net"
+	"github.com/molecula/featurebase/v3/roaring"
+	"github.com/molecula/featurebase/v3/testhook"
+	"github.com/molecula/featurebase/v3/topology"
+	. "github.com/molecula/featurebase/v3/vprint" // nolint:staticcheck
 )
 
 // Ensure that fragCombos creates the correct fragment mapping.

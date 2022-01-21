@@ -7,7 +7,7 @@ import (
 	"io"
 
 	"github.com/gorilla/securecookie"
-	pilosa "github.com/molecula/featurebase/v2"
+	pilosa "github.com/molecula/featurebase/v3"
 )
 
 // Keygen represents a command for generating a cryptographic key.

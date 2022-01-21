@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/molecula/featurebase/v2/cmd"
-	_ "github.com/molecula/featurebase/v2/test"
-	"github.com/molecula/featurebase/v2/testhook"
-	"github.com/molecula/featurebase/v2/toml"
+	"github.com/molecula/featurebase/v3/cmd"
+	_ "github.com/molecula/featurebase/v3/test"
+	"github.com/molecula/featurebase/v3/testhook"
+	"github.com/molecula/featurebase/v3/toml"
 	"github.com/pkg/errors"
 )
 

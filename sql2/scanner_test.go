@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	sql "github.com/molecula/featurebase/v2/sql2"
+	sql "github.com/molecula/featurebase/v3/sql2"
 )
 
 func TestScanner_Scan(t *testing.T) {

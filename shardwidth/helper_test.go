@@ -5,7 +5,7 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/molecula/featurebase/v2/shardwidth"
+	"github.com/molecula/featurebase/v3/shardwidth"
 )
 
 type nextShardTestCase struct {

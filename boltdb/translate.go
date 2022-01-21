@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/molecula/featurebase/v2"
+	"github.com/molecula/featurebase/v3"
 	"github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"
 

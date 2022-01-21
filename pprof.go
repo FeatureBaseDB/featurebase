@@ -10,8 +10,8 @@ import (
 
 	_ "net/http/pprof" // Imported for its side-effect of registering pprof endpoints with the server.
 
-	"github.com/molecula/featurebase/v2/storage"
-	"github.com/molecula/featurebase/v2/vprint"
+	"github.com/molecula/featurebase/v3/storage"
+	"github.com/molecula/featurebase/v3/vprint"
 )
 
 // CPUProfileForDur (where "Dur" is short for "Duration"), is used for

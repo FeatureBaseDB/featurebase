@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/molecula/featurebase/v2/disco"
-	"github.com/molecula/featurebase/v2/test"
+	"github.com/molecula/featurebase/v3/disco"
+	"github.com/molecula/featurebase/v3/test"
 )
 
 func TestNewCluster(t *testing.T) {

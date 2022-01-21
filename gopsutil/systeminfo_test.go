@@ -4,8 +4,8 @@ package gopsutil_test
 import (
 	"testing"
 
-	"github.com/molecula/featurebase/v2"
-	"github.com/molecula/featurebase/v2/gopsutil"
+	"github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/gopsutil"
 )
 
 func TestSystemInfo(t *testing.T) {

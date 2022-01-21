@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/molecula/featurebase/v2"
-	"github.com/molecula/featurebase/v2/pql"
+	"github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/pql"
 	"github.com/pkg/errors"
 	"vitess.io/vitess/go/vt/sqlparser"
 )

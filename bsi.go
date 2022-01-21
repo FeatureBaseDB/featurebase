@@ -4,7 +4,7 @@ package pilosa
 import (
 	"math/bits"
 
-	"github.com/molecula/featurebase/v2/roaring"
+	"github.com/molecula/featurebase/v3/roaring"
 )
 
 // bsiData contains BSI-structured data.

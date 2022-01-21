@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/DataDog/datadog-go/statsd"
-	"github.com/molecula/featurebase/v2/logger"
-	"github.com/molecula/featurebase/v2/stats"
+	"github.com/molecula/featurebase/v3/logger"
+	"github.com/molecula/featurebase/v3/stats"
 )
 
 // StatsD protocol wrapper using the DataDog library that added Tags to the StatsD protocol

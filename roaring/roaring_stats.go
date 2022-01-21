@@ -5,7 +5,7 @@
 package roaring
 
 import (
-	"github.com/molecula/featurebase/v2/stats"
+	"github.com/molecula/featurebase/v3/stats"
 )
 
 var statsEv = stats.NewExpvarStatsClient()

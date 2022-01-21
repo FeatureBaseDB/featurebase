@@ -4,7 +4,7 @@ package rbf
 import (
 	"unsafe"
 
-	"github.com/molecula/featurebase/v2/roaring"
+	"github.com/molecula/featurebase/v3/roaring"
 )
 
 // toArray16 converts a byte slice into a slice of uint16 values using unsafe.

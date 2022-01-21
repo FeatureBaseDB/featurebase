@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/molecula/featurebase/v2"
-	"github.com/molecula/featurebase/v2/logger"
-	"github.com/molecula/featurebase/v2/test"
+	"github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/logger"
+	"github.com/molecula/featurebase/v3/test"
 )
 
 // TestTransactionManager currently uses an in memory transaction

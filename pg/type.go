@@ -1,7 +1,7 @@
 // Copyright 2021 Molecula Corp. All rights reserved.
 package pg
 
-import "github.com/molecula/featurebase/v2/pg/message"
+import "github.com/molecula/featurebase/v3/pg/message"
 
 // Type represents a postgres type.
 type Type struct {

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/molecula/featurebase/v2/pql"
+	"github.com/molecula/featurebase/v3/pql"
 )
 
 // Ensure call can be converted into a string.

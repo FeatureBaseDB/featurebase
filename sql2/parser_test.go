@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/go-test/deep"
-	sql "github.com/molecula/featurebase/v2/sql2"
+	sql "github.com/molecula/featurebase/v3/sql2"
 )
 
 func TestParser_ParseStatement(t *testing.T) {
