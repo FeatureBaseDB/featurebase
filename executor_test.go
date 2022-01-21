@@ -6915,11 +6915,9 @@ func TestTimelessClearRegression(t *testing.T) {
 }
 
 func TestMissingKeyRegression(t *testing.T) {
-	c := test.MustRunCluster(t, 1, []server.CommandOption{server.OptCommandServerOptions(
-		pilosa.OptServerStorageConfig(&storage.Config{
-			Backend:      "roaring",
-			FsyncEnabled: false,
-		}))})
+	// this used to be explicitly roaring backend... I'm not sure
+	// whether it is a useful test in post-roaring world.
+	c := test.MustRunCluster(t, 1)
 	defer c.Close()
 
 	c.CreateField(t, "i", pilosa.IndexOptions{Keys: true, TrackExistence: true}, "f", pilosa.OptFieldKeys())
