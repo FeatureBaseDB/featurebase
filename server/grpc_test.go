@@ -2,6 +2,7 @@
 package server_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
 	"fmt"
@@ -1425,6 +1426,47 @@ func TestCRUDIndexes(t *testing.T) {
 			t.Fatalf("Error code should be codes.NotFound, but is %v", errStatus.Code())
 		}
 	})
+}
+
+func TestLogQuery(t *testing.T) {
+	method := "test!"
+	uinfo := authn.UserInfo{
+		UserID:   "ID",
+		UserName: "name",
+	}
+	ctx := context.WithValue(context.Background(), "userinfo", &uinfo)
+
+	cases := []struct {
+		name     string
+		req      interface{}
+		expected string
+	}{
+		{
+			name:     "nonQueryReq",
+			req:      "nope",
+			expected: fmt.Sprintf("GRPC: %v, %v, %v, %v, %v\n", "", []string{}, "test!", uinfo.UserID, uinfo.UserName),
+		},
+		{
+			name:     "QuerySQLReq",
+			req:      &pb.QuerySQLRequest{Sql: "show fields from table"},
+			expected: fmt.Sprintf("GRPC: %v, %v, %v, %v, %v, %v\n", "", []string{}, "test!", uinfo.UserID, uinfo.UserName, "show fields from table"),
+		},
+		{
+			name:     "QueryPQLReq",
+			req:      &pb.QueryPQLRequest{Pql: "Count(All())"},
+			expected: fmt.Sprintf("GRPC: %v, %v, %v, %v, %v, %v\n", "", []string{}, "test!", uinfo.UserID, uinfo.UserName, "Count(All())"),
+		},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			buf := new(bytes.Buffer)
+			l := logger.NewStandardLogger(buf)
+			server.LogQuery(ctx, method, test.req, l)
+			if !strings.HasSuffix(buf.String(), test.expected) {
+				t.Errorf("expected '%v', got '%v'", test.expected, buf.String())
+			}
+		})
+	}
 }
 
 func setUpTestQuerySQLUnary(ctx context.Context, t *testing.T) (gh *server.GRPCHandler, tearDownFunc func()) {

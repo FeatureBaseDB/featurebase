@@ -544,9 +544,13 @@ func (h *Handler) chkInternal(handler http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if h.auth != nil {
 			secret, ok := r.Header["X-Feature-Key"]
-			decodedString, err := hex.DecodeString(secret[0])
+			secretString := ""
+			if ok {
+				secretString = secret[0]
+			}
+			decodedString, err := hex.DecodeString(secretString)
 			if err != nil || !ok || !bytes.Equal(decodedString, h.auth.SecretKey()) {
-				http.Error(w, errors.Wrap(err, "internal secret key validation failed").Error(), http.StatusUnauthorized)
+				http.Error(w, "internal secret key validation failed", http.StatusUnauthorized)
 				return
 			}
 		}
