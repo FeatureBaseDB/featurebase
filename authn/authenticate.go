@@ -117,6 +117,7 @@ type Groups struct {
 // Authenticate takes in a bearer token `bearer` and returns UserInfo from that token
 func (a *Auth) Authenticate(bearer string) (*UserInfo, error) {
 	// parse the bearer token into a jwt.Token
+	// this also validates the token, and checks that it's not expired
 	token, err := jwt.Parse(bearer, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
@@ -124,39 +125,21 @@ func (a *Auth) Authenticate(bearer string) (*UserInfo, error) {
 		return a.secretKey, nil
 	})
 	if token == nil || token.Claims == nil || err != nil || !token.Valid {
-		return nil, errors.Wrap(err, fmt.Sprintf("%#v parsing jwt claims from access tokens", token))
+		return nil, fmt.Errorf("parsing bearer token: %v", err)
 	}
 	userInfo := UserInfo{}
-	// check that token does not expire now
-	switch claimType := token.Claims.(type) {
-	case jwt.MapClaims:
-		if exp, ok := claimType["exp"]; ok {
-			var e int64
-			switch expType := exp.(type) {
-			case float64:
-				e = int64(expType)
-			case json.Number:
-				e, _ = expType.Int64()
-			}
-			if e <= time.Now().Unix() {
-				return nil, fmt.Errorf("token expired")
-			}
-		}
 
-		userInfo.UserID = claimType["oid"].(string)
-		userInfo.UserName = claimType["name"].(string)
-		userInfo.Token = bearer
+	claims := token.Claims.(jwt.MapClaims)
+	userInfo.UserID = claims["oid"].(string)
+	userInfo.UserName = claims["name"].(string)
+	userInfo.Token = bearer
 
-		g := claimType["molecula-idp-groups"].(string)
-		groups, err := FromGob64(g)
-		if err != nil {
-			return nil, errors.Wrap(err, "decoding groups")
-		}
-		userInfo.Groups = groups
-
-	default:
-		return nil, fmt.Errorf("could not parse jwt claims of type %T, expected jwt.MapClaims", claimType)
+	g := claims["molecula-idp-groups"].(string)
+	groups, err := FromGob64(g)
+	if err != nil {
+		return nil, errors.Wrap(err, "decoding groups")
 	}
+	userInfo.Groups = groups
 
 	return &userInfo, nil
 }
@@ -194,8 +177,16 @@ func (a *Auth) Redirect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// with vitamin A!
-	enrichedTkn, err := a.addGroupMembership(token.AccessToken)
+	// enrich token with groups!
+	g, err := a.getGroups(token.AccessToken)
+	if err != nil {
+		a.logger.Warnf("getting groups from IdP: %+v", err)
+		http.Error(w, "Bad Request", http.StatusBadRequest)
+		return
+	}
+
+	// with vitamin G! (for groups)
+	enrichedTkn, err := a.addGroupMembership(token.AccessToken, g)
 	if err != nil {
 		a.logger.Warnf("enriching token with group membership: %+v", err)
 		http.Error(w, "Bad Request", http.StatusBadRequest)
@@ -217,40 +208,28 @@ func (a *Auth) getToken(r *http.Request, code string) (*oauth2.Token, error) {
 
 // addGroupMembership is only called in `a.Redirect`. It adds groups to a jwt's
 // claims, and signs it using `a.secretKey`.
-func (a *Auth) addGroupMembership(token string) (string, error) {
-	g, err := a.getGroups(token)
-	if err != nil {
-		return "", err
-	}
-
+func (a *Auth) addGroupMembership(token string, g []Group) (string, error) {
 	// parse token into jwt
 	unenriched, _, err := new(jwt.Parser).ParseUnverified(token, jwt.MapClaims{})
 	if unenriched == nil || unenriched.Claims == nil || err != nil {
-		return "", errors.Wrap(err, fmt.Sprintf("%v parsing jwt claims from access tokens", token))
+		return "", fmt.Errorf("parsing bearer token: %v", err)
 	}
 
 	enriched := jwt.New(jwt.SigningMethodHS256)
 	enriched.Claims = unenriched.Claims
-	var tokenStr string
 	// parse groups into string format
-	switch claims := enriched.Claims.(type) {
-	case jwt.MapClaims:
-		groupString, err := ToGob64(g)
-		if err != nil {
-			return "", errors.Wrap(err, "failed to serialize groups")
-		}
+	claims := enriched.Claims.(jwt.MapClaims)
+	groupString, err := ToGob64(g)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to serialize groups")
+	}
+	// stick it into jwt claims
+	claims["molecula-idp-groups"] = groupString
 
-		// stick it into jwt claims
-		claims["molecula-idp-groups"] = groupString
-
-		// get stringified and signed jwt
-		tokenStr, err = enriched.SignedString(a.secretKey)
-		if err != nil {
-			return "", errors.Wrap(err, "signing jwt")
-		}
-
-	default:
-		return "", fmt.Errorf("could not parse jwt claims of type %T, expected jwt.MapClaims", claims)
+	// get stringified and signed jwt
+	tokenStr, err := enriched.SignedString(a.secretKey)
+	if err != nil {
+		return "", errors.Wrap(err, "signing jwt")
 	}
 
 	return tokenStr, nil
@@ -303,7 +282,7 @@ func decodeHex(hexstr string) ([]byte, error) {
 		return nil, errors.Wrap(err, "decoding hex string to byte slice")
 	}
 	if len(data) != 32 {
-		return nil, errors.Wrap(err, "invalid key length")
+		return nil, fmt.Errorf("invalid key length")
 	}
 	return data, nil
 }
