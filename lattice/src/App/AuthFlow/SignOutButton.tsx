@@ -7,6 +7,7 @@ interface Props {
 
 const SignOutButton: React.FC<Props> = ({ children }) => {
   const signoutOnClick = (e) => {
+    localStorage.clear();
     window.location.href = '/logout';
   };
 
