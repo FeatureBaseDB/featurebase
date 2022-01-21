@@ -2,13 +2,11 @@
 package pilosa
 
 import (
-	"fmt"
 	"math/rand"
 	"runtime"
 	"testing"
 
 	"github.com/molecula/featurebase/v3/logger"
-	"github.com/molecula/featurebase/v3/syswrap"
 )
 
 type cv struct {
@@ -66,31 +64,5 @@ func forceSnapshotsCheckMapping(t *testing.T) {
 		if err != nil {
 			t.Fatalf("snapshot[%d]: %v", i, err)
 		}
-	}
-}
-
-// This test should basically never fail, but it might if you were running
-// out of available mmaps. Which you can fake up by adding '&& false' to the test
-// in newGeneration in generation.go. So this is probably useless but it's
-// a failure mode we've been bitten by once...
-func TestMmapBehavior(t *testing.T) {
-	// rbf and lmdb not happy with this test.
-	roaringOnlyTest(t)
-
-	var changed bool
-	var original uint64
-	defer func() {
-		syswrap.SetMaxMapCount(original)
-	}()
-
-	for _, mmapMaxVal := range []uint64{0, 3} {
-		prev := syswrap.SetMaxMapCount(mmapMaxVal)
-		if !changed {
-			original = prev
-			changed = true
-		}
-		t.Run(fmt.Sprintf("maps%d", mmapMaxVal), func(t *testing.T) {
-			forceSnapshotsCheckMapping(t)
-		})
 	}
 }

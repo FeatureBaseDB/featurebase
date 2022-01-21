@@ -620,8 +620,7 @@ func (b *Bitmap) OffsetRange(offset, start, end uint64) *Bitmap {
 		}
 		other.Containers.Put(off+(k-hi0), c.Freeze())
 	}
-	// if b.Source != nil && mappedAny {
-	if b.Source != nil && (generationDebug || mappedAny) {
+	if b.Source != nil && mappedAny {
 		other.Source = b.Source
 	}
 	return other
