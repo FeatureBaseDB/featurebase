@@ -3,14 +3,6 @@ include:
   - template: Security/License-Scanning.gitlab-ci.yml
   - template: Security/Dependency-Scanning.gitlab-ci.yml
 
-.go-cache:
-    variables:
-        GOPATH: $CI_PROJECT_DIR/.go
-    cache:
-      - key: $CI_COMMIT_REF_SLUG
-        paths:
-          - .go/pkg/mod/
-
 variables:
   GOVERSION: "1.16.13"
 
@@ -24,7 +16,6 @@ stages:
 golangci-lint:
   image: golangci/golangci-lint:v1.39.0
   stage: lint
-  extends: .go-cache
   allow_failure: false
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
@@ -71,7 +62,6 @@ run jest tests:
 run go tests:
   stage: test
   image: golang:$GOVERSION
-  extends: .go-cache
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
@@ -83,7 +73,6 @@ run go tests:
 run go tests race:
   stage: test
   image: golang:$GOVERSION
-  extends: .go-cache
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
@@ -95,7 +84,6 @@ run go tests race:
 run go tests shardwidth22:
   stage: test
   image: golang:$GOVERSION
-  extends: .go-cache
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
@@ -110,7 +98,6 @@ run go tests shardwidth22:
 run go tests future:
   stage: test
   image: golang:1.17.6
-  extends: .go-cache
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
