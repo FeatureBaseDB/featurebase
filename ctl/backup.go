@@ -60,7 +60,7 @@ func NewBackupCommand(stdin io.Reader, stdout, stderr io.Writer) *BackupCommand 
 		CmdIO:       pilosa.NewCmdIO(stdin, stdout, stderr),
 		Concurrency: 1,
 		RetryPeriod: time.Minute,
-		Pprof:       "localhost:43809",
+		Pprof:       "localhost:0",
 	}
 }
 

@@ -140,14 +140,14 @@ func TestTx_CommitRollback(t *testing.T) {
 		select {
 		case <-ch1:
 			t.Fatal("second tx started while first tx active")
-		case <-time.After(10 * time.Millisecond):
+		case <-time.After(50 * time.Millisecond):
 		}
 
 		// Finish first transaction.
 		close(ch0)
 		select {
 		case <-ch1:
-		case <-time.After(10 * time.Millisecond):
+		case <-time.After(10 * time.Second):
 			t.Fatal("second tx should have started after first tx closed")
 		}
 	})

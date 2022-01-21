@@ -187,6 +187,22 @@ func (e *Etcd) Close() error {
 // New feature: retryClient can also retry on errTimeout.
 const etcdRetryTimes = 3
 
+// newClient requests a new client which is different from the one
+// passed in. if we've already changed our client (say, because someone
+// else already did that) we just return that new one.
+func (e *Etcd) newClient(cli *clientv3.Client) *clientv3.Client {
+	e.cliMu.Lock()
+	defer e.cliMu.Unlock()
+	if cli != e.cli {
+		cli = e.cli
+		// someone else already reopened. retry.
+		return cli
+	}
+	_ = cli.Close()
+	e.cli = v3client.New(e.e.Server)
+	return e.cli
+}
+
 func (e *Etcd) retryClient(fn func(cli *clientv3.Client) error) (err error) {
 	e.cliMu.Lock()
 	cli := e.cli
@@ -196,29 +212,24 @@ func (e *Etcd) retryClient(fn func(cli *clientv3.Client) error) (err error) {
 		err = fn(cli)
 		switch err {
 		case etcdserver.ErrLeaderChanged:
-			// we can't do much with an error from closing e.cli at this point, so
-			// we try again.
-			e.cliMu.Lock()
-			if cli != e.cli {
-				cli = e.cli
-				e.cliMu.Unlock()
-				// someone else already reopened. retry.
-				continue
-			}
-			_ = cli.Close()
-			cli = v3client.New(e.e.Server)
-			e.cli = cli
-			e.cliMu.Unlock()
+			cli = e.newClient(cli)
 			break
 		case nil:
 			return nil
 		default:
 			msg := err.Error()
-			if !strings.HasPrefix(msg, "etcdserver: request timed out") {
+			// this shouldn't be necessary, but empirically, we sometimes
+			// get an error message which has this text, but the error itself
+			// isn't actually etcdserver.ErrLeaderChanged.
+			if strings.Contains(msg, "etcdserver: leader changed") {
+				cli = e.newClient(cli)
+				break
+			}
+			if !strings.Contains(msg, "etcdserver: request timed out") {
 				// not a known error, also not a wrapped timeout
 				return errors.Wrap(err, "non-retryable error")
 			}
-			fallthrough // treat this as being like a timeout error
+			fallthrough // treat this as being one of the ErrTimeout derivatives, possibly wrapped.
 		case etcdserver.ErrTimeout, etcdserver.ErrTimeoutDueToLeaderFail, etcdserver.ErrTimeoutDueToConnectionLost, etcdserver.ErrTimeoutLeaderTransfer:
 			// sporadic timeouts are concerning but not necessarily fatal
 			// and can usually be retried.

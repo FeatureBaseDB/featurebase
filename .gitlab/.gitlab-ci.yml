@@ -66,7 +66,7 @@ run go tests:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
     - echo "Running featurebase unit tests..."
-    - go test ./...
+    - go test -timeout=30m ./...
   tags:
     - aws
 
@@ -77,7 +77,7 @@ run go tests race:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
     - echo "Running featurebase race tests..."
-    - go test -race -timeout=30m ./...
+    - go test -race -timeout=90m ./...
   tags:
     - aws
 
@@ -88,10 +88,10 @@ run go tests shardwidth22:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
     - echo "Running featurebase race tests..."
-    - go test -tags=shardwidth22 ./...
+    - go test -timeout=30m -tags=shardwidth22 ./...
   tags:
     - aws
-
+    
 # we do coverage reporting from the future tests because the json
 # output is very difficult to human-read. The alternative would be to
 # run the regular tests twice and also run the future tests.
@@ -103,7 +103,7 @@ run go tests future:
   script:
     - echo "Running featurebase unit tests..."
     - PKG_LIST=$(go list ./... | grep -v internal/clustertests | paste -s -d, -)
-    - go test -json -coverprofile=coverage.out -covermode=atomic -coverpkg=${PKG_LIST} ./... | tee test-report.out
+    - go test -timeout=30m -json -coverprofile=coverage.out -covermode=atomic -coverpkg=${PKG_LIST} ./... | tee test-report.out
   artifacts:
     paths:
       - coverage.out

@@ -38,7 +38,7 @@ func (ports *Ports) Close() error {
 	return err3
 }
 
-// listenerPortURL builds a TCP listener and corresponding http://localhost:%d
+// listenerWithURL builds a TCP listener and corresponding http://localhost:%d
 // URL, and returns those.
 func listenerWithURL() (listener *net.TCPListener, url string, err error) {
 	l, err := net.Listen("tcp", ":0")

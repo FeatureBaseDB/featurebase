@@ -19,6 +19,8 @@ DOCKER_BUILD= # set to 1 to use `docker-build` instead of `build` when creating 
 BUILD_TAGS += shardwidth$(SHARD_WIDTH)
 TEST_TAGS = roaringparanoia
 UNAME := $(shell uname -s)
+TEST_TIMEOUT=30m
+RACE_TEST_TIMEOUT=90m
 ifeq ($(UNAME), Darwin)
     IS_MACOS:=1
 else
@@ -45,11 +47,11 @@ version:
 
 # Run test suite
 test:
-	$(GO) test ./... -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) -v
+	$(GO) test ./... -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) -v -timeout $(TEST_TIMEOUT)
 
 # Run test suite with race flag
 test-race:
-	CGO_ENABLED=1 $(GO) test ./... -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) -race -timeout 60m -v
+	CGO_ENABLED=1 $(GO) test ./... -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) -race -timeout $(RACE_TEST_TIMEOUT) -v
 
 testv: topt testvsub
 
@@ -64,7 +66,7 @@ testvsub:
 	set -e; for i in boltdb client ctl http pg pql rbf roaring server sql txkey; do \
            echo; echo "___ testing subpkg $$i"; \
            cd $$i; pwd; \
-           $(GO) test -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) -v -timeout 60m || break; \
+           $(GO) test -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) -v -timeout $(RACE_TEST_TIMEOUT) || break; \
            echo; echo "999 done testing subpkg $$i"; \
            cd ..; \
         done
@@ -73,7 +75,7 @@ testvsub-race:
 	set -e; for i in boltdb client ctl http pg pql rbf roaring server sql txkey; do \
            echo; echo "___ testing subpkg $$i -race"; \
            cd $$i; pwd; \
-           CGO_ENABLED=1 $(GO) test -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) -v -race -timeout 60m || break; \
+           CGO_ENABLED=1 $(GO) test -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) -v -race -timeout $(RACE_TEST_TIMEOUT) || break; \
            echo; echo "999 done testing subpkg $$i -race"; \
            cd ..; \
         done
@@ -248,20 +250,20 @@ pilosa-fsck:
 
 # Run Pilosa tests inside Docker container
 docker-test:
-	docker run --rm -v $(PWD):/go/src/$(CLONE_URL) -w /go/src/$(CLONE_URL) golang:$(GO_VERSION) go test -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) ./...
+	docker run --rm -v $(PWD):/go/src/$(CLONE_URL) -w /go/src/$(CLONE_URL) golang:$(GO_VERSION) go test -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) -timeout $(TEST_TIMEOUT) ./...
 
 # Must use bash in order to -o pipefail; otherwise the tee will hide red tests.
 # run top tests, not subdirs. print summary red/green after.
 # The \-\-\- FAIL avoids counting the extra two FAIL strings at then bottom of log.topt.
 topt:
 	mv log.topt.roar log.topt.roar.prev || true
-	$(eval SHELL:=/bin/bash) set -o pipefail; $(GO) test -v -timeout 60m -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) 2>&1 | tee log.topt.roar
+	$(eval SHELL:=/bin/bash) set -o pipefail; $(GO) test -v -timeout $(RACE_TEST_TIMEOUT) -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) 2>&1 | tee log.topt.roar
 	@echo "   log.topt.roar green: \c"; cat log.topt.roar | grep PASS |wc -l
 	@echo "   log.topt.roar   red: \c"; cat log.topt.roar | grep '\-\-\- FAIL' | wc -l
 
 topt-race:
 	mv log.topt.race log.topt.race.prev || true
-	$(eval SHELL:=/bin/bash) set -o pipefail; CGO_ENABLED=1 $(GO) test -race -timeout 60m -v -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) 2>&1 | tee log.topt.race
+	$(eval SHELL:=/bin/bash) set -o pipefail; CGO_ENABLED=1 $(GO) test -race -timeout $(RACE_TEST_TIMEOUT) -v -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) 2>&1 | tee log.topt.race
 	@echo "   log.topt.race green: \c"; cat log.topt.race | grep PASS |wc -l
 	@echo "   log.topt.race   red: \c"; cat log.topt.race | grep '\-\-\- FAIL' | wc -l
 

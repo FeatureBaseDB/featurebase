@@ -56,7 +56,7 @@ func NewRestoreCommand(stdin io.Reader, stdout, stderr io.Writer) *RestoreComman
 		CmdIO:       pilosa.NewCmdIO(stdin, stdout, stderr),
 		RetryPeriod: time.Second * 30,
 		Concurrency: 1,
-		Pprof:       "localhost:43809",
+		Pprof:       "localhost:0",
 	}
 }
 
