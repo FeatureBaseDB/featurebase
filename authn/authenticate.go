@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt"
-	"github.com/molecula/featurebase/v2/logger"
+	"github.com/molecula/featurebase/v3/logger"
 	"github.com/pkg/errors"
 	"golang.org/x/oauth2"
 )

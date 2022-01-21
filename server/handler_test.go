@@ -18,13 +18,13 @@ import (
 	"testing"
 	"time"
 
-	pilosa "github.com/molecula/featurebase/v2"
-	"github.com/molecula/featurebase/v2/boltdb"
-	"github.com/molecula/featurebase/v2/encoding/proto"
-	"github.com/molecula/featurebase/v2/http"
-	"github.com/molecula/featurebase/v2/pql"
-	"github.com/molecula/featurebase/v2/server"
-	"github.com/molecula/featurebase/v2/test"
+	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/boltdb"
+	"github.com/molecula/featurebase/v3/encoding/proto"
+	"github.com/molecula/featurebase/v3/http"
+	"github.com/molecula/featurebase/v3/pql"
+	"github.com/molecula/featurebase/v3/server"
+	"github.com/molecula/featurebase/v3/test"
 )
 
 func TestHandler_PostSchemaCluster(t *testing.T) {

@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/molecula/featurebase/v2/client"
-	"github.com/molecula/featurebase/v2/client/csv"
+	"github.com/molecula/featurebase/v3/client"
+	"github.com/molecula/featurebase/v3/client/csv"
 )
 
 func TestCSVIterate(t *testing.T) {

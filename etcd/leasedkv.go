@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/molecula/featurebase/v2/disco"
+	"github.com/molecula/featurebase/v3/disco"
 	"github.com/pkg/errors"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/clientv3util"

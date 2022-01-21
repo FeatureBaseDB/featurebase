@@ -6,8 +6,8 @@ import (
 	"os"
 	"reflect"
 
-	"github.com/molecula/featurebase/v2"
-	"github.com/molecula/featurebase/v2/testhook"
+	"github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/testhook"
 )
 
 // AuditLeaksOn is a global switch to turn on resource

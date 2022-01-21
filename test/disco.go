@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/molecula/featurebase/v2/etcd"
-	"github.com/molecula/featurebase/v2/server"
-	"github.com/molecula/featurebase/v2/testhook"
+	"github.com/molecula/featurebase/v3/etcd"
+	"github.com/molecula/featurebase/v3/server"
+	"github.com/molecula/featurebase/v3/testhook"
 	"github.com/pkg/errors"
 )
 

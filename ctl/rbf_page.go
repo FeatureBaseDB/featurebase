@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/molecula/featurebase/v2"
-	"github.com/molecula/featurebase/v2/rbf"
+	"github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/rbf"
 )
 
 // RBFPageCommand represents a command for printing data for a single RBF page.

@@ -11,8 +11,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/molecula/featurebase/v2/logger"
-	"github.com/molecula/featurebase/v2/testhook"
+	"github.com/molecula/featurebase/v3/logger"
+	"github.com/molecula/featurebase/v3/testhook"
 	"github.com/pkg/errors"
 )
 

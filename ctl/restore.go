@@ -17,11 +17,11 @@ import (
 
 	"github.com/hashicorp/go-retryablehttp"
 
-	pilosa "github.com/molecula/featurebase/v2"
-	fb_http "github.com/molecula/featurebase/v2/http"
-	"github.com/molecula/featurebase/v2/logger"
-	"github.com/molecula/featurebase/v2/server"
-	"github.com/molecula/featurebase/v2/topology"
+	pilosa "github.com/molecula/featurebase/v3"
+	fb_http "github.com/molecula/featurebase/v3/http"
+	"github.com/molecula/featurebase/v3/logger"
+	"github.com/molecula/featurebase/v3/server"
+	"github.com/molecula/featurebase/v3/topology"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )

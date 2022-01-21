@@ -13,11 +13,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/molecula/featurebase/v2/pql"
-	"github.com/molecula/featurebase/v2/roaring"
-	"github.com/molecula/featurebase/v2/stats"
-	"github.com/molecula/featurebase/v2/testhook"
-	"github.com/molecula/featurebase/v2/vprint"
+	"github.com/molecula/featurebase/v3/pql"
+	"github.com/molecula/featurebase/v3/roaring"
+	"github.com/molecula/featurebase/v3/stats"
+	"github.com/molecula/featurebase/v3/testhook"
+	"github.com/molecula/featurebase/v3/vprint"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )

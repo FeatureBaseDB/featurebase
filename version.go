@@ -22,7 +22,7 @@ func VersionInfo(rename bool) string {
 	if Version != "" {
 		suffix = " " + Version
 	} else {
-		suffix = " v2.x"
+		suffix = " v3.x"
 	}
 	buildTime := BuildTime
 	if buildTime != "" {

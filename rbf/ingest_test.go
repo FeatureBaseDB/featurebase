@@ -12,12 +12,12 @@ import (
 
 	//"time"
 
-	"github.com/molecula/featurebase/v2/rbf/cfg"
-	"github.com/molecula/featurebase/v2/roaring"
-	"github.com/molecula/featurebase/v2/testhook"
+	"github.com/molecula/featurebase/v3/rbf/cfg"
+	"github.com/molecula/featurebase/v3/roaring"
+	"github.com/molecula/featurebase/v3/testhook"
 
-	txkey "github.com/molecula/featurebase/v2/short_txkey"
-	. "github.com/molecula/featurebase/v2/vprint" // nolint:staticcheck
+	txkey "github.com/molecula/featurebase/v3/short_txkey"
+	. "github.com/molecula/featurebase/v3/vprint" // nolint:staticcheck
 )
 
 func rbfName(index, field, view string, shard uint64) string {

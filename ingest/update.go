@@ -2,7 +2,7 @@
 package ingest
 
 import (
-	"github.com/molecula/featurebase/v2/roaring"
+	"github.com/molecula/featurebase/v3/roaring"
 )
 
 // ShardUpdate is an update request for a shard.

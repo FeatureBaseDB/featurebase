@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/molecula/featurebase/v2/logger"
+	"github.com/molecula/featurebase/v3/logger"
 )
 
 // Server is a postgres wire protocol server.

@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/molecula/featurebase/v2"
-	"github.com/molecula/featurebase/v2/rbf"
+	"github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/rbf"
 )
 
 // RBFCheckCommand represents a command for running a consistency check on RBF.

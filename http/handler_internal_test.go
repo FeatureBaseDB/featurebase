@@ -16,13 +16,13 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt"
-	pilosa "github.com/molecula/featurebase/v2"
-	"github.com/molecula/featurebase/v2/authn"
+	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/authn"
 	"golang.org/x/oauth2"
 
-	"github.com/molecula/featurebase/v2/authz"
-	"github.com/molecula/featurebase/v2/logger"
-	"github.com/molecula/featurebase/v2/pql"
+	"github.com/molecula/featurebase/v3/authz"
+	"github.com/molecula/featurebase/v3/logger"
+	"github.com/molecula/featurebase/v3/pql"
 )
 
 // Test custom UnmarshalJSON for postIndexRequest object

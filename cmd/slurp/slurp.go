@@ -17,10 +17,10 @@ import (
 	"strings"
 	"time"
 
-	pilosa "github.com/molecula/featurebase/v2"
-	"github.com/molecula/featurebase/v2/http"
-	pnet "github.com/molecula/featurebase/v2/net"
-	"github.com/molecula/featurebase/v2/vprint"
+	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/http"
+	pnet "github.com/molecula/featurebase/v3/net"
+	"github.com/molecula/featurebase/v3/vprint"
 )
 
 // slurp: slurp is a load-tester for importing bulk data.

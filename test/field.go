@@ -2,7 +2,7 @@
 package test
 
 import (
-	"github.com/molecula/featurebase/v2"
+	"github.com/molecula/featurebase/v3"
 )
 
 // Field represents a test wrapper for pilosa.Field.

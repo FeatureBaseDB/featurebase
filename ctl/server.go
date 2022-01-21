@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/molecula/featurebase/v2/server"
-	"github.com/molecula/featurebase/v2/storage"
+	"github.com/molecula/featurebase/v3/server"
+	"github.com/molecula/featurebase/v3/storage"
 	"github.com/spf13/cobra"
 )
 

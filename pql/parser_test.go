@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/molecula/featurebase/v2/pql"
-	_ "github.com/molecula/featurebase/v2/test"
+	"github.com/molecula/featurebase/v3/pql"
+	_ "github.com/molecula/featurebase/v3/test"
 )
 
 // Ensure the parser can parse PQL.

@@ -7,8 +7,8 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/molecula/featurebase/v2/logger"
-	"github.com/molecula/featurebase/v2/syswrap"
+	"github.com/molecula/featurebase/v3/logger"
+	"github.com/molecula/featurebase/v3/syswrap"
 )
 
 type cv struct {

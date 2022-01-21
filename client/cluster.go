@@ -7,7 +7,7 @@ package client
 import (
 	"sync"
 
-	pnet "github.com/molecula/featurebase/v2/net"
+	pnet "github.com/molecula/featurebase/v3/net"
 )
 
 // Cluster contains hosts in a Pilosa cluster.

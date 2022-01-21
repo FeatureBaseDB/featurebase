@@ -16,8 +16,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/molecula/featurebase/v2"
-	phttp "github.com/molecula/featurebase/v2/http"
+	"github.com/molecula/featurebase/v3"
+	phttp "github.com/molecula/featurebase/v3/http"
 	"golang.org/x/sync/errgroup"
 )
 

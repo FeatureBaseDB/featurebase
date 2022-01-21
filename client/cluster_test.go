@@ -7,7 +7,7 @@ package client
 import (
 	"testing"
 
-	pnet "github.com/molecula/featurebase/v2/net"
+	pnet "github.com/molecula/featurebase/v3/net"
 )
 
 func TestNewClusterWithHost(t *testing.T) {

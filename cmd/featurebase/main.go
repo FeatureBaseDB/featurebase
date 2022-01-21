@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/molecula/featurebase/v2/cmd"
+	"github.com/molecula/featurebase/v3/cmd"
 )
 
 func main() {

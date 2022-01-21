@@ -14,9 +14,9 @@ import (
 	"unsafe"
 
 	"github.com/benbjohnson/immutable"
-	"github.com/molecula/featurebase/v2/logger"
-	rbfcfg "github.com/molecula/featurebase/v2/rbf/cfg"
-	"github.com/molecula/featurebase/v2/syswrap"
+	"github.com/molecula/featurebase/v3/logger"
+	rbfcfg "github.com/molecula/featurebase/v3/rbf/cfg"
+	"github.com/molecula/featurebase/v3/syswrap"
 )
 
 var (

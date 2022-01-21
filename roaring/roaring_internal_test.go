@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/molecula/featurebase/v2/generator"
+	"github.com/molecula/featurebase/v3/generator"
 	"github.com/pkg/errors"
 )
 

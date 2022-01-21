@@ -5,8 +5,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/molecula/featurebase/v2"
-	pproto "github.com/molecula/featurebase/v2/proto"
+	"github.com/molecula/featurebase/v3"
+	pproto "github.com/molecula/featurebase/v3/proto"
 	"github.com/pkg/errors"
 	"vitess.io/vitess/go/vt/sqlparser"
 )

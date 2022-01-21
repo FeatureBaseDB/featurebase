@@ -11,11 +11,11 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/molecula/featurebase/v2/roaring"
-	txkey "github.com/molecula/featurebase/v2/short_txkey"
-	"github.com/molecula/featurebase/v2/storage"
+	"github.com/molecula/featurebase/v3/roaring"
+	txkey "github.com/molecula/featurebase/v3/short_txkey"
+	"github.com/molecula/featurebase/v3/storage"
 
-	"github.com/molecula/featurebase/v2/vprint"
+	"github.com/molecula/featurebase/v3/vprint"
 	"github.com/pkg/errors"
 )
 

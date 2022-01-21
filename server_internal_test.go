@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/molecula/featurebase/v2/storage"
-	"github.com/molecula/featurebase/v2/testhook"
+	"github.com/molecula/featurebase/v3/storage"
+	"github.com/molecula/featurebase/v3/testhook"
 )
 
 // Ensure the file handle count is working

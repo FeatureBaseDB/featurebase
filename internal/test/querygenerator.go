@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/molecula/featurebase/v2/pql"
+	"github.com/molecula/featurebase/v3/pql"
 )
 
 type Args map[string]interface{}

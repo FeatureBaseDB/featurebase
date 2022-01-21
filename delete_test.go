@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/molecula/featurebase/v2"
-	"github.com/molecula/featurebase/v2/test"
+	"github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/test"
 	"github.com/stretchr/testify/require"
 )
 

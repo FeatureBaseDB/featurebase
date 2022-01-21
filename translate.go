@@ -10,8 +10,8 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/molecula/featurebase/v2/ingest"
-	"github.com/molecula/featurebase/v2/topology"
+	"github.com/molecula/featurebase/v3/ingest"
+	"github.com/molecula/featurebase/v3/topology"
 	"github.com/pkg/errors"
 )
 

@@ -15,12 +15,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/molecula/featurebase/v2/disco"
-	"github.com/molecula/featurebase/v2/pql"
-	"github.com/molecula/featurebase/v2/roaring"
-	"github.com/molecula/featurebase/v2/stats"
-	"github.com/molecula/featurebase/v2/testhook"
-	"github.com/molecula/featurebase/v2/tracing"
+	"github.com/molecula/featurebase/v3/disco"
+	"github.com/molecula/featurebase/v3/pql"
+	"github.com/molecula/featurebase/v3/roaring"
+	"github.com/molecula/featurebase/v3/stats"
+	"github.com/molecula/featurebase/v3/testhook"
+	"github.com/molecula/featurebase/v3/tracing"
 	"github.com/pkg/errors"
 )
 

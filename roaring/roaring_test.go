@@ -11,10 +11,10 @@ import (
 	"testing/quick"
 	"time"
 
-	"github.com/molecula/featurebase/v2"
-	"github.com/molecula/featurebase/v2/generator"
-	"github.com/molecula/featurebase/v2/roaring"
-	_ "github.com/molecula/featurebase/v2/test"
+	"github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/generator"
+	"github.com/molecula/featurebase/v3/roaring"
+	_ "github.com/molecula/featurebase/v3/test"
 )
 
 func TestContainerCount(t *testing.T) {

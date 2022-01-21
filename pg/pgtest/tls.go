@@ -12,7 +12,7 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/molecula/featurebase/v2/pg"
+	"github.com/molecula/featurebase/v3/pg"
 	"github.com/pkg/errors"
 )
 

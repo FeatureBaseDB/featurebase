@@ -4,7 +4,7 @@ package sql2_test
 import (
 	"testing"
 
-	sql "github.com/molecula/featurebase/v2/sql2"
+	sql "github.com/molecula/featurebase/v3/sql2"
 )
 
 func TestPos_String(t *testing.T) {

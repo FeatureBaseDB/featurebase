@@ -4,7 +4,7 @@ package pilosa
 import (
 	"fmt"
 
-	"github.com/molecula/featurebase/v2/topology"
+	"github.com/molecula/featurebase/v3/topology"
 	"github.com/pkg/errors"
 )
 

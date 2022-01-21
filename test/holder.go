@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	pilosa "github.com/molecula/featurebase/v2"
-	"github.com/molecula/featurebase/v2/pql"
-	"github.com/molecula/featurebase/v2/testhook"
-	"github.com/molecula/featurebase/v2/vprint"
+	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/pql"
+	"github.com/molecula/featurebase/v3/testhook"
+	"github.com/molecula/featurebase/v3/vprint"
 	"github.com/pkg/errors"
 )
 

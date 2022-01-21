@@ -4,9 +4,9 @@ package sql
 import (
 	"sort"
 
-	"github.com/molecula/featurebase/v2"
-	"github.com/molecula/featurebase/v2/pql"
-	pproto "github.com/molecula/featurebase/v2/proto"
+	"github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/pql"
+	pproto "github.com/molecula/featurebase/v3/proto"
 	"github.com/pkg/errors"
 )
 

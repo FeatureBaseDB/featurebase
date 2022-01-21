@@ -7,12 +7,12 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/molecula/featurebase/v2"
-	"github.com/molecula/featurebase/v2/boltdb"
-	"github.com/molecula/featurebase/v2/http"
-	"github.com/molecula/featurebase/v2/server"
-	"github.com/molecula/featurebase/v2/test"
-	. "github.com/molecula/featurebase/v2/vprint" // nolint:staticcheck
+	"github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/boltdb"
+	"github.com/molecula/featurebase/v3/http"
+	"github.com/molecula/featurebase/v3/server"
+	"github.com/molecula/featurebase/v3/test"
+	. "github.com/molecula/featurebase/v3/vprint" // nolint:staticcheck
 )
 
 func TestAPI_SimplerOneNode_ImportColumnKey(t *testing.T) {

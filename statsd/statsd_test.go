@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/molecula/featurebase/v2/statsd"
-	_ "github.com/molecula/featurebase/v2/test"
+	"github.com/molecula/featurebase/v3/statsd"
+	_ "github.com/molecula/featurebase/v3/test"
 )
 
 func TestStatsClient_WithTags(t *testing.T) {

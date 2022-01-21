@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	pilosa "github.com/molecula/featurebase/v2"
-	"github.com/molecula/featurebase/v2/pql"
+	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/pql"
 	"github.com/pkg/errors"
 )
 

@@ -19,14 +19,14 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt"
-	pilosa "github.com/molecula/featurebase/v2"
-	"github.com/molecula/featurebase/v2/authn"
-	"github.com/molecula/featurebase/v2/boltdb"
-	"github.com/molecula/featurebase/v2/http"
-	"github.com/molecula/featurebase/v2/server"
-	"github.com/molecula/featurebase/v2/shardwidth"
-	"github.com/molecula/featurebase/v2/test"
-	. "github.com/molecula/featurebase/v2/vprint" // nolint:staticcheck
+	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/authn"
+	"github.com/molecula/featurebase/v3/boltdb"
+	"github.com/molecula/featurebase/v3/http"
+	"github.com/molecula/featurebase/v3/server"
+	"github.com/molecula/featurebase/v3/shardwidth"
+	"github.com/molecula/featurebase/v3/test"
+	. "github.com/molecula/featurebase/v3/vprint" // nolint:staticcheck
 )
 
 func TestAPI_Import(t *testing.T) {

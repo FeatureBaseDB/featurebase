@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/molecula/featurebase/v2/testhook"
+	"github.com/molecula/featurebase/v3/testhook"
 )
 
 func TestInspectCommand_Run(t *testing.T) {

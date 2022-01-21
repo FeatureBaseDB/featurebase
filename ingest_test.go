@@ -12,9 +12,9 @@ import (
 	"strings"
 	"testing"
 
-	pilosa "github.com/molecula/featurebase/v2"
-	"github.com/molecula/featurebase/v2/ingest"
-	"github.com/molecula/featurebase/v2/test"
+	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/ingest"
+	"github.com/molecula/featurebase/v3/test"
 	"github.com/pkg/errors"
 )
 

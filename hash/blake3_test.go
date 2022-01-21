@@ -9,7 +9,7 @@ import (
 	"path"
 	"testing"
 
-	"github.com/molecula/featurebase/v2/testhook"
+	"github.com/molecula/featurebase/v3/testhook"
 )
 
 func TestBlake3Hasher(t *testing.T) {

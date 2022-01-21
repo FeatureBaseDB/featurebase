@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/molecula/featurebase/v2/pql"
-	"github.com/molecula/featurebase/v2/testhook"
+	"github.com/molecula/featurebase/v3/pql"
+	"github.com/molecula/featurebase/v3/testhook"
 )
 
 func TestExecutor_TranslateRowsOnBool(t *testing.T) {
