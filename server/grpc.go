@@ -13,15 +13,15 @@ import (
 	"time"
 
 	"github.com/improbable-eng/grpc-web/go/grpcweb"
-	pilosa "github.com/molecula/featurebase/v2"
-	"github.com/molecula/featurebase/v2/authn"
-	"github.com/molecula/featurebase/v2/authz"
-	"github.com/molecula/featurebase/v2/logger"
-	"github.com/molecula/featurebase/v2/pql"
-	pb "github.com/molecula/featurebase/v2/proto"
-	vdsm_pb "github.com/molecula/featurebase/v2/proto/vdsm"
-	"github.com/molecula/featurebase/v2/sql"
-	"github.com/molecula/featurebase/v2/stats"
+	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/authn"
+	"github.com/molecula/featurebase/v3/authz"
+	"github.com/molecula/featurebase/v3/logger"
+	"github.com/molecula/featurebase/v3/pql"
+	pb "github.com/molecula/featurebase/v3/proto"
+	vdsm_pb "github.com/molecula/featurebase/v3/proto/vdsm"
+	"github.com/molecula/featurebase/v3/sql"
+	"github.com/molecula/featurebase/v3/stats"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -30,6 +30,7 @@ import (
 	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/reflection"
 	"google.golang.org/grpc/status"
+	"vitess.io/vitess/go/vt/sqlparser"
 )
 
 // GRPCHandler contains methods which handle the various gRPC requests.
@@ -165,8 +166,8 @@ func isAllowed(requested []string, allowed []string) bool {
 // QuerySQL handles the SQL request and sends RowResponses to the stream.
 func (h *GRPCHandler) QuerySQL(req *pb.QuerySQLRequest, stream pb.Pilosa_QuerySQLServer) error {
 	ctx := stream.Context()
-	uinfo := ctx.Value("userinfo")
-	if uinfo != nil {
+	uinfo, ok := ctx.Value("userinfo").(*authn.UserInfo)
+	if ok && uinfo != nil {
 		// authz
 		m := sql.NewMapper()
 		parsed, err := m.MapSQL(req.Sql)
@@ -174,13 +175,20 @@ func (h *GRPCHandler) QuerySQL(req *pb.QuerySQLRequest, stream pb.Pilosa_QuerySQ
 			return errors.Wrap(err, "parsing SQL")
 		}
 
-		allowed := h.perms.GetAuthorizedIndexList(uinfo.(*authn.UserInfo).Groups, authz.Read)
-		if !h.perms.IsAdmin(uinfo.(*authn.UserInfo).Groups) {
+		perm := authz.Read
+		switch parsed.Statement.(type) {
+		case *sqlparser.DDL: // currently only used for DropTable
+			perm = authz.Admin
+		}
+
+		allowed := h.perms.GetAuthorizedIndexList(uinfo.Groups, perm)
+		if !h.perms.IsAdmin(uinfo.Groups) {
 			if !isAllowed(parsed.Tables, allowed) {
 				return status.Error(codes.PermissionDenied, "insufficient permissions to access requested tables")
 			}
 			ctx = context.WithValue(ctx, "indices", allowed)
 		}
+		LogQuery(ctx, "QuerySQL", req, h.queryLogger)
 	}
 
 	start := time.Now()
@@ -219,9 +227,29 @@ func (h *GRPCHandler) QuerySQL(req *pb.QuerySQLRequest, stream pb.Pilosa_QuerySQ
 func (h *GRPCHandler) QuerySQLUnary(ctx context.Context, req *pb.QuerySQLRequest) (*pb.TableResponse, error) {
 	start := time.Now()
 	uinfo := ctx.Value("userinfo")
-	if uinfo != nil && !h.perms.IsAdmin(uinfo.(*authn.UserInfo).Groups) {
-		ctx = context.WithValue(ctx, "indices", h.perms.GetAuthorizedIndexList(uinfo.(*authn.UserInfo).Groups, authz.Read))
+	if uinfo != nil {
+		// authz
+		m := sql.NewMapper()
+		parsed, err := m.MapSQL(req.Sql)
+		if err != nil {
+			return nil, errors.Wrap(err, "parsing SQL")
+		}
+
+		perm := authz.Read
+		switch parsed.Statement.(type) {
+		case *sqlparser.DDL: // currently only used for DropTable
+			perm = authz.Admin
+		}
+
+		allowed := h.perms.GetAuthorizedIndexList(uinfo.(*authn.UserInfo).Groups, perm)
+		if !h.perms.IsAdmin(uinfo.(*authn.UserInfo).Groups) {
+			if !isAllowed(parsed.Tables, allowed) {
+				return nil, status.Error(codes.PermissionDenied, "insufficient permissions to access requested tables")
+			}
+			ctx = context.WithValue(ctx, "indices", allowed)
+		}
 	}
+
 	results, err := h.execSQL(ctx, req.Sql)
 	if err != nil {
 		return nil, err
@@ -272,6 +300,7 @@ func (h *GRPCHandler) QueryPQL(req *pb.QueryPQLRequest, stream pb.Pilosa_QueryPQ
 				return status.Error(codes.PermissionDenied, "insufficient permissions to access requested indexes")
 			}
 		}
+		LogQuery(ctx, "QueryPQL", req, h.queryLogger)
 	}
 	t := time.Now()
 	resp, err := h.api.Query(stream.Context(), &query)
@@ -429,10 +458,10 @@ func (h *GRPCHandler) GetIndex(ctx context.Context, req *pb.GetIndexRequest) (*p
 // GetIndexes returns a list of all Indexes
 func (h *GRPCHandler) GetIndexes(ctx context.Context, req *pb.GetIndexesRequest) (*pb.GetIndexesResponse, error) {
 	uinfo := ctx.Value("userinfo")
-	var pp *authn.UserInfo
+	var userInfo *authn.UserInfo
 	if uinfo != nil {
 		var ok bool
-		pp, ok = uinfo.(*authn.UserInfo)
+		userInfo, ok = uinfo.(*authn.UserInfo)
 		if !ok {
 			return nil, status.Error(codes.InvalidArgument, "malformed auth header")
 		}
@@ -442,17 +471,14 @@ func (h *GRPCHandler) GetIndexes(ctx context.Context, req *pb.GetIndexesRequest)
 		return nil, errToStatusError(err)
 	}
 
-	indexes := make([]*pb.Index, len(schema))
-	i := 0
+	indexes := make([]*pb.Index, 0)
 	for _, index := range schema {
-		if pp != nil {
-			if p, err := h.perms.GetPermissions(pp, index.Name); err == nil && p.Satisfies(authz.Read) {
-				indexes[i] = &pb.Index{Name: index.Name}
-				i += 1
+		if userInfo != nil {
+			if p, err := h.perms.GetPermissions(userInfo, index.Name); err == nil && p.Satisfies(authz.Read) {
+				indexes = append(indexes, &pb.Index{Name: index.Name})
 			}
 		} else {
-			indexes[i] = &pb.Index{Name: index.Name}
-			i += 1
+			indexes = append(indexes, &pb.Index{Name: index.Name})
 		}
 	}
 	return &pb.GetIndexesResponse{Indexes: indexes}, nil
@@ -692,6 +718,8 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 	h.inspectDeprecated.Do(func() {
 		h.logger.Infof("DEPRECATED: Inspect is deprecated, please use Extract() instead.")
 	})
+
+	LogQuery(stream.Context(), "Inspect", req, h.queryLogger)
 
 	index, err := h.api.Index(stream.Context(), req.Index)
 	if err != nil {
@@ -1561,16 +1589,17 @@ func NewGRPCServer(opts ...grpcServerOption) (*grpcServer, error) {
 	if server.auth != nil {
 		gopts = append(gopts, grpc.UnaryInterceptor(
 			func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-				ctx, err := Valid(ctx, info.FullMethod, server.auth, req, server.queryLogger)
+				ctx, err := Valid(ctx, server.auth)
 				if err != nil {
 					return nil, err
 				}
+				LogQuery(ctx, info.FullMethod, req, server.logger)
 				return handler(ctx, req)
 			},
 		))
 		gopts = append(gopts, grpc.StreamInterceptor(
 			func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
-				ctx, err := Valid(ss.Context(), info.FullMethod, server.auth, srv, server.queryLogger)
+				ctx, err := Valid(ss.Context(), server.auth)
 				if err != nil {
 					return err
 				}
@@ -1597,6 +1626,29 @@ func NewGRPCServer(opts ...grpcServerOption) (*grpcServer, error) {
 	return server, nil
 }
 
+// LogQuery logs requests
+func LogQuery(ctx context.Context, method string, req interface{}, logger logger.Logger) {
+	uinfo, ok := ctx.Value("userinfo").(*authn.UserInfo)
+	md, _ := metadata.FromIncomingContext(ctx)
+	p, ok := peer.FromContext(ctx)
+	ip := ""
+	if ok {
+		ip = p.Addr.String()
+	}
+	ua, ok := md["user-agent"]
+	if !ok {
+		ua = []string{""}
+	}
+	switch r := req.(type) {
+	case *pb.QueryPQLRequest:
+		logger.Infof("GRPC: %v, %v, %v, %v, %v, %s", ip, ua, method, uinfo.UserID, uinfo.UserName, r.Pql)
+	case *pb.QuerySQLRequest:
+		logger.Infof("GRPC: %v, %v, %v, %v, %v, %s", ip, ua, method, uinfo.UserID, uinfo.UserName, r.Sql)
+	default:
+		logger.Infof("GRPC: %v, %v, %v, %v, %v", ip, ua, method, uinfo.UserID, uinfo.UserName)
+	}
+}
+
 // wrappedStream wraps around the embedded grpc.ServerStream, and intercepts the RecvMsg and
 // SendMsg method call.
 type wrappedStream struct {
@@ -1616,7 +1668,7 @@ func (w *wrappedStream) SendMsg(m interface{}) error {
 	return w.ServerStream.SendMsg(m)
 }
 
-func Valid(ctx context.Context, method string, auth *authn.Auth, req interface{}, logger logger.Logger) (context.Context, error) {
+func Valid(ctx context.Context, auth *authn.Auth) (context.Context, error) {
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
 		return ctx, status.Errorf(codes.InvalidArgument, "missing metadata")
@@ -1645,17 +1697,6 @@ func Valid(ctx context.Context, method string, auth *authn.Auth, req interface{}
 	if err != nil {
 		return ctx, status.Errorf(codes.Unauthenticated, err.Error())
 	}
-
-	p, ok := peer.FromContext(ctx)
-	ip := ""
-	if ok {
-		ip = p.Addr.String()
-	}
-	ua, ok := md["user-agent"]
-	if !ok {
-		ua = []string{""}
-	}
-	logger.Infof("GRPC: %v, %v, %v, %v, %v, %v", ip, ua, method, uinfo.UserID, uinfo.UserName, req)
 
 	return context.WithValue(ctx, "userinfo", uinfo), nil
 }

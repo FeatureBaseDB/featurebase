@@ -8,7 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/molecula/featurebase/v2/pb"
+	"github.com/molecula/featurebase/v3/pb"
 )
 
 // QueryResponse types.

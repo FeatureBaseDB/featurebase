@@ -9,10 +9,10 @@ import (
 	"strings"
 	"testing"
 
-	pilosa "github.com/molecula/featurebase/v2"
-	"github.com/molecula/featurebase/v2/http"
-	"github.com/molecula/featurebase/v2/server"
-	"github.com/molecula/featurebase/v2/test"
+	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/http"
+	"github.com/molecula/featurebase/v3/server"
+	"github.com/molecula/featurebase/v3/test"
 )
 
 func TestHandlerOptions(t *testing.T) {

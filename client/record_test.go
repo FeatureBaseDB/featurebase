@@ -7,7 +7,7 @@ package client_test
 import (
 	"testing"
 
-	"github.com/molecula/featurebase/v2/client"
+	"github.com/molecula/featurebase/v3/client"
 )
 
 func TestColumnShard(t *testing.T) {

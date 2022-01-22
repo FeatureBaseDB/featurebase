@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/molecula/featurebase/v2"
-	"github.com/molecula/featurebase/v2/test"
+	"github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/test"
 )
 
 func TestExportCommand_Validation(t *testing.T) {

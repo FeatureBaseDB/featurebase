@@ -17,11 +17,11 @@ import (
 
 	"github.com/hashicorp/go-retryablehttp"
 
-	pilosa "github.com/molecula/featurebase/v2"
-	fb_http "github.com/molecula/featurebase/v2/http"
-	"github.com/molecula/featurebase/v2/logger"
-	"github.com/molecula/featurebase/v2/server"
-	"github.com/molecula/featurebase/v2/topology"
+	pilosa "github.com/molecula/featurebase/v3"
+	fb_http "github.com/molecula/featurebase/v3/http"
+	"github.com/molecula/featurebase/v3/logger"
+	"github.com/molecula/featurebase/v3/server"
+	"github.com/molecula/featurebase/v3/topology"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -56,7 +56,7 @@ func NewRestoreCommand(stdin io.Reader, stdout, stderr io.Writer) *RestoreComman
 		CmdIO:       pilosa.NewCmdIO(stdin, stdout, stderr),
 		RetryPeriod: time.Second * 30,
 		Concurrency: 1,
-		Pprof:       "localhost:43809",
+		Pprof:       "localhost:0",
 	}
 }
 

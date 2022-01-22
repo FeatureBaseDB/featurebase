@@ -8,11 +8,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/molecula/featurebase/v2/rbf"
-	"github.com/molecula/featurebase/v2/shardwidth"
-	txkey "github.com/molecula/featurebase/v2/short_txkey"
-	"github.com/molecula/featurebase/v2/testhook"
-	. "github.com/molecula/featurebase/v2/vprint" // nolint:staticcheck
+	"github.com/molecula/featurebase/v3/rbf"
+	"github.com/molecula/featurebase/v3/shardwidth"
+	txkey "github.com/molecula/featurebase/v3/short_txkey"
+	"github.com/molecula/featurebase/v3/testhook"
+	. "github.com/molecula/featurebase/v3/vprint" // nolint:staticcheck
 )
 
 // Shard per db evaluation

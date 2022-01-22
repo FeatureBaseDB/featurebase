@@ -6,8 +6,8 @@ import (
 	"crypto/tls"
 	"sync"
 
-	"github.com/molecula/featurebase/v2/logger"
-	pb "github.com/molecula/featurebase/v2/proto"
+	"github.com/molecula/featurebase/v3/logger"
+	pb "github.com/molecula/featurebase/v3/proto"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"

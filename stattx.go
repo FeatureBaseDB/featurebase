@@ -9,10 +9,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/molecula/featurebase/v2/debugstats"
-	"github.com/molecula/featurebase/v2/roaring"
-	txkey "github.com/molecula/featurebase/v2/short_txkey"
-	"github.com/molecula/featurebase/v2/vprint"
+	"github.com/molecula/featurebase/v3/debugstats"
+	"github.com/molecula/featurebase/v3/roaring"
+	txkey "github.com/molecula/featurebase/v3/short_txkey"
+	"github.com/molecula/featurebase/v3/vprint"
 )
 
 // statTx is useful to profile on a

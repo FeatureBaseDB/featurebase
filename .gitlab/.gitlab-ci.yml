@@ -3,14 +3,6 @@ include:
   - template: Security/License-Scanning.gitlab-ci.yml
   - template: Security/Dependency-Scanning.gitlab-ci.yml
 
-.go-cache:
-    variables:
-        GOPATH: $CI_PROJECT_DIR/.go
-    cache:
-      - key: $CI_COMMIT_REF_SLUG
-        paths:
-          - .go/pkg/mod/
-
 variables:
   GOVERSION: "1.16.13"
 
@@ -24,7 +16,6 @@ stages:
 golangci-lint:
   image: golangci/golangci-lint:v1.39.0
   stage: lint
-  extends: .go-cache
   allow_failure: false
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
@@ -71,32 +62,35 @@ run jest tests:
 run go tests:
   stage: test
   image: golang:$GOVERSION
-  extends: .go-cache
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
     - echo "Running featurebase unit tests..."
-    - go test ./...
+    - go test -timeout=30m ./...
+  tags:
+    - aws
 
 run go tests race:
   stage: test
   image: golang:$GOVERSION
-  extends: .go-cache
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
     - echo "Running featurebase race tests..."
-    - go test -race -timeout=30m ./...
+    - go test -race -timeout=90m ./...
+  tags:
+    - aws
 
 run go tests shardwidth22:
   stage: test
   image: golang:$GOVERSION
-  extends: .go-cache
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
     - echo "Running featurebase race tests..."
-    - go test -tags=shardwidth22 ./...
+    - go test -timeout=30m -tags=shardwidth22 ./...
+  tags:
+    - aws
     
 # we do coverage reporting from the future tests because the json
 # output is very difficult to human-read. The alternative would be to
@@ -104,17 +98,18 @@ run go tests shardwidth22:
 run go tests future:
   stage: test
   image: golang:1.17.6
-  extends: .go-cache
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
     - echo "Running featurebase unit tests..."
     - PKG_LIST=$(go list ./... | grep -v internal/clustertests | paste -s -d, -)
-    - go test -json -coverprofile=coverage.out -covermode=atomic -coverpkg=${PKG_LIST} ./... | tee test-report.out
+    - go test -timeout=30m -json -coverprofile=coverage.out -covermode=atomic -coverpkg=${PKG_LIST} ./... | tee test-report.out
   artifacts:
     paths:
       - coverage.out
       - test-report.out
+  tags:
+    - aws
 
 upload to sonarcloud:
   stage: test

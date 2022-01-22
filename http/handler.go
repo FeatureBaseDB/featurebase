@@ -29,16 +29,16 @@ import (
 	"github.com/felixge/fgprof"
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
-	pilosa "github.com/molecula/featurebase/v2"
-	"github.com/molecula/featurebase/v2/authn"
-	"github.com/molecula/featurebase/v2/authz"
-	"github.com/molecula/featurebase/v2/encoding/proto"
-	"github.com/molecula/featurebase/v2/ingest"
-	"github.com/molecula/featurebase/v2/logger"
-	"github.com/molecula/featurebase/v2/pql"
-	"github.com/molecula/featurebase/v2/rbf"
-	"github.com/molecula/featurebase/v2/topology"
-	"github.com/molecula/featurebase/v2/tracing"
+	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/authn"
+	"github.com/molecula/featurebase/v3/authz"
+	"github.com/molecula/featurebase/v3/encoding/proto"
+	"github.com/molecula/featurebase/v3/ingest"
+	"github.com/molecula/featurebase/v3/logger"
+	"github.com/molecula/featurebase/v3/pql"
+	"github.com/molecula/featurebase/v3/rbf"
+	"github.com/molecula/featurebase/v3/topology"
+	"github.com/molecula/featurebase/v3/tracing"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	dto "github.com/prometheus/client_model/go"
@@ -544,9 +544,13 @@ func (h *Handler) chkInternal(handler http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if h.auth != nil {
 			secret, ok := r.Header["X-Feature-Key"]
-			decodedString, err := hex.DecodeString(secret[0])
+			secretString := ""
+			if ok {
+				secretString = secret[0]
+			}
+			decodedString, err := hex.DecodeString(secretString)
 			if err != nil || !ok || !bytes.Equal(decodedString, h.auth.SecretKey()) {
-				http.Error(w, errors.Wrap(err, "internal secret key validation failed").Error(), http.StatusUnauthorized)
+				http.Error(w, "internal secret key validation failed", http.StatusUnauthorized)
 				return
 			}
 		}

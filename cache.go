@@ -10,9 +10,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/molecula/featurebase/v2/lru"
-	pb "github.com/molecula/featurebase/v2/proto"
-	"github.com/molecula/featurebase/v2/stats"
+	"github.com/molecula/featurebase/v3/lru"
+	pb "github.com/molecula/featurebase/v3/proto"
+	"github.com/molecula/featurebase/v3/stats"
 	"github.com/pkg/errors"
 )
 

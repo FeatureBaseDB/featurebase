@@ -4,10 +4,10 @@ package server
 import (
 	"context"
 
-	"github.com/molecula/featurebase/v2"
-	"github.com/molecula/featurebase/v2/logger"
-	pb "github.com/molecula/featurebase/v2/proto"
-	"github.com/molecula/featurebase/v2/sql"
+	"github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/logger"
+	pb "github.com/molecula/featurebase/v3/proto"
+	"github.com/molecula/featurebase/v3/sql"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"

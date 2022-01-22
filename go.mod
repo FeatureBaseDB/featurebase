@@ -1,4 +1,4 @@
-module github.com/molecula/featurebase/v2
+module github.com/molecula/featurebase/v3
 
 replace go.etcd.io/etcd => github.com/molecula/etcd v0.0.0-20210930172242-ad94b354f72c
 
@@ -14,7 +14,6 @@ require (
 	github.com/cespare/xxhash v1.1.0
 	github.com/davecgh/go-spew v1.1.1
 	github.com/desertbit/timer v0.0.0-20180107155436-c41aec40b27f // indirect
-	github.com/dgrijalva/jwt-go v3.2.0+incompatible
 	github.com/dustin/go-humanize v1.0.0 // indirect
 	github.com/felixge/fgprof v0.9.1
 	github.com/fsnotify/fsnotify v1.4.9 // indirect

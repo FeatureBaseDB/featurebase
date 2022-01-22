@@ -5,10 +5,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/molecula/featurebase/v2"
+	"github.com/molecula/featurebase/v3"
 
-	"github.com/molecula/featurebase/v2/cmd"
-	"github.com/molecula/featurebase/v2/pql"
+	"github.com/molecula/featurebase/v3/cmd"
+	"github.com/molecula/featurebase/v3/pql"
 )
 
 func TestImportHelp(t *testing.T) {

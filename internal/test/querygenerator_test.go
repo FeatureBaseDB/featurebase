@@ -4,7 +4,7 @@ package test
 import (
 	"testing"
 
-	"github.com/molecula/featurebase/v2/pql"
+	"github.com/molecula/featurebase/v3/pql"
 )
 
 func TestPQL_Generator(t *testing.T) {

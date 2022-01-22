@@ -1,7 +1,6 @@
 .PHONY: build check-clean clean build-lattice cover cover-viz default docker docker-build docker-test docker-tag-push generate generate-protoc generate-pql generate-statik gometalinter install install-build-deps install-golangci-lint install-gometalinter install-protoc install-protoc-gen-gofast install-peg install-statik release release-build test testv testv-race testvsub testvsub-race test-txstore-rbf
 
 CLONE_URL=github.com/pilosa/pilosa
-MOD_VERSION=v2
 VERSION := $(shell git describe --tags 2> /dev/null || echo unknown)
 VARIANT = Molecula
 GO=go
@@ -13,12 +12,14 @@ BRANCH_ID := $(BRANCH)-$(GOOS)-$(GOARCH)
 BUILD_TIME := $(shell date -u +%FT%T%z)
 SHARD_WIDTH = 20
 COMMIT := $(shell git describe --exact-match >/dev/null 2>&1 || git rev-parse --short HEAD)
-LDFLAGS="-X github.com/molecula/featurebase/v2.Version=$(VERSION) -X github.com/molecula/featurebase/v2.BuildTime=$(BUILD_TIME) -X github.com/molecula/featurebase/v2.Variant=$(VARIANT) -X github.com/molecula/featurebase/v2.Commit=$(COMMIT) -X github.com/molecula/featurebase/v2.TrialDeadline=$(TRIAL_DEADLINE)"
+LDFLAGS="-X github.com/molecula/featurebase/v3.Version=$(VERSION) -X github.com/molecula/featurebase/v3.BuildTime=$(BUILD_TIME) -X github.com/molecula/featurebase/v3.Variant=$(VARIANT) -X github.com/molecula/featurebase/v3.Commit=$(COMMIT) -X github.com/molecula/featurebase/v3.TrialDeadline=$(TRIAL_DEADLINE)"
 GO_VERSION=1.16.10
 DOCKER_BUILD= # set to 1 to use `docker-build` instead of `build` when creating a release
 BUILD_TAGS += shardwidth$(SHARD_WIDTH)
 TEST_TAGS = roaringparanoia
 UNAME := $(shell uname -s)
+TEST_TIMEOUT=30m
+RACE_TEST_TIMEOUT=90m
 ifeq ($(UNAME), Darwin)
     IS_MACOS:=1
 else
@@ -45,11 +46,11 @@ version:
 
 # Run test suite
 test:
-	$(GO) test ./... -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) -v
+	$(GO) test ./... -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) -v -timeout $(TEST_TIMEOUT)
 
 # Run test suite with race flag
 test-race:
-	CGO_ENABLED=1 $(GO) test ./... -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) -race -timeout 60m -v
+	CGO_ENABLED=1 $(GO) test ./... -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) -race -timeout $(RACE_TEST_TIMEOUT) -v
 
 testv: topt testvsub
 
@@ -64,7 +65,7 @@ testvsub:
 	set -e; for i in boltdb client ctl http pg pql rbf roaring server sql txkey; do \
            echo; echo "___ testing subpkg $$i"; \
            cd $$i; pwd; \
-           $(GO) test -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) -v -timeout 60m || break; \
+           $(GO) test -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) -v -timeout $(RACE_TEST_TIMEOUT) || break; \
            echo; echo "999 done testing subpkg $$i"; \
            cd ..; \
         done
@@ -73,7 +74,7 @@ testvsub-race:
 	set -e; for i in boltdb client ctl http pg pql rbf roaring server sql txkey; do \
            echo; echo "___ testing subpkg $$i -race"; \
            cd $$i; pwd; \
-           CGO_ENABLED=1 $(GO) test -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) -v -race -timeout 60m || break; \
+           CGO_ENABLED=1 $(GO) test -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) -v -race -timeout $(RACE_TEST_TIMEOUT) || break; \
            echo; echo "999 done testing subpkg $$i -race"; \
            cd ..; \
         done
@@ -168,11 +169,11 @@ build-lattice:
 
 # `go generate` protocol buffers
 generate-protoc: require-protoc require-protoc-gen-gofast
-	$(GO) generate github.com/molecula/featurebase/v2/pb
+	$(GO) generate github.com/molecula/featurebase/v3/pb
 
 # `go generate` statik assets (lattice UI)
 generate-statik: build-lattice require-statik
-	$(GO) generate github.com/molecula/featurebase/v2/statik
+	$(GO) generate github.com/molecula/featurebase/v3/statik
 
 # `go generate` statik assets (lattice UI) in Docker
 generate-statik-docker: build-lattice
@@ -180,7 +181,7 @@ generate-statik-docker: build-lattice
 
 # `go generate` stringers
 generate-stringer:
-	$(GO) generate github.com/molecula/featurebase/v2
+	$(GO) generate github.com/molecula/featurebase/v3
 
 generate-pql: require-peg
 	cd pql && peg -inline pql.peg && cd ..
@@ -191,7 +192,7 @@ generate-proto-grpc: require-protoc require-protoc-gen-go
 	# TODO: Modify above commands and remove the below mv if possible.
 	# See https://go-review.googlesource.com/c/protobuf/+/219298/ for info on --go-opt
 	# I couldn't get it to work during development - Cody
-	cp -r proto/github.com/molecula/featurebase/v2/proto/ proto/
+	cp -r proto/github.com/molecula/featurebase/v3/proto/ proto/
 	rm -rf proto/github.com
 
 # `go generate` all needed packages
@@ -248,20 +249,20 @@ pilosa-fsck:
 
 # Run Pilosa tests inside Docker container
 docker-test:
-	docker run --rm -v $(PWD):/go/src/$(CLONE_URL) -w /go/src/$(CLONE_URL) golang:$(GO_VERSION) go test -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) ./...
+	docker run --rm -v $(PWD):/go/src/$(CLONE_URL) -w /go/src/$(CLONE_URL) golang:$(GO_VERSION) go test -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) -timeout $(TEST_TIMEOUT) ./...
 
 # Must use bash in order to -o pipefail; otherwise the tee will hide red tests.
 # run top tests, not subdirs. print summary red/green after.
 # The \-\-\- FAIL avoids counting the extra two FAIL strings at then bottom of log.topt.
 topt:
 	mv log.topt.roar log.topt.roar.prev || true
-	$(eval SHELL:=/bin/bash) set -o pipefail; $(GO) test -v -timeout 60m -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) 2>&1 | tee log.topt.roar
+	$(eval SHELL:=/bin/bash) set -o pipefail; $(GO) test -v -timeout $(RACE_TEST_TIMEOUT) -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) 2>&1 | tee log.topt.roar
 	@echo "   log.topt.roar green: \c"; cat log.topt.roar | grep PASS |wc -l
 	@echo "   log.topt.roar   red: \c"; cat log.topt.roar | grep '\-\-\- FAIL' | wc -l
 
 topt-race:
 	mv log.topt.race log.topt.race.prev || true
-	$(eval SHELL:=/bin/bash) set -o pipefail; CGO_ENABLED=1 $(GO) test -race -timeout 60m -v -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) 2>&1 | tee log.topt.race
+	$(eval SHELL:=/bin/bash) set -o pipefail; CGO_ENABLED=1 $(GO) test -race -timeout $(RACE_TEST_TIMEOUT) -v -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) 2>&1 | tee log.topt.race
 	@echo "   log.topt.race green: \c"; cat log.topt.race | grep PASS |wc -l
 	@echo "   log.topt.race   red: \c"; cat log.topt.race | grep '\-\-\- FAIL' | wc -l
 

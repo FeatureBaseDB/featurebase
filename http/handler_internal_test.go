@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"io/ioutil"
+	"net/http"
 	gohttp "net/http"
 	"net/http/httptest"
 	"net/url"
@@ -16,13 +17,13 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt"
-	pilosa "github.com/molecula/featurebase/v2"
-	"github.com/molecula/featurebase/v2/authn"
+	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/authn"
 	"golang.org/x/oauth2"
 
-	"github.com/molecula/featurebase/v2/authz"
-	"github.com/molecula/featurebase/v2/logger"
-	"github.com/molecula/featurebase/v2/pql"
+	"github.com/molecula/featurebase/v3/authz"
+	"github.com/molecula/featurebase/v3/logger"
+	"github.com/molecula/featurebase/v3/pql"
 )
 
 // Test custom UnmarshalJSON for postIndexRequest object
@@ -235,7 +236,7 @@ func TestAuthentication(t *testing.T) {
 	claims["name"] = "todd"
 	validToken, err := tkn.SignedString([]byte(secretKey))
 	if err != nil {
-		panic(err)
+		t.Fatal(err)
 	}
 	validToken = "Bearer " + validToken
 
@@ -247,15 +248,10 @@ func TestAuthentication(t *testing.T) {
 	}
 
 	// make an expired token
-	expiredTkn := jwt.New(jwt.SigningMethodHS256)
-	expiredClaims := expiredTkn.Claims.(jwt.MapClaims)
-	expiredClaims["molecula-idp-groups"] = groupString
-	expiredClaims["oid"] = "42"
-	expiredClaims["name"] = "todd"
-	expiredClaims["exp"] = "1"
-	expiredToken, err := expiredTkn.SignedString([]byte(secretKey))
+	claims["exp"] = "1"
+	expiredToken, err := tkn.SignedString([]byte(secretKey))
 	if err != nil {
-		panic(err)
+		t.Fatal(err)
 	}
 	expiredToken = "Bearer " + expiredToken
 
@@ -502,9 +498,7 @@ admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 			},
 		},
 		{
-			// this tests that there are no permissions read in even though
-			// auth is turned on, so we get a 500
-			name:   "MW-CreateIndexGood",
+			name:   "MW-CreateIndexInsufficientPerms",
 			path:   "/index/abcd",
 			kind:   "bearer",
 			method: gohttp.MethodPost,
@@ -621,4 +615,173 @@ admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 
 	}
 
+}
+
+func TestChkAuthN(t *testing.T) {
+	a := NewTestAuth(t)
+	h := Handler{
+		logger:      logger.NewStandardLogger(os.Stdout),
+		queryLogger: logger.NewStandardLogger(os.Stdout),
+		auth:        a,
+	}
+
+	// make a valid token
+	tkn := jwt.New(jwt.SigningMethodHS256)
+	claims := tkn.Claims.(jwt.MapClaims)
+	groupString, _ := authn.ToGob64([]authn.Group{{GroupID: "thing", GroupName: "whatever"}})
+	claims["molecula-idp-groups"] = groupString
+	claims["oid"] = "42"
+	claims["name"] = "A. Token"
+	validToken, err := tkn.SignedString(a.SecretKey())
+	if err != nil {
+		t.Fatal(err)
+	}
+	validToken = "Bearer " + validToken
+
+	// make an invalid token
+	invalidKey, err := hex.DecodeString("DEADBEEDDEADBEEDDEADBEEDDEADBEEDDEADBEEDDEADBEEDDEADBEEDDEADBEED")
+	if err != nil {
+		t.Fatal(err)
+	}
+	invalidToken, err := tkn.SignedString(invalidKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	invalidToken = "Bearer " + invalidToken
+
+	// make an expired token
+	claims["exp"] = "1"
+	expiredToken, err := tkn.SignedString(a.SecretKey())
+	if err != nil {
+		t.Fatal(err)
+	}
+	expiredToken = "Bearer " + expiredToken
+
+	testingHandler := func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("good"))
+	}
+
+	cases := []struct {
+		name       string
+		endpoint   string
+		token      string
+		handler    http.HandlerFunc
+		statusCode int
+	}{
+		{
+			name:       "Valid",
+			token:      validToken,
+			handler:    h.chkAuthN(testingHandler),
+			statusCode: http.StatusOK,
+		},
+		{
+			name:       "Invalid",
+			token:      invalidToken,
+			handler:    h.chkAuthN(testingHandler),
+			statusCode: http.StatusUnauthorized,
+		},
+		{
+			name:       "Expired",
+			token:      expiredToken,
+			handler:    h.chkAuthN(testingHandler),
+			statusCode: http.StatusUnauthorized,
+		},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			r := httptest.NewRequest("GET", "/whatever", nil)
+			r.Header.Add("Authorization", test.token)
+			test.handler(w, r)
+			resp := w.Result()
+			if resp.StatusCode != test.statusCode {
+				t.Fatalf("expected %v, got %v", test.statusCode, resp.StatusCode)
+			}
+		})
+	}
+}
+
+func TestChkInternal(t *testing.T) {
+	a := NewTestAuth(t)
+	authKey := "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF"
+	h := Handler{
+		logger:      logger.NewStandardLogger(os.Stdout),
+		queryLogger: logger.NewStandardLogger(os.Stdout),
+		auth:        a,
+	}
+
+	testingHandler := func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("good"))
+	}
+
+	cases := []struct {
+		name       string
+		statusCode int
+		handler    http.HandlerFunc
+		key        string
+	}{
+		{
+			name:       "happyPath",
+			statusCode: http.StatusOK,
+			handler:    h.chkInternal(testingHandler),
+			key:        authKey,
+		},
+		{
+			name:       "unhappyPath-empty",
+			statusCode: http.StatusUnauthorized,
+			handler:    h.chkInternal(testingHandler),
+			key:        "",
+		},
+		{
+			name:       "unhappyPath-wrong",
+			statusCode: http.StatusUnauthorized,
+			handler:    h.chkInternal(testingHandler),
+			key:        "BEABBEEFBEABBEEFBEABBEEFBEABBEEFBEABBEEFBEABBEEFBEABBEEFBEABBEEF",
+		},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			r := httptest.NewRequest("GET", "/whatever", nil)
+			if test.key != "" {
+				r.Header.Add("X-Feature-Key", test.key)
+			}
+			test.handler(w, r)
+			resp := w.Result()
+			if resp.StatusCode != test.statusCode {
+				t.Fatalf("expected %v, got %v", test.statusCode, resp.StatusCode)
+			}
+		})
+	}
+}
+
+func NewTestAuth(t *testing.T) *authn.Auth {
+	t.Helper()
+	var (
+		ClientID         = "e9088663-eb08-41d7-8f65-efb5f54bbb71"
+		ClientSecret     = "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF"
+		AuthorizeURL     = "https://login.microsoftonline.com/4a137d66-d161-4ae4-b1e6-07e9920874b8/oauth2/v2.0/authorize"
+		TokenURL         = "https://login.microsoftonline.com/4a137d66-d161-4ae4-b1e6-07e9920874b8/oauth2/v2.0/token"
+		GroupEndpointURL = "https://graph.microsoft.com/v1.0/me/transitiveMemberOf/microsoft.graph.group?$count=true"
+		LogoutURL        = "https://login.microsoftonline.com/common/oauth2/v2.0/logout"
+		Scopes           = []string{"https://graph.microsoft.com/.default", "offline_access"}
+		Key              = "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF"
+	)
+
+	a, err := authn.NewAuth(
+		logger.NewStandardLogger(os.Stdout),
+		"http://localhost:10101/",
+		Scopes,
+		AuthorizeURL,
+		TokenURL,
+		GroupEndpointURL,
+		LogoutURL,
+		ClientID,
+		ClientSecret,
+		Key,
+	)
+	if err != nil {
+		t.Fatalf("building auth object%s", err)
+	}
+	return a
 }

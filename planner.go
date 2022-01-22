@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/molecula/featurebase/v2/pql"
-	"github.com/molecula/featurebase/v2/sql2"
+	"github.com/molecula/featurebase/v3/pql"
+	"github.com/molecula/featurebase/v3/sql2"
 )
 
 type Planner struct {

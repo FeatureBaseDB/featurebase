@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/molecula/featurebase/v2"
-	"github.com/molecula/featurebase/v2/rbf"
-	"github.com/molecula/featurebase/v2/txkey"
+	"github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/rbf"
+	"github.com/molecula/featurebase/v3/txkey"
 )
 
 // RBFPagesCommand represents a command for printing a list of RBF page metadata.

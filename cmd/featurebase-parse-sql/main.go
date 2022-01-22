@@ -9,7 +9,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/molecula/featurebase/v2/sql2"
+	"github.com/molecula/featurebase/v3/sql2"
 )
 
 func main() {

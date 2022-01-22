@@ -6,9 +6,9 @@ import (
 	"io"
 	"time"
 
-	"github.com/molecula/featurebase/v2/ingest"
-	pnet "github.com/molecula/featurebase/v2/net"
-	"github.com/molecula/featurebase/v2/topology"
+	"github.com/molecula/featurebase/v3/ingest"
+	pnet "github.com/molecula/featurebase/v3/net"
+	"github.com/molecula/featurebase/v3/topology"
 )
 
 // Bit represents the intersection of a row and a column. It can be specified by
@@ -36,7 +36,7 @@ type FieldValue struct {
 // While I understand that putting the entire Client behind an interface might require this many methods,
 // I don't want to let it go unquestioned.
 // Another note from Travis: I think we eventually want to unify `InternalClient` with
-// the `github.com/molecula/featurebase/v2/client` client.
+// the `github.com/molecula/featurebase/v3/client` client.
 // Doing that may obviate the need to refactor this.
 type InternalClient interface {
 	InternalQueryClient

@@ -15,11 +15,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/molecula/featurebase/v2/authz"
-	petcd "github.com/molecula/featurebase/v2/etcd"
-	rbfcfg "github.com/molecula/featurebase/v2/rbf/cfg"
-	"github.com/molecula/featurebase/v2/storage"
-	"github.com/molecula/featurebase/v2/toml"
+	"github.com/molecula/featurebase/v3/authz"
+	petcd "github.com/molecula/featurebase/v3/etcd"
+	rbfcfg "github.com/molecula/featurebase/v3/rbf/cfg"
+	"github.com/molecula/featurebase/v3/storage"
+	"github.com/molecula/featurebase/v3/toml"
 	"github.com/pkg/errors"
 )
 
@@ -240,6 +240,7 @@ type Auth struct {
 	AuthorizeURL     string   `toml:"authorize-url"`
 	TokenURL         string   `toml:"token-url"`
 	GroupEndpointURL string   `toml:"group-endpoint-url"`
+	RedirectBaseURL  string   `toml:"redirect-base-url"`
 	LogoutURL        string   `toml:"logout-url"`
 	Scopes           []string `toml:"scopes"`
 	SecretKey        string   `toml:"secret-key"`
@@ -622,6 +623,7 @@ func (c *Config) ValidateAuth() (errors []error) {
 		{name: "AuthorizeURL", val: c.Auth.AuthorizeURL},
 		{name: "TokenURL", val: c.Auth.TokenURL},
 		{name: "GroupEndpointURL", val: c.Auth.GroupEndpointURL},
+		{name: "RedirectBaseURL", val: c.Auth.RedirectBaseURL},
 		{name: "LogoutURL", val: c.Auth.LogoutURL},
 		{name: "SecretKey", val: c.Auth.SecretKey},
 		{name: "QueryLogPath", val: c.Auth.QueryLogPath},

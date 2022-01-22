@@ -12,10 +12,10 @@ import (
 	"path/filepath"
 	"time"
 
-	pilosa "github.com/molecula/featurebase/v2"
-	fb_http "github.com/molecula/featurebase/v2/http"
-	"github.com/molecula/featurebase/v2/server"
-	"github.com/molecula/featurebase/v2/topology"
+	pilosa "github.com/molecula/featurebase/v3"
+	fb_http "github.com/molecula/featurebase/v3/http"
+	"github.com/molecula/featurebase/v3/server"
+	"github.com/molecula/featurebase/v3/topology"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -60,7 +60,7 @@ func NewBackupCommand(stdin io.Reader, stdout, stderr io.Writer) *BackupCommand 
 		CmdIO:       pilosa.NewCmdIO(stdin, stdout, stderr),
 		Concurrency: 1,
 		RetryPeriod: time.Minute,
-		Pprof:       "localhost:43809",
+		Pprof:       "localhost:0",
 	}
 }
 

@@ -75,6 +75,6 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     command:
-      - "cd /go/src/github.com/molecula/featurebase/ && go test -mod=vendor -v -count=1 github.com/molecula/featurebase/v2/internal/clustertests"
+      - "cd /go/src/github.com/molecula/featurebase/ && go test -mod=vendor -v -count=1 github.com/molecula/featurebase/v3/internal/clustertests"
 networks: 
   pilosanet:

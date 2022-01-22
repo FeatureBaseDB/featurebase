@@ -12,11 +12,11 @@ import (
 	"strings"
 	"syscall"
 
-	pilosa "github.com/molecula/featurebase/v2"
-	"github.com/molecula/featurebase/v2/rbf"
-	"github.com/molecula/featurebase/v2/rbf/cfg"
-	"github.com/molecula/featurebase/v2/roaring"
-	txkey "github.com/molecula/featurebase/v2/short_txkey"
+	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/rbf"
+	"github.com/molecula/featurebase/v3/rbf/cfg"
+	"github.com/molecula/featurebase/v3/roaring"
+	txkey "github.com/molecula/featurebase/v3/short_txkey"
 	"github.com/spf13/cobra"
 )
 

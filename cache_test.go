@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/molecula/featurebase/v2"
+	"github.com/molecula/featurebase/v3"
 )
 
 // Ensure cache stays constrained to its configured size.

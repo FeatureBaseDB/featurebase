@@ -6,9 +6,9 @@ import (
 	"reflect"
 	"testing"
 
-	pilosa "github.com/molecula/featurebase/v2"
-	"github.com/molecula/featurebase/v2/ingest"
-	"github.com/molecula/featurebase/v2/pb"
+	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/ingest"
+	"github.com/molecula/featurebase/v3/pb"
 )
 
 func testOneRoundTrip(t *testing.T, s pilosa.Serializer, obj pilosa.Message, expectedMarshalErr error, expectedUnmarshalErr error, expectedMismatchErr error) {

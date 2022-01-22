@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/molecula/featurebase/v2/rbf"
-	"github.com/molecula/featurebase/v2/roaring"
+	"github.com/molecula/featurebase/v3/rbf"
+	"github.com/molecula/featurebase/v3/roaring"
 )
 
 func TestTx_CommitRollback(t *testing.T) {
@@ -140,14 +140,14 @@ func TestTx_CommitRollback(t *testing.T) {
 		select {
 		case <-ch1:
 			t.Fatal("second tx started while first tx active")
-		case <-time.After(10 * time.Millisecond):
+		case <-time.After(50 * time.Millisecond):
 		}
 
 		// Finish first transaction.
 		close(ch0)
 		select {
 		case <-ch1:
-		case <-time.After(10 * time.Millisecond):
+		case <-time.After(10 * time.Second):
 			t.Fatal("second tx should have started after first tx closed")
 		}
 	})
@@ -248,6 +248,27 @@ func TestTx_DeallocateTree(t *testing.T) {
 	}
 }
 
+func arraySizedChunk() []uint16 {
+	v := make([]uint16, rbf.ArrayMaxSize)
+	for i := range v {
+		v[i] = uint16(i)
+	}
+	return v
+}
+
+var convenientPrepopulatedArray = arraySizedChunk()
+
+// populateBitmapWithArrays
+func populateBitmapWithArrays(tb testing.TB, tx *rbf.Tx, n int, name string) {
+	c := roaring.NewContainerArray(convenientPrepopulatedArray)
+	for i := 0; i < n; i++ {
+		err := tx.PutContainer(name, uint64(i), c)
+		if err != nil {
+			tb.Fatal(err)
+		}
+	}
+}
+
 func TestTx_RecreateBitmap(t *testing.T) {
 	db := MustOpenDB(t)
 	defer MustCloseDB(t, db)
@@ -258,14 +279,8 @@ func TestTx_RecreateBitmap(t *testing.T) {
 	if err := tx.CreateBitmap("x"); err != nil {
 		t.Fatal(err)
 	}
-	const N = 825000
-	slots := make([]uint64, N)
-	for i := range slots {
-		slots[i] = uint64(i) << 20
-	}
-	if _, err := tx.Add("x", slots...); err != nil {
-		t.Fatal(err)
-	}
+	const N = 825
+	populateBitmapWithArrays(t, tx, N, "x")
 	err := tx.Commit()
 	if err != nil {
 		t.Fatal(err)
@@ -291,9 +306,7 @@ func TestTx_RecreateBitmap(t *testing.T) {
 	if err := tx.CreateBitmap("x"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := tx.Add("x", slots...); err != nil {
-		t.Fatal(err)
-	}
+	populateBitmapWithArrays(t, tx, N, "x")
 	err = tx.Commit()
 	if err != nil {
 		t.Fatal(err)
@@ -374,20 +387,14 @@ func TestTx_DeallocateToFreeList(t *testing.T) {
 	if err = tx.CreateBitmap("y"); err != nil {
 		t.Fatal(err)
 	}
-	const N = 12274831
-	slots := make([]uint64, N)
-	for i := range slots {
-		slots[i] = uint64(i) << 10
-	}
-	bm := roaring.NewBitmap(slots...)
-	if _, err = tx.AddRoaring("x", bm); err != nil {
-		t.Fatal(err)
-	}
+	// Insert large array values.
+	populateBitmapWithArrays(t, tx, 4080, "x")
+
 	if err = tx.Check(); err != nil {
 		t.Fatal(err)
 	}
 	for i := 0; i < 500; i++ {
-		if _, err := tx.Add("y", uint64(i)<<16); err != nil {
+		if _, err := tx.Add("y", uint64(i)<<16+32768); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -426,9 +433,8 @@ func TestTx_DeallocateToFreeList(t *testing.T) {
 	if err := tx.CreateBitmap("x"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := tx.AddRoaring("x", bm); err != nil {
-		t.Fatal(err)
-	}
+	populateBitmapWithArrays(t, tx, 4080, "x")
+
 	if err = tx.Check(); err != nil {
 		t.Fatal(err)
 	}
@@ -451,17 +457,7 @@ func TestTx_Remove(t *testing.T) {
 	}
 
 	// Insert large array values.
-	var values []uint64
-	for i := 0; i < 1000; i++ {
-		for j := 0; j < rbf.ArrayMaxSize; j++ {
-			v := uint64((i << 16) + j)
-			values = append(values, v)
-
-			if _, err := tx.Add("x", v); err != nil {
-				t.Fatalf("Add(%d) err=%q", v, err)
-			}
-		}
-	}
+	populateBitmapWithArrays(t, tx, 500, "x")
 
 	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
@@ -471,11 +467,16 @@ func TestTx_Remove(t *testing.T) {
 	defer tx.Rollback()
 
 	// Remove all array values.
-	for _, i := range rand.Perm(len(values)) {
-		v := values[i]
-		if _, err := tx.Remove("x", v); err != nil {
-			t.Fatalf("Remove(%d) err=%q", v, err)
+	for i := 0; i < 500; i++ {
+		err := tx.RemoveContainer("x", uint64(i))
+		if err != nil {
+			t.Fatal(err)
 		}
+	}
+	// This triggered a different panic without the relevant patch.
+	err := tx.RemoveContainer("x", 500)
+	if err != nil {
+		t.Fatal(err)
 	}
 
 	if err := tx.Commit(); err != nil {

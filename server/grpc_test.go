@@ -2,6 +2,7 @@
 package server_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
 	"fmt"
@@ -15,15 +16,15 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt"
-	pilosa "github.com/molecula/featurebase/v2"
-	"github.com/molecula/featurebase/v2/authn"
-	"github.com/molecula/featurebase/v2/authz"
-	"github.com/molecula/featurebase/v2/logger"
-	"github.com/molecula/featurebase/v2/pql"
-	pb "github.com/molecula/featurebase/v2/proto"
-	"github.com/molecula/featurebase/v2/server"
-	"github.com/molecula/featurebase/v2/sql"
-	"github.com/molecula/featurebase/v2/test"
+	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/authn"
+	"github.com/molecula/featurebase/v3/authz"
+	"github.com/molecula/featurebase/v3/logger"
+	"github.com/molecula/featurebase/v3/pql"
+	pb "github.com/molecula/featurebase/v3/proto"
+	"github.com/molecula/featurebase/v3/server"
+	"github.com/molecula/featurebase/v3/sql"
+	"github.com/molecula/featurebase/v3/test"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -843,6 +844,8 @@ func TestQuerySQL(t *testing.T) {
 					{"Table", "string"},
 				},
 				rows: []row{
+					{[]columnResponse{"another_one"}},
+					{[]columnResponse{"deletable_index"}},
 					{[]columnResponse{"delete_me"}},
 					{[]columnResponse{"grouper"}},
 					{[]columnResponse{"joiner"}},
@@ -881,6 +884,9 @@ func TestQuerySQL(t *testing.T) {
 					{"Table", "string"},
 				},
 				rows: []row{
+					{[]columnResponse{"another_one"}},
+					{[]columnResponse{"deletable_index"}},
+
 					{[]columnResponse{"grouper"}},
 					{[]columnResponse{"joiner"}},
 				},
@@ -1162,6 +1168,7 @@ admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 			t.Fatal(err)
 		}
 	})
+
 	t.Run("test-show-tables-unary-admin", func(t *testing.T) {
 		response, err := gh.QuerySQLUnary(adminCtx, &pb.QuerySQLRequest{
 			Sql: "show tables",
@@ -1188,6 +1195,55 @@ admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 		if err != nil {
 			//should be able to write
 			t.Fatal(err)
+		}
+	})
+
+	t.Run("test-drop-table-unary-read", func(t *testing.T) {
+		_, err := gh.QuerySQLUnary(readCtx, &pb.QuerySQLRequest{
+			Sql: "drop table deletable_index",
+		})
+		if err == nil {
+			t.Fatal("expected error but got nil")
+		}
+	})
+
+	t.Run("test-drop-table-unary-write", func(t *testing.T) {
+		_, err := gh.QuerySQLUnary(writeCtx, &pb.QuerySQLRequest{
+			Sql: "drop table deletable_index",
+		})
+		if err == nil {
+			t.Fatal("expected error but got nil")
+		}
+	})
+
+	t.Run("test-drop-table-unary-admin", func(t *testing.T) {
+		_, err := gh.QuerySQLUnary(adminCtx, &pb.QuerySQLRequest{
+			Sql: "drop table deletable_index",
+		})
+		if err != nil {
+			t.Fatalf("expected nil error but got %v", err)
+		}
+	})
+
+	t.Run("test-drop-table-stream-read", func(t *testing.T) {
+		mock := &mockPilosa_QuerySQLServer{ctx: readCtx}
+		err := gh.QuerySQL(&pb.QuerySQLRequest{Sql: "drop table another_one"}, mock)
+		if err == nil {
+			t.Fatal("expected error but got nil")
+		}
+	})
+	t.Run("test-drop-table-stream-write", func(t *testing.T) {
+		mock := &mockPilosa_QuerySQLServer{ctx: writeCtx}
+		err := gh.QuerySQL(&pb.QuerySQLRequest{Sql: "drop table another_one"}, mock)
+		if err == nil {
+			t.Fatal("expected error but got nil")
+		}
+	})
+	t.Run("test-drop-table-stream-admin", func(t *testing.T) {
+		mock := &mockPilosa_QuerySQLServer{ctx: adminCtx}
+		err := gh.QuerySQL(&pb.QuerySQLRequest{Sql: "drop table another_one"}, mock)
+		if err != nil {
+			t.Fatalf("expected nil error but got %v", err)
 		}
 	})
 }
@@ -1372,6 +1428,47 @@ func TestCRUDIndexes(t *testing.T) {
 	})
 }
 
+func TestLogQuery(t *testing.T) {
+	method := "test!"
+	uinfo := authn.UserInfo{
+		UserID:   "ID",
+		UserName: "name",
+	}
+	ctx := context.WithValue(context.Background(), "userinfo", &uinfo)
+
+	cases := []struct {
+		name     string
+		req      interface{}
+		expected string
+	}{
+		{
+			name:     "nonQueryReq",
+			req:      "nope",
+			expected: fmt.Sprintf("GRPC: %v, %v, %v, %v, %v\n", "", []string{}, "test!", uinfo.UserID, uinfo.UserName),
+		},
+		{
+			name:     "QuerySQLReq",
+			req:      &pb.QuerySQLRequest{Sql: "show fields from table"},
+			expected: fmt.Sprintf("GRPC: %v, %v, %v, %v, %v, %v\n", "", []string{}, "test!", uinfo.UserID, uinfo.UserName, "show fields from table"),
+		},
+		{
+			name:     "QueryPQLReq",
+			req:      &pb.QueryPQLRequest{Pql: "Count(All())"},
+			expected: fmt.Sprintf("GRPC: %v, %v, %v, %v, %v, %v\n", "", []string{}, "test!", uinfo.UserID, uinfo.UserName, "Count(All())"),
+		},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			buf := new(bytes.Buffer)
+			l := logger.NewStandardLogger(buf)
+			server.LogQuery(ctx, method, test.req, l)
+			if !strings.HasSuffix(buf.String(), test.expected) {
+				t.Errorf("expected '%v', got '%v'", test.expected, buf.String())
+			}
+		})
+	}
+}
+
 func setUpTestQuerySQLUnary(ctx context.Context, t *testing.T) (gh *server.GRPCHandler, tearDownFunc func()) {
 	t.Helper()
 
@@ -1505,6 +1602,9 @@ func setUpTestQuerySQLUnary(ctx context.Context, t *testing.T) (gh *server.GRPCH
 
 	// delete_me
 	m.MustCreateIndex(t, "delete_me", pilosa.IndexOptions{TrackExistence: true})
+
+	m.MustCreateIndex(t, "another_one", pilosa.IndexOptions{TrackExistence: true})
+	m.MustCreateIndex(t, "deletable_index", pilosa.IndexOptions{TrackExistence: true})
 
 	return gh, func() {
 		if err := m.API.DeleteIndex(ctx, joiner.Name()); err != nil {

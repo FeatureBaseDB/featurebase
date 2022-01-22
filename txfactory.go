@@ -10,8 +10,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/molecula/featurebase/v2/testhook"
-	"github.com/molecula/featurebase/v2/vprint"
+	"github.com/molecula/featurebase/v3/testhook"
+	"github.com/molecula/featurebase/v3/vprint"
 	"github.com/pkg/errors"
 )
 

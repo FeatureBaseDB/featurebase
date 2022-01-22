@@ -7,9 +7,9 @@ import (
 
 	gohttp "net/http"
 
-	"github.com/molecula/featurebase/v2/http"
-	"github.com/molecula/featurebase/v2/logger"
-	"github.com/molecula/featurebase/v2/server"
+	"github.com/molecula/featurebase/v3/http"
+	"github.com/molecula/featurebase/v3/logger"
+	"github.com/molecula/featurebase/v3/server"
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
 )

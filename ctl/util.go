@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/felixge/fgprof"
-	"github.com/molecula/featurebase/v2/logger"
+	"github.com/molecula/featurebase/v3/logger"
 	"github.com/pkg/errors"
 )
 
@@ -40,7 +40,7 @@ func startProfilingServer(addr string, logger logger.Logger) (close func() error
 		return nil, err
 	}
 	go func() {
-		logger.Printf("Listening for /debug/pprof/ and /debug/fgprof on '%s'", addr)
+		logger.Printf("Listening for /debug/pprof/ and /debug/fgprof on '%s'", ln.Addr().String())
 		logger.Printf("%v", s.Serve(ln))
 	}()
 

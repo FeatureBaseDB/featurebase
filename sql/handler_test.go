@@ -5,8 +5,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/molecula/featurebase/v2/sql"
-	"github.com/molecula/featurebase/v2/test"
+	"github.com/molecula/featurebase/v3/sql"
+	"github.com/molecula/featurebase/v3/test"
 )
 
 func TestHandler(t *testing.T) {

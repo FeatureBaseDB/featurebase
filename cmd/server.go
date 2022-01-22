@@ -4,10 +4,10 @@ package cmd
 import (
 	"io"
 
-	"github.com/molecula/featurebase/v2/ctl"
-	"github.com/molecula/featurebase/v2/server"
-	"github.com/molecula/featurebase/v2/tracing"
-	"github.com/molecula/featurebase/v2/tracing/opentracing"
+	"github.com/molecula/featurebase/v3/ctl"
+	"github.com/molecula/featurebase/v3/server"
+	"github.com/molecula/featurebase/v3/tracing"
+	"github.com/molecula/featurebase/v3/tracing/opentracing"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	jaegercfg "github.com/uber/jaeger-client-go/config"

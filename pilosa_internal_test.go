@@ -6,8 +6,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/molecula/featurebase/v2/roaring"
-	. "github.com/molecula/featurebase/v2/vprint" // nolint:staticcheck
+	"github.com/molecula/featurebase/v3/roaring"
+	. "github.com/molecula/featurebase/v3/vprint" // nolint:staticcheck
 )
 
 func TestValidateName(t *testing.T) {

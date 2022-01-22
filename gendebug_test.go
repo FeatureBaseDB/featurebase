@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"runtime"
 
-	"github.com/molecula/featurebase/v2/testhook"
+	"github.com/molecula/featurebase/v3/testhook"
 )
 
 func examineResults() error {

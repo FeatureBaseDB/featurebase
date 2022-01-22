@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"sort"
 
-	pb "github.com/molecula/featurebase/v2/proto"
-	"github.com/molecula/featurebase/v2/roaring"
+	pb "github.com/molecula/featurebase/v3/proto"
+	"github.com/molecula/featurebase/v3/roaring"
 	"github.com/pkg/errors"
 )
 

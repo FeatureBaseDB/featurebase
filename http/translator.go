@@ -12,8 +12,8 @@ import (
 	"reflect"
 	"sync"
 
-	"github.com/molecula/featurebase/v2"
-	"github.com/molecula/featurebase/v2/logger"
+	"github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/logger"
 )
 
 func GetOpenTranslateReaderFunc(client *http.Client) pilosa.OpenTranslateReaderFunc {

@@ -15,8 +15,8 @@ import (
 	_ "net/http/pprof"
 
 	"github.com/felixge/fgprof"
-	"github.com/molecula/featurebase/v2/rbf"
-	rbfcfg "github.com/molecula/featurebase/v2/rbf/cfg"
+	"github.com/molecula/featurebase/v3/rbf"
+	rbfcfg "github.com/molecula/featurebase/v3/rbf/cfg"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -339,7 +339,7 @@ func TestDB_MultiTx(t *testing.T) {
 	}
 
 	// Continuously set/clear bits while readers are executing.
-	for i := 0; i < 1000; i++ {
+	for i := 0; i < 100; i++ {
 		func() {
 			tx, err := db.Begin(true)
 			if err != nil {

@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/molecula/featurebase/v2/server"
-	"github.com/molecula/featurebase/v2/storage"
+	"github.com/molecula/featurebase/v3/server"
+	"github.com/molecula/featurebase/v3/storage"
 	"github.com/spf13/cobra"
 )
 
@@ -111,6 +111,7 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 	flags.StringVar(&srv.Config.Auth.ClientId, "auth.client-id", srv.Config.Auth.ClientId, "Identity Provider's Application/Client ID.")
 	flags.StringVar(&srv.Config.Auth.ClientSecret, "auth.client-secret", srv.Config.Auth.ClientSecret, "Identity Provider's Client Secret.")
 	flags.StringVar(&srv.Config.Auth.AuthorizeURL, "auth.authorize-url", srv.Config.Auth.AuthorizeURL, "Identity Provider's Authorize URL.")
+	flags.StringVar(&srv.Config.Auth.RedirectBaseURL, "auth.redirect-base-url", srv.Config.Auth.RedirectBaseURL, "Base URL of the featurebase instance used to redirect IDP.")
 	flags.StringVar(&srv.Config.Auth.TokenURL, "auth.token-url", srv.Config.Auth.TokenURL, "Identity Provider's Token URL.")
 	flags.StringVar(&srv.Config.Auth.GroupEndpointURL, "auth.group-endpoint-url", srv.Config.Auth.GroupEndpointURL, "Identity Provider's Group endpoint URL.")
 	flags.StringVar(&srv.Config.Auth.LogoutURL, "auth.logout-url", srv.Config.Auth.LogoutURL, "Identity Provider's Logout URL.")

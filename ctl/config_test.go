@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/molecula/featurebase/v2/server"
+	"github.com/molecula/featurebase/v3/server"
 )
 
 func TestConfigCommand_Run(t *testing.T) {
