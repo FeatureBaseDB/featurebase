@@ -3010,7 +3010,7 @@ func BenchmarkImportRoaringUpdate(b *testing.B) {
 						b.StopTimer()
 						var stat os.FileInfo
 						var statTarget io.Writer
-						err = f.gen.Transaction(&statTarget, func() error {
+						err = func() error {
 							targetFile, ok := statTarget.(*os.File)
 							if ok {
 								stat, _ = targetFile.Stat()
@@ -3018,7 +3018,7 @@ func BenchmarkImportRoaringUpdate(b *testing.B) {
 								b.Errorf("couldn't stat file")
 							}
 							return nil
-						})
+						}()
 						if err != nil {
 							b.Errorf("transaction error: %v", err)
 						}
@@ -3486,8 +3486,6 @@ func (f *fragment) Clean(t testing.TB) {
 		}
 	}()
 	errc := f.Close()
-	// prevent double-closes of generation during testing.
-	f.gen = nil
 	if errc != nil {
 		t.Fatalf("error closing fragment: %v", errc)
 	}
