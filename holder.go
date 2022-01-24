@@ -653,7 +653,7 @@ func (h *Holder) Open() error {
 			return errors.Wrap(err, "opening index")
 		}
 
-		// Since we don't have createAt stored on disk within the data
+		// Since we don't have createdAt stored on disk within the data
 		// directory, we need to populate it from the etcd schema data.
 		// TODO: we may no longer need the createdAt value stored in memory on
 		// the index struct; it may only be needed in the schema return value
