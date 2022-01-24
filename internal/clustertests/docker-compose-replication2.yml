@@ -5,8 +5,6 @@ services:
       context: ../..
       dockerfile: Dockerfile-clustertests
     image: ptest
-    ports:
-      - "33455:10101"
     environment:
       - PILOSA_CLUSTER_COORDINATOR=true
       - PILOSA_GOSSIP_SEEDS=pilosa1:14000
@@ -20,8 +18,6 @@ services:
       context: ../..
       dockerfile: Dockerfile-clustertests
     image: ptest
-    ports:
-      - "33456:10101"
     environment:
       - PILOSA_GOSSIP_SEEDS=pilosa1:14000
       - PILOSA_CLUSTER_REPLICAS=2
@@ -34,8 +30,6 @@ services:
       context: ../..
       dockerfile: Dockerfile-clustertests
     image: ptest
-    ports:
-      - "33457:10101"
     environment:
       - PILOSA_GOSSIP_SEEDS=pilosa1:14000,pilosa2:14000
       - PILOSA_CLUSTER_REPLICAS=2
