@@ -2158,9 +2158,15 @@ func (h *Handler) handlePostTransaction(w http.ResponseWriter, r *http.Request) 
 	if !ok {
 		id = reqTrns.ID
 	}
-	trns, err := h.api.StartTransaction(r.Context(), id, reqTrns.Timeout, reqTrns.Exclusive, false)
 
-	h.doTransactionResponse(w, err, trns)
+	if primary := h.api.PrimaryNode(); h.api.NodeID() == primary.ID {
+		trns, err := h.api.StartTransaction(r.Context(), id, reqTrns.Timeout, reqTrns.Exclusive, false)
+		h.doTransactionResponse(w, err, trns)
+		return
+	} else {
+		http.Redirect(w, r, primary.URI.Normalize()+"/transaction/"+id, http.StatusSeeOther)
+		return
+	}
 }
 
 func (h *Handler) handlePostFinishTransaction(w http.ResponseWriter, r *http.Request) {
