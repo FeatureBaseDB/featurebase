@@ -39,7 +39,7 @@ const (
 	mapNodeMask = mapNodeSize - 1
 )
 
-// Map represents an immutable hash map implementation. The map uses a Hasher
+// PageMap represents an immutable hash map implementation. The map uses a Hasher
 // to generate hashes and check for equality of key values.
 //
 // It is implemented as an Hash Array Mapped Trie.
@@ -49,7 +49,7 @@ type PageMap struct {
 	hasher *uint32Hasher // hasher implementation
 }
 
-// NewMap returns a new instance of Map. If hasher is nil, a default hasher
+// NewPageMap returns a new instance of PageMap. If hasher is nil, a default hasher
 // implementation will automatically be chosen based on the first key added.
 // Default hasher implementations only exist for int, string, and byte slice types.
 func NewPageMap() *PageMap {
@@ -83,7 +83,7 @@ func (m *PageMap) Get(key uint32) (value int64, ok bool) {
 // Set returns a map with the key set to the new value. A nil value is allowed.
 //
 // This function will return a new map even if the updated value is the same as
-// the existing value because Map does not track value equality.
+// the existing value because PageMap does not track value equality.
 func (m *PageMap) Set(key uint32, value int64) *PageMap {
 	return m.set(key, value, false)
 }
@@ -157,7 +157,7 @@ func (m *PageMap) Iterator() *PageMapIterator {
 	return itr
 }
 
-// PageMapBuilder represents an efficient builder for creating Maps.
+// PageMapBuilder represents an efficient builder for creating PageMaps.
 type PageMapBuilder struct {
 	m *PageMap // current state
 }
@@ -188,13 +188,13 @@ func (b *PageMapBuilder) Get(key uint32) (value int64, ok bool) {
 	return b.m.Get(key)
 }
 
-// Set sets the value of the given key. See Map.Set() for additional details.
+// Set sets the value of the given key. See PageMap.Set() for additional details.
 func (b *PageMapBuilder) Set(key uint32, value int64) {
 	assert(b.m != nil) // "immutable.PageMapBuilder: builder invalid after Map() invocation")
 	b.m = b.m.set(key, value, true)
 }
 
-// Delete removes the given key. See Map.Delete() for additional details.
+// Delete removes the given key. See PageMap.Delete() for additional details.
 func (b *PageMapBuilder) Delete(key uint32) {
 	assert(b.m != nil) //  "immutable.PageMapBuilder: builder invalid after Map() invocation")
 	b.m = b.m.delete(key, true)
@@ -777,7 +777,7 @@ type mapEntry struct {
 	value int64
 }
 
-// MapIterator represents an iterator over a map's key/value pairs. Although
+// PageMapIterator represents an iterator over a map's key/value pairs. Although
 // map keys are not sorted, the iterator's order is deterministic.
 type PageMapIterator struct {
 	m *PageMap // source map
@@ -903,7 +903,7 @@ func (itr *PageMapIterator) first() {
 	}
 }
 
-// mapIteratorElem represents a node/index pair in the MapIterator stack.
+// mapIteratorElem represents a node/index pair in the PageMapIterator stack.
 type mapIteratorElem struct {
 	node  mapNode
 	index int
