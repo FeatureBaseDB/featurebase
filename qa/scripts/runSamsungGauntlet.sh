@@ -18,5 +18,5 @@ else
 fi
 
 $SCRIPT_DIR/setupSamsungGauntlet.sh
-#$SCRIPT_DIR/testSamsungGauntlet.sh
-#$SCRIPT_DIR/teardownSamsungGauntlet.sh
+$SCRIPT_DIR/testSamsungGauntlet.sh
+$SCRIPT_DIR/teardownSamsungGauntlet.sh
