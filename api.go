@@ -2514,23 +2514,23 @@ func (api *API) StartTransaction(ctx context.Context, id string, timeout time.Du
 		return nil, errors.Wrap(err, "validating api method")
 	}
 	t, err := api.server.StartTransaction(ctx, id, timeout, exclusive, remote)
-	if exclusive {
-		switch err {
-		case nil:
+
+	switch err {
+	case nil:
+		if exclusive {
 			api.holder.Stats.Count(MetricExclusiveTransactionRequest, 1, 1.0)
-		case ErrTransactionExclusive:
-			api.holder.Stats.Count(MetricExclusiveTransactionBlocked, 1, 1.0)
-		}
-		if t.Active {
-			api.holder.Stats.Count(MetricExclusiveTransactionActive, 1, 1.0)
-		}
-	} else {
-		switch err {
-		case nil:
+		} else {
 			api.holder.Stats.Count(MetricTransactionStart, 1, 1.0)
-		case ErrTransactionExclusive:
+		}
+	case ErrTransactionExclusive:
+		if exclusive {
+			api.holder.Stats.Count(MetricExclusiveTransactionBlocked, 1, 1.0)
+		} else {
 			api.holder.Stats.Count(MetricTransactionBlocked, 1, 1.0)
 		}
+	}
+	if exclusive && t != nil && t.Active {
+		api.holder.Stats.Count(MetricExclusiveTransactionActive, 1, 1.0)
 	}
 	return t, err
 }
