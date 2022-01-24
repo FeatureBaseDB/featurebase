@@ -264,6 +264,7 @@ clustertests:
   stage: integration
   tags:
     - shell
+    - gcp
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
