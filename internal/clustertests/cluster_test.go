@@ -16,6 +16,20 @@ import (
 	picli "github.com/molecula/featurebase/v3/http"
 )
 
+// container turns a docker-compose service name into a container name
+// assuming the project name is set in the enviroment as PROJECT. This
+// refers to the "-p" argument to docker-compose. NOTE: this assumes
+// docker-compose joins the project name with a separating
+// underscore... this may not always be true as I've seen a dash used
+// as well, but I think it is true in recent versions.
+func container(svc string) string {
+	project := "clustertests"
+	if p := os.Getenv("PROJECT"); p != "" {
+		project = p
+	}
+	return project + "_" + svc + "_1"
+}
+
 func TestClusterStuff(t *testing.T) {
 	if os.Getenv("ENABLE_PILOSA_CLUSTER_TESTS") != "1" {
 		t.Skip("pilosa cluster tests are not enabled")
@@ -70,8 +84,7 @@ func TestClusterStuff(t *testing.T) {
 		}
 	}
 	t.Run("long pause", func(t *testing.T) {
-
-		pcmd := exec.Command("/pumba", "pause", "clustertests_pilosa3_1", "--duration", "10s")
+		pcmd := exec.Command("/pumba", "pause", container("pilosa3"), "--duration", "10s")
 		pcmd.Stdout = os.Stdout
 		pcmd.Stderr = os.Stderr
 		t.Log("pausing pilosa3 for 10s")
@@ -101,7 +114,7 @@ func TestClusterStuff(t *testing.T) {
 
 	t.Run("backup", func(t *testing.T) {
 		// do backup with node 1 down, but restart it after a few seconds
-		if err := sendCmd("docker", "stop", "clustertests_pilosa1_1"); err != nil {
+		if err := sendCmd("docker", "stop", container("pilosa1")); err != nil {
 			t.Fatalf("sending stop command: %v", err)
 		}
 		var backupCmd *exec.Cmd
@@ -111,7 +124,7 @@ func TestClusterStuff(t *testing.T) {
 			t.Fatalf("sending backup command: %v", err)
 		}
 		time.Sleep(time.Second * 5)
-		if err = sendCmd("docker", "start", "clustertests_pilosa1_1"); err != nil {
+		if err = sendCmd("docker", "start", container("pilosa1")); err != nil {
 			t.Fatalf("sending start command: %v", err)
 		}
 
@@ -137,12 +150,12 @@ func TestClusterStuff(t *testing.T) {
 			t.Fatalf("starting restore: %v", err)
 		}
 		time.Sleep(time.Millisecond * 50)
-		if err = sendCmd("docker", "stop", "clustertests_pilosa2_1"); err != nil {
+		if err = sendCmd("docker", "stop", container("pilosa2")); err != nil {
 			t.Fatalf("sending stop command: %v", err)
 		}
 
 		time.Sleep(time.Second * 10)
-		if err = sendCmd("docker", "start", "clustertests_pilosa2_1"); err != nil {
+		if err = sendCmd("docker", "start", container("pilosa2")); err != nil {
 			t.Fatalf("sending stop command: %v", err)
 		}
 		if err := restoreCmd.Wait(); err != nil {
@@ -157,25 +170,25 @@ func TestClusterStuff(t *testing.T) {
 			t.Fatalf("sending second backup command: %v", err)
 		}
 		time.Sleep(time.Millisecond * 10) // want the backup to get started, then fail
-		if err = sendCmd("docker", "stop", "clustertests_pilosa1_1"); err != nil {
+		if err = sendCmd("docker", "stop", container("pilosa1")); err != nil {
 			t.Fatalf("sending stop command: %v", err)
 		}
-		if err = sendCmd("docker", "stop", "clustertests_pilosa2_1"); err != nil {
+		if err = sendCmd("docker", "stop", container("pilosa2")); err != nil {
 			t.Fatalf("sending stop command: %v", err)
 		}
-		if err = sendCmd("docker", "stop", "clustertests_pilosa3_1"); err != nil {
+		if err = sendCmd("docker", "stop", container("pilosa3")); err != nil {
 			t.Fatalf("sending stop command: %v", err)
 		}
 
 		time.Sleep(time.Second * 5)
 
-		if err = sendCmd("docker", "start", "clustertests_pilosa1_1"); err != nil {
+		if err = sendCmd("docker", "start", container("pilosa1")); err != nil {
 			t.Fatalf("sending start command: %v", err)
 		}
-		if err = sendCmd("docker", "start", "clustertests_pilosa2_1"); err != nil {
+		if err = sendCmd("docker", "start", container("pilosa2")); err != nil {
 			t.Fatalf("sending start command: %v", err)
 		}
-		if err = sendCmd("docker", "start", "clustertests_pilosa3_1"); err != nil {
+		if err = sendCmd("docker", "start", container("pilosa3")); err != nil {
 			t.Fatalf("sending start command: %v", err)
 		}
 		if err = backupCmd.Wait(); err == nil {

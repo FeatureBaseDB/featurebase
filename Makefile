@@ -155,7 +155,7 @@ clustertests: vendor
 	$(DOCKER_COMPOSE) -f internal/clustertests/docker-compose.yml down
 	$(DOCKER_COMPOSE) -f internal/clustertests/docker-compose.yml build
 	$(DOCKER_COMPOSE) -f internal/clustertests/docker-compose.yml up -d pilosa1 pilosa2 pilosa3
-	$(DOCKER_COMPOSE) -f internal/clustertests/docker-compose.yml run client1
+	PROJECT=$(PROJECT) $(DOCKER_COMPOSE) -f internal/clustertests/docker-compose.yml run client1
 	$(DOCKER_COMPOSE) -f internal/clustertests/docker-compose.yml down
 
 
