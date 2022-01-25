@@ -64,6 +64,7 @@ services:
     environment:
       - ENABLE_PILOSA_CLUSTER_TESTS=1
       - GO111MODULE=on
+      - PROJECT=${PROJECT}
     networks:
       - pilosanet
     volumes:
