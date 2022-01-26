@@ -9,12 +9,17 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/molecula/featurebase/v3"
+	"github.com/golang-jwt/jwt"
+	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/authn"
+	"github.com/molecula/featurebase/v3/logger"
+	"github.com/molecula/featurebase/v3/server"
 	"github.com/molecula/featurebase/v3/test"
 	"github.com/molecula/featurebase/v3/testhook"
 )
@@ -565,6 +570,159 @@ func TestImportCommand_RunBool(t *testing.T) {
 		err = cm.Run(ctx)
 		if !strings.Contains(err.Error(), "bool field imports only support values 0 and 1") {
 			t.Fatalf("expect error: bool field imports only support values 0 and 1, actual: %s", err)
+		}
+	})
+}
+
+func TestImport_AuthOn(t *testing.T) {
+	clusterSize := 1
+
+	logFilename := "./testdata/query.log"
+	_, err := os.Create(logFilename)
+	if err != nil {
+		t.Fatalf("Failed to create query log file: %s", err)
+	}
+
+	auth := server.Auth{
+		Enable:           true,
+		ClientId:         "e9088663-eb08-41d7-8f65-efb5f54bbb71",
+		ClientSecret:     "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF",
+		AuthorizeURL:     "https://login.microsoftonline.com/4a137d66-d161-4ae4-b1e6-07e9920874b8/oauth2/v2.0/authorize",
+		TokenURL:         "https://login.microsoftonline.com/4a137d66-d161-4ae4-b1e6-07e9920874b8/oauth2/v2.0/token",
+		GroupEndpointURL: "https://graph.microsoft.com/v1.0/me/transitiveMemberOf/microsoft.graph.group?$count=true",
+		LogoutURL:        "https://login.microsoftonline.com/common/oauth2/v2.0/logout",
+		Scopes:           []string{"https://graph.microsoft.com/.default", "offline_access"},
+		SecretKey:        "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF",
+		RedirectBaseURL:  "https://localhost:0",
+		QueryLogPath:     logFilename,
+		PermissionsFile:  "./testdata/permissions.yaml",
+	}
+
+	commandOpts := make([][]server.CommandOption, clusterSize)
+	configs := make([]*server.Config, clusterSize)
+	for i := range configs {
+		conf := server.NewConfig()
+		configs[i] = conf
+		conf.Bind = "https://localhost:0"
+		conf.Auth = auth
+		conf.TLS.CertificatePath = "./testdata/certs/localhost.crt"
+		conf.TLS.CertificateKeyPath = "./testdata/certs/localhost.key"
+		conf.TLS.CACertPath = "./testdata/certs/pilosa-ca.crt"
+		conf.TLS.EnableClientVerification = false
+		conf.TLS.SkipVerify = true
+		commandOpts[i] = append(commandOpts[i], server.OptCommandConfig(conf))
+	}
+
+	a, err := authn.NewAuth(
+		logger.NewStandardLogger(os.Stdout),
+		"http://localhost:0/",
+		auth.Scopes,
+		auth.AuthorizeURL,
+		auth.TokenURL,
+		auth.GroupEndpointURL,
+		auth.LogoutURL,
+		auth.ClientId,
+		auth.ClientSecret,
+		auth.SecretKey,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// make a valid token
+	tkn := jwt.New(jwt.SigningMethodHS256)
+	claims := tkn.Claims.(jwt.MapClaims)
+	groupString, _ := authn.ToGob64([]authn.Group{{GroupID: "group-id-test", GroupName: "group-name-test"}})
+	claims["molecula-idp-groups"] = groupString
+	claims["oid"] = "42"
+	claims["name"] = "valid"
+	token, err := tkn.SignedString([]byte(a.SecretKey()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	validToken := "Bearer " + token
+	invalidToken := "Bearer " + string(tkn.Raw)
+
+	tests := []struct {
+		Index        string
+		Field        string
+		CreateSchema bool
+		Token        string
+		Err          error
+	}{
+		{
+			Index:        "test",
+			Field:        "field1",
+			CreateSchema: true,
+			Token:        validToken,
+			Err:          nil,
+		},
+		{
+			Index:        "test",
+			Field:        "field1",
+			CreateSchema: false,
+			Token:        validToken,
+			Err:          nil,
+		},
+		{
+			Index:        "test",
+			Field:        "field1",
+			CreateSchema: false,
+			Token:        invalidToken,
+			Err:          fmt.Errorf("token contains an invalid number of segments"),
+		},
+		{
+			Index:        "test",
+			Field:        "field1",
+			CreateSchema: true,
+			Token:        invalidToken,
+			Err:          fmt.Errorf("token contains an invalid number of segments"),
+		},
+	}
+
+	t.Run("set", func(t *testing.T) {
+		buf := bytes.Buffer{}
+		stdin, stdout, stderr := GetIO(buf)
+		cm := NewImportCommand(stdin, stdout, stderr)
+		file, err := testhook.TempFile(t, "import.csv")
+		if err != nil {
+			t.Fatalf("creating tempfile: %v", err)
+		}
+		_, err = file.Write([]byte("1,2\n3,4\n5,6"))
+		if err != nil {
+			t.Fatalf("writing to tempfile: %v", err)
+		}
+
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		cluster := test.MustRunCluster(t, clusterSize, commandOpts...)
+		defer cluster.Close()
+		cmd := cluster.GetNode(0)
+		cm.Host = cmd.API.Node().URI.HostPort()
+
+		for i, test := range tests {
+			cm.Index = test.Index
+			cm.Field = test.Field
+			cm.CreateSchema = test.CreateSchema
+			cm.Paths = []string{file.Name()}
+			ctx := context.WithValue(context.Background(), "token", test.Token)
+			err = cm.Run(ctx)
+			if test.Err != nil {
+				if !strings.Contains(err.Error(), test.Err.Error()) {
+					t.Fatalf("Test: %d, Import Run doesn't work: got %s, expected: %s", i, err, test.Err)
+				}
+			} else {
+				if err != test.Err {
+					t.Fatalf("Test: %d, Import Run doesn't work: got %s, expected: %s", i, err, test.Err)
+				}
+			}
+
+		}
+		err = os.Remove(logFilename)
+		if err != nil {
+			t.Fatalf("Failed to delete query log file: %s", err)
 		}
 	})
 }

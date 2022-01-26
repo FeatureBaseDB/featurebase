@@ -270,6 +270,12 @@ func TestPauseReplica(t *testing.T) {
 	if os.Getenv("ENABLE_PILOSA_CLUSTER_TESTS") != "1" {
 		t.Skip("pilosa cluster tests for replication when a replica is paused are not enabled")
 	}
+
+	auth := false
+	if os.Getenv("ENABLE_AUTH") == "1" {
+		auth = true
+	}
+
 	// configurations for test
 	nodeNames := []string{"pilosa1", "pilosa2", "pilosa3"}
 	nodeToPause := "pilosa3"
@@ -289,12 +295,17 @@ func TestPauseReplica(t *testing.T) {
 	uri := uris[0]
 
 	ctx := context.Background()
+	if auth {
+		token := GetAuthToken(t)
+		ctx = context.WithValue(ctx, "token", "Bearer "+token)
+	}
+
 	ctx, cancel := context.WithCancel(ctx)
 
 	t.Log("start Client")
 
 	// first achieve normal cluster status
-	waitForStatus(t, cli.Status, string(disco.ClusterStateNormal), 30, 1*time.Second)
+	waitForStatus(t, cli.Status, string(disco.ClusterStateNormal), 30, 1*time.Second, ctx)
 
 	// create keyed index
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
@@ -354,7 +365,7 @@ func TestPauseReplica(t *testing.T) {
 	t.Logf("successfully end insert: %v", len(ts))
 
 	// wait for cluster status to be non-normal
-	waitForStatus(t, cli.Status, string(disco.ClusterStateDegraded), 30, 1*time.Second)
+	waitForStatus(t, cli.Status, string(disco.ClusterStateDegraded), 30, 1*time.Second, ctx)
 
 	// wait for cluster status to get back to normal
 	t.Logf("unpause %s", nodeToPause)
@@ -362,7 +373,7 @@ func TestPauseReplica(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error on unpause node %s: %v", nodeToPause, err)
 	}
-	waitForStatus(t, cli.Status, string(disco.ClusterStateNormal), 30, 1*time.Second)
+	waitForStatus(t, cli.Status, string(disco.ClusterStateNormal), 30, 1*time.Second, ctx)
 
 	// set up directory to store keys
 	basePath := "."

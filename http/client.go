@@ -142,6 +142,14 @@ func NewInternalClientFromURI(defaultURI *pnet.URI, remoteClient *http.Client, o
 	return ic
 }
 
+func AddAuthToken(ctx context.Context, req *http.Request) *http.Request {
+	token, ok := ctx.Value("token").(string)
+	if ok && token != "" {
+		req.Header.Set("Authorization", token)
+	}
+	return req
+}
+
 // MaxShardByIndex returns the number of shards on a server by index.
 func (c *InternalClient) MaxShardByIndex(ctx context.Context) (map[string]uint64, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.MaxShardByIndex")
@@ -162,6 +170,7 @@ func (c *InternalClient) maxShardByIndex(ctx context.Context) (map[string]uint64
 
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
 	req.Header.Set("Accept", "application/json")
+	req = AddAuthToken(ctx, req)
 
 	// Execute request.
 	resp, err := c.executeRequest(req.WithContext(ctx))
@@ -194,6 +203,7 @@ func (c *InternalClient) AvailableShards(ctx context.Context, indexName string) 
 
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
 	req.Header.Set("Accept", "application/json")
+	req = AddAuthToken(ctx, req)
 
 	// Execute request.
 	resp, err := c.executeRequest(req.WithContext(ctx))
@@ -227,6 +237,7 @@ func (c *InternalClient) SchemaNode(ctx context.Context, uri *pnet.URI, views bo
 
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
 	req.Header.Set("Accept", "application/json")
+	req = AddAuthToken(ctx, req)
 
 	// Execute request.
 	resp, err := c.executeRequest(req.WithContext(ctx))
@@ -258,6 +269,7 @@ func (c *InternalClient) Schema(ctx context.Context) ([]*pilosa.IndexInfo, error
 
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
 	req.Header.Set("Accept", "application/json")
+	req = AddAuthToken(ctx, req)
 
 	// Execute request.
 	resp, err := c.executeRequest(req.WithContext(ctx))
@@ -294,6 +306,7 @@ func (c *InternalClient) IngestSchema(ctx context.Context, uri *pnet.URI, buf []
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+	req = AddAuthToken(ctx, req)
 
 	resp, err := c.executeRequest(req.WithContext(ctx), giveRawResponse(true))
 	if err != nil {
@@ -344,6 +357,7 @@ func (c *InternalClient) IngestOperations(ctx context.Context, uri *pnet.URI, in
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+	req = AddAuthToken(ctx, req)
 
 	resp, err := c.executeRequest(req.WithContext(ctx))
 	if err != nil {
@@ -376,6 +390,7 @@ func (c *InternalClient) IngestNodeOperations(ctx context.Context, uri *pnet.URI
 	req.Header.Set("Content-Type", "application/x-protobuf")
 	req.Header.Set("Accept", "application/x-protobuf")
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+	req = AddAuthToken(ctx, req)
 
 	resp, err := c.executeRequest(req.WithContext(ctx))
 	if err != nil {
@@ -404,6 +419,7 @@ func (c *InternalClient) MutexCheck(ctx context.Context, uri *pnet.URI, indexNam
 	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+	req = AddAuthToken(ctx, req)
 
 	resp, err := c.executeRequest(req.WithContext(ctx))
 	if err != nil {
@@ -434,6 +450,7 @@ func (c *InternalClient) PostSchema(ctx context.Context, uri *pnet.URI, s *pilos
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+	req = AddAuthToken(ctx, req)
 
 	resp, err := c.executeRequest(req.WithContext(ctx))
 	if err != nil {
@@ -480,6 +497,7 @@ func (c *InternalClient) CreateIndex(ctx context.Context, index string, opt pilo
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+	req = AddAuthToken(ctx, req)
 
 	// Execute request against the host.
 	resp, err := c.executeRequest(req.WithContext(ctx))
@@ -509,6 +527,7 @@ func (c *InternalClient) FragmentNodes(ctx context.Context, index string, shard 
 
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
 	req.Header.Set("Accept", "application/json")
+	req = AddAuthToken(ctx, req)
 
 	// Execute request.
 	resp, err := c.executeRequest(req.WithContext(ctx))
@@ -540,6 +559,7 @@ func (c *InternalClient) Nodes(ctx context.Context) ([]*topology.Node, error) {
 
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
 	req.Header.Set("Accept", "application/json")
+	req = AddAuthToken(ctx, req)
 
 	// Execute request.
 	resp, err := c.executeRequest(req.WithContext(ctx))
@@ -589,6 +609,8 @@ func (c *InternalClient) QueryNode(ctx context.Context, uri *pnet.URI, index str
 		token := uinfo.(*authn.UserInfo).Token
 		req.Header.Set("Authorization", token)
 	}
+
+	req = AddAuthToken(ctx, req)
 
 	req.Header.Set("Content-Length", strconv.Itoa(len(buf)))
 	req.Header.Set("Content-Type", "application/x-protobuf")
@@ -682,6 +704,7 @@ func (c *InternalClient) importNode(ctx context.Context, node *topology.Node, in
 	req.Header.Set("Accept", "application/x-protobuf")
 	req.Header.Set("X-Pilosa-Row", "roaring")
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+	req = AddAuthToken(ctx, req)
 
 	// Execute request against the host.
 	resp, err := c.executeRequest(req.WithContext(ctx))
@@ -902,6 +925,7 @@ func (c *InternalClient) ImportRoaring(ctx context.Context, uri *pnet.URI, index
 	httpReq.Header.Set("Accept", "application/x-protobuf")
 	httpReq.Header.Set("X-Pilosa-Row", "roaring")
 	httpReq.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+	httpReq = AddAuthToken(ctx, httpReq)
 
 	// Execute request against the host.
 	resp, err := c.executeRequest(httpReq.WithContext(ctx))
@@ -976,6 +1000,7 @@ func (c *InternalClient) exportNodeCSV(ctx context.Context, node *topology.Node,
 	}
 	req.Header.Set("Accept", "text/csv")
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+	req = AddAuthToken(ctx, req)
 
 	// Execute request against the host.
 	resp, err := c.executeRequest(req.WithContext(ctx))
@@ -1018,6 +1043,7 @@ func (c *InternalClient) RetrieveShardFromURI(ctx context.Context, index, field,
 	}
 
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+	req = AddAuthToken(ctx, req)
 
 	// Execute request.
 	resp, err := c.executeRequest(req.WithContext(ctx))
@@ -1107,6 +1133,7 @@ func (c *InternalClient) CreateFieldWithOptions(ctx context.Context, index, fiel
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+	req = AddAuthToken(ctx, req)
 
 	// Execute request against the host.
 	resp, err := c.executeRequest(req.WithContext(ctx))
@@ -1145,6 +1172,7 @@ func (c *InternalClient) FragmentBlocks(ctx context.Context, uri *pnet.URI, inde
 
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
 	req.Header.Set("Accept", "application/json")
+	req = AddAuthToken(ctx, req)
 
 	// Execute request.
 	resp, err := c.executeRequest(req.WithContext(ctx))
@@ -1194,6 +1222,7 @@ func (c *InternalClient) BlockData(ctx context.Context, uri *pnet.URI, index, fi
 	req.Header.Set("Accept", "application/protobuf")
 	req.Header.Set("X-Pilosa-Row", "roaring")
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+	req = AddAuthToken(ctx, req)
 
 	resp, err := c.executeRequest(req.WithContext(ctx))
 	if err != nil {
@@ -1275,6 +1304,7 @@ func (c *InternalClient) TranslateKeysNode(ctx context.Context, uri *pnet.URI, i
 	req.Header.Set("Accept", "application/x-protobuf")
 	req.Header.Set("X-Pilosa-Row", "roaring")
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+	req = AddAuthToken(ctx, req)
 
 	// Execute request against the host.
 	resp, err := c.executeRequest(req.WithContext(ctx))
@@ -1329,6 +1359,7 @@ func (c *InternalClient) TranslateIDsNode(ctx context.Context, uri *pnet.URI, in
 	req.Header.Set("Accept", "application/x-protobuf")
 	req.Header.Set("X-Pilosa-Row", "roaring")
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+	req = AddAuthToken(ctx, req)
 
 	// Execute request against the host.
 	resp, err := c.executeRequest(req.WithContext(ctx))
@@ -1360,6 +1391,7 @@ func (c *InternalClient) GetNodeUsage(ctx context.Context, uri *pnet.URI) (map[s
 
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+	req = AddAuthToken(ctx, req)
 
 	// Execute request against the host.
 	resp, err := c.executeRequest(req.WithContext(ctx))
@@ -1391,6 +1423,7 @@ func (c *InternalClient) GetPastQueries(ctx context.Context, uri *pnet.URI) ([]p
 
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+	req = AddAuthToken(ctx, req)
 
 	// Execute request against the host.
 	resp, err := c.executeRequest(req.WithContext(ctx))
@@ -1432,6 +1465,7 @@ func (c *InternalClient) FindIndexKeysNode(ctx context.Context, uri *pnet.URI, i
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+	req = AddAuthToken(ctx, req)
 
 	// Send the request.
 	resp, err := c.executeRequest(req.WithContext(ctx))
@@ -1480,6 +1514,7 @@ func (c *InternalClient) FindFieldKeysNode(ctx context.Context, uri *pnet.URI, i
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+	req = AddAuthToken(ctx, req)
 
 	// Send the request.
 	resp, err := c.executeRequest(req.WithContext(ctx))
@@ -1529,6 +1564,7 @@ func (c *InternalClient) CreateIndexKeysNode(ctx context.Context, uri *pnet.URI,
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+	req = AddAuthToken(ctx, req)
 
 	// Send the request.
 	resp, err := c.executeRequest(req.WithContext(ctx))
@@ -1581,6 +1617,7 @@ func (c *InternalClient) CreateFieldKeysNode(ctx context.Context, uri *pnet.URI,
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+	req = AddAuthToken(ctx, req)
 
 	// Send the request.
 	resp, err := c.executeRequest(req.WithContext(ctx))
@@ -1625,6 +1662,7 @@ func (c *InternalClient) MatchFieldKeysNode(ctx context.Context, uri *pnet.URI, 
 	req.Header.Set("Content-Length", strconv.Itoa(len(like)))
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+	req = AddAuthToken(ctx, req)
 
 	// Send the request.
 	resp, err := c.executeRequest(req.WithContext(ctx))
@@ -1664,6 +1702,7 @@ func (c *InternalClient) Transactions(ctx context.Context) (map[string]*pilosa.T
 	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+	req = AddAuthToken(ctx, req)
 
 	resp, err := c.executeRequest(req.WithContext(ctx))
 	if err != nil {
@@ -1702,6 +1741,7 @@ func (c *InternalClient) StartTransaction(ctx context.Context, id string, timeou
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+	req = AddAuthToken(ctx, req)
 
 	resp, err := c.executeRequest(req.WithContext(ctx), giveRawResponse(true))
 	if err != nil {
@@ -1736,6 +1776,7 @@ func (c *InternalClient) FinishTransaction(ctx context.Context, id string) (*pil
 
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+	req = AddAuthToken(ctx, req)
 
 	resp, err := c.executeRequest(req.WithContext(ctx), giveRawResponse(true))
 	if err != nil {
@@ -1772,6 +1813,7 @@ func (c *InternalClient) GetTransaction(ctx context.Context, id string) (*pilosa
 	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+	req = AddAuthToken(ctx, req)
 
 	resp, err := c.executeRequest(req.WithContext(ctx), giveRawResponse(true))
 	if err != nil {
@@ -1797,6 +1839,8 @@ type executeOpts struct {
 	// giveRawResponse instructs executeRequest not to process the
 	// respStatusCode and try to extract errors or whatever.
 	giveRawResponse bool
+	// forwardAuthHeader instructs executeRequest not to follow redirects
+	forwardAuthHeader bool
 }
 
 type executeRequestOption func(*executeOpts)
@@ -1804,6 +1848,11 @@ type executeRequestOption func(*executeOpts)
 func giveRawResponse(b bool) executeRequestOption {
 	return func(eo *executeOpts) {
 		eo.giveRawResponse = b
+	}
+}
+func forwardAuthHeader(b bool) executeRequestOption {
+	return func(eo *executeOpts) {
+		eo.forwardAuthHeader = b
 	}
 }
 
@@ -1831,7 +1880,25 @@ func (c *InternalClient) executeRetryableRequest(req *retryablehttp.Request, opt
 		opt(eo)
 	}
 
-	resp, err := c.retryableClient.Do(req)
+	var resp *http.Response
+	var err error
+	if eo.forwardAuthHeader {
+		rc := retryablehttp.NewClient()
+		rc.HTTPClient = &http.Client{
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				if len(via) > 0 {
+					req.Header.Set("Authorization", "Bearer "+getToken(via[0]))
+				}
+				return nil
+			},
+		}
+		rc.CheckRetry = retryWith400Policy
+		rc.Logger = logger.NopLogger
+
+		resp, err = rc.Do(req)
+	} else {
+		resp, err = c.retryableClient.Do(req)
+	}
 
 	return c.handleResponse(req.Request, eo, resp, err)
 }
@@ -1846,6 +1913,7 @@ func (c *InternalClient) handleResponse(req *http.Request, eo *executeOpts, resp
 	if eo.giveRawResponse {
 		return resp, nil
 	}
+
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		defer resp.Body.Close()
 		buf, err := ioutil.ReadAll(resp.Body)
@@ -2104,6 +2172,7 @@ func (c *InternalClient) RetrieveTranslatePartitionFromURI(ctx context.Context, 
 	}
 
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+	req = AddAuthToken(ctx, req)
 
 	// Execute request.
 	resp, err := c.executeRequest(req.WithContext(ctx))
@@ -2171,6 +2240,11 @@ func (c *InternalClient) ImportFieldKeys(ctx context.Context, uri *pnet.URI, ind
 	}
 	httpReq.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
 
+	token, ok := ctx.Value("token").(string)
+	if ok && token != "" {
+		httpReq.Header.Set("Authorization", token)
+	}
+
 	// Execute request against the host.
 	resp, err := c.executeRetryableRequest(httpReq.WithContext(ctx))
 	if err != nil {
@@ -2196,6 +2270,7 @@ func (c *InternalClient) ShardReader(ctx context.Context, index string, shard ui
 
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
 	req.Header.Set("Accept", "application/octet-stream")
+	req = AddAuthToken(ctx, req)
 
 	// Execute request.
 	resp, err := c.executeRequest(req.WithContext(ctx))
@@ -2218,6 +2293,7 @@ func (c *InternalClient) IDAllocDataReader(ctx context.Context) (io.ReadCloser, 
 
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
 	req.Header.Set("Accept", "application/octet-stream")
+	req = AddAuthToken(ctx, req)
 
 	// Execute request.
 	resp, err := c.executeRequest(req.WithContext(ctx))
@@ -2225,6 +2301,30 @@ func (c *InternalClient) IDAllocDataReader(ctx context.Context) (io.ReadCloser, 
 		return nil, err
 	}
 	return resp.Body, nil
+}
+
+func (c *InternalClient) IDAllocDataWriter(ctx context.Context, f io.Reader, primary *topology.Node) error {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.IDAllocDataWriter")
+	defer span.Finish()
+
+	u := primary.URI.Path("/internal/idalloc/restore")
+
+	// Build request.
+	req, err := http.NewRequest("POST", u, f)
+	if err != nil {
+		return errors.Wrap(err, "creating request")
+	}
+
+	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+	req.Header.Set("Accept", "application/octet-stream")
+	req = AddAuthToken(ctx, req)
+
+	// Execute request.
+	_, err = c.executeRequest(req.WithContext(ctx))
+	if err != nil {
+		return err
+	}
+	return err
 }
 
 // IndexTranslateDataReader returns a reader that provides a snapshot of
@@ -2244,9 +2344,10 @@ func (c *InternalClient) IndexTranslateDataReader(ctx context.Context, index str
 
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
 	req.Header.Set("Accept", "application/octet-stream")
+	req = AddAuthToken(ctx, req)
 
 	// Execute request.
-	resp, err := c.executeRequest(req.WithContext(ctx))
+	resp, err := c.executeRequest(req.WithContext(ctx), forwardAuthHeader(true))
 	if resp != nil && resp.StatusCode == http.StatusNotFound {
 		resp.Body.Close()
 		return nil, pilosa.ErrTranslateStoreNotFound
@@ -2273,6 +2374,7 @@ func (c *InternalClient) FieldTranslateDataReader(ctx context.Context, index, fi
 
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
 	req.Header.Set("Accept", "application/octet-stream")
+	req = AddAuthToken(ctx, req)
 
 	// Execute request.
 	resp, err := c.executeRequest(req.WithContext(ctx))
@@ -2303,6 +2405,7 @@ func (c *InternalClient) Status(ctx context.Context) (string, error) {
 
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
 	req.Header.Set("Accept", "application/json")
+	req = AddAuthToken(ctx, req)
 
 	// Execute request.
 	resp, err := c.executeRequest(req.WithContext(ctx))
@@ -2334,6 +2437,7 @@ func (c *InternalClient) PartitionNodes(ctx context.Context, partitionID int) ([
 
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
 	req.Header.Set("Accept", "application/json")
+	req = AddAuthToken(ctx, req)
 
 	// Execute request.
 	resp, err := c.executeRequest(req.WithContext(ctx))
