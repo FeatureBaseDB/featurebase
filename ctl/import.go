@@ -54,6 +54,8 @@ type ImportCommand struct { // nolint: maligned
 	*pilosa.CmdIO
 
 	TLS server.TLSConfig
+
+	AuthToken string
 }
 
 // NewImportCommand returns a new instance of ImportCommand.
@@ -83,6 +85,10 @@ func (cmd *ImportCommand) Run(ctx context.Context) error {
 		return errors.Wrap(err, "creating client")
 	}
 	cmd.client = client
+
+	if cmd.AuthToken != "" {
+		ctx = context.WithValue(ctx, "token", "Bearer "+cmd.AuthToken)
+	}
 
 	if cmd.CreateSchema {
 		if cmd.FieldOptions.Type == "" {

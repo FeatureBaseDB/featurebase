@@ -280,6 +280,7 @@ clustertests:
   allow_failure: true
   script:
     - make clustertests
+    - make authclustertests
 
 external lookup tests:
   stage: integration

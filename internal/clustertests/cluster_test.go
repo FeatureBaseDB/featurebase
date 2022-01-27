@@ -11,9 +11,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang-jwt/jwt"
 	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/authn"
 	"github.com/molecula/featurebase/v3/disco"
 	picli "github.com/molecula/featurebase/v3/http"
+	"github.com/molecula/featurebase/v3/logger"
 )
 
 // container turns a docker-compose service name into a container name
@@ -24,16 +27,66 @@ import (
 // as well, but I think it is true in recent versions.
 func container(svc string) string {
 	project := "clustertests"
+	if os.Getenv("ENABLE_AUTH") == "1" {
+		project = "authclustertests"
+	}
+
 	if p := os.Getenv("PROJECT"); p != "" {
 		project = p
 	}
 	return project + "_" + svc + "_1"
 }
 
+func GetAuthToken(t *testing.T) string {
+	t.Helper()
+	var (
+		ClientID         = "e9088663-eb08-41d7-8f65-efb5f54bbb71"
+		ClientSecret     = "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF"
+		AuthorizeURL     = "https://login.microsoftonline.com/4a137d66-d161-4ae4-b1e6-07e9920874b8/oauth2/v2.0/authorize"
+		TokenURL         = "https://login.microsoftonline.com/4a137d66-d161-4ae4-b1e6-07e9920874b8/oauth2/v2.0/token"
+		GroupEndpointURL = "https://graph.microsoft.com/v1.0/me/transitiveMemberOf/microsoft.graph.group?$count=true"
+		LogoutURL        = "https://login.microsoftonline.com/common/oauth2/v2.0/logout"
+		Scopes           = []string{"https://graph.microsoft.com/.default", "offline_access"}
+		Key              = "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF"
+	)
+
+	a, err := authn.NewAuth(
+		logger.NewStandardLogger(os.Stdout),
+		"http://localhost:10101/",
+		Scopes,
+		AuthorizeURL,
+		TokenURL,
+		GroupEndpointURL,
+		LogoutURL,
+		ClientID,
+		ClientSecret,
+		Key,
+	)
+
+	// make a valid token
+	tkn := jwt.New(jwt.SigningMethodHS256)
+	claims := tkn.Claims.(jwt.MapClaims)
+	groupString, _ := authn.ToGob64([]authn.Group{{GroupID: "group-id-test", GroupName: "group-name-test"}})
+	claims["molecula-idp-groups"] = groupString
+	claims["oid"] = "42"
+	claims["name"] = "valid"
+	token, err := tkn.SignedString([]byte(a.SecretKey()))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return token
+}
 func TestClusterStuff(t *testing.T) {
 	if os.Getenv("ENABLE_PILOSA_CLUSTER_TESTS") != "1" {
 		t.Skip("pilosa cluster tests are not enabled")
 	}
+
+	auth := false
+	if os.Getenv("ENABLE_AUTH") == "1" {
+		auth = true
+	}
+
 	cli1, err := picli.NewInternalClient("pilosa1:10101", picli.GetHTTPClient(nil))
 	if err != nil {
 		t.Fatalf("getting client: %v", err)
@@ -46,11 +99,18 @@ func TestClusterStuff(t *testing.T) {
 	if err != nil {
 		t.Fatalf("getting client: %v", err)
 	}
+	ctx := context.Background()
+	token := ""
+	// generate auth token and add to context
+	if auth {
+		token = GetAuthToken(t)
+		ctx = context.WithValue(ctx, "token", "Bearer "+token)
+	}
 
-	if err := cli1.CreateIndex(context.Background(), "testidx", pilosa.IndexOptions{}); err != nil {
+	if err := cli1.CreateIndex(ctx, "testidx", pilosa.IndexOptions{}); err != nil {
 		t.Fatalf("creating index: %v", err)
 	}
-	if err := cli1.CreateFieldWithOptions(context.Background(), "testidx", "testf", pilosa.FieldOptions{CacheType: pilosa.CacheTypeRanked, CacheSize: 100}); err != nil {
+	if err := cli1.CreateFieldWithOptions(ctx, "testidx", "testf", pilosa.FieldOptions{CacheType: pilosa.CacheTypeRanked, CacheSize: 100}); err != nil {
 		t.Fatalf("creating field: %v", err)
 	}
 
@@ -66,7 +126,7 @@ func TestClusterStuff(t *testing.T) {
 		req.ColumnIDs[i%10] = uint64((i/10)*pilosa.ShardWidth + i%10)
 		req.Shard = uint64(i / 10)
 		if i%10 == 9 {
-			err = cli1.Import(context.Background(), nil, req, &pilosa.ImportOptions{})
+			err = cli1.Import(ctx, nil, req, &pilosa.ImportOptions{})
 			if err != nil {
 				t.Fatalf("importing: %v", err)
 			}
@@ -75,7 +135,7 @@ func TestClusterStuff(t *testing.T) {
 
 	// Check query results from each node.
 	for i, cli := range []*picli.InternalClient{cli1, cli2, cli3} {
-		r, err := cli.Query(context.Background(), "testidx", &pilosa.QueryRequest{Index: "testidx", Query: "Count(Row(testf=0))"})
+		r, err := cli.Query(ctx, "testidx", &pilosa.QueryRequest{Index: "testidx", Query: "Count(Row(testf=0))"})
 		if err != nil {
 			t.Fatalf("count querying pilosa%d: %v", i, err)
 		}
@@ -97,12 +157,12 @@ func TestClusterStuff(t *testing.T) {
 		}
 
 		t.Log("done with pause, waiting for stability")
-		waitForStatus(t, cli1.Status, string(disco.ClusterStateNormal), 30, time.Second)
+		waitForStatus(t, cli1.Status, string(disco.ClusterStateNormal), 30, time.Second, ctx)
 		t.Log("done waiting for stability")
 
 		// Check query results from each node.
 		for i, cli := range []*picli.InternalClient{cli1, cli2, cli3} {
-			r, err := cli.Query(context.Background(), "testidx", &pilosa.QueryRequest{Index: "testidx", Query: "Count(Row(testf=0))"})
+			r, err := cli.Query(ctx, "testidx", &pilosa.QueryRequest{Index: "testidx", Query: "Count(Row(testf=0))"})
 			if err != nil {
 				t.Fatalf("count querying pilosa%d: %v", i, err)
 			}
@@ -119,9 +179,17 @@ func TestClusterStuff(t *testing.T) {
 		}
 		var backupCmd *exec.Cmd
 		tmpdir := t.TempDir()
-		if backupCmd, err = startCmd(
-			"featurebase", "backup", "--host=pilosa1:10101", fmt.Sprintf("--output=%s", tmpdir+"/backuptest")); err != nil {
-			t.Fatalf("sending backup command: %v", err)
+
+		if auth {
+			if backupCmd, err = startCmd(
+				"featurebase", "backup", "--host=pilosa1:10101", fmt.Sprintf("--output=%s", tmpdir+"/backuptest"), "--auth-token", token); err != nil {
+				t.Fatalf("sending backup command: %v", err)
+			}
+		} else {
+			if backupCmd, err = startCmd(
+				"featurebase", "backup", "--host=pilosa1:10101", fmt.Sprintf("--output=%s", tmpdir+"/backuptest")); err != nil {
+				t.Fatalf("sending backup command: %v", err)
+			}
 		}
 		time.Sleep(time.Second * 5)
 		if err = sendCmd("docker", "start", container("pilosa1")); err != nil {
@@ -133,7 +201,11 @@ func TestClusterStuff(t *testing.T) {
 		}
 
 		client := http.Client{}
-		if req, err := http.NewRequest(http.MethodDelete, "http://pilosa1:10101/index/testidx", nil); err != nil {
+		req, err := http.NewRequest(http.MethodDelete, "http://pilosa1:10101/index/testidx", nil)
+		if auth {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		if err != nil {
 			t.Fatalf("getting req: %v", err)
 		} else if resp, err := client.Do(req); err != nil {
 			t.Fatalf("doing request: %v", err)
@@ -146,8 +218,14 @@ func TestClusterStuff(t *testing.T) {
 		}
 
 		var restoreCmd *exec.Cmd
-		if restoreCmd, err = startCmd("featurebase", "restore", "-s", tmpdir+"/backuptest", "--host", "pilosa1:10101"); err != nil {
-			t.Fatalf("starting restore: %v", err)
+		if auth {
+			if restoreCmd, err = startCmd("featurebase", "restore", "-s", tmpdir+"/backuptest", "--host", "pilosa1:10101", "--auth-token", token); err != nil {
+				t.Fatalf("starting restore: %v", err)
+			}
+		} else {
+			if restoreCmd, err = startCmd("featurebase", "restore", "-s", tmpdir+"/backuptest", "--host", "pilosa1:10101"); err != nil {
+				t.Fatalf("starting restore: %v", err)
+			}
 		}
 		time.Sleep(time.Millisecond * 50)
 		if err = sendCmd("docker", "stop", container("pilosa2")); err != nil {
@@ -165,9 +243,16 @@ func TestClusterStuff(t *testing.T) {
 		// now do backup with all nodes down and too short a timeout
 		// so it fails. Has be to be all 3 because the cluster has
 		// replicas=3 and the backup command will retry on replicas.
-		if backupCmd, err = startCmd(
-			"featurebase", "backup", "--host=pilosa1:10101", fmt.Sprintf("--output=%s", tmpdir+"/backuptest2"), "--retry-period=200ms"); err != nil {
-			t.Fatalf("sending second backup command: %v", err)
+		if auth {
+			if backupCmd, err = startCmd(
+				"featurebase", "backup", "--host=pilosa1:10101", fmt.Sprintf("--output=%s", tmpdir+"/backuptest2"), "--retry-period=200ms", "--auth-token", token); err != nil {
+				t.Fatalf("sending second backup command: %v", err)
+			}
+		} else {
+			if backupCmd, err = startCmd(
+				"featurebase", "backup", "--host=pilosa1:10101", fmt.Sprintf("--output=%s", tmpdir+"/backuptest2"), "--retry-period=200ms"); err != nil {
+				t.Fatalf("sending second backup command: %v", err)
+			}
 		}
 		time.Sleep(time.Millisecond * 10) // want the backup to get started, then fail
 		if err = sendCmd("docker", "stop", container("pilosa1")); err != nil {
@@ -198,11 +283,11 @@ func TestClusterStuff(t *testing.T) {
 	})
 }
 
-func waitForStatus(t *testing.T, stator func(context.Context) (string, error), status string, n int, sleep time.Duration) {
+func waitForStatus(t *testing.T, stator func(context.Context) (string, error), status string, n int, sleep time.Duration, ctx context.Context) {
 	t.Helper()
 
 	for i := 0; i < n; i++ {
-		s, err := stator(context.TODO())
+		s, err := stator(ctx)
 		if err != nil {
 			t.Logf("Status (try %d/%d): %v (retrying in %s)", i, n, err, sleep.String())
 		} else {
@@ -214,7 +299,7 @@ func waitForStatus(t *testing.T, stator func(context.Context) (string, error), s
 		time.Sleep(sleep)
 	}
 
-	s, err := stator(context.TODO())
+	s, err := stator(ctx)
 	if err != nil {
 		t.Fatalf("querying status: %v", err)
 	}

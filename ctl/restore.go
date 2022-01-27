@@ -29,7 +29,8 @@ import (
 // RestoreCommand represents a command for restoring a backup to
 type RestoreCommand struct {
 	tlsConfig *tls.Config
-	Host      string
+
+	Host string
 
 	Concurrency int
 
@@ -47,7 +48,10 @@ type RestoreCommand struct {
 
 	// Standard input/output
 	*pilosa.CmdIO
+
 	TLS server.TLSConfig
+
+	AuthToken string
 }
 
 // NewRestoreCommand returns a new instance of RestoreCommand.
@@ -87,6 +91,10 @@ func (cmd *RestoreCommand) Run(ctx context.Context) (err error) {
 		return fmt.Errorf("creating client: %w", err)
 	}
 	cmd.client = client
+
+	if cmd.AuthToken != "" {
+		ctx = context.WithValue(ctx, "token", "Bearer "+cmd.AuthToken)
+	}
 
 	nodes, err := cmd.client.Nodes(ctx)
 	if err != nil {
@@ -139,8 +147,24 @@ func (cmd *RestoreCommand) restoreSchema(ctx context.Context, primary *topology.
 	if len(existingSchema) == 0 {
 		cmd.Logger().Printf("Load Schema")
 		url := primary.URI.Path("/schema")
+		req, err := retryablehttp.NewRequest("POST", url, f)
+		if err != nil {
+			return err
+		}
+		req = req.WithContext(ctx)
+		req.Header.Add("Accept", "application/json")
+
+		token, ok := ctx.Value("token").(string)
+		if ok && token != "" {
+			req.Header.Set("Authorization", token)
+		}
+
 		client := cmd.newClient()
-		_, err = client.Post(url, "application/json", f)
+		_, err = client.Do(req)
+		if err != nil {
+			return err
+		}
+
 	} else {
 		schema := &pilosa.Schema{}
 		if err := json.NewDecoder(f).Decode(schema); err != nil {
@@ -222,10 +246,9 @@ func (cmd *RestoreCommand) restoreIDAlloc(ctx context.Context, primary *topology
 	defer f.Close()
 
 	logger.Printf("Load idalloc")
-	url := primary.URI.Path("/internal/idalloc/restore")
 
-	client := cmd.newClient()
-	_, err = client.Post(url, "application/octet-stream", f)
+	err = cmd.client.IDAllocDataWriter(ctx, f, primary)
+
 	return err
 }
 
@@ -300,6 +323,11 @@ func (cmd *RestoreCommand) restoreShard(ctx context.Context, filename string) er
 		}
 		req = req.WithContext(ctx)
 		req.Header.Set("Content-Type", "application/octet-stream")
+
+		token, ok := ctx.Value("token").(string)
+		if ok && token != "" {
+			req.Header.Set("Authorization", token)
+		}
 
 		client := cmd.newClient()
 		resp, err := client.Do(req)

@@ -443,8 +443,8 @@ func newRouter(handler *Handler) http.Handler {
 
 	// Truly used internally by featurebase
 	router.HandleFunc("/internal/cluster/message", handler.chkInternal(handler.handlePostClusterMessage)).Methods("POST").Name("PostClusterMessage")
-	router.HandleFunc("/internal/translate/data", handler.chkInternal(handler.handleGetTranslateData)).Methods("GET").Name("GetTranslateData")
-	router.HandleFunc("/internal/translate/data", handler.chkInternal(handler.handlePostTranslateData)).Methods("POST").Name("PostTranslateData")
+	router.HandleFunc("/internal/translate/data", handler.chkAuthZ(handler.handleGetTranslateData, authz.Read)).Methods("GET").Name("GetTranslateData")
+	router.HandleFunc("/internal/translate/data", handler.chkAuthZ(handler.handlePostTranslateData, authz.Write)).Methods("POST").Name("PostTranslateData")
 
 	// other ones
 	router.HandleFunc("/internal/fragment/block/data", handler.chkAuthN(handler.handleGetFragmentBlockData)).Methods("GET").Name("GetFragmentBlockData")
@@ -566,7 +566,8 @@ func (h *Handler) chkAuthN(handler http.HandlerFunc) http.HandlerFunc {
 				return
 			}
 		}
-		handler.ServeHTTP(w, r)
+		ctx := context.WithValue(r.Context(), "token", r.Header["Authorization"])
+		handler.ServeHTTP(w, r.WithContext(ctx))
 	}
 }
 
@@ -590,6 +591,7 @@ func (h *Handler) chkAuthZ(handler http.HandlerFunc, perm authz.Permission) http
 
 		// put the user's groups in the context
 		ctx := context.WithValue(r.Context(), contextKeyGroupMembership, uinfo.Groups)
+		ctx = context.WithValue(ctx, "token", "Bearer "+uinfo.Token)
 
 		// unlikely h.permissions will be nil, but we'll check to be safe
 		if h.permissions == nil {
