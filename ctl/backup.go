@@ -52,6 +52,8 @@ type BackupCommand struct { // nolint: maligned
 	*pilosa.CmdIO
 
 	TLS server.TLSConfig
+
+	AuthToken string
 }
 
 // NewBackupCommand returns a new instance of BackupCommand.
@@ -92,6 +94,10 @@ func (cmd *BackupCommand) Run(ctx context.Context) (err error) {
 		return fmt.Errorf("creating client: %w", err)
 	}
 	cmd.client = client
+
+	if cmd.AuthToken != "" {
+		ctx = context.WithValue(ctx, "token", "Bearer "+cmd.AuthToken)
+	}
 
 	// Determine the field type in order to correctly handle the input data.
 	indexes, err := cmd.client.Schema(ctx)

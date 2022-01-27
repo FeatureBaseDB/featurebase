@@ -27,6 +27,7 @@ The Restore command will take a backup archive and restore it to a new, clean cl
 	flags.IntVar(&cmd.Concurrency, "concurrency", 1, "number of concurrent uploads")
 	flags.DurationVar(&cmd.RetryPeriod, "retry-period", cmd.RetryPeriod, "Length of time after HTTP request failure to continue retrying request.")
 	flags.StringVar(&cmd.Pprof, "pprof", cmd.Pprof, "host:port to listen for profiling requests at /debug/pprof and /debug/fgprof.")
+	flags.StringVar(&cmd.AuthToken, "auth-token", "", "Authentication token")
 	ctl.SetTLSConfig(
 		flags, "",
 		&cmd.TLS.CertificatePath,

@@ -247,7 +247,7 @@ func (api *API) CreateIndex(ctx context.Context, indexName string, options Index
 	}
 
 	// Create index.
-	index, err := api.holder.CreateIndexAndBroadcast(cim)
+	index, err := api.holder.CreateIndexAndBroadcast(ctx, cim)
 	if err != nil {
 		return nil, errors.Wrap(err, "creating index")
 	}

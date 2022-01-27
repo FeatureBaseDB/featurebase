@@ -5,12 +5,12 @@ LABEL org.opencontainers.image.authors="dev@molecula.com"
 
 ARG ARCH
 
-WORKDIR /featurebase
+WORKDIR /
 
 RUN apk add --no-cache curl jq
 
 COPY NOTICE .
-COPY featurebase_linux_$ARCH .
+COPY featurebase_linux_$ARCH featurebase
 
 RUN chmod ugo+x .
 EXPOSE 10101
