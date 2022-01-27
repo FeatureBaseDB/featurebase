@@ -153,9 +153,12 @@ build for linux arm64:
     - go get -v -u github.com/rakyll/statik 
     - /go/bin/statik -src=lattice
     - GOOS="linux" GOARCH="arm64" make build FLAGS="-o featurebase_linux_arm64"
+    - GOOS="linux" GOARCH="arm64" go build ./cmd/roaring-migrate
+    - mv ./roaring-migrate ./roaring-migrate_linux_arm64
   artifacts:
     paths:
       - featurebase_linux_arm64
+      - roaring-migrate_linux_arm64
 
 build for darwin amd64:
   stage: build
@@ -168,9 +171,12 @@ build for darwin amd64:
     - go get -v -u github.com/rakyll/statik 
     - /go/bin/statik -src=lattice
     - GOOS="darwin" GOARCH="amd64" make build FLAGS="-o featurebase_darwin_amd64"
+    - GOOS="darwin" GOARCH="amd64" go build ./cmd/roaring-migrate
+    - mv ./roaring-migrate ./roaring-migrate_darwin_amd64
   artifacts:
     paths:
       - featurebase_darwin_amd64
+      - roaring-migrate_darwin_amd64
 
 build for darwin arm64:
   stage: build
@@ -183,9 +189,12 @@ build for darwin arm64:
     - go get -v -u github.com/rakyll/statik 
     - /go/bin/statik -src=lattice
     - GOOS="darwin" GOARCH="arm64" make build FLAGS="-o featurebase_darwin_arm64"
+    - GOOS="darwin" GOARCH="arm64" go build ./cmd/roaring-migrate
+    - mv ./roaring-migrate ./roaring-migrate_darwin_arm64
   artifacts:
     paths:
       - featurebase_darwin_arm64
+      - roaring-migrate_darwin_arm64
 
 package for linux amd64:
   stage: build
