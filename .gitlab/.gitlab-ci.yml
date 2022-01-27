@@ -135,9 +135,12 @@ build for linux amd64:
     - go get -v -u github.com/rakyll/statik 
     - /go/bin/statik -src=lattice
     - GOOS="linux" GOARCH="amd64" make build FLAGS="-o featurebase_linux_amd64"
+    - GOOS=linux GOARCH=arm64 go build ./cmd/roaring-migrate
+    - cp ./cmd/roaring-migrate ./roaring-migrate_linux_amd64
   artifacts:
     paths:
       - featurebase_linux_amd64
+      - roaring-migrate_linux_amd64
 
 build for linux arm64:
   stage: build
