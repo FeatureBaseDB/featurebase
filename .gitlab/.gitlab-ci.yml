@@ -274,6 +274,7 @@ clustertests:
     - shell
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
+  allow_failure: true
   script:
     - make clustertests
 
