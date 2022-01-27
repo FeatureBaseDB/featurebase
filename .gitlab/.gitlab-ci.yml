@@ -64,6 +64,7 @@ run go tests:
   image: golang:$GOVERSION
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
+  retry: 1
   script:
     - echo "Running featurebase unit tests..."
     - go test -timeout=30m ./...
@@ -75,6 +76,7 @@ run go tests race:
   image: golang:$GOVERSION
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
+  retry: 1
   script:
     - echo "Running featurebase race tests..."
     - go test -race -timeout=90m ./...
@@ -100,6 +102,7 @@ run go tests future:
   image: golang:1.17.6
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
+  retry: 1
   script:
     - echo "Running featurebase unit tests..."
     - PKG_LIST=$(go list ./... | grep -v internal/clustertests | paste -s -d, -)
