@@ -276,6 +276,7 @@ clustertests:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
     - make clustertests
+    - make authclustertests
 
 external lookup tests:
   stage: integration

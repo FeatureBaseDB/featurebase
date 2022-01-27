@@ -69,6 +69,7 @@ type InternalClient interface {
 	IngestNodeOperations(ctx context.Context, uri *pnet.URI, indexName string, ireq *ingest.ShardedRequest) error
 
 	IDAllocDataReader(ctx context.Context) (io.ReadCloser, error)
+	IDAllocDataWriter(ctx context.Context, f io.Reader, primary *topology.Node) error
 	IndexTranslateDataReader(ctx context.Context, index string, partitionID int) (io.ReadCloser, error)
 	FieldTranslateDataReader(ctx context.Context, index, field string) (io.ReadCloser, error)
 
@@ -221,6 +222,10 @@ func (n nopInternalClient) ShardReader(ctx context.Context, index string, shard 
 
 func (n nopInternalClient) IDAllocDataReader(ctx context.Context) (io.ReadCloser, error) {
 	return nil, nil
+}
+
+func (n nopInternalClient) IDAllocDataWriter(cctx context.Context, f io.Reader, primary *topology.Node) error {
+	return nil
 }
 
 func (n nopInternalClient) IndexTranslateDataReader(ctx context.Context, index string, partitionID int) (io.ReadCloser, error) {

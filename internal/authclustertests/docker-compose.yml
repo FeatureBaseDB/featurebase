@@ -17,7 +17,7 @@ services:
     networks:
       - pilosanet
     command:
-      - "/featurebase server --bind pilosa1:10101"
+      - "/featurebase server --bind pilosa1:10101 -c /go/src/github.com/molecula/featurebase/internal/authclustertests/testdata/featurebase.conf"
   pilosa2:
     build:
       context: ../..
@@ -35,7 +35,7 @@ services:
     networks:
       - pilosanet
     command:
-      - "/featurebase server --bind pilosa2:10101"
+      - "/featurebase server --bind pilosa2:10101 -c /go/src/github.com/molecula/featurebase/internal/authclustertests/testdata/featurebase.conf"
   pilosa3:
     build:
       context: ../..
@@ -53,10 +53,11 @@ services:
     networks:
       - pilosanet
     command:
-      - "/featurebase server --bind pilosa3:10101"
+      - "/featurebase server --bind pilosa3:10101 -c /go/src/github.com/molecula/featurebase/internal/authclustertests/testdata/featurebase.conf"
   client1:
     build:
       context: .
+      dockerfile: ../clustertests/Dockerfile
     depends_on:
         - "pilosa1"
         - "pilosa2"
@@ -64,14 +65,13 @@ services:
     environment:
       - ENABLE_PILOSA_CLUSTER_TESTS=1
       - GO111MODULE=on
-      - PROJECT=${PROJECT}
-      - ENABLE_AUTH=0
+      - PROJECT=authclustertests
+      - ENABLE_AUTH=1
     networks:
       - pilosanet
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     command:
       - "cd /go/src/github.com/molecula/featurebase/ && go test -mod=vendor -v -count=1 github.com/molecula/featurebase/v3/internal/clustertests"
-
 networks: 
   pilosanet:

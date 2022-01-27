@@ -1083,7 +1083,7 @@ func (h *Holder) LoadView(index, field, view string) (*view, error) {
 // CreateIndexAndBroadcast creates an index locally, then broadcasts the
 // creation to other nodes so they can create locally as well. An error is
 // returned if the index already exists.
-func (h *Holder) CreateIndexAndBroadcast(cim *CreateIndexMessage) (*Index, error) {
+func (h *Holder) CreateIndexAndBroadcast(ctx context.Context, cim *CreateIndexMessage) (*Index, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -1093,7 +1093,7 @@ func (h *Holder) CreateIndexAndBroadcast(cim *CreateIndexMessage) (*Index, error
 	}
 
 	// Create the index in etcd as the system of record.
-	if err := h.persistIndex(context.Background(), cim); err != nil {
+	if err := h.persistIndex(ctx, cim); err != nil {
 		return nil, errors.Wrap(err, "persisting index")
 	}
 
