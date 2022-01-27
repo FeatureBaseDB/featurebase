@@ -140,19 +140,23 @@ package:
 	nfpm package --packager deb --target featurebase_$(VERSION_ID).deb
 	nfpm package --packager rpm --target featurebase_$(VERSION_ID).rpm
 
-# try (e.g.) internal/clustertests/docker-compose-replication2.yml
-DOCKER_COMPOSE=internal/clustertests/docker-compose.yml
+
+# We allow setting a custom docker-compose "project". Multiple of the
+# same docker-compose environment can exist simultaneously as long as
+# they use different projects (the project name is prepended to
+# container names and such). This is useful in a CI environment where
+# we might be running multiple instances of the tests concurrently.
+PROJECT ?= clustertests
+DOCKER_COMPOSE = docker-compose -p $(PROJECT)
 
 # Run cluster integration tests using docker. Requires docker daemon to be
-# running. This will catch changes to internal/clustertests/*.go, but if you
-# make changes to Pilosa, you'll want to run clustertests-build to rebuild the
-# pilosa image.
+# running and docker-compose to be installed.
 clustertests: vendor
-	docker-compose -f $(DOCKER_COMPOSE) down
-	docker-compose -f $(DOCKER_COMPOSE) build
-	docker-compose -f $(DOCKER_COMPOSE) up -d pilosa1 pilosa2 pilosa3
-	docker-compose -f $(DOCKER_COMPOSE) run client1
-	docker-compose -f $(DOCKER_COMPOSE) down
+	$(DOCKER_COMPOSE) -f internal/clustertests/docker-compose.yml down
+	$(DOCKER_COMPOSE) -f internal/clustertests/docker-compose.yml build
+	$(DOCKER_COMPOSE) -f internal/clustertests/docker-compose.yml up -d pilosa1 pilosa2 pilosa3
+	PROJECT=$(PROJECT) $(DOCKER_COMPOSE) -f internal/clustertests/docker-compose.yml run client1
+	$(DOCKER_COMPOSE) -f internal/clustertests/docker-compose.yml down
 
 
 # Install Pilosa

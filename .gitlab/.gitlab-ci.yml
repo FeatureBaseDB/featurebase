@@ -259,10 +259,11 @@ build arm container fb:
 # 5. Add deploy key github.com/molecula/featurebase/settings/keys and add public key in .ssh folder of gitlab-runner user
 # TODO: (I think) get clustertests coverage added to coverage report
 clustertests:
+  variables:
+    PROJECT: clustertests_${CI_CONCURRENT_ID}
   stage: integration
   tags:
     - shell
-    - gcp # this is to restrict to the GCP runner we set up manually, once all our runners are set up properly we can remove this.
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:

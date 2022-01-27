@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
-	"github.com/molecula/featurebase/v3"
+	pilosa "github.com/molecula/featurebase/v3"
 	"github.com/molecula/featurebase/v3/http"
 	"github.com/molecula/featurebase/v3/pql"
 	"github.com/molecula/featurebase/v3/server"
@@ -1419,12 +1419,11 @@ func TestClientTransactions(t *testing.T) {
 	}
 
 	// non-primary
-	if trns, err := client1.StartTransaction(context.Background(), "blah", time.Minute, false); err == nil ||
-		!strings.Contains(err.Error(), pilosa.ErrNodeNotPrimary.Error()) {
+	if trns, err := client1.StartTransaction(context.Background(), "blah", time.Minute, false); err != nil {
 		t.Fatalf("unexpected error starting on non-primary: %v", err)
 	} else {
 		test.CompareTransactions(t,
-			nil,
+			&pilosa.Transaction{ID: "blah", Timeout: time.Minute, Active: true, Exclusive: false, Deadline: expDeadline},
 			trns)
 	}
 

@@ -44,12 +44,12 @@ func sendCmd(cmd string, args ...string) error {
 }
 
 func unpauseNode(node string) error {
-	unpauseArgs := []string{"container", "unpause", "clustertests_" + node + "_1"}
+	unpauseArgs := []string{"container", "unpause", container(node)}
 	return sendCmd("docker", unpauseArgs...)
 }
 
 func pauseNode(node string) error {
-	pauseArgs := []string{"container", "pause", "clustertests_" + node + "_1"}
+	pauseArgs := []string{"container", "pause", container(node)}
 	return sendCmd("docker", pauseArgs...)
 }
 
