@@ -719,7 +719,11 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 		h.logger.Infof("DEPRECATED: Inspect is deprecated, please use Extract() instead.")
 	})
 
-	LogQuery(stream.Context(), "Inspect", req, h.queryLogger)
+	ctx := stream.Context()
+	uinfo := ctx.Value("userinfo")
+	if uinfo != nil {
+		LogQuery(stream.Context(), "Inspect", req, h.queryLogger)
+	}
 
 	index, err := h.api.Index(stream.Context(), req.Index)
 	if err != nil {
