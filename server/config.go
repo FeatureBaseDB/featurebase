@@ -626,7 +626,6 @@ func (c *Config) ValidateAuth() (errors []error) {
 		{name: "RedirectBaseURL", val: c.Auth.RedirectBaseURL},
 		{name: "LogoutURL", val: c.Auth.LogoutURL},
 		{name: "SecretKey", val: c.Auth.SecretKey},
-		{name: "QueryLogPath", val: c.Auth.QueryLogPath},
 	}
 
 	for _, configOpt := range authConfig {
