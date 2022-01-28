@@ -309,7 +309,6 @@ func TestConfig_validateAuth(t *testing.T) {
 				errorMesgEmpty,
 				errorMesgEmpty,
 				errorMesgEmpty,
-				errorMesgEmpty,
 			},
 			Auth{
 				Enable:           enable,
@@ -328,7 +327,6 @@ func TestConfig_validateAuth(t *testing.T) {
 			// Auth enabled, keys are invalid length
 			[]string{
 				errorMesgKey,
-				errorMesgEmpty,
 			},
 			Auth{
 				Enable:           enable,
@@ -361,7 +359,6 @@ func TestConfig_validateAuth(t *testing.T) {
 				LogoutURL:        invalidURL,
 				Scopes:           validStringSlice,
 				SecretKey:        validKey,
-				QueryLogPath:     "thisnisfasdfPAth",
 			},
 		},
 		{
@@ -380,7 +377,6 @@ func TestConfig_validateAuth(t *testing.T) {
 				LogoutURL:        validTestURL,
 				Scopes:           emptySlice,
 				SecretKey:        validKey,
-				QueryLogPath:     "thisaisdf aPath",
 			},
 		},
 		{

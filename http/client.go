@@ -2207,6 +2207,10 @@ func (c *InternalClient) ImportIndexKeys(ctx context.Context, uri *pnet.URI, ind
 		return errors.Wrap(err, "creating request")
 	}
 	httpReq.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+	token, ok := ctx.Value("token").(string)
+	if ok && token != "" {
+		httpReq.Header.Set("Authorization", token)
+	}
 
 	// Execute request against the host.
 	resp, err := c.executeRetryableRequest(httpReq.WithContext(ctx))
