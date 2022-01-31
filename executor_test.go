@@ -3490,6 +3490,28 @@ func TestExecutor_Execute_Remote_Row(t *testing.T) {
 		}
 	})
 
+	t.Run("json format groupBy on timestamps", func(t *testing.T) {
+		//SUP-138
+		c.CreateField(t, "t", pilosa.IndexOptions{TrackExistence: true}, "timestamp", pilosa.OptFieldTypeTimestamp(pilosa.DefaultEpoch, pilosa.TimeUnitSeconds))
+		c.Query(t, "t", `
+		Set(8, timestamp='2021-01-27T08:00:00Z')
+		Set(9, timestamp='2000-01-27T09:00:00Z')
+		Set(10, timestamp='2000-01-27T10:00:00Z')
+	`)
+		if res, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{
+			Index: "t",
+			Query: `GroupBy(Rows(timestamp))`,
+		}); err != nil {
+			t.Fatalf("GroupBy querying: %v", err)
+		} else {
+			b, _ := res.MarshalJSON()
+			expected := `{"results":[[{"group":[{"field":"timestamp","value":"2000-01-27T09:00:00Z"}],"count":1},{"group":[{"field":"timestamp","value":"2000-01-27T10:00:00Z"}],"count":1},{"group":[{"field":"timestamp","value":"2021-01-27T08:00:00Z"}],"count":1}]]}`
+			if string(b) != expected {
+				t.Fatalf("JSON FORMAT not as expected: %v", err)
+			}
+		}
+	})
+
 	t.Run("remote groupBy on ints", func(t *testing.T) {
 		_, err = c.GetPrimary().API.CreateField(context.Background(), "i", "fint", pilosa.OptFieldTypeInt(-1000, 1000))
 		if err != nil {

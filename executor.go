@@ -3189,13 +3189,24 @@ func (fr *FieldRow) Clone() (clone *FieldRow) {
 // either a Key or an ID is included.
 func (fr FieldRow) MarshalJSON() ([]byte, error) {
 	if fr.Value != nil {
-		return json.Marshal(struct {
-			Field string `json:"field"`
-			Value int64  `json:"value"`
-		}{
-			Field: fr.Field,
-			Value: *fr.Value,
-		})
+		if fr.FieldOptions.Type == FieldTypeTimestamp {
+			ts := FormatTimestampNano(int64(*fr.Value), fr.FieldOptions.Base, fr.FieldOptions.TimeUnit)
+			return json.Marshal(struct {
+				Field string `json:"field"`
+				Value string `json:"value"`
+			}{
+				Field: fr.Field,
+				Value: ts,
+			})
+		} else {
+			return json.Marshal(struct {
+				Field string `json:"field"`
+				Value int64  `json:"value"`
+			}{
+				Field: fr.Field,
+				Value: *fr.Value,
+			})
+		}
 	}
 
 	if fr.RowKey != "" {
