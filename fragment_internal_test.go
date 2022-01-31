@@ -3460,31 +3460,8 @@ func (f *fragment) sanityCheck(t testing.TB) {
 
 // Clean used to delete fragments, but doesn't anymore -- deleting is
 // handled by the testhook.TempDir when appropriate.
+// TODO(jaffee): this can likely go away entirely... it was doing snapshot/source/generation stuff that it no longer needs to.
 func (f *fragment) Clean(t testing.TB) {
-	f.mu.Lock()
-	// we need to ensure that we unlock the mutex before terminating
-	// the clean operation, but we need it held during the sanity
-	// check or else, in some cases, the background snapshot queue
-	// can decide to pick it up.
-	func() {
-		// should we skip snapshot queue stuff under bolt/rbf?
-		defer f.mu.Unlock()
-
-		// rbf doesn't need snapshot, so this stuff is skipped.
-		// The snapshot queue stuff doesn't work under rbf.
-		if f.idx.NeedsSnapshot() {
-			err := f.holder.SnapshotQueue.Await(f)
-			if err != nil {
-				t.Fatalf("snapshot failed before sanity check: %v", err)
-			}
-			f.sanityCheck(t)
-			if f.storage != nil && f.storage.Source != nil {
-				if f.storage.Source.Dead() {
-					t.Fatalf("cleaning up fragment %s, source %s, source already dead", f.path(), f.storage.Source.ID())
-				}
-			}
-		}
-	}()
 	errc := f.Close()
 	if errc != nil {
 		t.Fatalf("error closing fragment: %v", errc)

@@ -167,7 +167,6 @@ type ContainerIterator interface {
 // Bitmap represents a roaring bitmap.
 type Bitmap struct {
 	Containers Containers
-	Source     Source
 
 	// User-defined flags.
 	Flags byte
@@ -248,7 +247,6 @@ func (b *Bitmap) Freeze() *Bitmap {
 	// Create a copy of the bitmap structure.
 	other := &Bitmap{
 		Containers: b.Containers.Freeze(),
-		Source:     b.Source,
 	}
 
 	return other
@@ -609,19 +607,12 @@ func (b *Bitmap) OffsetRange(offset, start, end uint64) *Bitmap {
 	hi0, hi1 := highbits(start), highbits(end)
 	citer, _ := b.Containers.Iterator(hi0)
 	other := NewSliceBitmap()
-	mappedAny := false
 	for citer.Next() {
 		k, c := citer.Value()
 		if k >= hi1 {
 			break
 		}
-		if c.Mapped() {
-			mappedAny = true
-		}
 		other.Containers.Put(off+(k-hi0), c.Freeze())
-	}
-	if b.Source != nil && mappedAny {
-		other.Source = b.Source
 	}
 	return other
 }
@@ -661,7 +652,6 @@ func (b *Bitmap) IntersectionCount(other *Bitmap) uint64 {
 // Intersect returns the intersection of b and other.
 func (b *Bitmap) Intersect(other *Bitmap) *Bitmap {
 	output := NewBitmap()
-	usedB, usedOther := false, false
 	iiter, _ := b.Containers.Iterator(0)
 	jiter, _ := other.Containers.Iterator(0)
 	i, j := iiter.Next(), jiter.Next()
@@ -676,25 +666,11 @@ func (b *Bitmap) Intersect(other *Bitmap) *Bitmap {
 			kj, cj = jiter.Value()
 		} else { // ki == kj
 			newC := intersect(ci, cj)
-			if newC == ci {
-				usedB = true
-			}
-			if newC == cj {
-				usedOther = true
-			}
 			output.Containers.Put(ki, newC)
 			i, j = iiter.Next(), jiter.Next()
 			ki, ci = iiter.Value()
 			kj, cj = jiter.Value()
 		}
-	}
-	switch {
-	case usedB && usedOther:
-		output.Source = MergeSources(b.Source, other.Source)
-	case usedB:
-		output.Source = b.Source
-	case usedOther:
-		output.Source = other.Source
 	}
 	return output
 }
@@ -1192,42 +1168,25 @@ func (b *Bitmap) UnionInPlace(others ...*Bitmap) {
 func (b *Bitmap) unionIntoTargetSingle(target *Bitmap, other *Bitmap) {
 	iiter, _ := b.Containers.Iterator(0)
 	jiter, _ := other.Containers.Iterator(0)
-	usedB, usedOther := false, false
 	i, j := iiter.Next(), jiter.Next()
 	ki, ci := iiter.Value()
 	kj, cj := jiter.Value()
 	for i || j {
 		if i && (!j || ki < kj) {
 			target.Containers.Put(ki, ci.Freeze())
-			usedB = true
 			i = iiter.Next()
 			ki, ci = iiter.Value()
 		} else if j && (!i || ki > kj) {
 			target.Containers.Put(kj, cj.Freeze())
-			usedOther = true
 			j = jiter.Next()
 			kj, cj = jiter.Value()
 		} else { // ki == kj
 			newC := union(ci, cj)
 			target.Containers.Put(ki, newC)
-			if newC == ci {
-				usedB = true
-			}
-			if newC == cj {
-				usedOther = true
-			}
 			i, j = iiter.Next(), jiter.Next()
 			ki, ci = iiter.Value()
 			kj, cj = jiter.Value()
 		}
-	}
-	switch {
-	case usedB && usedOther:
-		target.Source = MergeSources(b.Source, other.Source)
-	case usedB:
-		target.Source = b.Source
-	case usedOther:
-		target.Source = other.Source
 	}
 }
 
@@ -1324,14 +1283,7 @@ func (b *Bitmap) unionInPlace(others ...*Bitmap) {
 		bitmapIters = make(handledIters, 0, requiredSliceSize)
 	}
 
-	var sources []Source
-	if b.Source != nil {
-		sources = append(sources, b.Source)
-	}
 	for _, other := range others {
-		if other.Source != nil {
-			sources = append(sources, other.Source)
-		}
 		otherIter, _ := other.Containers.Iterator(0)
 		if otherIter.Next() {
 			bitmapIters = append(bitmapIters, handledIter{
@@ -1341,8 +1293,6 @@ func (b *Bitmap) unionInPlace(others ...*Bitmap) {
 			})
 		}
 	}
-	// new bitmap might have containers from any of those bitmaps in it
-	b.Source = MergeSources(sources...)
 
 	// Loop until we've exhausted every iter.
 	hasNext := true
@@ -1505,9 +1455,6 @@ func (b *Bitmap) singleDifference(other *Bitmap) *Bitmap {
 // Xor returns the bitwise exclusive or of b and other.
 func (b *Bitmap) Xor(other *Bitmap) *Bitmap {
 	output := NewBitmap()
-	// Xor can end up with containers from either parent if the other
-	// had no container or an empty container.
-	output.Source = MergeSources(b.Source, other.Source)
 
 	iiter, _ := b.Containers.Iterator(0)
 	jiter, _ := other.Containers.Iterator(0)

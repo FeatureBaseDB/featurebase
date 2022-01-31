@@ -285,39 +285,6 @@ func (f *fragment) Open() error {
 	return nil
 }
 
-// emptyStorage is the common case for importStorage/applyStorage where they
-// get no data. It tries to write the current storage to the provided file,
-// which is assumed to be the file they didn't get any data from.
-func (f *fragment) emptyStorage(file *os.File) (bool, error) {
-	if f.holder.Opts.ReadOnly {
-		return false, errors.New("can't flush/create storage for read-only holder")
-	}
-	// No data. We'll mark this for no mapping, clear any existing
-	// mapped containers, and set the Source to nil. We also have no
-	// ops.
-	f.opN = 0
-	f.ops = 0
-	f.storage.SetOps(0, 0)
-
-	f.storage.PreferMapping(false)
-	_, err := f.storage.RemapRoaringStorage(nil)
-	f.storage.SetSource(nil)
-	if err != nil {
-		return false, fmt.Errorf("applying/importing storage: no data, and clearing old mapping also failed: %v", err)
-	}
-	// Write the existing storage out to the file so it's
-	// a valid Roaring file thereafter. nothing to unmarshal.
-	// In the unlikely event that this happened even though we
-	// had significant data, we're not mapping it, but that's
-	// harmless even if it's not maximally efficient.
-	bi := bufio.NewWriter(file)
-	if _, err = f.storage.WriteTo(bi); err != nil {
-		return false, fmt.Errorf("init storage file: %s", err)
-	}
-	bi.Flush()
-	return false, nil
-}
-
 // openStorage opens the storage bitmap. Does nothing in RBF-world and will be removed soon.
 func (f *fragment) openStorage(unmarshalData bool) error {
 	if !f.idx.NeedsSnapshot() {
