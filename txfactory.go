@@ -925,9 +925,6 @@ func fileSize(name string) (int64, error) {
 var _ = anyGlobalDBWrappersStillOpen // happy linter
 
 func anyGlobalDBWrappersStillOpen() bool {
-	if globalRoaringReg.Size() != 0 {
-		return true
-	}
 	if globalRbfDBReg.Size() != 0 {
 		return true
 	}

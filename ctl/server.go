@@ -2,7 +2,6 @@
 package ctl
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/molecula/featurebase/v3/server"
@@ -75,7 +74,7 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 	flags.IntVar(&srv.Config.Profile.BlockRate, "profile.block-rate", srv.Config.Profile.BlockRate, "Sampling rate for goroutine blocking profiler. One sample per <rate> ns.")
 	flags.IntVar(&srv.Config.Profile.MutexFraction, "profile.mutex-fraction", srv.Config.Profile.MutexFraction, "Sampling fraction for mutex contention profiling. Sample 1/<rate> of events.")
 
-	flags.StringVar(&srv.Config.Storage.Backend, "storage.backend", storage.DefaultBackend, fmt.Sprintf("transaction/storage to use: 'rbf' is only supported value.", storage.DefaultBackend))
+	flags.StringVar(&srv.Config.Storage.Backend, "storage.backend", storage.DefaultBackend, "Storage backend to use: 'rbf' is only supported value.")
 	flags.BoolVar(&srv.Config.Storage.FsyncEnabled, "storage.fsync", true, "enable fsync fully safe flush-to-disk")
 
 	// RBF specific flags. See pilosa/rbf/cfg/cfg.go for definitions.

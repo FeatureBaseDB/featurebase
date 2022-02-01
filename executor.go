@@ -1651,6 +1651,9 @@ func (d *DistinctTimestamp) Union(other DistinctTimestamp) DistinctTimestamp {
 	return DistinctTimestamp{Name: d.Name, Values: vals}
 }
 
+const ViewNotFound = Error("view not found")
+const FragmentNotFound = Error("fragment not found")
+
 func executeDistinctShardSet(ctx context.Context, qcx *Qcx, idx *Index, fieldName string, shard uint64, filterBitmap *roaring.Bitmap) (result *Row, err0 error) {
 	index := idx.Name()
 	tx, finisher, err := qcx.GetTx(Txo{Write: !writable, Index: idx, Shard: shard})
