@@ -33,7 +33,6 @@ import (
 	"github.com/molecula/featurebase/v3/pql"
 	"github.com/molecula/featurebase/v3/proto"
 	"github.com/molecula/featurebase/v3/server"
-	"github.com/molecula/featurebase/v3/storage"
 	"github.com/molecula/featurebase/v3/test"
 	"github.com/molecula/featurebase/v3/testhook"
 	. "github.com/molecula/featurebase/v3/vprint" // nolint:staticcheck
@@ -1275,15 +1274,6 @@ func TestExecutor_Execute_Count(t *testing.T) {
 		}
 	})
 
-}
-
-func roaringOnlyTest(t *testing.T) {
-	src := pilosa.CurrentBackend()
-	if src == pilosa.RoaringTxn || (storage.DefaultBackend == pilosa.RoaringTxn && src == "") {
-		// okay to run, we are under roaring only
-	} else {
-		t.Skip("skip for everything but roaring")
-	}
 }
 
 // Ensure a set query can be executed.

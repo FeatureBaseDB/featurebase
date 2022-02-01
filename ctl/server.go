@@ -75,13 +75,7 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 	flags.IntVar(&srv.Config.Profile.BlockRate, "profile.block-rate", srv.Config.Profile.BlockRate, "Sampling rate for goroutine blocking profiler. One sample per <rate> ns.")
 	flags.IntVar(&srv.Config.Profile.MutexFraction, "profile.mutex-fraction", srv.Config.Profile.MutexFraction, "Sampling fraction for mutex contention profiling. Sample 1/<rate> of events.")
 
-	// Storage
-	// Note: the default for --storage.backend must be kept "" empty string.
-	// Otherwise we cannot detect and honor the PILOSA_STORAGE_BACKEND env var
-	// over-ride.
-	// TODO: the comment above was carried over from the PILOSA_TXSRC flag, but
-	// we should confirm that this still applies.
-	flags.StringVar(&srv.Config.Storage.Backend, "storage.backend", storage.DefaultBackend, fmt.Sprintf("transaction/storage to use: one of roaring or rbf. The default is: %v. The env var PILOSA_STORAGE_BACKEND is over-ridden by --storage.backend option on the command line.", storage.DefaultBackend))
+	flags.StringVar(&srv.Config.Storage.Backend, "storage.backend", storage.DefaultBackend, fmt.Sprintf("transaction/storage to use: 'rbf' is only supported value.", storage.DefaultBackend))
 	flags.BoolVar(&srv.Config.Storage.FsyncEnabled, "storage.fsync", true, "enable fsync fully safe flush-to-disk")
 
 	// RBF specific flags. See pilosa/rbf/cfg/cfg.go for definitions.

@@ -64,11 +64,10 @@ type Server struct { // nolint: maligned
 	schemator disco.Schemator
 
 	// External
-	systemInfo    SystemInfo
-	gcNotifier    GCNotifier
-	logger        logger.Logger
-	queryLogger   logger.Logger
-	snapshotQueue SnapshotQueue
+	systemInfo  SystemInfo
+	gcNotifier  GCNotifier
+	logger      logger.Logger
+	queryLogger logger.Logger
 
 	nodeID              string
 	uri                 pnet.URI
@@ -544,13 +543,6 @@ func (s *Server) UpAndDown() error {
 func (s *Server) Open() error {
 	s.logger.Infof("open server. PID %v", os.Getpid())
 
-	if s.holder.NeedsSnapshot() {
-		// Start background monitoring.
-		s.snapshotQueue = newSnapshotQueue(10, 2, s.logger)
-	} else {
-		s.snapshotQueue = defaultSnapshotQueue //TODO (twg) rethink this
-	}
-
 	// Log startup
 	err := s.holder.logStartup()
 	if err != nil {
@@ -612,7 +604,6 @@ func (s *Server) Open() error {
 		return errors.Wrap(err, "opening Holder")
 	}
 	// bring up the background tasks for the holder.
-	s.holder.SnapshotQueue = s.snapshotQueue
 	s.holder.Activate()
 	// if we joined existing cluster then broadcast "resize on add" message
 	if initState == disco.InitialClusterStateExisting {
@@ -742,11 +733,6 @@ func (s *Server) Close() error {
 		}
 		if s.holder != nil {
 			errh = s.holder.Close()
-		}
-		if s.snapshotQueue != nil {
-			s.holder.SnapshotQueue = nil
-			s.snapshotQueue.Stop()
-			s.snapshotQueue = nil
 		}
 
 		// prefer to return holder error over cluster

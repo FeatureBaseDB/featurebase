@@ -2,13 +2,11 @@
 package pilosa
 
 import (
-	"os"
 	"regexp"
 	"time"
 
 	"github.com/molecula/featurebase/v3/disco"
 	pnet "github.com/molecula/featurebase/v3/net"
-	"github.com/molecula/featurebase/v3/storage"
 	"github.com/pkg/errors"
 )
 
@@ -156,21 +154,4 @@ func AddressWithDefaults(addr string) (*pnet.URI, error) {
 		return pnet.DefaultURI(), nil
 	}
 	return pnet.NewURIFromAddress(addr)
-}
-
-// CurrentBackend is one step in an attempt to centralize (and either minimize
-// or completely remove), the calls to environment variables throughout the
-// tests. Ideally we could get rid of this and rely completely on the
-// configuration parameters.
-func CurrentBackend() string {
-	return os.Getenv("PILOSA_STORAGE_BACKEND")
-}
-
-// CurrentBackendOrDefault tries the environment variable first, but falls back
-// to the default backend if the environment variable is empty.
-func CurrentBackendOrDefault() string {
-	if backend := os.Getenv("PILOSA_STORAGE_BACKEND"); backend != "" {
-		return backend
-	}
-	return storage.DefaultBackend
 }

@@ -85,8 +85,7 @@ type Holder struct {
 	// The interval at which the cached row ids are persisted to disk.
 	cacheFlushInterval time.Duration
 
-	Logger        logger.Logger
-	SnapshotQueue SnapshotQueue
+	Logger logger.Logger
 
 	// Instantiates new translation stores
 	OpenTranslateStore  OpenTranslateStoreFunc
@@ -270,8 +269,6 @@ func NewHolder(path string, cfg *HolderConfig) *Holder {
 		schemator:            cfg.Schemator,
 		Logger:               cfg.Logger,
 		Opts:                 HolderOpts{StorageBackend: cfg.StorageConfig.Backend},
-
-		SnapshotQueue: defaultSnapshotQueue,
 
 		Auditor: NewAuditor(),
 
@@ -734,16 +731,15 @@ func (h *Holder) maybeSpool(msg Message) bool {
 	return true
 }
 
-// Activate runs the background tasks relevant to keeping a holder in a stable
-// state, such as scanning it for needed snapshots, or flushing caches. This
-// is separate from opening because, while a server would nearly always want
-// to do this, other use cases (like consistency checks of a data directory)
+// Activate runs the background tasks relevant to keeping a holder in
+// a stable state, such as flushing caches. This is separate from
+// opening because, while a server would nearly always want to do
+// this, other use cases (like consistency checks of a data directory)
 // need to avoid it even getting started.
 func (h *Holder) Activate() {
 	// Periodically flush cache.
-	h.wg.Add(2)
+	h.wg.Add(1)
 	go func() { defer h.wg.Done(); h.monitorCacheFlush() }()
-	go func() { defer h.wg.Done(); h.SnapshotQueue.ScanHolder(h, h.closing) }()
 }
 
 // checkForeignIndex is a check before applying a foreign
@@ -791,7 +787,6 @@ func (h *Holder) Close() error {
 	// Notify goroutines of closing and wait for completion.
 	close(h.closing)
 	h.wg.Wait()
-
 	for _, index := range h.Indexes() {
 		if err := index.Close(); err != nil {
 			return errors.Wrap(err, "closing index")
@@ -809,10 +804,6 @@ func (h *Holder) Close() error {
 	h.opened.mu.Lock()
 	h.opened.ch = make(chan struct{})
 	h.opened.mu.Unlock()
-	if h.SnapshotQueue != nil {
-		h.SnapshotQueue.Stop()
-		h.SnapshotQueue = nil
-	}
 
 	if h.lookupDB != nil {
 		err := h.lookupDB.Close()
@@ -825,13 +816,6 @@ func (h *Holder) Close() error {
 	_ = testhook.Closed(h.Auditor, h, nil)
 
 	return nil
-}
-
-func (h *Holder) NeedsSnapshot() bool {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-
-	return h.txf.NeedsSnapshot()
 }
 
 // HasData returns true if Holder contains at least one index.
