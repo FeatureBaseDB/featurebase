@@ -8,11 +8,6 @@ variable "profile" {
   type        = string
 }
 
-variable "gitlab_token" {
-  description = "The API token for taking to Gitlab API - expected to come from an env variable."
-  type        = string
-}
-
 variable "cluster_prefix" {
   type        = string
   description = "This is a identifier that will be prefixed to created resources"
