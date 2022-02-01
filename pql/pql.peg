@@ -43,6 +43,7 @@ items <- item (comma items)?
 item <-   'null' &(comma / close) { p.addVal(nil) }
          / 'true' &(comma / close) { p.addVal(true) }
          / 'false' &(comma / close) { p.addVal(false) }
+         / '$' < variable > { p.addVal(NewVariable(text)) }
          / timefmt { p.addVal(text) }
          / timestampfmt { p.addTimestampVal(text) }
          / < decimal > { p.addNumVal(text) }
@@ -53,6 +54,8 @@ item <-   'null' &(comma / close) { p.addVal(nil) }
 
 doublequotedstring <- ( '\\"' / '\\\\' / '\\n' / '\\t' / [^"\\] )*
 singlequotedstring <- ( '\\\'' / '\\\\' / '\\n' / '\\t' /  [^'\\] )*
+
+variable <- ( [[A-Z]] / '_' ) ( [[A-Z]] / [0-9] / '_' / '-' )*
 
 fieldExpr <- ( [[A-Z]] / '_' ) ( [[A-Z]] / [0-9] / '_' / '-' )*
 field <- <fieldExpr / reserved> { p.addField(text) }

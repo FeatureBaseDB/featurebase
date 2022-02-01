@@ -19,6 +19,22 @@ type Query struct {
 	conditional []string
 }
 
+// ExpandVars recursively replaces variables in the query with their values.
+func (q *Query) ExpandVars(vars map[string]interface{}) (*Query, error) {
+	other := *q
+	other.Calls = make([]*Call, 0, len(q.Calls))
+
+	for _, c := range q.Calls {
+		newCalls, err := c.ExpandVars(vars)
+		if err != nil {
+			return err
+		}
+		other.Calls = append(other.Calls, newCalls...)
+	}
+
+	return q, nil
+}
+
 func (q *Query) startCall(name string) {
 	// Coerce every name into a canonical form if we know of one.
 	if canon, ok := canonicalCaps[strings.ToLower(name)]; ok {
@@ -896,6 +912,28 @@ func (c *Call) ArgString(key string) string {
 	return s
 }
 
+// ExpandVars recursively replaces variables in the call with their values.
+func (c *Call) ExpandVars(vars map[string]interface{}) ([]*Call, error) {
+	other := *c
+	other.Args = CopyArgs(c.Args)
+	other.Children = make([]*Call, 0, len(c.Children))
+
+	// TODO: Replace field variables.
+
+	// Recursively expand variables in children.
+	for _, child := range c.Children {
+		newChildren, err := child.ExpandVars(vars)
+		if err != nil {
+			return nil, err
+		}
+		other.Children = append(other.Children, newChildren...)
+	}
+
+	// TODO: Return multiple calls for list.
+
+	return []*Call{&other}, nil
+}
+
 // Condition represents an operation & value.
 // When used in an argument map it represents a binary expression.
 type Condition struct {
@@ -1034,6 +1072,21 @@ func (cond *Condition) StringSliceValue() ([]string, bool) {
 	return nil, false
 }
 
+// Variable represents a placeholder variable in a query.
+type Variable struct {
+	Name string
+}
+
+// NewVariable returns a new instance of Variable.
+func NewVariable(name string) *Variable {
+	return &Variable{Name: name}
+}
+
+// String returns the string representation of v.
+func (v *Variable) String() string {
+	return "$" + v.Name
+}
+
 func formatValue(v interface{}) string {
 	switch v := v.(type) {
 	case nil:
@@ -1047,6 +1100,8 @@ func formatValue(v interface{}) string {
 	case time.Time:
 		return fmt.Sprintf("\"%s\"", v.Format(time.RFC3339Nano))
 	case *Condition:
+		return v.String()
+	case *Variable:
 		return v.String()
 	default:
 		return fmt.Sprintf("%v", v)
