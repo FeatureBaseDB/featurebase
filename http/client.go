@@ -94,7 +94,6 @@ func WithClientRetryPeriod(period time.Duration) InternalClientOption {
 		rc.RetryWaitMin = min
 		rc.RetryMax = int(attempts)
 		rc.CheckRetry = retryWith400Policy
-		rc.Logger = logger.NopLogger
 		c.retryableClient = rc
 	}
 }

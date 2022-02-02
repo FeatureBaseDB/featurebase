@@ -43,13 +43,13 @@ func sendCmd(cmd string, args ...string) error {
 	return nil
 }
 
-func unpauseNode(node string) error {
-	unpauseArgs := []string{"container", "unpause", container(node)}
+func unpauseNode(t *testing.T, node string) error {
+	unpauseArgs := []string{"container", "unpause", container(t, node)}
 	return sendCmd("docker", unpauseArgs...)
 }
 
-func pauseNode(node string) error {
-	pauseArgs := []string{"container", "pause", container(node)}
+func pauseNode(t *testing.T, node string) error {
+	pauseArgs := []string{"container", "pause", container(t, node)}
 	return sendCmd("docker", pauseArgs...)
 }
 
@@ -346,7 +346,7 @@ func TestPauseReplica(t *testing.T) {
 
 	// pause node
 	t.Logf("pause %s", nodeToPause)
-	err = pauseNode(nodeToPause)
+	err = pauseNode(t, nodeToPause)
 	if err != nil {
 		t.Fatalf("error on pause node %s: %v", nodeToPause, err)
 	}
@@ -369,7 +369,7 @@ func TestPauseReplica(t *testing.T) {
 
 	// wait for cluster status to get back to normal
 	t.Logf("unpause %s", nodeToPause)
-	err = unpauseNode(nodeToPause)
+	err = unpauseNode(t, nodeToPause)
 	if err != nil {
 		t.Fatalf("error on unpause node %s: %v", nodeToPause, err)
 	}

@@ -278,9 +278,18 @@ clustertests:
     - shell
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
-  allow_failure: true
   script:
     - make clustertests
+
+authclustertests:
+  variables:
+    PROJECT: authclustertests_${CI_CONCURRENT_ID}
+  stage: integration
+  tags:
+    - shell
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
+  script:
     - make authclustertests
 
 external lookup tests:

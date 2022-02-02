@@ -159,13 +159,12 @@ clustertests: vendor
 	$(DOCKER_COMPOSE) -f internal/clustertests/docker-compose.yml down
 
 # Run the cluster tests with authentication enabled 
-DOCKER_COMPOSE_AUTH = docker-compose -p authclustertests
 authclustertests: vendor
-	$(DOCKER_COMPOSE_AUTH) -f internal/authclustertests/docker-compose.yml down
-	$(DOCKER_COMPOSE_AUTH) -f internal/authclustertests/docker-compose.yml build
-	$(DOCKER_COMPOSE_AUTH) -f internal/authclustertests/docker-compose.yml up -d pilosa1 pilosa2 pilosa3
-	$(DOCKER_COMPOSE_AUTH) -f internal/authclustertests/docker-compose.yml run client1
-	$(DOCKER_COMPOSE_AUTH) -f internal/authclustertests/docker-compose.yml down
+	$(DOCKER_COMPOSE) -f internal/authclustertests/docker-compose.yml down
+	$(DOCKER_COMPOSE) -f internal/authclustertests/docker-compose.yml build
+	$(DOCKER_COMPOSE) -f internal/authclustertests/docker-compose.yml up -d pilosa1 pilosa2 pilosa3
+	PROJECT=$(PROJECT) $(DOCKER_COMPOSE) -f internal/authclustertests/docker-compose.yml run client1
+	$(DOCKER_COMPOSE) -f internal/authclustertests/docker-compose.yml down
 
 # Install Pilosa
 install:
