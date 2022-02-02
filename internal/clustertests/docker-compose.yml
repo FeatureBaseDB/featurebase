@@ -59,6 +59,7 @@ services:
         - "pilosa1"
         - "pilosa2"
         - "pilosa3"
+        - "fakeidp"
     environment:
       - ENABLE_PILOSA_CLUSTER_TESTS=1
       - GO111MODULE=on
@@ -70,6 +71,11 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     command:
       - "cd /go/src/github.com/molecula/featurebase/ && go test -mod=vendor -v -count=1 github.com/molecula/featurebase/v3/internal/clustertests"
-
+  fakeidp:
+    build:
+      context: .
+      dockerfile: Dockerfile-fakeIDP
+    networks:
+      - pilosanet
 networks: 
   pilosanet:

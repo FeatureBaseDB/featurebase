@@ -580,10 +580,13 @@ func (h *Handler) chkInternal(handler http.HandlerFunc) http.HandlerFunc {
 func (h *Handler) chkAuthN(handler http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if h.auth != nil {
-			if _, err := h.auth.Authenticate(getToken(r)); err != nil {
+			uinfo, err := h.auth.Authenticate(r.Context(), getToken(r))
+			if err != nil {
 				http.Error(w, errors.Wrap(err, "authenticating").Error(), http.StatusUnauthorized)
 				return
 			}
+			// just in case it got refreshed
+			h.auth.SetCookie(w, uinfo.Token, uinfo.Expiry)
 		}
 		ctx := context.WithValue(r.Context(), "token", r.Header["Authorization"])
 		handler.ServeHTTP(w, r.WithContext(ctx))
@@ -602,11 +605,13 @@ func (h *Handler) chkAuthZ(handler http.HandlerFunc, perm authz.Permission) http
 		lperm := perm
 
 		// check if the user is authenticated
-		uinfo, err := h.auth.Authenticate(getToken(r))
+		uinfo, err := h.auth.Authenticate(r.Context(), getToken(r))
 		if err != nil {
 			http.Error(w, errors.Wrap(err, "authenticating").Error(), http.StatusForbidden)
 			return
 		}
+		// just in case it got refreshed
+		h.auth.SetCookie(w, uinfo.Token, uinfo.Expiry)
 
 		// put the user's groups in the context
 		ctx := context.WithValue(r.Context(), contextKeyGroupMembership, uinfo.Groups)
@@ -3718,17 +3723,19 @@ func (h *Handler) handleCheckAuthentication(w http.ResponseWriter, r *http.Reque
 		http.Error(w, "", http.StatusNoContent)
 		return
 	}
-	uinfo, err := h.auth.Authenticate(getToken(r))
 
+	uinfo, err := h.auth.Authenticate(r.Context(), getToken(r))
 	if uinfo == nil || err != nil {
 		w.Header().Add("Content-Type", "text/plain")
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
+	// just in case it got refreshed
+	h.auth.SetCookie(w, uinfo.Token, uinfo.Expiry)
+
 	w.Header().Add("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("OK")) //nolint:errcheck
-
 }
 
 func (h *Handler) handleUserInfo(w http.ResponseWriter, r *http.Request) {
@@ -3740,12 +3747,14 @@ func (h *Handler) handleUserInfo(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "", http.StatusNoContent)
 		return
 	}
-	uinfo, err := h.auth.Authenticate(getToken(r))
+	uinfo, err := h.auth.Authenticate(r.Context(), getToken(r))
 	if err != nil {
 		h.logger.Errorf("error authenticating: %v", err)
 		http.Error(w, err.Error(), http.StatusForbidden)
 		return
 	}
+	// just in case it got refreshed
+	h.auth.SetCookie(w, uinfo.Token, uinfo.Expiry)
 
 	if err := json.NewEncoder(w).Encode(uinfo); err != nil {
 		h.logger.Errorf("writing user info: %s", err)

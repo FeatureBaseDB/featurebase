@@ -547,7 +547,7 @@ func (m *Command) SetupServer() error {
 			return errors.Wrap(err, "setting up queryLogger")
 		}
 
-		m.queryLogger.Infof("Featurebase Server Started")
+		m.queryLogger.Infof("Starting Featurebase...")
 		m.queryLogger.Infof("Group with admin level access: %v", p.Admin)
 		m.queryLogger.Infof("Permissions: %+v", p.Permissions)
 

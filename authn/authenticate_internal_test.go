@@ -2,19 +2,24 @@ package authn
 
 import (
 	"bytes"
+	"context"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/golang-jwt/jwt"
 	"github.com/molecula/featurebase/v3/logger"
-	"github.com/pkg/errors"
+	"golang.org/x/oauth2"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 )
 
 func NewTestAuth(t *testing.T) *Auth {
@@ -47,12 +52,11 @@ func NewTestAuth(t *testing.T) *Auth {
 	}
 	return a
 }
-
 func TestAuth(t *testing.T) {
 	a := NewTestAuth(t)
 	t.Run("SetCookie", func(t *testing.T) {
 		w := httptest.NewRecorder()
-		err := a.setCookie(w, "a cookie value", time.Now().Add(time.Hour))
+		err := a.SetCookie(w, "a cookie value", time.Now().Add(time.Hour))
 		if err != nil {
 			t.Fatalf("expected no errors, got: %v", err)
 		}
@@ -63,6 +67,42 @@ func TestAuth(t *testing.T) {
 
 		if got, want := w.Result().Cookies()[0].Path, "/"; got != want {
 			t.Fatalf("path=%s, want %s", got, want)
+		}
+	})
+	t.Run("SetGRPCMetadata", func(t *testing.T) {
+		md := metadata.MD{
+			"cookie": []string{a.cookieName + "=something"},
+		}
+		ctx := grpc.NewContextWithServerTransportStream(
+			metadata.NewIncomingContext(context.TODO(),
+				md,
+			),
+			NewServerTransportStream(),
+		)
+		md, ok := metadata.FromIncomingContext(ctx)
+		if !ok {
+			t.Fatalf("expected ok, got: %v", ok)
+		}
+		err := a.SetGRPCMetadata(ctx, md, "this is a token!")
+		if err != nil {
+			t.Fatalf("expected no errors, got: %v", err)
+		}
+		md, ok = metadata.FromIncomingContext(ctx)
+		if !ok {
+			t.Fatalf("expected ok, got: %v", ok)
+		}
+		c, ok := md["cookie"]
+		if !ok {
+			t.Fatalf("expected ok, got: %v", ok)
+		}
+		var cookie string
+		for _, cookie = range c {
+			if strings.HasPrefix(cookie, a.cookieName) {
+				break
+			}
+		}
+		if exp, got := a.cookieName+"=this is a token!", cookie; got != exp {
+			t.Fatalf("expected '%v', got '%v'", exp, got)
 		}
 	})
 	t.Run("KeyLength", func(t *testing.T) {
@@ -88,13 +128,19 @@ func TestAuth(t *testing.T) {
 			t.Fatalf("expected %v, got %v", got, want)
 		}
 	})
+}
+
+func TestAuthenticate(t *testing.T) {
 	cases := []struct {
-		name   string
-		uid    string
-		uname  string
-		exp    interface{}
-		groups []Group
-		err    error
+		name         string
+		uid          string
+		uname        string
+		exp          int64
+		refresh      bool
+		errOnRefresh bool
+		malformed    bool
+		groups       []Group
+		err          error
 	}{
 		{
 			name:  "GoodToken",
@@ -108,7 +154,13 @@ func TestAuth(t *testing.T) {
 			},
 		},
 		{
-			name:  "ExpiredToken",
+			name:      "Malformed",
+			malformed: true,
+			err:       fmt.Errorf("parsing bearer token: token contains an invalid number of segments"),
+		},
+
+		{
+			name:  "ExpiredTokenNoRefresh",
 			uid:   "42",
 			uname: "A. Token",
 			groups: []Group{
@@ -117,30 +169,99 @@ func TestAuth(t *testing.T) {
 					GroupName: "adminGroup",
 				},
 			},
-			exp: "-17764800",
-			err: errors.Wrap(fmt.Errorf("Token is expired"), "parsing bearer token"),
+			exp: -17764800,
+			err: fmt.Errorf("token is expired"),
+		},
+		{
+			name:  "ExpiredTokenYesRefresh",
+			uid:   "42",
+			uname: "A. Token",
+			groups: []Group{
+				{
+					GroupID:   "ac97c9e2-346b-42a2-b6da-18bcb61a32fe",
+					GroupName: "adminGroup",
+				},
+			},
+			refresh: true,
+			exp:     -17764800,
+		},
+		{
+			name:  "ExpiredTokenYesRefreshButError",
+			uid:   "42",
+			uname: "A. Token",
+			groups: []Group{
+				{
+					GroupID:   "ac97c9e2-346b-42a2-b6da-18bcb61a32fe",
+					GroupName: "adminGroup",
+				},
+			},
+			refresh:      true,
+			errOnRefresh: true,
+			exp:          -17764800,
+			err:          fmt.Errorf("decoding refreshed token: invalid character 'b' looking for beginning of value"),
 		},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
-			tkn := jwt.New(jwt.SigningMethodHS256)
-			claims := tkn.Claims.(jwt.MapClaims)
-			groupString, err := ToGob64(test.groups)
-			if err != nil {
-				t.Fatalf("unexpected error when gobbing groups %v", err)
+			// setup the test
+			a := NewTestAuth(t)
+			token := ""
+			var err error
+			if !test.malformed {
+				tkn := jwt.New(jwt.SigningMethodHS256)
+				claims := tkn.Claims.(jwt.MapClaims)
+				claims["oid"] = test.uid
+				claims["name"] = test.uname
+				if test.exp != 0 {
+					claims["exp"] = strconv.Itoa(int(test.exp))
+				}
+				token, err = tkn.SignedString(a.SecretKey())
+				if err != nil {
+					t.Fatalf("unexpected error when signing token %v", err)
+				}
+			} else {
+				token = "asdfasdfasdfasdF"
 			}
-			claims["molecula-idp-groups"] = groupString
-			claims["oid"] = test.uid
-			claims["name"] = test.uname
-			if test.exp != nil {
-				claims["exp"] = test.exp
+			if len(test.groups) > 0 {
+				a.groupsCache[token] = cachedGroups{time.Now(), test.groups}
 			}
-			token, err := tkn.SignedString(a.SecretKey())
-			if err != nil {
-				t.Fatalf("unexpected error when signing token %v", err)
+			if test.refresh {
+				var srv *httptest.Server
+				if !test.errOnRefresh {
+					srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						tkn := jwt.New(jwt.SigningMethodHS256)
+						claims := tkn.Claims.(jwt.MapClaims)
+						claims["oid"] = test.uid
+						claims["name"] = test.uname
+						expiry := strconv.Itoa(int(time.Now().Add(2 * time.Hour).Unix()))
+						claims["exp"] = expiry
+						fresh, err := tkn.SignedString(a.SecretKey())
+						if err != nil {
+							t.Fatalf("unexpected error when signing token %v", err)
+						}
+
+						a.groupsCache[fresh] = cachedGroups{time.Now(), test.groups}
+						fmt.Fprintf(w, `{"access_token": "`+fresh+`",  "refresh_token": "blah",  "token_type": "bearer",  "expires": `+expiry+` }`)
+					}))
+				} else {
+					srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						http.Error(w, "bad", http.StatusInternalServerError)
+					}))
+				}
+				defer srv.Close()
+				a.oAuthConfig.Endpoint.TokenURL = srv.URL
+				a.tokenCache[token] = cachedToken{
+					time.Now(),
+					&oauth2.Token{
+						AccessToken:  token,
+						RefreshToken: "blah",
+						Expiry:       time.Unix(test.exp, 0),
+					},
+				}
 			}
 
-			uinfo, err := a.Authenticate(token)
+			// do the actual testing
+			uinfo, err := a.Authenticate(context.TODO(), token)
 			// okay this part kind of sucks bc we need to check errors and i
 			// dont want to write a whole new test for things that should have
 			// errors just to avoid this mess. errors.Is doesn't work either
@@ -167,34 +288,124 @@ func TestAuth(t *testing.T) {
 	}
 }
 
-func TestGobs(t *testing.T) {
-	t.Run("goodGob!", func(t *testing.T) {
-		g := []Group{
-			{
-				GroupID:   "groupA",
-				GroupName: "groupA-Name",
-			},
-			{
-				GroupID:   "groupB",
-				GroupName: "groupB-Name",
-			},
-			{
-				GroupID:   "groupC",
-				GroupName: "groupC-Name",
-			},
+func TestAuthenticate_CleanCache(t *testing.T) {
+	// this deserves its own test bc it has gross setup required
+	t.Run("should clean", func(t *testing.T) {
+		a := NewTestAuth(t)
+		now := time.Now()
+		a.groupsCache["oldy"] = cachedGroups{now.Add(-24 * time.Hour), []Group{}}
+		a.groupsCache["goldy"] = cachedGroups{now.Add(-4 * time.Hour), []Group{}}
+		a.tokenCache["oldy"] = cachedToken{now.Add(-24 * time.Hour), &oauth2.Token{}}
+		a.tokenCache["goldy"] = cachedToken{now.Add(-4 * time.Hour), &oauth2.Token{}}
+		a.lastCacheClean = now.Add(-45 * time.Minute)
+
+		_, _ = a.Authenticate(context.TODO(), "this doesn't matter")
+		if a.lastCacheClean.Sub(now) <= time.Nanosecond {
+			t.Fatalf("cache should have been cleaned")
 		}
-		gobbed, err := ToGob64(g)
-		if err != nil {
-			t.Fatalf("could not gob %+v", g)
+		if _, ok := a.groupsCache["oldy"]; ok {
+			t.Errorf("oldy should have been deleted")
 		}
-		ungobbed, err := FromGob64(gobbed)
-		if err != nil {
-			t.Fatalf("could not ungob %+v", gobbed)
+		if _, ok := a.groupsCache["goldy"]; !ok {
+			t.Errorf("goldy should not have been deleted")
 		}
-		if !reflect.DeepEqual(ungobbed, g) {
-			t.Fatalf("expected %v, got %v", g, ungobbed)
+		if _, ok := a.tokenCache["oldy"]; ok {
+			t.Errorf("oldy should have been deleted")
+		}
+		if _, ok := a.tokenCache["goldy"]; !ok {
+			t.Errorf("goldy should not have been deleted")
 		}
 	})
+	t.Run("shouldn't clean", func(t *testing.T) {
+		a := NewTestAuth(t)
+		now := time.Now()
+		a.groupsCache["oldy"] = cachedGroups{now.Add(-24 * time.Hour), []Group{}}
+		a.groupsCache["goldy"] = cachedGroups{now.Add(-4 * time.Hour), []Group{}}
+		a.tokenCache["oldy"] = cachedToken{now.Add(-24 * time.Hour), &oauth2.Token{}}
+		a.tokenCache["goldy"] = cachedToken{now.Add(-4 * time.Hour), &oauth2.Token{}}
+		a.lastCacheClean = now
+
+		_, _ = a.Authenticate(context.TODO(), "this doesn't matter")
+		if a.lastCacheClean.Sub(now) >= time.Nanosecond {
+			t.Fatalf("cache should not have been cleaned")
+		}
+		if _, ok := a.groupsCache["oldy"]; !ok {
+			t.Errorf("oldy should not have been deleted")
+		}
+		if _, ok := a.groupsCache["goldy"]; !ok {
+			t.Errorf("goldy should not have been deleted")
+		}
+		if _, ok := a.tokenCache["oldy"]; !ok {
+			t.Errorf("oldy should not have been deleted")
+		}
+		if _, ok := a.tokenCache["goldy"]; !ok {
+			t.Errorf("goldy should not have been deleted")
+		}
+	})
+
+}
+
+func TestGetGroups(t *testing.T) {
+	a := NewTestAuth(t)
+	a.groupsCache = map[string]cachedGroups{
+		"the world is changed": {
+			cacheTime: time.Now(),
+			groups: []Group{
+				{
+					GroupID:   "i feel it in the water",
+					GroupName: "i feel it in the earth",
+				},
+			},
+		},
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := json.Marshal(
+			Groups{
+				Groups: []Group{
+					{
+						GroupID:   "much that once was is lost",
+						GroupName: "for none now live who remember it",
+					},
+				},
+			},
+		)
+		if err != nil {
+			t.Fatalf("unexpected error marshalling groups response: %v", err)
+		}
+		fmt.Fprintf(w, "%s", body)
+	}))
+	a.groupEndpoint = srv.URL
+
+	for name, test := range map[string]struct {
+		token  string
+		groups []Group
+	}{
+		"InCache": {
+			token: "the world is changed",
+			groups: []Group{
+				{
+					GroupID:   "i feel it in the water",
+					GroupName: "i feel it in the earth",
+				},
+			},
+		},
+		"NotInCache": {
+			token: "i smell it in the air",
+			groups: []Group{
+				{
+					GroupID:   "much that once was is lost",
+					GroupName: "for none now live who remember it",
+				},
+			},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if got, err := a.getGroups(test.token); err != nil || !reflect.DeepEqual(got, test.groups) {
+				t.Errorf("expected %v, nil, got %v, %v", test.groups, got, err)
+			}
+		})
+	}
+
 }
 
 func TestDecodeHex(t *testing.T) {
@@ -224,68 +435,6 @@ func TestDecodeHex(t *testing.T) {
 	})
 }
 
-func TestAddGroupMembership(t *testing.T) {
-	cases := []struct {
-		name   string
-		groups []Group
-		err    error
-	}{
-		{
-			name:   "emptyGroups",
-			groups: []Group{},
-			err:    nil,
-		},
-		{
-			name: "happyPath",
-			groups: []Group{
-				{
-					GroupID:   "ac97c9e2-346b-42a2-b6da-18bcb61a32fe",
-					GroupName: "adminGroup",
-				},
-			},
-			err: nil,
-		},
-	}
-	a := NewTestAuth(t)
-	for _, test := range cases {
-		t.Run(test.name, func(t *testing.T) {
-			tkn := jwt.New(jwt.SigningMethodHS256)
-			token, err := tkn.SignedString(a.SecretKey())
-			if err != nil {
-				t.Fatalf("unexpected error when signing token %v", err)
-			}
-
-			tokenWithGroups, err := a.addGroupMembership(token, test.groups)
-			// okay this part kind of sucks bc we need to check errors and i
-			// dont want to write a whole new test for things that should have
-			// errors just to avoid this mess. errors.Is doesn't work either
-			if (test.err == nil && err != nil) || (test.err != nil && err == nil) {
-				t.Fatalf("expected %v but got %v", test.err, err)
-			} else if test.err != nil && err != nil {
-				if test.err.Error() != err.Error() {
-					t.Fatalf("expected %v, but got %v", test.err, err)
-				} else {
-					return
-				}
-			}
-			parsed, _, err := new(jwt.Parser).ParseUnverified(tokenWithGroups, jwt.MapClaims{})
-			if err != nil {
-				t.Fatalf("unexpected error parsing token %v", err)
-			}
-
-			claims := parsed.Claims.(jwt.MapClaims)
-			groups, err := FromGob64(claims["molecula-idp-groups"].(string))
-			if err != nil {
-				t.Fatalf("unexpected error parsing groupString %v", err)
-			}
-
-			if !reflect.DeepEqual(groups, test.groups) {
-				t.Fatalf("expected %v, got %v", test.groups, groups)
-			}
-		})
-	}
-}
-
 func TestHandlers(t *testing.T) {
 	a := NewTestAuth(t)
 	t.Run("login", func(t *testing.T) {
@@ -304,6 +453,19 @@ func TestHandlers(t *testing.T) {
 	t.Run("logout", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/logout", nil)
 		w := httptest.NewRecorder()
+		req.AddCookie(
+			&http.Cookie{
+				Name:     a.cookieName,
+				Value:    "test",
+				Path:     "/",
+				Secure:   true,
+				HttpOnly: true,
+				SameSite: http.SameSiteStrictMode,
+				Expires:  time.Unix(3000000, 0),
+			},
+		)
+		a.groupsCache["test"] = cachedGroups{}
+		a.tokenCache["test"] = cachedToken{time.Now(), &oauth2.Token{}}
 		a.Logout(w, req)
 		resp := w.Result()
 		if resp.StatusCode != http.StatusTemporaryRedirect {
@@ -314,7 +476,7 @@ func TestHandlers(t *testing.T) {
 			t.Fatalf("expected %v, got %v", redirect, got.Path)
 		}
 		for _, c := range resp.Cookies() {
-			if c.Name == "molecula-chip" {
+			if c.Name == a.cookieName {
 				if c.Value != "" {
 					t.Fatalf("cookie not set to empty value!")
 				}
@@ -326,5 +488,105 @@ func TestHandlers(t *testing.T) {
 				break
 			}
 		}
+		if _, ok := a.groupsCache["test"]; ok {
+			t.Fatalf("groups not deleted!")
+		}
+		if _, ok := a.tokenCache["test"]; ok {
+			t.Fatalf("token not deleted!")
+		}
 	})
+	t.Run("redirectGood", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/redirect", nil)
+		w := httptest.NewRecorder()
+		tkn := jwt.New(jwt.SigningMethodHS256)
+		claims := tkn.Claims.(jwt.MapClaims)
+		claims["oid"] = "user id"
+		claims["name"] = "user name"
+		expiresIn := 2 * time.Hour
+		exp := time.Now().Add(expiresIn)
+		expiry := strconv.Itoa(int(exp.Unix()))
+		claims["exp"] = expiry
+		fresh, err := tkn.SignedString(a.SecretKey())
+		if err != nil {
+			t.Fatalf("unexpected error when signing token %v", err)
+		}
+		freshToken := oauth2.Token{
+			AccessToken:  fresh,
+			RefreshToken: "blah",
+			Expiry:       exp,
+		}
+
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			body := `{"access_token": "` + fresh + `", "refresh_token": "blah", "expires_in": "` + strconv.Itoa(int(expiresIn.Seconds())) + `"}`
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(body))
+		}))
+		a.oAuthConfig.Endpoint.TokenURL = srv.URL
+		a.Redirect(w, req)
+		resp := w.Result()
+		if resp.StatusCode != http.StatusTemporaryRedirect {
+			t.Fatalf("expected redirect, got %v", resp.StatusCode)
+		}
+		if got, err := resp.Location(); err != nil || got.String() != "/" {
+			t.Fatalf("expected %v, got %v", "/", got.Path)
+		}
+		cachedToken := a.tokenCache[fresh].token
+		if cachedToken.AccessToken != freshToken.AccessToken {
+			t.Fatalf("expected %v, got %v", freshToken.AccessToken, cachedToken.AccessToken)
+		}
+		if cachedToken.RefreshToken != freshToken.RefreshToken {
+			t.Fatalf("expected %v, got %v", freshToken.RefreshToken, cachedToken.RefreshToken)
+		}
+		if cachedToken.Expiry.Sub(freshToken.Expiry) > time.Second {
+			t.Fatalf("expected %v, got %v", freshToken.Expiry, cachedToken.Expiry)
+		}
+	})
+
+	t.Run("redirectBad", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/redirect", nil)
+		w := httptest.NewRecorder()
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			http.Error(w, "Server Error", http.StatusInternalServerError)
+		}))
+		a.oAuthConfig.Endpoint.TokenURL = srv.URL
+		a.Redirect(w, req)
+		resp := w.Result()
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("expected BadRequest, got %v", resp.StatusCode)
+		}
+	})
+
+}
+
+// This type is used for mocking ServerTransportStreams in tests
+type ServerTransportStream struct {
+	md     metadata.MD
+	method string
+}
+
+func NewServerTransportStream() *ServerTransportStream {
+	return &ServerTransportStream{
+		md:     metadata.MD{},
+		method: "test",
+	}
+}
+
+func (s *ServerTransportStream) Method() string {
+	return s.method
+}
+
+func (s *ServerTransportStream) SetHeader(md metadata.MD) error {
+	s.md = md
+	return nil
+}
+
+func (s *ServerTransportStream) SendHeader(md metadata.MD) error {
+	_ = md
+	return nil
+}
+
+func (s *ServerTransportStream) SetTrailer(md metadata.MD) error {
+	_ = md
+	return nil
 }

@@ -5,10 +5,12 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"reflect"
 	"strings"
@@ -582,6 +584,22 @@ func TestImport_AuthOn(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create query log file: %s", err)
 	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := json.Marshal(
+			authn.Groups{
+				Groups: []authn.Group{
+					{
+						GroupID:   "group-id-test",
+						GroupName: "group-id-test",
+					},
+				},
+			},
+		)
+		if err != nil {
+			t.Fatalf("unexpected error marshalling groups response: %v", err)
+		}
+		fmt.Fprintf(w, "%s", body)
+	}))
 
 	auth := server.Auth{
 		Enable:           true,
@@ -589,7 +607,7 @@ func TestImport_AuthOn(t *testing.T) {
 		ClientSecret:     "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF",
 		AuthorizeURL:     "https://login.microsoftonline.com/4a137d66-d161-4ae4-b1e6-07e9920874b8/oauth2/v2.0/authorize",
 		TokenURL:         "https://login.microsoftonline.com/4a137d66-d161-4ae4-b1e6-07e9920874b8/oauth2/v2.0/token",
-		GroupEndpointURL: "https://graph.microsoft.com/v1.0/me/transitiveMemberOf/microsoft.graph.group?$count=true",
+		GroupEndpointURL: srv.URL,
 		LogoutURL:        "https://login.microsoftonline.com/common/oauth2/v2.0/logout",
 		Scopes:           []string{"https://graph.microsoft.com/.default", "offline_access"},
 		SecretKey:        "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF",
@@ -612,14 +630,13 @@ func TestImport_AuthOn(t *testing.T) {
 		conf.TLS.SkipVerify = true
 		commandOpts[i] = append(commandOpts[i], server.OptCommandConfig(conf))
 	}
-
 	a, err := authn.NewAuth(
 		logger.NewStandardLogger(os.Stdout),
 		"http://localhost:0/",
 		auth.Scopes,
 		auth.AuthorizeURL,
 		auth.TokenURL,
-		auth.GroupEndpointURL,
+		srv.URL,
 		auth.LogoutURL,
 		auth.ClientId,
 		auth.ClientSecret,
@@ -632,8 +649,6 @@ func TestImport_AuthOn(t *testing.T) {
 	// make a valid token
 	tkn := jwt.New(jwt.SigningMethodHS256)
 	claims := tkn.Claims.(jwt.MapClaims)
-	groupString, _ := authn.ToGob64([]authn.Group{{GroupID: "group-id-test", GroupName: "group-name-test"}})
-	claims["molecula-idp-groups"] = groupString
 	claims["oid"] = "42"
 	claims["name"] = "valid"
 	token, err := tkn.SignedString([]byte(a.SecretKey()))

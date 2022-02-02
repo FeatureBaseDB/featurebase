@@ -52,6 +52,7 @@ require (
 	github.com/zeebo/blake3 v0.1.1
 	go.etcd.io/bbolt v1.3.5
 	go.etcd.io/etcd v0.0.0-20201125193152-8a03d2e9614b
+	golang.org/x/crypto v0.0.0-20201217014255-9d1352758620 // indirect
 	golang.org/x/exp v0.0.0-20201008143054-e3b2a7f2fdc7
 	golang.org/x/mod v0.4.2
 	golang.org/x/net v0.0.0-20210805182204-aaa1db679c0d // indirect

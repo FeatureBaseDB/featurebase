@@ -39,13 +39,14 @@ func container(t *testing.T, svc string) string {
 
 func GetAuthToken(t *testing.T) string {
 	t.Helper()
+
 	var (
 		ClientID         = "e9088663-eb08-41d7-8f65-efb5f54bbb71"
 		ClientSecret     = "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF"
-		AuthorizeURL     = "https://login.microsoftonline.com/4a137d66-d161-4ae4-b1e6-07e9920874b8/oauth2/v2.0/authorize"
-		TokenURL         = "https://login.microsoftonline.com/4a137d66-d161-4ae4-b1e6-07e9920874b8/oauth2/v2.0/token"
-		GroupEndpointURL = "https://graph.microsoft.com/v1.0/me/transitiveMemberOf/microsoft.graph.group?$count=true"
-		LogoutURL        = "https://login.microsoftonline.com/common/oauth2/v2.0/logout"
+		AuthorizeURL     = "fakeidp:10101/authorize"
+		TokenURL         = "fakeidp:10101/token"
+		GroupEndpointURL = "fakeidp:10101/groups"
+		LogoutURL        = "fakeidp:10101/logout"
 		Scopes           = []string{"https://graph.microsoft.com/.default", "offline_access"}
 		Key              = "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF"
 	)
@@ -66,8 +67,6 @@ func GetAuthToken(t *testing.T) string {
 	// make a valid token
 	tkn := jwt.New(jwt.SigningMethodHS256)
 	claims := tkn.Claims.(jwt.MapClaims)
-	groupString, _ := authn.ToGob64([]authn.Group{{GroupID: "group-id-test", GroupName: "group-name-test"}})
-	claims["molecula-idp-groups"] = groupString
 	claims["oid"] = "42"
 	claims["name"] = "valid"
 	token, err := tkn.SignedString([]byte(a.SecretKey()))
