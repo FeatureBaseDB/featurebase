@@ -2864,10 +2864,24 @@ func (s queryValidationSpec) validate(query url.Values) error {
 
 type ClientOption func(client *http.Client, dialer *net.Dialer) *http.Client
 
+func ClientResponseHeaderTimeoutOption(dur time.Duration) ClientOption {
+	return func(client *http.Client, dialer *net.Dialer) *http.Client {
+		client.Transport.(*http.Transport).ResponseHeaderTimeout = dur
+		return client
+	}
+}
+
+func ClientDialTimeoutOption(dur time.Duration) ClientOption {
+	return func(client *http.Client, dialer *net.Dialer) *http.Client {
+		dialer.Timeout = dur
+		return client
+	}
+}
+
 func GetHTTPClient(t *tls.Config, opts ...ClientOption) *http.Client {
 	dialer := &net.Dialer{
 		Timeout:   30 * time.Second,
-		KeepAlive: 30 * time.Second,
+		KeepAlive: 15 * time.Second,
 		DualStack: true,
 	}
 	transport := &http.Transport{
@@ -2875,7 +2889,7 @@ func GetHTTPClient(t *tls.Config, opts ...ClientOption) *http.Client {
 		DialContext:           dialer.DialContext,
 		MaxIdleConns:          1000,
 		MaxIdleConnsPerHost:   200,
-		IdleConnTimeout:       90 * time.Second,
+		IdleConnTimeout:       20 * time.Second,
 		TLSHandshakeTimeout:   10 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
 	}

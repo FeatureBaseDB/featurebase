@@ -2,12 +2,14 @@
 package clustertest
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"os/exec"
+	"strings"
 	"testing"
 	"time"
 
@@ -17,24 +19,22 @@ import (
 	"github.com/molecula/featurebase/v3/disco"
 	picli "github.com/molecula/featurebase/v3/http"
 	"github.com/molecula/featurebase/v3/logger"
+	"github.com/pkg/errors"
 )
 
-// container turns a docker-compose service name into a container name
-// assuming the project name is set in the enviroment as PROJECT. This
-// refers to the "-p" argument to docker-compose. NOTE: this assumes
-// docker-compose joins the project name with a separating
-// underscore... this may not always be true as I've seen a dash used
-// as well, but I think it is true in recent versions.
-func container(svc string) string {
+// container turns a docker-compose service name into a container ID
+// by calling "docker-compose ps"
+func container(t *testing.T, svc string) string {
 	project := "clustertests"
-	if os.Getenv("ENABLE_AUTH") == "1" {
-		project = "authclustertests"
-	}
-
 	if p := os.Getenv("PROJECT"); p != "" {
 		project = p
 	}
-	return project + "_" + svc + "_1"
+	stdout, stderr, err := runCmd("docker-compose", "-p", project, "ps", "-q", svc)
+	if err != nil {
+		t.Fatalf("couldn't construct container name, err: %v, stderr:\n%s\nstdout:\n%s", err, stderr, stdout)
+	}
+	name := strings.Trim(stdout, "\n")
+	return name
 }
 
 func GetAuthToken(t *testing.T) string {
@@ -144,18 +144,14 @@ func TestClusterStuff(t *testing.T) {
 		}
 	}
 	t.Run("long pause", func(t *testing.T) {
-		pcmd := exec.Command("/pumba", "pause", container("pilosa3"), "--duration", "10s")
-		pcmd.Stdout = os.Stdout
-		pcmd.Stderr = os.Stderr
+		if err := sendCmd("docker", "pause", container(t, "pilosa3")); err != nil {
+			t.Fatalf("sending pause: %v", err)
+		}
 		t.Log("pausing pilosa3 for 10s")
-
-		if err := pcmd.Start(); err != nil {
-			t.Fatalf("starting pumba command: %v", err)
+		time.Sleep(time.Second * 10)
+		if err := sendCmd("docker", "unpause", container(t, "pilosa3")); err != nil {
+			t.Fatalf("sending unpause: %v", err)
 		}
-		if err := pcmd.Wait(); err != nil {
-			t.Fatalf("waiting on pumba pause cmd: %v", err)
-		}
-
 		t.Log("done with pause, waiting for stability")
 		waitForStatus(t, cli1.Status, string(disco.ClusterStateNormal), 30, time.Second, ctx)
 		t.Log("done waiting for stability")
@@ -174,7 +170,7 @@ func TestClusterStuff(t *testing.T) {
 
 	t.Run("backup", func(t *testing.T) {
 		// do backup with node 1 down, but restart it after a few seconds
-		if err := sendCmd("docker", "stop", container("pilosa1")); err != nil {
+		if err := sendCmd("docker", "stop", container(t, "pilosa1")); err != nil {
 			t.Fatalf("sending stop command: %v", err)
 		}
 		var backupCmd *exec.Cmd
@@ -192,7 +188,7 @@ func TestClusterStuff(t *testing.T) {
 			}
 		}
 		time.Sleep(time.Second * 5)
-		if err = sendCmd("docker", "start", container("pilosa1")); err != nil {
+		if err = sendCmd("docker", "start", container(t, "pilosa1")); err != nil {
 			t.Fatalf("sending start command: %v", err)
 		}
 
@@ -228,18 +224,28 @@ func TestClusterStuff(t *testing.T) {
 			}
 		}
 		time.Sleep(time.Millisecond * 50)
-		if err = sendCmd("docker", "stop", container("pilosa2")); err != nil {
+		if err = sendCmd("docker", "stop", container(t, "pilosa2")); err != nil {
 			t.Fatalf("sending stop command: %v", err)
 		}
 
 		time.Sleep(time.Second * 10)
-		if err = sendCmd("docker", "start", container("pilosa2")); err != nil {
+		if err = sendCmd("docker", "start", container(t, "pilosa2")); err != nil {
 			t.Fatalf("sending stop command: %v", err)
 		}
 		if err := restoreCmd.Wait(); err != nil {
 			t.Fatalf("restore failed: %v", err)
 		}
 
+		fmt.Println("pausing all featurebasen")
+		if err = sendCmd("docker", "pause", container(t, "pilosa1")); err != nil {
+			t.Fatalf("sending pause command: %v", err)
+		}
+		if err = sendCmd("docker", "pause", container(t, "pilosa2")); err != nil {
+			t.Fatalf("sending pause command: %v", err)
+		}
+		if err = sendCmd("docker", "pause", container(t, "pilosa3")); err != nil {
+			t.Fatalf("sending pause command: %v", err)
+		}
 		// now do backup with all nodes down and too short a timeout
 		// so it fails. Has be to be all 3 because the cluster has
 		// replicas=3 and the backup command will retry on replicas.
@@ -254,27 +260,19 @@ func TestClusterStuff(t *testing.T) {
 				t.Fatalf("sending second backup command: %v", err)
 			}
 		}
-		time.Sleep(time.Millisecond * 10) // want the backup to get started, then fail
-		if err = sendCmd("docker", "stop", container("pilosa1")); err != nil {
-			t.Fatalf("sending stop command: %v", err)
-		}
-		if err = sendCmd("docker", "stop", container("pilosa2")); err != nil {
-			t.Fatalf("sending stop command: %v", err)
-		}
-		if err = sendCmd("docker", "stop", container("pilosa3")); err != nil {
-			t.Fatalf("sending stop command: %v", err)
-		}
 
-		time.Sleep(time.Second * 5)
+		t.Logf("sleeping 8s")
+		time.Sleep(time.Second * 8)
+		t.Logf("restarting FB nodes")
 
-		if err = sendCmd("docker", "start", container("pilosa1")); err != nil {
-			t.Fatalf("sending start command: %v", err)
+		if err = sendCmd("docker", "unpause", container(t, "pilosa1")); err != nil {
+			t.Fatalf("sending unpause command: %v", err)
 		}
-		if err = sendCmd("docker", "start", container("pilosa2")); err != nil {
-			t.Fatalf("sending start command: %v", err)
+		if err = sendCmd("docker", "unpause", container(t, "pilosa2")); err != nil {
+			t.Fatalf("sending unpause command: %v", err)
 		}
-		if err = sendCmd("docker", "start", container("pilosa3")); err != nil {
-			t.Fatalf("sending start command: %v", err)
+		if err = sendCmd("docker", "unpause", container(t, "pilosa3")); err != nil {
+			t.Fatalf("sending unpause command: %v", err)
 		}
 		if err = backupCmd.Wait(); err == nil {
 			t.Fatal("backup command should have errored but didn't")
@@ -307,4 +305,15 @@ func waitForStatus(t *testing.T, stator func(context.Context) (string, error), s
 		waited := time.Duration(n) * sleep
 		t.Fatalf("waited %s for status: %s, got: %s", waited.String(), status, s)
 	}
+}
+
+// runCmd is a helper which uses os.Exec to run a command and returns
+// stdout and stderr as separate strings, and any error returned from
+// Command.Run
+func runCmd(name string, args ...string) (sout, serr string, err error) {
+	cmd := exec.Command(name, args...)
+	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
+	cmd.Stdout, cmd.Stderr = stdout, stderr
+	err = cmd.Run()
+	return stdout.String(), stderr.String(), errors.Wrap(err, "running command")
 }
