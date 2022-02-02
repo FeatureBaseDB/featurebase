@@ -17,7 +17,7 @@ services:
     networks:
       - pilosanet
     command:
-      - "/featurebase server --bind pilosa1:10101"
+      - "/featurebase server --bind pilosa1:10101 ${CLUSTERTESTS_FB_ARGS}"
   pilosa2:
     build:
       context: ../..
@@ -35,7 +35,7 @@ services:
     networks:
       - pilosanet
     command:
-      - "/featurebase server --bind pilosa2:10101"
+      - "/featurebase server --bind pilosa2:10101 ${CLUSTERTESTS_FB_ARGS}"
   pilosa3:
     build:
       context: ../..
@@ -53,7 +53,7 @@ services:
     networks:
       - pilosanet
     command:
-      - "/featurebase server --bind pilosa3:10101"
+      - "/featurebase server --bind pilosa3:10101 ${CLUSTERTESTS_FB_ARGS}"
   client1:
     build:
       context: .
@@ -65,7 +65,7 @@ services:
       - ENABLE_PILOSA_CLUSTER_TESTS=1
       - GO111MODULE=on
       - PROJECT=${PROJECT}
-      - ENABLE_AUTH=0
+      - ENABLE_AUTH=${ENABLE_AUTH}
     networks:
       - pilosanet
     volumes:
