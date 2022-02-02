@@ -236,6 +236,16 @@ func TestClusterStuff(t *testing.T) {
 			t.Fatalf("restore failed: %v", err)
 		}
 
+		fmt.Println("pausing all featurebasen")
+		if err = sendCmd("docker", "pause", container(t, "pilosa1")); err != nil {
+			t.Fatalf("sending pause command: %v", err)
+		}
+		if err = sendCmd("docker", "pause", container(t, "pilosa2")); err != nil {
+			t.Fatalf("sending pause command: %v", err)
+		}
+		if err = sendCmd("docker", "pause", container(t, "pilosa3")); err != nil {
+			t.Fatalf("sending pause command: %v", err)
+		}
 		// now do backup with all nodes down and too short a timeout
 		// so it fails. Has be to be all 3 because the cluster has
 		// replicas=3 and the backup command will retry on replicas.
@@ -250,21 +260,10 @@ func TestClusterStuff(t *testing.T) {
 				t.Fatalf("sending second backup command: %v", err)
 			}
 		}
-		time.Sleep(time.Millisecond * 10) // want the backup to get started, then fail
-		fmt.Println("pausing all featurebasen")
-		if err = sendCmd("docker", "pause", container(t, "pilosa1")); err != nil {
-			t.Fatalf("sending pause command: %v", err)
-		}
-		if err = sendCmd("docker", "pause", container(t, "pilosa2")); err != nil {
-			t.Fatalf("sending pause command: %v", err)
-		}
-		if err = sendCmd("docker", "pause", container(t, "pilosa3")); err != nil {
-			t.Fatalf("sending pause command: %v", err)
-		}
 
-		fmt.Println("sleeping long")
-		time.Sleep(time.Second * 10)
-		fmt.Println("restarting")
+		t.Logf("sleeping 8s")
+		time.Sleep(time.Second * 8)
+		t.Logf("restarting FB nodes")
 
 		if err = sendCmd("docker", "unpause", container(t, "pilosa1")); err != nil {
 			t.Fatalf("sending unpause command: %v", err)

@@ -42,6 +42,9 @@ type BackupCommand struct { // nolint: maligned
 	// Amount of time after first failed request to continue retrying.
 	RetryPeriod time.Duration `json:"retry-period"`
 
+	// Response Header Timeout for HTTP Requests
+	HeaderTimeout time.Duration `json:"header-timeout"`
+
 	// Host:port on which to listen for pprof.
 	Pprof string `json:"pprof"`
 
@@ -59,10 +62,11 @@ type BackupCommand struct { // nolint: maligned
 // NewBackupCommand returns a new instance of BackupCommand.
 func NewBackupCommand(stdin io.Reader, stdout, stderr io.Writer) *BackupCommand {
 	return &BackupCommand{
-		CmdIO:       pilosa.NewCmdIO(stdin, stdout, stderr),
-		Concurrency: 1,
-		RetryPeriod: time.Minute,
-		Pprof:       "localhost:0",
+		CmdIO:         pilosa.NewCmdIO(stdin, stdout, stderr),
+		Concurrency:   1,
+		RetryPeriod:   time.Minute,
+		HeaderTimeout: time.Second * 3,
+		Pprof:         "localhost:0",
 	}
 }
 
@@ -89,7 +93,7 @@ func (cmd *BackupCommand) Run(ctx context.Context) (err error) {
 	}
 
 	// Create a client to the server.
-	client, err := commandClient(cmd, fb_http.WithClientRetryPeriod(cmd.RetryPeriod))
+	client, err := commandClient(cmd, fb_http.WithClientRetryPeriod(cmd.RetryPeriod), fb_http.ClientResponseHeaderTimeoutOption(cmd.HeaderTimeout))
 	if err != nil {
 		return fmt.Errorf("creating client: %w", err)
 	}
@@ -285,7 +289,9 @@ func (cmd *BackupCommand) backupShardNode(ctx context.Context, indexName string,
 	logger := cmd.Logger()
 	logger.Printf("backing up shard: index=%q id=%d", indexName, shard)
 
-	client := fb_http.NewInternalClientFromURI(&node.URI, fb_http.GetHTTPClient(cmd.tlsConfig), fb_http.WithClientRetryPeriod(cmd.RetryPeriod))
+	client := fb_http.NewInternalClientFromURI(&node.URI,
+		fb_http.GetHTTPClient(cmd.tlsConfig, fb_http.ClientResponseHeaderTimeoutOption(cmd.HeaderTimeout)),
+		fb_http.WithClientRetryPeriod(cmd.RetryPeriod))
 	rc, err := client.ShardReader(ctx, indexName, shard)
 	if err != nil {
 		return fmt.Errorf("fetching shard reader: %w", err)
