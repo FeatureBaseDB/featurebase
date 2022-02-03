@@ -4,7 +4,6 @@ services:
     build:
       context: ../..
       dockerfile: Dockerfile-clustertests
-    image: ptest
     environment:
       - PILOSA_NAME=pilosa1
       - PILOSA_ETCD_DIR=/root/.etcd
@@ -22,7 +21,6 @@ services:
     build:
       context: ../..
       dockerfile: Dockerfile-clustertests
-    image: ptest
     environment:
       - PILOSA_NAME=pilosa2
       - PILOSA_ETCD_DIR=/root/.etcd
@@ -40,7 +38,6 @@ services:
     build:
       context: ../..
       dockerfile: Dockerfile-clustertests
-    image: ptest
     environment:
       - PILOSA_NAME=pilosa3
       - PILOSA_ETCD_DIR=/root/.etcd
@@ -56,7 +53,8 @@ services:
       - "/featurebase server --bind pilosa3:10101 ${CLUSTERTESTS_FB_ARGS}"
   client1:
     build:
-      context: .
+      context: ../..
+      dockerfile: Dockerfile-clustertests-client
     depends_on:
         - "pilosa1"
         - "pilosa2"
