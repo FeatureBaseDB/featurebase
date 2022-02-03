@@ -18,7 +18,7 @@ import (
 	"time"
 
 	pilosa "github.com/molecula/featurebase/v3"
-	"github.com/molecula/featurebase/v3/http"
+	"github.com/molecula/featurebase/v3/encoding/proto"
 	pnet "github.com/molecula/featurebase/v3/net"
 	"github.com/molecula/featurebase/v3/vprint"
 )
@@ -32,7 +32,7 @@ type stateMachine struct {
 	lastField string
 	lastShard uint64
 	state     string
-	client    *http.InternalClient
+	client    *pilosa.InternalClient
 	start     time.Time
 
 	profile string
@@ -136,7 +136,7 @@ func (r *stateMachine) Upload() error {
 	return nil
 }
 
-func UploadTar(srcFile string, client *http.InternalClient, profile, host string) error {
+func UploadTar(srcFile string, client *pilosa.InternalClient, profile, host string) error {
 
 	f, err := os.Open(srcFile)
 	if err != nil {
@@ -192,7 +192,7 @@ func main() {
 	if profile != "" {
 		startProfile(host)
 	}
-	c, err := http.NewInternalClient(host, h)
+	c, err := pilosa.NewInternalClient(host, h, pilosa.WithSerializer(proto.Serializer{}))
 	vprint.PanicOn(err)
 
 	t0 := time.Now()

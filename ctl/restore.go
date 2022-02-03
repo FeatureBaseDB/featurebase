@@ -18,7 +18,6 @@ import (
 	"github.com/hashicorp/go-retryablehttp"
 
 	pilosa "github.com/molecula/featurebase/v3"
-	fb_http "github.com/molecula/featurebase/v3/http"
 	"github.com/molecula/featurebase/v3/logger"
 	"github.com/molecula/featurebase/v3/server"
 	"github.com/molecula/featurebase/v3/topology"
@@ -44,7 +43,7 @@ type RestoreCommand struct {
 	Pprof string `json:"pprof"`
 
 	// Reusable client.
-	client pilosa.InternalClient
+	client *pilosa.InternalClient
 
 	// Standard input/output
 	*pilosa.CmdIO
@@ -86,7 +85,7 @@ func (cmd *RestoreCommand) Run(ctx context.Context) (err error) {
 		return fmt.Errorf("parsing tls config: %w", err)
 	}
 	// Create a client to the server.
-	client, err := commandClient(cmd, fb_http.WithClientRetryPeriod(cmd.RetryPeriod))
+	client, err := commandClient(cmd, pilosa.WithClientRetryPeriod(cmd.RetryPeriod))
 	if err != nil {
 		return fmt.Errorf("creating client: %w", err)
 	}

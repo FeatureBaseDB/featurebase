@@ -9,8 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/molecula/featurebase/v3"
-	"github.com/molecula/featurebase/v3/http"
+	pilosa "github.com/molecula/featurebase/v3"
 	"github.com/molecula/featurebase/v3/logger"
 	"github.com/molecula/featurebase/v3/stats"
 	"github.com/molecula/featurebase/v3/test"
@@ -143,7 +142,7 @@ func TestStatsCount_APICalls(t *testing.T) {
 	cluster := test.MustRunCluster(t, 1)
 	defer cluster.Close()
 	cmd := cluster.GetNode(0)
-	h := cmd.Handler.(*http.Handler).Handler
+	h := cmd.Handler.(*pilosa.Handler).Handler
 	holder := cmd.Server.Holder()
 	hldr := test.Holder{Holder: holder}
 

@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	pilosa "github.com/molecula/featurebase/v3"
-	"github.com/molecula/featurebase/v3/http"
 	"github.com/molecula/featurebase/v3/server"
 	"github.com/molecula/featurebase/v3/test"
 	. "github.com/molecula/featurebase/v3/vprint" // nolint:staticcheck
@@ -51,7 +50,7 @@ func TestAPI_ImportAtomicRecord(t *testing.T) {
 			server.OptCommandServerOptions(
 				pilosa.OptServerNodeID("node0"),
 				pilosa.OptServerClusterHasher(&offsetModHasher{}),
-				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+				pilosa.OptServerOpenTranslateReader(pilosa.GetOpenTranslateReaderFunc(nil)),
 			)},
 	)
 	defer c.Close()

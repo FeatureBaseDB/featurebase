@@ -22,7 +22,6 @@ import (
 	pilosa "github.com/molecula/featurebase/v3"
 	"github.com/molecula/featurebase/v3/authn"
 	"github.com/molecula/featurebase/v3/boltdb"
-	"github.com/molecula/featurebase/v3/http"
 	"github.com/molecula/featurebase/v3/server"
 	"github.com/molecula/featurebase/v3/shardwidth"
 	"github.com/molecula/featurebase/v3/test"
@@ -36,21 +35,21 @@ func TestAPI_Import(t *testing.T) {
 				pilosa.OptServerNodeID("node0"),
 				pilosa.OptServerClusterHasher(&offsetModHasher{}),
 				pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
-				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+				pilosa.OptServerOpenTranslateReader(pilosa.GetOpenTranslateReaderFunc(nil)),
 			)},
 		[]server.CommandOption{
 			server.OptCommandServerOptions(
 				pilosa.OptServerNodeID("node1"),
 				pilosa.OptServerClusterHasher(&offsetModHasher{}),
 				pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
-				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+				pilosa.OptServerOpenTranslateReader(pilosa.GetOpenTranslateReaderFunc(nil)),
 			)},
 		[]server.CommandOption{
 			server.OptCommandServerOptions(
 				pilosa.OptServerNodeID("node2"),
 				pilosa.OptServerClusterHasher(&offsetModHasher{}),
 				pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
-				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+				pilosa.OptServerOpenTranslateReader(pilosa.GetOpenTranslateReaderFunc(nil)),
 			)},
 	)
 	defer c.Close()
@@ -222,19 +221,19 @@ func TestAPI_ImportValue(t *testing.T) {
 			server.OptCommandServerOptions(
 				pilosa.OptServerNodeID("node0"),
 				pilosa.OptServerClusterHasher(&offsetModHasher{}),
-				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+				pilosa.OptServerOpenTranslateReader(pilosa.GetOpenTranslateReaderFunc(nil)),
 			)},
 		[]server.CommandOption{
 			server.OptCommandServerOptions(
 				pilosa.OptServerNodeID("node1"),
 				pilosa.OptServerClusterHasher(&offsetModHasher{}),
-				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+				pilosa.OptServerOpenTranslateReader(pilosa.GetOpenTranslateReaderFunc(nil)),
 			)},
 		[]server.CommandOption{
 			server.OptCommandServerOptions(
 				pilosa.OptServerNodeID("node2"),
 				pilosa.OptServerClusterHasher(&offsetModHasher{}),
-				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+				pilosa.OptServerOpenTranslateReader(pilosa.GetOpenTranslateReaderFunc(nil)),
 			)},
 	)
 	defer c.Close()
@@ -529,7 +528,7 @@ func TestAPI_Ingest(t *testing.T) {
 			server.OptCommandServerOptions(
 				pilosa.OptServerNodeID("node0"),
 				pilosa.OptServerClusterHasher(&offsetModHasher{}),
-				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+				pilosa.OptServerOpenTranslateReader(pilosa.GetOpenTranslateReaderFunc(nil)),
 			)},
 	)
 	defer c.Close()
@@ -648,7 +647,7 @@ func BenchmarkIngest(b *testing.B) {
 			server.OptCommandServerOptions(
 				pilosa.OptServerNodeID("node0"),
 				pilosa.OptServerClusterHasher(&offsetModHasher{}),
-				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+				pilosa.OptServerOpenTranslateReader(pilosa.GetOpenTranslateReaderFunc(nil)),
 			)},
 	)
 	defer c.Close()
@@ -709,7 +708,7 @@ func TestAPI_ClearFlagForImportAndImportValues(t *testing.T) {
 			server.OptCommandServerOptions(
 				pilosa.OptServerNodeID("node0"),
 				pilosa.OptServerClusterHasher(&offsetModHasher{}),
-				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+				pilosa.OptServerOpenTranslateReader(pilosa.GetOpenTranslateReaderFunc(nil)),
 			)},
 	)
 	defer c.Close()
@@ -1430,7 +1429,7 @@ func TestAPI_RBFDebugInfo(t *testing.T) {
 			server.OptCommandServerOptions(
 				pilosa.OptServerNodeID("node0"),
 				pilosa.OptServerClusterHasher(&offsetModHasher{}),
-				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+				pilosa.OptServerOpenTranslateReader(pilosa.GetOpenTranslateReaderFunc(nil)),
 			)},
 	)
 	defer c.Close()

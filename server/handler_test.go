@@ -21,7 +21,6 @@ import (
 	pilosa "github.com/molecula/featurebase/v3"
 	"github.com/molecula/featurebase/v3/boltdb"
 	"github.com/molecula/featurebase/v3/encoding/proto"
-	"github.com/molecula/featurebase/v3/http"
 	"github.com/molecula/featurebase/v3/pql"
 	"github.com/molecula/featurebase/v3/server"
 	"github.com/molecula/featurebase/v3/test"
@@ -31,7 +30,7 @@ func TestHandler_PostSchemaCluster(t *testing.T) {
 	cluster := test.MustRunCluster(t, 3)
 	defer cluster.Close()
 	cmd := cluster.GetNode(0)
-	h := cmd.Handler.(*http.Handler).Handler
+	h := cmd.Handler.(*pilosa.Handler).Handler
 
 	t.Run("PostSchema", func(t *testing.T) {
 		w := httptest.NewRecorder()
@@ -70,7 +69,7 @@ func TestHandler_Endpoints(t *testing.T) {
 	cluster := test.MustRunCluster(t, 1)
 	defer cluster.Close()
 	cmd := cluster.GetNode(0)
-	h := cmd.Handler.(*http.Handler).Handler
+	h := cmd.Handler.(*pilosa.Handler).Handler
 	holder := cmd.Server.Holder()
 	hldr := test.Holder{Holder: holder}
 
@@ -1120,7 +1119,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		clus := test.MustRunCluster(t, 1, []server.CommandOption{test.OptAllowedOrigins([]string{"http://test/"})})
 		defer clus.Close()
 		w = httptest.NewRecorder()
-		h1 := clus.GetNode(0).Handler.(*http.Handler).Handler
+		h1 := clus.GetNode(0).Handler.(*pilosa.Handler).Handler
 		h1.ServeHTTP(w, req)
 		result = w.Result()
 
@@ -1383,7 +1382,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		clus := test.MustRunCluster(t, 1, []server.CommandOption{test.OptAllowedOrigins([]string{"http://test/"})})
 		defer clus.Close()
 		w = httptest.NewRecorder()
-		h := clus.GetNode(0).Handler.(*http.Handler).Handler
+		h := clus.GetNode(0).Handler.(*pilosa.Handler).Handler
 		h.ServeHTTP(w, req)
 		result = w.Result()
 
@@ -1402,7 +1401,7 @@ func TestCluster_TranslateStore(t *testing.T) {
 	cluster.Nodes[0] = test.NewCommandNode(t,
 		server.OptCommandServerOptions(
 			pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
-			pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderWithLockerFunc(nil, &sync.Mutex{})),
+			pilosa.OptServerOpenTranslateReader(pilosa.GetOpenTranslateReaderWithLockerFunc(nil, &sync.Mutex{})),
 		),
 	)
 
@@ -1423,7 +1422,7 @@ func TestClusterTranslator(t *testing.T) {
 		[]server.CommandOption{
 			server.OptCommandServerOptions(
 				pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
-				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderWithLockerFunc(nil, &sync.Mutex{})),
+				pilosa.OptServerOpenTranslateReader(pilosa.GetOpenTranslateReaderWithLockerFunc(nil, &sync.Mutex{})),
 			)},
 		[]server.CommandOption{
 			server.OptCommandServerOptions(
@@ -1487,7 +1486,7 @@ func TestClusterTranslator(t *testing.T) {
 // 	defer cluster.Close()
 
 // 	cmd := cluster.GetNode(0)
-// 	h := cmd.Handler.(*http.Handler).Handler
+// 	h := cmd.Handler.(*pilosa.Handler).Handler
 
 // 	w := httptest.NewRecorder()
 

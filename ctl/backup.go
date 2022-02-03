@@ -13,7 +13,7 @@ import (
 	"time"
 
 	pilosa "github.com/molecula/featurebase/v3"
-	fb_http "github.com/molecula/featurebase/v3/http"
+	"github.com/molecula/featurebase/v3/encoding/proto"
 	"github.com/molecula/featurebase/v3/server"
 	"github.com/molecula/featurebase/v3/topology"
 	"github.com/pkg/errors"
@@ -49,7 +49,7 @@ type BackupCommand struct { // nolint: maligned
 	Pprof string `json:"pprof"`
 
 	// Reusable client.
-	client pilosa.InternalClient
+	client *pilosa.InternalClient
 
 	// Standard input/output
 	*pilosa.CmdIO
@@ -93,7 +93,7 @@ func (cmd *BackupCommand) Run(ctx context.Context) (err error) {
 	}
 
 	// Create a client to the server.
-	client, err := commandClient(cmd, fb_http.WithClientRetryPeriod(cmd.RetryPeriod), fb_http.ClientResponseHeaderTimeoutOption(cmd.HeaderTimeout))
+	client, err := commandClient(cmd, pilosa.WithClientRetryPeriod(cmd.RetryPeriod), pilosa.ClientResponseHeaderTimeoutOption(cmd.HeaderTimeout))
 	if err != nil {
 		return fmt.Errorf("creating client: %w", err)
 	}
@@ -289,9 +289,10 @@ func (cmd *BackupCommand) backupShardNode(ctx context.Context, indexName string,
 	logger := cmd.Logger()
 	logger.Printf("backing up shard: index=%q id=%d", indexName, shard)
 
-	client := fb_http.NewInternalClientFromURI(&node.URI,
-		fb_http.GetHTTPClient(cmd.tlsConfig, fb_http.ClientResponseHeaderTimeoutOption(cmd.HeaderTimeout)),
-		fb_http.WithClientRetryPeriod(cmd.RetryPeriod))
+	client := pilosa.NewInternalClientFromURI(&node.URI,
+		pilosa.GetHTTPClient(cmd.tlsConfig, pilosa.ClientResponseHeaderTimeoutOption(cmd.HeaderTimeout)),
+		pilosa.WithClientRetryPeriod(cmd.RetryPeriod),
+		pilosa.WithSerializer(proto.Serializer{}))
 	rc, err := client.ShardReader(ctx, indexName, shard)
 	if err != nil {
 		return fmt.Errorf("fetching shard reader: %w", err)

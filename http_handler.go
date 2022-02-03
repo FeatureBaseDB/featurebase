@@ -1,5 +1,5 @@
 // Copyright 2021 Molecula Corp. All rights reserved.
-package http
+package pilosa
 
 import (
 	"bytes"
@@ -29,10 +29,8 @@ import (
 	"github.com/felixge/fgprof"
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
-	pilosa "github.com/molecula/featurebase/v3"
 	"github.com/molecula/featurebase/v3/authn"
 	"github.com/molecula/featurebase/v3/authz"
-	"github.com/molecula/featurebase/v3/encoding/proto"
 	"github.com/molecula/featurebase/v3/ingest"
 	"github.com/molecula/featurebase/v3/logger"
 	"github.com/molecula/featurebase/v3/pql"
@@ -51,7 +49,7 @@ import (
 type Handler struct {
 	Handler http.Handler
 
-	fileSystem pilosa.FileSystem
+	fileSystem FileSystem
 
 	logger logger.Logger
 
@@ -60,13 +58,16 @@ type Handler struct {
 	// Keeps the query argument validators for each handler
 	validators map[string]*queryValidationSpec
 
-	api *pilosa.API
+	api *API
 
 	ln net.Listener
 	// url is used to hold the advertise bind address for printing a log during startup.
 	url string
 
 	closeTimeout time.Duration
+
+	serializer        Serializer
+	roaringSerializer Serializer
 
 	server *http.Server
 
@@ -96,7 +97,7 @@ type errorResponse struct {
 	Error string `json:"error"`
 }
 
-// handlerOption is a functional option type for pilosa.Handler
+// handlerOption is a functional option type for Handler
 type handlerOption func(s *Handler) error
 
 func OptHandlerMiddleware(middleware func(http.Handler) http.Handler) handlerOption {
@@ -116,7 +117,7 @@ func OptHandlerAllowedOrigins(origins []string) handlerOption {
 	}
 }
 
-func OptHandlerAPI(api *pilosa.API) handlerOption {
+func OptHandlerAPI(api *API) handlerOption {
 	return func(h *Handler) error {
 		h.api = api
 		return nil
@@ -137,7 +138,7 @@ func OptHandlerAuthZ(gp *authz.GroupPermissions) handlerOption {
 	}
 }
 
-func OptHandlerFileSystem(fs pilosa.FileSystem) handlerOption {
+func OptHandlerFileSystem(fs FileSystem) handlerOption {
 	return func(h *Handler) error {
 		h.fileSystem = fs
 		return nil
@@ -154,6 +155,20 @@ func OptHandlerLogger(logger logger.Logger) handlerOption {
 func OptHandlerQueryLogger(logger logger.Logger) handlerOption {
 	return func(h *Handler) error {
 		h.queryLogger = logger
+		return nil
+	}
+}
+
+func OptHandlerSerializer(s Serializer) handlerOption {
+	return func(h *Handler) error {
+		h.serializer = s
+		return nil
+	}
+}
+
+func OptHandlerRoaringSerializer(s Serializer) handlerOption {
+	return func(h *Handler) error {
+		h.roaringSerializer = s
 		return nil
 	}
 }
@@ -183,15 +198,8 @@ var importOk []byte
 
 // NewHandler returns a new instance of Handler with a default logger.
 func NewHandler(opts ...handlerOption) (*Handler, error) {
-	makeImportOk.Do(func() {
-		var err error
-		importOk, err = proto.DefaultSerializer.Marshal(&pilosa.ImportResponse{Err: ""})
-		if err != nil {
-			panic(fmt.Sprintf("trying to cache import-OK response: %v", err))
-		}
-	})
 	handler := &Handler{
-		fileSystem:   pilosa.NopFileSystem,
+		fileSystem:   NopFileSystem,
 		logger:       logger.NopLogger,
 		closeTimeout: time.Second * 30,
 	}
@@ -202,6 +210,16 @@ func NewHandler(opts ...handlerOption) (*Handler, error) {
 			return nil, errors.Wrap(err, "applying option")
 		}
 	}
+	if handler.serializer == nil || handler.roaringSerializer == nil {
+		return nil, errors.New("must use serializer options when creating handler")
+	}
+	makeImportOk.Do(func() {
+		var err error
+		importOk, err = handler.serializer.Marshal(&ImportResponse{Err: ""})
+		if err != nil {
+			panic(fmt.Sprintf("trying to cache import-OK response: %v", err))
+		}
+	})
 
 	// if OptHandlerFileSystem is used, it must be before newRouter is called
 	handler.Handler = newRouter(handler)
@@ -350,7 +368,7 @@ func (h *Handler) collectStats(next http.Handler) http.Handler {
 			queryRequest := r.Context().Value(contextKeyQueryRequest)
 
 			var queryString string
-			if req, ok := queryRequest.(*pilosa.QueryRequest); ok {
+			if req, ok := queryRequest.(*QueryRequest); ok {
 				queryString = req.Query
 			}
 
@@ -378,7 +396,7 @@ func (h *Handler) collectStats(next http.Handler) http.Handler {
 
 		stats := h.api.StatsWithTags(statsTags)
 		if stats != nil {
-			stats.Timing(pilosa.MetricHTTPRequest, dur, 0.1)
+			stats.Timing(MetricHTTPRequest, dur, 0.1)
 		}
 	})
 }
@@ -604,7 +622,7 @@ func (h *Handler) chkAuthZ(handler http.HandlerFunc, perm authz.Permission) http
 		// figure out what the user is querying for
 		queryString := ""
 		queryRequest := r.Context().Value(contextKeyQueryRequest)
-		if req, ok := queryRequest.(*pilosa.QueryRequest); ok {
+		if req, ok := queryRequest.(*QueryRequest); ok {
 			queryString = req.Query
 
 			q, err := pql.ParseString(queryString)
@@ -734,10 +752,21 @@ func (s statikHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // successResponse is a general success/error struct for http responses.
 type successResponse struct {
 	h         *Handler
-	Success   bool   `json:"success"`
-	Name      string `json:"name,omitempty"`
-	CreatedAt int64  `json:"createdAt,omitempty"`
-	Error     *Error `json:"error,omitempty"`
+	Success   bool       `json:"success"`
+	Name      string     `json:"name,omitempty"`
+	CreatedAt int64      `json:"createdAt,omitempty"`
+	Error     *HTTPError `json:"error,omitempty"`
+}
+
+// Error defines a standard application error.
+type HTTPError struct {
+	// Human-readable message.
+	Message string `json:"message"`
+}
+
+// Error returns the string representation of the error message.
+func (e *HTTPError) Error() string {
+	return e.Message
 }
 
 // check determines success or failure based on the error.
@@ -752,18 +781,18 @@ func (r *successResponse) check(err error) (statusCode int) {
 
 	// Determine HTTP status code based on the error type.
 	switch cause.(type) {
-	case pilosa.BadRequestError:
+	case BadRequestError:
 		statusCode = http.StatusBadRequest
-	case pilosa.ConflictError:
+	case ConflictError:
 		statusCode = http.StatusConflict
-	case pilosa.NotFoundError:
+	case NotFoundError:
 		statusCode = http.StatusNotFound
 	default:
 		statusCode = http.StatusInternalServerError
 	}
 
 	r.Success = false
-	r.Error = &Error{Message: err.Error()}
+	r.Error = &HTTPError{Message: err.Error()}
 
 	return statusCode
 }
@@ -873,7 +902,7 @@ func (h *Handler) handleGetSchema(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if !h.permissions.IsAdmin(g.([]authn.Group)) {
-			var filtered []*pilosa.IndexInfo
+			var filtered []*IndexInfo
 			allowed := h.permissions.GetAuthorizedIndexList(g.([]authn.Group), authz.Read)
 			for _, s := range schema {
 				for _, index := range allowed {
@@ -887,7 +916,7 @@ func (h *Handler) handleGetSchema(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if err := json.NewEncoder(w).Encode(pilosa.Schema{Indexes: schema}); err != nil {
+	if err := json.NewEncoder(w).Encode(Schema{Indexes: schema}); err != nil {
 		h.logger.Errorf("write schema response error: %s", err)
 	}
 }
@@ -914,7 +943,7 @@ func (h *Handler) handleGetSchemaDetails(w http.ResponseWriter, r *http.Request)
 			return
 		}
 		if !h.permissions.IsAdmin(g.([]authn.Group)) {
-			var filtered []*pilosa.IndexInfo
+			var filtered []*IndexInfo
 			allowed := h.permissions.GetAuthorizedIndexList(g.([]authn.Group), authz.Read)
 			for _, s := range schema {
 				for _, index := range allowed {
@@ -927,7 +956,7 @@ func (h *Handler) handleGetSchemaDetails(w http.ResponseWriter, r *http.Request)
 			schema = filtered
 		}
 	}
-	if err := json.NewEncoder(w).Encode(pilosa.Schema{Indexes: schema}); err != nil {
+	if err := json.NewEncoder(w).Encode(Schema{Indexes: schema}); err != nil {
 		h.logger.Printf("write schema response error: %s", err)
 	}
 }
@@ -940,7 +969,7 @@ func (h *Handler) handlePostSchema(w http.ResponseWriter, r *http.Request) {
 		remote = true
 	}
 
-	schema := &pilosa.Schema{}
+	schema := &Schema{}
 	if err := json.NewDecoder(r.Body).Decode(schema); err != nil {
 		http.Error(w, fmt.Sprintf("decoding request as JSON Pilosa schema: %v", err), http.StatusBadRequest)
 		return
@@ -981,12 +1010,12 @@ func (h *Handler) handleGetUsage(w http.ResponseWriter, r *http.Request) {
 		}
 		if !h.permissions.IsAdmin(g.([]authn.Group)) {
 			allowed := h.permissions.GetAuthorizedIndexList(g.([]authn.Group), authz.Read)
-			filteredNodeUsages := map[string]pilosa.NodeUsage{}
+			filteredNodeUsages := map[string]NodeUsage{}
 
 			for nodeId, nodeUsage := range nodeUsages {
-				filteredIndexUsage := pilosa.NodeUsage{
-					Disk: pilosa.DiskUsage{
-						IndexUsage: map[string]pilosa.IndexUsage{},
+				filteredIndexUsage := NodeUsage{
+					Disk: DiskUsage{
+						IndexUsage: map[string]IndexUsage{},
 					},
 				}
 				for index, idxUsage := range nodeUsage.Disk.IndexUsage {
@@ -1058,7 +1087,7 @@ func (h *Handler) handleGetInfo(w http.ResponseWriter, r *http.Request) {
 }
 
 type getSchemaResponse struct {
-	Indexes []*pilosa.IndexInfo `json:"indexes"`
+	Indexes []*IndexInfo `json:"indexes"`
 }
 
 type getStatusResponse struct {
@@ -1068,8 +1097,7 @@ type getStatusResponse struct {
 	ClusterName string           `json:"clusterName"`
 }
 
-func hash(s string) string {
-
+func httpHash(s string) string {
 	hasher := blake3.New()
 	_, _ = hasher.Write([]byte(s))
 	var buf [16]byte
@@ -1085,11 +1113,11 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 	// Read previouly parsed request from context
 	qreq := r.Context().Value(contextKeyQueryRequest)
 	qerr := r.Context().Value(contextKeyQueryError)
-	req, ok := qreq.(*pilosa.QueryRequest)
+	req, ok := qreq.(*QueryRequest)
 
 	if DoPerQueryProfiling {
 		backend := storage.DefaultBackend
-		reqHash := hash(req.Query)
+		reqHash := httpHash(req.Query)
 
 		qlen := len(req.Query)
 		if qlen > 100 {
@@ -1112,7 +1140,7 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil || !ok {
 		w.WriteHeader(http.StatusBadRequest)
-		e := h.writeQueryResponse(w, r, &pilosa.QueryResponse{Err: err})
+		e := h.writeQueryResponse(w, r, &QueryResponse{Err: err})
 		if e != nil {
 			h.logger.Errorf("write query response error: %v (while trying to write another error: %v)", e, err)
 		}
@@ -1124,9 +1152,9 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 	resp, err := h.api.Query(r.Context(), req)
 	if err != nil {
 		switch errors.Cause(err) {
-		case pilosa.ErrTooManyWrites:
+		case ErrTooManyWrites:
 			w.WriteHeader(http.StatusRequestEntityTooLarge)
-		case pilosa.ErrTranslateStoreReadOnly:
+		case ErrTranslateStoreReadOnly:
 			u := h.api.PrimaryReplicaNodeURL()
 			u.Path, u.RawQuery = r.URL.Path, r.URL.RawQuery
 			http.Redirect(w, r, u.String(), http.StatusFound)
@@ -1134,7 +1162,7 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 		default:
 			w.WriteHeader(http.StatusBadRequest)
 		}
-		e := h.writeQueryResponse(w, r, &pilosa.QueryResponse{Err: err})
+		e := h.writeQueryResponse(w, r, &QueryResponse{Err: err})
 		if e != nil {
 			h.logger.Errorf("write query response error: %v (while trying to write another error: %v)", e, err)
 		}
@@ -1146,7 +1174,7 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 	// doing nothing right now.
 	if resp.Err != nil {
 		switch errors.Cause(resp.Err) {
-		case pilosa.ErrTooManyWrites:
+		case ErrTooManyWrites:
 			w.WriteHeader(http.StatusRequestEntityTooLarge)
 		default:
 			w.WriteHeader(http.StatusBadRequest)
@@ -1282,7 +1310,7 @@ func (h *Handler) handleGetIndex(w http.ResponseWriter, r *http.Request) {
 }
 
 type postIndexRequest struct {
-	Options pilosa.IndexOptions `json:"options"`
+	Options IndexOptions `json:"options"`
 }
 
 //_postIndexRequest is necessary to avoid recursion while decoding.
@@ -1297,14 +1325,14 @@ func (p *postIndexRequest) UnmarshalJSON(b []byte) error {
 		return errors.Wrap(err, "unmarshalling unexpected values")
 	}
 
-	validIndexOptions := getValidOptions(pilosa.IndexOptions{})
+	validIndexOptions := getValidOptions(IndexOptions{})
 	err := validateOptions(m, validIndexOptions)
 	if err != nil {
 		return err
 	}
 	// Unmarshal expected values.
 	_p := _postIndexRequest{
-		Options: pilosa.IndexOptions{
+		Options: IndexOptions{
 			Keys:           false,
 			TrackExistence: true,
 		},
@@ -1389,7 +1417,7 @@ func (h *Handler) handlePostIndex(w http.ResponseWriter, r *http.Request) {
 
 	// Decode request.
 	req := postIndexRequest{
-		Options: pilosa.IndexOptions{
+		Options: IndexOptions{
 			Keys:           false,
 			TrackExistence: true,
 		},
@@ -1403,7 +1431,7 @@ func (h *Handler) handlePostIndex(w http.ResponseWriter, r *http.Request) {
 
 	if index != nil {
 		resp.CreatedAt = index.CreatedAt()
-	} else if _, ok = errors.Cause(err).(pilosa.ConflictError); ok {
+	} else if _, ok = errors.Cause(err).(ConflictError); ok {
 		if index, _ = h.api.Index(r.Context(), indexName); index != nil {
 			resp.CreatedAt = index.CreatedAt()
 		}
@@ -1478,13 +1506,13 @@ func (h *Handler) handleGetPastQueries(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func fieldOptionsToFunctionalOpts(opt fieldOptions) []pilosa.FieldOption {
+func fieldOptionsToFunctionalOpts(opt fieldOptions) []FieldOption {
 	// Convert json options into functional options.
-	var fos []pilosa.FieldOption
+	var fos []FieldOption
 	switch opt.Type {
-	case pilosa.FieldTypeSet:
-		fos = append(fos, pilosa.OptFieldTypeSet(*opt.CacheType, *opt.CacheSize))
-	case pilosa.FieldTypeInt:
+	case FieldTypeSet:
+		fos = append(fos, OptFieldTypeSet(*opt.CacheType, *opt.CacheSize))
+	case FieldTypeInt:
 		if opt.Min == nil {
 			min := pql.NewDecimal(int64(math.MinInt64), 0)
 			opt.Min = &min
@@ -1493,8 +1521,8 @@ func fieldOptionsToFunctionalOpts(opt fieldOptions) []pilosa.FieldOption {
 			max := pql.NewDecimal(int64(math.MaxInt64), 0)
 			opt.Max = &max
 		}
-		fos = append(fos, pilosa.OptFieldTypeInt(opt.Min.ToInt64(0), opt.Max.ToInt64(0)))
-	case pilosa.FieldTypeDecimal:
+		fos = append(fos, OptFieldTypeInt(opt.Min.ToInt64(0), opt.Max.ToInt64(0)))
+	case FieldTypeDecimal:
 		scale := int64(0)
 		if opt.Scale != nil {
 			scale = *opt.Scale
@@ -1516,27 +1544,27 @@ func fieldOptionsToFunctionalOpts(opt fieldOptions) []pilosa.FieldOption {
 				minmax = append(minmax, *opt.Max)
 			}
 		}
-		fos = append(fos, pilosa.OptFieldTypeDecimal(scale, minmax...))
-	case pilosa.FieldTypeTimestamp:
+		fos = append(fos, OptFieldTypeDecimal(scale, minmax...))
+	case FieldTypeTimestamp:
 		if opt.Epoch == nil {
-			epoch := pilosa.DefaultEpoch
+			epoch := DefaultEpoch
 			opt.Epoch = &epoch
 		}
-		fos = append(fos, pilosa.OptFieldTypeTimestamp(opt.Epoch.UTC(), *opt.TimeUnit))
-	case pilosa.FieldTypeTime:
-		fos = append(fos, pilosa.OptFieldTypeTime(*opt.TimeQuantum, opt.NoStandardView))
-	case pilosa.FieldTypeMutex:
-		fos = append(fos, pilosa.OptFieldTypeMutex(*opt.CacheType, *opt.CacheSize))
-	case pilosa.FieldTypeBool:
-		fos = append(fos, pilosa.OptFieldTypeBool())
+		fos = append(fos, OptFieldTypeTimestamp(opt.Epoch.UTC(), *opt.TimeUnit))
+	case FieldTypeTime:
+		fos = append(fos, OptFieldTypeTime(*opt.TimeQuantum, opt.NoStandardView))
+	case FieldTypeMutex:
+		fos = append(fos, OptFieldTypeMutex(*opt.CacheType, *opt.CacheSize))
+	case FieldTypeBool:
+		fos = append(fos, OptFieldTypeBool())
 	}
 	if opt.Keys != nil {
 		if *opt.Keys {
-			fos = append(fos, pilosa.OptFieldKeys())
+			fos = append(fos, OptFieldKeys())
 		}
 	}
 	if opt.ForeignIndex != nil {
-		fos = append(fos, pilosa.OptFieldForeignIndex(*opt.ForeignIndex))
+		fos = append(fos, OptFieldForeignIndex(*opt.ForeignIndex))
 	}
 	return fos
 }
@@ -1580,13 +1608,13 @@ func (h *Handler) handlePostField(w http.ResponseWriter, r *http.Request) {
 
 	fos := fieldOptionsToFunctionalOpts(req.Options)
 	field, err := h.api.CreateField(r.Context(), indexName, fieldName, fos...)
-	if _, ok = err.(pilosa.BadRequestError); ok {
+	if _, ok = err.(BadRequestError); ok {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	if field != nil {
 		resp.CreatedAt = field.CreatedAt()
-	} else if _, ok = errors.Cause(err).(pilosa.ConflictError); ok {
+	} else if _, ok = errors.Cause(err).(ConflictError); ok {
 		if field, _ = h.api.Field(r.Context(), indexName, fieldName); field != nil {
 			resp.CreatedAt = field.CreatedAt()
 		}
@@ -1676,7 +1704,7 @@ func fieldSpecToFieldOption(fSpec fieldSpec) fieldOptions {
 	opt.Epoch = fSpec.FieldOptions.Epoch
 	opt.TimeUnit = fSpec.FieldOptions.Unit
 	if fSpec.FieldOptions.TimeQuantum != nil {
-		timeQuantumVal := pilosa.TimeQuantum(*fSpec.FieldOptions.TimeQuantum)
+		timeQuantumVal := TimeQuantum(*fSpec.FieldOptions.TimeQuantum)
 		opt.TimeQuantum = &timeQuantumVal
 	}
 
@@ -1694,7 +1722,7 @@ func fieldSpecToFieldOption(fSpec fieldSpec) fieldOptions {
 // a later error, but if the list of fields is empty, the entire index was new,
 // and should be cleaned up, in which case there's no need to track or delete
 // the specific fields separately.
-func (h *Handler) applyOneIngestSchema(ctx context.Context, schema *ingestSpec) (index *pilosa.Index, returnedFields []string, err error) {
+func (h *Handler) applyOneIngestSchema(ctx context.Context, schema *ingestSpec) (index *Index, returnedFields []string, err error) {
 	// create index
 	indexName := schema.IndexName
 	var createdFields []string
@@ -1707,7 +1735,7 @@ func (h *Handler) applyOneIngestSchema(ctx context.Context, schema *ingestSpec) 
 	default:
 		return nil, nil, fmt.Errorf("invalid primary key type %q", schema.PrimaryKeyType)
 	}
-	opts := pilosa.IndexOptions{
+	opts := IndexOptions{
 		Keys:           useKeys,
 		TrackExistence: true,
 	}
@@ -1731,7 +1759,7 @@ func (h *Handler) applyOneIngestSchema(ctx context.Context, schema *ingestSpec) 
 	case "ensure", "require":
 		index, err = h.api.Index(ctx, indexName)
 		if err != nil {
-			if _, ok := err.(pilosa.NotFoundError); !ok {
+			if _, ok := err.(NotFoundError); !ok {
 				return nil, nil, fmt.Errorf("checking for existing index %q: %w", indexName, err)
 			} else {
 				err = nil
@@ -1791,7 +1819,7 @@ func (h *Handler) applyOneIngestSchema(ctx context.Context, schema *ingestSpec) 
 			field, schemaErr := h.api.Field(ctx, indexName, fieldName)
 			if schemaErr != nil {
 				// NotFoundError is fine
-				if _, ok := schemaErr.(pilosa.NotFoundError); !ok {
+				if _, ok := schemaErr.(NotFoundError); !ok {
 					return nil, nil, fmt.Errorf("checking for existing field %q in %q: %w", fieldName, indexName, err)
 				}
 			}
@@ -1903,35 +1931,35 @@ type postFieldRequest struct {
 	Options fieldOptions `json:"options"`
 }
 
-// fieldOptions tracks pilosa.FieldOptions. It is made up of pointers to values,
+// fieldOptions tracks FieldOptions. It is made up of pointers to values,
 // and used for input validation.
 type fieldOptions struct {
-	Type           string              `json:"type,omitempty"`
-	CacheType      *string             `json:"cacheType,omitempty"`
-	CacheSize      *uint32             `json:"cacheSize,omitempty"`
-	Min            *pql.Decimal        `json:"min,omitempty"`
-	Max            *pql.Decimal        `json:"max,omitempty"`
-	Scale          *int64              `json:"scale,omitempty"`
-	Epoch          *time.Time          `json:"epoch,omitempty"`
-	TimeUnit       *string             `json:"timeUnit,omitempty"`
-	TimeQuantum    *pilosa.TimeQuantum `json:"timeQuantum,omitempty"`
-	Keys           *bool               `json:"keys,omitempty"`
-	NoStandardView bool                `json:"noStandardView,omitempty"`
-	ForeignIndex   *string             `json:"foreignIndex,omitempty"`
+	Type           string       `json:"type,omitempty"`
+	CacheType      *string      `json:"cacheType,omitempty"`
+	CacheSize      *uint32      `json:"cacheSize,omitempty"`
+	Min            *pql.Decimal `json:"min,omitempty"`
+	Max            *pql.Decimal `json:"max,omitempty"`
+	Scale          *int64       `json:"scale,omitempty"`
+	Epoch          *time.Time   `json:"epoch,omitempty"`
+	TimeUnit       *string      `json:"timeUnit,omitempty"`
+	TimeQuantum    *TimeQuantum `json:"timeQuantum,omitempty"`
+	Keys           *bool        `json:"keys,omitempty"`
+	NoStandardView bool         `json:"noStandardView,omitempty"`
+	ForeignIndex   *string      `json:"foreignIndex,omitempty"`
 }
 
 func (o *fieldOptions) validate() error {
 	// Pointers to default values.
-	defaultCacheType := pilosa.DefaultCacheType
-	defaultCacheSize := uint32(pilosa.DefaultCacheSize)
+	defaultCacheType := DefaultCacheType
+	defaultCacheSize := uint32(DefaultCacheSize)
 
 	switch o.Type {
-	case pilosa.FieldTypeSet, "":
+	case FieldTypeSet, "":
 		// Because FieldTypeSet is the default, its arguments are
 		// not required. Instead, the defaults are applied whenever
 		// a value does not exist.
 		if o.Type == "" {
-			o.Type = pilosa.FieldTypeSet
+			o.Type = FieldTypeSet
 		}
 		if o.CacheType == nil {
 			o.CacheType = &defaultCacheType
@@ -1940,59 +1968,59 @@ func (o *fieldOptions) validate() error {
 			o.CacheSize = &defaultCacheSize
 		}
 		if o.Min != nil {
-			return pilosa.NewBadRequestError(errors.New("min does not apply to field type set"))
+			return NewBadRequestError(errors.New("min does not apply to field type set"))
 		} else if o.Max != nil {
-			return pilosa.NewBadRequestError(errors.New("max does not apply to field type set"))
+			return NewBadRequestError(errors.New("max does not apply to field type set"))
 		} else if o.TimeQuantum != nil {
-			return pilosa.NewBadRequestError(errors.New("timeQuantum does not apply to field type set"))
+			return NewBadRequestError(errors.New("timeQuantum does not apply to field type set"))
 		}
-	case pilosa.FieldTypeInt:
+	case FieldTypeInt:
 		if o.CacheType != nil {
-			return pilosa.NewBadRequestError(errors.New("cacheType does not apply to field type int"))
+			return NewBadRequestError(errors.New("cacheType does not apply to field type int"))
 		} else if o.CacheSize != nil {
-			return pilosa.NewBadRequestError(errors.New("cacheSize does not apply to field type int"))
+			return NewBadRequestError(errors.New("cacheSize does not apply to field type int"))
 		} else if o.TimeQuantum != nil {
-			return pilosa.NewBadRequestError(errors.New("timeQuantum does not apply to field type int"))
+			return NewBadRequestError(errors.New("timeQuantum does not apply to field type int"))
 		}
-	case pilosa.FieldTypeDecimal:
+	case FieldTypeDecimal:
 		if o.Scale == nil {
-			return pilosa.NewBadRequestError(errors.New("decimal field requires a scale argument"))
+			return NewBadRequestError(errors.New("decimal field requires a scale argument"))
 		} else if o.CacheType != nil {
-			return pilosa.NewBadRequestError(errors.New("cacheType does not apply to field type int"))
+			return NewBadRequestError(errors.New("cacheType does not apply to field type int"))
 		} else if o.CacheSize != nil {
-			return pilosa.NewBadRequestError(errors.New("cacheSize does not apply to field type int"))
+			return NewBadRequestError(errors.New("cacheSize does not apply to field type int"))
 		} else if o.TimeQuantum != nil {
-			return pilosa.NewBadRequestError(errors.New("timeQuantum does not apply to field type int"))
-		} else if o.ForeignIndex != nil && o.Type == pilosa.FieldTypeDecimal {
-			return pilosa.NewBadRequestError(errors.New("decimal field cannot be a foreign key"))
+			return NewBadRequestError(errors.New("timeQuantum does not apply to field type int"))
+		} else if o.ForeignIndex != nil && o.Type == FieldTypeDecimal {
+			return NewBadRequestError(errors.New("decimal field cannot be a foreign key"))
 		}
-	case pilosa.FieldTypeTimestamp:
+	case FieldTypeTimestamp:
 		if o.TimeUnit == nil {
-			return pilosa.NewBadRequestError(errors.New("timestamp field requires a timeUnit argument"))
-		} else if !pilosa.IsValidTimeUnit(*o.TimeUnit) {
-			return pilosa.NewBadRequestError(errors.New("invalid timeUnit argument"))
+			return NewBadRequestError(errors.New("timestamp field requires a timeUnit argument"))
+		} else if !IsValidTimeUnit(*o.TimeUnit) {
+			return NewBadRequestError(errors.New("invalid timeUnit argument"))
 		} else if o.CacheType != nil {
-			return pilosa.NewBadRequestError(errors.New("cacheType does not apply to field type timestamp"))
+			return NewBadRequestError(errors.New("cacheType does not apply to field type timestamp"))
 		} else if o.CacheSize != nil {
-			return pilosa.NewBadRequestError(errors.New("cacheSize does not apply to field type timestamp"))
+			return NewBadRequestError(errors.New("cacheSize does not apply to field type timestamp"))
 		} else if o.TimeQuantum != nil {
-			return pilosa.NewBadRequestError(errors.New("timeQuantum does not apply to field type timestamp"))
+			return NewBadRequestError(errors.New("timeQuantum does not apply to field type timestamp"))
 		} else if o.ForeignIndex != nil {
-			return pilosa.NewBadRequestError(errors.New("timestamp field cannot be a foreign key"))
+			return NewBadRequestError(errors.New("timestamp field cannot be a foreign key"))
 		}
-	case pilosa.FieldTypeTime:
+	case FieldTypeTime:
 		if o.CacheType != nil {
-			return pilosa.NewBadRequestError(errors.New("cacheType does not apply to field type time"))
+			return NewBadRequestError(errors.New("cacheType does not apply to field type time"))
 		} else if o.CacheSize != nil {
-			return pilosa.NewBadRequestError(errors.New("cacheSize does not apply to field type time"))
+			return NewBadRequestError(errors.New("cacheSize does not apply to field type time"))
 		} else if o.Min != nil {
-			return pilosa.NewBadRequestError(errors.New("min does not apply to field type time"))
+			return NewBadRequestError(errors.New("min does not apply to field type time"))
 		} else if o.Max != nil {
-			return pilosa.NewBadRequestError(errors.New("max does not apply to field type time"))
+			return NewBadRequestError(errors.New("max does not apply to field type time"))
 		} else if o.TimeQuantum == nil {
-			return pilosa.NewBadRequestError(errors.New("timeQuantum is required for field type time"))
+			return NewBadRequestError(errors.New("timeQuantum is required for field type time"))
 		}
-	case pilosa.FieldTypeMutex:
+	case FieldTypeMutex:
 		if o.CacheType == nil {
 			o.CacheType = &defaultCacheType
 		}
@@ -2000,27 +2028,27 @@ func (o *fieldOptions) validate() error {
 			o.CacheSize = &defaultCacheSize
 		}
 		if o.Min != nil {
-			return pilosa.NewBadRequestError(errors.New("min does not apply to field type mutex"))
+			return NewBadRequestError(errors.New("min does not apply to field type mutex"))
 		} else if o.Max != nil {
-			return pilosa.NewBadRequestError(errors.New("max does not apply to field type mutex"))
+			return NewBadRequestError(errors.New("max does not apply to field type mutex"))
 		} else if o.TimeQuantum != nil {
-			return pilosa.NewBadRequestError(errors.New("timeQuantum does not apply to field type mutex"))
+			return NewBadRequestError(errors.New("timeQuantum does not apply to field type mutex"))
 		}
-	case pilosa.FieldTypeBool:
+	case FieldTypeBool:
 		if o.CacheType != nil {
-			return pilosa.NewBadRequestError(errors.New("cacheType does not apply to field type bool"))
+			return NewBadRequestError(errors.New("cacheType does not apply to field type bool"))
 		} else if o.CacheSize != nil {
-			return pilosa.NewBadRequestError(errors.New("cacheSize does not apply to field type bool"))
+			return NewBadRequestError(errors.New("cacheSize does not apply to field type bool"))
 		} else if o.Min != nil {
-			return pilosa.NewBadRequestError(errors.New("min does not apply to field type bool"))
+			return NewBadRequestError(errors.New("min does not apply to field type bool"))
 		} else if o.Max != nil {
-			return pilosa.NewBadRequestError(errors.New("max does not apply to field type bool"))
+			return NewBadRequestError(errors.New("max does not apply to field type bool"))
 		} else if o.TimeQuantum != nil {
-			return pilosa.NewBadRequestError(errors.New("timeQuantum does not apply to field type bool"))
+			return NewBadRequestError(errors.New("timeQuantum does not apply to field type bool"))
 		} else if o.Keys != nil {
-			return pilosa.NewBadRequestError(errors.New("keys does not apply to field type bool"))
+			return NewBadRequestError(errors.New("keys does not apply to field type bool"))
 		} else if o.ForeignIndex != nil {
-			return pilosa.NewBadRequestError(errors.New("bool field cannot be a foreign key"))
+			return NewBadRequestError(errors.New("bool field cannot be a foreign key"))
 		}
 	default:
 		return errors.Errorf("invalid field type: %s", o.Type)
@@ -2051,7 +2079,7 @@ func (h *Handler) handleGetTransactionList(w http.ResponseWriter, r *http.Reques
 	trnsMap, err := h.api.Transactions(r.Context())
 	if err != nil {
 		switch errors.Cause(err) {
-		case pilosa.ErrNodeNotPrimary:
+		case ErrNodeNotPrimary:
 			http.Error(w, err.Error(), http.StatusBadRequest)
 		default:
 			http.Error(w, "problem getting transactions: "+err.Error(), http.StatusInternalServerError)
@@ -2060,7 +2088,7 @@ func (h *Handler) handleGetTransactionList(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Convert the map of transactions to a slice.
-	trnsList := make([]*pilosa.Transaction, len(trnsMap))
+	trnsList := make([]*Transaction, len(trnsMap))
 	var i int
 	for _, v := range trnsMap {
 		trnsList[i] = v
@@ -2086,7 +2114,7 @@ func (h *Handler) handleGetTransactions(w http.ResponseWriter, r *http.Request) 
 	trnsMap, err := h.api.Transactions(r.Context())
 	if err != nil {
 		switch errors.Cause(err) {
-		case pilosa.ErrNodeNotPrimary:
+		case ErrNodeNotPrimary:
 			http.Error(w, err.Error(), http.StatusBadRequest)
 		default:
 			http.Error(w, "problem getting transactions: "+err.Error(), http.StatusInternalServerError)
@@ -2101,18 +2129,18 @@ func (h *Handler) handleGetTransactions(w http.ResponseWriter, r *http.Request) 
 }
 
 type TransactionResponse struct {
-	Transaction *pilosa.Transaction `json:"transaction,omitempty"`
-	Error       string              `json:"error,omitempty"`
+	Transaction *Transaction `json:"transaction,omitempty"`
+	Error       string       `json:"error,omitempty"`
 }
 
-func (h *Handler) doTransactionResponse(w http.ResponseWriter, err error, trns *pilosa.Transaction) {
+func (h *Handler) doTransactionResponse(w http.ResponseWriter, err error, trns *Transaction) {
 	if err != nil {
 		switch errors.Cause(err) {
-		case pilosa.ErrNodeNotPrimary, pilosa.ErrTransactionExists:
+		case ErrNodeNotPrimary, ErrTransactionExists:
 			w.WriteHeader(http.StatusBadRequest)
-		case pilosa.ErrTransactionExclusive:
+		case ErrTransactionExclusive:
 			w.WriteHeader(http.StatusConflict)
-		case pilosa.ErrTransactionNotFound:
+		case ErrTransactionNotFound:
 			w.WriteHeader(http.StatusNotFound)
 		default:
 			w.WriteHeader(http.StatusInternalServerError)
@@ -2147,7 +2175,7 @@ func (h *Handler) handlePostTransaction(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
 		return
 	}
-	reqTrns := &pilosa.Transaction{}
+	reqTrns := &Transaction{}
 	if err := json.NewDecoder(r.Body).Decode(reqTrns); err != nil || reqTrns.Timeout == 0 {
 		if err == nil {
 			http.Error(w, "timeout is required and cannot be 0", http.StatusBadRequest)
@@ -2210,7 +2238,7 @@ func (h *Handler) handleGetIndexShardSnapshot(w http.ResponseWriter, r *http.Req
 	rc, err := h.api.IndexShardSnapshot(r.Context(), indexName, shard)
 	if err != nil {
 		switch errors.Cause(err) {
-		case pilosa.ErrIndexNotFound:
+		case ErrIndexNotFound:
 			http.Error(w, err.Error(), http.StatusNotFound)
 		default:
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -2227,7 +2255,7 @@ func (h *Handler) handleGetIndexShardSnapshot(w http.ResponseWriter, r *http.Req
 }
 
 // readQueryRequest parses an query parameters from r.
-func (h *Handler) readQueryRequest(r *http.Request) (*pilosa.QueryRequest, error) {
+func (h *Handler) readQueryRequest(r *http.Request) (*QueryRequest, error) {
 	switch r.Header.Get("Content-Type") {
 	case "application/x-protobuf":
 		return h.readProtobufQueryRequest(r)
@@ -2247,15 +2275,15 @@ func (w *passthroughWriter) Write(p []byte) (int, error) {
 }
 
 // readProtobufQueryRequest parses query parameters in protobuf from r.
-func (h *Handler) readProtobufQueryRequest(r *http.Request) (*pilosa.QueryRequest, error) {
+func (h *Handler) readProtobufQueryRequest(r *http.Request) (*QueryRequest, error) {
 	// Slurp the body.
 	body, err := readBody(r)
 	if err != nil {
 		return nil, errors.Wrap(err, "reading")
 	}
 
-	qreq := &pilosa.QueryRequest{}
-	err = proto.DefaultSerializer.Unmarshal(body, qreq)
+	qreq := &QueryRequest{}
+	err = h.serializer.Unmarshal(body, qreq)
 	if err != nil {
 		return nil, errors.Wrap(err, "unmarshalling query request")
 	}
@@ -2263,7 +2291,7 @@ func (h *Handler) readProtobufQueryRequest(r *http.Request) (*pilosa.QueryReques
 }
 
 // readURLQueryRequest parses query parameters from URL parameters from r.
-func (h *Handler) readURLQueryRequest(r *http.Request) (*pilosa.QueryRequest, error) {
+func (h *Handler) readURLQueryRequest(r *http.Request) (*QueryRequest, error) {
 	q := r.URL.Query()
 
 	// Parse query string.
@@ -2289,7 +2317,7 @@ func (h *Handler) readURLQueryRequest(r *http.Request) (*pilosa.QueryRequest, er
 		}
 	}
 
-	return &pilosa.QueryRequest{
+	return &QueryRequest{
 		Query:   query,
 		Shards:  shards,
 		Profile: profile,
@@ -2297,7 +2325,7 @@ func (h *Handler) readURLQueryRequest(r *http.Request) (*pilosa.QueryRequest, er
 }
 
 // writeQueryResponse writes the response from the executor to w.
-func (h *Handler) writeQueryResponse(w http.ResponseWriter, r *http.Request, resp *pilosa.QueryResponse) error {
+func (h *Handler) writeQueryResponse(w http.ResponseWriter, r *http.Request, resp *QueryResponse) error {
 	if !validHeaderAcceptJSON(r.Header) {
 		w.Header().Set("Content-Type", "application/protobuf")
 		return h.writeProtobufQueryResponse(w, resp, headerAcceptRoaringRow(r.Header))
@@ -2307,10 +2335,10 @@ func (h *Handler) writeQueryResponse(w http.ResponseWriter, r *http.Request, res
 }
 
 // writeProtobufQueryResponse writes the response from the executor to w as protobuf.
-func (h *Handler) writeProtobufQueryResponse(w io.Writer, resp *pilosa.QueryResponse, writeRoaring bool) error {
-	serializer := proto.DefaultSerializer
+func (h *Handler) writeProtobufQueryResponse(w io.Writer, resp *QueryResponse, writeRoaring bool) error {
+	serializer := h.serializer
 	if writeRoaring {
-		serializer = proto.RoaringSerializer
+		serializer = h.roaringSerializer
 	}
 	if buf, err := serializer.Marshal(resp); err != nil {
 		return errors.Wrap(err, "marshalling")
@@ -2321,7 +2349,7 @@ func (h *Handler) writeProtobufQueryResponse(w io.Writer, resp *pilosa.QueryResp
 }
 
 // writeJSONQueryResponse writes the response from the executor to w as JSON.
-func (h *Handler) writeJSONQueryResponse(w io.Writer, resp *pilosa.QueryResponse) error {
+func (h *Handler) writeJSONQueryResponse(w io.Writer, resp *QueryResponse) error {
 	return json.NewEncoder(w).Encode(resp)
 }
 
@@ -2413,9 +2441,9 @@ func (h *Handler) handleGetExportCSV(w http.ResponseWriter, r *http.Request) {
 
 	if err = h.api.ExportCSV(r.Context(), index, field, shard, w); err != nil {
 		switch errors.Cause(err) {
-		case pilosa.ErrFragmentNotFound:
+		case ErrFragmentNotFound:
 			break
-		case pilosa.ErrClusterDoesNotOwnShard:
+		case ErrClusterDoesNotOwnShard:
 			http.Error(w, err.Error(), http.StatusPreconditionFailed)
 		default:
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -2504,9 +2532,9 @@ func (h *Handler) handleGetNodes(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleGetFragmentBlockData(w http.ResponseWriter, r *http.Request) {
 	buf, err := h.api.FragmentBlockData(r.Context(), r.Body)
 	if err != nil {
-		if _, ok := err.(pilosa.BadRequestError); ok {
+		if _, ok := err.(BadRequestError); ok {
 			http.Error(w, err.Error(), http.StatusBadRequest)
-		} else if errors.Cause(err) == pilosa.ErrFragmentNotFound {
+		} else if errors.Cause(err) == ErrFragmentNotFound {
 			http.Error(w, err.Error(), http.StatusNotFound)
 		} else {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -2539,7 +2567,7 @@ func (h *Handler) handleGetFragmentBlocks(w http.ResponseWriter, r *http.Request
 
 	blocks, err := h.api.FragmentBlocks(r.Context(), q.Get("index"), q.Get("field"), q.Get("view"), shard)
 	if err != nil {
-		if errors.Cause(err) == pilosa.ErrFragmentNotFound {
+		if errors.Cause(err) == ErrFragmentNotFound {
 			http.Error(w, err.Error(), http.StatusNotFound)
 		} else {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -2557,7 +2585,7 @@ func (h *Handler) handleGetFragmentBlocks(w http.ResponseWriter, r *http.Request
 }
 
 type getFragmentBlocksResponse struct {
-	Blocks []pilosa.FragmentBlock `json:"blocks"`
+	Blocks []FragmentBlock `json:"blocks"`
 }
 
 // handleGetFragmentData handles GET /internal/fragment/data requests.
@@ -2609,7 +2637,7 @@ func (h *Handler) handleGetTranslateData(w http.ResponseWriter, r *http.Request)
 
 	// Retrieve partition data from holder.
 	p, err := h.api.TranslateData(r.Context(), q.Get("index"), int(partition))
-	if redir, ok := err.(pilosa.RedirectError); ok {
+	if redir, ok := err.(RedirectError); ok {
 		newURL := *r.URL
 		newURL.Host = redir.HostPort
 		http.Redirect(w, r, newURL.String(), http.StatusSeeOther)
@@ -2685,7 +2713,7 @@ func (h *Handler) handlePostClusterResizeRemoveNode(w http.ResponseWriter, r *ht
 
 	removeNode, err := h.api.RemoveNode(req.ID)
 	if err != nil {
-		if errors.Cause(err) == pilosa.ErrNodeIDNotExists {
+		if errors.Cause(err) == ErrNodeIDNotExists {
 			http.Error(w, "removing node: "+err.Error(), http.StatusNotFound)
 		} else {
 			http.Error(w, "removing node: "+err.Error(), http.StatusInternalServerError)
@@ -2721,10 +2749,10 @@ func (h *Handler) handlePostClusterResizeAbort(w http.ResponseWriter, r *http.Re
 	var msg string
 	if err != nil {
 		switch errors.Cause(err) {
-		case pilosa.ErrNodeNotPrimary:
+		case ErrNodeNotPrimary:
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
-		case pilosa.ErrResizeNotRunning:
+		case ErrResizeNotRunning:
 			msg = err.Error()
 		default:
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -2767,7 +2795,7 @@ func (h *Handler) handlePostClusterMessage(w http.ResponseWriter, r *http.Reques
 	err := h.api.ClusterMessage(r.Context(), r.Body)
 	if err != nil {
 		switch err := err.(type) {
-		case pilosa.MessageProcessingError:
+		case MessageProcessingError:
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		default:
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -2785,14 +2813,14 @@ type defaultClusterMessageResponse struct{}
 
 func (h *Handler) handlePostTranslateData(w http.ResponseWriter, r *http.Request) {
 	// Parse offsets for all indexes and fields from POST body.
-	offsets := make(pilosa.TranslateOffsetMap)
+	offsets := make(TranslateOffsetMap)
 	if err := json.NewDecoder(r.Body).Decode(&offsets); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	// Stream all translation data.
 	rd, err := h.api.GetTranslateEntryReader(r.Context(), offsets)
-	if errors.Cause(err) == pilosa.ErrNotImplemented {
+	if errors.Cause(err) == ErrNotImplemented {
 		http.Error(w, err.Error(), http.StatusNotImplemented)
 		return
 	} else if err != nil {
@@ -2809,7 +2837,7 @@ func (h *Handler) handlePostTranslateData(w http.ResponseWriter, r *http.Request
 	enc := json.NewEncoder(w)
 	for {
 		// Read from store.
-		var entry pilosa.TranslateEntry
+		var entry TranslateEntry
 		if err := rd.ReadEntry(&entry); err == io.EOF {
 			return
 		} else if err != nil {
@@ -2932,13 +2960,13 @@ func (h *Handler) handlePostImportAtomicRecord(w http.ResponseWriter, r *http.Re
 			http.Error(w, err.Error(), http.StatusBadRequest)
 		}
 	}
-	opt := func(o *pilosa.ImportOptions) error {
+	opt := func(o *ImportOptions) error {
 		o.SimPowerLossAfter = loss
 		return nil
 	}
 
-	req := &pilosa.AtomicRecord{}
-	if err := proto.DefaultSerializer.Unmarshal(body, req); err != nil {
+	req := &AtomicRecord{}
+	if err := h.serializer.Unmarshal(body, req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -2952,7 +2980,7 @@ func (h *Handler) handlePostImportAtomicRecord(w http.ResponseWriter, r *http.Re
 	}
 	if err != nil {
 		switch errors.Cause(err) {
-		case pilosa.ErrClusterDoesNotOwnShard, pilosa.ErrPreconditionFailed:
+		case ErrClusterDoesNotOwnShard, ErrPreconditionFailed:
 			http.Error(w, err.Error(), http.StatusPreconditionFailed)
 		default:
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -2980,7 +3008,7 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 	indexName := mux.Vars(r)["index"]
 	index, err := h.api.Index(r.Context(), indexName)
 	if err != nil {
-		if errors.Cause(err) == pilosa.ErrIndexNotFound {
+		if errors.Cause(err) == ErrIndexNotFound {
 			http.Error(w, err.Error(), http.StatusNotFound)
 		} else {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -2990,7 +3018,7 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 	fieldName := mux.Vars(r)["field"]
 	field := index.Field(fieldName)
 	if field == nil {
-		http.Error(w, pilosa.ErrFieldNotFound.Error(), http.StatusNotFound)
+		http.Error(w, ErrFieldNotFound.Error(), http.StatusNotFound)
 		return
 	}
 
@@ -2999,9 +3027,9 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 	doClear := q.Get("clear") == "true"
 	doIgnoreKeyCheck := q.Get("ignoreKeyCheck") == "true"
 
-	opts := []pilosa.ImportOption{
-		pilosa.OptImportOptionsClear(doClear),
-		pilosa.OptImportOptionsIgnoreKeyCheck(doIgnoreKeyCheck),
+	opts := []ImportOption{
+		OptImportOptionsClear(doClear),
+		OptImportOptionsIgnoreKeyCheck(doIgnoreKeyCheck),
 	}
 
 	// Read entire body.
@@ -3011,11 +3039,11 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Unmarshal request based on field type.
-	if field.Type() == pilosa.FieldTypeInt || field.Type() == pilosa.FieldTypeDecimal || field.Type() == pilosa.FieldTypeTimestamp {
+	if field.Type() == FieldTypeInt || field.Type() == FieldTypeDecimal || field.Type() == FieldTypeTimestamp {
 		// Field type: Int
 		// Marshal into request object.
-		req := &pilosa.ImportValueRequest{}
-		if err := proto.DefaultSerializer.Unmarshal(body, req); err != nil {
+		req := &ImportValueRequest{}
+		if err := h.serializer.Unmarshal(body, req); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -3025,7 +3053,7 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 
 		if err := h.api.ImportValue(r.Context(), qcx, req, opts...); err != nil {
 			switch errors.Cause(err) {
-			case pilosa.ErrClusterDoesNotOwnShard, pilosa.ErrPreconditionFailed:
+			case ErrClusterDoesNotOwnShard, ErrPreconditionFailed:
 				http.Error(w, err.Error(), http.StatusPreconditionFailed)
 			default:
 				http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -3040,8 +3068,8 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 	} else {
 		// Field type: set, time, mutex
 		// Marshal into request object.
-		req := &pilosa.ImportRequest{}
-		if err := proto.DefaultSerializer.Unmarshal(body, req); err != nil {
+		req := &ImportRequest{}
+		if err := h.serializer.Unmarshal(body, req); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -3051,7 +3079,7 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 
 		if err := h.api.Import(r.Context(), qcx, req, opts...); err != nil {
 			switch errors.Cause(err) {
-			case pilosa.ErrClusterDoesNotOwnShard, pilosa.ErrPreconditionFailed:
+			case ErrClusterDoesNotOwnShard, ErrPreconditionFailed:
 				http.Error(w, err.Error(), http.StatusPreconditionFailed)
 			default:
 				http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -3178,9 +3206,9 @@ func (h *Handler) handlePostImportRoaring(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	req := &pilosa.ImportRoaringRequest{}
+	req := &ImportRoaringRequest{}
 	span, _ = tracing.StartSpanFromContext(ctx, "Unmarshal")
-	err = proto.DefaultSerializer.Unmarshal(body, req)
+	err = h.serializer.Unmarshal(body, req)
 	span.Finish()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -3193,16 +3221,16 @@ func (h *Handler) handlePostImportRoaring(w http.ResponseWriter, r *http.Request
 		http.Error(w, "shard should be an unsigned integer", http.StatusBadRequest)
 		return
 	}
-	resp := &pilosa.ImportResponse{}
+	resp := &ImportResponse{}
 	// TODO give meaningful stats for import
 	err = h.api.ImportRoaring(ctx, indexName, fieldName, shard, remote, req)
 	if err != nil {
 		resp.Err = err.Error()
-		if _, ok := err.(pilosa.BadRequestError); ok {
+		if _, ok := err.(BadRequestError); ok {
 			w.WriteHeader(http.StatusBadRequest)
-		} else if _, ok := err.(pilosa.NotFoundError); ok {
+		} else if _, ok := err.(NotFoundError); ok {
 			w.WriteHeader(http.StatusNotFound)
-		} else if _, ok := err.(pilosa.PreconditionFailedError); ok {
+		} else if _, ok := err.(PreconditionFailedError); ok {
 			w.WriteHeader(http.StatusPreconditionFailed)
 		} else {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -3210,7 +3238,7 @@ func (h *Handler) handlePostImportRoaring(w http.ResponseWriter, r *http.Request
 	}
 
 	// Marshal response object.
-	buf, err := proto.DefaultSerializer.Marshal(resp)
+	buf, err := h.serializer.Marshal(resp)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("marshal import-roaring response: %v", err), http.StatusInternalServerError)
 		return
@@ -3247,7 +3275,7 @@ func (h *Handler) handlePostIngestNode(w http.ResponseWriter, r *http.Request) {
 
 	req := &ingest.ShardedRequest{}
 	span, _ = tracing.StartSpanFromContext(ctx, "Unmarshal")
-	err = proto.DefaultSerializer.Unmarshal(body, req)
+	err = h.serializer.Unmarshal(body, req)
 	span.Finish()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -3288,10 +3316,10 @@ func (h *Handler) handlePostTranslateKeys(w http.ResponseWriter, r *http.Request
 			h.logger.Errorf("writing translate keys response: %v", err)
 		}
 
-	case pilosa.ErrTranslatingKeyNotFound:
+	case ErrTranslatingKeyNotFound:
 		http.Error(w, fmt.Sprintf("translate keys: %v", err), http.StatusNotFound)
 
-	case pilosa.ErrTranslateStoreReadOnly:
+	case ErrTranslateStoreReadOnly:
 		http.Error(w, fmt.Sprintf("translate keys: %v", err), http.StatusPreconditionFailed)
 
 	default:
@@ -3528,7 +3556,7 @@ func (h *Handler) handleReserveIDs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req pilosa.IDAllocReserveRequest
+	var req IDAllocReserveRequest
 	req.Offset = ^uint64(0)
 	err = json.Unmarshal(bd, &req)
 	if err != nil {
@@ -3538,12 +3566,12 @@ func (h *Handler) handleReserveIDs(w http.ResponseWriter, r *http.Request) {
 
 	ids, err := h.api.ReserveIDs(req.Key, req.Session, req.Offset, req.Count)
 	if err != nil {
-		var esync pilosa.ErrIDOffsetDesync
+		var esync ErrIDOffsetDesync
 		if errors.As(err, &esync) {
 			w.Header().Add("Content-Type", "application/json")
 			w.WriteHeader(http.StatusConflict)
 			err = json.NewEncoder(w).Encode(struct {
-				pilosa.ErrIDOffsetDesync
+				ErrIDOffsetDesync
 				Err string `json:"error"`
 			}{
 				ErrIDOffsetDesync: esync,
@@ -3582,7 +3610,7 @@ func (h *Handler) handleCommitIDs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req pilosa.IDAllocCommitRequest
+	var req IDAllocCommitRequest
 	err = json.Unmarshal(bd, &req)
 	if err != nil {
 		http.Error(w, "failed to decode request", http.StatusBadRequest)

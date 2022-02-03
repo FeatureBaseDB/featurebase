@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/molecula/featurebase/v3"
+	pilosa "github.com/molecula/featurebase/v3"
 	"github.com/molecula/featurebase/v3/pql"
 	"github.com/molecula/featurebase/v3/server"
 	"github.com/pkg/errors"
@@ -48,7 +48,7 @@ type ImportCommand struct { // nolint: maligned
 	Sort bool `json:"sort"`
 
 	// Reusable client.
-	client pilosa.InternalClient
+	client *pilosa.InternalClient
 
 	// Standard input/output
 	*pilosa.CmdIO

@@ -1,5 +1,5 @@
 // Copyright 2021 Molecula Corp. All rights reserved.
-package http_test
+package pilosa_test
 
 import (
 	"bufio"
@@ -15,7 +15,7 @@ import (
 
 	"github.com/davecgh/go-spew/spew"
 	pilosa "github.com/molecula/featurebase/v3"
-	"github.com/molecula/featurebase/v3/http"
+	"github.com/molecula/featurebase/v3/encoding/proto"
 	"github.com/molecula/featurebase/v3/pql"
 	"github.com/molecula/featurebase/v3/server"
 	"github.com/molecula/featurebase/v3/test"
@@ -122,9 +122,9 @@ func TestClient_MultiNode(t *testing.T) {
 
 	// Connect to each node to compare results.
 	client := make([]*Client, 3)
-	client[0] = MustNewClient(c.GetNode(0).URL(), http.GetHTTPClient(nil))
-	client[1] = MustNewClient(c.GetNode(1).URL(), http.GetHTTPClient(nil))
-	client[2] = MustNewClient(c.GetNode(2).URL(), http.GetHTTPClient(nil))
+	client[0] = MustNewClient(c.GetNode(0).URL(), pilosa.GetHTTPClient(nil))
+	client[1] = MustNewClient(c.GetNode(1).URL(), pilosa.GetHTTPClient(nil))
+	client[2] = MustNewClient(c.GetNode(2).URL(), pilosa.GetHTTPClient(nil))
 
 	topN := 4
 	queryRequest := &pilosa.QueryRequest{
@@ -188,7 +188,7 @@ func TestClient_Export(t *testing.T) {
 	cmd.MustCreateField(t, "unkeyed", "keyedf", pilosa.OptFieldTypeSet(pilosa.CacheTypeRanked, 1000), pilosa.OptFieldKeys())
 	cmd.MustCreateField(t, "unkeyed", "unkeyedf", pilosa.OptFieldTypeSet(pilosa.CacheTypeRanked, 1000))
 
-	c := MustNewClient(host, http.GetHTTPClient(nil))
+	c := MustNewClient(host, pilosa.GetHTTPClient(nil))
 	data := []pilosa.Bit{
 		{RowID: 1, ColumnID: 100, RowKey: "row1", ColumnKey: "col100"},
 		{RowID: 1, ColumnID: 101, RowKey: "row1", ColumnKey: "col101"},
@@ -376,7 +376,7 @@ func TestClient_Import(t *testing.T) {
 	recIDs := []uint64{0, 3, 7}
 	valueIDs := []uint64{0, 3, 7}
 
-	c := MustNewClient(host, http.GetHTTPClient(nil))
+	c := MustNewClient(host, pilosa.GetHTTPClient(nil))
 	// set API to point at the local node
 	c.SetInternalAPI(cmd.API)
 
@@ -532,7 +532,7 @@ func TestClient_ImportRoaring(t *testing.T) {
 
 	// Send import request.
 	host := cluster.GetNode(0).URL()
-	c := MustNewClient(host, http.GetHTTPClient(nil))
+	c := MustNewClient(host, pilosa.GetHTTPClient(nil))
 	// [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 65537]
 	roaringReq := makeImportRoaringRequest(false, "3B3001000100000900010000000100010009000100")
 	if err := c.ImportRoaring(context.Background(), &cluster.GetNode(0).API.Node().URI, "i", "f", 0, false, roaringReq); err != nil {
@@ -656,7 +656,7 @@ func TestClient_ImportRoaring_MultiView(t *testing.T) {
 
 	// Send import request.
 	host := cluster.GetNode(0).URL()
-	c := MustNewClient(host, http.GetHTTPClient(nil))
+	c := MustNewClient(host, pilosa.GetHTTPClient(nil))
 	req := &pilosa.ImportRoaringRequest{Views: map[string][]byte{}}
 	req.Views["a"], _ = hex.DecodeString("3B3001000100000900010000000100010009000100")
 	req.Views["b"], _ = hex.DecodeString("3B3001000100000900010000000100010009000100")
@@ -681,7 +681,7 @@ func TestClient_ImportKeys(t *testing.T) {
 		cmd.MustCreateField(t, "unkeyed", "keyedf", pilosa.OptFieldTypeSet(pilosa.CacheTypeRanked, 1000), pilosa.OptFieldKeys())
 
 		// Send import request.
-		c := MustNewClient(host, http.GetHTTPClient(nil))
+		c := MustNewClient(host, pilosa.GetHTTPClient(nil))
 		baseReq := &pilosa.ImportRequest{
 			Index:      "keyed",
 			Field:      "keyedf",
@@ -774,8 +774,8 @@ func TestClient_ImportKeys(t *testing.T) {
 		cmd0.MustCreateField(t, "keyed", "keyedf1", pilosa.OptFieldTypeSet(pilosa.CacheTypeRanked, 1000), pilosa.OptFieldKeys())
 
 		// Send import request.
-		c0 := MustNewClient(host0, http.GetHTTPClient(nil))
-		c1 := MustNewClient(host1, http.GetHTTPClient(nil))
+		c0 := MustNewClient(host0, pilosa.GetHTTPClient(nil))
+		c1 := MustNewClient(host1, pilosa.GetHTTPClient(nil))
 
 		// Import to node0.
 		t.Run("Import node0", func(t *testing.T) {
@@ -852,7 +852,7 @@ func TestClient_ImportKeys(t *testing.T) {
 		}
 
 		// Send import request.
-		c := MustNewClient(host, http.GetHTTPClient(nil))
+		c := MustNewClient(host, pilosa.GetHTTPClient(nil))
 		req := &pilosa.ImportValueRequest{
 			Index:      "i",
 			Field:      "f",
@@ -931,7 +931,7 @@ func TestClient_ImportIDs(t *testing.T) {
 		}
 
 		// Send import request.
-		c := MustNewClient(host, http.GetHTTPClient(nil))
+		c := MustNewClient(host, pilosa.GetHTTPClient(nil))
 		req := &pilosa.ImportValueRequest{
 			Index:     idxName,
 			Field:     fldName,
@@ -999,7 +999,7 @@ func TestClient_ImportValue(t *testing.T) {
 	}
 
 	// Send import request.
-	c := MustNewClient(host, http.GetHTTPClient(nil))
+	c := MustNewClient(host, pilosa.GetHTTPClient(nil))
 	req := &pilosa.ImportValueRequest{
 		Index:     "i",
 		Field:     "f",
@@ -1078,7 +1078,7 @@ func TestClient_ImportExistence(t *testing.T) {
 		}
 
 		// Send import request.
-		c := MustNewClient(host, http.GetHTTPClient(nil))
+		c := MustNewClient(host, pilosa.GetHTTPClient(nil))
 		req := &pilosa.ImportRequest{
 			Index:     "iset",
 			Field:     "fset",
@@ -1114,7 +1114,7 @@ func TestClient_ImportExistence(t *testing.T) {
 		}
 
 		// Send import request.
-		c := MustNewClient(host, http.GetHTTPClient(nil))
+		c := MustNewClient(host, pilosa.GetHTTPClient(nil))
 		req := &pilosa.ImportValueRequest{
 			Index:     "iint",
 			Field:     "fint",
@@ -1155,7 +1155,7 @@ func TestClient_FragmentBlocks(t *testing.T) {
 
 	// Set a bit on a different shard.
 	hldr.SetBit("i", "f", 0, 1)
-	c := MustNewClient(cmd.URL(), http.GetHTTPClient(nil))
+	c := MustNewClient(cmd.URL(), pilosa.GetHTTPClient(nil))
 	blocks, err := c.FragmentBlocks(context.Background(), nil, "i", "f", "standard", 0)
 	if err != nil {
 		t.Fatal(err)
@@ -1180,7 +1180,7 @@ func TestClient_CreateDecimalField(t *testing.T) {
 	defer cluster.Close()
 	cmd := cluster.GetNode(0)
 
-	c := MustNewClient(cmd.URL(), http.GetHTTPClient(nil))
+	c := MustNewClient(cmd.URL(), pilosa.GetHTTPClient(nil))
 
 	index := "cdf"
 	err := c.CreateIndex(context.Background(), index, pilosa.IndexOptions{})
@@ -1290,8 +1290,8 @@ func TestClientTransactions(t *testing.T) {
 	coord := c.GetPrimary()
 	other := c.GetNonPrimary()
 
-	client0 := MustNewClient(coord.URL(), http.GetHTTPClient(nil))
-	client1 := MustNewClient(other.URL(), http.GetHTTPClient(nil))
+	client0 := MustNewClient(coord.URL(), pilosa.GetHTTPClient(nil))
+	client1 := MustNewClient(other.URL(), pilosa.GetHTTPClient(nil))
 
 	// can create, list, get, and finish a transaction
 	var expDeadline time.Time
@@ -1444,12 +1444,12 @@ func TestClientTransactions(t *testing.T) {
 
 // Client represents a test wrapper for pilosa.Client.
 type Client struct {
-	*http.InternalClient
+	*pilosa.InternalClient
 }
 
 // MustNewClient returns a new instance of Client. Panic on error.
 func MustNewClient(host string, h *gohttp.Client) *Client {
-	c, err := http.NewInternalClient(host, h)
+	c, err := pilosa.NewInternalClient(host, h, pilosa.WithSerializer(proto.Serializer{}))
 	if err != nil {
 		panic(err)
 	}
@@ -1497,7 +1497,7 @@ func TestClient_ImportRoaringExists(t *testing.T) {
 	}
 	// Send import request.
 	host := node.URL()
-	c := MustNewClient(host, http.GetHTTPClient(nil))
+	c := MustNewClient(host, pilosa.GetHTTPClient(nil))
 	// [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 65537]
 	roaringReq := makeImportRoaringRequest(false, "3B3001000100000900010000000100010009000100")
 

@@ -19,7 +19,7 @@ import (
 
 	pilosa "github.com/molecula/featurebase/v3"
 	"github.com/molecula/featurebase/v3/disco"
-	"github.com/molecula/featurebase/v3/http"
+	"github.com/molecula/featurebase/v3/encoding/proto"
 	"github.com/molecula/featurebase/v3/pql"
 	"github.com/molecula/featurebase/v3/roaring"
 	"github.com/molecula/featurebase/v3/server"
@@ -54,7 +54,7 @@ func TestMain_Set_Quick(t *testing.T) {
 			defer m.Close()
 
 			// Create client.
-			client, err := http.NewInternalClient(m.API.Node().URI.HostPort(), http.GetHTTPClient(nil))
+			client, err := pilosa.NewInternalClient(m.API.Node().URI.HostPort(), pilosa.GetHTTPClient(nil), pilosa.WithSerializer(proto.Serializer{}))
 			client.SetInternalAPI(m.API)
 			if err != nil {
 				t.Fatal(err)
@@ -904,7 +904,7 @@ func TestQueryingWithQuotesAndStuff(t *testing.T) {
 	m := test.RunCommand(t)
 	defer m.Close()
 
-	client, err := http.NewInternalClient(m.API.Node().URI.HostPort(), http.GetHTTPClient(nil))
+	client, err := pilosa.NewInternalClient(m.API.Node().URI.HostPort(), pilosa.GetHTTPClient(nil), pilosa.WithSerializer(proto.Serializer{}))
 	client.SetInternalAPI(m.API)
 	if err != nil {
 		t.Fatal(err)

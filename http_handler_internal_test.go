@@ -1,5 +1,5 @@
 // Copyright 2021 Molecula Corp. All rights reserved.
-package http
+package pilosa
 
 import (
 	"bytes"
@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt"
-	pilosa "github.com/molecula/featurebase/v3"
 	"github.com/molecula/featurebase/v3/authn"
 	"golang.org/x/oauth2"
 
@@ -33,9 +32,9 @@ func TestPostIndexRequestUnmarshalJSON(t *testing.T) {
 		expected postIndexRequest
 		err      string
 	}{
-		{json: `{"options": {}}`, expected: postIndexRequest{Options: pilosa.IndexOptions{TrackExistence: true}}},
-		{json: `{"options": {"trackExistence": false}}`, expected: postIndexRequest{Options: pilosa.IndexOptions{TrackExistence: false}}},
-		{json: `{"options": {"keys": true}}`, expected: postIndexRequest{Options: pilosa.IndexOptions{Keys: true, TrackExistence: true}}},
+		{json: `{"options": {}}`, expected: postIndexRequest{Options: IndexOptions{TrackExistence: true}}},
+		{json: `{"options": {"trackExistence": false}}`, expected: postIndexRequest{Options: IndexOptions{TrackExistence: false}}},
+		{json: `{"options": {"keys": true}}`, expected: postIndexRequest{Options: IndexOptions{Keys: true, TrackExistence: true}}},
 		{json: `{"options": 4}`, err: "options is not map[string]interface{}"},
 		{json: `{"option": {}}`, err: "unknown key: option:map[]"},
 		{json: `{"options": {"badKey": "test"}}`, err: "unknown key: badKey:test"},
@@ -107,8 +106,8 @@ func decimalPtr(d pql.Decimal) *pql.Decimal {
 
 // Test fieldOption validation.
 func TestFieldOptionValidation(t *testing.T) {
-	timeQuantum := pilosa.TimeQuantum("YMD")
-	defaultCacheSize := uint32(pilosa.DefaultCacheSize)
+	timeQuantum := TimeQuantum("YMD")
+	defaultCacheSize := uint32(DefaultCacheSize)
 	tests := []struct {
 		json     string
 		expected postFieldRequest
@@ -116,17 +115,17 @@ func TestFieldOptionValidation(t *testing.T) {
 	}{
 		// FieldType: Set
 		{json: `{"options": {}}`, expected: postFieldRequest{Options: fieldOptions{
-			Type:      pilosa.FieldTypeSet,
-			CacheType: stringPtr(pilosa.DefaultCacheType),
+			Type:      FieldTypeSet,
+			CacheType: stringPtr(DefaultCacheType),
 			CacheSize: &defaultCacheSize,
 		}}},
 		{json: `{"options": {"type": "set"}}`, expected: postFieldRequest{Options: fieldOptions{
-			Type:      pilosa.FieldTypeSet,
-			CacheType: stringPtr(pilosa.DefaultCacheType),
+			Type:      FieldTypeSet,
+			CacheType: stringPtr(DefaultCacheType),
 			CacheSize: &defaultCacheSize,
 		}}},
 		{json: `{"options": {"type": "set", "cacheType": "lru"}}`, expected: postFieldRequest{Options: fieldOptions{
-			Type:      pilosa.FieldTypeSet,
+			Type:      FieldTypeSet,
 			CacheType: stringPtr("lru"),
 			CacheSize: &defaultCacheSize,
 		}}},
@@ -138,7 +137,7 @@ func TestFieldOptionValidation(t *testing.T) {
 		{json: `{"options": {"type": "int"}}`, err: "min is required for field type int"},
 		{json: `{"options": {"type": "int", "min": 0}}`, err: "max is required for field type int"},
 		{json: `{"options": {"type": "int", "min": 0, "max": 1001}}`, expected: postFieldRequest{Options: fieldOptions{
-			Type: pilosa.FieldTypeInt,
+			Type: FieldTypeInt,
 			Min:  decimalPtr(pql.NewDecimal(0, 0)),
 			Max:  decimalPtr(pql.NewDecimal(1001, 0)),
 		}}},
@@ -149,7 +148,7 @@ func TestFieldOptionValidation(t *testing.T) {
 		// FieldType: Time
 		{json: `{"options": {"type": "time"}}`, err: "timeQuantum is required for field type time"},
 		{json: `{"options": {"type": "time", "timeQuantum": "YMD"}}`, expected: postFieldRequest{Options: fieldOptions{
-			Type:        pilosa.FieldTypeTime,
+			Type:        FieldTypeTime,
 			TimeQuantum: &timeQuantum,
 		}}},
 		{json: `{"options": {"type": "time", "timeQuantum": "YMD", "min": 0}}`, err: "min does not apply to field type time"},

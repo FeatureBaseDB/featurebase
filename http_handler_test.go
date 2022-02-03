@@ -1,5 +1,5 @@
 // Copyright 2021 Molecula Corp. All rights reserved.
-package http_test
+package pilosa_test
 
 import (
 	"encoding/json"
@@ -10,17 +10,17 @@ import (
 	"testing"
 
 	pilosa "github.com/molecula/featurebase/v3"
-	"github.com/molecula/featurebase/v3/http"
+	"github.com/molecula/featurebase/v3/encoding/proto"
 	"github.com/molecula/featurebase/v3/server"
 	"github.com/molecula/featurebase/v3/test"
 )
 
 func TestHandlerOptions(t *testing.T) {
-	_, err := http.NewHandler()
+	_, err := pilosa.NewHandler()
 	if err == nil {
 		t.Fatalf("expected error making handler without options, got nil")
 	}
-	_, err = http.NewHandler(http.OptHandlerAPI(&pilosa.API{}))
+	_, err = pilosa.NewHandler(pilosa.OptHandlerAPI(&pilosa.API{}))
 	if err == nil {
 		t.Fatalf("expected error making handler without options, got nil")
 	}
@@ -30,24 +30,30 @@ func TestHandlerOptions(t *testing.T) {
 		t.Fatalf("creating listener: %v", err)
 	}
 
-	_, err = http.NewHandler(http.OptHandlerListener(ln, ln.Addr().String()))
+	_, err = pilosa.NewHandler(pilosa.OptHandlerListener(ln, ln.Addr().String()))
 	if err == nil {
 		t.Fatalf("expected error making handler without options, got nil")
 	}
+
+	_, err = pilosa.NewHandler(pilosa.OptHandlerListener(ln, ln.Addr().String()), pilosa.OptHandlerSerializer(proto.Serializer{}), pilosa.OptHandlerSerializer(proto.RoaringSerializer))
+	if err == nil {
+		t.Fatalf("expected error making handler without enough options, got nil")
+	}
+
 }
 
 func TestMarshalUnmarshalTransactionResponse(t *testing.T) {
 	tests := []struct {
 		name string
-		tr   *http.TransactionResponse
+		tr   *pilosa.TransactionResponse
 	}{
 		{
 			name: "nil transaction",
-			tr:   &http.TransactionResponse{},
+			tr:   &pilosa.TransactionResponse{},
 		},
 		{
 			name: "empty transaction",
-			tr:   &http.TransactionResponse{Transaction: &pilosa.Transaction{}},
+			tr:   &pilosa.TransactionResponse{Transaction: &pilosa.Transaction{}},
 		},
 	}
 
@@ -58,7 +64,7 @@ func TestMarshalUnmarshalTransactionResponse(t *testing.T) {
 				t.Fatalf("marshaling: %v", err)
 			}
 
-			mytr := &http.TransactionResponse{}
+			mytr := &pilosa.TransactionResponse{}
 			err = json.Unmarshal(data, mytr)
 			if err != nil {
 				t.Fatalf("unmarshalling: %v", err)
