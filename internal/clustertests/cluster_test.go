@@ -236,7 +236,6 @@ func TestClusterStuff(t *testing.T) {
 			t.Fatalf("restore failed: %v", err)
 		}
 
-		fmt.Println("pausing all featurebasen")
 		if err = sendCmd("docker", "pause", container(t, "pilosa1")); err != nil {
 			t.Fatalf("sending pause command: %v", err)
 		}
