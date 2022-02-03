@@ -410,31 +410,3 @@ type TranslateIDsRequest struct {
 type TranslateIDsResponse struct {
 	Keys []string
 }
-
-// InspectRequestParams represents the parts of an InspectRequest that
-// aren't generic holder filtering attributes.
-type InspectRequestParams struct {
-	Containers bool // include container details
-	Checksum   bool // perform checksums
-}
-
-// InspectRequest represents a request for a possibly-partial
-// holder inspection, using a provided holder filter and inspect-specific
-// parameters.
-type InspectRequest struct {
-	HolderFilterParams
-	InspectRequestParams
-}
-
-// InspectResponse contains the structured results for an InspectRequest.
-// It may some day be expanded to include metadata about views or indexes.
-type InspectResponse struct {
-	Fragments []struct {
-		Index string
-		Field string
-		View  string
-		Shard int64
-		Path  string
-		Info  *FragmentInfo
-	}
-}

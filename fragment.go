@@ -214,18 +214,6 @@ func (f *fragment) Index() *Index {
 	return f.holder.Index(f.index())
 }
 
-func (f *fragment) inspect(params InspectRequestParams) (fi FragmentInfo) {
-	if f.bitmapInfo == nil {
-		fi.BitmapInfo = f.storage.Info(params.Containers)
-	} else {
-		fi.BitmapInfo = *f.bitmapInfo
-	}
-	if params.Checksum {
-		fi.BlockChecksums, _ = f.Blocks()
-	}
-	return fi
-}
-
 // Open opens the underlying storage.
 func (f *fragment) Open() error {
 	f.mu.Lock()

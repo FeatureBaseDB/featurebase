@@ -57,7 +57,6 @@ at https://docs.molecula.cloud/.
 	rc.AddCommand(newExportCommand(stdin, stdout, stderr))
 	rc.AddCommand(newGenerateConfigCommand(stdin, stdout, stderr))
 	rc.AddCommand(newImportCommand(stdin, stdout, stderr))
-	rc.AddCommand(newInspectCommand(stdin, stdout, stderr))
 	rc.AddCommand(newRBFCommand(stdin, stdout, stderr))
 	rc.AddCommand(newServeCmd(stdin, stdout, stderr))
 	rc.AddCommand(newHolderCmd(stdin, stdout, stderr))
