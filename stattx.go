@@ -12,6 +12,7 @@ import (
 	"github.com/molecula/featurebase/v3/debugstats"
 	"github.com/molecula/featurebase/v3/roaring"
 	txkey "github.com/molecula/featurebase/v3/short_txkey"
+	"github.com/molecula/featurebase/v3/storage"
 	"github.com/molecula/featurebase/v3/vprint"
 )
 
@@ -56,7 +57,7 @@ func (w *callStats) reset() {
 }
 
 func (c *callStats) report() (r string) {
-	backend := CurrentBackend()
+	backend := storage.DefaultBackend
 	r = fmt.Sprintf("callStats: (%v)\n", backend)
 	c.mu.Lock()
 	defer c.mu.Unlock()

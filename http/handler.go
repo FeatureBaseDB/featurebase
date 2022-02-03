@@ -37,6 +37,7 @@ import (
 	"github.com/molecula/featurebase/v3/logger"
 	"github.com/molecula/featurebase/v3/pql"
 	"github.com/molecula/featurebase/v3/rbf"
+	"github.com/molecula/featurebase/v3/storage"
 	"github.com/molecula/featurebase/v3/topology"
 	"github.com/molecula/featurebase/v3/tracing"
 	"github.com/pkg/errors"
@@ -1087,7 +1088,7 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 	req, ok := qreq.(*pilosa.QueryRequest)
 
 	if DoPerQueryProfiling {
-		backend := pilosa.CurrentBackend()
+		backend := storage.DefaultBackend
 		reqHash := hash(req.Query)
 
 		qlen := len(req.Query)

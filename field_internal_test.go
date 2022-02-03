@@ -247,7 +247,6 @@ func NewTestField(t testing.TB, opts FieldOption) *TestField {
 	}
 
 	cfg := DefaultHolderConfig()
-	cfg.StorageConfig.Backend = CurrentBackendOrDefault()
 	cfg.StorageConfig.FsyncEnabled = false
 	cfg.RBFConfig.FsyncEnabled = false
 	h := NewHolder(path, cfg)

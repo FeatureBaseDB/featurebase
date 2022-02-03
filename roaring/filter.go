@@ -579,7 +579,6 @@ func (b *BitmapRowFilterMultiFilter) ConsiderData(key FilterKey, data *Container
 // offsets the input bitmap's containers have, it matches them against
 // corresponding keys.
 type BitmapBitmapFilter struct {
-	filter      *Bitmap // We don't use this while iterating, but in ludicrous edge cases it might be holding a generation we need. TODO @seebs I don't understand why this mentions generations
 	containers  []*Container
 	nextOffsets []uint64
 	callback    func(uint64) error
@@ -629,7 +628,6 @@ func (b *BitmapBitmapFilter) ConsiderData(key FilterKey, data *Container) Filter
 // because offset-within-row is what we care about.
 func NewBitmapBitmapFilter(filter *Bitmap, callback func(uint64) error) *BitmapBitmapFilter {
 	b := &BitmapBitmapFilter{
-		filter:      filter,
 		callback:    callback,
 		containers:  make([]*Container, rowWidth),
 		nextOffsets: make([]uint64, rowWidth),

@@ -19,10 +19,7 @@ import (
 // commented out—in holder.go.
 func CPUProfileForDur(dur time.Duration, outpath string) {
 	// per-query pprof output:
-	backend := CurrentBackend()
-	if backend == "" {
-		backend = storage.DefaultBackend
-	}
+	backend := storage.DefaultBackend
 	path := outpath + "." + backend
 	f, err := os.Create(path)
 	vprint.PanicOn(err)
@@ -45,10 +42,7 @@ func CPUProfileForDur(dur time.Duration, outpath string) {
 // commented out—in holder.go.
 func MemProfileForDur(dur time.Duration, outpath string) {
 	// per-query pprof output:
-	backend := CurrentBackend()
-	if backend == "" {
-		backend = storage.DefaultBackend
-	}
+	backend := storage.DefaultBackend
 	path := outpath + "." + backend
 	f, err := os.Create(path)
 	vprint.PanicOn(err)

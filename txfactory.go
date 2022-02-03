@@ -17,8 +17,7 @@ import (
 
 // public strings that pilosa/server/config.go can reference
 const (
-	RoaringTxn string = "roaring"
-	RBFTxn     string = "rbf"
+	RBFTxn string = "rbf"
 )
 
 // DetectMemAccessPastTx true helps us catch places in api and executor
@@ -377,9 +376,8 @@ type TxFactory struct {
 type txtype int
 
 const (
-	noneTxn    txtype = 0
-	roaringTxn txtype = 1 // these don't really have any transactions
-	rbfTxn     txtype = 2
+	noneTxn txtype = 0
+	rbfTxn  txtype = 2
 )
 
 // DirectoryName just returns a string version of the transaction type. We
@@ -388,17 +386,11 @@ const (
 // replaced/removed) during that refactor.
 func (ty txtype) DirectoryName() string {
 	switch ty {
-	case roaringTxn:
-		return "roaring"
 	case rbfTxn:
 		return "rbf"
 	}
 	vprint.PanicOn(fmt.Sprintf("unkown txtype %v", int(ty)))
 	return ""
-}
-
-func (txf *TxFactory) NeedsSnapshot() (b bool) {
-	return txf.typ == roaringTxn
 }
 
 func MustBackendToTxtype(backend string) (typ txtype) {
@@ -407,8 +399,6 @@ func MustBackendToTxtype(backend string) (typ txtype) {
 	}
 
 	switch backend {
-	case RoaringTxn: // "roaring"
-		return roaringTxn
 	case RBFTxn: // "rbf"
 		return rbfTxn
 	}
@@ -839,8 +829,6 @@ func (ty txtype) String() string {
 	switch ty {
 	case noneTxn:
 		return "noneTxn"
-	case roaringTxn:
-		return "roaring"
 	case rbfTxn:
 		return "rbf"
 	}
@@ -937,24 +925,15 @@ func fileSize(name string) (int64, error) {
 var _ = anyGlobalDBWrappersStillOpen // happy linter
 
 func anyGlobalDBWrappersStillOpen() bool {
-	if globalRoaringReg.Size() != 0 {
-		return true
-	}
 	if globalRbfDBReg.Size() != 0 {
 		return true
 	}
 	return false
 }
 
-func (f *TxFactory) hasRoaring() bool {
-	return f.typ == roaringTxn
-}
-
 func (f *TxFactory) hasRBF() bool {
 	return f.typ == rbfTxn
 }
-
-var _ = (&TxFactory{}).hasRoaring // happy linter
 
 func (f *TxFactory) GetDBShardPath(index string, shard uint64, idx *Index, ty txtype, write bool) (shardPath string, err error) {
 	dbs, err := f.dbPerShard.GetDBShard(index, shard, idx)

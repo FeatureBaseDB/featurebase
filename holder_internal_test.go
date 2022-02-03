@@ -174,17 +174,9 @@ func TestHolderOperatorCancel(t *testing.T) {
 	}
 }
 
-// mustHolderConfig is meant to help minimize the number of places in the code
-// where we're reading the PILOSA_STORAGE_BACKEND environment variable for
-// testing purposes. Ideally we would handle this differently, but this is a
-// first attempt at improving things. Note: the actual os.Getenv() call was
-// moved to the CurrentBackend() function.
+// mustHolderConfig sets up a default holder config for tests.
 func mustHolderConfig() *HolderConfig {
 	cfg := DefaultHolderConfig()
-	if backend := CurrentBackend(); backend != "" {
-		_ = MustBackendToTxtype(backend)
-		cfg.StorageConfig.Backend = backend
-	}
 	cfg.StorageConfig.FsyncEnabled = false
 	cfg.RBFConfig.FsyncEnabled = false
 	cfg.Schemator = disco.InMemSchemator

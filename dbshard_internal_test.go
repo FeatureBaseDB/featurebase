@@ -71,7 +71,7 @@ func Test_DBPerShard_GetShardsForIndex_LocalOnly(t *testing.T) {
 		v2s.addViewShardSet(txkey.FieldView{Field: field, View: "standard"}, stdShardSet)
 	}
 
-	for _, src := range []string{"roaring", "rbf"} {
+	for _, src := range []string{"rbf"} {
 		cfg := mustHolderConfig()
 		cfg.StorageConfig.Backend = src
 		holder := NewHolder(tmpdir, cfg)
@@ -82,7 +82,6 @@ func Test_DBPerShard_GetShardsForIndex_LocalOnly(t *testing.T) {
 			idx, err = NewIndex(holder, filepath.Join(tmpdir, index), index)
 			PanicOn(err)
 		}
-		estd := "rick/fields/_exists/views/standard"
 		std := "rick/fields/f/views/standard"
 
 		shards, err := holder.txf.GetShardsForIndex(idx, tmpdir+sep+std, false)
@@ -93,65 +92,23 @@ func Test_DBPerShard_GetShardsForIndex_LocalOnly(t *testing.T) {
 				panic(fmt.Sprintf("missing shard=%v from shards='%#v'", shard, shards))
 			}
 		}
-		if src == "roaring" {
-			// check estd too
-			shards, err = holder.txf.GetShardsForIndex(idx, tmpdir+sep+estd, false)
+		for _, shard := range []uint64{93, 223, 221, 215, 219, 217} {
+			tx := idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Shard: shard})
+			fvs, err := tx.GetSortedFieldViewList(idx, shard)
 			PanicOn(err)
-			for _, shard := range []uint64{93, 223, 221, 215, 219, 217} {
-				if !shards[shard] {
-					panic(fmt.Sprintf("missing shard=%v from shards='%#v'", shard, shards))
-				}
+			// expect these same two field/views for all 6 shards
+			expect0 := txkey.FieldView{Field: "_exists", View: "standard"}
+			expect1 := txkey.FieldView{Field: "f", View: "standard"}
+			if len(fvs) != 2 {
+				panic(fmt.Sprintf("fvs should be len 2, got '%#v' (%s)", fvs, src))
 			}
-
-			// check GetSortedFieldViewList() and roaringGetFieldView2Shards()
-			vs, err := roaringGetFieldView2Shards(idx)
-			PanicOn(err)
-
-			for _, shard := range []uint64{93, 223, 221, 215, 219, 217} {
-				tx := idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Shard: shard})
-				fvs, err := tx.GetSortedFieldViewList(idx, shard)
-				PanicOn(err)
-				// expect these same two field/views for all 6 shards
-				expect0 := txkey.FieldView{Field: "_exists", View: "standard"}
-				expect1 := txkey.FieldView{Field: "f", View: "standard"}
-				if len(fvs) != 2 {
-					panic(fmt.Sprintf("fvs should be len 2, got '%#v' (%s)", fvs, src))
-				}
-				if fvs[0] != expect0 {
-					panic(fmt.Sprintf("expected fvs[0]='%#v', but got '%#v'", expect0, fvs[0]))
-				}
-				if fvs[1] != expect1 {
-					panic(fmt.Sprintf("expected fvs[1]='%#v', but got '%#v'", expect1, fvs[1]))
-				}
-
-				for _, fv := range fvs {
-					if !vs.has(fv.Field, fv.View, shard) {
-						panic(fmt.Sprintf("vs did not contain fv='%#v' for shard %v", fv, shard))
-					}
-				}
-				tx.Rollback()
+			if fvs[0] != expect0 {
+				panic(fmt.Sprintf("expected fvs[0]='%#v', but got '%#v'", expect0, fvs[0]))
 			}
-		} else {
-			// non-roaring: rbf
-
-			for _, shard := range []uint64{93, 223, 221, 215, 219, 217} {
-				tx := idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Shard: shard})
-				fvs, err := tx.GetSortedFieldViewList(idx, shard)
-				PanicOn(err)
-				// expect these same two field/views for all 6 shards
-				expect0 := txkey.FieldView{Field: "_exists", View: "standard"}
-				expect1 := txkey.FieldView{Field: "f", View: "standard"}
-				if len(fvs) != 2 {
-					panic(fmt.Sprintf("fvs should be len 2, got '%#v' (%s)", fvs, src))
-				}
-				if fvs[0] != expect0 {
-					panic(fmt.Sprintf("expected fvs[0]='%#v', but got '%#v'", expect0, fvs[0]))
-				}
-				if fvs[1] != expect1 {
-					panic(fmt.Sprintf("expected fvs[1]='%#v', but got '%#v'", expect1, fvs[1]))
-				}
-				tx.Rollback()
+			if fvs[1] != expect1 {
+				panic(fmt.Sprintf("expected fvs[1]='%#v', but got '%#v'", expect1, fvs[1]))
 			}
+			tx.Rollback()
 		}
 		holder.Close()
 	}

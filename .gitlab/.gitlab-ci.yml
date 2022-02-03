@@ -14,6 +14,16 @@ stages:
   - gauntlet
   - post build
 
+smoke build:
+  image: golang:$GOVERSION
+  stage: lint
+  allow_failure: false
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
+  script:
+    - echo "Let's just see if it compiles... (sometimes the linter gives unclear errors if it doesn't)"
+    - go build ./...
+
 golangci-lint:
   image: golangci/golangci-lint:v1.39.0
   stage: lint
@@ -22,7 +32,7 @@ golangci-lint:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
     - echo "Checking for issues in new code"
-    - golangci-lint run -v 
+    - golangci-lint run
 
 build lattice:
   stage: test

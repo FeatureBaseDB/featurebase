@@ -79,9 +79,6 @@ testvsub-race:
            cd ..; \
         done
 
-tour:
-	./tournament.sh
-
 bench:
 	$(GO) test ./... -bench=. -run=NoneZ -timeout=127m $(TESTFLAGS)
 
@@ -159,7 +156,7 @@ clustertests: vendor
 	$(DOCKER_COMPOSE) -f internal/clustertests/docker-compose.yml down
 
 # Run the cluster tests with authentication enabled 
-AUTH_ARGS="-c /go/src/github.com/molecula/featurebase/internal/authclustertests/testdata/featurebase.conf"
+AUTH_ARGS="-c /go/src/github.com/molecula/featurebase/internal/clustertests/testdata/featurebase.conf"
 authclustertests: vendor
 	CLUSTERTESTS_FB_ARGS=$(AUTH_ARGS) $(DOCKER_COMPOSE) -f internal/clustertests/docker-compose.yml down
 	CLUSTERTESTS_FB_ARGS=$(AUTH_ARGS) $(DOCKER_COMPOSE) -f internal/clustertests/docker-compose.yml build
@@ -348,15 +345,6 @@ install-gometalinter:
 	GO111MODULE=off $(GO) get -u github.com/alecthomas/gometalinter
 	GO111MODULE=off gometalinter --install
 	GO111MODULE=off $(GO) get github.com/remyoudompheng/go-misc/deadcode
-
-test-txstore-rbf:
-	PILOSA_STORAGE_BACKEND=rbf $(MAKE) testv-race
-
-# WARNING: This feature is no longer being tested regularly in CI. The test is
-# very slow and very expensive, and we're not sure it actually provides useful
-# information now.
-test-txstore-rbf_bolt:
-	PILOSA_STORAGE_BACKEND=rbf_bolt $(MAKE) testv-race
 
 test-external-lookup:
 	$(GO) test . -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) -run ^TestExternalLookup$$ -externalLookupDSN $(EXTERNAL_LOOKUP_DSN)
