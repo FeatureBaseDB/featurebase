@@ -3658,9 +3658,20 @@ func (e *executor) executeGroupByShard(ctx context.Context, qcx *Qcx, index stri
 	}
 
 	// Apply bases.
+	//
+	// SUP-139: The group value is shared across multiple groups so we can't
+	// add the base to each one. Instead, we need to track which ones have been
+	// seen already and avoid adding to those again in the future.
 	for i, base := range bases {
+		m := make(map[*int64]struct{})
+
 		for _, r := range results {
+			if _, ok := m[r.Group[i].Value]; ok {
+				continue
+			}
+
 			*r.Group[i].Value += base
+			m[r.Group[i].Value] = struct{}{}
 		}
 	}
 

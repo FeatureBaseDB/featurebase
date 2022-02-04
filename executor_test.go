@@ -6150,6 +6150,34 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 			test.CheckGroupByOnKey(t, expected, results)
 		})
 
+		// SUP-139: GroupBy returns incorrect results when two or more Integer Range Fields are used to define the grouping
+		t.Run("CountByIntegersWithMinMax", func(t *testing.T) {
+			c.CreateField(t, "cbimm", pilosa.IndexOptions{}, "year", pilosa.OptFieldTypeInt(2019, 2020))
+			c.CreateField(t, "cbimm", pilosa.IndexOptions{}, "quarter", pilosa.OptFieldTypeInt(1, 4))
+
+			c.ImportIntID(t, "cbimm", "year", []test.IntID{{ID: 1, Val: 2019}, {ID: 2, Val: 2019}, {ID: 3, Val: 2019}, {ID: 4, Val: 2019}})
+			c.ImportIntID(t, "cbimm", "quarter", []test.IntID{{ID: 1, Val: 1}, {ID: 2, Val: 1}, {ID: 3, Val: 1}, {ID: 4, Val: 2}})
+
+			year2019 := int64(2019)
+			quarter1, quarter2 := int64(1), int64(2)
+
+			results := c.Query(t, "cbimm", `GroupBy(Rows(year), Rows(quarter))`).Results[0].(*pilosa.GroupCounts).Groups()
+
+			test.CheckGroupBy(t,
+				[]pilosa.GroupCount{
+					{Group: []pilosa.FieldRow{
+						{Field: "year", RowID: 0, Value: &year2019},
+						{Field: "quarter", RowID: 0, Value: &quarter1},
+					}, Count: 3},
+					{Group: []pilosa.FieldRow{
+						{Field: "year", RowID: 0, Value: &year2019},
+						{Field: "quarter", RowID: 0, Value: &quarter2},
+					}, Count: 1},
+				},
+				results,
+			)
+
+		})
 	}
 	for _, size := range []int{1, 3} {
 		t.Run(fmt.Sprintf("%d_nodes", size), func(t *testing.T) {
