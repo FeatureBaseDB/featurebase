@@ -1453,8 +1453,8 @@ func TestLogQuery(t *testing.T) {
 		},
 		{
 			name:     "QueryPQLReq",
-			req:      &pb.QueryPQLRequest{Pql: "Count(All())"},
-			expected: fmt.Sprintf("GRPC: %v, %v, %v, %v, %v, %v\n", "", []string{}, "test!", uinfo.UserID, uinfo.UserName, "Count(All())"),
+			req:      &pb.QueryPQLRequest{Index: "index", Pql: "Count(All())"},
+			expected: fmt.Sprintf("GRPC: %v, %v, %v, %v, %v, %v\n", "", []string{}, "test!", uinfo.UserID, uinfo.UserName, "[index]Count(All())"),
 		},
 	}
 	for _, test := range cases {

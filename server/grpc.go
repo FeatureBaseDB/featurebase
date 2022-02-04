@@ -1645,7 +1645,7 @@ func LogQuery(ctx context.Context, method string, req interface{}, logger logger
 	}
 	switch r := req.(type) {
 	case *pb.QueryPQLRequest:
-		logger.Infof("GRPC: %v, %v, %v, %v, %v, %s", ip, ua, method, uinfo.UserID, uinfo.UserName, r.Pql)
+		logger.Infof("GRPC: %v, %v, %v, %v, %v, [%s]%s", ip, ua, method, uinfo.UserID, uinfo.UserName, r.Index, r.Pql)
 	case *pb.QuerySQLRequest:
 		logger.Infof("GRPC: %v, %v, %v, %v, %v, %s", ip, ua, method, uinfo.UserID, uinfo.UserName, r.Sql)
 	default:
