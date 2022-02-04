@@ -102,7 +102,7 @@ type cluster struct { // nolint: maligned
 
 	logger logger.Logger
 
-	InternalClient InternalClient
+	InternalClient *InternalClient
 
 	confirmDownRetries int
 	confirmDownSleep   time.Duration
@@ -120,7 +120,7 @@ func newCluster() *cluster {
 
 		translationSyncer: NopTranslationSyncer,
 
-		InternalClient: newNopInternalClient(),
+		InternalClient: &InternalClient{}, // TODO might have to fill this out a bit
 
 		logger: logger.NopLogger,
 

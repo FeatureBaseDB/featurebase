@@ -9,7 +9,6 @@ import (
 
 	pilosa "github.com/molecula/featurebase/v3"
 	"github.com/molecula/featurebase/v3/boltdb"
-	"github.com/molecula/featurebase/v3/http"
 	"github.com/molecula/featurebase/v3/server"
 	"github.com/molecula/featurebase/v3/test"
 	. "github.com/molecula/featurebase/v3/vprint" // nolint:staticcheck
@@ -35,7 +34,7 @@ func Test_RandomQuery(t *testing.T) {
 			server.OptCommandServerOptions(
 				pilosa.OptServerNodeID(nodeid[0]),
 				pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
-				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+				pilosa.OptServerOpenTranslateReader(pilosa.GetOpenTranslateReaderFunc(nil)),
 				pilosa.OptServerReplicaN(nReplicas),
 			)},
 	)

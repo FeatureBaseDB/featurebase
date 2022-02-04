@@ -76,9 +76,9 @@ func (resp *QueryResponse) MarshalJSON() ([]byte, error) {
 	})
 }
 
-// Handler is the interface for the data handler, a wrapper around
+// HandlerI is the interface for the data handler, a wrapper around
 // Pilosa's data store.
-type Handler interface {
+type HandlerI interface {
 	Serve() error
 	Close() error
 }
@@ -94,7 +94,7 @@ func (n nopHandler) Close() error {
 }
 
 // NopHandler is a no-op implementation of the Handler interface.
-var NopHandler Handler = nopHandler{}
+var NopHandler HandlerI = nopHandler{}
 
 // ImportValueRequest describes the import request structure
 // for a value (BSI) import.

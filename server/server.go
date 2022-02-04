@@ -36,7 +36,6 @@ import (
 	petcd "github.com/molecula/featurebase/v3/etcd"
 	"github.com/molecula/featurebase/v3/gcnotify"
 	"github.com/molecula/featurebase/v3/gopsutil"
-	"github.com/molecula/featurebase/v3/http"
 	"github.com/molecula/featurebase/v3/logger"
 	pnet "github.com/molecula/featurebase/v3/net"
 	"github.com/molecula/featurebase/v3/prometheus"
@@ -74,7 +73,7 @@ type Command struct {
 	logger         loggerLogger
 	queryLogger    loggerLogger
 
-	Handler      pilosa.Handler
+	Handler      pilosa.HandlerI
 	grpcServer   *grpcServer
 	grpcLn       net.Listener
 	API          *pilosa.API
@@ -405,7 +404,7 @@ func (m *Command) SetupServer() error {
 	// Save listenURI for later reference.
 	m.listenURI = uri
 
-	c := http.GetHTTPClient(m.tlsConfig)
+	c := pilosa.GetHTTPClient(m.tlsConfig)
 
 	// Get advertise address as uri.
 	advertiseURI, err := pilosa.AddressWithDefaults(m.Config.Advertise)
@@ -473,7 +472,7 @@ func (m *Command) SetupServer() error {
 		pilosa.OptServerDiagnosticsInterval(diagnosticsInterval),
 		pilosa.OptServerExecutorPoolSize(m.Config.WorkerPoolSize),
 		pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
-		pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderWithLockerFunc(c, &sync.Mutex{})),
+		pilosa.OptServerOpenTranslateReader(pilosa.GetOpenTranslateReaderWithLockerFunc(c, &sync.Mutex{})),
 		pilosa.OptServerOpenIDAllocator(pilosa.OpenIDAllocator),
 		pilosa.OptServerLogger(m.logger),
 		pilosa.OptServerQueryLogger(m.queryLogger),
@@ -498,9 +497,9 @@ func (m *Command) SetupServer() error {
 	serverOptions = append(serverOptions, m.serverOptions...)
 
 	if m.Config.Auth.Enable {
-		serverOptions = append(serverOptions, pilosa.OptServerInternalClient(http.NewInternalClientFromURI(uri, c, http.WithSecretKey(m.Config.Auth.SecretKey))))
+		serverOptions = append(serverOptions, pilosa.OptServerInternalClient(pilosa.NewInternalClientFromURI(uri, c, pilosa.WithSecretKey(m.Config.Auth.SecretKey), pilosa.WithSerializer(proto.Serializer{}))))
 	} else {
-		serverOptions = append(serverOptions, pilosa.OptServerInternalClient(http.NewInternalClientFromURI(uri, c)))
+		serverOptions = append(serverOptions, pilosa.OptServerInternalClient(pilosa.NewInternalClientFromURI(uri, c, pilosa.WithSerializer(proto.Serializer{}))))
 	}
 
 	m.Server, err = pilosa.NewServer(serverOptions...)
@@ -573,17 +572,19 @@ func (m *Command) SetupServer() error {
 		OptGRPCServerQueryLogger(m.queryLogger),
 	)
 
-	m.Handler, err = http.NewHandler(
-		http.OptHandlerAllowedOrigins(m.Config.Handler.AllowedOrigins),
-		http.OptHandlerAPI(m.API),
-		http.OptHandlerLogger(m.logger),
-		http.OptHandlerQueryLogger(m.queryLogger),
-		http.OptHandlerFileSystem(&statik.FileSystem{}),
-		http.OptHandlerListener(m.ln, m.Config.Advertise),
-		http.OptHandlerCloseTimeout(m.closeTimeout),
-		http.OptHandlerMiddleware(m.grpcServer.middleware(m.Config.Handler.AllowedOrigins)),
-		http.OptHandlerAuthN(m.auth),
-		http.OptHandlerAuthZ(&p),
+	m.Handler, err = pilosa.NewHandler(
+		pilosa.OptHandlerAllowedOrigins(m.Config.Handler.AllowedOrigins),
+		pilosa.OptHandlerAPI(m.API),
+		pilosa.OptHandlerLogger(m.logger),
+		pilosa.OptHandlerQueryLogger(m.queryLogger),
+		pilosa.OptHandlerFileSystem(&statik.FileSystem{}),
+		pilosa.OptHandlerListener(m.ln, m.Config.Advertise),
+		pilosa.OptHandlerCloseTimeout(m.closeTimeout),
+		pilosa.OptHandlerMiddleware(m.grpcServer.middleware(m.Config.Handler.AllowedOrigins)),
+		pilosa.OptHandlerAuthN(m.auth),
+		pilosa.OptHandlerAuthZ(&p),
+		pilosa.OptHandlerSerializer(proto.Serializer{}),
+		pilosa.OptHandlerRoaringSerializer(proto.RoaringSerializer),
 	)
 	return errors.Wrap(err, "new handler")
 }

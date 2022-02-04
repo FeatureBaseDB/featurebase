@@ -86,7 +86,7 @@ type Server struct { // nolint: maligned
 	// HolderConfig stashes server options that are really Holder options.
 	holderConfig *HolderConfig
 
-	defaultClient InternalClient
+	defaultClient *InternalClient
 	dataDir       string
 
 	// Threshold for logging long-running queries
@@ -193,7 +193,7 @@ func OptServerGCNotifier(gcn GCNotifier) ServerOption {
 
 // OptServerInternalClient is a functional option on Server
 // used to set the implementation of InternalClient.
-func OptServerInternalClient(c InternalClient) ServerOption {
+func OptServerInternalClient(c *InternalClient) ServerOption {
 	return func(s *Server) error {
 		s.defaultClient = c
 		s.cluster.InternalClient = c
@@ -405,7 +405,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		cluster:       cluster,
 		diagnostics:   newDiagnosticsCollector(defaultDiagnosticServer),
 		systemInfo:    newNopSystemInfo(),
-		defaultClient: nopInternalClient{},
+		defaultClient: &InternalClient{}, // TODO may need to make this a valid thing
 
 		gcNotifier: NopGCNotifier,
 
@@ -511,7 +511,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	return s, nil
 }
 
-func (s *Server) InternalClient() InternalClient {
+func (s *Server) InternalClient() *InternalClient {
 	return s.defaultClient
 }
 

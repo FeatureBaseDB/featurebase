@@ -17,7 +17,7 @@ import (
 	pilosa "github.com/molecula/featurebase/v3"
 	"github.com/molecula/featurebase/v3/authn"
 	"github.com/molecula/featurebase/v3/disco"
-	picli "github.com/molecula/featurebase/v3/http"
+	"github.com/molecula/featurebase/v3/encoding/proto"
 	"github.com/molecula/featurebase/v3/logger"
 	"github.com/pkg/errors"
 )
@@ -87,15 +87,15 @@ func TestClusterStuff(t *testing.T) {
 		auth = true
 	}
 
-	cli1, err := picli.NewInternalClient("pilosa1:10101", picli.GetHTTPClient(nil))
+	cli1, err := pilosa.NewInternalClient("pilosa1:10101", pilosa.GetHTTPClient(nil), pilosa.WithSerializer(proto.Serializer{}))
 	if err != nil {
 		t.Fatalf("getting client: %v", err)
 	}
-	cli2, err := picli.NewInternalClient("pilosa2:10101", picli.GetHTTPClient(nil))
+	cli2, err := pilosa.NewInternalClient("pilosa2:10101", pilosa.GetHTTPClient(nil), pilosa.WithSerializer(proto.Serializer{}))
 	if err != nil {
 		t.Fatalf("getting client: %v", err)
 	}
-	cli3, err := picli.NewInternalClient("pilosa3:10101", picli.GetHTTPClient(nil))
+	cli3, err := pilosa.NewInternalClient("pilosa3:10101", pilosa.GetHTTPClient(nil), pilosa.WithSerializer(proto.Serializer{}))
 	if err != nil {
 		t.Fatalf("getting client: %v", err)
 	}
@@ -134,7 +134,7 @@ func TestClusterStuff(t *testing.T) {
 	}
 
 	// Check query results from each node.
-	for i, cli := range []*picli.InternalClient{cli1, cli2, cli3} {
+	for i, cli := range []*pilosa.InternalClient{cli1, cli2, cli3} {
 		r, err := cli.Query(ctx, "testidx", &pilosa.QueryRequest{Index: "testidx", Query: "Count(Row(testf=0))"})
 		if err != nil {
 			t.Fatalf("count querying pilosa%d: %v", i, err)
@@ -157,7 +157,7 @@ func TestClusterStuff(t *testing.T) {
 		t.Log("done waiting for stability")
 
 		// Check query results from each node.
-		for i, cli := range []*picli.InternalClient{cli1, cli2, cli3} {
+		for i, cli := range []*pilosa.InternalClient{cli1, cli2, cli3} {
 			r, err := cli.Query(ctx, "testidx", &pilosa.QueryRequest{Index: "testidx", Query: "Count(Row(testf=0))"})
 			if err != nil {
 				t.Fatalf("count querying pilosa%d: %v", i, err)

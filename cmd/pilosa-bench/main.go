@@ -16,8 +16,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/molecula/featurebase/v3"
-	phttp "github.com/molecula/featurebase/v3/http"
+	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/encoding/proto"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -78,7 +78,7 @@ func run(ctx context.Context, args []string) (err error) {
 	rand.Seed(0)
 
 	// Setup connection to pilosa.
-	client, err := phttp.NewInternalClient(*hostport, http.DefaultClient)
+	client, err := pilosa.NewInternalClient(*hostport, http.DefaultClient, pilosa.WithSerializer(proto.Serializer{}))
 	if err != nil {
 		return err
 	}
@@ -270,7 +270,7 @@ func generateTopKQuery(index, field string, from, to time.Time) string {
 }
 
 // loadFields returns a mapping of index/field names to field info & identifiers.
-func loadFields(ctx context.Context, client *phttp.InternalClient) (map[fieldKey]*fieldInfo, error) {
+func loadFields(ctx context.Context, client *pilosa.InternalClient) (map[fieldKey]*fieldInfo, error) {
 	indexes, err := client.Schema(ctx)
 	if err != nil {
 		return nil, err
@@ -299,7 +299,7 @@ func loadFields(ctx context.Context, client *phttp.InternalClient) (map[fieldKey
 }
 
 // fetchFieldIDs returns a list of field IDs or keys.
-func fetchFieldIDs(ctx context.Context, client *phttp.InternalClient, indexName, fieldName string) (*pilosa.RowIdentifiers, error) {
+func fetchFieldIDs(ctx context.Context, client *pilosa.InternalClient, indexName, fieldName string) (*pilosa.RowIdentifiers, error) {
 	resp, err := client.Query(ctx, indexName, &pilosa.QueryRequest{Index: indexName, Query: `Rows(` + fieldName + `)`})
 	if err != nil {
 		return nil, err

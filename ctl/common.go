@@ -4,7 +4,8 @@ package ctl
 import (
 	"time"
 
-	"github.com/molecula/featurebase/v3/http"
+	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/encoding/proto"
 	"github.com/molecula/featurebase/v3/logger"
 	"github.com/molecula/featurebase/v3/server"
 	"github.com/pkg/errors"
@@ -27,14 +28,14 @@ func SetTLSConfig(flags *pflag.FlagSet, prefix string, certificatePath *string, 
 	flags.BoolVarP(enableClientVerification, prefix+"tls.enable-client-verification", "", false, "Enable TLS certificate client verification for incoming connections")
 }
 
-// AnyClientOption can be either http.InternalClientOption or
-// http.ClientOption. The internal options are specific to the
+// AnyClientOption can be either pilosa.InternalClientOption or
+// pilosa.ClientOption. The internal options are specific to the
 // featurebase client, whereas the client options are applied to the
 // Go HTTP client that gets used under the hood.
 type AnyClientOption interface{}
 
 // commandClient returns a pilosa.InternalHTTPClient for the command
-func commandClient(cmd CommandWithTLSSupport, opts ...AnyClientOption) (*http.InternalClient, error) {
+func commandClient(cmd CommandWithTLSSupport, opts ...AnyClientOption) (*pilosa.InternalClient, error) {
 	internalopts, clientopts, err := separateOptions(opts...)
 	if err != nil {
 		return nil, errors.Wrap(err, "separating client options")
@@ -42,13 +43,14 @@ func commandClient(cmd CommandWithTLSSupport, opts ...AnyClientOption) (*http.In
 
 	// we default dial timeout to 3s in commandClient, but prepend it
 	// to the option list so other options can override it.
-	clientopts = append([]http.ClientOption{http.ClientDialTimeoutOption(time.Second * 3)}, clientopts...)
+	clientopts = append([]pilosa.ClientOption{pilosa.ClientDialTimeoutOption(time.Second * 3)}, clientopts...)
+	internalopts = append([]pilosa.InternalClientOption{pilosa.WithSerializer(proto.Serializer{})}, internalopts...)
 	tls := cmd.TLSConfiguration()
 	tlsConfig, err := server.GetTLSConfig(&tls, cmd.Logger())
 	if err != nil {
 		return nil, errors.Wrap(err, "getting tls config")
 	}
-	client, err := http.NewInternalClient(cmd.TLSHost(), http.GetHTTPClient(tlsConfig, clientopts...), internalopts...)
+	client, err := pilosa.NewInternalClient(cmd.TLSHost(), pilosa.GetHTTPClient(tlsConfig, clientopts...), internalopts...)
 	if err != nil {
 		return nil, errors.Wrap(err, "getting internal client")
 	}
@@ -57,15 +59,15 @@ func commandClient(cmd CommandWithTLSSupport, opts ...AnyClientOption) (*http.In
 
 // separateOptions splits the list of AnyClientOption into the two
 // possible types.
-func separateOptions(opts ...AnyClientOption) ([]http.InternalClientOption, []http.ClientOption, error) {
-	internalopts := []http.InternalClientOption{}
-	clientopts := []http.ClientOption{}
+func separateOptions(opts ...AnyClientOption) ([]pilosa.InternalClientOption, []pilosa.ClientOption, error) {
+	internalopts := []pilosa.InternalClientOption{}
+	clientopts := []pilosa.ClientOption{}
 	for _, opt := range opts {
-		if iopt, ok := opt.(http.InternalClientOption); ok {
+		if iopt, ok := opt.(pilosa.InternalClientOption); ok {
 			internalopts = append(internalopts, iopt)
 			continue
 		}
-		if copt, ok := opt.(http.ClientOption); ok {
+		if copt, ok := opt.(pilosa.ClientOption); ok {
 			clientopts = append(clientopts, copt)
 			continue
 		}

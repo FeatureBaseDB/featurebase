@@ -17,7 +17,7 @@ import (
 	pilosa "github.com/molecula/featurebase/v3"
 	boltdb "github.com/molecula/featurebase/v3/boltdb"
 	"github.com/molecula/featurebase/v3/disco"
-	"github.com/molecula/featurebase/v3/http"
+	"github.com/molecula/featurebase/v3/encoding/proto"
 	"github.com/molecula/featurebase/v3/net"
 	"github.com/molecula/featurebase/v3/topology"
 	"github.com/pkg/errors"
@@ -54,7 +54,7 @@ func pauseNode(t *testing.T, node string) error {
 }
 
 type keyInserter struct {
-	client *http.InternalClient
+	client *pilosa.InternalClient
 	uri    *net.URI
 	index  string
 	keys   []string
@@ -69,10 +69,10 @@ func getAddress(node string) string {
 	return node + ":10101"
 }
 
-func getClients(addrs []string) ([]*http.InternalClient, error) {
-	clients := make([]*http.InternalClient, 0, len(addrs))
+func getClients(addrs []string) ([]*pilosa.InternalClient, error) {
+	clients := make([]*pilosa.InternalClient, 0, len(addrs))
 	for _, addr := range addrs {
-		c, err := http.NewInternalClient(addr, http.GetHTTPClient(nil))
+		c, err := pilosa.NewInternalClient(addr, pilosa.GetHTTPClient(nil), pilosa.WithSerializer(proto.Serializer{}))
 		if err != nil {
 			return nil, err
 		}
@@ -93,7 +93,7 @@ func getURIsFromAddresses(addrs []string) ([]*net.URI, error) {
 	return uris, nil
 }
 
-func readIndexTranslateData(ctx context.Context, client *http.InternalClient, dirPath, index string, partition int) error {
+func readIndexTranslateData(ctx context.Context, client *pilosa.InternalClient, dirPath, index string, partition int) error {
 	// read translateStore contents from endpoint
 	r, err := client.IndexTranslateDataReader(ctx, index, partition)
 	if err != nil {
@@ -177,7 +177,7 @@ var errOpRetriable = errors.New("If operation failed on this error, it can be re
 func verifyNodeHasGivenKeys(ctx context.Context, node, index, dirPath string, keys []string) error {
 	// get client that's connected to node
 	address := getAddress(node)
-	client, err := http.NewInternalClient(address, http.GetHTTPClient(nil))
+	client, err := pilosa.NewInternalClient(address, pilosa.GetHTTPClient(nil), pilosa.WithSerializer(proto.Serializer{}))
 	if err != nil {
 		return err
 	}

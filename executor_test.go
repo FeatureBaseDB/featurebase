@@ -29,7 +29,6 @@ import (
 	"github.com/molecula/featurebase/v3/boltdb"
 	"github.com/molecula/featurebase/v3/ctl"
 	"github.com/molecula/featurebase/v3/disco"
-	"github.com/molecula/featurebase/v3/http"
 	"github.com/molecula/featurebase/v3/pql"
 	"github.com/molecula/featurebase/v3/proto"
 	"github.com/molecula/featurebase/v3/server"
@@ -3826,7 +3825,7 @@ func TestExecutor_Execute_Existence(t *testing.T) {
 		c := test.MustRunCluster(t, 1, []server.CommandOption{
 			server.OptCommandServerOptions(
 				pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
-				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+				pilosa.OptServerOpenTranslateReader(pilosa.GetOpenTranslateReaderFunc(nil)),
 			),
 		})
 		defer c.Close()
@@ -4217,7 +4216,7 @@ func TestExecutor_Execute_All(t *testing.T) {
 		c := test.MustRunCluster(t, 1, []server.CommandOption{
 			server.OptCommandServerOptions(
 				pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
-				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+				pilosa.OptServerOpenTranslateReader(pilosa.GetOpenTranslateReaderFunc(nil)),
 			),
 		})
 		defer c.Close()
