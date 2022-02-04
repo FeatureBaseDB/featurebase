@@ -55,7 +55,7 @@ type executor struct {
 	workCounter uint64
 
 	// Client used for remote requests.
-	client InternalQueryClient
+	client *InternalClient
 
 	// Maximum number of Set() or Clear() commands per request.
 	MaxWritesPerRequest int
@@ -74,7 +74,7 @@ type executor struct {
 // executorOption is a functional option type for pilosa.Executor
 type executorOption func(e *executor) error
 
-func optExecutorInternalQueryClient(c InternalQueryClient) executorOption {
+func optExecutorInternalQueryClient(c *InternalClient) executorOption {
 	return func(e *executor) error {
 		e.client = c
 		return nil
@@ -116,7 +116,6 @@ func emptyResult(c *pql.Call) interface{} {
 // newExecutor returns a new instance of Executor.
 func newExecutor(opts ...executorOption) *executor {
 	e := &executor{
-		client:         newNopInternalQueryClient(),
 		workerPoolSize: 2,
 	}
 	for _, opt := range opts {
