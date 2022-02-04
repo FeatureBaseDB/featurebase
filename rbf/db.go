@@ -704,7 +704,6 @@ func (db *DB) afterCurrentTx(callback func()) {
 		defer db.mu.Unlock()
 		txw.callback()
 	}()
-	return
 }
 
 // removeTx removes an active transaction from the database. it obtains

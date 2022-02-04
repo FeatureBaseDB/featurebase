@@ -63,6 +63,9 @@ func GetAuthToken(t *testing.T) string {
 		ClientSecret,
 		Key,
 	)
+	if err != nil {
+		t.Fatalf("NewAuth: %v", err)
+	}
 
 	// make a valid token
 	tkn := jwt.New(jwt.SigningMethodHS256)

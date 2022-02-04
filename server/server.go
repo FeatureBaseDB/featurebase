@@ -571,6 +571,9 @@ func (m *Command) SetupServer() error {
 		OptGRPCServerPerm(&p),
 		OptGRPCServerQueryLogger(m.queryLogger),
 	)
+	if err != nil {
+		return errors.Wrap(err, "getting grpcServer")
+	}
 
 	m.Handler, err = pilosa.NewHandler(
 		pilosa.OptHandlerAllowedOrigins(m.Config.Handler.AllowedOrigins),

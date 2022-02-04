@@ -236,12 +236,6 @@ func newShardSet() *shardSet {
 		shardsMap: make(map[uint64]bool),
 	}
 }
-func newShardSetFromMap(m map[uint64]bool) *shardSet {
-	return &shardSet{
-		shardsMap: m,
-		shardsVer: 1,
-	}
-}
 
 func (per *DBPerShard) LoadExistingDBs() (err error) {
 	idxs := per.holder.Indexes()
@@ -580,19 +574,6 @@ type FieldView2Shards struct {
 
 func (vs *FieldView2Shards) getViewsForField(field string) map[string]*shardSet {
 	return vs.m[field]
-}
-
-func (vs *FieldView2Shards) has(field, view string, shard uint64) bool {
-	vw, ok := vs.m[field]
-	if !ok {
-		return false
-	}
-	ss, ok := vw[view]
-	if !ok {
-		return false
-	}
-	shardMap := ss.CloneMaybe()
-	return shardMap[shard]
 }
 
 func (vs *FieldView2Shards) addViewShardSet(fv txkey.FieldView, ss *shardSet) {

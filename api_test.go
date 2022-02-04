@@ -1365,7 +1365,9 @@ func TestVariousApiTranslateCalls(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%v: could not create test index", err)
 		}
-		_, err = idx.CreateFieldIfNotExistsWithOptions("field", &pilosa.FieldOptions{Keys: false})
+		if _, err = idx.CreateFieldIfNotExistsWithOptions("field", &pilosa.FieldOptions{Keys: false}); err != nil {
+			t.Fatalf("creating field: %v", err)
+		}
 		t.Run("translateIndexDbOnNilIndex",
 			func(t *testing.T) {
 				err := api.TranslateIndexDB(context.Background(), "nonExistentIndex", 0, r)

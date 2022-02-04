@@ -1858,14 +1858,6 @@ func forwardAuthHeader(b bool) executeRequestOption {
 	}
 }
 
-type nopCloser struct {
-	*bytes.Reader
-}
-
-func (n nopCloser) Close() error {
-	return nil
-}
-
 // executeRequest executes the given request and checks the Response. For
 // responses with non-2XX status, the body is read and closed, and an error is
 // returned. If the error is nil, the caller must ensure that the response body
