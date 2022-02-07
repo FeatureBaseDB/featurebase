@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/jinzhu/copier"
 )
 
 // Query represents a PQL query.
@@ -27,12 +29,12 @@ func (q *Query) ExpandVars(vars map[string]interface{}) (*Query, error) {
 	for _, c := range q.Calls {
 		newCalls, err := c.ExpandVars(vars)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		other.Calls = append(other.Calls, newCalls...)
 	}
 
-	return q, nil
+	return &other, nil
 }
 
 func (q *Query) startCall(name string) {
@@ -912,27 +914,106 @@ func (c *Call) ArgString(key string) string {
 	return s
 }
 
-// ExpandVars recursively replaces variables in the call with their values.
 func (c *Call) ExpandVars(vars map[string]interface{}) ([]*Call, error) {
-	other := *c
-	other.Args = CopyArgs(c.Args)
-	other.Children = make([]*Call, 0, len(c.Children))
+	switch c.Name {
+	case "Row":
 
-	// TODO: Replace field variables.
+		for k, v := range vars {
+			if _, ok := c.Args[k]; ok {
+				union := &Call{Name: "Union"}
+				switch tv := v.(type) {
+				case []interface{}:
+					for i := range tv {
+						r := Call{Name: "Row"}
+						r.Args = CopyArgs(c.Args)
+						switch cond := r.Args[k].(type) {
+						case *Condition:
+							cond.Value = tv[i]
+							r.Args[k] = cond
+						default:
+							cond = tv[i]
+							r.Args[k] = cond
+						}
+						union.Children = append(union.Children, &r)
+					}
+				}
 
-	// Recursively expand variables in children.
-	for _, child := range c.Children {
-		newChildren, err := child.ExpandVars(vars)
-		if err != nil {
-			return nil, err
+				return []*Call{union}, nil
+			}
 		}
-		other.Children = append(other.Children, newChildren...)
+		return []*Call{c}, nil
+	case "Rows":
+		row1 := &Call{Name: "Rows"}
+		row2 := &Call{Name: "Rows"}
+		return []*Call{row1, row2}, nil
+	default:
+		other := &Call{}
+		copier.Copy(other, c)
+		other.Children = make([]*Call, 0, len(c.Children))
+		for _, child := range c.Children {
+			newChildren, err := child.ExpandVars(vars)
+			if err != nil {
+				return nil, err
+			}
+			other.Children = append(other.Children, newChildren...)
+		}
+		return []*Call{other}, nil
+		//Expand then return Union to caller
 	}
-
-	// TODO: Return multiple calls for list.
-
-	return []*Call{&other}, nil
 }
+
+// ExpandVars recursively replaces variables in the call with their values.
+// func (c *Call) ExpandVars(vars map[string]interface{}) ([]*Call, error) {
+// 	other := *c
+// 	other.Args = CopyArgs(c.Args)
+// 	other.Children = make([]*Call, 0, len(c.Children))
+
+// 	for _, child := range c.Children {
+// 		switch child.Name {
+// 		case "Row":
+// 			for key, val := range vars {
+// 				if _, ok := child.Args[key]; ok {
+// 					// Make Union Cal
+// 					union := &Call{Name: "Union"}
+// 					// data type for val?
+// 					vi := reflect.ValueOf(val)
+// 					switch vi.Kind() {
+// 					case reflect.Slice:
+// 						for i := 0; i < vi.Len(); i++ {
+// 							cpy := &Call{}
+// 							copier.Copy(cpy, child)
+// 							cpy.Args[key] = vi.Index(i)
+// 							union.Children = append(union.Children, cpy)
+// 						}
+// 						// case []uint, []uint16, []uint32, []uint64:
+// 						// case []float32, []float64:
+// 					}
+// 					// Loop thru val
+
+// 					// Make copy of Child replacing its val for val
+
+// 					other.Children = append(other.Children, union)
+// 					break
+// 				}
+// 			}
+// 		}
+// 	}
+
+// 	// TODO: Replace field variables.
+
+// 	// Recursively expand variables in children.
+// 	for _, child := range c.Children {
+// 		newChildren, err := child.ExpandVars(vars)
+// 		if err != nil {
+// 			return nil, err
+// 		}
+// 		other.Children = append(other.Children, newChildren...)
+// 	}
+
+// 	// TODO: Return multiple calls for list.
+
+// 	return []*Call{&other}, nil
+// }
 
 // Condition represents an operation & value.
 // When used in an argument map it represents a binary expression.
