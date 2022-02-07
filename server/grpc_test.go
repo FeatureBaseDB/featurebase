@@ -1055,15 +1055,13 @@ admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 		// make a valid token
 		tkn := jwt.New(jwt.SigningMethodHS256)
 		claims := tkn.Claims.(jwt.MapClaims)
-		groupString, _ := authn.ToGob64(groups)
-		claims["molecula-idp-groups"] = groupString
 		claims["oid"] = "42"
 		claims["name"] = name
 		secretKey, _ := hex.DecodeString(auth.SecretKey)
 
 		validToken, err := tkn.SignedString(secretKey)
 		if err != nil {
-			panic(err)
+			t.Fatalf("unexpected error creating token %v", err)
 		}
 		validToken = "Bearer " + validToken
 

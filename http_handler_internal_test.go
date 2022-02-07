@@ -229,8 +229,6 @@ func TestAuthentication(t *testing.T) {
 	// make a valid token
 	tkn := jwt.New(jwt.SigningMethodHS256)
 	claims := tkn.Claims.(jwt.MapClaims)
-	groupString, _ := authn.ToGob64([]authn.Group{{GroupID: "thing", GroupName: "whatever"}})
-	claims["molecula-idp-groups"] = groupString
 	claims["oid"] = "42"
 	claims["name"] = "todd"
 	validToken, err := tkn.SignedString([]byte(secretKey))
@@ -627,8 +625,6 @@ func TestChkAuthN(t *testing.T) {
 	// make a valid token
 	tkn := jwt.New(jwt.SigningMethodHS256)
 	claims := tkn.Claims.(jwt.MapClaims)
-	groupString, _ := authn.ToGob64([]authn.Group{{GroupID: "thing", GroupName: "whatever"}})
-	claims["molecula-idp-groups"] = groupString
 	claims["oid"] = "42"
 	claims["name"] = "A. Token"
 	validToken, err := tkn.SignedString(a.SecretKey())
@@ -638,15 +634,7 @@ func TestChkAuthN(t *testing.T) {
 	validToken = "Bearer " + validToken
 
 	// make an invalid token
-	invalidKey, err := hex.DecodeString("DEADBEEDDEADBEEDDEADBEEDDEADBEEDDEADBEEDDEADBEEDDEADBEEDDEADBEED")
-	if err != nil {
-		t.Fatal(err)
-	}
-	invalidToken, err := tkn.SignedString(invalidKey)
-	if err != nil {
-		t.Fatal(err)
-	}
-	invalidToken = "Bearer " + invalidToken
+	invalidToken := "Bearer " + "thisis.a.bad.token"
 
 	// make an expired token
 	claims["exp"] = "1"
