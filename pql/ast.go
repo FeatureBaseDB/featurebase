@@ -917,35 +917,74 @@ func (c *Call) ArgString(key string) string {
 func (c *Call) ExpandVars(vars map[string]interface{}) ([]*Call, error) {
 	switch c.Name {
 	case "Row":
-
-		for k, v := range vars {
-			if _, ok := c.Args[k]; ok {
-				union := &Call{Name: "Union"}
-				switch tv := v.(type) {
-				case []interface{}:
-					for i := range tv {
-						r := Call{Name: "Row"}
-						r.Args = CopyArgs(c.Args)
-						switch cond := r.Args[k].(type) {
-						case *Condition:
-							cond.Value = tv[i]
-							r.Args[k] = cond
-						default:
-							cond = tv[i]
-							r.Args[k] = cond
+		for argK, argV := range c.Args { // animal: interface{}
+			switch variable := argV.(type) {
+			case *Variable: // if interface{} is of type Variable
+				for varK, varV := range vars { // go through all the vars. "var1": ["cat", "dog"]
+					if variable.Name == varK {
+						switch values := varV.(type) {
+						case []interface{}:
+							union := &Call{Name: "Union"}
+							for i := range values {
+								r := Call{Name: "Row"}
+								r.Args = CopyArgs(c.Args)
+								switch cond := r.Args[argK].(type) {
+								case *Condition:
+									r.Args[argK] = &Condition{Op: cond.Op, Value: values[i]}
+								default:
+									r.Args[argK] = values[i]
+								}
+								union.Children = append(union.Children, &r)
+							}
+							return []*Call{union}, nil
 						}
-						union.Children = append(union.Children, &r)
 					}
 				}
 
-				return []*Call{union}, nil
+			}
+		}
+
+		// for k, v := range vars {
+		// 	if _, ok := c.Args[k]; ok {
+		// 		union := &Call{Name: "Union"}
+		// 		switch tv := v.(type) {
+		// 		case []interface{}:
+		// 			for i := range tv {
+		// 				r := Call{Name: "Row"}
+		// 				r.Args = CopyArgs(c.Args)
+		// 				switch cond := r.Args[k].(type) {
+		// 				case *Condition:
+		// 					r.Args[k] = &Condition{Op: cond.Op, Value: tv[i]}
+		// 				default:
+		// 					r.Args[k] = tv[i]
+		// 				}
+		// 				union.Children = append(union.Children, &r)
+		// 			}
+		// 		}
+		// 		return []*Call{union}, nil
+		// 	}
+		// }
+		return []*Call{c}, nil
+	case "Rows":
+		for k, v := range vars {
+			if _, ok := c.Args[k]; ok {
+				rows := make([]*Call, len(vars))
+				switch tv := v.(type) {
+				case []interface{}:
+					for i := range tv {
+						r := Call{Name: "Rows"}
+						r.Args = CopyArgs(c.Args)
+						r.Args[k] = tv[i]
+						rows = append(rows, &r)
+					}
+				}
+				return rows, nil
 			}
 		}
 		return []*Call{c}, nil
-	case "Rows":
-		row1 := &Call{Name: "Rows"}
-		row2 := &Call{Name: "Rows"}
-		return []*Call{row1, row2}, nil
+		// row1 := &Call{Name: "Rows"}
+		// row2 := &Call{Name: "Rows"}
+		// return []*Call{row1, row2}, nil
 	default:
 		other := &Call{}
 		copier.Copy(other, c)
