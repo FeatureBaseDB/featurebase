@@ -761,6 +761,15 @@ func TestPQLDeepEquality(t *testing.T) {
 					"f": &Variable{Name: "my_VAR123"},
 				},
 			}},
+		{
+			name: "RowsWithVariable",
+			call: `Rows($var)`,
+			exp: &Call{
+				Name: "Rows",
+				Args: map[string]interface{}{
+					"_field": &Variable{Name: "var"},
+				},
+			}},
 	}
 
 	for i, test := range tests {

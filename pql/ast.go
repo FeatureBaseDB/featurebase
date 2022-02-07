@@ -78,7 +78,11 @@ func (q *Query) addPosNum(key, value string) {
 
 func (q *Query) addPosStr(key, value string) {
 	q.addField(key)
-	q.addVal(value)
+	if strings.HasPrefix(value, "$") {
+		q.addVal(NewVariable(strings.TrimPrefix(value, "$")))
+	} else {
+		q.addVal(value)
+	}
 }
 
 func (q *Query) startConditional() {
@@ -369,11 +373,17 @@ type stringOrInt64Type struct{}
 
 var stringOrInt64 stringOrInt64Type
 
+// We want to be able to accept either a string or variable for
+// _field args. Special-case type:
+type stringOrVariableType struct{}
+
+var stringOrVariable stringOrVariableType
+
 var allowField = callInfo{
 	allowUnknown: false,
 	prototypes: map[string]interface{}{
-		"_field": "",
-		"field":  "",
+		"_field": stringOrVariable,
+		"field":  stringOrVariable,
 	},
 }
 
@@ -419,8 +429,8 @@ var callInfoByFunc = map[string]callInfo{
 	"Rows": {
 		allowUnknown: false,
 		prototypes: map[string]interface{}{
-			"_field":   "",
-			"field":    "",
+			"_field":   stringOrVariable,
+			"field":    stringOrVariable,
 			"limit":    int64(0),
 			"column":   nil,
 			"previous": nil,
@@ -466,8 +476,8 @@ var callInfoByFunc = map[string]callInfo{
 	"TopK": {
 		allowUnknown: false,
 		prototypes: map[string]interface{}{
-			"_field": "",
-			"field":  "",
+			"_field": stringOrVariable,
+			"field":  stringOrVariable,
 			"k":      int64(0),
 			"filter": nil,
 			"from":   nil,
@@ -478,15 +488,15 @@ var callInfoByFunc = map[string]callInfo{
 	"TopN": {
 		allowUnknown: true,
 		prototypes: map[string]interface{}{
-			"_field": "",
-			"field":  "",
+			"_field": stringOrVariable,
+			"field":  stringOrVariable,
 		},
 	},
 	"Percentile": {
 		allowUnknown: false,
 		prototypes: map[string]interface{}{
-			"field":  "",
-			"_field": "",
+			"field":  stringOrVariable,
+			"_field": stringOrVariable,
 			"filter": nil,
 			"nth":    nil,
 		},
@@ -592,6 +602,15 @@ func (c *Call) CheckCallInfo() error {
 				continue
 			default:
 				return fmt.Errorf("'%s': arg '%s' needed a string or integer value, got %T",
+					c.String(), k, v)
+			}
+		}
+		if reflect.TypeOf(acceptable) == reflect.TypeOf(stringOrVariable) {
+			switch v.(type) {
+			case string, *Variable:
+				continue
+			default:
+				return fmt.Errorf("'%s': arg '%s' needed a string or variable value, got %T",
 					c.String(), k, v)
 			}
 		}
