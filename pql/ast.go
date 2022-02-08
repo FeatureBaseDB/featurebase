@@ -475,7 +475,6 @@ var callInfoByFunc = map[string]callInfo{
 		allowUnknown: false,
 		prototypes: map[string]interface{}{
 			"columns": interfaceOrVariable,
-			// "columns": []interface{}{},
 		},
 		callType: PrecallGlobal,
 	},
