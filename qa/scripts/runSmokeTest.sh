@@ -2,10 +2,6 @@
 
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
-
-# requires TF_VAR_branch env var to be set
-if [ -z ${TF_VAR_branch+x} ]; then echo "TF_VAR_branch is unset"; else echo "TF_VAR_branch is set to '$TF_VAR_branch'"; fi
-
 # requires TF_VAR_cluster_prefix env var to be set
 if [ -z ${TF_VAR_cluster_prefix+x} ]; then 
     echo "setting TF_VAR_cluster_prefix";

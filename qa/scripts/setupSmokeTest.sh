@@ -3,9 +3,6 @@
 # To run script: ./setupSmokeTest.sh
 export TF_IN_AUTOMATION=1
 
-# requires TF_VAR_branch env var to be set
-if [ -z ${TF_VAR_branch+x} ]; then echo "TF_VAR_branch is unset"; else echo "TF_VAR_branch is set to '$TF_VAR_branch'"; fi
-
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 source $SCRIPT_DIR/utilCluster.sh
 

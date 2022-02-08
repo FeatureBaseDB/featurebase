@@ -328,7 +328,6 @@ smoke test:
     AWS_ACCESS_KEY_ID: $AWS_FBCI_ACCESS_KEY_ID
     AWS_SECRET_ACCESS_KEY: $AWS_FBCI_SECRET_ACCESS_KEY
     TF_VAR_cluster_prefix: ""
-    TF_VAR_branch: ""
   tags:
     - aws
     - docker
@@ -360,8 +359,6 @@ smoke test:
     - export PATH=$PATH:/usr/local/go/bin
     - TF_VAR_cluster_prefix="smoke-$(openssl rand -base64 12 | tr -d /=+ | cut -c -16)"
     - echo "Cluster Prefix --> $TF_VAR_cluster_prefix"
-    - TF_VAR_branch=$CI_COMMIT_BRANCH
-    - echo "Branch --> $TF_VAR_branch"
   script:
     - ./qa/scripts/setupSmokeTest.sh
     - ./qa/scripts/testSmokeTest.sh
@@ -387,7 +384,6 @@ gauntlet:
     AWS_ACCESS_KEY_ID: $AWS_FBCI_ACCESS_KEY_ID
     AWS_SECRET_ACCESS_KEY: $AWS_FBCI_SECRET_ACCESS_KEY
     TF_VAR_cluster_prefix: ""
-    TF_VAR_branch: ""
   tags:
     - aws
     - docker
@@ -419,8 +415,6 @@ gauntlet:
     - export PATH=$PATH:/usr/local/go/bin
     - TF_VAR_cluster_prefix="gauntlet-$(openssl rand -base64 12 | tr -d /=+ | cut -c -16)"
     - echo "Cluster Prefix --> $TF_VAR_cluster_prefix"
-    - TF_VAR_branch=$CI_COMMIT_BRANCH
-    - echo "Branch --> $TF_VAR_branch"
   script:
     - ./qa/scripts/setupSamsungGauntlet.sh
     - ./qa/scripts/testSamsungGauntlet.sh
