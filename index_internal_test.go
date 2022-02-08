@@ -28,14 +28,3 @@ func mustOpenIndex(tb testing.TB, opt IndexOptions) *Index {
 
 	return index
 }
-
-// reopen closes the index and reopens it.
-func (i *Index) reopen() error {
-	if err := i.Close(); err != nil {
-		return err
-	}
-	if err := i.Open(); err != nil {
-		return err
-	}
-	return nil
-}

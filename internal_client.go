@@ -1858,14 +1858,6 @@ func forwardAuthHeader(b bool) executeRequestOption {
 	}
 }
 
-type nopCloser struct {
-	*bytes.Reader
-}
-
-func (n nopCloser) Close() error {
-	return nil
-}
-
 // executeRequest executes the given request and checks the Response. For
 // responses with non-2XX status, the body is read and closed, and an error is
 // returned. If the error is nil, the caller must ensure that the response body
@@ -1936,6 +1928,16 @@ func (c *InternalClient) handleResponse(req *http.Request, eo *executeOpts, resp
 		return resp, errors.Errorf("against %s %s: '%s'", req.URL.String(), resp.Status, msg)
 	}
 	return resp, nil
+}
+
+// Bit represents the intersection of a row and a column. It can be specified by
+// integer ids or string keys.
+type Bit struct {
+	RowID     uint64
+	ColumnID  uint64
+	RowKey    string
+	ColumnKey string
+	Timestamp int64
 }
 
 // Bits is a slice of Bit.
@@ -2045,6 +2047,14 @@ func (p Bits) GroupByShard() map[uint64][]Bit {
 	}
 
 	return m
+}
+
+// FieldValue represents the value for a column within a
+// range-encoded field.
+type FieldValue struct {
+	ColumnID  uint64
+	ColumnKey string
+	Value     int64
 }
 
 // FieldValues represents a slice of field values.

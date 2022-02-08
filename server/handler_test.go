@@ -1405,7 +1405,7 @@ func TestCluster_TranslateStore(t *testing.T) {
 		),
 	)
 
-	if err := cluster.GetIdleNode(0).Start(); err != nil {
+	if err := cluster.Start(); err != nil {
 		t.Fatalf("starting node 0: %v", err)
 	}
 	defer cluster.GetIdleNode(0).Close() // nolint: errcheck

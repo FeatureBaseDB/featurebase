@@ -359,7 +359,7 @@ func testTrimNull(t *testing.T, c *test.Cluster, client *Client) {
 		t.Fatalf("querying: %v", err)
 	}
 	for i, result := range resp.Results() {
-		if 1 == i {
+		if i == 1 {
 			if !reflect.DeepEqual(result.Row().Columns, []uint64(nil)) {
 				t.Errorf("expected %#v for %d, but got %#v", []uint64(nil), i, result.Row().Columns)
 			}
@@ -1180,26 +1180,6 @@ outer:
 			}
 		}
 		return errors.Errorf("%s in one but not two", vOne)
-	}
-	if len(two) != 0 {
-		return errors.Errorf("vals in two but not one: %v", two)
-	}
-	return nil
-}
-
-func isPermutationOfInt(one, two []uint64) error {
-	if len(one) != len(two) {
-		return errors.Errorf("different lengths %d and %d", len(one), len(two))
-	}
-outer:
-	for _, vOne := range one {
-		for j, vTwo := range two {
-			if vOne == vTwo {
-				two = append(two[:j], two[j+1:]...)
-				continue outer
-			}
-		}
-		return errors.Errorf("%d in one but not two", vOne)
 	}
 	if len(two) != 0 {
 		return errors.Errorf("vals in two but not one: %v", two)

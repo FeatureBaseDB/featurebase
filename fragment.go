@@ -19,9 +19,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
-	"unsafe"
 
 	"github.com/cespare/xxhash"
 	"github.com/gogo/protobuf/proto"
@@ -127,9 +125,6 @@ type fragment struct {
 	// parent holder
 	holder *Holder
 
-	// File-backed storage
-	storage *roaring.Bitmap
-
 	// Cache for row counts.
 	CacheType string // passed in by field
 
@@ -153,8 +148,6 @@ type fragment struct {
 	mutexVector vector
 
 	stats stats.StatsClient
-
-	bitmapInfo *roaring.BitmapInfo
 }
 
 // newFragment returns a new instance of fragment.
@@ -2331,7 +2324,7 @@ func (f *fragment) doImportRoaring(ctx context.Context, tx Tx, data []byte, clea
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 	rowSize := uint64(1 << shardVsContainerExponent)
-	span, ctx := tracing.StartSpanFromContext(ctx, "importRoaring.ImportRoaringBits")
+	span, _ := tracing.StartSpanFromContext(ctx, "importRoaring.ImportRoaringBits")
 	defer span.Finish()
 
 	var rowSet map[uint64]int
@@ -3306,14 +3299,6 @@ func bitsToRoaringData(ps pairSet) ([]byte, error) {
 	}
 
 	return buf.Bytes(), nil
-}
-
-func madvise(b []byte, advice int) error { // nolint: unparam
-	_, _, err := syscall.Syscall(syscall.SYS_MADVISE, uintptr(unsafe.Pointer(&b[0])), uintptr(len(b)), uintptr(advice))
-	if err != 0 {
-		return err
-	}
-	return nil
 }
 
 // pairSet is a list of equal length row and column id lists.

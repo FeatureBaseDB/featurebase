@@ -3879,14 +3879,6 @@ func TestFragmentRowIterator_WithTxCommit(t *testing.T) {
 	})
 }
 
-func randPositions(n int, r *rand.Rand) []uint64 {
-	ret := make([]uint64, n)
-	for i := 0; i < n; i++ {
-		ret[i] = uint64(r.Int63n(ShardWidth))
-	}
-	return ret
-}
-
 func TestFragmentPositionsForValue(t *testing.T) {
 	f, _, _ := mustOpenFragment(t, "i", "f", "v", 0, CacheTypeNone)
 	defer f.Clean(t)
