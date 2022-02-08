@@ -379,6 +379,12 @@ type stringOrVariableType struct{}
 
 var stringOrVariable stringOrVariableType
 
+// We want to be able to accept either a interface or variable for
+// column args. Special-case type:
+type interfaceOrVariableType struct{}
+
+var interfaceOrVariable stringOrVariableType
+
 var allowField = callInfo{
 	allowUnknown: false,
 	prototypes: map[string]interface{}{
@@ -468,7 +474,8 @@ var callInfoByFunc = map[string]callInfo{
 	"ConstRow": {
 		allowUnknown: false,
 		prototypes: map[string]interface{}{
-			"columns": []interface{}{},
+			"columns": interfaceOrVariable,
+			// "columns": []interface{}{},
 		},
 		callType: PrecallGlobal,
 	},
@@ -611,6 +618,15 @@ func (c *Call) CheckCallInfo() error {
 				continue
 			default:
 				return fmt.Errorf("'%s': arg '%s' needed a string or variable value, got %T",
+					c.String(), k, v)
+			}
+		}
+		if reflect.TypeOf(acceptable) == reflect.TypeOf(interfaceOrVariable) {
+			switch v.(type) {
+			case []interface{}, *Variable:
+				continue
+			default:
+				return fmt.Errorf("'%s': arg '%s' needed a []interfacer{} or variable value, got %T",
 					c.String(), k, v)
 			}
 		}
@@ -935,14 +951,14 @@ func (c *Call) ArgString(key string) string {
 
 func (c *Call) ExpandVars(vars map[string]interface{}) ([]*Call, error) {
 	switch c.Name {
-	case "Row":
+	case "Row", "ConstRow", "Rows":
 		for argK, argV := range c.Args { // animal: interface{}
 			var variable *Variable
-			switch vari := argV.(type) {
+			switch _var := argV.(type) {
 			case *Condition:
-				variable = vari.Value.(*Variable)
+				variable = _var.Value.(*Variable)
 			case *Variable: // if interface{} is of type Variable
-				variable = vari
+				variable = _var
 			default:
 				return []*Call{c}, nil
 			}
@@ -950,54 +966,22 @@ func (c *Call) ExpandVars(vars map[string]interface{}) ([]*Call, error) {
 				if variable.Name == varK {
 					switch values := varV.(type) {
 					case []interface{}:
-						union := &Call{Name: "Union"}
-						for i := range values {
-							r := Call{Name: "Row"}
-							r.Args = CopyArgs(c.Args)
-							switch cond := r.Args[argK].(type) {
-							case *Condition:
-								r.Args[argK] = &Condition{Op: cond.Op, Value: values[i]}
-							default:
-								r.Args[argK] = values[i]
+						switch c.Name {
+						case "Row":
+							union := &Call{Name: "Union"}
+							for i := range values {
+								r := Call{Name: "Row"}
+								r.Args = CopyArgs(c.Args)
+								switch cond := r.Args[argK].(type) {
+								case *Condition:
+									r.Args[argK] = &Condition{Op: cond.Op, Value: values[i]}
+								default:
+									r.Args[argK] = values[i]
+								}
+								union.Children = append(union.Children, &r)
 							}
-							union.Children = append(union.Children, &r)
-						}
-						return []*Call{union}, nil
-					}
-				}
-			}
-		}
-
-		// for k, v := range vars {
-		// 	if _, ok := c.Args[k]; ok {
-		// 		union := &Call{Name: "Union"}
-		// 		switch tv := v.(type) {
-		// 		case []interface{}:
-		// 			for i := range tv {
-		// 				r := Call{Name: "Row"}
-		// 				r.Args = CopyArgs(c.Args)
-		// 				switch cond := r.Args[k].(type) {
-		// 				case *Condition:
-		// 					r.Args[k] = &Condition{Op: cond.Op, Value: tv[i]}
-		// 				default:
-		// 					r.Args[k] = tv[i]
-		// 				}
-		// 				union.Children = append(union.Children, &r)
-		// 			}
-		// 		}
-		// 		return []*Call{union}, nil
-		// 	}
-		// }
-		return []*Call{c}, nil
-	case "Rows":
-
-		for argK, argV := range c.Args { // animal: interface{}
-			switch variable := argV.(type) {
-			case *Variable: // if interface{} is of type Variable
-				for varK, varV := range vars { // go through all the vars. "var1": ["cat", "dog"]
-					if variable.Name == varK {
-						switch values := varV.(type) {
-						case []interface{}:
+							return []*Call{union}, nil
+						case "Rows":
 							rows := make([]*Call, 0, len(values))
 							for i := range values {
 								r := Call{Name: "Rows"}
@@ -1006,17 +990,21 @@ func (c *Call) ExpandVars(vars map[string]interface{}) ([]*Call, error) {
 								rows = append(rows, &r)
 							}
 							return rows, nil
+						case "ConstRow":
+							r := Call{Name: "ConstRow"}
+							r.Args = CopyArgs(c.Args)
+							r.Args[argK] = values
+							return []*Call{&r}, nil
+						default:
+							// TODO:
 						}
+					default:
+						// TODO:
 					}
 				}
-
 			}
 		}
-
 		return []*Call{c}, nil
-		// row1 := &Call{Name: "Rows"}
-		// row2 := &Call{Name: "Rows"}
-		// return []*Call{row1, row2}, nil
 	default:
 		other := &Call{}
 		copier.Copy(other, c)
@@ -1036,6 +1024,8 @@ func (c *Call) ExpandVars(vars map[string]interface{}) ([]*Call, error) {
 					return nil, err
 				}
 				other.Args[key] = newChildren[0]
+			default:
+				//TODO
 
 			}
 		}
