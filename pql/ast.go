@@ -949,57 +949,22 @@ func (c *Call) ArgString(key string) string {
 	return s
 }
 
+// ExpandVars recursively replaces variables in the call with their values.
 func (c *Call) ExpandVars(vars map[string]interface{}) ([]*Call, error) {
 	switch c.Name {
 	case "Row", "ConstRow", "Rows":
-		for argK, argV := range c.Args { // animal: interface{}
-			var variable *Variable
-			switch _var := argV.(type) {
-			case *Condition:
-				variable = _var.Value.(*Variable)
-			case *Variable: // if interface{} is of type Variable
-				variable = _var
-			default:
+		for argK, argV := range c.Args {
+			variable := getVariable(argV)
+			if variable == nil {
 				return []*Call{c}, nil
 			}
-			for varK, varV := range vars { // go through all the vars. "var1": ["cat", "dog"]
+			for varK, varV := range vars {
 				if variable.Name == varK {
 					switch values := varV.(type) {
 					case []interface{}:
-						switch c.Name {
-						case "Row":
-							union := &Call{Name: "Union"}
-							for i := range values {
-								r := Call{Name: "Row"}
-								r.Args = CopyArgs(c.Args)
-								switch cond := r.Args[argK].(type) {
-								case *Condition:
-									r.Args[argK] = &Condition{Op: cond.Op, Value: values[i]}
-								default:
-									r.Args[argK] = values[i]
-								}
-								union.Children = append(union.Children, &r)
-							}
-							return []*Call{union}, nil
-						case "Rows":
-							rows := make([]*Call, 0, len(values))
-							for i := range values {
-								r := Call{Name: "Rows"}
-								r.Args = CopyArgs(c.Args)
-								r.Args[argK] = values[i]
-								rows = append(rows, &r)
-							}
-							return rows, nil
-						case "ConstRow":
-							r := Call{Name: "ConstRow"}
-							r.Args = CopyArgs(c.Args)
-							r.Args[argK] = values
-							return []*Call{&r}, nil
-						default:
-							// TODO:
-						}
+						return c.expandVars(argK, values), nil
 					default:
-						// TODO:
+						return nil, fmt.Errorf("expected variable value of type []interface{}, got: %T", values)
 					}
 				}
 			}
@@ -1019,73 +984,66 @@ func (c *Call) ExpandVars(vars map[string]interface{}) ([]*Call, error) {
 		for key, val := range other.Args {
 			switch call := val.(type) {
 			case *Call:
-				newChildren, err := call.ExpandVars(vars)
+				newArg, err := call.ExpandVars(vars)
 				if err != nil {
 					return nil, err
 				}
-				other.Args[key] = newChildren[0]
-			default:
-				//TODO
-
+				if len(newArg) != 1 {
+					return nil, fmt.Errorf("variable: requires single value for argument, got: %+v", newArg)
+				}
+				other.Args[key] = newArg[0]
 			}
 		}
 		return []*Call{other}, nil
-		//Expand then return Union to caller
 	}
 }
 
-// ExpandVars recursively replaces variables in the call with their values.
-// func (c *Call) ExpandVars(vars map[string]interface{}) ([]*Call, error) {
-// 	other := *c
-// 	other.Args = CopyArgs(c.Args)
-// 	other.Children = make([]*Call, 0, len(c.Children))
+// expandVars specifies the implementation for variable expansion for various Call types
+func (c *Call) expandVars(name string, values []interface{}) []*Call {
+	switch c.Name {
+	case "Row":
+		union := &Call{Name: "Union"}
+		for i := range values {
+			r := Call{Name: "Row"}
+			r.Args = CopyArgs(c.Args)
+			switch cond := r.Args[name].(type) {
+			case *Condition:
+				r.Args[name] = &Condition{Op: cond.Op, Value: values[i]}
+			default:
+				r.Args[name] = values[i]
+			}
+			union.Children = append(union.Children, &r)
+		}
+		return []*Call{union}
+	case "Rows":
+		rows := make([]*Call, 0, len(values))
+		for i := range values {
+			r := Call{Name: "Rows"}
+			r.Args = CopyArgs(c.Args)
+			r.Args[name] = values[i]
+			rows = append(rows, &r)
+		}
+		return rows
+	case "ConstRow":
+		r := Call{Name: "ConstRow"}
+		r.Args = CopyArgs(c.Args)
+		r.Args[name] = values
+		return []*Call{&r}
+	}
+	return []*Call{c}
+}
 
-// 	for _, child := range c.Children {
-// 		switch child.Name {
-// 		case "Row":
-// 			for key, val := range vars {
-// 				if _, ok := child.Args[key]; ok {
-// 					// Make Union Cal
-// 					union := &Call{Name: "Union"}
-// 					// data type for val?
-// 					vi := reflect.ValueOf(val)
-// 					switch vi.Kind() {
-// 					case reflect.Slice:
-// 						for i := 0; i < vi.Len(); i++ {
-// 							cpy := &Call{}
-// 							copier.Copy(cpy, child)
-// 							cpy.Args[key] = vi.Index(i)
-// 							union.Children = append(union.Children, cpy)
-// 						}
-// 						// case []uint, []uint16, []uint32, []uint64:
-// 						// case []float32, []float64:
-// 					}
-// 					// Loop thru val
-
-// 					// Make copy of Child replacing its val for val
-
-// 					other.Children = append(other.Children, union)
-// 					break
-// 				}
-// 			}
-// 		}
-// 	}
-
-// 	// TODO: Replace field variables.
-
-// 	// Recursively expand variables in children.
-// 	for _, child := range c.Children {
-// 		newChildren, err := child.ExpandVars(vars)
-// 		if err != nil {
-// 			return nil, err
-// 		}
-// 		other.Children = append(other.Children, newChildren...)
-// 	}
-
-// 	// TODO: Return multiple calls for list.
-
-// 	return []*Call{&other}, nil
-// }
+// getVariable returns *Variable given a Call argument if present
+func getVariable(i interface{}) *Variable {
+	switch _var := i.(type) {
+	case *Condition:
+		return _var.Value.(*Variable)
+	case *Variable: // if interface{} is of type Variable
+		return _var
+	default:
+		return nil
+	}
+}
 
 // Condition represents an operation & value.
 // When used in an argument map it represents a binary expression.

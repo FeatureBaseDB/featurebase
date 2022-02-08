@@ -29,6 +29,7 @@ require (
 	github.com/gorilla/securecookie v1.1.1
 	github.com/hashicorp/go-retryablehttp v0.7.0
 	github.com/improbable-eng/grpc-web v0.13.0
+	github.com/jinzhu/copier v0.3.5
 	github.com/lib/pq v1.8.0
 	github.com/molecula/apophenia v0.0.0-20190827192002-68b7a14a478b
 	github.com/opentracing/opentracing-go v1.1.0
