@@ -9,8 +9,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/jinzhu/copier"
 )
 
 // Query represents a PQL query.
@@ -625,7 +623,7 @@ func (c *Call) CheckCallInfo() error {
 			case []interface{}, *Variable:
 				continue
 			default:
-				return fmt.Errorf("'%s': arg '%s' needed a []interfacer{} or variable value, got %T",
+				return fmt.Errorf("'%s': arg '%s' needed a []interface{} or variable value, got %T",
 					c.String(), k, v)
 			}
 		}
@@ -955,23 +953,25 @@ func (c *Call) ExpandVars(vars map[string]interface{}) ([]*Call, error) {
 		for argK, argV := range c.Args {
 			variable := getVariable(argV)
 			if variable == nil {
-				return []*Call{c}, nil
+				continue
 			}
 			for varK, varV := range vars {
-				if variable.Name == varK {
-					switch values := varV.(type) {
-					case []interface{}:
-						return c.expandVars(argK, values), nil
-					default:
-						return nil, fmt.Errorf("expected variable value of type []interface{}, got: %T", values)
-					}
+				if variable.Name != varK {
+					continue
 				}
+				switch values := varV.(type) {
+				case []interface{}:
+					return c.expandVars(argK, values), nil
+				default:
+					return nil, fmt.Errorf("expected variable value of type []interface{}, got: %T", values)
+				}
+
 			}
 		}
 		return []*Call{c}, nil
 	default:
-		other := &Call{}
-		copier.Copy(other, c)
+		other := *c
+		other.Args = CopyArgs(c.Args)
 		other.Children = make([]*Call, 0, len(c.Children))
 		for _, child := range c.Children {
 			newChildren, err := child.ExpandVars(vars)
@@ -993,7 +993,7 @@ func (c *Call) ExpandVars(vars map[string]interface{}) ([]*Call, error) {
 				other.Args[key] = newArg[0]
 			}
 		}
-		return []*Call{other}, nil
+		return []*Call{&other}, nil
 	}
 }
 
@@ -1003,8 +1003,7 @@ func (c *Call) expandVars(name string, values []interface{}) []*Call {
 	case "Row":
 		union := &Call{Name: "Union"}
 		for i := range values {
-			r := Call{Name: "Row"}
-			r.Args = CopyArgs(c.Args)
+			r := Call{Name: "Row", Args: CopyArgs(c.Args)}
 			switch cond := r.Args[name].(type) {
 			case *Condition:
 				r.Args[name] = &Condition{Op: cond.Op, Value: values[i]}
@@ -1036,7 +1035,10 @@ func (c *Call) expandVars(name string, values []interface{}) []*Call {
 func getVariable(i interface{}) *Variable {
 	switch _var := i.(type) {
 	case *Condition:
-		return _var.Value.(*Variable)
+		if v, ok := _var.Value.(*Variable); ok {
+			return v
+		}
+		return nil
 	case *Variable: // if interface{} is of type Variable
 		return _var
 	default:
