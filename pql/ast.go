@@ -383,7 +383,7 @@ var stringOrVariable stringOrVariableType
 // column args. Special-case type:
 type interfaceOrVariableType struct{}
 
-var interfaceOrVariable stringOrVariableType
+var interfaceOrVariable interfaceOrVariableType
 
 var allowField = callInfo{
 	allowUnknown: false,
