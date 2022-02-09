@@ -64,11 +64,10 @@ type Server struct { // nolint: maligned
 	schemator disco.Schemator
 
 	// External
-	systemInfo    SystemInfo
-	gcNotifier    GCNotifier
-	logger        logger.Logger
-	queryLogger   logger.Logger
-	snapshotQueue SnapshotQueue
+	systemInfo  SystemInfo
+	gcNotifier  GCNotifier
+	logger      logger.Logger
+	queryLogger logger.Logger
 
 	nodeID              string
 	uri                 pnet.URI
@@ -87,7 +86,7 @@ type Server struct { // nolint: maligned
 	// HolderConfig stashes server options that are really Holder options.
 	holderConfig *HolderConfig
 
-	defaultClient InternalClient
+	defaultClient *InternalClient
 	dataDir       string
 
 	// Threshold for logging long-running queries
@@ -194,7 +193,7 @@ func OptServerGCNotifier(gcn GCNotifier) ServerOption {
 
 // OptServerInternalClient is a functional option on Server
 // used to set the implementation of InternalClient.
-func OptServerInternalClient(c InternalClient) ServerOption {
+func OptServerInternalClient(c *InternalClient) ServerOption {
 	return func(s *Server) error {
 		s.defaultClient = c
 		s.cluster.InternalClient = c
@@ -406,7 +405,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		cluster:       cluster,
 		diagnostics:   newDiagnosticsCollector(defaultDiagnosticServer),
 		systemInfo:    newNopSystemInfo(),
-		defaultClient: nopInternalClient{},
+		defaultClient: &InternalClient{}, // TODO may need to make this a valid thing
 
 		gcNotifier: NopGCNotifier,
 
@@ -512,7 +511,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	return s, nil
 }
 
-func (s *Server) InternalClient() InternalClient {
+func (s *Server) InternalClient() *InternalClient {
 	return s.defaultClient
 }
 
@@ -543,13 +542,6 @@ func (s *Server) UpAndDown() error {
 // Open opens and initializes the server.
 func (s *Server) Open() error {
 	s.logger.Infof("open server. PID %v", os.Getpid())
-
-	if s.holder.NeedsSnapshot() {
-		// Start background monitoring.
-		s.snapshotQueue = newSnapshotQueue(10, 2, s.logger)
-	} else {
-		s.snapshotQueue = defaultSnapshotQueue //TODO (twg) rethink this
-	}
 
 	// Log startup
 	err := s.holder.logStartup()
@@ -612,7 +604,6 @@ func (s *Server) Open() error {
 		return errors.Wrap(err, "opening Holder")
 	}
 	// bring up the background tasks for the holder.
-	s.holder.SnapshotQueue = s.snapshotQueue
 	s.holder.Activate()
 	// if we joined existing cluster then broadcast "resize on add" message
 	if initState == disco.InitialClusterStateExisting {
@@ -742,11 +733,6 @@ func (s *Server) Close() error {
 		}
 		if s.holder != nil {
 			errh = s.holder.Close()
-		}
-		if s.snapshotQueue != nil {
-			s.holder.SnapshotQueue = nil
-			s.snapshotQueue.Stop()
-			s.snapshotQueue = nil
 		}
 
 		// prefer to return holder error over cluster

@@ -20,7 +20,7 @@ type ChkSumCommand struct { // nolint: maligned
 	Host string `json:"host"`
 
 	// Reusable client.
-	client pilosa.InternalClient
+	client *pilosa.InternalClient
 
 	// Standard input/output
 	*pilosa.CmdIO

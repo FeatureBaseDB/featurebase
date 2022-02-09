@@ -12,6 +12,17 @@ stages:
   - build
   - integration
   - gauntlet
+  - post build
+
+smoke build:
+  image: golang:$GOVERSION
+  stage: lint
+  allow_failure: false
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
+  script:
+    - echo "Let's just see if it compiles... (sometimes the linter gives unclear errors if it doesn't)"
+    - go build ./...
 
 golangci-lint:
   image: golangci/golangci-lint:v1.39.0
@@ -21,7 +32,7 @@ golangci-lint:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
     - echo "Checking for issues in new code"
-    - golangci-lint run -v 
+    - golangci-lint run
 
 build lattice:
   stage: test
@@ -205,7 +216,7 @@ package for linux amd64:
     GOARCH: "amd64"
   script:
     - echo 'deb [trusted=yes] https://repo.goreleaser.com/apt/ /' | tee /etc/apt/sources.list.d/goreleaser.list
-    - apt update && apt install nfpm
+    - apt update && apt install nfpm=2.11.3
     - make package
   artifacts:
     paths:
@@ -222,7 +233,7 @@ package for linux arm64:
     GOARCH: "arm64"
   script:
     - echo 'deb [trusted=yes] https://repo.goreleaser.com/apt/ /' | tee /etc/apt/sources.list.d/goreleaser.list
-    - apt update && apt install nfpm
+    - apt update && apt install nfpm=2.11.3
     - make package
   artifacts:
     paths:
@@ -277,9 +288,18 @@ clustertests:
     - shell
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
-  allow_failure: true
   script:
     - make clustertests
+
+authclustertests:
+  variables:
+    PROJECT: authclustertests_${CI_CONCURRENT_ID}
+  stage: integration
+  tags:
+    - shell
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
+  script:
     - make authclustertests
 
 external lookup tests:
@@ -407,3 +427,40 @@ gauntlet:
   after_script:
     - ./qa/scripts/teardownSamsungGauntlet.sh
   
+s3 dump:
+  stage: post build
+  variables:
+    PROFILE: "service-fb-ci"
+    AWS_SSH_PRIVATE_KEY: $AWS_FBCI_SSH_KEY
+    AWS_ACCESS_KEY_ID: $AWS_FBCI_ACCESS_KEY_ID
+    AWS_SECRET_ACCESS_KEY: $AWS_FBCI_SECRET_ACCESS_KEY
+  tags:
+    - shell
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
+  script:
+    - aws configure set aws_access_key_id $AWS_FBCI_ACCESS_KEY_ID
+    - aws configure set aws_secret_access_key $AWS_FBCI_SECRET_ACCESS_KEY
+    - aws configure set region "us-east-2"
+    - aws configure set aws_profile $PROFILE
+    - aws s3 cp featurebase_linux_amd64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/${CI_COMMIT_SHORT_SHA}/featurebase_linux_amd64
+    - aws s3 cp featurebase_linux_amd64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/_latest/featurebase_linux_amd64
+    - aws s3 cp roaring-migrate_linux_amd64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/${CI_COMMIT_SHORT_SHA}/roaring-migrate_linux_amd64
+    - aws s3 cp roaring-migrate_linux_amd64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/_latest/roaring-migrate_linux_amd64
+    - aws s3 cp featurebase_linux_arm64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/${CI_COMMIT_SHORT_SHA}/featurebase_linux_arm64
+    - aws s3 cp featurebase_linux_arm64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/_latest/featurebase_linux_arm64
+    - aws s3 cp roaring-migrate_linux_arm64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/${CI_COMMIT_SHORT_SHA}/roaring-migrate_linux_arm64
+    - aws s3 cp roaring-migrate_linux_arm64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/_latest/roaring-migrate_linux_arm64
+    - aws s3 cp featurebase_darwin_amd64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/${CI_COMMIT_SHORT_SHA}/featurebase_darwin_amd64
+    - aws s3 cp featurebase_darwin_amd64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/_latest/featurebase_darwin_amd64
+    - aws s3 cp roaring-migrate_darwin_amd64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/${CI_COMMIT_SHORT_SHA}/roaring-migrate_darwin_amd64
+    - aws s3 cp roaring-migrate_darwin_amd64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/_latest/roaring-migrate_darwin_amd64
+    - aws s3 cp featurebase_darwin_arm64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/${CI_COMMIT_SHORT_SHA}/featurebase_darwin_arm64
+    - aws s3 cp featurebase_darwin_arm64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/_latest/featurebase_darwin_arm64
+    - aws s3 cp roaring-migrate_darwin_arm64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/${CI_COMMIT_SHORT_SHA}/roaring-migrate_darwin_arm64
+    - aws s3 cp roaring-migrate_darwin_arm64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/_latest/roaring-migrate_darwin_arm64
+  needs:
+    - job: build for darwin amd64
+    - job: build for darwin arm64
+    - job: build for linux amd64
+    - job: build for linux arm64

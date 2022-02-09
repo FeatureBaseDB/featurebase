@@ -4,13 +4,10 @@ package pilosa_test
 import (
 	"context"
 	"fmt"
-	"strings"
 	"testing"
 
 	pilosa "github.com/molecula/featurebase/v3"
-	"github.com/molecula/featurebase/v3/http"
 	"github.com/molecula/featurebase/v3/server"
-	"github.com/molecula/featurebase/v3/storage"
 	"github.com/molecula/featurebase/v3/test"
 	. "github.com/molecula/featurebase/v3/vprint" // nolint:staticcheck
 )
@@ -47,21 +44,13 @@ func queryBalances(m0api *pilosa.API, acctOwnerID uint64, fldAcct0, fldAcct1, in
 	return
 }
 
-func skipForRoaring(t *testing.T) {
-	src := pilosa.CurrentBackend()
-	if (storage.DefaultBackend == pilosa.RoaringTxn) || strings.Contains(src, "roaring") {
-		t.Skip("skip if roaring pseudo-txn involved -- won't show transactional rollback")
-	}
-}
-
 func TestAPI_ImportAtomicRecord(t *testing.T) {
-	skipForRoaring(t)
 	c := test.MustRunCluster(t, 1,
 		[]server.CommandOption{
 			server.OptCommandServerOptions(
 				pilosa.OptServerNodeID("node0"),
 				pilosa.OptServerClusterHasher(&offsetModHasher{}),
-				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+				pilosa.OptServerOpenTranslateReader(pilosa.GetOpenTranslateReaderFunc(nil)),
 			)},
 	)
 	defer c.Close()

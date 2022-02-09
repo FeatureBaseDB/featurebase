@@ -8,13 +8,9 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"math"
 	"math/rand"
 	"os"
-	"path/filepath"
 	"reflect"
-	"runtime"
-	"runtime/debug"
 	"sort"
 	"strconv"
 	"strings"
@@ -25,7 +21,6 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	"github.com/molecula/featurebase/v3/pql"
 	"github.com/molecula/featurebase/v3/roaring"
-	"github.com/molecula/featurebase/v3/storage"
 	"github.com/molecula/featurebase/v3/testhook"
 	. "github.com/molecula/featurebase/v3/vprint" // nolint:staticcheck
 	"github.com/pkg/errors"
@@ -1025,50 +1020,44 @@ func BenchmarkFragment_ImportValue(b *testing.B) {
 //
 // We test a variety of combinations of the number of separate updates(imports),
 // the number of bits in the import, the number of rows in the fragment (which
-// is a pretty good proxy for fragment size on disk), and the MaxOpN on the
-// fragment which controls how many set bits occur before a snapshot is done. If
-// the number of bits in a given import is greater than MaxOpN, bulkImport will
-// always go through the standard snapshotting import path.
+// is a pretty good proxy for fragment size on disk).
 func BenchmarkFragment_RepeatedSmallImports(b *testing.B) {
 	for _, numUpdates := range []int{100} {
 		for _, bitsPerUpdate := range []int{100, 1000} {
 			for _, numRows := range []int{1000, 100000, 1000000} {
-				for _, opN := range []int{1, 5000, 50000} {
-					b.Run(fmt.Sprintf("Rows%dUpdates%dBits%dOpN%d", numRows, numUpdates, bitsPerUpdate, opN), func(b *testing.B) {
-						for a := 0; a < b.N; a++ {
-							b.StopTimer()
-							// build the update data set all at once - this will get applied
-							// to a fragment in numUpdates batches
-							updateRows := make([]uint64, numUpdates*bitsPerUpdate)
-							updateCols := make([]uint64, numUpdates*bitsPerUpdate)
-							for i := 0; i < numUpdates*bitsPerUpdate; i++ {
-								updateRows[i] = uint64(rand.Int63n(int64(numRows))) // row id
-								updateCols[i] = uint64(rand.Int63n(ShardWidth))     // column id
-							}
-							f, idx, tx := mustOpenFragment(b, "i", "f", viewStandard, 0, "")
-							_ = idx
-							f.MaxOpN = opN
-							defer f.Clean(b)
-
-							err := f.importRoaringT(tx, getZipfRowsSliceRoaring(uint64(numRows), 1, 0, ShardWidth), false)
-							if err != nil {
-								b.Fatalf("importing base data for benchmark: %v", err)
-							}
-							b.StartTimer()
-							for i := 0; i < numUpdates; i++ {
-								err := f.bulkImportStandard(tx,
-									updateRows[bitsPerUpdate*i:bitsPerUpdate*(i+1)],
-									updateRows[bitsPerUpdate*i:bitsPerUpdate*(i+1)],
-									&ImportOptions{},
-								)
-								if err != nil {
-									b.Fatalf("doing small bulk import: %v", err)
-								}
-							}
-							tx.Rollback() // don't exhaust the Tx space under b.N iterations.
+				b.Run(fmt.Sprintf("Rows%dUpdates%dBits%d", numRows, numUpdates, bitsPerUpdate), func(b *testing.B) {
+					for a := 0; a < b.N; a++ {
+						b.StopTimer()
+						// build the update data set all at once - this will get applied
+						// to a fragment in numUpdates batches
+						updateRows := make([]uint64, numUpdates*bitsPerUpdate)
+						updateCols := make([]uint64, numUpdates*bitsPerUpdate)
+						for i := 0; i < numUpdates*bitsPerUpdate; i++ {
+							updateRows[i] = uint64(rand.Int63n(int64(numRows))) // row id
+							updateCols[i] = uint64(rand.Int63n(ShardWidth))     // column id
 						}
-					})
-				}
+						f, idx, tx := mustOpenFragment(b, "i", "f", viewStandard, 0, "")
+						_ = idx
+						defer f.Clean(b)
+
+						err := f.importRoaringT(tx, getZipfRowsSliceRoaring(uint64(numRows), 1, 0, ShardWidth), false)
+						if err != nil {
+							b.Fatalf("importing base data for benchmark: %v", err)
+						}
+						b.StartTimer()
+						for i := 0; i < numUpdates; i++ {
+							err := f.bulkImportStandard(tx,
+								updateRows[bitsPerUpdate*i:bitsPerUpdate*(i+1)],
+								updateRows[bitsPerUpdate*i:bitsPerUpdate*(i+1)],
+								&ImportOptions{},
+							)
+							if err != nil {
+								b.Fatalf("doing small bulk import: %v", err)
+							}
+						}
+						tx.Rollback() // don't exhaust the Tx space under b.N iterations.
+					}
+				})
 			}
 		}
 	}
@@ -1078,33 +1067,30 @@ func BenchmarkFragment_RepeatedSmallImportsRoaring(b *testing.B) {
 	for _, numUpdates := range []int{100} {
 		for _, bitsPerUpdate := range []uint64{100, 1000} {
 			for _, numRows := range []uint64{1000, 100000, 1000000} {
-				for _, opN := range []int{1, 5000, 50000} {
-					b.Run(fmt.Sprintf("Rows%dUpdates%dBits%dOpN%d", numRows, numUpdates, bitsPerUpdate, opN), func(b *testing.B) {
-						for a := 0; a < b.N; a++ {
-							b.StopTimer()
-							// build the update data set all at once - this will get applied
-							// to a fragment in numUpdates batches
-							f, idx, tx := mustOpenFragment(b, "i", "f", viewStandard, 0, "")
-							_ = idx
-							f.MaxOpN = opN
-							defer f.Clean(b)
+				b.Run(fmt.Sprintf("Rows%dUpdates%dBits%d", numRows, numUpdates, bitsPerUpdate), func(b *testing.B) {
+					for a := 0; a < b.N; a++ {
+						b.StopTimer()
+						// build the update data set all at once - this will get applied
+						// to a fragment in numUpdates batches
+						f, idx, tx := mustOpenFragment(b, "i", "f", viewStandard, 0, "")
+						_ = idx
+						defer f.Clean(b)
 
-							err := f.importRoaringT(tx, getZipfRowsSliceRoaring(numRows, 1, 0, ShardWidth), false)
+						err := f.importRoaringT(tx, getZipfRowsSliceRoaring(numRows, 1, 0, ShardWidth), false)
+						if err != nil {
+							b.Fatalf("importing base data for benchmark: %v", err)
+						}
+						for i := 0; i < numUpdates; i++ {
+							data := getUpdataRoaring(numRows, bitsPerUpdate, int64(i))
+							b.StartTimer()
+							err := f.importRoaringT(tx, data, false)
+							b.StopTimer()
 							if err != nil {
-								b.Fatalf("importing base data for benchmark: %v", err)
-							}
-							for i := 0; i < numUpdates; i++ {
-								data := getUpdataRoaring(numRows, bitsPerUpdate, int64(i))
-								b.StartTimer()
-								err := f.importRoaringT(tx, data, false)
-								b.StopTimer()
-								if err != nil {
-									b.Fatalf("doing small roaring import: %v", err)
-								}
+								b.Fatalf("doing small roaring import: %v", err)
 							}
 						}
-					})
-				}
+					}
+				})
 			}
 		}
 	}
@@ -1131,67 +1117,31 @@ func BenchmarkFragment_RepeatedSmallValueImports(b *testing.B) {
 				updateVals[i] = int64(rand.Int63n(1 << 21))
 			}
 
-			for _, opN := range []int{1, 5000, 50000} {
-				b.Run(fmt.Sprintf("Updates%dVals%dOpN%d", numUpdates, valsPerUpdate, opN), func(b *testing.B) {
-					for i := 0; i < b.N; i++ {
-						b.StopTimer()
-						f, _, tx := mustOpenBSIFragment(b, "i", "f", viewBSIGroupPrefix+"foo", 0)
-						f.MaxOpN = opN
+			b.Run(fmt.Sprintf("Updates%dVals%d", numUpdates, valsPerUpdate), func(b *testing.B) {
+				for i := 0; i < b.N; i++ {
+					b.StopTimer()
+					f, _, tx := mustOpenBSIFragment(b, "i", "f", viewBSIGroupPrefix+"foo", 0)
 
-						err := f.importValue(tx, initialCols, initialVals, 21, false)
-						if err != nil {
-							b.Fatalf("initial value import: %v", err)
-						}
-						b.StartTimer()
-						for j := 0; j < numUpdates; j++ {
-							err := f.importValue(tx,
-								updateCols[valsPerUpdate*j:valsPerUpdate*(j+1)],
-								updateVals[valsPerUpdate*j:valsPerUpdate*(j+1)],
-								21,
-								false,
-							)
-							if err != nil {
-								b.Fatalf("importing values: %v", err)
-							}
-						}
-						tx.Rollback() // don't exhaust the Tx over the b.N iterations.
+					err := f.importValue(tx, initialCols, initialVals, 21, false)
+					if err != nil {
+						b.Fatalf("initial value import: %v", err)
 					}
-				})
-			}
-
+					b.StartTimer()
+					for j := 0; j < numUpdates; j++ {
+						err := f.importValue(tx,
+							updateCols[valsPerUpdate*j:valsPerUpdate*(j+1)],
+							updateVals[valsPerUpdate*j:valsPerUpdate*(j+1)],
+							21,
+							false,
+						)
+						if err != nil {
+							b.Fatalf("importing values: %v", err)
+						}
+					}
+					tx.Rollback() // don't exhaust the Tx over the b.N iterations.
+				}
+			})
 		}
-	}
-}
-
-// Ensure a fragment can snapshot correctly.
-func TestFragment_Snapshot(t *testing.T) {
-	f, idx, tx := mustOpenFragment(t, "i", "f", viewStandard, 0, "")
-	defer f.Clean(t)
-
-	// Set and then clear bits on the fragment.
-	if _, err := f.setBit(tx, 1000, 1); err != nil {
-		t.Fatal(err)
-	} else if _, err := f.setBit(tx, 1000, 2); err != nil {
-		t.Fatal(err)
-	} else if _, err := f.clearBit(tx, 1000, 1); err != nil {
-		t.Fatal(err)
-	}
-	PanicOn(tx.Commit())
-	tx = idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: f.shard})
-	defer tx.Rollback()
-
-	// Snapshot bitmap and verify data.
-	if err := f.Snapshot(); err != nil {
-		t.Fatal(err)
-	} else if n := f.mustRow(tx, 1000).Count(); n != 1 {
-		t.Fatalf("unexpected count: %d", n)
-	}
-
-	// Close and reopen the fragment & verify the data.
-	if err := f.Reopen(); err != nil {
-		t.Fatal(err)
-	} else if n := f.mustRow(tx, 1000).Count(); n != 1 {
-		t.Fatalf("unexpected count (reopen): %d", n)
 	}
 }
 
@@ -1577,91 +1527,8 @@ func TestFragment_LRUCache_Persistence(t *testing.T) {
 	}
 }
 
-// Ensure a fragment's cache can be persisted between restarts.
-func TestFragment_RankCache_Persistence(t *testing.T) {
-	roaringOnlyTest(t)
-
-	index := mustOpenIndex(t, IndexOptions{})
-	defer index.Close()
-
-	// Create field.
-	field, err := index.CreateFieldIfNotExists("f", OptFieldTypeSet(CacheTypeRanked, DefaultCacheSize))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Create view.
-	view, err := field.createViewIfNotExists(viewStandard)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Create fragment.
-	f, err := view.CreateFragmentIfNotExists(0)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Obtain transaction.
-	tx := index.holder.txf.NewTx(Txo{Write: writable, Index: index, Fragment: f, Shard: f.shard})
-	defer tx.Rollback()
-
-	// Set bits on the fragment.
-	for i := uint64(0); i < 1000; i++ {
-		if _, err := f.setBit(tx, i, 0); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	PanicOn(tx.Commit())
-	tx = index.holder.txf.NewTx(Txo{Write: !writable, Index: index, Fragment: f, Shard: f.shard})
-	defer tx.Rollback()
-
-	// Verify correct cache type and size.
-	if cache, ok := f.cache.(*rankCache); !ok {
-		t.Fatalf("unexpected cache: %T", f.cache)
-	} else if cache.Len() != 1000 {
-		t.Fatalf("unexpected cache len: %d", cache.Len())
-	}
-
-	// Reopen the index.
-	if err := index.reopen(); err != nil {
-		t.Fatal(err)
-	}
-
-	// Re-fetch fragment.
-	f = index.Field("f").view(viewStandard).Fragment(0)
-
-	// Re-verify correct cache type and size.
-	if cache, ok := f.cache.(*rankCache); !ok {
-		t.Fatalf("unexpected cache: %T", f.cache)
-	} else if cache.Len() != 1000 {
-		t.Fatalf("unexpected cache len: %d", cache.Len())
-	}
-}
-
-func roaringOnlyTest(t *testing.T) {
-	src := CurrentBackend()
-	if src == RoaringTxn || (storage.DefaultBackend == RoaringTxn && src == "") {
-		// okay to run, we are under roaring only
-	} else {
-		t.Skip("skip for everything but roaring")
-	}
-}
-
-func roaringOnlyBenchmark(b *testing.B) {
-	src := CurrentBackend()
-	if src == RoaringTxn || (storage.DefaultBackend == RoaringTxn && src == "") {
-		// okay to run, we are under roaring only
-	} else {
-		b.Skip("skip for everything but roaring")
-	}
-}
-
 // Ensure a fragment can be copied to another fragment.
 func TestFragment_WriteTo_ReadFrom(t *testing.T) {
-	// roaringOnlyTest(t)
-
 	f0, _, tx := mustOpenFragment(t, "i", "f", viewStandard, 0, "")
 	defer f0.Clean(t)
 
@@ -1752,7 +1619,6 @@ func BenchmarkFragment_Blocks(b *testing.B) {
 func BenchmarkFragment_IntersectionCount(b *testing.B) {
 	f, idx, tx := mustOpenFragment(b, "i", "f", viewStandard, 0, "")
 	defer f.Clean(b)
-	f.MaxOpN = math.MaxInt32
 
 	// Generate some intersecting data.
 	for i := 0; i < 10000; i += 2 {
@@ -1769,11 +1635,6 @@ func BenchmarkFragment_IntersectionCount(b *testing.B) {
 	PanicOn(tx.Commit())
 	tx = idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: f.shard})
 	defer tx.Rollback()
-
-	// Snapshot to disk before benchmarking.
-	if err := f.Snapshot(); err != nil {
-		b.Fatal(err)
-	}
 
 	// Start benchmark
 	b.ResetTimer()
@@ -1831,35 +1692,6 @@ func TestFragment_Zero_Tanimoto(t *testing.T) {
 		t.Fatalf("unexpected pair(1): %v", pairs[1])
 	} else if pairs[2] != (Pair{ID: 102, Count: 2}) {
 		t.Fatalf("unexpected pair(1): %v", pairs[2])
-	}
-}
-
-func TestFragment_Snapshot_Run(t *testing.T) {
-	roaringOnlyTest(t)
-
-	f, idx, tx := mustOpenFragment(t, "i", "f", viewStandard, 0, "")
-	_ = idx
-	defer f.Clean(t)
-
-	// Set bits on the fragment.
-	for i := uint64(1); i < 3; i++ {
-		if _, err := f.setBit(tx, 1000, i); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	// Snapshot bitmap and verify data.
-	if err := f.Snapshot(); err != nil {
-		t.Fatal(err)
-	} else if n := f.mustRow(tx, 1000).Count(); n != 2 {
-		t.Fatalf("unexpected count: %d", n)
-	}
-
-	// Close and reopen the fragment & verify the data.
-	if err := f.Reopen(); err != nil {
-		t.Fatal(err)
-	} else if n := f.mustRow(tx, 1000).Count(); n != 2 {
-		t.Fatalf("unexpected count (reopen): %d", n)
 	}
 }
 
@@ -2684,77 +2516,6 @@ func makeTestFragSpec(path, index, field, view0 string) fragSpec {
 	}
 }
 
-func BenchmarkFragment_Snapshot(b *testing.B) {
-	if *FragmentPath == "" {
-		b.Skip("no fragment specified")
-	}
-
-	b.ReportAllocs()
-	// Open the fragment specified by the path.
-	f := newFragment(newTestHolder(b), makeTestFragSpec(*FragmentPath, "i", "f", viewStandard), 0, 0)
-	if err := f.Open(); err != nil {
-		b.Fatal(err)
-	}
-	defer f.Clean(b)
-	b.ResetTimer()
-
-	// Reset timer and execute benchmark.
-	b.ResetTimer()
-	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
-		err := f.Snapshot()
-		if err != nil {
-			b.Fatalf("unexpected count (reopen): %s", err)
-		}
-	}
-}
-
-func BenchmarkFragment_FullSnapshot(b *testing.B) {
-	f, idx, tx := mustOpenFragment(b, "i", "f", viewStandard, 0, "")
-	_ = idx
-	tx.Rollback()
-	defer f.Clean(b)
-
-	// Generate some intersecting data.
-	maxX := ShardWidth / 2
-	sz := maxX
-	rows := make([]uint64, sz)
-	cols := make([]uint64, sz)
-
-	options := &ImportOptions{}
-	max := 0
-	for row := 0; row < 100; row++ {
-		val := 1
-		i := 0
-		for col := 0; col < ShardWidth/2; col++ {
-			rows[i] = uint64(row)
-			cols[i] = uint64(val)
-			val += 2
-			i++
-		}
-
-		tx := idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: f.shard})
-		defer tx.Rollback()
-
-		if err := f.bulkImport(tx, rows, cols, options); err != nil {
-			b.Fatalf("Error Building Sample: %s", err)
-		}
-		tx.Rollback()
-		if row > max {
-			max = row
-		}
-	}
-
-	b.ResetTimer()
-	b.ReportAllocs()
-
-	for i := 0; i < b.N; i++ {
-		if err := f.Snapshot(); err != nil {
-			b.Fatal(err)
-		}
-	}
-}
-
 func BenchmarkFragment_Import(b *testing.B) {
 	b.StopTimer()
 	maxX := ShardWidth * 5 * 2
@@ -2813,11 +2574,6 @@ func BenchmarkImportRoaring(b *testing.B) {
 
 					err := f.importRoaringT(tx, data, false)
 					if err != nil {
-						// we don't actually particularly
-						// care whether this succeeds,
-						// but if it's happening we want
-						// it to be done.
-						_ = f.holder.SnapshotQueue.Await(f)
 						f.Clean(b)
 						b.Fatalf("import error: %v", err)
 					}
@@ -2859,9 +2615,6 @@ func BenchmarkImportRoaringConcurrent(b *testing.B) {
 								defer txs[j].Rollback()
 
 								err := frags[j].importRoaringT(txs[j], data[j], false)
-								// error unimportant if it happened, but we want
-								// any snapshots to have finished.
-								_ = frags[j].holder.SnapshotQueue.Await(frags[j])
 								return err
 							})
 						}
@@ -2875,68 +2628,6 @@ func BenchmarkImportRoaringConcurrent(b *testing.B) {
 						}
 					}
 				})
-			}
-		}
-	}
-}
-func BenchmarkImportRoaringUpdateConcurrent(b *testing.B) {
-	roaringOnlyBenchmark(b)
-	if testing.Short() {
-		b.SkipNow()
-	}
-	for _, numRows := range rowCases {
-		for _, numCols := range colCases {
-			data := getZipfRowsSliceRoaring(numRows, 1, 0, ShardWidth)
-			updata := getUpdataRoaring(numRows, numCols, 1)
-			for _, concurrency := range concurrencyCases {
-				for _, cacheType := range cacheCases {
-					b.Run(fmt.Sprintf("Rows%dCols%dConcurrency%dCache_%s", numRows, numCols, concurrency, cacheType), func(b *testing.B) {
-						b.StopTimer()
-						frags := make([]*fragment, concurrency)
-						txs := make([]Tx, concurrency)
-						for i := 0; i < b.N; i++ {
-							for j := 0; j < concurrency; j++ {
-								frags[j], _, txs[j] = mustOpenFragment(b, "i", "f", viewStandard, uint64(j), cacheType)
-
-								// the cost of actually doing the op log for the large initial data set
-								// is excessive. force storage into snapshotted state, then use import
-								// to generate an op log and/or snapshot.
-								// note: skipped for rbf, bolt, lmdb, above.
-								_, _, err := frags[j].storage.ImportRoaringBits(data, false, false, 0)
-								if err != nil {
-									b.Fatalf("importing roaring: %v", err)
-								}
-								err = frags[j].holder.SnapshotQueue.Immediate(frags[j])
-								if err != nil {
-									b.Fatalf("snapshot after import: %v", err)
-								}
-							}
-							eg := errgroup.Group{}
-							b.StartTimer()
-							for j := 0; j < concurrency; j++ {
-								j := j
-								eg.Go(func() error {
-									defer txs[j].Rollback()
-
-									err := frags[j].importRoaringT(txs[j], updata, false)
-									err2 := frags[j].holder.SnapshotQueue.Await(frags[j])
-									if err == nil {
-										err = err2
-									}
-									return err
-								})
-							}
-							err := eg.Wait()
-							if err != nil {
-								b.Errorf("importing fragment: %v", err)
-							}
-							b.StopTimer()
-							for j := 0; j < concurrency; j++ {
-								frags[j].Clean(b)
-							}
-						}
-					})
-				}
 			}
 		}
 	}
@@ -2984,28 +2675,17 @@ func BenchmarkImportRoaringUpdate(b *testing.B) {
 						f, idx, tx := mustOpenFragment(b, "i", fmt.Sprintf("r%dc%dcache_%s", numRows, numCols, cacheType), viewStandard, 0, cacheType)
 						_ = idx
 
-						// the cost of actually doing the op log for the large initial data set
-						// is excessive. force storage into snapshotted state, then use import
-						// to generate an op log and/or snapshot.
 						itr, err := roaring.NewRoaringIterator(data)
 						PanicOn(err)
 						_, _, err = tx.ImportRoaringBits(f.index(), f.field(), f.view(), f.shard, itr, false, false, 0)
 						if err != nil {
 							b.Errorf("import error: %v", err)
 						}
-						err = f.holder.SnapshotQueue.Immediate(f)
-						if err != nil {
-							b.Errorf("snapshot after import error: %v", err)
-						}
 						b.StartTimer()
 						err = f.importRoaringT(tx, updata, false)
 						if err != nil {
 							f.Clean(b)
 							b.Errorf("import error: %v", err)
-						}
-						err = f.holder.SnapshotQueue.Await(f)
-						if err != nil {
-							b.Errorf("snapshot after import error: %v", err)
 						}
 						b.StopTimer()
 						var stat os.FileInfo
@@ -3160,9 +2840,6 @@ func BenchmarkImportRoaringIntoLargeFragment(b *testing.B) {
 		//nf, idx, tx := mustOpenFragmentFlags(index, field, view string, shard uint64, cacheType string, flags byte)
 
 		idx := fragTestMustOpenIndex("i", th, IndexOptions{})
-		if th.NeedsSnapshot() {
-			th.SnapshotQueue = newSnapshotQueue(1, 1, nil)
-		}
 		// XXX TODO: newFragment is using the wrong path here, we should fix that someday.
 		f := newFragment(th, makeTestFragSpec(fi.Name(), "i", "f", viewStandard), 0, 0)
 		defer f.Clean(b)
@@ -3433,58 +3110,10 @@ func BenchmarkFileWrite(b *testing.B) {
 
 }
 
-/////////////////////////////////////////////////////////////////////
-
-// not called under Tx stores b/c f.idx.NeedsSnapshot() in Clean() avoids it.
-func (f *fragment) sanityCheck(t testing.TB) {
-	newBM := roaring.NewFileBitmap()
-	file, err := os.Open(f.path())
-	if err != nil {
-		t.Fatalf("sanityCheck couldn't open file %s: %v", f.path(), err)
-	}
-	defer file.Close()
-	data, err := ioutil.ReadAll(file)
-	if err != nil {
-		t.Fatalf("sanityCheck couldn't read fragment %s: %v", f.path(), err)
-	}
-	err = newBM.UnmarshalBinary(data)
-	if err != nil {
-		t.Fatalf("sanityCheck couldn't unmarshal fragment %s: %v", f.path(), err)
-	}
-	// Refactor fragment.storage
-	// note: not called for rbf, see above.
-	if equal, reason := newBM.BitwiseEqual(f.storage); !equal {
-		t.Fatalf("fragment %s: unmarshalled bitmap different: %v", f.path(), reason)
-	}
-}
-
 // Clean used to delete fragments, but doesn't anymore -- deleting is
 // handled by the testhook.TempDir when appropriate.
+// TODO(jaffee): this can likely go away entirely... it was doing snapshot/source/generation stuff that it no longer needs to.
 func (f *fragment) Clean(t testing.TB) {
-	f.mu.Lock()
-	// we need to ensure that we unlock the mutex before terminating
-	// the clean operation, but we need it held during the sanity
-	// check or else, in some cases, the background snapshot queue
-	// can decide to pick it up.
-	func() {
-		// should we skip snapshot queue stuff under bolt/rbf?
-		defer f.mu.Unlock()
-
-		// rbf doesn't need snapshot, so this stuff is skipped.
-		// The snapshot queue stuff doesn't work under rbf.
-		if f.idx.NeedsSnapshot() {
-			err := f.holder.SnapshotQueue.Await(f)
-			if err != nil {
-				t.Fatalf("snapshot failed before sanity check: %v", err)
-			}
-			f.sanityCheck(t)
-			if f.storage != nil && f.storage.Source != nil {
-				if f.storage.Source.Dead() {
-					t.Fatalf("cleaning up fragment %s, source %s, source already dead", f.path(), f.storage.Source.ID())
-				}
-			}
-		}
-	}()
 	errc := f.Close()
 	if errc != nil {
 		t.Fatalf("error closing fragment: %v", errc)
@@ -3513,7 +3142,7 @@ func newTestHolder(tb testing.TB) *Holder {
 	testhook.Cleanup(tb, func() {
 		h.Close()
 	})
-	//h.SnapshotQueue = newSnapshotQueue(1, 1, nil)
+
 	return h
 }
 
@@ -3547,9 +3176,6 @@ func mustOpenFragmentFlags(tb testing.TB, index, field, view string, shard uint6
 
 	th := newTestHolder(tb)
 	idx := fragTestMustOpenIndex(index, th, IndexOptions{})
-	if th.NeedsSnapshot() {
-		th.SnapshotQueue = newSnapshotQueue(1, 1, nil)
-	}
 
 	fragDir := fmt.Sprintf("%v/%v/views/%v/fragments/", idx.path, field, view)
 	PanicOn(os.MkdirAll(fragDir, 0777))
@@ -4253,83 +3879,6 @@ func TestFragmentRowIterator_WithTxCommit(t *testing.T) {
 	})
 }
 
-func TestUnionInPlaceMapped(t *testing.T) {
-	roaringOnlyTest(t)
-
-	f, _, _ := mustOpenFragment(t, "i", "f", "v", 0, CacheTypeNone)
-	// note: clean has to be deferred first, because it has to run with
-	// the lock *not* held, because it is sometimes so it has to grab the
-	// lock...
-	defer f.Clean(t)
-
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	r0 := rand.New(rand.NewSource(2))
-	r1 := rand.New(rand.NewSource(1))
-	data0 := randPositions(1000000, r0)
-	setBM0 := roaring.NewBitmap()
-	setBM0.OpWriter = nil
-	_, err := setBM0.Add(data0...)
-	if err != nil {
-		t.Fatalf("adding bits: %v", err)
-	}
-	count0 := setBM0.Count()
-
-	data1 := randPositions(1000000, r1)
-	setBM1 := roaring.NewBitmap()
-	setBM1.OpWriter = nil
-	_, err = setBM1.Add(data1...)
-	if err != nil {
-		t.Fatalf("adding bits: %v", err)
-	}
-	count1 := setBM1.Count()
-
-	// now we write setBM0 into f.storage.
-	_, err = unprotectedWriteToFragment(f, setBM0)
-	if err != nil {
-		t.Fatalf("trying to flush fragment to disk: %v", err)
-	}
-	countF := f.storage.Count()
-
-	f.storage.UnionInPlace(setBM1)
-	countUnion := f.storage.Count()
-
-	// UnionInPlace produces no ops log, we have to make it snapshot, to
-	// ensure that the on-disk representation is correct. Note, UIP is
-	// not used for things that are modifying real fragments, usually;
-	// it's used only in computation of things that usually don't go to
-	// disk, which is why we handle this specially in testing and not
-	// generically.
-	err = f.holder.SnapshotQueue.Immediate(f)
-	if err != nil {
-		t.Fatalf("snapshot after union-in-place: %v", err)
-	}
-
-	if count0 != countF {
-		t.Fatalf("writing bitmap to storage changed count: %d => %d", count0, countF)
-	}
-	min := count0
-	if count1 > min {
-		min = count1
-	}
-	max := count0 + count1
-	// We don't know how many bits we should have, because of overlap,
-	// but it should be between the size of the largest bitmap and the
-	// sum of the bitmaps.
-	if countUnion < min || countUnion > max {
-		t.Fatalf("union of sets with cardinality %d and %d should be between %d and %d, got %d",
-			count0, count1, min, max, countUnion)
-	}
-}
-
-func randPositions(n int, r *rand.Rand) []uint64 {
-	ret := make([]uint64, n)
-	for i := 0; i < n; i++ {
-		ret[i] = uint64(r.Int63n(ShardWidth))
-	}
-	return ret
-}
-
 func TestFragmentPositionsForValue(t *testing.T) {
 	f, _, _ := mustOpenFragment(t, "i", "f", "v", 0, CacheTypeNone)
 	defer f.Clean(t)
@@ -4950,217 +4499,11 @@ func TestFragmentBSISigned(t *testing.T) {
 	})
 }
 
-func TestImportClearRestart(t *testing.T) {
-	roaringOnlyTest(t)
-
-	tests := []struct {
-		rows []uint64
-		cols []uint64
-	}{
-		{
-			rows: []uint64{1},
-			cols: []uint64{1},
-		},
-		{
-			rows: []uint64{1, 2, 3, 4, 5, 6, 7, 8, 9, 1},
-			cols: []uint64{1, 2, 3, 4, 5, 6, 7, 8, 9, 500000},
-		},
-		{
-			rows: []uint64{0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-			cols: []uint64{0, 65535, 65536, 131071, 131072, 196607, 196608, 262143, 262144, 1000000},
-		},
-		{
-			rows: []uint64{1, 2, 20, 200, 2000, 200000},
-			cols: []uint64{1, 1, 1, 1, 1, 1},
-		},
-	}
-	for i, test := range tests {
-		for _, maxOpN := range []int{0, 10000} {
-			t.Run(fmt.Sprintf("%dMaxOpN%d", i, maxOpN), func(t *testing.T) {
-				testrows, testcols := make([]uint64, len(test.rows)), make([]uint64, len(test.rows))
-				copy(testrows, test.rows)
-				copy(testcols, test.cols)
-				exp := make(map[uint64]map[uint64]struct{}) // row num to cols
-				if len(testrows) != len(testcols) {
-					t.Fatalf("bad test spec-need same number of rows/cols, %d/%d", len(testrows), len(testcols))
-				}
-				// set up expected data
-				expOpN := 0
-				for i := range testrows {
-					row, col := testrows[i], testcols[i]
-					cols, ok := exp[row]
-					if !ok {
-						exp[row] = make(map[uint64]struct{})
-						cols = exp[row]
-					}
-					if _, ok = cols[col]; !ok {
-						expOpN++
-						cols[col] = struct{}{}
-					}
-				}
-
-				f, idx, tx := mustOpenFragment(t, "i", "f", viewStandard, 0, "")
-				_ = idx
-				f.MaxOpN = maxOpN
-
-				err := f.bulkImport(tx, testrows, testcols, &ImportOptions{})
-				if err != nil {
-					t.Fatalf("initial small import: %v", err)
-				}
-				if idx.holder.txf.TxType() == RoaringTxn {
-					if expOpN <= maxOpN && f.opN != expOpN {
-						t.Errorf("unexpected opN - %d is not %d", f.opN, expOpN)
-					}
-				}
-				check(t, tx, f, exp)
-
-				err = f.Close()
-				if err != nil {
-					t.Fatalf("closing fragment: %v", err)
-				}
-				PanicOn(tx.Commit())
-
-				err = f.Open()
-				tx = idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f, Shard: f.shard})
-				defer tx.Rollback()
-				if err != nil {
-					t.Fatalf("reopening fragment: %v", err)
-				}
-
-				if idx.holder.txf.TxType() == RoaringTxn {
-					if expOpN <= maxOpN && f.opN != expOpN {
-						t.Errorf("unexpected opN after close/open %d is not %d", f.opN, expOpN)
-					}
-				}
-
-				check(t, tx, f, exp)
-
-				h := newTestHolder(t)
-				idx2, err := h.CreateIndex("i", IndexOptions{})
-				_ = idx2
-				PanicOn(err)
-
-				// OVERWRITING the f.path with a new fragment
-				f2 := newFragment(h, makeTestFragSpec(f.path(), "i", "f", viewStandard), 0, 0)
-				f2.MaxOpN = maxOpN
-				f2.CacheType = f.CacheType
-
-				PanicOn(tx.Commit()) // match the f.closeStorage which overlaps the f2 creation.
-
-				tx2 := idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f2, Shard: f2.shard})
-				defer tx2.Rollback()
-
-				err = f.Close()
-				if err != nil {
-					t.Fatalf("closing storage: %v", err)
-				}
-
-				err = f2.Open()
-				if err != nil {
-					t.Fatalf("opening new fragment: %v", err)
-				}
-
-				if idx.holder.txf.TxType() == RoaringTxn {
-					if expOpN <= maxOpN && f2.opN != expOpN {
-						t.Errorf("unexpected opN after close/open %d is not %d", f2.opN, expOpN)
-					}
-				}
-
-				check(t, tx2, f2, exp)
-
-				copy(testrows, test.rows)
-				copy(testcols, test.cols)
-				err = f2.bulkImport(tx2, testrows, testcols, &ImportOptions{Clear: true})
-				if err != nil {
-					t.Fatalf("clearing imported data: %v", err)
-				}
-
-				// clear exp, but leave rows in so we re-query them in `check`
-				for row := range exp {
-					exp[row] = nil
-				}
-
-				check(t, tx2, f2, exp)
-
-				PanicOn(tx2.Commit())
-
-				h3 := NewHolder(filepath.Dir(f2.path()), mustHolderConfig())
-				testhook.Cleanup(t, func() {
-					h3.Close()
-				})
-
-				idx3, err := h3.CreateIndex("i", IndexOptions{})
-				_ = idx3
-				PanicOn(err)
-
-				f3 := newFragment(h3, makeTestFragSpec(f2.path(), "i", "f", viewStandard), 0, 0)
-				f3.MaxOpN = maxOpN
-				f3.CacheType = f.CacheType
-
-				tx3 := idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f3, Shard: f3.shard})
-				defer tx3.Rollback()
-
-				err = f2.Close()
-				if err != nil {
-					t.Fatalf("f2 closing storage: %v", err)
-				}
-
-				err = f3.Open()
-				if err != nil {
-					t.Fatalf("opening f3: %v", err)
-				}
-				defer f3.Clean(t)
-
-				check(t, tx3, f3, exp)
-
-			})
-
-		}
-	}
-}
-
-func check(t *testing.T, tx Tx, f *fragment, exp map[uint64]map[uint64]struct{}) {
-
-	for rowID, colsExp := range exp {
-		colsAct := f.mustRow(tx, rowID).Columns()
-		if len(colsAct) != len(colsExp) {
-			t.Errorf("row %d len mismatch got: %d exp:%d", rowID, len(colsAct), len(colsExp))
-		}
-		for _, colAct := range colsAct {
-			if _, ok := colsExp[colAct]; !ok {
-				t.Errorf("extra column: %d", colAct)
-			}
-		}
-		for colExp := range colsExp {
-			found := false
-			for _, colAct := range colsAct {
-				if colExp == colAct {
-					found = true
-					break
-				}
-			}
-			if !found {
-				t.Errorf("expected %d, but not found", colExp)
-			}
-		}
-	}
-
-}
-
 func TestImportValueConcurrent(t *testing.T) {
 	f, idx, tx := mustOpenBSIFragment(t, "i", "f", viewBSIGroupPrefix+"foo", 0)
 	defer f.Clean(t)
 	// we will be making a new Tx each time, so we can rollback the default provided one.
 	tx.Rollback()
-
-	ty := idx.holder.txf.TxTyp()
-	switch ty {
-	case roaringTxn:
-		t.Skip(fmt.Sprintf("skipping TestImportValueConcurrent under " +
-			"roaring because the lack of transactional consistency " +
-			"from Roaring-per-file will create false comparison " +
-			"failures."))
-	}
 
 	eg := &errgroup.Group{}
 	for i := 0; i < 4; i++ {
@@ -5201,38 +4544,29 @@ func TestImportMultipleValues(t *testing.T) {
 	}
 
 	for i, test := range tests {
-		for _, maxOpN := range []int{0, 10000} { // test small/large write
-			t.Run(fmt.Sprintf("%dLowOpN", i), func(t *testing.T) {
-				f, _, tx := mustOpenBSIFragment(t, "i", "f", viewBSIGroupPrefix+"foo", 0)
-				f.MaxOpN = maxOpN
-				defer f.Clean(t)
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			f, _, tx := mustOpenBSIFragment(t, "i", "f", viewBSIGroupPrefix+"foo", 0)
+			defer f.Clean(t)
 
-				err := f.importValue(tx, test.cols, test.vals, test.depth, false)
+			err := f.importValue(tx, test.cols, test.vals, test.depth, false)
+			if err != nil {
+				t.Fatalf("importing values: %v", err)
+			}
+
+			for i := range test.checkCols {
+				cc, cv := test.checkCols[i], test.checkVals[i]
+				n, exists, err := f.value(tx, cc, test.depth)
 				if err != nil {
-					t.Fatalf("importing values: %v", err)
+					t.Fatalf("getting value: %v", err)
 				}
-
-				// probably too slow, would hit disk alot:
-				//PanicOn(tx.Commit())
-				//tx = idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard:f.shard, ShardSet:true})
-				//defer tx.Rollback()
-
-				for i := range test.checkCols {
-					cc, cv := test.checkCols[i], test.checkVals[i]
-					n, exists, err := f.value(tx, cc, test.depth)
-					if err != nil {
-						t.Fatalf("getting value: %v", err)
-					}
-					if !exists {
-						t.Errorf("column %d should exist", cc)
-					}
-					if n != cv {
-						t.Errorf("wrong value: %d is not %d", n, cv)
-					}
+				if !exists {
+					t.Errorf("column %d should exist", cc)
 				}
-			})
-
-		}
+				if n != cv {
+					t.Errorf("wrong value: %d is not %d", n, cv)
+				}
+			}
+		})
 	}
 }
 
@@ -5264,35 +4598,32 @@ func TestImportValueRowCache(t *testing.T) {
 	}
 
 	for i, test := range tests {
-		for _, maxOpN := range []int{1, 10000} {
-			t.Run(fmt.Sprintf("%dMaxOpN%d", i, maxOpN), func(t *testing.T) {
-				f, _, tx := mustOpenBSIFragment(t, "i", "f", viewBSIGroupPrefix+"foo", 0)
-				f.MaxOpN = maxOpN
-				defer f.Clean(t)
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			f, _, tx := mustOpenBSIFragment(t, "i", "f", viewBSIGroupPrefix+"foo", 0)
+			defer f.Clean(t)
 
-				// First import (tc1)
-				if err := f.importValue(tx, test.tc1.cols, test.tc1.vals, test.tc1.depth, false); err != nil {
-					t.Fatalf("importing values: %v", err)
-				}
+			// First import (tc1)
+			if err := f.importValue(tx, test.tc1.cols, test.tc1.vals, test.tc1.depth, false); err != nil {
+				t.Fatalf("importing values: %v", err)
+			}
 
-				if r, err := f.rangeOp(tx, pql.GT, test.tc1.depth, 0); err != nil {
-					t.Error("getting range of values")
-				} else if !reflect.DeepEqual(r.Columns(), test.tc1.checkCols) {
-					t.Errorf("wrong column values. expected: %v, but got: %v", test.tc1.checkCols, r.Columns())
-				}
+			if r, err := f.rangeOp(tx, pql.GT, test.tc1.depth, 0); err != nil {
+				t.Error("getting range of values")
+			} else if !reflect.DeepEqual(r.Columns(), test.tc1.checkCols) {
+				t.Errorf("wrong column values. expected: %v, but got: %v", test.tc1.checkCols, r.Columns())
+			}
 
-				// Second import (tc2)
-				if err := f.importValue(tx, test.tc2.cols, test.tc2.vals, test.tc2.depth, false); err != nil {
-					t.Fatalf("importing values: %v", err)
-				}
+			// Second import (tc2)
+			if err := f.importValue(tx, test.tc2.cols, test.tc2.vals, test.tc2.depth, false); err != nil {
+				t.Fatalf("importing values: %v", err)
+			}
 
-				if r, err := f.rangeOp(tx, pql.GT, test.tc2.depth, 0); err != nil {
-					t.Error("getting range of values")
-				} else if !reflect.DeepEqual(r.Columns(), test.tc2.checkCols) {
-					t.Errorf("wrong column values. expected: %v, but got: %v", test.tc2.checkCols, r.Columns())
-				}
-			})
-		}
+			if r, err := f.rangeOp(tx, pql.GT, test.tc2.depth, 0); err != nil {
+				t.Error("getting range of values")
+			} else if !reflect.DeepEqual(r.Columns(), test.tc2.checkCols) {
+				t.Errorf("wrong column values. expected: %v, but got: %v", test.tc2.checkCols, r.Columns())
+			}
+		})
 	}
 }
 
@@ -5333,64 +4664,6 @@ func TestFragmentConcurrentReadWrite(t *testing.T) {
 	}
 
 	t.Logf("%d", acc)
-}
-
-func TestRemapCache(t *testing.T) {
-	f, _, tx := mustOpenFragment(t, "i", "f", viewStandard, 0, "")
-	defer f.Close()
-	index, field, view, shard := f.index(), f.field(), f.view(), f.shard
-
-	// request a PanicOn that doesn't kill the program on fault
-	wouldFault := debug.SetPanicOnFault(true)
-	defer func() {
-		debug.SetPanicOnFault(wouldFault)
-		if r := recover(); r != nil {
-			if err, ok := r.(error); ok {
-				// special case: if we caught a page fault, we diagnose that directly. sadly,
-				// we can't see the actual values that were used to generate this, probably.
-				if err.Error() == "runtime error: invalid memory address or nil pointer dereference" {
-					t.Fatalf("segfault trapped during remap test (expected failure mode)")
-				}
-			}
-			t.Fatalf("unexpected PanicOn: %v", r)
-		}
-	}()
-
-	// create a container
-	_, err := tx.Add(index, field, view, shard, 65537)
-	if err != nil {
-		t.Fatalf("storage add: %v", err)
-	}
-	// cause the container to be mapped
-	err = f.Snapshot()
-	if err != nil {
-		t.Fatalf("storage snapshot: %v", err)
-	}
-	// freeze the row
-	_ = f.mustRow(tx, 0)
-	// add a bit that isn't in that container, so that container doesn't
-	// change
-	_, err = tx.Add(index, field, view, shard, 2)
-	if err != nil {
-		t.Fatalf("storage add: %v", err)
-	}
-	// make the original container be the most recent, thus cached, container
-	_, err = f.bit(tx, 0, 65537)
-	if err != nil {
-		t.Fatalf("storage bit check: %v", err)
-	}
-	// force snapshot, remapping the containers
-	err = f.Snapshot()
-	if err != nil {
-		t.Fatalf("storage snapshot: %v", err)
-	}
-	// get rid of the old mapping
-	runtime.GC()
-	// try to read that container again
-	_, err = f.bit(tx, 0, 65537)
-	if err != nil {
-		t.Fatalf("storage bit check: %v", err)
-	}
 }
 
 func TestFragment_Bug_Q2DoubleDelete(t *testing.T) {
@@ -6008,49 +5281,5 @@ func TestSliceDifference(t *testing.T) {
 		scratch = append(scratch[:0], tc.original...)
 		result := sliceDifference(scratch, tc.remove)
 		compareSlices(t, name, tc.expected, result)
-	}
-}
-
-func TestBitmapGrowth(t *testing.T) {
-	roaringOnlyTest(t)
-	f, _, tx := mustOpenFragment(t, "i", "f", viewBSIGroupPrefix+"foo", 0, "")
-	path := f.path()
-	defer f.Clean(t)
-	const values = 500
-	cols := make([]uint64, values)
-	vals := make([]int64, values)
-	for i := range cols {
-		cols[i] = uint64(rand.Int63n(65536))
-		vals[i] = rand.Int63n(24)
-	}
-	err := f.importValue(tx, cols, vals, 7, false)
-	if err != nil {
-		t.Fatalf("importing values: %v", err)
-	}
-	info, err := os.Stat(path)
-	if err != nil {
-		t.Fatalf("statting %s: %v", path, err)
-	}
-	prevSize := info.Size()
-	prevOpN := f.opN
-	err = f.importValue(tx, cols, vals, 7, false)
-	if err != nil {
-		t.Fatalf("importing values: %v", err)
-	}
-	info, err = os.Stat(path)
-	if err != nil {
-		t.Fatalf("statting %s: %v", path, err)
-	}
-	deltaSize := info.Size() - prevSize
-	deltaOpN := f.opN - prevOpN
-	// This is somewhat arbitrary, but the issue tested for was that
-	// opN would grow by 0 or 1 with multiple KB of actual ops written.
-	// If deltaOpN is at least 20, we'll probably see snapshots happening
-	// at least occasionally, and if deltaSize is under 1024, the writes
-	// are probably going to be small enough that the regular backlog of
-	// snapshotting catches them anyway.
-	if deltaSize > 1024 && deltaOpN < 20 {
-		t.Fatalf("bitmap grew by %d bytes but OpN only grew by %d",
-			deltaSize, deltaOpN)
 	}
 }

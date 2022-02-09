@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path"
-	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 
@@ -17,8 +15,7 @@ import (
 
 // public strings that pilosa/server/config.go can reference
 const (
-	RoaringTxn string = "roaring"
-	RBFTxn     string = "rbf"
+	RBFTxn string = "rbf"
 )
 
 // DetectMemAccessPastTx true helps us catch places in api and executor
@@ -377,9 +374,8 @@ type TxFactory struct {
 type txtype int
 
 const (
-	noneTxn    txtype = 0
-	roaringTxn txtype = 1 // these don't really have any transactions
-	rbfTxn     txtype = 2
+	noneTxn txtype = 0
+	rbfTxn  txtype = 2
 )
 
 // DirectoryName just returns a string version of the transaction type. We
@@ -388,17 +384,11 @@ const (
 // replaced/removed) during that refactor.
 func (ty txtype) DirectoryName() string {
 	switch ty {
-	case roaringTxn:
-		return "roaring"
 	case rbfTxn:
 		return "rbf"
 	}
 	vprint.PanicOn(fmt.Sprintf("unkown txtype %v", int(ty)))
 	return ""
-}
-
-func (txf *TxFactory) NeedsSnapshot() (b bool) {
-	return txf.typ == roaringTxn
 }
 
 func MustBackendToTxtype(backend string) (typ txtype) {
@@ -407,8 +397,6 @@ func MustBackendToTxtype(backend string) (typ txtype) {
 	}
 
 	switch backend {
-	case RoaringTxn: // "roaring"
-		return roaringTxn
 	case RBFTxn: // "rbf"
 		return rbfTxn
 	}
@@ -839,80 +827,11 @@ func (ty txtype) String() string {
 	switch ty {
 	case noneTxn:
 		return "noneTxn"
-	case roaringTxn:
-		return "roaring"
 	case rbfTxn:
 		return "rbf"
 	}
 	vprint.PanicOn(fmt.Sprintf("unhandled ty '%v' in txtype.String()", int(ty)))
 	return ""
-}
-
-// fragmentSpecFromRoaringPath takes a path releative to the
-// index directory, not including the name of the index itself.
-// The path should not start with the path separator sep ('/' or '\\') rune.
-func fragmentSpecFromRoaringPath(path string) (field, view string, shard uint64, err error) {
-	if len(path) == 0 {
-		err = fmt.Errorf("fragmentSpecFromRoaringPath error: path '%v' too short", path)
-		return
-	}
-	if path[:1] == sep {
-		err = fmt.Errorf("fragmentSpecFromRoaringPath error: path '%v' cannot start with separator '%v'; must be relative to the index base directory", path, sep)
-		return
-	}
-
-	// sample path:
-	//        field         view               shard
-	// fields/myfield/views/standard/fragments/0
-	s := strings.Split(path, "/")
-	n := len(s)
-	if n != 6 {
-		err = fmt.Errorf("len(s)=%v, but expected 5. path='%v'", n, path)
-		return
-	}
-	field = s[1]
-	view = s[3]
-	shard, err = strconv.ParseUint(s[5], 10, 64)
-	if err != nil {
-		err = fmt.Errorf("fragmentSpecFromRoaringPath(path='%v') could not parse shard '%v' as uint: '%v'", path, s[5], err)
-	}
-	return
-}
-
-// listFilesUnderDir returns the paths of files found under directory root.
-// If includeRoot is true, it returns the full path, otherwise paths are relative to root.
-// If requriedSuffix is supplied, the returned file paths will end in that,
-// and any other files found during the walk of the directory tree will be ignored.
-// If ignoreEmpty is true, files of size 0 will be excluded.
-func listFilesUnderDir(root string, includeRoot bool, requiredSuffix string, ignoreEmpty bool) (files []string, err error) {
-	if !dirExists(root) {
-		return nil, fmt.Errorf("listFilesUnderDir error: root directory '%v' not found", root)
-	}
-	n := len(root) + 1
-	if includeRoot {
-		n = 0
-	}
-	err = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
-		if len(path) < n {
-			// ignore
-		} else {
-			if info == nil {
-				vprint.PanicOn(fmt.Sprintf("info was nil for path = '%v'", path))
-			}
-			if info.IsDir() {
-				// skip directories.
-			} else {
-				if ignoreEmpty && info.Size() == 0 {
-					return nil
-				}
-				if requiredSuffix == "" || strings.HasSuffix(path, requiredSuffix) {
-					files = append(files, path[n:])
-				}
-			}
-		}
-		return nil
-	})
-	return
 }
 
 func dirExists(name string) bool {
@@ -937,24 +856,12 @@ func fileSize(name string) (int64, error) {
 var _ = anyGlobalDBWrappersStillOpen // happy linter
 
 func anyGlobalDBWrappersStillOpen() bool {
-	if globalRoaringReg.Size() != 0 {
-		return true
-	}
-	if globalRbfDBReg.Size() != 0 {
-		return true
-	}
-	return false
-}
-
-func (f *TxFactory) hasRoaring() bool {
-	return f.typ == roaringTxn
+	return globalRbfDBReg.Size() != 0
 }
 
 func (f *TxFactory) hasRBF() bool {
 	return f.typ == rbfTxn
 }
-
-var _ = (&TxFactory{}).hasRoaring // happy linter
 
 func (f *TxFactory) GetDBShardPath(index string, shard uint64, idx *Index, ty txtype, write bool) (shardPath string, err error) {
 	dbs, err := f.dbPerShard.GetDBShard(index, shard, idx)

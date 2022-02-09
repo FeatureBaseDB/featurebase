@@ -593,7 +593,7 @@ func prependTestServerOpts(opts []server.CommandOption) []server.CommandOption {
 			pilosa.OptServerOpenTranslateStore(pilosa.OpenInMemTranslateStore),
 			pilosa.OptServerNodeDownRetries(5, 100*time.Millisecond),
 			pilosa.OptServerStorageConfig(&storage.Config{
-				Backend:      pilosa.CurrentBackendOrDefault(),
+				Backend:      storage.DefaultBackend,
 				FsyncEnabled: false,
 			}),
 		),

@@ -1,5 +1,5 @@
 // Copyright 2021 Molecula Corp. All rights reserved.
-package http_test
+package pilosa_test
 
 import (
 	"context"
@@ -8,8 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/molecula/featurebase/v3"
-	"github.com/molecula/featurebase/v3/http"
+	pilosa "github.com/molecula/featurebase/v3"
 	"github.com/molecula/featurebase/v3/test"
 )
 
@@ -41,7 +40,7 @@ func TestTranslateStore_EntryReader(t *testing.T) {
 			}
 
 			// Connect to server and stream all available data.
-			r := http.NewTranslateEntryReader(context.Background(), nil)
+			r := pilosa.NewTranslateEntryReader(context.Background(), nil)
 			r.URL = primary.URL()
 
 			// Wait to ensure writes make it to translate store
@@ -123,7 +122,7 @@ func BenchmarkReadEntryNoMutex(b *testing.B) {
 	defer teardown()
 
 	for n := 0; n < b.N; n++ {
-		r, err := http.GetOpenTranslateReaderFunc(nil)(ctx, url, offset)
+		r, err := pilosa.GetOpenTranslateReaderFunc(nil)(ctx, url, offset)
 		if err != nil {
 			b.Fatalf("opening translate reader: %+v", err)
 		}
@@ -138,7 +137,7 @@ func BenchmarkReadEntryWithMutex(b *testing.B) {
 	defer teardown()
 
 	for n := 0; n < b.N; n++ {
-		r, err := http.GetOpenTranslateReaderWithLockerFunc(nil, &sync.Mutex{})(ctx, url, offset)
+		r, err := pilosa.GetOpenTranslateReaderWithLockerFunc(nil, &sync.Mutex{})(ctx, url, offset)
 		if err != nil {
 			b.Fatalf("opening translate reader: %+v", err)
 		}

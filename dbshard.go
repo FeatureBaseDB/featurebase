@@ -67,9 +67,8 @@ type DBShard struct {
 	Shard uint64
 	Open  bool
 
-	typ        txtype
-	styp       string
-	hasRoaring bool // if either of the types is roaringTxn
+	typ  txtype
+	styp string
 
 	W             DBWrapper
 	ParentDBIndex *DBIndex
@@ -131,8 +130,7 @@ type DBPerShard struct {
 	// Easily see how many we have.
 	Flatmap map[flatkey]*DBShard
 
-	typ        txtype
-	hasRoaring bool
+	typ txtype
 
 	txf    *TxFactory
 	holder *Holder
@@ -238,12 +236,6 @@ func newShardSet() *shardSet {
 		shardsMap: make(map[uint64]bool),
 	}
 }
-func newShardSetFromMap(m map[uint64]bool) *shardSet {
-	return &shardSet{
-		shardsMap: m,
-		shardsVer: 1,
-	}
-}
 
 func (per *DBPerShard) LoadExistingDBs() (err error) {
 	idxs := per.holder.Indexes()
@@ -269,11 +261,6 @@ func (txf *TxFactory) NewDBPerShard(typ txtype, holderDir string, holder *Holder
 		vprint.PanicOn("must have holder.cfg.RBFConfig and holder.cfg.StorageConfig set here")
 	}
 
-	hasRoaring := false
-	if typ == roaringTxn {
-		hasRoaring = true
-	}
-
 	d = &DBPerShard{
 		typ:           typ,
 		HolderDir:     holderDir,
@@ -281,7 +268,6 @@ func (txf *TxFactory) NewDBPerShard(typ txtype, holderDir string, holder *Holder
 		dbh:           NewDBHolder(),
 		Flatmap:       make(map[flatkey]*DBShard),
 		txf:           txf,
-		hasRoaring:    hasRoaring,
 		index2shards:  newIndex2Shards(),
 		StorageConfig: holder.cfg.StorageConfig,
 		RBFConfig:     holder.cfg.RBFConfig,
@@ -407,10 +393,7 @@ func (per *DBPerShard) unprotectedGetDBShard(index string, shard uint64, idx *In
 	}
 	dbs, ok = dbi.Shard[shard]
 	if dbs != nil && dbs.closed {
-		// roaring txn are nil/fake anyway. Don't freak out.
-		if per.typ != roaringTxn {
-			vprint.PanicOn(fmt.Sprintf("cannot retain closed dbs across holder ReOpen dbs='%p'; per.typ='%v'", dbs, per.typ))
-		}
+		vprint.PanicOn(fmt.Sprintf("cannot retain closed dbs across holder ReOpen dbs='%p'; per.typ='%v'", dbs, per.typ))
 	}
 	if !ok {
 		dbs = &DBShard{
@@ -421,7 +404,6 @@ func (per *DBPerShard) unprotectedGetDBShard(index string, shard uint64, idx *In
 			HolderPath:    per.HolderDir,
 			idx:           idx,
 			per:           per,
-			hasRoaring:    per.hasRoaring,
 		}
 		dbs.styp = per.typ.String()
 		dbi.Shard[shard] = dbs
@@ -430,8 +412,6 @@ func (per *DBPerShard) unprotectedGetDBShard(index string, shard uint64, idx *In
 	if !dbs.Open {
 		var registry DBRegistry
 		switch dbs.typ {
-		case roaringTxn:
-			registry = globalRoaringReg
 		case rbfTxn:
 			registry = globalRbfDBReg
 			registry.(*rbfDBRegistrar).SetRBFConfig(per.RBFConfig)
@@ -470,8 +450,6 @@ func (f *TxFactory) GetShardsForIndex(idx *Index, roaringViewPath string, requir
 	return f.dbPerShard.TypedDBPerShardGetShardsForIndex(f.typ, idx, roaringViewPath, requireData)
 }
 
-// if roaringViewPath is "" then for ty == roaringTxn we go to disk to discover
-// all the view paths under idx for type ty.
 // requireData means open the database file and verify that at least one key is set.
 // The returned sliceOfShards should not be modified. We will cache it for subsequent
 // queries.
@@ -484,14 +462,6 @@ func (per *DBPerShard) TypedDBPerShardGetShardsForIndex(ty txtype, idx *Index, r
 	// use the cache, always
 	per.Mu.Lock()
 	defer per.Mu.Unlock()
-
-	if ty == roaringTxn && roaringViewPath != "" {
-		shardMap, err := roaringMapOfShards(roaringViewPath)
-		if err != nil {
-			return nil, err
-		}
-		return shardMap, nil
-	}
 
 	i2ss := per.index2shards
 
@@ -506,27 +476,6 @@ func (per *DBPerShard) TypedDBPerShardGetShardsForIndex(ty txtype, idx *Index, r
 	per.index2shards[idx.name] = setOfShards
 
 	// Upon return, cache the setOfShards value and reuse it next time
-
-	if ty == roaringTxn {
-		// INVAR: roaringViewPath == "", because the other case is
-		// handled above.
-		fields := idx.Fields()
-		for _, field := range fields {
-			for _, view := range field.views() {
-				shardMap, err := roaringMapOfShards(view.path)
-				if err != nil {
-					return nil,
-						errors.Wrap(err, fmt.Sprintf(
-							"TypedDBPerShardGetLocalShardsForIndex roaringTxn view.path='%v'", view.path))
-				}
-				for shard := range shardMap {
-					setOfShards.add(shard)
-				}
-			}
-		}
-		return setOfShards.CloneMaybe(), nil
-	}
-	// INVAR: not-roaring.
 
 	path := per.prefixForType(idx, ty)
 
@@ -627,19 +576,6 @@ func (vs *FieldView2Shards) getViewsForField(field string) map[string]*shardSet 
 	return vs.m[field]
 }
 
-func (vs *FieldView2Shards) has(field, view string, shard uint64) bool {
-	vw, ok := vs.m[field]
-	if !ok {
-		return false
-	}
-	ss, ok := vw[view]
-	if !ok {
-		return false
-	}
-	shardMap := ss.CloneMaybe()
-	return shardMap[shard]
-}
-
 func (vs *FieldView2Shards) addViewShardSet(fv txkey.FieldView, ss *shardSet) {
 
 	f, ok := vs.m[fv.Field]
@@ -730,8 +666,6 @@ func (per *DBPerShard) GetFieldView2ShardsMapForIndex(idx *Index) (vs *FieldView
 	ty := per.typ
 
 	switch ty {
-	case roaringTxn:
-		return roaringGetFieldView2Shards(idx)
 	default:
 		vs = NewFieldView2Shards()
 

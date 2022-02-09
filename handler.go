@@ -76,9 +76,9 @@ func (resp *QueryResponse) MarshalJSON() ([]byte, error) {
 	})
 }
 
-// Handler is the interface for the data handler, a wrapper around
+// HandlerI is the interface for the data handler, a wrapper around
 // Pilosa's data store.
-type Handler interface {
+type HandlerI interface {
 	Serve() error
 	Close() error
 }
@@ -94,7 +94,7 @@ func (n nopHandler) Close() error {
 }
 
 // NopHandler is a no-op implementation of the Handler interface.
-var NopHandler Handler = nopHandler{}
+var NopHandler HandlerI = nopHandler{}
 
 // ImportValueRequest describes the import request structure
 // for a value (BSI) import.
@@ -409,32 +409,4 @@ type TranslateIDsRequest struct {
 // translation request.
 type TranslateIDsResponse struct {
 	Keys []string
-}
-
-// InspectRequestParams represents the parts of an InspectRequest that
-// aren't generic holder filtering attributes.
-type InspectRequestParams struct {
-	Containers bool // include container details
-	Checksum   bool // perform checksums
-}
-
-// InspectRequest represents a request for a possibly-partial
-// holder inspection, using a provided holder filter and inspect-specific
-// parameters.
-type InspectRequest struct {
-	HolderFilterParams
-	InspectRequestParams
-}
-
-// InspectResponse contains the structured results for an InspectRequest.
-// It may some day be expanded to include metadata about views or indexes.
-type InspectResponse struct {
-	Fragments []struct {
-		Index string
-		Field string
-		View  string
-		Shard int64
-		Path  string
-		Info  *FragmentInfo
-	}
 }

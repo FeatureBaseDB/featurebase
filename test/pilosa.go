@@ -16,7 +16,6 @@ import (
 	pilosa "github.com/molecula/featurebase/v3"
 	"github.com/molecula/featurebase/v3/disco"
 	"github.com/molecula/featurebase/v3/encoding/proto"
-	"github.com/molecula/featurebase/v3/http"
 	"github.com/molecula/featurebase/v3/server"
 	"github.com/molecula/featurebase/v3/testhook"
 )
@@ -165,8 +164,8 @@ func (m *Command) IsPrimary() bool {
 }
 
 // Client returns a client to connect to the program.
-func (m *Command) Client() *http.InternalClient {
-	return m.Server.InternalClient().(*http.InternalClient)
+func (m *Command) Client() *pilosa.InternalClient {
+	return m.Server.InternalClient()
 }
 
 // Query executes a query against the program through the HTTP API.

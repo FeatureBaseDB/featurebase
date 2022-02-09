@@ -1,5 +1,5 @@
 // Copyright 2021 Molecula Corp. All rights reserved.
-package http
+package pilosa
 
 import (
 	"bytes"
@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"net/http"
-	gohttp "net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
@@ -17,7 +16,6 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt"
-	pilosa "github.com/molecula/featurebase/v3"
 	"github.com/molecula/featurebase/v3/authn"
 	"golang.org/x/oauth2"
 
@@ -33,9 +31,9 @@ func TestPostIndexRequestUnmarshalJSON(t *testing.T) {
 		expected postIndexRequest
 		err      string
 	}{
-		{json: `{"options": {}}`, expected: postIndexRequest{Options: pilosa.IndexOptions{TrackExistence: true}}},
-		{json: `{"options": {"trackExistence": false}}`, expected: postIndexRequest{Options: pilosa.IndexOptions{TrackExistence: false}}},
-		{json: `{"options": {"keys": true}}`, expected: postIndexRequest{Options: pilosa.IndexOptions{Keys: true, TrackExistence: true}}},
+		{json: `{"options": {}}`, expected: postIndexRequest{Options: IndexOptions{TrackExistence: true}}},
+		{json: `{"options": {"trackExistence": false}}`, expected: postIndexRequest{Options: IndexOptions{TrackExistence: false}}},
+		{json: `{"options": {"keys": true}}`, expected: postIndexRequest{Options: IndexOptions{Keys: true, TrackExistence: true}}},
 		{json: `{"options": 4}`, err: "options is not map[string]interface{}"},
 		{json: `{"option": {}}`, err: "unknown key: option:map[]"},
 		{json: `{"options": {"badKey": "test"}}`, err: "unknown key: badKey:test"},
@@ -107,8 +105,8 @@ func decimalPtr(d pql.Decimal) *pql.Decimal {
 
 // Test fieldOption validation.
 func TestFieldOptionValidation(t *testing.T) {
-	timeQuantum := pilosa.TimeQuantum("YMD")
-	defaultCacheSize := uint32(pilosa.DefaultCacheSize)
+	timeQuantum := TimeQuantum("YMD")
+	defaultCacheSize := uint32(DefaultCacheSize)
 	tests := []struct {
 		json     string
 		expected postFieldRequest
@@ -116,17 +114,17 @@ func TestFieldOptionValidation(t *testing.T) {
 	}{
 		// FieldType: Set
 		{json: `{"options": {}}`, expected: postFieldRequest{Options: fieldOptions{
-			Type:      pilosa.FieldTypeSet,
-			CacheType: stringPtr(pilosa.DefaultCacheType),
+			Type:      FieldTypeSet,
+			CacheType: stringPtr(DefaultCacheType),
 			CacheSize: &defaultCacheSize,
 		}}},
 		{json: `{"options": {"type": "set"}}`, expected: postFieldRequest{Options: fieldOptions{
-			Type:      pilosa.FieldTypeSet,
-			CacheType: stringPtr(pilosa.DefaultCacheType),
+			Type:      FieldTypeSet,
+			CacheType: stringPtr(DefaultCacheType),
 			CacheSize: &defaultCacheSize,
 		}}},
 		{json: `{"options": {"type": "set", "cacheType": "lru"}}`, expected: postFieldRequest{Options: fieldOptions{
-			Type:      pilosa.FieldTypeSet,
+			Type:      FieldTypeSet,
 			CacheType: stringPtr("lru"),
 			CacheSize: &defaultCacheSize,
 		}}},
@@ -138,7 +136,7 @@ func TestFieldOptionValidation(t *testing.T) {
 		{json: `{"options": {"type": "int"}}`, err: "min is required for field type int"},
 		{json: `{"options": {"type": "int", "min": 0}}`, err: "max is required for field type int"},
 		{json: `{"options": {"type": "int", "min": 0, "max": 1001}}`, expected: postFieldRequest{Options: fieldOptions{
-			Type: pilosa.FieldTypeInt,
+			Type: FieldTypeInt,
 			Min:  decimalPtr(pql.NewDecimal(0, 0)),
 			Max:  decimalPtr(pql.NewDecimal(1001, 0)),
 		}}},
@@ -149,7 +147,7 @@ func TestFieldOptionValidation(t *testing.T) {
 		// FieldType: Time
 		{json: `{"options": {"type": "time"}}`, err: "timeQuantum is required for field type time"},
 		{json: `{"options": {"type": "time", "timeQuantum": "YMD"}}`, expected: postFieldRequest{Options: fieldOptions{
-			Type:        pilosa.FieldTypeTime,
+			Type:        FieldTypeTime,
 			TimeQuantum: &timeQuantum,
 		}}},
 		{json: `{"options": {"type": "time", "timeQuantum": "YMD", "min": 0}}`, err: "min does not apply to field type time"},
@@ -189,7 +187,7 @@ func readResponse(w *httptest.ResponseRecorder) ([]byte, error) {
 
 func TestAuthentication(t *testing.T) {
 	type evaluate func(w *httptest.ResponseRecorder, data []byte)
-	type endpoint func(w gohttp.ResponseWriter, r *gohttp.Request)
+	type endpoint func(w http.ResponseWriter, r *http.Request)
 	var (
 		ClientId         = "e9088663-eb08-41d7-8f65-efb5f54bbb71"
 		ClientSecret     = "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF"
@@ -230,8 +228,6 @@ func TestAuthentication(t *testing.T) {
 	// make a valid token
 	tkn := jwt.New(jwt.SigningMethodHS256)
 	claims := tkn.Claims.(jwt.MapClaims)
-	groupString, _ := authn.ToGob64([]authn.Group{{GroupID: "thing", GroupName: "whatever"}})
-	claims["molecula-idp-groups"] = groupString
 	claims["oid"] = "42"
 	claims["name"] = "todd"
 	validToken, err := tkn.SignedString([]byte(secretKey))
@@ -255,7 +251,7 @@ func TestAuthentication(t *testing.T) {
 	}
 	expiredToken = "Bearer " + expiredToken
 
-	validCookie := &gohttp.Cookie{
+	validCookie := &http.Cookie{
 		Name:     "molecula-chip",
 		Value:    token.AccessToken,
 		Path:     "/",
@@ -276,7 +272,7 @@ admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 		method   string
 		yamlData string
 		token    string
-		cookie   *gohttp.Cookie
+		cookie   *http.Cookie
 		handler  endpoint
 		fn       evaluate
 	}{
@@ -337,7 +333,7 @@ admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 			handler: h.handleCheckAuthentication,
 			fn: func(w *httptest.ResponseRecorder, data []byte) {
 				// no valid token in header == Unauthorized
-				if w.Result().StatusCode != gohttp.StatusUnauthorized {
+				if w.Result().StatusCode != http.StatusUnauthorized {
 					t.Errorf("expected http code 401, got: %+v", w.Result().StatusCode)
 				}
 			},
@@ -379,7 +375,7 @@ admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 			token:   "",
 			handler: h.handleUserInfo,
 			fn: func(w *httptest.ResponseRecorder, data []byte) {
-				if got := w.Result().StatusCode; got != gohttp.StatusForbidden {
+				if got := w.Result().StatusCode; got != http.StatusForbidden {
 					t.Errorf("expected 403, got %v", got)
 				}
 			},
@@ -487,7 +483,7 @@ admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 			path:   "/index/{index}/query",
 			kind:   "middleware",
 			cookie: validCookie,
-			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) {
+			handler: func(w http.ResponseWriter, r *http.Request) {
 				f := hOff.chkAuthZ(hOff.handlePostQuery, authz.Admin)
 				f(w, r)
 			},
@@ -501,9 +497,9 @@ admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 			name:   "MW-CreateIndexInsufficientPerms",
 			path:   "/index/abcd",
 			kind:   "bearer",
-			method: gohttp.MethodPost,
+			method: http.MethodPost,
 			token:  validToken,
-			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) {
+			handler: func(w http.ResponseWriter, r *http.Request) {
 				h := h
 				var p authz.GroupPermissions
 				if err := p.ReadPermissionsFile(strings.NewReader(permissions1)); err != nil {
@@ -515,7 +511,7 @@ admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 				f(w, r)
 			},
 			fn: func(w *httptest.ResponseRecorder, data []byte) {
-				if got, want := w.Result().StatusCode, gohttp.StatusForbidden; got != want {
+				if got, want := w.Result().StatusCode, http.StatusForbidden; got != want {
 					t.Errorf("expected %v, got %v", want, got)
 				}
 			},
@@ -527,13 +523,13 @@ admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 			path:  "/index/{index}/query",
 			kind:  "bearer",
 			token: validToken,
-			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) {
+			handler: func(w http.ResponseWriter, r *http.Request) {
 				h := h
 				f := h.chkAuthZ(h.handlePostQuery, authz.Write)
 				f(w, r)
 			},
 			fn: func(w *httptest.ResponseRecorder, data []byte) {
-				if got, want := w.Result().StatusCode, gohttp.StatusInternalServerError; got != want {
+				if got, want := w.Result().StatusCode, http.StatusInternalServerError; got != want {
 					t.Errorf("expected %v, got %v", want, got)
 				}
 			},
@@ -543,7 +539,7 @@ admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 			path:  "/index/{index}/query",
 			kind:  "bearer",
 			token: validToken,
-			handler: func(w gohttp.ResponseWriter, r *gohttp.Request) {
+			handler: func(w http.ResponseWriter, r *http.Request) {
 				h := h
 				var p authz.GroupPermissions
 				if err := p.ReadPermissionsFile(strings.NewReader(permissions1)); err != nil {
@@ -554,7 +550,7 @@ admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 				f(w, r)
 			},
 			fn: func(w *httptest.ResponseRecorder, data []byte) {
-				if got, want := w.Result().StatusCode, gohttp.StatusBadRequest; got != want {
+				if got, want := w.Result().StatusCode, http.StatusBadRequest; got != want {
 					t.Errorf("expected %v, got: %+v", want, got)
 				}
 			},
@@ -565,7 +561,7 @@ admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 		switch test.kind {
 		case "type1", "middleware":
 			t.Run(test.name, func(t *testing.T) {
-				r := httptest.NewRequest(gohttp.MethodGet, test.path, nil)
+				r := httptest.NewRequest(http.MethodGet, test.path, nil)
 				w := httptest.NewRecorder()
 				if test.cookie != nil {
 					r.AddCookie(test.cookie)
@@ -579,7 +575,7 @@ admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 			})
 		case "type2":
 			t.Run(test.name, func(t *testing.T) {
-				r := httptest.NewRequest(gohttp.MethodGet, test.path, nil)
+				r := httptest.NewRequest(http.MethodGet, test.path, nil)
 				w := httptest.NewRecorder()
 				r.Form = url.Values{}
 				r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -597,7 +593,7 @@ admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 		case "bearer":
 			t.Run(test.name, func(t *testing.T) {
 				if test.method == "" {
-					test.method = gohttp.MethodGet
+					test.method = http.MethodGet
 				}
 				r := httptest.NewRequest(test.method, test.path, nil)
 				w := httptest.NewRecorder()
@@ -628,8 +624,6 @@ func TestChkAuthN(t *testing.T) {
 	// make a valid token
 	tkn := jwt.New(jwt.SigningMethodHS256)
 	claims := tkn.Claims.(jwt.MapClaims)
-	groupString, _ := authn.ToGob64([]authn.Group{{GroupID: "thing", GroupName: "whatever"}})
-	claims["molecula-idp-groups"] = groupString
 	claims["oid"] = "42"
 	claims["name"] = "A. Token"
 	validToken, err := tkn.SignedString(a.SecretKey())
@@ -639,15 +633,7 @@ func TestChkAuthN(t *testing.T) {
 	validToken = "Bearer " + validToken
 
 	// make an invalid token
-	invalidKey, err := hex.DecodeString("DEADBEEDDEADBEEDDEADBEEDDEADBEEDDEADBEEDDEADBEEDDEADBEEDDEADBEED")
-	if err != nil {
-		t.Fatal(err)
-	}
-	invalidToken, err := tkn.SignedString(invalidKey)
-	if err != nil {
-		t.Fatal(err)
-	}
-	invalidToken = "Bearer " + invalidToken
+	invalidToken := "Bearer " + "thisis.a.bad.token"
 
 	// make an expired token
 	claims["exp"] = "1"

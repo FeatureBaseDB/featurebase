@@ -2307,10 +2307,6 @@ func (api *API) Info() serverInfo {
 	}
 }
 
-func (api *API) Inspect(ctx context.Context, req *InspectRequest) (*HolderInfo, error) {
-	return api.holder.Inspect(ctx, req)
-}
-
 // GetTranslateEntryReader provides an entry reader for key translation logs starting at offset.
 func (api *API) GetTranslateEntryReader(ctx context.Context, offsets TranslateOffsetMap) (_ TranslateEntryReader, err error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "API.GetTranslateEntryReader")

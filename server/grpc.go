@@ -1598,6 +1598,12 @@ func NewGRPCServer(opts ...grpcServerOption) (*grpcServer, error) {
 					return nil, err
 				}
 				LogQuery(ctx, info.FullMethod, req, server.logger)
+
+				// reset the molecula-chip cookie just in case the token was refreshed
+				md, ok := metadata.FromIncomingContext(ctx)
+				if uinfo, yeah := ctx.Value("userinfo").(*authn.UserInfo); ok && yeah {
+					server.auth.SetGRPCMetadata(ctx, md, uinfo.Token)
+				}
 				return handler(ctx, req)
 			},
 		))
@@ -1606,6 +1612,11 @@ func NewGRPCServer(opts ...grpcServerOption) (*grpcServer, error) {
 				ctx, err := Valid(ss.Context(), server.auth)
 				if err != nil {
 					return err
+				}
+				// reset the molecula-chip cookie just in case the token was refreshed
+				md, ok := metadata.FromIncomingContext(ctx)
+				if uinfo, yeah := ctx.Value("userinfo").(*authn.UserInfo); ok && yeah {
+					server.auth.SetGRPCMetadata(ctx, md, uinfo.Token)
 				}
 				return handler(srv, &wrappedStream{ss, ctx})
 			},
@@ -1645,7 +1656,7 @@ func LogQuery(ctx context.Context, method string, req interface{}, logger logger
 	}
 	switch r := req.(type) {
 	case *pb.QueryPQLRequest:
-		logger.Infof("GRPC: %v, %v, %v, %v, %v, %s", ip, ua, method, uinfo.UserID, uinfo.UserName, r.Pql)
+		logger.Infof("GRPC: %v, %v, %v, %v, %v, [%s]%s", ip, ua, method, uinfo.UserID, uinfo.UserName, r.Index, r.Pql)
 	case *pb.QuerySQLRequest:
 		logger.Infof("GRPC: %v, %v, %v, %v, %v, %s", ip, ua, method, uinfo.UserID, uinfo.UserName, r.Sql)
 	default:
@@ -1697,7 +1708,7 @@ func Valid(ctx context.Context, auth *authn.Auth) (context.Context, error) {
 	}
 
 	token := strings.TrimPrefix(authorization[0], "Bearer ")
-	uinfo, err := auth.Authenticate(token)
+	uinfo, err := auth.Authenticate(ctx, token)
 	if err != nil {
 		return ctx, status.Errorf(codes.Unauthenticated, err.Error())
 	}

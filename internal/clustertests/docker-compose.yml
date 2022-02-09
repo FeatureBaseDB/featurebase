@@ -4,7 +4,6 @@ services:
     build:
       context: ../..
       dockerfile: Dockerfile-clustertests
-    image: ptest
     environment:
       - PILOSA_NAME=pilosa1
       - PILOSA_ETCD_DIR=/root/.etcd
@@ -17,12 +16,11 @@ services:
     networks:
       - pilosanet
     command:
-      - "/featurebase server --bind pilosa1:10101"
+      - "/featurebase server --bind pilosa1:10101 ${CLUSTERTESTS_FB_ARGS}"
   pilosa2:
     build:
       context: ../..
       dockerfile: Dockerfile-clustertests
-    image: ptest
     environment:
       - PILOSA_NAME=pilosa2
       - PILOSA_ETCD_DIR=/root/.etcd
@@ -35,12 +33,11 @@ services:
     networks:
       - pilosanet
     command:
-      - "/featurebase server --bind pilosa2:10101"
+      - "/featurebase server --bind pilosa2:10101 ${CLUSTERTESTS_FB_ARGS}"
   pilosa3:
     build:
       context: ../..
       dockerfile: Dockerfile-clustertests
-    image: ptest
     environment:
       - PILOSA_NAME=pilosa3
       - PILOSA_ETCD_DIR=/root/.etcd
@@ -53,25 +50,32 @@ services:
     networks:
       - pilosanet
     command:
-      - "/featurebase server --bind pilosa3:10101"
+      - "/featurebase server --bind pilosa3:10101 ${CLUSTERTESTS_FB_ARGS}"
   client1:
     build:
-      context: .
+      context: ../..
+      dockerfile: Dockerfile-clustertests-client
     depends_on:
         - "pilosa1"
         - "pilosa2"
         - "pilosa3"
+        - "fakeidp"
     environment:
       - ENABLE_PILOSA_CLUSTER_TESTS=1
       - GO111MODULE=on
       - PROJECT=${PROJECT}
-      - ENABLE_AUTH=0
+      - ENABLE_AUTH=${ENABLE_AUTH}
     networks:
       - pilosanet
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     command:
       - "cd /go/src/github.com/molecula/featurebase/ && go test -mod=vendor -v -count=1 github.com/molecula/featurebase/v3/internal/clustertests"
-
+  fakeidp:
+    build:
+      context: .
+      dockerfile: Dockerfile-fakeIDP
+    networks:
+      - pilosanet
 networks: 
   pilosanet:

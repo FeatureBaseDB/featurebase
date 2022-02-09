@@ -55,7 +55,7 @@ type executor struct {
 	workCounter uint64
 
 	// Client used for remote requests.
-	client InternalQueryClient
+	client *InternalClient
 
 	// Maximum number of Set() or Clear() commands per request.
 	MaxWritesPerRequest int
@@ -74,7 +74,7 @@ type executor struct {
 // executorOption is a functional option type for pilosa.Executor
 type executorOption func(e *executor) error
 
-func optExecutorInternalQueryClient(c InternalQueryClient) executorOption {
+func optExecutorInternalQueryClient(c *InternalClient) executorOption {
 	return func(e *executor) error {
 		e.client = c
 		return nil
@@ -116,7 +116,6 @@ func emptyResult(c *pql.Call) interface{} {
 // newExecutor returns a new instance of Executor.
 func newExecutor(opts ...executorOption) *executor {
 	e := &executor{
-		client:         newNopInternalQueryClient(),
 		workerPoolSize: 2,
 	}
 	for _, opt := range opts {
@@ -1650,6 +1649,9 @@ func (d *DistinctTimestamp) Union(other DistinctTimestamp) DistinctTimestamp {
 	}
 	return DistinctTimestamp{Name: d.Name, Values: vals}
 }
+
+const ViewNotFound = Error("view not found")
+const FragmentNotFound = Error("fragment not found")
 
 func executeDistinctShardSet(ctx context.Context, qcx *Qcx, idx *Index, fieldName string, shard uint64, filterBitmap *roaring.Bitmap) (result *Row, err0 error) {
 	index := idx.Name()
@@ -3655,9 +3657,20 @@ func (e *executor) executeGroupByShard(ctx context.Context, qcx *Qcx, index stri
 	}
 
 	// Apply bases.
+	//
+	// SUP-139: The group value is shared across multiple groups so we can't
+	// add the base to each one. Instead, we need to track which ones have been
+	// seen already and avoid adding to those again in the future.
 	for i, base := range bases {
+		m := make(map[*int64]struct{})
+
 		for _, r := range results {
+			if _, ok := m[r.Group[i].Value]; ok {
+				continue
+			}
+
 			*r.Group[i].Value += base
+			m[r.Group[i].Value] = struct{}{}
 		}
 	}
 

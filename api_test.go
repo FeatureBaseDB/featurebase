@@ -5,11 +5,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"math"
 	"math/rand"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -22,7 +25,6 @@ import (
 	pilosa "github.com/molecula/featurebase/v3"
 	"github.com/molecula/featurebase/v3/authn"
 	"github.com/molecula/featurebase/v3/boltdb"
-	"github.com/molecula/featurebase/v3/http"
 	"github.com/molecula/featurebase/v3/server"
 	"github.com/molecula/featurebase/v3/shardwidth"
 	"github.com/molecula/featurebase/v3/test"
@@ -36,21 +38,21 @@ func TestAPI_Import(t *testing.T) {
 				pilosa.OptServerNodeID("node0"),
 				pilosa.OptServerClusterHasher(&offsetModHasher{}),
 				pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
-				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+				pilosa.OptServerOpenTranslateReader(pilosa.GetOpenTranslateReaderFunc(nil)),
 			)},
 		[]server.CommandOption{
 			server.OptCommandServerOptions(
 				pilosa.OptServerNodeID("node1"),
 				pilosa.OptServerClusterHasher(&offsetModHasher{}),
 				pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
-				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+				pilosa.OptServerOpenTranslateReader(pilosa.GetOpenTranslateReaderFunc(nil)),
 			)},
 		[]server.CommandOption{
 			server.OptCommandServerOptions(
 				pilosa.OptServerNodeID("node2"),
 				pilosa.OptServerClusterHasher(&offsetModHasher{}),
 				pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
-				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+				pilosa.OptServerOpenTranslateReader(pilosa.GetOpenTranslateReaderFunc(nil)),
 			)},
 	)
 	defer c.Close()
@@ -222,19 +224,19 @@ func TestAPI_ImportValue(t *testing.T) {
 			server.OptCommandServerOptions(
 				pilosa.OptServerNodeID("node0"),
 				pilosa.OptServerClusterHasher(&offsetModHasher{}),
-				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+				pilosa.OptServerOpenTranslateReader(pilosa.GetOpenTranslateReaderFunc(nil)),
 			)},
 		[]server.CommandOption{
 			server.OptCommandServerOptions(
 				pilosa.OptServerNodeID("node1"),
 				pilosa.OptServerClusterHasher(&offsetModHasher{}),
-				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+				pilosa.OptServerOpenTranslateReader(pilosa.GetOpenTranslateReaderFunc(nil)),
 			)},
 		[]server.CommandOption{
 			server.OptCommandServerOptions(
 				pilosa.OptServerNodeID("node2"),
 				pilosa.OptServerClusterHasher(&offsetModHasher{}),
-				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+				pilosa.OptServerOpenTranslateReader(pilosa.GetOpenTranslateReaderFunc(nil)),
 			)},
 	)
 	defer c.Close()
@@ -529,7 +531,7 @@ func TestAPI_Ingest(t *testing.T) {
 			server.OptCommandServerOptions(
 				pilosa.OptServerNodeID("node0"),
 				pilosa.OptServerClusterHasher(&offsetModHasher{}),
-				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+				pilosa.OptServerOpenTranslateReader(pilosa.GetOpenTranslateReaderFunc(nil)),
 			)},
 	)
 	defer c.Close()
@@ -648,7 +650,7 @@ func BenchmarkIngest(b *testing.B) {
 			server.OptCommandServerOptions(
 				pilosa.OptServerNodeID("node0"),
 				pilosa.OptServerClusterHasher(&offsetModHasher{}),
-				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+				pilosa.OptServerOpenTranslateReader(pilosa.GetOpenTranslateReaderFunc(nil)),
 			)},
 	)
 	defer c.Close()
@@ -709,7 +711,7 @@ func TestAPI_ClearFlagForImportAndImportValues(t *testing.T) {
 			server.OptCommandServerOptions(
 				pilosa.OptServerNodeID("node0"),
 				pilosa.OptServerClusterHasher(&offsetModHasher{}),
-				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+				pilosa.OptServerOpenTranslateReader(pilosa.GetOpenTranslateReaderFunc(nil)),
 			)},
 	)
 	defer c.Close()
@@ -1363,7 +1365,9 @@ func TestVariousApiTranslateCalls(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%v: could not create test index", err)
 		}
-		_, err = idx.CreateFieldIfNotExistsWithOptions("field", &pilosa.FieldOptions{Keys: false})
+		if _, err = idx.CreateFieldIfNotExistsWithOptions("field", &pilosa.FieldOptions{Keys: false}); err != nil {
+			t.Fatalf("creating field: %v", err)
+		}
 		t.Run("translateIndexDbOnNilIndex",
 			func(t *testing.T) {
 				err := api.TranslateIndexDB(context.Background(), "nonExistentIndex", 0, r)
@@ -1430,7 +1434,7 @@ func TestAPI_RBFDebugInfo(t *testing.T) {
 			server.OptCommandServerOptions(
 				pilosa.OptServerNodeID("node0"),
 				pilosa.OptServerClusterHasher(&offsetModHasher{}),
-				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+				pilosa.OptServerOpenTranslateReader(pilosa.GetOpenTranslateReaderFunc(nil)),
 			)},
 	)
 	defer c.Close()
@@ -1448,11 +1452,6 @@ func TestAPI_RBFDebugInfo(t *testing.T) {
 func makeUser(t *testing.T, groups []authn.Group, name, secret string) *authn.UserInfo {
 	tkn := jwt.New(jwt.SigningMethodHS256)
 	claims := tkn.Claims.(jwt.MapClaims)
-	groupString, err := authn.ToGob64(groups)
-	if err != nil {
-		t.Fatalf("gobbing groups %v", err)
-	}
-	claims["molecula-idp-groups"] = groupString
 	claims["oid"] = "42"
 	claims["name"] = name
 	secretKey, _ := hex.DecodeString(secret)
@@ -1473,7 +1472,6 @@ func makeUser(t *testing.T, groups []authn.Group, name, secret string) *authn.Us
 }
 
 func TestAuth_MultiNode(t *testing.T) {
-
 	// create permissions file
 	permissions := `
 "user-groups":
@@ -1482,6 +1480,43 @@ func TestAuth_MultiNode(t *testing.T) {
   "dca35310-ecda-4f23-86cd-876aee55906f":
     "test": "write"
 admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
+	adminUser := makeUser(t, []authn.Group{{GroupID: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe", GroupName: "adminGroup"}}, "admin", "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF")
+	adminCtx := context.WithValue(
+		context.Background(),
+		"userinfo",
+		adminUser,
+	)
+	readUser := makeUser(t, []authn.Group{{GroupID: "dca35310-ecda-4f23-86cd-876aee55906b", GroupName: "readGroup"}}, "reader", "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF")
+	readCtx := context.WithValue(
+		context.Background(),
+		"userinfo",
+		readUser,
+	)
+	writeUser := makeUser(t, []authn.Group{{GroupID: "dca35310-ecda-4f23-86cd-876aee55906f", GroupName: "writeGroup"}}, "writer", "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEED")
+	writeCtx := context.WithValue(
+		context.Background(),
+		"userinfo",
+		writeUser,
+	)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		token, ok := r.Header["Authorization"]
+		if !ok || len(token) == 0 {
+			http.Error(w, "BAD REQUEST", http.StatusBadRequest)
+			return
+		}
+		g := []authn.Group{}
+		switch token[0] {
+		case adminUser.Token:
+			g = adminUser.Groups
+		case readUser.Token:
+			g = readUser.Groups
+		case writeUser.Token:
+			g = writeUser.Groups
+		}
+		if err := json.NewEncoder(w).Encode(authn.Groups{Groups: g}); err != nil {
+			t.Fatalf("unexpected error marshalling groups response: %v", err)
+		}
+	}))
 
 	// authentication on
 	auth := server.Auth{
@@ -1490,7 +1525,7 @@ admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 		ClientSecret:     "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF",
 		AuthorizeURL:     "https://login.microsoftonline.com/4a137d66-d161-4ae4-b1e6-07e9920874b8/oauth2/v2.0/authorize",
 		TokenURL:         "https://login.microsoftonline.com/4a137d66-d161-4ae4-b1e6-07e9920874b8/oauth2/v2.0/token",
-		GroupEndpointURL: "https://graph.microsoft.com/v1.0/me/transitiveMemberOf/microsoft.graph.group?$count=true",
+		GroupEndpointURL: srv.URL,
 		RedirectBaseURL:  "https://localhost:10101",
 		LogoutURL:        "https://login.microsoftonline.com/common/oauth2/v2.0/logout",
 		Scopes:           []string{"https://graph.microsoft.com/.default", "offline_access"},
@@ -1561,22 +1596,6 @@ f9Oeos0UUothgiDktdQHxdNEwLjQf7lJJBzV+5OtwswCWA==
 		},
 	)
 	defer c.Close()
-
-	adminCtx := context.WithValue(
-		context.Background(),
-		"userinfo",
-		makeUser(t, []authn.Group{{GroupID: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe", GroupName: "adminGroup"}}, "admin", config.Auth.SecretKey),
-	)
-	readCtx := context.WithValue(
-		context.Background(),
-		"userinfo",
-		makeUser(t, []authn.Group{{GroupID: "dca35310-ecda-4f23-86cd-876aee55906b", GroupName: "readGroup"}}, "reader", config.Auth.SecretKey),
-	)
-	writeCtx := context.WithValue(
-		context.Background(),
-		"userinfo",
-		makeUser(t, []authn.Group{{GroupID: "dca35310-ecda-4f23-86cd-876aee55906f", GroupName: "writeGroup"}}, "writer", config.Auth.SecretKey),
-	)
 
 	primaryAPI := c.GetPrimary().API
 

@@ -2,30 +2,12 @@
 package pilosa
 
 import (
-	"runtime"
 	"testing"
 	"time"
 
 	"github.com/molecula/featurebase/v3/storage"
 	"github.com/molecula/featurebase/v3/testhook"
 )
-
-// Ensure the file handle count is working
-func TestCountOpenFiles(t *testing.T) {
-	roaringOnlyTest(t)
-
-	// Windows is not supported yet
-	if runtime.GOOS == "windows" {
-		t.Skip("Skipping unsupported countOpenFiles test on Windows.")
-	}
-	count, err := countOpenFiles()
-	if err != nil {
-		t.Errorf("countOpenFiles failed: %s", err)
-	}
-	if count == 0 {
-		t.Error("countOpenFiles returned invalid value 0.")
-	}
-}
 
 func TestMonitorAntiEntropyZero(t *testing.T) {
 

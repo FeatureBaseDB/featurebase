@@ -93,10 +93,6 @@ func (i *Index) NewTx(txo Txo) Tx {
 	return i.holder.txf.NewTx(txo)
 }
 
-func (i *Index) NeedsSnapshot() bool {
-	return i.holder.txf.NeedsSnapshot()
-}
-
 // CreatedAt is an timestamp for a specific version of an index.
 func (i *Index) CreatedAt() int64 {
 	i.mu.RLock()
