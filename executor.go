@@ -22,6 +22,7 @@ import (
 	"github.com/molecula/featurebase/v3/proto"
 	"github.com/molecula/featurebase/v3/roaring"
 	"github.com/molecula/featurebase/v3/shardwidth"
+	"github.com/molecula/featurebase/v3/task"
 	"github.com/molecula/featurebase/v3/testhook"
 	"github.com/molecula/featurebase/v3/topology"
 	"github.com/molecula/featurebase/v3/tracing"
@@ -51,9 +52,6 @@ type executor struct {
 	Node    *topology.Node
 	Cluster *cluster
 
-	// how many jobs the work queue has seen
-	workCounter uint64
-
 	// Client used for remote requests.
 	client *InternalClient
 
@@ -61,10 +59,9 @@ type executor struct {
 	MaxWritesPerRequest int
 
 	shutdown       bool
-	workMu         sync.RWMutex
-	workersWG      sync.WaitGroup
+	workers        *task.Pool
+	workerPoolMu   sync.Mutex
 	workerPoolSize int
-	currentWorkers int64
 	work           chan job
 
 	// Maximum per-request memory usage (Extract() only)
@@ -130,72 +127,11 @@ func newExecutor(opts ...executorOption) *executor {
 	// workloads. Possible that it could be smaller.
 	e.work = make(chan job, e.workerPoolSize)
 	_ = testhook.Opened(NewAuditor(), e, nil)
-	for i := 0; i < e.workerPoolSize; i++ {
-		e.addWorker()
-	}
-	go func() {
-		// background task: every so often, check to see whether we have
-		// work in the queue but none has been taken for a while. if so, we
-		// need more workers.
-		prev := atomic.LoadUint64(&e.workCounter)
-		periodic := time.NewTicker(50 * time.Millisecond)
-		defer periodic.Stop()
-		running := true
-		idle := 0
-		for running {
-			<-periodic.C
-			func() {
-				e.workMu.RLock()
-				defer e.workMu.RUnlock()
-				if e.shutdown {
-					running = false
-					return
-				}
-				if len(e.work) == 0 {
-					idle++
-					if idle > 10 && atomic.LoadInt64(&e.currentWorkers) > int64(e.workerPoolSize*2) {
-						select {
-						case e.work <- job{idleHands: true}:
-							// we closed an excess worker
-						default:
-							// somehow between our test above and now the work
-							// queue FILLED UP and we stoically accept this
-						}
-						idle = 0
-					}
-					return
-				}
-				next := atomic.LoadUint64(&e.workCounter)
-				if next == prev {
-					e.addWorker()
-				}
-				prev = next
-			}()
-		}
-	}()
+	e.workers = task.NewPool(e.workerPoolSize, e.doOneJob, e)
 	return e
 }
 
-func (e *executor) addWorker() {
-	e.workersWG.Add(1)
-	n := atomic.AddInt64(&e.currentWorkers, 1)
-	if e.Holder != nil {
-		e.Holder.Stats.Gauge("worker_total", float64(n), 0)
-	}
-
-	go func() {
-		defer e.workersWG.Done()
-		e.worker(e.work)
-		n := atomic.AddInt64(&e.currentWorkers, -1)
-		if e.Holder != nil {
-			e.Holder.Stats.Gauge("worker_total", float64(n), 0)
-		}
-	}()
-}
-
 func (e *executor) Close() error {
-	e.workMu.Lock()
-	defer e.workMu.Unlock()
 	if e.shutdown {
 		// otherwise close(e.work) can result in
 		// panic: close of closed channel.
@@ -206,15 +142,23 @@ func (e *executor) Close() error {
 	e.shutdown = true
 	_ = testhook.Closed(NewAuditor(), e, nil)
 	close(e.work)
-	e.workersWG.Wait()
+	e.workers.Close()
 	return nil
+}
+
+// PoolSize is exported to let the task pool update us
+func (e *executor) PoolSize(n int) {
+	if e.Holder != nil {
+		e.Holder.Stats.Gauge("worker_total", float64(n), 0)
+	}
 }
 
 // InitStats initializes stats counters. Must be called after Holder set.
 func (e *executor) InitStats() {
 	if e.Holder != nil {
 		e.Holder.Stats.Count("job_total", 0, 0)
-		e.Holder.Stats.Gauge("worker_total", float64(atomic.LoadInt64(&e.currentWorkers)), 0)
+		l, _, _ := e.workers.Stats()
+		e.Holder.Stats.Gauge("worker_total", float64(l), 0)
 	}
 }
 
@@ -6068,9 +6012,25 @@ type job struct {
 	idleHands       bool
 }
 
+// doOneJob had one job. *disappointed sigh*
+func (e *executor) doOneJob() {
+	j, ok := <-e.work
+	if !ok {
+		return
+	}
+	// Skip out early if the context is done, but still send
+	// an ack so mapperLocal can be sure we aren't about to
+	// work on something it sent us.
+	if err := j.ctx.Err(); err != nil {
+		j.resultChan <- mapResponse{result: nil, err: err}
+		return
+	}
+	result, err := j.mapFn(j.ctx, j.shard, &mapOptions{memoryAvailable: j.memoryAvailable})
+	j.resultChan <- mapResponse{result: result, err: err}
+}
+
 func (e *executor) worker(work chan job) {
 	for j := range work {
-		atomic.AddUint64(&e.workCounter, 1)
 		e.Holder.Stats.Count("job_total", 1, 0)
 		if j.idleHands {
 			return
@@ -6096,9 +6056,8 @@ func (e *executor) mapperLocal(ctx context.Context, shards []uint64, mapFn mapFu
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	done := ctx.Done()
-	e.workMu.RLock()
-	defer e.workMu.RUnlock()
-
+	e.workerPoolMu.Lock()
+	defer e.workerPoolMu.Unlock()
 	if e.shutdown {
 		return nil, errShutdown
 	}

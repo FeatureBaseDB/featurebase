@@ -70,6 +70,9 @@ type Holder struct {
 	sharder     disco.Sharder
 	serializer  Serializer
 
+	// executor, which we use only to get access to its worker pool
+	executor *executor
+
 	// Close management
 	wg      sync.WaitGroup
 	closing chan struct{}
