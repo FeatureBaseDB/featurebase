@@ -379,10 +379,12 @@ gauntlet:
   timeout: 4h
   image: registry.gitlab.com/gitlab-org/cloud-deploy/aws-base:latest
   variables:
-    PROFILE: "service-terraform"
+    FBCI_PROFILE: "service-terraform"
+    INFRA_PROFILE: "service-gitlab"
     AWS_SSH_PRIVATE_KEY: $AWS_FBCI_SSH_KEY
     AWS_ACCESS_KEY_ID: $AWS_FBCI_ACCESS_KEY_ID
     AWS_SECRET_ACCESS_KEY: $AWS_FBCI_SECRET_ACCESS_KEY
+    ASG_NAME: "gitlab-runners"
     TF_VAR_cluster_prefix: ""
   tags:
     - aws
@@ -398,7 +400,9 @@ gauntlet:
     - aws configure set aws_access_key_id $AWS_FBCI_ACCESS_KEY_ID
     - aws configure set aws_secret_access_key $AWS_FBCI_SECRET_ACCESS_KEY
     - aws configure set region "us-east-2"
-    - aws configure set aws_profile $PROFILE
+    - aws configure set aws_profile $FBCI_PROFILE
+    - aws configure set aws_access_key_id $AWS_INFRA_ACCESS_KEY_ID --profile $INFRA_PROFILE
+    - aws configure set aws_secret_access_key $AWS_INFRA_SECRET_ACCESS_KEY --profile $INFRA_PROFILE
     - echo $AWS_FBCI_SSH_KEY > gitlab-featurebase-ci.pem
     - chmod 400 gitlab-featurebase-ci.pem
     - 'which ssh-agent || ( apt-get update -y && apt-get install openssh-client -y )'
@@ -415,11 +419,17 @@ gauntlet:
     - export PATH=$PATH:/usr/local/go/bin
     - TF_VAR_cluster_prefix="gauntlet-$(openssl rand -base64 12 | tr -d /=+ | cut -c -16)"
     - echo "Cluster Prefix --> $TF_VAR_cluster_prefix"
+    - TF_VAR_branch=$CI_COMMIT_BRANCH
+    - echo "Branch --> $TF_VAR_branch"
+    - export INSTANCE_ID=$(curl --silent --fail "http://169.254.169.254/latest/meta-data/instance-id" | tee instance_id)
+    - aws autoscaling set-instance-protection --instance-ids "$INSTANCE_ID" --auto-scaling-group-name $ASG_NAME --protected-from-scale-in --profile $INFRA_PROFILE
   script:
     - ./qa/scripts/setupSamsungGauntlet.sh
     - ./qa/scripts/testSamsungGauntlet.sh
   after_script:
-    - ./qa/scripts/teardownSamsungGauntlet.sh
+    - ./qa/scripts/teardownSamsungGauntlet.sh || true # leaving dangling resources is better than dangling ASG instances that can't be terminated
+    - export INSTANCE_ID=$(cat instance_id)
+    - aws autoscaling set-instance-protection --instance-ids "$INSTANCE_ID" --auto-scaling-group-name $ASG_NAME --no-protected-from-scale-in --profile $INFRA_PROFILE
   
 s3 dump:
   stage: post build
