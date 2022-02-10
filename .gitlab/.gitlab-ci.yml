@@ -419,8 +419,6 @@ gauntlet:
     - export PATH=$PATH:/usr/local/go/bin
     - TF_VAR_cluster_prefix="gauntlet-$(openssl rand -base64 12 | tr -d /=+ | cut -c -16)"
     - echo "Cluster Prefix --> $TF_VAR_cluster_prefix"
-    - TF_VAR_branch=$CI_COMMIT_BRANCH
-    - echo "Branch --> $TF_VAR_branch"
     - export INSTANCE_ID=$(curl --silent --fail "http://169.254.169.254/latest/meta-data/instance-id" | tee instance_id)
     - aws autoscaling set-instance-protection --instance-ids "$INSTANCE_ID" --auto-scaling-group-name $ASG_NAME --protected-from-scale-in --profile $INFRA_PROFILE
   script:
