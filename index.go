@@ -264,36 +264,18 @@ func (i *Index) openFields(idx *disco.Index) error {
 	}
 	defer f.Close()
 
-	fis, err := f.Readdir(0)
-	if err != nil {
-		return errors.Wrap(err, "reading directory")
-	}
 	eg, ctx := errgroup.WithContext(context.Background())
 	var mu sync.Mutex
 
-fileLoop:
-	for _, loopFi := range fis {
-		select {
-		case <-ctx.Done():
-			break fileLoop
-		default:
-			fi := loopFi
-			if !fi.IsDir() {
-				continue
-			}
-
-			var cfm *CreateFieldMessage = &CreateFieldMessage{}
-			var err error
-
-			// Only continue with fields which are present in the provided,
-			// non-nil index schema. The reason we have to check for idx != nil
-			// here is because there are tests which call index.Open without
-			// having a disco.Index available.
-			if idx != nil {
-				fld, ok := idx.Fields[fi.Name()]
-				if !ok {
-					continue
-				}
+	if idx != nil {
+	fileLoop:
+		for fname, fld := range idx.Fields {
+			select {
+			case <-ctx.Done():
+				break fileLoop
+			default:
+				var cfm *CreateFieldMessage = &CreateFieldMessage{}
+				var err error
 
 				// Decode the CreateFieldMessage from the schema data in order to
 				// get its metadata.
@@ -301,22 +283,22 @@ fileLoop:
 				if err != nil {
 					return errors.Wrap(err, "decoding create field message")
 				}
+
+				indexQueue <- struct{}{}
+				eg.Go(func() error {
+					defer func() {
+						<-indexQueue
+					}()
+					i.holder.Logger.Debugf("open field: %s", fname)
+
+					_, err := i.openField(&mu, cfm, fname)
+					if err != nil {
+						return errors.Wrap(err, "opening field")
+					}
+
+					return nil
+				})
 			}
-
-			indexQueue <- struct{}{}
-			eg.Go(func() error {
-				defer func() {
-					<-indexQueue
-				}()
-				i.holder.Logger.Debugf("open field: %s", fi.Name())
-
-				_, err := i.openField(&mu, cfm, fi.Name())
-				if err != nil {
-					return errors.Wrap(err, "opening field")
-				}
-
-				return nil
-			})
 		}
 	}
 	err = eg.Wait()

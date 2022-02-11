@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
-	"strings"
 	"sync"
 	"time"
 
@@ -332,23 +331,7 @@ func (h *Holder) Open() error {
 	}
 	defer f.Close()
 
-	fis, err := f.Readdir(0)
-	if err != nil {
-		return errors.Wrap(err, "reading directory")
-	}
-
-	for _, fi := range fis {
-		// Skip files or hidden directories.
-		if !fi.IsDir() || strings.HasPrefix(fi.Name(), ".") {
-			continue
-		}
-
-		// Only continue with indexes which are present in schema.
-		idx, ok := schema[fi.Name()]
-		if !ok {
-			continue
-		}
-
+	for idxKey, idx := range schema {
 		// decode the CreateIndexMessage from the schema data in order to
 		// get its metadata, such as CreateAt.
 		cim, err := decodeCreateIndexMessage(h.serializer, idx.Data)
@@ -356,11 +339,11 @@ func (h *Holder) Open() error {
 			return errors.Wrap(err, "decoding create index message")
 		}
 
-		h.Logger.Printf("opening index: %s", filepath.Base(fi.Name()))
+		h.Logger.Printf("opening index: %s", idxKey)
 
-		index, err := h.newIndex(h.IndexPath(filepath.Base(fi.Name())), filepath.Base(fi.Name()))
+		index, err := h.newIndex(h.IndexPath(idxKey), idxKey)
 		if errors.Cause(err) == ErrName {
-			h.Logger.Errorf("opening index: %s, err=%s", fi.Name(), err)
+			h.Logger.Errorf("opening index: %s, err=%s", idxKey, err)
 			continue
 		} else if err != nil {
 			return errors.Wrap(err, "opening index")
