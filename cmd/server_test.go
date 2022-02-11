@@ -85,7 +85,6 @@ func TestServerConfig(t *testing.T) {
 				"--profile.mutex-fraction", "8290",
 			},
 			env: map[string]string{
-				"PILOSA_CLUSTER_HOSTS":          "localhost:1110,localhost:1111",
 				"PILOSA_TRANSLATION_MAP_SIZE":   "100000",
 				"PILOSA_PROFILE_BLOCK_RATE":     "9123",
 				"PILOSA_PROFILE_MUTEX_FRACTION": "444",
