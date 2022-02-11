@@ -35,6 +35,16 @@ func (q *Query) ExpandVars(vars map[string]interface{}) (*Query, error) {
 	return &other, nil
 }
 
+// HasCall returns true if q contains the given call name.
+func (q *Query) HasCall(name string) bool {
+	for _, c := range q.Calls {
+		if c.HasCall(name) {
+			return true
+		}
+	}
+	return false
+}
+
 func (q *Query) startCall(name string) {
 	// Coerce every name into a canonical form if we know of one.
 	if canon, ok := canonicalCaps[strings.ToLower(name)]; ok {
@@ -347,6 +357,20 @@ type Call struct {
 	Children    []*Call
 	Type        CallType
 	Precomputed map[uint64]interface{}
+}
+
+// HasCall returns true if q contains the given call name.
+func (c *Call) HasCall(name string) bool {
+	if c.Name == name {
+		return true
+	}
+
+	for _, child := range c.Children {
+		if child.HasCall(name) {
+			return true
+		}
+	}
+	return false
 }
 
 // callInfo defines the arguments allowed for a particular PQL call, and

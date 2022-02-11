@@ -15,8 +15,10 @@ services:
       - PILOSA_CLUSTER_REPLICAS=3
     networks:
       - pilosanet
+    volumes:
+      - ./results:/results 
     command:
-      - "/featurebase server --bind pilosa1:10101 ${CLUSTERTESTS_FB_ARGS}"
+      - "cd /go/src/github.com/molecula/featurebase/cmd/featurebase && /featurebase -test.run=TestRunMain -test.coverprofile=/results/coverage-server1.out server --bind pilosa1:10101 ${CLUSTERTESTS_FB_ARGS}"
   pilosa2:
     build:
       context: ../..
@@ -32,8 +34,10 @@ services:
       - PILOSA_CLUSTER_REPLICAS=3
     networks:
       - pilosanet
+    volumes:
+      - ./results:/results
     command:
-      - "/featurebase server --bind pilosa2:10101 ${CLUSTERTESTS_FB_ARGS}"
+      - "cd /go/src/github.com/molecula/featurebase/cmd/featurebase && /featurebase -test.run=TestRunMain -test.coverprofile=/results/coverage-server2.out server --bind pilosa2:10101 ${CLUSTERTESTS_FB_ARGS}"
   pilosa3:
     build:
       context: ../..
@@ -49,8 +53,10 @@ services:
       - PILOSA_CLUSTER_REPLICAS=3
     networks:
       - pilosanet
+    volumes:
+      - ./results:/results
     command:
-      - "/featurebase server --bind pilosa3:10101 ${CLUSTERTESTS_FB_ARGS}"
+      - "cd /go/src/github.com/molecula/featurebase/cmd/featurebase && /featurebase -test.run=TestRunMain -test.coverprofile=/results/coverage-server3.out server --bind pilosa3:10101 ${CLUSTERTESTS_FB_ARGS}"
   client1:
     build:
       context: ../..
@@ -69,8 +75,9 @@ services:
       - pilosanet
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - ./results:/results
     command:
-      - "cd /go/src/github.com/molecula/featurebase/ && go test -mod=vendor -v -count=1 github.com/molecula/featurebase/v3/internal/clustertests"
+      - "cd /go/src/github.com/molecula/featurebase/ && go test -mod=vendor -v -count=1 -covermode=atomic -coverprofile=/results/coverage-clustertests.out -coverpkg=./... -json github.com/molecula/featurebase/v3/internal/clustertests | tee /results/report-clustertests.out"
   fakeidp:
     build:
       context: .

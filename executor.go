@@ -257,7 +257,7 @@ func (e *executor) Execute(ctx context.Context, index string, q *pql.Query, shar
 		opt = &execOptions{}
 	}
 	// Default maximum memory, if not passed in.
-	if opt.MaxMemory == 0 {
+	if opt.MaxMemory == 0 && q.HasCall("Extract") {
 		opt.MaxMemory = e.maxMemory
 	}
 
