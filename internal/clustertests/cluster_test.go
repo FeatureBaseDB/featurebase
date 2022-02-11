@@ -2,6 +2,7 @@
 package clustertest
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"fmt"
@@ -16,6 +17,7 @@ import (
 	"github.com/golang-jwt/jwt"
 	pilosa "github.com/molecula/featurebase/v3"
 	"github.com/molecula/featurebase/v3/authn"
+	"github.com/molecula/featurebase/v3/ctl"
 	"github.com/molecula/featurebase/v3/disco"
 	"github.com/molecula/featurebase/v3/encoding/proto"
 	"github.com/molecula/featurebase/v3/logger"
@@ -178,17 +180,18 @@ func TestClusterStuff(t *testing.T) {
 		var backupCmd *exec.Cmd
 		tmpdir := t.TempDir()
 
+		// collect code coverage while doing backup using an instrumented binary by calling
+		// a wrapper test (TestRunMain) for the main entrypoint of featurebase
+		args := []string{"-test.run=TestRunMain", "-test.coverprofile=/results/coverage-backup.out", "backup",
+			"--host=pilosa1:10101", fmt.Sprintf("--output=%s", tmpdir+"/backuptest")}
 		if auth {
-			if backupCmd, err = startCmd(
-				"featurebase", "backup", "--host=pilosa1:10101", fmt.Sprintf("--output=%s", tmpdir+"/backuptest"), "--auth-token", token); err != nil {
-				t.Fatalf("sending backup command: %v", err)
-			}
-		} else {
-			if backupCmd, err = startCmd(
-				"featurebase", "backup", "--host=pilosa1:10101", fmt.Sprintf("--output=%s", tmpdir+"/backuptest")); err != nil {
-				t.Fatalf("sending backup command: %v", err)
-			}
+			args = append(args, fmt.Sprintf("--auth-token=%s", token))
 		}
+
+		if backupCmd, err = startCmd("/featurebase", args...); err != nil {
+			t.Fatalf("sending backup command: %v", err)
+		}
+
 		time.Sleep(time.Second * 5)
 		if err = sendCmd("docker", "start", container(t, "pilosa1")); err != nil {
 			t.Fatalf("sending start command: %v", err)
@@ -216,15 +219,15 @@ func TestClusterStuff(t *testing.T) {
 		}
 
 		var restoreCmd *exec.Cmd
+		args = []string{"-test.run=TestRunMain", "-test.coverprofile=/results/coverage-restore.out", "restore",
+			"-s", tmpdir + "/backuptest", "--host", "pilosa1:10101"}
 		if auth {
-			if restoreCmd, err = startCmd("featurebase", "restore", "-s", tmpdir+"/backuptest", "--host", "pilosa1:10101", "--auth-token", token); err != nil {
-				t.Fatalf("starting restore: %v", err)
-			}
-		} else {
-			if restoreCmd, err = startCmd("featurebase", "restore", "-s", tmpdir+"/backuptest", "--host", "pilosa1:10101"); err != nil {
-				t.Fatalf("starting restore: %v", err)
-			}
+			args = append(args, fmt.Sprintf("--auth-token=%s", token))
 		}
+		if restoreCmd, err = startCmd("/featurebase", args...); err != nil {
+			t.Fatalf("starting restore: %v", err)
+		}
+
 		time.Sleep(time.Millisecond * 50)
 		if err = sendCmd("docker", "stop", container(t, "pilosa2")); err != nil {
 			t.Fatalf("sending stop command: %v", err)
@@ -250,16 +253,23 @@ func TestClusterStuff(t *testing.T) {
 		// now do backup with all nodes down and too short a timeout
 		// so it fails. Has be to be all 3 because the cluster has
 		// replicas=3 and the backup command will retry on replicas.
+		// featurebase backup cmd can't be used for a test expected to fail
+		// because code coverage report won't be generated.
+		buf := bytes.Buffer{}
+		rder := []byte{}
+		stdin := bytes.NewReader(rder)
+		stdout := bufio.NewWriter(&buf)
+		stderr := bufio.NewWriter(&buf)
+		backup := ctl.NewBackupCommand(stdin, stdout, stderr)
+		backup.Host = "--host=pilosa1:10101"
+		backup.OutputDir = tmpdir + "/backuptest2"
+		backup.RetryPeriod = time.Millisecond * 200
 		if auth {
-			if backupCmd, err = startCmd(
-				"featurebase", "backup", "--host=pilosa1:10101", fmt.Sprintf("--output=%s", tmpdir+"/backuptest2"), "--retry-period=200ms", "--auth-token", token); err != nil {
-				t.Fatalf("sending second backup command: %v", err)
-			}
-		} else {
-			if backupCmd, err = startCmd(
-				"featurebase", "backup", "--host=pilosa1:10101", fmt.Sprintf("--output=%s", tmpdir+"/backuptest2"), "--retry-period=200ms"); err != nil {
-				t.Fatalf("sending second backup command: %v", err)
-			}
+			backup.AuthToken = token
+		}
+
+		if err = backup.Run(context.Background()); err == nil {
+			t.Fatal("backup command should have errored but didn't")
 		}
 
 		t.Logf("sleeping 8s")
@@ -275,10 +285,6 @@ func TestClusterStuff(t *testing.T) {
 		if err = sendCmd("docker", "unpause", container(t, "pilosa3")); err != nil {
 			t.Fatalf("sending unpause command: %v", err)
 		}
-		if err = backupCmd.Wait(); err == nil {
-			t.Fatal("backup command should have errored but didn't")
-		}
-
 	})
 }
 
