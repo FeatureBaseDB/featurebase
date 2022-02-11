@@ -11,6 +11,6 @@ else
     echo "TF_VAR_cluster_prefix is set to '$TF_VAR_cluster_prefix'"; 
 fi
 
-$SCRIPT_DIR/ableSetupGauntlet.sh
-$SCRIPT_DIR/ableTestGauntlet.sh
-$SCRIPT_DIR/ableTeardownGauntlet.sh
+$SCRIPT_DIR/ableSetup.sh
+$SCRIPT_DIR/ableTest.sh
+$SCRIPT_DIR/ableTeardown.sh

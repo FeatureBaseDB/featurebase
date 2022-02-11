@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# To run script: ./SetupGauntlet.sh
+# To run script: ./ableSetup.sh
 export TF_IN_AUTOMATION=1
 
 if [ -z ${TF_VAR_cluster_prefix+x} ]; then 
@@ -11,7 +11,7 @@ else
 fi
 
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
-source $SCRIPT_DIR/utilCluster.sh
+source $SCRIPT_DIR/../..utilCluster.sh
 
 pushd ./qa/tf/gauntlet/able
 echo "Running terraform init..."

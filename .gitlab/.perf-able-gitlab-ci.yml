@@ -1,0 +1,11 @@
+stages:
+  - loadtest
+
+loadtest:
+  image:
+    name: loadimpact/k6:latest
+    entrypoint: ['']
+  stage: loadtest
+  script:
+    - echo "executing local k6 in k6 container..."
+    - k6 run ./qa/scripts/perf/able/script.js

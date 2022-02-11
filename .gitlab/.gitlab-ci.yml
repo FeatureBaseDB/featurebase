@@ -12,6 +12,7 @@ stages:
   - build
   - integration
   - gauntlet
+  - performance
   - post build
 
 smoke build:
@@ -467,3 +468,11 @@ s3 dump:
     - job: build for darwin arm64
     - job: build for linux amd64
     - job: build for linux arm64
+
+perf_able:
+  stage: performance
+  trigger:
+    include: .perf-able-gitlab-ci.yml
+  rules:
+    - changes:
+      - featurebase/*
