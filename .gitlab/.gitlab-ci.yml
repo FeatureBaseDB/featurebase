@@ -90,7 +90,7 @@ run go tests race:
   retry: 1
   script:
     - echo "Running featurebase race tests..."
-    - go test -race -timeout=90m ./...
+    - go test -race -v -timeout=90m ./...
   tags:
     - aws
 
