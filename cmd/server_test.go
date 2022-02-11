@@ -37,7 +37,7 @@ func TestServerConfig(t *testing.T) {
 	tests := []commandTest{
 		// TEST 0
 		{
-			args: []string{"server", "--data-dir", actualDataDir, "--bind", "localhost:42454", "--bind-grpc", "localhost:30112", "--translation.map-size", "100000"},
+			args: []string{"server", "--data-dir", actualDataDir, "--translation.map-size", "100000"},
 			env: map[string]string{
 				"PILOSA_DATA_DIR":                "/tmp/myEnvDatadir",
 				"PILOSA_LONG_QUERY_TIME":         "1m30s",
@@ -56,6 +56,10 @@ func TestServerConfig(t *testing.T) {
 	[cluster]
 		replicas = 2
 		long-query-time = "1m10s"
+    [etcd]
+        listen-client-address = "http://localhost:0"
+        listen-peer-address = "http://localhost:0"
+        initial-cluster = "pilosa0=http://localhost:0"
 	[profile]
 		block-rate = 100
 		mutex-fraction = 10
@@ -63,7 +67,6 @@ func TestServerConfig(t *testing.T) {
 			validation: func() error {
 				v := validator{}
 				v.Check(cmd.Server.Config.DataDir, actualDataDir)
-				v.Check(cmd.Server.Config.Bind, "localhost:42454")
 				v.Check(cmd.Server.Config.Cluster.ReplicaN, 2)
 				v.Check(cmd.Server.Config.LongQueryTime, toml.Duration(time.Second*90))
 				v.Check(cmd.Server.Config.Cluster.LongQueryTime, toml.Duration(time.Second*90))
@@ -83,7 +86,6 @@ func TestServerConfig(t *testing.T) {
 			},
 			env: map[string]string{
 				"PILOSA_CLUSTER_HOSTS":          "localhost:1110,localhost:1111",
-				"PILOSA_BIND":                   "localhost:1110",
 				"PILOSA_TRANSLATION_MAP_SIZE":   "100000",
 				"PILOSA_PROFILE_BLOCK_RATE":     "9123",
 				"PILOSA_PROFILE_MUTEX_FRACTION": "444",
@@ -92,6 +94,10 @@ func TestServerConfig(t *testing.T) {
 	bind = ` + nextPort() + `
 	bind-grpc = ` + nextPort() + `
 	data-dir = "` + actualDataDir + `"
+    [etcd]
+        listen-client-address = "http://localhost:0"
+        listen-peer-address = "http://localhost:0"
+        initial-cluster = "pilosa0=http://localhost:0"
 	[profile]
 		block-rate = 100
 		mutex-fraction = 10
@@ -110,9 +116,13 @@ func TestServerConfig(t *testing.T) {
 			args: []string{"server", "--log-path", logFile.Name(), "--translation.map-size", "100000"},
 			env:  map[string]string{},
 			cfgFileContent: `
-	bind = "localhost:19444"
-	bind-grpc = "localhost:29444"
+	bind = ` + nextPort() + `
+	bind-grpc = ` + nextPort() + `
 	data-dir = "` + actualDataDir + `"
+    [etcd]
+        listen-client-address = "http://localhost:0"
+        listen-peer-address = "http://localhost:0"
+        initial-cluster = "pilosa0=http://localhost:0"
 	[anti-entropy]
 		interval = "11m0s"
 	[metric]
@@ -191,6 +201,10 @@ func TestServerConfig_DeprecateLongQueryTime(t *testing.T) {
             	bind = ` + nextPort() + `
             	bind-grpc = ` + nextPort() + `
              	data-dir = "` + actualDataDir + `"
+                [etcd]
+                  listen-client-address = "http://localhost:0"
+                  listen-peer-address = "http://localhost:0"
+                  initial-cluster = "pilosa0=http://localhost:0"
 `,
 			validation: func() error {
 				v := validator{}
@@ -207,6 +221,10 @@ func TestServerConfig_DeprecateLongQueryTime(t *testing.T) {
             	bind = ` + nextPort() + `
             	bind-grpc = ` + nextPort() + `
              	data-dir = "` + actualDataDir + `"
+                [etcd]
+                  listen-client-address = "http://localhost:0"
+                  listen-peer-address = "http://localhost:0"
+                  initial-cluster = "pilosa0=http://localhost:0"
 `,
 			validation: func() error {
 				v := validator{}
@@ -223,6 +241,10 @@ func TestServerConfig_DeprecateLongQueryTime(t *testing.T) {
             	bind = ` + nextPort() + `
             	bind-grpc = ` + nextPort() + `
              	data-dir = "` + actualDataDir + `"
+                [etcd]
+                  listen-client-address = "http://localhost:0"
+                  listen-peer-address = "http://localhost:0"
+                  initial-cluster = "pilosa0=http://localhost:0"
 `,
 			validation: func() error {
 				v := validator{}
