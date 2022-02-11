@@ -22,6 +22,7 @@ import (
 	"github.com/molecula/featurebase/v3/encoding/proto"
 	"github.com/molecula/featurebase/v3/logger"
 	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
 )
 
 // container turns a docker-compose service name into a container ID
@@ -286,6 +287,87 @@ func TestClusterStuff(t *testing.T) {
 			t.Fatalf("sending unpause command: %v", err)
 		}
 	})
+}
+
+func ingestRandomData(ctx context.Context, cli *pilosa.InternalClient, index, field string) error {
+	if err := cli.CreateIndex(ctx, index, pilosa.IndexOptions{}); err != nil {
+		return fmt.Errorf("creating index: %v", err)
+	}
+	if err := cli.CreateFieldWithOptions(ctx, index, field, pilosa.FieldOptions{CacheType: pilosa.CacheTypeRanked, CacheSize: 100}); err != nil {
+		return fmt.Errorf("creating field: %v", err)
+	}
+
+	req := &pilosa.ImportRequest{
+		Index: index,
+		Field: field,
+	}
+	req.ColumnIDs = make([]uint64, 10)
+	req.RowIDs = make([]uint64, 10)
+
+	for i := 0; i < 100000; i++ {
+		req.RowIDs[i%10] = 0
+		req.ColumnIDs[i%10] = uint64((i/10)*pilosa.ShardWidth + i%10)
+		req.Shard = uint64(i / 10)
+		if i%10 == 9 {
+			err := cli.Import(ctx, nil, req, &pilosa.ImportOptions{})
+			if err != nil {
+				return fmt.Errorf("import error: %v", err)
+			}
+		}
+	}
+	return nil
+}
+
+func TestRetryLogic(t *testing.T) {
+	if os.Getenv("ENABLE_PILOSA_CLUSTER_TESTS") != "1" {
+		t.Skip("pilosa cluster tests are not enabled")
+	}
+	ctx := context.Background()
+	auth := false
+	if os.Getenv("ENABLE_AUTH") == "1" {
+		auth = true
+	}
+	if auth {
+		token := GetAuthToken(t)
+		ctx = context.WithValue(ctx, "token", "Bearer "+token)
+	}
+
+	cli1, err := pilosa.NewInternalClient("pilosa1:10101", pilosa.GetHTTPClient(nil), pilosa.WithSerializer(proto.Serializer{}))
+	if err != nil {
+		t.Fatalf("getting client: %v", err)
+	}
+
+	g := new(errgroup.Group)
+	runCmd("pumba", "stress", "-d 10s", container(t, "pilosa2"))
+	g.Go(func() error {
+		return ingestRandomData(ctx, cli1, "testidx1", "testfield1")
+	})
+	if err = sendCmd("docker", "pause", container(t, "pilosa3")); err != nil {
+		t.Fatalf("sending docker pause")
+	}
+	runCmd("pumba", "stress", "-d 10s", container(t, "pilosa2"))
+	if err = sendCmd("docker", "pause", container(t, "pilosa1")); err != nil {
+		t.Fatalf("sending docker pause")
+	}
+	time.Sleep(10 * time.Second)
+	if err = sendCmd("docker", "unpause", container(t, "pilosa3")); err != nil {
+		t.Fatalf("sending docker unpause")
+	}
+	if err = sendCmd("docker", "pause", container(t, "pilosa2")); err != nil {
+		t.Fatalf("sending docker pause")
+	}
+	if err = sendCmd("docker", "unpause", container(t, "pilosa2")); err != nil {
+		t.Fatalf("sending docker unpause")
+	}
+	if err = sendCmd("docker", "unpause", container(t, "pilosa1")); err != nil {
+		t.Fatalf("sending docker unpause")
+	}
+	time.Sleep(10 * time.Second)
+	if err = g.Wait(); err != nil {
+		t.Fatal(err)
+	}
+	waitForStatus(t, cli1.Status, string(disco.ClusterStateNormal), 30, time.Second, ctx)
+
 }
 
 func waitForStatus(t *testing.T, stator func(context.Context) (string, error), status string, n int, sleep time.Duration, ctx context.Context) {
