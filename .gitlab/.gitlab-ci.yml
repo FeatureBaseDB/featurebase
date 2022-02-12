@@ -25,6 +25,14 @@ smoke build:
     - echo "Let's just see if it compiles... (sometimes the linter gives unclear errors if it doesn't)"
     - go build ./...
 
+un-firetruck build:
+  stage: lint
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
+  script:
+    - echo "Removes some files which cause problems"
+    - rm -rf internal/clustertests/results
+
 golangci-lint:
   image: golangci/golangci-lint:v1.39.0
   stage: lint
