@@ -291,7 +291,7 @@ clustertests:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
-    - rm -rf  internal/clustertests/results && mkdir -p  internal/clustertests/results && chown gitlab-runner:gitlab-runner  internal/clustertests/results
+    - rm -rf  internal/clustertests/results && mkdir -p internal/clustertests/results && chown gitlab-runner:gitlab-runner  internal/clustertests/results
     - make clustertests
     - mv internal/clustertests/results/ results/
   artifacts:
@@ -307,7 +307,9 @@ authclustertests:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
+    - rm -rf  internal/clustertests/results && mkdir -p internal/clustertests/results && chown gitlab-runner:gitlab-runner  internal/clustertests/results
     - make authclustertests
+    - rm -rf internal/clustertests/results
 
 
 external lookup tests:
