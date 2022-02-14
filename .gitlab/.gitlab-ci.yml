@@ -90,7 +90,7 @@ run go tests race:
   retry: 1
   script:
     - echo "Running featurebase race tests..."
-    - go test -race -timeout=90m ./...
+    - go test -race -v -timeout=90m ./...
   tags:
     - aws
 
@@ -126,17 +126,18 @@ run go tests future:
     - aws
 
 upload to sonarcloud:
-  stage: test
+  stage: integration
   image: sonarsource/sonar-scanner-cli:4.6
   variables:
     SONAR_TOKEN: $SONAR_TOKEN
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
-    - sonar-scanner -Dsonar.projectKey=molecula_featurebase -Dsonar.organization=molecula -Dsonar.sources=. -Dsonar.host.url=https://sonarcloud.io -Dsonar.go.coverage.reportPaths=coverage.out -Dsonar.go.tests.reportPaths=test-report.out  -Dsonar.javascript.lcov.reportPaths=lattice/coverage/lcov.info
+    - sonar-scanner -Dsonar.projectKey=molecula_featurebase -Dsonar.organization=molecula -Dsonar.sources=. -Dsonar.host.url=https://sonarcloud.io -Dsonar.go.coverage.reportPaths=coverage.out,results/coverage*.out -Dsonar.go.tests.reportPaths=test-report.out,results/report*  -Dsonar.javascript.lcov.reportPaths=lattice/coverage/lcov.info
   needs:
     - job: run go tests future
     - job: run jest tests 
+    - job: clustertests
     
 build for linux amd64:
   stage: build
@@ -289,7 +290,12 @@ clustertests:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
+    - rm -rf  internal/clustertests/results && mkdir -p internal/clustertests/results && chown gitlab-runner:gitlab-runner  internal/clustertests/results
     - make clustertests
+    - mv internal/clustertests/results/ results/
+  artifacts:
+    paths:
+      - results/coverage*.out
 
 authclustertests:
   variables:
@@ -300,7 +306,10 @@ authclustertests:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
+    - rm -rf  internal/clustertests/results && mkdir -p internal/clustertests/results && chown gitlab-runner:gitlab-runner  internal/clustertests/results
     - make authclustertests
+    - rm -rf internal/clustertests/results
+
 
 external lookup tests:
   stage: integration
