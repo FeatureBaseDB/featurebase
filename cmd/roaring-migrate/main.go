@@ -223,7 +223,7 @@ func (d *rbfFile) getDB(path, index string, shard uint64) (*rbf.DB, error) {
 }
 func (d *rbfFile) Close() error {
 	defer func() error {
-		//cleanup the tempdirectory
+		// clean up the temp directory
 		err := os.RemoveAll(d.temp)
 		if err != nil {
 			return err
