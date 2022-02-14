@@ -332,7 +332,7 @@ func Migrate(dataDir, backupPath string, verbose bool) error {
 				visited[filename] = fi.Size()
 			} else {
 				if fi.Size() <= sz {
-					continue //skipp it
+					continue // skip it
 				}
 				visited[filename] = fi.Size()
 			}
