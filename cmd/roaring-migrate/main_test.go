@@ -33,13 +33,19 @@ func TestMainProgram(t *testing.T) {
 	if realMain() == 0 {
 		t.Fatal("should fail and it succeeded")
 	}
+	os.Args = []string{"roaring-migrate",
+		"--verbose",
+	}
+	if realMain() == 0 {
+		t.Fatal("should fail and it succeeded")
+	}
 	dir, err := ioutil.TempDir("", "backup")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(dir) // clean up
 	os.Args = []string{"roaring-migrate",
-		"--verbose",
+		"--verbose=true",
 		"--data-dir=testdata/data-dir/",
 		"--backup-dir=" + dir,
 	}

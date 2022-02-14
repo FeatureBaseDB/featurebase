@@ -42,6 +42,9 @@ func realMain() int {
 		Short: "convert roaring pilosa backup to rbf",
 		Long:  `roaring-migrate uses the pilosa data-dir for each node, and produces a new backup that is able to be restored from utilizing the new pilosa restore tool.`,
 		Run: func(cmd *cobra.Command, args []string) {
+			if verbose {
+				glogger.Infof("Version: %v", Version)
+			}
 			nodes := strings.Split(dataDir, ",")
 			for _, nodePath := range nodes {
 				err := Migrate(nodePath, backupPath, verbose)
@@ -66,13 +69,10 @@ func realMain() int {
 		glogger.Errorf("Error setting flag backup-dir")
 		return 1
 	}
-	if verbose {
-		glogger.Infof("Version: %v", Version)
-	}
 
 	err = cmdMigrate.Execute()
 	if err != nil {
-		glogger.Errorf("exec error", err)
+		glogger.Errorf("exec error %v", err)
 		return 1
 	}
 	return 0
