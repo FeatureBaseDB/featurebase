@@ -10,7 +10,7 @@ func mustHolderConfig() *HolderConfig {
 	cfg := DefaultHolderConfig()
 	cfg.StorageConfig.FsyncEnabled = false
 	cfg.RBFConfig.FsyncEnabled = false
-	cfg.Schemator = disco.InMemSchemator
+	cfg.Schemator = disco.NewInMemSchemator()
 	cfg.Sharder = disco.InMemSharder
 	return cfg
 }
