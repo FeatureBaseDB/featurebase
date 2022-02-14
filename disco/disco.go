@@ -312,6 +312,8 @@ type inMemSchemator struct {
 	schema Schema
 }
 
+// NewInMemSchemator instantiates an InMemSchemator
+// this allows new holders to have thier own, and not rely on a shared instance
 func NewInMemSchemator() *inMemSchemator {
 	return &inMemSchemator{
 		schema: make(Schema),
