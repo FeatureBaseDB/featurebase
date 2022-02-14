@@ -29,6 +29,10 @@ const (
 )
 
 func main() {
+	os.Exit(realMain())
+}
+func realMain() int {
+
 	visited = make(map[string]int64)
 	var dataDir, backupPath string
 	var verbose bool
@@ -54,14 +58,12 @@ func main() {
 	err := cmdMigrate.MarkFlagRequired("data-dir")
 	if err != nil {
 		fmt.Println("Error setting flag data-dir")
-		os.Exit(1)
-		return
+		return 1
 	}
 	err = cmdMigrate.MarkFlagRequired("backup-dir")
 	if err != nil {
 		fmt.Println("Error setting flag backup-dir")
-		os.Exit(1)
-		return
+		return 1
 	}
 	if verbose {
 		vprint.VV("Version: %v", Version)
@@ -70,8 +72,9 @@ func main() {
 	err = cmdMigrate.Execute()
 	if err != nil {
 		fmt.Println("exec error", err)
-		os.Exit(1)
+		return 1
 	}
+	return 0
 }
 
 func FetchFragments(base string) []string {
