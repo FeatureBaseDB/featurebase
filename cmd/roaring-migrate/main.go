@@ -54,7 +54,7 @@ func realMain() int {
 	}
 	cmdMigrate.Flags().StringVarP(&dataDir, "data-dir", "d", "", "source directories for each node seperated by commas")
 	cmdMigrate.Flags().StringVarP(&backupPath, "backup-dir", "b", "", "location of backup directory")
-	cmdMigrate.Flags().BoolVar(&verbose, "verbose", false, "addition progress information")
+	cmdMigrate.Flags().BoolVar(&verbose, "verbose", false, "additional progress information")
 	err := cmdMigrate.MarkFlagRequired("data-dir")
 	if err != nil {
 		fmt.Println("Error setting flag data-dir")
