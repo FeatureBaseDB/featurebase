@@ -494,6 +494,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	s.holder.Stats = s.holder.Stats.WithTags(fmt.Sprintf("node_id:%s", s.nodeID))
 
 	s.executor.Holder = s.holder
+	s.holder.executor = s.executor
 	s.executor.Cluster = s.cluster
 	s.executor.MaxWritesPerRequest = s.maxWritesPerRequest
 	s.cluster.broadcaster = s
