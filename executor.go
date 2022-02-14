@@ -5781,7 +5781,7 @@ loop:
 				continue loop
 			}
 		}
-		return nil, errors.Wrapf(errShardUnavailable, "%s:%d:%v:%v", index, shard, shards, nodes)
+		return nil, errors.Wrapf(errShardUnavailable, "%s:%d:%v", index, shard, nodes)
 	}
 	return m, nil
 }
