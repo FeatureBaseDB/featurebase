@@ -504,13 +504,17 @@ s3 dump tag:
     - aws configure set region "us-east-2"
     - aws configure set aws_profile $PROFILE
     - aws s3 cp featurebase_linux_amd64 s3://${LOCATION}/${CI_COMMIT_TAG}/featurebase_linux_amd64
-    - aws s3 cp roaring-migrate_linux_amd64 s3://${LOCATION}/${CI_COMMIT_TAG}/${CI_COMMIT_SHORT_SHA}/roaring-migrate_linux_amd64
-    - aws s3 cp featurebase_linux_arm64 s3://${LOCATION}/${CI_COMMIT_TAG}/${CI_COMMIT_SHORT_SHA}/featurebase_linux_arm64
-    - aws s3 cp roaring-migrate_linux_arm64 s3://${LOCATION}/${CI_COMMIT_TAG}/${CI_COMMIT_SHORT_SHA}/roaring-migrate_linux_arm64
-    - aws s3 cp featurebase_darwin_amd64 s3://${LOCATION}/${CI_COMMIT_TAG}/${CI_COMMIT_SHORT_SHA}/featurebase_darwin_amd64
-    - aws s3 cp roaring-migrate_darwin_amd64 s3://${LOCATION}/${CI_COMMIT_TAG}/${CI_COMMIT_SHORT_SHA}/roaring-migrate_darwin_amd64
-    - aws s3 cp featurebase_darwin_arm64 s3://${LOCATION}/${CI_COMMIT_TAG}/${CI_COMMIT_SHORT_SHA}/featurebase_darwin_arm64
-    - aws s3 cp roaring-migrate_darwin_arm64 s3://${LOCATION}/${CI_COMMIT_TAG}/${CI_COMMIT_SHORT_SHA}/roaring-migrate_darwin_arm64
+    - aws s3 cp roaring-migrate_linux_amd64 s3://${LOCATION}/${CI_COMMIT_TAG}/roaring-migrate_linux_amd64
+    - aws s3 cp featurebase_linux_arm64 s3://${LOCATION}/${CI_COMMIT_TAG}/featurebase_linux_arm64
+    - aws s3 cp roaring-migrate_linux_arm64 s3://${LOCATION}/${CI_COMMIT_TAG}/roaring-migrate_linux_arm64
+    - aws s3 cp featurebase_darwin_amd64 s3://${LOCATION}/${CI_COMMIT_TAG}/featurebase_darwin_amd64
+    - aws s3 cp roaring-migrate_darwin_amd64 s3://${LOCATION}/${CI_COMMIT_TAG}/roaring-migrate_darwin_amd64
+    - aws s3 cp featurebase_darwin_arm64 s3://${LOCATION}/${CI_COMMIT_TAG}/featurebase_darwin_arm64
+    - aws s3 cp roaring-migrate_darwin_arm64 s3://${LOCATION}/${CI_COMMIT_TAG}/roaring-migrate_darwin_arm64
+    - aws s3 cp NOTICE s3://${LOCATION}/${CI_COMMIT_TAG}/NOTICE
+    - aws s3 cp install/featurebase.debian.service s3://${LOCATION}/${CI_COMMIT_TAG}/featurebase.debian.service
+    - aws s3 cp install/featurebase.redhat.service s3://${LOCATION}/${CI_COMMIT_TAG}/featurebase.redhat.service
+    - aws s3 cp install/featurebase.conf s3://${LOCATION}/${CI_COMMIT_TAG}/featurebase.conf
   needs:
     - job: build for darwin amd64
     - job: build for darwin arm64
