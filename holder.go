@@ -215,7 +215,7 @@ func DefaultHolderConfig() *HolderConfig {
 		OpenIDAllocator:      func(string, bool) (*idAllocator, error) { return &idAllocator{}, nil },
 		TranslationSyncer:    NopTranslationSyncer,
 		Serializer:           GobSerializer,
-		Schemator:            disco.InMemSchemator,
+		Schemator:            disco.NewInMemSchemator(),
 		Sharder:              disco.InMemSharder,
 		CacheFlushInterval:   defaultCacheFlushInterval,
 		StatsClient:          stats.NopStatsClient,

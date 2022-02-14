@@ -312,6 +312,12 @@ type inMemSchemator struct {
 	schema Schema
 }
 
+func NewInMemSchemator() *inMemSchemator {
+	return &inMemSchemator{
+		schema: make(Schema),
+	}
+}
+
 // Schema is an in-memory implementation of the Schemator Schema method.
 func (s *inMemSchemator) Schema(ctx context.Context) (Schema, error) {
 	s.mu.RLock()

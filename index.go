@@ -77,7 +77,7 @@ func NewIndex(holder *Holder, path, name string) (*Index, error) {
 		holder:         holder,
 		trackExistence: true,
 
-		Schemator:  disco.InMemSchemator,
+		Schemator:  disco.NewInMemSchemator(),
 		serializer: NopSerializer,
 
 		translateStores: make(map[int]TranslateStore),
