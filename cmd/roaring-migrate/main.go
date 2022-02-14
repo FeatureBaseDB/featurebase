@@ -14,6 +14,7 @@ import (
 	"syscall"
 
 	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/logger"
 	"github.com/molecula/featurebase/v3/rbf"
 	"github.com/molecula/featurebase/v3/rbf/cfg"
 	"github.com/molecula/featurebase/v3/roaring"
@@ -23,6 +24,7 @@ import (
 )
 
 var visited map[string]int64
+var glogger = logger.NewStandardLogger(os.Stdout)
 
 const (
 	Version = "1.0"
@@ -32,7 +34,6 @@ func main() {
 	os.Exit(realMain())
 }
 func realMain() int {
-
 	visited = make(map[string]int64)
 	var dataDir, backupPath string
 	var verbose bool
@@ -57,21 +58,21 @@ func realMain() int {
 	cmdMigrate.Flags().BoolVar(&verbose, "verbose", false, "additional progress information")
 	err := cmdMigrate.MarkFlagRequired("data-dir")
 	if err != nil {
-		fmt.Println("Error setting flag data-dir")
+		glogger.Errorf("Error setting flag data-dir")
 		return 1
 	}
 	err = cmdMigrate.MarkFlagRequired("backup-dir")
 	if err != nil {
-		fmt.Println("Error setting flag backup-dir")
+		glogger.Errorf("Error setting flag backup-dir")
 		return 1
 	}
 	if verbose {
-		vprint.VV("Version: %v", Version)
+		glogger.Infof("Version: %v", Version)
 	}
 
 	err = cmdMigrate.Execute()
 	if err != nil {
-		fmt.Println("exec error", err)
+		glogger.Errorf("exec error", err)
 		return 1
 	}
 	return 0
@@ -84,7 +85,7 @@ func FetchFragments(base string) []string {
 
 		// first thing to do, check error. and decide what to do about it
 		if errX != nil {
-			fmt.Printf("error 「%v」 at a path 「%q」\n", errX, pathX)
+			glogger.Errorf("error 「%v」 at a path 「%q」\n", errX, pathX)
 			return errX
 		}
 		pathX = pathX[len(base):]
@@ -99,7 +100,7 @@ func FetchFragments(base string) []string {
 	err := filepath.Walk(base, ff)
 
 	if err != nil {
-		fmt.Printf("error walking the path %q: %v\n", base, err)
+		glogger.Errorf("error walking the path %q: %v\n", base, err)
 	}
 	return fragments
 }
@@ -130,7 +131,7 @@ func BuildSchema(dataDir string) ([]byte, error) {
 
 		// first thing to do, check error. and decide what to do about it
 		if errX != nil {
-			fmt.Printf("error 「%v」 at a path 「%q」\n", errX, pathX)
+			glogger.Infof("error 「%v」 at a path 「%q」\n", errX, pathX)
 			return errX
 		}
 		pathX = pathX[len(dataDir):]
@@ -140,7 +141,7 @@ func BuildSchema(dataDir string) ([]byte, error) {
 			if strings.Contains(pathX, ".meta") {
 				//convert the file to a fieldOptions
 				// ex: metaPath /trait_store/aba/.meta
-				fmt.Println("PATHX", pathX)
+				glogger.Infof("PATHX %v", pathX)
 				t := strings.Split(pathX, "/")
 				index := t[1]
 				src := dataDir + pathX
@@ -185,7 +186,7 @@ func BuildSchema(dataDir string) ([]byte, error) {
 	err := filepath.Walk(dataDir, ff)
 
 	if err != nil {
-		fmt.Printf("error walking the path %q: %v\n", dataDir, err)
+		glogger.Errorf("error walking the path %q: %v\n", dataDir, err)
 	}
 	return json.MarshalIndent(schemaSerializer, "", "    ")
 }
@@ -208,7 +209,7 @@ func (d *rbfFile) getDB(path, index string, shard uint64) (*rbf.DB, error) {
 	if d.last != src {
 		d.Close()
 		d.last = src
-		fmt.Println("RBF:", src)
+		glogger.Infof("RBF: %v", src)
 		c := cfg.NewDefaultConfig()
 		c.FsyncEnabled = false
 		c.MinWALCheckpointSize = 0
@@ -338,7 +339,7 @@ func Migrate(dataDir, backupPath string, verbose bool) error {
 			}
 		}
 		if verbose {
-			vprint.VV("processing: %v", dataDir+filename)
+			glogger.Infof("processing: %v", dataDir+filename)
 		}
 		content, err := ioutil.ReadFile(dataDir + filename)
 		if err != nil {
@@ -361,7 +362,7 @@ func Migrate(dataDir, backupPath string, verbose bool) error {
 	cache.Close()
 	keys := FetchIndexKeys(dataDir)
 	for _, filename := range keys {
-		fmt.Println("index keys", filename)
+		glogger.Infof("index keys %v", filename)
 		srcFile := filepath.Join(dataDir, filename)
 		parts := strings.Split(filename, "/")
 		destFile := filepath.Join(backupPath, "indexes", parts[1], "translate", parts[3])
@@ -374,7 +375,7 @@ func Migrate(dataDir, backupPath string, verbose bool) error {
 	//deal with index field(row)keys
 	keys = FetchRowkeys(dataDir)
 	for _, filename := range keys {
-		fmt.Println("field", filename)
+		glogger.Infof("field %v", filename)
 		srcFile := dataDir + filename
 		parts := strings.Split(filename, "/")
 		destFile := filepath.Join(backupPath, "indexes", parts[1], "fields", parts[2], "translate")
@@ -422,7 +423,7 @@ func FetchIndexKeys(base string) []string {
 
 		// first thing to do, check error. and decide what to do about it
 		if errX != nil {
-			fmt.Printf("error 「%v」 at a path 「%q」\n", errX, pathX)
+			glogger.Errorf("error 「%v」 at a path 「%q」\n", errX, pathX)
 			return errX
 		}
 		pathX = pathX[len(base):]
@@ -439,7 +440,7 @@ func FetchIndexKeys(base string) []string {
 	err := filepath.Walk(base, ff)
 
 	if err != nil {
-		fmt.Printf("error walking the path %q: %v\n", base, err)
+		glogger.Errorf("error walking the path %q: %v\n", base, err)
 	}
 	return directory
 }
@@ -451,7 +452,7 @@ func FetchRowkeys(base string) []string {
 
 		// first thing to do, check error. and decide what to do about it
 		if errX != nil {
-			fmt.Printf("error 「%v」 at a path 「%q」\n", errX, pathX)
+			glogger.Errorf("error 「%v」 at a path 「%q」\n", errX, pathX)
 			return errX
 		}
 		pathX = pathX[len(base):]
@@ -473,7 +474,7 @@ func FetchRowkeys(base string) []string {
 	err := filepath.Walk(base, ff)
 
 	if err != nil {
-		fmt.Printf("error walking the path %q: %v\n", base, err)
+		glogger.Errorf("error walking the path %q: %v\n", base, err)
 	}
 	return directory
 }
