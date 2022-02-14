@@ -13,7 +13,7 @@ data "aws_ami" "amazon_linux_2" {
 
   filter {
     name   = "architecture"
-    values = ["arm64", "x86_64"]
+    values = var.fb_cluster_arch
   }
 }
 
