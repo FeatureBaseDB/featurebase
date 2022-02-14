@@ -49,7 +49,7 @@ func realMain() int {
 			for _, nodePath := range nodes {
 				err := Migrate(nodePath, backupPath, verbose)
 				if err != nil {
-					fmt.Println("Error", err)
+					glogger.Errorf("%v", Version)
 					return
 				}
 
