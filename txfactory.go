@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/molecula/featurebase/v3/task"
 	"github.com/molecula/featurebase/v3/testhook"
 	"github.com/molecula/featurebase/v3/vprint"
 	"github.com/pkg/errors"
@@ -83,8 +84,9 @@ var sep = string(os.PathSeparator)
 // See also the Qcx.GetTx() example and the TxGroup description below.
 //
 type Qcx struct {
-	Grp *TxGroup
-	Txf *TxFactory
+	Grp     *TxGroup
+	Txf     *TxFactory
+	workers *task.Pool
 
 	// if we go back to using Qcx values, this must become a pointer,
 	// or otherwise be dealt with because copies of Mutex are a no-no.
@@ -178,6 +180,9 @@ func (f *TxFactory) NewQcx() (qcx *Qcx) {
 		Grp: f.NewTxGroup(),
 		Txf: f,
 	}
+	if f.holder != nil && f.holder.executor != nil {
+		qcx.workers = f.holder.executor.workers
+	}
 	if f.typeOfTx == "roaring" {
 		qcx.isRoaring = true
 	}
@@ -223,6 +228,10 @@ var ErrQcxDone = fmt.Errorf("Qcx already Aborted or Finished, so must call reset
 // to make it clear we are referring to the first and final error.
 //
 func (qcx *Qcx) GetTx(o Txo) (tx Tx, finisher func(perr *error), err error) {
+	if qcx.workers != nil {
+		qcx.workers.Block()
+		defer qcx.workers.Unblock()
+	}
 	qcx.mu.Lock()
 	defer qcx.mu.Unlock()
 
