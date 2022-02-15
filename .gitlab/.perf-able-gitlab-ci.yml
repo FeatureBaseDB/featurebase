@@ -15,10 +15,10 @@ able_loadtest:
     - docker
     - fbsmoke
   before_script:
-    - sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
-    - echo "deb https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
-    - sudo apt-get update
-    - sudo apt-get install k6
+  #  - sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+  #  - echo "deb https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+  #  - sudo apt-get update
+  #  - sudo apt-get install k6
 
     - apt-get update && apt-get install -y gnupg software-properties-common curl git
     - curl -fsSL https://apt.releases.hashicorp.com/gpg | apt-key add -
@@ -48,9 +48,7 @@ able_loadtest:
     #- ./qa/scripts/setupSmokeTest.sh
     #- ./qa/scripts/testSmokeTest.sh
     - echo "executing local k6 in k6 container..."
-    - k6 run ./qa/scripts/perf/able/script.js
+    #- k6 run ./qa/scripts/perf/able/script.js
 
   #after_script:
   #  - ./qa/scripts/teardownSmokeTest.sh
-  #needs:
-  #  - job: build for linux arm64

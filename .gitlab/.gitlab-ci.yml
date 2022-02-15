@@ -482,3 +482,8 @@ perf_able:
   stage: performance
   trigger:
     include: .gitlab/.perf-able-gitlab-ci.yml
+  needs:
+    - job: build for darwin amd64
+    - job: build for darwin arm64
+    - job: build for linux amd64
+    - job: build for linux arm64
