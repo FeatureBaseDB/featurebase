@@ -481,7 +481,7 @@ s3 dump:
 perf_able:
   stage: performance
   trigger:
-    include: .perf-able-gitlab-ci.yml
+    include: .gitlab/.perf-able-gitlab-ci.yml
   rules:
     - changes:
       - featurebase/*
