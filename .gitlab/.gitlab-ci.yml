@@ -482,6 +482,3 @@ perf_able:
   stage: performance
   trigger:
     include: .gitlab/.perf-able-gitlab-ci.yml
-  rules:
-    - changes:
-      - featurebase/*
