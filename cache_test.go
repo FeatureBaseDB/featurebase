@@ -70,3 +70,15 @@ func TestCache_Rank_Dirty(t *testing.T) {
 		t.Fatalf("wrote %v but got %v", expect, got)
 	}
 }
+
+func TestCache_Rank_BulkAdd(t *testing.T) {
+	const cacheSize = 10
+	cache := pilosa.NewRankCache(uint32(cacheSize))
+
+	for i := uint64(0); i < 1000; i++ {
+		cache.BulkAdd(i, i)
+		if n := cache.Len(); n > cacheSize*2 {
+			t.Fatalf("entry count exceed 2x cache size: %d", n)
+		}
+	}
+}
