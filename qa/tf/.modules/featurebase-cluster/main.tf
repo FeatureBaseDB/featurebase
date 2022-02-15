@@ -13,7 +13,7 @@ data "aws_ami" "amazon_linux_2" {
 
   filter {
     name   = "architecture"
-    values = ["arm64"]
+    values = var.fb_cluster_arch
   }
 }
 
@@ -38,6 +38,7 @@ resource "aws_instance" "fb_cluster_nodes" {
     volume_type = var.fb_data_disk_type
     volume_size = var.fb_data_disk_size_gb
     iops        = var.fb_data_disk_iops
+    encrypted   = true 
   }
 
   tags = {
@@ -70,6 +71,7 @@ resource "aws_instance" "fb_ingest" {
     volume_type = var.fb_ingest_disk_type
     volume_size = var.fb_ingest_disk_size_gb
     iops        = var.fb_ingest_disk_iops
+    encrypted   = true
   }
 
   tags = {

@@ -3,6 +3,11 @@ variable "cluster_prefix" {
   description = "This is a identifier that will be prefixed to created resources"
 }
 
+variable "fb_cluster_arch" {
+  type    = list(string)
+  default = ["arm64"]
+}
+
 variable "fb_ingest_type" {
   type    = string
   default = "c6g.2xlarge"
