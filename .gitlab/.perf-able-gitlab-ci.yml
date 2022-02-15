@@ -1,8 +1,8 @@
 stages:
-  - loadtest
+  - performance
 
 able_loadtest:
-  stage: loadtest
+  stage: performance
   image: registry.gitlab.com/gitlab-org/cloud-deploy/aws-base:latest
   variables:
     PROFILE: "service-terraform"
