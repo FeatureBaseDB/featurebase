@@ -194,6 +194,14 @@ func (c *rankCache) BulkAdd(id uint64, n uint64) {
 	}
 
 	c.entries[id] = n
+
+	// FB-1206: Periodically invalidate the cache when we are bulk loading
+	// as this can take up an upbounded amount of memory. This is especially
+	// true when restoring shards as all rows will be added.
+	if len(c.entries) > int(2*c.maxEntries) {
+		c.stats.Count(MetricRecalculateCache, 1, 1.0)
+		c.recalculate()
+	}
 }
 
 // Get returns a count for a given id.
