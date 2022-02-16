@@ -463,6 +463,11 @@ func (r *Row) MarshalJSON() ([]byte, error) {
 
 // Columns returns the columns in r as a slice of ints.
 func (r *Row) Columns() []uint64 {
+	// We occasionally hit cases where we want to call Columns on something
+	// that might not exist, but a nil slice would be fine.
+	if r == nil {
+		return nil
+	}
 	a := make([]uint64, 0, r.Count())
 	for i := range r.segments {
 		a = append(a, r.segments[i].Columns()...)
