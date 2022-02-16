@@ -484,8 +484,11 @@ perf_able:
   stage: performance
   trigger:
     include: .gitlab/.perf-able-gitlab-ci.yml
-    artifacts: true
-  
+  dependencies:
+    - build for darwin amd64
+    - build for darwin arm64
+    - build for linux amd64
+    - build for linux arm64
 
 s3 dump tag:
   stage: post build
