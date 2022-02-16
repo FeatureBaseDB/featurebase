@@ -450,7 +450,7 @@ s3 dump:
   tags:
     - shell
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
+    - if: '$CI_COMMIT_TAG == null && ($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")'
   script:
     - aws configure set aws_access_key_id $AWS_FBCI_ACCESS_KEY_ID
     - aws configure set aws_secret_access_key $AWS_FBCI_SECRET_ACCESS_KEY
@@ -485,3 +485,38 @@ perf_able:
   rules:
     - changes:
       - featurebase/*
+
+s3 dump tag:
+  stage: post build
+  variables:
+    PROFILE: "service-fb-ci"
+    AWS_SSH_PRIVATE_KEY: $AWS_FBCI_SSH_KEY
+    AWS_ACCESS_KEY_ID: $AWS_FBCI_ACCESS_KEY_ID
+    AWS_SECRET_ACCESS_KEY: $AWS_FBCI_SECRET_ACCESS_KEY
+    LOCATION: molecula-artifact-storage/featurebase/_tags
+  tags:
+    - shell
+  rules:
+    - if: '$CI_COMMIT_TAG != null && ($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")'
+  script:
+    - aws configure set aws_access_key_id $AWS_FBCI_ACCESS_KEY_ID
+    - aws configure set aws_secret_access_key $AWS_FBCI_SECRET_ACCESS_KEY
+    - aws configure set region "us-east-2"
+    - aws configure set aws_profile $PROFILE
+    - aws s3 cp featurebase_linux_amd64 s3://${LOCATION}/${CI_COMMIT_TAG}/featurebase_linux_amd64
+    - aws s3 cp roaring-migrate_linux_amd64 s3://${LOCATION}/${CI_COMMIT_TAG}/roaring-migrate_linux_amd64
+    - aws s3 cp featurebase_linux_arm64 s3://${LOCATION}/${CI_COMMIT_TAG}/featurebase_linux_arm64
+    - aws s3 cp roaring-migrate_linux_arm64 s3://${LOCATION}/${CI_COMMIT_TAG}/roaring-migrate_linux_arm64
+    - aws s3 cp featurebase_darwin_amd64 s3://${LOCATION}/${CI_COMMIT_TAG}/featurebase_darwin_amd64
+    - aws s3 cp roaring-migrate_darwin_amd64 s3://${LOCATION}/${CI_COMMIT_TAG}/roaring-migrate_darwin_amd64
+    - aws s3 cp featurebase_darwin_arm64 s3://${LOCATION}/${CI_COMMIT_TAG}/featurebase_darwin_arm64
+    - aws s3 cp roaring-migrate_darwin_arm64 s3://${LOCATION}/${CI_COMMIT_TAG}/roaring-migrate_darwin_arm64
+    - aws s3 cp NOTICE s3://${LOCATION}/${CI_COMMIT_TAG}/NOTICE
+    - aws s3 cp install/featurebase.debian.service s3://${LOCATION}/${CI_COMMIT_TAG}/featurebase.debian.service
+    - aws s3 cp install/featurebase.redhat.service s3://${LOCATION}/${CI_COMMIT_TAG}/featurebase.redhat.service
+    - aws s3 cp install/featurebase.conf s3://${LOCATION}/${CI_COMMIT_TAG}/featurebase.conf
+  needs:
+    - job: build for darwin amd64
+    - job: build for darwin arm64
+    - job: build for linux amd64
+    - job: build for linux arm64
