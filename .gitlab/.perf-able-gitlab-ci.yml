@@ -50,3 +50,8 @@ perf_able:
     - k6 run ./qa/scripts/perf/able/script.js
   after_script:
     - ./qa/scripts/perf/able/ableTeardown.sh
+  needs:
+    - pipeline: $PARENT_PIPELINE_ID
+      job: build for linux arm64
+    - pipeline: $PARENT_PIPELINE_ID
+      job: build for linux amd64
