@@ -44,10 +44,9 @@ perf_able:
     - TF_VAR_cluster_prefix="able-$(openssl rand -base64 12 | tr -d /=+ | cut -c -16)"
     - echo "Cluster Prefix --> $TF_VAR_cluster_prefix"
   script:
-    #- ./qa/scripts/setupSmokeTest.sh
+    - ./qa/scripts/perf/able/ableSetup.sh
     #- ./qa/scripts/testSmokeTest.sh
     - echo "executing local k6 in k6 container..."
     - k6 run ./qa/scripts/perf/able/script.js
-
-  #after_script:
-  #  - ./qa/scripts/teardownSmokeTest.sh
+  after_script:
+    - ./qa/scripts/perf/able/ableTeardown.sh
