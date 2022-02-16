@@ -1529,6 +1529,8 @@ func (e *executor) executeDistinctShard(ctx context.Context, qcx *Qcx, index str
 			Index: index,
 			Field: fieldName,
 		}
+	} else if field.Options().Type == FieldTypeTimestamp {
+		result = DistinctTimestamp{Name: fieldName}
 	} else {
 		result = SignedRow{}
 	}
@@ -1564,11 +1566,19 @@ func (e *executor) executeDistinctShard(ctx context.Context, qcx *Qcx, index str
 		if err != nil {
 			return nil, err
 		}
-		results := make([]string, len(r.Pos.Columns()))
-		for i, val := range r.Pos.Columns() {
+		// If we have a filter, or there's just no content for this shard, we
+		// can end up with empty results. Rather than trying to synthesize
+		// a result from this empty set, we just go ahead and use that.
+		if r.Pos == nil {
+			return result, nil
+		}
+		cols := r.Pos.Columns()
+		results := make([]string, len(cols))
+		for i, val := range cols {
 			results[i] = FormatTimestampNano(int64(val), bsig.Base, field.options.TimeUnit)
 		}
-		return DistinctTimestamp{Name: fieldName, Values: results}, nil
+		result = DistinctTimestamp{Name: fieldName, Values: results}
+		return result, nil
 	}
 	return executeDistinctShardBSI(ctx, qcx, idx, fieldName, shard, bsig, filterBitmap)
 }

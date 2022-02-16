@@ -6789,13 +6789,16 @@ func variousQueriesCountDistinctTimestamp(t *testing.T, c *test.Cluster) {
 
 	// create an index and timestamp field
 	c.CreateField(t, index, pilosa.IndexOptions{TrackExistence: true}, field, pilosa.OptFieldTypeTimestamp(time.Unix(0, 0), "s"))
+	c.CreateField(t, index, pilosa.IndexOptions{TrackExistence: true}, "set")
 
 	// add some data
 	data := []string{"2010-01-02T12:32:00Z", "2010-04-20T12:32:00Z", "2011-04-20T12:59:00Z", "2011-04-20T12:40:00Z", "2011-04-20T12:32:00Z"}
 
 	for i, datum := range data {
-		c.Query(t, index, fmt.Sprintf("Set(%d, ts=\"%s\")", i*(1<<20), datum))
+		c.Query(t, index, fmt.Sprintf("Set(%d, ts=\"%s\")", i*ShardWidth, datum))
 	}
+	// set something in shard 8 so there's a shard present with no timestamp data
+	c.Query(t, index, fmt.Sprintf("Set(%d, set=0)", 8*ShardWidth))
 
 	// query the Count of Distinct vals in field ts
 	count := c.Query(t, index, "Count(Distinct(field=ts))").Results[0]
@@ -6803,6 +6806,13 @@ func variousQueriesCountDistinctTimestamp(t *testing.T, c *test.Cluster) {
 		t.Fatalf("expected %v got %v", len(data), count)
 	}
 
+	// query the ones that are in or after 2011, expecting 3. this helps us
+	// hit an edge case that only happens if you have no data *because of
+	// a filter*.
+	count = c.Query(t, index, "Count(Distinct(Row(ts > \"2011-01-01T00:00:00Z\"), field=ts))").Results[0]
+	if count != uint64(3) {
+		t.Fatalf("expected %v got %v", 3, count)
+	}
 }
 
 // Ensure that a top-level, bare distinct on multiple nodes
