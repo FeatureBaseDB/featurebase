@@ -288,6 +288,7 @@ clustertests:
   stage: integration
   tags:
     - shell
+  retry: 1
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
@@ -302,6 +303,7 @@ authclustertests:
   variables:
     PROJECT: authclustertests_${CI_CONCURRENT_ID}
   stage: integration
+  retry: 1
   tags:
     - shell
   rules:
