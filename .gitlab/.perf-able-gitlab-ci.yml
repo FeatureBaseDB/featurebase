@@ -50,3 +50,8 @@ perf_able:
     - k6 run ./qa/scripts/perf/able/script.js
   after_script:
     - ./qa/scripts/perf/able/ableTeardown.sh
+  dependencies:
+    - build for darwin amd64
+    - build for darwin arm64
+    - build for linux amd64
+    - build for linux arm64
