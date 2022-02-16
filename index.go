@@ -272,16 +272,14 @@ func (i *Index) openFields(idx *disco.Index) error {
 	}
 fileLoop:
 	for fname, fld := range idx.Fields {
+		lfname := fname
 		select {
 		case <-ctx.Done():
 			break fileLoop
 		default:
-			var cfm *CreateFieldMessage = &CreateFieldMessage{}
-			var err error
-
 			// Decode the CreateFieldMessage from the schema data in order to
 			// get its metadata.
-			cfm, err = decodeCreateFieldMessage(i.holder.serializer, fld.Data)
+			cfm, err := decodeCreateFieldMessage(i.holder.serializer, fld.Data)
 			if err != nil {
 				return errors.Wrap(err, "decoding create field message")
 			}
@@ -291,9 +289,9 @@ fileLoop:
 				defer func() {
 					<-indexQueue
 				}()
-				i.holder.Logger.Debugf("open field: %s", fname)
+				i.holder.Logger.Debugf("open field: %s", lfname)
 
-				_, err := i.openField(&mu, cfm, fname)
+				_, err := i.openField(&mu, cfm, lfname)
 				if err != nil {
 					return errors.Wrap(err, "opening field")
 				}
