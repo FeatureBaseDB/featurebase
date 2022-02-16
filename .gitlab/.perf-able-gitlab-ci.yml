@@ -47,7 +47,7 @@ perf_able:
     #- ./qa/scripts/setupSmokeTest.sh
     #- ./qa/scripts/testSmokeTest.sh
     - echo "executing local k6 in k6 container..."
-    #- k6 run ./qa/scripts/perf/able/script.js
+    - k6 run ./qa/scripts/perf/able/script.js
 
   #after_script:
   #  - ./qa/scripts/teardownSmokeTest.sh
