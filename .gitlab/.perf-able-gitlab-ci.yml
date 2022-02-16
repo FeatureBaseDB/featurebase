@@ -16,10 +16,6 @@ perf_able:
     - fbsmoke
   before_script:
     - apt-get update && apt-get install -y gnupg software-properties-common curl git
-    - apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
-    - echo "deb https://dl.k6.io/deb stable main" | tee /etc/apt/sources.list.d/k6.list
-    - apt-get update
-    - apt-get install k6
     - curl -fsSL https://apt.releases.hashicorp.com/gpg | apt-key add -
     - apt-add-repository "deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
     - apt-get update && apt-get install terraform
@@ -46,8 +42,6 @@ perf_able:
   script:
     - ./qa/scripts/perf/able/ableSetup.sh
     - ./qa/scripts/perf/able/ableTest.sh
-    - echo "executing local k6 in k6 container..."
-    - k6 run ./qa/scripts/perf/able/script.js
   after_script:
     - ./qa/scripts/perf/able/ableTeardown.sh
   needs:
