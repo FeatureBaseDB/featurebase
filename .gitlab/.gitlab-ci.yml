@@ -452,7 +452,7 @@ s3 dump:
   tags:
     - shell
   rules:
-    - if: '$CI_COMMIT_TAG == null && ($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")'
+    - if: '$CI_COMMIT_TAG == null && ($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web")'
   script:
     - aws configure set aws_access_key_id $AWS_FBCI_ACCESS_KEY_ID
     - aws configure set aws_secret_access_key $AWS_FBCI_SECRET_ACCESS_KEY
@@ -482,6 +482,8 @@ s3 dump:
 
 perf_able:
   stage: performance
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push"'
   trigger:
     include: .gitlab/.perf-able-gitlab-ci.yml
   variables:
@@ -498,7 +500,7 @@ s3 dump tag:
   tags:
     - shell
   rules:
-    - if: '$CI_COMMIT_TAG != null && ($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")'
+    - if: '$CI_COMMIT_TAG != null && ($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web")'
   script:
     - aws configure set aws_access_key_id $AWS_FBCI_ACCESS_KEY_ID
     - aws configure set aws_secret_access_key $AWS_FBCI_SECRET_ACCESS_KEY
