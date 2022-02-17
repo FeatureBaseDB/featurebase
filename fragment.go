@@ -770,50 +770,31 @@ func (f *fragment) setValueBase(txOrig Tx, columnID uint64, bitDepth uint64, val
 // sum returns the sum of a given bsiGroup as well as the number of columns involved.
 // A bitmap can be passed in to optionally filter the computed columns.
 func (f *fragment) sum(tx Tx, filter *Row, bitDepth uint64) (sum int64, count uint64, err error) {
-	// Compute count based on the existence row.
-	consider, err := f.row(tx, bsiExistsBit)
-	if err != nil {
-		return sum, count, err
-	} else if filter != nil {
-		consider = consider.Intersect(filter)
-	}
-	count = consider.Count()
-
-	// Get negative set
-	nrow, err := f.row(tx, bsiSignBit)
-	if err != nil {
-		return sum, count, err
-	}
-
-	// Filter negative set
-	nrow = consider.Intersect(nrow)
-
-	// Get postive set
-	prow := consider.Difference(nrow)
-
-	// Compute the sum based on the bit count of each row multiplied by the
-	// place value of each row. For example, 10 bits in the 1's place plus
-	// 4 bits in the 2's place plus 3 bits in the 4's place equals a total
-	// sum of 30:
-	//
-	//   10*(2^0) + 4*(2^1) + 3*(2^2) = 30
-	//
-	// Execute once for positive numbers and once for negative. Subtract the
-	// negative sum from the positive sum.
-	for i := uint64(0); i < bitDepth; i++ {
-		row, err := f.row(tx, uint64(bsiOffsetBit+i))
-		if err != nil {
-			return sum, count, err
+	// If there's a provided filter, but it has no contents for this particular
+	// shard, we're done and can return early. If there's no provided filter,
+	// though, we want to run with no-filter, as opposed to an empty filter.
+	var filterData *roaring.Bitmap
+	if filter != nil {
+		for _, seg := range filter.segments {
+			if seg.shard == f.shard {
+				filterData = seg.data
+				break
+			}
 		}
-
-		psum := int64((1 << i) * row.intersectionCount(prow))
-		nsum := int64((1 << i) * row.intersectionCount(nrow))
-
-		// Squash to reduce the possibility of overflow.
-		sum += psum - nsum
+		// if filter is empty, we're done
+		if filterData == nil {
+			return 0, 0, nil
+		}
+	}
+	bsiFilt := roaring.NewBitmapBSICountFilter(filterData)
+	err = tx.ApplyFilter(f.index(), f.field(), f.view(), f.shard, 0, bsiFilt)
+	if err != nil && err != io.EOF {
+		return sum, count, errors.Wrap(err, "finding existing positions")
 	}
 
-	return sum, count, nil
+	c32, sum := bsiFilt.Total()
+
+	return sum, uint64(c32), nil
 }
 
 // min returns the min of a given bsiGroup as well as the number of columns involved.
