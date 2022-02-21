@@ -1,0 +1,7 @@
+Democrat
+Republican
+Independent
+Libertarian
+Green
+Federalist
+Whig

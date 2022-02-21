@@ -1,0 +1,96 @@
+fields:
+  - name: "id"
+    type: uint # (default IDField (non-mutex))
+    distribution: "sequential"
+    min: 0
+    max: 1000000000 # 1B
+    repeat: false # if false, data generation stops when we hit >= max. only available with sequential
+    step: 1
+  - name: "age"
+    type: int
+    distribution: "uniform" # uniform or zipfian # TODO should totally add some kind of poission, normal, gaussian, bimodal
+    min: 15
+    max: 107
+    null_chance: 0.01
+  - name: "education_level"
+    type: string
+    source_file: "values/education.txt"
+    distribution: "zipfian"
+    s: 1.1
+    v: 5.1
+  - name: "gender"
+    type: string
+    source_file: "values/gender.txt"
+    distribution: "fixed"
+  - name: "income_bracket"
+    type: string
+    source_file: "values/income.txt"
+  - name: "domain"
+    type: "string-set"
+    min_num: 1
+    max_num: 6
+    source_file: "values/opendns-top-domains-10K.txt"
+    distribution: "zipfian"
+    s: 1.5
+    v: 4.3
+  - name: "timestamp"
+    type: "timestamp" # (default TimestampField)
+    min_date: 2006-01-02T15:04:05.001Z # RFC3339Nano
+    max_date: 2010-01-02T15:04:05.001Z # RFC3339Nano
+    distribution: "increasing" # only "increasing" is supported right now
+    min_step_duration: "10us"
+    max_step_duration: "100ms" # generated values will add randomly between 1s and 1h to previous value starting at min_date.
+    repeat: false # stop at > max_date unless repeat=true... then go back to min.
+  - name: "political_party"
+    type: "string"
+    source_file: "values/political_parties.txt"
+    distribution: "zipfian"
+    s: 1.0001
+    v: 1.0001
+  - name: "ltv"
+    type: "float" # use idk_params to choose a scale
+    min_float: 0.2
+    max_float: 1500
+    distribution: "uniform" # only supported value
+  - name: "hobby"
+    type: "string-set"
+    source_file: "values/hobbies.txt"
+    distribution: "zipfian"
+    min_num: 0
+    max_num: 4
+    s: 1.3
+    v: 2.5
+
+# idk_params describe how data from "fields" should be ingested by IDK
+idk_params:
+  primary_key_config:
+    field: "id" # if this is a single field named "id" then we'll use uint IDs, if it's empty we'll autogen ids, and if it's anything else we'll do string keys... yes this is a bit hacky, needs to be cleaned up.
+  # fields is keyed by names of fields from top level "fields". It is
+  # not required that all fields appear here, those that don't will
+  # use the default ingestion.
+  fields:
+    id:
+      - type: "ID"
+    timestamp:
+      - type: "RecordTime"
+        layout: "2006-01-02T15:04:05Z"
+        epoch: 1970-01-01T00:00:00.0Z
+        name: "na"
+    domain:
+      - type: "StringArray"
+        time_quantum: "YMD"
+    ltv:
+      - type: "Decimal"
+        scale: 2
+    income_bracket:
+      - type: "String"
+        mutex: true
+    education_level:
+      - type: "String"
+        mutex: true
+    gender:
+      - type: "String"
+        mutex: true
+    political_party:
+      - type: "String"
+        mutex: true
