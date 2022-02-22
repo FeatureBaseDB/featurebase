@@ -257,6 +257,27 @@ resource "aws_iam_role" "fb_cluster_node_role" {
     })
   }
 
+  inline_policy {
+    name = "s3_perms"
+    policy = jsonencode({
+      Version = "2012-10-17"
+      Statement = [
+        {
+            Sid = "VisualEditor0",
+            Effect = "Allow",
+            Action = ["s3:PutObject", "s3:GetObject"],
+            Resource = "arn:aws:s3:::molecula-perf-storage/*"
+        },
+        {
+            Sid = "VisualEditor1",
+            Effect = "Allow",
+            Action = "s3:PutObject",
+            Resource = "arn:aws:s3:::molecula-artifact-storage/*"
+        }
+      ]
+    })
+  }
+
   tags = {
     Prefix = "${var.cluster_prefix}"
     Name   = "${var.cluster_prefix}-fb_cluster_node_role"

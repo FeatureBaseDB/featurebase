@@ -41,7 +41,7 @@ then
 fi
 
 # run test
-echo "Running perf test..."
+echo "Running perf test"
 # leaving this here because K6 is timing out and need to work out why
 #ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem -o "StrictHostKeyChecking no" ec2-user@${INGESTNODE0} "/home/ec2-user/bin/k6 run -e DATANODE0=test.k6.io /data/highcardinalitygroupby.js" 
 ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem -o "StrictHostKeyChecking no" ec2-user@${INGESTNODE0} "curl ${DATANODE0}:10101/index/seg/query -X POST -o /data/response.json -d 'GroupBy(Rows(education_level), Rows(gender), Rows(political_party), Rows(domain))'" 
