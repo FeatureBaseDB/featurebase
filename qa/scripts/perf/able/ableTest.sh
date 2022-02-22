@@ -24,7 +24,7 @@ fi
 
 # copy restore data to ingest node
 echo "Copying restore data from S3"
-ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem -o "StrictHostKeyChecking no" ec2-user@${INGESTNODE0} "aws s3 cp s3://molecula-perf-storage/able/perf-able-seg.tar.xz /data/perf-able-seg.tar.xz" 
+ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem -o "StrictHostKeyChecking no" ec2-user@${INGESTNODE0} "aws s3 cp s3://molecula-perf-storage/able/perf-able-seg.tar.xz /data/perf-able-seg.tar.xz --no-progress" 
 if (( $? != 0 )) 
 then 
     echo "Copy failed"
