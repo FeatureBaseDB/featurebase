@@ -31,12 +31,21 @@ then
     exit 1
 fi
 
-# untar and restore data data
-echo "Untarring and restoring data"
-ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem -o "StrictHostKeyChecking no" ec2-user@${INGESTNODE0} "cd /data; tar -xf perf-able-seg.tar.xz; featurebase restore --host http://${DATANODE0}:10101 -s /data/data/backup | grep -v 'DEBUG'" 
+# untar data
+echo "Untarring data"
+ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem -o "StrictHostKeyChecking no" ec2-user@${INGESTNODE0} "cd /data; tar -xf perf-able-seg.tar.xz" 
 if (( $? != 0 )) 
 then 
-    echo "Untarring and restoring failed"
+    echo "Untarring failed"
+    exit 1
+fi
+
+# restore data
+echo "Restoring data"
+ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem -o "StrictHostKeyChecking no" ec2-user@${INGESTNODE0} "cd /data; featurebase restore --host http://${DATANODE0}:10101 -s /data/data/backup > restore.out" 
+if (( $? != 0 )) 
+then 
+    echo "Restoring failed"
     exit 1
 fi
 
