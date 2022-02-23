@@ -44,6 +44,7 @@ var _ broadcaster = &Server{}
 type Server struct { // nolint: maligned
 	// Close management.
 	wg      sync.WaitGroup
+	muWG    sync.Mutex
 	closing chan struct{}
 
 	// Internal
@@ -97,6 +98,26 @@ type Server struct { // nolint: maligned
 // Holder returns the holder for server.
 func (s *Server) Holder() *Holder {
 	return s.holder
+}
+
+// addToWaitGroup adds to the server WaitGroup but makes sure the server isn't
+// closing, and that the WaitGroup is not already waiting before it adds
+func (s *Server) addToWaitGroup(delta int) bool {
+	select {
+	case <-s.closing:
+		return false
+	default:
+		s.muWG.Lock()
+		defer s.muWG.Unlock()
+		select {
+		case <-s.closing:
+			// if we're closing after having gotten the lock, stop!!
+			return false
+		default:
+			s.wg.Add(delta)
+			return true
+		}
+	}
 }
 
 // ServerOption is a functional option type for pilosa.Server
@@ -590,7 +611,10 @@ func (s *Server) Open() error {
 
 	// Start background process listening for translation
 	// sync resets.
-	s.wg.Add(1)
+	if ok := s.addToWaitGroup(1); !ok {
+		return fmt.Errorf("closing server while opening server is NOT allowed")
+	}
+
 	go func() { defer s.wg.Done(); s.monitorResetTranslationSync() }()
 	go func() { _ = s.translationSyncer.Reset() }()
 
@@ -617,7 +641,9 @@ func (s *Server) Open() error {
 		return errors.Wrap(err, "setting nodeState")
 	}
 
-	s.wg.Add(3)
+	if ok := s.addToWaitGroup(3); !ok {
+		return fmt.Errorf("closing server while opening server is NOT allowed")
+	}
 	go func() { defer s.wg.Done(); s.monitorAntiEntropy() }()
 	go func() { defer s.wg.Done(); s.monitorRuntime() }()
 	go func() { defer s.wg.Done(); s.monitorDiagnostics() }()
@@ -631,14 +657,18 @@ func (s *Server) Open() error {
 		return toSend
 	}()
 
-	s.wg.Add(1)
+	if ok := s.addToWaitGroup(1); !ok {
+		return fmt.Errorf("closing server while opening server is NOT allowed")
+	}
 	go func() {
 		defer s.wg.Done()
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-
-		s.wg.Add(1)
+		if ok := s.addToWaitGroup(1); !ok {
+			// the server is closing, stop!!
+			return
+		}
 		go func() {
 			defer s.wg.Done()
 			defer cancel()
@@ -716,11 +746,15 @@ func (s *Server) Close() error {
 	case <-s.closing:
 		return nil
 	default:
-		errE := s.executor.Close()
-
+		// get the muWG lock so that noone adds to the WaitGroup while it Waits
+		s.muWG.Lock()
+		defer s.muWG.Unlock()
 		// Notify goroutines to stop.
 		close(s.closing)
 		s.wg.Wait()
+
+		errE := s.executor.Close()
+
 		var errh, errd error
 		var errhs error
 		var errc error
@@ -776,8 +810,11 @@ func (s *Server) monitorResetTranslationSync() {
 		case <-s.closing:
 			return
 		case <-s.resetTranslationSyncCh:
+			if ok := s.addToWaitGroup(1); !ok {
+				// the server is closing!!! stop!!
+				return
+			}
 			s.logger.Infof("holder translation sync beginning")
-			s.wg.Add(1)
 			go func() {
 				// Obtaining this lock ensures that there is only
 				// one instance of resetTranslationSync() running

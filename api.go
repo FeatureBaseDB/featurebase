@@ -1049,9 +1049,17 @@ func (api *API) requestUsageOfNodes() {
 
 // Calculates disk usage from scratch if cache has expired for each index and stores the results in the usage cache
 func (api *API) calculateUsage() {
+	// don't need to calculateUsage if we're about to close!
+	if api.isClosing() {
+		return
+	}
+
 	api.usageCache.muCalculate.Lock()
 	defer api.usageCache.muCalculate.Unlock()
-	api.server.wg.Add(1)
+	if ok := api.server.addToWaitGroup(1); !ok {
+		// the server is closing, so just stop!
+		return
+	}
 	defer api.server.wg.Done()
 
 	api.usageCache.muAssign.Lock()
@@ -1065,10 +1073,6 @@ func (api *API) calculateUsage() {
 	if err != nil {
 		api.server.logger.Infof("couldn't get index usage details: %s", err)
 	}
-	if api.isClosing() {
-		return
-	}
-
 	totalSize := nodeMetadataBytes
 	for _, s := range indexDetails {
 		totalSize += s.Total
