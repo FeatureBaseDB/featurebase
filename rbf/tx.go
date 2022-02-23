@@ -201,6 +201,29 @@ func (tx *Tx) BitmapNames() ([]string, error) {
 	return a, nil
 }
 
+// BitmapExist returns true if bitmap exists.
+func (tx *Tx) BitmapExists(name string) (bool, error) {
+	tx.mu.Lock()
+	defer tx.mu.Unlock()
+	return tx.bitmapExists(name)
+}
+
+func (tx *Tx) bitmapExists(name string) (bool, error) {
+	if tx.db == nil {
+		return false, ErrTxClosed
+	} else if name == "" {
+		return false, ErrBitmapNameRequired
+	}
+
+	// Read root records and find entry for bitmap.
+	records, err := tx.RootRecords()
+	if err != nil {
+		return false, err
+	}
+	_, ok := records.Get(name)
+	return ok, nil
+}
+
 // CreateBitmap creates a new empty bitmap with the given name.
 // Returns an error if the bitmap already exists.
 func (tx *Tx) CreateBitmap(name string) error {
@@ -559,6 +582,31 @@ func (tx *Tx) Contains(name string, v uint64) (bool, error) {
 	defer c.Close()
 
 	return c.Contains(v)
+}
+
+// Depth returns the depth of the b-tree for a bitmap.
+func (tx *Tx) Depth(name string) (int, error) {
+	tx.mu.RLock()
+	defer tx.mu.RUnlock()
+
+	if tx.db == nil {
+		return 0, ErrTxClosed
+	} else if name == "" {
+		return 0, ErrBitmapNameRequired
+	}
+
+	c, err := tx.cursor(name)
+	if err == ErrBitmapNotFound {
+		return 0, nil
+	} else if err != nil {
+		return 0, err
+	}
+	defer c.Close()
+
+	if err := c.First(); err != nil {
+		return 0, err
+	}
+	return c.stack.top + 1, nil
 }
 
 // Cursor returns an instance of a cursor this bitmap.

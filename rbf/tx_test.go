@@ -444,7 +444,7 @@ func TestTx_DeallocateToFreeList(t *testing.T) {
 	}
 }
 
-func TestTx_Remove(t *testing.T) {
+func TestTx_RemoveContainer(t *testing.T) {
 	t.Parallel()
 
 	db := MustOpenDB(t)
@@ -538,6 +538,309 @@ func TestTx_AddRemove_Quick(t *testing.T) {
 			if ok, err := tx.Contains("x", v); !ok || err != nil {
 				t.Fatalf("Contains(%d)=(%v,%v) i=%d hi=%d lo=%d", v, ok, err, i, highbits(v), lowbits(v))
 			}
+		}
+	})
+}
+
+func TestTx_Remove(t *testing.T) {
+	t.Run("FullContiguous", func(t *testing.T) {
+		if testing.Short() {
+			t.Skip("-short enabled, skipping")
+		}
+
+		for _, bitN := range []uint64{1000, 100000, 2000000} {
+			t.Run(fmt.Sprint(bitN), func(t *testing.T) {
+				db := MustOpenDB(t)
+				defer MustCloseDB(t, db)
+
+				// Add bits
+				func() {
+					tx := MustBegin(t, db, true)
+					defer tx.Rollback()
+
+					if err := tx.CreateBitmap("x"); err != nil {
+						t.Fatal(err)
+					}
+					for i := uint64(0); i < bitN; i++ {
+						if _, err := tx.Add("x", i); err != nil {
+							t.Fatalf("Add(%d) err=%q", i, err)
+						}
+					}
+					if err := tx.Commit(); err != nil {
+						t.Fatal(err)
+					}
+				}()
+
+				// Remove bits
+				func() {
+					tx := MustBegin(t, db, true)
+					defer tx.Rollback()
+
+					for i := uint64(0); i < bitN; i++ {
+						if _, err := tx.Remove("x", i); err != nil {
+							t.Fatalf("Remove(%d) err=%q", i, err)
+						}
+					}
+					if err := tx.Commit(); err != nil {
+						t.Fatal(err)
+					}
+				}()
+
+				// Verify that all bits have been removed.
+				tx := MustBegin(t, db, false)
+				defer tx.Rollback()
+				if n, err := tx.Count("x"); err != nil {
+					t.Fatal(err)
+				} else if got, want := n, uint64(0); got != want {
+					t.Fatalf("Count=%d, want %d", got, want)
+				}
+			})
+		}
+	})
+
+	t.Run("PartialContiguous", func(t *testing.T) {
+		db := MustOpenDB(t)
+		defer MustCloseDB(t, db)
+
+		// Add bits
+		const bitN = 100000
+		const multiplier = 7 // space out bits so we span more containers
+		func() {
+			tx := MustBegin(t, db, true)
+			defer tx.Rollback()
+
+			if err := tx.CreateBitmap("x"); err != nil {
+				t.Fatal(err)
+			}
+			for i := uint64(0); i < bitN; i++ {
+				if _, err := tx.Add("x", i*multiplier); err != nil {
+					t.Fatalf("Add(%d) err=%q", i, err)
+				}
+			}
+			if err := tx.Commit(); err != nil {
+				t.Fatal(err)
+			}
+		}()
+
+		// Remove some bits in small contiguous chunks.
+		var deleteN int
+		for i := uint64(bitN / 2); i < bitN; {
+			func() {
+				tx := MustBegin(t, db, true)
+				defer tx.Rollback()
+				for j := uint64(0); j < 100; i, j = i+1, j+1 {
+					if n, err := tx.Remove("x", i*multiplier); err != nil || n != 1 {
+						t.Fatalf("Remove(%d)=(%v,%q)", i, n, err)
+					}
+					deleteN++
+				}
+				if err := tx.Commit(); err != nil {
+					t.Fatal(err)
+				}
+			}()
+		}
+
+		// Verify that we have the correct count afterward.
+		tx := MustBegin(t, db, false)
+		defer tx.Rollback()
+		if n, err := tx.Count("x"); err != nil {
+			t.Fatal(err)
+		} else if got, want := n, uint64(bitN-deleteN); got != want {
+			t.Fatalf("Count=%d, want %d", got, want)
+		}
+	})
+
+	t.Run("PartialNonContiguous", func(t *testing.T) {
+		db := MustOpenDB(t)
+		defer MustCloseDB(t, db)
+
+		// Add bits
+		const bitN = 100000
+		const multiplier = 7 // space out bits
+		bits := make([]uint64, 0, bitN)
+		func() {
+			tx := MustBegin(t, db, true)
+			defer tx.Rollback()
+
+			if err := tx.CreateBitmap("x"); err != nil {
+				t.Fatal(err)
+			}
+			for i := uint64(0); i < bitN; i++ {
+				if _, err := tx.Add("x", i*multiplier); err != nil {
+					t.Fatalf("Add(%d) err=%q", i, err)
+				}
+				bits = append(bits, i*multiplier)
+			}
+			if err := tx.Commit(); err != nil {
+				t.Fatal(err)
+			}
+		}()
+
+		// Remove some bits in small contiguous chunks.
+		var deleteN int
+		perm := rand.Perm(len(bits))
+		for i := uint64(bitN / 2); i < bitN; {
+			func() {
+				tx := MustBegin(t, db, true)
+				defer tx.Rollback()
+				for j := uint64(0); j < 100; i, j = i+1, j+1 {
+					value := bits[perm[i]]
+					if n, err := tx.Remove("x", value); err != nil || n != 1 {
+						t.Fatalf("Remove(%d)=(%v,%q)", value, n, err)
+					}
+					deleteN++
+				}
+				if err := tx.Commit(); err != nil {
+					t.Fatal(err)
+				}
+			}()
+		}
+
+		// Verify that we have the correct count afterward.
+		tx := MustBegin(t, db, false)
+		defer tx.Rollback()
+		if n, err := tx.Count("x"); err != nil {
+			t.Fatal(err)
+		} else if got, want := n, uint64(bitN-deleteN); got != want {
+			t.Fatalf("Count=%d, want %d", got, want)
+		}
+	})
+
+	t.Run("DeleteEmptyBitmap", func(t *testing.T) {
+		db := MustOpenDB(t)
+		defer MustCloseDB(t, db)
+
+		// Create bitmap.
+		func() {
+			tx := MustBegin(t, db, true)
+			defer tx.Rollback()
+			if err := tx.CreateBitmap("x"); err != nil {
+				t.Fatal(err)
+			} else if err := tx.Commit(); err != nil {
+				t.Fatal(err)
+			}
+		}()
+
+		// Remove bitmap.
+		func() {
+			tx := MustBegin(t, db, true)
+			defer tx.Rollback()
+			if err := tx.DeleteBitmap("x"); err != nil {
+				t.Fatal(err)
+			} else if err := tx.Commit(); err != nil {
+				t.Fatal(err)
+			}
+		}()
+
+		// Ensure bitmap no longer exists.
+		tx := MustBegin(t, db, false)
+		defer tx.Rollback()
+		if exists, err := tx.BitmapExists("x"); err != nil {
+			t.Fatal(err)
+		} else if exists {
+			t.Fatal("expected bitmap to be removed")
+		}
+	})
+
+	t.Run("WithTreeDepth", func(t *testing.T) {
+		for depth := 1; depth <= 3; depth++ {
+			t.Run(fmt.Sprint(depth), func(t *testing.T) {
+				db := MustOpenDB(t)
+				defer MustCloseDB(t, db)
+
+				// Create bitmap & insert until we hit a tree depth.
+				var bitN int
+				func() {
+					tx := MustBegin(t, db, true)
+					defer tx.Rollback()
+					if err := tx.CreateBitmap("x"); err != nil {
+						t.Fatal(err)
+					}
+					for i := uint64(0); ; i++ {
+						if _, err := tx.Add("x", i<<16); err != nil {
+							t.Fatalf("Add(%d) err=%q", i<<16, err)
+						}
+						bitN++
+
+						if d, err := tx.Depth("x"); err != nil {
+							t.Fatal(err)
+						} else if d == depth {
+							break
+						}
+					}
+					if err := tx.Commit(); err != nil {
+						t.Fatal(err)
+					}
+				}()
+
+				// Remove all bits in reverse order.
+				func() {
+					tx := MustBegin(t, db, true)
+					defer tx.Rollback()
+					for i := bitN - 1; i >= 0; i-- {
+						if n, err := tx.Remove("x", uint64(i)<<16); err != nil || n != 1 {
+							t.Fatalf("Remove(%d)=(%v,%q)", uint64(i)<<16, n, err)
+						}
+					}
+					if err := tx.Commit(); err != nil {
+						t.Fatal(err)
+					}
+				}()
+
+				// Ensure bitmap no longer exists.
+				tx := MustBegin(t, db, false)
+				defer tx.Rollback()
+				for i := uint64(0); i < uint64(bitN); i++ {
+					if ok, err := tx.Contains("x", i<<16); err != nil || ok {
+						t.Fatalf("Contains(%d)=(%v,%q)", i<<16, ok, err)
+					}
+				}
+			})
+		}
+	})
+
+	t.Run("RollbackAfterDelete", func(t *testing.T) {
+		db := MustOpenDB(t)
+		defer MustCloseDB(t, db)
+
+		func() {
+			tx := MustBegin(t, db, true)
+			defer tx.Rollback()
+
+			if err := tx.CreateBitmap("x"); err != nil {
+				t.Fatal(err)
+			} else if err := tx.Commit(); err != nil {
+				t.Fatal(err)
+			}
+		}()
+
+		// Add bits
+		const bitN = 1000
+		for i := uint64(0); i < bitN; i++ {
+			func() {
+				tx := MustBegin(t, db, true)
+				defer tx.Rollback()
+
+				if _, err := tx.Add("x", i<<16); err != nil {
+					t.Fatalf("Add(%d) err=%q", i<<16, err)
+				}
+
+				// Only commit every other bit.
+				if i%2 == 1 {
+					if err := tx.Commit(); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}()
+		}
+
+		// Verify that we have the correct count afterward.
+		tx := MustBegin(t, db, false)
+		defer tx.Rollback()
+		if n, err := tx.Count("x"); err != nil {
+			t.Fatal(err)
+		} else if got, want := n, uint64(bitN/2); got != want {
+			t.Fatalf("Count=%d, want %d", got, want)
 		}
 	})
 }
