@@ -25,6 +25,9 @@ perf_able:
     - aws configure set aws_secret_access_key $AWS_FBCI_SECRET_ACCESS_KEY --profile $PROFILE
     - aws configure set region "us-east-2" --profile $PROFILE
     - aws configure set aws_profile $PROFILE
+    - aws configure set aws_access_key_id $AWS_INFRA_ACCESS_KEY_ID --profile $INFRA_PROFILE
+    - aws configure set aws_secret_access_key $AWS_INFRA_SECRET_ACCESS_KEY --profile $INFRA_PROFILE
+    - aws configure set region "us-east-2" --profile $INFRA_PROFILE
     - echo $AWS_FBCI_SSH_KEY > gitlab-featurebase-ci.pem
     - chmod 400 gitlab-featurebase-ci.pem
     - 'which ssh-agent || ( apt-get update -y && apt-get install openssh-client -y )'
