@@ -21,3 +21,4 @@ __pycache__/
 report.xml
 outputs.json
 builds/
+*.tfstate.backup
