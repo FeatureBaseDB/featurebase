@@ -261,7 +261,7 @@ func (db *DB) methodicalWALPageN(pageN int) (lastMeta int, err error) {
 		}
 		switch {
 		case IsMetaPage(page):
-			lastMeta = i
+			lastMeta = i + 1
 		case IsBitmapHeader(page):
 			// skip the bitmap page, which we can't usefully evaluate
 			i++
