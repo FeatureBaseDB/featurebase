@@ -287,6 +287,50 @@ func (h *Holder) IndexesPath() string {
 	return filepath.Join(h.path, IndexesDir)
 }
 
+// processDeleteInflight checks if deletion was in progress when server shutdown
+// the _exists field is set to row+1 when delete is started. Upon completion, the row is deleted.
+// if _exists>=1, we finish deleting the rows
+func (h *Holder) processDeleteInflight() error {
+	for _, index := range h.indexes {
+		if index.trackExistence {
+			shards := index.AvailableShards(includeRemote).Slice()
+
+			for _, shard := range shards {
+				inprocessRowIDs := NewRow()
+
+				frag := h.fragment(index.name, existenceFieldName, viewStandard, shard)
+				if frag == nil {
+					continue
+				}
+
+				tx := index.Txf().NewTx(Txo{Write: !writable, Index: index, Shard: shard})
+				defer tx.Rollback()
+
+				// filter rows based on having _exists>=1, which is used to flag delete in-flight
+				rows, err := frag.rows(context.Background(), tx, 1)
+				if err != nil {
+					return err
+				}
+
+				// check if any rows are found
+				if len(rows) == 0 {
+					return nil
+				}
+
+				for _, rowID := range rows {
+					row, err2 := frag.row(tx, rowID)
+					if err2 != nil {
+						return err2
+					}
+					inprocessRowIDs = inprocessRowIDs.Union(row)
+				}
+				DeleteRows(inprocessRowIDs, index, shard)
+			}
+		}
+	}
+	return nil
+}
+
 // Open initializes the root data directory for the holder.
 func (h *Holder) Open() error {
 	h.opening = true
@@ -379,6 +423,9 @@ func (h *Holder) Open() error {
 	if err := h.processForeignIndexFields(); err != nil {
 		return errors.Wrap(err, "processing foreign index fields")
 	}
+
+	// Check if deletion was in progress when server was shutdown
+	h.processDeleteInflight()
 
 	h.Stats.Open()
 

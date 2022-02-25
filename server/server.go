@@ -519,10 +519,6 @@ func (m *Command) SetupServer() error {
 	// Tell server about its new API, which its client will need.
 	m.Server.SetAPI(m.API)
 
-	if err != nil {
-		return errors.Wrap(err, "new grpc server")
-	}
-
 	var p authz.GroupPermissions
 	if m.Config.Auth.Enable {
 		m.Config.MustValidateAuth()
