@@ -65,18 +65,6 @@ func (c *Cluster) Host() *pnet.URI {
 	return host
 }
 
-// RemoveHost black lists the host with the given pnet.URI from the cluster.
-func (c *Cluster) RemoveHost(address *pnet.URI) {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-	for i, uri := range c.hosts {
-		if uri.Equals(address) {
-			c.okList[i] = false
-			break
-		}
-	}
-}
-
 // Hosts returns all available hosts in the cluster.
 func (c *Cluster) Hosts() []pnet.URI {
 	c.mutex.RLock()

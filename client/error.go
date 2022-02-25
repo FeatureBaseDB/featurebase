@@ -12,7 +12,7 @@ var (
 	ErrInvalidFieldName            = errors.New("Invalid field name")
 	ErrInvalidLabel                = errors.New("Invalid label")
 	ErrInvalidKey                  = errors.New("Invalid key")
-	ErrTriedMaxHosts               = errors.New("Tried max hosts, still failing")
+	ErrHTTPRequest                 = errors.New("Failed all HTTP retries")
 	ErrAddrURIClusterExpected      = errors.New("Addresses, URIs or a cluster is expected")
 	ErrInvalidQueryOption          = errors.New("Invalid query option")
 	ErrInvalidIndexOption          = errors.New("Invalid index option")

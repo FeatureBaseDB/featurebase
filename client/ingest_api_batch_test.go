@@ -133,7 +133,6 @@ func TestIngestAPIBatchAdd(t *testing.T) {
 }
 
 func TestIngestAPIBatch(t *testing.T) {
-	t.Skip("causing sporadic CI failures... on my list to debug, but this code doesn't affect anyone's production anyhow (jaffee)")
 	c := test.MustRunCluster(t, 3)
 	defer c.Close()
 
