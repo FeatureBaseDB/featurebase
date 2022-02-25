@@ -585,12 +585,13 @@ func TestExecutor_DeleteRows(t *testing.T) {
 		t.Fatalf("failed to read row: %v", err)
 	}
 
-	changed, err := DeleteRows(row, idx, shard)
+	ctx := context.Background()
+	changed, err := DeleteRows(ctx, row, idx, shard)
 	if !changed || err != nil {
 		t.Fatalf("failed to delete row: %v", err)
 	}
 
-	changed, err = DeleteRows(row, idx, shard)
+	changed, err = DeleteRows(ctx, row, idx, shard)
 	if changed {
 		t.Fatalf("expected delete to not clear bit but it did")
 	}
