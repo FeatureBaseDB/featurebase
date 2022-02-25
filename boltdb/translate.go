@@ -450,7 +450,7 @@ func (r *TranslateEntryReader) Close() error {
 	return nil
 }
 
-// ReadEntry reads th next entry from the underlying translate store.
+// ReadEntry reads the next entry from the underlying translate store.
 func (r *TranslateEntryReader) ReadEntry(entry *pilosa.TranslateEntry) error {
 	// Ensure reader has not been closed before read.
 	select {

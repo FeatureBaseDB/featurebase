@@ -3,7 +3,6 @@ package pilosa
 
 import (
 	"fmt"
-	"math/rand"
 	"os"
 	"path/filepath"
 	"strings"
@@ -296,68 +295,4 @@ func Test_DBPerShard_GetFieldView2Shards_map_from_RBF(t *testing.T) {
 	if !view2shard.equals(exp) {
 		panic(fmt.Sprintf("expected '%v' but got view2shard '%v'", exp, view2shard))
 	}
-}
-func TestTXBigDelete(t *testing.T) {
-	if _, ok := os.LookupEnv("GAUNTLET"); !ok {
-		t.Skip("only running this test if GAUNTLET is set")
-	}
-
-	f, idx, tx := mustOpenFragment(t, "i", "f", viewStandard, 0, "")
-	_ = idx
-	defer f.Clean(t)
-	result := make(map[uint64]struct{})
-	var set, none []uint64
-	accum := uint64(0)
-	N := 1000000
-	fmt.Println("build big set")
-	rand.Seed(0)
-	for i := 0; i < N; i++ {
-		bd := rand.Intn(15)
-		accum += uint64(bd)
-		for row := uint64(0); row < uint64(rand.Intn(10)); row++ {
-			pos, _ := f.pos(row, accum)
-			set = append(set, pos)
-		}
-	}
-	fmt.Println("set")
-	err := f.importPositions(tx, set, none, result)
-	PanicOn(err)
-	PanicOn(tx.Commit())
-
-	// Close and reopen the fragment & verify the data.
-	fmt.Println("repopen")
-	err = f.Reopen() // roaring data not being flushed? red on roaring
-	if err != nil {
-		t.Fatal(err)
-	}
-	fmt.Println("clear")
-	tx = idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f, Shard: f.shard})
-	row, er := f.row(tx, 5)
-	PanicOn(er)
-	fmt.Println(row.Count())
-	cols := row.Columns()
-	subset := make([]uint64, len(cols))
-	for i := range cols {
-		pos, e := f.pos(5, cols[i])
-		PanicOn(e)
-		subset[i] = pos
-	}
-	PanicOn(f.importPositions(tx, none, subset, result))
-	row, er = f.row(tx, 5)
-	PanicOn(er)
-	fmt.Println(row.Count())
-	PanicOn(tx.Commit())
-
-	fmt.Println("reopen")
-	err = f.Reopen() // roaring data not being flushed? red on roaring
-	if err != nil {
-		t.Fatal(err)
-	}
-	tx = idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: f.shard})
-	row, er = f.row(tx, 5)
-	PanicOn(er)
-	fmt.Println("delete count should be 0", row.Count())
-	row, er = f.row(tx, 2)
-	PanicOn(er)
-	fmt.Println(row.Count())
 }
