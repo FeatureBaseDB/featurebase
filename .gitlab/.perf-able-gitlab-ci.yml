@@ -3,6 +3,7 @@ stages:
 
 perf_able:
   stage: performance
+  timeout: 2h
   image: registry.gitlab.com/gitlab-org/cloud-deploy/aws-base:latest
   variables:
     PROFILE: "service-terraform"
