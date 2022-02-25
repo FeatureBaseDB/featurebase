@@ -291,7 +291,7 @@ func (h *Holder) IndexesPath() string {
 // the _exists field is set to row+1 when delete is started. Upon completion, the row is deleted.
 // if _exists>=1, we finish deleting the rows
 func (h *Holder) processDeleteInflight() error {
-	for _, index := range h.indexes {
+	for _, index := range h.Indexes() {
 		if index.trackExistence {
 			shards := index.AvailableShards(includeRemote).Slice()
 
