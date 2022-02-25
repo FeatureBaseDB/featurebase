@@ -214,9 +214,6 @@ type Config struct {
 	// LookupDBDSN is an external database to connect to for `ExternalLookup` queries.
 	LookupDBDSN string `toml:"lookup-db-dsn"`
 
-	// The percentage of time spent recalculating the disk and memory usage cache.
-	UsageDutyCycle float64 `toml:"usage-duty-cycle"`
-
 	// Future flags are used to represent features or functionality which is not
 	// yet the default behavior, but will be in a future release.
 	Future struct {
@@ -389,9 +386,6 @@ func NewConfig() *Config {
 	c.Etcd.ClientKeyFile = ""
 	c.Etcd.PeerCertFile = ""
 	c.Etcd.PeerKeyFile = ""
-
-	// Disk and Memory Usage
-	c.UsageDutyCycle = 20.0
 
 	// Future flags.
 	c.Future.Rename = false

@@ -19,14 +19,12 @@ export const ClusterHealth: FC = () => {
   const [cluster, setCluster] = useState<any>();
   const [metrics, setMetrics] = useState<any>();
   const [info, setInfo] = useState<any>();
-  const [clusterData, setClusterData] = useState<any>();
   const [expanded, setExpanded] = useState<string[]>([]);
   const [showMetrics, setShowMetrics] = useState<any>();
   const allExpanded = cluster && expanded.length === cluster.nodes.length;
 
   useEffectOnce(() => {
     getClusterHealth();
-    getClusterData();
   });
 
   const refreshMetrics = useCallback(() => {
@@ -38,15 +36,11 @@ export const ClusterHealth: FC = () => {
 
   useEffect(() => {
     const interval = setInterval(() => {
-      if (!clusterData) {
-        getClusterData();
-      }
-
       getClusterHealth();
       refreshMetrics();
     }, 15000);
     return () => clearInterval(interval);
-  }, [refreshMetrics, cluster, clusterData]);
+  }, [refreshMetrics, cluster]);
 
   const getClusterHealth = () => {
     pilosa.get
@@ -74,13 +68,6 @@ export const ClusterHealth: FC = () => {
       .metrics()
       .then((res) => setMetrics(res.data))
       .catch(() => setMetrics(undefined));
-  };
-
-  const getClusterData = () => {
-    pilosa.get
-      .usage()
-      .then((res) => setClusterData(res.data))
-      .catch(() => setClusterData(undefined));
   };
 
   const toggleAccordion = (nodeId: string) => {
@@ -140,7 +127,6 @@ export const ClusterHealth: FC = () => {
                 key={node.id}
                 node={node}
                 info={info}
-                usage={clusterData ? clusterData[node.id] : undefined}
                 expanded={expanded.includes(node.id)}
                 onToggle={() => toggleAccordion(node.id)}
                 onMetricClick={() => setShowMetrics(node)}

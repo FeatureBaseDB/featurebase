@@ -20,19 +20,16 @@ import Tooltip from '@material-ui/core/Tooltip';
 import Typography from '@material-ui/core/Typography';
 import { Block } from 'shared/Block';
 import { Pager } from 'shared/Pager';
-import { UsageBreakdown } from '../UsageBreakdown';
 import css from './MoleculaTable.module.scss';
 
 type MoleculaTableProps = {
   table: any;
-  dataDistribution: any;
   lastUpdated: string;
 };
 
 export const MoleculaTable: FC<MoleculaTableProps> = ({
   table,
-  dataDistribution,
-  lastUpdated
+  lastUpdated,
 }) => {
   const [page, setPage] = useState<number>(1);
   const [resultsPerPage, setResultsPerPage] = useState<number>(10);
@@ -46,41 +43,12 @@ export const MoleculaTable: FC<MoleculaTableProps> = ({
   const lastUpdatedMoment = lastUpdated ? moment(lastUpdated).utc() : undefined;
 
   useEffect(() => {
-    if (dataDistribution && !dataDistribution.uncached) {
-      const aggregatedFieldsData = Reduce(
-        dataDistribution.fields,
-        (result, value) => {
-          let newResult = {};
-          const keys = Object.keys(value);
-          keys.forEach(
-            (key) =>
-              (newResult[key] = {
-                total: result[key].total + value[key].total,
-                fragments: result[key].fragments + value[key].fragments,
-                keys: result[key].keys + value[key].keys,
-                metadata: result[key].metadata + value[key].metadata
-              })
-          );
-          return newResult;
-        }
-      );
-
-      const sorted = OrderBy(aggregatedFieldsData, ['total'], ['desc']);
-      if (sorted.length > 0) {
-        setMaxFieldSize(sorted[0].total);
-      }
-
-      setFieldsData(aggregatedFieldsData);
-    }
-  }, [dataDistribution]);
-
-  useEffect(() => {
     if (searchText.length > 1) {
       const fuse = new Fuse(table.fields, {
         keys: ['name'],
         minMatchCharLength: 2,
         ignoreLocation: true,
-        threshold: 0
+        threshold: 0,
       });
       const result = fuse.search(searchText);
 
@@ -131,46 +99,6 @@ export const MoleculaTable: FC<MoleculaTableProps> = ({
       <Typography variant="h5" color="textSecondary">
         {table.name}
       </Typography>
-      {lastUpdatedMoment ? (
-        <div className={css.infoMessage}>
-          {dataDistribution && dataDistribution.uncached ? (
-            <Fragment>
-              Disk usage will be calculated at the next{` `}
-              <Tooltip
-                title={
-                  <Fragment>
-                    Disk and memory information shown here are read from a
-                    cache, the behavior of which can be controlled with the{` `}
-                    <code style={{ whiteSpace: 'nowrap' }}>
-                      --usage-duty-cycle
-                    </code>{' '}
-                    command line flag.
-                  </Fragment>
-                }
-                placement="top"
-                arrow
-              >
-                <span className={css.infoTooltip}>cache refresh</span>
-              </Tooltip>
-              .
-            </Fragment>
-          ) : (
-            <Fragment>
-              Disk usage last updated{' '}
-              <Tooltip
-                title={`${lastUpdatedMoment.format('M/D/YYYY hh:mm a')} UTC`}
-                placement="top"
-                arrow
-              >
-                <span className={css.infoTooltip}>
-                  {lastUpdatedMoment.fromNow()}
-                </span>
-              </Tooltip>
-              .
-            </Fragment>
-          )}
-        </div>
-      ) : null}
       <div className={css.layout}>
         <div>
           <label className={css.label}>keys</label>
@@ -179,9 +107,6 @@ export const MoleculaTable: FC<MoleculaTableProps> = ({
               {table.options.keys ? 'TRUE' : 'FALSE'}
             </code>
           </div>
-        </div>
-        <div className={css.breakdown}>
-          <UsageBreakdown data={dataDistribution} />
         </div>
       </div>
       <div>
@@ -211,14 +136,14 @@ export const MoleculaTable: FC<MoleculaTableProps> = ({
               <TableCell className={css.tableHeader}>
                 <span
                   className={classNames(css.sortable, {
-                    [css.currentSort]: sort === 'name'
+                    [css.currentSort]: sort === 'name',
                   })}
                   onClick={() => onSortClick('name')}
                 >
                   Name{' '}
                   <ArrowDropDownIcon
                     className={classNames(css.sortArrow, {
-                      [css.asc]: sortDir === 'asc'
+                      [css.asc]: sortDir === 'asc',
                     })}
                   />
                 </span>
@@ -226,21 +151,6 @@ export const MoleculaTable: FC<MoleculaTableProps> = ({
               <TableCell className={css.tableHeader}>Type</TableCell>
               <TableCell className={css.tableHeader}>Cardinality</TableCell>
               <TableCell className={css.tableHeader}>Options</TableCell>
-              <TableCell className={css.tableHeader}>
-                <span
-                  className={classNames(css.sortable, {
-                    [css.currentSort]: sort === 'total'
-                  })}
-                  onClick={() => onSortClick('total')}
-                >
-                  Disk Usage{' '}
-                  <ArrowDropDownIcon
-                    className={classNames(css.sortArrow, {
-                      [css.asc]: sortDir === 'asc'
-                    })}
-                  />
-                </span>
-              </TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -294,22 +204,6 @@ export const MoleculaTable: FC<MoleculaTableProps> = ({
                           return null;
                         })}
                       </div>
-                    </TableCell>
-                    <TableCell className={css.tableCell}>
-                      <UsageBreakdown
-                        data={
-                          isEmpty(field)
-                            ? field
-                            : dataDistribution
-                            ? dataDistribution.uncached
-                              ? dataDistribution
-                              : field
-                            : field
-                        }
-                        width={`${(field.total / maxFieldSize) * 150}px`}
-                        showLabel={false}
-                        usageValueSize="small"
-                      />
                     </TableCell>
                   </TableRow>
                 );

@@ -452,7 +452,6 @@ func newRouter(handler *Handler) http.Handler {
 	router.HandleFunc("/version", handler.handleGetVersion).Methods("GET").Name("GetVersion")
 
 	// /ui endpoints are for UI use; they may change at any time.
-	router.HandleFunc("/ui/usage", handler.chkAuthZ(handler.handleGetUsage, authz.Read)).Methods("GET").Name("GetUsage")
 	router.HandleFunc("/ui/transaction", handler.chkAuthZ(handler.handleGetTransactionList, authz.Read)).Methods("GET").Name("GetTransactionList")
 	router.HandleFunc("/ui/transaction/", handler.chkAuthZ(handler.handleGetTransactionList, authz.Read)).Methods("GET").Name("GetTransactionList")
 	router.HandleFunc("/ui/shard-distribution", handler.chkAuthZ(handler.handleGetShardDistribution, authz.Admin)).Methods("GET").Name("GetShardDistribution")
@@ -985,63 +984,6 @@ func (h *Handler) handlePostSchema(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
-}
-
-// handleGetUsage handles GET /ui/usage requests.
-func (h *Handler) handleGetUsage(w http.ResponseWriter, r *http.Request) {
-	if !validHeaderAcceptJSON(r.Header) {
-		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
-		return
-	}
-
-	q := r.URL.Query()
-	remoteStr := q.Get("remote")
-	var remote bool
-	if remoteStr == "true" {
-		remote = true
-	}
-
-	nodeUsages, err := h.api.Usage(r.Context(), remote)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
-
-	// if auth is turned on, filter results
-	if h.auth != nil {
-		g := r.Context().Value(contextKeyGroupMembership)
-		if g == nil {
-			http.Error(w, "Forbidden", http.StatusForbidden)
-			return
-		}
-		if !h.permissions.IsAdmin(g.([]authn.Group)) {
-			allowed := h.permissions.GetAuthorizedIndexList(g.([]authn.Group), authz.Read)
-			filteredNodeUsages := map[string]NodeUsage{}
-
-			for nodeId, nodeUsage := range nodeUsages {
-				filteredIndexUsage := NodeUsage{
-					Disk: DiskUsage{
-						IndexUsage: map[string]IndexUsage{},
-					},
-				}
-				for index, idxUsage := range nodeUsage.Disk.IndexUsage {
-					// is it in auth list
-					for _, authd := range allowed {
-						if index == authd {
-							filteredIndexUsage.Disk.IndexUsage[index] = idxUsage
-							break
-						}
-					}
-				}
-				filteredNodeUsages[nodeId] = filteredIndexUsage
-			}
-			nodeUsages = filteredNodeUsages
-		}
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(nodeUsages); err != nil {
-		h.logger.Errorf("write status response error: %s", err)
-	}
 }
 
 // handleGetShardDistribution handles GET /ui/shard-distribution requests.

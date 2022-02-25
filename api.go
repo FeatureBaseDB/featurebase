@@ -50,7 +50,6 @@ type API struct {
 	importWorkerPoolSize int
 	importWork           chan importJob
 
-	usageCache      *usageCache
 	schemaDetailsOn bool
 
 	Serializer Serializer
@@ -936,260 +935,6 @@ func (api *API) PrimaryNode() *topology.Node {
 	// Create a snapshot of the cluster to use for node/partition calculations.
 	snap := topology.NewClusterSnapshot(api.cluster.noder, api.cluster.Hasher, api.cluster.ReplicaN)
 	return snap.PrimaryFieldTranslationNode()
-}
-
-// Cache of disk usage statistics
-type usageCache struct {
-	data             map[string]NodeUsage
-	refreshInterval  time.Duration
-	lastUpdated      time.Time
-	resetTrigger     chan bool
-	lastCalcDuration time.Duration
-	waitMultiplier   float64
-	disable          bool
-
-	muCalculate sync.Mutex
-	muAssign    sync.Mutex
-}
-
-var usageCacheMinDuration = 5 * time.Second // If usage takes less than this duration to calculate, don't use the cache.
-var usageCacheMinInterval = time.Hour       // Refresh interval is forced to be >= this duration.
-var usageCacheInitialInterval = time.Hour   // Refresh interval starts with this duration.
-
-// NodeUsage represents all usage measurements for one node.
-type NodeUsage struct {
-	Disk        DiskUsage   `json:"diskUsage"`
-	Memory      MemoryUsage `json:"memoryUsage"`
-	LastUpdated time.Time   `json:"lastUpdated"`
-}
-
-// DiskUsage represents the storage space used on disk by one node.
-type DiskUsage struct {
-	Capacity   uint64                `json:"capacity,omitempty"`
-	TotalUse   uint64                `json:"totalInUse"`
-	IndexUsage map[string]IndexUsage `json:"indexes"`
-}
-
-// IndexUsage represents the storage space used on disk by one index, on one node.
-type IndexUsage struct {
-	Total          uint64                `json:"total"`
-	IndexKeys      uint64                `json:"indexKeys"`
-	FieldKeysTotal uint64                `json:"fieldKeysTotal"`
-	Fragments      uint64                `json:"fragments"`
-	Metadata       uint64                `json:"metadata"`
-	Fields         map[string]FieldUsage `json:"fields"`
-}
-
-// FieldUsage represents the storage space used on disk by one field, on one node
-type FieldUsage struct {
-	Total     uint64 `json:"total"`
-	Fragments uint64 `json:"fragments"`
-	Keys      uint64 `json:"keys"`
-	Metadata  uint64 `json:"metadata"`
-}
-
-// MemoryUsage represents the memory used by one node.
-type MemoryUsage struct {
-	Capacity uint64 `json:"capacity"`
-	TotalUse uint64 `json:"totalInUse"`
-}
-
-// Returns disk usage from cache if cache is large. It will recalculate on the spot if the last cacluation was under 5 seconds.
-func (api *API) Usage(ctx context.Context, remote bool) (map[string]NodeUsage, error) {
-	span, _ := tracing.StartSpanFromContext(ctx, "API.Usage")
-	defer span.Finish()
-
-	if api.usageCache.disable {
-		resp := make(map[string]NodeUsage)
-		return resp, nil
-	}
-
-	api.usageCache.muAssign.Lock()
-	lastCalc := api.usageCache.lastCalcDuration
-	api.usageCache.muAssign.Unlock()
-	if lastCalc < usageCacheMinDuration {
-		err := api.ResetUsageCache()
-		if err != nil {
-			api.server.logger.Infof("could not reset usageCache: %s", err)
-		}
-	}
-
-	api.usageCache.muAssign.Lock()
-	lastUpdated := api.usageCache.lastUpdated
-	api.usageCache.muAssign.Unlock()
-	if lastUpdated == (time.Time{}) {
-		api.calculateUsage()
-	}
-
-	if !remote {
-		api.requestUsageOfNodes()
-	}
-
-	return api.usageCache.data, nil
-}
-
-// Makes a ui/usage request for each node in cluster to calculates its usage and adds it to the cache
-func (api *API) requestUsageOfNodes() {
-	nodes := api.cluster.Nodes()
-	for _, node := range nodes {
-		if node.ID == api.server.nodeID {
-			continue
-		}
-
-		nodeUsage, err := api.server.defaultClient.GetNodeUsage(context.Background(), &node.URI)
-		if err != nil {
-			api.server.logger.Infof("couldn't collect disk usage from %s: %s", node.URI, err)
-		}
-
-		api.usageCache.muAssign.Lock()
-		api.usageCache.data[node.ID] = nodeUsage[node.ID]
-		api.usageCache.muAssign.Unlock()
-	}
-}
-
-// Calculates disk usage from scratch if cache has expired for each index and stores the results in the usage cache
-func (api *API) calculateUsage() {
-	// don't need to calculateUsage if we're about to close!
-	if api.isClosing() {
-		return
-	}
-
-	api.usageCache.muCalculate.Lock()
-	defer api.usageCache.muCalculate.Unlock()
-	if ok := api.server.addToWaitGroup(1); !ok {
-		// the server is closing, so just stop!
-		return
-	}
-	defer api.server.wg.Done()
-
-	api.usageCache.muAssign.Lock()
-	lastUpdated := api.usageCache.lastUpdated
-	api.usageCache.muAssign.Unlock()
-
-	if time.Since(lastUpdated) <= api.usageCache.refreshInterval {
-		return
-	}
-	indexDetails, nodeMetadataBytes, err := api.holder.Txf().IndexUsageDetails(api.isClosing)
-	if err != nil {
-		api.server.logger.Infof("couldn't get index usage details: %s", err)
-	}
-	totalSize := nodeMetadataBytes
-	for _, s := range indexDetails {
-		totalSize += s.Total
-	}
-
-	// NOTE: these errors are ignored in api.Info(), but checked here
-	si := api.server.systemInfo
-	diskCapacity, err := si.DiskCapacity(api.holder.path)
-	if err != nil {
-		api.server.logger.Infof("couldn't read disk capacity: %s", err)
-	}
-
-	memoryCapacity, err := si.MemTotal()
-	if err != nil {
-		api.server.logger.Infof("couldn't read memory capacity: %s", err)
-	}
-	memoryUse, err := si.MemUsed()
-	if err != nil {
-		api.server.logger.Infof("couldn't read memory usage: %s", err)
-	}
-
-	lastUpdated = time.Now()
-	// Insert into result.
-	nodeUsage := NodeUsage{
-		Disk: DiskUsage{
-			Capacity:   diskCapacity,
-			TotalUse:   totalSize,
-			IndexUsage: indexDetails,
-		},
-		Memory: MemoryUsage{
-			Capacity: memoryCapacity,
-			TotalUse: memoryUse,
-		},
-		LastUpdated: lastUpdated,
-	}
-	api.usageCache.muAssign.Lock()
-	api.usageCache.data = make(map[string]NodeUsage)
-	api.usageCache.data[api.server.nodeID] = nodeUsage
-	api.usageCache.lastUpdated = lastUpdated
-	api.usageCache.muAssign.Unlock()
-}
-
-// Periodically calculates disk/memory usage in terms of the duty cycle. The duty cycle represents the percentage of
-// time that is spent recalculating this cache. It is specified relatively, rather than by a set interval, because
-// scans can take an unpredictably long time.
-func (api *API) RefreshUsageCache(dutyCycle float64) {
-
-	if dutyCycle == 0 {
-		api.server.logger.Warnf("usage-duty-cycle set to 0, usage cache and /ui/usage endpoint are disabled")
-		api.usageCache = &usageCache{
-			disable: true,
-		}
-		return
-	}
-
-	trigger := make(chan bool)
-	defer close(trigger)
-
-	multiplier := 100/dutyCycle - 1
-
-	api.usageCache = &usageCache{
-		data:             make(map[string]NodeUsage),
-		refreshInterval:  usageCacheInitialInterval,
-		resetTrigger:     trigger,
-		lastCalcDuration: 0,
-		waitMultiplier:   multiplier,
-	}
-	api.server.logger.Infof("monitoring resource usage with duty cycle %v%%\n", dutyCycle)
-	for {
-		start := time.Now()
-		api.calculateUsage()
-		api.setRefreshInterval(time.Since(start))
-		api.server.logger.Infof("updated resource usage cache at %v, took %v, next update in %v\n", api.usageCache.lastUpdated.Format(time.RFC3339), api.usageCache.lastCalcDuration.Truncate(time.Millisecond), api.usageCache.refreshInterval.Truncate(100*time.Millisecond))
-		select {
-		case <-trigger:
-			continue
-		case <-api.server.closing:
-			return
-		case <-time.After(api.usageCache.refreshInterval):
-			continue
-		}
-	}
-}
-
-// Refresh interval set in relation to how long the last calculation took.
-func (api *API) setRefreshInterval(dur time.Duration) {
-	refresh := time.Duration(float64(dur) * api.usageCache.waitMultiplier)
-	if refresh < usageCacheMinInterval {
-		refresh = usageCacheMinInterval
-	}
-	api.usageCache.muAssign.Lock()
-	api.usageCache.refreshInterval = refresh
-	api.usageCache.lastCalcDuration = dur
-	api.usageCache.muAssign.Unlock()
-}
-
-// Resets the lastUpdated time and awakens RefreshUsageCache()
-func (api *API) ResetUsageCache() error {
-	if api.usageCache != nil {
-		api.usageCache.muAssign.Lock()
-		api.usageCache.lastUpdated = time.Time{}
-		api.usageCache.muAssign.Unlock()
-	} else {
-		return errors.New("invalidating cache: cache not initialized")
-	}
-	api.usageCache.resetTrigger <- true
-	return nil
-}
-
-// isClosing returns true if the server is shutting down.
-func (api *API) isClosing() bool {
-	select {
-	case <-api.server.closing:
-		return true
-	default:
-		return false
-	}
 }
 
 // RecalculateCaches forces all TopN caches to be updated.
@@ -3256,24 +3001,24 @@ var methodsResizing = map[apiMethod]struct{}{
 	apiSchema:             {},
 }
 
-var methodsDegraded = map[apiMethod]struct{}{
-	apiExportCSV:         {},
-	apiFragmentBlockData: {},
-	apiFragmentBlocks:    {},
-	apiField:             {},
-	apiIndex:             {},
-	apiQuery:             {},
-	apiRecalculateCaches: {},
-	apiRemoveNode:        {},
-	apiShardNodes:        {},
-	apiSchema:            {},
-	apiViews:             {},
-	apiStartTransaction:  {},
-	apiFinishTransaction: {},
-	apiTransactions:      {},
-	apiGetTransaction:    {},
-	apiActiveQueries:     {},
-}
+// var methodsDegraded = map[apiMethod]struct{}{
+// 	apiExportCSV:         {},
+// 	apiFragmentBlockData: {},
+// 	apiFragmentBlocks:    {},
+// 	apiField:             {},
+// 	apiIndex:             {},
+// 	apiQuery:             {},
+// 	apiRecalculateCaches: {},
+// 	apiRemoveNode:        {},
+// 	apiShardNodes:        {},
+// 	apiSchema:            {},
+// 	apiViews:             {},
+// 	apiStartTransaction:  {},
+// 	apiFinishTransaction: {},
+// 	apiTransactions:      {},
+// 	apiGetTransaction:    {},
+// 	apiActiveQueries:     {},
+// }
 
 var methodsNormal = map[apiMethod]struct{}{
 	apiCreateField:          {},
