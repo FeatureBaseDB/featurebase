@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/molecula/featurebase/v3"
+	pilosa "github.com/molecula/featurebase/v3"
 	"github.com/molecula/featurebase/v3/test"
 	"github.com/stretchr/testify/require"
 )
@@ -33,7 +33,7 @@ func TestExecutor_DeleteRecords(t *testing.T) {
 			{ID: 0, Val: 4},
 			{ID: 2, Val: 8},
 		})
-		c.CreateField(t, indexName, pilosa.IndexOptions{TrackExistence: true}, "timefield", pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMDH")))
+		c.CreateField(t, indexName, pilosa.IndexOptions{TrackExistence: true}, "timefield", pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMDH"), "0"))
 		c.ImportBitsWithTimestamp(t, indexName, "timefield", [][2]uint64{
 			{0, 0},
 			{0, 1},
@@ -51,7 +51,7 @@ func TestExecutor_DeleteRecords(t *testing.T) {
 	}
 	setupKeys := func(t *testing.T, r *require.Assertions, c *test.Cluster) {
 		t.Helper()
-		c.CreateField(t, indexName, pilosa.IndexOptions{Keys: true, TrackExistence: true}, "timefield", pilosa.OptFieldKeys(), pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMDH")))
+		c.CreateField(t, indexName, pilosa.IndexOptions{Keys: true, TrackExistence: true}, "timefield", pilosa.OptFieldKeys(), pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMDH"), "0"))
 		c.ImportTimeQuantumKey(t, indexName, "timefield", []test.TimeQuantumKey{
 			{RowKey: "fish", ColKey: "one", Ts: time.Date(2019, time.January, 2, 17, 45, 0, 0, time.UTC).Unix()},
 			{RowKey: "fish", ColKey: "one", Ts: time.Date(2020, time.January, 2, 17, 45, 0, 0, time.UTC).Unix()},

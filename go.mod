@@ -54,11 +54,12 @@ require (
 	go.etcd.io/etcd v0.0.0-20201125193152-8a03d2e9614b
 	golang.org/x/crypto v0.0.0-20201217014255-9d1352758620 // indirect
 	golang.org/x/exp v0.0.0-20201008143054-e3b2a7f2fdc7
-	golang.org/x/mod v0.4.2
-	golang.org/x/net v0.0.0-20210805182204-aaa1db679c0d // indirect
+	golang.org/x/mod v0.5.1
+	golang.org/x/net v0.0.0-20211015210444-4f30a5c0130f // indirect
 	golang.org/x/oauth2 v0.0.0-20190604053449-0f29369cfe45
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	golang.org/x/sys v0.0.0-20220111092808-5a964db01320 // indirect
+	golang.org/x/text v0.3.7 // indirect
 	google.golang.org/grpc v1.28.0
 	gopkg.in/yaml.v2 v2.4.0
 	modernc.org/mathutil v1.0.0

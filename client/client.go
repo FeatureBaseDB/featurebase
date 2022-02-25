@@ -1678,6 +1678,7 @@ type SchemaOptions struct {
 	CacheType      string      `json:"cacheType"`
 	CacheSize      uint        `json:"cacheSize"`
 	TimeQuantum    string      `json:"timeQuantum"`
+	Ttl            string      `json:"ttl"`
 	Min            pql.Decimal `json:"min"`
 	Max            pql.Decimal `json:"max"`
 	Scale          int64       `json:"scale"`
@@ -1697,11 +1698,25 @@ func (so SchemaOptions) asIndexOptions() *IndexOptions {
 }
 
 func (so SchemaOptions) asFieldOptions() *FieldOptions {
+	var ttlValue time.Duration
+	if so.Ttl != "" {
+		ttlVal, err := time.ParseDuration(so.Ttl)
+		if err != nil {
+			ttlValue = 0
+			fmt.Println(fmt.Errorf("ParseDuration error: %v", err))
+		} else {
+			ttlValue = ttlVal
+		}
+	} else {
+		ttlValue = 0
+	}
+
 	return &FieldOptions{
 		fieldType:      so.FieldType,
 		cacheSize:      int(so.CacheSize),
 		cacheType:      CacheType(so.CacheType),
 		timeQuantum:    TimeQuantum(so.TimeQuantum),
+		ttl:            ttlValue,
 		min:            so.Min,
 		max:            so.Max,
 		scale:          so.Scale,

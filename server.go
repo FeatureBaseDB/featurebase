@@ -617,10 +617,11 @@ func (s *Server) Open() error {
 		return errors.Wrap(err, "setting nodeState")
 	}
 
-	s.wg.Add(3)
+	s.wg.Add(4)
 	go func() { defer s.wg.Done(); s.monitorAntiEntropy() }()
 	go func() { defer s.wg.Done(); s.monitorRuntime() }()
 	go func() { defer s.wg.Done(); s.monitorDiagnostics() }()
+	go func() { defer s.wg.Done(); s.monitorTtl() }()
 
 	toSend := func() []Message {
 		s.holder.startMsgsMu.Lock()
@@ -789,6 +790,53 @@ func (s *Server) monitorResetTranslationSync() {
 					s.logger.Errorf("holder translation sync error: err=%s", err)
 				}
 			}()
+		}
+	}
+}
+
+func (s *Server) monitorTtl() {
+	ctx := context.Background()
+	ttlRemovalInterval, err := time.ParseDuration("1h")
+	if err != nil {
+		s.logger.Errorf("ttl parse interval error: err=%s", err)
+	}
+	ticker := time.NewTicker(ttlRemovalInterval)
+	for {
+		select {
+		case <-s.closing:
+			return
+		case <-ticker.C:
+			for _, index := range s.holder.Indexes() {
+				for _, field := range index.Fields() {
+					if field.Options().Type == "time" {
+						if field.Options().Ttl > 0 {
+							for _, view := range field.views() {
+								viewNames := strings.Split(view.name, "_")
+								if len(viewNames) >= 2 {
+									viewTime, err := timeOfView(view.name, false)
+									if err != nil {
+										s.logger.Printf("ttl parse view time: %s", err)
+										continue
+									}
+									timeSince := time.Since(viewTime)
+
+									if timeSince > field.Options().Ttl {
+										for _, shard := range field.AvailableShards(true).Slice() {
+											s.holder.txf.DeleteFragmentFromStore(index.Name(), field.Name(), view.name, shard, nil)
+										}
+
+										err := s.defaultClient.api.DeleteView(ctx, index.Name(), field.Name(), view.name)
+										if err != nil {
+											s.logger.Errorf("ttl delete view: %s", err)
+										}
+										s.logger.Infof("ttl deleted view: %s", view.name)
+									}
+								}
+							}
+						}
+					}
+				}
+			}
 		}
 	}
 }

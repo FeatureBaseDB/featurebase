@@ -669,6 +669,7 @@ func (s Serializer) encodeFieldOptions(o *pilosa.FieldOptions) *pb.FieldOptions 
 		Scale:        o.Scale,
 		BitDepth:     uint64(o.BitDepth),
 		TimeQuantum:  string(o.TimeQuantum),
+		Ttl:          o.Ttl.String(),
 		TimeUnit:     string(o.TimeUnit),
 		Keys:         o.Keys,
 		ForeignIndex: o.ForeignIndex,
@@ -1072,6 +1073,19 @@ func (s Serializer) decodeFieldOptions(options *pb.FieldOptions, m *pilosa.Field
 	m.Scale = options.Scale
 	m.BitDepth = uint64(options.BitDepth)
 	m.TimeQuantum = pilosa.TimeQuantum(options.TimeQuantum)
+	// Ttl is optional, it might not exist on some data
+	// To prevent "ParseDuration error:" logs showwing for the empty Ttl values, set those emtpy Ttl as 0
+	if options.Ttl != "" {
+		ttlVal, err := time.ParseDuration(options.Ttl)
+		if err != nil {
+			m.Ttl = 0
+			fmt.Println(fmt.Errorf("ParseDuration error: %v", err))
+		} else {
+			m.Ttl = ttlVal
+		}
+	} else {
+		m.Ttl = 0
+	}
 	m.TimeUnit = options.TimeUnit
 	m.Keys = options.Keys
 	m.ForeignIndex = options.ForeignIndex

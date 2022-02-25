@@ -2,6 +2,8 @@
 package pilosa
 
 import (
+	"time"
+
 	"github.com/gogo/protobuf/proto"
 	"github.com/molecula/featurebase/v3/pb"
 	"github.com/molecula/featurebase/v3/pql"
@@ -57,6 +59,18 @@ func UnmarshalFieldOptions(name string, createdAt int64, buf []byte) (*FieldInfo
 	fi.Options.Base = pbi.Base
 	fi.Options.BitDepth = pbi.BitDepth
 	fi.Options.TimeQuantum = TimeQuantum(pbi.TimeQuantum)
+	// Ttl is optional, it might not exist on some data
+	// for the empty Ttl values, set those emtpy Ttl as 0
+	if pbi.Ttl != "" {
+		ttlVal, err := time.ParseDuration(pbi.Ttl)
+		if err != nil {
+			fi.Options.Ttl = 0
+		} else {
+			fi.Options.Ttl = ttlVal
+		}
+	} else {
+		fi.Options.Ttl = 0
+	}
 	fi.Options.Keys = pbi.Keys
 	fi.Options.NoStandardView = pbi.NoStandardView
 
