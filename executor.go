@@ -8295,31 +8295,31 @@ func (e *executor) executeDeleteRecordFromShard(ctx context.Context, qcx *Qcx, i
 	return DeleteRows(ctx, src, idx, shard)
 }
 
-func DeleteRows(ctx context.Context, row *Row, idx *Index, shard uint64) (bool, error) {
+func DeleteRows(ctx context.Context, src *Row, idx *Index, shard uint64) (bool, error) {
 	var existenceFragment *fragment
 	var deletedRowID uint64
 	var commitor Commitor = &NopCommitor{}
 	var err error
-	columns := row.segments[0].data //should only be one segment
+	columns := src.segments[0].data //should only be one segment
+
 	if idx.Keys() {
-		columns := row.segments[0].data
 		//store columns in exits field ToBeDelete row commited
 		existenceFragment = idx.Holder().fragment(idx.Name(), existenceFieldName, viewStandard, shard)
 		if existenceFragment == nil {
 			//no exists field
 			return false, errors.New("can't bulk delete without existence field")
 		}
-		deletedRowID, err = transactExistRow(ctx, idx, shard, existenceFragment, row)
+		deletedRowID, err = transactExistRow(ctx, idx, shard, existenceFragment, src)
 		commitor, err = deleteKeyTranslation(ctx, idx, shard, columns)
 		if err != nil {
 			return false, err
 		}
 	}
 	writeTx := idx.Txf().NewTx(Txo{Write: writable, Index: idx, Shard: shard})
-	defer writeTx.Rollback()
 	if err != nil {
 		return false, err
 	}
+	defer writeTx.Rollback()
 	changed := false
 	defer func() {
 		//if there is an error on the bit clearing rollback the keys
