@@ -8265,10 +8265,6 @@ func (e *executor) executeDeleteRecordFromShard(ctx context.Context, qcx *Qcx, i
 	if len(row.segments) == 0 { //nothing to remove
 		return false, nil
 	}
-	columns := row.segments[0].data //should only be one segment
-	if columns.Count() == 0 {
-		return false, nil
-	}
 
 	// Fetch index.
 	idx := e.Holder.Index(index)
@@ -8276,14 +8272,20 @@ func (e *executor) executeDeleteRecordFromShard(ctx context.Context, qcx *Qcx, i
 		return false, newNotFoundError(ErrIndexNotFound, index)
 	}
 
+	return DeleteRows(row, idx, shard)
+}
+
+func DeleteRows(row *Row, idx *Index, shard uint64) (bool, error) {
+	tx := idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Shard: shard})
+	defer tx.Rollback()
+
+	columns := row.segments[0].data //should only be one segment
+	if columns.Count() == 0 {
+		return false, nil
+	}
 	columnIDs := make([]uint64, 0)
 	none := make([]uint64, 0) // no bits will be set
 
-	tx, finisher, err := qcx.GetTx(Txo{Write: writable, Index: idx, Shard: shard})
-	if err != nil {
-		return false, err
-	}
-	defer finisher(&err)
 	changed := false
 	colCounts := make([]int, 0)
 	toClear := columnIDs[:0]
@@ -8301,7 +8303,7 @@ func (e *executor) executeDeleteRecordFromShard(ctx context.Context, qcx *Qcx, i
 		toClear = columnIDs[:0]
 		rowSet = make(map[uint64]struct{})
 
-		err = tx.ApplyFilter(frag.index(), frag.field(), frag.view(), frag.shard, 0, findExisting)
+		err := tx.ApplyFilter(frag.index(), frag.field(), frag.view(), frag.shard, 0, findExisting)
 		if err != nil {
 			return false, err
 		}
@@ -8332,5 +8334,5 @@ func (e *executor) executeDeleteRecordFromShard(ctx context.Context, qcx *Qcx, i
 			}
 		}
 	}
-	return changed, nil
+	return changed, tx.Commit()
 }

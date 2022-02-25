@@ -545,3 +545,53 @@ func TestDistinctTimestampUnion(t *testing.T) {
 		})
 	}
 }
+
+func TestExecutor_DeleteRows(t *testing.T) {
+	path, _ := testhook.TempDir(t, "pilosa-executor-")
+	holder := NewHolder(path, mustHolderConfig())
+	defer holder.Close()
+
+	if err := holder.Open(); err != nil {
+		t.Fatalf("opening holder: %v", err)
+	}
+
+	idx, err := holder.CreateIndex("i", IndexOptions{TrackExistence: true})
+	if err != nil {
+		t.Fatalf("creating index: %v", err)
+	}
+
+	f, err := idx.CreateField("f", OptFieldTypeDefault())
+	if err != nil {
+		t.Fatalf("creating field: %v", err)
+	}
+
+	shard := uint64(0)
+	tx := idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Shard: shard})
+	defer tx.Rollback()
+
+	if _, err = f.SetBit(tx, 1, 1, nil); err != nil {
+		t.Fatalf("setting bit: %v", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("failed to commit transaction: %v", err)
+	}
+
+	tx = idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Shard: shard})
+	defer tx.Rollback()
+
+	row, err := f.Row(tx, 1)
+	if err != nil {
+		t.Fatalf("failed to read row: %v", err)
+	}
+
+	changed, err := DeleteRows(row, idx, shard)
+	if !changed || err != nil {
+		t.Fatalf("failed to delete row: %v", err)
+	}
+
+	changed, err = DeleteRows(row, idx, shard)
+	if changed {
+		t.Fatalf("expected delete to not clear bit but it did")
+	}
+}
