@@ -8300,7 +8300,13 @@ func DeleteRows(ctx context.Context, src *Row, idx *Index, shard uint64) (bool, 
 	var deletedRowID uint64
 	var commitor Commitor = &NopCommitor{}
 	var err error
+	if len(src.segments) == 0 { //nothing to remove
+		return false, nil
+	}
 	columns := src.segments[0].data //should only be one segment
+	if columns.Count() == 0 {
+		return false, nil
+	}
 
 	if idx.Keys() {
 		//store columns in exits field ToBeDelete row commited

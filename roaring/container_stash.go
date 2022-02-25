@@ -618,7 +618,7 @@ func (c *Container) setBitmap(bitmap []uint64) {
 		}
 	}
 	if len(bitmap) != 1024 {
-		panic("illegal bitmap length")
+		panic(fmt.Sprintf("illegal bitmap length %v", len(bitmap)))
 	}
 	c.pointer, c.len, c.cap = (*uint16)(unsafe.Pointer(&bitmap[0])), bitmapN, bitmapN
 	c.flags &^= flagPristine
