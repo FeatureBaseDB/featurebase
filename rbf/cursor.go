@@ -474,9 +474,11 @@ func (c *Cursor) putLeafCell(in leafCell) (err error) {
 		writeCellN(buf[:], len(group))
 
 		offset := dataOffset(len(group))
+		X := 0
 		for j, cell := range group {
 			writeLeafCell(buf[:], j, offset, cell)
 			offset += align8(cell.Size())
+			X++
 		}
 
 		if err := c.tx.writePage(buf[:]); err != nil {
@@ -614,7 +616,6 @@ func (c *Cursor) deleteLeafCell(key uint64) (err error) {
 	copy(cells[elem.index:], cells[elem.index+1:])
 	cells[len(cells)-1] = leafCell{}
 	cells = cells[:len(cells)-1]
-
 	// Write cells to page.
 	buf := allocPage()
 	writePageNo(buf[:], elem.pgno)
@@ -626,12 +627,14 @@ func (c *Cursor) deleteLeafCell(key uint64) (err error) {
 		writeLeafCell(buf[:], j, offset, cell)
 		offset += align8(cell.Size())
 	}
+
 	if err := c.tx.writePage(buf[:]); err != nil {
 		return err
 	}
 
 	// Update the parent's reference key if it's changed.
 	if c.stack.top > 0 && oldPageKey != cells[0].Key {
+
 		return c.updateBranchCell(c.stack.top-1, cells[0].Key)
 	}
 	return nil

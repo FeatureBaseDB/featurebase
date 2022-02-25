@@ -675,6 +675,47 @@ func (b *Bitmap) Intersect(other *Bitmap) *Bitmap {
 	return output
 }
 
+func (b *Bitmap) Hash(hash uint64) uint64 {
+	const (
+		offset = 14695981039346656037
+		prime  = 1099511628211
+	)
+	if hash == 0 {
+		hash = uint64(offset)
+	}
+
+	it, _ := b.Containers.Iterator(0)
+	for it.Next() {
+		ki, _ := it.Value()
+		hash ^= uint64(ki)
+		hash *= prime
+	}
+
+	it, _ = b.Containers.Iterator(0)
+	for it.Next() {
+		_, ci := it.Value()
+		hash ^= 0
+		hash *= prime
+		if ci.N() > 0 {
+			var bytes []byte
+			switch ci.typ() {
+
+			case ContainerArray:
+				bytes = fromArray16(ci.array())
+			case ContainerBitmap:
+				bytes = fromArray64(ci.bitmap())
+			case ContainerRun:
+				bytes = fromInterval16(ci.runs())
+			}
+			for _, b := range bytes {
+				hash ^= uint64(b)
+				hash *= prime
+			}
+		}
+	}
+	return hash
+}
+
 type mutableContainersIterator struct {
 	c Containers
 
@@ -7487,4 +7528,14 @@ func (c *Container) Slice() (r []uint16) {
 		}
 	}
 	return r
+}
+
+func fromArray16(a []uint16) []byte {
+	return (*[8192]byte)(unsafe.Pointer(&a[0]))[: len(a)*2 : len(a)*2]
+}
+func fromArray64(a []uint64) []byte {
+	return (*[8192]byte)(unsafe.Pointer(&a[0]))[:8192:8192]
+}
+func fromInterval16(a []Interval16) []byte {
+	return (*[8192]byte)(unsafe.Pointer(&a[0]))[: len(a)*4 : len(a)*4]
 }

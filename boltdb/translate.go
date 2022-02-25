@@ -12,7 +12,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/molecula/featurebase/v3"
+	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/roaring"
 	"github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"
 
@@ -32,6 +33,8 @@ var (
 
 	bucketKeys = []byte("keys")
 	bucketIDs  = []byte("ids")
+	bucketFree = []byte("free")
+	FreeKey    = []byte("free")
 )
 
 const (
@@ -118,6 +121,8 @@ func (s *TranslateStore) Open() (err error) {
 		if _, err := tx.CreateBucketIfNotExists(bucketKeys); err != nil {
 			return err
 		} else if _, err := tx.CreateBucketIfNotExists(bucketIDs); err != nil {
+			return err
+		} else if _, err := tx.CreateBucketIfNotExists(bucketFree); err != nil {
 			return err
 		}
 		return nil
@@ -445,7 +450,7 @@ func (r *TranslateEntryReader) Close() error {
 	return nil
 }
 
-// ReadEntry reads the next entry from the underlying translate store.
+// ReadEntry reads th next entry from the underlying translate store.
 func (r *TranslateEntryReader) ReadEntry(entry *pilosa.TranslateEntry) error {
 	// Ensure reader has not been closed before read.
 	select {
@@ -496,6 +501,88 @@ func (r *TranslateEntryReader) ReadEntry(entry *pilosa.TranslateEntry) error {
 		case <-writeNotify:
 		}
 	}
+}
+
+type boltWrapper struct {
+	tx *bolt.Tx
+	db *bolt.DB
+}
+
+func (w *boltWrapper) Commit() error {
+	if w.tx != nil {
+		return w.tx.Commit()
+	}
+	return nil
+}
+
+func (w *boltWrapper) Rollback() {
+	if w.tx != nil {
+		w.tx.Rollback()
+	}
+}
+func (s *TranslateStore) FreeIDs() (*roaring.Bitmap, error) {
+	result := roaring.NewBitmap()
+	err := s.db.View(func(tx *bolt.Tx) error {
+		bkt := tx.Bucket(bucketFree)
+		if bkt == nil {
+			return errors.Errorf(errFmtTranslateBucketNotFound, bucketKeys)
+		}
+		b := bkt.Get(FreeKey)
+		err := result.UnmarshalBinary(b)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+	return result, err
+}
+func (s *TranslateStore) MergeFree(tx *bolt.Tx, newIDs *roaring.Bitmap) error {
+	bkt := tx.Bucket(bucketFree)
+	b := bkt.Get(FreeKey)
+	buf := new(bytes.Buffer)
+	if b != nil { //if existing combine with newIDs
+		before := roaring.NewBitmap()
+		err := before.UnmarshalBinary(b)
+		if err != nil {
+			return err
+		}
+		final := newIDs.Union(before)
+		_, err = final.WriteTo(buf)
+		if err != nil {
+			return err
+		}
+	} else {
+		newIDs.WriteTo(buf)
+	}
+	return bkt.Put(FreeKey, buf.Bytes())
+}
+
+// Delete removes the lookeup pairs in order to make avialble for reuse but doesn't commit the
+// transaction for that is tied to the associated rbf transaction being successful
+func (s *TranslateStore) Delete(records *roaring.Bitmap) (pilosa.Commitor, error) {
+	tx, err := s.db.Begin(true)
+	if err != nil {
+		return nil, err
+	}
+	keyBucket := tx.Bucket(bucketKeys)
+	idBucket := tx.Bucket(bucketIDs)
+	ids := records.Slice()
+	for i := range ids {
+		id := u64tob(ids[i])
+		boltKey := idBucket.Get(id)
+		err = keyBucket.Delete(boltKey)
+		if err != nil {
+			tx.Rollback()
+			return &boltWrapper{}, err
+		}
+		err = idBucket.Delete(id)
+		if err != nil {
+			tx.Rollback()
+			return &boltWrapper{}, err
+		}
+
+	}
+	return &boltWrapper{tx: tx}, s.MergeFree(tx, records)
 }
 
 // emptyKey is a sentinel byte slice which stands for "" as a key.

@@ -584,6 +584,10 @@ type BitmapBitmapFilter struct {
 	callback    func(uint64) error
 }
 
+func (b *BitmapBitmapFilter) SetCallback(cb func(uint64) error) {
+	b.callback = cb
+}
+
 func (b *BitmapBitmapFilter) ConsiderKey(key FilterKey, n int32) FilterResult {
 	pos := key & keyMask
 	if b.containers[pos] == nil || n == 0 {

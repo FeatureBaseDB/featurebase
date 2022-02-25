@@ -412,7 +412,6 @@ func (db *DB) checkpoint() (err error) {
 // Close closes the database.
 func (db *DB) Close() (err error) {
 	// TODO(bbj): Add wait group to hang until last Tx is complete.
-
 	// Wait for writer lock.
 	db.rwmu.Lock()
 	defer db.rwmu.Unlock()

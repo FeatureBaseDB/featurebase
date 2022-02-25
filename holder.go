@@ -324,7 +324,7 @@ func (h *Holder) processDeleteInflight() error {
 					}
 					inprocessRowIDs = inprocessRowIDs.Union(row)
 				}
-				DeleteRows(inprocessRowIDs, index, shard)
+				DeleteRows(context.Background(), inprocessRowIDs, index, shard)
 			}
 		}
 	}

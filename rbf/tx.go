@@ -669,6 +669,7 @@ func (tx *Tx) container(name string, key uint64) (*roaring.Container, error) {
 func (tx *Tx) PutContainer(name string, key uint64, ct *roaring.Container) error {
 	tx.mu.Lock()
 	defer tx.mu.Unlock()
+
 	return tx.putContainer(name, key, ct)
 }
 
@@ -725,7 +726,6 @@ func (tx *Tx) removeContainer(name string, key uint64) error {
 	if exact, err := c.Seek(key); err != nil || !exact {
 		return err
 	}
-
 	return c.deleteLeafCell(key)
 }
 
@@ -1125,7 +1125,7 @@ func (tx *Tx) readPage(pgno uint32) (_ []byte, isHeap bool, err error) {
 
 	// Verify page number requested is within current size of database.
 	pageN := readMetaPageN(tx.meta[:])
-	if pgno > pageN {
+	if pgno >= pageN {
 		return nil, false, fmt.Errorf("rbf: page read out of bounds: pgno=%d max=%d", pgno, pageN-1)
 	}
 
@@ -1932,6 +1932,7 @@ func (tx *Tx) Pages(pgnos []uint32) ([]Page, error) {
 // PageInfos returns meta data about all pages in the database.
 func (tx *Tx) PageInfos() ([]PageInfo, error) {
 	var errorList ErrorList
+
 	infos := make([]PageInfo, tx.PageN())
 
 	// Read meta page info.
