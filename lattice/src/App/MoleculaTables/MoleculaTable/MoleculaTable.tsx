@@ -4,19 +4,16 @@ import Breadcrumbs from '@material-ui/core/Breadcrumbs';
 import classNames from 'classnames';
 import Fuse from 'fuse.js';
 import Highlighter from 'react-highlight-words';
-import isEmpty from 'lodash/isEmpty';
 import Link from '@material-ui/core/Link';
 import map from 'lodash/map';
 import moment from 'moment';
 import OrderBy from 'lodash/orderBy';
-import Reduce from 'lodash/reduce';
 import Table from '@material-ui/core/Table';
 import TableBody from '@material-ui/core/TableBody';
 import TableCell from '@material-ui/core/TableCell';
 import TableHead from '@material-ui/core/TableHead';
 import TableRow from '@material-ui/core/TableRow';
 import TextField from '@material-ui/core/TextField';
-import Tooltip from '@material-ui/core/Tooltip';
 import Typography from '@material-ui/core/Typography';
 import { Block } from 'shared/Block';
 import { Pager } from 'shared/Pager';
@@ -36,11 +33,9 @@ export const MoleculaTable: FC<MoleculaTableProps> = ({
   const sliceStart = (page - 1) * resultsPerPage;
   const [searchText, setSearchText] = useState<string>('');
   const [filteredFields, setFiltereedFields] = useState(table.fields);
-  const [fieldsData, setFieldsData] = useState<{}>({});
-  const [maxFieldSize, setMaxFieldSize] = useState<number>(0);
+  const [fieldsData] = useState<{}>({});
   const [sort, setSort] = useState<string>('total');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
-  const lastUpdatedMoment = lastUpdated ? moment(lastUpdated).utc() : undefined;
 
   useEffect(() => {
     if (searchText.length > 1) {

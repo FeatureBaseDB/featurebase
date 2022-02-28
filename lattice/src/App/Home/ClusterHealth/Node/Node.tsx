@@ -1,4 +1,4 @@
-import React, { FC, Fragment, useState } from 'react';
+import React, { FC, useState } from 'react';
 import Button from '@material-ui/core/Button';
 import copy from 'copy-to-clipboard';
 import EqualizerIcon from '@material-ui/icons/EqualizerSharp';
@@ -11,7 +11,6 @@ import Find from 'lodash/find';
 import IconButton from '@material-ui/core/IconButton';
 import InfoIcon from '@material-ui/icons/Info';
 import Tooltip from '@material-ui/core/Tooltip';
-import Typography from '@material-ui/core/Typography';
 import { formatBytes } from 'shared/utils/formatBytes';
 import { nodeInfo } from './nodeInfo';
 import { NODE_STATE } from './nodeStatus';

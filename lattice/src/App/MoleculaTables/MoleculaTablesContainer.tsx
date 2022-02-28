@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import OrderBy from 'lodash/orderBy';
 import { MoleculaTable } from './MoleculaTable';
 import { MoleculaTables } from './MoleculaTables';
 import { pilosa } from 'services/eventServices';
@@ -12,8 +11,8 @@ export const MoleculaTablesContainer = () => {
   const history = useHistory();
   const [tables, setTables] = useState<any>();
   const [selectedTable, setSelectedTable] = useState<any>();
-  const [maxSize, setMaxSize] = useState<number>(0);
-  const [lastUpdated, setLastUpdated] = useState<string>('');
+  const [maxSize] = useState<number>(0);
+  const [lastUpdated] = useState<string>('');
 
   useEffectOnce(() => {
     pilosa.get
