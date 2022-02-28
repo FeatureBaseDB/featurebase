@@ -2,6 +2,7 @@
 package rbf_test
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"math/rand"
@@ -742,7 +743,11 @@ func TestTx_DeleteBitmapsWithPrefix(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	checkInfos := func() {
+	var b bytes.Buffer
+	pBuf := func(msg string, args ...interface{}) (int, error) {
+		return fmt.Fprintf(&b, msg, args...)
+	}
+	checkInfos := func(pf func(string, ...interface{}) (int, error)) {
 		tx := MustBegin(t, db, false)
 		defer tx.Rollback()
 		infos, err := tx.PageInfos()
@@ -750,34 +755,34 @@ func TestTx_DeleteBitmapsWithPrefix(t *testing.T) {
 		for pgno, info := range infos {
 			switch info := info.(type) {
 			case *rbf.MetaPageInfo:
-				fmt.Printf("%-8d ", pgno)
-				fmt.Printf("%-10s ", "meta")
-				fmt.Printf("pageN=%d,walid=%d,rootrec=%d,freelist=%d\n", info.PageN, info.WALID, info.RootRecordPageNo, info.FreelistPageNo)
+				pf("%-8d ", pgno)
+				pf("%-10s ", "meta")
+				pf("pageN=%d,walid=%d,rootrec=%d,freelist=%d\n", info.PageN, info.WALID, info.RootRecordPageNo, info.FreelistPageNo)
 
 			case *rbf.RootRecordPageInfo:
-				fmt.Printf("%-8d ", pgno)
-				fmt.Printf("%-10s ", "rootrec")
-				fmt.Printf("next=%d\n", info.Next)
+				pf("%-8d ", pgno)
+				pf("%-10s ", "rootrec")
+				pf("next=%d\n", info.Next)
 
 			case *rbf.LeafPageInfo:
-				fmt.Printf("%-8d ", pgno)
-				fmt.Printf("%-10s ", "leaf")
-				fmt.Printf("flags=x%x,celln=%d\n", info.Flags, info.CellN)
+				pf("%-8d ", pgno)
+				pf("%-10s ", "leaf")
+				pf("flags=x%x,celln=%d\n", info.Flags, info.CellN)
 
 			case *rbf.BranchPageInfo:
-				fmt.Printf("%-8d ", pgno)
-				fmt.Printf("%-10s ", "branch")
-				fmt.Printf("flags=x%x,celln=%d\n", info.Flags, info.CellN)
+				pf("%-8d ", pgno)
+				pf("%-10s ", "branch")
+				pf("flags=x%x,celln=%d\n", info.Flags, info.CellN)
 
 			case *rbf.BitmapPageInfo:
-				fmt.Printf("%-8d ", pgno)
-				fmt.Printf("%-10s ", "bitmap")
-				fmt.Printf("-\n")
+				pf("%-8d ", pgno)
+				pf("%-10s ", "bitmap")
+				pf("-\n")
 
 			case *rbf.FreePageInfo:
-				fmt.Printf("%-8d ", pgno)
-				fmt.Printf("%-10s ", "free")
-				fmt.Printf("-\n")
+				pf("%-8d ", pgno)
+				pf("%-10s ", "free")
+				pf("-\n")
 
 			default:
 				t.Fatal(fmt.Sprintf("unexpected page info type %T", info))
@@ -806,19 +811,19 @@ func TestTx_DeleteBitmapsWithPrefix(t *testing.T) {
 		ifError(tx.Commit())
 	}
 
-	checkInfos()
+	checkInfos(pBuf)
 	populate()
-	checkInfos()
+	checkInfos(pBuf)
 	ifError(db.Check())
 
 	tx := MustBegin(t, db, true)
 	tx.DeleteBitmapsWithPrefix(prefix)
 	ifError(tx.Commit())
 	ifError(db.Check())
-	checkInfos()
+	checkInfos(pBuf)
 	populate()
 	ifError(db.Check())
-	checkInfos()
+	checkInfos(pBuf)
 
 }
 
