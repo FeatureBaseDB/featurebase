@@ -465,6 +465,7 @@ func newRouter(handler *Handler) http.Handler {
 	router.HandleFunc("/internal/translate/data", handler.chkAuthZ(handler.handlePostTranslateData, authz.Write)).Methods("POST").Name("PostTranslateData")
 
 	// other ones
+	router.HandleFunc("/internal/mem-usage", handler.chkAuthZ(handler.handleGetMemUsage, authz.Read)).Methods("GET").Name("GetUsage")
 	router.HandleFunc("/internal/fragment/block/data", handler.chkAuthN(handler.handleGetFragmentBlockData)).Methods("GET").Name("GetFragmentBlockData")
 	router.HandleFunc("/internal/fragment/blocks", handler.chkAuthN(handler.handleGetFragmentBlocks)).Methods("GET").Name("GetFragmentBlocks")
 	router.HandleFunc("/internal/fragment/data", handler.chkAuthN(handler.handleGetFragmentData)).Methods("GET").Name("GetFragmentData")
@@ -984,6 +985,25 @@ func (h *Handler) handlePostSchema(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleGetMemUsage handles GET /internal/mem-usage requests.
+func (h *Handler) handleGetMemUsage(w http.ResponseWriter, r *http.Request) {
+	if !validHeaderAcceptJSON(r.Header) {
+		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
+		return
+	}
+
+	use, err := GetMemoryUsage()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(use); err != nil {
+		h.logger.Errorf("write mem usage response error: %s", err)
+	}
 }
 
 // handleGetShardDistribution handles GET /ui/shard-distribution requests.

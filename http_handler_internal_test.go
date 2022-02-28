@@ -771,3 +771,19 @@ func NewTestAuth(t *testing.T) *authn.Auth {
 	}
 	return a
 }
+
+func TestHandleGetMemUsage(t *testing.T) {
+	h := Handler{
+		logger:      logger.NewStandardLogger(os.Stdout),
+		queryLogger: logger.NewStandardLogger(os.Stdout),
+	}
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("GET", "/whatever", nil)
+
+	h.handleGetMemUsage(w, r)
+
+	resp := w.Result()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected %v, got %v", http.StatusOK, resp.StatusCode)
+	}
+}
