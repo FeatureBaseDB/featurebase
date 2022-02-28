@@ -8292,10 +8292,13 @@ func (e *executor) executeDeleteRecordFromShard(ctx context.Context, qcx *Qcx, i
 		return
 	}
 
-	return DeleteRows(ctx, src, idx, shard)
+	return DeleteRowsWithFlow(ctx, src, idx, shard, true)
 }
 
 func DeleteRows(ctx context.Context, src *Row, idx *Index, shard uint64) (bool, error) {
+	return DeleteRowsWithFlow(ctx, src, idx, shard, false)
+}
+func DeleteRowsWithFlow(ctx context.Context, src *Row, idx *Index, shard uint64, normalFlow bool) (bool, error) {
 	var existenceFragment *fragment
 	var deletedRowID uint64
 	var commitor Commitor = &NopCommitor{}
@@ -8310,12 +8313,14 @@ func DeleteRows(ctx context.Context, src *Row, idx *Index, shard uint64) (bool, 
 
 	if idx.Keys() {
 		//store columns in exits field ToBeDelete row commited
-		existenceFragment = idx.Holder().fragment(idx.Name(), existenceFieldName, viewStandard, shard)
-		if existenceFragment == nil {
-			//no exists field
-			return false, errors.New("can't bulk delete without existence field")
+		if normalFlow { // normalFlow is the standard path, "not normal" is recoverory
+			existenceFragment = idx.Holder().fragment(idx.Name(), existenceFieldName, viewStandard, shard)
+			if existenceFragment == nil {
+				//no exists field
+				return false, errors.New("can't bulk delete without existence field")
+			}
+			deletedRowID, err = transactExistRow(ctx, idx, shard, existenceFragment, src)
 		}
-		deletedRowID, err = transactExistRow(ctx, idx, shard, existenceFragment, src)
 		commitor, err = deleteKeyTranslation(ctx, idx, shard, columns)
 		if err != nil {
 			return false, err
@@ -8388,7 +8393,18 @@ func DeleteRows(ctx context.Context, src *Row, idx *Index, shard uint64) (bool, 
 	}
 	close(resChan)
 	if existenceFragment != nil { //a string keys have been deleted and the deleteRow was created
-		existenceFragment.clearRow(writeTx, deletedRowID)
+		if normalFlow {
+			existenceFragment.clearRow(writeTx, deletedRowID)
+		} else {
+			// this is if we are recovering from failure and cleaning up
+			rows, err := existenceFragment.rows(ctx, writeTx, 1)
+			if err != nil {
+				return false, err
+			}
+			for _, rowId := range rows {
+				existenceFragment.clearRow(writeTx, rowId)
+			}
+		}
 	}
 	return changed, nil
 }
