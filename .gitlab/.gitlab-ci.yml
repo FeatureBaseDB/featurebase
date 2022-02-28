@@ -506,18 +506,21 @@ s3 dump tag:
     - aws configure set aws_secret_access_key $AWS_FBCI_SECRET_ACCESS_KEY
     - aws configure set region "us-east-2"
     - aws configure set aws_profile $PROFILE
-    - aws s3 cp featurebase_linux_amd64 s3://${LOCATION}/${CI_COMMIT_TAG}/featurebase_linux_amd64
-    - aws s3 cp roaring-migrate_linux_amd64 s3://${LOCATION}/${CI_COMMIT_TAG}/roaring-migrate_linux_amd64
-    - aws s3 cp featurebase_linux_arm64 s3://${LOCATION}/${CI_COMMIT_TAG}/featurebase_linux_arm64
-    - aws s3 cp roaring-migrate_linux_arm64 s3://${LOCATION}/${CI_COMMIT_TAG}/roaring-migrate_linux_arm64
-    - aws s3 cp featurebase_darwin_amd64 s3://${LOCATION}/${CI_COMMIT_TAG}/featurebase_darwin_amd64
-    - aws s3 cp roaring-migrate_darwin_amd64 s3://${LOCATION}/${CI_COMMIT_TAG}/roaring-migrate_darwin_amd64
-    - aws s3 cp featurebase_darwin_arm64 s3://${LOCATION}/${CI_COMMIT_TAG}/featurebase_darwin_arm64
-    - aws s3 cp roaring-migrate_darwin_arm64 s3://${LOCATION}/${CI_COMMIT_TAG}/roaring-migrate_darwin_arm64
-    - aws s3 cp NOTICE s3://${LOCATION}/${CI_COMMIT_TAG}/NOTICE
-    - aws s3 cp install/featurebase.debian.service s3://${LOCATION}/${CI_COMMIT_TAG}/featurebase.debian.service
-    - aws s3 cp install/featurebase.redhat.service s3://${LOCATION}/${CI_COMMIT_TAG}/featurebase.redhat.service
-    - aws s3 cp install/featurebase.conf s3://${LOCATION}/${CI_COMMIT_TAG}/featurebase.conf
+    - |
+      for goos in "darwin" "linux"; do
+        for goarch in "amd64" "arm64"; do
+          dir=featurebase-${CI_COMMIT_TAG}-${goos}-${goarch}
+          echo "Directory ${dir}"
+          mkdir $dir
+          mv featurebase_${goos}_${goarch} ${dir}/featurebase
+          mv roaring-migrate_${goos}_${goarch} ${dir}/roaring-migrate
+          cp NOTICE install/featurebase.conf install/featurebase.*.service ${dir}/
+          tar cvzf ${dir}.tar.gz ${dir}
+          aws s3 cp ${dir} s3://${LOCATION}/${CI_COMMIT_TAG}/${dir}/ --recursive
+          aws s3 cp ${dir}.tar.gz s3://${LOCATION}/${CI_COMMIT_TAG}/
+        done
+      done
+
   needs:
     - job: build for darwin amd64
     - job: build for darwin arm64
