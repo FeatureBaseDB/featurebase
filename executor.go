@@ -6731,6 +6731,17 @@ func (e *executor) translateCall(c *pql.Call, index string, columnKeys map[strin
 				}
 			}
 		}
+
+		// Check if "like" argument is applied to keyed fields.
+		if _, found := c.Args["like"].(string); found {
+			fieldName, err := c.FirstStringArg("_field", "field")
+			if err != nil || fieldName == "" {
+				return nil, fmt.Errorf("cannot read field name for Rows call")
+			}
+			if !idx.Field(fieldName).options.Keys {
+				return nil, fmt.Errorf("'%s' is not a set/mutex/time field with a string key", fieldName)
+			}
+		}
 	}
 
 	// Translate child calls.
