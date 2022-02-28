@@ -34,14 +34,14 @@ func (s *SelectHandler) Handle(ctx context.Context, mapped *MappedSQL) (pproto.T
 	if !ok {
 		return nil, fmt.Errorf("statement is not type select: %T", mapped.Statement)
 	}
-	mr, err := s.mapSelect(ctx, stmt, mapped.Mask)
+	mr, err := s.MapSelect(ctx, stmt, mapped.Mask)
 	if err != nil {
 		return nil, errors.Wrap(err, "mapping select")
 	}
 	return s.execMappingResult(ctx, mr, mapped.SQL)
 }
 
-func (s *SelectHandler) mapSelect(ctx context.Context, selectStmt *sqlparser.Select, qm QueryMask) (*MappingResult, error) {
+func (s *SelectHandler) MapSelect(ctx context.Context, selectStmt *sqlparser.Select, qm QueryMask) (*MappingResult, error) {
 	// Get the handler for this query mask.
 	hndlr := s.router.handler(qm)
 	if hndlr == nil {
