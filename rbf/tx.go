@@ -1258,6 +1258,22 @@ func (tx *Tx) ContainerIterator(name string, key uint64) (citer roaring.Containe
 	return &containerIterator{cursor: c}, exact, nil
 }
 
+// Shared pool for in-memory database pages.
+// These are used before being flushed to disk.
+var containerFilterPool = &sync.Pool{}
+
+func getContainerFilter(c *Cursor, filter roaring.BitmapFilter, tx *Tx) *containerFilter {
+	existing := containerFilterPool.Get()
+	if existing == nil {
+		return &containerFilter{cursor: c, filter: filter, tx: tx}
+	}
+	f := existing.(*containerFilter)
+	f.cursor = c
+	f.filter = filter
+	f.tx = tx
+	return f
+}
+
 func (tx *Tx) ApplyFilter(name string, key uint64, filter roaring.BitmapFilter) (err error) {
 	tx.mu.RLock()
 	defer tx.mu.RUnlock()
@@ -1273,7 +1289,7 @@ func (tx *Tx) ApplyFilter(name string, key uint64, filter roaring.BitmapFilter) 
 	if err != nil {
 		return err
 	}
-	f := containerFilter{cursor: c, filter: filter, tx: tx}
+	f := getContainerFilter(c, filter, tx)
 	defer f.Close()
 	return f.Apply()
 }
@@ -1615,6 +1631,8 @@ type containerFilter struct {
 
 func (s *containerFilter) Close() {
 	s.cursor.Close()
+	s.cursor = nil
+	containerFilterPool.Put(s)
 }
 
 func (s *containerFilter) Apply() (err error) {
