@@ -90,9 +90,6 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 	flags.Uint16Var(&srv.Config.Postgres.ConnectionLimit, "postgres.connection-limit", srv.Config.Postgres.ConnectionLimit, "Maximum number of simultaneous postgres connections to allow. (set 0 to disable)")
 	flags.Uint16Var(&srv.Config.Postgres.SqlVersion, "postgres.sql-version", srv.Config.Postgres.SqlVersion, "Molecula Sql Handling Version (default 1)")
 
-	// Disk and Memory usage cache for ui/usage endpoint
-	flags.Float64Var(&srv.Config.UsageDutyCycle, "usage-duty-cycle", srv.Config.UsageDutyCycle, "Sets the percentage of time that is spent recalculating the disk and memory usage cache. 100.0 for always-running, 0 disables the cache and the /ui/usage endpoint.")
-
 	// Future flags.
 	flags.BoolVar(&srv.Config.Future.Rename, "future.rename", false, "Present application name as FeatureBase. Defaults to false, will default to true in an upcoming release.")
 

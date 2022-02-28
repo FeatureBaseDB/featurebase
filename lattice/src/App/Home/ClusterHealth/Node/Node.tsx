@@ -1,4 +1,4 @@
-import React, { FC, Fragment, useState } from 'react';
+import React, { FC, useState } from 'react';
 import Button from '@material-ui/core/Button';
 import copy from 'copy-to-clipboard';
 import EqualizerIcon from '@material-ui/icons/EqualizerSharp';
@@ -11,7 +11,6 @@ import Find from 'lodash/find';
 import IconButton from '@material-ui/core/IconButton';
 import InfoIcon from '@material-ui/icons/Info';
 import Tooltip from '@material-ui/core/Tooltip';
-import Typography from '@material-ui/core/Typography';
 import { formatBytes } from 'shared/utils/formatBytes';
 import { nodeInfo } from './nodeInfo';
 import { NODE_STATE } from './nodeStatus';
@@ -21,7 +20,6 @@ import css from './Node.module.scss';
 type NodeType = {
   node: any;
   info: any;
-  usage: any;
   expanded: boolean;
   onToggle: () => void;
   onMetricClick: () => void;
@@ -30,24 +28,13 @@ type NodeType = {
 export const Node: FC<NodeType> = ({
   node,
   info,
-  usage,
   expanded,
   onToggle,
-  onMetricClick
+  onMetricClick,
 }) => {
   const [copyHost, setCopyHost] = useState<string>('Copy Host');
   const [copyID, setCopyID] = useState<string>('Click to Copy');
   const { id, isPrimary, state } = node;
-  const diskTotalInUse = usage?.diskUsage?.totalInUse;
-  const diskCapacity = usage?.diskUsage?.capacity;
-  const diskUsagePercentage = diskCapacity
-    ? (diskTotalInUse / diskCapacity) * 100
-    : undefined;
-  const memoryTotalInUse = usage?.memoryUsage?.totalInUse;
-  const memoryCapacity = usage?.memoryUsage?.capacity;
-  const memoryUsagePercentage = memoryCapacity
-    ? (memoryTotalInUse / memoryCapacity) * 100
-    : undefined;
   const keys = Object.keys(info);
 
   const onCopyHostClick = () => {
@@ -102,154 +89,6 @@ export const Node: FC<NodeType> = ({
                 {node.id}
               </span>
             </Tooltip>
-          </div>
-          <div className={css.nodeUsage}>
-            <div>
-              <div className={css.label}>Disk Usage:</div>
-              <div>
-                {usage ? (
-                  <Fragment>
-                    <Typography variant="caption">
-                      {formatBytes(diskTotalInUse)}
-                      {diskCapacity
-                        ? ` used out of ${formatBytes(diskCapacity)}`
-                        : null}
-                    </Typography>
-                    <div className={css.totalCapacity}>
-                      {diskUsagePercentage ? (
-                        <Tooltip
-                          title={
-                            <Typography variant="caption">
-                              {diskUsagePercentage < 1
-                                ? '< 1'
-                                : diskUsagePercentage.toLocaleString(
-                                    undefined,
-                                    { maximumFractionDigits: 1 }
-                                  )}
-                              % used
-                            </Typography>
-                          }
-                          placement="top"
-                          arrow
-                        >
-                          <div
-                            className={css.totalInUse}
-                            style={{
-                              width: `${
-                                diskUsagePercentage < 1
-                                  ? 1
-                                  : diskUsagePercentage
-                              }%`
-                            }}
-                          />
-                        </Tooltip>
-                      ) : (
-                        <Fragment>
-                          <Tooltip
-                            title={
-                              <Typography variant="caption">
-                                {formatBytes(diskTotalInUse)} used
-                              </Typography>
-                            }
-                            placement="top"
-                            arrow
-                          >
-                            <div
-                              className={css.totalInUse}
-                              style={{ width: '2%' }}
-                            />
-                          </Tooltip>
-                          <Typography
-                            className={css.unknownCapacity}
-                            variant="caption"
-                            color="textSecondary"
-                          >
-                            Node disk capacity unknown
-                          </Typography>
-                        </Fragment>
-                      )}
-                    </div>
-                  </Fragment>
-                ) : (
-                  <Typography variant="caption" paragraph>
-                    Calculating...
-                  </Typography>
-                )}
-              </div>
-            </div>
-            <div>
-              <div className={css.label}>Memory Usage:</div>
-              <div>
-                {usage ? (
-                  <Fragment>
-                    <Typography variant="caption">
-                      {formatBytes(memoryTotalInUse)}
-                      {memoryCapacity
-                        ? ` used out of ${formatBytes(memoryCapacity)}`
-                        : null}
-                    </Typography>
-                    <div className={css.totalCapacity}>
-                      {memoryUsagePercentage ? (
-                        <Tooltip
-                          title={
-                            <Typography variant="caption">
-                              {memoryUsagePercentage < 1
-                                ? '< 1'
-                                : memoryUsagePercentage.toLocaleString(
-                                    undefined,
-                                    { maximumFractionDigits: 1 }
-                                  )}
-                              % used
-                            </Typography>
-                          }
-                          placement="top"
-                          arrow
-                        >
-                          <div
-                            className={css.totalInUse}
-                            style={{
-                              width: `${
-                                memoryUsagePercentage < 1
-                                  ? 1
-                                  : memoryUsagePercentage
-                              }%`
-                            }}
-                          />
-                        </Tooltip>
-                      ) : (
-                        <Fragment>
-                          <Tooltip
-                            title={
-                              <Typography variant="caption">
-                                {formatBytes(memoryTotalInUse)} used
-                              </Typography>
-                            }
-                            placement="top"
-                            arrow
-                          >
-                            <div
-                              className={css.totalInUse}
-                              style={{ width: '2%' }}
-                            />
-                          </Tooltip>
-                          <Typography
-                            className={css.unknownCapacity}
-                            variant="caption"
-                            color="textSecondary"
-                          >
-                            Node memory capacity unknown
-                          </Typography>
-                        </Fragment>
-                      )}
-                    </div>
-                  </Fragment>
-                ) : (
-                  <Typography variant="caption" paragraph>
-                    Calculating...
-                  </Typography>
-                )}
-              </div>
-            </div>
           </div>
           <div className={css.nodeSettings}>
             {keys.map((key) => {

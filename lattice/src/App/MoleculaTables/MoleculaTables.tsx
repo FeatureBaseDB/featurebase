@@ -8,42 +8,29 @@ import Tooltip from '@material-ui/core/Tooltip';
 import Typography from '@material-ui/core/Typography';
 import { Block } from 'shared/Block';
 import { SortBy } from 'shared/SortBy';
-import { UsageBreakdown } from './UsageBreakdown';
 import { useHistory } from 'react-router-dom';
 import css from './MoleculaTables.module.scss';
 
 type MoleculaTablesProps = {
   tables: any;
-  dataDistribution: any;
   lastUpdated: string;
   maxSize: number;
 };
 
 export const MoleculaTables: FC<MoleculaTablesProps> = ({
   tables,
-  dataDistribution,
   lastUpdated,
-  maxSize
+  maxSize,
 }) => {
   const history = useHistory();
   const [sortedTables, setSortedTables] = useState<any>([]);
   const lastUpdatedMoment = lastUpdated ? moment(lastUpdated).utc() : undefined;
 
   useEffect(() => {
-    if (tables && dataDistribution) {
-      let aggregatedData: any[] = [];
-      tables.forEach((i) =>
-        aggregatedData.push({
-          ...dataDistribution[i.name],
-          ...i
-        })
-      );
-
-      setSortedTables(aggregatedData);
-    } else if (tables) {
+    if (tables) {
       setSortedTables(tables);
     }
-  }, [tables, dataDistribution]);
+  }, [tables]);
 
   const handleSortChange = (value: any) => {
     const sortDirection = value === 'name' ? 'asc' : 'desc';
@@ -96,7 +83,7 @@ export const MoleculaTables: FC<MoleculaTablesProps> = ({
               { label: 'Index Keys Size', value: 'indexKeys' },
               { label: 'Fragment Size', value: 'fragments' },
               { label: 'Field Keys Size', value: 'fieldKeysTotal' },
-              { label: 'Metadata Size', value: 'metadata' }
+              { label: 'Metadata Size', value: 'metadata' },
             ]}
             defaultValue="name"
             onChange={handleSortChange}
@@ -111,22 +98,6 @@ export const MoleculaTables: FC<MoleculaTablesProps> = ({
               <Card key={name} className={css.tableTile}>
                 <CardContent>
                   <div className={css.header}>{name}</div>
-                  <div className={css.section}>
-                    <UsageBreakdown
-                      data={
-                        dataDistribution
-                          ? dataDistribution[name]
-                            ? dataDistribution[name]
-                            : { uncached: true }
-                          : undefined
-                      }
-                      width={
-                        dataDistribution && dataDistribution[name]
-                          ? `${(dataDistribution[name].total / maxSize) * 100}%`
-                          : '0px'
-                      }
-                    />
-                  </div>
                   <label className={css.label}>Options</label>
                   <div className={css.cell}>
                     <span className={css.label}>keys</span>

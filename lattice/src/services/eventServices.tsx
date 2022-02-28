@@ -42,9 +42,6 @@ export const pilosa = {
     metrics() {
       return api.get('/metrics.json');
     },
-    usage() {
-      return api.get('/ui/usage');
-    },
     queryHistory() {
       return api.get('/query-history');
     },
