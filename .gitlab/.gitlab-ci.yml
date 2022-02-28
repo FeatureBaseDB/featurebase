@@ -483,7 +483,7 @@ s3 dump:
 perf_able:
   stage: performance
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "push"'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE == "push"'
   trigger:
     include: .gitlab/.perf-able-gitlab-ci.yml
   variables:
