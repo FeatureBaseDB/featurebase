@@ -7,13 +7,13 @@ variables:
   GOVERSION: "1.16.13"
 
 stages:
+  - build
+  - post build
   - lint
   - test
-  - build
   - integration
   - gauntlet
   - performance
-  - post build
 
 smoke build:
   image: golang:$GOVERSION
@@ -510,6 +510,7 @@ s3 dump tag:
       for goos in "darwin", "linux"; do
         for goarch in "amd64", "arm64"; do
           dir=featurebase-${CI_COMMIT_TAG}-${goos}-${goarch}
+          echo "Directory ${dir}"
           mkdir $dir
           mv featurebase_${goos}_${goarch} ${dir}/featurebase
           mv roaring-migrate_${goos}_${goarch} ${dir}/roaring-migrate
