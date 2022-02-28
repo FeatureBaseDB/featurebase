@@ -455,7 +455,7 @@ func TestTranslateStore_ReadWrite(t *testing.T) {
 
 		// Put the contents of the store into a buffer.
 		buf := bytes.NewBuffer(nil)
-		expN := int64(32768)
+		expN := s.Size()
 
 		// After this, the buffer should contain batch0.
 		if n, err := s.WriteTo(buf); err != nil {
@@ -505,7 +505,7 @@ func TestTranslateStore_ReadWrite(t *testing.T) {
 func MustOpenNewTranslateStore(tb testing.TB) *boltdb.TranslateStore {
 	s := MustNewTranslateStore(tb)
 	if err := s.Open(); err != nil {
-		panic(err)
+		tb.Fatalf("opening s: %v", err)
 	}
 	return s
 }

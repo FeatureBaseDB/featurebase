@@ -34,7 +34,7 @@ var (
 	bucketKeys = []byte("keys")
 	bucketIDs  = []byte("ids")
 	bucketFree = []byte("free")
-	FreeKey    = []byte("free")
+	freeKey    = []byte("free")
 )
 
 const (
@@ -235,14 +235,26 @@ func (s *TranslateStore) CreateKeys(keys ...string) (map[string]uint64, error) {
 			if idBucket == nil {
 				return errors.Errorf(errFmtTranslateBucketNotFound, bucketIDs)
 			}
+			freeBucket := tx.Bucket(bucketFree)
+			if freeBucket == nil {
+				return errors.Errorf(errFmtTranslateBucketNotFound, bucketFree)
+			}
 			puts := 0
+
+			// we create a freeIDGetter to reduce marshalling
+			getter := newFreeIDGetter(freeBucket)
+			defer getter.Close()
+
 			for idx, key := range keys {
 				id, boltKey := findIDByKey(keyBucket, key)
 				if id != 0 {
 					result[key] = id
 					continue
 				}
-				id = pilosa.GenerateNextPartitionedID(s.index, maxID(tx), s.partitionID, s.partitionN)
+				// see if we can re-use any IDs first
+				if id = getter.GetFreeID(); id == 0 {
+					id = pilosa.GenerateNextPartitionedID(s.index, maxID(tx), s.partitionID, s.partitionN)
+				}
 				idBytes := idScratch[puts*8 : puts*8+8]
 				binary.BigEndian.PutUint64(idBytes, id)
 				puts++
@@ -527,7 +539,7 @@ func (s *TranslateStore) FreeIDs() (*roaring.Bitmap, error) {
 		if bkt == nil {
 			return errors.Errorf(errFmtTranslateBucketNotFound, bucketKeys)
 		}
-		b := bkt.Get(FreeKey)
+		b := bkt.Get(freeKey)
 		err := result.UnmarshalBinary(b)
 		if err != nil {
 			return err
@@ -538,7 +550,7 @@ func (s *TranslateStore) FreeIDs() (*roaring.Bitmap, error) {
 }
 func (s *TranslateStore) MergeFree(tx *bolt.Tx, newIDs *roaring.Bitmap) error {
 	bkt := tx.Bucket(bucketFree)
-	b := bkt.Get(FreeKey)
+	b := bkt.Get(freeKey)
 	buf := new(bytes.Buffer)
 	if b != nil { //if existing combine with newIDs
 		before := roaring.NewBitmap()
@@ -554,7 +566,7 @@ func (s *TranslateStore) MergeFree(tx *bolt.Tx, newIDs *roaring.Bitmap) error {
 	} else {
 		newIDs.WriteTo(buf)
 	}
-	return bkt.Put(FreeKey, buf.Bytes())
+	return bkt.Put(freeKey, buf.Bytes())
 }
 
 // Delete removes the lookeup pairs in order to make avialble for reuse but doesn't commit the
@@ -606,6 +618,84 @@ func findIDByKey(bkt *bolt.Bucket, key string) (uint64, []byte) {
 		return btou64(value), boltKey
 	}
 	return 0, boltKey
+}
+
+// freeIDGetter reduces the amount of marshaling required to get multiple ids
+type freeIDGetter struct {
+	freeBucket *bolt.Bucket
+	b          *roaring.Bitmap
+	changed    bool
+}
+
+// newFreeIDGetter initializes a new freeIDGetter. If at any point there is a
+// failure, it returns an error.
+//
+// NOTE: For changes to be persisted to the bucket, you must call
+// (*freeIDGetter).Close()
+func newFreeIDGetter(freeBucket *bolt.Bucket) *freeIDGetter {
+	g := &freeIDGetter{
+		freeBucket: freeBucket,
+	}
+	// we ignore this value because it's okay if we dont have a bitmap just yet
+	_ = g.getBitmap()
+	return g
+}
+
+func (g *freeIDGetter) getBitmap() bool {
+	if g.b == nil {
+		// get the bitmap from freeBucket
+		value := g.freeBucket.Get(freeKey)
+		if value == nil {
+			return false
+		}
+		// turn the value into a bitmap
+		b := roaring.NewBitmap()
+		if err := b.UnmarshalBinary(value); err != nil {
+			return false
+		}
+		g.b = b
+	}
+	return true
+}
+
+// GetFreeID tries to get a free ID from the free id bucket. If at any point it
+// fails to do so, it returns a 0. Otherwise, it returns the first free ID in the
+// bucket
+func (g *freeIDGetter) GetFreeID() (id uint64) {
+	if !g.getBitmap() {
+		return 0
+	}
+	// get the first free id
+	id, ok := g.b.Min()
+	if !ok {
+		return 0
+	}
+	// remove that id from the free id bitmap
+	if changed, err := g.b.RemoveN(id); changed == 0 || err != nil {
+		return 0
+	} else {
+		g.changed = true
+	}
+	return id
+}
+
+// Close persists any changes to the bitmap back to the bucket and then nils the
+// references for safety.
+func (g *freeIDGetter) Close() error {
+	if g.changed {
+		// convert bitmap to binary
+		buf, err := g.b.MarshalBinary()
+		if err != nil {
+			return errors.Wrap(err, "closing free ID Getter")
+		}
+		// put updated bitmap back into the freeBucket
+		if err := g.freeBucket.Put(freeKey, buf); err != nil {
+			return errors.Wrap(err, "closing free ID Getter")
+		}
+	}
+	g.b = nil
+	g.freeBucket = nil
+	return nil
 }
 
 func findKeyByID(bkt *bolt.Bucket, id uint64) string {
