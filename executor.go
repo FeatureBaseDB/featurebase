@@ -8263,72 +8263,128 @@ func (e *executor) executeDeleteRecords(ctx context.Context, qcx *Qcx, index str
 	return n, nil
 }
 
-func (e *executor) executeDeleteRecordFromShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64) (bool, error) {
+func transactExistRow(ctx context.Context, idx *Index, shard uint64, frag *fragment, src *Row) (uint64, error) {
+	tx := idx.Txf().NewTx(Txo{Write: writable, Index: idx, Shard: shard})
+	rows, err := frag.rows(ctx, tx, 1)
+	if err != nil {
+		tx.Rollback()
+		return 0, err
 
+	}
+	rowID := uint64(len(rows) + 1)
+	_, err = frag.setRow(tx, src, rowID)
+	if err != nil {
+		tx.Rollback()
+		return 0, err
+	}
+	return rowID, tx.Commit()
+}
+func (e *executor) executeDeleteRecordFromShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64) (changed bool, err error) {
 	span, _ := tracing.StartSpanFromContext(ctx, "Executor.executeDeleteRecordFromShard")
 	defer span.Finish()
 	//need to build the bitmap in the call
 	child := c.Children[0]
-	row, err := e.executeBitmapCallShard(ctx, qcx, index, child, shard)
-	if err != nil {
-		return false, err
+	src, er := e.executeBitmapCallShard(ctx, qcx, index, child, shard)
+	if er != nil {
+		err = er
+		return
 	}
-	if len(row.segments) == 0 { //nothing to remove
-		return false, nil
+	if len(src.segments) == 0 { //nothing to remove
+		return
 	}
-
+	columns := src.segments[0].data //should only be one segment
+	if columns.Count() == 0 {
+		return
+	}
 	// Fetch index.
 	idx := e.Holder.Index(index)
 	if idx == nil {
-		return false, newNotFoundError(ErrIndexNotFound, index)
+		err = newNotFoundError(ErrIndexNotFound, index)
+		return
 	}
 
-	return DeleteRows(row, idx, shard)
+	return DeleteRowsWithFlow(ctx, src, idx, shard, true)
 }
 
-func DeleteRows(row *Row, idx *Index, shard uint64) (bool, error) {
-	tx := idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Shard: shard})
-	defer tx.Rollback()
-
-	columns := row.segments[0].data //should only be one segment
+func DeleteRows(ctx context.Context, src *Row, idx *Index, shard uint64) (bool, error) {
+	return DeleteRowsWithFlow(ctx, src, idx, shard, false)
+}
+func DeleteRowsWithFlow(ctx context.Context, src *Row, idx *Index, shard uint64, normalFlow bool) (bool, error) {
+	var existenceFragment *fragment
+	var deletedRowID uint64
+	var commitor Commitor = &NopCommitor{}
+	var err error
+	if len(src.segments) == 0 { //nothing to remove
+		return false, nil
+	}
+	columns := src.segments[0].data //should only be one segment
 	if columns.Count() == 0 {
 		return false, nil
 	}
-	columnIDs := make([]uint64, 0)
-	none := make([]uint64, 0) // no bits will be set
 
-	changed := false
-	colCounts := make([]int, 0)
-	toClear := columnIDs[:0]
-	rowSet := make(map[uint64]struct{})
-	callback := func(pos uint64) error {
-		toClear = append(toClear, pos)
-		rowID := pos / ShardWidth
-		rowSet[rowID] = struct{}{}
-		return nil
-	}
-	findExisting := roaring.NewBitmapBitmapFilter(columns, callback)
-
-	clearFragment := func(frag *fragment) (bool, error) {
-		// re-zero these
-		toClear = columnIDs[:0]
-		rowSet = make(map[uint64]struct{})
-
-		err := tx.ApplyFilter(frag.index(), frag.field(), frag.view(), frag.shard, 0, findExisting)
+	if idx.Keys() {
+		//store columns in exits field ToBeDelete row commited
+		if normalFlow { // normalFlow is the standard path, "not normal" is recoverory
+			existenceFragment = idx.Holder().fragment(idx.Name(), existenceFieldName, viewStandard, shard)
+			if existenceFragment == nil {
+				//no exists field
+				return false, errors.New("can't bulk delete without existence field")
+			}
+			deletedRowID, err = transactExistRow(ctx, idx, shard, existenceFragment, src)
+		}
+		commitor, err = deleteKeyTranslation(ctx, idx, shard, columns)
 		if err != nil {
 			return false, err
 		}
-		colCounts = append(colCounts, len(toClear))
-		// this will be the remove part
-		if len(toClear) > 0 {
-			err = frag.importPositions(tx, none, toClear, rowSet)
-			if err != nil {
-				return false, err
-			}
-			return true, nil
-		}
-		return false, nil
 	}
+	writeTx := idx.Txf().NewTx(Txo{Write: writable, Index: idx, Shard: shard})
+	if err != nil {
+		return false, err
+	}
+	defer writeTx.Rollback()
+	changed := false
+	defer func() {
+		//if there is an error on the bit clearing rollback the keys
+		if err != nil {
+			changed = false
+			commitor.Rollback()
+			return
+		}
+		// if there is an error in the key commit, then rollback the delete
+		// write records before keys to remove possiblity of unmatch keys=records
+		err = writeTx.Commit()
+		if err != nil {
+			changed = false
+			commitor.Rollback()
+			return
+		}
+		if er := commitor.Commit(); er != nil {
+			err = er
+		}
+		if err != nil {
+			idx.Holder().Logger.Errorf("problems committing delete in rbf %v shard %v", err, shard)
+		}
+
+	}()
+	findExisting := roaring.NewBitmapBitmapFilter(columns, func(p uint64) error { return nil })
+	resChan := make(chan countResults)
+	clearFragment := func(frag *fragment) (bool, error) {
+		posChan := make(chan uint64, 8192)
+		findExisting.SetCallback(func(pos uint64) error {
+			posChan <- pos
+			return nil
+		})
+		go writeTx.RemoveChannel(frag.index(), frag.field(), frag.view(), frag.shard, posChan, resChan)
+
+		err = writeTx.ApplyFilter(frag.index(), frag.field(), frag.view(), frag.shard, 0, findExisting)
+		close(posChan)
+		if err != nil {
+			return false, err
+		}
+		r := <-resChan
+		return r.changeCount > 0, r.err
+	}
+
 	for _, field := range idx.Fields() {
 		for _, view := range field.views() {
 
@@ -8343,7 +8399,44 @@ func DeleteRows(row *Row, idx *Index, shard uint64) (bool, error) {
 			if c {
 				changed = true
 			}
+
 		}
 	}
-	return changed, tx.Commit()
+	close(resChan)
+	if existenceFragment != nil { //a string keys have been deleted and the deleteRow was created
+		if normalFlow {
+			existenceFragment.clearRow(writeTx, deletedRowID)
+		} else {
+			// this is if we are recovering from failure and cleaning up
+			rows, err := existenceFragment.rows(ctx, writeTx, 1)
+			if err != nil {
+				return false, err
+			}
+			for _, rowId := range rows {
+				existenceFragment.clearRow(writeTx, rowId)
+			}
+		}
+	}
+	return changed, nil
+}
+
+type Commitor interface {
+	Rollback()
+	Commit() error
+}
+type NopCommitor struct {
+}
+
+func (c *NopCommitor) Rollback() {
+
+}
+func (c *NopCommitor) Commit() error {
+	return nil
+}
+
+func deleteKeyTranslation(ctx context.Context, idx *Index, shard uint64, records *roaring.Bitmap) (Commitor, error) {
+	// ShardToShardParition ...
+	paritionID := topology.ShardToShardPartition(idx.name, shard, idx.holder.partitionN)
+
+	return idx.TranslateStore(paritionID).Delete(records)
 }
