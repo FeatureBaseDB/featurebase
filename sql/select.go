@@ -598,8 +598,7 @@ func (h handlerSelectGroupBy) Apply(stmt *sqlparser.Select, qm QueryMask, indexF
 
 	rowsQueries := []string{}
 	for _, fieldName := range groupByFieldNames {
-		field := index.Field(fieldName)
-		rowsQueries = append(rowsQueries, Rows(field.Name()))
+		rowsQueries = append(rowsQueries, Rows(fieldName))
 	}
 
 	var wherePQL string
