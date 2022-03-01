@@ -1007,6 +1007,10 @@ func TestQuerySQLWithError(t *testing.T) {
 			sql: "select _id, age, field_not_found from grouper",
 			err: pilosa.ErrFieldNotFound,
 		},
+		{
+			sql: "select age, color, count(*) from grouper group by field_not_found, age, color",
+			err: pilosa.ErrFieldNotFound,
+		},
 	}
 
 	for i, test := range tests {
