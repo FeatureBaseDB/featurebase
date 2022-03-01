@@ -1004,7 +1004,7 @@ func TestORM(t *testing.T) {
 			t.Fatalf("field noStandardView %v != %v", true, field.Opts().NoStandardView())
 		}
 		jsonString := field.options.String()
-		targetString := `{"options":{"noStandardView":true,"type":"time","timeQuantum":"DH"}}`
+		targetString := `{"options":{"noStandardView":true,"type":"time","timeQuantum":"DH","ttl":"0s"}}`
 		if sortedString(targetString) != sortedString(jsonString) {
 			t.Fatalf("`%s` != `%s`", targetString, jsonString)
 		}

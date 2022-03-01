@@ -1615,7 +1615,11 @@ func fieldOptionsToFunctionalOpts(opt fieldOptions) []FieldOption {
 		}
 		fos = append(fos, OptFieldTypeTimestamp(opt.Epoch.UTC(), *opt.TimeUnit))
 	case FieldTypeTime:
-		fos = append(fos, OptFieldTypeTime(*opt.TimeQuantum, *opt.Ttl, opt.NoStandardView))
+		if opt.Ttl != nil {
+			fos = append(fos, OptFieldTypeTime(*opt.TimeQuantum, *opt.Ttl, opt.NoStandardView))
+		} else {
+			fos = append(fos, OptFieldTypeTime(*opt.TimeQuantum, "0", opt.NoStandardView))
+		}
 	case FieldTypeMutex:
 		fos = append(fos, OptFieldTypeMutex(*opt.CacheType, *opt.CacheSize))
 	case FieldTypeBool:
