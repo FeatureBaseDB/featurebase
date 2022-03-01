@@ -956,29 +956,6 @@ func TestAPI_IDAlloc(t *testing.T) {
 	})
 }
 
-func TestAPI_SchemaDetailsOff(t *testing.T) {
-	cluster := test.MustRunCluster(t, 2)
-	defer cluster.Close()
-	cmd := cluster.GetNode(0)
-	err := cmd.API.SetAPIOptions(pilosa.OptAPISchemaDetailsOn(false))
-	if err != nil {
-		t.Fatalf("could not toggle schema details to off: %v", err)
-	}
-	schema, err := cmd.API.SchemaDetails(context.Background())
-	if err != nil {
-		t.Fatalf("getting schema: %v", err)
-	}
-
-	for _, i := range schema {
-		for _, f := range i.Fields {
-			if f.Cardinality != nil {
-				t.Fatalf("expected nil cardinality, got: %v", *f.Cardinality)
-			}
-		}
-	}
-
-}
-
 type mutexCheckIndex struct {
 	index     *pilosa.Index
 	indexName string

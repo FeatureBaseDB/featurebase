@@ -222,9 +222,6 @@ type Config struct {
 		Rename bool `toml:"rename"`
 	} `toml:"future"`
 
-	// Toggles /schema/details endpoint. If off, it returns empty.
-	SchemaDetailsOn bool `toml:"schema-details-on"`
-
 	Auth Auth
 }
 
@@ -389,9 +386,6 @@ func NewConfig() *Config {
 
 	// Future flags.
 	c.Future.Rename = false
-
-	// Schema Details Toggle
-	c.SchemaDetailsOn = true
 
 	return c
 }
