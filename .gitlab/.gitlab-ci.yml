@@ -14,6 +14,7 @@ stages:
   - gauntlet
   - performance
   - post build
+  - nonblocking
 
 smoke build:
   image: golang:$GOVERSION
@@ -84,11 +85,12 @@ run go tests:
     - aws
 
 run go tests race:
-  stage: test
+  stage: nonblocking # don't let this job block any other jobs because it takes much longer than the other tests.
   image: golang:$GOVERSION
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   retry: 1
+  needs: [] # don't wait to start running this.
   script:
     - echo "Running featurebase race tests..."
     - go test -race -v -timeout=90m ./...
@@ -101,7 +103,7 @@ run go tests shardwidth22:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
-    - echo "Running featurebase race tests..."
+    - echo "Running featurebase shardwidth22 tests..."
     - go test -timeout=30m -tags=shardwidth22 ./...
   tags:
     - aws
