@@ -58,7 +58,7 @@ func newRouter() *router {
 	groupByOptional := NewQueryMask(
 		SelectPartField|SelectPartFields|SelectPartCountStar|SelectPartSumField,
 		FromPartTable,
-		WherePartFieldCondition, // TODO: this can probably handle fields as well
+		WherePartFieldCondition|WherePartMultiFieldCondition,
 		GroupByPartField|GroupByPartFields,
 		HavingPartCondition,
 	)
