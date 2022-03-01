@@ -36,6 +36,15 @@ golangci-lint:
     - echo "Checking for issues in new code"
     - golangci-lint run
 
+go mod tidy:
+  stage: lint
+  image: golang:$GOVERSION
+  rules:
+    - if: '$CI_COMMIT_TAG == null && ($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")'
+  script:
+    - go mod tidy
+    - git diff --exit-code -- go.mod go.sum
+
 build lattice:
   stage: test
   image: node:14
