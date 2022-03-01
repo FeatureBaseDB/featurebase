@@ -98,8 +98,14 @@ func Between(fieldName string, a interface{}, b interface{}) string {
 }
 
 // Distinct creates a Distinct query.
-func Distinct(indexName, fieldName string) string {
-	return fmt.Sprintf("Distinct(Row(%s!=null),index='%s',field='%s')", fieldName, indexName, fieldName)
+func Distinct(indexName, fieldName, rowCall string) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, `Distinct(`)
+	if rowCall != "" {
+		fmt.Fprintf(&b, `%s, `, rowCall)
+	}
+	fmt.Fprintf(&b, `index='%s',field='%s')`, indexName, fieldName)
+	return b.String()
 }
 
 // RowDistinct creates a Distinct query with the given row filter.
