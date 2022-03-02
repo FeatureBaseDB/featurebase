@@ -144,7 +144,6 @@ export const MoleculaTable: FC<MoleculaTableProps> = ({
                 </span>
               </TableCell>
               <TableCell className={css.tableHeader}>Type</TableCell>
-              <TableCell className={css.tableHeader}>Cardinality</TableCell>
               <TableCell className={css.tableHeader}>Options</TableCell>
             </TableRow>
           </TableHead>
@@ -170,9 +169,6 @@ export const MoleculaTable: FC<MoleculaTableProps> = ({
                       <code className={css.code}>
                         {type} {showKeys ? (keys ? '(keys)' : '(ID)') : null}
                       </code>
-                    </TableCell>
-                    <TableCell className={css.tableCell}>
-                      {cardinality ? cardinality.toLocaleString() : '-'}
                     </TableCell>
                     <TableCell className={css.tableCell}>
                       <div className={css.optionsTable}>

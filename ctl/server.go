@@ -93,9 +93,6 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 	// Future flags.
 	flags.BoolVar(&srv.Config.Future.Rename, "future.rename", false, "Present application name as FeatureBase. Defaults to false, will default to true in an upcoming release.")
 
-	// Toggle /schema/details endpoint.
-	flags.BoolVar(&srv.Config.SchemaDetailsOn, "schema-details-on", true, "Disable /schema/details endpoint")
-
 	// OAuth2.0 identity provider configuration
 	flags.BoolVar(&srv.Config.Auth.Enable, "auth.enable", false, "Enable AuthN/AuthZ of featurebase, disabled by default.")
 	flags.StringVar(&srv.Config.Auth.ClientId, "auth.client-id", srv.Config.Auth.ClientId, "Identity Provider's Application/Client ID.")

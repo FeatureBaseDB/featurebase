@@ -50,8 +50,6 @@ type API struct {
 	importWorkerPoolSize int
 	importWork           chan importJob
 
-	schemaDetailsOn bool
-
 	Serializer Serializer
 }
 
@@ -68,14 +66,6 @@ func OptAPIServer(s *Server) apiOption {
 		a.holder = s.holder
 		a.cluster = s.cluster
 		a.Serializer = s.serializer
-		return nil
-	}
-}
-
-// Used to configure API option: schemaDetailsOn
-func OptAPISchemaDetailsOn(isOn bool) apiOption {
-	return func(a *API) error {
-		a.schemaDetailsOn = isOn
 		return nil
 	}
 }
@@ -1019,38 +1009,6 @@ func (api *API) Schema(ctx context.Context, withViews bool) ([]*IndexInfo, error
 	}
 
 	return api.holder.limitedSchema()
-}
-
-// SchemaDetails returns information about each index in Pilosa including which
-// fields they contain. Additional field information such as cardinality unless
-// turned off via the schemaDetailsOn cli option.
-func (api *API) SchemaDetails(ctx context.Context) ([]*IndexInfo, error) {
-	span, _ := tracing.StartSpanFromContext(ctx, "API.Schema")
-	defer span.Finish()
-	schema, err := api.holder.Schema()
-	if err != nil {
-		return nil, errors.Wrap(err, "getting schema")
-	}
-	if !api.schemaDetailsOn {
-		return schema, nil
-	}
-	for _, index := range schema {
-		for _, field := range index.Fields {
-			q := fmt.Sprintf("Count(Distinct(field=%s))", field.Name)
-			req := QueryRequest{Index: index.Name, Query: q}
-			resp, err := api.query(ctx, &req)
-			if err != nil {
-				return schema, errors.Wrapf(err, "querying cardinality (%s/%s)", index.Name, field.Name)
-			}
-			if len(resp.Results) == 0 {
-				continue
-			}
-			if card, ok := resp.Results[0].(uint64); ok {
-				field.Cardinality = &card
-			}
-		}
-	}
-	return schema, nil
 }
 
 // ApplySchema takes the given schema and applies it across the

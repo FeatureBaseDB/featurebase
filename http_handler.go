@@ -926,7 +926,12 @@ func (h *Handler) handleGetSchema(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleGetSchema handles GET /schema/details requests.
+// handleGetSchema handles GET /schema/details requests. This is essentially the
+// same thing as a GET /schema request, except WithViews is turned on by default.
+// Previously, /schema/details returned the cardinality of each field, but this was
+// removed for performance reasons. If, at some point in the future, there is a more
+// performant way to get the cardinality of a field, that information would be
+// included here.
 func (h *Handler) handleGetSchemaDetails(w http.ResponseWriter, r *http.Request) {
 	if !validHeaderAcceptJSON(r.Header) {
 		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
@@ -934,7 +939,7 @@ func (h *Handler) handleGetSchemaDetails(w http.ResponseWriter, r *http.Request)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	schema, err := h.api.SchemaDetails(r.Context())
+	schema, err := h.api.Schema(r.Context(), true)
 	if err != nil {
 		h.logger.Printf("error getting detailed schema: %s", err)
 		return
