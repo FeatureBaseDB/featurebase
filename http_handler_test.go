@@ -170,6 +170,173 @@ func TestIngestSchemaHandler(t *testing.T) {
 	}
 }
 
+func TestPostFieldWithTtl(t *testing.T) {
+	c := test.MustRunCluster(t, 1)
+	defer c.Close()
+
+	schema := `
+	{
+		"index-name": "example",
+		"primary-key-type": "string",
+		"index-action": "create",
+		"fields":[]
+	 }
+	`
+	m := c.GetPrimary()
+	schemaURL := fmt.Sprintf("%s/internal/schema", m.URL())
+	resp := test.Do(t, "POST", schemaURL, string(schema))
+	if resp.StatusCode != gohttp.StatusOK {
+		t.Errorf("invalid status: %d, body=%s", resp.StatusCode, resp.Body)
+	}
+
+	postFieldTtlUrl := fmt.Sprintf("%s/index/example/field/with_ttl", m.URL())
+
+	// Create new field with ttl but in invalid format
+	fieldOptionInvalidTtl := `
+ 	{ "options": {"timeQuantum":"YMDH","type":"time","ttl":"24hour" }}
+	`
+	respField := test.Do(t, "POST", postFieldTtlUrl, string(fieldOptionInvalidTtl))
+	if (respField.StatusCode != gohttp.StatusBadRequest) &&
+		(respField.Body != "applying option: cannot parse ttl: 24hour") {
+		t.Errorf("expected ttl parse error, got status: %d, body=%s", respField.StatusCode, respField.Body)
+	}
+
+	// Create new field with ttl in invalid format
+	fieldOptionValidTtl := `
+	{ "options": {"timeQuantum":"YMDH","type":"time","ttl":"24h" }}
+	`
+	respField = test.Do(t, "POST", postFieldTtlUrl, string(fieldOptionValidTtl))
+	if resp.StatusCode != gohttp.StatusOK {
+		t.Errorf("creating field with ttl, got status: %d, body=%s", respField.StatusCode, respField.Body)
+	}
+
+	// Create new field without ttl
+	postFieldNoTtlUrl := fmt.Sprintf("%s/index/example/field/no_ttl", m.URL())
+	fieldOptionNoTtl := `
+	{ "options": {"timeQuantum":"YMDH","type":"time" }}
+	`
+	respField = test.Do(t, "POST", postFieldNoTtlUrl, string(fieldOptionNoTtl))
+	if resp.StatusCode != gohttp.StatusOK {
+		t.Errorf("creating field without ttl, status: %d, body=%s", respField.StatusCode, respField.Body)
+	}
+}
+
+func TestGetViewHAndDeleteHandler(t *testing.T) {
+	c := test.MustRunCluster(t, 1)
+	defer c.Close()
+
+	schema := `
+	{
+		"index-name": "example",
+		"primary-key-type": "string",
+		"index-action": "create",
+		"fields": [
+			{
+				"field-name": "test_view",
+				"field-type": "time",
+				"field-options": {
+					"time-quantum": "YMDH"
+				}
+			}
+		]
+	 }
+	 `
+	m := c.GetPrimary()
+	schemaURL := fmt.Sprintf("%s/internal/schema", m.URL())
+	resp := test.Do(t, "POST", schemaURL, string(schema))
+	if resp.StatusCode != gohttp.StatusOK {
+		t.Errorf("invalid status: %d, body=%s", resp.StatusCode, resp.Body)
+	}
+
+	// Send sample data
+	postQueryUrl := fmt.Sprintf("%s/index/example/query", m.URL())
+	queryOption := `
+	Set(1,test_view=1,2001-02-03T04:05)
+	`
+	respQuery := test.Do(t, "POST", postQueryUrl, string(queryOption))
+	if respQuery.StatusCode != gohttp.StatusOK {
+		t.Errorf("posting query, status: %d, body=%s", respQuery.StatusCode, respQuery.Body)
+	}
+
+	// The above sample data will create these views:
+	expectedViewNames := []string{
+		"standard",
+		"standard_2001",
+		"standard_200102",
+		"standard_20010203",
+		"standard_2001020304",
+	}
+
+	// Call view to get data
+	viewUrl := fmt.Sprintf("%s/index/example/field/test_view/view", m.URL())
+	respView := test.Do(t, "GET", viewUrl, "")
+	if respView.StatusCode != gohttp.StatusOK {
+		t.Errorf("view handler, status: %d, body=%s", respView.StatusCode, respView.Body)
+	}
+
+	type viewReponse struct {
+		Name  string `json:"name"`
+		Type  string `json:"type"`
+		Field string `json:"field"`
+		Index string `json:"index"`
+	}
+
+	var parsedViews []viewReponse
+	if err := json.Unmarshal([]byte(respView.Body), &parsedViews); err != nil {
+		t.Errorf("parsing view, err: %s", err)
+	}
+
+	// check if data from view matches with expectedViewNames
+	allViewsFound := true
+	for _, expectedViewName := range expectedViewNames {
+		viewFound := false
+		for _, view := range parsedViews {
+			if view.Name == expectedViewName {
+				viewFound = true
+				break
+			}
+		}
+		allViewsFound = allViewsFound && viewFound
+	}
+	if !allViewsFound {
+		t.Errorf("view handler did not return expected data")
+	}
+
+	// call delete on view standard_20010203
+	deleteViewUrl := fmt.Sprintf("%s/index/example/field/test_view/view/standard_20010203", m.URL())
+	respDelete := test.Do(t, "DELETE", deleteViewUrl, "")
+	if respDelete.StatusCode != gohttp.StatusOK {
+		t.Errorf("view handler, status: %d, body=%s", respDelete.StatusCode, respDelete.Body)
+	}
+
+	// remove view that was deleted (standard_20010203) from expectedViewNames
+	expectedViewNames = expectedViewNames[:len(expectedViewNames)-1]
+
+	// call view again
+	viewUrl = fmt.Sprintf("%s/index/example/field/test_view/view", m.URL())
+	respView = test.Do(t, "GET", viewUrl, "")
+	if respView.StatusCode != gohttp.StatusOK {
+		t.Errorf("view handler, status: %d, body=%s", respView.StatusCode, respView.Body)
+	}
+
+	// check if expected data matches with data returned from view
+	allViewsFound = true
+	for _, expectedViewName := range expectedViewNames {
+		viewFound := false
+		for _, view := range parsedViews {
+			if view.Name == expectedViewName {
+				viewFound = true
+				break
+			}
+		}
+		allViewsFound = allViewsFound && viewFound
+	}
+	if !allViewsFound {
+		t.Errorf("after delete, view handler did not return expected data")
+	}
+
+}
+
 func TestTranslationHandlers(t *testing.T) {
 	// reusable data for the tests
 	nameBytes, err := json.Marshal([]string{"a", "b", "c"})
