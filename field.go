@@ -679,7 +679,7 @@ func (f *Field) ForeignIndex() string {
 	return f.options.ForeignIndex
 }
 
-// Ttl returns the ttl for the field.
+// Ttl returns the ttl of the field.
 func (f *Field) Ttl() time.Duration {
 	return f.options.Ttl
 }

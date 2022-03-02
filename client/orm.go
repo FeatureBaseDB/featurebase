@@ -920,7 +920,7 @@ func OptFieldTypeTime(quantum TimeQuantum, opts ...bool) FieldOption {
 	}
 }
 
-func OptFieldTtl(dur time.Duration, opts ...bool) FieldOption {
+func OptFieldTtl(dur time.Duration) FieldOption {
 	return func(options *FieldOptions) {
 		options.ttl = dur
 	}

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net"
 	gohttp "net/http"
+	"reflect"
+	"sort"
 	"strings"
 	"testing"
 
@@ -221,7 +223,7 @@ func TestPostFieldWithTtl(t *testing.T) {
 	}
 }
 
-func TestGetViewHAndDeleteHandler(t *testing.T) {
+func TestGetViewAndDelete(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
 
@@ -258,7 +260,7 @@ func TestGetViewHAndDeleteHandler(t *testing.T) {
 		t.Errorf("posting query, status: %d, body=%s", respQuery.StatusCode, respQuery.Body)
 	}
 
-	// The above sample data will create these views:
+	// The above sample data should create these views:
 	expectedViewNames := []string{
 		"standard",
 		"standard_2001",
@@ -287,54 +289,47 @@ func TestGetViewHAndDeleteHandler(t *testing.T) {
 	}
 
 	// check if data from view matches with expectedViewNames
-	allViewsFound := true
-	for _, expectedViewName := range expectedViewNames {
-		viewFound := false
-		for _, view := range parsedViews {
-			if view.Name == expectedViewName {
-				viewFound = true
-				break
-			}
-		}
-		allViewsFound = allViewsFound && viewFound
+	parseViewNames := []string{}
+	for _, view := range parsedViews {
+		parseViewNames = append(parseViewNames, view.Name)
 	}
-	if !allViewsFound {
-		t.Errorf("view handler did not return expected data")
+	sort.Strings(parseViewNames)
+
+	if !reflect.DeepEqual(expectedViewNames, parseViewNames) {
+		t.Fatalf("expected %v, but got %v", expectedViewNames, parseViewNames)
 	}
 
-	// call delete on view standard_20010203
-	deleteViewUrl := fmt.Sprintf("%s/index/example/field/test_view/view/standard_20010203", m.URL())
+	// call delete on view standard_2001020304
+	deleteViewUrl := fmt.Sprintf("%s/index/example/field/test_view/view/standard_2001020304", m.URL())
 	respDelete := test.Do(t, "DELETE", deleteViewUrl, "")
 	if respDelete.StatusCode != gohttp.StatusOK {
-		t.Errorf("view handler, status: %d, body=%s", respDelete.StatusCode, respDelete.Body)
+		t.Errorf("delete handler, status: %d, body=%s", respDelete.StatusCode, respDelete.Body)
 	}
 
-	// remove view that was deleted (standard_20010203) from expectedViewNames
+	// remove view that was deleted (standard_2001020304) from expectedViewNames
 	expectedViewNames = expectedViewNames[:len(expectedViewNames)-1]
 
 	// call view again
 	viewUrl = fmt.Sprintf("%s/index/example/field/test_view/view", m.URL())
 	respView = test.Do(t, "GET", viewUrl, "")
 	if respView.StatusCode != gohttp.StatusOK {
-		t.Errorf("view handler, status: %d, body=%s", respView.StatusCode, respView.Body)
+		t.Errorf("view handler after delete, status: %d, body=%s", respView.StatusCode, respView.Body)
 	}
 
-	// check if expected data matches with data returned from view
-	allViewsFound = true
-	for _, expectedViewName := range expectedViewNames {
-		viewFound := false
-		for _, view := range parsedViews {
-			if view.Name == expectedViewName {
-				viewFound = true
-				break
-			}
-		}
-		allViewsFound = allViewsFound && viewFound
-	}
-	if !allViewsFound {
-		t.Errorf("after delete, view handler did not return expected data")
+	if err := json.Unmarshal([]byte(respView.Body), &parsedViews); err != nil {
+		t.Errorf("parsing view, err: %s", err)
 	}
 
+	// check if data from view matches with expectedViewNames
+	parseViewNames = []string{}
+	for _, view := range parsedViews {
+		parseViewNames = append(parseViewNames, view.Name)
+	}
+	sort.Strings(parseViewNames)
+
+	if !reflect.DeepEqual(expectedViewNames, parseViewNames) {
+		t.Fatalf("after delete, expected %v, but got %v", expectedViewNames, parseViewNames)
+	}
 }
 
 func TestTranslationHandlers(t *testing.T) {
