@@ -347,6 +347,34 @@ func AssignHeaders(rowser pproto.ToRowser, headers ...Column) pproto.ToRowser {
 	return &assignHeadersRowser{rowser, headers}
 }
 
+type staticHeaderRowser struct {
+	rowser pproto.ToRowser
+	cols   []Column
+}
+
+func (a *staticHeaderRowser) ToRows(fn func(*pproto.RowResponse) error) error {
+	return a.rowser.ToRows(func(row *pproto.RowResponse) error {
+		var out pproto.RowResponse
+
+		headers := make([]*pproto.ColumnInfo, len(row.Headers))
+		for i := range row.Headers {
+			header := row.Headers[i]
+			header.Name = a.cols[i].Name()
+			headers[i] = header
+		}
+		out.Headers = headers
+
+		out.Columns = row.Columns
+
+		return fn(&out)
+	})
+}
+
+// StaticHeaders assigns fixed cols to a ToRowser.
+func StaticHeaders(rowser pproto.ToRowser, cols ...Column) pproto.ToRowser {
+	return &staticHeaderRowser{rowser, cols}
+}
+
 var (
 	ErrIncompleteHeaders = errors.New("incomplete header assignment")
 	ErrFieldNotInHeaders = errors.New("field not found in source header")

@@ -122,6 +122,15 @@ func (r *Row) ToTable() (*pb.TableResponse, error) {
 	return pb.RowsToTable(r, n)
 }
 
+// Hash calculate checksum code be useful in block hash join
+func (r *Row) Hash() uint64 {
+	hash := uint64(0)
+	for i := range r.segments {
+		hash = r.segments[i].data.Hash(hash)
+	}
+	return hash
+}
+
 // ToRows implements the ToRowser interface.
 func (r *Row) ToRows(callback func(*pb.RowResponse) error) error {
 	if len(r.Keys) > 0 {

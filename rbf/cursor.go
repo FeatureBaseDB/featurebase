@@ -474,9 +474,11 @@ func (c *Cursor) putLeafCell(in leafCell) (err error) {
 		writeCellN(buf[:], len(group))
 
 		offset := dataOffset(len(group))
+		x := 0
 		for j, cell := range group {
 			writeLeafCell(buf[:], j, offset, cell)
 			offset += align8(cell.Size())
+			x++
 		}
 
 		if err := c.tx.writePage(buf[:]); err != nil {
@@ -614,7 +616,6 @@ func (c *Cursor) deleteLeafCell(key uint64) (err error) {
 	copy(cells[elem.index:], cells[elem.index+1:])
 	cells[len(cells)-1] = leafCell{}
 	cells = cells[:len(cells)-1]
-
 	// Write cells to page.
 	buf := allocPage()
 	writePageNo(buf[:], elem.pgno)
@@ -626,6 +627,7 @@ func (c *Cursor) deleteLeafCell(key uint64) (err error) {
 		writeLeafCell(buf[:], j, offset, cell)
 		offset += align8(cell.Size())
 	}
+
 	if err := c.tx.writePage(buf[:]); err != nil {
 		return err
 	}

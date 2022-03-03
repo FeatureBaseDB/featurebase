@@ -242,5 +242,4 @@ func TestAPI_ImportAtomicRecord(t *testing.T) {
 	if iraBit {
 		PanicOn("IRA bit should have been cleared")
 	}
-
 }

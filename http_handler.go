@@ -454,7 +454,6 @@ func newRouter(handler *Handler) http.Handler {
 	router.HandleFunc("/version", handler.handleGetVersion).Methods("GET").Name("GetVersion")
 
 	// /ui endpoints are for UI use; they may change at any time.
-	router.HandleFunc("/ui/usage", handler.chkAuthZ(handler.handleGetUsage, authz.Read)).Methods("GET").Name("GetUsage")
 	router.HandleFunc("/ui/transaction", handler.chkAuthZ(handler.handleGetTransactionList, authz.Read)).Methods("GET").Name("GetTransactionList")
 	router.HandleFunc("/ui/transaction/", handler.chkAuthZ(handler.handleGetTransactionList, authz.Read)).Methods("GET").Name("GetTransactionList")
 	router.HandleFunc("/ui/shard-distribution", handler.chkAuthZ(handler.handleGetShardDistribution, authz.Admin)).Methods("GET").Name("GetShardDistribution")
@@ -468,6 +467,7 @@ func newRouter(handler *Handler) http.Handler {
 	router.HandleFunc("/internal/translate/data", handler.chkAuthZ(handler.handlePostTranslateData, authz.Write)).Methods("POST").Name("PostTranslateData")
 
 	// other ones
+	router.HandleFunc("/internal/mem-usage", handler.chkAuthZ(handler.handleGetMemUsage, authz.Read)).Methods("GET").Name("GetUsage")
 	router.HandleFunc("/internal/fragment/block/data", handler.chkAuthN(handler.handleGetFragmentBlockData)).Methods("GET").Name("GetFragmentBlockData")
 	router.HandleFunc("/internal/fragment/blocks", handler.chkAuthN(handler.handleGetFragmentBlocks)).Methods("GET").Name("GetFragmentBlocks")
 	router.HandleFunc("/internal/fragment/data", handler.chkAuthN(handler.handleGetFragmentData)).Methods("GET").Name("GetFragmentData")
@@ -928,7 +928,12 @@ func (h *Handler) handleGetSchema(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleGetSchema handles GET /schema/details requests.
+// handleGetSchema handles GET /schema/details requests. This is essentially the
+// same thing as a GET /schema request, except WithViews is turned on by default.
+// Previously, /schema/details returned the cardinality of each field, but this was
+// removed for performance reasons. If, at some point in the future, there is a more
+// performant way to get the cardinality of a field, that information would be
+// included here.
 func (h *Handler) handleGetSchemaDetails(w http.ResponseWriter, r *http.Request) {
 	if !validHeaderAcceptJSON(r.Header) {
 		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
@@ -936,7 +941,7 @@ func (h *Handler) handleGetSchemaDetails(w http.ResponseWriter, r *http.Request)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	schema, err := h.api.SchemaDetails(r.Context())
+	schema, err := h.api.Schema(r.Context(), true)
 	if err != nil {
 		h.logger.Printf("error getting detailed schema: %s", err)
 		return
@@ -989,60 +994,22 @@ func (h *Handler) handlePostSchema(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// handleGetUsage handles GET /ui/usage requests.
-func (h *Handler) handleGetUsage(w http.ResponseWriter, r *http.Request) {
+// handleGetMemUsage handles GET /internal/mem-usage requests.
+func (h *Handler) handleGetMemUsage(w http.ResponseWriter, r *http.Request) {
 	if !validHeaderAcceptJSON(r.Header) {
 		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
 		return
 	}
 
-	q := r.URL.Query()
-	remoteStr := q.Get("remote")
-	var remote bool
-	if remoteStr == "true" {
-		remote = true
-	}
-
-	nodeUsages, err := h.api.Usage(r.Context(), remote)
+	use, err := GetMemoryUsage()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
-
-	// if auth is turned on, filter results
-	if h.auth != nil {
-		g := r.Context().Value(contextKeyGroupMembership)
-		if g == nil {
-			http.Error(w, "Forbidden", http.StatusForbidden)
-			return
-		}
-		if !h.permissions.IsAdmin(g.([]authn.Group)) {
-			allowed := h.permissions.GetAuthorizedIndexList(g.([]authn.Group), authz.Read)
-			filteredNodeUsages := map[string]NodeUsage{}
-
-			for nodeId, nodeUsage := range nodeUsages {
-				filteredIndexUsage := NodeUsage{
-					Disk: DiskUsage{
-						IndexUsage: map[string]IndexUsage{},
-					},
-				}
-				for index, idxUsage := range nodeUsage.Disk.IndexUsage {
-					// is it in auth list
-					for _, authd := range allowed {
-						if index == authd {
-							filteredIndexUsage.Disk.IndexUsage[index] = idxUsage
-							break
-						}
-					}
-				}
-				filteredNodeUsages[nodeId] = filteredIndexUsage
-			}
-			nodeUsages = filteredNodeUsages
-		}
+		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(nodeUsages); err != nil {
-		h.logger.Errorf("write status response error: %s", err)
+	if err := json.NewEncoder(w).Encode(use); err != nil {
+		h.logger.Errorf("write mem usage response error: %s", err)
 	}
 }
 

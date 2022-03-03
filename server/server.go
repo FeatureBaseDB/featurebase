@@ -271,8 +271,6 @@ func (m *Command) Start() (err error) {
 		}
 	}
 
-	go m.API.RefreshUsageCache(m.Config.UsageDutyCycle)
-
 	_ = testhook.Opened(pilosa.NewAuditor(), m, nil)
 	close(m.Started)
 	return nil
@@ -511,17 +509,12 @@ func (m *Command) SetupServer() error {
 	m.API, err = pilosa.NewAPI(
 		pilosa.OptAPIServer(m.Server),
 		pilosa.OptAPIImportWorkerPoolSize(m.Config.ImportWorkerPoolSize),
-		pilosa.OptAPISchemaDetailsOn(m.Config.SchemaDetailsOn),
 	)
 	if err != nil {
 		return errors.Wrap(err, "new api")
 	}
 	// Tell server about its new API, which its client will need.
 	m.Server.SetAPI(m.API)
-
-	if err != nil {
-		return errors.Wrap(err, "new grpc server")
-	}
 
 	var p authz.GroupPermissions
 	if m.Config.Auth.Enable {

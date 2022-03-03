@@ -5452,6 +5452,11 @@ func TestExecutor_Execute_Rows_Keys(t *testing.T) {
 		t.Fatalf("creating field: %v", err)
 	}
 
+	_, err = c.GetNode(0).API.CreateField(context.Background(), "i", "f_id")
+	if err != nil {
+		t.Fatalf("creating field: %v", err)
+	}
+
 	// setup some data. 10 bits in each of shards 0 through 9. starting at
 	// row/col shardNum and progressing to row/col shardNum+10. Also set the
 	// previous 2 for each bit if row >0.
@@ -5474,8 +5479,9 @@ func TestExecutor_Execute_Rows_Keys(t *testing.T) {
 	}
 
 	tests := []struct {
-		q   string
-		exp []string
+		q      string
+		exp    []string
+		expErr string
 	}{
 		{
 			q:   `Rows(f)`,
@@ -5557,13 +5563,26 @@ func TestExecutor_Execute_Rows_Keys(t *testing.T) {
 			q:   `Rows(f, like="__")`,
 			exp: []string{"10", "11", "12", "13", "14", "15", "16", "17", "18"},
 		},
+		{
+			q:      `Rows(f_id, like=7)`,
+			expErr: "parsing:",
+		},
+		{
+			q:      `Rows(f_id, like="__")`,
+			expErr: "executing: translating call:",
+		},
 	}
 
 	for i, test := range tests {
 		t.Run(fmt.Sprintf("#%d_%s", i, test.q), func(t *testing.T) {
 			if res, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: test.q}); err != nil {
-				t.Fatal(err)
+				if !strings.HasPrefix(err.Error(), test.expErr) {
+					t.Fatal(err)
+				}
 			} else {
+				if test.expErr != "" {
+					t.Fatalf("got success, expected error similar to: %+v", test.expErr)
+				}
 				rows := res.Results[0].(pilosa.RowIdentifiers)
 				if !reflect.DeepEqual(rows.Keys, test.exp) {
 					t.Fatalf("\ngot: %+v\nexp: %+v", rows.Keys, test.exp)

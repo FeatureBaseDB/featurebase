@@ -2,6 +2,7 @@
 package rbf_test
 
 import (
+	"bytes"
 	"io"
 	"math/bits"
 	"math/rand"
@@ -852,8 +853,10 @@ func TestDumpDot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rbf.Dumpdot(tx, 0, " ", os.Stdout)
+	var b bytes.Buffer
+	rbf.Dumpdot(tx, 0, " ", &b)
 }
+
 func TestCursor_UpdateBranchCells(t *testing.T) {
 	db := MustOpenDB(t)
 	defer MustCloseDB(t, db)

@@ -1570,6 +1570,7 @@ func TestFragment_WriteTo_ReadFrom(t *testing.T) {
 	}
 	// make a read-only Tx after ReadFrom has committed.
 	tx = idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f1, Shard: f1.shard})
+	defer tx.Rollback()
 
 	// Verify cache is in other fragment.
 	if n := f1.cache.Len(); n != 1 {

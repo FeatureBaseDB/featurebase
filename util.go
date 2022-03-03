@@ -4,8 +4,11 @@ package pilosa
 // util.go: a place for generic, reusable utilities.
 
 import (
+	"fmt"
 	"reflect"
 	"time"
+
+	"github.com/shirou/gopsutil/v3/mem"
 )
 
 // LeftShifted16MaxContainerKey is 0xffffffffffff0000. It is similar
@@ -53,4 +56,18 @@ func GetLoopProgress(start time.Time, now time.Time, iteration uint, total uint)
 // an epoch value, base, and time unit
 func FormatTimestampNano(value, base int64, timeUnit string) string {
 	return time.Unix(0, (value+base)*TimeUnitNanos(timeUnit)).UTC().Format(time.RFC3339Nano)
+}
+
+type MemoryUsage struct {
+	Capacity uint64 `json:"capacity"`
+	TotalUse uint64 `json:"totalUsed"`
+}
+
+// GetMemoryUsage gets the memory usage
+func GetMemoryUsage() (MemoryUsage, error) {
+	usage, err := mem.VirtualMemory()
+	if usage == nil || err != nil {
+		return MemoryUsage{}, fmt.Errorf("reading virtual memory: %v", err)
+	}
+	return MemoryUsage{Capacity: usage.Total, TotalUse: usage.Used}, nil
 }

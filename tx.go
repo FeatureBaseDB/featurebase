@@ -133,6 +133,7 @@ type Tx interface {
 	GetSortedFieldViewList(idx *Index, shard uint64) (fvs []txkey.FieldView, err error)
 
 	GetFieldSizeBytes(index, field string) (uint64, error)
+	RemoveChannel(index, field, view string, shard uint64, a chan uint64, resChan chan countResults)
 }
 
 // GenericApplyFilter implements ApplyFilter in terms of tx.ContainerIterator,

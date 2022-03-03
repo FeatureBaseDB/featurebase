@@ -119,19 +119,7 @@ export const QueryContainer: FC<{}> = () => {
           setLoading(false);
         }
       } else {
-        let queryArr = query.split(' ');
-        queryArr.forEach((word, idx) => {
-          if (word.includes('-')) {
-            let wordArr = word.split('.');
-            wordArr.forEach((section, idx) => {
-              if (section.includes('-') && !word.includes('`')) {
-                wordArr[idx] = `\`${wordArr[idx]}\``;
-              }
-            });
-            queryArr[idx] = wordArr.join('.');
-          }
-        });
-        querySQL(queryArr.join(' '), handleQueryMessages, handleQueryEnd);
+        querySQL(query, handleQueryMessages, handleQueryEnd);
       }
     }
   };
