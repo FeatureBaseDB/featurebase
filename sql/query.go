@@ -15,32 +15,32 @@ const timeFormat = "2006-01-02T15:04"
 
 // LT creates a less than query.
 func LT(fieldName string, value interface{}) string {
-	return fmt.Sprintf("Row(%s<%s)", fieldName, intOrFloat(value))
+	return fmt.Sprintf("Row(%s<%s)", fieldName, formatValue(value))
 }
 
 // LTE creates a less than or equal query.
 func LTE(fieldName string, value interface{}) string {
-	return fmt.Sprintf("Row(%s<=%s)", fieldName, intOrFloat(value))
+	return fmt.Sprintf("Row(%s<=%s)", fieldName, formatValue(value))
 }
 
 // GT creates a greater than query.
 func GT(fieldName string, value interface{}) string {
-	return fmt.Sprintf("Row(%s>%s)", fieldName, intOrFloat(value))
+	return fmt.Sprintf("Row(%s>%s)", fieldName, formatValue(value))
 }
 
 // GTE creates a greater than or equal query.
 func GTE(fieldName string, value interface{}) string {
-	return fmt.Sprintf("Row(%s>=%s)", fieldName, intOrFloat(value))
+	return fmt.Sprintf("Row(%s>=%s)", fieldName, formatValue(value))
 }
 
 // Equals creates an equals query.
 func Equals(fieldName string, value interface{}) string {
-	return fmt.Sprintf("Row(%s=%s)", fieldName, intOrFloat(value))
+	return fmt.Sprintf("Row(%s=%s)", fieldName, formatValue(value))
 }
 
 // NotEquals creates a not equals query.
 func NotEquals(fieldName string, value interface{}) string {
-	return fmt.Sprintf("Row(%s!=%s)", fieldName, intOrFloat(value))
+	return fmt.Sprintf("Row(%s!=%s)", fieldName, formatValue(value))
 }
 
 // NotNull creates a not equal to null query.
@@ -94,12 +94,18 @@ func Like(fieldName string, pattern string) string {
 
 // Between creates a between query.
 func Between(fieldName string, a interface{}, b interface{}) string {
-	return fmt.Sprintf("Row(%s >< [%s,%s])", fieldName, intOrFloat(a), intOrFloat(b))
+	return fmt.Sprintf("Row(%s >< [%s,%s])", fieldName, formatValue(a), formatValue(b))
 }
 
 // Distinct creates a Distinct query.
-func Distinct(indexName, fieldName string) string {
-	return fmt.Sprintf("Distinct(Row(%s!=null),index='%s',field='%s')", fieldName, indexName, fieldName)
+func Distinct(indexName, fieldName, rowCall string) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, `Distinct(`)
+	if rowCall != "" {
+		fmt.Fprintf(&b, `%s, `, rowCall)
+	}
+	fmt.Fprintf(&b, `index='%s',field='%s')`, indexName, fieldName)
+	return b.String()
 }
 
 // RowDistinct creates a Distinct query with the given row filter.
@@ -269,8 +275,10 @@ func formatIDKey(idKey interface{}) (string, error) {
 	}
 }
 
-func intOrFloat(value interface{}) string {
+func formatValue(value interface{}) string {
 	switch value.(type) {
+	case string:
+		return fmt.Sprintf("%q", value)
 	case float64, float32:
 		// In order to test expected values, we set the precision
 		// to 8. TODO: It's likely we'll need to address this

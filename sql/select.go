@@ -34,14 +34,14 @@ func (s *SelectHandler) Handle(ctx context.Context, mapped *MappedSQL) (pproto.T
 	if !ok {
 		return nil, fmt.Errorf("statement is not type select: %T", mapped.Statement)
 	}
-	mr, err := s.mapSelect(ctx, stmt, mapped.Mask)
+	mr, err := s.MapSelect(ctx, stmt, mapped.Mask)
 	if err != nil {
 		return nil, errors.Wrap(err, "mapping select")
 	}
 	return s.execMappingResult(ctx, mr, mapped.SQL)
 }
 
-func (s *SelectHandler) mapSelect(ctx context.Context, selectStmt *sqlparser.Select, qm QueryMask) (*MappingResult, error) {
+func (s *SelectHandler) MapSelect(ctx context.Context, selectStmt *sqlparser.Select, qm QueryMask) (*MappingResult, error) {
 	// Get the handler for this query mask.
 	hndlr := s.router.handler(qm)
 	if hndlr == nil {
@@ -305,6 +305,15 @@ func (h handlerSelectDistinctFromTable) Apply(stmt *sqlparser.Select, qm QueryMa
 		return nil, errors.New("distinct requires a valid field column")
 	}
 
+	var wherePQL string
+	if stmt.Where != nil {
+		if wherePQL, err = extractWhere(index, stmt.Where.Expr); err != nil {
+			return nil, err
+		}
+	} else {
+		wherePQL = All()
+	}
+
 	limit, offset, hasLimit, hasOffset, err := extractLimitOffset(stmt)
 	if err != nil {
 		return nil, errors.Wrap(err, "extracting limit")
@@ -315,22 +324,8 @@ func (h handlerSelectDistinctFromTable) Apply(stmt *sqlparser.Select, qm QueryMa
 		return nil, errors.Wrap(err, "extracting order by")
 	}
 
-	// Determine the type of the field needing distinct.
-	// If the pilosa field is type int, handle it as a Distinct() query.
-	// Otherwise, use Rows()
-	// TODO: ensure this works for all field types (bool, time, etc).
-	var qo string
-	if fieldCol.Field.Type() == pilosa.FieldTypeInt || fieldCol.Field.Type() == pilosa.FieldTypeTimestamp {
-		qo = Distinct(fieldCol.Field.Index(), fieldCol.Field.Name())
-	} else {
-		if !qm.HasOrderBy() && limit > 0 {
-			if qo, err = RowsLimit(fieldCol.Field.Name(), int64(limit)); err != nil {
-				return nil, errors.Wrap(err, "creating Rows query")
-			}
-		} else {
-			qo = Rows(fieldCol.Field.Name())
-		}
-	}
+	// We use a Distinct call instead of Rows as it supports filtering.
+	qo := Distinct(fieldCol.Field.Index(), fieldCol.Field.Name(), wherePQL)
 
 	mr := &MappingResult{
 		IndexName: indexName,
@@ -340,7 +335,7 @@ func (h handlerSelectDistinctFromTable) Apply(stmt *sqlparser.Select, qm QueryMa
 
 	// Assign headers to the result.
 	mr.addReducer(func(result pproto.ToRowser) pproto.ToRowser {
-		return AssignHeaders(result, selectFields...)
+		return StaticHeaders(result, selectFields...)
 	})
 
 	if qm.HasOrderBy() {
@@ -598,8 +593,7 @@ func (h handlerSelectGroupBy) Apply(stmt *sqlparser.Select, qm QueryMask, indexF
 
 	rowsQueries := []string{}
 	for _, fieldName := range groupByFieldNames {
-		field := index.Field(fieldName)
-		rowsQueries = append(rowsQueries, Rows(field.Name()))
+		rowsQueries = append(rowsQueries, Rows(fieldName))
 	}
 
 	var wherePQL string
@@ -796,7 +790,7 @@ func (h handlerSelectJoin) Apply(stmt *sqlparser.Select, qm QueryMask, indexFunc
 	// Build the Distinct() portion of the query on the secondary.
 	var distinctQry string
 	if secondaryWhere == "" {
-		distinctQry = Distinct(secondaryField.Index(), secondaryField.Name())
+		distinctQry = Distinct(secondaryField.Index(), secondaryField.Name(), "")
 	} else {
 		distinctQry = RowDistinct(secondaryField.Index(), secondaryField.Name(), secondaryWhere)
 	}

@@ -90,3 +90,9 @@ func TestFormatTimestampNano(t *testing.T) {
 		t.Fatal("Timestamp not formatted properly")
 	}
 }
+
+func TestGetMemoryUsage(t *testing.T) {
+	if _, err := GetMemoryUsage(); err != nil {
+		t.Fatalf("unexpected error getting memory usage: %v", err)
+	}
+}

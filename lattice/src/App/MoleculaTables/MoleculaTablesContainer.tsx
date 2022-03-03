@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import OrderBy from 'lodash/orderBy';
 import { MoleculaTable } from './MoleculaTable';
 import { MoleculaTables } from './MoleculaTables';
 import { pilosa } from 'services/eventServices';
@@ -12,9 +11,8 @@ export const MoleculaTablesContainer = () => {
   const history = useHistory();
   const [tables, setTables] = useState<any>();
   const [selectedTable, setSelectedTable] = useState<any>();
-  const [dataDistribution, setDataDistribution] = useState<any>();
-  const [maxSize, setMaxSize] = useState<number>(0);
-  const [lastUpdated, setLastUpdated] = useState<string>('');
+  const [maxSize] = useState<number>(0);
+  const [lastUpdated] = useState<string>('');
 
   useEffectOnce(() => {
     pilosa.get
@@ -26,48 +24,6 @@ export const MoleculaTablesContainer = () => {
           .then((res) => setTables(res.data.indexes))
           .catch((err) => console.log(err))
       );
-
-    pilosa.get.usage().then((res) => {
-      const nodes = Object.keys(res.data);
-      let data = {};
-      nodes.forEach((node) => {
-        const nodeIndexes = res.data[node].diskUsage.indexes;
-        const indexList = Object.keys(nodeIndexes);
-        indexList.forEach((i) => {
-          const nodeData = nodeIndexes[i];
-          if (data[i]) {
-            data[i] = {
-              total: data[i].total + nodeData.total,
-              fieldKeysTotal: data[i].fieldKeysTotal + nodeData.fieldKeysTotal,
-              indexKeys: data[i].indexKeys + nodeData.indexKeys,
-              fragments: data[i].fragments + nodeData.fragments,
-              metadata: data[i].metadata + nodeData.metadata,
-              fields: [...data[i].fields, nodeData.fields]
-            };
-          } else {
-            data[i] = {
-              total: nodeData.total,
-              fieldKeysTotal: nodeData.fieldKeysTotal,
-              indexKeys: nodeData.indexKeys,
-              fragments: nodeData.fragments,
-              metadata: nodeData.metadata,
-              fields: [nodeData.fields]
-            };
-          }
-        });
-
-        if(!lastUpdated) {
-          setLastUpdated(res.data[node].lastUpdated);
-        }
-      });
-
-      const sorted = OrderBy(data, ['total'], ['desc']);
-      if (sorted.length > 0) {
-        setMaxSize(sorted[0].total);
-      }
-
-      setDataDistribution(data);
-    });
   });
 
   useEffect(() => {
@@ -85,21 +41,10 @@ export const MoleculaTablesContainer = () => {
   }, [match, tables, history]);
 
   return selectedTable ? (
-    <MoleculaTable
-      table={selectedTable}
-      dataDistribution={
-        dataDistribution
-          ? dataDistribution[selectedTable.name]
-            ? dataDistribution[selectedTable.name]
-            : { uncached: true }
-          : undefined
-      }
-      lastUpdated={lastUpdated}
-    />
+    <MoleculaTable table={selectedTable} lastUpdated={lastUpdated} />
   ) : (
     <MoleculaTables
       tables={tables}
-      dataDistribution={dataDistribution}
       lastUpdated={lastUpdated}
       maxSize={maxSize}
     />

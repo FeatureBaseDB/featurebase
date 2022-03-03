@@ -81,11 +81,6 @@ func TestStatsCount_TopN(t *testing.T) {
 	defer c.Close()
 	hldr := test.Holder{Holder: c.GetNode(0).Server.Holder()}
 
-	hldr.SetBit("d", "f", 0, 0)
-	hldr.SetBit("d", "f", 0, 1)
-	hldr.SetBit("d", "f", 0, pilosa.ShardWidth)
-	hldr.SetBit("d", "f", 0, pilosa.ShardWidth+2)
-
 	// Execute query.
 	called := false
 	hldr.Holder.Stats = &MockStats{
@@ -101,6 +96,12 @@ func TestStatsCount_TopN(t *testing.T) {
 			called = true
 		},
 	}
+
+	hldr.SetBit("d", "f", 0, 0)
+	hldr.SetBit("d", "f", 0, 1)
+	hldr.SetBit("d", "f", 0, pilosa.ShardWidth)
+	hldr.SetBit("d", "f", 0, pilosa.ShardWidth+2)
+
 	if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "d", Query: `TopN(field=f, n=2)`}); err != nil {
 		t.Fatal(err)
 	}

@@ -302,8 +302,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		}
 
 		var bodySchema pilosa.Schema
-		if err := json.Unmarshal(w.Body.Bytes(),
-			&bodySchema); err != nil {
+		if err := json.Unmarshal(w.Body.Bytes(), &bodySchema); err != nil {
 			t.Fatalf("unexpected unmarshalling error: %v", err)
 		}
 		// DO NOT COMPARE `CreatedAt` - reset to 0
@@ -316,46 +315,13 @@ func TestHandler_Endpoints(t *testing.T) {
 		//
 
 		var targetSchema pilosa.Schema
-		target := fmt.Sprintf(`{"indexes":[{"name":"i0","options":{"keys":false,"trackExistence":false},"fields":[{"name":"f0","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false},"cardinality":0},{"name":"f1","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false},"cardinality":1,"views":[{"name":"standard"}]}],"shardWidth":%[1]d},{"name":"i1","options":{"keys":false,"trackExistence":false},"fields":[{"name":"f0","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false},"cardinality":1,"views":[{"name":"standard"}]}],"shardWidth":%[1]d},{"name":"i2","options":{"keys":false,"trackExistence":false},"fields":[{"name":"f0","options":{"type":"set","cacheType":"ranked","cacheSize":1000,"keys":false},"cardinality":1,"views":[{"name":"standard"}]},{"name":"f1","options":{"type":"int","base":0,"bitDepth":0,"min":-100,"max":100,"keys":false,"foreignIndex":""},"cardinality":4,"views":[{"name":"bsig_f1"}]},{"name":"f2","options":{"type":"decimal","base":0,"scale":1,"bitDepth":0,"min":-10,"max":10,"keys":false},"cardinality":5,"views":[{"name":"bsig_f2"}]},{"name":"f3","options":{"type":"time","timeQuantum":"YMDH","keys":false,"noStandardView":false},"cardinality":1,"views":[{"name":"standard"}]},{"name":"f4","options":{"type":"mutex","cacheType":"ranked","cacheSize":5000,"keys":false},"cardinality":1,"views":[{"name":"standard"}]},{"name":"f5","options":{"type":"bool"},"cardinality":1,"views":[{"name":"standard"}]}],"shardWidth":%[1]d}]}`, pilosa.ShardWidth)
-		if err := json.Unmarshal([]byte(target),
-			&targetSchema); err != nil {
+		target := fmt.Sprintf(`{"indexes":[{"name":"i0","options":{"keys":false,"trackExistence":false},"fields":[{"name":"f0","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false}},{"name":"f1","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false},"views":[{"name":"standard"}]}],"shardWidth":%[1]d},{"name":"i1","options":{"keys":false,"trackExistence":false},"fields":[{"name":"f0","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false},"views":[{"name":"standard"}]}],"shardWidth":%[1]d},{"name":"i2","options":{"keys":false,"trackExistence":false},"fields":[{"name":"f0","options":{"type":"set","cacheType":"ranked","cacheSize":1000,"keys":false},"views":[{"name":"standard"}]},{"name":"f1","options":{"type":"int","base":0,"bitDepth":0,"min":-100,"max":100,"keys":false,"foreignIndex":""},"views":[{"name":"bsig_f1"}]},{"name":"f2","options":{"type":"decimal","base":0,"scale":1,"bitDepth":0,"min":-10,"max":10,"keys":false},"views":[{"name":"bsig_f2"}]},{"name":"f3","options":{"type":"time","timeQuantum":"YMDH","keys":false,"noStandardView":false},"views":[{"name":"standard"}]},{"name":"f4","options":{"type":"mutex","cacheType":"ranked","cacheSize":5000,"keys":false},"views":[{"name":"standard"}]},{"name":"f5","options":{"type":"bool"},"views":[{"name":"standard"}]}],"shardWidth":%[1]d}]}`, pilosa.ShardWidth)
+		if err := json.Unmarshal([]byte(target), &targetSchema); err != nil {
 			t.Fatalf("unexpected unmarshalling error: %v", err)
 		}
 
 		if !reflect.DeepEqual(targetSchema, bodySchema) {
 			t.Fatalf("target: %+v\nbody: %+v\n", targetSchema, bodySchema)
-		}
-	})
-
-	t.Run("SchemaDetailsOff", func(t *testing.T) {
-		err := cmd.API.SetAPIOptions(pilosa.OptAPISchemaDetailsOn(false))
-		if err != nil {
-			t.Fatalf("setting schema details option")
-		}
-
-		w := httptest.NewRecorder()
-		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/schema/details", nil))
-		if w.Code != gohttp.StatusOK {
-			t.Fatalf("unexpected status code: %d", w.Code)
-		}
-
-		var bodySchema pilosa.Schema
-		if err := json.Unmarshal(w.Body.Bytes(),
-			&bodySchema); err != nil {
-			t.Fatalf("unexpected unmarshalling error: %v", err)
-
-		}
-		for _, i := range bodySchema.Indexes {
-			for _, f := range i.Fields {
-				if f.Cardinality != nil {
-					t.Fatalf("expected nil cardinality, got: %v", *f.Cardinality)
-				}
-			}
-		}
-
-		err = cmd.API.SetAPIOptions(pilosa.OptAPISchemaDetailsOn(true))
-		if err != nil {
-			t.Fatalf("could not toggle schema details to on: %v", err)
 		}
 	})
 
@@ -514,48 +480,6 @@ func TestHandler_Endpoints(t *testing.T) {
 		}
 		if len(ret["nodes"].([]interface{})) != 1 {
 			t.Fatalf("wrong length nodes list: %#v", ret)
-		}
-	})
-
-	// UI/usage returns disk and memory usage from a precalculated cache.
-	// Since the cache calculates the cache on server startup, and tests create indexes thereafter
-	// the cache initially has 0 indexes when the test suite is ran. Therefore, this test first
-	// resets the cache.
-	t.Run("UI/usage", func(t *testing.T) {
-		if cmd.API.ResetUsageCache() != nil {
-			t.Fatal(err)
-		}
-		w := httptest.NewRecorder()
-		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/ui/usage", nil))
-		if w.Code != gohttp.StatusOK {
-			t.Fatalf("unexpected status code: %d", w.Code)
-		}
-		nodeUsages := make(map[string]pilosa.NodeUsage)
-		if err := json.Unmarshal(w.Body.Bytes(), &nodeUsages); err != nil {
-			t.Fatalf("unmarshal")
-		}
-
-		for _, nodeUsage := range nodeUsages {
-			if nodeUsage.Disk.TotalUse < 1 {
-				t.Fatalf("expected some disk use, got %d", nodeUsage.Disk.TotalUse)
-			}
-			if nodeUsage.Disk.Capacity < 1 {
-				t.Fatalf("expected some disk capacity, got %d", nodeUsage.Disk.Capacity)
-			}
-			if nodeUsage.Memory.TotalUse < 1 {
-				t.Fatalf("expected some memory use, got %d", nodeUsage.Memory.TotalUse)
-			}
-			if nodeUsage.Memory.Capacity < 1 {
-				t.Fatalf("expected some memory capacity, got %d", nodeUsage.Memory.Capacity)
-			}
-			numIndexes := len(nodeUsage.Disk.IndexUsage)
-			if numIndexes != 3 {
-				t.Fatalf("wrong length index usage list: expected %d, got %d", 3, numIndexes)
-			}
-			numFields := len(nodeUsage.Disk.IndexUsage["i1"].Fields)
-			if numFields != len(i1.Fields()) {
-				t.Fatalf("wrong length field usage list: expected %d, got %d", len(i1.Fields()), numFields)
-			}
 		}
 	})
 
