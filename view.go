@@ -307,6 +307,10 @@ func (v *view) recalculateCaches() {
 	}
 }
 
+func (v *view) Name() string {
+	return v.name
+}
+
 // CreateFragmentIfNotExists returns a fragment in the view by shard.
 func (v *view) CreateFragmentIfNotExists(shard uint64) (*fragment, error) {
 	v.mu.Lock()
