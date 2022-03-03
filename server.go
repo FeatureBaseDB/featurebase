@@ -652,7 +652,6 @@ func (s *Server) Open() error {
 		return errors.Wrap(err, "setting nodeState")
 	}
 
-
 	if ok := s.addToWaitGroup(4); !ok {
 		return fmt.Errorf("closing server while opening server is NOT allowed")
 	}
