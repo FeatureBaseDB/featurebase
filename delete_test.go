@@ -9,6 +9,7 @@ import (
 	"time"
 
 	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/disco"
 	"github.com/molecula/featurebase/v3/test"
 	"github.com/stretchr/testify/require"
 )
