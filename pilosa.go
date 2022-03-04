@@ -111,6 +111,12 @@ func newConflictError(err error) ConflictError {
 	return ConflictError{err}
 }
 
+// Unwrap makes it so that a ConflictError wrapping ErrFieldExists gets a
+// true from errors.Is(ErrFieldExists).
+func (c ConflictError) Unwrap() error {
+	return c.error
+}
+
 // NotFoundError wraps an error value to signify that a resource was not found
 // such that in an HTTP scenario, http.StatusNotFound would be returned.
 type NotFoundError error

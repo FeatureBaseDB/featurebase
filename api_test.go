@@ -29,6 +29,8 @@ import (
 	"github.com/molecula/featurebase/v3/shardwidth"
 	"github.com/molecula/featurebase/v3/test"
 	. "github.com/molecula/featurebase/v3/vprint" // nolint:staticcheck
+
+	"golang.org/x/sync/errgroup"
 )
 
 func TestAPI_Import(t *testing.T) {
@@ -1400,6 +1402,42 @@ func TestVariousApiTranslateCalls(t *testing.T) {
 		       }
 		   })
 		*/
+	}
+}
+
+func TestAPI_CreateField(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	c := test.MustRunCluster(t, 3)
+	defer c.Close()
+
+	nodes := make([]*test.Command, 3)
+	for i := range nodes {
+		nodes[i] = c.GetNode(i)
+	}
+
+	if _, err := nodes[0].API.CreateIndex(ctx, "i", pilosa.IndexOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	eg, ctx := errgroup.WithContext(context.Background())
+	for _, n := range nodes {
+		node := n
+		eg.Go(func() error {
+			for i := 0; i < 10; i++ {
+				_, err := node.API.CreateField(ctx, "i", fmt.Sprintf("f%d", i))
+				if err != nil && !errors.Is(err, pilosa.ErrFieldExists) {
+					return err
+				}
+			}
+			return nil
+		})
+	}
+	err := eg.Wait()
+	if err != nil {
+		if errors.Is(err, pilosa.ErrFieldExists) {
+			t.Fatalf("conflict error: %v", err)
+		}
+		t.Fatalf("unexpected error: %T %v", err, err)
 	}
 }
 

@@ -328,9 +328,15 @@ func (api *API) CreateField(ctx context.Context, indexName string, fieldName str
 	}
 
 	// Create field.
-	field, err := index.CreateFieldAndBroadcast(cfm)
+	field, err := index.CreateField(fieldName, opts...)
 	if err != nil {
 		return nil, errors.Wrap(err, "creating field")
+	}
+
+	// Send the create field message to all nodes. We do this *outside* the
+	// CreateField logic so we're not blocking on it.
+	if err := api.holder.sendOrSpool(cfm); err != nil {
+		return nil, errors.Wrap(err, "sending CreateField message")
 	}
 
 	api.holder.Stats.CountWithCustomTags(MetricCreateField, 1, 1.0, []string{fmt.Sprintf("index:%s", indexName)})
