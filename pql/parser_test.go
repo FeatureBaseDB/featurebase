@@ -5,9 +5,10 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
-	"github.com/molecula/featurebase/v2/pql"
-	_ "github.com/molecula/featurebase/v2/test"
+	"github.com/molecula/featurebase/v3/pql"
+	_ "github.com/molecula/featurebase/v3/test"
 )
 
 // Ensure the parser can parse PQL.
@@ -194,6 +195,33 @@ func TestParser_Parse(t *testing.T) {
 			},
 		) {
 			t.Fatalf("unexpected call: %#v", q.Calls[0])
+		}
+	})
+
+	t.Run("Timestamp", func(t *testing.T) {
+		twos := "2022-02-22T22:22:22Z"
+		date, err := time.Parse(time.RFC3339, twos)
+		if err != nil {
+			t.Fatal(err)
+		}
+		q, err := pql.ParseString(`Row(x>'2022-02-22T22:22:22Z')`)
+		if err != nil {
+			t.Fatal(err)
+		} else if !reflect.DeepEqual(q.Calls[0],
+			&pql.Call{
+				Name: "Row",
+				Args: map[string]interface{}{
+					"x": &pql.Condition{Op: pql.GT, Value: date},
+				},
+			},
+		) {
+			t.Fatalf("unexpected call: %#v", q.Calls[0])
+		}
+		q, err = pql.ParseString(`Row(x>'2024-04-24T24:24:24Z')`)
+		if err == nil {
+			t.Fatal("no error parsing invalid date")
+		} else if !strings.Contains(err.Error(), "not a valid timestamp") {
+			t.Fatalf("expected error for invalid timestamp, got: %s", err.Error())
 		}
 	})
 

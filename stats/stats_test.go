@@ -9,11 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/molecula/featurebase/v2"
-	"github.com/molecula/featurebase/v2/http"
-	"github.com/molecula/featurebase/v2/logger"
-	"github.com/molecula/featurebase/v2/stats"
-	"github.com/molecula/featurebase/v2/test"
+	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/logger"
+	"github.com/molecula/featurebase/v3/stats"
+	"github.com/molecula/featurebase/v3/test"
 )
 
 // TestMultiStatClient_Expvar run the multistat client with exp var
@@ -82,11 +81,6 @@ func TestStatsCount_TopN(t *testing.T) {
 	defer c.Close()
 	hldr := test.Holder{Holder: c.GetNode(0).Server.Holder()}
 
-	hldr.SetBit("d", "f", 0, 0)
-	hldr.SetBit("d", "f", 0, 1)
-	hldr.SetBit("d", "f", 0, pilosa.ShardWidth)
-	hldr.SetBit("d", "f", 0, pilosa.ShardWidth+2)
-
 	// Execute query.
 	called := false
 	hldr.Holder.Stats = &MockStats{
@@ -102,6 +96,12 @@ func TestStatsCount_TopN(t *testing.T) {
 			called = true
 		},
 	}
+
+	hldr.SetBit("d", "f", 0, 0)
+	hldr.SetBit("d", "f", 0, 1)
+	hldr.SetBit("d", "f", 0, pilosa.ShardWidth)
+	hldr.SetBit("d", "f", 0, pilosa.ShardWidth+2)
+
 	if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "d", Query: `TopN(field=f, n=2)`}); err != nil {
 		t.Fatal(err)
 	}
@@ -143,7 +143,7 @@ func TestStatsCount_APICalls(t *testing.T) {
 	cluster := test.MustRunCluster(t, 1)
 	defer cluster.Close()
 	cmd := cluster.GetNode(0)
-	h := cmd.Handler.(*http.Handler).Handler
+	h := cmd.Handler.(*pilosa.Handler).Handler
 	holder := cmd.Server.Holder()
 	hldr := test.Holder{Holder: holder}
 

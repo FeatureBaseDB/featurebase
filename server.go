@@ -17,15 +17,15 @@ import (
 
 	uuid "github.com/satori/go.uuid"
 
-	"github.com/molecula/featurebase/v2/disco"
-	"github.com/molecula/featurebase/v2/logger"
-	pnet "github.com/molecula/featurebase/v2/net"
-	rbfcfg "github.com/molecula/featurebase/v2/rbf/cfg"
-	"github.com/molecula/featurebase/v2/roaring"
-	"github.com/molecula/featurebase/v2/sql2"
-	"github.com/molecula/featurebase/v2/stats"
-	"github.com/molecula/featurebase/v2/storage"
-	"github.com/molecula/featurebase/v2/topology"
+	"github.com/molecula/featurebase/v3/disco"
+	"github.com/molecula/featurebase/v3/logger"
+	pnet "github.com/molecula/featurebase/v3/net"
+	rbfcfg "github.com/molecula/featurebase/v3/rbf/cfg"
+	"github.com/molecula/featurebase/v3/roaring"
+	"github.com/molecula/featurebase/v3/sql2"
+	"github.com/molecula/featurebase/v3/stats"
+	"github.com/molecula/featurebase/v3/storage"
+	"github.com/molecula/featurebase/v3/topology"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 
@@ -44,6 +44,7 @@ var _ broadcaster = &Server{}
 type Server struct { // nolint: maligned
 	// Close management.
 	wg      sync.WaitGroup
+	muWG    sync.Mutex
 	closing chan struct{}
 
 	// Internal
@@ -64,10 +65,10 @@ type Server struct { // nolint: maligned
 	schemator disco.Schemator
 
 	// External
-	systemInfo    SystemInfo
-	gcNotifier    GCNotifier
-	logger        logger.Logger
-	snapshotQueue SnapshotQueue
+	systemInfo  SystemInfo
+	gcNotifier  GCNotifier
+	logger      logger.Logger
+	queryLogger logger.Logger
 
 	nodeID              string
 	uri                 pnet.URI
@@ -86,7 +87,7 @@ type Server struct { // nolint: maligned
 	// HolderConfig stashes server options that are really Holder options.
 	holderConfig *HolderConfig
 
-	defaultClient InternalClient
+	defaultClient *InternalClient
 	dataDir       string
 
 	// Threshold for logging long-running queries
@@ -99,6 +100,26 @@ func (s *Server) Holder() *Holder {
 	return s.holder
 }
 
+// addToWaitGroup adds to the server WaitGroup but makes sure the server isn't
+// closing, and that the WaitGroup is not already waiting before it adds
+func (s *Server) addToWaitGroup(delta int) bool {
+	select {
+	case <-s.closing:
+		return false
+	default:
+		s.muWG.Lock()
+		defer s.muWG.Unlock()
+		select {
+		case <-s.closing:
+			// if we're closing after having gotten the lock, stop!!
+			return false
+		default:
+			s.wg.Add(delta)
+			return true
+		}
+	}
+}
+
 // ServerOption is a functional option type for pilosa.Server
 type ServerOption func(s *Server) error
 
@@ -108,6 +129,13 @@ func OptServerLogger(l logger.Logger) ServerOption {
 	return func(s *Server) error {
 		s.logger = l
 		s.holderConfig.Logger = l
+		return nil
+	}
+}
+
+func OptServerQueryLogger(l logger.Logger) ServerOption {
+	return func(s *Server) error {
+		s.queryLogger = l
 		return nil
 	}
 }
@@ -186,7 +214,7 @@ func OptServerGCNotifier(gcn GCNotifier) ServerOption {
 
 // OptServerInternalClient is a functional option on Server
 // used to set the implementation of InternalClient.
-func OptServerInternalClient(c InternalClient) ServerOption {
+func OptServerInternalClient(c *InternalClient) ServerOption {
 	return func(s *Server) error {
 		s.defaultClient = c
 		s.cluster.InternalClient = c
@@ -333,15 +361,6 @@ func OptServerStorageConfig(cfg *storage.Config) ServerOption {
 	}
 }
 
-// OptServerRowcacheOn is a functional option on Server
-// used to turn on the row cache.
-func OptServerRowcacheOn(rowcacheOn bool) ServerOption {
-	return func(s *Server) error {
-		s.holderConfig.RowcacheOn = rowcacheOn
-		return nil
-	}
-}
-
 // OptServerRBFConfig conveys the RBF flags to the Holder.
 func OptServerRBFConfig(cfg *rbfcfg.Config) ServerOption {
 	return func(s *Server) error {
@@ -407,7 +426,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		cluster:       cluster,
 		diagnostics:   newDiagnosticsCollector(defaultDiagnosticServer),
 		systemInfo:    newNopSystemInfo(),
-		defaultClient: nopInternalClient{},
+		defaultClient: &InternalClient{}, // TODO may need to make this a valid thing
 
 		gcNotifier: NopGCNotifier,
 
@@ -476,7 +495,6 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	}
 	s.holder = NewHolder(path, s.holderConfig)
 	s.holder.Stats.SetLogger(s.logger)
-	s.holder.Logger.Infof("RowCacheOn: %v", s.holderConfig.RowcacheOn)
 	cwd, err := os.Getwd()
 	if err != nil {
 		return nil, err
@@ -497,6 +515,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	s.holder.Stats = s.holder.Stats.WithTags(fmt.Sprintf("node_id:%s", s.nodeID))
 
 	s.executor.Holder = s.holder
+	s.holder.executor = s.executor
 	s.executor.Cluster = s.cluster
 	s.executor.MaxWritesPerRequest = s.maxWritesPerRequest
 	s.cluster.broadcaster = s
@@ -507,10 +526,14 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	s.holder.schemator = s.schemator
 	s.holder.sharder = s.sharder
 	s.holder.serializer = s.serializer
+
+	// Initial stats must be invoked after the executor obtains reference to the holder.
+	s.executor.InitStats()
+
 	return s, nil
 }
 
-func (s *Server) InternalClient() InternalClient {
+func (s *Server) InternalClient() *InternalClient {
 	return s.defaultClient
 }
 
@@ -541,13 +564,6 @@ func (s *Server) UpAndDown() error {
 // Open opens and initializes the server.
 func (s *Server) Open() error {
 	s.logger.Infof("open server. PID %v", os.Getpid())
-
-	if s.holder.NeedsSnapshot() {
-		// Start background monitoring.
-		s.snapshotQueue = newSnapshotQueue(10, 2, s.logger)
-	} else {
-		s.snapshotQueue = defaultSnapshotQueue //TODO (twg) rethink this
-	}
 
 	// Log startup
 	err := s.holder.logStartup()
@@ -595,7 +611,10 @@ func (s *Server) Open() error {
 
 	// Start background process listening for translation
 	// sync resets.
-	s.wg.Add(1)
+	if ok := s.addToWaitGroup(1); !ok {
+		return fmt.Errorf("closing server while opening server is NOT allowed")
+	}
+
 	go func() { defer s.wg.Done(); s.monitorResetTranslationSync() }()
 	go func() { _ = s.translationSyncer.Reset() }()
 
@@ -610,7 +629,6 @@ func (s *Server) Open() error {
 		return errors.Wrap(err, "opening Holder")
 	}
 	// bring up the background tasks for the holder.
-	s.holder.SnapshotQueue = s.snapshotQueue
 	s.holder.Activate()
 	// if we joined existing cluster then broadcast "resize on add" message
 	if initState == disco.InitialClusterStateExisting {
@@ -623,7 +641,9 @@ func (s *Server) Open() error {
 		return errors.Wrap(err, "setting nodeState")
 	}
 
-	s.wg.Add(3)
+	if ok := s.addToWaitGroup(3); !ok {
+		return fmt.Errorf("closing server while opening server is NOT allowed")
+	}
 	go func() { defer s.wg.Done(); s.monitorAntiEntropy() }()
 	go func() { defer s.wg.Done(); s.monitorRuntime() }()
 	go func() { defer s.wg.Done(); s.monitorDiagnostics() }()
@@ -637,14 +657,18 @@ func (s *Server) Open() error {
 		return toSend
 	}()
 
-	s.wg.Add(1)
+	if ok := s.addToWaitGroup(1); !ok {
+		return fmt.Errorf("closing server while opening server is NOT allowed")
+	}
 	go func() {
 		defer s.wg.Done()
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-
-		s.wg.Add(1)
+		if ok := s.addToWaitGroup(1); !ok {
+			// the server is closing, stop!!
+			return
+		}
 		go func() {
 			defer s.wg.Done()
 			defer cancel()
@@ -722,11 +746,15 @@ func (s *Server) Close() error {
 	case <-s.closing:
 		return nil
 	default:
-		errE := s.executor.Close()
-
+		// get the muWG lock so that noone adds to the WaitGroup while it Waits
+		s.muWG.Lock()
+		defer s.muWG.Unlock()
 		// Notify goroutines to stop.
 		close(s.closing)
 		s.wg.Wait()
+
+		errE := s.executor.Close()
+
 		var errh, errd error
 		var errhs error
 		var errc error
@@ -740,11 +768,6 @@ func (s *Server) Close() error {
 		}
 		if s.holder != nil {
 			errh = s.holder.Close()
-		}
-		if s.snapshotQueue != nil {
-			s.holder.SnapshotQueue = nil
-			s.snapshotQueue.Stop()
-			s.snapshotQueue = nil
 		}
 
 		// prefer to return holder error over cluster
@@ -787,8 +810,11 @@ func (s *Server) monitorResetTranslationSync() {
 		case <-s.closing:
 			return
 		case <-s.resetTranslationSyncCh:
+			if ok := s.addToWaitGroup(1); !ok {
+				// the server is closing!!! stop!!
+				return
+			}
 			s.logger.Infof("holder translation sync beginning")
-			s.wg.Add(1)
 			go func() {
 				// Obtaining this lock ensures that there is only
 				// one instance of resetTranslationSync() running

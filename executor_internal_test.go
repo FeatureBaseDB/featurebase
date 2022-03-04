@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/molecula/featurebase/v2/pql"
-	"github.com/molecula/featurebase/v2/testhook"
+	"github.com/molecula/featurebase/v3/pql"
+	"github.com/molecula/featurebase/v3/testhook"
 )
 
 func TestExecutor_TranslateRowsOnBool(t *testing.T) {
@@ -487,5 +487,112 @@ func TestExecutorSafeCopyDistinctTimestamp(t *testing.T) {
 	copied := safeCopy(response)
 	if !reflect.DeepEqual(copied.Results, response.Results) {
 		t.Fatalf("Did not copy results. got %+v, want %+v", copied.Results, response.Results)
+	}
+}
+
+func TestGetScaledInt(t *testing.T) {
+	f := OpenField(t, OptFieldTypeTimestamp(time.Now(), "ms"))
+	defer f.Close()
+	// check that fields with type timestamp return the int64 passed in to getScaledInt with nil err
+	v := time.Now().Unix()
+	res, err := getScaledInt(f.Field, v)
+	if err != nil {
+		t.Errorf("got error %v, expected nil", err)
+	}
+	if !reflect.DeepEqual(res, v) {
+		t.Errorf("expected %v, got %v", v, res)
+	}
+
+}
+
+func TestDistinctTimestampUnion(t *testing.T) {
+	cases := []struct {
+		name     string
+		a        DistinctTimestamp
+		b        DistinctTimestamp
+		expected DistinctTimestamp
+	}{
+		{
+			name:     "empty other",
+			a:        DistinctTimestamp{Name: "a", Values: []string{"a", "b", "c"}},
+			b:        DistinctTimestamp{Name: "a", Values: []string{}},
+			expected: DistinctTimestamp{Name: "a", Values: []string{"a", "b", "c"}},
+		},
+		{
+			name:     "one more in other",
+			a:        DistinctTimestamp{Name: "a", Values: []string{"a", "b", "c"}},
+			b:        DistinctTimestamp{Name: "a", Values: []string{"a", "b", "c", "d"}},
+			expected: DistinctTimestamp{Name: "a", Values: []string{"a", "b", "c", "d"}},
+		},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			res := test.a.Union(test.b)
+			allThere := true
+			for _, val := range res.Values {
+				here := false
+				for _, expected := range test.expected.Values {
+					if val == expected {
+						here = true
+						break
+					}
+				}
+				allThere = allThere && here
+			}
+			if !allThere {
+				t.Errorf("expected %v, got %v", test.expected, res)
+			}
+		})
+	}
+}
+
+func TestExecutor_DeleteRows(t *testing.T) {
+	path, _ := testhook.TempDir(t, "pilosa-executor-")
+	holder := NewHolder(path, mustHolderConfig())
+	defer holder.Close()
+
+	if err := holder.Open(); err != nil {
+		t.Fatalf("opening holder: %v", err)
+	}
+
+	idx, err := holder.CreateIndex("i", IndexOptions{TrackExistence: true})
+	if err != nil {
+		t.Fatalf("creating index: %v", err)
+	}
+
+	f, err := idx.CreateField("f", OptFieldTypeDefault())
+	if err != nil {
+		t.Fatalf("creating field: %v", err)
+	}
+
+	shard := uint64(0)
+	tx := idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Shard: shard})
+	defer tx.Rollback()
+
+	if _, err = f.SetBit(tx, 1, 1, nil); err != nil {
+		t.Fatalf("setting bit: %v", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("failed to commit transaction: %v", err)
+	}
+
+	tx = idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Shard: shard})
+	defer tx.Rollback()
+
+	row, err := f.Row(tx, 1)
+	if err != nil {
+		t.Fatalf("failed to read row: %v", err)
+	}
+
+	ctx := context.Background()
+	changed, err := DeleteRows(ctx, row, idx, shard)
+	if !changed || err != nil {
+		t.Fatalf("failed to delete row: %v", err)
+	}
+
+	changed, err = DeleteRows(ctx, row, idx, shard)
+	if changed {
+		t.Fatalf("expected delete to not clear bit but it did")
 	}
 }

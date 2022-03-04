@@ -8,8 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/molecula/featurebase/v2"
-	"github.com/molecula/featurebase/v2/test"
+	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/disco"
+	"github.com/molecula/featurebase/v3/test"
 	"github.com/stretchr/testify/require"
 )
 
@@ -49,6 +50,21 @@ func TestExecutor_DeleteRecords(t *testing.T) {
 		})
 
 	}
+	setupBig := func(t *testing.T, r *require.Assertions, c *test.Cluster, Rows uint64) {
+		t.Helper()
+		fieldName := "setfield"
+		c.CreateField(t, indexName, pilosa.IndexOptions{TrackExistence: true}, fieldName)
+		rows := make([][2]uint64, ShardWidth*Rows)
+		for columnID := uint64(0); columnID < ShardWidth; columnID++ {
+			for rowID := uint64(0); rowID < Rows; rowID++ {
+				if rowID == 0 || (columnID%rowID+1) != 0 {
+					rows[rowID] = [2]uint64{rowID, columnID}
+				}
+			}
+		}
+		c.ImportBits(t, indexName, "setfield", rows)
+	}
+
 	setupKeys := func(t *testing.T, r *require.Assertions, c *test.Cluster) {
 		t.Helper()
 		c.CreateField(t, indexName, pilosa.IndexOptions{Keys: true, TrackExistence: true}, "timefield", pilosa.OptFieldKeys(), pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMDH")))
@@ -131,6 +147,12 @@ func TestExecutor_DeleteRecords(t *testing.T) {
 			m = resp.Results[0].(pilosa.ExtractedTable)
 			after := convertKey(m.Columns)
 			require.Equal([]string{"B", "C", "D", "two"}, after, "these keyed records after delete")
+			//validate that column keys got deleted
+			node := c.GetNode(0)
+			keys := []string{"A", "one"}
+			res, err := node.API.FindIndexKeys(context.Background(), indexName, keys...)
+			require.Nil(err)
+			require.Empty(res)
 		})
 		t.Run("Delete Row", func(t *testing.T) {
 			setup(t, require, c)
@@ -200,8 +222,33 @@ func TestExecutor_DeleteRecords(t *testing.T) {
 			require.Equal([]uint64{0, 1}, after, "these records should be remaining")
 		})
 	})
+	t.Run("DeleteRecordsBigWithRestart", func(t *testing.T) {
+		c := test.MustNewCluster(t, 1)
+		for _, n := range c.Nodes {
+			n.Config.Cluster.ReplicaN = 1
+		}
+		err := c.Start()
+		defer c.Close()
+		require.NoError(err, "Start cluster DeleteRecordsBig")
+		setupBig(t, require, c, 16)
+		defer tearDown(t, require, c)
+		node := c.GetNode(0)
+		resp := c.Query(t, indexName, `Delete(Row(setfield=12))`)
+		require.NotNil(resp, "Response should not be nil")
+		require.NotEmpty(resp.Results)
+		require.Equal(true, resp.Results[0], "Change should have happened")
+		resp = c.Query(t, indexName, `Count(Row(setfield=12))`)
+		require.NotNil(resp, "Response should not be nil")
+		require.NotEmpty(resp.Results)
+		require.Equal(uint64(0), resp.Results[0], "Should have removed")
+		err = node.Reopen()
+		require.NoError(err, "restart cluster DeleteRecordsBig")
+		err = c.AwaitState(disco.ClusterStateNormal, 10*time.Second)
+		require.NoError(err, "backToNormal")
 
+	})
 }
+
 func convert(before []pilosa.ExtractedTableColumn) []uint64 {
 	result := make([]uint64, 0)
 	for _, i := range before {

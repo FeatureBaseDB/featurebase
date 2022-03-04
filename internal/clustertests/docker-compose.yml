@@ -4,11 +4,9 @@ services:
     build:
       context: ../..
       dockerfile: Dockerfile-clustertests
-    image: ptest
-    ports:
-      - "33455:10101"
     environment:
       - PILOSA_NAME=pilosa1
+      - PILOSA_ETCD_DIR=/root/.etcd
       - PILOSA_ETCD_LISTEN_CLIENT_ADDRESS=http://0.0.0.0:10201
       - PILOSA_ETCD_ADVERTISE_CLIENT_ADDRESS=http://pilosa1:10201
       - PILOSA_ETCD_LISTEN_PEER_ADDRESS=http://0.0.0.0:10301
@@ -17,17 +15,17 @@ services:
       - PILOSA_CLUSTER_REPLICAS=3
     networks:
       - pilosanet
+    volumes:
+      - ./results:/results 
     command:
-      - "/featurebase server --bind pilosa1:10101"
+      - "cd /go/src/github.com/molecula/featurebase/cmd/featurebase && /featurebase -test.run=TestRunMain -test.coverprofile=/results/coverage-server1.out server --bind pilosa1:10101 ${CLUSTERTESTS_FB_ARGS}"
   pilosa2:
     build:
       context: ../..
       dockerfile: Dockerfile-clustertests
-    image: ptest
-    ports:
-      - "33456:10101"
     environment:
       - PILOSA_NAME=pilosa2
+      - PILOSA_ETCD_DIR=/root/.etcd
       - PILOSA_ETCD_LISTEN_CLIENT_ADDRESS=http://0.0.0.0:10201
       - PILOSA_ETCD_ADVERTISE_CLIENT_ADDRESS=http://pilosa2:10201
       - PILOSA_ETCD_LISTEN_PEER_ADDRESS=http://0.0.0.0:10301
@@ -36,17 +34,17 @@ services:
       - PILOSA_CLUSTER_REPLICAS=3
     networks:
       - pilosanet
+    volumes:
+      - ./results:/results
     command:
-      - "/featurebase server --bind pilosa2:10101"
+      - "cd /go/src/github.com/molecula/featurebase/cmd/featurebase && /featurebase -test.run=TestRunMain -test.coverprofile=/results/coverage-server2.out server --bind pilosa2:10101 ${CLUSTERTESTS_FB_ARGS}"
   pilosa3:
     build:
       context: ../..
       dockerfile: Dockerfile-clustertests
-    image: ptest
-    ports:
-      - "33457:10101"
     environment:
       - PILOSA_NAME=pilosa3
+      - PILOSA_ETCD_DIR=/root/.etcd
       - PILOSA_ETCD_LISTEN_CLIENT_ADDRESS=http://0.0.0.0:10201
       - PILOSA_ETCD_ADVERTISE_CLIENT_ADDRESS=http://pilosa3:10201
       - PILOSA_ETCD_LISTEN_PEER_ADDRESS=http://0.0.0.0:10301
@@ -55,23 +53,36 @@ services:
       - PILOSA_CLUSTER_REPLICAS=3
     networks:
       - pilosanet
+    volumes:
+      - ./results:/results
     command:
-      - "/featurebase server --bind pilosa3:10101"
+      - "cd /go/src/github.com/molecula/featurebase/cmd/featurebase && /featurebase -test.run=TestRunMain -test.coverprofile=/results/coverage-server3.out server --bind pilosa3:10101 ${CLUSTERTESTS_FB_ARGS}"
   client1:
     build:
-      context: .
+      context: ../..
+      dockerfile: Dockerfile-clustertests-client
     depends_on:
         - "pilosa1"
         - "pilosa2"
         - "pilosa3"
+        - "fakeidp"
     environment:
       - ENABLE_PILOSA_CLUSTER_TESTS=1
       - GO111MODULE=on
+      - PROJECT=${PROJECT}
+      - ENABLE_AUTH=${ENABLE_AUTH}
     networks:
       - pilosanet
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - ./results:/results
     command:
-      - "cd /go/src/github.com/molecula/featurebase/ && go test -mod=vendor -v -count=1 github.com/molecula/featurebase/v2/internal/clustertests"
+      - "cd /go/src/github.com/molecula/featurebase/ && go test -mod=vendor -v -count=1 -covermode=atomic -coverprofile=/results/coverage-clustertests.out -coverpkg=./... -json github.com/molecula/featurebase/v3/internal/clustertests | tee /results/report-clustertests.out"
+  fakeidp:
+    build:
+      context: .
+      dockerfile: Dockerfile-fakeIDP
+    networks:
+      - pilosanet
 networks: 
   pilosanet:

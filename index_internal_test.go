@@ -4,7 +4,7 @@ package pilosa
 import (
 	"testing"
 
-	"github.com/molecula/featurebase/v2/testhook"
+	"github.com/molecula/featurebase/v3/testhook"
 )
 
 // mustOpenIndex returns a new, opened index at a temporary path. Panic on error.
@@ -27,15 +27,4 @@ func mustOpenIndex(tb testing.TB, opt IndexOptions) *Index {
 	index.trackExistence = opt.TrackExistence
 
 	return index
-}
-
-// reopen closes the index and reopens it.
-func (i *Index) reopen() error {
-	if err := i.Close(); err != nil {
-		return err
-	}
-	if err := i.Open(); err != nil {
-		return err
-	}
-	return nil
 }

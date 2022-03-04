@@ -1,7 +1,7 @@
 // Copyright 2021 Molecula Corp. All rights reserved.
 package pilosa
 
-import "github.com/molecula/featurebase/v2/topology"
+import "github.com/molecula/featurebase/v3/topology"
 
 // NodeEventType are the types of node events.
 type NodeEventType int

@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/molecula/featurebase/v2/disco"
-	pnet "github.com/molecula/featurebase/v2/net"
-	"github.com/molecula/featurebase/v2/shardwidth"
-	"github.com/molecula/featurebase/v2/test"
+	"github.com/molecula/featurebase/v3/disco"
+	pnet "github.com/molecula/featurebase/v3/net"
+	"github.com/molecula/featurebase/v3/shardwidth"
+	"github.com/molecula/featurebase/v3/test"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )

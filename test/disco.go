@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/molecula/featurebase/v2/etcd"
-	"github.com/molecula/featurebase/v2/server"
-	"github.com/molecula/featurebase/v2/testhook"
+	"github.com/molecula/featurebase/v3/etcd"
+	"github.com/molecula/featurebase/v3/server"
+	"github.com/molecula/featurebase/v3/testhook"
 	"github.com/pkg/errors"
 )
 
@@ -38,7 +38,7 @@ func (ports *Ports) Close() error {
 	return err3
 }
 
-// listenerPortURL builds a TCP listener and corresponding http://localhost:%d
+// listenerWithURL builds a TCP listener and corresponding http://localhost:%d
 // URL, and returns those.
 func listenerWithURL() (listener *net.TCPListener, url string, err error) {
 	l, err := net.Listen("tcp", ":0")

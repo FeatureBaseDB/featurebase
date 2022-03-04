@@ -28,21 +28,22 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	pilosa "github.com/molecula/featurebase/v2"
-	"github.com/molecula/featurebase/v2/boltdb"
-	"github.com/molecula/featurebase/v2/encoding/proto"
-	petcd "github.com/molecula/featurebase/v2/etcd"
-	"github.com/molecula/featurebase/v2/gcnotify"
-	"github.com/molecula/featurebase/v2/gopsutil"
-	"github.com/molecula/featurebase/v2/http"
-	"github.com/molecula/featurebase/v2/logger"
-	pnet "github.com/molecula/featurebase/v2/net"
-	"github.com/molecula/featurebase/v2/prometheus"
-	"github.com/molecula/featurebase/v2/statik"
-	"github.com/molecula/featurebase/v2/stats"
-	"github.com/molecula/featurebase/v2/statsd"
-	"github.com/molecula/featurebase/v2/syswrap"
-	"github.com/molecula/featurebase/v2/testhook"
+	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/authn"
+	"github.com/molecula/featurebase/v3/authz"
+	"github.com/molecula/featurebase/v3/boltdb"
+	"github.com/molecula/featurebase/v3/encoding/proto"
+	petcd "github.com/molecula/featurebase/v3/etcd"
+	"github.com/molecula/featurebase/v3/gcnotify"
+	"github.com/molecula/featurebase/v3/gopsutil"
+	"github.com/molecula/featurebase/v3/logger"
+	pnet "github.com/molecula/featurebase/v3/net"
+	"github.com/molecula/featurebase/v3/prometheus"
+	"github.com/molecula/featurebase/v3/statik"
+	"github.com/molecula/featurebase/v3/stats"
+	"github.com/molecula/featurebase/v3/statsd"
+	"github.com/molecula/featurebase/v3/syswrap"
+	"github.com/molecula/featurebase/v3/testhook"
 	"github.com/pelletier/go-toml"
 	"github.com/pkg/errors"
 )
@@ -67,10 +68,12 @@ type Command struct {
 	// done will be closed when Command.Close() is called
 	done chan struct{}
 
-	logOutput io.Writer
-	logger    loggerLogger
+	logOutput      io.Writer
+	queryLogOutput io.Writer
+	logger         loggerLogger
+	queryLogger    loggerLogger
 
-	Handler      pilosa.Handler
+	Handler      pilosa.HandlerI
 	grpcServer   *grpcServer
 	grpcLn       net.Listener
 	API          *pilosa.API
@@ -81,6 +84,7 @@ type Command struct {
 	pgserver     *PostgresServer
 
 	serverOptions []pilosa.ServerOption
+	auth          *authn.Auth
 }
 
 type CommandOption func(c *Command) error
@@ -104,6 +108,8 @@ func OptCommandConfig(config *Config) CommandOption {
 		defer c.Config.MustValidate()
 		if c.Config != nil {
 			c.Config.Etcd = config.Etcd
+			c.Config.Auth = config.Auth
+			c.Config.TLS = config.TLS
 			return nil
 		}
 		c.Config = config
@@ -222,10 +228,6 @@ func (m *Command) Start() (err error) {
 		return errors.Wrap(err, "setting resource limits")
 	}
 
-	if m.Config.Auth.Enable {
-		m.Config.MustValidateAuth()
-	}
-
 	// Initialize server.
 	if err = m.Server.Open(); err != nil {
 		return errors.Wrap(err, "opening server")
@@ -268,8 +270,6 @@ func (m *Command) Start() (err error) {
 			return errors.Wrap(err, "starting postgres")
 		}
 	}
-
-	go m.API.RefreshUsageCache(m.Config.UsageDutyCycle)
 
 	_ = testhook.Opened(pilosa.NewAuditor(), m, nil)
 	close(m.Started)
@@ -402,7 +402,7 @@ func (m *Command) SetupServer() error {
 	// Save listenURI for later reference.
 	m.listenURI = uri
 
-	c := http.GetHTTPClient(m.tlsConfig)
+	c := pilosa.GetHTTPClient(m.tlsConfig)
 
 	// Get advertise address as uri.
 	advertiseURI, err := pilosa.AddressWithDefaults(m.Config.Advertise)
@@ -470,19 +470,18 @@ func (m *Command) SetupServer() error {
 		pilosa.OptServerDiagnosticsInterval(diagnosticsInterval),
 		pilosa.OptServerExecutorPoolSize(m.Config.WorkerPoolSize),
 		pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
-		pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderWithLockerFunc(c, &sync.Mutex{})),
+		pilosa.OptServerOpenTranslateReader(pilosa.GetOpenTranslateReaderWithLockerFunc(c, &sync.Mutex{})),
 		pilosa.OptServerOpenIDAllocator(pilosa.OpenIDAllocator),
 		pilosa.OptServerLogger(m.logger),
+		pilosa.OptServerQueryLogger(m.queryLogger),
 		pilosa.OptServerSystemInfo(gopsutil.NewSystemInfo()),
 		pilosa.OptServerGCNotifier(gcnotify.NewActiveGCNotifier()),
 		pilosa.OptServerStatsClient(statsClient),
 		pilosa.OptServerURI(advertiseURI),
 		pilosa.OptServerGRPCURI(advertiseGRPCURI),
-		pilosa.OptServerInternalClient(http.NewInternalClientFromURI(uri, c)),
 		pilosa.OptServerClusterName(m.Config.Cluster.Name),
 		pilosa.OptServerSerializer(proto.Serializer{}),
 		pilosa.OptServerStorageConfig(m.Config.Storage),
-		pilosa.OptServerRowcacheOn(m.Config.RowcacheOn),
 		pilosa.OptServerRBFConfig(m.Config.RBFConfig),
 		pilosa.OptServerMaxQueryMemory(m.Config.MaxQueryMemory),
 		pilosa.OptServerQueryHistoryLength(m.Config.QueryHistoryLength),
@@ -495,6 +494,12 @@ func (m *Command) SetupServer() error {
 
 	serverOptions = append(serverOptions, m.serverOptions...)
 
+	if m.Config.Auth.Enable {
+		serverOptions = append(serverOptions, pilosa.OptServerInternalClient(pilosa.NewInternalClientFromURI(uri, c, pilosa.WithSecretKey(m.Config.Auth.SecretKey), pilosa.WithSerializer(proto.Serializer{}))))
+	} else {
+		serverOptions = append(serverOptions, pilosa.OptServerInternalClient(pilosa.NewInternalClientFromURI(uri, c, pilosa.WithSerializer(proto.Serializer{}))))
+	}
+
 	m.Server, err = pilosa.NewServer(serverOptions...)
 
 	if err != nil {
@@ -504,7 +509,6 @@ func (m *Command) SetupServer() error {
 	m.API, err = pilosa.NewAPI(
 		pilosa.OptAPIServer(m.Server),
 		pilosa.OptAPIImportWorkerPoolSize(m.Config.ImportWorkerPoolSize),
-		pilosa.OptAPISchemaDetailsOn(m.Config.SchemaDetailsOn),
 	)
 	if err != nil {
 		return errors.Wrap(err, "new api")
@@ -512,25 +516,71 @@ func (m *Command) SetupServer() error {
 	// Tell server about its new API, which its client will need.
 	m.Server.SetAPI(m.API)
 
+	var p authz.GroupPermissions
+	if m.Config.Auth.Enable {
+		m.Config.MustValidateAuth()
+		permsFile, err := os.Open(m.Config.Auth.PermissionsFile)
+		if err != nil {
+			return err
+		}
+		defer permsFile.Close()
+
+		if err = p.ReadPermissionsFile(permsFile); err != nil {
+			return err
+		}
+
+		ac := m.Config.Auth
+		m.auth, err = authn.NewAuth(m.logger, ac.RedirectBaseURL, ac.Scopes, ac.AuthorizeURL, ac.TokenURL, ac.GroupEndpointURL, ac.LogoutURL, ac.ClientId, ac.ClientSecret, ac.SecretKey)
+		if err != nil {
+			return errors.Wrap(err, "instantiating authN object")
+		}
+
+		err = m.setupQueryLogger()
+		if err != nil {
+			return errors.Wrap(err, "setting up queryLogger")
+		}
+
+		m.queryLogger.Infof("Starting Featurebase...")
+		m.queryLogger.Infof("Group with admin level access: %v", p.Admin)
+		m.queryLogger.Infof("Permissions: %+v", p.Permissions)
+
+		// disable postgres binding if auth is enabled
+		m.Config.Postgres.Bind = ""
+
+		// TLS must be enabled if auth is
+		if m.Config.TLS.CertificatePath == "" || m.Config.TLS.CertificateKeyPath == "" {
+			return fmt.Errorf("transport layer security (TLS) is not configured properly. TLS is required when AuthN/Z is enabled, current configuration: %v", m.Config.TLS)
+		}
+
+	}
+
 	m.grpcServer, err = NewGRPCServer(
 		OptGRPCServerAPI(m.API),
 		OptGRPCServerListener(m.grpcLn),
 		OptGRPCServerTLSConfig(m.tlsConfig),
 		OptGRPCServerLogger(m.logger),
 		OptGRPCServerStats(statsClient),
+		OptGRPCServerAuth(m.auth),
+		OptGRPCServerPerm(&p),
+		OptGRPCServerQueryLogger(m.queryLogger),
 	)
 	if err != nil {
-		return errors.Wrap(err, "new grpc server")
+		return errors.Wrap(err, "getting grpcServer")
 	}
 
-	m.Handler, err = http.NewHandler(
-		http.OptHandlerAllowedOrigins(m.Config.Handler.AllowedOrigins),
-		http.OptHandlerAPI(m.API),
-		http.OptHandlerLogger(m.logger),
-		http.OptHandlerFileSystem(&statik.FileSystem{}),
-		http.OptHandlerListener(m.ln, m.Config.Advertise),
-		http.OptHandlerCloseTimeout(m.closeTimeout),
-		http.OptHandlerMiddleware(m.grpcServer.middleware(m.Config.Handler.AllowedOrigins)),
+	m.Handler, err = pilosa.NewHandler(
+		pilosa.OptHandlerAllowedOrigins(m.Config.Handler.AllowedOrigins),
+		pilosa.OptHandlerAPI(m.API),
+		pilosa.OptHandlerLogger(m.logger),
+		pilosa.OptHandlerQueryLogger(m.queryLogger),
+		pilosa.OptHandlerFileSystem(&statik.FileSystem{}),
+		pilosa.OptHandlerListener(m.ln, m.Config.Advertise),
+		pilosa.OptHandlerCloseTimeout(m.closeTimeout),
+		pilosa.OptHandlerMiddleware(m.grpcServer.middleware(m.Config.Handler.AllowedOrigins)),
+		pilosa.OptHandlerAuthN(m.auth),
+		pilosa.OptHandlerAuthZ(&p),
+		pilosa.OptHandlerSerializer(proto.Serializer{}),
+		pilosa.OptHandlerRoaringSerializer(proto.RoaringSerializer),
 	)
 	return errors.Wrap(err, "new handler")
 }
@@ -573,6 +623,37 @@ func (m *Command) setupLogger() error {
 			}
 		}()
 	}
+	return nil
+}
+
+func (m *Command) setupQueryLogger() error {
+	var f *logger.FileWriter
+	var err error
+
+	if m.Config.Auth.QueryLogPath == "" {
+		f, err = logger.NewFileWriterMode("queries/query.log", 0600)
+		if err != nil {
+			return errors.Wrap(err, "opening file")
+		}
+	} else {
+		f, err = logger.NewFileWriterMode(m.Config.Auth.QueryLogPath, 0600)
+		if err != nil {
+			return errors.Wrap(err, "opening file")
+		}
+	}
+	m.queryLogOutput = f
+
+	m.queryLogger = logger.NewStandardLogger(m.queryLogOutput)
+
+	sighup := make(chan os.Signal, 1)
+	signal.Notify(sighup, syscall.SIGHUP)
+	go func() {
+		for range sighup {
+			if err := f.Reopen(); err != nil {
+				m.queryLogger.Infof("reopen: %s\n", err.Error())
+			}
+		}
+	}()
 	return nil
 }
 

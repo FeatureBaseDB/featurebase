@@ -10,10 +10,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/molecula/featurebase/v2"
-	"github.com/molecula/featurebase/v2/boltdb"
-	"github.com/molecula/featurebase/v2/testhook"
-	"github.com/molecula/featurebase/v2/topology"
+	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/boltdb"
+	"github.com/molecula/featurebase/v3/roaring"
+	"github.com/molecula/featurebase/v3/testhook"
+	"github.com/molecula/featurebase/v3/topology"
 )
 
 //var vv = pilosa.VV
@@ -385,7 +386,53 @@ func MustNewTranslateStore(tb testing.TB) *boltdb.TranslateStore {
 	s.Path = f.Name()
 	return s
 }
+func TestTranslateStore_Delete(t *testing.T) {
+	s := MustOpenNewTranslateStore(t)
+	defer MustCloseTranslateStore(s)
 
+	// Setup initial keys.
+	ids, err := s.CreateKeys("foo", "bar", "deleteme")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	records := roaring.NewBitmap(ids["deleteme"])
+	c, err := s.Delete(records)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = c.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	r, e := s.FreeIDs()
+	if e != nil {
+		t.Fatal(err)
+	}
+	freeids := r.Slice()
+	if len(freeids) == 0 {
+		t.Fatalf("expected to have free id")
+	}
+	if freeids[0] != ids["deleteme"] {
+		t.Fatalf("expected [%v] and got %v", ids["deleteme"], freeids[0])
+	}
+
+	records2 := roaring.NewBitmap(ids["foo"])
+	c, err = s.Delete(records2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = c.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	r, e = s.FreeIDs()
+	if e != nil {
+		t.Fatal(err)
+	}
+	freeids = r.Slice()
+	if len(freeids) != 2 {
+		t.Fatalf("expected to have 2 free ids")
+	}
+}
 func TestTranslateStore_ReadWrite(t *testing.T) {
 	t.Run("WriteTo_ReadFrom", func(t *testing.T) {
 		s := MustOpenNewTranslateStore(t)
@@ -408,7 +455,7 @@ func TestTranslateStore_ReadWrite(t *testing.T) {
 
 		// Put the contents of the store into a buffer.
 		buf := bytes.NewBuffer(nil)
-		expN := int64(32768)
+		expN := s.Size()
 
 		// After this, the buffer should contain batch0.
 		if n, err := s.WriteTo(buf); err != nil {
@@ -458,7 +505,7 @@ func TestTranslateStore_ReadWrite(t *testing.T) {
 func MustOpenNewTranslateStore(tb testing.TB) *boltdb.TranslateStore {
 	s := MustNewTranslateStore(tb)
 	if err := s.Open(); err != nil {
-		panic(err)
+		tb.Fatalf("opening s: %v", err)
 	}
 	return s
 }

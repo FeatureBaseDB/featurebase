@@ -2,19 +2,29 @@
 package server_test
 
 import (
+	"bytes"
 	"context"
+	"encoding/hex"
 	"fmt"
+	"io"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
-	"github.com/molecula/featurebase/v2"
-	"github.com/molecula/featurebase/v2/pql"
-	pb "github.com/molecula/featurebase/v2/proto"
-	"github.com/molecula/featurebase/v2/server"
-	"github.com/molecula/featurebase/v2/sql"
-	"github.com/molecula/featurebase/v2/test"
+	"github.com/golang-jwt/jwt"
+	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/authn"
+	"github.com/molecula/featurebase/v3/authz"
+	"github.com/molecula/featurebase/v3/logger"
+	"github.com/molecula/featurebase/v3/pql"
+	pb "github.com/molecula/featurebase/v3/proto"
+	"github.com/molecula/featurebase/v3/server"
+	"github.com/molecula/featurebase/v3/sql"
+	"github.com/molecula/featurebase/v3/test"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -385,7 +395,7 @@ func TestQueryPQL(t *testing.T) {
 	m.MustCreateField(t, i.Name(), "f", pilosa.OptFieldKeys())
 	gh := server.NewGRPCHandler(m.API)
 
-	mock := &mockPilosa_QuerySQLServer{}
+	mock := &mockPilosa_QuerySQLServer{ctx: context.Background()}
 
 	err := gh.QueryPQL(&pb.QueryPQLRequest{
 		Index: i.Name(),
@@ -524,9 +534,10 @@ func TestQuerySQL(t *testing.T) {
 					{"color", "[]string"},
 					{"height", "int64"},
 					{"score", "int64"},
+					{"timestamp", "timestamp"},
 				},
 				rows: []row{
-					{[]columnResponse{uint64(2), int64(16), []string{"blue"}, int64(30), int64(-8)}},
+					{[]columnResponse{uint64(2), int64(16), []string{"blue"}, int64(30), int64(-8), "2011-01-02T12:32:00Z"}},
 				},
 			},
 			eq: equal,
@@ -541,18 +552,19 @@ func TestQuerySQL(t *testing.T) {
 					{"color", "[]string"},
 					{"height", "int64"},
 					{"score", "int64"},
+					{"timestamp", "timestamp"},
 				},
 				rows: []row{
-					{[]columnResponse{uint64(1), int64(27), []string{"blue"}, int64(20), int64(-10)}},
-					{[]columnResponse{uint64(2), int64(16), []string{"blue"}, int64(30), int64(-8)}},
-					{[]columnResponse{uint64(3), int64(19), []string{"red"}, int64(40), int64(6)}},
-					{[]columnResponse{uint64(4), int64(27), []string{"green"}, int64(50), int64(0)}},
-					{[]columnResponse{uint64(5), int64(16), []string{"blue"}, int64(60), int64(-2)}},
-					{[]columnResponse{uint64(6), int64(34), []string{"blue"}, int64(70), int64(100)}},
-					{[]columnResponse{uint64(7), int64(27), []string{"blue"}, int64(80), int64(0)}},
-					{[]columnResponse{uint64(8), int64(16), []string{}, int64(90), int64(-13)}},
-					{[]columnResponse{uint64(9), int64(16), []string{"red"}, int64(100), int64(80)}},
-					{[]columnResponse{uint64(10), int64(31), []string{"red"}, int64(110), int64(-2)}},
+					{[]columnResponse{uint64(1), int64(27), []string{"blue"}, int64(20), int64(-10), "2011-04-02T12:32:00Z"}},
+					{[]columnResponse{uint64(2), int64(16), []string{"blue"}, int64(30), int64(-8), "2011-01-02T12:32:00Z"}},
+					{[]columnResponse{uint64(3), int64(19), []string{"red"}, int64(40), int64(6), "2012-01-02T12:32:00Z"}},
+					{[]columnResponse{uint64(4), int64(27), []string{"green"}, int64(50), int64(0), "2013-09-02T12:32:00Z"}},
+					{[]columnResponse{uint64(5), int64(16), []string{"blue"}, int64(60), int64(-2), "2014-01-02T12:32:00Z"}},
+					{[]columnResponse{uint64(6), int64(34), []string{"blue"}, int64(70), int64(100), "2010-05-02T12:32:00Z"}},
+					{[]columnResponse{uint64(7), int64(27), []string{"blue"}, int64(80), int64(0), "2016-08-02T12:32:00Z"}},
+					{[]columnResponse{uint64(8), int64(16), []string{}, int64(90), int64(-13), "2020-01-02T12:32:00Z"}},
+					{[]columnResponse{uint64(9), int64(16), []string{"red"}, int64(100), int64(80), "2000-03-02T12:32:00Z"}},
+					{[]columnResponse{uint64(10), int64(31), []string{"red"}, int64(110), int64(-2), "2018-01-02T12:32:00Z"}},
 				},
 			},
 			eq: equal,
@@ -828,12 +840,72 @@ func TestQuerySQL(t *testing.T) {
 			eq: equal,
 		},
 		{
+			// GroupBy(Rows(field='age'),Rows(field='height'),filter=Intersect(Row(timestamp>"2017-09-02T12:32:00Z"),Row(height>40)))
+			sql: "select age, height from grouper where timestamp > '2017-09-02T12:32:00Z' and height > 40 group by age, height",
+			exp: tableResponse{
+				headers: []columnInfo{
+					{"age", "int64"},
+					{"height", "int64"},
+				},
+				rows: []row{
+					{[]columnResponse{int64(16), int64(90)}},
+					{[]columnResponse{int64(31), int64(110)}},
+				},
+			},
+			eq: equalUnordered,
+		},
+		{
+			// Extract(Union(Row(timestamp>"2017-09-02T12:32:00Z"),Row(height>90)),Rows(age), Rows(height))
+			sql: "select age, height from grouper where timestamp > '2017-09-02T12:32:00Z' or height > 90",
+			exp: tableResponse{
+				headers: []columnInfo{
+					{"age", "int64"},
+					{"height", "int64"},
+				},
+				rows: []row{
+					{[]columnResponse{int64(16), int64(90)}},
+					{[]columnResponse{int64(16), int64(100)}},
+					{[]columnResponse{int64(31), int64(110)}},
+				},
+			},
+			eq: equalUnordered,
+		},
+		{
+			//Extract(Intersect(Row(timestamp>"2017-09-02T12:32:00Z"),Row(timestamp<"2019-09-02T12:32:00Z")),Rows(age), Rows(height))
+			sql: "select age, height from grouper where timestamp > '2017-09-02T12:32:00Z' and timestamp < '2019-09-02T12:32:00Z'",
+			exp: tableResponse{
+				headers: []columnInfo{
+					{"age", "int64"},
+					{"height", "int64"},
+				},
+				rows: []row{
+					{[]columnResponse{int64(31), int64(110)}},
+				},
+			},
+			eq: equalUnordered,
+		},
+		{
+			//Distinct(Row(timestamp>"2019-09-02T12:32:00Z"), index='grouper',field='age')
+			sql: "select distinct age from grouper where timestamp > '2019-09-02T12:32:00Z'",
+			exp: tableResponse{
+				headers: []columnInfo{
+					{"age", "int64"},
+				},
+				rows: []row{
+					{[]columnResponse{int64(16)}},
+				},
+			},
+			eq: equalUnordered,
+		},
+		{
 			sql: "show tables",
 			exp: tableResponse{
 				headers: []columnInfo{
 					{"Table", "string"},
 				},
 				rows: []row{
+					{[]columnResponse{"another_one"}},
+					{[]columnResponse{"deletable_index"}},
 					{[]columnResponse{"delete_me"}},
 					{[]columnResponse{"grouper"}},
 					{[]columnResponse{"joiner"}},
@@ -853,6 +925,7 @@ func TestQuerySQL(t *testing.T) {
 					{[]columnResponse{"color", "keyed-set"}},
 					{[]columnResponse{"height", "int"}},
 					{[]columnResponse{"score", "int"}},
+					{[]columnResponse{"timestamp", "timestamp"}},
 				},
 			},
 			eq: equal,
@@ -872,6 +945,9 @@ func TestQuerySQL(t *testing.T) {
 					{"Table", "string"},
 				},
 				rows: []row{
+					{[]columnResponse{"another_one"}},
+					{[]columnResponse{"deletable_index"}},
+
 					{[]columnResponse{"grouper"}},
 					{[]columnResponse{"joiner"}},
 				},
@@ -941,7 +1017,7 @@ func TestQuerySQL(t *testing.T) {
 			if strings.HasPrefix(test.sql, "drop table") {
 				t.Skip("drop statements can only run once")
 			}
-			mock := &mockPilosa_QuerySQLServer{}
+			mock := &mockPilosa_QuerySQLServer{ctx: context.Background()}
 			err := gh.QuerySQL(&pb.QuerySQLRequest{Sql: test.sql}, mock)
 			if err != nil {
 				t.Fatalf("sql: %s, error: %v", test.sql, err)
@@ -962,13 +1038,12 @@ func TestQuerySQL(t *testing.T) {
 	}
 }
 
-func TestQuerySQLUnaryWithError(t *testing.T) {
+func TestQuerySQLWithError(t *testing.T) {
 
 	stream := &MockServerTransportStream{}
 	ctx := grpc.NewContextWithServerTransportStream(context.Background(), stream)
 	gh, tearDownFunc := setUpTestQuerySQLUnary(ctx, t)
 	defer tearDownFunc()
-
 	tests := []struct {
 		sql string
 		err error
@@ -993,6 +1068,10 @@ func TestQuerySQLUnaryWithError(t *testing.T) {
 			sql: "select _id, age, field_not_found from grouper",
 			err: pilosa.ErrFieldNotFound,
 		},
+		{
+			sql: "select age, color, count(*) from grouper group by field_not_found, age, color",
+			err: pilosa.ErrFieldNotFound,
+		},
 	}
 
 	for i, test := range tests {
@@ -1005,6 +1084,231 @@ func TestQuerySQLUnaryWithError(t *testing.T) {
 			}
 		})
 	}
+	permissions := `
+"user-groups":
+  "dca35310-ecda-4f23-86cd-876aee55906b":
+    "grouper": "read"
+  "dca35310-ecda-4f23-86cd-876aee55906f":
+    "grouper": "write"
+admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
+
+	permFile := writeTestFile(t, "permissions.yaml", permissions)
+	auth := server.Auth{
+		Enable:           true,
+		ClientId:         "e9088663-eb08-41d7-8f65-efb5f54bbb71",
+		ClientSecret:     "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF",
+		AuthorizeURL:     "https://login.microsoftonline.com/4a137d66-d161-4ae4-b1e6-07e9920874b8/oauth2/v2.0/authorize",
+		TokenURL:         "https://login.microsoftonline.com/4a137d66-d161-4ae4-b1e6-07e9920874b8/oauth2/v2.0/token",
+		GroupEndpointURL: "https://graph.microsoft.com/v1.0/me/transitiveMemberOf/microsoft.graph.group?$count=true",
+		LogoutURL:        "https://login.microsoftonline.com/common/oauth2/v2.0/logout",
+		Scopes:           []string{"https://graph.microsoft.com/.default", "offline_access"},
+		SecretKey:        "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF",
+		PermissionsFile:  permFile,
+	}
+	var p authz.GroupPermissions
+	permsFile, err := os.Open(permFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer permsFile.Close()
+
+	if err = p.ReadPermissionsFile(permsFile); err != nil {
+		t.Fatal(err)
+	}
+	gh = gh.WithPerms(&p)
+	makeUser := func(groups []authn.Group, name string) *authn.UserInfo {
+		// make a valid token
+		tkn := jwt.New(jwt.SigningMethodHS256)
+		claims := tkn.Claims.(jwt.MapClaims)
+		claims["oid"] = "42"
+		claims["name"] = name
+		secretKey, _ := hex.DecodeString(auth.SecretKey)
+
+		validToken, err := tkn.SignedString(secretKey)
+		if err != nil {
+			t.Fatalf("unexpected error creating token %v", err)
+		}
+		validToken = "Bearer " + validToken
+
+		return &authn.UserInfo{
+			UserID:   "fake" + name,
+			UserName: name,
+			Groups:   groups,
+			Token:    validToken,
+			Expiry:   time.Time{},
+		}
+	}
+
+	user := makeUser([]authn.Group{{GroupID: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe", GroupName: "adminGroup"}}, "admin")
+	adminCtx := context.WithValue(
+		ctx,
+		"userinfo",
+		user,
+	)
+	readuser := makeUser([]authn.Group{{GroupID: "dca35310-ecda-4f23-86cd-876aee55906b", GroupName: "readers"}}, "reader")
+	readCtx := context.WithValue(
+		ctx,
+		"userinfo",
+		readuser,
+	)
+	writeuser := makeUser([]authn.Group{{GroupID: "dca35310-ecda-4f23-86cd-876aee55906f", GroupName: "writers"}}, "admin")
+	writeCtx := context.WithValue(
+		ctx,
+		"userinfo",
+		writeuser,
+	)
+
+	sql := "select * from grouper"
+	t.Run("test-auth-with-admin-sqlUnary", func(t *testing.T) {
+		_, err := gh.QuerySQLUnary(adminCtx, &pb.QuerySQLRequest{Sql: sql})
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+	t.Run("test-auth-with-read-sqlUnary", func(t *testing.T) {
+		_, err := gh.QuerySQLUnary(readCtx, &pb.QuerySQLRequest{Sql: sql})
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+	t.Run("test-admin-auth-sql", func(t *testing.T) {
+		mock := &mockPilosa_QuerySQLServer{ctx: adminCtx}
+
+		err := gh.QuerySQL(&pb.QuerySQLRequest{Sql: sql}, mock)
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("test-admin-auth-sql-show", func(t *testing.T) {
+		mock := &mockPilosa_QuerySQLServer{ctx: adminCtx}
+
+		err := gh.QuerySQL(&pb.QuerySQLRequest{Sql: "show tables"}, mock)
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("test-admin-auth-get-index", func(t *testing.T) {
+		_, err := gh.GetIndex(adminCtx, &pb.GetIndexRequest{Name: "grouper"})
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+	t.Run("test-admin-auth-get-indexes", func(t *testing.T) {
+
+		_, err := gh.GetIndexes(adminCtx, &pb.GetIndexesRequest{})
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+	t.Run("test-admin-auth-pql", func(t *testing.T) {
+		_, err := gh.QueryPQLUnary(adminCtx, &pb.QueryPQLRequest{
+			Index: "grouper",
+			Pql:   `Set(0, color="red")`,
+		})
+		if err != nil {
+			// Unary query should work
+			t.Fatal(err)
+		}
+	})
+	t.Run("test-write-with-read-auth-pql", func(t *testing.T) {
+		_, err := gh.QueryPQLUnary(readCtx, &pb.QueryPQLRequest{
+			Index: "grouper",
+			Pql:   `Set(0, color="red")`,
+		})
+		if err == nil {
+			//should not be able to write
+			t.Fatal(err)
+		}
+	})
+	t.Run("test-show-tables-unary", func(t *testing.T) {
+		response, err := gh.QuerySQLUnary(readCtx, &pb.QuerySQLRequest{
+			Sql: "show tables",
+		})
+
+		if err != nil && len(response.Rows) != 1 {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("test-show-tables-unary-admin", func(t *testing.T) {
+		response, err := gh.QuerySQLUnary(adminCtx, &pb.QuerySQLRequest{
+			Sql: "show tables",
+		})
+		if err != nil && len(response.Rows) != 3 {
+			t.Fatal(err)
+		}
+	})
+	t.Run("test-write-with-write-auth-pql", func(t *testing.T) {
+		_, err := gh.QueryPQLUnary(writeCtx, &pb.QueryPQLRequest{
+			Index: "grouper",
+			Pql:   `Set(0, color="red")`,
+		})
+		if err != nil {
+			//should be able to write
+			t.Fatal(err)
+		}
+	})
+	t.Run("test-write-with-admin-auth-pql", func(t *testing.T) {
+		_, err := gh.QueryPQLUnary(adminCtx, &pb.QueryPQLRequest{
+			Index: "grouper",
+			Pql:   `Set(0, color="green")`,
+		})
+		if err != nil {
+			//should be able to write
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("test-drop-table-unary-read", func(t *testing.T) {
+		_, err := gh.QuerySQLUnary(readCtx, &pb.QuerySQLRequest{
+			Sql: "drop table deletable_index",
+		})
+		if err == nil {
+			t.Fatal("expected error but got nil")
+		}
+	})
+
+	t.Run("test-drop-table-unary-write", func(t *testing.T) {
+		_, err := gh.QuerySQLUnary(writeCtx, &pb.QuerySQLRequest{
+			Sql: "drop table deletable_index",
+		})
+		if err == nil {
+			t.Fatal("expected error but got nil")
+		}
+	})
+
+	t.Run("test-drop-table-unary-admin", func(t *testing.T) {
+		_, err := gh.QuerySQLUnary(adminCtx, &pb.QuerySQLRequest{
+			Sql: "drop table deletable_index",
+		})
+		if err != nil {
+			t.Fatalf("expected nil error but got %v", err)
+		}
+	})
+
+	t.Run("test-drop-table-stream-read", func(t *testing.T) {
+		mock := &mockPilosa_QuerySQLServer{ctx: readCtx}
+		err := gh.QuerySQL(&pb.QuerySQLRequest{Sql: "drop table another_one"}, mock)
+		if err == nil {
+			t.Fatal("expected error but got nil")
+		}
+	})
+	t.Run("test-drop-table-stream-write", func(t *testing.T) {
+		mock := &mockPilosa_QuerySQLServer{ctx: writeCtx}
+		err := gh.QuerySQL(&pb.QuerySQLRequest{Sql: "drop table another_one"}, mock)
+		if err == nil {
+			t.Fatal("expected error but got nil")
+		}
+	})
+	t.Run("test-drop-table-stream-admin", func(t *testing.T) {
+		mock := &mockPilosa_QuerySQLServer{ctx: adminCtx}
+		err := gh.QuerySQL(&pb.QuerySQLRequest{Sql: "drop table another_one"}, mock)
+		if err != nil {
+			t.Fatalf("expected nil error but got %v", err)
+		}
+	})
 }
 
 func TestCRUDIndexes(t *testing.T) {
@@ -1014,7 +1318,6 @@ func TestCRUDIndexes(t *testing.T) {
 	stream := &MockServerTransportStream{}
 	ctx := grpc.NewContextWithServerTransportStream(context.Background(), stream)
 	gh := server.NewGRPCHandler(m.API)
-
 	t.Run("CreateIndex", func(t *testing.T) {
 		// Try CreateIndex for testindex1
 		_, err := gh.CreateIndex(ctx, &pb.CreateIndexRequest{Name: "testindex1", Keys: true})
@@ -1188,12 +1491,52 @@ func TestCRUDIndexes(t *testing.T) {
 	})
 }
 
+func TestLogQuery(t *testing.T) {
+	method := "test!"
+	uinfo := authn.UserInfo{
+		UserID:   "ID",
+		UserName: "name",
+	}
+	ctx := context.WithValue(context.Background(), "userinfo", &uinfo)
+
+	cases := []struct {
+		name     string
+		req      interface{}
+		expected string
+	}{
+		{
+			name:     "nonQueryReq",
+			req:      "nope",
+			expected: fmt.Sprintf("GRPC: %v, %v, %v, %v, %v\n", "", []string{}, "test!", uinfo.UserID, uinfo.UserName),
+		},
+		{
+			name:     "QuerySQLReq",
+			req:      &pb.QuerySQLRequest{Sql: "show fields from table"},
+			expected: fmt.Sprintf("GRPC: %v, %v, %v, %v, %v, %v\n", "", []string{}, "test!", uinfo.UserID, uinfo.UserName, "show fields from table"),
+		},
+		{
+			name:     "QueryPQLReq",
+			req:      &pb.QueryPQLRequest{Index: "index", Pql: "Count(All())"},
+			expected: fmt.Sprintf("GRPC: %v, %v, %v, %v, %v, %v\n", "", []string{}, "test!", uinfo.UserID, uinfo.UserName, "[index]Count(All())"),
+		},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			buf := new(bytes.Buffer)
+			l := logger.NewStandardLogger(buf)
+			server.LogQuery(ctx, method, test.req, l)
+			if !strings.HasSuffix(buf.String(), test.expected) {
+				t.Errorf("expected '%v', got '%v'", test.expected, buf.String())
+			}
+		})
+	}
+}
+
 func setUpTestQuerySQLUnary(ctx context.Context, t *testing.T) (gh *server.GRPCHandler, tearDownFunc func()) {
 	t.Helper()
 
 	m := test.RunCommand(t)
-	gh = server.NewGRPCHandler(m.API)
-
+	gh = server.NewGRPCHandler(m.API).WithQueryLogger(logger.NewStandardLogger(os.Stdout))
 	// grouper
 	grouper := m.MustCreateIndex(t, "grouper", pilosa.IndexOptions{Keys: false, TrackExistence: true})
 	m.MustCreateField(t, grouper.Name(), "color", pilosa.OptFieldKeys())
@@ -1276,6 +1619,26 @@ func setUpTestQuerySQLUnary(ctx context.Context, t *testing.T) (gh *server.GRPCH
 			t.Fatal(err)
 		}
 	}
+	m.MustCreateField(t, grouper.Name(), "timestamp", pilosa.OptFieldTypeTimestamp(pilosa.DefaultEpoch, pilosa.TimeUnitSeconds))
+	for id, timestamp := range map[int]string{
+		1:  "2011-04-02T12:32:00Z",
+		2:  "2011-01-02T12:32:00Z",
+		3:  "2012-01-02T12:32:00Z",
+		4:  "2013-09-02T12:32:00Z",
+		5:  "2014-01-02T12:32:00Z",
+		6:  "2010-05-02T12:32:00Z",
+		7:  "2016-08-02T12:32:00Z",
+		8:  "2020-01-02T12:32:00Z",
+		9:  "2000-03-02T12:32:00Z",
+		10: "2018-01-02T12:32:00Z",
+	} {
+		if _, err := gh.QueryPQLUnary(ctx, &pb.QueryPQLRequest{
+			Index: grouper.Name(),
+			Pql:   fmt.Sprintf("Set(%d, timestamp=\"%s\")", id, timestamp),
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
 
 	// joiner
 	joiner := m.MustCreateIndex(t, "joiner", pilosa.IndexOptions{TrackExistence: true})
@@ -1322,6 +1685,9 @@ func setUpTestQuerySQLUnary(ctx context.Context, t *testing.T) (gh *server.GRPCH
 
 	// delete_me
 	m.MustCreateIndex(t, "delete_me", pilosa.IndexOptions{TrackExistence: true})
+
+	m.MustCreateIndex(t, "another_one", pilosa.IndexOptions{TrackExistence: true})
+	m.MustCreateIndex(t, "deletable_index", pilosa.IndexOptions{TrackExistence: true})
 
 	return gh, func() {
 		if err := m.API.DeleteIndex(ctx, joiner.Name()); err != nil {
@@ -1372,6 +1738,8 @@ func toTableResponse(resp *pb.TableResponse) tableResponse {
 				tr.rows[i].columns[j] = v.Float64Val
 			case *pb.ColumnResponse_DecimalVal:
 				tr.rows[i].columns[j] = pql.NewDecimal(v.DecimalVal.Value, v.DecimalVal.Scale)
+			case *pb.ColumnResponse_TimestampVal:
+				tr.rows[i].columns[j] = v.TimestampVal
 			default:
 				tr.rows[i].columns[j] = nil
 			}
@@ -1448,6 +1816,7 @@ func (stream *MockServerTransportStream) ClearMD() {
 
 type mockPilosa_QuerySQLServer struct {
 	MockServerTransportStream
+	ctx context.Context
 	pb.Pilosa_QuerySQLServer
 	Results []*pb.RowResponse
 }
@@ -1470,9 +1839,19 @@ func (m *mockPilosa_QuerySQLServer) SetTrailer(md metadata.MD) {
 }
 
 func (m *mockPilosa_QuerySQLServer) Context() context.Context {
-	return context.Background()
+	return m.ctx
 }
 
 func (m *mockPilosa_QuerySQLServer) clearResults() {
 	m.Results = m.Results[:0]
+}
+func writeTestFile(t *testing.T, filename, content string) string {
+	fname := filepath.Join(t.TempDir(), filename)
+	f, err := os.Create(fname)
+	if err != nil {
+		panic(filename)
+	}
+	io.WriteString(f, content)
+	defer f.Close()
+	return fname
 }

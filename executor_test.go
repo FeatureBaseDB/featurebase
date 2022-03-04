@@ -25,18 +25,16 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	pilosa "github.com/molecula/featurebase/v2"
-	"github.com/molecula/featurebase/v2/boltdb"
-	"github.com/molecula/featurebase/v2/ctl"
-	"github.com/molecula/featurebase/v2/disco"
-	"github.com/molecula/featurebase/v2/http"
-	"github.com/molecula/featurebase/v2/pql"
-	"github.com/molecula/featurebase/v2/proto"
-	"github.com/molecula/featurebase/v2/server"
-	"github.com/molecula/featurebase/v2/storage"
-	"github.com/molecula/featurebase/v2/test"
-	"github.com/molecula/featurebase/v2/testhook"
-	. "github.com/molecula/featurebase/v2/vprint" // nolint:staticcheck
+	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/boltdb"
+	"github.com/molecula/featurebase/v3/ctl"
+	"github.com/molecula/featurebase/v3/disco"
+	"github.com/molecula/featurebase/v3/pql"
+	"github.com/molecula/featurebase/v3/proto"
+	"github.com/molecula/featurebase/v3/server"
+	"github.com/molecula/featurebase/v3/test"
+	"github.com/molecula/featurebase/v3/testhook"
+	. "github.com/molecula/featurebase/v3/vprint" // nolint:staticcheck
 	"github.com/pkg/errors"
 )
 
@@ -1275,15 +1273,6 @@ func TestExecutor_Execute_Count(t *testing.T) {
 		}
 	})
 
-}
-
-func roaringOnlyTest(t *testing.T) {
-	src := pilosa.CurrentBackend()
-	if src == pilosa.RoaringTxn || (storage.DefaultBackend == pilosa.RoaringTxn && src == "") {
-		// okay to run, we are under roaring only
-	} else {
-		t.Skip("skip for everything but roaring")
-	}
 }
 
 // Ensure a set query can be executed.
@@ -3490,6 +3479,28 @@ func TestExecutor_Execute_Remote_Row(t *testing.T) {
 		}
 	})
 
+	t.Run("json format groupBy on timestamps", func(t *testing.T) {
+		//SUP-138
+		c.CreateField(t, "t", pilosa.IndexOptions{TrackExistence: true}, "timestamp", pilosa.OptFieldTypeTimestamp(pilosa.DefaultEpoch, pilosa.TimeUnitSeconds))
+		c.Query(t, "t", `
+		Set(8, timestamp='2021-01-27T08:00:00Z')
+		Set(9, timestamp='2000-01-27T09:00:00Z')
+		Set(10, timestamp='2000-01-27T10:00:00Z')
+	`)
+		if res, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{
+			Index: "t",
+			Query: `GroupBy(Rows(timestamp))`,
+		}); err != nil {
+			t.Fatalf("GroupBy querying: %v", err)
+		} else {
+			b, _ := res.MarshalJSON()
+			expected := `{"results":[[{"group":[{"field":"timestamp","value":"2000-01-27T09:00:00Z"}],"count":1},{"group":[{"field":"timestamp","value":"2000-01-27T10:00:00Z"}],"count":1},{"group":[{"field":"timestamp","value":"2021-01-27T08:00:00Z"}],"count":1}]]}`
+			if string(b) != expected {
+				t.Fatalf("JSON FORMAT not as expected: %v", err)
+			}
+		}
+	})
+
 	t.Run("remote groupBy on ints", func(t *testing.T) {
 		_, err = c.GetPrimary().API.CreateField(context.Background(), "i", "fint", pilosa.OptFieldTypeInt(-1000, 1000))
 		if err != nil {
@@ -3814,7 +3825,7 @@ func TestExecutor_Execute_Existence(t *testing.T) {
 		c := test.MustRunCluster(t, 1, []server.CommandOption{
 			server.OptCommandServerOptions(
 				pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
-				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+				pilosa.OptServerOpenTranslateReader(pilosa.GetOpenTranslateReaderFunc(nil)),
 			),
 		})
 		defer c.Close()
@@ -4205,7 +4216,7 @@ func TestExecutor_Execute_All(t *testing.T) {
 		c := test.MustRunCluster(t, 1, []server.CommandOption{
 			server.OptCommandServerOptions(
 				pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
-				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+				pilosa.OptServerOpenTranslateReader(pilosa.GetOpenTranslateReaderFunc(nil)),
 			),
 		})
 		defer c.Close()
@@ -5441,6 +5452,11 @@ func TestExecutor_Execute_Rows_Keys(t *testing.T) {
 		t.Fatalf("creating field: %v", err)
 	}
 
+	_, err = c.GetNode(0).API.CreateField(context.Background(), "i", "f_id")
+	if err != nil {
+		t.Fatalf("creating field: %v", err)
+	}
+
 	// setup some data. 10 bits in each of shards 0 through 9. starting at
 	// row/col shardNum and progressing to row/col shardNum+10. Also set the
 	// previous 2 for each bit if row >0.
@@ -5463,8 +5479,9 @@ func TestExecutor_Execute_Rows_Keys(t *testing.T) {
 	}
 
 	tests := []struct {
-		q   string
-		exp []string
+		q      string
+		exp    []string
+		expErr string
 	}{
 		{
 			q:   `Rows(f)`,
@@ -5546,13 +5563,26 @@ func TestExecutor_Execute_Rows_Keys(t *testing.T) {
 			q:   `Rows(f, like="__")`,
 			exp: []string{"10", "11", "12", "13", "14", "15", "16", "17", "18"},
 		},
+		{
+			q:      `Rows(f_id, like=7)`,
+			expErr: "parsing:",
+		},
+		{
+			q:      `Rows(f_id, like="__")`,
+			expErr: "executing: translating call:",
+		},
 	}
 
 	for i, test := range tests {
 		t.Run(fmt.Sprintf("#%d_%s", i, test.q), func(t *testing.T) {
 			if res, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: test.q}); err != nil {
-				t.Fatal(err)
+				if !strings.HasPrefix(err.Error(), test.expErr) {
+					t.Fatal(err)
+				}
 			} else {
+				if test.expErr != "" {
+					t.Fatalf("got success, expected error similar to: %+v", test.expErr)
+				}
 				rows := res.Results[0].(pilosa.RowIdentifiers)
 				if !reflect.DeepEqual(rows.Keys, test.exp) {
 					t.Fatalf("\ngot: %+v\nexp: %+v", rows.Keys, test.exp)
@@ -6139,6 +6169,34 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 			test.CheckGroupByOnKey(t, expected, results)
 		})
 
+		// SUP-139: GroupBy returns incorrect results when two or more Integer Range Fields are used to define the grouping
+		t.Run("CountByIntegersWithMinMax", func(t *testing.T) {
+			c.CreateField(t, "cbimm", pilosa.IndexOptions{}, "year", pilosa.OptFieldTypeInt(2019, 2020))
+			c.CreateField(t, "cbimm", pilosa.IndexOptions{}, "quarter", pilosa.OptFieldTypeInt(1, 4))
+
+			c.ImportIntID(t, "cbimm", "year", []test.IntID{{ID: 1, Val: 2019}, {ID: 2, Val: 2019}, {ID: 3, Val: 2019}, {ID: 4, Val: 2019}})
+			c.ImportIntID(t, "cbimm", "quarter", []test.IntID{{ID: 1, Val: 1}, {ID: 2, Val: 1}, {ID: 3, Val: 1}, {ID: 4, Val: 2}})
+
+			year2019 := int64(2019)
+			quarter1, quarter2 := int64(1), int64(2)
+
+			results := c.Query(t, "cbimm", `GroupBy(Rows(year), Rows(quarter))`).Results[0].(*pilosa.GroupCounts).Groups()
+
+			test.CheckGroupBy(t,
+				[]pilosa.GroupCount{
+					{Group: []pilosa.FieldRow{
+						{Field: "year", RowID: 0, Value: &year2019},
+						{Field: "quarter", RowID: 0, Value: &quarter1},
+					}, Count: 3},
+					{Group: []pilosa.FieldRow{
+						{Field: "year", RowID: 0, Value: &year2019},
+						{Field: "quarter", RowID: 0, Value: &quarter2},
+					}, Count: 1},
+				},
+				results,
+			)
+
+		})
 	}
 	for _, size := range []int{1, 3} {
 		t.Run(fmt.Sprintf("%d_nodes", size), func(t *testing.T) {
@@ -6750,12 +6808,16 @@ func variousQueriesCountDistinctTimestamp(t *testing.T, c *test.Cluster) {
 
 	// create an index and timestamp field
 	c.CreateField(t, index, pilosa.IndexOptions{TrackExistence: true}, field, pilosa.OptFieldTypeTimestamp(time.Unix(0, 0), "s"))
+	c.CreateField(t, index, pilosa.IndexOptions{TrackExistence: true}, "set")
 
 	// add some data
-	data := []string{"2010-01-02T12:32:00Z", "2010-04-20T12:32:00Z", "2011-04-20T12:32:00Z"}
+	data := []string{"2010-01-02T12:32:00Z", "2010-04-20T12:32:00Z", "2011-04-20T12:59:00Z", "2011-04-20T12:40:00Z", "2011-04-20T12:32:00Z"}
+
 	for i, datum := range data {
-		c.Query(t, index, fmt.Sprintf("Set(%d, ts=\"%s\")", i+10, datum))
+		c.Query(t, index, fmt.Sprintf("Set(%d, ts=\"%s\")", i*ShardWidth, datum))
 	}
+	// set something in shard 8 so there's a shard present with no timestamp data
+	c.Query(t, index, fmt.Sprintf("Set(%d, set=0)", 8*ShardWidth))
 
 	// query the Count of Distinct vals in field ts
 	count := c.Query(t, index, "Count(Distinct(field=ts))").Results[0]
@@ -6763,6 +6825,13 @@ func variousQueriesCountDistinctTimestamp(t *testing.T, c *test.Cluster) {
 		t.Fatalf("expected %v got %v", len(data), count)
 	}
 
+	// query the ones that are in or after 2011, expecting 3. this helps us
+	// hit an edge case that only happens if you have no data *because of
+	// a filter*.
+	count = c.Query(t, index, "Count(Distinct(Row(ts > \"2011-01-01T00:00:00Z\"), field=ts))").Results[0]
+	if count != uint64(3) {
+		t.Fatalf("expected %v got %v", 3, count)
+	}
 }
 
 // Ensure that a top-level, bare distinct on multiple nodes
@@ -6914,11 +6983,9 @@ func TestTimelessClearRegression(t *testing.T) {
 }
 
 func TestMissingKeyRegression(t *testing.T) {
-	c := test.MustRunCluster(t, 1, []server.CommandOption{server.OptCommandServerOptions(
-		pilosa.OptServerStorageConfig(&storage.Config{
-			Backend:      "roaring",
-			FsyncEnabled: false,
-		}))})
+	// this used to be explicitly roaring backend... I'm not sure
+	// whether it is a useful test in post-roaring world.
+	c := test.MustRunCluster(t, 1)
 	defer c.Close()
 
 	c.CreateField(t, "i", pilosa.IndexOptions{Keys: true, TrackExistence: true}, "f", pilosa.OptFieldKeys())

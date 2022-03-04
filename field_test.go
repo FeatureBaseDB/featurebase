@@ -6,10 +6,10 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/molecula/featurebase/v2"
-	"github.com/molecula/featurebase/v2/roaring"
-	"github.com/molecula/featurebase/v2/test"
-	"github.com/molecula/featurebase/v2/testhook"
+	"github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/roaring"
+	"github.com/molecula/featurebase/v3/test"
+	"github.com/molecula/featurebase/v3/testhook"
 )
 
 // Ensure a field can set & read a bsiGroup value.

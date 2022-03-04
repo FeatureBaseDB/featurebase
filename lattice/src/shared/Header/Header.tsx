@@ -1,12 +1,17 @@
-import React, { FC } from 'react';
-import AppBar from '@material-ui/core/AppBar';
-import Toolbar from '@material-ui/core/Toolbar';
-import { Link } from 'react-router-dom';
-import { ReactComponent as MoleculaLogo } from 'assets/lightTheme/MoleculaLogo.svg';
-import { ReactComponent as MoleculaLogoDark } from 'assets/darkTheme/MoleculaLogo.svg';
-import { ThemeToggle } from 'shared/ThemeToggle';
-import { useTheme } from '@material-ui/core/styles';
-import css from './Header.module.scss';
+import SignOutButton from "App/AuthFlow/SignOutButton";
+import { ReactComponent as MoleculaLogoDark } from "assets/darkTheme/MoleculaLogo.svg";
+import { ReactComponent as MoleculaLogo } from "assets/lightTheme/MoleculaLogo.svg";
+import { FC } from "react";
+import { Link } from "react-router-dom";
+import { useAuth } from "services/useAuth";
+import { ThemeToggle } from "shared/ThemeToggle";
+
+import AppBar from "@material-ui/core/AppBar";
+import Button from "@material-ui/core/Button";
+import { useTheme } from "@material-ui/core/styles";
+import Toolbar from "@material-ui/core/Toolbar";
+
+import css from "./Header.module.scss";
 
 type HeaderProps = {
   onToggleTheme: () => void;
@@ -14,7 +19,8 @@ type HeaderProps = {
 
 export const Header: FC<HeaderProps> = ({ onToggleTheme }) => {
   const theme = useTheme();
-  const isDark = theme.palette.type === 'dark';
+  const isDark = theme.palette.type === "dark";
+  const auth = useAuth();
 
   return (
     <AppBar
@@ -38,6 +44,22 @@ export const Header: FC<HeaderProps> = ({ onToggleTheme }) => {
               />
             </div>
           </div>
+
+          {auth.isAuthenticated ? (
+            <div>
+              {auth.user && (
+                <Button
+                  style={{
+                    backgroundColor: "transparent",
+                    pointerEvents: "none",
+                  }}
+                >
+                  {auth.user.username}
+                </Button>
+              )}
+              <SignOutButton />
+            </div>
+          ) : null}
         </div>
       </Toolbar>
     </AppBar>

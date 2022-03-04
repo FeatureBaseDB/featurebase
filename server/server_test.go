@@ -17,15 +17,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/molecula/featurebase/v2"
-	"github.com/molecula/featurebase/v2/disco"
-	"github.com/molecula/featurebase/v2/http"
-	"github.com/molecula/featurebase/v2/pql"
-	"github.com/molecula/featurebase/v2/roaring"
-	"github.com/molecula/featurebase/v2/server"
-	"github.com/molecula/featurebase/v2/test"
-	"github.com/molecula/featurebase/v2/testhook"
+	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/disco"
+	"github.com/molecula/featurebase/v3/encoding/proto"
+	"github.com/molecula/featurebase/v3/pql"
+	"github.com/molecula/featurebase/v3/roaring"
+	"github.com/molecula/featurebase/v3/server"
+	"github.com/molecula/featurebase/v3/test"
+	"github.com/molecula/featurebase/v3/testhook"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -53,7 +54,7 @@ func TestMain_Set_Quick(t *testing.T) {
 			defer m.Close()
 
 			// Create client.
-			client, err := http.NewInternalClient(m.API.Node().URI.HostPort(), http.GetHTTPClient(nil))
+			client, err := pilosa.NewInternalClient(m.API.Node().URI.HostPort(), pilosa.GetHTTPClient(nil), pilosa.WithSerializer(proto.Serializer{}))
 			client.SetInternalAPI(m.API)
 			if err != nil {
 				t.Fatal(err)
@@ -504,6 +505,30 @@ func TestClusteringNodesReplica1(t *testing.T) {
 		t.Fatalf("starting cluster: %v", err)
 	}
 
+	indexName := "idx"
+	fieldName := "fld"
+
+	// Create the schema.
+	if _, err := cluster.GetPrimary().API.CreateIndex(context.Background(), indexName, pilosa.IndexOptions{}); err != nil {
+		t.Fatalf("creating index: %v", err)
+	}
+	if _, err := cluster.GetPrimary().API.CreateField(context.Background(), indexName, fieldName); err != nil {
+		t.Fatalf("creating field: %v", err)
+	}
+
+	// Set some columns across shards to ensure that the Row query will require
+	// data from all nodes.
+	data := []string{}
+	for rowID := 1; rowID < 2; rowID++ {
+		for columnID := 1; columnID < 10; columnID++ {
+			data = append(data, fmt.Sprintf(`Set(%d, %s=%d)`, columnID*pilosa.ShardWidth, fieldName, rowID))
+		}
+	}
+	if _, err := cluster.GetPrimary().Query(t, indexName, "", strings.Join(data, "")); err != nil {
+		t.Fatalf("setting columns: %v", err)
+	}
+
+	// Shut down a node.
 	if err := cluster.GetNonPrimary().Command.Close(); err != nil {
 		t.Fatalf("closing third node: %v", err)
 	}
@@ -513,7 +538,12 @@ func TestClusteringNodesReplica1(t *testing.T) {
 	}
 
 	// confirm that cluster stops accepting queries after one node closes
-	if _, err := cluster.GetPrimary().API.Query(context.Background(), &pilosa.QueryRequest{}); !strings.Contains(err.Error(), "not allowed in state DOWN") {
+	qry := &pilosa.QueryRequest{
+		Index: "idx",
+		Query: fmt.Sprintf("Row(%s=1)", fieldName),
+	}
+
+	if _, err := cluster.GetPrimary().API.Query(context.Background(), qry); !strings.Contains(err.Error(), "shard unavailable") {
 		t.Fatalf("got unexpected error querying an incomplete cluster: %v", err)
 	}
 }
@@ -540,7 +570,33 @@ func TestClusteringNodesReplica2(t *testing.T) {
 	}
 	defer cluster.Close()
 
+	indexName := "idx"
+	fieldName := "fld"
+
 	coord, others := cluster.GetPrimary(), cluster.GetNonPrimaries()
+
+	// Create the schema.
+	if _, err := coord.API.CreateIndex(context.Background(), indexName, pilosa.IndexOptions{}); err != nil {
+		t.Fatalf("creating index: %v", err)
+	}
+	if _, err := coord.API.CreateField(context.Background(), indexName, fieldName); err != nil {
+		t.Fatalf("creating field: %v", err)
+	}
+
+	// Set some columns across shards to ensure that the Row query will require
+	// data from all nodes.
+	data := []string{}
+	cols := []uint64{}
+	for rowID := 1; rowID < 2; rowID++ {
+		for columnID := 1; columnID < 30; columnID++ {
+			col := uint64(columnID * pilosa.ShardWidth)
+			cols = append(cols, col)
+			data = append(data, fmt.Sprintf(`Set(%d, %s=%d)`, col, fieldName, rowID))
+		}
+	}
+	if _, err := coord.Query(t, indexName, "", strings.Join(data, "")); err != nil {
+		t.Fatalf("setting columns: %v", err)
+	}
 
 	if err := others[0].Close(); err != nil {
 		t.Fatalf("closing third node: %v", err)
@@ -569,8 +625,30 @@ func TestClusteringNodesReplica2(t *testing.T) {
 		t.Fatalf("after closing second server: %v", err)
 	}
 
-	if _, err := coord.API.Query(context.Background(), &pilosa.QueryRequest{}); !strings.Contains(err.Error(), "not allowed in state DOWN") {
-		t.Fatalf("got unexpected error querying an incomplete cluster: %v", err)
+	qry := &pilosa.QueryRequest{
+		Index: "idx",
+		Query: fmt.Sprintf("Row(%s=1)", fieldName),
+	}
+
+	// Because we no longer block queries when the cluster is in state DOWN,
+	// there are cases where a DOWN cluster can still respond to a query. In
+	// that case, we want the test to pass. But if the unavailable node(s) cause
+	// the query to result in an error, we check that it's the error we expect.
+	resp, err := coord.API.Query(context.Background(), qry)
+	if err != nil {
+		if !strings.Contains(err.Error(), "shard unavailable") {
+			t.Fatalf("got unexpected error querying an incomplete cluster: %v", err)
+		}
+	} else {
+		if len(resp.Results) == 0 {
+			t.Fatal("got no results")
+		}
+
+		row, ok := resp.Results[0].(*pilosa.Row)
+		if !ok {
+			t.Fatalf("expected a *pilosa.Row, but got %T", resp.Results[0])
+		}
+		require.Equal(t, row.Columns(), cols)
 	}
 }
 
@@ -826,7 +904,7 @@ func TestQueryingWithQuotesAndStuff(t *testing.T) {
 	m := test.RunCommand(t)
 	defer m.Close()
 
-	client, err := http.NewInternalClient(m.API.Node().URI.HostPort(), http.GetHTTPClient(nil))
+	client, err := pilosa.NewInternalClient(m.API.Node().URI.HostPort(), pilosa.GetHTTPClient(nil), pilosa.WithSerializer(proto.Serializer{}))
 	client.SetInternalAPI(m.API)
 	if err != nil {
 		t.Fatal(err)

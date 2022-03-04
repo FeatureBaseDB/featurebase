@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/molecula/featurebase/v2/shardwidth"
+	"github.com/molecula/featurebase/v3/shardwidth"
 )
 
 // We want BitmapScanner to be accessible from both the pilosa package, and
@@ -579,10 +579,13 @@ func (b *BitmapRowFilterMultiFilter) ConsiderData(key FilterKey, data *Container
 // offsets the input bitmap's containers have, it matches them against
 // corresponding keys.
 type BitmapBitmapFilter struct {
-	filter      *Bitmap // We don't use this while iterating, but in ludicrous edge cases it might be holding a generation we need.
 	containers  []*Container
 	nextOffsets []uint64
 	callback    func(uint64) error
+}
+
+func (b *BitmapBitmapFilter) SetCallback(cb func(uint64) error) {
+	b.callback = cb
 }
 
 func (b *BitmapBitmapFilter) ConsiderKey(key FilterKey, n int32) FilterResult {
@@ -629,7 +632,6 @@ func (b *BitmapBitmapFilter) ConsiderData(key FilterKey, data *Container) Filter
 // because offset-within-row is what we care about.
 func NewBitmapBitmapFilter(filter *Bitmap, callback func(uint64) error) *BitmapBitmapFilter {
 	b := &BitmapBitmapFilter{
-		filter:      filter,
 		callback:    callback,
 		containers:  make([]*Container, rowWidth),
 		nextOffsets: make([]uint64, rowWidth),
@@ -876,4 +878,137 @@ func ApplyFilterToIterator(filter BitmapFilter, iter ContainerIterator) error {
 		until = uint64(result.NoKey)
 	}
 	return nil
+}
+
+// BitmapBSICountFilter gives counts of values in each value-holding row
+// of a BSI field, constrained by a filter. The first row of the data is
+// taken to be an existence bit, which is intersected into the filter to
+// constrain it, and the second is used as a sign bit. The rows after that
+// are treated as value rows, and their counts of bits, overlapping with
+// positive and negative bits in the sign rows, are returned to a callback
+// function.
+//
+// The total counts of positions evaluated are returned with a row count
+// of ^uint64(0) prior to row counts.
+type BitmapBSICountFilter struct {
+	containers  []*Container
+	positive    []*Container
+	negative    []*Container
+	nextOffsets []uint64
+	count       int32
+	psum, nsum  uint64
+}
+
+func (b *BitmapBSICountFilter) Total() (count int32, total int64) {
+	return b.count, int64(b.psum) - int64(b.nsum)
+}
+
+func (b *BitmapBSICountFilter) ConsiderKey(key FilterKey, n int32) FilterResult {
+	pos := key & keyMask
+	if b.containers[pos] == nil || n == 0 {
+		return key.RejectUntilOffset(b.nextOffsets[pos])
+	}
+	return key.NeedData()
+}
+
+func (b *BitmapBSICountFilter) ConsiderData(key FilterKey, data *Container) FilterResult {
+	pos := key & keyMask
+	filter := b.containers[pos]
+	if filter == nil {
+		key.RejectUntilOffset(b.nextOffsets[pos])
+	}
+	row := uint64(key >> rowExponent) // row count within the fragment
+	// How do we translate the filter and existence bit into actionable things?
+	// Assume the sign row is empty. We want positive values for anything in
+	// the intersection of the filter and the positive bits. If the sign row
+	// isn't empty, we want positive values for that intersection, less the
+	// sign row, and negative for the intersection of the filter/positive and
+	// the sign bits. So we can just stash the intermediate filter+existence
+	// as positive, then split it up if we have sign bits, which we often don't.
+	setup := false
+	switch row {
+	case 0: // existence bit
+		b.positive[pos] = intersect(b.containers[pos], data)
+		if b.positive[pos] == data {
+			b.positive[pos] = b.positive[pos].Clone()
+		}
+		b.count += int32(b.positive[pos].N())
+		setup = true
+	case 1: // sign bit
+		// split into negative/positive components. doesn't affect total
+		// count.
+		b.negative[pos] = intersect(b.positive[pos], data)
+		if b.negative[pos] == data {
+			b.negative[pos] = b.negative[pos].Clone()
+		}
+		b.positive[pos] = difference(b.positive[pos], data)
+		setup = true
+	}
+	// if we were doing setup (first two rows), we're done
+	if setup {
+		return key.MatchOneUntilOffset(b.nextOffsets[pos])
+	}
+	// helpful reminder: a nil container is a valid empty container, and
+	// intersectionCount knows this.
+	pcount := intersectionCount(b.positive[pos], data)
+	ncount := intersectionCount(b.negative[pos], data)
+	b.psum += (uint64(pcount) << (row - 2))
+	b.nsum += (uint64(ncount) << (row - 2))
+	return key.MatchOneUntilOffset(b.nextOffsets[pos])
+}
+
+// NewBitmapBSICountFilter creates a BitmapBSICountFilter, used for tasks
+// like computing the sum of a BSI field matching a given filter.
+//
+// The input filter is assumed to represent one "row" of a shard's data,
+// which is to say, a range of up to rowWidth consecutive containers starting
+// at some multiple of rowWidth. We coerce that to the 0..rowWidth range
+// because offset-within-row is what we care about.
+func NewBitmapBSICountFilter(filter *Bitmap) *BitmapBSICountFilter {
+	containers := make([]*Container, rowWidth*3)
+	b := &BitmapBSICountFilter{
+		containers:  containers[:rowWidth],
+		positive:    containers[rowWidth : rowWidth*2],
+		negative:    containers[rowWidth*2 : rowWidth*3],
+		nextOffsets: make([]uint64, rowWidth),
+	}
+	if filter == nil {
+		for i := range b.containers {
+			b.containers[i] = NewContainerRun([]Interval16{{Start: 0, Last: 65535}})
+			b.nextOffsets[i] = uint64(i+1) % rowWidth
+		}
+		return b
+	}
+	count := 0
+	iter, _ := filter.Containers.Iterator(0)
+	last := uint64(0)
+	for iter.Next() {
+		k, v := iter.Value()
+		// Coerce container key into the 0-rowWidth range we'll be
+		// using to compare against containers within each row.
+		k = k & keyMask
+		b.containers[k] = v
+		last = k
+		count++
+	}
+	// if there's only one container, we need to populate everything with
+	// its position.
+	if count == 1 {
+		for i := range b.containers {
+			b.nextOffsets[i] = last
+		}
+	} else {
+		// Point each container at the offset of the next valid container.
+		// With sparse bitmaps this will potentially make skipping faster.
+		for i := range b.containers {
+			if b.containers[i] != nil {
+				for int(last) != i {
+					b.nextOffsets[last] = uint64(i)
+					last = (last + 1) % rowWidth
+				}
+			}
+		}
+	}
+
+	return b
 }

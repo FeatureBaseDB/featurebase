@@ -7,10 +7,8 @@ import (
 	"io"
 	"math"
 	"os"
-	"unsafe"
 
-	"github.com/molecula/featurebase/v2/roaring"
-	"github.com/molecula/featurebase/v2/storage"
+	"github.com/molecula/featurebase/v3/roaring"
 	"github.com/pkg/errors"
 )
 
@@ -162,8 +160,8 @@ func intoContainer(l leafCell, tx *Tx, replacing *roaring.Container, target []by
 	orig := l.Data
 	var cpMaybe []byte
 	var mapped bool
-	if storage.RowCacheEnabled() || tx.db.cfg.DoAllocZero {
-		// make a copy, otherwise the rowCache will see corrupted data
+	if tx.db.cfg.DoAllocZero {
+		// make a copy so no one will see corrupted data
 		// or mmapped data that may disappear.
 		cpMaybe = target[:len(orig)]
 		copy(cpMaybe, orig)
@@ -179,11 +177,7 @@ func intoContainer(l leafCell, tx *Tx, replacing *roaring.Container, target []by
 	case ContainerTypeBitmapPtr:
 		_, bm, _ := tx.leafCellBitmap(toPgno(cpMaybe))
 		cloneMaybe := bm
-		if storage.RowCacheEnabled() {
-			cloneMaybe = (*[1024]uint64)(unsafe.Pointer(&target[0]))[:1024]
-			copy(cloneMaybe, bm)
-		}
-		c = roaring.RemakeContainerBitmap(replacing, cloneMaybe)
+		c = roaring.RemakeContainerBitmapN(replacing, cloneMaybe, int32(l.BitN))
 	case ContainerTypeBitmap:
 		c = roaring.RemakeContainerBitmapN(replacing, toArray64(cpMaybe), int32(l.BitN))
 	case ContainerTypeRLE:
@@ -205,8 +199,8 @@ func toContainer(l leafCell, tx *Tx) (c *roaring.Container) {
 	orig := l.Data
 	var cpMaybe []byte
 	var mapped bool
-	if storage.RowCacheEnabled() || tx.db.cfg.DoAllocZero {
-		// make a copy, otherwise the rowCache will see corrupted data
+	if tx.db.cfg.DoAllocZero {
+		// make a copy, otherwise someone could see corrupted data
 		// or mmapped data that may disappear.
 		cpMaybe = make([]byte, len(orig))
 		copy(cpMaybe, orig)
@@ -222,13 +216,9 @@ func toContainer(l leafCell, tx *Tx) (c *roaring.Container) {
 	case ContainerTypeBitmapPtr:
 		_, bm, _ := tx.leafCellBitmap(toPgno(cpMaybe))
 		cloneMaybe := bm
-		if storage.RowCacheEnabled() {
-			cloneMaybe = make([]uint64, len(bm))
-			copy(cloneMaybe, bm)
-		}
-		c = roaring.NewContainerBitmap(-1, cloneMaybe)
+		c = roaring.NewContainerBitmap(l.BitN, cloneMaybe)
 	case ContainerTypeBitmap:
-		c = roaring.NewContainerBitmap(-1, toArray64(cpMaybe))
+		c = roaring.NewContainerBitmap(l.BitN, toArray64(cpMaybe))
 	case ContainerTypeRLE:
 		c = roaring.NewContainerRun(toInterval16(cpMaybe))
 	}

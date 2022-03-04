@@ -7,23 +7,20 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"sort"
-	"strconv"
-	"strings"
 	"sync"
 	"time"
 
-	"github.com/molecula/featurebase/v2/disco"
-	"github.com/molecula/featurebase/v2/logger"
-	rbfcfg "github.com/molecula/featurebase/v2/rbf/cfg"
-	"github.com/molecula/featurebase/v2/roaring"
-	"github.com/molecula/featurebase/v2/stats"
-	"github.com/molecula/featurebase/v2/storage"
-	"github.com/molecula/featurebase/v2/testhook"
-	"github.com/molecula/featurebase/v2/topology"
-	"github.com/molecula/featurebase/v2/vprint"
+	"github.com/molecula/featurebase/v3/disco"
+	"github.com/molecula/featurebase/v3/logger"
+	rbfcfg "github.com/molecula/featurebase/v3/rbf/cfg"
+	"github.com/molecula/featurebase/v3/roaring"
+	"github.com/molecula/featurebase/v3/stats"
+	"github.com/molecula/featurebase/v3/storage"
+	"github.com/molecula/featurebase/v3/testhook"
+	"github.com/molecula/featurebase/v3/topology"
+	"github.com/molecula/featurebase/v3/vprint"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -72,6 +69,9 @@ type Holder struct {
 	sharder     disco.Sharder
 	serializer  Serializer
 
+	// executor, which we use only to get access to its worker pool
+	executor *executor
+
 	// Close management
 	wg      sync.WaitGroup
 	closing chan struct{}
@@ -85,8 +85,7 @@ type Holder struct {
 	// The interval at which the cached row ids are persisted to disk.
 	cacheFlushInterval time.Duration
 
-	Logger        logger.Logger
-	SnapshotQueue SnapshotQueue
+	Logger logger.Logger
 
 	// Instantiates new translation stores
 	OpenTranslateStore  OpenTranslateStoreFunc
@@ -138,20 +137,9 @@ type Holder struct {
 // HolderOpts holds information about the holder which other things might want
 // to look up later while using the holder.
 type HolderOpts struct {
-	// ReadOnly indicates that this holder's contents should not produce
-	// disk writes under any circumstances. It must be set before Open
-	// is called, and changing it is not supported.
-	ReadOnly bool
-	// If Inspect is set, we'll try to obtain additional information
-	// about fragments when opening them.
-	Inspect bool
-
 	// StorageBackend controls the tx/storage engine we instatiate. Set by
 	// server.go OptServerStorageConfig
 	StorageBackend string
-
-	// RowcacheOn, if true, turns on the row cache for all storage backends.
-	RowcacheOn bool
 }
 
 func (h *Holder) StartTransaction(ctx context.Context, id string, timeout time.Duration, exclusive bool) (*Transaction, error) {
@@ -213,7 +201,6 @@ type HolderConfig struct {
 	CacheFlushInterval   time.Duration
 	StatsClient          stats.StatsClient
 	Logger               logger.Logger
-	RowcacheOn           bool
 
 	StorageConfig       *storage.Config
 	RBFConfig           *rbfcfg.Config
@@ -231,7 +218,7 @@ func DefaultHolderConfig() *HolderConfig {
 		OpenIDAllocator:      func(string, bool) (*idAllocator, error) { return &idAllocator{}, nil },
 		TranslationSyncer:    NopTranslationSyncer,
 		Serializer:           GobSerializer,
-		Schemator:            disco.InMemSchemator,
+		Schemator:            disco.NewInMemSchemator(),
 		Sharder:              disco.InMemSharder,
 		CacheFlushInterval:   defaultCacheFlushInterval,
 		StatsClient:          stats.NopStatsClient,
@@ -273,9 +260,7 @@ func NewHolder(path string, cfg *HolderConfig) *Holder {
 		sharder:              cfg.Sharder,
 		schemator:            cfg.Schemator,
 		Logger:               cfg.Logger,
-		Opts:                 HolderOpts{StorageBackend: cfg.StorageConfig.Backend, RowcacheOn: cfg.RowcacheOn},
-
-		SnapshotQueue: defaultSnapshotQueue,
+		Opts:                 HolderOpts{StorageBackend: cfg.StorageConfig.Backend},
 
 		Auditor: NewAuditor(),
 
@@ -283,8 +268,6 @@ func NewHolder(path string, cfg *HolderConfig) *Holder {
 
 		indexes: make(map[string]*Index),
 	}
-
-	storage.SetRowCacheOn(cfg.RowcacheOn)
 
 	txf, err := NewTxFactory(cfg.StorageConfig.Backend, h.IndexesPath(), h)
 	vprint.PanicOn(err)
@@ -304,278 +287,48 @@ func (h *Holder) IndexesPath() string {
 	return filepath.Join(h.path, IndexesDir)
 }
 
-type HolderInfo struct {
-	FragmentInfo  map[string]FragmentInfo
-	FragmentNames []string
-}
+// processDeleteInflight checks if deletion was in progress when server shutdown
+// the _exists field is set to row+1 when delete is started. Upon completion, the row is deleted.
+// if _exists>=1, we finish deleting the rows
+func (h *Holder) processDeleteInflight() error {
+	for _, index := range h.Indexes() {
+		if index.trackExistence {
+			shards := index.AvailableShards(includeRemote).Slice()
 
-type regexpList []*regexp.Regexp
+			for _, shard := range shards {
+				inprocessRowIDs := NewRow()
 
-func newRegexpList(regexes string) (results regexpList, err error) {
-	if regexes == "" {
-		return nil, nil
-	}
-	for _, sub := range strings.Split(regexes, ",") {
-		re, err := regexp.Compile(sub)
-		if err != nil {
-			return nil, err
-		}
-		results = append(results, re)
-	}
-	return results, nil
-}
+				frag := h.fragment(index.name, existenceFieldName, viewStandard, shard)
+				if frag == nil {
+					continue
+				}
 
-func (rl regexpList) Match(haystack string) bool {
-	if rl == nil {
-		return true
-	}
-	for _, re := range rl {
-		if re.MatchString(haystack) {
-			return true
-		}
-	}
-	return false
-}
+				tx := index.Txf().NewTx(Txo{Write: !writable, Index: index, Shard: shard})
+				defer tx.Rollback()
 
-// shardRange represents a series of shards
-type shardRange struct {
-	min, max uint64
-}
+				// filter rows based on having _exists>=1, which is used to flag delete in-flight
+				rows, err := frag.rows(context.Background(), tx, 1)
+				if err != nil {
+					return err
+				}
 
-type shardRangeList []shardRange
+				// check if any rows are found
+				if len(rows) == 0 {
+					return nil
+				}
 
-func newShardRangeList(shards string) (results shardRangeList, err error) {
-	if shards == "" {
-		return nil, nil
-	}
-	for _, sub := range strings.Split(shards, ",") {
-		var sr shardRange
-		minMax := strings.Split(sub, "-")
-		if len(minMax) > 2 {
-			return nil, fmt.Errorf("invalid range %q", sub)
-		}
-		sr.min, err = strconv.ParseUint(minMax[0], 10, 64)
-		if err != nil {
-			return nil, err
-		}
-		sr.max = sr.min
-		if len(minMax) == 2 {
-			sr.max, err = strconv.ParseUint(minMax[0], 10, 64)
-			if err != nil {
-				return nil, err
+				for _, rowID := range rows {
+					row, err2 := frag.row(tx, rowID)
+					if err2 != nil {
+						return err2
+					}
+					inprocessRowIDs = inprocessRowIDs.Union(row)
+				}
+				DeleteRows(context.Background(), inprocessRowIDs, index, shard)
 			}
 		}
-		if sr.max < sr.min {
-			return nil, fmt.Errorf("invalid range %q: max < min", sub)
-		}
-		results = append(results, sr)
 	}
-	return results, nil
-}
-
-func (sl shardRangeList) Match(shard uint64) bool {
-	if sl == nil {
-		return true
-	}
-	for _, sr := range sl {
-		if shard >= sr.min && shard <= sr.max {
-			return true
-		}
-	}
-	return false
-}
-
-// HolderFilter represents something that potentially filters out
-// parts of a holder, indicating whether or not to process them,
-// or recurse into them. It is permissible to recurse a thing
-// without processing it, or process it without recursing it.
-// For instance, something looking to accumulate statistics
-// about views might return (true, false) from CheckView,
-// while a fragment scanning operation would return (false, true)
-// from everything above CheckFrag.
-type HolderFilter interface {
-	CheckIndex(iname string) (process bool, recurse bool)
-	CheckField(iname, fname string) (process bool, recurse bool)
-	CheckView(iname, fname, vname string) (process bool, recurse bool)
-	CheckFragment(iname, fname, vname string, shard uint64) (process bool)
-}
-
-// HolderFilterAll is a placeholder type which always returns true for the
-// check functions. You can embed it to make a HolderOperator which processes
-// everything.
-type HolderFilterAll struct{}
-
-func (HolderFilterAll) CheckIndex(string) (bool, bool) {
-	return true, true
-}
-
-func (HolderFilterAll) CheckField(string, string) (bool, bool) {
-	return true, true
-}
-
-func (HolderFilterAll) CheckView(string, string, string) (bool, bool) {
-	return true, true
-}
-
-func (HolderFilterAll) CheckFragment(string, string, string, uint64) bool {
-	return true
-}
-
-// HolderProcessNone is a placeholder type which does nothing for the
-// process functions. You can embed it to make a HolderOperator which
-// does nothing, or embed it and provide your own ProcessFragment to
-// do just that.
-type HolderProcessNone struct{}
-
-func (HolderProcessNone) ProcessIndex(*Index) error {
 	return nil
-}
-
-func (HolderProcessNone) ProcessField(*Field) error {
-	return nil
-}
-
-func (HolderProcessNone) ProcessView(*view) error {
-	return nil
-}
-
-func (HolderProcessNone) ProcessFragment(*fragment) error {
-	return nil
-}
-
-// HolderProcess represents something that has operations which can be
-// performed on indexes, fields, views, and/or fragments.
-type HolderProcess interface {
-	ProcessIndex(*Index) error
-	ProcessField(*Field) error
-	ProcessView(*view) error
-	ProcessFragment(*fragment) error
-}
-
-// HolderOperator is both a filter and a process. This is the general
-// form of "I want to do something to some part of a holder."
-type HolderOperator interface {
-	HolderFilter
-	HolderProcess
-}
-
-var _ HolderOperator = (*holderInspector)(nil)
-
-type HolderFilterParams struct {
-	Indexes string
-	Fields  string
-	Views   string
-	Shards  string
-}
-
-type holderFilterFull struct {
-	HolderFilterParams
-	indexRegexps regexpList
-	fieldRegexps regexpList
-	viewRegexps  regexpList
-	shardRanges  shardRangeList
-}
-
-type inspectRequestFull struct {
-	HolderFilter
-	params InspectRequestParams
-}
-
-func (i *holderFilterFull) CheckIndex(iname string) (process, recurse bool) {
-	return true, i.indexRegexps.Match(iname)
-}
-
-func (i *holderFilterFull) CheckField(iname, fname string) (process, recurse bool) {
-	return true, i.fieldRegexps.Match(fname)
-}
-
-func (i *holderFilterFull) CheckView(iname, fname, vname string) (process, recurse bool) {
-	return true, i.viewRegexps.Match(vname)
-}
-
-func (i *holderFilterFull) CheckFragment(iname, fname, vname string, shard uint64) (process bool) {
-	return i.shardRanges.Match(shard)
-}
-
-func NewHolderFilter(params HolderFilterParams) (result HolderFilter, err error) {
-	filter := &holderFilterFull{
-		HolderFilterParams: params,
-	}
-	filter.indexRegexps, err = newRegexpList(params.Indexes)
-	if err != nil {
-		return nil, err
-	}
-	filter.fieldRegexps, err = newRegexpList(params.Fields)
-	if err != nil {
-		return nil, err
-	}
-	filter.viewRegexps, err = newRegexpList(params.Views)
-	if err != nil {
-		return nil, err
-	}
-	filter.shardRanges, err = newShardRangeList(params.Shards)
-	if err != nil {
-		return nil, err
-	}
-	return filter, nil
-}
-
-func expandInspectRequest(req *InspectRequest) (*inspectRequestFull, error) {
-	filter, err := NewHolderFilter(req.HolderFilterParams)
-	if err != nil {
-		return nil, err
-	}
-	irf := &inspectRequestFull{
-		HolderFilter: filter,
-		params:       req.InspectRequestParams,
-	}
-	return irf, nil
-}
-
-type holderInspector struct {
-	*inspectRequestFull
-	pathParts [3]string
-	path      string
-	hi        *HolderInfo
-}
-
-func (h *holderInspector) ProcessIndex(i *Index) error {
-	h.pathParts[0] = i.name
-	return nil
-}
-
-func (h *holderInspector) ProcessField(f *Field) error {
-	h.pathParts[1] = f.name
-	return nil
-}
-
-func (h *holderInspector) ProcessView(v *view) error {
-	h.pathParts[2] = v.name
-	h.path = strings.Join(h.pathParts[:], "/")
-	return nil
-}
-
-func (h *holderInspector) ProcessFragment(f *fragment) error {
-	path := h.path + "/" + strconv.FormatUint(f.shard, 10)
-	h.hi.FragmentInfo[path] = f.inspect(h.inspectRequestFull.params)
-	h.hi.FragmentNames = append(h.hi.FragmentNames, path)
-	return nil
-}
-
-func (h *Holder) Inspect(ctx context.Context, req *InspectRequest) (*HolderInfo, error) {
-	fullReq, err := expandInspectRequest(req)
-	if err != nil {
-		return nil, err
-	}
-	inspector := &holderInspector{
-		inspectRequestFull: fullReq,
-		hi: &HolderInfo{
-			FragmentInfo: make(map[string]FragmentInfo),
-		},
-	}
-	err = h.Process(ctx, inspector)
-	sort.Strings(inspector.hi.FragmentNames)
-	return inspector.hi, err
 }
 
 // Open initializes the root data directory for the holder.
@@ -625,23 +378,7 @@ func (h *Holder) Open() error {
 	}
 	defer f.Close()
 
-	fis, err := f.Readdir(0)
-	if err != nil {
-		return errors.Wrap(err, "reading directory")
-	}
-
-	for _, fi := range fis {
-		// Skip files or hidden directories.
-		if !fi.IsDir() || strings.HasPrefix(fi.Name(), ".") {
-			continue
-		}
-
-		// Only continue with indexes which are present in schema.
-		idx, ok := schema[fi.Name()]
-		if !ok {
-			continue
-		}
-
+	for idxKey, idx := range schema {
 		// decode the CreateIndexMessage from the schema data in order to
 		// get its metadata, such as CreateAt.
 		cim, err := decodeCreateIndexMessage(h.serializer, idx.Data)
@@ -649,17 +386,17 @@ func (h *Holder) Open() error {
 			return errors.Wrap(err, "decoding create index message")
 		}
 
-		h.Logger.Printf("opening index: %s", filepath.Base(fi.Name()))
+		h.Logger.Printf("opening index: %s", idxKey)
 
-		index, err := h.newIndex(h.IndexPath(filepath.Base(fi.Name())), filepath.Base(fi.Name()))
+		index, err := h.newIndex(h.IndexPath(idxKey), idxKey)
 		if errors.Cause(err) == ErrName {
-			h.Logger.Errorf("opening index: %s, err=%s", fi.Name(), err)
+			h.Logger.Errorf("opening index: %s, err=%s", idxKey, err)
 			continue
 		} else if err != nil {
 			return errors.Wrap(err, "opening index")
 		}
 
-		// Since we don't have createAt stored on disk within the data
+		// Since we don't have createdAt stored on disk within the data
 		// directory, we need to populate it from the etcd schema data.
 		// TODO: we may no longer need the createdAt value stored in memory on
 		// the index struct; it may only be needed in the schema return value
@@ -686,6 +423,9 @@ func (h *Holder) Open() error {
 	if err := h.processForeignIndexFields(); err != nil {
 		return errors.Wrap(err, "processing foreign index fields")
 	}
+
+	// Check if deletion was in progress when server was shutdown
+	h.processDeleteInflight()
 
 	h.Stats.Open()
 
@@ -740,16 +480,15 @@ func (h *Holder) maybeSpool(msg Message) bool {
 	return true
 }
 
-// Activate runs the background tasks relevant to keeping a holder in a stable
-// state, such as scanning it for needed snapshots, or flushing caches. This
-// is separate from opening because, while a server would nearly always want
-// to do this, other use cases (like consistency checks of a data directory)
+// Activate runs the background tasks relevant to keeping a holder in
+// a stable state, such as flushing caches. This is separate from
+// opening because, while a server would nearly always want to do
+// this, other use cases (like consistency checks of a data directory)
 // need to avoid it even getting started.
 func (h *Holder) Activate() {
 	// Periodically flush cache.
-	h.wg.Add(2)
+	h.wg.Add(1)
 	go func() { defer h.wg.Done(); h.monitorCacheFlush() }()
-	go func() { defer h.wg.Done(); h.SnapshotQueue.ScanHolder(h, h.closing) }()
 }
 
 // checkForeignIndex is a check before applying a foreign
@@ -783,7 +522,6 @@ func (h *Holder) processForeignIndexFields() error {
 
 // Close closes all open fragments.
 func (h *Holder) Close() error {
-
 	if h == nil {
 		return nil
 	}
@@ -797,7 +535,6 @@ func (h *Holder) Close() error {
 	// Notify goroutines of closing and wait for completion.
 	close(h.closing)
 	h.wg.Wait()
-
 	for _, index := range h.Indexes() {
 		if err := index.Close(); err != nil {
 			return errors.Wrap(err, "closing index")
@@ -815,10 +552,6 @@ func (h *Holder) Close() error {
 	h.opened.mu.Lock()
 	h.opened.ch = make(chan struct{})
 	h.opened.mu.Unlock()
-	if h.SnapshotQueue != nil {
-		h.SnapshotQueue.Stop()
-		h.SnapshotQueue = nil
-	}
 
 	if h.lookupDB != nil {
 		err := h.lookupDB.Close()
@@ -831,13 +564,6 @@ func (h *Holder) Close() error {
 	_ = testhook.Closed(h.Auditor, h, nil)
 
 	return nil
-}
-
-func (h *Holder) NeedsSnapshot() bool {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-
-	return h.txf.NeedsSnapshot()
 }
 
 // HasData returns true if Holder contains at least one index.
@@ -1089,7 +815,7 @@ func (h *Holder) LoadView(index, field, view string) (*view, error) {
 // CreateIndexAndBroadcast creates an index locally, then broadcasts the
 // creation to other nodes so they can create locally as well. An error is
 // returned if the index already exists.
-func (h *Holder) CreateIndexAndBroadcast(cim *CreateIndexMessage) (*Index, error) {
+func (h *Holder) CreateIndexAndBroadcast(ctx context.Context, cim *CreateIndexMessage) (*Index, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -1099,7 +825,7 @@ func (h *Holder) CreateIndexAndBroadcast(cim *CreateIndexMessage) (*Index, error
 	}
 
 	// Create the index in etcd as the system of record.
-	if err := h.persistIndex(context.Background(), cim); err != nil {
+	if err := h.persistIndex(ctx, cim); err != nil {
 		return nil, errors.Wrap(err, "persisting index")
 	}
 
@@ -1973,130 +1699,6 @@ func uint64InSlice(i uint64, s []uint64) bool {
 	return false
 }
 
-// Process loops through a holder based on the Check functions in op, calling
-// the Process functions in op when indicated.
-func (h *Holder) Process(ctx context.Context, op HolderOperator) (err error) {
-	var fieldNames, viewNames []string
-	var fragNums []uint64
-
-	indexes := h.Indexes()
-	for _, idx := range indexes {
-		if err = ctx.Err(); err != nil {
-			return err
-		}
-		if idx == nil {
-			continue
-		}
-		indexName := idx.name
-		process, recurse := op.CheckIndex(indexName)
-		if !process && !recurse {
-			continue
-		}
-
-		if err = ctx.Err(); err != nil {
-			return err
-		}
-		if process {
-			err = op.ProcessIndex(idx)
-			if err != nil {
-				return err
-			}
-		}
-		if !recurse {
-			continue
-		}
-		fieldNames = fieldNames[:0]
-		idx.mu.Lock()
-		for fieldName := range idx.fields {
-			fieldNames = append(fieldNames, fieldName)
-		}
-		idx.mu.Unlock()
-		for _, fieldName := range fieldNames {
-			if err = ctx.Err(); err != nil {
-				return err
-			}
-			process, recurse := op.CheckField(idx.name, fieldName)
-			if !process && !recurse {
-				continue
-			}
-			idx.mu.Lock()
-			field := idx.fields[fieldName]
-			idx.mu.Unlock()
-			if field == nil {
-				continue
-			}
-			if err = ctx.Err(); err != nil {
-				return err
-			}
-			if process {
-				err = op.ProcessField(field)
-				if err != nil {
-					return err
-				}
-			}
-			if !recurse {
-				continue
-			}
-			viewNames = viewNames[:0]
-			field.mu.Lock()
-			for viewName := range field.viewMap {
-				viewNames = append(viewNames, viewName)
-			}
-			field.mu.Unlock()
-			for _, viewName := range viewNames {
-				if err = ctx.Err(); err != nil {
-					return err
-				}
-				process, recurse := op.CheckView(indexName, fieldName, viewName)
-				if !process && !recurse {
-					continue
-				}
-				field.mu.Lock()
-				view := field.viewMap[viewName]
-				field.mu.Unlock()
-				if view == nil {
-					continue
-				}
-				if err = ctx.Err(); err != nil {
-					return err
-				}
-				if process {
-					err = op.ProcessView(view)
-					if err != nil {
-						return err
-					}
-				}
-				if !recurse {
-					continue
-				}
-				fragNums = fragNums[:0]
-				view.mu.Lock()
-				for fragNum := range view.fragments {
-					fragNums = append(fragNums, fragNum)
-				}
-				view.mu.Unlock()
-				for _, fragNum := range fragNums {
-					if err = ctx.Err(); err != nil {
-						return err
-					}
-					process := op.CheckFragment(indexName, fieldName, viewName, fragNum)
-					if !process {
-						continue
-					}
-					view.mu.Lock()
-					frag := view.fragments[fragNum]
-					view.mu.Unlock()
-					err = op.ProcessFragment(frag)
-					if err != nil {
-						return err
-					}
-				}
-			}
-		}
-	}
-	return nil
-}
-
 // used by Index.openFields(), enabling Tx / Txf by telling
 // the holder about its own indexes.
 func (h *Holder) addIndex(idx *Index) {
@@ -2115,34 +1717,6 @@ func (h *Holder) Txf() *TxFactory {
 // must be specified.
 func (h *Holder) BeginTx(writable bool, idx *Index, shard uint64) (Tx, error) {
 	return h.txf.NewTx(Txo{Write: writable, Index: idx, Shard: shard}), nil
-}
-
-func (h *Holder) HasRoaringData() (has bool, err error) {
-	idxs := h.Indexes()
-	for _, idx := range idxs {
-		paths, err := listFilesUnderDir(idx.path, false, "", true)
-		if err != nil {
-			return false, errors.Wrap(err, "HasRoaringData listFilesUnderDir")
-		}
-		index := idx.name
-
-		for _, relpath := range paths {
-			field, view, shard, err := fragmentSpecFromRoaringPath(relpath)
-			if err != nil {
-				continue // ignore .meta paths
-			}
-			abspath := idx.path + sep + relpath
-
-			hasData, err := roaringFragmentHasData(abspath, index, field, view, shard)
-			if err != nil {
-				return false, errors.Wrap(err, "HasRoaringData roaringFragmentHasData")
-			}
-			if hasData {
-				return true, nil
-			}
-		}
-	}
-	return
 }
 
 func decodeCreateIndexMessage(ser Serializer, b []byte) (*CreateIndexMessage, error) {

@@ -2,6 +2,7 @@
 package rbf_test
 
 import (
+	"bytes"
 	"io"
 	"math/bits"
 	"math/rand"
@@ -11,8 +12,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/molecula/featurebase/v2/rbf"
-	"github.com/molecula/featurebase/v2/roaring"
+	"github.com/molecula/featurebase/v3/rbf"
+	"github.com/molecula/featurebase/v3/roaring"
 )
 
 func TestCursor_FirstNext(t *testing.T) {
@@ -852,8 +853,10 @@ func TestDumpDot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rbf.Dumpdot(tx, 0, " ", os.Stdout)
+	var b bytes.Buffer
+	rbf.Dumpdot(tx, 0, " ", &b)
 }
+
 func TestCursor_UpdateBranchCells(t *testing.T) {
 	db := MustOpenDB(t)
 	defer MustCloseDB(t, db)
@@ -973,8 +976,8 @@ func TestCursor_SplitBranchCells(t *testing.T) {
 	}
 	//
 	c, _ := tx.Cursor("x") //added just for dot code coverage
-	c.Dump("ignore for coverage")
-
+	c.Dump("test.dump")
+	os.Remove("test.dump")
 }
 
 func TestCursor_RemoveCells(t *testing.T) {

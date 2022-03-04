@@ -16,12 +16,13 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/proto"
-	pilosa "github.com/molecula/featurebase/v2"
-	"github.com/molecula/featurebase/v2/client"
-	"github.com/molecula/featurebase/v2/http"
-	"github.com/molecula/featurebase/v2/pb"
-	"github.com/molecula/featurebase/v2/pql"
-	"github.com/molecula/featurebase/v2/vprint"
+
+	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/client"
+	fb_proto "github.com/molecula/featurebase/v3/encoding/proto"
+	"github.com/molecula/featurebase/v3/pb"
+	"github.com/molecula/featurebase/v3/pql"
+	"github.com/molecula/featurebase/v3/vprint"
 	"github.com/pkg/errors"
 	vegeta "github.com/tsenart/vegeta/v12/lib"
 )
@@ -162,7 +163,7 @@ func main() {
 
 func (cfg *RandomQueryConfig) Run() (err error) {
 	remoteClient := nethttp.DefaultClient
-	cli, err := http.NewInternalClient(cfg.HostPort, remoteClient)
+	cli, err := pilosa.NewInternalClient(cfg.HostPort, remoteClient, pilosa.WithSerializer(fb_proto.Serializer{}))
 	if err != nil {
 		return err
 	}

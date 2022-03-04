@@ -2,14 +2,19 @@
 package rbf_test
 
 import (
+	"bytes"
+	"encoding/binary"
 	"fmt"
 	"math/rand"
+	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/molecula/featurebase/v2/rbf"
-	"github.com/molecula/featurebase/v2/roaring"
+	"github.com/molecula/featurebase/v3/rbf"
+	"github.com/molecula/featurebase/v3/roaring"
 )
 
 func TestTx_CommitRollback(t *testing.T) {
@@ -136,14 +141,14 @@ func TestTx_CommitRollback(t *testing.T) {
 		select {
 		case <-ch1:
 			t.Fatal("second tx started while first tx active")
-		case <-time.After(10 * time.Millisecond):
+		case <-time.After(50 * time.Millisecond):
 		}
 
 		// Finish first transaction.
 		close(ch0)
 		select {
 		case <-ch1:
-		case <-time.After(10 * time.Millisecond):
+		case <-time.After(10 * time.Second):
 			t.Fatal("second tx should have started after first tx closed")
 		}
 	})
@@ -244,6 +249,27 @@ func TestTx_DeallocateTree(t *testing.T) {
 	}
 }
 
+func arraySizedChunk() []uint16 {
+	v := make([]uint16, rbf.ArrayMaxSize)
+	for i := range v {
+		v[i] = uint16(i)
+	}
+	return v
+}
+
+var convenientPrepopulatedArray = arraySizedChunk()
+
+// populateBitmapWithArrays
+func populateBitmapWithArrays(tb testing.TB, tx *rbf.Tx, n int, name string) {
+	c := roaring.NewContainerArray(convenientPrepopulatedArray)
+	for i := 0; i < n; i++ {
+		err := tx.PutContainer(name, uint64(i), c)
+		if err != nil {
+			tb.Fatal(err)
+		}
+	}
+}
+
 func TestTx_RecreateBitmap(t *testing.T) {
 	db := MustOpenDB(t)
 	defer MustCloseDB(t, db)
@@ -254,14 +280,8 @@ func TestTx_RecreateBitmap(t *testing.T) {
 	if err := tx.CreateBitmap("x"); err != nil {
 		t.Fatal(err)
 	}
-	const N = 825000
-	slots := make([]uint64, N)
-	for i := range slots {
-		slots[i] = uint64(i) << 20
-	}
-	if _, err := tx.Add("x", slots...); err != nil {
-		t.Fatal(err)
-	}
+	const N = 825
+	populateBitmapWithArrays(t, tx, N, "x")
 	err := tx.Commit()
 	if err != nil {
 		t.Fatal(err)
@@ -287,9 +307,7 @@ func TestTx_RecreateBitmap(t *testing.T) {
 	if err := tx.CreateBitmap("x"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := tx.Add("x", slots...); err != nil {
-		t.Fatal(err)
-	}
+	populateBitmapWithArrays(t, tx, N, "x")
 	err = tx.Commit()
 	if err != nil {
 		t.Fatal(err)
@@ -370,20 +388,14 @@ func TestTx_DeallocateToFreeList(t *testing.T) {
 	if err = tx.CreateBitmap("y"); err != nil {
 		t.Fatal(err)
 	}
-	const N = 12274831
-	slots := make([]uint64, N)
-	for i := range slots {
-		slots[i] = uint64(i) << 10
-	}
-	bm := roaring.NewBitmap(slots...)
-	if _, err = tx.AddRoaring("x", bm); err != nil {
-		t.Fatal(err)
-	}
+	// Insert large array values.
+	populateBitmapWithArrays(t, tx, 4080, "x")
+
 	if err = tx.Check(); err != nil {
 		t.Fatal(err)
 	}
 	for i := 0; i < 500; i++ {
-		if _, err := tx.Add("y", uint64(i)<<16); err != nil {
+		if _, err := tx.Add("y", uint64(i)<<16+32768); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -422,13 +434,53 @@ func TestTx_DeallocateToFreeList(t *testing.T) {
 	if err := tx.CreateBitmap("x"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := tx.AddRoaring("x", bm); err != nil {
-		t.Fatal(err)
-	}
+	populateBitmapWithArrays(t, tx, 4080, "x")
+
 	if err = tx.Check(); err != nil {
 		t.Fatal(err)
 	}
 	if err = tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestTx_RemoveContainer(t *testing.T) {
+	t.Parallel()
+
+	db := MustOpenDB(t)
+	defer MustCloseDB(t, db)
+
+	tx := MustBegin(t, db, true)
+	defer tx.Rollback()
+
+	if err := tx.CreateBitmap("x"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Insert large array values.
+	populateBitmapWithArrays(t, tx, 500, "x")
+
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	tx = MustBegin(t, db, true)
+	defer tx.Rollback()
+
+	// Remove all array values.
+	for i := 0; i < 500; i++ {
+		err := tx.RemoveContainer("x", uint64(i))
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	// This triggered a different panic without the relevant patch.
+	err := tx.RemoveContainer("x", 500)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -486,6 +538,309 @@ func TestTx_AddRemove_Quick(t *testing.T) {
 			if ok, err := tx.Contains("x", v); !ok || err != nil {
 				t.Fatalf("Contains(%d)=(%v,%v) i=%d hi=%d lo=%d", v, ok, err, i, highbits(v), lowbits(v))
 			}
+		}
+	})
+}
+
+func TestTx_Remove(t *testing.T) {
+	t.Run("FullContiguous", func(t *testing.T) {
+		if testing.Short() {
+			t.Skip("-short enabled, skipping")
+		}
+
+		for _, bitN := range []uint64{1000, 100000, 2000000} {
+			t.Run(fmt.Sprint(bitN), func(t *testing.T) {
+				db := MustOpenDB(t)
+				defer MustCloseDB(t, db)
+
+				// Add bits
+				func() {
+					tx := MustBegin(t, db, true)
+					defer tx.Rollback()
+
+					if err := tx.CreateBitmap("x"); err != nil {
+						t.Fatal(err)
+					}
+					for i := uint64(0); i < bitN; i++ {
+						if _, err := tx.Add("x", i); err != nil {
+							t.Fatalf("Add(%d) err=%q", i, err)
+						}
+					}
+					if err := tx.Commit(); err != nil {
+						t.Fatal(err)
+					}
+				}()
+
+				// Remove bits
+				func() {
+					tx := MustBegin(t, db, true)
+					defer tx.Rollback()
+
+					for i := uint64(0); i < bitN; i++ {
+						if _, err := tx.Remove("x", i); err != nil {
+							t.Fatalf("Remove(%d) err=%q", i, err)
+						}
+					}
+					if err := tx.Commit(); err != nil {
+						t.Fatal(err)
+					}
+				}()
+
+				// Verify that all bits have been removed.
+				tx := MustBegin(t, db, false)
+				defer tx.Rollback()
+				if n, err := tx.Count("x"); err != nil {
+					t.Fatal(err)
+				} else if got, want := n, uint64(0); got != want {
+					t.Fatalf("Count=%d, want %d", got, want)
+				}
+			})
+		}
+	})
+
+	t.Run("PartialContiguous", func(t *testing.T) {
+		db := MustOpenDB(t)
+		defer MustCloseDB(t, db)
+
+		// Add bits
+		const bitN = 100000
+		const multiplier = 7 // space out bits so we span more containers
+		func() {
+			tx := MustBegin(t, db, true)
+			defer tx.Rollback()
+
+			if err := tx.CreateBitmap("x"); err != nil {
+				t.Fatal(err)
+			}
+			for i := uint64(0); i < bitN; i++ {
+				if _, err := tx.Add("x", i*multiplier); err != nil {
+					t.Fatalf("Add(%d) err=%q", i, err)
+				}
+			}
+			if err := tx.Commit(); err != nil {
+				t.Fatal(err)
+			}
+		}()
+
+		// Remove some bits in small contiguous chunks.
+		var deleteN int
+		for i := uint64(bitN / 2); i < bitN; {
+			func() {
+				tx := MustBegin(t, db, true)
+				defer tx.Rollback()
+				for j := uint64(0); j < 100; i, j = i+1, j+1 {
+					if n, err := tx.Remove("x", i*multiplier); err != nil || n != 1 {
+						t.Fatalf("Remove(%d)=(%v,%q)", i, n, err)
+					}
+					deleteN++
+				}
+				if err := tx.Commit(); err != nil {
+					t.Fatal(err)
+				}
+			}()
+		}
+
+		// Verify that we have the correct count afterward.
+		tx := MustBegin(t, db, false)
+		defer tx.Rollback()
+		if n, err := tx.Count("x"); err != nil {
+			t.Fatal(err)
+		} else if got, want := n, uint64(bitN-deleteN); got != want {
+			t.Fatalf("Count=%d, want %d", got, want)
+		}
+	})
+
+	t.Run("PartialNonContiguous", func(t *testing.T) {
+		db := MustOpenDB(t)
+		defer MustCloseDB(t, db)
+
+		// Add bits
+		const bitN = 100000
+		const multiplier = 7 // space out bits
+		bits := make([]uint64, 0, bitN)
+		func() {
+			tx := MustBegin(t, db, true)
+			defer tx.Rollback()
+
+			if err := tx.CreateBitmap("x"); err != nil {
+				t.Fatal(err)
+			}
+			for i := uint64(0); i < bitN; i++ {
+				if _, err := tx.Add("x", i*multiplier); err != nil {
+					t.Fatalf("Add(%d) err=%q", i, err)
+				}
+				bits = append(bits, i*multiplier)
+			}
+			if err := tx.Commit(); err != nil {
+				t.Fatal(err)
+			}
+		}()
+
+		// Remove some bits in small contiguous chunks.
+		var deleteN int
+		perm := rand.Perm(len(bits))
+		for i := uint64(bitN / 2); i < bitN; {
+			func() {
+				tx := MustBegin(t, db, true)
+				defer tx.Rollback()
+				for j := uint64(0); j < 100; i, j = i+1, j+1 {
+					value := bits[perm[i]]
+					if n, err := tx.Remove("x", value); err != nil || n != 1 {
+						t.Fatalf("Remove(%d)=(%v,%q)", value, n, err)
+					}
+					deleteN++
+				}
+				if err := tx.Commit(); err != nil {
+					t.Fatal(err)
+				}
+			}()
+		}
+
+		// Verify that we have the correct count afterward.
+		tx := MustBegin(t, db, false)
+		defer tx.Rollback()
+		if n, err := tx.Count("x"); err != nil {
+			t.Fatal(err)
+		} else if got, want := n, uint64(bitN-deleteN); got != want {
+			t.Fatalf("Count=%d, want %d", got, want)
+		}
+	})
+
+	t.Run("DeleteEmptyBitmap", func(t *testing.T) {
+		db := MustOpenDB(t)
+		defer MustCloseDB(t, db)
+
+		// Create bitmap.
+		func() {
+			tx := MustBegin(t, db, true)
+			defer tx.Rollback()
+			if err := tx.CreateBitmap("x"); err != nil {
+				t.Fatal(err)
+			} else if err := tx.Commit(); err != nil {
+				t.Fatal(err)
+			}
+		}()
+
+		// Remove bitmap.
+		func() {
+			tx := MustBegin(t, db, true)
+			defer tx.Rollback()
+			if err := tx.DeleteBitmap("x"); err != nil {
+				t.Fatal(err)
+			} else if err := tx.Commit(); err != nil {
+				t.Fatal(err)
+			}
+		}()
+
+		// Ensure bitmap no longer exists.
+		tx := MustBegin(t, db, false)
+		defer tx.Rollback()
+		if exists, err := tx.BitmapExists("x"); err != nil {
+			t.Fatal(err)
+		} else if exists {
+			t.Fatal("expected bitmap to be removed")
+		}
+	})
+
+	t.Run("WithTreeDepth", func(t *testing.T) {
+		for depth := 1; depth <= 3; depth++ {
+			t.Run(fmt.Sprint(depth), func(t *testing.T) {
+				db := MustOpenDB(t)
+				defer MustCloseDB(t, db)
+
+				// Create bitmap & insert until we hit a tree depth.
+				var bitN int
+				func() {
+					tx := MustBegin(t, db, true)
+					defer tx.Rollback()
+					if err := tx.CreateBitmap("x"); err != nil {
+						t.Fatal(err)
+					}
+					for i := uint64(0); ; i++ {
+						if _, err := tx.Add("x", i<<16); err != nil {
+							t.Fatalf("Add(%d) err=%q", i<<16, err)
+						}
+						bitN++
+
+						if d, err := tx.Depth("x"); err != nil {
+							t.Fatal(err)
+						} else if d == depth {
+							break
+						}
+					}
+					if err := tx.Commit(); err != nil {
+						t.Fatal(err)
+					}
+				}()
+
+				// Remove all bits in reverse order.
+				func() {
+					tx := MustBegin(t, db, true)
+					defer tx.Rollback()
+					for i := bitN - 1; i >= 0; i-- {
+						if n, err := tx.Remove("x", uint64(i)<<16); err != nil || n != 1 {
+							t.Fatalf("Remove(%d)=(%v,%q)", uint64(i)<<16, n, err)
+						}
+					}
+					if err := tx.Commit(); err != nil {
+						t.Fatal(err)
+					}
+				}()
+
+				// Ensure bitmap no longer exists.
+				tx := MustBegin(t, db, false)
+				defer tx.Rollback()
+				for i := uint64(0); i < uint64(bitN); i++ {
+					if ok, err := tx.Contains("x", i<<16); err != nil || ok {
+						t.Fatalf("Contains(%d)=(%v,%q)", i<<16, ok, err)
+					}
+				}
+			})
+		}
+	})
+
+	t.Run("RollbackAfterDelete", func(t *testing.T) {
+		db := MustOpenDB(t)
+		defer MustCloseDB(t, db)
+
+		func() {
+			tx := MustBegin(t, db, true)
+			defer tx.Rollback()
+
+			if err := tx.CreateBitmap("x"); err != nil {
+				t.Fatal(err)
+			} else if err := tx.Commit(); err != nil {
+				t.Fatal(err)
+			}
+		}()
+
+		// Add bits
+		const bitN = 1000
+		for i := uint64(0); i < bitN; i++ {
+			func() {
+				tx := MustBegin(t, db, true)
+				defer tx.Rollback()
+
+				if _, err := tx.Add("x", i<<16); err != nil {
+					t.Fatalf("Add(%d) err=%q", i<<16, err)
+				}
+
+				// Only commit every other bit.
+				if i%2 == 1 {
+					if err := tx.Commit(); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}()
+		}
+
+		// Verify that we have the correct count afterward.
+		tx := MustBegin(t, db, false)
+		defer tx.Rollback()
+		if n, err := tx.Count("x"); err != nil {
+			t.Fatal(err)
+		} else if got, want := n, uint64(bitN/2); got != want {
+			t.Fatalf("Count=%d, want %d", got, want)
 		}
 	})
 }
@@ -691,7 +1046,11 @@ func TestTx_DeleteBitmapsWithPrefix(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	checkInfos := func() {
+	var b bytes.Buffer
+	pBuf := func(msg string, args ...interface{}) (int, error) {
+		return fmt.Fprintf(&b, msg, args...)
+	}
+	checkInfos := func(pf func(string, ...interface{}) (int, error)) {
 		tx := MustBegin(t, db, false)
 		defer tx.Rollback()
 		infos, err := tx.PageInfos()
@@ -699,34 +1058,34 @@ func TestTx_DeleteBitmapsWithPrefix(t *testing.T) {
 		for pgno, info := range infos {
 			switch info := info.(type) {
 			case *rbf.MetaPageInfo:
-				fmt.Printf("%-8d ", pgno)
-				fmt.Printf("%-10s ", "meta")
-				fmt.Printf("pageN=%d,walid=%d,rootrec=%d,freelist=%d\n", info.PageN, info.WALID, info.RootRecordPageNo, info.FreelistPageNo)
+				pf("%-8d ", pgno)
+				pf("%-10s ", "meta")
+				pf("pageN=%d,walid=%d,rootrec=%d,freelist=%d\n", info.PageN, info.WALID, info.RootRecordPageNo, info.FreelistPageNo)
 
 			case *rbf.RootRecordPageInfo:
-				fmt.Printf("%-8d ", pgno)
-				fmt.Printf("%-10s ", "rootrec")
-				fmt.Printf("next=%d\n", info.Next)
+				pf("%-8d ", pgno)
+				pf("%-10s ", "rootrec")
+				pf("next=%d\n", info.Next)
 
 			case *rbf.LeafPageInfo:
-				fmt.Printf("%-8d ", pgno)
-				fmt.Printf("%-10s ", "leaf")
-				fmt.Printf("flags=x%x,celln=%d\n", info.Flags, info.CellN)
+				pf("%-8d ", pgno)
+				pf("%-10s ", "leaf")
+				pf("flags=x%x,celln=%d\n", info.Flags, info.CellN)
 
 			case *rbf.BranchPageInfo:
-				fmt.Printf("%-8d ", pgno)
-				fmt.Printf("%-10s ", "branch")
-				fmt.Printf("flags=x%x,celln=%d\n", info.Flags, info.CellN)
+				pf("%-8d ", pgno)
+				pf("%-10s ", "branch")
+				pf("flags=x%x,celln=%d\n", info.Flags, info.CellN)
 
 			case *rbf.BitmapPageInfo:
-				fmt.Printf("%-8d ", pgno)
-				fmt.Printf("%-10s ", "bitmap")
-				fmt.Printf("-\n")
+				pf("%-8d ", pgno)
+				pf("%-10s ", "bitmap")
+				pf("-\n")
 
 			case *rbf.FreePageInfo:
-				fmt.Printf("%-8d ", pgno)
-				fmt.Printf("%-10s ", "free")
-				fmt.Printf("-\n")
+				pf("%-8d ", pgno)
+				pf("%-10s ", "free")
+				pf("-\n")
 
 			default:
 				t.Fatal(fmt.Sprintf("unexpected page info type %T", info))
@@ -755,18 +1114,128 @@ func TestTx_DeleteBitmapsWithPrefix(t *testing.T) {
 		ifError(tx.Commit())
 	}
 
-	checkInfos()
+	checkInfos(pBuf)
 	populate()
-	checkInfos()
+	checkInfos(pBuf)
 	ifError(db.Check())
 
 	tx := MustBegin(t, db, true)
 	tx.DeleteBitmapsWithPrefix(prefix)
 	ifError(tx.Commit())
 	ifError(db.Check())
-	checkInfos()
+	checkInfos(pBuf)
 	populate()
 	ifError(db.Check())
-	checkInfos()
+	checkInfos(pBuf)
 
+}
+
+func TestTx_Check(t *testing.T) {
+	t.Run("EmptyBranchPage", func(t *testing.T) {
+		t.Parallel()
+
+		db := MustOpenDB(t)
+		defer MustCloseDBNoCheck(t, db)
+		tx := MustBegin(t, db, true)
+		defer tx.Rollback()
+
+		if err := tx.CreateBitmap("x"); err != nil {
+			t.Fatal(err)
+		}
+
+		// Insert enough array containers to split page.
+		for i := 0; i < 1000; i++ {
+			if _, err := tx.Add("x", uint64(i<<16)); err != nil {
+				t.Fatalf("Add(%d) err=%q", i<<16, err)
+			}
+		}
+
+		// Read page types for all pages.
+		infos, err := tx.PageInfos()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Commit & checkpoint to flush to the data file.
+		if err := tx.Commit(); err != nil {
+			t.Fatal(err)
+		} else if err := db.Checkpoint(); err != nil {
+			t.Fatal(err)
+		}
+
+		// Corrupt first branch page found by zeroing out the cell count.
+		var pgno uint32
+		for _, info := range infos {
+			if info, ok := info.(*rbf.BranchPageInfo); ok {
+				pgno = info.Pgno
+				page := mustReadPage(t, db.DataPath(), pgno)
+				binary.BigEndian.PutUint16(page[8:10], 0) // zero cell count
+				mustWritePage(t, db.DataPath(), pgno, page)
+				break
+			}
+		}
+
+		// Verify that check now returns an error.
+		if err := db.Check(); err == nil || !strings.Contains(err.Error(), fmt.Sprintf("branch page %d is empty", pgno)) {
+			t.Fatalf("unexpected error: %#v", err)
+		}
+	})
+
+	t.Run("ErrBadFreelist", func(t *testing.T) {
+		t.Parallel()
+
+		db := MustOpenDBAt(t, filepath.Join("testdata", "check", "bad-freelist"))
+		defer db.Close()
+		tx := MustBegin(t, db, false)
+		defer tx.Rollback()
+
+		if err, ok := tx.Check().(rbf.ErrorList); !ok {
+			t.Fatal("expected error list")
+		} else if s := err.FullError(); !strings.Contains(s, `branch cell index out of range: pgno=2 i=0 n=0`) {
+			t.Fatalf("unexpected error:\n%s", s)
+		}
+	})
+
+	t.Run("ErrBadBitmap", func(t *testing.T) {
+		t.Parallel()
+
+		db := MustOpenDBAt(t, filepath.Join("testdata", "check", "bad-bitmap"))
+		defer db.Close()
+		tx := MustBegin(t, db, false)
+		defer tx.Rollback()
+
+		if err, ok := tx.Check().(rbf.ErrorList); !ok {
+			t.Fatal("expected error list")
+		} else if s := err.FullError(); !strings.Contains(s, `cannot read page: pgno=65537 parent=3 err=rbf: page read out of bounds: pgno=65537 max=3`) {
+			t.Fatalf("unexpected error:\n%s", s)
+		}
+	})
+}
+
+func mustReadPage(tb testing.TB, path string, pgno uint32) []byte {
+	tb.Helper()
+	f, err := os.Open(path)
+	if err != nil {
+		tb.Fatal(err)
+	}
+	defer f.Close()
+
+	buf := make([]byte, rbf.PageSize)
+	if _, err := f.ReadAt(buf, int64(pgno)*rbf.PageSize); err != nil {
+		tb.Fatal(err)
+	}
+	return buf
+}
+
+func mustWritePage(tb testing.TB, path string, pgno uint32, buf []byte) {
+	tb.Helper()
+	f, err := os.OpenFile(path, os.O_WRONLY, 0666)
+	if err != nil {
+		tb.Fatal(err)
+	}
+	defer f.Close()
+
+	if _, err := f.WriteAt(buf, int64(pgno)*rbf.PageSize); err != nil {
+		tb.Fatal(err)
+	}
 }

@@ -8,8 +8,8 @@ import (
 	"io"
 
 	"github.com/cespare/xxhash"
-	pilosa "github.com/molecula/featurebase/v2"
-	"github.com/molecula/featurebase/v2/server"
+	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/server"
 )
 
 // ChkSumCommand represents a command for backing up a Pilosa node.
@@ -20,7 +20,7 @@ type ChkSumCommand struct { // nolint: maligned
 	Host string `json:"host"`
 
 	// Reusable client.
-	client pilosa.InternalClient
+	client *pilosa.InternalClient
 
 	// Standard input/output
 	*pilosa.CmdIO

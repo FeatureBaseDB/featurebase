@@ -2,9 +2,9 @@
 package pilosa
 
 import (
-	"github.com/molecula/featurebase/v2/roaring"
-	txkey "github.com/molecula/featurebase/v2/short_txkey"
-	"github.com/molecula/featurebase/v2/vprint"
+	"github.com/molecula/featurebase/v3/roaring"
+	txkey "github.com/molecula/featurebase/v3/short_txkey"
+	"github.com/molecula/featurebase/v3/vprint"
 )
 
 // catcher is useful to report error locations with a
@@ -25,6 +25,11 @@ func init() {
 }
 
 var _ Tx = (*catcherTx)(nil)
+
+func (c *catcherTx) RemoveChannel(index, field, view string, shard uint64, a chan uint64, resChan chan countResults) {
+	c.b.RemoveChannel(index, field, view, shard, a, resChan)
+	return
+}
 
 func (c *catcherTx) NewTxIterator(index, field, view string, shard uint64) *roaring.Iterator {
 	return c.b.NewTxIterator(index, field, view, shard)

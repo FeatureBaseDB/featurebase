@@ -4,21 +4,18 @@ package pilosa
 import (
 	"fmt"
 	"os"
-	"path"
-	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 
-	"github.com/molecula/featurebase/v2/testhook"
-	"github.com/molecula/featurebase/v2/vprint"
+	"github.com/molecula/featurebase/v3/task"
+	"github.com/molecula/featurebase/v3/testhook"
+	"github.com/molecula/featurebase/v3/vprint"
 	"github.com/pkg/errors"
 )
 
 // public strings that pilosa/server/config.go can reference
 const (
-	RoaringTxn string = "roaring"
-	RBFTxn     string = "rbf"
+	RBFTxn string = "rbf"
 )
 
 // DetectMemAccessPastTx true helps us catch places in api and executor
@@ -86,8 +83,9 @@ var sep = string(os.PathSeparator)
 // See also the Qcx.GetTx() example and the TxGroup description below.
 //
 type Qcx struct {
-	Grp *TxGroup
-	Txf *TxFactory
+	Grp     *TxGroup
+	Txf     *TxFactory
+	workers *task.Pool
 
 	// if we go back to using Qcx values, this must become a pointer,
 	// or otherwise be dealt with because copies of Mutex are a no-no.
@@ -181,6 +179,9 @@ func (f *TxFactory) NewQcx() (qcx *Qcx) {
 		Grp: f.NewTxGroup(),
 		Txf: f,
 	}
+	if f.holder != nil && f.holder.executor != nil {
+		qcx.workers = f.holder.executor.workers
+	}
 	if f.typeOfTx == "roaring" {
 		qcx.isRoaring = true
 	}
@@ -226,6 +227,10 @@ var ErrQcxDone = fmt.Errorf("Qcx already Aborted or Finished, so must call reset
 // to make it clear we are referring to the first and final error.
 //
 func (qcx *Qcx) GetTx(o Txo) (tx Tx, finisher func(perr *error), err error) {
+	if qcx.workers != nil {
+		qcx.workers.Block()
+		defer qcx.workers.Unblock()
+	}
 	qcx.mu.Lock()
 	defer qcx.mu.Unlock()
 
@@ -242,10 +247,15 @@ func (qcx *Qcx) GetTx(o Txo) (tx Tx, finisher func(perr *error), err error) {
 	}
 
 	// qcx.write reflects the top executor determination
-	// if a write will be done at the end, so we upgrade
-	// the "local" read Tx to be writes, so that they
-	// don't deadlock against themselves.
-	o.Write = o.Write || qcx.write
+	// if a write will be happen at some point, in which case, to avoid
+	// locking problems with multi-shard things, we (probably incorrectly)
+	// treat every Tx as its own individual separate Tx.
+	//
+	// But we still want to open non-write transactions individually, we
+	// just can't recycle them (because write operations will come in and
+	// we want them to work and commit right away so we're not holding a write
+	// lock for long).
+	writeLogic := o.Write || qcx.write
 
 	// In general, we make ALL write transactions local, and never reuse them
 	// below. Previously this was to help lmdb.
@@ -273,7 +283,7 @@ func (qcx *Qcx) GetTx(o Txo) (tx Tx, finisher func(perr *error), err error) {
 		return *qcx.RequiredForAtomicWriteTx, NoopFinisher, nil
 	}
 
-	if !o.Write && qcx.Grp != nil {
+	if !writeLogic && qcx.Grp != nil {
 		// read, with a group in place.
 		finisher = func(perr *error) {} // finisher is a returned value
 
@@ -372,9 +382,8 @@ type TxFactory struct {
 type txtype int
 
 const (
-	noneTxn    txtype = 0
-	roaringTxn txtype = 1 // these don't really have any transactions
-	rbfTxn     txtype = 2
+	noneTxn txtype = 0
+	rbfTxn  txtype = 2
 )
 
 // DirectoryName just returns a string version of the transaction type. We
@@ -383,17 +392,11 @@ const (
 // replaced/removed) during that refactor.
 func (ty txtype) DirectoryName() string {
 	switch ty {
-	case roaringTxn:
-		return "roaring"
 	case rbfTxn:
 		return "rbf"
 	}
 	vprint.PanicOn(fmt.Sprintf("unkown txtype %v", int(ty)))
 	return ""
-}
-
-func (txf *TxFactory) NeedsSnapshot() (b bool) {
-	return txf.typ == roaringTxn
 }
 
 func MustBackendToTxtype(backend string) (typ txtype) {
@@ -402,8 +405,6 @@ func MustBackendToTxtype(backend string) (typ txtype) {
 	}
 
 	switch backend {
-	case RoaringTxn: // "roaring"
-		return roaringTxn
 	case RBFTxn: // "rbf"
 		return rbfTxn
 	}
@@ -467,192 +468,6 @@ func (f *TxFactory) DeleteFragmentFromStore(
 	index, field, view string, shard uint64, frag *fragment,
 ) (err error) {
 	return f.dbPerShard.DeleteFragment(index, field, view, shard, frag)
-}
-
-// IndexUsageDetails computes the sum of filesizes used by the node, broken down
-// by index, field, fragments and keys.
-func (f *TxFactory) IndexUsageDetails(isClosing func() bool) (map[string]IndexUsage, uint64, error) {
-	indexUsage := make(map[string]IndexUsage)
-	holderPath, err := expandDirName(f.holder.path)
-	if err != nil {
-		return indexUsage, 0, errors.Wrap(err, "expanding data directory")
-	}
-	indexesPath, err := expandDirName(f.holder.IndexesPath())
-	if err != nil {
-		return indexUsage, 0, errors.Wrap(err, "expanding indexes directory")
-	}
-
-	idxs := f.holder.Indexes()
-
-	qcx := f.NewQcx()
-	defer qcx.Abort()
-	for _, idx := range idxs {
-		index := idx.name
-		indexPath := path.Join(indexesPath, index)
-
-		// field usage
-		fieldUsages := make(map[string]FieldUsage)
-		fragmentsTotal := uint64(0)
-		fieldKeysTotal := uint64(0)
-		fieldMetaBytesTotal := uint64(0)
-		fieldsTotal := uint64(0)
-		flds := idx.Fields()
-		for _, fld := range flds {
-			field := fld.Name()
-			if field == "_keys" {
-				continue
-			}
-			fUsage, err := f.fieldUsage(indexPath, fld)
-			if err != nil {
-				return indexUsage, 0, errors.Wrapf(err, "getting disk usage for index (%s)", index)
-			}
-
-			// non-roaring field usage
-			fragmentUsage := uint64(0)
-
-			for _, shard := range fld.AvailableShards(true).Slice() {
-				if isClosing() {
-					return nil, 0, nil
-				}
-				if err := func() error {
-					tx, finisher, err := qcx.GetTx(Txo{Write: !writable, Index: idx, Shard: shard})
-					if err != nil {
-						return errors.Wrap(err, "qcx.GetTx")
-					}
-					defer finisher(nil)
-
-					fieldBytes, err := tx.GetFieldSizeBytes(index, field)
-					if err != nil {
-						return errors.Wrapf(err, "getting disk usage for non-roaring fragments (%s)", field)
-					}
-					fragmentUsage += fieldBytes
-					return nil
-				}(); err != nil {
-					return indexUsage, 0, err
-				}
-			}
-
-			// add non-roaring to roaring
-			fUsage.Fragments += fragmentUsage
-			fUsage.Total += fragmentUsage
-
-			// add to running total
-			fieldMetaBytesTotal += fUsage.Metadata
-			fieldKeysTotal += fUsage.Keys
-			fragmentsTotal += fUsage.Fragments
-			fieldsTotal += fUsage.Total
-
-			fieldUsages[field] = fUsage
-		}
-
-		// index metadata
-		indexMetaBytes, err := directoryUsage(indexPath, false)
-		if err != nil {
-			return indexUsage, 0, errors.Wrapf(err, "getting disk usage for index metadata (%s)", index)
-		}
-
-		// index keys usage
-		indexKeysBytes := uint64(0)
-		if idx.keys {
-			keysPath := path.Join(indexPath, translateStoreDir)
-			indexKeysBytes, _ = directoryUsage(keysPath, true) // if directory doesn't exist, size = 0
-		}
-
-		indexUsage[index] = IndexUsage{
-			Total:          indexMetaBytes + indexKeysBytes + fieldsTotal,
-			Metadata:       indexMetaBytes + fieldMetaBytesTotal,
-			IndexKeys:      indexKeysBytes,
-			FieldKeysTotal: fieldKeysTotal,
-			Fragments:      fragmentsTotal,
-			Fields:         fieldUsages,
-		}
-	}
-
-	// node metadata, e.g. id allocator
-	nodeMetaBytes, err := directoryUsage(holderPath, false)
-	if err != nil {
-		return indexUsage, 0, errors.Wrapf(err, "getting disk usage for node metadata")
-	}
-
-	return indexUsage, nodeMetaBytes, nil
-}
-
-// fieldUsage computes the sum of filesizes used by a field in
-// the filesystem tree (roaring storage), broken down by keys and fragments.
-func (f *TxFactory) fieldUsage(indexPath string, fld *Field) (FieldUsage, error) {
-	fieldUsage := FieldUsage{}
-
-	field := fld.name
-
-	// row keys
-	keysBytes := int64(0)
-	var err error
-	keysBytes, err = fileSize(fld.TranslateStorePath())
-	if err != nil {
-		// if file doesn't exist, size = 0
-		keysBytes = 0
-	}
-
-	// field metadata
-	fieldPath := path.Join(indexPath, FieldsDir, field)
-	metaBytes, err := directoryUsage(fieldPath, false) // this includes keys
-	if err != nil {
-		return fieldUsage, errors.Wrapf(err, "getting disk usage for field meta (%s)", field)
-	}
-
-	// fragment data
-	viewsPath := path.Join(fieldPath, "views")
-	fragmentBytes := uint64(0)
-	if dirExists(viewsPath) {
-		fragmentBytes, err = directoryUsage(viewsPath, true)
-		if err != nil {
-			return fieldUsage, errors.Wrapf(err, "getting disk usage for field fragments (%s)", field)
-		}
-	}
-
-	fieldUsage = FieldUsage{
-		Total:     metaBytes + fragmentBytes, // metaBytes includes keys
-		Metadata:  metaBytes - uint64(keysBytes),
-		Fragments: fragmentBytes,
-		Keys:      uint64(keysBytes),
-	}
-
-	return fieldUsage, nil
-}
-
-// NOTE: Go 1.16 introduced a new Readdir() method that is supposed to be more performant.
-// Not yet upgraded b/c new method is not compatible with older versions of Go.
-func directoryUsage(fname string, recursive bool) (uint64, error) {
-	if !dirExists(fname) {
-		return 0, errors.Errorf("directory does not exist (%s)", fname)
-	}
-
-	var size uint64
-
-	dir, err := os.Open(fname)
-	if err != nil {
-		return 0, errors.Wrap(err, "opening data subdirectory")
-	}
-	defer dir.Close()
-
-	files, err := dir.Readdir(-1)
-	if err != nil {
-		return 0, errors.Wrap(err, "reading data subdirectory")
-	}
-
-	for _, file := range files {
-		if recursive && file.IsDir() {
-			sz, err := directoryUsage(path.Join(fname, file.Name()), true)
-			if err != nil {
-				return 0, err
-			}
-			size += sz
-		} else {
-			size += uint64(file.Size()) // NOTE this cast is safe for regular files, not necessarily others
-		}
-	}
-
-	return size, nil
 }
 
 // CloseIndex is a no-op. This seems to be in place for debugging purposes.
@@ -834,80 +649,11 @@ func (ty txtype) String() string {
 	switch ty {
 	case noneTxn:
 		return "noneTxn"
-	case roaringTxn:
-		return "roaring"
 	case rbfTxn:
 		return "rbf"
 	}
 	vprint.PanicOn(fmt.Sprintf("unhandled ty '%v' in txtype.String()", int(ty)))
 	return ""
-}
-
-// fragmentSpecFromRoaringPath takes a path releative to the
-// index directory, not including the name of the index itself.
-// The path should not start with the path separator sep ('/' or '\\') rune.
-func fragmentSpecFromRoaringPath(path string) (field, view string, shard uint64, err error) {
-	if len(path) == 0 {
-		err = fmt.Errorf("fragmentSpecFromRoaringPath error: path '%v' too short", path)
-		return
-	}
-	if path[:1] == sep {
-		err = fmt.Errorf("fragmentSpecFromRoaringPath error: path '%v' cannot start with separator '%v'; must be relative to the index base directory", path, sep)
-		return
-	}
-
-	// sample path:
-	//        field         view               shard
-	// fields/myfield/views/standard/fragments/0
-	s := strings.Split(path, "/")
-	n := len(s)
-	if n != 6 {
-		err = fmt.Errorf("len(s)=%v, but expected 5. path='%v'", n, path)
-		return
-	}
-	field = s[1]
-	view = s[3]
-	shard, err = strconv.ParseUint(s[5], 10, 64)
-	if err != nil {
-		err = fmt.Errorf("fragmentSpecFromRoaringPath(path='%v') could not parse shard '%v' as uint: '%v'", path, s[5], err)
-	}
-	return
-}
-
-// listFilesUnderDir returns the paths of files found under directory root.
-// If includeRoot is true, it returns the full path, otherwise paths are relative to root.
-// If requriedSuffix is supplied, the returned file paths will end in that,
-// and any other files found during the walk of the directory tree will be ignored.
-// If ignoreEmpty is true, files of size 0 will be excluded.
-func listFilesUnderDir(root string, includeRoot bool, requiredSuffix string, ignoreEmpty bool) (files []string, err error) {
-	if !dirExists(root) {
-		return nil, fmt.Errorf("listFilesUnderDir error: root directory '%v' not found", root)
-	}
-	n := len(root) + 1
-	if includeRoot {
-		n = 0
-	}
-	err = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
-		if len(path) < n {
-			// ignore
-		} else {
-			if info == nil {
-				vprint.PanicOn(fmt.Sprintf("info was nil for path = '%v'", path))
-			}
-			if info.IsDir() {
-				// skip directories.
-			} else {
-				if ignoreEmpty && info.Size() == 0 {
-					return nil
-				}
-				if requiredSuffix == "" || strings.HasSuffix(path, requiredSuffix) {
-					files = append(files, path[n:])
-				}
-			}
-		}
-		return nil
-	})
-	return
 }
 
 func dirExists(name string) bool {
@@ -932,24 +678,12 @@ func fileSize(name string) (int64, error) {
 var _ = anyGlobalDBWrappersStillOpen // happy linter
 
 func anyGlobalDBWrappersStillOpen() bool {
-	if globalRoaringReg.Size() != 0 {
-		return true
-	}
-	if globalRbfDBReg.Size() != 0 {
-		return true
-	}
-	return false
-}
-
-func (f *TxFactory) hasRoaring() bool {
-	return f.typ == roaringTxn
+	return globalRbfDBReg.Size() != 0
 }
 
 func (f *TxFactory) hasRBF() bool {
 	return f.typ == rbfTxn
 }
-
-var _ = (&TxFactory{}).hasRoaring // happy linter
 
 func (f *TxFactory) GetDBShardPath(index string, shard uint64, idx *Index, ty txtype, write bool) (shardPath string, err error) {
 	dbs, err := f.dbPerShard.GetDBShard(index, shard, idx)

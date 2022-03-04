@@ -2,11 +2,10 @@
 package ctl
 
 import (
-	"fmt"
 	"time"
 
-	"github.com/molecula/featurebase/v2/server"
-	"github.com/molecula/featurebase/v2/storage"
+	"github.com/molecula/featurebase/v3/server"
+	"github.com/molecula/featurebase/v3/storage"
 	"github.com/spf13/cobra"
 )
 
@@ -45,7 +44,7 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 
 	// Etcd
 	// Etcd.Name used Config.Name for its value.
-	// Etcd.Dir defaults to a directory under the pilosa data directory.
+	flags.StringVar(&srv.Config.Etcd.Dir, "etcd.dir", srv.Config.Etcd.Dir, "Directory to store etcd data files. If not provided, a directory will be created under the main data-dir directory.")
 	// Etcd.ClusterName uses Cluster.Name for its value
 	flags.StringVar(&srv.Config.Etcd.LClientURL, "etcd.listen-client-address", srv.Config.Etcd.LClientURL, "Listen client address.")
 	flags.StringVar(&srv.Config.Etcd.AClientURL, "etcd.advertise-client-address", srv.Config.Etcd.AClientURL, "Advertise client address. If not provided, uses the listen client address.")
@@ -75,17 +74,8 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 	flags.IntVar(&srv.Config.Profile.BlockRate, "profile.block-rate", srv.Config.Profile.BlockRate, "Sampling rate for goroutine blocking profiler. One sample per <rate> ns.")
 	flags.IntVar(&srv.Config.Profile.MutexFraction, "profile.mutex-fraction", srv.Config.Profile.MutexFraction, "Sampling fraction for mutex contention profiling. Sample 1/<rate> of events.")
 
-	// Storage
-	// Note: the default for --storage.backend must be kept "" empty string.
-	// Otherwise we cannot detect and honor the PILOSA_STORAGE_BACKEND env var
-	// over-ride.
-	// TODO: the comment above was carried over from the PILOSA_TXSRC flag, but
-	// we should confirm that this still applies.
-	flags.StringVar(&srv.Config.Storage.Backend, "storage.backend", storage.DefaultBackend, fmt.Sprintf("transaction/storage to use: one of roaring or rbf. The default is: %v. The env var PILOSA_STORAGE_BACKEND is over-ridden by --storage.backend option on the command line.", storage.DefaultBackend))
+	flags.StringVar(&srv.Config.Storage.Backend, "storage.backend", storage.DefaultBackend, "Storage backend to use: 'rbf' is only supported value.")
 	flags.BoolVar(&srv.Config.Storage.FsyncEnabled, "storage.fsync", true, "enable fsync fully safe flush-to-disk")
-
-	// RowcacheOn
-	flags.BoolVar((&srv.Config.RowcacheOn), "rowcache-on", srv.Config.RowcacheOn, "turn on the rowcache for all backends (may speed some queries)")
 
 	// RBF specific flags. See pilosa/rbf/cfg/cfg.go for definitions.
 	srv.Config.RBFConfig.DefineFlags(flags)
@@ -100,22 +90,21 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 	flags.Uint16Var(&srv.Config.Postgres.ConnectionLimit, "postgres.connection-limit", srv.Config.Postgres.ConnectionLimit, "Maximum number of simultaneous postgres connections to allow. (set 0 to disable)")
 	flags.Uint16Var(&srv.Config.Postgres.SqlVersion, "postgres.sql-version", srv.Config.Postgres.SqlVersion, "Molecula Sql Handling Version (default 1)")
 
-	// Disk and Memory usage cache for ui/usage endpoint
-	flags.Float64Var(&srv.Config.UsageDutyCycle, "usage-duty-cycle", srv.Config.UsageDutyCycle, "Sets the percentage of time that is spent recalculating the disk and memory usage cache. 100.0 for always-running, 0 disables the cache and the /ui/usage endpoint.")
-
 	// Future flags.
 	flags.BoolVar(&srv.Config.Future.Rename, "future.rename", false, "Present application name as FeatureBase. Defaults to false, will default to true in an upcoming release.")
-
-	// Toggle /schema/details endpoint.
-	flags.BoolVar(&srv.Config.SchemaDetailsOn, "schema-details-on", true, "Disable /schema/details endpoint")
 
 	// OAuth2.0 identity provider configuration
 	flags.BoolVar(&srv.Config.Auth.Enable, "auth.enable", false, "Enable AuthN/AuthZ of featurebase, disabled by default.")
 	flags.StringVar(&srv.Config.Auth.ClientId, "auth.client-id", srv.Config.Auth.ClientId, "Identity Provider's Application/Client ID.")
 	flags.StringVar(&srv.Config.Auth.ClientSecret, "auth.client-secret", srv.Config.Auth.ClientSecret, "Identity Provider's Client Secret.")
 	flags.StringVar(&srv.Config.Auth.AuthorizeURL, "auth.authorize-url", srv.Config.Auth.AuthorizeURL, "Identity Provider's Authorize URL.")
+	flags.StringVar(&srv.Config.Auth.RedirectBaseURL, "auth.redirect-base-url", srv.Config.Auth.RedirectBaseURL, "Base URL of the featurebase instance used to redirect IDP.")
 	flags.StringVar(&srv.Config.Auth.TokenURL, "auth.token-url", srv.Config.Auth.TokenURL, "Identity Provider's Token URL.")
 	flags.StringVar(&srv.Config.Auth.GroupEndpointURL, "auth.group-endpoint-url", srv.Config.Auth.GroupEndpointURL, "Identity Provider's Group endpoint URL.")
-	flags.StringVar(&srv.Config.Auth.ScopeURL, "auth.scope-url", srv.Config.Auth.ScopeURL, "Identity Provider's Scope URL.")
+	flags.StringVar(&srv.Config.Auth.LogoutURL, "auth.logout-url", srv.Config.Auth.LogoutURL, "Identity Provider's Logout URL.")
+	flags.StringSliceVar(&srv.Config.Auth.Scopes, "auth.scopes", srv.Config.Auth.Scopes, "Comma separated list of scopes obtained from IdP")
+	flags.StringVar(&srv.Config.Auth.SecretKey, "auth.secret-key", srv.Config.Auth.SecretKey, "Secret key used for auth.")
+	flags.StringVar(&srv.Config.Auth.PermissionsFile, "auth.permissions", srv.Config.Auth.PermissionsFile, "Permissions' file with group authorization.")
+	flags.StringVar(&srv.Config.Auth.QueryLogPath, "auth.query-log-path", srv.Config.Auth.QueryLogPath, "Path to log user queries")
 
 }

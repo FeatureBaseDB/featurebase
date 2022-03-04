@@ -9,13 +9,13 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/molecula/featurebase/v2/rbf"
-	rbfcfg "github.com/molecula/featurebase/v2/rbf/cfg"
-	"github.com/molecula/featurebase/v2/roaring"
-	txkey "github.com/molecula/featurebase/v2/short_txkey"
-	"github.com/molecula/featurebase/v2/storage"
+	"github.com/molecula/featurebase/v3/rbf"
+	rbfcfg "github.com/molecula/featurebase/v3/rbf/cfg"
+	"github.com/molecula/featurebase/v3/roaring"
+	txkey "github.com/molecula/featurebase/v3/short_txkey"
+	"github.com/molecula/featurebase/v3/storage"
 
-	"github.com/molecula/featurebase/v2/vprint"
+	"github.com/molecula/featurebase/v3/vprint"
 	"github.com/pkg/errors"
 )
 
@@ -223,6 +223,74 @@ func (tx *RBFTx) Remove(index, field, view string, shard uint64, a ...uint64) (c
 // which is expensive in practice and only really useful occasionally.
 const sortedParanoia = false
 
+type countResults struct {
+	changeCount int
+	err         error
+}
+
+// RemoveChannel provides a method of streaming in bits or positions and not requiring a large buffer like add and remove
+// the bits are input via the posChanel and the results are returned via the retChannel
+func (tx *RBFTx) RemoveChannel(index, field, view string, shard uint64, a chan uint64, resChan chan countResults) {
+	name := rbfName(index, field, view, shard)
+	var lastHi uint64 = math.MaxUint64 // highbits is always less than this starter.
+	var rc *roaring.Container
+	var hi uint64
+	var lo uint16
+	var err error
+	changeCount := 0
+	i := 0
+	for v := range a {
+		hi, lo = highbits(v), lowbits(v)
+		if hi != lastHi {
+			// either first time through, or changed to a different container.
+			// do we need put the last updated container now?
+			if i > 0 {
+				// not first time through, write what we got.
+				if rc == nil || (rc.N() == 0) {
+					err = tx.tx.RemoveContainer(name, lastHi)
+					if err != nil {
+						resChan <- countResults{0, errors.Wrap(err, "failed to remove container")}
+						return
+					}
+				} else {
+					err = tx.tx.PutContainer(name, lastHi, rc)
+					if err != nil {
+						resChan <- countResults{0, errors.Wrap(err, "failed to put container")}
+						return
+					}
+				}
+			}
+			// get the next container
+			rc, err = tx.tx.Container(name, hi)
+			if err != nil {
+				resChan <- countResults{0, errors.Wrap(err, "failed to retrieve container")}
+				return
+			}
+		} // else same container, keep adding bits to rct.
+		chng := false
+		rc, chng = rc.Remove(lo)
+		if chng {
+			changeCount++
+		}
+		lastHi = hi
+		i++
+	}
+	// write the last updates.
+	if rc == nil || rc.N() == 0 {
+		err = tx.tx.RemoveContainer(name, hi)
+		if err != nil {
+			resChan <- countResults{0, errors.Wrap(err, "failed to remove container")}
+			return
+		}
+	} else {
+		err = tx.tx.PutContainer(name, hi, rc)
+		if err != nil {
+			resChan <- countResults{0, errors.Wrap(err, "put to remove container")}
+			return
+		}
+	}
+	resChan <- countResults{changeCount, nil}
+}
 func (tx *RBFTx) addOrRemove(index, field, view string, shard uint64, remove bool, a ...uint64) (changeCount int, err error) {
 	if len(a) == 0 {
 		return 0, nil

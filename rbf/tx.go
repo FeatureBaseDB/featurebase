@@ -11,9 +11,9 @@ import (
 	"sync"
 
 	"github.com/benbjohnson/immutable"
-	"github.com/molecula/featurebase/v2/roaring"
-	txkey "github.com/molecula/featurebase/v2/short_txkey"
-	"github.com/molecula/featurebase/v2/vprint"
+	"github.com/molecula/featurebase/v3/roaring"
+	txkey "github.com/molecula/featurebase/v3/short_txkey"
+	"github.com/molecula/featurebase/v3/vprint"
 )
 
 var _ = txkey.ToString
@@ -65,6 +65,9 @@ type Tx struct {
 	// manages to trigger a *deallocation* (which I don't think should be
 	// happening), we'll process that one after the current list is processed.
 	pendingFreelistAdds []uint32
+
+	// DEBUG
+	stack []byte
 }
 
 func (tx *Tx) DBPath() string {
@@ -109,20 +112,25 @@ func (tx *Tx) Commit() error {
 		// future plan: after checkpoint is moved to background
 		// or not every removeTx, then we can move the
 		// tx.db.rootRecords = tx.rootRecords into removeTx().
-
+		//
+		// ... or maybe not: let's do that part here, and then removeTx
+		// may or may not start a checkpoint, possibly asynchronously.
+		//
 		// avoid race detector firing on a write race here
-		// vs the read of rootRecords at db.Begin()
+		// vs the read of rootRecords at db.Begin(), then release
+		// the lock, because we need removeTx to grab the lock to
+		// work, but if it wants to checkpoint, it wants to be able to return
+		// to us here and still be holding the lock.
 		tx.db.mu.Lock()
-		defer tx.db.mu.Unlock()
 		tx.db.rootRecords = tx.rootRecords
 		tx.db.pageMap = tx.pageMap
 		tx.db.walPageN = tx.walPageN
-		return tx.db.removeTx(tx)
+		tx.db.mu.Unlock()
 	}
 
-	// Disconnect transaction from DB.
 	tx.db.mu.Lock()
 	defer tx.db.mu.Unlock()
+	// Disconnect transaction from DB.
 	return tx.db.removeTx(tx)
 }
 
@@ -193,6 +201,29 @@ func (tx *Tx) BitmapNames() ([]string, error) {
 	return a, nil
 }
 
+// BitmapExist returns true if bitmap exists.
+func (tx *Tx) BitmapExists(name string) (bool, error) {
+	tx.mu.Lock()
+	defer tx.mu.Unlock()
+	return tx.bitmapExists(name)
+}
+
+func (tx *Tx) bitmapExists(name string) (bool, error) {
+	if tx.db == nil {
+		return false, ErrTxClosed
+	} else if name == "" {
+		return false, ErrBitmapNameRequired
+	}
+
+	// Read root records and find entry for bitmap.
+	records, err := tx.RootRecords()
+	if err != nil {
+		return false, err
+	}
+	_, ok := records.Get(name)
+	return ok, nil
+}
+
 // CreateBitmap creates a new empty bitmap with the given name.
 // Returns an error if the bitmap already exists.
 func (tx *Tx) CreateBitmap(name string) error {
@@ -228,7 +259,7 @@ func (tx *Tx) createBitmap(name string) error {
 	}
 
 	// Write root page.
-	page := make([]byte, PageSize)
+	page := allocPage()
 	writePageNo(page, pgno)
 	writeFlags(page, PageTypeLeaf)
 	writeCellN(page, 0)
@@ -441,7 +472,7 @@ func (tx *Tx) writeRootRecordPages(records *immutable.SortedMap) (err error) {
 	// Write new root record pages.
 	for itr := records.Iterator(); !itr.Done(); {
 		// Initialize page & write as many records as will fit.
-		page := make([]byte, PageSize)
+		page := allocPage()
 		writePageNo(page, pgno)
 		writeFlags(page, PageTypeRootRecord)
 
@@ -553,6 +584,31 @@ func (tx *Tx) Contains(name string, v uint64) (bool, error) {
 	return c.Contains(v)
 }
 
+// Depth returns the depth of the b-tree for a bitmap.
+func (tx *Tx) Depth(name string) (int, error) {
+	tx.mu.RLock()
+	defer tx.mu.RUnlock()
+
+	if tx.db == nil {
+		return 0, ErrTxClosed
+	} else if name == "" {
+		return 0, ErrBitmapNameRequired
+	}
+
+	c, err := tx.cursor(name)
+	if err == ErrBitmapNotFound {
+		return 0, nil
+	} else if err != nil {
+		return 0, err
+	}
+	defer c.Close()
+
+	if err := c.First(); err != nil {
+		return 0, err
+	}
+	return c.stack.top + 1, nil
+}
+
 // Cursor returns an instance of a cursor this bitmap.
 func (tx *Tx) Cursor(name string) (*Cursor, error) {
 	tx.mu.RLock()
@@ -661,6 +717,7 @@ func (tx *Tx) container(name string, key uint64) (*roaring.Container, error) {
 func (tx *Tx) PutContainer(name string, key uint64, ct *roaring.Container) error {
 	tx.mu.Lock()
 	defer tx.mu.Unlock()
+
 	return tx.putContainer(name, key, ct)
 }
 
@@ -717,7 +774,6 @@ func (tx *Tx) removeContainer(name string, key uint64) error {
 	if exact, err := c.Seek(key); err != nil || !exact {
 		return err
 	}
-
 	return c.deleteLeafCell(key)
 }
 
@@ -730,22 +786,45 @@ func (tx *Tx) Check() error {
 		return ErrTxClosed
 	}
 
+	var errorList ErrorList
 	if err := tx.checkPageAllocations(); err != nil {
-		return fmt.Errorf("page allocations: %w", err)
+		errorList.Append(err)
+	}
+	return errorList.Err()
+}
+
+func (tx *Tx) checkPage(pgno, parent, typ uint32) error {
+	switch typ {
+	case PageTypeBranch:
+		return tx.checkBranchPage(pgno, parent, typ)
+	default:
+		return nil
+	}
+}
+
+func (tx *Tx) checkBranchPage(pgno, parent, typ uint32) error {
+	page, _, err := tx.readPage(pgno)
+	if err != nil {
+		return err
+	}
+
+	if readCellN(page) == 0 {
+		return fmt.Errorf("branch page %d is empty", pgno)
 	}
 	return nil
 }
 
 // checkPageAllocations ensures that all pages are either in-use or on the freelist.
 func (tx *Tx) checkPageAllocations() error {
+	var errorList ErrorList
 	freePageSet, err := tx.freePageSet()
 	if err != nil {
-		return err
+		errorList.Append(err)
 	}
 
 	inusePageSet, err := tx.inusePageSet()
 	if err != nil {
-		return err
+		errorList.Append(err)
 	}
 
 	// Iterate over all pages and ensure they are either in-use or free.
@@ -756,26 +835,23 @@ func (tx *Tx) checkPageAllocations() error {
 		_, isFree := freePageSet[pgno]
 
 		if isInuse && isFree {
-			return fmt.Errorf("page in-use & free: pgno=%d", pgno)
-		} else if !isInuse && !isFree {
-			page, _, err := tx.readPage(pgno)
-			if err != nil {
-				return err
-			}
-			flags := readFlags(page)
-			if flags == PageTypeBranch || flags == PageTypeLeaf {
-				return fmt.Errorf("page not in-use & not free: pgno=%d", pgno)
-			}
-			//assuming its a bitmap so its ok TODO ben?
-			return nil
+			errorList.Append(fmt.Errorf("page in-use & free: pgno=%d", pgno))
+			continue
+		}
+
+		if !isInuse && !isFree {
+			errorList.Append(fmt.Errorf("page not in-use & not free: pgno=%d", pgno))
+			continue
 		}
 	}
 
-	return nil
+	return errorList.Err()
 }
 
 // freePageSet returns the set of pages in the freelist.
 func (tx *Tx) freePageSet() (map[uint32]struct{}, error) {
+	var errorList ErrorList
+
 	m := make(map[uint32]struct{})
 	c := Cursor{tx: tx}
 	c.stack.elems[0] = stackElem{pgno: readMetaFreelistPageNo(tx.meta[:])}
@@ -787,18 +863,20 @@ func (tx *Tx) freePageSet() (map[uint32]struct{}, error) {
 
 	for {
 		if err := c.Next(); err == io.EOF {
-			return m, nil
+			return m, errorList.Err()
 		} else if err != nil {
-			return m, err
+			errorList.Append(err)
+			return m, errorList.Err()
 		}
 
 		elem := &c.stack.elems[c.stack.top]
 		leafPage, _, err := c.tx.readPage(elem.pgno)
 		if err != nil {
-			return nil, err
+			errorList.Append(fmt.Errorf("cannot read free page: pgno=%d err=%w", elem.pgno, err))
+			continue
 		}
-		cell := readLeafCell(leafPage, elem.index)
 
+		cell := readLeafCell(leafPage, elem.index)
 		for _, v := range cell.Values(tx) {
 			pgno := uint32((cell.Key << 16) | uint64(v))
 			m[pgno] = struct{}{}
@@ -808,6 +886,7 @@ func (tx *Tx) freePageSet() (map[uint32]struct{}, error) {
 
 // inusePageSet returns the set of pages in use by the root records or b-trees.
 func (tx *Tx) inusePageSet() (map[uint32]struct{}, error) {
+	var errorList ErrorList
 	m := make(map[uint32]struct{})
 	m[0] = struct{}{} // meta page
 
@@ -817,14 +896,23 @@ func (tx *Tx) inusePageSet() (map[uint32]struct{}, error) {
 
 		page, _, err := tx.readPage(pgno)
 		if err != nil {
-			return nil, err
+			errorList.Append(err)
+			break
 		}
 		pgno = WalkRootRecordPages(page)
 	}
 
 	// Traverse freelist and mark pages as in-use.
-	if err := tx.walkTree(readMetaFreelistPageNo(tx.meta[:]), 0, func(pgno, parent, typ uint32) error {
+	if err := tx.walkTree(readMetaFreelistPageNo(tx.meta[:]), 0, func(pgno, parent, typ uint32, err error) error {
+		if err != nil {
+			errorList.Append(err)
+			return nil
+		}
+
 		m[pgno] = struct{}{}
+		if err := tx.checkPage(pgno, parent, typ); err != nil {
+			errorList.Append(err)
+		}
 		return nil
 	}); err != nil {
 		return m, err
@@ -833,21 +921,28 @@ func (tx *Tx) inusePageSet() (map[uint32]struct{}, error) {
 	// Traverse every b-tree and mark pages as in-use.
 	records, err := tx.RootRecords()
 	if err != nil {
-		return m, err
-	}
+		errorList.Append(err)
+	} else {
+		for itr := records.Iterator(); !itr.Done(); {
+			_, pgno := itr.Next()
 
-	for itr := records.Iterator(); !itr.Done(); {
-		_, pgno := itr.Next()
+			if err := tx.walkTree(pgno.(uint32), 0, func(pgno, parent, typ uint32, err error) error {
+				if err != nil {
+					errorList.Append(err)
+				}
 
-		if err := tx.walkTree(pgno.(uint32), 0, func(pgno, parent, typ uint32) error {
-			m[pgno] = struct{}{}
-			return nil
-		}); err != nil {
-			return m, err
+				m[pgno] = struct{}{}
+				if err := tx.checkPage(pgno, parent, typ); err != nil {
+					errorList.Append(err)
+				}
+				return nil
+			}); err != nil {
+				return m, err
+			}
 		}
 	}
 
-	return m, nil
+	return m, errorList.Err()
 }
 
 // GetSizeBytesWithPrefix returns the size of bitmaps with a given key prefix.
@@ -867,9 +962,9 @@ func (tx *Tx) GetSizeBytesWithPrefix(prefix string) (n uint64, err error) {
 		}
 
 		// Traverse the bitmap's b-tree and count the bytes for each page.
-		if err := tx.walkTree(pgno.(uint32), 0, func(pgno, parent, typ uint32) error {
+		if err := tx.walkTree(pgno.(uint32), 0, func(pgno, parent, typ uint32, err error) error {
 			n += PageSize
-			return nil
+			return err
 		}); err != nil {
 			return 0, err
 		}
@@ -878,21 +973,19 @@ func (tx *Tx) GetSizeBytesWithPrefix(prefix string) (n uint64, err error) {
 }
 
 // walkTree recursively iterates over a page and all its children.
-func (tx *Tx) walkTree(pgno, parent uint32, fn func(pgno, parent, typ uint32) error) error {
+func (tx *Tx) walkTree(pgno, parent uint32, fn func(pgno, parent, typ uint32, err error) error) error {
 	// Read page and iterate over children.
 	page, _, err := tx.readPage(pgno)
 	if err != nil {
-		return err
+		return fn(pgno, parent, 0, fmt.Errorf("cannot read page: pgno=%d parent=%d err=%s", pgno, parent, err))
 	}
 
-	// Execute callback.
-	typ := readFlags(page)
-	if err := fn(pgno, parent, typ); err != nil {
-		return err
-	}
-
-	switch typ {
+	switch typ := readFlags(page); typ {
 	case PageTypeBranch:
+		if err := fn(pgno, parent, typ, nil); err != nil {
+			return err
+		}
+
 		for i, n := 0, readCellN(page); i < n; i++ {
 			cell := readBranchCell(page, i)
 			if err := tx.walkTree(cell.ChildPgno, pgno, fn); err != nil {
@@ -900,18 +993,24 @@ func (tx *Tx) walkTree(pgno, parent uint32, fn func(pgno, parent, typ uint32) er
 			}
 		}
 		return nil
+
 	case PageTypeLeaf:
+		if err := fn(pgno, parent, typ, nil); err != nil {
+			return err
+		}
+
 		// Execute callback only for bitmap pages pointed to by this leaf.
 		for i, n := 0, readCellN(page); i < n; i++ {
 			if cell := readLeafCell(page, i); cell.Type == ContainerTypeBitmapPtr {
-				if err := fn(toPgno(cell.Data), pgno, PageTypeBitmap); err != nil {
+				if err := fn(toPgno(cell.Data), pgno, PageTypeBitmap, nil); err != nil {
 					return err
 				}
 			}
 		}
 		return nil
+
 	default:
-		return fmt.Errorf("rbf.Tx.forEachTreePage(): invalid page type: pgno=%d type=%d", pgno, typ)
+		return fn(pgno, parent, typ, fmt.Errorf("invalid page type: pgno=%d parent=%d type=%d", pgno, parent, typ))
 	}
 }
 
@@ -933,6 +1032,10 @@ func (tx *Tx) walkTree(pgno, parent uint32, fn func(pgno, parent, typ uint32) er
 // about that removing things from the free list, because the add logic
 // already just uses new pages rather than trying to use the free list
 // when it knows the free list is involved.
+//
+// Because this is expected to be used in a defer, instead of returning an
+// error, it will set the error it got the address of to a new error if it
+// encounters one and there wasn't one already.
 func (tx *Tx) freelistCleanup(outErr *error) {
 	defer func() {
 		// no matter what, we're done with this after this, but we still
@@ -943,8 +1046,7 @@ func (tx *Tx) freelistCleanup(outErr *error) {
 	if len(tx.pendingFreelistAdds) == 0 {
 		return
 	}
-	c := Cursor{tx: tx}
-	c.stack.elems[0] = stackElem{pgno: readMetaFreelistPageNo(tx.meta[:])}
+	c := tx.db.getFreelistCursor(tx)
 	for len(tx.pendingFreelistAdds) > 0 {
 		var pass []uint32
 		pass, tx.pendingFreelistAdds = tx.pendingFreelistAdds, nil
@@ -955,7 +1057,7 @@ func (tx *Tx) freelistCleanup(outErr *error) {
 				}
 				return
 			} else if !changed {
-				vprint.PanicOn(fmt.Sprintf("rbf.Tx.freePgno(): double free: %d", tx.pendingFreelistAdds))
+				vprint.PanicOn(fmt.Sprintf("rbf.Tx.freelistCleanup(): double free: %d", pass))
 			}
 		}
 	}
@@ -964,44 +1066,25 @@ func (tx *Tx) freelistCleanup(outErr *error) {
 // allocatePgno returns a page number for a new available page. This page may be
 // pulled from the free list or, if no free pages are available, it will be
 // created by extending the file size.
+//
+// allocatePgno uses the freelist cursor (a shared db-wide thing), and sets
+// the "modifyingFreelist" flag while it's running. If for some reason a
+// modification to the freelist would require a new allocation or free,
+// allocations always just create a new page, and frees are processed later
+// by a separate call through a deferred tx.freelistCleanup().
 func (tx *Tx) allocatePgno() (_ uint32, outErr error) {
 	if tx.modifyingFreelist {
 		return tx.allocateNewPgno(), nil
 	}
-	// Attempt to find page in freelist.
-	pgno, err := tx.nextFreelistPageNo()
-
-	if err != nil {
-		return 0, err
-	} else if pgno != 0 {
-		tx.modifyingFreelist = true
-		defer tx.freelistCleanup(&outErr)
-		c := Cursor{tx: tx}
-		c.stack.elems[0] = stackElem{pgno: readMetaFreelistPageNo(tx.meta[:])}
-		if changed, err := c.Remove(uint64(pgno)); err != nil {
-			return 0, err
-		} else if !changed {
-			vprint.PanicOn(fmt.Sprintf("tx.Tx.allocatePgno(): double alloc: %d", pgno))
-		}
-		return pgno, nil
-	}
-	// no freelist pages, fall back
-	return tx.allocateNewPgno(), nil
-}
-
-// allocateNewPgno requests a new page unconditionally, ignoring the free list.
-func (tx *Tx) allocateNewPgno() uint32 {
-	// Increment the total page count by one and return the last page.
-	pgno := readMetaPageN(tx.meta[:])
-	writeMetaPageN(tx.meta[:], pgno+1)
-	return pgno
-}
-
-func (tx *Tx) nextFreelistPageNo() (uint32, error) {
-	c := Cursor{tx: tx}
-	c.stack.elems[0] = stackElem{pgno: readMetaFreelistPageNo(tx.meta[:])}
+	// this serves as a precaution against double-use of the freelist cursor
+	// used database-wide. we don't have actual synchronization here because
+	// only one write Tx should exist at once and it's not safe to use its
+	// write-capable ops concurrently anyway.
+	tx.modifyingFreelist = true
+	defer tx.freelistCleanup(&outErr)
+	c := tx.db.getFreelistCursor(tx)
 	if err := c.First(); err == io.EOF {
-		return 0, nil
+		return tx.allocateNewPgno(), nil
 	} else if err != nil {
 		return 0, err
 	}
@@ -1016,7 +1099,21 @@ func (tx *Tx) nextFreelistPageNo() (uint32, error) {
 	v := cell.firstValue(tx)
 
 	pgno := uint32((cell.Key << 16) | uint64(v))
+
+	if changed, err := c.Remove(uint64(pgno)); err != nil {
+		return 0, err
+	} else if !changed {
+		vprint.PanicOn(fmt.Sprintf("tx.Tx.allocatePgno(): double alloc: %d", pgno))
+	}
 	return pgno, nil
+}
+
+// allocateNewPgno requests a new page unconditionally, ignoring the free list.
+func (tx *Tx) allocateNewPgno() uint32 {
+	// Increment the total page count by one and return the last page.
+	pgno := readMetaPageN(tx.meta[:])
+	writeMetaPageN(tx.meta[:], pgno+1)
+	return pgno
 }
 
 // deallocate releases a page number to the freelist.
@@ -1025,8 +1122,7 @@ func (tx *Tx) freePgno(pgno uint32) (outErr error) {
 		tx.pendingFreelistAdds = append(tx.pendingFreelistAdds, pgno)
 		return nil
 	}
-	c := Cursor{tx: tx}
-	c.stack.elems[0] = stackElem{pgno: readMetaFreelistPageNo(tx.meta[:])}
+	c := tx.db.getFreelistCursor(tx)
 
 	tx.modifyingFreelist = true
 	defer tx.freelistCleanup(&outErr)
@@ -1071,14 +1167,13 @@ func (tx *Tx) deallocateTree(pgno uint32) error {
 
 func (tx *Tx) readPage(pgno uint32) (_ []byte, isHeap bool, err error) {
 	// Meta page is always cached on the transaction.
-	//fmt.Printf("readPage %d\n", pgno)
 	if pgno == 0 {
 		return tx.meta[:], false, nil
 	}
 
 	// Verify page number requested is within current size of database.
 	pageN := readMetaPageN(tx.meta[:])
-	if pgno > pageN {
+	if pgno >= pageN {
 		return nil, false, fmt.Errorf("rbf: page read out of bounds: pgno=%d max=%d", pgno, pageN-1)
 	}
 
@@ -1113,7 +1208,8 @@ func (tx *Tx) writeBitmapPage(pgno uint32, page []byte) error {
 }
 
 func (tx *Tx) checkTxSize() error {
-	if (tx.walPageN+tx.dirtyN())*PageSize >= len(tx.db.wal) {
+	pageN := tx.walPageN + len(tx.dirtyPages) + (len(tx.dirtyBitmapPages) * 2)
+	if pageN*PageSize >= len(tx.db.wal) {
 		return ErrTxTooLarge
 	}
 	return nil
@@ -1162,6 +1258,22 @@ func (tx *Tx) ContainerIterator(name string, key uint64) (citer roaring.Containe
 	return &containerIterator{cursor: c}, exact, nil
 }
 
+// Shared pool for in-memory database pages.
+// These are used before being flushed to disk.
+var containerFilterPool = &sync.Pool{}
+
+func getContainerFilter(c *Cursor, filter roaring.BitmapFilter, tx *Tx) *containerFilter {
+	existing := containerFilterPool.Get()
+	if existing == nil {
+		return &containerFilter{cursor: c, filter: filter, tx: tx}
+	}
+	f := existing.(*containerFilter)
+	f.cursor = c
+	f.filter = filter
+	f.tx = tx
+	return f
+}
+
 func (tx *Tx) ApplyFilter(name string, key uint64, filter roaring.BitmapFilter) (err error) {
 	tx.mu.RLock()
 	defer tx.mu.RUnlock()
@@ -1177,7 +1289,7 @@ func (tx *Tx) ApplyFilter(name string, key uint64, filter roaring.BitmapFilter) 
 	if err != nil {
 		return err
 	}
-	f := containerFilter{cursor: c, filter: filter, tx: tx}
+	f := getContainerFilter(c, filter, tx)
 	defer f.Close()
 	return f.Apply()
 }
@@ -1519,6 +1631,8 @@ type containerFilter struct {
 
 func (s *containerFilter) Close() {
 	s.cursor.Close()
+	s.cursor = nil
+	containerFilterPool.Put(s)
 }
 
 func (s *containerFilter) Apply() (err error) {
@@ -1749,9 +1863,16 @@ func (tx *Tx) flush() error {
 	}
 
 	// Write bitmap headers & pages to WAL.
+	//
+	// We need to write a bitmap header before each such page. We only allocate
+	// one header, and we reuse it, because each write is flushing it out to
+	// disk, and it doesn't get stored in-memory.
+	var hdr []byte
+	if len(tx.dirtyBitmapPages) > 0 {
+		hdr = allocPage()
+	}
 	for _, pgno := range dirtyPageMapKeys(tx.dirtyBitmapPages) {
 		// Write header page.
-		hdr := make([]byte, PageSize)
 		writePageNo(hdr[:], pgno)
 		writeFlags(hdr[:], PageTypeBitmapHeader)
 		if _, err := tx.writeToWAL(w, hdr); err != nil {
@@ -1876,6 +1997,8 @@ func (tx *Tx) Pages(pgnos []uint32) ([]Page, error) {
 
 // PageInfos returns meta data about all pages in the database.
 func (tx *Tx) PageInfos() ([]PageInfo, error) {
+	var errorList ErrorList
+
 	infos := make([]PageInfo, tx.PageN())
 
 	// Read meta page info.
@@ -1889,7 +2012,8 @@ func (tx *Tx) PageInfos() ([]PageInfo, error) {
 	for pgno := metaInfo.RootRecordPageNo; pgno != 0; {
 		info, err := tx.rootRecordPageInfo(pgno)
 		if err != nil {
-			return nil, err
+			errorList.Append(err)
+			break
 		}
 		infos[pgno] = info
 		pgno = info.Next
@@ -1897,33 +2021,34 @@ func (tx *Tx) PageInfos() ([]PageInfo, error) {
 
 	// Traverse freelist and mark pages as in-use.
 	if err := tx.walkPageInfo(infos, metaInfo.FreelistPageNo, "freelist"); err != nil {
-		return nil, err
+		errorList.Append(err)
 	}
 
 	// Traverse every b-tree and mark pages as in-use.
 	records, err := tx.RootRecords()
 	if err != nil {
-		return nil, err
-	}
+		errorList.Append(err)
+	} else {
+		for itr := records.Iterator(); !itr.Done(); {
+			name, pgno := itr.Next()
 
-	for itr := records.Iterator(); !itr.Done(); {
-		name, pgno := itr.Next()
-
-		if err := tx.walkPageInfo(infos, pgno.(uint32), name.(string)); err != nil {
-			return nil, err
+			if err := tx.walkPageInfo(infos, pgno.(uint32), name.(string)); err != nil {
+				errorList.Append(err)
+			}
 		}
 	}
 
 	// Build page info objects for each free page.
 	freePageSet, err := tx.freePageSet()
 	if err != nil {
-		return nil, err
-	}
-	for pgno := range freePageSet {
-		infos[pgno] = &FreePageInfo{Pgno: pgno}
+		errorList.Append(err)
+	} else {
+		for pgno := range freePageSet {
+			infos[pgno] = &FreePageInfo{Pgno: pgno}
+		}
 	}
 
-	return infos, nil
+	return infos, errorList.Err()
 }
 
 // metaPageInfo returns page metadata for the meta page.
@@ -1957,10 +2082,18 @@ func (tx *Tx) rootRecordPageInfo(pgno uint32) (*RootRecordPageInfo, error) {
 }
 
 func (tx *Tx) walkPageInfo(infos []PageInfo, root uint32, name string) error {
-	return tx.walkTree(root, 0, func(pgno, parent, typ uint32) error {
+	var errorList ErrorList
+
+	if err := tx.walkTree(root, 0, func(pgno, parent, typ uint32, err error) error {
+		if err != nil {
+			errorList.Append(err)
+			return nil
+		}
+
 		buf, _, err := tx.readPage(pgno)
 		if err != nil {
-			return err
+			errorList.Append(fmt.Errorf("cannot read page: pgno=%d parent=%d typ=%d err=%d", pgno, parent, typ, err))
+			return nil
 		}
 
 		switch typ {
@@ -1986,12 +2119,14 @@ func (tx *Tx) walkPageInfo(infos []PageInfo, root uint32, name string) error {
 				Parent: parent,
 				Tree:   name,
 			}
-		default:
-			vprint.PanicOn(fmt.Sprintf("unexpected page type %d for page %d", typ, pgno))
 		}
 
 		return nil
-	})
+	}); err != nil {
+		errorList.Append(err)
+	}
+
+	return errorList.Err()
 }
 
 // PageData returns the raw page data for a single page.
@@ -2013,6 +2148,20 @@ func (tx *Tx) GetSortedFieldViewList() (fvs []txkey.FieldView, _ error) {
 		fvs = append(fvs, fv)
 	}
 	return
+}
+
+func (tx *Tx) DebugInfo() *TxDebugInfo {
+	return &TxDebugInfo{
+		Ptr:      fmt.Sprintf("%p", tx),
+		Writable: tx.writable,
+		Stack:    string(tx.stack),
+	}
+}
+
+type TxDebugInfo struct {
+	Ptr      string `json:"ptr"`
+	Writable bool   `json:"writable"`
+	Stack    string `json:"stack,omitempty"`
 }
 
 // SnapshotReader returns a reader that provides a snapshot for the current database state.

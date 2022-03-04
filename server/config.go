@@ -4,19 +4,22 @@ package server
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/url"
+	"os"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/molecula/featurebase/v2/auth"
-	petcd "github.com/molecula/featurebase/v2/etcd"
-	rbfcfg "github.com/molecula/featurebase/v2/rbf/cfg"
-	"github.com/molecula/featurebase/v2/storage"
-	"github.com/molecula/featurebase/v2/toml"
+	"github.com/molecula/featurebase/v3/authz"
+	petcd "github.com/molecula/featurebase/v3/etcd"
+	rbfcfg "github.com/molecula/featurebase/v3/rbf/cfg"
+	"github.com/molecula/featurebase/v3/storage"
+	"github.com/molecula/featurebase/v3/toml"
 	"github.com/pkg/errors"
 )
 
@@ -200,11 +203,6 @@ type Config struct {
 	// "rbf".
 	Storage *storage.Config `toml:"storage"`
 
-	// RowcacheOn, if true, turns on the row cache for all storage backends.
-	// The default is now off because it makes rbf queries faster and uses
-	// much less memory.
-	RowcacheOn bool `toml:"rowcache-on"`
-
 	// RBFConfig defines all externally configurable RBF flags.
 	RBFConfig *rbfcfg.Config `toml:"rbf"`
 
@@ -216,9 +214,6 @@ type Config struct {
 	// LookupDBDSN is an external database to connect to for `ExternalLookup` queries.
 	LookupDBDSN string `toml:"lookup-db-dsn"`
 
-	// The percentage of time spent recalculating the disk and memory usage cache.
-	UsageDutyCycle float64 `toml:"usage-duty-cycle"`
-
 	// Future flags are used to represent features or functionality which is not
 	// yet the default behavior, but will be in a future release.
 	Future struct {
@@ -227,11 +222,24 @@ type Config struct {
 		Rename bool `toml:"rename"`
 	} `toml:"future"`
 
-	// Toggles /schema/details endpoint. If off, it returns empty.
-	SchemaDetailsOn bool `toml:"schema-details-on"`
+	Auth Auth
+}
 
-	// Enable AuthZ/AuthN
-	Auth auth.Auth `toml:"auth"`
+type Auth struct {
+	// Enable AuthZ/AuthN for featurebase server
+	Enable bool `toml:"enable"`
+
+	ClientId         string   `toml:"client-id"`
+	ClientSecret     string   `toml:"client-secret"`
+	AuthorizeURL     string   `toml:"authorize-url"`
+	TokenURL         string   `toml:"token-url"`
+	GroupEndpointURL string   `toml:"group-endpoint-url"`
+	RedirectBaseURL  string   `toml:"redirect-base-url"`
+	LogoutURL        string   `toml:"logout-url"`
+	Scopes           []string `toml:"scopes"`
+	SecretKey        string   `toml:"secret-key"`
+	PermissionsFile  string   `toml:"permissions"`
+	QueryLogPath     string   `toml:"query-log-path"`
 }
 
 // Namespace returns the namespace to use based on the Future flag.
@@ -376,14 +384,8 @@ func NewConfig() *Config {
 	c.Etcd.PeerCertFile = ""
 	c.Etcd.PeerKeyFile = ""
 
-	// Disk and Memory Usage
-	c.UsageDutyCycle = 20.0
-
 	// Future flags.
 	c.Future.Rename = false
-
-	// Schema Details Toggle
-	c.SchemaDetailsOn = true
 
 	return c
 }
@@ -596,24 +598,36 @@ func lookupAddr(ctx context.Context, resolver *net.Resolver, host string) (strin
 	return addrs[0].String(), nil
 }
 
-func (c *Config) ValidateAuth() ([]error, error) {
+func (c *Config) ValidateAuth() (errors []error) {
 	if !c.Auth.Enable {
-		return []error{}, nil
+		return
 	}
-	authConfig := map[string]string{
-		"ClientId":         c.Auth.ClientId,
-		"ClientSecret":     c.Auth.ClientSecret,
-		"AuthorizeURL":     c.Auth.AuthorizeURL,
-		"TokenURL":         c.Auth.TokenURL,
-		"GroupEndpointURL": c.Auth.GroupEndpointURL,
-		"ScopeURL":         c.Auth.ScopeURL,
+	authConfig := []struct {
+		name string
+		val  string
+	}{
+		{name: "ClientId", val: c.Auth.ClientId},
+		{name: "ClientSecret", val: c.Auth.ClientSecret},
+		{name: "AuthorizeURL", val: c.Auth.AuthorizeURL},
+		{name: "TokenURL", val: c.Auth.TokenURL},
+		{name: "GroupEndpointURL", val: c.Auth.GroupEndpointURL},
+		{name: "RedirectBaseURL", val: c.Auth.RedirectBaseURL},
+		{name: "LogoutURL", val: c.Auth.LogoutURL},
+		{name: "SecretKey", val: c.Auth.SecretKey},
 	}
 
-	errors := make([]error, 0)
-	for name, value := range authConfig {
+	for _, configOpt := range authConfig {
+		name := configOpt.name
+		value := configOpt.val
 		if value == "" {
 			errors = append(errors, fmt.Errorf("empty string for auth config %s", name))
 			continue
+		}
+
+		if name == "SecretKey" {
+			if len(value) != 64 {
+				errors = append(errors, fmt.Errorf("invalid key length for %s. exp %d, got %d", name, 64, len(value)))
+			}
 		}
 
 		if strings.Contains(name, "URL") {
@@ -624,17 +638,101 @@ func (c *Config) ValidateAuth() ([]error, error) {
 			}
 		}
 	}
-	if len(errors) > 0 {
-		return errors, fmt.Errorf("there were errors validating config")
+
+	if len(c.Auth.Scopes) == 0 {
+		errors = append(errors, fmt.Errorf("must provide scope for authentication with IdP - for access and refresh token"))
 	}
-	return errors, nil
+
+	return errors
+}
+
+func (c *Config) ValidatePermissions(permsFile io.Reader) (errors []error) {
+
+	var p authz.GroupPermissions
+	if err := p.ReadPermissionsFile(permsFile); err != nil {
+		return append(errors, err)
+	}
+
+	if len(p.Permissions) == 0 {
+		return append(errors, fmt.Errorf("no group permissions found in permissions file: %s", c.Auth.PermissionsFile))
+	}
+
+	for groupId, indexPerm := range p.Permissions {
+		if groupId == "" {
+			errors = append(errors, fmt.Errorf("empty string for group id in permissions file %s", c.Auth.PermissionsFile))
+			continue
+		}
+
+		for index, perm := range indexPerm {
+			if index == "" {
+				errors = append(errors, fmt.Errorf("empty string for index for group id %s in permissions file %s ", groupId, c.Auth.PermissionsFile))
+				continue
+			}
+
+			if perm == "" {
+				errors = append(errors, fmt.Errorf("empty string for permission for group id %s and index %s in permissions file %s", groupId, index, c.Auth.PermissionsFile))
+				continue
+			}
+
+			if !((perm == "write") || (perm == "read")) {
+				errors = append(errors, fmt.Errorf("not a valid permission %s for group id %s and index %s in permissions file %s; expected permissions are read or write", perm, groupId, index, c.Auth.PermissionsFile))
+				continue
+			}
+		}
+	}
+
+	if p.Admin == "" {
+		errors = append(errors, fmt.Errorf("empty string for admin in permissions file: %s", c.Auth.PermissionsFile))
+
+	}
+
+	return errors
+}
+
+func (c *Config) ValidatePermissionsFile() (err error) {
+
+	if c.Auth.PermissionsFile == "" {
+		return fmt.Errorf("empty string for auth config permissions file")
+	}
+
+	fileExt := filepath.Ext(c.Auth.PermissionsFile)
+	if (fileExt != ".yaml") && (fileExt != ".yml") {
+		return fmt.Errorf("invalid file extension for auth config permissions file: %s", c.Auth.PermissionsFile)
+	}
+	return
 }
 
 func (c *Config) MustValidateAuth() {
-	if errors, err := c.ValidateAuth(); err != nil {
-		for _, e := range errors {
+
+	errorsAuth := c.ValidateAuth()
+	if len(errorsAuth) > 0 {
+		for _, e := range errorsAuth {
 			log.Println(e)
 		}
-		log.Fatal(err)
+	}
+
+	var errorsPerm []error
+	errorsPermFile := c.ValidatePermissionsFile()
+	if errorsPermFile == nil {
+		permsFile, err := os.Open(c.Auth.PermissionsFile)
+		if err != nil {
+			log.Println(err)
+		}
+
+		defer permsFile.Close()
+
+		errorsPerm = c.ValidatePermissions(permsFile)
+		if len(errorsPerm) > 0 {
+			for _, e := range errorsPerm {
+				log.Println(e)
+			}
+		}
+
+	} else {
+		log.Println(errorsPermFile)
+	}
+
+	if len(errorsAuth) > 0 || len(errorsPerm) > 0 || errorsPermFile != nil {
+		log.Fatal(fmt.Errorf("there were errors validating authN/authZ config and/or permissions"))
 	}
 }

@@ -10,8 +10,8 @@ import (
 
 	_ "net/http/pprof" // Imported for its side-effect of registering pprof endpoints with the server.
 
-	"github.com/molecula/featurebase/v2/storage"
-	"github.com/molecula/featurebase/v2/vprint"
+	"github.com/molecula/featurebase/v3/storage"
+	"github.com/molecula/featurebase/v3/vprint"
 )
 
 // CPUProfileForDur (where "Dur" is short for "Duration"), is used for
@@ -19,10 +19,7 @@ import (
 // commented out—in holder.go.
 func CPUProfileForDur(dur time.Duration, outpath string) {
 	// per-query pprof output:
-	backend := CurrentBackend()
-	if backend == "" {
-		backend = storage.DefaultBackend
-	}
+	backend := storage.DefaultBackend
 	path := outpath + "." + backend
 	f, err := os.Create(path)
 	vprint.PanicOn(err)
@@ -45,10 +42,7 @@ func CPUProfileForDur(dur time.Duration, outpath string) {
 // commented out—in holder.go.
 func MemProfileForDur(dur time.Duration, outpath string) {
 	// per-query pprof output:
-	backend := CurrentBackend()
-	if backend == "" {
-		backend = storage.DefaultBackend
-	}
+	backend := storage.DefaultBackend
 	path := outpath + "." + backend
 	f, err := os.Create(path)
 	vprint.PanicOn(err)

@@ -17,14 +17,15 @@ import (
 	"unsafe"
 
 	"github.com/lib/pq"
-	"github.com/molecula/featurebase/v2/disco"
-	"github.com/molecula/featurebase/v2/pql"
-	"github.com/molecula/featurebase/v2/proto"
-	"github.com/molecula/featurebase/v2/roaring"
-	"github.com/molecula/featurebase/v2/shardwidth"
-	"github.com/molecula/featurebase/v2/testhook"
-	"github.com/molecula/featurebase/v2/topology"
-	"github.com/molecula/featurebase/v2/tracing"
+	"github.com/molecula/featurebase/v3/disco"
+	"github.com/molecula/featurebase/v3/pql"
+	"github.com/molecula/featurebase/v3/proto"
+	"github.com/molecula/featurebase/v3/roaring"
+	"github.com/molecula/featurebase/v3/shardwidth"
+	"github.com/molecula/featurebase/v3/task"
+	"github.com/molecula/featurebase/v3/testhook"
+	"github.com/molecula/featurebase/v3/topology"
+	"github.com/molecula/featurebase/v3/tracing"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -52,14 +53,14 @@ type executor struct {
 	Cluster *cluster
 
 	// Client used for remote requests.
-	client InternalQueryClient
+	client *InternalClient
 
 	// Maximum number of Set() or Clear() commands per request.
 	MaxWritesPerRequest int
 
 	shutdown       bool
-	workMu         sync.RWMutex
-	workersWG      sync.WaitGroup
+	workers        *task.Pool
+	workerPoolMu   sync.Mutex
 	workerPoolSize int
 	work           chan job
 
@@ -70,7 +71,7 @@ type executor struct {
 // executorOption is a functional option type for pilosa.Executor
 type executorOption func(e *executor) error
 
-func optExecutorInternalQueryClient(c InternalQueryClient) executorOption {
+func optExecutorInternalQueryClient(c *InternalClient) executorOption {
 	return func(e *executor) error {
 		e.client = c
 		return nil
@@ -112,7 +113,6 @@ func emptyResult(c *pql.Call) interface{} {
 // newExecutor returns a new instance of Executor.
 func newExecutor(opts ...executorOption) *executor {
 	e := &executor{
-		client:         newNopInternalQueryClient(),
 		workerPoolSize: 2,
 	}
 	for _, opt := range opts {
@@ -127,19 +127,11 @@ func newExecutor(opts ...executorOption) *executor {
 	// workloads. Possible that it could be smaller.
 	e.work = make(chan job, e.workerPoolSize)
 	_ = testhook.Opened(NewAuditor(), e, nil)
-	for i := 0; i < e.workerPoolSize; i++ {
-		e.workersWG.Add(1)
-		go func() {
-			defer e.workersWG.Done()
-			worker(e.work)
-		}()
-	}
+	e.workers = task.NewPool(e.workerPoolSize, e.doOneJob, e)
 	return e
 }
 
 func (e *executor) Close() error {
-	e.workMu.Lock()
-	defer e.workMu.Unlock()
 	if e.shutdown {
 		// otherwise close(e.work) can result in
 		// panic: close of closed channel.
@@ -150,8 +142,24 @@ func (e *executor) Close() error {
 	e.shutdown = true
 	_ = testhook.Closed(NewAuditor(), e, nil)
 	close(e.work)
-	e.workersWG.Wait()
+	e.workers.Close()
 	return nil
+}
+
+// PoolSize is exported to let the task pool update us
+func (e *executor) PoolSize(n int) {
+	if e.Holder != nil {
+		e.Holder.Stats.Gauge("worker_total", float64(n), 0)
+	}
+}
+
+// InitStats initializes stats counters. Must be called after Holder set.
+func (e *executor) InitStats() {
+	if e.Holder != nil {
+		e.Holder.Stats.Count("job_total", 0, 0)
+		l, _, _ := e.workers.Stats()
+		e.Holder.Stats.Gauge("worker_total", float64(l), 0)
+	}
 }
 
 // Execute executes a PQL query.
@@ -193,7 +201,7 @@ func (e *executor) Execute(ctx context.Context, index string, q *pql.Query, shar
 		opt = &execOptions{}
 	}
 	// Default maximum memory, if not passed in.
-	if opt.MaxMemory == 0 {
+	if opt.MaxMemory == 0 && q.HasCall("Extract") {
 		opt.MaxMemory = e.maxMemory
 	}
 
@@ -537,6 +545,11 @@ func (e *executor) execute(ctx context.Context, qcx *Qcx, index string, q *pql.Q
 			return nil, err
 		}
 
+		if vc, ok := v.(ValCount); ok {
+			vc.cleanup()
+			v = vc
+		}
+
 		results = append(results, v)
 		// Some Calls can have significant data associated with them
 		// that gets generated during processing, such as Precomputed
@@ -545,6 +558,22 @@ func (e *executor) execute(ctx context.Context, qcx *Qcx, index string, q *pql.Q
 		e.dumpPrecomputedCalls(ctx, q.Calls[i])
 	}
 	return results, nil
+}
+
+// cleanup removes the integer value (Val) from the ValCount if one of
+// the other fields is in use.
+//
+// ValCounts are normally holding data which is stored as a BSI
+// (integer) under the hood. Sometimes it's convenient to be able to
+// compare the underlying integer values rather than their
+// interpretation as decimal, timestamp, etc, so the lower level
+// functions may return both integer and the interpreted value, but we
+// don't want to pass that all the way back to the client, so we
+// remove it here.
+func (vc *ValCount) cleanup() {
+	if vc.Val != 0 && (vc.FloatVal != 0 || !vc.TimestampVal.IsZero() || vc.DecimalVal != nil) {
+		vc.Val = 0
+	}
 }
 
 // preprocessQuery expands any calls that need preprocessing.
@@ -1095,6 +1124,8 @@ func (e *executor) executeDistinct(ctx context.Context, qcx *Qcx, index string, 
 			return other.Union(v.(*Row))
 		case nil:
 			return v
+		case DistinctTimestamp:
+			return other.Union(v.(DistinctTimestamp))
 		default:
 			return errors.Errorf("unexpected return type from executeDistinctShard: %+v %T", other, other)
 		}
@@ -1211,6 +1242,10 @@ func (e *executor) executePercentile(ctx context.Context, qcx *Qcx, index string
 	if err != nil {
 		return ValCount{}, errors.New("Percentile(): field required")
 	}
+	field := e.Holder.Field(index, fieldName)
+	if field == nil {
+		return ValCount{}, ErrFieldNotFound
+	}
 
 	// filter call for min & max
 	var filterCall *pql.Call
@@ -1231,7 +1266,7 @@ func (e *executor) executePercentile(ctx context.Context, qcx *Qcx, index string
 		return ValCount{}, errors.Wrap(err, "executing Min call for Percentile")
 	}
 	if nthFloat == 0.0 {
-		return ValCount{Val: minVal.Val, Count: minVal.Count}, nil
+		return minVal, nil
 	}
 
 	// get max
@@ -1298,11 +1333,11 @@ func (e *executor) executePercentile(ctx context.Context, qcx *Qcx, index string
 		} else if leftCountWeighted < rightCount {
 			min = possibleNthVal + 1
 		} else {
-			return ValCount{Val: possibleNthVal, Count: 1}, nil
+			return field.valCountize(possibleNthVal, 1, nil)
 		}
 	}
 
-	return ValCount{Val: min, Count: 1}, nil
+	return field.valCountize(min, 1, nil)
 
 }
 
@@ -1494,6 +1529,8 @@ func (e *executor) executeDistinctShard(ctx context.Context, qcx *Qcx, index str
 			Index: index,
 			Field: fieldName,
 		}
+	} else if field.Options().Type == FieldTypeTimestamp {
+		result = DistinctTimestamp{Name: fieldName}
 	} else {
 		result = SignedRow{}
 	}
@@ -1529,11 +1566,19 @@ func (e *executor) executeDistinctShard(ctx context.Context, qcx *Qcx, index str
 		if err != nil {
 			return nil, err
 		}
-		results := make([]string, len(r.Pos.Columns()))
-		for i, val := range r.Pos.Columns() {
+		// If we have a filter, or there's just no content for this shard, we
+		// can end up with empty results. Rather than trying to synthesize
+		// a result from this empty set, we just go ahead and use that.
+		if r.Pos == nil {
+			return result, nil
+		}
+		cols := r.Pos.Columns()
+		results := make([]string, len(cols))
+		for i, val := range cols {
 			results[i] = FormatTimestampNano(int64(val), bsig.Base, field.options.TimeUnit)
 		}
-		return DistinctTimestamp{Name: fieldName, Values: results}, nil
+		result = DistinctTimestamp{Name: fieldName, Values: results}
+		return result, nil
 	}
 	return executeDistinctShardBSI(ctx, qcx, idx, fieldName, shard, bsig, filterBitmap)
 }
@@ -1542,6 +1587,25 @@ type DistinctTimestamp struct {
 	Values []string
 	Name   string
 }
+
+// Union returns the union of the values of `d` and `other`
+func (d *DistinctTimestamp) Union(other DistinctTimestamp) DistinctTimestamp {
+	both := map[string]string{}
+	for _, val := range d.Values {
+		both[val] = val
+	}
+	for _, val := range other.Values {
+		both[val] = val
+	}
+	vals := []string{}
+	for key := range both {
+		vals = append(vals, key)
+	}
+	return DistinctTimestamp{Name: d.Name, Values: vals}
+}
+
+const ViewNotFound = Error("view not found")
+const FragmentNotFound = Error("fragment not found")
 
 func executeDistinctShardSet(ctx context.Context, qcx *Qcx, idx *Index, fieldName string, shard uint64, filterBitmap *roaring.Bitmap) (result *Row, err0 error) {
 	index := idx.Name()
@@ -3081,13 +3145,24 @@ func (fr *FieldRow) Clone() (clone *FieldRow) {
 // either a Key or an ID is included.
 func (fr FieldRow) MarshalJSON() ([]byte, error) {
 	if fr.Value != nil {
-		return json.Marshal(struct {
-			Field string `json:"field"`
-			Value int64  `json:"value"`
-		}{
-			Field: fr.Field,
-			Value: *fr.Value,
-		})
+		if fr.FieldOptions.Type == FieldTypeTimestamp {
+			ts := FormatTimestampNano(int64(*fr.Value), fr.FieldOptions.Base, fr.FieldOptions.TimeUnit)
+			return json.Marshal(struct {
+				Field string `json:"field"`
+				Value string `json:"value"`
+			}{
+				Field: fr.Field,
+				Value: ts,
+			})
+		} else {
+			return json.Marshal(struct {
+				Field string `json:"field"`
+				Value int64  `json:"value"`
+			}{
+				Field: fr.Field,
+				Value: *fr.Value,
+			})
+		}
 	}
 
 	if fr.RowKey != "" {
@@ -3536,9 +3611,20 @@ func (e *executor) executeGroupByShard(ctx context.Context, qcx *Qcx, index stri
 	}
 
 	// Apply bases.
+	//
+	// SUP-139: The group value is shared across multiple groups so we can't
+	// add the base to each one. Instead, we need to track which ones have been
+	// seen already and avoid adding to those again in the future.
 	for i, base := range bases {
+		m := make(map[*int64]struct{})
+
 		for _, r := range results {
+			if _, ok := m[r.Group[i].Value]; ok {
+				continue
+			}
+
 			*r.Group[i].Value += base
+			m[r.Group[i].Value] = struct{}{}
 		}
 	}
 
@@ -4493,7 +4579,11 @@ func (e *executor) executeRowShard(ctx context.Context, qcx *Qcx, index string, 
 			return nil, err
 		}
 		defer finisher(&err0)
-		return frag.row(tx, rowID)
+		row, err := frag.row(tx, rowID)
+		if qcx.write && err == nil {
+			row = row.Clone()
+		}
+		return row, err
 	}
 
 	// If no quantum exists then return an empty bitmap.
@@ -4532,15 +4622,21 @@ func (e *executor) executeRowShard(ctx context.Context, qcx *Qcx, index string, 
 	if len(rows) == 0 {
 		return &Row{}, nil
 	} else if len(rows) == 1 {
+		if qcx.write {
+			return rows[0].Clone(), nil
+		}
 		return rows[0], nil
 	}
 	row := rows[0].Union(rows[1:]...)
+	if qcx.write {
+		row = row.Clone()
+	}
 	return row, nil
 
 }
 
 // executeRowBSIGroupShard executes a range(bsiGroup) call for a local shard.
-func (e *executor) executeRowBSIGroupShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64) (_ *Row, err0 error) {
+func (e *executor) executeRowBSIGroupShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64) (cloneable *Row, err0 error) {
 	span, _ := tracing.StartSpanFromContext(ctx, "Executor.executeRowBSIGroupShard")
 	defer span.Finish()
 
@@ -4572,6 +4668,11 @@ func (e *executor) executeRowBSIGroupShard(ctx context.Context, qcx *Qcx, index 
 		return nil, err
 	}
 	defer finisher(&err0)
+	defer func() {
+		if qcx.write && cloneable != nil {
+			cloneable = cloneable.Clone()
+		}
+	}()
 
 	// EQ null           _exists - frag.NotNull()
 	// NEQ null          frag.NotNull()
@@ -4821,6 +4922,9 @@ func (e *executor) executeNotShard(ctx context.Context, qcx *Qcx, index string, 
 	} else {
 		if existenceRow, err = existenceFrag.row(tx, 0); err != nil {
 			return nil, err
+		}
+		if qcx.write {
+			existenceRow = existenceRow.Clone()
 		}
 	}
 	// the finishers returned by a write tx, which we might be in if there's
@@ -5631,7 +5735,7 @@ loop:
 				continue loop
 			}
 		}
-		return nil, errors.Wrapf(errShardUnavailable, "%s:%d:%v:%v", index, shard, shards, nodes)
+		return nil, errors.Wrapf(errShardUnavailable, "%s:%d:%v", index, shard, nodes)
 	}
 	return m, nil
 }
@@ -5915,10 +6019,32 @@ type job struct {
 	ctx             context.Context
 	memoryAvailable *int64 // shared, atomic value
 	resultChan      chan mapResponse
+	idleHands       bool
 }
 
-func worker(work chan job) {
+// doOneJob had one job. *disappointed sigh*
+func (e *executor) doOneJob() {
+	j, ok := <-e.work
+	if !ok {
+		return
+	}
+	// Skip out early if the context is done, but still send
+	// an ack so mapperLocal can be sure we aren't about to
+	// work on something it sent us.
+	if err := j.ctx.Err(); err != nil {
+		j.resultChan <- mapResponse{result: nil, err: err}
+		return
+	}
+	result, err := j.mapFn(j.ctx, j.shard, &mapOptions{memoryAvailable: j.memoryAvailable})
+	j.resultChan <- mapResponse{result: result, err: err}
+}
+
+func (e *executor) worker(work chan job) {
 	for j := range work {
+		e.Holder.Stats.Count("job_total", 1, 0)
+		if j.idleHands {
+			return
+		}
 		// Skip out early if the context is done, but still send
 		// an ack so mapperLocal can be sure we aren't about to
 		// work on something it sent us.
@@ -5940,9 +6066,8 @@ func (e *executor) mapperLocal(ctx context.Context, shards []uint64, mapFn mapFu
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	done := ctx.Done()
-	e.workMu.RLock()
-	defer e.workMu.RUnlock()
-
+	e.workerPoolMu.Lock()
+	defer e.workerPoolMu.Unlock()
 	if e.shutdown {
 		return nil, errShutdown
 	}
@@ -6604,6 +6729,17 @@ func (e *executor) translateCall(c *pql.Call, index string, columnKeys map[strin
 				} else {
 					c.Args["previous"] = falseRowID
 				}
+			}
+		}
+
+		// Check if "like" argument is applied to keyed fields.
+		if _, found := c.Args["like"].(string); found {
+			fieldName, err := c.FirstStringArg("_field", "field")
+			if err != nil || fieldName == "" {
+				return nil, fmt.Errorf("cannot read field name for Rows call")
+			}
+			if !idx.Field(fieldName).options.Keys {
+				return nil, fmt.Errorf("'%s' is not a set/mutex/time field with a string key", fieldName)
 			}
 		}
 	}
@@ -8057,6 +8193,8 @@ func getScaledInt(f *Field, v interface{}) (int64, error) {
 		switch tv := v.(type) {
 		case time.Time:
 			value = tv.UnixNano() / TimeUnitNanos(f.options.TimeUnit)
+		case int64:
+			value = tv
 		default:
 			return 0, errors.Errorf("unexpected timestamp value type %T, val %v", tv, tv)
 		}
@@ -8125,70 +8263,128 @@ func (e *executor) executeDeleteRecords(ctx context.Context, qcx *Qcx, index str
 	return n, nil
 }
 
-func (e *executor) executeDeleteRecordFromShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64) (bool, error) {
+func transactExistRow(ctx context.Context, idx *Index, shard uint64, frag *fragment, src *Row) (uint64, error) {
+	tx := idx.Txf().NewTx(Txo{Write: writable, Index: idx, Shard: shard})
+	rows, err := frag.rows(ctx, tx, 1)
+	if err != nil {
+		tx.Rollback()
+		return 0, err
 
+	}
+	rowID := uint64(len(rows) + 1)
+	_, err = frag.setRow(tx, src, rowID)
+	if err != nil {
+		tx.Rollback()
+		return 0, err
+	}
+	return rowID, tx.Commit()
+}
+func (e *executor) executeDeleteRecordFromShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64) (changed bool, err error) {
 	span, _ := tracing.StartSpanFromContext(ctx, "Executor.executeDeleteRecordFromShard")
 	defer span.Finish()
 	//need to build the bitmap in the call
 	child := c.Children[0]
-	row, err := e.executeBitmapCallShard(ctx, qcx, index, child, shard)
-	if err != nil {
-		return false, err
+	src, er := e.executeBitmapCallShard(ctx, qcx, index, child, shard)
+	if er != nil {
+		err = er
+		return
 	}
-	if len(row.segments) == 0 { //nothing to remove
+	if len(src.segments) == 0 { //nothing to remove
+		return
+	}
+	columns := src.segments[0].data //should only be one segment
+	if columns.Count() == 0 {
+		return
+	}
+	// Fetch index.
+	idx := e.Holder.Index(index)
+	if idx == nil {
+		err = newNotFoundError(ErrIndexNotFound, index)
+		return
+	}
+
+	return DeleteRowsWithFlow(ctx, src, idx, shard, true)
+}
+
+func DeleteRows(ctx context.Context, src *Row, idx *Index, shard uint64) (bool, error) {
+	return DeleteRowsWithFlow(ctx, src, idx, shard, false)
+}
+func DeleteRowsWithFlow(ctx context.Context, src *Row, idx *Index, shard uint64, normalFlow bool) (bool, error) {
+	var existenceFragment *fragment
+	var deletedRowID uint64
+	var commitor Commitor = &NopCommitor{}
+	var err error
+	if len(src.segments) == 0 { //nothing to remove
 		return false, nil
 	}
-	columns := row.segments[0].data //should only be one segment
+	columns := src.segments[0].data //should only be one segment
 	if columns.Count() == 0 {
 		return false, nil
 	}
 
-	// Fetch index.
-	idx := e.Holder.Index(index)
-	if idx == nil {
-		return false, newNotFoundError(ErrIndexNotFound, index)
-	}
-
-	columnIDs := make([]uint64, 0)
-	none := make([]uint64, 0) // no bits will be set
-
-	tx, finisher, err := qcx.GetTx(Txo{Write: writable, Index: idx, Shard: shard})
-	if err != nil {
-		return false, err
-	}
-	defer finisher(&err)
-	changed := false
-	colCounts := make([]int, 0)
-	toClear := columnIDs[:0]
-	rowSet := make(map[uint64]struct{})
-	callback := func(pos uint64) error {
-		toClear = append(toClear, pos)
-		rowID := pos / ShardWidth
-		rowSet[rowID] = struct{}{}
-		return nil
-	}
-	findExisting := roaring.NewBitmapBitmapFilter(columns, callback)
-
-	clearFragment := func(frag *fragment) (bool, error) {
-		// re-zero these
-		toClear = columnIDs[:0]
-		rowSet = make(map[uint64]struct{})
-
-		err = tx.ApplyFilter(frag.index(), frag.field(), frag.view(), frag.shard, 0, findExisting)
+	if idx.Keys() {
+		//store columns in exits field ToBeDelete row commited
+		if normalFlow { // normalFlow is the standard path, "not normal" is recoverory
+			existenceFragment = idx.Holder().fragment(idx.Name(), existenceFieldName, viewStandard, shard)
+			if existenceFragment == nil {
+				//no exists field
+				return false, errors.New("can't bulk delete without existence field")
+			}
+			deletedRowID, err = transactExistRow(ctx, idx, shard, existenceFragment, src)
+		}
+		commitor, err = deleteKeyTranslation(ctx, idx, shard, columns)
 		if err != nil {
 			return false, err
 		}
-		colCounts = append(colCounts, len(toClear))
-		// this will be the remove part
-		if len(toClear) > 0 {
-			err = frag.importPositions(tx, none, toClear, rowSet)
-			if err != nil {
-				return false, err
-			}
-			return true, nil
-		}
-		return false, nil
 	}
+	writeTx := idx.Txf().NewTx(Txo{Write: writable, Index: idx, Shard: shard})
+	if err != nil {
+		return false, err
+	}
+	defer writeTx.Rollback()
+	changed := false
+	defer func() {
+		//if there is an error on the bit clearing rollback the keys
+		if err != nil {
+			changed = false
+			commitor.Rollback()
+			return
+		}
+		// if there is an error in the key commit, then rollback the delete
+		// write records before keys to remove possiblity of unmatch keys=records
+		err = writeTx.Commit()
+		if err != nil {
+			changed = false
+			commitor.Rollback()
+			return
+		}
+		if er := commitor.Commit(); er != nil {
+			err = er
+		}
+		if err != nil {
+			idx.Holder().Logger.Errorf("problems committing delete in rbf %v shard %v", err, shard)
+		}
+
+	}()
+	findExisting := roaring.NewBitmapBitmapFilter(columns, func(p uint64) error { return nil })
+	resChan := make(chan countResults)
+	clearFragment := func(frag *fragment) (bool, error) {
+		posChan := make(chan uint64, 8192)
+		findExisting.SetCallback(func(pos uint64) error {
+			posChan <- pos
+			return nil
+		})
+		go writeTx.RemoveChannel(frag.index(), frag.field(), frag.view(), frag.shard, posChan, resChan)
+
+		err = writeTx.ApplyFilter(frag.index(), frag.field(), frag.view(), frag.shard, 0, findExisting)
+		close(posChan)
+		if err != nil {
+			return false, err
+		}
+		r := <-resChan
+		return r.changeCount > 0, r.err
+	}
+
 	for _, field := range idx.Fields() {
 		for _, view := range field.views() {
 
@@ -8203,7 +8399,44 @@ func (e *executor) executeDeleteRecordFromShard(ctx context.Context, qcx *Qcx, i
 			if c {
 				changed = true
 			}
+
+		}
+	}
+	close(resChan)
+	if existenceFragment != nil { //a string keys have been deleted and the deleteRow was created
+		if normalFlow {
+			existenceFragment.clearRow(writeTx, deletedRowID)
+		} else {
+			// this is if we are recovering from failure and cleaning up
+			rows, err := existenceFragment.rows(ctx, writeTx, 1)
+			if err != nil {
+				return false, err
+			}
+			for _, rowId := range rows {
+				existenceFragment.clearRow(writeTx, rowId)
+			}
 		}
 	}
 	return changed, nil
+}
+
+type Commitor interface {
+	Rollback()
+	Commit() error
+}
+type NopCommitor struct {
+}
+
+func (c *NopCommitor) Rollback() {
+
+}
+func (c *NopCommitor) Commit() error {
+	return nil
+}
+
+func deleteKeyTranslation(ctx context.Context, idx *Index, shard uint64, records *roaring.Bitmap) (Commitor, error) {
+	// ShardToShardParition ...
+	paritionID := topology.ShardToShardPartition(idx.name, shard, idx.holder.partitionN)
+
+	return idx.TranslateStore(paritionID).Delete(records)
 }

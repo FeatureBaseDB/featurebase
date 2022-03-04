@@ -13,11 +13,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/molecula/featurebase/v2/pql"
-	"github.com/molecula/featurebase/v2/roaring"
-	"github.com/molecula/featurebase/v2/stats"
-	"github.com/molecula/featurebase/v2/testhook"
-	"github.com/molecula/featurebase/v2/vprint"
+	"github.com/molecula/featurebase/v3/pql"
+	"github.com/molecula/featurebase/v3/roaring"
+	"github.com/molecula/featurebase/v3/stats"
+	"github.com/molecula/featurebase/v3/testhook"
+	"github.com/molecula/featurebase/v3/vprint"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -40,6 +40,7 @@ type view struct {
 
 	holder *Holder
 	idx    *Index
+	fld    *Field
 
 	fieldType string
 	cacheType string
@@ -363,7 +364,7 @@ func (v *view) notifyIfNewShard(shard uint64) {
 }
 
 func (v *view) newFragment(shard uint64) *fragment {
-	fld := v.idx.Field(v.field)
+	fld := v.fld
 	spec := fragSpec{
 		index: v.idx,
 		field: fld,
@@ -619,7 +620,9 @@ func (v *view) bitDepth(shards []uint64) (uint64, error) {
 	var maxBitDepth uint64
 
 	for _, shard := range shards {
+		v.mu.RLock()
 		frag, ok := v.fragments[shard]
+		v.mu.RUnlock()
 		if !ok || frag == nil {
 			continue
 		}

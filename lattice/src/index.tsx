@@ -1,14 +1,17 @@
 import React from 'react';
 import ReactDOM from 'react-dom';
-import App from './App';
-import { BrowserRouter as Router, Route } from 'react-router-dom';
+import { ProvideAuth } from 'services/useAuth';
+
 import * as serviceWorker from './serviceWorker';
 import './index.scss';
+import App from './App';
 
 ReactDOM.render(
-  <Router>
-    <Route path="/" component={App} />
-  </Router>,
+  <React.StrictMode>
+    <ProvideAuth>
+      <App />
+    </ProvideAuth>
+  </React.StrictMode>,
   document.getElementById('root')
 );
 

@@ -12,17 +12,17 @@ import (
 	"io/ioutil"
 	gohttp "net/http"
 
-	pilosa "github.com/molecula/featurebase/v2"
-	"github.com/molecula/featurebase/v2/http"
-	pnet "github.com/molecula/featurebase/v2/net"
-	"github.com/molecula/featurebase/v2/vprint"
+	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/encoding/proto"
+	pnet "github.com/molecula/featurebase/v3/net"
+	"github.com/molecula/featurebase/v3/vprint"
 
 	"os"
 	"strconv"
 	"strings"
 )
 
-func UploadTar(srcFile string, client *http.InternalClient) error {
+func UploadTar(srcFile string, client *pilosa.InternalClient) error {
 	t0 := time.Now()
 	f, err := os.Open(srcFile)
 	if err != nil {
@@ -114,7 +114,7 @@ func main() {
 
 	host := "127.0.0.1:10101"
 	h := &gohttp.Client{}
-	c, err := http.NewInternalClient(host, h)
+	c, err := pilosa.NewInternalClient(host, h, pilosa.WithSerializer(proto.Serializer{}))
 	vprint.PanicOn(err)
 
 	tarSrcPath := "q2.tar.gz"

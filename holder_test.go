@@ -5,26 +5,22 @@ import (
 	"context"
 	"math"
 	"os"
-	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/molecula/featurebase/v2"
-	"github.com/molecula/featurebase/v2/disco"
-	"github.com/molecula/featurebase/v2/pql"
-	"github.com/molecula/featurebase/v2/test"
+	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/disco"
+	"github.com/molecula/featurebase/v3/pql"
+	"github.com/molecula/featurebase/v3/test"
 	"github.com/pkg/errors"
 )
 
 // mustHolderConfig provides a default test-friendly holder config.
 func mustHolderConfig() *pilosa.HolderConfig {
 	cfg := pilosa.DefaultHolderConfig()
-	if backend := pilosa.CurrentBackend(); backend != "" {
-		_ = pilosa.MustBackendToTxtype(backend)
-		cfg.StorageConfig.Backend = backend
-	}
+	cfg.StorageConfig.Backend = "rbf"
 	cfg.StorageConfig.FsyncEnabled = false
 	cfg.RBFConfig.FsyncEnabled = false
 	cfg.Schemator = disco.InMemSchemator
@@ -55,109 +51,6 @@ func TestHolder_Open(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
-	t.Run("ErrFragmentStoragePermission", func(t *testing.T) {
-		roaringOnlyTest(t)
-
-		if os.Geteuid() == 0 {
-			t.Skip("Skipping permissions test since user is root.")
-		}
-		h := test.MustOpenHolder(t)
-		defer h.Close()
-
-		var idx *pilosa.Index
-		var err error
-		if idx, err = h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
-			t.Fatal(err)
-		}
-
-		var shard uint64
-		tx := idx.Txf().NewTx(pilosa.Txo{Write: writable, Index: idx, Shard: shard})
-		defer tx.Rollback()
-
-		if field, err := idx.CreateField("bar", pilosa.OptFieldTypeDefault()); err != nil {
-			t.Fatal(err)
-		} else if _, err := field.SetBit(tx, 0, 0, nil); err != nil {
-			t.Fatal(err)
-		} else if err := tx.Commit(); err != nil {
-			t.Fatal(err)
-		} else if err := h.Holder.Close(); err != nil {
-			t.Fatal(err)
-		} else if err := os.Chmod(filepath.Join(h.Path(), "foo", "bar", "views", "standard", "fragments", "0"), 0000); err != nil {
-			t.Fatal(err)
-		}
-		defer func() {
-			_ = os.Chmod(filepath.Join(h.Path(), "foo", "bar", "views", "standard", "fragments", "0"), 0644)
-		}()
-		if err := h.Reopen(); err == nil || !strings.Contains(err.Error(), "permission denied") {
-			t.Fatalf("unexpected error: %s", err)
-		}
-	})
-	t.Run("ErrFragmentStorageCorrupt", func(t *testing.T) {
-		roaringOnlyTest(t)
-
-		h := test.MustOpenHolder(t)
-		defer h.Close()
-
-		var idx *pilosa.Index
-		var err error
-		if idx, err = h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
-			t.Fatal(err)
-		}
-
-		var shard uint64
-		tx := idx.Txf().NewTx(pilosa.Txo{Write: writable, Index: idx, Shard: shard})
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer tx.Rollback()
-
-		if field, err := idx.CreateField("bar", pilosa.OptFieldTypeDefault()); err != nil {
-			t.Fatal(err)
-		} else if _, err := field.SetBit(tx, 0, 0, nil); err != nil {
-			t.Fatal(err)
-		} else if err := tx.Commit(); err != nil {
-			t.Fatal(err)
-		} else if err := h.Holder.Close(); err != nil {
-			t.Fatal(err)
-		} else if err := os.Truncate(filepath.Join(h.Path(), "foo", "bar", "views", "standard", "fragments", "0"), 2); err != nil {
-			t.Fatal(err)
-		}
-
-		if err := h.Reopen(); err == nil || !strings.Contains(err.Error(), "open fragment: shard=0, err=opening storage: unmarshal storage") {
-			t.Fatalf("unexpected error: %s", err)
-		}
-	})
-	t.Run("ErrFragmentStorageRecoverable", func(t *testing.T) {
-		roaringOnlyTest(t)
-
-		h := test.MustOpenHolder(t)
-		defer h.Close()
-
-		idx, err := h.CreateIndex("foo", pilosa.IndexOptions{})
-		if err != nil {
-			t.Fatal(err)
-		}
-		var shard uint64
-		tx := idx.Txf().NewTx(pilosa.Txo{Write: writable, Index: idx, Shard: shard})
-		defer tx.Rollback()
-
-		if field, err := idx.CreateField("bar", pilosa.OptFieldTypeDefault()); err != nil {
-			t.Fatal(err)
-		} else if _, err := field.SetBit(tx, 0, 0, nil); err != nil {
-			t.Fatal(err)
-		} else if err := tx.Commit(); err != nil {
-			t.Fatal(err)
-		} else if err := h.Holder.Close(); err != nil {
-			t.Fatal(err)
-		} else if err := os.Truncate(filepath.Join(h.IndexesPath(), "foo", "bar", "views", "standard", "fragments", "0"), 20); err != nil {
-			t.Fatal(err)
-		}
-
-		if err := h.Reopen(); err != nil {
-			t.Fatalf("unexpected error: %s", err)
-		}
-	})
-
 	t.Run("ForeignIndex", func(t *testing.T) {
 		t.Run("ErrForeignIndexNotFound", func(t *testing.T) {
 			h := test.MustOpenHolder(t)

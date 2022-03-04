@@ -1077,7 +1077,7 @@ func (o *Operation) EncodeJSON(dst *jsonBuffer, codec *JSONCodec) (err error) {
 				// or a different id
 				for j = idx; j < len(op.RecordIDs) && op.RecordIDs[j] == id; j++ {
 				}
-				// fmt.Printf("field %s encoding %d-%d (v %d, s %d, k %d)\n",
+
 				// 	field, idx, j, len(op.Values), len(op.Signed), len(fieldKeys[i]))
 				// print this one, and advance this index to next position
 				dst.EncodeString(field)

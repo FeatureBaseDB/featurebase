@@ -11,9 +11,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/molecula/featurebase/v2"
-	"github.com/molecula/featurebase/v2/pql"
-	"github.com/molecula/featurebase/v2/server"
+	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/pql"
+	"github.com/molecula/featurebase/v3/server"
 	"github.com/pkg/errors"
 )
 
@@ -48,12 +48,14 @@ type ImportCommand struct { // nolint: maligned
 	Sort bool `json:"sort"`
 
 	// Reusable client.
-	client pilosa.InternalClient
+	client *pilosa.InternalClient
 
 	// Standard input/output
 	*pilosa.CmdIO
 
 	TLS server.TLSConfig
+
+	AuthToken string
 }
 
 // NewImportCommand returns a new instance of ImportCommand.
@@ -83,6 +85,10 @@ func (cmd *ImportCommand) Run(ctx context.Context) error {
 		return errors.Wrap(err, "creating client")
 	}
 	cmd.client = client
+
+	if cmd.AuthToken != "" {
+		ctx = context.WithValue(ctx, "token", "Bearer "+cmd.AuthToken)
+	}
 
 	if cmd.CreateSchema {
 		if cmd.FieldOptions.Type == "" {

@@ -3,14 +3,16 @@ package cmd_test
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/molecula/featurebase/v2/cmd"
-	_ "github.com/molecula/featurebase/v2/test"
-	"github.com/molecula/featurebase/v2/testhook"
-	"github.com/molecula/featurebase/v2/toml"
+	"github.com/felixge/fgprof"
+	"github.com/molecula/featurebase/v3/cmd"
+	_ "github.com/molecula/featurebase/v3/test"
+	"github.com/molecula/featurebase/v3/testhook"
+	"github.com/molecula/featurebase/v3/toml"
 	"github.com/pkg/errors"
 )
 
@@ -23,12 +25,11 @@ func TestServerHelp(t *testing.T) {
 }
 
 // I have no idea why the linter in ci is complaining about this being unused.
-func nextPort() string { //nolint:unused
+func nextPort() string {
 	return fmt.Sprintf(`"localhost:%d"`, 0)
 }
 
 func TestServerConfig(t *testing.T) {
-	t.Skip("pilosa hosts config (cmd.Server.Config.Cluster.Hosts and brethren) is test only and will go away with high probability. skip for now.")
 	actualDataDir, err := testhook.TempDir(t, "")
 	failErr(t, err, "making data dir")
 	logFile, err := testhook.TempFile(t, "")
@@ -36,7 +37,7 @@ func TestServerConfig(t *testing.T) {
 	tests := []commandTest{
 		// TEST 0
 		{
-			args: []string{"server", "--data-dir", actualDataDir, "--bind", "localhost:42454", "--bind-grpc", "localhost:30112", "--translation.map-size", "100000"},
+			args: []string{"server", "--data-dir", actualDataDir, "--translation.map-size", "100000"},
 			env: map[string]string{
 				"PILOSA_DATA_DIR":                "/tmp/myEnvDatadir",
 				"PILOSA_LONG_QUERY_TIME":         "1m30s",
@@ -55,6 +56,10 @@ func TestServerConfig(t *testing.T) {
 	[cluster]
 		replicas = 2
 		long-query-time = "1m10s"
+    [etcd]
+        listen-client-address = "http://localhost:0"
+        listen-peer-address = "http://localhost:0"
+        initial-cluster = "pilosa0=http://localhost:0"
 	[profile]
 		block-rate = 100
 		mutex-fraction = 10
@@ -62,7 +67,6 @@ func TestServerConfig(t *testing.T) {
 			validation: func() error {
 				v := validator{}
 				v.Check(cmd.Server.Config.DataDir, actualDataDir)
-				v.Check(cmd.Server.Config.Bind, "localhost:42454")
 				v.Check(cmd.Server.Config.Cluster.ReplicaN, 2)
 				v.Check(cmd.Server.Config.LongQueryTime, toml.Duration(time.Second*90))
 				v.Check(cmd.Server.Config.Cluster.LongQueryTime, toml.Duration(time.Second*90))
@@ -81,8 +85,6 @@ func TestServerConfig(t *testing.T) {
 				"--profile.mutex-fraction", "8290",
 			},
 			env: map[string]string{
-				"PILOSA_CLUSTER_HOSTS":          "localhost:1110,localhost:1111",
-				"PILOSA_BIND":                   "localhost:1110",
 				"PILOSA_TRANSLATION_MAP_SIZE":   "100000",
 				"PILOSA_PROFILE_BLOCK_RATE":     "9123",
 				"PILOSA_PROFILE_MUTEX_FRACTION": "444",
@@ -91,6 +93,10 @@ func TestServerConfig(t *testing.T) {
 	bind = ` + nextPort() + `
 	bind-grpc = ` + nextPort() + `
 	data-dir = "` + actualDataDir + `"
+    [etcd]
+        listen-client-address = "http://localhost:0"
+        listen-peer-address = "http://localhost:0"
+        initial-cluster = "pilosa0=http://localhost:0"
 	[profile]
 		block-rate = 100
 		mutex-fraction = 10
@@ -106,12 +112,16 @@ func TestServerConfig(t *testing.T) {
 		},
 		// TEST 2
 		{
-			args: []string{"server", "--log-path", logFile.Name(), "--cluster.disabled", "true", "--translation.map-size", "100000"},
+			args: []string{"server", "--log-path", logFile.Name(), "--translation.map-size", "100000"},
 			env:  map[string]string{},
 			cfgFileContent: `
-	bind = "localhost:19444"
-	bind-grpc = "localhost:29444"
+	bind = ` + nextPort() + `
+	bind-grpc = ` + nextPort() + `
 	data-dir = "` + actualDataDir + `"
+    [etcd]
+        listen-client-address = "http://localhost:0"
+        listen-peer-address = "http://localhost:0"
+        initial-cluster = "pilosa0=http://localhost:0"
 	[anti-entropy]
 		interval = "11m0s"
 	[metric]
@@ -175,7 +185,9 @@ func TestServerConfig(t *testing.T) {
 	}
 }
 func TestServerConfig_DeprecateLongQueryTime(t *testing.T) {
-	t.Skip("pilosa hosts config (cmd.Server.Config.Cluster.Hosts and brethren) is test only and will go away with high probability. skip for now.")
+	// if you don't pass an empty dir as data-dir it will use the
+	// default... which might be full of data and cause the test to
+	// run super slow.
 	actualDataDir, err := testhook.TempDir(t, "")
 	failErr(t, err, "making data dir")
 
@@ -188,6 +200,10 @@ func TestServerConfig_DeprecateLongQueryTime(t *testing.T) {
             	bind = ` + nextPort() + `
             	bind-grpc = ` + nextPort() + `
              	data-dir = "` + actualDataDir + `"
+                [etcd]
+                  listen-client-address = "http://localhost:0"
+                  listen-peer-address = "http://localhost:0"
+                  initial-cluster = "pilosa0=http://localhost:0"
 `,
 			validation: func() error {
 				v := validator{}
@@ -203,6 +219,11 @@ func TestServerConfig_DeprecateLongQueryTime(t *testing.T) {
 			cfgFileContent: `
             	bind = ` + nextPort() + `
             	bind-grpc = ` + nextPort() + `
+             	data-dir = "` + actualDataDir + `"
+                [etcd]
+                  listen-client-address = "http://localhost:0"
+                  listen-peer-address = "http://localhost:0"
+                  initial-cluster = "pilosa0=http://localhost:0"
 `,
 			validation: func() error {
 				v := validator{}
@@ -218,6 +239,11 @@ func TestServerConfig_DeprecateLongQueryTime(t *testing.T) {
 			cfgFileContent: `
             	bind = ` + nextPort() + `
             	bind-grpc = ` + nextPort() + `
+             	data-dir = "` + actualDataDir + `"
+                [etcd]
+                  listen-client-address = "http://localhost:0"
+                  listen-peer-address = "http://localhost:0"
+                  initial-cluster = "pilosa0=http://localhost:0"
 `,
 			validation: func() error {
 				v := validator{}
@@ -228,7 +254,11 @@ func TestServerConfig_DeprecateLongQueryTime(t *testing.T) {
 			},
 		},
 	}
-
+	out, err := os.Create("myprof.prof")
+	if err != nil {
+		t.Fatalf("creating prof file: %v", err)
+	}
+	stop := fgprof.Start(out, fgprof.FormatPprof)
 	// run server tests
 	for i, test := range tests {
 		t.Run(fmt.Sprintf("test-%d", i), func(t *testing.T) {
@@ -256,5 +286,9 @@ func TestServerConfig_DeprecateLongQueryTime(t *testing.T) {
 			}
 			test.reset()
 		})
+	}
+	err = stop()
+	if err != nil {
+		t.Fatalf("stopping profile: %v", err)
 	}
 }

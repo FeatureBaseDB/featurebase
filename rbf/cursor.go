@@ -8,7 +8,7 @@ import (
 	"sort"
 	"unsafe"
 
-	"github.com/molecula/featurebase/v2/roaring"
+	"github.com/molecula/featurebase/v3/roaring"
 	"github.com/pkg/errors"
 )
 
@@ -474,9 +474,11 @@ func (c *Cursor) putLeafCell(in leafCell) (err error) {
 		writeCellN(buf[:], len(group))
 
 		offset := dataOffset(len(group))
+		x := 0
 		for j, cell := range group {
 			writeLeafCell(buf[:], j, offset, cell)
 			offset += align8(cell.Size())
+			x++
 		}
 
 		if err := c.tx.writePage(buf[:]); err != nil {
@@ -526,7 +528,7 @@ func (c *Cursor) putLeafCellFast(in leafCell, isInsert bool) (err error) {
 	}
 
 	// Write page header.
-	dst := allocPage() // make([]byte, PageSize)
+	dst := allocPage()
 	writePageNo(dst, readPageNo(src))
 	writeFlags(dst, PageTypeLeaf)
 	writeCellN(dst, dstCellN)
@@ -614,9 +616,8 @@ func (c *Cursor) deleteLeafCell(key uint64) (err error) {
 	copy(cells[elem.index:], cells[elem.index+1:])
 	cells[len(cells)-1] = leafCell{}
 	cells = cells[:len(cells)-1]
-
 	// Write cells to page.
-	buf := make([]byte, PageSize)
+	buf := allocPage()
 	writePageNo(buf[:], elem.pgno)
 	writeFlags(buf[:], PageTypeLeaf)
 	writeCellN(buf[:], len(cells))
@@ -626,6 +627,7 @@ func (c *Cursor) deleteLeafCell(key uint64) (err error) {
 		writeLeafCell(buf[:], j, offset, cell)
 		offset += align8(cell.Size())
 	}
+
 	if err := c.tx.writePage(buf[:]); err != nil {
 		return err
 	}
@@ -774,6 +776,25 @@ func (c *Cursor) deleteBranchCell(stackIndex int, key uint64) (err error) {
 	cells[len(cells)-1] = branchCell{}
 	cells = cells[:len(cells)-1]
 
+	// Branches are not allowed to have zero element so we must remove the page
+	// or, in the case of the root page, convert to a leaf page.
+	if len(cells) == 0 {
+		// If this is the root page, convert to leaf page.
+		if stackIndex == 0 {
+			var buf [PageSize]byte
+			writePageNo(buf[:], elem.pgno)
+			writeFlags(buf[:], PageTypeLeaf)
+			writeCellN(buf[:], len(cells))
+			return c.tx.writePage(buf[:])
+		}
+
+		// If this is a non-root page, free and remove from parent.
+		if err := c.tx.freePgno(elem.pgno); err != nil {
+			return err
+		}
+		return c.deleteBranchCell(stackIndex-1, oldPageKey)
+	}
+
 	// If the root only has one node, replace it with its child.
 	if stackIndex == 0 && len(cells) == 1 {
 		target, _, err := c.tx.readPage(cells[0].ChildPgno)
@@ -781,7 +802,7 @@ func (c *Cursor) deleteBranchCell(stackIndex int, key uint64) (err error) {
 			return err
 		}
 
-		buf := make([]byte, PageSize)
+		buf := allocPage()
 		copy(buf, target)
 		writePageNo(buf[:], elem.pgno)
 
@@ -802,6 +823,9 @@ func (c *Cursor) deleteBranchCell(stackIndex int, key uint64) (err error) {
 		writeBranchCell(buf[:], j, offset, cell)
 		offset += align8(branchCellSize)
 	}
+
+	assert(readCellN(buf[:]) > 0) // must have at least one cell
+
 	if err := c.tx.writePage(buf[:]); err != nil {
 		return err
 	}
@@ -909,6 +933,10 @@ func (c *Cursor) First() error {
 		switch typ := readFlags(buf); typ {
 		case PageTypeBranch:
 			elem.index = 0
+
+			if n := readCellN(buf); elem.index >= n { // branch cell index must less than cell count
+				return fmt.Errorf("branch cell index out of range: pgno=%d i=%d n=%d", elem.pgno, elem.index, n)
+			}
 
 			// Read cell pgno into the next stack level.
 			cell := readBranchCell(buf, elem.index)

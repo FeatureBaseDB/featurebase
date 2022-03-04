@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/molecula/featurebase/v2/generator"
+	"github.com/molecula/featurebase/v3/generator"
 	"github.com/pkg/errors"
 )
 
@@ -4823,5 +4823,28 @@ func TestVariousBitmap(t *testing.T) {
 	if r != 0 {
 
 		t.Fatal("nil AddN should be 0")
+	}
+}
+func TestBitmapHash(t *testing.T) {
+	a, b := NewContainerBitmapN(getFullBitmap(), MaxContainerVal+1), NewContainerBitmapN(getFullBitmap(), MaxContainerVal+1)
+	arr := NewContainerArray([]uint16{1, 2, 3, 5, 8})
+	run := NewContainerRun([]Interval16{{Start: 0, Last: 32}})
+	ba := NewBitmap()
+	bb := NewBitmap()
+	ba.Containers.Put(1, arr)
+	ba.Containers.Put(2, run)
+	ba.Containers.Put(101, a)
+	ba.Containers.Put(102, a)
+
+	bb.Containers.Put(1, arr)
+	bb.Containers.Put(2, run)
+	bb.Containers.Put(101, b)
+	bb.Containers.Put(102, b)
+	if ba.Hash(0) != bb.Hash(0) {
+		t.Fatal("hash should be equal")
+	}
+	bb.Containers.Put(103, b)
+	if ba.Hash(0) == bb.Hash(0) {
+		t.Fatal("hash should be different")
 	}
 }

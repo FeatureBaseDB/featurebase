@@ -6,7 +6,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/molecula/featurebase/v2"
+	pilosa "github.com/molecula/featurebase/v3"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
@@ -53,15 +53,15 @@ at https://docs.molecula.cloud/.
 	rc.AddCommand(newChkSumCommand(stdin, stdout, stderr))
 	rc.AddCommand(newBackupCommand(stdin, stdout, stderr))
 	rc.AddCommand(newRestoreCommand(stdin, stdout, stderr))
-	rc.AddCommand(newCheckCommand(stdin, stdout, stderr))
 	rc.AddCommand(newConfigCommand(stdin, stdout, stderr))
 	rc.AddCommand(newExportCommand(stdin, stdout, stderr))
 	rc.AddCommand(newGenerateConfigCommand(stdin, stdout, stderr))
 	rc.AddCommand(newImportCommand(stdin, stdout, stderr))
-	rc.AddCommand(newInspectCommand(stdin, stdout, stderr))
 	rc.AddCommand(newRBFCommand(stdin, stdout, stderr))
 	rc.AddCommand(newServeCmd(stdin, stdout, stderr))
 	rc.AddCommand(newHolderCmd(stdin, stdout, stderr))
+	rc.AddCommand(newHolderCmd(stdin, stdout, stderr))
+	rc.AddCommand(newKeygenCommand(stdin, stdout, stderr))
 
 	rc.SetOutput(stderr)
 	return rc

@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/molecula/featurebase/v2"
-	_ "github.com/molecula/featurebase/v2/test"
+	"github.com/molecula/featurebase/v3"
+	_ "github.com/molecula/featurebase/v3/test"
 )
 
 func TestAddressWithDefaults(t *testing.T) {

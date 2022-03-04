@@ -1,23 +1,48 @@
 // Copyright 2021 Molecula Corp. All rights reserved.
-//go:build integration
-// +build integration
 
 package client
 
 import (
+	"math/rand"
 	"reflect"
 	"sort"
 	"strconv"
 	"testing"
 	"time"
 
+	"github.com/molecula/featurebase/v3/test"
+
 	"github.com/pkg/errors"
 )
 
-func TestStringSliceCombos(t *testing.T) {
-	client := DefaultClient()
+func NewTestClient(t *testing.T, c *test.Cluster) *Client {
+	client, err := NewClient(c.Nodes[0].URL())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return client
+}
+
+func TestAgainstCluster(t *testing.T) {
+	c := test.MustRunCluster(t, 1)
+	defer c.Close()
+	client := NewTestClient(t, c)
+
+	t.Run("string-slice-combos", func(t *testing.T) { testStringSliceCombos(t, c, client) })
+	t.Run("import-batch-ints", func(t *testing.T) { testImportBatchInts(t, c, client) })
+	t.Run("import-batch-sorting", func(t *testing.T) { testImportBatchSorting(t, c, client) })
+	t.Run("test-trim-null", func(t *testing.T) { testTrimNull(t, c, client) })
+	t.Run("test-string-slice-empty-and-nil", func(t *testing.T) { testStringSliceEmptyAndNil(t, c, client) })
+	t.Run("test-string-slice", func(t *testing.T) { testStringSlice(t, c, client) })
+	t.Run("test-single-clear-batch-regression", func(t *testing.T) { testSingleClearBatchRegression(t, c, client) })
+	t.Run("test-batches", func(t *testing.T) { testBatches(t, c, client) })
+	t.Run("batches-strings-ids", func(t *testing.T) { testBatchesStringIDs(t, c, client) })
+	t.Run("test-batch-staleness", func(t *testing.T) { testBatchStaleness(t, c, client) })
+}
+
+func testStringSliceCombos(t *testing.T, c *test.Cluster, client *Client) {
 	schema := NewSchema()
-	idx := schema.Index("test-string-slicecombos")
+	idx := schema.Index("test-string-slice-combos")
 	fields := make([]*Field, 1)
 	fields[0] = idx.Field("a1", OptFieldKeys(true), OptFieldTypeSet(CacheTypeRanked, 100))
 	err := client.SyncSchema(schema)
@@ -152,10 +177,9 @@ func ingestRecords(records []Row, batch *Batch) error {
 	return nil
 }
 
-func TestImportBatchInts(t *testing.T) {
-	client := DefaultClient()
+func testImportBatchInts(t *testing.T, c *test.Cluster, client *Client) {
 	schema := NewSchema()
-	idx := schema.Index("gopilosatest-blah")
+	idx := schema.Index("test-import-batch-ints")
 	field := idx.Field("anint", OptFieldTypeInt())
 	err := client.SyncSchema(schema)
 	if err != nil {
@@ -212,10 +236,59 @@ func TestImportBatchInts(t *testing.T) {
 	}
 }
 
-func TestTrimNull(t *testing.T) {
-	client := DefaultClient()
+func testImportBatchSorting(t *testing.T, c *test.Cluster, client *Client) {
 	schema := NewSchema()
-	idx := schema.Index("gopilosatest-null")
+	idx := schema.Index("test-import-batch-sorting")
+	field := idx.Field("anint", OptFieldTypeInt())
+	field2 := idx.Field("amutex", OptFieldTypeMutex(CacheTypeNone, 0))
+	err := client.SyncSchema(schema)
+	if err != nil {
+		t.Fatalf("syncing schema: %v", err)
+	}
+
+	b, err := NewBatch(client, 100, idx, []*Field{field, field2})
+	if err != nil {
+		t.Fatalf("getting batch: %v", err)
+	}
+
+	r := Row{Values: make([]interface{}, 2)}
+
+	rnd := rand.New(rand.NewSource(7))
+
+	// generate 100 records randomly spread/ordered across multiple
+	// shards to test sorting on int/mutex fields
+	for i := 0; i < 100; i++ {
+		id := rnd.Intn(10_000_000)
+		r.ID = uint64(id)
+		r.Values[0] = int64(id)
+		r.Values[1] = uint64(id)
+		err := b.Add(r)
+		if err != nil && err != ErrBatchNowFull {
+			t.Fatalf("adding to batch: %v", err)
+		}
+	}
+	err = b.Import()
+	if err != nil {
+		t.Fatalf("importing: %v", err)
+	}
+
+	err = b.Import()
+	if err != nil {
+		t.Fatalf("second import: %v", err)
+	}
+
+	resp, err := client.Query(idx.RawQuery("Count(All())"))
+	if err != nil {
+		t.Fatalf("querying: %v", err)
+	}
+	if res := resp.Results()[0]; res.Count() != 100 {
+		t.Fatalf("unexpected result: %+v", res)
+	}
+}
+
+func testTrimNull(t *testing.T, c *test.Cluster, client *Client) {
+	schema := NewSchema()
+	idx := schema.Index("test-trim-null")
 	field := idx.Field("empty", OptFieldTypeInt())
 	err := client.SyncSchema(schema)
 	if err != nil {
@@ -286,7 +359,7 @@ func TestTrimNull(t *testing.T) {
 		t.Fatalf("querying: %v", err)
 	}
 	for i, result := range resp.Results() {
-		if 1 == i {
+		if i == 1 {
 			if !reflect.DeepEqual(result.Row().Columns, []uint64(nil)) {
 				t.Errorf("expected %#v for %d, but got %#v", []uint64(nil), i, result.Row().Columns)
 			}
@@ -299,8 +372,7 @@ func TestTrimNull(t *testing.T) {
 
 }
 
-func TestStringSliceEmptyAndNil(t *testing.T) {
-	client := DefaultClient()
+func testStringSliceEmptyAndNil(t *testing.T, c *test.Cluster, client *Client) {
 	schema := NewSchema()
 	idx := schema.Index("test-string-slice-nil")
 	fields := make([]*Field, 1)
@@ -397,8 +469,7 @@ func TestStringSliceEmptyAndNil(t *testing.T) {
 
 }
 
-func TestStringSlice(t *testing.T) {
-	client := DefaultClient()
+func testStringSlice(t *testing.T, c *test.Cluster, client *Client) {
 	schema := NewSchema()
 	idx := schema.Index("test-string-slice")
 	fields := make([]*Field, 1)
@@ -513,10 +584,9 @@ func TestStringSlice(t *testing.T) {
 	}
 }
 
-func TestSingleClearBatchRegression(t *testing.T) {
-	client := DefaultClient()
+func testSingleClearBatchRegression(t *testing.T, c *test.Cluster, client *Client) {
 	schema := NewSchema()
-	idx := schema.Index("gopilosatest-blah")
+	idx := schema.Index("test-single-clear-batch-regression")
 	numFields := 1
 	fields := make([]*Field, numFields)
 	fields[0] = idx.Field("zero", OptFieldKeys(true))
@@ -565,10 +635,9 @@ func TestSingleClearBatchRegression(t *testing.T) {
 
 }
 
-func TestBatches(t *testing.T) {
-	client := DefaultClient()
+func testBatches(t *testing.T, c *test.Cluster, client *Client) {
 	schema := NewSchema()
-	idx := schema.Index("gopilosatest-blah")
+	idx := schema.Index("test-batches")
 	numFields := 5
 	fields := make([]*Field, numFields)
 	fields[0] = idx.Field("zero", OptFieldKeys(true))
@@ -890,8 +959,8 @@ func TestBatches(t *testing.T) {
 		}
 	}
 	res := results[1]
-	cols := res.Row().Columns
-	if !reflect.DeepEqual(cols, []uint64{0, 2, 4, 6, 8, 10, 12, 14, 16, 18}) {
+
+	if cols := res.Row().Columns; !reflect.DeepEqual(cols, []uint64{0, 2, 4, 6, 8, 10, 12, 14, 16, 18}) {
 		t.Fatalf("unexpected columns for field 1 row b: %v", cols)
 	}
 
@@ -919,23 +988,25 @@ func TestBatches(t *testing.T) {
 		t.Fatalf("querying: %v", err)
 	}
 	results = resp.Results()
-	cols = results[0].Row().Columns
-	if !reflect.DeepEqual(cols, []uint64{0, 1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28}) {
+
+	if cols := results[0].Row().Columns; !reflect.DeepEqual(cols, []uint64{0, 1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28}) {
 		t.Fatalf("all columns (but 8) should be greater than -11, but got: %v", cols)
 	}
-	cols = results[1].Row().Columns
-	if !reflect.DeepEqual(cols, []uint64{19, 21, 23, 25, 27}) {
+
+	if cols := results[1].Row().Columns; !reflect.DeepEqual(cols, []uint64{19, 21, 23, 25, 27}) {
 		t.Fatalf("wrong cols for ==0: %v", cols)
 	}
-	cols = results[2].Row().Columns
-	if !reflect.DeepEqual(cols, []uint64{20, 22, 24, 26, 28}) {
+
+	if cols := results[2].Row().Columns; !reflect.DeepEqual(cols, []uint64{20, 22, 24, 26, 28}) {
 		t.Fatalf("wrong cols for ==100: %v", cols)
 	}
-	cols = results[3].Row().Columns
+
+	cols := results[3].Row().Columns
 	exp := []uint64{0, 2, 4, 6, 10, 12, 14, 16, 18}
 	if !reflect.DeepEqual(cols, exp) {
 		t.Fatalf("wrong cols for January: got/want\n%v\n%v", cols, exp)
 	}
+
 	cols = results[4].Row().Columns
 	exp = []uint64{1, 3, 5, 7}
 	if !reflect.DeepEqual(cols, exp) {
@@ -977,10 +1048,9 @@ func TestBatches(t *testing.T) {
 	// TODO test importing across multiple shards
 }
 
-func TestBatchesStringIDs(t *testing.T) {
-	client := DefaultClient()
+func testBatchesStringIDs(t *testing.T, c *test.Cluster, client *Client) {
 	schema := NewSchema()
-	idx := schema.Index("gopilosatest-blah", OptIndexKeys(true))
+	idx := schema.Index("batches-strings-ids", OptIndexKeys(true))
 	fields := make([]*Field, 3)
 	fields[0] = idx.Field("zero", OptFieldKeys(true))
 	fields[1] = idx.Field("one", OptFieldTypeMutex(CacheTypeNone, 0), OptFieldKeys(true))
@@ -1117,26 +1187,6 @@ outer:
 	return nil
 }
 
-func isPermutationOfInt(one, two []uint64) error {
-	if len(one) != len(two) {
-		return errors.Errorf("different lengths %d and %d", len(one), len(two))
-	}
-outer:
-	for _, vOne := range one {
-		for j, vTwo := range two {
-			if vOne == vTwo {
-				two = append(two[:j], two[j+1:]...)
-				continue outer
-			}
-		}
-		return errors.Errorf("%d in one but not two", vOne)
-	}
-	if len(two) != 0 {
-		return errors.Errorf("vals in two but not one: %v", two)
-	}
-	return nil
-}
-
 func TestQuantizedTime(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -1263,10 +1313,9 @@ func TestQuantizedTime(t *testing.T) {
 
 }
 
-func TestBatchStaleness(t *testing.T) {
-	client := DefaultClient()
+func testBatchStaleness(t *testing.T, c *test.Cluster, client *Client) {
 	schema := NewSchema()
-	idx := schema.Index("gopilosatest-blah")
+	idx := schema.Index("test-batch-staleness")
 	field := idx.Field("anint", OptFieldTypeInt())
 	err := client.SyncSchema(schema)
 	if err != nil {

@@ -15,9 +15,9 @@ import (
 	"unsafe"
 
 	"github.com/benbjohnson/immutable"
-	"github.com/molecula/featurebase/v2/roaring"
-	"github.com/molecula/featurebase/v2/shardwidth"
-	"github.com/molecula/featurebase/v2/vprint"
+	"github.com/molecula/featurebase/v3/roaring"
+	"github.com/molecula/featurebase/v3/shardwidth"
+	"github.com/molecula/featurebase/v3/vprint"
 )
 
 const (
@@ -797,5 +797,48 @@ func (m *Metric) Inc(d time.Duration) {
 
 	if m.n != 0 && m.n%m.interval == 0 {
 		fmt.Printf("metric:%10s avg=%dns\n", m.name, int(m.d)/m.n)
+	}
+}
+
+// ErrorList represents a list of errors.
+type ErrorList []error
+
+// Err returns the list if it contains errors. Otherwise returns nil.
+func (a ErrorList) Err() error {
+	if len(a) > 0 {
+		return a
+	}
+	return nil
+}
+
+func (a ErrorList) Error() string {
+	switch len(a) {
+	case 0:
+		return "no errors"
+	case 1:
+		return a[0].Error()
+	}
+	return fmt.Sprintf("%s (and %d more errors)", a[0], len(a)-1)
+}
+
+func (a ErrorList) FullError() string {
+	if len(a) == 0 {
+		return ""
+	}
+
+	var buf bytes.Buffer
+	for _, err := range a {
+		fmt.Fprintln(&buf, err)
+	}
+	return buf.String()
+}
+
+// Append appends an error to the list. If err is an ErrorList then all errors are appended.
+func (a *ErrorList) Append(err error) {
+	switch err := err.(type) {
+	case ErrorList:
+		*a = append(*a, err...)
+	default:
+		*a = append(*a, err)
 	}
 }

@@ -2,6 +2,7 @@
 package cfg
 
 import (
+	"github.com/molecula/featurebase/v3/logger"
 	"github.com/spf13/pflag"
 )
 
@@ -35,6 +36,11 @@ type Config struct {
 	// CursorCacheSize is the number of copies of Cursor{} to keep in our
 	// readyCursorCh arena to avoid GC pressure.
 	CursorCacheSize int64 `toml:"cursor-cache-size"`
+
+	// Logger specifies a logger for asynchronous errors, such as
+	// background checkpoints. It cannot be set from toml. The default is
+	// to use stderr.
+	Logger logger.Logger `toml:"-"`
 }
 
 func NewDefaultConfig() *Config {

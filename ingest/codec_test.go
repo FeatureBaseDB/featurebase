@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/molecula/featurebase/v2/shardwidth"
+	"github.com/molecula/featurebase/v3/shardwidth"
 )
 
 func TestStableTranslator(t *testing.T) {

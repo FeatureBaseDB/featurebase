@@ -9,10 +9,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/molecula/featurebase/v2/debugstats"
-	"github.com/molecula/featurebase/v2/roaring"
-	txkey "github.com/molecula/featurebase/v2/short_txkey"
-	"github.com/molecula/featurebase/v2/vprint"
+	"github.com/molecula/featurebase/v3/debugstats"
+	"github.com/molecula/featurebase/v3/roaring"
+	txkey "github.com/molecula/featurebase/v3/short_txkey"
+	"github.com/molecula/featurebase/v3/storage"
+	"github.com/molecula/featurebase/v3/vprint"
 )
 
 // statTx is useful to profile on a
@@ -56,7 +57,7 @@ func (w *callStats) reset() {
 }
 
 func (c *callStats) report() (r string) {
-	backend := CurrentBackend()
+	backend := storage.DefaultBackend
 	r = fmt.Sprintf("callStats: (%v)\n", backend)
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -158,6 +159,7 @@ const (
 	kOffsetRange
 	kLast // mark the end, always keep this last. The following aren't tracked atm:
 	kType
+	kRemoveChannel
 )
 
 func (k kall) String() string {
@@ -204,6 +206,8 @@ func (k kall) String() string {
 		return "kLast"
 	case kType:
 		return "kType"
+	case kRemoveChannel:
+		return "kRemoveChannel"
 	}
 	vprint.PanicOn(fmt.Sprintf("unknown kall '%v'", int(k)))
 	return ""
@@ -219,6 +223,15 @@ func (c *statTx) NewTxIterator(index, field, view string, shard uint64) *roaring
 		c.stats.add(me, time.Since(t0))
 	}()
 	return c.b.NewTxIterator(index, field, view, shard)
+}
+func (c *statTx) RemoveChannel(index, field, view string, shard uint64, a chan uint64, resChan chan countResults) {
+	me := kRemoveChannel
+	t0 := time.Now()
+	defer func() {
+		c.stats.add(me, time.Since(t0))
+	}()
+	c.b.RemoveChannel(index, field, view, shard, a, resChan)
+	return
 }
 
 func (c *statTx) ImportRoaringBits(index, field, view string, shard uint64, rit roaring.RoaringIterator, clear bool, log bool, rowSize uint64) (changed int, rowSet map[uint64]int, err error) {

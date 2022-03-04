@@ -17,10 +17,10 @@ import (
 	"strings"
 	"time"
 
-	pilosa "github.com/molecula/featurebase/v2"
-	"github.com/molecula/featurebase/v2/http"
-	pnet "github.com/molecula/featurebase/v2/net"
-	"github.com/molecula/featurebase/v2/vprint"
+	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/encoding/proto"
+	pnet "github.com/molecula/featurebase/v3/net"
+	"github.com/molecula/featurebase/v3/vprint"
 )
 
 // slurp: slurp is a load-tester for importing bulk data.
@@ -32,7 +32,7 @@ type stateMachine struct {
 	lastField string
 	lastShard uint64
 	state     string
-	client    *http.InternalClient
+	client    *pilosa.InternalClient
 	start     time.Time
 
 	profile string
@@ -92,8 +92,10 @@ func (r *stateMachine) NewHeader(h *tar.Header, tr *tar.Reader) error {
 
 			byteData, err := ioutil.ReadAll(tr)
 			vprint.PanicOn(err)
-			br := bytes.NewReader(byteData)
-			err = r.client.ImportFieldKeys(context.Background(), uri, index, fieldName, false, br)
+			readerFunc := func() (io.Reader, error) {
+				return bytes.NewReader(byteData), nil
+			}
+			err = r.client.ImportFieldKeys(context.Background(), uri, index, fieldName, false, readerFunc)
 			if err != nil {
 				return err
 			}
@@ -106,9 +108,11 @@ func (r *stateMachine) NewHeader(h *tar.Header, tr *tar.Reader) error {
 			}
 			byteData, err := ioutil.ReadAll(tr)
 			vprint.PanicOn(err)
+			readerFunc := func() (io.Reader, error) {
+				return bytes.NewReader(byteData), nil
+			}
 
-			br := bytes.NewReader(byteData)
-			err = r.client.ImportIndexKeys(context.Background(), uri, index, int(partition), false, br)
+			err = r.client.ImportIndexKeys(context.Background(), uri, index, int(partition), false, readerFunc)
 			if err != nil {
 				return err
 			}
@@ -132,7 +136,7 @@ func (r *stateMachine) Upload() error {
 	return nil
 }
 
-func UploadTar(srcFile string, client *http.InternalClient, profile, host string) error {
+func UploadTar(srcFile string, client *pilosa.InternalClient, profile, host string) error {
 
 	f, err := os.Open(srcFile)
 	if err != nil {
@@ -188,7 +192,7 @@ func main() {
 	if profile != "" {
 		startProfile(host)
 	}
-	c, err := http.NewInternalClient(host, h)
+	c, err := pilosa.NewInternalClient(host, h, pilosa.WithSerializer(proto.Serializer{}))
 	vprint.PanicOn(err)
 
 	t0 := time.Now()

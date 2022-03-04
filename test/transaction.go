@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/molecula/featurebase/v2"
+	"github.com/molecula/featurebase/v3"
 )
 
 const deadlineSkew = time.Second

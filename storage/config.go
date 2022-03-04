@@ -3,9 +3,7 @@ package storage
 
 // public strings that pilosa/server/config.go can reference
 const (
-	RoaringBackend string = "roaring"
-	RBFBackend     string = "rbf"
-	BoltBackend    string = "bolt"
+	RBFBackend string = "rbf"
 )
 
 // DefaultBackend is set here. pilosa/server/config.go references it

@@ -9,7 +9,7 @@ package statik
 import (
 	"net/http"
 
-	"github.com/molecula/featurebase/v2"
+	"github.com/molecula/featurebase/v3"
 	"github.com/rakyll/statik/fs"
 )
 

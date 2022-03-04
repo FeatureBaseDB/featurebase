@@ -14,9 +14,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/molecula/featurebase/v2/disco"
-	"github.com/molecula/featurebase/v2/logger"
-	"github.com/molecula/featurebase/v2/topology"
+	"github.com/molecula/featurebase/v3/disco"
+	"github.com/molecula/featurebase/v3/logger"
+	"github.com/molecula/featurebase/v3/topology"
 	"github.com/pkg/errors"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/clientv3util"
@@ -183,27 +183,73 @@ func (e *Etcd) Close() error {
 // the client object, then call things on that object. This should error
 // out sanely instead of panicing if we close the client while something
 // is running on it.
+//
+// New feature: retryClient can also retry on errTimeout.
+const etcdRetryTimes = 3
+
+// newClient requests a new client which is different from the one
+// passed in. if we've already changed our client (say, because someone
+// else already did that) we just return that new one.
+func (e *Etcd) newClient(cli *clientv3.Client) *clientv3.Client {
+	e.cliMu.Lock()
+	defer e.cliMu.Unlock()
+	if cli != e.cli {
+		cli = e.cli
+		// someone else already reopened. retry.
+		return cli
+	}
+	_ = cli.Close()
+	e.cli = v3client.New(e.e.Server)
+	return e.cli
+}
+
 func (e *Etcd) retryClient(fn func(cli *clientv3.Client) error) (err error) {
 	e.cliMu.Lock()
 	cli := e.cli
 	e.cliMu.Unlock()
-	if err = fn(cli); err == nil || err.Error() != etcdLeaderChanged {
-		// either it's nil or it's an error we don't try to handle here
-		return err
+	for tries := 0; tries < etcdRetryTimes; tries++ {
+		start := time.Now()
+		err = fn(cli)
+		switch err {
+		case etcdserver.ErrLeaderChanged:
+			cli = e.newClient(cli)
+			break
+		case nil:
+			return nil
+		default:
+			msg := err.Error()
+			// this shouldn't be necessary, but empirically, we sometimes
+			// get an error message which has this text, but the error itself
+			// isn't actually etcdserver.ErrLeaderChanged.
+			if strings.Contains(msg, "etcdserver: leader changed") {
+				cli = e.newClient(cli)
+				break
+			}
+			if !strings.Contains(msg, "etcdserver: request timed out") {
+				// not a known error, also not a wrapped timeout
+				return errors.Wrap(err, "non-retryable error")
+			}
+			fallthrough // treat this as being one of the ErrTimeout derivatives, possibly wrapped.
+		case etcdserver.ErrTimeout, etcdserver.ErrTimeoutDueToLeaderFail, etcdserver.ErrTimeoutDueToConnectionLost, etcdserver.ErrTimeoutLeaderTransfer:
+			// sporadic timeouts are concerning but not necessarily fatal
+			// and can usually be retried.
+			elapsed := time.Since(start)
+			retrying := ""
+			if tries < etcdRetryTimes {
+				retrying = fmt.Sprintf(" (retrying, n=%d)", tries)
+			}
+			e.logger.Warnf("timeout (%v elapsed) on etcd query%s", elapsed, retrying)
+			// Sleep just a touch longer to give things a time to
+			// stabilize. We're mostly relying on the fact that this is a
+			// timeout to give us a reasonable backoff period and keep us
+			// from spamming these.
+			time.Sleep(100 * time.Millisecond)
+			break
+		}
 	}
-	// we can't do much with an error from closing e.cli at this point, so
-	// we try again.
-	e.cliMu.Lock()
-	if cli != e.cli {
-		cli = e.cli
-		e.cliMu.Unlock()
-		return fn(cli)
-	}
-	_ = cli.Close()
-	cli = v3client.New(e.e.Server)
-	e.cli = cli
-	e.cliMu.Unlock()
-	return fn(cli)
+	// if we got here, we got a total of three of some combination of
+	// ErrTimeout or ErrLeaderChanged, and we're giving up.
+	return errors.Wrap(err, "exhausted all retries")
 }
 
 func parseOptions(opt Options) *embed.Config {

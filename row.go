@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"sort"
 
-	pb "github.com/molecula/featurebase/v2/proto"
-	"github.com/molecula/featurebase/v2/roaring"
+	pb "github.com/molecula/featurebase/v3/proto"
+	"github.com/molecula/featurebase/v3/roaring"
 	"github.com/pkg/errors"
 )
 
@@ -120,6 +120,15 @@ func (r *Row) ToTable() (*pb.TableResponse, error) {
 		n = len(r.Columns())
 	}
 	return pb.RowsToTable(r, n)
+}
+
+// Hash calculate checksum code be useful in block hash join
+func (r *Row) Hash() uint64 {
+	hash := uint64(0)
+	for i := range r.segments {
+		hash = r.segments[i].data.Hash(hash)
+	}
+	return hash
 }
 
 // ToRows implements the ToRowser interface.
@@ -463,6 +472,11 @@ func (r *Row) MarshalJSON() ([]byte, error) {
 
 // Columns returns the columns in r as a slice of ints.
 func (r *Row) Columns() []uint64 {
+	// We occasionally hit cases where we want to call Columns on something
+	// that might not exist, but a nil slice would be fine.
+	if r == nil {
+		return nil
+	}
 	a := make([]uint64, 0, r.Count())
 	for i := range r.segments {
 		a = append(a, r.segments[i].Columns()...)

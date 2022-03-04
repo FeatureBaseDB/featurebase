@@ -19,6 +19,32 @@ type Query struct {
 	conditional []string
 }
 
+// ExpandVars recursively replaces variables in the query with their values.
+func (q *Query) ExpandVars(vars map[string]interface{}) (*Query, error) {
+	other := *q
+	other.Calls = make([]*Call, 0, len(q.Calls))
+
+	for _, c := range q.Calls {
+		newCalls, err := c.ExpandVars(vars)
+		if err != nil {
+			return nil, err
+		}
+		other.Calls = append(other.Calls, newCalls...)
+	}
+
+	return &other, nil
+}
+
+// HasCall returns true if q contains the given call name.
+func (q *Query) HasCall(name string) bool {
+	for _, c := range q.Calls {
+		if c.HasCall(name) {
+			return true
+		}
+	}
+	return false
+}
+
 func (q *Query) startCall(name string) {
 	// Coerce every name into a canonical form if we know of one.
 	if canon, ok := canonicalCaps[strings.ToLower(name)]; ok {
@@ -60,7 +86,11 @@ func (q *Query) addPosNum(key, value string) {
 
 func (q *Query) addPosStr(key, value string) {
 	q.addField(key)
-	q.addVal(value)
+	if strings.HasPrefix(value, "$") {
+		q.addVal(NewVariable(strings.TrimPrefix(value, "$")))
+	} else {
+		q.addVal(value)
+	}
 }
 
 func (q *Query) startConditional() {
@@ -329,6 +359,20 @@ type Call struct {
 	Precomputed map[uint64]interface{}
 }
 
+// HasCall returns true if q contains the given call name.
+func (c *Call) HasCall(name string) bool {
+	if c.Name == name {
+		return true
+	}
+
+	for _, child := range c.Children {
+		if child.HasCall(name) {
+			return true
+		}
+	}
+	return false
+}
+
 // callInfo defines the arguments allowed for a particular PQL call, and
 // possibly things about its semantics. If allowUnknown is true, unfamiliar
 // non-reserved names are allowed on the assumption that they're field names.
@@ -351,11 +395,23 @@ type stringOrInt64Type struct{}
 
 var stringOrInt64 stringOrInt64Type
 
+// We want to be able to accept either a string or variable for
+// _field args. Special-case type:
+type stringOrVariableType struct{}
+
+var stringOrVariable stringOrVariableType
+
+// We want to be able to accept either a interface or variable for
+// column args. Special-case type:
+type interfaceOrVariableType struct{}
+
+var interfaceOrVariable interfaceOrVariableType
+
 var allowField = callInfo{
 	allowUnknown: false,
 	prototypes: map[string]interface{}{
-		"_field": "",
-		"field":  "",
+		"_field": stringOrVariable,
+		"field":  stringOrVariable,
 	},
 }
 
@@ -401,8 +457,8 @@ var callInfoByFunc = map[string]callInfo{
 	"Rows": {
 		allowUnknown: false,
 		prototypes: map[string]interface{}{
-			"_field":   "",
-			"field":    "",
+			"_field":   stringOrVariable,
+			"field":    stringOrVariable,
 			"limit":    int64(0),
 			"column":   nil,
 			"previous": nil,
@@ -440,7 +496,7 @@ var callInfoByFunc = map[string]callInfo{
 	"ConstRow": {
 		allowUnknown: false,
 		prototypes: map[string]interface{}{
-			"columns": []interface{}{},
+			"columns": interfaceOrVariable,
 		},
 		callType: PrecallGlobal,
 	},
@@ -448,8 +504,8 @@ var callInfoByFunc = map[string]callInfo{
 	"TopK": {
 		allowUnknown: false,
 		prototypes: map[string]interface{}{
-			"_field": "",
-			"field":  "",
+			"_field": stringOrVariable,
+			"field":  stringOrVariable,
 			"k":      int64(0),
 			"filter": nil,
 			"from":   nil,
@@ -460,15 +516,15 @@ var callInfoByFunc = map[string]callInfo{
 	"TopN": {
 		allowUnknown: true,
 		prototypes: map[string]interface{}{
-			"_field": "",
-			"field":  "",
+			"_field": stringOrVariable,
+			"field":  stringOrVariable,
 		},
 	},
 	"Percentile": {
 		allowUnknown: false,
 		prototypes: map[string]interface{}{
-			"field":  "",
-			"_field": "",
+			"field":  stringOrVariable,
+			"_field": stringOrVariable,
 			"filter": nil,
 			"nth":    nil,
 		},
@@ -574,6 +630,24 @@ func (c *Call) CheckCallInfo() error {
 				continue
 			default:
 				return fmt.Errorf("'%s': arg '%s' needed a string or integer value, got %T",
+					c.String(), k, v)
+			}
+		}
+		if reflect.TypeOf(acceptable) == reflect.TypeOf(stringOrVariable) {
+			switch v.(type) {
+			case string, *Variable:
+				continue
+			default:
+				return fmt.Errorf("'%s': arg '%s' needed a string or variable value, got %T",
+					c.String(), k, v)
+			}
+		}
+		if reflect.TypeOf(acceptable) == reflect.TypeOf(interfaceOrVariable) {
+			switch v.(type) {
+			case []interface{}, *Variable:
+				continue
+			default:
+				return fmt.Errorf("'%s': arg '%s' needed a []interface{} or variable value, got %T",
 					c.String(), k, v)
 			}
 		}
@@ -896,6 +970,106 @@ func (c *Call) ArgString(key string) string {
 	return s
 }
 
+// ExpandVars recursively replaces variables in the call with their values.
+func (c *Call) ExpandVars(vars map[string]interface{}) ([]*Call, error) {
+	switch c.Name {
+	case "Row", "ConstRow", "Rows":
+		for argK, argV := range c.Args {
+			variable := getVariable(argV)
+			if variable == nil {
+				continue
+			}
+			for varK, varV := range vars {
+				if variable.Name != varK {
+					continue
+				}
+				switch values := varV.(type) {
+				case []interface{}:
+					return c.expandVars(argK, values), nil
+				default:
+					return nil, fmt.Errorf("expected variable value of type []interface{}, got: %T", values)
+				}
+
+			}
+		}
+		return []*Call{c}, nil
+	default:
+		other := *c
+		other.Args = CopyArgs(c.Args)
+		other.Children = make([]*Call, 0, len(c.Children))
+		for _, child := range c.Children {
+			newChildren, err := child.ExpandVars(vars)
+			if err != nil {
+				return nil, err
+			}
+			other.Children = append(other.Children, newChildren...)
+		}
+		for key, val := range other.Args {
+			switch call := val.(type) {
+			case *Call:
+				newArg, err := call.ExpandVars(vars)
+				if err != nil {
+					return nil, err
+				}
+				if len(newArg) != 1 {
+					return nil, fmt.Errorf("variable: requires single value for argument, got: %+v", newArg)
+				}
+				other.Args[key] = newArg[0]
+			}
+		}
+		return []*Call{&other}, nil
+	}
+}
+
+// expandVars specifies the implementation for variable expansion for various Call types
+func (c *Call) expandVars(name string, values []interface{}) []*Call {
+	switch c.Name {
+	case "Row":
+		union := &Call{Name: "Union"}
+		for i := range values {
+			r := Call{Name: "Row", Args: CopyArgs(c.Args)}
+			switch cond := r.Args[name].(type) {
+			case *Condition:
+				r.Args[name] = &Condition{Op: cond.Op, Value: values[i]}
+			default:
+				r.Args[name] = values[i]
+			}
+			union.Children = append(union.Children, &r)
+		}
+		return []*Call{union}
+	case "Rows":
+		rows := make([]*Call, 0, len(values))
+		for i := range values {
+			r := Call{Name: "Rows"}
+			r.Args = CopyArgs(c.Args)
+			r.Args[name] = values[i]
+			rows = append(rows, &r)
+		}
+		return rows
+	case "ConstRow":
+		r := Call{Name: "ConstRow"}
+		r.Args = CopyArgs(c.Args)
+		r.Args[name] = values
+		return []*Call{&r}
+	}
+	return []*Call{c}
+}
+
+// getVariable returns *Variable given a Call argument if present
+func getVariable(i interface{}) *Variable {
+	switch _var := i.(type) {
+	case *Condition:
+		if v, ok := _var.Value.(*Variable); ok {
+			return v
+		}
+		return nil
+	case *Variable: // if interface{} is of type Variable
+		return _var
+	default:
+		return nil
+	}
+}
+
 // Condition represents an operation & value.
 // When used in an argument map it represents a binary expression.
 type Condition struct {
@@ -1034,6 +1208,21 @@ func (cond *Condition) StringSliceValue() ([]string, bool) {
 	return nil, false
 }
 
+// Variable represents a placeholder variable in a query.
+type Variable struct {
+	Name string
+}
+
+// NewVariable returns a new instance of Variable.
+func NewVariable(name string) *Variable {
+	return &Variable{Name: name}
+}
+
+// String returns the string representation of v.
+func (v *Variable) String() string {
+	return "$" + v.Name
+}
+
 func formatValue(v interface{}) string {
 	switch v := v.(type) {
 	case nil:
@@ -1047,6 +1236,8 @@ func formatValue(v interface{}) string {
 	case time.Time:
 		return fmt.Sprintf("\"%s\"", v.Format(time.RFC3339Nano))
 	case *Condition:
+		return v.String()
+	case *Variable:
 		return v.String()
 	default:
 		return fmt.Sprintf("%v", v)

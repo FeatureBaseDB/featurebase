@@ -5,7 +5,7 @@ import (
 	"context"
 	"io"
 
-	"github.com/molecula/featurebase/v2"
+	"github.com/molecula/featurebase/v3"
 )
 
 type TranslateStore struct {

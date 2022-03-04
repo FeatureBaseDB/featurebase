@@ -12,7 +12,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/molecula/featurebase/v2"
+	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/roaring"
 	"github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"
 
@@ -32,6 +33,8 @@ var (
 
 	bucketKeys = []byte("keys")
 	bucketIDs  = []byte("ids")
+	bucketFree = []byte("free")
+	freeKey    = []byte("free")
 )
 
 const (
@@ -118,6 +121,8 @@ func (s *TranslateStore) Open() (err error) {
 		if _, err := tx.CreateBucketIfNotExists(bucketKeys); err != nil {
 			return err
 		} else if _, err := tx.CreateBucketIfNotExists(bucketIDs); err != nil {
+			return err
+		} else if _, err := tx.CreateBucketIfNotExists(bucketFree); err != nil {
 			return err
 		}
 		return nil
@@ -230,14 +235,26 @@ func (s *TranslateStore) CreateKeys(keys ...string) (map[string]uint64, error) {
 			if idBucket == nil {
 				return errors.Errorf(errFmtTranslateBucketNotFound, bucketIDs)
 			}
+			freeBucket := tx.Bucket(bucketFree)
+			if freeBucket == nil {
+				return errors.Errorf(errFmtTranslateBucketNotFound, bucketFree)
+			}
 			puts := 0
+
+			// we create a freeIDGetter to reduce marshalling
+			getter := newFreeIDGetter(freeBucket)
+			defer getter.Close()
+
 			for idx, key := range keys {
 				id, boltKey := findIDByKey(keyBucket, key)
 				if id != 0 {
 					result[key] = id
 					continue
 				}
-				id = pilosa.GenerateNextPartitionedID(s.index, maxID(tx), s.partitionID, s.partitionN)
+				// see if we can re-use any IDs first
+				if id = getter.GetFreeID(); id == 0 {
+					id = pilosa.GenerateNextPartitionedID(s.index, maxID(tx), s.partitionID, s.partitionN)
+				}
 				idBytes := idScratch[puts*8 : puts*8+8]
 				binary.BigEndian.PutUint64(idBytes, id)
 				puts++
@@ -498,6 +515,88 @@ func (r *TranslateEntryReader) ReadEntry(entry *pilosa.TranslateEntry) error {
 	}
 }
 
+type boltWrapper struct {
+	tx *bolt.Tx
+	db *bolt.DB
+}
+
+func (w *boltWrapper) Commit() error {
+	if w.tx != nil {
+		return w.tx.Commit()
+	}
+	return nil
+}
+
+func (w *boltWrapper) Rollback() {
+	if w.tx != nil {
+		w.tx.Rollback()
+	}
+}
+func (s *TranslateStore) FreeIDs() (*roaring.Bitmap, error) {
+	result := roaring.NewBitmap()
+	err := s.db.View(func(tx *bolt.Tx) error {
+		bkt := tx.Bucket(bucketFree)
+		if bkt == nil {
+			return errors.Errorf(errFmtTranslateBucketNotFound, bucketKeys)
+		}
+		b := bkt.Get(freeKey)
+		err := result.UnmarshalBinary(b)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+	return result, err
+}
+func (s *TranslateStore) MergeFree(tx *bolt.Tx, newIDs *roaring.Bitmap) error {
+	bkt := tx.Bucket(bucketFree)
+	b := bkt.Get(freeKey)
+	buf := new(bytes.Buffer)
+	if b != nil { //if existing combine with newIDs
+		before := roaring.NewBitmap()
+		err := before.UnmarshalBinary(b)
+		if err != nil {
+			return err
+		}
+		final := newIDs.Union(before)
+		_, err = final.WriteTo(buf)
+		if err != nil {
+			return err
+		}
+	} else {
+		newIDs.WriteTo(buf)
+	}
+	return bkt.Put(freeKey, buf.Bytes())
+}
+
+// Delete removes the lookeup pairs in order to make avialble for reuse but doesn't commit the
+// transaction for that is tied to the associated rbf transaction being successful
+func (s *TranslateStore) Delete(records *roaring.Bitmap) (pilosa.Commitor, error) {
+	tx, err := s.db.Begin(true)
+	if err != nil {
+		return nil, err
+	}
+	keyBucket := tx.Bucket(bucketKeys)
+	idBucket := tx.Bucket(bucketIDs)
+	ids := records.Slice()
+	for i := range ids {
+		id := u64tob(ids[i])
+		boltKey := idBucket.Get(id)
+		err = keyBucket.Delete(boltKey)
+		if err != nil {
+			tx.Rollback()
+			return &boltWrapper{}, err
+		}
+		err = idBucket.Delete(id)
+		if err != nil {
+			tx.Rollback()
+			return &boltWrapper{}, err
+		}
+
+	}
+	return &boltWrapper{tx: tx}, s.MergeFree(tx, records)
+}
+
 // emptyKey is a sentinel byte slice which stands for "" as a key.
 var emptyKey = []byte{
 	0x00, 0x00, 0x00,
@@ -519,6 +618,84 @@ func findIDByKey(bkt *bolt.Bucket, key string) (uint64, []byte) {
 		return btou64(value), boltKey
 	}
 	return 0, boltKey
+}
+
+// freeIDGetter reduces the amount of marshaling required to get multiple ids
+type freeIDGetter struct {
+	freeBucket *bolt.Bucket
+	b          *roaring.Bitmap
+	changed    bool
+}
+
+// newFreeIDGetter initializes a new freeIDGetter. If at any point there is a
+// failure, it returns an error.
+//
+// NOTE: For changes to be persisted to the bucket, you must call
+// (*freeIDGetter).Close()
+func newFreeIDGetter(freeBucket *bolt.Bucket) *freeIDGetter {
+	g := &freeIDGetter{
+		freeBucket: freeBucket,
+	}
+	// we ignore this value because it's okay if we dont have a bitmap just yet
+	_ = g.getBitmap()
+	return g
+}
+
+func (g *freeIDGetter) getBitmap() bool {
+	if g.b == nil {
+		// get the bitmap from freeBucket
+		value := g.freeBucket.Get(freeKey)
+		if value == nil {
+			return false
+		}
+		// turn the value into a bitmap
+		b := roaring.NewBitmap()
+		if err := b.UnmarshalBinary(value); err != nil {
+			return false
+		}
+		g.b = b
+	}
+	return true
+}
+
+// GetFreeID tries to get a free ID from the free id bucket. If at any point it
+// fails to do so, it returns a 0. Otherwise, it returns the first free ID in the
+// bucket
+func (g *freeIDGetter) GetFreeID() (id uint64) {
+	if !g.getBitmap() {
+		return 0
+	}
+	// get the first free id
+	id, ok := g.b.Min()
+	if !ok {
+		return 0
+	}
+	// remove that id from the free id bitmap
+	if changed, err := g.b.RemoveN(id); changed == 0 || err != nil {
+		return 0
+	} else {
+		g.changed = true
+	}
+	return id
+}
+
+// Close persists any changes to the bitmap back to the bucket and then nils the
+// references for safety.
+func (g *freeIDGetter) Close() error {
+	if g.changed {
+		// convert bitmap to binary
+		buf, err := g.b.MarshalBinary()
+		if err != nil {
+			return errors.Wrap(err, "closing free ID Getter")
+		}
+		// put updated bitmap back into the freeBucket
+		if err := g.freeBucket.Put(freeKey, buf); err != nil {
+			return errors.Wrap(err, "closing free ID Getter")
+		}
+	}
+	g.b = nil
+	g.freeBucket = nil
+	return nil
 }
 
 func findKeyByID(bkt *bolt.Bucket, id uint64) string {

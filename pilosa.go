@@ -2,13 +2,11 @@
 package pilosa
 
 import (
-	"os"
 	"regexp"
 	"time"
 
-	"github.com/molecula/featurebase/v2/disco"
-	pnet "github.com/molecula/featurebase/v2/net"
-	"github.com/molecula/featurebase/v2/storage"
+	"github.com/molecula/featurebase/v3/disco"
+	pnet "github.com/molecula/featurebase/v3/net"
 	"github.com/pkg/errors"
 )
 
@@ -113,6 +111,12 @@ func newConflictError(err error) ConflictError {
 	return ConflictError{err}
 }
 
+// Unwrap makes it so that a ConflictError wrapping ErrFieldExists gets a
+// true from errors.Is(ErrFieldExists).
+func (c ConflictError) Unwrap() error {
+	return c.error
+}
+
 // NotFoundError wraps an error value to signify that a resource was not found
 // such that in an HTTP scenario, http.StatusNotFound would be returned.
 type NotFoundError error
@@ -156,21 +160,4 @@ func AddressWithDefaults(addr string) (*pnet.URI, error) {
 		return pnet.DefaultURI(), nil
 	}
 	return pnet.NewURIFromAddress(addr)
-}
-
-// CurrentBackend is one step in an attempt to centralize (and either minimize
-// or completely remove), the calls to environment variables throughout the
-// tests. Ideally we could get rid of this and rely completely on the
-// configuration parameters.
-func CurrentBackend() string {
-	return os.Getenv("PILOSA_STORAGE_BACKEND")
-}
-
-// CurrentBackendOrDefault tries the environment variable first, but falls back
-// to the default backend if the environment variable is empty.
-func CurrentBackendOrDefault() string {
-	if backend := os.Getenv("PILOSA_STORAGE_BACKEND"); backend != "" {
-		return backend
-	}
-	return storage.DefaultBackend
 }

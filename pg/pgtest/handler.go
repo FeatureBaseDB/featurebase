@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/molecula/featurebase/v2/pg"
+	"github.com/molecula/featurebase/v3/pg"
 )
 
 // HandlerFunc implements a postgres query handler with a function.

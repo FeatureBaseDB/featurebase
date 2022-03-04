@@ -11,13 +11,12 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
-	pilosa "github.com/molecula/featurebase/v2"
-	"github.com/molecula/featurebase/v2/boltdb"
-	"github.com/molecula/featurebase/v2/http"
-	"github.com/molecula/featurebase/v2/mock"
-	"github.com/molecula/featurebase/v2/server"
-	"github.com/molecula/featurebase/v2/test"
-	"github.com/molecula/featurebase/v2/topology"
+	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/boltdb"
+	"github.com/molecula/featurebase/v3/mock"
+	"github.com/molecula/featurebase/v3/server"
+	"github.com/molecula/featurebase/v3/test"
+	"github.com/molecula/featurebase/v3/topology"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -156,25 +155,25 @@ func TestTranslation_KeyNotFound(t *testing.T) {
 			server.OptCommandServerOptions(
 				pilosa.OptServerNodeID("node0"),
 				pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
-				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+				pilosa.OptServerOpenTranslateReader(pilosa.GetOpenTranslateReaderFunc(nil)),
 			)},
 		[]server.CommandOption{
 			server.OptCommandServerOptions(
 				pilosa.OptServerNodeID("node1"),
 				pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
-				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+				pilosa.OptServerOpenTranslateReader(pilosa.GetOpenTranslateReaderFunc(nil)),
 			)},
 		[]server.CommandOption{
 			server.OptCommandServerOptions(
 				pilosa.OptServerNodeID("node2"),
 				pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
-				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+				pilosa.OptServerOpenTranslateReader(pilosa.GetOpenTranslateReaderFunc(nil)),
 			)},
 		[]server.CommandOption{
 			server.OptCommandServerOptions(
 				pilosa.OptServerNodeID("node3"),
 				pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
-				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+				pilosa.OptServerOpenTranslateReader(pilosa.GetOpenTranslateReaderFunc(nil)),
 			)},
 	)
 	defer c.Close()
@@ -312,19 +311,19 @@ func TestTranslation_Primary(t *testing.T) {
 				server.OptCommandServerOptions(
 					pilosa.OptServerNodeID("node0"),
 					pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
-					pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+					pilosa.OptServerOpenTranslateReader(pilosa.GetOpenTranslateReaderFunc(nil)),
 				)},
 			[]server.CommandOption{
 				server.OptCommandServerOptions(
 					pilosa.OptServerNodeID("node1"),
 					pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
-					pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+					pilosa.OptServerOpenTranslateReader(pilosa.GetOpenTranslateReaderFunc(nil)),
 				)},
 			[]server.CommandOption{
 				server.OptCommandServerOptions(
 					pilosa.OptServerNodeID("node2"),
 					pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
-					pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+					pilosa.OptServerOpenTranslateReader(pilosa.GetOpenTranslateReaderFunc(nil)),
 				)},
 		)
 		defer c.Close()
@@ -388,25 +387,25 @@ func TestTranslation_TranslateIDsOnCluster(t *testing.T) {
 			server.OptCommandServerOptions(
 				pilosa.OptServerNodeID("node0"),
 				pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
-				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+				pilosa.OptServerOpenTranslateReader(pilosa.GetOpenTranslateReaderFunc(nil)),
 			)},
 		[]server.CommandOption{
 			server.OptCommandServerOptions(
 				pilosa.OptServerNodeID("node1"),
 				pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
-				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+				pilosa.OptServerOpenTranslateReader(pilosa.GetOpenTranslateReaderFunc(nil)),
 			)},
 		[]server.CommandOption{
 			server.OptCommandServerOptions(
 				pilosa.OptServerNodeID("node2"),
 				pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
-				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+				pilosa.OptServerOpenTranslateReader(pilosa.GetOpenTranslateReaderFunc(nil)),
 			)},
 		[]server.CommandOption{
 			server.OptCommandServerOptions(
 				pilosa.OptServerNodeID("node3"),
 				pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
-				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+				pilosa.OptServerOpenTranslateReader(pilosa.GetOpenTranslateReaderFunc(nil)),
 			)},
 	)
 	defer c.Close()

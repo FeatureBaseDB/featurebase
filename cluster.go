@@ -10,12 +10,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/molecula/featurebase/v2/disco"
-	"github.com/molecula/featurebase/v2/ingest"
-	"github.com/molecula/featurebase/v2/logger"
-	"github.com/molecula/featurebase/v2/roaring"
-	"github.com/molecula/featurebase/v2/topology"
-	"github.com/molecula/featurebase/v2/tracing"
+	"github.com/molecula/featurebase/v3/disco"
+	"github.com/molecula/featurebase/v3/ingest"
+	"github.com/molecula/featurebase/v3/logger"
+	"github.com/molecula/featurebase/v3/roaring"
+	"github.com/molecula/featurebase/v3/topology"
+	"github.com/molecula/featurebase/v3/tracing"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -102,7 +102,7 @@ type cluster struct { // nolint: maligned
 
 	logger logger.Logger
 
-	InternalClient InternalClient
+	InternalClient *InternalClient
 
 	confirmDownRetries int
 	confirmDownSleep   time.Duration
@@ -120,7 +120,7 @@ func newCluster() *cluster {
 
 		translationSyncer: NopTranslationSyncer,
 
-		InternalClient: newNopInternalClient(),
+		InternalClient: &InternalClient{}, // TODO might have to fill this out a bit
 
 		logger: logger.NopLogger,
 

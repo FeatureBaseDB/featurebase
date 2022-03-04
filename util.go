@@ -4,13 +4,11 @@ package pilosa
 // util.go: a place for generic, reusable utilities.
 
 import (
-	"os"
+	"fmt"
 	"reflect"
-	"syscall"
 	"time"
 
-	"github.com/molecula/featurebase/v2/roaring"
-	"github.com/pkg/errors"
+	"github.com/shirou/gopsutil/v3/mem"
 )
 
 // LeftShifted16MaxContainerKey is 0xffffffffffff0000. It is similar
@@ -43,65 +41,6 @@ func NilInside(iface interface{}) bool {
 func highbits(v uint64) uint64 { return v >> 16 }
 func lowbits(v uint64) uint16  { return uint16(v & 0xFFFF) }
 
-// called by Holder.hasRoaringData()
-func roaringFragmentHasData(path string, index, field, view string, shard uint64) (hasData bool, err error) {
-
-	var info roaring.BitmapInfo
-	_ = info
-	var f *os.File
-	f, err = os.Open(path)
-	if err != nil {
-		return
-	}
-
-	var fi os.FileInfo
-	fi, err = f.Stat()
-	if err != nil {
-		return
-	}
-
-	// Memory map the file.
-	data, err := syscall.Mmap(int(f.Fd()), 0, int(fi.Size()), syscall.PROT_READ, syscall.MAP_SHARED)
-	if err != nil {
-		err = errors.Wrap(err, "mmapping")
-		return
-	}
-	defer func() {
-		err = syscall.Munmap(data)
-		if err != nil {
-			err = errors.Wrap(err, "roaringFragmentHasData: munmap failed")
-		}
-		err = f.Close()
-		if err != nil {
-			err = errors.Wrap(err, "roaringFragmentHasData f.Close() in defer")
-		}
-	}()
-
-	// Attach the mmap file to the bitmap.
-	var rbm *roaring.Bitmap
-	rbm, _, err = roaring.InspectBinary(data, true, &info)
-	if err != nil {
-		err = errors.Wrap(err, "inspecting")
-		return
-	}
-
-	if info.ContainerCount > 0 {
-		return true, nil
-	}
-	if info.Ops > 0 {
-		return true, nil
-	}
-
-	citer, found := rbm.Containers.Iterator(0)
-	_ = found
-
-	for citer.Next() {
-		return true, nil
-	}
-
-	return
-}
-
 // GetLoopProgress returns the estimated remaining time to iterate through some
 // items as well as the loop completion percentage with the following
 // parameters:
@@ -117,4 +56,18 @@ func GetLoopProgress(start time.Time, now time.Time, iteration uint, total uint)
 // an epoch value, base, and time unit
 func FormatTimestampNano(value, base int64, timeUnit string) string {
 	return time.Unix(0, (value+base)*TimeUnitNanos(timeUnit)).UTC().Format(time.RFC3339Nano)
+}
+
+type MemoryUsage struct {
+	Capacity uint64 `json:"capacity"`
+	TotalUse uint64 `json:"totalUsed"`
+}
+
+// GetMemoryUsage gets the memory usage
+func GetMemoryUsage() (MemoryUsage, error) {
+	usage, err := mem.VirtualMemory()
+	if usage == nil || err != nil {
+		return MemoryUsage{}, fmt.Errorf("reading virtual memory: %v", err)
+	}
+	return MemoryUsage{Capacity: usage.Total, TotalUse: usage.Used}, nil
 }

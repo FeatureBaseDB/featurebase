@@ -10,10 +10,10 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/molecula/featurebase/v2/disco"
-	"github.com/molecula/featurebase/v2/roaring"
-	"github.com/molecula/featurebase/v2/stats"
-	"github.com/molecula/featurebase/v2/testhook"
+	"github.com/molecula/featurebase/v3/disco"
+	"github.com/molecula/featurebase/v3/roaring"
+	"github.com/molecula/featurebase/v3/stats"
+	"github.com/molecula/featurebase/v3/testhook"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -77,7 +77,7 @@ func NewIndex(holder *Holder, path, name string) (*Index, error) {
 		holder:         holder,
 		trackExistence: true,
 
-		Schemator:  disco.InMemSchemator,
+		Schemator:  disco.NewInMemSchemator(),
 		serializer: NopSerializer,
 
 		translateStores: make(map[int]TranslateStore),
@@ -91,10 +91,6 @@ func NewIndex(holder *Holder, path, name string) (*Index, error) {
 
 func (i *Index) NewTx(txo Txo) Tx {
 	return i.holder.txf.NewTx(txo)
-}
-
-func (i *Index) NeedsSnapshot() bool {
-	return i.holder.txf.NeedsSnapshot()
 }
 
 // CreatedAt is an timestamp for a specific version of an index.
@@ -268,43 +264,24 @@ func (i *Index) openFields(idx *disco.Index) error {
 	}
 	defer f.Close()
 
-	fis, err := f.Readdir(0)
-	if err != nil {
-		return errors.Wrap(err, "reading directory")
-	}
 	eg, ctx := errgroup.WithContext(context.Background())
 	var mu sync.Mutex
 
+	if idx == nil {
+		return nil
+	}
 fileLoop:
-	for _, loopFi := range fis {
+	for fname, fld := range idx.Fields {
+		lfname := fname
 		select {
 		case <-ctx.Done():
 			break fileLoop
 		default:
-			fi := loopFi
-			if !fi.IsDir() {
-				continue
-			}
-
-			var cfm *CreateFieldMessage = &CreateFieldMessage{}
-			var err error
-
-			// Only continue with fields which are present in the provided,
-			// non-nil index schema. The reason we have to check for idx != nil
-			// here is because there are tests which call index.Open without
-			// having a disco.Index available.
-			if idx != nil {
-				fld, ok := idx.Fields[fi.Name()]
-				if !ok {
-					continue
-				}
-
-				// Decode the CreateFieldMessage from the schema data in order to
-				// get its metadata.
-				cfm, err = decodeCreateFieldMessage(i.holder.serializer, fld.Data)
-				if err != nil {
-					return errors.Wrap(err, "decoding create field message")
-				}
+			// Decode the CreateFieldMessage from the schema data in order to
+			// get its metadata.
+			cfm, err := decodeCreateFieldMessage(i.holder.serializer, fld.Data)
+			if err != nil {
+				return errors.Wrap(err, "decoding create field message")
 			}
 
 			indexQueue <- struct{}{}
@@ -312,9 +289,9 @@ fileLoop:
 				defer func() {
 					<-indexQueue
 				}()
-				i.holder.Logger.Debugf("open field: %s", fi.Name())
+				i.holder.Logger.Debugf("open field: %s", lfname)
 
-				_, err := i.openField(&mu, cfm, fi.Name())
+				_, err := i.openField(&mu, cfm, lfname)
 				if err != nil {
 					return errors.Wrap(err, "opening field")
 				}
@@ -323,6 +300,7 @@ fileLoop:
 			})
 		}
 	}
+
 	err = eg.Wait()
 	if err != nil {
 		// Close any fields which got opened, since the overall
@@ -525,12 +503,21 @@ func (i *Index) CreateField(name string, opts ...FieldOption) (*Field, error) {
 		return nil, errors.Wrap(err, "validating name")
 	}
 
-	i.mu.Lock()
-	defer i.mu.Unlock()
+	// Grab lock, check for field existing, release lock. We don't want
+	// to stay holding the lock, but we might care about the ErrFieldExists
+	// part of this.
+	err = func() error {
+		i.mu.Lock()
+		defer i.mu.Unlock()
 
-	// Ensure field doesn't already exist.
-	if i.fields[name] != nil {
-		return nil, newConflictError(ErrFieldExists)
+		// Ensure field doesn't already exist.
+		if i.fields[name] != nil {
+			return newConflictError(ErrFieldExists)
+		}
+		return nil
+	}()
+	if err != nil {
+		return nil, err
 	}
 
 	// Apply and validate functional options.
@@ -546,37 +533,26 @@ func (i *Index) CreateField(name string, opts ...FieldOption) (*Field, error) {
 		Meta:      fo,
 	}
 
-	// Create the field in etcd as the system of record.
+	// Create the field in etcd as the system of record. We do this without
+	// the lock held because it can take an arbitrary amount of time...
 	if err := i.persistField(context.Background(), cfm); err != nil {
 		return nil, errors.Wrap(err, "persisting field")
 	}
 
-	return i.createField(cfm, false)
-}
-
-// CreateFieldAndBroadcast creates a field locally, then broadcasts the
-// creation to other nodes so they can create locally as well. An error is
-// returned if the field already exists.
-func (i *Index) CreateFieldAndBroadcast(cfm *CreateFieldMessage) (*Field, error) {
-	err := ValidateName(cfm.Field)
-	if err != nil {
-		return nil, errors.Wrap(err, "validating name")
-	}
-
+	// This is identical to the previous check, because we could get super
+	// unlucky and have the persist-field thing happen, and somehow the field
+	// gets created, before we get to run again, and the specific nature of
+	// the error can matter to the backend.
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
 	// Ensure field doesn't already exist.
-	if i.fields[cfm.Field] != nil {
+	if i.fields[name] != nil {
 		return nil, newConflictError(ErrFieldExists)
 	}
 
-	// Create the field in etcd as the system of record.
-	if err := i.persistField(context.Background(), cfm); err != nil {
-		return nil, errors.Wrap(err, "persisting field")
-	}
-
-	return i.createField(cfm, true)
+	// Actually do the internal bookkeeping.
+	return i.createField(cfm)
 }
 
 // CreateFieldIfNotExists creates a field with the given options if it doesn't exist.
@@ -616,7 +592,7 @@ func (i *Index) CreateFieldIfNotExists(name string, opts ...FieldOption) (*Field
 		return nil, errors.Wrap(err, "persisting field")
 	}
 
-	return i.createField(cfm, false)
+	return i.createField(cfm)
 }
 
 // CreateFieldIfNotExistsWithOptions is a method which I created because I
@@ -654,7 +630,7 @@ func (i *Index) CreateFieldIfNotExistsWithOptions(name string, opt *FieldOptions
 		return nil, errors.Wrap(err, "persisting field")
 	}
 
-	return i.createField(cfm, false)
+	return i.createField(cfm)
 }
 
 // persistField stores the field information in etcd.
@@ -689,14 +665,14 @@ func (i *Index) createFieldIfNotExists(cfm *CreateFieldMessage) (*Field, error) 
 		return f, nil
 	}
 
-	return i.createField(cfm, false)
+	return i.createField(cfm)
 }
 
-// createField, in addition to creating a new Field, calls Field.Open which
-// potentially aquires a lock on Index. So until/unless we refactor the
-// Index.createField() function call path, we cannot call Index.createField
-// while holding an Index lock.
-func (i *Index) createField(cfm *CreateFieldMessage, broadcast bool) (*Field, error) {
+// createField does the internal field creation logic, creating the in-memory
+// data structure, and kicking translation sync if appropriate. It does not
+// notify other nodes; that's done from the API's initial CreateField call
+// now.
+func (i *Index) createField(cfm *CreateFieldMessage) (*Field, error) {
 	opt := cfm.Meta
 	if opt == nil {
 		opt = &FieldOptions{}
@@ -732,13 +708,6 @@ func (i *Index) createField(cfm *CreateFieldMessage, broadcast bool) (*Field, er
 
 	// enable Txf to find the index in field_test.go TestField_SetValue
 	f.idx = i
-
-	if broadcast {
-		// Send the create field message to all nodes.
-		if err := i.holder.sendOrSpool(cfm); err != nil {
-			return nil, errors.Wrap(err, "sending CreateField message")
-		}
-	}
 
 	// Kick off the field's translation sync process.
 	if err := i.translationSyncer.Reset(); err != nil {

@@ -20,9 +20,6 @@ func Test_KeyPrefix(t *testing.T) {
 	// prefix example: i%f;v:12345678<
 	prefix := Prefix(index, field, view, 0)
 
-	//fmt.Printf("needle = '%v'\n", string(needle))
-	//fmt.Printf("prefix = '%v'\n", string(prefix))
-
 	if !bytes.HasPrefix(needle, prefix) {
 		panic(fmt.Sprintf("Prefix() output '%v'was not a prefix of Key() '%v'", string(needle), string(prefix)))
 	}

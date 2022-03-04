@@ -5,8 +5,8 @@ import (
 	"context"
 	"io"
 
-	"github.com/molecula/featurebase/v2"
-	"github.com/molecula/featurebase/v2/ctl"
+	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/ctl"
 	"github.com/spf13/cobra"
 )
 
@@ -51,6 +51,7 @@ omitted. If it is present then its format should be YYYY-MM-DDTHH:MM.
 	flags.BoolVarP(&Importer.CreateSchema, "create", "e", false, "Create the schema if it does not exist before import.")
 	flags.BoolVarP(&Importer.Clear, "clear", "", false, "Clear the data provided in the import.")
 	ctl.SetTLSConfig(flags, "", &Importer.TLS.CertificatePath, &Importer.TLS.CertificateKeyPath, &Importer.TLS.CACertPath, &Importer.TLS.SkipVerify, &Importer.TLS.EnableClientVerification)
+	flags.StringVar(&Importer.AuthToken, "auth-token", "", "Authentication token")
 
 	return importCmd
 }

@@ -20,13 +20,13 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto" //nolint:staticcheck
-	pilosa "github.com/molecula/featurebase/v2"
-	"github.com/molecula/featurebase/v2/logger"
-	pnet "github.com/molecula/featurebase/v2/net"
-	"github.com/molecula/featurebase/v2/pb"
-	"github.com/molecula/featurebase/v2/pql"
-	"github.com/molecula/featurebase/v2/roaring"
-	"github.com/molecula/featurebase/v2/stats"
+	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/logger"
+	pnet "github.com/molecula/featurebase/v3/net"
+	"github.com/molecula/featurebase/v3/pb"
+	"github.com/molecula/featurebase/v3/pql"
+	"github.com/molecula/featurebase/v3/roaring"
+	"github.com/molecula/featurebase/v3/stats"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
@@ -36,7 +36,7 @@ import (
 const PQLVersion = "1.0"
 
 // DefaultShardWidth is used if an index doesn't have it defined.
-const DefaultShardWidth = 1 << 20
+const DefaultShardWidth = pilosa.ShardWidth
 
 const maxHosts = 10
 
@@ -61,6 +61,8 @@ type Client struct {
 	shardNodes shardNodes
 	tick       *time.Ticker
 	done       chan struct{}
+
+	AuthToken string
 }
 
 func (c *Client) getURIsForShard(index string, shard uint64) ([]*pnet.URI, error) {
@@ -283,7 +285,7 @@ func (c *Client) Query(query PQLQuery, options ...interface{}) (*QueryResponse, 
 		return nil, errors.Wrap(err, "making request data")
 	}
 	path := fmt.Sprintf("/index/%s/query", query.Index().name)
-	_, respData, err := c.HTTPRequest("POST", path, reqData, defaultProtobufHeaders())
+	_, respData, err := c.HTTPRequest("POST", path, reqData, c.augmentHeaders(defaultProtobufHeaders()))
 	if err != nil {
 		return nil, err
 	}
@@ -306,7 +308,7 @@ func (c *Client) CreateIndex(index *Index) error {
 
 	data := []byte(index.options.String())
 	path := fmt.Sprintf("/index/%s", index.name)
-	status, body, err := c.HTTPRequest("POST", path, data, nil)
+	status, body, err := c.HTTPRequest("POST", path, data, c.augmentHeaders(nil))
 	if err != nil {
 		return errors.Wrapf(err, "creating index: %s", index.name)
 	}
@@ -330,7 +332,7 @@ func (c *Client) CreateField(field *Field) error {
 
 	data := []byte(field.options.String())
 	path := fmt.Sprintf("/index/%s/field/%s", field.index.name, field.name)
-	status, body, err := c.HTTPRequest("POST", path, data, nil)
+	status, body, err := c.HTTPRequest("POST", path, data, c.augmentHeaders(nil))
 	if err != nil {
 		return errors.Wrapf(err, "creating field: %s in index: %s", field.name, field.index.name)
 	}
@@ -398,7 +400,7 @@ func (c *Client) DeleteIndexByName(index string) error {
 	defer span.Finish()
 
 	path := fmt.Sprintf("/index/%s", index)
-	_, _, err := c.HTTPRequest("DELETE", path, nil, nil)
+	_, _, err := c.HTTPRequest("DELETE", path, nil, c.augmentHeaders(nil))
 	return err
 }
 
@@ -408,7 +410,7 @@ func (c *Client) DeleteField(field *Field) error {
 	defer span.Finish()
 
 	path := fmt.Sprintf("/index/%s/field/%s", field.index.name, field.name)
-	_, _, err := c.HTTPRequest("DELETE", path, nil, nil)
+	_, _, err := c.HTTPRequest("DELETE", path, nil, c.augmentHeaders(nil))
 	return err
 }
 
@@ -597,7 +599,7 @@ func (c *Client) fetchFragmentNodes(indexName string, shard uint64) ([]fragmentN
 		return []fragmentNode{*c.manualFragmentNode}, nil
 	}
 	path := fmt.Sprintf("/internal/fragment/nodes?shard=%d&index=%s", shard, indexName)
-	_, body, err := c.HTTPRequest("GET", path, []byte{}, nil)
+	_, body, err := c.HTTPRequest("GET", path, []byte{}, c.augmentHeaders(nil))
 	if err != nil {
 		return nil, err
 	}
@@ -635,7 +637,7 @@ func (c *Client) fetchPrimaryNode() (fragmentNode, error) {
 }
 
 func (c *Client) importData(uri *pnet.URI, path string, data []byte) error {
-	if status, _, err := c.doRequest(uri, "POST", path, defaultProtobufHeaders(), data); err != nil {
+	if status, _, err := c.doRequest(uri, "POST", path, c.augmentHeaders(defaultProtobufHeaders()), data); err != nil {
 		return errors.Wrapf(err, "import to %s", uri.HostPort())
 	} else if status == http.StatusPreconditionFailed {
 		return ErrPreconditionFailed
@@ -683,7 +685,8 @@ func (c *Client) importRoaringBitmap(uri *pnet.URI, field *Field, shard uint64, 
 		return err
 	}
 
-	status, _, err := c.doRequest(uri, "POST", path, defaultProtobufHeaders(), data)
+	header := c.augmentHeaders(defaultProtobufHeaders())
+	status, _, err := c.doRequest(uri, "POST", path, header, data)
 	if err != nil {
 		return errors.Wrapf(err, "roaring import to %s, status: %d", uri.HostPort(), status)
 	}
@@ -724,7 +727,7 @@ func (c *Client) Info() (Info, error) {
 	span := c.tracer.StartSpan("Client.Info")
 	defer span.Finish()
 
-	_, data, err := c.HTTPRequest("GET", "/info", nil, nil)
+	_, data, err := c.HTTPRequest("GET", "/info", nil, c.augmentHeaders(nil))
 	if err != nil {
 		return Info{}, errors.Wrap(err, "requesting /info")
 	}
@@ -754,7 +757,7 @@ func (c *Client) Status() (Status, error) {
 }
 
 func (c *Client) readSchema() ([]SchemaIndex, error) {
-	_, data, err := c.HTTPRequest("GET", "/schema", nil, nil)
+	_, data, err := c.HTTPRequest("GET", "/schema", nil, c.augmentHeaders(nil))
 	if err != nil {
 		return nil, errors.Wrap(err, "requesting /schema")
 	}
@@ -1021,6 +1024,9 @@ func (c *Client) augmentHeaders(headers map[string]string) map[string]string {
 	version := strings.TrimPrefix(Version, "v")
 
 	headers["User-Agent"] = fmt.Sprintf("pilosa/client/%s", version)
+	if c.AuthToken != "" {
+		headers["Authorization"] = c.AuthToken
+	}
 	return headers
 }
 
@@ -1177,7 +1183,7 @@ func (c *Client) startTransaction(id string, timeout time.Duration, exclusive bo
 		return nil, errors.Wrap(err, "marshalling transaction")
 	}
 
-	status, data, err := c.httpRequest("POST", "/transaction", bod, defaultJSONHeaders(), true)
+	status, data, err := c.httpRequest("POST", "/transaction", bod, c.augmentHeaders(defaultJSONHeaders()), true)
 	if status == http.StatusConflict && time.Now().Before(deadline) {
 		// if we're getting StatusConflict after all the usual timeouts/retries, keep retrying until the deadline
 		time.Sleep(time.Second)
@@ -1204,7 +1210,7 @@ func (c *Client) startTransaction(id string, timeout time.Duration, exclusive bo
 }
 
 func (c *Client) FinishTransaction(id string) (*pilosa.Transaction, error) {
-	_, data, err := c.httpRequest("POST", "/transaction/"+id+"/finish", nil, defaultJSONHeaders(), true)
+	_, data, err := c.httpRequest("POST", "/transaction/"+id+"/finish", nil, c.augmentHeaders(defaultJSONHeaders()), true)
 	if err != nil && len(data) == 0 {
 		return nil, err
 	}
@@ -1226,7 +1232,7 @@ func (c *Client) FinishTransaction(id string) (*pilosa.Transaction, error) {
 }
 
 func (c *Client) Transactions() (map[string]*pilosa.Transaction, error) {
-	_, respData, err := c.httpRequest("GET", "/transactions", nil, defaultJSONHeaders(), true)
+	_, respData, err := c.httpRequest("GET", "/transactions", nil, c.augmentHeaders(defaultJSONHeaders()), true)
 	if err != nil {
 		return nil, errors.Wrap(err, "getting transactions")
 	}
@@ -1240,7 +1246,7 @@ func (c *Client) Transactions() (map[string]*pilosa.Transaction, error) {
 }
 
 func (c *Client) GetTransaction(id string) (*pilosa.Transaction, error) {
-	_, data, err := c.httpRequest("GET", "/transaction/"+id, nil, defaultJSONHeaders(), true)
+	_, data, err := c.httpRequest("GET", "/transaction/"+id, nil, c.augmentHeaders(defaultJSONHeaders()), true)
 	if err != nil {
 		return nil, err
 	}

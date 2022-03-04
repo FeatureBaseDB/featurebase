@@ -10,11 +10,13 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"time"
 
-	pilosa "github.com/molecula/featurebase/v2"
-	"github.com/molecula/featurebase/v2/http"
-	"github.com/molecula/featurebase/v2/server"
-	"github.com/molecula/featurebase/v2/topology"
+	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/encoding/proto"
+	"github.com/molecula/featurebase/v3/server"
+	"github.com/molecula/featurebase/v3/topology"
+	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -37,25 +39,46 @@ type BackupCommand struct { // nolint: maligned
 	// Number of concurrent backup goroutines running at a time.
 	Concurrency int
 
+	// Amount of time after first failed request to continue retrying.
+	RetryPeriod time.Duration `json:"retry-period"`
+
+	// Response Header Timeout for HTTP Requests
+	HeaderTimeout time.Duration `json:"header-timeout"`
+
+	// Host:port on which to listen for pprof.
+	Pprof string `json:"pprof"`
+
 	// Reusable client.
-	client pilosa.InternalClient
+	client *pilosa.InternalClient
 
 	// Standard input/output
 	*pilosa.CmdIO
 
 	TLS server.TLSConfig
+
+	AuthToken string
 }
 
 // NewBackupCommand returns a new instance of BackupCommand.
 func NewBackupCommand(stdin io.Reader, stdout, stderr io.Writer) *BackupCommand {
 	return &BackupCommand{
-		CmdIO:       pilosa.NewCmdIO(stdin, stdout, stderr),
-		Concurrency: 1,
+		CmdIO:         pilosa.NewCmdIO(stdin, stdout, stderr),
+		Concurrency:   1,
+		RetryPeriod:   time.Minute,
+		HeaderTimeout: time.Second * 3,
+		Pprof:         "localhost:0",
 	}
 }
 
 // Run executes the main program execution.
 func (cmd *BackupCommand) Run(ctx context.Context) (err error) {
+	logger := cmd.Logger()
+	close, err := startProfilingServer(cmd.Pprof, logger)
+	if err != nil {
+		return errors.Wrap(err, "starting profiling server")
+	}
+	defer close()
+
 	// Validate arguments.
 	if cmd.OutputDir == "" {
 		return fmt.Errorf("-o flag required")
@@ -70,11 +93,15 @@ func (cmd *BackupCommand) Run(ctx context.Context) (err error) {
 	}
 
 	// Create a client to the server.
-	client, err := commandClient(cmd)
+	client, err := commandClient(cmd, pilosa.WithClientRetryPeriod(cmd.RetryPeriod), pilosa.ClientResponseHeaderTimeoutOption(cmd.HeaderTimeout))
 	if err != nil {
 		return fmt.Errorf("creating client: %w", err)
 	}
 	cmd.client = client
+
+	if cmd.AuthToken != "" {
+		ctx = context.WithValue(ctx, "token", "Bearer "+cmd.AuthToken)
+	}
 
 	// Determine the field type in order to correctly handle the input data.
 	indexes, err := cmd.client.Schema(ctx)
@@ -262,7 +289,10 @@ func (cmd *BackupCommand) backupShardNode(ctx context.Context, indexName string,
 	logger := cmd.Logger()
 	logger.Printf("backing up shard: index=%q id=%d", indexName, shard)
 
-	client := http.NewInternalClientFromURI(&node.URI, http.GetHTTPClient(cmd.tlsConfig))
+	client := pilosa.NewInternalClientFromURI(&node.URI,
+		pilosa.GetHTTPClient(cmd.tlsConfig, pilosa.ClientResponseHeaderTimeoutOption(cmd.HeaderTimeout)),
+		pilosa.WithClientRetryPeriod(cmd.RetryPeriod),
+		pilosa.WithSerializer(proto.Serializer{}))
 	rc, err := client.ShardReader(ctx, indexName, shard)
 	if err != nil {
 		return fmt.Errorf("fetching shard reader: %w", err)

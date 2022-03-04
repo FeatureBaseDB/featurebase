@@ -12,11 +12,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/molecula/featurebase/v2/pql"
-	"github.com/molecula/featurebase/v2/roaring"
-	"github.com/molecula/featurebase/v2/shardwidth"
-	"github.com/molecula/featurebase/v2/testhook"
-	. "github.com/molecula/featurebase/v2/vprint" // nolint:staticcheck
+	"github.com/molecula/featurebase/v3/pql"
+	"github.com/molecula/featurebase/v3/roaring"
+	"github.com/molecula/featurebase/v3/shardwidth"
+	"github.com/molecula/featurebase/v3/testhook"
+	. "github.com/molecula/featurebase/v3/vprint" // nolint:staticcheck
 )
 
 // CorruptAMutex breaks a mutex in order to test the mutex-corruption stuff.
@@ -182,6 +182,23 @@ func TestBSIGroup_BaseValue(t *testing.T) {
 	})
 }
 
+func TestField_ValCountize(t *testing.T) {
+	f := OpenField(t, OptFieldTypeDefault())
+	defer f.Close()
+	// check that you get an empty val count and err
+	// BSIGroupNotFound on nil bsig from
+	// f.bsiGroup(f.name)
+	f.bsiGroups = []*bsiGroup{}
+	v, err := f.valCountize(42, 42, nil)
+	if !reflect.DeepEqual(v, ValCount{}) {
+		t.Errorf("expected %v, got %v", ValCount{}, v)
+	}
+	if err != ErrBSIGroupNotFound {
+		t.Errorf("expected %v, got %v", ErrBSIGroupNotFound, err)
+	}
+
+}
+
 // Ensure field can open and retrieve a view.
 func TestField_DeleteView(t *testing.T) {
 	f := OpenField(t, OptFieldTypeDefault())
@@ -230,7 +247,6 @@ func NewTestField(t testing.TB, opts FieldOption) *TestField {
 	}
 
 	cfg := DefaultHolderConfig()
-	cfg.StorageConfig.Backend = CurrentBackendOrDefault()
 	cfg.StorageConfig.FsyncEnabled = false
 	cfg.RBFConfig.FsyncEnabled = false
 	h := NewHolder(path, cfg)
@@ -748,29 +764,29 @@ func TestDecimalField_MinMaxForShard(t *testing.T) {
 			name:      "single",
 			columnIDs: []uint64{1},
 			values:    []float64{10.1},
-			expMax:    ValCount{DecimalVal: &pql.Decimal{Value: 10100, Scale: 3}, Count: 1},
-			expMin:    ValCount{DecimalVal: &pql.Decimal{Value: 10100, Scale: 3}, Count: 1},
+			expMax:    ValCount{Val: 10100, DecimalVal: &pql.Decimal{Value: 10100, Scale: 3}, Count: 1},
+			expMin:    ValCount{Val: 10100, DecimalVal: &pql.Decimal{Value: 10100, Scale: 3}, Count: 1},
 		},
 		{
 			name:      "twovals",
 			columnIDs: []uint64{1, 2},
 			values:    []float64{10.1, 20.2},
-			expMax:    ValCount{DecimalVal: &pql.Decimal{Value: 20200, Scale: 3}, Count: 1},
-			expMin:    ValCount{DecimalVal: &pql.Decimal{Value: 10100, Scale: 3}, Count: 1},
+			expMax:    ValCount{Val: 20200, DecimalVal: &pql.Decimal{Value: 20200, Scale: 3}, Count: 1},
+			expMin:    ValCount{Val: 10100, DecimalVal: &pql.Decimal{Value: 10100, Scale: 3}, Count: 1},
 		},
 		{
 			name:      "multiplecounts",
 			columnIDs: []uint64{1, 2, 3, 4, 5},
 			values:    []float64{10.1, 20.2, 10.1, 10.1, 20.2},
-			expMax:    ValCount{DecimalVal: &pql.Decimal{Value: 20200, Scale: 3}, Count: 2},
-			expMin:    ValCount{DecimalVal: &pql.Decimal{Value: 10100, Scale: 3}, Count: 3},
+			expMax:    ValCount{Val: 20200, DecimalVal: &pql.Decimal{Value: 20200, Scale: 3}, Count: 2},
+			expMin:    ValCount{Val: 10100, DecimalVal: &pql.Decimal{Value: 10100, Scale: 3}, Count: 3},
 		},
 		{
 			name:      "middlevals",
 			columnIDs: []uint64{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
 			values:    []float64{10.1, 20.2, 10.1, 10.1, 20.2, 11, 12, 11, 13, 11},
-			expMax:    ValCount{DecimalVal: &pql.Decimal{Value: 20200, Scale: 3}, Count: 2},
-			expMin:    ValCount{DecimalVal: &pql.Decimal{Value: 10100, Scale: 3}, Count: 3},
+			expMax:    ValCount{Val: 20200, DecimalVal: &pql.Decimal{Value: 20200, Scale: 3}, Count: 2},
+			expMin:    ValCount{Val: 10100, DecimalVal: &pql.Decimal{Value: 10100, Scale: 3}, Count: 3},
 		},
 	} {
 		t.Run(test.name+strconv.Itoa(i), func(t *testing.T) {
