@@ -557,6 +557,44 @@ func TestCursor_RLETesting(t *testing.T) {
 	})
 }
 
+func TestCursor_BitmapBitN(t *testing.T) {
+	db := MustOpenDB(t)
+	defer MustCloseDB(t, db)
+	tx := MustBegin(t, db, true)
+	defer tx.Rollback()
+	if err := tx.CreateBitmap("x"); err != nil {
+		t.Fatal(err)
+	}
+	bmData := make([]uint64, 1024)
+	for i := range bmData {
+		bmData[i] = 0x5555555555555555
+	}
+	ct := roaring.NewContainerBitmap(-1, bmData)
+	err := tx.PutContainer("x", 0, ct)
+	if err != nil {
+		t.Fatalf("error writing container: %v", err)
+	}
+	// Putting a container to the same slot, which is also a bitmap
+	// (rather than a BitmapPtr), while the existing cell is a BitmapPtr,
+	// may not update BitN correctly.
+	ct, _ = ct.Add(1)
+	err = tx.PutContainer("x", 0, ct)
+	if err != nil {
+		t.Fatalf("rewriting container: %v", err)
+	}
+	v, err := tx.Container("x", 0)
+	if err != nil {
+		t.Fatalf("getting container: %v", err)
+	}
+	c1 := v.N()
+	v.Repair()
+	c2 := v.N()
+	if c1 != c2 {
+		t.Fatalf("expected count %d, got %d", c2, c1)
+	}
+	tx.Commit()
+}
+
 func TestCursor_RLEConversion(t *testing.T) {
 	db := MustOpenDB(t)
 	defer MustCloseDB(t, db)

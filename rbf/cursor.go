@@ -411,10 +411,10 @@ func (c *Cursor) putLeafCell(in leafCell) (err error) {
 				}
 				cell.Type = ContainerTypeBitmapPtr
 				cell.Data = fromPgno(bitmapPgno)
-				// update the BitN too
-				cell.BitN = in.BitN
 				cell.ElemN = in.ElemN
 			}
+			// update the BitN regardless
+			cell.BitN = in.BitN
 		}
 	}
 
