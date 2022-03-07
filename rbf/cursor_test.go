@@ -1247,3 +1247,63 @@ func TestForEachRange(t *testing.T) {
 		t.Fatalf("expected empty container, but see %v values left: '%#v'", len(valmap), valmap)
 	}
 }
+
+func TestCursor_PutContainer(t *testing.T) {
+	t.Run("BitmapToArray", func(t *testing.T) {
+		db := MustOpenDB(t)
+		defer MustCloseDB(t, db)
+
+		tx := MustBegin(t, db, true)
+		defer tx.Rollback()
+
+		if err := tx.CreateBitmap("x"); err != nil {
+			t.Fatal(err)
+		}
+
+		bmData := make([]uint64, 1024)
+		for i := range bmData {
+			bmData[i] = 0x5555555555555555
+		}
+		if err := tx.PutContainer("x", 0, roaring.NewContainerBitmap(-1, bmData)); err != nil {
+			t.Fatal(err)
+		}
+		if err := tx.PutContainer("x", 0, roaring.NewContainerArray([]uint16{0})); err != nil {
+			t.Fatal(err)
+		}
+		if err := tx.Commit(); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("BitmapToBitmap", func(t *testing.T) {
+		db := MustOpenDB(t)
+		defer MustCloseDB(t, db)
+
+		tx := MustBegin(t, db, true)
+		defer tx.Rollback()
+
+		if err := tx.CreateBitmap("x"); err != nil {
+			t.Fatal(err)
+		}
+
+		data0 := make([]uint64, 1024)
+		for i := range data0 {
+			data0[i] = 0x5555555555555555
+		}
+		if err := tx.PutContainer("x", 0, roaring.NewContainerBitmap(-1, data0)); err != nil {
+			t.Fatal(err)
+		}
+
+		data1 := make([]uint64, 1024)
+		for i := range data0 {
+			data1[i] = 0x7777777777777777
+		}
+		if err := tx.PutContainer("x", 0, roaring.NewContainerBitmap(-1, data1)); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := tx.Commit(); err != nil {
+			t.Fatal(err)
+		}
+	})
+}
