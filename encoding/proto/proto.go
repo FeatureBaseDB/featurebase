@@ -1076,7 +1076,6 @@ func (s Serializer) decodeFieldOptions(options *pb.FieldOptions, m *pilosa.Field
 	ttlValue, err := time.ParseDuration(options.Ttl)
 	if err != nil {
 		ttlValue = 0
-		fmt.Println(fmt.Errorf("ParseDuration error: %v", err))
 	}
 	m.Ttl = ttlValue
 	m.TimeUnit = options.TimeUnit
