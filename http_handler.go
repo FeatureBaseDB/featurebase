@@ -1672,14 +1672,18 @@ func (h *Handler) handlePostIngestData(w http.ResponseWriter, r *http.Request) {
 
 	qcx := h.api.Txf().NewQcx()
 	err := h.api.IngestOperations(r.Context(), qcx, indexName, r.Body)
-	if err == nil {
-		err = qcx.Finish()
-		if err != nil {
-			http.Error(w, fmt.Sprintf("ingesting: %v", err), http.StatusInternalServerError)
+	if err != nil {
+		qcx.Abort()
+		switch e := err.(type) {
+		case RedirectError:
+			http.Redirect(w, r, e.HostPort+r.URL.Path, http.StatusPermanentRedirect)
 			return
 		}
-	} else {
-		qcx.Abort()
+	}
+	err = qcx.Finish()
+	if err != nil {
+		http.Error(w, fmt.Sprintf("ingesting: %v", err), http.StatusInternalServerError)
+		return
 	}
 
 	resp := successResponse{h: h, Name: indexName}
@@ -1747,155 +1751,6 @@ func fieldSpecToFieldOption(fSpec fieldSpec) fieldOptions {
 	return opt
 }
 
-// applyOneIngestSchema applies a single ingestSpec, which specifies operations on
-// a single index and possibly fields. If it is successful, it returns the name
-// of the index and an empty slice (if it created the index), or the name of the
-// index and a slice of the fields within that index that it created. If it
-// is unsuccessful, it tries to delete whatever it created.
-//
-// The intended idiom is that if the returned list of fields isn't empty, the index
-// already existed and only those fields need to be cleaned up in the event of
-// a later error, but if the list of fields is empty, the entire index was new,
-// and should be cleaned up, in which case there's no need to track or delete
-// the specific fields separately.
-func (h *Handler) applyOneIngestSchema(ctx context.Context, schema *ingestSpec) (index *Index, returnedFields []string, err error) {
-	// create index
-	indexName := schema.IndexName
-	var createdFields []string
-	var useKeys bool
-	switch schema.PrimaryKeyType {
-	case "string":
-		useKeys = true
-	case "uint":
-		useKeys = false
-	default:
-		return nil, nil, fmt.Errorf("invalid primary key type %q", schema.PrimaryKeyType)
-	}
-	opts := IndexOptions{
-		Keys:           useKeys,
-		TrackExistence: true,
-	}
-	createdIndex := false
-
-	// We check this up here because, if there's at least one field but we don't know what to do with
-	// it, we will necessarily fail, which means we'd delete the index anyway, so there's no point in
-	// trying to create it. We don't care about this if there's no fields specified.
-	if len(schema.Fields) > 0 {
-		switch schema.FieldAction {
-		case "create", "ensure", "require":
-			// do nothing
-		case "":
-			schema.FieldAction = schema.IndexAction
-		default:
-			return nil, nil, fmt.Errorf("invalid field-action %q, expecting create/ensure/require", schema.FieldAction)
-		}
-	}
-
-	switch schema.IndexAction {
-	case "ensure", "require":
-		index, err = h.api.Index(ctx, indexName)
-		if err != nil {
-			if _, ok := err.(NotFoundError); !ok {
-				return nil, nil, fmt.Errorf("checking for existing index %q: %w", indexName, err)
-			} else {
-				err = nil
-			}
-		}
-		if index != nil {
-			existingOpts := index.Options()
-			if existingOpts != opts {
-				return nil, nil, fmt.Errorf("index %q options mismatch: schema %#v, existing %#v", indexName, opts, existingOpts)
-			}
-			break
-		}
-		if schema.IndexAction == "require" {
-			return nil, nil, fmt.Errorf("index %q does not exist", indexName)
-		}
-		fallthrough
-	case "create":
-		index, err = h.api.CreateIndex(ctx, indexName, opts)
-		if err != nil {
-			return nil, nil, err
-		}
-		createdIndex = true
-	default:
-		return nil, nil, fmt.Errorf("invalid index-action %q, need create/ensure/require", schema.IndexAction)
-	}
-
-	// Now we might have an index, so we need our cleanup code.
-	defer func() {
-		if err == nil {
-			return
-		}
-		if createdIndex {
-			err := h.api.DeleteIndex(ctx, indexName)
-			if err != nil {
-				h.logger.Printf("trying to undo failed index %q creation: %v", indexName, err)
-			}
-			return
-		}
-		for _, field := range createdFields {
-			err := h.api.DeleteField(ctx, indexName, field)
-			if err != nil {
-				h.logger.Printf("trying to undo failed field %q creation in index %q: %v", field, indexName, err)
-			}
-		}
-	}()
-
-	// create all the fields specified in the index
-	for _, fSpec := range schema.Fields {
-		fieldName := fSpec.FieldName
-		opt := fieldSpecToFieldOption(fSpec)
-		err = opt.validate()
-		if err != nil {
-			return nil, nil, err
-		}
-		switch schema.FieldAction {
-		case "ensure", "require":
-			field, schemaErr := h.api.Field(ctx, indexName, fieldName)
-			if schemaErr != nil {
-				// NotFoundError is fine
-				if _, ok := schemaErr.(NotFoundError); !ok {
-					return nil, nil, fmt.Errorf("checking for existing field %q in %q: %w", fieldName, indexName, err)
-				}
-			}
-			if field != nil {
-				existing := field.Options()
-				if opt.Type != existing.Type {
-					return nil, nil, fmt.Errorf("existing field %q is %q, not %q", fieldName, existing.Type, opt.Type)
-				}
-				if ((opt.Keys != nil) && *opt.Keys) != existing.Keys {
-					if existing.Keys {
-						return nil, nil, fmt.Errorf("existing field %q in %q uses keys", fieldName, indexName)
-					} else {
-						return nil, nil, fmt.Errorf("existing field %q in %q doesn't use keys", fieldName, indexName)
-					}
-				}
-				// TODO: verify compatibility of other field opts, this is sorta hard
-				break
-			}
-			if schema.FieldAction == "require" {
-				return nil, nil, fmt.Errorf("field %q does not exist in %q", fieldName, indexName)
-			}
-			fallthrough
-		case "create":
-			fos := fieldOptionsToFunctionalOpts(opt)
-			_, err = h.api.CreateField(ctx, indexName, fieldName, fos...)
-			if err != nil {
-				return nil, nil, fmt.Errorf("creating field %q in %q: %v", fieldName, indexName, err)
-			}
-			createdFields = append(createdFields, fieldName)
-		}
-	}
-	// we don't report the fields back, so we can distinguish "created index"
-	// from "created fields within index"
-	if createdIndex {
-		createdFields = nil
-	}
-
-	return index, createdFields, nil
-}
-
 func (h *Handler) handleIngestSchema(w http.ResponseWriter, r *http.Request) {
 	if !validHeaderAcceptJSON(r.Header) {
 		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
@@ -1938,12 +1793,18 @@ func (h *Handler) handleIngestSchema(w http.ResponseWriter, r *http.Request) {
 			resp.write(w, err)
 			return
 		}
-		index, fields, err := h.applyOneIngestSchema(r.Context(), &schema)
+		index, fields, err := h.api.ApplyOneIngestSchema(r.Context(), &schema)
 		if err != nil {
-			// if a previous schema created things, clean them up...
-			schemaErr = err
-			resp.write(w, err)
-			return
+			switch e := err.(type) {
+			case RedirectError:
+				http.Redirect(w, r, e.HostPort+r.URL.Path, http.StatusPermanentRedirect)
+				return
+			default:
+				// if a previous schema created things, clean them up...
+				schemaErr = err
+				resp.write(w, err)
+				return
+			}
 		}
 		// we only have one slot to report these, sorry.
 		resp.Name = index.Name()
