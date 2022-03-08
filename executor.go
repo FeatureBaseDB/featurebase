@@ -8303,6 +8303,8 @@ func (e *executor) executeDeleteRecordFromShard(ctx context.Context, qcx *Qcx, i
 		return
 	}
 
+	qcx.Finish() // have to release the tx in order for a snapshot to be able to occur
+	qcx.Reset()
 	return DeleteRowsWithFlow(ctx, src, idx, shard, true)
 }
 
