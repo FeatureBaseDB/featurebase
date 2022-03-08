@@ -253,6 +253,8 @@ func (tx *RBFTx) RemoveChannel(index, field, view string, shard uint64, a chan u
 						return
 					}
 				} else {
+					rc = roaring.Optimize(rc)
+
 					err = tx.tx.PutContainer(name, lastHi, rc)
 					if err != nil {
 						resChan <- countResults{0, errors.Wrap(err, "failed to put container")}
