@@ -429,6 +429,8 @@ func newRouter(handler *Handler) http.Handler {
 	//router.HandleFunc("/index/{index}/field", handler.chkAuthZ(handler.handleGetFields, authz.Read)).Methods("GET") // Not implemented.
 	router.HandleFunc("/index/{index}/field", handler.chkAuthZ(handler.handlePostField, authz.Write)).Methods("POST").Name("PostField")
 	router.HandleFunc("/index/{index}/field/", handler.chkAuthZ(handler.handlePostField, authz.Write)).Methods("POST").Name("PostField")
+	router.HandleFunc("/index/{index}/field/{field}/view", handler.chkAuthZ(handler.handleGetView, authz.Admin)).Methods("GET")
+	router.HandleFunc("/index/{index}/field/{field}/view/{view}", handler.chkAuthZ(handler.handleDeleteView, authz.Admin)).Methods("DELETE").Name("DeleteView")
 	router.HandleFunc("/index/{index}/field/{field}", handler.chkAuthZ(handler.handlePostField, authz.Write)).Methods("POST").Name("PostField")
 	router.HandleFunc("/index/{index}/field/{field}", handler.chkAuthZ(handler.handleDeleteField, authz.Write)).Methods("DELETE").Name("DeleteField")
 	router.HandleFunc("/index/{index}/field/{field}/import", handler.chkAuthZ(handler.handlePostImport, authz.Write)).Methods("POST").Name("PostImport")
@@ -1281,6 +1283,62 @@ func (h *Handler) handleGetIndex(w http.ResponseWriter, r *http.Request) {
 	http.Error(w, fmt.Sprintf("Index %s Not Found", indexName), http.StatusNotFound)
 }
 
+// handleGetView handles GET /index/<indexname>/field/<fieldname>/view requests.
+func (h *Handler) handleGetView(w http.ResponseWriter, r *http.Request) {
+	if !validHeaderAcceptJSON(r.Header) {
+		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
+		return
+	}
+
+	indexName := mux.Vars(r)["index"]
+	fieldName := mux.Vars(r)["field"]
+	index, err := h.api.Index(r.Context(), indexName)
+
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Index %s Not Found", indexName), http.StatusNotFound)
+		return
+	} else {
+		w.Header().Set("Content-Type", "application/json")
+		var viewsList []viewReponse
+		for _, field := range index.fields {
+			if field.name == fieldName {
+				for _, view := range field.views() {
+					viewsList = append(viewsList, viewReponse{Name: view.name, Type: view.fieldType, Field: view.field, Index: view.index})
+				}
+
+				if err := json.NewEncoder(w).Encode(viewsList); err != nil {
+					h.logger.Errorf("write response error: %s", err)
+				}
+				return
+			}
+		}
+	}
+	http.Error(w, fmt.Sprintf("Field %s Not Found", fieldName), http.StatusNotFound)
+}
+
+type viewReponse struct {
+	Name  string `json:"name"`
+	Type  string `json:"type"`
+	Field string `json:"field"`
+	Index string `json:"index"`
+}
+
+// handleDeleteIndex handles DELETE /index/<indexname>/field/<fieldname>/view/<viewname> request.
+func (h *Handler) handleDeleteView(w http.ResponseWriter, r *http.Request) {
+	if !validHeaderAcceptJSON(r.Header) {
+		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
+		return
+	}
+
+	indexName := mux.Vars(r)["index"]
+	fieldName := mux.Vars(r)["field"]
+	viewName := mux.Vars(r)["view"]
+
+	resp := successResponse{h: h}
+	err := h.api.DeleteView(r.Context(), indexName, fieldName, viewName)
+	resp.write(w, err)
+}
+
 type postIndexRequest struct {
 	Options IndexOptions `json:"options"`
 }
@@ -1524,7 +1582,11 @@ func fieldOptionsToFunctionalOpts(opt fieldOptions) []FieldOption {
 		}
 		fos = append(fos, OptFieldTypeTimestamp(opt.Epoch.UTC(), *opt.TimeUnit))
 	case FieldTypeTime:
-		fos = append(fos, OptFieldTypeTime(*opt.TimeQuantum, opt.NoStandardView))
+		if opt.Ttl != nil {
+			fos = append(fos, OptFieldTypeTime(*opt.TimeQuantum, *opt.Ttl, opt.NoStandardView))
+		} else {
+			fos = append(fos, OptFieldTypeTime(*opt.TimeQuantum, "0", opt.NoStandardView))
+		}
 	case FieldTypeMutex:
 		fos = append(fos, OptFieldTypeMutex(*opt.CacheType, *opt.CacheSize))
 	case FieldTypeBool:
@@ -1646,6 +1708,7 @@ type fieldOptionSpec struct {
 	Epoch                  *time.Time `json:"epoch"`
 	Unit                   *string    `json:"unit"`
 	TimeQuantum            *string    `json:"time-quantum"`
+	Ttl                    *string    `json:"ttl"`
 }
 
 func fieldSpecToFieldOption(fSpec fieldSpec) fieldOptions {
@@ -1679,6 +1742,7 @@ func fieldSpecToFieldOption(fSpec fieldSpec) fieldOptions {
 		timeQuantumVal := TimeQuantum(*fSpec.FieldOptions.TimeQuantum)
 		opt.TimeQuantum = &timeQuantumVal
 	}
+	opt.Ttl = fSpec.FieldOptions.Ttl
 
 	return opt
 }
@@ -1918,6 +1982,7 @@ type fieldOptions struct {
 	Keys           *bool        `json:"keys,omitempty"`
 	NoStandardView bool         `json:"noStandardView,omitempty"`
 	ForeignIndex   *string      `json:"foreignIndex,omitempty"`
+	Ttl            *string      `json:"ttl,omitempty"`
 }
 
 func (o *fieldOptions) validate() error {
@@ -1945,6 +2010,8 @@ func (o *fieldOptions) validate() error {
 			return NewBadRequestError(errors.New("max does not apply to field type set"))
 		} else if o.TimeQuantum != nil {
 			return NewBadRequestError(errors.New("timeQuantum does not apply to field type set"))
+		} else if o.Ttl != nil {
+			return NewBadRequestError(errors.New("ttl does not apply to field type set"))
 		}
 	case FieldTypeInt:
 		if o.CacheType != nil {
@@ -1953,6 +2020,8 @@ func (o *fieldOptions) validate() error {
 			return NewBadRequestError(errors.New("cacheSize does not apply to field type int"))
 		} else if o.TimeQuantum != nil {
 			return NewBadRequestError(errors.New("timeQuantum does not apply to field type int"))
+		} else if o.Ttl != nil {
+			return NewBadRequestError(errors.New("ttl does not apply to field type int"))
 		}
 	case FieldTypeDecimal:
 		if o.Scale == nil {
@@ -1963,6 +2032,8 @@ func (o *fieldOptions) validate() error {
 			return NewBadRequestError(errors.New("cacheSize does not apply to field type int"))
 		} else if o.TimeQuantum != nil {
 			return NewBadRequestError(errors.New("timeQuantum does not apply to field type int"))
+		} else if o.Ttl != nil {
+			return NewBadRequestError(errors.New("ttl does not apply to field type int"))
 		} else if o.ForeignIndex != nil && o.Type == FieldTypeDecimal {
 			return NewBadRequestError(errors.New("decimal field cannot be a foreign key"))
 		}
@@ -1977,6 +2048,8 @@ func (o *fieldOptions) validate() error {
 			return NewBadRequestError(errors.New("cacheSize does not apply to field type timestamp"))
 		} else if o.TimeQuantum != nil {
 			return NewBadRequestError(errors.New("timeQuantum does not apply to field type timestamp"))
+		} else if o.Ttl != nil {
+			return NewBadRequestError(errors.New("ttl does not apply to field type timestamp"))
 		} else if o.ForeignIndex != nil {
 			return NewBadRequestError(errors.New("timestamp field cannot be a foreign key"))
 		}
@@ -2005,6 +2078,8 @@ func (o *fieldOptions) validate() error {
 			return NewBadRequestError(errors.New("max does not apply to field type mutex"))
 		} else if o.TimeQuantum != nil {
 			return NewBadRequestError(errors.New("timeQuantum does not apply to field type mutex"))
+		} else if o.Ttl != nil {
+			return NewBadRequestError(errors.New("ttl does not apply to field type mutex"))
 		}
 	case FieldTypeBool:
 		if o.CacheType != nil {
@@ -2019,6 +2094,8 @@ func (o *fieldOptions) validate() error {
 			return NewBadRequestError(errors.New("timeQuantum does not apply to field type bool"))
 		} else if o.Keys != nil {
 			return NewBadRequestError(errors.New("keys does not apply to field type bool"))
+		} else if o.Ttl != nil {
+			return NewBadRequestError(errors.New("ttl does not apply to field type bool"))
 		} else if o.ForeignIndex != nil {
 			return NewBadRequestError(errors.New("bool field cannot be a foreign key"))
 		}

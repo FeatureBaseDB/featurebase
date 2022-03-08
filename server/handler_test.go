@@ -274,7 +274,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		}
 	}
 
-	if f, err := i2.CreateFieldIfNotExists("f3", pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMDH"))); err != nil {
+	if f, err := i2.CreateFieldIfNotExists("f3", pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMDH"), "0")); err != nil {
 		t.Fatal(err)
 	} else if _, err := f.SetBit(tx2, 0, 0, nil); err != nil {
 		t.Fatal(err)

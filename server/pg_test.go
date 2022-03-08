@@ -29,7 +29,7 @@ func TestPostgresHandler(t *testing.T) {
 	m.MustCreateField(t, "i", "keymutex", pilosa.OptFieldKeys(), pilosa.OptFieldTypeMutex(pilosa.CacheTypeNone, 0))
 	m.MustCreateField(t, "i", "int", pilosa.OptFieldTypeInt(math.MinInt64, math.MaxInt64))
 	m.MustCreateField(t, "i", "decimal", pilosa.OptFieldTypeDecimal(2))
-	m.MustCreateField(t, "i", "time", pilosa.OptFieldTypeTime("YMDH"))
+	m.MustCreateField(t, "i", "time", pilosa.OptFieldTypeTime("YMDH", "0"))
 	m.MustCreateField(t, "i", "bool", pilosa.OptFieldTypeBool())
 
 	m.MustCreateIndex(t, "j", pilosa.IndexOptions{TrackExistence: true, Keys: true})

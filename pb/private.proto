@@ -25,6 +25,7 @@ message FieldOptions {
 	Decimal Min = 17;
 	Decimal Max = 18;
 	string TimeUnit = 19;
+	string Ttl = 20;
 }
 
 message ImportResponse {

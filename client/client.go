@@ -1674,17 +1674,18 @@ type SchemaField struct {
 
 // SchemaOptions contains options for a field or an index.
 type SchemaOptions struct {
-	FieldType      FieldType   `json:"type"`
-	CacheType      string      `json:"cacheType"`
-	CacheSize      uint        `json:"cacheSize"`
-	TimeQuantum    string      `json:"timeQuantum"`
-	Min            pql.Decimal `json:"min"`
-	Max            pql.Decimal `json:"max"`
-	Scale          int64       `json:"scale"`
-	Keys           bool        `json:"keys"`
-	NoStandardView bool        `json:"noStandardView"`
-	TrackExistence bool        `json:"trackExistence"`
-	TimeUnit       string      `json:"timeUnit"`
+	FieldType      FieldType     `json:"type"`
+	CacheType      string        `json:"cacheType"`
+	CacheSize      uint          `json:"cacheSize"`
+	TimeQuantum    string        `json:"timeQuantum"`
+	Ttl            time.Duration `json:"ttl"`
+	Min            pql.Decimal   `json:"min"`
+	Max            pql.Decimal   `json:"max"`
+	Scale          int64         `json:"scale"`
+	Keys           bool          `json:"keys"`
+	NoStandardView bool          `json:"noStandardView"`
+	TrackExistence bool          `json:"trackExistence"`
+	TimeUnit       string        `json:"timeUnit"`
 }
 
 func (so SchemaOptions) asIndexOptions() *IndexOptions {
@@ -1702,6 +1703,7 @@ func (so SchemaOptions) asFieldOptions() *FieldOptions {
 		cacheSize:      int(so.CacheSize),
 		cacheType:      CacheType(so.CacheType),
 		timeQuantum:    TimeQuantum(so.TimeQuantum),
+		ttl:            so.Ttl,
 		min:            so.Min,
 		max:            so.Max,
 		scale:          so.Scale,

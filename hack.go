@@ -2,6 +2,8 @@
 package pilosa
 
 import (
+	"time"
+
 	"github.com/gogo/protobuf/proto"
 	"github.com/molecula/featurebase/v3/pb"
 	"github.com/molecula/featurebase/v3/pql"
@@ -57,6 +59,11 @@ func UnmarshalFieldOptions(name string, createdAt int64, buf []byte) (*FieldInfo
 	fi.Options.Base = pbi.Base
 	fi.Options.BitDepth = pbi.BitDepth
 	fi.Options.TimeQuantum = TimeQuantum(pbi.TimeQuantum)
+	ttlValue, err := time.ParseDuration(pbi.Ttl)
+	if err != nil {
+		ttlValue = 0
+	}
+	fi.Options.Ttl = ttlValue
 	fi.Options.Keys = pbi.Keys
 	fi.Options.NoStandardView = pbi.NoStandardView
 

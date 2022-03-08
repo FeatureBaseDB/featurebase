@@ -76,6 +76,7 @@ type Server struct { // nolint: maligned
 	antiEntropyInterval time.Duration
 	metricInterval      time.Duration
 	diagnosticInterval  time.Duration
+	ttlRemovalInterval  time.Duration
 	maxWritesPerRequest int
 	confirmDownSleep    time.Duration
 	confirmDownRetries  int
@@ -163,6 +164,15 @@ func OptServerDataDir(dir string) ServerOption {
 func OptServerAntiEntropyInterval(interval time.Duration) ServerOption {
 	return func(s *Server) error {
 		s.antiEntropyInterval = interval
+		return nil
+	}
+}
+
+// OptServerTtlRemovalInterval is a functional option on Server
+// used to set the ttl removal interval.
+func OptServerTtlRemovalInterval(interval time.Duration) ServerOption {
+	return func(s *Server) error {
+		s.ttlRemovalInterval = interval
 		return nil
 	}
 }
@@ -433,6 +443,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		antiEntropyInterval: 0,
 		metricInterval:      0,
 		diagnosticInterval:  0,
+		ttlRemovalInterval:  time.Hour,
 
 		disCo:      disco.NopDisCo,
 		stator:     disco.NopStator,
@@ -641,12 +652,13 @@ func (s *Server) Open() error {
 		return errors.Wrap(err, "setting nodeState")
 	}
 
-	if ok := s.addToWaitGroup(3); !ok {
+	if ok := s.addToWaitGroup(4); !ok {
 		return fmt.Errorf("closing server while opening server is NOT allowed")
 	}
 	go func() { defer s.wg.Done(); s.monitorAntiEntropy() }()
 	go func() { defer s.wg.Done(); s.monitorRuntime() }()
 	go func() { defer s.wg.Done(); s.monitorDiagnostics() }()
+	go func() { defer s.wg.Done(); s.monitorTtl() }()
 
 	toSend := func() []Message {
 		s.holder.startMsgsMu.Lock()
@@ -826,6 +838,53 @@ func (s *Server) monitorResetTranslationSync() {
 					s.logger.Errorf("holder translation sync error: err=%s", err)
 				}
 			}()
+		}
+	}
+}
+
+func (s *Server) monitorTtl() {
+	ctx := context.Background()
+	ticker := time.NewTicker(s.ttlRemovalInterval)
+	for {
+		select {
+		case <-s.closing:
+			return
+		case <-ticker.C:
+			s.TtlRemoval(ctx)
+		}
+	}
+}
+
+func (s *Server) TtlRemoval(ctx context.Context) {
+	for _, index := range s.holder.Indexes() {
+		for _, field := range index.Fields() {
+			if field.Options().Type == "time" {
+				if field.Options().Ttl > 0 {
+					for _, view := range field.views() {
+						viewNames := strings.Split(view.name, "_")
+						if len(viewNames) >= 2 {
+							viewTime, err := timeOfView(view.name, false)
+							if err != nil {
+								s.logger.Printf("ttl parse view time: %s", err)
+								continue
+							}
+							timeSince := time.Since(viewTime)
+
+							if timeSince >= field.Options().Ttl {
+								for _, shard := range field.AvailableShards(true).Slice() {
+									s.holder.txf.DeleteFragmentFromStore(index.Name(), field.Name(), view.name, shard, nil)
+								}
+
+								err := s.defaultClient.api.DeleteView(ctx, index.Name(), field.Name(), view.name)
+								if err != nil {
+									s.logger.Errorf("ttl delete view: %s", err)
+								}
+								s.logger.Infof("ttl deleted view: %s", view.name)
+							}
+						}
+					}
+				}
+			}
 		}
 	}
 }

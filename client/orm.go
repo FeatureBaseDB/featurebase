@@ -728,6 +728,7 @@ type FieldInfo struct {
 type FieldOptions struct {
 	fieldType      FieldType
 	timeQuantum    TimeQuantum
+	ttl            time.Duration
 	cacheType      CacheType
 	cacheSize      int
 	min            pql.Decimal
@@ -749,6 +750,11 @@ func (fo FieldOptions) Type() FieldType {
 // string otherwise.
 func (fo FieldOptions) TimeQuantum() TimeQuantum {
 	return fo.timeQuantum
+}
+
+// Ttl returns the configured ttl for a time field.
+func (fo FieldOptions) Ttl() time.Duration {
+	return fo.ttl
 }
 
 // CacheType returns the configured cache type for a "set" field. Empty string
@@ -826,6 +832,7 @@ func (fo FieldOptions) String() string {
 	case FieldTypeTime:
 		mopt["timeQuantum"] = string(fo.timeQuantum)
 		mopt["noStandardView"] = fo.noStandardView
+		mopt["ttl"] = fo.ttl.String()
 	case FieldTypeTimestamp:
 		mopt["min"] = fo.min
 		mopt["max"] = fo.max
@@ -910,6 +917,12 @@ func OptFieldTypeTime(quantum TimeQuantum, opts ...bool) FieldOption {
 		if len(opts) > 0 && opts[0] {
 			options.noStandardView = true
 		}
+	}
+}
+
+func OptFieldTtl(dur time.Duration) FieldOption {
+	return func(options *FieldOptions) {
+		options.ttl = dur
 	}
 }
 

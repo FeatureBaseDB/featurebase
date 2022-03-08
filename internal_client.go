@@ -1094,6 +1094,8 @@ func (c *InternalClient) CreateFieldWithOptions(ctx context.Context, index, fiel
 		fieldOpt.Max = &opt.Max
 	case FieldTypeTime:
 		fieldOpt.TimeQuantum = &opt.TimeQuantum
+		ttlString := opt.Ttl.String()
+		fieldOpt.Ttl = &ttlString
 	case FieldTypeBool:
 		// pass
 	case FieldTypeDecimal:

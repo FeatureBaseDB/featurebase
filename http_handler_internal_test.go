@@ -131,6 +131,7 @@ func TestFieldOptionValidation(t *testing.T) {
 		{json: `{"options": {"type": "set", "min": 0}}`, err: "min does not apply to field type set"},
 		{json: `{"options": {"type": "set", "max": 100}}`, err: "max does not apply to field type set"},
 		{json: `{"options": {"type": "set", "timeQuantum": "YMD"}}`, err: "timeQuantum does not apply to field type set"},
+		{json: `{"options": {"type": "set", "ttl": "1h"}}`, err: "ttl does not apply to field type set"},
 
 		// FieldType: Int
 		{json: `{"options": {"type": "int"}}`, err: "min is required for field type int"},
@@ -143,6 +144,7 @@ func TestFieldOptionValidation(t *testing.T) {
 		{json: `{"options": {"type": "int", "min": 0, "max": 1000, "cacheType": "ranked"}}`, err: "cacheType does not apply to field type int"},
 		{json: `{"options": {"type": "int", "min": 0, "max": 1000, "cacheSize": 1000}}`, err: "cacheSize does not apply to field type int"},
 		{json: `{"options": {"type": "int", "min": 0, "max": 1000, "timeQuantum": "YMD"}}`, err: "timeQuantum does not apply to field type int"},
+		{json: `{"options": {"type": "int", "min": 0, "max": 1000, "ttl": "1h"}}`, err: "ttl does not apply to field type int"},
 
 		// FieldType: Time
 		{json: `{"options": {"type": "time"}}`, err: "timeQuantum is required for field type time"},

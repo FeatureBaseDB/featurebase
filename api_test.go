@@ -555,7 +555,7 @@ func TestAPI_Ingest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("creating field: %v", err)
 	}
-	_, err = coord.API.CreateField(ctx, index, timeField, pilosa.OptFieldTypeTime("YMD"))
+	_, err = coord.API.CreateField(ctx, index, timeField, pilosa.OptFieldTypeTime("YMD", "0"))
 	if err != nil {
 		t.Fatalf("creating field: %v", err)
 	}
@@ -678,7 +678,7 @@ func BenchmarkIngest(b *testing.B) {
 	if err != nil {
 		b.Fatalf("creating field: %v", err)
 	}
-	_, err = coord.API.CreateField(ctx, index, tqField, pilosa.OptFieldTypeTime("YMDH"))
+	_, err = coord.API.CreateField(ctx, index, tqField, pilosa.OptFieldTypeTime("YMDH", "0"))
 	if err != nil {
 		b.Fatalf("creating field: %v", err)
 	}
