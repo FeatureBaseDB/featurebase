@@ -158,9 +158,6 @@ func (q *Qcx) Abort() {
 func (q *Qcx) Reset() {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	if !q.done {
-		vprint.PanicOn("must call Qcx.Abort() or Qcx.Finish() before calling Reset().")
-	}
 	q.unprotected_reset()
 }
 
