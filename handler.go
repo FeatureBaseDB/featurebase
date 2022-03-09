@@ -427,6 +427,7 @@ type ImportRoaringRequest struct {
 	Block           int
 	Views           map[string][]byte
 	UpdateExistence bool
+	SuppressLog     bool
 }
 
 // ImportRoaringShardRequest is the request for the shard
@@ -438,6 +439,11 @@ type ImportRoaringShardRequest struct {
 	// a successful response to the client.
 	Remote bool
 	Views  []RoaringUpdate
+
+	// SuppressLog requests we not write to the write log. Typically
+	// that would be because this request is being replayed from a
+	// write log.
+	SuppressLog bool
 }
 
 // RoaringUpdate represents the bits to clear and then set in a particular view.

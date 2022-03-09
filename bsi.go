@@ -8,14 +8,14 @@ import (
 	"github.com/featurebasedb/featurebase/v3/roaring"
 )
 
-// bsiData contains BSI-structured data.
-type bsiData []*Row
+// BSIData contains BSI-structured data.
+type BSIData []*Row
 
-// pivotDescending loops over nonzero BSI values in descending order.
+// PivotDescending loops over nonzero BSI values in descending order.
 // For each value, the provided function is called with the value and a slice of the associated columns.
 // If limit or offset are not-nil, they will be applied.
 // Applying a limit or offset may modify the pointed-to value.
-func (bsi bsiData) pivotDescending(filter *Row, branch uint64, limit, offset *uint64, fn func(uint64, ...uint64)) {
+func (bsi BSIData) PivotDescending(filter *Row, branch uint64, limit, offset *uint64, fn func(uint64, ...uint64)) {
 	// This "pivot" algorithm works by treating the BSI data as a tree.
 	// Each branch of this tree corresponds to a power-of-2-sized range of BSI values.
 	// Each range is subdivided into 2 ranges of half size, which form lower branches.
@@ -56,8 +56,8 @@ func (bsi bsiData) pivotDescending(filter *Row, branch uint64, limit, offset *ui
 		upperBranch, lowerBranch := branch|(1<<uint(len(bsi)-1)), branch
 		splitBit := bsi[len(bsi)-1]
 		lowerBits := bsi[:len(bsi)-1]
-		lowerBits.pivotDescending(filter.Intersect(splitBit), upperBranch, limit, offset, fn)
-		lowerBits.pivotDescending(filter.Difference(splitBit), lowerBranch, limit, offset, fn)
+		lowerBits.PivotDescending(filter.Intersect(splitBit), upperBranch, limit, offset, fn)
+		lowerBits.PivotDescending(filter.Difference(splitBit), lowerBranch, limit, offset, fn)
 	}
 }
 
@@ -69,7 +69,7 @@ func (bsi bsiData) pivotDescending(filter *Row, branch uint64, limit, offset *ui
 // - TopN on int
 func (bsi bsiData) distribution(filter *Row) bsiData {
 	var dist bsiData
-	bsi.pivotDescending(filter, 0, nil, nil, func(count uint64, values ...uint64) {
+	bsi.PivotDescending(filter, 0, nil, nil, func(count uint64, values ...uint64) {
 		dist.insert(count, uint64(len(values)))
 	})
 	return dist
@@ -78,20 +78,20 @@ func (bsi bsiData) distribution(filter *Row) bsiData {
 
 var placeholderBitmap = roaring.NewBitmap()
 
-// addBSI adds two BSI bitmaps together.
+// AddBSI adds two BSI bitmaps together.
 // It does not handle sign and has no concept of overflow.
-func addBSI(x, y bsiData) bsiData {
+func AddBSI(x, y BSIData) BSIData {
 	// Accumulate row segments.
-	segments := make([][]rowSegment, len(x)+len(y))
+	segments := make([][]RowSegment, len(x)+len(y))
 	xsegs, ysegs := segments[:len(x)], segments[len(x):]
 	for i, r := range x {
-		xsegs[i] = r.segments
+		xsegs[i] = r.Segments
 	}
 	for i, r := range y {
-		ysegs[i] = r.segments
+		ysegs[i] = r.Segments
 	}
 
-	var dst bsiData
+	var dst BSIData
 	var xbitmaps, ybitmaps []*roaring.Bitmap
 	for {
 		// Find the next shard.
@@ -162,7 +162,7 @@ func addBSI(x, y bsiData) bsiData {
 			for len(dst) <= i {
 				dst = append(dst, NewRow())
 			}
-			dst[i].segments = append(dst[i].segments, rowSegment{
+			dst[i].Segments = append(dst[i].Segments, RowSegment{
 				shard:    next,
 				writable: true,
 				data:     b,
@@ -273,10 +273,10 @@ func (b *bsiBuilder) Insert(col, val uint64) {
 
 // Build BSI data.
 // This resets the builder.
-func (b *bsiBuilder) Build() bsiData {
+func (b *bsiBuilder) Build() BSIData {
 	builders := *b
 	*b = builders[:0]
-	rows := make(bsiData, len(builders))
+	rows := make(BSIData, len(builders))
 	for i := range builders {
 		rows[i] = builders[i].Build()
 	}

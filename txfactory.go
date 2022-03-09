@@ -175,13 +175,15 @@ func (f *TxFactory) NewQcx() (qcx *Qcx) {
 		Grp: f.NewTxGroup(),
 		Txf: f,
 	}
-	if f.holder != nil && f.holder.executor != nil {
-		qcx.workers = f.holder.executor.workers
-	}
 	if f.typeOfTx == "roaring" {
 		qcx.isRoaring = true
 	}
-	_ = testhook.Opened(f.holder.Auditor, qcx, nil)
+	if f.holder != nil {
+		if f.holder.executor != nil {
+			qcx.workers = f.holder.executor.workers
+		}
+		_ = testhook.Opened(f.holder.Auditor, qcx, nil)
+	}
 	return
 }
 

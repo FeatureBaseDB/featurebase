@@ -12,11 +12,19 @@ In addition to these dependancies, you will need to be added to the moleculacorp
 
 First start the test environment. This is a docker-compose environment that includes pilosa and a confluent kafka stack. Run the following to start those services:
 
-    BRANCH_NAME=master make startup
+    make startup
 
 To build and run the integration tests, run:
 
     make test-run
+
+An alternative command to use, if you're running tests locally and want human-friendly output, is:
+
+    make test-run-local
+
+With that command you can also specify individual tests to run like this:
+
+    make test-run-local TCMD='-run=TestJustThisOne .'
 
 Then to shut down the test environment, run:
 
@@ -24,7 +32,7 @@ Then to shut down the test environment, run:
 
 You can run all of the previous commands by calling test-all:
 
-    BRANCH_NAME=master make test-all
+    make test-all
 
 The previous command is equivalent to running the following:
 

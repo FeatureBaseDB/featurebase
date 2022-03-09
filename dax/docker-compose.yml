@@ -1,0 +1,66 @@
+version: '3'
+
+services:
+  mds:
+    build:
+      context: ../.quick
+      dockerfile: ../Dockerfile-dax-quick
+    environment:
+      FEATUREBASE_BIND: 0.0.0.0:8080
+      FEATUREBASE_VERBOSE: "true"
+      FEATUREBASE_STORAGE_METHOD: boltdb
+      FEATUREBASE_STORAGE_DSN: file:/dax-data/mds.boldtb
+      FEATUREBASE_MDS_RUN: "true"
+    ports:
+      - "8081:8080"
+
+  queryer:
+    build:
+      context: ../.quick
+      dockerfile: ../Dockerfile-dax-quick
+    environment:
+      FEATUREBASE_BIND: 0.0.0.0:8080
+      FEATUREBASE_VERBOSE: "true"
+      FEATUREBASE_QUERYER_RUN: "true"
+      FEATUREBASE_QUERYER_CONFIG_MDS_ADDRESS: "mds:8080"
+    depends_on:
+      - mds
+    ports:
+      - "8080:8080"
+
+  computer:
+    build:
+      context: ../.quick
+      dockerfile: ../Dockerfile-dax-quick
+    environment:
+      FEATUREBASE_COMPUTER_RUN: "true"
+      FEATUREBASE_COMPUTER_CONFIG_MDS_ADDRESS: "mds:8080"
+      FEATUREBASE_COMPUTER_CONFIG_DATA_DIR: /dax-data/computer
+      FEATUREBASE_BIND: 0.0.0.0:8080
+      FEATUREBASE_VERBOSE: "true"
+      FEATUREBASE_STORAGE_METHOD: boltdb
+      FEATUREBASE_WRITELOGGER_RUN: "true"
+      FEATUREBASE_WRITELOGGER_CONFIG_DATA_DIR: "/dax-data/writelogger"
+      FEATUREBASE_SNAPSHOTTER_RUN: "true"
+      FEATUREBASE_SNAPSHOTTER_CONFIG_DATA_DIR: "/dax-data/snapshotter"
+    volumes:
+      - "./dax-data/writelogger:/dax-data/writelogger"
+      - "./dax-data/snapshotter:/dax-data/snapshotter"
+    depends_on:
+      - mds
+    deploy:
+      replicas: 1
+
+  datagen:
+    build:
+      context: ..
+      dockerfile: Dockerfile-datagen
+    profiles: [ "datagen" ]
+    environment:
+      GEN_CUSTOM_CONFIG: "/testdata/keys_ids.yaml"
+      GEN_FEATUREBASE_ORG_ID: "testorg"
+      GEN_FEATUREBASE_DB_ID: "testdb"
+      GEN_USE_SHARD_TRANSACTIONAL_ENDPOINT: "true"
+      GEN_SOURCE: "custom"
+      GEN_TARGET: "mds"
+      GEN_MDS_ADDRESS: "mds:8080"

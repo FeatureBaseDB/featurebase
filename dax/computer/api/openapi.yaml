@@ -1,0 +1,235 @@
+openapi: 3.0.3
+
+info:
+  title: Computer
+  description: The dax-related API for the Computer service.
+  version: 0.0.0
+
+paths:
+  /computer/health:
+    get:
+      summary: Health check endpoint.
+      description: Provides an endpoint to check the overall health of the Computer service.
+      operationId: GetHealth
+      responses:
+        200:
+          description: Service is healthy.
+
+  /computer/directive:
+    post:
+      summary: Post Directive to compute node.
+      description: Post a Directive to the compute node.
+      operationId: PostDirective
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Directive'
+      responses:
+        200:
+          description: Directive was applied successfully.
+
+  /computer/snapshot/shard-data:
+    post:
+      summary: Request to snapshot shard data.
+      description: Request to snapshot shard data.
+      operationId: PostSnapshotShardData
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                address:
+                  type: string
+                table:
+                  type: string
+                shard:
+                  type: integer
+                  format: int64
+                fromVersion:
+                  type: integer
+                  format: int64
+                toVersion:
+                  type: integer
+                  format: int64
+                directive:
+                  $ref: '#/components/schemas/Directive'
+                  
+      responses:
+        200:
+          description: Shard snapshot was successful.
+
+  /computer/snapshot/table-keys:
+    post:
+      summary: Request to snapshot table keys.
+      description: Request to snapshot table keys.
+      operationId: PostSnapshotTableKeys
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                address:
+                  type: string
+                table:
+                  type: string
+                partition:
+                  type: integer
+                  format: int32
+                fromVersion:
+                  type: integer
+                  format: int64
+                toVersion:
+                  type: integer
+                  format: int64
+                directive:
+                  $ref: '#/components/schemas/Directive'
+                  
+      responses:
+        200:
+          description: Table keys snapshot was successful.
+
+  /computer/snapshot/field-keys:
+    post:
+      summary: Request to snapshot field keys.
+      description: Request to snapshot field keys.
+      operationId: PostSnapshotFieldKeys
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                address:
+                  type: string
+                table:
+                  type: string
+                field:
+                  type: string
+                fromVersion:
+                  type: integer
+                  format: int64
+                toVersion:
+                  type: integer
+                  format: int64
+                directive:
+                  $ref: '#/components/schemas/Directive'
+                  
+      responses:
+        200:
+          description: Field keys snapshot was successful.
+
+components:
+  responses:
+    Directive:
+      description: Directive response.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Directive'
+
+  schemas:
+    Directive:
+      type: object
+      properties:
+        address:
+          type: string
+        tables:
+          type: array
+          items:
+            $ref: '#/components/schemas/Table'
+        computeRoles:
+          type: array
+          items:
+            type: object
+            properties:
+              table:
+                type: string
+              shards:
+                type: array
+                items:
+                  type: integer
+                  format: int64
+        translateRoles:
+          type: array
+          items:
+            type: object
+            properties:
+              table:
+                type: string
+              partitions:
+                type: array
+                items:
+                  type: integer
+                  format: int32
+              fields:
+                type: array
+                items:
+                  type: string
+        version:
+          type: integer
+          format: int64
+
+    # This is copied from /mds/api/openapi.yaml. TODO: share schemas across yaml files.
+    Table:
+      type: object
+      properties:
+        name:
+          type: string
+        fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/Field'
+        partitionN:
+          type: integer
+          format: int32
+
+    Field:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum:
+          - bool
+          - decimal
+          - id
+          - idset
+          - int
+          - string
+          - stringset
+          - timestamp
+        options:
+          type: object
+          properties:
+            min:
+              type: integer
+              format: int64
+            max:
+              type: integer
+              format: int64
+            scale:
+              type: integer
+              format: int64
+              minimum: 0
+            noStandardView:
+              type: boolean
+            cacheType:
+              type: string
+            cacheSize:
+              type: integer
+              format: int32
+            timeUnit:
+              type: string
+            epoch:
+              type: string
+              format: date-time
+            timeQuantum:
+              type: string
+            ttl:
+              type: string
+            foreignIndex:
+              type: string

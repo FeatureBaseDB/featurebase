@@ -13,14 +13,15 @@ import (
 	"sync"
 	"time"
 
-	"github.com/featurebasedb/featurebase/v3/disco"
-	"github.com/featurebasedb/featurebase/v3/logger"
-	rbfcfg "github.com/featurebasedb/featurebase/v3/rbf/cfg"
-	"github.com/featurebasedb/featurebase/v3/roaring"
-	"github.com/featurebasedb/featurebase/v3/stats"
-	"github.com/featurebasedb/featurebase/v3/storage"
-	"github.com/featurebasedb/featurebase/v3/testhook"
-	"github.com/featurebasedb/featurebase/v3/vprint"
+	"github.com/molecula/featurebase/v3/dax"
+	"github.com/molecula/featurebase/v3/disco"
+	"github.com/molecula/featurebase/v3/logger"
+	rbfcfg "github.com/molecula/featurebase/v3/rbf/cfg"
+	"github.com/molecula/featurebase/v3/roaring"
+	"github.com/molecula/featurebase/v3/stats"
+	"github.com/molecula/featurebase/v3/storage"
+	"github.com/molecula/featurebase/v3/testhook"
+	"github.com/molecula/featurebase/v3/vprint"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -132,6 +133,11 @@ type Holder struct {
 	// on holding mu.
 	imu     sync.RWMutex
 	indexes map[string]*Index
+
+	// directive is the latest directive applied to the node.
+	directive *dax.Directive
+
+	versionStore dax.VersionStore
 }
 
 // HolderOpts holds information about the holder which other things might want
@@ -140,6 +146,31 @@ type HolderOpts struct {
 	// StorageBackend controls the tx/storage engine we instatiate. Set by
 	// server.go OptServerStorageConfig
 	StorageBackend string
+}
+
+func (h *Holder) Directive() dax.Directive {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	if h.directive == nil {
+		return dax.Directive{}
+	}
+	return *h.directive
+}
+
+func (h *Holder) SetDirective(d *dax.Directive) {
+	if d == nil {
+		return
+	}
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	// Only set the cached directive if the incoming version is newer than that
+	// of the existing directive's version.
+	if h.directive == nil || d.Version > h.directive.Version {
+		h.directive = d
+	}
 }
 
 func (h *Holder) StartTransaction(ctx context.Context, id string, timeout time.Duration, exclusive bool) (*Transaction, error) {
@@ -284,6 +315,8 @@ func NewHolder(path string, cfg *HolderConfig) *Holder {
 		path: path,
 
 		indexes: make(map[string]*Index),
+
+		versionStore: dax.NewNopVersionStore(),
 	}
 
 	txf, err := NewTxFactory(cfg.StorageConfig.Backend, h.IndexesPath(), h)
@@ -957,11 +990,72 @@ func (h *Holder) createIndex(cim *CreateIndexMessage, broadcast bool) (*Index, e
 	// Update options.
 	h.addIndex(index)
 
+	tkey := dax.TableKey(cim.Index)
+	qtid := tkey.QualifiedTableID()
+
+	// Initialize the table in holder.versionStore.
+	if err := h.versionStore.AddTable(context.Background(), qtid); err != nil {
+		h.Logger.Printf("could not add table to version store: %s", cim.Index)
+	}
+
 	if broadcast {
 		// Send the create index message to all nodes.
 		if err := h.broadcaster.SendSync(cim); err != nil {
 			return nil, errors.Wrap(err, "sending CreateIndex message")
 		}
+	}
+
+	// Since this is a new index, we need to kick off
+	// its translation sync.
+	if err := h.translationSyncer.Reset(); err != nil {
+		return nil, errors.Wrap(err, "resetting translation sync")
+	}
+
+	return index, nil
+}
+
+// createIndexWithPartitions is similar to createIndex, but it takes a list of
+// partitions for which this node is responsible. This ensures that the node
+// doesn't instantiate more partition TranslateStores than is necessary.
+func (h *Holder) createIndexWithPartitions(cim *CreateIndexMessage, translatePartitions dax.Partitions) (*Index, error) {
+	if cim.Index == "" {
+		return nil, errors.New("index name required")
+	}
+
+	// Otherwise create a new index.
+	index, err := h.newIndex(h.IndexPath(cim.Index), cim.Index)
+	if err != nil {
+		return nil, errors.Wrap(err, "creating")
+	}
+
+	index.keys = cim.Meta.Keys
+	index.trackExistence = cim.Meta.TrackExistence
+	index.createdAt = cim.CreatedAt
+	index.translatePartitions = translatePartitions
+
+	if err = index.Open(); err != nil {
+		return nil, errors.Wrap(err, "opening")
+	}
+
+	// Update options.
+	h.addIndex(index)
+
+	tkey := dax.TableKey(cim.Index)
+	qtid := tkey.QualifiedTableID()
+
+	// Initialize the table in holder.versionStore.
+	if err := h.versionStore.AddTable(context.Background(), qtid); err != nil {
+		h.Logger.Printf("could not add table to version store: %s", cim.Index)
+	}
+
+	// Initialize a list of partitions at version 0.
+	newPartitions := make(dax.Partitions, len(translatePartitions))
+	for i := range translatePartitions {
+		newPartitions[i] = dax.NewPartition(translatePartitions[i].Num, 0)
+	}
+
+	if err := h.versionStore.AddPartitions(context.Background(), qtid, newPartitions...); err != nil {
+		return nil, errors.Wrap(err, "adding partitions to version store")
 	}
 
 	// Since this is a new index, we need to kick off
@@ -1077,7 +1171,11 @@ func (h *Holder) newIndex(path, name string) (*Index, error) {
 func (h *Holder) DeleteIndex(name string) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	return h.deleteIndex(name)
+}
 
+// deleteIndex is a non-locking version of DeleteIndex().
+func (h *Holder) deleteIndex(name string) error {
 	// Confirm index exists.
 	index := h.Index(name)
 	if index == nil {
@@ -1114,7 +1212,15 @@ func (h *Holder) DeleteIndex(name string) error {
 	}
 
 	// Remove reference.
-	h.deleteIndex(name)
+	h.deleteIndexFromMap(name)
+
+	tkey := dax.TableKey(name)
+	qtid := tkey.QualifiedTableID()
+
+	// Remove the index from holder.versionStore.
+	if _, _, err := h.versionStore.RemoveTable(context.Background(), qtid); err != nil {
+		h.Logger.Printf("could not find table to remove from version store: %s", name)
+	}
 
 	// I'm not sure if calling Reset() here is necessary
 	// since closing the index stops its translation
@@ -1122,7 +1228,7 @@ func (h *Holder) DeleteIndex(name string) error {
 	return h.translationSyncer.Reset()
 }
 
-func (h *Holder) deleteIndex(index string) {
+func (h *Holder) deleteIndexFromMap(index string) {
 	h.imu.Lock()
 	delete(h.indexes, index)
 	h.imu.Unlock()

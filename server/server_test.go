@@ -890,6 +890,7 @@ func TestClusterExhaustingConnectionsImport(t *testing.T) {
 					Views: map[string][]byte{
 						"": data,
 					},
+					SuppressLog: true,
 				})
 				if err != nil {
 					return err

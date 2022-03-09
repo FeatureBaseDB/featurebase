@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	pilosa "github.com/featurebasedb/featurebase/v3"
+	pilosa "github.com/molecula/featurebase/v3"
 )
 
 const deadlineSkew = time.Second

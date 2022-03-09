@@ -4,12 +4,13 @@ services:
   featurebase:
     build:
       context: ../.
-      dockerfile: ./Dockerfile
+      dockerfile: ./Dockerfile-clustertests
     environment:
       PILOSA_DATA_DIR: /data
       PILOSA_BIND: 0.0.0.0:10101
       PILOSA_BIND_GRPC: 0.0.0.0:20101
       PILOSA_ADVERTISE: featurebase:10101
+    command: /featurebase -test.run=TestRunMain -test.coverprofile=/testdata/batch_coverage.out server
     volumes:
       - ./testdata:/testdata
 
@@ -21,6 +22,8 @@ services:
       - ./testdata:/testdata
 
   wait:
+    depends_on:
+        - "featurebase"
     build:
       context: .
       dockerfile: Dockerfile-wait

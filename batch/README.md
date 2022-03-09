@@ -22,7 +22,7 @@ In addition to these dependancies, you will need to be added to the molecula [Gi
 
 First start the test environment. This is a docker-compose environment that includes featurebase.
 
-    BRANCH_NAME=master make startup
+    make startup
 
 To build and run the integration tests, run:
 

@@ -13,7 +13,7 @@ import (
 
 // Row is a set of integers (the associated columns).
 type Row struct {
-	segments []rowSegment
+	Segments []RowSegment
 
 	// String keys translated to/from segment columns.
 	Keys []string
@@ -57,8 +57,8 @@ func (r *Row) Clone() (clone *Row) {
 		Field: r.Field,
 	}
 
-	for _, seg := range r.segments {
-		segClone := rowSegment{
+	for _, seg := range r.Segments {
+		segClone := RowSegment{
 			shard:    seg.shard,
 			writable: true, // we know it is safe; it is a copy.
 			n:        seg.n,
@@ -67,7 +67,7 @@ func (r *Row) Clone() (clone *Row) {
 			segClone.data = seg.data.Clone() // *roaring.Bitmap
 		}
 		//segClone.InvalidateCount() // not needed?
-		clone.segments = append(clone.segments, segClone)
+		clone.Segments = append(clone.Segments, segClone)
 	}
 	return clone
 }
@@ -83,13 +83,13 @@ func NewRowFromBitmap(b *roaring.Bitmap) *Row {
 	rowNum := uint64(0)
 	for col, ok := b.MinAt(rowNum * ShardWidth); ok; col, ok = b.MinAt(rowNum * ShardWidth) {
 		rowNum = col / ShardWidth
-		seg := rowSegment{
+		seg := RowSegment{
 			shard:    rowNum,
 			data:     b.OffsetRange(rowNum*ShardWidth, rowNum*ShardWidth, (rowNum+1)*ShardWidth),
 			writable: true,
 		}
 		seg.n = seg.data.Count()
-		r.segments = append(r.segments, seg)
+		r.Segments = append(r.Segments, seg)
 		rowNum++
 	}
 	return r
@@ -99,15 +99,15 @@ func NewRowFromBitmap(b *roaring.Bitmap) *Row {
 // bitmaps and rowSegments based on shard width.
 func NewRowFromRoaring(data []byte) *Row {
 	bitmaps, shards := roaring.RoaringToBitmaps(data, ShardWidth)
-	r := &Row{segments: make([]rowSegment, len(bitmaps))}
+	r := &Row{Segments: make([]RowSegment, len(bitmaps))}
 	for i := range bitmaps {
-		segment := rowSegment{
+		segment := RowSegment{
 			shard:    shards[i],
 			data:     bitmaps[i],
 			writable: false,
 			n:        bitmaps[i].Count(),
 		}
-		r.segments[i] = segment
+		r.Segments[i] = segment
 	}
 	return r
 }
@@ -126,8 +126,8 @@ func (r *Row) ToTable() (*pb.TableResponse, error) {
 // Hash calculate checksum code be useful in block hash join
 func (r *Row) Hash() uint64 {
 	hash := uint64(0)
-	for i := range r.segments {
-		hash = r.segments[i].data.Hash(hash)
+	for i := range r.Segments {
+		hash = r.Segments[i].data.Hash(hash)
 	}
 	return hash
 }
@@ -170,20 +170,20 @@ func (r *Row) ToRows(callback func(*pb.RowResponse) error) error {
 
 // Roaring returns the row treated as a unified roaring bitmap.
 func (r *Row) Roaring() []byte {
-	bitmaps := make([]*roaring.Bitmap, len(r.segments))
-	for i := range r.segments {
-		bitmaps[i] = r.segments[i].data
+	bitmaps := make([]*roaring.Bitmap, len(r.Segments))
+	for i := range r.Segments {
+		bitmaps[i] = r.Segments[i].data
 	}
 	return roaring.BitmapsToRoaring(bitmaps)
 }
 
 // IsEmpty returns true if the row doesn't contain any set bits.
 func (r *Row) IsEmpty() bool {
-	if len(r.segments) == 0 {
+	if len(r.Segments) == 0 {
 		return true
 	}
-	for i := range r.segments {
-		if r.segments[i].n > 0 {
+	for i := range r.Segments {
+		if r.Segments[i].n > 0 {
 			return false
 		}
 
@@ -192,16 +192,16 @@ func (r *Row) IsEmpty() bool {
 }
 
 func (r *Row) Freeze() {
-	for _, s := range r.segments {
+	for _, s := range r.Segments {
 		s.Freeze()
 	}
 }
 
 // Merge merges data from other into r.
 func (r *Row) Merge(other *Row) {
-	var segments []rowSegment
+	var segments []RowSegment
 
-	itr := newMergeSegmentIterator(r.segments, other.segments)
+	itr := newMergeSegmentIterator(r.Segments, other.Segments)
 	for s0, s1 := itr.next(); s0 != nil || s1 != nil; s0, s1 = itr.next() {
 		// Use the other row's data if segment is missing.
 		if s0 == nil {
@@ -217,7 +217,7 @@ func (r *Row) Merge(other *Row) {
 		segments = append(segments, *s0)
 	}
 
-	r.segments = segments
+	r.Segments = segments
 	r.invalidateCount()
 }
 
@@ -225,7 +225,7 @@ func (r *Row) Merge(other *Row) {
 func (r *Row) intersectionCount(other *Row) uint64 {
 	var n uint64
 
-	itr := newMergeSegmentIterator(r.segments, other.segments)
+	itr := newMergeSegmentIterator(r.Segments, other.Segments)
 	for s0, s1 := itr.next(); s0 != nil || s1 != nil; s0, s1 = itr.next() {
 		// Ignore non-overlapping segments.
 		if s0 == nil || s1 == nil {
@@ -239,9 +239,9 @@ func (r *Row) intersectionCount(other *Row) uint64 {
 
 // Intersect returns the itersection of r and other.
 func (r *Row) Intersect(other *Row) *Row {
-	var segments []rowSegment
+	var segments []RowSegment
 
-	itr := newMergeSegmentIterator(r.segments, other.segments)
+	itr := newMergeSegmentIterator(r.Segments, other.Segments)
 	for s0, s1 := itr.next(); s0 != nil || s1 != nil; s0, s1 = itr.next() {
 		// Ignore non-overlapping segments.
 		if s0 == nil || s1 == nil {
@@ -250,12 +250,12 @@ func (r *Row) Intersect(other *Row) *Row {
 		segments = append(segments, *s0.Intersect(s1))
 	}
 
-	return &Row{segments: segments}
+	return &Row{Segments: segments}
 }
 
 // Any returns true if row contains any bits.
 func (r *Row) Any() bool {
-	for _, s := range r.segments {
+	for _, s := range r.Segments {
 		if s.data.Any() {
 			return true
 		}
@@ -265,9 +265,9 @@ func (r *Row) Any() bool {
 
 // Xor returns the xor of r and other.
 func (r *Row) Xor(other *Row) *Row {
-	var segments []rowSegment
+	var segments []RowSegment
 
-	itr := newMergeSegmentIterator(r.segments, other.segments)
+	itr := newMergeSegmentIterator(r.Segments, other.Segments)
 	for s0, s1 := itr.next(); s0 != nil || s1 != nil; s0, s1 = itr.next() {
 		if s1 == nil {
 			segments = append(segments, *s0)
@@ -280,21 +280,21 @@ func (r *Row) Xor(other *Row) *Row {
 		segments = append(segments, *s0.Xor(s1))
 	}
 
-	return &Row{segments: segments}
+	return &Row{Segments: segments}
 }
 
 // Union returns the bitwise union of r and other.
 func (r *Row) Union(others ...*Row) *Row {
-	segments := make([][]rowSegment, 0, len(others)+1)
-	if len(r.segments) > 0 {
-		segments = append(segments, r.segments)
+	segments := make([][]RowSegment, 0, len(others)+1)
+	if len(r.Segments) > 0 {
+		segments = append(segments, r.Segments)
 	}
-	nextSegs := make([][]rowSegment, 0, len(others)+1)
-	toProcess := make([]*rowSegment, 0, len(others)+1)
-	var output []rowSegment
+	nextSegs := make([][]RowSegment, 0, len(others)+1)
+	toProcess := make([]*RowSegment, 0, len(others)+1)
+	var output []RowSegment
 	for _, other := range others {
-		if len(other.segments) > 0 {
-			segments = append(segments, other.segments)
+		if len(other.Segments) > 0 {
+			segments = append(segments, other.Segments)
 		}
 	}
 	for len(segments) > 0 {
@@ -325,21 +325,21 @@ func (r *Row) Union(others ...*Row) *Row {
 			output = append(output, *toProcess[0].Union(toProcess[1:]...))
 		}
 	}
-	return &Row{Index: r.Index, Field: r.Field, segments: output}
+	return &Row{Index: r.Index, Field: r.Field, Segments: output}
 }
 
 // Difference returns the diff of r and other.
 func (r *Row) Difference(others ...*Row) *Row {
-	var output []rowSegment
-	o := make(map[uint64][]*rowSegment)
+	var output []RowSegment
+	o := make(map[uint64][]*RowSegment)
 
 	for x := range others {
-		for y := range others[x].segments {
-			segment := others[x].segments[y]
+		for y := range others[x].Segments {
+			segment := others[x].Segments[y]
 			o[segment.shard] = append(o[segment.shard], &segment)
 		}
 	}
-	for _, segment := range r.segments {
+	for _, segment := range r.Segments {
 
 		dest, ok := o[segment.shard]
 		if ok {
@@ -348,7 +348,7 @@ func (r *Row) Difference(others ...*Row) *Row {
 			output = append(output, segment)
 		}
 	}
-	return &Row{segments: output}
+	return &Row{Segments: output}
 }
 
 // Shift returns the bitwise shift of r by n bits.
@@ -378,17 +378,17 @@ func (r *Row) Shift(n int64) (*Row, error) {
 	}
 
 	work := r
-	var segments []rowSegment
+	var segments []RowSegment
 	for i := int64(0); i < n; i++ {
 		segments = segments[:0]
-		for _, segment := range work.segments {
+		for _, segment := range work.Segments {
 			shifted, err := segment.Shift()
 			if err != nil {
 				return nil, errors.Wrap(err, "shifting row segment")
 			}
 			segments = append(segments, *shifted)
 		}
-		work = &Row{segments: segments}
+		work = &Row{Segments: segments}
 	}
 
 	return work, nil
@@ -399,50 +399,45 @@ func (r *Row) SetBit(i uint64) (changed bool) {
 	return r.createSegmentIfNotExists(i / ShardWidth).SetBit(i)
 }
 
-// Segments returns a list of all segments in the row.
-func (r *Row) Segments() []rowSegment {
-	return r.segments
-}
-
 // segment returns a segment for a given shard.
 // Returns nil if segment does not exist.
-func (r *Row) segment(shard uint64) *rowSegment {
-	if i := sort.Search(len(r.segments), func(i int) bool {
-		return r.segments[i].shard >= shard
-	}); i < len(r.segments) && r.segments[i].shard == shard {
-		return &r.segments[i]
+func (r *Row) segment(shard uint64) *RowSegment {
+	if i := sort.Search(len(r.Segments), func(i int) bool {
+		return r.Segments[i].shard >= shard
+	}); i < len(r.Segments) && r.Segments[i].shard == shard {
+		return &r.Segments[i]
 	}
 	return nil
 }
 
-func (r *Row) createSegmentIfNotExists(shard uint64) *rowSegment {
-	i := sort.Search(len(r.segments), func(i int) bool {
-		return r.segments[i].shard >= shard
+func (r *Row) createSegmentIfNotExists(shard uint64) *RowSegment {
+	i := sort.Search(len(r.Segments), func(i int) bool {
+		return r.Segments[i].shard >= shard
 	})
 
 	// Return exact match.
-	if i < len(r.segments) && r.segments[i].shard == shard {
-		return &r.segments[i]
+	if i < len(r.Segments) && r.Segments[i].shard == shard {
+		return &r.Segments[i]
 	}
 
 	// Insert new segment.
-	r.segments = append(r.segments, rowSegment{data: roaring.NewSliceBitmap()})
-	if i < len(r.segments) {
-		copy(r.segments[i+1:], r.segments[i:])
+	r.Segments = append(r.Segments, RowSegment{data: roaring.NewSliceBitmap()})
+	if i < len(r.Segments) {
+		copy(r.Segments[i+1:], r.Segments[i:])
 	}
-	r.segments[i] = rowSegment{
+	r.Segments[i] = RowSegment{
 		data:     roaring.NewSliceBitmap(),
 		shard:    shard,
 		writable: true,
 	}
 
-	return &r.segments[i]
+	return &r.Segments[i]
 }
 
 // invalidateCount updates the cached count in the row.
 func (r *Row) invalidateCount() {
-	for i := range r.segments {
-		r.segments[i].InvalidateCount()
+	for i := range r.Segments {
+		r.Segments[i].InvalidateCount()
 	}
 }
 
@@ -453,8 +448,8 @@ func (r *Row) Count() uint64 {
 		// Count(Distinct()) on an empty field panics here
 		return n
 	}
-	for i := range r.segments {
-		n += r.segments[i].Count()
+	for i := range r.Segments {
+		n += r.Segments[i].Count()
 	}
 	return n
 }
@@ -479,8 +474,8 @@ func (r *Row) Columns() []uint64 {
 		return nil
 	}
 	a := make([]uint64, 0, r.Count())
-	for i := range r.segments {
-		a = append(a, r.segments[i].Columns()...)
+	for i := range r.Segments {
+		a = append(a, r.Segments[i].Columns()...)
 	}
 	return a
 }
@@ -488,18 +483,18 @@ func (r *Row) Columns() []uint64 {
 // Includes returns true if the row contains the given column.
 func (r *Row) Includes(col uint64) bool {
 	shard := col / ShardWidth
-	for i := range r.segments {
-		if r.segments[i].shard == shard {
-			return r.segments[i].data.Contains(col)
+	for i := range r.Segments {
+		if r.Segments[i].shard == shard {
+			return r.Segments[i].data.Contains(col)
 		}
 	}
 	return false
 }
 
-// rowSegment holds a subset of a row.
+// RowSegment holds a subset of a row.
 // This could point to a mmapped roaring bitmap or an in-memory bitmap. The
 // width of the segment will always match the shard width.
-type rowSegment struct {
+type RowSegment struct {
 	// Shard this segment belongs to
 	shard uint64
 
@@ -513,7 +508,11 @@ type rowSegment struct {
 	n uint64
 }
 
-func (s *rowSegment) Freeze() {
+func (s *RowSegment) Shard() uint64 {
+	return s.shard
+}
+
+func (s *RowSegment) Freeze() {
 	s.data = s.data.Freeze()
 }
 
@@ -530,7 +529,7 @@ func (s *rowSegment) Raw() (uint64, []byte) {
 
 // Merge adds chunks from other to s.
 // Chunks in s are overwritten if they exist in other.
-func (s *rowSegment) Merge(other *rowSegment) {
+func (s *RowSegment) Merge(other *RowSegment) {
 	s.ensureWritable()
 
 	itr := other.data.Iterator()
@@ -540,15 +539,15 @@ func (s *rowSegment) Merge(other *rowSegment) {
 }
 
 // IntersectionCount returns the number of intersections between s and other.
-func (s *rowSegment) IntersectionCount(other *rowSegment) uint64 {
+func (s *RowSegment) IntersectionCount(other *RowSegment) uint64 {
 	return s.data.IntersectionCount(other.data)
 }
 
 // Intersect returns the itersection of s and other.
-func (s *rowSegment) Intersect(other *rowSegment) *rowSegment {
+func (s *RowSegment) Intersect(other *RowSegment) *RowSegment {
 	data := s.data.Intersect(other.data)
 
-	return &rowSegment{
+	return &RowSegment{
 		data:  data,
 		shard: s.shard,
 		n:     data.Count(),
@@ -556,14 +555,14 @@ func (s *rowSegment) Intersect(other *rowSegment) *rowSegment {
 }
 
 // Union returns the bitwise union of s and other.
-func (s *rowSegment) Union(others ...*rowSegment) *rowSegment {
+func (s *RowSegment) Union(others ...*RowSegment) *RowSegment {
 	datas := make([]*roaring.Bitmap, len(others))
 	for i, other := range others {
 		datas[i] = other.data
 	}
 	data := s.data.Union(datas...)
 
-	return &rowSegment{
+	return &RowSegment{
 		data:  data,
 		shard: s.shard,
 		n:     data.Count(),
@@ -571,14 +570,14 @@ func (s *rowSegment) Union(others ...*rowSegment) *rowSegment {
 }
 
 // Difference returns the diff of s and other.
-func (s *rowSegment) Difference(others ...*rowSegment) *rowSegment {
+func (s *RowSegment) Difference(others ...*RowSegment) *RowSegment {
 	datas := make([]*roaring.Bitmap, len(others))
 	for i, other := range others {
 		datas[i] = other.data
 	}
 	data := s.data.Difference(datas...)
 
-	return &rowSegment{
+	return &RowSegment{
 		data:  data,
 		shard: s.shard,
 		n:     data.Count(),
@@ -586,10 +585,10 @@ func (s *rowSegment) Difference(others ...*rowSegment) *rowSegment {
 }
 
 // Xor returns the xor of s and other.
-func (s *rowSegment) Xor(other *rowSegment) *rowSegment {
+func (s *RowSegment) Xor(other *RowSegment) *RowSegment {
 	data := s.data.Xor(other.data)
 
-	return &rowSegment{
+	return &RowSegment{
 		data:  data,
 		shard: s.shard,
 		n:     data.Count(),
@@ -597,7 +596,7 @@ func (s *rowSegment) Xor(other *rowSegment) *rowSegment {
 }
 
 // Shift returns s shifted by 1 bit.
-func (s *rowSegment) Shift() (*rowSegment, error) {
+func (s *RowSegment) Shift() (*RowSegment, error) {
 	// TODO: deal with overflow
 	// See issue: https://github.com/molecula/pilosa/issues/403
 	data, err := s.data.Shift(1)
@@ -605,7 +604,7 @@ func (s *rowSegment) Shift() (*rowSegment, error) {
 		return nil, errors.Wrap(err, "shifting roaring data")
 	}
 
-	return &rowSegment{
+	return &RowSegment{
 		data:  data,
 		shard: s.shard,
 		n:     data.Count(),
@@ -613,7 +612,7 @@ func (s *rowSegment) Shift() (*rowSegment, error) {
 }
 
 // SetBit sets the i-th column of the row.
-func (s *rowSegment) SetBit(i uint64) (changed bool) {
+func (s *RowSegment) SetBit(i uint64) (changed bool) {
 	s.ensureWritable()
 	changed, _ = s.data.Add(i)
 	if changed {
@@ -623,7 +622,7 @@ func (s *rowSegment) SetBit(i uint64) (changed bool) {
 }
 
 // ClearBit clears the i-th column of the row.
-func (s *rowSegment) ClearBit(i uint64) (changed bool) {
+func (s *RowSegment) ClearBit(i uint64) (changed bool) {
 	s.ensureWritable()
 
 	changed, _ = s.data.Remove(i)
@@ -634,12 +633,12 @@ func (s *rowSegment) ClearBit(i uint64) (changed bool) {
 }
 
 // InvalidateCount updates the cached count in the row.
-func (s *rowSegment) InvalidateCount() {
+func (s *RowSegment) InvalidateCount() {
 	s.n = s.data.Count()
 }
 
 // Columns returns a list of all columns set in the segment.
-func (s *rowSegment) Columns() []uint64 {
+func (s *RowSegment) Columns() []uint64 {
 	a := make([]uint64, 0, s.Count())
 	itr := s.data.Iterator()
 	for v, eof := itr.Next(); !eof; v, eof = itr.Next() {
@@ -649,10 +648,10 @@ func (s *rowSegment) Columns() []uint64 {
 }
 
 // Count returns the number of set columns in the row.
-func (s *rowSegment) Count() uint64 { return s.n }
+func (s *RowSegment) Count() uint64 { return s.n }
 
 // ensureWritable clones the segment if it is pointing to non-writable data.
-func (s *rowSegment) ensureWritable() {
+func (s *RowSegment) ensureWritable() {
 	if s.writable {
 		return
 	}
@@ -667,16 +666,16 @@ func (s *rowSegment) ensureWritable() {
 
 // mergeSegmentIterator produces an iterator that loops through two sets of segments.
 type mergeSegmentIterator struct {
-	a0, a1 []rowSegment
+	a0, a1 []RowSegment
 }
 
 // newMergeSegmentIterator returns a new instance of mergeSegmentIterator.
-func newMergeSegmentIterator(a0, a1 []rowSegment) mergeSegmentIterator {
+func newMergeSegmentIterator(a0, a1 []RowSegment) mergeSegmentIterator {
 	return mergeSegmentIterator{a0: a0, a1: a1}
 }
 
 // next returns the next set of segments.
-func (itr *mergeSegmentIterator) next() (s0, s1 *rowSegment) {
+func (itr *mergeSegmentIterator) next() (s0, s1 *RowSegment) {
 	// Find current segments.
 	if len(itr.a0) > 0 {
 		s0 = &itr.a0[0]

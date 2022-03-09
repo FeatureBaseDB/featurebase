@@ -12,9 +12,10 @@ import (
 	"sync"
 
 	"github.com/glycerine/vprint"
-	pilosaclient "github.com/featurebasedb/featurebase/v3/client"
-	"github.com/featurebasedb/featurebase/v3/idk"
-	"github.com/featurebasedb/featurebase/v3/logger"
+	pilosaclient "github.com/molecula/featurebase/v3/client"
+	"github.com/molecula/featurebase/v3/dax"
+	"github.com/molecula/featurebase/v3/idk"
+	"github.com/molecula/featurebase/v3/logger"
 	"github.com/pkg/errors"
 
 	"github.com/featurebasedb/featurebase/v3/idk/common"
@@ -25,6 +26,7 @@ const (
 	TargetFeaturebase = "featurebase"
 	TargetKafka       = "kafka"
 	TargetKafkaStatic = "kafkastatic"
+	TargetMDS         = "mds"
 )
 
 // Main is the top-level datagen struct. It represents datagen-specific
@@ -41,7 +43,7 @@ type Main struct {
 	cfg SourceGeneratorConfig
 
 	Source string `short:"s" flag:"source" help:"Source generator type. Running datagen with no arguments will list the available source types."`
-	Target string `short:"t" flag:"target" help:"Destination for the generated data: [kafka, featurebase]."`
+	Target string `short:"t" flag:"target" help:"Destination for the generated data: [featurebase, kafka, kafkastatic, mds]."`
 
 	Concurrency int `short:"c" flag:"concurrency" help:"Number of concurrent sources and indexing routines to launch."`
 
@@ -57,8 +59,10 @@ type Main struct {
 	CustomConfig string `short:"" help:"File from which to pull configuration for 'custom' source."`
 
 	// Used strictly for configuration of the targets.
-	Pilosa PilosaConfig
-	Kafka  KafkaConfig
+	Pilosa      PilosaConfig
+	Kafka       KafkaConfig
+	MDS         MDSConfig
+	FeatureBase FeatureBaseConfig `flag:"featurebase" help:"qualified featurebase table"`
 
 	DryRun bool `help:"Dry run - just flag parsing."`
 
@@ -77,6 +81,16 @@ type PilosaConfig struct {
 	CacheLength uint64   `help:"Number of batches of ID mappings to cache."`
 }
 
+// FeatureBaseConfig is meant to represent the scoped (featurebase.*)
+// configuration options to be used when target = mds. These are really just a
+// sub-set of idk.Main, containing only those arguments that really apply to
+// datagen.
+type FeatureBaseConfig struct {
+	OrganizationID string `flag:"org-id" short:"" help:"auto-assigned organization ID"`
+	DatabaseID     string `flag:"db-id" short:"" help:"auto-assigned database ID"`
+	TableName      string `flag:"table-name" short:"" help:"human friendly table name"`
+}
+
 // KafkaConfig is meant to represent the scoped (pilosa.*) configuration options
 // to be used when target = kafka. These are really just a sub-set of kafka.PutSource,
 // containing only those arguments that really apply to datagen.
@@ -87,6 +101,13 @@ type KafkaConfig struct {
 	BatchSize         int    `short:"" help:"Number of records to generate before sending them to Kafka all at once. Generally, larger means better throughput and more memory usage."`
 	ReplicationFactor int    `short:"" help:"set replication factor for kafka cluster"`
 	NumPartitions     int    `short:"" help:"set partition for kafka cluster"`
+}
+
+// MDSConfig represents the configuration options to be used when target = mds.
+// These are really just a sub-set of idk.Main, containing only those arguments
+// that really apply to datagen.
+type MDSConfig struct {
+	Address string `short:"" help:"MDS host:port to connect to"`
 }
 
 // NewMain returns a new instance of Main.
@@ -265,6 +286,25 @@ func (m *Main) Preload() error {
 		m.KafkaPut.FBIDField = m.idkMain.IDField
 		m.KafkaPut.FBIndexName = m.Pilosa.Index
 
+	case TargetMDS:
+		m.idkMain.Namespace = "ingester_datagen"
+		m.idkMain.Concurrency = m.Concurrency
+		m.idkMain.CacheLength = m.Pilosa.CacheLength
+		m.idkMain.NewSource = m.newSource
+		m.idkMain.TrackProgress = m.TrackProgress
+		m.idkMain.AuthToken = m.AuthToken
+		m.idkMain.UseShardTransactionalEndpoint = m.UseShardTransactionalEndpoint
+		if m.Pilosa.BatchSize > 0 {
+			m.idkMain.BatchSize = m.Pilosa.BatchSize
+		}
+
+		// MDS-specific
+		m.idkMain.MDSAddress = m.MDS.Address
+		m.idkMain.OrganizationID = dax.OrganizationID(m.FeatureBase.OrganizationID)
+		m.idkMain.DatabaseID = dax.DatabaseID(m.FeatureBase.DatabaseID)
+		m.idkMain.TableName = dax.TableName(m.FeatureBase.TableName)
+		m.idkMain.PackBools = ""
+
 	default:
 		m.idkMain.Namespace = "ingester_datagen"
 		m.idkMain.Concurrency = m.Concurrency
@@ -396,14 +436,15 @@ func (m *Main) PrintPlan() {
 			m.Pilosa.Index = "(not specified)"
 		}
 		fmt.Printf(`Datagen config:
-		hosts:			%s
-		index:			%s
-		start id:		%s
-		end id:			%s
-		total generated:	%s
-		concurrency:            %d
-		batch size:		%s
-		total batches:		%s
+		hosts:           %s
+		index:           %s
+		start id:        %s
+		end id:          %s
+		total generated: %s
+		concurrency:     %d
+		batch size:      %s
+		total batches:   %s
+		use shard trans: %v
 `,
 			strings.Join(Hosts, ", "),
 			m.Pilosa.Index,
@@ -413,6 +454,7 @@ func (m *Main) PrintPlan() {
 			concurrency,
 			AddThousandSep(uint64(BatchSize)),
 			AddThousandSep(BatchCount),
+			m.UseShardTransactionalEndpoint,
 		)
 
 		fmt.Println("Schema:")

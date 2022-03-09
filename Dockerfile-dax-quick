@@ -1,0 +1,18 @@
+ARG GO_VERSION=latest
+
+##########################
+### FeatureBase runner ###
+##########################
+
+FROM alpine:3.13.2 as runner
+
+LABEL maintainer "dev@featurebase.com"
+
+RUN apk add --no-cache curl jq tree
+
+COPY ./fb_linux /featurebase
+
+EXPOSE 8080
+
+ENTRYPOINT ["/featurebase"]
+CMD ["dax"]

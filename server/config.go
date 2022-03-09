@@ -52,6 +52,20 @@ type Config struct {
 	// Name a unique name for this node in the cluster.
 	Name string `toml:"name"`
 
+	// MDSAddress is the location at which this node should register itself and
+	// retrieve its instructions. For example, after registring, the MDS service
+	// might tell this node that it is responsible for specific shards for a
+	// particular index.
+	MDSAddress string `toml:"mds-address"`
+
+	// WriteLogger is the location at which this node should read/write change
+	// logs.
+	WriteLogger string `toml:"write-logger"`
+
+	// Snapshotter is the location at which this node should read/write
+	// snapshots.
+	Snapshotter string `toml:"snapshotter"`
+
 	// DataDir is the directory where Pilosa stores both indexed data and
 	// running state such as cluster topology information.
 	DataDir string `toml:"data-dir"`
@@ -61,6 +75,10 @@ type Config struct {
 
 	// BindGRPC is the host:port on which Pilosa will bind for gRPC.
 	BindGRPC string `toml:"bind-grpc"`
+
+	// Listener is an already-bound listener to use for http.
+	//Listener *net.TCPListener
+	Listener net.Listener
 
 	// GRPCListener is an already-bound listener to use for gRPC.
 	// This is for use by test infrastructure, where it's useful to
@@ -123,6 +141,12 @@ type Config struct {
 	// don't exhaust the goroutine limit.
 	ImportWorkerPoolSize int `toml:"-"`
 
+	// DirectiveWorkerPoolSize controls how many goroutines are created for
+	// processing a Directive (i.e. concurrently loading key/partition/shard
+	// data from shapshotter and writelogger) on a compute node. Defaults to
+	// runtime.NumCPU().
+	DirectiveWorkerPoolSize int `toml:"-"`
+
 	// Limits the total amount of memory to be used by Extract() & SELECT queries.
 	MaxQueryMemory int64 `toml:"max-query-memory"`
 
@@ -182,6 +206,10 @@ type Config struct {
 		// EndpointEnabled enables the /sql endpoint.
 		EndpointEnabled bool `toml:"endpoint-enabled"`
 	} `toml:"sql"`
+
+	// CheckInTimeout is the amount of time between compute node check-ins to
+	// MDS.
+	CheckInInterval time.Duration `toml:"check-in-interval"`
 
 	// Storage.Backend determines which Tx implementation the holder/Index will
 	// use; one of the available transactional-storage engines. Choices are
@@ -337,12 +365,16 @@ func NewConfig() *Config {
 		WorkerPoolSize:       runtime.NumCPU(),
 		ImportWorkerPoolSize: runtime.NumCPU(),
 
+		DirectiveWorkerPoolSize: runtime.NumCPU(),
+
 		Storage:   storage.NewDefaultConfig(),
 		RBFConfig: rbfcfg.NewDefaultConfig(),
 
 		QueryHistoryLength: 100,
 
 		LongQueryTime: toml.Duration(-time.Minute),
+
+		CheckInInterval: 5 * time.Second,
 	}
 
 	// Cluster config.
